@@ -95,7 +95,7 @@ dev/package.json, dev/webshot.mjs, dev/build-web.sh, dev/.gdignore  # 웹 빌드
 - 엔드투엔드: `--headless --path . --fixed-fps 60 --quit-after 9000 -- --auto-stage` 로그에서 `[cleared] 1` 다음 `[mode] 1 stage=2`.
 - 웹 빌드: `bash dev/build-web.sh` → `export/web/`.
 - 서빙: `npm --prefix dev run serve` → `http://localhost:8060`.
-- 화면 확인(에이전트): `node dev/webshot.mjs --out <png> [--url ...] [--wait ms] [--click x,y[,ms]] [--drag x1,y1,x2,y2] [--wheel x,y,dy]`. 헤드리스 Chromium, 창 없음. URL에 `?auto-stage`를 붙이면 시작 즉시 스테이지 진행.
+- 화면 확인(에이전트): `node dev/webshot.mjs --out <png> [--url ...] [--wait ms] [--click x,y[,ms]] [--drag x1,y1,x2,y2] [--wheel x,y,dy] [--until TEXT[,ms]]`. 헤드리스 Chromium, 창 없음. URL에 `?auto-stage`를 붙이면 시작 즉시 스테이지 진행. `--until TEXT[,ms]`는 콘솔에 TEXT(예: `[cleared] 1`, `[mode] 2 stage=2`)가 뜰 때까지 기다렸다가 ms 더 대기한다 — 대기 시각을 추측하지 않고 클리어 배너·카운트다운처럼 시점이 중요한 장면을 정확히 찍을 때 쓴다.
 - 사용자 미리보기: VSCode `Ctrl+Shift+P` → `Simple Browser: Show` → `http://localhost:8060`. 코드 변경 후 `bash dev/build-web.sh` 다시 실행하고 Simple Browser 새로고침.
 - 네이티브 창 실행(`--headless` 없는 실행)과 v1의 `--shot` 플래그는 쓰지 않는다. `--shot`은 삭제한다.
 
