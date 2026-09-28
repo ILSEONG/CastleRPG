@@ -22,6 +22,10 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
 
+[gui]
+
+theme/custom_font="res://assets/fonts/Pretendard-SemiBold.otf"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

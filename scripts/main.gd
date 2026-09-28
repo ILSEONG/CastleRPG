@@ -1,7 +1,6 @@
 extends Node3D
 ## 월드 조립. 씬 파일은 이것 하나. 나머지는 코드로 생성.
-## 개발용 유저 인자(-- 뒤): --shot=SECONDS  그 시각에 res://tools/shot.png 저장 후 종료
-##                          --auto-stage    시작 즉시 스테이지 진행
+## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 
 const Balance := preload("res://scripts/balance.gd")
 const Flat := preload("res://scripts/flat.gd")
@@ -14,9 +13,6 @@ const HudScript := preload("res://scripts/hud.gd")
 var camera: Camera3D
 var castle
 var heroes: Array = []
-
-var _shot_at := -1.0
-var _elapsed := 0.0
 
 
 func _ready() -> void:
@@ -37,18 +33,9 @@ func _ready() -> void:
 	spawner.castle = castle
 	add_child(spawner)
 	add_child(HudScript.new())
-	_apply_dev_args()
-
-
-func _process(delta: float) -> void:
-	if _shot_at < 0.0:
-		return
-	_elapsed += delta
-	if _elapsed >= _shot_at:
-		_shot_at = -1.0
-		var err := get_viewport().get_texture().get_image().save_png("res://tools/shot.png")
-		print("shot saved err=%d" % err)
-		get_tree().quit()
+	_connect_dev_log()
+	if _auto_stage_requested():
+		GameState.start_stage()
 
 
 func _build_world() -> void:
@@ -79,12 +66,15 @@ func _build_world() -> void:
 	camera.look_at(Vector3.ZERO)
 
 
-func _apply_dev_args() -> void:
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--shot="):
-			_shot_at = float(arg.get_slice("=", 1))
-		elif arg == "--auto-stage":
-			GameState.start_stage()
+func _connect_dev_log() -> void:
 	GameState.mode_changed.connect(func(m): print("[mode] %d stage=%d" % [m, GameState.stage]))
 	GameState.stage_cleared.connect(func(s): print("[cleared] %d" % s))
 	GameState.stage_failed.connect(func(s): print("[failed] %d" % s))
+
+
+func _auto_stage_requested() -> bool:
+	if OS.get_cmdline_user_args().has("--auto-stage"):
+		return true
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("window.location.search")).contains("auto-stage")
+	return false

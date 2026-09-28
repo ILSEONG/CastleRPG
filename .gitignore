@@ -3,3 +3,4 @@ tools/
 export/
 *.apk
 *.aab
+dev/node_modules/
