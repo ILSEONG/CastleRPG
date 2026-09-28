@@ -14,11 +14,14 @@
 
 ### 포함
 - 3D 아이소메트릭 고정 카메라(직교 투영), 세로 화면(9:16)
-- 성: 정사각 성벽 4면, 각 면 중앙에 성문 1개(북·동·남·서). 성 HP 하나
-- 영웅 4명 고정. 탭으로 선택, 성문 탭으로 이동 배치. 자동 공격
+- 성: 정사각 성벽 4면, 각 면 중앙에 성문 1개(북·동·남·서). 성문마다 HP, 성 자체 HP. 성 HP 0 = 패배. 다른 건물은 HP 없음
+- 성문 파괴 → 그 면 괴물이 성 안으로 들어와 성(중앙 성채)을 직접 공격
+- 영웅 수는 성채 레벨 표 `[4, 8, 12]`로 결정. MVP는 성채 레벨 1 고정 → 4명. 탭으로 선택, 성문 탭으로 이동 배치. 자동 공격
+- 영웅 사망 시 부활 없음. 리필 이벤트까지 사망 상태 유지
 - 방치 모드: 사방에서 약한 괴물이 일정 간격으로 계속 스폰
 - 스테이지 모드: 웨이브가 강해지고 마지막에 에픽 보스 등장
-- 클리어 → 영웅 리셋(부활, 초기 위치, HP 전회복) → 3초 카운트 → 다음 스테이지 자동 시작
+- 클리어 → 리필 → 3초 카운트 → 다음 스테이지 자동 시작
+- 리필 = 영웅 전원 부활·HP 전회복·자리 복귀, 성문 HP 전회복, 성 HP 전회복, 남은 괴물 제거. 발생 시점: 방치→스테이지 시작, 클리어, 패배, 방치 중 성 HP 0
 - 패배(성 HP 0) → 방치 모드 복귀, 스테이지 번호 유지(재도전)
 - HUD: 스테이지 번호, 성 HP 바, 스테이지 진행/중지 버튼, 카운트다운, 결과 배너
 - 순수 로직 헤드리스 테스트 1개 파일
@@ -72,7 +75,11 @@ tests/
 - `mode`: `IDLE | STAGE | COUNTDOWN | RESULT`
 - `stage: int` (1부터), `castle_hp`, `castle_hp_max`
 - 시그널: `mode_changed(mode)`, `stage_cleared(stage)`, `stage_failed(stage)`, `castle_hp_changed(hp, max)`
-- 메서드: `start_stage()`, `stop_after_stage()`, `damage_castle(amount)`, `on_all_monsters_dead()`, `advance(delta)`
+- `keep_level: int` (MVP 고정 1), `gate_hp: Array[float]` 크기 4, `gate_hp_max`
+- 시그널 추가: `gate_hp_changed(side, hp, max)`, `gate_broken(side)`, `refilled`
+- 메서드: `start_stage()`, `stop_after_stage()`, `damage_castle(amount)`, `damage_gate(side, amount)`, `on_all_monsters_dead()`, `refill()`, `advance(delta)`, `hero_count() -> int`
+- `damage_gate`는 HP 0 도달 시 `gate_broken(side)`를 한 번만 낸다. 파괴된 성문에 추가 피해는 무시
+- `refill()`은 영웅·성문·성 HP를 전부 초기화하고 `refilled`를 낸다. 영웅·몬스터 노드는 이 시그널을 받아 스스로 리셋/제거한다
 - 카운트다운·결과 배너 시간은 `Timer` 노드 대신 `advance(delta)` 누적으로 진행한다. `_process`가 `advance`를 호출한다. 테스트에서 `advance(3.0)`으로 전이를 검증하기 위함
 - 씬 의존 없음. `load("res://scripts/game_state.gd").new()`로 단독 인스턴스화 가능해야 한다
 - 전이:
@@ -96,19 +103,22 @@ tests/
 ### 4.4 Castle
 - 성벽 한 변 길이 `Balance.CASTLE_SIZE`, 성문 4개는 `Marker3D` 자식. `gate_position(side) -> Vector3`
 - 성문마다 `Area3D`(충돌 레이어 2)로 탭 판정
-- 성 자체는 HP만 가진다. 성문별 HP 없음
+- 성문 HP는 `GameState.gate_hp`가 진실. Castle은 `gate_hp_changed`를 받아 색을 어둡게, `gate_broken`을 받아 성문 메시를 숨기고 `is_gate_broken(side)`를 노출
+- 성 중앙 `Marker3D`(성채 위치)를 `keep_position() -> Vector3`로 제공. 파괴된 성문을 통과한 괴물의 목표점
 
 ### 4.5 Hero
 - 스탯: `hp, atk, range, atk_interval, speed` — `Balance.HERO`에서 로드
 - 상태: `IDLE | MOVE | ATTACK | DEAD`
 - `assigned_side`: 배치 성문. 성문 위치에서 바깥으로 1.5 유닛 지점을 "자리"로 삼는다
 - 0.2초마다 사거리 내 가장 가까운 몬스터 탐색. 있으면 `ATTACK`, 없고 자리에서 벗어났으면 `MOVE`
-- 죽으면 `Balance.HERO_RESPAWN_SEC` 후 자리에서 부활. 스테이지 클리어/패배 리셋 때는 즉시 부활
+- 죽으면 `DEAD`. 메시 숨김, 탭 판정 끔, 행동 없음. `GameState.refilled`를 받을 때만 자리에서 HP 전회복으로 복귀. 부활 타이머 없음
+- 영웅 수는 `GameState.hero_count()`. main이 시작 시 그 수만큼 인스턴스화하고 4개 성문에 순환 배치
 - 선택 시 발밑에 링 표시
 
 ### 4.6 Monster
 - 스탯: `Balance.MONSTER[kind]`에 스테이지 스케일 곱
-- 우선순위: 사거리 안에 영웅 있음 → 공격. 없음 → 목표 성문으로 이동. 성문 도달 → `GameState.damage_castle` 주기 공격
+- 우선순위: 사거리 안에 영웅 있음 → 공격. 없음 → 목표 성문으로 이동. 성문 도달 → 성문 멀쩡하면 `GameState.damage_gate` 주기 공격, 파괴됐으면 `Castle.keep_position()`으로 이동 → 도달 시 `GameState.damage_castle` 주기 공격
+- `GameState.refilled`를 받으면 `queue_free`
 - 죽으면 `queue_free`, Spawner에 통지
 - 보스: 스케일 2.5배, HP·공격 배수. 색 구분
 
@@ -131,7 +141,8 @@ tests/
 
 ## 6. 밸런스 초기값 (`balance.gd`)
 
-- 성 HP 1000
+- 성 HP 1000, 성문 HP 400 (각각)
+- 영웅 슬롯: 성채 레벨별 `[4, 8, 12]`. MVP 성채 레벨 1
 - 영웅: hp 300, atk 25, range 3.0, atk_interval 0.8, speed 6
 - grunt: hp 60, atk 10, speed 2.5, 성 공격 간격 1.0
 - epic_boss: hp 1200, atk 60, speed 1.8
@@ -160,6 +171,8 @@ tests/
   - WaveDirector: stage가 커지면 총 스폰 수가 줄지 않는다
   - Balance: 스케일 함수가 stage에 대해 단조 증가
   - GameState: `IDLE → STAGE → RESULT → COUNTDOWN → STAGE` 전이, 패배 시 `IDLE` 복귀와 stage 유지
+  - GameState: `damage_gate`가 HP 0에서 `gate_broken`을 정확히 한 번 내고, 이후 피해는 무시. `refill()` 후 성문·성 HP 최대치 복원
+  - GameState: `hero_count()`가 성채 레벨 1에서 4
 - 스모크: `godot --headless --quit-after 60 scenes/main.tscn`이 스크립트 오류 없이 종료
 - 수동: 데스크톱 실행. 영웅 이동, 스테이지 1 클리어, 카운트다운, 스테이지 2 진입 확인
 
