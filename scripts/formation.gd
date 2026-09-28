@@ -11,6 +11,8 @@ const SIDE_DIR: Array[Vector3] = [
 	Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0),
 ]
 
+static var _keep_half: float = Balance.building("keep").size.x * Balance.TILE / 2.0  # 성채 외벽 절반 크기. 로드 때 한 번 계산
+
 var _claims := {}  # hero_id -> {"side": int, "post": int, "slot": int}
 
 
@@ -70,9 +72,7 @@ static func slot_position(half: float, side: int, post: int, slot: int) -> Vecto
 
 ## 성문이 부서진 뒤 괴물이 성채를 치려고 서는 지점 (성채 외벽 바로 앞).
 static func keep_target(side: int) -> Vector3:
-	var keep: Dictionary = Balance.building("keep")
-	var keep_half: float = keep.size.x * Balance.TILE / 2.0
-	return SIDE_DIR[side] * (keep_half + 0.8)
+	return SIDE_DIR[side] * (_keep_half + 0.8)
 
 
 static func spawn_center(half: float, side: int) -> Vector3:

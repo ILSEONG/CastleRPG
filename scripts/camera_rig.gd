@@ -65,6 +65,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			pan_pixels(mm.relative)
 
 
+## 포커스를 잃으면 손 뗌 이벤트가 안 올 수 있다 — 누름·드래그·터치 상태를 버린다.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_touches.clear()
+		_press_pos = Vector2.INF
+		_dragging = false
+
+
 ## 화면 픽셀 이동량만큼 바닥이 손가락을 따라오게 리그를 옮긴다.
 func pan_pixels(rel: Vector2) -> void:
 	var world_per_px := camera.size / get_viewport().get_visible_rect().size.x

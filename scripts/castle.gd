@@ -20,9 +20,8 @@ func _ready() -> void:
 	half = Balance.interior_half(GameState.keep_level)
 	var seg_len := half + Balance.WALL_T - Balance.GATE_W / 2.0  # 성문 옆 벽 한 토막 (모서리 바깥까지)
 	for side in 4:
-		var dir: Vector3 = Formation.SIDE_DIR[side]
 		var perp := Formation.perp(side)
-		var center := dir * (half + Balance.WALL_T / 2.0)
+		var center := Formation.gate_position(half, side)
 		for s in [-1.0, 1.0]:
 			var seg_center: Vector3 = center + perp * s * (Balance.GATE_W + seg_len) / 2.0
 			var seg_size := _along(perp, seg_len, Balance.WALL_H, Balance.WALL_T)

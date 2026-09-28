@@ -15,8 +15,6 @@ const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
 var camera: Camera3D
 var castle
-var formation
-var heroes: Array = []
 
 
 func _ready() -> void:
@@ -28,12 +26,11 @@ func _ready() -> void:
 	var rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
-	formation = FormationScript.new()
+	var formation = FormationScript.new()
 	for i in GameState.hero_count():
 		var hero = HeroScript.new()
 		hero.setup(i, castle, formation)
 		add_child(hero)
-		heroes.append(hero)
 	var picker = PickerScript.new()
 	picker.camera = camera
 	add_child(picker)
@@ -41,8 +38,10 @@ func _ready() -> void:
 	spawner.castle = castle
 	add_child(spawner)
 	add_child(HudScript.new())
-	_connect_dev_log()
+	if OS.is_debug_build():
+		_connect_dev_log()
 	if _auto_stage_requested():
+		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
 
 

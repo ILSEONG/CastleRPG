@@ -21,6 +21,7 @@ func _init() -> void:
 	test_gamestate_stop_after_stage()
 	test_gamestate_gate_broken_once()
 	test_gamestate_idle_castle_break_refills()
+	test_gamestate_start_stage_refills()
 	test_gamestate_hero_count()
 	test_layout_tables()
 	test_building_layout()
@@ -170,6 +171,22 @@ func test_gamestate_idle_castle_break_refills() -> void:
 	check(gs.castle_hp == gs.castle_hp_max, "castle healed immediately in idle")
 	check(not gs.is_gate_broken(1), "gates restored in idle refill")
 	check(refills[0] == 1, "refilled emitted once")
+	gs.free()
+
+
+func test_gamestate_start_stage_refills() -> void:
+	var gs = GameStateScript.new()
+	var refills := [0]
+	gs.refilled.connect(func(): refills[0] += 1)
+	gs.damage_gate(3, gs.gate_hp_max * 0.5)
+	gs.damage_castle(100.0)
+	check(not gs.is_gate_broken(3) and gs.gate_hp[3] < gs.gate_hp_max, "gate damaged, not broken, in idle")
+	check(gs.castle_hp < gs.castle_hp_max and gs.mode == gs.Mode.IDLE, "castle damaged in idle")
+	gs.start_stage()
+	check(gs.gate_hp[3] == gs.gate_hp_max, "start_stage refills the gate")
+	check(gs.castle_hp == gs.castle_hp_max, "start_stage refills the castle")
+	check(refills[0] == 1, "refilled emitted once, got %d" % refills[0])
+	check(gs.mode == gs.Mode.STAGE, "stage mode after start_stage")
 	gs.free()
 
 
