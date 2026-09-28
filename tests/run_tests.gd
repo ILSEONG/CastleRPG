@@ -236,6 +236,18 @@ func test_formation_claims() -> void:
 	check(a.side == 0 and a.post == wall and a.slot == 0, "assignment reports side, post and slot")
 	check(FormationScript.capacity(gate) == Balance.GATE_FRONT_SLOTS.size(), "gate capacity from balance")
 	check(FormationScript.capacity(wall) == Balance.WALL_TOP_SLOTS.size(), "wall capacity from balance")
+	# Test that hero with existing assignment keeps it when move to full post fails
+	# Gate side 0 currently full (heroes 0, 3, 2 at slots 0, 1, 2)
+	# Wall side 0 has 3 empty slots (1, 2, 3)
+	check(f.claim(6, 0, wall) == 1, "claim wall slot 1")
+	check(f.claim(7, 0, wall) == 2, "claim wall slot 2")
+	check(f.claim(8, 0, wall) == 3, "claim wall slot 3")
+	# Wall side 0 is now full (4 slots: heroes 1, 6, 7, 8 at slots 0, 1, 2, 3)
+	check(f.claim(3, 0, wall) == -1, "hero 3 cannot move to full wall")
+	var a3_after: Dictionary = f.assignment(3)
+	check(a3_after.side == 0 and a3_after.post == gate and a3_after.slot == 1, "hero 3 kept original assignment at gate slot 1")
+	check(f.claim(9, 0, gate) == -1, "gate still full, cannot add new hero")
+	check(f.assignment(3).slot == 1, "hero 3 still holds gate slot 1")
 
 
 func test_formation_positions() -> void:
