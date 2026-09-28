@@ -12,8 +12,6 @@ enum State { IDLE, MOVE, ATTACK, DEAD }
 const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
 const TRACER_SEC := 0.15
-const TAP_RADIUS := 1.4  # 탭 판정 캡슐 반경(m). 몸(0.45m)보다 크게 — 손가락 크기
-const TAP_HEIGHT := 2.6
 
 var castle
 var formation
@@ -33,7 +31,6 @@ var selected := false:
 var _stats: Dictionary = {}
 var _body: MeshInstance3D
 var _ring: MeshInstance3D
-var _area: Area3D
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
@@ -62,18 +59,6 @@ func _ready() -> void:
 	_ring.position.y = 0.05
 	_ring.visible = false
 	add_child(_ring)
-	_area = Area3D.new()
-	_area.collision_layer = 4
-	_area.collision_mask = 0
-	var cs := CollisionShape3D.new()
-	var shape := CapsuleShape3D.new()
-	shape.radius = TAP_RADIUS
-	shape.height = TAP_HEIGHT
-	cs.shape = shape
-	cs.position.y = TAP_HEIGHT / 2.0
-	_area.add_child(cs)
-	_area.set_meta("hero", self)
-	add_child(_area)
 	GameState.refilled.connect(reset)
 	reset()
 
@@ -84,7 +69,6 @@ func reset() -> void:
 	_target = null
 	global_position = stand_position()
 	_body.visible = true
-	_area.collision_layer = 4
 	_ring.visible = selected
 
 
@@ -116,7 +100,6 @@ func take_damage(amount: float) -> void:
 		state = State.DEAD
 		_body.visible = false
 		_ring.visible = false
-		_area.collision_layer = 0
 
 
 func is_alive() -> bool:

@@ -1,6 +1,8 @@
 extends Node3D
 ## 쿼터뷰 직교 카메라 리그. 리그 위치 = 화면 중앙이 바라보는 바닥 지점.
 ## 한 손가락/마우스 드래그로 이동(DRAG_THRESHOLD_PX 넘으면 드래그 확정), 휠·두 손가락 핀치로 줌.
+## 한 손가락 터치 팬은 emulate_mouse_from_touch로 들어온다(0번 손가락 → 마우스 이벤트) —
+## pan_pixels는 InputEventScreenDrag에서는 호출되지 않고 InputEventMouseMotion 쪽에서만 호출된다.
 ## 입력을 소비하지 않는다 — 탭 판정(UnitPicker)도 같은 이벤트를 본다.
 
 const Balance := preload("res://scripts/balance.gd")
