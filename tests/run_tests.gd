@@ -4,6 +4,7 @@ extends SceneTree
 
 const Balance := preload("res://scripts/balance.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
+const GameStateScript := preload("res://scripts/game_state.gd")
 
 var _fails := 0
 
@@ -14,6 +15,12 @@ func _init() -> void:
 	test_wave_stage_ends_with_boss()
 	test_wave_total_monotonic()
 	test_wave_idle_cycle()
+	test_gamestate_win_loop()
+	test_gamestate_fail_keeps_stage()
+	test_gamestate_stop_after_stage()
+	test_gamestate_gate_broken_once()
+	test_gamestate_idle_castle_break_refills()
+	test_gamestate_hero_count()
 	if _fails > 0:
 		printerr("FAILED %d" % _fails)
 	else:
@@ -76,3 +83,94 @@ func test_wave_idle_cycle() -> void:
 	check(sides == [0, 1, 2, 3], "idle sides rotate 0..3")
 	for e in ev:
 		check(e.kind == "grunt", "idle spawns grunts only")
+
+
+func test_gamestate_win_loop() -> void:
+	var gs = GameStateScript.new()
+	var modes: Array = []
+	gs.mode_changed.connect(func(m): modes.append(m))
+	check(gs.mode == gs.Mode.IDLE, "starts idle")
+	gs.start_stage()
+	check(gs.mode == gs.Mode.STAGE, "stage after start")
+	gs.on_all_monsters_dead()
+	check(gs.stage == 2, "stage incremented on clear")
+	check(gs.mode == gs.Mode.RESULT, "result after clear")
+	gs.advance(Balance.RESULT_SEC + 0.01)
+	check(gs.mode == gs.Mode.COUNTDOWN, "countdown after result")
+	check(gs.countdown_left() > 2.9, "countdown starts near 3s")
+	gs.advance(Balance.COUNTDOWN_SEC + 0.01)
+	check(gs.mode == gs.Mode.STAGE, "stage after countdown")
+	check(modes == [gs.Mode.STAGE, gs.Mode.RESULT, gs.Mode.COUNTDOWN, gs.Mode.STAGE], "transition order %s" % [modes])
+	gs.free()
+
+
+func test_gamestate_fail_keeps_stage() -> void:
+	var gs = GameStateScript.new()
+	var failed: Array = []
+	gs.stage_failed.connect(func(s): failed.append(s))
+	gs.stage = 5
+	gs.start_stage()
+	gs.damage_castle(Balance.CASTLE_HP + 1.0)
+	check(gs.castle_hp == 0.0, "castle hp clamps at 0")
+	check(gs.mode == gs.Mode.RESULT, "result after castle destroyed")
+	check(failed == [5], "stage_failed emitted with stage 5")
+	gs.damage_castle(50.0)
+	check(gs.mode == gs.Mode.RESULT, "extra damage after destruction ignored")
+	gs.advance(Balance.RESULT_SEC + 0.01)
+	check(gs.mode == gs.Mode.IDLE, "idle after fail")
+	check(gs.stage == 5, "stage kept on fail")
+	check(gs.castle_hp == gs.castle_hp_max, "castle healed after fail")
+	gs.free()
+
+
+func test_gamestate_stop_after_stage() -> void:
+	var gs = GameStateScript.new()
+	gs.start_stage()
+	gs.stop_after_stage()
+	check(gs.stop_requested, "stop requested")
+	gs.stop_after_stage()
+	check(not gs.stop_requested, "stop toggled off")
+	gs.stop_after_stage()
+	gs.on_all_monsters_dead()
+	gs.advance(Balance.RESULT_SEC + 0.01)
+	check(gs.mode == gs.Mode.IDLE, "idle when stop requested after clear")
+	check(gs.stage == 2, "stage still incremented")
+	gs.free()
+
+
+func test_gamestate_gate_broken_once() -> void:
+	var gs = GameStateScript.new()
+	var broken: Array = []
+	gs.gate_broken.connect(func(s): broken.append(s))
+	gs.damage_gate(2, gs.gate_hp_max * 0.5)
+	check(not gs.is_gate_broken(2), "half damage does not break gate")
+	gs.damage_gate(2, gs.gate_hp_max)
+	gs.damage_gate(2, 10.0)
+	check(gs.is_gate_broken(2), "gate broken")
+	check(gs.gate_hp[2] == 0.0, "gate hp clamps at 0")
+	check(broken == [2], "gate_broken emitted exactly once, got %s" % [broken])
+	check(not gs.is_gate_broken(0), "other gates untouched")
+	gs.refill()
+	check(gs.gate_hp[2] == gs.gate_hp_max, "gate restored on refill")
+	gs.free()
+
+
+func test_gamestate_idle_castle_break_refills() -> void:
+	var gs = GameStateScript.new()
+	var refills := [0]
+	gs.refilled.connect(func(): refills[0] += 1)
+	gs.damage_gate(1, 9999.0)
+	gs.damage_castle(9999.0)
+	check(gs.mode == gs.Mode.IDLE, "idle mode kept")
+	check(gs.castle_hp == gs.castle_hp_max, "castle healed immediately in idle")
+	check(not gs.is_gate_broken(1), "gates restored in idle refill")
+	check(refills[0] == 1, "refilled emitted once")
+	gs.free()
+
+
+func test_gamestate_hero_count() -> void:
+	var gs = GameStateScript.new()
+	check(gs.hero_count() == 4, "4 heroes at keep level 1")
+	gs.keep_level = 2
+	check(gs.hero_count() == 8, "8 heroes at keep level 2")
+	gs.free()
