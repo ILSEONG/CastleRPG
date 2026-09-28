@@ -9,6 +9,7 @@ const CastleScript := preload("res://scripts/castle.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
+const HudScript := preload("res://scripts/hud.gd")
 
 var camera: Camera3D
 var castle
@@ -35,6 +36,7 @@ func _ready() -> void:
 	var spawner = SpawnerScript.new()
 	spawner.castle = castle
 	add_child(spawner)
+	add_child(HudScript.new())
 	_apply_dev_args()
 
 
@@ -83,3 +85,6 @@ func _apply_dev_args() -> void:
 			_shot_at = float(arg.get_slice("=", 1))
 		elif arg == "--auto-stage":
 			GameState.start_stage()
+	GameState.mode_changed.connect(func(m): print("[mode] %d stage=%d" % [m, GameState.stage]))
+	GameState.stage_cleared.connect(func(s): print("[cleared] %d" % s))
+	GameState.stage_failed.connect(func(s): print("[failed] %d" % s))
