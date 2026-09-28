@@ -8,6 +8,7 @@ const Flat := preload("res://scripts/flat.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
+const SpawnerScript := preload("res://scripts/spawner.gd")
 
 var camera: Camera3D
 var castle
@@ -31,6 +32,9 @@ func _ready() -> void:
 	var picker = PickerScript.new()
 	picker.camera = camera
 	add_child(picker)
+	var spawner = SpawnerScript.new()
+	spawner.castle = castle
+	add_child(spawner)
 	_apply_dev_args()
 
 
