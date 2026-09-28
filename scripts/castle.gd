@@ -1,88 +1,84 @@
 extends Node3D
-## 성벽 4면 + 성문 4개 + 중앙 성채. 성문 HP의 진실은 GameState. 여기는 시각화와 위치 제공만.
+## 성벽 4면(두께·높이 있는 벽) + 모서리 탑 + 성문 4개. 성문 HP의 진실은 GameState.
+## 여기는 시각화·탭 판정 영역·위치 제공만. 크기는 GameState.keep_level의 내부 크기,
+## 위치 계산은 Formation static 함수에 위임한다.
 ## side: 0=N(-z) 1=E(+x) 2=S(+z) 3=W(-x)
 
 const Balance := preload("res://scripts/balance.gd")
 const Flat := preload("res://scripts/flat.gd")
+const Formation := preload("res://scripts/formation.gd")
 
-const SIDE_DIR: Array[Vector3] = [
-	Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0),
-]
-const WALL_H := 1.5
-const WALL_T := 0.6
-const GATE_W := 2.0
+const LAYER_GATE := 2
+const LAYER_WALL := 8
+const TAP_MARGIN := Vector3(1, 1, 1)  # 탭 판정 박스 여유
 
+var half: float = 0.0
 var _gate_meshes: Array = []
 
 
 func _ready() -> void:
-	var half := Balance.CASTLE_SIZE / 2.0
-	var seg_len := (Balance.CASTLE_SIZE - GATE_W) / 2.0
+	half = Balance.interior_half(GameState.keep_level)
+	var seg_len := half + Balance.WALL_T - Balance.GATE_W / 2.0  # 성문 옆 벽 한 토막 (모서리 바깥까지)
 	for side in 4:
-		var dir := SIDE_DIR[side]
-		var perp := _perp(side)
-		var center := dir * half
+		var dir: Vector3 = Formation.SIDE_DIR[side]
+		var perp := Formation.perp(side)
+		var center := dir * (half + Balance.WALL_T / 2.0)
 		for s in [-1.0, 1.0]:
-			var seg := Flat.box(_wall_size(perp, seg_len), Flat.WALL)
-			seg.position += center + perp * s * (GATE_W / 2.0 + seg_len / 2.0)
+			var seg_center: Vector3 = center + perp * s * (Balance.GATE_W + seg_len) / 2.0
+			var seg_size := _along(perp, seg_len, Balance.WALL_H, Balance.WALL_T)
+			var seg := Flat.box(seg_size, Flat.WALL)
+			seg.position += seg_center
 			add_child(seg)
-		var gate := Flat.box(_wall_size(perp, GATE_W), Flat.GATE)
-		gate.position += center
-		add_child(gate)
-		_gate_meshes.append(gate)
-		var area := Area3D.new()
-		area.collision_layer = 2
-		area.collision_mask = 0
-		var cs := CollisionShape3D.new()
-		var shape := BoxShape3D.new()
-		shape.size = _wall_size(perp, GATE_W) + Vector3(1.0, 1.0, 1.0)
-		cs.shape = shape
-		area.add_child(cs)
-		area.position = center + Vector3(0, WALL_H / 2.0, 0)
-		area.set_meta("side", side)
-		add_child(area)
-	add_child(Flat.box(Vector3(3, 3, 3), Flat.KEEP))
+			_add_tap_area(seg_center, seg_size, LAYER_WALL, side)
+		var door := Flat.box(_along(perp, Balance.GATE_W, Balance.WALL_H, Balance.WALL_T * 0.6), Flat.GATE)
+		door.position += center
+		add_child(door)
+		_gate_meshes.append(door)
+		_add_tap_area(center, _along(perp, Balance.GATE_W, Balance.WALL_H, Balance.WALL_T), LAYER_GATE, side)
+	var c := half + Balance.WALL_T / 2.0
+	for corner in [Vector3(c, 0, c), Vector3(-c, 0, c), Vector3(c, 0, -c), Vector3(-c, 0, -c)]:
+		var tower := Flat.box(Vector3(Balance.TOWER_SIZE, Balance.TOWER_H, Balance.TOWER_SIZE), Flat.TOWER)
+		tower.position += corner
+		add_child(tower)
 	GameState.gate_hp_changed.connect(_on_gate_hp_changed)
 
 
-func gate_position(side: int) -> Vector3:
-	return SIDE_DIR[side] * (Balance.CASTLE_SIZE / 2.0)
-
-
-## 몬스터가 성문을 공격하려고 멈추는 지점 (성문 바로 바깥).
 func gate_target(side: int) -> Vector3:
-	return gate_position(side) + SIDE_DIR[side] * 0.8
+	return Formation.gate_target(half, side)
 
 
-## 성문 바깥 GATE_STAND_OFFSET 지점. 초기 배치는 영웅 i → 성문 i % 4 이므로
-## 슬롯 = i / 4 (4명이면 전원 슬롯 0 = 성문 정면 중앙, 8·12명이면 좌우로 1.2씩).
-## ponytail: 슬롯이 영웅 index 고정이라, 같은 슬롯 영웅 둘을 같은 성문으로 옮기면 겹친다. 겹침이 문제되면 성문별 점유 슬롯 배정으로 교체.
-const STAND_SLOT_OFFSETS := [0.0, -1.2, 1.2]
+func keep_target(side: int) -> Vector3:
+	return Formation.keep_target(side)
 
 
-func hero_stand_position(side: int, hero_index: int) -> Vector3:
-	var slot := floori(hero_index / 4.0) % STAND_SLOT_OFFSETS.size()
-	return gate_position(side) + SIDE_DIR[side] * Balance.GATE_STAND_OFFSET \
-		+ _perp(side) * STAND_SLOT_OFFSETS[slot]
-
-
-func keep_position() -> Vector3:
-	return Vector3.ZERO
+func slot_position(side: int, post: int, slot: int) -> Vector3:
+	return Formation.slot_position(half, side, post, slot)
 
 
 func spawn_position(side: int) -> Vector3:
-	return SIDE_DIR[side] * Balance.SPAWN_DISTANCE + _perp(side) * randf_range(-3.0, 3.0)
+	return Formation.spawn_center(half, side) \
+		+ Formation.perp(side) * randf_range(-Balance.SPAWN_SPREAD, Balance.SPAWN_SPREAD)
 
 
-func _perp(side: int) -> Vector3:
-	var dir := SIDE_DIR[side]
-	return Vector3(-dir.z, 0, dir.x)
-
-
-func _wall_size(perp: Vector3, length: float) -> Vector3:
+## perp 방향 길이 length, 높이 height, 면 방향 두께 thickness 인 박스 크기.
+func _along(perp: Vector3, length: float, height: float, thickness: float) -> Vector3:
 	if absf(perp.x) > 0.5:
-		return Vector3(length, WALL_H, WALL_T)
-	return Vector3(WALL_T, WALL_H, length)
+		return Vector3(length, height, thickness)
+	return Vector3(thickness, height, length)
+
+
+func _add_tap_area(ground_center: Vector3, size: Vector3, layer: int, side: int) -> void:
+	var area := Area3D.new()
+	area.collision_layer = layer
+	area.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size + TAP_MARGIN
+	cs.shape = shape
+	area.add_child(cs)
+	area.position = ground_center + Vector3(0, size.y / 2.0, 0)
+	area.set_meta("side", side)
+	add_child(area)
 
 
 func _on_gate_hp_changed(side: int, hp: float, hp_max: float) -> void:

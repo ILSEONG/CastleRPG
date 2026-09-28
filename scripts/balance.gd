@@ -2,19 +2,12 @@ extends RefCounted
 ## 밸런스 상수와 스케일 함수. 튠은 여기서만.
 
 const CASTLE_HP := 1000.0
-const CASTLE_SIZE := 10.0        # 성벽 한 변 (미터)
-const GATE_STAND_OFFSET := 1.5   # 성문 바깥 영웅 자리까지 거리
-const SPAWN_DISTANCE := 18.0     # 성 중심에서 스폰 지점까지
 const HERO_SLOTS := [4, 8, 12]   # index = keep_level - 1
 const MAX_LIVE_MONSTERS := 120
 const COUNTDOWN_SEC := 3.0
 const RESULT_SEC := 2.0
 const WAVE_GAP_SEC := 8.0
 const SPAWN_SPACING_SEC := 0.5
-
-const HERO := {
-	"hp": 300.0, "atk": 25.0, "range": 3.0, "atk_interval": 0.8, "speed": 6.0,
-}
 
 const MONSTER := {
 	"grunt": {
@@ -41,7 +34,7 @@ const SPAWN_SPREAD := 6.0             # 스폰 지점 좌우 흩어짐 (±)
 const GATE_FRONT_OFFSET := 1.5        # 성벽 바깥면에서 성문 앞 자리까지
 const GATE_FRONT_SLOTS := [0.0, -1.6, 1.6]      # 성문 앞 자리 좌우 오프셋
 const WALL_TOP_SLOTS := [-4.0, 4.0, -8.0, 8.0]  # 성벽 위 자리 좌우 오프셋 (성문 위는 비움)
-const CAMERA_SIZE_DEFAULT := 44.0     # 직교 카메라 가로 폭(미터)
+const CAMERA_SIZE_DEFAULT := 56.0     # 직교 카메라 가로 폭(미터)
 const CAMERA_SIZE_MIN := 16.0
 const CAMERA_SIZE_MAX := 90.0
 

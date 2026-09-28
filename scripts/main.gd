@@ -3,27 +3,35 @@ extends Node3D
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 
 const Balance := preload("res://scripts/balance.gd")
-const Flat := preload("res://scripts/flat.gd")
 const CastleScript := preload("res://scripts/castle.gd")
+const BuildingsScript := preload("res://scripts/buildings.gd")
+const CameraRigScript := preload("res://scripts/camera_rig.gd")
+const FormationScript := preload("res://scripts/formation.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
 var camera: Camera3D
 var castle
+var formation
 var heroes: Array = []
 
 
 func _ready() -> void:
-	_build_world()
+	_build_environment()
 	castle = CastleScript.new()
 	add_child(castle)
+	_build_ground(castle.half)
+	add_child(BuildingsScript.new())
+	var rig = CameraRigScript.new()
+	add_child(rig)
+	camera = rig.camera
+	formation = FormationScript.new()
 	for i in GameState.hero_count():
 		var hero = HeroScript.new()
-		hero.castle = castle
-		hero.index = i
-		hero.assigned_side = i % 4
+		hero.setup(i, castle, formation)
 		add_child(hero)
 		heroes.append(hero)
 	var picker = PickerScript.new()
@@ -38,7 +46,7 @@ func _ready() -> void:
 		GameState.start_stage()
 
 
-func _build_world() -> void:
+func _build_environment() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
@@ -47,23 +55,24 @@ func _build_world() -> void:
 	e.ambient_light_color = Color(0.75, 0.78, 0.85)
 	env.environment = e
 	add_child(env)
-
 	var sun := DirectionalLight3D.new()
 	sun.shadow_enabled = false
 	add_child(sun)
 	sun.rotation_degrees = Vector3(-55, 35, 0)
 
-	var ground := PlaneMesh.new()
-	ground.size = Vector2(60, 60)
-	add_child(Flat.mesh(ground, Flat.GROUND))
 
-	camera = Camera3D.new()
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.keep_aspect = Camera3D.KEEP_WIDTH
-	camera.size = 26.0
-	add_child(camera)
-	camera.position = Vector3(0, 24, 24)
-	camera.look_at(Vector3.ZERO)
+func _build_ground(interior_half: float) -> void:
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(Balance.MAP_HALF * 2.0, Balance.MAP_HALF * 2.0)
+	var mat := ShaderMaterial.new()
+	mat.shader = GroundShader
+	mat.set_shader_parameter("tile_size", Balance.TILE)
+	mat.set_shader_parameter("interior_half", interior_half)
+	mat.set_shader_parameter("road_half", Balance.TILE)
+	var mi := MeshInstance3D.new()
+	mi.mesh = plane
+	mi.material_override = mat
+	add_child(mi)
 
 
 func _connect_dev_log() -> void:

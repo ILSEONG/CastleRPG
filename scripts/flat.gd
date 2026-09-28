@@ -1,12 +1,11 @@
 extends RefCounted
 ## 단색 플랫 메시 헬퍼와 팔레트. 모든 플레이스홀더 지오메트리는 여기로.
 
-const GROUND := Color(0.72, 0.80, 0.62)
-const WALL := Color(0.80, 0.78, 0.72)
+const WALL := Color(0.86, 0.84, 0.78)
+const TOWER := Color(0.78, 0.76, 0.70)
 const GATE := Color(0.55, 0.38, 0.22)
-const KEEP := Color(0.62, 0.64, 0.72)
-const HERO := Color(0.25, 0.55, 0.95)
 const HERO_SELECTED := Color(1.0, 0.9, 0.2)
+const ARROW := Color(0.30, 0.22, 0.14)
 
 
 static func mesh(m: Mesh, color: Color) -> MeshInstance3D:

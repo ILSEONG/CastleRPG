@@ -1,8 +1,10 @@
 extends Node3D
-## 괴물. 사거리 내 영웅 우선 공격, 없으면 목표 성문으로 직진. 성문이 부서졌으면 성채로 진입해 성 HP 공격.
+## 괴물(근접). 수평 사거리 안 지상 영웅 우선 공격, 없으면 자기 면 성문 앞으로 직진해 성문 공격.
+## 성문이 부서졌으면 성채 앞으로 가서 성 HP 공격. 성벽 위 영웅은 표적으로 삼지 않는다.
 
 const Balance := preload("res://scripts/balance.gd")
 const Flat := preload("res://scripts/flat.gd")
+const Formation := preload("res://scripts/formation.gd")
 
 const SCAN_INTERVAL := 0.2
 
@@ -66,15 +68,15 @@ func _process(delta: float) -> void:
 	if _scan_cd <= 0.0:
 		_scan_cd = SCAN_INTERVAL
 		_target_hero = _nearest_hero()
-	if _target_hero != null and _target_hero.is_alive():
+	if _target_hero != null and _target_hero.is_alive() and not _target_hero.is_on_wall():
 		if _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
 			_target_hero.take_damage(atk)
 		return
 	_target_hero = null
 	var broken: bool = GameState.is_gate_broken(side)
-	var dest: Vector3 = castle.keep_position() if broken else castle.gate_target(side)
-	if global_position.distance_to(dest) > _stats.range:
+	var dest: Vector3 = castle.keep_target(side) if broken else castle.gate_target(side)
+	if Formation.flat_distance(global_position, dest) > _stats.range:
 		global_position = global_position.move_toward(dest, _stats.speed * delta)
 	elif _atk_cd <= 0.0:
 		_atk_cd = _stats.atk_interval
@@ -88,9 +90,9 @@ func _nearest_hero():
 	var best = null
 	var best_d: float = _stats.range
 	for h in get_tree().get_nodes_in_group("heroes"):
-		if not h.is_alive():
+		if not h.is_alive() or h.is_on_wall():
 			continue
-		var d: float = global_position.distance_to(h.global_position)
+		var d := Formation.flat_distance(global_position, h.global_position)
 		if d <= best_d:
 			best_d = d
 			best = h
