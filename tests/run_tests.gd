@@ -5,6 +5,7 @@ extends SceneTree
 const Balance := preload("res://scripts/balance.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const GameStateScript := preload("res://scripts/game_state.gd")
+const FormationScript := preload("res://scripts/formation.gd")
 
 var _fails := 0
 
@@ -21,6 +22,10 @@ func _init() -> void:
 	test_gamestate_gate_broken_once()
 	test_gamestate_idle_castle_break_refills()
 	test_gamestate_hero_count()
+	test_layout_tables()
+	test_building_layout()
+	test_formation_claims()
+	test_formation_positions()
 	if _fails > 0:
 		printerr("FAILED %d" % _fails)
 	else:
@@ -174,3 +179,88 @@ func test_gamestate_hero_count() -> void:
 	gs.keep_level = 2
 	check(gs.hero_count() == 8, "8 heroes at keep level 2")
 	gs.free()
+
+
+func test_layout_tables() -> void:
+	check(Balance.interior_half(1) == 16.0, "interior half is 16m at keep level 1")
+	check(Balance.interior_half(2) > Balance.interior_half(1), "interior grows at keep level 2")
+	check(Balance.interior_half(3) > Balance.interior_half(2), "interior grows at keep level 3")
+	check(Balance.interior_half(99) == Balance.interior_half(3), "interior clamps beyond table")
+	check(Balance.hero_role(0) == "warrior" and Balance.hero_role(1) == "archer", "roster starts warrior, archer")
+	check(Balance.hero_role(2) == "warrior" and Balance.hero_role(3) == "archer", "roster alternates")
+	for role in Balance.HERO_ROLES:
+		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "color"]:
+			check(Balance.HERO_ROLES[role].has(key), "role %s has %s" % [role, key])
+	check(Balance.HERO_ROLES.archer.range > Balance.HERO_ROLES.warrior.range, "archer outranges warrior")
+
+
+func test_building_layout() -> void:
+	var half_tiles := floori(Balance.INTERIOR_TILES[0] / 2.0)
+	var allowed := Rect2i(-half_tiles + 1, -half_tiles + 1, 2 * half_tiles - 2, 2 * half_tiles - 2)
+	var road_ns := Rect2i(-1, -half_tiles, 2, 2 * half_tiles)
+	var road_ew := Rect2i(-half_tiles, -1, 2 * half_tiles, 2)
+	var placed: Array = []
+	var ids := {}
+	for b in Balance.BUILDINGS:
+		var r := Rect2i(b.cell, b.size)
+		check(allowed.encloses(r), "%s inside level-1 interior with 1-tile wall margin" % b.id)
+		if b.id != "keep":
+			check(not r.intersects(road_ns) and not r.intersects(road_ew), "%s stays off the cross roads" % b.id)
+		for other in placed:
+			check(not r.intersects(other), "%s overlaps no other building" % b.id)
+		placed.append(r)
+		ids[b.id] = true
+	for id in ["keep", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm"]:
+		check(ids.has(id), "building %s present" % id)
+	var keep := Balance.building("keep")
+	check(Rect2i(keep.cell, keep.size).get_center() == Vector2i(0, 0), "keep centered on the crossroads")
+	check(Balance.building("nope").is_empty(), "unknown building id gives empty dict")
+
+
+func test_formation_claims() -> void:
+	var f = FormationScript.new()
+	var gate: int = FormationScript.POST_GATE
+	var wall: int = FormationScript.POST_WALL
+	check(f.claim(0, 0, gate) == 0, "first gate claim gets slot 0")
+	check(f.claim(1, 0, gate) == 1, "second gate claim gets slot 1")
+	check(f.claim(2, 0, gate) == 2, "third gate claim gets slot 2")
+	check(f.claim(3, 0, gate) == -1, "gate post full at capacity 3")
+	check(f.assignment(3).is_empty(), "failed claim leaves hero unassigned")
+	check(f.claim(1, 0, gate) == 1, "re-claiming own post keeps the slot")
+	check(f.claim(1, 0, wall) == 0, "moving to the wall claims wall slot 0")
+	check(f.claim(3, 0, gate) == 1, "slot freed by the move is reusable")
+	f.release(0)
+	check(f.claim(4, 0, gate) == 0, "released slot is reusable")
+	check(f.claim(5, 2, gate) == 0, "other side is independent")
+	var a: Dictionary = f.assignment(1)
+	check(a.side == 0 and a.post == wall and a.slot == 0, "assignment reports side, post and slot")
+	check(FormationScript.capacity(gate) == Balance.GATE_FRONT_SLOTS.size(), "gate capacity from balance")
+	check(FormationScript.capacity(wall) == Balance.WALL_TOP_SLOTS.size(), "wall capacity from balance")
+
+
+func test_formation_positions() -> void:
+	var half := Balance.interior_half(1)
+	var outer := half + Balance.WALL_T
+	var seen := {}
+	for side in 4:
+		var dir: Vector3 = FormationScript.SIDE_DIR[side]
+		check(dir.dot(FormationScript.gate_position(half, side)) == half + Balance.WALL_T / 2.0, "gate on wall centerline, side %d" % side)
+		check(dir.dot(FormationScript.gate_target(half, side)) > outer, "gate target outside the wall face, side %d" % side)
+		check(dir.dot(FormationScript.spawn_center(half, side)) > outer + 10.0, "spawn far outside, side %d" % side)
+		for slot in FormationScript.capacity(FormationScript.POST_GATE):
+			var p: Vector3 = FormationScript.slot_position(half, side, FormationScript.POST_GATE, slot)
+			check(p.y == 0.0 and dir.dot(p) > outer, "gate slot on the ground outside the wall (side %d slot %d)" % [side, slot])
+			seen[p] = true
+		for slot in FormationScript.capacity(FormationScript.POST_WALL):
+			var p: Vector3 = FormationScript.slot_position(half, side, FormationScript.POST_WALL, slot)
+			check(p.y == Balance.WALL_H, "wall slot on the wall top (side %d slot %d)" % [side, slot])
+			check(absf(dir.dot(p) - (half + Balance.WALL_T / 2.0)) < 0.001, "wall slot on the wall centerline")
+			check(absf(FormationScript.perp(side).dot(p)) > Balance.GATE_W / 2.0, "wall slot beside the gate, not above it")
+			seen[p] = true
+	check(seen.size() == 4 * (Balance.GATE_FRONT_SLOTS.size() + Balance.WALL_TOP_SLOTS.size()), "all slot positions distinct")
+	var keep := Balance.building("keep")
+	var keep_half: float = keep.size.x * Balance.TILE / 2.0
+	for side in 4:
+		var k: Vector3 = FormationScript.keep_target(side)
+		check(FormationScript.SIDE_DIR[side].dot(k) > keep_half, "keep target outside the keep footprint, side %d" % side)
+	check(is_equal_approx(FormationScript.flat_distance(Vector3(0, 3, 0), Vector3(3, 0, 4)), 5.0), "flat distance ignores height")
