@@ -52,12 +52,10 @@
 ```
 project.godot
 scenes/
-  main.tscn        # 카메라, 조명, 바닥, Castle, Spawner, HUD
-  castle.tscn      # 성벽 4면 + 성문 4개(Marker3D + StaticBody3D)
-  hero.tscn        # Node3D + MeshInstance3D + Area3D(탭 판정) + 선택 링
-  monster.tscn     # Node3D + MeshInstance3D (보스도 같은 씬, 스탯·스케일만 다름)
-  hud.tscn         # CanvasLayer
+  main.tscn        # 유일한 씬. Node3D + main.gd. 나머지 오브젝트는 전부 코드로 생성
 scripts/
+  main.gd          # 카메라, 조명, 바닥, Castle, 영웅, Spawner, Picker, HUD 생성. 개발용 --shot/--auto-stage 플래그
+  flat.gd          # 단색 플랫 메시 헬퍼 (box, capsule, mesh) + 팔레트 상수
   game_state.gd    # 오토로드. 모드·스테이지·성 HP·시그널
   balance.gd       # 상수 및 스케일 함수
   wave_director.gd # RefCounted. 스폰 스케줄 생성 (순수 로직)
@@ -134,7 +132,7 @@ tests/
 ## 5. 데이터 흐름
 
 1. 버튼 → `GameState.start_stage()` → `mode_changed(STAGE)`
-2. Spawner가 `WaveDirector.build(stage, STAGE)`로 스케줄 받아 타이머 소비 → `monster.tscn` 인스턴스
+2. Spawner가 `WaveDirector.build(stage, STAGE)`로 스케줄 받아 타이머 소비 → `monster.gd` 인스턴스
 3. 몬스터 이동/공격, 영웅 자동 공격. 성 피격은 `GameState.damage_castle`
 4. 마지막 몬스터 사망 → Spawner → `GameState.on_all_monsters_dead()` → `RESULT` → 리셋 → `COUNTDOWN` → `STAGE`
 5. HUD는 GameState 시그널만 구독. 게임 오브젝트를 직접 참조하지 않는다
@@ -173,7 +171,7 @@ tests/
   - GameState: `IDLE → STAGE → RESULT → COUNTDOWN → STAGE` 전이, 패배 시 `IDLE` 복귀와 stage 유지
   - GameState: `damage_gate`가 HP 0에서 `gate_broken`을 정확히 한 번 내고, 이후 피해는 무시. `refill()` 후 성문·성 HP 최대치 복원
   - GameState: `hero_count()`가 성채 레벨 1에서 4
-- 스모크: `godot --headless --quit-after 60 scenes/main.tscn`이 스크립트 오류 없이 종료
+- 스모크: `godot --headless --fixed-fps 60 --quit-after 900 -- --auto-stage`가 `SCRIPT ERROR` 없이 종료
 - 수동: 데스크톱 실행. 영웅 이동, 스테이지 1 클리어, 카운트다운, 스테이지 2 진입 확인
 
 ## 10. 완료 기준
@@ -181,4 +179,4 @@ tests/
 - 위 테스트·스모크 통과
 - 데스크톱에서 스테이지 1→2 연속 진행과 패배→방치 복귀가 동작
 - 프로젝트 설정이 세로·Compatibility·모바일 기준
-- 코드 파일 12개 이내, 외부 에셋 0개
+- 스크립트 12개 이내(테스트 제외), 씬 파일 1개, 외부 에셋 0개
