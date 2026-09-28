@@ -1414,11 +1414,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `scripts/camera_rig.gd` (입력 추가)
 - Modify: `scripts/hud.gd` (컨테이너·바 마우스 무시)
 - Modify: `dev/webshot.mjs` (`--drag`, `--wheel` 동작 추가)
+- Modify: `scripts/unit_picker.gd` (드래그·핀치 중 탭 취소 — Task 3 리뷰 지적)
+- Modify: `scripts/hero.gd` (탭 판정 반경 확대 — 모바일 손가락 크기)
 
 **Interfaces:**
 - Consumes: `Balance.CAMERA_SIZE_MIN/MAX`, `MAP_HALF`
 - Produces `camera_rig.gd`: `pan_pixels(rel: Vector2)`, `zoom_by(factor: float)`. `_unhandled_input`에서 마우스 드래그(12px 넘으면 드래그 확정)·휠·두 손가락 핀치 처리. 입력을 소비하지 않는다
-- Produces `webshot.mjs`: `--drag x1,y1,x2,y2[,ms]`, `--wheel x,y,dy[,ms]` (인자 순서대로 실행)
+- Produces `webshot.mjs`: `--drag x1,y1,x2,y2[,ms]`, `--wheel x,y,dy[,ms]`, `--dragback x,y,dx,dy[,ms]` (인자 순서대로 실행)
 
 - [ ] **Step 1: scripts/camera_rig.gd 전체 교체**
 
@@ -1541,12 +1543,13 @@ func _pinch(sd: InputEventScreenDrag) -> void:
 
 사용법 주석 둘째 줄을 교체:
 ```js
-//                            [--click x,y[,ms]]... [--drag x1,y1,x2,y2[,ms]]... [--wheel x,y,dy[,ms]]...
+//                            [--click x,y[,ms]]... [--drag x1,y1,x2,y2[,ms]]... [--wheel x,y,dy[,ms]]... [--dragback x,y,dx,dy[,ms]]...
 ```
 인자 파싱의 `--click` 분기 다음에 추가:
 ```js
   else if (a === '--drag') { opt.actions.push({ type: 'drag', nums: v.split(',').map(Number) }); i++; }
   else if (a === '--wheel') { opt.actions.push({ type: 'wheel', nums: v.split(',').map(Number) }); i++; }
+  else if (a === '--dragback') { opt.actions.push({ type: 'dragback', nums: v.split(',').map(Number) }); i++; }
 ```
 동작 루프의 `click` 분기 다음에 추가:
 ```js
@@ -1562,9 +1565,63 @@ func _pinch(sd: InputEventScreenDrag) -> void:
     await page.mouse.move(x, y);
     await page.mouse.wheel(0, dy);
     await page.waitForTimeout(ms);
+  } else if (act.type === 'dragback') {
+    // 한 번 누른 채 (dx,dy)만큼 갔다가 제자리로 돌아와 뗀다 — 탭으로 오인되면 안 되는 동작
+    const [x, y, dx, dy, ms = 500] = act.nums;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.move(x, y, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(ms);
   }
 ```
 (`if (act.type === 'click') { ... }` 블록 뒤에 `else if`로 이어 붙인다.)
+
+- [ ] **Step 3a: scripts/unit_picker.gd — 드래그·핀치면 탭 취소**
+
+현재는 누른 곳과 뗀 곳만 비교해서, 멀리 끌었다가 제자리로 돌아와 떼거나 핀치 후 첫 손가락을 떼면 탭으로 처리된다(의도치 않은 이동 명령). 이동 중 한 번이라도 `TAP_MAX_PX`를 넘으면 그 누름은 탭이 아니고, 두 번째 손가락이 닿아도 탭이 아니다.
+
+`_unhandled_input` 전체를 교체:
+```gdscript
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if (event as InputEventScreenTouch).index >= 1:
+			_press_pos = Vector2.INF  # 두 번째 손가락 = 핀치. 이번 누름은 탭이 아니다
+		return
+	if event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if _press_pos != Vector2.INF and mm.position.distance_to(_press_pos) > TAP_MAX_PX:
+			_press_pos = Vector2.INF  # 드래그로 확정. 되돌아와 떼도 탭이 아니다
+		return
+	var mb := event as InputEventMouseButton
+	if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed:
+		_press_pos = mb.position
+	elif _press_pos != Vector2.INF:
+		_pending = mb.position
+		_press_pos = Vector2.INF
+```
+파일 머리 주석의 "누른 곳과 뗀 곳이 TAP_MAX_PX 이내일 때만 탭" 줄을 "누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭"으로 바꾼다.
+
+- [ ] **Step 3b: scripts/hero.gd — 탭 판정 반경 확대**
+
+기본 줌에서 영웅이 화면에서 20px 안팎이라 손가락으로 누르기 어렵다. 판정 캡슐만 키운다(보이는 몸은 그대로).
+
+상수 블록(`const TRACER_SEC := 0.15` 다음)에 추가:
+```gdscript
+const TAP_RADIUS := 1.4  # 탭 판정 캡슐 반경(m). 몸(0.45m)보다 크게 — 손가락 크기
+const TAP_HEIGHT := 2.6
+```
+`_ready()`의 판정 캡슐 부분을 교체:
+```gdscript
+	shape.radius = TAP_RADIUS
+	shape.height = TAP_HEIGHT
+	cs.shape = shape
+	cs.position.y = TAP_HEIGHT / 2.0
+```
+(기존 `shape.radius = 0.7`, `shape.height = 1.8`, `cs.shape = shape`, `cs.position.y = 0.9` 네 줄을 대체.)
 
 - [ ] **Step 4: 테스트 + 스모크**
 
@@ -1587,15 +1644,16 @@ Read 다섯 장. Expected: `drag` — 성이 기준보다 왼쪽 아래로 이�
 ```bash
 node dev/webshot.mjs --out $W/t4-tap-move.png --wait 5000 --click AX,AY,300 --click GX,GY,3000
 node dev/webshot.mjs --out $W/t4-drag-no-select.png --wait 5000 --drag AX,AY,AX+40,AY+40
+node dev/webshot.mjs --out $W/t4-dragback-no-order.png --wait 5000 --click AX,AY,300 --dragback GX,GY,80,0,3000
 ```
-(`AX,AY`=궁수, `GX,GY`=성문, 숫자로 바꿔 넣는다.) Expected: `tap-move` — 그 궁수가 목표 성문 바로 바깥에 서 있고 발밑에 노란 링. `drag-no-select` — 화면만 이동하고 노란 링 없음.
+(`AX,AY`=궁수, `GX,GY`=성문, 숫자로 바꿔 넣는다.) Expected: `tap-move` — 그 궁수가 목표 성문 바로 바깥에 서 있고 발밑에 노란 링. `drag-no-select` — 화면만 이동하고 노란 링 없음. `dragback-no-order` — 궁수는 선택(노란 링)됐지만 원래 성벽 자리에 그대로(성문으로 가지 않음).
 
 서버 종료.
 
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add scripts/camera_rig.gd scripts/hud.gd dev/webshot.mjs
+git add scripts/camera_rig.gd scripts/hud.gd scripts/unit_picker.gd scripts/hero.gd dev/webshot.mjs
 git commit -m "feat: camera drag pan, wheel and pinch zoom; HUD passes drags through
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1653,6 +1711,8 @@ Read 전부. Expected: spec 개정 2 §9의 화면 항목 전부 — 쿼터뷰 �
 - 실행 방법: 개정 2 §8 참고 (창을 띄우지 않는다. 웹 빌드 → VSCode Simple Browser)
 ```
 같은 파일 §9의 `- 수동: 데스크톱 실행...` 줄을 삭제.
+
+`docs/superpowers/specs/2026-09-28-castlerpg-mvp-rev2-design.md` §3의 `줌(직교 크기) 16~90, 기본 44.`를 실제 값(`Balance.CAMERA_SIZE_DEFAULT`, Task 3에서 56으로 조정 — 레벨 1 성 전체가 보이게)으로 고치고, §6 탭 규칙을 "누른 뒤 뗄 때까지 12px 넘게 움직이지 않고 두 번째 손가락도 없으면 탭"으로 고친다.
 
 - [ ] **Step 6: 완료 기준 점검 (spec 개정 2 §9)**
 
