@@ -19,6 +19,7 @@ func _ready() -> void:
 	top.offset_left = 16
 	top.offset_right = -16
 	top.offset_top = 16
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(top)
 	_stage_label = Label.new()
 	_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -27,6 +28,7 @@ func _ready() -> void:
 	_castle_bar = _bar(Color(0.95, 0.75, 0.2))
 	top.add_child(_castle_bar)
 	var gates := HBoxContainer.new()
+	gates.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(gates)
 	for side in 4:
 		var b := _bar(Color(0.55, 0.6, 0.7))
@@ -72,6 +74,7 @@ func _bar(color: Color) -> ProgressBar:
 	var b := ProgressBar.new()
 	b.custom_minimum_size = Vector2(0, 18)
 	b.show_percentage = false
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = color
 	b.add_theme_stylebox_override("fill", fill)

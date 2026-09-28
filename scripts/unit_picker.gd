@@ -1,6 +1,6 @@
 extends Node
 ## 탭 → 카메라 레이캐스트 → 영웅 선택 / 선택 영웅을 성문 앞(성문 탭) 또는 성벽 위(성벽 탭)로 이동.
-## 드래그(카메라 이동)와 구분: 누른 곳과 뗀 곳이 TAP_MAX_PX 이내일 때만 탭.
+## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
 ## 입력을 소비하지 않는다 — 카메라 리그도 같은 이벤트를 본다.
 ## 터치는 emulate_mouse_from_touch로 마우스 이벤트가 되므로 마우스만 처리.
 
@@ -19,14 +19,22 @@ var _pending: Vector2 = Vector2.INF
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if (event as InputEventScreenTouch).index >= 1:
+			_press_pos = Vector2.INF  # 두 번째 손가락 = 핀치. 이번 누름은 탭이 아니다
+		return
+	if event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if _press_pos != Vector2.INF and mm.position.distance_to(_press_pos) > TAP_MAX_PX:
+			_press_pos = Vector2.INF  # 드래그로 확정. 되돌아와 떼도 탭이 아니다
+		return
 	var mb := event as InputEventMouseButton
 	if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if mb.pressed:
 		_press_pos = mb.position
 	elif _press_pos != Vector2.INF:
-		if mb.position.distance_to(_press_pos) <= TAP_MAX_PX:
-			_pending = mb.position
+		_pending = mb.position
 		_press_pos = Vector2.INF
 
 

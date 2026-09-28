@@ -12,6 +12,8 @@ enum State { IDLE, MOVE, ATTACK, DEAD }
 const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
 const TRACER_SEC := 0.15
+const TAP_RADIUS := 1.4  # 탭 판정 캡슐 반경(m). 몸(0.45m)보다 크게 — 손가락 크기
+const TAP_HEIGHT := 2.6
 
 var castle
 var formation
@@ -65,10 +67,10 @@ func _ready() -> void:
 	_area.collision_mask = 0
 	var cs := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.7
-	shape.height = 1.8
+	shape.radius = TAP_RADIUS
+	shape.height = TAP_HEIGHT
 	cs.shape = shape
-	cs.position.y = 0.9
+	cs.position.y = TAP_HEIGHT / 2.0
 	_area.add_child(cs)
 	_area.set_meta("hero", self)
 	add_child(_area)
