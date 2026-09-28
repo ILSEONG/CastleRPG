@@ -1,5 +1,7 @@
 # CastleRPG MVP 설계 (서브프로젝트 1: 코어 루프)
 
+> 개정: `2026-09-28-castlerpg-mvp-rev2-design.md`가 시점·맵 크기·성벽 전투·테스트 방법을 바꾼다. 충돌 시 개정 2가 우선.
+
 작성일: 2026-09-28
 엔진: Godot 4.7.2 stable (GDScript). 실행 파일은 `tools/`에 두고 git에서 제외한다.
 출시 타깃: 모바일(Android 우선, iOS 후속). 개발·테스트는 Windows 데스크톱에서 한다.
