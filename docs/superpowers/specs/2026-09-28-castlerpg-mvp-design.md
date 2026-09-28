@@ -174,8 +174,7 @@ tests/
   - GameState: `damage_gate`가 HP 0에서 `gate_broken`을 정확히 한 번 내고, 이후 피해는 무시. `refill()` 후 성문·성 HP 최대치 복원
   - GameState: `hero_count()`가 성채 레벨 1에서 4
 - 스모크: `godot --headless --fixed-fps 60 --quit-after 900 -- --auto-stage`가 `SCRIPT ERROR` 없이 종료
-- 수동: 데스크톱 실행. 영웅 이동, 스테이지 1 클리어, 카운트다운, 스테이지 2 진입 확인
-- 실행 방법: 프로젝트 루트에서 `./tools/Godot_v4.7.2-stable_win64_console.exe --path .` (창 실행), 에디터는 `--editor` 추가. 개발 플래그는 `--` 뒤에 `--shot=SECONDS`, `--auto-stage`
+- 실행 방법: 개정 2 §8 참고 (창을 띄우지 않는다. 웹 빌드 → VSCode Simple Browser)
 
 ## 10. 완료 기준
 
