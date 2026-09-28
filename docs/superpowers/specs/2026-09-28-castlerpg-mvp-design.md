@@ -141,7 +141,7 @@ tests/
 
 ## 6. 밸런스 초기값 (`balance.gd`)
 
-- 성 HP 1000, 성문 HP 400 (각각)
+- 성 HP 1000, 성문 HP 400 (각각). 성문은 서브프로젝트 2에서 성채·채석장·벌목장처럼 레벨업 대상이 되므로 `Balance.gate_hp_max(level)` 함수로 두고 MVP는 레벨 1
 - 영웅 슬롯: 성채 레벨별 `[4, 8, 12]`. MVP 성채 레벨 1
 - 영웅: hp 300, atk 25, range 3.0, atk_interval 0.8, speed 6
 - grunt: hp 60, atk 10, speed 2.5, 성 공격 간격 1.0
