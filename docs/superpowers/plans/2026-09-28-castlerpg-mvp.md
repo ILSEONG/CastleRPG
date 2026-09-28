@@ -18,7 +18,7 @@
 - 다른 스크립트의 노드를 담는 변수는 타입 없이 선언(`var castle`). 이유: `Node3D` 타입으로 두면 커스텀 메서드 호출마다 UNSAFE_METHOD_ACCESS 경고
 - 오토로드 enum을 `match` 패턴에 쓰지 않는다(`GameState.Mode.IDLE`은 `if/elif`로). `game_state.gd` 내부에서는 `match mode:` 사용 가능
 - 외부 에셋 0개. 스크립트 12개 이내(테스트 제외), 씬 1개
-- 커밋 메시지 끝에 `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
+- 커밋 메시지 끝에 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
 - 테스트 실행: `./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . -s tests/run_tests.gd` → 마지막 줄 `ALL PASSED`, 종료 코드 0
 - 스모크 실행: `./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . --fixed-fps 60 --quit-after 900 -- --auto-stage 2>&1 | grep -c "SCRIPT ERROR"` → `0`
 - 스크린샷 확인: `./tools/Godot_v4.7.2-stable_win64_console.exe --path . --resolution 540x960 -- --shot=SECONDS` → `tools/shot.png` 생성 후 자동 종료. Read 도구로 PNG를 열어 눈으로 확인
@@ -204,7 +204,7 @@ const MONSTER := {
 		"scale": 1.0, "color": Color(0.85, 0.3, 0.3),
 	},
 	"epic_boss": {
-		"hp": 1200.0, "atk": 60.0, "speed": 1.8, "range": 1.8, "atk_interval": 1.2,
+		"hp": 400.0, "atk": 20.0, "speed": 1.8, "range": 1.8, "atk_interval": 1.2,
 		"scale": 2.5, "color": Color(0.6, 0.1, 0.5),
 	},
 }
@@ -260,7 +260,7 @@ Expected: 마지막 줄 `ALL PASSED`, `exit=0`.
 git add project.godot scenes scripts tests
 git commit -m "feat: project skeleton, balance table, headless test runner
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -376,7 +376,7 @@ Expected: `ALL PASSED`, `exit=0`.
 git add scripts/wave_director.gd tests/run_tests.gd
 git commit -m "feat: wave director builds idle and stage spawn schedules
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -677,7 +677,7 @@ Expected: `CastleRPG main ready` 출력, `SCRIPT ERROR` 없음.
 git add scripts/game_state.gd tests/run_tests.gd
 git commit -m "feat: game state machine with stage flow, gate and castle hp
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -797,11 +797,16 @@ func gate_target(side: int) -> Vector3:
 	return gate_position(side) + SIDE_DIR[side] * 0.8
 
 
-## 성문 바깥 GATE_STAND_OFFSET, 같은 성문의 영웅은 perp 방향으로 1.2 간격.
-## ponytail: hero_index % 4 로 자리 배정. 영웅 8명 이상이면 같은 자리가 겹칠 수 있음. 겹치면 슬롯 배정으로 교체.
+## 성문 바깥 GATE_STAND_OFFSET 지점. 초기 배치는 영웅 i → 성문 i % 4 이므로
+## 슬롯 = i / 4 (4명이면 전원 슬롯 0 = 성문 정면 중앙, 8·12명이면 좌우로 1.2씩).
+## ponytail: 슬롯이 영웅 index 고정이라, 같은 슬롯 영웅 둘을 같은 성문으로 옮기면 겹친다. 겹침이 문제되면 성문별 점유 슬롯 배정으로 교체.
+const STAND_SLOT_OFFSETS := [0.0, -1.2, 1.2]
+
+
 func hero_stand_position(side: int, hero_index: int) -> Vector3:
+	var slot := floori(hero_index / 4.0) % STAND_SLOT_OFFSETS.size()
 	return gate_position(side) + SIDE_DIR[side] * Balance.GATE_STAND_OFFSET \
-		+ _perp(side) * ((hero_index % 4) - 1.5) * 1.2
+		+ _perp(side) * STAND_SLOT_OFFSETS[slot]
 
 
 func keep_position() -> Vector3:
@@ -926,7 +931,7 @@ Expected: `shot saved err=0`, 파일 존재. Read 도구로 `tools/shot.png`를 
 git add scripts/flat.gd scripts/castle.gd scripts/main.gd
 git commit -m "feat: flat mesh helper, castle geometry, world setup with dev screenshot flag
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1186,7 +1191,7 @@ Run:
 git add scripts/hero.gd scripts/unit_picker.gd scripts/main.gd
 git commit -m "feat: heroes with auto-attack state machine and tap-to-place picker
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1432,7 +1437,7 @@ Read `tools/shot.png`. Expected: 사방에서 여러 마리(첫 웨이브 8마�
 git add scripts/monster.gd scripts/spawner.gd scripts/main.gd
 git commit -m "feat: monsters attack heroes, gates and keep; spawner drives wave schedules
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1610,7 +1615,7 @@ Run:
 ```bash
 ./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . --fixed-fps 60 --quit-after 5400 -- --auto-stage 2>&1 | grep -E "^\[(mode|cleared|failed)\]"
 ```
-Expected: `[mode] 1 stage=1` 다음 `[cleared] 1` 또는 `[failed] 1`, 이어서 `[mode] 3 ...`(RESULT) → `[mode] 2 ...`(COUNTDOWN, 승리 시) → `[mode] 1 stage=2`. 패배가 나오면 밸런스 문제이지 버그가 아니다. 그래도 루프가 IDLE(`[mode] 0`)로 돌아오면 통과. 승리하는 밸런스가 목표이므로 패배가 반복되면 `balance.gd`의 `HERO.atk`를 올리거나 `wave_size`를 줄이고 다시 실행한다. 조정 폭은 한 번에 25% 이내.
+Expected: `[mode] 1 stage=1` 다음 `[cleared] 1` 또는 `[failed] 1`, 이어서 `[mode] 3 ...`(RESULT) → `[mode] 2 ...`(COUNTDOWN, 승리 시) → `[mode] 1 stage=2`. 헤드리스 자동 진행은 영웅을 움직이지 않으므로 스테이지 1은 성문마다 영웅 1명이 혼자 막아 클리어돼야 한다. `[failed] 1`이 나오면 먼저 원인을 로그로 확인한다(어느 성문이 뚫렸는지, 보스가 영웅을 이겼는지 — 필요하면 임시 print 추가 후 제거). 원인이 밸런스면 `balance.gd`의 `epic_boss` 수치나 `HERO` 수치를 조정해 스테이지 1이 클리어되게 하고, 바꾼 값을 spec §6에 같은 커밋으로 반영한다. 원인이 로직 버그면 버그를 고친다. `[cleared] 1` 다음 `[mode] 1 stage=2`가 보여야 통과.
 
 - [ ] **Step 5: 스크린샷 확인 (HUD)**
 
@@ -1646,10 +1651,10 @@ Expected: `ALL PASSED`, `exit=0`
 - [ ] **Step 9: 커밋**
 
 ```bash
-git add scripts/hud.gd scripts/main.gd docs/superpowers/specs/2026-09-28-castlerpg-mvp-design.md
+git add scripts/hud.gd scripts/main.gd scripts/balance.gd docs/superpowers/specs/2026-09-28-castlerpg-mvp-design.md
 git commit -m "feat: HUD with hp bars, stage button, countdown and result banner
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 - [ ] **Step 10: 완료 기준 점검 (spec §10)**

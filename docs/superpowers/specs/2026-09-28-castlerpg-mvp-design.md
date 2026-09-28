@@ -143,7 +143,7 @@ tests/
 - 영웅 슬롯: 성채 레벨별 `[4, 8, 12]`. MVP 성채 레벨 1
 - 영웅: hp 300, atk 25, range 3.0, atk_interval 0.8, speed 6
 - grunt: hp 60, atk 10, speed 2.5, 성 공격 간격 1.0
-- epic_boss: hp 1200, atk 60, speed 1.8
+- epic_boss: hp 400, atk 20, speed 1.8 (스테이지 1 보스는 영웅 1명이 혼자 이길 수 있어야 한다. 헤드리스 자동 진행은 영웅을 움직이지 않기 때문)
 - 스테이지 스케일: hp ×(1 + 0.25·(stage−1)), atk ×(1 + 0.15·(stage−1))
 - 방치 스폰 간격 4초. 스테이지 웨이브 수 3 + stage/3, 웨이브 크기 6 + 2·stage, 웨이브 간격 8초
 - 전부 튠 대상. 숫자는 첫 실행용
