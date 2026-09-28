@@ -6,6 +6,8 @@ extends Node3D
 const Balance := preload("res://scripts/balance.gd")
 const Flat := preload("res://scripts/flat.gd")
 const CastleScript := preload("res://scripts/castle.gd")
+const HeroScript := preload("res://scripts/hero.gd")
+const PickerScript := preload("res://scripts/unit_picker.gd")
 
 var camera: Camera3D
 var castle
@@ -19,6 +21,16 @@ func _ready() -> void:
 	_build_world()
 	castle = CastleScript.new()
 	add_child(castle)
+	for i in GameState.hero_count():
+		var hero = HeroScript.new()
+		hero.castle = castle
+		hero.index = i
+		hero.assigned_side = i % 4
+		add_child(hero)
+		heroes.append(hero)
+	var picker = PickerScript.new()
+	picker.camera = camera
+	add_child(picker)
 	_apply_dev_args()
 
 
