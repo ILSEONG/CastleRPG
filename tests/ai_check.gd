@@ -137,10 +137,9 @@ func _run() -> void:
 	_check(Formation.is_inside(_half, entry) and absf(entry.x) < Balance.GATE_W / 2.0,
 		"(f) grunt enters the broken north gate through the opening, not the wall", "first inside at %s" % entry)
 
-	# (g) 부서진 성문으로 표적을 쫓아 성 안에 들어선 지상 영웅(자리는 성 밖): 다음 스캔은 자리 기준 영역으로 본다 —
-	#     성 안으로 넘어간 표적도, (영웅이 자리 반대편에 있는 동안) 성 밖 몬스터도 잡지 않고 성문 경로로 자리에 돌아간다.
-	#     실제로는 표적이 넘어간 뒤 다음 스캔(≤0.2초) 전에 영웅도 넘어가는 경쟁이라, 스캔 시점을 테스트가 붙잡는다:
-	#     보스는 스캔을 멈춰(영웅과 싸우지 않고) 진로대로 성문으로 들어가고, 영웅은 표적을 잡은 뒤 넘어갈 때까지 스캔을 미룬다.
+	# (g) 부서진 성문으로 성 안에 들어가는 표적을 쫓던 지상 영웅(자리는 성 밖)은 문턱에서 멈추고(성 안팎 경계를 넘는 추격 걸음은
+	#     딛지 않는다) 표적을 놓은 뒤 자리로 돌아간다. 실제로는 표적이 넘어간 뒤 다음 스캔(≤0.2초)이 먼저 표적을 놓을 수도 있어,
+	#     스캔 시점을 테스트가 붙잡는다: 보스는 스캔을 멈춰(영웅과 싸우지 않고) 진로대로 성문으로 들어가고, 영웅은 표적을 잡은 뒤 스캔을 미룬다.
 	_clear_monsters()
 	await _frames(1)
 	var gw = heroes[2]  # 기본 배치: 남(2) 성문 앞 전사
@@ -151,18 +150,41 @@ func _run() -> void:
 	await _wait_until(func(): return gw._target == _g, 2.0)
 	_check(gw._target == _g, "(g) precondition: the south gate warrior targets the boss outside", "target=%s" % [gw._target])
 	gw._scan_cd = INF
-	await _wait_until(func(): return Formation.is_inside(_half, gw.global_position), 8.0)
-	_check(Formation.is_inside(_half, gw.global_position) and _alive(_g) and Formation.is_inside(_half, _g.global_position),
-		"(g) precondition: the warrior followed the boss in through the broken gate", "warrior=%s boss alive=%s" % [gw.global_position, _alive(_g)])
-	var decoy = _spawn("grunt", 2, gpost + Vector3(5, 0, 1.5))  # 성 밖, 자리에서 aggro 안
-	gw._scan_cd = 0.0
-	await _frames(2)
-	_check(gw._target == null, "(g) warrior across the wall from its post drops the boss and ignores outside monsters",
-		"target=%s" % ["boss" if gw._target == _g else ("outside grunt" if gw._target == decoy else str(gw._target))])
-	decoy.queue_free()  # 돌아간 자리 근처에서 새로 교전하지 않게
+	var gw_in := false
+	t = 0.0
+	while t < 8.0 and not (gw._target == null and _alive(_g) and Formation.is_inside(_half, _g.global_position)):
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		gw_in = gw_in or Formation.is_inside(_half, gw.global_position)
+	_check(not gw_in and gw._target == null and _alive(_g) and Formation.is_inside(_half, _g.global_position),
+		"(g) warrior stops at the broken gate's threshold and drops the boss that walked in",
+		"warrior went inside=%s pos=%s target=%s boss alive=%s" % [gw_in, gw.global_position, "boss" if gw._target == _g else str(gw._target), _alive(_g)])
 	await _wait_until(func(): return gw._path.is_empty() and Formation.flat_distance(gw.global_position, gpost) < 0.05, 5.0)
 	var gd := Formation.flat_distance(gw.global_position, gpost)
-	_check(gd < 0.2, "(g) warrior walks back to its post through the gate", "d=%.2f pos=%s" % [gd, gw.global_position])
+	_check(gd < 0.2, "(g) warrior walks back to its post", "d=%.2f pos=%s" % [gd, gw.global_position])
+
+	# (h) 성 모서리 근처 밖 자유 위치 전사와 모서리 너머 동쪽 면의 grunt(성문 멀쩡): 둘 사이 직선이 성 모서리를 가로지른다.
+	#     grunt는 추격하다 성벽 띠로 들어서지 않고(진로로 동쪽 성문으로 간다), 전사는 그 grunt를 잡지 않아 자리를 지킨다. 매 프레임 확인.
+	var hpost := Vector3(15, 0, -20)
+	warrior.move_to_point(hpost)
+	GameState.refill()  # 성문 복구·몬스터 제거, 영웅은 자리(방금 정한 자유 위치)로 옮겨진다
+	await _frames(1)
+	_g = _spawn("grunt", 1, Vector3(18.1, 0, -16.5))
+	var g_in := false
+	var w_in := false
+	var w_out := 0.0
+	t = 0.0
+	while t < 4.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		if _alive(_g):
+			g_in = g_in or Formation.is_inside(_half, _g.global_position)
+		w_in = w_in or Formation.is_inside(_half, warrior.global_position)
+		w_out = maxf(w_out, Formation.flat_distance(warrior.global_position, hpost))
+	_check(not g_in and GameState.castle_hp == GameState.castle_hp_max, "(h) grunt chasing across the castle corner never steps inside the wall line",
+		"went inside=%s castle hp %.0f" % [g_in, GameState.castle_hp])
+	_check(not w_in and w_out < 0.5, "(h) warrior does not chase the grunt across the castle corner",
+		"went inside=%s max distance from point %.2f" % [w_in, w_out])
 
 
 func _alive(m) -> bool:

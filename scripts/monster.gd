@@ -77,8 +77,13 @@ func _process(delta: float) -> void:
 		var hpos: Vector3 = _target_hero.global_position
 		_model.face(hpos - global_position)
 		if Formation.flat_distance(global_position, hpos) > _stats.range:
+			var next := global_position.move_toward(Vector3(hpos.x, 0.0, hpos.z), _stats.speed * delta)
+			if Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position):
+				_target_hero = null  # 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 진로로 간다
+				_advance(delta)
+				return
 			_model.play_walk()
-			global_position = global_position.move_toward(Vector3(hpos.x, 0.0, hpos.z), _stats.speed * delta)
+			global_position = next
 		elif _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
 			_model.play_attack()

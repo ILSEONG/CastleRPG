@@ -155,20 +155,22 @@ func _process(delta: float) -> void:
 			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= float(_stats.range)):
 		var tpos: Vector3 = _target.global_position
 		_model.face(tpos - global_position)
-		if Formation.flat_distance(global_position, tpos) > float(_stats.range):
-			# 추격: 지상 영웅만 여기 온다(위 조건).
+		if Formation.flat_distance(global_position, tpos) <= float(_stats.range):
+			state = State.ATTACK
+			if _atk_cd <= 0.0:
+				_atk_cd = _stats.atk_interval
+				_model.play_attack()
+				if role == "archer":
+					_fire_tracer(tpos)
+				_target.take_damage(_stats.atk)
+			return
+		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
+		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(_stats.speed) * delta)
+		if Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position):
 			state = State.MOVE
 			_model.play_walk()
-			global_position = global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(_stats.speed) * delta)
+			global_position = next
 			return
-		state = State.ATTACK
-		if _atk_cd <= 0.0:
-			_atk_cd = _stats.atk_interval
-			_model.play_attack()
-			if role == "archer":
-				_fire_tracer(tpos)
-			_target.take_damage(_stats.atk)
-		return
 	_target = null
 	var home := stand_position()
 	if global_position.distance_to(home) > ARRIVE_EPS:
@@ -188,7 +190,7 @@ func _process(delta: float) -> void:
 
 
 ## 표적: 지상 영웅은 자기 자리에서 aggro 안·자리와 같은 영역(자기도 그 영역에 있을 때만), 성벽 위 영웅은 지금 위치에서 사거리 안(영역 무관). 가장 가까운 것.
-## ponytail: 추격은 직선이다. 성벽 모서리 근처 자유 위치에서는 모서리를 스칠 수 있다 — 문제되면 추격에도 route() 사용.
+## ponytail: 추격은 직선이다 — 성(모서리)을 가로질러야 닿는 표적은 포기한다(모서리 너머 괴물과는 안 싸운다). 필요하면 추격에도 route() 사용.
 func _find_target():
 	var on_wall := is_on_wall()
 	var origin := global_position if on_wall else stand_position()
@@ -205,6 +207,8 @@ func _find_target():
 			continue
 		if Formation.flat_distance(origin, m.global_position) > reach:
 			continue
+		if not here_inside and Formation.crosses_castle(castle.half, global_position, m.global_position):
+			continue  # 성 밖에서 직선 추격이 성(모서리)을 가로지르는 표적은 잡지 않는다
 		var d := Formation.flat_distance(global_position, m.global_position)
 		if d < best_d:
 			best_d = d

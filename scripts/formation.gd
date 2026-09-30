@@ -102,7 +102,7 @@ static func gate_outer(half: float, side: int) -> Vector3:
 
 
 ## from → to 이동 경로 (도착점 포함). 성 안팎을 오가거나 성을 가로지를 때는 성문을 지난다.
-## "안" = 성벽 위(높이 > WALL_H/2)이거나 성벽 바깥면 안쪽(_crosses_castle과 같은 경계). 문짝 상태와 무관하게 아군은 통과.
+## "안" = 성벽 위(높이 > WALL_H/2)이거나 성벽 바깥면 안쪽(crosses_castle과 같은 경계). 문짝 상태와 무관하게 아군은 통과.
 static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var from_in := is_inside(half, from)
@@ -115,7 +115,7 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 		var s := side_of(from)
 		path.append(gate_outer(half, s))
 		path.append(gate_inner(half, s))
-	elif not from_in and not to_in and _crosses_castle(half, from, to):
+	elif not from_in and not to_in and crosses_castle(half, from, to):
 		var a := side_of(from)
 		var b := side_of(to)
 		path.append(gate_outer(half, a))
@@ -132,7 +132,7 @@ static func is_inside(half: float, p: Vector3) -> bool:
 
 
 ## 수평 선분 a→b가 성 바깥 경계 정사각형(±(half + WALL_T))을 지나는지 (슬랩 테스트).
-static func _crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
+static func crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
 	var r := half + Balance.WALL_T
 	var o := Vector2(a.x, a.z)
 	var d := Vector2(b.x - a.x, b.z - a.z)
