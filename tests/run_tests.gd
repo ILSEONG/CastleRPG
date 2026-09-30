@@ -46,6 +46,7 @@ func _init() -> void:
 	test_is_inside()
 	test_mesh_kit()
 	test_castle_parts()
+	test_town_recipes()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -351,24 +352,16 @@ func test_art_assets() -> void:
 			var skels := root.find_children("*", "Skeleton3D", true, false)
 			check(skels.size() == 1 and (skels[0] as Skeleton3D).find_bone(Art.WEAPON_BONE) >= 0, "%s has bone %s" % [key, Art.WEAPON_BONE])
 		root.free()
-	for b in Balance.BUILDINGS:
-		check(Art.BUILDING_MODELS.has(b.id) and ResourceLoader.exists(Art.BUILDING_MODELS[b.id]), "building %s has a model" % b.id)
-	for path in [Art.ARROW_MODEL] + Art.NATURE_MODELS + Art.BORDER_MODELS:
-		check(ResourceLoader.exists(path), "model exists: %s" % path)
+	check(ResourceLoader.exists(Art.ARROW_MODEL), "model exists: %s" % Art.ARROW_MODEL)
 	var arrow: Node3D = (load(Art.ARROW_MODEL) as PackedScene).instantiate()
 	var ab := Art.model_aabb(arrow)
 	check(ab.size.y > ab.size.x and ab.size.y > ab.size.z, "arrow model long axis is Y (ARROW_PITCH_FIX): %s" % ab.size)
 	arrow.free()
-	for id in Art.BUILDING_MODELS:
-		var bm: Node3D = (load(Art.BUILDING_MODELS[id]) as PackedScene).instantiate()
-		var bb := Art.model_aabb(bm)
-		check(bb.size.x > 0.0 and bb.size.z > 0.0, "building %s model has non-zero x/z size: %s" % [id, bb.size])
-		bm.free()
 
 
 func test_lowpoly_conversion() -> void:
 	for path in [Art.HERO_MODELS.warrior.scene, Art.HERO_MODELS.archer.scene, Art.MONSTER_MODELS.grunt.scene, Art.MONSTER_MODELS.grunt.weapon,
-			Art.ARROW_MODEL, Art.BUILDING_MODELS.keep] + Art.BORDER_MODELS:
+			Art.ARROW_MODEL]:
 		var root: Node = Art.instance(path)
 		var surfaces := 0
 		for node in root.find_children("*", "MeshInstance3D", true, false):
@@ -584,6 +577,13 @@ func test_mesh_kit() -> void:
 	g.gable(Vector3.ZERO, Vector3(2, 0, 2), 1.0, Color.BLUE)
 	var gv: PackedVector3Array = g.commit().surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	check(_wound_outward(gv, Vector3(0, 0.3, 0)), "every gable triangle wound front-facing outward")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var rk = MeshKitScript.new()
+	rk.rock(Vector3(0, 0.3, 0), 1.0, Color.GRAY, rng, 0.7, 0.0)  # 가장 낮은 꼭짓점 ≤ 0.3 − 0.85×0.7×0.8 < 0 → 바닥에 눌린다
+	var rm: ArrayMesh = rk.commit()
+	check(rk.triangle_count() == 20 and _wound_outward(rm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], Vector3(0, 0.3, 0)), "rock: 20 triangles, all wound front-facing outward")
+	check(is_equal_approx(rm.get_aabb().position.y, 0.0), "rock floor_y flattens its bottom onto the floor: %s" % rm.get_aabb())
 
 
 ## 볼록 도형의 모든 삼각형이 안쪽 점 center 기준 바깥을 앞면(MeshKit 규약)으로 감겼는가.
@@ -604,3 +604,19 @@ func test_castle_parts() -> void:
 		check(m.get_surface_count() == 1 and m.get_aabb().size.length() > 0.5, "%s has one non-empty surface" % pair[0])
 	var st: AABB = TownKitScript.stairs().get_aabb()
 	check(is_equal_approx(st.size.x, Balance.STAIR_RUN) and is_equal_approx(st.end.y, Balance.WALL_H) and is_equal_approx(st.size.z, Balance.STAIR_W), "stairs span run x wall height x stair width: %s" % st)
+
+
+## 건물 레시피는 부지 안·바닥 위·부지 가운데, 자연물·산은 한 표면으로 땅 근처에 놓인다.
+func test_town_recipes() -> void:
+	for b in Balance.BUILDINGS:
+		var m: ArrayMesh = TownKitScript.building(b.id)
+		var box := m.get_aabb()
+		var plot := Vector2(b.size.x * Balance.TILE - Art.BUILDING_GAP, b.size.y * Balance.TILE - Art.BUILDING_GAP)
+		check(box.size.x <= plot.x + 0.01 and box.size.z <= plot.y + 0.01, "%s fits its plot: %s vs %s" % [b.id, box.size, plot])
+		check(absf(box.position.y) < 0.01 and box.size.y > 1.0, "%s stands on the ground" % b.id)
+		check(absf(box.get_center().x) < 0.6 and absf(box.get_center().z) < 0.6, "%s centred on its plot" % b.id)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	for f in [TownKitScript.tree_pine, TownKitScript.tree_round, TownKitScript.bush, TownKitScript.rock_cluster, TownKitScript.mountain]:
+		var m: ArrayMesh = f.call(rng)
+		check(m.get_surface_count() == 1 and m.get_aabb().position.y > -0.3, "%s is one surface resting near the ground" % f.get_method())

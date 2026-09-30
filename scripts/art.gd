@@ -1,5 +1,6 @@
 extends RefCounted
-## 아트 설정과 헬퍼 (구 flat.gd 흡수). 단색 메시 헬퍼, KayKit(CC0) 모델 경로·배율·애니메이션 표.
+## 아트 설정과 헬퍼 (구 flat.gd 흡수). 단색 메시 헬퍼, 로우폴리 재질, KayKit(CC0) 캐릭터·무기·화살 경로·애니메이션 표.
+## 건물·성·자연물·산은 코드로 만든 메시(TownKit). 자연물·테두리 상수는 배치 규칙만.
 ## 모델 출처·라이선스: assets/models/LICENSE-KayKit.txt, 다시 받기: dev/fetch-assets.sh
 ## 오토로드 참조 없음 → 헤드리스 테스트에서 preload 가능.
 
@@ -10,7 +11,6 @@ const HEAD_HEIGHT := 2.5          # 캐릭터 모델 발에서 HP 바까지 높�
 const CORPSE_SEC := 1.6           # 몬스터 사망 후 제거까지(초). Death_C_Skeletons(~2.0초)는 ~1.6초에 쓰러짐이 끝나므로, 애니메이션 꼬리가 끝나기 전 쓰러진 자세에서 제거한다. 사망 애니메이션 길이 이하여야 함(테스트)
 const BUILDING_GAP := 0.6         # 건물 부지 가장자리 여유(m)
 const ARROW_SCALE := 1.2
-const NATURE_SCALE := 3.0
 const NATURE_COUNT := 180
 const NATURE_SEED := 7
 const NATURE_MIN_GAP := 5.0
@@ -21,14 +21,10 @@ const LOWPOLY_DOUBLE_SHADER := preload("res://shaders/lowpoly_double.gdshader") 
 const BORDER_INNER := 12.0        # 플레이 영역 가장자리(MAP_HALF)에서 테두리 띠 안쪽까지
 const BORDER_OUTER := 40.0        # 테두리 띠 바깥쪽까지
 const BORDER_SPACING := 22.0      # 테두리 산 간격(m)
-const BORDER_SCALE_MIN := 10.0
-const BORDER_SCALE_MAX := 14.0
 const BORDER_SEED := 11
-const BORDER_SINK := 0.5          # 테두리 산을 이만큼(모델 단위, 배율 곱하기 전) 땅에 묻어 육각 받침을 가린다. 받침 위 가장 낮은 윗면 높이 A 0.40 · B 0.49 · C 0.44
 
 const CHAR_DIR := "res://assets/models/characters/"
 const PROP_DIR := "res://assets/models/props/"
-const HEX_DIR := "res://assets/models/hex/"
 
 const HERO_MODELS := {
 	"warrior": {
@@ -59,25 +55,7 @@ const MONSTER_MODELS := {
 }
 const WEAPON_BONE := "handslot.r"
 
-const BUILDING_MODELS := {
-	"keep": HEX_DIR + "building_castle_blue.gltf",
-	"barracks": HEX_DIR + "building_barracks_blue.gltf",
-	"tavern": HEX_DIR + "building_tavern_blue.gltf",
-	"lab": HEX_DIR + "building_blacksmith_blue.gltf",
-	"houses": HEX_DIR + "building_home_B_blue.gltf",
-	"lumber": HEX_DIR + "building_lumbermill_blue.gltf",
-	"quarry": HEX_DIR + "building_mine_blue.gltf",
-	"farm": HEX_DIR + "building_windmill_blue.gltf",
-}
 const ARROW_MODEL := PROP_DIR + "arrow.gltf"
-const NATURE_MODELS := [
-	HEX_DIR + "trees_A_medium.gltf", HEX_DIR + "trees_B_large.gltf",
-	HEX_DIR + "tree_single_A.gltf", HEX_DIR + "tree_single_B.gltf",
-	HEX_DIR + "rock_single_A.gltf", HEX_DIR + "rock_single_C.gltf", HEX_DIR + "rock_single_E.gltf",
-]
-const BORDER_MODELS := [  # 풀·언덕 변형은 윗면이 라임색 팔레트라 바닥과 어긋나서 바위 산만 쓴다
-	HEX_DIR + "mountain_A.gltf", HEX_DIR + "mountain_B.gltf", HEX_DIR + "mountain_C.gltf",
-]
 
 static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
 static var _vc_material: ShaderMaterial

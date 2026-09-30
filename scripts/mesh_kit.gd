@@ -99,7 +99,8 @@ func pyramid(base: Vector3, size: float, height: float, color: Color) -> void:
 
 
 ## 각진 바위: 20면체를 rng로 흔든다. 중심 center, 반지름 radius, 세로 납작함 squash.
-func rock(center: Vector3, radius: float, color: Color, rng: RandomNumberGenerator, squash := 0.7) -> void:
+## floor_y 아래로 내려간 꼭짓점은 그 높이로 올린다(땅에 앉은 평평한 밑면).
+func rock(center: Vector3, radius: float, color: Color, rng: RandomNumberGenerator, squash := 0.7, floor_y := -INF) -> void:
 	var t := (1.0 + sqrt(5.0)) / 2.0
 	var v := [
 		Vector3(-1, t, 0), Vector3(1, t, 0), Vector3(-1, -t, 0), Vector3(1, -t, 0),
@@ -111,7 +112,7 @@ func rock(center: Vector3, radius: float, color: Color, rng: RandomNumberGenerat
 	var pts := []
 	for p in v:
 		var n: Vector3 = p.normalized() * radius * rng.randf_range(0.8, 1.15)
-		pts.append(center + Vector3(n.x, n.y * squash, n.z))
+		pts.append(center + Vector3(n.x, maxf(n.y * squash, floor_y - center.y), n.z))
 	for tri_i in f:
 		var a: Vector3 = pts[tri_i[0]]
 		var b: Vector3 = pts[tri_i[1]]
