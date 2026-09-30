@@ -376,11 +376,17 @@ func test_lowpoly_conversion() -> void:
 			for i in mi.mesh.get_surface_count():
 				surfaces += 1
 				var mat := mi.get_active_material(i)
-				var ok := (mat is ShaderMaterial and (mat as ShaderMaterial).shader == Art.LOWPOLY_SHADER) \
+				var src := mi.mesh.surface_get_material(i) as BaseMaterial3D  # 원본 (덮어쓰기는 MeshInstance에만 걸린다)
+				var want: Shader = Art.LOWPOLY_DOUBLE_SHADER if src != null and src.cull_mode == BaseMaterial3D.CULL_DISABLED else Art.LOWPOLY_SHADER
+				var ok := (mat is ShaderMaterial and (mat as ShaderMaterial).shader == want) \
 					or (mat is BaseMaterial3D and ((mat as BaseMaterial3D).emission_enabled or (mat as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED))
-				check(ok, "%s surface %s/%d is low-poly (or an emissive/transparent exception)" % [path, mi.name, i])
+				check(ok, "%s surface %s/%d is low-poly with the source's sidedness (or an emissive/transparent exception)" % [path, mi.name, i])
 		check(surfaces > 0, "%s has surfaces" % path)
 		root.free()
+	var knight: Node = Art.instance(Art.HERO_MODELS.warrior.scene)
+	var cape_mat := (knight.find_child("Knight_Cape", true, false) as MeshInstance3D).get_active_material(0) as ShaderMaterial
+	check(cape_mat != null and cape_mat.shader == Art.LOWPOLY_DOUBLE_SHADER, "double-sided source (Knight cape, open mesh) uses the double-sided low-poly shader")
+	knight.free()
 	var a: Node = Art.instance(Art.WALL_MODEL)
 	var b: Node = Art.instance(Art.WALL_MODEL)
 	var ma: Material = (a.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).get_active_material(0)

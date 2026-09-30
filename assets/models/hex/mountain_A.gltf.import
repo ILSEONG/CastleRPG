@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://qrdrtmtqirkf"
-path="res://.godot/imported/mountain_A_grass_trees.gltf-3b0e053766731f2472d141caf0d1bdd9.scn"
+uid="uid://cmfsal0qeu4nc"
+path="res://.godot/imported/mountain_A.gltf-d015a50bfa35941626bb07d83dc09c44.scn"
 
 [deps]
 
-source_file="res://assets/models/hex/mountain_A_grass_trees.gltf"
-dest_files=["res://.godot/imported/mountain_A_grass_trees.gltf-3b0e053766731f2472d141caf0d1bdd9.scn"]
+source_file="res://assets/models/hex/mountain_A.gltf"
+dest_files=["res://.godot/imported/mountain_A.gltf-d015a50bfa35941626bb07d83dc09c44.scn"]
 
 [params]
 

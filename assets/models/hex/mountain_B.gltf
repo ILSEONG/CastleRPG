@@ -15,7 +15,7 @@
     "nodes" : [
         {
             "mesh" : 0,
-            "name" : "mountain_C_grass_trees"
+            "name" : "mountain_B"
         }
     ],
     "materials" : [
@@ -32,7 +32,7 @@
     ],
     "meshes" : [
         {
-            "name" : "mountain_C_grass_trees",
+            "name" : "mountain_B",
             "primitives" : [
                 {
                     "attributes" : {
@@ -63,61 +63,61 @@
         {
             "bufferView" : 0,
             "componentType" : 5126,
-            "count" : 1214,
+            "count" : 216,
             "max" : [
-                0.9073365330696106,
-                2.112415075302124,
-                1.005179524421692
+                0.9132055044174194,
+                1.7695502042770386,
+                0.9421151876449585
             ],
             "min" : [
-                -0.8512817621231079,
-                1.341104507446289e-07,
-                -1.0178070068359375
+                -0.887812614440918,
+                -5.960464477539063e-08,
+                -0.9340556859970093
             ],
             "type" : "VEC3"
         },
         {
             "bufferView" : 1,
             "componentType" : 5126,
-            "count" : 1214,
+            "count" : 216,
             "type" : "VEC2"
         },
         {
             "bufferView" : 2,
             "componentType" : 5126,
-            "count" : 1214,
+            "count" : 216,
             "type" : "VEC3"
         },
         {
             "bufferView" : 3,
             "componentType" : 5123,
-            "count" : 2250,
+            "count" : 360,
             "type" : "SCALAR"
         }
     ],
     "bufferViews" : [
         {
             "buffer" : 0,
-            "byteLength" : 14568,
+            "byteLength" : 2592,
             "byteOffset" : 0,
             "target" : 34962
         },
         {
             "buffer" : 0,
-            "byteLength" : 9712,
-            "byteOffset" : 14568,
+            "byteLength" : 1728,
+            "byteOffset" : 2592,
             "target" : 34962
         },
         {
             "buffer" : 0,
-            "byteLength" : 14568,
-            "byteOffset" : 24280,
+            "byteLength" : 2592,
+            "byteOffset" : 4320,
             "target" : 34962
         },
         {
             "buffer" : 0,
-            "byteLength" : 4500,
-            "byteOffset" : 38848,
+            "byteLength" : 720,
+            "byteOffset" : 6912,
             "target" : 34963
         }
     ],
@@ -129,8 +129,8 @@
     ],
     "buffers" : [
         {
-            "byteLength" : 43348,
-            "uri" : "mountain_C_grass_trees.bin"
+            "byteLength" : 7632,
+            "uri" : "mountain_B.bin"
         }
     ]
 }

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://duswh3wq1a7lj"
-path="res://.godot/imported/hills_A_trees.gltf-71259000a24a540705bd9b930888618a.scn"
+uid="uid://c6dskee1o61bn"
+path="res://.godot/imported/mountain_B.gltf-07adad4a4afac6dae2384f4e2f0262c3.scn"
 
 [deps]
 
-source_file="res://assets/models/hex/hills_A_trees.gltf"
-dest_files=["res://.godot/imported/hills_A_trees.gltf-71259000a24a540705bd9b930888618a.scn"]
+source_file="res://assets/models/hex/mountain_B.gltf"
+dest_files=["res://.godot/imported/mountain_B.gltf-07adad4a4afac6dae2384f4e2f0262c3.scn"]
 
 [params]
 

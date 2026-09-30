@@ -28,7 +28,7 @@ done
 for f in wall_straight wall_straight_gate; do
 	for e in gltf bin; do get "$HEX/buildings/neutral/$f.$e" "$H/$f.$e"; done
 done
-for f in trees_A_medium trees_B_large tree_single_A tree_single_B rock_single_A rock_single_C rock_single_E mountain_A_grass_trees mountain_B_grass mountain_C_grass_trees hills_A_trees hills_B_trees hills_C_trees; do
+for f in trees_A_medium trees_B_large tree_single_A tree_single_B rock_single_A rock_single_C rock_single_E mountain_A mountain_B mountain_C; do
 	for e in gltf bin; do get "$HEX/decoration/nature/$f.$e" "$H/$f.$e"; done
 done
 get "$HEX/buildings/blue/hexagons_medieval.png" "$H/hexagons_medieval.png"

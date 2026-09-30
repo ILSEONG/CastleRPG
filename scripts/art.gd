@@ -22,12 +22,14 @@ const NATURE_MIN_GAP := 5.0
 const NATURE_CASTLE_MARGIN := 6.0  # 성벽 바깥면에서 이 거리 안에는 자연물 없음
 const LANE_HALF_WIDTH := 9.0       # 괴물 진입로(두 축) 양옆 이 거리 안에는 자연물 없음
 const LOWPOLY_SHADER := preload("res://shaders/lowpoly.gdshader")
+const LOWPOLY_DOUBLE_SHADER := preload("res://shaders/lowpoly_double.gdshader")  # 원본이 양면(CULL_DISABLED)인 재질용
 const BORDER_INNER := 12.0        # 플레이 영역 가장자리(MAP_HALF)에서 테두리 띠 안쪽까지
 const BORDER_OUTER := 40.0        # 테두리 띠 바깥쪽까지
 const BORDER_SPACING := 22.0      # 테두리 산 간격(m)
 const BORDER_SCALE_MIN := 10.0
 const BORDER_SCALE_MAX := 14.0
 const BORDER_SEED := 11
+const BORDER_SINK := 0.5          # 테두리 산을 이만큼(모델 단위, 배율 곱하기 전) 땅에 묻어 육각 받침을 가린다. 받침 위 가장 낮은 윗면 높이 A 0.40 · B 0.49 · C 0.44
 
 const CHAR_DIR := "res://assets/models/characters/"
 const PROP_DIR := "res://assets/models/props/"
@@ -82,9 +84,8 @@ const NATURE_MODELS := [
 	HEX_DIR + "tree_single_A.gltf", HEX_DIR + "tree_single_B.gltf",
 	HEX_DIR + "rock_single_A.gltf", HEX_DIR + "rock_single_C.gltf", HEX_DIR + "rock_single_E.gltf",
 ]
-const BORDER_MODELS := [
-	HEX_DIR + "mountain_A_grass_trees.gltf", HEX_DIR + "mountain_B_grass.gltf", HEX_DIR + "mountain_C_grass_trees.gltf",
-	HEX_DIR + "hills_A_trees.gltf", HEX_DIR + "hills_B_trees.gltf", HEX_DIR + "hills_C_trees.gltf",
+const BORDER_MODELS := [  # 풀·언덕 변형은 윗면이 라임색 팔레트라 바닥과 어긋나서 바위 산만 쓴다
+	HEX_DIR + "mountain_A.gltf", HEX_DIR + "mountain_B.gltf", HEX_DIR + "mountain_C.gltf",
 ]
 
 static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
@@ -100,7 +101,7 @@ static func mesh(m: Mesh, color: Color) -> MeshInstance3D:
 	return mi
 
 
-## 원본 재질의 알베도(텍스처·색)를 쓰는 로우폴리 재질. 발광·투명 재질(해골 눈 등)은 원본 그대로.
+## 원본 재질의 알베도(텍스처·색)를 쓰는 로우폴리 재질. 원본이 양면이면 양면 변형. 발광·투명 재질(해골 눈 등)은 원본 그대로.
 static func lowpoly_material(src: Material) -> Material:
 	var base := src as BaseMaterial3D
 	if base == null or base.emission_enabled or base.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
@@ -108,7 +109,7 @@ static func lowpoly_material(src: Material) -> Material:
 	if _lowpoly_cache.has(src):
 		return _lowpoly_cache[src]
 	var m := ShaderMaterial.new()
-	m.shader = LOWPOLY_SHADER
+	m.shader = LOWPOLY_DOUBLE_SHADER if base.cull_mode == BaseMaterial3D.CULL_DISABLED else LOWPOLY_SHADER
 	m.set_shader_parameter("albedo_color", base.albedo_color)
 	m.set_shader_parameter("use_texture", base.albedo_texture != null)
 	if base.albedo_texture != null:

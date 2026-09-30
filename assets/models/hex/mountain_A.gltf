@@ -15,7 +15,7 @@
     "nodes" : [
         {
             "mesh" : 0,
-            "name" : "hills_B_trees"
+            "name" : "mountain_A"
         }
     ],
     "materials" : [
@@ -32,7 +32,7 @@
     ],
     "meshes" : [
         {
-            "name" : "hills_B_trees",
+            "name" : "mountain_A",
             "primitives" : [
                 {
                     "attributes" : {
@@ -63,61 +63,61 @@
         {
             "bufferView" : 0,
             "componentType" : 5126,
-            "count" : 712,
+            "count" : 216,
             "max" : [
-                0.7030627131462097,
-                1.369074821472168,
-                0.7383113503456116
+                0.9073365330696106,
+                1.4253854751586914,
+                0.9390947818756104
             ],
             "min" : [
-                -0.7704500555992126,
-                -9.38796074478887e-05,
-                -0.885293185710907
+                -0.893681526184082,
+                1.043081283569336e-07,
+                -0.9370760917663574
             ],
             "type" : "VEC3"
         },
         {
             "bufferView" : 1,
             "componentType" : 5126,
-            "count" : 712,
+            "count" : 216,
             "type" : "VEC2"
         },
         {
             "bufferView" : 2,
             "componentType" : 5126,
-            "count" : 712,
+            "count" : 216,
             "type" : "VEC3"
         },
         {
             "bufferView" : 3,
             "componentType" : 5123,
-            "count" : 1218,
+            "count" : 360,
             "type" : "SCALAR"
         }
     ],
     "bufferViews" : [
         {
             "buffer" : 0,
-            "byteLength" : 8544,
+            "byteLength" : 2592,
             "byteOffset" : 0,
             "target" : 34962
         },
         {
             "buffer" : 0,
-            "byteLength" : 5696,
-            "byteOffset" : 8544,
+            "byteLength" : 1728,
+            "byteOffset" : 2592,
             "target" : 34962
         },
         {
             "buffer" : 0,
-            "byteLength" : 8544,
-            "byteOffset" : 14240,
+            "byteLength" : 2592,
+            "byteOffset" : 4320,
             "target" : 34962
         },
         {
             "buffer" : 0,
-            "byteLength" : 2436,
-            "byteOffset" : 22784,
+            "byteLength" : 720,
+            "byteOffset" : 6912,
             "target" : 34963
         }
     ],
@@ -129,8 +129,8 @@
     ],
     "buffers" : [
         {
-            "byteLength" : 25220,
-            "uri" : "hills_B_trees.bin"
+            "byteLength" : 7632,
+            "uri" : "mountain_A.bin"
         }
     ]
 }

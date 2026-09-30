@@ -76,7 +76,7 @@ func _scatter_nature() -> void:
 		_add_multimesh(path, by_model[path])
 
 
-## 플레이 영역 바깥 띠에 로우폴리 산·언덕을 한 바퀴 두른다(유닛은 들어가지 않는다). 시드 고정, 모델별 MultiMesh.
+## 플레이 영역 바깥 띠에 로우폴리 바위 산을 한 바퀴 두르고 육각 받침은 땅에 묻는다(유닛은 들어가지 않는다). 시드 고정, 모델별 MultiMesh.
 func _ring_mountains() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Art.BORDER_SEED
@@ -92,6 +92,7 @@ func _ring_mountains() -> void:
 			var pos := dir * rng.randf_range(inner, outer) + perp * along
 			var path: String = Art.BORDER_MODELS[rng.randi_range(0, Art.BORDER_MODELS.size() - 1)]
 			var s := rng.randf_range(Art.BORDER_SCALE_MIN, Art.BORDER_SCALE_MAX)
+			pos.y = -Art.BORDER_SINK * s
 			var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * s)
 			if not by_model.has(path):
 				by_model[path] = []
