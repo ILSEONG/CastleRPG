@@ -144,8 +144,8 @@ func _run() -> void:
 		"selected=%s on_wall=%s side=%d px=%s" % [_name(_picker.selected), archer.is_on_wall(), archer.side, sp])
 	var ge := 1.0 if Formation.perp(0).dot(archer.global_position) >= 0.0 else -1.0
 	var lane := half - Balance.STAIR_W - Formation.GATE_PASS_MARGIN
-	var corners := [(Formation.SIDE_DIR[0] + Formation.perp(0) * ge) * lane, (Formation.SIDE_DIR[2] + Formation.perp(0) * ge) * lane]
-	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.stair_approach(half, 0, ge)] 		+ corners + [Formation.gate_inner(half, 2)]
+	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.stair_approach(half, 0, ge),
+		(Formation.SIDE_DIR[0] + Formation.perp(0) * ge) * lane, (Formation.SIDE_DIR[2] + Formation.perp(0) * ge) * lane, Formation.gate_inner(half, 2)]
 	await _tap(sp)
 	_check(archer.post == Formation.POST_FREE and archer._path.slice(0, 7) == down,
 		"(g) wall-top archer ordered outside the far side goes down the north stairs, round the lane corners, then to the south gate's inner point",
