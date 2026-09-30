@@ -8,7 +8,7 @@ const Balance := preload("res://scripts/balance.gd")
 const POST_GATE := 0
 const POST_WALL := 1
 const POST_FREE := 2          # 자유 위치 (슬롯 없음)
-const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점이 성벽에서 떨어진 거리
+const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점·계단 앞 지점이 성벽 바깥면·계단 띠에서 떨어진 거리
 const REGION_OUTSIDE := 0
 const REGION_INSIDE := 1
 const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
@@ -96,8 +96,9 @@ static func side_of(p: Vector3) -> int:
 	return best
 
 
+## 성문 안쪽 통과 지점. 계단 띠(성벽 안쪽 STAIR_W) 밖이라 여기서 옆으로 가는 지상 구간이 계단을 지나지 않는다.
 static func gate_inner(half: float, side: int) -> Vector3:
-	return SIDE_DIR[side] * (half - GATE_PASS_MARGIN)
+	return SIDE_DIR[side] * (half - Balance.STAIR_W - GATE_PASS_MARGIN)
 
 
 static func gate_outer(half: float, side: int) -> Vector3:
@@ -129,12 +130,19 @@ static func wall_landing(half: float, side: int, end: float) -> Vector3:
 		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
 
 
+## 계단 아랫단 너머 지상 지점(계단 띠 밖). 지상 구간은 여기까지만 오고, 띠에는 아랫단 너머로만 들어간다.
+static func stair_approach(half: float, side: int, end: float) -> Vector3:
+	return SIDE_DIR[side] * (half - Balance.STAIR_W - GATE_PASS_MARGIN) \
+		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN + GATE_PASS_MARGIN))
+
+
 static func _stair_end(side: int, p: Vector3) -> float:
 	return 1.0 if perp(side).dot(p) >= 0.0 else -1.0
 
 
-## from → to 이동 경로(도착점 포함). 성벽 위는 계단으로만 오르내린다(같은 면 성벽 위끼리는 곧장).
-## 지상 구간은 성 안팎을 오갈 때 성문을 지난다(_ground_route).
+## from → to 이동 경로(도착점 포함). 성벽 위는 계단으로만 오르내린다(같은 면 성벽 위끼리는 곧장):
+## 오를 때 stair_approach → 아랫단 → 윗단 → landing, 내릴 때 그 역순. 지상 구간은 stair_approach에서 끊기고
+## 성 안팎을 오갈 때 성문을 지난다(_ground_route).
 static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var from_wall := region(half, from) == REGION_WALL
@@ -148,15 +156,16 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 		var e := _stair_end(s, from)
 		path.append(wall_landing(half, s, e))
 		path.append(stair_top(half, s, e))
-		ground_from = stair_bottom(half, s, e)
+		path.append(stair_bottom(half, s, e))
+		ground_from = stair_approach(half, s, e)
 		path.append(ground_from)
 	var ground_to := to
 	var tail: Array[Vector3] = []
 	if to_wall:
 		var s2 := side_of(to)
 		var e2 := _stair_end(s2, to)
-		ground_to = stair_bottom(half, s2, e2)
-		tail = [stair_top(half, s2, e2), wall_landing(half, s2, e2), to]
+		ground_to = stair_approach(half, s2, e2)
+		tail = [stair_bottom(half, s2, e2), stair_top(half, s2, e2), wall_landing(half, s2, e2), to]
 	path.append_array(_ground_route(half, ground_from, ground_to))
 	path.append_array(tail)
 	return path

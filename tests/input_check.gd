@@ -131,7 +131,7 @@ func _run() -> void:
 	fd = Formation.flat_distance(warrior.global_position, field)
 	_check(warrior.post == Formation.POST_FREE and fd < 0.1, "(f) refill keeps the free-point assignment", "post=%d d=%.2f" % [warrior.post, fd])
 
-	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 북쪽 계단(landing → 윗단 → 아랫단)으로 내려가 남문 안쪽 지점으로 (성벽을 뚫지 않음)
+	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 북쪽 계단(landing → 윗단 → 아랫단 → 계단 앞)으로 내려가 남문 안쪽 지점으로 (성벽을 뚫지 않음)
 	archer.move_to(0, Formation.POST_WALL)
 	GameState.refill()  # 리필은 배정을 유지한 채 순간 복귀 → 궁수가 북쪽 성벽 위에 선다
 	await _frames(1)
@@ -142,9 +142,9 @@ func _run() -> void:
 		"(g) precondition: archer selected on the north wall, south field point on open ground",
 		"selected=%s on_wall=%s side=%d px=%s" % [_name(_picker.selected), archer.is_on_wall(), archer.side, sp])
 	var ge := 1.0 if Formation.perp(0).dot(archer.global_position) >= 0.0 else -1.0
-	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.gate_inner(half, 2)]
+	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.stair_approach(half, 0, ge), Formation.gate_inner(half, 2)]
 	await _tap(sp)
-	_check(archer.post == Formation.POST_FREE and archer._path.slice(0, 4) == down,
+	_check(archer.post == Formation.POST_FREE and archer._path.slice(0, 5) == down,
 		"(g) wall-top archer ordered outside the far side goes down the north stairs, then heads for the south gate's inner point",
 		"post=%d path=%s" % [archer.post, archer._path])
 
@@ -167,7 +167,7 @@ func _run() -> void:
 	_check(_picker.selected == warrior and Formation.flat_distance(warrior.free_pos, gp) < 0.1 and Formation.flat_distance(old_free, gp) > 1.0,
 		"(i) ground tap 20 px from the selected hero moves it there", "selected=%s free_pos=%s ground=%s" % [_name(_picker.selected), warrior.free_pos, gp])
 
-	# (j) 성 안 자유 위치 전사 선택 중 북쪽 성벽 탭 → 경로가 계단 아랫단 → 윗단을 지나고, 몇 초 뒤 성벽 위 자리에 선다
+	# (j) 성 안 자유 위치 전사 선택 중 북쪽 성벽 탭 → 경로가 계단 앞 → 아랫단 → 윗단을 지나고, 몇 초 뒤 성벽 위 자리에 선다
 	var yard := Vector3(0, 0, -(half - 8.0))  # 북쪽 십자 도로 위(성채와 북쪽 성벽 사이)
 	warrior.move_to_point(yard)
 	GameState.refill()
@@ -181,8 +181,9 @@ func _run() -> void:
 	var je := 1.0 if Formation.perp(0).dot(home) >= 0.0 else -1.0
 	var bi: int = warrior._path.find(Formation.stair_bottom(half, 0, je))
 	var ti: int = warrior._path.find(Formation.stair_top(half, 0, je))
-	_check(warrior.side == 0 and warrior.post == Formation.POST_WALL and bi >= 0 and ti == bi + 1,
-		"(j) wall tap with an inside warrior selected routes up the north stairs (bottom, then top)",
+	var ai: int = warrior._path.find(Formation.stair_approach(half, 0, je))
+	_check(warrior.side == 0 and warrior.post == Formation.POST_WALL and ai >= 0 and bi == ai + 1 and ti == bi + 1,
+		"(j) wall tap with an inside warrior selected routes up the north stairs (approach, bottom, then top)",
 		"side/post=%s path=%s" % [[warrior.side, warrior.post], warrior._path])
 	await get_tree().create_timer(5.0).timeout
 	var wd: float = warrior.global_position.distance_to(home)

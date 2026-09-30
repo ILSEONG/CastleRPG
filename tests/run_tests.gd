@@ -425,7 +425,7 @@ func test_route() -> void:
 	r = F.route(half, gate_n, gate_e)
 	check(r.size() == 5 and r[0] == F.gate_outer(half, 0) and r[3] == F.gate_outer(half, 1), "adjacent gate fronts route through both gates: %s" % [r])
 	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)  # 동쪽 성벽 위 -옆(z = -4) → 계단 end -1
-	var stairs_e := [F.wall_landing(half, 1, -1.0), F.stair_top(half, 1, -1.0), F.stair_bottom(half, 1, -1.0)]
+	var stairs_e := [F.wall_landing(half, 1, -1.0), F.stair_top(half, 1, -1.0), F.stair_bottom(half, 1, -1.0), F.stair_approach(half, 1, -1.0)]
 	r = F.route(half, wall_e, out_s)
 	check(r == stairs_e + [F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside goes down the stairs, then leaves through a gate: %s" % [r])
 	r = F.route(half, out_s, wall_e)
@@ -452,30 +452,47 @@ func test_stairs_and_wall_routes() -> void:
 			check(dir.dot(top) < half and dir.dot(bot) < half and dir.dot(top) > half - Balance.STAIR_W, "stairs sit in the strip inside the wall")
 			check(absf(pp.dot(top)) > Balance.GATE_W / 2.0 and absf(pp.dot(bot)) > absf(pp.dot(top)), "stairs beside the gate, climbing toward it")
 			check(F.region(half, land) == F.REGION_WALL and F.region(half, bot) == F.REGION_INSIDE, "landing is wall top, bottom is inside ground")
+			var app: Vector3 = F.stair_approach(half, side, e)
+			check(app.y == 0.0 and dir.dot(app) < half - Balance.STAIR_W and pp.dot(app) * e > absf(pp.dot(bot)) and not _in_stair_footprint(half, app),
+				"stair approach is on the ground off the strip, beyond the stair's foot (side %d end %d)" % [side, e])
+		check(dir.dot(F.gate_inner(half, side)) < half - Balance.STAIR_W, "gate inner point is off the stair strip, side %d" % side)
 	var wall_n := F.slot_position(half, 0, F.POST_WALL, 1)   # 북쪽 성벽 위, +옆
 	var inside := Vector3(6, 0, 6)
 	var r: Array = F.route(half, inside, wall_n)
 	var e_n := 1.0 if F.perp(0).dot(wall_n) >= 0.0 else -1.0
-	check(r.size() >= 4 and r[-4] == F.stair_bottom(half, 0, e_n) and r[-3] == F.stair_top(half, 0, e_n) and r[-2] == F.wall_landing(half, 0, e_n) and r[-1] == wall_n, "inside to wall top climbs the stairs: %s" % [r])
+	check(r.size() >= 5 and r[-5] == F.stair_approach(half, 0, e_n) and r[-4] == F.stair_bottom(half, 0, e_n) and r[-3] == F.stair_top(half, 0, e_n) and r[-2] == F.wall_landing(half, 0, e_n) and r[-1] == wall_n, "inside to wall top climbs the stairs: %s" % [r])
 	var out_s := Vector3(-5, 0, 45)
 	r = F.route(half, wall_n, out_s)
-	check(r[0] == F.wall_landing(half, 0, e_n) and r[1] == F.stair_top(half, 0, e_n) and r[2] == F.stair_bottom(half, 0, e_n), "wall top to outside goes down the stairs first: %s" % [r])
+	check(r[0] == F.wall_landing(half, 0, e_n) and r[1] == F.stair_top(half, 0, e_n) and r[2] == F.stair_bottom(half, 0, e_n) and r[3] == F.stair_approach(half, 0, e_n), "wall top to outside goes down the stairs first: %s" % [r])
 	check(r.has(F.gate_inner(half, 2)) and r.has(F.gate_outer(half, 2)) and r[-1] == out_s, "then leaves through a gate")
 	var wall_n2 := F.slot_position(half, 0, F.POST_WALL, 0)
 	check(F.route(half, wall_n, wall_n2) == [wall_n2], "same-side wall top walks straight")
 	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)
 	r = F.route(half, wall_n, wall_e)
 	var e_e := 1.0 if F.perp(1).dot(wall_e) >= 0.0 else -1.0
-	check(r[2] == F.stair_bottom(half, 0, e_n) and r[-4] == F.stair_bottom(half, 1, e_e) and r[-1] == wall_e, "wall top to another side's wall top goes down and up: %s" % [r])
+	check(r[2] == F.stair_bottom(half, 0, e_n) and r[3] == F.stair_approach(half, 0, e_n) and r[-5] == F.stair_approach(half, 1, e_e) and r[-4] == F.stair_bottom(half, 1, e_e) and r[-1] == wall_e, "wall top to another side's wall top goes down and up: %s" % [r])
 	var out_n := Vector3(5, 0, -45)
 	r = F.route(half, out_n, wall_n)
-	check(r[0] == F.gate_outer(half, 0) and r[1] == F.gate_inner(half, 0) and r[-4] == F.stair_bottom(half, 0, e_n), "outside to wall top enters a gate then climbs: %s" % [r])
-	# 어떤 구간도 성벽 띠를 곧장 오르내리지 않는다: 높이가 바뀌는 구간은 계단 윗단↔아랫단, 윗단↔landing 뿐
-	for pair in [[inside, wall_n], [wall_n, out_s], [wall_n, wall_e], [out_n, wall_n]]:
+	check(r[0] == F.gate_outer(half, 0) and r[1] == F.gate_inner(half, 0) and r[-5] == F.stair_approach(half, 0, e_n) and r[-4] == F.stair_bottom(half, 0, e_n), "outside to wall top enters a gate then climbs: %s" % [r])
+	# 어떤 구간도 성벽 띠를 곧장 오르내리지 않는다: 높이가 바뀌는 구간은 계단 윗단↔아랫단, 윗단↔landing 뿐.
+	# 지상 구간(양 끝 y=0)은 계단 발판(띠 × 계단 길이)을 지나지 않는다 — 0.1 m 간격으로 샘플.
+	var pairs := [[inside, wall_n], [wall_n, out_s], [wall_n, wall_e], [out_n, wall_n]]
+	for s in 4:
+		for slot in 2:  # WALL_TOP_SLOTS[0] = -4 (end -1), [1] = +4 (end +1)
+			var w := F.slot_position(half, s, F.POST_WALL, slot)
+			pairs.append([inside, w])
+			pairs.append([w, inside])
+	for pair in pairs:
 		var pts: Array = [pair[0]] + F.route(half, pair[0], pair[1])
 		for i in range(1, pts.size()):
 			var a: Vector3 = pts[i - 1]
 			var b: Vector3 = pts[i]
+			if absf(a.y) < 0.01 and absf(b.y) < 0.01:
+				var n := ceili(F.flat_distance(a, b) / 0.1)
+				var hit := false
+				for k in range(n + 1):
+					hit = hit or _in_stair_footprint(half, a.lerp(b, float(k) / maxf(n, 1)))
+				check(not hit, "ground leg stays off every stair footprint (%s -> %s, route %s -> %s)" % [a, b, pair[0], pair[1]])
 			if absf(a.y - b.y) > 0.01:
 				var ok := false
 				for s in 4:
@@ -485,6 +502,17 @@ func test_stairs_and_wall_routes() -> void:
 						if (a.is_equal_approx(st) and b.is_equal_approx(sb)) or (a.is_equal_approx(sb) and b.is_equal_approx(st)):
 							ok = true
 				check(ok, "height changes only on a stair flight (%s -> %s)" % [a, b])
+
+
+## 계단 발판: 면의 띠(성벽 안쪽 STAIR_W) × 성문 옆 GATE_W/2 + STAIR_GAP .. + STAIR_RUN (양쪽 end). 경계선 위는 밖(아랫단이 경계에 있다).
+func _in_stair_footprint(half: float, p: Vector3) -> bool:
+	var lo := Balance.GATE_W / 2.0 + Balance.STAIR_GAP
+	for s in 4:
+		var depth: float = FormationScript.SIDE_DIR[s].dot(p)
+		var along: float = absf(FormationScript.perp(s).dot(p))
+		if depth > half - Balance.STAIR_W + 0.01 and depth < half - 0.01 and along > lo + 0.01 and along < lo + Balance.STAIR_RUN - 0.01:
+			return true
+	return false
 
 
 func test_is_inside() -> void:
