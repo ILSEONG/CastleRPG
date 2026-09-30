@@ -2,7 +2,7 @@ extends Node3D
 ## 성벽 4면 + 모서리 탑 + 성문 4개 + 계단 8개 (코드로 만든 로우폴리 메시, TownKit). 성문 HP의 진실은 GameState.
 ## 여기는 시각화·탭 판정 영역·위치 제공만. 크기는 GameState.keep_level의 내부 크기,
 ## 위치 계산은 Formation static 함수에 위임한다.
-## 성벽은 "성문 가장자리 ~ 모서리 탑 가장자리" 구간을 메시 한 토막으로 채운다.
+## 성벽은 "성문 가장자리 ~ 모서리 탑 중심선" 구간을 메시 한 토막으로 채운다(8각 탑과 성벽 모서리 사이에 틈이 없게 탑 안까지).
 ## side: 0=N(-z) 1=E(+x) 2=S(+z) 3=W(-x)
 
 const Balance := preload("res://scripts/balance.gd")
@@ -21,7 +21,7 @@ var _gate_doors: Array = []  # side -> 문짝 MeshInstance3D
 func _ready() -> void:
 	half = Balance.interior_half(GameState.keep_level)
 	var c := half + Balance.WALL_T / 2.0  # 성벽 중심선
-	var run := c - Balance.TOWER_SIZE / 2.0 - Balance.GATE_W / 2.0
+	var run := c - Balance.GATE_W / 2.0
 	var wall_mesh := TownKit.wall_run(run)
 	var gate_mesh := TownKit.gatehouse()
 	var doors_mesh := TownKit.gate_doors()

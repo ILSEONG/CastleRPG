@@ -11,7 +11,7 @@ const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const MOUNTAIN_VARIANTS := 5
 
-var half: float = 16.0  # 성 내부 절반 크기. main이 add_child 전에 castle.half로 설정
+var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
 
 
 func _ready() -> void:
