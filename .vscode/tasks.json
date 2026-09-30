@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			// 웹 빌드(헤드리스, 창 없음) 후 http://localhost:8060 서빙. 터미널의 링크를 Ctrl+클릭하면 Simple Browser로 열린다.
+			"label": "CastleRPG: 웹 실행",
+			"type": "process",
+			"command": "C:/Program Files/Git/bin/bash.exe",
+			"args": ["-c", "bash dev/build-web.sh && npm --prefix dev run serve"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,0 +1,6 @@
+{
+	// localhost:8060(웹 빌드 미리보기) 링크는 외부 브라우저 대신 VSCode Simple Browser 탭으로 연다.
+	"workbench.externalUriOpeners": {
+		"localhost:8060": "simpleBrowser.open"
+	}
+}
