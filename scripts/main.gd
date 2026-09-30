@@ -3,7 +3,6 @@ extends Node3D
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 
 const Balance := preload("res://scripts/balance.gd")
-const Art := preload("res://scripts/art.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -72,9 +71,13 @@ func _build_environment() -> void:
 	sun.rotation_degrees = Vector3(-50, -45, 0)  # 카메라(요 45°) 시선을 가로지르게 → 그림자가 화면 오른쪽 바닥에 드리운다
 
 
+## 바닥은 픽셀 셰이더 평면 한 장이라 크기는 공짜 — 카메라가 보여 줄 수 있는 곳을 다 덮는다: 팬 한계 + 최대 줌아웃에서
+## 19.5:9 세로 화면이 비추는 바닥 직사각형(가로 반폭 w, 세로는 1/sin(피치)로 늘어난 h)의 대각선 반(요와 무관하게 덮는다).
 func _build_ground(interior_half: float) -> void:
+	var w := Balance.CAMERA_SIZE_MAX / 2.0
+	var h := w * 19.5 / 9.0 / sin(deg_to_rad(-CameraRigScript.PITCH_DEG))
 	var plane := PlaneMesh.new()
-	plane.size = Vector2.ONE * (Balance.MAP_HALF + Art.BORDER_OUTER + 15.0) * 2.0
+	plane.size = Vector2.ONE * (Balance.MAP_HALF - CameraRigScript.PAN_LIMIT_MARGIN + Vector2(w, h).length()) * 2.0
 	var mat := ShaderMaterial.new()
 	mat.shader = GroundShader
 	mat.set_shader_parameter("tile_size", Balance.TILE)
