@@ -9,11 +9,6 @@ const CHARACTER_SCALE := 1.0      # KayKit 캐릭터 키 약 2.2m
 const HEAD_HEIGHT := 2.5          # 캐릭터 모델 발에서 HP 바까지 높이(모델 단위, 배율 곱하기 전)
 const CORPSE_SEC := 1.6           # 몬스터 사망 후 제거까지(초). Death_C_Skeletons(~2.0초)는 ~1.6초에 쓰러짐이 끝나므로, 애니메이션 꼬리가 끝나기 전 쓰러진 자세에서 제거한다. 사망 애니메이션 길이 이하여야 함(테스트)
 const BUILDING_GAP := 0.6         # 건물 부지 가장자리 여유(m)
-const WALL_MODEL_LEN := 2.0       # wall_straight 모델 치수(모델 단위): 길이·높이·두께
-const WALL_MODEL_H := 1.1
-const WALL_MODEL_T := 0.8
-const WALL_PIECE_TARGET := 5.0    # 성벽 조각 목표 길이(m). 구간을 이 근처 길이로 균등 분할
-const TOWER_SCALE := 3.2
 const ARROW_SCALE := 1.2
 const NATURE_SCALE := 3.0
 const NATURE_COUNT := 180
@@ -74,10 +69,6 @@ const BUILDING_MODELS := {
 	"quarry": HEX_DIR + "building_mine_blue.gltf",
 	"farm": HEX_DIR + "building_windmill_blue.gltf",
 }
-const WALL_MODEL := HEX_DIR + "wall_straight.gltf"
-const GATE_MODEL := HEX_DIR + "wall_straight_gate.gltf"
-const GATE_DOORS := ["wall_straight_gate_door_left", "wall_straight_gate_door_right"]
-const TOWER_MODEL := HEX_DIR + "building_tower_A_blue.gltf"
 const ARROW_MODEL := PROP_DIR + "arrow.gltf"
 const NATURE_MODELS := [
 	HEX_DIR + "trees_A_medium.gltf", HEX_DIR + "trees_B_large.gltf",
@@ -89,6 +80,17 @@ const BORDER_MODELS := [  # 풀·언덕 변형은 윗면이 라임색 팔레트�
 ]
 
 static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
+static var _vc_material: ShaderMaterial
+
+
+## 코드로 만든 로우폴리 메시(정점 색)용 공유 재질.
+static func lowpoly_vc_material() -> ShaderMaterial:
+	if _vc_material == null:
+		_vc_material = ShaderMaterial.new()
+		_vc_material.shader = LOWPOLY_SHADER
+		_vc_material.set_shader_parameter("use_texture", false)
+		_vc_material.set_shader_parameter("use_vertex_color", true)
+	return _vc_material
 
 
 static func mesh(m: Mesh, color: Color) -> MeshInstance3D:

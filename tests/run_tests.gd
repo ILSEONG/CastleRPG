@@ -7,6 +7,8 @@ const WaveDirector := preload("res://scripts/wave_director.gd")
 const GameStateScript := preload("res://scripts/game_state.gd")
 const FormationScript := preload("res://scripts/formation.gd")
 const Art := preload("res://scripts/art.gd")
+const MeshKitScript := preload("res://scripts/mesh_kit.gd")
+const TownKitScript := preload("res://scripts/town_kit.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -42,6 +44,8 @@ func _init() -> void:
 	test_stairs_and_wall_routes()
 	test_buildings_clear_stairs()
 	test_is_inside()
+	test_mesh_kit()
+	test_castle_parts()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -349,16 +353,8 @@ func test_art_assets() -> void:
 		root.free()
 	for b in Balance.BUILDINGS:
 		check(Art.BUILDING_MODELS.has(b.id) and ResourceLoader.exists(Art.BUILDING_MODELS[b.id]), "building %s has a model" % b.id)
-	for path in [Art.WALL_MODEL, Art.GATE_MODEL, Art.TOWER_MODEL, Art.ARROW_MODEL] + Art.NATURE_MODELS + Art.BORDER_MODELS:
+	for path in [Art.ARROW_MODEL] + Art.NATURE_MODELS + Art.BORDER_MODELS:
 		check(ResourceLoader.exists(path), "model exists: %s" % path)
-	var gate: Node = (load(Art.GATE_MODEL) as PackedScene).instantiate()
-	for door in Art.GATE_DOORS:
-		check(gate.find_child(door, true, false) != null, "gate model has %s" % door)
-	var wall: Node3D = (load(Art.WALL_MODEL) as PackedScene).instantiate()
-	var wb := Art.model_aabb(wall)
-	check(absf(wb.size.x - Art.WALL_MODEL_LEN) < 0.05 and absf(wb.size.y - Art.WALL_MODEL_H) < 0.05 and absf(wb.size.z - Art.WALL_MODEL_T) < 0.05, "wall model size matches Art constants: %s" % wb.size)
-	gate.free()
-	wall.free()
 	var arrow: Node3D = (load(Art.ARROW_MODEL) as PackedScene).instantiate()
 	var ab := Art.model_aabb(arrow)
 	check(ab.size.y > ab.size.x and ab.size.y > ab.size.z, "arrow model long axis is Y (ARROW_PITCH_FIX): %s" % ab.size)
@@ -372,7 +368,7 @@ func test_art_assets() -> void:
 
 func test_lowpoly_conversion() -> void:
 	for path in [Art.HERO_MODELS.warrior.scene, Art.HERO_MODELS.archer.scene, Art.MONSTER_MODELS.grunt.scene, Art.MONSTER_MODELS.grunt.weapon,
-			Art.ARROW_MODEL, Art.WALL_MODEL, Art.BUILDING_MODELS.keep] + Art.BORDER_MODELS:
+			Art.ARROW_MODEL, Art.BUILDING_MODELS.keep] + Art.BORDER_MODELS:
 		var root: Node = Art.instance(path)
 		var surfaces := 0
 		for node in root.find_children("*", "MeshInstance3D", true, false):
@@ -391,8 +387,8 @@ func test_lowpoly_conversion() -> void:
 	var cape_mat := (knight.find_child("Knight_Cape", true, false) as MeshInstance3D).get_active_material(0) as ShaderMaterial
 	check(cape_mat != null and cape_mat.shader == Art.LOWPOLY_DOUBLE_SHADER, "double-sided source (Knight cape, open mesh) uses the double-sided low-poly shader")
 	knight.free()
-	var a: Node = Art.instance(Art.WALL_MODEL)
-	var b: Node = Art.instance(Art.WALL_MODEL)
+	var a: Node = Art.instance(Art.ARROW_MODEL)
+	var b: Node = Art.instance(Art.ARROW_MODEL)
 	var ma: Material = (a.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).get_active_material(0)
 	var mb: Material = (b.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).get_active_material(0)
 	check(ma == mb, "same source material shares one low-poly material")
@@ -568,3 +564,43 @@ func test_is_inside() -> void:
 	check(FormationScript.is_inside(half, Vector3(0, 0, -(half + Balance.WALL_T - 0.1))), "just inside the outer wall face counts as inside")
 	check(not FormationScript.is_inside(half, Vector3(0, 0, -(half + Balance.WALL_T + 0.1))), "just outside the outer wall face counts as outside")
 	check(FormationScript.is_inside(half, Vector3(0, Balance.WALL_H, -(half + Balance.WALL_T / 2.0))), "wall top counts as inside")
+
+
+func test_mesh_kit() -> void:
+	var k = MeshKitScript.new()
+	k.box(Vector3.ZERO, Vector3(2, 1, 3), Color.RED)
+	check(k.triangle_count() == 10, "box without bottom = 5 faces = 10 triangles")
+	var m: ArrayMesh = k.commit()
+	var arrays := m.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	check(verts.size() == 30 and cols.size() == 30 and cols[0] == Color.RED, "unshared vertices with vertex colours")
+	var aabb := m.get_aabb()
+	check(aabb.position.is_equal_approx(Vector3(-1, 0, -1.5)) and aabb.size.is_equal_approx(Vector3(2, 1, 3)), "box bounds")
+	# 감기: 모든 삼각형이 같은 규약(바깥 기준)으로 감겨 있다. 상자는 넘긴 순서가 이미 규약대로라
+	# 뒤집기 분기를 타지 않으므로, 한 경사면을 반대 순서로 넘기는 박공지붕도 함께 본다.
+	check(_wound_outward(verts, Vector3(0, 0.5, 0)), "every box triangle wound front-facing outward")
+	var g = MeshKitScript.new()
+	g.gable(Vector3.ZERO, Vector3(2, 0, 2), 1.0, Color.BLUE)
+	var gv: PackedVector3Array = g.commit().surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	check(_wound_outward(gv, Vector3(0, 0.3, 0)), "every gable triangle wound front-facing outward")
+
+
+## 볼록 도형의 모든 삼각형이 안쪽 점 center 기준 바깥을 앞면(MeshKit 규약)으로 감겼는가.
+func _wound_outward(verts: PackedVector3Array, center: Vector3) -> bool:
+	for i in range(0, verts.size(), 3):
+		var a := verts[i]
+		var b := verts[i + 1]
+		var c := verts[i + 2]
+		var ccw_out := (b - a).cross(c - a).dot((a + b + c) / 3.0 - center) > 0.0
+		if ccw_out == MeshKitScript.CLOCKWISE_FRONT:
+			return false
+	return true
+
+
+func test_castle_parts() -> void:
+	for pair in [["wall_run", TownKitScript.wall_run(10.0)], ["gatehouse", TownKitScript.gatehouse()], ["gate_doors", TownKitScript.gate_doors()], ["corner_tower", TownKitScript.corner_tower()], ["stairs", TownKitScript.stairs()]]:
+		var m: ArrayMesh = pair[1]
+		check(m.get_surface_count() == 1 and m.get_aabb().size.length() > 0.5, "%s has one non-empty surface" % pair[0])
+	var st: AABB = TownKitScript.stairs().get_aabb()
+	check(is_equal_approx(st.size.x, Balance.STAIR_RUN) and is_equal_approx(st.end.y, Balance.WALL_H) and is_equal_approx(st.size.z, Balance.STAIR_W), "stairs span run x wall height x stair width: %s" % st)

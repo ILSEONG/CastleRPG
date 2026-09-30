@@ -5,11 +5,17 @@
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform vec4 albedo_color : source_color = vec4(1.0);
 uniform bool use_texture = true;
+uniform bool use_vertex_color = false;
 
 void fragment() {
 	vec4 c = albedo_color;
 	if (use_texture) {
 		c *= texture(albedo_tex, UV);
+	}
+	if (use_vertex_color) {
+		// 정점 색은 sRGB로 적는다(팔레트 그대로). 이 렌더러(Compatibility/WebGL)는 fragment()에 오기 전에 이미
+		// 선형으로 바꿔 준다 — 캡처 A/B 측정: 여기서 한 번 더 바꾸면 균일 albedo_color(source_color)보다 짙고 탁해졌다.
+		c.rgb *= COLOR.rgb;
 	}
 	ALBEDO = c.rgb;
 	vec3 n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));

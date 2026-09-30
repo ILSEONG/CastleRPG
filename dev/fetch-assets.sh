@@ -22,11 +22,8 @@ for f in arrow.gltf arrow.bin rogue_texture.png; do get "$ADV/Assets/gltf/$f" "$
 for f in Skeleton_Blade.gltf Skeleton_Blade.bin Skeleton_Axe.gltf Skeleton_Axe.bin skeleton_texture.png; do
 	get "$SKE/Assets/gltf/$f" "$P/$f"
 done
-for f in castle barracks tavern blacksmith home_B lumbermill mine windmill tower_A; do
+for f in castle barracks tavern blacksmith home_B lumbermill mine windmill; do
 	for e in gltf bin; do get "$HEX/buildings/blue/building_${f}_blue.$e" "$H/building_${f}_blue.$e"; done
-done
-for f in wall_straight wall_straight_gate; do
-	for e in gltf bin; do get "$HEX/buildings/neutral/$f.$e" "$H/$f.$e"; done
 done
 for f in trees_A_medium trees_B_large tree_single_A tree_single_B rock_single_A rock_single_C rock_single_E mountain_A mountain_B mountain_C; do
 	for e in gltf bin; do get "$HEX/decoration/nature/$f.$e" "$H/$f.$e"; done
