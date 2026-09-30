@@ -33,7 +33,9 @@ void fragment() {
 	// 로우폴리: 타일마다 대각선으로 나눈 두 삼각형에 서로 다른 명암
 	vec2 cell = floor(p);
 	float upper = step(fract(p).x, fract(p).y);
-	vec3 q = fract(vec3(cell.xyx + upper * vec3(0.37, 0.71, 0.37)) * 0.1031);  // sin 없는 해시(Hoskins hash12): 인자가 작아 모바일 GPU에서도 줄무늬·반복 없음
+	// sin 없는 해시(Hoskins hash12): 큰 인자에서 줄무늬가 생기는 sin 해시와 달리 곱·fract만 쓴다. 중간 곱 (q.x + q.y) * q.z는 ~2e4까지 커지지만
+	// 32비트 float 정밀도에서는 fract 뒤에도 자릿수가 충분해 줄무늬·반복이 없다.
+	vec3 q = fract(vec3(cell.xyx + upper * vec3(0.37, 0.71, 0.37)) * 0.1031);
 	q += dot(q, q.yzx + 33.33);
 	float h = fract((q.x + q.y) * q.z);
 	base *= 1.0 + facet_variation * (h * 2.0 - 1.0);
