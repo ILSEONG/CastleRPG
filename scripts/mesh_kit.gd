@@ -14,6 +14,7 @@ var _tris := 0
 
 func _init() -> void:
 	_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_st.set_smooth_group(-1)  # 면마다 법선 하나(평면 법선). 기본 그룹 0이면 같은 위치 정점끼리 법선이 평균된다
 
 
 func triangle_count() -> int:
@@ -37,8 +38,8 @@ func face(points: Array, outward: Vector3, color: Color) -> void:
 		_tris += 1
 
 
-## 바닥 중심 base, 크기 size인 상자. 바닥면은 기본 생략(땅에 붙는 물체).
-func box(base: Vector3, size: Vector3, color: Color, with_bottom := false) -> void:
+## 바닥 중심 base, 크기 size인 상자. 바닥면은 없다(땅이나 다른 부품 위에 놓이는 물체).
+func box(base: Vector3, size: Vector3, color: Color) -> void:
 	var h := Vector3(size.x / 2.0, 0, size.z / 2.0)
 	var y0 := base.y
 	var y1 := base.y + size.y
@@ -50,8 +51,6 @@ func box(base: Vector3, size: Vector3, color: Color, with_bottom := false) -> vo
 	for v in p:
 		q.append(Vector3(v.x, y1, v.z))
 	face(q, Vector3.UP, color)
-	if with_bottom:
-		face(p, Vector3.DOWN, color)
 	for i in 4:
 		var j := (i + 1) % 4
 		var mid: Vector3 = (p[i] + p[j]) / 2.0 - base

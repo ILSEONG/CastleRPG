@@ -96,13 +96,16 @@ static func corner_tower() -> ArrayMesh:
 
 
 ## 계단(로컬 규약이 다르다): 길이 방향 +X로 올라간다 — x=0 높이 0, x=STAIR_RUN 높이 WALL_H. 폭 Z = STAIR_W(가운데 기준).
-## 단 i는 x 구간 [i, i+1]×run/steps, 높이 (i+1)×WALL_H/steps, 바닥부터 채운 박스.
+## 단 i는 x 구간 [i, i+1]×run/steps, 윗면 높이 (i+0.5)×WALL_H/steps(바닥부터 채운 박스): 아랫단→윗단 직선 경사를 걷는
+## 영웅의 발이 반 단 넘게 묻히지 않는다. 마지막 단의 뒤 절반은 WALL_H로 올려 성벽 위와 같은 높이로 맞춘다.
 static func stairs() -> ArrayMesh:
 	var k = MeshKit.new()
 	var n := Balance.STAIR_STEPS
 	var d := Balance.STAIR_RUN / n
 	for i in n:
-		k.box(Vector3(d * (i + 0.5), 0, 0), Vector3(d, Balance.WALL_H * (i + 1) / n, Balance.STAIR_W), STONE_DARK)
+		var w := d if i < n - 1 else d / 2.0
+		k.box(Vector3(d * i + w / 2.0, 0, 0), Vector3(w, Balance.WALL_H * (i + 0.5) / n, Balance.STAIR_W), STONE_DARK)
+	k.box(Vector3(Balance.STAIR_RUN - d / 4.0, 0, 0), Vector3(d / 2.0, Balance.WALL_H, Balance.STAIR_W), STONE_DARK)
 	return k.commit()
 
 

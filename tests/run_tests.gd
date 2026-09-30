@@ -588,6 +588,9 @@ func test_mesh_kit() -> void:
 	check(verts.size() == 30 and cols.size() == 30 and cols[0] == Color.RED, "unshared vertices with vertex colours")
 	var aabb := m.get_aabb()
 	check(aabb.position.is_equal_approx(Vector3(-1, 0, -1.5)) and aabb.size.is_equal_approx(Vector3(2, 1, 3)), "box bounds")
+	var nrm: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]  # 윗면 삼각형 2개(정점 0~5) 다음이 옆면
+	check(nrm[0].distance_to(Vector3.UP) < 0.001 and absf(nrm[6].y) < 0.001 and absf(nrm[6].length() - 1.0) < 0.001,
+		"flat per-face normals (not averaged over shared corners): top %s, side %s" % [nrm[0], nrm[6]])
 	# 감기: 모든 삼각형이 같은 규약(바깥 기준)으로 감겨 있다. 상자는 넘긴 순서가 이미 규약대로라
 	# 뒤집기 분기를 타지 않으므로, 한 경사면을 반대 순서로 넘기는 박공지붕도 함께 본다.
 	check(_wound_outward(verts, Vector3(0, 0.5, 0)), "every box triangle wound front-facing outward")
@@ -595,6 +598,12 @@ func test_mesh_kit() -> void:
 	g.gable(Vector3.ZERO, Vector3(2, 0, 2), 1.0, Color.BLUE)
 	var gv: PackedVector3Array = g.commit().surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	check(_wound_outward(gv, Vector3(0, 0.3, 0)), "every gable triangle wound front-facing outward")
+	var pr = MeshKitScript.new()
+	pr.prism_n(Vector3.ZERO, 6, 1.0, 0.7, 2.0, Color.GREEN, 0.3)
+	check(_wound_outward(pr.commit().surface_get_arrays(0)[Mesh.ARRAY_VERTEX], Vector3(0, 1.0, 0)), "every prism_n (frustum) triangle wound front-facing outward")
+	var cn = MeshKitScript.new()
+	cn.cone(Vector3.ZERO, 7, 1.0, 2.0, Color.GREEN)
+	check(_wound_outward(cn.commit().surface_get_arrays(0)[Mesh.ARRAY_VERTEX], Vector3(0, 0.5, 0)), "every cone triangle wound front-facing outward")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
 	var rk = MeshKitScript.new()
@@ -620,8 +629,28 @@ func test_castle_parts() -> void:
 	for pair in [["wall_run", TownKitScript.wall_run(10.0)], ["gatehouse", TownKitScript.gatehouse()], ["gate_doors", TownKitScript.gate_doors()], ["corner_tower", TownKitScript.corner_tower()], ["stairs", TownKitScript.stairs()]]:
 		var m: ArrayMesh = pair[1]
 		check(m.get_surface_count() == 1 and m.get_aabb().size.length() > 0.5, "%s has one non-empty surface" % pair[0])
-	var st: AABB = TownKitScript.stairs().get_aabb()
+	var sm: ArrayMesh = TownKitScript.stairs()
+	var st: AABB = sm.get_aabb()
 	check(is_equal_approx(st.size.x, Balance.STAIR_RUN) and is_equal_approx(st.end.y, Balance.WALL_H) and is_equal_approx(st.size.z, Balance.STAIR_W), "stairs span run x wall height x stair width: %s" % st)
+	# 높은 쪽이 +X(윗단)여야 castle.gd 배치와 맞는다: 가장 높은 정점들은 마지막 단 칸 안, 그중 하나는 x = STAIR_RUN.
+	var sv: PackedVector3Array = sm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var d := Balance.STAIR_RUN / Balance.STAIR_STEPS
+	var top_xs: Array = []
+	for v in sv:
+		if is_equal_approx(v.y, Balance.WALL_H):
+			top_xs.append(v.x)
+	check(not top_xs.is_empty() and top_xs.min() > Balance.STAIR_RUN - d - 0.01 and is_equal_approx(top_xs.max(), Balance.STAIR_RUN), "stair mesh is highest at x = STAIR_RUN (top end): %s" % [top_xs])
+	# 아랫단(x=0, y=0) → 윗단(x=RUN, y=WALL_H) 직선 경사를 걷는 발은 디딤판 아래로 반 단 넘게 묻히지 않는다.
+	var worst := 0.0
+	for i in 601:
+		var x := Balance.STAIR_RUN * i / 600.0
+		var tread := 0.0
+		for t in range(0, sv.size(), 3):
+			var a := sv[t]
+			if is_equal_approx(a.y, sv[t + 1].y) and is_equal_approx(a.y, sv[t + 2].y) and x >= minf(a.x, minf(sv[t + 1].x, sv[t + 2].x)) - 0.001 and x <= maxf(a.x, maxf(sv[t + 1].x, sv[t + 2].x)) + 0.001:
+				tread = maxf(tread, a.y)
+		worst = maxf(worst, tread - Balance.WALL_H * x / Balance.STAIR_RUN)
+	check(worst <= Balance.WALL_H / Balance.STAIR_STEPS / 2.0 + 0.001, "feet on the straight stair slope sink at most half a riser: %.3f m" % worst)
 
 
 ## 건물 레시피는 부지 안·바닥 위·부지 가운데, 자연물·산은 한 표면으로 땅 근처에 놓인다.
