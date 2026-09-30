@@ -174,14 +174,14 @@ func _process(delta: float) -> void:
 	_target = null
 	var home := stand_position()
 	if global_position.distance_to(home) > ARRIVE_EPS:
-		if not is_on_wall() and Formation.is_inside(castle.half, global_position) == Formation.is_inside(castle.half, home):
-			# 추격 뒤 복귀: 같은 영역이면 곧장(도중에 새 표적을 만나면 다시 교전)
+		if not is_on_wall() and Formation.route(castle.half, global_position, home).size() == 1:
+			# 추격 뒤 복귀: 곧장 갈 수 있으면(같은 영역, 성 모서리를 가로지르지 않음) 곧장(도중에 새 표적을 만나면 다시 교전)
 			state = State.MOVE
 			_model.face(home - global_position)
 			_model.play_walk()
 			global_position = global_position.move_toward(home, float(_stats.speed) * delta)
 			return
-		_replan()  # 다른 영역이면 성문 경로로
+		_replan()  # 다른 영역이거나 성을 가로지르면 성문 경로로
 		return
 	if state != State.IDLE:
 		state = State.IDLE

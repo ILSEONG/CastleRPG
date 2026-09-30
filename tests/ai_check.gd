@@ -186,6 +186,23 @@ func _run() -> void:
 	_check(not w_in and w_out < 0.5, "(h) warrior does not chase the grunt across the castle corner",
 		"went inside=%s max distance from point %.2f" % [w_in, w_out])
 
+	# (i) 추격 끝에 자리(모서리 근처 북쪽 면 밖)의 이웃 동쪽 면 밖에 남은 전사는 모서리를 가로질러 곧장 가지 않고 성문 경로로 돌아간다.
+	#     실제로는 맞서지 않고 면을 따라 걷는 괴물을 쫓을 때만 비결정적으로 생기므로 전사를 그 위치에 옮겨 놓는다. 매 프레임 성벽 띠(성문 폭 밖)에 들어서는지 본다.
+	_clear_monsters()
+	await _frames(1)
+	warrior.global_position = Vector3(_half + Balance.WALL_T + 1.5, 0, -(_half - 2.0))
+	var through_wall := false
+	t = 0.0
+	while t < 15.0 and not (warrior._path.is_empty() and Formation.flat_distance(warrior.global_position, hpost) < 0.05):
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		var p: Vector3 = warrior.global_position
+		var ring := maxf(absf(p.x), absf(p.z))
+		through_wall = through_wall or (ring >= _half and ring < _half + Balance.WALL_T and minf(absf(p.x), absf(p.z)) >= Balance.GATE_W / 2.0)
+	var hd := Formation.flat_distance(warrior.global_position, hpost)
+	_check(not through_wall and hd < 0.2, "(i) warrior left beside the castle corner walks home through the gates, not the corner",
+		"crossed the wall band=%s d=%.2f pos=%s" % [through_wall, hd, warrior.global_position])
+
 
 func _alive(m) -> bool:
 	return is_instance_valid(m) and m.is_alive()
