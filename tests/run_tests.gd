@@ -8,10 +8,18 @@ const GameStateScript := preload("res://scripts/game_state.gd")
 const FormationScript := preload("res://scripts/formation.gd")
 const Art := preload("res://scripts/art.gd")
 
+class ErrorCounter extends Logger:
+	var count := 0
+	func _log_error(_fn: String, _file: String, _line: int, _code: String, _why: String, _notify: bool, error_type: int, _bt: Array[ScriptBacktrace]) -> void:
+		if error_type != ERROR_TYPE_WARNING:
+			count += 1  # SCRIPT ERROR는 그 테스트 함수만 중단시키므로 여기서 센다
+
 var _fails := 0
+var _errors := ErrorCounter.new()
 
 
 func _init() -> void:
+	OS.add_logger(_errors)
 	test_balance_monotonic()
 	test_balance_tables()
 	test_wave_stage_ends_with_boss()
@@ -30,6 +38,9 @@ func _init() -> void:
 	test_formation_positions()
 	test_art_assets()
 	test_route()
+	if _errors.count > 0:
+		printerr("SCRIPT ERRORS %d" % _errors.count)
+	_fails += _errors.count
 	if _fails > 0:
 		printerr("FAILED %d" % _fails)
 	else:
@@ -385,3 +396,7 @@ func test_route() -> void:
 	check(r == [F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside leaves through a gate: %s" % [r])
 	r = F.route(half, out_s, wall_e)
 	check(r == [F.gate_outer(half, 2), F.gate_inner(half, 2), wall_e], "outside to wall top enters through a gate: %s" % [r])
+	var mid_gate := Vector3(0, 0, -(half + Balance.WALL_T * 0.75))  # 성문 통로 바깥쪽 절반 = 안
+	var field_n := Vector3(-40, 0, -41)
+	r = F.route(half, mid_gate, field_n)
+	check(r == [F.gate_inner(half, 0), F.gate_outer(half, 0), field_n], "gate-passage point counts as inside and leaves via gate inner then outer, not through the wall: %s" % [r])

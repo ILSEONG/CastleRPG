@@ -3,7 +3,7 @@ extends Node
 ## 영웅 선택 / 선택 영웅을 성문 앞(성문 탭)·성벽 위(성벽 탭)·바닥 지점(그 외)으로 이동.
 ## 판정: 선택된 산 영웅이 없으면 HERO_TAP_PX 안 영웅 선택, 없으면 선택 해제. 있으면
 ## HERO_TAP_PRECISE_PX 안 영웅(선택된 영웅 자신이면 해제, 아니면 그 영웅 선택) → 성문 → 성벽 →
-## HERO_TAP_PX 안 영웅 선택 → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
+## HERO_TAP_PX 안 다른 영웅 선택 → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
 ## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
 ## 입력을 소비하지 않는다 — 카메라 리그도 같은 이벤트를 본다.
 ## 터치는 emulate_mouse_from_touch로 마우스 이벤트가 되므로 마우스만 처리.
@@ -69,7 +69,7 @@ func _physics_process(_delta: float) -> void:
 		selected.move_to(hit.collider.get_meta("side"), Formation.POST_WALL)
 		return
 	hero = _hero_at(screen_pos, HERO_TAP_PX)
-	if hero != null:
+	if hero != null and hero != selected:
 		_select(hero)
 		return
 	var ground = _ground_point(screen_pos)
@@ -82,7 +82,7 @@ func _physics_process(_delta: float) -> void:
 
 func _pick(screen_pos: Vector2, layer_mask: int) -> Dictionary:
 	var from := camera.project_ray_origin(screen_pos)
-	var to := from + camera.project_ray_normal(screen_pos) * 400.0
+	var to := from + camera.project_ray_normal(screen_pos) * camera.far
 	var q := PhysicsRayQueryParameters3D.create(from, to, layer_mask)
 	q.collide_with_areas = true
 	q.collide_with_bodies = false

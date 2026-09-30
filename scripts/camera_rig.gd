@@ -27,10 +27,9 @@ func _ready() -> void:
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
 	camera.size = Balance.CAMERA_SIZE_DEFAULT
 	camera.near = 1.0
-	camera.far = 300.0
 	camera.rotation_degrees = Vector3(PITCH_DEG, YAW_DEG, 0)
-	camera.position = camera.basis.z * DISTANCE
 	add_child(camera)
+	_fit_depth()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -92,6 +91,15 @@ func pan_pixels(rel: Vector2) -> void:
 ## factor < 1 이면 확대.
 func zoom_by(factor: float) -> void:
 	camera.size = clampf(camera.size * factor, Balance.CAMERA_SIZE_MIN, Balance.CAMERA_SIZE_MAX)
+	_fit_depth()
+
+
+## 줌에 맞춰 카메라를 뒤로 빼고 far를 늘린다 — 직교 카메라라 그림은 같고 바닥이 near/far 밖으로 잘리지 않는다.
+func _fit_depth() -> void:
+	var vp := get_viewport().get_visible_rect().size
+	var spread := camera.size * vp.y / vp.x * 0.5 / tan(deg_to_rad(-PITCH_DEG)) + 20.0  # 화면 절반이 덮는 바닥 깊이 + 키 큰 물체 여유
+	camera.position = camera.basis.z * maxf(DISTANCE, spread)
+	camera.far = camera.position.length() + spread
 
 
 func _pinch(sd: InputEventScreenDrag) -> void:

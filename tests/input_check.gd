@@ -10,7 +10,14 @@ const Balance := preload("res://scripts/balance.gd")
 const Formation := preload("res://scripts/formation.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 
+class ErrorCounter extends Logger:
+	var count := 0
+	func _log_error(_fn: String, _file: String, _line: int, _code: String, _why: String, _notify: bool, error_type: int, _bt: Array[ScriptBacktrace]) -> void:
+		if error_type != ERROR_TYPE_WARNING:
+			count += 1  # SCRIPT ERROR는 그 테스트 함수만 중단시키므로 여기서 센다
+
 var _fails := 0
+var _errors := ErrorCounter.new()
 var _main
 var _camera: Camera3D
 var _picker
@@ -18,6 +25,7 @@ var _heroes: Array = []
 
 
 func _ready() -> void:
+	OS.add_logger(_errors)
 	get_window().size = Vector2i(360, 640)
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -29,6 +37,9 @@ func _ready() -> void:
 	_heroes = get_tree().get_nodes_in_group("heroes")
 	_heroes.sort_custom(func(a, b): return a.index < b.index)
 	await _run()
+	if _errors.count > 0:
+		print("INPUT SCRIPT ERRORS %d" % _errors.count)
+	_fails += _errors.count
 	if _fails > 0:
 		print("INPUT FAILED %d" % _fails)
 		get_tree().quit(1)
@@ -98,7 +109,7 @@ func _run() -> void:
 		"size %.1f -> %.1f selected=%s" % [size_before, _camera.size, _name(_picker.selected)])
 
 	# (f) 전사 선택 중 성 밖 바닥 탭 → 자유 위치(POST_FREE), 3초 뒤 그 지점에 서 있다
-	_camera.size = 70.0  # (e) 핀치로 확대된 줌을 기본(56)보다 조금 넓게 되돌린다 — (f)·(g)의 성 밖 지점이 화면 안에 오게
+	_camera.get_parent().zoom_by(70.0 / _camera.size)  # (e) 핀치로 확대된 줌을 기본(56)보다 조금 넓게 되돌린다 — (f)·(g)의 성 밖 지점이 화면 안에 오게
 	var half: float = _main.castle.half
 	_picker._select(null)
 	await _tap(_hero_px(warrior))
@@ -110,6 +121,10 @@ func _run() -> void:
 	await get_tree().create_timer(3.0).timeout
 	var fd := Formation.flat_distance(warrior.global_position, field)
 	_check(fd < 0.5, "(f) warrior stands at the tapped field point 3 s later", "d=%.2f pos=%s" % [fd, warrior.global_position])
+	GameState.refill()  # 리필은 자유 위치 배정도 유지한다
+	await _frames(1)
+	fd = Formation.flat_distance(warrior.global_position, field)
+	_check(warrior.post == Formation.POST_FREE and fd < 0.1, "(f) refill keeps the free-point assignment", "post=%d d=%.2f" % [warrior.post, fd])
 
 	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 경로 첫 지점이 남문 안쪽 지점 (성벽을 뚫지 않음)
 	archer.move_to(0, Formation.POST_WALL)
@@ -133,6 +148,17 @@ func _run() -> void:
 	await _tap(_hero_px(warrior))
 	_check(was == warrior and _picker.selected == null, "(h) tapping the selected hero again deselects it",
 		"first=%s then=%s" % [_name(was), _name(_picker.selected)])
+
+	# (i) 선택된 영웅에서 20px(정밀 12px 밖, 32px 안) 떨어진 바닥 탭 → 그 영웅 재선택이 아니라 바닥 이동
+	await _tap(_hero_px(warrior))
+	var tp := _hero_px(warrior) + Vector2(0, 20)
+	var old_free: Vector3 = warrior.free_pos
+	var gp = _picker._ground_point(tp)
+	_check(_picker.selected == warrior and _picker._pick(tp, PickerScript.LAYER_GATE | PickerScript.LAYER_WALL).is_empty() and _picker._hero_at(tp, PickerScript.HERO_TAP_PX) == warrior,
+		"(i) precondition: warrior selected, tap point is open ground 20 px from it", "selected=%s px=%s" % [_name(_picker.selected), tp])
+	await _tap(tp)
+	_check(_picker.selected == warrior and Formation.flat_distance(warrior.free_pos, gp) < 0.1 and Formation.flat_distance(old_free, gp) > 1.0,
+		"(i) ground tap 20 px from the selected hero moves it there", "selected=%s free_pos=%s ground=%s" % [_name(_picker.selected), warrior.free_pos, gp])
 
 
 func _check(cond: bool, what: String, detail: String) -> void:
