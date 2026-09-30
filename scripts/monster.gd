@@ -5,6 +5,7 @@ extends Node3D
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
+const UnitModelScript := preload("res://scripts/unit_model.gd")
 
 const SCAN_INTERVAL := 0.2
 
@@ -18,7 +19,7 @@ var hp: float = 0.0
 var atk: float = 0.0
 
 var _stats: Dictionary = {}
-var _body: MeshInstance3D
+var _model
 var _target_hero
 var _atk_cd := 0.0
 var _scan_cd := 0.0
@@ -39,9 +40,9 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle) -> void:
 
 func _ready() -> void:
 	add_to_group("monsters")
-	var s: float = _stats.scale
-	_body = Art.capsule(0.4 * s, 1.2 * s, _stats.color)
-	add_child(_body)
+	_model = UnitModelScript.new()
+	_model.setup(Art.MONSTER_MODELS[kind], float(_stats.scale))
+	add_child(_model)
 	global_position = castle.spawn_position(side)
 	GameState.refilled.connect(_vanish)
 
@@ -56,8 +57,10 @@ func take_damage(amount: float) -> void:
 	hp = maxf(0.0, hp - amount)
 	if hp == 0.0:
 		_dead = true
+		remove_from_group("monsters")  # 즉시 표적 대상에서 빠진다
 		died.emit(self)
-		queue_free()
+		_model.play_death()
+		get_tree().create_timer(Art.CORPSE_SEC).timeout.connect(queue_free)
 
 
 func _process(delta: float) -> void:
@@ -69,17 +72,22 @@ func _process(delta: float) -> void:
 		_scan_cd = SCAN_INTERVAL
 		_target_hero = _nearest_hero()
 	if _target_hero != null and _target_hero.is_alive() and not _target_hero.is_on_wall():
+		_model.face(_target_hero.global_position - global_position)
 		if _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
+			_model.play_attack()
 			_target_hero.take_damage(atk)
 		return
 	_target_hero = null
 	var broken: bool = GameState.is_gate_broken(side)
 	var dest: Vector3 = castle.keep_target(side) if broken else castle.gate_target(side)
+	_model.face(dest - global_position)
 	if Formation.flat_distance(global_position, dest) > _stats.range:
+		_model.play_walk()
 		global_position = global_position.move_toward(dest, _stats.speed * delta)
 	elif _atk_cd <= 0.0:
 		_atk_cd = _stats.atk_interval
+		_model.play_attack()
 		if broken:
 			GameState.damage_castle(atk)
 		else:

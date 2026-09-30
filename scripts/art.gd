@@ -4,11 +4,10 @@ extends RefCounted
 ## 오토로드 참조 없음 → 헤드리스 테스트에서 preload 가능.
 
 const HERO_SELECTED := Color(1.0, 0.9, 0.2)
-# 아래 넷은 플레이스홀더용. Task 2·3에서 안 쓰게 되면 삭제.
+# 아래 셋은 플레이스홀더용. Task 2·3에서 안 쓰게 되면 삭제.
 const WALL := Color(0.86, 0.84, 0.78)
 const TOWER := Color(0.78, 0.76, 0.70)
 const GATE := Color(0.55, 0.38, 0.22)
-const ARROW := Color(0.30, 0.22, 0.14)
 
 const CHARACTER_SCALE := 0.75     # KayKit 캐릭터 키 약 2.2 → 약 1.65m
 const CORPSE_SEC := 1.6           # 몬스터 사망 애니메이션 뒤 제거까지
@@ -97,16 +96,6 @@ static func box(size: Vector3, color: Color) -> MeshInstance3D:
 	bm.size = size
 	var mi := mesh(bm, color)
 	mi.position.y = size.y / 2.0
-	return mi
-
-
-## 바닥이 y=0에 닿는 캡슐. (플레이스홀더용 — Task 2 뒤 안 쓰면 삭제)
-static func capsule(radius: float, height: float, color: Color) -> MeshInstance3D:
-	var cm := CapsuleMesh.new()
-	cm.radius = radius
-	cm.height = height
-	var mi := mesh(cm, color)
-	mi.position.y = height / 2.0
 	return mi
 
 

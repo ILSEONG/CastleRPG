@@ -6,12 +6,14 @@ extends Node3D
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
+const UnitModelScript := preload("res://scripts/unit_model.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
 const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
 const TRACER_SEC := 0.15
+const ARROW_PITCH_FIX := PI / 2.0  # 화살 모델은 길이 축 Y, 촉이 -Y → X축 +90°로 촉을 -Z(look_at 정면)에 맞춘다
 
 var castle
 var formation
@@ -29,7 +31,7 @@ var selected := false:
 			_ring.visible = v and state != State.DEAD
 
 var _stats: Dictionary = {}
-var _body: MeshInstance3D
+var _model
 var _ring: MeshInstance3D
 var _target
 var _atk_cd := 0.0
@@ -50,8 +52,9 @@ func setup(p_index: int, p_castle, p_formation) -> void:
 
 func _ready() -> void:
 	add_to_group("heroes")
-	_body = Art.capsule(0.45, 1.6, _stats.color)
-	add_child(_body)
+	_model = UnitModelScript.new()
+	_model.setup(Art.HERO_MODELS[role])
+	add_child(_model)
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.6
 	torus.outer_radius = 0.8
@@ -68,7 +71,8 @@ func reset() -> void:
 	state = State.IDLE
 	_target = null
 	global_position = stand_position()
-	_body.visible = true
+	_model.reset_pose()
+	_model.face(Formation.SIDE_DIR[side])  # 대기 중엔 성 바깥을 본다
 	_ring.visible = selected
 
 
@@ -98,7 +102,7 @@ func take_damage(amount: float) -> void:
 	hp = maxf(0.0, hp - amount)
 	if hp == 0.0:
 		state = State.DEAD
-		_body.visible = false
+		_model.play_death()
 		_ring.visible = false
 
 
@@ -114,6 +118,8 @@ func _process(delta: float) -> void:
 	if global_position.distance_to(dest) > ARRIVE_EPS:
 		state = State.MOVE
 		_target = null
+		_model.face(dest - global_position)
+		_model.play_walk()
 		global_position = global_position.move_toward(dest, float(_stats.speed) * delta)
 		return
 	_scan_cd -= delta
@@ -122,14 +128,18 @@ func _process(delta: float) -> void:
 		_target = _nearest_monster()
 	if _target != null and is_instance_valid(_target) and _target.is_alive():
 		state = State.ATTACK
+		_model.face(_target.global_position - global_position)
 		if _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
+			_model.play_attack()
 			if role == "archer":
 				_fire_tracer(_target.global_position)
 			_target.take_damage(_stats.atk)
 	else:
 		_target = null
-		state = State.IDLE
+		if state != State.IDLE:
+			state = State.IDLE
+			_model.play_idle()
 
 
 func _nearest_monster():
@@ -145,15 +155,17 @@ func _nearest_monster():
 	return best
 
 
-## 궁수 화살 궤적 (시각 효과만. 피해는 발사 즉시 적용).
+## 궁수 화살 (시각 효과만. 피해는 발사 즉시 적용).
 func _fire_tracer(to: Vector3) -> void:
 	var from := global_position + Vector3(0, 1.3, 0)
-	var dest := to + Vector3(0, 0.6, 0)
+	var dest := to + Vector3(0, 0.8, 0)
 	if Formation.flat_distance(from, dest) < 0.1:
 		return
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.1, 0.1, 0.8)
-	var arrow := Art.mesh(bm, Art.ARROW)
+	var arrow := Node3D.new()
+	var model := Art.instance(Art.ARROW_MODEL)
+	model.scale = Vector3.ONE * Art.ARROW_SCALE
+	model.rotation.x = ARROW_PITCH_FIX
+	arrow.add_child(model)
 	get_parent().add_child(arrow)
 	arrow.global_position = from
 	arrow.look_at(dest)

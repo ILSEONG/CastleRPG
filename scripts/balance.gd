@@ -12,11 +12,11 @@ const SPAWN_SPACING_SEC := 0.5
 const MONSTER := {
 	"grunt": {
 		"hp": 60.0, "atk": 10.0, "speed": 2.5, "range": 1.2, "atk_interval": 1.0,
-		"scale": 1.0, "color": Color(0.85, 0.3, 0.3),
+		"scale": 1.0,
 	},
 	"epic_boss": {
 		"hp": 400.0, "atk": 20.0, "speed": 1.8, "range": 1.8, "atk_interval": 1.2,
-		"scale": 2.5, "color": Color(0.6, 0.1, 0.5),
+		"scale": 1.6,
 	},
 }
 
@@ -41,11 +41,9 @@ const CAMERA_SIZE_MAX := 90.0
 const HERO_ROLES := {
 	"warrior": {
 		"name": "전사", "hp": 400.0, "atk": 30.0, "range": 1.8, "atk_interval": 0.8, "speed": 6.0,
-		"color": Color(0.25, 0.55, 0.95),
 	},
 	"archer": {
 		"name": "궁수", "hp": 220.0, "atk": 20.0, "range": 9.0, "atk_interval": 1.0, "speed": 6.0,
-		"color": Color(0.30, 0.72, 0.45),
 	},
 }
 const HERO_ROSTER := ["warrior", "archer"]  # 영웅 i의 역할 = HERO_ROSTER[i % 2]

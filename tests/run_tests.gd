@@ -59,7 +59,7 @@ func test_balance_tables() -> void:
 	check(Balance.gate_hp_max(2) > Balance.gate_hp_max(1), "gate hp grows with level")
 	check(Balance.MONSTER.has("grunt") and Balance.MONSTER.has("epic_boss"), "monster table has grunt and epic_boss")
 	for kind in Balance.MONSTER:
-		for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "color"]:
+		for key in ["hp", "atk", "speed", "range", "atk_interval", "scale"]:
 			check(Balance.MONSTER[kind].has(key), "monster %s has %s" % [kind, key])
 
 
@@ -208,7 +208,7 @@ func test_layout_tables() -> void:
 	check(Balance.hero_role(0) == "warrior" and Balance.hero_role(1) == "archer", "roster starts warrior, archer")
 	check(Balance.hero_role(2) == "warrior" and Balance.hero_role(3) == "archer", "roster alternates")
 	for role in Balance.HERO_ROLES:
-		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "color"]:
+		for key in ["name", "hp", "atk", "range", "atk_interval", "speed"]:
 			check(Balance.HERO_ROLES[role].has(key), "role %s has %s" % [role, key])
 	check(Balance.HERO_ROLES.archer.range > Balance.HERO_ROLES.warrior.range, "archer outranges warrior")
 
