@@ -142,7 +142,7 @@ static func _stair_end(side: int, p: Vector3) -> float:
 
 ## from → to 이동 경로(도착점 포함). 성벽 위는 계단으로만 오르내린다(같은 면 성벽 위끼리는 곧장):
 ## 오를 때 stair_approach → 아랫단 → 윗단 → landing, 내릴 때 그 역순. 지상 구간은 stair_approach에서 끊기고
-## 성 안팎을 오갈 때 성문을 지난다(_ground_route).
+## 성 안팎을 오갈 때 성문을 지난다(_ground_route). 다른 면의 안쪽 통로 점끼리는 통로 모서리를 돈다(_lane_corners).
 static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var from_wall := region(half, from) == REGION_WALL
@@ -168,7 +168,34 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 		tail = [stair_bottom(half, s2, e2), stair_top(half, s2, e2), wall_landing(half, s2, e2), to]
 	path.append_array(_ground_route(half, ground_from, ground_to))
 	path.append_array(tail)
-	return path
+	var out: Array[Vector3] = []
+	var prev := from
+	for p in path:
+		out.append_array(_lane_corners(half, prev, p))
+		out.append(p)
+		prev = p
+	return out
+
+
+## 서로 다른 면의 안쪽 통로(깊이 l = stair_approach·gate_inner 깊이) 두 점 사이에 통로 모서리를 끼운다 — 가로지르면 건물을 지난다.
+## 통로 고리는 모든 부지·계단 띠에서 떨어져 있다(테스트). 마주 보는 면이면 두 점의 옆 방향 합 쪽 모서리 둘을 돈다.
+static func _lane_corners(half: float, a: Vector3, b: Vector3) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var l := half - Balance.STAIR_W - GATE_PASS_MARGIN
+	for p in [a, b]:
+		if p.y != 0.0 or absf(maxf(absf(p.x), absf(p.z)) - l) > 0.01:
+			return out
+	var sa := side_of(a)
+	var sb := side_of(b)
+	if sa == sb:
+		return out
+	if (sa + 2) % 4 != sb:
+		out.append((SIDE_DIR[sa] + SIDE_DIR[sb]) * l)
+	else:
+		var t := 1.0 if perp(sa).dot(a + b) >= 0.0 else -1.0
+		out.append((SIDE_DIR[sa] + perp(sa) * t) * l)
+		out.append((SIDE_DIR[sb] + perp(sa) * t) * l)
+	return out
 
 
 ## 지상 두 점 사이 경로(도착점 포함). 성 안팎을 오가거나 성을 가로지를 때는 성문을 지난다.

@@ -131,7 +131,8 @@ func _run() -> void:
 	fd = Formation.flat_distance(warrior.global_position, field)
 	_check(warrior.post == Formation.POST_FREE and fd < 0.1, "(f) refill keeps the free-point assignment", "post=%d d=%.2f" % [warrior.post, fd])
 
-	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 북쪽 계단(landing → 윗단 → 아랫단 → 계단 앞)으로 내려가 남문 안쪽 지점으로 (성벽을 뚫지 않음)
+	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 북쪽 계단(landing → 윗단 → 아랫단 → 계단 앞)으로 내려가
+	#     안쪽 통로 모서리 둘(계단 쪽 옆)을 돌아 남문 안쪽 지점으로 (성벽도 건물도 뚫지 않음)
 	archer.move_to(0, Formation.POST_WALL)
 	GameState.refill()  # 리필은 배정을 유지한 채 순간 복귀 → 궁수가 북쪽 성벽 위에 선다
 	await _frames(1)
@@ -142,10 +143,12 @@ func _run() -> void:
 		"(g) precondition: archer selected on the north wall, south field point on open ground",
 		"selected=%s on_wall=%s side=%d px=%s" % [_name(_picker.selected), archer.is_on_wall(), archer.side, sp])
 	var ge := 1.0 if Formation.perp(0).dot(archer.global_position) >= 0.0 else -1.0
-	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.stair_approach(half, 0, ge), Formation.gate_inner(half, 2)]
+	var lane := half - Balance.STAIR_W - Formation.GATE_PASS_MARGIN
+	var corners := [(Formation.SIDE_DIR[0] + Formation.perp(0) * ge) * lane, (Formation.SIDE_DIR[2] + Formation.perp(0) * ge) * lane]
+	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.stair_approach(half, 0, ge)] 		+ corners + [Formation.gate_inner(half, 2)]
 	await _tap(sp)
-	_check(archer.post == Formation.POST_FREE and archer._path.slice(0, 5) == down,
-		"(g) wall-top archer ordered outside the far side goes down the north stairs, then heads for the south gate's inner point",
+	_check(archer.post == Formation.POST_FREE and archer._path.slice(0, 7) == down,
+		"(g) wall-top archer ordered outside the far side goes down the north stairs, round the lane corners, then to the south gate's inner point",
 		"post=%d path=%s" % [archer.post, archer._path])
 
 	# (h) 선택된 영웅을 다시 탭 → 선택 해제

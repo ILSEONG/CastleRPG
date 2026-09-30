@@ -406,21 +406,24 @@ func test_route() -> void:
 	r = F.route(half, out_n, inside_a)
 	check(r == [F.gate_outer(half, 0), F.gate_inner(half, 0), inside_a], "outside to inside enters through the start's gate: %s" % [r])
 	var out_s := Vector3(-5, 0, 40)
+	var lane: float = half - Balance.STAIR_W - F.GATE_PASS_MARGIN  # 안쪽 통로 고리 깊이 (gate_inner·stair_approach)
+	var ne: Vector3 = (F.SIDE_DIR[0] + F.SIDE_DIR[1]) * lane
+	var se: Vector3 = (F.SIDE_DIR[2] + F.SIDE_DIR[1]) * lane
 	r = F.route(half, out_n, out_s)
-	check(r == [F.gate_outer(half, 0), F.gate_inner(half, 0), F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "outside across the castle goes gate to gate: %s" % [r])
+	check(r == [F.gate_outer(half, 0), F.gate_inner(half, 0), ne, se, F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "outside across the castle goes gate to gate around the lane corners: %s" % [r])
 	var out_n2 := Vector3(-25, 0, -40)
 	check(F.route(half, out_n, out_n2) == [out_n2], "outside to outside on the same side goes straight")
 	var gate_n := F.slot_position(half, 0, F.POST_GATE, 0)
 	var gate_e := F.slot_position(half, 1, F.POST_GATE, 0)
 	r = F.route(half, gate_n, gate_e)
-	check(r.size() == 5 and r[0] == F.gate_outer(half, 0) and r[3] == F.gate_outer(half, 1), "adjacent gate fronts route through both gates: %s" % [r])
+	check(r == [F.gate_outer(half, 0), F.gate_inner(half, 0), ne, F.gate_inner(half, 1), F.gate_outer(half, 1), gate_e], "adjacent gate fronts route through both gates via the lane corner: %s" % [r])
 	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)  # 동쪽 성벽 위 -옆(z = -4) → 계단 end -1
 	var stairs_e := [F.wall_landing(half, 1, -1.0), F.stair_top(half, 1, -1.0), F.stair_bottom(half, 1, -1.0), F.stair_approach(half, 1, -1.0)]
 	r = F.route(half, wall_e, out_s)
-	check(r == stairs_e + [F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside goes down the stairs, then leaves through a gate: %s" % [r])
+	check(r == stairs_e + [se, F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside goes down the stairs, then leaves through a gate: %s" % [r])
 	r = F.route(half, out_s, wall_e)
 	stairs_e.reverse()
-	check(r == [F.gate_outer(half, 2), F.gate_inner(half, 2)] + stairs_e + [wall_e], "outside to wall top enters through a gate, then climbs the stairs: %s" % [r])
+	check(r == [F.gate_outer(half, 2), F.gate_inner(half, 2), se] + stairs_e + [wall_e], "outside to wall top enters through a gate, then climbs the stairs: %s" % [r])
 	var mid_gate := Vector3(0, 0, -(half + Balance.WALL_T * 0.75))  # 성문 통로 바깥쪽 절반 = 안
 	var field_n := Vector3(-40, 0, -41)
 	r = F.route(half, mid_gate, field_n)
@@ -513,7 +516,7 @@ func _leg_samples(a: Vector3, b: Vector3) -> Array:
 	return out
 
 
-## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 성문 ↔ 성벽 위 경로의 지상 구간(성문 안쪽 ↔ 계단 앞 통로)은 부지를 지나지 않는다.
+## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 모든 자리 사이 경로(면을 넘나드는 것 포함)의 지상 구간은 부지·계단 발판을 지나지 않는다.
 func test_buildings_clear_stairs() -> void:
 	var F = FormationScript
 	var half := Balance.interior_half(1)
@@ -533,23 +536,38 @@ func test_buildings_clear_stairs() -> void:
 				for p in [F.stair_approach(half, s, e), F.gate_inner(half, s), F.stair_bottom(half, s, e)]:
 					check(not plot.has_point(Vector2(p.x, p.z)), "%s plot does not contain stair/gate point %s" % [id, p])
 				check(not plot.intersects(foot), "%s plot does not overlap the stair footprint (side %d end %d)" % [id, s, e])
-			var w := F.slot_position(half, s, F.POST_WALL, 0 if e < 0.0 else 1)  # WALL_TOP_SLOTS[0] = -4, [1] = +4
-			var front := F.slot_position(half, s, F.POST_GATE, 0)
-			var gi: Vector3 = F.gate_inner(half, s)
-			for pair in [[gi, w], [w, gi], [front, w], [w, front]]:
-				var pts: Array = [pair[0]] + F.route(half, pair[0], pair[1])
+	# 모든 면의 성문 앞·성벽 위 자리와 성문 안쪽 사이 모든 경로(면을 넘나드는 것 포함): 지상 구간은 부지도 계단 발판도 지나지 않는다.
+	var inner := {}  # id -> 경계선을 뺀 부지
+	for id in plots:
+		inner[id] = (plots[id] as Rect2).grow(-0.01)
+	for level in [1, 2, 3]:
+		var h := Balance.interior_half(level)
+		var spots: Array = []
+		for s in 4:
+			spots.append(F.gate_inner(h, s))
+			for post in [F.POST_GATE, F.POST_WALL]:
+				for slot in F.capacity(post):
+					spots.append(F.slot_position(h, s, post, slot))
+		var bad_plot: Array = []
+		var bad_stair: Array = []
+		for from in spots:
+			for to in spots:
+				if from == to:
+					continue
+				var pts: Array = [from] + F.route(h, from, to)
 				for i in range(1, pts.size()):
 					var a: Vector3 = pts[i - 1]
 					var b: Vector3 = pts[i]
 					if absf(a.y) > 0.01 or absf(b.y) > 0.01:
 						continue
-					var hit := ""
 					for q in _leg_samples(a, b):
 						for id in plots:
-							var plot: Rect2 = plots[id]
-							if plot.grow(-0.01).has_point(Vector2(q.x, q.z)):
-								hit = id
-					check(hit == "", "ground leg %s -> %s (route %s -> %s) passes no building plot, hit %s" % [a, b, pair[0], pair[1], hit])
+							if (inner[id] as Rect2).has_point(Vector2(q.x, q.z)):
+								bad_plot.append("%s: %s -> %s (route %s -> %s)" % [id, a, b, from, to])
+						if _in_stair_footprint(h, q):
+							bad_stair.append("%s -> %s (route %s -> %s)" % [a, b, from, to])
+		check(bad_plot.is_empty(), "level %d: no ground leg between any two spots passes a building plot (%d hit samples, first %s)" % [level, bad_plot.size(), bad_plot.slice(0, 1)])
+		check(bad_stair.is_empty(), "level %d: no ground leg between any two spots passes a stair footprint (%d hit samples, first %s)" % [level, bad_stair.size(), bad_stair.slice(0, 1)])
 
 
 func test_is_inside() -> void:
