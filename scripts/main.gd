@@ -3,6 +3,7 @@ extends Node3D
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 
 const Balance := preload("res://scripts/balance.gd")
+const Art := preload("res://scripts/art.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -73,7 +74,7 @@ func _build_environment() -> void:
 
 func _build_ground(interior_half: float) -> void:
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(Balance.MAP_HALF * 2.0, Balance.MAP_HALF * 2.0)
+	plane.size = Vector2.ONE * (Balance.MAP_HALF + Art.BORDER_OUTER + 15.0) * 2.0
 	var mat := ShaderMaterial.new()
 	mat.shader = GroundShader
 	mat.set_shader_parameter("tile_size", Balance.TILE)

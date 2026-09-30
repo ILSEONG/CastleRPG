@@ -12,6 +12,7 @@ uniform vec4 paved_b : source_color = vec4(0.507, 0.492, 0.457, 1.0);
 uniform vec4 road : source_color = vec4(0.471, 0.438, 0.384, 1.0);
 uniform vec4 line_color : source_color = vec4(0.0, 0.0, 0.0, 0.12);
 uniform float line_width = 0.03;
+uniform float facet_variation = 0.07;  // 타일을 대각선으로 나눈 두 삼각형의 명암 차이 폭
 
 varying vec3 world_pos;
 
@@ -29,6 +30,11 @@ void fragment() {
 	} else {
 		base = mix(grass_a.rgb, grass_b.rgb, checker);
 	}
+	// 로우폴리: 타일마다 대각선으로 나눈 두 삼각형에 서로 다른 명암
+	vec2 cell = floor(p);
+	float upper = step(fract(p).x, fract(p).y);
+	float h = fract(sin(dot(cell + upper * vec2(0.37, 0.71), vec2(12.9898, 78.233))) * 43758.5453);
+	base *= 1.0 + facet_variation * (h * 2.0 - 1.0);
 	vec2 to_line = 0.5 - abs(fract(p) - 0.5);  // 격자선에서 0
 	vec2 aa = fwidth(p);
 	vec2 on_line = 1.0 - smoothstep(vec2(line_width), vec2(line_width) + aa, to_line);

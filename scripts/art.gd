@@ -21,6 +21,13 @@ const NATURE_SEED := 7
 const NATURE_MIN_GAP := 5.0
 const NATURE_CASTLE_MARGIN := 6.0  # 성벽 바깥면에서 이 거리 안에는 자연물 없음
 const LANE_HALF_WIDTH := 9.0       # 괴물 진입로(두 축) 양옆 이 거리 안에는 자연물 없음
+const LOWPOLY_SHADER := preload("res://shaders/lowpoly.gdshader")
+const BORDER_INNER := 12.0        # 플레이 영역 가장자리(MAP_HALF)에서 테두리 띠 안쪽까지
+const BORDER_OUTER := 40.0        # 테두리 띠 바깥쪽까지
+const BORDER_SPACING := 22.0      # 테두리 산 간격(m)
+const BORDER_SCALE_MIN := 10.0
+const BORDER_SCALE_MAX := 14.0
+const BORDER_SEED := 11
 
 const CHAR_DIR := "res://assets/models/characters/"
 const PROP_DIR := "res://assets/models/props/"
@@ -75,6 +82,12 @@ const NATURE_MODELS := [
 	HEX_DIR + "tree_single_A.gltf", HEX_DIR + "tree_single_B.gltf",
 	HEX_DIR + "rock_single_A.gltf", HEX_DIR + "rock_single_C.gltf", HEX_DIR + "rock_single_E.gltf",
 ]
+const BORDER_MODELS := [
+	HEX_DIR + "mountain_A_grass_trees.gltf", HEX_DIR + "mountain_B_grass.gltf", HEX_DIR + "mountain_C_grass_trees.gltf",
+	HEX_DIR + "hills_A_trees.gltf", HEX_DIR + "hills_B_trees.gltf", HEX_DIR + "hills_C_trees.gltf",
+]
+
+static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
 
 
 static func mesh(m: Mesh, color: Color) -> MeshInstance3D:
@@ -87,8 +100,40 @@ static func mesh(m: Mesh, color: Color) -> MeshInstance3D:
 	return mi
 
 
+## 원본 재질의 알베도(텍스처·색)를 쓰는 로우폴리 재질. 발광·투명 재질(해골 눈 등)은 원본 그대로.
+static func lowpoly_material(src: Material) -> Material:
+	var base := src as BaseMaterial3D
+	if base == null or base.emission_enabled or base.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+		return src
+	if _lowpoly_cache.has(src):
+		return _lowpoly_cache[src]
+	var m := ShaderMaterial.new()
+	m.shader = LOWPOLY_SHADER
+	m.set_shader_parameter("albedo_color", base.albedo_color)
+	m.set_shader_parameter("use_texture", base.albedo_texture != null)
+	if base.albedo_texture != null:
+		m.set_shader_parameter("albedo_tex", base.albedo_texture)
+	_lowpoly_cache[src] = m
+	return m
+
+
+## 모델의 모든 표면 재질을 로우폴리 재질로 바꾼다.
+static func apply_lowpoly(root: Node) -> void:
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			var src := mi.get_active_material(i)
+			if src != null:
+				mi.set_surface_override_material(i, lowpoly_material(src))
+
+
+## 모든 모델은 여기서 만든다 — 로우폴리 변환이 한 곳에서 적용된다.
 static func instance(path: String) -> Node3D:
-	return (load(path) as PackedScene).instantiate()
+	var n := (load(path) as PackedScene).instantiate() as Node3D
+	apply_lowpoly(n)
+	return n
 
 
 ## node의 root 기준 변환 (root 자신의 변환 제외). 트리에 없어도 된다.

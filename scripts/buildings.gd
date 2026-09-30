@@ -4,6 +4,7 @@ extends Node3D
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
+const Formation := preload("res://scripts/formation.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 var half: float = 16.0  # 성 내부 절반 크기. main이 add_child 전에 castle.half로 설정
@@ -13,6 +14,7 @@ func _ready() -> void:
 	for b in Balance.BUILDINGS:
 		_place_building(b)
 	_scatter_nature()
+	_ring_mountains()
 
 
 func _place_building(b: Dictionary) -> void:
@@ -74,6 +76,30 @@ func _scatter_nature() -> void:
 		_add_multimesh(path, by_model[path])
 
 
+## 플레이 영역 바깥 띠에 로우폴리 산·언덕을 한 바퀴 두른다(유닛은 들어가지 않는다). 시드 고정, 모델별 MultiMesh.
+func _ring_mountains() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = Art.BORDER_SEED
+	var inner := Balance.MAP_HALF + Art.BORDER_INNER
+	var outer := Balance.MAP_HALF + Art.BORDER_OUTER
+	var steps := ceili(2.0 * outer / Art.BORDER_SPACING)
+	var by_model := {}
+	for side in 4:
+		var dir: Vector3 = Formation.SIDE_DIR[side]
+		var perp := Formation.perp(side)
+		for i in steps + 1:
+			var along := -outer + i * Art.BORDER_SPACING + rng.randf_range(-4.0, 4.0)
+			var pos := dir * rng.randf_range(inner, outer) + perp * along
+			var path: String = Art.BORDER_MODELS[rng.randi_range(0, Art.BORDER_MODELS.size() - 1)]
+			var s := rng.randf_range(Art.BORDER_SCALE_MIN, Art.BORDER_SCALE_MAX)
+			var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * s)
+			if not by_model.has(path):
+				by_model[path] = []
+			by_model[path].append(Transform3D(basis, pos))
+	for path in by_model:
+		_add_multimesh(path, by_model[path])
+
+
 func _add_multimesh(path: String, placements: Array) -> void:
 	var model := Art.instance(path)
 	for node in model.find_children("*", "MeshInstance3D", true, false):
@@ -81,7 +107,10 @@ func _add_multimesh(path: String, placements: Array) -> void:
 		var local := Art.relative_transform(mi, model)
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = mi.mesh
+		var mesh := mi.mesh.duplicate() as Mesh
+		for s in mesh.get_surface_count():
+			mesh.surface_set_material(s, mi.get_active_material(s))
+		mm.mesh = mesh
 		mm.instance_count = placements.size()
 		for i in placements.size():
 			mm.set_instance_transform(i, placements[i] * local)

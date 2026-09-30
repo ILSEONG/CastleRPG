@@ -37,6 +37,7 @@ func _init() -> void:
 	test_formation_claims()
 	test_formation_positions()
 	test_art_assets()
+	test_lowpoly_conversion()
 	test_route()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
@@ -345,7 +346,7 @@ func test_art_assets() -> void:
 		root.free()
 	for b in Balance.BUILDINGS:
 		check(Art.BUILDING_MODELS.has(b.id) and ResourceLoader.exists(Art.BUILDING_MODELS[b.id]), "building %s has a model" % b.id)
-	for path in [Art.WALL_MODEL, Art.GATE_MODEL, Art.TOWER_MODEL, Art.ARROW_MODEL] + Art.NATURE_MODELS:
+	for path in [Art.WALL_MODEL, Art.GATE_MODEL, Art.TOWER_MODEL, Art.ARROW_MODEL] + Art.NATURE_MODELS + Art.BORDER_MODELS:
 		check(ResourceLoader.exists(path), "model exists: %s" % path)
 	var gate: Node = (load(Art.GATE_MODEL) as PackedScene).instantiate()
 	for door in Art.GATE_DOORS:
@@ -364,6 +365,29 @@ func test_art_assets() -> void:
 		var bb := Art.model_aabb(bm)
 		check(bb.size.x > 0.0 and bb.size.z > 0.0, "building %s model has non-zero x/z size: %s" % [id, bb.size])
 		bm.free()
+
+
+func test_lowpoly_conversion() -> void:
+	for path in [Art.HERO_MODELS.warrior.scene, Art.MONSTER_MODELS.grunt.scene, Art.WALL_MODEL, Art.BUILDING_MODELS.keep]:
+		var root: Node = Art.instance(path)
+		var surfaces := 0
+		for node in root.find_children("*", "MeshInstance3D", true, false):
+			var mi := node as MeshInstance3D
+			for i in mi.mesh.get_surface_count():
+				surfaces += 1
+				var mat := mi.get_active_material(i)
+				var ok := (mat is ShaderMaterial and (mat as ShaderMaterial).shader == Art.LOWPOLY_SHADER) \
+					or (mat is BaseMaterial3D and ((mat as BaseMaterial3D).emission_enabled or (mat as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED))
+				check(ok, "%s surface %s/%d is low-poly (or an emissive/transparent exception)" % [path, mi.name, i])
+		check(surfaces > 0, "%s has surfaces" % path)
+		root.free()
+	var a: Node = Art.instance(Art.WALL_MODEL)
+	var b: Node = Art.instance(Art.WALL_MODEL)
+	var ma: Material = (a.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).get_active_material(0)
+	var mb: Material = (b.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).get_active_material(0)
+	check(ma == mb, "same source material shares one low-poly material")
+	a.free()
+	b.free()
 
 
 func test_route() -> void:
