@@ -114,7 +114,7 @@ func _run() -> void:
 		"size %.1f -> %.1f selected=%s" % [size_before, _camera.size, _name(_picker.selected)])
 
 	# (f) 전사 선택 중 성 밖 바닥 탭 → 자유 위치(POST_FREE), 3초 뒤 그 지점에 서 있다
-	_camera.get_parent().zoom_by(70.0 / _camera.size)  # (e) 핀치로 확대된 줌을 기본(56)보다 조금 넓게 되돌린다 — (f)·(g)의 성 밖 지점이 화면 안에 오게
+	_camera.get_parent().zoom_by(70.0 / _camera.size)  # (e) 핀치로 확대된 줌을 기본(66)보다 조금 넓게 되돌린다 — (f)·(g)의 성 밖 지점이 화면 안에 오게
 	var half: float = _main.castle.half
 	_picker._select(null)
 	await _tap(_hero_px(warrior))
@@ -131,7 +131,7 @@ func _run() -> void:
 	fd = Formation.flat_distance(warrior.global_position, field)
 	_check(warrior.post == Formation.POST_FREE and fd < 0.1, "(f) refill keeps the free-point assignment", "post=%d d=%.2f" % [warrior.post, fd])
 
-	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 경로 첫 지점이 남문 안쪽 지점 (성벽을 뚫지 않음)
+	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 북쪽 계단(landing → 윗단 → 아랫단)으로 내려가 남문 안쪽 지점으로 (성벽을 뚫지 않음)
 	archer.move_to(0, Formation.POST_WALL)
 	GameState.refill()  # 리필은 배정을 유지한 채 순간 복귀 → 궁수가 북쪽 성벽 위에 선다
 	await _frames(1)
@@ -141,9 +141,11 @@ func _run() -> void:
 	_check(_picker.selected == archer and archer.is_on_wall() and archer.side == 0 and _open_ground(sp),
 		"(g) precondition: archer selected on the north wall, south field point on open ground",
 		"selected=%s on_wall=%s side=%d px=%s" % [_name(_picker.selected), archer.is_on_wall(), archer.side, sp])
+	var ge := 1.0 if Formation.perp(0).dot(archer.global_position) >= 0.0 else -1.0
+	var down := [Formation.wall_landing(half, 0, ge), Formation.stair_top(half, 0, ge), Formation.stair_bottom(half, 0, ge), Formation.gate_inner(half, 2)]
 	await _tap(sp)
-	_check(archer.post == Formation.POST_FREE and not archer._path.is_empty() and archer._path[0] == Formation.gate_inner(half, 2),
-		"(g) wall-top archer ordered outside the far side heads for the south gate's inner point first",
+	_check(archer.post == Formation.POST_FREE and archer._path.slice(0, 4) == down,
+		"(g) wall-top archer ordered outside the far side goes down the north stairs, then heads for the south gate's inner point",
 		"post=%d path=%s" % [archer.post, archer._path])
 
 	# (h) 선택된 영웅을 다시 탭 → 선택 해제
@@ -164,6 +166,28 @@ func _run() -> void:
 	await _tap(tp)
 	_check(_picker.selected == warrior and Formation.flat_distance(warrior.free_pos, gp) < 0.1 and Formation.flat_distance(old_free, gp) > 1.0,
 		"(i) ground tap 20 px from the selected hero moves it there", "selected=%s free_pos=%s ground=%s" % [_name(_picker.selected), warrior.free_pos, gp])
+
+	# (j) 성 안 자유 위치 전사 선택 중 북쪽 성벽 탭 → 경로가 계단 아랫단 → 윗단을 지나고, 몇 초 뒤 성벽 위 자리에 선다
+	var yard := Vector3(0, 0, -(half - 8.0))  # 북쪽 십자 도로 위(성채와 북쪽 성벽 사이)
+	warrior.move_to_point(yard)
+	GameState.refill()
+	await _frames(1)
+	_picker._select(null)
+	await _tap(_hero_px(warrior))
+	_check(_picker.selected == warrior and Formation.region(half, warrior.global_position) == Formation.REGION_INSIDE,
+		"(j) precondition: warrior selected on the ground inside the castle", "selected=%s pos=%s" % [_name(_picker.selected), warrior.global_position])
+	await _tap(_wall_px(0))
+	var home: Vector3 = warrior.stand_position()
+	var je := 1.0 if Formation.perp(0).dot(home) >= 0.0 else -1.0
+	var bi: int = warrior._path.find(Formation.stair_bottom(half, 0, je))
+	var ti: int = warrior._path.find(Formation.stair_top(half, 0, je))
+	_check(warrior.side == 0 and warrior.post == Formation.POST_WALL and bi >= 0 and ti == bi + 1,
+		"(j) wall tap with an inside warrior selected routes up the north stairs (bottom, then top)",
+		"side/post=%s path=%s" % [[warrior.side, warrior.post], warrior._path])
+	await get_tree().create_timer(5.0).timeout
+	var wd: float = warrior.global_position.distance_to(home)
+	_check(wd < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
+		"(j) warrior stands at its wall-top slot 5 s later", "d=%.2f pos=%s" % [wd, warrior.global_position])
 
 
 func _check(cond: bool, what: String, detail: String) -> void:

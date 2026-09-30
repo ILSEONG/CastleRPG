@@ -22,7 +22,7 @@ const MONSTER := {
 
 # --- 맵·성 기하 (개정 2) ---
 const TILE := 2.0                     # 격자 타일 한 칸 (미터)
-const INTERIOR_TILES := [16, 20, 24]  # 성 내부 한 변 타일 수. index = keep_level - 1
+const INTERIOR_TILES := [20, 24, 28]  # 성 내부 한 변 타일 수. index = keep_level - 1
 const WALL_T := 2.0                   # 성벽 두께 (1타일)
 const WALL_H := 3.0                   # 성벽 높이 = 성벽 위 발판 높이
 const GATE_W := 4.0                   # 성문 폭 (2타일)
@@ -33,7 +33,11 @@ const SPAWN_SPREAD := 6.0             # 스폰 지점 좌우 흩어짐 (±)
 const GATE_FRONT_OFFSET := 1.5        # 성벽 바깥면에서 성문 앞 자리까지
 const GATE_FRONT_SLOTS := [0.0, -1.6, 1.6]      # 성문 앞 자리 좌우 오프셋
 const WALL_TOP_SLOTS := [-4.0, 4.0, -8.0, 8.0]  # 성벽 위 자리 좌우 오프셋 (성문 위는 비움)
-const CAMERA_SIZE_DEFAULT := 56.0     # 직교 카메라 가로 폭(미터)
+const STAIR_W := 2.0      # 계단 폭(성벽 안쪽 면에 붙은 1타일 띠)
+const STAIR_GAP := 0.5    # 성문 가장자리 ~ 계단 윗단
+const STAIR_RUN := 6.0    # 계단 수평 길이(윗단 → 아랫단, 성문 반대 방향)
+const STAIR_STEPS := 8    # 계단 단 수(시각)
+const CAMERA_SIZE_DEFAULT := 66.0     # 직교 카메라 가로 폭(미터)
 const CAMERA_SIZE_MIN := 16.0
 const CAMERA_SIZE_MAX := 150.0
 
@@ -48,16 +52,16 @@ const HERO_ROLES := {
 const HERO_ROSTER := ["warrior", "archer"]  # 영웅 i의 역할 = HERO_ROSTER[i % 2]
 
 ## 건물 배치 (플레이스홀더). cell = 최소 모서리 타일 좌표, size = 타일 수. 성 중심이 타일 경계 (0,0).
-## 레벨 1 내부 타일 범위 -8..7. 성채 외 건물은 벽 쪽 1칸 여유(-7..6)를 두고 십자 도로(-1·0)를 피한다.
+## 레벨 1 내부 타일 범위 -10..9. 성채 외 건물은 벽 쪽 1칸 여유(-9..8, 계단 띠)를 두고 십자 도로(-1·0)를 피한다.
 const BUILDINGS := [
 	{"id": "keep", "name": "성채", "cell": Vector2i(-2, -2), "size": Vector2i(4, 4)},
-	{"id": "barracks", "name": "막사", "cell": Vector2i(1, -7), "size": Vector2i(3, 3)},
-	{"id": "tavern", "name": "주점", "cell": Vector2i(4, -4), "size": Vector2i(3, 3)},
-	{"id": "lab", "name": "연구소", "cell": Vector2i(-4, -7), "size": Vector2i(3, 3)},
-	{"id": "houses", "name": "민가", "cell": Vector2i(-7, -4), "size": Vector2i(3, 3)},
-	{"id": "lumber", "name": "벌목장", "cell": Vector2i(1, 4), "size": Vector2i(3, 3)},
-	{"id": "quarry", "name": "채석장", "cell": Vector2i(4, 1), "size": Vector2i(3, 3)},
-	{"id": "farm", "name": "농장", "cell": Vector2i(-4, 4), "size": Vector2i(3, 3)},
+	{"id": "barracks", "name": "막사", "cell": Vector2i(2, -8), "size": Vector2i(3, 3)},
+	{"id": "tavern", "name": "주점", "cell": Vector2i(6, -5), "size": Vector2i(3, 3)},
+	{"id": "lab", "name": "연구소", "cell": Vector2i(-5, -8), "size": Vector2i(3, 3)},
+	{"id": "houses", "name": "민가", "cell": Vector2i(-9, -5), "size": Vector2i(3, 3)},
+	{"id": "lumber", "name": "벌목장", "cell": Vector2i(2, 5), "size": Vector2i(3, 3)},
+	{"id": "quarry", "name": "채석장", "cell": Vector2i(6, 2), "size": Vector2i(3, 3)},
+	{"id": "farm", "name": "농장", "cell": Vector2i(-5, 5), "size": Vector2i(3, 3)},
 ]
 
 

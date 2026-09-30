@@ -9,6 +9,9 @@ const POST_GATE := 0
 const POST_WALL := 1
 const POST_FREE := 2          # 자유 위치 (슬롯 없음)
 const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점이 성벽에서 떨어진 거리
+const REGION_OUTSIDE := 0
+const REGION_INSIDE := 1
+const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
 const SIDE_DIR: Array[Vector3] = [
 	Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0),
 ]
@@ -101,9 +104,67 @@ static func gate_outer(half: float, side: int) -> Vector3:
 	return SIDE_DIR[side] * (half + Balance.WALL_T + GATE_PASS_MARGIN)
 
 
-## from → to 이동 경로 (도착점 포함). 성 안팎을 오가거나 성을 가로지를 때는 성문을 지난다.
-## "안" = 성벽 위(높이 > WALL_H/2)이거나 성벽 바깥면 안쪽(crosses_castle과 같은 경계). 문짝 상태와 무관하게 아군은 통과.
+static func region(half: float, p: Vector3) -> int:
+	if p.y > Balance.WALL_H / 2.0:
+		return REGION_WALL
+	if maxf(absf(p.x), absf(p.z)) < half + Balance.WALL_T:
+		return REGION_INSIDE
+	return REGION_OUTSIDE
+
+
+## 계단: 각 면 성문 좌우(end = -1/+1)에 하나씩, 성벽 안쪽 면에 붙은 띠에서 성문 쪽으로 올라간다.
+static func stair_bottom(half: float, side: int, end: float) -> Vector3:
+	return SIDE_DIR[side] * (half - Balance.STAIR_W / 2.0) \
+		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN))
+
+
+static func stair_top(half: float, side: int, end: float) -> Vector3:
+	return SIDE_DIR[side] * (half - Balance.STAIR_W / 2.0) \
+		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
+
+
+## 계단 윗단에서 성벽 중심선으로 올라선 지점.
+static func wall_landing(half: float, side: int, end: float) -> Vector3:
+	return SIDE_DIR[side] * (half + Balance.WALL_T / 2.0) \
+		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
+
+
+static func _stair_end(side: int, p: Vector3) -> float:
+	return 1.0 if perp(side).dot(p) >= 0.0 else -1.0
+
+
+## from → to 이동 경로(도착점 포함). 성벽 위는 계단으로만 오르내린다(같은 면 성벽 위끼리는 곧장).
+## 지상 구간은 성 안팎을 오갈 때 성문을 지난다(_ground_route).
 static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
+	var path: Array[Vector3] = []
+	var from_wall := region(half, from) == REGION_WALL
+	var to_wall := region(half, to) == REGION_WALL
+	if from_wall and to_wall and side_of(from) == side_of(to):
+		path.append(to)
+		return path
+	var ground_from := from
+	if from_wall:
+		var s := side_of(from)
+		var e := _stair_end(s, from)
+		path.append(wall_landing(half, s, e))
+		path.append(stair_top(half, s, e))
+		ground_from = stair_bottom(half, s, e)
+		path.append(ground_from)
+	var ground_to := to
+	var tail: Array[Vector3] = []
+	if to_wall:
+		var s2 := side_of(to)
+		var e2 := _stair_end(s2, to)
+		ground_to = stair_bottom(half, s2, e2)
+		tail = [stair_top(half, s2, e2), wall_landing(half, s2, e2), to]
+	path.append_array(_ground_route(half, ground_from, ground_to))
+	path.append_array(tail)
+	return path
+
+
+## 지상 두 점 사이 경로(도착점 포함). 성 안팎을 오가거나 성을 가로지를 때는 성문을 지난다.
+## "안" = 성벽 바깥면 안쪽(crosses_castle과 같은 경계). 문짝 상태와 무관하게 아군은 통과.
+static func _ground_route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var from_in := is_inside(half, from)
 	var to_in := is_inside(half, to)

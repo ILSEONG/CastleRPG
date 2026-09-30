@@ -39,6 +39,7 @@ func _init() -> void:
 	test_art_assets()
 	test_lowpoly_conversion()
 	test_route()
+	test_stairs_and_wall_routes()
 	test_is_inside()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
@@ -215,7 +216,7 @@ func test_gamestate_hero_count() -> void:
 
 
 func test_layout_tables() -> void:
-	check(Balance.interior_half(1) == 16.0, "interior half is 16m at keep level 1")
+	check(Balance.interior_half(1) == 20.0, "interior half is 20m at keep level 1")
 	check(Balance.interior_half(2) > Balance.interior_half(1), "interior grows at keep level 2")
 	check(Balance.interior_half(3) > Balance.interior_half(2), "interior grows at keep level 3")
 	check(Balance.interior_half(99) == Balance.interior_half(3), "interior clamps beyond table")
@@ -423,15 +424,67 @@ func test_route() -> void:
 	var gate_e := F.slot_position(half, 1, F.POST_GATE, 0)
 	r = F.route(half, gate_n, gate_e)
 	check(r.size() == 5 and r[0] == F.gate_outer(half, 0) and r[3] == F.gate_outer(half, 1), "adjacent gate fronts route through both gates: %s" % [r])
-	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)
+	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)  # 동쪽 성벽 위 -옆(z = -4) → 계단 end -1
+	var stairs_e := [F.wall_landing(half, 1, -1.0), F.stair_top(half, 1, -1.0), F.stair_bottom(half, 1, -1.0)]
 	r = F.route(half, wall_e, out_s)
-	check(r == [F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside leaves through a gate: %s" % [r])
+	check(r == stairs_e + [F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside goes down the stairs, then leaves through a gate: %s" % [r])
 	r = F.route(half, out_s, wall_e)
-	check(r == [F.gate_outer(half, 2), F.gate_inner(half, 2), wall_e], "outside to wall top enters through a gate: %s" % [r])
+	stairs_e.reverse()
+	check(r == [F.gate_outer(half, 2), F.gate_inner(half, 2)] + stairs_e + [wall_e], "outside to wall top enters through a gate, then climbs the stairs: %s" % [r])
 	var mid_gate := Vector3(0, 0, -(half + Balance.WALL_T * 0.75))  # 성문 통로 바깥쪽 절반 = 안
 	var field_n := Vector3(-40, 0, -41)
 	r = F.route(half, mid_gate, field_n)
 	check(r == [F.gate_inner(half, 0), F.gate_outer(half, 0), field_n], "gate-passage point counts as inside and leaves via gate inner then outer, not through the wall: %s" % [r])
+
+
+func test_stairs_and_wall_routes() -> void:
+	var F = FormationScript
+	var half := Balance.interior_half(1)
+	check(half == 20.0, "interior half is 20m at keep level 1 (1.25x)")
+	for side in 4:
+		var dir: Vector3 = F.SIDE_DIR[side]
+		var pp: Vector3 = F.perp(side)
+		for e in [-1.0, 1.0]:
+			var top: Vector3 = F.stair_top(half, side, e)
+			var bot: Vector3 = F.stair_bottom(half, side, e)
+			var land: Vector3 = F.wall_landing(half, side, e)
+			check(is_equal_approx(top.y, Balance.WALL_H) and bot.y == 0.0 and is_equal_approx(land.y, Balance.WALL_H), "stair heights side %d end %d" % [side, e])
+			check(dir.dot(top) < half and dir.dot(bot) < half and dir.dot(top) > half - Balance.STAIR_W, "stairs sit in the strip inside the wall")
+			check(absf(pp.dot(top)) > Balance.GATE_W / 2.0 and absf(pp.dot(bot)) > absf(pp.dot(top)), "stairs beside the gate, climbing toward it")
+			check(F.region(half, land) == F.REGION_WALL and F.region(half, bot) == F.REGION_INSIDE, "landing is wall top, bottom is inside ground")
+	var wall_n := F.slot_position(half, 0, F.POST_WALL, 1)   # 북쪽 성벽 위, +옆
+	var inside := Vector3(6, 0, 6)
+	var r: Array = F.route(half, inside, wall_n)
+	var e_n := 1.0 if F.perp(0).dot(wall_n) >= 0.0 else -1.0
+	check(r.size() >= 4 and r[-4] == F.stair_bottom(half, 0, e_n) and r[-3] == F.stair_top(half, 0, e_n) and r[-2] == F.wall_landing(half, 0, e_n) and r[-1] == wall_n, "inside to wall top climbs the stairs: %s" % [r])
+	var out_s := Vector3(-5, 0, 45)
+	r = F.route(half, wall_n, out_s)
+	check(r[0] == F.wall_landing(half, 0, e_n) and r[1] == F.stair_top(half, 0, e_n) and r[2] == F.stair_bottom(half, 0, e_n), "wall top to outside goes down the stairs first: %s" % [r])
+	check(r.has(F.gate_inner(half, 2)) and r.has(F.gate_outer(half, 2)) and r[-1] == out_s, "then leaves through a gate")
+	var wall_n2 := F.slot_position(half, 0, F.POST_WALL, 0)
+	check(F.route(half, wall_n, wall_n2) == [wall_n2], "same-side wall top walks straight")
+	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)
+	r = F.route(half, wall_n, wall_e)
+	var e_e := 1.0 if F.perp(1).dot(wall_e) >= 0.0 else -1.0
+	check(r[2] == F.stair_bottom(half, 0, e_n) and r[-4] == F.stair_bottom(half, 1, e_e) and r[-1] == wall_e, "wall top to another side's wall top goes down and up: %s" % [r])
+	var out_n := Vector3(5, 0, -45)
+	r = F.route(half, out_n, wall_n)
+	check(r[0] == F.gate_outer(half, 0) and r[1] == F.gate_inner(half, 0) and r[-4] == F.stair_bottom(half, 0, e_n), "outside to wall top enters a gate then climbs: %s" % [r])
+	# 어떤 구간도 성벽 띠를 곧장 오르내리지 않는다: 높이가 바뀌는 구간은 계단 윗단↔아랫단, 윗단↔landing 뿐
+	for pair in [[inside, wall_n], [wall_n, out_s], [wall_n, wall_e], [out_n, wall_n]]:
+		var pts: Array = [pair[0]] + F.route(half, pair[0], pair[1])
+		for i in range(1, pts.size()):
+			var a: Vector3 = pts[i - 1]
+			var b: Vector3 = pts[i]
+			if absf(a.y - b.y) > 0.01:
+				var ok := false
+				for s in 4:
+					for e in [-1.0, 1.0]:
+						var st: Vector3 = F.stair_top(half, s, e)
+						var sb: Vector3 = F.stair_bottom(half, s, e)
+						if (a.is_equal_approx(st) and b.is_equal_approx(sb)) or (a.is_equal_approx(sb) and b.is_equal_approx(st)):
+							ok = true
+				check(ok, "height changes only on a stair flight (%s -> %s)" % [a, b])
 
 
 func test_is_inside() -> void:

@@ -50,8 +50,9 @@ func _run() -> void:
 	var archer = heroes[1]   # 동(1) 성벽 위
 	var warrior_hp: float = Balance.HERO_ROLES.warrior.hp
 
-	# (a) 밖 자유 위치 전사와 5 m 떨어진 grunt가 서로 다가가 교전한다
-	var post := Vector3(30, 0, -40)
+	# (a) 밖 자유 위치 전사와 5 m 떨어진 grunt가 서로 다가가 교전한다(북동쪽 벌판: 북쪽 바깥면에서 22 m, 모서리 너머 12 m)
+	var outer := _half + Balance.WALL_T
+	var post := Vector3(outer + 12.0, 0, -(outer + 22.0))
 	warrior.move_to_point(post)
 	await _wait_until(func(): return warrior._path.is_empty() and Formation.flat_distance(warrior.global_position, post) < 0.05, 10.0)
 	_check(Formation.flat_distance(warrior.global_position, post) < 0.05, "(a) precondition: warrior stands at its free point", "pos=%s" % warrior.global_position)
@@ -165,11 +166,12 @@ func _run() -> void:
 
 	# (h) 성 모서리 근처 밖 자유 위치 전사와 모서리 너머 동쪽 면의 grunt(성문 멀쩡): 둘 사이 직선이 성 모서리를 가로지른다.
 	#     grunt는 추격하다 성벽 띠로 들어서지 않고(진로로 동쪽 성문으로 간다), 전사는 그 grunt를 잡지 않아 자리를 지킨다. 매 프레임 확인.
-	var hpost := Vector3(15, 0, -20)
+	#     전사: 북쪽 바깥면 2 m 밖, 모서리에서 x로 3 m 안쪽. grunt: 동쪽 바깥면 0.1 m 밖, z는 북쪽 성벽 띠 높이. 둘 사이 4.7 m(양쪽 aggro 안)
+	var hpost := Vector3(_half - 1.0, 0, -(outer + 2.0))
 	warrior.move_to_point(hpost)
 	GameState.refill()  # 성문 복구·몬스터 제거, 영웅은 자리(방금 정한 자유 위치)로 옮겨진다
 	await _frames(1)
-	_g = _spawn("grunt", 1, Vector3(18.1, 0, -16.5))
+	_g = _spawn("grunt", 1, Vector3(outer + 0.1, 0, -(_half + 0.5)))
 	var g_in := false
 	var w_in := false
 	var w_out := 0.0
