@@ -40,12 +40,14 @@ func _place_building(b: Dictionary) -> void:
 
 
 ## 성벽 근처·괴물 진입로(두 축)·서로 가까운 자리를 피해 나무·바위를 흩는다.
+## 모델 종류별(그 모델의 메시마다) MultiMeshInstance3D 하나로 그린다 — 수백 개여도 그리기 호출 몇 번.
 func _scatter_nature() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Art.NATURE_SEED
 	var keep_out := half + Balance.WALL_T + Art.NATURE_CASTLE_MARGIN
 	var lim := Balance.MAP_HALF - 4.0
 	var placed: Array[Vector2] = []
+	var by_model := {}  # 모델 경로 -> Array[Transform3D]
 	var tries := 0
 	while placed.size() < Art.NATURE_COUNT and tries < Art.NATURE_COUNT * 20:
 		tries += 1
@@ -62,8 +64,28 @@ func _scatter_nature() -> void:
 		if crowded:
 			continue
 		placed.append(p)
-		var n := Art.instance(Art.NATURE_MODELS[rng.randi_range(0, Art.NATURE_MODELS.size() - 1)])
-		n.position = Vector3(p.x, 0, p.y)
-		n.rotation.y = rng.randf_range(0.0, TAU)
-		n.scale = Vector3.ONE * Art.NATURE_SCALE * rng.randf_range(0.8, 1.2)
-		add_child(n)
+		var path: String = Art.NATURE_MODELS[rng.randi_range(0, Art.NATURE_MODELS.size() - 1)]
+		var s := Art.NATURE_SCALE * rng.randf_range(0.8, 1.2)
+		var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * s)
+		if not by_model.has(path):
+			by_model[path] = []
+		by_model[path].append(Transform3D(basis, Vector3(p.x, 0, p.y)))
+	for path in by_model:
+		_add_multimesh(path, by_model[path])
+
+
+func _add_multimesh(path: String, placements: Array) -> void:
+	var model := Art.instance(path)
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		var local := Art.relative_transform(mi, model)
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mi.mesh
+		mm.instance_count = placements.size()
+		for i in placements.size():
+			mm.set_instance_transform(i, placements[i] * local)
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		add_child(mmi)
+	model.free()

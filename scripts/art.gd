@@ -6,6 +6,7 @@ extends RefCounted
 const HERO_SELECTED := Color(1.0, 0.9, 0.2)
 
 const CHARACTER_SCALE := 1.0      # KayKit 캐릭터 키 약 2.2m
+const HEAD_HEIGHT := 2.5          # 캐릭터 모델 발에서 HP 바까지 높이(모델 단위, 배율 곱하기 전)
 const CORPSE_SEC := 1.6           # 몬스터 사망 후 제거까지(초). Death_C_Skeletons(~2.0초)는 ~1.6초에 쓰러짐이 끝나므로, 애니메이션 꼬리가 끝나기 전 쓰러진 자세에서 제거한다. 사망 애니메이션 길이 이하여야 함(테스트)
 const BUILDING_GAP := 0.6         # 건물 부지 가장자리 여유(m)
 const WALL_MODEL_LEN := 2.0       # wall_straight 모델 치수(모델 단위): 길이·높이·두께
@@ -15,7 +16,7 @@ const WALL_PIECE_TARGET := 5.0    # 성벽 조각 목표 길이(m). 구간을 �
 const TOWER_SCALE := 3.2
 const ARROW_SCALE := 1.2
 const NATURE_SCALE := 3.0
-const NATURE_COUNT := 60
+const NATURE_COUNT := 180
 const NATURE_SEED := 7
 const NATURE_MIN_GAP := 5.0
 const NATURE_CASTLE_MARGIN := 6.0  # 성벽 바깥면에서 이 거리 안에는 자연물 없음
@@ -90,18 +91,23 @@ static func instance(path: String) -> Node3D:
 	return (load(path) as PackedScene).instantiate()
 
 
+## node의 root 기준 변환 (root 자신의 변환 제외). 트리에 없어도 된다.
+static func relative_transform(node: Node3D, root: Node3D) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var n: Node = node
+	while n != root:
+		xf = (n as Node3D).transform * xf
+		n = n.get_parent()
+	return xf
+
+
 ## 모델 루트 기준 AABB (모든 MeshInstance3D 합, 루트 자신의 변환 제외). 트리에 없어도 된다.
 static func model_aabb(root: Node3D) -> AABB:
 	var box_sum := AABB()
 	var first := true
 	for node in root.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
-		var xf := Transform3D.IDENTITY
-		var n: Node = mi
-		while n != root:
-			xf = (n as Node3D).transform * xf
-			n = n.get_parent()
-		var b := xf * mi.get_aabb()
+		var b := relative_transform(mi, root) * mi.get_aabb()
 		box_sum = b if first else box_sum.merge(b)
 		first = false
 	return box_sum

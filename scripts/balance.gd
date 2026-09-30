@@ -27,15 +27,15 @@ const WALL_T := 2.0                   # 성벽 두께 (1타일)
 const WALL_H := 3.0                   # 성벽 높이 = 성벽 위 발판 높이
 const GATE_W := 4.0                   # 성문 폭 (2타일)
 const TOWER_SIZE := 3.0               # 모서리 탑 한 변
-const MAP_HALF := 70.0                # 바닥 절반 크기
-const SPAWN_MARGIN := 22.0            # 성벽 바깥면에서 스폰 지점까지
+const MAP_HALF := 120.0                # 바닥 절반 크기
+const SPAWN_MARGIN := 40.0            # 성벽 바깥면에서 스폰 지점까지
 const SPAWN_SPREAD := 6.0             # 스폰 지점 좌우 흩어짐 (±)
 const GATE_FRONT_OFFSET := 1.5        # 성벽 바깥면에서 성문 앞 자리까지
 const GATE_FRONT_SLOTS := [0.0, -1.6, 1.6]      # 성문 앞 자리 좌우 오프셋
 const WALL_TOP_SLOTS := [-4.0, 4.0, -8.0, 8.0]  # 성벽 위 자리 좌우 오프셋 (성문 위는 비움)
 const CAMERA_SIZE_DEFAULT := 56.0     # 직교 카메라 가로 폭(미터)
 const CAMERA_SIZE_MIN := 16.0
-const CAMERA_SIZE_MAX := 90.0
+const CAMERA_SIZE_MAX := 150.0
 
 const HERO_ROLES := {
 	"warrior": {
