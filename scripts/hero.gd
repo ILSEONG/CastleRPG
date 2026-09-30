@@ -60,6 +60,7 @@ func _ready() -> void:
 	torus.outer_radius = 0.8
 	_ring = Art.mesh(torus, Art.HERO_SELECTED)
 	_ring.position.y = 0.05
+	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_ring.visible = false
 	add_child(_ring)
 	GameState.refilled.connect(reset)
@@ -140,6 +141,7 @@ func _process(delta: float) -> void:
 		if state != State.IDLE:
 			state = State.IDLE
 			_model.play_idle()
+			_model.face(Formation.SIDE_DIR[side])  # 대기로 돌아오면 늘 성 바깥을 본다
 
 
 func _nearest_monster():

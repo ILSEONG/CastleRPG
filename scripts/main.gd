@@ -64,7 +64,7 @@ func _build_environment() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL  # 분할 없음: 모바일 부담 최소
 	sun.directional_shadow_max_distance = 220.0
 	add_child(sun)
-	sun.rotation_degrees = Vector3(-55, 35, 0)
+	sun.rotation_degrees = Vector3(-50, -45, 0)  # 카메라(요 45°) 시선을 가로지르게 → 그림자가 화면 오른쪽 바닥에 드리운다
 
 
 func _build_ground(interior_half: float) -> void:
@@ -78,6 +78,7 @@ func _build_ground(interior_half: float) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane
 	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
 

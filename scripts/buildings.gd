@@ -32,6 +32,7 @@ func _place_building(b: Dictionary) -> void:
 	label.pixel_size = 0.03
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
+	label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	label.modulate = Color(0.18, 0.18, 0.22)
 	label.outline_modulate = Color(1, 1, 1, 0.9)
 	label.position = center + Vector3(0, box.size.y * s + 1.0, 0)

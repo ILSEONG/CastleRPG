@@ -301,6 +301,7 @@ func test_art_assets() -> void:
 	var specs := {}
 	specs.merge(Art.HERO_MODELS)
 	specs.merge(Art.MONSTER_MODELS)
+	var visible_gear := {"warrior": ["1H_Sword", "Round_Shield"], "archer": ["2H_Crossbow"]}  # Knight, Rogue_Hooded
 	for key in Balance.HERO_ROLES:
 		check(Art.HERO_MODELS.has(key), "hero role %s has a model" % key)
 	for key in Balance.MONSTER:
@@ -317,8 +318,14 @@ func test_art_assets() -> void:
 			var ap: AnimationPlayer = players[0]
 			for anim in spec.anims.values():
 				check(ap.has_animation(anim), "%s has animation %s" % [key, anim])
+			if Art.MONSTER_MODELS.has(key) and ap.has_animation(spec.anims.death):
+				var death_len := ap.get_animation(spec.anims.death).length
+				check(Art.CORPSE_SEC <= death_len, "%s corpse removed before death animation ends: CORPSE_SEC %.2f <= %.2f" % [key, Art.CORPSE_SEC, death_len])
 		for mesh_name in spec.hide:
 			check(root.find_child(mesh_name, true, false) != null, "%s has mesh %s to hide" % [key, mesh_name])
+		for mesh_name in visible_gear.get(key, []):
+			var g := root.find_child(mesh_name, true, false) as Node3D
+			check(g != null and g.visible and not spec.hide.has(mesh_name), "%s shows gear %s" % [key, mesh_name])
 		if spec.has("weapon"):
 			check(ResourceLoader.exists(spec.weapon), "%s weapon exists" % key)
 			var skels := root.find_children("*", "Skeleton3D", true, false)
@@ -336,3 +343,12 @@ func test_art_assets() -> void:
 	check(absf(wb.size.x - Art.WALL_MODEL_LEN) < 0.05 and absf(wb.size.y - Art.WALL_MODEL_H) < 0.05 and absf(wb.size.z - Art.WALL_MODEL_T) < 0.05, "wall model size matches Art constants: %s" % wb.size)
 	gate.free()
 	wall.free()
+	var arrow: Node3D = (load(Art.ARROW_MODEL) as PackedScene).instantiate()
+	var ab := Art.model_aabb(arrow)
+	check(ab.size.y > ab.size.x and ab.size.y > ab.size.z, "arrow model long axis is Y (ARROW_PITCH_FIX): %s" % ab.size)
+	arrow.free()
+	for id in Art.BUILDING_MODELS:
+		var bm: Node3D = (load(Art.BUILDING_MODELS[id]) as PackedScene).instantiate()
+		var bb := Art.model_aabb(bm)
+		check(bb.size.x > 0.0 and bb.size.z > 0.0, "building %s model has non-zero x/z size: %s" % [id, bb.size])
+		bm.free()

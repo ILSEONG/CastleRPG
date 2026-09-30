@@ -6,7 +6,7 @@ extends RefCounted
 const HERO_SELECTED := Color(1.0, 0.9, 0.2)
 
 const CHARACTER_SCALE := 1.0      # KayKit 캐릭터 키 약 2.2m
-const CORPSE_SEC := 1.6           # 몬스터 사망 애니메이션 뒤 제거까지
+const CORPSE_SEC := 1.6           # 몬스터 사망 후 제거까지(초). Death_C_Skeletons(~2.0초)는 ~1.6초에 쓰러짐이 끝나므로, 애니메이션 꼬리가 끝나기 전 쓰러진 자세에서 제거한다. 사망 애니메이션 길이 이하여야 함(테스트)
 const BUILDING_GAP := 0.6         # 건물 부지 가장자리 여유(m)
 const WALL_MODEL_LEN := 2.0       # wall_straight 모델 치수(모델 단위): 길이·높이·두께
 const WALL_MODEL_H := 1.1

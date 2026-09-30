@@ -28,5 +28,6 @@ theme/custom_font="res://assets/fonts/Pretendard-SemiBold.otf"
 
 [rendering]
 
+lights_and_shadows/directional_shadow/size=2048
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"

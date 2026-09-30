@@ -1,6 +1,9 @@
 extends Node3D
 ## 캐릭터 모델 래퍼: KayKit 모델 인스턴스, 안 쓰는 부착물 숨김, 무기 부착, 애니메이션 재생, 방향.
 ## spec = Art.HERO_MODELS[role] 또는 Art.MONSTER_MODELS[kind]. KayKit 모델 정면은 +Z.
+# ponytail: 성능 한계 — 캐릭터 하나 = AnimationPlayer 1개 + 스킨 메시 드로 ~10개(+ 그림자 패스). 스켈레톤 120개면 애니메이션만
+# 데스크톱 네이티브 실측 ~2.2 ms/프레임, 모바일 웹은 5–10배 예상. 올릴 길: 멀리·화면 밖 유닛의 애니메이션 건너뛰기/간헐 갱신,
+# 몬스터 그림자 끄기, 스켈레톤당 메시 수 줄이기, 또는 화면 표시 상한 낮추기.
 
 const Art := preload("res://scripts/art.gd")
 
