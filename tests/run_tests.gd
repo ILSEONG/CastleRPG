@@ -40,6 +40,7 @@ func _init() -> void:
 	test_lowpoly_conversion()
 	test_route()
 	test_stairs_and_wall_routes()
+	test_buildings_clear_stairs()
 	test_is_inside()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
@@ -230,14 +231,14 @@ func test_layout_tables() -> void:
 
 func test_building_layout() -> void:
 	var half_tiles := floori(Balance.INTERIOR_TILES[0] / 2.0)
-	var allowed := Rect2i(-half_tiles + 1, -half_tiles + 1, 2 * half_tiles - 2, 2 * half_tiles - 2)
+	var allowed := Rect2i(-half_tiles + 2, -half_tiles + 2, 2 * half_tiles - 4, 2 * half_tiles - 4)  # 벽 쪽 2타일: 계단 띠 + 성문 안쪽↔계단 앞 통로
 	var road_ns := Rect2i(-1, -half_tiles, 2, 2 * half_tiles)
 	var road_ew := Rect2i(-half_tiles, -1, 2 * half_tiles, 2)
 	var placed: Array = []
 	var ids := {}
 	for b in Balance.BUILDINGS:
 		var r := Rect2i(b.cell, b.size)
-		check(allowed.encloses(r), "%s inside level-1 interior with 1-tile wall margin" % b.id)
+		check(allowed.encloses(r), "%s inside level-1 interior with 2-tile wall margin (stair strip + inner lane)" % b.id)
 		if b.id != "keep":
 			check(not r.intersects(road_ns) and not r.intersects(road_ew), "%s stays off the cross roads" % b.id)
 		for other in placed:
@@ -488,11 +489,10 @@ func test_stairs_and_wall_routes() -> void:
 			var a: Vector3 = pts[i - 1]
 			var b: Vector3 = pts[i]
 			if absf(a.y) < 0.01 and absf(b.y) < 0.01:
-				var n := ceili(F.flat_distance(a, b) / 0.1)
 				var hit := false
-				for k in range(n + 1):
-					hit = hit or _in_stair_footprint(half, a.lerp(b, float(k) / maxf(n, 1)))
-				check(not hit, "ground leg stays off every stair footprint (%s -> %s, route %s -> %s)" % [a, b, pair[0], pair[1]])
+				for q in _leg_samples(a, b):
+					hit = hit or _in_stair_footprint(half, q)
+				check(not hit,"ground leg stays off every stair footprint (%s -> %s, route %s -> %s)" % [a, b, pair[0], pair[1]])
 			if absf(a.y - b.y) > 0.01:
 				var ok := false
 				for s in 4:
@@ -513,6 +513,54 @@ func _in_stair_footprint(half: float, p: Vector3) -> bool:
 		if depth > half - Balance.STAIR_W + 0.01 and depth < half - 0.01 and along > lo + 0.01 and along < lo + Balance.STAIR_RUN - 0.01:
 			return true
 	return false
+
+
+## a → b 수평 선분 위 0.1 m 간격 샘플(양 끝 포함).
+func _leg_samples(a: Vector3, b: Vector3) -> Array:
+	var n := ceili(FormationScript.flat_distance(a, b) / 0.1)
+	var out := []
+	for k in range(n + 1):
+		out.append(a.lerp(b, float(k) / maxf(n, 1)))
+	return out
+
+
+## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 성문 ↔ 성벽 위 경로의 지상 구간(성문 안쪽 ↔ 계단 앞 통로)은 부지를 지나지 않는다.
+func test_buildings_clear_stairs() -> void:
+	var F = FormationScript
+	var half := Balance.interior_half(1)
+	var lo := Balance.GATE_W / 2.0 + Balance.STAIR_GAP
+	var plots := {}  # id -> Rect2 (x, z)
+	for b in Balance.BUILDINGS:
+		plots[b.id] = Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE)
+	for s in 4:
+		var dir: Vector3 = F.SIDE_DIR[s]
+		var pp: Vector3 = F.perp(s)
+		for e in [-1.0, 1.0]:
+			var c1: Vector3 = dir * (half - Balance.STAIR_W) + pp * (e * lo)
+			var c2: Vector3 = dir * half + pp * (e * (lo + Balance.STAIR_RUN))
+			var foot := Rect2(Vector2(c1.x, c1.z), Vector2.ZERO).expand(Vector2(c2.x, c2.z))
+			for id in plots:
+				var plot: Rect2 = plots[id]
+				for p in [F.stair_approach(half, s, e), F.gate_inner(half, s), F.stair_bottom(half, s, e)]:
+					check(not plot.has_point(Vector2(p.x, p.z)), "%s plot does not contain stair/gate point %s" % [id, p])
+				check(not plot.intersects(foot), "%s plot does not overlap the stair footprint (side %d end %d)" % [id, s, e])
+			var w := F.slot_position(half, s, F.POST_WALL, 0 if e < 0.0 else 1)  # WALL_TOP_SLOTS[0] = -4, [1] = +4
+			var front := F.slot_position(half, s, F.POST_GATE, 0)
+			var gi: Vector3 = F.gate_inner(half, s)
+			for pair in [[gi, w], [w, gi], [front, w], [w, front]]:
+				var pts: Array = [pair[0]] + F.route(half, pair[0], pair[1])
+				for i in range(1, pts.size()):
+					var a: Vector3 = pts[i - 1]
+					var b: Vector3 = pts[i]
+					if absf(a.y) > 0.01 or absf(b.y) > 0.01:
+						continue
+					var hit := ""
+					for q in _leg_samples(a, b):
+						for id in plots:
+							var plot: Rect2 = plots[id]
+							if plot.grow(-0.01).has_point(Vector2(q.x, q.z)):
+								hit = id
+					check(hit == "", "ground leg %s -> %s (route %s -> %s) passes no building plot, hit %s" % [a, b, pair[0], pair[1], hit])
 
 
 func test_is_inside() -> void:

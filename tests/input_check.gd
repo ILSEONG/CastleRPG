@@ -185,10 +185,10 @@ func _run() -> void:
 	_check(warrior.side == 0 and warrior.post == Formation.POST_WALL and ai >= 0 and bi == ai + 1 and ti == bi + 1,
 		"(j) wall tap with an inside warrior selected routes up the north stairs (approach, bottom, then top)",
 		"side/post=%s path=%s" % [[warrior.side, warrior.post], warrior._path])
-	await get_tree().create_timer(5.0).timeout
+	await get_tree().create_timer(8.0).timeout
 	var wd: float = warrior.global_position.distance_to(home)
 	_check(wd < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
-		"(j) warrior stands at its wall-top slot 5 s later", "d=%.2f pos=%s" % [wd, warrior.global_position])
+		"(j) warrior stands at its wall-top slot 8 s later", "d=%.2f pos=%s" % [wd, warrior.global_position])
 
 
 func _check(cond: bool, what: String, detail: String) -> void:

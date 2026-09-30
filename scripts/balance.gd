@@ -52,15 +52,15 @@ const HERO_ROLES := {
 const HERO_ROSTER := ["warrior", "archer"]  # 영웅 i의 역할 = HERO_ROSTER[i % 2]
 
 ## 건물 배치 (플레이스홀더). cell = 최소 모서리 타일 좌표, size = 타일 수. 성 중심이 타일 경계 (0,0).
-## 레벨 1 내부 타일 범위 -10..9. 성채 외 건물은 벽 쪽 1칸 여유(-9..8, 계단 띠)를 두고 십자 도로(-1·0)를 피한다.
+## 레벨 1 내부 타일 범위 -10..9. 성채 외 건물은 벽 쪽 2칸 여유(-8..7: 계단 띠 + 성문 안쪽↔계단 앞 통로)를 두고 십자 도로(-1·0)를 피한다.
 const BUILDINGS := [
 	{"id": "keep", "name": "성채", "cell": Vector2i(-2, -2), "size": Vector2i(4, 4)},
 	{"id": "barracks", "name": "막사", "cell": Vector2i(2, -8), "size": Vector2i(3, 3)},
-	{"id": "tavern", "name": "주점", "cell": Vector2i(6, -5), "size": Vector2i(3, 3)},
+	{"id": "tavern", "name": "주점", "cell": Vector2i(5, -5), "size": Vector2i(3, 3)},
 	{"id": "lab", "name": "연구소", "cell": Vector2i(-5, -8), "size": Vector2i(3, 3)},
-	{"id": "houses", "name": "민가", "cell": Vector2i(-9, -5), "size": Vector2i(3, 3)},
+	{"id": "houses", "name": "민가", "cell": Vector2i(-8, -5), "size": Vector2i(3, 3)},
 	{"id": "lumber", "name": "벌목장", "cell": Vector2i(2, 5), "size": Vector2i(3, 3)},
-	{"id": "quarry", "name": "채석장", "cell": Vector2i(6, 2), "size": Vector2i(3, 3)},
+	{"id": "quarry", "name": "채석장", "cell": Vector2i(5, 2), "size": Vector2i(3, 3)},
 	{"id": "farm", "name": "농장", "cell": Vector2i(-5, 5), "size": Vector2i(3, 3)},
 ]
 
