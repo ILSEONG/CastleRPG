@@ -5,7 +5,7 @@ extends Node3D
 ## side: 0=N(-z) 1=E(+x) 2=S(+z) 3=W(-x)
 
 const Balance := preload("res://scripts/balance.gd")
-const Flat := preload("res://scripts/flat.gd")
+const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 
 const LAYER_GATE := 2
@@ -25,18 +25,18 @@ func _ready() -> void:
 		for s in [-1.0, 1.0]:
 			var seg_center: Vector3 = center + perp * s * (Balance.GATE_W + seg_len) / 2.0
 			var seg_size := _along(perp, seg_len, Balance.WALL_H, Balance.WALL_T)
-			var seg := Flat.box(seg_size, Flat.WALL)
+			var seg := Art.box(seg_size, Art.WALL)
 			seg.position += seg_center
 			add_child(seg)
 			_add_tap_area(seg_center, seg_size, LAYER_WALL, side)
-		var door := Flat.box(_along(perp, Balance.GATE_W, Balance.WALL_H, Balance.WALL_T * 0.6), Flat.GATE)
+		var door := Art.box(_along(perp, Balance.GATE_W, Balance.WALL_H, Balance.WALL_T * 0.6), Art.GATE)
 		door.position += center
 		add_child(door)
 		_gate_meshes.append(door)
 		_add_tap_area(center, _along(perp, Balance.GATE_W, Balance.WALL_H, Balance.WALL_T), LAYER_GATE, side)
 	var c := half + Balance.WALL_T / 2.0
 	for corner in [Vector3(c, 0, c), Vector3(-c, 0, c), Vector3(c, 0, -c), Vector3(-c, 0, -c)]:
-		var tower := Flat.box(Vector3(Balance.TOWER_SIZE, Balance.TOWER_H, Balance.TOWER_SIZE), Flat.TOWER)
+		var tower := Art.box(Vector3(Balance.TOWER_SIZE, Balance.TOWER_H, Balance.TOWER_SIZE), Art.TOWER)
 		tower.position += corner
 		add_child(tower)
 	GameState.gate_hp_changed.connect(_on_gate_hp_changed)
@@ -84,4 +84,4 @@ func _on_gate_hp_changed(side: int, hp: float, hp_max: float) -> void:
 	var mi: MeshInstance3D = _gate_meshes[side]
 	mi.visible = hp > 0.0
 	var mat := mi.material_override as StandardMaterial3D
-	mat.albedo_color = Flat.GATE.darkened(0.6 * (1.0 - hp / hp_max))
+	mat.albedo_color = Art.GATE.darkened(0.6 * (1.0 - hp / hp_max))

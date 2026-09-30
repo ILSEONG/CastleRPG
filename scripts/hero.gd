@@ -4,7 +4,7 @@ extends Node3D
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
 
 const Balance := preload("res://scripts/balance.gd")
-const Flat := preload("res://scripts/flat.gd")
+const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
@@ -50,12 +50,12 @@ func setup(p_index: int, p_castle, p_formation) -> void:
 
 func _ready() -> void:
 	add_to_group("heroes")
-	_body = Flat.capsule(0.45, 1.6, _stats.color)
+	_body = Art.capsule(0.45, 1.6, _stats.color)
 	add_child(_body)
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.6
 	torus.outer_radius = 0.8
-	_ring = Flat.mesh(torus, Flat.HERO_SELECTED)
+	_ring = Art.mesh(torus, Art.HERO_SELECTED)
 	_ring.position.y = 0.05
 	_ring.visible = false
 	add_child(_ring)
@@ -153,7 +153,7 @@ func _fire_tracer(to: Vector3) -> void:
 		return
 	var bm := BoxMesh.new()
 	bm.size = Vector3(0.1, 0.1, 0.8)
-	var arrow := Flat.mesh(bm, Flat.ARROW)
+	var arrow := Art.mesh(bm, Art.ARROW)
 	get_parent().add_child(arrow)
 	arrow.global_position = from
 	arrow.look_at(dest)

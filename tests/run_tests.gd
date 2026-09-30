@@ -6,6 +6,7 @@ const Balance := preload("res://scripts/balance.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const GameStateScript := preload("res://scripts/game_state.gd")
 const FormationScript := preload("res://scripts/formation.gd")
+const Art := preload("res://scripts/art.gd")
 
 var _fails := 0
 
@@ -27,6 +28,7 @@ func _init() -> void:
 	test_building_layout()
 	test_formation_claims()
 	test_formation_positions()
+	test_art_assets()
 	if _fails > 0:
 		printerr("FAILED %d" % _fails)
 	else:
@@ -293,3 +295,44 @@ func test_formation_positions() -> void:
 		var k: Vector3 = FormationScript.keep_target(side)
 		check(FormationScript.SIDE_DIR[side].dot(k) > keep_half, "keep target outside the keep footprint, side %d" % side)
 	check(is_equal_approx(FormationScript.flat_distance(Vector3(0, 3, 0), Vector3(3, 0, 4)), 5.0), "flat distance ignores height")
+
+
+func test_art_assets() -> void:
+	var specs := {}
+	specs.merge(Art.HERO_MODELS)
+	specs.merge(Art.MONSTER_MODELS)
+	for key in Balance.HERO_ROLES:
+		check(Art.HERO_MODELS.has(key), "hero role %s has a model" % key)
+	for key in Balance.MONSTER:
+		check(Art.MONSTER_MODELS.has(key), "monster %s has a model" % key)
+	for key in specs:
+		var spec: Dictionary = specs[key]
+		check(ResourceLoader.exists(spec.scene), "%s model exists" % key)
+		if not ResourceLoader.exists(spec.scene):
+			continue
+		var root: Node = (load(spec.scene) as PackedScene).instantiate()
+		var players := root.find_children("*", "AnimationPlayer", true, false)
+		check(players.size() == 1, "%s has one AnimationPlayer" % key)
+		if players.size() == 1:
+			var ap: AnimationPlayer = players[0]
+			for anim in spec.anims.values():
+				check(ap.has_animation(anim), "%s has animation %s" % [key, anim])
+		for mesh_name in spec.hide:
+			check(root.find_child(mesh_name, true, false) != null, "%s has mesh %s to hide" % [key, mesh_name])
+		if spec.has("weapon"):
+			check(ResourceLoader.exists(spec.weapon), "%s weapon exists" % key)
+			var skels := root.find_children("*", "Skeleton3D", true, false)
+			check(skels.size() == 1 and (skels[0] as Skeleton3D).find_bone(Art.WEAPON_BONE) >= 0, "%s has bone %s" % [key, Art.WEAPON_BONE])
+		root.free()
+	for b in Balance.BUILDINGS:
+		check(Art.BUILDING_MODELS.has(b.id) and ResourceLoader.exists(Art.BUILDING_MODELS[b.id]), "building %s has a model" % b.id)
+	for path in [Art.WALL_MODEL, Art.GATE_MODEL, Art.TOWER_MODEL, Art.ARROW_MODEL] + Art.NATURE_MODELS:
+		check(ResourceLoader.exists(path), "model exists: %s" % path)
+	var gate: Node = (load(Art.GATE_MODEL) as PackedScene).instantiate()
+	for door in Art.GATE_DOORS:
+		check(gate.find_child(door, true, false) != null, "gate model has %s" % door)
+	var wall: Node3D = (load(Art.WALL_MODEL) as PackedScene).instantiate()
+	var wb := Art.model_aabb(wall)
+	check(absf(wb.size.x - Art.WALL_MODEL_LEN) < 0.05 and absf(wb.size.y - Art.WALL_MODEL_H) < 0.05 and absf(wb.size.z - Art.WALL_MODEL_T) < 0.05, "wall model size matches Art constants: %s" % wb.size)
+	gate.free()
+	wall.free()

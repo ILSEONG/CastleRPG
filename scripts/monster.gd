@@ -3,7 +3,7 @@ extends Node3D
 ## 성문이 부서졌으면 성채 앞으로 가서 성 HP 공격. 성벽 위 영웅은 표적으로 삼지 않는다.
 
 const Balance := preload("res://scripts/balance.gd")
-const Flat := preload("res://scripts/flat.gd")
+const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 
 const SCAN_INTERVAL := 0.2
@@ -40,7 +40,7 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle) -> void:
 func _ready() -> void:
 	add_to_group("monsters")
 	var s: float = _stats.scale
-	_body = Flat.capsule(0.4 * s, 1.2 * s, _stats.color)
+	_body = Art.capsule(0.4 * s, 1.2 * s, _stats.color)
 	add_child(_body)
 	global_position = castle.spawn_position(side)
 	GameState.refilled.connect(_vanish)

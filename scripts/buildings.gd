@@ -3,7 +3,7 @@ extends Node3D
 ## 건물 기능(자원·업그레이드)은 서브프로젝트 2.
 
 const Balance := preload("res://scripts/balance.gd")
-const Flat := preload("res://scripts/flat.gd")
+const Art := preload("res://scripts/art.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const GAP := 0.4  # 타일 경계와 건물 벽 사이 여유 (격자선이 보이게)
@@ -13,7 +13,7 @@ func _ready() -> void:
 	for b in Balance.BUILDINGS:
 		var size := Vector3(b.size.x * Balance.TILE - GAP, b.height, b.size.y * Balance.TILE - GAP)
 		var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
-		var box := Flat.box(size, b.color)
+		var box := Art.box(size, b.color)
 		box.position += center
 		add_child(box)
 		var label := Label3D.new()
