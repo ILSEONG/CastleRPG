@@ -804,7 +804,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 4: 그림자·HUD 스타일 + 최종 확인
 
 **Files:**
-- Modify: `scripts/main.gd` (조명), `scripts/hud.gd` (스타일)
+- Modify: `scripts/main.gd` (조명), `scripts/hud.gd` (스타일), `scripts/art.gd` (캐릭터 배율)
 - Modify: `docs/superpowers/specs/2026-09-30-castlerpg-asset-pass-design.md` (조정값 반영)
 
 - [ ] **Step 1: scripts/main.gd `_build_environment()` 교체**
@@ -889,6 +889,10 @@ func _round(color: Color, radius: int, margin: int) -> StyleBoxFlat:
 	return s
 ```
 
+- [ ] **Step 2b: 캐릭터 배율 조정 (Task 3 캡처 소견: 건물 대비 캐릭터가 너무 작다)**
+
+`art.gd`의 `CHARACTER_SCALE`를 `0.75` → `1.0`(키 약 2.2m)으로 올린다. 규칙 값·슬롯은 그대로. Step 4 캡처에서 성문 앞 인접 슬롯(1.6m 간격)의 영웅이 서로·성벽과 심하게 겹치거나 성벽 위 궁수가 성벽 밖으로 튀어나와 보이면 `0.9`로 낮추고 보고서에 적는다. spec 개정 3 §3의 캐릭터 배율 줄도 실제 값으로 고친다.
+
 - [ ] **Step 3: 테스트 + 입력 체크 + 엔드투엔드 + 패배 복귀**
 
 세 명령 + 패배 복귀(`HERO_ROLES` 두 `atk`를 임시 1.0 → `[failed] 1` → `[mode] 0 stage=1` 확인 → 되돌리고 `git diff scripts/balance.gd` 비었는지 확인).
@@ -916,7 +920,7 @@ du -sh export/web/index.pck   # 보고서에 기록 (참고)
 
 ```bash
 git add scripts docs
-git commit -m "feat: sun shadows and rounded HUD styling for the asset pass
+git commit -m "feat: sun shadows, rounded HUD styling and larger characters for the asset pass
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
