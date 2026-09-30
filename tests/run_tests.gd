@@ -369,7 +369,8 @@ func test_art_assets() -> void:
 
 
 func test_lowpoly_conversion() -> void:
-	for path in [Art.HERO_MODELS.warrior.scene, Art.MONSTER_MODELS.grunt.scene, Art.WALL_MODEL, Art.BUILDING_MODELS.keep]:
+	for path in [Art.HERO_MODELS.warrior.scene, Art.HERO_MODELS.archer.scene, Art.MONSTER_MODELS.grunt.scene, Art.MONSTER_MODELS.grunt.weapon,
+			Art.ARROW_MODEL, Art.WALL_MODEL, Art.BUILDING_MODELS.keep] + Art.BORDER_MODELS:
 		var root: Node = Art.instance(path)
 		var surfaces := 0
 		for node in root.find_children("*", "MeshInstance3D", true, false):
