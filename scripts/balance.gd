@@ -27,7 +27,6 @@ const WALL_T := 2.0                   # 성벽 두께 (1타일)
 const WALL_H := 3.0                   # 성벽 높이 = 성벽 위 발판 높이
 const GATE_W := 4.0                   # 성문 폭 (2타일)
 const TOWER_SIZE := 3.0               # 모서리 탑 한 변
-const TOWER_H := 4.5
 const MAP_HALF := 70.0                # 바닥 절반 크기
 const SPAWN_MARGIN := 22.0            # 성벽 바깥면에서 스폰 지점까지
 const SPAWN_SPREAD := 6.0             # 스폰 지점 좌우 흩어짐 (±)
@@ -51,14 +50,14 @@ const HERO_ROSTER := ["warrior", "archer"]  # 영웅 i의 역할 = HERO_ROSTER[i
 ## 건물 배치 (플레이스홀더). cell = 최소 모서리 타일 좌표, size = 타일 수. 성 중심이 타일 경계 (0,0).
 ## 레벨 1 내부 타일 범위 -8..7. 성채 외 건물은 벽 쪽 1칸 여유(-7..6)를 두고 십자 도로(-1·0)를 피한다.
 const BUILDINGS := [
-	{"id": "keep", "name": "성채", "cell": Vector2i(-2, -2), "size": Vector2i(4, 4), "height": 6.0, "color": Color(0.62, 0.64, 0.72)},
-	{"id": "barracks", "name": "막사", "cell": Vector2i(1, -7), "size": Vector2i(3, 3), "height": 2.4, "color": Color(0.72, 0.48, 0.42)},
-	{"id": "tavern", "name": "주점", "cell": Vector2i(4, -4), "size": Vector2i(3, 3), "height": 2.4, "color": Color(0.80, 0.62, 0.38)},
-	{"id": "lab", "name": "연구소", "cell": Vector2i(-4, -7), "size": Vector2i(3, 3), "height": 2.8, "color": Color(0.52, 0.56, 0.80)},
-	{"id": "houses", "name": "민가", "cell": Vector2i(-7, -4), "size": Vector2i(3, 3), "height": 2.0, "color": Color(0.86, 0.74, 0.58)},
-	{"id": "lumber", "name": "벌목장", "cell": Vector2i(1, 4), "size": Vector2i(3, 3), "height": 1.8, "color": Color(0.55, 0.42, 0.28)},
-	{"id": "quarry", "name": "채석장", "cell": Vector2i(4, 1), "size": Vector2i(3, 3), "height": 1.6, "color": Color(0.60, 0.60, 0.60)},
-	{"id": "farm", "name": "농장", "cell": Vector2i(-4, 4), "size": Vector2i(3, 3), "height": 1.0, "color": Color(0.78, 0.74, 0.40)},
+	{"id": "keep", "name": "성채", "cell": Vector2i(-2, -2), "size": Vector2i(4, 4)},
+	{"id": "barracks", "name": "막사", "cell": Vector2i(1, -7), "size": Vector2i(3, 3)},
+	{"id": "tavern", "name": "주점", "cell": Vector2i(4, -4), "size": Vector2i(3, 3)},
+	{"id": "lab", "name": "연구소", "cell": Vector2i(-4, -7), "size": Vector2i(3, 3)},
+	{"id": "houses", "name": "민가", "cell": Vector2i(-7, -4), "size": Vector2i(3, 3)},
+	{"id": "lumber", "name": "벌목장", "cell": Vector2i(1, 4), "size": Vector2i(3, 3)},
+	{"id": "quarry", "name": "채석장", "cell": Vector2i(4, 1), "size": Vector2i(3, 3)},
+	{"id": "farm", "name": "농장", "cell": Vector2i(-4, 4), "size": Vector2i(3, 3)},
 ]
 
 

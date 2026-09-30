@@ -22,7 +22,9 @@ func _ready() -> void:
 	castle = CastleScript.new()
 	add_child(castle)
 	_build_ground(castle.half)
-	add_child(BuildingsScript.new())
+	var scenery = BuildingsScript.new()
+	scenery.half = castle.half
+	add_child(scenery)
 	var rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
