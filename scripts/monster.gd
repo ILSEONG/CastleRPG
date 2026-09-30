@@ -16,6 +16,7 @@ var kind: String = "grunt"
 var side: int = 0
 var stage: int = 1
 var hp: float = 0.0
+var hp_max: float = 0.0
 var atk: float = 0.0
 
 var _stats: Dictionary = {}
@@ -35,6 +36,7 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle) -> void:
 	castle = p_castle
 	_stats = Balance.MONSTER[kind]
 	hp = _stats.hp * Balance.hp_scale(stage)
+	hp_max = hp
 	atk = _stats.atk * Balance.atk_scale(stage)
 
 
@@ -105,6 +107,18 @@ func _nearest_hero():
 			best_d = d
 			best = h
 	return best
+
+
+func hp_ratio() -> float:
+	return hp / hp_max if hp_max > 0.0 else 0.0
+
+
+func bar_height() -> float:
+	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE * float(_stats.scale)
+
+
+func bar_scale() -> float:
+	return float(_stats.scale)
 
 
 ## 리필로 제거될 때. died를 내지 않으므로 Spawner는 refilled에서 카운트를 0으로 맞춘다.

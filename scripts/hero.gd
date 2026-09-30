@@ -182,6 +182,18 @@ func _nearest_monster():
 	return best
 
 
+func hp_ratio() -> float:
+	return hp / float(_stats.hp)
+
+
+func bar_height() -> float:
+	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE
+
+
+func bar_scale() -> float:
+	return 1.0
+
+
 ## 궁수 화살 (시각 효과만. 피해는 발사 즉시 적용).
 func _fire_tracer(to: Vector3) -> void:
 	var from := global_position + Vector3(0, 1.3, 0)

@@ -11,6 +11,7 @@ const HeroScript := preload("res://scripts/hero.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
 var camera: Camera3D
@@ -28,6 +29,9 @@ func _ready() -> void:
 	var rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
+	var bars = HpBarsScript.new()
+	bars.camera = camera
+	add_child(bars)
 	var formation = FormationScript.new()
 	for i in GameState.hero_count():
 		var hero = HeroScript.new()
