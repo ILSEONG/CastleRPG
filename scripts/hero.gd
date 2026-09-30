@@ -1,6 +1,7 @@
 extends Node3D
-## 영웅. 역할(전사/궁수)별 스탯. 배정 자리(면 · 성문 앞/성벽 위 · 슬롯, 또는 자유 위치)로 성문을 거쳐 이동하고, 자리에 서 있을 때만
-## 수평 사거리 안 가장 가까운 괴물을 자동 공격한다. 성벽 위에 서 있으면 근접 괴물의 표적이 되지 않는다.
+## 영웅. 역할(전사/궁수)별 스탯. 배정 자리(면 · 성문 앞/성벽 위 · 슬롯, 또는 자유 위치)로 성문을 거쳐 이동한다(이동 중엔 적 무시).
+## 지상에서는 자리 기준 aggro 안·같은 영역(성 안/밖)의 괴물을 쫓아가 치고 자리로 돌아오며, 성벽 위에서는 움직이지 않고
+## 사거리 안 괴물을 쏜다. 성벽 위에 서 있으면 근접 괴물의 표적이 되지 않는다.
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
 
 const Balance := preload("res://scripts/balance.gd")
@@ -145,38 +146,65 @@ func _process(delta: float) -> void:
 		if global_position.distance_to(wp) <= ARRIVE_EPS:
 			_path.pop_front()
 		return
-	if global_position.distance_to(stand_position()) > ARRIVE_EPS:
-		_replan()  # 경로 없이 자리에서 벗어나 있으면(예: 명령 직후 첫 프레임) 다시 계산
-		return
 	_scan_cd -= delta
 	if _scan_cd <= 0.0:
 		_scan_cd = SCAN_INTERVAL
-		_target = _nearest_monster()
-	if _target != null and is_instance_valid(_target) and _target.is_alive():
+		_target = _find_target()
+	# 성벽 위 영웅은 쫓지 않는다: 스캔 사이에 사거리를 벗어난 표적은 놓는다(안 그러면 성벽 높이로 떠서 따라간다).
+	if _target != null and is_instance_valid(_target) and _target.is_alive() \
+			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= float(_stats.range)):
+		var tpos: Vector3 = _target.global_position
+		_model.face(tpos - global_position)
+		if Formation.flat_distance(global_position, tpos) > float(_stats.range):
+			# 추격: 지상 영웅만 여기 온다(위 조건).
+			state = State.MOVE
+			_model.play_walk()
+			global_position = global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(_stats.speed) * delta)
+			return
 		state = State.ATTACK
-		_model.face(_target.global_position - global_position)
 		if _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
 			_model.play_attack()
 			if role == "archer":
-				_fire_tracer(_target.global_position)
+				_fire_tracer(tpos)
 			_target.take_damage(_stats.atk)
-	else:
-		_target = null
-		if state != State.IDLE:
-			state = State.IDLE
-			_model.play_idle()
-			_model.face(Formation.SIDE_DIR[side])  # 대기로 돌아오면 늘 성 바깥을 본다
+		return
+	_target = null
+	var home := stand_position()
+	if global_position.distance_to(home) > ARRIVE_EPS:
+		if not is_on_wall() and Formation.is_inside(castle.half, global_position) == Formation.is_inside(castle.half, home):
+			# 추격 뒤 복귀: 같은 영역이면 곧장(도중에 새 표적을 만나면 다시 교전)
+			state = State.MOVE
+			_model.face(home - global_position)
+			_model.play_walk()
+			global_position = global_position.move_toward(home, float(_stats.speed) * delta)
+			return
+		_replan()  # 다른 영역이면 성문 경로로
+		return
+	if state != State.IDLE:
+		state = State.IDLE
+		_model.play_idle()
+		_model.face(Formation.SIDE_DIR[side])
 
 
-func _nearest_monster():
+## 표적: 지상 영웅은 자기 자리에서 aggro 안·같은 영역, 성벽 위 영웅은 지금 위치에서 사거리 안(영역 무관). 가장 가까운 것.
+## ponytail: 추격은 직선이다. 성벽 모서리 근처 자유 위치에서는 모서리를 스칠 수 있다 — 문제되면 추격에도 route() 사용.
+func _find_target():
+	var on_wall := is_on_wall()
+	var origin := global_position if on_wall else stand_position()
+	var reach: float = float(_stats.range) if on_wall else float(_stats.aggro)
+	var here_inside := Formation.is_inside(castle.half, global_position)
 	var best = null
-	var best_d: float = _stats.range
+	var best_d := INF
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if not m.is_alive():
 			continue
+		if not on_wall and Formation.is_inside(castle.half, m.global_position) != here_inside:
+			continue
+		if Formation.flat_distance(origin, m.global_position) > reach:
+			continue
 		var d := Formation.flat_distance(global_position, m.global_position)
-		if d <= best_d:
+		if d < best_d:
 			best_d = d
 			best = m
 	return best

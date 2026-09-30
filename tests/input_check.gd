@@ -9,6 +9,7 @@ extends Node
 const Balance := preload("res://scripts/balance.gd")
 const Formation := preload("res://scripts/formation.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
+const SpawnerScript := preload("res://scripts/spawner.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -34,6 +35,10 @@ func _ready() -> void:
 	for c in _main.get_children():
 		if c.get_script() == PickerScript:
 			_picker = c
+		elif c.get_script() == SpawnerScript:
+			c.set_process(false)  # 몬스터가 입력 사례에 끼어들지 않게(aggro로 영웅을 끌고 가지 않게)
+	for m in get_tree().get_nodes_in_group("monsters"):
+		m.queue_free()
 	_heroes = get_tree().get_nodes_in_group("heroes")
 	_heroes.sort_custom(func(a, b): return a.index < b.index)
 	await _run()

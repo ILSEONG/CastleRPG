@@ -39,6 +39,7 @@ func _init() -> void:
 	test_art_assets()
 	test_lowpoly_conversion()
 	test_route()
+	test_is_inside()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -72,7 +73,7 @@ func test_balance_tables() -> void:
 	check(Balance.gate_hp_max(2) > Balance.gate_hp_max(1), "gate hp grows with level")
 	check(Balance.MONSTER.has("grunt") and Balance.MONSTER.has("epic_boss"), "monster table has grunt and epic_boss")
 	for kind in Balance.MONSTER:
-		for key in ["hp", "atk", "speed", "range", "atk_interval", "scale"]:
+		for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro"]:
 			check(Balance.MONSTER[kind].has(key), "monster %s has %s" % [kind, key])
 
 
@@ -221,7 +222,7 @@ func test_layout_tables() -> void:
 	check(Balance.hero_role(0) == "warrior" and Balance.hero_role(1) == "archer", "roster starts warrior, archer")
 	check(Balance.hero_role(2) == "warrior" and Balance.hero_role(3) == "archer", "roster alternates")
 	for role in Balance.HERO_ROLES:
-		for key in ["name", "hp", "atk", "range", "atk_interval", "speed"]:
+		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "aggro"]:
 			check(Balance.HERO_ROLES[role].has(key), "role %s has %s" % [role, key])
 	check(Balance.HERO_ROLES.archer.range > Balance.HERO_ROLES.warrior.range, "archer outranges warrior")
 
@@ -430,3 +431,10 @@ func test_route() -> void:
 	var field_n := Vector3(-40, 0, -41)
 	r = F.route(half, mid_gate, field_n)
 	check(r == [F.gate_inner(half, 0), F.gate_outer(half, 0), field_n], "gate-passage point counts as inside and leaves via gate inner then outer, not through the wall: %s" % [r])
+
+
+func test_is_inside() -> void:
+	var half := Balance.interior_half(1)
+	check(FormationScript.is_inside(half, Vector3(0, 0, -(half + Balance.WALL_T - 0.1))), "just inside the outer wall face counts as inside")
+	check(not FormationScript.is_inside(half, Vector3(0, 0, -(half + Balance.WALL_T + 0.1))), "just outside the outer wall face counts as outside")
+	check(FormationScript.is_inside(half, Vector3(0, Balance.WALL_H, -(half + Balance.WALL_T / 2.0))), "wall top counts as inside")

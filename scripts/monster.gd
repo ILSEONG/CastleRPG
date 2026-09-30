@@ -1,6 +1,6 @@
 extends Node3D
-## 괴물(근접). 수평 사거리 안 지상 영웅 우선 공격, 없으면 자기 면 성문 앞으로 직진해 성문 공격.
-## 성문이 부서졌으면 성채 앞으로 가서 성 HP 공격. 성벽 위 영웅은 표적으로 삼지 않는다.
+## 괴물(근접). 자기 위치에서 aggro 안·같은 영역(성 안/밖)의 지상 영웅을 쫓아가 치고, 없으면 진로(_advance)로 돌아가 성문·성채를 친다.
+## 성벽 위 영웅은 표적으로 삼지 않는다.
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
@@ -72,35 +72,62 @@ func _process(delta: float) -> void:
 	_scan_cd -= delta
 	if _scan_cd <= 0.0:
 		_scan_cd = SCAN_INTERVAL
-		_target_hero = _nearest_hero()
+		_target_hero = _find_hero()
 	if _target_hero != null and _target_hero.is_alive() and not _target_hero.is_on_wall():
-		_model.face(_target_hero.global_position - global_position)
-		if _atk_cd <= 0.0:
+		var hpos: Vector3 = _target_hero.global_position
+		_model.face(hpos - global_position)
+		if Formation.flat_distance(global_position, hpos) > _stats.range:
+			_model.play_walk()
+			global_position = global_position.move_toward(Vector3(hpos.x, 0.0, hpos.z), _stats.speed * delta)
+		elif _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
 			_model.play_attack()
 			_target_hero.take_damage(atk)
 		return
 	_target_hero = null
-	var broken: bool = GameState.is_gate_broken(side)
-	var dest: Vector3 = castle.keep_target(side) if broken else castle.gate_target(side)
+	_advance(delta)
+
+
+## 진로: 성 밖이면 지금 가장 가까운 면의 성문으로(끌려간 뒤 재조준). 멀쩡하면 성문을 치고,
+## 부서졌으면 성문 축에 맞춘 뒤 안쪽 지점을 거쳐 들어간다(성벽을 뚫지 않게). 성 안이면 성채를 친다.
+func _advance(delta: float) -> void:
+	var half: float = castle.half
+	var inside := Formation.is_inside(half, global_position)
+	if not inside:
+		side = Formation.side_of(global_position)
+	var dest: Vector3
+	var strikes := true
+	if inside:
+		dest = castle.keep_target(side)
+	elif GameState.is_gate_broken(side):
+		strikes = false
+		var aligned := absf(Formation.perp(side).dot(global_position)) < Balance.GATE_W / 2.0 - 0.5
+		dest = Formation.gate_inner(half, side) if aligned else castle.gate_target(side)
+	else:
+		dest = castle.gate_target(side)
 	_model.face(dest - global_position)
-	if Formation.flat_distance(global_position, dest) > _stats.range:
+	var stop: float = _stats.range if strikes else 0.1
+	if Formation.flat_distance(global_position, dest) > stop:
 		_model.play_walk()
 		global_position = global_position.move_toward(dest, _stats.speed * delta)
-	elif _atk_cd <= 0.0:
+	elif strikes and _atk_cd <= 0.0:
 		_atk_cd = _stats.atk_interval
 		_model.play_attack()
-		if broken:
+		if inside:
 			GameState.damage_castle(atk)
 		else:
 			GameState.damage_gate(side, atk)
 
 
-func _nearest_hero():
+## 표적: 자기 위치에서 aggro 안, 같은 영역의 살아 있는 지상 영웅 중 가장 가까운 것.
+func _find_hero():
+	var here_inside := Formation.is_inside(castle.half, global_position)
 	var best = null
-	var best_d: float = _stats.range
+	var best_d: float = float(_stats.aggro)
 	for h in get_tree().get_nodes_in_group("heroes"):
 		if not h.is_alive() or h.is_on_wall():
+			continue
+		if Formation.is_inside(castle.half, h.global_position) != here_inside:
 			continue
 		var d := Formation.flat_distance(global_position, h.global_position)
 		if d <= best_d:

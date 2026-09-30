@@ -105,8 +105,8 @@ static func gate_outer(half: float, side: int) -> Vector3:
 ## "안" = 성벽 위(높이 > WALL_H/2)이거나 성벽 바깥면 안쪽(_crosses_castle과 같은 경계). 문짝 상태와 무관하게 아군은 통과.
 static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var path: Array[Vector3] = []
-	var from_in := _is_inside(half, from)
-	var to_in := _is_inside(half, to)
+	var from_in := is_inside(half, from)
+	var to_in := is_inside(half, to)
 	if from_in and not to_in:
 		var s := side_of(to)
 		path.append(gate_inner(half, s))
@@ -127,7 +127,7 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	return path
 
 
-static func _is_inside(half: float, p: Vector3) -> bool:
+static func is_inside(half: float, p: Vector3) -> bool:
 	return p.y > Balance.WALL_H / 2.0 or maxf(absf(p.x), absf(p.z)) < half + Balance.WALL_T
 
 
