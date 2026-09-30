@@ -137,6 +137,33 @@ func _run() -> void:
 	_check(Formation.is_inside(_half, entry) and absf(entry.x) < Balance.GATE_W / 2.0,
 		"(f) grunt enters the broken north gate through the opening, not the wall", "first inside at %s" % entry)
 
+	# (g) 부서진 성문으로 표적을 쫓아 성 안에 들어선 지상 영웅(자리는 성 밖): 다음 스캔은 자리 기준 영역으로 본다 —
+	#     성 안으로 넘어간 표적도, (영웅이 자리 반대편에 있는 동안) 성 밖 몬스터도 잡지 않고 성문 경로로 자리에 돌아간다.
+	#     실제로는 표적이 넘어간 뒤 다음 스캔(≤0.2초) 전에 영웅도 넘어가는 경쟁이라, 스캔 시점을 테스트가 붙잡는다:
+	#     보스는 스캔을 멈춰(영웅과 싸우지 않고) 진로대로 성문으로 들어가고, 영웅은 표적을 잡은 뒤 넘어갈 때까지 스캔을 미룬다.
+	_clear_monsters()
+	await _frames(1)
+	var gw = heroes[2]  # 기본 배치: 남(2) 성문 앞 전사
+	var gpost: Vector3 = gw.stand_position()
+	GameState.damage_gate(2, GameState.gate_hp_max)
+	_g = _spawn("epic_boss", 2, gpost + Vector3(0, 0, 4.5))  # 성문 축 위. grunt는 전사 두 방에 죽어 성문까지 못 간다
+	_g._scan_cd = INF
+	await _wait_until(func(): return gw._target == _g, 2.0)
+	_check(gw._target == _g, "(g) precondition: the south gate warrior targets the boss outside", "target=%s" % [gw._target])
+	gw._scan_cd = INF
+	await _wait_until(func(): return Formation.is_inside(_half, gw.global_position), 8.0)
+	_check(Formation.is_inside(_half, gw.global_position) and _alive(_g) and Formation.is_inside(_half, _g.global_position),
+		"(g) precondition: the warrior followed the boss in through the broken gate", "warrior=%s boss alive=%s" % [gw.global_position, _alive(_g)])
+	var decoy = _spawn("grunt", 2, gpost + Vector3(5, 0, 1.5))  # 성 밖, 자리에서 aggro 안
+	gw._scan_cd = 0.0
+	await _frames(2)
+	_check(gw._target == null, "(g) warrior across the wall from its post drops the boss and ignores outside monsters",
+		"target=%s" % ["boss" if gw._target == _g else ("outside grunt" if gw._target == decoy else str(gw._target))])
+	decoy.queue_free()  # 돌아간 자리 근처에서 새로 교전하지 않게
+	await _wait_until(func(): return gw._path.is_empty() and Formation.flat_distance(gw.global_position, gpost) < 0.05, 5.0)
+	var gd := Formation.flat_distance(gw.global_position, gpost)
+	_check(gd < 0.2, "(g) warrior walks back to its post through the gate", "d=%.2f pos=%s" % [gd, gw.global_position])
+
 
 func _alive(m) -> bool:
 	return is_instance_valid(m) and m.is_alive()

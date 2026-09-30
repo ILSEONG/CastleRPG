@@ -187,13 +187,15 @@ func _process(delta: float) -> void:
 		_model.face(Formation.SIDE_DIR[side])
 
 
-## 표적: 지상 영웅은 자기 자리에서 aggro 안·같은 영역, 성벽 위 영웅은 지금 위치에서 사거리 안(영역 무관). 가장 가까운 것.
+## 표적: 지상 영웅은 자기 자리에서 aggro 안·자리와 같은 영역(자기도 그 영역에 있을 때만), 성벽 위 영웅은 지금 위치에서 사거리 안(영역 무관). 가장 가까운 것.
 ## ponytail: 추격은 직선이다. 성벽 모서리 근처 자유 위치에서는 모서리를 스칠 수 있다 — 문제되면 추격에도 route() 사용.
 func _find_target():
 	var on_wall := is_on_wall()
 	var origin := global_position if on_wall else stand_position()
 	var reach: float = float(_stats.range) if on_wall else float(_stats.aggro)
-	var here_inside := Formation.is_inside(castle.half, global_position)
+	var here_inside := Formation.is_inside(castle.half, origin)  # 지상 영웅의 영역은 자리 기준(추격 중 성벽을 넘어가도 바뀌지 않는다)
+	if Formation.is_inside(castle.half, global_position) != here_inside:
+		return null  # 자리 반대편(성벽 너머)에 와 있으면 아무것도 잡지 않고 성문 경로로 돌아간다 — 성벽을 가로지르는 추격 방지
 	var best = null
 	var best_d := INF
 	for m in get_tree().get_nodes_in_group("monsters"):
