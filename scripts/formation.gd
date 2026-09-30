@@ -7,6 +7,8 @@ const Balance := preload("res://scripts/balance.gd")
 
 const POST_GATE := 0
 const POST_WALL := 1
+const POST_FREE := 2          # 자유 위치 (슬롯 없음)
+const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점이 성벽에서 떨어진 거리
 const SIDE_DIR: Array[Vector3] = [
 	Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0),
 ]
@@ -77,6 +79,77 @@ static func keep_target(side: int) -> Vector3:
 
 static func spawn_center(half: float, side: int) -> Vector3:
 	return SIDE_DIR[side] * (half + Balance.WALL_T + Balance.SPAWN_MARGIN)
+
+
+## p가 바라보는 면 (면 방향과의 내적이 가장 큰 면).
+static func side_of(p: Vector3) -> int:
+	var best := 0
+	var best_d := -INF
+	for s in 4:
+		var d := SIDE_DIR[s].dot(p)
+		if d > best_d:
+			best_d = d
+			best = s
+	return best
+
+
+static func gate_inner(half: float, side: int) -> Vector3:
+	return SIDE_DIR[side] * (half - GATE_PASS_MARGIN)
+
+
+static func gate_outer(half: float, side: int) -> Vector3:
+	return SIDE_DIR[side] * (half + Balance.WALL_T + GATE_PASS_MARGIN)
+
+
+## from → to 이동 경로 (도착점 포함). 성 안팎을 오가거나 성을 가로지를 때는 성문을 지난다.
+## "안" = 성벽 위(높이 > WALL_H/2)이거나 성벽 중심선 안쪽. 문짝 상태와 무관하게 아군은 통과.
+static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
+	var path: Array[Vector3] = []
+	var from_in := _is_inside(half, from)
+	var to_in := _is_inside(half, to)
+	if from_in and not to_in:
+		var s := side_of(to)
+		path.append(gate_inner(half, s))
+		path.append(gate_outer(half, s))
+	elif not from_in and to_in:
+		var s := side_of(from)
+		path.append(gate_outer(half, s))
+		path.append(gate_inner(half, s))
+	elif not from_in and not to_in and _crosses_castle(half, from, to):
+		var a := side_of(from)
+		var b := side_of(to)
+		path.append(gate_outer(half, a))
+		path.append(gate_inner(half, a))
+		if b != a:
+			path.append(gate_inner(half, b))
+			path.append(gate_outer(half, b))
+	path.append(to)
+	return path
+
+
+static func _is_inside(half: float, p: Vector3) -> bool:
+	return p.y > Balance.WALL_H / 2.0 or maxf(absf(p.x), absf(p.z)) < half + Balance.WALL_T / 2.0
+
+
+## 수평 선분 a→b가 성 바깥 경계 정사각형(±(half + WALL_T))을 지나는지 (슬랩 테스트).
+static func _crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
+	var r := half + Balance.WALL_T
+	var o := Vector2(a.x, a.z)
+	var d := Vector2(b.x - a.x, b.z - a.z)
+	var t0 := 0.0
+	var t1 := 1.0
+	for axis in 2:
+		if absf(d[axis]) < 1e-6:
+			if absf(o[axis]) > r:
+				return false
+			continue
+		var ta := (-r - o[axis]) / d[axis]
+		var tb := (r - o[axis]) / d[axis]
+		t0 = maxf(t0, minf(ta, tb))
+		t1 = minf(t1, maxf(ta, tb))
+		if t0 > t1:
+			return false
+	return true
 
 
 ## 높이를 무시한 수평 거리. 사거리 판정은 전부 이것으로 한다.

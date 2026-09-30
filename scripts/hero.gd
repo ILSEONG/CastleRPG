@@ -1,5 +1,5 @@
 extends Node3D
-## 영웅. 역할(전사/궁수)별 스탯. 배정 자리(면 · 성문 앞/성벽 위 · 슬롯)로 이동하고, 자리에 서 있을 때만
+## 영웅. 역할(전사/궁수)별 스탯. 배정 자리(면 · 성문 앞/성벽 위 · 슬롯, 또는 자유 위치)로 성문을 거쳐 이동하고, 자리에 서 있을 때만
 ## 수평 사거리 안 가장 가까운 괴물을 자동 공격한다. 성벽 위에 서 있으면 근접 괴물의 표적이 되지 않는다.
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
 
@@ -22,6 +22,8 @@ var role: String = ""
 var side: int = 0
 var post: int = Formation.POST_GATE
 var slot: int = 0
+var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
+var _path: Array[Vector3] = []
 var hp: float = 0.0
 var state: int = State.IDLE
 var selected := false:
@@ -72,12 +74,15 @@ func reset() -> void:
 	state = State.IDLE
 	_target = null
 	global_position = stand_position()
+	_path.clear()
 	_model.reset_pose()
 	_model.face(Formation.SIDE_DIR[side])  # 대기 중엔 성 바깥을 본다
 	_ring.visible = selected
 
 
 func stand_position() -> Vector3:
+	if post == Formation.POST_FREE:
+		return free_pos
 	return castle.slot_position(side, post, slot)
 
 
@@ -89,7 +94,22 @@ func move_to(p_side: int, p_post: int) -> bool:
 	side = p_side
 	post = p_post
 	slot = s
+	_replan()
 	return true
+
+
+## 자유 이동 명령: 슬롯을 비우고 바닥 지점 p에 선다. 대기 방향은 가장 가까운 면의 바깥.
+func move_to_point(p: Vector3) -> void:
+	formation.release(index)
+	post = Formation.POST_FREE
+	free_pos = Vector3(p.x, 0.0, p.z)
+	side = Formation.side_of(free_pos)
+	_replan()
+
+
+func _replan() -> void:
+	if is_inside_tree():
+		_path = Formation.route(castle.half, global_position, stand_position())
 
 
 ## 실제 높이로 판정한다 — 오르내리는 중에는 지상 취급.
@@ -115,13 +135,18 @@ func _process(delta: float) -> void:
 	if state == State.DEAD:
 		return
 	_atk_cd -= delta
-	var dest := stand_position()
-	if global_position.distance_to(dest) > ARRIVE_EPS:
+	if not _path.is_empty():
+		var wp: Vector3 = _path[0]
 		state = State.MOVE
 		_target = null
-		_model.face(dest - global_position)
+		_model.face(wp - global_position)
 		_model.play_walk()
-		global_position = global_position.move_toward(dest, float(_stats.speed) * delta)
+		global_position = global_position.move_toward(wp, float(_stats.speed) * delta)
+		if global_position.distance_to(wp) <= ARRIVE_EPS:
+			_path.pop_front()
+		return
+	if global_position.distance_to(stand_position()) > ARRIVE_EPS:
+		_replan()  # 경로 없이 자리에서 벗어나 있으면(예: 명령 직후 첫 프레임) 다시 계산
 		return
 	_scan_cd -= delta
 	if _scan_cd <= 0.0:

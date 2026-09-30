@@ -97,6 +97,43 @@ func _run() -> void:
 	_check(_camera.size < size_before and _picker.selected == null, "(e) pinch apart zooms in and does not select",
 		"size %.1f -> %.1f selected=%s" % [size_before, _camera.size, _name(_picker.selected)])
 
+	# (f) 전사 선택 중 성 밖 바닥 탭 → 자유 위치(POST_FREE), 3초 뒤 그 지점에 서 있다
+	_camera.size = 70.0  # (e) 핀치로 확대된 줌을 기본(56)보다 조금 넓게 되돌린다 — (f)·(g)의 성 밖 지점이 화면 안에 오게
+	var half: float = _main.castle.half
+	_picker._select(null)
+	await _tap(_hero_px(warrior))
+	var field := Vector3(6, 0, -(half + Balance.WALL_T + 8))
+	var fp := _camera.unproject_position(field)
+	_check(_picker.selected == warrior and _open_ground(fp), "(f) precondition: warrior selected, field point on open ground", "selected=%s px=%s" % [_name(_picker.selected), fp])
+	await _tap(fp)
+	_check(warrior.post == Formation.POST_FREE, "(f) ground tap with the warrior selected sets a free post", "post=%d" % warrior.post)
+	await get_tree().create_timer(3.0).timeout
+	var fd := Formation.flat_distance(warrior.global_position, field)
+	_check(fd < 0.5, "(f) warrior stands at the tapped field point 3 s later", "d=%.2f pos=%s" % [fd, warrior.global_position])
+
+	# (g) 성벽 위 궁수 선택 중 반대편(남쪽) 성 밖 바닥 탭 → 경로 첫 지점이 남문 안쪽 지점 (성벽을 뚫지 않음)
+	archer.move_to(0, Formation.POST_WALL)
+	GameState.refill()  # 리필은 배정을 유지한 채 순간 복귀 → 궁수가 북쪽 성벽 위에 선다
+	await _frames(1)
+	await _tap(_hero_px(archer))
+	var south := Vector3(-10, 0, half + Balance.WALL_T + 12)
+	var sp := _camera.unproject_position(south)
+	_check(_picker.selected == archer and archer.is_on_wall() and archer.side == 0 and _open_ground(sp),
+		"(g) precondition: archer selected on the north wall, south field point on open ground",
+		"selected=%s on_wall=%s side=%d px=%s" % [_name(_picker.selected), archer.is_on_wall(), archer.side, sp])
+	await _tap(sp)
+	_check(archer.post == Formation.POST_FREE and not archer._path.is_empty() and archer._path[0] == Formation.gate_inner(half, 2),
+		"(g) wall-top archer ordered outside the far side heads for the south gate's inner point first",
+		"post=%d path=%s" % [archer.post, archer._path])
+
+	# (h) 선택된 영웅을 다시 탭 → 선택 해제
+	_picker._select(null)
+	await _tap(_hero_px(warrior))
+	var was = _picker.selected
+	await _tap(_hero_px(warrior))
+	_check(was == warrior and _picker.selected == null, "(h) tapping the selected hero again deselects it",
+		"first=%s then=%s" % [_name(was), _name(_picker.selected)])
+
 
 func _check(cond: bool, what: String, detail: String) -> void:
 	if cond:
@@ -125,6 +162,13 @@ func _wall_px(side: int) -> Vector2:
 	var seg_len := half + Balance.WALL_T - Balance.GATE_W / 2.0
 	var p := Formation.gate_position(half, side) + Formation.perp(side) * (Balance.GATE_W + seg_len) / 2.0
 	return _camera.unproject_position(p + Vector3(0, Balance.WALL_H / 2.0, 0))
+
+
+## 화면 안이고 성문·성벽 탭 영역이 아니며 HERO_TAP_PX 안에 영웅이 없는 바닥 탭 지점인지.
+func _open_ground(px: Vector2) -> bool:
+	return get_viewport().get_visible_rect().has_point(px) \
+		and _picker._pick(px, PickerScript.LAYER_GATE | PickerScript.LAYER_WALL).is_empty() \
+		and _picker._hero_at(px, PickerScript.HERO_TAP_PX) == null
 
 
 func _frames(n: int) -> void:

@@ -29,6 +29,7 @@ func _init() -> void:
 	test_formation_claims()
 	test_formation_positions()
 	test_art_assets()
+	test_route()
 	if _fails > 0:
 		printerr("FAILED %d" % _fails)
 	else:
@@ -352,3 +353,35 @@ func test_art_assets() -> void:
 		var bb := Art.model_aabb(bm)
 		check(bb.size.x > 0.0 and bb.size.z > 0.0, "building %s model has non-zero x/z size: %s" % [id, bb.size])
 		bm.free()
+
+
+func test_route() -> void:
+	var half := Balance.interior_half(1)
+	var F = FormationScript
+	check(F.side_of(Vector3(0, 0, -30)) == 0 and F.side_of(Vector3(30, 0, 1)) == 1 and F.side_of(Vector3(2, 0, 30)) == 2 and F.side_of(Vector3(-30, 0, 0)) == 3, "side_of picks the facing side")
+	for side in 4:
+		var dir: Vector3 = F.SIDE_DIR[side]
+		check(dir.dot(F.gate_inner(half, side)) < half, "gate inner point inside the walls, side %d" % side)
+		check(dir.dot(F.gate_outer(half, side)) > half + Balance.WALL_T, "gate outer point outside the walls, side %d" % side)
+	var inside_a := Vector3(-6, 0, -6)
+	var inside_b := Vector3(6, 0, 6)
+	check(F.route(half, inside_a, inside_b) == [inside_b], "inside to inside goes straight")
+	var out_n := Vector3(5, 0, -40)
+	var r: Array = F.route(half, inside_a, out_n)
+	check(r == [F.gate_inner(half, 0), F.gate_outer(half, 0), out_n], "inside to outside leaves through the destination's gate: %s" % [r])
+	r = F.route(half, out_n, inside_a)
+	check(r == [F.gate_outer(half, 0), F.gate_inner(half, 0), inside_a], "outside to inside enters through the start's gate: %s" % [r])
+	var out_s := Vector3(-5, 0, 40)
+	r = F.route(half, out_n, out_s)
+	check(r == [F.gate_outer(half, 0), F.gate_inner(half, 0), F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "outside across the castle goes gate to gate: %s" % [r])
+	var out_n2 := Vector3(-25, 0, -40)
+	check(F.route(half, out_n, out_n2) == [out_n2], "outside to outside on the same side goes straight")
+	var gate_n := F.slot_position(half, 0, F.POST_GATE, 0)
+	var gate_e := F.slot_position(half, 1, F.POST_GATE, 0)
+	r = F.route(half, gate_n, gate_e)
+	check(r.size() == 5 and r[0] == F.gate_outer(half, 0) and r[3] == F.gate_outer(half, 1), "adjacent gate fronts route through both gates: %s" % [r])
+	var wall_e := F.slot_position(half, 1, F.POST_WALL, 0)
+	r = F.route(half, wall_e, out_s)
+	check(r == [F.gate_inner(half, 2), F.gate_outer(half, 2), out_s], "wall top to outside leaves through a gate: %s" % [r])
+	r = F.route(half, out_s, wall_e)
+	check(r == [F.gate_outer(half, 2), F.gate_inner(half, 2), wall_e], "outside to wall top enters through a gate: %s" % [r])
