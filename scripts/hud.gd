@@ -1,6 +1,12 @@
 extends CanvasLayer
 ## HUD. GameState 시그널만 구독. 게임 오브젝트 직접 참조 없음.
 
+const INK := Color(0.16, 0.18, 0.24)
+const PANEL_BG := Color(1, 1, 1, 0.72)
+const BAR_BG := Color(0, 0, 0, 0.12)
+const ACCENT := Color(0.98, 0.70, 0.20)
+const RADIUS := 14
+
 var _stage_label: Label
 var _castle_bar: ProgressBar
 var _gate_bars: Array = []
@@ -15,15 +21,21 @@ func _ready() -> void:
 	add_child(root)
 
 	var top := VBoxContainer.new()
-	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 16
-	top.offset_right = -16
-	top.offset_top = 16
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(top)
+	top.add_theme_constant_override("separation", 8)
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	panel.offset_left = 16
+	panel.offset_right = -16
+	panel.offset_top = 16
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", _round(PANEL_BG, RADIUS, 12))
+	root.add_child(panel)
+	panel.add_child(top)
 	_stage_label = Label.new()
 	_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stage_label.add_theme_font_size_override("font_size", 36)
+	_stage_label.add_theme_color_override("font_color", INK)
 	top.add_child(_stage_label)
 	_castle_bar = _bar(Color(0.95, 0.75, 0.2))
 	top.add_child(_castle_bar)
@@ -42,6 +54,9 @@ func _ready() -> void:
 	_center.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_center.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_center.add_theme_font_size_override("font_size", 72)
+	_center.add_theme_color_override("font_color", Color.WHITE)
+	_center.add_theme_color_override("font_outline_color", Color(INK, 0.85))
+	_center.add_theme_constant_override("outline_size", 18)
 	root.add_child(_center)
 
 	_button = Button.new()
@@ -52,6 +67,15 @@ func _ready() -> void:
 	_button.offset_bottom = -32
 	_button.add_theme_font_size_override("font_size", 28)
 	_button.pressed.connect(_on_button)
+	_button.add_theme_stylebox_override("normal", _round(ACCENT, RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("hover", _round(ACCENT.lightened(0.12), RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("pressed", _round(ACCENT.darkened(0.15), RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("disabled", _round(Color(0.6, 0.62, 0.66, 0.8), RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_button.add_theme_color_override("font_color", Color.WHITE)
+	_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	_button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	_button.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.7))
 	root.add_child(_button)
 
 	GameState.mode_changed.connect(_on_mode_changed)
@@ -72,13 +96,20 @@ func _process(_delta: float) -> void:
 
 func _bar(color: Color) -> ProgressBar:
 	var b := ProgressBar.new()
-	b.custom_minimum_size = Vector2(0, 18)
+	b.custom_minimum_size = Vector2(0, 16)
 	b.show_percentage = false
 	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = color
-	b.add_theme_stylebox_override("fill", fill)
+	b.add_theme_stylebox_override("fill", _round(color, 8, 0))
+	b.add_theme_stylebox_override("background", _round(BAR_BG, 8, 0))
 	return b
+
+
+func _round(color: Color, radius: int, margin: int) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = color
+	s.set_corner_radius_all(radius)
+	s.set_content_margin_all(margin)
+	return s
 
 
 func _on_castle_hp(hp: float, hp_max: float) -> void:

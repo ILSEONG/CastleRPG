@@ -51,13 +51,18 @@ func _build_environment() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.88, 0.90, 0.94)
+	e.background_color = Color(0.86, 0.91, 0.96)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.75, 0.78, 0.85)
+	e.ambient_light_color = Color(0.78, 0.80, 0.86)
+	e.ambient_light_energy = 0.9
 	env.environment = e
 	add_child(env)
 	var sun := DirectionalLight3D.new()
-	sun.shadow_enabled = false
+	sun.light_color = Color(1.0, 0.96, 0.88)
+	sun.light_energy = 1.1
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL  # 분할 없음: 모바일 부담 최소
+	sun.directional_shadow_max_distance = 220.0
 	add_child(sun)
 	sun.rotation_degrees = Vector3(-55, 35, 0)
 

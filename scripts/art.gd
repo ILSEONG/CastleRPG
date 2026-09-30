@@ -5,7 +5,7 @@ extends RefCounted
 
 const HERO_SELECTED := Color(1.0, 0.9, 0.2)
 
-const CHARACTER_SCALE := 0.75     # KayKit 캐릭터 키 약 2.2 → 약 1.65m
+const CHARACTER_SCALE := 1.0      # KayKit 캐릭터 키 약 2.2m
 const CORPSE_SEC := 1.6           # 몬스터 사망 애니메이션 뒤 제거까지
 const BUILDING_GAP := 0.6         # 건물 부지 가장자리 여유(m)
 const WALL_MODEL_LEN := 2.0       # wall_straight 모델 치수(모델 단위): 길이·높이·두께
