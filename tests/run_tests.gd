@@ -216,16 +216,20 @@ func _remote_checks() -> int:
 		["roster names an unknown hero", 1], ["boss monster missing", 1], ["table is not an array", 1], ["table is empty", 1],
 		["row is not an object", 1], ["config is not an object", 1], ["two bad rows", 2],
 	]
+	var before := _tables_hash()
 	for entry in bad:
 		var q := _payload()
 		_corrupt(q, entry[0])
 		var ok := GameData.apply_remote(q)
 		check(not ok and GameData.errors == entry[1], "apply_remote rejects: %s (errors %d)" % [entry[0], GameData.errors])
 		expected_errors += GameData.errors
-		check(GameData.hero("warrior").hp == 999.0 and GameData.config_num("castle_hp") == 2000.0 and GameData.heroes().size() == 3 \
-				and GameData.monster("grunt").gold == 7.0 and GameData.resource("wood").per_min == 20.0 and GameData.stage(10).hp_mult == 3.25, \
-				"tables unchanged after rejected payload: %s" % entry[0])
+		check(_tables_hash() == before, "tables unchanged after rejected payload: %s" % entry[0])
 	return expected_errors
+
+
+## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
+func _tables_hash() -> int:
+	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._config])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
