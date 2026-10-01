@@ -1,7 +1,6 @@
 extends Node
 ## WaveDirector 스케줄을 시간에 맞춰 소비해 몬스터를 부모 노드 아래에 생성. 전멸 감지.
 
-const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
@@ -26,7 +25,7 @@ func _process(delta: float) -> void:
 		return
 	_clock += delta
 	while _cursor < _events.size() and _events[_cursor].time <= _clock:
-		if _live >= Balance.MAX_LIVE_MONSTERS:
+		if _live >= GameData.config_num("max_live_monsters"):
 			return  # 상한. 스케줄은 지연되고 다음 프레임에 재시도
 		_spawn(_events[_cursor])
 		_cursor += 1

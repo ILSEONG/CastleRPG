@@ -51,7 +51,7 @@ func _run() -> void:
 	heroes.sort_custom(func(a, b): return a.index < b.index)
 	var warrior = heroes[0]  # 기본 배치: 북(0) 성문 앞
 	var archer = heroes[1]   # 동(1) 성벽 위
-	var warrior_hp: float = Balance.HERO_ROLES.warrior.hp
+	var warrior_hp: float = GameData.hero("warrior").hp
 
 	# (a) 밖 자유 위치 전사와 5 m 떨어진 grunt가 서로 다가가 교전한다(북동쪽 벌판: 북쪽 바깥면에서 22 m, 모서리 너머 12 m)
 	var outer := _half + Balance.WALL_T
@@ -116,7 +116,7 @@ func _run() -> void:
 	#     성 안 몬스터는 영역이 같아도 성벽 위 궁수를 치지 못한다
 	_clear_monsters()
 	await _frames(1)
-	var reach: float = Balance.HERO_ROLES.archer.range + 1.0
+	var reach: float = GameData.hero("archer").range + 1.0
 	_g = _spawn("epic_boss", 1, Vector3(apos.x - 2.0, 0, apos.z))
 	await _wait_until(func(): return not _alive(_g) or Formation.flat_distance(_g.global_position, apos) > reach, 8.0)
 	var bd2 := Formation.flat_distance(_g.global_position, apos) if _alive(_g) else 0.0

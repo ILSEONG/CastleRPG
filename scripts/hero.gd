@@ -5,6 +5,7 @@ extends Node3D
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
@@ -46,8 +47,8 @@ func setup(p_index: int, p_castle, p_formation) -> void:
 	index = p_index
 	castle = p_castle
 	formation = p_formation
-	role = Balance.hero_role(index)
-	_stats = Balance.HERO_ROLES[role]
+	role = GameData.hero_role(index)
+	_stats = GameData.hero(role)
 	var default_post := Formation.POST_WALL if role == "archer" else Formation.POST_GATE
 	var placed := move_to(index % 4, default_post)
 	assert(placed, "no free default slot for hero %d" % index)

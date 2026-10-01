@@ -3,7 +3,7 @@ extends CanvasLayer
 ## 열려 있는 동안 뒤 화면(카메라·탭)은 입력을 못 받는다 — GUI가 먼저 소비해 _unhandled_input에 안 닿는다.
 ## 시세·남은 시간은 매초, 보유량은 Economy.changed마다 갱신한다.
 
-const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 
@@ -55,7 +55,8 @@ func _ready() -> void:
 	col.add_child(_rate_label)
 	_timer_label = _label("", 24, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_CENTER)
 	col.add_child(_timer_label)
-	for id in Balance.RESOURCES:
+	for r in GameData.resources():
+		var id: String = r.id
 		col.add_child(_row(id))
 	sell_all_button = _button("전부 판매")
 	sell_all_button.pressed.connect(func(): Economy.sell_all(_now()))
@@ -107,7 +108,8 @@ func _refresh(now: float) -> void:
 	var left := floori(Economy.seconds_to_next_rate(now))  # 59:59 → 00:00
 	_timer_label.text = "다음 시세까지 %02d:%02d" % [left / 60, left % 60]
 	var any := false
-	for id in Balance.RESOURCES:
+	for r in GameData.resources():
+		var id: String = r.id
 		var amount: int = Economy.res[id]
 		_amount_labels[id].text = HudScript.commas(amount)
 		_value_labels[id].text = "→ %s골드" % HudScript.commas(Economy.sell_value(id, amount, rate))
@@ -118,7 +120,7 @@ func _refresh(now: float) -> void:
 
 ## 1 미만 빨강, 1 기본, 1 초과 초록, 2 금색.
 static func rate_color(rate: float) -> Color:
-	if rate >= Balance.MERCHANT_JACKPOT_RATE:
+	if rate >= GameData.config_num("merchant_jackpot_rate"):
 		return RATE_JACKPOT
 	if rate > 1.0:
 		return RATE_HIGH

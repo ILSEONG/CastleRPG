@@ -26,6 +26,8 @@ func _init() -> void:
 	OS.add_logger(_errors)
 	test_game_data()
 	test_balance_tables()
+	test_game_tables()
+	test_apply_remote()
 	test_wave_stage_ends_with_boss()
 	test_wave_total_monotonic()
 	test_wave_idle_cycle()
@@ -95,7 +97,7 @@ func test_game_data() -> void:
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
 	var mp := "user://t_monsters.csv"
 	var sp := "user://t_stages.csv"
-	_write(mp, "\ufeffgold,id,scale,hp,atk,speed,range,atk_interval,aggro\r\n\r\n0.4,grunt,1,10,2,1,1,1,1\r\n\r\n")
+	_write(mp, "\ufeffgold,id,scale,hp,atk,speed,range,atk_interval,aggro\r\n\r\n0.4,grunt,1,10,2,1,1,1,1\r\n5,epic_boss,2,50,5,1,1,1,1\r\n\r\n")
 	_write(sp, "\ufeffwaves,stage,wave_size,hp_mult,atk_mult,gold_mult,idle_interval\r\n3,1,6,1,1,1,4\r\n\r\n5,2,8,2,1,3,4\r\n")
 	GameData.load_tables(mp, sp)
 	check(GameData.errors == 0 and GameData.monster("grunt").hp == 10.0 and GameData.stage(2).hp_mult == 2.0 and int(GameData.stage(2).waves) == 5, "BOM, blank lines, CRLF and reordered columns parse the same")
@@ -125,12 +127,137 @@ func _write(path: String, text: String) -> void:
 
 
 func test_balance_tables() -> void:
-	check(Balance.hero_slots(1) == 4, "keep level 1 gives 4 heroes")
-	check(Balance.hero_slots(2) == 8, "keep level 2 gives 8 heroes")
-	check(Balance.hero_slots(3) == 12, "keep level 3 gives 12 heroes")
-	check(Balance.hero_slots(99) == 12, "keep level beyond table clamps to last")
-	check(Balance.gate_hp_max(1) == 400.0, "gate hp at level 1")
-	check(Balance.gate_hp_max(2) > Balance.gate_hp_max(1), "gate hp grows with level")
+	check(GameData.hero_slots(1) == 4, "keep level 1 gives 4 heroes")
+	check(GameData.hero_slots(2) == 8, "keep level 2 gives 8 heroes")
+	check(GameData.hero_slots(3) == 12, "keep level 3 gives 12 heroes")
+	check(GameData.hero_slots(99) == 12, "keep level beyond table clamps to last")
+	check(GameData.gate_hp_max(1) == 400.0, "gate hp at level 1")
+	check(GameData.gate_hp_max(2) > GameData.gate_hp_max(1), "gate hp grows with level")
+
+
+func test_game_tables() -> void:
+	GameData.load_tables()
+	check(GameData.errors == 0, "default tables incl. heroes/resources/config load without errors")
+	# Balance에서 옮긴 값 — 이전 상수와 같다(하드코딩 기대값)
+	var heroes := GameData.heroes()
+	check(heroes.size() == 2 and heroes[0].id == "warrior" and heroes[1].id == "archer", "heroes keep file order")
+	var w := GameData.hero("warrior")
+	check(w.name == "전사" and w.hp == 400.0 and w.atk == 30.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0, "warrior row = old HERO_ROLES")
+	var a := GameData.hero("archer")
+	check(a.name == "궁수" and a.hp == 220.0 and a.atk == 20.0 and a.range == 9.0 and a.atk_interval == 1.0 and a.speed == 6.0 and a.aggro == 12.0, "archer row = old HERO_ROLES")
+	check(GameData.hero("nobody").is_empty(), "unknown hero is empty")
+	var res := GameData.resources()
+	check(res.size() == 3 and res[0].id == "wood" and res[1].id == "stone" and res[2].id == "food", "resources keep file order")
+	var st := GameData.resource("stone")
+	check(st.name == "석재" and st.building == "quarry" and st.per_min == 5.0 and st.price == 2.0, "stone row = old RESOURCES")
+	check(GameData.resource("wood").building == "lumber" and GameData.resource("food").per_min == 10.0 and GameData.resource("food").building == "farm", "wood/food rows")
+	check(GameData.resource_of_building("farm") == "food" and GameData.resource_of_building("keep") == "", "resource_of_building")
+	var nums := {"castle_hp": 1000.0, "gate_hp_per_level": 400.0, "max_live_monsters": 120.0, "countdown_sec": 3.0, "result_sec": 2.0,
+		"wave_gap_sec": 8.0, "spawn_spacing_sec": 0.5, "accum_cap_min": 720.0, "badge_min": 5.0, "merchant_jackpot_p": 0.05,
+		"merchant_jackpot_rate": 2.0, "merchant_rate_min": 0.5, "merchant_rate_max": 1.5, "merchant_rate_step": 0.1,
+		"merchant_low_high_ratio": 3.0, "kill_rate_cap": 5.0}
+	for key in nums:
+		check(GameData.config_num(key) == nums[key], "config %s = %s" % [key, nums[key]])
+	check(GameData.config_list("hero_slots") == [4.0, 8.0, 12.0], "config_list parses numbers")
+	check(GameData.config_list("hero_roster") == ["warrior", "archer"], "config_list keeps strings")
+	check(GameData.config_list("nope").is_empty() and GameData.config_num("nope") == 0.0, "unknown config key is empty / 0")
+	check(GameData.hero_role(0) == "warrior" and GameData.hero_role(1) == "archer" and GameData.hero_role(2) == "warrior" and GameData.hero_role(3) == "archer", "hero_role alternates by roster")
+	# 깨진 config 파일: 필수 키 빠짐
+	var logged := _errors.count
+	var cp := "user://t_config.csv"
+	_write(cp, "key,value\ncastle_hp,1000\nhero_slots,4|8|12\nhero_roster,warrior|archer\n")
+	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
+	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1, "config file missing keys reports one error per key")
+	_errors.count = logged
+	DirAccess.remove_absolute(cp)
+	GameData.load_tables()
+	check(GameData.errors == 0, "default tables restored after config test")
+
+
+func _payload() -> Dictionary:
+	var stages := []
+	for s in range(1, 31):
+		var r := GameData.stage(s).duplicate()
+		stages.append(r)
+	var cfg := {}
+	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS:
+		cfg[k] = String(GameData._config[k])
+	return {"version": "t", "monsters": [GameData.monster("grunt").duplicate(), GameData.monster("epic_boss").duplicate()],
+		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true), "config": cfg}
+
+
+## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
+func _remote_checks() -> int:
+	var expected_errors := 0
+	var p := _payload()
+	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts a payload equal to the tables")
+	p = _payload()
+	p.heroes[0].hp = 999.0
+	p.heroes.append({"id": "mage", "name": "마법사", "hp": 100.0, "atk": 50.0, "range": 7.0, "atk_interval": 1.5, "speed": 5.0, "aggro": 10.0})
+	p.resources[0].per_min = 20
+	p.monsters[0].gold = 7
+	p.stages = p.stages.slice(0, 10)
+	p.stages.reverse()  # 순서가 뒤섞여도 stage 번호로 정렬해 읽는다
+	p.config.castle_hp = "2000"
+	p.config.hero_slots = "5|9"
+	p.config.hero_roster = "warrior|archer|mage"
+	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
+	check(GameData.hero("warrior").hp == 999.0 and GameData.heroes().size() == 3 and GameData.hero_role(2) == "mage", "remote heroes + roster replace the table")
+	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
+	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(1) == 5 and GameData.hero_slots(9) == 9, "remote config replaces the table")
+	check(GameData.stage(10).hp_mult == 3.25 and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
+	var gs = GameStateScript.new()  # 표가 바뀐 뒤에는 새 값으로 시작한다
+	check(gs.castle_hp_max == 2000.0 and gs.hero_count() == 5, "GameState reads the replaced tables")
+	gs.free()
+	# 틀린 payload는 거부하고 위 상태를 그대로 둔다. [이름, 고치는 함수, 오류 수]
+	var bad := [
+		["monster cell not a number", 1], ["monster column missing", 1], ["stage gap", 1], ["hero name empty", 1],
+		["duplicate hero id", 1], ["resource building duplicated", 1], ["config key missing", 1], ["config value not a number", 1],
+		["roster names an unknown hero", 1], ["boss monster missing", 1], ["table is not an array", 1], ["table is empty", 1],
+		["row is not an object", 1], ["config is not an object", 1], ["two bad rows", 2],
+	]
+	for entry in bad:
+		var q := _payload()
+		_corrupt(q, entry[0])
+		var ok := GameData.apply_remote(q)
+		check(not ok and GameData.errors == entry[1], "apply_remote rejects: %s (errors %d)" % [entry[0], GameData.errors])
+		expected_errors += GameData.errors
+		check(GameData.hero("warrior").hp == 999.0 and GameData.config_num("castle_hp") == 2000.0 and GameData.heroes().size() == 3 \
+				and GameData.monster("grunt").gold == 7.0 and GameData.resource("wood").per_min == 20.0 and GameData.stage(10).hp_mult == 3.25, \
+				"tables unchanged after rejected payload: %s" % entry[0])
+	return expected_errors
+
+
+## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
+func _corrupt(q: Dictionary, what: String) -> void:
+	match what:
+		"monster cell not a number": q.monsters[0].hp = "abc"
+		"monster column missing": q.monsters[1].erase("gold")
+		"stage gap": q.stages.remove_at(3)
+		"hero name empty": q.heroes[1].name = ""
+		"duplicate hero id": q.heroes[1].id = "warrior"
+		"resource building duplicated": q.resources[1].building = "lumber"
+		"config key missing": q.config.erase("badge_min")
+		"config value not a number": q.config.castle_hp = "lots"
+		"roster names an unknown hero": q.config.hero_roster = "warrior|ghost"
+		"boss monster missing": q.monsters.remove_at(1)
+		"table is not an array": q.heroes = {}
+		"table is empty": q.resources = []
+		"row is not an object": q.heroes.append(5)
+		"config is not an object": q.config = []
+		"two bad rows":
+			q.monsters[0].atk = "x"
+			q.heroes[0].hp = null
+
+
+func test_apply_remote() -> void:
+	var logged := _errors.count
+	GameData.load_tables()
+	var expected := _remote_checks()
+	check(_errors.count - logged == expected, "rejected payloads report each error through push_error")
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.hero("warrior").hp == 400.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 2, "default tables restored after apply_remote tests")
 
 
 func test_wave_stage_ends_with_boss() -> void:
@@ -173,10 +300,10 @@ func test_gamestate_win_loop() -> void:
 	gs.on_all_monsters_dead()
 	check(gs.stage == 2, "stage incremented on clear")
 	check(gs.mode == gs.Mode.RESULT, "result after clear")
-	gs.advance(Balance.RESULT_SEC + 0.01)
+	gs.advance(GameData.config_num("result_sec") + 0.01)
 	check(gs.mode == gs.Mode.COUNTDOWN, "countdown after result")
 	check(gs.countdown_left() > 2.9, "countdown starts near 3s")
-	gs.advance(Balance.COUNTDOWN_SEC + 0.01)
+	gs.advance(GameData.config_num("countdown_sec") + 0.01)
 	check(gs.mode == gs.Mode.STAGE, "stage after countdown")
 	check(modes == [gs.Mode.STAGE, gs.Mode.RESULT, gs.Mode.COUNTDOWN, gs.Mode.STAGE], "transition order %s" % [modes])
 	gs.free()
@@ -188,13 +315,13 @@ func test_gamestate_fail_keeps_stage() -> void:
 	gs.stage_failed.connect(func(s): failed.append(s))
 	gs.stage = 5
 	gs.start_stage()
-	gs.damage_castle(Balance.CASTLE_HP + 1.0)
+	gs.damage_castle(GameData.config_num("castle_hp") + 1.0)
 	check(gs.castle_hp == 0.0, "castle hp clamps at 0")
 	check(gs.mode == gs.Mode.RESULT, "result after castle destroyed")
 	check(failed == [5], "stage_failed emitted with stage 5")
 	gs.damage_castle(50.0)
 	check(gs.mode == gs.Mode.RESULT, "extra damage after destruction ignored")
-	gs.advance(Balance.RESULT_SEC + 0.01)
+	gs.advance(GameData.config_num("result_sec") + 0.01)
 	check(gs.mode == gs.Mode.IDLE, "idle after fail")
 	check(gs.stage == 5, "stage kept on fail")
 	check(gs.castle_hp == gs.castle_hp_max, "castle healed after fail")
@@ -210,7 +337,7 @@ func test_gamestate_stop_after_stage() -> void:
 	check(not gs.stop_requested, "stop toggled off")
 	gs.stop_after_stage()
 	gs.on_all_monsters_dead()
-	gs.advance(Balance.RESULT_SEC + 0.01)
+	gs.advance(GameData.config_num("result_sec") + 0.01)
 	check(gs.mode == gs.Mode.IDLE, "idle when stop requested after clear")
 	check(gs.stage == 2, "stage still incremented")
 	gs.free()
@@ -275,12 +402,12 @@ func test_layout_tables() -> void:
 	check(Balance.interior_half(2) > Balance.interior_half(1), "interior grows at keep level 2")
 	check(Balance.interior_half(3) > Balance.interior_half(2), "interior grows at keep level 3")
 	check(Balance.interior_half(99) == Balance.interior_half(3), "interior clamps beyond table")
-	check(Balance.hero_role(0) == "warrior" and Balance.hero_role(1) == "archer", "roster starts warrior, archer")
-	check(Balance.hero_role(2) == "warrior" and Balance.hero_role(3) == "archer", "roster alternates")
-	for role in Balance.HERO_ROLES:
+	check(GameData.hero_role(0) == "warrior" and GameData.hero_role(1) == "archer", "roster starts warrior, archer")
+	check(GameData.hero_role(2) == "warrior" and GameData.hero_role(3) == "archer", "roster alternates")
+	for role in GameData.heroes():
 		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "aggro"]:
-			check(Balance.HERO_ROLES[role].has(key), "role %s has %s" % [role, key])
-	check(Balance.HERO_ROLES.archer.range > Balance.HERO_ROLES.warrior.range, "archer outranges warrior")
+			check(role.has(key), "role %s has %s" % [role.id, key])
+	check(GameData.hero("archer").range > GameData.hero("warrior").range, "archer outranges warrior")
 
 
 func test_building_layout() -> void:
@@ -372,8 +499,9 @@ func test_art_assets() -> void:
 	specs.merge(Art.HERO_MODELS)
 	specs.merge(Art.MONSTER_MODELS)
 	var visible_gear := {"warrior": ["1H_Sword", "Round_Shield"], "archer": ["2H_Crossbow"]}  # Knight, Rogue_Hooded
-	for key in Balance.HERO_ROLES:
-		check(Art.HERO_MODELS.has(key), "hero role %s has a model" % key)
+	for h in GameData.heroes():
+		var key: String = h.id
+		check(Art.HERO_MODELS.has(key),"hero role %s has a model" % key)
 	for key in ["grunt", "epic_boss"]:
 		check(Art.MONSTER_MODELS.has(key), "monster %s has a model" % key)
 	for key in specs:

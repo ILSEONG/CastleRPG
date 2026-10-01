@@ -1,28 +1,5 @@
 extends RefCounted
-## 밸런스 상수. 몬스터·스테이지 수치는 data/*.csv(GameData)에 있다.
-
-const CASTLE_HP := 1000.0
-const HERO_SLOTS := [4, 8, 12]   # index = keep_level - 1
-const MAX_LIVE_MONSTERS := 120
-const COUNTDOWN_SEC := 3.0
-const RESULT_SEC := 2.0
-const WAVE_GAP_SEC := 8.0
-const SPAWN_SPACING_SEC := 0.5
-
-# --- 경제 (개정 7) ---
-const RESOURCES := {
-	"wood": {"name": "목재", "building": "lumber", "per_min": 10, "price": 1},
-	"stone": {"name": "석재", "building": "quarry", "per_min": 5, "price": 2},
-	"food": {"name": "식량", "building": "farm", "per_min": 10, "price": 1},
-}
-const ACCUM_CAP_MIN := 720          # 축적 상한(분) = 12시간
-const BADGE_MIN := 5                # 이 분 이상 쌓이면 말풍선
-const MERCHANT_JACKPOT_P := 0.05
-const MERCHANT_JACKPOT_RATE := 2.0
-const MERCHANT_RATE_MIN := 0.5
-const MERCHANT_RATE_MAX := 1.5
-const MERCHANT_RATE_STEP := 0.1
-const MERCHANT_LOW_HIGH_RATIO := 3.0  # P(최저) : P(최고)
+## 맵·성 기하 상수. 몬스터·스테이지·영웅·자원·설정 수치는 data/*.csv(GameData)에 있다.
 
 # --- 맵·성 기하 (개정 2) ---
 const TILE := 2.0                     # 격자 타일 한 칸 (미터)
@@ -45,16 +22,6 @@ const CAMERA_SIZE_DEFAULT := 66.0     # 직교 카메라 가로 폭(미터)
 const CAMERA_SIZE_MIN := 16.0
 const CAMERA_SIZE_MAX := 150.0
 
-const HERO_ROLES := {
-	"warrior": {
-		"name": "전사", "hp": 400.0, "atk": 30.0, "range": 1.8, "atk_interval": 0.8, "speed": 6.0, "aggro": 8.0,
-	},
-	"archer": {
-		"name": "궁수", "hp": 220.0, "atk": 20.0, "range": 9.0, "atk_interval": 1.0, "speed": 6.0, "aggro": 12.0,
-	},
-}
-const HERO_ROSTER := ["warrior", "archer"]  # 영웅 i의 역할 = HERO_ROSTER[i % 2]
-
 ## 건물 배치 (플레이스홀더). cell = 최소 모서리 타일 좌표, size = 타일 수. 성 중심이 타일 경계 (0,0).
 ## 레벨 1 내부 타일 범위 -10..9. 성채 외 건물은 벽 쪽 2칸 여유(-8..7: 계단 띠 + 성문 안쪽↔계단 앞 통로)를 두고 십자 도로(-1·0)를 피한다.
 const BUILDINGS := [
@@ -74,20 +41,8 @@ const MERCHANT_CART_OFFSET := Vector3(2.0, 0, 0)
 const MERCHANT_RADIUS := 0.6
 
 
-static func gate_hp_max(level: int) -> float:
-	return 400.0 * level
-
-
-static func hero_slots(keep_level: int) -> int:
-	return HERO_SLOTS[clampi(keep_level, 1, HERO_SLOTS.size()) - 1]
-
-
 static func interior_half(keep_level: int) -> float:
 	return INTERIOR_TILES[clampi(keep_level, 1, INTERIOR_TILES.size()) - 1] * TILE / 2.0
-
-
-static func hero_role(index: int) -> String:
-	return HERO_ROSTER[index % HERO_ROSTER.size()]
 
 
 static func building(id: String) -> Dictionary:

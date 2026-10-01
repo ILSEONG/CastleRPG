@@ -2,7 +2,7 @@ extends Node
 ## 게임 모드·스테이지·성/성문 HP의 단일 진실. 오토로드 GameState.
 ## 씬 의존 없음. 테스트에서 .new()로 단독 생성 가능.
 
-const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 
 enum Mode { IDLE, STAGE, COUNTDOWN, RESULT }
 
@@ -18,9 +18,9 @@ var mode: int = Mode.IDLE
 var stage: int = 1
 var keep_level: int = 1
 var gate_level: int = 1
-var castle_hp_max: float = Balance.CASTLE_HP
-var castle_hp: float = Balance.CASTLE_HP
-var gate_hp_max: float = Balance.gate_hp_max(1)
+var castle_hp_max := 0.0  # refill()이 표에서 읽는다
+var castle_hp := 0.0
+var gate_hp_max := 0.0
 var gate_hp: Array[float] = []
 var stop_requested := false
 
@@ -37,7 +37,7 @@ func _process(delta: float) -> void:
 
 
 func hero_count() -> int:
-	return Balance.hero_slots(keep_level)
+	return GameData.hero_slots(keep_level)
 
 
 func start_stage() -> void:
@@ -86,8 +86,9 @@ func on_all_monsters_dead() -> void:
 
 ## 영웅·성문·성 HP 전부 초기화. 영웅/몬스터 노드는 refilled를 받아 스스로 리셋/제거.
 func refill() -> void:
+	castle_hp_max = GameData.config_num("castle_hp")  # 표가 바뀌었을 수 있어 매번 읽는다
 	castle_hp = castle_hp_max
-	gate_hp_max = Balance.gate_hp_max(gate_level)
+	gate_hp_max = GameData.gate_hp_max(gate_level)
 	gate_hp.resize(4)
 	gate_hp.fill(gate_hp_max)
 	castle_hp_changed.emit(castle_hp, castle_hp_max)
@@ -129,7 +130,7 @@ func _set_mode(new_mode: int) -> void:
 	mode = new_mode
 	match mode:
 		Mode.RESULT:
-			_timer = Balance.RESULT_SEC
+			_timer = GameData.config_num("result_sec")
 		Mode.COUNTDOWN:
-			_timer = Balance.COUNTDOWN_SEC
+			_timer = GameData.config_num("countdown_sec")
 	mode_changed.emit(mode)

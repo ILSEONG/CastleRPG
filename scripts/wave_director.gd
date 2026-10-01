@@ -1,7 +1,6 @@
 extends RefCounted
 ## 스폰 스케줄 생성. 씬 의존 없음.
 
-const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 
 const MODE_IDLE := 0
@@ -22,8 +21,8 @@ static func build(stage: int, mode: int) -> Array:
 	for w in int(st.waves):
 		var size := int(st.wave_size)
 		for i in size:
-			events.append({"time": t + i * Balance.SPAWN_SPACING_SEC, "kind": "grunt", "side": i % 4})
-		t += size * Balance.SPAWN_SPACING_SEC + Balance.WAVE_GAP_SEC
+			events.append({"time": t + i * GameData.config_num("spawn_spacing_sec"), "kind": "grunt", "side": i % 4})
+		t += size * GameData.config_num("spawn_spacing_sec") + GameData.config_num("wave_gap_sec")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = stage
 	events.append({"time": t, "kind": "epic_boss", "side": rng.randi_range(0, 3)})

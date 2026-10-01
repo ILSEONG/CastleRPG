@@ -2,7 +2,7 @@ extends Node
 ## 골드·자원·마지막 수집 시각·건물 레벨의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
 ## 시간은 인자 now(유닉스 초)로 받는다 — 테스트에서 .new()로 단독 생성 가능(트리에 안 넣으면 _ready 안 돎).
 
-const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 
 const SAVE_VERSION := 1
 const SAVE_INTERVAL := 10.0
@@ -22,14 +22,14 @@ var _save_cd := SAVE_INTERVAL
 # --- 순수 규칙 ---
 
 static func rate_per_min(res_id: String, level: int) -> int:
-	return int(Balance.RESOURCES[res_id].per_min) * level
+	return int(GameData.resource(res_id).per_min) * level
 
 
 ## 쌓인 양 = floor(min(경과, 상한)/60) × 분당. 경과가 음수면 0.
 static func pending_amount(res_id: String, level: int, elapsed_sec: float) -> int:
 	if elapsed_sec <= 0.0:
 		return 0
-	return floori(minf(elapsed_sec, Balance.ACCUM_CAP_MIN * 60.0) / 60.0) * rate_per_min(res_id, level)
+	return floori(minf(elapsed_sec, GameData.config_num("accum_cap_min") * 60.0) / 60.0) * rate_per_min(res_id, level)
 
 
 static func hour_index(unix: float) -> int:
@@ -42,12 +42,12 @@ static func merchant_rate(hour: int) -> float:
 	var s: int = hour * 0x1E3779B97F4A7C15 + 0x2545F4914F6CDD1D
 	s ^= s >> 29
 	rng.seed = s
-	if rng.randf() < Balance.MERCHANT_JACKPOT_P:
-		return Balance.MERCHANT_JACKPOT_RATE
-	var per_unit := roundi(1.0 / Balance.MERCHANT_RATE_STEP)  # 10
-	var lo := roundi(Balance.MERCHANT_RATE_MIN * per_unit)
-	var n := roundi((Balance.MERCHANT_RATE_MAX - Balance.MERCHANT_RATE_MIN) / Balance.MERCHANT_RATE_STEP) + 1  # 11단계
-	var low_w := 1.0 / Balance.MERCHANT_LOW_HIGH_RATIO
+	if rng.randf() < GameData.config_num("merchant_jackpot_p"):
+		return GameData.config_num("merchant_jackpot_rate")
+	var per_unit := roundi(1.0 / GameData.config_num("merchant_rate_step"))  # 10
+	var lo := roundi(GameData.config_num("merchant_rate_min") * per_unit)
+	var n := roundi((GameData.config_num("merchant_rate_max") - GameData.config_num("merchant_rate_min")) / GameData.config_num("merchant_rate_step")) + 1  # 11단계
+	var low_w := 1.0 / GameData.config_num("merchant_low_high_ratio")
 	var total := 0.0
 	var ws: Array[float] = []
 	for i in n:
@@ -63,15 +63,12 @@ static func merchant_rate(hour: int) -> float:
 
 ## floor(수량 × 단가 × 배율). 배율은 0.1 단위 정수로 바꿔 정수 연산(부동소수 내림 오차 없음).
 static func sell_value(res_id: String, amount: int, rate: float) -> int:
-	return amount * int(Balance.RESOURCES[res_id].price) * roundi(rate * 10.0) / 10
+	return amount * int(GameData.resource(res_id).price) * roundi(rate * 10.0) / 10
 
 
 ## 자원 건물이 아니면 "".
 static func res_of(building_id: String) -> String:
-	for id in Balance.RESOURCES:
-		if Balance.RESOURCES[id].building == building_id:
-			return id
-	return ""
+	return GameData.resource_of_building(building_id)
 
 
 # --- 상태 ---
@@ -99,8 +96,9 @@ func reset(now: float) -> void:
 	res = {}
 	last_collect = {}
 	levels = {}
-	for id in Balance.RESOURCES:
-		var b: String = Balance.RESOURCES[id].building
+	for r in GameData.resources():
+		var id: String = r.id
+		var b: String = r.building
 		res[id] = 0
 		last_collect[b] = now
 		levels[b] = 1
@@ -116,7 +114,7 @@ func pending(building_id: String, now: float) -> int:
 
 
 func show_badge(building_id: String, now: float) -> bool:
-	return now - float(last_collect.get(building_id, now)) >= Balance.BADGE_MIN * 60.0 and pending(building_id, now) > 0
+	return now - float(last_collect.get(building_id, now)) >= GameData.config_num("badge_min") * 60.0 and pending(building_id, now) > 0
 
 
 ## 쌓인 양을 보유량에 더하고 마지막 수집 시각을 옮긴다(§2). 수집량을 돌려준다.
@@ -130,7 +128,7 @@ func collect(building_id: String, now: float) -> int:
 		return 0
 	var id := res_of(building_id)
 	var elapsed := now - float(last_collect[building_id])
-	if elapsed >= Balance.ACCUM_CAP_MIN * 60.0:
+	if elapsed >= GameData.config_num("accum_cap_min") * 60.0:
 		last_collect[building_id] = now
 	else:
 		last_collect[building_id] = float(last_collect[building_id]) + floori(elapsed / 60.0) * 60.0
@@ -160,8 +158,8 @@ func sell(res_id: String, now: float) -> int:
 
 func sell_all(now: float) -> int:
 	var total := 0
-	for id in Balance.RESOURCES:
-		total += sell(id, now)
+	for r in GameData.resources():
+		total += sell(r.id, now)
 	return total
 
 
@@ -210,9 +208,10 @@ func _apply(data) -> bool:
 	var r := {}
 	var lc := {}
 	var lv := {}
-	for id in Balance.RESOURCES:
-		var b: String = Balance.RESOURCES[id].building
-		var rs = data.get("res")
+	for r_row in GameData.resources():
+		var id: String = r_row.id
+		var b: String = r_row.building
+		var rs =data.get("res")
 		var ls = data.get("last_collect")
 		var vs = data.get("levels")
 		if not (rs is Dictionary and ls is Dictionary and vs is Dictionary):

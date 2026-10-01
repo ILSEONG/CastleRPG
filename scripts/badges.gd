@@ -4,6 +4,7 @@ extends Node2D
 ## 건물 이름표(buildings.gd)가 높이+1.0m에 있다 — 말풍선 꼬리 끝은 그 위(높이+ANCHOR_UP).
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
@@ -26,8 +27,8 @@ var _t := 0.0
 
 
 func _ready() -> void:
-	for res_id in Balance.RESOURCES:
-		var b := Balance.building(Balance.RESOURCES[res_id].building)
+	for r in GameData.resources():
+		var b := Balance.building(r.building)
 		var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
 		_anchors[b.id] = center + Vector3(0, TownKit.building(b.id).get_aabb().end.y, 0)
 
