@@ -15,6 +15,7 @@ export interface AppOptions {
   jwtSecret: string
   allowTestHooks?: boolean
   corsOrigins?: string[] // 비면 *
+  random?: () => number // [0, 1) 난수(모집). 기본은 암호학적 난수(R.cryptoRandom) — 테스트만 주입한다
 }
 
 const TOKEN_TTL = 30 * 86400
@@ -56,6 +57,8 @@ interface Player {
   kill_seq: number
   res: Record<string, number>
   buildings: Record<string, { level: number; last_collect: number }>
+  heroes: Record<string, number> // 영웅 id → copies
+  deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
 }
 
 // 한 번의 원자적 변경. version이 읽은 값과 같을 때만 전부 적용된다.
@@ -67,6 +70,8 @@ interface Change {
   killSeq?: number // 새 처치 보고 번호
   res?: Record<string, number> // 자원 증감
   buildings?: Record<string, number> // 건물 → 새 last_collect
+  heroes?: Record<string, number> // 영웅 → copies 증가
+  deploy?: (string | null)[] // 새 배치
   log?: { kind: string; detail: unknown }
 }
 
@@ -79,20 +84,24 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq,
+const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8))
-    from player_buildings where player_id = s.player_id), '{}'::json) as buildings
+    from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
+  coalesce((select json_object_agg(hero_id, copies) from player_heroes where player_id = s.player_id), '{}'::json) as heroes
   from player_state s where s.player_id = $1`
 
 // 플레이어를 찾거나 만들고(last_seen 갱신), 빠진 상태·자원·건물 행을 채운다 — 한 문장이라 중간에 끊겨도 반쪽 계정이 없다.
+// 새 상태 행이면 시작 영웅($3, JSON 배열)을 copies 1로 주고 그 순서로 배치한다.
 const ENSURE_SQL = `with p as (
     insert into players (device_id, created_at, last_seen) values ($1, to_timestamp($2::float8), to_timestamp($2::float8))
     on conflict (device_id) do update set last_seen = excluded.last_seen returning id),
-  s as (insert into player_state (player_id, last_kill_report, last_stage_clear)
-    select id, to_timestamp($2::float8), to_timestamp($2::float8) from p on conflict do nothing),
+  s as (insert into player_state (player_id, last_kill_report, last_stage_clear, deploy)
+    select id, to_timestamp($2::float8), to_timestamp($2::float8), $3::jsonb from p on conflict do nothing returning player_id),
+  h as (insert into player_heroes (player_id, hero_id) select s.player_id, x from s, jsonb_array_elements_text($3::jsonb) as x
+    on conflict do nothing),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
   b as (insert into player_buildings (player_id, building, last_collect) select p.id, resources.building, to_timestamp($2::float8)
     from p, resources on conflict do nothing)
@@ -112,6 +121,7 @@ export function createApp(opts: AppOptions) {
   const query = opts.query
   const clock = opts.now ?? (() => Date.now() / 1000)
   const secret = opts.jwtSecret
+  const random = opts.random ?? R.cryptoRandom
   const app = new Hono()
 
   app.use('*', cors({
@@ -158,10 +168,13 @@ export function createApp(opts: AppOptions) {
         await query(ENSURE_ROWS_SQL, [id, now]) // 나중에 추가된 자원 — 행을 채우고 다시 읽는다
         continue
       }
+      const heroes: Record<string, number> = {}
+      for (const [k, v] of Object.entries(json(r.heroes) as Record<string, unknown>)) heroes[k] = Number(v)
+      const deploy = json(r.deploy)
       return {
         gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
-        kill_seq: Number(r.kill_seq), res, buildings,
+        kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
       }
     }
     throw new ApiError(500, 'internal', 'player rows missing')
@@ -176,9 +189,20 @@ export function createApp(opts: AppOptions) {
       const b = p.buildings[r.building]
       buildings[r.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
     }
+    // 영웅: 표에 있는 것만. 배치: 길이 = 슬롯 수, 보유하지 않은(표에서 빠진) 영웅은 null
+    const known = new Set(game.heroes.map((h) => String(h.id)))
+    const heroes: Record<string, number> = {}
+    for (const [id, n] of Object.entries(p.heroes)) if (known.has(id)) heroes[id] = n
+    const deploy = Array.from({ length: R.heroSlots(game.config, p.keep_level) }, (_, i) => {
+      const id = p.deploy[i]
+      return typeof id === 'string' && Object.hasOwn(heroes, id) ? id : null
+    })
     return {
       server_now: now,
-      player: { gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level, kill_seq: p.kill_seq, buildings },
+      player: {
+        gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
+        kill_seq: p.kill_seq, buildings, heroes, deploy,
+      },
       merchant: { rate: R.merchantRate(R.hourIndex(now), game.config), next_change: R.nextChange(now) },
     }
   }
@@ -197,7 +221,14 @@ export function createApp(opts: AppOptions) {
     if (ch.lastKillReport !== undefined) sets.push(`last_kill_report = to_timestamp(${p(ch.lastKillReport)}::float8)`)
     if (ch.lastStageClear !== undefined) sets.push(`last_stage_clear = to_timestamp(${p(ch.lastStageClear)}::float8)`)
     if (ch.killSeq !== undefined) sets.push(`kill_seq = ${p(ch.killSeq)}::int`)
+    if (ch.deploy !== undefined) sets.push(`deploy = ${p(JSON.stringify(ch.deploy))}::jsonb`)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2 returning player_id)`]
+    if (ch.heroes && Object.keys(ch.heroes).length) {
+      // from s: version 가드가 실패하면(s가 비면) 영웅도 안 늘어난다
+      ctes.push(`h as (insert into player_heroes (player_id, hero_id, copies)
+        select s.player_id, x.key, x.value::int from s, jsonb_each_text(${p(JSON.stringify(ch.heroes))}::jsonb) as x
+        on conflict (player_id, hero_id) do update set copies = player_heroes.copies + excluded.copies returning 1)`)
+    }
     Object.entries(ch.res ?? {}).forEach(([res, d], i) => {
       ctes.push(`r${i} as (update player_resources set amount = amount + ${p(bigint(d))}::bigint
         where player_id = (select player_id from s) and res = ${p(res)} returning 1)`)
@@ -222,6 +253,8 @@ export function createApp(opts: AppOptions) {
     if (ch.killSeq !== undefined) pl.kill_seq = ch.killSeq
     for (const [k, d] of Object.entries(ch.res ?? {})) pl.res[k] = (pl.res[k] ?? 0) + d
     for (const [k, t] of Object.entries(ch.buildings ?? {})) pl.buildings[k].last_collect = t
+    for (const [k, d] of Object.entries(ch.heroes ?? {})) pl.heroes[k] = (pl.heroes[k] ?? 0) + d
+    if (ch.deploy !== undefined) pl.deploy = ch.deploy
     pl.version += 1
   }
 
@@ -295,7 +328,9 @@ export function createApp(opts: AppOptions) {
       throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
     }
     const now = clock()
-    const [r] = await query(ENSURE_SQL, [device, now])
+    const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
+    const starters = String(cfg?.value ?? '').split('|').map((x) => x.trim()).filter(Boolean)
+    const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(starters)])
     const iat = Math.floor(now)
     const token = await sign({ sub: r.id, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
     return c.json({ token, player_id: r.id })
@@ -394,6 +429,48 @@ export function createApp(opts: AppOptions) {
       const sec = now - p.last_stage_clear
       if (sec < R.minClearSec(R.stageRow(stage, g.stages), R.cfgNum(g.config, 'kill_rate_cap'))) return { extra: { cleared: false } }
       return { change: { stage: stage + 1, lastStageClear: now, log: { kind: 'stage_clear', detail: { stage, sec } } }, extra: { cleared: true } }
+    })
+  })
+
+  // 모집(스펙 §3.6·§3.7): 비용(정수 골드)은 floor(gold_tenths / 10)로 판정하고 × 10을 뺀다(소수 부분은 남는다).
+  // 골드 차감·영웅 copies·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
+  app.post('/v1/gacha', auth, async (c) => {
+    const count = (await body(c)).count
+    if (count !== 1 && count !== 10) throw new ApiError(400, 'bad_request', "'count' must be 1 or 10")
+    return mutate(c, (p, g) => {
+      const cost = R.cfgNum(g.config, count === 10 ? 'gacha_cost_10' : 'gacha_cost_1')
+      if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `recruiting ${count} costs ${cost} gold`)
+      const owned: Record<string, number> = { ...p.heroes }
+      const add: Record<string, number> = {}
+      const results = R.rollGacha(count, g.heroes, g.config, random).map(({ id, grade }) => {
+        const isNew = !(owned[id] > 0)
+        owned[id] = (owned[id] ?? 0) + 1
+        add[id] = (add[id] ?? 0) + 1
+        return { hero_id: id, grade, new: isNew, copies: owned[id] }
+      })
+      return {
+        change: { goldTenths: -cost * 10, heroes: add, log: { kind: 'gacha', detail: { count, cost, gold_tenths: -cost * 10, results } } },
+        extra: { results },
+      }
+    })
+  })
+
+  // 배치: 길이 = 슬롯 수, 보유한 영웅만, 중복 금지(null은 여러 개 가능). 아니면 400.
+  app.post('/v1/deploy', auth, async (c) => {
+    const d = (await body(c)).deploy
+    if (!Array.isArray(d) || d.some((x) => x !== null && (typeof x !== 'string' || x === ''))) {
+      throw new ApiError(400, 'bad_deploy', "'deploy' must be an array of hero ids or null")
+    }
+    return mutate(c, (p, g) => {
+      const slots = R.heroSlots(g.config, p.keep_level)
+      if (d.length !== slots) throw new ApiError(400, 'bad_deploy', `'deploy' must have ${slots} slots`)
+      const ids = d.filter((x): x is string => x !== null)
+      if (new Set(ids).size !== ids.length) throw new ApiError(400, 'bad_deploy', 'a hero can be deployed only once')
+      const known = new Set(g.heroes.map((h) => String(h.id)))
+      for (const id of ids) {
+        if (!known.has(id) || !Object.hasOwn(p.heroes, id)) throw new ApiError(400, 'bad_deploy', `hero '${id}' is not owned`)
+      }
+      return { change: { deploy: d } }
     })
   })
 

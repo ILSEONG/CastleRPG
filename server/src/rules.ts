@@ -1,6 +1,10 @@
 // 경제 규칙(순수 함수, 시간은 인자 — 유닉스 초). 앱 economy.gd(개정 7)·game_data.gd(개정 8)와 같은 규칙.
+import { randomBytes } from 'node:crypto'
 
 export type Config = Record<string, string>
+
+// 48비트 암호학적 난수 → [0, 1). 모집의 기본 난수.
+export const cryptoRandom = () => randomBytes(6).readUIntBE(0, 6) / 2 ** 48
 
 export interface StageRow {
   stage: number
@@ -127,6 +131,45 @@ export function killBucket(lastReport: number, now: number, ratePerSec: number, 
 
 // 스테이지 최소 클리어 시간(초) = 웨이브 수 × 웨이브 크기 / 초당 처치 상한. 이보다 빠른 클리어는 받지 않는다.
 export const minClearSec = (row: StageRow, ratePerSec: number) => (row.waves * row.wave_size) / ratePerSec
+
+// --- 영웅 (개정 10) ---
+
+// 배치 슬롯 수 = hero_slots 목록[keep_level − 1](표 끝을 넘으면 마지막 값). 앱 GameData.hero_slots와 같다.
+export function heroSlots(config: Config, keepLevel: number): number {
+  const list = String(config.hero_slots ?? '').split('|').map((s) => Number(s.trim()))
+  if (list.length === 0 || list.some((n) => !Number.isInteger(n) || n < 0)) throw new Error("config 'hero_slots' is missing or not a list of integers")
+  return list[Math.min(Math.max(keepLevel, 1), list.length) - 1]
+}
+
+// 모집(스펙 §3.6): 장마다 등급(SSR rate_ssr, SR rate_sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
+// 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand는 [0, 1) 난수(서버는 암호학적 난수).
+// 앱 Economy.roll_gacha와 같은 규칙.
+export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number) {
+  const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
+  for (const h of heroes) pools[h.grade]?.push(h.id)
+  const pick = (grade: string) => {
+    const pool = pools[grade]
+    if (pool.length === 0) throw new Error(`no ${grade} heroes to recruit`)
+    return { id: pool[Math.floor(rand() * pool.length)], grade }
+  }
+  const ssr = cfgNum(config, 'gacha_rate_ssr')
+  const sr = cfgNum(config, 'gacha_rate_sr')
+  const out: { id: string; grade: string }[] = []
+  for (let i = 0; i < count; i++) {
+    const r = rand()
+    out.push(pick(r < ssr ? 'SSR' : r < ssr + sr ? 'SR' : 'R'))
+  }
+  if (count === 10) {
+    let need = cfgNum(config, 'gacha_10_min_sr') - out.filter((x) => x.grade !== 'R').length
+    for (let i = out.length - 1; i >= 0 && need > 0; i--) {
+      if (out[i].grade === 'R') {
+        out[i] = pick('SR')
+        need--
+      }
+    }
+  }
+  return out
+}
 
 // 상한을 넘는 처치는 버린다 — 싼 몬스터부터 인정하고 비싼 몬스터를 먼저 버린다(부풀린 보스 처치가 먼저 잘린다).
 export function clampKills(kills: { id: string; count: number; gold: number }[], cap: number) {

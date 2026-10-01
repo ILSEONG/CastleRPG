@@ -19,7 +19,7 @@ export interface Setup {
 
 export const randomDevice = () => `test-${randomBytes(12).toString('hex')}`
 
-export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string } = {}): Promise<Setup> {
+export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)
   await seed(db)
@@ -29,6 +29,7 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
     now: () => clock.t,
     jwtSecret: o.secret ?? 'test-secret-0123456789abcdef0123456789',
     allowTestHooks: o.allowTestHooks ?? true,
+    random: o.random,
     ...extra,
   })
   const app = makeApp()

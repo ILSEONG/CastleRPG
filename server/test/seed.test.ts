@@ -73,6 +73,55 @@ test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroe
   await old.close()
 })
 
+test('마이그레이션 003~005: 001·002만 적용된 DB에서 올리면 gold × 10, 기존 플레이어는 시작 영웅(copies 1)과 그 순서의 배치를 받는다', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  for (const f of ['001_init.sql', '002_kill_seq_stage_clear.sql']) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, dir)
+    const ids: string[] = []
+    for (const dev of ['mig-005-device-0001', 'mig-005-device-0002']) {
+      const [p] = await d.query('insert into players (device_id) values ($1) returning id', [dev])
+      await d.query('insert into player_state (player_id, gold) values ($1, 7)', [p.id])
+      ids.push(p.id)
+    }
+    const applied = await migrate(d)
+    assert.deepEqual(applied.slice(0, 3), ['003_gold_tenths.sql', '004_heroes.sql', '005_player_heroes.sql'])
+    for (const id of ids) {
+      const [s] = await d.query('select gold_tenths, deploy from player_state where player_id = $1', [id])
+      assert.deepEqual([Number(s.gold_tenths), s.deploy], [70, ['hans', 'ella', 'dorik', 'nina']]) // 시드 전: 스펙 기본 시작 영웅
+      const h = await d.query('select hero_id, copies from player_heroes where player_id = $1 order by hero_id', [id])
+      assert.deepEqual(h.map((r) => `${r.hero_id}:${r.copies}`), ['dorik:1', 'ella:1', 'hans:1', 'nina:1'])
+    }
+    await assert.rejects(d.query("insert into player_heroes (player_id, hero_id, copies) values ($1, 'jack', 0)", [ids[0]]))
+    await seed(d)
+    assert.equal((await d.query('select count(*)::int as n from heroes'))[0].n, 22)
+  } finally {
+    await d.close()
+  }
+})
+
+test('마이그레이션 005: game_config에 starter_heroes가 있으면 그 목록·순서를 쓴다', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  for (const f of ALL_MIGRATIONS.filter((f) => f < '005')) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, dir)
+    await d.query("insert into game_config (key, value) values ('starter_heroes', 'nina| jack')")
+    const [p] = await d.query("insert into players (device_id) values ('mig-005-device-0003') returning id")
+    await d.query('insert into player_state (player_id) values ($1)', [p.id])
+    assert.deepEqual(await migrate(d), ALL_MIGRATIONS.filter((f) => f >= '005'))
+    const [s] = await d.query('select deploy from player_state where player_id = $1', [p.id])
+    assert.deepEqual(s.deploy, ['nina', 'jack'])
+    const h = await d.query('select hero_id from player_heroes where player_id = $1 order by hero_id', [p.id])
+    assert.deepEqual(h.map((r) => r.hero_id), ['jack', 'nina'])
+  } finally {
+    await d.close()
+  }
+})
+
 test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async () => {
   for (let i = 0; i < 2; i++) {
     const r = await seed(db)

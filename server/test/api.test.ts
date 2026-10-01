@@ -72,12 +72,12 @@ test('JWT: 없음·위조·다른 비밀·만료·이상한 sub는 401', async (
   const exp = await S.req('GET', '/v1/player', { token })
   assert.equal(exp.status, 401)
   assert.equal(exp.json.error, 'token_expired')
-  for (const p of ['/v1/collect', '/v1/sell', '/v1/kills', '/v1/stage/clear', '/v1/test/age']) {
+  for (const p of ['/v1/collect', '/v1/sell', '/v1/kills', '/v1/stage/clear', '/v1/gacha', '/v1/deploy', '/v1/test/age']) {
     assert.equal((await S.req('POST', p, { body: {} })).status, 401, p)
   }
 })
 
-test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,keep_level,gate_level,buildings}, merchant{rate,next_change}', async () => {
+test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,keep_level,gate_level,buildings,heroes,deploy}, merchant{rate,next_change}', async () => {
   S.clock.t = T0 + 0.25
   const { token } = await S.login()
   const r = await S.req('GET', '/v1/player', { token })
@@ -92,6 +92,8 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         quarry: { level: 1, last_collect: T0 + 0.25 },
         farm: { level: 1, last_collect: T0 + 0.25 },
       },
+      heroes: { hans: 1, ella: 1, dorik: 1, nina: 1 },
+      deploy: ['hans', 'ella', 'dorik', 'nina'],
     },
     merchant: { rate: R.merchantRate(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })

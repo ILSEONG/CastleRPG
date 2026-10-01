@@ -94,6 +94,32 @@ test('같은 seq 처치 보고 2건이 겹쳐도(재전송이 원래 요청과 �
   }
 })
 
+test('동시 모집 2건(골드는 1회분): 둘 다 같은 version을 읽어도 한 번만 뽑힌다 — 하나 200, 하나 409, 영웅 +1, 골드 0, 로그 1', async () => {
+  const b = barrier()
+  const S = await setup({ wrapQuery: b.wrap })
+  try {
+    S.clock.t = T0
+    const { token, id } = await S.login()
+    await S.db.query('update player_state set gold_tenths = 3000 where player_id = $1', [id])
+    b.arm()
+    const [r1, r2] = await Promise.all([
+      S.req('POST', '/v1/gacha', { token, body: { count: 1 } }),
+      S.req('POST', '/v1/gacha', { token, body: { count: 1 } }),
+    ])
+    assert.equal(b.arrived(), 2, 'both requests read the same gold before either wrote')
+    assert.deepEqual([r1.status, r2.status].sort(), [200, 409])
+    assert.equal((r1.status === 409 ? r1 : r2).json.error, 'not_enough_gold')
+    const [s] = await S.db.query('select gold_tenths from player_state where player_id = $1', [id])
+    assert.equal(Number(s.gold_tenths), 0)
+    const [h] = await S.db.query('select coalesce(sum(copies), 0)::int as n from player_heroes where player_id = $1', [id])
+    assert.equal(h.n, 4 + 1)
+    const n = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'gacha'", [id])
+    assert.equal(n[0].n, 1)
+  } finally {
+    await S.close()
+  }
+})
+
 test('쓰기 직전마다 다른 쓰기가 끼어들면 재시도 3회 후 409, 아무것도 안 바뀜', async () => {
   let interfere = false
   let commits = 0

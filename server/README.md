@@ -72,7 +72,8 @@ npm --prefix server test
   - 게스트 로그인 멱등
   - JWT 401
   - 수집 규칙
-  - 동시 수집·판매·같은 seq 처치
+  - 동시 수집·판매·같은 seq 처치·모집
+  - 시작 영웅, 모집(비용·409·결과·10연차 보장·확률 표본), 배치 검증, 마이그레이션 003~005
   - 409
   - 시세 분포
   - 처치 골드·토큰 버킷(같은 순간 50연타)·처치 멱등(seq)
@@ -99,13 +100,16 @@ npm --prefix server test
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
 | `POST /v1/kills {seq, stage, kills}` | Bearer | 플레이어 응답 + `gold_gained` |
 | `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 + `cleared` |
+| `POST /v1/gacha {count}` | Bearer | 플레이어 응답 + `results: [{hero_id, grade, new, copies}]`. count는 1 또는 10. 골드가 모자라면 409 `not_enough_gold` |
+| `POST /v1/deploy {deploy}` | Bearer | 플레이어 응답. deploy = [영웅 id 또는 null, …], 길이 = 슬롯 수, 보유한 영웅만, 중복 금지. 아니면 400 `bad_deploy` |
 | `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수 |
 
 플레이어 응답은 다음과 같다.
 
 ```
-{server_now, player: {gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq,
- buildings: {lumber: {level, last_collect}, quarry: ..., farm: ...}}, merchant: {rate, next_change}}
+{server_now, player: {gold_tenths, gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq,
+ buildings: {lumber: {level, last_collect}, quarry: ..., farm: ...}, heroes: {hero_id: copies}, deploy: [hero_id | null, ...]},
+ merchant: {rate, next_change}}
 ```
 
 - 입력 상한(넘으면 400): `stage` 1..1,000,000 정수, 처치 수(몬스터 한 종류) 0..10,000 정수, `seq` 0..2147483647 정수.
@@ -125,6 +129,11 @@ npm --prefix server test
   - 아니면(중복·재전송·앞지름·너무 빠름) 200 + 상태 그대로 + `cleared: false`다. 앱은 `player.stage`를 진실로 쓴다.
   - 앱은 `cleared: false`를 다시 보내지 않는다. 보낸 클리어가 전부 답을 받았는데 앱 스테이지가 서버와 다르면, 다음 스테이지 경계(결과가 끝날 때·스테이지 시작)에서 서버 값으로 맞춘다. 스테이지 도중에는 바꾸지 않는다.
 - 시세는 시간 칸(`floor(유닉스 초 / 3600)`)을 시드로 한 mulberry32로 결정적으로 계산한다. 분포 값은 `game_config`에서 읽는다.
+- 영웅(개정 10)
+  - 새 플레이어는 `starter_heroes`를 copies 1로 받고, 배치는 그 순서다. 마이그레이션 005는 기존 플레이어에게 같은 것을 채운다.
+  - 응답 `deploy`의 길이는 슬롯 수(`hero_slots`[keep_level − 1])다. 표에서 빠진 영웅은 `heroes`·`deploy`에서 거른다.
+  - 모집: 가능 조건은 `floor(gold_tenths / 10) ≥ 비용`이고 `비용 × 10`을 뺀다. 장마다 등급(SSR `gacha_rate_ssr`, SR `gacha_rate_sr`, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다. 10연차에 SR 이상이 `gacha_10_min_sr`장보다 적으면 뒤에서부터 R을 SR로 바꾼다. 난수는 암호학적 난수(`randomBytes`)다.
+  - 골드 차감·copies 증가·`economy_log`(`gacha`)는 version 가드 한 문장이다. 같은 순간 두 번 보내도 골드가 1회분이면 하나는 409다. 앱은 모집을 다시 보내지 않는다.
 
 ## 동시성
 
