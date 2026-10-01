@@ -576,6 +576,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	heroes_win.show_detail("hans")  # 배치되지 않은 영웅, 빈 슬롯 없음
 	_check(heroes_win.deploy_button.text == "빈 슬롯 없음" and heroes_win.deploy_button.disabled, "(x) [배치] with no empty slot is off", "text=%s" % heroes_win.deploy_button.text)
 	await _guard_wait()
+	await _figures(heroes_win)
 	await _tap(heroes_win.prev_button.get_parent().get_child(1).get_global_rect().get_center())  # [닫기]
 	_check(heroes_win.is_open() and not heroes_win.is_showing_detail() and heroes_win.is_guarded() and heroes_win.hero_cards.arteon.level == 5,
 		"(x) [닫기] returns to the list (guarded); the card shows Lv 5", "")
@@ -973,3 +974,37 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.build = {}
 	Economy.changed.emit()
 	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
+
+
+## (x2) 개정 14 §2 영웅 피규어(헤드리스 — 렌더 없이 자리표시): main에 Portraits 하나, 상세 큰 카드는 보일 때만 실시간 미리보기를 걸고
+##      (목록으로 내리면 꺼짐) 가로로 끌면 모델이 돈다 — 이전·다음 스와이프로 새지 않는다. 목록·슬롯 카드는 피규어 칸에 portrait를 그린다.
+##      상세(hans)가 보이고 보호 시간이 끝난 상태에서 불러, 같은 상태(hans 상세, 보호 끝)로 돌려놓는다.
+func _figures(heroes_win) -> void:
+	var P = preload("res://scripts/portraits.gd")
+	var p = P.current
+	var mine: Array = _main.get_children().filter(func(c): return c.get_script() == P)
+	_check(mine.size() == 1 and p == mine[0] and not p.can_render and p.queue.is_empty(), "(x2) main has one Portraits node; headless renders nothing (placeholders only)", "")
+	_check(p.live_key == "hero:hans" and heroes_win.big_card.figure_texture() == P.placeholder("hero:hans"),
+		"(x2) the detail's big card runs the live preview of its hero (headless: the placeholder)", "live=%s" % p.live_key)
+	var c: Vector2 = heroes_win.big_card.get_global_rect().get_center()
+	_mouse_button(c, true)
+	for i in 5:
+		_mouse_motion(c + Vector2(30, 0) * (i + 1), Vector2(30, 0))
+	_mouse_button(c + Vector2(150, 0), false)
+	await _frames(2)
+	_check(heroes_win.detail_id == "hans" and is_equal_approx(p.yaw, 150.0 * P.TURN_DEG_PER_PX),
+		"(x2) a sideways drag on the big card turns the model instead of swiping to the next hero", "detail=%s yaw=%.1f" % [heroes_win.detail_id, p.yaw])
+	heroes_win.step(1)
+	_check(heroes_win.detail_id != "hans" and p.live_key == "hero:" + heroes_win.detail_id and p.yaw == 0.0, "(x2) [다음] moves the live preview to the next hero, facing front", "live=%s" % p.live_key)
+	heroes_win.step(-1)
+	heroes_win._show_list(false)
+	var slot = heroes_win.slot_cards[0]
+	_check(p.live_key == "" and slot.figure_texture() == P.portrait("hero:" + slot.hero_id) and slot.figure_rect().size.x > 50.0,
+		"(x2) back to the list the live preview stops; slot cards draw the figure", "live=%s" % p.live_key)
+	heroes_win.show_detail("hans")
+	_check(p.live_key == "hero:hans", "(x2) reopening the detail resumes the live preview", "live=%s" % p.live_key)
+	heroes_win.close()
+	_check(p.live_key == "", "(x2) closing the window stops the live preview", "live=%s" % p.live_key)
+	heroes_win.open()
+	heroes_win.show_detail("hans")
+	await _guard_wait()
