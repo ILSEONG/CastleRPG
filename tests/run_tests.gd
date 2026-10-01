@@ -102,9 +102,7 @@ func test_game_data() -> void:
 	check(GameData.kill_gold("grunt", 1) == 1, "kill_gold has a minimum of 1")
 	# 깨진 표: 숫자 아님, 빠진 열, stage 건너뜀. 오류 수를 세고 로거 몫은 뺀다
 	var logged := _errors.count
-	_write(mp, "id,hp,atk,speed,range,atk_interval,aggro,scale
-grunt,60,1,1,1,1,1,1
-")
+	_write(mp, "id,hp,atk,speed,range,atk_interval,aggro,scale\ngrunt,60,1,1,1,1,1,1\n")
 	GameData.load_tables(mp, sp)
 	check(GameData.errors == 1, "missing column reports one error")
 	_write(mp, "id,hp,atk,speed,range,atk_interval,aggro,scale,gold\ngrunt,abc,1,1,1,1,1,1,1\n")
