@@ -378,8 +378,11 @@ func _recruit_and_heroes(rig) -> void:
 	var big: Rect2 = hud._button.get_global_rect()
 	_check(tabs.buttons.keys() == ["castle", "hero", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
 		"(t) the tab bar has 성·영웅·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
-	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < bar_rect.position.y and big.end.y > bar_rect.position.y - 20.0,
-		"(t) the tab bar is the bottom 104 px and the big button sits right above it", "bar=%s button=%s" % [bar_rect, big])
+	var title: Rect2 = hud._stage_label.get_global_rect()
+	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
+		and big.end.x > 680.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
+		"(t) the tab bar is the bottom 104 px; the stage button sits at the top, right of the stage title on the same row (64 px tall)",
+		"bar=%s button=%s title=%s" % [bar_rect, big, title])
 	var cam_pos: Vector3 = rig.position
 	var dp: Vector2 = recruit.dialog.get_global_rect().position + Vector2(300, 20)
 	_mouse_button(dp, true)
@@ -586,6 +589,68 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	recruit._on_gacha_done(late)
 	_check(recruit.is_showing_results() and recruit.cards[0].hero_id == "jack", "(y) with no other window open, a late result reopens the recruit window", "")
 	recruit.close()
+	await _guard_wait()
+	await _top_hud(hud)
+
+
+## (z) 개정 12-2: 상단 스테이지 버튼(탭으로 진행 → 중지 예약 → 예약 취소)과 방향별 성 내구도(성문 막대 탭 → 카메라가 그 성문으로 0.4초,
+##     줌 유지, 전장으로 새지 않음). 문루 위 방향 글자. 스테이지를 시작하므로 맨 끝에 둔다.
+func _top_hud(hud) -> void:
+	var half: float = _main.castle.half
+	var rig = _camera.get_parent()
+	_check(_main.castle.side_labels.map(func(l): return l.text) == ["북", "동", "남", "서"]
+		and _main.castle.side_labels.all(func(l): return l.position.y > Balance.WALL_H + 2.0),
+		"(z) direction letters 북·동·남·서 float above the four gatehouses", "")
+	print("INPUT INFO: stage button %s, title %s, castle bar %s, gate bars %s (720x1280 logical)" % [hud._button.get_global_rect(), hud._stage_label.get_global_rect(),
+		hud._castle_bar.get_global_rect(), hud._gate_tiles.map(func(t): return t.get_global_rect())])
+	var names: Array = hud._gate_tiles.map(func(t): return t.get_child(0).get_child(1).text)
+	var nums: Array = range(4).map(func(s): return hud._hp[s].num.text)
+	var full := "%s / %s" % [UiKit.commas(roundi(GameState.gate_hp_max)), UiKit.commas(roundi(GameState.gate_hp_max))]
+	_check(names == ["북", "동", "남", "서"] and nums.all(func(s): return s == full) and hud._hp[hud.CASTLE].num.text.contains(" / "),
+		"(z) gate bars are named 북·동·남·서 with 'hp / max' inside; the castle bar too", "names=%s nums=%s" % [names, nums])
+	var dirs: Array = range(4).map(func(s): return hud.compass_dir(s))
+	_check(dirs[0].x > 0.5 and dirs[0].y < -0.5 and dirs[1].x > 0.5 and dirs[1].y > 0.5 and dirs[2].x < -0.5 and dirs[2].y > 0.5 and dirs[3].x < -0.5 and dirs[3].y < -0.5,
+		"(z) compass arrows point where each gate is on screen (N up-right, E down-right, S down-left, W up-left)", "dirs=%s" % [dirs])
+	# 성문 피해 → 그 막대만 번쩍, 부서지면 회색 "파괴". 방치 무적(개정 12 §3)과 무관하게 보려고 잠깐 스테이지 모드로 둔다
+	GameState.mode = GameState.Mode.STAGE
+	GameState.damage_gate(2, 10.0)
+	var flashing: Array = range(4).map(func(s): return hud._hp[s].flash.visible)
+	GameState.damage_gate(3, GameState.gate_hp_max)
+	GameState.mode = GameState.Mode.IDLE
+	_check(flashing == [false, false, true, false] and hud._hp[3].num.text == "파괴" and hud._gate_bars[3].get_theme_stylebox("background") == UiKit.bar(hud.BROKEN_GREY).fill,
+		"(z) a damaged gate's bar flashes (only that one); a broken gate turns grey and reads 파괴", "flash=%s text=%s" % [flashing, hud._hp[3].num.text])
+	await get_tree().create_timer(hud.FLASH_SEC + 0.1).timeout
+	_check(not hud._hp[2].flash.visible, "(z) the flash fades after 0.3 s", "")
+	GameState.refill()
+
+	# 성문 막대 탭 → 카메라가 그 성문으로 부드럽게(0.4초), 줌 그대로. 선택한 영웅은 명령을 받지 않는다(HUD가 누름을 먹는다)
+	var warrior = get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())[0]  # (w)에서 바뀐 영웅일 수 있다
+	_picker._select(warrior)
+	var state := [warrior.side, warrior.post, warrior.free_pos]
+	var zoom0 := _camera.size
+	var start: Vector3 = rig.position
+	var east := Formation.gate_position(half, 1)
+	var dest := Vector3(east.x, start.y, east.z)
+	var tile: Rect2 = hud._gate_tiles[1].get_global_rect()
+	await _tap(tile.get_center())
+	var mid: Vector3 = rig.position
+	await get_tree().create_timer(0.5).timeout
+	_check(start.distance_to(dest) > 5.0 and mid.distance_to(dest) > 0.5 and rig.position.distance_to(dest) < 0.01 and _camera.size == zoom0,
+		"(z) tapping the east gate bar glides the camera to the east gate (centered after 0.4 s, zoom kept)",
+		"start=%s mid=%s end=%s dest=%s zoom %.1f -> %.1f" % [start, mid, rig.position, dest, zoom0, _camera.size])
+	_check(_picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == state, "(z) the gate bar tap does not reach the battlefield (no hero order)",
+		"selected=%s" % _name(_picker.selected))
+	_picker._select(null)
+
+	# 상단 버튼: 대기 "▶ 진행" → 탭 = 스테이지 시작 → "중지 예약" → 탭 = 예약 → "예약 취소" → 탭 = 취소
+	var bp: Vector2 = hud._button.get_global_rect().get_center()
+	_check(GameState.mode == GameState.Mode.IDLE and hud._button.text == "▶ 진행" and bp.y < 300.0, "(z) idle: the top button reads ▶ 진행", "text=%s at %s" % [hud._button.text, bp])
+	await _tap(bp)
+	_check(GameState.mode == GameState.Mode.STAGE and hud._button.text == "중지 예약", "(z) tapping it starts the stage; it now reads 중지 예약", "mode=%d text=%s" % [GameState.mode, hud._button.text])
+	await _tap(bp)
+	_check(GameState.stop_requested and hud._button.text == "예약 취소", "(z) tapping again books the stop; it reads 예약 취소", "text=%s" % hud._button.text)
+	await _tap(bp)
+	_check(not GameState.stop_requested and hud._button.text == "중지 예약", "(z) and again cancels the booking", "text=%s" % hud._button.text)
 
 
 ## 하단 탭 바 탭 id의 가운데(화면 좌표).
