@@ -176,9 +176,7 @@ func _process(delta: float) -> void:
 		if Formation.flat_distance(global_position, tpos) <= float(stats.range):
 			_set_walking(false)
 			if _atk_cd <= 0.0:
-				_atk_cd = float(stats.atk_interval)
-				_swing = _target
-				_swing_left = _model.play_attack(_atk_cd)
+				_attack()
 			return
 		if _ranged:
 			return  # 궁병은 제자리에서 다음 스캔을 기다린다
@@ -211,6 +209,13 @@ func _find_target():
 			best_d = d
 			best = m
 	return best
+
+
+## 공격 시작(개정 12-2 §3): 대상을 고정하고 모션을 재생한다(간격에 맞춰 빨라질 수 있다). 피해는 타격 순간(_release)에.
+func _attack() -> void:
+	_atk_cd = float(stats.atk_interval)
+	_swing = _target
+	_swing_left = _model.play_attack(_atk_cd)
 
 
 func _tick_swing(delta: float) -> void:

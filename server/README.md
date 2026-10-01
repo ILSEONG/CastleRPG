@@ -95,7 +95,7 @@ npm --prefix server test
 |---|---|---|
 | `GET /v1/health` | - | `{ok, server_now}` |
 | `POST /v1/auth/guest {device_id}` | - | `{token, player_id}`. device_id는 16~128자 `[A-Za-z0-9-]`, 토큰은 30일 유효 |
-| `GET /v1/gamedata` | - | `{version, monsters, stages, heroes, resources, buildings, config}`. `ETag` = `"version"`이고, `If-None-Match`가 맞으면 304 |
+| `GET /v1/gamedata` | - | `{version, monsters, stages, heroes, resources, buildings, soldiers, config}`. `ETag` = `"version"`이고, `If-None-Match`가 맞으면 304 |
 | `GET /v1/player` | Bearer | 플레이어 응답 |
 | `POST /v1/collect {building}` | Bearer | 플레이어 응답 + `amount` |
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
@@ -106,14 +106,17 @@ npm --prefix server test
 | `POST /v1/gacha {count}` | Bearer | 플레이어 응답 + `results: [{hero_id, grade, new, copies}]`. count는 1 또는 10. 골드가 모자라면 409 `not_enough_gold` |
 | `POST /v1/deploy {deploy}` | Bearer | 플레이어 응답. deploy = [영웅 id 또는 null, …], 길이 = 슬롯 수, 보유한 영웅만, 중복 금지. 아니면 400 `bad_deploy` |
 | `POST /v1/hero/levelup {hero_id, count}` | Bearer | 플레이어 응답 + `level`. count는 1..100 정수. 보유하지 않은 영웅은 404 `not_owned`, 최대 레벨을 넘으면 409 `max_level`, 골드·식량이 모자라면 409 `not_enough` |
-| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수 |
+| `POST /v1/soldiers/merge {type, tier}` | Bearer | 플레이어 응답 + `merged: {type, tier}`(새 티어). 모르는 병종은 400 `unknown_soldier`, tier는 1 이상 정수(아니면 400). 최대 티어면 409 `max_tier`, `soldier_merge_count`마리보다 적으면 409 `not_enough` |
+| `POST /v1/soldiers/deploy {deploy}` | Bearer | 플레이어 응답. deploy = `{"병종:티어": 수}`(0 이상 정수). 키 형식·보유 이하·합계 ≤ 인구가 아니면 400 `bad_deploy`. 멱등 |
+| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집·병사 생산 시각)를 당긴다 |
 
 플레이어 응답은 다음과 같다.
 
 ```
 {server_now, player: {gold_tenths, gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq,
- buildings: {keep: {level}, gate: {level}, ..., lumber: {level, last_collect}, quarry: ..., farm: ...}, build: {id, finish} | null,
- population, heroes: {hero_id: {copies, level}}, deploy: [hero_id | null, ...]},
+ buildings: {keep: {level}, gate: {level}, ..., lumber: {level, last_collect}, quarry: ..., farm: ..., barracks: {level, last_collect}, archery: ..., stable: ...},
+ build: {id, finish} | null, population, heroes: {hero_id: {copies, level}}, deploy: [hero_id | null, ...],
+ soldiers: {"infantry:1": n, ...}, soldier_deploy: {"infantry:1": n, ...}},
  merchant: {rates: {wood, stone, food}, next_change}}
 ```
 
@@ -138,8 +141,14 @@ npm --prefix server test
   - L → L+1 비용(목재·석재·식량) = round(값 × 1.35^(L−1)), 시간(초) = round(`base_sec` × 1.5^(L−1)). 성채를 뺀 건물은 목표 레벨 ≤ 성채 레벨, 선행 `req1`·`req2` ≥ 목표 − 1. 일꾼은 1명.
   - 자원 건물은 시작할 때 먼저 자동 수집(수집 규칙 그대로)하고 그 양까지 비용에 쓴다. 수집·차감·일꾼·`economy_log`(`build_start`)는 version 가드 한 문장이다.
   - 게으른 완료: 플레이어 상태를 읽는 모든 요청이 먼저 `build_finish ≤ 지금`인 건설을 완료한다(레벨 +1, 성채·성문이면 `keep_level`·`gate_level`도, 일꾼 비움, `build_done` 로그 — version 가드 한 문장). 앱은 업그레이드를 다시 보내지 않는다.
-  - 효과: 영웅 슬롯 = `keep_slot_tiers`(성채 단계 `레벨:값|…`), 성 HP = `castle_hp` + `castle_hp_per_level` × (성채 − 1), 인구(`player.population`) = `pop_base` + `pop_per_house` × (민가 − 1), 모집 확률 + 주점 × `tavern_ssr_per_level`·`tavern_sr_per_level`. 성 내부(`keep_interior_tiers`)·막사·연구소(영웅 HP·공격)·성문 HP는 앱이 쓴다.
+  - 효과: 영웅 슬롯 = `keep_slot_tiers`(성채 단계 `레벨:값|…`), 성 HP = `castle_hp` + `castle_hp_per_level` × (성채 − 1), 인구(`player.population`) = `pop_base` + `pop_per_house` × (민가 − 1), 모집 확률 + 주점 × `tavern_ssr_per_level`·`tavern_sr_per_level`. 성 내부(`keep_interior_tiers`)·연구소(영웅 공격)·성문 HP는 앱이 쓴다.
   - Neon: 007 마이그레이션과 시드(건물 표, 설정 `hero_slots` 삭제·건물 설정 9개)를 새 서버와 같이 올린다.
+- 병사(개정 13, 마이그레이션 008: `soldier_defs` = `data/soldiers.csv`, `player_soldiers(type, tier, count ≥ 0)`, `player_state.soldier_deploy`, 기존 플레이어에게 `archery`·`stable` 행(레벨 1), 막사 포함 병사 건물 생산 시각 = 지금)
+  - 병사 건물(`soldiers.csv`의 `building`)마다 1티어를 만든다. 한 마리 시간(초) = `soldier_prod_sec` × `soldier_prod_level_factor`^(L−1).
+  - 게으른 생산: 플레이어 상태를 읽는 모든 요청이 완료보다 먼저, 지난 시간(`accum_cap_min`분까지) / 한 마리 시간만큼 보유에 더한다(남은 시간 유지, 상한이면 지금으로). 생산 시각·보유·`economy_log`(`soldier_prod`)는 version 가드 한 문장이다.
+  - 합성: 티어 t `soldier_merge_count`마리 → t+1 한 마리(HP·공격 × `soldier_tier_mult`, 앱이 계산). 배치는 보유로 자른다. 보유·배치·`economy_log`(`soldier_merge`)는 version 가드 한 문장이다. 앱은 합성을 다시 보내지 않는다.
+  - 막사는 영웅 HP를 올리지 않는다(`barracks_hp_per_level` 삭제).
+  - Neon: 008 마이그레이션과 시드(병종 표, 건물 표 2행·막사 이름, 설정 `soldier_*` 5개 추가·`barracks_hp_per_level` 삭제)를 새 서버와 같이 올린다.
 - 영웅(개정 10)
   - 새 플레이어는 `starter_heroes`를 copies 1로 받고, 배치는 그 순서다. 마이그레이션 005는 기존 플레이어에게 같은 것을 채운다.
   - 응답 `deploy`의 길이는 슬롯 수(`keep_slot_tiers`의 성채 단계 값)다. 표에서 빠진 영웅은 `heroes`·`deploy`에서 거른다.
