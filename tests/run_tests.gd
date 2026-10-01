@@ -78,6 +78,7 @@ func _init() -> void:
 	test_skill_text()
 	test_merchant_rates()
 	test_damage_numbers()
+	test_hero_levels()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1012,7 +1013,7 @@ func test_economy_save() -> void:
 	e2.save_path = ECON_TMP
 	e2.load_save(now + 5.0)
 	check(e2.gold_tenths == 783 and e2.gold == 78 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
-	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":3,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
+	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":4,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
 		var f := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 		f.store_string(junk)
 		f.close()
@@ -1196,7 +1197,7 @@ func test_gold_tenths() -> void:
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var saved = JSON.parse_string(f.get_as_text())
 	f.close()
-	check(int(saved.version) == 2 and int(saved.gold_tenths) == 72 and not saved.has("gold"), "save writes version 2 with gold_tenths")
+	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 72 and not saved.has("gold"), "save writes the current version with gold_tenths")
 	var v1 := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 	v1.store_string(JSON.stringify({"version": 1, "gold": 41, "res": {"wood": 3, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}))
 	v1.close()
@@ -1382,7 +1383,7 @@ func test_roster() -> void:
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(now)
-	check(e2.heroes == e.heroes and e2.heroes.ignis is int and e2.deploy == ["ignis", null, "hans", "nina"], "save v2 round-trips heroes and deploy: %s %s" % [e2.heroes, e2.deploy])
+	check(e2.heroes == e.heroes and e2.heroes.ignis is int and e2.deploy == ["ignis", null, "hans", "nina"], "save v3 round-trips heroes and deploy: %s %s" % [e2.heroes, e2.deploy])
 	var base := {"version": 2, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}
 	_write(ECON_TMP, JSON.stringify(base))
 	e2.load_save(now)
@@ -1396,11 +1397,11 @@ func test_roster() -> void:
 	DirAccess.remove_absolute(ECON_TMP)
 	# 서버 응답
 	var o = _econ(1000.0)
-	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "heroes": {"hans": 2, "kyle": 1}, "deploy": ["kyle", null, "hans", null]},
+	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "heroes": {"hans": {"copies": 2, "level": 1}, "kyle": {"copies": 1, "level": 3}}, "deploy": ["kyle", null, "hans", null]},
 		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
 	var changes := []
 	o.roster_changed.connect(func(): changes.append(1))
-	check(o.apply_server(reply) and o.heroes == {"hans": 2, "kyle": 1} and o.deploy == ["kyle", null, "hans", null] and changes.size() == 1, "apply_server takes heroes and deploy (roster_changed once)")
+	check(o.apply_server(reply) and o.heroes == {"hans": 2, "kyle": 1} and o.deploy == ["kyle", null, "hans", null] and o.level_of("kyle") == 3 and o.level_of("hans") == 1 and changes.size() == 1, "apply_server takes heroes {copies, level} and deploy (roster_changed once)")
 	check(o.apply_server(reply) and changes.size() == 1, "the same roster again does not signal")
 	o._pending_deploy = ["hans", null, null, null]
 	check(o.apply_server(reply) and o.deploy == ["hans", null, null, null], "a deploy still waiting for its reply is not undone by an older reply")
@@ -1539,3 +1540,89 @@ func test_damage_numbers() -> void:
 	dn.free()
 	t.free()
 	u.free()
+
+
+## 개정 11 영웅 레벨: 능력치 공식(기본 × 레벨 배율 × 별 배율), 전투력, 최대 레벨(별 반영), 비용 표(서버 levelup.test와 같은 값),
+## 오프라인 레벨업(골드 tenths·식량 차감, 이유 문구, [×10] 횟수), 저장 v2 → v3, apply_remote의 레벨업 설정 검증.
+func test_hero_levels() -> void:
+	GameData.load_tables()
+	var hans := GameData.hero("hans")
+	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.54) and is_equal_approx(GameData.level_mult(70), 5.14), "level x(1 + 0.06 x (L - 1))")
+	var st := GameData.hero_stats(hans, 10, 3)  # 440 × 1.54 × 1.2, 30 × 1.54 × 1.2
+	check(is_equal_approx(st.hp, 440.0 * 1.54 * 1.2) and is_equal_approx(st.atk, 30.0 * 1.54 * 1.2), "stats = base x level mult x star mult: %s" % [st])
+	check(GameData.hero_power(hans, 1, 1) == 119 and GameData.hero_power(GameData.hero("kyle"), 1, 1) == 317 \
+		and GameData.hero_power(hans, 10, 3) == roundi(440.0 * 1.848 / 10.0 + 30.0 * 1.848 * 2.0 / 0.8),
+		"power = round(HP / 10 + atk x 2 / interval): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 1), GameData.hero_power(GameData.hero("kyle"), 1, 1)])
+	check([1, 2, 6, 7, 99].map(func(c): return GameData.max_level(c)) == [20, 30, 70, 70, 70], "max level = 20 + 10 x stars (70 at 5 stars)")
+	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
+	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
+		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 134, 151, 333, 923, 266690], "gold cost table = round(base x 1.12^(L-1)), same as the server")
+	check(GameData.levelup_cost("R", 19).food == 190 and GameData.levelup_cost("SSR", 20).food == 800 and GameData.levelup_cost("R", 1, 5) == {"gold": 191, "food": 150} \
+		and GameData.levelup_cost("SSR", 1, 19) == {"gold": 7614, "food": 7600}, "food = base x L, count sums the levels")
+	# 오프라인 레벨업
+	var e = _econ(1000.0)
+	var got := []
+	e.leveled.connect(func(id, l): got.append([id, l]))
+	e.gold_tenths = 2005
+	e.res.food = 200
+	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 190 and got == [["hans", 2]], "offline level up takes 300 tenths and 10 food")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 565 and e.res.food == 100, "three levels at once take the summed cost")
+	var notes := []
+	e.notice.connect(func(t): notes.append(t))
+	e.gold_tenths = 469  # 46.9골드 < 47
+	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
+	e.gold_tenths = 100000
+	e.res.food = 49
+	check(e.levelup_block("hans") == "식량 부족" and e.levelup_block("arteon") == "보유하지 않은 영웅", "food short / not owned reasons")
+	e.res.food = 0
+	e.gold_tenths = 0
+	check(e.levelup_block("hans") == "골드·식량 부족", "both short")
+	# [×10] 횟수: 3회분만 있으면 3
+	var c3: Dictionary = GameData.levelup_cost("R", 5, 3)
+	e.gold_tenths = int(c3.gold) * 10
+	e.res.food = int(c3.food) + 5
+	check(e.levelup_affordable("hans") == 3 and e.levelup_block("hans", 4) != "", "x10 counts the affordable levels (3)")
+	e.gold_tenths = 10000000
+	e.res.food = 10000000
+	e.hero_levels["hans"] = 15
+	check(e.levelup_affordable("hans") == 5 and e.levelup_block("hans", 6) == "최대 레벨", "x10 stops at the max level (15 -> 20)")
+	e.hero_levels["hans"] = 20
+	check(not e.level_up("hans") and e.level_of("hans") == 20 and e.levelup_affordable("hans") == 0, "max level blocks")
+	e.heroes["hans"] = 2  # 별 1 → 최대 30
+	check(e.level_up("hans", 10) and e.level_of("hans") == 30, "a star raises the cap")
+	# GameState 공급자: 레벨
+	var gs = GameStateScript.new()
+	check(gs.hero_level("hans") == 1, "no roster: level 1")
+	gs.roster = e
+	check(gs.hero_level("hans") == 30 and gs.hero_level("ella") == 1, "provider: level from the roster")
+	gs.free()
+	# 저장 v3 왕복, v2 → v3(level 1)
+	e.save_path = ECON_TMP
+	e.save()
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
+	check(int(raw.version) == 3 and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 30.0 and raw.heroes.ella.level == 1.0, "save v3 writes heroes {copies, level}")
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(1000.0)
+	check(e2.heroes == e.heroes and e2.level_of("hans") == 30 and e2.hero_levels.hans is int and e2.level_of("nina") == 1, "save v3 round-trips levels")
+	var v2 := {"version": 2, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": 0, "quarry": 0, "farm": 0},
+		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "heroes": {"hans": 2, "ignis": 1}, "deploy": ["ignis", "hans"]}
+	_write(ECON_TMP, JSON.stringify(v2))
+	e2.load_save(1000.0)
+	check(e2.gold_tenths == 5 and e2.heroes == {"hans": 2, "ignis": 1} and e2.level_of("hans") == 1 and e2.level_of("ignis") == 1 and e2.deploy == ["ignis", "hans"], "a v2 save loads with level 1")
+	v2.version = 3  # v3인데 heroes가 옛 형식이면 깨진 저장
+	_write(ECON_TMP, JSON.stringify(v2))
+	e2.load_save(1000.0)
+	check(e2.gold_tenths == 0 and e2.heroes == _econ_starters(), "a v3 save with {id: copies} heroes is corrupt: defaults")
+	DirAccess.remove_absolute(ECON_TMP)
+	e.free()
+	e2.free()
+	# apply_remote: 레벨업 설정 검증(서버 seed와 같은 규칙)
+	var logged := _errors.count
+	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_star", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_food_R", "-10"], ["hero_level_stat", "-0.1"]]:
+		var p := _payload()
+		p.config[bad[0]] = bad[1]
+		check(not GameData.apply_remote(p) and GameData.errors == 1, "apply_remote rejects %s = %s" % bad)
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.config_num("hero_max_level_base") == 20.0, "default tables restored")

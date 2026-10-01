@@ -368,6 +368,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _placement_cases()
 	await _fx_cap()
 	await _damage_numbers()
+	await _levelup_case()
 
 
 ## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
@@ -701,3 +702,39 @@ func _check(ok: bool, what: String, detail: String) -> void:
 	else:
 		_fails += 1
 		print("AI FAIL: %s (%s)" % [what, detail])
+
+
+## (L) 개정 11 레벨업: 방치 모드에서 오프라인 레벨업(Economy.level_up)하면 그 슬롯 영웅만 다시 만들어지고 HP·공격이
+##     기본 × (1 + 0.06 × (L − 1)) × 별 배율이다. 실제 타격 피해도 그 공격력이다(오라 없는 혼자 공격).
+func _levelup_case() -> void:
+	GameState.refill()
+	await _frames(1)
+	var slot := GameState.deploy().find("dorik")
+	if slot < 0:  # 앞 사례가 배치를 바꿨으면 슬롯 2에 도릭을 둔다
+		var d := GameState.deploy()
+		d[2] = "dorik"
+		Economy.set_deploy(d)
+		slot = 2
+	await _frames(1)
+	Economy.heroes["dorik"] = 3  # 별 2
+	Economy.gold_tenths = 1000000
+	Economy.res["food"] = 100000
+	var before := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	var ok := Economy.level_up("dorik", 9)  # 1 → 10
+	await _frames(1)
+	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	var dorik = live.filter(func(h): return h.index == slot)[0]
+	var mult := (1.0 + 0.06 * 9) * 1.2
+	var others_kept := live.filter(func(h): return h.index != slot).all(func(h): return before.has(h))
+	_check(ok and Economy.level_of("dorik") == 10 and dorik.def.id == "dorik" and not before.has(dorik) and others_kept
+		and is_equal_approx(dorik.hp_max, 440.0 * mult) and is_equal_approx(dorik.atk, 30.0 * mult) and is_equal_approx(dorik.hp, dorik.hp_max),
+		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.06 x 9) x 1.2",
+		"ok=%s hp=%.2f atk=%.2f kept=%s" % [ok, dorik.hp_max, dorik.atk, others_kept])
+	for h in live:
+		h.set_process(h == dorik)
+	var m = _still("epic_boss", dorik.global_position + Formation.SIDE_DIR[dorik.side] * 1.2)
+	dorik._sk = {}  # 순수 타격(치명타·처형·연쇄 없음)으로 공격력만 본다
+	await _wait_until(func(): return _dmg(m) > 0.0, 3.0)
+	_check(is_equal_approx(_dmg(m), dorik.atk), "(L) the leveled hero hits for its leveled attack", "dmg=%.2f atk=%.2f" % [_dmg(m), dorik.atk])
+	_clear_monsters()
+	await _frames(1)

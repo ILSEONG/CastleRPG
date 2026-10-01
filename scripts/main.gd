@@ -3,7 +3,7 @@ extends Node3D
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 ## 온라인 모드(Net.is_online())면 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다 —
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
-## 영웅은 배치(GameState.deploy·hero_copies)대로 만들고, 배치·별이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
+## 영웅은 배치(GameState.deploy·hero_copies·hero_level)대로 만들고, 배치·별·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
 
 const Balance := preload("res://scripts/balance.gd")
@@ -23,6 +23,7 @@ const BadgesScript := preload("res://scripts/badges.gd")
 const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
+const TabBarScript := preload("res://scripts/tab_bar.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
 var camera: Camera3D
@@ -30,7 +31,7 @@ var castle
 
 var _formation
 var _picker
-var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies]}(만들 때 값)
+var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies, level]}(만들 때 값)
 
 
 func _ready() -> void:
@@ -83,7 +84,9 @@ func _build_world() -> void:
 	picker.recruit = recruit
 	var hero_panel = HeroPanelScript.new()
 	add_child(hero_panel)
-	hud.hero_panel = hero_panel
+	var tabs = TabBarScript.new()  # 하단 탭 바(개정 11): 성·영웅·모집·상인
+	tabs.windows = {"hero": hero_panel, "recruit": recruit, "merchant": panel}
+	add_child(tabs)
 	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별 반영
 	Economy.roster_changed.connect(_on_roster_changed)
 	if OS.is_debug_build():
@@ -132,7 +135,7 @@ func _wait_for_server() -> void:
 	layer.queue_free()
 
 
-## 배치(GameState.deploy)·별(copies)을 만들어 둔 영웅에 맞춘다. 바뀐 슬롯만 빼고 다시 만든다(나머지는 그대로).
+## 배치(GameState.deploy)·별(copies)·레벨을 만들어 둔 영웅에 맞춘다. 바뀐 슬롯만 빼고 다시 만든다(나머지는 그대로).
 func _sync_heroes() -> void:
 	var deploy: Array = GameState.deploy()  # 슬롯 i → 영웅 id 또는 null(빈 슬롯)
 	for i in _slots.keys():
@@ -140,14 +143,14 @@ func _sync_heroes() -> void:
 			_retire(i)
 	for i in deploy.size():
 		var id = deploy[i]
-		var key := [id, GameState.hero_copies(id) if id != null else 0]
+		var key := [id, GameState.hero_copies(id) if id != null else 0, GameState.hero_level(id) if id != null else 0]
 		if _slots.has(i) and _slots[i].key == key:
 			continue
 		_retire(i)
 		if id == null or GameData.hero(id).is_empty():
 			continue
 		var hero = HeroScript.new()
-		hero.setup(i, GameData.hero(id), castle, _formation, key[1])
+		hero.setup(i, GameData.hero(id), castle, _formation, key[1], key[2])
 		add_child(hero)
 		_slots[i] = {"node": hero, "key": key}
 

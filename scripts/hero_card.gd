@@ -4,6 +4,8 @@ extends Button
 ## 바탕·보석·별 지오메트리는 (크기, 영웅, 별)이 바뀔 때만 만들고(_ensure_geo), 그리기는 삼각형 배열 몇 번이다 — SSR은 매 프레임
 ## 다시 그리므로 반짝임은 색 배열의 알파만 바꾼다. 창이 닫혀 안 보이면 다시 그리지 않는다.
 ## 입력은 부모로도 넘긴다(MOUSE_FILTER_PASS) — 스크롤 격자 안에서 끌어 스크롤할 수 있게.
+## 개정 11 영웅 목록: level > 0이면 왼위 "Lv N", power > 0이면 아래 "전투력 N", deployed면 "배치" 배지, can_level이면 오른위 초록 ▲(다각형).
+## burst(): 레벨업 성공 연출 — 빛 조각이 BURST_SEC 동안 가운데에서 퍼진다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -14,6 +16,9 @@ const LONG_PRESS_MS := 500
 const SHIMMER_SPEED := 4.0
 const STAR_COLOR := Color("F2B233")
 const HIGHLIGHT := Color("F9B233")
+const UP_COLOR := Color(0.2, 0.72, 0.3)  # 레벨업 가능 ▲
+const BURST_SEC := 0.5
+const BURST_SHARDS := 14
 
 signal tapped(card)
 signal long_pressed(card)
@@ -21,18 +26,23 @@ signal long_pressed(card)
 var hero_id := "":
 	set(v):
 		hero_id = v
-		set_process(v != "" and GameData.hero(v).get("grade", "") == "SSR")  # SSR만 매 프레임 다시 그린다
+		_update_process()
 		queue_redraw()
 var badge := ""  # 아래 줄 글자("NEW"). 비면 별
 var stars := 0
 var corner := ""  # 왼위 작은 글자(슬롯 번호)
 var highlight := false  # 고른 슬롯·카드: 호박색 테두리
 var empty_text := "빈 칸"
+var level := 0  # > 0이면 "Lv N"
+var power := 0  # > 0이면 "전투력 N"
+var deployed := false  # "배치" 배지
+var can_level := false  # 오른위 초록 ▲
 
 var geo_builds := 0  # 지오메트리를 만든 횟수(테스트용)
 
 var _down_ms := 0
 var _t := 0.0
+var _burst := 0.0  # 남은 빛 조각 시간
 var _geo_key := []
 var _body := PackedVector2Array()  # 카드 바탕(테두리 8각 + 안쪽 면) 삼각형 점(3개씩)
 var _body_cols := PackedColorArray()
@@ -57,10 +67,29 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _burst > 0.0:
+		_burst -= delta
+		if _burst <= 0.0:
+			_update_process()
 	if not is_visible_in_tree():
 		return  # 닫힌 창의 카드는 다시 그리지 않는다
 	_t += delta
 	queue_redraw()
+
+
+## SSR(반짝임)이거나 빛 조각이 남았을 때만 매 프레임 다시 그린다.
+func _update_process() -> void:
+	set_process(_burst > 0.0 or (hero_id != "" and GameData.hero(hero_id).get("grade", "") == "SSR"))
+
+
+## 레벨업 성공 연출: 빛 조각이 가운데에서 BURST_SEC 동안 퍼지며 사라진다.
+func burst() -> void:
+	_burst = BURST_SEC
+	_update_process()
+
+
+func is_bursting() -> bool:
+	return _burst > 0.0
 
 
 func _on_pressed() -> void:
@@ -98,11 +127,47 @@ func _draw() -> void:
 		_text(h.title, size.y * 0.6 + name_size * 0.95, maxi(11, name_size - 7), UiKit.INK.lightened(0.3))
 		if badge != "":
 			_text(badge, size.y - 10.0, name_size - 2, Color("D9480F"), true)
+		_draw_list_info()
+	if _burst > 0.0:
+		_draw_burst()
 	if corner != "":
 		draw_string_outline(FONT, Vector2(9, 22), corner, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 4, Color.WHITE)
 		draw_string(FONT, Vector2(9, 22), corner, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.INK)
 	if highlight:
 		_outline(r.grow(1.0), HIGHLIGHT, 5.0)
+
+
+## 목록 카드 정보: 왼위 "Lv N"·그 아래 "배치" 배지, 오른위 초록 ▲, 별 위 "전투력 N".
+func _draw_list_info() -> void:
+	if level > 0:
+		draw_string_outline(FONT, Vector2(10, 28), "Lv %d" % level, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, 5, Color.WHITE)
+		draw_string(FONT, Vector2(10, 28), "Lv %d" % level, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, UiKit.INK)
+	if deployed:
+		var chip := Rect2(8, 36, 48, 24)
+		draw_colored_polygon(LowpolyBox.octagon(chip, 5.0), UiKit.AMBER)
+		draw_string(FONT, Vector2(chip.position.x, chip.end.y - 6), "배치", HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, 16, Color.WHITE)
+	if can_level:
+		var c := Vector2(size.x - 22, 22)
+		var tri := PackedVector2Array([c + Vector2(0, -11), c + Vector2(11, 8), c + Vector2(-11, 8)])
+		draw_colored_polygon(tri, UP_COLOR)
+		tri.append(tri[0])
+		draw_polyline(tri, UiKit.OUTLINE, 1.5, true)
+	if power > 0:
+		_text("전투력 %s" % UiKit.commas(power), size.y - 34.0, 17, UiKit.INK.lightened(0.15))
+
+
+## 빛 조각: 가운데에서 바깥으로 날아가며 작아지고 흐려지는 금색·흰 삼각형. 방향은 결정적(조각 번호 해시).
+func _draw_burst() -> void:
+	var t := 1.0 - _burst / BURST_SEC  # 0 → 1
+	var c := size / 2.0
+	var reach := minf(size.x, size.y) * 0.75
+	for i in BURST_SHARDS:
+		var dir := Vector2.from_angle(TAU * i / BURST_SHARDS + LowpolyBox.hash01(i, 7) * 0.4)
+		var p := c + dir * reach * (0.2 + 0.8 * t) * (0.7 + 0.3 * LowpolyBox.hash01(i, 9))
+		var r := 9.0 * (1.0 - t * 0.6)
+		var col := (HIGHLIGHT if i % 2 == 0 else Color.WHITE)
+		col.a = 1.0 - t
+		draw_colored_polygon(PackedVector2Array([p + dir * r, p + dir.orthogonal() * r * 0.5, p - dir.orthogonal() * r * 0.5]), col)
 
 
 func _outline(r: Rect2, color: Color, width: float) -> void:

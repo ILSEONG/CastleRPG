@@ -27,8 +27,13 @@ const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "hero_max_stars", "hero_star_bonus",
-	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr"]
+	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
+	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
+	"levelup_food_R", "levelup_food_SR", "levelup_food_SSR"]
 const CONFIG_LIST_KEYS := ["hero_slots", "starter_heroes"]
+const LEVELUP_INT_KEYS := ["hero_max_level_per_star", "levelup_gold_R", "levelup_food_R", "levelup_gold_SR", "levelup_food_SR",
+	"levelup_gold_SSR", "levelup_food_SSR"]  # 0 이상 정수(개정 11)
+const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
 static var _monsters := {}
@@ -162,8 +167,48 @@ static func default_deploy(slots: int) -> Array:
 
 ## 별 = min(copies − 1, hero_max_stars). HP·공격력 배율 = 1 + hero_star_bonus × 별.
 static func star_mult(copies: int) -> float:
-	var stars := clampi(copies - 1, 0, int(config_num("hero_max_stars")))
-	return 1.0 + config_num("hero_star_bonus") * stars
+	return 1.0 + config_num("hero_star_bonus") * stars(copies)
+
+
+static func stars(copies: int) -> int:
+	return clampi(copies - 1, 0, int(config_num("hero_max_stars")))
+
+
+# --- 영웅 레벨(개정 11 §2.1). 서버 rules.heroMaxLevel·levelupCost와 같은 식 ---
+
+## 레벨 배율 = 1 + hero_level_stat × (L − 1)(1레벨 기준 직선).
+static func level_mult(level: int) -> float:
+	return 1.0 + config_num("hero_level_stat") * (level - 1)
+
+
+## 최대 레벨 = hero_max_level_base + hero_max_level_per_star × 별.
+static func max_level(copies: int) -> int:
+	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_star")) * stars(copies)
+
+
+## level에서 count번 올리는 비용 합계 {gold(정수 골드), food}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.12^(L−1)),
+## 식량 = levelup_food_<등급> × L.
+static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
+	var g := config_num("levelup_gold_" + grade)
+	var f := int(config_num("levelup_food_" + grade))
+	var gold := 0
+	var food := 0
+	for l in range(level, level + count):
+		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1))
+		food += f * l
+	return {"gold": gold, "food": food}
+
+
+## 최종 HP·공격 = 표 기본값 × 레벨 배율 × 별 배율. {hp, atk}
+static func hero_stats(def: Dictionary, level: int, copies: int) -> Dictionary:
+	var m := level_mult(level) * star_mult(copies)
+	return {"hp": float(def.hp) * m, "atk": float(def.atk) * m}
+
+
+## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격).
+static func hero_power(def: Dictionary, level: int, copies: int) -> int:
+	var s := hero_stats(def, level, copies)
+	return roundi(s.hp / 10.0 + s.atk * 2.0 / float(def.atk_interval))
 
 
 ## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장(정수 열 ≥ 1, 방치 간격 ≥ MIN_IDLE_INTERVAL) —
@@ -401,6 +446,15 @@ static func _check_gacha(cfg: Dictionary) -> void:
 			_err("config", 0, k, "must be in 0..1: '%s'" % s)
 	if rates.size() == 2 and rates[0] + rates[1] > 1.0 + 1e-9:
 		_err("config", 0, "gacha_rate_sr", "gacha_rate_ssr + gacha_rate_sr must be at most 1: %s + %s" % [cfg.gacha_rate_ssr, cfg.gacha_rate_sr])
+	# 레벨업(개정 11, 서버 seed와 같은 규칙): 비용·별당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상
+	for k in LEVELUP_INT_KEYS + ["hero_max_level_base"]:
+		var s := String(cfg.get(k, ""))
+		var low := 1.0 if k == "hero_max_level_base" else 0.0
+		if s.is_valid_float() and not (s.to_float() >= low and s.to_float() == floorf(s.to_float())):
+			_err("config", 0, k, "must be an integer of at least %d: '%s'" % [low, s])
+	var stat := String(cfg.get("hero_level_stat", ""))
+	if stat.is_valid_float() and not stat.to_float() >= 0.0:
+		_err("config", 0, "hero_level_stat", "must be 0 or more: '%s'" % stat)
 
 
 ## key,value 행 → {키: 문자열}. 키가 겹치면 오류.

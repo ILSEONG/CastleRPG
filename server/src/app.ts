@@ -25,6 +25,8 @@ const MAX_STAGE = 1_000_000
 const MAX_KILL_COUNT = 10_000 // 몬스터 한 종류의 한 번 보고 수
 const MAX_INT4 = 2_147_483_647
 const MAX_AGE_MIN = 100_000
+const MAX_LEVELUP_COUNT = 100
+const FOOD = 'food' // 레벨업 식량 자원 id
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -57,7 +59,7 @@ interface Player {
   kill_seq: number
   res: Record<string, number>
   buildings: Record<string, { level: number; last_collect: number }>
-  heroes: Record<string, number> // 영웅 id → copies
+  heroes: Record<string, { copies: number; level: number }> // 영웅 id → 보유 수·레벨
   deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
 }
 
@@ -71,6 +73,7 @@ interface Change {
   res?: Record<string, number> // 자원 증감
   buildings?: Record<string, number> // 건물 → 새 last_collect
   heroes?: Record<string, number> // 영웅 → copies 증가
+  heroLevels?: Record<string, number> // 영웅 → 레벨 증가
   deploy?: (string | null)[] // 새 배치
   log?: { kind: string; detail: unknown }
 }
@@ -90,7 +93,8 @@ const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
-  coalesce((select json_object_agg(hero_id, copies) from player_heroes where player_id = s.player_id), '{}'::json) as heroes
+  coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level))
+    from player_heroes where player_id = s.player_id), '{}'::json) as heroes
   from player_state s where s.player_id = $1`
 
 // 플레이어를 찾거나 만들고(last_seen 갱신), 빠진 상태·자원·건물 행을 채운다 — 한 문장이라 중간에 끊겨도 반쪽 계정이 없다.
@@ -168,8 +172,8 @@ export function createApp(opts: AppOptions) {
         await query(ENSURE_ROWS_SQL, [id, now]) // 나중에 추가된 자원 — 행을 채우고 다시 읽는다
         continue
       }
-      const heroes: Record<string, number> = {}
-      for (const [k, v] of Object.entries(json(r.heroes) as Record<string, unknown>)) heroes[k] = Number(v)
+      const heroes: Player['heroes'] = {}
+      for (const [k, v] of Object.entries(json(r.heroes) as Record<string, any>)) heroes[k] = { copies: Number(v.copies), level: Number(v.level) }
       const deploy = json(r.deploy)
       return {
         gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
@@ -191,8 +195,8 @@ export function createApp(opts: AppOptions) {
     }
     // 영웅: 표에 있는 것만. 배치: 길이 = 슬롯 수, 보유하지 않은(표에서 빠진) 영웅은 null
     const known = new Set(game.heroes.map((h) => String(h.id)))
-    const heroes: Record<string, number> = {}
-    for (const [id, n] of Object.entries(p.heroes)) if (known.has(id)) heroes[id] = n
+    const heroes: Player['heroes'] = {}
+    for (const [id, h] of Object.entries(p.heroes)) if (known.has(id)) heroes[id] = { copies: h.copies, level: h.level }
     const deploy = Array.from({ length: R.heroSlots(game.config, p.keep_level) }, (_, i) => {
       const id = p.deploy[i]
       return typeof id === 'string' && Object.hasOwn(heroes, id) ? id : null
@@ -229,6 +233,10 @@ export function createApp(opts: AppOptions) {
         select s.player_id, x.key, x.value::int from s, jsonb_each_text(${p(JSON.stringify(ch.heroes))}::jsonb) as x
         on conflict (player_id, hero_id) do update set copies = player_heroes.copies + excluded.copies returning 1)`)
     }
+    Object.entries(ch.heroLevels ?? {}).forEach(([id, d], i) => {
+      ctes.push(`hl${i} as (update player_heroes set level = level + ${p(d)}::int
+        where player_id = (select player_id from s) and hero_id = ${p(id)} returning 1)`)
+    })
     Object.entries(ch.res ?? {}).forEach(([res, d], i) => {
       ctes.push(`r${i} as (update player_resources set amount = amount + ${p(bigint(d))}::bigint
         where player_id = (select player_id from s) and res = ${p(res)} returning 1)`)
@@ -253,7 +261,8 @@ export function createApp(opts: AppOptions) {
     if (ch.killSeq !== undefined) pl.kill_seq = ch.killSeq
     for (const [k, d] of Object.entries(ch.res ?? {})) pl.res[k] = (pl.res[k] ?? 0) + d
     for (const [k, t] of Object.entries(ch.buildings ?? {})) pl.buildings[k].last_collect = t
-    for (const [k, d] of Object.entries(ch.heroes ?? {})) pl.heroes[k] = (pl.heroes[k] ?? 0) + d
+    for (const [k, d] of Object.entries(ch.heroes ?? {})) pl.heroes[k] = { copies: (pl.heroes[k]?.copies ?? 0) + d, level: pl.heroes[k]?.level ?? 1 }
+    for (const [k, d] of Object.entries(ch.heroLevels ?? {})) pl.heroes[k].level += d
     if (ch.deploy !== undefined) pl.deploy = ch.deploy
     pl.version += 1
   }
@@ -441,7 +450,8 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g) => {
       const cost = R.cfgNum(g.config, count === 10 ? 'gacha_cost_10' : 'gacha_cost_1')
       if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `recruiting ${count} costs ${cost} gold`)
-      const owned: Record<string, number> = { ...p.heroes }
+      const owned: Record<string, number> = {}
+      for (const [id, h] of Object.entries(p.heroes)) owned[id] = h.copies
       const add: Record<string, number> = {}
       const results = R.rollGacha(count, g.heroes, g.config, random).map(({ id, grade }) => {
         const isNew = !(owned[id] > 0)
@@ -472,6 +482,33 @@ export function createApp(opts: AppOptions) {
         if (!known.has(id) || !Object.hasOwn(p.heroes, id)) throw new ApiError(400, 'bad_deploy', `hero '${id}' is not owned`)
       }
       return { change: { deploy: d } }
+    })
+  })
+
+  // 레벨업(개정 11 §2.2): count 1..100. 보유하지 않은 영웅은 404, 최대 레벨을 넘거나 골드·식량이 모자라면 409(max_level / not_enough).
+  // 골드(정수, × 10 tenths)·식량 차감, 레벨, economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
+  app.post('/v1/hero/levelup', auth, async (c) => {
+    const b = await body(c)
+    const heroId = strField(b, 'hero_id')
+    const count = intField(b, 'count', 1, MAX_LEVELUP_COUNT)
+    return mutate(c, (p, g) => {
+      const def = g.heroes.find((h) => h.id === heroId)
+      const own = Object.hasOwn(p.heroes, heroId) ? p.heroes[heroId] : undefined
+      if (!def || !own) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      const to = own.level + count
+      const max = R.heroMaxLevel(own.copies, g.config)
+      if (to > max) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${max}`)
+      const cost = R.levelupCost(String(def.grade), own.level, count, g.config)
+      if (Math.floor(p.gold_tenths / 10) < cost.gold || (p.res[FOOD] ?? 0) < cost.food) {
+        throw new ApiError(409, 'not_enough', `levels ${own.level} -> ${to} cost ${cost.gold} gold and ${cost.food} food`)
+      }
+      return {
+        change: {
+          goldTenths: -cost.gold * 10, res: cost.food ? { [FOOD]: -cost.food } : {}, heroLevels: { [heroId]: count },
+          log: { kind: 'levelup', detail: { hero_id: heroId, from: own.level, to, count, gold: cost.gold, food: cost.food, gold_tenths: -cost.gold * 10 } },
+        },
+        extra: { level: to },
+      }
     })
   })
 

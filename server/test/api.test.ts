@@ -92,7 +92,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         quarry: { level: 1, last_collect: T0 + 0.25 },
         farm: { level: 1, last_collect: T0 + 0.25 },
       },
-      heroes: { hans: 1, ella: 1, dorik: 1, nina: 1 },
+      heroes: { hans: { copies: 1, level: 1 }, ella: { copies: 1, level: 1 }, dorik: { copies: 1, level: 1 }, nina: { copies: 1, level: 1 } },
       deploy: ['hans', 'ella', 'dorik', 'nina'],
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
@@ -383,7 +383,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.resources[1], { id: 'stone', name: '석재', building: 'quarry', per_min: 5, price: 2 })
   assert.equal(g.config.hero_slots, '4|8|12')
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 26)
+  assert.equal(Object.keys(g.config).length, 35) // 개정 11: 레벨업 설정 9개
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
   assert.equal(g.config.hero_roster, undefined)
   assert.equal(g.config.kill_burst_sec, '60')

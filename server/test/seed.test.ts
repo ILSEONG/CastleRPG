@@ -248,3 +248,51 @@ test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..
   await readTables(withCfg('gacha_cost_1', '0')) // 0원 모집·확률 경계(합 1)는 받는다
   await readTables(withCfg('gacha_rate_sr', '0.97'))
 })
+
+test('마이그레이션 006: 005까지 적용된 DB의 보유 영웅은 level 1이 되고, level은 1 이상이어야 한다', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  for (const f of ALL_MIGRATIONS.filter((f) => f < '006')) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, dir)
+    const [p] = await d.query("insert into players (device_id) values ('mig-006-device-0001') returning id")
+    await d.query('insert into player_state (player_id) values ($1)', [p.id])
+    await d.query("insert into player_heroes (player_id, hero_id, copies) values ($1, 'arteon', 3)", [p.id])
+    assert.deepEqual(await migrate(d), ALL_MIGRATIONS.filter((f) => f >= '006'))
+    const h = await d.query('select hero_id, copies, level from player_heroes where player_id = $1 order by hero_id', [p.id])
+    assert.deepEqual(h.map((r) => `${r.hero_id}:${r.copies}:${r.level}`), ['arteon:3:1'])
+    await assert.rejects(d.query("update player_heroes set level = 0 where player_id = $1 and hero_id = 'arteon'", [p.id]))
+  } finally {
+    await d.close()
+  }
+})
+
+test('레벨업 설정 검증: 비용·별당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상', async () => {
+  const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
+  const dir = dataCopy()
+  const withCfg = (key: string, value: string) => {
+    writeFileSync(join(dir, 'config.csv'), cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`))
+    return dir
+  }
+  const cases: [string, string, RegExp][] = [
+    ['hero_max_level_base', '0', /hero_max_level_base must be an integer of at least 1: '0'/],
+    ['hero_max_level_base', '20.5', /hero_max_level_base must be an integer of at least 1/],
+    ['hero_max_level_per_star', '-1', /hero_max_level_per_star must be a non-negative integer: '-1'/],
+    ['hero_level_stat', '-0.01', /hero_level_stat must be 0 or more: '-0\.01'/],
+    ['levelup_gold_SSR', '1.5', /levelup_gold_SSR must be a non-negative integer: '1\.5'/],
+    ['levelup_food_R', '-10', /levelup_food_R must be a non-negative integer: '-10'/],
+  ]
+  for (const [key, value, re] of cases) {
+    await assert.rejects(readTables(withCfg(key, value)), (e: unknown) => {
+      assert.ok(e instanceof CsvError)
+      assert.equal(e.errors.length, 1, `${key}=${value}: ${e.errors.join(' | ')}`)
+      assert.match(e.errors[0], re)
+      return true
+    })
+  }
+  writeFileSync(join(dir, 'config.csv'), cfg.replace(/^levelup_food_SR,.*\n/m, ''))
+  await assert.rejects(readTables(dir), /missing key 'levelup_food_SR'/)
+  await readTables(withCfg('levelup_gold_R', '0')) // 0원·0배율은 받는다
+  await readTables(withCfg('hero_level_stat', '0'))
+})

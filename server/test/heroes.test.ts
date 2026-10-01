@@ -17,6 +17,8 @@ after(async () => {
 })
 
 const STARTERS = ['hans', 'ella', 'dorik', 'nina']
+// 응답 heroes {id: {copies, level}}(개정 11) → {id: copies}
+const copiesOf = (h: Record<string, { copies: number }>) => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, v.copies]))
 const setGold = (id: string, tenths: number) => S.db.query('update player_state set gold_tenths = $2 where player_id = $1', [id, tenths])
 const logs = async (id: string, kind: string) => S.db.query('select detail from economy_log where player_id = $1 and kind = $2 order by id', [id, kind])
 const gacha = (token: string, count: unknown) => S.req('POST', '/v1/gacha', { token, body: { count } })
@@ -26,7 +28,7 @@ test('새 플레이어: 시작 영웅 4종 copies 1, 배치 = 시작 영웅 순�
   S.clock.t = T0
   const { token, id } = await S.login()
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual(p.heroes, { hans: 1, ella: 1, dorik: 1, nina: 1 })
+  assert.deepEqual(copiesOf(p.heroes), { hans: 1, ella: 1, dorik: 1, nina: 1 })
   assert.deepEqual(p.deploy, STARTERS)
   const rows = await S.db.query('select hero_id, copies from player_heroes where player_id = $1 order by hero_id', [id])
   assert.deepEqual(rows, [{ hero_id: 'dorik', copies: 1 }, { hero_id: 'ella', copies: 1 }, { hero_id: 'hans', copies: 1 }, { hero_id: 'nina', copies: 1 }])
@@ -34,7 +36,7 @@ test('새 플레이어: 시작 영웅 4종 copies 1, 배치 = 시작 영웅 순�
   const dev = (await S.db.query('select device_id from players where id = $1', [id]))[0].device_id
   await S.login(dev) // 기존 플레이어: 시작 영웅을 다시 주거나 배치를 되돌리지 않는다
   const again = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([again.heroes, again.deploy], [{ hans: 1, ella: 1, dorik: 1, nina: 1 }, ['nina', null, 'hans', null]])
+  assert.deepEqual([copiesOf(again.heroes), again.deploy], [{ hans: 1, ella: 1, dorik: 1, nina: 1 }, ['nina', null, 'hans', null]])
 })
 
 test('모집 1회: floor(gold) ≥ 300이면 tenths 3000 차감(소수는 남음), 결과 {hero_id, grade, new, copies}, 중복은 copies +1, economy_log', async () => {
@@ -45,17 +47,17 @@ test('모집 1회: floor(gold) ≥ 300이면 tenths 3000 차감(소수는 남음
   let r = await gacha(token, 1)
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.results, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2 }])
-  assert.deepEqual([r.json.player.gold_tenths, r.json.player.gold, r.json.player.heroes.hans], [5, 0, 2])
+  assert.deepEqual([r.json.player.gold_tenths, r.json.player.gold, r.json.player.heroes.hans.copies], [5, 0, 2])
   await setGold(id, 3000)
   rand.next = [0.02, 0] // SSR(< 0.03), SSR 풀 첫째 = arteon(새로)
   r = await gacha(token, 1)
   assert.deepEqual(r.json.results, [{ hero_id: 'arteon', grade: 'SSR', new: true, copies: 1 }])
-  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.arteon], [0, 1])
+  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.arteon.copies], [0, 1])
   rand.next = [0.19, 0.99] // SR 경계(0.03 ≤ r < 0.2), SR 풀 마지막 = felix
   await setGold(id, 3000)
   assert.deepEqual((await gacha(token, 1)).json.results, [{ hero_id: 'felix', grade: 'SR', new: true, copies: 1 }])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual(p.heroes, { hans: 2, ella: 1, dorik: 1, nina: 1, arteon: 1, felix: 1 })
+  assert.deepEqual(copiesOf(p.heroes), { hans: 2, ella: 1, dorik: 1, nina: 1, arteon: 1, felix: 1 })
   const l = await logs(id, 'gacha')
   assert.equal(l.length, 3)
   assert.deepEqual([l[0].detail.count, l[0].detail.cost, l[0].detail.gold_tenths, l[0].detail.results], [1, 300, -3000, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2 }]])
@@ -70,7 +72,7 @@ test('모집: 골드 부족(floor 299)은 409 not_enough_gold이고 아무것도
   await setGold(id, 26999)
   assert.equal((await gacha(token, 10)).status, 409)
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.gold_tenths, p.heroes], [26999, { hans: 1, ella: 1, dorik: 1, nina: 1 }])
+  assert.deepEqual([p.gold_tenths, copiesOf(p.heroes)], [26999, { hans: 1, ella: 1, dorik: 1, nina: 1 }])
   assert.equal((await logs(id, 'gacha')).length, 0)
   for (const count of [0, 2, 5, 11, '1', 1.5, null]) assert.equal((await gacha(token, count)).status, 400, String(count))
   assert.equal((await S.req('POST', '/v1/gacha', { token, body: {} })).status, 400)
@@ -87,7 +89,7 @@ test('10연차: 2700(tenths 27000) 차감, 10장, SR 이상이 없으면 마지�
   assert.equal(res.length, 10)
   assert.deepEqual(res.slice(0, 9).map((x: any) => [x.hero_id, x.new, x.copies]), Array.from({ length: 9 }, (_, i) => ['jack', i === 0, i + 1]))
   assert.deepEqual(res[9], { hero_id: 'felix', grade: 'SR', new: true, copies: 1 })
-  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.jack, r.json.player.heroes.felix], [7, 9, 1])
+  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.jack.copies, r.json.player.heroes.felix.copies], [7, 9, 1])
   rand.next = []
 })
 
@@ -149,7 +151,7 @@ test('응답: 표에서 빠진 영웅은 heroes·deploy에서 거른다(보유 �
   await S.db.query("insert into player_heroes (player_id, hero_id, copies) values ($1, 'retired_hero', 2)", [id])
   await S.db.query(`update player_state set deploy = '["retired_hero", "ella", null, "nina"]'::jsonb where player_id = $1`, [id])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.heroes, p.deploy], [{ hans: 1, ella: 1, dorik: 1, nina: 1 }, [null, 'ella', null, 'nina']])
+  assert.deepEqual([copiesOf(p.heroes), p.deploy], [{ hans: 1, ella: 1, dorik: 1, nina: 1 }, [null, 'ella', null, 'nina']])
 })
 
 test('시드 전 DB(마이그레이션만): 새 플레이어도 스펙 기본 시작 영웅 4종과 그 순서의 배치를 받는다(마이그레이션 005와 같은 기본값)', async () => {

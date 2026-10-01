@@ -59,6 +59,13 @@ func hero_copies(hero_id: String) -> int:
 	return maxi(1, int(roster.heroes.get(hero_id, 1)))
 
 
+## 영웅 id의 레벨(능력치 레벨 배율, 개정 11). roster가 없으면 1.
+func hero_level(hero_id: String) -> int:
+	if roster == null:
+		return 1
+	return roster.level_of(hero_id)
+
+
 func start_stage() -> void:
 	if mode != Mode.IDLE:
 		push_warning("start_stage ignored in mode %d" % mode)
