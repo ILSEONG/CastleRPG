@@ -17,3 +17,4 @@ merchant_rate_max,1.5
 merchant_rate_step,0.1
 merchant_low_high_ratio,3
 kill_rate_cap,5
+kill_burst_sec,60

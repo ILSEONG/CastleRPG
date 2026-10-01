@@ -16,7 +16,6 @@ export const STAGE_COLS = ['hp_mult', 'atk_mult', 'gold_mult', 'waves', 'wave_si
 const INT_COLS = ['waves', 'wave_size']
 export const EXTEND_ROWS = 12 // 표 너머 연장 기울기를 잴 마지막 행 수
 export const MIN_IDLE_INTERVAL = 0.5
-export const KILL_SLACK = 20 // 처치 상한 여유분
 
 export function cfgNum(config: Config, key: string): number {
   const v = Number(config[key])
@@ -68,10 +67,9 @@ export function merchantRate(hour: number, config: Config): number {
   if (rnd() < cfgNum(config, 'merchant_jackpot_p')) return cfgNum(config, 'merchant_jackpot_rate')
   const step = cfgNum(config, 'merchant_rate_step')
   const min = cfgNum(config, 'merchant_rate_min')
-  const perUnit = Math.round(1 / step)
-  const lo = Math.round(min * perUnit)
   const n = Math.round((cfgNum(config, 'merchant_rate_max') - min) / step) + 1
-  if (n <= 1) return lo / perUnit
+  const at = (i: number) => Math.round((min + i * step) * 1000) / 1000 // 0.001 단위(step이 1/정수가 아니어도)
+  if (n <= 1) return at(0)
   const lowW = 1 / cfgNum(config, 'merchant_low_high_ratio')
   const ws: number[] = []
   let total = 0
@@ -82,9 +80,9 @@ export function merchantRate(hour: number, config: Config): number {
   let pick = rnd() * total
   for (let i = 0; i < n; i++) {
     pick -= ws[i]
-    if (pick < 0) return (lo + i) / perUnit
+    if (pick < 0) return at(i)
   }
-  return (lo + n - 1) / perUnit
+  return at(n - 1)
 }
 
 // floor(수량 × 단가 × 배율). 배율을 0.001 단위 정수로 바꿔 내림 오차를 없앤다.
@@ -118,10 +116,17 @@ export function killGold(monsterGold: number, stage: StageRow): number {
   return Math.max(1, roundHalfAway(monsterGold * stage.gold_mult))
 }
 
-// 총 처치 수 상한 = ceil(지난 보고 이후 초 × 초당 상한) + 20. 경과가 음수면 0초로 본다.
-export function killCap(elapsedSec: number, ratePerSec: number): number {
-  return Math.ceil(Math.max(0, elapsedSec) * ratePerSec) + KILL_SLACK
+// 처치 토큰 버킷. 지난 보고 시각은 최대 burstSec초 전까지만 인정한다(from) — 쌓이는 상한이 burstSec × rate로 묶인다.
+// 상한 = max(0, ceil((now − from) × rate)). kept개를 인정하면 다음 보고 시각 = from + kept / rate(쓴 만큼만 앞으로).
+// 같은 순간 여러 번 보내도 합쳐서 버킷 이상은 못 얻는다.
+export function killBucket(lastReport: number, now: number, ratePerSec: number, burstSec: number) {
+  const from = Math.max(lastReport, now - burstSec)
+  const cap = Math.max(0, Math.ceil((now - from) * ratePerSec))
+  return { cap, after: (kept: number) => (kept > 0 ? from + kept / ratePerSec : from) }
 }
+
+// 스테이지 최소 클리어 시간(초) = 웨이브 수 × 웨이브 크기 / 초당 처치 상한. 이보다 빠른 클리어는 받지 않는다.
+export const minClearSec = (row: StageRow, ratePerSec: number) => (row.waves * row.wave_size) / ratePerSec
 
 // 상한을 넘는 처치는 버린다 — 싼 몬스터부터 인정하고 비싼 몬스터를 먼저 버린다(부풀린 보스 처치가 먼저 잘린다).
 export function clampKills(kills: { id: string; count: number; gold: number }[], cap: number) {

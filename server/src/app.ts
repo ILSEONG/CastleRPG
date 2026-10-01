@@ -20,6 +20,10 @@ export interface AppOptions {
 const TOKEN_TTL = 30 * 86400
 const MAX_ATTEMPTS = 4 // 첫 시도 + 충돌 시 재시도 3회
 const MAX_BODY = 16 * 1024
+const MAX_STAGE = 1_000_000
+const MAX_KILL_COUNT = 10_000 // 몬스터 한 종류의 한 번 보고 수
+const MAX_INT4 = 2_147_483_647
+const MAX_AGE_MIN = 100_000
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -48,6 +52,8 @@ interface Player {
   gate_level: number
   version: number
   last_kill_report: number
+  last_stage_clear: number
+  kill_seq: number
   res: Record<string, number>
   buildings: Record<string, { level: number; last_collect: number }>
 }
@@ -57,6 +63,8 @@ interface Change {
   gold?: number // 더할 골드
   stage?: number // 새 스테이지
   lastKillReport?: number // 새 처치 보고 시각
+  lastStageClear?: number // 새 스테이지 클리어 시각
+  killSeq?: number // 새 처치 보고 번호
   res?: Record<string, number> // 자원 증감
   buildings?: Record<string, number> // 건물 → 새 last_collect
   log?: { kind: string; detail: unknown }
@@ -71,8 +79,9 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold, s.stage, s.keep_level, s.gate_level, s.version,
+const PLAYER_SQL = `select s.gold, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
+  extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings
@@ -82,7 +91,8 @@ const PLAYER_SQL = `select s.gold, s.stage, s.keep_level, s.gate_level, s.versio
 const ENSURE_SQL = `with p as (
     insert into players (device_id, created_at, last_seen) values ($1, to_timestamp($2::float8), to_timestamp($2::float8))
     on conflict (device_id) do update set last_seen = excluded.last_seen returning id),
-  s as (insert into player_state (player_id, last_kill_report) select id, to_timestamp($2::float8) from p on conflict do nothing),
+  s as (insert into player_state (player_id, last_kill_report, last_stage_clear)
+    select id, to_timestamp($2::float8), to_timestamp($2::float8) from p on conflict do nothing),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
   b as (insert into player_buildings (player_id, building, last_collect) select p.id, resources.building, to_timestamp($2::float8)
     from p, resources on conflict do nothing)
@@ -95,6 +105,8 @@ const ENSURE_ROWS_SQL = `with p as (select $1::uuid as id),
   select 1`
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
+// bigint 파라미터는 정수 문자열로 — Neon은 숫자를 toString()으로 보내 1e21부터 지수 표기가 되고 ::bigint가 거부한다. 정수가 아니면 throw.
+const bigint = (v: number) => BigInt(v).toString()
 
 export function createApp(opts: AppOptions) {
   const query = opts.query
@@ -148,7 +160,8 @@ export function createApp(opts: AppOptions) {
       }
       return {
         gold: Number(r.gold), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
-        version: Number(r.version), last_kill_report: Number(r.last_kill_report), res, buildings,
+        version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
+        kill_seq: Number(r.kill_seq), res, buildings,
       }
     }
     throw new ApiError(500, 'internal', 'player rows missing')
@@ -165,7 +178,7 @@ export function createApp(opts: AppOptions) {
     }
     return {
       server_now: now,
-      player: { gold: p.gold, res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level, buildings },
+      player: { gold: p.gold, res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level, kill_seq: p.kill_seq, buildings },
       merchant: { rate: R.merchantRate(R.hourIndex(now), game.config), next_change: R.nextChange(now) },
     }
   }
@@ -179,12 +192,14 @@ export function createApp(opts: AppOptions) {
       return `$${params.length}`
     }
     const sets = ['version = version + 1']
-    if (ch.gold) sets.push(`gold = gold + ${p(ch.gold)}::bigint`)
+    if (ch.gold) sets.push(`gold = gold + ${p(bigint(ch.gold))}::bigint`)
     if (ch.stage !== undefined) sets.push(`stage = ${p(ch.stage)}::int`)
     if (ch.lastKillReport !== undefined) sets.push(`last_kill_report = to_timestamp(${p(ch.lastKillReport)}::float8)`)
+    if (ch.lastStageClear !== undefined) sets.push(`last_stage_clear = to_timestamp(${p(ch.lastStageClear)}::float8)`)
+    if (ch.killSeq !== undefined) sets.push(`kill_seq = ${p(ch.killSeq)}::int`)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2 returning player_id)`]
     Object.entries(ch.res ?? {}).forEach(([res, d], i) => {
-      ctes.push(`r${i} as (update player_resources set amount = amount + ${p(d)}::bigint
+      ctes.push(`r${i} as (update player_resources set amount = amount + ${p(bigint(d))}::bigint
         where player_id = (select player_id from s) and res = ${p(res)} returning 1)`)
     })
     Object.entries(ch.buildings ?? {}).forEach(([b, t], i) => {
@@ -203,6 +218,8 @@ export function createApp(opts: AppOptions) {
     pl.gold += ch.gold ?? 0
     if (ch.stage !== undefined) pl.stage = ch.stage
     if (ch.lastKillReport !== undefined) pl.last_kill_report = ch.lastKillReport
+    if (ch.lastStageClear !== undefined) pl.last_stage_clear = ch.lastStageClear
+    if (ch.killSeq !== undefined) pl.kill_seq = ch.killSeq
     for (const [k, d] of Object.entries(ch.res ?? {})) pl.res[k] = (pl.res[k] ?? 0) + d
     for (const [k, t] of Object.entries(ch.buildings ?? {})) pl.buildings[k].last_collect = t
     pl.version += 1
@@ -238,9 +255,10 @@ export function createApp(opts: AppOptions) {
     return b as Record<string, unknown>
   }
 
-  const intField = (b: Record<string, unknown>, key: string, min: number) => {
+  const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
+  const intField = (b: Record<string, unknown>, key: string, min: number, max: number) => {
     const v = b[key]
-    if (typeof v !== 'number' || !Number.isInteger(v) || v < min) throw new ApiError(400, 'bad_request', `'${key}' must be an integer >= ${min}`)
+    if (!isInt(v, min, max)) throw new ApiError(400, 'bad_request', `'${key}' must be an integer in ${min}..${max}`)
     return v
   }
   const strField = (b: Record<string, unknown>, key: string) => {
@@ -342,41 +360,47 @@ export function createApp(opts: AppOptions) {
 
   app.post('/v1/kills', auth, async (c) => {
     const b = await body(c)
-    const askedStage = intField(b, 'stage', 1)
+    const seq = intField(b, 'seq', 0, MAX_INT4)
+    const askedStage = intField(b, 'stage', 1, MAX_STAGE)
     const kills = b.kills
     if (!kills || typeof kills !== 'object' || Array.isArray(kills)) throw new ApiError(400, 'bad_request', "'kills' must be an object of monster id -> count")
     const entries = Object.entries(kills as Record<string, unknown>)
     for (const [id, n] of entries) {
-      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) throw new ApiError(400, 'bad_request', `kill count for '${id}' must be an integer >= 0`)
+      if (!isInt(n, 0, MAX_KILL_COUNT)) throw new ApiError(400, 'bad_request', `kill count for '${id}' must be an integer in 0..${MAX_KILL_COUNT}`)
     }
     return mutate(c, (p, g, now) => {
       const monsters = new Map(g.monsters.map((m) => [m.id, m]))
       for (const [id] of entries) if (!monsters.has(id)) throw new ApiError(400, 'unknown_monster', `unknown monster '${id}'`)
+      // 재전송(응답 유실 후 다시 보냄)·순서 뒤바뀜: 이미 반영한 번호면 아무것도 안 한다.
+      if (seq <= p.kill_seq) return { extra: { gold_gained: 0 } }
       const stage = Math.min(askedStage, p.stage)
       const row = R.stageRow(stage, g.stages)
-      const cap = R.killCap(now - p.last_kill_report, R.cfgNum(g.config, 'kill_rate_cap'))
+      const bucket = R.killBucket(p.last_kill_report, now, R.cfgNum(g.config, 'kill_rate_cap'), R.cfgNum(g.config, 'kill_burst_sec'))
       const priced = entries.map(([id, n]) => ({ id, count: n as number, gold: R.killGold(Number(monsters.get(id).gold), row) }))
-      const { kept, clamped } = R.clampKills(priced, cap)
+      const { kept, clamped } = R.clampKills(priced, bucket.cap)
       const gold = priced.reduce((s, k) => s + kept[k.id] * k.gold, 0)
       const total = priced.reduce((s, k) => s + k.count, 0)
-      const log = total > 0 ? { kind: 'kills', detail: { stage, asked_stage: askedStage, kills, kept, cap, clamped, gold } } : undefined
-      return { change: { gold, lastKillReport: now, log }, extra: { gold_gained: gold } }
+      const keptTotal = priced.reduce((s, k) => s + kept[k.id], 0)
+      const log = total > 0 ? { kind: 'kills', detail: { seq, stage, asked_stage: askedStage, kills, kept, cap: bucket.cap, clamped, gold } } : undefined
+      return { change: { gold, lastKillReport: bucket.after(keptTotal), killSeq: seq, log }, extra: { gold_gained: gold } }
     })
   })
 
   app.post('/v1/stage/clear', auth, async (c) => {
-    const stage = intField(await body(c), 'stage', 1)
-    return mutate(c, (p) => {
-      if (stage !== p.stage) return {} // 중복·재전송: 변화 없음
-      return { change: { stage: stage + 1, log: { kind: 'stage_clear', detail: { stage } } } }
+    const stage = intField(await body(c), 'stage', 1, MAX_STAGE)
+    return mutate(c, (p, g, now) => {
+      if (stage !== p.stage) return { extra: { cleared: false } } // 중복·재전송·앞지름: 변화 없음
+      // 지난 클리어(새 계정이면 가입) 이후 최소 시간보다 빠르면 받지 않는다 — 스크립트로 스테이지를 올려 처치 골드를 키우지 못한다.
+      const sec = now - p.last_stage_clear
+      if (sec < R.minClearSec(R.stageRow(stage, g.stages), R.cfgNum(g.config, 'kill_rate_cap'))) return { extra: { cleared: false } }
+      return { change: { stage: stage + 1, lastStageClear: now, log: { kind: 'stage_clear', detail: { stage, sec } } }, extra: { cleared: true } }
     })
   })
 
   if (opts.allowTestHooks) {
     // 통합 테스트용: 그 플레이어 건물의 last_collect를 minutes분 앞당긴다.
     app.post('/v1/test/age', auth, async (c) => {
-      const minutes = (await body(c)).minutes
-      if (typeof minutes !== 'number' || !Number.isFinite(minutes)) throw new ApiError(400, 'bad_request', "'minutes' must be a number")
+      const minutes = intField(await body(c), 'minutes', 0, MAX_AGE_MIN)
       const id = c.get('playerId') as string
       await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
         update player_buildings set last_collect = last_collect - $2::float8 * interval '1 second'

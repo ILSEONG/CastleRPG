@@ -54,6 +54,14 @@ test('merchantRate: 결정적, 값 12개, 20만 칸 표본 분포(2.0 = 5% ± 0.
   assert.equal(R.hourIndex(3600 * 10 - 0.001), 9)
 })
 
+test('merchantRate: step이 1/정수가 아니어도 min + i × step(0.001 단위)', () => {
+  const cfg = { ...CONFIG, merchant_rate_step: '0.3' } // 0.5, 0.8, 1.1, 1.4
+  const seen = new Set<number>()
+  const start = R.hourIndex(1_790_000_000)
+  for (let h = start; h < start + 5000; h++) seen.add(R.merchantRate(h, cfg))
+  assert.deepEqual([...seen].sort((a, b) => a - b), [0.5, 0.8, 1.1, 1.4, 2])
+})
+
 test('sellValue: floor(수량 × 단가 × 배율)', () => {
   assert.equal(R.sellValue(7, 1, 0.5), 3)
   assert.equal(R.sellValue(3, 2, 0.7), 4) // 4.2
@@ -99,10 +107,36 @@ test('killGold: round(gold × gold_mult), 최소 1', () => {
   assert.equal(R.killGold(2, R.stageRow(40, STAGES)), 18) // gold_mult 8.8
 })
 
-test('killCap / clampKills: ceil(초 × 상한) + 20, 넘치면 비싼 몬스터부터 버림', () => {
-  assert.equal(R.killCap(10, 5), 70)
-  assert.equal(R.killCap(0.1, 5), 21)
-  assert.equal(R.killCap(-50, 5), 20)
+test('killBucket: 상한 = ceil(인정 초 × rate), 인정 초는 최대 burst, 쓴 만큼만 보고 시각이 앞으로', () => {
+  const b = R.killBucket(1000, 1010, 5, 60)
+  assert.equal(b.cap, 50)
+  assert.equal(b.after(50), 1010)
+  assert.equal(b.after(20), 1004) // 남은 6초는 다음 보고로
+  assert.equal(b.after(0), 1000)
+  const far = R.killBucket(0, 1000, 5, 60) // 오래 쉬어도 버킷은 60초 × 5 = 300
+  assert.equal(far.cap, 300)
+  assert.equal(far.after(0), 940)
+  assert.equal(R.killBucket(1000, 1000.1, 5, 60).cap, 1)
+  assert.equal(R.killBucket(1010, 1000, 5, 60).cap, 0) // 보고 시각이 미래(시계 되돌림·외상)면 0
+  // 같은 순간 반복: 합쳐서 버킷 이상 못 얻는다
+  let last = 0
+  let got = 0
+  for (let i = 0; i < 50; i++) {
+    const k = R.killBucket(last, 1000, 5, 60)
+    const kept = Math.min(20, k.cap)
+    got += kept
+    last = k.after(kept)
+  }
+  assert.equal(got, 300)
+})
+
+test('minClearSec: 웨이브 수 × 웨이브 크기 / kill_rate_cap', () => {
+  assert.equal(R.minClearSec(STAGES[0], 5), 4.8) // 3 × 8 / 5
+  assert.equal(R.minClearSec(STAGES[1], 5), 6) // 3 × 10 / 5
+  assert.equal(R.minClearSec(R.stageRow(31, STAGES), 5), (13 * 68) / 5) // 연장 규칙
+})
+
+test('clampKills: 넘치면 비싼 몬스터부터 버림', () => {
   const k = [{ id: 'grunt', count: 60, gold: 2 }, { id: 'epic_boss', count: 20, gold: 50 }]
   assert.deepEqual(R.clampKills(k, 100), { kept: { grunt: 60, epic_boss: 20 }, clamped: false })
   assert.deepEqual(R.clampKills(k, 70), { kept: { grunt: 60, epic_boss: 10 }, clamped: true })

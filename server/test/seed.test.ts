@@ -30,10 +30,10 @@ function dataCopy(changes: Record<string, string> = {}): string {
 const csvRows = (file: string) => readFileSync(join(DATA_DIR, file), 'utf8').split('\n').slice(1).filter((l) => l.replace(/,/g, '').trim() !== '').length
 
 test('마이그레이션: 적용하고 기록, 두 번째는 아무것도 안 함', async () => {
-  assert.deepEqual(await migrate(db), ['001_init.sql'])
+  assert.deepEqual(await migrate(db), ['001_init.sql', '002_kill_seq_stage_clear.sql'])
   assert.deepEqual(await migrate(db), [])
   const rows = await db.query('select name from schema_migrations')
-  assert.deepEqual(rows.map((r) => r.name), ['001_init.sql'])
+  assert.deepEqual(rows.map((r) => r.name), ['001_init.sql', '002_kill_seq_stage_clear.sql'])
 })
 
 test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async () => {

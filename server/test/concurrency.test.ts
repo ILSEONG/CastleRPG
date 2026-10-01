@@ -73,6 +73,27 @@ test('동시 판매 2건은 한 번만 판다(골드가 두 번 들어오지 않
   }
 })
 
+test('같은 seq 처치 보고 2건이 겹쳐도(재전송이 원래 요청과 경합) 한 번만 반영된다', async () => {
+  const b = barrier()
+  const S = await setup({ wrapQuery: b.wrap })
+  try {
+    S.clock.t = T0
+    const { token, id } = await S.login()
+    S.clock.t = T0 + 100
+    b.arm()
+    const body = { seq: 1, stage: 1, kills: { grunt: 10 } }
+    const [r1, r2] = await Promise.all([S.req('POST', '/v1/kills', { token, body }), S.req('POST', '/v1/kills', { token, body })])
+    assert.equal(b.arrived(), 2, 'both requests read kill_seq 0 before either wrote')
+    assert.deepEqual([r1.json.gold_gained, r2.json.gold_gained].sort((x, y) => x - y), [0, 20])
+    const p = await S.req('GET', '/v1/player', { token })
+    assert.deepEqual([p.json.player.gold, p.json.player.kill_seq], [20, 1])
+    const n = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'kills'", [id])
+    assert.equal(n[0].n, 1)
+  } finally {
+    await S.close()
+  }
+})
+
 test('쓰기 직전마다 다른 쓰기가 끼어들면 재시도 3회 후 409, 아무것도 안 바뀜', async () => {
   let interfere = false
   let commits = 0
