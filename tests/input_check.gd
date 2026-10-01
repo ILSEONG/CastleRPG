@@ -603,6 +603,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	recruit.close()
 	await _guard_wait()
 	await _buildings_ui(tabs, hud, recruit)
+	await _rotate_ui(hud)
 	await _top_hud(hud)
 
 
@@ -973,3 +974,66 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.build = {}
 	Economy.changed.emit()
 	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
+
+
+## (R) 개정 14 §1 꾹 누르고 드래그 = 화면 회전: 0.35초 뒤 회전 대기 표시 → 가로 이동으로 요가 돈다(0.4°/px), 명령 없음. 회전 뒤 탭 판정(벌목장 수집)·나침반 화살이 맞다.
+func _rotate_ui(hud) -> void:
+	var rig = _camera.get_parent()
+	var warrior = get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())[0]
+	_picker._select(warrior)
+	var state := [warrior.side, warrior.post, warrior.free_pos]
+	var pos0: Vector3 = rig.position
+	var size0 := _camera.size
+	var yaw0: float = rig.yaw_deg()
+	var px := Vector2(360, 640)
+	for c in [Vector2(360, 640), Vector2(120, 560), Vector2(600, 560), Vector2(360, 900), Vector2(100, 900), Vector2(620, 900)]:
+		if _open_ground(c) and _picker._building_at(c) == "":  # 건물 위면 0.5초에 창이 열린다
+			px = c
+			break
+	_check(_open_ground(px) and _picker._building_at(px) == "", "(R) precondition: the press point is open ground", "px=%s" % px)
+	_mouse_button(px, true)
+	await get_tree().create_timer(0.2).timeout
+	await _frames(2)
+	_check(not rig._rotating and not rig._indicator.visible, "(R) still pressed at 0.2 s: not rotating yet", "")
+	await get_tree().create_timer(0.3).timeout
+	await _frames(2)
+	_check(rig._rotating and rig._indicator.visible, "(R) pressed 0.5 s without moving: rotate-ready indicator shown", "rotating=%s" % rig._rotating)
+	for i in 5:  # 시간이 지난 뒤의 push_input 움직임은 헤드리스 뷰포트가 버리므로 리그에 직접 넣는다
+		var mv := InputEventMouseMotion.new()
+		mv.position = px + Vector2(20, 0) * (i + 1)
+		mv.relative = Vector2(20, 0)
+		rig._unhandled_input(mv)
+	_mouse_button(px + Vector2(100, 0), false)
+	await _frames(3)
+	var yaw1: float = rig.yaw_deg()
+	var turned := wrapf(yaw0 - yaw1, -180.0, 180.0)
+	_check(absf(turned - 40.0) < 0.5 and rig.position == pos0 and _camera.size == size0 and not rig._rotating and not rig._indicator.visible,
+		"(R) hold + 100 px drag turns the yaw 40 degrees (0.4/px), pivot and zoom kept, indicator gone", "yaw %.1f -> %.1f pos=%s size=%.1f" % [yaw0, yaw1, rig.position, _camera.size])
+	_check(_picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == state and not _building_win().is_open(),
+		"(R) the rotating drag issues no command and opens no window", "selected=%s warrior=%s state %s -> %s win=%s" % [_name(_picker.selected), _name(warrior), state, [warrior.side, warrior.post, warrior.free_pos], _building_win().is_open()])
+	# 회전한 뒤 탭 판정: 벌목장 탭이 수집한다. 나침반 화살은 현재 요를 따른다
+	_picker._select(null)
+	await _frames(2)
+	_check(is_equal_approx(hud._compass_yaw, yaw1) and hud.compass_dir(0, yaw1).distance_to(hud.compass_dir(0)) > 0.3,
+		"(R) the gate-bar compass follows the camera yaw", "hud=%.1f cam=%.1f" % [hud._compass_yaw, yaw1])
+	var now := Time.get_unix_time_from_system()
+	Economy.res = {"wood": 0, "stone": 0, "food": 0}
+	Economy.last_collect["lumber"] = now - 600.0
+	Economy.changed.emit()
+	var lp := _building_px("lumber")
+	if get_viewport().get_visible_rect().has_point(lp) and not _open_hero(lp):
+		var due: int = Economy.pending("lumber", Economy.time_now())
+		await _tap(lp)
+		_check(due >= 100 and Economy.res.wood >= due, "(R) after rotating, a tap on the lumber mill (at its new screen position) still collects", "wood=%d px=%s" % [Economy.res.wood, lp])
+	else:
+		print("INPUT INFO: (R) lumber mill off screen after rotation, px=%s" % lp)
+	# 움직임 없이 뗀 꾹 누름은 회전 대기만 거치고 요를 그대로 둔다
+	var yaw2: float = rig.yaw_deg()
+	_mouse_button(px, true)
+	await get_tree().create_timer(0.5).timeout
+	await _frames(2)
+	_mouse_button(px, false)
+	await _frames(2)
+	_check(is_equal_approx(rig.yaw_deg(), yaw2) and not rig._rotating, "(R) hold and release without moving leaves the yaw alone", "yaw %.1f -> %.1f" % [yaw2, rig.yaw_deg()])
+	rig.rotation_degrees.y = 0.0
+	await _frames(2)

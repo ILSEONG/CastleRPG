@@ -29,7 +29,9 @@ var _stage_label: Label
 var _title_box: HBoxContainer  # 첫 줄 왼쪽: 스테이지 글자 + (개정 12 §3) 방치 무적 표시 자리
 var _castle_bar: ProgressBar
 var _gate_bars: Array = []
-var _gate_tiles: Array = []  # side -> 성문 막대 줄(탭하면 gate_tapped)
+var _compass_arrows: Array = []  # 나침반 화살 Control들(요가 바뀌면 다시 그림)
+var _compass_yaw := CameraRig.YAW_DEG
+var _gate_tiles: Array = [] # side -> 성문 막대 줄(탭하면 gate_tapped)
 var _hp := {}  # CASTLE·면 → {bar, num, flash: 테두리 번쩍임 Control, left: 남은 번쩍임 초, last: 지난 HP}
 var _center: Label
 var _button: Button
@@ -129,6 +131,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_compass()
 	if GameState.mode == GameState.Mode.COUNTDOWN:
 		_center.text = str(ceili(GameState.countdown_left()))
 	if _toast_left > 0.0:
@@ -191,7 +194,8 @@ func _gate_tile(side: int) -> Button:
 	arrow.custom_minimum_size = Vector2(22, 22)
 	arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	arrow.draw.connect(_draw_compass.bind(arrow, compass_dir(side)))
+	arrow.draw.connect(func(): _draw_compass(arrow, compass_dir(side, _camera_yaw())))
+	_compass_arrows.append(arrow)
 	row.add_child(arrow)
 	row.add_child(_side_name(Formation.SIDE_NAMES[side]))
 	row.add_child(_hp_bar(side, GATE_COLOR))
@@ -208,9 +212,25 @@ func _side_name(text: String) -> Label:
 	return l
 
 
-## 면 side의 성문이 화면에서 성 가운데로부터 놓인 방향(단위 벡터, 화면 y 아래 +). 카메라 요는 고정(CameraRig.YAW_DEG).
-static func compass_dir(side: int) -> Vector2:
-	var yaw := deg_to_rad(CameraRig.YAW_DEG)
+## 지금 카메라 요(도). 카메라가 없으면 기본값.
+func _camera_yaw() -> float:
+	var cam := get_viewport().get_camera_3d()
+	return rad_to_deg(cam.global_rotation.y) if cam != null else CameraRig.YAW_DEG
+
+
+## 회전하면 나침반 화살을 다시 그린다(매 프레임 _process에서).
+func _update_compass() -> void:
+	var yaw := _camera_yaw()
+	if is_equal_approx(yaw, _compass_yaw):
+		return
+	_compass_yaw = yaw
+	for a in _compass_arrows:
+		a.queue_redraw()
+
+
+## 면 side의 성문이 화면에서 성 가운데로부터 놓인 방향(단위 벡터, 화면 y 아래 +). yaw_deg = 카메라 요(기본 CameraRig.YAW_DEG).
+static func compass_dir(side: int, yaw_deg := CameraRig.YAW_DEG) -> Vector2:
+	var yaw := deg_to_rad(yaw_deg)
 	var d: Vector3 = Formation.SIDE_DIR[side]
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var ahead := Vector3(-sin(yaw), 0, -cos(yaw))  # 화면 위쪽이 보는 바닥 방향

@@ -37,7 +37,8 @@ var building_panel  # 건물 창(building_panel.gd)
 
 var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
-var _press_ms := -1  # 누른 시각(길게 누르기를 아직 안 본 누름). 봤거나 누름이 아니면 -1
+var _press_yaw := 0.0  # 누른 순간 카메라 요(회전했는지 판정)
+var _press_ms := -1 # 누른 시각(길게 누르기를 아직 안 본 누름). 봤거나 누름이 아니면 -1
 
 
 func _ready() -> void:
@@ -60,8 +61,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mb.pressed:
 		_press_pos = mb.position
 		_press_ms = Time.get_ticks_msec()
+		_press_yaw = camera.global_rotation.y
 	elif _press_pos != Vector2.INF:
-		_pending = mb.position
+		if is_equal_approx(_press_yaw, camera.global_rotation.y):  # 꾹 누르고 회전했으면 명령 없음(개정 14 §1)
+			_pending = mb.position
 		_press_pos = Vector2.INF
 
 
