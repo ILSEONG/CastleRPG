@@ -123,6 +123,7 @@ npm --prefix server test
 - 스테이지 클리어
   - `stage == player.stage`이고 지난 클리어(새 계정은 가입) 이후 `waves × wave_size / kill_rate_cap`초(그 스테이지 행, 연장 규칙)가 지났으면 +1, `cleared: true`.
   - 아니면(중복·재전송·앞지름·너무 빠름) 200 + 상태 그대로 + `cleared: false`다. 앱은 `player.stage`를 진실로 쓴다.
+  - 앱은 `cleared: false`를 다시 보내지 않는다. 보낸 클리어가 전부 답을 받았는데 앱 스테이지가 서버와 다르면, 다음 스테이지 경계(결과가 끝날 때·스테이지 시작)에서 서버 값으로 맞춘다. 스테이지 도중에는 바꾸지 않는다.
 - 시세는 시간 칸(`floor(유닉스 초 / 3600)`)을 시드로 한 mulberry32로 결정적으로 계산한다. 분포 값은 `game_config`에서 읽는다.
 
 ## 동시성
@@ -163,7 +164,15 @@ npm --prefix server test
    - 환경 변수 `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`(웹 빌드 출처), `PORT`를 설정한다.
    - 실행 명령은 `node src/main.ts`다(작업 디렉터리 `server/`). 운영 모드는 시작할 때 마이그레이션·시드를 하지 않는다. 3단계로 먼저 적용한다.
    - Vercel·Cloudflare Workers처럼 Node 서버가 아닌 곳은 `src/app.ts`의 `createApp`을 그 플랫폼 진입점에 연결해야 한다. 지금 코드는 `node:fs`·`node:crypto`를 쓰므로 그 플랫폼의 Node 호환 모드가 필요하다(확인하지 않음).
-5. 앱 프로젝트 설정 `castle/api_base_url`에 서버 주소(`https://...`)를 넣고 빌드한다.
+5. 앱 프로젝트 설정 `castle/api_base_url`에 서버 주소(`https://...`)를 넣고 **릴리스로** 빌드한다(`--export-release`).
+
+   ```bash
+   ./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . --export-release "Web" export/web/index.html
+   ```
+
+   - 릴리스 빌드는 `--api=<url>`(네이티브)·`?api=<url>`(웹)을 무시하고 설정 주소만 쓴다.
+   - 디버그 빌드는 이 인자를 받는다. 그래서 디버그 빌드를 배포하면 `?api=https://다른-서버` 링크 하나로 기기 id(게스트 계정 열쇠)가 남의 서버로 간다.
+   - `dev/build-web.sh`는 개발용 디버그 빌드(`--export-debug`)다. 배포에 쓰지 않는다.
 
 ## 비밀 관리
 
@@ -177,3 +186,12 @@ npm --prefix server test
   - `DATABASE_URL`이 있는데 `JWT_SECRET`이 없거나 32자 미만이다.
   - `DATABASE_URL`과 `ALLOW_TEST_HOOKS=1`이 같이 있다. 켜면 누구나 자기 건물 시계를 앞당길 수 있다.
   - 고정 개발 비밀(`JWT_SECRET` 없음)인데 `HOST`가 루프백이 아니다.
+
+## 알려진 한계
+
+- **같은 기기 id로 두 곳에서 동시에 하면 한쪽 처치 골드가 사라진다.**
+  - `seq`는 플레이어마다 하나다. 웹은 탭끼리 IndexedDB를 같이 쓰므로, 두 번째 탭도 같은 기기 id(같은 플레이어)로 로그인한다.
+  - 두 번째 탭의 `seq`는 보통 서버 `kill_seq` 이하라서, 그 탭의 처치 보고는 재전송으로 취급되고 골드 0이다.
+  - 이번 개정에서는 고치지 않는다. 고친다면 세션마다 `seq` 공간을 따로 두는 계약 변경이 필요하다.
+- 웹에서 브라우저 저장소가 영구가 아니면(사생활 모드, IndexedDB 차단) 기기 id가 남지 않는다. 다음 방문은 새 게스트 계정이다.
+  - 앱은 이때 경고 로그를 남기고, 접속 화면과 화면 아래 띠에 "브라우저 저장소가 꺼져 있어 진행이 저장되지 않을 수 있습니다"를 한 줄 보인다. 게임은 계속된다.
