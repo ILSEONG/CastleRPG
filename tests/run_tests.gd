@@ -68,6 +68,9 @@ func _init() -> void:
 	test_deploy_and_stars()
 	test_gate_repair()
 	test_fx_meshes()
+	test_gacha_offline()
+	test_roster()
+	test_skill_text()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1223,3 +1226,140 @@ func test_fx_meshes() -> void:
 	check(size.x < 1.6 and size.z < 1.6 and size.y < 0.1, "foot ring inside the selection ring: %s" % size)
 	check(ring.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and ring.material_override == Fx.material(), "foot ring: no shadow, shared material")
 	ring.free()
+
+
+## 개정 10 모집(오프라인, 스펙 §3.6): 10만 장 표본 확률, 10연차 보장(표본 + 조작 난수), 비용 tenths(소수 남음), copies·NEW, 부족하면 알림만,
+## 같은 seed면 같은 결과.
+func test_gacha_offline() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12345
+	var n := 100000
+	var out: Array = EconomyScript.roll_gacha(n, rng.randf)
+	var c := {"SSR": 0, "SR": 0, "R": 0}
+	for x in out:
+		c[x.grade] += 1
+	check(out.size() == n and absf(c.SSR / float(n) - 0.03) <= 0.004 and absf(c.SR / float(n) - 0.17) <= 0.008, "gacha rates SSR 3%% +- 0.4%%, SR 17%% +- 0.8%%: %s" % [c])
+	check(out.slice(0, 200).all(func(x): return GameData.hero(x.id).grade == x.grade), "each pull is a hero of its grade")
+	var all_ten := true
+	for i in 2000:
+		var ten: Array = EconomyScript.roll_gacha(10, rng.randf)
+		all_ten = all_ten and ten.size() == 10 and ten.any(func(x): return x.grade != "R")
+	check(all_ten, "every 10-pull has an SR or better (2000 samples)")
+	var all_r := func(): return 0.99  # 전부 R, 풀 마지막(jack)
+	var rigged: Array = EconomyScript.roll_gacha(10, all_r)
+	check(rigged.slice(0, 9).all(func(x): return x.id == "jack") and rigged[9] == {"id": "felix", "grade": "SR"}, "a 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
+	check(EconomyScript.roll_gacha(1, all_r) == [{"id": "jack", "grade": "R"}], "a single pull has no guarantee")
+	check(EconomyScript.gacha_cost(1) == 300 and EconomyScript.gacha_cost(10) == 2700, "costs 300 / 2700")
+	var e = _econ(1000.0)
+	e.rng.seed = 7
+	var got := []
+	var notices := []
+	e.gacha_done.connect(func(r): got.append(r))
+	e.notice.connect(func(t): notices.append(t))
+	e.gold_tenths = 30005
+	check(e.gacha(10) and e.gold_tenths == 3005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 2700 gold (27000 tenths) and returns 10 cards")
+	var seen := _econ_starters()
+	var consistent := true
+	for r in got[0]:
+		var before := int(seen.get(r.hero_id, 0))
+		seen[r.hero_id] = before + 1
+		consistent = consistent and r.new == (before == 0) and r.copies == before + 1 and r.grade == GameData.hero(r.hero_id).grade
+	check(consistent and seen == e.heroes, "results: new only on the first copy, copies count up per card, heroes updated: %s" % [got[0]])
+	check(e.gacha(1) and e.gold_tenths == 5 and got.size() == 2, "1 pull costs 300 (3000 tenths), the 0.5 fraction stays")
+	check(not e.gacha(1) and e.gold_tenths == 5 and got.size() == 2 and notices == [EconomyScript.NO_GOLD_TEXT], "not enough gold: nothing happens, one notice")
+	e.gold = 99999
+	check(not e.gacha(3) and e.gold == 99999, "only 1 or 10 pulls")
+	var a = _econ(0.0)
+	var b = _econ(0.0)
+	a.rng.seed = 99
+	b.rng.seed = 99
+	a.gold = 2700
+	b.gold = 2700
+	a.gacha(10)
+	b.gacha(10)
+	check(a.heroes == b.heroes and a.heroes != _econ_starters(), "same seed, same pulls")
+	e.free()
+	a.free()
+	b.free()
+
+
+func _econ_starters() -> Dictionary:
+	return {"hans": 1, "ella": 1, "dorik": 1, "nina": 1}
+
+
+## 보유 영웅·배치(오프라인 save v2, 서버 응답), GameState 공급자(roster 주입), 개발용 --heroes.
+func test_roster() -> void:
+	var now := 1.8e9
+	var e = _econ(now)
+	check(e.heroes == _econ_starters() and e.deploy == ["hans", "ella", "dorik", "nina"], "new game: starters copies 1, deployed in order")
+	e.save_path = ECON_TMP
+	e.heroes["ignis"] = 3
+	e.set_deploy(["ignis", null, "hans", "nina"])
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(now)
+	check(e2.heroes == e.heroes and e2.heroes.ignis is int and e2.deploy == ["ignis", null, "hans", "nina"], "save v2 round-trips heroes and deploy: %s %s" % [e2.heroes, e2.deploy])
+	var base := {"version": 2, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}
+	_write(ECON_TMP, JSON.stringify(base))
+	e2.load_save(now)
+	check(e2.gold_tenths == 5 and e2.heroes == _econ_starters() and e2.deploy == ["hans", "ella", "dorik", "nina"], "a v2 save from before heroes loads with the starters")
+	for junk in [{"heroes": [], "deploy": []}, {"heroes": {"hans": 1}}, {"heroes": {"hans": "x"}, "deploy": []}, {"heroes": {"hans": 1}, "deploy": [3]}]:
+		var bad := base.duplicate()
+		bad.merge(junk)
+		_write(ECON_TMP, JSON.stringify(bad))
+		e2.load_save(now)
+		check(e2.gold_tenths == 0 and e2.heroes == _econ_starters(), "malformed heroes/deploy (%s) is a corrupt save: defaults" % [junk])
+	DirAccess.remove_absolute(ECON_TMP)
+	# 서버 응답
+	var o = _econ(1000.0)
+	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "heroes": {"hans": 2, "kyle": 1}, "deploy": ["kyle", null, "hans", null]},
+		"merchant": {"rate": 1.0, "next_change": 3600.0}}
+	var changes := []
+	o.roster_changed.connect(func(): changes.append(1))
+	check(o.apply_server(reply) and o.heroes == {"hans": 2, "kyle": 1} and o.deploy == ["kyle", null, "hans", null] and changes.size() == 1, "apply_server takes heroes and deploy (roster_changed once)")
+	check(o.apply_server(reply) and changes.size() == 1, "the same roster again does not signal")
+	o._pending_deploy = ["hans", null, null, null]
+	check(o.apply_server(reply) and o.deploy == ["hans", null, null, null], "a deploy still waiting for its reply is not undone by an older reply")
+	o._pending_deploy = null
+	var logged := _errors.count
+	reply.player.heroes = [1]
+	check(not o.apply_server(reply) and o.heroes.hans == 2, "apply_server rejects malformed heroes")
+	_errors.count = logged
+	# GameState 공급자
+	var gs = GameStateScript.new()
+	gs.roster = e2
+	e2.heroes = {"ignis": 3, "hans": 1, "nina": 1}
+	e2.deploy = ["ignis", "ghost", "ignis", "jack", "nina"]  # 모르는 영웅·중복·미보유·슬롯 넘침
+	check(gs.deploy() == ["ignis", null, null, null], "provider: slot count, unknown/duplicate/unowned heroes become null: %s" % [gs.deploy()])
+	check(gs.hero_copies("ignis") == 3 and gs.hero_copies("hans") == 1, "provider: copies from the roster")
+	gs.keep_level = 2
+	check(gs.deploy().size() == 8 and gs.deploy()[4] == "nina", "provider: more slots at keep level 2")
+	gs.free()
+	# 개발용 --heroes
+	var d = _econ(now)
+	d.save_path = ECON_TMP
+	d.heroes["nev"] = 4
+	var ok: Array = d.grant_dev_heroes(["ignis", " nev", "ghost", "ignis", "arteon", "grom"])
+	check(ok == ["ignis", "nev", "arteon", "grom"] and d.deploy == ok and d.heroes.ignis == 1 and d.heroes.nev == 4 and d.heroes.hans == 1,
+		"--heroes grants copies 1 (keeps more), deploys in order, skips unknown and repeated ids: %s" % [ok])
+	d.save()
+	check(d.save_path == "" and not FileAccess.file_exists(ECON_TMP), "--heroes never writes the save")
+	e.free()
+	e2.free()
+	o.free()
+	d.free()
+
+
+## 스킬 설명(영웅 창 상세): 19종 모두 이름과 숫자를 넣은 한국어 문장(틀 자리 안 남음), 영웅마다 스킬 수치가 문장에 들어간다.
+func test_skill_text() -> void:
+	const Skills := preload("res://scripts/skills.gd")
+	for kind in Skills.KINDS:
+		var t := Skills.describe(kind, [6.0, 3.5, 220.0])
+		check(t != "" and not t.contains("{") and Skills.NAMES.has(kind) and t.contains("6"), "skill %s: name and a filled sentence: %s" % [kind, t])
+	check(Skills.describe("aoe_blast", [5.0, 3.5, 220.0]) == "5초마다 대상 위치에 폭발을 일으켜 반경 3.5m 안 모든 적에게 공격력의 220% 피해를 줍니다.", "aoe_blast sentence with numbers")
+	check(Skills.describe("crit", [40.0, 250.0, 0.0]).begins_with("40% 확률로 2.5배"), "crit shows b/100 as a multiplier")
+	check(Skills.num_text(6.0) == "6" and Skills.num_text(0.8) == "0.8" and Skills.num_text(3.5) == "3.5" and Skills.num_text(100.0) == "100" and Skills.num_text(0.64) == "0.64", "numbers drop trailing zeros")
+	for h in GameData.heroes():
+		for kind in h.skills:
+			var nums: Array = h.skills[kind]
+			check(Skills.describe(kind, nums).contains(Skills.num_text(nums[0])), "hero %s skill %s text has its number" % [h.id, kind])

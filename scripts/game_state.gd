@@ -41,17 +41,22 @@ func hero_count() -> int:
 
 
 # --- 영웅 보유·배치 공급자 (경계) ---
-# ponytail: 임시 공급자 — 지금은 starter_heroes 기본 배치·copies 1. 보유·배치가 Economy(서버 player.heroes/deploy)로 오면
-# 이 두 함수만 그쪽을 읽게 바꾼다. 호출자(main·hero)는 그대로.
+# roster = Economy(보유 copies·배치: 오프라인 저장 또는 서버 player.heroes/deploy). main이 넣는다 — 이 스크립트는
+# run_tests(-s, 오토로드 없음)가 preload해서 오토로드 이름을 쓸 수 없다. null이면(로직 테스트) starter_heroes 기본 배치·copies 1.
+var roster = null
 
 ## 배치 슬롯 i → 영웅 id 또는 null. 길이 = hero_count().
 func deploy() -> Array:
-	return GameData.default_deploy(hero_count())
+	if roster == null:
+		return GameData.default_deploy(hero_count())
+	return roster.deploy_slots(hero_count())
 
 
 ## 영웅 id의 보유 수(별 계산용).
-func hero_copies(_hero_id: String) -> int:
-	return 1
+func hero_copies(hero_id: String) -> int:
+	if roster == null:
+		return 1
+	return maxi(1, int(roster.heroes.get(hero_id, 1)))
 
 
 func start_stage() -> void:

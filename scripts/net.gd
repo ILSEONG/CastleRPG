@@ -32,6 +32,7 @@ var gamedata_version := ""
 var logins := 0  # 로그인 성공 횟수(테스트용)
 var requested := {}  # 경로 → 큐에 넣은 횟수(테스트용)
 var kill_seq_sent := 0  # 마지막으로 큐에 넣은 처치 묶음 번호
+var last_error := ""  # 마지막으로 버린 요청의 서버 오류 코드(fail 콜백이 읽는다. 답이 없었으면 "")
 
 var _http: HTTPRequest
 var _queue: Array = []  # {method, path, body, auth, done, fail, tries, conflicted}
@@ -79,8 +80,12 @@ func start() -> void:
 
 
 ## 요청을 큐 끝에 넣는다. done(data: Dictionary)은 2xx 응답, fail()은 그 요청을 버렸을 때(4xx·재시도 소진).
-func send(method: String, path: String, body = null, done := Callable(), fail := Callable(), auth := true) -> void:
-	_queue.append(_item(method, path, body, done, fail, auth))
+## once: 다시 보내면 두 번 반영될 수 있는 요청(모집). 401(서버가 아무것도 안 함) 말고는 다시 보내지 않는다 — 연결 실패·
+## 시간 초과·5xx·409면 버리고 fail, 대신 /v1/player를 큐 머리에 넣어 상태(이미 반영됐는지)를 새로 받는다.
+func send(method: String, path: String, body = null, done := Callable(), fail := Callable(), auth := true, once := false) -> void:
+	var it := _item(method, path, body, done, fail, auth)
+	it.once = once
+	_queue.append(it)
 	_pump()
 
 
@@ -241,6 +246,9 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, raw: Pac
 	var step := classify(result, code, data, it.auth, _auth_retries, 0 if keep_trying else it.tries, it.conflicted)
 	if step != "net":
 		_fails = 0
+	if it.get("once", false) and step in ["net", "retry", "refresh"]:
+		_drop_once(it, step, code, data)
+		return
 	match step:
 		"ok":
 			_queue.pop_front()
@@ -276,6 +284,7 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, raw: Pac
 		"drop":
 			_queue.pop_front()
 			push_warning("server rejected %s %s: %d %s; dropping it" % [it.method, it.path, code, str(data)])
+			last_error = str(data.get("error", "")) if data is Dictionary else ""
 			if it.fail.is_valid():
 				it.fail.call()
 			_mark_up()
@@ -284,6 +293,24 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, raw: Pac
 			_fails += 1
 			_go_down()
 			_retry_in(backoff(_fails))
+
+
+## once 요청이 다시 보내야 할 결과(연결 실패·시간 초과·5xx·409)를 받았다: 버리고 fail, 상태를 새로 받는 /v1/player를 머리에 둔다.
+## 연결 실패면 끊김 상태로 그 /v1/player를 백오프로 다시 보낸다(다시 연결되면 이미 반영됐는지 상태로 보인다).
+func _drop_once(it: Dictionary, step: String, code: int, data) -> void:
+	_queue.pop_front()
+	push_warning("%s %s failed (%s, %d); not resending it" % [it.method, it.path, step, code])
+	last_error = str(data.get("error", "")) if data is Dictionary else ""
+	_queue.push_front(_item("GET", "/v1/player", null, _on_state, Callable(), true))
+	if it.fail.is_valid():
+		it.fail.call()
+	if step == "net":
+		_fails += 1
+		_go_down()
+		_retry_in(backoff(_fails))
+	else:
+		_mark_up()
+		_next()
 
 
 func _mark_up() -> void:

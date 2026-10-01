@@ -10,6 +10,52 @@ const KINDS := {
 }
 
 
+## 종류 → 한국어 이름(영웅 창 상세).
+const NAMES := {
+	"heal_aura": "치유의 기도", "atk_aura": "용기의 오라", "dmg_reduce": "철벽", "dodge": "회피", "thorns": "가시 갑옷",
+	"lifesteal": "흡혈", "haste": "신속", "rage": "광분", "crit": "치명타", "execute": "마무리 일격", "boss_slayer": "거인 사냥",
+	"cleave": "휩쓸기", "multishot": "다중 사격", "chain": "연쇄", "aoe_blast": "폭발", "slow": "둔화", "stun": "기절",
+	"poison": "독", "gate_repair": "성문 수리",
+}
+
+## 종류 → 설명 틀. {a}·{b}·{c} = 숫자, {bx} = b / 100(배수). 스펙 §3.2 표의 효과를 그대로 문장으로.
+const TEXTS := {
+	"heal_aura": "{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 각자 최대 HP의 {c}%만큼 회복합니다.",
+	"atk_aura": "반경 {a}m 안 다른 영웅의 공격력을 {b}% 올립니다(여럿이면 가장 큰 것 하나).",
+	"dmg_reduce": "받는 피해를 {a}% 줄입니다.",
+	"dodge": "{a}% 확률로 피해를 피합니다.",
+	"thorns": "받은 피해의 {a}%를 공격한 적에게 되돌려 줍니다.",
+	"lifesteal": "준 피해의 {a}%만큼 HP를 회복합니다.",
+	"haste": "공격 속도가 {a}% 빨라집니다.",
+	"rage": "잃은 HP 비율만큼 공격 속도가 빨라집니다(최대 {a}%).",
+	"crit": "{a}% 확률로 {bx}배 피해를 줍니다.",
+	"execute": "HP가 {a}% 이하인 적에게 피해를 {b}% 더 줍니다.",
+	"boss_slayer": "보스에게 주는 피해가 {a}% 늘어납니다.",
+	"cleave": "근접 공격 때 대상 주변 {a}m 안 다른 적에게 피해의 {b}%를 줍니다.",
+	"multishot": "사거리 안 가까운 적 {a}마리를 동시에 공격합니다.",
+	"chain": "맞은 적에서 {c}m 안 가장 가까운 다른 적으로 {a}번 튕기며, 튕길 때마다 피해가 {b}%가 됩니다.",
+	"aoe_blast": "{a}초마다 대상 위치에 폭발을 일으켜 반경 {b}m 안 모든 적에게 공격력의 {c}% 피해를 줍니다.",
+	"slow": "맞은 적의 이동 속도를 {b}초 동안 {a}% 늦춥니다.",
+	"stun": "{a}번째 공격마다 대상을 {b}초 동안 기절시킵니다.",
+	"poison": "맞은 적이 {b}초 동안 매초 공격력의 {a}% 독 피해를 입습니다.",
+	"gate_repair": "{a}초마다 자기 면 성문 HP를 최대치의 {b}% 수리합니다(성문 앞이나 같은 면 성벽 위, 부서진 성문 제외).",
+}
+
+
+## 스킬 한 줄 설명(숫자 포함). nums = [a, b, c].
+static func describe(kind: String, nums: Array) -> String:
+	var t: String = TEXTS.get(kind, "")
+	for i in 3:
+		t = t.replace("{%s}" % "abc"[i], num_text(float(nums[i]) if i < nums.size() else 0.0))
+	return t.replace("{bx}", num_text(float(nums[1]) / 100.0 if nums.size() > 1 else 0.0))
+
+
+## 3.5 → "3.5", 6.0 → "6", 0.8 → "0.8"(소수 둘째 자리까지).
+static func num_text(v: float) -> String:
+	var s := "%.2f" % v
+	return s.rstrip("0").rstrip(".")
+
+
 ## 공격 간격: haste a% → 간격 ÷ (1 + a/100). rage a% → 잃은 HP 비율만큼 속도 +a% (둘 다 있으면 더한다).
 static func interval(sk: Dictionary, base: float, hp_ratio: float) -> float:
 	var speed := 1.0
