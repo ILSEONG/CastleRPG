@@ -80,6 +80,14 @@ static func apply_button(btn: Button, color: Color, chamfer := 12.0) -> void:
 	btn.add_theme_constant_override("outline_size", 4)
 
 
+## 1234567 → "1,234,567"
+static func commas(n: int) -> String:
+	var s := str(absi(n))
+	for i in range(s.length() - 3, 0, -3):
+		s = s.insert(i, ",")
+	return ("-" if n < 0 else "") + s
+
+
 ## 바 박스 {background, fill}. 채움도 면 분할(4px 깎기).
 static func bar(fill_color: Color) -> Dictionary:
 	var key := ["r", fill_color]

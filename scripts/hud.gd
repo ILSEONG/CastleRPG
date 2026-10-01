@@ -7,11 +7,10 @@ const ACCENT := Color(0.98, 0.70, 0.20)
 const TOAST_SEC := 1.6
 const IconsScript := preload("res://scripts/icons.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
-const HexButtonScript := preload("res://scripts/hex_button.gd")
-const HERO_BUTTON := 104  # [영웅] 6각 버튼 한 변(px). 아래 큰 버튼 위 왼쪽
-
-var hero_panel  # 영웅 창(hero_panel.gd). main이 넣는다
-var hero_button: Button
+const TAB_BAR_H := 104  # 하단 탭 바 높이(tab_bar.gd, 개정 11 §2.3)
+const BUTTON_H := 88  # 큰 버튼 높이 — 탭 바 바로 위(12px 띄움)
+const BUTTON_BOTTOM := -(TAB_BAR_H + 12)
+const BAND_BOTTOM := BUTTON_BOTTOM - BUTTON_H - 12  # 끊김 띠는 큰 버튼 위에서 위로 자란다
 
 var _stage_label: Label
 var _castle_bar: ProgressBar
@@ -80,21 +79,12 @@ func _ready() -> void:
 	_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_button.offset_left = 32
 	_button.offset_right = -32
-	_button.offset_top = -120
-	_button.offset_bottom = -32
+	_button.offset_top = BUTTON_BOTTOM - BUTTON_H
+	_button.offset_bottom = BUTTON_BOTTOM
 	_button.add_theme_font_size_override("font_size", 28)
 	_button.pressed.connect(_on_button)
 	UiKit.apply_button(_button, ACCENT, 18.0)
 	root.add_child(_button)
-	hero_button = HexButtonScript.new()
-	hero_button.label = "영웅"
-	hero_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	hero_button.offset_left = 32
-	hero_button.offset_right = 32 + HERO_BUTTON
-	hero_button.offset_top = -132 - HERO_BUTTON  # 큰 버튼(-120..-32) 위 12px
-	hero_button.offset_bottom = -132
-	hero_button.pressed.connect(func(): if hero_panel != null: hero_panel.open())
-	root.add_child(hero_button)
 	_build_link_ui()
 
 	GameState.mode_changed.connect(_on_mode_changed)
@@ -209,7 +199,7 @@ func _build_chips(root: Control) -> void:
 	_refresh_chips()
 
 
-## 온라인 알림: 아래 버튼 바로 위, [영웅] 버튼 오른쪽 띠(상단 자원 칩·[영웅] 버튼을 가리지 않는다) — 끊기면 "서버 연결 중…", 웹 저장소가 영구가 아니면
+## 온라인 알림: 큰 버튼 바로 위 띠(상단 자원 칩·큰 버튼·탭 바를 가리지 않는다) — 끊기면 "서버 연결 중…", 웹 저장소가 영구가 아니면
 ## 경고 한 줄(게임은 계속). 끊긴 동안 수집·판매 탭은 띠 위 짧은 알림. 거래 창(층 2) 위 층 3, 입력은 통과.
 func _build_link_ui() -> void:
 	var top := CanvasLayer.new()
@@ -217,10 +207,10 @@ func _build_link_ui() -> void:
 	add_child(top)
 	var band := PanelContainer.new()
 	band.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	band.offset_left = 32 + HERO_BUTTON + 12  # [영웅] 6각 버튼(32..136) 오른쪽
+	band.offset_left = 32
 	band.offset_right = -32
-	band.offset_top = -132  # 아래 버튼(-120..-32) 위 12px에서
-	band.offset_bottom = -132
+	band.offset_top = BAND_BOTTOM  # 큰 버튼 위 12px에서
+	band.offset_bottom = BAND_BOTTOM
 	band.grow_vertical = Control.GROW_DIRECTION_BEGIN  # 내용 높이만큼 위로 자란다
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	band.add_theme_stylebox_override("panel", UiKit.panel(Color(INK, 0.86), 10.0, 10, 0.05))
@@ -241,8 +231,8 @@ func _build_link_ui() -> void:
 	_toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_toast.offset_left = -320
 	_toast.offset_right = 320
-	_toast.offset_top = -330  # 띠(버튼 위 -132에서 위로 두 줄까지) 위
-	_toast.offset_bottom = -280
+	_toast.offset_top = BAND_BOTTOM - 198  # 띠(큰 버튼 위에서 위로 두 줄까지) 위
+	_toast.offset_bottom = BAND_BOTTOM - 148
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_toast.add_theme_font_size_override("font_size", 32)
@@ -286,7 +276,4 @@ func _refresh_chips() -> void:
 
 ## 1234567 → "1,234,567"
 static func commas(n: int) -> String:
-	var s := str(absi(n))
-	for i in range(s.length() - 3, 0, -3):
-		s = s.insert(i, ",")
-	return ("-" if n < 0 else "") + s
+	return UiKit.commas(n)
