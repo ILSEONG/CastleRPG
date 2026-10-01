@@ -13,11 +13,12 @@ Godot 앱과 Neon Postgres 사이의 권위 서버다(개정 9 스펙 `docs/supe
 
 | 파일 | 내용 |
 |---|---|
-| `src/main.ts` | 환경 변수를 읽고 서버를 시작한다. 개발 모드면 마이그레이션을 적용하고, 기획 표가 비어 있으면 시드한다. |
+| `src/main.ts` | 서버를 시작한다. 개발 모드면 마이그레이션을 적용하고, 기획 표가 비어 있으면 시드한다. |
+| `src/env.ts` | 환경 변수 → 설정(`readEnv`). 위험한 조합이면 시작을 거부한다(아래 표). |
 | `src/app.ts` | Hono 앱 팩토리 `createApp({query, now, jwtSecret, allowTestHooks, corsOrigins})`. 엔드포인트 전부가 여기 있다. |
 | `src/rules.ts` | 경제 규칙(순수 함수, 시간 인자): 수집, 시세, 판매, 스테이지 연장, 처치 골드·상한. |
-| `src/db.ts` | Neon/PGlite `query`, 마이그레이션 러너(`schema_migrations`). |
-| `src/seed.ts` | `data/*.csv`를 검증하고 기획 표에 upsert한다. 사라진 키는 지운다. |
+| `src/db.ts` | Neon/PGlite `query`·`batch`(한 트랜잭션), 마이그레이션 러너(`schema_migrations`). |
+| `src/seed.ts` | `data/*.csv`를 검증하고 기획 표 전부를 한 트랜잭션으로 upsert한다. 사라진 키는 지운다. |
 | `src/cli.ts` | `npm run migrate` / `npm run seed`. |
 | `migrations/*.sql` | 이름순으로 적용된다. 파일 하나가 한 트랜잭션이다. |
 | `test/*.test.ts` | `node --test`, 메모리 PGlite. |
@@ -51,11 +52,11 @@ curl http://127.0.0.1:8787/v1/health
 | 이름 | 뜻 |
 |---|---|
 | `DATABASE_URL` | Neon 접속 문자열. 비우면 개발 모드다. |
-| `JWT_SECRET` | HS256 비밀. `DATABASE_URL`이 있는데 비어 있으면 **시작을 거부한다**. |
-| `CORS_ORIGINS` | 허용할 출처(쉼표 목록). 비우면 `*`다. |
+| `JWT_SECRET` | HS256 비밀. `DATABASE_URL`이 있는데 비었거나 32자 미만이면 **시작을 거부한다**. |
+| `CORS_ORIGINS` | 허용할 출처(쉼표 목록). 비우면 `*`다. **운영에서는 웹 빌드 출처로 정한다.** |
 | `PORT` | 기본 8787이다. |
-| `ALLOW_TEST_HOOKS` | `1`이면 `POST /v1/test/age`가 생긴다. 운영에서는 비워 둔다. |
-| `HOST` | (선택) 듣는 주소. 기본은 개발 `127.0.0.1`, 운영 `0.0.0.0`이다. |
+| `ALLOW_TEST_HOOKS` | `1`이면 `POST /v1/test/age`가 생긴다. `DATABASE_URL`과 같이 있으면 **시작을 거부한다**. |
+| `HOST` | (선택) 듣는 주소. 기본은 개발 `127.0.0.1`, 운영 `0.0.0.0`이다. 고정 개발 비밀(`JWT_SECRET` 없음)인데 루프백(`127.x`, `localhost`, `::1`)이 아니면 **시작을 거부한다**. |
 | `PGLITE_DIR` | (선택) 개발 PGlite 위치. `memory`면 메모리다. |
 
 ## 테스트
@@ -71,18 +72,22 @@ npm --prefix server test
   - 게스트 로그인 멱등
   - JWT 401
   - 수집 규칙
-  - 동시 수집·판매
+  - 동시 수집·판매·같은 seq 처치
   - 409
   - 시세 분포
-  - 처치 골드·상한
-  - 스테이지 클리어 멱등
+  - 처치 골드·토큰 버킷(같은 순간 50연타)·처치 멱등(seq)
+  - 스테이지 클리어 멱등·최소 간격(같은 순간 300연타)
+  - 입력 상한·`__proto__` 키·본문 16 KB(413)
+  - 시작 거부 조건(`readEnv`)
+  - 시드 원자성
   - gamedata version
   - 테스트 훅 404
   - 플레이어 격리
 
 ## API 요약 (스펙 §4)
 
-모든 요청과 응답은 JSON이다. 시각은 유닉스 초(float)다. 오류는 `{"error": "<code>", "message": "..."}` 형식에 400·401·404·409·500을 쓴다.
+모든 요청과 응답은 JSON이다. 시각은 유닉스 초(float)다. 오류는 `{"error": "<code>", "message": "..."}` 형식에 400·401·404·409·413·500을 쓴다.
+`/v1/*` 요청 본문은 16 KB까지다. 넘으면 읽기 전에 413 `payload_too_large`다.
 
 | 요청 | 인증 | 응답 |
 |---|---|---|
@@ -92,21 +97,32 @@ npm --prefix server test
 | `GET /v1/player` | Bearer | 플레이어 응답 |
 | `POST /v1/collect {building}` | Bearer | 플레이어 응답 + `amount` |
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
-| `POST /v1/kills {stage, kills}` | Bearer | 플레이어 응답 + `gold_gained` |
-| `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 |
-| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다 |
+| `POST /v1/kills {seq, stage, kills}` | Bearer | 플레이어 응답 + `gold_gained` |
+| `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 + `cleared` |
+| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수 |
 
 플레이어 응답은 다음과 같다.
 
 ```
-{server_now, player: {gold, res: {wood, stone, food}, stage, keep_level, gate_level,
+{server_now, player: {gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq,
  buildings: {lumber: {level, last_collect}, quarry: ..., farm: ...}}, merchant: {rate, next_change}}
 ```
 
-- 처치 상한
-  - 총 처치 수 상한은 `ceil(지난 보고 이후 초 × kill_rate_cap) + 20`이다.
+- 입력 상한(넘으면 400): `stage` 1..1,000,000 정수, 처치 수(몬스터 한 종류) 0..10,000 정수, `seq` 0..2147483647 정수.
+- 처치 보고 번호 `seq`(멱등)
+  - 앱은 보고마다 `seq`를 1씩 올린다. 서버는 마지막으로 반영한 번호를 `player_state.kill_seq`에 두고, 플레이어 응답 `player.kill_seq`로 알려 준다.
+  - `seq <= kill_seq`면(응답 유실 뒤 재전송, 늦게 온 옛 요청) 아무것도 바꾸지 않고 현재 상태 + `gold_gained: 0`을 준다.
+  - 크면 반영하고 `kill_seq = seq`로 둔다. version 비교와 같은 문장이라, 같은 seq 두 건이 겹쳐도 한 번만 들어간다.
+- 처치 상한(토큰 버킷)
+  - `W = kill_burst_sec`(기본 60), `rate = kill_rate_cap`(초당).
+  - `lkr_eff = max(last_kill_report, now − W)`, 상한 `cap = max(0, ceil((now − lkr_eff) × rate))`.
+  - 인정한 처치 `kept`개만큼만 시각을 옮긴다: `last_kill_report = lkr_eff + kept / rate`.
+  - 그래서 같은 순간 여러 번 보내도 합쳐서 버킷(`W × rate`, 기본 300) 이상은 못 얻고, 오래 쉬어도 한 번에 버킷까지만 받는다.
   - 넘는 만큼은 **싼 몬스터부터 인정**하고, 비싼 몬스터를 먼저 버린다.
   - 버린 일이 있으면 `economy_log`에 `clamped: true`를 남긴다.
+- 스테이지 클리어
+  - `stage == player.stage`이고 지난 클리어(새 계정은 가입) 이후 `waves × wave_size / kill_rate_cap`초(그 스테이지 행, 연장 규칙)가 지났으면 +1, `cleared: true`.
+  - 아니면(중복·재전송·앞지름·너무 빠름) 200 + 상태 그대로 + `cleared: false`다. 앱은 `player.stage`를 진실로 쓴다.
 - 시세는 시간 칸(`floor(유닉스 초 / 3600)`)을 시드로 한 mulberry32로 결정적으로 계산한다. 분포 값은 `game_config`에서 읽는다.
 
 ## 동시성
@@ -154,6 +170,10 @@ npm --prefix server test
 - `DATABASE_URL`과 `JWT_SECRET`은 서버 환경 변수에만 둔다. 앱, 저장소, 로그, 스크린숏에 넣지 않는다.
   - DB 접속 문자열이 앱에 들어가면 누구나 모든 플레이어 데이터를 읽고 쓸 수 있다.
 - `server/.env`는 git에서 제외된다. `.env.example`에는 자리표시자만 둔다.
+- 운영에서는 `CORS_ORIGINS`를 웹 빌드 출처로 정한다. 인증이 Bearer 헤더라 `*`여도 CSRF 위험은 없지만, 다른 사이트의 브라우저 코드가 API를 부르지 못하게 한다.
 - `JWT_SECRET`을 바꾸면 기존 토큰이 전부 401이 된다. 앱은 다시 게스트 로그인하므로 데이터는 그대로다(기기 id가 계정 열쇠).
 - 접속 문자열이 새면 Neon 콘솔에서 DB 역할 비밀번호를 재설정한다.
-- 운영에서는 `ALLOW_TEST_HOOKS`를 켜지 않는다. 켜면 누구나 자기 건물 시계를 앞당길 수 있다.
+- 시작 거부 조건(`src/env.ts`):
+  - `DATABASE_URL`이 있는데 `JWT_SECRET`이 없거나 32자 미만이다.
+  - `DATABASE_URL`과 `ALLOW_TEST_HOOKS=1`이 같이 있다. 켜면 누구나 자기 건물 시계를 앞당길 수 있다.
+  - 고정 개발 비밀(`JWT_SECRET` 없음)인데 `HOST`가 루프백이 아니다.

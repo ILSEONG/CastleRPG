@@ -86,7 +86,7 @@ test('플레이어 응답 형식: server_now, player{gold,res,stage,keep_level,g
   assert.deepEqual(r.json, {
     server_now: T0 + 0.25,
     player: {
-      gold: 0, res: { wood: 0, stone: 0, food: 0 }, stage: 1, keep_level: 1, gate_level: 1,
+      gold: 0, res: { wood: 0, stone: 0, food: 0 }, stage: 1, keep_level: 1, gate_level: 1, kill_seq: 0,
       buildings: {
         lumber: { level: 1, last_collect: T0 + 0.25 },
         quarry: { level: 1, last_collect: T0 + 0.25 },
@@ -188,83 +188,172 @@ test('처치 골드: Σ count × kill_gold(id, stage), stage는 player.stage로 
   S.clock.t = T0
   const { token, id } = await S.login()
   S.clock.t = T0 + 1000 // 상한 넉넉히
-  let r = await S.req('POST', '/v1/kills', { token, body: { stage: 1, kills: { grunt: 10, epic_boss: 1 } } })
+  let r = await S.req('POST', '/v1/kills', { token, body: { seq: 1, stage: 1, kills: { grunt: 10, epic_boss: 1 } } })
   assert.equal(r.status, 200)
   assert.equal(r.json.gold_gained, 10 * 2 + 50)
   assert.equal(r.json.player.gold, 70)
 
   await S.req('POST', '/v1/stage/clear', { token, body: { stage: 1 } })
+  S.clock.t += 10
   await S.req('POST', '/v1/stage/clear', { token, body: { stage: 2 } }) // 이제 stage 3
   S.clock.t += 1000
-  r = await S.req('POST', '/v1/kills', { token, body: { stage: 3, kills: { grunt: 10, epic_boss: 1 } } })
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 2, stage: 3, kills: { grunt: 10, epic_boss: 1 } } })
   assert.equal(r.json.gold_gained, 10 * 3 + 70) // gold_mult 1.4: 2.8 → 3, 70
   S.clock.t += 1000
-  r = await S.req('POST', '/v1/kills', { token, body: { stage: 99, kills: { grunt: 10 } } }) // 3으로 자름
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 3, stage: 99, kills: { grunt: 10 } } }) // 3으로 자름
   assert.equal(r.json.gold_gained, 30)
   S.clock.t += 1000
-  r = await S.req('POST', '/v1/kills', { token, body: { stage: 2, kills: { grunt: 5 } } }) // 2.4 → 2
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 4, stage: 2, kills: { grunt: 5 } } }) // 2.4 → 2
   assert.equal(r.json.gold_gained, 10)
   assert.equal(r.json.player.gold, 70 + 100 + 30 + 10)
 
   const before = r.json.player.gold
   for (const body of [
-    { stage: 0, kills: { grunt: 1 } }, { stage: 1.5, kills: { grunt: 1 } }, { kills: { grunt: 1 } },
-    { stage: 1, kills: { grunt: -1 } }, { stage: 1, kills: { grunt: 1.5 } }, { stage: 1, kills: [] }, { stage: 1 },
-    { stage: 1, kills: { dragon: 1 } },
+    { seq: 9, stage: 0, kills: { grunt: 1 } }, { seq: 9, stage: 1.5, kills: { grunt: 1 } }, { seq: 9, kills: { grunt: 1 } },
+    { seq: 9, stage: 1_000_001, kills: { grunt: 1 } }, { seq: 9, stage: 2e9, kills: { grunt: 1 } },
+    { seq: 9, stage: 1, kills: { grunt: -1 } }, { seq: 9, stage: 1, kills: { grunt: 1.5 } }, { seq: 9, stage: 1, kills: [] }, { seq: 9, stage: 1 },
+    { seq: 9, stage: 1, kills: { grunt: 10_001 } }, { seq: 9, stage: 1, kills: { epic_boss: 1e21 } }, { seq: 9, stage: 1, kills: { grunt: '5' } },
+    { seq: 9, stage: 1, kills: { dragon: 1 } }, { seq: 9, stage: 1, kills: { constructor: 1 } },
+    { stage: 1, kills: { grunt: 1 } }, { seq: 1.5, stage: 1, kills: { grunt: 1 } }, { seq: -1, stage: 1, kills: { grunt: 1 } }, { seq: 2 ** 31, stage: 1, kills: { grunt: 1 } },
   ]) {
     const bad = await S.req('POST', '/v1/kills', { token, body })
     assert.equal(bad.status, 400, JSON.stringify(body))
   }
-  assert.equal((await S.req('POST', '/v1/kills', { token, body: { stage: 1, kills: { dragon: 1 } } })).json.error, 'unknown_monster')
-  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold, before)
+  assert.equal((await S.req('POST', '/v1/kills', { token, body: { seq: 9, stage: 1, kills: { dragon: 1 } } })).json.error, 'unknown_monster')
+  // JSON의 "__proto__" 키는 자기 속성 — 프로토타입을 건드리지 못하고 모르는 몬스터로 400
+  const proto = await S.req('POST', '/v1/kills', { token, body: '{"seq":9,"stage":1,"kills":{"__proto__":5,"grunt":1}}' })
+  assert.equal(proto.status, 400)
+  assert.equal(proto.json.error, 'unknown_monster')
+  // 경계값은 받는다: stage 1,000,000(→ player.stage로 자름), 한 종류 10,000(→ 버킷으로 자름)
+  S.clock.t += 1000
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 5, stage: 1_000_000, kills: { grunt: 10_000 } } })
+  assert.equal(r.status, 200)
+  assert.equal(r.json.gold_gained, 300 * 3)
+  assert.equal(r.json.player.gold, before + 900)
   const ks = await logs(id, 'kills')
-  assert.equal(ks.length, 4)
+  assert.equal(ks.length, 5)
   assert.deepEqual(ks[2].detail.kept, { grunt: 10 })
   assert.equal(ks[2].detail.stage, 3)
   assert.equal(ks[2].detail.asked_stage, 99)
 })
 
-test('처치 상한: ceil(지난 보고 이후 초 × kill_rate_cap) + 20, 넘는 만큼 버리고 clamped 로그', async () => {
+test('처치 상한(토큰 버킷): ceil(인정 초 × kill_rate_cap), 인정 초 ≤ kill_burst_sec, 넘는 만큼 버리고 clamped 로그', async () => {
   S.clock.t = T0
   const { token, id } = await S.login() // last_kill_report = T0
-  S.clock.t = T0 + 10 // 상한 ceil(10 × 5) + 20 = 70
-  let r = await S.req('POST', '/v1/kills', { token, body: { stage: 1, kills: { grunt: 100 } } })
-  assert.equal(r.json.gold_gained, 70 * 2)
-  r = await S.req('POST', '/v1/kills', { token, body: { stage: 1, kills: { grunt: 30 } } }) // 0초 뒤: 상한 20
-  assert.equal(r.json.gold_gained, 20 * 2)
-  S.clock.t += 10 // 상한 70: 싼 grunt부터 인정, 비싼 epic_boss를 먼저 버린다
-  r = await S.req('POST', '/v1/kills', { token, body: { stage: 1, kills: { epic_boss: 20, grunt: 60 } } })
+  const lkr = async () => (await S.db.query('select extract(epoch from last_kill_report)::float8 as t from player_state where player_id = $1', [id]))[0].t
+  const kill = (seq: number, kills: Record<string, number>) => S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills } })
+  S.clock.t = T0 + 10 // 상한 ceil(10 × 5) = 50
+  let r = await kill(1, { grunt: 100 })
+  assert.equal(r.json.gold_gained, 50 * 2)
+  r = await kill(2, { grunt: 30 }) // 같은 순간: 버킷이 비었다 — 슬랙 없음
+  assert.equal(r.json.gold_gained, 0)
+  S.clock.t = T0 + 24 // 상한 70: 싼 grunt부터 인정, 비싼 epic_boss를 먼저 버린다
+  r = await kill(3, { epic_boss: 20, grunt: 60 })
   assert.equal(r.json.gold_gained, 60 * 2 + 10 * 50)
-  S.clock.t += 10 // 상한 안: 그대로
-  r = await S.req('POST', '/v1/kills', { token, body: { stage: 1, kills: { grunt: 70 } } })
-  assert.equal(r.json.gold_gained, 140)
-  assert.equal(r.json.player.gold, 140 + 40 + 620 + 140)
+  S.clock.t = T0 + 34 // 상한 50 안: 그대로, 쓴 40개(8초)만큼만 보고 시각이 앞으로
+  r = await kill(4, { grunt: 40 })
+  assert.equal(r.json.gold_gained, 80)
+  assert.equal(await lkr(), T0 + 32)
+  S.clock.t = T0 + 1034 // 오래 쉬어도 버킷은 kill_burst_sec(60) × 5 = 300
+  r = await kill(5, { grunt: 1000 })
+  assert.equal(r.json.gold_gained, 300 * 2)
+  assert.equal(r.json.player.gold, 100 + 0 + 620 + 80 + 600)
+  assert.equal(await lkr(), S.clock.t)
   const ks = await logs(id, 'kills')
-  assert.deepEqual(ks.map((k) => k.detail.clamped), [true, true, true, false])
-  assert.deepEqual(ks.map((k) => k.detail.cap), [70, 20, 70, 70])
+  assert.deepEqual(ks.map((k) => k.detail.clamped), [true, true, true, false, true])
+  assert.deepEqual(ks.map((k) => k.detail.cap), [50, 0, 70, 50, 300])
   assert.deepEqual(ks[2].detail.kept, { epic_boss: 10, grunt: 60 })
-  const [st] = await S.db.query('select extract(epoch from last_kill_report)::float8 as t from player_state where player_id = $1', [id])
-  assert.equal(st.t, S.clock.t)
 })
 
-test('스테이지 클리어: 같으면 +1, 아니면 그대로(중복·재전송 안전)', async () => {
+test('골드 무한 생성 차단: 같은 순간 /v1/kills 50연타는 합쳐서 버킷(300) 이상 못 얻는다', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  S.clock.t = T0 + 1000
+  let total = 0
+  for (let seq = 1; seq <= 50; seq++) {
+    const r = await S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills: { epic_boss: 20 } } })
+    assert.equal(r.status, 200)
+    total += r.json.gold_gained
+  }
+  assert.equal(total, 300 * 50) // 리뷰 시나리오: 예전엔 50 × (20 × 50) = 50,000
+  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold, 300 * 50)
+})
+
+test('처치 멱등: seq <= kill_seq면 반영 없이 현재 상태 + gold_gained 0, 크면 반영하고 kill_seq = seq', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
+  S.clock.t = T0 + 100
+  const kill = (seq: number, n: number) => S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills: { grunt: n } } })
+  let r = await kill(1, 10)
+  assert.deepEqual([r.json.gold_gained, r.json.player.gold, r.json.player.kill_seq], [20, 20, 1])
+  r = await kill(1, 10) // 응답 유실 후 재전송
+  assert.equal(r.status, 200)
+  assert.deepEqual([r.json.gold_gained, r.json.player.gold, r.json.player.kill_seq], [0, 20, 1])
+  r = await kill(0, 10)
+  assert.deepEqual([r.json.gold_gained, r.json.player.gold], [0, 20])
+  r = await kill(2, 5)
+  assert.deepEqual([r.json.gold_gained, r.json.player.gold, r.json.player.kill_seq], [10, 30, 2])
+  r = await kill(1, 10) // 늦게 도착한 옛 번호
+  assert.deepEqual([r.json.gold_gained, r.json.player.gold, r.json.player.kill_seq], [0, 30, 2])
+  r = await kill(7, 1) // 번호를 건너뛰어도 크면 반영
+  assert.deepEqual([r.json.gold_gained, r.json.player.kill_seq], [2, 7])
+  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.kill_seq, 7)
+  assert.equal((await logs(id, 'kills')).length, 3)
+})
+
+test('스테이지 클리어: 같으면 +1(cleared true), 아니면 그대로(cleared false, 중복·재전송 안전)', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  S.clock.t = T0 + 100
   let r = await S.req('POST', '/v1/stage/clear', { token, body: { stage: 1 } })
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.stage, 2)
+  assert.deepEqual([r.json.player.stage, r.json.cleared], [2, true])
+  S.clock.t += 100
   r = await S.req('POST', '/v1/stage/clear', { token, body: { stage: 1 } }) // 재전송
-  assert.equal(r.json.player.stage, 2)
+  assert.deepEqual([r.json.player.stage, r.json.cleared], [2, false])
   r = await S.req('POST', '/v1/stage/clear', { token, body: { stage: 5 } }) // 앞지름
-  assert.equal(r.json.player.stage, 2)
+  assert.deepEqual([r.json.player.stage, r.json.cleared], [2, false])
   const [a, b] = await Promise.all([
     S.req('POST', '/v1/stage/clear', { token, body: { stage: 2 } }),
     S.req('POST', '/v1/stage/clear', { token, body: { stage: 2 } }),
   ])
   assert.deepEqual([a.json.player.stage, b.json.player.stage], [3, 3])
+  assert.deepEqual([a.json.cleared, b.json.cleared].sort(), [false, true])
   assert.equal((await S.req('GET', '/v1/player', { token })).json.player.stage, 3)
-  assert.equal((await S.req('POST', '/v1/stage/clear', { token, body: { stage: 0 } })).status, 400)
+  for (const stage of [0, 1.5, 1_000_001, 2147483647, '3']) {
+    assert.equal((await S.req('POST', '/v1/stage/clear', { token, body: { stage } })).status, 400, String(stage))
+  }
   assert.equal((await logs(id, 'stage_clear')).length, 2)
+})
+
+test('스테이지 클리어 최소 간격: waves × wave_size / kill_rate_cap초보다 빠르면 200 + 상태 그대로 + cleared false', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login() // 새 계정: 가입 시각부터 잰다
+  const clear = (stage: number) => S.req('POST', '/v1/stage/clear', { token, body: { stage } })
+  let r = await clear(1)
+  assert.deepEqual([r.status, r.json.player.stage, r.json.cleared], [200, 1, false])
+  S.clock.t = T0 + 4.7 // stage 1: 3 × 8 / 5 = 4.8초
+  assert.equal((await clear(1)).json.cleared, false)
+  S.clock.t = T0 + 4.9
+  r = await clear(1)
+  assert.deepEqual([r.json.player.stage, r.json.cleared], [2, true])
+  S.clock.t += 5.9 // stage 2: 3 × 10 / 5 = 6초
+  assert.equal((await clear(2)).json.cleared, false)
+  S.clock.t += 0.2
+  assert.equal((await clear(2)).json.player.stage, 3)
+
+  // 리뷰 시나리오: 같은 순간 300연타 — 예전엔 stage 301. 이제 한 번만 오른다.
+  S.clock.t += 1000
+  let stage = 3
+  let cleared = 0
+  for (let i = 0; i < 300; i++) {
+    r = await clear(stage)
+    assert.equal(r.status, 200)
+    if (r.json.cleared) cleared++
+    stage = r.json.player.stage
+  }
+  assert.deepEqual([cleared, stage], [1, 4])
+  assert.equal((await logs(id, 'stage_clear')).length, 3)
 })
 
 test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = 내용 해시(ETag), 내용이 바뀌면 바뀐다', async () => {
@@ -283,7 +372,8 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.resources[1], { id: 'stone', name: '석재', building: 'quarry', per_min: 5, price: 2 })
   assert.equal(g.config.hero_slots, '4|8|12')
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 18)
+  assert.equal(Object.keys(g.config).length, 19)
+  assert.equal(g.config.kill_burst_sec, '60')
 
   const again = await S.req('GET', '/v1/gamedata')
   assert.equal(again.json.version, g.version)
@@ -309,7 +399,10 @@ test('test/age: ALLOW_TEST_HOOKS면 last_collect를 minutes분 앞당김, 없으
   assert.equal(r.json.player.buildings.lumber.last_collect, T0 - 600)
   assert.equal(r.json.player.buildings.farm.last_collect, T0 - 600)
   assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 100)
-  assert.equal((await S.req('POST', '/v1/test/age', { token, body: { minutes: 'x' } })).status, 400)
+  for (const minutes of ['x', -1, 1.5, 100_001, 1e300]) {
+    assert.equal((await S.req('POST', '/v1/test/age', { token, body: { minutes } })).status, 400, String(minutes))
+  }
+  assert.equal((await S.req('POST', '/v1/test/age', { token, body: { minutes: 100_000 } })).status, 200)
 
   const noHooks = S.makeApp({ allowTestHooks: false })
   const res = await noHooks.request('/v1/test/age', {
@@ -329,7 +422,7 @@ test('플레이어 격리: A의 토큰으로 B의 상태를 바꿀 수 없다', 
   await S.req('POST', '/v1/test/age', { token: A.token, body: { minutes: 30, player_id: B.id } })
   const ca = await S.req('POST', '/v1/collect', { token: A.token, body: { building: 'lumber', player_id: B.id } })
   assert.equal(ca.json.amount, 400)
-  await S.req('POST', '/v1/kills', { token: A.token, body: { stage: 1, kills: { grunt: 5 }, player_id: B.id } })
+  await S.req('POST', '/v1/kills', { token: A.token, body: { seq: 1, stage: 1, kills: { grunt: 5 }, player_id: B.id } })
   await S.req('POST', '/v1/stage/clear', { token: A.token, body: { stage: 1, player_id: B.id } })
   await S.req('POST', '/v1/sell', { token: A.token, body: { res: 'all', player_id: B.id } })
   // A의 서명을 그대로 두고 sub만 B로 바꾼 토큰은 거부된다
@@ -346,6 +439,22 @@ test('플레이어 격리: A의 토큰으로 B의 상태를 바꿀 수 없다', 
   assert.ok(a.gold > 0)
   const bLogs = await S.db.query('select count(*)::int as n from economy_log where player_id = $1', [B.id])
   assert.equal(bLogs[0].n, 0)
+})
+
+test('본문 16 KB 초과는 413 payload_too_large(인증 전에), 이하는 통과', async () => {
+  const pad = (n: number) => JSON.stringify({ device_id: 'x', pad: 'a'.repeat(n) })
+  const big = pad(16 * 1024) // 16 KB + 머리
+  const r = await S.req('POST', '/v1/auth/guest', { body: big })
+  assert.equal(r.status, 413)
+  assert.equal(r.json.error, 'payload_too_large')
+  assert.equal((await S.req('POST', '/v1/kills', { body: big })).status, 413) // 토큰 검사보다 먼저
+  const fits = pad(16 * 1024 - 40)
+  assert.ok(fits.length <= 16 * 1024)
+  assert.equal((await S.req('POST', '/v1/auth/guest', { body: fits })).json.error, 'bad_device_id')
+  // Content-Length만 보고 읽기 전에 끊는다(Node 서버 경로)
+  const app = S.makeApp()
+  const cl = await app.request('/v1/auth/guest', { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': '999999' }, body: '{}' })
+  assert.equal(cl.status, 413)
 })
 
 test('알 수 없는 경로는 404 JSON, CORS 기본 *', async () => {
