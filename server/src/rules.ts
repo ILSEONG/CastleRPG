@@ -111,9 +111,9 @@ export function stageRow(n: number, rows: StageRow[]): StageRow {
   return out
 }
 
-// 처치 골드 = round(gold × gold_mult), 최소 1.
-export function killGold(monsterGold: number, stage: StageRow): number {
-  return Math.max(1, roundHalfAway(monsterGold * stage.gold_mult))
+// 처치 골드(tenths, 0.1 단위 정수) = max(1, round(gold × gold_mult × 10)). 앱 GameData.kill_gold_tenths와 같은 식.
+export function killGoldTenths(monsterGold: number, stage: StageRow): number {
+  return Math.max(1, roundHalfAway(monsterGold * stage.gold_mult * 10))
 }
 
 // 처치 토큰 버킷. 지난 보고 시각은 최대 burstSec초 전까지만 인정한다(from) — 쌓이는 상한이 burstSec × rate로 묶인다.

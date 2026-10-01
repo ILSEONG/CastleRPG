@@ -265,15 +265,15 @@ func _run() -> void:
 
 	# (p) [판매] → 골드 증가·자원 0. 상인 시세와 같은 값
 	Economy.res["stone"] = 7
-	Economy.gold = 10
+	Economy.gold_tenths = 105  # 10.5골드: 판매가 소수 부분을 지키는지도 본다
 	Economy.changed.emit()
 	await _frames(2)
 	var rate: float = Economy.current_rate(Time.get_unix_time_from_system())
 	var expect := Economy.sell_value("wood", 200, rate)
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
 	await _tap(bp)
-	_check(Economy.res["wood"] == 0 and Economy.gold == 10 + expect and Economy.res["stone"] == 7 and panel.is_open(),
-		"(p) [sell] on wood zeroes wood and adds floor(200 x price x rate) gold; others stay", "wood=%d gold=%d expect=%d" % [Economy.res["wood"], Economy.gold, 10 + expect])
+	_check(Economy.res["wood"] == 0 and Economy.gold_tenths == 105 + expect * 10 and Economy.gold == 10 + expect and Economy.res["stone"] == 7 and panel.is_open(),
+		"(p) [sell] on wood zeroes wood and adds floor(200 x price x rate) whole gold (x10 tenths, 0.5 kept); others stay", "wood=%d tenths=%d expect=%d" % [Economy.res["wood"], Economy.gold_tenths, 105 + expect * 10])
 	_check(panel.sell_buttons["wood"].disabled and not panel.sell_buttons["stone"].disabled, "(p) sell button is disabled at 0 holdings only", "")
 	await _tap(panel.sell_all_button.get_global_rect().get_center())
 	_check(Economy.res["stone"] == 0 and Economy.res["food"] == 0 and panel.sell_all_button.disabled, "(p) [sell all] clears everything", "stone=%d" % Economy.res["stone"])

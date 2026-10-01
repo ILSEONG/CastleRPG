@@ -46,7 +46,7 @@ interface Game {
 }
 
 interface Player {
-  gold: number
+  gold_tenths: number
   stage: number
   keep_level: number
   gate_level: number
@@ -60,7 +60,7 @@ interface Player {
 
 // 한 번의 원자적 변경. version이 읽은 값과 같을 때만 전부 적용된다.
 interface Change {
-  gold?: number // 더할 골드
+  goldTenths?: number // 더할 골드(0.1 단위 정수)
   stage?: number // 새 스테이지
   lastKillReport?: number // 새 처치 보고 시각
   lastStageClear?: number // 새 스테이지 클리어 시각
@@ -79,7 +79,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq,
+const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
@@ -159,7 +159,7 @@ export function createApp(opts: AppOptions) {
         continue
       }
       return {
-        gold: Number(r.gold), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
+        gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
         kill_seq: Number(r.kill_seq), res, buildings,
       }
@@ -178,7 +178,7 @@ export function createApp(opts: AppOptions) {
     }
     return {
       server_now: now,
-      player: { gold: p.gold, res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level, kill_seq: p.kill_seq, buildings },
+      player: { gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level, kill_seq: p.kill_seq, buildings },
       merchant: { rate: R.merchantRate(R.hourIndex(now), game.config), next_change: R.nextChange(now) },
     }
   }
@@ -192,7 +192,7 @@ export function createApp(opts: AppOptions) {
       return `$${params.length}`
     }
     const sets = ['version = version + 1']
-    if (ch.gold) sets.push(`gold = gold + ${p(bigint(ch.gold))}::bigint`)
+    if (ch.goldTenths) sets.push(`gold_tenths = gold_tenths + ${p(bigint(ch.goldTenths))}::bigint`)
     if (ch.stage !== undefined) sets.push(`stage = ${p(ch.stage)}::int`)
     if (ch.lastKillReport !== undefined) sets.push(`last_kill_report = to_timestamp(${p(ch.lastKillReport)}::float8)`)
     if (ch.lastStageClear !== undefined) sets.push(`last_stage_clear = to_timestamp(${p(ch.lastStageClear)}::float8)`)
@@ -215,7 +215,7 @@ export function createApp(opts: AppOptions) {
   }
 
   function applyLocal(pl: Player, ch: Change) {
-    pl.gold += ch.gold ?? 0
+    pl.gold_tenths += ch.goldTenths ?? 0
     if (ch.stage !== undefined) pl.stage = ch.stage
     if (ch.lastKillReport !== undefined) pl.last_kill_report = ch.lastKillReport
     if (ch.lastStageClear !== undefined) pl.last_stage_clear = ch.lastStageClear
@@ -354,7 +354,7 @@ export function createApp(opts: AppOptions) {
         delta[r.id] = -amount
       }
       if (Object.keys(sold).length === 0) return { extra: { gold_gained: 0, rate } }
-      return { change: { gold, res: delta, log: { kind: 'sell', detail: { res: target, sold, rate, gold } } }, extra: { gold_gained: gold, rate } }
+      return { change: { goldTenths: gold * 10, res: delta, log: { kind: 'sell', detail: { res: target, sold, rate, gold, gold_tenths: gold * 10 } } }, extra: { gold_gained: gold, rate } }
     })
   })
 
@@ -372,17 +372,17 @@ export function createApp(opts: AppOptions) {
       const monsters = new Map(g.monsters.map((m) => [m.id, m]))
       for (const [id] of entries) if (!monsters.has(id)) throw new ApiError(400, 'unknown_monster', `unknown monster '${id}'`)
       // 재전송(응답 유실 후 다시 보냄)·순서 뒤바뀜: 이미 반영한 번호면 아무것도 안 한다.
-      if (seq <= p.kill_seq) return { extra: { gold_gained: 0 } }
+      if (seq <= p.kill_seq) return { extra: { gold_gained_tenths: 0 } }
       const stage = Math.min(askedStage, p.stage)
       const row = R.stageRow(stage, g.stages)
       const bucket = R.killBucket(p.last_kill_report, now, R.cfgNum(g.config, 'kill_rate_cap'), R.cfgNum(g.config, 'kill_burst_sec'))
-      const priced = entries.map(([id, n]) => ({ id, count: n as number, gold: R.killGold(Number(monsters.get(id).gold), row) }))
+      const priced = entries.map(([id, n]) => ({ id, count: n as number, gold: R.killGoldTenths(Number(monsters.get(id).gold), row) }))
       const { kept, clamped } = R.clampKills(priced, bucket.cap)
-      const gold = priced.reduce((s, k) => s + kept[k.id] * k.gold, 0)
+      const tenths = priced.reduce((s, k) => s + kept[k.id] * k.gold, 0) // k.gold = 처치 1회 tenths
       const total = priced.reduce((s, k) => s + k.count, 0)
       const keptTotal = priced.reduce((s, k) => s + kept[k.id], 0)
-      const log = total > 0 ? { kind: 'kills', detail: { seq, stage, asked_stage: askedStage, kills, kept, cap: bucket.cap, clamped, gold } } : undefined
-      return { change: { gold, lastKillReport: bucket.after(keptTotal), killSeq: seq, log }, extra: { gold_gained: gold } }
+      const log = total > 0 ? { kind: 'kills', detail: { seq, stage, asked_stage: askedStage, kills, kept, cap: bucket.cap, clamped, gold_tenths: tenths } } : undefined
+      return { change: { goldTenths: tenths, lastKillReport: bucket.after(keptTotal), killSeq: seq, log }, extra: { gold_gained_tenths: tenths } }
     })
   })
 

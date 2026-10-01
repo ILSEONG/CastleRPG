@@ -169,8 +169,9 @@ static func stage(n: int) -> Dictionary:
 	return out
 
 
-static func kill_gold(id: String, stage_n: int) -> int:
-	return maxi(1, roundi(float(monster(id).get("gold", 0)) * float(stage(stage_n).get("gold_mult", 1.0))))
+## 처치 골드(tenths, 0.1 단위 정수) = max(1, round(gold × gold_mult × 10)). 서버 killGoldTenths와 같은 식.
+static func kill_gold_tenths(id: String, stage_n: int) -> int:
+	return maxi(1, roundi(float(monster(id).get("gold", 0)) * float(stage(stage_n).get("gold_mult", 1.0)) * 10.0))
 
 
 static func _ensure() -> void:
