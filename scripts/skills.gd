@@ -12,7 +12,7 @@ const KINDS := {
 
 ## 종류 → 숫자(a, b, c 앞에서부터)의 허용 범위(GameData가 표를 읽을 때 본다). 개수는 KINDS와 같다.
 ## pos = 0보다 큼(쿨 0이면 매 프레임, 반경 0이면 무의미), nonneg = 0 이상, pct = 0..100, int1 = 1 이상 정수(multishot 0이면
-## slice(0, -1), stun 0이면 0으로 나눔), mult = 100 이상(치명타 배수가 피해를 줄이지 않게).
+## slice(0, -1), stun 2.5면 int로 잘려 2번째마다), mult = 100 이상(치명타 배수가 피해를 줄이지 않게).
 const RULES := {
 	"heal_aura": ["pos", "pos", "nonneg"], "atk_aura": ["pos", "nonneg"], "dmg_reduce": ["pct"], "dodge": ["pct"],
 	"thorns": ["nonneg"], "lifesteal": ["nonneg"], "haste": ["nonneg"], "rage": ["nonneg"], "crit": ["pct", "mult"],
