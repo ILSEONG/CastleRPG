@@ -23,7 +23,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _events.is_empty():
 		return
-	_clock += delta
+	_clock += delta * (1.0 if _stage_mode else Fever.mult())  # FEVER: 방치 스폰만 배속(개정 14 §3)
 	while _cursor < _events.size() and _events[_cursor].time <= _clock:
 		if _live >= GameData.config_num("max_live_monsters"):
 			return  # 상한. 스케줄은 지연되고 다음 프레임에 재시도
@@ -70,3 +70,4 @@ func _spawn(ev: Dictionary) -> void:
 func _on_monster_died(m) -> void:
 	_live = maxi(0, _live - 1)
 	Economy.add_kill(m.kind, m.stage)  # 리필 제거(_vanish)는 died를 안 내므로 골드 없음
+	Fever.add_kill(GameState.mode == GameState.Mode.IDLE)  # 방치 처치만 FEVER 게이지에 센다

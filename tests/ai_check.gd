@@ -33,6 +33,8 @@ var _g  # 지금 사례의 몬스터. 멤버로 둔다 — 지역 변수를 람�
 func _ready() -> void:
 	OS.add_logger(_errors)
 	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
+	Fever.save_path = ""
+	Fever.reset()
 	Economy.reset(Time.get_unix_time_from_system())
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -378,6 +380,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _levelup_case()
 	await _idle_invincible_case()
 	await _attack_sync()
+	await _fever_spawn()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -1045,3 +1048,28 @@ func _attack_sync() -> void:
 	_remove_hero(h)
 	_clear_monsters()
 	await _frames(1)
+
+
+## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 사이클) 마리를 내고, 스테이지 모드는 변화가 없다.
+func _fever_spawn() -> void:
+	var counts := {}
+	for k in ["idle", "idle_fever", "stage", "stage_fever"]:
+		Fever.reset()
+		if k.ends_with("fever"):
+			Fever.left = 180.0
+		GameState.mode = GameState.Mode.IDLE if k.begins_with("idle") else GameState.Mode.STAGE
+		var holder := Node.new()
+		add_child(holder)
+		var sp = SpawnerScript.new()
+		sp.castle = _main.castle
+		holder.add_child(sp)  # _ready가 모드의 스케줄을 읽는다
+		for i in 800:  # 40 s
+			sp._process(0.05)
+		counts[k] = sp._live
+		holder.queue_free()
+		await _frames(1)
+	Fever.reset()
+	GameState.mode = GameState.Mode.STAGE
+	_clear_monsters()
+	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= 4, "(fever) FEVER triples the idle spawn count over the same time (±1 cycle)", str(counts))
+	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))

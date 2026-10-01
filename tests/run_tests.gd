@@ -81,6 +81,7 @@ func _init() -> void:
 	test_hero_levels()
 	test_hit_frac()
 	test_buildings()
+	test_fever()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1829,3 +1830,47 @@ func test_hit_frac() -> void:
 		check(ap.has_animation(anim) and ap.get_animation(anim).length > 0.0, "%s plays %s" % [used[anim], anim])
 		root.free()
 	check(Art.ATTACK_FIT > 0.0 and Art.ATTACK_FIT < 1.0, "attack animation fits inside the interval (x %.2f)" % Art.ATTACK_FIT)
+
+
+## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 200에서 가득, FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
+func test_fever() -> void:
+	GameData.load_tables()
+	var f = preload("res://scripts/fever.gd").new()
+	f.save_path = ""
+	check(f.kills_needed() == 200 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
+	for i in 50:
+		f.add_kill(false)  # 스테이지 모드 처치는 세지 않는다
+	check(f.gauge == 0, "stage-mode kills do not charge the gauge")
+	for i in 199:
+		f.add_kill(true)
+	check(f.gauge == 199 and not f.full() and not f.start() and f.mult() == 1.0, "199 idle kills: not full, cannot start, spawn mult 1")
+	f.add_kill(true)
+	f.add_kill(true)
+	check(f.gauge == 200 and f.full() and f.ratio() == 1.0, "200 idle kills fill the gauge (and stay at 200)")
+	check(f.start() and f.active() and f.gauge == 0 and f.left == 180.0 and f.mult() == 3.0, "start: 180 s, gauge back to 0, spawn mult 3")
+	f.add_kill(true)
+	check(f.gauge == 0 and not f.start(), "the gauge does not charge during FEVER")
+	f.advance(179.0)
+	check(f.active() and f.mult() == 3.0, "still FEVER at 179 s")
+	f.advance(2.0)
+	check(not f.active() and f.left == 0.0 and f.mult() == 1.0, "FEVER ends after 180 s")
+	f.add_kill(true)
+	check(f.gauge == 1, "the gauge charges again from 0 after FEVER")
+	# 저장·불러오기(임시 파일)
+	var p := "user://fever_test.json"
+	f.save_path = p
+	f.gauge = 73
+	f.left = 42.5
+	f.save()
+	var g = preload("res://scripts/fever.gd").new()
+	g.save_path = p
+	g.load_save()
+	check(g.gauge == 73 and g.left == 42.5, "save/load round trip")
+	var w := FileAccess.open(p, FileAccess.WRITE)
+	w.store_string("{broken")
+	w.close()
+	g.load_save()
+	check(g.gauge == 0 and g.left == 0.0, "a corrupt file starts from zero")
+	DirAccess.remove_absolute(p)
+	f.free()
+	g.free()

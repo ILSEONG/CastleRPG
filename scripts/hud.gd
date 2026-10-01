@@ -12,6 +12,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const Formation := preload("res://scripts/formation.gd")
 const CameraRig := preload("res://scripts/camera_rig.gd")
+const FeverButtonScript := preload("res://scripts/fever_button.gd")
 const TAB_BAR_H := 104  # 하단 탭 바 높이(tab_bar.gd, 개정 11 §2.3)
 const STAGE_BUTTON := Vector2(196, 64)  # 상단 스테이지 버튼(개정 12-2 §1)
 const BAND_BOTTOM := -(TAB_BAR_H + 12)  # 끊김 띠는 탭 바 위 12px에서 위로 자란다
@@ -33,6 +34,7 @@ var _gate_tiles: Array = []  # side -> 성문 막대 줄(탭하면 gate_tapped)
 var _hp := {}  # CASTLE·면 → {bar, num, flash: 테두리 번쩍임 Control, left: 남은 번쩍임 초, last: 지난 HP}
 var _center: Label
 var _button: Button
+var _fever: Button  # FEVER 버튼(fever_button.gd)
 var _chips := {}  # 아이콘 kind(gold·wood·stone·food) → 숫자 Label
 var _chip_row: Control
 var _banner: Control  # 온라인 띠(아래 버튼 위): 끊김 "서버 연결 중…" + 웹 비영구 저장소 경고
@@ -70,6 +72,9 @@ func _ready() -> void:
 	_title_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_title_box.add_theme_constant_override("separation", 8)
 	head.add_child(_title_box)
+	head.add_theme_constant_override("separation", 8)
+	_fever = FeverButtonScript.new()  # [진행] 바로 왼쪽(개정 14 §3)
+	head.add_child(_fever)
 	_stage_label = Label.new()
 	_stage_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_stage_label.add_theme_font_size_override("font_size", 36)

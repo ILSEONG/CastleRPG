@@ -31,6 +31,8 @@ var _heroes: Array = []
 func _ready() -> void:
 	OS.add_logger(_errors)
 	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
+	Fever.save_path = ""
+	Fever.reset()
 	Economy.reset(Time.get_unix_time_from_system())
 	get_window().size = Vector2i(360, 640)
 	_main = preload("res://scenes/main.tscn").instantiate()
@@ -603,6 +605,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	recruit.close()
 	await _guard_wait()
 	await _buildings_ui(tabs, hud, recruit)
+	await _fever_ui(hud)
 	await _top_hud(hud)
 
 
@@ -973,3 +976,31 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.build = {}
 	Economy.changed.emit()
 	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
+
+
+## 개정 14 §3 FEVER 버튼: [진행] 왼쪽, 미충전 탭은 "몬스터 N마리 더" 알림, 충전 뒤 탭은 FEVER 시작(남은 시간 표시).
+func _fever_ui(hud) -> void:
+	var fb = hud._fever
+	Fever.reset()
+	Fever.gauge = 73
+	await _frames(2)
+	var fr: Rect2 = fb.get_global_rect()
+	var br: Rect2 = hud._button.get_global_rect()
+	print("INPUT INFO: fever button %s, stage button %s" % [fr, br])
+	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
+		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
+	await _tap(fr.get_center())
+	_check(not Fever.active() and Fever.gauge == 73 and hud._toast.visible and hud._toast.text == "몬스터 127마리 더",
+		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
+	Fever.gauge = Fever.kills_needed()
+	await _frames(2)
+	_check(fb.label_text() == "FEVER!", "(fever) a full gauge reads FEVER!", fb.label_text())
+	await _tap(fr.get_center())
+	await _frames(2)
+	_check(Fever.active() and Fever.left > 170.0 and Fever.gauge == 0 and fb.label_text() == "3:00" and fb.banner_left > 0.0,
+		"(fever) tapping a full button starts FEVER: timer 3:00 on the button, big banner", "left=%.1f text=%s banner=%.2f" % [Fever.left, fb.label_text(), fb.banner_left])
+	Fever.left = 119.5
+	await _frames(1)
+	_check(fb.label_text() == "2:00" or fb.label_text() == "1:59", "(fever) the button shows the time left", fb.label_text())
+	Fever.reset()
+	await _frames(1)

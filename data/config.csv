@@ -39,3 +39,6 @@ hero_level_stat,0.06
 levelup_gold_R,30
 levelup_gold_SR,60
 levelup_gold_SSR,120
+fever_kills,200
+fever_sec,180
+fever_spawn_mult,3

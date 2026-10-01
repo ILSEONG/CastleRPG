@@ -67,7 +67,8 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'hero_max_stars', 'hero_star_bonus',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
-  'hero_max_level_base', 'hero_max_level_per_star', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR']
+  'hero_max_level_base', 'hero_max_level_per_star', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
+  'fever_kills', 'fever_sec', 'fever_spawn_mult']
 export const CONFIG_LIST = ['starter_heroes']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
