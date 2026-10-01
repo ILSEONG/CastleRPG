@@ -1,0 +1,10 @@
+id,name,max_level,wood,stone,food,base_sec,req1,req2
+keep,성채,30,300,300,200,60,gate,barracks
+gate,성문,30,150,250,0,45,quarry,
+barracks,막사,30,200,120,100,40,farm,
+tavern,주점,30,180,100,150,40,barracks,
+lab,연구소,30,150,200,80,40,houses,
+houses,민가,30,160,80,120,30,,
+lumber,벌목장,30,60,80,40,20,,
+quarry,채석장,30,100,40,40,20,,
+farm,농장,30,80,60,20,20,,

@@ -144,17 +144,104 @@ export const minClearSec = (row: StageRow, ratePerSec: number) => (row.waves * r
 
 // --- 영웅 (개정 10) ---
 
-// 배치 슬롯 수 = hero_slots 목록[keep_level − 1](표 끝을 넘으면 마지막 값). 앱 GameData.hero_slots와 같다.
-export function heroSlots(config: Config, keepLevel: number): number {
-  const list = String(config.hero_slots ?? '').split('|').map((s) => Number(s.trim()))
-  if (list.length === 0 || list.some((n) => !Number.isInteger(n) || n < 0)) throw new Error("config 'hero_slots' is missing or not a list of integers")
-  return list[Math.min(Math.max(keepLevel, 1), list.length) - 1]
+// 배치 슬롯 수 = 성채 단계 표 keep_slot_tiers(개정 12). 앱 GameData.hero_slots와 같다.
+export const heroSlots = (config: Config, keepLevel: number) => tierValue(config, 'keep_slot_tiers', keepLevel)
+
+// --- 건물 (개정 12 §2.2·§2.3) — 앱 GameData.build_cost·build_sec·tier_value와 같은 식 ---
+
+export const BUILD_RES = ['wood', 'stone', 'food'] // 건물 비용 열 = 자원 id
+export const BUILD_COST_GROWTH = 1.35
+export const BUILD_TIME_GROWTH = 1.5
+export const KEEP = 'keep' // 다른 건물의 상한·영웅 슬롯·성 HP
+export const GATE = 'gate' // 성문 HP
+export const HOUSES = 'houses' // 축적 상한
+export const TAVERN = 'tavern' // 모집 확률
+
+export interface BuildingDef {
+  id: string
+  name: string
+  max_level: number
+  wood: number
+  stone: number
+  food: number
+  base_sec: number
+  req1: string | null
+  req2: string | null
+}
+
+// base × growth^n을 곱셈 n번으로 — 앱(GDScript)과 같은 IEEE 곱셈 순서라 pow 구현 차이로 반올림이 갈리지 않는다.
+export function grown(base: number, growth: number, n: number): number {
+  let v = base
+  for (let i = 0; i < n; i++) v *= growth
+  return v
+}
+
+// L → L+1 비용 {wood, stone, food} = round(값 × 1.35^(L−1)).
+export function buildCost(def: BuildingDef, level: number): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const r of BUILD_RES) out[r] = roundHalfAway(grown(Number(def[r as 'wood']), BUILD_COST_GROWTH, level - 1))
+  return out
+}
+
+// L → L+1 시간(초) = round(base_sec × 1.5^(L−1)).
+export const buildSec = (def: BuildingDef, level: number) => roundHalfAway(grown(Number(def.base_sec), BUILD_TIME_GROWTH, level - 1))
+
+// 단계 표 "레벨:값|…" → [[레벨, 값], …]. 레벨은 1부터 오름차순 정수, 값은 숫자. 틀리면 null.
+export function parseTiers(text: string): [number, number][] | null {
+  const out: [number, number][] = []
+  for (const part of String(text).split('|')) {
+    const m = /^\s*(\d+)\s*:\s*([+-]?(\d+(\.\d*)?|\.\d+))\s*$/.exec(part)
+    if (!m) return null
+    const level = Number(m[1])
+    if (out.length === 0 ? level !== 1 : level <= out[out.length - 1][0]) return null
+    out.push([level, Number(m[2])])
+  }
+  return out
+}
+
+// 레벨 이하인 마지막 단계의 값.
+export function tierValue(config: Config, key: string, level: number): number {
+  const tiers = parseTiers(config[key] ?? '')
+  if (!tiers) throw new Error(`config '${key}' is missing or not a tier table`)
+  let v = tiers[0][1]
+  for (const [l, x] of tiers) if (level >= l) v = x
+  return v
+}
+
+// 축적 상한(분) = accum_cap_min + accum_cap_per_house × (민가 − 1).
+export const accumCapMin = (config: Config, housesLevel: number) =>
+  cfgNum(config, 'accum_cap_min') + cfgNum(config, 'accum_cap_per_house') * (Math.max(housesLevel, 1) - 1)
+
+// 모집 확률(주점): SSR + tavern_ssr_per_level × (L − 1), SR + tavern_sr_per_level × (L − 1). R은 나머지.
+export function gachaRates(config: Config, tavernLevel: number) {
+  const k = Math.max(tavernLevel, 1) - 1
+  return {
+    ssr: cfgNum(config, 'gacha_rate_ssr') + cfgNum(config, 'tavern_ssr_per_level') * k,
+    sr: cfgNum(config, 'gacha_rate_sr') + cfgNum(config, 'tavern_sr_per_level') * k,
+  }
+}
+
+// 업그레이드를 못 하는 이유(앱 Economy.upgrade_block_for와 같은 순서·코드). 되면 ''. 스펙 §2.4 검사 순서:
+// 존재(unknown) → 최대 레벨(max_level) → 성채 상한(keep_cap, 성채 제외) → 선행(prereq: req ≥ T−1) → 일꾼(builder_busy) → 자원(not_enough).
+// levels: 건물 → 레벨(없으면 1), res: 쓸 수 있는 자원(자원 건물이면 자동 수집분을 더해서 넘긴다).
+export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<string, number>, builderBusy: boolean, res: Record<string, number>): string {
+  const def = defs.find((d) => d.id === id)
+  if (!def) return 'unknown'
+  const lv = (b: string) => (Object.hasOwn(levels, b) ? levels[b] : 1)
+  const to = lv(id) + 1
+  if (lv(id) >= def.max_level) return 'max_level'
+  if (id !== KEEP && to > lv(KEEP)) return 'keep_cap'
+  for (const req of [def.req1, def.req2]) if (req && lv(req) < to - 1) return 'prereq'
+  if (builderBusy) return 'builder_busy'
+  const cost = buildCost(def, lv(id))
+  if (BUILD_RES.some((r) => (res[r] ?? 0) < cost[r])) return 'not_enough'
+  return ''
 }
 
 // 모집(스펙 §3.6): 장마다 등급(SSR rate_ssr, SR rate_sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
 // 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand는 [0, 1) 난수(서버는 암호학적 난수).
-// 앱 Economy.roll_gacha와 같은 규칙.
-export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number) {
+// 확률은 주점 레벨로 오른다(개정 12, gachaRates). 앱 Economy.roll_gacha와 같은 규칙.
+export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number, tavernLevel = 1) {
   const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {
@@ -162,8 +249,7 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
     if (pool.length === 0) throw new Error(`no ${grade} heroes to recruit`)
     return { id: pool[Math.floor(rand() * pool.length)], grade }
   }
-  const ssr = cfgNum(config, 'gacha_rate_ssr')
-  const sr = cfgNum(config, 'gacha_rate_sr')
+  const { ssr, sr } = gachaRates(config, tavernLevel)
   const out: { id: string; grade: string }[] = []
   for (let i = 0; i < count; i++) {
     const r = rand()

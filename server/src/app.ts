@@ -45,6 +45,7 @@ interface Game {
   stages: R.StageRow[]
   heroes: Record<string, any>[]
   resources: { id: string; name: string; building: string; per_min: number; price: number }[]
+  buildings: R.BuildingDef[] // 개정 12 건물 표(파일 순서)
   config: R.Config
 }
 
@@ -61,6 +62,7 @@ interface Player {
   buildings: Record<string, { level: number; last_collect: number }>
   heroes: Record<string, { copies: number; level: number }> // 영웅 id → 보유 수·레벨
   deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
+  build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
 }
 
 // 한 번의 원자적 변경. version이 읽은 값과 같을 때만 전부 적용된다.
@@ -75,6 +77,7 @@ interface Change {
   heroes?: Record<string, number> // 영웅 → copies 증가
   heroLevels?: Record<string, number> // 영웅 → 레벨 증가
   deploy?: (string | null)[] // 새 배치
+  build?: { id: string; finish: number } | null // 새 일꾼 상태(개정 12)
   log?: { kind: string; detail: unknown }
 }
 
@@ -87,7 +90,8 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy,
+const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id,
+  extract(epoch from s.build_finish)::float8 as build_finish,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
@@ -107,17 +111,31 @@ const ENSURE_SQL = `with p as (
   h as (insert into player_heroes (player_id, hero_id) select s.player_id, x from s, jsonb_array_elements_text($3::jsonb) as x
     on conflict do nothing),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
-  b as (insert into player_buildings (player_id, building, last_collect) select p.id, resources.building, to_timestamp($2::float8)
-    from p, resources on conflict do nothing)
+  b as (insert into player_buildings (player_id, building, last_collect) select p.id, x.id, to_timestamp($2::float8)
+    from p, (select building as id from resources union select id from building_defs) as x on conflict do nothing)
   select id from p`
 
+// 빠진 행(나중에 추가된 자원·건물)을 채운다. 건물은 레벨 1, 성채·성문은 player_state의 레벨(개정 12).
 const ENSURE_ROWS_SQL = `with p as (select $1::uuid as id),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
-  b as (insert into player_buildings (player_id, building, last_collect) select p.id, resources.building, to_timestamp($2::float8)
-    from p, resources on conflict do nothing)
+  b as (insert into player_buildings (player_id, building, level, last_collect)
+    select s.player_id, x.id, case x.id when $3 then s.keep_level when $4 then s.gate_level else 1 end, to_timestamp($2::float8)
+    from player_state s, (select building as id from resources union select id from building_defs) as x
+    where s.player_id = $1 on conflict do nothing)
   select 1`
 
+// 게으른 완료(개정 12 §2.4): 다 지은 건물 레벨 +1(성채·성문이면 player_state 레벨도 — 하위 호환), 일꾼 비우기,
+// economy_log build_done을 version 가드 한 문장으로. 다른 요청이 먼저 바꿨으면 0행 — 다시 읽는다.
+const COMPLETE_SQL = `with s as (update player_state set version = version + 1, build_id = null, build_finish = null,
+    keep_level = keep_level + (case when build_id = $5 then 1 else 0 end), gate_level = gate_level + (case when build_id = $6 then 1 else 0 end)
+    where player_id = $1 and version = $2 and build_id = $3 returning player_id),
+  b as (update player_buildings set level = level + 1 where player_id = (select player_id from s) and building = $3 returning 1),
+  l as (insert into economy_log (player_id, kind, detail, at) select player_id, 'build_done', $7::jsonb, to_timestamp($4::float8) from s returning 1)
+  select count(*)::int as n from s`
+
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
+// 건물 레벨(행이 없으면 1)
+const level = (p: Player, building: string) => p.buildings[building]?.level ?? 1
 // bigint 파라미터는 정수 문자열로 — Neon은 숫자를 toString()으로 보내 1e21부터 지수 표기가 되고 ::bigint가 거부한다. 정수가 아니면 throw.
 const bigint = (v: number) => BigInt(v).toString()
 
@@ -155,39 +173,53 @@ export function createApp(opts: AppOptions) {
     const [r] = await query(GAME_SQL)
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
-      resources: json(r.resources), config: json(r.config),
+      resources: json(r.resources), buildings: json(r.buildings), config: json(r.config),
     }
   }
 
+  // 플레이어 상태 읽기. 플레이어 상태를 읽거나 쓰는 모든 요청이 여기를 지난다 — 다 지은 건물이 있으면 먼저 완료하고
+  // (게으른 완료, 개정 12) 다시 읽는다. 빠진 자원·건물 행은 한 번 채우고 다시 읽는다.
   async function loadPlayer(id: string, game: Game, now: number): Promise<Player> {
-    for (let i = 0; i < 2; i++) {
+    let ensured = false
+    for (let i = 0; i < MAX_ATTEMPTS + 1; i++) {
       const [r] = await query(PLAYER_SQL, [id])
       if (!r) throw new ApiError(401, 'unknown_player', 'player not found; log in again')
       const res: Record<string, number> = {}
       for (const [k, v] of Object.entries(json(r.res) as Record<string, unknown>)) res[k] = Number(v)
       const buildings: Player['buildings'] = {}
       for (const [k, v] of Object.entries(json(r.buildings) as Record<string, any>)) buildings[k] = { level: Number(v.level), last_collect: Number(v.last_collect) }
-      const missing = game.resources.some((x) => !(x.id in res) || !(x.building in buildings))
-      if (missing && i === 0) {
-        await query(ENSURE_ROWS_SQL, [id, now]) // 나중에 추가된 자원 — 행을 채우고 다시 읽는다
+      const missing = game.resources.some((x) => !(x.id in res) || !(x.building in buildings)) || game.buildings.some((b) => !(b.id in buildings))
+      if (missing) {
+        if (ensured) throw new ApiError(500, 'internal', 'player rows missing')
+        ensured = true
+        await query(ENSURE_ROWS_SQL, [id, now, R.KEEP, R.GATE]) // 나중에 추가된 자원·건물 — 행을 채우고 다시 읽는다
         continue
       }
       const heroes: Player['heroes'] = {}
       for (const [k, v] of Object.entries(json(r.heroes) as Record<string, any>)) heroes[k] = { copies: Number(v.copies), level: Number(v.level) }
       const deploy = json(r.deploy)
-      return {
+      const p: Player = {
         gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
+        build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
       }
+      if (p.build && p.build.finish <= now) {
+        const from = level(p, p.build.id)
+        await query(COMPLETE_SQL, [id, p.version, p.build.id, now, R.KEEP, R.GATE,
+          JSON.stringify({ building: p.build.id, from, to: from + 1, finish: p.build.finish })])
+        continue // 이겼든 졌든(다른 요청이 먼저 완료했으면 build_id가 비어 있다) 다시 읽는다
+      }
+      return p
     }
-    throw new ApiError(500, 'internal', 'player rows missing')
+    throw new ApiError(409, 'conflict', 'concurrent update; try again')
   }
 
-  // 플레이어 응답(스펙 §4 공통).
+  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원 건물은 last_collect도. build = 일꾼 또는 null(개정 12).
   function view(p: Player, game: Game, now: number) {
     const res: Record<string, number> = {}
-    const buildings: Record<string, { level: number; last_collect: number }> = {}
+    const buildings: Record<string, { level: number; last_collect?: number }> = {}
+    for (const d of game.buildings) buildings[d.id] = { level: level(p, d.id) }
     for (const r of game.resources) {
       res[r.id] = p.res[r.id] ?? 0
       const b = p.buildings[r.building]
@@ -197,7 +229,7 @@ export function createApp(opts: AppOptions) {
     const known = new Set(game.heroes.map((h) => String(h.id)))
     const heroes: Player['heroes'] = {}
     for (const [id, h] of Object.entries(p.heroes)) if (known.has(id)) heroes[id] = { copies: h.copies, level: h.level }
-    const deploy = Array.from({ length: R.heroSlots(game.config, p.keep_level) }, (_, i) => {
+    const deploy = Array.from({ length: R.heroSlots(game.config, level(p, R.KEEP)) }, (_, i) => {
       const id = p.deploy[i]
       return typeof id === 'string' && Object.hasOwn(heroes, id) ? id : null
     })
@@ -205,7 +237,7 @@ export function createApp(opts: AppOptions) {
       server_now: now,
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
-        kill_seq: p.kill_seq, buildings, heroes, deploy,
+        kill_seq: p.kill_seq, buildings, build: p.build, heroes, deploy,
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -226,6 +258,7 @@ export function createApp(opts: AppOptions) {
     if (ch.lastStageClear !== undefined) sets.push(`last_stage_clear = to_timestamp(${p(ch.lastStageClear)}::float8)`)
     if (ch.killSeq !== undefined) sets.push(`kill_seq = ${p(ch.killSeq)}::int`)
     if (ch.deploy !== undefined) sets.push(`deploy = ${p(JSON.stringify(ch.deploy))}::jsonb`)
+    if (ch.build !== undefined) sets.push(`build_id = ${p(ch.build?.id ?? null)}::text, build_finish = to_timestamp(${p(ch.build?.finish ?? null)}::float8)`)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2 returning player_id)`]
     if (ch.heroes && Object.keys(ch.heroes).length) {
       // from s: version 가드가 실패하면(s가 비면) 영웅도 안 늘어난다
@@ -264,6 +297,7 @@ export function createApp(opts: AppOptions) {
     for (const [k, d] of Object.entries(ch.heroes ?? {})) pl.heroes[k] = { copies: (pl.heroes[k]?.copies ?? 0) + d, level: pl.heroes[k]?.level ?? 1 }
     for (const [k, d] of Object.entries(ch.heroLevels ?? {})) pl.heroes[k].level += d
     if (ch.deploy !== undefined) pl.deploy = ch.deploy
+    if (ch.build !== undefined) pl.build = ch.build
     pl.version += 1
   }
 
@@ -348,7 +382,7 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
-    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, config: g.config }
+    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, config: g.config }
     const version = createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16)
     const etag = `"${version}"`
     c.header('ETag', etag)
@@ -369,7 +403,7 @@ export function createApp(opts: AppOptions) {
       const r = g.resources.find((x) => x.building === building)
       if (!r) throw new ApiError(400, 'not_resource_building', `'${building}' is not a resource building`)
       const b = p.buildings[building]
-      const st = R.collectStep(b.last_collect, now, r.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'))
+      const st = R.collectStep(b.last_collect, now, r.per_min, b.level, R.accumCapMin(g.config, level(p, R.HOUSES)))
       if (!st.changed) return { extra: { amount: 0 } }
       return {
         change: {
@@ -442,6 +476,47 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // 건물 업그레이드(개정 12 §2.4): 검사 순서 존재(400 unknown_building) → 최대 레벨 → 성채 상한 → 선행 → 일꾼 → 자원
+  // (409, 코드 = rules.upgradeBlock). 자원 건물이면 먼저 자동 수집(수집 규칙 그대로, 남은 초 유지)하고 그 양까지 비용에 쓴다 —
+  // 레벨이 바뀌는 경계를 깨끗하게. 수집·차감·일꾼(build_id·build_finish = 서버 시각 + 시간)·로그는 version 가드 한 문장.
+  app.post('/v1/building/upgrade', auth, async (c) => {
+    const building = strField(await body(c), 'building')
+    return mutate(c, (p, g, now) => {
+      const def = g.buildings.find((d) => d.id === building)
+      if (!def) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
+      const from = level(p, building)
+      const res: Record<string, number> = { ...p.res }
+      const rdef = g.resources.find((r) => r.building === building)
+      let collect: { res: string; amount: number; from: number; to: number } | null = null
+      if (rdef) {
+        const b = p.buildings[building]
+        const st = R.collectStep(b.last_collect, now, rdef.per_min, b.level, R.accumCapMin(g.config, level(p, R.HOUSES)))
+        if (st.changed) {
+          collect = { res: rdef.id, amount: st.amount, from: b.last_collect, to: st.lastCollect }
+          res[rdef.id] = (res[rdef.id] ?? 0) + st.amount
+        }
+      }
+      const levels: Record<string, number> = {}
+      for (const d of g.buildings) levels[d.id] = level(p, d.id)
+      const why = R.upgradeBlock(building, g.buildings, levels, p.build !== null, res)
+      if (why) throw new ApiError(409, why, `cannot upgrade '${building}' from level ${from}: ${why}`)
+      const cost = R.buildCost(def, from)
+      const finish = now + R.buildSec(def, from)
+      const delta: Record<string, number> = {}
+      for (const r of R.BUILD_RES) {
+        const d = (collect?.res === r ? collect.amount : 0) - cost[r]
+        if (d !== 0) delta[r] = d
+      }
+      return {
+        change: {
+          res: delta, buildings: collect ? { [building]: collect.to } : {}, build: { id: building, finish },
+          log: { kind: 'build_start', detail: { building, from, to: from + 1, cost, finish, collect } },
+        },
+        extra: { build: { id: building, finish } },
+      }
+    })
+  })
+
   // 모집(스펙 §3.6·§3.7): 비용(정수 골드)은 floor(gold_tenths / 10)로 판정하고 × 10을 뺀다(소수 부분은 남는다).
   // 골드 차감·영웅 copies·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
   app.post('/v1/gacha', auth, async (c) => {
@@ -453,7 +528,7 @@ export function createApp(opts: AppOptions) {
       const owned: Record<string, number> = {}
       for (const [id, h] of Object.entries(p.heroes)) owned[id] = h.copies
       const add: Record<string, number> = {}
-      const results = R.rollGacha(count, g.heroes, g.config, random).map(({ id, grade }) => {
+      const results = R.rollGacha(count, g.heroes, g.config, random, level(p, R.TAVERN)).map(({ id, grade }) => {
         const isNew = !(owned[id] > 0)
         owned[id] = (owned[id] ?? 0) + 1
         add[id] = (add[id] ?? 0) + 1
@@ -473,7 +548,7 @@ export function createApp(opts: AppOptions) {
       throw new ApiError(400, 'bad_deploy', "'deploy' must be an array of hero ids or null")
     }
     return mutate(c, (p, g) => {
-      const slots = R.heroSlots(g.config, p.keep_level)
+      const slots = R.heroSlots(g.config, level(p, R.KEEP))
       if (d.length !== slots) throw new ApiError(400, 'bad_deploy', `'deploy' must have ${slots} slots`)
       const ids = d.filter((x): x is string => x !== null)
       if (new Set(ids).size !== ids.length) throw new ApiError(400, 'bad_deploy', 'a hero can be deployed only once')
@@ -520,6 +595,15 @@ export function createApp(opts: AppOptions) {
       await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
         update player_buildings set last_collect = last_collect - $2::float8 * interval '1 second'
         where player_id = (select player_id from s)`, [id, minutes * 60])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
+    app.post('/v1/test/build_now', auth, async (c) => {
+      const id = c.get('playerId') as string
+      await query('update player_state set version = version + 1, build_finish = to_timestamp($2::float8) where player_id = $1 and build_id is not null', [id, clock()])
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))

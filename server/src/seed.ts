@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
+import { BUILD_RES, GATE, KEEP, parseTiers } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -49,6 +50,12 @@ export const TABLES: TableSpec[] = [
     sql: { id: 'text', name: 'text', building: 'text', per_min: 'integer', price: 'integer' },
   },
   {
+    // 개정 12: 건물 표(스펙 §2.2). req1·req2는 비면 null(선행 없음)
+    name: 'buildings', table: 'building_defs', file: 'buildings.csv', ordered: true,
+    cols: { id: 'key', name: 'text', max_level: 'int', wood: 'int', stone: 'int', food: 'int', base_sec: 'num', req1: 'opt', req2: 'opt' },
+    sql: { id: 'text', name: 'text', max_level: 'integer', wood: 'integer', stone: 'integer', food: 'integer', base_sec: 'real', req1: 'text', req2: 'text' },
+  },
+  {
     name: 'config', table: 'game_config', file: 'config.csv', ordered: false,
     cols: { key: 'key', value: 'text' },
     sql: { key: 'text', value: 'text' },
@@ -62,7 +69,12 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
   'hero_max_level_base', 'hero_max_level_per_star', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
   'levelup_food_R', 'levelup_food_SR', 'levelup_food_SSR']
-export const CONFIG_LIST = ['hero_slots', 'starter_heroes']
+export const CONFIG_LIST = ['starter_heroes']
+// 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
+// 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
+export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'accum_cap_per_house', 'barracks_hp_per_level', 'lab_atk_per_level',
+  'tavern_ssr_per_level', 'tavern_sr_per_level']
+export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
 export const GRADES = ['R', 'SR', 'SSR']
@@ -154,11 +166,14 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
   }
   if (spec.name === 'config') {
     const byKey = new Map(rows.map((r) => [String(r.key), r]))
-    for (const k of [...CONFIG_NUM, ...CONFIG_LIST]) {
+    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_TIERS]) {
       const r = byKey.get(k)
       if (!r) err(0, 'key', `missing key '${k}'`)
-      else if (CONFIG_NUM.includes(k) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
+      else if ((CONFIG_NUM.includes(k) || CONFIG_BUILDING_NUM.includes(k)) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
       else if (CONFIG_LIST.includes(k) && String(r.value).split('|').some((p) => p.trim() === '')) err(Number(r._line), 'value', `empty list item: '${r.value}'`)
+      else if (CONFIG_TIERS.includes(k) && !parseTiers(String(r.value))?.every(([, v]) => Number.isInteger(v) && v >= 1)) {
+        err(Number(r._line), 'value', `not a tier table 'level:value|…' (levels from 1 ascending, values integers >= 1): '${r.value}'`)
+      }
     }
   }
   if (rows.length === 0 && !errors.some((e) => e.startsWith(`${spec.file} `))) err(0, Object.keys(spec.cols)[0], 'no rows')
@@ -193,6 +208,35 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   }
 }
 
+// 건물 표(개정 12 §2.2, 앱 GameData와 같은 규칙): 최대 레벨 1 이상, 비용 0 이상(정수는 열 형이 본다), base_sec > 0,
+// 선행(req1·req2)은 표에 있는 건물, 성채·성문 행 필수(상한·성 HP), 자원 건물은 모두 건물 표에, 비용 열(wood·stone·food)은 자원 id.
+// 건물 효과 설정은 0 이상, 주점 확률 증가분은 1 이하.
+function checkBuildings(t: Tables, errors: string[]) {
+  const rows = t.buildings ?? []
+  const ids = new Set(rows.map((b) => String(b.id)))
+  const err = (line: unknown, col: string, why: string) => errors.push(`buildings.csv line ${line} column '${col}': ${why}`)
+  for (const b of rows) {
+    if (!(Number(b.max_level) >= 1)) err(b._line, 'max_level', `must be at least 1: ${b.max_level}`)
+    for (const r of BUILD_RES) if (!(Number(b[r]) >= 0)) err(b._line, r, `must be 0 or more: ${b[r]}`)
+    if (!(Number(b.base_sec) > 0)) err(b._line, 'base_sec', `must be greater than 0: ${b.base_sec}`)
+    for (const c of ['req1', 'req2']) if (b[c] !== null && !ids.has(String(b[c]))) err(b._line, c, `unknown building '${b[c]}'`)
+  }
+  if (t.buildings) for (const id of [KEEP, GATE]) if (!ids.has(id)) err(0, 'id', `missing required building '${id}'`)
+  if (t.buildings && t.resources) {
+    const res = new Set(t.resources.map((r) => String(r.id)))
+    for (const r of t.resources) if (!ids.has(String(r.building))) errors.push(`resources.csv line ${r._line} column 'building': building '${r.building}' is not in buildings.csv`)
+    for (const r of BUILD_RES) if (!res.has(r)) errors.push(`resources.csv line 0 column 'id': building cost resource '${r}' is missing`)
+  }
+  const byKey = new Map((t.config ?? []).map((r) => [String(r.key), r]))
+  for (const k of CONFIG_BUILDING_NUM) {
+    const r = byKey.get(k)
+    const v = Number(r?.value)
+    if (r && isNum(String(r.value)) && !(v >= 0 && (!k.startsWith('tavern_') || v <= 1))) {
+      errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${k.startsWith('tavern_') ? 'in 0..1' : '0 or more'}: '${r.value}'`)
+    }
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -215,6 +259,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
     if (out.heroes && !heroIds.has(id)) errors.push(`config.csv line ${starters?._line} column 'value': unknown hero '${id}' in starter_heroes`)
   }
   if (out.config) checkGacha(out.config, errors)
+  checkBuildings(out, errors)
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {
