@@ -35,8 +35,8 @@ var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
 var _path: Array[Vector3] = []
 var hp: float = 0.0
-var hp_max: float = 0.0  # 별 반영
-var atk: float = 0.0     # 별 반영(오라 전)
+var hp_max: float = 0.0  # 레벨·별 반영
+var atk: float = 0.0     # 레벨·별 반영(오라 전)
 var state: int = State.IDLE
 var selected := false:
 	set(v):
@@ -58,8 +58,9 @@ var _repair_cd := 0.0
 var _blast_cd := 0.0
 
 
-## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default). copies = 보유 수(별).
-func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1) -> void:
+## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default).
+## copies = 보유 수(별), level = 영웅 레벨. HP·공격 = 기본 × 레벨 배율 × 별 배율(GameData.hero_stats).
+func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1, level := 1) -> void:
 	index = p_index
 	def = p_def
 	castle = p_castle
@@ -67,9 +68,9 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1) 
 	role = def.role
 	_sk = def.skills
 	_color = Color(def.color)
-	var mult := GameData.star_mult(copies)
-	hp_max = def.hp * mult
-	atk = def.atk * mult
+	var st := GameData.hero_stats(def, level, copies)
+	hp_max = st.hp
+	atk = st.atk
 	_place_default()
 
 

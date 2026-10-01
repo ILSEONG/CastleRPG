@@ -1,5 +1,5 @@
 extends Node
-## 골드·자원·마지막 수집 시각·건물 레벨·보유 영웅(copies)·배치의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
+## 골드·자원·마지막 수집 시각·건물 레벨·보유 영웅(copies·레벨)·배치의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
 ## 시간은 인자 now(유닉스 초)로 받는다 — 테스트에서 .new()로 단독 생성 가능(트리에 안 넣으면 _ready 안 돎).
 ## 온라인 모드(net이 Net 노드, 개정 9): 상태는 서버 응답(apply_server)으로만 바뀐다. 수집·판매는 요청만 보내고
 ## 응답이 오면 반영한다. 처치는 쌓아 두고 Net이 보낸다. 표시 골드 = 서버 골드 + 아직 반영 안 된 처치의 예상 골드
@@ -8,19 +8,22 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 2  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다
+const SAVE_VERSION := 3  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
+const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
+const FOOD := "food"  # 레벨업 식량 자원 id
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
 signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 signal roster_changed  # 보유 영웅(copies)이나 배치가 바뀌었다
 signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies}]. 실패(온라인)면 빈 배열
+signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
 
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
 var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
@@ -32,6 +35,7 @@ var res: Dictionary = {}           # 자원 id → int
 var last_collect: Dictionary = {}  # 건물 id → 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1). 별 = min(copies − 1, hero_max_stars)
+var hero_levels: Dictionary = {}   # 영웅 id → 레벨(≥ 1, 없으면 1). 개정 11
 var deploy: Array = []             # 배치 슬롯 i → 영웅 id 또는 null(저장된 그대로 — 쓰는 쪽은 deploy_slots)
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
@@ -176,6 +180,7 @@ func reset(now: float) -> void:
 		last_collect[b] = now
 		levels[b] = 1
 	heroes = {}
+	hero_levels = {}
 	deploy = []
 	for id in GameData.config_list("starter_heroes"):  # 시작 영웅 copies 1, 그 순서로 배치
 		heroes[str(id)] = 1
@@ -321,6 +326,61 @@ func set_deploy(ids: Array) -> void:
 	net.send("POST", "/v1/deploy", {"deploy": d}, _on_deployed, _on_deploy_failed)
 
 
+func level_of(hero_id: String) -> int:
+	return maxi(1, int(hero_levels.get(hero_id, 1)))
+
+
+## count번 레벨업을 못 하는 이유(UI 문구). 되면 "".
+func levelup_block(hero_id: String, count := 1) -> String:
+	var h := GameData.hero(hero_id)
+	if h.is_empty() or int(heroes.get(hero_id, 0)) < 1:
+		return "보유하지 않은 영웅"
+	if level_of(hero_id) + count > GameData.max_level(int(heroes[hero_id])):
+		return "최대 레벨"
+	var cost := GameData.levelup_cost(h.grade, level_of(hero_id), count)
+	var no_gold: bool = gold < cost.gold
+	var no_food: bool = int(res.get(FOOD, 0)) < cost.food
+	if no_gold and no_food:
+		return "골드·식량 부족"
+	if no_gold:
+		return "골드 부족"
+	return "식량 부족" if no_food else ""
+
+
+## 지금 감당할 수 있는 레벨업 횟수(최대 cap, 최대 레벨까지). [×10] 버튼.
+func levelup_affordable(hero_id: String, cap := 10) -> int:
+	var n := 0
+	while n < cap and levelup_block(hero_id, n + 1) == "":
+		n += 1
+	return n
+
+
+## 레벨업 count번(스펙 §2.1). 안 되면 알림만. 오프라인은 골드(× 10 tenths)·식량을 빼고 올려 저장한 뒤 leveled,
+## 온라인은 /v1/hero/levelup(once — 다시 보내면 두 번 오를 수 있어 재전송하지 않는다. 응답에 leveled). 올렸거나 보냈으면 true.
+## 능력치 반영은 배치 변경과 같다(roster_changed → main: 다음 리필, 방치 모드면 그 영웅만 곧바로).
+func level_up(hero_id: String, count := 1) -> bool:
+	var why := levelup_block(hero_id, count)
+	if why != "":
+		notice.emit(why)
+		return false
+	if net != null:
+		return _levelup_online(hero_id, count)
+	var cost := GameData.levelup_cost(GameData.hero(hero_id).grade, level_of(hero_id), count)
+	gold_tenths -= int(cost.gold) * 10
+	res[FOOD] = int(res.get(FOOD, 0)) - int(cost.food)
+	hero_levels[hero_id] = level_of(hero_id) + count
+	changed.emit()
+	roster_changed.emit()
+	save()
+	leveled.emit(hero_id, level_of(hero_id))
+	return true
+
+
+## 레벨업 응답을 기다리는 중(UI는 버튼을 끈다).
+func levelup_waiting() -> bool:
+	return _waiting.has("levelup")
+
+
 ## 개발용(main의 --heroes= / ?heroes=): 그 영웅들을 보유(없으면 copies 1)하고 그 순서로 배치한다. 저장 파일은 쓰지 않는다
 ## (save_path를 비운다). 모르는 id는 경고하고 건너뛴다. 받아들인 id 목록을 돌려준다.
 func grant_dev_heroes(ids: Array) -> Array:
@@ -362,13 +422,17 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("heroes") == null or p.heroes is Dictionary) and (p.get("deploy") == null or p.deploy is Array)):
 		push_error("bad player response: %s" % str(data))
 		return false
-	var roster_before := [heroes.duplicate(), deploy.duplicate()]
-	if p.get("heroes") is Dictionary:
+	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate()]
+	if p.get("heroes") is Dictionary:  # 개정 11: {id: {copies, level}}
 		var h := {}
+		var lv := {}
 		for id in p.heroes:
-			if _num(p.heroes[id]) and int(p.heroes[id]) >= 1:
-				h[str(id)] = int(p.heroes[id])
+			var v = p.heroes[id]
+			if v is Dictionary and _num(v.get("copies")) and int(v.copies) >= 1:
+				h[str(id)] = int(v.copies)
+				lv[str(id)] = maxi(1, int(v.level)) if _num(v.get("level")) else 1
 		heroes = h
+		hero_levels = lv
 	if p.get("deploy") is Array:
 		deploy = p.deploy.map(func(x): return x if x is String else null)
 	if _pending_deploy != null:
@@ -394,7 +458,7 @@ func apply_server(data: Dictionary) -> bool:
 	merchant = {"rate": float(m.rate), "next_change": float(m.next_change)}
 	_recalc_gold()
 	changed.emit()
-	if [heroes, deploy] != roster_before:
+	if [heroes, deploy, hero_levels] != roster_before:
 		roster_changed.emit()
 	return true
 
@@ -518,6 +582,35 @@ func _on_gacha_failed() -> void:
 	gacha_done.emit([])
 
 
+## 온라인 레벨업: 쌓인 처치를 먼저 보내(서버 골드를 표시 골드에 맞춤) 뒤 once로 보낸다(모집과 같은 이유로 다시 보내지 않는다).
+func _levelup_online(hero_id: String, count: int) -> bool:
+	if _waiting.has("levelup"):
+		return false
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["levelup"] = true
+	net.flush_kills()
+	net.send("POST", "/v1/hero/levelup", {"hero_id": hero_id, "count": count}, _on_levelup.bind(hero_id), _on_levelup_failed, true, true)
+	changed.emit()  # UI가 응답 전 버튼을 끈다
+	return true
+
+
+func _on_levelup(data: Dictionary, hero_id: String) -> void:
+	_waiting.erase("levelup")
+	apply_server(data)
+	leveled.emit(hero_id, level_of(hero_id))
+
+
+## 거부(409 max_level·not_enough, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
+func _on_levelup_failed() -> void:
+	_waiting.erase("levelup")
+	var why := {"not_enough": "골드·식량이 부족합니다", "max_level": "최대 레벨입니다"}
+	notice.emit(why.get(net.last_error, LEVELUP_FAIL_TEXT))
+	net.refresh()
+	changed.emit()
+
+
 func _on_deployed(data: Dictionary) -> void:
 	_deploy_answered()
 	apply_server(data)
@@ -550,8 +643,11 @@ func save() -> void:
 	if f == null:
 		push_warning("economy save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
+	var hs := {}
+	for id in heroes:
+		hs[id] = {"copies": heroes[id], "level": level_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
-		"heroes": heroes, "deploy": deploy}))
+		"heroes": hs, "deploy": deploy}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -573,8 +669,9 @@ func load_save(now: float) -> void:
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, SAVE_VERSION]:
 		return false
+	var v3: bool = int(data.version) == 3  # v3: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v1: bool = int(data.version) == 1  # v1: gold(정수) → × 10
 	if not _num(data.get("gold" if v1 else "gold_tenths")):
 		return false
@@ -598,16 +695,25 @@ func _apply(data) -> bool:
 	var hs = data.get("heroes")
 	var ds = data.get("deploy")
 	var h := heroes
+	var hl := {}
 	var d := deploy
 	if hs != null or ds != null:
 		if not (hs is Dictionary and ds is Array):
 			return false
 		h = {}
 		for id in hs:
-			if not (id is String and _num(hs[id])):
+			var v = hs[id]
+			var level := 1
+			if v3:
+				if not (v is Dictionary and _num(v.get("copies")) and _num(v.get("level"))):
+					return false
+				level = maxi(1, int(v.level))
+				v = v.copies
+			if not (id is String and _num(v)):
 				return false
-			if int(hs[id]) >= 1:
-				h[id] = int(hs[id])
+			if int(v) >= 1:
+				h[id] = int(v)
+				hl[id] = level
 		d = []
 		for x in ds:
 			if not (x == null or x is String):
@@ -618,6 +724,7 @@ func _apply(data) -> bool:
 	last_collect = lc
 	levels = lv
 	heroes = h
+	hero_levels = hl
 	deploy = d
 	return true
 
