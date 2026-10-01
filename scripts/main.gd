@@ -1,6 +1,8 @@
 extends Node3D
 ## 월드 조립. 씬 파일은 이것 하나. 나머지는 코드로 생성.
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
+## 온라인 모드(Net.is_online())면 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다 —
+## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 
 const Balance := preload("res://scripts/balance.gd")
 const CastleScript := preload("res://scripts/castle.gd")
@@ -21,6 +23,12 @@ var castle
 
 
 func _ready() -> void:
+	if Net.is_online():
+		await _wait_for_server()
+	_build_world()
+
+
+func _build_world() -> void:
 	_build_environment()
 	castle = CastleScript.new()
 	add_child(castle)
@@ -59,8 +67,33 @@ func _ready() -> void:
 		Economy.save_path = ""  # 개발 실행은 실제 저장 파일을 건드리지 않는다
 		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
-	if OS.is_debug_build() and _flag_requested("econ-demo"):
+	if OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
 		_econ_demo()
+
+
+## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.
+func _wait_for_server() -> void:
+	var layer := CanvasLayer.new()
+	var back := ColorRect.new()
+	back.color = Color(0.86, 0.91, 0.96)  # 월드 배경색
+	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(back)
+	var box := PanelContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	box.add_theme_stylebox_override("panel", HudScript.round_box(HudScript.PANEL_BG, HudScript.RADIUS + 6, 28))
+	back.add_child(box)
+	var label := Label.new()
+	label.text = "서버 연결 중…"
+	label.add_theme_font_size_override("font_size", 40)
+	label.add_theme_color_override("font_color", HudScript.INK)
+	box.add_child(label)
+	add_child(layer)
+	Net.start()
+	if not Net.ready_once:
+		await Net.connected
+	layer.queue_free()
 
 
 func _build_environment() -> void:

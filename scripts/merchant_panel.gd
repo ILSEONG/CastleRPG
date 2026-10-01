@@ -90,7 +90,7 @@ func is_open() -> bool:
 
 
 func _now() -> float:
-	return Time.get_unix_time_from_system()
+	return Economy.time_now()  # 온라인은 서버 보정 시각
 
 
 func _on_back_input(event: InputEvent) -> void:

@@ -1,11 +1,12 @@
 extends CanvasLayer
-## HUD. GameState 시그널만 구독. 게임 오브젝트 직접 참조 없음.
+## HUD. GameState·Economy·Net 시그널만 구독. 게임 오브젝트 직접 참조 없음.
 
 const INK := Color(0.16, 0.18, 0.24)
 const PANEL_BG := Color(1, 1, 1, 0.72)
 const BAR_BG := Color(0, 0, 0, 0.12)
 const ACCENT := Color(0.98, 0.70, 0.20)
 const RADIUS := 14
+const TOAST_SEC := 1.6
 const IconsScript := preload("res://scripts/icons.gd")
 
 var _stage_label: Label
@@ -14,6 +15,9 @@ var _gate_bars: Array = []
 var _center: Label
 var _button: Button
 var _chips := {}  # 아이콘 kind(gold·wood·stone·food) → 숫자 Label
+var _banner: Control  # 온라인 끊김 띠 "서버 연결 중…"
+var _toast: Label  # 짧은 알림("연결 대기 중")
+var _toast_left := 0.0
 
 
 func _ready() -> void:
@@ -81,6 +85,7 @@ func _ready() -> void:
 	_button.add_theme_color_override("font_pressed_color", Color.WHITE)
 	_button.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.7))
 	root.add_child(_button)
+	_build_link_ui()
 
 	GameState.mode_changed.connect(_on_mode_changed)
 	GameState.castle_hp_changed.connect(_on_castle_hp)
@@ -93,9 +98,13 @@ func _ready() -> void:
 	_on_mode_changed(GameState.mode)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if GameState.mode == GameState.Mode.COUNTDOWN:
 		_center.text = str(ceili(GameState.countdown_left()))
+	if _toast_left > 0.0:
+		_toast_left -= delta
+		_toast.modulate.a = clampf(_toast_left / 0.4, 0.0, 1.0)  # 마지막 0.4초에 사라진다
+		_toast.visible = _toast_left > 0.0
 
 
 func _bar(color: Color) -> ProgressBar:
@@ -196,6 +205,59 @@ func _build_chips(root: Control) -> void:
 		_chips[kind] = label
 	Economy.changed.connect(_refresh_chips)
 	_refresh_chips()
+
+
+## 온라인 알림: 끊기면 맨 위 띠, 끊긴 동안 수집·판매 탭은 짧은 알림. 거래 창(층 2) 위 층 3, 입력은 통과.
+func _build_link_ui() -> void:
+	var top := CanvasLayer.new()
+	top.layer = 3
+	add_child(top)
+	var band := PanelContainer.new()
+	band.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.add_theme_stylebox_override("panel", round_box(Color(INK, 0.86), 0, 10))
+	var text := Label.new()
+	text.text = "서버 연결 중…"
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.add_theme_font_size_override("font_size", 26)
+	text.add_theme_color_override("font_color", Color.WHITE)
+	band.add_child(text)
+	top.add_child(band)
+	_banner = band
+	_banner.visible = Net.is_online() and not Net.up
+	Net.connected.connect(_on_link_up)
+	Net.disconnected.connect(_on_link_down)
+	_toast = Label.new()
+	_toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_toast.offset_left = -320
+	_toast.offset_right = 320
+	_toast.offset_top = -200  # 아래 버튼(-120..-32) 위
+	_toast.offset_bottom = -150
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_toast.add_theme_font_size_override("font_size", 32)
+	_toast.add_theme_color_override("font_color", Color.WHITE)
+	_toast.add_theme_color_override("font_outline_color", Color(INK, 0.85))
+	_toast.add_theme_constant_override("outline_size", 14)
+	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast.visible = false
+	top.add_child(_toast)
+	Economy.notice.connect(_on_notice)
+
+
+func _on_link_up() -> void:
+	_banner.visible = false
+
+
+func _on_link_down() -> void:
+	_banner.visible = true
+
+
+func _on_notice(text: String) -> void:
+	_toast.text = text
+	_toast.modulate.a = 1.0
+	_toast.visible = true
+	_toast_left = TOAST_SEC
 
 
 func _refresh_chips() -> void:

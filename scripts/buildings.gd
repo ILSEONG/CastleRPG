@@ -9,7 +9,6 @@ const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
-const EconomyScript := preload("res://scripts/economy.gd")  # 정적 규칙만 쓴다(오토로드 아님)
 
 const LAYER_TAP := 16  # 건물 탭 판정체 (성문 2, 성벽 8과 별도)
 const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물보다 먼저 본다(앞쪽 건물 상자에 가리지 않게)
@@ -17,9 +16,8 @@ const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물�
 const MOUNTAIN_VARIANTS := 5
 
 var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
-var merchant_label: Label3D  # 상인 이름표: "상인 ×1.3" — 정시마다 갱신
+var merchant_label: Label3D  # 상인 이름표: "상인 ×1.3" — 시세가 바뀌면 갱신
 
-var _label_hour := -1
 var _label_cd := 0.0
 
 
@@ -31,16 +29,15 @@ func _ready() -> void:
 	_ring_mountains()
 
 
-## 상인 이름표 배율은 정시에만 바뀐다 — 1초마다 시간 칸을 확인한다.
+## 상인 이름표 배율은 정시(오프라인)나 서버 시세 갱신(온라인) 때만 바뀐다 — 1초마다 확인한다.
 func _process(delta: float) -> void:
 	_label_cd -= delta
 	if _label_cd > 0.0:
 		return
 	_label_cd = 1.0
-	var hour := EconomyScript.hour_index(Time.get_unix_time_from_system())
-	if hour != _label_hour:
-		_label_hour = hour
-		merchant_label.text = "상인 ×%.1f" % EconomyScript.merchant_rate(hour)
+	var text := "상인 ×%.1f" % Economy.current_rate(Economy.time_now())
+	if merchant_label.text != text:
+		merchant_label.text = text
 
 
 func _place_building(b: Dictionary) -> void:

@@ -32,6 +32,10 @@ var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
 
 
+func _ready() -> void:
+	Economy.collected.connect(_on_collected)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if (event as InputEventScreenTouch).index >= 1:
@@ -111,10 +115,13 @@ func _tap_object(screen_pos: Vector2) -> bool:
 	var res_id: String = Economy.res_of(id)
 	if res_id == "":
 		return false
-	var amount: int = Economy.collect(id, Time.get_unix_time_from_system())
-	if amount > 0:
-		badges.pop(badges.anchor(id), res_id, amount)
+	Economy.collect(id, Economy.time_now())  # "+N"은 collected 시그널로(온라인은 응답이 왔을 때)
 	return true
+
+
+## 수집 결과 "+N". 오프라인은 탭 즉시, 온라인은 서버 응답의 amount로.
+func _on_collected(building_id: String, res_id: String, amount: int) -> void:
+	badges.pop(badges.anchor(building_id), res_id, amount)
 
 
 ## 탭 위치의 바닥(y=0) 지점, 맵 안으로 자름. 바닥을 못 맞히면 null.

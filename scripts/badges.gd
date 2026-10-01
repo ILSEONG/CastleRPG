@@ -65,7 +65,7 @@ func _draw() -> void:
 		return
 	var view := get_viewport_rect().grow(BUBBLE_R * 2.0)
 	var bob := sin(_t * TAU * BOB_HZ) * BOB_PX
-	for id in badge_ids(Time.get_unix_time_from_system()):
+	for id in badge_ids(Economy.time_now()):
 		var tip := camera.unproject_position(anchor(id)) + Vector2(0, bob)
 		if view.has_point(tip):
 			_draw_bubble(tip, Economy.res_of(id))
