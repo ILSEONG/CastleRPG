@@ -11,6 +11,8 @@ const HudScript := preload("res://scripts/hud.gd")
 const DIM := Color(0, 0, 0, 0.55)
 const OPEN_GUARD_MS := 400  # 연 직후 이 시간 동안 이 창의 누름(버튼·카드·배경)을 버린다
 const GROUP := "ui_windows"
+const SHEET_TOP := 76  # 시트 위 끝: 상단 칩 줄(16..64) 아래
+const SHEET_SIDE := 8
 
 var dialog: PanelContainer
 var content: VBoxContainer
@@ -48,6 +50,15 @@ func _fit() -> void:
 	dialog.offset_right = 0.0
 	dialog.offset_top = 0.0
 	dialog.offset_bottom = 0.0
+
+
+## 시트(하단 탭 창): 상단 칩 줄 아래부터 탭 바 위까지 채운다(크기 고정 — 내용이 바뀌어도 다시 맞추지 않는다).
+func _fit_sheet() -> void:
+	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dialog.offset_left = SHEET_SIDE
+	dialog.offset_right = -SHEET_SIDE
+	dialog.offset_top = SHEET_TOP
+	dialog.offset_bottom = -(HudScript.TAB_BAR_H + 8)
 
 
 func open() -> void:

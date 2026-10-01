@@ -25,9 +25,7 @@ const CASTLE := -1  # _hp 키: 성(성문은 면 0..3)
 
 signal gate_tapped(side: int)
 
-const IDLE_TEXT := "방치 · 무적"
 var _stage_label: Label
-var _idle_badge: Control  # 방치 무적 표시(방패 + 글자)
 var _title_box: HBoxContainer  # 첫 줄 왼쪽: 스테이지 글자 + (개정 12 §3) 방치 무적 표시 자리
 var _castle_bar: ProgressBar
 var _gate_bars: Array = []
@@ -79,24 +77,6 @@ func _ready() -> void:
 	_stage_label.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))  # 제목: 외곽선
 	_stage_label.add_theme_constant_override("outline_size", 6)
 	_title_box.add_child(_stage_label)
-	# 방치 무적 표시(개정 12): 방패 아이콘 + "방치 · 무적". 방치 모드에서만 보인다.
-	_idle_badge = HBoxContainer.new()
-	_idle_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_idle_badge.add_theme_constant_override("separation", 6)
-	var shield = IconsScript.new()
-	shield.kind = "shield"
-	shield.custom_minimum_size = Vector2(32, 32)
-	shield.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	shield.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_idle_badge.add_child(shield)
-	var idle_text := Label.new()
-	idle_text.text = IDLE_TEXT
-	idle_text.add_theme_font_size_override("font_size", 24)
-	idle_text.add_theme_color_override("font_color", Color(0.24, 0.38, 0.64))
-	idle_text.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
-	idle_text.add_theme_constant_override("outline_size", 5)
-	_idle_badge.add_child(idle_text)
-	_title_box.add_child(_idle_badge)
 	_button = Button.new()
 	_button.custom_minimum_size = STAGE_BUTTON
 	_button.focus_mode = Control.FOCUS_NONE
@@ -285,7 +265,6 @@ func _on_failed(_stage: int) -> void:
 
 func _on_mode_changed(mode: int) -> void:
 	_stage_label.text = "스테이지 %d" % GameState.stage
-	_idle_badge.visible = mode == GameState.Mode.IDLE
 	if mode == GameState.Mode.IDLE or mode == GameState.Mode.STAGE:
 		_center.text = ""
 	_refresh_button()

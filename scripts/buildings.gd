@@ -2,6 +2,8 @@ extends Node3D
 ## 성 안 건물(코드로 만든 로우폴리 메시, 기능 없음 — 서브프로젝트 2)과 성 밖 자연물·테두리 산 장식.
 ## 건물은 TownKit 레시피를 부지 중심에 그대로 놓는다(레시피가 부지 안에 맞춰져 있다 — 테스트).
 ## 자연물·산은 시드 고정 변형 몇 개를 시드 고정 난수로 흩고, 변형마다 MultiMesh 하나로 그린다.
+## 건물 레벨업(개정 12 §2.5): 이름표 "벌목장 Lv 3"(Economy.changed마다), 짓는 중인 건물에 로우폴리 비계(기둥 4 + 가로대, 건물 AABB 둘레 —
+## 성문은 문루 넷), 완료되면 비계를 걷고 빛 조각(Fx.repair)과 알림 "벌목장 Lv 4 완료". 머리 위 진행 막대·남은 시간은 badges.gd(화면 공간).
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
@@ -9,22 +11,37 @@ const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
+const GameData := preload("res://scripts/game_data.gd")
+const MeshKit := preload("res://scripts/mesh_kit.gd")
+const Fx := preload("res://scripts/fx.gd")
 
 const LAYER_TAP := 16  # 건물 탭 판정체 (성문 2, 성벽 8과 별도)
 const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물보다 먼저 본다(앞쪽 건물 상자에 가리지 않게)
 
 const MOUNTAIN_VARIANTS := 5
+const SCAFFOLD_MARGIN := 0.35  # 비계 기둥이 건물 AABB 밖으로 떨어진 거리(m)
+const SCAFFOLD_POST := 0.28  # 기둥 굵기
+const SCAFFOLD_RAIL := 0.14  # 가로대 굵기
+const DONE_TEXT := "%s Lv %d 완료"
 
 var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
 var merchant_label: Label3D  # 상인 이름표 "상인" — 시세·남은 시간은 상인을 눌러 여는 거래 창에서 본다
+var labels := {}  # 건물 id → 이름표 Label3D("이름 Lv N")
+var sites := {}  # 건물 id → [AABB(월드), …] — 비계·진행 막대 자리. 성문은 문루 넷
+var scaffold_id := ""  # 지금 비계를 두른 건물 id(없으면 "")
+var _scaffolds: Array = []
 
 
 func _ready() -> void:
 	for b in Balance.BUILDINGS:
 		_place_building(b)
+	_add_gate_sites()
 	_place_merchant()
 	_scatter_nature()
 	_ring_mountains()
+	Economy.changed.connect(_sync_build)
+	Economy.building_done.connect(_on_building_done)
+	_sync_build()
 
 
 func _place_building(b: Dictionary) -> void:
@@ -36,7 +53,8 @@ func _place_building(b: Dictionary) -> void:
 	add_child(mi)
 	var h: float = mi.mesh.get_aabb().end.y
 	_add_tap_body(center, Vector3(b.size.x * Balance.TILE, h, b.size.y * Balance.TILE)).set_meta("building", b.id)
-	_add_label(b.name, center + Vector3(0, h + 1.0, 0))
+	labels[b.id] = _add_label("", center + Vector3(0, h + 1.0, 0))
+	sites[b.id] = [AABB(center + mi.mesh.get_aabb().position, mi.mesh.get_aabb().size)]
 
 
 ## 상인 NPC(대기, 카메라 쪽 +X+Z 대각을 봄) + 수레 + 이름표 + 탭 판정체(상인·수레를 함께 덮음).
@@ -171,3 +189,65 @@ func _add_multimesh(mesh: Mesh, placements: Array) -> void:
 ## 자연물 자리 규칙: 성벽 바깥 여유 밖, 괴물 진입로(두 축) 밖.
 func _nature_spot_ok(p: Vector2, keep_out: float) -> bool:
 	return maxf(absf(p.x), absf(p.y)) >= keep_out and absf(p.x) >= Art.LANE_HALF_WIDTH and absf(p.y) >= Art.LANE_HALF_WIDTH
+
+
+# --- 건물 레벨업 표시(개정 12 §2.5) ---
+
+## 성문 자리: 네 문루의 AABB(castle.gd와 같은 놓임 — 로컬 +Z가 성 바깥).
+func _add_gate_sites() -> void:
+	var aabb := TownKit.gatehouse().get_aabb()
+	var boxes := []
+	for side in 4:
+		var dir: Vector3 = Formation.SIDE_DIR[side]
+		boxes.append(Transform3D(Basis(Vector3.UP, atan2(dir.x, dir.z)), Formation.gate_position(half, side)) * aabb)
+	sites[GameData.GATE] = boxes
+
+
+## 이름표 "이름 Lv N"과 비계를 Economy(레벨·일꾼)에 맞춘다. 비계는 짓는 건물이 바뀔 때만 다시 만든다.
+func _sync_build() -> void:
+	for id in labels:
+		labels[id].text = "%s Lv %d" % [GameData.building_def(id).name, Economy.building_level(id)]
+	var id := str(Economy.build.get("id", ""))
+	if not sites.has(id):
+		id = ""
+	if id == scaffold_id:
+		return
+	for s in _scaffolds:
+		s.queue_free()
+	_scaffolds.clear()
+	scaffold_id = id
+	for box in sites.get(id, []):
+		var mi := MeshInstance3D.new()
+		mi.mesh = scaffold_mesh(box.size)
+		mi.material_override = Art.lowpoly_vc_material()
+		mi.position = Vector3(box.get_center().x, box.position.y, box.get_center().z)
+		add_child(mi)
+		_scaffolds.append(mi)
+
+
+## 완료: 비계는 changed가 이미 걷었다. 지붕 위·네 모서리에 빛 조각, 알림 "이름 Lv N 완료".
+func _on_building_done(id: String, level: int) -> void:
+	_sync_build()
+	for box in sites.get(id, []):
+		var top := Vector3(box.get_center().x, box.end.y - 2.0, box.get_center().z)  # Fx.repair는 2 m 위에서 튄다
+		Fx.repair(self, top)
+		for sx in [-0.5, 0.5]:
+			for sz in [-0.5, 0.5]:
+				Fx.repair(self, top + Vector3(box.size.x * sx, -box.size.y * 0.4, box.size.z * sz))
+	Economy.notice.emit(DONE_TEXT % [GameData.building_def(id).name, level])
+
+
+## 로우폴리 비계: 크기 size(건물 AABB) 둘레에 각진 나무 기둥 4개 + 세 단 가로대. 바닥 가운데가 원점.
+static func scaffold_mesh(size: Vector3) -> ArrayMesh:
+	var k = MeshKit.new()
+	var hx := size.x / 2.0 + SCAFFOLD_MARGIN
+	var hz := size.z / 2.0 + SCAFFOLD_MARGIN
+	var h := size.y + 0.4
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			k.box(Vector3(sx * hx, 0, sz * hz), Vector3(SCAFFOLD_POST, h, SCAFFOLD_POST), TownKit.WOOD_DARK)
+	for y in [h * 0.33, h * 0.66, h - SCAFFOLD_RAIL]:
+		for s in [-1.0, 1.0]:
+			k.box(Vector3(0, y, s * hz), Vector3(hx * 2.0 + SCAFFOLD_POST, SCAFFOLD_RAIL, SCAFFOLD_RAIL), TownKit.WOOD)
+			k.box(Vector3(s * hx, y, 0), Vector3(SCAFFOLD_RAIL, SCAFFOLD_RAIL, hz * 2.0 + SCAFFOLD_POST), TownKit.WOOD)
+	return k.commit()

@@ -62,6 +62,7 @@ func _run() -> void:
 	var warrior = _heroes[0]  # 기본 배치: 북(0) 성문 앞
 	var archer = _heroes[1]   # 동(1) 성벽 위
 	var archer2 = _heroes[3]  # 서(3) 성벽 위
+	print("INPUT INFO: default camera building px (720x1280 logical): %s, gates %s" % [Balance.BUILDINGS.map(func(b): return [b.id, _building_px(b.id)]), range(4).map(func(s): return _gate_px(s))])
 
 	# (a) 마우스 탭 → 영웅 선택
 	_picker._select(null)
@@ -206,6 +207,7 @@ func _run() -> void:
 			badges = c
 		elif c.get_script() == preload("res://scripts/merchant_panel.gd"):
 			panel = c
+	var bwin = _building_win()
 	var rig = _camera.get_parent()
 	_picker._select(null)
 	var now := Time.get_unix_time_from_system()
@@ -219,7 +221,7 @@ func _run() -> void:
 	ids.sort()
 	_check(ids == ["farm", "lumber"], "(k) badges only on resource buildings with >= 5 min pending", "ids=%s" % [ids])
 
-	# (l) 영웅 없이 벌목장 탭 → 목재 +100, "+N" 뜸, 선택 없음 유지. 곧바로 또 탭하면 0이라 pop 없음
+	# (l) 영웅 없이 벌목장 탭 → 목재 +100, "+N" 뜸, 선택 없음 유지. 곧바로 또 탭하면 0이라 pop 없이 건물 창(개정 12 §2.5)
 	var lp := _building_px("lumber")
 	_check(_picker._pick(lp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(lp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "lumber",
 		"(l) precondition: lumber tap point hits the lumber tap body", "px=%s" % lp)
@@ -228,7 +230,9 @@ func _run() -> void:
 		"(l) lumber tap collects 100 wood and pops +100", "wood=%d pop=%s" % [Economy.res["wood"], badges.last_pop])
 	badges.last_pop = {}
 	await _tap(lp)
-	_check(Economy.res["wood"] == 100 and badges.last_pop.is_empty(), "(l) second tap collects nothing and shows no pop", "wood=%d pop=%s" % [Economy.res["wood"], badges.last_pop])
+	_check(Economy.res["wood"] == 100 and badges.last_pop.is_empty() and bwin.is_open() and bwin.building_id == "lumber" and _picker.selected == null,
+		"(l) a second tap with nothing to collect shows no pop and opens the lumber building window", "wood=%d pop=%s open=%s id=%s" % [Economy.res["wood"], badges.last_pop, bwin.is_open(), bwin.building_id])
+	bwin.close()
 
 	# (m) 영웅 선택 중 벌목장 탭 → 수집되고 선택·위치 유지(이동 명령 없음)
 	var hero_pre := [warrior.side, warrior.post, warrior.free_pos]
@@ -238,20 +242,20 @@ func _run() -> void:
 	_check(_picker.selected == warrior and Economy.res["wood"] == 200 and [warrior.side, warrior.post, warrior.free_pos] == hero_pre,
 		"(m) lumber tap with a hero selected collects and keeps the selection without a move", "selected=%s wood=%d" % [_name(_picker.selected), Economy.res["wood"]])
 
-	# (n) 기능 없는 건물(성채) 탭: 영웅 선택 중이면 바닥 이동 / 없으면 선택 해제 (수집·창 없음)
+	# (n) 성채 탭(개정 12 §2.5): 영웅 선택 중이어도 건물 창(선택·위치 그대로, 이동 명령 없음) / 없어도 건물 창(선택 없음 유지)
 	var gold0: int = Economy.gold
 	var kp := _building_px("keep")
 	_check(_picker._pick(kp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "keep" and not _open_hero(kp),
 		"(n) precondition: keep tap point hits the keep body, no hero nearby", "px=%s" % kp)
 	await _tap(kp)
-	_check(_picker.selected == warrior and warrior.post == Formation.POST_FREE and warrior.free_pos != hero_pre[2] and not panel.is_open() and Economy.gold == gold0,
-		"(n) keep tap with a hero selected falls through to a ground move", "post=%d free=%s" % [warrior.post, warrior.free_pos])
-	_picker._select(null)
-	await _tap(_hero_px(warrior))
-	_check(_picker.selected == warrior, "(n) precondition: warrior re-selected", "selected=%s" % _name(_picker.selected))
+	_check(bwin.is_open() and bwin.building_id == "keep" and _picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == hero_pre
+		and not panel.is_open() and Economy.gold == gold0, "(n) keep tap with a hero selected opens the keep window and keeps the hero (no move)",
+		"open=%s id=%s post=%d free=%s" % [bwin.is_open(), bwin.building_id, warrior.post, warrior.free_pos])
+	bwin.close()
 	_picker._select(null)
 	await _tap(kp)
-	_check(_picker.selected == null and not panel.is_open(), "(n) keep tap with no hero selected stays deselected", "selected=%s" % _name(_picker.selected))
+	_check(bwin.is_open() and bwin.building_id == "keep" and _picker.selected == null, "(n) keep tap with no hero selected opens the keep window too", "selected=%s" % _name(_picker.selected))
+	bwin.close()
 
 	# (o) 상인 탭 → 창 열림, 선택 유지. 창 안(제목) 탭은 닫지 않는다
 	_picker._select(warrior)
@@ -368,16 +372,17 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(recruit.confirm_button.get_global_rect().get_center())
 	_check(recruit.is_open() and not recruit.is_showing_results() and recruit.one_button.disabled, "(s) [확인] goes back; [1회] is off at 0 gold", "")
 
-	# (t) 하단 탭 바(개정 11): 탭 4개(성·영웅·모집·상인), 건물 탭으로 연 모집 창도 [모집] 선택(올라옴). 창이 열린 동안 끌기는 카메라를
-	#     못 움직이고, 탭 바는 창 위에서도 동작한다: [상인] → 모집 창 닫고 거래 창, 같은 탭 다시 → 닫고 [성], [모집] 열기, [성] 모두 닫기
+	# (t) 하단 탭 바(개정 13 §7.1): 탭 4개(영웅·병사·모집·상인, [성] 없음), 건물 탭으로 연 모집 창도 [모집] 선택(올라옴). 창이 열린 동안
+	#     끌기는 카메라를 못 움직이고, 탭 바는 창 위에서도 동작한다: [상인] → 모집 창 닫고 거래 창, 같은 탭 다시 → 닫고 선택 없음,
+	#     [병사] → "병사 준비 중" 빈 시트, 다시 → 닫힘
 	var merchant: Node = null
 	for c in _main.get_children():
 		if c.get_script() == preload("res://scripts/merchant_panel.gd"):
 			merchant = c
 	var bar_rect: Rect2 = tabs._bar.get_global_rect()
 	var big: Rect2 = hud._button.get_global_rect()
-	_check(tabs.buttons.keys() == ["castle", "hero", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
-		"(t) the tab bar has 성·영웅·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
+	_check(tabs.buttons.keys() == ["hero", "soldier", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
+		"(t) the tab bar has 영웅·병사·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
 		and big.end.x > 680.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
@@ -395,17 +400,24 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(_tab_px(tabs, "merchant"))
 	_check(not recruit.is_open() and merchant.is_open() and tabs.selected == "merchant", "(t) [상인] works over the open recruit window: it closes it and opens the trade window",
 		"recruit=%s merchant=%s selected=%s" % [recruit.is_open(), merchant.is_open(), tabs.selected])
-	await _tap(_tab_px(tabs, "castle"))  # 연 직후 보호 시간: 탭 바 누름도 버린다
+	await _tap(_tab_px(tabs, "hero"))  # 연 직후 보호 시간: 탭 바 누름도 버린다
 	_check(merchant.is_open(), "(t) a tab press right after a window opens is ignored too", "")
 	await _guard_wait()
 	await _tap(_tab_px(tabs, "merchant"))
-	_check(not merchant.is_open() and tabs.selected == "castle", "(t) the selected tab again closes its window and [성] is selected", "selected=%s" % tabs.selected)
+	_check(not merchant.is_open() and tabs.selected == "" and _picker.selected == null, "(t) the selected tab again closes its window and no tab is selected (battlefield)", "selected=%s" % tabs.selected)
 	await _tap(_tab_px(tabs, "recruit"))
 	_check(recruit.is_open() and tabs.selected == "recruit", "(t) [모집] opens the recruit window", "")
 	await _guard_wait()
-	await _tap(_tab_px(tabs, "castle"))
-	_check(not recruit.is_open() and not merchant.is_open() and not heroes_win.is_open() and tabs.selected == "castle" and _picker.selected == null,
-		"(t) [성] closes every window and the press does not reach the battlefield", "selected=%s" % tabs.selected)
+	var soldiers: Node = tabs.windows.soldier
+	await _tap(_tab_px(tabs, "soldier"))
+	var sheet0: Rect2 = soldiers.dialog.get_global_rect()
+	_check(soldiers.is_open() and not recruit.is_open() and tabs.selected == "soldier" and soldiers.content.get_child(1).text == soldiers.EMPTY_TEXT
+		and sheet0.end.y <= bar_rect.position.y and sheet0.size.y > 1000.0, "(t) [병사] closes the recruit window and opens the empty soldier sheet (병사 준비 중) above the tab bar",
+		"open=%s selected=%s sheet=%s" % [soldiers.is_open(), tabs.selected, sheet0])
+	await _guard_wait()
+	await _tap(_tab_px(tabs, "soldier"))
+	_check(not recruit.is_open() and not merchant.is_open() and not heroes_win.is_open() and not soldiers.is_open() and tabs.selected == "" and _picker.selected == null,
+		"(t) [병사] again closes it; every window is closed and the press does not reach the battlefield", "selected=%s" % tabs.selected)
 
 	# (t) 탭 바 위 마우스 휠은 카메라 줌으로 새지 않는다
 	var zoom0 := _camera.size
@@ -569,7 +581,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) [닫기] returns to the list (guarded); the card shows Lv 5", "")
 	await _guard_wait()
 	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 시트 바깥 배경
-	_check(not heroes_win.is_open() and tabs.selected == "castle", "(x) a backdrop tap above the sheet closes it and [성] is selected", "")
+	_check(not heroes_win.is_open() and tabs.selected == "", "(x) a backdrop tap above the sheet closes it and no tab is selected", "")
 
 	# (y) 늦게 온 모집 결과(온라인): 다른 창이 열려 있으면 그 위로 모집 창을 열지 않고 알림, 다음에 주점 창을 열 때 보여 준다.
 	#     아무 창도 없으면 모집 창을 열어 보여 준다.
@@ -590,6 +602,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(recruit.is_showing_results() and recruit.cards[0].hero_id == "jack", "(y) with no other window open, a late result reopens the recruit window", "")
 	recruit.close()
 	await _guard_wait()
+	await _buildings_ui(tabs, hud, recruit)
 	await _top_hud(hud)
 
 
@@ -776,3 +789,187 @@ func _building_px(id: String) -> Vector2:
 ## px 근처(HERO_TAP_PX)에 영웅이 있는지 — 영웅 판정이 건물 탭을 가로채지 않는지 사전 확인용.
 func _open_hero(px: Vector2) -> bool:
 	return _picker._hero_at(px, PickerScript.HERO_TAP_PX) != null
+
+
+## 건물 창(building_panel.gd). main 자식에서 찾는다.
+func _building_win() -> Node:
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/building_panel.gd"):
+			return c
+	return null
+
+
+## px를 LONG_PRESS_MS보다 길게(0.6초) 누른 채 있다가 뗀다. 누른 채 열린 창(건물 id, 없으면 "")을 돌려준다.
+func _long_press(px: Vector2, bwin) -> String:
+	_mouse_button(px, true)
+	await get_tree().create_timer(0.6).timeout
+	await _frames(2)
+	var held: String = bwin.building_id if bwin.is_open() else ""
+	_mouse_button(px, false)
+	await _frames(2)
+	return held
+
+
+## (B) 개정 12 §2.5·§4 건물 창·월드 표시(오프라인): 이름표 "이름 Lv N", 길게 누르기 → 누른 채 건물 창(탭·드래그·핀치와 구분, 주점·성문도),
+##     성채 상한 비활성 이유, 성채 [업그레이드] → 자원 감소·일꾼·비계·머리 위 막대·매초 남은 시간, 테스트 훅으로 완료 → 레벨·이름표·비계 제거·
+##     빛 조각·알림, 다른 건물은 일꾼이 바빠 비활성. (l)·(n)이 탭으로 여는 건 이미 봤다.
+func _buildings_ui(tabs, hud, recruit) -> void:
+	var bwin = _building_win()
+	var scenery: Node = null
+	var badges: Node = null
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/buildings.gd"):
+			scenery = c
+		elif c.get_script() == preload("res://scripts/badges.gd"):
+			badges = c
+	var rig = _camera.get_parent()
+	_picker._select(null)
+	var now := Time.get_unix_time_from_system()
+	Economy.res = {"wood": 0, "stone": 0, "food": 0}
+	Economy.last_collect["lumber"] = now - 600.0  # 쌓인 목재 100 — 짧은 탭이면 수집
+	Economy.changed.emit()
+	badges.last_pop = {}
+	var lp := _building_px("lumber")
+	_check(Economy.levels.values().all(func(l): return l == 1) and Economy.build.is_empty() and scenery.labels.lumber.text == "벌목장 Lv 1"
+		and scenery.labels.keep.text == "성채 Lv 1" and scenery.labels.size() == Balance.BUILDINGS.size(), "(B) every building's name tag reads '이름 Lv N'",
+		"lumber=%s keep=%s" % [scenery.labels.lumber.text, scenery.labels.keep.text])
+
+	# 길게 누르기(0.5초): 누른 채 건물 창이 열리고, 뗀 뒤에도 수집하지 않는다. 창을 닫은 뒤 누르지 않은 마우스 움직임은 카메라를 못 옮긴다
+	var held: String = await _long_press(lp, bwin)
+	_check(held == "lumber" and bwin.is_open() and Economy.res.wood == 0 and badges.last_pop.is_empty(),
+		"(B) a 0.5 s long press on the lumber mill (wood waiting) opens its building window while held; the release collects nothing",
+		"held=%s open=%s wood=%d" % [held, bwin.is_open(), Economy.res.wood])
+	await _guard_wait()
+	var cam0: Vector3 = rig.position
+	await _tap(bwin.content.get_child(bwin.content.get_child_count() - 1).get_global_rect().get_center())  # [닫기]
+	var hover := InputEventMouseMotion.new()
+	hover.position = lp + Vector2(60, 40)
+	hover.global_position = hover.position
+	hover.relative = Vector2(60, 40)
+	get_viewport().push_input(hover, true)
+	await _frames(2)
+	_check(not bwin.is_open() and rig.position == cam0, "(B) [닫기] closes it; afterwards a mouse move without a press does not pan the camera",
+		"open=%s cam %s -> %s" % [bwin.is_open(), cam0, rig.position])
+	await _tap(lp)
+	_check(Economy.res.wood == 100 and not bwin.is_open() and badges.last_pop.get("amount", 0) == 100, "(B) a short tap on the same mill still collects (+100)", "wood=%d" % Economy.res.wood)
+	# 누른 채 12 px 넘게 끌고 0.6초: 카메라 이동이지 건물 창이 아니다
+	Economy.last_collect["lumber"] = now - 600.0
+	var cam1: Vector3 = rig.position
+	_mouse_button(lp, true)
+	for i in 3:
+		_mouse_motion(lp + Vector2(8, 0) * (i + 1), Vector2(8, 0))
+	await get_tree().create_timer(0.6).timeout
+	await _frames(2)
+	_mouse_button(lp + Vector2(24, 0), false)
+	await _frames(2)
+	_check(not bwin.is_open() and rig.position != cam1 and Economy.res.wood == 100, "(B) press, drag past 12 px and hold 0.6 s pans the camera and opens nothing",
+		"open=%s cam %s -> %s wood=%d" % [bwin.is_open(), cam1, rig.position, Economy.res.wood])
+	rig.position = cam1
+	await _frames(1)
+	# 두 번째 손가락(핀치)이 닿은 누름은 0.6초를 채워도 아무것도 열지 않는다
+	await _touch(0, lp, true)
+	await _touch(1, lp + Vector2(0, 150), true)
+	await get_tree().create_timer(0.6).timeout
+	await _frames(2)
+	await _touch(1, lp + Vector2(0, 150), false)
+	await _touch(0, lp, false)
+	_check(not bwin.is_open() and Economy.res.wood == 100, "(B) a held press with a second finger down (pinch) opens nothing and collects nothing",
+		"open=%s wood=%d" % [bwin.is_open(), Economy.res.wood])
+	# 주점·성문 길게 누르기 → 건물 창(주점 탭은 모집 창, 성문 탭은 영웅 명령이 먼저)
+	held = await _long_press(_building_px("tavern"), bwin)
+	_check(held == "tavern" and not recruit.is_open(), "(B) a long press on the tavern opens its building window, not the recruit window", "held=%s recruit=%s" % [held, recruit.is_open()])
+	bwin.close()
+	var gp := _gate_px(1)
+	_check(get_viewport().get_visible_rect().has_point(gp), "(B) precondition: the east gate is on screen", "px=%s" % gp)
+	held = await _long_press(gp, bwin)
+	_check(held == "gate" and bwin.title_label.text == "성문 Lv 1" and bwin.effects.get_child(0).get_child(1).text == "→ 800",
+		"(B) a long press on a gate opens the gate window (성문 HP 400 → 800)", "held=%s title=%s" % [held, bwin.title_label.text])
+	bwin.close()
+
+	# 성채 상한: 성채 Lv 1이면 벌목장 Lv 2는 막힌다 — ✗ 빨강 줄, 비활성 + 이유. 효과·비용·시간 줄
+	Economy.last_collect["lumber"] = Time.get_unix_time_from_system()  # 쌓인 게 없다 — 탭이 건물 창을 연다
+	await _tap(lp)
+	print("INPUT INFO: lumber window (keep cap) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
+	var eff: HBoxContainer = bwin.effects.get_child(0)
+	var req: Label = bwin.reqs.get_child(0)
+	_check(bwin.is_open() and bwin.title_label.text == "벌목장 Lv 1" and bwin.desc_label.text != "" and eff.get_child(0).text == "생산 10/분" and eff.get_child(1).text == "→ 20/분"
+		and req.text == "✗ 성채 Lv 2 필요" and req.get_theme_color("font_color") == bwin.RED and bwin.upgrade_button.disabled
+		and bwin.reason_label.text == Economy.BLOCK_TEXT.keep_cap and bwin.reason_label.visible,
+		"(B) lumber window at keep Lv 1: title, 생산 10/분 → 20/분, red '✗ 성채 Lv 2 필요', [업그레이드] off with the keep-cap reason",
+		"title=%s eff=%s req=%s reason=%s" % [bwin.title_label.text, [eff.get_child(0).text, eff.get_child(1).text], req.text, bwin.reason_label.text])
+	_check(bwin.cost_labels.wood.text == "60" and bwin.cost_labels.wood.get_theme_color("font_color") == HudScript.INK and bwin.cost_labels.stone.text == "80"
+		and bwin.cost_labels.stone.get_theme_color("font_color") == bwin.RED and bwin.time_label.text == "건설 시간 00:20" and not bwin._progress_box.visible,
+		"(B) cost 60/80/40 with icons (stone short = red, wood 100 ok), 건설 시간 00:20",
+		"wood=%s stone=%s time=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.time_label.text])
+	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 3).is_empty() and bwin.effect_lines("lab", 2)[0] == ["영웅 공격", "+3%", "+6%"]
+		and UiKit.duration(3900) == "1시간 5분" and UiKit.duration(59.2) == "01:00",
+		"(B) effect sentences: 인구 6 → 8, barracks none (the soldier UI fills it), lab +3% → +6%; times mm:ss / h시간 m분", "")
+	bwin.close()
+
+	# 성채 [업그레이드]: 자원 300/300/200 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간
+	Economy.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	Economy.changed.emit()
+	await _tap(_building_px("keep"))
+	var rows: Array = bwin.reqs.get_children().map(func(l): return l.text)
+	print("INPUT INFO: keep window (Lv 1, can upgrade) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
+	_check(bwin.building_id == "keep" and rows == ["✓ 성문 Lv 1 필요", "✓ 막사 Lv 1 필요"] and bwin.reqs.get_child(0).get_theme_color("font_color") == bwin.GREEN
+		and not bwin.upgrade_button.disabled and not bwin.reason_label.visible and bwin.time_label.text == "건설 시간 01:00"
+		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child(2).get_child_count() == 1,
+		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200 (unchanged slots show no arrow), [업그레이드] on, 01:00", "reqs=%s" % [rows])
+	await _guard_wait()
+	await _tap(bwin.upgrade_button.get_global_rect().get_center())
+	var keep_box: AABB = scenery.sites.keep[0]
+	var sc: MeshInstance3D = scenery._scaffolds[0] if scenery._scaffolds.size() == 1 else null
+	var sbox := AABB(sc.position + sc.mesh.get_aabb().position, sc.mesh.get_aabb().size) if sc != null else AABB()
+	_check(Economy.res == {"wood": 700, "stone": 700, "food": 800} and Economy.is_building("keep") and bwin.upgrade_button.disabled and bwin._progress_box.visible
+		and not bwin._cost_row.visible and bwin.left_label.text.begins_with("Lv 1 → 2 건설 중"),
+		"(B) [업그레이드] takes 300/300/200, the builder works on the keep; the window swaps cost for a progress bar", "res=%s build=%s" % [Economy.res, Economy.build])
+	_check(scenery.scaffold_id == "keep" and sc != null and sbox.encloses(keep_box) and sbox.size.x > keep_box.size.x and badges.build_anchors().size() == 1
+		and badges.build_anchors()[0].y > keep_box.end.y, "(B) a scaffold rings the keep's AABB and the progress bar anchor sits above its roof", "scaffold=%s keep=%s" % [sbox, keep_box])
+	var t0: String = bwin.left_label.text
+	var p0: float = bwin.progress.value
+	await get_tree().create_timer(1.1).timeout
+	_check(bwin.left_label.text != t0 and bwin.progress.value > p0, "(B) the remaining time and bar tick every second", "%s -> %s" % [t0, bwin.left_label.text])
+	bwin.close()
+	await _tap(lp)  # 다른 건물: 성채 상한이 먼저
+	_check(bwin.building_id == "lumber" and bwin.reason_label.text == Economy.BLOCK_TEXT.keep_cap, "(B) while the keep builds, the lumber mill still shows the keep cap first", bwin.reason_label.text)
+	bwin.close()
+
+	# 시간 당기기(테스트 훅) → 성채 Lv 2: 비계 걷힘, 이름표, 빛 조각, 알림
+	var fx0: int = get_tree().get_nodes_in_group("fx").size()
+	Economy.finish_build_now()
+	await _frames(1)
+	_check(Economy.building_level("keep") == 2 and Economy.build.is_empty() and scenery.scaffold_id == "" and scenery._scaffolds.is_empty() and badges.build_anchors().is_empty()
+		and scenery.labels.keep.text == "성채 Lv 2" and get_tree().get_nodes_in_group("fx").size() >= fx0 + 5 and hud._toast.visible and hud._toast.text == "성채 Lv 2 완료",
+		"(B) pulling the time in completes it: keep Lv 2, scaffold gone, tag '성채 Lv 2', light shards, notice '성채 Lv 2 완료'",
+		"keep=%d scaffold=%s tag=%s fx=%d->%d toast=%s" % [Economy.building_level("keep"), scenery.scaffold_id, scenery.labels.keep.text, fx0,
+			get_tree().get_nodes_in_group("fx").size(), hud._toast.text])
+
+	# 벌목장 업그레이드 → 다른 건물(채석장)은 일꾼이 바빠 비활성(무엇을 짓는지·남은 시간)
+	await _tap(lp)
+	_check(bwin.building_id == "lumber" and not bwin.upgrade_button.disabled and bwin.reqs.get_child(0).text == "✓ 성채 Lv 2 필요", "(B) at keep Lv 2 the lumber upgrade is on", bwin.reason_label.text)
+	await _guard_wait()
+	await _tap(bwin.upgrade_button.get_global_rect().get_center())
+	_check(Economy.is_building("lumber") and Economy.res.wood == 640 and Economy.res.stone == 620, "(B) the lumber upgrade pays 60/80/40", "res=%s" % [Economy.res])
+	bwin.close()
+	Economy.last_collect["quarry"] = Time.get_unix_time_from_system()  # 쌓인 석재 없음 — 탭이 건물 창
+	await _tap(_building_px("quarry"))
+	_check(bwin.building_id == "quarry" and bwin.upgrade_button.disabled and bwin.reason_label.text.begins_with(Economy.BLOCK_TEXT.builder_busy + " (벌목장 00:"),
+		"(B) another building is off while the builder works: '다른 건물 건설 중 (벌목장 00:20)'", bwin.reason_label.text)
+	bwin.close()
+	Economy.finish_build_now()
+	await _frames(1)
+	_check(Economy.building_level("lumber") == 2 and scenery.labels.lumber.text == "벌목장 Lv 2" and hud._toast.text == "벌목장 Lv 2 완료", "(B) lumber Lv 2 completes with its notice", hud._toast.text)
+
+	# 성문 건설은 네 문루를 모두 두른다
+	Economy.build = {"id": "gate", "finish": Economy.time_now() + 45.0}
+	Economy.changed.emit()
+	_check(scenery._scaffolds.size() == 4 and badges.build_anchors().size() == 4, "(B) a gate upgrade rings all four gatehouses with scaffolds and bars", "n=%d" % scenery._scaffolds.size())
+	var errors0: int = _errors.count
+	for f in [0.005, 0.02, 0.03, 0.05, 0.08, 0.5, 1.0]:  # 막대 채움이 아주 가늘 때도 다각형이 깨지지 않는다(그리기 오류는 ErrorCounter가 센다)
+		Economy.build.finish = Economy.time_now() + 45.0 * (1.0 - f)
+		await _frames(2)
+	_check(_errors.count == errors0, "(B) the overhead bar draws cleanly from a sliver to full", "errors=%d" % (_errors.count - errors0))
+	Economy.build = {}
+	Economy.changed.emit()
+	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
