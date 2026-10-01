@@ -192,6 +192,26 @@ test('판매: 자원별 시세로 그 자원 전부 / all, 골드 증가, 0개�
   assert.equal((await logs(id, 'sell')).length, 2)
 })
 
+test('수량 판매: 부분 판매, 보유 초과 409, 정수 아님 400, 전량 생략, all은 amount 무시', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  await S.req('POST', '/v1/test/age', { token, body: { minutes: 7 } })
+  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // wood 70
+  const sell = (body: object) => S.req('POST', '/v1/sell', { token, body })
+  let r = await sell({ res: 'wood', amount: 30 })
+  assert.equal(r.status, 200)
+  assert.equal(r.json.player.res.wood, 40)
+  assert.equal(r.json.gold_gained, R.sellValue(30, 1, r.json.rates.wood))
+  assert.equal(r.json.player.gold_tenths, r.json.gold_gained * 10)
+  r = await sell({ res: 'wood', amount: 41 })
+  assert.equal(r.status, 409)
+  assert.equal(r.json.error, 'not_enough')
+  for (const amount of [1.5, 0, -3, '5', null]) assert.equal((await sell({ res: 'wood', amount })).status, 400)
+  assert.equal((await sell({ res: 'wood' })).json.player.res.wood, 0) // 생략 = 전량
+  r = await sell({ res: 'all', amount: 'x' }) // all은 amount를 보지 않는다
+  assert.equal(r.status, 200)
+})
+
 test('처치 골드: Σ count × kill_gold(id, stage), stage는 player.stage로 자름, 잘못된 입력 400', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
