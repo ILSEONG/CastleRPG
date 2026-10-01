@@ -356,3 +356,36 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
   }
   await readTables(dir) // 원래대로면 통과
 })
+
+// 성채 단계 표 둘은 함께 움직인다(사용자 규칙: 성이 넓어질 때마다 영웅 슬롯 +4, 최대 12) — 앱 GameData._check_keep_tiers와 같은 규칙
+test('시드 검증: keep_slot_tiers는 keep_interior_tiers와 같은 레벨, 슬롯은 4 × 단계(최대 12), 내부는 단계마다 커진다', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-data-'))
+  tmp.push(dir)
+  for (const t of TABLES) cpSync(join(DATA_DIR, t.file), join(dir, t.file))
+  const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
+  const tiers = (slots: string, interior: string) => cfg.replace('keep_slot_tiers,1:4|5:8|10:12', `keep_slot_tiers,${slots}`)
+    .replace('keep_interior_tiers,1:20|5:24|10:28', `keep_interior_tiers,${interior}`)
+  const cases: [string, RegExp][] = [
+    [tiers('1:4|6:8|10:12', '1:20|5:24|10:28'), /config\.csv line 5 column 'value': keep_slot_tiers levels must match keep_interior_tiers: 1,6,10 vs 1,5,10/],
+    [tiers('1:4|5:8|10:12', '1:20|5:24'), /keep_slot_tiers levels must match keep_interior_tiers: 1,5,10 vs 1,5$/],
+    [tiers('1:4|5:9|10:12', '1:20|5:24|10:28'), /keep_slot_tiers values must be 4 x tier \(4, 8, 12 — at most 12\): 4,9,12/],
+    [tiers('1:4|5:8|10:12|15:16', '1:20|5:24|10:28|15:32'), /keep_slot_tiers values must be 4 x tier.*: 4,8,12,16/],
+    [tiers('1:6|5:8|10:12', '1:20|5:24|10:28'), /keep_slot_tiers values must be 4 x tier/],
+    [tiers('1:4|5:8|10:12', '1:20|5:24|10:24'), /keep_interior_tiers values must grow every tier: 20,24,24/],
+  ]
+  for (const [text, re] of cases) {
+    writeFileSync(join(dir, 'config.csv'), text)
+    await assert.rejects(readTables(dir), (e: unknown) => {
+      assert.ok(e instanceof CsvError)
+      assert.equal(e.errors.length, 1, `${re}: ${e.errors.join(' | ')}`)
+      assert.match(e.errors[0], re)
+      return true
+    })
+  }
+  writeFileSync(join(dir, 'config.csv'), tiers('1:4|4:8|8:12', '1:20|4:22|8:26')) // 같은 레벨로 함께 옮기면 통과
+  const t = await readTables(dir)
+  const conf = Object.fromEntries(t.config.map((r) => [String(r.key), String(r.value)]))
+  assert.deepEqual([1, 4, 8].map((l) => R.heroSlots(conf, l)), [4, 8, 12])
+  writeFileSync(join(dir, 'config.csv'), tiers('1:4|5:8', '1:20|5:24')) // 단계가 둘뿐이어도(최대 8) 규칙 안이면 통과
+  await readTables(dir)
+})

@@ -85,6 +85,8 @@ const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
 export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'soldier_prod_sec', 'soldier_prod_level_factor', 'soldier_merge_count']
 const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
+export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 앱 GameData.KEEP_SLOT_STEP
+export const MAX_HERO_SLOTS = 12 // 앱 GameData.MAX_HERO_SLOTS
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
 export const GRADES = ['R', 'SR', 'SSR']
@@ -247,6 +249,27 @@ function checkBuildings(t: Tables, errors: string[]) {
       errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${tavern ? 'in 0..1' : pop ? 'a non-negative integer' : '0 or more'}: '${r.value}'`)
     }
   }
+  checkKeepTiers(byKey, errors)
+}
+
+// 성채 단계 표 둘은 함께 움직인다(사용자 규칙: 성이 넓어질 때마다 영웅 슬롯 +4, 최대 12). 앱 GameData._check_keep_tiers와 같은 규칙:
+// 슬롯 표의 레벨 = 내부 표의 레벨, 슬롯 값 = SLOT_STEP × 단계 번호(4, 8, 12 — MAX_HERO_SLOTS 이하), 내부 값은 단계마다 커진다.
+// 형식이 틀린 표는 checkTable이 이미 알렸으므로 둘 다 읽힐 때만 본다.
+function checkKeepTiers(byKey: Map<string, CsvRow>, errors: string[]) {
+  const read = (k: string) => {
+    const t = parseTiers(String(byKey.get(k)?.value ?? ''))
+    return t?.every(([, v]) => Number.isInteger(v) && v >= 1) ? t : null
+  }
+  const slots = read('keep_slot_tiers')
+  const interior = read('keep_interior_tiers')
+  if (!slots || !interior) return
+  const err = (k: string, why: string) => errors.push(`config.csv line ${byKey.get(k)?._line} column 'value': ${k} ${why}`)
+  const levels = (t: [number, number][]) => t.map(([l]) => l).join(',')
+  if (levels(slots) !== levels(interior)) err('keep_slot_tiers', `levels must match keep_interior_tiers: ${levels(slots)} vs ${levels(interior)}`)
+  if (slots.some(([, v], i) => v !== SLOT_STEP * (i + 1) || v > MAX_HERO_SLOTS)) {
+    err('keep_slot_tiers', `values must be ${SLOT_STEP} x tier (${SLOT_STEP}, ${SLOT_STEP * 2}, ${SLOT_STEP * 3} — at most ${MAX_HERO_SLOTS}): ${slots.map(([, v]) => v).join(',')}`)
+  }
+  if (interior.some(([, v], i) => i > 0 && v <= interior[i - 1][1])) err('keep_interior_tiers', `values must grow every tier: ${interior.map(([, v]) => v).join(',')}`)
 }
 
 // 병종 표(개정 13, 앱 GameData와 같은 규칙): 건물은 건물 표에 있고 병종마다 다르다(건물 하나 = 병종 하나), hp·range·atk_interval·speed > 0,
