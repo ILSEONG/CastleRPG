@@ -15,7 +15,7 @@ before(async () => {
 })
 after(async () => {
   await db.close()
-  for (const d of tmp) rmSync(d, { recursive: true, force: true })
+  for (const d of tmp) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) // Windows: 백신 등이 막 만든 파일을 잡고 있으면 EBUSY
 })
 
 // data 폴더 사본(일부 파일 바꿔 쓰기용)
