@@ -11,8 +11,7 @@ extends Node3D
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
-const TownKit := preload("res://scripts/town_kit.gd")
-const UnitModelScript := preload("res://scripts/unit_model.gd")
+const SoldierBody := preload("res://scripts/soldier_body.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
@@ -20,15 +19,13 @@ const ProjectileScript := preload("res://scripts/projectile.gd")
 const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
 const SWING_SLACK := 0.6  # 근접 타격 순간 대상이 사거리 + 이만큼 안이면 맞는다(영웅과 같다)
-const MUZZLE := Vector3(0, 1.0, 0)  # 화살이 나가는 높이(병사 크기 0.75)
+const MUZZLE := Vector3(0, 1.33 * Art.SOLDIER_SCALE, 0)  # 화살이 나가는 높이(모델 1.33 m × 병사 크기)
 const ARROW_SPEED := 30.0
 const OFFSCREEN_EVERY := 4  # 화면 밖이면 애니메이션을 이 프레임마다 한 번(쌓인 시간만큼)
-const RIDER_Y := 0.5  # 기사 모델 높이 = 말 등(TownKit.HORSE_BACK × 0.75 ≈ 0.86) − 기사 엉덩이(KayKit 다리 뿌리 0.41~0.52 × 0.75 ≈ 0.36)
+const RIDER_Y := SoldierBody.RIDER_Y  # 기사 모델 높이(말 등 − 엉덩이) × 병사 크기
 const BOB := 0.06  # 말이 걸을 때 위아래 흔들림(m)
 const BOB_HZ := 2.5
 const FACE := Vector3(0, 0, 1)  # 서 있을 때 보는 쪽: 남(+Z) 성문
-
-static var _horse_mesh: ArrayMesh  # 말 메시는 하나를 같이 쓴다
 
 var type := ""
 var tier := 1
@@ -70,18 +67,9 @@ func setup(p_type: String, p_tier: int, p_home: Vector3, p_castle) -> void:
 func _ready() -> void:
 	add_to_group("soldiers")
 	var art: Dictionary = Art.SOLDIERS[type]
-	_model = UnitModelScript.new()
-	_model.manual = true
-	_model.setup(Art.soldier_spec(type, GameData.soldier(type).model), Art.SOLDIER_SCALE)
-	add_child(_model)
-	if art.get("horse", false):
-		if _horse_mesh == null:
-			_horse_mesh = TownKit.horse()
-		_horse = MeshInstance3D.new()
-		_horse.mesh = _horse_mesh
-		_horse.material_override = Art.lowpoly_vc_material()
-		_horse.scale = Vector3.ONE * Art.SOLDIER_SCALE  # 말 길이 ≈ 1.65 m — 기병은 두 줄 건너 선다(Formation.soldier_spots)
-		add_child(_horse)
+	var body := SoldierBody.build(self, type, true)  # 모델 + 기병이면 말(병사 피규어도 같은 것으로 만든다)
+	_model = body[0]
+	_horse = body[1]
 	_disc = Fx.soldier_disc(art.color, 0.75 if _horse != null else 0.42)
 	_disc.position.y = 0.02
 	add_child(_disc)

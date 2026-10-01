@@ -10,6 +10,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
 const Art := preload("res://scripts/art.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const PortraitsScript := preload("res://scripts/portraits.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const EMPTY_TEXT := "보유한 병사가 없습니다"
@@ -189,11 +190,10 @@ func production_line(building_id: String, now: float) -> String:
 
 # --- 병종 그림(시트 행·건물 창 합성 칸) ---
 
-## 병종 그림 텍스처. 병사 행·칸은 모두 이것으로 그린다 — Portraits(scripts/portraits.gd, 다른 작업)가 병합되면
-## `return Portraits.portrait("soldier:" + type)` 한 줄로 바꾼다(그때 portrait_ready에 칸 queue_redraw도).
-# ponytail: 지금은 null — 칸이 임시 자리표시(병종 색 8각 + 이름 첫 글자)를 그린다. 진짜 피규어는 Portraits 병합 때.
-static func figure(_type: String) -> Texture2D:
-	return null
+## 병종 그림 텍스처 = 병사 피규어(Portraits "soldier:<병종>" — 월드 병사와 같은 몸). 렌더 전에는 자리표시를 주고 렌더를 요청한다.
+## 병사 행·칸은 모두 이것으로 그린다(렌더가 끝나면 portrait_ready에 칸을 다시 그린다 — unit_icon).
+static func figure(type: String) -> Texture2D:
+	return PortraitsScript.portrait("soldier:" + type)
 
 
 ## 병종 그림 칸(px × px, 입력 없음). tier > 0이면 오른위에 갈매기 tier개(월드 머리 위 티어 표시와 같은 모양).
@@ -203,19 +203,22 @@ static func unit_icon(type: String, tier: int, px: float) -> Control:
 	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.draw.connect(func(): _draw_unit(c, type, tier))
+	if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다(칸이 사라지면 연결도 같이 끊긴다 — 대상이 c)
+		PortraitsScript.current.portrait_ready.connect(c.queue_redraw.unbind(1))
 	return c
 
 
+## 병종 색 8각 바탕 + 피규어(렌더 전에는 이름 첫 글자) + 갈매기.
 static func _draw_unit(c: Control, type: String, tier: int) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
+	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.22)
+	c.draw_colored_polygon(oct, Color(Art.SOLDIERS.get(type, {}).get("color", UiKit.STEEL)).lightened(0.35))
+	oct.append(oct[0])
+	c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
 	var tex := figure(type)
-	if tex != null:
+	if PortraitsScript.has_portrait("soldier:" + type):
 		c.draw_texture_rect(tex, r, false)
 	else:
-		var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.22)
-		c.draw_colored_polygon(oct, Art.SOLDIERS.get(type, {}).get("color", UiKit.STEEL))
-		oct.append(oct[0])
-		c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
 		var glyph := str(GameData.soldier(type).get("name", "?")).left(1)
 		var fs := roundi(r.size.y * 0.5)
 		var base := Vector2(0, r.size.y * 0.5 + fs * 0.36)

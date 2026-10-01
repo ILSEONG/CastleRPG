@@ -1,7 +1,8 @@
 extends Node
 ## 영웅 피규어(개정 14 §2): 숨긴 SubViewport 하나(정사각 SIZE px, 투명 배경)에서 모델(gear 포함, 대기 자세 첫 프레임,
 ## 살짝 왼쪽 위 3/4 시점, main과 같은 조명·로우폴리 재질)을 키마다 한 번 렌더링해 ImageTexture로 캐시한다.
-## 키 = "hero:<영웅 id>". 병사 "soldier:<병종>"은 spec_of가 아직 {}라 자리표시만 쓴다(S1 메시가 생기면 spec_of에 한 갈래 더).
+## 키 = "hero:<영웅 id>" 또는 "soldier:<병종>"(개정 15: 보병 = 기사 + 칼·방패, 궁병 = 두건 도적 + 쇠뇌, 기병 = 로우폴리 말 + 기사 —
+## 월드 병사와 같은 SoldierBody.build로 만든다).
 ## portrait(key)는 바로 돌려준다: 캐시가 있으면 그것, 없으면 자리표시(등급 색 실루엣)를 주고 렌더를 큐에 넣는다 → 끝나면
 ## portrait_ready(key)(Node에 이미 ready 시그널이 있어 이 이름이다). 큐는 한 프레임에 하나: 모델을 띄우고 대기 자세를 곧바로 적용
 ## (AnimationPlayer.advance(0) — 안 하면 이 프레임은 T자 기본 자세) + UPDATE_ONCE → 그 프레임 RenderingServer.frame_post_draw에서
@@ -16,6 +17,7 @@ extends Node
 const Art := preload("res://scripts/art.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
+const SoldierBody := preload("res://scripts/soldier_body.gd")
 
 const SIZE := 256
 const VIEW_SIZE := 3.5  # 직교 카메라 세로 폭(m): 키 2.2(도적)~3.0m(마법사 모자) 모델과 앞으로 뻗은 무기가 여유 있게 들어간다
@@ -101,10 +103,13 @@ static func has_portrait(key: String) -> bool:
 	return _cache.has(key)
 
 
-## 키 → UnitModel 스펙. 모르는 키·아직 메시가 없는 병종은 {}(자리표시만).
+## 키 → UnitModel 스펙(병사는 월드 병사와 같은 Art.soldier_spec). 모르는 키는 {}(자리표시만).
 static func spec_of(key: String) -> Dictionary:
 	var h := _hero_of(key)
-	return Art.hero_spec(h) if not h.is_empty() else {}
+	if not h.is_empty():
+		return Art.hero_spec(h)
+	var s := _soldier_of(key)
+	return Art.soldier_spec(s.id, s.model) if not s.is_empty() else {}
 
 
 ## 자리표시: 등급 색(병사는 NEUTRAL) 반투명 실루엣. 색마다 하나를 공유한다.
@@ -141,6 +146,14 @@ static func feet_y() -> float:
 
 static func _hero_of(key: String) -> Dictionary:
 	return GameData.hero(key.trim_prefix("hero:")) if key.begins_with("hero:") else {}
+
+
+## "soldier:<병종>" → 병종 행(앱이 그릴 수 있는 병종만). 아니면 {}.
+static func _soldier_of(key: String) -> Dictionary:
+	if not key.begins_with("soldier:"):
+		return {}
+	var s := GameData.soldier(key.trim_prefix("soldier:"))
+	return s if not s.is_empty() and Art.SOLDIERS.has(s.id) else {}
 
 
 ## 렌더 요청(렌더러가 있고 모델이 있는 키만, 한 번씩).
@@ -218,9 +231,13 @@ func _show(key: String) -> void:
 	var spec := spec_of(key)
 	if spec.is_empty():
 		return
-	var m = UnitModelScript.new()
-	m.setup(spec)
-	_pivot.add_child(m)
+	var m
+	if key.begins_with("soldier:"):
+		m = SoldierBody.build(_pivot, key.trim_prefix("soldier:"))[0]  # 월드 병사와 같은 몸(기병은 말 + 기사)
+	else:
+		m = UnitModelScript.new()
+		m.setup(spec)
+		_pivot.add_child(m)
 	var ap := m.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	ap.advance(0.0)  # 대기 첫 프레임을 지금 적용
 	ap.speed_scale = LIVE_ANIM_SPEED  # 미리보기는 천천히(스냅샷은 첫 프레임이라 상관없다)
