@@ -14,11 +14,12 @@
 		{
 			// 온라인: 웹 빌드 → API 서버(npm run dev와 같은 명령, server/.data/dev PGlite, 8787) 백그라운드 → 8060 서빙.
 			// 서버는 node를 직접 띄워 작업이 끝나면 그 PID를 끈다(npm만 끄면 자식 node가 포트를 쥔 채 남는다).
+			// 트랩은 EXIT·INT·TERM 모두(정상 종료든 중지든 서버 PID를 끈다). bash는 신호 트랩을 앞쪽 npm serve가 끝난 뒤 실행한다.
 			// 터미널에 찍히는 http://localhost:8060/?api=http://localhost:8787 을 Ctrl+클릭하면 서버에 붙은 게임이 열린다.
 			"label": "CastleRPG: 온라인 실행",
 			"type": "process",
 			"command": "C:/Program Files/Git/bin/bash.exe",
-			"args": ["-c", "bash dev/build-web.sh || exit 1; cd server; node --env-file-if-exists=.env src/main.ts & SERVER=$!; cd ..; trap 'kill $SERVER 2>/dev/null' EXIT; echo 'open: http://localhost:8060/?api=http://localhost:8787'; npm --prefix dev run serve"],
+			"args": ["-c", "bash dev/build-web.sh || exit 1; cd server; node --env-file-if-exists=.env src/main.ts & SERVER=$!; cd ..; trap 'kill $SERVER 2>/dev/null' EXIT INT TERM; echo 'open: http://localhost:8060/?api=http://localhost:8787'; npm --prefix dev run serve"],
 			"options": { "cwd": "${workspaceFolder}" },
 			"isBackground": true,
 			"problemMatcher": []
