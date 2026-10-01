@@ -142,11 +142,12 @@ func _phase1(state_path: String) -> void:
 		"(d) server collect: +100 wood from the reply, pop shows the reply amount", "wood=%d pop=%s" % [Economy.res["wood"], _badges.last_pop])
 
 	# (e) 판매: 서버 시세로, 창과 상인 이름표도 서버 시세
-	var rate := float(Economy.merchant.rate)
+	var rate := float(Economy.merchant.rates.wood)
+	_check(Economy.merchant.rates.size() == 3 and Economy.merchant.rates.has("stone") and Economy.merchant.rates.has("food"), "(e) server merchant has rates for wood, stone and food", "rates=%s" % [Economy.merchant.rates])
 	var gold0: int = Economy.server_gold_tenths
 	var gain := Economy.sell_value("wood", 100, rate) * 10  # 판매 골드는 정수 → tenths는 × 10
 	_panel.open()
-	_check(_panel._rate_label.text == "현재 시세 ×%.1f" % rate, "(e) trade window shows the server merchant rate", "label=%s rate=%.1f" % [_panel._rate_label.text, rate])
+	_check(_panel.rate_labels["wood"].text == "×%.1f" % rate and _panel.rate_labels["food"].text == "×%.1f" % float(Economy.merchant.rates.food), "(e) trade window rows show the server rate of each resource", "wood=%s food=%s" % [_panel.rate_labels["wood"].text, _panel.rate_labels["food"].text])
 	var sell0: int = Net.requested.get("/v1/sell", 0)
 	_panel.sell_buttons["wood"].pressed.emit()
 	_panel.sell_buttons["wood"].pressed.emit()  # 응답 전 재탭
@@ -155,7 +156,8 @@ func _phase1(state_path: String) -> void:
 		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()
 	await get_tree().create_timer(1.2).timeout
-	_check(_scenery.merchant_label.text == "상인 ×%.1f" % rate, "(e) merchant name tag shows the server rate", "label=%s" % _scenery.merchant_label.text)
+	var best: Dictionary = Economy.best_rate(Economy.time_now())
+	_check(_scenery.merchant_label.text.begins_with("상인 · ") and _scenery.merchant_rate_label.text == "%s ×%.1f" % [GameData.resource(best.id).name, best.rate], "(e) merchant name tag shows the countdown and the best server rate", "label=%s / %s" % [_scenery.merchant_label.text, _scenery.merchant_rate_label.text])
 
 	# (f) next_change가 지나면 /v1/player로 시세를 한 번 갱신한다
 	var p0: int = Net.requested.get("/v1/player", 0)

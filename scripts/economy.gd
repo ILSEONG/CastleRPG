@@ -42,7 +42,7 @@ var clock_offset := 0.0  # 서버 시각 − 로컬 시각(초)
 var server_gold_tenths := 0
 var server_stage := 0
 var kill_seq := 0  # 서버가 마지막으로 반영한 처치 묶음 번호(player.kill_seq)
-var merchant := {}  # {rate, next_change} 서버 값
+var merchant := {}  # {rates: {자원 id → 배율}, next_change} 서버 값
 var kills_pending := {}  # 스테이지 → {몬스터 id → 수}: 아직 안 보낸 처치
 var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 응답 전
 
@@ -74,10 +74,11 @@ static func hour_index(unix: float) -> int:
 	return floori(unix / 3600.0)
 
 
-## 시간 칸만의 결정적 함수(PCG). 0.1 단위 값은 정수 단계에서 만들어 부동소수 오차가 없다.
-static func merchant_rate(hour: int) -> float:
+## (시간 칸, 자원 id)만의 결정적 함수(PCG). 자원마다 따로 뽑는다(개정 11). 0.1 단위 값은 정수 단계에서 만들어 부동소수 오차가 없다.
+static func merchant_rate(hour: int, res_id: String) -> float:
 	var rng := RandomNumberGenerator.new()
 	var s: int = hour * 0x1E3779B97F4A7C15 + 0x2545F4914F6CDD1D
+	s ^= res_id.hash() * 0x1E3779B97F4A7C15  # 자원 id를 섞는다
 	s ^= s >> 29
 	rng.seed = s
 	if rng.randf() < GameData.config_num("merchant_jackpot_p"):
@@ -229,10 +230,28 @@ func collect(building_id: String, now: float) -> int:
 
 
 ## 온라인은 서버 시세(next_change가 지나면 Net이 /v1/player로 갱신).
-func current_rate(now: float) -> float:
+func current_rate(res_id: String, now: float) -> float:
 	if net != null:
-		return float(merchant.get("rate", 1.0))
-	return merchant_rate(hour_index(now))
+		var rates = merchant.get("rates")
+		return float(rates.get(res_id, 1.0)) if rates is Dictionary else 1.0
+	return merchant_rate(hour_index(now), res_id)
+
+
+## 자원 순서(GameData.resources) 그대로 [{id, rate}].
+func current_rates(now: float) -> Array:
+	var out := []
+	for r in GameData.resources():
+		out.append({"id": r.id, "rate": current_rate(r.id, now)})
+	return out
+
+
+## 배율이 가장 높은 자원 {id, rate}. 같으면 자원 순서(목재 → 석재 → 식량)에서 앞선 쪽.
+func best_rate(now: float) -> Dictionary:
+	var best := {}
+	for e in current_rates(now):
+		if best.is_empty() or e.rate > best.rate:
+			best = e
+	return best
 
 
 func seconds_to_next_rate(now: float) -> float:
@@ -246,7 +265,7 @@ func sell(res_id: String, now: float) -> int:
 	if net != null:
 		_sell_online(res_id)
 		return 0
-	var g := sell_value(res_id, res[res_id], current_rate(now))
+	var g := sell_value(res_id, res[res_id], current_rate(res_id, now))
 	res[res_id] = 0
 	gold_tenths += g * 10  # 판매 골드는 정수
 	changed.emit()
@@ -358,7 +377,7 @@ func apply_server(data: Dictionary) -> bool:
 	var p = data.get("player")
 	var m = data.get("merchant")
 	if not (p is Dictionary and m is Dictionary and _num(p.get("gold_tenths")) and _num(p.get("stage")) and p.get("res") is Dictionary \
-			and p.get("buildings") is Dictionary and _num(m.get("rate")) and _num(m.get("next_change")) \
+			and p.get("buildings") is Dictionary and _rates_ok(m.get("rates")) and _num(m.get("next_change")) \
 			and (p.get("heroes") == null or p.heroes is Dictionary) and (p.get("deploy") == null or p.deploy is Array)):
 		push_error("bad player response: %s" % str(data))
 		return false
@@ -391,7 +410,10 @@ func apply_server(data: Dictionary) -> bool:
 	server_stage = int(p.stage)
 	if _num(p.get("kill_seq")):
 		kill_seq = int(p.kill_seq)
-	merchant = {"rate": float(m.rate), "next_change": float(m.next_change)}
+	var rates := {}
+	for k in m.rates:
+		rates[str(k)] = float(m.rates[k])
+	merchant = {"rates": rates, "next_change": float(m.next_change)}
 	_recalc_gold()
 	changed.emit()
 	if [heroes, deploy] != roster_before:
@@ -436,6 +458,16 @@ func kills_done(stage: int, part: Dictionary) -> void:
 
 func _recalc_gold() -> void:
 	gold_tenths = server_gold_tenths + _kills_tenths(kills_pending) + _kills_tenths(kills_sent)
+
+
+## 자원별 시세 표: 모든 자원 id가 숫자 배율로 있어야 한다.
+func _rates_ok(rates) -> bool:
+	if not rates is Dictionary:
+		return false
+	for r in GameData.resources():
+		if not _num(rates.get(r.id)):
+			return false
+	return true
 
 
 ## 서버는 처치를 min(보낸 stage, player.stage)로 매긴다 — 예상도 같게(서버 stage를 아직 모르면 그대로).

@@ -5,6 +5,7 @@ extends Node3D
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
@@ -16,7 +17,8 @@ const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물�
 const MOUNTAIN_VARIANTS := 5
 
 var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
-var merchant_label: Label3D  # 상인 이름표: "상인 ×1.3" — 시세가 바뀌면 갱신
+var merchant_label: Label3D  # 상인 이름표: "상인 · mm:ss"(다음 시세까지) — 매초 갱신
+var merchant_rate_label: Label3D  # 그 아래 줄: 최고 배율 자원 "목재 ×1.4"
 
 var _label_cd := 0.0
 
@@ -29,15 +31,21 @@ func _ready() -> void:
 	_ring_mountains()
 
 
-## 상인 이름표 배율은 정시(오프라인)나 서버 시세 갱신(온라인) 때만 바뀐다 — 1초마다 확인한다.
+## 상인 이름표: 남은 시간은 매초, 최고 배율 자원은 정시(오프라인)나 서버 시세 갱신(온라인) 때 바뀐다 — 1초마다 확인한다.
 func _process(delta: float) -> void:
 	_label_cd -= delta
 	if _label_cd > 0.0:
 		return
 	_label_cd = 1.0
-	var text := "상인 ×%.1f" % Economy.current_rate(Economy.time_now())
+	var now := Economy.time_now()
+	var left := floori(Economy.seconds_to_next_rate(now))
+	var text := "상인 · %02d:%02d" % [left / 60, left % 60]
 	if merchant_label.text != text:
 		merchant_label.text = text
+	var best := Economy.best_rate(now)
+	text = "%s ×%.1f" % [GameData.resource(best.id).name, best.rate] if not best.is_empty() else ""
+	if merchant_rate_label.text != text:
+		merchant_rate_label.text = text
 
 
 func _place_building(b: Dictionary) -> void:
@@ -65,6 +73,8 @@ func _place_merchant() -> void:
 	cart.position = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
 	add_child(cart)
 	merchant_label = _add_label("상인", Balance.MERCHANT_POS + Vector3(0, Art.HEAD_HEIGHT + 0.6, 0))
+	merchant_rate_label = _add_label("", Balance.MERCHANT_POS + Vector3(0, Art.HEAD_HEIGHT + 0.6 - 1.3, 0))  # 이름표 바로 아래 줄
+	merchant_rate_label.font_size = 36
 	var r := Vector3(Balance.MERCHANT_RADIUS, Art.HEAD_HEIGHT, Balance.MERCHANT_RADIUS)
 	var box := AABB(Balance.MERCHANT_POS - Vector3(r.x, 0, r.z), r * 2.0 * Vector3(1, 0.5, 1))  # 상인 기둥
 	box = box.merge(AABB(cart.position + cart.mesh.get_aabb().position, cart.mesh.get_aabb().size))

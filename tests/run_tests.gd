@@ -75,6 +75,7 @@ func _init() -> void:
 	test_gacha_offline()
 	test_roster()
 	test_skill_text()
+	test_merchant_rates()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -951,24 +952,25 @@ func test_economy_collect() -> void:
 
 func test_economy_merchant() -> void:
 	var h := 480000
-	check(EconomyScript.merchant_rate(h) == EconomyScript.merchant_rate(EconomyScript.hour_index(h * 3600.0 + 3599.0)), "rate is the same within an hour slot")
+	check(EconomyScript.merchant_rate(h, "wood") == EconomyScript.merchant_rate(EconomyScript.hour_index(h * 3600.0 + 3599.0), "wood"), "rate is the same within an hour slot")
 	check(EconomyScript.hour_index(7199.9) == 1 and EconomyScript.hour_index(7200.0) == 2, "hour_index floors on the hour")
 	var allowed := [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 2.0]
 	var counts := {}
-	var n := 200000
+	var n := 200000 * 3
 	var bad := 0
-	for i in n:
-		var r := EconomyScript.merchant_rate(i)
-		if not allowed.has(r):
-			bad += 1
-		counts[r] = counts.get(r, 0) + 1
+	for i in 200000:
+		for id in ["wood", "stone", "food"]:
+			var r := EconomyScript.merchant_rate(i, id)
+			if not allowed.has(r):
+				bad += 1
+			counts[r] = counts.get(r, 0) + 1
 	check(bad == 0, "every rate is one of the 12 exact values (%d off)" % bad)
 	var jack: float = counts.get(2.0, 0) / float(n)
 	check(absf(jack - 0.05) <= 0.005, "jackpot share %.4f is 5%% +- 0.5%%" % jack)
 	var ratio: float = counts.get(0.5, 0) / float(maxi(1, counts.get(1.5, 0)))
 	check(absf(ratio - 3.0) <= 0.3, "P(0.5)/P(1.5) = %.2f is 3 +- 0.3" % ratio)
 	var e = _econ(3600.0 * h + 100.0)
-	check(is_equal_approx(e.seconds_to_next_rate(3600.0 * h + 100.0), 3500.0) and e.current_rate(3600.0 * h + 100.0) == EconomyScript.merchant_rate(h), "seconds_to_next_rate / current_rate follow the hour slot")
+	check(is_equal_approx(e.seconds_to_next_rate(3600.0 * h + 100.0), 3500.0) and e.current_rate("stone", 3600.0 * h + 100.0) == EconomyScript.merchant_rate(h, "stone"), "seconds_to_next_rate / current_rate follow the hour slot")
 	e.free()
 
 
@@ -976,7 +978,9 @@ func test_economy_sell() -> void:
 	check(EconomyScript.sell_value("wood", 7, 0.5) == 3 and EconomyScript.sell_value("stone", 7, 1.3) == 18 and EconomyScript.sell_value("food", 100, 1.1) == 110 and EconomyScript.sell_value("wood", 10, 2.0) == 20, "sell_value floors (no float error)")
 	var now := 3600.0 * 480000.0
 	var e = _econ(now)
-	var rate: float = e.current_rate(now)
+	var rate: float = e.current_rate("wood", now)
+	var rate_s: float = e.current_rate("stone", now)
+	var rate_f: float = e.current_rate("food", now)
 	e.res.wood = 40
 	e.res.stone = 9
 	e.res.food = 13
@@ -984,7 +988,7 @@ func test_economy_sell() -> void:
 	check(g == EconomyScript.sell_value("wood", 40, rate) and e.res.wood == 0 and e.gold == g and e.gold_tenths == g * 10, "sell zeroes the resource and adds whole gold (x10 tenths)")
 	var before: int = e.gold
 	var g2: int = e.sell_all(now)
-	check(e.res.stone == 0 and e.res.food == 0 and e.gold == before + g2 and g2 == EconomyScript.sell_value("stone", 9, rate) + EconomyScript.sell_value("food", 13, rate), "sell_all sells everything")
+	check(e.res.stone == 0 and e.res.food == 0 and e.gold == before + g2 and g2 == EconomyScript.sell_value("stone", 9, rate_s) + EconomyScript.sell_value("food", 13, rate_f), "sell_all sells everything")
 	e.add_gold_tenths(5)
 	check(e.gold_tenths == (before + g2) * 10 + 5 and e.gold == before + g2, "add_gold_tenths adds 0.5 gold and the display floors it away")
 	e.free()
@@ -1034,9 +1038,9 @@ func test_economy_online() -> void:
 	check(not e.apply_server({"player": {"gold_tenths": "x"}, "merchant": {}}) and e.gold_tenths == 5 and e.server_stage == 0, "apply_server rejects a malformed reply and changes nothing")
 	_errors.count = logged  # 거부는 push_error로 알린다
 	var reply := {"player": {"gold_tenths": 1005, "gold": 100, "stage": 3, "kill_seq": 7, "res": {"wood": 4}, "buildings": {"lumber": {"level": 2, "last_collect": 900.0}}},
-		"merchant": {"rate": 1.2, "next_change": 3600.0}}
+		"merchant": {"rates": {"wood": 1.2, "stone": 0.8, "food": 2.0}, "next_change": 3600.0}}
 	check(e.apply_server(reply) and e.server_gold_tenths == 1005 and e.gold_tenths == 1005 and e.gold == 100 and e.server_stage == 3 and e.kill_seq == 7 and e.res.wood == 4 and e.res.stone == 0 \
-		and e.levels.lumber == 2 and e.last_collect.lumber == 900.0 and e.merchant.rate == 1.2, "apply_server takes the server snapshot")
+		and e.levels.lumber == 2 and e.last_collect.lumber == 900.0 and e.merchant.rates.wood == 1.2 and e.merchant.rates.food == 2.0, "apply_server takes the server snapshot")
 	e.kills_pending = {1: {"grunt": 2}, 5: {"epic_boss": 1}}
 	e.kills_sent = {3: {"grunt": 1}}
 	e._recalc_gold()
@@ -1391,7 +1395,7 @@ func test_roster() -> void:
 	# 서버 응답
 	var o = _econ(1000.0)
 	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "heroes": {"hans": 2, "kyle": 1}, "deploy": ["kyle", null, "hans", null]},
-		"merchant": {"rate": 1.0, "next_change": 3600.0}}
+		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
 	var changes := []
 	o.roster_changed.connect(func(): changes.append(1))
 	check(o.apply_server(reply) and o.heroes == {"hans": 2, "kyle": 1} and o.deploy == ["kyle", null, "hans", null] and changes.size() == 1, "apply_server takes heroes and deploy (roster_changed once)")
@@ -1441,3 +1445,50 @@ func test_skill_text() -> void:
 		for kind in h.skills:
 			var nums: Array = h.skills[kind]
 			check(Skills.describe(kind, nums).contains(Skills.num_text(nums[0])), "hero %s skill %s text has its number" % [h.id, kind])
+
+
+## 자원별 시세(개정 11): 오프라인 결정성, 자원끼리 다름, 판매가 자기 배율, 온라인 응답 형식, 최고 배율 자원.
+func test_merchant_rates() -> void:
+	var ids := ["wood", "stone", "food"]
+	var same_all := 0
+	var cols := {"wood": [], "stone": [], "food": []}
+	for h in range(480000, 482000):
+		var a := []
+		for id in ids:
+			var r := EconomyScript.merchant_rate(h, id)
+			check(r == EconomyScript.merchant_rate(h, id), "rate (%d, %s) is deterministic" % [h, id])
+			a.append(r)
+			cols[id].append(r)
+		if a[0] == a[1] and a[1] == a[2]:
+			same_all += 1
+	check(same_all < 400, "resources get different rates (all-equal slots %d of 2000)" % same_all)
+	check(cols.wood != cols.stone and cols.stone != cols.food and cols.wood != cols.food, "each resource has its own rate sequence")
+	# 서로 다른 시세인 시간 칸에서 판매는 자기 배율
+	var h := 480000
+	while EconomyScript.merchant_rate(h, "wood") == EconomyScript.merchant_rate(h, "food"):
+		h += 1
+	var now := 3600.0 * h
+	var e = _econ(now)
+	e.res.wood = 100
+	e.res.food = 100
+	var gw: int = e.sell("wood", now)
+	var gf: int = e.sell("food", now)
+	check(gw == EconomyScript.sell_value("wood", 100, EconomyScript.merchant_rate(h, "wood")) and gf == EconomyScript.sell_value("food", 100, EconomyScript.merchant_rate(h, "food")) and gw != gf, "sell uses that resource's own rate (same price, different rates)")
+	# 최고 배율: 동률이면 목재 → 석재 → 식량
+	var b = e.best_rate(now)
+	var top := 0.0
+	for r in e.current_rates(now):
+		top = maxf(top, r.rate)
+	check(b.rate == top and e.current_rate(b.id, now) == top, "best_rate is the highest")
+	e.net = null
+	e.merchant = {"rates": {"wood": 1.0, "stone": 1.4, "food": 1.4}, "next_change": now + 10.0}
+	e.net = e  # 온라인 흉내(net != null)
+	check(e.best_rate(now).id == "stone" and e.current_rate("food", now) == 1.4, "online rates are used; a tie picks the earlier resource")
+	e.merchant = {"rates": {"wood": 1.4, "stone": 1.4, "food": 1.4}, "next_change": now + 10.0}
+	check(e.best_rate(now).id == "wood", "a three-way tie picks wood")
+	e.net = null
+	# 서버 응답 검사: 자원 하나라도 빠지면 거부
+	var logged := _errors.count
+	check(not e.apply_server({"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}}, "merchant": {"rates": {"wood": 1.0}, "next_change": 3600.0}}), "apply_server rejects rates missing a resource")
+	_errors.count = logged
+	e.free()
