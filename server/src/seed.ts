@@ -145,7 +145,7 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
       else if (CONFIG_LIST.includes(k) && String(r.value).split('|').some((p) => p.trim() === '')) err(Number(r._line), 'value', `empty list item: '${r.value}'`)
     }
   }
-  if (rows.length === 0) err(0, Object.keys(spec.cols)[0], 'no rows')
+  if (rows.length === 0 && !errors.some((e) => e.startsWith(`${spec.file} `))) err(0, Object.keys(spec.cols)[0], 'no rows')
   return rows
 }
 
