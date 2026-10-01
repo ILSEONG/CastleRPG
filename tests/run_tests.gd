@@ -60,6 +60,7 @@ func _init() -> void:
 	test_economy_collect()
 	test_economy_merchant()
 	test_economy_sell()
+	test_economy_sell_amount()
 	test_economy_save()
 	test_economy_online()
 	test_merchant_spot()
@@ -2006,3 +2007,18 @@ func test_soldiers() -> void:
 	var hb := horse.get_aabb()
 	check(horse.get_surface_count() == 1 and absf(hb.position.y) < 0.01 and hb.end.y > TownKitScript.HORSE_BACK and hb.end.y < 2.0 and hb.size.z > hb.size.x * 2.0,
 		"horse: one low-poly surface on the ground, head above its back (%.2f m), longer than wide: %s" % [TownKitScript.HORSE_BACK, hb])
+
+
+## 개정 14 §4 수량 판매(오프라인): amount만큼만 팔고 floor(amount × 단가 × 그 자원 배율) 골드, 보유 초과는 보유로 자른다.
+func test_economy_sell_amount() -> void:
+	var now := 3600.0 * 480000.0
+	var e = _econ(now)
+	var rate: float = e.current_rate("wood", now)
+	e.res.wood = 40
+	var g: int = e.sell("wood", now, 15)
+	check(g == EconomyScript.sell_value("wood", 15, rate) and e.res.wood == 25 and e.gold_tenths == g * 10, "sell(amount) sells only that many")
+	check(e.sell("wood", now, 0) == 0 and e.res.wood == 25, "sell(amount 0) sells nothing")
+	var g2: int = e.sell("wood", now, 999)
+	check(e.res.wood == 0 and g2 == EconomyScript.sell_value("wood", 25, rate), "sell(amount above holdings) clamps to holdings")
+	e.res.wood = 9
+	check(e.sell("wood", now) == EconomyScript.sell_value("wood", 9, rate) and e.res.wood == 0, "sell without amount still sells all")

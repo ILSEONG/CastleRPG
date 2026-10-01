@@ -300,13 +300,16 @@ func seconds_to_next_rate(now: float) -> float:
 	return (hour_index(now) + 1) * 3600.0 - now
 
 
-## 그 자원 전부를 현재 시세로 판다. 얻은 골드를 돌려준다. 온라인은 요청만 보내고 0.
-func sell(res_id: String, now: float) -> int:
+## 그 자원을 현재 시세로 판다(amount < 0이면 전부, 아니면 보유로 자른 그 수량). 얻은 골드를 돌려준다. 온라인은 요청만 보내고 0.
+func sell(res_id: String, now: float, amount := -1) -> int:
 	if net != null:
-		_sell_online(res_id)
+		_sell_online(res_id, amount)
 		return 0
-	var g := sell_value(res_id, res[res_id], current_rate(res_id, now))
-	res[res_id] = 0
+	var n: int = res[res_id] if amount < 0 else mini(amount, res[res_id])
+	if n <= 0:
+		return 0
+	var g := sell_value(res_id, n, current_rate(res_id, now))
+	res[res_id] -= n
 	gold_tenths += g * 10  # 판매 골드는 정수
 	changed.emit()
 	save()
@@ -1008,7 +1011,7 @@ func _on_collected(data: Dictionary, building_id: String) -> void:
 		collected.emit(building_id, res_of(building_id), amount)
 
 
-func _sell_online(target: String) -> void:
+func _sell_online(target: String, amount := -1) -> void:
 	var key := "sell:" + target
 	if _waiting.has(key):
 		return
@@ -1016,7 +1019,10 @@ func _sell_online(target: String) -> void:
 		notice.emit(WAIT_TEXT)
 		return
 	_waiting[key] = true
-	net.send("POST", "/v1/sell", {"res": target}, _on_sold.bind(key), _unwait.bind(key))
+	var body := {"res": target}
+	if amount >= 0 and target != "all":
+		body["amount"] = amount
+	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unwait.bind(key))
 
 
 func _on_sold(data: Dictionary, key: String) -> void:

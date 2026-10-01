@@ -484,7 +484,10 @@ export function createApp(opts: AppOptions) {
   })
 
   app.post('/v1/sell', auth, async (c) => {
-    const target = strField(await body(c), 'res')
+    const b = await body(c)
+    const target = strField(b, 'res')
+    // 수량 판매(개정 14 §4): amount 생략 = 전량. 'all'이면 amount는 쓰지 않는다
+    const want = target !== 'all' && b.amount !== undefined ? intField(b, 'amount', 1, MAX_INT4) : undefined
     return mutate(c, (p, g, now) => {
       const list = target === 'all' ? g.resources : g.resources.filter((x) => x.id === target)
       if (list.length === 0) throw new ApiError(400, 'unknown_resource', `unknown resource '${target}'`)
@@ -493,7 +496,9 @@ export function createApp(opts: AppOptions) {
       const sold: Record<string, number> = {}
       const delta: Record<string, number> = {}
       for (const r of list) {
-        const amount = p.res[r.id] ?? 0
+        const have = p.res[r.id] ?? 0
+        if (want !== undefined && want > have) throw new ApiError(409, 'not_enough', `only ${have} ${r.id} to sell`)
+        const amount = want ?? have
         if (amount <= 0) continue
         gold += R.sellValue(amount, r.price, rates[r.id])
         sold[r.id] = amount
