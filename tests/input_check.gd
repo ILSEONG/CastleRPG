@@ -588,6 +588,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(heroes_win.deploy_button.text == "빈 슬롯 없음" and heroes_win.deploy_button.disabled, "(x) [배치] with no empty slot is off", "text=%s" % heroes_win.deploy_button.text)
 	await _guard_wait()
 	await _figures(heroes_win)
+	await _promotion_ui(heroes_win, recruit)
 	await _guard_wait()  # _figures가 창을 다시 열어 0.4초 보호가 다시 걸린다
 	await _tap(heroes_win.prev_button.get_parent().get_child(1).get_global_rect().get_center())  # [닫기]
 	_check(heroes_win.is_open() and not heroes_win.is_showing_detail() and heroes_win.is_guarded() and heroes_win.hero_cards.arteon.level == 5,
@@ -1296,7 +1297,7 @@ func _figures(heroes_win) -> void:
 	var p = P.current
 	var mine: Array = _main.get_children().filter(func(c): return c.get_script() == P)
 	_check(mine.size() == 1 and p == mine[0] and not p.can_render and p.queue.is_empty(), "(x2) main has one Portraits node; headless renders nothing (placeholders only)", "")
-	var feet: Vector2 = p._cam.unproject_position(Vector3.ZERO) / P.SIZE
+	var feet: Vector2 = p._cam.unproject_position(Vector3.ZERO) / Vector2(p._vp.size)  # 미리보기 중이면 LIVE_SIZE(개정 15), 아니면 SIZE
 	_check(is_equal_approx(feet.x, 0.5) and absf(feet.y - P.feet_y()) < 0.002, "(x2) the portrait camera puts the model's feet where cards draw the pedestal", "feet=%s feet_y=%.3f" % [feet, P.feet_y()])
 	p._show("hero:hans")  # 렌더 직전 단계만(헤드리스): 모델을 띄운 그 프레임에 대기 자세여야 한다
 	var skel := p._pivot.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
@@ -1326,8 +1327,119 @@ func _figures(heroes_win) -> void:
 		"(x2) back to the list the live preview stops; slot cards draw the figure", "live=%s" % p.live_key)
 	heroes_win.show_detail("hans")
 	_check(p.live_key == "hero:hans", "(x2) reopening the detail resumes the live preview", "live=%s" % p.live_key)
+	_check(p._vp.size == Vector2i(P.LIVE_SIZE, P.LIVE_SIZE), "(x2) the live preview renders at LIVE_SIZE (the big card draws the figure large)", "size=%s" % p._vp.size)
 	heroes_win.close()
-	_check(p.live_key == "", "(x2) closing the window stops the live preview", "live=%s" % p.live_key)
+	_check(p.live_key == "" and p._vp.size == Vector2i(P.SIZE, P.SIZE), "(x2) closing the window stops the live preview (snapshots back at SIZE)", "live=%s size=%s" % [p.live_key, p._vp.size])
 	heroes_win.open()
 	heroes_win.show_detail("hans")
 	await _guard_wait()
+
+
+## (x3) 개정 15 승급(오프라인): 상세 배치(720×1280) — 맨 위 큰 카드에 피규어가 카드 대부분, 그 아래 능력치, 그 아래 [레벨업]·[×10]·[승급],
+##      시트 안에 다 들어간다. [승급] 안 "조각 2 / 25"·이유 "조각 부족"·미리보기(×1.5, 최대 레벨 30 → 40). 목록 카드 조각 막대·금색 ⬆.
+##      조각이 모이면 [승급] 탭 → 조각 −25, ★ +1(별이 날아와 박힘·금색 빛 조각), HP·공격 × 1.5(초록 반짝임), 최대 레벨 40, 방치 모드라
+##      그 영웅만 곧바로 새 능력치. 최대 승급은 "MAX"·"최대 승급". 모집 결과: 중복은 "+1 조각"과 조각 막대, 새 영웅은 NEW(막대 없음).
+##      hans 상세·보호 끝 상태에서 불러 같은 상태로 돌려놓는다.
+func _promotion_ui(heroes_win, recruit) -> void:
+	var arteon := GameData.hero("arteon")
+	heroes_win.show_detail("arteon")
+	await _guard_wait()
+	await _frames(2)
+	var card: Rect2 = heroes_win.big_card.get_global_rect()
+	var fig: Rect2 = heroes_win.big_card.figure_rect()
+	var stats: Rect2 = heroes_win.stat_values[0].get_global_rect()
+	var stats_end: Rect2 = heroes_win.stat_values[4].get_global_rect()
+	var lb: Rect2 = heroes_win.level_button.get_global_rect()
+	var tb: Rect2 = heroes_win.ten_button.get_global_rect()
+	var pb: Rect2 = heroes_win.promote_button.get_global_rect()
+	var sheet: Rect2 = heroes_win.dialog.get_global_rect()
+	var nav: Rect2 = heroes_win.next_button.get_global_rect()
+	print("INPUT INFO: hero detail card %s figure %s stats %s..%s buttons %s %s %s nav %s sheet %s" % [card, fig, stats, stats_end, lb, tb, pb, nav, sheet])
+	_check(card.size.x >= 600.0 and card.size.y >= 380.0 and fig.size.y >= card.size.y * 0.75 and fig.size.x >= 330.0,
+		"(x3) the big card spans the sheet width and its figure fills most of it (live figure >= 75% of the card height)", "card=%s figure=%s" % [card, fig])
+	_check(card.end.y <= stats.position.y and stats_end.end.y <= lb.position.y and is_equal_approx(lb.position.y, pb.position.y) and lb.end.x <= tb.position.x and tb.end.x <= pb.position.x,
+		"(x3) order top to bottom: figure, stats, then [레벨업] [×10] [승급] in one row", "card=%s stats=%s lb=%s tb=%s pb=%s" % [card, stats_end, lb, tb, pb])
+	_check(nav.end.y <= sheet.end.y - 12.0 and sheet.end.y <= 1280.0 - 104.0 and heroes_win._detail_view.get_combined_minimum_size().y <= heroes_win.content.size.y + 0.5
+		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
+		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
+	_check(heroes_win._promo.line.text == "조각 2 / 25" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
+		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.5 · 최대 레벨 30 → 40" and heroes_win.big_card.stars == 1,
+		"(x3) [승급] shows 조각 2 / 25 inside, is off with the reason 조각 부족, and previews x1.5 and max level 30 -> 40",
+		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
+	heroes_win._show_list(false)
+	var ac = heroes_win.hero_cards.arteon
+	_check(ac.shards == 2 and ac.shard_text() == "조각 2 / 25" and not ac.can_promote and ac.stars == 1 and ac.shard_bar_rect().size.x > 100.0
+		and heroes_win.slot_cards[1].shard_bar_rect().size.x == 0.0,
+		"(x3) list card: one gold star and a shard bar 조각 2 / 25 (no ⬆ yet); slot cards have no bar", "text=%s" % ac.shard_text())
+	Economy.hero_shards["arteon"] = 30
+	Economy.changed.emit()
+	_check(ac.can_promote and ac.shard_text() == "조각 30 / 25" and not ac.can_level, "(x3) with 30 shards the card shows the gold ⬆ (not the green ▲)", "")
+	heroes_win.show_detail("arteon")
+	await _guard_wait()
+	_check(not heroes_win.promote_button.disabled and heroes_win._promo.line.text == "조각 30 / 25" and heroes_win.promote_reason.text == "", "(x3) 30 shards: [승급] on", "")
+	var lv := Economy.level_of("arteon")
+	var hp0: String = heroes_win.stat_values[0].text
+	var pre := _alive_heroes()
+	await _tap(heroes_win.promote_button.get_global_rect().get_center())
+	await _frames(2)
+	var mult := 1.0 + 0.06 * (lv - 1)
+	var hero = _alive_heroes().filter(func(h): return h.def.id == "arteon")
+	_check(Economy.shards_of("arteon") == 5 and Economy.promotion_of("arteon") == 2 and heroes_win.big_card.stars == 2 and heroes_win.big_card.is_promoting()
+		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 40" % lv
+		and heroes_win.stat_values[0].text == UiKit.commas(roundi(1040.0 * mult * 2.25)) and heroes_win.stat_values[0].text != hp0
+		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win._promo.line.text == "조각 5 / 50",
+		"(x3) [승급] spends 25 shards: ★2 (a star flies in, gold shards burst), HP x1.5 flashes green, Lv %d / 40, next 조각 5 / 50" % lv,
+		"shards=%d promo=%d hp=%s->%s label=%s" % [Economy.shards_of("arteon"), Economy.promotion_of("arteon"), hp0, heroes_win.stat_values[0].text, heroes_win.level_label.text])
+	_check(hero.size() == 1 and not pre.has(hero[0]) and is_equal_approx(hero[0].hp_max, 1040.0 * mult * 2.25) and is_equal_approx(hero[0].atk, 42.0 * mult * 2.25),
+		"(x3) idle mode rebuilds the promoted hero at once with HP/atk x1.5^2", "hp=%s" % [hero.map(func(h): return h.hp_max)])
+	await get_tree().create_timer(1.0).timeout
+	_check(not heroes_win.big_card.is_promoting() and heroes_win.big_card._flying == -1, "(x3) the effect ends and the new star stays in place", "")
+	await _tap(heroes_win.promote_button.get_global_rect().get_center())
+	_check(Economy.promotion_of("arteon") == 2 and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족", "(x3) 5 of 50 shards: [승급] is off again", "")
+	Economy.hero_promotions["arteon"] = 5
+	Economy.hero_levels["arteon"] = 69  # 가장 큰 숫자(다음 레벨 미리보기 포함)로도 가로가 시트 안에 들어가는지
+	Economy.roster_changed.emit()
+	await _frames(1)
+	var wide: Vector2 = heroes_win._detail_view.get_combined_minimum_size()
+	_check(wide.x <= heroes_win.content.size.x + 0.5 and heroes_win.stat_nexts[0].text.begins_with("→ ") and heroes_win.stat_values[0].text.length() >= 6,
+		"(x3) the widest stats (★5 Lv 69: HP %s %s) still fit the sheet width" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text],
+		"min=%s content=%s" % [wide, heroes_win.content.size])
+	Economy.hero_levels["arteon"] = lv
+	Economy.roster_changed.emit()
+	_check(heroes_win._promo.line.text == "조각 5 · MAX" and heroes_win.promote_reason.text == "최대 승급" and heroes_win.promote_button.disabled
+		and heroes_win.promote_preview.text == "최대 승급 ★5 — HP·공격 ×7.59" and heroes_win.level_label.text == "Lv %d / 70" % lv,
+		"(x3) max promotion: MAX inside, reason 최대 승급, x7.59, max level 70", "line=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_preview.text])
+	heroes_win._show_list(false)
+	_check(heroes_win.hero_cards.arteon.shard_text() == "MAX" and heroes_win.hero_cards.arteon.stars == 5, "(x3) the list card bar reads MAX with five stars", "")
+	Economy.hero_promotions["arteon"] = 2
+	Economy.roster_changed.emit()
+	# 모집 결과: 모든 영웅을 가진 채 1회 모집(오프라인) → 중복 "+1 조각"과 막대. 끝나면 보유를 되돌린다
+	var keep := [Economy.heroes.duplicate(), Economy.hero_shards.duplicate(), Economy.gold_tenths]
+	for h in GameData.heroes():
+		Economy.heroes[h.id] = maxi(1, int(Economy.heroes.get(h.id, 0)))
+	Economy.gold_tenths = 3000
+	heroes_win.close()
+	recruit.open()
+	await _guard_wait()
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	var rc = recruit.cards[0] if recruit.cards.size() == 1 else null
+	var got: String = rc.hero_id if rc != null else ""
+	_check(rc != null and rc.badge == recruit.DUP_TEXT and rc.shards == Economy.shards_of(got) and rc.shards == int(keep[1].get(got, 0)) + 1
+		and rc.shard_text() == "조각 %d / %d" % [rc.shards, Economy.promote_cost(got)] and rc.shard_bar_rect().size.x > 50.0,
+		"(x3) a repeat pull shows +1 조각 and that hero's shard bar (offline: shards +1)", "card=%s badge=%s shards=%d" % [got, rc.badge if rc else "", rc.shards if rc else -1])
+	recruit._on_gacha_done([{"hero_id": "jack", "grade": "R", "new": true, "copies": 1, "shards": 0}])
+	_check(recruit.cards[0].badge == "NEW" and recruit.cards[0].shard_bar_rect().size.x == 0.0, "(x3) a new hero shows NEW and no bar", "")
+	recruit.close()
+	Economy.heroes = keep[0]
+	Economy.hero_shards = keep[1]
+	Economy.gold_tenths = keep[2]
+	Economy.roster_changed.emit()
+	Economy.changed.emit()
+	heroes_win.open()
+	heroes_win.show_detail("hans")
+	await _guard_wait()
+
+
+func _alive_heroes() -> Array:
+	return get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())

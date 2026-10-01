@@ -6,7 +6,8 @@ extends Node
 ## portrait_ready(key)(Node에 이미 ready 시그널이 있어 이 이름이다). 큐는 한 프레임에 하나: 모델을 띄우고 대기 자세를 곧바로 적용
 ## (AnimationPlayer.advance(0) — 안 하면 이 프레임은 T자 기본 자세) + UPDATE_ONCE → 그 프레임 RenderingServer.frame_post_draw에서
 ## get_texture().get_image()로 읽는다.
-## 살아 있는 미리보기(상세 큰 카드): set_live(key) 동안 같은 SubViewport를 매 프레임 그리고(UPDATE_ALWAYS, 대기 애니메이션 × LIVE_ANIM_SPEED) 큐는 쉰다.
+## 살아 있는 미리보기(상세 큰 카드): set_live(key) 동안 같은 SubViewport를 LIVE_SIZE로 키워 매 프레임 그리고(UPDATE_ALWAYS, 대기 애니메이션 ×
+## LIVE_ANIM_SPEED) 큐는 쉰다.
 ## turn(px)로 모델을 돌린다. 카드는 live_texture()(ViewportTexture)를 직접 그린다 — SubViewportContainer도 안에서 같은 일을 하므로
 ## 공유 뷰포트를 컨테이너 자식으로 옮기거나 입력을 3D로 넘길 필요가 없다.
 ## 헤드리스(렌더러 없음): 렌더·읽기를 건너뛰고 자리표시만 쓴다(frame_post_draw가 오지 않고 get_image는 오류를 낸다).
@@ -18,6 +19,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 
 const SIZE := 256
+const LIVE_SIZE := 512  # 실시간 미리보기 해상도 — 상세 큰 카드가 피규어를 400px 안팎으로 그린다(개정 15). 스냅샷은 SIZE
 const VIEW_SIZE := 3.5  # 직교 카메라 세로 폭(m): 키 2.2(도적)~3.0m(마법사 모자) 모델과 앞으로 뻗은 무기가 여유 있게 들어간다
 const LOOK_AT := Vector3(0, 1.3, 0)
 const CAM_ROT := Vector3(-18, -30, 0)  # 살짝 위·왼쪽에서 본 3/4 시점(모델 정면 +Z). 직교 — 로우폴리 셰이더 법선 규약과 같다
@@ -163,6 +165,7 @@ func set_live(key: String) -> void:
 	live_key = key
 	yaw = 0.0
 	_pivot.rotation_degrees.y = 0.0
+	_vp.size = Vector2i(LIVE_SIZE, LIVE_SIZE) if key != "" else Vector2i(SIZE, SIZE)  # 큐 스냅샷은 미리보기가 쉴 때만 — 늘 SIZE
 	if not can_render:
 		return
 	if _pending != "":

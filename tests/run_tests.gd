@@ -1233,7 +1233,38 @@ func test_hero_card_geometry() -> void:
 	card.hero_id = "hans"
 	card._ensure_geo(GameData.hero("hans"))
 	check(card.geo_builds == 3 and card._shine.is_empty(), "an R card has no shimmer")
+	# 개정 15: 조각 막대(아래, 별·전투력은 그만큼 위로), 최대 승급 MAX, 승급 연출(별 하나가 날아오는 동안 그 자리 별은 지오메트리에서 빠진다)
+	var y0: float = card.star_center(0).y
+	card.shards = 3
+	card.shard_need = 5
+	card._ensure_geo(GameData.hero("hans"))
+	var bar: Rect2 = card.shard_bar_rect()
+	check(card.geo_builds == 4 and card.shard_text() == "조각 3 / 5" and Rect2(Vector2.ZERO, card.size).encloses(bar) and bar.size.y == HeroCardScript.BAR_H
+		and is_equal_approx(card.star_center(0).y, y0 - HeroCardScript.BAR_H - HeroCardScript.BAR_GAP) and card.star_center(0).y + 9.0 < bar.position.y,
+		"shard bar at the bottom reads 조각 3 / 5; the stars move up above it: bar %s" % bar)
+	card.shard_need = 0
+	check(card.shard_text() == "MAX", "max promotion: the bar reads MAX")
+	card.shards = -1
+	check(card.shard_bar_rect() == Rect2(), "no bar when shards < 0 (slot cards)")
+	card.promote_fx()
+	card._ensure_geo(GameData.hero("hans"))
+	check(card.is_promoting() and card._flying == 2 and card._top.size() == (6 + 2 * 10) * 3 and card.promote_fxs == 1,
+		"promote effect: the newest star (3rd) flies in, so only two stars are in the static geometry")
+	card._process(HeroCardScript.STAR_FLY_SEC + 0.01)
+	card._ensure_geo(GameData.hero("hans"))
+	check(card._flying == -1 and card.is_promoting() and card._top.size() == (6 + 3 * 10) * 3, "after the flight the star is set in place while the sparkle ring fades")
+	card._process(HeroCardScript.PROMOTE_FX_SEC)
+	check(not card.is_promoting(), "the promote effect ends")
 	card.free()
+	# 상세 큰 카드(live): 피규어가 카드 높이의 대부분(별 줄만 남긴다), 별은 아래에 크게
+	var big = HeroCardScript.new()
+	big.size = Vector2(656, 440)
+	big.live = true
+	big.stars = 2
+	var fr: Rect2 = big.figure_rect()
+	check(fr.size.x == 378.0 and fr.size.y >= big.size.y * 0.8 and Rect2(Vector2.ZERO, big.size).encloses(fr) and big.star_center(0).y > fr.end.y
+		and big._star_row()[1] == HeroCardScript.LIVE_STAR_R, "the live big card's figure fills most of it: %s in %s" % [fr, big.size])
+	big.free()
 
 
 ## 개정 10: 골드 tenths. 표시는 floor, 저장 v1(정수 골드) → v2(tenths) 이전, 오프라인 처치는 tenths로 더한다.
@@ -2248,9 +2279,9 @@ func test_portraits() -> void:
 	check(p.live_key == "hero:arteon" and is_equal_approx(p.yaw, 30.0) and is_equal_approx(p._pivot.rotation_degrees.y, 30.0) and p.live_texture("hero:arteon") == ph,
 		"live preview: a 50 px drag turns the model 30 degrees; headless draws the placeholder instead of the viewport")
 	p.set_live("hero:hans")
-	check(p.yaw == 0.0 and p._pivot.rotation_degrees.y == 0.0, "the next live hero starts facing front")
+	check(p.yaw == 0.0 and p._pivot.rotation_degrees.y == 0.0 and p._vp.size == Vector2i(P.LIVE_SIZE, P.LIVE_SIZE), "the next live hero starts facing front; live renders at LIVE_SIZE")
 	p.set_live("")
-	check(p.live_key == "", "live preview off")
+	check(p.live_key == "" and p._vp.size == Vector2i(P.SIZE, P.SIZE), "live preview off; snapshots back at SIZE")
 	P.current = null
 	p.free()
 	check(P.portrait("hero:hans") == tex, "the cache is static: it outlives the node (world rebuild)")

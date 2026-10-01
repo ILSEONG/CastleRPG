@@ -1,6 +1,6 @@
 extends Button
 ## 영웅 카드(스펙 §5): 등급 색 테두리 로우폴리 카드 + 위쪽 등급 보석 + 영웅 피규어(개정 14 §2, Portraits — 렌더 전엔 등급 색 실루엣)와
-## 발밑 고유 색 받침 원판 + 이름·칭호 + 아래 NEW 또는 별. live(상세 큰 카드)면 피규어가 실시간(대기 애니메이션)이고 가로로 끌면 돈다 —
+## 발밑 고유 색 받침 원판 + 이름·칭호 + 아래 badge(NEW·+1 조각) 또는 금색 별(개정 15: 별 = 승급 단계). live(상세 큰 카드)면 피규어가 실시간(대기 애니메이션)이고 가로로 끌면 돈다 —
 ## 끌기는 카드가 먹어 상세의 좌우 스와이프로 새지 않는다. 보일 때만 Portraits에 미리보기를 건다(목록으로·창 닫힘이면 내린다).
 ## SSR은 금색 면이 반짝인다(면 밝기 순환). hero_id가 ""이면 빈 슬롯 칸. 짧게 누르면 tapped, LONG_PRESS_MS 이상 눌렀다 떼면 long_pressed.
 ## 바탕·보석·별 지오메트리는 (크기, 영웅, 별)이 바뀔 때만 만들고(_ensure_geo), 그리기는 삼각형 배열 몇 번이다 — SSR은 매 프레임
@@ -8,6 +8,9 @@ extends Button
 ## 입력은 부모로도 넘긴다(MOUSE_FILTER_PASS) — 스크롤 격자 안에서 끌어 스크롤할 수 있게.
 ## 개정 11 영웅 목록: level > 0이면 왼위 "Lv N", power > 0이면 아래 "전투력 N", deployed면 "배치" 배지, can_level이면 오른위 초록 ▲(다각형).
 ## burst(): 레벨업 성공 연출 — 빛 조각이 BURST_SEC 동안 가운데에서 퍼진다.
+## 개정 15: shards ≥ 0이면 맨 아래 조각 막대 "조각 3 / 5"(shard_need 0 = 최대 승급 "MAX"), can_promote면 오른위 ▲ 아래 금색 ⬆.
+## live(상세 큰 카드)는 피규어가 카드 대부분을 채우고(figure_rect) 이름·칭호는 그리지 않는다(상세 글자가 보여 준다), 별은 아래에 크게.
+## promote_fx(): 승급 성공 연출 — 피규어 주위로 금색 로우폴리 빛 조각이 퍼지고, 새 별 하나가 날아와 제자리에 박힌다(PROMOTE_FX_SEC).
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -24,6 +27,14 @@ const BURST_SEC := 0.5
 const BURST_SHARDS := 14
 const FIGURE_TOP := 14.0  # 피규어 칸 위 끝(등급 보석 아래)
 const BASE_SIDES := 10  # 받침 원판 각 수
+const BAR_H := 16.0  # 조각 막대 높이(개정 15)
+const BAR_GAP := 4.0
+const BAR_FILL := Color("9B6CD6")  # 조각 막대 채움(SR 보라 — 레벨 막대 호박색과 구분)
+const LIVE_BAND := 48.0  # 큰 카드 아래 별 줄 높이
+const LIVE_STAR_R := 15.0
+const PROMOTE_FX_SEC := 0.9
+const STAR_FLY_SEC := 0.55  # 별이 날아오는 시간(그 뒤 박히는 반짝임)
+const PROMOTE_SHARDS := 22
 
 signal tapped(card)
 signal long_pressed(card)
@@ -47,12 +58,19 @@ var level := 0  # > 0이면 "Lv N"
 var power := 0  # > 0이면 "전투력 N"
 var deployed := false  # "배치" 배지
 var can_level := false  # 오른위 초록 ▲
+var shards := -1  # ≥ 0이면 아래 조각 막대(개정 15)
+var shard_need := 0  # 다음 승급에 드는 조각. 0 = 최대 승급("MAX")
+var can_promote := false  # 오른위 금색 ⬆(승급 가능)
+var badge_color := Color("D9480F")  # badge 글자색(NEW 주황, 모집 창이 "+1 조각"에 보라로 바꾼다)
+var promote_fxs := 0  # 승급 연출 횟수(테스트용)
 
 var geo_builds := 0  # 지오메트리를 만든 횟수(테스트용)
 
 var _down_ms := 0
 var _t := 0.0
 var _burst := 0.0  # 남은 빛 조각 시간
+var _pfx := 0.0  # 남은 승급 연출 시간
+var _flying := -1  # 날아오는 중인 별 번호(그동안 그 자리 별은 지오메트리에서 뺀다), 없으면 -1
 var _geo_key := []
 var _body := PackedVector2Array()  # 카드 바탕(테두리 8각 + 안쪽 면) 삼각형 점(3개씩)
 var _body_cols := PackedColorArray()
@@ -114,15 +132,21 @@ func _process(delta: float) -> void:
 		_burst -= delta
 		if _burst <= 0.0:
 			_update_process()
+	if _pfx > 0.0:
+		_pfx -= delta
+		if _flying >= 0 and _pfx <= PROMOTE_FX_SEC - STAR_FLY_SEC:
+			_flying = -1  # 박혔다 — 그 자리 별을 다시 그린다
+		if _pfx <= 0.0:
+			_update_process()
 	if not is_visible_in_tree():
 		return  # 닫힌 창의 카드는 다시 그리지 않는다
 	_t += delta
 	queue_redraw()
 
 
-## SSR(반짝임)이거나 빛 조각이 남았을 때만 매 프레임 다시 그린다.
+## SSR(반짝임)이거나 빛 조각·승급 연출이 남았을 때만 매 프레임 다시 그린다.
 func _update_process() -> void:
-	set_process(_burst > 0.0 or (hero_id != "" and GameData.hero(hero_id).get("grade", "") == "SSR"))
+	set_process(_burst > 0.0 or _pfx > 0.0 or (hero_id != "" and GameData.hero(hero_id).get("grade", "") == "SSR"))
 
 
 ## 레벨업 성공 연출: 빛 조각이 가운데에서 BURST_SEC 동안 퍼지며 사라진다.
@@ -133,6 +157,19 @@ func burst() -> void:
 
 func is_bursting() -> bool:
 	return _burst > 0.0
+
+
+## 승급 성공 연출: 금색 빛 조각이 피규어 주위로 퍼지고, 마지막 별(stars번째)이 위에서 날아와 박힌다. stars를 새 승급으로 둔 뒤 부른다.
+func promote_fx() -> void:
+	_pfx = PROMOTE_FX_SEC
+	_flying = stars - 1
+	promote_fxs += 1
+	_update_process()
+	queue_redraw()
+
+
+func is_promoting() -> bool:
+	return _pfx > 0.0
 
 
 func _on_pressed() -> void:
@@ -165,13 +202,17 @@ func _draw() -> void:
 		for l in _lines:
 			draw_polyline(l[0], UiKit.OUTLINE, l[1], true)
 		var name_size := _name_size()
-		_text(h.name, size.y * 0.6, name_size, UiKit.INK)
-		_text(h.title, size.y * 0.6 + name_size * 0.95, maxi(11, name_size - 7), UiKit.INK.lightened(0.3))
+		if not live:  # 큰 카드는 상세 글자가 이름·칭호를 보여 준다
+			_text(h.name, size.y * 0.6, name_size, UiKit.INK)
+			_text(h.title, size.y * 0.6 + name_size * 0.95, maxi(11, name_size - 7), UiKit.INK.lightened(0.3))
 		if badge != "":
-			_text(badge, size.y - 10.0, name_size - 2, Color("D9480F"), true)
+			_text(badge, size.y - 10.0 - _bar_space(), name_size - 2, badge_color, true)
 		_draw_list_info()
+		_draw_shard_bar()
 	if _burst > 0.0:
 		_draw_burst()
+	if _pfx > 0.0 and not h.is_empty():
+		_draw_promote_fx()
 	if corner != "":
 		draw_string_outline(FONT, Vector2(9, 22), corner, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 4, Color.WHITE)
 		draw_string(FONT, Vector2(9, 22), corner, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.INK)
@@ -183,10 +224,46 @@ func _name_size() -> int:
 	return clampi(roundi(size.x * 0.17), 14, 24)
 
 
-## 피규어 칸(정사각, 가운데): 등급 보석 아래부터 이름 글자 위까지.
+## 피규어 칸(정사각, 가운데): 등급 보석 아래부터 이름 글자 위까지. live(상세 큰 카드)는 보석 아래 ~ 별 줄 위를 거의 다 채운다.
 func figure_rect() -> Rect2:
+	if live:
+		var h := size.y - FIGURE_TOP - LIVE_BAND
+		var s := maxf(minf(size.x - 24.0, h), 0.0)
+		return Rect2(size.x / 2.0 - s / 2.0, FIGURE_TOP + (h - s) / 2.0, s, s)
 	var side := maxf(size.y * 0.6 - _name_size() * 0.85 - FIGURE_TOP, 0.0)
 	return Rect2(size.x / 2.0 - side / 2.0, FIGURE_TOP, side, side)
+
+
+## 조각 막대 칸(맨 아래). 막대가 없으면 빈 Rect2.
+func shard_bar_rect() -> Rect2:
+	if shards < 0:
+		return Rect2()
+	return Rect2(14.0, size.y - BAR_H - 8.0, size.x - 28.0, BAR_H)
+
+
+## 막대가 있으면 아래 글자·별을 그만큼 올린다.
+func _bar_space() -> float:
+	return BAR_H + BAR_GAP if shards >= 0 else 0.0
+
+
+## 막대 글자: "조각 3 / 5", 최대 승급이면 "MAX".
+func shard_text() -> String:
+	return "MAX" if shard_need <= 0 else "조각 %d / %d" % [shards, shard_need]
+
+
+## 별 줄 [가운데, 별 반지름]: 목록·모집은 아래(막대 위)에 작게, live는 아래 별 줄에 크게.
+func _star_row() -> Array:
+	if live:
+		return [Vector2(size.x / 2.0, size.y - LIVE_BAND / 2.0), LIVE_STAR_R]
+	return [Vector2(size.x / 2.0, size.y - 16.0 - _bar_space()), minf(9.0, size.x / 14.0)]
+
+
+## i번째 별의 가운데(stars개를 가운데 맞춤).
+func star_center(i: int) -> Vector2:
+	var row := _star_row()
+	var gap: float = row[1] * 2.1
+	var c: Vector2 = row[0]
+	return Vector2(c.x - gap * (stars - 1) / 2.0 + gap * i, c.y)
 
 
 ## 그릴 피규어: live면 실시간 미리보기, 아니면 캐시(렌더 전엔 자리표시 실루엣).
@@ -210,8 +287,74 @@ func _draw_list_info() -> void:
 		draw_colored_polygon(tri, UP_COLOR)
 		tri.append(tri[0])
 		draw_polyline(tri, UiKit.OUTLINE, 1.5, true)
+	if can_promote:  # 승급 가능: 금색 ⬆(자루 달린 화살표 — 레벨업 ▲와 모양·색이 다르다)
+		var c := Vector2(size.x - 22, 52)
+		var arrow := PackedVector2Array([c + Vector2(0, -13), c + Vector2(12, 0), c + Vector2(5, 0), c + Vector2(5, 12),
+			c + Vector2(-5, 12), c + Vector2(-5, 0), c + Vector2(-12, 0)])
+		draw_colored_polygon(arrow, STAR_COLOR)
+		arrow.append(arrow[0])
+		draw_polyline(arrow, UiKit.OUTLINE, 1.5, true)
 	if power > 0:
-		_text("전투력 %s" % UiKit.commas(power), size.y - 34.0, 17, UiKit.INK.lightened(0.15))
+		_text("전투력 %s" % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, UiKit.INK.lightened(0.15))
+
+
+## 조각 막대(개정 15): 어두운 바탕 + 보라 채움(모였거나 최대 승급이면 금색) + 가운데 흰 글자.
+func _draw_shard_bar() -> void:
+	var r := shard_bar_rect()
+	if r.size.x <= 0.0:
+		return
+	draw_colored_polygon(LowpolyBox.octagon(r, 4.0), Color(UiKit.INK, 0.18))
+	var full := shard_need <= 0 or shards >= shard_need
+	var f := 1.0 if full else clampf(float(shards) / shard_need, 0.0, 1.0)
+	if f > 0.0:
+		draw_colored_polygon(LowpolyBox.octagon(Rect2(r.position, Vector2(maxf(r.size.x * f, 8.0), r.size.y)), 4.0), STAR_COLOR if full else BAR_FILL)
+	var line := LowpolyBox.octagon(r, 4.0)
+	line.append(line[0])
+	draw_polyline(line, UiKit.OUTLINE, 1.2, true)
+	var at := Vector2(r.position.x, r.end.y - 3.0)
+	draw_string_outline(FONT, at, shard_text(), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, 4, Color(UiKit.INK, 0.85))
+	draw_string(FONT, at, shard_text(), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, Color.WHITE)
+
+
+## 승급 연출: 피규어 가운데에서 금색 로우폴리 조각(삼각형·사각형)이 돌며 바깥으로 퍼지고, 새 별이 카드 위에서 크게 날아와
+## 제자리(star_center)에 박힌 뒤 고리가 반짝인다.
+func _draw_promote_fx() -> void:
+	var t := 1.0 - _pfx / PROMOTE_FX_SEC  # 0 → 1
+	var fr := figure_rect()
+	var c := fr.get_center()
+	var base := maxf(fr.size.x, 40.0)
+	for i in PROMOTE_SHARDS:
+		var dir := Vector2.from_angle(TAU * i / PROMOTE_SHARDS + LowpolyBox.hash01(i, 3) * 0.5)
+		var p := c + dir * base * 0.75 * (0.15 + 0.85 * t) * (0.6 + 0.4 * LowpolyBox.hash01(i, 5))
+		var r := base * 0.045 * (1.0 - t * 0.5) * (0.7 + 0.6 * LowpolyBox.hash01(i, 11))
+		var n := 3 if i % 2 == 0 else 4
+		var col := Color("FFF3C4") if i % 3 == 0 else STAR_COLOR.lightened(0.35 * LowpolyBox.hash01(i, 13))
+		col.a = 1.0 - t * t
+		var pts := PackedVector2Array()
+		for k in n:
+			pts.append(p + Vector2.from_angle(t * 6.0 + i + TAU * k / n) * r)
+		draw_colored_polygon(pts, col)
+	if stars <= 0:
+		return
+	var sr: float = _star_row()[1]
+	var home := star_center(stars - 1)
+	if _flying >= 0:  # 위에서 크게 → 제자리에 작게(감속)
+		var e := clampf((PROMOTE_FX_SEC - _pfx) / STAR_FLY_SEC, 0.0, 1.0)
+		e = 1.0 - (1.0 - e) * (1.0 - e)
+		_star(Vector2(size.x / 2.0, -sr * 2.0).lerp(home, e), sr * lerpf(3.0, 1.0, e))
+	else:  # 박힌 뒤: 별 주위로 퍼지며 흐려지는 고리
+		var k := clampf((PROMOTE_FX_SEC - STAR_FLY_SEC - _pfx) / (PROMOTE_FX_SEC - STAR_FLY_SEC), 0.0, 1.0)
+		draw_arc(home, sr * (1.2 + 1.5 * k), 0.0, TAU, 12, Color(1, 0.95, 0.7, 1.0 - k), 3.0, true)
+
+
+## 연출용 별 하나(지오메트리 캐시 밖, 매 프레임 그린다).
+func _star(c: Vector2, r: float) -> void:
+	var pts := PackedVector2Array()
+	for k in 10:
+		pts.append(c + Vector2.from_angle(-PI / 2.0 + PI * k / 5.0) * (r if k % 2 == 0 else r * 0.45))
+	draw_colored_polygon(pts, STAR_COLOR)
+	pts.append(pts[0])
+	draw_polyline(pts, UiKit.OUTLINE, 1.5, true)
 
 
 ## 빛 조각: 가운데에서 바깥으로 날아가며 작아지고 흐려지는 금색·흰 삼각형. 방향은 결정적(조각 번호 해시).
@@ -241,9 +384,9 @@ func _text(text: String, y: float, font_size: int, color: Color, outline := fals
 	draw_string(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, size.x, font_size, color)
 
 
-## (크기, 영웅, 별)이 바뀌었을 때만 지오메트리를 다시 만든다.
+## (크기, 영웅, 별, badge·막대·live·날아오는 별)이 바뀌었을 때만 지오메트리를 다시 만든다.
 func _ensure_geo(h: Dictionary) -> void:
-	var key := [size, hero_id, stars, badge != ""]
+	var key := [size, hero_id, stars, badge != "", shards >= 0, live, _flying]
 	if key == _geo_key:
 		return
 	_geo_key = key
@@ -267,7 +410,7 @@ func _ensure_geo(h: Dictionary) -> void:
 	_add_gem(UiKit.card_gem_center(r), UiKit.CARD_GEM_R, gc)
 	_add_base(Color(h.color))
 	if badge == "" and stars > 0:
-		_add_stars(Vector2(size.x / 2.0, size.y - 16.0), minf(9.0, size.x / 14.0))
+		_add_stars()
 
 
 func _add_gem(center: Vector2, r: float, color: Color) -> void:
@@ -317,12 +460,13 @@ func _tick_shine(gc: Color) -> void:
 			_shine_cols[i * 3 + k] = c
 
 
-## 별 stars개(각진 5각 별: 가운데 부채꼴 10삼각형, 글꼴과 무관).
-func _add_stars(center: Vector2, r: float) -> void:
-	var gap := r * 2.1
-	var x0 := center.x - gap * (stars - 1) / 2.0
+## 금색 별 stars개(= 승급 단계, 각진 5각 별: 가운데 부채꼴 10삼각형, 글꼴과 무관). 날아오는 중인 별(_flying)은 뺀다.
+func _add_stars() -> void:
+	var r: float = _star_row()[1]
 	for s in stars:
-		var c := Vector2(x0 + gap * s, center.y)
+		if s == _flying:
+			continue
+		var c := star_center(s)
 		var pts := PackedVector2Array()
 		for k in 10:
 			pts.append(c + Vector2.from_angle(-PI / 2.0 + PI * k / 5.0) * (r if k % 2 == 0 else r * 0.45))

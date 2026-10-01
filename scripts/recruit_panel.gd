@@ -1,7 +1,7 @@
 extends "res://scripts/ui_window.gd"
 ## 주점 모집 창(스펙 §5, 주점 탭으로 연다): 제목, 확률 한 줄, [1회 모집 300] [10회 모집 2700(SR 이상 1장 보장)]
 ## (골드가 모자라거나 응답을 기다리는 중이면 비활성), 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
-## NEW 또는 별, SSR은 반짝임) + [확인]. 모집은 Economy.gacha, 결과는 Economy.gacha_done — 온라인 응답이 창을 닫은 뒤에
+## 새 영웅은 "NEW", 중복은 "+1 조각"과 그 영웅의 조각 막대(개정 15), SSR은 반짝임) + [확인]. 모집은 Economy.gacha, 결과는 Economy.gacha_done — 온라인 응답이 창을 닫은 뒤에
 ## 와도 다시 열어 보여 준다(결과를 놓치지 않게). 다른 창(영웅·거래)이 열려 있으면 그 위로 열지 않고 알림만 띄우고,
 ## 결과는 다음에 주점 창을 열 때 보여 준다. 결과 화면이 뜨면 연 직후처럼 보호 시간을 다시 건다([확인] 연타 방지).
 
@@ -11,8 +11,9 @@ const Skills := preload("res://scripts/skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 
 const DIALOG_W := 680
-const CARD_SIZE := Vector2(118, 160)
+const CARD_SIZE := Vector2(118, 180)
 const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
+const DUP_TEXT := "+1 조각"  # 이미 가진 영웅(개정 15)
 
 var one_button: Button
 var ten_button: Button
@@ -120,8 +121,14 @@ func _show_results(results: Array) -> void:
 		var card = HeroCardScript.new()
 		card.custom_minimum_size = CARD_SIZE
 		card.hero_id = r.hero_id
-		card.badge = "NEW" if r.new else ""
 		card.stars = Economy.promotion_of(r.hero_id)
+		if r.new:
+			card.badge = "NEW"
+		else:  # 개정 15: 중복은 "+1 조각"과 그 장까지의 조각 막대
+			card.badge = DUP_TEXT
+			card.badge_color = HeroCardScript.BAR_FILL.darkened(0.2)
+			card.shards = int(r.get("shards", 0))
+			card.shard_need = Economy.promote_cost(r.hero_id)
 		_grid.add_child(card)
 		cards.append(card)
 	_pick_view.visible = false

@@ -364,6 +364,9 @@ func _econ_demo() -> void:
 		Economy.res[id] = 500
 	Economy.gold = 9999
 	Economy.soldiers = {"infantry:1": 7, "infantry:2": 2, "archer:1": 5, "cavalry:1": 3}  # 병사 탭·[합성] 캡처용(생산은 3시간)
+	Economy.hero_shards = {"hans": 7, "ella": 3}  # 승급 캡처용(개정 15): 한스는 승급 가능(7 / 5), 엘라는 3 / 5
+	Economy.hero_promotions = {"nina": 2}  # 금색 별 2개
 	Economy.changed.emit()
 	Economy.soldiers_changed.emit()
-	print("[econ-demo] gold 9999, resources 500, soldiers 17")
+	Economy.roster_changed.emit()
+	print("[econ-demo] gold 9999, resources 500, soldiers 17, shards hans 7 / ella 3, nina promotion 2")
