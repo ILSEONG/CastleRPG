@@ -25,3 +25,12 @@ gacha_cost_10,2700
 gacha_rate_ssr,0.03
 gacha_rate_sr,0.17
 gacha_10_min_sr,1
+hero_max_level_base,20
+hero_max_level_per_star,10
+hero_level_stat,0.06
+levelup_gold_R,30
+levelup_gold_SR,60
+levelup_gold_SSR,120
+levelup_food_R,10
+levelup_food_SR,20
+levelup_food_SSR,40

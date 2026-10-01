@@ -149,3 +149,30 @@ test('쓰기 직전마다 다른 쓰기가 끼어들면 재시도 3회 후 409, 
     await S.close()
   }
 })
+
+test('동시 레벨업 2건(골드·식량은 1회분): 둘 다 같은 version을 읽어도 한 번만 오른다 — 하나 200, 하나 409, 레벨 2, 골드·식량 1회분, 로그 1', async () => {
+  const b = barrier()
+  const S = await setup({ wrapQuery: b.wrap })
+  try {
+    S.clock.t = T0
+    const { token, id } = await S.login()
+    await S.db.query('update player_state set gold_tenths = 300 where player_id = $1', [id])
+    await S.db.query("update player_resources set amount = 10 where player_id = $1 and res = 'food'", [id])
+    b.arm()
+    const [r1, r2] = await Promise.all([
+      S.req('POST', '/v1/hero/levelup', { token, body: { hero_id: 'hans', count: 1 } }),
+      S.req('POST', '/v1/hero/levelup', { token, body: { hero_id: 'hans', count: 1 } }),
+    ])
+    assert.equal(b.arrived(), 2, 'both requests read the same level before either wrote')
+    assert.deepEqual([r1.status, r2.status].sort(), [200, 409])
+    assert.equal((r1.status === 409 ? r1 : r2).json.error, 'not_enough')
+    const [s] = await S.db.query("select s.gold_tenths, r.amount from player_state s join player_resources r on r.player_id = s.player_id and r.res = 'food' where s.player_id = $1", [id])
+    assert.deepEqual([Number(s.gold_tenths), Number(s.amount)], [0, 0])
+    const [h] = await S.db.query("select level from player_heroes where player_id = $1 and hero_id = 'hans'", [id])
+    assert.equal(h.level, 2)
+    const n = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'levelup'", [id])
+    assert.equal(n[0].n, 1)
+  } finally {
+    await S.close()
+  }
+})
