@@ -3,7 +3,7 @@ extends Node
 ## 실행: ... res://tests/online_check.tscn -- --api=http://127.0.0.1:8790 --device=<임시 파일> --state=<임시 파일> --phase=1|2
 ## phase 1: 접속·월드·응답 처리 규칙(classify)·처치 골드·재로그인·4xx 버림·수집·판매·시세 갱신·끊김·스테이지 클리어·
 ##   끊긴 동안 쌓인 클리어 둘 중 두 번째 거부 → 다음 경계에서 서버 stage로·처치 묶음 나누기. 끝 상태를 --state 파일에 쓴다.
-## phase 2: 같은 기기 id로 다시 접속해 골드·자원·스테이지가 그대로인지 본다.
+## phase 2: 같은 기기 id로 다시 접속해 골드·자원·스테이지가 그대로인지 본다. 웹 비영구 저장소 경고 띠와 띠 위치도 본다.
 ## 오토로드를 쓰므로 tests/run_tests.gd(-s)에서 preload 금지. user://save.json·device.json을 쓰지 않는다(온라인은 저장 안 함, 기기 id는 임시 파일).
 
 const Balance := preload("res://scripts/balance.gd")
@@ -171,7 +171,9 @@ func _phase1(state_path: String) -> void:
 	Net.api_base = DEAD_API
 	Net.flush_kills()
 	var down := await _wait_until(func(): return not Net.up, 20.0)
-	_check(down and _hud._banner.visible, "(g) a failed request shows the '서버 연결 중…' banner", "up=%s banner=%s" % [Net.up, _hud._banner.visible])
+	_check(down and _hud._banner.visible and _hud._link_label.visible, "(g) a failed request shows the '서버 연결 중…' banner", "up=%s banner=%s" % [Net.up, _hud._banner.visible])
+	await _frames(1)
+	_check_band_layout("(g)")
 	col0 = Net.requested.get("/v1/collect", 0)
 	sell0 = Net.requested.get("/v1/sell", 0)
 	_badges.last_pop = {}
@@ -283,6 +285,7 @@ func _phase2(state_path: String) -> void:
 	var saved: Dictionary = json.data
 	GameState.stage = 9
 	Economy.gold = 777
+	Net.storage_persistent = false  # 웹 비영구 저장소 흉내(네이티브는 늘 영구)
 	if not await _start_world():
 		return
 	_check(Net.device_id == saved.device_id and Net.logins == 1, "(p2) same device id from the device file", "id=%s saved=%s" % [Net.device_id, saved.device_id])
@@ -291,6 +294,13 @@ func _phase2(state_path: String) -> void:
 		res_ok = res_ok and Economy.res[r.id] == int(saved.res[r.id])
 	_check(Economy.gold == int(saved.gold) and Economy.server_gold == int(saved.gold) and res_ok and GameState.stage == int(saved.stage) and GameState.stage == 3,
 		"(p2) second run restores gold, resources and stage", "gold=%d res=%s stage=%d saved=%s" % [Economy.gold, Economy.res, GameState.stage, saved])
+	await _frames(2)
+	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
+		and _warned("not persistent") == 1, "(p2) non-persistent storage: one warning log and a one-line notice in the band, the game goes on",
+		"banner=%s storage=%s link=%s warnings=%d" % [_hud._banner.visible, _hud._storage_label.visible, _hud._link_label.visible, _warned("not persistent")])
+	_hud._link_label.visible = true  # 가장 큰 띠(끊김 + 저장소 두 줄)로 위치를 본다
+	await _frames(2)
+	_check_band_layout("(p2)")
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
@@ -393,6 +403,16 @@ func _check_classify() -> void:
 			bad.append("%s -> %s (want %s)" % [c.slice(0, 7), got, c[7]])
 	_check(bad.is_empty(), "(a) response policy: network failure -> banner + retry, 401 -> relogin x%d then down, 409 -> refresh + one retry, 5xx/408/429 -> %d retries, other 4xx dropped" % [Net.AUTH_MAX, Net.SERVER_TRIES], str(bad))
 	_check(Net.backoff(1) == 2.0 and Net.backoff(3) == 8.0 and Net.backoff(10) == Net.RETRY_MAX_SEC, "(a) backoff 2, 4, 8 ... capped at 15 s", "")
+
+
+## 띠가 상단 자원 칩·아래 버튼·알림 자리를 가리지 않는다(층만 다른 CanvasLayer라 화면 좌표가 같다).
+func _check_band_layout(tag: String) -> void:
+	var band: Rect2 = _hud._banner.get_global_rect()
+	var chips: Rect2 = _hud._chip_row.get_global_rect()
+	var button: Rect2 = _hud._button.get_global_rect()
+	var toast: Rect2 = _hud._toast.get_global_rect()
+	_check(band.size.y > 0.0 and not band.intersects(chips) and not band.intersects(button) and not band.intersects(toast),
+		"%s the band covers neither the resource chips, the bottom button nor the toast spot" % tag, "band=%s chips=%s button=%s toast=%s" % [band, chips, button, toast])
 
 
 ## 대기 → 스테이지 → 전멸(클리어) → 결과 뒤 대기(중지 예약). 스포너는 멈춰 있다.

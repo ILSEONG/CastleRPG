@@ -72,6 +72,7 @@ func _build_world() -> void:
 
 
 ## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.
+## 웹 저장소가 영구가 아니면 경고 한 줄을 더한다(접속은 그대로 진행).
 func _wait_for_server() -> void:
 	var layer := CanvasLayer.new()
 	var back := ColorRect.new()
@@ -84,11 +85,23 @@ func _wait_for_server() -> void:
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	box.add_theme_stylebox_override("panel", HudScript.round_box(HudScript.PANEL_BG, HudScript.RADIUS + 6, 28))
 	back.add_child(box)
+	var lines := VBoxContainer.new()
+	box.add_child(lines)
 	var label := Label.new()
 	label.text = "서버 연결 중…"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 40)
 	label.add_theme_color_override("font_color", HudScript.INK)
-	box.add_child(label)
+	lines.add_child(label)
+	if not Net.storage_persistent:
+		var warn := Label.new()
+		warn.text = Net.STORAGE_TEXT
+		warn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		warn.custom_minimum_size = Vector2(520, 0)
+		warn.add_theme_font_size_override("font_size", 22)
+		warn.add_theme_color_override("font_color", HudScript.INK)
+		lines.add_child(warn)
 	add_child(layer)
 	Net.start()
 	if not Net.ready_once:

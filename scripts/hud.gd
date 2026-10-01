@@ -15,7 +15,10 @@ var _gate_bars: Array = []
 var _center: Label
 var _button: Button
 var _chips := {}  # 아이콘 kind(gold·wood·stone·food) → 숫자 Label
-var _banner: Control  # 온라인 끊김 띠 "서버 연결 중…"
+var _chip_row: Control
+var _banner: Control  # 온라인 띠(아래 버튼 위): 끊김 "서버 연결 중…" + 웹 비영구 저장소 경고
+var _link_label: Label
+var _storage_label: Label
 var _toast: Label  # 짧은 알림("연결 대기 중")
 var _toast_left := 0.0
 
@@ -179,6 +182,7 @@ func _build_chips(root: Control) -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 8)
 	root.add_child(row)
+	_chip_row = row
 	for kind in IconsScript.KINDS:
 		var chip := PanelContainer.new()
 		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -207,32 +211,40 @@ func _build_chips(root: Control) -> void:
 	_refresh_chips()
 
 
-## 온라인 알림: 끊기면 맨 위 띠, 끊긴 동안 수집·판매 탭은 짧은 알림. 거래 창(층 2) 위 층 3, 입력은 통과.
+## 온라인 알림: 아래 버튼 바로 위 띠(상단 자원 칩을 가리지 않는다) — 끊기면 "서버 연결 중…", 웹 저장소가 영구가 아니면
+## 경고 한 줄(게임은 계속). 끊긴 동안 수집·판매 탭은 띠 위 짧은 알림. 거래 창(층 2) 위 층 3, 입력은 통과.
 func _build_link_ui() -> void:
 	var top := CanvasLayer.new()
 	top.layer = 3
 	add_child(top)
 	var band := PanelContainer.new()
-	band.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	band.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	band.offset_left = 32
+	band.offset_right = -32
+	band.offset_top = -132  # 아래 버튼(-120..-32) 위 12px에서
+	band.offset_bottom = -132
+	band.grow_vertical = Control.GROW_DIRECTION_BEGIN  # 내용 높이만큼 위로 자란다
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	band.add_theme_stylebox_override("panel", round_box(Color(INK, 0.86), 0, 10))
-	var text := Label.new()
-	text.text = "서버 연결 중…"
-	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	text.add_theme_font_size_override("font_size", 26)
-	text.add_theme_color_override("font_color", Color.WHITE)
-	band.add_child(text)
+	band.add_theme_stylebox_override("panel", round_box(Color(INK, 0.86), RADIUS, 10))
+	var lines := VBoxContainer.new()
+	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.add_child(lines)
+	_link_label = _band_label("서버 연결 중…", 26)
+	lines.add_child(_link_label)
+	_storage_label = _band_label(Net.STORAGE_TEXT, 20)
+	_storage_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lines.add_child(_storage_label)
 	top.add_child(band)
 	_banner = band
-	_banner.visible = Net.is_online() and not Net.up
-	Net.connected.connect(_on_link_up)
-	Net.disconnected.connect(_on_link_down)
+	_update_band()
+	Net.connected.connect(_update_band)
+	Net.disconnected.connect(_update_band)
 	_toast = Label.new()
 	_toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_toast.offset_left = -320
 	_toast.offset_right = 320
-	_toast.offset_top = -200  # 아래 버튼(-120..-32) 위
-	_toast.offset_bottom = -150
+	_toast.offset_top = -330  # 띠(버튼 위 -132에서 위로 두 줄까지) 위
+	_toast.offset_bottom = -280
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_toast.add_theme_font_size_override("font_size", 32)
@@ -245,12 +257,20 @@ func _build_link_ui() -> void:
 	Economy.notice.connect(_on_notice)
 
 
-func _on_link_up() -> void:
-	_banner.visible = false
+func _band_label(text: String, font_size: int) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", Color.WHITE)
+	return l
 
 
-func _on_link_down() -> void:
-	_banner.visible = true
+func _update_band() -> void:
+	_link_label.visible = Net.is_online() and not Net.up
+	_storage_label.visible = Net.is_online() and not Net.storage_persistent
+	_banner.visible = _link_label.visible or _storage_label.visible
 
 
 func _on_notice(text: String) -> void:
