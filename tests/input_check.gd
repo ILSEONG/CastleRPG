@@ -663,15 +663,23 @@ func _top_hud(hud) -> void:
 		"selected=%s" % _name(_picker.selected))
 	_picker._select(null)
 
-	# 상단 버튼: 대기 "▶ 진행" → 탭 = 스테이지 시작 → "중지 예약" → 탭 = 예약 → "예약 취소" → 탭 = 취소
+	# 상단 버튼: 대기 "▶ 진행" → 탭 = 시작 → "■ 중지" → 탭 = 즉시 중지(같은 스테이지, 대기)
 	var bp: Vector2 = hud._button.get_global_rect().get_center()
+	var st0: int = GameState.stage
 	_check(GameState.mode == GameState.Mode.IDLE and hud._button.text == "▶ 진행" and bp.y < 300.0, "(z) idle: the top button reads ▶ 진행", "text=%s at %s" % [hud._button.text, bp])
 	await _tap(bp)
-	_check(GameState.mode == GameState.Mode.STAGE and hud._button.text == "중지 예약", "(z) tapping it starts the stage; it now reads 중지 예약", "mode=%d text=%s" % [GameState.mode, hud._button.text])
+	_check(GameState.mode == GameState.Mode.STAGE and hud._button.text == "■ 중지", "(z) tapping it starts the stage; it now reads ■ 중지", "mode=%d text=%s" % [GameState.mode, hud._button.text])
 	await _tap(bp)
-	_check(GameState.stop_requested and hud._button.text == "예약 취소", "(z) tapping again books the stop; it reads 예약 취소", "text=%s" % hud._button.text)
-	await _tap(bp)
-	_check(not GameState.stop_requested and hud._button.text == "중지 예약", "(z) and again cancels the booking", "text=%s" % hud._button.text)
+	_check(GameState.mode == GameState.Mode.IDLE and GameState.stage == st0 and hud._button.text == "▶ 진행", "(z) tapping again stops at once: idle, same stage, reads ▶ 진행", "mode=%d stage=%d text=%s" % [GameState.mode, GameState.stage, hud._button.text])
+	# 연속 진행 체크박스: 진행 버튼 오른쪽, 탭 56px 이상, 탭하면 토글(테스트는 저장 안 함), 720 안에 들어간다
+	var cr: Rect2 = hud._auto.get_global_rect()
+	_check(cr.position.x >= hud._button.get_global_rect().end.x and cr.size.x >= 56.0 and cr.size.y >= 56.0 and cr.end.x <= 720.0 and hud._fever.get_global_rect().end.x <= hud._button.get_global_rect().position.x,
+		"(z) header row: fever, 진행, then the 연속 진행 checkbox, all inside 720 px, tap target >= 56", "auto=%s button=%s" % [cr, hud._button.get_global_rect()])
+	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) the checkbox starts checked")
+	await _tap(cr.get_center())
+	_check(not GameState.auto_continue and not hud._auto.button_pressed, "(z) tapping the checkbox unchecks it")
+	await _tap(cr.get_center())
+	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) and checks it again")
 
 
 ## 하단 탭 바 탭 id의 가운데(화면 좌표).

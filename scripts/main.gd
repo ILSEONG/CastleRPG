@@ -128,6 +128,7 @@ func _build_world() -> void:
 	if rebuilds == 0 and _auto_stage_requested():
 		Economy.save_path = ""  # 개발 실행은 실제 저장 파일을 건드리지 않는다
 		Fever.save_path = ""
+		GameState.auto_continue = true  # 저장된 체크 해제 상태와 무관하게 E2E는 연속
 		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
 

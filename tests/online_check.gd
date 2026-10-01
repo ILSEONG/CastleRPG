@@ -219,7 +219,7 @@ func _phase1(state_path: String) -> void:
 	for i in 4:
 		Economy.add_kill("grunt", 1)
 	GameState.start_stage()
-	GameState.stop_after_stage()  # 결과 뒤 대기 모드로(스포너는 멈춰 있다)
+	GameState.auto_continue = false  # 결과 뒤 대기 모드로(스포너는 멈춰 있다)
 	GameState.on_all_monsters_dead()
 	var saved := await _wait_until(func(): return Economy.server_stage == 2 and Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
 	var t_clear := Time.get_ticks_msec()  # 서버가 클리어 1을 반영한 뒤(last_stage_clear 이후)
@@ -602,10 +602,10 @@ func _check_band_layout(tag: String) -> void:
 		"band=%s chips=%s button=%s bar=%s toast=%s" % [band, chips, button, bar, toast])
 
 
-## 대기 → 스테이지 → 전멸(클리어) → 결과 뒤 대기(중지 예약). 스포너는 멈춰 있다.
+## 대기 → 스테이지 → 전멸(클리어) → 결과 뒤 대기(연속 진행 끔). 스포너는 멈춰 있다.
 func _clear_now() -> void:
 	GameState.start_stage()
-	GameState.stop_after_stage()
+	GameState.auto_continue = false
 	GameState.on_all_monsters_dead()
 
 
