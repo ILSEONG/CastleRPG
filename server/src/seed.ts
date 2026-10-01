@@ -56,6 +56,12 @@ export const TABLES: TableSpec[] = [
     sql: { id: 'text', name: 'text', max_level: 'integer', wood: 'integer', stone: 'integer', food: 'integer', base_sec: 'real', req1: 'text', req2: 'text' },
   },
   {
+    // 개정 13: 병종 표(1티어 기준). building = 그 병종을 만드는 건물
+    name: 'soldiers', table: 'soldier_defs', file: 'soldiers.csv', ordered: true,
+    cols: { id: 'key', name: 'text', building: 'text', hp: 'num', atk: 'num', range: 'num', atk_interval: 'num', speed: 'num', aggro: 'num', model: 'text' },
+    sql: { id: 'text', name: 'text', building: 'text', ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']), model: 'text' },
+  },
+  {
     name: 'config', table: 'game_config', file: 'config.csv', ordered: false,
     cols: { key: 'key', value: 'text' },
     sql: { key: 'text', value: 'text' },
@@ -71,9 +77,12 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
 export const CONFIG_LIST = ['starter_heroes']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
-export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'barracks_hp_per_level', 'lab_atk_per_level',
+export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'lab_atk_per_level',
   'tavern_ssr_per_level', 'tavern_sr_per_level']
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
+// 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수는 1 이상 정수, 나머지는 0보다 크다
+export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'soldier_prod_sec', 'soldier_prod_level_factor', 'soldier_merge_count']
+const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
@@ -166,10 +175,10 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
   }
   if (spec.name === 'config') {
     const byKey = new Map(rows.map((r) => [String(r.key), r]))
-    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_TIERS]) {
+    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_SOLDIER_NUM, ...CONFIG_TIERS]) {
       const r = byKey.get(k)
       if (!r) err(0, 'key', `missing key '${k}'`)
-      else if ((CONFIG_NUM.includes(k) || CONFIG_BUILDING_NUM.includes(k)) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
+      else if ((CONFIG_NUM.includes(k) || CONFIG_BUILDING_NUM.includes(k) || CONFIG_SOLDIER_NUM.includes(k)) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
       else if (CONFIG_LIST.includes(k) && String(r.value).split('|').some((p) => p.trim() === '')) err(Number(r._line), 'value', `empty list item: '${r.value}'`)
       else if (CONFIG_TIERS.includes(k) && !parseTiers(String(r.value))?.every(([, v]) => Number.isInteger(v) && v >= 1)) {
         err(Number(r._line), 'value', `not a tier table 'level:value|…' (levels from 1 ascending, values integers >= 1): '${r.value}'`)
@@ -239,6 +248,31 @@ function checkBuildings(t: Tables, errors: string[]) {
   }
 }
 
+// 병종 표(개정 13, 앱 GameData와 같은 규칙): 건물은 건물 표에 있고 병종마다 다르다(건물 하나 = 병종 하나), hp·range·atk_interval·speed > 0,
+// atk·aggro ≥ 0. 병사 설정: 최대 티어·합성 수는 1 이상 정수, 티어 배율·한 마리 시간·레벨 계수는 0보다 크다.
+function checkSoldiers(t: Tables, errors: string[]) {
+  const rows = t.soldiers ?? []
+  const err = (line: unknown, col: string, why: string) => errors.push(`soldiers.csv line ${line} column '${col}': ${why}`)
+  const buildings = new Set((t.buildings ?? []).map((b) => String(b.id)))
+  const seen = new Set<string>()
+  for (const s of rows) {
+    if (t.buildings && !buildings.has(String(s.building))) err(s._line, 'building', `building '${s.building}' is not in buildings.csv`)
+    else if (seen.has(String(s.building))) err(s._line, 'building', `building '${s.building}' already makes another soldier`)
+    seen.add(String(s.building))
+    for (const c of ['hp', 'range', 'atk_interval', 'speed']) if (!(Number(s[c]) > 0)) err(s._line, c, `must be greater than 0: ${s[c]}`)
+    for (const c of ['atk', 'aggro']) if (!(Number(s[c]) >= 0)) err(s._line, c, `must be 0 or more: ${s[c]}`)
+  }
+  const byKey = new Map((t.config ?? []).map((r) => [String(r.key), r]))
+  for (const k of CONFIG_SOLDIER_NUM) {
+    const r = byKey.get(k)
+    const v = Number(r?.value)
+    const int = SOLDIER_INT_KEYS.includes(k)
+    if (r && isNum(String(r.value)) && !(int ? Number.isInteger(v) && v >= 1 : v > 0)) {
+      errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${int ? 'an integer of at least 1' : 'greater than 0'}: '${r.value}'`)
+    }
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -262,6 +296,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   }
   if (out.config) checkGacha(out.config, errors)
   checkBuildings(out, errors)
+  checkSoldiers(out, errors)
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {

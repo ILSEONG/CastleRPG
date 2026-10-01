@@ -282,6 +282,7 @@ func _phase1(state_path: String) -> void:
 	await _levelup_online()
 
 	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
+	await _soldiers_online(state_path)
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
@@ -475,6 +476,7 @@ func _phase2(state_path: String) -> void:
 	await _frames(2)
 	_check_band_layout("(p2)")
 	_buildings_restored(state_path)
+	_soldiers_restored(state_path)
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
@@ -638,8 +640,8 @@ func _buildings_online(state_path: String) -> void:
 	var cost := Economy.upgrade_cost("keep")
 	var p0 := await _request("GET", "/v1/player")
 	_check(Economy.building_level("keep") == 1 and Economy.build.is_empty() and Economy.upgrade_block("keep", Economy.time_now()) == "" and Economy.population() == 6
-		and p0.get("player", {}).get("population") == 6 and p0.get("player", {}).get("buildings", {}).size() == 9,
-		"(r) precondition: all 9 buildings from the server at Lv 1, builder idle, population 6", "keep=%d build=%s" % [Economy.building_level("keep"), Economy.build])
+		and p0.get("player", {}).get("population") == 6 and p0.get("player", {}).get("buildings", {}).size() == 11,
+		"(r) precondition: all 11 buildings from the server at Lv 1, builder idle, population 6", "keep=%d build=%s" % [Economy.building_level("keep"), Economy.build])
 	var u0: int = Net.requested.get("/v1/building/upgrade", 0)
 	var sent := Economy.upgrade("keep", Economy.time_now())
 	var again := Economy.upgrade("keep", Economy.time_now())  # 응답 전 재탭
@@ -718,3 +720,92 @@ func _buildings_restored(state_path: String) -> void:
 		and GameState.castle_hp_max == 1200.0 and GameState.gate_hp_max == 400.0 * Economy.building_level("gate"),
 		"(p2) reconnecting restores every building level and the builder (gate %s), population, castle/gate HP" % ["done by the server" if gate_done else "still building"],
 		"levels=%s build=%s saved=%s" % [Economy.levels, Economy.build, saved])
+
+
+## (v) 개정 13 서버 병사: test/age(병사 건물 생산 시각도 당긴다)로 3시간 앞당기면 서버가 병종마다 1마리씩 만들고 앱은 생산 알림(soldier_made·"보병 +1").
+##     합성: 요청 한 번(응답 전 재탭 무시) → 1티어 −5·2티어 +1. 재전송 금지: 서버가 사라진 채 합성 → 버리고 알림, 다시 연결돼도 두 번째 요청 없음.
+##     서버 거부(409 max_tier) → 알림. 배치: 서버가 저장하고(응답 soldier_deploy) 월드에 그 병사들이 선다. 인구를 넘는 배치는 400.
+##     끝 상태를 <state>.soldiers에 쓴다 — phase 2가 재접속 복원을 본다.
+func _soldiers_online(state_path: String) -> void:
+	var made := []
+	var notices := []
+	var on_made := func(t, n): made.append([t, n])
+	var on_notice := func(t): notices.append(t)
+	Economy.soldier_made.connect(on_made)
+	Economy.notice.connect(on_notice)
+	var c0 := Economy.soldier_counts()
+	await _request("POST", "/v1/test/age", {"minutes": 180})
+	var c1 := Economy.soldier_counts()
+	var plus_one := true
+	for s in GameData.soldiers():
+		var k: String = s.id + ":1"
+		plus_one = plus_one and int(c1.get(k, 0)) == int(c0.get(k, 0)) + 1
+	_check(plus_one and made == [["infantry", 1], ["archer", 1], ["cavalry", 1]] and notices.has("보병 +1") and int(c1.get("infantry:1", 0)) >= 6,
+		"(v) test/age 3 h -> the server makes one soldier per soldier building, the app announces '보병 +1'", "before=%s after=%s made=%s" % [c0, c1, made])
+	# 합성: 한 번만 보낸다(응답 전 재탭은 무시)
+	var m0: int = Net.requested.get("/v1/soldiers/merge", 0)
+	var inf1 := int(Economy.soldiers.get("infantry:1", 0))
+	var inf2 := int(Economy.soldiers.get("infantry:2", 0))
+	var sent := Economy.merge_soldiers("infantry", 1)
+	var again := Economy.merge_soldiers("infantry", 1)
+	_check(sent and not again and Economy.merge_block("infantry", 1) == "waiting" and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 1,
+		"(v) one merge request; a second tap before the reply is ignored", "requests=%d" % [Net.requested.get("/v1/soldiers/merge", 0) - m0])
+	await _wait_until(func(): return not Economy._waiting.has("merge"), 15.0)
+	_check(int(Economy.soldiers.get("infantry:1", 0)) == inf1 - 5 and int(Economy.soldiers.get("infantry:2", 0)) == inf2 + 1,
+		"(v) the server merges 5 tier-1 infantry into 1 tier-2", "infantry:1 %d -> %d, infantry:2 %d -> %d" % [inf1, Economy.soldiers.get("infantry:1", 0), inf2, Economy.soldiers.get("infantry:2", 0)])
+	# 재전송 금지
+	var live := Net.api_base
+	var w0 := _warned("not resending")
+	var arc1 := int(Economy.soldiers.get("archer:1", 0))
+	Net.api_base = DEAD_API
+	var sent2 := Economy.merge_soldiers("archer", 1)
+	var dropped := await _wait_until(func(): return not Net.up and not Economy._waiting.has("merge"), 20.0)
+	_check(sent2 and dropped and notices.has(Economy.MERGE_FAIL_TEXT) and _warned("not resending") == w0 + 1,
+		"(v) a merge that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent2, dropped, notices])
+	Net.api_base = live
+	var back := await _wait_until(func(): return Net.up, 40.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	await _frames(3)
+	_check(back and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 2 and int(Economy.soldiers.get("archer:1", 0)) == arc1,
+		"(v) after reconnecting the merge is not resent (the archers are unchanged)", "requests=%d archers %d -> %s" % [Net.requested.get("/v1/soldiers/merge", 0) - m0, arc1, Economy.soldiers.get("archer:1")])
+	# 서버 거부: 최대 티어 — 화면이 막는 요청을 직접 보낸다
+	Economy._merge_online("cavalry", 5)
+	await _wait_until(func(): return not Economy._waiting.has("merge"), 15.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	_check(notices.has(Economy.SOLDIER_TEXT.max_tier) and Net.up, "(v) a refused merge (409 max_tier) shows the reason", "notices=%s" % [notices])
+	# 배치: 서버 저장 → 월드에 선다. 인구(6)를 넘는 배치는 400
+	var d := {"infantry:2": 1, "archer:1": 3, "cavalry:1": 2}
+	var d0: int = Net.requested.get("/v1/soldiers/deploy", 0)
+	var ok := Economy.set_soldier_deploy(d)
+	await _wait_until(func(): return Economy._pending_soldier_deploy == null, 15.0)
+	var p := await _request("GET", "/v1/player")
+	var server_d = p.get("player", {}).get("soldier_deploy", {})
+	var stored: bool = server_d is Dictionary and server_d.size() == 3 and d.keys().all(func(k): return int(server_d.get(k, -1)) == d[k])
+	await _frames(2)
+	_check(ok and Net.requested.get("/v1/soldiers/deploy", 0) == d0 + 1 and stored and Economy.soldier_deploy() == d and _main.soldiers.size() == 6 and GameState.mode == GameState.Mode.IDLE,
+		"(v) the soldier deploy is saved on the server and the six soldiers stand in front of the keep", "server=%s app=%s spawned=%d" % [server_d, Economy.soldier_deploy(), _main.soldiers.size()])
+	var r0 := _warned("server rejected")
+	await _request("POST", "/v1/soldiers/deploy", {"deploy": {"archer:1": 4, "cavalry:1": 3}})
+	_check(_warned("server rejected") == r0 + 1 and Economy.soldier_deploy() == d, "(v) a deploy above the population is refused (400)", "warnings=%d" % [_warned("server rejected") - r0])
+	Economy.soldier_made.disconnect(on_made)
+	Economy.notice.disconnect(on_notice)
+	var f := FileAccess.open(state_path + ".soldiers", FileAccess.WRITE)
+	f.store_string(JSON.stringify({"soldiers": Economy.soldiers, "deploy": Economy.soldier_deployed}))
+	f.close()
+
+
+## (p2) 재접속하면 병사 보유·배치가 그대로이고 월드에 그 병사들이 선다.
+func _soldiers_restored(state_path: String) -> void:
+	var json := JSON.new()
+	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".soldiers")) == OK and json.data is Dictionary
+	_check(ok, "(p2) phase 1 soldiers state file", state_path)
+	if not ok:
+		return
+	var saved: Dictionary = json.data
+	var same: bool = Economy.soldiers.size() == saved.soldiers.size() and Economy.soldier_deployed.size() == saved.deploy.size()
+	for k in saved.soldiers:
+		same = same and int(Economy.soldiers.get(k, 0)) == int(saved.soldiers[k])
+	for k in saved.deploy:
+		same = same and int(Economy.soldier_deployed.get(k, 0)) == int(saved.deploy[k])
+	_check(same and _main.soldiers.size() == 6, "(p2) reconnecting restores the soldiers and their deploy, and the world spawns them",
+		"soldiers=%s deploy=%s saved=%s spawned=%d" % [Economy.soldiers, Economy.soldier_deployed, saved, _main.soldiers.size()])

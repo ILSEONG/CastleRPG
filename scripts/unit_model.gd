@@ -7,6 +7,7 @@ extends Node3D
 
 const Art := preload("res://scripts/art.gd")
 
+var manual := false  # true면 애니메이션을 스스로 돌리지 않는다 — 쓰는 쪽이 advance(초)로 돌린다(병사 화면 밖 간헐 갱신, 개정 13). add_child 전에
 var _spec: Dictionary = {}
 var _anim: AnimationPlayer
 var _current := ""
@@ -32,6 +33,8 @@ func _ready() -> void:
 		skel.add_child(slot)
 		slot.add_child(Art.instance(_spec.weapon))
 	_anim = model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	if manual:
+		_anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	for anim_name in [_spec.anims.idle, _spec.anims.walk]:
 		_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR  # 공유 리소스라 한 번 바꾸면 전부 적용
 	_anim.animation_finished.connect(_on_finished)
@@ -66,6 +69,11 @@ func play_death() -> void:
 func reset_pose() -> void:
 	_current = ""
 	play_idle()
+
+
+## manual일 때 애니메이션을 dt초 돌린다.
+func advance(dt: float) -> void:
+	_anim.advance(dt)
 
 
 ## 수평 방향 dir 쪽을 본다.

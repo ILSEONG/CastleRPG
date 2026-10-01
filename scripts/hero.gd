@@ -66,8 +66,8 @@ var _blast_cd := 0.0
 
 
 ## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default).
-## copies = 보유 수(별), level = 영웅 레벨. HP·공격 = 기본 × 레벨 배율 × 별 배율 × 막사·연구소 보너스(GameData.hero_stats,
-## 건물 레벨은 GameState.building_levels — 개정 12).
+## copies = 보유 수(별), level = 영웅 레벨. HP·공격 = 기본 × 레벨 배율 × 별 배율(공격은 × 연구소 보너스 — GameData.hero_stats,
+## 건물 레벨은 GameState.building_levels, 개정 12·13).
 func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1, level := 1) -> void:
 	index = p_index
 	def = p_def

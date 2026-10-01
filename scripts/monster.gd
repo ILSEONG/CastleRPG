@@ -1,5 +1,5 @@
 extends Node3D
-## 괴물(근접). 자기 위치에서 aggro 안·같은 영역(성 안/밖)의 지상 영웅을 쫓아가 치고, 없으면 진로(_advance)로 돌아가 성문·성채를 친다.
+## 괴물(근접). 자기 위치에서 aggro 안·같은 영역(성 안/밖)의 지상 영웅(성 안이면 병사도)을 쫓아가 치고, 없으면 진로(_advance)로 돌아가 성문·성채를 친다.
 ## 성벽 위 영웅은 표적으로 삼지 않는다.
 ## 영웅 스킬 상태: slow(이동 −%), stun(이동·공격 정지), poison(초당 피해). 영웅을 칠 때 자신을 출처로 넘긴다(thorns 반사 대상).
 ## 공격은 시작(_swing) 때 대상을 고정하고, 피해는 모션의 타격 순간(_release, 개정 12-2 §3)에 들어간다.
@@ -213,20 +213,21 @@ func is_stunned() -> bool:
 	return _stun_t > 0.0
 
 
-## 표적: 자기 위치에서 aggro 안, 같은 영역의 살아 있는 지상 영웅 중 가장 가까운 것.
+## 표적: 자기 위치에서 aggro 안, 같은 영역의 살아 있는 지상 영웅 중 가장 가까운 것. 성 안에서는 병사도(개정 13 — 병사는 늘 성 안).
 func _find_hero():
 	var here_inside := Formation.is_inside(castle.half, global_position)
 	var best = null
 	var best_d: float = float(_stats.aggro)
-	for h in get_tree().get_nodes_in_group("heroes"):
-		if not h.is_alive() or h.is_on_wall():
-			continue
-		if Formation.is_inside(castle.half, h.global_position) != here_inside:
-			continue
-		var d := Formation.flat_distance(global_position, h.global_position)
-		if d <= best_d:
-			best_d = d
-			best = h
+	for group in (["heroes", "soldiers"] if here_inside else ["heroes"]):
+		for h in get_tree().get_nodes_in_group(group):
+			if not h.is_alive() or h.is_on_wall():
+				continue
+			if Formation.is_inside(castle.half, h.global_position) != here_inside:
+				continue
+			var d := Formation.flat_distance(global_position, h.global_position)
+			if d <= best_d:
+				best_d = d
+				best = h
 	return best
 
 

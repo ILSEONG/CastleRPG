@@ -3,7 +3,8 @@ extends Node2D
 ## 유닛마다 노드를 두지 않아 몬스터가 많아도 가볍다. HUD(CanvasLayer)보다 아래 캔버스에 그려진다.
 ## 바는 모서리를 깎은 8각형(배경 + 채움)이고, 프레임의 모든 바를 삼각형 배열 하나(canvas_item_add_triangle_array 한 번)로 그린다.
 ## 정점·색·인덱스 배열은 멤버로 재사용한다(유닛마다 배열을 만들지 않는다). 인덱스는 8각형 칸마다 고정된 부채꼴이라 늘어날 때만 채운다.
-## 유닛 인터페이스: is_alive(), hp_ratio(), bar_height(), bar_scale(). 영웅은 selected·def(이름표)도.
+## 유닛 인터페이스: is_alive(), hp_ratio(), bar_height(), bar_scale(). 영웅은 selected·def(이름표)도. 병사(개정 13)는 tier도 —
+## 하늘색 바 위에 각진 V 갈매기 tier개(같은 삼각형 배열, 칸 하나 = 6점 부채꼴을 8점으로 채움).
 
 const BAR_W := 34.0           # 논리 px(720 폭 기준). 줌과 무관
 const BAR_H := 5.0
@@ -13,6 +14,12 @@ const SCREEN_MARGIN := 40.0   # 화면 밖 이만큼까지는 그린다(가장�
 const HERO_COLOR := Color(0.35, 0.85, 0.40)
 const MONSTER_COLOR := Color(0.92, 0.28, 0.22)
 const BACK := Color(0, 0, 0, 0.55)
+const CHEVRON_W := 12.0       # 갈매기 하나 폭·높이·두께·간격(px)
+const CHEVRON_H := 5.0
+const CHEVRON_T := 2.2
+const CHEVRON_GAP := 4.0
+const CHEVRON_COLOR := Color(1.0, 0.84, 0.3)
+const CHEVRON_EDGE := Color(0.12, 0.10, 0.14)
 const NAME_SIZE := 20
 const NAME_OUTLINE := Color(0.12, 0.10, 0.14)
 const Art := preload("res://scripts/art.gd")
@@ -38,6 +45,7 @@ func _draw() -> void:
 	_n = 0
 	_add_group("heroes", HERO_COLOR, view)
 	_add_group("monsters", MONSTER_COLOR, view)
+	_add_group("soldiers", Art.SOLDIER_BAR, view)
 	if _flush():
 		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), _idx, _pts, _cols)
 	_draw_name_tags(view)
@@ -57,6 +65,12 @@ func _add_group(group: String, color: Color, view: Rect2) -> void:
 		var fw := w * clampf(u.hp_ratio(), 0.0, 1.0)
 		if fw > 0.5:
 			add_octagon(top_left, Vector2(fw, BAR_H), CHAMFER, color)
+		var tier = u.get("tier")
+		if tier is int:  # 병사: 바 위에 아래부터 쌓는다(테두리 = 같은 모양을 크게 먼저)
+			for i in tier:
+				var tip := p + Vector2(0.0, -BAR_H / 2.0 - BORDER - 3.0 - i * (CHEVRON_H + CHEVRON_GAP))
+				add_chevron(tip + Vector2(0, 1.0), CHEVRON_W + 2.0, CHEVRON_H + 2.0, CHEVRON_T + 2.0, CHEVRON_EDGE)
+				add_chevron(tip, CHEVRON_W, CHEVRON_H, CHEVRON_T, CHEVRON_COLOR)
 
 
 ## 8각형 하나(LowpolyBox.octagon과 같은 점 순서: 윗변 왼쪽부터 시계 방향)를 이번 프레임 배열에 더한다. 배열은 모자랄 때만 늘린다.
@@ -81,6 +95,21 @@ func add_octagon(pos: Vector2, size: Vector2, chamfer: float, color: Color) -> v
 	for i in 8:
 		_cols[b + i] = color
 	_n += 1
+
+
+## 각진 V 갈매기 하나(아래 꼭짓점 tip, 폭 w, 높이 h, 팔 두께 t). 6점 [꼭짓점, 왼쪽 위 바깥·안, 안쪽 꼭짓점, 오른쪽 위 안·바깥]을
+## 꼭짓점 부채꼴로 나누면 두 팔이 정확히 덮인다 — 8각형 칸(8점)에 넣고 남는 두 점은 마지막 점으로 채워 넓이 0 삼각형이 된다.
+func add_chevron(tip: Vector2, w: float, h: float, t: float, color: Color) -> void:
+	add_octagon(Vector2.ZERO, Vector2.ONE, 0.0, color)  # 칸·색을 잡고 점은 아래에서 덮어쓴다
+	var b := (_n - 1) * 8
+	var hw := w / 2.0
+	_pts[b] = tip
+	_pts[b + 1] = tip + Vector2(-hw, -h)
+	_pts[b + 2] = tip + Vector2(-hw + t, -h)
+	_pts[b + 3] = tip + Vector2(0, -t)
+	_pts[b + 4] = tip + Vector2(hw - t, -h)
+	for i in range(5, 8):
+		_pts[b + i] = tip + Vector2(hw, -h)
 
 
 ## 이번 프레임 배열을 그릴 길이로 맞춘다(정점 8개·인덱스 18개 × 8각형 수). 그릴 게 없으면 false.

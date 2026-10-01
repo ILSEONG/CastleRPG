@@ -19,6 +19,23 @@ export interface Setup {
 
 export const randomDevice = () => `test-${randomBytes(12).toString('hex')}`
 
+// 처음 두 번의 플레이어 읽기를 서로 기다리게 한다 — 두 요청이 반드시 같은 version을 읽은 뒤 쓰기를 겨룬다(setup({wrapQuery: b.wrap})).
+export function barrier() {
+  let armed = false
+  let arrived = 0
+  let release = () => {}
+  const both = new Promise<void>((r) => (release = r))
+  const wrap = (q: Query): Query => async (text, params) => {
+    if (armed && text.includes('from player_state s where') && arrived < 2) {
+      arrived++
+      if (arrived === 2) release()
+      await both
+    }
+    return q(text, params)
+  }
+  return { wrap, arm: () => (armed = true), arrived: () => arrived }
+}
+
 export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)

@@ -154,7 +154,7 @@ export const BUILD_COST_GROWTH = 1.35
 export const BUILD_TIME_GROWTH = 1.5
 export const KEEP = 'keep' // 다른 건물의 상한·영웅 슬롯·성 HP
 export const GATE = 'gate' // 성문 HP
-export const HOUSES = 'houses' // 인구(병사 배치 상한 — 병사는 다음 개정)
+export const HOUSES = 'houses' // 인구(병사 배치 상한, 개정 13)
 export const TAVERN = 'tavern' // 모집 확률
 
 export interface BuildingDef {
@@ -208,9 +208,56 @@ export function tierValue(config: Config, key: string, level: number): number {
   return v
 }
 
-// 인구 = pop_base + pop_per_house × (민가 − 1)(사용자 지시 2026-10-01: 민가는 축적 상한 대신 인구. 병사 배치 상한 — 병사는 다음 개정).
+// 인구 = pop_base + pop_per_house × (민가 − 1)(사용자 지시 2026-10-01: 민가는 축적 상한 대신 인구. 병사 배치 상한).
 export const population = (config: Config, housesLevel: number) =>
   cfgNum(config, 'pop_base') + cfgNum(config, 'pop_per_house') * (Math.max(housesLevel, 1) - 1)
+
+// --- 병사 (개정 13) — 앱 GameData.soldier_unit_sec·Economy.prod_step·auto_deploy와 같은 식 ---
+
+export interface SoldierDef {
+  id: string
+  name: string
+  building: string
+  hp: number
+  atk: number
+  range: number
+  atk_interval: number
+  speed: number
+  aggro: number
+  model: string
+}
+
+// 보유·배치 키 "병종:티어"
+export const soldierKey = (type: string, tier: number) => `${type}:${tier}`
+export function parseSoldierKey(key: string, defs: SoldierDef[], maxTier: number): { type: string; tier: number } | null {
+  const m = /^([a-z_]+):([1-9]\d*)$/.exec(key)
+  if (!m || !defs.some((d) => d.id === m[1]) || Number(m[2]) > maxTier) return null
+  return { type: m[1], tier: Number(m[2]) }
+}
+
+// 한 마리 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 앱과 같은 반올림 없는 값).
+export const soldierUnitSec = (config: Config, level: number) =>
+  grown(cfgNum(config, 'soldier_prod_sec'), cfgNum(config, 'soldier_prod_level_factor'), Math.max(level, 1) - 1)
+
+// 게으른 생산 한 번: 지난 시간(축적 상한 capMin분까지) / 한 마리 시간만큼 만들고, 남은 시간은 유지(상한이면 지금으로).
+// 시계가 마지막 생산보다 뒤로 갔으면 0마리, 지금부터 다시. 아무것도 안 바뀌면 changed = false.
+export function soldierProdStep(last: number, now: number, unitSec: number, capMin: number) {
+  if (now < last) return { count: 0, last: now, changed: true }
+  const elapsed = Math.min(now - last, capMin * 60)
+  const count = Math.floor(elapsed / unitSec)
+  if (count === 0) return { count: 0, last, changed: false }
+  return { count, last: now - last >= capMin * 60 ? now : last + count * unitSec, changed: true }
+}
+
+// 합성 뒤 배치 자르기: 배치 수를 보유 수로(0이면 키를 뺀다).
+export function trimDeploy(deploy: Record<string, number>, owned: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [k, n] of Object.entries(deploy)) {
+    const v = Math.min(n, owned[k] ?? 0)
+    if (v > 0) out[k] = v
+  }
+  return out
+}
 
 // 모집 확률(주점): SSR + tavern_ssr_per_level × (L − 1), SR + tavern_sr_per_level × (L − 1). R은 나머지.
 export function gachaRates(config: Config, tavernLevel: number) {

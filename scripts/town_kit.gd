@@ -134,6 +134,8 @@ static func building(id: String) -> ArrayMesh:
 		"lumber": _lumber(k)
 		"quarry": _quarry(k)
 		"farm": _farm(k)
+		"archery": _archery(k)
+		"stable": _stable(k)
 		_: push_error("unknown building %s" % id)
 	return k.commit()
 
@@ -163,8 +165,14 @@ static func _keep(k) -> void:
 	k.box(Vector3(1.5, 6.0, 0), Vector3(0.1, 0.8, 0.4), WINDOW)
 
 
-## 막사: 돌 기단 위 긴 목조 막사 + 빨간 박공지붕, 문·창, 앞마당 무기 걸이(창 3자루), 깃대(파란 깃발).
+## 보병 막사: 돌 기단 위 긴 목조 막사 + 빨간 박공지붕, 문·창, 앞마당 무기 걸이(창 3자루)·방패 걸이(직사각 방패 2, 개정 13), 깃대(파란 깃발).
 static func _barracks(k) -> void:
+	for x in [-1.55, -0.45]:  # 방패 걸이: 기둥 둘 + 가로대, 빨간 방패 둘(가운데 쇠 장식)
+		k.box(Vector3(x, 0, 1.9), Vector3(0.12, 1.0, 0.12), WOOD)
+	k.box(Vector3(-1.0, 0.85, 1.9), Vector3(1.25, 0.1, 0.12), WOOD)
+	for x in [-1.25, -0.75]:
+		k.box(Vector3(x, 0.3, 2.0), Vector3(0.38, 0.55, 0.06), ROOF_RED)
+		k.box(Vector3(x, 0.52, 2.04), Vector3(0.1, 0.1, 0.04), METAL)
 	k.box(Vector3(0, 0, -0.5), Vector3(5.0, 0.35, 3.3), STONE_DARK)
 	_house(k, Vector3(0, 0.35, -0.5), Vector3(4.6, 2.1, 3.0), 1.8, WOOD, ROOF_RED)
 	k.box(Vector3(0, 0.35, 1.0), Vector3(1.0, 1.6, 0.12), WOOD_DARK)
@@ -293,6 +301,74 @@ static func _farm(k) -> void:
 	k.box(Vector3(0, 0, 1.45), Vector3(5.2, 0.06, 2.2), SOIL)
 	for i in 4:
 		k.box(Vector3(0, 0.06, 0.62 + i * 0.55), Vector3(4.8, 0.22, 0.32), CROP if i % 2 == 0 else LEAF)
+
+
+## 궁병 훈련소(개정 13): 지붕 있는 사격대(나무 바닥·기둥 넷·초록 박공지붕·사격 난간), 과녁 2개(흰·빨강 동심원 원판, 카메라 쪽을 봄), 화살통.
+static func _archery(k) -> void:
+	var c := Vector3(-1.3, 0, -0.8)
+	k.box(c, Vector3(1.9, 0.15, 2.7), WOOD_DARK)
+	for p in [Vector3(-0.9, 0, -1.3), Vector3(0.9, 0, -1.3), Vector3(-0.9, 0, 1.3), Vector3(0.9, 0, 1.3)]:
+		k.box(c + p, Vector3(0.2, 2.0, 0.2), WOOD)
+	k.xform = Transform3D(Basis(Vector3.UP, PI / 2.0), c)  # 용마루가 Z 방향
+	k.gable(Vector3(0, 2.0, 0), Vector3(2.6, 0, 1.8), 0.9, ROOF_GREEN)
+	k.xform = Transform3D.IDENTITY
+	k.box(c + Vector3(0.9, 0, 0), Vector3(0.12, 0.9, 2.4), WOOD)  # 사격 난간(과녁 쪽)
+	for t in [Vector3(1.5, 0, -1.5), Vector3(1.6, 0, 1.0)]:
+		var yaw := PI / 4.0
+		var side := Basis(Vector3.UP, yaw) * Vector3.RIGHT
+		var back := -(Basis(Vector3.UP, yaw) * Vector3.BACK) * 0.12
+		for s in [-1.0, 1.0]:
+			k.box(t + side * s * 0.35 + back, Vector3(0.1, 1.15, 0.1), WOOD_DARK)
+		var front := Basis(Vector3.UP, yaw) * Vector3.BACK
+		for i in 4:  # 바깥부터 흰·빨강 번갈아, 안쪽 원판이 조금씩 앞으로
+			_disc(k, t + Vector3(0, 1.1, 0) + front * (0.02 * i), yaw, 0.6 - 0.15 * i, PLASTER if i % 2 == 0 else ROOF_RED)
+	var q := Vector3(-0.1, 0, 1.1)  # 화살통 + 화살 셋(깃 흰색)
+	k.prism_n(q, 6, 0.16, 0.13, 0.6, WOOD_DARK)
+	for d in [Vector3(-0.05, 0, 0.03), Vector3(0.05, 0, -0.02), Vector3(0.0, 0, 0.06)]:
+		k.box(q + d + Vector3(0, 0.6, 0), Vector3(0.03, 0.3, 0.03), WOOD)
+		k.box(q + d + Vector3(0, 0.82, 0), Vector3(0.06, 0.1, 0.02), PLASTER)
+
+
+## 기병 마구간(개정 13): 긴 마구간(빨간 박공지붕, 마구간 문 셋), 앞마당 울타리, 건초 더미, 여물통(물).
+static func _stable(k) -> void:
+	_house(k, Vector3(-0.1, 0, -1.2), Vector3(4.6, 1.8, 2.0), 1.2, WOOD, ROOF_RED)
+	for x in [-1.5, -0.1, 1.3]:
+		k.box(Vector3(x, 0, -0.18), Vector3(0.9, 1.0, 0.1), WOOD_DARK)  # 반쪽 문
+		k.box(Vector3(x, 1.05, -0.19), Vector3(0.9, 0.5, 0.08), WINDOW)  # 위는 열린 칸
+	for x in [-2.3, -1.4, -0.5, 0.4]:  # 울타리: 앞(z 2.2)과 왼쪽(x −2.3)
+		k.box(Vector3(x, 0, 2.2), Vector3(0.12, 0.8, 0.12), WOOD)
+	for z in [0.4, 1.3]:
+		k.box(Vector3(-2.3, 0, z), Vector3(0.12, 0.8, 0.12), WOOD)
+	for y in [0.35, 0.65]:
+		k.box(Vector3(-0.95, y, 2.2), Vector3(2.7, 0.08, 0.06), WOOD)
+		k.box(Vector3(-2.3, y, 1.3), Vector3(0.06, 0.08, 1.8), WOOD)
+	k.box(Vector3(1.7, 0, 1.6), Vector3(0.8, 0.5, 0.55), CROP)  # 건초 더미 둘
+	k.box(Vector3(1.75, 0.5, 1.6), Vector3(0.7, 0.45, 0.5), CROP.darkened(0.08))
+	k.box(Vector3(-0.6, 0, 1.3), Vector3(1.2, 0.35, 0.4), WOOD_DARK)  # 여물통 + 물
+	k.box(Vector3(-0.6, 0.3, 1.3), Vector3(1.0, 0.06, 0.28), ROOF_BLUE)
+
+
+## 말(개정 13 기병, 원점 = 발 사이 바닥, 머리 +Z): 몸통·목·머리·다리 넷·꼬리, 갈색(갈기·꼬리는 진하게). 기병 등 높이 = HORSE_BACK.
+const HORSE_BACK := 1.15
+const HORSE := Color(0.50, 0.33, 0.20)
+const HORSE_DARK := Color(0.28, 0.19, 0.13)
+
+
+static func horse() -> ArrayMesh:
+	var k = MeshKit.new()
+	for p in [Vector3(-0.17, 0, 0.45), Vector3(0.17, 0, 0.45), Vector3(-0.17, 0, -0.45), Vector3(0.17, 0, -0.45)]:
+		k.box(p, Vector3(0.14, 0.75, 0.14), HORSE)
+		k.box(p, Vector3(0.15, 0.12, 0.15), HORSE_DARK)  # 발굽
+	k.box(Vector3(0, 0.7, 0), Vector3(0.5, 0.45, 1.25), HORSE)  # 몸통(위 = HORSE_BACK)
+	k.xform = Transform3D(Basis(Vector3.RIGHT, 0.6), Vector3(0, 0.95, 0.5))  # 목: 앞(+Z)으로 기울어 올라간다(위 끝 ≈ (0, 1.57, 0.92))
+	k.box(Vector3.ZERO, Vector3(0.28, 0.75, 0.32), HORSE)
+	k.box(Vector3(0, 0, -0.17), Vector3(0.1, 0.8, 0.08), HORSE_DARK)  # 갈기(목 뒤)
+	k.xform = Transform3D(Basis(Vector3.RIGHT, 0.5), Vector3(0, 1.5, 0.95))  # 머리: 코가 아래 앞으로
+	k.box(Vector3(0, -0.15, 0.12), Vector3(0.24, 0.3, 0.5), HORSE)
+	k.xform = Transform3D(Basis(Vector3.RIGHT, 0.6), Vector3(0, 1.0, -0.62))  # 꼬리: 뒤로 늘어진다
+	k.box(Vector3(0, -0.5, 0), Vector3(0.12, 0.55, 0.1), HORSE_DARK)
+	k.xform = Transform3D.IDENTITY
+	return k.commit()
 
 
 ## 집 한 채: 벽 박스 + 박공지붕 + 벽색 박공 삼각형(지붕 끝이 테두리처럼 보인다). yaw = 용마루 방향(0: X). k.xform을 쓰고 되돌린다.

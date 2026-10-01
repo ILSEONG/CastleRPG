@@ -88,15 +88,19 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
     player: {
       gold_tenths: 0, gold: 0, res: { wood: 0, stone: 0, food: 0 }, stage: 1, keep_level: 1, gate_level: 1, kill_seq: 0,
       buildings: { // 개정 12: 건물 표의 모든 건물, last_collect는 자원 건물만
-        keep: { level: 1 }, gate: { level: 1 }, barracks: { level: 1 }, tavern: { level: 1 }, lab: { level: 1 }, houses: { level: 1 },
+        keep: { level: 1 }, gate: { level: 1 }, tavern: { level: 1 }, lab: { level: 1 }, houses: { level: 1 },
         lumber: { level: 1, last_collect: T0 + 0.25 },
         quarry: { level: 1, last_collect: T0 + 0.25 },
         farm: { level: 1, last_collect: T0 + 0.25 },
+        barracks: { level: 1, last_collect: T0 + 0.25 }, // 개정 13: 병사 건물은 마지막 생산 시각
+        archery: { level: 1, last_collect: T0 + 0.25 },
+        stable: { level: 1, last_collect: T0 + 0.25 },
       },
       build: null,
       population: 6, // 민가 1: pop_base
       heroes: { hans: { copies: 1, level: 1 }, ella: { copies: 1, level: 1 }, dorik: { copies: 1, level: 1 }, nina: { copies: 1, level: 1 } },
       deploy: ['hans', 'ella', 'dorik', 'nina'],
+      soldiers: {}, soldier_deploy: {}, // 개정 13
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })
@@ -387,8 +391,10 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 40) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9
-  assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm']) // 파일 순서
+  assert.equal(Object.keys(g.config).length, 44) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1
+  assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
+  assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
+  assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })
   assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 150, stone: 250, food: 0, base_sec: 45, req1: 'quarry', req2: null })
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
   assert.equal(g.config.hero_roster, undefined)

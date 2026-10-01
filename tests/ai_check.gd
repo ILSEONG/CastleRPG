@@ -378,6 +378,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _levelup_case()
 	await _idle_invincible_case()
 	await _attack_sync()
+	await _soldier_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -751,7 +752,8 @@ func _levelup_case() -> void:
 
 
 ## (B) 개정 12 건물(오프라인, 실제 완료 경로: 끝난 일꾼을 Economy._process가 완료 → building_done → main).
-## 막사 Lv 5 → 방치 모드라 영웅을 곧바로 다시 만들고 HP +12%, 연구소 Lv 3 → 공격 +6%(레벨·별 배율 위에 곱). 영웅이 그 공격으로 친다.
+## 막사 Lv 5 → 영웅은 그대로(개정 13: 막사는 영웅 HP를 올리지 않는다), 연구소 Lv 3 → 방치 모드라 영웅을 곧바로 다시 만들고 공격 +6%
+## (레벨·별 배율 위에 곱). 영웅이 그 공격으로 친다.
 ## 성문 Lv 2 → 성문 최대 HP 800. 성채가 단계(5)를 넘으면 "성이 넓어졌습니다!"와 함께 월드를 다시 만든다 — 새 main(성 내부 24타일, 슬롯 8,
 ## 성 HP 1800)이고 오토로드 상태(Economy 골드·자원·건물·영웅, GameState 스테이지)는 그대로. 월드가 바뀌므로 마지막 사례.
 func _building_cases() -> void:
@@ -767,8 +769,8 @@ func _building_cases() -> void:
 	var hp_ok := not live.is_empty()
 	for h in live:
 		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id]))
-		hp_ok = hp_ok and not before.has(h) and is_equal_approx(h.hp_max, base.hp * 1.12) and is_equal_approx(h.atk, base.atk) and is_equal_approx(h.hp, h.hp_max)
-	_check(Economy.building_level("barracks") == 5 and Economy.build.is_empty() and hp_ok, "(B) barracks Lv 5 done in idle: heroes rebuilt at once with HP x1.12",
+		hp_ok = hp_ok and before.has(h) and is_equal_approx(h.hp_max, base.hp) and is_equal_approx(h.atk, base.atk)
+	_check(Economy.building_level("barracks") == 5 and Economy.build.is_empty() and hp_ok, "(B) barracks Lv 5 done in idle: heroes are not rebuilt and keep their HP (rev 13: no barracks HP bonus)",
 		"barracks=%d heroes=%s" % [Economy.building_level("barracks"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
 	Economy.levels["lab"] = 2
 	Economy.build = {"id": "lab", "finish": Economy.time_now() - 1.0}
@@ -777,8 +779,8 @@ func _building_cases() -> void:
 	var atk_ok := not live.is_empty()
 	for h in live:
 		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id]))
-		atk_ok = atk_ok and is_equal_approx(h.hp_max, base.hp * 1.12) and is_equal_approx(h.atk, base.atk * 1.06)
-	_check(Economy.building_level("lab") == 3 and atk_ok, "(B) lab Lv 3 done: hero attack x1.06 (HP keeps the barracks bonus)",
+		atk_ok = atk_ok and not before.has(h) and is_equal_approx(h.hp_max, base.hp) and is_equal_approx(h.atk, base.atk * 1.06)
+	_check(Economy.building_level("lab") == 3 and atk_ok, "(B) lab Lv 3 done in idle: heroes rebuilt at once with attack x1.06 (HP unchanged)",
 		"lab=%d heroes=%s" % [Economy.building_level("lab"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
 	var hero = live[0]
 	for h in live:
@@ -1043,5 +1045,136 @@ func _attack_sync() -> void:
 	_check(absf(h._attacks - ran / 0.8) <= 1.0 and (hits == h._attacks or hits == h._attacks - 1) and is_equal_approx(_dmg(boss), hits * a),
 		"(A) DPS unchanged: one attack per interval over %.1f s, each one hit for atk" % ran, "attacks=%d hits=%d dmg=%.1f" % [h._attacks, hits, _dmg(boss)])
 	_remove_hero(h)
+	_clear_monsters()
+	await _frames(1)
+
+
+## (S) 개정 13 병사. 영웅 처리는 끄고(몬스터를 치지 않게) 시험 몬스터를 성 안에 놓는다.
+##  - 방치 모드에서 배치하면 곧바로 성채 앞 대열(Formation.soldier_spots)에 선다: 크기 0.75, 기병은 말, HP 바 + 티어 갈매기
+##  - 티어 2 능력치 = 1티어 × 2, 기병 이동 속도 = 보병 × 2(실제로 걸어 잰다)
+##  - 방치 모드: 성 안 보스가 병사를 노려 쳐도 피해 0, 병사는 제자리에서 싸우지 않는다
+##  - 스테이지 모드: 성 안 보스와 싸운다(화살이 난다), 보스도 병사를 친다. 근접은 타격 순간, 궁병은 화살 도착 순간에 피해
+##  - 죽은 병사는 리필 때 되살아나 제자리로. 스테이지 중 배치 변경은 다음 리필에 다시 만든다. 화면 밖은 4프레임마다 애니메이션
+func _soldier_cases() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	await _frames(1)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(false)
+	var bars = _main.get_children().filter(func(c): return c.get_script() == HpBarsScript)[0]
+	await _frames(2)
+	var oct0: int = bars.octagons
+	Economy.soldiers = {"infantry:1": 3, "infantry:2": 1, "archer:1": 2, "cavalry:1": 1}
+	var sent := Economy.set_soldier_deploy({"infantry:1": 2, "infantry:2": 1, "archer:1": 2, "cavalry:1": 1})
+	await _frames(2)
+	var ss: Array = _main.soldiers.duplicate()
+	var spots: Array = Formation.soldier_spots(ss.map(func(s): return {"type": s.type, "tier": s.tier}))
+	var placed := sent and ss.size() == 6 and get_tree().get_nodes_in_group("soldiers").size() == 6
+	for i in ss.size():
+		var s = ss[i]
+		placed = placed and s.home.is_equal_approx(spots[i]) and s.global_position.is_equal_approx(s.home) and Formation.is_inside(_half, s.home) \
+			and is_equal_approx(s._model.scale.x, Art.SOLDIER_SCALE) and (s._horse != null) == (s.type == "cavalry")
+	_check(placed and bars.octagons == oct0 + 6 * 2 + 2 * 7, "(S) a deploy in idle mode spawns the soldiers at once in front of the keep (0.75 size, cavalry on a horse, HP bars + tier chevrons)",
+		"sent=%s soldiers=%d octagons %d -> %d" % [sent, ss.size(), oct0, bars.octagons])
+	var inf1 = ss.filter(func(s): return s.type == "infantry" and s.tier == 1)[0]
+	var inf2 = ss.filter(func(s): return s.type == "infantry" and s.tier == 2)[0]
+	var cav = ss.filter(func(s): return s.type == "cavalry")[0]
+	_check(inf1.hp_max == 320.0 and inf1.atk == 22.0 and inf2.hp_max == 2.0 * inf1.hp_max and inf2.atk == 2.0 * inf1.atk and inf2.hp == inf2.hp_max,
+		"(S) tier 2 stats are twice tier 1 (infantry 640 / 44)", "t1=%.0f/%.0f t2=%.0f/%.0f" % [inf1.hp_max, inf1.atk, inf2.hp_max, inf2.atk])
+	# 이동 속도: 스테이지 모드(몬스터 없음)에서 자리 3 m 앞에 놓으면 걸어 돌아온다 — 같은 프레임 동안 기병이 보병의 2배를 간다
+	GameState.mode = GameState.Mode.STAGE
+	for s in [inf1, cav]:
+		s.global_position = s.home + Vector3(0, 0, -3.0)
+	await _seconds(0.25)
+	var moved_inf: float = 3.0 - inf1.global_position.distance_to(inf1.home)
+	var moved_cav: float = 3.0 - cav.global_position.distance_to(cav.home)
+	_check(moved_inf > 0.5 and absf(moved_cav / moved_inf - 2.0) < 0.05, "(S) cavalry walks twice as fast as infantry", "infantry %.2f m, cavalry %.2f m" % [moved_inf, moved_cav])
+	await _wait_until(func(): return ss.all(func(s): return s.global_position.distance_to(s.home) < 0.06), 3.0)
+	# 방치 모드: 성 안 보스가 병사를 노리고 쳐도 피해 0, 병사는 제자리에서 싸우지 않는다
+	GameState.mode = GameState.Mode.IDLE
+	_g = _spawn("epic_boss", 2, inf2.home + Vector3(0.4, 0, 1.4))
+	await _seconds(3.0)
+	var targets_soldier: bool = _alive(_g) and _g._target_hero != null and _g._target_hero.is_in_group("soldiers")
+	_check(targets_soldier and _g.hp == _g.hp_max and ss.all(func(s): return s.hp == s.hp_max and s.global_position.is_equal_approx(s.home)),
+		"(S) idle mode: a boss inside the castle targets the soldiers, but they take no damage, stay in place and do not fight",
+		"target soldier=%s boss hp %.0f soldiers=%s" % [targets_soldier, _g.hp if _alive(_g) else 0.0, ss.map(func(s): return s.hp)])
+	# 스테이지 모드: 맞서 싸운다(궁병 화살), 보스도 병사를 친다
+	GameState.mode = GameState.Mode.STAGE
+	var saw_arrow := false
+	var hurt := false
+	var t := 0.0
+	while t < 8.0 and _alive(_g):
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		saw_arrow = saw_arrow or _flying() > 0
+		hurt = hurt or ss.any(func(s): return s.hp < s.hp_max)
+	_check(not _alive(_g) and saw_arrow and hurt, "(S) stage mode: the soldiers fight the boss inside the castle (arrows fly) and the boss hits soldiers",
+		"boss alive=%s arrow=%s soldier hurt=%s after %.1f s" % [_alive(_g), saw_arrow, hurt, t])
+	await _wait_until(func(): return ss.all(func(s): return not s.is_alive() or s.global_position.distance_to(s.home) < 0.06), 4.0)
+	_check(ss.all(func(s): return not s.is_alive() or s.global_position.distance_to(s.home) < 0.06), "(S) with no target left the soldiers walk back to their places",
+		"%s" % [ss.map(func(s): return s.global_position.distance_to(s.home))])
+	# 타격 동기화: 근접은 타격 순간에, 궁병은 화살 도착 순간에
+	for s in ss:
+		s.set_process(false)
+	var m = _still("epic_boss", inf1.global_position + Vector3(0, 0, 1.2))
+	var arc = ss.filter(func(s): return s.type == "archer")[0]
+	await _frames(1)
+	inf1._target = m
+	inf1._attack()
+	var at: float = inf1._swing_left
+	inf1._tick_swing(at - 0.02)
+	var before := _dmg(m)
+	inf1._tick_swing(0.04)
+	_check(at > 0.1 and before == 0.0 and is_equal_approx(_dmg(m), inf1.atk), "(S) a melee soldier hits at the motion's hit moment (%.2f s), not at its start" % at,
+		"before=%.1f after=%.1f atk=%.1f" % [before, _dmg(m), inf1.atk])
+	var hp0: float = m.hp
+	arc._target = m
+	arc._attack()
+	arc._tick_swing(1.0)
+	await _frames(1)
+	var in_flight: bool = _flying() == 1 and m.hp == hp0
+	await _wait_until(func(): return _flying() == 0, 3.0)
+	_check(in_flight and is_equal_approx(hp0 - m.hp, arc.atk), "(S) an archer shoots an arrow at the release moment; the boss loses HP only when it lands",
+		"flying=%s dmg=%.1f atk=%.1f" % [in_flight, hp0 - m.hp, arc.atk])
+	_clear_monsters()
+	await _frames(1)
+	# 죽은 병사는 리필 때 되살아나 제자리로
+	inf2.global_position = inf2.home + Vector3(1, 0, 1)
+	inf2.take_damage(1.0e6)
+	var dead: bool = not inf2.is_alive()
+	GameState.refill()
+	await _frames(1)
+	_check(dead and inf2.is_alive() and inf2.hp == inf2.hp_max and inf2.global_position.is_equal_approx(inf2.home) and _main.soldiers.has(inf2),
+		"(S) a dead soldier comes back to life at its place on refill", "dead=%s alive=%s hp=%.0f" % [dead, inf2.is_alive(), inf2.hp])
+	# 화면 밖: 애니메이션은 4프레임마다(쌓인 시간만큼)
+	var counts := []
+	for where in [inf1.home, Vector3(0, 0, 500)]:
+		inf1.global_position = where
+		var n := 0
+		for i in 8:
+			inf1._animate(0.016)
+			n += 1 if inf1._anim_acc == 0.0 else 0
+		counts.append(n)
+	inf1.global_position = inf1.home
+	_check(counts == [8, 2], "(S) on screen a soldier animates every frame, off screen every 4th frame", "advances=%s" % [counts])
+	for s in ss:
+		s.set_process(true)
+	# 스테이지 중 배치 변경은 다음 리필에
+	var ids0: Array = ss.map(func(s): return s.get_instance_id())
+	Economy.set_soldier_deploy({"infantry:1": 3})
+	await _frames(2)
+	var kept: bool = _main.soldiers.map(func(s): return s.get_instance_id()) == ids0
+	GameState.refill()
+	await _frames(2)
+	var now_types: Array = _main.soldiers.map(func(s): return s.type)
+	_check(kept and now_types == ["infantry", "infantry", "infantry"] and ids0.all(func(id): return not is_instance_id_valid(id)),
+		"(S) a deploy change during a stage waits for the next refill, then the soldiers are rebuilt", "kept=%s now=%s" % [kept, now_types])
+	GameState.mode = GameState.Mode.IDLE
+	Economy.set_soldier_deploy({})
+	await _frames(2)
+	_check(_main.soldiers.is_empty() and get_tree().get_nodes_in_group("soldiers").is_empty(), "(S) an empty deploy in idle removes the soldiers at once", "soldiers=%d" % _main.soldiers.size())
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(true)
 	_clear_monsters()
 	await _frames(1)

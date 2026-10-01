@@ -912,7 +912,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	await _tap(_building_px("keep"))
 	var rows: Array = bwin.reqs.get_children().map(func(l): return l.text)
 	print("INPUT INFO: keep window (Lv 1, can upgrade) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
-	_check(bwin.building_id == "keep" and rows == ["✓ 성문 Lv 1 필요", "✓ 막사 Lv 1 필요"] and bwin.reqs.get_child(0).get_theme_color("font_color") == bwin.GREEN
+	_check(bwin.building_id == "keep" and rows == ["✓ 성문 Lv 1 필요", "✓ 보병 막사 Lv 1 필요"] and bwin.reqs.get_child(0).get_theme_color("font_color") == bwin.GREEN
 		and not bwin.upgrade_button.disabled and not bwin.reason_label.visible and bwin.time_label.text == "건설 시간 01:00"
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child(2).get_child_count() == 1,
 		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200 (unchanged slots show no arrow), [업그레이드] on, 01:00", "reqs=%s" % [rows])

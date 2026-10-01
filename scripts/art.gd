@@ -74,6 +74,25 @@ const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 
 
 const ARROW_MODEL := PROP_DIR + "arrow.gltf"
 
+## 병사(개정 13 §7): 병종 id(soldiers.csv) → 무기(gear, 영웅 열과 같은 "a|b"), 역할(공격 애니메이션·투사체), 발밑 원판 색, 말(기병).
+## 모델은 soldiers.csv `model`. 영웅보다 작게(SOLDIER_SCALE) 그려 구분한다.
+const SOLDIERS := {
+	"infantry": {"gear": "1H_Sword|Rectangle_Shield", "role": "melee", "color": Color("#C0504D")},
+	"archer": {"gear": "2H_Crossbow", "role": "ranged", "color": Color("#6AA84F")},
+	"cavalry": {"gear": "1H_Sword", "role": "melee", "color": Color("#4F81BD"), "horse": true},
+}
+const SOLDIER_SCALE := 0.75
+const SOLDIER_BAR := Color(0.45, 0.78, 0.98)  # 병사 HP 바(하늘색)
+
+
+## 병종 → UnitModel 스펙(hero_spec과 같은 규칙). 말 탄 병사는 걷지 않고 대기 동작 그대로(말이 걷는다).
+static func soldier_spec(type: String, model: String) -> Dictionary:
+	var a: Dictionary = SOLDIERS[type]
+	var spec := hero_spec({"model": model, "gear": a.gear, "role": a.role})
+	if a.get("horse", false):
+		spec.anims.walk = spec.anims.idle
+	return spec
+
 ## 영웅 정의(GameData.hero) → UnitModel 스펙: gear만 보이고, 공격 애니메이션은 역할·모델·주무기로 고른다.
 static func hero_spec(h: Dictionary) -> Dictionary:
 	var m: Dictionary = HERO_MODELS[h.model]

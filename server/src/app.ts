@@ -45,6 +45,7 @@ interface Game {
   heroes: Record<string, any>[]
   resources: { id: string; name: string; building: string; per_min: number; price: number }[]
   buildings: R.BuildingDef[] // 개정 12 건물 표(파일 순서)
+  soldiers: R.SoldierDef[] // 개정 13 병종 표(파일 순서)
   config: R.Config
 }
 
@@ -62,6 +63,8 @@ interface Player {
   heroes: Record<string, { copies: number; level: number }> // 영웅 id → 보유 수·레벨
   deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
   build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
+  soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
+  soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
 }
 
 // 한 번의 원자적 변경. version이 읽은 값과 같을 때만 전부 적용된다.
@@ -77,6 +80,8 @@ interface Change {
   heroLevels?: Record<string, number> // 영웅 → 레벨 증가
   deploy?: (string | null)[] // 새 배치
   build?: { id: string; finish: number } | null // 새 일꾼 상태(개정 12)
+  soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
+  soldierDeploy?: Record<string, number> // 새 병사 배치
   log?: { kind: string; detail: unknown }
 }
 
@@ -89,7 +94,8 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id,
+const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
+  coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   extract(epoch from s.build_finish)::float8 as build_finish,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
@@ -137,6 +143,39 @@ const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 const level = (p: Player, building: string) => p.buildings[building]?.level ?? 1
 // bigint 파라미터는 정수 문자열로 — Neon은 숫자를 toString()으로 보내 1e21부터 지수 표기가 되고 ::bigint가 거부한다. 정수가 아니면 throw.
 const bigint = (v: number) => BigInt(v).toString()
+// {키: 정수} 사전(DB jsonb·집계) — 숫자가 아닌 값은 버린다
+function counts(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    for (const [k, n] of Object.entries(v as Record<string, unknown>)) if (Number.isInteger(Number(n))) out[k] = Number(n)
+  }
+  return out
+}
+
+// 게으른 생산(개정 13 §4): 병사 건물마다 마지막 생산 시각(last_collect)부터 지난 시간(축적 상한까지) / 한 마리 시간만큼 1티어를 만든다
+// (남은 시간 유지). 바뀐 게 없으면 null. 건설 중에도 이어진다.
+// ponytail: loadPlayer가 완료보다 먼저 생산하므로 끝나는 시각 ~ 그 뒤 첫 요청 사이(앱은 2초마다 묻는다)는 이전 레벨로 센다.
+// 정확해야 하면 완료 처리에서 끝나는 시각까지 이전 레벨로 생산한다.
+function production(p: Player, game: Game, now: number): Change | null {
+  if (game.soldiers.length === 0) return null // 시드 전 DB
+  const cap = R.cfgNum(game.config, 'accum_cap_min')
+  const buildings: Record<string, number> = {}
+  const soldiers: Record<string, number> = {}
+  const made: unknown[] = []
+  for (const s of game.soldiers) {
+    const b = p.buildings[s.building]
+    if (!b) continue
+    const st = R.soldierProdStep(b.last_collect, now, R.soldierUnitSec(game.config, b.level), cap)
+    if (!st.changed) continue
+    buildings[s.building] = st.last
+    if (st.count > 0) {
+      soldiers[R.soldierKey(s.id, 1)] = st.count
+      made.push({ building: s.building, type: s.id, count: st.count, level: b.level, from: b.last_collect, to: st.last })
+    }
+  }
+  if (Object.keys(buildings).length === 0) return null
+  return { buildings, soldiers, log: made.length ? { kind: 'soldier_prod', detail: made } : undefined }
+}
 
 export function createApp(opts: AppOptions) {
   const query = opts.query
@@ -172,7 +211,7 @@ export function createApp(opts: AppOptions) {
     const [r] = await query(GAME_SQL)
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
-      resources: json(r.resources), buildings: json(r.buildings), config: json(r.config),
+      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), config: json(r.config),
     }
   }
 
@@ -180,7 +219,7 @@ export function createApp(opts: AppOptions) {
   // (게으른 완료, 개정 12) 다시 읽는다. 빠진 자원·건물 행은 한 번 채우고 다시 읽는다.
   async function loadPlayer(id: string, game: Game, now: number): Promise<Player> {
     let ensured = false
-    for (let i = 0; i < MAX_ATTEMPTS + 1; i++) {
+    for (let i = 0; i < MAX_ATTEMPTS + 2; i++) { // 행 채우기·생산·완료가 한 번씩 다시 읽게 한다
       const [r] = await query(PLAYER_SQL, [id])
       if (!r) throw new ApiError(401, 'unknown_player', 'player not found; log in again')
       const res: Record<string, number> = {}
@@ -202,6 +241,12 @@ export function createApp(opts: AppOptions) {
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
+        soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)),
+      }
+      const made = production(p, game, now) // 게으른 생산(개정 13) — 완료와 같은 자리, commit의 version 가드 한 문장
+      if (made) {
+        await commit(id, p.version, made, now)
+        continue // 이겼든 졌든 다시 읽는다(졌으면 다른 요청이 이미 생산했다)
       }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
@@ -214,8 +259,9 @@ export function createApp(opts: AppOptions) {
     throw new ApiError(409, 'conflict', 'concurrent update; try again')
   }
 
-  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원 건물은 last_collect도. build = 일꾼 또는 null,
-  // population = 민가 레벨의 인구(개정 12).
+  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원·병사 건물은 last_collect(병사는 마지막 생산 시각)도.
+  // build = 일꾼 또는 null, population = 민가 레벨의 인구(개정 12). soldiers = 표에 있는 병종의 보유 "병종:티어" → 수(0 초과),
+  // soldier_deploy = 배치(보유로 자름, 개정 13).
   function view(p: Player, game: Game, now: number) {
     const res: Record<string, number> = {}
     const buildings: Record<string, { level: number; last_collect?: number }> = {}
@@ -225,6 +271,13 @@ export function createApp(opts: AppOptions) {
       const b = p.buildings[r.building]
       buildings[r.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
     }
+    for (const s of game.soldiers) {
+      const b = p.buildings[s.building]
+      buildings[s.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
+    }
+    const maxTier = game.soldiers.length ? R.cfgNum(game.config, 'soldier_max_tier') : 0
+    const soldiers: Record<string, number> = {}
+    for (const [k, n] of Object.entries(p.soldiers)) if (n > 0 && R.parseSoldierKey(k, game.soldiers, maxTier)) soldiers[k] = n
     // 영웅: 표에 있는 것만. 배치: 길이 = 슬롯 수, 보유하지 않은(표에서 빠진) 영웅은 null
     const known = new Set(game.heroes.map((h) => String(h.id)))
     const heroes: Player['heroes'] = {}
@@ -238,6 +291,7 @@ export function createApp(opts: AppOptions) {
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
         kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
+        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers),
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -259,7 +313,18 @@ export function createApp(opts: AppOptions) {
     if (ch.killSeq !== undefined) sets.push(`kill_seq = ${p(ch.killSeq)}::int`)
     if (ch.deploy !== undefined) sets.push(`deploy = ${p(JSON.stringify(ch.deploy))}::jsonb`)
     if (ch.build !== undefined) sets.push(`build_id = ${p(ch.build?.id ?? null)}::text, build_finish = to_timestamp(${p(ch.build?.finish ?? null)}::float8)`)
+    if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2 returning player_id)`]
+    if (ch.soldiers && Object.keys(ch.soldiers).length) {
+      // "병종:티어" → 증감. from s: version 가드가 실패하면 보유도 안 바뀐다. 더하기는 upsert, 빼기는 검사한 기존 행의 update
+      // (insert의 후보 행이 음수면 충돌 처리 전에 count ≥ 0 제약에 걸린다)
+      const x = `jsonb_each_text(${p(JSON.stringify(ch.soldiers))}::jsonb) as x`
+      ctes.push(`sa as (insert into player_soldiers (player_id, type, tier, count)
+        select s.player_id, split_part(x.key, ':', 1), split_part(x.key, ':', 2)::int, x.value::int from s, ${x} where x.value::int > 0
+        on conflict (player_id, type, tier) do update set count = player_soldiers.count + excluded.count returning 1)`)
+      ctes.push(`sd as (update player_soldiers set count = count + x.value::int from s, ${x}
+        where x.value::int < 0 and player_soldiers.player_id = s.player_id and type = split_part(x.key, ':', 1) and tier = split_part(x.key, ':', 2)::int returning 1)`)
+    }
     if (ch.heroes && Object.keys(ch.heroes).length) {
       // from s: version 가드가 실패하면(s가 비면) 영웅도 안 늘어난다
       ctes.push(`h as (insert into player_heroes (player_id, hero_id, copies)
@@ -298,6 +363,8 @@ export function createApp(opts: AppOptions) {
     for (const [k, d] of Object.entries(ch.heroLevels ?? {})) pl.heroes[k].level += d
     if (ch.deploy !== undefined) pl.deploy = ch.deploy
     if (ch.build !== undefined) pl.build = ch.build
+    for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
+    if (ch.soldierDeploy !== undefined) pl.soldier_deploy = ch.soldierDeploy
     pl.version += 1
   }
 
@@ -382,7 +449,7 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
-    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, config: g.config }
+    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, config: g.config }
     const version = createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16)
     const etag = `"${version}"`
     c.header('ETag', etag)
@@ -587,8 +654,60 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // 병사 합성(개정 13 §5): 같은 병종·티어 soldier_merge_count마리 → 한 티어 위 1마리. 400 unknown_soldier, 409 max_tier(최대 티어),
+  // 409 not_enough(부족). 배치가 보유보다 많아지면 보유로 자른다. 보유·배치·economy_log는 version 가드 한 문장.
+  app.post('/v1/soldiers/merge', auth, async (c) => {
+    const b = await body(c)
+    const type = strField(b, 'type')
+    const tier = intField(b, 'tier', 1, MAX_INT4)
+    return mutate(c, (p, g) => {
+      if (!g.soldiers.some((s) => s.id === type)) throw new ApiError(400, 'unknown_soldier', `unknown soldier '${type}'`)
+      const max = R.cfgNum(g.config, 'soldier_max_tier')
+      if (tier >= max) throw new ApiError(409, 'max_tier', `tier ${tier} cannot merge (max tier ${max})`)
+      const need = R.cfgNum(g.config, 'soldier_merge_count')
+      const key = R.soldierKey(type, tier)
+      const up = R.soldierKey(type, tier + 1)
+      const have = p.soldiers[key] ?? 0
+      if (have < need) throw new ApiError(409, 'not_enough', `merging needs ${need} of ${key}, have ${have}`)
+      const owned = { ...p.soldiers, [key]: have - need, [up]: (p.soldiers[up] ?? 0) + 1 }
+      const deploy = R.trimDeploy(p.soldier_deploy, owned)
+      return {
+        change: {
+          soldiers: { [key]: -need, [up]: 1 }, soldierDeploy: deploy,
+          log: { kind: 'soldier_merge', detail: { type, tier, count: need, have, deployed: p.soldier_deploy[key] ?? 0, deployed_after: deploy[key] ?? 0 } },
+        },
+        extra: { merged: { type, tier: tier + 1 } },
+      }
+    })
+  })
+
+  // 병사 배치(개정 13 §6): {deploy: {"병종:티어": 수}}. 키 형식(표에 있는 병종, 티어 1..최대), 0 이상 정수, 보유 이하, 합계 ≤ 인구 — 아니면 400.
+  // 같은 배치를 다시 보내도 같다(멱등).
+  app.post('/v1/soldiers/deploy', auth, async (c) => {
+    const d = (await body(c)).deploy
+    if (!d || typeof d !== 'object' || Array.isArray(d)) throw new ApiError(400, 'bad_deploy', "'deploy' must be an object of 'type:tier' -> count")
+    const entries = Object.entries(d as Record<string, unknown>)
+    for (const [k, n] of entries) {
+      if (!isInt(n, 0, MAX_INT4)) throw new ApiError(400, 'bad_deploy', `count for '${k}' must be a non-negative integer`)
+    }
+    return mutate(c, (p, g) => {
+      const max = R.cfgNum(g.config, 'soldier_max_tier')
+      const out: Record<string, number> = {}
+      let total = 0
+      for (const [k, n] of entries as [string, number][]) {
+        if (!R.parseSoldierKey(k, g.soldiers, max)) throw new ApiError(400, 'bad_deploy', `'${k}' is not a 'type:tier' key`)
+        if (n > (p.soldiers[k] ?? 0)) throw new ApiError(400, 'bad_deploy', `only ${p.soldiers[k] ?? 0} of '${k}' owned`)
+        if (n > 0) out[k] = n
+        total += n
+      }
+      const pop = R.population(g.config, level(p, R.HOUSES))
+      if (total > pop) throw new ApiError(400, 'bad_deploy', `deploying ${total} is above the population ${pop}`)
+      return { change: { soldierDeploy: out } }
+    })
+  })
+
   if (opts.allowTestHooks) {
-    // 통합 테스트용: 그 플레이어 건물의 last_collect를 minutes분 앞당긴다.
+    // 통합 테스트용: 그 플레이어 건물의 last_collect를 minutes분 앞당긴다(자원 건물 수집, 병사 건물 생산 — 개정 13).
     app.post('/v1/test/age', auth, async (c) => {
       const minutes = intField(await body(c), 'minutes', 0, MAX_AGE_MIN)
       const id = c.get('playerId') as string

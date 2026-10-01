@@ -10,6 +10,7 @@ const HEROES_PATH := "res://data/heroes.csv"
 const RESOURCES_PATH := "res://data/resources.csv"
 const CONFIG_PATH := "res://data/config.csv"
 const BUILDINGS_PATH := "res://data/buildings.csv"
+const SOLDIERS_PATH := "res://data/soldiers.csv"
 const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하는 정수 열
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
@@ -40,13 +41,18 @@ const BUILD_COST_GROWTH := 1.35  # L → L+1 비용 = round(값 × 1.35^(L−1))
 const BUILD_TIME_GROWTH := 1.5   # L → L+1 시간 = round(base_sec × 1.5^(L−1))
 const KEEP := "keep"  # 다른 건물의 상한·영웅 슬롯·성 내부·성 HP
 const GATE := "gate"  # 성문 HP(네 성문이 레벨 하나). 배치(Balance.BUILDINGS)에 없는 성 구조물
-const BARRACKS := "barracks"  # 영웅 HP
 const LAB := "lab"  # 영웅 공격
 const HOUSES := "houses"  # 인구
 const TAVERN := "tavern"  # 모집 확률
-const BUILDING_NUM_KEYS := ["castle_hp_per_level", "pop_base", "pop_per_house", "barracks_hp_per_level", "lab_atk_per_level",
+const BUILDING_NUM_KEYS := ["castle_hp_per_level", "pop_base", "pop_per_house", "lab_atk_per_level",
 	"tavern_ssr_per_level", "tavern_sr_per_level"]  # 0 이상, 주점 증가분은 1 이하, 인구는 정수
 const POP_KEYS := ["pop_base", "pop_per_house"]
+# --- 병사(개정 13). 서버 rules.ts·seed.ts와 같은 규칙 ---
+const SOLDIER_STR_COLS := ["id", "name", "building", "model"]
+const SOLDIER_NUM_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]  # 1티어 기준
+const SOLDIER_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 크다(나머지는 0 이상)
+const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_prod_sec", "soldier_prod_level_factor", "soldier_merge_count"]
+const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count"]  # 1 이상 정수(나머지는 0보다 크다)
 const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 단계 표 "레벨:값|…"(hero_slots·Balance.INTERIOR_TILES를 대신)
 const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
 const LEVELUP_INT_KEYS := ["hero_max_level_per_star", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만)
@@ -59,12 +65,13 @@ static var _heroes: Array = []  # 파일 순서
 static var _resources: Array = []  # 파일 순서
 static var _config := {}  # 키 → 문자열
 static var _buildings: Array = []  # 파일 순서(개정 12)
+static var _soldiers: Array = []  # 파일 순서(개정 13)
 static var _loaded := false
 
 
 ## 기본 표를 다시 읽게 한다. 경로를 주면 그 파일을 쓴다(테스트용). 오류가 있어도 읽은 만큼은 쓴다.
 static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PATH, heroes_path := HEROES_PATH,
-		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH) -> void:
+		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH, soldiers_path := SOLDIERS_PATH) -> void:
 	errors = 0
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
@@ -72,6 +79,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1]),
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
 		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS),
+		"soldiers": _read(soldiers_path, SOLDIER_STR_COLS + SOLDIER_NUM_COLS),
 		"config": _config_map(_read(config_path, ["key", "value"])),
 	}))
 
@@ -81,7 +89,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 static func apply_remote(payload: Dictionary) -> bool:
 	errors = 0
 	var raw := {}
-	for table in ["monsters", "stages", "heroes", "resources", "buildings"]:
+	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers"]:
 		var rows = payload.get(table)
 		var out: Array = []
 		if rows is Array:
@@ -258,15 +266,47 @@ static func castle_hp_max(keep_level: int) -> float:
 	return config_num("castle_hp") + config_num("castle_hp_per_level") * (maxi(keep_level, 1) - 1)
 
 
-## 인구 = pop_base + pop_per_house × (민가 − 1)(사용자 지시 2026-10-01: 민가는 축적 상한 대신 인구 — 병사 배치 상한, 병사는 다음 개정).
+## 인구 = pop_base + pop_per_house × (민가 − 1)(사용자 지시 2026-10-01: 민가는 축적 상한 대신 인구 — 병사 배치 상한).
 static func population(houses_level: int) -> int:
 	return int(config_num("pop_base")) + int(config_num("pop_per_house")) * (maxi(houses_level, 1) - 1)
 
 
-## 막사: 영웅 HP + barracks_hp_per_level × (L − 1)(0.03이면 Lv 3 → +6%). 다음 개정에서 막사가 병사 건물 셋으로 나뉜다 —
-## 이 보너스는 hero_stats의 곱 하나라 거기만 지우면 된다.
-static func barracks_hp_bonus(level: int) -> float:
-	return config_num("barracks_hp_per_level") * (maxi(level, 1) - 1)
+# --- 병사(개정 13 §3·§4). 서버 rules.soldierUnitSec와 같은 식 ---
+
+## 병종 표(파일 순서). 행 = {id, name, building, model, hp, atk, range, atk_interval, speed, aggro}(숫자는 float, 1티어 기준).
+static func soldiers() -> Array:
+	_ensure()
+	return _soldiers
+
+
+static func soldier(id: String) -> Dictionary:
+	for s in soldiers():
+		if s.id == id:
+			return s
+	return {}
+
+
+## 그 건물이 만드는 병종 id, 병사 건물이 아니면 "".
+static func soldier_of_building(building_id: String) -> String:
+	for s in soldiers():
+		if s.building == building_id:
+			return s.id
+	return ""
+
+
+## 한 마리 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 서버와 같은 값). Lv 1 3시간, Lv 10 약 1시간 54분.
+static func soldier_unit_sec(level: int) -> float:
+	return _grown(config_num("soldier_prod_sec"), config_num("soldier_prod_level_factor"), maxi(level, 1) - 1)
+
+
+## 티어 t 능력치 {hp, atk, range, atk_interval, speed, aggro}: HP·공격 × soldier_tier_mult^(t−1), 나머지는 같다. 모르는 병종이면 {}.
+static func soldier_stats(type: String, tier: int) -> Dictionary:
+	var d := soldier(type)
+	if d.is_empty():
+		return {}
+	var m := _grown(1.0, config_num("soldier_tier_mult"), maxi(tier, 1) - 1)
+	return {"hp": float(d.hp) * m, "atk": float(d.atk) * m, "range": float(d.range), "atk_interval": float(d.atk_interval),
+		"speed": float(d.speed), "aggro": float(d.aggro)}
 
 
 ## 연구소: 영웅 공격 + lab_atk_per_level × (L − 1).
@@ -320,12 +360,11 @@ static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	return {"gold": gold}
 
 
-## 최종 HP = 표 기본값 × 레벨 배율 × 별 배율 × (1 + 막사 보너스), 공격 = … × (1 + 연구소 보너스)(개정 12). {hp, atk}
-## buildings = 건물 id → 레벨(Economy.levels). 비우면 막사·연구소 1(보너스 없음).
+## 최종 HP = 표 기본값 × 레벨 배율 × 별 배율, 공격 = … × (1 + 연구소 보너스)(개정 12, 개정 13: 막사 HP 보너스 없음). {hp, atk}
+## buildings = 건물 id → 레벨(Economy.levels). 비우면 연구소 1(보너스 없음).
 static func hero_stats(def: Dictionary, level: int, copies: int, buildings := {}) -> Dictionary:
 	var m := level_mult(level) * star_mult(copies)
-	return {"hp": float(def.hp) * m * (1.0 + barracks_hp_bonus(int(buildings.get(BARRACKS, 1)))),
-		"atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1))))}
+	return {"hp": float(def.hp) * m, "atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1))))}
 
 
 ## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(건물 보너스 포함).
@@ -372,6 +411,7 @@ static func _install(t: Dictionary) -> void:
 	_heroes = t.heroes
 	_resources = t.resources
 	_buildings = t.buildings
+	_soldiers = t.soldiers
 	_config = t.config
 	_loaded = true
 
@@ -461,7 +501,7 @@ static func _hero_skills(row: Dictionary):
 
 ## 원시 표들 → 검사한 표들. 오류는 errors에 센다(교체 여부는 호출자가 결정).
 static func _build(raw: Dictionary) -> Dictionary:
-	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "config": raw.config}
+	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "soldiers": [], "config": raw.config}
 	for row in _convert(raw.monsters, ["id"], MONSTER_COLS):
 		if t.monsters.has(row.id):
 			_err("monsters", row._line, "id", "duplicate id '%s'" % row.id)
@@ -520,6 +560,13 @@ static func _build(raw: Dictionary) -> Dictionary:
 		else:
 			ids[row.id] = true
 			t.buildings.append(row)
+	ids = {}
+	for row in _convert(raw.soldiers, SOLDIER_STR_COLS, SOLDIER_NUM_COLS):  # 개정 13
+		if ids.has(row.id):
+			_err("soldiers", row._line, "id", "duplicate id '%s'" % row.id)
+		else:
+			ids[row.id] = true
+			t.soldiers.append(row)
 	if errors == 0:
 		_check_contents(t)
 	return t
@@ -531,7 +578,7 @@ static func _check_contents(t: Dictionary) -> void:
 	for id in ["grunt", "epic_boss"]:
 		if not t.monsters.has(id):
 			_err("monsters", 0, "id", "missing required monster '%s'" % id)
-	for table in ["stages", "heroes", "resources", "buildings"]:
+	for table in ["stages", "heroes", "resources", "buildings", "soldiers"]:
 		if t[table].is_empty():
 			_err(table, 0, "", "table is empty")
 	for k in CONFIG_NUM_KEYS:
@@ -541,6 +588,7 @@ static func _check_contents(t: Dictionary) -> void:
 		if _split_list(String(t.config.get(k, ""))).is_empty():
 			_err("config", 0, k, "missing or empty list")
 	_check_buildings(t)
+	_check_soldiers(t)
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
 		if not h.grade in GRADES:
@@ -618,6 +666,34 @@ static func _check_buildings(t: Dictionary) -> void:
 		var tiers := parse_tiers(String(t.config.get(k, "")))
 		if tiers.is_empty() or not tiers.all(func(x): return x[1] == floorf(x[1]) and x[1] >= low):
 			_err("config", 0, k, "must be a tier table 'level:value|…' (levels from 1 ascending, integer values of at least %d): '%s'" % [low, t.config.get(k, "")])
+
+
+## 병종 표·설정(개정 13, 서버 seed.checkSoldiers와 같은 규칙): 건물은 건물 표에 있고 병종마다 다르다, hp·range·atk_interval·speed > 0,
+## atk·aggro ≥ 0. 최대 티어·합성 수는 1 이상 정수, 티어 배율·한 마리 시간·레벨 계수는 0보다 크다. 앱이 그릴 수 없는 병종(Art.SOLDIERS에
+## 없는 id, 없는 모델)도 거부한다.
+static func _check_soldiers(t: Dictionary) -> void:
+	var buildings := {}
+	for b in t.buildings:
+		buildings[b.id] = true
+	var used := {}
+	for s in t.soldiers:
+		if not buildings.has(s.building):
+			_err("soldiers", s._line, "building", "building '%s' is not in the buildings table" % s.building)
+		elif used.has(s.building):
+			_err("soldiers", s._line, "building", "building '%s' already makes another soldier" % s.building)
+		used[s.building] = true
+		for c in SOLDIER_NUM_COLS:
+			if not (s[c] > 0.0 if c in SOLDIER_POSITIVE_COLS else s[c] >= 0.0):
+				_err("soldiers", s._line, c, "must be %s: %s" % ["greater than 0" if c in SOLDIER_POSITIVE_COLS else "0 or more", s[c]])
+		if not Art.SOLDIERS.has(s.id) or not Art.HERO_MODELS.has(s.model):
+			_err("soldiers", s._line, "id", "soldier '%s' (model %s) cannot be drawn by this app" % [s.id, s.model])
+	for k in SOLDIER_NUM_KEYS:
+		var v := String(t.config.get(k, ""))
+		var int_key: bool = k in SOLDIER_INT_KEYS
+		if not v.is_valid_float():
+			_err("config", 0, k, "missing or not a number")
+		elif not ((v.to_float() >= 1.0 and v.to_float() == floorf(v.to_float())) if int_key else v.to_float() > 0.0):
+			_err("config", 0, k, "must be %s: '%s'" % ["an integer of at least 1" if int_key else "greater than 0", v])
 
 
 ## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.

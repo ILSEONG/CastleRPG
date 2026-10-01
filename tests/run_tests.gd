@@ -81,6 +81,7 @@ func _init() -> void:
 	test_hero_levels()
 	test_hit_frac()
 	test_buildings()
+	test_soldiers()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -193,7 +194,7 @@ func test_game_tables() -> void:
 	var cp := "user://t_config.csv"
 	_write(cp, "key,value\ncastle_hp,1000\nkeep_slot_tiers,1:4|5:8|10:12\nkeep_interior_tiers,1:20|5:24|10:28\nstarter_heroes,hans|ella\n")
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
-	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size(), "config file missing keys reports one error per key")
+	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size() + GameData.SOLDIER_NUM_KEYS.size(), "config file missing keys reports one error per key")
 	_errors.count = logged
 	DirAccess.remove_absolute(cp)
 	GameData.load_tables()
@@ -206,11 +207,11 @@ func _payload() -> Dictionary:
 		var r := GameData.stage(s).duplicate()
 		stages.append(r)
 	var cfg := {}
-	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS:
+	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS + GameData.SOLDIER_NUM_KEYS:
 		cfg[k] = String(GameData._config[k])
 	return {"version": "t", "monsters": [GameData.monster("grunt").duplicate(), GameData.monster("epic_boss").duplicate()],
 		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true),
-		"buildings": GameData.buildings().duplicate(true), "config": cfg}
+		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true), "config": cfg}
 
 
 ## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
@@ -265,7 +266,7 @@ func _remote_checks() -> int:
 
 ## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
 func _tables_hash() -> int:
-	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._config])
+	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._config])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
@@ -489,7 +490,7 @@ func test_building_layout() -> void:
 			check(not r.intersects(other), "%s overlaps no other building" % b.id)
 		placed.append(r)
 		ids[b.id] = true
-	for id in ["keep", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm"]:
+	for id in ["keep", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable"]:
 		check(ids.has(id), "building %s present" % id)
 	var keep := Balance.building("keep")
 	check(Rect2i(keep.cell, keep.size).get_center() == Vector2i(0, 0), "keep centered on the crossroads")
@@ -1018,7 +1019,7 @@ func test_economy_save() -> void:
 	e2.save_path = ECON_TMP
 	e2.load_save(now + 5.0)
 	check(e2.gold_tenths == 783 and e2.gold == 78 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
-	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":5,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
+	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":6,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
 		var f := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 		f.store_string(junk)
 		f.close()
@@ -1631,7 +1632,7 @@ func test_hero_levels() -> void:
 func test_buildings() -> void:
 	GameData.load_tables()
 	var ids: Array = GameData.buildings().map(func(b): return b.id)
-	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm"], "buildings.csv: 9 rows in file order: %s" % [ids])
+	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable"], "buildings.csv: 11 rows in file order: %s" % [ids])
 	var gate := GameData.building_def("gate")
 	check(gate.name == "성문" and gate.max_level == 30.0 and gate.stone == 250.0 and gate.base_sec == 45.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
 	# 비용 = round(값 × 1.35^(L−1)), 시간 = round(base_sec × 1.5^(L−1)) — 서버와 같은 표
@@ -1650,15 +1651,15 @@ func test_buildings() -> void:
 	# 효과 수치
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
-	check(GameData.barracks_hp_bonus(1) == 0.0 and is_equal_approx(GameData.barracks_hp_bonus(3), 0.06) and is_equal_approx(GameData.lab_atk_bonus(11), 0.3), "barracks/lab +3% per level above 1")
+	check(GameData.lab_atk_bonus(1) == 0.0 and is_equal_approx(GameData.lab_atk_bonus(11), 0.3), "lab +3% per level above 1")
 	var r1 := GameData.gacha_rates(1)
 	var r11 := GameData.gacha_rates(11)
 	check(is_equal_approx(r1.ssr, 0.03) and is_equal_approx(r1.sr, 0.17) and is_equal_approx(r11.ssr, 0.04) and is_equal_approx(r11.sr, 0.2), "tavern: SSR +0.1%p, SR +0.3%p per level")
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 1, {"barracks": 5, "lab": 3})
-	check(is_equal_approx(st.hp, 440.0 * 1.12) and is_equal_approx(st.atk, 30.0 * 1.06) and GameData.hero_stats(hans, 1, 1) == {"hp": 440.0, "atk": 30.0},
-		"hero hp x(1 + barracks), atk x(1 + lab): %s" % [st])
-	check(GameData.hero_power(hans, 1, 1, {"barracks": 5, "lab": 3}) == roundi(440.0 * 1.12 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the building bonuses")
+	check(st.hp == 440.0 and is_equal_approx(st.atk, 30.0 * 1.06) and GameData.hero_stats(hans, 1, 1) == {"hp": 440.0, "atk": 30.0},
+		"hero atk x(1 + lab); the barracks no longer raises hero HP (rev 13): %s" % [st])
+	check(GameData.hero_power(hans, 1, 1, {"barracks": 5, "lab": 3}) == roundi(440.0 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the lab bonus")
 	var rig := func(): return 0.0305  # 등급 굴림 0.0305: 주점 1(SSR 3%)은 SR, 주점 2(3.1%)는 SSR
 	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, 2)[0].grade == "SSR", "offline recruiting uses the tavern odds")
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
@@ -1683,8 +1684,8 @@ func test_buildings() -> void:
 	e.build_started.connect(func(id, f): started.append([id, f]))
 	e.building_done.connect(func(id, l): done.append([id, l]))
 	e.notice.connect(func(tx): notes.append(tx))
-	check(e.levels.size() == 9 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 300, "stone": 300, "food": 200} and e.upgrade_sec("keep") == 60,
-		"new game: 9 buildings at level 1, builder idle, population 6")
+	check(e.levels.size() == 11 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 300, "stone": 300, "food": 200} and e.upgrade_sec("keep") == 60,
+		"new game: 11 buildings at level 1, builder idle, population 6")
 	check(e.requirements("keep") == [{"id": "gate", "need": 1, "have": 1, "ok": true}, {"id": "barracks", "need": 1, "have": 1, "ok": true}]
 		and e.requirements("lumber") == [{"id": "keep", "need": 2, "have": 1, "ok": false}], "requirements: keep cap first, then req1/req2 at target - 1: %s" % [e.requirements("lumber")])
 	check(not e.upgrade("lumber", now) and notes == [EconomyScript.BLOCK_TEXT.keep_cap] and e.upgrade_block("keep", now) == "not_enough", "blocked upgrades only show the reason")
@@ -1710,7 +1711,7 @@ func test_buildings() -> void:
 	e.save_path = ECON_TMP
 	e.save()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == 4 and raw.levels.size() == 9 and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save v4 writes every building level and the builder")
+	check(int(raw.version) == 5 and raw.levels.size() == 11 and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save v5 writes every building level and the builder")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(t + 1.0)
@@ -1794,13 +1795,13 @@ func _lv(o: Dictionary) -> Dictionary:
 ## payload q의 건물 표·설정을 이름에 맞게 한 곳 망가뜨린다.
 func _corrupt_buildings(q: Dictionary, what: String) -> void:
 	match what:
-		"req unknown": q.buildings[3].req1 = "stable"
+		"req unknown": q.buildings[3].req1 = "mine"
 		"req not a string": q.buildings[3].req1 = 5
 		"cost negative": q.buildings[4].wood = -150
 		"cost not an integer": q.buildings[4].stone = 1.5
 		"base_sec 0": q.buildings[5].base_sec = 0
 		"max_level 0": q.buildings[8].max_level = 0
-		"building not in the layout": q.buildings.append({"id": "stable", "name": "마구간", "max_level": 30, "wood": 1, "stone": 1, "food": 1, "base_sec": 10, "req1": null, "req2": null})
+		"building not in the layout": q.buildings.append({"id": "mine", "name": "광산", "max_level": 30, "wood": 1, "stone": 1, "food": 1, "base_sec": 10, "req1": null, "req2": null})
 		"keep missing": q.buildings.remove_at(0)
 		"resource building not a building": q.buildings.remove_at(7)  # 채석장: 성문의 선행이자 자원 건물
 		"table missing": q.erase("buildings")
@@ -1829,3 +1830,179 @@ func test_hit_frac() -> void:
 		check(ap.has_animation(anim) and ap.get_animation(anim).length > 0.0, "%s plays %s" % [used[anim], anim])
 		root.free()
 	check(Art.ATTACK_FIT > 0.0 and Art.ATTACK_FIT < 1.0, "attack animation fits inside the interval (x %.2f)" % Art.ATTACK_FIT)
+
+
+## 개정 13 병사: 표·티어 배율·생산 시간 공식(서버 soldiers.test와 같은 값)·prod_step·키, 자동 배치 순서, 오프라인 생산(게으른 처리·상한·알림)·
+## 합성(5 → 1, 부족·최대, 배치 자르기)·배치 검사(보유·인구·키), save v5 왕복·v4 → v5·깨진 v5, 온라인 응답(1티어가 늘면 생산 — 첫 반영 제외),
+## apply_remote 검증, 성채 앞 자리 격자(66칸·겹침 없음·상인·부지 피함·대열), 말 메시.
+func test_soldiers() -> void:
+	GameData.load_tables()
+	var ids: Array = GameData.soldiers().map(func(s): return [s.id, s.building])
+	check(GameData.errors == 0 and ids == [["infantry", "barracks"], ["archer", "archery"], ["cavalry", "stable"]], "soldiers.csv: 3 rows in file order: %s" % [ids])
+	check(GameData.soldier_of_building("stable") == "cavalry" and GameData.soldier_of_building("lab") == "" and GameData.building_def("barracks").name == "보병 막사", "soldier buildings")
+	var i1 := GameData.soldier_stats("infantry", 1)
+	var i2 := GameData.soldier_stats("infantry", 2)
+	check(i1 == {"hp": 320.0, "atk": 22.0, "range": 1.6, "atk_interval": 1.0, "speed": 4.0, "aggro": 7.0} and i2.hp == 640.0 and i2.atk == 44.0 and i2.range == 1.6 and i2.speed == 4.0
+		and GameData.soldier_stats("cavalry", 5).hp == 240.0 * 16.0 and GameData.soldier_stats("knight", 1).is_empty(), "tier t: hp/atk x 2^(t-1), the rest unchanged: %s" % [i2])
+	check(GameData.soldier_stats("cavalry", 1).speed == 2.0 * GameData.soldier_stats("infantry", 1).speed, "cavalry moves twice as fast as infantry")
+	check(GameData.soldier_unit_sec(1) == 10800.0 and absf(GameData.soldier_unit_sec(10) - 6806.7) < 0.1 and absf(GameData.soldier_unit_sec(30) / 60.0 - 40.7) < 0.1,
+		"unit time = 10800 x 0.95^(L-1): Lv 10 about 1 h 54 min, Lv 30 about 41 min")
+	check(EconomyScript.prod_step(1000.0, 1000.0 + 10799.0, 10800.0, 720.0) == {"count": 0, "last": 1000.0, "changed": false}
+		and EconomyScript.prod_step(1000.0, 1000.0 + 3 * 10800.0 + 5.0, 10800.0, 720.0) == {"count": 3, "last": 1000.0 + 3 * 10800.0, "changed": true}
+		and EconomyScript.prod_step(1000.0, 361000.0, 10800.0, 720.0) == {"count": 4, "last": 361000.0, "changed": true}
+		and EconomyScript.prod_step(1000.0, 900.0, 10800.0, 720.0) == {"count": 0, "last": 900.0, "changed": true}, "prod_step: floor(elapsed / unit), leftover kept, the 12 h cap snaps to now, clock back restarts")
+	check(EconomyScript.parse_soldier_key("archer:2") == ["archer", 2] and EconomyScript.soldier_key("archer", 2) == "archer:2"
+		and ["knight:1", "archer:0", "archer:6", "archer:01", "archer", "archer:1:2", 5].all(func(k): return EconomyScript.parse_soldier_key(k).is_empty()), "soldier keys 'type:tier' (tier 1..5)")
+	var owned := {"archer:1": 4, "infantry:1": 3, "cavalry:2": 1, "archer:2": 2, "cavalry:1": 5, "knight:1": 9}
+	check(EconomyScript.auto_deploy_for(owned, 6) == {"cavalry:2": 1, "archer:2": 2, "infantry:1": 3} and EconomyScript.auto_deploy_for(owned, 9) == {"cavalry:2": 1, "archer:2": 2, "infantry:1": 3, "cavalry:1": 3},
+		"auto deploy: higher tier first, the same tier infantry -> cavalry -> archer, up to the population: %s" % [EconomyScript.auto_deploy_for(owned, 9)])
+	check(EconomyScript.trim_deploy({"infantry:1": 5, "archer:1": 2, "cavalry:2": 1}, {"infantry:1": 3, "archer:1": 2}) == {"infantry:1": 3, "archer:1": 2}, "trim_deploy cuts the deploy to what is owned")
+	# 오프라인 생산
+	var now := 1.8e9
+	var e = _econ(now)
+	var made := []
+	var notes := []
+	e.soldier_made.connect(func(t, n): made.append([t, n]))
+	e.notice.connect(func(t): notes.append(t))
+	check(e.soldier_counts().is_empty() and e.soldier_deploy().is_empty() and e.deployed_total() == 0 and e.population() == 6 and e.last_collect.barracks == now and e.last_collect.stable == now,
+		"new game: no soldiers, production clocks start now")
+	e.produce_due(now + 10799.0)
+	check(e.soldiers.is_empty() and made.is_empty(), "nothing before 3 h")
+	e.produce_due(now + 10800.0)
+	check(e.soldiers == {"infantry:1": 1, "archer:1": 1, "cavalry:1": 1} and made == [["infantry", 1], ["archer", 1], ["cavalry", 1]] and notes == ["보병 +1", "궁병 +1", "기병 +1"],
+		"3 h: one tier-1 soldier per building, soldier_made and the notice '보병 +1': %s %s" % [e.soldiers, notes])
+	check(e.soldier_production("barracks", now + 10800.0 + 800.0) == {"type": "infantry", "level": 1, "per_unit_sec": 10800.0, "next_in_sec": 10000.0} and e.soldier_production("lab").is_empty(),
+		"soldier_production: type, level, unit time, seconds to the next one")
+	e.levels.barracks = 10
+	e.produce_due(now + 10800.0 + 7000.0)
+	check(e.soldiers["infantry:1"] == 2 and e.soldiers["archer:1"] == 1, "the barracks level shortens the unit time")
+	e.produce_due(now + 360000.0)
+	check(e.soldiers == {"infantry:1": 8, "archer:1": 5, "cavalry:1": 5}, "closed for 100 h: at most the 720-minute cap (archers +4, Lv 10 infantry +6): %s" % [e.soldiers])
+	# 합성
+	e.soldiers = {"infantry:1": 12, "infantry:5": 5}
+	e.soldier_deployed = {"infantry:1": 6}
+	check(e.can_merge("infantry", 1) and e.merge_block("infantry", 5) == "max_tier" and e.merge_block("knight", 1) == "unknown" and e.merge_block("archer", 1) == "not_enough" and not e.can_merge("archer", 1),
+		"merge_block: unknown / max tier / not enough")
+	check(e.merge_soldiers("infantry", 1) and e.merge_soldiers("infantry", 1) and e.soldiers == {"infantry:1": 2, "infantry:2": 2, "infantry:5": 5} and e.soldier_deployed == {"infantry:1": 2},
+		"merge: 5 of a tier -> 1 of the next, the deploy is trimmed to what is owned: %s %s" % [e.soldiers, e.soldier_deployed])
+	check(not e.merge_soldiers("infantry", 1) and notes[-1] == EconomyScript.SOLDIER_TEXT.not_enough and not e.merge_soldiers("infantry", 5) and notes[-1] == EconomyScript.SOLDIER_TEXT.max_tier
+		and e.soldiers == {"infantry:1": 2, "infantry:2": 2, "infantry:5": 5}, "a refused merge only shows the reason")
+	# 배치
+	e.soldiers = {"infantry:1": 10, "archer:2": 3}
+	e.soldier_deployed = {}
+	check(e.soldier_deploy_block({"infantry:1": 7}) == "over_population" and e.soldier_deploy_block({"archer:2": 4}) == "not_owned" and e.soldier_deploy_block({"knight:1": 1}) == "bad_key"
+		and e.soldier_deploy_block({"infantry:1": -1}) == "bad_key" and e.soldier_deploy_block({"infantry:1": 1.5}) == "bad_key" and e.soldier_deploy_block({"infantry:1": "2"}) == "bad_key"
+		and e.soldier_deploy_block({"infantry:1": 3, "archer:2": 3}) == "", "deploy checks: keys, owned counts, population")
+	check(e.set_soldier_deploy({"infantry:1": 3, "archer:2": 3, "cavalry:1": 0}) and e.soldier_deploy() == {"infantry:1": 3, "archer:2": 3} and e.deployed_total() == 6
+		and not e.set_soldier_deploy({"infantry:1": 7}) and notes[-1] == EconomyScript.SOLDIER_TEXT.over_population and e.soldier_deploy() == {"infantry:1": 3, "archer:2": 3},
+		"set_soldier_deploy stores a valid deploy (zeros dropped) and refuses one above the population")
+	e.levels.houses = 3  # 인구 10
+	check(e.auto_deploy() == {"archer:2": 3, "infantry:1": 7}, "auto_deploy: highest tier first up to the population (10): %s" % [e.auto_deploy()])
+	# 저장 v5 왕복, v4 → v5, 깨진 v5
+	e.save_path = ECON_TMP
+	e.save()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(now + 360001.0)
+	check(int(JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP)).version) == 5 and e2.soldiers == e.soldiers and e2.soldier_deployed == e.soldier_deployed
+		and e2.last_collect.stable == e.last_collect.stable and e2.levels.barracks == 10, "save v5 round-trips soldiers, deploy and the production clocks")
+	var v4 := {"version": 4, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now},
+		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 1, "level": 1}}, "deploy": ["hans"]}
+	_write(ECON_TMP, JSON.stringify(v4))
+	e2.load_save(now + 50.0)
+	check(e2.gold_tenths == 5 and e2.soldiers.is_empty() and e2.soldier_deployed.is_empty() and e2.last_collect.barracks == now + 50.0 and e2.last_collect.stable == now + 50.0,
+		"save v4 -> v5: no soldiers, production starts at load")
+	var v5 := v4.duplicate(true)
+	v5.version = 5
+	v5.soldiers = {"knight:1": 3, "infantry:1": 2}
+	v5.soldier_deploy = {"infantry:1": 5}
+	_write(ECON_TMP, JSON.stringify(v5))
+	e2.load_save(now + 50.0)
+	check(e2.gold_tenths == 5 and e2.soldiers == {"infantry:1": 2} and e2.soldier_deployed == {"infantry:1": 2}, "v5 load drops unknown soldier keys and trims the deploy")
+	for junk in [{"soldiers": [1]}, {"soldiers": {"infantry:1": "x"}}, {"soldier_deploy": 3}, {"last_collect": {"lumber": now, "quarry": now, "farm": now, "stable": "x"}}]:
+		var bad: Dictionary = v5.duplicate(true)
+		bad.merge(junk, true)
+		_write(ECON_TMP, JSON.stringify(bad))
+		e2.load_save(now)
+		check(e2.gold_tenths == 0 and e2.soldiers.is_empty(), "malformed v5 soldiers (%s) is a corrupt save" % [junk])
+	DirAccess.remove_absolute(ECON_TMP)
+	e.free()
+	e2.free()
+	# 온라인 응답
+	var o = _econ(1000.0)
+	var om := []
+	o.soldier_made.connect(func(t, n): om.append([t, n]))
+	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {"barracks": {"level": 2, "last_collect": 900.0}},
+		"soldiers": {"infantry:1": 3, "knight:1": 2, "archer:2": 0}, "soldier_deploy": {"infantry:1": 2}, "population": 6},
+		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	check(o.apply_server(reply) and o.soldiers == {"infantry:1": 3} and o.soldier_deployed == {"infantry:1": 2} and o.last_collect.barracks == 900.0 and o.building_level("barracks") == 2 and om.is_empty(),
+		"first reply: soldiers (known keys only), deploy, production clock; no soldier_made")
+	reply.player.soldiers = {"infantry:1": 5, "archer:1": 1}
+	check(o.apply_server(reply) and om == [["infantry", 2], ["archer", 1]], "a later reply with more tier-1 soldiers signals soldier_made (server production): %s" % [om])
+	reply.player.soldiers = {"infantry:2": 1, "archer:1": 1}
+	check(o.apply_server(reply) and om.size() == 2 and o.soldiers == {"infantry:2": 1, "archer:1": 1}, "a merge reply (tier 1 down) is not production")
+	var logged := _errors.count
+	reply.player.soldiers = "x"
+	check(not o.apply_server(reply) and o.soldiers == {"infantry:2": 1, "archer:1": 1}, "apply_server rejects malformed soldiers")
+	_errors.count = logged
+	o.free()
+	# apply_remote: 병종 표·설정 검증 — 틀리면 아무것도 안 바꾼다
+	var before := _tables_hash()
+	for entry in [["building unknown", 1], ["building shared", 1], ["hp 0", 1], ["atk negative", 1], ["not drawable", 1], ["table missing", 1], ["max tier 0", 1], ["prod sec missing", 1]]:
+		var q := _payload()
+		match entry[0]:
+			"building unknown": q.soldiers[1].building = "mine"
+			"building shared": q.soldiers[2].building = "barracks"
+			"hp 0": q.soldiers[0].hp = 0
+			"atk negative": q.soldiers[1].atk = -1
+			"not drawable": q.soldiers[0].id = "dragon"
+			"table missing": q.erase("soldiers")
+			"max tier 0": q.config.soldier_max_tier = "0"
+			"prod sec missing": q.config.erase("soldier_prod_sec")
+		check(not GameData.apply_remote(q) and GameData.errors == entry[1] and _tables_hash() == before, "apply_remote rejects soldiers: %s (errors %d)" % [entry[0], GameData.errors])
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.soldiers().size() == 3, "default tables restored")
+	# 성채 앞 자리 격자: 11 × 6 = 66칸, 겹침 없음, 범위 안, 상인·수레·건물 부지 밖. 67번째는 자리 없음
+	var units := []
+	for i in 66:
+		units.append({"type": ["infantry", "archer", "cavalry"][i % 3], "tier": 1 + i % 5})
+	var spots: Array = FormationScript.soldier_spots(units)
+	var seen := {}
+	var inside := true
+	for p in spots:
+		if p == null:
+			inside = false
+			continue
+		seen[str(p)] = true
+		inside = inside and p.x >= Balance.SOLDIER_X.x - 0.001 and p.x <= Balance.SOLDIER_X.y + 0.001 and p.z >= Balance.SOLDIER_Z.x - 0.001 and p.z <= Balance.SOLDIER_Z.y + 0.001 and p.y == 0.0
+	check(FormationScript.soldier_grid() == Vector2i(11, 6) and seen.size() == 66 and inside, "66 soldiers get 66 distinct spots inside the square in front of the keep")
+	check(FormationScript.soldier_spots(units + [{"type": "infantry", "tier": 1}]).count(null) == 1, "67 soldiers: one of them gets no spot")
+	var cart_box := TownKitScript.merchant_cart().get_aabb()
+	var cart_c: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
+	var keep_out := [  # 상인·수레·건물 부지(병사 발밑 원판 반지름만큼 넓혀서)
+		Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS),
+		Rect2(cart_c.x + cart_box.position.x, cart_c.z + cart_box.position.z, cart_box.size.x, cart_box.size.z),
+	]
+	for b in Balance.BUILDINGS:
+		keep_out.append(Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE))
+	var hits := []
+	for p in spots:
+		for r in keep_out:
+			if (r as Rect2).grow(0.45).has_point(Vector2(p.x, p.z)):
+				hits.append([p, r])
+	check(hits.is_empty(), "soldier spots stay clear of the merchant, the cart and every building plot: %s" % [hits.slice(0, 2)])
+	var few: Array = FormationScript.soldier_spots([{"type": "infantry", "tier": 1}, {"type": "infantry", "tier": 2}, {"type": "infantry", "tier": 2},
+		{"type": "archer", "tier": 1}, {"type": "archer", "tier": 1}, {"type": "cavalry", "tier": 3}, {"type": "cavalry", "tier": 1}])
+	var want := [Vector3(3.9, 0, 9.1), Vector3(3.0, 0, 9.1), Vector3(2.1, 0, 9.1), Vector3(3.0, 0, 4.6), Vector3(2.1, 0, 4.6), Vector3(-1.5, 0, 9.1), Vector3(7.5, 0, 9.1)]
+	var rows_ok := true
+	for i in want.size():
+		rows_ok = rows_ok and few[i] is Vector3 and (few[i] as Vector3).is_equal_approx(want[i])
+	check(rows_ok, "ranks: infantry front row (gate side) highest tier in the middle, archers back row, cavalry at both ends: %s" % [few])
+	var cav: Array = FormationScript.soldier_spots(range(6).map(func(i): return {"type": "cavalry", "tier": 1}))
+	var cav_zs := cav.filter(func(p): return is_equal_approx(p.x, Balance.SOLDIER_X.x)).map(func(p): return snappedf(p.z, 0.01))
+	check(cav_zs == [9.1, 7.3, 5.5] and cav.all(func(p): return is_equal_approx(absf(p.x - 3.0), 4.5)), "six cavalry: both end columns, every other row (horses do not overlap): %s" % [cav])
+	var horse := TownKitScript.horse()
+	var hb := horse.get_aabb()
+	check(horse.get_surface_count() == 1 and absf(hb.position.y) < 0.01 and hb.end.y > TownKitScript.HORSE_BACK and hb.end.y < 2.0 and hb.size.z > hb.size.x * 2.0,
+		"horse: one low-poly surface on the ground, head above its back (%.2f m), longer than wide: %s" % [TownKitScript.HORSE_BACK, hb])

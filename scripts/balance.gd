@@ -25,7 +25,9 @@ const CAMERA_SIZE_MAX := 150.0
 ## 레벨 1 내부 타일 범위 -10..9. 성채 외 건물은 벽 쪽 2칸 여유(-8..7: 계단 띠 + 성문 안쪽↔계단 앞 통로)를 두고 십자 도로(-1·0)를 피한다.
 const BUILDINGS := [
 	{"id": "keep", "name": "성채", "cell": Vector2i(-2, -2), "size": Vector2i(4, 4)},
-	{"id": "barracks", "name": "막사", "cell": Vector2i(2, -8), "size": Vector2i(3, 3)},
+	{"id": "barracks", "name": "보병 막사", "cell": Vector2i(2, -8), "size": Vector2i(3, 3)},
+	{"id": "archery", "name": "궁병 훈련소", "cell": Vector2i(5, -8), "size": Vector2i(3, 3)},  # 개정 13 병사 건물
+	{"id": "stable", "name": "기병 마구간", "cell": Vector2i(-8, -8), "size": Vector2i(3, 3)},
 	{"id": "tavern", "name": "주점", "cell": Vector2i(5, -5), "size": Vector2i(3, 3)},
 	{"id": "lab", "name": "연구소", "cell": Vector2i(-5, -8), "size": Vector2i(3, 3)},
 	{"id": "houses", "name": "민가", "cell": Vector2i(-8, -5), "size": Vector2i(3, 3)},
@@ -38,6 +40,11 @@ const BUILDINGS := [
 const MERCHANT_POS := Vector3(-5.5, 0, 6.5)  # 성채 정문 앞 광장 왼쪽 — 벌목장·채석장 말풍선과 화면에서 겹치지 않는 자리
 const MERCHANT_CART_OFFSET := Vector3(2.0, 0, 0)
 const MERCHANT_RADIUS := 0.6
+
+## 성채 앞 병사 자리(개정 13 §7): 성채 정문(+Z) 앞 광장의 격자 x ∈ SOLDIER_X, z ∈ SOLDIER_Z, 간격 SOLDIER_GAP(11 × 6 = 66칸).
+const SOLDIER_X := Vector2(-1.5, 7.5)
+const SOLDIER_Z := Vector2(4.6, 9.4)
+const SOLDIER_GAP := 0.9
 
 
 static func building(id: String) -> Dictionary:
