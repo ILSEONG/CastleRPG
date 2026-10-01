@@ -2,8 +2,7 @@ extends RefCounted
 ## 맵·성 기하 상수. 몬스터·스테이지·영웅·자원·설정 수치는 data/*.csv(GameData)에 있다.
 
 # --- 맵·성 기하 (개정 2) ---
-const TILE := 2.0                     # 격자 타일 한 칸 (미터)
-const INTERIOR_TILES := [20, 24, 28]  # 성 내부 한 변 타일 수. index = keep_level - 1
+const TILE := 2.0                     # 격자 타일 한 칸 (미터). 성 내부 넓이는 성채 단계 표(GameData.interior_half, 개정 12)
 const WALL_T := 2.0                   # 성벽 두께 (1타일)
 const WALL_H := 3.0                   # 성벽 높이 = 성벽 위 발판 높이
 const GATE_W := 4.0                   # 성문 폭 (2타일)
@@ -39,10 +38,6 @@ const BUILDINGS := [
 const MERCHANT_POS := Vector3(-5.5, 0, 6.5)  # 성채 정문 앞 광장 왼쪽 — 벌목장·채석장 말풍선과 화면에서 겹치지 않는 자리
 const MERCHANT_CART_OFFSET := Vector3(2.0, 0, 0)
 const MERCHANT_RADIUS := 0.6
-
-
-static func interior_half(keep_level: int) -> float:
-	return INTERIOR_TILES[clampi(keep_level, 1, INTERIOR_TILES.size()) - 1] * TILE / 2.0
 
 
 static func building(id: String) -> Dictionary:

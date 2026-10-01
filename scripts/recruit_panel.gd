@@ -24,6 +24,7 @@ var _result_view: VBoxContainer
 var _grid: GridContainer
 var _waiting := false
 var _late: Array = []  # 다른 창이 열려 있어 못 보여 준 결과(다음에 열 때)
+var _rates_label: Label
 
 
 func _ready() -> void:
@@ -32,7 +33,8 @@ func _ready() -> void:
 	_pick_view = VBoxContainer.new()
 	_pick_view.add_theme_constant_override("separation", 14)
 	content.add_child(_pick_view)
-	_pick_view.add_child(_label(rates_text(), 28))
+	_rates_label = _label(rates_text(), 28)
+	_pick_view.add_child(_rates_label)
 	one_button = _button("1회 모집 %d" % EconomyScript.gacha_cost(1))
 	one_button.pressed.connect(_recruit.bind(1))
 	_pick_view.add_child(one_button)
@@ -62,6 +64,7 @@ func _ready() -> void:
 
 
 func _on_open() -> void:
+	_rates_label.text = rates_text()  # 주점 레벨이 올랐을 수 있다
 	if _late.is_empty():
 		_show_pick()
 		return
@@ -74,10 +77,11 @@ func is_showing_results() -> bool:
 	return visible and _result_view.visible
 
 
-## "SSR 3% · SR 17% · R 80%"(설정 값에서).
+## "SSR 3% · SR 17% · R 80%"(설정 값 + 주점 레벨 보너스, 개정 12).
 static func rates_text() -> String:
-	var ssr := GameData.config_num("gacha_rate_ssr")
-	var sr := GameData.config_num("gacha_rate_sr")
+	var rates: Dictionary = Economy.gacha_rates()
+	var ssr: float = rates.ssr
+	var sr: float = rates.sr
 	return "SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0), Skills.num_text((1.0 - ssr - sr) * 100.0)]
 
 

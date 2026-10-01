@@ -4,11 +4,16 @@ extends Node
 ## 온라인 모드(net이 Net 노드, 개정 9): 상태는 서버 응답(apply_server)으로만 바뀐다. 수집·판매는 요청만 보내고
 ## 응답이 오면 반영한다. 처치는 쌓아 두고 Net이 보낸다. 표시 골드 = 서버 골드 + 아직 반영 안 된 처치의 예상 골드
 ## (서버처럼 min(처치 스테이지, 서버 stage)로 매긴다).
+## 건물(개정 12): 모든 건물 레벨(levels)과 일꾼(build)도 여기 있다. UI(건물 창·[성] 탭)가 쓰는 API는 아래 "건물 레벨업" 한 곳 —
+## upgrade_block·requirements·upgrade_cost·upgrade_sec·upgrade·build_left·build_progress·population, 시그널 build_started·building_done.
+## 완료는 보정 시각으로 판정한다: 오프라인은 여기서 게으른 완료(complete_due), 온라인은 서버가 완료하고 /v1/player로 받는다.
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 3  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 4  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+# 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
+# GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -17,6 +22,13 @@ const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
 const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
 const FOOD := "food"  # 레벨업 식량 자원 id
+const BUILD_FAIL_TEXT := "건설 결과를 받지 못했습니다 — 건물 상태를 다시 확인합니다"
+const BUILD_POLL_SEC := 2.0  # 온라인: 끝나는 시각이 지난 건설을 서버에 다시 물어보는 간격
+## 업그레이드 못 하는 이유 코드 → 문구(upgrade_block, 서버 409 코드와 같다. in_progress·waiting은 앱만).
+const BLOCK_TEXT := {
+	"unknown": "알 수 없는 건물", "max_level": "최대 레벨", "keep_cap": "성채 레벨이 부족합니다", "prereq": "선행 조건 미충족",
+	"in_progress": "건설 중", "builder_busy": "다른 건물 건설 중", "not_enough": "자원 부족", "waiting": "응답 대기 중",
+}
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
@@ -24,6 +36,8 @@ signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 signal roster_changed  # 보유 영웅(copies)이나 배치가 바뀌었다
 signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies}]. 실패(온라인)면 빈 배열
 signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
+signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
+signal building_done(building_id: String, level: int)  # 건설 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
 
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
 var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
@@ -32,8 +46,9 @@ var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면
 	set(v):
 		gold_tenths = v * 10
 var res: Dictionary = {}           # 자원 id → int
-var last_collect: Dictionary = {}  # 건물 id → 유닉스 초(float)
-var levels: Dictionary = {}        # 건물 id → int
+var last_collect: Dictionary = {}  # 자원 건물 id → 유닉스 초(float)
+var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 모든 건물)
+var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1). 별 = min(copies − 1, hero_max_stars)
 var hero_levels: Dictionary = {}   # 영웅 id → 레벨(≥ 1, 없으면 1). 개정 11
 var deploy: Array = []             # 배치 슬롯 i → 영웅 id 또는 null(저장된 그대로 — 쓰는 쪽은 deploy_slots)
@@ -55,6 +70,8 @@ var _save_cd := SAVE_INTERVAL
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
 var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(그동안 다른 응답의 옛 배치로 되돌리지 않는다)
 var _deploys_out := 0
+var _synced := false  # 온라인: 서버 응답을 한 번이라도 반영했다(첫 반영의 레벨 차이는 완료가 아니다)
+var _build_poll_at := 0.0  # 온라인: 다 지은 건설을 다시 물어볼 시각
 
 
 func _init() -> void:
@@ -121,14 +138,15 @@ static func gacha_cost(count: int) -> int:
 
 ## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(SSR rate_ssr, SR rate_sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
 ## 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand = [0, 1) 난수 Callable(테스트는 주입).
-## 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
-static func roll_gacha(count: int, rand: Callable) -> Array:
+## 확률은 주점 레벨로 오른다(개정 12, GameData.gacha_rates). 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
+static func roll_gacha(count: int, rand: Callable, tavern_level := 1) -> Array:
 	var pools := {"SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
 		if pools.has(h.grade):
 			pools[h.grade].append(h.id)
-	var ssr := GameData.config_num("gacha_rate_ssr")
-	var sr := GameData.config_num("gacha_rate_sr")
+	var rates := GameData.gacha_rates(tavern_level)
+	var ssr: float = rates.ssr
+	var sr: float = rates.sr
 	var out := []
 	for i in count:
 		var r: float = rand.call()
@@ -156,6 +174,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	complete_due(time_now())
 	if not _dirty:
 		return
 	_save_cd -= delta
@@ -174,6 +193,10 @@ func reset(now: float) -> void:
 	res = {}
 	last_collect = {}
 	levels = {}
+	for b in GameData.buildings():
+		levels[b.id] = 1
+	build = {}
+	_build_poll_at = 0.0
 	for r in GameData.resources():
 		var id: String = r.id
 		var b: String = r.building
@@ -299,7 +322,7 @@ func gacha(count: int) -> bool:
 		return _gacha_online(count)
 	gold_tenths -= gacha_cost(count) * 10
 	var results := []
-	for r in roll_gacha(count, rng.randf):
+	for r in roll_gacha(count, rng.randf, building_level(GameData.TAVERN)):
 		var c := int(heroes.get(r.id, 0)) + 1
 		results.append({"hero_id": r.id, "grade": r.grade, "new": c == 1, "copies": c})
 		heroes[r.id] = c
@@ -413,6 +436,159 @@ func add_kill(kind: String, stage: int) -> void:
 	changed.emit()
 
 
+# --- 건물 레벨업(개정 12 §2.2~2.5) — UI가 쓰는 API는 여기 한 곳 ---
+
+## 업그레이드 못 하는 이유 코드(순수 함수, 서버 rules.upgradeBlock과 같은 순서·코드). 되면 "".
+## levels: 건물 id → 레벨(없으면 1), build_id: 짓고 있는 건물(쉬면 ""), res: 쓸 수 있는 자원(자원 건물이면 자동 수집분 포함).
+##   unknown → max_level → keep_cap(성채 제외: 목표 레벨 > 성채 레벨) → prereq(req1·req2 레벨 < 목표 − 1)
+##   → in_progress(바로 이 건물을 짓는 중) / builder_busy(다른 건물을 짓는 중) → not_enough
+static func upgrade_block_for(id: String, lv: Dictionary, build_id: String, have: Dictionary) -> String:
+	var d := GameData.building_def(id)
+	if d.is_empty():
+		return "unknown"
+	var level := maxi(1, int(lv.get(id, 1)))
+	if level >= int(d.max_level):
+		return "max_level"
+	if id != GameData.KEEP and level + 1 > maxi(1, int(lv.get(GameData.KEEP, 1))):
+		return "keep_cap"
+	for c in GameData.BUILDING_REQ_COLS:
+		if d[c] != "" and maxi(1, int(lv.get(d[c], 1))) < level:
+			return "prereq"
+	if build_id != "":
+		return "in_progress" if build_id == id else "builder_busy"
+	var cost := GameData.build_cost(id, level)
+	for r in cost:
+		if int(have.get(r, 0)) < int(cost[r]):
+			return "not_enough"
+	return ""
+
+
+func building_level(id: String) -> int:
+	return maxi(1, int(levels.get(id, 1)))
+
+
+## 인구 = 민가 레벨로(GameData.population). 병사 배치 상한(병사는 다음 개정).
+func population() -> int:
+	return GameData.population(building_level(GameData.HOUSES))
+
+
+## 지금 모집 확률 {ssr, sr}(주점 레벨). 모집 창 확률 줄.
+func gacha_rates() -> Dictionary:
+	return GameData.gacha_rates(building_level(GameData.TAVERN))
+
+
+## 지금 업그레이드 못 하는 이유 코드(upgrade_block_for + "waiting": 온라인 응답 대기). 되면 "". now = 보정 시각(time_now) —
+## 자원 건물은 시작할 때 자동 수집하므로 그만큼(pending)을 보유량에 더해 본다(서버와 같다). 문구는 BLOCK_TEXT[코드].
+func upgrade_block(id: String, now: float) -> String:
+	if _waiting.has("build"):
+		return "waiting"
+	var have := res.duplicate()
+	var r := res_of(id)
+	if r != "":
+		have[r] = int(have.get(r, 0)) + pending(id, now)
+	return upgrade_block_for(id, levels, str(build.get("id", "")), have)
+
+
+## 다음 레벨 비용 {wood, stone, food}(최대 레벨이면 {}).
+func upgrade_cost(id: String) -> Dictionary:
+	var d := GameData.building_def(id)
+	return GameData.build_cost(id, building_level(id)) if not d.is_empty() and building_level(id) < int(d.max_level) else {}
+
+
+## 다음 레벨 건설 시간(초, 최대 레벨이면 0).
+func upgrade_sec(id: String) -> int:
+	var d := GameData.building_def(id)
+	return GameData.build_sec(id, building_level(id)) if not d.is_empty() and building_level(id) < int(d.max_level) else 0
+
+
+## 선행 조건 목록(건물 창 ✓/✗): [{id, need, have, ok}]. 성채가 아니면 성채 상한(성채 Lv 목표 필요)이 먼저, 그다음 req1·req2
+## (목표 − 1 필요). 최대 레벨·모르는 건물이면 [].
+func requirements(id: String) -> Array:
+	var d := GameData.building_def(id)
+	if d.is_empty() or building_level(id) >= int(d.max_level):
+		return []
+	var to := building_level(id) + 1
+	var out := []
+	if id != GameData.KEEP:
+		out.append({"id": GameData.KEEP, "need": to, "have": building_level(GameData.KEEP), "ok": building_level(GameData.KEEP) >= to})
+	for c in GameData.BUILDING_REQ_COLS:
+		if d[c] != "":
+			out.append({"id": d[c], "need": to - 1, "have": building_level(d[c]), "ok": building_level(d[c]) >= to - 1})
+	return out
+
+
+func is_building(id: String) -> bool:
+	return str(build.get("id", "")) == id
+
+
+## 건설 남은 초(쉬면 0).
+func build_left(now: float) -> float:
+	return maxf(0.0, float(build.finish) - now) if not build.is_empty() else 0.0
+
+
+## 건설 진행 0..1(쉬면 0). 전체 시간 = 지금 레벨의 건설 시간.
+func build_progress(now: float) -> float:
+	if build.is_empty():
+		return 0.0
+	var total := float(GameData.build_sec(str(build.id), building_level(str(build.id))))
+	return clampf(1.0 - build_left(now) / total, 0.0, 1.0) if total > 0.0 else 1.0
+
+
+## 업그레이드 시작(스펙 §2.4·§2.5). 안 되면 알림(BLOCK_TEXT)만. 오프라인: 자원 건물이면 먼저 자동 수집(수집 규칙 그대로, 남은 초 유지)
+## → 비용 즉시 차감 → 일꾼 {id, finish = now + 시간} → 저장 → build_started. 온라인: /v1/building/upgrade(once — 다시 보내면 두 번
+## 지어질 수 있어 재전송하지 않는다. 실패하면 알림 + 상태 새로 받기. 응답에 build_started). 시작했거나 보냈으면 true.
+func upgrade(id: String, now: float) -> bool:
+	if _waiting.has("build"):
+		return false  # 응답 전 재탭
+	complete_due(now)
+	var why := upgrade_block(id, now)
+	if why != "":
+		notice.emit(BLOCK_TEXT.get(why, BUILD_FAIL_TEXT))
+		return false
+	if net != null:
+		return _upgrade_online(id)
+	if res_of(id) != "":
+		collect(id, now)
+	var cost := upgrade_cost(id)
+	for r in cost:
+		res[r] = int(res.get(r, 0)) - int(cost[r])
+	build = {"id": id, "finish": now + upgrade_sec(id)}
+	changed.emit()
+	save()
+	build_started.emit(id, float(build.finish))
+	return true
+
+
+## 게으른 완료: 끝나는 시각(보정 시각)이 지났으면 오프라인은 레벨 +1 · 일꾼 비움 · 저장 · building_done. 온라인은 서버가 완료한다 —
+## BUILD_POLL_SEC마다 한 번 /v1/player로 새 상태를 받는다(레벨이 오르면 apply_server가 building_done). 매 프레임 불러도 가볍다.
+func complete_due(now: float) -> void:
+	if build.is_empty() or now < float(build.finish):
+		return
+	if net != null:
+		if net.up and now >= _build_poll_at:
+			_build_poll_at = now + BUILD_POLL_SEC
+			net.refresh()
+		return
+	var id := str(build.id)
+	levels[id] = building_level(id) + 1
+	build = {}
+	changed.emit()
+	save()
+	building_done.emit(id, levels[id])
+
+
+## 테스트 훅(입력·통합 체크): 진행 중 건설을 지금 끝낸다. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은
+## POST /v1/test/build_now(ALLOW_TEST_HOOKS 서버만)의 응답을 반영한다(완료는 서버가, building_done은 apply_server가).
+func finish_build_now() -> void:
+	if build.is_empty():
+		return
+	if net != null:
+		net.send("POST", "/v1/test/build_now", {}, apply_server)
+		return
+	build.finish = time_now()
+	complete_due(time_now())
+
+
 # --- 온라인 ---
 
 ## 서버 플레이어 응답 반영. 형이 틀리면 아무것도 안 바꾸고 false. heroes·deploy는 있으면 반영(형은 검사).
@@ -421,7 +597,8 @@ func apply_server(data: Dictionary) -> bool:
 	var m = data.get("merchant")
 	if not (p is Dictionary and m is Dictionary and _num(p.get("gold_tenths")) and _num(p.get("stage")) and p.get("res") is Dictionary \
 			and p.get("buildings") is Dictionary and _rates_ok(m.get("rates")) and _num(m.get("next_change")) \
-			and (p.get("heroes") == null or p.heroes is Dictionary) and (p.get("deploy") == null or p.deploy is Array)):
+			and (p.get("heroes") == null or p.heroes is Dictionary) and (p.get("deploy") == null or p.deploy is Array) \
+			and (p.get("build") == null or p.build is Dictionary)):
 		push_error("bad player response: %s" % str(data))
 		return false
 	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate()]
@@ -442,6 +619,9 @@ func apply_server(data: Dictionary) -> bool:
 	var r := {}
 	var lc := {}
 	var lv := {}
+	for row in GameData.buildings():  # 개정 12: 모든 건물 {level}(자원 건물은 아래에서 last_collect와 함께)
+		var v = p.buildings.get(row.id)
+		lv[row.id] = maxi(1, int(v.level)) if v is Dictionary and _num(v.get("level")) else 1
 	for row in GameData.resources():
 		var id: String = row.id
 		var bid: String = row.building
@@ -452,7 +632,10 @@ func apply_server(data: Dictionary) -> bool:
 		lv[bid] = int(b.level) if ok else 1
 	res = r
 	last_collect = lc
+	var levels_before := levels
 	levels = lv
+	var bd = p.get("build")  # 일꾼: {id, finish} 또는 null
+	build = {"id": bd.id, "finish": float(bd.finish)} if bd is Dictionary and bd.get("id") is String and _num(bd.get("finish")) else {}
 	server_gold_tenths = int(p.gold_tenths)
 	server_stage = int(p.stage)
 	if _num(p.get("kill_seq")):
@@ -465,6 +648,11 @@ func apply_server(data: Dictionary) -> bool:
 	changed.emit()
 	if [heroes, deploy, hero_levels] != roster_before:
 		roster_changed.emit()
+	if _synced:  # 서버가 완료한 건설(게으른 완료) — 첫 반영의 레벨 차이는 완료가 아니라 접속이다
+		for id in levels:
+			if int(levels[id]) > int(levels_before.get(id, 1)):
+				building_done.emit(id, levels[id])
+	_synced = true
 	return true
 
 
@@ -645,6 +833,32 @@ func _deploy_answered() -> void:
 		_pending_deploy = null
 
 
+## 온라인 업그레이드: once로 보낸다(모집·레벨업과 같은 이유로 다시 보내지 않는다). 자원은 서버가 뺀다(처치 골드와 무관).
+func _upgrade_online(id: String) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["build"] = true
+	net.send("POST", "/v1/building/upgrade", {"building": id}, _on_upgraded, _on_upgrade_failed, true, true)
+	changed.emit()  # UI가 응답 전 버튼을 끈다
+	return true
+
+
+func _on_upgraded(data: Dictionary) -> void:
+	_waiting.erase("build")
+	apply_server(data)
+	if not build.is_empty():
+		build_started.emit(str(build.id), float(build.finish))
+
+
+## 거부(409 max_level·keep_cap·prereq·builder_busy·not_enough, 400)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
+func _on_upgrade_failed() -> void:
+	_waiting.erase("build")
+	notice.emit(BLOCK_TEXT.get(net.last_error, BUILD_FAIL_TEXT))
+	net.refresh()
+	changed.emit()
+
+
 # --- 저장 ---
 
 func save() -> void:
@@ -662,7 +876,7 @@ func save() -> void:
 	for id in heroes:
 		hs[id] = {"copies": heroes[id], "level": level_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
-		"heroes": hs, "deploy": deploy}))
+		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -680,13 +894,14 @@ func load_save(now: float) -> void:
 		return
 	changed.emit()
 	roster_changed.emit()
+	complete_due(now)  # 앱이 꺼져 있는 동안 끝난 건설
 
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, SAVE_VERSION]:
 		return false
-	var v3: bool = int(data.version) == 3  # v3: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
+	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v1: bool = int(data.version) == 1  # v1: gold(정수) → × 10
 	if not _num(data.get("gold" if v1 else "gold_tenths")):
 		return false
@@ -706,6 +921,19 @@ func _apply(data) -> bool:
 		r[id] = maxi(0, int(rs[id]))
 		lc[b] = float(ls[b])
 		lv[b] = maxi(1, int(vs[b]))
+	# 건물(개정 12, v4): 자원 건물이 아닌 건물 레벨은 있으면 숫자여야 하고, 없으면(v3 이하·새 건물) 1. 일꾼은 null 또는 {표에 있는 id, finish}
+	for row in GameData.buildings():
+		var v = data.levels.get(row.id)
+		if v != null and not _num(v):
+			return false
+		if not lv.has(row.id):
+			lv[row.id] = maxi(1, int(v)) if v != null else 1
+	var bd = data.get("build")
+	var bld := {}
+	if bd != null:
+		if not (bd is Dictionary and bd.get("id") is String and not GameData.building_def(bd.id).is_empty() and _num(bd.get("finish"))):
+			return false
+		bld = {"id": bd.id, "finish": float(bd.finish)}
 	# 영웅(개정 10): 없으면(v1, 영웅 전 v2) reset()의 시작 영웅 그대로. 있으면 둘 다 형이 맞아야 한다
 	var hs = data.get("heroes")
 	var ds = data.get("deploy")
@@ -738,6 +966,7 @@ func _apply(data) -> bool:
 	res = r
 	last_collect = lc
 	levels = lv
+	build = bld
 	heroes = h
 	hero_levels = hl
 	deploy = d

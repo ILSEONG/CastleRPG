@@ -338,15 +338,13 @@ func _on_gamedata(data: Dictionary) -> void:
 		push_error("server gamedata rejected (%d errors); keeping the built-in tables" % GameData.errors)
 
 
-## 첫 player 응답: 상태와 스테이지·성 레벨을 서버 값으로 두고 HP를 새 표로 채운다. 그 다음 connected(_mark_up).
+## 첫 player 응답: 상태와 스테이지를 서버 값으로 두고 HP를 새 표·건물 레벨(Economy, GameState.roster)로 채운다. 그 다음 connected(_mark_up).
 func _on_first_player(data: Dictionary) -> void:
 	if not Economy.apply_server(data):
 		_retry_first_player()
 		return
 	var p: Dictionary = data.player
 	GameState.stage = int(p.stage)
-	GameState.keep_level = int(p.get("keep_level", 1))
-	GameState.gate_level = int(p.get("gate_level", 1))
 	GameState.refill()
 	ready_once = true
 

@@ -9,6 +9,7 @@ const STAGES_PATH := "res://data/stages.csv"
 const HEROES_PATH := "res://data/heroes.csv"
 const RESOURCES_PATH := "res://data/resources.csv"
 const CONFIG_PATH := "res://data/config.csv"
+const BUILDINGS_PATH := "res://data/buildings.csv"
 const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하는 정수 열
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
@@ -30,7 +31,25 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
 	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
 	"levelup_food_R", "levelup_food_SR", "levelup_food_SSR"]
-const CONFIG_LIST_KEYS := ["hero_slots", "starter_heroes"]
+const CONFIG_LIST_KEYS := ["starter_heroes"]
+# --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
+const BUILDING_STR_COLS := ["id", "name"]
+const BUILDING_NUM_COLS := ["max_level", "wood", "stone", "food", "base_sec"]
+const BUILDING_REQ_COLS := ["req1", "req2"]  # 선행 건물 id. 빈 칸(서버는 null) = 없음
+const BUILD_RES := ["wood", "stone", "food"]  # 건물 비용 열 = 자원 id
+const BUILD_COST_GROWTH := 1.35  # L → L+1 비용 = round(값 × 1.35^(L−1))
+const BUILD_TIME_GROWTH := 1.5   # L → L+1 시간 = round(base_sec × 1.5^(L−1))
+const KEEP := "keep"  # 다른 건물의 상한·영웅 슬롯·성 내부·성 HP
+const GATE := "gate"  # 성문 HP(네 성문이 레벨 하나). 배치(Balance.BUILDINGS)에 없는 성 구조물
+const BARRACKS := "barracks"  # 영웅 HP
+const LAB := "lab"  # 영웅 공격
+const HOUSES := "houses"  # 인구
+const TAVERN := "tavern"  # 모집 확률
+const BUILDING_NUM_KEYS := ["castle_hp_per_level", "pop_base", "pop_per_house", "barracks_hp_per_level", "lab_atk_per_level",
+	"tavern_ssr_per_level", "tavern_sr_per_level"]  # 0 이상, 주점 증가분은 1 이하, 인구는 정수
+const POP_KEYS := ["pop_base", "pop_per_house"]
+const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 단계 표 "레벨:값|…"(hero_slots·Balance.INTERIOR_TILES를 대신)
+const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
 const LEVELUP_INT_KEYS := ["hero_max_level_per_star", "levelup_gold_R", "levelup_food_R", "levelup_gold_SR", "levelup_food_SR",
 	"levelup_gold_SSR", "levelup_food_SSR"]  # 0 이상 정수(개정 11)
 const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
@@ -41,18 +60,20 @@ static var _stages: Array = []
 static var _heroes: Array = []  # 파일 순서
 static var _resources: Array = []  # 파일 순서
 static var _config := {}  # 키 → 문자열
+static var _buildings: Array = []  # 파일 순서(개정 12)
 static var _loaded := false
 
 
 ## 기본 표를 다시 읽게 한다. 경로를 주면 그 파일을 쓴다(테스트용). 오류가 있어도 읽은 만큼은 쓴다.
 static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PATH, heroes_path := HEROES_PATH,
-		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH) -> void:
+		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH) -> void:
 	errors = 0
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
 		"stages": _read(stages_path, ["stage"] + STAGE_COLS),
 		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1]),
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
+		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS),
 		"config": _config_map(_read(config_path, ["key", "value"])),
 	}))
 
@@ -62,7 +83,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 static func apply_remote(payload: Dictionary) -> bool:
 	errors = 0
 	var raw := {}
-	for table in ["monsters", "stages", "heroes", "resources"]:
+	for table in ["monsters", "stages", "heroes", "resources", "buildings"]:
 		var rows = payload.get(table)
 		var out: Array = []
 		if rows is Array:
@@ -146,14 +167,120 @@ static func config_list(key: String) -> Array:
 	return _split_list(String(_config.get(key, "")))
 
 
+## 성문 HP = gate_hp_per_level × 성문 레벨.
 static func gate_hp_max(level: int) -> float:
 	return config_num("gate_hp_per_level") * level
 
 
-## index = keep_level - 1, 표 끝을 넘으면 마지막 값.
+# --- 건물(개정 12 §2.2·§2.3). 서버 rules.ts(buildCost·buildSec·parseTiers·tierValue…)와 같은 식 ---
+
+## 건물 표(파일 순서). 행 = {id, name, max_level, wood, stone, food, base_sec, req1, req2}(숫자는 float, 선행 없으면 "").
+static func buildings() -> Array:
+	_ensure()
+	return _buildings
+
+
+static func building_def(id: String) -> Dictionary:
+	for b in buildings():
+		if b.id == id:
+			return b
+	return {}
+
+
+## L → L+1 비용 {wood, stone, food}(정수) = round(값 × 1.35^(L−1)). 모르는 건물이면 {}.
+static func build_cost(id: String, level: int) -> Dictionary:
+	var d := building_def(id)
+	if d.is_empty():
+		return {}
+	var out := {}
+	for r in BUILD_RES:
+		out[r] = roundi(_grown(float(d[r]), BUILD_COST_GROWTH, level - 1))
+	return out
+
+
+## L → L+1 시간(초, 정수) = round(base_sec × 1.5^(L−1)). 모르는 건물이면 0.
+static func build_sec(id: String, level: int) -> int:
+	var d := building_def(id)
+	return roundi(_grown(float(d.base_sec), BUILD_TIME_GROWTH, level - 1)) if not d.is_empty() else 0
+
+
+## base × growth^n을 곱셈 n번으로 — 서버(JS)와 같은 IEEE 곱셈 순서라 pow 구현 차이로 반올림이 갈리지 않는다.
+static func _grown(base: float, growth: float, n: int) -> float:
+	var v := base
+	for i in n:
+		v *= growth
+	return v
+
+
+## 단계 표 "레벨:값|…" → [[레벨(int), 값(float)], …]. 레벨은 1부터 오름차순 정수. 틀리면 [].
+static func parse_tiers(s: String) -> Array:
+	var out := []
+	for part in s.split("|"):
+		var kv := part.split(":")
+		if kv.size() != 2 or not kv[0].strip_edges().is_valid_int() or not kv[1].strip_edges().is_valid_float():
+			return []
+		var lv := kv[0].strip_edges().to_int()
+		var first_ok := lv == 1 if out.is_empty() else lv > int(out[-1][0])
+		if not first_ok:
+			return []
+		out.append([lv, kv[1].strip_edges().to_float()])
+	return out
+
+
+## 단계 표 key에서 level 이하인 마지막 단계의 값(첫 단계보다 낮으면 첫 값). 표가 틀리면 0(검증이 막는다).
+static func tier_value(key: String, level: int) -> float:
+	_ensure()
+	var tiers := parse_tiers(String(_config.get(key, "")))
+	if tiers.is_empty():
+		return 0.0
+	var v: float = tiers[0][1]
+	for t in tiers:
+		if level >= int(t[0]):
+			v = t[1]
+	return v
+
+
+## 영웅 슬롯 수 = 성채 단계 표 keep_slot_tiers(성채 1~4 → 4, 5~9 → 8, 10+ → 12).
 static func hero_slots(keep_level: int) -> int:
-	var slots := config_list("hero_slots")
-	return int(slots[clampi(keep_level, 1, slots.size()) - 1])
+	return int(tier_value("keep_slot_tiers", keep_level))
+
+
+## 성 내부 한 변 타일 수 = 성채 단계 표 keep_interior_tiers(1~4 → 20, 5~9 → 24, 10+ → 28).
+static func interior_tiles(keep_level: int) -> int:
+	return int(tier_value("keep_interior_tiers", keep_level))
+
+
+## 성 내부 절반 크기(미터).
+static func interior_half(keep_level: int) -> float:
+	return interior_tiles(keep_level) * Balance.TILE / 2.0
+
+
+## 성 HP = castle_hp + castle_hp_per_level × (성채 − 1).
+static func castle_hp_max(keep_level: int) -> float:
+	return config_num("castle_hp") + config_num("castle_hp_per_level") * (maxi(keep_level, 1) - 1)
+
+
+## 인구 = pop_base + pop_per_house × (민가 − 1)(사용자 지시 2026-10-01: 민가는 축적 상한 대신 인구 — 병사 배치 상한, 병사는 다음 개정).
+static func population(houses_level: int) -> int:
+	return int(config_num("pop_base")) + int(config_num("pop_per_house")) * (maxi(houses_level, 1) - 1)
+
+
+## 막사: 영웅 HP + barracks_hp_per_level × (L − 1)(0.03이면 Lv 3 → +6%). 다음 개정에서 막사가 병사 건물 셋으로 나뉜다 —
+## 이 보너스는 hero_stats의 곱 하나라 거기만 지우면 된다.
+static func barracks_hp_bonus(level: int) -> float:
+	return config_num("barracks_hp_per_level") * (maxi(level, 1) - 1)
+
+
+## 연구소: 영웅 공격 + lab_atk_per_level × (L − 1).
+static func lab_atk_bonus(level: int) -> float:
+	return config_num("lab_atk_per_level") * (maxi(level, 1) - 1)
+
+
+## 모집 확률(주점) {ssr, sr}: SSR + tavern_ssr_per_level × (L − 1), SR + tavern_sr_per_level × (L − 1). R은 나머지.
+static func gacha_rates(tavern_level: int) -> Dictionary:
+	var k := maxi(tavern_level, 1) - 1
+	return {"ssr": config_num("gacha_rate_ssr") + config_num("tavern_ssr_per_level") * k,
+		"sr": config_num("gacha_rate_sr") + config_num("tavern_sr_per_level") * k}
 
 
 ## 오프라인 기본 배치: starter_heroes를 슬롯 수만큼(넘치면 자르고, 모자라면 null).
@@ -199,15 +326,17 @@ static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	return {"gold": gold, "food": food}
 
 
-## 최종 HP·공격 = 표 기본값 × 레벨 배율 × 별 배율. {hp, atk}
-static func hero_stats(def: Dictionary, level: int, copies: int) -> Dictionary:
+## 최종 HP = 표 기본값 × 레벨 배율 × 별 배율 × (1 + 막사 보너스), 공격 = … × (1 + 연구소 보너스)(개정 12). {hp, atk}
+## buildings = 건물 id → 레벨(Economy.levels). 비우면 막사·연구소 1(보너스 없음).
+static func hero_stats(def: Dictionary, level: int, copies: int, buildings := {}) -> Dictionary:
 	var m := level_mult(level) * star_mult(copies)
-	return {"hp": float(def.hp) * m, "atk": float(def.atk) * m}
+	return {"hp": float(def.hp) * m * (1.0 + barracks_hp_bonus(int(buildings.get(BARRACKS, 1)))),
+		"atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1))))}
 
 
-## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격).
-static func hero_power(def: Dictionary, level: int, copies: int) -> int:
-	var s := hero_stats(def, level, copies)
+## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(건물 보너스 포함).
+static func hero_power(def: Dictionary, level: int, copies: int, buildings := {}) -> int:
+	var s := hero_stats(def, level, copies, buildings)
 	return roundi(s.hp / 10.0 + s.atk * 2.0 / float(def.atk_interval))
 
 
@@ -248,6 +377,7 @@ static func _install(t: Dictionary) -> void:
 	_stages = t.stages
 	_heroes = t.heroes
 	_resources = t.resources
+	_buildings = t.buildings
 	_config = t.config
 	_loaded = true
 
@@ -337,7 +467,7 @@ static func _hero_skills(row: Dictionary):
 
 ## 원시 표들 → 검사한 표들. 오류는 errors에 센다(교체 여부는 호출자가 결정).
 static func _build(raw: Dictionary) -> Dictionary:
-	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "config": raw.config}
+	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "config": raw.config}
 	for row in _convert(raw.monsters, ["id"], MONSTER_COLS):
 		if t.monsters.has(row.id):
 			_err("monsters", row._line, "id", "duplicate id '%s'" % row.id)
@@ -373,6 +503,29 @@ static func _build(raw: Dictionary) -> Dictionary:
 			ids[row.id] = true
 			buildings[row.building] = true
 			t.resources.append(row)
+	ids = {}
+	for src in raw.buildings:  # 개정 12: 선행 칸은 비면 ""(CSV 빈 칸·서버 null)
+		var conv := _convert([src], BUILDING_STR_COLS, BUILDING_NUM_COLS)
+		if conv.is_empty():
+			continue
+		var row: Dictionary = conv[0]
+		var ok := true
+		for c in BUILDING_REQ_COLS:
+			var v = src.get(c)
+			if _blank(v):
+				row[c] = ""
+			elif v is String:
+				row[c] = v.strip_edges()
+			else:
+				_err(src._src, src._line, c, "not a building id: '%s'" % str(v))
+				ok = false
+		if not ok:
+			continue
+		if ids.has(row.id):
+			_err("buildings", row._line, "id", "duplicate id '%s'" % row.id)
+		else:
+			ids[row.id] = true
+			t.buildings.append(row)
 	if errors == 0:
 		_check_contents(t)
 	return t
@@ -384,7 +537,7 @@ static func _check_contents(t: Dictionary) -> void:
 	for id in ["grunt", "epic_boss"]:
 		if not t.monsters.has(id):
 			_err("monsters", 0, "id", "missing required monster '%s'" % id)
-	for table in ["stages", "heroes", "resources"]:
+	for table in ["stages", "heroes", "resources", "buildings"]:
 		if t[table].is_empty():
 			_err(table, 0, "", "table is empty")
 	for k in CONFIG_NUM_KEYS:
@@ -393,9 +546,7 @@ static func _check_contents(t: Dictionary) -> void:
 	for k in CONFIG_LIST_KEYS:
 		if _split_list(String(t.config.get(k, ""))).is_empty():
 			_err("config", 0, k, "missing or empty list")
-	for v in _split_list(String(t.config.get("hero_slots", ""))):
-		if not (v is float):
-			_err("config", 0, "hero_slots", "not a number: '%s'" % str(v))
+	_check_buildings(t)
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
 		if not h.grade in GRADES:
@@ -426,6 +577,53 @@ static func _check_contents(t: Dictionary) -> void:
 	for g in GRADES:  # 모집은 등급을 먼저 정하고 그 등급 안에서 뽑는다 — 빈 등급이면 roll_gacha가 깨진다
 		if not t.heroes.any(func(h): return h.grade == g):
 			_err("heroes", 0, "grade", "no %s heroes to recruit" % g)
+
+
+## 건물 표·설정(개정 12, 서버 seed.checkBuildings와 같은 규칙): 최대 레벨 1 이상 정수, 비용 0 이상 정수, base_sec > 0, 선행은 표 안,
+## 성채·성문 필수, 자원 건물은 건물 표에, 비용 자원(wood·stone·food)은 자원 표에. 효과 설정은 0 이상(주점 증가분 ≤ 1, 인구는 정수),
+## 단계 표는 "레벨:값|…"(1부터 오름차순, 값은 1 이상 정수). 앱이 그릴 수 없는 내용도 거부한다: 배치(Balance.BUILDINGS)에 없는
+## 건물(성문 제외), 성 내부 MIN_INTERIOR_TILES 미만.
+static func _check_buildings(t: Dictionary) -> void:
+	var ids := {}
+	for b in t.buildings:
+		ids[b.id] = true
+	for b in t.buildings:
+		if not (b.max_level >= 1.0 and b.max_level == floorf(b.max_level)):
+			_err("buildings", b._line, "max_level", "must be an integer of at least 1: %s" % b.max_level)
+		for r in BUILD_RES:
+			if not (b[r] >= 0.0 and b[r] == floorf(b[r])):
+				_err("buildings", b._line, r, "must be a non-negative integer: %s" % b[r])
+		if not b.base_sec > 0.0:
+			_err("buildings", b._line, "base_sec", "must be greater than 0: %s" % b.base_sec)
+		for c in BUILDING_REQ_COLS:
+			if b[c] != "" and not ids.has(b[c]):
+				_err("buildings", b._line, c, "unknown building '%s'" % b[c])
+		if b.id != GATE and Balance.building(b.id).is_empty():
+			_err("buildings", b._line, "id", "building '%s' is not in this app's layout" % b.id)
+	for id in [KEEP, GATE]:
+		if not ids.has(id):
+			_err("buildings", 0, "id", "missing required building '%s'" % id)
+	var res_ids := {}
+	for r in t.resources:
+		res_ids[r.id] = true
+		if not ids.has(r.building) and not Balance.building(r.building).is_empty():  # 배치에 없는 건물은 이미 알렸다
+			_err("resources", r._line, "building", "building '%s' is not in the buildings table" % r.building)
+	for r in BUILD_RES:
+		if not res_ids.has(r) and not t.resources.is_empty():  # 빈 표는 이미 알렸다
+			_err("resources", 0, "id", "building cost resource '%s' is missing" % r)
+	for k in BUILDING_NUM_KEYS:
+		var s := String(t.config.get(k, ""))
+		var tavern: bool = k.begins_with("tavern_")
+		var pop: bool = k in POP_KEYS
+		if not s.is_valid_float():
+			_err("config", 0, k, "missing or not a number")
+		elif not (s.to_float() >= 0.0 and (not tavern or s.to_float() <= 1.0) and (not pop or s.to_float() == floorf(s.to_float()))):
+			_err("config", 0, k, "must be %s: '%s'" % ["in 0..1" if tavern else ("a non-negative integer" if pop else "0 or more"), s])
+	for k in CONFIG_TIER_KEYS:
+		var low := MIN_INTERIOR_TILES if k == "keep_interior_tiers" else 1
+		var tiers := parse_tiers(String(t.config.get(k, "")))
+		if tiers.is_empty() or not tiers.all(func(x): return x[1] == floorf(x[1]) and x[1] >= low):
+			_err("config", 0, k, "must be a tier table 'level:value|…' (levels from 1 ascending, integer values of at least %d): '%s'" % [low, t.config.get(k, "")])
 
 
 ## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.

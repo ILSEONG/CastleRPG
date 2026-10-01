@@ -5,6 +5,9 @@ extends Node3D
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 ## 영웅은 배치(GameState.deploy·hero_copies·hero_level)대로 만들고, 배치·별·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
+## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 막사·연구소 → 영웅 능력치(방치면 곧바로,
+## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
+## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -25,18 +28,24 @@ const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
+const EXPANDED_TEXT := "성이 넓어졌습니다!"
+
+static var rebuilds := 0  # 월드를 다시 만든 횟수(성채 단계 변경). 개발용 1회 설정(econ-demo·--heroes·auto-stage)은 첫 월드에서만
+static var _expanded_notice := false  # 방치 중 단계가 바뀌어 곧바로 다시 만들었다 — 새 월드에서 알린다(옛 HUD는 사라진다)
 
 var camera: Camera3D
 var castle
 
 var _formation
 var _picker
-var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies, level]}(만들 때 값)
+var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies, level, 막사, 연구소]}(만들 때 값)
+var _built_slots := 0  # 이 월드를 만들 때의 영웅 슬롯 수(성채 단계)
+var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점에 월드를 다시 만든다
 
 
 func _ready() -> void:
-	GameState.roster = Economy  # 영웅 보유·배치 공급자
-	if Net.is_online():
+	GameState.roster = Economy  # 영웅 보유·배치·건물 레벨 공급자
+	if Net.is_online() and not Net.ready_once:
 		await _wait_for_server()
 	_build_world()
 
@@ -62,9 +71,11 @@ func _build_world() -> void:
 	badges.camera = camera
 	add_child(badges)
 	_formation = FormationScript.new()
-	if OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
+	if rebuilds == 0 and OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
 		_econ_demo()  # --heroes보다 먼저: Economy.reset이 개발용 영웅 보유·배치를 지우지 않게
-	_apply_dev_heroes()
+	if rebuilds == 0:
+		_apply_dev_heroes()
+	_built_slots = GameState.hero_count()
 	_sync_heroes()
 	var picker = PickerScript.new()
 	picker.camera = camera
@@ -87,11 +98,16 @@ func _build_world() -> void:
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 11): 성·영웅·모집·상인
 	tabs.windows = {"hero": hero_panel, "recruit": recruit, "merchant": panel}
 	add_child(tabs)
-	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별 반영
+	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별·막사·연구소 반영
 	Economy.roster_changed.connect(_on_roster_changed)
-	if OS.is_debug_build():
-		_connect_dev_log()
-	if _auto_stage_requested():
+	Economy.building_done.connect(_on_building_done)
+	GameState.mode_changed.connect(_on_mode_changed)
+	if OS.is_debug_build() and rebuilds == 0:
+		_connect_dev_log()  # 람다(오토로드 시그널)라 다시 만든 월드에서 또 붙이면 두 번 찍힌다
+	if _expanded_notice:
+		_expanded_notice = false
+		Economy.notice.emit(EXPANDED_TEXT)
+	if rebuilds == 0 and _auto_stage_requested():
 		Economy.save_path = ""  # 개발 실행은 실제 저장 파일을 건드리지 않는다
 		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
@@ -143,7 +159,8 @@ func _sync_heroes() -> void:
 			_retire(i)
 	for i in deploy.size():
 		var id = deploy[i]
-		var key := [id, GameState.hero_copies(id) if id != null else 0, GameState.hero_level(id) if id != null else 0]
+		var key := [id, GameState.hero_copies(id) if id != null else 0, GameState.hero_level(id) if id != null else 0,
+			GameState.building_level(GameData.BARRACKS), GameState.building_level(GameData.LAB)]
 		if _slots.has(i) and _slots[i].key == key:
 			continue
 		_retire(i)
@@ -170,6 +187,52 @@ func _retire(i: int) -> void:
 func _on_roster_changed() -> void:
 	if GameState.mode == GameState.Mode.IDLE:
 		_sync_heroes()
+
+
+## 건설 완료(개정 12): 성채·성문 → 최대 HP. 막사·연구소 → 영웅 능력치(방치면 곧바로 다시 만들고, 아니면 다음 리필에 _sync_heroes가 key로
+## 알아챈다). 성채가 단계를 넘어 성 내부·슬롯 수가 이 월드와 달라지면 월드를 다시 만든다(_expand).
+func _on_building_done(id: String, level: int) -> void:
+	if id == GameData.KEEP or id == GameData.GATE:
+		GameState.apply_levels()
+	if (id == GameData.BARRACKS or id == GameData.LAB) and GameState.mode == GameState.Mode.IDLE:
+		_sync_heroes()
+	if id == GameData.KEEP and (GameData.interior_half(level) != castle.half or GameData.hero_slots(level) != _built_slots):
+		_expand()
+
+
+## 성이 넓어졌다: 방치면 곧바로 다시 만들고 새 월드에서 알린다. 아니면 지금 알리고 방치로 돌아올 때(_on_mode_changed) 다시 만든다.
+func _expand() -> void:
+	if _expand_pending:
+		return
+	_expand_pending = true
+	if GameState.mode == GameState.Mode.IDLE:
+		_expanded_notice = true
+		_rebuild_world.call_deferred()
+	else:
+		Economy.notice.emit(EXPANDED_TEXT)
+
+
+func _on_mode_changed(mode: int) -> void:
+	if _expand_pending and mode == GameState.Mode.IDLE:
+		_rebuild_world.call_deferred()
+
+
+## 월드를 다시 만든다(씬 다시 읽기). 상태는 오토로드(Economy·GameState·Net)에 있어 그대로 이어지고, 새 main이 그 레벨로 성·영웅을 만든다.
+## 테스트 하네스처럼 main이 현재 씬이 아니라 자식으로 붙어 있으면 같은 자리에서 새 인스턴스로 바꿔 끼운다.
+func _rebuild_world() -> void:
+	if not _expand_pending or not is_inside_tree():
+		return  # 이미 다시 만드는 중(같은 프레임에 두 번 불림)
+	_expand_pending = false
+	rebuilds += 1
+	var tree := get_tree()
+	if tree.current_scene == self:
+		tree.reload_current_scene()
+		return
+	var parent := get_parent()
+	var fresh = load(scene_file_path).instantiate()
+	parent.remove_child(self)
+	queue_free()
+	parent.add_child(fresh)
 
 
 ## 개발용 --heroes=id1,id2(웹 ?heroes=): 디버그·오프라인에서만. 모르는 id는 경고하고 건너뛴다. 저장 파일은 쓰지 않는다.

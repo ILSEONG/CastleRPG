@@ -79,6 +79,7 @@ func _init() -> void:
 	test_merchant_rates()
 	test_damage_numbers()
 	test_hero_levels()
+	test_buildings()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -148,10 +149,10 @@ func _write(path: String, text: String) -> void:
 
 
 func test_balance_tables() -> void:
-	check(GameData.hero_slots(1) == 4, "keep level 1 gives 4 heroes")
-	check(GameData.hero_slots(2) == 8, "keep level 2 gives 8 heroes")
-	check(GameData.hero_slots(3) == 12, "keep level 3 gives 12 heroes")
-	check(GameData.hero_slots(99) == 12, "keep level beyond table clamps to last")
+	check(GameData.hero_slots(1) == 4 and GameData.hero_slots(4) == 4, "keep levels 1-4 give 4 heroes")
+	check(GameData.hero_slots(5) == 8 and GameData.hero_slots(9) == 8, "keep levels 5-9 give 8 heroes")
+	check(GameData.hero_slots(10) == 12, "keep level 10 gives 12 heroes")
+	check(GameData.hero_slots(99) == 12, "keep level beyond the last tier stays at 12")
 	check(GameData.gate_hp_max(1) == 400.0, "gate hp at level 1")
 	check(GameData.gate_hp_max(2) > GameData.gate_hp_max(1), "gate hp grows with level")
 
@@ -182,16 +183,16 @@ func test_game_tables() -> void:
 		"merchant_low_high_ratio": 3.0, "kill_rate_cap": 5.0}
 	for key in nums:
 		check(GameData.config_num(key) == nums[key], "config %s = %s" % [key, nums[key]])
-	check(GameData.config_list("hero_slots") == [4.0, 8.0, 12.0], "config_list parses numbers")
+	check(GameData.config_list("merchant_rate_step") == [0.1], "config_list parses numbers")
 	check(GameData.config_list("starter_heroes") == ["hans", "ella", "dorik", "nina"], "config_list keeps strings")
 	check(GameData.config_list("nope").is_empty() and GameData.config_num("nope") == 0.0, "unknown config key is empty / 0")
 	check(GameData.config_num("hero_max_stars") == 5.0 and GameData.config_num("hero_star_bonus") == 0.1 and GameData.config_num("gacha_cost_10") == 2700.0, "hero/gacha config")
 	# 깨진 config 파일: 필수 키 빠짐
 	var logged := _errors.count
 	var cp := "user://t_config.csv"
-	_write(cp, "key,value\ncastle_hp,1000\nhero_slots,4|8|12\nstarter_heroes,hans|ella\n")
+	_write(cp, "key,value\ncastle_hp,1000\nkeep_slot_tiers,1:4|5:8|10:12\nkeep_interior_tiers,1:20|5:24|10:28\nstarter_heroes,hans|ella\n")
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
-	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1, "config file missing keys reports one error per key")
+	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size(), "config file missing keys reports one error per key")
 	_errors.count = logged
 	DirAccess.remove_absolute(cp)
 	GameData.load_tables()
@@ -204,10 +205,11 @@ func _payload() -> Dictionary:
 		var r := GameData.stage(s).duplicate()
 		stages.append(r)
 	var cfg := {}
-	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS:
+	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS:
 		cfg[k] = String(GameData._config[k])
 	return {"version": "t", "monsters": [GameData.monster("grunt").duplicate(), GameData.monster("epic_boss").duplicate()],
-		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true), "config": cfg}
+		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true),
+		"buildings": GameData.buildings().duplicate(true), "config": cfg}
 
 
 ## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
@@ -222,7 +224,7 @@ func _remote_checks() -> int:
 	p.stages = p.stages.slice(0, 10)
 	p.stages.reverse()  # 순서가 뒤섞여도 stage 번호로 정렬해 읽는다
 	p.config.castle_hp = "2000"
-	p.config.hero_slots = "5|9"
+	p.config.keep_slot_tiers = "1:5|9:9"
 	p.config.starter_heroes = "jack|kyle"
 	p.heroes[1].s1a = 5  # 서버 행처럼: 숫자는 숫자, 빈 칸은 null
 	p.heroes[1].skill2 = null
@@ -262,7 +264,7 @@ func _remote_checks() -> int:
 
 ## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
 func _tables_hash() -> int:
-	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._config])
+	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._config])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
@@ -451,16 +453,16 @@ func test_gamestate_start_stage_refills() -> void:
 func test_gamestate_hero_count() -> void:
 	var gs = GameStateScript.new()
 	check(gs.hero_count() == 4, "4 heroes at keep level 1")
-	gs.keep_level = 2
-	check(gs.hero_count() == 8, "8 heroes at keep level 2")
+	gs.keep_level = 5
+	check(gs.hero_count() == 8, "8 heroes at keep level 5 (keep tier)")
 	gs.free()
 
 
 func test_layout_tables() -> void:
-	check(Balance.interior_half(1) == 20.0, "interior half is 20m at keep level 1")
-	check(Balance.interior_half(2) > Balance.interior_half(1), "interior grows at keep level 2")
-	check(Balance.interior_half(3) > Balance.interior_half(2), "interior grows at keep level 3")
-	check(Balance.interior_half(99) == Balance.interior_half(3), "interior clamps beyond table")
+	check(GameData.interior_half(1) == 20.0 and GameData.interior_half(4) == 20.0, "interior half is 20m at keep levels 1-4")
+	check(GameData.interior_half(5) > GameData.interior_half(1), "interior grows at keep level 5")
+	check(GameData.interior_half(10) > GameData.interior_half(5), "interior grows at keep level 10")
+	check(GameData.interior_half(99) == GameData.interior_half(10), "interior stays at the last tier")
 	for h in GameData.heroes():
 		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "aggro", "skills"]:
 			check(h.has(key), "hero %s has %s" % [h.id, key])
@@ -469,7 +471,7 @@ func test_layout_tables() -> void:
 
 
 func test_building_layout() -> void:
-	var half_tiles := floori(Balance.INTERIOR_TILES[0] / 2.0)
+	var half_tiles := floori(GameData.interior_tiles(1) / 2.0)
 	var allowed := Rect2i(-half_tiles + 2, -half_tiles + 2, 2 * half_tiles - 4, 2 * half_tiles - 4)  # 벽 쪽 2타일: 계단 띠 + 성문 안쪽↔계단 앞 통로
 	var road_ns := Rect2i(-1, -half_tiles, 2, 2 * half_tiles)
 	var road_ew := Rect2i(-half_tiles, -1, 2 * half_tiles, 2)
@@ -525,7 +527,7 @@ func test_formation_claims() -> void:
 
 
 func test_formation_positions() -> void:
-	var half := Balance.interior_half(1)
+	var half := GameData.interior_half(1)
 	var outer := half + Balance.WALL_T
 	var seen := {}
 	for side in 4:
@@ -635,7 +637,7 @@ func test_lowpoly_conversion() -> void:
 
 
 func test_route() -> void:
-	var half := Balance.interior_half(1)
+	var half := GameData.interior_half(1)
 	var F = FormationScript
 	check(F.side_of(Vector3(0, 0, -30)) == 0 and F.side_of(Vector3(30, 0, 1)) == 1 and F.side_of(Vector3(2, 0, 30)) == 2 and F.side_of(Vector3(-30, 0, 0)) == 3, "side_of picks the facing side")
 	for side in 4:
@@ -677,7 +679,7 @@ func test_route() -> void:
 
 func test_stairs_and_wall_routes() -> void:
 	var F = FormationScript
-	var half := Balance.interior_half(1)
+	var half := GameData.interior_half(1)
 	check(half == 20.0, "interior half is 20m at keep level 1 (1.25x)")
 	for side in 4:
 		var dir: Vector3 = F.SIDE_DIR[side]
@@ -764,7 +766,7 @@ func _leg_samples(a: Vector3, b: Vector3) -> Array:
 ## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 모든 자리 사이 경로(면을 넘나드는 것 포함)의 지상 구간은 부지·계단 발판을 지나지 않는다.
 func test_buildings_clear_stairs() -> void:
 	var F = FormationScript
-	var half := Balance.interior_half(1)
+	var half := GameData.interior_half(1)
 	var lo := Balance.GATE_W / 2.0 + Balance.STAIR_GAP
 	var plots := {}  # id -> Rect2 (x, z)
 	for b in Balance.BUILDINGS:
@@ -785,8 +787,8 @@ func test_buildings_clear_stairs() -> void:
 	var inner := {}  # id -> 경계선을 뺀 부지
 	for id in plots:
 		inner[id] = (plots[id] as Rect2).grow(-0.01)
-	for level in [1, 2, 3]:
-		var h := Balance.interior_half(level)
+	for level in [1, 5, 10]:  # 성채 단계마다(keep_interior_tiers)
+		var h := GameData.interior_half(level)
 		var spots: Array = []
 		for s in 4:
 			spots.append(F.gate_inner(h, s))
@@ -816,7 +818,7 @@ func test_buildings_clear_stairs() -> void:
 
 
 func test_is_inside() -> void:
-	var half := Balance.interior_half(1)
+	var half := GameData.interior_half(1)
 	check(FormationScript.is_inside(half, Vector3(0, 0, -(half + Balance.WALL_T - 0.1))), "just inside the outer wall face counts as inside")
 	check(not FormationScript.is_inside(half, Vector3(0, 0, -(half + Balance.WALL_T + 0.1))), "just outside the outer wall face counts as outside")
 	check(FormationScript.is_inside(half, Vector3(0, Balance.WALL_H, -(half + Balance.WALL_T / 2.0))), "wall top counts as inside")
@@ -1013,7 +1015,7 @@ func test_economy_save() -> void:
 	e2.save_path = ECON_TMP
 	e2.load_save(now + 5.0)
 	check(e2.gold_tenths == 783 and e2.gold == 78 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
-	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":4,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
+	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":5,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
 		var f := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 		f.store_string(junk)
 		f.close()
@@ -1084,8 +1086,8 @@ func test_merchant_spot() -> void:
 		# 사각형 안 |x|, |z|의 범위(축을 걸치지 않음 — 위 검사) → max(|x|,|z|) 범위
 		var ax := [minf(absf(rc.position.x), absf(rc.end.x)), maxf(absf(rc.position.x), absf(rc.end.x))]
 		var az := [minf(absf(rc.position.y), absf(rc.end.y)), maxf(absf(rc.position.y), absf(rc.end.y))]
-		for level in [1, 2, 3]:
-			var lane := Balance.interior_half(level) - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN
+		for level in [1, 5, 10]:  # 성채 단계마다
+			var lane := GameData.interior_half(level) - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN
 			var lo: float = maxf(ax[0], az[0])
 			var hi: float = maxf(ax[1], az[1])
 			check(hi < lane - 1.0 or lo > lane + 1.0, "merchant spot %s clear of level %d lane ring (depth %.1f)" % [rc, level, lane])
@@ -1279,7 +1281,7 @@ func test_deploy_and_stars() -> void:
 		and is_equal_approx(GameData.star_mult(99), 1.5), "stars = min(copies - 1, 5), x(1 + 0.1 x stars)")
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_copies("hans") == 1, "GameState deploy provider: starters, copies 1")
-	gs.keep_level = 2
+	gs.keep_level = 5
 	check(gs.deploy().size() == 8 and gs.deploy()[4] == null, "deploy length = hero slots")
 	gs.free()
 
@@ -1417,8 +1419,8 @@ func test_roster() -> void:
 	e2.deploy = ["ignis", "ghost", "ignis", "jack", "nina"]  # 모르는 영웅·중복·미보유·슬롯 넘침
 	check(gs.deploy() == ["ignis", null, null, null], "provider: slot count, unknown/duplicate/unowned heroes become null: %s" % [gs.deploy()])
 	check(gs.hero_copies("ignis") == 3 and gs.hero_copies("hans") == 1, "provider: copies from the roster")
-	gs.keep_level = 2
-	check(gs.deploy().size() == 8 and gs.deploy()[4] == "nina", "provider: more slots at keep level 2")
+	e2.levels["keep"] = 5  # roster가 있으면 성채 레벨은 roster(Economy) 건물 레벨
+	check(gs.deploy().size() == 8 and gs.deploy()[4] == "nina", "provider: more slots at keep level 5")
 	gs.free()
 	# 개발용 --heroes
 	var d = _econ(now)
@@ -1592,7 +1594,7 @@ func test_hero_levels() -> void:
 	e.save_path = ECON_TMP
 	e.save()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == 3 and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 30.0 and raw.heroes.ella.level == 1.0, "save v3 writes heroes {copies, level}")
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 30.0 and raw.heroes.ella.level == 1.0, "save v3 writes heroes {copies, level}")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(1000.0)
@@ -1618,3 +1620,189 @@ func test_hero_levels() -> void:
 	_errors.count = logged
 	GameData.load_tables()
 	check(GameData.errors == 0 and GameData.config_num("hero_max_level_base") == 20.0, "default tables restored")
+
+
+## 개정 12 건물: 표(9행·파일 순서), 비용·시간 공식(서버 buildings.test와 같은 값), 단계 표(슬롯·내부), 효과 수치(성 HP·성문 HP·인구·
+## 막사·연구소·주점 확률), 업그레이드 판단(이유 코드 순서·선행 목록), 오프라인 업그레이드(즉시 차감·일꾼·자동 수집·게으른 완료),
+## 저장 v4·v3 → v4, 온라인 응답(buildings·build — 첫 반영은 완료가 아님), GameState(건물 레벨 → 성·성문 HP·슬롯), apply_remote 검증.
+func test_buildings() -> void:
+	GameData.load_tables()
+	var ids: Array = GameData.buildings().map(func(b): return b.id)
+	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm"], "buildings.csv: 9 rows in file order: %s" % [ids])
+	var gate := GameData.building_def("gate")
+	check(gate.name == "성문" and gate.max_level == 30.0 and gate.stone == 250.0 and gate.base_sec == 45.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
+	# 비용 = round(값 × 1.35^(L−1)), 시간 = round(base_sec × 1.5^(L−1)) — 서버와 같은 표
+	check(GameData.build_cost("lumber", 1) == {"wood": 60, "stone": 80, "food": 40} and GameData.build_sec("lumber", 1) == 20, "lumber 1 -> 2: 60/80/40, 20 s")
+	check(GameData.build_cost("keep", 2) == {"wood": 405, "stone": 405, "food": 270} and GameData.build_sec("keep", 2) == 90, "keep 2 -> 3")
+	check(GameData.build_cost("keep", 10) == {"wood": 4468, "stone": 4468, "food": 2979} and GameData.build_sec("keep", 10) == 2307, "keep 10 -> 11: about 4,470 / 2,980, about 38 min")
+	check(GameData.build_cost("gate", 2) == {"wood": 203, "stone": 338, "food": 0} and GameData.build_sec("gate", 2) == 68, "gate 2 -> 3: 337.5 and 67.5 round away from zero")
+	check(GameData.build_sec("lumber", 20) == 44337 and GameData.build_cost("keep", 29) == {"wood": 1338033, "stone": 1338033, "food": 892022}, "level 20 is about 2,217x the base time; level 29 costs")
+	check(GameData.build_cost("mine", 1).is_empty() and GameData.build_sec("mine", 1) == 0, "unknown building: no cost, no time")
+	# 단계 표
+	check(GameData.parse_tiers("1:4|5:8|10:12") == [[1, 4.0], [5, 8.0], [10, 12.0]] and GameData.parse_tiers(" 1 : 20 | 5:24 ") == [[1, 20.0], [5, 24.0]], "tier tables parse")
+	var bad_tiers := ["", "4|8|12", "2:4|5:8", "1:4|5:8|5:9", "1:4|3:8|2:9", "1:x", "1:4|", "1:4|5", "a:1", "1.5:4"]
+	check(bad_tiers.all(func(s): return GameData.parse_tiers(s).is_empty()), "malformed tier tables are rejected")
+	check([1, 4, 5, 9, 10, 30].map(func(l): return GameData.hero_slots(l)) == [4, 4, 8, 8, 12, 12], "hero slots by keep tier: 4/8/12")
+	check([1, 4, 5, 10].map(func(l): return GameData.interior_tiles(l)) == [20, 20, 24, 28] and GameData.interior_half(5) == 24.0, "interior tiles by keep tier: 20/24/28")
+	# 효과 수치
+	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
+	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
+	check(GameData.barracks_hp_bonus(1) == 0.0 and is_equal_approx(GameData.barracks_hp_bonus(3), 0.06) and is_equal_approx(GameData.lab_atk_bonus(11), 0.3), "barracks/lab +3% per level above 1")
+	var r1 := GameData.gacha_rates(1)
+	var r11 := GameData.gacha_rates(11)
+	check(is_equal_approx(r1.ssr, 0.03) and is_equal_approx(r1.sr, 0.17) and is_equal_approx(r11.ssr, 0.04) and is_equal_approx(r11.sr, 0.2), "tavern: SSR +0.1%p, SR +0.3%p per level")
+	var hans := GameData.hero("hans")
+	var st := GameData.hero_stats(hans, 1, 1, {"barracks": 5, "lab": 3})
+	check(is_equal_approx(st.hp, 440.0 * 1.12) and is_equal_approx(st.atk, 30.0 * 1.06) and GameData.hero_stats(hans, 1, 1) == {"hp": 440.0, "atk": 30.0},
+		"hero hp x(1 + barracks), atk x(1 + lab): %s" % [st])
+	check(GameData.hero_power(hans, 1, 1, {"barracks": 5, "lab": 3}) == roundi(440.0 * 1.12 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the building bonuses")
+	var rig := func(): return 0.0305  # 등급 굴림 0.0305: 주점 1(SSR 3%)은 SR, 주점 2(3.1%)는 SSR
+	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, 2)[0].grade == "SSR", "offline recruiting uses the tavern odds")
+	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
+	var none := {"wood": 0, "stone": 0, "food": 0}
+	var rich := {"wood": 1000000, "stone": 1000000, "food": 1000000}
+	var tav := _lv({"keep": 5, "tavern": 3, "barracks": 3})
+	check(EconomyScript.upgrade_block_for("mine", _lv({}), "", rich) == "unknown", "unknown building")
+	check(EconomyScript.upgrade_block_for("farm", _lv({"farm": 30, "keep": 30}), "keep", none) == "max_level", "max level comes first")
+	check(EconomyScript.upgrade_block_for("lumber", _lv({}), "keep", none) == "keep_cap", "no building above the keep (target 2 > keep 1)")
+	check(EconomyScript.upgrade_block_for("keep", _lv({"keep": 3, "barracks": 3}), "lab", none) == "prereq", "keep 4 needs gate >= 3")
+	check(EconomyScript.upgrade_block_for("tavern", _lv({"keep": 5, "tavern": 3, "barracks": 2}), "lab", none) == "prereq", "tavern 4 needs barracks >= 3")
+	check(EconomyScript.upgrade_block_for("tavern", tav, "lab", none) == "builder_busy" and EconomyScript.upgrade_block_for("tavern", tav, "tavern", none) == "in_progress", "one builder: busy elsewhere / this one")
+	check(EconomyScript.upgrade_block_for("tavern", tav, "", none) == "not_enough" and EconomyScript.upgrade_block_for("tavern", tav, "", GameData.build_cost("tavern", 3)) == "", "resources last; the exact cost is enough")
+	check(EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 300, "stone": 300, "food": 199}) == "not_enough" and EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 300, "stone": 300, "food": 200}) == "", "keep 1 -> 2 needs gate/barracks >= 1 and 300/300/200")
+	check(["unknown", "max_level", "keep_cap", "prereq", "in_progress", "builder_busy", "not_enough", "waiting"].all(func(c): return EconomyScript.BLOCK_TEXT.has(c)), "every reason code has a text")
+	# 오프라인 업그레이드
+	var now := 1.8e9
+	var e = _econ(now)
+	var started := []
+	var done := []
+	var notes := []
+	e.build_started.connect(func(id, f): started.append([id, f]))
+	e.building_done.connect(func(id, l): done.append([id, l]))
+	e.notice.connect(func(tx): notes.append(tx))
+	check(e.levels.size() == 9 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 300, "stone": 300, "food": 200} and e.upgrade_sec("keep") == 60,
+		"new game: 9 buildings at level 1, builder idle, population 6")
+	check(e.requirements("keep") == [{"id": "gate", "need": 1, "have": 1, "ok": true}, {"id": "barracks", "need": 1, "have": 1, "ok": true}]
+		and e.requirements("lumber") == [{"id": "keep", "need": 2, "have": 1, "ok": false}], "requirements: keep cap first, then req1/req2 at target - 1: %s" % [e.requirements("lumber")])
+	check(not e.upgrade("lumber", now) and notes == [EconomyScript.BLOCK_TEXT.keep_cap] and e.upgrade_block("keep", now) == "not_enough", "blocked upgrades only show the reason")
+	e.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	check(e.upgrade("keep", now) and e.res == {"wood": 700, "stone": 700, "food": 800} and e.build == {"id": "keep", "finish": now + 60.0} and started == [["keep", now + 60.0]],
+		"offline upgrade takes the cost at once and starts the builder: %s %s" % [e.res, e.build])
+	check(e.upgrade_block("keep", now) == "in_progress" and is_equal_approx(e.build_left(now + 15.0), 45.0) and is_equal_approx(e.build_progress(now + 15.0), 0.25) and e.is_building("keep"),
+		"builder busy: left 45 s, progress 25%")
+	e.complete_due(now + 59.9)
+	check(e.building_level("keep") == 1 and done.is_empty(), "not done before the finish time")
+	e.complete_due(now + 60.0)
+	check(e.building_level("keep") == 2 and e.build.is_empty() and done == [["keep", 2]] and e.build_left(now + 60.0) == 0.0, "lazy completion: level +1, builder free, building_done")
+	var t := now + 100.0
+	check(e.upgrade("barracks", t) and e.upgrade_block("houses", t) == "builder_busy" and not e.upgrade("houses", t) and notes[-1] == EconomyScript.BLOCK_TEXT.builder_busy, "one builder: a second building waits")
+	e.finish_build_now()
+	check(e.building_level("barracks") == 2 and e.build.is_empty() and done[-1] == ["barracks", 2], "finish_build_now completes the build (test hook)")
+	# 자원 건물: 시작할 때 자동 수집(남은 초 유지) — 쌓인 20으로 모자란 목재를 채운다
+	e.res = {"wood": 40, "stone": 80, "food": 40}
+	e.last_collect.lumber = t - 150.0
+	check(e.upgrade_block("lumber", t) == "" and e.upgrade("lumber", t) and e.res == {"wood": 0, "stone": 0, "food": 0} and is_equal_approx(e.last_collect.lumber, t - 30.0),
+		"a resource building collects first and the collected wood pays: %s" % [e.res])
+	# 저장 v4 왕복, 꺼진 동안 끝난 건설은 불러올 때 완료
+	e.save_path = ECON_TMP
+	e.save()
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
+	check(int(raw.version) == 4 and raw.levels.size() == 9 and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save v4 writes every building level and the builder")
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(t + 1.0)
+	check(e2.levels == e.levels and e2.levels.keep is int and e2.build == e.build, "save v4 round-trips levels and the builder")
+	var d2 := []
+	e2.building_done.connect(func(id, l): d2.append([id, l]))
+	e2.load_save(t + 21.0)  # 벌목장 20초 — 꺼져 있는 동안 끝났다
+	check(e2.building_level("lumber") == 2 and e2.build.is_empty() and d2 == [["lumber", 2]], "a build that finished while the app was closed completes on load")
+	var v3 := {"version": 3, "gold_tenths": 5, "res": {"wood": 1, "stone": 0, "food": 0}, "last_collect": {"lumber": t, "quarry": t, "farm": t},
+		"levels": {"lumber": 3, "quarry": 1, "farm": 2}, "heroes": {"hans": {"copies": 1, "level": 4}}, "deploy": ["hans"]}
+	_write(ECON_TMP, JSON.stringify(v3))
+	e2.load_save(t)
+	check(e2.gold_tenths == 5 and e2.levels == _lv({"lumber": 3, "farm": 2}) and e2.build.is_empty() and e2.level_of("hans") == 4, "save v3 -> v4: keep/gate and the new buildings at 1, no builder: %s" % [e2.levels])
+	for junk in [{"build": {"id": "mine", "finish": 1.0}}, {"build": {"id": "keep"}}, {"build": 5}, {"levels": {"lumber": 1, "quarry": 1, "farm": 1, "keep": "x"}}]:
+		var bad: Dictionary = v3.duplicate(true)
+		bad.version = 4
+		bad.merge(junk, true)
+		_write(ECON_TMP, JSON.stringify(bad))
+		e2.load_save(t)
+		check(e2.gold_tenths == 0 and e2.build.is_empty() and e2.building_level("lumber") == 1, "malformed v4 builder/levels (%s) is a corrupt save" % [junk])
+	DirAccess.remove_absolute(ECON_TMP)
+	# GameState: 건물 레벨 → 성·성문 HP, 슬롯
+	var gs = GameStateScript.new()
+	gs.roster = e
+	gs.refill()
+	check(gs.building_level("keep") == 2 and gs.castle_hp_max == 1200.0 and gs.gate_hp_max == 400.0 and gs.hero_count() == 4, "GameState reads building levels from the roster")
+	gs.castle_hp = 1100.0
+	gs.gate_hp[1] = 0.0
+	e.levels.keep = 3
+	e.levels.gate = 2
+	gs.apply_levels()
+	check(gs.castle_hp_max == 1400.0 and gs.castle_hp == 1300.0 and gs.gate_hp_max == 800.0 and gs.gate_hp[0] == 800.0 and gs.gate_hp[1] == 0.0,
+		"apply_levels: max HP to the new level, current HP up by the gain, a broken gate stays broken")
+	e.levels.keep = 5
+	check(gs.hero_count() == 8 and gs.deploy().size() == 8, "keep 5: 8 slots")
+	gs.free()
+	e.free()
+	e2.free()
+	# 온라인 응답: 모든 건물 레벨·일꾼. 첫 반영의 레벨 차이는 완료가 아니고, 그 뒤 레벨이 오르면 building_done
+	var o = _econ(1000.0)
+	var od := []
+	o.building_done.connect(func(id, l): od.append([id, l]))
+	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {"keep": {"level": 3}, "lumber": {"level": 2, "last_collect": 900.0}},
+		"build": {"id": "gate", "finish": 2000.0}, "population": 6}, "merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	check(o.apply_server(reply) and o.building_level("keep") == 3 and o.building_level("gate") == 1 and o.levels.lumber == 2 and o.build == {"id": "gate", "finish": 2000.0} and od.is_empty(),
+		"first reply: levels and builder from the server, no building_done")
+	reply.player.buildings["gate"] = {"level": 2}
+	reply.player.build = null
+	check(o.apply_server(reply) and o.building_level("gate") == 2 and o.build.is_empty() and od == [["gate", 2]], "a later reply with a higher level signals building_done once")
+	check(o.apply_server(reply) and od.size() == 1, "the same levels again do not signal")
+	var logged := _errors.count
+	reply.player.build = "gate"
+	check(not o.apply_server(reply) and o.building_level("gate") == 2, "apply_server rejects a malformed builder")
+	_errors.count = logged
+	o.free()
+	# apply_remote: 건물 표·설정 검증(서버 seed와 같은 규칙) — 틀리면 아무것도 안 바꾼다
+	var before := _tables_hash()
+	for entry in [["req unknown", 1], ["req not a string", 1], ["cost negative", 1], ["cost not an integer", 1], ["base_sec 0", 1], ["max_level 0", 1],
+			["building not in the layout", 1], ["keep missing", 1], ["resource building not a building", 2], ["table missing", 1],
+			["tiers malformed", 1], ["interior below 20 tiles", 1], ["tavern rate above 1", 1], ["population not an integer", 1], ["building config missing", 1]]:
+		var q := _payload()
+		_corrupt_buildings(q, entry[0])
+		check(not GameData.apply_remote(q) and GameData.errors == entry[1] and _tables_hash() == before, "apply_remote rejects: %s (errors %d)" % [entry[0], GameData.errors])
+	var p := _payload()
+	p.buildings[1].stone = 300
+	check(GameData.apply_remote(p) and GameData.build_cost("gate", 1).stone == 300, "a valid remote buildings table replaces the built-in one")
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.build_cost("gate", 1).stone == 250, "default tables restored")
+
+
+## 모든 건물 레벨 1에 o를 덮은 사전.
+func _lv(o: Dictionary) -> Dictionary:
+	var out := {}
+	for b in GameData.buildings():
+		out[b.id] = 1
+	out.merge(o, true)
+	return out
+
+
+## payload q의 건물 표·설정을 이름에 맞게 한 곳 망가뜨린다.
+func _corrupt_buildings(q: Dictionary, what: String) -> void:
+	match what:
+		"req unknown": q.buildings[3].req1 = "stable"
+		"req not a string": q.buildings[3].req1 = 5
+		"cost negative": q.buildings[4].wood = -150
+		"cost not an integer": q.buildings[4].stone = 1.5
+		"base_sec 0": q.buildings[5].base_sec = 0
+		"max_level 0": q.buildings[8].max_level = 0
+		"building not in the layout": q.buildings.append({"id": "stable", "name": "마구간", "max_level": 30, "wood": 1, "stone": 1, "food": 1, "base_sec": 10, "req1": null, "req2": null})
+		"keep missing": q.buildings.remove_at(0)
+		"resource building not a building": q.buildings.remove_at(7)  # 채석장: 성문의 선행이자 자원 건물
+		"table missing": q.erase("buildings")
+		"tiers malformed": q.config.keep_slot_tiers = "4|8|12"
+		"interior below 20 tiles": q.config.keep_interior_tiers = "1:18|5:24"
+		"tavern rate above 1": q.config.tavern_sr_per_level = "1.5"
+		"population not an integer": q.config.pop_base = "6.5"
+		"building config missing": q.config.erase("castle_hp_per_level")

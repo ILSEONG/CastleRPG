@@ -16,7 +16,7 @@ signal refilled
 
 var mode: int = Mode.IDLE
 var stage: int = 1
-var keep_level: int = 1
+var keep_level: int = 1  # roster가 없을 때(로직 테스트)만 쓰는 성채·성문 레벨. 진실은 roster(Economy) 건물 레벨 — building_level()
 var gate_level: int = 1
 var castle_hp_max := 0.0  # refill()이 표에서 읽는다
 var castle_hp := 0.0
@@ -36,8 +36,39 @@ func _process(delta: float) -> void:
 	advance(delta)
 
 
+## 영웅 슬롯 수 = 성채 단계(개정 12).
 func hero_count() -> int:
-	return GameData.hero_slots(keep_level)
+	return GameData.hero_slots(building_level(GameData.KEEP))
+
+
+## 건물 레벨(개정 12). roster(Economy)가 있으면 거기서, 없으면(로직 테스트) 성채·성문은 keep_level·gate_level 필드, 나머지 1.
+func building_level(id: String) -> int:
+	if roster != null:
+		return roster.building_level(id)
+	if id == GameData.KEEP:
+		return keep_level
+	return gate_level if id == GameData.GATE else 1
+
+
+## 건물 id → 레벨 전부(영웅 능력치의 막사·연구소 보너스, GameData.hero_stats). roster가 없으면 {}(전부 1).
+func building_levels() -> Dictionary:
+	return roster.levels if roster != null else {}
+
+
+## 성채·성문 레벨이 바뀌었다(건설 완료): 최대 HP를 새 레벨로 두고 늘어난 만큼 지금 HP도 올린다(무너진 성·부서진 성문은 그대로).
+func apply_levels() -> void:
+	var c_max := GameData.castle_hp_max(building_level(GameData.KEEP))
+	if castle_hp > 0.0:
+		castle_hp = clampf(castle_hp + c_max - castle_hp_max, 1.0, c_max)
+	castle_hp_max = c_max
+	castle_hp_changed.emit(castle_hp, castle_hp_max)
+	var g_max := GameData.gate_hp_max(building_level(GameData.GATE))
+	for side in 4:
+		if gate_hp[side] > 0.0:
+			gate_hp[side] = clampf(gate_hp[side] + g_max - gate_hp_max, 1.0, g_max)
+	gate_hp_max = g_max
+	for side in 4:
+		gate_hp_changed.emit(side, gate_hp[side], gate_hp_max)
 
 
 # --- 영웅 보유·배치 공급자 (경계) ---
@@ -123,9 +154,9 @@ func on_all_monsters_dead() -> void:
 
 ## 영웅·성문·성 HP 전부 초기화. 영웅/몬스터 노드는 refilled를 받아 스스로 리셋/제거.
 func refill() -> void:
-	castle_hp_max = GameData.config_num("castle_hp")  # 표가 바뀌었을 수 있어 매번 읽는다
+	castle_hp_max = GameData.castle_hp_max(building_level(GameData.KEEP))  # 표·레벨이 바뀌었을 수 있어 매번 읽는다
 	castle_hp = castle_hp_max
-	gate_hp_max = GameData.gate_hp_max(gate_level)
+	gate_hp_max = GameData.gate_hp_max(building_level(GameData.GATE))
 	gate_hp.resize(4)
 	gate_hp.fill(gate_hp_max)
 	castle_hp_changed.emit(castle_hp, castle_hp_max)
