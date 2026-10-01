@@ -65,6 +65,9 @@ func _run() -> void:
 	var archer = _heroes[1]   # 동(1) 성벽 위
 	var archer2 = _heroes[3]  # 서(3) 성벽 위
 	print("INPUT INFO: default camera building px (720x1280 logical): %s, gates %s" % [Balance.BUILDINGS.map(func(b): return [b.id, _building_px(b.id)]), range(4).map(func(s): return _gate_px(s))])
+	print("INPUT INFO: default camera soldier building roof points that hit the building (long press here; INF = hidden): %s; site centers hit %s" % [
+		["barracks", "archery", "stable"].map(func(id): return [id, _roof_px(id)]),
+		["barracks", "archery", "stable"].map(func(id): return [id, _picker._pick(_building_px(id), PickerScript.LAYER_TAP).get("collider", self).get_meta("building", "none")])])
 
 	# (a) 마우스 탭 → 영웅 선택
 	_picker._select(null)
@@ -379,7 +382,7 @@ func _recruit_and_heroes(rig) -> void:
 
 	# (t) 하단 탭 바(개정 13 §7.1): 탭 4개(영웅·병사·모집·상인, [성] 없음), 건물 탭으로 연 모집 창도 [모집] 선택(올라옴). 창이 열린 동안
 	#     끌기는 카메라를 못 움직이고, 탭 바는 창 위에서도 동작한다: [상인] → 모집 창 닫고 거래 창, 같은 탭 다시 → 닫고 선택 없음,
-	#     [병사] → "병사 준비 중" 빈 시트, 다시 → 닫힘
+	#     [병사] → 병사 시트(아직 병사 없음), 다시 → 닫힘
 	var merchant: Node = null
 	for c in _main.get_children():
 		if c.get_script() == preload("res://scripts/merchant_panel.gd"):
@@ -416,9 +419,10 @@ func _recruit_and_heroes(rig) -> void:
 	var soldiers: Node = tabs.windows.soldier
 	await _tap(_tab_px(tabs, "soldier"))
 	var sheet0: Rect2 = soldiers.dialog.get_global_rect()
-	_check(soldiers.is_open() and not recruit.is_open() and tabs.selected == "soldier" and soldiers.content.get_child(1).text == soldiers.EMPTY_TEXT
-		and sheet0.end.y <= bar_rect.position.y and sheet0.size.y > 1000.0, "(t) [병사] closes the recruit window and opens the empty soldier sheet (병사 준비 중) above the tab bar",
-		"open=%s selected=%s sheet=%s" % [soldiers.is_open(), tabs.selected, sheet0])
+	_check(soldiers.is_open() and not recruit.is_open() and tabs.selected == "soldier" and soldiers.empty_label.visible and soldiers.rows.is_empty()
+		and soldiers.summary_label.text == "배치 0 / 6 (인구)" and sheet0.end.y <= bar_rect.position.y and sheet0.size.y > 1000.0,
+		"(t) [병사] closes the recruit window and opens the soldier sheet above the tab bar (no soldiers yet: 배치 0 / 6, 보유한 병사가 없습니다)",
+		"open=%s selected=%s summary=%s sheet=%s" % [soldiers.is_open(), tabs.selected, soldiers.summary_label.text, sheet0])
 	await _guard_wait()
 	await _tap(_tab_px(tabs, "soldier"))
 	_check(not recruit.is_open() and not merchant.is_open() and not heroes_win.is_open() and not soldiers.is_open() and tabs.selected == "" and _picker.selected == null,
@@ -608,6 +612,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	recruit.close()
 	await _guard_wait()
 	await _buildings_ui(tabs, hud, recruit)
+	await _soldiers_ui(tabs, hud)
 	await _rotate_ui(hud)
 	await _fever_ui(hud)
 	await _top_hud(hud)
@@ -908,9 +913,11 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.cost_labels.stone.get_theme_color("font_color") == bwin.RED and bwin.time_label.text == "건설 시간 00:20" and not bwin._progress_box.visible,
 		"(B) cost 60/80/40 with icons (stone short = red, wood 100 ok), 건설 시간 00:20",
 		"wood=%s stone=%s time=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.time_label.text])
-	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 3).is_empty() and bwin.effect_lines("lab", 2)[0] == ["영웅 공격", "+3%", "+6%"]
+	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 1) == [["1마리", "3:00:00", "2:51:00"]]
+		and bwin.effect_lines("stable", 3) == [["1마리", "2:42:27", "2:34:20"]] and bwin.effect_lines("lab", 2)[0] == ["영웅 공격", "+3%", "+6%"]
 		and UiKit.duration(3900) == "1시간 5분" and UiKit.duration(59.2) == "01:00",
-		"(B) effect sentences: 인구 6 → 8, barracks none (the soldier UI fills it), lab +3% → +6%; times mm:ss / h시간 m분", "")
+		"(B) effect sentences: 인구 6 → 8, soldier buildings 1마리 3:00:00 → 2:51:00 (Lv 3 2:42:27 → 2:34:20), lab +3% → +6%; times mm:ss / h시간 m분",
+		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
 	bwin.close()
 
 	# 성채 [업그레이드]: 자원 300/300/200 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간
@@ -980,6 +987,158 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.build = {}
 	Economy.changed.emit()
 	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
+
+
+## (S) 개정 13 §5·§6 병사 UI(오프라인): [병사] 시트 — 행 순서(강한 순)·[+]·[−]·보유 상한·인구 상한·[적용](방치 모드라 곧바로 성채 앞)·
+##     [모두 해제]·[자동 배치]·생산 3줄 매초·시트 안 탭/끌기는 뒤로 안 샌다. 보병 막사 길게 누르기 → 1마리 시간·다음 보병까지·
+##     티어별 보유·[합성 5→1](불가 이유)·성공 연출·배치 자르기·최대 티어.
+func _soldiers_ui(tabs, hud) -> void:
+	var sw = tabs.windows.soldier
+	var bwin = _building_win()
+	var rig = _camera.get_parent()
+	_picker._select(null)
+	Economy.levels["houses"] = 1  # 인구 6
+	Economy.soldiers = {"infantry:1": 5, "archer:1": 3, "cavalry:2": 1, "infantry:2": 4}
+	Economy.soldier_deployed = {}
+	Economy.last_collect["barracks"] = Economy.time_now() - 30.0
+	Economy.soldiers_changed.emit()
+	await _tap(_tab_px(tabs, "soldier"))
+	await _guard_wait()
+	print("INPUT INFO: soldier sheet %s, [+] rows %s, [자동 배치] %s, [적용] %s (720x1280 logical)" % [sw.dialog.get_global_rect(),
+		sw.rows.values().map(func(r): return r.plus.get_global_rect()), sw.auto_button.get_global_rect(), sw.apply_button.get_global_rect()])
+	var keys: Array = sw.rows.keys()
+	_check(sw.is_open() and GameState.mode == GameState.Mode.IDLE and keys == ["infantry:2", "cavalry:2", "infantry:1", "archer:1"] and sw.summary_label.text == "배치 0 / 6 (인구)"
+		and sw.rows["archer:1"].have.text == "보유 3" and sw.rows["infantry:1"].minus.disabled and sw.apply_button.disabled and sw.clear_button.disabled and not sw.empty_label.visible,
+		"(S) [병사] sheet: rows strongest first (tier, then 보병 -> 기병 -> 궁병), 배치 0 / 6 (인구), 보유 N; [−]·[모두 해제]·[적용] off",
+		"keys=%s summary=%s" % [keys, sw.summary_label.text])
+	var inf = sw.rows["infantry:1"]
+	await _tap(_center(inf.plus))
+	await _tap(_center(inf.plus))
+	await _tap(_center(inf.minus))
+	_check(sw.work == {"infantry:1": 1} and inf.count.text == "1" and sw.summary_label.text == "배치 1 / 6 (인구)" and not sw.apply_button.disabled and Economy.soldier_deployed.is_empty(),
+		"(S) [+] twice then [−] gives 1; [적용] turns on; nothing applied yet", "work=%s" % [sw.work])
+	var arc = sw.rows["archer:1"]
+	for i in 4:
+		await _tap(_center(arc.plus))
+	_check(sw.work.get("archer:1", 0) == 3 and arc.plus.disabled and arc.count.text == "3", "(S) [+] stops at the owned count (궁병 T1 보유 3)", "work=%s" % [sw.work])
+	await _tap(_center(sw.rows["cavalry:2"].plus))
+	await _tap(_center(sw.rows["infantry:2"].plus))
+	await _tap(_center(sw.rows["infantry:2"].plus))  # 인구 6 — 눌러도 그대로
+	_check(sw.work == {"infantry:1": 1, "archer:1": 3, "cavalry:2": 1, "infantry:2": 1} and sw.summary_label.text == "배치 6 / 6 (인구)"
+		and sw.rows.values().all(func(r): return r.plus.disabled) and not sw.rows["infantry:2"].minus.disabled,
+		"(S) population cap: at 6 / 6 every [+] is off and a press adds nothing", "work=%s plus=%s" % [sw.work, sw.rows.values().map(func(r): return r.plus.disabled)])
+	await _tap(_center(sw.apply_button))
+	await _frames(2)
+	var front: Array = _main.soldiers.filter(func(s): return is_instance_valid(s))
+	var kinds: Array = front.map(func(s): return "%s:%d" % [s.type, s.tier])
+	kinds.sort()
+	_check(Economy.soldier_deployed == {"infantry:1": 1, "archer:1": 3, "cavalry:2": 1, "infantry:2": 1} and sw.apply_button.disabled
+		and kinds == ["archer:1", "archer:1", "archer:1", "cavalry:2", "infantry:1", "infantry:2"] and hud._toast.text == "병사 배치를 적용했습니다",
+		"(S) [적용] saves the deploy; idle mode stands those 6 soldiers in front of the keep at once", "deployed=%s kinds=%s toast=%s" % [Economy.soldier_deployed, kinds, hud._toast.text])
+	await _tap(_center(sw.clear_button))
+	_check(sw.work.is_empty() and sw.summary_label.text == "배치 0 / 6 (인구)" and sw.clear_button.disabled and not sw.apply_button.disabled and Economy.soldier_deployed.size() == 4,
+		"(S) [모두 해제] empties the edit only (not applied)", "work=%s" % [sw.work])
+	await _tap(_center(sw.auto_button))
+	_check(sw.work == {"infantry:2": 4, "cavalry:2": 1, "infantry:1": 1} and sw.work == Economy.auto_deploy() and sw.auto_button.disabled and sw.summary_label.text == "배치 6 / 6 (인구)",
+		"(S) [자동 배치] fills strongest first up to the population: 보병 T2 x4, 기병 T2 x1, 보병 T1 x1", "work=%s" % [sw.work])
+	await _tap(_center(sw.apply_button))
+	await _frames(2)
+	_check(Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1, "infantry:1": 1} and _main.soldiers.size() == 6, "(S) and [적용] puts that line-up in front of the keep",
+		"deployed=%s n=%d" % [Economy.soldier_deployed, _main.soldiers.size()])
+	var line0: String = sw.prod_labels.barracks.text
+	_check(sw.prod_labels.size() == 3 and line0.begins_with("보병 막사 Lv 1 · 다음 2:59:") and sw.prod_labels.archery.text.begins_with("궁병 훈련소 Lv 1 · 다음 ")
+		and sw.prod_labels.stable.text.begins_with("기병 마구간 Lv 1 · 다음 "), "(S) three production lines: '보병 막사 Lv 1 · 다음 2:59:..'",
+		"lines=%s" % [sw.prod_labels.values().map(func(l): return l.text)])
+	await get_tree().create_timer(1.1).timeout
+	_check(sw.prod_labels.barracks.text != line0, "(S) the production countdown ticks every second", "%s -> %s" % [line0, sw.prod_labels.barracks.text])
+	# 시트 안 탭·끌기는 전장으로 새지 않는다(영웅 이동·카메라 이동 없음)
+	var hero = get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())[0]
+	var state := [hero.side, hero.post, hero.free_pos]
+	var cam0: Vector3 = rig.position
+	var inside := Vector2(30, 700)
+	_picker._select(hero)
+	await _tap(inside)
+	_mouse_button(inside, true)
+	for i in 6:
+		_mouse_motion(inside + Vector2(0, 12) * (i + 1), Vector2(0, 12))
+	_mouse_button(inside + Vector2(0, 72), false)
+	await _frames(2)
+	_check(sw.is_open() and sw.dialog.get_global_rect().has_point(inside) and [hero.side, hero.post, hero.free_pos] == state and rig.position == cam0,
+		"(S) a tap or drag inside the sheet reaches neither the hero nor the camera", "open=%s cam %s -> %s" % [sw.is_open(), cam0, rig.position])
+	_picker._select(null)
+	await _tap(_tab_px(tabs, "soldier"))
+	_check(not sw.is_open() and tabs.selected == "", "(S) [병사] again closes the sheet", "")
+
+	# 보병 막사 지붕 길게 누르기 → 건물 창(부지 중심은 바로 앞 주점 상자에 가린다): 1마리 3:00:00 → 2:51:00, 다음 보병까지,
+	# 티어 행 T1(5 — [합성] 켜짐)·T2(4 — 부족 이유), T3 이상 숨김
+	var bp := _roof_px("barracks")
+	_check(_picker._pick(bp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(bp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "barracks"
+		and not _open_hero(bp), "(S) precondition: the barracks roof point hits the barracks body", "px=%s" % bp)
+	var held: String = await _long_press(bp, bwin)
+	await _frames(1)
+	var rows: Array = bwin.merge_rows
+	var eff: HBoxContainer = bwin.effects.get_child(0)
+	print("INPUT INFO: barracks window dialog %s, [합성] T1 %s, T2 %s (720x1280 logical)" % [bwin.dialog.get_global_rect(), rows[0].button.get_global_rect(), rows[1].button.get_global_rect()])
+	_check(held == "barracks" and bwin.title_label.text == "보병 막사 Lv 1" and eff.get_child(0).text == "1마리 3:00:00" and eff.get_child(1).text == "→ 2:51:00"
+		and bwin.soldier_box.visible and bwin.next_label.text.begins_with("다음 보병까지 2:5"),
+		"(S) a long press on the barracks opens its window: 1마리 3:00:00 → 2:51:00, '다음 보병까지 2:5x:xx'",
+		"held=%s title=%s eff=%s next=%s" % [held, bwin.title_label.text, [eff.get_child(0).text, eff.get_child(1).text], bwin.next_label.text])
+	_check(rows.size() == 5 and rows[0].box.visible and rows[1].box.visible and not rows[2].box.visible and rows[0].have.text == "T1 보유 5" and not rows[0].button.disabled
+		and rows[0].button.text == "합성 5→1" and rows[0].reason.text == "" and rows[1].have.text == "T2 보유 4" and rows[1].button.disabled
+		and rows[1].reason.text == Economy.SOLDIER_TEXT.not_enough, "(S) tier rows T1..T2: T1 5 -> [합성 5→1] on; T2 4 -> off with '병사가 부족합니다'; T3+ hidden",
+		"have=%s off=%s why=%s" % [rows.map(func(r): return r.have.text), rows.map(func(r): return r.button.disabled), rows.map(func(r): return r.reason.text)])
+	await _guard_wait()
+	await _tap(_center(rows[0].button))
+	await _frames(2)
+	_check(Economy.soldiers == {"infantry:2": 5, "archer:1": 3, "cavalry:2": 1} and Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1}
+		and bwin.celebrations == 1 and rows[0].have.text == "T1 보유 0" and rows[0].button.disabled and rows[1].have.text == "T2 보유 5" and not rows[1].button.disabled
+		and _main.soldiers.size() == 5 and hud._toast.text == "보병 T2 합성 완료",
+		"(S) [합성] T1: 5 → T2 +1, the deployed T1 is trimmed (front line 5), T2 now mergeable; success pop + notice '보병 T2 합성 완료'",
+		"owned=%s deployed=%s celebrations=%d toast=%s" % [Economy.soldiers, Economy.soldier_deployed, bwin.celebrations, hud._toast.text])
+	Economy.soldiers["infantry:5"] = 5
+	Economy.soldiers_changed.emit()
+	_check(rows.all(func(r): return r.box.visible) and rows[4].button.disabled and rows[4].reason.text == Economy.SOLDIER_TEXT.max_tier,
+		"(S) the top tier (T5) row shows its count but [합성] is off: '최대 티어입니다'", "why=%s" % rows[4].reason.text)
+	bwin.close()
+	bwin.open_building("stable")
+	await _frames(1)
+	_check(bwin.title_label.text == "기병 마구간 Lv 1" and bwin.merge_rows[0].have.text == "T1 보유 0" and bwin.merge_rows[1].have.text == "T2 보유 1"
+		and bwin.next_label.text.begins_with("다음 기병까지 ") and not bwin.merge_rows[2].box.visible, "(S) the stable window shows cavalry: T1 0, T2 1, '다음 기병까지'",
+		"have=%s next=%s" % [bwin.merge_rows.map(func(r): return r.have.text), bwin.next_label.text])
+	bwin.close()
+	bwin.open_building("lumber")
+	await _frames(1)
+	_check(not bwin.soldier_box.visible, "(S) a resource building has no soldier section", "")
+	bwin.close()
+	Economy.soldiers = {}
+	Economy.soldier_deployed = {}
+	Economy.soldiers_changed.emit()
+	await _frames(2)
+
+
+func _center(c: Control) -> Vector2:
+	return c.get_global_rect().get_center()
+
+
+## 건물 지붕(탭 판정체 윗면 0.3 m 아래) 5×5 점을 가운데에 가까운 순으로 보며, 그 건물 판정체가 맞는 첫 화면 좌표 — 부지 중심은 앞 건물
+## 상자에 가릴 수 있다(보병 막사는 주점 뒤). 화면 안에 보이는 곳이 없으면 Vector2.INF.
+func _roof_px(id: String) -> Vector2:
+	var b := Balance.building(id)
+	var top := 0.0
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/buildings.gd"):
+			top = c.sites[id][0].end.y
+	var offs := []
+	for i in 5:
+		for j in 5:
+			offs.append(Vector2(i - 2, j - 2) / 5.0)
+	offs.sort_custom(func(a, c): return a.length() < c.length())
+	for o in offs:
+		var px := _camera.unproject_position(Vector3((b.cell.x + b.size.x * (0.5 + o.x)) * Balance.TILE, top - 0.3, (b.cell.y + b.size.y * (0.5 + o.y)) * Balance.TILE))
+		var hit: Dictionary = _picker._pick(px, PickerScript.LAYER_TAP)
+		if get_viewport().get_visible_rect().has_point(px) and not hit.is_empty() and hit.collider.get_meta("building", "") == id:
+			return px
+	return Vector2.INF
 
 
 ## 개정 14 §4 수량 칸: [판매] → 펼침, [+]·[−]·입력·슬라이더·[최대], 판매 후 보유 감소·골드 증가. stone 7개로 본다(창이 열려 있어야 한다).
