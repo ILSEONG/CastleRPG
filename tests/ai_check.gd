@@ -859,6 +859,7 @@ func _attack_sync() -> void:
 	await _frames(1)
 
 	# 몬스터도 같다: 성문 HP는 휘두름 시작이 아니라 타격 순간에 준다. 방치 무적(개정 12 §3)과 무관하게 보려고 잠깐 스테이지 모드로 둔다
+	var mode0: int = GameState.mode
 	GameState.mode = GameState.Mode.STAGE
 	var gs := 0
 	var g = _still("grunt", _main.castle.gate_target(gs))
@@ -869,7 +870,7 @@ func _attack_sync() -> void:
 	g._tick_swing(g_at - 0.02)
 	var gate_mid: float = GameState.gate_hp[gs]
 	g._tick_swing(0.04)
-	GameState.mode = GameState.Mode.IDLE
+	GameState.mode = mode0
 	_check(g_at > 0.1 and gate_mid == gate0 and is_equal_approx(gate0 - GameState.gate_hp[gs], g.atk), "(A) monster: the gate loses HP at the swing's hit moment (%.2f s), not at its start" % g_at,
 		"gate %.1f -> %.1f -> %.1f atk=%.1f" % [gate0, gate_mid, GameState.gate_hp[gs], g.atk])
 	_clear_monsters()

@@ -612,11 +612,12 @@ func _top_hud(hud) -> void:
 	_check(dirs[0].x > 0.5 and dirs[0].y < -0.5 and dirs[1].x > 0.5 and dirs[1].y > 0.5 and dirs[2].x < -0.5 and dirs[2].y > 0.5 and dirs[3].x < -0.5 and dirs[3].y < -0.5,
 		"(z) compass arrows point where each gate is on screen (N up-right, E down-right, S down-left, W up-left)", "dirs=%s" % [dirs])
 	# 성문 피해 → 그 막대만 번쩍, 부서지면 회색 "파괴". 방치 무적(개정 12 §3)과 무관하게 보려고 잠깐 스테이지 모드로 둔다
+	var mode0: int = GameState.mode
 	GameState.mode = GameState.Mode.STAGE
 	GameState.damage_gate(2, 10.0)
 	var flashing: Array = range(4).map(func(s): return hud._hp[s].flash.visible)
 	GameState.damage_gate(3, GameState.gate_hp_max)
-	GameState.mode = GameState.Mode.IDLE
+	GameState.mode = mode0
 	_check(flashing == [false, false, true, false] and hud._hp[3].num.text == "파괴" and hud._gate_bars[3].get_theme_stylebox("background") == UiKit.bar(hud.BROKEN_GREY).fill,
 		"(z) a damaged gate's bar flashes (only that one); a broken gate turns grey and reads 파괴", "flash=%s text=%s" % [flashing, hud._hp[3].num.text])
 	await get_tree().create_timer(hud.FLASH_SEC + 0.1).timeout
