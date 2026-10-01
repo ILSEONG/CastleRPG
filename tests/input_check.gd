@@ -390,7 +390,7 @@ func _recruit_and_heroes(rig) -> void:
 		"(t) the tab bar has 영웅·병사·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
-		and big.end.x > 680.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
+		and big.end.x < 600.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
 		"(t) the tab bar is the bottom 104 px; the stage button sits at the top, right of the stage title on the same row (64 px tall)",
 		"bar=%s button=%s title=%s" % [bar_rect, big, title])
 	var cam_pos: Vector3 = rig.position
@@ -675,11 +675,11 @@ func _top_hud(hud) -> void:
 	var cr: Rect2 = hud._auto.get_global_rect()
 	_check(cr.position.x >= hud._button.get_global_rect().end.x and cr.size.x >= 56.0 and cr.size.y >= 56.0 and cr.end.x <= 720.0 and hud._fever.get_global_rect().end.x <= hud._button.get_global_rect().position.x,
 		"(z) header row: fever, 진행, then the 연속 진행 checkbox, all inside 720 px, tap target >= 56", "auto=%s button=%s" % [cr, hud._button.get_global_rect()])
-	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) the checkbox starts checked")
+	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) the checkbox starts checked", "")
 	await _tap(cr.get_center())
-	_check(not GameState.auto_continue and not hud._auto.button_pressed, "(z) tapping the checkbox unchecks it")
+	_check(not GameState.auto_continue and not hud._auto.button_pressed, "(z) tapping the checkbox unchecks it", "")
 	await _tap(cr.get_center())
-	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) and checks it again")
+	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) and checks it again", "")
 
 
 ## 하단 탭 바 탭 id의 가운데(화면 좌표).
