@@ -283,14 +283,70 @@ func _phase1(state_path: String) -> void:
 
 	var copies_start := await _heroes_online()
 	await _levelup_online()
+	await _promote_online()
 
 	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
 	await _soldiers_online(state_path)
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
-		"heroes": Economy.heroes, "deploy": Economy.deploy, "copies_start": copies_start, "levels": Economy.hero_levels}))
+		"heroes": Economy.heroes, "deploy": Economy.deploy, "copies_start": copies_start, "levels": Economy.hero_levels,
+		"shards": Economy.hero_shards, "promotions": Economy.hero_promotions}))
 	f.close()
+
+
+## (w) 개정 15 서버 승급: test/shards로 한스 조각 30 → 상세 [승급] → /v1/hero/promote 한 번(응답 전 재탭 무시), 조각 −5·★1·최대 레벨 30·연출,
+##     한 번 더 → 조각 −25·★2. (x) 승급은 다시 보내지 않는다: 서버가 사라진 채 → 버리고 알림, 다시 연결되면 상태만 받는다.
+## (y) 서버가 거부(409 not_enough_shards)하면 알림 + 상태 새로 받기. phase 2가 재접속 승급·조각 복원과 그 능력치로 선 영웅을 본다.
+func _promote_online() -> void:
+	var id := "hans"
+	var lv := Economy.level_of(id)
+	await _request("POST", "/v1/test/shards", {"hero_id": id, "shards": 30})
+	_check(Economy.shards_of(id) == 30 and Economy.promotion_of(id) == 0 and lv == 12, "(w) precondition: hans Lv 12, 30 shards from the server, promotion 0",
+		"shards=%d promotion=%d level=%d" % [Economy.shards_of(id), Economy.promotion_of(id), lv])
+	var p0: int = Net.requested.get("/v1/hero/promote", 0)
+	_hero_panel.open()
+	_hero_panel.show_detail(id)
+	_check(_hero_panel._promo.line.text == "조각 30 / 5" and not _hero_panel.promote_button.disabled, "(w) [승급] shows 조각 30 / 5 and is on", _hero_panel._promo.line.text)
+	_hero_panel.promote_button.pressed.emit()
+	_hero_panel.promote_button.pressed.emit()  # 응답 전 재탭
+	_check(_hero_panel.promote_button.disabled and Economy.promote_waiting() and Economy.promotion_of(id) == 0, "(w) while waiting for the reply [승급] is off and nothing changes yet", "")
+	var done := await _wait_until(func(): return Economy.promotion_of(id) == 1 and not Economy.promote_waiting(), 15.0)
+	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 1 and Economy.shards_of(id) == 25 and _hero_panel.promotions_shown == 1
+		and _hero_panel.big_card.stars == 1 and _hero_panel.level_label.text == "Lv 12 / 30" and _hero_panel._promo.line.text == "조각 25 / 25",
+		"(w) one /v1/hero/promote: shards 30 -> 25, ★1, max level 30, with the effect",
+		"requests=%d shards=%d promotion=%d label=%s" % [Net.requested.get("/v1/hero/promote", 0) - p0, Economy.shards_of(id), Economy.promotion_of(id), _hero_panel.level_label.text])
+	_hero_panel.promote_button.pressed.emit()
+	done = await _wait_until(func(): return Economy.promotion_of(id) == 2 and not Economy.promote_waiting(), 15.0)
+	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 2 and Economy.shards_of(id) == 0 and _hero_panel.promote_button.disabled
+		and _hero_panel.promote_reason.text == "조각 부족" and _hero_panel.level_label.text == "Lv 12 / 40",
+		"(w) again: 25 shards -> ★2 (Lv 12 / 40); [승급] off with 조각 부족", "shards=%d reason=%s" % [Economy.shards_of(id), _hero_panel.promote_reason.text])
+	var live := Net.api_base
+	var notices := []
+	var on_notice := func(t): notices.append(t)
+	Economy.notice.connect(on_notice)
+	await _request("POST", "/v1/test/shards", {"hero_id": id, "shards": 50})
+	var w0 := _warned("not resending")
+	Net.api_base = DEAD_API
+	var sent := Economy.promote(id)
+	var dropped := await _wait_until(func(): return not Net.up and not Economy.promote_waiting(), 20.0)
+	_check(sent and dropped and notices.has(Economy.PROMOTE_FAIL_TEXT) and _warned("not resending") == w0 + 1,
+		"(x) a promotion that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent, dropped, notices])
+	Net.api_base = live
+	var back := await _wait_until(func(): return Net.up, 40.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	await _frames(3)
+	_check(back and Net.requested.get("/v1/hero/promote", 0) == p0 + 3 and Economy.promotion_of(id) == 2 and Economy.shards_of(id) == 50,
+		"(x) after reconnecting the state is refreshed and the promotion is not resent",
+		"requests=%d promotion=%d shards=%d" % [Net.requested.get("/v1/hero/promote", 0) - p0, Economy.promotion_of(id), Economy.shards_of(id)])
+	await _request("POST", "/v1/test/shards", {"hero_id": id, "shards": 10})
+	Economy._promote_online(id)  # 화면이 막는 요청을 직접 보낸다 — 서버가 409 not_enough_shards
+	await _wait_until(func(): return not Economy.promote_waiting(), 15.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	_check(notices.has("조각 부족") and Economy.promotion_of(id) == 2 and Economy.shards_of(id) == 10 and Net.requested.get("/v1/hero/promote", 0) == p0 + 4 and Net.up,
+		"(y) a refused promotion (409 not_enough_shards) shows a notice and refreshes the state", "notices=%s promotion=%d" % [notices, Economy.promotion_of(id)])
+	Economy.notice.disconnect(on_notice)
+	_hero_panel.close()
 
 
 ## (n) 서버 레벨업(개정 11): 영웅 상세 [레벨업] → /v1/hero/levelup 한 번(응답 전 재탭은 무시), 서버 골드 −비용 × 10 tenths(식량은 그대로 — 개정 12),
@@ -471,6 +527,14 @@ func _phase2(state_path: String) -> void:
 		stats_ok = stats_ok and is_equal_approx(h.hp_max, GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id)).hp)
 	_check(levels_ok and stats_ok, "(p2) reconnecting restores hero levels (hans Lv 12) and the spawned heroes use them",
 		"levels=%s saved=%s" % [Economy.hero_levels, saved.get("levels")])
+	var promo_ok: bool = saved.get("promotions") is Dictionary and saved.get("shards") is Dictionary and Economy.promotion_of("hans") == 2 and Economy.shards_of("hans") == 10
+	if promo_ok:
+		for id in saved.promotions:
+			promo_ok = promo_ok and Economy.promotion_of(id) == int(saved.promotions[id]) and Economy.shards_of(id) == int(saved.shards.get(id, 0))
+	var hans_node = spawned.filter(func(h): return h.def.id == "hans")
+	_check(promo_ok and hans_node.size() == 1 and is_equal_approx(hans_node[0].hp_max, GameData.hero_stats(GameData.hero("hans"), 12, 0).hp * 2.25),
+		"(p2) reconnecting restores promotions and shards (hans ★2, 10 shards); the spawned hans has HP x1.5^2",
+		"promotions=%s shards=%s saved=%s" % [Economy.hero_promotions, Economy.hero_shards, saved.get("promotions")])
 	await _frames(2)
 	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
 		and _warned("not persistent") == 1, "(p2) non-persistent storage: one warning log and a one-line notice in the band, the game goes on",
