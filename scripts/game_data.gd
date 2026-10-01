@@ -4,7 +4,8 @@ extends RefCounted
 const MONSTERS_PATH := "res://data/monsters.csv"
 const STAGES_PATH := "res://data/stages.csv"
 const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하는 정수 열
-const EXTEND_ROWS := 10  # 표 너머 연장 기울기를 잴 마지막 행 수
+const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
+const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
 const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "scale", "gold"]
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 
@@ -35,7 +36,7 @@ static func monster(id: String) -> Dictionary:
 	return _monsters.get(id, {})
 
 
-## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장 —
+## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장(정수 열 ≥ 1, 방치 간격 ≥ MIN_IDLE_INTERVAL) —
 ## 계단처럼 몇 행마다 오르는 정수 열(waves)도 두 행 차이보다 고르게 이어진다.
 static func stage(n: int) -> Dictionary:
 	if not _loaded:
@@ -53,7 +54,8 @@ static func stage(n: int) -> Dictionary:
 	for col in STAGE_COLS:
 		var slope: float = (last[col] - base[col]) / back if back > 0 else 0.0
 		var v: float = last[col] + slope * k
-		out[col] = roundi(v) if col in INT_COLS else v
+		out[col] = maxi(1, roundi(v)) if col in INT_COLS else v
+	out.idle_interval = maxf(out.idle_interval, MIN_IDLE_INTERVAL)
 	return out
 
 
@@ -73,12 +75,12 @@ static func _read(path: String, cols: Array) -> Array:
 	if f == null:
 		_err(path, 0, "", "cannot open file")
 		return rows
-	var lines := f.get_as_text().trim_prefix("﻿").split("\n")
+	var lines := f.get_as_text().trim_prefix("\uFEFF").split("\n")  # 엑셀 BOM(Godot가 이미 떼지만 안전하게)
 	var header := []
 	var idx := {}
 	for i in lines.size():
 		var line := lines[i].strip_edges()
-		if line.is_empty():
+		if line.replace(",", "").strip_edges().is_empty():  # 빈 줄, 엑셀이 남기는 ",,,,," 줄
 			continue
 		var cells := line.split(",")
 		if header.is_empty():

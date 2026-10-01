@@ -1,5 +1,5 @@
 extends RefCounted
-## 밸런스 상수와 스케일 함수. 튠은 여기서만.
+## 밸런스 상수. 몬스터·스테이지 수치는 data/*.csv(GameData)에 있다.
 
 const CASTLE_HP := 1000.0
 const HERO_SLOTS := [4, 8, 12]   # index = keep_level - 1
