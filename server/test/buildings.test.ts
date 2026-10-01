@@ -1,5 +1,6 @@
 // 건물 레벨업(개정 12 §2.2~2.4): 비용·시간 공식, 단계 표, 성채 상한·선행·일꾼·자원 검사 순서, 게으른 완료(시계 주입),
-// 자원 건물 자동 수집, 원자성(동시 2건), 007 업그레이드, 주점·민가 효과, 배치 길이 확장, build_now 훅, 시드 검증.
+// 자원 건물 자동 수집, 원자성(동시 2건), 007 업그레이드, 주점 확률·민가 인구(사용자 지시: 축적 상한 대신 인구), 배치 길이 확장,
+// build_now 훅, 시드 검증.
 import assert from 'node:assert/strict'
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -31,7 +32,7 @@ after(async () => {
 })
 
 const CFG: R.Config = {
-  keep_slot_tiers: '1:4|5:8|10:12', keep_interior_tiers: '1:20|5:24|10:28', accum_cap_min: '720', accum_cap_per_house: '60',
+  keep_slot_tiers: '1:4|5:8|10:12', keep_interior_tiers: '1:20|5:24|10:28', pop_base: '6', pop_per_house: '2',
   gacha_rate_ssr: '0.03', gacha_rate_sr: '0.17', tavern_ssr_per_level: '0.001', tavern_sr_per_level: '0.003',
 }
 const defs = async () => (await S.db.query('select id, name, max_level, wood, stone, food, base_sec, req1, req2 from building_defs order by ord')) as R.BuildingDef[]
@@ -64,7 +65,7 @@ test('비용·시간 공식: L → L+1 비용 = round(값 × 1.35^(L−1)), 시�
   assert.equal(R.grown(300, 1.35, 9), 300 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35)
 })
 
-test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 마지막 단계 값 — 슬롯 4/8/12, 민가 상한, 주점 확률', () => {
+test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 마지막 단계 값 — 슬롯 4/8/12, 민가 인구, 주점 확률', () => {
   assert.deepEqual(R.parseTiers('1:4|5:8|10:12'), [[1, 4], [5, 8], [10, 12]])
   assert.deepEqual(R.parseTiers(' 1 : 20 | 5:24 '), [[1, 20], [5, 24]])
   for (const bad of ['', '4|8|12', '2:4|5:8', '1:4|5:8|5:9', '1:4|3:8|2:9', '1:x', '1:4|', '1:4|5', 'a:1', '1.5:4']) {
@@ -73,7 +74,7 @@ test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 �
   assert.deepEqual([1, 4, 5, 9, 10, 30].map((l) => R.heroSlots(CFG, l)), [4, 4, 8, 8, 12, 12])
   assert.deepEqual([0, 1, 5, 10].map((l) => R.tierValue(CFG, 'keep_interior_tiers', l)), [20, 20, 24, 28])
   assert.throws(() => R.heroSlots({ keep_slot_tiers: '4|8|12' }, 1), /tier table/)
-  assert.deepEqual([1, 3, 30].map((l) => R.accumCapMin(CFG, l)), [720, 840, 2460])
+  assert.deepEqual([0, 1, 2, 3, 30].map((l) => R.population(CFG, l)), [6, 6, 8, 10, 64]) // 인구 = 6 + 2 × (민가 − 1)
   const r11 = R.gachaRates(CFG, 11)
   assert.deepEqual(R.gachaRates(CFG, 1), { ssr: 0.03, sr: 0.17 })
   assert.ok(Math.abs(r11.ssr - 0.04) < 1e-12 && Math.abs(r11.sr - 0.2) < 1e-12, JSON.stringify(r11))
@@ -240,7 +241,7 @@ test('원자성: 끝난 건설을 두 요청이 동시에 읽어도 완료는 �
   }
 })
 
-test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.1%p/레벨), 민가 레벨이 축적 상한을 늘린다(+60분/레벨)', async () => {
+test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.1%p/레벨), 민가 레벨이 인구(player.population)를 늘린다. 축적 상한은 민가와 무관(720분)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await S.db.query('update player_state set gold_tenths = 100000 where player_id = $1', [id])
@@ -250,11 +251,16 @@ test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.
   rand.next = [0.0305, 0]
   assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => [x.grade, x.hero_id]), [['SSR', 'arteon']])
   rand.next = []
+  assert.equal((await player(token)).population, 6) // 민가 1
+  await setLevels(id, { houses: 4 })
+  assert.equal((await player(token)).population, 12) // 6 + 2 × 3
   await S.req('POST', '/v1/test/age', { token, body: { minutes: 1000 } })
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 720 * 10) // 민가 1: 720분
-  await setLevels(id, { houses: 4 }) // 720 + 180 = 900분
-  await S.req('POST', '/v1/test/age', { token, body: { minutes: 1000 } })
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } })).json.amount, 900 * 5)
+  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 720 * 10) // 민가 4여도 720분
+  // 민가 업그레이드(실제 경로) → 완료 → 인구 +2
+  await setRes(id, RICH)
+  await setLevels(id, { keep: 5 })
+  assert.equal((await upgrade(token, 'houses')).status, 200)
+  assert.equal((await S.req('POST', '/v1/test/build_now', { token })).json.player.population, 14)
 })
 
 test('배치 길이 확장: 성채 4 → 5(실제 업그레이드 + build_now)면 슬롯 8 — 응답 배치는 null로 채우고 /v1/deploy도 8칸', async () => {
@@ -336,7 +342,8 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|5:24|10:28', 'keep_interior_tiers,2:20'), /not a tier table/],
     ['config.csv', cfg.replace('tavern_sr_per_level,0.003', 'tavern_sr_per_level,1.5'), /tavern_sr_per_level must be in 0\.\.1: '1\.5'/],
     ['config.csv', cfg.replace('barracks_hp_per_level,0.03', 'barracks_hp_per_level,-0.03'), /barracks_hp_per_level must be 0 or more/],
-    ['config.csv', cfg.replace(/^accum_cap_per_house,.*\n/m, ''), /missing key 'accum_cap_per_house'/],
+    ['config.csv', cfg.replace(/^pop_per_house,.*\n/m, ''), /missing key 'pop_per_house'/],
+    ['config.csv', cfg.replace('pop_base,6', 'pop_base,6.5'), /pop_base must be a non-negative integer: '6\.5'/],
   ]
   for (const [file, text, re] of cases) {
     writeFileSync(join(dir, file), text)

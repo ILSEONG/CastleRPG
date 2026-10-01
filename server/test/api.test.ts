@@ -94,6 +94,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         farm: { level: 1, last_collect: T0 + 0.25 },
       },
       build: null,
+      population: 6, // 민가 1: pop_base
       heroes: { hans: { copies: 1, level: 1 }, ella: { copies: 1, level: 1 }, dorik: { copies: 1, level: 1 }, nina: { copies: 1, level: 1 } },
       deploy: ['hans', 'ella', 'dorik', 'nina'],
     },
@@ -386,7 +387,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 42) // 개정 11: 레벨업 설정 9개. 개정 12: hero_slots −1, 건물 설정 +8
+  assert.equal(Object.keys(g.config).length, 43) // 개정 11: 레벨업 설정 9개. 개정 12: hero_slots −1, 건물 설정 +9
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm']) // 파일 순서
   assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 150, stone: 250, food: 0, base_sec: 45, req1: 'quarry', req2: null })
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')

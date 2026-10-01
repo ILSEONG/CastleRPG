@@ -215,7 +215,8 @@ export function createApp(opts: AppOptions) {
     throw new ApiError(409, 'conflict', 'concurrent update; try again')
   }
 
-  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원 건물은 last_collect도. build = 일꾼 또는 null(개정 12).
+  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원 건물은 last_collect도. build = 일꾼 또는 null,
+  // population = 민가 레벨의 인구(개정 12).
   function view(p: Player, game: Game, now: number) {
     const res: Record<string, number> = {}
     const buildings: Record<string, { level: number; last_collect?: number }> = {}
@@ -237,7 +238,7 @@ export function createApp(opts: AppOptions) {
       server_now: now,
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
-        kill_seq: p.kill_seq, buildings, build: p.build, heroes, deploy,
+        kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -403,7 +404,7 @@ export function createApp(opts: AppOptions) {
       const r = g.resources.find((x) => x.building === building)
       if (!r) throw new ApiError(400, 'not_resource_building', `'${building}' is not a resource building`)
       const b = p.buildings[building]
-      const st = R.collectStep(b.last_collect, now, r.per_min, b.level, R.accumCapMin(g.config, level(p, R.HOUSES)))
+      const st = R.collectStep(b.last_collect, now, r.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'))
       if (!st.changed) return { extra: { amount: 0 } }
       return {
         change: {
@@ -490,7 +491,7 @@ export function createApp(opts: AppOptions) {
       let collect: { res: string; amount: number; from: number; to: number } | null = null
       if (rdef) {
         const b = p.buildings[building]
-        const st = R.collectStep(b.last_collect, now, rdef.per_min, b.level, R.accumCapMin(g.config, level(p, R.HOUSES)))
+        const st = R.collectStep(b.last_collect, now, rdef.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'))
         if (st.changed) {
           collect = { res: rdef.id, amount: st.amount, from: b.last_collect, to: st.lastCollect }
           res[rdef.id] = (res[rdef.id] ?? 0) + st.amount

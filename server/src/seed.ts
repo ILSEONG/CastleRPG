@@ -72,8 +72,9 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
 export const CONFIG_LIST = ['starter_heroes']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
-export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'accum_cap_per_house', 'barracks_hp_per_level', 'lab_atk_per_level',
+export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'barracks_hp_per_level', 'lab_atk_per_level',
   'tavern_ssr_per_level', 'tavern_sr_per_level']
+const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
@@ -210,7 +211,7 @@ function checkGacha(config: CsvRow[], errors: string[]) {
 
 // 건물 표(개정 12 §2.2, 앱 GameData와 같은 규칙): 최대 레벨 1 이상, 비용 0 이상(정수는 열 형이 본다), base_sec > 0,
 // 선행(req1·req2)은 표에 있는 건물, 성채·성문 행 필수(상한·성 HP), 자원 건물은 모두 건물 표에, 비용 열(wood·stone·food)은 자원 id.
-// 건물 효과 설정은 0 이상, 주점 확률 증가분은 1 이하.
+// 건물 효과 설정은 0 이상, 주점 확률 증가분은 1 이하, 인구(pop_base·pop_per_house)는 정수.
 function checkBuildings(t: Tables, errors: string[]) {
   const rows = t.buildings ?? []
   const ids = new Set(rows.map((b) => String(b.id)))
@@ -231,8 +232,10 @@ function checkBuildings(t: Tables, errors: string[]) {
   for (const k of CONFIG_BUILDING_NUM) {
     const r = byKey.get(k)
     const v = Number(r?.value)
-    if (r && isNum(String(r.value)) && !(v >= 0 && (!k.startsWith('tavern_') || v <= 1))) {
-      errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${k.startsWith('tavern_') ? 'in 0..1' : '0 or more'}: '${r.value}'`)
+    const tavern = k.startsWith('tavern_')
+    const pop = POP_KEYS.includes(k)
+    if (r && isNum(String(r.value)) && !(v >= 0 && (!tavern || v <= 1) && (!pop || Number.isInteger(v)))) {
+      errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${tavern ? 'in 0..1' : pop ? 'a non-negative integer' : '0 or more'}: '${r.value}'`)
     }
   }
 }

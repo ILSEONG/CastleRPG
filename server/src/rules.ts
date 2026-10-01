@@ -154,7 +154,7 @@ export const BUILD_COST_GROWTH = 1.35
 export const BUILD_TIME_GROWTH = 1.5
 export const KEEP = 'keep' // 다른 건물의 상한·영웅 슬롯·성 HP
 export const GATE = 'gate' // 성문 HP
-export const HOUSES = 'houses' // 축적 상한
+export const HOUSES = 'houses' // 인구(병사 배치 상한 — 병사는 다음 개정)
 export const TAVERN = 'tavern' // 모집 확률
 
 export interface BuildingDef {
@@ -208,9 +208,9 @@ export function tierValue(config: Config, key: string, level: number): number {
   return v
 }
 
-// 축적 상한(분) = accum_cap_min + accum_cap_per_house × (민가 − 1).
-export const accumCapMin = (config: Config, housesLevel: number) =>
-  cfgNum(config, 'accum_cap_min') + cfgNum(config, 'accum_cap_per_house') * (Math.max(housesLevel, 1) - 1)
+// 인구 = pop_base + pop_per_house × (민가 − 1)(사용자 지시 2026-10-01: 민가는 축적 상한 대신 인구. 병사 배치 상한 — 병사는 다음 개정).
+export const population = (config: Config, housesLevel: number) =>
+  cfgNum(config, 'pop_base') + cfgNum(config, 'pop_per_house') * (Math.max(housesLevel, 1) - 1)
 
 // 모집 확률(주점): SSR + tavern_ssr_per_level × (L − 1), SR + tavern_sr_per_level × (L − 1). R은 나머지.
 export function gachaRates(config: Config, tavernLevel: number) {

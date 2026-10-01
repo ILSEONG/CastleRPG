@@ -10,7 +10,8 @@ result_sec,2
 wave_gap_sec,8
 spawn_spacing_sec,0.5
 accum_cap_min,720
-accum_cap_per_house,60
+pop_base,6
+pop_per_house,2
 badge_min,5
 merchant_jackpot_p,0.05
 merchant_jackpot_rate,2
