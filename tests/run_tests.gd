@@ -11,6 +11,8 @@ const Art := preload("res://scripts/art.gd")
 const MeshKitScript := preload("res://scripts/mesh_kit.gd")
 const TownKitScript := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -59,6 +61,7 @@ func _init() -> void:
 	test_economy_online()
 	test_merchant_spot()
 	test_icon_shapes()
+	test_lowpoly_box()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1044,3 +1047,23 @@ func test_icon_shapes() -> void:
 			for p in s[0]:
 				check(absf(p.x) <= 0.5 and absf(p.y) <= 0.5, "icon %s point %s inside the unit box" % [kind, p])
 	check(IconsScript.shapes("nope").is_empty(), "unknown icon kind draws nothing")
+
+
+## lowpoly_box: 면 수 고정, 같은 seed면 같은 폴리곤, 다른 seed면 다름. 키트 smoke(상태 4종·바·패널).
+func test_lowpoly_box() -> void:
+	var r := Rect2(0, 0, 200, 80)
+	var a: Array = LowpolyBoxScript.faces(r, 10.0, Color.WHITE, 0.06, 5)
+	var b: Array = LowpolyBoxScript.faces(r, 10.0, Color.WHITE, 0.06, 5)
+	var c: Array = LowpolyBoxScript.faces(r, 10.0, Color.WHITE, 0.06, 6)
+	check(a.size() == LowpolyBoxScript.FACES and a.size() >= 8 and a.size() <= 16, "lowpoly box has 8..16 faces (%d)" % a.size())
+	check(a == b, "lowpoly box is deterministic for the same seed")
+	check(a != c, "lowpoly box differs for another seed")
+	check(LowpolyBoxScript.octagon(r, 10.0).size() == 8, "lowpoly box outline is an octagon")
+	check(LowpolyBoxScript.octagon(Rect2(0, 0, 4, 4), 50.0)[0].x <= 2.0, "chamfer clamps to half the short side")
+	var styles: Dictionary = UiKit.button_styles(UiKit.AMBER)
+	for k in ["normal", "hover", "pressed", "disabled"]:
+		check(styles.has(k) and styles[k] is StyleBox, "button style %s exists" % k)
+	check(styles.pressed.content_margin_top == UiKit.PRESS_SHIFT, "pressed style pushes content down")
+	check(UiKit.button_styles(UiKit.AMBER) == styles and UiKit.panel(UiKit.CREAM) == UiKit.panel(UiKit.CREAM), "kit styleboxes are reused")
+	check(UiKit.bar(UiKit.AMBER).has("fill") and UiKit.bar(UiKit.AMBER).has("background"), "bar has fill and background")
+	check(UiKit.GRADE_COLORS.has("R") and UiKit.GRADE_COLORS.has("SR") and UiKit.GRADE_COLORS.has("SSR"), "grade colors R/SR/SSR")
