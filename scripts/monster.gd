@@ -9,6 +9,7 @@ const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const Fx := preload("res://scripts/fx.gd")
+const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 
 const SCAN_INTERVAL := 0.2
 
@@ -62,10 +63,11 @@ func is_alive() -> bool:
 	return not _dead
 
 
-func take_damage(amount: float) -> void:
+func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind(표시 색)
 	if _dead:
 		return
 	hp = maxf(0.0, hp - amount)
+	DamageNumbers.pop(self, amount, kind)
 	if hp == 0.0:
 		_dead = true
 		remove_from_group("monsters")  # 즉시 표적 대상에서 빠진다
@@ -82,7 +84,7 @@ func _process(delta: float) -> void:
 	if _poison_t > 0.0:
 		var dt := minf(delta, _poison_t)  # 마지막 틱은 남은 시간만큼만 — 합계가 dps × 초를 넘지 않는다
 		_poison_t -= delta
-		take_damage(_poison_dps * dt)
+		take_damage(_poison_dps * dt, DamageNumbers.Kind.POISON)
 		if _dead:
 			return
 	if _stun_t > 0.0:

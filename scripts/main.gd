@@ -18,6 +18,7 @@ const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
+const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 const BadgesScript := preload("res://scripts/badges.gd")
 const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
@@ -53,6 +54,9 @@ func _build_world() -> void:
 	var bars = HpBarsScript.new()
 	bars.camera = camera
 	add_child(bars)
+	var numbers = DamageNumbersScript.new()
+	numbers.camera = camera
+	add_child(numbers)
 	var badges = BadgesScript.new()
 	badges.camera = camera
 	add_child(badges)

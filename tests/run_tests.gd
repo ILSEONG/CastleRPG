@@ -15,6 +15,7 @@ const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
+const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -75,6 +76,7 @@ func _init() -> void:
 	test_gacha_offline()
 	test_roster()
 	test_skill_text()
+	test_damage_numbers()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1441,3 +1443,48 @@ func test_skill_text() -> void:
 		for kind in h.skills:
 			var nums: Array = h.skills[kind]
 			check(Skills.describe(kind, nums).contains(Skills.num_text(nums[0])), "hero %s skill %s text has its number" % [h.id, kind])
+
+
+
+## 피해 숫자 대역: 위치·살아 있음·바 높이만 있는 노드.
+class DnStub extends Node:
+	var global_position := Vector3.ZERO
+	var alive := true
+	func bar_height() -> float:
+		return 1.0
+	func is_alive() -> bool:
+		return alive
+
+
+## 피해 숫자: 형식(반올림·1.2k), 0 생략, 풀 상한 80(오래된 것부터), 독 1초 합산, 치명타 "!"·회복 "+"·회피 문구.
+func test_damage_numbers() -> void:
+	var dn = DamageNumbersScript.new()
+	check(dn.format(7.4) == "7" and dn.format(7.5) == "8" and dn.format(999.4) == "999" and dn.format(1000.0) == "1.0k" and dn.format(1234.0) == "1.2k" and dn.format(15600.0) == "15.6k",
+		"damage number format: rounded integers, 1.2k from 1000")
+	var t := DnStub.new()
+	dn.add(t, 0.4, DamageNumbersScript.Kind.HIT)
+	dn.add(t, 0.0, DamageNumbersScript.Kind.HEAL)
+	check(dn._list.is_empty(), "amounts that round to 0 are not shown")
+	dn.add(t, 12.0, DamageNumbersScript.Kind.CRIT)
+	dn.add(t, 5.0, DamageNumbersScript.Kind.HEAL)
+	dn.add(t, 0.0, DamageNumbersScript.Kind.DODGE)
+	check(dn._list.map(func(e): return e.text) == ["12!", "+5", "회피"], "crit gets '!', heal '+', dodge shows the word: %s" % [dn._list.map(func(e): return e.text)])
+	dn._list.clear()
+	for i in DamageNumbersScript.MAX_NUMBERS + 20:
+		dn.add(t, float(i + 1), DamageNumbersScript.Kind.HIT)
+	check(dn._list.size() == DamageNumbersScript.MAX_NUMBERS and dn._list[0].text == "21" and dn._list[-1].text == str(DamageNumbersScript.MAX_NUMBERS + 20),
+		"pool capped at %d, oldest dropped first: %d first %s" % [DamageNumbersScript.MAX_NUMBERS, dn._list.size(), dn._list[0].text])
+	dn._list.clear()
+	var u := DnStub.new()
+	for i in 4:
+		dn.add(t, 2.0, DamageNumbersScript.Kind.POISON)
+		dn.add(u, 3.0, DamageNumbersScript.Kind.POISON)
+	check(dn._list.is_empty() and dn._poison.size() == 2, "poison ticks are held, not shown one by one")
+	dn._process(1.0)
+	var texts: Array = dn._list.map(func(e): return e.text)
+	check(texts.size() == 2 and texts.has("8") and texts.has("12") and dn._poison.is_empty(), "poison sums per target after 1 s: %s" % [texts])
+	dn._process(0.9)
+	check(dn._list.is_empty(), "numbers disappear after their life")
+	dn.free()
+	t.free()
+	u.free()

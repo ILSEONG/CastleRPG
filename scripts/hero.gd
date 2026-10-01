@@ -14,6 +14,7 @@ const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const Skills := preload("res://scripts/skills.gd")
 const Fx := preload("res://scripts/fx.gd")
+const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
@@ -165,10 +166,12 @@ func take_damage(amount: float, source = null) -> void:
 		return
 	var r := Skills.incoming(_sk, amount, randf())
 	if r.x <= 0.0:
+		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
 		return
 	hp = maxf(0.0, hp - r.x)
+	DamageNumbers.pop(self, r.x, DamageNumbers.Kind.HURT)
 	if r.y > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
-		source.take_damage(r.y)
+		source.take_damage(r.y, DamageNumbers.Kind.SKILL)
 	if hp == 0.0:
 		state = State.DEAD
 		_model.play_death()
@@ -182,6 +185,7 @@ func heal(amount: float) -> float:
 		return 0.0
 	var gain := minf(hp_max - hp, maxf(0.0, amount))
 	hp += gain
+	DamageNumbers.pop(self, gain, DamageNumbers.Kind.HEAL)
 	return gain
 
 
@@ -341,9 +345,10 @@ func _attack() -> void:
 
 ## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun·lifesteal·cleave·chain.
 func _strike(m, a: float, primary: bool) -> void:
-	var d := Skills.damage(_sk, a, randf(), m.hp_ratio(), m.kind == "epic_boss")
+	var roll := randf()
+	var d := Skills.damage(_sk, a, roll, m.hp_ratio(), m.kind == "epic_boss")
 	_projectile(m.global_position)
-	m.take_damage(d)
+	m.take_damage(d, DamageNumbers.Kind.CRIT if _sk.has("crit") and roll < _sk.crit[0] / 100.0 else DamageNumbers.Kind.HIT)
 	_on_hit(m, a)
 	if not primary:
 		return
@@ -353,7 +358,7 @@ func _strike(m, a: float, primary: bool) -> void:
 		heal(d * _sk.lifesteal[0] / 100.0)
 	if _sk.has("cleave") and role == "melee":
 		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):
-			o.take_damage(d * _sk.cleave[1] / 100.0)
+			o.take_damage(d * _sk.cleave[1] / 100.0, DamageNumbers.Kind.SKILL)
 	if _sk.has("chain"):
 		_chain(m, d, a)
 
@@ -382,7 +387,7 @@ func _chain(first, d: float, a: float) -> void:
 			break
 		hit.append(next)
 		pts.append(next.global_position + HIT_HEIGHT)
-		next.take_damage(dmg)
+		next.take_damage(dmg, DamageNumbers.Kind.SKILL)
 		_on_hit(next, a)
 		cur = next
 	Fx.lightning(get_parent(), pts, _color)
@@ -394,7 +399,7 @@ func _blast(center: Vector3) -> void:
 	var dmg: float = atk * _aura_mult() * _sk.aoe_blast[2] / 100.0
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
-			m.take_damage(dmg)
+			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
 	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1])
 
 
