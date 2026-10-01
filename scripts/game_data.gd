@@ -30,7 +30,8 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "hero_max_stars", "hero_star_bonus",
 	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
-	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]
+	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
+	"fever_kills", "fever_sec", "fever_spawn_mult"]
 const CONFIG_LIST_KEYS := ["starter_heroes"]
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
 const BUILDING_STR_COLS := ["id", "name"]

@@ -47,6 +47,7 @@ var _resp_done := false
 func _ready() -> void:
 	OS.add_logger(_errors)
 	Engine.max_fps = 60
+	Fever.save_path = ""  # 개정 14: 테스트는 user://local.json을 쓰지 않는다
 	get_window().size = Vector2i(360, 640)  # 논리 화면 720×1280(input_check와 같다)
 	var phase := Net.arg_value("phase")
 	var device := Net.arg_value("device")
