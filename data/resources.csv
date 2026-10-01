@@ -1,0 +1,4 @@
+id,name,building,per_min,price
+wood,목재,lumber,10,1
+stone,석재,quarry,5,2
+food,식량,farm,10,1

@@ -1,0 +1,3 @@
+id,name,hp,atk,range,atk_interval,speed,aggro
+warrior,전사,400,30,1.8,0.8,6,8
+archer,궁수,220,20,9,1.0,6,12
