@@ -1470,9 +1470,9 @@ func test_damage_numbers() -> void:
 	dn.add(t, 0.0, DamageNumbersScript.Kind.DODGE)
 	check(dn._list.map(func(e): return e.text) == ["12!", "+5", "회피"], "crit gets '!', heal '+', dodge shows the word: %s" % [dn._list.map(func(e): return e.text)])
 	dn._list.clear()
-	for i in DamageNumbersScript.MAX_NUMBERS + 20:
+	for i in 100:
 		dn.add(t, float(i + 1), DamageNumbersScript.Kind.HIT)
-	check(dn._list.size() == DamageNumbersScript.MAX_NUMBERS and dn._list[0].text == "21" and dn._list[-1].text == str(DamageNumbersScript.MAX_NUMBERS + 20),
+	check(dn._list.size() == 80 and dn._list[0].text == "21" and dn._list[-1].text == "100",
 		"pool capped at %d, oldest dropped first: %d first %s" % [DamageNumbersScript.MAX_NUMBERS, dn._list.size(), dn._list[0].text])
 	dn._list.clear()
 	var u := DnStub.new()

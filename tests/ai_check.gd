@@ -11,6 +11,7 @@ const SpawnerScript := preload("res://scripts/spawner.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const Fx := preload("res://scripts/fx.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
+const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -366,6 +367,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _skill_application(heroes)
 	await _placement_cases()
 	await _fx_cap()
+	await _damage_numbers()
 
 
 ## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
@@ -570,6 +572,62 @@ func _fx_cap() -> void:
 	var units := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive()).size()
 	_check(bars.octagons > 0 and bars.octagons <= units * 2 and bars._idx.size() == bars.octagons * 18 and bars._pts.size() == bars.octagons * 8,
 		"(z) HP bars: one triangle array, two octagons per unit on screen", "octagons=%d units=%d" % [bars.octagons, units])
+
+
+## 피해 숫자: 공격하면 종류별 숫자가 생기고(치명타 100% 영웅 = 치명타), 받은 피해·회피·회복도 나온다. 120마리여도 그리기 호출 ≤ 숫자 × 2.
+func _damage_numbers() -> void:
+	_clear_monsters()
+	GameState.refill()
+	await _frames(1)
+	var dn = DamageNumbersScript.current
+	_check(dn != null, "(dn) the damage numbers node is in the world", "current=%s" % dn)
+	var K = DamageNumbersScript.Kind
+	var plain: Dictionary = GameData.hero("lumina").duplicate(true)
+	plain.skills = {}
+	var crit_def := plain.duplicate(true)
+	crit_def.skills = {"crit": [100.0, 200.0, 0.0]}
+	var dodge_def := plain.duplicate(true)
+	dodge_def.skills = {"dodge": [100.0]}
+	var h = _add_hero_def(plain, 310)
+	var hc = _add_hero_def(crit_def, 311)
+	var hd = _add_hero_def(dodge_def, 312)
+	for x in [h, hc, hd]:
+		x.set_process(false)
+	var m = _still("grunt", Vector3(0, 0, -(_half + 6.0)))
+	dn._list.clear()
+	h._target = m
+	h._attack()
+	var kinds: Array = dn._list.map(func(e): return e.kind)
+	_check(kinds == [K.HIT] and dn._list[0].text == str(roundi(h.atk)), "(dn) a plain attack makes one white damage number", "kinds=%s text=%s atk=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-", h.atk])
+	dn._list.clear()
+	hc._target = m
+	hc._attack()
+	kinds = dn._list.map(func(e): return e.kind)
+	_check(kinds == [K.CRIT] and dn._list[0].text == "%d!" % roundi(hc.atk * 2.0) and DamageNumbersScript.STYLE[K.CRIT][0] == Color(1.0, 0.62, 0.15),
+		"(dn) a 100% crit hero makes an orange crit number with '!'", "kinds=%s text=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-"])
+	dn._list.clear()
+	h.take_damage(10.0, m)
+	hd.take_damage(10.0, m)
+	h.hp = h.hp_max - 5.0
+	h.heal(3.0)
+	h.heal(0.0)
+	kinds = dn._list.map(func(e): return e.kind)
+	_check(kinds == [K.HURT, K.DODGE, K.HEAL] and dn._list.map(func(e): return e.text) == ["10", "회피", "+3"], "(dn) hurt, dodge and heal numbers (a zero heal shows nothing)", "kinds=%s" % [kinds])
+	_clear_monsters()
+	await _frames(1)
+	var crowd := []
+	for i in 120:
+		crowd.append(_still("grunt", Vector3(-6.0 + (i % 12) * 1.0, 0, -(_half + 6.0) - (i / 12) * 1.0)))
+	dn._list.clear()
+	for c in crowd:
+		c.take_damage(5.0, K.HIT)
+	await _frames(2)
+	_check(dn._list.size() == 80 and dn.draws <= dn._list.size() * 2 and dn.draws > 0,
+		"(dn) 120 hit monsters: pool stays at the cap and draw calls <= numbers x 2", "list=%d draws=%d" % [dn._list.size(), dn.draws])
+	for x in [h, hc, hd]:
+		_remove_hero(x)
+	_clear_monsters()
+	await _frames(1)
 
 
 func _add_hero(id: String, idx: int):
