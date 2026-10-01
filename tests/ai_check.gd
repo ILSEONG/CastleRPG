@@ -8,6 +8,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
+const HeroScript := preload("res://scripts/hero.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -49,9 +50,17 @@ func _ready() -> void:
 func _run() -> void:
 	var heroes := get_tree().get_nodes_in_group("heroes")
 	heroes.sort_custom(func(a, b): return a.index < b.index)
-	var warrior = heroes[0]  # 기본 배치: 북(0) 성문 앞
-	var archer = heroes[1]   # 동(1) 성벽 위
-	var warrior_hp: float = GameData.hero("warrior").hp
+	var warrior = heroes[0]  # 기본 배치(시작 영웅): 슬롯 0 한스(근접) = 북(0) 성문 앞
+	var archer = heroes[1]   # 슬롯 1 엘라(원거리) = 동(1) 성벽 위
+	var warrior_hp: float = warrior.hp_max
+
+	# 배치: 슬롯 i의 영웅 = deploy[i], 면 i % 4, melee는 성문 앞·ranged는 성벽 위
+	var deploy: Array = GameState.deploy()
+	_check(heroes.size() == deploy.size(), "deploy: one hero per filled slot", "heroes=%d deploy=%s" % [heroes.size(), deploy])
+	for h in heroes:
+		var want_post: int = Formation.POST_WALL if h.def.role == "ranged" else Formation.POST_GATE
+		_check(h.def.id == deploy[h.index] and h.side == h.index % 4 and h.post == want_post and h.global_position.distance_to(h.stand_position()) < 0.01,
+			"deploy: slot %d %s on side %d at its role post" % [h.index, h.def.id, h.index % 4], "id=%s side=%d post=%d pos=%s" % [h.def.id, h.side, h.post, h.global_position])
 
 	# (a) 밖 자유 위치 전사와 5 m 떨어진 grunt가 서로 다가가 교전한다(북동쪽 벌판: 북쪽 바깥면에서 22 m, 모서리 너머 12 m)
 	var outer := _half + Balance.WALL_T
@@ -116,7 +125,7 @@ func _run() -> void:
 	#     성 안 몬스터는 영역이 같아도 성벽 위 궁수를 치지 못한다
 	_clear_monsters()
 	await _frames(1)
-	var reach: float = GameData.hero("archer").range + 1.0
+	var reach: float = archer.def.range + 1.0
 	_g = _spawn("epic_boss", 1, Vector3(apos.x - 2.0, 0, apos.z))
 	await _wait_until(func(): return not _alive(_g) or Formation.flat_distance(_g.global_position, apos) > reach, 8.0)
 	var bd2 := Formation.flat_distance(_g.global_position, apos) if _alive(_g) else 0.0
@@ -224,6 +233,132 @@ func _run() -> void:
 	GameState.refill()
 	await _frames(1)
 	_check(Economy.gold_tenths == gold0 + GameData.kill_gold_tenths("grunt", GameState.stage), "(j) a monster removed by refill gives no gold", "gold %d" % Economy.gold_tenths)
+
+	await _skill_cases(heroes)
+
+
+## 스킬 대표 사례(스펙 §6). 기본 영웅은 멈추고(처리 끔) 시험 영웅 하나씩 더해 본다. 시험 영웅 index는 100+면(면 = index % 4).
+func _skill_cases(heroes: Array) -> void:
+	for h in heroes:
+		if h.post == Formation.POST_FREE:  # 앞 사례가 자유 위치로 옮긴 영웅은 배치 자리로
+			h.move_to(h.index % 4, Formation.POST_WALL if h.def.role == "ranged" else Formation.POST_GATE)
+		h.set_process(false)
+	GameState.refill()  # 모두 자리에 바로 선다(경로 없음), 몬스터 제거
+	await _frames(1)
+	var north_out := _half + Balance.WALL_T  # 북쪽 성벽 바깥면까지
+
+	# (k) aoe_blast: 이그니스(북 성벽 위 x=-4)의 첫 폭발이 반경 안 보스 셋을 모두 깎는다(보통 공격은 하나만 친다)
+	var ig = _add_hero("ignis", 100)
+	var c := Vector3(-6, 0, -(north_out + 4.0))
+	var bosses := []
+	for off in [Vector3.ZERO, Vector3(1.5, 0, 0), Vector3(-1.0, 0, 1.0)]:
+		var m = _spawn("epic_boss", 0, c + off)
+		m.set_process(false)  # 제자리
+		bosses.append(m)
+	await _wait_until(func(): return ig._blast_cd > 0.0, 3.0)
+	var hurt := 0
+	for m in bosses:
+		if m.hp < m.hp_max:
+			hurt += 1
+	_check(ig._blast_cd > 0.0 and hurt == 3, "(k) aoe_blast damages every monster in its radius", "blasted=%s hurt=%d" % [ig._blast_cd > 0.0, hurt])
+	_remove_hero(ig)
+	_clear_monsters()
+	await _frames(1)
+
+	# (l) heal_aura: 루미나(북 성벽 위)가 4초 쿨마다 반경 8 m 안 다친 한스(북 성문 앞, 약 4.7 m)를 최대 HP의 6% 회복
+	var lu = _add_hero("lumina", 100)
+	var hans = heroes[0]
+	hans.take_damage(200.0)
+	var hp0: float = hans.hp
+	await _wait_until(func(): return hans.hp > hp0, 5.0)
+	_check(is_equal_approx(hans.hp - hp0, hans.hp_max * 0.06), "(l) heal_aura heals a nearby ally by c% of its max HP", "hp %.1f -> %.1f" % [hp0, hans.hp])
+	_remove_hero(lu)
+	GameState.refill()
+	await _frames(1)
+
+	# (m) stun: 기절한 몬스터는 걷지 않다가 풀리면 다시 걷는다. 펠릭스(남 성문 앞)는 4번째 공격마다 대상을 기절시킨다
+	_g = _spawn("grunt", 1, Vector3(_half + Balance.WALL_T + 15.0, 0, 3.0))  # 동쪽 밖, 영웅들 멀리
+	await _frames(2)
+	_g.apply_stun(1.0)
+	var p0: Vector3 = _g.global_position
+	await _seconds(0.8)
+	var still := Formation.flat_distance(p0, _g.global_position)
+	await _seconds(0.5)
+	var after := Formation.flat_distance(p0, _g.global_position)
+	_check(still < 0.01 and after > 0.3, "(m) a stunned monster stops, then walks again", "moved %.2f while stunned, %.2f after" % [still, after])
+	_clear_monsters()
+	await _frames(1)
+	var fe = _add_hero("felix", 102)
+	_g = _spawn("epic_boss", 2, fe.global_position + Vector3(0, 0, 1.5))
+	await _wait_until(func(): return fe._attacks >= 4, 6.0)
+	_check(fe._attacks >= 4 and _alive(_g) and _g.is_stunned(), "(m) felix's 4th attack stuns its target", "attacks=%d stunned=%s" % [fe._attacks, _alive(_g) and _g.is_stunned()])
+	_remove_hero(fe)
+	_clear_monsters()
+	await _frames(1)
+
+	# (n) gate_repair: 발두르(서 성문 앞)가 쿨마다 서쪽 성문을 최대치의 3% 회복
+	var ba = _add_hero("baldur", 103)
+	GameState.damage_gate(3, 100.0)
+	var g0: float = GameState.gate_hp[3]
+	ba._repair_cd = 0.1  # 첫 쿨(8초)을 기다리지 않는다
+	await _wait_until(func(): return GameState.gate_hp[3] > g0, 1.0)
+	_check(is_equal_approx(GameState.gate_hp[3] - g0, GameState.gate_hp_max * 0.03), "(n) gate_repair restores b% of the gate", "gate %.1f -> %.1f" % [g0, GameState.gate_hp[3]])
+	_remove_hero(ba)
+	GameState.refill()
+	await _frames(1)
+
+	# (o) slow: 세라핀(북 성벽 위)에게 맞은 grunt는 30% 느리게 걷는다
+	var se = _add_hero("seraphine", 100)
+	_g = _spawn("grunt", 0, Vector3(-6, 0, -(north_out + 4.0)))
+	await _wait_until(func(): return _alive(_g) and _g._slow_t > 0.0, 3.0)
+	var base_speed: float = _g._stats.speed
+	# process_frame은 각 _process 전에 온다: 이 프레임의 delta(이 뒤에 움직일 몫)부터 센다 — 프레임 간격이 들쭉날쭉해도 맞게
+	var q0: Vector3 = _g.global_position
+	var t := get_process_delta_time()
+	var spent := 0.0
+	var moved := 0.0
+	while spent < 0.4 and _alive(_g):
+		await get_tree().process_frame
+		moved = Formation.flat_distance(q0, _g.global_position) if _alive(_g) else moved
+		spent = t
+		t += get_process_delta_time()
+	var v := moved / spent
+	_check(v > base_speed * 0.65 and v < base_speed * 0.75, "(o) a slowed monster walks at (1 - a%) speed", "speed %.2f (base %.2f)" % [v, base_speed])
+	_remove_hero(se)
+	_clear_monsters()
+	await _frames(1)
+
+	# (p) 22종 전부: 네 명씩(면마다 하나) 보스·grunt와 3초 싸운다 — 모두 한 번 이상 공격하고 스크립트 오류가 없다(오류는 로거가 센다)
+	var ids: Array = GameData.heroes().map(func(h): return h.id)
+	var idle := []
+	for b in range(0, ids.size(), 4):
+		var batch := []
+		for i in range(b, mini(b + 4, ids.size())):
+			var h = _add_hero(ids[i], 200 + i - b)
+			batch.append(h)
+			var out: Vector3 = Formation.SIDE_DIR[h.side] * 3.0
+			_spawn("epic_boss", h.side, Vector3(h.global_position.x, 0, h.global_position.z) + out)
+			_spawn("grunt", h.side, Vector3(h.global_position.x, 0, h.global_position.z) + out + Formation.perp(h.side) * 1.5)
+		await _seconds(3.0)
+		for h in batch:
+			if h._attacks == 0:
+				idle.append(h.def.id)
+			_remove_hero(h)
+		_clear_monsters()
+		await _frames(1)
+	_check(idle.is_empty(), "(p) all 22 heroes fight (attack at least once in 3 s)", "never attacked: %s" % [idle])
+
+
+func _add_hero(id: String, idx: int):
+	var h = HeroScript.new()
+	h.setup(idx, GameData.hero(id), _main.castle, get_tree().get_first_node_in_group("heroes").formation)
+	_main.add_child(h)
+	return h
+
+
+func _remove_hero(h) -> void:
+	h.formation.release(h.index)
+	h.queue_free()
 
 
 func _alive(m) -> bool:

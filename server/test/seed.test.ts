@@ -32,6 +32,7 @@ const csvRows = (file: string) => readFileSync(join(DATA_DIR, file), 'utf8').spl
 const ALL_MIGRATIONS = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()
 
 test('마이그레이션: 적용하고 기록, 두 번째는 아무것도 안 함', async () => {
+  assert.ok(ALL_MIGRATIONS.includes('004_heroes.sql'))
   assert.deepEqual(await migrate(db), ALL_MIGRATIONS)
   assert.deepEqual(await migrate(db), [])
   const rows = await db.query('select name from schema_migrations order by name')
@@ -57,6 +58,21 @@ test('마이그레이션 003: 001·002만 적용된 DB에서 올리면 gold가 g
   }
 })
 
+test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroes로 바꾸고, 시드가 22행을 채운다', async () => {
+  const old = await openDb({})
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  for (const f of ['001_init.sql', '002_kill_seq_stage_clear.sql']) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  await migrate(old, dir)
+  await old.query("insert into hero_roles (id, name, hp, atk, range, atk_interval, speed, aggro) values ('warrior', '전사', 400, 30, 1.8, 0.8, 6, 8)")
+  assert.ok((await migrate(old)).includes('004_heroes.sql'))
+  assert.equal((await old.query("select to_regclass('hero_roles') as t"))[0].t, null)
+  assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 0)
+  await seed(old)
+  assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 22)
+  await old.close()
+})
+
 test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async () => {
   for (let i = 0; i < 2; i++) {
     const r = await seed(db)
@@ -73,6 +89,22 @@ test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async (
   assert.deepEqual(w, { name: '목재', building: 'lumber', per_min: 10, price: 1 })
   const [cfg] = await db.query("select value from game_config where key = 'hero_slots'")
   assert.equal(cfg.value, '4|8|12')
+  const [ig] = await db.query(`select title, grade, gear, s1b, skill2, s2a, "desc" from heroes where id = 'ignis'`)
+  assert.deepEqual(ig, { title: '화염 대마법사', grade: 'SSR', gear: '2H_Staff', s1b: 3.5, skill2: null, s2a: null, desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다' })
+  const [st] = await db.query("select value from game_config where key = 'starter_heroes'")
+  assert.equal(st.value, 'hans|ella|dorik|nina')
+})
+
+test('영웅 CSV: 빈 스킬 칸은 null, 숫자 칸 오류, 시작 영웅은 영웅 표에, 등급은 DB 제약', async () => {
+  const errs: string[] = []
+  const rows = parseCsv('id,skill,a\nx,,\ny,crit,abc\n', 'h.csv', { id: 'key', skill: 'opt', a: 'optnum' }, errs)
+  assert.deepEqual(rows.map(({ _line, ...r }) => r), [{ id: 'x', skill: null, a: null }])
+  assert.deepEqual(errs, ["h.csv line 3 column 'a': not a number: 'abc'"])
+  const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8').replace('starter_heroes,hans|', 'starter_heroes,ghost|')
+  await assert.rejects(readTables(dataCopy({ 'config.csv': cfg })), /unknown hero 'ghost' in starter_heroes/)
+  const heroes = readFileSync(join(DATA_DIR, 'heroes.csv'), 'utf8').replace(',SSR,', ',UR,')
+  await assert.rejects(seed(db, dataCopy({ 'heroes.csv': heroes })))
+  assert.equal((await db.query("select grade from heroes where id = 'arteon'"))[0].grade, 'SSR')
 })
 
 test('시드: CSV에서 사라진 키는 지우고, 바뀐 값은 덮어쓴다', async () => {
