@@ -348,6 +348,22 @@ test('플레이어 격리: A의 토큰으로 B의 상태를 바꿀 수 없다', 
   assert.equal(bLogs[0].n, 0)
 })
 
+test('본문 16 KB 초과는 413 payload_too_large(인증 전에), 이하는 통과', async () => {
+  const pad = (n: number) => JSON.stringify({ device_id: 'x', pad: 'a'.repeat(n) })
+  const big = pad(16 * 1024) // 16 KB + 머리
+  const r = await S.req('POST', '/v1/auth/guest', { body: big })
+  assert.equal(r.status, 413)
+  assert.equal(r.json.error, 'payload_too_large')
+  assert.equal((await S.req('POST', '/v1/kills', { body: big })).status, 413) // 토큰 검사보다 먼저
+  const fits = pad(16 * 1024 - 40)
+  assert.ok(fits.length <= 16 * 1024)
+  assert.equal((await S.req('POST', '/v1/auth/guest', { body: fits })).json.error, 'bad_device_id')
+  // Content-Length만 보고 읽기 전에 끊는다(Node 서버 경로)
+  const app = S.makeApp()
+  const cl = await app.request('/v1/auth/guest', { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': '999999' }, body: '{}' })
+  assert.equal(cl.status, 413)
+})
+
 test('알 수 없는 경로는 404 JSON, CORS 기본 *', async () => {
   const r = await S.req('GET', '/v1/nope')
   assert.equal(r.status, 404)

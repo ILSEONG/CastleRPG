@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto'
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
 import type { Query } from './db.ts'
@@ -18,6 +19,7 @@ export interface AppOptions {
 
 const TOKEN_TTL = 30 * 86400
 const MAX_ATTEMPTS = 4 // 첫 시도 + 충돌 시 재시도 3회
+const MAX_BODY = 16 * 1024
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -106,6 +108,12 @@ export function createApp(opts: AppOptions) {
     allowHeaders: ['Authorization', 'Content-Type', 'If-None-Match'],
     exposeHeaders: ['ETag'],
     maxAge: 600,
+  }))
+
+  // 본문은 다 읽기 전에 크기로 끊는다(Content-Length가 있으면 그것으로, 없으면 읽으면서 센다).
+  app.use('/v1/*', bodyLimit({
+    maxSize: MAX_BODY,
+    onError: (c) => c.json({ error: 'payload_too_large', message: `request body must be at most ${MAX_BODY} bytes` }, 413),
   }))
 
   app.onError((err, c) => {
