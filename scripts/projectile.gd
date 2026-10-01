@@ -34,7 +34,8 @@ func _process(delta: float) -> void:
 			on_hit.call(target)
 		return
 	global_position += to.normalized() * speed * delta
-	if to.length() > 0.01:
-		look_at(dest, Vector3.UP if absf(to.normalized().y) < 0.99 else Vector3.FORWARD)
+	var left := dest - global_position
+	if left.length() > 0.01:
+		look_at(dest, Vector3.UP if absf(left.normalized().y) < 0.99 else Vector3.FORWARD)
 	if kind == "axe" and _look != null:
 		_look.rotation.x -= AXE_SPIN * delta
