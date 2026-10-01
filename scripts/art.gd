@@ -39,6 +39,13 @@ const HERO_MODELS := {
 	},
 }
 
+## 상인 NPC: 두건 없는 Rogue, 무기·투척물 숨김(Cape는 망토라 유지). attack/death는 UnitModel 계약상 채움(쓰지 않음).
+const MERCHANT_MODEL := {
+	"scene": CHAR_DIR + "Rogue.glb",
+	"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"],
+	"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "2H_Ranged_Shoot", "death": "Death_A"},
+}
+
 const MONSTER_MODELS := {
 	"grunt": {
 		"scene": CHAR_DIR + "Skeleton_Minion.glb",
