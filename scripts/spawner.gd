@@ -69,4 +69,4 @@ func _spawn(ev: Dictionary) -> void:
 
 func _on_monster_died(m) -> void:
 	_live = maxi(0, _live - 1)
-	Economy.add_gold(GameData.kill_gold(m.kind, m.stage))  # 리필 제거(_vanish)는 died를 안 내므로 골드 없음
+	Economy.add_kill(m.kind, m.stage)  # 리필 제거(_vanish)는 died를 안 내므로 골드 없음

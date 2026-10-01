@@ -1,13 +1,19 @@
 extends Node
 ## 골드·자원·마지막 수집 시각·건물 레벨의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
 ## 시간은 인자 now(유닉스 초)로 받는다 — 테스트에서 .new()로 단독 생성 가능(트리에 안 넣으면 _ready 안 돎).
+## 온라인 모드(net이 Net 노드, 개정 9): 상태는 서버 응답(apply_server)으로만 바뀐다. 수집·판매는 요청만 보내고
+## 응답이 오면 반영한다. 처치는 쌓아 두고 Net이 보낸다. 표시 골드 = 서버 골드 + 아직 반영 안 된 처치의 예상 골드.
+## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
 
 const SAVE_VERSION := 1
 const SAVE_INTERVAL := 10.0
+const WAIT_TEXT := "연결 대기 중"
 
 signal changed
+signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
+signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 
 var gold := 0
 var res: Dictionary = {}           # 자원 id → int
@@ -15,8 +21,19 @@ var last_collect: Dictionary = {}  # 건물 id → 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
 
+# --- 온라인 모드 ---
+var net = null  # Net(오토로드). null이면 오프라인: 로컬 규칙·저장(개정 7)
+var clock_offset := 0.0  # 서버 시각 − 로컬 시각(초)
+var server_gold := 0
+var server_stage := 0
+var kill_seq := 0  # 서버가 마지막으로 반영한 처치 묶음 번호(player.kill_seq)
+var merchant := {}  # {rate, next_change} 서버 값
+var kills_pending := {}  # 스테이지 → {몬스터 id → 수}: 아직 안 보낸 처치
+var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 응답 전
+
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
+var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>") — 재탭 무시
 
 
 # --- 순수 규칙 ---
@@ -117,8 +134,16 @@ func show_badge(building_id: String, now: float) -> bool:
 	return now - float(last_collect.get(building_id, now)) >= GameData.config_num("badge_min") * 60.0 and pending(building_id, now) > 0
 
 
-## 쌓인 양을 보유량에 더하고 마지막 수집 시각을 옮긴다(§2). 수집량을 돌려준다.
+## 서버 보정 시각(오프라인은 로컬 시각 그대로).
+func time_now() -> float:
+	return Time.get_unix_time_from_system() + clock_offset
+
+
+## 쌓인 양을 보유량에 더하고 마지막 수집 시각을 옮긴다(§2). 수집량을 돌려준다. 온라인은 요청만 보내고 0(결과는 collected).
 func collect(building_id: String, now: float) -> int:
+	if net != null:
+		_collect_online(building_id)
+		return 0
 	if res_of(building_id) != "" and now < float(last_collect[building_id]):  # 시계를 되돌림: 지금부터 다시 쌓는다
 		last_collect[building_id] = now
 		save()
@@ -134,20 +159,29 @@ func collect(building_id: String, now: float) -> int:
 		last_collect[building_id] = float(last_collect[building_id]) + floori(elapsed / 60.0) * 60.0
 	res[id] += amount
 	changed.emit()
+	collected.emit(building_id, id, amount)
 	save()
 	return amount
 
 
+## 온라인은 서버 시세(next_change가 지나면 Net이 /v1/player로 갱신).
 func current_rate(now: float) -> float:
+	if net != null:
+		return float(merchant.get("rate", 1.0))
 	return merchant_rate(hour_index(now))
 
 
 func seconds_to_next_rate(now: float) -> float:
+	if net != null:
+		return maxf(0.0, float(merchant.get("next_change", now)) - now)
 	return (hour_index(now) + 1) * 3600.0 - now
 
 
-## 그 자원 전부를 현재 시세로 판다. 얻은 골드를 돌려준다.
+## 그 자원 전부를 현재 시세로 판다. 얻은 골드를 돌려준다. 온라인은 요청만 보내고 0.
 func sell(res_id: String, now: float) -> int:
+	if net != null:
+		_sell_online(res_id)
+		return 0
 	var g := sell_value(res_id, res[res_id], current_rate(now))
 	res[res_id] = 0
 	gold += g
@@ -157,6 +191,9 @@ func sell(res_id: String, now: float) -> int:
 
 
 func sell_all(now: float) -> int:
+	if net != null:
+		_sell_online("all")
+		return 0
 	var total := 0
 	for r in GameData.resources():
 		total += sell(r.id, now)
@@ -167,6 +204,115 @@ func add_gold(n: int) -> void:
 	gold += n
 	_dirty = true
 	changed.emit()
+
+
+## 몬스터 처치. 오프라인은 바로 골드, 온라인은 쌓아 두고 Net이 /v1/kills로 보낸다.
+func add_kill(kind: String, stage: int) -> void:
+	if net == null:
+		add_gold(GameData.kill_gold(kind, stage))
+		return
+	var per: Dictionary = kills_pending.get(stage, {})
+	per[kind] = int(per.get(kind, 0)) + 1
+	kills_pending[stage] = per
+	_recalc_gold()
+	changed.emit()
+
+
+# --- 온라인 ---
+
+## 서버 플레이어 응답 반영. 형이 틀리면 아무것도 안 바꾸고 false.
+func apply_server(data: Dictionary) -> bool:
+	var p = data.get("player")
+	var m = data.get("merchant")
+	if not (p is Dictionary and m is Dictionary and _num(p.get("gold")) and _num(p.get("stage")) and p.get("res") is Dictionary \
+			and p.get("buildings") is Dictionary and _num(m.get("rate")) and _num(m.get("next_change"))):
+		push_error("bad player response: %s" % str(data))
+		return false
+	var r := {}
+	var lc := {}
+	var lv := {}
+	for row in GameData.resources():
+		var id: String = row.id
+		var bid: String = row.building
+		var b = p.buildings.get(bid)
+		var ok: bool = b is Dictionary and _num(b.get("last_collect")) and _num(b.get("level"))
+		r[id] = int(p.res.get(id, 0)) if _num(p.res.get(id)) else 0
+		lc[bid] = float(b.last_collect) if ok else time_now()
+		lv[bid] = int(b.level) if ok else 1
+	res = r
+	last_collect = lc
+	levels = lv
+	server_gold = int(p.gold)
+	server_stage = int(p.stage)
+	if _num(p.get("kill_seq")):
+		kill_seq = int(p.kill_seq)
+	merchant = {"rate": float(m.rate), "next_change": float(m.next_change)}
+	_recalc_gold()
+	changed.emit()
+	return true
+
+
+## 쌓인 처치를 보낼 몫으로 옮긴다(Net.flush_kills).
+func take_kills() -> Dictionary:
+	kills_sent = kills_pending
+	kills_pending = {}
+	return kills_sent
+
+
+## 그 스테이지 보고가 끝났다(반영됐거나 거절됨). 다음 apply_server가 골드를 다시 계산한다.
+func kills_done(stage: int) -> void:
+	kills_sent.erase(stage)
+	_recalc_gold()
+
+
+func _recalc_gold() -> void:
+	gold = server_gold + _kills_gold(kills_pending) + _kills_gold(kills_sent)
+
+
+static func _kills_gold(kills: Dictionary) -> int:
+	var g := 0
+	for stage in kills:
+		for id in kills[stage]:
+			g += GameData.kill_gold(id, stage) * int(kills[stage][id])
+	return g
+
+
+func _collect_online(building_id: String) -> void:
+	if res_of(building_id) == "" or _waiting.has(building_id):
+		return  # 응답 전 같은 건물 재탭은 무시
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return
+	_waiting[building_id] = true
+	net.send("POST", "/v1/collect", {"building": building_id}, _on_collected.bind(building_id), _unwait.bind(building_id))
+
+
+func _on_collected(data: Dictionary, building_id: String) -> void:
+	_waiting.erase(building_id)
+	apply_server(data)
+	var amount := int(data.get("amount", 0))
+	if amount > 0:
+		collected.emit(building_id, res_of(building_id), amount)
+
+
+func _sell_online(target: String) -> void:
+	var key := "sell:" + target
+	if _waiting.has(key):
+		return
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return
+	_waiting[key] = true
+	net.send("POST", "/v1/sell", {"res": target}, _on_sold.bind(key), _unwait.bind(key))
+
+
+func _on_sold(data: Dictionary, key: String) -> void:
+	_waiting.erase(key)
+	apply_server(data)
+
+
+func _unwait(key: String) -> void:
+	_waiting.erase(key)
 
 
 # --- 저장 ---
