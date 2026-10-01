@@ -276,18 +276,19 @@ func _phase1(state_path: String) -> void:
 		"(j) 10 001 kills of one kind go out as two accepted batches (seq +2, no 400)",
 		"requests=%d seq=%d server_seq=%d rejected=%d" % [Net.requested.get("/v1/kills", 0) - kills1, Net.kill_seq_sent - seq1, Economy.kill_seq - seq1, _warned("server rejected") - rejected0])
 
-	await _heroes_online()
+	var copies_start := await _heroes_online()
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
-		"heroes": Economy.heroes, "deploy": Economy.deploy}))
+		"heroes": Economy.heroes, "deploy": Economy.deploy, "copies_start": copies_start}))
 	f.close()
 
 
 ## (k) 서버 모집 1회: 판매로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 3000 tenths↓, 영웅 +1, 결과 카드.
 ## (l) 모집은 다시 보내지 않는다: 서버가 사라진 채 모집 → 버리고 알림, 다시 연결되면 /v1/player로 상태를 받는다(두 번째 모집 요청 없음).
 ## (m) 배치: 영웅 창 [적용] → /v1/deploy → 서버 배치, 방치 모드라 곧바로 영웅이 바뀐다. phase 2가 재접속 복원을 본다.
-func _heroes_online() -> void:
+## 모집 전 copies 합(새 플레이어 = 시작 영웅 수)을 돌려준다 — phase 2는 그 합 + 1(뽑은 한 장, 새 영웅이든 중복이든)을 본다.
+func _heroes_online() -> int:
 	await _request("POST", "/v1/test/age", {"minutes": 720})
 	await _request("POST", "/v1/collect", {"building": "lumber"})
 	await _request("POST", "/v1/sell", {"res": "all"})
@@ -295,6 +296,7 @@ func _heroes_online() -> void:
 	var gold0: int = Economy.server_gold_tenths
 	_check(Economy.gold >= 300 and Economy.gold_tenths == gold0, "(k) precondition: at least 300 server gold from selling", "gold=%d" % Economy.gold)
 	var copies0 := _copies()
+	_check(copies0 == GameData.config_list("starter_heroes").size(), "(k) precondition: a new player owns the starters once each", "copies=%d heroes=%s" % [copies0, Economy.heroes])
 	var g0: int = Net.requested.get("/v1/gacha", 0)
 	_recruit.open()
 	_recruit.one_button.pressed.emit()
@@ -342,6 +344,7 @@ func _heroes_online() -> void:
 		and GameState.mode == GameState.Mode.IDLE and ids == want,
 		"(m) [적용] sends one /v1/deploy; the server keeps it and the idle heroes switch at once", "want=%s server=%s ids=%s" % [want, r.get("player", {}).get("deploy"), ids])
 	_hero_panel.close()
+	return copies0
 
 
 func _copies() -> int:
@@ -368,15 +371,23 @@ func _phase2(state_path: String) -> void:
 		res_ok = res_ok and Economy.res[r.id] == int(saved.res[r.id])
 	_check(Economy.gold_tenths == int(saved.gold_tenths) and Economy.server_gold_tenths == int(saved.gold_tenths) and res_ok and GameState.stage == int(saved.stage) and GameState.stage == 3,
 		"(p2) second run restores gold, resources and stage", "gold=%d res=%s stage=%d saved=%s" % [Economy.gold_tenths, Economy.res, GameState.stage, saved])
-	var heroes_ok: bool = saved.get("heroes") is Dictionary and saved.heroes.size() == Economy.heroes.size() and saved.heroes.size() >= 5
+	# 서버 모집은 암호학적 난수라 새 영웅인지 중복인지 정해져 있지 않다 — 보유 수(id 개수)가 아니라 phase 1 끝 보유와 같은지,
+	# copies 합이 모집 전 합 + 1(한 장)인지 본다.
+	var heroes_ok: bool = saved.get("heroes") is Dictionary and saved.heroes.size() == Economy.heroes.size()
+	var saved_sum := 0
 	if heroes_ok:
 		for id in saved.heroes:
 			heroes_ok = heroes_ok and int(Economy.heroes.get(id, 0)) == int(saved.heroes[id])
+			saved_sum += int(saved.heroes[id])
+	var start := int(saved.get("copies_start", -1))
+	_check(heroes_ok and start == GameData.config_list("starter_heroes").size() and saved_sum == start + 1 and _copies() == start + 1,
+		"(p2) reconnecting restores the owned heroes exactly: copies sum = starters + the one server pull",
+		"heroes=%s saved=%s start=%d sum=%d" % [Economy.heroes, saved.get("heroes"), start, _copies()])
 	var spawned := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	spawned.sort_custom(func(a, b): return a.index < b.index)
-	_check(heroes_ok and Economy.deploy == saved.deploy and GameState.deploy() == saved.deploy and spawned.map(func(h): return h.def.id) == saved.deploy,
-		"(p2) reconnecting restores owned heroes and the deploy, and the world spawns that deploy",
-		"heroes=%s deploy=%s saved=%s/%s" % [Economy.heroes, Economy.deploy, saved.get("heroes"), saved.get("deploy")])
+	_check(Economy.deploy == saved.deploy and GameState.deploy() == saved.deploy and spawned.map(func(h): return h.def.id) == saved.deploy,
+		"(p2) reconnecting restores the deploy, and the world spawns that deploy",
+		"deploy=%s saved=%s" % [Economy.deploy, saved.get("deploy")])
 	await _frames(2)
 	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
 		and _warned("not persistent") == 1, "(p2) non-persistent storage: one warning log and a one-line notice in the band, the game goes on",
