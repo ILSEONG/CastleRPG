@@ -193,16 +193,15 @@ func _remote_checks() -> int:
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts a payload equal to the tables")
 	p = _payload()
 	p.heroes[0].hp = 999.0
-	p.heroes.append({"id": "mage", "name": "마법사", "hp": 100.0, "atk": 50.0, "range": 7.0, "atk_interval": 1.5, "speed": 5.0, "aggro": 10.0})
 	p.resources[0].per_min = 20
 	p.monsters[0].gold = 7
 	p.stages = p.stages.slice(0, 10)
 	p.stages.reverse()  # 순서가 뒤섞여도 stage 번호로 정렬해 읽는다
 	p.config.castle_hp = "2000"
 	p.config.hero_slots = "5|9"
-	p.config.hero_roster = "warrior|archer|mage"
+	p.config.hero_roster = "archer|archer|warrior"
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
-	check(GameData.hero("warrior").hp == 999.0 and GameData.heroes().size() == 3 and GameData.hero_role(2) == "mage", "remote heroes + roster replace the table")
+	check(GameData.hero("warrior").hp == 999.0 and GameData.heroes().size() == 2 and GameData.hero_role(0) == "archer" and GameData.hero_role(2) == "warrior", "remote heroes + roster replace the table")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(1) == 5 and GameData.hero_slots(9) == 9, "remote config replaces the table")
 	check(GameData.stage(10).hp_mult == 3.25 and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
@@ -215,6 +214,7 @@ func _remote_checks() -> int:
 		["duplicate hero id", 1], ["resource building duplicated", 1], ["config key missing", 1], ["config value not a number", 1],
 		["roster names an unknown hero", 1], ["boss monster missing", 1], ["table is not an array", 1], ["table is empty", 1],
 		["row is not an object", 1], ["config is not an object", 1], ["two bad rows", 2],
+		["hero has no model", 1], ["roster names a hero without a model", 2], ["resource building not in the layout", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -252,6 +252,15 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"two bad rows":
 			q.monsters[0].atk = "x"
 			q.heroes[0].hp = null
+		"hero has no model": q.heroes.append(_mage())  # 앱에 모델이 없다(hero.gd가 Art.HERO_MODELS[role]로 깨진다)
+		"roster names a hero without a model":
+			q.heroes.append(_mage())
+			q.config.hero_roster = "warrior|mage"
+		"resource building not in the layout": q.resources[0].building = "mine"  # 배치에 없다(badges.gd가 깨진다)
+
+
+func _mage() -> Dictionary:
+	return {"id": "mage", "name": "마법사", "hp": 100.0, "atk": 50.0, "range": 7.0, "atk_interval": 1.5, "speed": 5.0, "aggro": 10.0}
 
 
 func test_apply_remote() -> void:

@@ -1,6 +1,8 @@
 extends RefCounted
 ## 기획 데이터 표(data/*.csv 또는 서버 /v1/gamedata). 처음 쓸 때 한 번 읽고 캐시한다.
 
+const Balance := preload("res://scripts/balance.gd")
+const Art := preload("res://scripts/art.gd")
 const MONSTERS_PATH := "res://data/monsters.csv"
 const STAGES_PATH := "res://data/stages.csv"
 const HEROES_PATH := "res://data/heroes.csv"
@@ -265,7 +267,8 @@ static func _build(raw: Dictionary) -> Dictionary:
 	return t
 
 
-## 읽기만으로는 못 잡는 필수 내용(게임이 꺼내 쓰는 것들)을 확인한다.
+## 읽기만으로는 못 잡는 필수 내용(게임이 꺼내 쓰는 것들)을 확인한다. 앱이 그릴 수 없는 내용(배치에 없는 건물,
+## 모델 없는 영웅)도 거부한다 — 서버 표가 앱보다 앞서 가면 말풍선·영웅 생성에서 깨진다.
 static func _check_contents(t: Dictionary) -> void:
 	for id in ["grunt", "epic_boss"]:
 		if not t.monsters.has(id):
@@ -283,9 +286,15 @@ static func _check_contents(t: Dictionary) -> void:
 		if not (v is float):
 			_err("config", 0, "hero_slots", "not a number: '%s'" % str(v))
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
+	for h in t.heroes:
+		if not Art.HERO_MODELS.has(h.id):
+			_err("heroes", h._line, "id", "hero '%s' has no model in this app" % h.id)
 	for v in _split_list(String(t.config.get("hero_roster", ""))):
-		if not (v is String and v in hero_ids):
-			_err("config", 0, "hero_roster", "unknown hero '%s'" % str(v))
+		if not (v is String and v in hero_ids and Art.HERO_MODELS.has(v)):
+			_err("config", 0, "hero_roster", "unknown hero or no model '%s'" % str(v))
+	for r in t.resources:
+		if Balance.building(r.building).is_empty():
+			_err("resources", r._line, "building", "building '%s' is not in this app's layout" % r.building)
 
 
 ## key,value 행 → {키: 문자열}. 키가 겹치면 오류.
