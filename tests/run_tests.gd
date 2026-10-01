@@ -239,6 +239,9 @@ func _remote_checks() -> int:
 		["hero model unknown", 1], ["hero gear not on the model", 1], ["resource building not in the layout", 1],
 		["unknown skill", 1], ["repeated skill", 1], ["skill number missing", 1], ["skill number not a number", 1],
 		["grade unknown", 1], ["role unknown", 1], ["color not #RRGGBB", 1],
+		["gacha cost not an integer", 1], ["gacha cost negative", 1], ["gacha guarantee not an integer", 1], ["gacha rate above 1", 1],
+		["gacha rates sum above 1", 1], ["a grade with no heroes", 1], ["multishot 0", 1], ["skill cooldown 0", 1], ["haste -100", 1],
+		["stun every 2.5th attack", 1], ["hero attack interval 0", 1], ["hero hp negative", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -285,6 +288,18 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"grade unknown": q.heroes[0].grade = "UR"
 		"role unknown": q.heroes[0].role = "flying"
 		"color not #RRGGBB": q.heroes[0].color = "gold"
+		"gacha cost not an integer": q.config.gacha_cost_1 = "300.5"  # 서버 BigInt(-cost × 10)가 throw
+		"gacha cost negative": q.config.gacha_cost_10 = "-1"
+		"gacha guarantee not an integer": q.config.gacha_10_min_sr = "1.5"
+		"gacha rate above 1": q.config.gacha_rate_ssr = "1.5"
+		"gacha rates sum above 1": q.config.gacha_rate_sr = "0.98"
+		"a grade with no heroes": q.heroes = q.heroes.filter(func(h): return h.grade != "SR")  # roll_gacha가 빈 풀에서 깨진다
+		"multishot 0": q.heroes[2].s1a = 0  # 실바나: slice(0, -1)
+		"skill cooldown 0": q.heroes[1].s1a = 0  # 이그니스 aoe_blast: 매 프레임 폭발
+		"haste -100": q.heroes[13].s1a = -100  # 리안: 간격 ÷ 0
+		"stun every 2.5th attack": q.heroes[9].s2a = 2.5  # 네브
+		"hero attack interval 0": q.heroes[0].atk_interval = 0
+		"hero hp negative": q.heroes[0].hp = -5
 		"resource building not in the layout": q.resources[0].building = "mine"  # 배치에 없다(badges.gd가 깨진다)
 
 
@@ -1170,6 +1185,10 @@ func test_heroes_table() -> void:
 			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
 	check(grades == {"SSR": 10, "SR": 7, "R": 5}, "grades 10/7/5: %s" % grades)
 	check(used.size() == Skills.KINDS.size(), "every skill kind is used: %d/%d" % [used.size(), Skills.KINDS.size()])
+	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
+		"every skill kind has one range rule per number")
+	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
+		"skill range: multishot 0 and chain decay above 100% are out, crit 25/200 is in")
 	var roles := []
 	for id in GameData.config_list("starter_heroes"):
 		check(GameData.hero(id).grade == "R", "starter %s is R" % id)

@@ -10,6 +10,18 @@ const KINDS := {
 }
 
 
+## 종류 → 숫자(a, b, c 앞에서부터)의 허용 범위(GameData가 표를 읽을 때 본다). 개수는 KINDS와 같다.
+## pos = 0보다 큼(쿨 0이면 매 프레임, 반경 0이면 무의미), nonneg = 0 이상, pct = 0..100, int1 = 1 이상 정수(multishot 0이면
+## slice(0, -1), stun 0이면 0으로 나눔), mult = 100 이상(치명타 배수가 피해를 줄이지 않게).
+const RULES := {
+	"heal_aura": ["pos", "pos", "nonneg"], "atk_aura": ["pos", "nonneg"], "dmg_reduce": ["pct"], "dodge": ["pct"],
+	"thorns": ["nonneg"], "lifesteal": ["nonneg"], "haste": ["nonneg"], "rage": ["nonneg"], "crit": ["pct", "mult"],
+	"execute": ["pct", "nonneg"], "boss_slayer": ["nonneg"], "cleave": ["pos", "nonneg"], "multishot": ["int1"],
+	"chain": ["int1", "pct", "pos"], "aoe_blast": ["pos", "pos", "nonneg"], "slow": ["pct", "pos"], "stun": ["int1", "pos"],
+	"poison": ["nonneg", "pos"], "gate_repair": ["pos", "nonneg"],
+}
+const RULE_TEXT := {"pos": "greater than 0", "nonneg": "0 or more", "pct": "in 0..100", "int1": "an integer of 1 or more", "mult": "100 or more"}
+
 ## 종류 → 한국어 이름(영웅 창 상세).
 const NAMES := {
 	"heal_aura": "치유의 기도", "atk_aura": "용기의 오라", "dmg_reduce": "철벽", "dodge": "회피", "thorns": "가시 갑옷",
@@ -48,6 +60,23 @@ static func describe(kind: String, nums: Array) -> String:
 	for i in 3:
 		t = t.replace("{%s}" % "abc"[i], num_text(float(nums[i]) if i < nums.size() else 0.0))
 	return t.replace("{bx}", num_text(float(nums[1]) / 100.0 if nums.size() > 1 else 0.0))
+
+
+## 범위(RULES)를 벗어난 첫 숫자의 번호(0 = a), 다 맞으면 -1.
+static func bad_num(kind: String, nums: Array) -> int:
+	var rules: Array = RULES.get(kind, [])
+	for i in rules.size():
+		var v := float(nums[i])
+		var ok := false
+		match rules[i]:
+			"pos": ok = v > 0.0
+			"nonneg": ok = v >= 0.0
+			"pct": ok = v >= 0.0 and v <= 100.0
+			"int1": ok = v >= 1.0 and v == floorf(v)
+			"mult": ok = v >= 100.0
+		if not ok:
+			return i
+	return -1
 
 
 ## 3.5 → "3.5", 6.0 → "6", 0.8 → "0.8"(소수 둘째 자리까지).

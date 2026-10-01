@@ -19,6 +19,10 @@ const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "mo
 const HERO_SKILL_COLS := [["skill1", "s1a", "s1b", "s1c"], ["skill2", "s2a", "s2b", "s2c"]]  # 빈 칸 = 없음(서버는 null)
 const GRADES := ["R", "SR", "SSR"]
 const ROLES := ["melee", "ranged"]
+const HERO_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 커야 한다(간격 0이면 매 프레임 공격)
+const HERO_NONNEG_COLS := ["atk", "aggro"]
+const GACHA_INT_KEYS := ["gacha_cost_1", "gacha_cost_10", "gacha_10_min_sr"]  # 0 이상 정수
+const GACHA_RATE_KEYS := ["gacha_rate_ssr", "gacha_rate_sr"]  # 0..1, 합 ≤ 1
 const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
@@ -253,7 +257,8 @@ static func _blank(v) -> bool:
 	return v == null or (v is String and v.strip_edges().is_empty())
 
 
-## skill1·skill2 열 → {종류: [a, b, c]}(빈 숫자 0). 빈 종류 = 없음. 모르는 종류, 필요한 숫자 빠짐, 숫자 아님, 같은 종류 둘 = 오류(null).
+## skill1·skill2 열 → {종류: [a, b, c]}(빈 숫자 0). 빈 종류 = 없음. 모르는 종류, 필요한 숫자 빠짐, 숫자 아님, 범위 밖(Skills.RULES),
+## 같은 종류 둘 = 오류(null).
 static func _hero_skills(row: Dictionary):
 	var sk := {}
 	for cols in HERO_SKILL_COLS:
@@ -276,6 +281,11 @@ static func _hero_skills(row: Dictionary):
 			else:
 				_err(row._src, row._line, cols[i + 1], "skill %s needs a number: '%s'" % [kind, str(v)])
 				return null
+		var bad := Skills.bad_num(kind, nums)
+		if bad >= 0:
+			var rule: String = Skills.RULES[kind][bad]
+			_err(row._src, row._line, cols[bad + 1], "skill %s %s must be %s: %s" % [kind, "abc"[bad], Skills.RULE_TEXT[rule], Skills.num_text(nums[bad])])
+			return null
 		sk[kind] = nums
 	return sk
 
@@ -349,6 +359,12 @@ static func _check_contents(t: Dictionary) -> void:
 			_err("heroes", h._line, "role", "role must be melee or ranged: '%s'" % h.role)
 		if not (h.color.length() == 7 and h.color.begins_with("#") and h.color.substr(1).is_valid_hex_number()):
 			_err("heroes", h._line, "color", "color must be #RRGGBB: '%s'" % h.color)
+		for c in HERO_POSITIVE_COLS:
+			if not h[c] > 0.0:
+				_err("heroes", h._line, c, "must be greater than 0: %s" % h[c])
+		for c in HERO_NONNEG_COLS:
+			if not h[c] >= 0.0:
+				_err("heroes", h._line, c, "must be 0 or more: %s" % h[c])
 		if not Art.HERO_MODELS.has(h.model):
 			_err("heroes", h._line, "model", "model '%s' is not in this app" % h.model)
 			continue
@@ -361,6 +377,30 @@ static func _check_contents(t: Dictionary) -> void:
 	for r in t.resources:
 		if Balance.building(r.building).is_empty():
 			_err("resources", r._line, "building", "building '%s' is not in this app's layout" % r.building)
+	_check_gacha(t.config)
+	for g in GRADES:  # 모집은 등급을 먼저 정하고 그 등급 안에서 뽑는다 — 빈 등급이면 roll_gacha가 깨진다
+		if not t.heroes.any(func(h): return h.grade == g):
+			_err("heroes", 0, "grade", "no %s heroes to recruit" % g)
+
+
+## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.
+## 숫자가 아닌 값은 CONFIG_NUM_KEYS 검사가 이미 알렸다.
+static func _check_gacha(cfg: Dictionary) -> void:
+	for k in GACHA_INT_KEYS:
+		var s := String(cfg.get(k, ""))
+		if s.is_valid_float() and not (s.to_float() >= 0.0 and s.to_float() == floorf(s.to_float())):
+			_err("config", 0, k, "must be a non-negative integer: '%s'" % s)
+	var rates := []
+	for k in GACHA_RATE_KEYS:
+		var s := String(cfg.get(k, ""))
+		if not s.is_valid_float():
+			continue
+		if s.to_float() >= 0.0 and s.to_float() <= 1.0:
+			rates.append(s.to_float())
+		else:
+			_err("config", 0, k, "must be in 0..1: '%s'" % s)
+	if rates.size() == 2 and rates[0] + rates[1] > 1.0 + 1e-9:
+		_err("config", 0, "gacha_rate_sr", "gacha_rate_ssr + gacha_rate_sr must be at most 1: %s + %s" % [cfg.gacha_rate_ssr, cfg.gacha_rate_sr])
 
 
 ## key,value 행 → {키: 문자열}. 키가 겹치면 오류.

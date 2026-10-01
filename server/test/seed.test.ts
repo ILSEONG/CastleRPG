@@ -15,7 +15,13 @@ before(async () => {
 })
 after(async () => {
   await db.close()
-  for (const d of tmp) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) // Windows: 백신 등이 막 만든 파일을 잡고 있으면 EBUSY
+  for (const d of tmp) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }) // Windows: 백신 등이 막 만든 파일을 잡고 있으면 EBUSY·EPERM
+    } catch (e) {
+      console.warn(`[seed.test] temp dir left behind: ${d} (${(e as Error).message})`) // OS 임시 폴더라 남아도 해가 없다 — 실패로 치지 않는다
+    }
+  }
 })
 
 // data 폴더 사본(일부 파일 바꿔 쓰기용)
@@ -212,7 +218,11 @@ test('CSV 오류: 파일·줄·열을 알리고 아무것도 쓰지 않는다', 
 
 test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1, 등급마다 영웅이 하나 이상', async () => {
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
-  const withCfg = (key: string, value: string) => dataCopy({ 'config.csv': cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`) })
+  const dir = dataCopy() // 사본 하나에 config.csv·heroes.csv만 바꿔 쓴다(임시 폴더를 적게)
+  const withCfg = (key: string, value: string) => {
+    writeFileSync(join(dir, 'config.csv'), cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`))
+    return dir
+  }
   const cases: [string, string, RegExp][] = [
     ['gacha_cost_1', '300.5', /gacha_cost_1 must be a non-negative integer: '300\.5'/],
     ['gacha_cost_10', '-1', /gacha_cost_10 must be a non-negative integer: '-1'/],
@@ -231,7 +241,10 @@ test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..
   }
   const lines = readFileSync(join(DATA_DIR, 'heroes.csv'), 'utf8').split('\n')
   const noSr = lines.filter((l) => !l.split(',').includes('SR')).join('\n')
-  await assert.rejects(readTables(dataCopy({ 'heroes.csv': noSr })), /heroes\.csv line 0 column 'grade': no SR heroes to recruit/)
+  writeFileSync(join(dir, 'config.csv'), cfg)
+  writeFileSync(join(dir, 'heroes.csv'), noSr)
+  await assert.rejects(readTables(dir), /heroes\.csv line 0 column 'grade': no SR heroes to recruit/)
+  writeFileSync(join(dir, 'heroes.csv'), lines.join('\n'))
   await readTables(withCfg('gacha_cost_1', '0')) // 0원 모집·확률 경계(합 1)는 받는다
   await readTables(withCfg('gacha_rate_sr', '0.97'))
 })

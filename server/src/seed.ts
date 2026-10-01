@@ -180,7 +180,7 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   }
   const ssr = num('gacha_rate_ssr')
   const sr = num('gacha_rate_sr')
-  if (ssr !== null && sr !== null && inUnit(ssr) && inUnit(sr) && ssr + sr > 1) {
+  if (ssr !== null && sr !== null && inUnit(ssr) && inUnit(sr) && ssr + sr > 1 + 1e-9) {
     err('gacha_rate_sr', `plus gacha_rate_ssr must be at most 1: ${raw('gacha_rate_ssr')} + ${raw('gacha_rate_sr')}`)
   }
 }
