@@ -96,6 +96,15 @@ static func duration(sec: float) -> String:
 	return "%d시간 %d분" % [s / 3600, s % 3600 / 60]
 
 
+## 병사 생산 시간(초, 올림): 1시간 이상 "h:mm:ss", 미만 "mm:ss"(개정 13 §6 "다음 2:41:10"). 0.001초 빼고 올린다 —
+## 10800 × 0.95가 10260.000…2라 그냥 올리면 "2:51:01"이 된다.
+static func clock(sec: float) -> String:
+	var s := maxi(0, ceili(sec - 0.001))
+	if s < 3600:
+		return "%02d:%02d" % [s / 60, s % 60]
+	return "%d:%02d:%02d" % [s / 3600, s % 3600 / 60, s % 60]
+
+
 ## 바 박스 {background, fill}. 채움도 면 분할(4px 깎기).
 static func bar(fill_color: Color) -> Dictionary:
 	var key := ["r", fill_color]

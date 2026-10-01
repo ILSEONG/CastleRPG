@@ -1137,6 +1137,8 @@ func test_lowpoly_box() -> void:
 	check(UiKit.button_styles(UiKit.AMBER) == styles and UiKit.panel(UiKit.CREAM) == UiKit.panel(UiKit.CREAM), "kit styleboxes are reused")
 	check(UiKit.bar(UiKit.AMBER).has("fill") and UiKit.bar(UiKit.AMBER).has("background"), "bar has fill and background")
 	check(UiKit.GRADE_COLORS.has("R") and UiKit.GRADE_COLORS.has("SR") and UiKit.GRADE_COLORS.has("SSR") and UiKit.GRADE_COLORS == Art.GRADE_COLORS, "grade colors R/SR/SSR from one source (Art)")
+	var clocks := [UiKit.clock(10800.0), UiKit.clock(10800.0 * 0.95), UiKit.clock(9669.2), UiKit.clock(3599.5), UiKit.clock(59.2), UiKit.clock(-3.0)]
+	check(clocks == ["3:00:00", "2:51:00", "2:41:10", "1:00:00", "01:00", "00:00"], "soldier clock h:mm:ss / mm:ss, rounded up (%s)" % [clocks])
 
 
 ## HP 바: 프레임의 8각형을 한 배열에 모은다(LowpolyBox.octagon과 같은 점), 인덱스는 칸마다 부채꼴 6삼각형.
