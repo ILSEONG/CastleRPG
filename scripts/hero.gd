@@ -4,7 +4,7 @@ extends Node3D
 ## 지상에서는 자리 기준 aggro 안·같은 영역(성 안/밖)의 괴물을 쫓아가 치고 자리로 돌아오며, 성벽 위에서는 움직이지 않고
 ## 사거리 안 괴물을 쏜다. 성벽 위에 서 있으면 근접 괴물의 표적이 되지 않는다.
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
-## 스킬(스펙 §3.2): 수식은 Skills(순수 함수), 적용은 여기 — 공격(_attack·_strike·_chain·_cleave·_blast), 쿨 스킬(_tick_skills),
+## 스킬(스펙 §3.2): 수식은 Skills(순수 함수), 적용은 여기 — 공격(_attack·_release·_strike·_chain·_cleave·_blast), 쿨 스킬(_tick_skills),
 ## 받는 피해(take_damage). 몬스터 상태(slow·stun·poison)는 monster.gd.
 
 const Balance := preload("res://scripts/balance.gd")
@@ -15,15 +15,19 @@ const UnitModelScript := preload("res://scripts/unit_model.gd")
 const Skills := preload("res://scripts/skills.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
+const ProjectileScript := preload("res://scripts/projectile.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
 const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
-const TRACER_SEC := 0.15
-const ARROW_PITCH_FIX := PI / 2.0  # 화살 모델은 길이 축 Y, 촉이 -Y → X축 +90°로 촉을 -Z(look_at 정면)에 맞춘다
 const HIT_HEIGHT := Vector3(0, 0.8, 0)
 const HOLD_EPS := 0.5  # 이만큼 안이면 자기 자리를 지키고 있다(gate_repair)
+const SWING_SLACK := 0.6  # 근접 타격 순간 대상이 사거리 + 이만큼 안이면 맞는다(밖이면 헛스윙)
+const MUZZLE := Vector3(0, 1.3, 0)  # 투사체가 나가는 높이
+## 모델 → 투사체 [모양, 속도 m/s](개정 12-2 §3). 없으면 화살.
+const SHOTS := {"Mage": ["bolt", 18.0], "Barbarian": ["axe", 20.0]}
+const ARROW_SPEED := 30.0
 
 var castle
 var formation
@@ -54,6 +58,8 @@ var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
 var _attacks := 0      # 공격 횟수(stun N번째)
+var _swing             # 휘두르는(쏘려는) 중인 공격의 고정 대상. null = 없음
+var _swing_left := 0.0  # 타격(발사) 순간까지 남은 초
 var _heal_cd := 0.0
 var _repair_cd := 0.0
 var _blast_cd := 0.0
@@ -112,6 +118,7 @@ func reset() -> void:
 	hp = hp_max
 	state = State.IDLE
 	_target = null
+	_swing = null
 	_attacks = 0
 	_heal_cd = _sk.heal_aura[0] if _sk.has("heal_aura") else 0.0
 	_repair_cd = _sk.gate_repair[0] if _sk.has("gate_repair") else 0.0
@@ -215,10 +222,12 @@ func _process(delta: float) -> void:
 		return
 	_atk_cd -= delta
 	_tick_skills(delta)
+	_tick_swing(delta)
 	if not _path.is_empty():
 		var wp: Vector3 = _path[0]
 		state = State.MOVE
 		_target = null
+		_swing = null  # 이동 명령은 휘두르던 공격을 거둔다
 		_model.face(wp - global_position)
 		_model.play_walk()
 		global_position = global_position.move_toward(wp, float(def.speed) * delta)
@@ -243,7 +252,7 @@ func _process(delta: float) -> void:
 					return
 			if _atk_cd <= 0.0:
 				_atk_cd = Skills.interval(_sk, float(def.atk_interval), hp_ratio())
-				_attack()
+				_attack(_atk_cd)
 			return
 		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
 		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(def.speed) * delta)
@@ -332,28 +341,58 @@ func _gate_repair() -> void:
 		Fx.repair(get_parent(), Formation.gate_position(castle.half, side))
 
 
-## 공격 한 번: 공격력 = atk × 오라. multishot이면 사거리 안 가까운 몬스터 여럿에게.
-func _attack() -> void:
+## 공격 시작(개정 12-2 §3): 대상을 고정하고 모션을 재생한다(간격 interval에 맞춰 빨라질 수 있다). 피해는 모션의 타격 순간(_release)에.
+func _attack(interval: float) -> void:
 	_attacks += 1
-	_model.play_attack()
+	_swing = _target
+	_swing_left = _model.play_attack(interval)
+
+
+func _tick_swing(delta: float) -> void:
+	if _swing == null:
+		return
+	_swing_left -= delta
+	if _swing_left <= 0.0:
+		_release()
+
+
+## 타격(발사) 순간. 공격력 = atk × 오라. 고정한 대상이 그새 죽었으면 아무 일도 없다.
+## 근접: 대상이 사거리 + SWING_SLACK 안이면 친다(아니면 헛스윙). 원거리: 대상(multishot이면 사거리 안 가까운 몬스터 여럿)에게 투사체 —
+## 피해는 도착 순간(_strike).
+func _release() -> void:
+	var m = _swing
+	_swing = null
+	if not is_instance_valid(m) or not m.is_alive():
+		return
 	var a := atk * _aura_mult()
-	var targets := [_target]
-	if _sk.has("multishot") and role == "ranged":
-		targets.append_array(_nearest_others(_target, global_position, float(def.range), int(_sk.multishot[0]) - 1))
+	if role != "ranged":
+		if Formation.flat_distance(global_position, m.global_position) <= float(def.range) + SWING_SLACK:
+			_strike(m, a, true, _attacks)
+		return
+	var targets := [m]
+	if _sk.has("multishot"):
+		targets.append_array(_nearest_others(m, global_position, float(def.range), int(_sk.multishot[0]) - 1))
+	var shot: Array = SHOTS.get(def.model, ["arrow", ARROW_SPEED])
 	for i in targets.size():
-		_strike(targets[i], a, i == 0)
+		var p = ProjectileScript.new()
+		p.target = targets[i]
+		p.kind = shot[0]
+		p.speed = shot[1]
+		p.color = _color
+		p.on_hit = _strike.bind(a, i == 0, _attacks)
+		get_parent().add_child(p)
+		p.global_position = global_position + MUZZLE
 
 
-## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun·lifesteal·cleave·chain.
-func _strike(m, a: float, primary: bool) -> void:
+## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun(attack_no번째 공격)·lifesteal·cleave·chain.
+func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 	var roll := randf()
 	var d := Skills.damage(_sk, a, roll, m.hp_ratio(), m.kind == "epic_boss")
-	_projectile(m.global_position)
 	m.take_damage(d, DamageNumbers.Kind.CRIT if _sk.has("crit") and roll < _sk.crit[0] / 100.0 else DamageNumbers.Kind.HIT)
 	_on_hit(m, a)
 	if not primary:
 		return
-	if Skills.stuns(_sk, _attacks) and m.is_alive():
+	if Skills.stuns(_sk, attack_no) and m.is_alive():
 		m.apply_stun(_sk.stun[1])
 	if _sk.has("lifesteal"):
 		heal(d * _sk.lifesteal[0] / 100.0)
@@ -440,37 +479,3 @@ func bar_height() -> float:
 
 func bar_scale() -> float:
 	return 1.0
-
-
-## 원거리 투사체(시각만. 피해는 발사 즉시): 마법사 = 고유 색 20면체, 바바리안 = 도끼, 나머지 = 화살.
-func _projectile(to: Vector3) -> void:
-	if role != "ranged":
-		return
-	var from := global_position + Vector3(0, 1.3, 0)
-	var dest := to + HIT_HEIGHT
-	if Formation.flat_distance(from, dest) < 0.1:
-		return
-	match def.model:
-		"Mage":
-			Fx.bolt(get_parent(), from, dest, _color)
-		"Barbarian":
-			Fx.axe(get_parent(), from, dest)
-		_:
-			_fire_tracer(from, dest)
-
-
-func _fire_tracer(from: Vector3, dest: Vector3) -> void:
-	if Fx.full(get_parent()):
-		return
-	var arrow := Node3D.new()
-	var model := Art.instance(Art.ARROW_MODEL)
-	model.scale = Vector3.ONE * Art.ARROW_SCALE
-	model.rotation.x = ARROW_PITCH_FIX
-	arrow.add_child(model)
-	get_parent().add_child(arrow)
-	Fx.track(arrow)
-	arrow.global_position = from
-	arrow.look_at(dest)
-	var tw := arrow.create_tween()
-	tw.tween_property(arrow, "global_position", dest, TRACER_SEC)
-	tw.tween_callback(arrow.queue_free)
