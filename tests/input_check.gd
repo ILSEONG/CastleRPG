@@ -62,6 +62,7 @@ func _run() -> void:
 	var warrior = _heroes[0]  # 기본 배치: 북(0) 성문 앞
 	var archer = _heroes[1]   # 동(1) 성벽 위
 	var archer2 = _heroes[3]  # 서(3) 성벽 위
+	print("INPUT INFO: default camera building px (720x1280 logical): %s, gates %s" % [Balance.BUILDINGS.map(func(b): return [b.id, _building_px(b.id)]), range(4).map(func(s): return _gate_px(s))])
 
 	# (a) 마우스 탭 → 영웅 선택
 	_picker._select(null)
@@ -888,6 +889,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	# 성채 상한: 성채 Lv 1이면 벌목장 Lv 2는 막힌다 — ✗ 빨강 줄, 비활성 + 이유. 효과·비용·시간 줄
 	Economy.last_collect["lumber"] = Time.get_unix_time_from_system()  # 쌓인 게 없다 — 탭이 건물 창을 연다
 	await _tap(lp)
+	print("INPUT INFO: lumber window (keep cap) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
 	var eff: HBoxContainer = bwin.effects.get_child(0)
 	var req: Label = bwin.reqs.get_child(0)
 	_check(bwin.is_open() and bwin.title_label.text == "벌목장 Lv 1" and bwin.desc_label.text != "" and eff.get_child(0).text == "생산 10/분" and eff.get_child(1).text == "→ 20/분"
@@ -909,6 +911,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.changed.emit()
 	await _tap(_building_px("keep"))
 	var rows: Array = bwin.reqs.get_children().map(func(l): return l.text)
+	print("INPUT INFO: keep window (Lv 1, can upgrade) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
 	_check(bwin.building_id == "keep" and rows == ["✓ 성문 Lv 1 필요", "✓ 막사 Lv 1 필요"] and bwin.reqs.get_child(0).get_theme_color("font_color") == bwin.GREEN
 		and not bwin.upgrade_button.disabled and not bwin.reason_label.visible and bwin.time_label.text == "건설 시간 01:00"
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child(2).get_child_count() == 1,
@@ -969,5 +972,4 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	_check(_errors.count == errors0, "(B) the overhead bar draws cleanly from a sliver to full", "errors=%d" % (_errors.count - errors0))
 	Economy.build = {}
 	Economy.changed.emit()
-	print("INPUT INFO: tabs %s, lumber long-press %s, keep window [업그레이드] %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect()),
-		lp, bwin.upgrade_button.get_global_rect()])
+	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
