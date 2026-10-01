@@ -75,7 +75,7 @@ func _init() -> void:
 	test_gold_tenths()
 	test_heroes_table()
 	test_skill_formulas()
-	test_deploy_and_stars()
+	test_deploy_and_promotion()
 	test_gate_repair()
 	test_fx_meshes()
 	test_gacha_offline()
@@ -84,6 +84,7 @@ func _init() -> void:
 	test_merchant_rates()
 	test_damage_numbers()
 	test_hero_levels()
+	test_promotion()
 	test_hit_frac()
 	test_buildings()
 	test_soldiers()
@@ -196,13 +197,13 @@ func test_game_tables() -> void:
 	check(GameData.config_list("merchant_rate_step") == [0.1], "config_list parses numbers")
 	check(GameData.config_list("starter_heroes") == ["hans", "ella", "dorik", "nina"], "config_list keeps strings")
 	check(GameData.config_list("nope").is_empty() and GameData.config_num("nope") == 0.0, "unknown config key is empty / 0")
-	check(GameData.config_num("hero_max_stars") == 5.0 and GameData.config_num("hero_star_bonus") == 0.1 and GameData.config_num("gacha_cost_10") == 2700.0, "hero/gacha config")
+	check(GameData.config_num("promote_mult") == 1.5 and GameData.config_list("promote_shards") == [5.0, 25.0, 50.0, 100.0, 200.0] and GameData.config_num("gacha_cost_10") == 2700.0, "hero/gacha/promotion config")
 	# 깨진 config 파일: 필수 키 빠짐
 	var logged := _errors.count
 	var cp := "user://t_config.csv"
 	_write(cp, "key,value\ncastle_hp,1000\nkeep_slot_tiers,1:4|5:8|10:12\nkeep_interior_tiers,1:20|5:24|10:28\nstarter_heroes,hans|ella\n")
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
-	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size() + GameData.SOLDIER_NUM_KEYS.size(), "config file missing keys reports one error per key")
+	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.CONFIG_LIST_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size() + GameData.SOLDIER_NUM_KEYS.size(), "config file missing keys reports one error per key")
 	_errors.count = logged
 	DirAccess.remove_absolute(cp)
 	GameData.load_tables()
@@ -1327,15 +1328,18 @@ func test_skill_formulas() -> void:
 	check(Skills.aura_mult(15.0) == 1.15 and Skills.aura_mult(0.0) == 1.0, "atk_aura multiplier")
 
 
-## 배치 기본값(오프라인 공급자)과 별 배율.
-func test_deploy_and_stars() -> void:
+## 배치 기본값(오프라인 공급자)과 승급 배율·비용·최대 레벨(개정 15).
+func test_deploy_and_promotion() -> void:
 	check(GameData.default_deploy(4) == ["hans", "ella", "dorik", "nina"], "default deploy = starters")
 	check(GameData.default_deploy(6) == ["hans", "ella", "dorik", "nina", null, null], "more slots than starters: null")
 	check(GameData.default_deploy(2) == ["hans", "ella"], "fewer slots: truncated")
-	check(GameData.star_mult(1) == 1.0 and is_equal_approx(GameData.star_mult(3), 1.2) and is_equal_approx(GameData.star_mult(6), 1.5) \
-		and is_equal_approx(GameData.star_mult(99), 1.5), "stars = min(copies - 1, 5), x(1 + 0.1 x stars)")
+	check(GameData.promote_mult(0) == 1.0 and GameData.promote_mult(1) == 1.5 and GameData.promote_mult(2) == 2.25 and is_equal_approx(GameData.promote_mult(5), 7.59375) \
+		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.5^p (p 5 = x7.59), capped at 5")
+	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
+		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 30, 40, 50, 60, 70], "max level = 20 + 10 x promotion (70 at 5)")
 	var gs = GameStateScript.new()
-	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_copies("hans") == 1, "GameState deploy provider: starters, copies 1")
+	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 5
 	check(gs.deploy().size() == 8 and gs.deploy()[4] == null, "deploy length = hero slots")
 	gs.free()
@@ -1406,8 +1410,10 @@ func test_gacha_offline() -> void:
 	for r in got[0]:
 		var before := int(seen.get(r.hero_id, 0))
 		seen[r.hero_id] = before + 1
-		consistent = consistent and r.new == (before == 0) and r.copies == before + 1 and r.grade == GameData.hero(r.hero_id).grade
+		consistent = consistent and r.new == (before == 0) and r.copies == before + 1 and r.grade == GameData.hero(r.hero_id).grade and r.shards == before
 	check(consistent and seen == e.heroes, "results: new only on the first copy, copies count up per card, heroes updated: %s" % [got[0]])
+	check(e.heroes.keys().all(func(id): return e.shards_of(id) == int(e.heroes[id]) - 1) and e.hero_promotions.is_empty(),
+		"rev 15: a repeat pull adds a shard (new heroes start at 0); recruiting never promotes: %s" % [e.hero_shards])
 	check(e.gacha(1) and e.gold_tenths == 5 and got.size() == 2, "1 pull costs 300 (3000 tenths), the 0.5 fraction stays")
 	check(not e.gacha(1) and e.gold_tenths == 5 and got.size() == 2 and notices == [EconomyScript.NO_GOLD_TEXT], "not enough gold: nothing happens, one notice")
 	e.gold = 99999
@@ -1455,12 +1461,17 @@ func test_roster() -> void:
 	DirAccess.remove_absolute(ECON_TMP)
 	# 서버 응답
 	var o = _econ(1000.0)
-	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "heroes": {"hans": {"copies": 2, "level": 1}, "kyle": {"copies": 1, "level": 3}}, "deploy": ["kyle", null, "hans", null]},
+	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "heroes": {"hans": {"copies": 2, "level": 1, "shards": 7, "promotion": 2}, "kyle": {"copies": 1, "level": 3}}, "deploy": ["kyle", null, "hans", null]},
 		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
 	var changes := []
 	o.roster_changed.connect(func(): changes.append(1))
-	check(o.apply_server(reply) and o.heroes == {"hans": 2, "kyle": 1} and o.deploy == ["kyle", null, "hans", null] and o.level_of("kyle") == 3 and o.level_of("hans") == 1 and changes.size() == 1, "apply_server takes heroes {copies, level} and deploy (roster_changed once)")
+	check(o.apply_server(reply) and o.heroes == {"hans": 2, "kyle": 1} and o.deploy == ["kyle", null, "hans", null] and o.level_of("kyle") == 3 and o.level_of("hans") == 1 and changes.size() == 1
+		and o.shards_of("hans") == 7 and o.promotion_of("hans") == 2 and o.shards_of("kyle") == 0 and o.promotion_of("kyle") == 0,
+		"apply_server takes heroes {copies, level, shards, promotion} (missing shards/promotion = 0) and deploy (roster_changed once)")
 	check(o.apply_server(reply) and changes.size() == 1, "the same roster again does not signal")
+	reply.player.heroes.hans.shards = 2
+	reply.player.heroes.hans.promotion = 3
+	check(o.apply_server(reply) and changes.size() == 2 and o.shards_of("hans") == 2 and o.promotion_of("hans") == 3, "a promotion (shards and promotion change) signals roster_changed")
 	o._pending_deploy = ["hans", null, null, null]
 	check(o.apply_server(reply) and o.deploy == ["hans", null, null, null], "a deploy still waiting for its reply is not undone by an older reply")
 	o._pending_deploy = null
@@ -1472,9 +1483,10 @@ func test_roster() -> void:
 	var gs = GameStateScript.new()
 	gs.roster = e2
 	e2.heroes = {"ignis": 3, "hans": 1, "nina": 1}
+	e2.hero_promotions = {"ignis": 2}
 	e2.deploy = ["ignis", "ghost", "ignis", "jack", "nina"]  # 모르는 영웅·중복·미보유·슬롯 넘침
 	check(gs.deploy() == ["ignis", null, null, null], "provider: slot count, unknown/duplicate/unowned heroes become null: %s" % [gs.deploy()])
-	check(gs.hero_copies("ignis") == 3 and gs.hero_copies("hans") == 1, "provider: copies from the roster")
+	check(gs.hero_promotion("ignis") == 2 and gs.hero_promotion("hans") == 0, "provider: promotion from the roster")
 	e2.levels["keep"] = 5  # roster가 있으면 성채 레벨은 roster(Economy) 건물 레벨
 	check(gs.deploy().size() == 8 and gs.deploy()[4] == "nina", "provider: more slots at keep level 5")
 	gs.free()
@@ -1592,18 +1604,17 @@ func test_damage_numbers() -> void:
 	u.free()
 
 
-## 개정 11 영웅 레벨: 능력치 공식(기본 × 레벨 배율 × 별 배율), 전투력, 최대 레벨(별 반영), 비용 표(서버 levelup.test와 같은 값),
+## 개정 11 영웅 레벨: 능력치 공식(기본 × 레벨 배율 × 승급 배율 — 개정 15), 전투력, 최대 레벨(승급 반영), 비용 표(서버 levelup.test와 같은 값),
 ## 오프라인 레벨업(골드 tenths만 차감 — 개정 12, 이유 문구, [×10] 횟수), 저장 v2 → v3, apply_remote의 레벨업 설정 검증.
 func test_hero_levels() -> void:
 	GameData.load_tables()
 	var hans := GameData.hero("hans")
 	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.54) and is_equal_approx(GameData.level_mult(70), 5.14), "level x(1 + 0.06 x (L - 1))")
-	var st := GameData.hero_stats(hans, 10, 3)  # 440 × 1.54 × 1.2, 30 × 1.54 × 1.2
-	check(is_equal_approx(st.hp, 440.0 * 1.54 * 1.2) and is_equal_approx(st.atk, 30.0 * 1.54 * 1.2), "stats = base x level mult x star mult: %s" % [st])
-	check(GameData.hero_power(hans, 1, 1) == 119 and GameData.hero_power(GameData.hero("kyle"), 1, 1) == 317 \
-		and GameData.hero_power(hans, 10, 3) == roundi(440.0 * 1.848 / 10.0 + 30.0 * 1.848 * 2.0 / 0.8),
-		"power = round(HP / 10 + atk x 2 / interval): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 1), GameData.hero_power(GameData.hero("kyle"), 1, 1)])
-	check([1, 2, 6, 7, 99].map(func(c): return GameData.max_level(c)) == [20, 30, 70, 70, 70], "max level = 20 + 10 x stars (70 at 5 stars)")
+	var st := GameData.hero_stats(hans, 10, 2)  # 440 × 1.54 × 1.5², 30 × 1.54 × 1.5²
+	check(is_equal_approx(st.hp, 440.0 * 1.54 * 2.25) and is_equal_approx(st.atk, 30.0 * 1.54 * 2.25), "stats = base x level mult x promotion mult (1.5^p on base and level-ups alike): %s" % [st])
+	check(GameData.hero_power(hans, 1, 0) == 119 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 317 \
+		and GameData.hero_power(hans, 10, 2) == roundi(440.0 * 3.465 / 10.0 + 30.0 * 3.465 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 179,
+		"power = round(HP / 10 + atk x 2 / interval): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
 		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 134, 151, 333, 923, 266690], "gold cost table = round(base x 1.12^(L-1)), same as the server")
@@ -1637,8 +1648,11 @@ func test_hero_levels() -> void:
 	check(e.levelup_affordable("hans") == 5 and e.levelup_block("hans", 6) == "최대 레벨", "x10 stops at the max level (15 -> 20)")
 	e.hero_levels["hans"] = 20
 	check(not e.level_up("hans") and e.level_of("hans") == 20 and e.levelup_affordable("hans") == 0, "max level blocks")
-	e.heroes["hans"] = 2  # 별 1 → 최대 30
-	check(e.level_up("hans", 10) and e.level_of("hans") == 30, "a star raises the cap")
+	e.heroes["hans"] = 9  # 옛 규칙의 별(중복)은 상한과 무관하다(개정 15)
+	check(not e.level_up("hans") and e.level_of("hans") == 20, "copies no longer raise the cap")
+	e.hero_promotions["hans"] = 1  # 승급 1 → 최대 30
+	check(e.level_up("hans", 10) and e.level_of("hans") == 30, "a promotion raises the cap")
+	e.heroes["hans"] = 2
 	# GameState 공급자: 레벨
 	var gs = GameStateScript.new()
 	check(gs.hero_level("hans") == 1, "no roster: level 1")
@@ -1649,16 +1663,18 @@ func test_hero_levels() -> void:
 	e.save_path = ECON_TMP
 	e.save()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 30.0 and raw.heroes.ella.level == 1.0, "save v3 writes heroes {copies, level}")
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 30.0 and raw.heroes.ella.level == 1.0
+		and raw.heroes.hans.promotion == 1.0 and raw.heroes.hans.shards == 0.0, "save v6 writes heroes {copies, level, shards, promotion}")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(1000.0)
-	check(e2.heroes == e.heroes and e2.level_of("hans") == 30 and e2.hero_levels.hans is int and e2.level_of("nina") == 1, "save v3 round-trips levels")
+	check(e2.heroes == e.heroes and e2.level_of("hans") == 30 and e2.hero_levels.hans is int and e2.level_of("nina") == 1 and e2.promotion_of("hans") == 1, "save round-trips levels and promotion")
 	var v2 := {"version": 2, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": 0, "quarry": 0, "farm": 0},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "heroes": {"hans": 2, "ignis": 1}, "deploy": ["ignis", "hans"]}
 	_write(ECON_TMP, JSON.stringify(v2))
 	e2.load_save(1000.0)
-	check(e2.gold_tenths == 5 and e2.heroes == {"hans": 2, "ignis": 1} and e2.level_of("hans") == 1 and e2.level_of("ignis") == 1 and e2.deploy == ["ignis", "hans"], "a v2 save loads with level 1")
+	check(e2.gold_tenths == 5 and e2.heroes == {"hans": 2, "ignis": 1} and e2.level_of("hans") == 1 and e2.level_of("ignis") == 1 and e2.deploy == ["ignis", "hans"]
+		and e2.shards_of("hans") == 1 and e2.shards_of("ignis") == 0 and e2.hero_promotions == {"hans": 0, "ignis": 0}, "a v2 save loads with level 1; old stars become shards (copies - 1), promotion 0")
 	v2.version = 3  # v3인데 heroes가 옛 형식이면 깨진 저장
 	_write(ECON_TMP, JSON.stringify(v2))
 	e2.load_save(1000.0)
@@ -1668,13 +1684,73 @@ func test_hero_levels() -> void:
 	e2.free()
 	# apply_remote: 레벨업 설정 검증(서버 seed와 같은 규칙)
 	var logged := _errors.count
-	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_star", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_gold_R", "-10"], ["hero_level_stat", "-0.1"]]:
+	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_promotion", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_gold_R", "-10"], ["hero_level_stat", "-0.1"],
+			["promote_shards", "5|25|50|100"], ["promote_shards", "5|25|50|100|0"], ["promote_shards", "5|25|x|100|200"], ["promote_shards", ""], ["promote_mult", "0.9"], ["promote_mult", "x"]]:
 		var p := _payload()
 		p.config[bad[0]] = bad[1]
 		check(not GameData.apply_remote(p) and GameData.errors == 1, "apply_remote rejects %s = %s" % bad)
 	_errors.count = logged
 	GameData.load_tables()
 	check(GameData.errors == 0 and GameData.config_num("hero_max_level_base") == 20.0, "default tables restored")
+
+
+## 개정 15 승급(오프라인): 조각 −비용·승급 +1·promoted·저장, 부족·최대·미보유 이유와 알림(아무것도 안 바뀜), 능력치 × 1.5와 최대 레벨 +10,
+## 5단계 누적 비용(375)과 ×7.59, save v5 → v6(옛 별 = 조각 copies − 1, 승급 0), v6 왕복, 깨진 v6.
+func test_promotion() -> void:
+	GameData.load_tables()
+	var e = _econ(1000.0)
+	var got := []
+	var notes := []
+	e.promoted.connect(func(id, p): got.append([id, p]))
+	e.notice.connect(func(t): notes.append(t))
+	var arteon := GameData.hero("arteon")
+	check(e.promote_block("hans") == "not_enough_shards" and e.promote_cost("hans") == 5 and e.promote_block("arteon") == "not_owned",
+		"a starter has no shards (5 needed); an unowned hero cannot promote")
+	check(not e.promote("hans") and notes == ["조각 부족"] and e.promotion_of("hans") == 0 and got.is_empty(), "not enough shards: a notice, nothing changes")
+	e.heroes["arteon"] = 13
+	e.hero_shards["arteon"] = 12
+	e.hero_levels["arteon"] = 20
+	var before := GameData.hero_stats(arteon, 20, 0)
+	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
+		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
+	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
+	check(is_equal_approx(after.hp, before.hp * 1.5) and is_equal_approx(after.atk, before.atk * 1.5) and GameData.max_level(e.promotion_of("arteon")) == 30
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.5 (base and level-ups), max level 20 -> 30 (Lv 20 can level again)")
+	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
+	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
+	for i in 4:
+		e.promote("arteon")
+	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 7.59375) and GameData.max_level(5) == 70,
+		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x7.59, max level 70)")
+	e.hero_shards["arteon"] = 999
+	notes.clear()
+	check(e.promote_block("arteon") == "max_promotion" and not e.promote("arteon") and notes == ["최대 승급"] and e.shards_of("arteon") == 999 and e.promotion_of("arteon") == 5,
+		"max promotion: a notice, shards kept")
+	# 저장: v6 왕복, v5 → v6, 깨진 v6
+	e.save_path = ECON_TMP
+	e.save()
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
+	check(int(raw.version) == 6 and EconomyScript.SAVE_VERSION == 6 and raw.heroes.arteon == {"copies": 13.0, "level": 20.0, "shards": 999.0, "promotion": 5.0}, "save v6 writes shards and promotion")
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(1000.0)
+	check(e2.shards_of("arteon") == 999 and e2.promotion_of("arteon") == 5 and e2.hero_promotions.arteon is int and e2.shards_of("hans") == 0, "save v6 round-trips shards and promotion")
+	var v5 := {"version": 5, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": 0, "quarry": 0, "farm": 0},
+		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 4, "level": 9}, "ignis": {"copies": 1, "level": 2}}, "deploy": ["ignis", "hans"]}
+	_write(ECON_TMP, JSON.stringify(v5))
+	e2.load_save(1000.0)
+	check(e2.gold_tenths == 5 and e2.shards_of("hans") == 3 and e2.promotion_of("hans") == 0 and e2.shards_of("ignis") == 0 and e2.level_of("hans") == 9 and e2.heroes == {"hans": 4, "ignis": 1},
+		"save v5 -> v6: old stars become shards (copies - 1 = 3), promotion 0, levels kept")
+	var hp_v5: float = GameData.hero_stats(GameData.hero("hans"), 9, e2.promotion_of("hans")).hp
+	check(is_equal_approx(hp_v5, 440.0 * 1.48), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
+	var v6 := v5.duplicate(true)
+	v6.version = 6
+	_write(ECON_TMP, JSON.stringify(v6))  # v6인데 shards·promotion이 없다
+	e2.load_save(1000.0)
+	check(e2.gold_tenths == 0 and e2.heroes == _econ_starters() and e2.hero_shards.is_empty(), "a v6 save without shards/promotion is corrupt: defaults")
+	DirAccess.remove_absolute(ECON_TMP)
+	e.free()
+	e2.free()
 
 
 ## 개정 12 건물: 표(9행·파일 순서), 비용·시간 공식(서버 buildings.test와 같은 값), 단계 표(슬롯·내부), 효과 수치(성 HP·성문 HP·인구·
@@ -1707,10 +1783,10 @@ func test_buildings() -> void:
 	var r11 := GameData.gacha_rates(11)
 	check(is_equal_approx(r1.ssr, 0.03) and is_equal_approx(r1.sr, 0.17) and is_equal_approx(r11.ssr, 0.04) and is_equal_approx(r11.sr, 0.2), "tavern: SSR +0.1%p, SR +0.3%p per level")
 	var hans := GameData.hero("hans")
-	var st := GameData.hero_stats(hans, 1, 1, {"barracks": 5, "lab": 3})
-	check(st.hp == 440.0 and is_equal_approx(st.atk, 30.0 * 1.06) and GameData.hero_stats(hans, 1, 1) == {"hp": 440.0, "atk": 30.0},
+	var st := GameData.hero_stats(hans, 1, 0, {"barracks": 5, "lab": 3})
+	check(st.hp == 440.0 and is_equal_approx(st.atk, 30.0 * 1.06) and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0},
 		"hero atk x(1 + lab); the barracks no longer raises hero HP (rev 13): %s" % [st])
-	check(GameData.hero_power(hans, 1, 1, {"barracks": 5, "lab": 3}) == roundi(440.0 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the lab bonus")
+	check(GameData.hero_power(hans, 1, 0, {"barracks": 5, "lab": 3}) == roundi(440.0 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the lab bonus")
 	var rig := func(): return 0.0305  # 등급 굴림 0.0305: 주점 1(SSR 3%)은 SR, 주점 2(3.1%)는 SSR
 	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, 2)[0].grade == "SSR", "offline recruiting uses the tavern odds")
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
@@ -1762,7 +1838,7 @@ func test_buildings() -> void:
 	e.save_path = ECON_TMP
 	e.save()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == 5 and raw.levels.size() == 11 and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save v5 writes every building level and the builder")
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.levels.size() == 11 and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save writes every building level and the builder")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(t + 1.0)
@@ -1968,7 +2044,7 @@ func test_soldiers() -> void:
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(now + 360001.0)
-	check(int(JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP)).version) == 5 and e2.soldiers == e.soldiers and e2.soldier_deployed == e.soldier_deployed
+	check(int(JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP)).version) == EconomyScript.SAVE_VERSION and e2.soldiers == e.soldiers and e2.soldier_deployed == e.soldier_deployed
 		and e2.last_collect.stable == e.last_collect.stable and e2.levels.barracks == 10, "save v5 round-trips soldiers, deploy and the production clocks")
 	var v4 := {"version": 4, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 1, "level": 1}}, "deploy": ["hans"]}

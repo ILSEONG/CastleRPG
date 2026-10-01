@@ -264,7 +264,7 @@ func owned_sorted(mode := sort_mode) -> Array:
 	var key := {}
 	for id in ids:
 		var h := GameData.hero(id)
-		var p := GameData.hero_power(h, Economy.level_of(id), int(Economy.heroes[id]), Economy.levels)
+		var p := GameData.hero_power(h, Economy.level_of(id), Economy.promotion_of(id), Economy.levels)
 		match mode:
 			"grade": key[id] = [GRADE_RANK[h.grade], h.name]
 			"level": key[id] = [-Economy.level_of(id), -p, h.name]
@@ -357,16 +357,16 @@ func _rebuild() -> void:
 		var c = slot_cards[i]
 		var id = work[i]
 		c.hero_id = id if id != null else ""
-		c.stars = GameData.stars(int(Economy.heroes.get(id, 1))) if id != null else 0
+		c.stars = Economy.promotion_of(id) if id != null else 0
 		c.corner = str(i + 1)
 		c.highlight = i == selected_slot
 		c.queue_redraw()
 	for id in hero_cards:
 		var c = hero_cards[id]
-		var copies := int(Economy.heroes[id])
-		c.stars = GameData.stars(copies)
+		var pr := Economy.promotion_of(id)
+		c.stars = pr
 		c.level = Economy.level_of(id)
-		c.power = GameData.hero_power(GameData.hero(id), c.level, copies, Economy.levels)
+		c.power = GameData.hero_power(GameData.hero(id), c.level, pr, Economy.levels)
 		c.deployed = deployed.has(id)
 		c.can_level = Economy.levelup_block(id) == ""
 		c.queue_redraw()
@@ -434,11 +434,11 @@ func _refresh_detail() -> void:
 	var h := GameData.hero(id)
 	if h.is_empty() or int(Economy.heroes.get(id, 0)) < 1:
 		return
-	var copies := int(Economy.heroes[id])
+	var pr := Economy.promotion_of(id)
 	var lv := Economy.level_of(id)
-	var mx := GameData.max_level(copies)
+	var mx := GameData.max_level(pr)
 	big_card.hero_id = id
-	big_card.stars = GameData.stars(copies)
+	big_card.stars = pr
 	big_card.queue_redraw()
 	title_label.text = "%s %s" % [h.title, h.name]
 	title_label.add_theme_color_override("font_color", UiKit.GRADE_COLORS[h.grade].lightened(0.15))
@@ -446,12 +446,12 @@ func _refresh_detail() -> void:
 	level_label.text = "Lv %d / %d" % [lv, mx]
 	level_bar.max_value = mx
 	level_bar.value = lv
-	var now := GameData.hero_stats(h, lv, copies, Economy.levels)  # 연구소 보너스 포함(개정 12, 개정 13: 막사 보너스 없음)
-	var nxt := GameData.hero_stats(h, lv + 1, copies, Economy.levels)
+	var now := GameData.hero_stats(h, lv, pr, Economy.levels)  # 연구소 보너스 포함(개정 12, 개정 13: 막사 보너스 없음)
+	var nxt := GameData.hero_stats(h, lv + 1, pr, Economy.levels)
 	var grow := lv < mx
 	var rows := [
 		[roundi(now.hp), roundi(nxt.hp)], [roundi(now.atk), roundi(nxt.atk)], null, null,
-		[GameData.hero_power(h, lv, copies, Economy.levels), GameData.hero_power(h, lv + 1, copies, Economy.levels)]]
+		[GameData.hero_power(h, lv, pr, Economy.levels), GameData.hero_power(h, lv + 1, pr, Economy.levels)]]
 	for i in rows.size():
 		var r = rows[i]
 		if r == null:

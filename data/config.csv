@@ -27,8 +27,6 @@ merchant_low_high_ratio,3
 kill_rate_cap,5
 kill_burst_sec,60
 starter_heroes,hans|ella|dorik|nina
-hero_max_stars,5
-hero_star_bonus,0.1
 lab_atk_per_level,0.03
 gacha_cost_1,300
 gacha_cost_10,2700
@@ -38,7 +36,6 @@ tavern_ssr_per_level,0.001
 tavern_sr_per_level,0.003
 gacha_10_min_sr,1
 hero_max_level_base,20
-hero_max_level_per_star,10
 hero_max_level_per_promotion,10
 promote_shards,5|25|50|100|200
 promote_mult,1.5

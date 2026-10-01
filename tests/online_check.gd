@@ -468,7 +468,7 @@ func _phase2(state_path: String) -> void:
 			levels_ok = levels_ok and Economy.level_of(id) == int(saved.levels[id])
 	var stats_ok := true
 	for h in spawned:
-		stats_ok = stats_ok and is_equal_approx(h.hp_max, GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id])).hp)
+		stats_ok = stats_ok and is_equal_approx(h.hp_max, GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id)).hp)
 	_check(levels_ok and stats_ok, "(p2) reconnecting restores hero levels (hans Lv 12) and the spawned heroes use them",
 		"levels=%s saved=%s" % [Economy.hero_levels, saved.get("levels")])
 	await _frames(2)

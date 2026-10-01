@@ -40,8 +40,8 @@ var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
 var _path: Array[Vector3] = []
 var hp: float = 0.0
-var hp_max: float = 0.0  # 레벨·별 반영
-var atk: float = 0.0     # 레벨·별 반영(오라 전)
+var hp_max: float = 0.0  # 레벨·승급 반영
+var atk: float = 0.0     # 레벨·승급 반영(오라 전)
 var state: int = State.IDLE
 var selected := false:
 	set(v):
@@ -66,9 +66,9 @@ var _blast_cd := 0.0
 
 
 ## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default).
-## copies = 보유 수(별), level = 영웅 레벨. HP·공격 = 기본 × 레벨 배율 × 별 배율(공격은 × 연구소 보너스 — GameData.hero_stats,
+## promotion = 승급 단계(개정 15), level = 영웅 레벨. HP·공격 = 기본 × 레벨 배율 × 승급 배율(공격은 × 연구소 보너스 — GameData.hero_stats,
 ## 건물 레벨은 GameState.building_levels, 개정 12·13).
-func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1, level := 1) -> void:
+func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 0, level := 1) -> void:
 	index = p_index
 	def = p_def
 	castle = p_castle
@@ -76,13 +76,13 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1, 
 	role = def.role
 	_sk = def.skills
 	_color = Color(def.color)
-	var st := GameData.hero_stats(def, level, copies, GameState.building_levels())
+	var st := GameData.hero_stats(def, level, promotion, GameState.building_levels())
 	hp_max = st.hp
 	atk = st.atk
 	_place_default()
 
 
-## 기본 자리(면 index % 4의 역할 자리). 게임 중 다시 만든 영웅(배치·별 변경)은 다른 영웅들이 옮겨 와 그 자리가 차 있을 수 있다 —
+## 기본 자리(면 index % 4의 역할 자리). 게임 중 다시 만든 영웅(배치·승급·레벨 변경)은 다른 영웅들이 옮겨 와 그 자리가 차 있을 수 있다 —
 ## 같은 면 다른 자리 → 다른 면들(역할 자리 먼저) → 그래도 다 차면 그 면 성문 앞 바닥(자유 위치)에 선다.
 func _place_default() -> void:
 	var home := index % 4

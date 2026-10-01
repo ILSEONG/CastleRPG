@@ -731,18 +731,18 @@ func _levelup_case() -> void:
 		Economy.set_deploy(d)
 		slot = 2
 	await _frames(1)
-	Economy.heroes["dorik"] = 3  # 별 2
+	Economy.hero_promotions["dorik"] = 2  # 승급 2(개정 15): × 1.5²
 	Economy.gold_tenths = 1000000
 	var before := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var ok := Economy.level_up("dorik", 9)  # 1 → 10
 	await _frames(1)
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var dorik = live.filter(func(h): return h.index == slot)[0]
-	var mult := (1.0 + 0.06 * 9) * 1.2
+	var mult := (1.0 + 0.06 * 9) * 2.25
 	var others_kept := live.filter(func(h): return h.index != slot).all(func(h): return before.has(h))
 	_check(ok and Economy.level_of("dorik") == 10 and dorik.def.id == "dorik" and not before.has(dorik) and others_kept
 		and is_equal_approx(dorik.hp_max, 440.0 * mult) and is_equal_approx(dorik.atk, 30.0 * mult) and is_equal_approx(dorik.hp, dorik.hp_max),
-		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.06 x 9) x 1.2",
+		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.06 x 9) x 1.5^2 (promotion 2)",
 		"ok=%s hp=%.2f atk=%.2f kept=%s" % [ok, dorik.hp_max, dorik.atk, others_kept])
 	for h in live:
 		h.set_process(h == dorik)
@@ -756,7 +756,7 @@ func _levelup_case() -> void:
 
 ## (B) 개정 12 건물(오프라인, 실제 완료 경로: 끝난 일꾼을 Economy._process가 완료 → building_done → main).
 ## 막사 Lv 5 → 영웅은 그대로(개정 13: 막사는 영웅 HP를 올리지 않는다), 연구소 Lv 3 → 방치 모드라 영웅을 곧바로 다시 만들고 공격 +6%
-## (레벨·별 배율 위에 곱). 영웅이 그 공격으로 친다.
+## (레벨·승급 배율 위에 곱). 영웅이 그 공격으로 친다.
 ## 성문 Lv 2 → 성문 최대 HP 800. 성채가 단계(5)를 넘으면 "성이 넓어졌습니다!"와 함께 월드를 다시 만든다 — 새 main(성 내부 24타일, 슬롯 8,
 ## 성 HP 1800)이고 오토로드 상태(Economy 골드·자원·건물·영웅, GameState 스테이지)는 그대로. 월드가 바뀌므로 마지막 사례.
 func _building_cases() -> void:
@@ -771,7 +771,7 @@ func _building_cases() -> void:
 	var live := _alive_heroes()
 	var hp_ok := not live.is_empty()
 	for h in live:
-		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id]))
+		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id))
 		hp_ok = hp_ok and before.has(h) and is_equal_approx(h.hp_max, base.hp) and is_equal_approx(h.atk, base.atk)
 	_check(Economy.building_level("barracks") == 5 and Economy.build.is_empty() and hp_ok, "(B) barracks Lv 5 done in idle: heroes are not rebuilt and keep their HP (rev 13: no barracks HP bonus)",
 		"barracks=%d heroes=%s" % [Economy.building_level("barracks"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
@@ -781,7 +781,7 @@ func _building_cases() -> void:
 	live = _alive_heroes()
 	var atk_ok := not live.is_empty()
 	for h in live:
-		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id]))
+		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id))
 		atk_ok = atk_ok and not before.has(h) and is_equal_approx(h.hp_max, base.hp) and is_equal_approx(h.atk, base.atk * 1.06)
 	_check(Economy.building_level("lab") == 3 and atk_ok, "(B) lab Lv 3 done in idle: heroes rebuilt at once with attack x1.06 (HP unchanged)",
 		"lab=%d heroes=%s" % [Economy.building_level("lab"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
@@ -791,7 +791,7 @@ func _building_cases() -> void:
 	var m = _still("epic_boss", hero.global_position + Formation.SIDE_DIR[hero.side] * 1.2)
 	hero._sk = {}  # 순수 타격으로 공격력만 본다
 	await _wait_until(func(): return _dmg(m) > 0.0, 3.0)
-	_check(is_equal_approx(_dmg(m), hero.atk) and is_equal_approx(hero.atk, GameData.hero_stats(hero.def, Economy.level_of(hero.def.id), int(Economy.heroes[hero.def.id]), Economy.levels).atk),
+	_check(is_equal_approx(_dmg(m), hero.atk) and is_equal_approx(hero.atk, GameData.hero_stats(hero.def, Economy.level_of(hero.def.id), Economy.promotion_of(hero.def.id), Economy.levels).atk),
 		"(B) a hero hits for its lab-boosted attack", "dmg=%.2f atk=%.2f" % [_dmg(m), hero.atk])
 	_clear_monsters()
 	await _frames(1)
@@ -801,7 +801,7 @@ func _building_cases() -> void:
 		"gate=%d max=%.0f hp=%.0f" % [Economy.building_level("gate"), GameState.gate_hp_max, GameState.gate_hp[0]])
 	# 성채 4 → 5: 단계가 바뀌어 월드를 다시 만든다
 	var old = _main
-	var keep_before := [Economy.gold_tenths, Economy.res.duplicate(), Economy.heroes.duplicate(), Economy.hero_levels.duplicate(), GameState.stage, GameState.deploy()]
+	var keep_before := [Economy.gold_tenths, Economy.res.duplicate(), Economy.heroes.duplicate(), Economy.hero_levels.duplicate(), Economy.hero_promotions.duplicate(), GameState.stage, GameState.deploy()]
 	var rebuilds0: int = MainScript.rebuilds
 	Economy.levels["keep"] = 4
 	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
@@ -824,7 +824,7 @@ func _building_cases() -> void:
 	var deployed: int = GameState.deploy().filter(func(x): return x != null).size()
 	_check(fresh.castle.half == 24.0 and GameState.hero_count() == 8 and GameState.deploy().size() == 8 and _alive_heroes().size() == deployed and GameState.castle_hp_max == 1800.0,
 		"(B) the new world uses keep 5: interior 24 tiles, 8 slots, castle HP 1800", "half=%.1f slots=%d heroes=%d castle=%.0f" % [fresh.castle.half, GameState.hero_count(), _alive_heroes().size(), GameState.castle_hp_max])
-	var keep_after := [Economy.gold_tenths, Economy.res, Economy.heroes, Economy.hero_levels, GameState.stage, GameState.deploy().slice(0, 4)]
+	var keep_after := [Economy.gold_tenths, Economy.res, Economy.heroes, Economy.hero_levels, Economy.hero_promotions, GameState.stage, GameState.deploy().slice(0, 4)]
 	_check(keep_after == keep_before and Economy.building_level("keep") == 5 and Economy.building_level("lab") == 3 and GameState.roster == Economy and not Net.is_online(),
 		"(B) autoload state carries over the rebuild (gold, resources, heroes, levels, stage, deploy)", "before=%s after=%s" % [keep_before, keep_after])
 	_check(hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!", "(B) the new HUD shows '성이 넓어졌습니다!'", "toast=%s '%s'" % [hud._toast.visible, hud._toast.text])

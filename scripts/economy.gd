@@ -1,5 +1,5 @@
 extends Node
-## 골드·자원·마지막 수집 시각·건물 레벨·보유 영웅(copies·레벨)·배치의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
+## 골드·자원·마지막 수집 시각·건물 레벨·보유 영웅(copies·레벨·조각·승급)·배치의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
 ## 시간은 인자 now(유닉스 초)로 받는다 — 테스트에서 .new()로 단독 생성 가능(트리에 안 넣으면 _ready 안 돎).
 ## 온라인 모드(net이 Net 노드, 개정 9): 상태는 서버 응답(apply_server)으로만 바뀐다. 수집·판매는 요청만 보내고
 ## 응답이 오면 반영한다. 처치는 쌓아 두고 Net이 보낸다. 표시 골드 = 서버 골드 + 아직 반영 안 된 처치의 예상 골드
@@ -10,14 +10,17 @@ extends Node
 ## 병사(개정 13): 보유·배치(soldiers·soldier_deployed, "병종:티어" → 수)와 병사 건물 생산 시각(last_collect)도 여기 있다. 병사 탭·건물 창(S2)이
 ## 쓰는 API는 아래 "병사" 한 곳 — soldier_counts·soldier_deploy·deployed_total·population·set_soldier_deploy·auto_deploy·can_merge·
 ## merge_soldiers·soldier_production·soldier_stats, 시그널 soldiers_changed·soldier_made(+ 알림 "보병 +1").
+## 승급(개정 15): 영웅별 조각(hero_shards)·승급 단계(hero_promotions). UI가 쓰는 API는 shards_of·promotion_of·promote_block·promote·
+## promote_waiting, 시그널 promoted. 모집 중복은 조각 +1.
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 5  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 6  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 # 5: soldiers·soldier_deploy {"병종:티어": 수}, last_collect에 병사 건물(개정 13). 4 이하는 병사 없음, 생산은 불러온 때부터
+# 6: heroes {id: {copies, level, shards, promotion}}(개정 15). 5 이하는 옛 별(중복)을 조각으로: shards = copies − 1, promotion 0
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -25,6 +28,9 @@ const NO_GOLD_TEXT := "골드가 부족합니다"
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
 const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
+const PROMOTE_FAIL_TEXT := "승급 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
+## 승급 못 하는 이유(promote_block, 서버 409 코드 → 같은 문구)
+const PROMOTE_TEXT := {"not_owned": "보유하지 않은 영웅", "max_promotion": "최대 승급", "not_enough_shards": "조각 부족", "waiting": "응답 대기 중"}
 const FOOD := "food"  # 레벨업 식량 자원 id
 const BUILD_FAIL_TEXT := "건설 결과를 받지 못했습니다 — 건물 상태를 다시 확인합니다"
 const BUILD_POLL_SEC := 2.0  # 온라인: 끝나는 시각이 지난 건설을 서버에 다시 물어보는 간격
@@ -47,7 +53,8 @@ signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
 signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 signal roster_changed  # 보유 영웅(copies)이나 배치가 바뀌었다
-signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies}]. 실패(온라인)면 빈 배열
+signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies, shards}]. 실패(온라인)면 빈 배열
+signal promoted(hero_id: String, promotion: int)  # 승급 성공(온라인은 응답이 왔을 때, 개정 15)
 signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
 signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
 signal building_done(building_id: String, level: int)  # 건설 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
@@ -64,8 +71,10 @@ var res: Dictionary = {}           # 자원 id → int
 var last_collect: Dictionary = {}  # 자원 건물 id → 마지막 수집, 병사 건물 id → 마지막 생산(개정 13). 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 모든 건물)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
-var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1). 별 = min(copies − 1, hero_max_stars)
+var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
 var hero_levels: Dictionary = {}   # 영웅 id → 레벨(≥ 1, 없으면 1). 개정 11
+var hero_shards: Dictionary = {}   # 영웅 id → 조각(≥ 0, 없으면 0). 개정 15
+var hero_promotions: Dictionary = {}  # 영웅 id → 승급 0..MAX_PROMOTION(없으면 0). 개정 15 — 별·능력치·최대 레벨
 var deploy: Array = []             # 배치 슬롯 i → 영웅 id 또는 null(저장된 그대로 — 쓰는 쪽은 deploy_slots)
 var soldiers: Dictionary = {}          # 병사 보유 "병종:티어" → 수(> 0, 개정 13)
 var soldier_deployed: Dictionary = {}  # 병사 배치 "병종:티어" → 수(> 0). 각 ≤ 보유, 합 ≤ 인구
@@ -233,6 +242,8 @@ func reset(now: float) -> void:
 	_prod_poll_at = 0.0
 	heroes = {}
 	hero_levels = {}
+	hero_shards = {}
+	hero_promotions = {}
 	deploy = []
 	for id in GameData.config_list("starter_heroes"):  # 시작 영웅 copies 1, 그 순서로 배치
 		heroes[str(id)] = 1
@@ -356,7 +367,9 @@ func gacha(count: int) -> bool:
 	var results := []
 	for r in roll_gacha(count, rng.randf, building_level(GameData.TAVERN)):
 		var c := int(heroes.get(r.id, 0)) + 1
-		results.append({"hero_id": r.id, "grade": r.grade, "new": c == 1, "copies": c})
+		if c > 1:  # 개정 15: 중복은 조각 +1
+			hero_shards[r.id] = shards_of(r.id) + 1
+		results.append({"hero_id": r.id, "grade": r.grade, "new": c == 1, "copies": c, "shards": shards_of(r.id)})
 		heroes[r.id] = c
 	changed.emit()
 	roster_changed.emit()
@@ -392,7 +405,7 @@ func levelup_block(hero_id: String, count := 1) -> String:
 	var h := GameData.hero(hero_id)
 	if h.is_empty() or int(heroes.get(hero_id, 0)) < 1:
 		return "보유하지 않은 영웅"
-	if level_of(hero_id) + count > GameData.max_level(int(heroes[hero_id])):
+	if level_of(hero_id) + count > GameData.max_level(promotion_of(hero_id)):
 		return "최대 레벨"
 	var cost := GameData.levelup_cost(h.grade, level_of(hero_id), count)
 	return "골드 부족" if gold < cost.gold else ""
@@ -429,6 +442,56 @@ func level_up(hero_id: String, count := 1) -> bool:
 ## 레벨업 응답을 기다리는 중(UI는 버튼을 끈다).
 func levelup_waiting() -> bool:
 	return _waiting.has("levelup")
+
+
+# --- 승급(개정 15 §1·§3) ---
+
+func shards_of(hero_id: String) -> int:
+	return maxi(0, int(hero_shards.get(hero_id, 0)))
+
+
+func promotion_of(hero_id: String) -> int:
+	return clampi(int(hero_promotions.get(hero_id, 0)), 0, GameData.MAX_PROMOTION)
+
+
+## 다음 승급에 드는 조각(최대 승급이면 0).
+func promote_cost(hero_id: String) -> int:
+	return GameData.promote_cost(promotion_of(hero_id))
+
+
+## 승급 못 하는 이유 코드(문구는 PROMOTE_TEXT, 서버 409 코드와 같은 순서). 되면 "". 보유 → 최대 승급 → 조각 → 응답 대기(앱만).
+func promote_block(hero_id: String) -> String:
+	if GameData.hero(hero_id).is_empty() or int(heroes.get(hero_id, 0)) < 1:
+		return "not_owned"
+	if promotion_of(hero_id) >= GameData.MAX_PROMOTION:
+		return "max_promotion"
+	if shards_of(hero_id) < promote_cost(hero_id):
+		return "not_enough_shards"
+	return "waiting" if _waiting.has("promote") else ""
+
+
+## 승급(스펙 §1): 조각 −비용, 승급 +1(능력치 × promote_mult, 최대 레벨 + hero_max_level_per_promotion). 안 되면 알림만.
+## 오프라인은 바로 저장하고 promoted, 온라인은 /v1/hero/promote(once — 다시 보내면 두 번 오를 수 있어 재전송하지 않는다.
+## 실패하면 알림 + 상태 새로 받기. 응답에 promoted). 능력치 반영은 레벨업과 같다(roster_changed → main). 했거나 보냈으면 true.
+func promote(hero_id: String) -> bool:
+	var why := promote_block(hero_id)
+	if why != "":
+		notice.emit(PROMOTE_TEXT.get(why, PROMOTE_FAIL_TEXT))
+		return false
+	if net != null:
+		return _promote_online(hero_id)
+	hero_shards[hero_id] = shards_of(hero_id) - promote_cost(hero_id)
+	hero_promotions[hero_id] = promotion_of(hero_id) + 1
+	changed.emit()
+	roster_changed.emit()
+	save()
+	promoted.emit(hero_id, promotion_of(hero_id))
+	return true
+
+
+## 승급 응답을 기다리는 중(UI는 버튼을 끈다).
+func promote_waiting() -> bool:
+	return _waiting.has("promote")
 
 
 ## 개발용(main의 --heroes= / ?heroes=): 그 영웅들을 보유(없으면 copies 1)하고 그 순서로 배치한다. 저장 파일은 쓰지 않는다
@@ -848,7 +911,7 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("soldiers") == null or p.soldiers is Dictionary) and (p.get("soldier_deploy") == null or p.soldier_deploy is Dictionary)):
 		push_error("bad player response: %s" % str(data))
 		return false
-	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate()]
+	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
 	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate(), _soldier_clocks()]
 	if p.get("soldiers") is Dictionary:  # 개정 13: {"병종:티어": 수}
 		soldiers = _soldier_dict(p.soldiers)
@@ -856,16 +919,22 @@ func apply_server(data: Dictionary) -> bool:
 		soldier_deployed = _soldier_dict(p.soldier_deploy)
 	if _pending_soldier_deploy != null:
 		soldier_deployed = _pending_soldier_deploy.duplicate()
-	if p.get("heroes") is Dictionary:  # 개정 11: {id: {copies, level}}
+	if p.get("heroes") is Dictionary:  # 개정 11: {id: {copies, level}}, 개정 15: + shards, promotion(없으면 0)
 		var h := {}
 		var lv := {}
+		var sh := {}
+		var pr := {}
 		for id in p.heroes:
 			var v = p.heroes[id]
 			if v is Dictionary and _num(v.get("copies")) and int(v.copies) >= 1:
 				h[str(id)] = int(v.copies)
 				lv[str(id)] = maxi(1, int(v.level)) if _num(v.get("level")) else 1
+				sh[str(id)] = maxi(0, int(v.shards)) if _num(v.get("shards")) else 0
+				pr[str(id)] = clampi(int(v.promotion), 0, GameData.MAX_PROMOTION) if _num(v.get("promotion")) else 0
 		heroes = h
 		hero_levels = lv
+		hero_shards = sh
+		hero_promotions = pr
 	if p.get("deploy") is Array:
 		deploy = p.deploy.map(func(x): return x if x is String else null)
 	if _pending_deploy != null:
@@ -903,7 +972,7 @@ func apply_server(data: Dictionary) -> bool:
 	merchant = {"rates": rates, "next_change": float(m.next_change)}
 	_recalc_gold()
 	changed.emit()
-	if [heroes, deploy, hero_levels] != roster_before:
+	if [heroes, deploy, hero_levels, hero_shards, hero_promotions] != roster_before:
 		roster_changed.emit()
 	if [soldiers, soldier_deployed, _soldier_clocks()] != troops_before:
 		soldiers_changed.emit()
@@ -1056,7 +1125,7 @@ func _on_gacha(data: Dictionary) -> void:
 		for r in data.results:
 			if r is Dictionary and r.get("hero_id") is String and not GameData.hero(r.hero_id).is_empty():
 				results.append({"hero_id": r.hero_id, "grade": GameData.hero(r.hero_id).grade, "new": r.get("new") == true,
-					"copies": int(r.copies) if _num(r.get("copies")) else 1})
+					"copies": int(r.copies) if _num(r.get("copies")) else 1, "shards": int(r.shards) if _num(r.get("shards")) else 0})
 	gacha_done.emit(results)
 
 
@@ -1091,6 +1160,31 @@ func _on_levelup_failed() -> void:
 	_waiting.erase("levelup")
 	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}
 	notice.emit(why.get(net.last_error, LEVELUP_FAIL_TEXT))
+	net.refresh()
+	changed.emit()
+
+
+## 온라인 승급(개정 15): once로 보낸다(레벨업과 같은 이유로 다시 보내지 않는다). 답이 올 때까지 promote_block = "waiting".
+func _promote_online(hero_id: String) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["promote"] = true
+	net.send("POST", "/v1/hero/promote", {"hero_id": hero_id}, _on_promoted.bind(hero_id), _on_promote_failed, true, true)
+	changed.emit()  # UI가 응답 전 버튼을 끈다
+	return true
+
+
+func _on_promoted(data: Dictionary, hero_id: String) -> void:
+	_waiting.erase("promote")
+	apply_server(data)
+	promoted.emit(hero_id, promotion_of(hero_id))
+
+
+## 거부(409 max_promotion·not_enough_shards, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
+func _on_promote_failed() -> void:
+	_waiting.erase("promote")
+	notice.emit(PROMOTE_TEXT.get(net.last_error, PROMOTE_FAIL_TEXT))
 	net.refresh()
 	changed.emit()
 
@@ -1199,7 +1293,7 @@ func save() -> void:
 		return
 	var hs := {}
 	for id in heroes:
-		hs[id] = {"copies": heroes[id], "level": level_of(id)}
+		hs[id] = {"copies": heroes[id], "level": level_of(id), "shards": shards_of(id), "promotion": promotion_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed}))
 	f.close()
@@ -1226,9 +1320,10 @@ func load_save(now: float) -> void:
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, SAVE_VERSION]:
 		return false
 	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
+	var v6: bool = int(data.version) >= 6  # v6: + shards, promotion. 그 전은 옛 별(중복)을 조각으로(copies − 1), 승급 0
 	var v1: bool = int(data.version) == 1  # v1: gold(정수) → × 10
 	if not _num(data.get("gold" if v1 else "gold_tenths")):
 		return false
@@ -1279,6 +1374,8 @@ func _apply(data) -> bool:
 	var ds = data.get("deploy")
 	var h := heroes
 	var hl := {}
+	var hsh := {}
+	var hpr := {}
 	var d := deploy
 	if hs != null or ds != null:
 		if not (hs is Dictionary and ds is Array):
@@ -1287,9 +1384,16 @@ func _apply(data) -> bool:
 		for id in hs:
 			var v = hs[id]
 			var level := 1
+			var shards := -1  # v5 이하: copies − 1
+			var promotion := 0
 			if v3:
 				if not (v is Dictionary and _num(v.get("copies")) and _num(v.get("level"))):
 					return false
+				if v6:
+					if not (_num(v.get("shards")) and _num(v.get("promotion"))):
+						return false
+					shards = maxi(0, int(v.shards))
+					promotion = clampi(int(v.promotion), 0, GameData.MAX_PROMOTION)
 				level = maxi(1, int(v.level))
 				v = v.copies
 			if not (id is String and _num(v)):
@@ -1297,6 +1401,8 @@ func _apply(data) -> bool:
 			if int(v) >= 1:
 				h[id] = int(v)
 				hl[id] = level
+				hsh[id] = shards if shards >= 0 else int(v) - 1
+				hpr[id] = promotion
 		d = []
 		for x in ds:
 			if not (x == null or x is String):
@@ -1309,6 +1415,8 @@ func _apply(data) -> bool:
 	build = bld
 	heroes = h
 	hero_levels = hl
+	hero_shards = hsh
+	hero_promotions = hpr
 	deploy = d
 	soldiers = troops[0]
 	soldier_deployed = trim_deploy(troops[1], soldiers)

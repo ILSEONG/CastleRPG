@@ -72,8 +72,8 @@ func apply_levels() -> void:
 
 
 # --- 영웅 보유·배치 공급자 (경계) ---
-# roster = Economy(보유 copies·배치: 오프라인 저장 또는 서버 player.heroes/deploy). main이 넣는다 — 이 스크립트는
-# run_tests(-s, 오토로드 없음)가 preload해서 오토로드 이름을 쓸 수 없다. null이면(로직 테스트) starter_heroes 기본 배치·copies 1.
+# roster = Economy(보유·승급·레벨·배치: 오프라인 저장 또는 서버 player.heroes/deploy). main이 넣는다 — 이 스크립트는
+# run_tests(-s, 오토로드 없음)가 preload해서 오토로드 이름을 쓸 수 없다. null이면(로직 테스트) starter_heroes 기본 배치·승급 0.
 var roster = null
 
 ## 배치 슬롯 i → 영웅 id 또는 null. 길이 = hero_count().
@@ -83,11 +83,11 @@ func deploy() -> Array:
 	return roster.deploy_slots(hero_count())
 
 
-## 영웅 id의 보유 수(별 계산용).
-func hero_copies(hero_id: String) -> int:
+## 영웅 id의 승급 단계(능력치 승급 배율, 개정 15). roster가 없으면 0.
+func hero_promotion(hero_id: String) -> int:
 	if roster == null:
-		return 1
-	return maxi(1, int(roster.heroes.get(hero_id, 1)))
+		return 0
+	return roster.promotion_of(hero_id)
 
 
 ## 영웅 id의 레벨(능력치 레벨 배율, 개정 11). roster가 없으면 1.

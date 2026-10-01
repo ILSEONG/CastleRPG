@@ -142,11 +142,6 @@ func _on_pressed() -> void:
 		tapped.emit(self)
 
 
-## 별 = min(copies − 1, hero_max_stars).
-static func stars_of(copies: int) -> int:
-	return clampi(copies - 1, 0, int(GameData.config_num("hero_max_stars")))
-
-
 func _draw() -> void:
 	var r := Rect2(Vector2.ZERO, size)
 	var h := GameData.hero(hero_id) if hero_id != "" else {}

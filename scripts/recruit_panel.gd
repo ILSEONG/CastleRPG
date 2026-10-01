@@ -121,7 +121,7 @@ func _show_results(results: Array) -> void:
 		card.custom_minimum_size = CARD_SIZE
 		card.hero_id = r.hero_id
 		card.badge = "NEW" if r.new else ""
-		card.stars = HeroCardScript.stars_of(int(r.copies))
+		card.stars = Economy.promotion_of(r.hero_id)
 		_grid.add_child(card)
 		cards.append(card)
 	_pick_view.visible = false

@@ -28,11 +28,12 @@ const GACHA_RATE_KEYS := ["gacha_rate_ssr", "gacha_rate_sr"]  # 0..1, 합 ≤ 1
 const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
-	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "hero_max_stars", "hero_star_bonus",
+	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "promote_mult",
 	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
-	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
+	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
 	"fever_kills", "fever_sec", "fever_spawn_mult"]
-const CONFIG_LIST_KEYS := ["starter_heroes"]
+const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
+const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항목 수 = 이 값. 서버 rules.MAX_PROMOTION
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
 const BUILDING_STR_COLS := ["id", "name"]
 const BUILDING_NUM_COLS := ["max_level", "wood", "stone", "food", "base_sec"]
@@ -56,7 +57,7 @@ const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_pro
 const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count"]  # 1 이상 정수(나머지는 0보다 크다)
 const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 단계 표 "레벨:값|…"(hero_slots·Balance.INTERIOR_TILES를 대신)
 const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
-const LEVELUP_INT_KEYS := ["hero_max_level_per_star", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만)
+const LEVELUP_INT_KEYS := ["hero_max_level_per_promotion", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만, 15: 승급당)
 const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
@@ -331,13 +332,17 @@ static func default_deploy(slots: int) -> Array:
 	return out
 
 
-## 별 = min(copies − 1, hero_max_stars). HP·공격력 배율 = 1 + hero_star_bonus × 별.
-static func star_mult(copies: int) -> float:
-	return 1.0 + config_num("hero_star_bonus") * stars(copies)
+# --- 영웅 승급(개정 15 §1). 서버 rules.promoteCost와 같은 식 ---
+
+## 승급 배율 = promote_mult^p(곱셈 p번). HP·공격의 기본·레벨업분 모두에 곱한다(승급 5면 1.5^5 ≈ 7.59).
+static func promote_mult(promotion: int) -> float:
+	return _grown(1.0, config_num("promote_mult"), clampi(promotion, 0, MAX_PROMOTION))
 
 
-static func stars(copies: int) -> int:
-	return clampi(copies - 1, 0, int(config_num("hero_max_stars")))
+## 승급 p → p+1에 드는 조각 = promote_shards의 p번째(5|25|50|100|200). 최대 승급이면 0.
+static func promote_cost(promotion: int) -> int:
+	var list := config_list("promote_shards")
+	return int(list[promotion]) if promotion >= 0 and promotion < mini(list.size(), MAX_PROMOTION) else 0
 
 
 # --- 영웅 레벨(개정 11 §2.1). 서버 rules.heroMaxLevel·levelupCost와 같은 식 ---
@@ -347,9 +352,9 @@ static func level_mult(level: int) -> float:
 	return 1.0 + config_num("hero_level_stat") * (level - 1)
 
 
-## 최대 레벨 = hero_max_level_base + hero_max_level_per_star × 별.
-static func max_level(copies: int) -> int:
-	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_star")) * stars(copies)
+## 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
+static func max_level(promotion: int) -> int:
+	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_promotion")) * promotion
 
 
 ## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.12^(L−1)). 식량 없음(개정 12).
@@ -361,16 +366,16 @@ static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	return {"gold": gold}
 
 
-## 최종 HP = 표 기본값 × 레벨 배율 × 별 배율, 공격 = … × (1 + 연구소 보너스)(개정 12, 개정 13: 막사 HP 보너스 없음). {hp, atk}
+## 최종 HP = 표 기본값 × 레벨 배율 × 승급 배율(개정 15), 공격 = … × (1 + 연구소 보너스)(개정 12, 개정 13: 막사 HP 보너스 없음). {hp, atk}
 ## buildings = 건물 id → 레벨(Economy.levels). 비우면 연구소 1(보너스 없음).
-static func hero_stats(def: Dictionary, level: int, copies: int, buildings := {}) -> Dictionary:
-	var m := level_mult(level) * star_mult(copies)
+static func hero_stats(def: Dictionary, level: int, promotion: int, buildings := {}) -> Dictionary:
+	var m := level_mult(level) * promote_mult(promotion)
 	return {"hp": float(def.hp) * m, "atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1))))}
 
 
 ## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(건물 보너스 포함).
-static func hero_power(def: Dictionary, level: int, copies: int, buildings := {}) -> int:
-	var s := hero_stats(def, level, copies, buildings)
+static func hero_power(def: Dictionary, level: int, promotion: int, buildings := {}) -> int:
+	var s := hero_stats(def, level, promotion, buildings)
 	return roundi(s.hp / 10.0 + s.atk * 2.0 / float(def.atk_interval))
 
 
@@ -715,7 +720,7 @@ static func _check_gacha(cfg: Dictionary) -> void:
 			_err("config", 0, k, "must be in 0..1: '%s'" % s)
 	if rates.size() == 2 and rates[0] + rates[1] > 1.0 + 1e-9:
 		_err("config", 0, "gacha_rate_sr", "gacha_rate_ssr + gacha_rate_sr must be at most 1: %s + %s" % [cfg.gacha_rate_ssr, cfg.gacha_rate_sr])
-	# 레벨업(개정 11, 서버 seed와 같은 규칙): 비용·별당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상
+	# 레벨업(개정 11, 서버 seed와 같은 규칙): 비용·승급당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상
 	for k in LEVELUP_INT_KEYS + ["hero_max_level_base"]:
 		var s := String(cfg.get(k, ""))
 		var low := 1.0 if k == "hero_max_level_base" else 0.0
@@ -724,6 +729,14 @@ static func _check_gacha(cfg: Dictionary) -> void:
 	var stat := String(cfg.get("hero_level_stat", ""))
 	if stat.is_valid_float() and not stat.to_float() >= 0.0:
 		_err("config", 0, "hero_level_stat", "must be 0 or more: '%s'" % stat)
+	# 승급(개정 15, 서버 seed와 같은 규칙): 조각은 1 이상 정수 MAX_PROMOTION개, 배율은 1 이상. 빈 목록은 CONFIG_LIST_KEYS 검사가 알렸다
+	var shards := String(cfg.get("promote_shards", ""))
+	var parts := Array(shards.split("|")).map(func(x): return x.strip_edges())
+	if not _split_list(shards).is_empty() and not (parts.size() == MAX_PROMOTION and parts.all(func(x): return x.is_valid_int() and not x.begins_with("+") and x.to_int() >= 1)):
+		_err("config", 0, "promote_shards", "must be %d integers of at least 1 separated by '|': '%s'" % [MAX_PROMOTION, shards])
+	var mult := String(cfg.get("promote_mult", ""))
+	if mult.is_valid_float() and not mult.to_float() >= 1.0:
+		_err("config", 0, "promote_mult", "must be 1 or more: '%s'" % mult)
 
 
 ## key,value 행 → {키: 문자열}. 키가 겹치면 오류.

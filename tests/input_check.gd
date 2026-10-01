@@ -443,7 +443,9 @@ func _recruit_and_heroes(rig) -> void:
 
 	# (u) [영웅] → 영웅 목록 시트(칩 줄 아래 ~ 탭 바 위). 연 직후 누름은 버린다. 슬롯 4칸, 카드 = 보유, 기본 정렬 전투력 ↓,
 	#     카드에 Lv·별·전투력·"배치"·▲(레벨업 가능할 때만). [정렬]: 전투력 → 등급 → 레벨 → 전투력
-	Economy.heroes["arteon"] = 2  # 별 1
+	Economy.heroes["arteon"] = 3  # 승급 1(개정 15), 조각 2
+	Economy.hero_shards["arteon"] = 2
+	Economy.hero_promotions["arteon"] = 1
 	Economy.gold_tenths = 0
 	Economy.res["food"] = 0
 	Economy.roster_changed.emit()
@@ -471,7 +473,7 @@ func _recruit_and_heroes(rig) -> void:
 	_check(heroes_win.slot_cards.size() == 4 and keys.size() == Economy.heroes.size() and powers == desc and powers[-1] > 0 and heroes_win.sort_button.text == "정렬: 전투력",
 		"(u) 4 slots and every owned hero, sorted by power (highest first)", "keys=%s powers=%s" % [keys, powers])
 	var ac = heroes_win.hero_cards.arteon
-	_check(ac.level == 1 and ac.stars == 1 and ac.power == GameData.hero_power(GameData.hero("arteon"), 1, 2) and not ac.deployed and heroes_win.hero_cards.hans.deployed
+	_check(ac.level == 1 and ac.stars == 1 and ac.power == GameData.hero_power(GameData.hero("arteon"), 1, 1) and not ac.deployed and heroes_win.hero_cards.hans.deployed
 		and not ac.can_level and heroes_win.slot_cards.map(func(c): return c.hero_id) == ["hans", "ella", "dorik", "nina"] and heroes_win.apply_button.disabled,
 		"(u) cards show Lv, stars, power and the 배치 badge; no ▲ without gold; [적용] off", "power=%d" % ac.power)
 	Economy.gold_tenths = 100000
@@ -500,7 +502,7 @@ func _recruit_and_heroes(rig) -> void:
 	_check(heroes_win.work == ["ella", "arteon", "dorik", "nina"], "(v) placing a hero that sits in another slot swaps the two", "work=%s" % [heroes_win.work])
 	_check(Economy.deploy == ["hans", "ella", "dorik", "nina"], "(v) nothing is applied before [적용]", "deploy=%s" % [Economy.deploy])
 
-	# (w) [적용] → 배치 저장, 방치 모드라 영웅이 곧바로 바뀐다(아르테온 별 1: HP × 1.1)
+	# (w) [적용] → 배치 저장, 방치 모드라 영웅이 곧바로 바뀐다(아르테온 승급 1: HP × 1.5)
 	var pre := get_tree().get_nodes_in_group("heroes")
 	pre.sort_custom(func(a, b): return a.index < b.index)
 	await _tap(heroes_win.apply_button.get_global_rect().get_center())
@@ -509,8 +511,8 @@ func _recruit_and_heroes(rig) -> void:
 	live.sort_custom(func(a, b): return a.index < b.index)
 	var ids := live.map(func(h): return h.def.id)
 	_check(Economy.deploy == ["ella", "arteon", "dorik", "nina"] and heroes_win.apply_button.disabled and ids == ["ella", "arteon", "dorik", "nina"]
-		and is_equal_approx(live[1].hp_max, 1040.0 * 1.1) and live[1].side == 1 and live[1].post == Formation.POST_GATE and hud._toast.visible,
-		"(w) [적용] saves the deploy and, in idle mode, swaps the heroes at once (arteon slot 2 at the east gate, star bonus)",
+		and is_equal_approx(live[1].hp_max, 1040.0 * 1.5) and live[1].side == 1 and live[1].post == Formation.POST_GATE and hud._toast.visible,
+		"(w) [적용] saves the deploy and, in idle mode, swaps the heroes at once (arteon slot 2 at the east gate, promotion x1.5)",
 		"deploy=%s ids=%s" % [Economy.deploy, ids])
 	_check(not is_instance_valid(pre[0]) and not is_instance_valid(pre[1]) and live[2] == pre[2] and live[3] == pre[3],
 		"(w) only the changed slots are rebuilt: slots 1-2 are new heroes, slots 3-4 keep theirs", "")
@@ -526,10 +528,10 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _frames(2)
 	_check(heroes_win.is_showing_detail() and heroes_win.detail_id == "arteon" and heroes_win.is_guarded() and heroes_win.work == ["ella", "arteon", "dorik", "nina"],
 		"(x) a card tap (no slot picked) opens its detail and re-arms the open guard", "detail=%s" % heroes_win.detail_id)
-	_check(heroes_win.stat_values[0].text == "1,144" and heroes_win.stat_nexts[0].text == "→ 1,213 (+69)" and heroes_win.stat_values[1].text == "46"
-		and heroes_win.stat_nexts[1].text == "→ 49 (+3)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
-		and heroes_win.stat_values[4].text == str(GameData.hero_power(arteon, 1, 2)) and heroes_win.level_label.text == "Lv 1 / 30",
-		"(x) stats with the star bonus and the next level in green (HP 1,144 -> 1,213 (+69)); Lv 1 / 30 at one star",
+	_check(heroes_win.stat_values[0].text == "1,560" and heroes_win.stat_nexts[0].text == "→ 1,654 (+94)" and heroes_win.stat_values[1].text == "63"
+		and heroes_win.stat_nexts[1].text == "→ 67 (+4)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
+		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 30",
+		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,560 -> 1,654 (+94)); Lv 1 / 30 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	_check(heroes_win.skills_label.text.contains("6초마다 반경 6m") and heroes_win.skills_label.text.contains("받는 피해를 25% 줄입니다") and heroes_win.desc_label.text == arteon.desc
 		and heroes_win.title_label.text == "빛의 성기사 아르테온" and heroes_win.grade_label.text.begins_with("SSR"),
@@ -552,13 +554,13 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	live.sort_custom(func(a, b): return a.index < b.index)
 	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 30"
-		and heroes_win.stat_values[0].text == "1,213" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
+		and heroes_win.stat_values[0].text == "1,654" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
 		"(x) [레벨업] takes 120 gold (1200 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
-	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 1040.0 * 1.06 * 1.1)
-		and is_equal_approx(live[1].atk, 42.0 * 1.06 * 1.1) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
-		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.06) x 1.1", "hp=%.1f" % live[1].hp_max)
+	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 1040.0 * 1.06 * 1.5)
+		and is_equal_approx(live[1].atk, 42.0 * 1.06 * 1.5) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
+		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.06) x 1.5", "hp=%.1f" % live[1].hp_max)
 	var c3 := GameData.levelup_cost("SSR", 2, 3)
 	Economy.gold_tenths = int(c3.gold) * 10
 	Economy.res["food"] = 0
@@ -596,7 +598,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 
 	# (y) 늦게 온 모집 결과(온라인): 다른 창이 열려 있으면 그 위로 모집 창을 열지 않고 알림, 다음에 주점 창을 열 때 보여 준다.
 	#     아무 창도 없으면 모집 창을 열어 보여 준다.
-	var late := [{"hero_id": "jack", "grade": "R", "new": false, "copies": 2}]
+	var late := [{"hero_id": "jack", "grade": "R", "new": false, "copies": 2, "shards": 1}]
 	heroes_win.open()
 	recruit._on_gacha_done(late)
 	_check(not recruit.is_open() and heroes_win.is_open() and hud._toast.visible and hud._toast.text == recruit.LATE_TEXT,
