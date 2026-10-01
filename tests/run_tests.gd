@@ -404,6 +404,7 @@ func test_gamestate_stop_after_stage() -> void:
 
 func test_gamestate_gate_broken_once() -> void:
 	var gs = GameStateScript.new()
+	gs.mode = gs.Mode.STAGE  # 방치 모드는 무적(개정 12 §3) — 피해는 스테이지 모드에서
 	var broken: Array = []
 	gs.gate_broken.connect(func(s): broken.append(s))
 	gs.damage_gate(2, gs.gate_hp_max * 0.5)
@@ -426,9 +427,8 @@ func test_gamestate_idle_castle_break_refills() -> void:
 	gs.damage_gate(1, 9999.0)
 	gs.damage_castle(9999.0)
 	check(gs.mode == gs.Mode.IDLE, "idle mode kept")
-	check(gs.castle_hp == gs.castle_hp_max, "castle healed immediately in idle")
-	check(not gs.is_gate_broken(1), "gates restored in idle refill")
-	check(refills[0] == 1, "refilled emitted once")
+	check(gs.castle_hp == gs.castle_hp_max and gs.gate_hp[1] == gs.gate_hp_max, "idle mode ignores gate and castle damage (invincible)")
+	check(refills[0] == 0, "no refill needed in idle")
 	gs.free()
 
 
@@ -436,10 +436,12 @@ func test_gamestate_start_stage_refills() -> void:
 	var gs = GameStateScript.new()
 	var refills := [0]
 	gs.refilled.connect(func(): refills[0] += 1)
+	gs.mode = gs.Mode.STAGE  # 피해는 스테이지 모드에서만 — 넣은 뒤 방치로 돌려 start_stage를 부른다
 	gs.damage_gate(3, gs.gate_hp_max * 0.5)
 	gs.damage_castle(100.0)
-	check(not gs.is_gate_broken(3) and gs.gate_hp[3] < gs.gate_hp_max, "gate damaged, not broken, in idle")
-	check(gs.castle_hp < gs.castle_hp_max and gs.mode == gs.Mode.IDLE, "castle damaged in idle")
+	gs.mode = gs.Mode.IDLE
+	check(not gs.is_gate_broken(3) and gs.gate_hp[3] < gs.gate_hp_max, "gate damaged, not broken")
+	check(gs.castle_hp < gs.castle_hp_max, "castle damaged")
 	gs.start_stage()
 	check(gs.gate_hp[3] == gs.gate_hp_max, "start_stage refills the gate")
 	check(gs.castle_hp == gs.castle_hp_max, "start_stage refills the castle")
@@ -1287,6 +1289,7 @@ func test_deploy_and_stars() -> void:
 ## 성문 회복: 최대치 상한, 부서진 성문 제외, 오를 때만 시그널.
 func test_gate_repair() -> void:
 	var gs = GameStateScript.new()
+	gs.mode = gs.Mode.STAGE  # 방치 무적이면 피해가 안 들어간다
 	var events := []
 	gs.gate_hp_changed.connect(func(s, hp, _mx): events.append([s, hp]))
 	gs.damage_gate(1, 100.0)
