@@ -3,9 +3,7 @@ extends CanvasLayer
 
 const INK := Color(0.16, 0.18, 0.24)
 const PANEL_BG := Color(0.984, 0.969, 0.933, 0.78)  # UiKit.CREAM_PANEL
-const BAR_BG := Color(0, 0, 0, 0.12)
 const ACCENT := Color(0.98, 0.70, 0.20)
-const RADIUS := 14
 const TOAST_SEC := 1.6
 const IconsScript := preload("res://scripts/icons.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -128,14 +126,6 @@ func _bar(color: Color) -> ProgressBar:
 	return b
 
 
-static func round_box(color: Color, radius: int, margin: int) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = color
-	s.set_corner_radius_all(radius)
-	s.set_content_margin_all(margin)
-	return s
-
-
 func _on_castle_hp(hp: float, hp_max: float) -> void:
 	_castle_bar.max_value = hp_max
 	_castle_bar.value = hp
@@ -219,7 +209,7 @@ func _build_chips(root: Control) -> void:
 	_refresh_chips()
 
 
-## 온라인 알림: 아래 버튼 바로 위 띠(상단 자원 칩을 가리지 않는다) — 끊기면 "서버 연결 중…", 웹 저장소가 영구가 아니면
+## 온라인 알림: 아래 버튼 바로 위, [영웅] 버튼 오른쪽 띠(상단 자원 칩·[영웅] 버튼을 가리지 않는다) — 끊기면 "서버 연결 중…", 웹 저장소가 영구가 아니면
 ## 경고 한 줄(게임은 계속). 끊긴 동안 수집·판매 탭은 띠 위 짧은 알림. 거래 창(층 2) 위 층 3, 입력은 통과.
 func _build_link_ui() -> void:
 	var top := CanvasLayer.new()
@@ -227,7 +217,7 @@ func _build_link_ui() -> void:
 	add_child(top)
 	var band := PanelContainer.new()
 	band.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	band.offset_left = 32
+	band.offset_left = 32 + HERO_BUTTON + 12  # [영웅] 6각 버튼(32..136) 오른쪽
 	band.offset_right = -32
 	band.offset_top = -132  # 아래 버튼(-120..-32) 위 12px에서
 	band.offset_bottom = -132

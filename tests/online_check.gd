@@ -503,14 +503,16 @@ func _check_classify() -> void:
 	_check(Net.backoff(1) == 2.0 and Net.backoff(3) == 8.0 and Net.backoff(10) == Net.RETRY_MAX_SEC, "(a) backoff 2, 4, 8 ... capped at 15 s", "")
 
 
-## 띠가 상단 자원 칩·아래 버튼·알림 자리를 가리지 않는다(층만 다른 CanvasLayer라 화면 좌표가 같다).
+## 띠가 상단 자원 칩·아래 버튼·[영웅] 버튼·알림 자리를 가리지 않는다(층만 다른 CanvasLayer라 화면 좌표가 같다).
 func _check_band_layout(tag: String) -> void:
 	var band: Rect2 = _hud._banner.get_global_rect()
 	var chips: Rect2 = _hud._chip_row.get_global_rect()
 	var button: Rect2 = _hud._button.get_global_rect()
 	var toast: Rect2 = _hud._toast.get_global_rect()
-	_check(band.size.y > 0.0 and not band.intersects(chips) and not band.intersects(button) and not band.intersects(toast),
-		"%s the band covers neither the resource chips, the bottom button nor the toast spot" % tag, "band=%s chips=%s button=%s toast=%s" % [band, chips, button, toast])
+	var hero: Rect2 = _hud.hero_button.get_global_rect()
+	_check(band.size.y > 0.0 and not band.intersects(chips) and not band.intersects(button) and not band.intersects(toast) and not band.intersects(hero),
+		"%s the band covers neither the resource chips, the bottom button, the [영웅] button nor the toast spot" % tag,
+		"band=%s chips=%s button=%s hero=%s toast=%s" % [band, chips, button, hero, toast])
 
 
 ## 대기 → 스테이지 → 전멸(클리어) → 결과 뒤 대기(중지 예약). 스포너는 멈춰 있다.
