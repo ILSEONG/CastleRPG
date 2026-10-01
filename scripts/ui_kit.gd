@@ -7,8 +7,11 @@ extends RefCounted
 ##   func _draw(): UiKit.draw_gem(self, Vector2(40, 40), 14, UiKit.GRADE_COLORS.SSR)   # 등급 보석
 ##   func _draw(): UiKit.draw_facet_card(self, Rect2(0, 0, 120, 160), UiKit.GRADE_COLORS.SR, UiKit.CREAM)
 ## 같은 인자의 StyleBox는 캐시로 재사용한다(StyleBox는 크기별 지오메트리를 스스로 캐시).
+## 보석·카드는 *_geometry가 삼각형 배열(점 3개씩 + 점마다 색)을 돌려준다 — 매 프레임 다시 그리는 쪽은 이것을 캐시해
+## canvas_item_add_triangle_array 한 번으로 그린다.
 
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const Art := preload("res://scripts/art.gd")
 
 const CREAM := Color("FBF7EE")
 const CREAM_PANEL := Color(0.984, 0.969, 0.933, 0.78)  # 반투명 크림(HUD 패널)
@@ -17,8 +20,11 @@ const AMBER := Color("F9B233")
 const STEEL := Color("8C9AB0")
 const INK := Color(0.16, 0.18, 0.24)
 const OUTLINE := Color(0.16, 0.18, 0.24, 0.9)
-const GRADE_COLORS := {"R": Color("8FA3B8"), "SR": Color("9B6CD6"), "SSR": Color("F2B233")}  # 스펙 §3.1(Art.GRADE_COLORS와 같다)
+const GRADE_COLORS := Art.GRADE_COLORS  # 스펙 §3.1. 값은 Art 한 곳에만 둔다
 const PRESS_SHIFT := 2.0  # 눌린 버튼 내용이 아래로 내려가는 px
+const BUTTON_PAD_V := 2.0  # 버튼 내용 위·아래 여백. 눌림은 위 + PRESS_SHIFT, 아래 − PRESS_SHIFT(음수는 "기본값"이라 쓰지 않는다)
+const CARD_OUTLINE_W := 2.0
+const CARD_GEM_R := 12.0  # 카드 위쪽 가운데 등급 보석
 
 static var _cache := {}
 
@@ -38,6 +44,7 @@ static func panel(color: Color, chamfer := 10.0, margin := 12, facet := 0.06) ->
 
 
 ## 버튼 상태 4종 {normal, hover, pressed, disabled}. pressed는 어둡게 + 내용 2px 아래, disabled는 채도를 뺀다.
+## 내용 위·아래 여백 합은 네 상태가 같다(버튼 크기가 상태마다 같고, 가운데 맞춤 글자가 눌림에서 PRESS_SHIFT만큼 내려간다).
 static func button_styles(color: Color, chamfer := 12.0) -> Dictionary:
 	var key := ["b", color, chamfer]
 	if not _cache.has(key):
@@ -52,9 +59,9 @@ static func button_styles(color: Color, chamfer := 12.0) -> Dictionary:
 			b.seed = 7  # 같은 버튼의 상태끼리 면 모양이 같다
 			if k == "disabled":
 				b.border_color = Color(OUTLINE, 0.5)
-			if k == "pressed":
-				b.content_margin_top = PRESS_SHIFT
-				b.content_margin_bottom = -PRESS_SHIFT
+			var down := PRESS_SHIFT if k == "pressed" else 0.0
+			b.content_margin_top = BUTTON_PAD_V + down
+			b.content_margin_bottom = BUTTON_PAD_V - down
 			out[k] = b
 		_cache[key] = out
 	return _cache[key]
@@ -101,10 +108,23 @@ static func apply_bar(pb: ProgressBar, fill_color: Color) -> void:
 
 ## 등급 보석 배지: center 중심 반지름 r의 n각 보석(부채꼴 면, 왼위가 밝다) + 외곽선. ci는 _draw 중인 CanvasItem.
 static func draw_gem(ci: CanvasItem, center: Vector2, r: float, color: Color, sides := 6) -> void:
+	var g := gem_geometry(center, r, color, sides)
+	RenderingServer.canvas_item_add_triangle_array(ci.get_canvas_item(), PackedInt32Array(), g[0], g[1])
+	ci.draw_polyline(g[2], OUTLINE, gem_outline_width(r), true)
+
+
+static func gem_outline_width(r: float) -> float:
+	return maxf(1.0, r / 7.0)
+
+
+## 보석 지오메트리 [삼각형 점(3개씩), 점마다 색, 닫힌 외곽선].
+static func gem_geometry(center: Vector2, r: float, color: Color, sides := 6) -> Array:
 	var ring := PackedVector2Array()
 	for i in sides:
 		ring.append(center + Vector2.from_angle(-PI / 2.0 + TAU * i / sides) * r)
 	var tip := center + Vector2(-r * 0.12, -r * 0.12)  # 살짝 비튼 중심
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
 	for i in sides:
 		var a: Vector2 = ring[i]
 		var b: Vector2 = ring[(i + 1) % sides]
@@ -112,20 +132,41 @@ static func draw_gem(ci: CanvasItem, center: Vector2, r: float, color: Color, si
 		var light := (-mid.x - mid.y) / (r * 1.4)  # 왼위 +, 오른아래 -
 		var d := 0.22 * light + 0.06 * (LowpolyBox.hash01(sides, i) - 0.5)
 		var col := color.lightened(d) if d >= 0.0 else color.darkened(-d)
-		ci.draw_colored_polygon(PackedVector2Array([tip, a, b]), col)
+		for p in [tip, a, b]:
+			pts.append(p)
+			cols.append(col)
 	var line := ring.duplicate()
 	line.append(ring[0])
-	ci.draw_polyline(line, OUTLINE, maxf(1.0, r / 7.0), true)
+	return [pts, cols, line]
 
 
 ## 영웅 카드: 등급 색 테두리(두꺼움) + inner_color 면 분할 안쪽 + 위쪽 가운데 등급 보석(grade_color).
 ## 카드 안쪽 내용(이름·별)은 호출한 쪽이 rect 안에 그린다.
 static func draw_facet_card(ci: CanvasItem, rect: Rect2, grade_color: Color, inner_color: Color) -> void:
+	var g := facet_card_geometry(rect, grade_color, inner_color)
+	RenderingServer.canvas_item_add_triangle_array(ci.get_canvas_item(), PackedInt32Array(), g[0], g[1])
+	ci.draw_polyline(g[2], OUTLINE, CARD_OUTLINE_W, true)
+	draw_gem(ci, card_gem_center(rect), CARD_GEM_R, grade_color, 6)
+
+
+static func card_gem_center(rect: Rect2) -> Vector2:
+	return Vector2(rect.get_center().x, rect.position.y + 4.0)
+
+
+## 카드 바탕 지오메트리 [삼각형 점(3개씩), 점마다 색, 닫힌 외곽선]: 등급 색 8각(부채꼴) 위에 inner_color 면 분할. 보석은 따로.
+static func facet_card_geometry(rect: Rect2, grade_color: Color, inner_color: Color) -> Array:
 	var outer := LowpolyBox.octagon(rect, 10.0)
-	ci.draw_colored_polygon(outer, grade_color.darkened(0.1))
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var edge := grade_color.darkened(0.1)
+	for i in range(1, 7):  # 8각형 부채꼴 6삼각형
+		for p in [outer[0], outer[i], outer[i + 1]]:
+			pts.append(p)
+			cols.append(edge)
 	for f in LowpolyBox.faces(rect.grow(-5.0), 7.0, inner_color, 0.05, hash(grade_color) & 0xffff):
-		ci.draw_colored_polygon(f[0], f[1])
+		for p in f[0]:
+			pts.append(p)
+			cols.append(f[1])
 	var line := outer.duplicate()
 	line.append(outer[0])
-	ci.draw_polyline(line, OUTLINE, 2.0, true)
-	draw_gem(ci, Vector2(rect.get_center().x, rect.position.y + 4.0), 12.0, grade_color, 6)
+	return [pts, cols, line]

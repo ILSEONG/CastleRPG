@@ -14,6 +14,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
+const HeroCardScript := preload("res://scripts/hero_card.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -64,6 +65,7 @@ func _init() -> void:
 	test_icon_shapes()
 	test_lowpoly_box()
 	test_hp_bars_batch()
+	test_hero_card_geometry()
 	test_gold_tenths()
 	test_heroes_table()
 	test_skill_formulas()
@@ -1108,10 +1110,17 @@ func test_lowpoly_box() -> void:
 	var styles: Dictionary = UiKit.button_styles(UiKit.AMBER)
 	for k in ["normal", "hover", "pressed", "disabled"]:
 		check(styles.has(k) and styles[k] is StyleBox, "button style %s exists" % k)
-	check(styles.pressed.content_margin_top == UiKit.PRESS_SHIFT, "pressed style pushes content down")
+	# 글자는 내용 칸 가운데: 위치 = (위 − 아래) / 2. 눌림이 PRESS_SHIFT만큼 아래, 위·아래 합(버튼 크기)은 네 상태가 같다. 음수 여백(= 기본값) 없음
+	var shift := func(sb: StyleBox): return (sb.get_margin(SIDE_TOP) - sb.get_margin(SIDE_BOTTOM)) / 2.0
+	var n: StyleBox = styles.normal
+	check(is_equal_approx(shift.call(styles.pressed) - shift.call(n), UiKit.PRESS_SHIFT), "pressed style moves the content %.0f px down" % UiKit.PRESS_SHIFT)
+	for k in styles:
+		var sb: StyleBox = styles[k]
+		check(sb.content_margin_top >= 0.0 and sb.content_margin_bottom >= 0.0 and is_equal_approx(sb.get_margin(SIDE_TOP) + sb.get_margin(SIDE_BOTTOM), n.get_margin(SIDE_TOP) + n.get_margin(SIDE_BOTTOM)),
+			"button style %s: no negative margin, same vertical margin sum as normal" % k)
 	check(UiKit.button_styles(UiKit.AMBER) == styles and UiKit.panel(UiKit.CREAM) == UiKit.panel(UiKit.CREAM), "kit styleboxes are reused")
 	check(UiKit.bar(UiKit.AMBER).has("fill") and UiKit.bar(UiKit.AMBER).has("background"), "bar has fill and background")
-	check(UiKit.GRADE_COLORS.has("R") and UiKit.GRADE_COLORS.has("SR") and UiKit.GRADE_COLORS.has("SSR"), "grade colors R/SR/SSR")
+	check(UiKit.GRADE_COLORS.has("R") and UiKit.GRADE_COLORS.has("SR") and UiKit.GRADE_COLORS.has("SSR") and UiKit.GRADE_COLORS == Art.GRADE_COLORS, "grade colors R/SR/SSR from one source (Art)")
 
 
 ## HP 바: 프레임의 8각형을 한 배열에 모은다(LowpolyBox.octagon과 같은 점), 인덱스는 칸마다 부채꼴 6삼각형.
@@ -1132,6 +1141,34 @@ func test_hp_bars_batch() -> void:
 		hb.add_octagon(Vector2(i * 40, 0), Vector2(34, 5), 1.5, Color.WHITE)
 	check(hb._flush() and hb._pts.size() == 24 and hb._idx.size() == 54 and hb._idx[36] == 16 and hb._idx[53] == 23 and hb._idx[0] == 0, "three bars after a frame with none: sizes and indices refilled")
 	hb.free()
+
+
+## 영웅 카드: 지오메트리는 (크기, 영웅, 별)이 바뀔 때만 만든다 — SSR이 매 프레임 다시 그려도 반짝임 색만 바뀐다.
+func test_hero_card_geometry() -> void:
+	var card = HeroCardScript.new()
+	card.size = Vector2(118, 160)
+	card.hero_id = "arteon"
+	card.stars = 2
+	var h := GameData.hero("arteon")
+	card._ensure_geo(h)
+	var body: PackedVector2Array = card._body
+	card._t = 0.3
+	card._tick_shine(UiKit.GRADE_COLORS.SSR)
+	var c1: Color = card._shine_cols[0]
+	card._ensure_geo(h)
+	card._t = 0.9
+	card._tick_shine(UiKit.GRADE_COLORS.SSR)
+	check(card.geo_builds == 1 and card._body == body and card._shine_cols[0] != c1, "same card size/hero/stars: geometry built once, only the shimmer colors change")
+	check(card._body.size() == (6 + LowpolyBoxScript.FACES) * 3 and card._body_cols.size() == card._body.size() and card._shine.size() == LowpolyBoxScript.FACES * 3,
+		"card body = octagon fan + %d faces, SSR shimmer = %d faces" % [LowpolyBoxScript.FACES, LowpolyBoxScript.FACES])
+	check(card._top.size() == (6 + 6 + 2 * 10) * 3 and card._top_cols.size() == card._top.size() and card._lines.size() == 4, "two gems and two stars on top: %d points" % card._top.size())
+	card.stars = 3
+	card._ensure_geo(h)
+	check(card.geo_builds == 2 and card._top.size() == (6 + 6 + 3 * 10) * 3, "a star change rebuilds the geometry")
+	card.hero_id = "hans"
+	card._ensure_geo(GameData.hero("hans"))
+	check(card.geo_builds == 3 and card._shine.is_empty(), "an R card has no shimmer")
+	card.free()
 
 
 ## 개정 10: 골드 tenths. 표시는 floor, 저장 v1(정수 골드) → v2(tenths) 이전, 오프라인 처치는 tenths로 더한다.
