@@ -83,6 +83,7 @@ func _init() -> void:
 	test_hit_frac()
 	test_buildings()
 	test_soldiers()
+	test_rotate_hold_state()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1811,6 +1812,19 @@ func _corrupt_buildings(q: Dictionary, what: String) -> void:
 		"tavern rate above 1": q.config.tavern_sr_per_level = "1.5"
 		"population not an integer": q.config.pop_base = "6.5"
 		"building config missing": q.config.erase("castle_hp_per_level")
+
+
+## 개정 14 §1: 누른 시간·움직임 → 탭(미정) / 회전 대기 / 팬. 회전은 피벗을 안 옮기고 제한이 없다.
+func test_rotate_hold_state() -> void:
+	var Rig := preload("res://scripts/camera_rig.gd")
+	check(Rig.hold_state(0.1, 0.0) == "tap" and Rig.hold_state(Rig.HOLD_SEC - 0.01, 3.0) == "tap", "hold_state: short press is still undecided")
+	check(Rig.hold_state(Rig.HOLD_SEC, 0.0) == "hold" and Rig.hold_state(2.0, Rig.DRAG_THRESHOLD_PX) == "hold", "hold_state: 0.35 s without moving is rotate-ready")
+	check(Rig.hold_state(0.1, Rig.DRAG_THRESHOLD_PX + 1.0) == "pan" and Rig.hold_state(2.0, 50.0) == "pan", "hold_state: moving past the threshold is a pan")
+	var rig := Rig.new()
+	rig.rotate_yaw(100.0)
+	rig.rotate_yaw(100.0)
+	check(is_equal_approx(rig.rotation_degrees.y, -160.0) and rig.position == Vector3.ZERO, "rotate_yaw wraps past 180 (no limit), pivot kept: %s" % rig.rotation_degrees.y)
+	rig.free()
 
 
 ## 개정 12-2 §3 공격 동기화: 쓰는 공격 애니메이션(영웅·몬스터·상인)마다 타격 비율이 있고 0 < frac < 1, 그 애니메이션이 GLB에 있다.

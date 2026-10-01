@@ -13,9 +13,16 @@ const DISTANCE := 100.0
 const DRAG_THRESHOLD_PX := 12.0
 const ZOOM_STEP := 1.1
 const PAN_LIMIT_MARGIN := 20.0
+const HOLD_SEC := 0.35  # 이만큼 덜 움직이고 누르면 회전 대기(개정 14 §1)
+const ROTATE_DEG_PER_PX := 0.4
+const INDICATOR_COLOR := Color("ffd23f")
+const INDICATOR_SEC := 0.3
 
 var camera: Camera3D
 
+var _press_ms := 0
+var _rotating := false  # 꾹 누름 회전 대기·회전 중
+var _indicator: Control  # 회전 표시(원 위 화살 둘)
 var _press_pos: Vector2 = Vector2.INF
 var _dragging := false
 var _touches := {}  # 터치 index -> 화면 위치 (핀치용)
@@ -31,6 +38,48 @@ func _ready() -> void:
 	camera.rotation_degrees = Vector3(PITCH_DEG, YAW_DEG, 0)
 	add_child(camera)
 	_fit_depth()
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	_indicator = Control.new()
+	_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_indicator.visible = false
+	_indicator.draw.connect(_draw_indicator)
+	layer.add_child(_indicator)
+
+
+## 누른 시간·움직인 거리 → "tap"(아직 미정) / "hold"(회전 대기) / "pan"(이미 드래그).
+static func hold_state(held_sec: float, moved_px: float) -> String:
+	if moved_px > DRAG_THRESHOLD_PX:
+		return "pan"
+	return "hold" if held_sec >= HOLD_SEC else "tap"
+
+
+## 화면상 카메라 요(도). 기본 YAW_DEG, 회전하면 변한다.
+func yaw_deg() -> float:
+	return rad_to_deg(camera.global_rotation.y)
+
+
+func _process(_delta: float) -> void:
+	if _press_pos == Vector2.INF or _dragging or _rotating or _touches.size() >= 2:
+		return
+	if hold_state((Time.get_ticks_msec() - _press_ms) / 1000.0, 0.0) == "hold":
+		_rotating = true
+		_indicator.position = _press_pos
+		_indicator.scale = Vector2.ONE * 0.3
+		_indicator.visible = true
+		_indicator.queue_redraw()
+		create_tween().tween_property(_indicator, "scale", Vector2.ONE, INDICATOR_SEC)
+
+
+func _draw_indicator() -> void:
+	var ring := PackedVector2Array()
+	for i in 8:
+		ring.append(Vector2.from_angle(TAU * i / 8.0) * 34.0)
+	ring.append(ring[0])
+	_indicator.draw_polyline(ring, INDICATOR_COLOR, 3.0)
+	for s in [-1.0, 1.0]:  # 좌우 화살
+		var x: float = s * 52.0
+		_indicator.draw_colored_polygon(PackedVector2Array([Vector2(x + s * 14.0, 0), Vector2(x - s * 6.0, -12), Vector2(x - s * 6.0, 12)]), INDICATOR_COLOR)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -54,10 +103,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			zoom_by(ZOOM_STEP)
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_press_pos = mb.position if mb.pressed else Vector2.INF
+			_press_ms = Time.get_ticks_msec()
 			_dragging = false
+			_stop_rotate()
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if _press_pos == Vector2.INF or _touches.size() >= 2:
+			return
+		if _rotating:
+			rotate_yaw(-mm.relative.x * ROTATE_DEG_PER_PX)  # 손가락 방향으로 바닥이 돈다
 			return
 		if not _dragging and mm.position.distance_to(_press_pos) > DRAG_THRESHOLD_PX:
 			_dragging = true
@@ -71,6 +125,17 @@ func _notification(what: int) -> void:
 		_touches.clear()
 		_press_pos = Vector2.INF
 		_dragging = false
+		_stop_rotate()
+
+
+func _stop_rotate() -> void:
+	_rotating = false
+	_indicator.visible = false
+
+
+## 화면 중심 지면 점(리그 위치) 둘레로 요만 돌린다. 피치·줌·위치는 그대로, 제한 없음.
+func rotate_yaw(deg: float) -> void:
+	rotation_degrees.y = wrapf(rotation_degrees.y + deg, -180.0, 180.0)
 
 
 ## 화면 가운데가 바닥 지점 target(높이 무시)을 보도록 sec초 동안 부드럽게 옮긴다(개정 12-2 §2). 줌은 그대로, 팬 한계 안.
