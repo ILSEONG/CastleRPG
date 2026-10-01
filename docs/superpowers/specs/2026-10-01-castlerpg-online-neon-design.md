@@ -45,7 +45,7 @@ Godot 앱 (Android/iOS/웹)  ──HTTPS JSON──▶  API 서버 (Node 24 + Ho
 - `data/heroes.csv`: `id,name,hp,atk,range,atk_interval,speed,aggro`
 - `data/resources.csv`: `id,name,building,per_min,price`
 - `data/config.csv`: `key,value`. 값은 숫자이거나 `|`로 구분한 목록이다(`hero_slots` = `4|8|12`, `hero_roster` = `warrior|archer`).
-  - 키: `castle_hp`, `gate_hp_per_level`, `hero_slots`, `hero_roster`, `max_live_monsters`, `countdown_sec`, `result_sec`, `wave_gap_sec`, `spawn_spacing_sec`, `accum_cap_min`, `badge_min`, `merchant_jackpot_p`, `merchant_jackpot_rate`, `merchant_rate_min`, `merchant_rate_max`, `merchant_rate_step`, `merchant_low_high_ratio`, `kill_rate_cap`(서버 전용, 초당 처치 상한)
+  - 키: `castle_hp`, `gate_hp_per_level`, `hero_slots`, `hero_roster`, `max_live_monsters`, `countdown_sec`, `result_sec`, `wave_gap_sec`, `spawn_spacing_sec`, `accum_cap_min`, `badge_min`, `merchant_jackpot_p`, `merchant_jackpot_rate`, `merchant_rate_min`, `merchant_rate_max`, `merchant_rate_step`, `merchant_low_high_ratio`, `kill_rate_cap`(서버 전용, 초당 처치 상한), `kill_burst_sec`(서버 전용, 처치 버킷 길이 초, 기본 60 — 리뷰 수정에서 추가)
 
 ## 3. DB 스키마 (`server/migrations/*.sql`, 순서대로 적용, `schema_migrations`로 기록)
 
@@ -72,9 +72,15 @@ create table player_buildings (player_id uuid references players(id) on delete c
 create table economy_log (id bigserial primary key, player_id uuid not null references players(id) on delete cascade,
   kind text not null, detail jsonb not null, at timestamptz not null default now());
 create index on economy_log (player_id, at);
+-- 002 (리뷰 수정): 처치 보고 멱등 번호, 스테이지 클리어 최소 간격용 시각, 처치 버킷 길이 기본값
+alter table player_state add column kill_seq integer not null default 0;
+alter table player_state add column last_stage_clear timestamptz not null default now();
+insert into game_config (key, value) values ('kill_burst_sec', '60') on conflict (key) do nothing;
 ```
 
-- 새 플레이어는 `player_state` 1행, `resources`의 자원마다 `player_resources` 1행, 자원 건물마다 `player_buildings` 1행(last_collect = 지금)으로 만든다.
+- 새 플레이어는 `player_state` 1행(last_kill_report = last_stage_clear = 지금), `resources`의 자원마다 `player_resources` 1행, 자원 건물마다 `player_buildings` 1행(last_collect = 지금)으로 만든다.
+- `kill_seq`: 마지막으로 반영한 `/v1/kills`의 `seq`. `last_stage_clear`: 마지막 스테이지 클리어 시각(새 계정은 가입 시각).
+- 골드·자원 증감은 bigint 파라미터를 **정수 문자열**로 보낸다. Neon 드라이버는 숫자를 `toString()`으로 보내 1e21부터 지수 표기가 되고 `::bigint`가 거부하기 때문이다.
 - **동시성**: 같은 플레이어의 요청이 겹쳐도 두 번 수집되거나 골드가 꼬이지 않아야 한다.
   - 각 변경은 한 문장(CTE)으로 원자적으로 하거나, `player_state.version` 비교 후 갱신(낙관적 잠금, 충돌 시 재시도 3회, 실패하면 409)으로 한다.
   - Neon HTTP 드라이버는 대화형 트랜잭션이 없다. 그래서 둘 중 하나로 구현한다(구현자 판단, 테스트로 증명).
@@ -84,10 +90,12 @@ create index on economy_log (player_id, at);
 - **공통**:
   - `/v1/auth/guest`, `/v1/gamedata`, `/v1/health`를 뺀 모든 요청은 `Authorization: Bearer <JWT>`가 필요하다.
   - JWT는 HS256, `JWT_SECRET` 환경 변수, 30일 만료, `sub` = player id.
-  - 오류는 `{"error": "<code>", "message": "..."}` 형식에 상태 코드 400(잘못된 입력), 401(토큰), 404, 409(경합), 500을 쓴다.
+  - 오류는 `{"error": "<code>", "message": "..."}` 형식에 상태 코드 400(잘못된 입력), 401(토큰), 404, 409(경합), 413(본문 초과), 500을 쓴다.
+  - `/v1/*` 요청 본문은 16 KB까지다. 넘으면 다 읽기 전에 413 `{"error": "payload_too_large", ...}`다(인증 검사보다 먼저).
+  - 정수 입력 상한(넘거나 정수가 아니면 400): `stage` 1..1,000,000, 처치 수(몬스터 한 종류) 0..10,000, `seq` 0..2147483647, `test/age`의 `minutes` 0..100,000.
   - 플레이어 응답은 항상 다음을 포함한다.
     - `server_now`(유닉스 초, float)
-    - `player`: `{gold, res: {wood, stone, food}, stage, keep_level, gate_level, buildings: {lumber: {level, last_collect}, ...}}`(last_collect는 유닉스 초)
+    - `player`: `{gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq, buildings: {lumber: {level, last_collect}, ...}}`(last_collect는 유닉스 초)
     - `merchant`: `{rate, next_change}`
 - 엔드포인트:
   - `GET /v1/health` → `{ok: true, server_now}`
@@ -105,24 +113,33 @@ create index on economy_log (player_id, at);
   - `POST /v1/sell` `{res}`
     - res는 자원 id 또는 `"all"`이다. 현재 시세로 판다.
     - → 플레이어 응답 + `gold_gained`, `rate`
-  - `POST /v1/kills` `{stage, kills: {<monster id>: count}}`
+  - `POST /v1/kills` `{seq, stage, kills: {<monster id>: count}}`
     - 골드는 Σ count × kill_gold(id, stage)이고, 개정 8의 연장 규칙을 그대로 쓴다.
+    - **멱등(seq)**: 앱은 보고마다 정수 `seq`를 1씩 올려 보낸다(필수). `seq <= player.kill_seq`면(응답 유실 뒤 재전송, 늦게 온 옛 요청) 아무것도 바꾸지 않고 현재 상태 + `gold_gained: 0`이다. 크면 반영하고 `kill_seq = seq`로 둔다(version 비교와 같은 문장).
     - 타당성 검사:
       - stage는 1 이상, `player.stage` 이하다(넘으면 player.stage로 자른다).
-      - 모르는 몬스터 id는 400이다.
-      - 총 처치 수 상한 = ceil(지난 보고 이후 초 × kill_rate_cap) + 20이다. 넘는 만큼 버리고 로그에 `clamped: true`를 남긴다.
-    - last_kill_report를 갱신한다. → 플레이어 응답 + `gold_gained`
+      - 모르는 몬스터 id는 400이다(`__proto__`·`constructor` 같은 키 포함).
+      - **처치 상한(토큰 버킷)**: `W = kill_burst_sec`, `rate = kill_rate_cap`.
+        - `lkr_eff = max(last_kill_report, now − W)`, 상한 `cap = max(0, ceil((now − lkr_eff) × rate))`.
+        - 넘는 만큼 버리고(싼 몬스터부터 인정) 로그에 `clamped: true`를 남긴다.
+        - 반영 후 `last_kill_report = lkr_eff + kept / rate`(인정한 만큼만 앞으로). 같은 순간 여러 번 보내도 합쳐서 `W × rate` 이상 못 얻는다. 예전 `+20` 여유분은 없앴다(버킷이 곧 버스트).
+    - → 플레이어 응답 + `gold_gained`
   - `POST /v1/stage/clear` `{stage}`
-    - stage == player.stage면 +1이고, 아니면 변화 없이 현재 상태를 준다(중복·재전송 안전). → 플레이어 응답
+    - stage == player.stage이고, 지난 클리어(새 계정은 가입) 이후 **최소 간격** `waves × wave_size / kill_rate_cap`초(그 스테이지 행, 연장 규칙)가 지났으면 +1, `last_stage_clear = 지금`. → 플레이어 응답 + `cleared: true`
+    - 아니면(중복·재전송·앞지름·너무 빠름) 200 + 상태 그대로 + `cleared: false`다. 앱은 `player.stage`를 진실로 쓰고, `cleared: false`를 다시 보내지 않는다.
   - `POST /v1/test/age` `{minutes}`
     - `ALLOW_TEST_HOOKS=1`일 때만 존재한다.
-    - 그 플레이어 건물의 last_collect를 minutes분 앞당긴다. 통합 테스트용이다.
+    - 그 플레이어 건물의 last_collect를 minutes분(0..100,000 정수) 앞당긴다. 통합 테스트용이다.
 - **시세**:
   - 서버가 시간 칸(유닉스 초 / 3600 내림)으로 결정적으로 계산한다. 분포는 개정 7 §3과 같고, 값은 config에서 읽는다.
   - 결정적 32비트 난수(mulberry32 등, 시드 = 시간 칸)를 쓴다.
   - 앱 오프라인 모드의 값과 같을 필요는 없다(온라인에서는 서버 값만 표시).
-- **CORS**: `CORS_ORIGINS` 환경 변수(쉼표 목록)로 정한다. 비어 있으면 `*`다. 웹 미리보기(8060)가 로컬 서버(8787)를 부를 수 있어야 한다.
-- **시작 조건**: `DATABASE_URL`이 있는데 `JWT_SECRET`이 없으면 시작을 거부한다. 개발 모드(`DATABASE_URL` 없음)는 고정 개발 비밀을 쓰고 경고를 출력한다.
+- **CORS**: `CORS_ORIGINS` 환경 변수(쉼표 목록)로 정한다. 비어 있으면 `*`다. 웹 미리보기(8060)가 로컬 서버(8787)를 부를 수 있어야 한다. 운영에서는 웹 빌드 출처로 정하라고 README에 적는다.
+- **시작 조건**(`server/src/env.ts`, 단위 테스트): 다음이면 시작을 거부한다.
+  - `DATABASE_URL`이 있는데 `JWT_SECRET`이 없거나 32자 미만이다.
+  - `DATABASE_URL`이 있는데 `ALLOW_TEST_HOOKS=1`이다.
+  - 고정 개발 비밀(개발 모드, `JWT_SECRET` 없음)을 쓰는데 `HOST`가 루프백(`127.x`, `localhost`, `::1`)이 아니다.
+  - 개발 모드(`DATABASE_URL` 없음)는 고정 개발 비밀을 쓰고 경고를 출력한다.
 
 ## 5. 서버 명령 (`server/package.json`)
 
