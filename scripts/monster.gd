@@ -1,12 +1,14 @@
 extends Node3D
 ## 괴물(근접). 자기 위치에서 aggro 안·같은 영역(성 안/밖)의 지상 영웅을 쫓아가 치고, 없으면 진로(_advance)로 돌아가 성문·성채를 친다.
 ## 성벽 위 영웅은 표적으로 삼지 않는다.
+## 영웅 스킬 상태: slow(이동 −%), stun(이동·공격 정지), poison(초당 피해). 영웅을 칠 때 자신을 출처로 넘긴다(thorns 반사 대상).
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
+const Fx := preload("res://scripts/fx.gd")
 
 const SCAN_INTERVAL := 0.2
 
@@ -26,6 +28,11 @@ var _target_hero
 var _atk_cd := 0.0
 var _scan_cd := 0.0
 var _dead := false
+var _slow_pct := 0.0
+var _slow_t := 0.0
+var _stun_t := 0.0
+var _poison_dps := 0.0
+var _poison_t := 0.0
 
 
 ## add_child 전에 호출.
@@ -70,6 +77,16 @@ func take_damage(amount: float) -> void:
 func _process(delta: float) -> void:
 	if _dead:
 		return
+	_slow_t -= delta
+	_stun_t -= delta
+	if _poison_t > 0.0:
+		_poison_t -= delta
+		take_damage(_poison_dps * delta)
+		if _dead:
+			return
+	if _stun_t > 0.0:
+		_model.play_idle()
+		return
 	_atk_cd -= delta
 	_scan_cd -= delta
 	if _scan_cd <= 0.0:
@@ -79,7 +96,7 @@ func _process(delta: float) -> void:
 		var hpos: Vector3 = _target_hero.global_position
 		_model.face(hpos - global_position)
 		if Formation.flat_distance(global_position, hpos) > _stats.range:
-			var next := global_position.move_toward(Vector3(hpos.x, 0.0, hpos.z), _stats.speed * delta)
+			var next := global_position.move_toward(Vector3(hpos.x, 0.0, hpos.z), speed() * delta)
 			if Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position):
 				_target_hero = null  # 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 진로로 간다
 				_advance(delta)
@@ -89,7 +106,7 @@ func _process(delta: float) -> void:
 		elif _atk_cd <= 0.0:
 			_atk_cd = _stats.atk_interval
 			_model.play_attack()
-			_target_hero.take_damage(atk)
+			_target_hero.take_damage(atk, self)
 		return
 	_target_hero = null
 	_advance(delta)
@@ -116,7 +133,7 @@ func _advance(delta: float) -> void:
 	var stop: float = _stats.range if strikes else 0.1
 	if Formation.flat_distance(global_position, dest) > stop:
 		_model.play_walk()
-		global_position = global_position.move_toward(dest, _stats.speed * delta)
+		global_position = global_position.move_toward(dest, speed() * delta)
 	elif strikes and _atk_cd <= 0.0:
 		_atk_cd = _stats.atk_interval
 		_model.play_attack()
@@ -124,6 +141,37 @@ func _advance(delta: float) -> void:
 			GameState.damage_castle(atk)
 		else:
 			GameState.damage_gate(side, atk)
+
+
+## 지금 이동 속도(slow 반영).
+func speed() -> float:
+	return float(_stats.speed) * (1.0 - _slow_pct / 100.0) if _slow_t > 0.0 else float(_stats.speed)
+
+
+## slow: 이동 속도 −pct%, sec초(갱신).
+func apply_slow(pct: float, sec: float) -> void:
+	if _slow_t <= 0.0:
+		Fx.slow(self)
+	_slow_pct = clampf(pct, 0.0, 100.0)
+	_slow_t = sec
+
+
+## stun: sec초 이동·공격 정지(남은 시간보다 길 때만 늘린다).
+func apply_stun(sec: float) -> void:
+	_stun_t = maxf(_stun_t, sec)
+	Fx.stun(self, bar_height() + 0.3)
+
+
+## poison: sec초 동안 초당 dps 피해(갱신).
+func apply_poison(dps: float, sec: float) -> void:
+	if _poison_t <= 0.0:
+		Fx.poison(self, bar_height())
+	_poison_dps = dps
+	_poison_t = sec
+
+
+func is_stunned() -> bool:
+	return _stun_t > 0.0
 
 
 ## 표적: 자기 위치에서 aggro 안, 같은 영역의 살아 있는 지상 영웅 중 가장 가까운 것.

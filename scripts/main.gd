@@ -5,6 +5,7 @@ extends Node3D
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -46,9 +47,12 @@ func _build_world() -> void:
 	badges.camera = camera
 	add_child(badges)
 	var formation = FormationScript.new()
-	for i in GameState.hero_count():
+	var deploy: Array = GameState.deploy()  # 슬롯 i → 영웅 id 또는 null(빈 슬롯)
+	for i in deploy.size():
+		if deploy[i] == null or GameData.hero(deploy[i]).is_empty():
+			continue
 		var hero = HeroScript.new()
-		hero.setup(i, castle, formation)
+		hero.setup(i, GameData.hero(deploy[i]), castle, formation, GameState.hero_copies(deploy[i]))
 		add_child(hero)
 	var picker = PickerScript.new()
 	picker.camera = camera

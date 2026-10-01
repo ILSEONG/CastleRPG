@@ -1,14 +1,19 @@
 extends Node3D
-## 영웅. 역할(전사/궁수)별 스탯. 배정 자리(면 · 성문 앞/성벽 위 · 슬롯, 또는 자유 위치)로 성문을 거쳐 이동한다(이동 중엔 적 무시).
+## 영웅. 정의(heroes.csv 한 행: 역할·능력치·스킬 둘)와 배치 슬롯 index로 만든다. 배정 자리(면 · 성문 앞/성벽 위 · 슬롯,
+## 또는 자유 위치)로 성문을 거쳐 이동한다(이동 중엔 적 무시).
 ## 지상에서는 자리 기준 aggro 안·같은 영역(성 안/밖)의 괴물을 쫓아가 치고 자리로 돌아오며, 성벽 위에서는 움직이지 않고
 ## 사거리 안 괴물을 쏜다. 성벽 위에 서 있으면 근접 괴물의 표적이 되지 않는다.
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
+## 스킬(스펙 §3.2): 수식은 Skills(순수 함수), 적용은 여기 — 공격(_attack·_strike·_chain·_cleave·_blast), 쿨 스킬(_tick_skills),
+## 받는 피해(take_damage). 몬스터 상태(slow·stun·poison)는 monster.gd.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
+const Skills := preload("res://scripts/skills.gd")
+const Fx := preload("res://scripts/fx.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
@@ -16,10 +21,12 @@ const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
 const TRACER_SEC := 0.15
 const ARROW_PITCH_FIX := PI / 2.0  # 화살 모델은 길이 축 Y, 촉이 -Y → X축 +90°로 촉을 -Z(look_at 정면)에 맞춘다
+const HIT_HEIGHT := Vector3(0, 0.8, 0)
 
 var castle
 var formation
 var index: int = 0
+var def: Dictionary = {}  # 영웅 정의(GameData.hero 행)
 var role: String = ""
 var side: int = 0
 var post: int = Formation.POST_GATE
@@ -27,6 +34,8 @@ var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
 var _path: Array[Vector3] = []
 var hp: float = 0.0
+var hp_max: float = 0.0  # 별 반영
+var atk: float = 0.0     # 별 반영(오라 전)
 var state: int = State.IDLE
 var selected := false:
 	set(v):
@@ -34,22 +43,33 @@ var selected := false:
 		if _ring != null:
 			_ring.visible = v and state != State.DEAD
 
-var _stats: Dictionary = {}
+var _sk: Dictionary = {}  # def.skills
+var _color := Color.WHITE
 var _model
 var _ring: MeshInstance3D
+var _foot: MeshInstance3D
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
+var _attacks := 0      # 공격 횟수(stun N번째)
+var _heal_cd := 0.0
+var _repair_cd := 0.0
+var _blast_cd := 0.0
 
 
-## add_child 전에 호출. 기본 배치: 면 = index % 4, 전사는 성문 앞, 궁수는 성벽 위.
-func setup(p_index: int, p_castle, p_formation) -> void:
+## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위. copies = 보유 수(별).
+func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1) -> void:
 	index = p_index
+	def = p_def
 	castle = p_castle
 	formation = p_formation
-	role = GameData.hero_role(index)
-	_stats = GameData.hero(role)
-	var default_post := Formation.POST_WALL if role == "archer" else Formation.POST_GATE
+	role = def.role
+	_sk = def.skills
+	_color = Color(def.color)
+	var mult := GameData.star_mult(copies)
+	hp_max = def.hp * mult
+	atk = def.atk * mult
+	var default_post := Formation.POST_WALL if role == "ranged" else Formation.POST_GATE
 	var placed := move_to(index % 4, default_post)
 	assert(placed, "no free default slot for hero %d" % index)
 
@@ -57,7 +77,7 @@ func setup(p_index: int, p_castle, p_formation) -> void:
 func _ready() -> void:
 	add_to_group("heroes")
 	_model = UnitModelScript.new()
-	_model.setup(Art.HERO_MODELS[role])
+	_model.setup(Art.hero_spec(def))
 	add_child(_model)
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.6
@@ -67,19 +87,27 @@ func _ready() -> void:
 	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_ring.visible = false
 	add_child(_ring)
+	_foot = Fx.foot_ring(Art.GRADE_COLORS[def.grade], _color)
+	_foot.position.y = 0.02
+	add_child(_foot)
 	GameState.refilled.connect(reset)
 	reset()
 
 
 func reset() -> void:
-	hp = _stats.hp
+	hp = hp_max
 	state = State.IDLE
 	_target = null
+	_attacks = 0
+	_heal_cd = _sk.heal_aura[0] if _sk.has("heal_aura") else 0.0
+	_repair_cd = _sk.gate_repair[0] if _sk.has("gate_repair") else 0.0
+	_blast_cd = 0.0
 	global_position = stand_position()
 	_path.clear()
 	_model.reset_pose()
 	_model.face(Formation.SIDE_DIR[side])  # 대기 중엔 성 바깥을 본다
 	_ring.visible = selected
+	_foot.visible = true
 
 
 func stand_position() -> Vector3:
@@ -119,14 +147,30 @@ func is_on_wall() -> bool:
 	return global_position.y > Balance.WALL_H / 2.0
 
 
-func take_damage(amount: float) -> void:
+## 받는 피해: dodge → dmg_reduce → thorns(source = 때린 몬스터에게 되돌림).
+func take_damage(amount: float, source = null) -> void:
 	if state == State.DEAD:
 		return
-	hp = maxf(0.0, hp - amount)
+	var r := Skills.incoming(_sk, amount, randf())
+	if r.x <= 0.0:
+		return
+	hp = maxf(0.0, hp - r.x)
+	if r.y > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
+		source.take_damage(r.y)
 	if hp == 0.0:
 		state = State.DEAD
 		_model.play_death()
 		_ring.visible = false
+		_foot.visible = false
+
+
+## 회복(최대 HP 상한). 실제로 오른 양.
+func heal(amount: float) -> float:
+	if state == State.DEAD:
+		return 0.0
+	var gain := minf(hp_max - hp, maxf(0.0, amount))
+	hp += gain
+	return gain
 
 
 func is_alive() -> bool:
@@ -137,13 +181,14 @@ func _process(delta: float) -> void:
 	if state == State.DEAD:
 		return
 	_atk_cd -= delta
+	_tick_skills(delta)
 	if not _path.is_empty():
 		var wp: Vector3 = _path[0]
 		state = State.MOVE
 		_target = null
 		_model.face(wp - global_position)
 		_model.play_walk()
-		global_position = global_position.move_toward(wp, float(_stats.speed) * delta)
+		global_position = global_position.move_toward(wp, float(def.speed) * delta)
 		if global_position.distance_to(wp) <= ARRIVE_EPS:
 			_path.pop_front()
 		return
@@ -153,20 +198,19 @@ func _process(delta: float) -> void:
 		_target = _find_target()
 	# 성벽 위 영웅은 쫓지 않는다: 스캔 사이에 사거리를 벗어난 표적은 놓는다(안 그러면 성벽 높이로 떠서 따라간다).
 	if _target != null and is_instance_valid(_target) and _target.is_alive() \
-			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= float(_stats.range)):
+			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= float(def.range)):
 		var tpos: Vector3 = _target.global_position
 		_model.face(tpos - global_position)
-		if Formation.flat_distance(global_position, tpos) <= float(_stats.range):
+		if Formation.flat_distance(global_position, tpos) <= float(def.range):
 			state = State.ATTACK
+			if _sk.has("aoe_blast") and _blast_cd <= 0.0:
+				_blast(tpos)
 			if _atk_cd <= 0.0:
-				_atk_cd = _stats.atk_interval
-				_model.play_attack()
-				if role == "archer":
-					_fire_tracer(tpos)
-				_target.take_damage(_stats.atk)
+				_atk_cd = Skills.interval(_sk, float(def.atk_interval), hp_ratio())
+				_attack()
 			return
 		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
-		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(_stats.speed) * delta)
+		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(def.speed) * delta)
 		if Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position):
 			state = State.MOVE
 			_model.play_walk()
@@ -180,7 +224,7 @@ func _process(delta: float) -> void:
 			state = State.MOVE
 			_model.face(home - global_position)
 			_model.play_walk()
-			global_position = global_position.move_toward(home, float(_stats.speed) * delta)
+			global_position = global_position.move_toward(home, float(def.speed) * delta)
 			return
 		_replan()  # 다른 영역이거나 성을 가로지르면 성문 경로로
 		return
@@ -195,7 +239,7 @@ func _process(delta: float) -> void:
 func _find_target():
 	var on_wall := is_on_wall()
 	var origin := global_position if on_wall else stand_position()
-	var reach: float = float(_stats.range) if on_wall else float(_stats.aggro)
+	var reach: float = float(def.range) if on_wall else float(def.aggro)
 	var here_inside := Formation.is_inside(castle.half, origin)  # 지상 영웅의 영역은 자리 기준(추격 중 성벽을 넘어가도 바뀌지 않는다)
 	if Formation.is_inside(castle.half, global_position) != here_inside:
 		return null  # 자리 반대편(성벽 너머)에 와 있으면 아무것도 잡지 않고 성문 경로로 돌아간다 — 성벽을 가로지르는 추격 방지
@@ -217,8 +261,140 @@ func _find_target():
 	return best
 
 
+# --- 스킬 ---
+
+## 쿨 스킬: heal_aura(반경 안 아군 회복), gate_repair(자기 면 성문 회복), aoe_blast 쿨 감소(발사는 교전 중에만).
+func _tick_skills(delta: float) -> void:
+	_blast_cd -= delta
+	if _sk.has("heal_aura"):
+		_heal_cd -= delta
+		if _heal_cd <= 0.0:
+			_heal_cd = _sk.heal_aura[0]
+			_heal_aura()
+	if _sk.has("gate_repair"):
+		_repair_cd -= delta
+		if _repair_cd <= 0.0:
+			_repair_cd = _sk.gate_repair[0]
+			_gate_repair()
+
+
+func _heal_aura() -> void:
+	var radius: float = _sk.heal_aura[1]
+	var healed := false
+	for h in get_tree().get_nodes_in_group("heroes"):
+		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= radius:
+			healed = h.heal(h.hp_max * _sk.heal_aura[2] / 100.0) > 0.0 or healed
+	if healed:
+		Fx.heal_ring(get_parent(), global_position, radius)
+
+
+## 자기 면 성문 앞이나 같은 면 성벽 위에 배정돼 있고 이동 중이 아닐 때만. 부서진 성문은 GameState가 거른다.
+func _gate_repair() -> void:
+	if post == Formation.POST_FREE or not _path.is_empty():
+		return
+	if GameState.repair_gate(side, GameState.gate_hp_max * _sk.gate_repair[1] / 100.0) > 0.0:
+		Fx.repair(get_parent(), Formation.gate_position(castle.half, side))
+
+
+## 공격 한 번: 공격력 = atk × 오라. multishot이면 사거리 안 가까운 몬스터 여럿에게.
+func _attack() -> void:
+	_attacks += 1
+	_model.play_attack()
+	var a := atk * _aura_mult()
+	var targets := [_target]
+	if _sk.has("multishot") and role == "ranged":
+		targets.append_array(_nearest_others(_target, global_position, float(def.range), int(_sk.multishot[0]) - 1))
+	for i in targets.size():
+		_strike(targets[i], a, i == 0)
+
+
+## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun·lifesteal·cleave·chain.
+func _strike(m, a: float, primary: bool) -> void:
+	var d := Skills.damage(_sk, a, randf(), m.hp_ratio(), m.kind == "epic_boss")
+	_projectile(m.global_position)
+	m.take_damage(d)
+	_on_hit(m, a)
+	if not primary:
+		return
+	if Skills.stuns(_sk, _attacks) and m.is_alive():
+		m.apply_stun(_sk.stun[1])
+	if _sk.has("lifesteal"):
+		heal(d * _sk.lifesteal[0] / 100.0)
+	if _sk.has("cleave") and role == "melee":
+		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):
+			o.take_damage(d * _sk.cleave[1] / 100.0)
+	if _sk.has("chain"):
+		_chain(m, d, a)
+
+
+func _on_hit(m, a: float) -> void:
+	if not m.is_alive():
+		return
+	if _sk.has("slow"):
+		m.apply_slow(_sk.slow[0], _sk.slow[1])
+	if _sk.has("poison"):
+		m.apply_poison(a * _sk.poison[0] / 100.0, _sk.poison[1])
+
+
+## chain: 맞은 대상에서 c m 안 가장 가까운(아직 안 맞은) 몬스터로 a번, 매번 피해 × b/100.
+func _chain(first, d: float, a: float) -> void:
+	var hit := [first]
+	var pts := [first.global_position + HIT_HEIGHT]
+	var cur = first
+	for dmg in Skills.chain_damages(_sk, d):
+		var next = null
+		for o in _nearest_others(cur, cur.global_position, _sk.chain[2], 1000):
+			if not hit.has(o):
+				next = o
+				break
+		if next == null:
+			break
+		hit.append(next)
+		pts.append(next.global_position + HIT_HEIGHT)
+		next.take_damage(dmg)
+		_on_hit(next, a)
+		cur = next
+	Fx.lightning(get_parent(), pts, _color)
+
+
+## aoe_blast: 대상 위치 반경 안 모든 몬스터에게 공격력 × c%.
+func _blast(center: Vector3) -> void:
+	_blast_cd = _sk.aoe_blast[0]
+	var dmg: float = atk * _aura_mult() * _sk.aoe_blast[2] / 100.0
+	for m in get_tree().get_nodes_in_group("monsters"):
+		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
+			m.take_damage(dmg)
+	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1])
+
+
+## from 주변 radius 안 살아 있는 몬스터(exclude 빼고) 가까운 순 최대 n마리. 지상 영웅은 자기 영역(성 안/밖)만.
+func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
+	var out := []
+	var ground := not is_on_wall()
+	var here_inside := Formation.is_inside(castle.half, global_position)
+	for m in get_tree().get_nodes_in_group("monsters"):
+		if m == exclude or not m.is_alive() or Formation.flat_distance(from, m.global_position) > radius:
+			continue
+		if ground and Formation.is_inside(castle.half, m.global_position) != here_inside:
+			continue
+		out.append(m)
+	out.sort_custom(func(p, q): return Formation.flat_distance(from, p.global_position) < Formation.flat_distance(from, q.global_position))
+	return out.slice(0, n)
+
+
+## atk_aura: 반경 안 다른 영웅들의 오라 중 가장 큰 것 하나.
+func _aura_mult() -> float:
+	var best := 0.0
+	for h in get_tree().get_nodes_in_group("heroes"):
+		var hs: Dictionary = h.def.skills
+		if h != self and h.is_alive() and hs.has("atk_aura") \
+				and Formation.flat_distance(h.global_position, global_position) <= hs.atk_aura[0]:
+			best = maxf(best, hs.atk_aura[1])
+	return Skills.aura_mult(best)
+
+
 func hp_ratio() -> float:
-	return hp / float(_stats.hp)
+	return hp / hp_max if hp_max > 0.0 else 0.0
 
 
 func bar_height() -> float:
@@ -229,13 +405,28 @@ func bar_scale() -> float:
 	return 1.0
 
 
-## 궁수 화살 (시각 효과만. 피해는 발사 즉시 적용).
-func _fire_tracer(to: Vector3) -> void:
+## 원거리 투사체(시각만. 피해는 발사 즉시): 마법사 = 고유 색 20면체, 바바리안 = 도끼, 나머지 = 화살.
+func _projectile(to: Vector3) -> void:
+	if role != "ranged":
+		return
 	var from := global_position + Vector3(0, 1.3, 0)
-	var dest := to + Vector3(0, 0.8, 0)
+	var dest := to + HIT_HEIGHT
 	if Formation.flat_distance(from, dest) < 0.1:
 		return
+	match def.model:
+		"Mage":
+			Fx.bolt(get_parent(), from, dest, _color)
+		"Barbarian":
+			Fx.axe(get_parent(), from, dest)
+		_:
+			_fire_tracer(from, dest)
+
+
+func _fire_tracer(from: Vector3, dest: Vector3) -> void:
+	if Fx.full(get_parent()):
+		return
 	var arrow := Node3D.new()
+	arrow.add_to_group(Fx.GROUP)
 	var model := Art.instance(Art.ARROW_MODEL)
 	model.scale = Vector3.ONE * Art.ARROW_SCALE
 	model.rotation.x = ARROW_PITCH_FIX
