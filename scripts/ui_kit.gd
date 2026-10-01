@@ -88,6 +88,14 @@ static func commas(n: int) -> String:
 	return ("-" if n < 0 else "") + s
 
 
+## 걸리는·남은 시간(초, 올림): 1시간 미만 "mm:ss", 이상 "h시간 m분"(개정 12 §2.5 — 건물 창·건설 막대).
+static func duration(sec: float) -> String:
+	var s := maxi(0, ceili(sec))
+	if s < 3600:
+		return "%02d:%02d" % [s / 60, s % 60]
+	return "%d시간 %d분" % [s / 3600, s % 3600 / 60]
+
+
 ## 바 박스 {background, fill}. 채움도 면 분할(4px 깎기).
 static func bar(fill_color: Color) -> Dictionary:
 	var key := ["r", fill_color]

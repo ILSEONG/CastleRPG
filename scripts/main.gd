@@ -27,6 +27,7 @@ const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
+const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -71,6 +72,7 @@ func _build_world() -> void:
 	add_child(numbers)
 	var badges = BadgesScript.new()
 	badges.camera = camera
+	badges.scenery = scenery  # 건설 진행 막대 자리
 	add_child(badges)
 	_formation = FormationScript.new()
 	if rebuilds == 0 and OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
@@ -98,6 +100,9 @@ func _build_world() -> void:
 	picker.recruit = recruit
 	var hero_panel = HeroPanelScript.new()
 	add_child(hero_panel)
+	var building_panel = BuildingPanelScript.new()  # 건물 창(개정 12 §2.5): 건물 탭·길게 누르기
+	add_child(building_panel)
+	picker.building_panel = building_panel
 	var soldier_panel = SoldierPanelScript.new()
 	add_child(soldier_panel)
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 13 §7.1): 영웅·병사·모집·상인

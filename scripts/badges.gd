@@ -2,6 +2,8 @@ extends Node2D
 ## 자원 건물 말풍선(쌓인 게 5분 이상이면 이름표 위에 자원 아이콘)과 수집 "+N" 떠오르기.
 ## hp_bars 방식: 화면 공간에 매 프레임 한 번에 그린다. 건물 위치·높이는 Balance.BUILDINGS와 TownKit 메시 AABB에서.
 ## 건물 이름표(buildings.gd)가 높이+1.0m에 있다 — 말풍선 꼬리 끝은 그 위(높이+ANCHOR_UP).
+## 건설 중(개정 12 §2.5): 짓는 건물(성문은 문루 넷) 이름표 위에 진행 막대 + 남은 시간(UiKit.duration, 초가 바뀔 때마다 글자가 바뀐다).
+## 그 건물의 말풍선은 막대 위로 올린다. 자리는 scenery(buildings.gd).sites.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -18,8 +20,12 @@ const POP_RISE_PX := 40.0
 const POP_SEC := 1.2
 const POP_FONT := 28
 const INK := Color(0.16, 0.18, 0.24)
+const BUILD_BAR := Vector2(96, 12)  # 건설 진행 막대(논리 px)
+const BUILD_FONT := 22
+const BUILD_LIFT_PX := 38.0  # 짓는 중인 자원 건물의 말풍선을 막대·글자 위로 올리는 양
 
 var camera: Camera3D
+var scenery  # 건물(buildings.gd) — 건설 막대 자리(sites). main이 넣는다
 var last_pop := {}  # 마지막 pop 인자(테스트·디버그용): {pos, kind, amount}
 
 var _anchors := {}  # 건물 id → 말풍선 기준 월드 좌표(지붕 위)
@@ -66,8 +72,13 @@ func _draw() -> void:
 		return
 	var view := get_viewport_rect().grow(BUBBLE_R * 2.0)
 	var bob := sin(_t * TAU * BOB_HZ) * BOB_PX
-	for id in badge_ids(Economy.time_now()):
-		var tip := camera.unproject_position(anchor(id)) + Vector2(0, bob)
+	var now := Economy.time_now()
+	for p in build_anchors():
+		var at := camera.unproject_position(p)
+		if view.has_point(at):
+			_draw_build_bar(at, Economy.build_progress(now), UiKit.duration(Economy.build_left(now)))
+	for id in badge_ids(now):
+		var tip := camera.unproject_position(anchor(id)) + Vector2(0, bob - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
 		if view.has_point(tip):
 			_draw_bubble(tip, Economy.res_of(id))
 	for p in _pops:
@@ -97,3 +108,23 @@ func _draw_pop(at: Vector2, p: Dictionary) -> void:
 	var pos := Vector2(x0 + icon_px + 4.0, at.y + POP_FONT * 0.35)
 	draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, 8, Color(1, 1, 1, a))
 	draw_string(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, Color(INK, a))
+
+
+## 지금 짓는 건물의 진행 막대 자리(월드, 지붕 위 ANCHOR_UP). 쉬면 [].
+func build_anchors() -> Array:
+	if scenery == null:
+		return []
+	return scenery.sites.get(str(Economy.build.get("id", "")), []).map(
+		func(box: AABB): return Vector3(box.get_center().x, box.end.y + ANCHOR_UP, box.get_center().z))
+
+
+## 각진 막대(어두운 바탕 + 호박색 채움) + 그 위 남은 시간.
+func _draw_build_bar(at: Vector2, ratio: float, text: String) -> void:
+	var r := Rect2(at - BUILD_BAR / 2.0, BUILD_BAR)
+	draw_colored_polygon(UiKit.LowpolyBox.octagon(r.grow(2.0), 4.0), Color(0, 0, 0, 0.55))
+	if r.size.x * ratio >= 2.0:  # 너무 가는 채움은 다각형이 찌그러진다
+		draw_colored_polygon(UiKit.LowpolyBox.octagon(Rect2(r.position, Vector2(r.size.x * ratio, r.size.y)), 3.0), UiKit.AMBER)
+	var w := FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, BUILD_FONT).x
+	var pos := Vector2(at.x - w / 2.0, r.position.y - 6.0)
+	draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, BUILD_FONT, 6, Color.WHITE)
+	draw_string(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, BUILD_FONT, INK)
