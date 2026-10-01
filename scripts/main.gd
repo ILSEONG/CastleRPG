@@ -60,6 +60,7 @@ func _ready() -> void:
 
 func _build_world() -> void:
 	_build_environment()
+	add_child(preload("res://scripts/portraits.gd").new())  # 영웅 피규어(개정 14 §2) — 카드(창)보다 먼저
 	castle = CastleScript.new()
 	add_child(castle)
 	_build_ground(castle.half)
