@@ -831,7 +831,7 @@ func _building_cases() -> void:
 	# 스테이지 중에 단계가 바뀌면(성채 9 → 10): 지금 알리고, 월드는 방치로 돌아올 때 다시 만든다
 	hud._toast.visible = false
 	GameState.start_stage()
-	GameState.stop_after_stage()  # 결과 뒤 방치로
+	GameState.auto_continue = false  # 결과 뒤 방치로
 	Economy.levels["keep"] = 9
 	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
 	await _frames(3)

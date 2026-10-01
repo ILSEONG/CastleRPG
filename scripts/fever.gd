@@ -7,6 +7,7 @@ const SAVE_EVERY := 5.0
 
 var gauge := 0
 var left := 0.0  # 남은 FEVER 초(0이면 꺼짐)
+var auto_next := true  # 연속 진행 체크(HUD). 같은 파일에 저장
 var save_path := "user://local.json"  # ""이면 저장하지 않는다
 
 var _dirty := false
@@ -86,18 +87,20 @@ func save() -> void:
 	if f == null:
 		push_warning("fever save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
-	f.store_string(JSON.stringify({"gauge": gauge, "left": left}))
+	f.store_string(JSON.stringify({"gauge": gauge, "left": left, "auto_next": auto_next}))
 	f.close()
 
 
 ## 없거나 깨진 파일은 0으로 시작한다.
 func load_save() -> void:
 	reset()
+	auto_next = true
 	if save_path == "" or not FileAccess.file_exists(save_path):
 		return
 	var json := JSON.new()
 	if json.parse(FileAccess.get_file_as_string(save_path)) != OK or not (json.data is Dictionary):
 		return
+	auto_next = json.data.get("auto_next", true) != false
 	var g = json.data.get("gauge")
 	var l = json.data.get("left")
 	if (g is float or g is int) and (l is float or l is int):

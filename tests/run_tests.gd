@@ -6,6 +6,7 @@ const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const GameStateScript := preload("res://scripts/game_state.gd")
+const FeverScript := preload("res://scripts/fever.gd")
 const FormationScript := preload("res://scripts/formation.gd")
 const Art := preload("res://scripts/art.gd")
 const MeshKitScript := preload("res://scripts/mesh_kit.gd")
@@ -39,7 +40,9 @@ func _init() -> void:
 	test_wave_idle_cycle()
 	test_gamestate_win_loop()
 	test_gamestate_fail_keeps_stage()
-	test_gamestate_stop_after_stage()
+	test_gamestate_stop_stage()
+	test_gamestate_auto_continue()
+	test_fever_auto_next_persists()
 	test_gamestate_gate_broken_once()
 	test_gamestate_idle_castle_break_refills()
 	test_gamestate_start_stage_refills()
@@ -396,19 +399,60 @@ func test_gamestate_fail_keeps_stage() -> void:
 	gs.free()
 
 
-func test_gamestate_stop_after_stage() -> void:
+func test_gamestate_stop_stage() -> void:
 	var gs = GameStateScript.new()
+	var cleared: Array = []
+	gs.stage_cleared.connect(func(s): cleared.append(s))
 	gs.start_stage()
-	gs.stop_after_stage()
-	check(gs.stop_requested, "stop requested")
-	gs.stop_after_stage()
-	check(not gs.stop_requested, "stop toggled off")
-	gs.stop_after_stage()
+	gs.stage = 3
+	gs.castle_hp = 10.0
+	gs.gate_hp[1] = 0.0
+	var refills := [0]
+	gs.refilled.connect(func(): refills[0] += 1)
+	gs.stop_stage()
+	check(gs.mode == gs.Mode.IDLE and gs.stage == 3 and cleared.is_empty(), "stop mid-stage: idle, same stage, no clear")
+	check(refills[0] == 1 and gs.castle_hp == gs.castle_hp_max and gs.gate_hp[1] == gs.gate_hp_max, "stop refills castle and gates")
+	gs.start_stage()
+	gs.on_all_monsters_dead()
+	gs.stop_stage()
+	check(gs.mode == gs.Mode.IDLE and gs.stage == 4, "stop during result: idle (clear already counted)")
+	gs.advance(10.0)
+	check(gs.mode == gs.Mode.IDLE, "no timer carry-over after stop")
+	gs.free()
+
+
+func test_gamestate_auto_continue() -> void:
+	var gs = GameStateScript.new()
+	check(gs.auto_continue, "continuous is on by default")
+	gs.start_stage()
 	gs.on_all_monsters_dead()
 	gs.advance(GameData.config_num("result_sec") + 0.01)
-	check(gs.mode == gs.Mode.IDLE, "idle when stop requested after clear")
-	check(gs.stage == 2, "stage still incremented")
+	check(gs.mode == gs.Mode.COUNTDOWN and gs.stage == 2, "checked: clear counts down to the next stage")
+	gs.stop_stage()
+	gs.auto_continue = false
+	gs.start_stage()
+	gs.on_all_monsters_dead()
+	gs.advance(GameData.config_num("result_sec") + 0.01)
+	check(gs.mode == gs.Mode.IDLE and gs.stage == 3, "unchecked: clear advances the stage then idles")
 	gs.free()
+
+
+func test_fever_auto_next_persists() -> void:
+	var path := "user://test_local_tmp.json"
+	var a = FeverScript.new()
+	a.save_path = path
+	a.gauge = 7
+	a.auto_next = false
+	a.save()
+	var b = FeverScript.new()
+	b.save_path = path
+	b.load_save()
+	check(not b.auto_next and b.gauge == 7, "unchecked state and fever gauge persist together")
+	DirAccess.remove_absolute(path)
+	b.load_save()
+	check(b.auto_next, "missing file defaults to checked")
+	a.free()
+	b.free()
 
 
 func test_gamestate_gate_broken_once() -> void:

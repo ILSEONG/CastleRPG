@@ -22,7 +22,7 @@ var castle_hp_max := 0.0  # refill()이 표에서 읽는다
 var castle_hp := 0.0
 var gate_hp_max := 0.0
 var gate_hp: Array[float] = []
-var stop_requested := false
+var auto_continue := true  # 연속 진행: 클리어 뒤 카운트다운으로 다음 스테이지, 꺼지면 스테이지만 올리고 대기
 
 var _timer := 0.0
 var _won := false
@@ -101,13 +101,17 @@ func start_stage() -> void:
 	if mode != Mode.IDLE:
 		push_warning("start_stage ignored in mode %d" % mode)
 		return
-	stop_requested = false
 	refill()
 	_set_mode(Mode.STAGE)
 
 
-func stop_after_stage() -> void:
-	stop_requested = not stop_requested
+## 즉시 중지: 스테이지는 그대로(클리어·진행 없음), 성·성문·영웅 채우고 몬스터 제거(refill) 후 대기. 서버엔 보내지 않는다.
+func stop_stage() -> void:
+	if mode == Mode.IDLE:
+		return
+	_won = false
+	refill()
+	_set_mode(Mode.IDLE)
 
 
 func damage_castle(amount: float) -> void:
@@ -171,7 +175,7 @@ func advance(delta: float) -> void:
 			_timer -= delta
 			if _timer <= 0.0:
 				refill()
-				if _won and not stop_requested:
+				if _won and auto_continue:
 					_set_mode(Mode.COUNTDOWN)
 				else:
 					_set_mode(Mode.IDLE)

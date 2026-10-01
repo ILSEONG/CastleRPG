@@ -14,7 +14,7 @@ const Formation := preload("res://scripts/formation.gd")
 const CameraRig := preload("res://scripts/camera_rig.gd")
 const FeverButtonScript := preload("res://scripts/fever_button.gd")
 const TAB_BAR_H := 104  # 하단 탭 바 높이(tab_bar.gd, 개정 11 §2.3)
-const STAGE_BUTTON := Vector2(196, 64)  # 상단 스테이지 버튼(개정 12-2 §1)
+const STAGE_BUTTON := Vector2(150, 64)  # 상단 스테이지 버튼(개정 12-2 §1)
 const BAND_BOTTOM := -(TAB_BAR_H + 12)  # 끊김 띠는 탭 바 위 12px에서 위로 자란다
 const BAR_H := 24
 const CASTLE_COLOR := Color(0.95, 0.75, 0.2)
@@ -36,6 +36,7 @@ var _gate_tiles: Array = [] # side -> 성문 막대 줄(탭하면 gate_tapped)
 var _hp := {}  # CASTLE·면 → {bar, num, flash: 테두리 번쩍임 Control, left: 남은 번쩍임 초, last: 지난 HP}
 var _center: Label
 var _button: Button
+var _auto: Button  # 연속 진행 체크박스(진행 버튼 오른쪽)
 var _fever: Button  # FEVER 버튼(fever_button.gd)
 var _chips := {}  # 아이콘 kind(gold·wood·stone·food) → 숫자 Label
 var _chip_row: Control
@@ -91,6 +92,8 @@ func _ready() -> void:
 	_button.pressed.connect(_on_button)
 	UiKit.apply_button(_button, UiKit.AMBER, 14.0)
 	head.add_child(_button)
+	_auto = _auto_box()
+	head.add_child(_auto)
 	var castle_row := HBoxContainer.new()
 	castle_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	castle_row.add_theme_constant_override("separation", 6)
@@ -124,6 +127,8 @@ func _ready() -> void:
 	root.add_child(_center)
 	_build_link_ui()
 
+	GameState.auto_continue = Fever.auto_next
+	_auto.set_pressed_no_signal(GameState.auto_continue)
 	GameState.mode_changed.connect(_on_mode_changed)
 	GameState.castle_hp_changed.connect(_on_castle_hp)
 	GameState.gate_hp_changed.connect(_on_gate_hp)
@@ -295,25 +300,60 @@ func _on_mode_changed(mode: int) -> void:
 	_refresh_button()
 
 
-## 대기 "▶ 진행" → 스테이지 시작. 진행 중 "중지 예약"(이번 스테이지 후 중지) ↔ "예약 취소". 결과 중엔 끈다.
+## 대기 "▶ 진행" → 스테이지 시작. 진행 중(스테이지·카운트다운·결과) "■ 중지" → 즉시 중지.
 func _refresh_button() -> void:
-	if GameState.mode == GameState.Mode.IDLE:
-		_button.text = "▶ 진행"
-		_button.disabled = false
-	elif GameState.mode == GameState.Mode.RESULT:
-		_button.disabled = true
-	else:
-		_button.text = "예약 취소" if GameState.stop_requested else "중지 예약"
-		_button.disabled = false
+	var idle: bool = GameState.mode == GameState.Mode.IDLE
+	_button.text = "▶ 진행" if idle else "■ 중지"
+	_button.disabled = false
 
 
 func _on_button() -> void:
 	if GameState.mode == GameState.Mode.IDLE:
 		GameState.start_stage()
 	else:
-		GameState.stop_after_stage()
-		_refresh_button()
+		GameState.stop_stage()
 
+
+## 연속 진행 체크박스: 각진 상자 + 각진 체크, 오른쪽에 글자. 탭 = 토글, 저장.
+func _auto_box() -> Button:
+	var b := Button.new()
+	b.toggle_mode = true
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(136, 64)
+	b.toggled.connect(_on_auto_toggled)
+	var box := Control.new()
+	box.position = Vector2(0, 12)
+	box.size = Vector2(40, 40)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.draw.connect(func():
+		var r := Rect2(Vector2.ZERO, box.size)
+		var on := b.button_pressed
+		box.draw_colored_polygon(UiKit.LowpolyBox.octagon(r, 9.0), UiKit.AMBER if on else Color(1, 1, 1, 0.9))
+		var o := UiKit.LowpolyBox.octagon(r.grow(-1.0), 9.0)
+		o.append(o[0])
+		box.draw_polyline(o, INK, 2.5)
+		if on:
+			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), Color.WHITE, 5.0, false)
+			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), INK, 1.5, false))
+	b.add_child(box)
+	b.toggled.connect(func(_on): box.queue_redraw())
+	var l := Label.new()
+	l.text = "연속 진행"
+	l.position = Vector2(46, 0)
+	l.size = Vector2(90, 64)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", 20)
+	l.add_theme_color_override("font_color", INK)
+	b.add_child(l)
+	return b
+
+
+func _on_auto_toggled(on: bool) -> void:
+	GameState.auto_continue = on
+	Fever.auto_next = on
+	Fever.save()  # save_path가 ""이면(테스트·auto-stage) 쓰지 않는다
 
 ## 맨 위 둥근 칩 4개: 골드·목재·석재·식량(아이콘 + 쉼표 숫자). 입력은 통과시킨다.
 func _build_chips(root: Control) -> void:
