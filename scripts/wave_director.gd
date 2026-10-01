@@ -2,6 +2,7 @@ extends RefCounted
 ## 스폰 스케줄 생성. 씬 의존 없음.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 
 const MODE_IDLE := 0
 const MODE_STAGE := 1
@@ -12,13 +13,14 @@ const MODE_STAGE := 1
 static func build(stage: int, mode: int) -> Array:
 	var events: Array = []
 	if mode == MODE_IDLE:
-		var interval := Balance.idle_interval(stage)
+		var interval: float = GameData.stage(stage).idle_interval
 		for side in 4:
 			events.append({"time": interval * (side + 1), "kind": "grunt", "side": side})
 		return events
 	var t := 0.0
-	for w in Balance.wave_count(stage):
-		var size := Balance.wave_size(stage, w)
+	var st := GameData.stage(stage)
+	for w in int(st.waves):
+		var size := int(st.wave_size)
 		for i in size:
 			events.append({"time": t + i * Balance.SPAWN_SPACING_SEC, "kind": "grunt", "side": i % 4})
 		t += size * Balance.SPAWN_SPACING_SEC + Balance.WAVE_GAP_SEC

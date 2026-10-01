@@ -3,6 +3,7 @@ extends Node3D
 ## 성벽 위 영웅은 표적으로 삼지 않는다.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
@@ -29,15 +30,16 @@ var _dead := false
 
 ## add_child 전에 호출.
 func setup(p_kind: String, p_side: int, p_stage: int, p_castle) -> void:
-	assert(Balance.MONSTER.has(p_kind), "unknown monster kind: " + p_kind)
+	assert(not GameData.monster(p_kind).is_empty(), "unknown monster kind: " + p_kind)
 	kind = p_kind
 	side = p_side
 	stage = p_stage
 	castle = p_castle
-	_stats = Balance.MONSTER[kind]
-	hp = _stats.hp * Balance.hp_scale(stage)
+	_stats = GameData.monster(kind)
+	var st := GameData.stage(stage)
+	hp = _stats.hp * st.hp_mult
 	hp_max = hp
-	atk = _stats.atk * Balance.atk_scale(stage)
+	atk = _stats.atk * st.atk_mult
 
 
 func _ready() -> void:

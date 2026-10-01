@@ -1,0 +1,3 @@
+id,hp,atk,speed,range,atk_interval,aggro,scale,gold
+grunt,60,10,2.5,1.2,1.0,6.0,1.0,2
+epic_boss,400,20,1.8,1.8,1.2,8.0,1.6,50

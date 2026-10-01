@@ -4,6 +4,7 @@ extends Node
 ## 오토로드를 쓰므로 tests/run_tests.gd(-s)에서 preload 금지. 스포너를 멈추고 몬스터를 직접 놓는다.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
@@ -218,11 +219,11 @@ func _run() -> void:
 	spawner._spawn({"kind": "grunt", "side": 0, "time": 0.0})
 	var kid: Node = _main.get_child(_main.get_child_count() - 1)
 	kid.take_damage(1.0e6)
-	_check(Economy.gold == gold0 + Balance.MONSTER.grunt.gold and Balance.MONSTER.grunt.gold == 2, "(j) killing a grunt gives 2 gold", "gold %d -> %d" % [gold0, Economy.gold])
+	_check(Economy.gold == gold0 + GameData.kill_gold("grunt", GameState.stage) and GameData.kill_gold("grunt", 1) == 2, "(j) killing a grunt gives GameData.kill_gold (stage 1 = 2)", "gold %d -> %d" % [gold0, Economy.gold])
 	spawner._spawn({"kind": "grunt", "side": 0, "time": 0.0})
 	GameState.refill()
 	await _frames(1)
-	_check(Economy.gold == gold0 + 2, "(j) a monster removed by refill gives no gold", "gold %d" % Economy.gold)
+	_check(Economy.gold == gold0 + GameData.kill_gold("grunt", GameState.stage), "(j) a monster removed by refill gives no gold", "gold %d" % Economy.gold)
 
 
 func _alive(m) -> bool:

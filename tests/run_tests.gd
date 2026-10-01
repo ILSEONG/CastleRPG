@@ -3,6 +3,7 @@ extends SceneTree
 ## 실행: ./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . -s tests/run_tests.gd
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const GameStateScript := preload("res://scripts/game_state.gd")
 const FormationScript := preload("res://scripts/formation.gd")
@@ -23,7 +24,7 @@ var _errors := ErrorCounter.new()
 
 func _init() -> void:
 	OS.add_logger(_errors)
-	test_balance_monotonic()
+	test_game_data()
 	test_balance_tables()
 	test_wave_stage_ends_with_boss()
 	test_wave_total_monotonic()
@@ -71,12 +72,58 @@ func check(cond: bool, msg: String) -> void:
 		printerr("FAIL: " + msg)
 
 
-func test_balance_monotonic() -> void:
-	for stage in range(1, 20):
-		check(Balance.hp_scale(stage + 1) >= Balance.hp_scale(stage), "hp_scale monotonic at %d" % stage)
-		check(Balance.atk_scale(stage + 1) >= Balance.atk_scale(stage), "atk_scale monotonic at %d" % stage)
-		check(Balance.wave_count(stage + 1) >= Balance.wave_count(stage), "wave_count monotonic at %d" % stage)
-		check(Balance.wave_size(stage + 1, 0) >= Balance.wave_size(stage, 0), "wave_size monotonic at %d" % stage)
+func test_game_data() -> void:
+	GameData.load_tables()
+	check(GameData.errors == 0, "default tables load without errors")
+	var grunt := GameData.monster("grunt")
+	check(grunt.hp == 60.0 and grunt.gold == 2 and GameData.monster("epic_boss").gold == 50, "monster table values")
+	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
+		for kind in ["grunt", "epic_boss"]:
+			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])
+	for s in range(1, 31):  # 1~30행은 예전 공식과 같다
+		var r := GameData.stage(s)
+		check(is_equal_approx(r.hp_mult, 1.0 + 0.25 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.15 * (s - 1)), "hp/atk mult at stage %d" % s)
+		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 4.0, "waves/size/idle at stage %d" % s)
+		check(is_equal_approx(r.gold_mult, 1.0 + 0.2 * (s - 1)), "gold_mult at stage %d" % s)
+	var r31 := GameData.stage(31)  # 직선 연장
+	var r30 := GameData.stage(30)
+	var r29 := GameData.stage(29)
+	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.25 * 39), "stage beyond table extrapolates hp_mult")
+	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 16, "extrapolated int columns round")
+	check(GameData.kill_gold("grunt", 1) == 2 and GameData.kill_gold("grunt", 2) == 2 and GameData.kill_gold("grunt", 3) == 3, "kill_gold rounds (2 x 1.2 = 2.4 -> 2, 2 x 1.4 = 2.8 -> 3)")
+	check(GameData.kill_gold("epic_boss", 2) == 60 and GameData.kill_gold("grunt", 31) == 14, "kill_gold boss and extrapolated stage")
+	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
+	var mp := "user://t_monsters.csv"
+	var sp := "user://t_stages.csv"
+	_write(mp, "\ufeffgold,id,scale,hp,atk,speed,range,atk_interval,aggro\r\n\r\n0.4,grunt,1,10,2,1,1,1,1\r\n\r\n")
+	_write(sp, "\ufeffwaves,stage,wave_size,hp_mult,atk_mult,gold_mult,idle_interval\r\n3,1,6,1,1,1,4\r\n\r\n5,2,8,2,1,3,4\r\n")
+	GameData.load_tables(mp, sp)
+	check(GameData.errors == 0 and GameData.monster("grunt").hp == 10.0 and GameData.stage(2).hp_mult == 2.0 and int(GameData.stage(2).waves) == 5, "BOM, blank lines, CRLF and reordered columns parse the same")
+	check(GameData.kill_gold("grunt", 1) == 1, "kill_gold has a minimum of 1")
+	# 깨진 표: 숫자 아님, 빠진 열, stage 건너뜀. 오류 수를 세고 로거 몫은 뺀다
+	var logged := _errors.count
+	_write(mp, "id,hp,atk,speed,range,atk_interval,aggro,scale
+grunt,60,1,1,1,1,1,1
+")
+	GameData.load_tables(mp, sp)
+	check(GameData.errors == 1, "missing column reports one error")
+	_write(mp, "id,hp,atk,speed,range,atk_interval,aggro,scale,gold\ngrunt,abc,1,1,1,1,1,1,1\n")
+	GameData.load_tables(mp, sp)
+	check(GameData.errors == 1, "non-numeric cell reports one error")
+	_write(sp, "stage,hp_mult,atk_mult,gold_mult,waves,wave_size,idle_interval\n1,1,1,1,3,6,4\n3,1,1,1,3,6,4\n")
+	GameData.load_tables(mp, sp)
+	check(GameData.errors == 2, "stage gap reports an error")
+	check(_errors.count - logged == 4, "table errors go through push_error")
+	_errors.count = logged
+	DirAccess.remove_absolute(mp)
+	DirAccess.remove_absolute(sp)
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.stage(1).hp_mult == 1.0, "default tables restored")
+
+
+func _write(path: String, text: String) -> void:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(text)
 
 
 func test_balance_tables() -> void:
@@ -86,10 +133,6 @@ func test_balance_tables() -> void:
 	check(Balance.hero_slots(99) == 12, "keep level beyond table clamps to last")
 	check(Balance.gate_hp_max(1) == 400.0, "gate hp at level 1")
 	check(Balance.gate_hp_max(2) > Balance.gate_hp_max(1), "gate hp grows with level")
-	check(Balance.MONSTER.has("grunt") and Balance.MONSTER.has("epic_boss"), "monster table has grunt and epic_boss")
-	for kind in Balance.MONSTER:
-		for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro"]:
-			check(Balance.MONSTER[kind].has(key), "monster %s has %s" % [kind, key])
 
 
 func test_wave_stage_ends_with_boss() -> void:
@@ -333,7 +376,7 @@ func test_art_assets() -> void:
 	var visible_gear := {"warrior": ["1H_Sword", "Round_Shield"], "archer": ["2H_Crossbow"]}  # Knight, Rogue_Hooded
 	for key in Balance.HERO_ROLES:
 		check(Art.HERO_MODELS.has(key), "hero role %s has a model" % key)
-	for key in Balance.MONSTER:
+	for key in ["grunt", "epic_boss"]:
 		check(Art.MONSTER_MODELS.has(key), "monster %s has a model" % key)
 	for key in specs:
 		var spec: Dictionary = specs[key]

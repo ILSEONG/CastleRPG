@@ -2,6 +2,7 @@ extends Node
 ## WaveDirector 스케줄을 시간에 맞춰 소비해 몬스터를 부모 노드 아래에 생성. 전멸 감지.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 
@@ -69,4 +70,4 @@ func _spawn(ev: Dictionary) -> void:
 
 func _on_monster_died(m) -> void:
 	_live = maxi(0, _live - 1)
-	Economy.add_gold(int(Balance.MONSTER[m.kind].gold))  # 리필 제거(_vanish)는 died를 안 내므로 골드 없음
+	Economy.add_gold(GameData.kill_gold(m.kind, m.stage))  # 리필 제거(_vanish)는 died를 안 내므로 골드 없음
