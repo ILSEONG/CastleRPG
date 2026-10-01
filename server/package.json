@@ -9,7 +9,10 @@
     "dev": "node --env-file-if-exists=.env src/main.ts",
     "test": "node --test \"test/*.test.ts\"",
     "migrate": "node --env-file-if-exists=.env src/cli.ts migrate",
-    "seed": "node --env-file-if-exists=.env src/cli.ts seed"
+    "seed": "node --env-file-if-exists=.env src/cli.ts seed",
+    "neon:migrate": "node --env-file=.env.neon src/cli.ts migrate",
+    "neon:seed": "node --env-file=.env.neon src/cli.ts seed",
+    "neon:start": "node --env-file=.env.neon src/main.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

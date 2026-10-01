@@ -150,12 +150,18 @@ npm --prefix server test
    node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
    ```
 
-3. 마이그레이션과 시드를 적용한다. 로컬 `server/.env`에 `DATABASE_URL`을 넣거나, 셸 환경 변수로 준다.
+3. 마이그레이션과 시드를 적용한다. Neon 접속 정보는 `server/.env.neon`에 둔다(git 제외). `server/.env`에는 두지 않는다. `npm run dev`가 `.env`를 읽기 때문에, 거기 두면 로컬 개발 서버가 운영 DB에 쓴다.
 
    ```bash
-   npm --prefix server run migrate
-   npm --prefix server run seed
+   # server/.env.neon
+   # DATABASE_URL=postgresql://...?sslmode=require
+   # JWT_SECRET=<위에서 만든 값>
+   npm --prefix server run neon:migrate
+   npm --prefix server run neon:seed
+   npm --prefix server run neon:start   # Neon에 붙은 서버를 로컬에서 띄운다(확인용, PORT로 포트 지정)
    ```
+
+   - 2026-10-01: 프로젝트 Neon DB(`ep-divine-credit-azirouja`, ap-southeast-1, PostgreSQL 18)에 001·002를 적용하고 시드했다. API 전 경로와 게임 접속을 확인했고, 시험 계정은 지웠다.
 
    - seed는 `data/*.csv`로 기획 표를 덮어쓴다. CSV에서 사라진 키는 DB에서 지운다.
    - CSV에 오류가 있으면 파일·줄·열을 출력하고, 아무것도 쓰지 않는다.
