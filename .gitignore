@@ -10,3 +10,4 @@ server/.data/
 server/.env
 server/.env.*
 !server/.env.example
+.superpowers/
