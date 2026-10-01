@@ -24,7 +24,7 @@ static var _cache := {}
 
 
 ## 패널 박스. 내용 여백 margin px.
-static func panel(color: Color, chamfer := 10.0, margin := 12, facet := 0.035) -> StyleBox:
+static func panel(color: Color, chamfer := 10.0, margin := 12, facet := 0.06) -> StyleBox:
 	var key := ["p", color, chamfer, margin, facet]
 	if not _cache.has(key):
 		var b := LowpolyBox.new()
@@ -80,7 +80,7 @@ static func bar(fill_color: Color) -> Dictionary:
 		var bg := LowpolyBox.new()
 		bg.color = Color(0, 0, 0, 0.14)
 		bg.chamfer = 4.0
-		bg.facet = 0.0
+		bg.facet = 0.05
 		bg.border_width = 1.5
 		bg.border_color = Color(OUTLINE, 0.55)
 		var fill := LowpolyBox.new()
