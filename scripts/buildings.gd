@@ -8,15 +8,20 @@ const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
+const UnitModelScript := preload("res://scripts/unit_model.gd")
+
+const LAYER_TAP := 16  # 건물·상인 탭 판정체 (성문 2, 성벽 8과 별도)
 
 const MOUNTAIN_VARIANTS := 5
 
 var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
+var merchant_label: Label3D  # 상인 이름표(작업 C가 텍스트를 바꾼다)
 
 
 func _ready() -> void:
 	for b in Balance.BUILDINGS:
 		_place_building(b)
+	_place_merchant()
 	_scatter_nature()
 	_ring_mountains()
 
@@ -28,8 +33,48 @@ func _place_building(b: Dictionary) -> void:
 	mi.material_override = Art.lowpoly_vc_material()
 	mi.position = center
 	add_child(mi)
+	var h: float = mi.mesh.get_aabb().end.y
+	_add_tap_body(center, Vector3(b.size.x * Balance.TILE, h, b.size.y * Balance.TILE)).set_meta("building", b.id)
+	_add_label(b.name, center + Vector3(0, h + 1.0, 0))
+
+
+## 상인 NPC(대기, 카메라 쪽 +X+Z 대각을 봄) + 수레 + 이름표 + 탭 판정체(상인·수레를 함께 덮음).
+func _place_merchant() -> void:
+	var npc := UnitModelScript.new()
+	npc.setup(Art.MERCHANT_MODEL)
+	npc.position = Balance.MERCHANT_POS
+	npc.face(Vector3(1, 0, 1))
+	add_child(npc)
+	var cart := MeshInstance3D.new()
+	cart.mesh = TownKit.merchant_cart()
+	cart.material_override = Art.lowpoly_vc_material()
+	cart.position = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
+	add_child(cart)
+	merchant_label = _add_label("상인", Balance.MERCHANT_POS + Vector3(0, Art.HEAD_HEIGHT + 0.6, 0))
+	var r := Vector3(Balance.MERCHANT_RADIUS, Art.HEAD_HEIGHT, Balance.MERCHANT_RADIUS)
+	var box := AABB(Balance.MERCHANT_POS - Vector3(r.x, 0, r.z), r * 2.0 * Vector3(1, 0.5, 1))  # 상인 기둥
+	box = box.merge(AABB(cart.position + cart.mesh.get_aabb().position, cart.mesh.get_aabb().size))
+	_add_tap_body(Vector3(box.get_center().x, 0, box.get_center().z), Vector3(box.size.x, box.end.y, box.size.z)).set_meta("merchant", true)
+
+
+## 탭 판정체: 물리 이동과 무관(마스크 0), 레이어 16 = 건물·상인 탭. 바닥 중심 ground_center, 크기 size.
+func _add_tap_body(ground_center: Vector3, size: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = LAYER_TAP
+	body.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	cs.shape = shape
+	body.add_child(cs)
+	body.position = ground_center + Vector3(0, size.y / 2.0, 0)
+	add_child(body)
+	return body
+
+
+func _add_label(text: String, pos: Vector3) -> Label3D:
 	var label := Label3D.new()
-	label.text = b.name
+	label.text = text
 	label.font = FONT
 	label.font_size = 48
 	label.outline_size = 12
@@ -39,8 +84,9 @@ func _place_building(b: Dictionary) -> void:
 	label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	label.modulate = Color(0.18, 0.18, 0.22)
 	label.outline_modulate = Color(1, 1, 1, 0.9)
-	label.position = center + Vector3(0, mi.mesh.get_aabb().end.y + 1.0, 0)
+	label.position = pos
 	add_child(label)
+	return label
 
 
 ## 성벽 근처·괴물 진입로(두 축)·서로 가까운 자리를 피해 나무·덤불·바위를 흩는다. 나무 자리는 2~4그루 숲(같은 변형, 회전·크기만 다름).

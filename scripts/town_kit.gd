@@ -410,3 +410,34 @@ static func _mtri(k, tri: Array, below: Vector3, band_h: float) -> void:
 	var c: Vector3 = (tri[0] + tri[1] + tri[2]) / 3.0
 	var t := c.y / band_h
 	k.face(tri, c - below, LEAF_DARK if t < 1.0 / 3.0 else (ROCK if t < 2.0 / 3.0 else SNOW))
+
+
+# --- 상인 수레 (원점 = 수레 중심 바닥, 폭 X ≤ 2.4, 깊이 Z ≤ 1.6, 높이 ≤ 2.6) ---
+
+## 나무 수레: 바닥 상자 + 바퀴 2개(8각 기둥, X축) + 줄무늬 차양(기둥 4개, 빨강/흰 띠) + 상자·자루.
+static func merchant_cart() -> ArrayMesh:
+	var k = MeshKit.new()
+	k.box(Vector3(0, 0.45, 0), Vector3(2.0, 0.35, 1.2), WOOD)
+	for x in [-1.16, 1.0]:  # 바퀴: X축으로 눕힌 8각 기둥(차체 옆에 붙음)
+		k.xform = Transform3D(Basis(Vector3.BACK, -PI / 2.0), Vector3(x, 0.4157, 0.0))  # 8각 변심 거리 = 0.45·cos(π/8) → 바닥이 y=0
+		k.prism_n(Vector3.ZERO, 8, 0.45, 0.45, 0.16, WOOD_DARK, PI / 8.0)
+	k.xform = Transform3D.IDENTITY
+	for p in [Vector3(-0.9, 0.8, -0.5), Vector3(0.9, 0.8, -0.5), Vector3(-0.9, 0.8, 0.5), Vector3(0.9, 0.8, 0.5)]:
+		k.box(p, Vector3(0.1, 1.5, 0.1), WOOD_DARK)
+	var n := 6  # 차양: X 방향 띠가 번갈아 빨강/흰, 앞(+Z)으로 살짝 기울어 내려옴
+	var w := 2.2 / n
+	for i in n:
+		var x0 := -1.1 + i * w
+		var col := ROOF_RED if i % 2 == 0 else PLASTER
+		var a := Vector3(x0, 2.3, -0.65)
+		var b := Vector3(x0 + w, 2.3, -0.65)
+		var c := Vector3(x0 + w, 2.0, 0.75)
+		var d := Vector3(x0, 2.0, 0.75)
+		k.face([a, b, c, d], Vector3(0, 1.0, 0.2), col)
+		k.face([a, b, c, d], Vector3(0, -1.0, -0.2), col.darkened(0.15))  # 뒷면(아래에서 보임)
+	k.box(Vector3(-0.55, 0.8, -0.1), Vector3(0.6, 0.5, 0.5), WOOD_DARK)
+	k.box(Vector3(0.1, 0.8, 0.15), Vector3(0.5, 0.4, 0.45), WOOD)
+	k.box(Vector3(0.45, 0.8, -0.2), Vector3(0.4, 0.3, 0.4), WOOD_DARK)
+	k.prism_n(Vector3(0.7, 0.8, 0.2), 6, 0.22, 0.17, 0.5, LOG_END)
+	k.prism_n(Vector3(-0.1, 0.8, -0.35), 6, 0.2, 0.14, 0.45, CROP)
+	return k.commit()

@@ -64,6 +64,11 @@ const BUILDINGS := [
 	{"id": "farm", "name": "농장", "cell": Vector2i(-5, 5), "size": Vector2i(3, 3)},
 ]
 
+## 상인 자리 (개정 7). 막사·벌목장·채석장 사이 빈 터(십자 도로 밖). 수레는 상인 +X 쪽.
+const MERCHANT_POS := Vector3(3.5, 0, 6.5)
+const MERCHANT_CART_OFFSET := Vector3(2.0, 0, 0)
+const MERCHANT_RADIUS := 0.6
+
 
 static func gate_hp_max(level: int) -> float:
 	return 400.0 * level

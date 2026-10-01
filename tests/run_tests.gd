@@ -9,6 +9,7 @@ const FormationScript := preload("res://scripts/formation.gd")
 const Art := preload("res://scripts/art.gd")
 const MeshKitScript := preload("res://scripts/mesh_kit.gd")
 const TownKitScript := preload("res://scripts/town_kit.gd")
+const IconsScript := preload("res://scripts/icons.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -47,6 +48,8 @@ func _init() -> void:
 	test_mesh_kit()
 	test_castle_parts()
 	test_town_recipes()
+	test_merchant_spot()
+	test_icon_shapes()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -667,3 +670,39 @@ func test_town_recipes() -> void:
 	for f in [TownKitScript.tree_pine, TownKitScript.tree_round, TownKitScript.bush, TownKitScript.rock_cluster, TownKitScript.mountain]:
 		var m: ArrayMesh = f.call(rng)
 		check(m.get_surface_count() == 1 and m.get_aabb().position.y > -0.3, "%s is one surface resting near the ground" % f.get_method())
+
+
+## 상인(반경 0.6 m)과 수레(AABB)는 건물 부지·십자 도로·안쪽 통로 고리(깊이 half−3, 레벨 1~3)를 침범하지 않고, 수레는 크기 한계 안.
+func test_merchant_spot() -> void:
+	var box := TownKitScript.merchant_cart().get_aabb()
+	check(box.size.x <= 2.4 and box.size.z <= 1.6 and box.size.y <= 2.6, "cart fits 2.4 x 1.6 x 2.6: %s" % box.size)
+	check(absf(box.position.y) < 0.01 and absf(box.get_center().x) < 0.2 and absf(box.get_center().z) < 0.2, "cart origin is bottom centre: %s" % box)
+	var cart_c: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
+	var r := Balance.MERCHANT_RADIUS
+	var rects := [  # 상인 사각형, 수레 사각형 (x, z)
+		Rect2(Balance.MERCHANT_POS.x - r, Balance.MERCHANT_POS.z - r, 2.0 * r, 2.0 * r),
+		Rect2(cart_c.x + box.position.x, cart_c.z + box.position.z, box.size.x, box.size.z),
+	]
+	check(not rects[0].intersects(rects[1]), "merchant and cart do not overlap")
+	for rc in rects:
+		for b in Balance.BUILDINGS:
+			var plot := Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE)
+			check(not rc.intersects(plot), "merchant spot %s clear of %s plot" % [rc, b.id])
+		check(rc.position.x > 2.0 and rc.position.y > 2.0, "merchant spot %s off the cross roads (tiles -1..0 = +-2 m)" % rc)
+		for level in [1, 2, 3]:
+			var lane := Balance.interior_half(level) - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN
+			var lo := maxf(rc.position.x, rc.position.y)  # 사각형 안 max(|x|,|z|) 범위(첫 사분면)
+			var hi := maxf(rc.end.x, rc.end.y)
+			check(hi < lane - 1.0 or lo > lane + 1.0, "merchant spot %s clear of level %d lane ring (depth %.1f)" % [rc, level, lane])
+
+
+## 아이콘 네 종류 모두 도형이 있고(다각형 ≥ 3점, 단위 박스 안), 모르는 종류는 비어 있다. (그리기 호출은 _draw 안에서만 가능해 도형 단위로 검사)
+func test_icon_shapes() -> void:
+	for kind in IconsScript.KINDS:
+		var shapes: Array = IconsScript.shapes(kind)
+		check(shapes.size() >= 2, "icon %s has shapes" % kind)
+		for s in shapes:
+			check(s[0].size() >= 3, "icon %s polygon has >= 3 points" % kind)
+			for p in s[0]:
+				check(absf(p.x) <= 0.5 and absf(p.y) <= 0.5, "icon %s point %s inside the unit box" % [kind, p])
+	check(IconsScript.shapes("nope").is_empty(), "unknown icon kind draws nothing")
