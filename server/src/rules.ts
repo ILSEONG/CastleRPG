@@ -65,9 +65,19 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
-// 시간 칸만의 결정적 함수. jackpot_p 확률로 jackpot_rate, 나머지는 min..max를 step 단위로, 가중치 1 → 1/ratio 직선.
-export function merchantRate(hour: number, config: Config): number {
-  const rnd = mulberry32(hour)
+// 자원마다 따로 뽑는다(개정 11). 시드 = (시간 칸, 자원 순번)을 섞은 값.
+export const MERCHANT_RES = ['wood', 'stone', 'food']
+export const merchantSeed = (hour: number, index: number) => (Math.imul(hour | 0, 0x9e3779b1) ^ Math.imul(index + 1, 0x85ebca6b)) >>> 0
+
+export function merchantRates(hour: number, config: Config, ids: string[] = MERCHANT_RES): Record<string, number> {
+  const out: Record<string, number> = {}
+  ids.forEach((id, i) => { out[id] = merchantRate(merchantSeed(hour, i), config) })
+  return out
+}
+
+// 시드만의 결정적 함수. jackpot_p 확률로 jackpot_rate, 나머지는 min..max를 step 단위로, 가중치 1 → 1/ratio 직선.
+export function merchantRate(seed: number, config: Config): number {
+  const rnd = mulberry32(seed)
   if (rnd() < cfgNum(config, 'merchant_jackpot_p')) return cfgNum(config, 'merchant_jackpot_rate')
   const step = cfgNum(config, 'merchant_rate_step')
   const min = cfgNum(config, 'merchant_rate_min')

@@ -203,7 +203,7 @@ export function createApp(opts: AppOptions) {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
         kill_seq: p.kill_seq, buildings, heroes, deploy,
       },
-      merchant: { rate: R.merchantRate(R.hourIndex(now), game.config), next_change: R.nextChange(now) },
+      merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
   }
 
@@ -378,19 +378,19 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g, now) => {
       const list = target === 'all' ? g.resources : g.resources.filter((x) => x.id === target)
       if (list.length === 0) throw new ApiError(400, 'unknown_resource', `unknown resource '${target}'`)
-      const rate = R.merchantRate(R.hourIndex(now), g.config)
+      const rates = R.merchantRates(R.hourIndex(now), g.config, g.resources.map((x) => x.id))
       let gold = 0
       const sold: Record<string, number> = {}
       const delta: Record<string, number> = {}
       for (const r of list) {
         const amount = p.res[r.id] ?? 0
         if (amount <= 0) continue
-        gold += R.sellValue(amount, r.price, rate)
+        gold += R.sellValue(amount, r.price, rates[r.id])
         sold[r.id] = amount
         delta[r.id] = -amount
       }
-      if (Object.keys(sold).length === 0) return { extra: { gold_gained: 0, rate } }
-      return { change: { goldTenths: gold * 10, res: delta, log: { kind: 'sell', detail: { res: target, sold, rate, gold, gold_tenths: gold * 10 } } }, extra: { gold_gained: gold, rate } }
+      if (Object.keys(sold).length === 0) return { extra: { gold_gained: 0, rates } }
+      return { change: { goldTenths: gold * 10, res: delta, log: { kind: 'sell', detail: { res: target, sold, rates: Object.fromEntries(Object.keys(sold).map((id) => [id, rates[id]])), gold, gold_tenths: gold * 10 } } }, extra: { gold_gained: gold, rates } }
     })
   })
 

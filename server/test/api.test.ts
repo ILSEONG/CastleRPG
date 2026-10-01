@@ -77,7 +77,7 @@ test('JWT: 없음·위조·다른 비밀·만료·이상한 sub는 401', async (
   }
 })
 
-test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,keep_level,gate_level,buildings,heroes,deploy}, merchant{rate,next_change}', async () => {
+test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,keep_level,gate_level,buildings,heroes,deploy}, merchant{rates{wood,stone,food},next_change}', async () => {
   S.clock.t = T0 + 0.25
   const { token } = await S.login()
   const r = await S.req('GET', '/v1/player', { token })
@@ -95,7 +95,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       heroes: { hans: 1, ella: 1, dorik: 1, nina: 1 },
       deploy: ['hans', 'ella', 'dorik', 'nina'],
     },
-    merchant: { rate: R.merchantRate(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
+    merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })
   assert.equal(r.headers.get('content-type')?.startsWith('application/json'), true)
 })
@@ -150,13 +150,14 @@ test('수집 규칙(서버 시계): 분 내림·남은 초 유지·상한·0이�
   assert.equal((await logs(id, 'collect')).length, 5) // 20, 3600, 7200, 시계 되돌림, 10
 })
 
-test('판매: 현재 시세로 그 자원 전부 / all, 골드 증가, 0개면 0, 모르는 자원 400', async () => {
+test('판매: 자원별 시세로 그 자원 전부 / all, 골드 증가, 0개면 0, 모르는 자원 400', async () => {
   const cfg = await CONFIG()
-  // 시세가 1이 아닌 시간 칸을 고른다(내림이 보이게)
+  // 세 자원 시세가 모두 1이 아니고 목재 ≠ 식량인 시간 칸을 고른다(내림이 보이고 같은 단가 자원도 배율이 다르게)
   let t = T0
-  while (R.merchantRate(R.hourIndex(t), cfg) === 1) t += 3600
+  const ok = (h: number) => { const q = R.merchantRates(h, cfg); return q.wood !== 1 && q.stone !== 1 && q.food !== 1 && q.wood !== q.food }
+  while (!ok(R.hourIndex(t))) t += 3600
   S.clock.t = t
-  const rate = R.merchantRate(R.hourIndex(t), cfg)
+  const rates = R.merchantRates(R.hourIndex(t), cfg)
   const { token, id } = await S.login()
   await S.req('POST', '/v1/test/age', { token, body: { minutes: 7 } })
   await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // 70
@@ -165,22 +166,23 @@ test('판매: 현재 시세로 그 자원 전부 / all, 골드 증가, 0개면 0
 
   let r = await S.req('POST', '/v1/sell', { token, body: { res: 'stone' } })
   assert.equal(r.status, 200)
-  assert.equal(r.json.rate, rate)
-  assert.equal(r.json.gold_gained, Math.floor(35 * 2 * rate + 1e-9))
+  assert.deepEqual(r.json.rates, rates)
+  assert.equal(r.json.gold_gained, Math.floor(35 * 2 * rates.stone + 1e-9))
   assert.equal(r.json.player.res.stone, 0)
   assert.equal(r.json.player.gold, r.json.gold_gained)
   assert.equal(r.json.player.gold_tenths, r.json.gold_gained * 10)
   const g1 = r.json.player.gold
 
   r = await S.req('POST', '/v1/sell', { token, body: { res: 'all' } })
-  const each = R.sellValue(70, 1, rate)
-  assert.equal(r.json.gold_gained, each * 2)
+  const each = R.sellValue(70, 1, rates.wood) + R.sellValue(70, 1, rates.food) // 자원마다 자기 배율
+  assert.notEqual(R.sellValue(70, 1, rates.wood), R.sellValue(70, 1, rates.food))
+  assert.equal(r.json.gold_gained, each)
   assert.deepEqual(r.json.player.res, { wood: 0, stone: 0, food: 0 })
-  assert.equal(r.json.player.gold, g1 + each * 2)
+  assert.equal(r.json.player.gold, g1 + each)
 
   r = await S.req('POST', '/v1/sell', { token, body: { res: 'all' } })
   assert.equal(r.json.gold_gained, 0)
-  assert.equal(r.json.player.gold, g1 + each * 2)
+  assert.equal(r.json.player.gold, g1 + each)
   const bad = await S.req('POST', '/v1/sell', { token, body: { res: 'gold' } })
   assert.equal(bad.status, 400)
   assert.equal(bad.json.error, 'unknown_resource')

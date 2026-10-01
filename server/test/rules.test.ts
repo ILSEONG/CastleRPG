@@ -35,21 +35,21 @@ test('collectStep: 남은 초 유지, 상한이면 지금, 0이면 변화 없음
   assert.deepEqual(R.collectStep(L, L - 500, 10, 1, CAP), { amount: 0, lastCollect: L - 500, changed: true })
 })
 
-test('merchantRate: 결정적, 값 12개, 20만 칸 표본 분포(2.0 = 5% ± 0.5%, P(0.5)/P(1.5) = 3 ± 0.3)', () => {
+test('merchantRates: 결정적, 값 12개, 20만 칸 × 3자원 표본 분포(2.0 = 5% ± 0.5%, P(0.5)/P(1.5) = 3 ± 0.3)', () => {
   const allowed = new Set([0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 2])
   const counts = new Map<number, number>()
   const start = R.hourIndex(1_790_000_000)
-  const N = 200_000
-  for (let h = start; h < start + N; h++) {
-    const r = R.merchantRate(h, CONFIG)
-    counts.set(r, (counts.get(r) ?? 0) + 1)
+  const N = 200_000 * 3
+  for (let h = start; h < start + N / 3; h++) {
+    for (const r of Object.values(R.merchantRates(h, CONFIG))) counts.set(r, (counts.get(r) ?? 0) + 1)
   }
   for (const v of counts.keys()) assert.ok(allowed.has(v), `unexpected rate ${v}`)
   const jackpot = (counts.get(2) ?? 0) / N
   const ratio = (counts.get(0.5) ?? 0) / (counts.get(1.5) ?? 1)
   assert.ok(Math.abs(jackpot - 0.05) <= 0.005, `jackpot share ${jackpot}`)
   assert.ok(Math.abs(ratio - 3) <= 0.3, `P(0.5)/P(1.5) = ${ratio}`)
-  assert.equal(R.merchantRate(start + 7, CONFIG), R.merchantRate(start + 7, CONFIG))
+  assert.deepEqual(R.merchantRates(start + 7, CONFIG), R.merchantRates(start + 7, CONFIG))
+  assert.deepEqual(Object.keys(R.merchantRates(start, CONFIG)), ['wood', 'stone', 'food'])
   assert.equal(R.nextChange(3600 * 10 + 1), 3600 * 11)
   assert.equal(R.hourIndex(3600 * 10 - 0.001), 9)
 })
@@ -58,8 +58,23 @@ test('merchantRate: step이 1/정수가 아니어도 min + i × step(0.001 단�
   const cfg = { ...CONFIG, merchant_rate_step: '0.3' } // 0.5, 0.8, 1.1, 1.4
   const seen = new Set<number>()
   const start = R.hourIndex(1_790_000_000)
-  for (let h = start; h < start + 5000; h++) seen.add(R.merchantRate(h, cfg))
+  for (let h = start; h < start + 5000; h++) for (const v of Object.values(R.merchantRates(h, cfg))) seen.add(v)
   assert.deepEqual([...seen].sort((a, b) => a - b), [0.5, 0.8, 1.1, 1.4, 2])
+})
+
+test('merchantRates: 자원끼리 다르다(표본에서 세 값이 모두 같은 칸은 절반 미만, 자원별 열이 서로 다른 수열)', () => {
+  const start = R.hourIndex(1_790_000_000)
+  let same = 0
+  const cols: Record<string, number[]> = { wood: [], stone: [], food: [] }
+  for (let h = start; h < start + 2000; h++) {
+    const r = R.merchantRates(h, CONFIG)
+    if (r.wood === r.stone && r.stone === r.food) same++
+    for (const k of Object.keys(cols)) cols[k].push(r[k])
+  }
+  assert.ok(same < 400, `all-equal slots ${same}`)
+  assert.notDeepEqual(cols.wood, cols.stone)
+  assert.notDeepEqual(cols.stone, cols.food)
+  assert.notDeepEqual(cols.wood, cols.food)
 })
 
 test('sellValue: floor(수량 × 단가 × 배율)', () => {
