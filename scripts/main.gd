@@ -57,6 +57,8 @@ func _build_world() -> void:
 	badges.camera = camera
 	add_child(badges)
 	_formation = FormationScript.new()
+	if OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
+		_econ_demo()  # --heroes보다 먼저: Economy.reset이 개발용 영웅 보유·배치를 지우지 않게
 	_apply_dev_heroes()
 	_sync_heroes()
 	var picker = PickerScript.new()
@@ -86,8 +88,6 @@ func _build_world() -> void:
 		Economy.save_path = ""  # 개발 실행은 실제 저장 파일을 건드리지 않는다
 		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
-	if OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
-		_econ_demo()
 
 
 ## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.
@@ -229,7 +229,8 @@ func _flag_requested(flag: String) -> bool:
 	return false
 
 
-## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 9999(10연차 확인용).
+## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 9999(10연차 확인용). 영웅을 만들기 전(_build_world 앞부분)에
+## 불러 --heroes(_apply_dev_heroes)가 그 뒤에 보유·배치를 덮게 한다.
 func _econ_demo() -> void:
 	var now := Time.get_unix_time_from_system()
 	Economy.save_path = ""
@@ -240,3 +241,4 @@ func _econ_demo() -> void:
 		Economy.res[id] = 500
 	Economy.gold = 9999
 	Economy.changed.emit()
+	print("[econ-demo] gold 9999, resources 500")
