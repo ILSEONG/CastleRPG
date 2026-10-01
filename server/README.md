@@ -160,7 +160,7 @@ npm --prefix server test
   - 모집에서 이미 가진 영웅이 다시 나오면 copies +1, 조각 +1이다(새 영웅은 조각 0).
   - 승급 p → p+1에 조각 `promote_shards`의 p번째(`5|25|50|100|200`)를 쓴다. 최대 승급은 5다. 능력치 배율 `promote_mult`^p는 앱이 계산한다.
   - 조각 차감·승급 +1·`economy_log`(`promote`)는 version 가드 한 문장이다. 같은 순간 두 번 보내도 조각이 1회분이면 하나는 409다. 앱은 승급을 다시 보내지 않는다.
-  - Neon: 009 마이그레이션(시드 전에도 승급 설정 기본값을 넣는다)과 시드(설정 `promote_shards`·`promote_mult`·`hero_max_level_per_promotion` 추가, `hero_star_bonus`·`hero_max_stars`·`hero_max_level_per_star` 삭제)를 새 서버와 같이 올린다.
+  - Neon: 009 마이그레이션(시드 전에도 승급 설정 기본값을 넣는다)과 시드(설정 `promote_shards`·`promote_mult`·`hero_max_level_per_promotion` 추가, 옛 별 설정 3개(별 보너스·최대 별·별당 최대 레벨)는 시드가 지운다)를 새 서버와 같이 올린다.
 - 영웅 레벨업(개정 11, 마이그레이션 006 `player_heroes.level`)
   - 최대 레벨 = `hero_max_level_base` + `hero_max_level_per_promotion` × 승급(개정 15).
   - L → L+1 비용: 골드(정수) = round(`levelup_gold_<등급>` × 1.12^(L−1)), 식량 = `levelup_food_<등급>` × L. count번이면 그 합이다. 골드는 `floor(gold_tenths / 10)`로 판정하고 × 10을 뺀다.

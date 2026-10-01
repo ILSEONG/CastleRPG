@@ -720,7 +720,7 @@ func _check(ok: bool, what: String, detail: String) -> void:
 
 
 ## (L) 개정 11 레벨업: 방치 모드에서 오프라인 레벨업(Economy.level_up)하면 그 슬롯 영웅만 다시 만들어지고 HP·공격이
-##     기본 × (1 + 0.06 × (L − 1)) × 별 배율이다. 실제 타격 피해도 그 공격력이다(오라 없는 혼자 공격).
+##     기본 × (1 + 0.06 × (L − 1)) × 승급 배율이다(개정 15). 실제 타격 피해도 그 공격력이다(오라 없는 혼자 공격).
 func _levelup_case() -> void:
 	GameState.refill()
 	await _frames(1)
