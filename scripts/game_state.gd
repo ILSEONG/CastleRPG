@@ -40,6 +40,20 @@ func hero_count() -> int:
 	return GameData.hero_slots(keep_level)
 
 
+# --- 영웅 보유·배치 공급자 (경계) ---
+# ponytail: 임시 공급자 — 지금은 starter_heroes 기본 배치·copies 1. 보유·배치가 Economy(서버 player.heroes/deploy)로 오면
+# 이 두 함수만 그쪽을 읽게 바꾼다. 호출자(main·hero)는 그대로.
+
+## 배치 슬롯 i → 영웅 id 또는 null. 길이 = hero_count().
+func deploy() -> Array:
+	return GameData.default_deploy(hero_count())
+
+
+## 영웅 id의 보유 수(별 계산용).
+func hero_copies(_hero_id: String) -> int:
+	return 1
+
+
 func start_stage() -> void:
 	if mode != Mode.IDLE:
 		push_warning("start_stage ignored in mode %d" % mode)
@@ -69,6 +83,17 @@ func damage_gate(side: int, amount: float) -> void:
 	gate_hp_changed.emit(side, gate_hp[side], gate_hp_max)
 	if gate_hp[side] == 0.0:
 		gate_broken.emit(side)
+
+
+## 성문 회복(최대치 상한). 부서진 성문은 회복하지 않는다. 실제로 오른 양을 돌려준다.
+func repair_gate(side: int, amount: float) -> float:
+	if gate_hp[side] <= 0.0 or amount <= 0.0:
+		return 0.0
+	var before := gate_hp[side]
+	gate_hp[side] = minf(gate_hp_max, before + amount)
+	if gate_hp[side] > before:
+		gate_hp_changed.emit(side, gate_hp[side], gate_hp_max)
+	return gate_hp[side] - before
 
 
 func is_gate_broken(side: int) -> bool:

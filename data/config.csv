@@ -2,7 +2,6 @@ key,value
 castle_hp,1000
 gate_hp_per_level,400
 hero_slots,4|8|12
-hero_roster,warrior|archer
 max_live_monsters,120
 countdown_sec,3
 result_sec,2
@@ -18,3 +17,11 @@ merchant_rate_step,0.1
 merchant_low_high_ratio,3
 kill_rate_cap,5
 kill_burst_sec,60
+starter_heroes,hans|ella|dorik|nina
+hero_max_stars,5
+hero_star_bonus,0.1
+gacha_cost_1,300
+gacha_cost_10,2700
+gacha_rate_ssr,0.03
+gacha_rate_sr,0.17
+gacha_10_min_sr,1

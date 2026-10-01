@@ -26,18 +26,19 @@ const BORDER_SEED := 11
 const CHAR_DIR := "res://assets/models/characters/"
 const PROP_DIR := "res://assets/models/props/"
 
+## 영웅 모델(heroes.csv `model`). gear = 손 부착물(handslot_l/r 자식) 전체 — 영웅의 gear 열에 있는 것만 보이고 나머지는 숨긴다.
+## 모자·투구·망토는 부착물이 아니라 늘 보인다. 이름은 각 GLB를 열어 확인한 실제 노드 이름. 애니메이션 이름은 다섯 모델 공통.
+const HERO_ANIMS := {"idle": "Idle", "walk": "Walking_A", "death": "Death_A"}
 const HERO_MODELS := {
-	"warrior": {
-		"scene": CHAR_DIR + "Knight.glb",
-		"hide": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Spike_Shield", "2H_Sword"],
-		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_A"},
-	},
-	"archer": {
-		"scene": CHAR_DIR + "Rogue_Hooded.glb",
-		"hide": ["Knife_Offhand", "1H_Crossbow", "Knife", "Throwable"],
-		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "2H_Ranged_Shoot", "death": "Death_A"},
-	},
+	"Knight": {"scene": CHAR_DIR + "Knight.glb",
+		"gear": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword", "2H_Sword"]},
+	"Barbarian": {"scene": CHAR_DIR + "Barbarian.glb",
+		"gear": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"]},
+	"Mage": {"scene": CHAR_DIR + "Mage.glb", "gear": ["Spellbook", "Spellbook_open", "1H_Wand", "2H_Staff"]},
+	"Rogue": {"scene": CHAR_DIR + "Rogue.glb", "gear": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"]},
+	"Rogue_Hooded": {"scene": CHAR_DIR + "Rogue_Hooded.glb", "gear": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"]},
 }
+const GRADE_COLORS := {"R": Color("#8FA3B8"), "SR": Color("#9B6CD6"), "SSR": Color("#F2B233")}
 
 ## 상인 NPC: 두건 없는 Rogue, 무기·투척물 숨김(Cape는 망토라 유지). attack/death는 UnitModel 계약상 채움(쓰지 않음).
 const MERCHANT_MODEL := {
@@ -63,6 +64,26 @@ const MONSTER_MODELS := {
 const WEAPON_BONE := "handslot.r"
 
 const ARROW_MODEL := PROP_DIR + "arrow.gltf"
+
+## 영웅 정의(GameData.hero) → UnitModel 스펙: gear만 보이고, 공격 애니메이션은 역할·모델·주무기로 고른다.
+static func hero_spec(h: Dictionary) -> Dictionary:
+	var m: Dictionary = HERO_MODELS[h.model]
+	var gear: PackedStringArray = h.gear.split("|")
+	var anims := HERO_ANIMS.duplicate()
+	anims.attack = _attack_anim(h.model, gear, h.role)
+	return {"scene": m.scene, "hide": m.gear.filter(func(g): return not gear.has(g)), "anims": anims}
+
+
+static func _attack_anim(model: String, gear: PackedStringArray, role: String) -> String:
+	if role == "ranged":
+		match model:
+			"Mage": return "Spellcast_Shoot"
+			"Barbarian": return "Throw"
+		return "1H_Ranged_Shoot" if gear[0].begins_with("1H") else "2H_Ranged_Shoot"
+	if gear.size() > 1 and gear[1].ends_with("_Offhand"):
+		return "Dualwield_Melee_Attack_Chop"
+	return "2H_Melee_Attack_Chop" if gear[0].begins_with("2H") else "1H_Melee_Attack_Chop"
+
 
 static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
 static var _vc_material: ShaderMaterial

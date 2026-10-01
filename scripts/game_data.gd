@@ -3,6 +3,7 @@ extends RefCounted
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
+const Skills := preload("res://scripts/skills.gd")
 const MONSTERS_PATH := "res://data/monsters.csv"
 const STAGES_PATH := "res://data/stages.csv"
 const HEROES_PATH := "res://data/heroes.csv"
@@ -14,11 +15,16 @@ const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하�
 const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "scale", "gold"]
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 const HERO_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]
+const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "model", "gear", "color", "desc"]
+const HERO_SKILL_COLS := [["skill1", "s1a", "s1b", "s1c"], ["skill2", "s2a", "s2b", "s2c"]]  # 빈 칸 = 없음(서버는 null)
+const GRADES := ["R", "SR", "SSR"]
+const ROLES := ["melee", "ranged"]
 const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
-	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap"]
-const CONFIG_LIST_KEYS := ["hero_slots", "hero_roster"]
+	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "hero_max_stars", "hero_star_bonus",
+	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr"]
+const CONFIG_LIST_KEYS := ["hero_slots", "starter_heroes"]
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
 static var _monsters := {}
@@ -36,7 +42,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
 		"stages": _read(stages_path, ["stage"] + STAGE_COLS),
-		"heroes": _read(heroes_path, ["id", "name"] + HERO_COLS),
+		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1]),
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
 		"config": _config_map(_read(config_path, ["key", "value"])),
 	}))
@@ -86,7 +92,7 @@ static func monster(id: String) -> Dictionary:
 	return _monsters.get(id, {})
 
 
-## 영웅 역할 표(파일 순서).
+## 영웅 표(파일 순서). 행 = CSV 열 + skills {종류: [a, b, c]}(빈 숫자 0).
 static func heroes() -> Array:
 	_ensure()
 	return _heroes
@@ -141,10 +147,19 @@ static func hero_slots(keep_level: int) -> int:
 	return int(slots[clampi(keep_level, 1, slots.size()) - 1])
 
 
-## 영웅 index의 역할 id = hero_roster[index % 길이].
-static func hero_role(index: int) -> String:
-	var roster := config_list("hero_roster")
-	return roster[index % roster.size()]
+## 오프라인 기본 배치: starter_heroes를 슬롯 수만큼(넘치면 자르고, 모자라면 null).
+static func default_deploy(slots: int) -> Array:
+	var out := []
+	var starters := config_list("starter_heroes")
+	for i in slots:
+		out.append(starters[i] if i < starters.size() else null)
+	return out
+
+
+## 별 = min(copies − 1, hero_max_stars). HP·공격력 배율 = 1 + hero_star_bonus × 별.
+static func star_mult(copies: int) -> float:
+	var stars := clampi(copies - 1, 0, int(config_num("hero_max_stars")))
+	return 1.0 + config_num("hero_star_bonus") * stars
 
 
 ## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장(정수 열 ≥ 1, 방치 간격 ≥ MIN_IDLE_INTERVAL) —
@@ -233,6 +248,37 @@ static func _convert(rows: Array, strs: Array, nums: Array) -> Array:
 	return out
 
 
+static func _blank(v) -> bool:
+	return v == null or (v is String and v.strip_edges().is_empty())
+
+
+## skill1·skill2 열 → {종류: [a, b, c]}(빈 숫자 0). 빈 종류 = 없음. 모르는 종류, 필요한 숫자 빠짐, 숫자 아님, 같은 종류 둘 = 오류(null).
+static func _hero_skills(row: Dictionary):
+	var sk := {}
+	for cols in HERO_SKILL_COLS:
+		var kind = row.get(cols[0])
+		if _blank(kind):
+			continue
+		if not (kind is String and Skills.KINDS.has(kind.strip_edges())) or sk.has(kind.strip_edges()):
+			_err(row._src, row._line, cols[0], "unknown or repeated skill '%s'" % str(kind))
+			return null
+		kind = kind.strip_edges()
+		var nums := []
+		for i in 3:
+			var v = row.get(cols[i + 1])
+			if v is float or v is int:
+				nums.append(float(v))
+			elif v is String and v.strip_edges().is_valid_float():
+				nums.append(v.strip_edges().to_float())
+			elif _blank(v) and i >= Skills.KINDS[kind]:
+				nums.append(0.0)
+			else:
+				_err(row._src, row._line, cols[i + 1], "skill %s needs a number: '%s'" % [kind, str(v)])
+				return null
+		sk[kind] = nums
+	return sk
+
+
 ## 원시 표들 → 검사한 표들. 오류는 errors에 센다(교체 여부는 호출자가 결정).
 static func _build(raw: Dictionary) -> Dictionary:
 	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "config": raw.config}
@@ -247,7 +293,16 @@ static func _build(raw: Dictionary) -> Dictionary:
 			break
 		t.stages.append(row)
 	var ids := {}
-	for row in _convert(raw.heroes, ["id", "name"], HERO_COLS):
+	for src in raw.heroes:
+		var conv := _convert([src], HERO_STR_COLS, HERO_COLS)
+		var sk = _hero_skills(src)
+		if conv.is_empty() or sk == null:
+			continue
+		var row: Dictionary = conv[0]
+		for cols in HERO_SKILL_COLS:  # 원래 열도 그대로 둔다(같은 행을 다시 넣어도 통과하게)
+			for c in cols:
+				row[c] = src.get(c)
+		row.skills = sk
 		if ids.has(row.id):
 			_err("heroes", row._line, "id", "duplicate id '%s'" % row.id)
 		else:
@@ -287,11 +342,21 @@ static func _check_contents(t: Dictionary) -> void:
 			_err("config", 0, "hero_slots", "not a number: '%s'" % str(v))
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
-		if not Art.HERO_MODELS.has(h.id):
-			_err("heroes", h._line, "id", "hero '%s' has no model in this app" % h.id)
-	for v in _split_list(String(t.config.get("hero_roster", ""))):
-		if not (v is String and v in hero_ids and Art.HERO_MODELS.has(v)):
-			_err("config", 0, "hero_roster", "unknown hero or no model '%s'" % str(v))
+		if not h.grade in GRADES:
+			_err("heroes", h._line, "grade", "grade must be R, SR or SSR: '%s'" % h.grade)
+		if not h.role in ROLES:
+			_err("heroes", h._line, "role", "role must be melee or ranged: '%s'" % h.role)
+		if not (h.color.length() == 7 and h.color.begins_with("#") and h.color.substr(1).is_valid_hex_number()):
+			_err("heroes", h._line, "color", "color must be #RRGGBB: '%s'" % h.color)
+		if not Art.HERO_MODELS.has(h.model):
+			_err("heroes", h._line, "model", "model '%s' is not in this app" % h.model)
+			continue
+		for g in h.gear.split("|"):
+			if not g in Art.HERO_MODELS[h.model].gear:
+				_err("heroes", h._line, "gear", "model %s has no attachment '%s'" % [h.model, g])
+	for v in _split_list(String(t.config.get("starter_heroes", ""))):
+		if not (v is String and v in hero_ids):
+			_err("config", 0, "starter_heroes", "unknown hero '%s'" % str(v))
 	for r in t.resources:
 		if Balance.building(r.building).is_empty():
 			_err("resources", r._line, "building", "building '%s' is not in this app's layout" % r.building)

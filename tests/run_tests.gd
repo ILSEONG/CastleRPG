@@ -59,6 +59,11 @@ func _init() -> void:
 	test_economy_online()
 	test_merchant_spot()
 	test_icon_shapes()
+	test_heroes_table()
+	test_skill_formulas()
+	test_deploy_and_stars()
+	test_gate_repair()
+	test_fx_meshes()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -141,11 +146,14 @@ func test_game_tables() -> void:
 	check(GameData.errors == 0, "default tables incl. heroes/resources/config load without errors")
 	# Balance에서 옮긴 값 — 이전 상수와 같다(하드코딩 기대값)
 	var heroes := GameData.heroes()
-	check(heroes.size() == 2 and heroes[0].id == "warrior" and heroes[1].id == "archer", "heroes keep file order")
-	var w := GameData.hero("warrior")
-	check(w.name == "전사" and w.hp == 400.0 and w.atk == 30.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0, "warrior row = old HERO_ROLES")
-	var a := GameData.hero("archer")
-	check(a.name == "궁수" and a.hp == 220.0 and a.atk == 20.0 and a.range == 9.0 and a.atk_interval == 1.0 and a.speed == 6.0 and a.aggro == 12.0, "archer row = old HERO_ROLES")
+	check(heroes.size() == 22 and heroes[0].id == "arteon" and heroes[21].id == "jack", "heroes keep file order")
+	var w := GameData.hero("hans")
+	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
+		and w.color == "#95A5A6" and w.hp == 440.0 and w.atk == 30.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
+		and w.skills == {"lifesteal": [10.0, 0.0, 0.0]}, "hans row")
+	var a := GameData.hero("arteon")
+	check(a.skills == {"heal_aura": [6.0, 6.0, 8.0], "dmg_reduce": [25.0, 0.0, 0.0]} and a.desc.begins_with("성문 앞을"), "arteon row: two skills, empty numbers are 0, desc")
+	check(GameData.hero("ignis").skills.size() == 1, "an empty skill2 is no skill")
 	check(GameData.hero("nobody").is_empty(), "unknown hero is empty")
 	var res := GameData.resources()
 	check(res.size() == 3 and res[0].id == "wood" and res[1].id == "stone" and res[2].id == "food", "resources keep file order")
@@ -160,13 +168,13 @@ func test_game_tables() -> void:
 	for key in nums:
 		check(GameData.config_num(key) == nums[key], "config %s = %s" % [key, nums[key]])
 	check(GameData.config_list("hero_slots") == [4.0, 8.0, 12.0], "config_list parses numbers")
-	check(GameData.config_list("hero_roster") == ["warrior", "archer"], "config_list keeps strings")
+	check(GameData.config_list("starter_heroes") == ["hans", "ella", "dorik", "nina"], "config_list keeps strings")
 	check(GameData.config_list("nope").is_empty() and GameData.config_num("nope") == 0.0, "unknown config key is empty / 0")
-	check(GameData.hero_role(0) == "warrior" and GameData.hero_role(1) == "archer" and GameData.hero_role(2) == "warrior" and GameData.hero_role(3) == "archer", "hero_role alternates by roster")
+	check(GameData.config_num("hero_max_stars") == 5.0 and GameData.config_num("hero_star_bonus") == 0.1 and GameData.config_num("gacha_cost_10") == 2700.0, "hero/gacha config")
 	# 깨진 config 파일: 필수 키 빠짐
 	var logged := _errors.count
 	var cp := "user://t_config.csv"
-	_write(cp, "key,value\ncastle_hp,1000\nhero_slots,4|8|12\nhero_roster,warrior|archer\n")
+	_write(cp, "key,value\ncastle_hp,1000\nhero_slots,4|8|12\nstarter_heroes,hans|ella\n")
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
 	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1, "config file missing keys reports one error per key")
 	_errors.count = logged
@@ -200,9 +208,13 @@ func _remote_checks() -> int:
 	p.stages.reverse()  # 순서가 뒤섞여도 stage 번호로 정렬해 읽는다
 	p.config.castle_hp = "2000"
 	p.config.hero_slots = "5|9"
-	p.config.hero_roster = "archer|archer|warrior"
+	p.config.starter_heroes = "jack|kyle"
+	p.heroes[1].s1a = 5  # 서버 행처럼: 숫자는 숫자, 빈 칸은 null
+	p.heroes[1].skill2 = null
+	p.heroes[1].s2a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
-	check(GameData.hero("warrior").hp == 999.0 and GameData.heroes().size() == 2 and GameData.hero_role(0) == "archer" and GameData.hero_role(2) == "warrior", "remote heroes + roster replace the table")
+	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 22 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
+	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0]}, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(1) == 5 and GameData.hero_slots(9) == 9, "remote config replaces the table")
 	check(GameData.stage(10).hp_mult == 3.25 and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
@@ -213,9 +225,11 @@ func _remote_checks() -> int:
 	var bad := [
 		["monster cell not a number", 1], ["monster column missing", 1], ["stage gap", 1], ["hero name empty", 1],
 		["duplicate hero id", 1], ["resource building duplicated", 1], ["config key missing", 1], ["config value not a number", 1],
-		["roster names an unknown hero", 1], ["boss monster missing", 1], ["table is not an array", 1], ["table is empty", 1],
+		["starter names an unknown hero", 1], ["boss monster missing", 1], ["table is not an array", 1], ["table is empty", 1],
 		["row is not an object", 1], ["config is not an object", 1], ["two bad rows", 2],
-		["hero has no model", 1], ["roster names a hero without a model", 2], ["resource building not in the layout", 1],
+		["hero model unknown", 1], ["hero gear not on the model", 1], ["resource building not in the layout", 1],
+		["unknown skill", 1], ["repeated skill", 1], ["skill number missing", 1], ["skill number not a number", 1],
+		["grade unknown", 1], ["role unknown", 1], ["color not #RRGGBB", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -240,11 +254,11 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"monster column missing": q.monsters[1].erase("gold")
 		"stage gap": q.stages.remove_at(3)
 		"hero name empty": q.heroes[1].name = ""
-		"duplicate hero id": q.heroes[1].id = "warrior"
+		"duplicate hero id": q.heroes[1].id = "arteon"
 		"resource building duplicated": q.resources[1].building = "lumber"
 		"config key missing": q.config.erase("badge_min")
 		"config value not a number": q.config.castle_hp = "lots"
-		"roster names an unknown hero": q.config.hero_roster = "warrior|ghost"
+		"starter names an unknown hero": q.config.starter_heroes = "hans|ghost"
 		"boss monster missing": q.monsters.remove_at(1)
 		"table is not an array": q.heroes = {}
 		"table is empty": q.resources = []
@@ -253,15 +267,16 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"two bad rows":
 			q.monsters[0].atk = "x"
 			q.heroes[0].hp = null
-		"hero has no model": q.heroes.append(_mage())  # 앱에 모델이 없다(hero.gd가 Art.HERO_MODELS[role]로 깨진다)
-		"roster names a hero without a model":
-			q.heroes.append(_mage())
-			q.config.hero_roster = "warrior|mage"
+		"hero model unknown": q.heroes[0].model = "Dragon"  # 앱에 모델이 없다(hero.gd가 Art.HERO_MODELS[model]로 깨진다)
+		"hero gear not on the model": q.heroes[0].gear = "1H_Sword|2H_Staff"
+		"unknown skill": q.heroes[0].skill1 = "fly"
+		"repeated skill": q.heroes[0].skill2 = "heal_aura"
+		"skill number missing": q.heroes[0].s1c = ""  # heal_aura는 숫자 셋
+		"skill number not a number": q.heroes[2].s1a = "three"
+		"grade unknown": q.heroes[0].grade = "UR"
+		"role unknown": q.heroes[0].role = "flying"
+		"color not #RRGGBB": q.heroes[0].color = "gold"
 		"resource building not in the layout": q.resources[0].building = "mine"  # 배치에 없다(badges.gd가 깨진다)
-
-
-func _mage() -> Dictionary:
-	return {"id": "mage", "name": "마법사", "hp": 100.0, "atk": 50.0, "range": 7.0, "atk_interval": 1.5, "speed": 5.0, "aggro": 10.0}
 
 
 func test_apply_remote() -> void:
@@ -271,7 +286,7 @@ func test_apply_remote() -> void:
 	check(_errors.count - logged == expected, "rejected payloads report each error through push_error")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.hero("warrior").hp == 400.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 2, "default tables restored after apply_remote tests")
+	check(GameData.errors == 0 and GameData.hero("arteon").hp == 1040.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 22, "default tables restored after apply_remote tests")
 
 
 func test_wave_stage_ends_with_boss() -> void:
@@ -416,12 +431,11 @@ func test_layout_tables() -> void:
 	check(Balance.interior_half(2) > Balance.interior_half(1), "interior grows at keep level 2")
 	check(Balance.interior_half(3) > Balance.interior_half(2), "interior grows at keep level 3")
 	check(Balance.interior_half(99) == Balance.interior_half(3), "interior clamps beyond table")
-	check(GameData.hero_role(0) == "warrior" and GameData.hero_role(1) == "archer", "roster starts warrior, archer")
-	check(GameData.hero_role(2) == "warrior" and GameData.hero_role(3) == "archer", "roster alternates")
-	for role in GameData.heroes():
-		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "aggro"]:
-			check(role.has(key), "role %s has %s" % [role.id, key])
-	check(GameData.hero("archer").range > GameData.hero("warrior").range, "archer outranges warrior")
+	for h in GameData.heroes():
+		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "aggro", "skills"]:
+			check(h.has(key), "hero %s has %s" % [h.id, key])
+		if h.role == "ranged":
+			check(h.range > 1.8, "ranged hero %s outranges melee" % h.id)
 
 
 func test_building_layout() -> void:
@@ -510,12 +524,21 @@ func test_formation_positions() -> void:
 
 func test_art_assets() -> void:
 	var specs := {}
-	specs.merge(Art.HERO_MODELS)
+	for h in GameData.heroes():  # 영웅마다 모델 스펙: gear만 보이고 공격 애니메이션이 있다
+		check(Art.HERO_MODELS.has(h.model), "hero %s has a model" % h.id)
+		specs["hero " + h.id] = Art.hero_spec(h)
 	specs.merge(Art.MONSTER_MODELS)
-	var visible_gear := {"warrior": ["1H_Sword", "Round_Shield"], "archer": ["2H_Crossbow"]}  # Knight, Rogue_Hooded
-	for h in GameData.heroes():
-		var key: String = h.id
-		check(Art.HERO_MODELS.has(key),"hero role %s has a model" % key)
+	for model in Art.HERO_MODELS:  # 모델의 부착물 목록 = GLB의 손 부착물 전부(빠진 것도, 없는 것도 없다)
+		var root: Node = (load(Art.HERO_MODELS[model].scene) as PackedScene).instantiate()
+		var found := []
+		for slot in root.find_children("handslot_*", "BoneAttachment3D", true, false):
+			for c in slot.get_children():
+				found.append(String(c.name))
+		found.sort()
+		var listed: Array = Art.HERO_MODELS[model].gear.duplicate()
+		listed.sort()
+		check(found == listed, "%s attachment list matches the GLB: %s" % [model, found])
+		root.free()
 	for key in ["grunt", "epic_boss"]:
 		check(Art.MONSTER_MODELS.has(key), "monster %s has a model" % key)
 	for key in specs:
@@ -535,7 +558,8 @@ func test_art_assets() -> void:
 				check(Art.CORPSE_SEC <= death_len, "%s corpse removed before death animation ends: CORPSE_SEC %.2f <= %.2f" % [key, Art.CORPSE_SEC, death_len])
 		for mesh_name in spec.hide:
 			check(root.find_child(mesh_name, true, false) != null, "%s has mesh %s to hide" % [key, mesh_name])
-		for mesh_name in visible_gear.get(key, []):
+		var hero: Dictionary = GameData.hero(key.trim_prefix("hero ")) if key.begins_with("hero ") else {}
+		for mesh_name in hero.get("gear", "").split("|", false):
 			var g := root.find_child(mesh_name, true, false) as Node3D
 			check(g != null and g.visible and not spec.hide.has(mesh_name), "%s shows gear %s" % [key, mesh_name])
 		if spec.has("weapon"):
@@ -551,8 +575,8 @@ func test_art_assets() -> void:
 
 
 func test_lowpoly_conversion() -> void:
-	for path in [Art.HERO_MODELS.warrior.scene, Art.HERO_MODELS.archer.scene, Art.MONSTER_MODELS.grunt.scene, Art.MONSTER_MODELS.grunt.weapon,
-			Art.ARROW_MODEL]:
+	var paths: Array = Art.HERO_MODELS.values().map(func(m): return m.scene)
+	for path in paths + [Art.MONSTER_MODELS.grunt.scene, Art.MONSTER_MODELS.grunt.weapon, Art.ARROW_MODEL]:
 		var root: Node = Art.instance(path)
 		var surfaces := 0
 		for node in root.find_children("*", "MeshInstance3D", true, false):
@@ -567,7 +591,7 @@ func test_lowpoly_conversion() -> void:
 				check(ok, "%s surface %s/%d is low-poly with the source's sidedness (or an emissive/transparent exception)" % [path, mi.name, i])
 		check(surfaces > 0, "%s has surfaces" % path)
 		root.free()
-	var knight: Node = Art.instance(Art.HERO_MODELS.warrior.scene)
+	var knight: Node = Art.instance(Art.HERO_MODELS.Knight.scene)
 	var cape_mat := (knight.find_child("Knight_Cape", true, false) as MeshInstance3D).get_active_material(0) as ShaderMaterial
 	check(cape_mat != null and cape_mat.shader == Art.LOWPOLY_DOUBLE_SHADER, "double-sided source (Knight cape, open mesh) uses the double-sided low-poly shader")
 	knight.free()
@@ -1044,3 +1068,102 @@ func test_icon_shapes() -> void:
 			for p in s[0]:
 				check(absf(p.x) <= 0.5 and absf(p.y) <= 0.5, "icon %s point %s inside the unit box" % [kind, p])
 	check(IconsScript.shapes("nope").is_empty(), "unknown icon kind draws nothing")
+
+
+## heroes.csv(스펙 §3.3): 22행, 등급 10/7/5, 스킬은 알려진 종류만(19종 모두 누군가 쓴다), 모델·부착물 존재, 시작 영웅 R 4종(근접 2·원거리 2).
+func test_heroes_table() -> void:
+	const Skills := preload("res://scripts/skills.gd")
+	GameData.load_tables()
+	var hs := GameData.heroes()
+	check(hs.size() == 22, "22 heroes, got %d" % hs.size())
+	var grades := {"SSR": 0, "SR": 0, "R": 0}
+	var used := {}
+	for h in hs:
+		grades[h.grade] += 1
+		check(h.role in GameData.ROLES and Art.HERO_MODELS.has(h.model) and Color.html_is_valid(h.color), "hero %s role/model/color" % h.id)
+		check(h.skills.size() >= 1, "hero %s has a skill" % h.id)
+		for k in h.skills:
+			check(Skills.KINDS.has(k), "hero %s skill %s is known" % [h.id, k])
+			used[k] = true
+		for g in h.gear.split("|"):
+			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
+	check(grades == {"SSR": 10, "SR": 7, "R": 5}, "grades 10/7/5: %s" % grades)
+	check(used.size() == Skills.KINDS.size(), "every skill kind is used: %d/%d" % [used.size(), Skills.KINDS.size()])
+	var roles := []
+	for id in GameData.config_list("starter_heroes"):
+		check(GameData.hero(id).grade == "R", "starter %s is R" % id)
+		roles.append(GameData.hero(id).role)
+	check(roles == ["melee", "ranged", "melee", "ranged"], "starters alternate melee/ranged: %s" % [roles])
+
+
+## 스킬 수식(스펙 §3.2): haste·rage 간격, crit·execute·boss_slayer 배율, chain 감쇠, dodge → dmg_reduce → thorns 순서, stun N번째, 오라.
+func test_skill_formulas() -> void:
+	const Skills := preload("res://scripts/skills.gd")
+	check(Skills.interval({}, 1.0, 0.5) == 1.0, "no skill: base interval")
+	check(is_equal_approx(Skills.interval({"haste": [30.0, 0.0, 0.0]}, 0.64, 1.0), 0.64 / 1.3), "haste: interval / (1 + a/100)")
+	var rage := {"rage": [80.0, 0.0, 0.0]}
+	check(Skills.interval(rage, 0.8, 1.0) == 0.8, "rage at full HP: unchanged")
+	check(is_equal_approx(Skills.interval(rage, 0.8, 0.5), 0.8 / 1.4), "rage at half HP: speed +40%")
+	check(is_equal_approx(Skills.interval(rage, 0.8, 0.0), 0.8 / 1.8), "rage at 0 HP: speed +a% max")
+	var crit := {"crit": [25.0, 200.0, 0.0]}
+	check(Skills.damage(crit, 40.0, 0.24, 1.0, false) == 80.0, "crit: roll < a% multiplies by b/100")
+	check(Skills.damage(crit, 40.0, 0.25, 1.0, false) == 40.0, "crit: roll at a% misses")
+	var ex := {"execute": [30.0, 100.0, 0.0]}
+	check(Skills.damage(ex, 50.0, 0.9, 0.3, false) == 100.0 and Skills.damage(ex, 50.0, 0.9, 0.31, false) == 50.0, "execute: +b% at or below a% target HP")
+	var boss := {"boss_slayer": [150.0, 0.0, 0.0]}
+	check(Skills.damage(boss, 60.0, 0.9, 1.0, true) == 150.0 and Skills.damage(boss, 60.0, 0.9, 1.0, false) == 60.0, "boss_slayer: +a% to epic_boss only")
+	check(is_equal_approx(Skills.damage(GameData.hero("kyle").skills, 81.0, 0.0, 0.2, false), 81.0 * 2.5 * 2.0), "crit and execute multiply (kyle)")
+	var cd := Skills.chain_damages({"chain": [3.0, 70.0, 4.0]}, 100.0)
+	check(cd.size() == 3 and is_equal_approx(cd[0], 70.0) and is_equal_approx(cd[1], 49.0) and is_equal_approx(cd[2], 34.3), "chain: a bounces, each x b/100: %s" % [cd])
+	check(Skills.chain_damages({}, 100.0).is_empty(), "no chain: no bounces")
+	var tank := {"dodge": [20.0, 0.0, 0.0], "dmg_reduce": [25.0, 0.0, 0.0], "thorns": [30.0, 0.0, 0.0]}
+	check(Skills.incoming(tank, 100.0, 0.19) == Vector2.ZERO, "dodge first: no damage and nothing reflected")
+	var r := Skills.incoming(tank, 100.0, 0.5)
+	check(is_equal_approx(r.x, 75.0) and is_equal_approx(r.y, 22.5), "dmg_reduce before thorns: thorns reflect the reduced damage: %s" % r)
+	check(Skills.incoming({}, 100.0, 0.0) == Vector2(100.0, 0.0), "no skill: full damage, no reflect")
+	var stun := {"stun": [5.0, 1.0, 0.0]}
+	check(Skills.stuns(stun, 5) and Skills.stuns(stun, 10) and not Skills.stuns(stun, 4) and not Skills.stuns({}, 5), "stun every N-th attack")
+	check(Skills.aura_mult(15.0) == 1.15 and Skills.aura_mult(0.0) == 1.0, "atk_aura multiplier")
+
+
+## 배치 기본값(오프라인 공급자)과 별 배율.
+func test_deploy_and_stars() -> void:
+	check(GameData.default_deploy(4) == ["hans", "ella", "dorik", "nina"], "default deploy = starters")
+	check(GameData.default_deploy(6) == ["hans", "ella", "dorik", "nina", null, null], "more slots than starters: null")
+	check(GameData.default_deploy(2) == ["hans", "ella"], "fewer slots: truncated")
+	check(GameData.star_mult(1) == 1.0 and is_equal_approx(GameData.star_mult(3), 1.2) and is_equal_approx(GameData.star_mult(6), 1.5) \
+		and is_equal_approx(GameData.star_mult(99), 1.5), "stars = min(copies - 1, 5), x(1 + 0.1 x stars)")
+	var gs = GameStateScript.new()
+	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_copies("hans") == 1, "GameState deploy provider: starters, copies 1")
+	gs.keep_level = 2
+	check(gs.deploy().size() == 8 and gs.deploy()[4] == null, "deploy length = hero slots")
+	gs.free()
+
+
+## 성문 회복: 최대치 상한, 부서진 성문 제외, 오를 때만 시그널.
+func test_gate_repair() -> void:
+	var gs = GameStateScript.new()
+	var events := []
+	gs.gate_hp_changed.connect(func(s, hp, _mx): events.append([s, hp]))
+	gs.damage_gate(1, 100.0)
+	events.clear()
+	check(gs.repair_gate(1, 40.0) == 40.0 and gs.gate_hp[1] == 340.0 and events == [[1, 340.0]], "repair adds hp and signals")
+	check(gs.repair_gate(1, 500.0) == 60.0 and gs.gate_hp[1] == gs.gate_hp_max, "repair capped at max")
+	check(gs.repair_gate(1, 10.0) == 0.0 and events.size() == 2, "full gate: no gain, no signal")
+	gs.damage_gate(2, 1.0e6)
+	check(gs.repair_gate(2, 100.0) == 0.0 and gs.is_gate_broken(2), "broken gate is not repaired")
+	gs.free()
+
+
+## 이펙트 메시: 종류마다 한 면, (종류, 색)마다 캐시, 발밑 링은 선택 링(바깥 0.8)보다 작고 그림자 없음·공유 재질.
+func test_fx_meshes() -> void:
+	const Fx := preload("res://scripts/fx.gd")
+	for kind in ["bolt", "blast", "axe", "heal", "slow", "poison", "repair", "stun"]:
+		var m: Mesh = Fx._mesh(kind, Color.RED)
+		check(m != null and m.get_surface_count() == 1, "fx mesh %s builds" % kind)
+	check(Fx._mesh("bolt", Color.RED) == Fx._mesh("bolt", Color.RED) and Fx._mesh("bolt", Color.RED) != Fx._mesh("bolt", Color.BLUE), "fx meshes cached per kind and color")
+	var ring: MeshInstance3D = Fx.foot_ring(Art.GRADE_COLORS.SSR, Color("#F5D76E"))
+	var size := ring.mesh.get_aabb().size
+	check(size.x < 1.6 and size.z < 1.6 and size.y < 0.1, "foot ring inside the selection ring: %s" % size)
+	check(ring.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and ring.material_override == Fx.material(), "foot ring: no shadow, shared material")
+	ring.free()
