@@ -80,8 +80,9 @@ func _process(delta: float) -> void:
 	_slow_t -= delta
 	_stun_t -= delta
 	if _poison_t > 0.0:
+		var dt := minf(delta, _poison_t)  # 마지막 틱은 남은 시간만큼만 — 합계가 dps × 초를 넘지 않는다
 		_poison_t -= delta
-		take_damage(_poison_dps * delta)
+		take_damage(_poison_dps * dt)
 		if _dead:
 			return
 	if _stun_t > 0.0:

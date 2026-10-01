@@ -261,6 +261,11 @@ func _skill_cases(heroes: Array) -> void:
 		if m.hp < m.hp_max:
 			hurt += 1
 	_check(ig._blast_cd > 0.0 and hurt == 3, "(k) aoe_blast damages every monster in its radius", "blasted=%s hurt=%d" % [ig._blast_cd > 0.0, hurt])
+	# 폭발 피해 = 공격력 × 오라 × c%(이그니스 44 × 220% = 96.8). 표적은 같은 프레임 보통 공격도 맞는다 — 나머지 둘이 정확히 폭발 몫
+	var blast_d: float = ig.atk * ig._aura_mult() * ig._sk.aoe_blast[2] / 100.0
+	var exact := bosses.filter(func(m): return is_equal_approx(m.hp_max - m.hp, blast_d)).size()
+	_check(is_equal_approx(blast_d, 96.8) and exact >= 2 and bosses.all(func(m): return m.hp_max - m.hp >= blast_d - 0.01),
+		"(k) the blast deals atk x c%% to each monster (%.1f)" % blast_d, "damage=%s" % [bosses.map(func(m): return m.hp_max - m.hp)])
 	_remove_hero(ig)
 	_clear_monsters()
 	await _frames(1)
@@ -303,6 +308,15 @@ func _skill_cases(heroes: Array) -> void:
 	ba._repair_cd = 0.1  # 첫 쿨(8초)을 기다리지 않는다
 	await _wait_until(func(): return GameState.gate_hp[3] > g0, 1.0)
 	_check(is_equal_approx(GameState.gate_hp[3] - g0, GameState.gate_hp_max * 0.03), "(n) gate_repair restores b% of the gate", "gate %.1f -> %.1f" % [g0, GameState.gate_hp[3]])
+	# 자리를 떠나 추격 중(성문 앞에서 3 m)이면 수리하지 않고, 자리로 돌아오면 다시 한다(스펙: 성문 앞에 있을 때만)
+	ba.set_process(false)
+	ba.global_position = ba.stand_position() + Formation.SIDE_DIR[3] * 3.0
+	var g1: float = GameState.gate_hp[3]
+	ba._gate_repair()
+	_check(not ba.holds_post() and GameState.gate_hp[3] == g1, "(n) a gate hero chasing 3 m off its post does not repair", "gate %.1f -> %.1f" % [g1, GameState.gate_hp[3]])
+	ba.global_position = ba.stand_position()
+	ba._gate_repair()
+	_check(ba.holds_post() and GameState.gate_hp[3] > g1, "(n) back on its post it repairs again", "gate %.1f -> %.1f" % [g1, GameState.gate_hp[3]])
 	_remove_hero(ba)
 	GameState.refill()
 	await _frames(1)
@@ -347,13 +361,216 @@ func _skill_cases(heroes: Array) -> void:
 		_clear_monsters()
 		await _frames(1)
 	_check(idle.is_empty(), "(p) all 22 heroes fight (attack at least once in 3 s)", "never attacked: %s" % [idle])
+	await _skill_application(heroes)
+	await _placement_cases()
+
+
+## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
+func _skill_application(heroes: Array) -> void:
+	_clear_monsters()
+	GameState.refill()
+	await _frames(1)
+
+	# (q) atk_aura: 반경 안 "다른" 영웅에게만, 여럿이면 가장 큰 것 하나. 공격에 실제로 곱해진다(multishot과 같이 본다)
+	var lu = _add_hero("lumina", 300)
+	var gk = _add_hero("gork", 301)
+	for h in [lu, gk]:
+		h.set_process(false)
+	lu.global_position = gk.global_position + Vector3(0, 0, 3.0)  # 같은 동쪽 성벽 위 3 m(오라 반경 8 m)
+	_check(is_equal_approx(gk._aura_mult(), 1.15) and lu._aura_mult() == 1.0, "(q) atk_aura +b% applies to other heroes in range, not to its owner",
+		"gork %.2f lumina %.2f" % [gk._aura_mult(), lu._aura_mult()])
+	var strong: Dictionary = GameData.hero("lumina").duplicate(true)
+	strong.id = "aura_test"
+	strong.skills = {"atk_aura": [8.0, 30.0, 0.0]}
+	var lu2 = _add_hero_def(strong, 304)
+	lu2.set_process(false)
+	lu2.global_position = gk.global_position + Vector3(0, 0, -3.0)
+	_check(is_equal_approx(gk._aura_mult(), 1.30) and is_equal_approx(lu._aura_mult(), 1.30), "(q) with two auras in range only the largest counts (+30%, not +45%)",
+		"gork %.2f lumina %.2f" % [gk._aura_mult(), lu._aura_mult()])
+	lu2.global_position = gk.global_position + Vector3(0, 0, -20.0)
+	_check(is_equal_approx(gk._aura_mult(), 1.15), "(q) an aura hero out of its radius gives nothing", "gork %.2f" % gk._aura_mult())
+	_remove_hero(lu2)
+
+	# (r) multishot: 고르크(a=2)의 한 번 공격 = 표적 + 사거리 안 가장 가까운 하나. 각자 공격력 × 오라, 먼 몬스터·사거리 밖은 안 맞는다
+	var gp := _flat(gk.global_position)
+	var ms := []
+	for off in [Vector3(2.5, 0, 0), Vector3(3.0, 0, 1.0), Vector3(4.5, 0, -1.0), Vector3(9.0, 0, 0)]:
+		ms.append(_still("epic_boss", gp + off))
+	await _frames(1)
+	gk._target = ms[0]
+	gk._attack()
+	var a: float = gk.atk * 1.15
+	_check(is_equal_approx(_dmg(ms[0]), a) and is_equal_approx(_dmg(ms[1]), a) and _dmg(ms[2]) == 0.0 and _dmg(ms[3]) == 0.0,
+		"(r) multishot a=2 hits the target and the nearest other in range, each for atk x aura (%.1f)" % a, "damage=%s" % [ms.map(_dmg)])
+	_remove_hero(lu)
+	_remove_hero(gk)
+	_clear_monsters()
+	await _frames(1)
+
+	# (s) chain: 세라핀(3번, 70%, 4 m). A→B→C. B에서 가장 가까운 A(이미 맞음)는 건너뛰고 C, C에서 4 m 안에 새 대상이 없으면(D는 5 m) 멈춘다
+	var se = _add_hero("seraphine", 302)
+	se.set_process(false)
+	var sp := _flat(se.global_position)
+	var side_x: Vector3 = Formation.perp(2)
+	var ca = _still("epic_boss", sp + Formation.SIDE_DIR[2] * 3.0)
+	var cb = _still("epic_boss", ca.global_position + side_x * 2.0)
+	var cc = _still("epic_boss", cb.global_position + side_x * 2.5)
+	var cdd = _still("epic_boss", cc.global_position + side_x * 5.0)
+	await _frames(1)
+	se._target = ca
+	se._attack()
+	var d0: float = se.atk * se._aura_mult()
+	_check(is_equal_approx(_dmg(ca), d0) and is_equal_approx(_dmg(cb), d0 * 0.7) and is_equal_approx(_dmg(cc), d0 * 0.49) and _dmg(cdd) == 0.0,
+		"(s) chain bounces to the nearest monster not yet hit (x b% each) and stops when none is within c m",
+		"damage=%s" % [[_dmg(ca), _dmg(cb), _dmg(cc), _dmg(cdd)]])
+	_remove_hero(se)
+	_clear_monsters()
+	await _frames(1)
+
+	# (t) cleave: 도릭(1.5 m, 50%)이 친 대상 주변 1.5 m 안 다른 몬스터에게 피해의 b%, 밖은 없음
+	var dk = _add_hero("dorik", 303)
+	dk.set_process(false)
+	var t0 := _flat(dk.global_position) + Formation.SIDE_DIR[3] * 1.0
+	var pz: Vector3 = Formation.perp(3)
+	var tt = _still("epic_boss", t0)
+	var n1 = _still("epic_boss", t0 + pz * 1.0)
+	var n2 = _still("epic_boss", t0 - pz * 1.4)
+	var far = _still("epic_boss", t0 + pz * 2.5)
+	await _frames(1)
+	dk._target = tt
+	dk._attack()
+	var dd: float = dk.atk * dk._aura_mult()
+	_check(is_equal_approx(_dmg(tt), dd) and is_equal_approx(_dmg(n1), dd * 0.5) and is_equal_approx(_dmg(n2), dd * 0.5) and _dmg(far) == 0.0,
+		"(t) cleave deals b% of the hit to other monsters within a m of the target only", "damage=%s" % [[_dmg(tt), _dmg(n1), _dmg(n2), _dmg(far)]])
+	_remove_hero(dk)
+	_clear_monsters()
+	await _frames(1)
+
+	# (u) 폭발이 표적을 죽이면 같은 프레임에 그 시체를 치지 않는다(공격 횟수·쿨 그대로)
+	var ig = _add_hero("ignis", 300)
+	ig.set_process(false)
+	var weak = _still("grunt", _flat(ig.global_position) + Formation.SIDE_DIR[0] * 3.0)
+	await _frames(1)
+	ig._target = weak
+	ig._scan_cd = 1.0
+	ig._blast_cd = 0.0
+	ig._atk_cd = 0.0
+	ig._process(0.016)
+	_check(not weak.is_alive() and ig._attacks == 0 and ig._atk_cd <= 0.0 and ig._target == null, "(u) a target killed by the blast is not struck again (no attack, no cooldown)",
+		"alive=%s attacks=%d cd=%.2f" % [weak.is_alive(), ig._attacks, ig._atk_cd])
+	_remove_hero(ig)
+	_clear_monsters()
+	await _frames(1)
+
+	# (v) stun은 공격도 멈춘다: 한스 바로 앞 보스(처리 켬)가 기절한 동안 한스를 치지 않고, 풀리면 친다
+	var hans = heroes[0]
+	var boss = _spawn("epic_boss", 0, _flat(hans.global_position) + Formation.SIDE_DIR[0] * 1.2)
+	boss.apply_stun(1.0)
+	_g = boss
+	await _seconds(0.8)
+	var hp_stunned: float = hans.hp
+	await _wait_until(func(): return hans.hp < hans.hp_max, 2.0)
+	_check(hp_stunned == hans.hp_max and hans.hp < hans.hp_max, "(v) a stunned monster next to a hero does not attack it, and attacks once the stun ends",
+		"hp while stunned %.0f, after %.0f / %.0f" % [hp_stunned, hans.hp, hans.hp_max])
+	_clear_monsters()
+	await _frames(1)
+
+	# (w) poison 마지막 틱은 남은 시간만큼: 10/초 × 0.05초에 0.1초 프레임이면 0.5(1.0 아님), 끝난 뒤엔 없음
+	var pm = _still("epic_boss", Vector3(0, 0, -(_half + Balance.WALL_T + 20.0)))
+	await _frames(1)
+	pm.apply_poison(10.0, 0.05)
+	pm._process(0.1)
+	var p1: float = _dmg(pm)
+	pm._process(0.1)
+	_check(is_equal_approx(p1, 0.5) and is_equal_approx(_dmg(pm), 0.5), "(w) the last poison tick only deals the time left (dps x seconds in total)", "after 1 tick %.2f, after 2 %.2f" % [p1, _dmg(pm)])
+	_clear_monsters()
+	await _frames(1)
+
+	# (x) retire: 그룹에서 빠지고 refilled를 끊는다 — 같은 프레임의 리필이 되살리지 않는다
+	var rh = _add_hero("jack", 305)
+	await _frames(1)
+	rh.retire()
+	GameState.refill()
+	_check(not rh.is_alive() and not rh.is_in_group("heroes") and not GameState.refilled.is_connected(rh.reset),
+		"(x) a retired hero leaves the group and is not revived by a refill in the same frame", "alive=%s group=%s" % [rh.is_alive(), rh.is_in_group("heroes")])
+	await _frames(1)
+
+
+## (y) 기본 자리(면 index % 4의 역할 자리)가 차 있으면 같은 면 다른 자리 → 다른 면 → 다 차면 그 면 성문 앞 바닥.
+##     게임 중 다시 만든 영웅이 assert로 죽지 않는다(오류 로거가 센다).
+func _placement_cases() -> void:
+	var f = Formation.new()
+	var hans_def: Dictionary = GameData.hero("hans")
+	for i in Formation.capacity(Formation.POST_GATE):
+		f.claim(900 + i, 0, Formation.POST_GATE)
+	var a = HeroScript.new()
+	a.setup(0, hans_def, _main.castle, f)
+	for i in Formation.capacity(Formation.POST_WALL):
+		f.claim(910 + i, 0, Formation.POST_WALL)  # 한 칸은 a가 쥐고 있다(마지막 claim은 -1)
+	var b = HeroScript.new()
+	b.setup(4, hans_def, _main.castle, f)
+	for s in 4:
+		for p in [Formation.POST_GATE, Formation.POST_WALL]:
+			for i in Formation.capacity(p):
+				f.claim(1000 + s * 100 + p * 10 + i, s, p)
+	var c = HeroScript.new()
+	c.setup(8, hans_def, _main.castle, f)
+	var free_at: Vector3 = Formation.slot_position(_half, 0, Formation.POST_GATE, 0)
+	_check(a.side == 0 and a.post == Formation.POST_WALL and f.assignment(0).get("post", -1) == Formation.POST_WALL,
+		"(y) default gate post full -> the wall on the same side", "side=%d post=%d" % [a.side, a.post])
+	_check(b.side == 1 and b.post == Formation.POST_GATE and f.assignment(4).get("side", -1) == 1,
+		"(y) both posts of its side full -> the next side's role post", "side=%d post=%d" % [b.side, b.post])
+	_check(c.post == Formation.POST_FREE and c.side == 0 and c.free_pos.distance_to(free_at) < 0.01 and f.assignment(8).is_empty(),
+		"(y) every post full -> free spot in front of its own gate", "side=%d post=%d free=%s" % [c.side, c.post, c.free_pos])
+	for h in [a, b, c]:
+		h.free()
+
+	# 실제 경로: 한스가 자리를 비우고 나머지 셋이 북문 앞(3칸)을 채운 뒤, 방치 모드 배치 변경으로 슬롯 0을 다시 만든다
+	GameState.refill()
+	await _frames(1)
+	var hs := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	hs.sort_custom(func(x, y): return x.index < y.index)
+	hs[0].move_to_point(Vector3(0, 0, -(_half + Balance.WALL_T + 12.0)))
+	var moved := true
+	for i in [1, 2, 3]:
+		moved = hs[i].move_to(0, Formation.POST_GATE) and moved
+	_check(moved and GameState.mode == GameState.Mode.IDLE, "(y) precondition: the other three heroes hold the north gate's three slots (idle mode)", "moved=%s" % moved)
+	var errors0 := _errors.count
+	Economy.heroes["jack"] = 1
+	var d: Array = GameState.deploy()
+	d[0] = "jack"
+	Economy.set_deploy(d)
+	await _frames(1)
+	var now0 := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive() and h.index == 0)
+	_check(now0.size() == 1 and now0[0].def.id == "jack" and now0[0].side == 0 and now0[0].post == Formation.POST_WALL and _errors.count == errors0,
+		"(y) a slot rebuilt mid-game while its gate is full stands on its side's wall (no assert)",
+		"heroes=%s errors=%d" % [now0.map(func(h): return [h.def.id, h.side, h.post]), _errors.count - errors0])
 
 
 func _add_hero(id: String, idx: int):
+	return _add_hero_def(GameData.hero(id), idx)
+
+
+func _add_hero_def(def: Dictionary, idx: int):
 	var h = HeroScript.new()
-	h.setup(idx, GameData.hero(id), _main.castle, get_tree().get_first_node_in_group("heroes").formation)
+	h.setup(idx, def, _main.castle, get_tree().get_first_node_in_group("heroes").formation)
 	_main.add_child(h)
 	return h
+
+
+## 처리를 끈(제자리) 몬스터.
+func _still(kind: String, pos: Vector3):
+	var m = _spawn(kind, Formation.side_of(pos), pos)
+	m.set_process(false)
+	return m
+
+
+func _dmg(m) -> float:
+	return m.hp_max - m.hp
+
+
+func _flat(p: Vector3) -> Vector3:
+	return Vector3(p.x, 0.0, p.z)
 
 
 func _remove_hero(h) -> void:

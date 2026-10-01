@@ -22,6 +22,7 @@ const ARRIVE_EPS := 0.05
 const TRACER_SEC := 0.15
 const ARROW_PITCH_FIX := PI / 2.0  # 화살 모델은 길이 축 Y, 촉이 -Y → X축 +90°로 촉을 -Z(look_at 정면)에 맞춘다
 const HIT_HEIGHT := Vector3(0, 0.8, 0)
+const HOLD_EPS := 0.5  # 이만큼 안이면 자기 자리를 지키고 있다(gate_repair)
 
 var castle
 var formation
@@ -57,7 +58,7 @@ var _repair_cd := 0.0
 var _blast_cd := 0.0
 
 
-## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위. copies = 보유 수(별).
+## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default). copies = 보유 수(별).
 func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1) -> void:
 	index = p_index
 	def = p_def
@@ -69,9 +70,20 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, copies := 1) 
 	var mult := GameData.star_mult(copies)
 	hp_max = def.hp * mult
 	atk = def.atk * mult
-	var default_post := Formation.POST_WALL if role == "ranged" else Formation.POST_GATE
-	var placed := move_to(index % 4, default_post)
-	assert(placed, "no free default slot for hero %d" % index)
+	_place_default()
+
+
+## 기본 자리(면 index % 4의 역할 자리). 게임 중 다시 만든 영웅(배치·별 변경)은 다른 영웅들이 옮겨 와 그 자리가 차 있을 수 있다 —
+## 같은 면 다른 자리 → 다른 면들(역할 자리 먼저) → 그래도 다 차면 그 면 성문 앞 바닥(자유 위치)에 선다.
+func _place_default() -> void:
+	var home := index % 4
+	var first := Formation.POST_WALL if role == "ranged" else Formation.POST_GATE
+	var second := Formation.POST_GATE if first == Formation.POST_WALL else Formation.POST_WALL
+	for k in 4:
+		for p in [first, second]:
+			if move_to((home + k) % 4, p):
+				return
+	move_to_point(Formation.slot_position(castle.half, home, Formation.POST_GATE, 0))
 
 
 func _ready() -> void:
@@ -177,9 +189,18 @@ func is_alive() -> bool:
 	return state != State.DEAD
 
 
+## 배정된 성문 앞·성벽 위 자리에 서 있는가(자유 위치·이동 중·추격 중이면 false).
+func holds_post() -> bool:
+	return post != Formation.POST_FREE and _path.is_empty() and global_position.distance_to(stand_position()) <= HOLD_EPS
+
+
 ## 배치에서 빠짐(main._sync_heroes): 죽은 것으로 두어 표적·오라·바에서 빠지고, 자리를 풀고, 프레임 끝에 사라진다.
+## 리필 중에 빠지면(_sync_heroes가 이 영웅의 reset보다 먼저 불린다) reset이 되살리지 않게 연결을 끊고 그룹에서도 뺀다.
 func retire() -> void:
 	state = State.DEAD
+	if GameState.refilled.is_connected(reset):
+		GameState.refilled.disconnect(reset)
+	remove_from_group("heroes")
 	formation.release(index)
 	queue_free()
 
@@ -212,6 +233,9 @@ func _process(delta: float) -> void:
 			state = State.ATTACK
 			if _sk.has("aoe_blast") and _blast_cd <= 0.0:
 				_blast(tpos)
+				if not _target.is_alive():
+					_target = null  # 폭발이 죽인 표적은 치지 않는다(공격·쿨을 아끼고, 시체에서 투사체·연쇄가 나가지 않게)
+					return
 			if _atk_cd <= 0.0:
 				_atk_cd = Skills.interval(_sk, float(def.atk_interval), hp_ratio())
 				_attack()
@@ -295,9 +319,9 @@ func _heal_aura() -> void:
 		Fx.heal_ring(get_parent(), global_position, radius)
 
 
-## 자기 면 성문 앞이나 같은 면 성벽 위에 배정돼 있고 이동 중이 아닐 때만. 부서진 성문은 GameState가 거른다.
+## 자기 면 성문 앞이나 같은 면 성벽 위 자리에 서 있을 때만(이동·추격 중이면 아님). 부서진 성문은 GameState가 거른다.
 func _gate_repair() -> void:
-	if post == Formation.POST_FREE or not _path.is_empty():
+	if not holds_post():
 		return
 	if GameState.repair_gate(side, GameState.gate_hp_max * _sk.gate_repair[1] / 100.0) > 0.0:
 		Fx.repair(get_parent(), Formation.gate_position(castle.half, side))
