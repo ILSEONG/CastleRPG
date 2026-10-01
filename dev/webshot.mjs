@@ -1,6 +1,6 @@
 // 헤드리스 Chromium으로 웹 빌드를 열어 스크린샷을 저장한다. 창을 띄우지 않는다.
 // 사용: node dev/webshot.mjs --out shot.png [--url http://localhost:8060/] [--wait 5000] [--size 360x640]
-//                            [--click x,y[,ms]]... [--drag x1,y1,x2,y2[,ms]]... [--wheel x,y,dy[,ms]]... [--dragback x,y,dx,dy[,ms]]...
+//                            [--click x,y[,ms]]... [--drag x1,y1,x2,y2[,ms]]... [--wheel x,y,dy[,ms]]... [--dragback x,y,dx,dy[,ms]]... [--hold x,y[,holdms[,ms]]]...
 //                            [--until TEXT[,ms]]...
 // 좌표는 CSS 픽셀(뷰포트 기준). 동작은 인자 순서대로 실행하고, 각 동작 뒤 ms(기본 500) 대기.
 // --until TEXT[,ms]: 페이지 콘솔에 TEXT를 포함한 메시지가 (페이지 로드 이후) 뜰 때까지 최대 240초 기다린 뒤 ms(기본 500) 더 대기한다.
@@ -20,6 +20,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--click') { opt.actions.push({ type: 'click', nums: v.split(',').map(Number) }); i++; }
   else if (a === '--drag') { opt.actions.push({ type: 'drag', nums: v.split(',').map(Number) }); i++; }
   else if (a === '--wheel') { opt.actions.push({ type: 'wheel', nums: v.split(',').map(Number) }); i++; }
+  else if (a === '--hold') { opt.actions.push({ type: 'hold', nums: v.split(',').map(Number) }); i++; }
   else if (a === '--dragback') { opt.actions.push({ type: 'dragback', nums: v.split(',').map(Number) }); i++; }
   else if (a === '--until') {
     const parts = v.split(',');
@@ -61,6 +62,14 @@ for (const act of opt.actions) {
     const [x, y, dy, ms = 500] = act.nums;
     await page.mouse.move(x, y);
     await page.mouse.wheel(0, dy);
+    await page.waitForTimeout(ms);
+  } else if (act.type === 'hold') {
+    // 길게 누르기: 누른 채 hold ms 기다렸다 뗀다
+    const [x, y, hold = 700, ms = 500] = act.nums;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.waitForTimeout(hold);
+    await page.mouse.up();
     await page.waitForTimeout(ms);
   } else if (act.type === 'dragback') {
     // 한 번 누른 채 (dx,dy)만큼 갔다가 제자리로 돌아와 뗀다 — 탭으로 오인되면 안 되는 동작

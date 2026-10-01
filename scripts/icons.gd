@@ -60,35 +60,22 @@ static func shapes(kind_name: String) -> Array:
 				[[b, c, d, m], Color(0.72, 0.72, 0.76), false],
 				[[a, b, c, d, e, f, g], Color(0, 0, 0, 0), true],
 			]
-		"food":  # 밀 이삭 하나: 기운 줄기 + 좌우로 엇갈린 낟알 4쌍 + 꼭대기 낟알 + 잎 하나(사용자 요청: 곡물답게)
-			var straw := Color(0.66, 0.54, 0.24)
-			var base := Vector2(-0.18, 0.46)
-			var tip := Vector2(0.16, -0.46)
-			var u := (tip - base).normalized()
-			var n := u.orthogonal()
-			var length := base.distance_to(tip)
-			var out := [
-				[_quad(base, base + u * length * 0.46, 0.036), straw, true],
-				[[base + u * length * 0.16, base + u * length * 0.24 + n * 0.20, base + u * length * 0.30 + n * 0.17, base + u * length * 0.21], straw.darkened(0.12), true],
-			]
-			for t in [0.44, 0.56, 0.68, 0.80]:
-				var c: Vector2 = base + u * length * t
-				for side in [-1.0, 1.0]:
-					var d := u.rotated(-side * 0.5)
-					out.append_array(_kernel(c + n * side * 0.085, d, 0.21, 0.12))
-			out.append_array(_kernel(base + u * length * 0.89, u, 0.2, 0.12))
-			return out
-		"shield":  # 방치 무적 표시(개정 12). KINDS(자원 칩)에는 넣지 않는다
-			var top_l := Vector2(-0.36, -0.40)
-			var top_r := Vector2(0.36, -0.40)
-			var mid_l := Vector2(-0.38, 0.06)
-			var mid_r := Vector2(0.38, 0.06)
-			var tip := Vector2(0.0, 0.48)
-			var top_c := Vector2(0.0, -0.46)
+		"food":  # 밥그릇(사용자 요청: 이삭은 화살·칼처럼 보인다) — 각진 고봉밥 + 그릇 + 받침
+			var rice := Color(0.97, 0.95, 0.88)
 			return [
-				[[top_l, top_c, top_r, mid_r, tip, mid_l], Color(0.36, 0.52, 0.78), true],
-				[[Vector2(-0.26, -0.30), top_c + Vector2(0, 0.08), Vector2(0.0, 0.30), Vector2(-0.28, 0.02)], Color(0.62, 0.78, 0.96), false],
-				[[top_c + Vector2(0, 0.08), Vector2(0.26, -0.30), Vector2(0.28, 0.02), Vector2(0.0, 0.30)], Color(0.24, 0.38, 0.64), false],
+				# 고봉밥: 각진 반원(면 3개 명암)
+				[[Vector2(-0.38, 0.02), Vector2(-0.30, -0.22), Vector2(-0.10, -0.36), Vector2(0.10, -0.36), Vector2(0.30, -0.22), Vector2(0.38, 0.02)], rice, true],
+				[[Vector2(-0.30, -0.22), Vector2(-0.10, -0.36), Vector2(0.02, -0.12), Vector2(-0.22, -0.04)], Color(1.0, 1.0, 0.97), false],
+				[[Vector2(0.10, -0.36), Vector2(0.30, -0.22), Vector2(0.38, 0.02), Vector2(0.14, -0.04)], Color(0.88, 0.85, 0.76), false],
+				# 밥알 몇 개(작은 마름모)
+				[[Vector2(-0.16, -0.20), Vector2(-0.12, -0.24), Vector2(-0.08, -0.20), Vector2(-0.12, -0.16)], Color(0.80, 0.77, 0.68), false],
+				[[Vector2(0.10, -0.14), Vector2(0.14, -0.18), Vector2(0.18, -0.14), Vector2(0.14, -0.10)], Color(0.80, 0.77, 0.68), false],
+				# 그릇: 위가 넓은 사다리꼴(청자색) + 밝은 왼쪽 면
+				[[Vector2(-0.46, 0.0), Vector2(0.46, 0.0), Vector2(0.30, 0.34), Vector2(-0.30, 0.34)], Color(0.30, 0.52, 0.62), true],
+				[[Vector2(-0.46, 0.0), Vector2(-0.06, 0.0), Vector2(-0.10, 0.34), Vector2(-0.30, 0.34)], Color(0.42, 0.66, 0.76), false],
+				[[Vector2(-0.46, 0.0), Vector2(0.46, 0.0), Vector2(0.44, 0.06), Vector2(-0.44, 0.06)], Color(0.22, 0.40, 0.48), false],
+				# 받침
+				[[Vector2(-0.18, 0.34), Vector2(0.18, 0.34), Vector2(0.22, 0.46), Vector2(-0.22, 0.46)], Color(0.24, 0.42, 0.50), true],
 			]
 	return []
 
@@ -105,10 +92,3 @@ static func _ngon(n: int, r: float, rot: float) -> Array:
 static func _quad(from: Vector2, to: Vector2, half_w: float) -> Array:
 	var n := (to - from).normalized().orthogonal() * half_w
 	return [from + n, to + n, to - n, from - n]
-
-## 낟알: center 중심, dir 방향 길이 len·폭 w의 마름모 + 왼쪽 반 밝은 면 → [본체, 하이라이트] 두 도형.
-static func _kernel(center: Vector2, dir: Vector2, len: float, w: float) -> Array:
-	var d := dir.normalized() * len * 0.5
-	var p := dir.normalized().orthogonal() * w * 0.5
-	var body := [center - d, center + p, center + d, center - p]
-	return [[body, Color(0.86, 0.66, 0.20), true], [[center - d, center + p, center + d], Color(0.98, 0.84, 0.42), false]]
