@@ -1477,18 +1477,10 @@ func test_merchant_rates() -> void:
 	var gw: int = e.sell("wood", now)
 	var gf: int = e.sell("food", now)
 	check(gw == EconomyScript.sell_value("wood", 100, EconomyScript.merchant_rate(h, "wood")) and gf == EconomyScript.sell_value("food", 100, EconomyScript.merchant_rate(h, "food")) and gw != gf, "sell uses that resource's own rate (same price, different rates)")
-	# 최고 배율: 동률이면 목재 → 석재 → 식량
-	var b = e.best_rate(now)
-	var top := 0.0
-	for r in e.current_rates(now):
-		top = maxf(top, r.rate)
-	check(b.rate == top and e.current_rate(b.id, now) == top, "best_rate is the highest")
 	e.net = null
-	e.merchant = {"rates": {"wood": 1.0, "stone": 1.4, "food": 1.4}, "next_change": now + 10.0}
+	e.merchant = {"rates": {"wood": 1.0, "stone": 1.4, "food": 1.2}, "next_change": now + 10.0}
 	e.net = e  # 온라인 흉내(net != null)
-	check(e.best_rate(now).id == "stone" and e.current_rate("food", now) == 1.4, "online rates are used; a tie picks the earlier resource")
-	e.merchant = {"rates": {"wood": 1.4, "stone": 1.4, "food": 1.4}, "next_change": now + 10.0}
-	check(e.best_rate(now).id == "wood", "a three-way tie picks wood")
+	check(e.current_rate("stone", now) == 1.4 and e.current_rate("food", now) == 1.2, "online rates are used per resource")
 	e.net = null
 	# 서버 응답 검사: 자원 하나라도 빠지면 거부
 	var logged := _errors.count

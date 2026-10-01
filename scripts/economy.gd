@@ -250,15 +250,6 @@ func current_rates(now: float) -> Array:
 	return out
 
 
-## 배율이 가장 높은 자원 {id, rate}. 같으면 자원 순서(목재 → 석재 → 식량)에서 앞선 쪽.
-func best_rate(now: float) -> Dictionary:
-	var best := {}
-	for e in current_rates(now):
-		if best.is_empty() or e.rate > best.rate:
-			best = e
-	return best
-
-
 func seconds_to_next_rate(now: float) -> float:
 	if net != null:
 		return maxf(0.0, float(merchant.get("next_change", now)) - now)
