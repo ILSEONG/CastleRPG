@@ -79,6 +79,7 @@ func _init() -> void:
 	test_merchant_rates()
 	test_damage_numbers()
 	test_hero_levels()
+	test_hit_frac()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1618,3 +1619,23 @@ func test_hero_levels() -> void:
 	_errors.count = logged
 	GameData.load_tables()
 	check(GameData.errors == 0 and GameData.config_num("hero_max_level_base") == 20.0, "default tables restored")
+
+
+## 개정 12-2 §3 공격 동기화: 쓰는 공격 애니메이션(영웅·몬스터·상인)마다 타격 비율이 있고 0 < frac < 1, 그 애니메이션이 GLB에 있다.
+func test_hit_frac() -> void:
+	var used := {}
+	for h in GameData.heroes():
+		var spec := Art.hero_spec(h)
+		used[spec.anims.attack] = spec.scene
+	for key in Art.MONSTER_MODELS:
+		used[Art.MONSTER_MODELS[key].anims.attack] = Art.MONSTER_MODELS[key].scene
+	used[Art.MERCHANT_MODEL.anims.attack] = Art.MERCHANT_MODEL.scene
+	check(used.size() >= 7, "attack animations in use: %s" % [used.keys()])
+	for anim in used:
+		var f: float = Art.HIT_FRAC.get(anim, -1.0)
+		check(f > 0.0 and f < 1.0, "hit_frac for %s in (0, 1): %s" % [anim, f])
+		var root: Node = (load(used[anim]) as PackedScene).instantiate()
+		var ap: AnimationPlayer = root.find_children("*", "AnimationPlayer", true, false)[0]
+		check(ap.has_animation(anim) and ap.get_animation(anim).length > 0.0, "%s plays %s" % [used[anim], anim])
+		root.free()
+	check(Art.ATTACK_FIT > 0.0 and Art.ATTACK_FIT < 1.0, "attack animation fits inside the interval (x %.2f)" % Art.ATTACK_FIT)
