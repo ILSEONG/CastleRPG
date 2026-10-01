@@ -60,17 +60,23 @@ static func shapes(kind_name: String) -> Array:
 				[[b, c, d, m], Color(0.72, 0.72, 0.76), false],
 				[[a, b, c, d, e, f, g], Color(0, 0, 0, 0), true],
 			]
-		"food":
-			var straw := Color(0.62, 0.52, 0.24)
+		"food":  # 밀 이삭 하나: 기운 줄기 + 좌우로 엇갈린 낟알 4쌍 + 꼭대기 낟알 + 잎 하나(사용자 요청: 곡물답게)
+			var straw := Color(0.66, 0.54, 0.24)
+			var base := Vector2(-0.18, 0.46)
+			var tip := Vector2(0.16, -0.46)
+			var u := (tip - base).normalized()
+			var n := u.orthogonal()
+			var length := base.distance_to(tip)
 			var out := [
-				[_quad(Vector2(0.0, 0.46), Vector2(0.0, -0.1), 0.05), straw, true],
-				[_quad(Vector2(0.0, 0.46), Vector2(-0.24, -0.04), 0.05), straw, true],
-				[_quad(Vector2(0.0, 0.46), Vector2(0.24, -0.04), 0.05), straw, true],
+				[_quad(base, base + u * length * 0.46, 0.036), straw, true],
+				[[base + u * length * 0.16, base + u * length * 0.24 + n * 0.20, base + u * length * 0.30 + n * 0.17, base + u * length * 0.21], straw.darkened(0.12), true],
 			]
-			for ear in [[Vector2(-0.24, -0.04), -0.35], [Vector2(0.24, -0.04), 0.35], [Vector2(0.0, -0.1), 0.0]]:
-				out.append([_ear(ear[0], ear[1], 0.34, 0.11), Color(0.88, 0.70, 0.22), true])
-				out.append([_ear(ear[0], ear[1], 0.34, 0.11).slice(0, 3), Color(0.98, 0.86, 0.45), false])
-			out.append([[Vector2(-0.1, 0.22), Vector2(0.1, 0.22), Vector2(0.11, 0.32), Vector2(-0.11, 0.32)], Color(0.70, 0.24, 0.20), true])
+			for t in [0.44, 0.56, 0.68, 0.80]:
+				var c: Vector2 = base + u * length * t
+				for side in [-1.0, 1.0]:
+					var d := u.rotated(-side * 0.5)
+					out.append_array(_kernel(c + n * side * 0.085, d, 0.21, 0.12))
+			out.append_array(_kernel(base + u * length * 0.89, u, 0.2, 0.12))
 			return out
 		"shield":  # 방치 무적 표시(개정 12). KINDS(자원 칩)에는 넣지 않는다
 			var top_l := Vector2(-0.36, -0.40)
@@ -100,11 +106,9 @@ static func _quad(from: Vector2, to: Vector2, half_w: float) -> Array:
 	var n := (to - from).normalized().orthogonal() * half_w
 	return [from + n, to + n, to - n, from - n]
 
-
-## 이삭: base에서 위쪽(−Y)으로 tilt만큼 기운 길이 len의 오각형(앞 3점 = 왼쪽 면, 하이라이트용).
-static func _ear(base: Vector2, tilt: float, len: float, w: float) -> Array:
-	var up := Vector2.UP.rotated(tilt)
-	var side := up.orthogonal() * w
-	var tip := base + up * len
-	var mid := base + up * len * 0.5
-	return [base - side, mid - side, tip, mid + side, base + side]
+## 낟알: center 중심, dir 방향 길이 len·폭 w의 마름모 + 왼쪽 반 밝은 면 → [본체, 하이라이트] 두 도형.
+static func _kernel(center: Vector2, dir: Vector2, len: float, w: float) -> Array:
+	var d := dir.normalized() * len * 0.5
+	var p := dir.normalized().orthogonal() * w * 0.5
+	var body := [center - d, center + p, center + d, center - p]
+	return [[body, Color(0.86, 0.66, 0.20), true], [[center - d, center + p, center + d], Color(0.98, 0.84, 0.42), false]]
