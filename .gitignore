@@ -5,3 +5,6 @@ export/
 *.aab
 dev/node_modules/
 .claude/worktrees/
+server/node_modules/
+server/.data/
+server/.env
