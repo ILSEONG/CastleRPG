@@ -287,7 +287,7 @@ func _phase1(state_path: String) -> void:
 	f.close()
 
 
-## (n) 서버 레벨업(개정 11): 영웅 상세 [레벨업] → /v1/hero/levelup 한 번(응답 전 재탭은 무시), 서버 골드 −비용 × 10 tenths·식량 −비용,
+## (n) 서버 레벨업(개정 11): 영웅 상세 [레벨업] → /v1/hero/levelup 한 번(응답 전 재탭은 무시), 서버 골드 −비용 × 10 tenths(식량은 그대로 — 개정 12),
 ##     레벨 +1과 연출. [×10]은 감당 가능한 횟수를 한 요청으로.
 ## (o) 레벨업은 다시 보내지 않는다: 서버가 사라진 채 → 버리고 알림, 다시 연결되면 상태만 받는다(두 번째 요청 없음).
 ## (q) 서버가 거부(409 max_level)하면 알림 + 상태 새로 받기. phase 2가 재접속 레벨 복원을 본다.
@@ -310,9 +310,9 @@ func _levelup_online() -> void:
 	_hero_panel.level_button.pressed.emit()  # 응답 전 재탭
 	_check(_hero_panel.level_button.disabled and Economy.level_of(id) == 1 and Economy.levelup_waiting(), "(n) while waiting for the reply [레벨업] is off and nothing changes yet", "")
 	var done := await _wait_until(func(): return Economy.level_of(id) == 2 and not Economy.levelup_waiting(), 15.0)
-	_check(done and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1 and Economy.server_gold_tenths == gold0 - int(c1.gold) * 10 and Economy.res["food"] == food0 - int(c1.food)
+	_check(done and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1 and Economy.server_gold_tenths == gold0 - int(c1.gold) * 10 and Economy.res["food"] == food0
 		and _hero_panel.celebrations == 1 and _hero_panel.level_label.text == "Lv 2 / 20",
-		"(n) one /v1/hero/levelup: server gold -30 (300 tenths), food -10, Lv 2 with the success effect",
+		"(n) one /v1/hero/levelup: server gold -30 (300 tenths), food unchanged, Lv 2 with the success effect",
 		"requests=%d gold=%d->%d food=%d->%d label=%s" % [Net.requested.get("/v1/hero/levelup", 0) - l0, gold0, Economy.server_gold_tenths, food0, Economy.res["food"], _hero_panel.level_label.text])
 	var n := Economy.levelup_affordable(id, 10)
 	var cn := GameData.levelup_cost("R", 2, n)
@@ -320,7 +320,7 @@ func _levelup_online() -> void:
 	var food1: int = Economy.res["food"]
 	_hero_panel.ten_button.pressed.emit()
 	done = await _wait_until(func(): return Economy.level_of(id) == 2 + n and not Economy.levelup_waiting(), 15.0)
-	_check(done and n == 10 and Net.requested.get("/v1/hero/levelup", 0) == l0 + 2 and Economy.server_gold_tenths == gold1 - int(cn.gold) * 10 and Economy.res["food"] == food1 - int(cn.food),
+	_check(done and n == 10 and Net.requested.get("/v1/hero/levelup", 0) == l0 + 2 and Economy.server_gold_tenths == gold1 - int(cn.gold) * 10 and Economy.res["food"] == food1,
 		"(n) [×10] sends one request for the affordable count (10) and the server takes the summed cost",
 		"n=%d level=%d gold=%d->%d" % [n, Economy.level_of(id), gold1, Economy.server_gold_tenths])
 

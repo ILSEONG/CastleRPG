@@ -26,7 +26,6 @@ const MAX_KILL_COUNT = 10_000 // 몬스터 한 종류의 한 번 보고 수
 const MAX_INT4 = 2_147_483_647
 const MAX_AGE_MIN = 100_000
 const MAX_LEVELUP_COUNT = 100
-const FOOD = 'food' // 레벨업 식량 자원 id
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -485,8 +484,8 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // 레벨업(개정 11 §2.2): count 1..100. 보유하지 않은 영웅은 404, 최대 레벨을 넘거나 골드·식량이 모자라면 409(max_level / not_enough).
-  // 골드(정수, × 10 tenths)·식량 차감, 레벨, economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
+  // 레벨업(개정 11 §2.2): count 1..100. 보유하지 않은 영웅은 404, 최대 레벨을 넘거나 골드가 모자라면 409(max_level / not_enough_gold). 개정 12: 골드만.
+  // 골드(정수, × 10 tenths) 차감, 레벨, economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
   app.post('/v1/hero/levelup', auth, async (c) => {
     const b = await body(c)
     const heroId = strField(b, 'hero_id')
@@ -499,13 +498,13 @@ export function createApp(opts: AppOptions) {
       const max = R.heroMaxLevel(own.copies, g.config)
       if (to > max) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${max}`)
       const cost = R.levelupCost(String(def.grade), own.level, count, g.config)
-      if (Math.floor(p.gold_tenths / 10) < cost.gold || (p.res[FOOD] ?? 0) < cost.food) {
-        throw new ApiError(409, 'not_enough', `levels ${own.level} -> ${to} cost ${cost.gold} gold and ${cost.food} food`)
+      if (Math.floor(p.gold_tenths / 10) < cost.gold) {
+        throw new ApiError(409, 'not_enough_gold', `levels ${own.level} -> ${to} cost ${cost.gold} gold`)
       }
       return {
         change: {
-          goldTenths: -cost.gold * 10, res: cost.food ? { [FOOD]: -cost.food } : {}, heroLevels: { [heroId]: count },
-          log: { kind: 'levelup', detail: { hero_id: heroId, from: own.level, to, count, gold: cost.gold, food: cost.food, gold_tenths: -cost.gold * 10 } },
+          goldTenths: -cost.gold * 10, heroLevels: { [heroId]: count },
+          log: { kind: 'levelup', detail: { hero_id: heroId, from: own.level, to, count, gold: cost.gold, gold_tenths: -cost.gold * 10 } },
         },
         extra: { level: to },
       }

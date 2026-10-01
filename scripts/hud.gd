@@ -12,7 +12,9 @@ const BUTTON_H := 88  # 큰 버튼 높이 — 탭 바 바로 위(12px 띄움)
 const BUTTON_BOTTOM := -(TAB_BAR_H + 12)
 const BAND_BOTTOM := BUTTON_BOTTOM - BUTTON_H - 12  # 끊김 띠는 큰 버튼 위에서 위로 자란다
 
+const IDLE_TEXT := "방치 · 무적"
 var _stage_label: Label
+var _idle_badge: Control  # 방치 무적 표시(방패 + 글자)
 var _castle_bar: ProgressBar
 var _gate_bars: Array = []
 var _center: Label
@@ -52,7 +54,30 @@ func _ready() -> void:
 	_stage_label.add_theme_color_override("font_color", INK)
 	_stage_label.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))  # 제목: 외곽선
 	_stage_label.add_theme_constant_override("outline_size", 6)
-	top.add_child(_stage_label)
+	var title_row := HBoxContainer.new()
+	title_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.add_theme_constant_override("separation", 14)
+	top.add_child(title_row)
+	title_row.add_child(_stage_label)
+	# 방치 무적 표시(개정 12): 방패 아이콘 + "방치 · 무적". 방치 모드에서만 보인다.
+	_idle_badge = HBoxContainer.new()
+	_idle_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_idle_badge.add_theme_constant_override("separation", 6)
+	var shield = IconsScript.new()
+	shield.kind = "shield"
+	shield.custom_minimum_size = Vector2(32, 32)
+	shield.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shield.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_idle_badge.add_child(shield)
+	var idle_text := Label.new()
+	idle_text.text = IDLE_TEXT
+	idle_text.add_theme_font_size_override("font_size", 24)
+	idle_text.add_theme_color_override("font_color", Color(0.24, 0.38, 0.64))
+	idle_text.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
+	idle_text.add_theme_constant_override("outline_size", 5)
+	_idle_badge.add_child(idle_text)
+	title_row.add_child(_idle_badge)
 	_castle_bar = _bar(Color(0.95, 0.75, 0.2))
 	top.add_child(_castle_bar)
 	var gates := HBoxContainer.new()
@@ -136,6 +161,7 @@ func _on_failed(_stage: int) -> void:
 
 func _on_mode_changed(mode: int) -> void:
 	_stage_label.text = "스테이지 %d" % GameState.stage
+	_idle_badge.visible = mode == GameState.Mode.IDLE
 	if mode == GameState.Mode.IDLE or mode == GameState.Mode.STAGE:
 		_center.text = ""
 	_refresh_button()

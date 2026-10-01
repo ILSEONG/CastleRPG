@@ -161,9 +161,9 @@ func is_on_wall() -> bool:
 	return global_position.y > Balance.WALL_H / 2.0
 
 
-## 받는 피해: dodge → dmg_reduce → thorns(source = 때린 몬스터에게 되돌림).
+## 받는 피해: dodge → dmg_reduce → thorns(source = 때린 몬스터에게 되돌림). 방치 모드는 무적(개정 12): 숫자·가시 없이 0.
 func take_damage(amount: float, source = null) -> void:
-	if state == State.DEAD:
+	if state == State.DEAD or GameState.mode == GameState.Mode.IDLE:
 		return
 	var r := Skills.incoming(_sk, amount, randf())
 	if r.x <= 0.0:

@@ -383,7 +383,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.resources[1], { id: 'stone', name: '석재', building: 'quarry', per_min: 5, price: 2 })
   assert.equal(g.config.hero_slots, '4|8|12')
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 35) // 개정 11: 레벨업 설정 9개
+  assert.equal(Object.keys(g.config).length, 32) // 개정 12: 레벨업 설정 6개(식량 삭제)
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
   assert.equal(g.config.hero_roster, undefined)
   assert.equal(g.config.kill_burst_sec, '60')

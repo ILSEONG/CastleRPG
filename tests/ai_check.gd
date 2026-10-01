@@ -37,6 +37,7 @@ func _ready() -> void:
 		if c.get_script() == SpawnerScript:
 			c.set_process(false)
 	_clear_monsters()
+	GameState.mode = GameState.Mode.STAGE  # 피해가 들어가는 모드로 시작(방치 모드는 무적 — 개정 12). 방치 사례만 IDLE로 바꾼다
 	_half = _main.castle.half
 	await _run()
 	if _errors.count > 0:
@@ -366,9 +367,12 @@ func _skill_cases(heroes: Array) -> void:
 	_check(idle.is_empty(), "(p) all 22 heroes fight (attack at least once in 3 s)", "never attacked: %s" % [idle])
 	await _skill_application(heroes)
 	await _placement_cases()
+	GameState.mode = GameState.Mode.STAGE
 	await _fx_cap()
 	await _damage_numbers()
+	GameState.mode = GameState.Mode.IDLE
 	await _levelup_case()
+	await _idle_invincible_case()
 
 
 ## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
@@ -531,6 +535,7 @@ func _placement_cases() -> void:
 	for h in [a, b, c]:
 		h.free()
 
+	GameState.mode = GameState.Mode.IDLE  # (y) 방치 모드 배치 변경
 	# 실제 경로: 한스가 자리를 비우고 나머지 셋이 북문 앞(3칸)을 채운 뒤, 방치 모드 배치 변경으로 슬롯 0을 다시 만든다
 	GameState.refill()
 	await _frames(1)
@@ -718,7 +723,6 @@ func _levelup_case() -> void:
 	await _frames(1)
 	Economy.heroes["dorik"] = 3  # 별 2
 	Economy.gold_tenths = 1000000
-	Economy.res["food"] = 100000
 	var before := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var ok := Economy.level_up("dorik", 9)  # 1 → 10
 	await _frames(1)
@@ -738,3 +742,45 @@ func _levelup_case() -> void:
 	_check(is_equal_approx(_dmg(m), dorik.atk), "(L) the leveled hero hits for its leveled attack", "dmg=%.2f atk=%.2f" % [_dmg(m), dorik.atk])
 	_clear_monsters()
 	await _frames(1)
+
+
+## (I) 개정 12 방치 무적: 방치 모드에서는 몬스터가 성문 앞에서 오래 때려도 성문·성·영웅 HP가 그대로고 몬스터는 쌓인다(상한 이하).
+##     영웅의 처리를 꺼 몬스터가 죽지 않게 한다. 같은 상황이 스테이지 모드에서는 피해가 들어간다.
+func _idle_invincible_case() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	await _frames(2)
+	var hs := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	for h in hs:
+		h.set_process(false)  # 때리지 않는 표적
+	var hp0 := hs.map(func(h): return h.hp)
+	for side in 4:
+		var gt: Vector3 = _main.castle.gate_target(side)
+		for i in 3:
+			_spawn("epic_boss", side, gt + Formation.SIDE_DIR[side] * (1.0 + i) + Formation.perp(side) * (i - 1) * 1.2)
+	await _seconds(5.0)
+	var mons := get_tree().get_nodes_in_group("monsters").filter(func(m): return m.is_alive())
+	var gates_full: bool = GameState.gate_hp.all(func(g): return g == GameState.gate_hp_max)
+	_check(gates_full and GameState.castle_hp == GameState.castle_hp_max and hs.map(func(h): return h.hp) == hp0,
+		"(I) idle mode: gates, castle and heroes take no damage while monsters hit for 5 s",
+		"gates=%s castle=%.0f heroes=%s" % [GameState.gate_hp, GameState.castle_hp, hs.map(func(h): return h.hp)])
+	_check(mons.size() == 12 and mons.size() <= int(GameData.config_num("max_live_monsters")), "(I) idle mode: the monsters pile up (alive, below the cap)", "alive=%d" % mons.size())
+	var h0 = hs[0]
+	h0.take_damage(50.0, mons[0])
+	GameState.damage_gate(0, 50.0)
+	GameState.damage_castle(50.0)
+	_check(h0.hp == hp0[0] and GameState.gate_hp[0] == GameState.gate_hp_max and GameState.castle_hp == GameState.castle_hp_max,
+		"(I) idle mode: direct hits on a hero, a gate and the castle do nothing", "hero=%.0f gate=%.0f castle=%.0f" % [h0.hp, GameState.gate_hp[0], GameState.castle_hp])
+	GameState.mode = GameState.Mode.STAGE
+	await _seconds(5.0)
+	var hurt: bool = GameState.gate_hp.any(func(g): return g < GameState.gate_hp_max) or GameState.castle_hp < GameState.castle_hp_max \
+		or hs.any(func(h): return h.hp < hp0[hs.find(h)])
+	_check(hurt, "(I) stage mode: the same monsters do damage", "gates=%s castle=%.0f heroes=%s" % [GameState.gate_hp, GameState.castle_hp, hs.map(func(h): return h.hp)])
+	_clear_monsters()
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	for h in hs:
+		if is_instance_valid(h):
+			h.set_process(true)
+	await _frames(2)

@@ -1535,7 +1535,7 @@ func test_damage_numbers() -> void:
 
 
 ## 개정 11 영웅 레벨: 능력치 공식(기본 × 레벨 배율 × 별 배율), 전투력, 최대 레벨(별 반영), 비용 표(서버 levelup.test와 같은 값),
-## 오프라인 레벨업(골드 tenths·식량 차감, 이유 문구, [×10] 횟수), 저장 v2 → v3, apply_remote의 레벨업 설정 검증.
+## 오프라인 레벨업(골드 tenths만 차감 — 개정 12, 이유 문구, [×10] 횟수), 저장 v2 → v3, apply_remote의 레벨업 설정 검증.
 func test_hero_levels() -> void:
 	GameData.load_tables()
 	var hans := GameData.hero("hans")
@@ -1549,30 +1549,29 @@ func test_hero_levels() -> void:
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
 		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 134, 151, 333, 923, 266690], "gold cost table = round(base x 1.12^(L-1)), same as the server")
-	check(GameData.levelup_cost("R", 19).food == 190 and GameData.levelup_cost("SSR", 20).food == 800 and GameData.levelup_cost("R", 1, 5) == {"gold": 191, "food": 150} \
-		and GameData.levelup_cost("SSR", 1, 19) == {"gold": 7614, "food": 7600}, "food = base x L, count sums the levels")
+	check(GameData.levelup_cost("R", 1, 5) == {"gold": 191} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 7614}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)
 	var got := []
 	e.leveled.connect(func(id, l): got.append([id, l]))
 	e.gold_tenths = 2005
 	e.res.food = 200
-	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 190 and got == [["hans", 2]], "offline level up takes 300 tenths and 10 food")
-	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 565 and e.res.food == 100, "three levels at once take the summed cost")
+	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 300 tenths and no food")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 565 and e.res.food == 200, "three levels at once take the summed cost")
 	var notes := []
 	e.notice.connect(func(t): notes.append(t))
 	e.gold_tenths = 469  # 46.9골드 < 47
 	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
 	e.gold_tenths = 100000
-	e.res.food = 49
-	check(e.levelup_block("hans") == "식량 부족" and e.levelup_block("arteon") == "보유하지 않은 영웅", "food short / not owned reasons")
 	e.res.food = 0
+	check(e.levelup_block("hans") == "" and e.levelup_block("arteon") == "보유하지 않은 영웅", "no food needed / not owned reason")
 	e.gold_tenths = 0
-	check(e.levelup_block("hans") == "골드·식량 부족", "both short")
+	e.res.food = 100000
+	check(e.levelup_block("hans") == "골드 부족", "gold short even with plenty of food")
 	# [×10] 횟수: 3회분만 있으면 3
 	var c3: Dictionary = GameData.levelup_cost("R", 5, 3)
 	e.gold_tenths = int(c3.gold) * 10
-	e.res.food = int(c3.food) + 5
+	e.res.food = 0
 	check(e.levelup_affordable("hans") == 3 and e.levelup_block("hans", 4) != "", "x10 counts the affordable levels (3)")
 	e.gold_tenths = 10000000
 	e.res.food = 10000000
@@ -1611,7 +1610,7 @@ func test_hero_levels() -> void:
 	e2.free()
 	# apply_remote: 레벨업 설정 검증(서버 seed와 같은 규칙)
 	var logged := _errors.count
-	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_star", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_food_R", "-10"], ["hero_level_stat", "-0.1"]]:
+	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_star", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_gold_R", "-10"], ["hero_level_stat", "-0.1"]]:
 		var p := _payload()
 		p.config[bad[0]] = bad[1]
 		check(not GameData.apply_remote(p) and GameData.errors == 1, "apply_remote rejects %s = %s" % bad)
