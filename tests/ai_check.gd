@@ -326,6 +326,27 @@ func _skill_cases(heroes: Array) -> void:
 	_check(v > base_speed * 0.65 and v < base_speed * 0.75, "(o) a slowed monster walks at (1 - a%) speed", "speed %.2f (base %.2f)" % [v, base_speed])
 	_remove_hero(se)
 	_clear_monsters()
+	await _frames(1)
+
+	# (p) 22종 전부: 네 명씩(면마다 하나) 보스·grunt와 3초 싸운다 — 모두 한 번 이상 공격하고 스크립트 오류가 없다(오류는 로거가 센다)
+	var ids: Array = GameData.heroes().map(func(h): return h.id)
+	var idle := []
+	for b in range(0, ids.size(), 4):
+		var batch := []
+		for i in range(b, mini(b + 4, ids.size())):
+			var h = _add_hero(ids[i], 200 + i - b)
+			batch.append(h)
+			var out: Vector3 = Formation.SIDE_DIR[h.side] * 3.0
+			_spawn("epic_boss", h.side, Vector3(h.global_position.x, 0, h.global_position.z) + out)
+			_spawn("grunt", h.side, Vector3(h.global_position.x, 0, h.global_position.z) + out + Formation.perp(h.side) * 1.5)
+		await _seconds(3.0)
+		for h in batch:
+			if h._attacks == 0:
+				idle.append(h.def.id)
+			_remove_hero(h)
+		_clear_monsters()
+		await _frames(1)
+	_check(idle.is_empty(), "(p) all 22 heroes fight (attack at least once in 3 s)", "never attacked: %s" % [idle])
 
 
 func _add_hero(id: String, idx: int):
