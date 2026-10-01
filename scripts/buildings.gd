@@ -5,7 +5,6 @@ extends Node3D
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
-const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")

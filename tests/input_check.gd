@@ -404,6 +404,19 @@ func _recruit_and_heroes(rig) -> void:
 	_check(not recruit.is_open() and not merchant.is_open() and not heroes_win.is_open() and tabs.selected == "castle" and _picker.selected == null,
 		"(t) [성] closes every window and the press does not reach the battlefield", "selected=%s" % tabs.selected)
 
+	# (t) 탭 바 위 마우스 휠은 카메라 줌으로 새지 않는다
+	var zoom0 := _camera.size
+	var wheel_at: Vector2 = tabs._bar.get_global_rect().get_center()
+	for pressed in [true, false]:
+		var we := InputEventMouseButton.new()
+		we.button_index = MOUSE_BUTTON_WHEEL_UP
+		we.pressed = pressed
+		we.position = wheel_at
+		we.global_position = wheel_at
+		get_viewport().push_input(we, true)
+	await _frames(2)
+	_check(_camera.size == zoom0, "(t) the mouse wheel over the tab bar does not zoom the camera", "size %.1f -> %.1f" % [zoom0, _camera.size])
+
 	# (u) [영웅] → 영웅 목록 시트(칩 줄 아래 ~ 탭 바 위). 연 직후 누름은 버린다. 슬롯 4칸, 카드 = 보유, 기본 정렬 전투력 ↓,
 	#     카드에 Lv·별·전투력·"배치"·▲(레벨업 가능할 때만). [정렬]: 전투력 → 등급 → 레벨 → 전투력
 	Economy.heroes["arteon"] = 2  # 별 1

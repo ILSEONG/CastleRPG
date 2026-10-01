@@ -31,6 +31,7 @@ var draws := 0  # 지난 프레임의 그리기 호출 수(테스트용)
 
 var _list: Array = []   # 살아 있는 숫자 {pos: 월드, text, kind, age, dx}. 나이순
 var _poison := {}       # 대상 id → {target, sum, age, pos}
+var _shown := false
 var _cache := {}        # 정수 → 문자열
 
 
@@ -52,10 +53,12 @@ static func pop(target, amount: float, kind: int) -> void:
 func add(target, amount: float, kind: int) -> void:
 	if kind == Kind.POISON:
 		var id: int = target.get_instance_id()
-		var e: Dictionary = _poison.get(id, {"target": target, "sum": 0.0, "age": 0.0, "pos": Vector3.ZERO})
+		var e = _poison.get(id)  # 틱마다 새 사전을 만들지 않는다
+		if e == null:
+			e = {"target": target, "sum": 0.0, "age": 0.0, "pos": Vector3.ZERO}
+			_poison[id] = e
 		e.sum += amount
 		e.pos = _anchor(target)
-		_poison[id] = e
 		return
 	if kind != Kind.DODGE and roundi(amount) <= 0:
 		return
@@ -97,14 +100,16 @@ func _process(delta: float) -> void:
 		e.age += delta
 	while not _list.is_empty() and _list[0].age >= LIFE:
 		_list.pop_front()
-	for id in _poison.keys():
+	for id in (_poison.keys() if not _poison.is_empty() else []):
 		var p: Dictionary = _poison[id]
 		p.age += delta
 		if p.age >= POISON_SEC or not is_instance_valid(p.target) or not p.target.is_alive():
 			_poison.erase(id)
 			if roundi(p.sum) > 0:
 				_push(p.pos, 0.0, p.sum, Kind.POISON)
-	queue_redraw()
+	if not _list.is_empty() or _shown:  # 보일 게 없으면 다시 그리지 않는다(마지막 한 번은 지우려고 그린다)
+		queue_redraw()
+	_shown = not _list.is_empty()
 
 
 func _draw() -> void:

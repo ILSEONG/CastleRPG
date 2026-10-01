@@ -242,14 +242,6 @@ func current_rate(res_id: String, now: float) -> float:
 	return merchant_rate(hour_index(now), res_id)
 
 
-## 자원 순서(GameData.resources) 그대로 [{id, rate}].
-func current_rates(now: float) -> Array:
-	var out := []
-	for r in GameData.resources():
-		out.append({"id": r.id, "rate": current_rate(r.id, now)})
-	return out
-
-
 func seconds_to_next_rate(now: float) -> float:
 	if net != null:
 		return maxf(0.0, float(merchant.get("next_change", now)) - now)

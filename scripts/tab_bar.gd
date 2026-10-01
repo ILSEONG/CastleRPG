@@ -28,6 +28,7 @@ func _ready() -> void:
 	_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_bar.offset_top = -HudScript.TAB_BAR_H
 	_bar.mouse_filter = Control.MOUSE_FILTER_STOP  # 탭 사이 틈도 뒤(카메라·창 배경)로 새지 않는다
+	_bar.mouse_force_pass_scroll_events = false  # 휠도 카메라 줌으로 새지 않게
 	_bar.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 0.0, 0, 0.05))
 	add_child(_bar)
 	for i in TABS.size():
