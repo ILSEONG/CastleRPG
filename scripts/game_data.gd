@@ -4,6 +4,7 @@ extends RefCounted
 const MONSTERS_PATH := "res://data/monsters.csv"
 const STAGES_PATH := "res://data/stages.csv"
 const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하는 정수 열
+const EXTEND_ROWS := 10  # 표 너머 연장 기울기를 잴 마지막 행 수
 const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "scale", "gold"]
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 
@@ -34,7 +35,8 @@ static func monster(id: String) -> Dictionary:
 	return _monsters.get(id, {})
 
 
-## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 두 행의 차이로 직선 연장.
+## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장 —
+## 계단처럼 몇 행마다 오르는 정수 열(waves)도 두 행 차이보다 고르게 이어진다.
 static func stage(n: int) -> Dictionary:
 	if not _loaded:
 		load_tables()
@@ -44,11 +46,13 @@ static func stage(n: int) -> Dictionary:
 	if n <= _stages.size():
 		return _stages[n - 1]
 	var last: Dictionary = _stages[-1]
-	var prev: Dictionary = _stages[-2] if _stages.size() > 1 else last
+	var back := mini(EXTEND_ROWS, _stages.size() - 1)
+	var base: Dictionary = _stages[-1 - back]
 	var k := n - _stages.size()
 	var out := {"stage": n}
 	for col in STAGE_COLS:
-		var v: float = last[col] + (last[col] - prev[col]) * k
+		var slope: float = (last[col] - base[col]) / back if back > 0 else 0.0
+		var v: float = last[col] + slope * k
 		out[col] = roundi(v) if col in INT_COLS else v
 	return out
 

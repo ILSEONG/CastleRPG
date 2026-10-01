@@ -89,7 +89,7 @@ func test_game_data() -> void:
 	var r30 := GameData.stage(30)
 	var r29 := GameData.stage(29)
 	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.25 * 39), "stage beyond table extrapolates hp_mult")
-	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 16, "extrapolated int columns round")
+	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 14, "extrapolated int columns follow the 10-row slope and round (waves 33 = old formula 14)")
 	check(GameData.kill_gold("grunt", 1) == 2 and GameData.kill_gold("grunt", 2) == 2 and GameData.kill_gold("grunt", 3) == 3, "kill_gold rounds (2 x 1.2 = 2.4 -> 2, 2 x 1.4 = 2.8 -> 3)")
 	check(GameData.kill_gold("epic_boss", 2) == 60 and GameData.kill_gold("grunt", 31) == 14, "kill_gold boss and extrapolated stage")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
