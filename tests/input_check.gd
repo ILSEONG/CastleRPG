@@ -449,7 +449,7 @@ func _recruit_and_heroes(rig) -> void:
 	var ac = heroes_win.hero_cards.arteon
 	_check(ac.level == 1 and ac.stars == 1 and ac.power == GameData.hero_power(GameData.hero("arteon"), 1, 2) and not ac.deployed and heroes_win.hero_cards.hans.deployed
 		and not ac.can_level and heroes_win.slot_cards.map(func(c): return c.hero_id) == ["hans", "ella", "dorik", "nina"] and heroes_win.apply_button.disabled,
-		"(u) cards show Lv, stars, power and the 배치 badge; no ▲ without gold and food; [적용] off", "power=%d" % ac.power)
+		"(u) cards show Lv, stars, power and the 배치 badge; no ▲ without gold; [적용] off", "power=%d" % ac.power)
 	Economy.gold_tenths = 100000
 	Economy.res["food"] = 1000
 	Economy.changed.emit()
@@ -510,17 +510,17 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(heroes_win.skills_label.text.contains("6초마다 반경 6m") and heroes_win.skills_label.text.contains("받는 피해를 25% 줄입니다") and heroes_win.desc_label.text == arteon.desc
 		and heroes_win.title_label.text == "빛의 성기사 아르테온" and heroes_win.grade_label.text.begins_with("SSR"),
 		"(x) title, grade, both skill sentences with numbers and the description", "")
-	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드·식량 부족" and heroes_win.deploy_button.text == "배치 중"
-		and heroes_win.deploy_button.disabled, "(x) no gold or food: [레벨업]·[×10] off with the reason; a deployed hero shows 배치 중", "reason=%s" % heroes_win.reason_label.text)
+	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드 부족" and heroes_win.deploy_button.text == "배치 중"
+		and heroes_win.deploy_button.disabled, "(x) no gold: [레벨업]·[×10] off with the reason; a deployed hero shows 배치 중", "reason=%s" % heroes_win.reason_label.text)
 	var c1 := GameData.levelup_cost("SSR", 1)
 	Economy.gold_tenths = int(c1.gold) * 10 + 5
-	Economy.res["food"] = int(c1.food)
+	Economy.res["food"] = 0  # 식량 없이도 된다(개정 12)
 	Economy.changed.emit()
 	await _tap(heroes_win.level_button.get_global_rect().get_center())  # 아직 보호 시간
 	_check(Economy.level_of("arteon") == 1, "(x) a press on [레벨업] right after the detail opens is ignored", "")
 	await _guard_wait()
-	_check(not heroes_win.level_button.disabled and heroes_win._one.gold.text == "120" and heroes_win._one.food.text == "40" and heroes_win.reason_label.text == "",
-		"(x) [레벨업] shows its cost inside (gold 120, food 40)", "gold=%s food=%s" % [heroes_win._one.gold.text, heroes_win._one.food.text])
+	_check(not heroes_win.level_button.disabled and heroes_win._one.gold.text == "120" and not heroes_win._one.has("food") and heroes_win.reason_label.text == "",
+		"(x) [레벨업] shows its gold cost inside (120, no food)", "gold=%s" % heroes_win._one.gold.text)
 	var pre := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	pre.sort_custom(func(a, b): return a.index < b.index)
 	await _tap(heroes_win.level_button.get_global_rect().get_center())
@@ -530,20 +530,20 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 30"
 		and heroes_win.stat_values[0].text == "1,213" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
-		"(x) [레벨업] takes 120 gold (1200 tenths) and 40 food, Lv 2, light burst, changed stats flash green",
+		"(x) [레벨업] takes 120 gold (1200 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
 	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 1040.0 * 1.06 * 1.1)
 		and is_equal_approx(live[1].atk, 42.0 * 1.06 * 1.1) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
 		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.06) x 1.1", "hp=%.1f" % live[1].hp_max)
 	var c3 := GameData.levelup_cost("SSR", 2, 3)
 	Economy.gold_tenths = int(c3.gold) * 10
-	Economy.res["food"] = int(c3.food) + 1
+	Economy.res["food"] = 0
 	Economy.changed.emit()
 	_check(heroes_win._ten.title.text == "×10 (3회)" and heroes_win._ten.gold.text == UiKit.commas(c3.gold) and not heroes_win.ten_button.disabled,
 		"(x) [×10] shows the affordable count (3) and its total cost", "title=%s gold=%s" % [heroes_win._ten.title.text, heroes_win._ten.gold.text])
 	await _tap(heroes_win.ten_button.get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 1 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 30",
+	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 0 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 30",
 		"(x) [×10] raises 3 levels for the summed cost", "level=%d tenths=%d" % [Economy.level_of("arteon"), Economy.gold_tenths])
 	# 이전·다음: [다음]은 목록 순서로 다음 영웅, 오른쪽으로 끌면 이전
 	var order: Array = heroes_win.order

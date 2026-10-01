@@ -718,7 +718,6 @@ func _levelup_case() -> void:
 	await _frames(1)
 	Economy.heroes["dorik"] = 3  # 별 2
 	Economy.gold_tenths = 1000000
-	Economy.res["food"] = 100000
 	var before := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var ok := Economy.level_up("dorik", 9)  # 1 → 10
 	await _frames(1)

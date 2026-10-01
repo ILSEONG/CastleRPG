@@ -28,11 +28,9 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "hero_max_stars", "hero_star_bonus",
 	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
-	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
-	"levelup_food_R", "levelup_food_SR", "levelup_food_SSR"]
+	"hero_max_level_base", "hero_max_level_per_star", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]
 const CONFIG_LIST_KEYS := ["hero_slots", "starter_heroes"]
-const LEVELUP_INT_KEYS := ["hero_max_level_per_star", "levelup_gold_R", "levelup_food_R", "levelup_gold_SR", "levelup_food_SR",
-	"levelup_gold_SSR", "levelup_food_SSR"]  # 0 이상 정수(개정 11)
+const LEVELUP_INT_KEYS := ["hero_max_level_per_star", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만)
 const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
@@ -186,17 +184,13 @@ static func max_level(copies: int) -> int:
 	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_star")) * stars(copies)
 
 
-## level에서 count번 올리는 비용 합계 {gold(정수 골드), food}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.12^(L−1)),
-## 식량 = levelup_food_<등급> × L.
+## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.12^(L−1)). 식량 없음(개정 12).
 static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	var g := config_num("levelup_gold_" + grade)
-	var f := int(config_num("levelup_food_" + grade))
 	var gold := 0
-	var food := 0
 	for l in range(level, level + count):
 		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1))
-		food += f * l
-	return {"gold": gold, "food": food}
+	return {"gold": gold}
 
 
 ## 최종 HP·공격 = 표 기본값 × 레벨 배율 × 별 배율. {hp, atk}

@@ -340,13 +340,7 @@ func levelup_block(hero_id: String, count := 1) -> String:
 	if level_of(hero_id) + count > GameData.max_level(int(heroes[hero_id])):
 		return "최대 레벨"
 	var cost := GameData.levelup_cost(h.grade, level_of(hero_id), count)
-	var no_gold: bool = gold < cost.gold
-	var no_food: bool = int(res.get(FOOD, 0)) < cost.food
-	if no_gold and no_food:
-		return "골드·식량 부족"
-	if no_gold:
-		return "골드 부족"
-	return "식량 부족" if no_food else ""
+	return "골드 부족" if gold < cost.gold else ""
 
 
 ## 지금 감당할 수 있는 레벨업 횟수(최대 cap, 최대 레벨까지). [×10] 버튼.
@@ -357,7 +351,7 @@ func levelup_affordable(hero_id: String, cap := 10) -> int:
 	return n
 
 
-## 레벨업 count번(스펙 §2.1). 안 되면 알림만. 오프라인은 골드(× 10 tenths)·식량을 빼고 올려 저장한 뒤 leveled,
+## 레벨업 count번(스펙 §2.1). 안 되면 알림만. 오프라인은 골드(× 10 tenths)만 빼고(개정 12) 올려 저장한 뒤 leveled,
 ## 온라인은 /v1/hero/levelup(once — 다시 보내면 두 번 오를 수 있어 재전송하지 않는다. 응답에 leveled). 올렸거나 보냈으면 true.
 ## 능력치 반영은 배치 변경과 같다(roster_changed → main: 다음 리필, 방치 모드면 그 영웅만 곧바로).
 func level_up(hero_id: String, count := 1) -> bool:
@@ -369,7 +363,6 @@ func level_up(hero_id: String, count := 1) -> bool:
 		return _levelup_online(hero_id, count)
 	var cost := GameData.levelup_cost(GameData.hero(hero_id).grade, level_of(hero_id), count)
 	gold_tenths -= int(cost.gold) * 10
-	res[FOOD] = int(res.get(FOOD, 0)) - int(cost.food)
 	hero_levels[hero_id] = level_of(hero_id) + count
 	changed.emit()
 	roster_changed.emit()
@@ -617,10 +610,10 @@ func _on_levelup(data: Dictionary, hero_id: String) -> void:
 	leveled.emit(hero_id, level_of(hero_id))
 
 
-## 거부(409 max_level·not_enough, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
+## 거부(409 max_level·not_enough_gold, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
 func _on_levelup_failed() -> void:
 	_waiting.erase("levelup")
-	var why := {"not_enough": "골드·식량이 부족합니다", "max_level": "최대 레벨입니다"}
+	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}
 	notice.emit(why.get(net.last_error, LEVELUP_FAIL_TEXT))
 	net.refresh()
 	changed.emit()

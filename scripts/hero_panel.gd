@@ -60,7 +60,7 @@ var _list_view: VBoxContainer
 var _detail_view: VBoxContainer
 var _slot_grid: GridContainer
 var _hero_grid: GridContainer
-var _one := {}  # [레벨업] 버튼 안 {title, gold, food} Label
+var _one := {}  # [레벨업] 버튼 안 {title, gold} Label
 var _ten := {}
 var _before: Array = []  # 레벨업을 누를 때의 능력치 글자(바뀐 것만 반짝인다)
 var _swipe_from := Vector2.INF
@@ -204,7 +204,7 @@ func _build_detail() -> void:
 		nav.add_child(b)
 
 
-## 비용 버튼: 위 제목, 아래 [골드 아이콘 숫자 · 식량 아이콘 숫자](버튼 안, 입력은 버튼이 받는다).
+## 비용 버튼: 위 제목, 아래 [골드 아이콘 숫자](버튼 안, 입력은 버튼이 받는다).
 func _cost_button(text: String) -> Dictionary:
 	var b := _button("")
 	b.custom_minimum_size = Vector2(0, 96)
@@ -222,7 +222,7 @@ func _cost_button(text: String) -> Dictionary:
 	line.add_theme_constant_override("separation", 4)
 	box.add_child(line)
 	var out := {"button": b, "title": title}
-	for kind in ["gold", "food"]:
+	for kind in ["gold"]:
 		var icon = IconsScript.new()
 		icon.kind = kind
 		icon.custom_minimum_size = Vector2(26, 26)
@@ -486,7 +486,6 @@ func _set_cost(btn: Dictionary, title: String, count: int, grade: String, lv: in
 	btn.title.text = title
 	var cost := GameData.levelup_cost(grade, lv, count)
 	btn.gold.text = UiKit.commas(cost.gold) if count > 0 else "-"
-	btn.food.text = UiKit.commas(cost.food) if count > 0 else "-"
 
 
 ## 좌우 스와이프(빈 곳에서 SWIPE_PX 넘게 가로로 끌었다 뗌) → 이전·다음.
