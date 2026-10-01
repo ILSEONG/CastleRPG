@@ -281,6 +281,8 @@ func _phase1(state_path: String) -> void:
 	var copies_start := await _heroes_online()
 	await _levelup_online()
 
+	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
+
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
 		"heroes": Economy.heroes, "deploy": Economy.deploy, "copies_start": copies_start, "levels": Economy.hero_levels}))
@@ -472,6 +474,7 @@ func _phase2(state_path: String) -> void:
 	_hud._link_label.visible = true  # 가장 큰 띠(끊김 + 저장소 두 줄)로 위치를 본다
 	await _frames(2)
 	_check_band_layout("(p2)")
+	_buildings_restored(state_path)
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
@@ -612,3 +615,106 @@ func _check(cond: bool, what: String, detail: String) -> void:
 	else:
 		_fails += 1
 		print("ONLINE FAIL: %s (%s)" % [what, detail])
+
+
+## (r) 개정 12 서버 건물: 성채 업그레이드 → 요청 한 번(응답 전 재탭 무시), 서버 자원 −비용, 일꾼·build_started → test/build_now →
+##     서버의 게으른 완료 → 성채 Lv 2(building_done)·성 HP 1200. (s) 재전송 금지: 서버가 사라진 채 → 버리고 알림, 다시 연결돼도 두 번째 요청
+##     없음. (t) 서버 거부(409 prereq) → 알림. (u) 벌목장: 시작할 때 서버가 자동 수집. 마지막으로 성문 건설을 걸어 둔 채 끝 상태를
+##     <state>.buildings에 쓴다 — phase 2가 재접속 복원(레벨·일꾼·인구·성/성문 HP)을 본다.
+func _buildings_online(state_path: String) -> void:
+	await _request("POST", "/v1/test/age", {"minutes": 720})
+	for b in ["lumber", "quarry", "farm"]:
+		await _request("POST", "/v1/collect", {"building": b})
+	var started := []
+	var done := []
+	var notices := []
+	var on_start := func(id, f): started.append([id, f])
+	var on_done := func(id, l): done.append([id, l])
+	var on_notice := func(t): notices.append(t)
+	Economy.build_started.connect(on_start)
+	Economy.building_done.connect(on_done)
+	Economy.notice.connect(on_notice)
+	var res0: Dictionary = Economy.res.duplicate()
+	var cost := Economy.upgrade_cost("keep")
+	var p0 := await _request("GET", "/v1/player")
+	_check(Economy.building_level("keep") == 1 and Economy.build.is_empty() and Economy.upgrade_block("keep", Economy.time_now()) == "" and Economy.population() == 6
+		and p0.get("player", {}).get("population") == 6 and p0.get("player", {}).get("buildings", {}).size() == 9,
+		"(r) precondition: all 9 buildings from the server at Lv 1, builder idle, population 6", "keep=%d build=%s" % [Economy.building_level("keep"), Economy.build])
+	var u0: int = Net.requested.get("/v1/building/upgrade", 0)
+	var sent := Economy.upgrade("keep", Economy.time_now())
+	var again := Economy.upgrade("keep", Economy.time_now())  # 응답 전 재탭
+	_check(sent and not again and Economy.upgrade_block("keep", Economy.time_now()) == "waiting" and Net.requested.get("/v1/building/upgrade", 0) == u0 + 1 and Economy.res == res0,
+		"(r) one upgrade request; a second tap before the reply is ignored and nothing changes yet", "requests=%d" % [Net.requested.get("/v1/building/upgrade", 0) - u0])
+	await _wait_until(func(): return not Economy.build.is_empty() and not Economy._waiting.has("build"), 15.0)
+	var fin := float(Economy.build.get("finish", 0.0))
+	var paid := true
+	for r in cost:
+		paid = paid and Economy.res[r] == int(res0[r]) - int(cost[r])
+	_check(Economy.build.get("id") == "keep" and paid and started == [["keep", fin]] and absf(fin - (Economy.time_now() + 60.0)) < 10.0 and Economy.upgrade_block("barracks", Economy.time_now()) == "keep_cap",
+		"(r) the server takes 300/300/200 and starts the builder (finish = server time + 60 s), build_started", "build=%s res=%s started=%s" % [Economy.build, Economy.res, started])
+	Economy.finish_build_now()  # POST /v1/test/build_now — 응답(플레이어 읽기)이 게으른 완료를 한다
+	await _wait_until(func(): return Economy.building_level("keep") == 2, 15.0)
+	await _frames(2)
+	_check(Economy.building_level("keep") == 2 and Economy.build.is_empty() and done == [["keep", 2]] and GameState.castle_hp_max == 1200.0 and GameState.hero_count() == 4,
+		"(r) build_now -> the server completes it: keep Lv 2, building_done, castle HP 1200", "keep=%d done=%s castle=%.0f" % [Economy.building_level("keep"), done, GameState.castle_hp_max])
+	# (s) 재전송 금지
+	var live := Net.api_base
+	var w0 := _warned("not resending")
+	Net.api_base = DEAD_API
+	var sent2 := Economy.upgrade("barracks", Economy.time_now())
+	var dropped := await _wait_until(func(): return not Net.up and not Economy._waiting.has("build"), 20.0)
+	_check(sent2 and dropped and notices.has(Economy.BUILD_FAIL_TEXT) and _warned("not resending") == w0 + 1,
+		"(s) an upgrade that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent2, dropped, notices])
+	Net.api_base = live
+	var back := await _wait_until(func(): return Net.up, 40.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	await _frames(3)
+	_check(back and Net.requested.get("/v1/building/upgrade", 0) == u0 + 2 and Economy.build.is_empty() and Economy.building_level("barracks") == 1,
+		"(s) after reconnecting the state is refreshed and the upgrade is not resent", "requests=%d build=%s" % [Net.requested.get("/v1/building/upgrade", 0) - u0, Economy.build])
+	# (t) 서버 거부: 성채 3은 성문·막사 ≥ 2가 선행 — 화면이 막는 요청을 직접 보낸다
+	Economy._upgrade_online("keep")
+	await _wait_until(func(): return not Economy._waiting.has("build"), 15.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	_check(notices.has(Economy.BLOCK_TEXT.prereq) and Economy.build.is_empty() and Net.up, "(t) a refused upgrade (409 prereq) shows the reason and changes nothing", "notices=%s" % [notices])
+	# (u) 벌목장: 서버가 시작할 때 자동 수집(10분 = 100)하고 그 목재까지 비용에 쓴다. 먼저 비워 두고(남은 초 0) 10분 앞당긴다
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/test/age", {"minutes": 10})
+	var wood0: int = Economy.res["wood"]
+	var lc := Economy.upgrade_cost("lumber")
+	Economy.upgrade("lumber", Economy.time_now())
+	await _wait_until(func(): return Economy.build.get("id") == "lumber", 15.0)
+	_check(Economy.res["wood"] == wood0 + 100 - int(lc.wood), "(u) a resource building upgrade collects first on the server (+100 wood) and then pays", "wood=%d -> %d" % [wood0, Economy.res["wood"]])
+	Economy.finish_build_now()
+	await _wait_until(func(): return Economy.building_level("lumber") == 2, 15.0)
+	# 성문 건설을 걸어 둔 채로 끝낸다(45초)
+	Economy.upgrade("gate", Economy.time_now())
+	await _wait_until(func(): return Economy.build.get("id") == "gate", 15.0)
+	_check(Economy.building_level("lumber") == 2 and Economy.build.get("id") == "gate" and done.size() == 2, "(u) lumber Lv 2 done; the gate is left building for phase 2",
+		"lumber=%d build=%s done=%s" % [Economy.building_level("lumber"), Economy.build, done])
+	Economy.build_started.disconnect(on_start)
+	Economy.building_done.disconnect(on_done)
+	Economy.notice.disconnect(on_notice)
+	var f := FileAccess.open(state_path + ".buildings", FileAccess.WRITE)
+	f.store_string(JSON.stringify({"levels": Economy.levels, "build": Economy.build}))
+	f.close()
+
+
+## (p2) 재접속하면 건물 레벨·진행 중 일꾼(끝나는 시각이 지났으면 서버가 완료한 레벨)·인구·성/성문 HP가 그대로다.
+func _buildings_restored(state_path: String) -> void:
+	var json := JSON.new()
+	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".buildings")) == OK and json.data is Dictionary
+	_check(ok, "(p2) phase 1 buildings state file", state_path)
+	if not ok:
+		return
+	var saved: Dictionary = json.data
+	var fin := float(saved.build.finish)
+	var gate_done: bool = Economy.build.is_empty()  # 끝나는 시각이 지나 서버가 완료했다(시각 검사는 아래)
+	var levels_ok := true
+	for id in saved.levels:
+		var want := int(saved.levels[id]) + (1 if gate_done and id == "gate" else 0)
+		levels_ok = levels_ok and Economy.building_level(id) == want
+	var build_ok: bool = Economy.time_now() >= fin - 1.0 if gate_done else (Economy.build.get("id") == "gate" and absf(float(Economy.build.finish) - fin) < 0.01)
+	_check(levels_ok and build_ok and Economy.building_level("keep") == 2 and Economy.building_level("lumber") == 2 and Economy.population() == 6
+		and GameState.castle_hp_max == 1200.0 and GameState.gate_hp_max == 400.0 * Economy.building_level("gate"),
+		"(p2) reconnecting restores every building level and the builder (gate %s), population, castle/gate HP" % ["done by the server" if gate_done else "still building"],
+		"levels=%s build=%s saved=%s" % [Economy.levels, Economy.build, saved])
