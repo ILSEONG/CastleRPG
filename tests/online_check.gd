@@ -16,6 +16,7 @@ const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
+const TabBarScript := preload("res://scripts/tab_bar.gd")
 const DEAD_API := "http://127.0.0.1:1"  # 아무도 듣지 않는 포트 — 끊김 흉내
 
 class ErrorCounter extends Logger:
@@ -38,6 +39,7 @@ var _panel
 var _scenery
 var _recruit
 var _hero_panel
+var _tabs
 var _resp = null  # _request의 응답
 var _resp_done := false
 
@@ -277,11 +279,77 @@ func _phase1(state_path: String) -> void:
 		"requests=%d seq=%d server_seq=%d rejected=%d" % [Net.requested.get("/v1/kills", 0) - kills1, Net.kill_seq_sent - seq1, Economy.kill_seq - seq1, _warned("server rejected") - rejected0])
 
 	var copies_start := await _heroes_online()
+	await _levelup_online()
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
-		"heroes": Economy.heroes, "deploy": Economy.deploy, "copies_start": copies_start}))
+		"heroes": Economy.heroes, "deploy": Economy.deploy, "copies_start": copies_start, "levels": Economy.hero_levels}))
 	f.close()
+
+
+## (n) 서버 레벨업(개정 11): 영웅 상세 [레벨업] → /v1/hero/levelup 한 번(응답 전 재탭은 무시), 서버 골드 −비용 × 10 tenths·식량 −비용,
+##     레벨 +1과 연출. [×10]은 감당 가능한 횟수를 한 요청으로.
+## (o) 레벨업은 다시 보내지 않는다: 서버가 사라진 채 → 버리고 알림, 다시 연결되면 상태만 받는다(두 번째 요청 없음).
+## (q) 서버가 거부(409 max_level)하면 알림 + 상태 새로 받기. phase 2가 재접속 레벨 복원을 본다.
+func _levelup_online() -> void:
+	await _request("POST", "/v1/test/age", {"minutes": 720})
+	await _request("POST", "/v1/collect", {"building": "farm"})
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/sell", {"res": "wood"})
+	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
+	var id := "hans"
+	var gold0: int = Economy.server_gold_tenths
+	var food0: int = Economy.res["food"]
+	var c1 := GameData.levelup_cost("R", 1)
+	_check(Economy.level_of(id) == 1 and Economy.gold >= 1000 and food0 >= 1000 and Economy.gold_tenths == gold0, "(n) precondition: hans Lv 1, gold and food from the server",
+		"level=%d gold=%d food=%d" % [Economy.level_of(id), Economy.gold, food0])
+	var l0: int = Net.requested.get("/v1/hero/levelup", 0)
+	_hero_panel.open()
+	_hero_panel.show_detail(id)
+	_hero_panel.level_button.pressed.emit()
+	_hero_panel.level_button.pressed.emit()  # 응답 전 재탭
+	_check(_hero_panel.level_button.disabled and Economy.level_of(id) == 1 and Economy.levelup_waiting(), "(n) while waiting for the reply [레벨업] is off and nothing changes yet", "")
+	var done := await _wait_until(func(): return Economy.level_of(id) == 2 and not Economy.levelup_waiting(), 15.0)
+	_check(done and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1 and Economy.server_gold_tenths == gold0 - int(c1.gold) * 10 and Economy.res["food"] == food0 - int(c1.food)
+		and _hero_panel.celebrations == 1 and _hero_panel.level_label.text == "Lv 2 / 20",
+		"(n) one /v1/hero/levelup: server gold -30 (300 tenths), food -10, Lv 2 with the success effect",
+		"requests=%d gold=%d->%d food=%d->%d label=%s" % [Net.requested.get("/v1/hero/levelup", 0) - l0, gold0, Economy.server_gold_tenths, food0, Economy.res["food"], _hero_panel.level_label.text])
+	var n := Economy.levelup_affordable(id, 10)
+	var cn := GameData.levelup_cost("R", 2, n)
+	var gold1: int = Economy.server_gold_tenths
+	var food1: int = Economy.res["food"]
+	_hero_panel.ten_button.pressed.emit()
+	done = await _wait_until(func(): return Economy.level_of(id) == 2 + n and not Economy.levelup_waiting(), 15.0)
+	_check(done and n == 10 and Net.requested.get("/v1/hero/levelup", 0) == l0 + 2 and Economy.server_gold_tenths == gold1 - int(cn.gold) * 10 and Economy.res["food"] == food1 - int(cn.food),
+		"(n) [×10] sends one request for the affordable count (10) and the server takes the summed cost",
+		"n=%d level=%d gold=%d->%d" % [n, Economy.level_of(id), gold1, Economy.server_gold_tenths])
+
+	var live := Net.api_base
+	var notices := []
+	var on_notice := func(t): notices.append(t)
+	Economy.notice.connect(on_notice)
+	var lv := Economy.level_of(id)
+	var gold2: int = Economy.server_gold_tenths
+	var w0 := _warned("not resending")
+	Net.api_base = DEAD_API
+	var sent := Economy.level_up(id, 1)
+	var dropped := await _wait_until(func(): return not Net.up and not Economy.levelup_waiting(), 20.0)
+	_check(sent and dropped and notices.has(Economy.LEVELUP_FAIL_TEXT) and _warned("not resending") == w0 + 1,
+		"(o) a level-up that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent, dropped, notices])
+	Net.api_base = live
+	var back := await _wait_until(func(): return Net.up, 40.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	await _frames(3)
+	_check(back and Net.requested.get("/v1/hero/levelup", 0) == l0 + 3 and Economy.level_of(id) == lv and Economy.server_gold_tenths == gold2,
+		"(o) after reconnecting the state is refreshed and the level-up is not resent",
+		"requests=%d level=%d gold=%d" % [Net.requested.get("/v1/hero/levelup", 0) - l0, Economy.level_of(id), Economy.server_gold_tenths])
+	Economy._levelup_online(id, 50)  # 화면이 막는 요청을 직접 보낸다 — 서버가 409 max_level
+	await _wait_until(func(): return not Economy.levelup_waiting(), 15.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	_check(notices.has("최대 레벨입니다") and Economy.level_of(id) == lv and Net.requested.get("/v1/hero/levelup", 0) == l0 + 4 and Net.up,
+		"(q) a refused level-up (409 max_level) shows a notice and refreshes the state", "notices=%s level=%d" % [notices, Economy.level_of(id)])
+	Economy.notice.disconnect(on_notice)
+	_hero_panel.close()
 
 
 ## (k) 서버 모집 1회: 판매로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 3000 tenths↓, 영웅 +1, 결과 카드.
@@ -388,6 +456,15 @@ func _phase2(state_path: String) -> void:
 	_check(Economy.deploy == saved.deploy and GameState.deploy() == saved.deploy and spawned.map(func(h): return h.def.id) == saved.deploy,
 		"(p2) reconnecting restores the deploy, and the world spawns that deploy",
 		"deploy=%s saved=%s" % [Economy.deploy, saved.get("deploy")])
+	var levels_ok: bool = saved.get("levels") is Dictionary and Economy.level_of("hans") == 12
+	if levels_ok:
+		for id in saved.levels:
+			levels_ok = levels_ok and Economy.level_of(id) == int(saved.levels[id])
+	var stats_ok := true
+	for h in spawned:
+		stats_ok = stats_ok and is_equal_approx(h.hp_max, GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id])).hp)
+	_check(levels_ok and stats_ok, "(p2) reconnecting restores hero levels (hans Lv 12) and the spawned heroes use them",
+		"levels=%s saved=%s" % [Economy.hero_levels, saved.get("levels")])
 	await _frames(2)
 	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
 		and _warned("not persistent") == 1, "(p2) non-persistent storage: one warning log and a one-line notice in the band, the game goes on",
@@ -424,6 +501,8 @@ func _start_world() -> bool:
 			_recruit = c
 		elif s == HeroPanelScript:
 			_hero_panel = c
+		elif s == TabBarScript:
+			_tabs = c
 	_spawner.set_process(false)
 	for m in get_tree().get_nodes_in_group("monsters"):
 		m.queue_free()
@@ -503,16 +582,16 @@ func _check_classify() -> void:
 	_check(Net.backoff(1) == 2.0 and Net.backoff(3) == 8.0 and Net.backoff(10) == Net.RETRY_MAX_SEC, "(a) backoff 2, 4, 8 ... capped at 15 s", "")
 
 
-## 띠가 상단 자원 칩·아래 버튼·[영웅] 버튼·알림 자리를 가리지 않는다(층만 다른 CanvasLayer라 화면 좌표가 같다).
+## 띠가 상단 자원 칩·큰 버튼·하단 탭 바·알림 자리를 가리지 않는다(층만 다른 CanvasLayer라 화면 좌표가 같다).
 func _check_band_layout(tag: String) -> void:
 	var band: Rect2 = _hud._banner.get_global_rect()
 	var chips: Rect2 = _hud._chip_row.get_global_rect()
 	var button: Rect2 = _hud._button.get_global_rect()
 	var toast: Rect2 = _hud._toast.get_global_rect()
-	var hero: Rect2 = _hud.hero_button.get_global_rect()
-	_check(band.size.y > 0.0 and not band.intersects(chips) and not band.intersects(button) and not band.intersects(toast) and not band.intersects(hero),
-		"%s the band covers neither the resource chips, the bottom button, the [영웅] button nor the toast spot" % tag,
-		"band=%s chips=%s button=%s hero=%s toast=%s" % [band, chips, button, hero, toast])
+	var bar: Rect2 = _tabs._bar.get_global_rect()
+	_check(band.size.y > 0.0 and not band.intersects(chips) and not band.intersects(button) and not band.intersects(toast) and not band.intersects(bar),
+		"%s the band covers neither the resource chips, the big button, the tab bar nor the toast spot" % tag,
+		"band=%s chips=%s button=%s bar=%s toast=%s" % [band, chips, button, bar, toast])
 
 
 ## 대기 → 스테이지 → 전멸(클리어) → 결과 뒤 대기(중지 예약). 스포너는 멈춰 있다.
