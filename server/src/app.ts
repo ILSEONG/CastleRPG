@@ -6,7 +6,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
 import type { Query } from './db.ts'
-import { ident, TABLES } from './seed.ts'
+import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 
 export interface AppOptions {
@@ -328,8 +328,9 @@ export function createApp(opts: AppOptions) {
       throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
     }
     const now = clock()
+    // 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(새 플레이어가 영웅 0명이 되지 않게)
     const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
-    const starters = String(cfg?.value ?? '').split('|').map((x) => x.trim()).filter(Boolean)
+    const starters = String(cfg?.value ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
     const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(starters)])
     const iat = Math.floor(now)
     const token = await sign({ sub: r.id, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')

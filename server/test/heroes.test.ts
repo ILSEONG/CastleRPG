@@ -1,6 +1,8 @@
 // 영웅(개정 10 §3.6·§3.7): 시작 영웅, 모집(비용·409·결과·copies·10연차 보장·확률), 배치 검증. 난수는 주입(rand.next).
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
+import { createApp } from '../src/app.ts'
+import { migrate, openDb } from '../src/db.ts'
 import * as R from '../src/rules.ts'
 import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
@@ -148,4 +150,21 @@ test('응답: 표에서 빠진 영웅은 heroes·deploy에서 거른다(보유 �
   await S.db.query(`update player_state set deploy = '["retired_hero", "ella", null, "nina"]'::jsonb where player_id = $1`, [id])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.deepEqual([p.heroes, p.deploy], [{ hans: 1, ella: 1, dorik: 1, nina: 1 }, [null, 'ella', null, 'nina']])
+})
+
+test('시드 전 DB(마이그레이션만): 새 플레이어도 스펙 기본 시작 영웅 4종과 그 순서의 배치를 받는다(마이그레이션 005와 같은 기본값)', async () => {
+  const d = await openDb({})
+  try {
+    await migrate(d)
+    const app = createApp({ query: d.query, now: () => T0, jwtSecret: 'test-secret-0123456789abcdef0123456789' })
+    const res = await app.request('/v1/auth/guest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_id: 'unseeded-db-device-0001' }) })
+    assert.equal(res.status, 200)
+    const id = (await res.json()).player_id
+    const [s] = await d.query('select deploy from player_state where player_id = $1', [id])
+    assert.deepEqual(s.deploy, STARTERS)
+    const h = await d.query('select hero_id, copies from player_heroes where player_id = $1 order by hero_id', [id])
+    assert.deepEqual(h.map((r) => `${r.hero_id}:${r.copies}`), ['dorik:1', 'ella:1', 'hans:1', 'nina:1'])
+  } finally {
+    await d.close()
+  }
 })

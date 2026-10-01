@@ -209,3 +209,29 @@ test('CSV 오류: 파일·줄·열을 알리고 아무것도 쓰지 않는다', 
   assert.equal(g.hp, 999) // 부분 반영 없음
   await seed(db)
 })
+
+test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1, 등급마다 영웅이 하나 이상', async () => {
+  const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
+  const withCfg = (key: string, value: string) => dataCopy({ 'config.csv': cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`) })
+  const cases: [string, string, RegExp][] = [
+    ['gacha_cost_1', '300.5', /gacha_cost_1 must be a non-negative integer: '300\.5'/],
+    ['gacha_cost_10', '-1', /gacha_cost_10 must be a non-negative integer: '-1'/],
+    ['gacha_10_min_sr', '1.5', /gacha_10_min_sr must be a non-negative integer: '1\.5'/],
+    ['gacha_rate_ssr', '1.5', /gacha_rate_ssr must be in 0\.\.1: '1\.5'/],
+    ['gacha_rate_sr', '-0.1', /gacha_rate_sr must be in 0\.\.1: '-0\.1'/],
+    ['gacha_rate_sr', '0.98', /gacha_rate_sr plus gacha_rate_ssr must be at most 1: 0\.03 \+ 0\.98/],
+  ]
+  for (const [key, value, re] of cases) {
+    await assert.rejects(readTables(withCfg(key, value)), (e: unknown) => {
+      assert.ok(e instanceof CsvError)
+      assert.equal(e.errors.length, 1, `${key}=${value}: ${e.errors.join(' | ')}`)
+      assert.match(e.errors[0], re)
+      return true
+    })
+  }
+  const lines = readFileSync(join(DATA_DIR, 'heroes.csv'), 'utf8').split('\n')
+  const noSr = lines.filter((l) => !l.split(',').includes('SR')).join('\n')
+  await assert.rejects(readTables(dataCopy({ 'heroes.csv': noSr })), /heroes\.csv line 0 column 'grade': no SR heroes to recruit/)
+  await readTables(withCfg('gacha_cost_1', '0')) // 0원 모집·확률 경계(합 1)는 받는다
+  await readTables(withCfg('gacha_rate_sr', '0.97'))
+})

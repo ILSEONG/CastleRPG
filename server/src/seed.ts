@@ -61,6 +61,9 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'hero_max_stars', 'hero_star_bonus',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr']
 export const CONFIG_LIST = ['hero_slots', 'starter_heroes']
+// 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
+export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
+export const GRADES = ['R', 'SR', 'SSR']
 
 const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/
 export const isNum = (s: string) => NUM_RE.test(s)
@@ -160,6 +163,28 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
   return rows
 }
 
+// 모집 설정(스펙 §3.6): 비용·10연차 보장 수는 0 이상 정수(소수 비용이면 BigInt(-cost × 10)가 throw → 500), 확률은 0..1이고
+// SSR + SR ≤ 1. 숫자가 아닌 값은 checkTable이 이미 알렸으므로 건너뛴다.
+function checkGacha(config: CsvRow[], errors: string[]) {
+  const byKey = new Map(config.map((r) => [String(r.key), r]))
+  const raw = (k: string) => String(byKey.get(k)?.value ?? '')
+  const num = (k: string) => (isNum(raw(k)) ? Number(raw(k)) : null)
+  const err = (k: string, why: string) => errors.push(`config.csv line ${byKey.get(k)?._line} column 'value': ${k} ${why}`)
+  for (const k of ['gacha_cost_1', 'gacha_cost_10', 'gacha_10_min_sr']) {
+    const v = num(k)
+    if (v !== null && !(Number.isInteger(v) && v >= 0)) err(k, `must be a non-negative integer: '${raw(k)}'`)
+  }
+  const inUnit = (v: number | null) => v !== null && v >= 0 && v <= 1
+  for (const k of ['gacha_rate_ssr', 'gacha_rate_sr']) {
+    if (num(k) !== null && !inUnit(num(k))) err(k, `must be in 0..1: '${raw(k)}'`)
+  }
+  const ssr = num('gacha_rate_ssr')
+  const sr = num('gacha_rate_sr')
+  if (ssr !== null && sr !== null && inUnit(ssr) && inUnit(sr) && ssr + sr > 1) {
+    err('gacha_rate_sr', `plus gacha_rate_ssr must be at most 1: ${raw('gacha_rate_ssr')} + ${raw('gacha_rate_sr')}`)
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -180,6 +205,13 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const heroIds = new Set((out.heroes ?? []).map((h) => String(h.id)))
   for (const id of String(starters?.value ?? '').split('|').map((x) => x.trim()).filter(Boolean)) {
     if (out.heroes && !heroIds.has(id)) errors.push(`config.csv line ${starters?._line} column 'value': unknown hero '${id}' in starter_heroes`)
+  }
+  if (out.config) checkGacha(out.config, errors)
+  // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
+  if (out.heroes) {
+    for (const g of GRADES) {
+      if (!out.heroes.some((h) => h.grade === g)) errors.push(`heroes.csv line 0 column 'grade': no ${g} heroes to recruit`)
+    }
   }
   if (errors.length) throw new CsvError(errors)
   return out
