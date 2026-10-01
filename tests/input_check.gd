@@ -195,6 +195,107 @@ func _run() -> void:
 	_check(wd < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
 		"(j) warrior stands at its wall-top slot 8 s later", "d=%.2f pos=%s" % [wd, warrior.global_position])
 
+	# --- 개정 7: 자원 건물·상인 탭, 거래 창 ---
+	var badges: Node = null
+	var panel: Node = null
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/badges.gd"):
+			badges = c
+		elif c.get_script() == preload("res://scripts/merchant_panel.gd"):
+			panel = c
+	var rig = _camera.get_parent()
+	_picker._select(null)
+	var now := Time.get_unix_time_from_system()
+	Economy.reset(now)
+
+	# (k) 말풍선 조건: 5분 이상 쌓인 자원 건물만 (벌목 10분, 농장 6분 → 2곳, 채석 3분은 제외)
+	Economy.last_collect["lumber"] = now - 600.0
+	Economy.last_collect["farm"] = now - 360.0
+	Economy.last_collect["quarry"] = now - 180.0
+	var ids: Array = badges.badge_ids(now)
+	ids.sort()
+	_check(ids == ["farm", "lumber"], "(k) badges only on resource buildings with >= 5 min pending", "ids=%s" % [ids])
+
+	# (l) 영웅 없이 벌목장 탭 → 목재 +100, "+N" 뜸, 선택 없음 유지. 곧바로 또 탭하면 0이라 pop 없음
+	var lp := _building_px("lumber")
+	_check(_picker._pick(lp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(lp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "lumber",
+		"(l) precondition: lumber tap point hits the lumber tap body", "px=%s" % lp)
+	await _tap(lp)
+	_check(Economy.res["wood"] == 100 and badges.last_pop.get("amount", 0) == 100 and badges.last_pop.get("kind", "") == "wood" and _picker.selected == null,
+		"(l) lumber tap collects 100 wood and pops +100", "wood=%d pop=%s" % [Economy.res["wood"], badges.last_pop])
+	badges.last_pop = {}
+	await _tap(lp)
+	_check(Economy.res["wood"] == 100 and badges.last_pop.is_empty(), "(l) second tap collects nothing and shows no pop", "wood=%d pop=%s" % [Economy.res["wood"], badges.last_pop])
+
+	# (m) 영웅 선택 중 벌목장 탭 → 수집되고 선택·위치 유지(이동 명령 없음)
+	var hero_pre := [warrior.side, warrior.post, warrior.free_pos]
+	_picker._select(warrior)
+	Economy.last_collect["lumber"] = Time.get_unix_time_from_system() - 600.0
+	await _tap(lp)
+	_check(_picker.selected == warrior and Economy.res["wood"] == 200 and [warrior.side, warrior.post, warrior.free_pos] == hero_pre,
+		"(m) lumber tap with a hero selected collects and keeps the selection without a move", "selected=%s wood=%d" % [_name(_picker.selected), Economy.res["wood"]])
+
+	# (n) 기능 없는 건물(성채) 탭: 영웅 선택 중이면 바닥 이동 / 없으면 선택 해제 (수집·창 없음)
+	var gold0: int = Economy.gold
+	var kp := _building_px("keep")
+	_check(_picker._pick(kp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "keep" and not _open_hero(kp),
+		"(n) precondition: keep tap point hits the keep body, no hero nearby", "px=%s" % kp)
+	await _tap(kp)
+	_check(_picker.selected == warrior and warrior.post == Formation.POST_FREE and warrior.free_pos != hero_pre[2] and not panel.is_open() and Economy.gold == gold0,
+		"(n) keep tap with a hero selected falls through to a ground move", "post=%d free=%s" % [warrior.post, warrior.free_pos])
+	_picker._select(null)
+	await _tap(_hero_px(warrior))
+	_check(_picker.selected == warrior, "(n) precondition: warrior re-selected", "selected=%s" % _name(_picker.selected))
+	_picker._select(null)
+	await _tap(kp)
+	_check(_picker.selected == null and not panel.is_open(), "(n) keep tap with no hero selected stays deselected", "selected=%s" % _name(_picker.selected))
+
+	# (o) 상인 탭 → 창 열림, 선택 유지. 창 안(제목) 탭은 닫지 않는다
+	_picker._select(warrior)
+	var mp := _camera.unproject_position(Balance.MERCHANT_POS + Vector3(0, 1.0, 0))
+	_check(_picker._pick(mp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(mp, PickerScript.LAYER_TAP).collider.has_meta("merchant") and not _open_hero(mp),
+		"(o) precondition: merchant tap point hits the merchant body", "px=%s" % mp)
+	var free_before: Vector3 = warrior.free_pos
+	await _tap(mp)
+	await _frames(2)
+	_check(panel.is_open() and _picker.selected == warrior and warrior.free_pos == free_before,
+		"(o) merchant tap opens the trade window and keeps the hero selected", "open=%s selected=%s" % [panel.is_open(), _name(_picker.selected)])
+	await _tap(panel.dialog.get_global_rect().position + Vector2(300, 20))
+	_check(panel.is_open(), "(o) tapping inside the dialog does not close it", "open=%s" % panel.is_open())
+
+	# (p) [판매] → 골드 증가·자원 0. 상인 시세와 같은 값
+	Economy.res["stone"] = 7
+	Economy.gold = 10
+	Economy.changed.emit()
+	await _frames(2)
+	var rate: float = Economy.current_rate(Time.get_unix_time_from_system())
+	var expect := Economy.sell_value("wood", 200, rate)
+	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
+	await _tap(bp)
+	_check(Economy.res["wood"] == 0 and Economy.gold == 10 + expect and Economy.res["stone"] == 7 and panel.is_open(),
+		"(p) [sell] on wood zeroes wood and adds floor(200 x price x rate) gold; others stay", "wood=%d gold=%d expect=%d" % [Economy.res["wood"], Economy.gold, 10 + expect])
+	_check(panel.sell_buttons["wood"].disabled and not panel.sell_buttons["stone"].disabled, "(p) sell button is disabled at 0 holdings only", "")
+	await _tap(panel.sell_all_button.get_global_rect().get_center())
+	_check(Economy.res["stone"] == 0 and Economy.res["food"] == 0 and panel.sell_all_button.disabled, "(p) [sell all] clears everything", "stone=%d" % Economy.res["stone"])
+
+	# (q) 창이 열린 동안 드래그는 카메라를 못 움직이고, 배경(바닥 위) 탭은 영웅을 못 움직이고 창만 닫는다
+	var cam_pos: Vector3 = rig.position
+	var bg := Vector2(30, 700)
+	_check(_open_ground(bg) and panel.dialog.get_global_rect().has_point(bg) == false, "(q) precondition: backdrop point is open ground outside the dialog", "px=%s" % bg)
+	var dp: Vector2 = panel.dialog.get_global_rect().position + Vector2(300, 20)  # 창 안에서 시작한 드래그(배경 누름은 닫기)
+	_mouse_button(dp, true)
+	for i in 6:
+		_mouse_motion(dp + Vector2(0, 12) * (i + 1), Vector2(0, 12))
+	_mouse_button(dp + Vector2(0, 72), false)
+	await _frames(2)
+	_check(rig.position == cam_pos and panel.is_open(), "(q) dragging while the window is open does not pan the camera", "pos=%s" % rig.position)
+	var hero_state := [warrior.side, warrior.post, warrior.free_pos]
+	await _tap(bg)
+	_check(not panel.is_open() and _picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == hero_state,
+		"(q) tapping the backdrop over open ground closes the window and does not move the hero", "open=%s state=%s" % [panel.is_open(), [warrior.side, warrior.post, warrior.free_pos]])
+	await _tap(bg)
+	_check(warrior.free_pos != hero_state[2], "(q) after closing, the same ground tap moves the hero again", "free=%s" % warrior.free_pos)
+
 
 func _check(cond: bool, what: String, detail: String) -> void:
 	if cond:
@@ -290,3 +391,14 @@ func _drag(index: int, pos: Vector2, rel: Vector2) -> void:
 	ev.relative = xf.basis_xform(rel)
 	Input.parse_input_event(ev)
 	await _frames(1)
+
+
+## 건물 부지 중심 약간 위(탭 판정체 안)의 화면 좌표.
+func _building_px(id: String) -> Vector2:
+	var b := Balance.building(id)
+	return _camera.unproject_position(Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 1.0, (b.cell.y + b.size.y / 2.0) * Balance.TILE))
+
+
+## px 근처(HERO_TAP_PX)에 영웅이 있는지 — 영웅 판정이 건물 탭을 가로채지 않는지 사전 확인용.
+func _open_hero(px: Vector2) -> bool:
+	return _picker._hero_at(px, PickerScript.HERO_TAP_PX) != null
