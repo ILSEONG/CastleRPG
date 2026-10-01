@@ -229,7 +229,7 @@ func _flag_requested(flag: String) -> bool:
 	return false
 
 
-## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 1234.
+## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 9999(10연차 확인용).
 func _econ_demo() -> void:
 	var now := Time.get_unix_time_from_system()
 	Economy.save_path = ""
@@ -238,5 +238,5 @@ func _econ_demo() -> void:
 		Economy.last_collect[b] = now - 1800.0
 	for id in Economy.res:
 		Economy.res[id] = 500
-	Economy.gold = 1234
+	Economy.gold = 9999
 	Economy.changed.emit()
