@@ -2,7 +2,7 @@
 // 숫자 검증, 오류는 파일·줄·열. 오류가 하나라도 있으면 아무것도 쓰지 않는다.
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Query } from './db.ts'
+import type { Db, Query } from './db.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -182,20 +182,24 @@ function seedSql(spec: TableSpec): string {
     select (select count(*) from up)::int as upserted, (select count(*) from del)::int as deleted`
 }
 
-// CSV로 기획 표를 덮어쓴다. 표별 {upserted, deleted}를 돌려준다.
-export async function seed(query: Query, dataDir = DATA_DIR): Promise<Record<string, { upserted: number; deleted: number }>> {
+// CSV로 기획 표를 덮어쓴다 — 표 전부를 한 트랜잭션(batch)으로, 중간에 실패하면 아무 표도 안 바뀐다. 표별 {upserted, deleted}.
+export async function seed(db: Pick<Db, 'batch'>, dataDir = DATA_DIR): Promise<Record<string, { upserted: number; deleted: number }>> {
   const tables = await readTables(dataDir)
-  const result: Record<string, { upserted: number; deleted: number }> = {}
-  for (const spec of TABLES) {
+  const stmts = TABLES.map((spec) => {
     const rows = tables[spec.name].map((r, i) => {
       const o: Record<string, unknown> = {}
       for (const c of Object.keys(spec.sql)) o[c] = r[c]
       if (spec.ordered) o.ord = i
       return o
     })
-    const [r] = await query(seedSql(spec), [JSON.stringify(rows)])
+    return { text: seedSql(spec), params: [JSON.stringify(rows)] }
+  })
+  const out = await db.batch(stmts)
+  const result: Record<string, { upserted: number; deleted: number }> = {}
+  TABLES.forEach((spec, i) => {
+    const [r] = out[i]
     result[spec.name] = { upserted: Number(r.upserted), deleted: Number(r.deleted) }
-  }
+  })
   return result
 }
 

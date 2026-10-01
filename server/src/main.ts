@@ -29,7 +29,7 @@ if (!databaseUrl) {
   const applied = await migrate(db)
   if (applied.length) console.log(`[server] migrations applied: ${applied.join(', ')}`)
   if (await planningEmpty(db.query)) {
-    const r = await seed(db.query)
+    const r = await seed(db)
     console.log(`[server] seeded planning tables from data/*.csv: ${Object.entries(r).map(([k, v]) => `${k}=${v.upserted}`).join(' ')}`)
   }
 }

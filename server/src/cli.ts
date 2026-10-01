@@ -17,7 +17,7 @@ try {
     const applied = await migrate(db)
     console.log(applied.length ? `[migrate] applied: ${applied.join(', ')}` : '[migrate] up to date')
   } else {
-    const r = await seed(db.query)
+    const r = await seed(db)
     for (const [t, v] of Object.entries(r)) console.log(`[seed] ${t}: ${v.upserted} upserted, ${v.deleted} deleted`)
   }
 } catch (e) {

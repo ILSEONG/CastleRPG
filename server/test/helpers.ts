@@ -22,7 +22,7 @@ export const randomDevice = () => `test-${randomBytes(12).toString('hex')}`
 export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)
-  await seed(db.query)
+  await seed(db)
   const clock = { t: T0 }
   const makeApp = (extra: Partial<AppOptions> = {}) => createApp({
     query: o.wrapQuery ? o.wrapQuery(db.query) : db.query,

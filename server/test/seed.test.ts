@@ -38,7 +38,7 @@ test('마이그레이션: 적용하고 기록, 두 번째는 아무것도 안 �
 
 test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async () => {
   for (let i = 0; i < 2; i++) {
-    const r = await seed(db.query)
+    const r = await seed(db)
     for (const t of TABLES) {
       const [c] = await db.query(`select count(*)::int as n from ${t.table}`)
       assert.equal(c.n, csvRows(t.file), `${t.table} rows`)
@@ -56,12 +56,20 @@ test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async (
 
 test('시드: CSV에서 사라진 키는 지우고, 바뀐 값은 덮어쓴다', async () => {
   const dir = dataCopy({ 'monsters.csv': 'id,hp,atk,speed,range,atk_interval,aggro,scale,gold\ngrunt,61,10,2.5,1.2,1.0,6.0,1.0,3\n' })
-  const r = await seed(db.query, dir)
+  const r = await seed(db, dir)
   assert.deepEqual(r.monsters, { upserted: 1, deleted: 1 })
   const rows = await db.query('select id, hp, gold from monsters')
   assert.deepEqual(rows, [{ id: 'grunt', hp: 61, gold: 3 }])
-  await seed(db.query) // 원래대로
+  await seed(db) // 원래대로
   assert.equal((await db.query('select count(*)::int as n from monsters'))[0].n, 2)
+})
+
+test('시드는 한 트랜잭션: 뒤 문장이 실패하면 앞 표도 안 바뀐다', async () => {
+  const dir = dataCopy({ 'monsters.csv': 'id,hp,atk,speed,range,atk_interval,aggro,scale,gold\ngrunt,61,10,2.5,1.2,1.0,6.0,1.0,3\n' })
+  const failing = { batch: (s: { text: string; params?: unknown[] }[]) => db.batch([...s, { text: 'select 1 / 0' }]) }
+  await assert.rejects(seed(failing, dir))
+  assert.equal((await db.query('select count(*)::int as n from monsters'))[0].n, 2)
+  assert.equal((await db.query("select gold from monsters where id = 'grunt'"))[0].gold, 2)
 })
 
 test('CSV 규칙: BOM, CRLF, 빈 줄, 쉼표만 있는 줄, 열 순서가 달라도 같은 결과', async () => {
@@ -84,7 +92,7 @@ test('CSV 오류: 파일·줄·열을 알리고 아무것도 쓰지 않는다', 
     'config.csv': 'key,value\ncastle_hp,lots\n', // 숫자 아님 + 필수 키 없음
   })
   await db.query("update monsters set hp = 999 where id = 'grunt'")
-  await assert.rejects(seed(db.query, bad), (e: unknown) => {
+  await assert.rejects(seed(db, bad), (e: unknown) => {
     assert.ok(e instanceof CsvError)
     const m = e.errors.join('\n')
     assert.match(m, /monsters\.csv line 1 column 'gold': missing column/)
@@ -97,5 +105,5 @@ test('CSV 오류: 파일·줄·열을 알리고 아무것도 쓰지 않는다', 
   })
   const [g] = await db.query("select hp from monsters where id = 'grunt'")
   assert.equal(g.hp, 999) // 부분 반영 없음
-  await seed(db.query)
+  await seed(db)
 })

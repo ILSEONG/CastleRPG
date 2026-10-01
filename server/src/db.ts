@@ -10,7 +10,7 @@ export interface Stmt {
 }
 export interface Db {
   query: Query
-  batch: (stmts: Stmt[]) => Promise<void> // 한 트랜잭션(비대화형)
+  batch: (stmts: Stmt[]) => Promise<Row[][]> // 한 트랜잭션(비대화형), 문장별 결과 행
   close: () => Promise<void>
 }
 
@@ -22,10 +22,9 @@ export async function openDb(opts: { databaseUrl?: string; pgliteDir?: string } 
     const { neon } = await import('@neondatabase/serverless')
     const sql = neon(opts.databaseUrl)
     return {
-      query: (text, params = []) => sql.query(text, params) as Promise<Row[]>,
-      batch: async (stmts) => {
-        await sql.transaction(stmts.map((s) => sql.query(s.text, s.params ?? [])))
-      },
+      // sql.query()는 then마다 다시 실행되는 지연 객체 — 여기서 한 번만 await해 진짜 Promise로 바꾼다.
+      query: async (text, params = []) => (await sql.query(text, params)) as Row[],
+      batch: async (stmts) => (await sql.transaction(stmts.map((s) => sql.query(s.text, s.params ?? [])))) as Row[][],
       close: async () => {},
     }
   }
@@ -36,11 +35,11 @@ export async function openDb(opts: { databaseUrl?: string; pgliteDir?: string } 
   await pg.waitReady
   return {
     query: async (text, params = []) => (await pg.query<Row>(text, params)).rows,
-    batch: async (stmts) => {
-      await pg.transaction(async (tx) => {
-        for (const s of stmts) await tx.query(s.text, s.params ?? [])
-      })
-    },
+    batch: (stmts) => pg.transaction(async (tx) => {
+      const out: Row[][] = []
+      for (const s of stmts) out.push((await tx.query<Row>(s.text, s.params ?? [])).rows)
+      return out
+    }),
     close: () => pg.close(),
   }
 }
