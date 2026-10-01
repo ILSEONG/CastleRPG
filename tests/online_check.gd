@@ -151,8 +151,10 @@ func _phase1(state_path: String) -> void:
 	_panel.open()
 	_check(_panel.rate_labels["wood"].text == "×%.1f" % rate and _panel.rate_labels["food"].text == "×%.1f" % float(Economy.merchant.rates.food), "(e) trade window rows show the server rate of each resource", "wood=%s food=%s" % [_panel.rate_labels["wood"].text, _panel.rate_labels["food"].text])
 	var sell0: int = Net.requested.get("/v1/sell", 0)
-	_panel.sell_buttons["wood"].pressed.emit()
-	_panel.sell_buttons["wood"].pressed.emit()  # 응답 전 재탭
+	_panel.sell_buttons["wood"].pressed.emit()  # 수량 칸 펼침 → [최대] → [판매]
+	_panel.qty_max["wood"].pressed.emit()
+	_panel.qty_confirms["wood"].pressed.emit()
+	_panel.qty_confirms["wood"].pressed.emit()  # 응답 전 재탭
 	await _wait_until(func(): return Economy.res["wood"] == 0, 10.0)
 	_check(Economy.res["wood"] == 0 and Economy.server_gold_tenths == gold0 + gain and Economy.gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
 		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])

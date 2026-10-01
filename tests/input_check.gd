@@ -280,10 +280,13 @@ func _run() -> void:
 	var expect := Economy.sell_value("wood", 200, rate)
 	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("다음 시세까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
-	await _tap(bp)
+	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [판매]로 전량
+	await _tap(panel.qty_max["wood"].get_global_rect().get_center())
+	await _tap(panel.qty_confirms["wood"].get_global_rect().get_center())
 	_check(Economy.res["wood"] == 0 and Economy.gold_tenths == 105 + expect * 10 and Economy.gold == 10 + expect and Economy.res["stone"] == 7 and panel.is_open(),
 		"(p) [sell] on wood zeroes wood and adds floor(200 x price x wood's own rate) whole gold (x10 tenths, 0.5 kept); others stay", "wood=%d tenths=%d expect=%d" % [Economy.res["wood"], Economy.gold_tenths, 105 + expect * 10])
 	_check(panel.sell_buttons["wood"].disabled and not panel.sell_buttons["stone"].disabled, "(p) sell button is disabled at 0 holdings only", "")
+	await _qty_sell_checks(panel)
 	await _tap(panel.sell_all_button.get_global_rect().get_center())
 	_check(Economy.res["stone"] == 0 and Economy.res["food"] == 0 and panel.sell_all_button.disabled, "(p) [sell all] clears everything", "stone=%d" % Economy.res["stone"])
 
@@ -973,3 +976,47 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.build = {}
 	Economy.changed.emit()
 	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
+
+
+## 개정 14 §4 수량 칸: [판매] → 펼침, [+]·[−]·입력·슬라이더·[최대], 판매 후 보유 감소·골드 증가. stone 7개로 본다(창이 열려 있어야 한다).
+func _qty_sell_checks(panel) -> void:
+	var stone_btn: Button = panel.sell_buttons["stone"]
+	await _tap(stone_btn.get_global_rect().get_center())
+	_check(panel.qty_boxes["stone"].visible and not panel.qty_boxes["wood"].visible and panel.qty == 0 and panel.qty_confirms["stone"].disabled,
+		"(p2) [sell] expands that row's quantity box (others folded); quantity 0 disables [sell]", "open=%s qty=%d" % [panel.open_res, panel.qty])
+	var plus: Vector2 = panel.qty_plus["stone"].get_global_rect().get_center()
+	await _tap(plus)
+	await _tap(plus)
+	await _tap(plus)
+	await _tap(panel.qty_minus["stone"].get_global_rect().get_center())
+	_check(panel.qty == 2 and panel.qty_edits["stone"].text == "2" and panel.qty_sliders["stone"].value == 2 and not panel.qty_confirms["stone"].disabled,
+		"(p2) [+] x3 then [-] gives 2 (input and slider follow)", "qty=%d text=%s" % [panel.qty, panel.qty_edits["stone"].text])
+	var edit: LineEdit = panel.qty_edits["stone"]
+	edit.text = "99"
+	edit.text_changed.emit("99")
+	var over: bool = panel.qty == 7 and edit.text == "7"
+	edit.text = "abc"
+	edit.text_changed.emit("abc")
+	var junk: bool = panel.qty == 0 and edit.text == "0"
+	edit.text = "-4"
+	edit.text_changed.emit("-4")
+	_check(over and junk and panel.qty == 0, "(p2) input above holdings becomes holdings; text and negatives become 0", "over=%s junk=%s qty=%d" % [over, junk, panel.qty])
+	await _tap(panel.qty_max["stone"].get_global_rect().get_center())
+	_check(panel.qty == 7, "(p2) [max] sets the holdings", "qty=%d" % panel.qty)
+	panel.qty_sliders["stone"].value = 3
+	var rate: float = Economy.current_rate("stone", Time.get_unix_time_from_system())
+	_check(panel.qty == 3 and panel.qty_gold_labels["stone"].text == "→ %s골드" % HudScript.commas(Economy.sell_value("stone", 3, rate)), "(p2) slider sets 3; label shows floor(3 x price x rate)", "qty=%d label=%s" % [panel.qty, panel.qty_gold_labels["stone"].text])
+	var q0: int = panel.qty
+	panel._hold_start(1)
+	panel._tick_hold(0.3)
+	var early: int = panel.qty
+	panel._tick_hold(1.0)
+	panel._hold_dir = 0
+	_check(early == q0 + 1 and panel.qty > early, "(p2) holding [+]: one step at once, no repeat before 0.4 s, then it accelerates", "q0=%d early=%d after=%d" % [q0, early, panel.qty])
+	panel._set_qty(3)
+	var gold0: int = Economy.gold_tenths
+	await _tap(panel.qty_confirms["stone"].get_global_rect().get_center())
+	_check(Economy.res["stone"] == 4 and Economy.gold_tenths == gold0 + Economy.sell_value("stone", 3, rate) * 10 and panel.qty_boxes["stone"].visible,
+		"(p2) quantity [sell] sells only that many (holdings drop, gold rises)", "stone=%d gold=%d->%d" % [Economy.res["stone"], gold0, Economy.gold_tenths])
+	await _tap(stone_btn.get_global_rect().get_center())  # 다시 누르면 접힌다
+	_check(not panel.qty_boxes["stone"].visible and panel.open_res == "", "(p2) tapping [sell] again folds the box", "open=%s" % panel.open_res)
