@@ -4,3 +4,4 @@ export/
 *.apk
 *.aab
 dev/node_modules/
+.claude/worktrees/
