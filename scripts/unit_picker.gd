@@ -5,7 +5,8 @@ extends Node
 ## HERO_TAP_PRECISE_PX 안 영웅(선택된 영웅 자신이면 해제, 아니면 그 영웅 선택) → 성문 → 성벽 →
 ## HERO_TAP_PX 안 다른 영웅 선택 → 상인·자원 건물 → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
 ## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
-## 상인 탭은 거래 창을 열고, 자원 건물 탭은 수집(+N)한다 — 둘 다 영웅 선택은 건드리지 않는다. 기능 없는 건물 탭은 무시(다음 판정).
+## 상인 탭은 거래 창을 열고, 주점 탭은 모집 창을 열고, 자원 건물 탭은 수집(+N)한다 — 모두 영웅 선택은 건드리지 않는다.
+## 기능 없는 건물 탭은 무시(다음 판정).
 ## 입력을 소비하지 않는다 — 카메라 리그도 같은 이벤트를 본다(거래 창이 열려 있으면 GUI가 먼저 먹어 둘 다 못 받는다).
 ## 터치는 emulate_mouse_from_touch로 마우스 이벤트가 되므로 마우스만 처리.
 
@@ -27,6 +28,7 @@ var camera: Camera3D
 var selected
 var badges  # 수집 "+N" 표시(badges.gd)
 var panel   # 상인 거래 창(merchant_panel.gd)
+var recruit  # 주점 모집 창(recruit_panel.gd)
 
 var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
@@ -103,7 +105,7 @@ func _pick(screen_pos: Vector2, layer_mask: int) -> Dictionary:
 	return camera.get_world_3d().direct_space_state.intersect_ray(q)
 
 
-## 상인(레이어 32) → 자원 건물(레이어 16) 탭. 처리했으면 true. 기능 없는 건물은 적중을 무시(false)해 다음 판정으로 넘긴다.
+## 상인(레이어 32) → 주점·자원 건물(레이어 16) 탭. 처리했으면 true. 기능 없는 건물은 적중을 무시(false)해 다음 판정으로 넘긴다.
 func _tap_object(screen_pos: Vector2) -> bool:
 	if not _pick(screen_pos, LAYER_MERCHANT).is_empty():
 		panel.open()
@@ -112,6 +114,9 @@ func _tap_object(screen_pos: Vector2) -> bool:
 	if hit.is_empty():
 		return false
 	var id: String = hit.collider.get_meta("building", "")
+	if id == "tavern" and recruit != null:
+		recruit.open()
+		return true
 	var res_id: String = Economy.res_of(id)
 	if res_id == "":
 		return false

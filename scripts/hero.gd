@@ -177,6 +177,13 @@ func is_alive() -> bool:
 	return state != State.DEAD
 
 
+## 배치에서 빠짐(main._sync_heroes): 죽은 것으로 두어 표적·오라·바에서 빠지고, 자리를 풀고, 프레임 끝에 사라진다.
+func retire() -> void:
+	state = State.DEAD
+	formation.release(index)
+	queue_free()
+
+
 func _process(delta: float) -> void:
 	if state == State.DEAD:
 		return

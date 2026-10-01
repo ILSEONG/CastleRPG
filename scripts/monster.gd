@@ -92,7 +92,7 @@ func _process(delta: float) -> void:
 	if _scan_cd <= 0.0:
 		_scan_cd = SCAN_INTERVAL
 		_target_hero = _find_hero()
-	if _target_hero != null and _target_hero.is_alive() and not _target_hero.is_on_wall():
+	if is_instance_valid(_target_hero) and _target_hero.is_alive() and not _target_hero.is_on_wall():  # 배치에서 빠진 영웅은 해제된다
 		var hpos: Vector3 = _target_hero.global_position
 		_model.face(hpos - global_position)
 		if Formation.flat_distance(global_position, hpos) > _stats.range:

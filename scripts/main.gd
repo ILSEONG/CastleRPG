@@ -3,6 +3,8 @@ extends Node3D
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 ## 온라인 모드(Net.is_online())면 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다 —
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
+## 영웅은 배치(GameState.deploy·hero_copies)대로 만들고, 배치·별이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
+## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -18,13 +20,20 @@ const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const BadgesScript := preload("res://scripts/badges.gd")
 const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
+const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
+const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
 var camera: Camera3D
 var castle
 
+var _formation
+var _picker
+var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies]}(만들 때 값)
+
 
 func _ready() -> void:
+	GameState.roster = Economy  # 영웅 보유·배치 공급자
 	if Net.is_online():
 		await _wait_for_server()
 	_build_world()
@@ -47,25 +56,30 @@ func _build_world() -> void:
 	var badges = BadgesScript.new()
 	badges.camera = camera
 	add_child(badges)
-	var formation = FormationScript.new()
-	var deploy: Array = GameState.deploy()  # 슬롯 i → 영웅 id 또는 null(빈 슬롯)
-	for i in deploy.size():
-		if deploy[i] == null or GameData.hero(deploy[i]).is_empty():
-			continue
-		var hero = HeroScript.new()
-		hero.setup(i, GameData.hero(deploy[i]), castle, formation, GameState.hero_copies(deploy[i]))
-		add_child(hero)
+	_formation = FormationScript.new()
+	_apply_dev_heroes()
+	_sync_heroes()
 	var picker = PickerScript.new()
 	picker.camera = camera
 	picker.badges = badges
 	add_child(picker)
+	_picker = picker
 	var spawner = SpawnerScript.new()
 	spawner.castle = castle
 	add_child(spawner)
-	add_child(HudScript.new())
+	var hud = HudScript.new()
+	add_child(hud)
 	var panel = MerchantPanelScript.new()
 	add_child(panel)
 	picker.panel = panel
+	var recruit = RecruitPanelScript.new()
+	add_child(recruit)
+	picker.recruit = recruit
+	var hero_panel = HeroPanelScript.new()
+	add_child(hero_panel)
+	hud.hero_panel = hero_panel
+	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별 반영
+	Economy.roster_changed.connect(_on_roster_changed)
 	if OS.is_debug_build():
 		_connect_dev_log()
 	if _auto_stage_requested():
@@ -112,6 +126,49 @@ func _wait_for_server() -> void:
 	if not Net.ready_once:
 		await Net.connected
 	layer.queue_free()
+
+
+## 배치(GameState.deploy)·별(copies)을 만들어 둔 영웅에 맞춘다. 바뀐 슬롯만 빼고 다시 만든다(나머지는 그대로).
+func _sync_heroes() -> void:
+	var deploy: Array = GameState.deploy()  # 슬롯 i → 영웅 id 또는 null(빈 슬롯)
+	for i in _slots.keys():
+		if i >= deploy.size():
+			_retire(i)
+	for i in deploy.size():
+		var id = deploy[i]
+		var key := [id, GameState.hero_copies(id) if id != null else 0]
+		if _slots.has(i) and _slots[i].key == key:
+			continue
+		_retire(i)
+		if id == null or GameData.hero(id).is_empty():
+			continue
+		var hero = HeroScript.new()
+		hero.setup(i, GameData.hero(id), castle, _formation, key[1])
+		add_child(hero)
+		_slots[i] = {"node": hero, "key": key}
+
+
+func _retire(i: int) -> void:
+	if not _slots.has(i):
+		return
+	var h = _slots[i].node
+	_slots.erase(i)
+	if _picker != null and _picker.selected == h:
+		_picker._select(null)
+	h.retire()
+
+
+## 방치 모드(대기)면 배치·별 변경을 곧바로 반영한다. 스테이지 중이면 다음 리필 때.
+func _on_roster_changed() -> void:
+	if GameState.mode == GameState.Mode.IDLE:
+		_sync_heroes()
+
+
+## 개발용 --heroes=id1,id2(웹 ?heroes=): 디버그·오프라인에서만. 모르는 id는 경고하고 건너뛴다. 저장 파일은 쓰지 않는다.
+func _apply_dev_heroes() -> void:
+	var arg := Net.arg_value("heroes")
+	if arg != "" and OS.is_debug_build() and not Net.is_online():
+		print("[heroes] %s" % [Economy.grant_dev_heroes(Array(arg.split(",", false)))])
 
 
 func _build_environment() -> void:

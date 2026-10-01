@@ -14,6 +14,8 @@ const BadgesScript := preload("res://scripts/badges.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
+const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
+const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const DEAD_API := "http://127.0.0.1:1"  # 아무도 듣지 않는 포트 — 끊김 흉내
 
 class ErrorCounter extends Logger:
@@ -34,6 +36,8 @@ var _badges
 var _hud
 var _panel
 var _scenery
+var _recruit
+var _hero_panel
 var _resp = null  # _request의 응답
 var _resp_done := false
 
@@ -272,9 +276,79 @@ func _phase1(state_path: String) -> void:
 		"(j) 10 001 kills of one kind go out as two accepted batches (seq +2, no 400)",
 		"requests=%d seq=%d server_seq=%d rejected=%d" % [Net.requested.get("/v1/kills", 0) - kills1, Net.kill_seq_sent - seq1, Economy.kill_seq - seq1, _warned("server rejected") - rejected0])
 
+	await _heroes_online()
+
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
-	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage}))
+	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
+		"heroes": Economy.heroes, "deploy": Economy.deploy}))
 	f.close()
+
+
+## (k) 서버 모집 1회: 판매로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 3000 tenths↓, 영웅 +1, 결과 카드.
+## (l) 모집은 다시 보내지 않는다: 서버가 사라진 채 모집 → 버리고 알림, 다시 연결되면 /v1/player로 상태를 받는다(두 번째 모집 요청 없음).
+## (m) 배치: 영웅 창 [적용] → /v1/deploy → 서버 배치, 방치 모드라 곧바로 영웅이 바뀐다. phase 2가 재접속 복원을 본다.
+func _heroes_online() -> void:
+	await _request("POST", "/v1/test/age", {"minutes": 720})
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/sell", {"res": "all"})
+	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
+	var gold0: int = Economy.server_gold_tenths
+	_check(Economy.gold >= 300 and Economy.gold_tenths == gold0, "(k) precondition: at least 300 server gold from selling", "gold=%d" % Economy.gold)
+	var copies0 := _copies()
+	var g0: int = Net.requested.get("/v1/gacha", 0)
+	_recruit.open()
+	_recruit.one_button.pressed.emit()
+	_recruit.one_button.pressed.emit()  # 응답 전 재탭
+	_check(_recruit.one_button.disabled and Economy.gold_tenths == gold0, "(k) while waiting for the reply the buttons are off and nothing changes yet", "")
+	var shown := await _wait_until(func(): return _recruit.is_showing_results(), 15.0)
+	var got: String = _recruit.cards[0].hero_id if shown and _recruit.cards.size() == 1 else ""
+	_check(shown and Net.requested.get("/v1/gacha", 0) == g0 + 1 and Economy.server_gold_tenths == gold0 - 3000 and Economy.gold_tenths == gold0 - 3000
+		and _copies() == copies0 + 1 and got != "" and int(Economy.heroes.get(got, 0)) >= 1,
+		"(k) one /v1/gacha: server gold -300 (3000 tenths), one more hero, one result card",
+		"requests=%d gold=%d->%d copies=%d->%d card=%s" % [Net.requested.get("/v1/gacha", 0) - g0, gold0, Economy.server_gold_tenths, copies0, _copies(), got])
+	_recruit.close()
+
+	var live := Net.api_base
+	var notices := []
+	var on_notice := func(t): notices.append(t)
+	Economy.notice.connect(on_notice)
+	var gold1: int = Economy.server_gold_tenths
+	var copies1 := _copies()
+	Net.api_base = DEAD_API
+	var sent := Economy.gacha(1)
+	var dropped := await _wait_until(func(): return not Net.up and not Economy._waiting.has("gacha"), 20.0)
+	_check(sent and dropped and notices.has(Economy.GACHA_FAIL_TEXT) and _warned("not resending") == 1, "(l) a gacha that cannot reach the server is dropped with a notice, not queued again",
+		"sent=%s dropped=%s notices=%s" % [sent, dropped, notices])
+	Net.api_base = live
+	var back := await _wait_until(func(): return Net.up, 40.0)
+	await _frames(3)
+	_check(back and Net.requested.get("/v1/gacha", 0) == g0 + 2 and Economy.server_gold_tenths == gold1 and _copies() == copies1,
+		"(l) after reconnecting the state is refreshed and the gacha is not resent", "requests=%d gold=%d copies=%d" % [Net.requested.get("/v1/gacha", 0) - g0, Economy.server_gold_tenths, _copies()])
+	Economy.notice.disconnect(on_notice)
+
+	var starters := ["hans", "ella", "dorik", "nina"]
+	var want: Array = ([got] + starters.filter(func(id): return id != got)).slice(0, 4)
+	var d0: int = Net.requested.get("/v1/deploy", 0)
+	_hero_panel.open()
+	_hero_panel.work = want.duplicate()
+	_hero_panel.apply()
+	var saved := await _wait_until(func(): return Economy._pending_deploy == null, 10.0)
+	var r := await _request("GET", "/v1/player")
+	await _frames(3)
+	var ids := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	ids.sort_custom(func(a, b): return a.index < b.index)
+	ids = ids.map(func(h): return h.def.id)
+	_check(saved and Net.requested.get("/v1/deploy", 0) == d0 + 1 and r.get("player", {}).get("deploy") == want and Economy.deploy == want and GameState.deploy() == want
+		and GameState.mode == GameState.Mode.IDLE and ids == want,
+		"(m) [적용] sends one /v1/deploy; the server keeps it and the idle heroes switch at once", "want=%s server=%s ids=%s" % [want, r.get("player", {}).get("deploy"), ids])
+	_hero_panel.close()
+
+
+func _copies() -> int:
+	var n := 0
+	for id in Economy.heroes:
+		n += int(Economy.heroes[id])
+	return n
 
 
 func _phase2(state_path: String) -> void:
@@ -294,6 +368,15 @@ func _phase2(state_path: String) -> void:
 		res_ok = res_ok and Economy.res[r.id] == int(saved.res[r.id])
 	_check(Economy.gold_tenths == int(saved.gold_tenths) and Economy.server_gold_tenths == int(saved.gold_tenths) and res_ok and GameState.stage == int(saved.stage) and GameState.stage == 3,
 		"(p2) second run restores gold, resources and stage", "gold=%d res=%s stage=%d saved=%s" % [Economy.gold_tenths, Economy.res, GameState.stage, saved])
+	var heroes_ok: bool = saved.get("heroes") is Dictionary and saved.heroes.size() == Economy.heroes.size() and saved.heroes.size() >= 5
+	if heroes_ok:
+		for id in saved.heroes:
+			heroes_ok = heroes_ok and int(Economy.heroes.get(id, 0)) == int(saved.heroes[id])
+	var spawned := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	spawned.sort_custom(func(a, b): return a.index < b.index)
+	_check(heroes_ok and Economy.deploy == saved.deploy and GameState.deploy() == saved.deploy and spawned.map(func(h): return h.def.id) == saved.deploy,
+		"(p2) reconnecting restores owned heroes and the deploy, and the world spawns that deploy",
+		"heroes=%s deploy=%s saved=%s/%s" % [Economy.heroes, Economy.deploy, saved.get("heroes"), saved.get("deploy")])
 	await _frames(2)
 	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
 		and _warned("not persistent") == 1, "(p2) non-persistent storage: one warning log and a one-line notice in the band, the game goes on",
@@ -326,6 +409,10 @@ func _start_world() -> bool:
 			_panel = c
 		elif s == BuildingsScript:
 			_scenery = c
+		elif s == RecruitPanelScript:
+			_recruit = c
+		elif s == HeroPanelScript:
+			_hero_panel = c
 	_spawner.set_process(false)
 	for m in get_tree().get_nodes_in_group("monsters"):
 		m.queue_free()

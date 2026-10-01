@@ -17,7 +17,7 @@ const AMBER := Color("F9B233")
 const STEEL := Color("8C9AB0")
 const INK := Color(0.16, 0.18, 0.24)
 const OUTLINE := Color(0.16, 0.18, 0.24, 0.9)
-const GRADE_COLORS := {"R": Color("6FA8DC"), "SR": Color("B07CD8"), "SSR": Color("F2B632")}
+const GRADE_COLORS := {"R": Color("8FA3B8"), "SR": Color("9B6CD6"), "SSR": Color("F2B233")}  # 스펙 §3.1(Art.GRADE_COLORS와 같다)
 const PRESS_SHIFT := 2.0  # 눌린 버튼 내용이 아래로 내려가는 px
 
 static var _cache := {}

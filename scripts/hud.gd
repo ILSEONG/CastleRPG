@@ -9,6 +9,11 @@ const RADIUS := 14
 const TOAST_SEC := 1.6
 const IconsScript := preload("res://scripts/icons.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
+const HexButtonScript := preload("res://scripts/hex_button.gd")
+const HERO_BUTTON := 104  # [영웅] 6각 버튼 한 변(px). 아래 큰 버튼 위 왼쪽
+
+var hero_panel  # 영웅 창(hero_panel.gd). main이 넣는다
+var hero_button: Button
 
 var _stage_label: Label
 var _castle_bar: ProgressBar
@@ -83,6 +88,15 @@ func _ready() -> void:
 	_button.pressed.connect(_on_button)
 	UiKit.apply_button(_button, ACCENT, 18.0)
 	root.add_child(_button)
+	hero_button = HexButtonScript.new()
+	hero_button.label = "영웅"
+	hero_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	hero_button.offset_left = 32
+	hero_button.offset_right = 32 + HERO_BUTTON
+	hero_button.offset_top = -132 - HERO_BUTTON  # 큰 버튼(-120..-32) 위 12px
+	hero_button.offset_bottom = -132
+	hero_button.pressed.connect(func(): if hero_panel != null: hero_panel.open())
+	root.add_child(hero_button)
 	_build_link_ui()
 
 	GameState.mode_changed.connect(_on_mode_changed)

@@ -8,6 +8,7 @@ extends Node
 
 const Balance := preload("res://scripts/balance.gd")
 const Formation := preload("res://scripts/formation.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 
@@ -307,6 +308,133 @@ func _run() -> void:
 	await _tap(bg)  # 더블 탭의 두 번째 누름
 	_check(panel.is_open(), "(r) a backdrop press right after opening (double tap) does not close the window", "open=%s" % panel.is_open())
 	panel.close()
+	await _recruit_and_heroes(rig)
+
+
+## 개정 10: 주점 탭 → 모집 창 → 1회 모집(오프라인), 창이 열린 동안 뒤 입력 차단, [영웅] → 영웅 창 슬롯·카드 탭 배치·정보·적용.
+func _recruit_and_heroes(rig) -> void:
+	var recruit: Node = null
+	var heroes_win: Node = null
+	var hud: Node = null
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/recruit_panel.gd"):
+			recruit = c
+		elif c.get_script() == preload("res://scripts/hero_panel.gd"):
+			heroes_win = c
+		elif c.get_script() == preload("res://scripts/hud.gd"):
+			hud = c
+	_picker._select(null)
+	Economy.gold_tenths = 3005  # 300.5골드: 1회만 된다
+	Economy.rng.seed = 3
+	Economy.changed.emit()
+
+	# (s) 주점 탭 → 모집 창. [1회 모집] → 골드 300↓, 영웅 +1, 결과 카드 1장 → [확인]
+	var tp := _building_px("tavern")
+	var hit: Dictionary = _picker._pick(tp, PickerScript.LAYER_TAP)
+	_check(not hit.is_empty() and hit.collider.get_meta("building", "") == "tavern" and not _open_hero(tp), "(s) precondition: tavern tap point hits the tavern body", "px=%s" % tp)
+	await _tap(tp)
+	await _frames(2)
+	_check(recruit.is_open() and _picker.selected == null, "(s) tavern tap opens the recruit window", "open=%s" % recruit.is_open())
+	_check(not recruit.one_button.disabled and recruit.ten_button.disabled and recruit.rates_text() == "SSR 3% · SR 17% · R 80%",
+		"(s) rates line; [1회 300] on, [10회 2700] off at 300 gold", "one=%s ten=%s rates=%s" % [recruit.one_button.disabled, recruit.ten_button.disabled, recruit.rates_text()])
+	var copies0 := _copies()
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.gold_tenths == 5 and Economy.gold == 0 and _copies() == copies0 + 1 and recruit.is_showing_results() and recruit.cards.size() == 1
+		and recruit.cards[0].hero_id != "" and int(Economy.heroes.get(recruit.cards[0].hero_id, 0)) >= 1,
+		"(s) [1회 모집] takes 300 gold (3000 tenths), adds one hero and shows one result card",
+		"tenths=%d copies=%d->%d cards=%d" % [Economy.gold_tenths, copies0, _copies(), recruit.cards.size()])
+	await _tap(recruit.confirm_button.get_global_rect().get_center())
+	_check(recruit.is_open() and not recruit.is_showing_results() and recruit.one_button.disabled, "(s) [확인] goes back; [1회] is off at 0 gold", "")
+
+	# (t) 창이 열린 동안 뒤 입력이 막힌다: 창 안에서 끌어도 카메라 그대로, HUD [영웅] 자리 탭은 배경 탭이라 창만 닫힌다
+	var hb: Vector2 = hud.hero_button.get_global_rect().get_center()
+	_check(not recruit.dialog.get_global_rect().has_point(hb), "(t) precondition: the [영웅] button is outside the recruit dialog", "px=%s" % hb)
+	var cam_pos: Vector3 = rig.position
+	var dp: Vector2 = recruit.dialog.get_global_rect().position + Vector2(300, 20)
+	_mouse_button(dp, true)
+	for i in 6:
+		_mouse_motion(dp + Vector2(0, 12) * (i + 1), Vector2(0, 12))
+	_mouse_button(dp + Vector2(0, 72), false)
+	await _frames(2)
+	_check(rig.position == cam_pos, "(t) dragging on the backdrop does not pan the camera", "pos=%s" % rig.position)
+	await get_tree().create_timer(0.45).timeout
+	await _tap(hb)
+	_check(not recruit.is_open() and not heroes_win.is_open(), "(t) a tap on the [영웅] spot while the recruit window is open only closes the window",
+		"recruit=%s heroes=%s" % [recruit.is_open(), heroes_win.is_open()])
+
+	# (u) [영웅] → 영웅 창: 슬롯 4칸, 보유 격자(등급 → 이름)
+	Economy.heroes["arteon"] = 2  # 별 1
+	Economy.roster_changed.emit()
+	await _tap(hb)
+	await _frames(2)
+	var keys: Array = heroes_win.hero_cards.keys()
+	var sorted_ok := true
+	for i in range(1, keys.size()):
+		var a: Dictionary = GameData.hero(keys[i - 1])
+		var b: Dictionary = GameData.hero(keys[i])
+		var ra: int = heroes_win.GRADE_RANK[a.grade]
+		var rb: int = heroes_win.GRADE_RANK[b.grade]
+		sorted_ok = sorted_ok and (ra < rb or (ra == rb and a.name <= b.name))
+	_check(heroes_win.is_open() and heroes_win.slot_cards.size() == 4 and keys.size() == Economy.heroes.size() and sorted_ok and GameData.hero(keys[0]).grade == "SSR",
+		"(u) [영웅] opens the hero window: 4 slots, owned grid sorted by grade then name", "open=%s slots=%d keys=%s" % [heroes_win.is_open(), heroes_win.slot_cards.size(), keys])
+	_check(heroes_win.slot_cards.map(func(c): return c.hero_id) == ["hans", "ella", "dorik", "nina"] and heroes_win.hero_cards.arteon.stars == 1 and heroes_win.apply_button.disabled,
+		"(u) slots show the deploy, cards show stars, [적용] off with no change", "")
+
+	# (v) 슬롯 1 탭 → 아르테온 카드 탭 = 슬롯 1에 배치. 슬롯 2 탭 → 아르테온 카드 탭 = 서로 바꿈
+	await _tap(heroes_win.slot_cards[0].get_global_rect().get_center())
+	_check(heroes_win.selected_slot == 0 and heroes_win.slot_cards[0].highlight, "(v) slot tap selects the slot", "sel=%d" % heroes_win.selected_slot)
+	await _tap(heroes_win.hero_cards.arteon.get_global_rect().get_center())
+	_check(heroes_win.work == ["arteon", "ella", "dorik", "nina"] and heroes_win.selected_slot == -1 and not heroes_win.apply_button.disabled,
+		"(v) then a hero card tap places it in that slot", "work=%s" % [heroes_win.work])
+	await _tap(heroes_win.slot_cards[1].get_global_rect().get_center())
+	await _tap(heroes_win.hero_cards.arteon.get_global_rect().get_center())
+	_check(heroes_win.work == ["ella", "arteon", "dorik", "nina"], "(v) placing a hero that sits in another slot swaps the two", "work=%s" % [heroes_win.work])
+	_check(Economy.deploy == ["hans", "ella", "dorik", "nina"], "(v) nothing is applied before [적용]", "deploy=%s" % [Economy.deploy])
+
+	# (w) [정보]·길게 누르기 → 상세(능력치 별 반영, 스킬 문장, 설명문) → [뒤로]
+	await _tap(heroes_win.info_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(heroes_win.is_showing_detail() and heroes_win._detail_stats.text.contains("HP 1144") and heroes_win._detail_skills.text.contains("6초마다 반경 6m")
+		and heroes_win._detail_skills.text.contains("받는 피해를 25% 줄입니다") and heroes_win._detail_desc.text == GameData.hero("arteon").desc,
+		"(w) [정보] shows stats with the star bonus, both skill sentences with numbers and the description",
+		"stats=%s skills=%s" % [heroes_win._detail_stats.text, heroes_win._detail_skills.text])
+	await _tap(heroes_win._detail_view.get_child(heroes_win._detail_view.get_child_count() - 1).get_global_rect().get_center())
+	await _frames(2)
+	var kp: Vector2 = heroes_win.hero_cards.nina.get_global_rect().get_center()
+	_mouse_button(kp, true)
+	await get_tree().create_timer(0.6).timeout
+	_mouse_button(kp, false)
+	await _frames(2)
+	_check(heroes_win.is_showing_detail() and heroes_win._detail_title.text.contains(GameData.hero("nina").name) and heroes_win.work == ["ella", "arteon", "dorik", "nina"],
+		"(w) a long press on a card opens its detail without placing it", "title=%s" % heroes_win._detail_title.text)
+	heroes_win._show_main()
+	await _frames(2)
+
+	# (x) [적용] → 배치 저장, 방치 모드라 영웅이 곧바로 바뀐다(아르테온 별 1: HP × 1.1)
+	var pre := get_tree().get_nodes_in_group("heroes")
+	pre.sort_custom(func(a, b): return a.index < b.index)
+	await _tap(heroes_win.apply_button.get_global_rect().get_center())
+	await _frames(2)
+	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	live.sort_custom(func(a, b): return a.index < b.index)
+	var ids := live.map(func(h): return h.def.id)
+	_check(Economy.deploy == ["ella", "arteon", "dorik", "nina"] and heroes_win.apply_button.disabled and ids == ["ella", "arteon", "dorik", "nina"]
+		and is_equal_approx(live[1].hp_max, 1040.0 * 1.1) and live[1].side == 1 and live[1].post == Formation.POST_GATE and hud._toast.visible,
+		"(x) [적용] saves the deploy and, in idle mode, swaps the heroes at once (arteon slot 2 at the east gate, star bonus)",
+		"deploy=%s ids=%s" % [Economy.deploy, ids])
+	_check(not is_instance_valid(pre[0]) and not is_instance_valid(pre[1]) and live[2] == pre[2] and live[3] == pre[3],
+		"(x) only the changed slots are rebuilt: slots 1-2 are new heroes, slots 3-4 keep theirs", "")
+	await get_tree().create_timer(0.45).timeout
+	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 창 바깥 배경
+	_check(not heroes_win.is_open(), "(x) a backdrop tap closes the hero window", "")
+
+
+func _copies() -> int:
+	var n := 0
+	for id in Economy.heroes:
+		n += int(Economy.heroes[id])
+	return n
 
 
 func _check(cond: bool, what: String, detail: String) -> void:
