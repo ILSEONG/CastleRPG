@@ -2,6 +2,7 @@ extends RefCounted
 ## 영웅 시각(스펙 §3.4): 발밑 6각 링, 투사체(마법 20면체·도끼), 스킬 이펙트. 전부 MeshKit 로우폴리 메시 +
 ## 공유 정점 색 재질 하나(양면, 그림자 없음). 이펙트는 짧게(≤0.6초) 살고 스스로 해제되며, 동시 수는 MAX_LIVE까지만.
 ## 메시는 (종류, 색)마다 한 번 만들어 캐시한다. 오토로드 참조 없음.
+## 상한은 살아 있는 수를 세어 본다(track이 더하고 트리에서 빠질 때 뺀다) — 생성마다 그룹 배열을 만들지 않는다.
 
 const Art := preload("res://scripts/art.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
@@ -18,6 +19,7 @@ const AXE_WOOD := Color(0.55, 0.38, 0.24)
 const AXE_METAL := Color(0.62, 0.64, 0.68)
 
 static var _meshes := {}
+static var _live := 0  # 지금 살아 있는 이펙트·투사체 수
 static var _material: ShaderMaterial
 
 
@@ -137,7 +139,18 @@ static func repair(parent: Node, pos: Vector3) -> void:
 
 ## 이펙트 상한에 찼거나 parent가 트리 밖이면 true.
 static func full(parent: Node) -> bool:
-	return parent == null or not parent.is_inside_tree() or parent.get_tree().get_nodes_in_group(GROUP).size() >= MAX_LIVE
+	return parent == null or not parent.is_inside_tree() or _live >= MAX_LIVE
+
+
+## 트리에 넣은 이펙트 노드를 상한 수에 넣는다. 트리에서 빠질 때(queue_free·부모 해제) 저절로 빠진다. hero의 화살도 쓴다.
+static func track(node: Node) -> void:
+	node.add_to_group(GROUP)
+	_live += 1
+	node.tree_exiting.connect(func(): _live -= 1, CONNECT_ONE_SHOT)
+
+
+static func live() -> int:
+	return _live
 
 
 static func _mesh(kind: String, color := Color.WHITE) -> Mesh:
@@ -192,8 +205,8 @@ static func _spawn(parent: Node, m: Mesh, pos: Vector3) -> MeshInstance3D:
 	mi.mesh = m
 	mi.material_override = material()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.add_to_group(GROUP)
 	parent.add_child(mi)
+	track(mi)
 	mi.global_position = pos
 	return mi
 

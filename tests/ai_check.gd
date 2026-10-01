@@ -9,6 +9,8 @@ const Formation := preload("res://scripts/formation.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HeroScript := preload("res://scripts/hero.gd")
+const Fx := preload("res://scripts/fx.gd")
+const HpBarsScript := preload("res://scripts/hp_bars.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -363,6 +365,7 @@ func _skill_cases(heroes: Array) -> void:
 	_check(idle.is_empty(), "(p) all 22 heroes fight (attack at least once in 3 s)", "never attacked: %s" % [idle])
 	await _skill_application(heroes)
 	await _placement_cases()
+	await _fx_cap()
 
 
 ## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
@@ -545,6 +548,28 @@ func _placement_cases() -> void:
 	_check(now0.size() == 1 and now0[0].def.id == "jack" and now0[0].side == 0 and now0[0].post == Formation.POST_WALL and _errors.count == errors0,
 		"(y) a slot rebuilt mid-game while its gate is full stands on its side's wall (no assert)",
 		"heroes=%s errors=%d" % [now0.map(func(h): return [h.def.id, h.side, h.post]), _errors.count - errors0])
+
+
+## (z) 이펙트 상한: 살아 있는 수를 세어 MAX_LIVE까지만 만들고(넘치면 건너뜀), 사라지면 수가 0으로 돌아온다.
+##     HP 바: 살아 있는 유닛마다 8각형 2개(배경·채움)를 한 배열로.
+func _fx_cap() -> void:
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+	var live0 := Fx.live()
+	for i in Fx.MAX_LIVE + 10:
+		Fx.heal_ring(_main, Vector3(0, 0, -5.0), 2.0)
+	var made := get_tree().get_nodes_in_group(Fx.GROUP).size()
+	_check(live0 == 0 and Fx.live() == Fx.MAX_LIVE and made == Fx.MAX_LIVE and Fx.full(_main), "(z) effects stop at MAX_LIVE (counted, extra ones skipped)",
+		"before=%d live=%d nodes=%d" % [live0, Fx.live(), made])
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+	_check(Fx.live() == 0 and get_tree().get_nodes_in_group(Fx.GROUP).is_empty() and not Fx.full(_main), "(z) the count drops back to 0 as effects free themselves", "live=%d" % Fx.live())
+	var bars
+	for c in _main.get_children():
+		if c.get_script() == HpBarsScript:
+			bars = c
+	await _frames(2)
+	var units := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive()).size()
+	_check(bars.octagons > 0 and bars.octagons <= units * 2 and bars._idx.size() == bars.octagons * 18 and bars._pts.size() == bars.octagons * 8,
+		"(z) HP bars: one triangle array, two octagons per unit on screen", "octagons=%d units=%d" % [bars.octagons, units])
 
 
 func _add_hero(id: String, idx: int):

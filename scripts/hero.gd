@@ -457,12 +457,12 @@ func _fire_tracer(from: Vector3, dest: Vector3) -> void:
 	if Fx.full(get_parent()):
 		return
 	var arrow := Node3D.new()
-	arrow.add_to_group(Fx.GROUP)
 	var model := Art.instance(Art.ARROW_MODEL)
 	model.scale = Vector3.ONE * Art.ARROW_SCALE
 	model.rotation.x = ARROW_PITCH_FIX
 	arrow.add_child(model)
 	get_parent().add_child(arrow)
+	Fx.track(arrow)
 	arrow.global_position = from
 	arrow.look_at(dest)
 	var tw := arrow.create_tween()
