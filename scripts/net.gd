@@ -156,6 +156,9 @@ static func load_device_id(path: String) -> String:
 	return id
 
 
+const DURABLE_PATHS := ["/v1/kills", "/v1/stage/clear"]  # 5xx에도 버리지 않는 요청(멱등)
+
+
 ## 응답 하나를 어떻게 처리할지(순수 함수 — online_check가 표로 확인한다).
 ##  net: 연결 불가·시간 초과 — 끊김 띠, 같은 요청을 백오프로 계속 다시
 ##  ok: 반영
@@ -232,8 +235,10 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, raw: Pac
 	var json := JSON.new()
 	if raw.size() > 0 and json.parse(raw.get_string_from_utf8()) == OK:
 		data = json.data
-	# 첫 접속 전에는 5xx도 계속 다시 보낸다(접속 화면이고 큐에 다른 요청이 없다)
-	var step := classify(result, code, data, it.auth, _auth_retries, it.tries if ready_once else 0, it.conflicted)
+	# 첫 접속 전, 그리고 처치·스테이지 클리어(seq·stage로 서버가 중복을 막는다 — 다시 보내도 안전, 버리면 진행을 잃는다)는
+	# 5xx도 버리지 않고 계속 다시 보낸다
+	var keep_trying: bool = not ready_once or it.path in DURABLE_PATHS
+	var step := classify(result, code, data, it.auth, _auth_retries, 0 if keep_trying else it.tries, it.conflicted)
 	if step != "net":
 		_fails = 0
 	match step:
