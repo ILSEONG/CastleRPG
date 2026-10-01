@@ -261,6 +261,7 @@ func _run() -> void:
 	await _frames(2)
 	_check(panel.is_open() and _picker.selected == warrior and warrior.free_pos == free_before,
 		"(o) merchant tap opens the trade window and keeps the hero selected", "open=%s selected=%s" % [panel.is_open(), _name(_picker.selected)])
+	await _guard_wait()  # 연 직후 보호 시간에는 창 안 누름도 버린다 — 지난 뒤의 창 안 탭을 본다
 	await _tap(panel.dialog.get_global_rect().position + Vector2(300, 20))
 	_check(panel.is_open(), "(o) tapping inside the dialog does not close it", "open=%s" % panel.is_open())
 
@@ -324,26 +325,39 @@ func _recruit_and_heroes(rig) -> void:
 		elif c.get_script() == preload("res://scripts/hud.gd"):
 			hud = c
 	_picker._select(null)
-	Economy.gold_tenths = 3005  # 300.5골드: 1회만 된다
+	Economy.gold_tenths = 27005  # 2700.5골드: 10회도 된다 — 연타가 10회를 누르지 않는지 본다
 	Economy.rng.seed = 3
 	Economy.changed.emit()
 
-	# (s) 주점 탭 → 모집 창. [1회 모집] → 골드 300↓, 영웅 +1, 결과 카드 1장 → [확인]
+	# (s) 주점 탭 → 모집 창. 연타의 두 번째 누름(연 직후 [10회 모집] 자리)은 버린다. [1회 모집] → 골드 300↓, 영웅 +1, 결과 카드 1장 → [확인]
 	var tp := _building_px("tavern")
 	var hit: Dictionary = _picker._pick(tp, PickerScript.LAYER_TAP)
 	_check(not hit.is_empty() and hit.collider.get_meta("building", "") == "tavern" and not _open_hero(tp), "(s) precondition: tavern tap point hits the tavern body", "px=%s" % tp)
+	var copies0 := _copies()
 	await _tap(tp)
 	await _frames(2)
 	_check(recruit.is_open() and _picker.selected == null, "(s) tavern tap opens the recruit window", "open=%s" % recruit.is_open())
+	_check(not recruit.ten_button.disabled and recruit.is_guarded(), "(s) precondition: [10회 모집] is on at 2700 gold and the window is still in its open guard",
+		"ten disabled=%s guarded=%s" % [recruit.ten_button.disabled, recruit.is_guarded()])
+	await _tap(recruit.ten_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.gold_tenths == 27005 and _copies() == copies0 and not recruit.is_showing_results() and recruit.is_open(),
+		"(s) double tap: a press on [10회 모집] right after the window opens is ignored (gold unchanged)",
+		"tenths=%d copies=%d->%d results=%s" % [Economy.gold_tenths, copies0, _copies(), recruit.is_showing_results()])
+	await _guard_wait()
+	Economy.gold_tenths = 3005  # 300.5골드: 1회만 된다
+	Economy.changed.emit()
 	_check(not recruit.one_button.disabled and recruit.ten_button.disabled and recruit.rates_text() == "SSR 3% · SR 17% · R 80%",
 		"(s) rates line; [1회 300] on, [10회 2700] off at 300 gold", "one=%s ten=%s rates=%s" % [recruit.one_button.disabled, recruit.ten_button.disabled, recruit.rates_text()])
-	var copies0 := _copies()
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.gold_tenths == 5 and Economy.gold == 0 and _copies() == copies0 + 1 and recruit.is_showing_results() and recruit.cards.size() == 1
 		and recruit.cards[0].hero_id != "" and int(Economy.heroes.get(recruit.cards[0].hero_id, 0)) >= 1,
 		"(s) [1회 모집] takes 300 gold (3000 tenths), adds one hero and shows one result card",
 		"tenths=%d copies=%d->%d cards=%d" % [Economy.gold_tenths, copies0, _copies(), recruit.cards.size()])
+	await _tap(recruit.confirm_button.get_global_rect().get_center())  # 결과가 막 떴다(오프라인은 곧바로) — 보호 시간
+	_check(recruit.is_showing_results(), "(s) a press on [확인] right after the results appear is ignored (results stay up)", "")
+	await _guard_wait()
 	await _tap(recruit.confirm_button.get_global_rect().get_center())
 	_check(recruit.is_open() and not recruit.is_showing_results() and recruit.one_button.disabled, "(s) [확인] goes back; [1회] is off at 0 gold", "")
 
@@ -368,6 +382,10 @@ func _recruit_and_heroes(rig) -> void:
 	Economy.roster_changed.emit()
 	await _tap(hb)
 	await _frames(2)
+	_check(heroes_win.is_open() and heroes_win.is_guarded(), "(u) precondition: the hero window just opened (open guard)", "")
+	await _tap(heroes_win.slot_cards[0].get_global_rect().get_center())  # 연타의 두 번째 누름이 슬롯 카드에 떨어진다
+	_check(heroes_win.selected_slot == -1, "(u) a card press right after the hero window opens is ignored", "sel=%d" % heroes_win.selected_slot)
+	await _guard_wait()
 	var keys: Array = heroes_win.hero_cards.keys()
 	var sorted_ok := true
 	for i in range(1, keys.size()):
@@ -428,6 +446,30 @@ func _recruit_and_heroes(rig) -> void:
 	await get_tree().create_timer(0.45).timeout
 	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 창 바깥 배경
 	_check(not heroes_win.is_open(), "(x) a backdrop tap closes the hero window", "")
+
+	# (y) 늦게 온 모집 결과(온라인): 다른 창이 열려 있으면 그 위로 모집 창을 열지 않고 알림, 다음에 주점 창을 열 때 보여 준다.
+	#     아무 창도 없으면 모집 창을 열어 보여 준다.
+	var late := [{"hero_id": "jack", "grade": "R", "new": false, "copies": 2}]
+	heroes_win.open()
+	recruit._on_gacha_done(late)
+	_check(not recruit.is_open() and heroes_win.is_open() and hud._toast.visible and hud._toast.text == recruit.LATE_TEXT,
+		"(y) a late gacha result does not open the recruit window over the hero window; a notice says it arrived",
+		"recruit=%s heroes=%s toast=%s" % [recruit.is_open(), heroes_win.is_open(), hud._toast.text])
+	heroes_win.close()
+	recruit.open()
+	_check(recruit.is_showing_results() and recruit.cards.size() == 1 and recruit.cards[0].hero_id == "jack", "(y) the next recruit window shows the late result", "")
+	recruit.close()
+	recruit.open()
+	_check(recruit.is_open() and not recruit.is_showing_results(), "(y) the late result is shown once", "")
+	recruit.close()
+	recruit._on_gacha_done(late)
+	_check(recruit.is_showing_results() and recruit.cards[0].hero_id == "jack", "(y) with no other window open, a late result reopens the recruit window", "")
+	recruit.close()
+
+
+## 창의 연 직후 보호 시간(OPEN_GUARD_MS)이 지나게.
+func _guard_wait() -> void:
+	await get_tree().create_timer(0.45).timeout
 
 
 func _copies() -> int:

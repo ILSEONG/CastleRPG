@@ -2,7 +2,8 @@ extends "res://scripts/ui_window.gd"
 ## 주점 모집 창(스펙 §5, 주점 탭으로 연다): 제목, 확률 한 줄, [1회 모집 300] [10회 모집 2700(SR 이상 1장 보장)]
 ## (골드가 모자라거나 응답을 기다리는 중이면 비활성), 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·이름·칭호·
 ## NEW 또는 별, SSR은 반짝임) + [확인]. 모집은 Economy.gacha, 결과는 Economy.gacha_done — 온라인 응답이 창을 닫은 뒤에
-## 와도 다시 열어 보여 준다(결과를 놓치지 않게).
+## 와도 다시 열어 보여 준다(결과를 놓치지 않게). 다른 창(영웅·거래)이 열려 있으면 그 위로 열지 않고 알림만 띄우고,
+## 결과는 다음에 주점 창을 열 때 보여 준다. 결과 화면이 뜨면 연 직후처럼 보호 시간을 다시 건다([확인] 연타 방지).
 
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
@@ -11,6 +12,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 160)
+const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
 
 var one_button: Button
 var ten_button: Button
@@ -21,6 +23,7 @@ var _pick_view: VBoxContainer
 var _result_view: VBoxContainer
 var _grid: GridContainer
 var _waiting := false
+var _late: Array = []  # 다른 창이 열려 있어 못 보여 준 결과(다음에 열 때)
 
 
 func _ready() -> void:
@@ -59,7 +62,12 @@ func _ready() -> void:
 
 
 func _on_open() -> void:
-	_show_pick()
+	if _late.is_empty():
+		_show_pick()
+		return
+	var r := _late
+	_late = []
+	_show_results(r)
 
 
 func is_showing_results() -> bool:
@@ -89,7 +97,16 @@ func _on_gacha_done(results: Array) -> void:
 		_refresh()
 		return
 	if not visible:
+		if _another_window_open():  # 그 창 위로 겹쳐 열지 않는다(어둠이 겹치고 층 순서에 따라 결과가 가려진다)
+			_late = results
+			Economy.notice.emit(LATE_TEXT)
+			return
 		open()
+	_show_results(results)
+
+
+## 결과 카드 1장 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다.
+func _show_results(results: Array) -> void:
 	for c in cards:
 		_grid.remove_child(c)
 		c.queue_free()
@@ -106,6 +123,7 @@ func _on_gacha_done(results: Array) -> void:
 	_pick_view.visible = false
 	_result_view.visible = true
 	_fit()
+	_arm_guard()
 
 
 func _show_pick() -> void:

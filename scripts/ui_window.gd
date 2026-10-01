@@ -1,14 +1,16 @@
 extends CanvasLayer
 ## 창 공통(스펙 §5, 상인 거래 창 방식): 어두운 반투명 배경(모든 입력을 먹는다, 탭하면 닫힘) + 가운데 로우폴리 패널.
 ## 열려 있는 동안 뒤 화면(카메라·탭·HUD)은 입력을 못 받는다 — GUI가 먼저 소비해 _unhandled_input에 안 닿는다.
-## 연 직후 OPEN_GUARD_MS 동안 배경 누름은 닫지 않는다(연타의 두 번째 누름). 하위 창은 _ready에서 _build_window를 부르고
-## content(VBox)에 내용을 넣는다. 열 때 할 일은 _on_open에.
+## 연 직후 OPEN_GUARD_MS 동안은 누름을 전부 버린다(_input) — 연타(더블 탭)의 두 번째 누름이 창을 닫거나, 그 자리의 버튼·카드
+## ([10회 모집] 등)를 누르지 않게. 내용이 크게 바뀔 때(모집 결과)도 _arm_guard로 다시 건다.
+## 하위 창은 _ready에서 _build_window를 부르고 content(VBox)에 내용을 넣는다. 열 때 할 일은 _on_open에.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
 const DIM := Color(0, 0, 0, 0.55)
-const OPEN_GUARD_MS := 400  # 연 직후 이 시간 동안 배경 누름은 닫지 않는다
+const OPEN_GUARD_MS := 400  # 연 직후 이 시간 동안 이 창의 누름(버튼·카드·배경)을 버린다
+const GROUP := "ui_windows"
 
 var dialog: PanelContainer
 var content: VBoxContainer
@@ -19,6 +21,7 @@ var _opened_ms := 0
 func _build_window(width: float, separation := 14) -> void:
 	layer = 2  # HUD(1) 위
 	visible = false
+	add_to_group(GROUP)
 	var back := ColorRect.new()
 	back.color = DIM
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -49,8 +52,31 @@ func _fit() -> void:
 
 func open() -> void:
 	visible = true
-	_opened_ms = Time.get_ticks_msec()
+	_arm_guard()
 	_on_open()
+
+
+## 지금부터 OPEN_GUARD_MS 동안 누름을 버린다.
+func _arm_guard() -> void:
+	_opened_ms = Time.get_ticks_msec()
+
+
+func is_guarded() -> bool:
+	return visible and Time.get_ticks_msec() - _opened_ms < OPEN_GUARD_MS
+
+
+## 보호 중이면 누름(마우스·터치)을 GUI보다 먼저 먹는다 — 버튼은 누름 없이 뗌만 오면 눌리지 않는다.
+func _input(event: InputEvent) -> void:
+	if (event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed and is_guarded():
+		get_viewport().set_input_as_handled()
+
+
+## 이 창 말고 열린 창이 있는지.
+func _another_window_open() -> bool:
+	for w in get_tree().get_nodes_in_group(GROUP):
+		if w != self and w.visible:
+			return true
+	return false
 
 
 func _on_open() -> void:
@@ -67,8 +93,7 @@ func is_open() -> bool:
 
 func _on_back_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
-	# 연타(더블 탭)의 두 번째 누름이 연 창을 바로 닫지 않게 잠깐 무시
-	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and Time.get_ticks_msec() - _opened_ms > OPEN_GUARD_MS:
+	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:  # 연 직후 누름은 _input이 이미 버렸다
 		close()
 
 
