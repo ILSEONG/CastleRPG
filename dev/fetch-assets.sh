@@ -14,7 +14,7 @@ P=assets/models/props
 
 get() { mkdir -p "$(dirname "$2")"; curl -sfL -o "$2" "$1" || { echo "download failed: $1" >&2; exit 1; }; }
 
-for f in Knight Rogue_Hooded; do get "$ADV/Characters/gltf/$f.glb" "$C/$f.glb"; done
+for f in Knight Rogue_Hooded Rogue; do get "$ADV/Characters/gltf/$f.glb" "$C/$f.glb"; done
 for f in Skeleton_Minion Skeleton_Warrior; do get "$SKE/Characters/gltf/$f.glb" "$C/$f.glb"; done
 for f in arrow.gltf arrow.bin rogue_texture.png; do get "$ADV/Assets/gltf/$f" "$P/$f"; done
 for f in Skeleton_Blade.gltf Skeleton_Blade.bin Skeleton_Axe.gltf Skeleton_Axe.bin skeleton_texture.png; do
