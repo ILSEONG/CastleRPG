@@ -8,7 +8,7 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -17,7 +17,12 @@ signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
 signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 
-var gold := 0
+var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
+var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
+	get:
+		return floori(gold_tenths / 10.0)
+	set(v):
+		gold_tenths = v * 10
 var res: Dictionary = {}           # 자원 id → int
 var last_collect: Dictionary = {}  # 건물 id → 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int
@@ -26,7 +31,7 @@ var save_path := "user://save.json"  # ""이면 저장하지 않는다
 # --- 온라인 모드 ---
 var net = null  # Net(오토로드). null이면 오프라인: 로컬 규칙·저장(개정 7)
 var clock_offset := 0.0  # 서버 시각 − 로컬 시각(초)
-var server_gold := 0
+var server_gold_tenths := 0
 var server_stage := 0
 var kill_seq := 0  # 서버가 마지막으로 반영한 처치 묶음 번호(player.kill_seq)
 var merchant := {}  # {rate, next_change} 서버 값
@@ -111,7 +116,7 @@ func _notification(what: int) -> void:
 
 
 func reset(now: float) -> void:
-	gold = 0
+	gold_tenths = 0
 	res = {}
 	last_collect = {}
 	levels = {}
@@ -186,7 +191,7 @@ func sell(res_id: String, now: float) -> int:
 		return 0
 	var g := sell_value(res_id, res[res_id], current_rate(now))
 	res[res_id] = 0
-	gold += g
+	gold_tenths += g * 10  # 판매 골드는 정수
 	changed.emit()
 	save()
 	return g
@@ -202,8 +207,8 @@ func sell_all(now: float) -> int:
 	return total
 
 
-func add_gold(n: int) -> void:
-	gold += n
+func add_gold_tenths(n: int) -> void:
+	gold_tenths += n
 	_dirty = true
 	changed.emit()
 
@@ -211,7 +216,7 @@ func add_gold(n: int) -> void:
 ## 몬스터 처치. 오프라인은 바로 골드, 온라인은 쌓아 두고 Net이 /v1/kills로 보낸다.
 func add_kill(kind: String, stage: int) -> void:
 	if net == null:
-		add_gold(GameData.kill_gold(kind, stage))
+		add_gold_tenths(GameData.kill_gold_tenths(kind, stage))
 		return
 	var per: Dictionary = kills_pending.get(stage, {})
 	per[kind] = int(per.get(kind, 0)) + 1
@@ -226,7 +231,7 @@ func add_kill(kind: String, stage: int) -> void:
 func apply_server(data: Dictionary) -> bool:
 	var p = data.get("player")
 	var m = data.get("merchant")
-	if not (p is Dictionary and m is Dictionary and _num(p.get("gold")) and _num(p.get("stage")) and p.get("res") is Dictionary \
+	if not (p is Dictionary and m is Dictionary and _num(p.get("gold_tenths")) and _num(p.get("stage")) and p.get("res") is Dictionary \
 			and p.get("buildings") is Dictionary and _num(m.get("rate")) and _num(m.get("next_change"))):
 		push_error("bad player response: %s" % str(data))
 		return false
@@ -244,7 +249,7 @@ func apply_server(data: Dictionary) -> bool:
 	res = r
 	last_collect = lc
 	levels = lv
-	server_gold = int(p.gold)
+	server_gold_tenths = int(p.gold_tenths)
 	server_stage = int(p.stage)
 	if _num(p.get("kill_seq")):
 		kill_seq = int(p.kill_seq)
@@ -290,16 +295,16 @@ func kills_done(stage: int, part: Dictionary) -> void:
 
 
 func _recalc_gold() -> void:
-	gold = server_gold + _kills_gold(kills_pending) + _kills_gold(kills_sent)
+	gold_tenths = server_gold_tenths + _kills_tenths(kills_pending) + _kills_tenths(kills_sent)
 
 
 ## 서버는 처치를 min(보낸 stage, player.stage)로 매긴다 — 예상도 같게(서버 stage를 아직 모르면 그대로).
-func _kills_gold(kills: Dictionary) -> int:
+func _kills_tenths(kills: Dictionary) -> int:
 	var g := 0
 	for stage in kills:
 		var s: int = mini(stage, server_stage) if server_stage > 0 else stage
 		for id in kills[stage]:
-			g += GameData.kill_gold(id, s) * int(kills[stage][id])
+			g += GameData.kill_gold_tenths(id, s) * int(kills[stage][id])
 	return g
 
 
@@ -354,7 +359,7 @@ func save() -> void:
 	if f == null:
 		push_warning("economy save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
-	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold": gold, "res": res, "last_collect": last_collect, "levels": levels}))
+	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -375,7 +380,10 @@ func load_save(now: float) -> void:
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or int(data.version) != SAVE_VERSION or not _num(data.get("gold")):
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, SAVE_VERSION]:
+		return false
+	var v1: bool = int(data.version) == 1  # v1: gold(정수) → × 10
+	if not _num(data.get("gold" if v1 else "gold_tenths")):
 		return false
 	var r := {}
 	var lc := {}
@@ -393,7 +401,7 @@ func _apply(data) -> bool:
 		r[id] = maxi(0, int(rs[id]))
 		lc[b] = float(ls[b])
 		lv[b] = maxi(1, int(vs[b]))
-	gold = maxi(0, int(data.gold))
+	gold_tenths = maxi(0, int(data.gold) * 10 if v1 else int(data.gold_tenths))
 	res = r
 	last_collect = lc
 	levels = lv

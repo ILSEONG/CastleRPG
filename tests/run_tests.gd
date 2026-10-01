@@ -59,6 +59,7 @@ func _init() -> void:
 	test_economy_online()
 	test_merchant_spot()
 	test_icon_shapes()
+	test_gold_tenths()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -83,26 +84,26 @@ func test_game_data() -> void:
 	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
 		for kind in ["grunt", "epic_boss"]:
 			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])
-	for s in range(1, 31):  # 1~30행은 예전 공식과 같다
+	for s in range(1, 31):  # 1~30행은 직선 공식(개정 10: HP·공격력 10%, 골드 20%)
 		var r := GameData.stage(s)
-		check(is_equal_approx(r.hp_mult, 1.0 + 0.25 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.15 * (s - 1)), "hp/atk mult at stage %d" % s)
+		check(is_equal_approx(r.hp_mult, 1.0 + 0.10 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.10 * (s - 1)), "hp/atk mult at stage %d" % s)
 		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 4.0, "waves/size/idle at stage %d" % s)
 		check(is_equal_approx(r.gold_mult, 1.0 + 0.2 * (s - 1)), "gold_mult at stage %d" % s)
 	var r31 := GameData.stage(31)  # 직선 연장
 	var r30 := GameData.stage(30)
 	var r29 := GameData.stage(29)
-	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.25 * 39), "stage beyond table extrapolates hp_mult")
+	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.10 * 39), "stage beyond table extrapolates hp_mult")
 	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 14, "extrapolated int columns follow the 12-row slope and round (waves 33 = 14, same as the old 3 + floor(s/3))")
-	check(GameData.kill_gold("grunt", 1) == 2 and GameData.kill_gold("grunt", 2) == 2 and GameData.kill_gold("grunt", 3) == 3, "kill_gold rounds (2 x 1.2 = 2.4 -> 2, 2 x 1.4 = 2.8 -> 3)")
-	check(GameData.kill_gold("epic_boss", 2) == 60 and GameData.kill_gold("grunt", 31) == 14, "kill_gold boss and extrapolated stage")
+	check(GameData.kill_gold_tenths("grunt", 1) == 20 and GameData.kill_gold_tenths("grunt", 2) == 24 and GameData.kill_gold_tenths("grunt", 3) == 28, "kill_gold_tenths keeps one decimal (2 x 1.2 = 2.4 -> 24, 2 x 1.4 = 2.8 -> 28)")
+	check(GameData.kill_gold_tenths("epic_boss", 2) == 600 and GameData.kill_gold_tenths("grunt", 31) == 140, "kill_gold_tenths boss and extrapolated stage")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
 	var mp := "user://t_monsters.csv"
 	var sp := "user://t_stages.csv"
-	_write(mp, "\ufeffgold,id,scale,hp,atk,speed,range,atk_interval,aggro\r\n\r\n0.4,grunt,1,10,2,1,1,1,1\r\n5,epic_boss,2,50,5,1,1,1,1\r\n\r\n")
+	_write(mp, "\ufeffgold,id,scale,hp,atk,speed,range,atk_interval,aggro\r\n\r\n0.04,grunt,1,10,2,1,1,1,1\r\n5,epic_boss,2,50,5,1,1,1,1\r\n\r\n")
 	_write(sp, "\ufeffwaves,stage,wave_size,hp_mult,atk_mult,gold_mult,idle_interval\r\n3,1,6,1,1,1,4\r\n\r\n5,2,8,2,1,3,4\r\n")
 	GameData.load_tables(mp, sp)
 	check(GameData.errors == 0 and GameData.monster("grunt").hp == 10.0 and GameData.stage(2).hp_mult == 2.0 and int(GameData.stage(2).waves) == 5, "BOM, blank lines, CRLF and reordered columns parse the same")
-	check(GameData.kill_gold("grunt", 1) == 1, "kill_gold has a minimum of 1")
+	check(GameData.kill_gold_tenths("grunt", 1) == 1, "kill_gold_tenths has a minimum of 1")
 	# 깨진 표: 숫자 아님, 빠진 열, stage 건너뜀. 오류 수를 세고 로거 몫은 뺀다
 	var logged := _errors.count
 	_write(mp, "id,hp,atk,speed,range,atk_interval,aggro,scale\ngrunt,60,1,1,1,1,1,1\n")
@@ -205,7 +206,7 @@ func _remote_checks() -> int:
 	check(GameData.hero("warrior").hp == 999.0 and GameData.heroes().size() == 2 and GameData.hero_role(0) == "archer" and GameData.hero_role(2) == "warrior", "remote heroes + roster replace the table")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(1) == 5 and GameData.hero_slots(9) == 9, "remote config replaces the table")
-	check(GameData.stage(10).hp_mult == 3.25 and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
+	check(is_equal_approx(GameData.stage(10).hp_mult, 1.9) and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
 	var gs = GameStateScript.new()  # 표가 바뀐 뒤에는 새 값으로 시작한다
 	check(gs.castle_hp_max == 2000.0 and gs.hero_count() == 5, "GameState reads the replaced tables")
 	gs.free()
@@ -931,12 +932,12 @@ func test_economy_sell() -> void:
 	e.res.stone = 9
 	e.res.food = 13
 	var g: int = e.sell("wood", now)
-	check(g == EconomyScript.sell_value("wood", 40, rate) and e.res.wood == 0 and e.gold == g, "sell zeroes the resource and adds gold")
+	check(g == EconomyScript.sell_value("wood", 40, rate) and e.res.wood == 0 and e.gold == g and e.gold_tenths == g * 10, "sell zeroes the resource and adds whole gold (x10 tenths)")
 	var before: int = e.gold
 	var g2: int = e.sell_all(now)
 	check(e.res.stone == 0 and e.res.food == 0 and e.gold == before + g2 and g2 == EconomyScript.sell_value("stone", 9, rate) + EconomyScript.sell_value("food", 13, rate), "sell_all sells everything")
-	e.add_gold(5)
-	check(e.gold == before + g2 + 5, "add_gold")
+	e.add_gold_tenths(5)
+	check(e.gold_tenths == (before + g2) * 10 + 5 and e.gold == before + g2, "add_gold_tenths adds 0.5 gold and the display floors it away")
 	e.free()
 
 
@@ -944,29 +945,29 @@ func test_economy_save() -> void:
 	var now := 1.8e9
 	var e = _econ(now)
 	e.save_path = ECON_TMP
-	e.gold = 77
+	e.gold_tenths = 775
 	e.res.wood = 12
 	e.last_collect.lumber = now - 90.5
 	e.levels.farm = 3
 	e.save()
-	e.gold = 78
+	e.gold_tenths = 783
 	e.save()  # 이미 있는 파일 위로 다시 저장(임시 파일 → 바꿔 끼우기)
 	check(not FileAccess.file_exists(ECON_TMP + ".tmp"), "save leaves no temp file behind")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(now + 5.0)
-	check(e2.gold == 78 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
-	for junk in ["{not json", "[1,2]", "{\"version\":1,\"gold\":5}", "{\"version\":2,\"gold\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
+	check(e2.gold_tenths == 783 and e2.gold == 78 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
+	for junk in ["{not json", "[1,2]", "{\"version\":2,\"gold\":5}", "{\"version\":3,\"gold_tenths\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
 		var f := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 		f.store_string(junk)
 		f.close()
-		e2.gold = 99
+		e2.gold_tenths = 99
 		e2.load_save(now)
-		check(e2.gold == 0 and e2.res.wood == 0 and e2.levels.lumber == 1 and e2.last_collect.lumber == now, "corrupt save (%s) falls back to defaults" % junk)
+		check(e2.gold_tenths == 0 and e2.res.wood == 0 and e2.levels.lumber == 1 and e2.last_collect.lumber == now, "corrupt save (%s) falls back to defaults" % junk)
 	DirAccess.remove_absolute(ECON_TMP)
-	e2.gold = 99
+	e2.gold_tenths = 99
 	e2.load_save(now)
-	check(e2.gold == 0, "missing save file gives defaults")
+	check(e2.gold_tenths == 0, "missing save file gives defaults")
 	e2.save_path = ""
 	e2.gold = 5
 	e2.save()
@@ -980,24 +981,24 @@ func test_economy_save() -> void:
 func test_economy_online() -> void:
 	var e = _econ(1000.0)
 	var logged := _errors.count
-	e.gold = 5
-	check(not e.apply_server({"player": {"gold": "x"}, "merchant": {}}) and e.gold == 5 and e.server_stage == 0, "apply_server rejects a malformed reply and changes nothing")
+	e.gold_tenths = 5
+	check(not e.apply_server({"player": {"gold_tenths": "x"}, "merchant": {}}) and e.gold_tenths == 5 and e.server_stage == 0, "apply_server rejects a malformed reply and changes nothing")
 	_errors.count = logged  # 거부는 push_error로 알린다
-	var reply := {"player": {"gold": 100, "stage": 3, "kill_seq": 7, "res": {"wood": 4}, "buildings": {"lumber": {"level": 2, "last_collect": 900.0}}},
+	var reply := {"player": {"gold_tenths": 1005, "gold": 100, "stage": 3, "kill_seq": 7, "res": {"wood": 4}, "buildings": {"lumber": {"level": 2, "last_collect": 900.0}}},
 		"merchant": {"rate": 1.2, "next_change": 3600.0}}
-	check(e.apply_server(reply) and e.server_gold == 100 and e.gold == 100 and e.server_stage == 3 and e.kill_seq == 7 and e.res.wood == 4 and e.res.stone == 0 \
+	check(e.apply_server(reply) and e.server_gold_tenths == 1005 and e.gold_tenths == 1005 and e.gold == 100 and e.server_stage == 3 and e.kill_seq == 7 and e.res.wood == 4 and e.res.stone == 0 \
 		and e.levels.lumber == 2 and e.last_collect.lumber == 900.0 and e.merchant.rate == 1.2, "apply_server takes the server snapshot")
 	e.kills_pending = {1: {"grunt": 2}, 5: {"epic_boss": 1}}
 	e.kills_sent = {3: {"grunt": 1}}
 	e._recalc_gold()
-	var want: int = 100 + 2 * GameData.kill_gold("grunt", 1) + GameData.kill_gold("epic_boss", 3) + GameData.kill_gold("grunt", 3)
-	check(GameData.kill_gold("epic_boss", 5) != GameData.kill_gold("epic_boss", 3) and e.gold == want,
-		"displayed gold = server gold + pending + sent, kills above the server stage priced at the server stage (%d vs %d)" % [e.gold, want])
+	var want: int = 1005 + 2 * GameData.kill_gold_tenths("grunt", 1) + GameData.kill_gold_tenths("epic_boss", 3) + GameData.kill_gold_tenths("grunt", 3)
+	check(GameData.kill_gold_tenths("epic_boss", 5) != GameData.kill_gold_tenths("epic_boss", 3) and e.gold_tenths == want,
+		"displayed gold = server gold + pending + sent, kills above the server stage priced at the server stage (%d vs %d)" % [e.gold_tenths, want])
 	e.kills_sent = {3: {"grunt": 10, "epic_boss": 1}}
 	e.kills_done(3, {"grunt": 4})
 	check(e.kills_sent == {3: {"grunt": 6, "epic_boss": 1}}, "kills_done removes only that batch: %s" % [e.kills_sent])
 	e.kills_done(3, {"grunt": 6, "epic_boss": 1})
-	check(e.kills_sent.is_empty() and e.gold == 100 + 2 * GameData.kill_gold("grunt", 1) + GameData.kill_gold("epic_boss", 3), "the last batch empties kills_sent and gold is recalculated")
+	check(e.kills_sent.is_empty() and e.gold_tenths == 1005 + 2 * GameData.kill_gold_tenths("grunt", 1) + GameData.kill_gold_tenths("epic_boss", 3), "the last batch empties kills_sent and gold is recalculated")
 	check(EconomyScript.split_kills({"grunt": 7, "epic_boss": 1}) == [{"grunt": 7, "epic_boss": 1}], "split_kills keeps a small batch whole")
 	var parts: Array = EconomyScript.split_kills({"grunt": 25000, "epic_boss": 3}, 10000)
 	check(parts == [{"grunt": 10000, "epic_boss": 3}, {"grunt": 10000}, {"grunt": 5000}] and EconomyScript.MAX_KILL_COUNT == 10000,
@@ -1044,3 +1045,35 @@ func test_icon_shapes() -> void:
 			for p in s[0]:
 				check(absf(p.x) <= 0.5 and absf(p.y) <= 0.5, "icon %s point %s inside the unit box" % [kind, p])
 	check(IconsScript.shapes("nope").is_empty(), "unknown icon kind draws nothing")
+
+
+## 개정 10: 골드 tenths. 표시는 floor, 저장 v1(정수 골드) → v2(tenths) 이전, 오프라인 처치는 tenths로 더한다.
+func test_gold_tenths() -> void:
+	var now := 1.8e9
+	var e = _econ(now)
+	e.save_path = ECON_TMP
+	e.gold_tenths = 129
+	check(e.gold == 12, "display gold floors tenths (129 -> 12)")
+	e.gold = 7
+	check(e.gold_tenths == 70, "setting whole gold writes x10 tenths")
+	e.gold_tenths = 0
+	e.add_kill("grunt", 2)
+	check(e.gold_tenths == 24 and e.gold == 2, "an offline kill adds 2.4 gold at stage 2 and shows 2")
+	e.add_kill("grunt", 2)
+	e.add_kill("grunt", 2)
+	check(e.gold_tenths == 72 and e.gold == 7, "tenths accumulate across kills (0.8 + 7.2 shows 7)")
+	e.save()
+	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
+	var saved = JSON.parse_string(f.get_as_text())
+	f.close()
+	check(int(saved.version) == 2 and int(saved.gold_tenths) == 72 and not saved.has("gold"), "save writes version 2 with gold_tenths")
+	var v1 := FileAccess.open(ECON_TMP, FileAccess.WRITE)
+	v1.store_string(JSON.stringify({"version": 1, "gold": 41, "res": {"wood": 3, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}))
+	v1.close()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(now)
+	check(e2.gold_tenths == 410 and e2.gold == 41 and e2.res.wood == 3, "a version 1 save moves over as gold x 10")
+	DirAccess.remove_absolute(ECON_TMP)
+	e.free()
+	e2.free()

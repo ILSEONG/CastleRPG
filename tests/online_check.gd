@@ -70,13 +70,13 @@ func _phase1(state_path: String) -> void:
 	Economy.gold = 777
 	if not await _start_world():
 		return
-	var grunt1 := GameData.kill_gold("grunt", 1)
+	var grunt1 := GameData.kill_gold_tenths("grunt", 1)
 
 	# (a) 접속 → 월드, 서버 상태
 	_check(Net.logins == 1 and Net.gamedata_version != "" and GameData.errors == 0, "(a) one guest login, server gamedata applied",
 		"logins=%d version=%s errors=%d" % [Net.logins, Net.gamedata_version, GameData.errors])
-	_check(GameState.stage == 1 and Economy.server_stage == 1 and Economy.gold == 0 and Economy.server_gold == 0,
-		"(a) GameState.stage and gold come from the server (new player: stage 1, gold 0)", "stage=%d server_stage=%d gold=%d" % [GameState.stage, Economy.server_stage, Economy.gold])
+	_check(GameState.stage == 1 and Economy.server_stage == 1 and Economy.gold_tenths == 0 and Economy.server_gold_tenths == 0,
+		"(a) GameState.stage and gold come from the server (new player: stage 1, gold 0)", "stage=%d server_stage=%d gold=%d" % [GameState.stage, Economy.server_stage, Economy.gold_tenths])
 	_check(Net.device_id.length() == 32 and Net.device_id.is_valid_hex_number() and FileAccess.file_exists(Net.device_path),
 		"(a) device id is 128-bit hex saved to the device file", "id=%s" % Net.device_id)
 	_check(Economy.save_path == "" and absf(Economy.clock_offset) < 5.0 and Net.up and not _hud._banner.visible,
@@ -90,13 +90,13 @@ func _phase1(state_path: String) -> void:
 	await _frames(2)
 	for m in get_tree().get_nodes_in_group("monsters"):
 		m.take_damage(1e9)
-	var expect := grunt1 + GameData.kill_gold("epic_boss", 1)
-	_check(Economy.gold == expect and Economy.server_gold == 0 and Net.requested.get("/v1/kills", 0) == kills0,
-		"(b) kills show at once as server gold + unsent estimate", "gold=%d server=%d expect=%d" % [Economy.gold, Economy.server_gold, expect])
-	var flushed := await _wait_until(func(): return Economy.server_gold == expect, Net.FLUSH_SEC + 5.0)
-	_check(flushed and Economy.gold == expect and Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty() and Net.requested.get("/v1/kills", 0) == kills0 + 1,
+	var expect := grunt1 + GameData.kill_gold_tenths("epic_boss", 1)
+	_check(Economy.gold_tenths == expect and Economy.server_gold_tenths == 0 and Net.requested.get("/v1/kills", 0) == kills0,
+		"(b) kills show at once as server gold + unsent estimate", "gold=%d server=%d expect=%d" % [Economy.gold_tenths, Economy.server_gold_tenths, expect])
+	var flushed := await _wait_until(func(): return Economy.server_gold_tenths == expect, Net.FLUSH_SEC + 5.0)
+	_check(flushed and Economy.gold_tenths == expect and Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty() and Net.requested.get("/v1/kills", 0) == kills0 + 1,
 		"(b) kill gold is reported within 10 s in one /v1/kills and the server gold rises by it",
-		"server=%d gold=%d requests=%d" % [Economy.server_gold, Economy.gold, Net.requested.get("/v1/kills", 0) - kills0])
+		"server=%d gold=%d requests=%d" % [Economy.server_gold_tenths, Economy.gold_tenths, Net.requested.get("/v1/kills", 0) - kills0])
 	_check(Net.kill_seq_sent == 1, "(b) first kill batch carries seq 1", "seq=%d" % Net.kill_seq_sent)
 
 	# (c) 토큰이 틀리면(401) 다시 로그인하고 같은 요청이 통과한다
@@ -139,16 +139,16 @@ func _phase1(state_path: String) -> void:
 
 	# (e) 판매: 서버 시세로, 창과 상인 이름표도 서버 시세
 	var rate := float(Economy.merchant.rate)
-	var gold0: int = Economy.server_gold
-	var gain := Economy.sell_value("wood", 100, rate)
+	var gold0: int = Economy.server_gold_tenths
+	var gain := Economy.sell_value("wood", 100, rate) * 10  # 판매 골드는 정수 → tenths는 × 10
 	_panel.open()
 	_check(_panel._rate_label.text == "현재 시세 ×%.1f" % rate, "(e) trade window shows the server merchant rate", "label=%s rate=%.1f" % [_panel._rate_label.text, rate])
 	var sell0: int = Net.requested.get("/v1/sell", 0)
 	_panel.sell_buttons["wood"].pressed.emit()
 	_panel.sell_buttons["wood"].pressed.emit()  # 응답 전 재탭
 	await _wait_until(func(): return Economy.res["wood"] == 0, 10.0)
-	_check(Economy.res["wood"] == 0 and Economy.server_gold == gold0 + gain and Economy.gold == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
-		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
+	_check(Economy.res["wood"] == 0 and Economy.server_gold_tenths == gold0 + gain and Economy.gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
+		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()
 	await get_tree().create_timer(1.2).timeout
 	_check(_scenery.merchant_label.text == "상인 ×%.1f" % rate, "(e) merchant name tag shows the server rate", "label=%s" % _scenery.merchant_label.text)
@@ -163,7 +163,7 @@ func _phase1(state_path: String) -> void:
 	# (g) 끊김: 보고 중 서버가 사라짐 → 띠, 수집·판매 탭은 알림만. 다시 연결되면 같은 seq로 재전송 + 끊긴 동안의 처치도 보낸다
 	r = await _request("POST", "/v1/test/age", {"minutes": 10})  # 끊긴 동안 수집할 거리
 	var live := Net.api_base
-	var gold1: int = Economy.server_gold
+	var gold1: int = Economy.server_gold_tenths
 	kills0 = Net.requested.get("/v1/kills", 0)
 	var seq0: int = Net.kill_seq_sent
 	for i in 3:
@@ -185,19 +185,19 @@ func _phase1(state_path: String) -> void:
 	for i in 2:
 		Economy.add_kill("grunt", 1)  # 전투는 계속된다
 	Net.flush_kills()
-	_check(Economy.gold == gold1 + 5 * grunt1 and Net.requested.get("/v1/kills", 0) == kills0 + 1, "(g) kills keep counting while disconnected and are not sent",
-		"gold=%d expect=%d requests=%d" % [Economy.gold, gold1 + 5 * grunt1, Net.requested.get("/v1/kills", 0) - kills0])
+	_check(Economy.gold_tenths == gold1 + 5 * grunt1 and Net.requested.get("/v1/kills", 0) == kills0 + 1, "(g) kills keep counting while disconnected and are not sent",
+		"gold=%d expect=%d requests=%d" % [Economy.gold_tenths, gold1 + 5 * grunt1, Net.requested.get("/v1/kills", 0) - kills0])
 	Net.api_base = live
 	var back := await _wait_until(func(): return Net.up, 40.0)
 	_check(back and not _hud._banner.visible, "(g) the backoff retry reconnects and hides the banner", "up=%s banner=%s" % [Net.up, _hud._banner.visible])
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
-	_check(Economy.server_gold == gold1 + 5 * grunt1 and Net.requested.get("/v1/kills", 0) == kills0 + 2 and Net.kill_seq_sent == seq0 + 2,
+	_check(Economy.server_gold_tenths == gold1 + 5 * grunt1 and Net.requested.get("/v1/kills", 0) == kills0 + 2 and Net.kill_seq_sent == seq0 + 2,
 		"(g) the retried batch keeps its seq and the disconnected kills follow on reconnect",
-		"server=%d expect=%d requests=%d seq=%d" % [Economy.server_gold, gold1 + 5 * grunt1, Net.requested.get("/v1/kills", 0) - kills0, Net.kill_seq_sent])
+		"server=%d expect=%d requests=%d seq=%d" % [Economy.server_gold_tenths, gold1 + 5 * grunt1, Net.requested.get("/v1/kills", 0) - kills0, Net.kill_seq_sent])
 	_check(Economy.kill_seq == Net.kill_seq_sent, "(g) server kill_seq matches the last batch", "server=%d sent=%d" % [Economy.kill_seq, Net.kill_seq_sent])
-	var g := Economy.server_gold
+	var g := Economy.server_gold_tenths
 	r = await _request("POST", "/v1/kills", {"seq": Economy.kill_seq, "stage": 1, "kills": {"grunt": 5}})
-	_check(int(r.get("gold_gained", -1)) == 0 and Economy.server_gold == g, "(g) a replayed seq adds no gold", "resp=%s" % [r.get("gold_gained")])
+	_check(int(r.get("gold_gained_tenths", -1)) == 0 and Economy.server_gold_tenths == g, "(g) a replayed seq adds no gold", "resp=%s" % [r.get("gold_gained_tenths")])
 	_check(Economy.res["wood"] == 0, "(g) the disconnected tap did not collect later", "wood=%d" % Economy.res["wood"])
 	_badges.last_pop = {}
 	_picker._tap_object(lp)
@@ -206,7 +206,7 @@ func _phase1(state_path: String) -> void:
 
 	# (h) 스테이지 클리어: 쌓인 처치를 곧바로 보내고 /v1/stage/clear로 저장
 	Net._flush_cd = Net.FLUSH_SEC  # 10초 보고가 끼어들지 않게
-	var gold2: int = Economy.server_gold
+	var gold2: int = Economy.server_gold_tenths
 	for i in 4:
 		Economy.add_kill("grunt", 1)
 	GameState.start_stage()
@@ -214,8 +214,8 @@ func _phase1(state_path: String) -> void:
 	GameState.on_all_monsters_dead()
 	var saved := await _wait_until(func(): return Economy.server_stage == 2 and Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
 	var t_clear := Time.get_ticks_msec()  # 서버가 클리어 1을 반영한 뒤(last_stage_clear 이후)
-	_check(saved and GameState.stage == 2 and Economy.server_gold == gold2 + 4 * grunt1, "(h) stage clear sends the kills at once and saves stage 2",
-		"server_stage=%d stage=%d gold=%d expect=%d" % [Economy.server_stage, GameState.stage, Economy.server_gold, gold2 + 4 * grunt1])
+	_check(saved and GameState.stage == 2 and Economy.server_gold_tenths == gold2 + 4 * grunt1, "(h) stage clear sends the kills at once and saves stage 2",
+		"server_stage=%d stage=%d gold=%d expect=%d" % [Economy.server_stage, GameState.stage, Economy.server_gold_tenths, gold2 + 4 * grunt1])
 	# 이미 반영된 클리어를 다시 보내면(응답 유실 뒤 재전송) cleared:false지만 서버 stage가 이미 2라 경고하지 않는다
 	var refused0 := _warned("refused stage")
 	Net._on_stage_cleared(1)
@@ -244,15 +244,15 @@ func _phase1(state_path: String) -> void:
 	_check(answered and Economy.server_stage == 3 and _warned("refused stage") == refused0 + 1 and GameState.stage == 4 and GameState.mode == GameState.Mode.IDLE,
 		"(i) on reconnect clear 2 is saved and clear 3 is refused as too soon (one warning); the local stage waits for the next boundary",
 		"answered=%s server=%d warnings=%d stage=%d" % [answered, Economy.server_stage, _warned("refused stage") - refused0, GameState.stage])
-	var gold3: int = Economy.server_gold
-	var boss3 := GameData.kill_gold("epic_boss", 3)
+	var gold3: int = Economy.server_gold_tenths
+	var boss3 := GameData.kill_gold_tenths("epic_boss", 3)
 	Economy.add_kill("epic_boss", 4)  # 로컬 스테이지 4에서 잡았다
-	_check(boss3 != GameData.kill_gold("epic_boss", 4) and Economy.gold == gold3 + boss3, "(i) a kill above the server stage is estimated at the server stage",
-		"gold=%d expect=%d" % [Economy.gold, gold3 + boss3])
+	_check(boss3 != GameData.kill_gold_tenths("epic_boss", 4) and Economy.gold_tenths == gold3 + boss3, "(i) a kill above the server stage is estimated at the server stage",
+		"gold=%d expect=%d" % [Economy.gold_tenths, gold3 + boss3])
 	Net.flush_kills()
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
-	_check(Economy.server_gold == gold3 + boss3 and Economy.gold == Economy.server_gold, "(i) the server pays it at the server stage, matching the estimate",
-		"server=%d expect=%d" % [Economy.server_gold, gold3 + boss3])
+	_check(Economy.server_gold_tenths == gold3 + boss3 and Economy.gold_tenths == Economy.server_gold_tenths, "(i) the server pays it at the server stage, matching the estimate",
+		"server=%d expect=%d" % [Economy.server_gold_tenths, gold3 + boss3])
 	GameState.start_stage()  # 경계: refill → 서버 stage
 	_check(GameState.stage == 3 and Economy.server_stage == 3 and GameState.mode == GameState.Mode.STAGE and _hud._stage_label.text == "스테이지 3",
 		"(i) at the next stage start GameState.stage and the HUD follow the server stage 3", "stage=%d label=%s" % [GameState.stage, _hud._stage_label.text])
@@ -273,7 +273,7 @@ func _phase1(state_path: String) -> void:
 		"requests=%d seq=%d server_seq=%d rejected=%d" % [Net.requested.get("/v1/kills", 0) - kills1, Net.kill_seq_sent - seq1, Economy.kill_seq - seq1, _warned("server rejected") - rejected0])
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
-	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold": Economy.server_gold, "res": Economy.res, "stage": Economy.server_stage}))
+	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage}))
 	f.close()
 
 
@@ -292,8 +292,8 @@ func _phase2(state_path: String) -> void:
 	var res_ok := true
 	for r in GameData.resources():
 		res_ok = res_ok and Economy.res[r.id] == int(saved.res[r.id])
-	_check(Economy.gold == int(saved.gold) and Economy.server_gold == int(saved.gold) and res_ok and GameState.stage == int(saved.stage) and GameState.stage == 3,
-		"(p2) second run restores gold, resources and stage", "gold=%d res=%s stage=%d saved=%s" % [Economy.gold, Economy.res, GameState.stage, saved])
+	_check(Economy.gold_tenths == int(saved.gold_tenths) and Economy.server_gold_tenths == int(saved.gold_tenths) and res_ok and GameState.stage == int(saved.stage) and GameState.stage == 3,
+		"(p2) second run restores gold, resources and stage", "gold=%d res=%s stage=%d saved=%s" % [Economy.gold_tenths, Economy.res, GameState.stage, saved])
 	await _frames(2)
 	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
 		and _warned("not persistent") == 1, "(p2) non-persistent storage: one warning log and a one-line notice in the band, the game goes on",
