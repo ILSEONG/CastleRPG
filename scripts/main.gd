@@ -28,6 +28,7 @@ const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
+const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
 
 static var rebuilds := 0  # 월드를 다시 만든 횟수(성채 단계 변경). 개발용 1회 설정(econ-demo·--heroes·auto-stage)은 첫 월드에서만
@@ -87,6 +88,7 @@ func _build_world() -> void:
 	add_child(spawner)
 	var hud = HudScript.new()
 	add_child(hud)
+	hud.gate_tapped.connect(func(side): rig.pan_to(FormationScript.gate_position(castle.half, side), GATE_PAN_SEC))  # 성문 막대 탭(개정 12-2 §2)
 	var panel = MerchantPanelScript.new()
 	add_child(panel)
 	picker.panel = panel

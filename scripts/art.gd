@@ -63,6 +63,15 @@ const MONSTER_MODELS := {
 }
 const WEAPON_BONE := "handslot.r"
 
+## 공격 애니메이션 → 타격(근접)·발사(원거리) 순간 = 길이 × 이 비율(개정 12-2 §3). GLB를 헤드리스로 재생해 무기 손(handslot) 궤적에서
+## 정했다: 근접 = 무기 끝 최고 속도~멈춤 사이(대상에 닿는 순간), 쌍검 = 첫 칼(오른손)이 가장 앞으로 뻗은 순간, 투척 = 손 최고 속도(놓는 순간),
+## 쇠뇌 = 조준이 끝나고 반동이 시작되는 순간, 마법 = 지팡이·완드를 앞으로 다 뻗은 순간. 같은 이름 애니메이션은 모델마다 같다(길이·궤적 동일).
+const HIT_FRAC := {
+	"1H_Melee_Attack_Chop": 0.56, "2H_Melee_Attack_Chop": 0.52, "Dualwield_Melee_Attack_Chop": 0.38, "Throw": 0.54,
+	"1H_Ranged_Shoot": 0.26, "2H_Ranged_Shoot": 0.26, "Spellcast_Shoot": 0.30,
+}
+const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 돌려 길이 ≤ 간격 × 이 값
+
 const ARROW_MODEL := PROP_DIR + "arrow.gltf"
 
 ## 영웅 정의(GameData.hero) → UnitModel 스펙: gear만 보이고, 공격 애니메이션은 역할·모델·주무기로 고른다.

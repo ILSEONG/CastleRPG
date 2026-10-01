@@ -2,6 +2,7 @@ extends Node3D
 ## 괴물(근접). 자기 위치에서 aggro 안·같은 영역(성 안/밖)의 지상 영웅을 쫓아가 치고, 없으면 진로(_advance)로 돌아가 성문·성채를 친다.
 ## 성벽 위 영웅은 표적으로 삼지 않는다.
 ## 영웅 스킬 상태: slow(이동 −%), stun(이동·공격 정지), poison(초당 피해). 영웅을 칠 때 자신을 출처로 넘긴다(thorns 반사 대상).
+## 공격은 시작(_swing) 때 대상을 고정하고, 피해는 모션의 타격 순간(_release, 개정 12-2 §3)에 들어간다.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -12,6 +13,8 @@ const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 
 const SCAN_INTERVAL := 0.2
+const SWING_SLACK := 0.6  # 타격 순간 대상(영웅·성문·성 지점)이 사거리 + 이만큼 안이면 맞는다(밖이면 헛스윙)
+const AT_HERO := -2  # _swing_side: 영웅을 친다(-1 = 성, 0..3 = 성문 면)
 
 signal died(monster)
 
@@ -34,6 +37,10 @@ var _slow_t := 0.0
 var _stun_t := 0.0
 var _poison_dps := 0.0
 var _poison_t := 0.0
+var _swing_left := -1.0  # 타격 순간까지 남은 초(음수 = 휘두르는 중 아님)
+var _swing_hero           # 치려는 영웅(_swing_side == AT_HERO일 때)
+var _swing_side := -1     # 치려는 것: AT_HERO, 성(-1), 성문 면(0..3)
+var _swing_at := Vector3.ZERO  # 성문·성을 칠 때 그 지점
 
 
 ## add_child 전에 호출.
@@ -88,9 +95,11 @@ func _process(delta: float) -> void:
 		if _dead:
 			return
 	if _stun_t > 0.0:
+		_swing_left = -1.0  # 기절은 휘두르던 공격도 끊는다
 		_model.play_idle()
 		return
 	_atk_cd -= delta
+	_tick_swing(delta)
 	_scan_cd -= delta
 	if _scan_cd <= 0.0:
 		_scan_cd = SCAN_INTERVAL
@@ -107,9 +116,7 @@ func _process(delta: float) -> void:
 			_model.play_walk()
 			global_position = next
 		elif _atk_cd <= 0.0:
-			_atk_cd = _stats.atk_interval
-			_model.play_attack()
-			_target_hero.take_damage(atk, self)
+			_swing(_target_hero, AT_HERO, Vector3.ZERO)
 		return
 	_target_hero = null
 	_advance(delta)
@@ -138,12 +145,41 @@ func _advance(delta: float) -> void:
 		_model.play_walk()
 		global_position = global_position.move_toward(dest, speed() * delta)
 	elif strikes and _atk_cd <= 0.0:
-		_atk_cd = _stats.atk_interval
-		_model.play_attack()
-		if inside:
+		_swing(null, -1 if inside else side, dest)
+
+
+## 공격 시작(개정 12-2 §3): 대상(what = AT_HERO면 영웅 hero, 성(-1)·성문 면(0..3)이면 그 지점 at)을 고정하고 모션을 재생한다. 피해는 타격 순간(_release)에.
+func _swing(hero, what: int, at: Vector3) -> void:
+	_atk_cd = _stats.atk_interval
+	_swing_hero = hero
+	_swing_side = what
+	_swing_at = at
+	_swing_left = _model.play_attack(float(_stats.atk_interval))
+
+
+func _tick_swing(delta: float) -> void:
+	if _swing_left < 0.0:
+		return
+	_swing_left -= delta
+	if _swing_left <= 0.0:
+		_swing_left = -1.0
+		_release()
+
+
+## 타격 순간: 대상이 사거리 + SWING_SLACK 안이면(영웅은 살아 있고 지상일 때만) 피해, 아니면 헛스윙.
+## 방치 무적 등 피해 판정은 받는 쪽(영웅 take_damage·GameState damage_*)이 이 순간에 한다.
+func _release() -> void:
+	var reach: float = float(_stats.range) + SWING_SLACK
+	var h = _swing_hero
+	_swing_hero = null
+	if _swing_side == AT_HERO:
+		if is_instance_valid(h) and h.is_alive() and not h.is_on_wall() and Formation.flat_distance(global_position, h.global_position) <= reach:
+			h.take_damage(atk, self)
+	elif Formation.flat_distance(global_position, _swing_at) <= reach:
+		if _swing_side < 0:
 			GameState.damage_castle(atk)
 		else:
-			GameState.damage_gate(side, atk)
+			GameState.damage_gate(_swing_side, atk)
 
 
 ## 지금 이동 속도(slow 반영).

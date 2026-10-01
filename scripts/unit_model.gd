@@ -46,11 +46,15 @@ func play_walk() -> void:
 	_play(_spec.anims.walk)
 
 
-## 공격 때마다 처음부터. 끝나면 대기로 돌아간다.
-func play_attack() -> void:
+## 공격 때마다 처음부터. 끝나면 대기로 돌아간다. 공격 간격 interval보다 길면 길이 ≤ 간격 × ATTACK_FIT가 되게 빨리 돈다.
+## 반환 = 타격(발사) 순간까지 초(길이 × HIT_FRAC ÷ 속도).
+func play_attack(interval: float) -> float:
 	_current = _spec.anims.attack
-	_anim.play(_current, 0.1)
+	var length := _anim.get_animation(_current).length
+	var speed := maxf(1.0, length / (interval * Art.ATTACK_FIT))
+	_anim.play(_current, 0.1, speed)
 	_anim.seek(0.0, true)
+	return length * Art.HIT_FRAC[_current] / speed
 
 
 ## 사망 애니메이션은 반복하지 않으므로 마지막 자세(쓰러짐)로 멈춘다.

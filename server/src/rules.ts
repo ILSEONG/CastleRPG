@@ -277,17 +277,14 @@ export function heroMaxLevel(copies: number, config: Config): number {
   return cfgNum(config, 'hero_max_level_base') + cfgNum(config, 'hero_max_level_per_star') * stars
 }
 
-// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.12^(L−1)), 식량 = levelup_food_<등급> × L.
+// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.12^(L−1)), 개정 12: 골드만.
 export function levelupCost(grade: string, level: number, count: number, config: Config) {
   const g = cfgNum(config, `levelup_gold_${grade}`)
-  const f = cfgNum(config, `levelup_food_${grade}`)
   let gold = 0
-  let food = 0
   for (let l = level; l < level + count; l++) {
     gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** (l - 1))
-    food += f * l
   }
-  return { gold, food }
+  return { gold }
 }
 
 // 상한을 넘는 처치는 버린다 — 싼 몬스터부터 인정하고 비싼 몬스터를 먼저 버린다(부풀린 보스 처치가 먼저 잘린다).

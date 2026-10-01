@@ -283,7 +283,7 @@ test('레벨업 설정 검증: 비용·별당 상한은 0 이상 정수, 최대 
     ['hero_max_level_per_star', '-1', /hero_max_level_per_star must be a non-negative integer: '-1'/],
     ['hero_level_stat', '-0.01', /hero_level_stat must be 0 or more: '-0\.01'/],
     ['levelup_gold_SSR', '1.5', /levelup_gold_SSR must be a non-negative integer: '1\.5'/],
-    ['levelup_food_R', '-10', /levelup_food_R must be a non-negative integer: '-10'/],
+    ['levelup_gold_R', '-10', /levelup_gold_R must be a non-negative integer: '-10'/],
   ]
   for (const [key, value, re] of cases) {
     await assert.rejects(readTables(withCfg(key, value)), (e: unknown) => {
@@ -293,8 +293,8 @@ test('레벨업 설정 검증: 비용·별당 상한은 0 이상 정수, 최대 
       return true
     })
   }
-  writeFileSync(join(dir, 'config.csv'), cfg.replace(/^levelup_food_SR,.*\n/m, ''))
-  await assert.rejects(readTables(dir), /missing key 'levelup_food_SR'/)
+  writeFileSync(join(dir, 'config.csv'), cfg.replace(/^levelup_gold_SR,.*\n/m, ''))
+  await assert.rejects(readTables(dir), /missing key 'levelup_gold_SR'/)
   await readTables(withCfg('levelup_gold_R', '0')) // 0원·0배율은 받는다
   await readTables(withCfg('hero_level_stat', '0'))
 })

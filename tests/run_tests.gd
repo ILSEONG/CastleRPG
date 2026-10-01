@@ -79,6 +79,7 @@ func _init() -> void:
 	test_merchant_rates()
 	test_damage_numbers()
 	test_hero_levels()
+	test_hit_frac()
 	test_buildings()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
@@ -406,6 +407,7 @@ func test_gamestate_stop_after_stage() -> void:
 
 func test_gamestate_gate_broken_once() -> void:
 	var gs = GameStateScript.new()
+	gs.mode = gs.Mode.STAGE  # 방치 모드는 무적(개정 12 §3) — 피해는 스테이지 모드에서
 	var broken: Array = []
 	gs.gate_broken.connect(func(s): broken.append(s))
 	gs.damage_gate(2, gs.gate_hp_max * 0.5)
@@ -428,9 +430,8 @@ func test_gamestate_idle_castle_break_refills() -> void:
 	gs.damage_gate(1, 9999.0)
 	gs.damage_castle(9999.0)
 	check(gs.mode == gs.Mode.IDLE, "idle mode kept")
-	check(gs.castle_hp == gs.castle_hp_max, "castle healed immediately in idle")
-	check(not gs.is_gate_broken(1), "gates restored in idle refill")
-	check(refills[0] == 1, "refilled emitted once")
+	check(gs.castle_hp == gs.castle_hp_max and gs.gate_hp[1] == gs.gate_hp_max, "idle mode ignores gate and castle damage (invincible)")
+	check(refills[0] == 0, "no refill needed in idle")
 	gs.free()
 
 
@@ -438,10 +439,12 @@ func test_gamestate_start_stage_refills() -> void:
 	var gs = GameStateScript.new()
 	var refills := [0]
 	gs.refilled.connect(func(): refills[0] += 1)
+	gs.mode = gs.Mode.STAGE  # 피해는 스테이지 모드에서만 — 넣은 뒤 방치로 돌려 start_stage를 부른다
 	gs.damage_gate(3, gs.gate_hp_max * 0.5)
 	gs.damage_castle(100.0)
-	check(not gs.is_gate_broken(3) and gs.gate_hp[3] < gs.gate_hp_max, "gate damaged, not broken, in idle")
-	check(gs.castle_hp < gs.castle_hp_max and gs.mode == gs.Mode.IDLE, "castle damaged in idle")
+	gs.mode = gs.Mode.IDLE
+	check(not gs.is_gate_broken(3) and gs.gate_hp[3] < gs.gate_hp_max, "gate damaged, not broken")
+	check(gs.castle_hp < gs.castle_hp_max, "castle damaged")
 	gs.start_stage()
 	check(gs.gate_hp[3] == gs.gate_hp_max, "start_stage refills the gate")
 	check(gs.castle_hp == gs.castle_hp_max, "start_stage refills the castle")
@@ -1289,6 +1292,7 @@ func test_deploy_and_stars() -> void:
 ## 성문 회복: 최대치 상한, 부서진 성문 제외, 오를 때만 시그널.
 func test_gate_repair() -> void:
 	var gs = GameStateScript.new()
+	gs.mode = gs.Mode.STAGE  # 방치 무적이면 피해가 안 들어간다
 	var events := []
 	gs.gate_hp_changed.connect(func(s, hp, _mx): events.append([s, hp]))
 	gs.damage_gate(1, 100.0)
@@ -1537,7 +1541,7 @@ func test_damage_numbers() -> void:
 
 
 ## 개정 11 영웅 레벨: 능력치 공식(기본 × 레벨 배율 × 별 배율), 전투력, 최대 레벨(별 반영), 비용 표(서버 levelup.test와 같은 값),
-## 오프라인 레벨업(골드 tenths·식량 차감, 이유 문구, [×10] 횟수), 저장 v2 → v3, apply_remote의 레벨업 설정 검증.
+## 오프라인 레벨업(골드 tenths만 차감 — 개정 12, 이유 문구, [×10] 횟수), 저장 v2 → v3, apply_remote의 레벨업 설정 검증.
 func test_hero_levels() -> void:
 	GameData.load_tables()
 	var hans := GameData.hero("hans")
@@ -1551,30 +1555,29 @@ func test_hero_levels() -> void:
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
 		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 134, 151, 333, 923, 266690], "gold cost table = round(base x 1.12^(L-1)), same as the server")
-	check(GameData.levelup_cost("R", 19).food == 190 and GameData.levelup_cost("SSR", 20).food == 800 and GameData.levelup_cost("R", 1, 5) == {"gold": 191, "food": 150} \
-		and GameData.levelup_cost("SSR", 1, 19) == {"gold": 7614, "food": 7600}, "food = base x L, count sums the levels")
+	check(GameData.levelup_cost("R", 1, 5) == {"gold": 191} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 7614}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)
 	var got := []
 	e.leveled.connect(func(id, l): got.append([id, l]))
 	e.gold_tenths = 2005
 	e.res.food = 200
-	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 190 and got == [["hans", 2]], "offline level up takes 300 tenths and 10 food")
-	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 565 and e.res.food == 100, "three levels at once take the summed cost")
+	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 300 tenths and no food")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 565 and e.res.food == 200, "three levels at once take the summed cost")
 	var notes := []
 	e.notice.connect(func(t): notes.append(t))
 	e.gold_tenths = 469  # 46.9골드 < 47
 	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
 	e.gold_tenths = 100000
-	e.res.food = 49
-	check(e.levelup_block("hans") == "식량 부족" and e.levelup_block("arteon") == "보유하지 않은 영웅", "food short / not owned reasons")
 	e.res.food = 0
+	check(e.levelup_block("hans") == "" and e.levelup_block("arteon") == "보유하지 않은 영웅", "no food needed / not owned reason")
 	e.gold_tenths = 0
-	check(e.levelup_block("hans") == "골드·식량 부족", "both short")
+	e.res.food = 100000
+	check(e.levelup_block("hans") == "골드 부족", "gold short even with plenty of food")
 	# [×10] 횟수: 3회분만 있으면 3
 	var c3: Dictionary = GameData.levelup_cost("R", 5, 3)
 	e.gold_tenths = int(c3.gold) * 10
-	e.res.food = int(c3.food) + 5
+	e.res.food = 0
 	check(e.levelup_affordable("hans") == 3 and e.levelup_block("hans", 4) != "", "x10 counts the affordable levels (3)")
 	e.gold_tenths = 10000000
 	e.res.food = 10000000
@@ -1613,7 +1616,7 @@ func test_hero_levels() -> void:
 	e2.free()
 	# apply_remote: 레벨업 설정 검증(서버 seed와 같은 규칙)
 	var logged := _errors.count
-	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_star", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_food_R", "-10"], ["hero_level_stat", "-0.1"]]:
+	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_star", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_gold_R", "-10"], ["hero_level_stat", "-0.1"]]:
 		var p := _payload()
 		p.config[bad[0]] = bad[1]
 		check(not GameData.apply_remote(p) and GameData.errors == 1, "apply_remote rejects %s = %s" % bad)
@@ -1806,3 +1809,23 @@ func _corrupt_buildings(q: Dictionary, what: String) -> void:
 		"tavern rate above 1": q.config.tavern_sr_per_level = "1.5"
 		"population not an integer": q.config.pop_base = "6.5"
 		"building config missing": q.config.erase("castle_hp_per_level")
+
+
+## 개정 12-2 §3 공격 동기화: 쓰는 공격 애니메이션(영웅·몬스터·상인)마다 타격 비율이 있고 0 < frac < 1, 그 애니메이션이 GLB에 있다.
+func test_hit_frac() -> void:
+	var used := {}
+	for h in GameData.heroes():
+		var spec := Art.hero_spec(h)
+		used[spec.anims.attack] = spec.scene
+	for key in Art.MONSTER_MODELS:
+		used[Art.MONSTER_MODELS[key].anims.attack] = Art.MONSTER_MODELS[key].scene
+	used[Art.MERCHANT_MODEL.anims.attack] = Art.MERCHANT_MODEL.scene
+	check(used.size() >= 7, "attack animations in use: %s" % [used.keys()])
+	for anim in used:
+		var f: float = Art.HIT_FRAC.get(anim, -1.0)
+		check(f > 0.0 and f < 1.0, "hit_frac for %s in (0, 1): %s" % [anim, f])
+		var root: Node = (load(used[anim]) as PackedScene).instantiate()
+		var ap: AnimationPlayer = root.find_children("*", "AnimationPlayer", true, false)[0]
+		check(ap.has_animation(anim) and ap.get_animation(anim).length > 0.0, "%s plays %s" % [used[anim], anim])
+		root.free()
+	check(Art.ATTACK_FIT > 0.0 and Art.ATTACK_FIT < 1.0, "attack animation fits inside the interval (x %.2f)" % Art.ATTACK_FIT)

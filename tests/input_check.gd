@@ -378,8 +378,11 @@ func _recruit_and_heroes(rig) -> void:
 	var big: Rect2 = hud._button.get_global_rect()
 	_check(tabs.buttons.keys() == ["castle", "hero", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
 		"(t) the tab bar has 성·영웅·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
-	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < bar_rect.position.y and big.end.y > bar_rect.position.y - 20.0,
-		"(t) the tab bar is the bottom 104 px and the big button sits right above it", "bar=%s button=%s" % [bar_rect, big])
+	var title: Rect2 = hud._stage_label.get_global_rect()
+	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
+		and big.end.x > 680.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
+		"(t) the tab bar is the bottom 104 px; the stage button sits at the top, right of the stage title on the same row (64 px tall)",
+		"bar=%s button=%s title=%s" % [bar_rect, big, title])
 	var cam_pos: Vector3 = rig.position
 	var dp: Vector2 = recruit.dialog.get_global_rect().position + Vector2(300, 20)
 	_mouse_button(dp, true)
@@ -449,7 +452,7 @@ func _recruit_and_heroes(rig) -> void:
 	var ac = heroes_win.hero_cards.arteon
 	_check(ac.level == 1 and ac.stars == 1 and ac.power == GameData.hero_power(GameData.hero("arteon"), 1, 2) and not ac.deployed and heroes_win.hero_cards.hans.deployed
 		and not ac.can_level and heroes_win.slot_cards.map(func(c): return c.hero_id) == ["hans", "ella", "dorik", "nina"] and heroes_win.apply_button.disabled,
-		"(u) cards show Lv, stars, power and the 배치 badge; no ▲ without gold and food; [적용] off", "power=%d" % ac.power)
+		"(u) cards show Lv, stars, power and the 배치 badge; no ▲ without gold; [적용] off", "power=%d" % ac.power)
 	Economy.gold_tenths = 100000
 	Economy.res["food"] = 1000
 	Economy.changed.emit()
@@ -510,17 +513,17 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(heroes_win.skills_label.text.contains("6초마다 반경 6m") and heroes_win.skills_label.text.contains("받는 피해를 25% 줄입니다") and heroes_win.desc_label.text == arteon.desc
 		and heroes_win.title_label.text == "빛의 성기사 아르테온" and heroes_win.grade_label.text.begins_with("SSR"),
 		"(x) title, grade, both skill sentences with numbers and the description", "")
-	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드·식량 부족" and heroes_win.deploy_button.text == "배치 중"
-		and heroes_win.deploy_button.disabled, "(x) no gold or food: [레벨업]·[×10] off with the reason; a deployed hero shows 배치 중", "reason=%s" % heroes_win.reason_label.text)
+	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드 부족" and heroes_win.deploy_button.text == "배치 중"
+		and heroes_win.deploy_button.disabled, "(x) no gold: [레벨업]·[×10] off with the reason; a deployed hero shows 배치 중", "reason=%s" % heroes_win.reason_label.text)
 	var c1 := GameData.levelup_cost("SSR", 1)
 	Economy.gold_tenths = int(c1.gold) * 10 + 5
-	Economy.res["food"] = int(c1.food)
+	Economy.res["food"] = 0  # 식량 없이도 된다(개정 12)
 	Economy.changed.emit()
 	await _tap(heroes_win.level_button.get_global_rect().get_center())  # 아직 보호 시간
 	_check(Economy.level_of("arteon") == 1, "(x) a press on [레벨업] right after the detail opens is ignored", "")
 	await _guard_wait()
-	_check(not heroes_win.level_button.disabled and heroes_win._one.gold.text == "120" and heroes_win._one.food.text == "40" and heroes_win.reason_label.text == "",
-		"(x) [레벨업] shows its cost inside (gold 120, food 40)", "gold=%s food=%s" % [heroes_win._one.gold.text, heroes_win._one.food.text])
+	_check(not heroes_win.level_button.disabled and heroes_win._one.gold.text == "120" and not heroes_win._one.has("food") and heroes_win.reason_label.text == "",
+		"(x) [레벨업] shows its gold cost inside (120, no food)", "gold=%s" % heroes_win._one.gold.text)
 	var pre := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	pre.sort_custom(func(a, b): return a.index < b.index)
 	await _tap(heroes_win.level_button.get_global_rect().get_center())
@@ -530,20 +533,20 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 30"
 		and heroes_win.stat_values[0].text == "1,213" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
-		"(x) [레벨업] takes 120 gold (1200 tenths) and 40 food, Lv 2, light burst, changed stats flash green",
+		"(x) [레벨업] takes 120 gold (1200 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
 	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 1040.0 * 1.06 * 1.1)
 		and is_equal_approx(live[1].atk, 42.0 * 1.06 * 1.1) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
 		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.06) x 1.1", "hp=%.1f" % live[1].hp_max)
 	var c3 := GameData.levelup_cost("SSR", 2, 3)
 	Economy.gold_tenths = int(c3.gold) * 10
-	Economy.res["food"] = int(c3.food) + 1
+	Economy.res["food"] = 0
 	Economy.changed.emit()
 	_check(heroes_win._ten.title.text == "×10 (3회)" and heroes_win._ten.gold.text == UiKit.commas(c3.gold) and not heroes_win.ten_button.disabled,
 		"(x) [×10] shows the affordable count (3) and its total cost", "title=%s gold=%s" % [heroes_win._ten.title.text, heroes_win._ten.gold.text])
 	await _tap(heroes_win.ten_button.get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 1 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 30",
+	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 0 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 30",
 		"(x) [×10] raises 3 levels for the summed cost", "level=%d tenths=%d" % [Economy.level_of("arteon"), Economy.gold_tenths])
 	# 이전·다음: [다음]은 목록 순서로 다음 영웅, 오른쪽으로 끌면 이전
 	var order: Array = heroes_win.order
@@ -586,6 +589,69 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	recruit._on_gacha_done(late)
 	_check(recruit.is_showing_results() and recruit.cards[0].hero_id == "jack", "(y) with no other window open, a late result reopens the recruit window", "")
 	recruit.close()
+	await _guard_wait()
+	await _top_hud(hud)
+
+
+## (z) 개정 12-2: 상단 스테이지 버튼(탭으로 진행 → 중지 예약 → 예약 취소)과 방향별 성 내구도(성문 막대 탭 → 카메라가 그 성문으로 0.4초,
+##     줌 유지, 전장으로 새지 않음). 문루 위 방향 글자. 스테이지를 시작하므로 맨 끝에 둔다.
+func _top_hud(hud) -> void:
+	var half: float = _main.castle.half
+	var rig = _camera.get_parent()
+	_check(_main.castle.side_labels.map(func(l): return l.text) == ["북", "동", "남", "서"]
+		and _main.castle.side_labels.all(func(l): return l.position.y > Balance.WALL_H + 2.0),
+		"(z) direction letters 북·동·남·서 float above the four gatehouses", "")
+	print("INPUT INFO: stage button %s, title %s, castle bar %s, gate bars %s (720x1280 logical)" % [hud._button.get_global_rect(), hud._stage_label.get_global_rect(),
+		hud._castle_bar.get_global_rect(), hud._gate_tiles.map(func(t): return t.get_global_rect())])
+	var names: Array = hud._gate_tiles.map(func(t): return t.get_child(0).get_child(1).text)
+	var nums: Array = range(4).map(func(s): return hud._hp[s].num.text)
+	var full := "%s / %s" % [UiKit.commas(roundi(GameState.gate_hp_max)), UiKit.commas(roundi(GameState.gate_hp_max))]
+	_check(names == ["북", "동", "남", "서"] and nums.all(func(s): return s == full) and hud._hp[hud.CASTLE].num.text.contains(" / "),
+		"(z) gate bars are named 북·동·남·서 with 'hp / max' inside; the castle bar too", "names=%s nums=%s" % [names, nums])
+	var dirs: Array = range(4).map(func(s): return hud.compass_dir(s))
+	_check(dirs[0].x > 0.5 and dirs[0].y < -0.5 and dirs[1].x > 0.5 and dirs[1].y > 0.5 and dirs[2].x < -0.5 and dirs[2].y > 0.5 and dirs[3].x < -0.5 and dirs[3].y < -0.5,
+		"(z) compass arrows point where each gate is on screen (N up-right, E down-right, S down-left, W up-left)", "dirs=%s" % [dirs])
+	# 성문 피해 → 그 막대만 번쩍, 부서지면 회색 "파괴". 방치 무적(개정 12 §3)과 무관하게 보려고 잠깐 스테이지 모드로 둔다
+	var mode0: int = GameState.mode
+	GameState.mode = GameState.Mode.STAGE
+	GameState.damage_gate(2, 10.0)
+	var flashing: Array = range(4).map(func(s): return hud._hp[s].flash.visible)
+	GameState.damage_gate(3, GameState.gate_hp_max)
+	GameState.mode = mode0
+	_check(flashing == [false, false, true, false] and hud._hp[3].num.text == "파괴" and hud._gate_bars[3].get_theme_stylebox("background") == UiKit.bar(hud.BROKEN_GREY).fill,
+		"(z) a damaged gate's bar flashes (only that one); a broken gate turns grey and reads 파괴", "flash=%s text=%s" % [flashing, hud._hp[3].num.text])
+	await get_tree().create_timer(hud.FLASH_SEC + 0.1).timeout
+	_check(not hud._hp[2].flash.visible, "(z) the flash fades after 0.3 s", "")
+	GameState.refill()
+
+	# 성문 막대 탭 → 카메라가 그 성문으로 부드럽게(0.4초), 줌 그대로. 선택한 영웅은 명령을 받지 않는다(HUD가 누름을 먹는다)
+	var warrior = get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())[0]  # (w)에서 바뀐 영웅일 수 있다
+	_picker._select(warrior)
+	var state := [warrior.side, warrior.post, warrior.free_pos]
+	var zoom0 := _camera.size
+	var start: Vector3 = rig.position
+	var east := Formation.gate_position(half, 1)
+	var dest := Vector3(east.x, start.y, east.z)
+	var tile: Rect2 = hud._gate_tiles[1].get_global_rect()
+	await _tap(tile.get_center())
+	var mid: Vector3 = rig.position
+	await get_tree().create_timer(0.5).timeout
+	_check(start.distance_to(dest) > 5.0 and mid.distance_to(dest) > 0.5 and rig.position.distance_to(dest) < 0.01 and _camera.size == zoom0,
+		"(z) tapping the east gate bar glides the camera to the east gate (centered after 0.4 s, zoom kept)",
+		"start=%s mid=%s end=%s dest=%s zoom %.1f -> %.1f" % [start, mid, rig.position, dest, zoom0, _camera.size])
+	_check(_picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == state, "(z) the gate bar tap does not reach the battlefield (no hero order)",
+		"selected=%s" % _name(_picker.selected))
+	_picker._select(null)
+
+	# 상단 버튼: 대기 "▶ 진행" → 탭 = 스테이지 시작 → "중지 예약" → 탭 = 예약 → "예약 취소" → 탭 = 취소
+	var bp: Vector2 = hud._button.get_global_rect().get_center()
+	_check(GameState.mode == GameState.Mode.IDLE and hud._button.text == "▶ 진행" and bp.y < 300.0, "(z) idle: the top button reads ▶ 진행", "text=%s at %s" % [hud._button.text, bp])
+	await _tap(bp)
+	_check(GameState.mode == GameState.Mode.STAGE and hud._button.text == "중지 예약", "(z) tapping it starts the stage; it now reads 중지 예약", "mode=%d text=%s" % [GameState.mode, hud._button.text])
+	await _tap(bp)
+	_check(GameState.stop_requested and hud._button.text == "예약 취소", "(z) tapping again books the stop; it reads 예약 취소", "text=%s" % hud._button.text)
+	await _tap(bp)
+	_check(not GameState.stop_requested and hud._button.text == "중지 예약", "(z) and again cancels the booking", "text=%s" % hud._button.text)
 
 
 ## 하단 탭 바 탭 id의 가운데(화면 좌표).

@@ -111,7 +111,7 @@ func stop_after_stage() -> void:
 
 
 func damage_castle(amount: float) -> void:
-	if castle_hp <= 0.0:
+	if mode == Mode.IDLE or castle_hp <= 0.0:  # 방치 모드는 무적(개정 12)
 		return
 	castle_hp = maxf(0.0, castle_hp - amount)
 	castle_hp_changed.emit(castle_hp, castle_hp_max)
@@ -120,7 +120,7 @@ func damage_castle(amount: float) -> void:
 
 
 func damage_gate(side: int, amount: float) -> void:
-	if gate_hp[side] <= 0.0:
+	if mode == Mode.IDLE or gate_hp[side] <= 0.0:  # 방치 모드는 무적(개정 12)
 		return
 	gate_hp[side] = maxf(0.0, gate_hp[side] - amount)
 	gate_hp_changed.emit(side, gate_hp[side], gate_hp_max)
