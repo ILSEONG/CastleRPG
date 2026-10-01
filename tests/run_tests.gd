@@ -16,6 +16,7 @@ const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
+const PortraitsScript := preload("res://scripts/portraits.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -81,6 +82,7 @@ func _init() -> void:
 	test_hero_levels()
 	test_hit_frac()
 	test_buildings()
+	test_portraits()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -1173,10 +1175,10 @@ func test_hero_card_geometry() -> void:
 	check(card.geo_builds == 1 and card._body == body and card._shine_cols[0] != c1, "same card size/hero/stars: geometry built once, only the shimmer colors change")
 	check(card._body.size() == (6 + LowpolyBoxScript.FACES) * 3 and card._body_cols.size() == card._body.size() and card._shine.size() == LowpolyBoxScript.FACES * 3,
 		"card body = octagon fan + %d faces, SSR shimmer = %d faces" % [LowpolyBoxScript.FACES, LowpolyBoxScript.FACES])
-	check(card._top.size() == (6 + 6 + 2 * 10) * 3 and card._top_cols.size() == card._top.size() and card._lines.size() == 4, "two gems and two stars on top: %d points" % card._top.size())
+	check(card._top.size() == (6 + 2 * 10) * 3 and card._top_cols.size() == card._top.size() and card._lines.size() == 3, "grade gem and two stars on top (the unique-color hexagon is gone): %d points" % card._top.size())
 	card.stars = 3
 	card._ensure_geo(h)
-	check(card.geo_builds == 2 and card._top.size() == (6 + 6 + 3 * 10) * 3, "a star change rebuilds the geometry")
+	check(card.geo_builds == 2 and card._top.size() == (6 + 3 * 10) * 3, "a star change rebuilds the geometry")
 	card.hero_id = "hans"
 	card._ensure_geo(GameData.hero("hans"))
 	check(card.geo_builds == 3 and card._shine.is_empty(), "an R card has no shimmer")
@@ -1829,3 +1831,74 @@ func test_hit_frac() -> void:
 		check(ap.has_animation(anim) and ap.get_animation(anim).length > 0.0, "%s plays %s" % [used[anim], anim])
 		root.free()
 	check(Art.ATTACK_FIT > 0.0 and Art.ATTACK_FIT < 1.0, "attack animation fits inside the interval (x %.2f)" % Art.ATTACK_FIT)
+
+
+## 개정 14 §2 영웅 피규어: 캐시 API(헤드리스라 렌더 없음 — 자리표시·큐·저장·알림·미리보기 상태만), 카드의 피규어 자리와 받침.
+func test_portraits() -> void:
+	var P = PortraitsScript
+	check(P.current == null, "no Portraits node outside a world")
+	var ph: Texture2D = P.portrait("hero:arteon")
+	check(ph != null and ph.get_width() == P.PLACEHOLDER_PX and P.portrait("hero:arteon") == ph and P.portrait("hero:ignis") == ph,
+		"before a render the placeholder comes back at once, one per grade color (two SSR heroes share it)")
+	check(P.portrait("hero:hans") != ph and P.portrait("soldier:cavalry") != ph and P.portrait("soldier:cavalry") == P.portrait("soldier:archer"),
+		"an R hero and the soldier keys get their own silhouette colors")
+	var sil: Image = P.silhouette(Color.RED)
+	var fy := int(P.feet_y() * P.PLACEHOLDER_PX)
+	check(sil.get_pixel(32, fy - 2).a > 0.5 and sil.get_pixel(32, fy + 2).a == 0.0 and sil.get_pixel(2, 2).a == 0.0 and P.feet_y() > 0.75 and P.feet_y() < 0.95,
+		"the silhouette stands on the figure's feet line (y %.2f), background transparent" % P.feet_y())
+	check(P.spec_of("hero:arteon") == Art.hero_spec(GameData.hero("arteon")) and P.spec_of("soldier:cavalry").is_empty() and P.spec_of("hero:nobody").is_empty(),
+		"spec_of: hero keys use the in-game model spec (gear shown); soldier keys have no mesh yet")
+	var p = P.new()
+	P.current = p  # 월드 안이라면 _enter_tree가 한다
+	check(not p.can_render, "headless: no renderer")
+	P.portrait("hero:hans")
+	check(p.queue.is_empty(), "headless: requests are skipped, placeholder only")
+	p.can_render = true  # 렌더러가 있는 척 — 큐만 본다(_show는 트리 밖에서 못 쓴다)
+	for key in ["hero:hans", "hero:hans", "hero:jack", "soldier:cavalry", "hero:nobody"]:
+		P.portrait(key)
+	check(p.queue == ["hero:hans", "hero:jack"], "requests queue once per key in order; keys without a model are not queued: %s" % [p.queue])
+	p.live_key = "hero:arteon"
+	p._process(0.016)
+	check(p.queue == ["hero:hans", "hero:jack"] and p._pending == "", "the queue waits while the live preview uses the viewport")
+	p.live_key = ""
+	var got := []
+	p.portrait_ready.connect(func(k): got.append(k))
+	var tex := ImageTexture.create_from_image(P.silhouette(Color.BLUE))
+	p.store("hero:hans", tex)
+	P.portrait("hero:hans")
+	check(got == ["hero:hans"] and p.queue == ["hero:jack"] and P.portrait("hero:hans") == tex and P.has_portrait("hero:hans"),
+		"a finished render is cached, leaves the queue, fires portrait_ready(key) and is not queued again")
+	p.can_render = false
+	p.set_live("hero:arteon")
+	p.turn(50.0)
+	check(p.live_key == "hero:arteon" and is_equal_approx(p.yaw, 30.0) and is_equal_approx(p._pivot.rotation_degrees.y, 30.0) and p.live_texture("hero:arteon") == ph,
+		"live preview: a 50 px drag turns the model 30 degrees; headless draws the placeholder instead of the viewport")
+	p.set_live("hero:hans")
+	check(p.yaw == 0.0 and p._pivot.rotation_degrees.y == 0.0, "the next live hero starts facing front")
+	p.set_live("")
+	check(p.live_key == "", "live preview off")
+	P.current = null
+	p.free()
+	check(P.portrait("hero:hans") == tex, "the cache is static: it outlives the node (world rebuild)")
+	P._cache.erase("hero:hans")
+	# 카드: 피규어 칸은 등급 보석 아래·이름 위(목록·슬롯·상세·모집 크기), 고유 색은 발밑 받침
+	for s in [Vector2(200, 240), Vector2(140, 150), Vector2(190, 240), Vector2(118, 160)]:
+		var c = HeroCardScript.new()
+		c.size = s
+		var fr: Rect2 = c.figure_rect()
+		var name_top: float = s.y * 0.6 - c._name_size() * 0.7
+		check(fr.size.x > 50.0 and fr.position.y >= UiKit.card_gem_center(Rect2(Vector2.ZERO, s)).y + 8.0 and fr.end.y < name_top and Rect2(Vector2.ZERO, s).encloses(fr),
+			"card %s: figure %s sits between the grade gem and the name" % [s, fr])
+		c.free()
+	var card = HeroCardScript.new()
+	card.size = Vector2(200, 240)
+	card.hero_id = "dorik"
+	var dorik := GameData.hero("dorik")
+	card._ensure_geo(dorik)
+	var fr: Rect2 = card.figure_rect()
+	var feet := Vector2(fr.get_center().x, fr.position.y + fr.size.y * P.feet_y())
+	check(card._base.size() == 2 * HeroCardScript.BASE_SIDES * 3 and card._base_cols.size() == card._base.size() and card._base_lines.size() == 2
+		and card._base_cols.has(Color(dorik.color).darkened(0.35)) and card._base[HeroCardScript.BASE_SIDES * 3].is_equal_approx(feet),
+		"the unique color is a two-tone pedestal centered under the figure's feet")
+	check(card.figure_texture() == P.portrait("hero:dorik") and card.figure_texture() == P.placeholder("hero:dorik"), "the card draws the placeholder until the figure is rendered")
+	card.free()
