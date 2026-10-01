@@ -60,8 +60,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'hero_max_stars', 'hero_star_bonus',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
-  'hero_max_level_base', 'hero_max_level_per_star', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
-  'levelup_food_R', 'levelup_food_SR', 'levelup_food_SSR']
+  'hero_max_level_base', 'hero_max_level_per_star', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR']
 export const CONFIG_LIST = ['hero_slots', 'starter_heroes']
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
@@ -168,7 +167,7 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
 // 모집 설정(스펙 §3.6): 비용·10연차 보장 수는 0 이상 정수(소수 비용이면 BigInt(-cost × 10)가 throw → 500), 확률은 0..1이고
 // SSR + SR ≤ 1. 레벨업 설정(개정 11 §2.1): 비용·별당 최대 레벨은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상.
 // 숫자가 아닌 값은 checkTable이 이미 알렸으므로 건너뛴다.
-const LEVELUP_INT_KEYS = ['hero_max_level_per_star', ...GRADES.flatMap((g) => [`levelup_gold_${g}`, `levelup_food_${g}`])]
+const LEVELUP_INT_KEYS = ['hero_max_level_per_star', ...GRADES.map((g) => `levelup_gold_${g}`)]
 function checkGacha(config: CsvRow[], errors: string[]) {
   const byKey = new Map(config.map((r) => [String(r.key), r]))
   const raw = (k: string) => String(byKey.get(k)?.value ?? '')
