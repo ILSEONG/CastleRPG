@@ -12,6 +12,8 @@ const HeroScript := preload("res://scripts/hero.gd")
 const Fx := preload("res://scripts/fx.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
+const MainScript := preload("res://scripts/main.gd")
+const HudScript := preload("res://scripts/hud.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -369,6 +371,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _fx_cap()
 	await _damage_numbers()
 	await _levelup_case()
+	await _building_cases()
 
 
 ## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
@@ -738,3 +741,102 @@ func _levelup_case() -> void:
 	_check(is_equal_approx(_dmg(m), dorik.atk), "(L) the leveled hero hits for its leveled attack", "dmg=%.2f atk=%.2f" % [_dmg(m), dorik.atk])
 	_clear_monsters()
 	await _frames(1)
+
+
+## (B) 개정 12 건물(오프라인, 실제 완료 경로: 끝난 일꾼을 Economy._process가 완료 → building_done → main).
+## 막사 Lv 5 → 방치 모드라 영웅을 곧바로 다시 만들고 HP +12%, 연구소 Lv 3 → 공격 +6%(레벨·별 배율 위에 곱). 영웅이 그 공격으로 친다.
+## 성문 Lv 2 → 성문 최대 HP 800. 성채가 단계(5)를 넘으면 "성이 넓어졌습니다!"와 함께 월드를 다시 만든다 — 새 main(성 내부 24타일, 슬롯 8,
+## 성 HP 1800)이고 오토로드 상태(Economy 골드·자원·건물·영웅, GameState 스테이지)는 그대로. 월드가 바뀌므로 마지막 사례.
+func _building_cases() -> void:
+	_clear_monsters()
+	GameState.refill()
+	await _frames(1)
+	_check(GameState.mode == GameState.Mode.IDLE and Economy.build.is_empty(), "(B) precondition: idle, builder free", "mode=%d build=%s" % [GameState.mode, Economy.build])
+	var before := _alive_heroes()
+	Economy.levels["barracks"] = 4
+	Economy.build = {"id": "barracks", "finish": Economy.time_now() - 1.0}
+	await _frames(2)
+	var live := _alive_heroes()
+	var hp_ok := not live.is_empty()
+	for h in live:
+		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id]))
+		hp_ok = hp_ok and not before.has(h) and is_equal_approx(h.hp_max, base.hp * 1.12) and is_equal_approx(h.atk, base.atk) and is_equal_approx(h.hp, h.hp_max)
+	_check(Economy.building_level("barracks") == 5 and Economy.build.is_empty() and hp_ok, "(B) barracks Lv 5 done in idle: heroes rebuilt at once with HP x1.12",
+		"barracks=%d heroes=%s" % [Economy.building_level("barracks"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
+	Economy.levels["lab"] = 2
+	Economy.build = {"id": "lab", "finish": Economy.time_now() - 1.0}
+	await _frames(2)
+	live = _alive_heroes()
+	var atk_ok := not live.is_empty()
+	for h in live:
+		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), int(Economy.heroes[h.def.id]))
+		atk_ok = atk_ok and is_equal_approx(h.hp_max, base.hp * 1.12) and is_equal_approx(h.atk, base.atk * 1.06)
+	_check(Economy.building_level("lab") == 3 and atk_ok, "(B) lab Lv 3 done: hero attack x1.06 (HP keeps the barracks bonus)",
+		"lab=%d heroes=%s" % [Economy.building_level("lab"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
+	var hero = live[0]
+	for h in live:
+		h.set_process(h == hero)
+	var m = _still("epic_boss", hero.global_position + Formation.SIDE_DIR[hero.side] * 1.2)
+	hero._sk = {}  # 순수 타격으로 공격력만 본다
+	await _wait_until(func(): return _dmg(m) > 0.0, 3.0)
+	_check(is_equal_approx(_dmg(m), hero.atk) and is_equal_approx(hero.atk, GameData.hero_stats(hero.def, Economy.level_of(hero.def.id), int(Economy.heroes[hero.def.id]), Economy.levels).atk),
+		"(B) a hero hits for its lab-boosted attack", "dmg=%.2f atk=%.2f" % [_dmg(m), hero.atk])
+	_clear_monsters()
+	await _frames(1)
+	Economy.build = {"id": "gate", "finish": Economy.time_now() - 1.0}
+	await _frames(2)
+	_check(Economy.building_level("gate") == 2 and GameState.gate_hp_max == 800.0 and GameState.gate_hp[0] == 800.0, "(B) gate Lv 2 done: gate max HP 800 at once",
+		"gate=%d max=%.0f hp=%.0f" % [Economy.building_level("gate"), GameState.gate_hp_max, GameState.gate_hp[0]])
+	# 성채 4 → 5: 단계가 바뀌어 월드를 다시 만든다
+	var old = _main
+	var keep_before := [Economy.gold_tenths, Economy.res.duplicate(), Economy.heroes.duplicate(), Economy.hero_levels.duplicate(), GameState.stage, GameState.deploy()]
+	var rebuilds0: int = MainScript.rebuilds
+	Economy.levels["keep"] = 4
+	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
+	var old_id: int = old.get_instance_id()  # 람다가 노드를 캡처하면 해제 뒤 호출마다 엔진 오류 — id로 본다
+	await _wait_until(func(): return not is_instance_id_valid(old_id), 3.0)
+	await _frames(3)
+	var fresh = null
+	for c in get_children():
+		if c.get_script() == MainScript:
+			fresh = c
+	_check(not is_instance_valid(old) and fresh != null and MainScript.rebuilds == rebuilds0 + 1, "(B) keep Lv 5 crosses a tier: the world is rebuilt (new main)",
+		"old valid=%s fresh=%s rebuilds=%d" % [is_instance_valid(old), fresh, MainScript.rebuilds - rebuilds0])
+	if fresh == null:
+		return
+	_main = fresh
+	for c in fresh.get_children():
+		if c.get_script() == SpawnerScript:
+			c.set_process(false)
+	var hud = fresh.get_children().filter(func(c): return c.get_script() == HudScript)[0]
+	var deployed: int = GameState.deploy().filter(func(x): return x != null).size()
+	_check(fresh.castle.half == 24.0 and GameState.hero_count() == 8 and GameState.deploy().size() == 8 and _alive_heroes().size() == deployed and GameState.castle_hp_max == 1800.0,
+		"(B) the new world uses keep 5: interior 24 tiles, 8 slots, castle HP 1800", "half=%.1f slots=%d heroes=%d castle=%.0f" % [fresh.castle.half, GameState.hero_count(), _alive_heroes().size(), GameState.castle_hp_max])
+	var keep_after := [Economy.gold_tenths, Economy.res, Economy.heroes, Economy.hero_levels, GameState.stage, GameState.deploy().slice(0, 4)]
+	_check(keep_after == keep_before and Economy.building_level("keep") == 5 and Economy.building_level("lab") == 3 and GameState.roster == Economy and not Net.is_online(),
+		"(B) autoload state carries over the rebuild (gold, resources, heroes, levels, stage, deploy)", "before=%s after=%s" % [keep_before, keep_after])
+	_check(hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!", "(B) the new HUD shows '성이 넓어졌습니다!'", "toast=%s '%s'" % [hud._toast.visible, hud._toast.text])
+	# 스테이지 중에 단계가 바뀌면(성채 9 → 10): 지금 알리고, 월드는 방치로 돌아올 때 다시 만든다
+	hud._toast.visible = false
+	GameState.start_stage()
+	GameState.stop_after_stage()  # 결과 뒤 방치로
+	Economy.levels["keep"] = 9
+	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
+	await _frames(3)
+	_check(is_instance_valid(fresh) and fresh.is_inside_tree() and hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!" and fresh.castle.half == 24.0,
+		"(B) a tier change during a stage shows the notice now and keeps the world until idle", "valid=%s toast=%s" % [is_instance_valid(fresh), hud._toast.visible])
+	var stage_id: int = fresh.get_instance_id()
+	GameState.on_all_monsters_dead()
+	await _wait_until(func(): return not is_instance_id_valid(stage_id), GameData.config_num("result_sec") + 3.0)
+	await _frames(3)
+	var after = get_children().filter(func(c): return c.get_script() == MainScript)
+	_check(not is_instance_id_valid(stage_id) and after.size() == 1 and after[0].castle.half == 28.0 and GameState.mode == GameState.Mode.IDLE and GameState.hero_count() == 12,
+		"(B) back in idle the world is rebuilt for keep 10 (interior 28 tiles, 12 slots)", "old valid=%s mains=%d" % [is_instance_id_valid(stage_id), after.size()])
+	if after.size() == 1:
+		_main = after[0]
+
+
+func _alive_heroes() -> Array:
+	var out := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	out.sort_custom(func(a, b): return a.index < b.index)
+	return out
