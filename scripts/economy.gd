@@ -189,7 +189,6 @@ func load_save(now: float) -> void:
 	var json := JSON.new()  # parse_string은 깨진 입력에 엔진 오류를 찍는다
 	if json.parse(FileAccess.get_file_as_string(save_path)) != OK or not _apply(json.data):
 		push_warning("economy save is corrupt; starting from defaults")
-		reset(now)
 		return
 	changed.emit()
 
