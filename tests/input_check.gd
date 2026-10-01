@@ -615,6 +615,8 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _guard_wait()
 	await _buildings_ui(tabs, hud, recruit)
 	await _soldiers_ui(tabs, hud)
+	await _soldier_picks()
+	await _soldier_figures(tabs)
 	await _rotate_ui(hud)
 	await _fever_ui(hud)
 	await _top_hud(hud)
@@ -1329,3 +1331,98 @@ func _figures(heroes_win) -> void:
 	heroes_win.open()
 	heroes_win.show_detail("hans")
 	await _guard_wait()
+
+
+## main 자식 중 script인 노드(없으면 null).
+func _child(script: Script) -> Node:
+	for c in _main.get_children():
+		if c.get_script() == script:
+			return c
+	return null
+
+
+## (P) 개정 15 병사 건물 탭: 기본 카메라에서 보병 막사·궁병 훈련소·기병 마구간의 보이는 지붕 가운데(메시 AABB 윗면 가운데 0.3 m 아래)를
+##     탭하면 그 건물 창 — 레이가 앞 건물(주점·성채) 상자를 먼저 꿰어도 판정체 중심이 탭에 가장 가까운 건물을 고른다. 길게 누르기·부지 중심도 같다.
+func _soldier_picks() -> void:
+	var bwin = _building_win()
+	var rig = _camera.get_parent()
+	var scenery = _child(preload("res://scripts/buildings.gd"))
+	var cam0 := [rig.position, rig.rotation_degrees.y, _camera.size]
+	rig.position = Vector3.ZERO  # 기본 카메라(리그 원점, 요 45°, 줌 66)
+	rig.rotation_degrees.y = 0.0
+	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
+	await _frames(2)
+	_picker._select(null)
+	var firsts := {}
+	for id in ["barracks", "archery", "stable"]:
+		var box: AABB = scenery.sites[id][0]
+		var px := _camera.unproject_position(Vector3(box.get_center().x, box.end.y - 0.3, box.get_center().z))
+		firsts[id] = _picker._pick(px, PickerScript.LAYER_TAP).get("collider", self).get_meta("building", "none")
+		_check(get_viewport().get_visible_rect().has_point(px) and not _open_hero(px), "(P) precondition: the %s roof center is on screen, no hero near" % id, "px=%s" % px)
+		await _tap(px)
+		_check(bwin.is_open() and bwin.building_id == id, "(P) a tap on the %s's visible roof center opens its window (the ray's first box is %s)" % [id, firsts[id]],
+			"open=%s id=%s px=%s" % [bwin.is_open(), bwin.building_id, px])
+		bwin.close()
+		_check(_picker._building_at(px) == id and _picker._building_at(_building_px(id)) == id, "(P) a long press on the %s roof center or site center picks it too" % id,
+			"roof=%s site=%s" % [_picker._building_at(px), _picker._building_at(_building_px(id))])
+	_check(firsts.keys().any(func(k): return firsts[k] != k), "(P) precondition: a front building's box is the ray's first hit on at least one soldier roof center (the case this fixes)", "first hits=%s" % [firsts])
+	for t in ["tavern", "keep", "lumber"]:  # 앞 건물은 그대로 그 건물
+		_check(_picker._building_at(_building_px(t)) == t, "(P) the %s site center still picks the %s" % [t, t], _picker._building_at(_building_px(t)))
+	rig.position = cam0[0]
+	rig.rotation_degrees.y = cam0[1]
+	rig.zoom_by(cam0[2] / _camera.size)
+	await _frames(2)
+
+
+## (F) 개정 15 병사 피규어: 병사 칸(시트 행·건물 창 합성 칸)은 Portraits "soldier:<병종>"을 그리고(헤드리스는 자리표시), 렌더가 끝나면
+##     (portrait_ready) 칸을 다시 그린다 — 칸이 사라지면 연결도 끊긴다. 피규어 몸은 월드 병사와 같은 SoldierBody(기병 = 같은 말 메시 + 기사), 대기 자세.
+func _soldier_figures(tabs) -> void:
+	var P = preload("res://scripts/portraits.gd")
+	var SP = preload("res://scripts/soldier_panel.gd")
+	var SB = preload("res://scripts/soldier_body.gd")
+	var p = P.current
+	_check(SP.figure("infantry") == P.portrait("soldier:infantry") and SP.figure("cavalry") == P.placeholder("soldier:cavalry") and p.queue.is_empty(),
+		"(F) a soldier cell's figure is Portraits 'soldier:<type>' (headless: the placeholder, nothing queued)", "")
+	p._show("soldier:cavalry")
+	var kids: Array = p._pivot.get_children()
+	var skel := p._pivot.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var hand := skel.get_bone_global_pose(skel.find_bone("hand.r")).origin
+	var rest := skel.get_bone_global_rest(skel.find_bone("hand.r")).origin
+	_check(kids.size() == 2 and kids[1] is MeshInstance3D and kids[1].mesh == SB._horse_mesh and is_equal_approx(kids[0].position.y, SB.RIDER_Y)
+		and is_equal_approx(kids[0].scale.x, preload("res://scripts/art.gd").SOLDIER_SCALE) and hand.y < rest.y - 0.2,
+		"(F) the cavalry figure is the world soldier's body: the shared horse mesh with the knight on its back, in the idle pose", "kids=%d hand=%s rest=%s" % [kids.size(), hand, rest])
+	var gear := {"soldier:infantry": [["1H_Sword", "Rectangle_Shield"], ["2H_Sword"]], "soldier:archer": [["2H_Crossbow"], ["Knife", "1H_Crossbow"]]}
+	for key in gear:
+		p._show(key)
+		var shown: bool = gear[key][0].all(func(g): return p._pivot.find_child(g, true, false).visible) and gear[key][1].all(func(g): return not p._pivot.find_child(g, true, false).visible)
+		_check(p._pivot.get_child_count() == 1 and shown, "(F) %s figure shows only its gear %s" % [key, gear[key][0]], "")
+	p._show("")
+	# 시트 행 칸: portrait_ready에 다시 그리고, 행이 사라지면 연결이 끊긴다
+	var sw = tabs.windows.soldier
+	Economy.soldiers = {"infantry:1": 1, "archer:2": 1}
+	Economy.soldiers_changed.emit()
+	sw.open()
+	await _frames(2)
+	var icon: Control = sw.rows["infantry:1"].box.get_child(0)
+	var linked := func(c: Object) -> bool: return p.portrait_ready.get_connections().any(func(cn): return cn.callable.get_object() == c)
+	var draws := [0]
+	icon.draw.connect(func(): draws[0] += 1)
+	await _frames(2)
+	var d0: int = draws[0]
+	p.store("soldier:infantry", ImageTexture.create_from_image(P.silhouette(Color.RED)))
+	await _frames(2)
+	_check(linked.call(icon) and draws[0] > d0 and P.has_portrait("soldier:infantry") and SP.figure("infantry") != P.placeholder("soldier:infantry"),
+		"(F) a finished soldier render redraws the cell with the figure", "draws %d -> %d" % [d0, draws[0]])
+	var n0: int = p.portrait_ready.get_connections().size()
+	Economy.soldiers = {}
+	Economy.soldiers_changed.emit()
+	await _frames(2)
+	_check(not is_instance_valid(icon) and p.portrait_ready.get_connections().size() <= n0 - 2, "(F) cells that go away drop their portrait_ready link",
+		"links %d -> %d" % [n0, p.portrait_ready.get_connections().size()])
+	sw.close()
+	P._cache.erase("soldier:infantry")
+	var bwin = _building_win()
+	bwin.open_building("barracks")
+	await _frames(1)
+	_check(linked.call(bwin.merge_rows[0].icon), "(F) the barracks window's merge cells use the same soldier figure cells", "")
+	bwin.close()
