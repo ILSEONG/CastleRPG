@@ -318,10 +318,21 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
 
 export const LEVELUP_GOLD_GROWTH = 1.12
 
-// 최대 레벨 = hero_max_level_base + hero_max_level_per_star × 별(별 = min(copies − 1, hero_max_stars)).
-export function heroMaxLevel(copies: number, config: Config): number {
-  const stars = Math.min(Math.max(copies - 1, 0), cfgNum(config, 'hero_max_stars'))
-  return cfgNum(config, 'hero_max_level_base') + cfgNum(config, 'hero_max_level_per_star') * stars
+// 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
+export function heroMaxLevel(promotion: number, config: Config): number {
+  return cfgNum(config, 'hero_max_level_base') + cfgNum(config, 'hero_max_level_per_promotion') * promotion
+}
+
+// --- 영웅 승급 (개정 15 §1) — 앱 GameData.promote_cost와 같은 식 ---
+
+export const MAX_PROMOTION = 5 // player_heroes.promotion check와 같다
+
+// 승급 p → p+1에 드는 조각 = promote_shards의 p번째(0부터). 최대 승급이면 null.
+export function promoteCost(promotion: number, config: Config): number | null {
+  if (promotion >= MAX_PROMOTION) return null
+  const v = Number(String(config.promote_shards ?? '').split('|')[promotion])
+  if (!Number.isInteger(v) || v < 1) throw new Error("config 'promote_shards' is missing or not a list of positive integers")
+  return v
 }
 
 // level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.12^(L−1)), 개정 12: 골드만.

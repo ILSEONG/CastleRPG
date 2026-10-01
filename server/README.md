@@ -103,9 +103,11 @@ npm --prefix server test
 | `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 + `cleared` |
 | `POST /v1/building/upgrade {building}` | Bearer | 플레이어 응답 + `build: {id, finish}`. 모르는 건물은 400 `unknown_building`, 아니면 409 `max_level` / `keep_cap` / `prereq` / `builder_busy` / `not_enough`(이 순서로 검사) |
 | `POST /v1/test/build_now` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. 진행 중 건설의 끝나는 시각을 지금으로(같은 응답이 완료를 반영) |
-| `POST /v1/gacha {count}` | Bearer | 플레이어 응답 + `results: [{hero_id, grade, new, copies}]`. count는 1 또는 10. 골드가 모자라면 409 `not_enough_gold` |
+| `POST /v1/gacha {count}` | Bearer | 플레이어 응답 + `results: [{hero_id, grade, new, copies, shards}]`. count는 1 또는 10. 골드가 모자라면 409 `not_enough_gold` |
 | `POST /v1/deploy {deploy}` | Bearer | 플레이어 응답. deploy = [영웅 id 또는 null, …], 길이 = 슬롯 수, 보유한 영웅만, 중복 금지. 아니면 400 `bad_deploy` |
-| `POST /v1/hero/levelup {hero_id, count}` | Bearer | 플레이어 응답 + `level`. count는 1..100 정수. 보유하지 않은 영웅은 404 `not_owned`, 최대 레벨을 넘으면 409 `max_level`, 골드·식량이 모자라면 409 `not_enough` |
+| `POST /v1/hero/levelup {hero_id, count}` | Bearer | 플레이어 응답 + `level`. count는 1..100 정수. 보유하지 않은 영웅은 404 `not_owned`, 최대 레벨을 넘으면 409 `max_level`, 골드가 모자라면 409 `not_enough_gold` |
+| `POST /v1/hero/promote {hero_id}` | Bearer | 플레이어 응답 + `promotion`(새 승급). 보유하지 않은 영웅은 404 `not_owned`, 최대 승급(5)이면 409 `max_promotion`, 조각이 모자라면 409 `not_enough_shards`(이 순서로 검사) |
+| `POST /v1/test/shards {hero_id, shards}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. 보유 영웅의 조각 수를 정한다(서버 모집은 암호학적 난수라 통합 테스트가 중복을 만들 수 없다) |
 | `POST /v1/soldiers/merge {type, tier}` | Bearer | 플레이어 응답 + `merged: {type, tier}`(새 티어). 모르는 병종은 400 `unknown_soldier`, tier는 1 이상 정수(아니면 400). 최대 티어면 409 `max_tier`, `soldier_merge_count`마리보다 적으면 409 `not_enough` |
 | `POST /v1/soldiers/deploy {deploy}` | Bearer | 플레이어 응답. deploy = `{"병종:티어": 수}`(0 이상 정수). 키 형식·보유 이하·합계 ≤ 인구가 아니면 400 `bad_deploy`. 멱등 |
 | `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집·병사 생산 시각)를 당긴다 |
@@ -115,7 +117,7 @@ npm --prefix server test
 ```
 {server_now, player: {gold_tenths, gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq,
  buildings: {keep: {level}, gate: {level}, ..., lumber: {level, last_collect}, quarry: ..., farm: ..., barracks: {level, last_collect}, archery: ..., stable: ...},
- build: {id, finish} | null, population, heroes: {hero_id: {copies, level}}, deploy: [hero_id | null, ...],
+ build: {id, finish} | null, population, heroes: {hero_id: {copies, level, shards, promotion}}, deploy: [hero_id | null, ...],
  soldiers: {"infantry:1": n, ...}, soldier_deploy: {"infantry:1": n, ...}},
  merchant: {rates: {wood, stone, food}, next_change}}
 ```
@@ -154,8 +156,13 @@ npm --prefix server test
   - 응답 `deploy`의 길이는 슬롯 수(`keep_slot_tiers`의 성채 단계 값)다. 표에서 빠진 영웅은 `heroes`·`deploy`에서 거른다.
   - 모집: 가능 조건은 `floor(gold_tenths / 10) ≥ 비용`이고 `비용 × 10`을 뺀다. 장마다 등급(SSR `gacha_rate_ssr`, SR `gacha_rate_sr`, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다. 10연차에 SR 이상이 `gacha_10_min_sr`장보다 적으면 뒤에서부터 R을 SR로 바꾼다. 난수는 암호학적 난수(`randomBytes`)다.
   - 골드 차감·copies 증가·`economy_log`(`gacha`)는 version 가드 한 문장이다. 같은 순간 두 번 보내도 골드가 1회분이면 하나는 409다. 앱은 모집을 다시 보내지 않는다.
+- 영웅 승급(개정 15, 마이그레이션 009 `player_heroes.shards`·`promotion`, 기존 행은 조각 = copies − 1·승급 0)
+  - 모집에서 이미 가진 영웅이 다시 나오면 copies +1, 조각 +1이다(새 영웅은 조각 0).
+  - 승급 p → p+1에 조각 `promote_shards`의 p번째(`5|25|50|100|200`)를 쓴다. 최대 승급은 5다. 능력치 배율 `promote_mult`^p는 앱이 계산한다.
+  - 조각 차감·승급 +1·`economy_log`(`promote`)는 version 가드 한 문장이다. 같은 순간 두 번 보내도 조각이 1회분이면 하나는 409다. 앱은 승급을 다시 보내지 않는다.
+  - Neon: 009 마이그레이션(시드 전에도 승급 설정 기본값을 넣는다)과 시드(설정 `promote_shards`·`promote_mult`·`hero_max_level_per_promotion` 추가, `hero_star_bonus`·`hero_max_stars`·`hero_max_level_per_star` 삭제)를 새 서버와 같이 올린다.
 - 영웅 레벨업(개정 11, 마이그레이션 006 `player_heroes.level`)
-  - 최대 레벨 = `hero_max_level_base` + `hero_max_level_per_star` × 별(별 = min(copies − 1, `hero_max_stars`)).
+  - 최대 레벨 = `hero_max_level_base` + `hero_max_level_per_promotion` × 승급(개정 15).
   - L → L+1 비용: 골드(정수) = round(`levelup_gold_<등급>` × 1.12^(L−1)), 식량 = `levelup_food_<등급>` × L. count번이면 그 합이다. 골드는 `floor(gold_tenths / 10)`로 판정하고 × 10을 뺀다.
   - 골드·식량 차감, 레벨 증가, `economy_log`(`levelup`)는 version 가드 한 문장이다. 앱은 레벨업을 다시 보내지 않는다(실패하면 알림 + 상태 새로 받기).
   - Neon: 006 마이그레이션과 시드(레벨업 설정 9개)를 새 서버와 같이 올린다.

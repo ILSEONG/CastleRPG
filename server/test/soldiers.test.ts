@@ -185,7 +185,7 @@ test('마이그레이션 008: 007까지 적용된 DB의 기존 플레이어는 �
     await d.query('insert into player_state (player_id) values ($1)', [p.id])
     await d.query("insert into player_buildings (player_id, building, level, last_collect) values ($1, 'barracks', 3, to_timestamp($2)), ($1, 'lumber', 2, to_timestamp($2))", [p.id, T0 - 86400])
     const t0 = Date.now() / 1000
-    assert.deepEqual(await migrate(d), ['008_soldiers.sql'])
+    assert.deepEqual(await migrate(d), all.filter((f) => f >= '008'))
     const rows = await d.query('select building, level, extract(epoch from last_collect)::float8 as lc from player_buildings where player_id = $1 order by building', [p.id])
     assert.deepEqual(rows.map((r) => `${r.building}:${r.level}`), ['archery:1', 'barracks:3', 'lumber:2', 'stable:1'])
     const lc = Object.fromEntries(rows.map((r) => [r.building, r.lc]))

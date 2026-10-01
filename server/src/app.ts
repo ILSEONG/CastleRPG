@@ -60,11 +60,18 @@ interface Player {
   kill_seq: number
   res: Record<string, number>
   buildings: Record<string, { level: number; last_collect: number }>
-  heroes: Record<string, { copies: number; level: number }> // 영웅 id → 보유 수·레벨
+  heroes: Record<string, Hero> // 영웅 id → 보유 수·레벨·조각·승급(개정 15)
   deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
   build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
   soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
   soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
+}
+
+interface Hero {
+  copies: number
+  level: number
+  shards: number // 개정 15: 승급에 쓰는 조각
+  promotion: number // 0..R.MAX_PROMOTION
 }
 
 // 한 번의 원자적 변경. version이 읽은 값과 같을 때만 전부 적용된다.
@@ -76,8 +83,9 @@ interface Change {
   killSeq?: number // 새 처치 보고 번호
   res?: Record<string, number> // 자원 증감
   buildings?: Record<string, number> // 건물 → 새 last_collect
-  heroes?: Record<string, number> // 영웅 → copies 증가
+  heroes?: Record<string, number> // 영웅 → copies 증가(모집). 새 행은 조각 = 증가 − 1, 있던 행은 조각 += 증가(개정 15)
   heroLevels?: Record<string, number> // 영웅 → 레벨 증가
+  promote?: { id: string; cost: number } // 승급(개정 15): 조각 −cost, 승급 +1
   deploy?: (string | null)[] // 새 배치
   build?: { id: string; finish: number } | null // 새 일꾼 상태(개정 12)
   soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
@@ -102,7 +110,7 @@ const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
-  coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level))
+  coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level, 'shards', shards, 'promotion', promotion))
     from player_heroes where player_id = s.player_id), '{}'::json) as heroes
   from player_state s where s.player_id = $1`
 
@@ -234,7 +242,7 @@ export function createApp(opts: AppOptions) {
         continue
       }
       const heroes: Player['heroes'] = {}
-      for (const [k, v] of Object.entries(json(r.heroes) as Record<string, any>)) heroes[k] = { copies: Number(v.copies), level: Number(v.level) }
+      for (const [k, v] of Object.entries(json(r.heroes) as Record<string, any>)) heroes[k] = { copies: Number(v.copies), level: Number(v.level), shards: Number(v.shards), promotion: Number(v.promotion) }
       const deploy = json(r.deploy)
       const p: Player = {
         gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
@@ -281,7 +289,7 @@ export function createApp(opts: AppOptions) {
     // 영웅: 표에 있는 것만. 배치: 길이 = 슬롯 수, 보유하지 않은(표에서 빠진) 영웅은 null
     const known = new Set(game.heroes.map((h) => String(h.id)))
     const heroes: Player['heroes'] = {}
-    for (const [id, h] of Object.entries(p.heroes)) if (known.has(id)) heroes[id] = { copies: h.copies, level: h.level }
+    for (const [id, h] of Object.entries(p.heroes)) if (known.has(id)) heroes[id] = { copies: h.copies, level: h.level, shards: h.shards, promotion: h.promotion }
     const deploy = Array.from({ length: R.heroSlots(game.config, level(p, R.KEEP)) }, (_, i) => {
       const id = p.deploy[i]
       return typeof id === 'string' && Object.hasOwn(heroes, id) ? id : null
@@ -326,15 +334,20 @@ export function createApp(opts: AppOptions) {
         where x.value::int < 0 and player_soldiers.player_id = s.player_id and type = split_part(x.key, ':', 1) and tier = split_part(x.key, ':', 2)::int returning 1)`)
     }
     if (ch.heroes && Object.keys(ch.heroes).length) {
-      // from s: version 가드가 실패하면(s가 비면) 영웅도 안 늘어난다
-      ctes.push(`h as (insert into player_heroes (player_id, hero_id, copies)
-        select s.player_id, x.key, x.value::int from s, jsonb_each_text(${p(JSON.stringify(ch.heroes))}::jsonb) as x
-        on conflict (player_id, hero_id) do update set copies = player_heroes.copies + excluded.copies returning 1)`)
+      // from s: version 가드가 실패하면(s가 비면) 영웅도 안 늘어난다. 조각(개정 15): 새 영웅은 첫 장을 뺀 나머지, 있던 영웅은 전부
+      ctes.push(`h as (insert into player_heroes (player_id, hero_id, copies, shards)
+        select s.player_id, x.key, x.value::int, x.value::int - 1 from s, jsonb_each_text(${p(JSON.stringify(ch.heroes))}::jsonb) as x
+        on conflict (player_id, hero_id) do update set copies = player_heroes.copies + excluded.copies,
+          shards = player_heroes.shards + excluded.copies returning 1)`)
     }
     Object.entries(ch.heroLevels ?? {}).forEach(([id, d], i) => {
       ctes.push(`hl${i} as (update player_heroes set level = level + ${p(d)}::int
         where player_id = (select player_id from s) and hero_id = ${p(id)} returning 1)`)
     })
+    if (ch.promote) {
+      ctes.push(`hp as (update player_heroes set shards = shards - ${p(ch.promote.cost)}::int, promotion = promotion + 1
+        where player_id = (select player_id from s) and hero_id = ${p(ch.promote.id)} returning 1)`)
+    }
     Object.entries(ch.res ?? {}).forEach(([res, d], i) => {
       ctes.push(`r${i} as (update player_resources set amount = amount + ${p(bigint(d))}::bigint
         where player_id = (select player_id from s) and res = ${p(res)} returning 1)`)
@@ -359,8 +372,15 @@ export function createApp(opts: AppOptions) {
     if (ch.killSeq !== undefined) pl.kill_seq = ch.killSeq
     for (const [k, d] of Object.entries(ch.res ?? {})) pl.res[k] = (pl.res[k] ?? 0) + d
     for (const [k, t] of Object.entries(ch.buildings ?? {})) pl.buildings[k].last_collect = t
-    for (const [k, d] of Object.entries(ch.heroes ?? {})) pl.heroes[k] = { copies: (pl.heroes[k]?.copies ?? 0) + d, level: pl.heroes[k]?.level ?? 1 }
+    for (const [k, d] of Object.entries(ch.heroes ?? {})) {
+      const h = pl.heroes[k]
+      pl.heroes[k] = h ? { ...h, copies: h.copies + d, shards: h.shards + d } : { copies: d, level: 1, shards: d - 1, promotion: 0 }
+    }
     for (const [k, d] of Object.entries(ch.heroLevels ?? {})) pl.heroes[k].level += d
+    if (ch.promote) {
+      pl.heroes[ch.promote.id].shards -= ch.promote.cost
+      pl.heroes[ch.promote.id].promotion += 1
+    }
     if (ch.deploy !== undefined) pl.deploy = ch.deploy
     if (ch.build !== undefined) pl.build = ch.build
     for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
@@ -590,21 +610,23 @@ export function createApp(opts: AppOptions) {
   })
 
   // 모집(스펙 §3.6·§3.7): 비용(정수 골드)은 floor(gold_tenths / 10)로 판정하고 × 10을 뺀다(소수 부분은 남는다).
-  // 골드 차감·영웅 copies·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
+  // 골드 차감·영웅 copies·조각·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
+  // 개정 15: 이미 가진 영웅이 다시 나오면 copies +1, 조각 +1. 결과 항목의 shards = 그 장까지 반영한 조각.
   app.post('/v1/gacha', auth, async (c) => {
     const count = (await body(c)).count
     if (count !== 1 && count !== 10) throw new ApiError(400, 'bad_request', "'count' must be 1 or 10")
     return mutate(c, (p, g) => {
       const cost = R.cfgNum(g.config, count === 10 ? 'gacha_cost_10' : 'gacha_cost_1')
       if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `recruiting ${count} costs ${cost} gold`)
-      const owned: Record<string, number> = {}
-      for (const [id, h] of Object.entries(p.heroes)) owned[id] = h.copies
+      const owned: Record<string, { copies: number; shards: number }> = {}
+      for (const [id, h] of Object.entries(p.heroes)) owned[id] = { copies: h.copies, shards: h.shards }
       const add: Record<string, number> = {}
       const results = R.rollGacha(count, g.heroes, g.config, random, level(p, R.TAVERN)).map(({ id, grade }) => {
-        const isNew = !(owned[id] > 0)
-        owned[id] = (owned[id] ?? 0) + 1
+        const o = owned[id]
+        const isNew = !(o?.copies > 0)
+        owned[id] = isNew ? { copies: 1, shards: 0 } : { copies: o.copies + 1, shards: o.shards + 1 }
         add[id] = (add[id] ?? 0) + 1
-        return { hero_id: id, grade, new: isNew, copies: owned[id] }
+        return { hero_id: id, grade, new: isNew, copies: owned[id].copies, shards: owned[id].shards }
       })
       return {
         change: { goldTenths: -cost * 10, heroes: add, log: { kind: 'gacha', detail: { count, cost, gold_tenths: -cost * 10, results } } },
@@ -643,7 +665,7 @@ export function createApp(opts: AppOptions) {
       const own = Object.hasOwn(p.heroes, heroId) ? p.heroes[heroId] : undefined
       if (!def || !own) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
       const to = own.level + count
-      const max = R.heroMaxLevel(own.copies, g.config)
+      const max = R.heroMaxLevel(own.promotion, g.config) // 개정 15: 승급 기준
       if (to > max) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${max}`)
       const cost = R.levelupCost(String(def.grade), own.level, count, g.config)
       if (Math.floor(p.gold_tenths / 10) < cost.gold) {
@@ -655,6 +677,27 @@ export function createApp(opts: AppOptions) {
           log: { kind: 'levelup', detail: { hero_id: heroId, from: own.level, to, count, gold: cost.gold, gold_tenths: -cost.gold * 10 } },
         },
         extra: { level: to },
+      }
+    })
+  })
+
+  // 승급(개정 15 §2): 검사 순서 보유(404 not_owned) → 최대 승급(409 max_promotion) → 조각(409 not_enough_shards).
+  // 조각 −비용·승급 +1·economy_log promote는 version 가드 한 문장 — 같은 순간 두 번 보내도 조각이 1회분이면 하나는 409다.
+  app.post('/v1/hero/promote', auth, async (c) => {
+    const heroId = strField(await body(c), 'hero_id')
+    return mutate(c, (p, g) => {
+      const own = Object.hasOwn(p.heroes, heroId) && g.heroes.some((h) => h.id === heroId) ? p.heroes[heroId] : undefined
+      if (!own) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      const cost = R.promoteCost(own.promotion, g.config)
+      if (cost === null) throw new ApiError(409, 'max_promotion', `hero '${heroId}' is at the max promotion ${own.promotion}`)
+      if (own.shards < cost) throw new ApiError(409, 'not_enough_shards', `promotion ${own.promotion} -> ${own.promotion + 1} needs ${cost} shards, have ${own.shards}`)
+      const to = own.promotion + 1
+      return {
+        change: {
+          promote: { id: heroId, cost },
+          log: { kind: 'promote', detail: { hero_id: heroId, from: own.promotion, to, shards: cost, shards_before: own.shards, shards_after: own.shards - cost } },
+        },
+        extra: { promotion: to },
       }
     })
   })
@@ -719,6 +762,19 @@ export function createApp(opts: AppOptions) {
       await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
         update player_buildings set last_collect = last_collect - $2::float8 * interval '1 second'
         where player_id = (select player_id from s)`, [id, minutes * 60])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(개정 15): 보유 영웅의 조각 수를 정한다(서버 모집은 암호학적 난수라 중복을 만들 수 없다). 없는 영웅은 아무것도 안 바뀐다.
+    app.post('/v1/test/shards', auth, async (c) => {
+      const b = await body(c)
+      const heroId = strField(b, 'hero_id')
+      const shards = intField(b, 'shards', 0, MAX_INT4)
+      const id = c.get('playerId') as string
+      await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
+        update player_heroes set shards = $3 where player_id = (select player_id from s) and hero_id = $2`, [id, heroId, shards])
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))

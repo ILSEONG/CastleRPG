@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, GATE, KEEP, parseTiers } from './rules.ts'
+import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -71,11 +71,11 @@ export const TABLES: TableSpec[] = [
 // 서버·앱이 쓰는 설정 키(스펙 §2). 숫자 키는 숫자여야 하고, 목록 키는 `|` 구분 항목이 비지 않아야 한다.
 export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters', 'countdown_sec', 'result_sec', 'wave_gap_sec',
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
-  'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'hero_max_stars', 'hero_star_bonus',
+  'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
-  'hero_max_level_base', 'hero_max_level_per_star', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
+  'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
   'fever_kills', 'fever_sec', 'fever_spawn_mult']
-export const CONFIG_LIST = ['starter_heroes']
+export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
 export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'lab_atk_per_level',
@@ -191,9 +191,10 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
 }
 
 // 모집 설정(스펙 §3.6): 비용·10연차 보장 수는 0 이상 정수(소수 비용이면 BigInt(-cost × 10)가 throw → 500), 확률은 0..1이고
-// SSR + SR ≤ 1. 레벨업 설정(개정 11 §2.1): 비용·별당 최대 레벨은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상.
+// SSR + SR ≤ 1. 레벨업 설정(개정 11 §2.1): 비용·승급당 최대 레벨은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상.
+// 승급(개정 15): promote_shards는 MAX_PROMOTION개의 1 이상 정수, promote_mult는 1 이상.
 // 숫자가 아닌 값은 checkTable이 이미 알렸으므로 건너뛴다.
-const LEVELUP_INT_KEYS = ['hero_max_level_per_star', ...GRADES.map((g) => `levelup_gold_${g}`)]
+const LEVELUP_INT_KEYS = ['hero_max_level_per_promotion', ...GRADES.map((g) => `levelup_gold_${g}`)]
 function checkGacha(config: CsvRow[], errors: string[]) {
   const byKey = new Map(config.map((r) => [String(r.key), r]))
   const raw = (k: string) => String(byKey.get(k)?.value ?? '')
@@ -207,6 +208,12 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   if (base !== null && !(Number.isInteger(base) && base >= 1)) err('hero_max_level_base', `must be an integer of at least 1: '${raw('hero_max_level_base')}'`)
   const stat = num('hero_level_stat')
   if (stat !== null && !(stat >= 0)) err('hero_level_stat', `must be 0 or more: '${raw('hero_level_stat')}'`)
+  const mult = num('promote_mult')
+  if (mult !== null && !(mult >= 1)) err('promote_mult', `must be 1 or more: '${raw('promote_mult')}'`)
+  const shards = raw('promote_shards').split('|').map((x) => x.trim())
+  if (byKey.has('promote_shards') && !(shards.length === MAX_PROMOTION && shards.every((x) => /^\d+$/.test(x) && Number(x) >= 1))) {
+    err('promote_shards', `must be ${MAX_PROMOTION} integers of at least 1 separated by '|': '${raw('promote_shards')}'`)
+  }
   const inUnit = (v: number | null) => v !== null && v >= 0 && v <= 1
   for (const k of ['gacha_rate_ssr', 'gacha_rate_sr']) {
     if (num(k) !== null && !inUnit(num(k))) err(k, `must be in 0..1: '${raw(k)}'`)

@@ -98,7 +98,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       },
       build: null,
       population: 6, // 민가 1: pop_base
-      heroes: { hans: { copies: 1, level: 1 }, ella: { copies: 1, level: 1 }, dorik: { copies: 1, level: 1 }, nina: { copies: 1, level: 1 } },
+      heroes: Object.fromEntries(['hans', 'ella', 'dorik', 'nina'].map((h) => [h, { copies: 1, level: 1, shards: 0, promotion: 0 }])), // 개정 15: 조각·승급
       deploy: ['hans', 'ella', 'dorik', 'nina'],
       soldiers: {}, soldier_deploy: {}, // 개정 13
     },
@@ -411,7 +411,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 47) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3
+  assert.equal(Object.keys(g.config).length, 50) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3(옛 별 3개는 앱이 바뀔 때 지운다)
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })

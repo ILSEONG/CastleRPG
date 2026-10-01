@@ -175,3 +175,27 @@ test('동시 레벨업 2건(골드·식량은 1회분): 둘 다 같은 version�
     await S.close()
   }
 })
+
+test('동시 승급 2건(조각은 1회분): 둘 다 같은 version을 읽어도 한 번만 오른다 — 하나 200, 하나 409 not_enough_shards, 승급 1, 조각 0, 로그 1', async () => {
+  const b = barrier()
+  const S = await setup({ wrapQuery: b.wrap })
+  try {
+    S.clock.t = T0
+    const { token, id } = await S.login()
+    await S.db.query("update player_heroes set shards = 5 where player_id = $1 and hero_id = 'hans'", [id])
+    b.arm()
+    const [r1, r2] = await Promise.all([
+      S.req('POST', '/v1/hero/promote', { token, body: { hero_id: 'hans' } }),
+      S.req('POST', '/v1/hero/promote', { token, body: { hero_id: 'hans' } }),
+    ])
+    assert.equal(b.arrived(), 2, 'both requests read the same shards before either wrote')
+    assert.deepEqual([r1.status, r2.status].sort(), [200, 409])
+    assert.equal((r1.status === 409 ? r1 : r2).json.error, 'not_enough_shards')
+    const [h] = await S.db.query("select shards, promotion from player_heroes where player_id = $1 and hero_id = 'hans'", [id])
+    assert.deepEqual(h, { shards: 0, promotion: 1 })
+    const n = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'promote'", [id])
+    assert.equal(n[0].n, 1)
+  } finally {
+    await S.close()
+  }
+})

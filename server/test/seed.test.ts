@@ -270,7 +270,7 @@ test('마이그레이션 006: 005까지 적용된 DB의 보유 영웅은 level 1
   }
 })
 
-test('레벨업 설정 검증: 비용·별당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상', async () => {
+test('레벨업·승급 설정 검증: 비용·승급당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상, 승급 조각은 1 이상 정수 5개, 승급 배율은 1 이상', async () => {
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const dir = dataCopy()
   const withCfg = (key: string, value: string) => {
@@ -280,7 +280,12 @@ test('레벨업 설정 검증: 비용·별당 상한은 0 이상 정수, 최대 
   const cases: [string, string, RegExp][] = [
     ['hero_max_level_base', '0', /hero_max_level_base must be an integer of at least 1: '0'/],
     ['hero_max_level_base', '20.5', /hero_max_level_base must be an integer of at least 1/],
-    ['hero_max_level_per_star', '-1', /hero_max_level_per_star must be a non-negative integer: '-1'/],
+    ['hero_max_level_per_promotion', '-1', /hero_max_level_per_promotion must be a non-negative integer: '-1'/],
+    ['promote_shards', '5|25|50|100', /promote_shards must be 5 integers of at least 1 separated by '\|': '5\|25\|50\|100'/],
+    ['promote_shards', '5|25|50|100|0', /promote_shards must be 5 integers/],
+    ['promote_shards', '5|25|x|100|200', /promote_shards must be 5 integers/],
+    ['promote_shards', '5|25|50|100|200|400', /promote_shards must be 5 integers/],
+    ['promote_mult', '0.9', /promote_mult must be 1 or more: '0\.9'/],
     ['hero_level_stat', '-0.01', /hero_level_stat must be 0 or more: '-0\.01'/],
     ['levelup_gold_SSR', '1.5', /levelup_gold_SSR must be a non-negative integer: '1\.5'/],
     ['levelup_gold_R', '-10', /levelup_gold_R must be a non-negative integer: '-10'/],
@@ -297,4 +302,32 @@ test('레벨업 설정 검증: 비용·별당 상한은 0 이상 정수, 최대 
   await assert.rejects(readTables(dir), /missing key 'levelup_gold_SR'/)
   await readTables(withCfg('levelup_gold_R', '0')) // 0원·0배율은 받는다
   await readTables(withCfg('hero_level_stat', '0'))
+  await readTables(withCfg('promote_mult', '1'))
+  for (const k of ['promote_shards', 'promote_mult', 'hero_max_level_per_promotion']) {
+    writeFileSync(join(dir, 'config.csv'), cfg.replace(new RegExp(`^${k},.*\\n`, 'm'), ''))
+    await assert.rejects(readTables(dir), new RegExp(`missing key '${k}'`))
+  }
+})
+
+test('마이그레이션 009: 008까지 적용된 DB의 보유 영웅은 조각 = copies − 1, 승급 0. 조각 ≥ 0, 승급 0..5 제약. 시드 전에도 승급 설정 기본값', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  for (const f of ALL_MIGRATIONS.filter((f) => f < '009')) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, dir)
+    const [p] = await d.query("insert into players (device_id) values ('mig-009-device-0001') returning id")
+    await d.query('insert into player_state (player_id) values ($1)', [p.id])
+    await d.query("insert into player_heroes (player_id, hero_id, copies, level) values ($1, 'arteon', 4, 12), ($1, 'hans', 1, 3)", [p.id])
+    assert.deepEqual(await migrate(d), ALL_MIGRATIONS.filter((f) => f >= '009'))
+    const h = await d.query('select hero_id, copies, level, shards, promotion from player_heroes where player_id = $1 order by hero_id', [p.id])
+    assert.deepEqual(h.map((r) => `${r.hero_id}:${r.copies}:${r.level}:${r.shards}:${r.promotion}`), ['arteon:4:12:3:0', 'hans:1:3:0:0'])
+    await assert.rejects(d.query("update player_heroes set shards = -1 where player_id = $1 and hero_id = 'hans'", [p.id]))
+    await assert.rejects(d.query("update player_heroes set promotion = 6 where player_id = $1 and hero_id = 'hans'", [p.id]))
+    await d.query("update player_heroes set promotion = 5 where player_id = $1 and hero_id = 'hans'", [p.id])
+    const cfg = await d.query("select key, value from game_config where key in ('promote_shards', 'promote_mult', 'hero_max_level_per_promotion') order by key")
+    assert.deepEqual(cfg.map((r) => `${r.key}=${r.value}`), ['hero_max_level_per_promotion=10', 'promote_mult=1.5', 'promote_shards=5|25|50|100|200'])
+  } finally {
+    await d.close()
+  }
 })
