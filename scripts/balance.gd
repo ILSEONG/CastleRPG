@@ -12,13 +12,28 @@ const SPAWN_SPACING_SEC := 0.5
 const MONSTER := {
 	"grunt": {
 		"hp": 60.0, "atk": 10.0, "speed": 2.5, "range": 1.2, "atk_interval": 1.0, "aggro": 6.0,
-		"scale": 1.0,
+		"scale": 1.0, "gold": 2,
 	},
 	"epic_boss": {
 		"hp": 400.0, "atk": 20.0, "speed": 1.8, "range": 1.8, "atk_interval": 1.2, "aggro": 8.0,
-		"scale": 1.6,
+		"scale": 1.6, "gold": 50,
 	},
 }
+
+# --- 경제 (개정 7) ---
+const RESOURCES := {
+	"wood": {"name": "목재", "building": "lumber", "per_min": 10, "price": 1},
+	"stone": {"name": "석재", "building": "quarry", "per_min": 5, "price": 2},
+	"food": {"name": "식량", "building": "farm", "per_min": 10, "price": 1},
+}
+const ACCUM_CAP_MIN := 720          # 축적 상한(분) = 12시간
+const BADGE_MIN := 5                # 이 분 이상 쌓이면 말풍선
+const MERCHANT_JACKPOT_P := 0.05
+const MERCHANT_JACKPOT_RATE := 2.0
+const MERCHANT_RATE_MIN := 0.5
+const MERCHANT_RATE_MAX := 1.5
+const MERCHANT_RATE_STEP := 0.1
+const MERCHANT_LOW_HIGH_RATIO := 3.0  # P(최저) : P(최고)
 
 # --- 맵·성 기하 (개정 2) ---
 const TILE := 2.0                     # 격자 타일 한 칸 (미터)

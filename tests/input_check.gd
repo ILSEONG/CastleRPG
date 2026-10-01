@@ -27,6 +27,8 @@ var _heroes: Array = []
 
 func _ready() -> void:
 	OS.add_logger(_errors)
+	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
+	Economy.reset(Time.get_unix_time_from_system())
 	get_window().size = Vector2i(360, 640)
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)

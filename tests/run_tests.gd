@@ -47,6 +47,11 @@ func _init() -> void:
 	test_mesh_kit()
 	test_castle_parts()
 	test_town_recipes()
+	test_economy_pending()
+	test_economy_collect()
+	test_economy_merchant()
+	test_economy_sell()
+	test_economy_save()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -667,3 +672,115 @@ func test_town_recipes() -> void:
 	for f in [TownKitScript.tree_pine, TownKitScript.tree_round, TownKitScript.bush, TownKitScript.rock_cluster, TownKitScript.mountain]:
 		var m: ArrayMesh = f.call(rng)
 		check(m.get_surface_count() == 1 and m.get_aabb().position.y > -0.3, "%s is one surface resting near the ground" % f.get_method())
+
+
+# --- 경제 (개정 7) ---
+const EconomyScript := preload("res://scripts/economy.gd")
+const ECON_TMP := "user://test_economy_save.json"
+
+
+func _econ(now: float):
+	var e = EconomyScript.new()
+	e.save_path = ""
+	e.reset(now)
+	return e
+
+
+func test_economy_pending() -> void:
+	check(EconomyScript.rate_per_min("wood", 1) == 10 and EconomyScript.rate_per_min("stone", 3) == 15, "rate = per_min x level")
+	check(EconomyScript.pending_amount("wood", 1, 59.9) == 0, "pending: under a minute is 0")
+	check(EconomyScript.pending_amount("wood", 1, 119.9) == 10, "pending floors minutes")
+	check(EconomyScript.pending_amount("stone", 2, 600.0) == 100, "pending scales with level")
+	check(EconomyScript.pending_amount("wood", 1, 720 * 60.0) == 7200 and EconomyScript.pending_amount("wood", 1, 99999999.0) == 7200, "pending capped at 720 min")
+	check(EconomyScript.pending_amount("wood", 1, -500.0) == 0, "pending: negative elapsed is 0")
+	check(EconomyScript.res_of("lumber") == "wood" and EconomyScript.res_of("quarry") == "stone" and EconomyScript.res_of("farm") == "food" and EconomyScript.res_of("keep") == "", "res_of maps resource buildings only")
+
+
+func test_economy_collect() -> void:
+	var e = _econ(1000.0)
+	e.last_collect.lumber = 1000.0 - 150.0  # 2분 30초
+	check(e.collect("lumber", 1000.0) == 20 and e.res.wood == 20, "collect adds 2 min of wood")
+	check(is_equal_approx(e.last_collect.lumber, 1000.0 - 30.0), "collect keeps the leftover 30 s: %s" % e.last_collect.lumber)
+	check(e.collect("lumber", 1000.0) == 0 and is_equal_approx(e.last_collect.lumber, 970.0) and e.res.wood == 20, "collect with nothing pending changes nothing")
+	e.last_collect.quarry = 1000.0 - 800 * 60.0  # 상한 초과
+	check(e.collect("quarry", 1000.0) == 720 * 5 and e.last_collect.quarry == 1000.0, "collect at the cap snaps last_collect to now")
+	e.last_collect.farm = 5000.0  # 시계를 되돌림
+	check(e.collect("farm", 1000.0) == 0 and e.last_collect.farm == 5000.0, "collect with negative elapsed gives 0 and changes nothing")
+	e.last_collect.farm = 1000.0 - 4 * 60.0
+	check(not e.show_badge("farm", 1000.0), "no badge under 5 minutes")
+	e.last_collect.farm = 1000.0 - 5 * 60.0
+	check(e.show_badge("farm", 1000.0) and not e.show_badge("keep", 1000.0), "badge at 5 minutes, never on non-resource buildings")
+	e.free()
+
+
+func test_economy_merchant() -> void:
+	var h := 480000
+	check(EconomyScript.merchant_rate(h) == EconomyScript.merchant_rate(EconomyScript.hour_index(h * 3600.0 + 3599.0)), "rate is the same within an hour slot")
+	check(EconomyScript.hour_index(7199.9) == 1 and EconomyScript.hour_index(7200.0) == 2, "hour_index floors on the hour")
+	var allowed := [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 2.0]
+	var counts := {}
+	var n := 200000
+	var bad := 0
+	for i in n:
+		var r := EconomyScript.merchant_rate(i)
+		if not allowed.has(r):
+			bad += 1
+		counts[r] = counts.get(r, 0) + 1
+	check(bad == 0, "every rate is one of the 12 exact values (%d off)" % bad)
+	var jack: float = counts.get(2.0, 0) / float(n)
+	check(absf(jack - 0.05) <= 0.005, "jackpot share %.4f is 5%% +- 0.5%%" % jack)
+	var ratio: float = counts.get(0.5, 0) / float(maxi(1, counts.get(1.5, 0)))
+	check(absf(ratio - 3.0) <= 0.3, "P(0.5)/P(1.5) = %.2f is 3 +- 0.3" % ratio)
+	var e = _econ(3600.0 * h + 100.0)
+	check(is_equal_approx(e.seconds_to_next_rate(3600.0 * h + 100.0), 3500.0) and e.current_rate(3600.0 * h + 100.0) == EconomyScript.merchant_rate(h), "seconds_to_next_rate / current_rate follow the hour slot")
+	e.free()
+
+
+func test_economy_sell() -> void:
+	check(EconomyScript.sell_value("wood", 7, 0.5) == 3 and EconomyScript.sell_value("stone", 7, 1.3) == 18 and EconomyScript.sell_value("food", 100, 1.1) == 110 and EconomyScript.sell_value("wood", 10, 2.0) == 20, "sell_value floors (no float error)")
+	var now := 3600.0 * 480000.0
+	var e = _econ(now)
+	var rate: float = e.current_rate(now)
+	e.res.wood = 40
+	e.res.stone = 9
+	e.res.food = 13
+	var g: int = e.sell("wood", now)
+	check(g == EconomyScript.sell_value("wood", 40, rate) and e.res.wood == 0 and e.gold == g, "sell zeroes the resource and adds gold")
+	var before: int = e.gold
+	var g2: int = e.sell_all(now)
+	check(e.res.stone == 0 and e.res.food == 0 and e.gold == before + g2 and g2 == EconomyScript.sell_value("stone", 9, rate) + EconomyScript.sell_value("food", 13, rate), "sell_all sells everything")
+	e.add_gold(5)
+	check(e.gold == before + g2 + 5, "add_gold")
+	e.free()
+
+
+func test_economy_save() -> void:
+	var now := 1.8e9
+	var e = _econ(now)
+	e.save_path = ECON_TMP
+	e.gold = 77
+	e.res.wood = 12
+	e.last_collect.lumber = now - 90.5
+	e.levels.farm = 3
+	e.save()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(now + 5.0)
+	check(e2.gold == 77 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
+	for junk in ["{not json", "[1,2]", "{\"version\":1,\"gold\":5}", "{\"version\":2,\"gold\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
+		var f := FileAccess.open(ECON_TMP, FileAccess.WRITE)
+		f.store_string(junk)
+		f.close()
+		e2.gold = 99
+		e2.load_save(now)
+		check(e2.gold == 0 and e2.res.wood == 0 and e2.levels.lumber == 1 and e2.last_collect.lumber == now, "corrupt save (%s) falls back to defaults" % junk)
+	DirAccess.remove_absolute(ECON_TMP)
+	e2.gold = 99
+	e2.load_save(now)
+	check(e2.gold == 0, "missing save file gives defaults")
+	e2.save_path = ""
+	e2.gold = 5
+	e2.save()
+	check(not FileAccess.file_exists(ECON_TMP), "save_path empty writes no file")
+	e.free()
+	e2.free()

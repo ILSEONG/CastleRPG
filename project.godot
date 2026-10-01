@@ -13,6 +13,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 
 GameState="*res://scripts/game_state.gd"
+Economy="*res://scripts/economy.gd"
 
 [display]
 

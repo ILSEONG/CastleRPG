@@ -23,7 +23,9 @@ var _g  # 지금 사례의 몬스터. 멤버로 둔다 — 지역 변수를 람�
 
 func _ready() -> void:
 	OS.add_logger(_errors)
-	_main = preload("res://scenes/main.tscn").instantiate()
+	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
+	Economy.reset(Time.get_unix_time_from_system())
+	_main =preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(5)
 	for c in _main.get_children():
@@ -204,6 +206,23 @@ func _run() -> void:
 	var hd := Formation.flat_distance(warrior.global_position, hpost)
 	_check(not through_wall and hd < 0.2, "(i) warrior left beside the castle corner walks home through the gates, not the corner",
 		"crossed the wall band=%s d=%.2f pos=%s" % [through_wall, hd, warrior.global_position])
+
+	# (j) 스포너가 만든 grunt를 처치하면 골드 +2, 리필로 사라지면 골드 없음
+	_clear_monsters()
+	await _frames(1)
+	var spawner
+	for c in _main.get_children():
+		if c.get_script() == SpawnerScript:
+			spawner = c
+	var gold0: int = Economy.gold
+	spawner._spawn({"kind": "grunt", "side": 0, "time": 0.0})
+	var kid: Node = _main.get_child(_main.get_child_count() - 1)
+	kid.take_damage(1.0e6)
+	_check(Economy.gold == gold0 + Balance.MONSTER.grunt.gold and Balance.MONSTER.grunt.gold == 2, "(j) killing a grunt gives 2 gold", "gold %d -> %d" % [gold0, Economy.gold])
+	spawner._spawn({"kind": "grunt", "side": 0, "time": 0.0})
+	GameState.refill()
+	await _frames(1)
+	_check(Economy.gold == gold0 + 2, "(j) a monster removed by refill gives no gold", "gold %d" % Economy.gold)
 
 
 func _alive(m) -> bool:

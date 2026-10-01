@@ -47,8 +47,11 @@ func _ready() -> void:
 	if OS.is_debug_build():
 		_connect_dev_log()
 	if _auto_stage_requested():
+		Economy.save_path = ""  # 개발 실행은 실제 저장 파일을 건드리지 않는다
 		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
+	if OS.is_debug_build() and _flag_requested("econ-demo"):
+		_econ_demo()
 
 
 func _build_environment() -> void:
@@ -97,8 +100,26 @@ func _connect_dev_log() -> void:
 
 
 func _auto_stage_requested() -> bool:
-	if OS.get_cmdline_user_args().has("--auto-stage"):
+	return _flag_requested("auto-stage")
+
+
+## 네이티브는 유저 인자 `-- --flag`, 웹은 URL `?flag`.
+func _flag_requested(flag: String) -> bool:
+	if OS.get_cmdline_user_args().has("--" + flag):
 		return true
 	if OS.has_feature("web"):
-		return str(JavaScriptBridge.eval("window.location.search")).contains("auto-stage")
+		return str(JavaScriptBridge.eval("window.location.search")).contains(flag)
 	return false
+
+
+## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 1234.
+func _econ_demo() -> void:
+	var now := Time.get_unix_time_from_system()
+	Economy.save_path = ""
+	Economy.reset(now)
+	for b in Economy.last_collect:
+		Economy.last_collect[b] = now - 1800.0
+	for id in Economy.res:
+		Economy.res[id] = 500
+	Economy.gold = 1234
+	Economy.changed.emit()

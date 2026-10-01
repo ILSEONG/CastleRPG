@@ -67,5 +67,6 @@ func _spawn(ev: Dictionary) -> void:
 	_live += 1
 
 
-func _on_monster_died(_m) -> void:
+func _on_monster_died(m) -> void:
 	_live = maxi(0, _live - 1)
+	Economy.add_gold(int(Balance.MONSTER[m.kind].gold))  # 리필 제거(_vanish)는 died를 안 내므로 골드 없음
