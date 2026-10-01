@@ -27,6 +27,7 @@ const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
+const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
@@ -97,8 +98,10 @@ func _build_world() -> void:
 	picker.recruit = recruit
 	var hero_panel = HeroPanelScript.new()
 	add_child(hero_panel)
-	var tabs = TabBarScript.new()  # 하단 탭 바(개정 11): 성·영웅·모집·상인
-	tabs.windows = {"hero": hero_panel, "recruit": recruit, "merchant": panel}
+	var soldier_panel = SoldierPanelScript.new()
+	add_child(soldier_panel)
+	var tabs = TabBarScript.new()  # 하단 탭 바(개정 13 §7.1): 영웅·병사·모집·상인
+	tabs.windows = {"hero": hero_panel, "soldier": soldier_panel, "recruit": recruit, "merchant": panel}
 	add_child(tabs)
 	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별·막사·연구소 반영
 	Economy.roster_changed.connect(_on_roster_changed)

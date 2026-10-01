@@ -1,22 +1,23 @@
 extends CanvasLayer
-## 하단 탭 바(스펙 §2.3, 방치형 RPG의 하단 고정 내비게이션): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 4개 —
-## 성(모든 창을 닫고 전장으로, 기본 선택)·영웅(영웅 목록)·모집(주점 창)·상인(거래 창). 탭마다 각진 아이콘 + 글자.
-## 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다(visibility_changed) —
-## 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 성으로 돌아간다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
+## 하단 탭 바(스펙 §2.3, 개정 13 §7.1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 4개 —
+## 영웅(영웅 목록)·병사(병사 시트)·모집(주점 창)·상인(거래 창). [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
+## 탭마다 각진 아이콘 + 글자. 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다
+## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
 ## 층 3: 창(층 2)의 어두운 배경 위라 창이 열려 있어도 탭 바는 계속 누를 수 있다(창의 연 직후 보호 시간에는 누름이 버려진다).
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const UiWindow := preload("res://scripts/ui_window.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TABS := [["castle", "성"], ["hero", "영웅"], ["recruit", "모집"], ["merchant", "상인"]]
+const TABS := [["hero", "영웅"], ["soldier", "병사"], ["recruit", "모집"], ["merchant", "상인"]]
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0
 
 var windows := {}  # 탭 id → 창(ui_window). main이 add_child 전에 넣는다
-var selected := "castle"
+var selected := ""  # 열린 창의 탭(없으면 "")
 var buttons := {}  # 탭 id → Button
 
 var _bar: Control
@@ -51,21 +52,21 @@ func _ready() -> void:
 	_refresh()
 
 
-## 탭 누름: 그 탭의 창이 닫혀 있으면 다른 창을 모두 닫고 연다. 열려 있으면(또는 성) 모두 닫는다.
+## 탭 누름: 그 탭의 창이 닫혀 있으면 다른 창(건물 창 등 탭 밖 창 포함)을 모두 닫고 연다. 열려 있으면 모두 닫는다.
 func press(id: String) -> void:
 	var w = windows.get(id)
 	var open_it: bool = w != null and not w.is_open()
-	for k in windows:
-		if windows[k].is_open():
-			windows[k].close()
+	for x in get_tree().get_nodes_in_group(UiWindow.GROUP):
+		if x.is_open():
+			x.close()
 	if open_it:
 		w.open()
 	_refresh()
 
 
-## 선택 = 열린 창의 탭(없으면 성). 선택은 호박색 + RAISE px 위, 나머지는 강철색.
+## 선택 = 열린 창의 탭(없으면 ""). 선택은 호박색 + RAISE px 위, 나머지는 강철색.
 func _refresh() -> void:
-	selected = "castle"
+	selected = ""
 	for id in windows:
 		if windows[id].is_open():
 			selected = id
@@ -100,16 +101,21 @@ static func draw_shapes(ci: CanvasItem, shapes: Array, center: Vector2, size_px:
 			ci.draw_polyline(pts, IconsScript.OUTLINE, maxf(1.0, size_px / 30.0))
 
 
-## 탭 아이콘(각진 평면 로우폴리): 성 = 총안 탑 + 문, 영웅 = 방패(밝은 왼쪽 면), 모집 = 맥주잔, 상인 = 금화(자원 아이콘).
+## 탭 아이콘(각진 평면 로우폴리): 영웅 = 방패·병사 = 쇠 투구(둘 다 밝은 왼쪽 면), 모집 = 맥주잔, 상인 = 금화(자원 아이콘).
 static func tab_shapes(id: String) -> Array:
 	match id:
-		"castle":
+		"soldier":  # 쇠 투구: 각진 돔(왼쪽 면 밝게) + 챙 + 코 가리개 + 눈 틈 둘
+			var dome := [Vector2(-0.38, 0.28), Vector2(-0.36, -0.08), Vector2(-0.22, -0.34), Vector2(0.0, -0.44), Vector2(0.22, -0.34),
+				Vector2(0.36, -0.08), Vector2(0.38, 0.28)]
+			var slit := Color(0.2, 0.22, 0.28)
 			return [
-				[[Vector2(-0.42, 0.44), Vector2(-0.42, -0.4), Vector2(-0.24, -0.4), Vector2(-0.24, -0.24), Vector2(-0.09, -0.24), Vector2(-0.09, -0.4),
-					Vector2(0.09, -0.4), Vector2(0.09, -0.24), Vector2(0.24, -0.24), Vector2(0.24, -0.4), Vector2(0.42, -0.4), Vector2(0.42, 0.44)],
-					Color(0.72, 0.72, 0.76), true],
-				[[Vector2(-0.42, 0.44), Vector2(-0.42, -0.24), Vector2(0.0, -0.24), Vector2(0.0, 0.44)], Color(0.84, 0.84, 0.88), false],
-				[[Vector2(-0.12, 0.44), Vector2(-0.12, 0.14), Vector2(0.0, 0.02), Vector2(0.12, 0.14), Vector2(0.12, 0.44)], Color(0.36, 0.25, 0.16), true],
+				[dome, Color(0.56, 0.6, 0.68), true],
+				[[Vector2(-0.38, 0.28), Vector2(-0.36, -0.08), Vector2(-0.22, -0.34), Vector2(0.0, -0.44), Vector2(0.0, 0.28)], Color(0.78, 0.82, 0.88), false],
+				[[Vector2(-0.32, 0.02), Vector2(-0.08, 0.02), Vector2(-0.08, 0.13), Vector2(-0.32, 0.13)], slit, false],
+				[[Vector2(0.08, 0.02), Vector2(0.32, 0.02), Vector2(0.32, 0.13), Vector2(0.08, 0.13)], slit, false],
+				[[Vector2(-0.05, -0.04), Vector2(0.05, -0.04), Vector2(0.05, 0.36), Vector2(-0.05, 0.36)], Color(0.44, 0.48, 0.56), true],
+				[[Vector2(-0.46, 0.28), Vector2(0.46, 0.28), Vector2(0.4, 0.42), Vector2(-0.4, 0.42)], Color(0.46, 0.5, 0.58), true],
+				[dome, Color(0, 0, 0, 0), true],
 			]
 		"hero":
 			var rim := [Vector2(-0.38, -0.4), Vector2(0.38, -0.4), Vector2(0.38, 0.02), Vector2(0.0, 0.46), Vector2(-0.38, 0.02)]

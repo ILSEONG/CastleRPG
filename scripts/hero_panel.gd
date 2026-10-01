@@ -14,8 +14,6 @@ const Skills := preload("res://scripts/skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 
-const SHEET_TOP := 76  # 상단 칩 줄(16..64) 아래
-const SHEET_SIDE := 8
 const SLOT_SIZE := Vector2(140, 150)
 const CARD_SIZE := Vector2(200, 240)
 const GRID_COLUMNS := 3
@@ -78,13 +76,9 @@ func _ready() -> void:
 	Economy.leveled.connect(_on_leveled)
 
 
-## 시트: 상단 칩 줄 아래부터 탭 바 위까지(크기는 고정 — 내용이 바뀌어도 다시 맞추지 않는다).
+## 시트(ui_window._fit_sheet): 내용이 바뀌어도 크기를 다시 맞추지 않는다.
 func _fit() -> void:
-	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dialog.offset_left = SHEET_SIDE
-	dialog.offset_right = -SHEET_SIDE
-	dialog.offset_top = SHEET_TOP
-	dialog.offset_bottom = -(HudScript.TAB_BAR_H + 8)
+	_fit_sheet()
 
 
 func _build_list() -> void:

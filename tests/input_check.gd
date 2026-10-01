@@ -368,16 +368,17 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(recruit.confirm_button.get_global_rect().get_center())
 	_check(recruit.is_open() and not recruit.is_showing_results() and recruit.one_button.disabled, "(s) [확인] goes back; [1회] is off at 0 gold", "")
 
-	# (t) 하단 탭 바(개정 11): 탭 4개(성·영웅·모집·상인), 건물 탭으로 연 모집 창도 [모집] 선택(올라옴). 창이 열린 동안 끌기는 카메라를
-	#     못 움직이고, 탭 바는 창 위에서도 동작한다: [상인] → 모집 창 닫고 거래 창, 같은 탭 다시 → 닫고 [성], [모집] 열기, [성] 모두 닫기
+	# (t) 하단 탭 바(개정 13 §7.1): 탭 4개(영웅·병사·모집·상인, [성] 없음), 건물 탭으로 연 모집 창도 [모집] 선택(올라옴). 창이 열린 동안
+	#     끌기는 카메라를 못 움직이고, 탭 바는 창 위에서도 동작한다: [상인] → 모집 창 닫고 거래 창, 같은 탭 다시 → 닫고 선택 없음,
+	#     [병사] → "병사 준비 중" 빈 시트, 다시 → 닫힘
 	var merchant: Node = null
 	for c in _main.get_children():
 		if c.get_script() == preload("res://scripts/merchant_panel.gd"):
 			merchant = c
 	var bar_rect: Rect2 = tabs._bar.get_global_rect()
 	var big: Rect2 = hud._button.get_global_rect()
-	_check(tabs.buttons.keys() == ["castle", "hero", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
-		"(t) the tab bar has 성·영웅·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
+	_check(tabs.buttons.keys() == ["hero", "soldier", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
+		"(t) the tab bar has 영웅·병사·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
 		and big.end.x > 680.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
@@ -395,17 +396,24 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(_tab_px(tabs, "merchant"))
 	_check(not recruit.is_open() and merchant.is_open() and tabs.selected == "merchant", "(t) [상인] works over the open recruit window: it closes it and opens the trade window",
 		"recruit=%s merchant=%s selected=%s" % [recruit.is_open(), merchant.is_open(), tabs.selected])
-	await _tap(_tab_px(tabs, "castle"))  # 연 직후 보호 시간: 탭 바 누름도 버린다
+	await _tap(_tab_px(tabs, "hero"))  # 연 직후 보호 시간: 탭 바 누름도 버린다
 	_check(merchant.is_open(), "(t) a tab press right after a window opens is ignored too", "")
 	await _guard_wait()
 	await _tap(_tab_px(tabs, "merchant"))
-	_check(not merchant.is_open() and tabs.selected == "castle", "(t) the selected tab again closes its window and [성] is selected", "selected=%s" % tabs.selected)
+	_check(not merchant.is_open() and tabs.selected == "" and _picker.selected == null, "(t) the selected tab again closes its window and no tab is selected (battlefield)", "selected=%s" % tabs.selected)
 	await _tap(_tab_px(tabs, "recruit"))
 	_check(recruit.is_open() and tabs.selected == "recruit", "(t) [모집] opens the recruit window", "")
 	await _guard_wait()
-	await _tap(_tab_px(tabs, "castle"))
-	_check(not recruit.is_open() and not merchant.is_open() and not heroes_win.is_open() and tabs.selected == "castle" and _picker.selected == null,
-		"(t) [성] closes every window and the press does not reach the battlefield", "selected=%s" % tabs.selected)
+	var soldiers: Node = tabs.windows.soldier
+	await _tap(_tab_px(tabs, "soldier"))
+	var sheet0: Rect2 = soldiers.dialog.get_global_rect()
+	_check(soldiers.is_open() and not recruit.is_open() and tabs.selected == "soldier" and soldiers.content.get_child(1).text == soldiers.EMPTY_TEXT
+		and sheet0.end.y <= bar_rect.position.y and sheet0.size.y > 1000.0, "(t) [병사] closes the recruit window and opens the empty soldier sheet (병사 준비 중) above the tab bar",
+		"open=%s selected=%s sheet=%s" % [soldiers.is_open(), tabs.selected, sheet0])
+	await _guard_wait()
+	await _tap(_tab_px(tabs, "soldier"))
+	_check(not recruit.is_open() and not merchant.is_open() and not heroes_win.is_open() and not soldiers.is_open() and tabs.selected == "" and _picker.selected == null,
+		"(t) [병사] again closes it; every window is closed and the press does not reach the battlefield", "selected=%s" % tabs.selected)
 
 	# (t) 탭 바 위 마우스 휠은 카메라 줌으로 새지 않는다
 	var zoom0 := _camera.size
@@ -569,7 +577,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) [닫기] returns to the list (guarded); the card shows Lv 5", "")
 	await _guard_wait()
 	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 시트 바깥 배경
-	_check(not heroes_win.is_open() and tabs.selected == "castle", "(x) a backdrop tap above the sheet closes it and [성] is selected", "")
+	_check(not heroes_win.is_open() and tabs.selected == "", "(x) a backdrop tap above the sheet closes it and no tab is selected", "")
 
 	# (y) 늦게 온 모집 결과(온라인): 다른 창이 열려 있으면 그 위로 모집 창을 열지 않고 알림, 다음에 주점 창을 열 때 보여 준다.
 	#     아무 창도 없으면 모집 창을 열어 보여 준다.
