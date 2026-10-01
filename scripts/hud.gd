@@ -6,12 +6,14 @@ const PANEL_BG := Color(1, 1, 1, 0.72)
 const BAR_BG := Color(0, 0, 0, 0.12)
 const ACCENT := Color(0.98, 0.70, 0.20)
 const RADIUS := 14
+const IconsScript := preload("res://scripts/icons.gd")
 
 var _stage_label: Label
 var _castle_bar: ProgressBar
 var _gate_bars: Array = []
 var _center: Label
 var _button: Button
+var _chips := {}  # 아이콘 kind(gold·wood·stone·food) → 숫자 Label
 
 
 func _ready() -> void:
@@ -20,6 +22,8 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
+	_build_chips(root)
+
 	var top := VBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_theme_constant_override("separation", 8)
@@ -27,9 +31,9 @@ func _ready() -> void:
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	panel.offset_left = 16
 	panel.offset_right = -16
-	panel.offset_top = 16
+	panel.offset_top = 76  # 상단 칩 줄(16..64) 아래
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", _round(PANEL_BG, RADIUS, 12))
+	panel.add_theme_stylebox_override("panel", round_box(PANEL_BG, RADIUS, 12))
 	root.add_child(panel)
 	panel.add_child(top)
 	_stage_label = Label.new()
@@ -67,10 +71,10 @@ func _ready() -> void:
 	_button.offset_bottom = -32
 	_button.add_theme_font_size_override("font_size", 28)
 	_button.pressed.connect(_on_button)
-	_button.add_theme_stylebox_override("normal", _round(ACCENT, RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("hover", _round(ACCENT.lightened(0.12), RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("pressed", _round(ACCENT.darkened(0.15), RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("disabled", _round(Color(0.6, 0.62, 0.66, 0.8), RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("normal", round_box(ACCENT, RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("hover", round_box(ACCENT.lightened(0.12), RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("pressed", round_box(ACCENT.darkened(0.15), RADIUS + 6, 0))
+	_button.add_theme_stylebox_override("disabled", round_box(Color(0.6, 0.62, 0.66, 0.8), RADIUS + 6, 0))
 	_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_button.add_theme_color_override("font_color", Color.WHITE)
 	_button.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -99,12 +103,12 @@ func _bar(color: Color) -> ProgressBar:
 	b.custom_minimum_size = Vector2(0, 16)
 	b.show_percentage = false
 	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_theme_stylebox_override("fill", _round(color, 8, 0))
-	b.add_theme_stylebox_override("background", _round(BAR_BG, 8, 0))
+	b.add_theme_stylebox_override("fill", round_box(color, 8, 0))
+	b.add_theme_stylebox_override("background", round_box(BAR_BG, 8, 0))
 	return b
 
 
-func _round(color: Color, radius: int, margin: int) -> StyleBoxFlat:
+static func round_box(color: Color, radius: int, margin: int) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = color
 	s.set_corner_radius_all(radius)
@@ -154,3 +158,55 @@ func _on_button() -> void:
 	else:
 		GameState.stop_after_stage()
 		_refresh_button()
+
+
+## 맨 위 둥근 칩 4개: 골드·목재·석재·식량(아이콘 + 쉼표 숫자). 입력은 통과시킨다.
+func _build_chips(root: Control) -> void:
+	var row := HBoxContainer.new()
+	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	row.offset_left = 16
+	row.offset_right = -16
+	row.offset_top = 16
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 8)
+	root.add_child(row)
+	for kind in IconsScript.KINDS:
+		var chip := PanelContainer.new()
+		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.add_theme_stylebox_override("panel", round_box(PANEL_BG, 24, 8))
+		row.add_child(chip)
+		var inner := HBoxContainer.new()
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_theme_constant_override("separation", 6)
+		chip.add_child(inner)
+		var icon = IconsScript.new()
+		icon.kind = kind
+		icon.custom_minimum_size = Vector2(32, 32)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(icon)
+		var label := Label.new()
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		label.clip_text = true
+		label.add_theme_font_size_override("font_size", 24)
+		label.add_theme_color_override("font_color", INK)
+		inner.add_child(label)
+		_chips[kind] = label
+	Economy.changed.connect(_refresh_chips)
+	_refresh_chips()
+
+
+func _refresh_chips() -> void:
+	_chips["gold"].text = commas(Economy.gold)
+	for id in Economy.res:
+		_chips[id].text = commas(Economy.res[id])
+
+
+## 1234567 → "1,234,567"
+static func commas(n: int) -> String:
+	var s := str(absi(n))
+	for i in range(s.length() - 3, 0, -3):
+		s = s.insert(i, ",")
+	return ("-" if n < 0 else "") + s

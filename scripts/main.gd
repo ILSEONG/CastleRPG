@@ -12,6 +12,8 @@ const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
+const BadgesScript := preload("res://scripts/badges.gd")
+const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
 var camera: Camera3D
@@ -32,6 +34,9 @@ func _ready() -> void:
 	var bars = HpBarsScript.new()
 	bars.camera = camera
 	add_child(bars)
+	var badges = BadgesScript.new()
+	badges.camera = camera
+	add_child(badges)
 	var formation = FormationScript.new()
 	for i in GameState.hero_count():
 		var hero = HeroScript.new()
@@ -39,11 +44,15 @@ func _ready() -> void:
 		add_child(hero)
 	var picker = PickerScript.new()
 	picker.camera = camera
+	picker.badges = badges
 	add_child(picker)
 	var spawner = SpawnerScript.new()
 	spawner.castle = castle
 	add_child(spawner)
 	add_child(HudScript.new())
+	var panel = MerchantPanelScript.new()
+	add_child(panel)
+	picker.panel = panel
 	if OS.is_debug_build():
 		_connect_dev_log()
 	if _auto_stage_requested():
