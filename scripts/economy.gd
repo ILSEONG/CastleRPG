@@ -2,7 +2,8 @@ extends Node
 ## 골드·자원·마지막 수집 시각·건물 레벨의 단일 진실 + 순수 규칙 + 저장. 오토로드 Economy.
 ## 시간은 인자 now(유닉스 초)로 받는다 — 테스트에서 .new()로 단독 생성 가능(트리에 안 넣으면 _ready 안 돎).
 ## 온라인 모드(net이 Net 노드, 개정 9): 상태는 서버 응답(apply_server)으로만 바뀐다. 수집·판매는 요청만 보내고
-## 응답이 오면 반영한다. 처치는 쌓아 두고 Net이 보낸다. 표시 골드 = 서버 골드 + 아직 반영 안 된 처치의 예상 골드.
+## 응답이 오면 반영한다. 처치는 쌓아 두고 Net이 보낸다. 표시 골드 = 서버 골드 + 아직 반영 안 된 처치의 예상 골드
+## (서버처럼 min(처치 스테이지, 서버 stage)로 매긴다).
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -10,6 +11,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const SAVE_VERSION := 1
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
+const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
@@ -259,9 +261,31 @@ func take_kills() -> Dictionary:
 	return kills_sent
 
 
-## 그 스테이지 보고가 끝났다(반영됐거나 거절됨). 다음 apply_server가 골드를 다시 계산한다.
-func kills_done(stage: int) -> void:
-	kills_sent.erase(stage)
+## 한 스테이지 처치 {몬스터 id: 수}를 종류별 수가 cap 이하인 묶음들로 나눈다.
+static func split_kills(per: Dictionary, cap := MAX_KILL_COUNT) -> Array:
+	var left := per.duplicate()
+	var out := []
+	while not left.is_empty():
+		var part := {}
+		for id in left.keys():
+			var n := mini(int(left[id]), cap)
+			part[id] = n
+			left[id] = int(left[id]) - n
+			if left[id] <= 0:
+				left.erase(id)
+		out.append(part)
+	return out
+
+
+## 그 스테이지 보고 한 묶음(part)이 끝났다(반영됐거나 버림). 보낸 몫에서 그만큼 뺀다. 다음 apply_server가 골드를 다시 계산한다.
+func kills_done(stage: int, part: Dictionary) -> void:
+	var per: Dictionary = kills_sent.get(stage, {})
+	for id in part:
+		per[id] = int(per.get(id, 0)) - int(part[id])
+		if per[id] <= 0:
+			per.erase(id)
+	if per.is_empty():
+		kills_sent.erase(stage)
 	_recalc_gold()
 
 
@@ -269,11 +293,13 @@ func _recalc_gold() -> void:
 	gold = server_gold + _kills_gold(kills_pending) + _kills_gold(kills_sent)
 
 
-static func _kills_gold(kills: Dictionary) -> int:
+## 서버는 처치를 min(보낸 stage, player.stage)로 매긴다 — 예상도 같게(서버 stage를 아직 모르면 그대로).
+func _kills_gold(kills: Dictionary) -> int:
 	var g := 0
 	for stage in kills:
+		var s: int = mini(stage, server_stage) if server_stage > 0 else stage
 		for id in kills[stage]:
-			g += GameData.kill_gold(id, stage) * int(kills[stage][id])
+			g += GameData.kill_gold(id, s) * int(kills[stage][id])
 	return g
 
 

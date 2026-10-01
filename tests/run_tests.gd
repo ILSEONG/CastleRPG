@@ -56,6 +56,7 @@ func _init() -> void:
 	test_economy_merchant()
 	test_economy_sell()
 	test_economy_save()
+	test_economy_online()
 	test_merchant_spot()
 	test_icon_shapes()
 	if _errors.count > 0:
@@ -972,6 +973,36 @@ func test_economy_save() -> void:
 	check(not FileAccess.file_exists(ECON_TMP), "save_path empty writes no file")
 	e.free()
 	e2.free()
+
+
+## 온라인 도우미(개정 9): apply_server 형 검사, 표시 골드 = 서버 골드 + 안 보낸·보낸 처치(서버 stage로 매김),
+## 묶음 하나씩 끝내기, 서버 상한으로 처치 나누기. net은 null 그대로(요청은 안 보낸다).
+func test_economy_online() -> void:
+	var e = _econ(1000.0)
+	var logged := _errors.count
+	e.gold = 5
+	check(not e.apply_server({"player": {"gold": "x"}, "merchant": {}}) and e.gold == 5 and e.server_stage == 0, "apply_server rejects a malformed reply and changes nothing")
+	_errors.count = logged  # 거부는 push_error로 알린다
+	var reply := {"player": {"gold": 100, "stage": 3, "kill_seq": 7, "res": {"wood": 4}, "buildings": {"lumber": {"level": 2, "last_collect": 900.0}}},
+		"merchant": {"rate": 1.2, "next_change": 3600.0}}
+	check(e.apply_server(reply) and e.server_gold == 100 and e.gold == 100 and e.server_stage == 3 and e.kill_seq == 7 and e.res.wood == 4 and e.res.stone == 0 \
+		and e.levels.lumber == 2 and e.last_collect.lumber == 900.0 and e.merchant.rate == 1.2, "apply_server takes the server snapshot")
+	e.kills_pending = {1: {"grunt": 2}, 5: {"epic_boss": 1}}
+	e.kills_sent = {3: {"grunt": 1}}
+	e._recalc_gold()
+	var want: int = 100 + 2 * GameData.kill_gold("grunt", 1) + GameData.kill_gold("epic_boss", 3) + GameData.kill_gold("grunt", 3)
+	check(GameData.kill_gold("epic_boss", 5) != GameData.kill_gold("epic_boss", 3) and e.gold == want,
+		"displayed gold = server gold + pending + sent, kills above the server stage priced at the server stage (%d vs %d)" % [e.gold, want])
+	e.kills_sent = {3: {"grunt": 10, "epic_boss": 1}}
+	e.kills_done(3, {"grunt": 4})
+	check(e.kills_sent == {3: {"grunt": 6, "epic_boss": 1}}, "kills_done removes only that batch: %s" % [e.kills_sent])
+	e.kills_done(3, {"grunt": 6, "epic_boss": 1})
+	check(e.kills_sent.is_empty() and e.gold == 100 + 2 * GameData.kill_gold("grunt", 1) + GameData.kill_gold("epic_boss", 3), "the last batch empties kills_sent and gold is recalculated")
+	check(EconomyScript.split_kills({"grunt": 7, "epic_boss": 1}) == [{"grunt": 7, "epic_boss": 1}], "split_kills keeps a small batch whole")
+	var parts: Array = EconomyScript.split_kills({"grunt": 25000, "epic_boss": 3}, 10000)
+	check(parts == [{"grunt": 10000, "epic_boss": 3}, {"grunt": 10000}, {"grunt": 5000}] and EconomyScript.MAX_KILL_COUNT == 10000,
+		"split_kills caps each kind per batch at the server limit: %s" % [parts])
+	e.free()
 
 
 ## 상인(반경 0.6 m)과 수레(AABB)는 건물 부지·십자 도로·안쪽 통로 고리(깊이 half−3, 레벨 1~3)를 침범하지 않고, 수레는 크기 한계 안.
