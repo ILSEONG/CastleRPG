@@ -6,8 +6,8 @@ import type { Db, Query } from './db.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
-// key = 첫 열(문자열, 비면 오류), text = 문자열, num = 숫자, int = 정수
-type ColType = 'key' | 'text' | 'num' | 'int'
+// key = 첫 열(문자열, 비면 오류), text = 문자열, num = 숫자, int = 정수, opt·optnum = 비면 null인 문자열·숫자
+type ColType = 'key' | 'text' | 'num' | 'int' | 'opt' | 'optnum'
 export interface TableSpec {
   name: string // 응답·CSV 이름
   table: string // DB 표
@@ -31,9 +31,17 @@ export const TABLES: TableSpec[] = [
     sql: { stage: 'integer', ...real(['hp_mult', 'atk_mult', 'gold_mult']), waves: 'integer', wave_size: 'integer', idle_interval: 'real' },
   },
   {
-    name: 'heroes', table: 'hero_roles', file: 'heroes.csv', ordered: true,
-    cols: { id: 'key', name: 'text', hp: 'num', atk: 'num', range: 'num', atk_interval: 'num', speed: 'num', aggro: 'num' },
-    sql: { id: 'text', name: 'text', ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']) },
+    name: 'heroes', table: 'heroes', file: 'heroes.csv', ordered: true,
+    cols: {
+      id: 'key', name: 'text', title: 'text', grade: 'text', role: 'text', archetype: 'text', model: 'text', gear: 'text', color: 'text',
+      hp: 'num', atk: 'num', range: 'num', atk_interval: 'num', speed: 'num', aggro: 'num',
+      skill1: 'opt', s1a: 'optnum', s1b: 'optnum', s1c: 'optnum', skill2: 'opt', s2a: 'optnum', s2b: 'optnum', s2c: 'optnum', desc: 'text',
+    },
+    sql: {
+      ...Object.fromEntries(['id', 'name', 'title', 'grade', 'role', 'archetype', 'model', 'gear', 'color'].map((n) => [n, 'text'])),
+      ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']),
+      skill1: 'text', ...real(['s1a', 's1b', 's1c']), skill2: 'text', ...real(['s2a', 's2b', 's2c']), desc: 'text',
+    },
   },
   {
     name: 'resources', table: 'resources', file: 'resources.csv', ordered: true,
@@ -50,13 +58,14 @@ export const TABLES: TableSpec[] = [
 // 서버·앱이 쓰는 설정 키(스펙 §2). 숫자 키는 숫자여야 하고, 목록 키는 `|` 구분 항목이 비지 않아야 한다.
 export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters', 'countdown_sec', 'result_sec', 'wave_gap_sec',
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
-  'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec']
-export const CONFIG_LIST = ['hero_slots', 'hero_roster']
+  'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'hero_max_stars', 'hero_star_bonus',
+  'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr']
+export const CONFIG_LIST = ['hero_slots', 'starter_heroes']
 
 const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/
 export const isNum = (s: string) => NUM_RE.test(s)
 
-export type CsvRow = Record<string, string | number>
+export type CsvRow = Record<string, string | number | null>
 export type Tables = Record<string, CsvRow[]>
 
 export class CsvError extends Error {
@@ -93,7 +102,9 @@ export function parseCsv(text: string, file: string, cols: Record<string, ColTyp
     for (const c of names) {
       const raw = idx[c] < cells.length ? cells[idx[c]] : ''
       const t = cols[c]
-      if (t === 'key' || t === 'text') {
+      if ((t === 'opt' || t === 'optnum') && raw === '') {
+        row[c] = null
+      } else if (t === 'key' || t === 'text' || t === 'opt') {
         if (raw === '') {
           err(i + 1, c, 'empty value')
           ok = false
@@ -164,19 +175,29 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
     }
     out[spec.name] = checkTable(spec, parseCsv(text, spec.file, spec.cols, errors), errors)
   }
+  // 시작 영웅은 영웅 표에 있어야 한다(새 플레이어가 받는다)
+  const starters = out.config?.find((r) => r.key === 'starter_heroes')
+  const heroIds = new Set((out.heroes ?? []).map((h) => String(h.id)))
+  for (const id of String(starters?.value ?? '').split('|').map((x) => x.trim()).filter(Boolean)) {
+    if (out.heroes && !heroIds.has(id)) errors.push(`config.csv line ${starters?._line} column 'value': unknown hero '${id}' in starter_heroes`)
+  }
   if (errors.length) throw new CsvError(errors)
   return out
 }
+
+// 열 이름은 따옴표로 — desc 같은 예약어도 CSV 열 이름 그대로 쓴다.
+export const ident = (c: string) => `"${c}"`
 
 // 표 하나를 한 문장으로 upsert + 사라진 키 삭제.
 function seedSql(spec: TableSpec): string {
   const cols = Object.keys(spec.sql)
   const all = spec.ordered ? [...cols, 'ord'] : cols
-  const def = all.map((c) => `${c} ${c === 'ord' ? 'integer' : spec.sql[c]}`).join(', ')
-  const key = cols[0]
-  const set = all.slice(1).map((c) => `${c} = excluded.${c}`).join(', ')
+  const def = all.map((c) => `${ident(c)} ${c === 'ord' ? 'integer' : spec.sql[c]}`).join(', ')
+  const key = ident(cols[0])
+  const set = all.slice(1).map((c) => `${ident(c)} = excluded.${ident(c)}`).join(', ')
+  const list = all.map(ident).join(', ')
   return `with src as (select * from jsonb_to_recordset($1::jsonb) as x(${def})),
-    up as (insert into ${spec.table} (${all.join(', ')}) select ${all.join(', ')} from src
+    up as (insert into ${spec.table} (${list}) select ${list} from src
       on conflict (${key}) do update set ${set} returning 1),
     del as (delete from ${spec.table} where ${key} not in (select ${key} from src) returning 1)
     select (select count(*) from up)::int as upserted, (select count(*) from del)::int as deleted`

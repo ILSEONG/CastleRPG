@@ -6,7 +6,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
 import type { Query } from './db.ts'
-import { TABLES } from './seed.ts'
+import { ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 
 export interface AppOptions {
@@ -74,7 +74,7 @@ interface Change {
 const GAME_SQL = 'select ' + TABLES.map((t) => {
   const cols = Object.keys(t.sql)
   if (t.name === 'config') return `(select coalesce(json_object_agg(key, value order by key), '{}'::json) from ${t.table}) as config`
-  const obj = `json_build_object(${cols.map((c) => `'${c}', ${c}`).join(', ')})`
+  const obj = `json_build_object(${cols.map((c) => `'${c}', ${ident(c)}`).join(', ')})`
   const order = t.ordered ? `ord, ${cols[0]}` : cols[0]
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')

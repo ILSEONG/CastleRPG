@@ -366,13 +366,21 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
   assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.25, atk_mult: 1.15, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 4 })
-  assert.deepEqual(g.heroes.map((h: any) => h.id), ['warrior', 'archer'])
-  assert.deepEqual(g.heroes[1], { id: 'archer', name: '궁수', hp: 220, atk: 20, range: 9, atk_interval: 1, speed: 6, aggro: 12 })
+  assert.equal(g.heroes.length, 22)
+  assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
+  assert.deepEqual(g.heroes[1], {
+    id: 'ignis', name: '이그니스', title: '화염 대마법사', grade: 'SSR', role: 'ranged', archetype: 'caster', model: 'Mage', gear: '2H_Staff',
+    color: '#E8553A', hp: 396, atk: 44, range: 8, atk_interval: 1.2, speed: 6, aggro: 12,
+    skill1: 'aoe_blast', s1a: 5, s1b: 3.5, s1c: 220, skill2: null, s2a: null, s2b: null, s2c: null,
+    desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다',
+  })
   assert.deepEqual(g.resources.map((x: any) => x.id), ['wood', 'stone', 'food']) // 파일 순서
   assert.deepEqual(g.resources[1], { id: 'stone', name: '석재', building: 'quarry', per_min: 5, price: 2 })
   assert.equal(g.config.hero_slots, '4|8|12')
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 19)
+  assert.equal(Object.keys(g.config).length, 26)
+  assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
+  assert.equal(g.config.hero_roster, undefined)
   assert.equal(g.config.kill_burst_sec, '60')
 
   const again = await S.req('GET', '/v1/gamedata')
