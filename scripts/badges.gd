@@ -122,8 +122,9 @@ func build_anchors() -> Array:
 func _draw_build_bar(at: Vector2, ratio: float, text: String) -> void:
 	var r := Rect2(at - BUILD_BAR / 2.0, BUILD_BAR)
 	draw_colored_polygon(UiKit.LowpolyBox.octagon(r.grow(2.0), 4.0), Color(0, 0, 0, 0.55))
-	if r.size.x * ratio >= 2.0:  # 너무 가는 채움은 다각형이 찌그러진다
-		draw_colored_polygon(UiKit.LowpolyBox.octagon(Rect2(r.position, Vector2(r.size.x * ratio, r.size.y)), 3.0), UiKit.AMBER)
+	var fw := r.size.x * ratio
+	if fw >= 2.0:  # 깎기를 폭의 절반 아래로 — 같으면 꼭짓점이 겹쳐 다각형이 깨진다
+		draw_colored_polygon(UiKit.LowpolyBox.octagon(Rect2(r.position, Vector2(fw, r.size.y)), minf(3.0, (fw - 1.0) / 2.0)), UiKit.AMBER)
 	var w := FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, BUILD_FONT).x
 	var pos := Vector2(at.x - w / 2.0, r.position.y - 6.0)
 	draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, BUILD_FONT, 6, Color.WHITE)

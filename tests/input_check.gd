@@ -962,6 +962,11 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.build = {"id": "gate", "finish": Economy.time_now() + 45.0}
 	Economy.changed.emit()
 	_check(scenery._scaffolds.size() == 4 and badges.build_anchors().size() == 4, "(B) a gate upgrade rings all four gatehouses with scaffolds and bars", "n=%d" % scenery._scaffolds.size())
+	var errors0: int = _errors.count
+	for f in [0.005, 0.02, 0.03, 0.05, 0.08, 0.5, 1.0]:  # 막대 채움이 아주 가늘 때도 다각형이 깨지지 않는다(그리기 오류는 ErrorCounter가 센다)
+		Economy.build.finish = Economy.time_now() + 45.0 * (1.0 - f)
+		await _frames(2)
+	_check(_errors.count == errors0, "(B) the overhead bar draws cleanly from a sliver to full", "errors=%d" % (_errors.count - errors0))
 	Economy.build = {}
 	Economy.changed.emit()
 	print("INPUT INFO: tabs %s, lumber long-press %s, keep window [업그레이드] %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect()),
