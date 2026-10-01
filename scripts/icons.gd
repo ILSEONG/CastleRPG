@@ -72,6 +72,18 @@ static func shapes(kind_name: String) -> Array:
 				out.append([_ear(ear[0], ear[1], 0.34, 0.11).slice(0, 3), Color(0.98, 0.86, 0.45), false])
 			out.append([[Vector2(-0.1, 0.22), Vector2(0.1, 0.22), Vector2(0.11, 0.32), Vector2(-0.11, 0.32)], Color(0.70, 0.24, 0.20), true])
 			return out
+		"shield":  # 방치 무적 표시(개정 12). KINDS(자원 칩)에는 넣지 않는다
+			var top_l := Vector2(-0.36, -0.40)
+			var top_r := Vector2(0.36, -0.40)
+			var mid_l := Vector2(-0.38, 0.06)
+			var mid_r := Vector2(0.38, 0.06)
+			var tip := Vector2(0.0, 0.48)
+			var top_c := Vector2(0.0, -0.46)
+			return [
+				[[top_l, top_c, top_r, mid_r, tip, mid_l], Color(0.36, 0.52, 0.78), true],
+				[[Vector2(-0.26, -0.30), top_c + Vector2(0, 0.08), Vector2(0.0, 0.30), Vector2(-0.28, 0.02)], Color(0.62, 0.78, 0.96), false],
+				[[top_c + Vector2(0, 0.08), Vector2(0.26, -0.30), Vector2(0.28, 0.02), Vector2(0.0, 0.30)], Color(0.24, 0.38, 0.64), false],
+			]
 	return []
 
 
