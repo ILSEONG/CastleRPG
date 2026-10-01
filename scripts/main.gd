@@ -13,6 +13,7 @@ const HeroScript := preload("res://scripts/hero.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const BadgesScript := preload("res://scripts/badges.gd")
 const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
@@ -83,7 +84,7 @@ func _wait_for_server() -> void:
 	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	box.add_theme_stylebox_override("panel", HudScript.round_box(HudScript.PANEL_BG, HudScript.RADIUS + 6, 28))
+	box.add_theme_stylebox_override("panel", UiKit.panel(HudScript.PANEL_BG, 16.0, 28))
 	back.add_child(box)
 	var lines := VBoxContainer.new()
 	box.add_child(lines)

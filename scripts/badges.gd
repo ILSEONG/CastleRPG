@@ -7,7 +7,8 @@ const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
-const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
+const UiKit := preload("res://scripts/ui_kit.gd")
+const FONT :=preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const ANCHOR_UP := 1.9   # 건물 지붕 위 m: 이름표(+1.0, 글자 높이 ~1.4) 위
 const BUBBLE_R := 22.0   # 논리 px(720 폭 기준)
@@ -77,9 +78,10 @@ func _draw() -> void:
 ## tip = 꼬리 끝(건물 쪽). 흰 둥근 말풍선이 그 위에 뜬다.
 func _draw_bubble(tip: Vector2, kind: String) -> void:
 	var c := tip + Vector2(0, -BUBBLE_R - 8.0)
-	draw_colored_polygon(PackedVector2Array([tip, c + Vector2(-7, BUBBLE_R - 3), c + Vector2(7, BUBBLE_R - 3)]), Color.WHITE)
-	draw_circle(c, BUBBLE_R + 1.5, Color(INK, 0.35))
-	draw_circle(c, BUBBLE_R, Color.WHITE)
+	var tail := PackedVector2Array([tip, c + Vector2(-7, BUBBLE_R - 3), c + Vector2(7, BUBBLE_R - 3)])
+	draw_colored_polygon(tail, UiKit.CREAM)
+	draw_polyline(PackedVector2Array([tail[1], tail[0], tail[2]]), UiKit.OUTLINE, 1.5, true)
+	UiKit.draw_gem(self, c, BUBBLE_R, UiKit.CREAM, 8)  # 8각 면 말풍선
 	IconsScript.draw_icon(self, kind, c, BUBBLE_R * 1.3)
 
 

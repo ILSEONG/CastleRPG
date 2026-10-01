@@ -2,12 +2,13 @@ extends CanvasLayer
 ## HUD. GameState·Economy·Net 시그널만 구독. 게임 오브젝트 직접 참조 없음.
 
 const INK := Color(0.16, 0.18, 0.24)
-const PANEL_BG := Color(1, 1, 1, 0.72)
+const PANEL_BG := Color(0.984, 0.969, 0.933, 0.78)  # UiKit.CREAM_PANEL
 const BAR_BG := Color(0, 0, 0, 0.12)
 const ACCENT := Color(0.98, 0.70, 0.20)
 const RADIUS := 14
 const TOAST_SEC := 1.6
 const IconsScript := preload("res://scripts/icons.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 
 var _stage_label: Label
 var _castle_bar: ProgressBar
@@ -40,13 +41,15 @@ func _ready() -> void:
 	panel.offset_right = -16
 	panel.offset_top = 76  # 상단 칩 줄(16..64) 아래
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", round_box(PANEL_BG, RADIUS, 12))
+	panel.add_theme_stylebox_override("panel", UiKit.panel(PANEL_BG, 12.0, 12))
 	root.add_child(panel)
 	panel.add_child(top)
 	_stage_label = Label.new()
 	_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stage_label.add_theme_font_size_override("font_size", 36)
 	_stage_label.add_theme_color_override("font_color", INK)
+	_stage_label.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))  # 제목: 외곽선
+	_stage_label.add_theme_constant_override("outline_size", 6)
 	top.add_child(_stage_label)
 	_castle_bar = _bar(Color(0.95, 0.75, 0.2))
 	top.add_child(_castle_bar)
@@ -78,15 +81,7 @@ func _ready() -> void:
 	_button.offset_bottom = -32
 	_button.add_theme_font_size_override("font_size", 28)
 	_button.pressed.connect(_on_button)
-	_button.add_theme_stylebox_override("normal", round_box(ACCENT, RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("hover", round_box(ACCENT.lightened(0.12), RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("pressed", round_box(ACCENT.darkened(0.15), RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("disabled", round_box(Color(0.6, 0.62, 0.66, 0.8), RADIUS + 6, 0))
-	_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	_button.add_theme_color_override("font_color", Color.WHITE)
-	_button.add_theme_color_override("font_hover_color", Color.WHITE)
-	_button.add_theme_color_override("font_pressed_color", Color.WHITE)
-	_button.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.7))
+	UiKit.apply_button(_button, ACCENT, 18.0)
 	root.add_child(_button)
 	_build_link_ui()
 
@@ -115,8 +110,7 @@ func _bar(color: Color) -> ProgressBar:
 	b.custom_minimum_size = Vector2(0, 16)
 	b.show_percentage = false
 	b.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_theme_stylebox_override("fill", round_box(color, 8, 0))
-	b.add_theme_stylebox_override("background", round_box(BAR_BG, 8, 0))
+	UiKit.apply_bar(b, color)
 	return b
 
 
@@ -187,7 +181,7 @@ func _build_chips(root: Control) -> void:
 		var chip := PanelContainer.new()
 		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.add_theme_stylebox_override("panel", round_box(PANEL_BG, 24, 8))
+		chip.add_theme_stylebox_override("panel", UiKit.panel(PANEL_BG, 10.0, 8))
 		row.add_child(chip)
 		var inner := HBoxContainer.new()
 		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -225,7 +219,7 @@ func _build_link_ui() -> void:
 	band.offset_bottom = -132
 	band.grow_vertical = Control.GROW_DIRECTION_BEGIN  # 내용 높이만큼 위로 자란다
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	band.add_theme_stylebox_override("panel", round_box(Color(INK, 0.86), RADIUS, 10))
+	band.add_theme_stylebox_override("panel", UiKit.panel(Color(INK, 0.86), 10.0, 10, 0.05))
 	var lines := VBoxContainer.new()
 	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	band.add_child(lines)

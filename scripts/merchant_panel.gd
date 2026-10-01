@@ -6,9 +6,10 @@ extends CanvasLayer
 const GameData := preload("res://scripts/game_data.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 
 const DIM := Color(0, 0, 0, 0.55)
-const DIALOG_BG := Color(1, 1, 1, 0.97)
+const DIALOG_BG := Color(0.984, 0.969, 0.933, 0.97)  # UiKit.CREAM_DIALOG
 const RATE_LOW := Color(0.85, 0.22, 0.2)
 const RATE_HIGH := Color(0.15, 0.6, 0.25)
 const RATE_JACKPOT := Color(0.9, 0.62, 0.05)
@@ -44,7 +45,7 @@ func _ready() -> void:
 	dialog.grow_vertical = Control.GROW_DIRECTION_BOTH
 	dialog.custom_minimum_size = Vector2(DIALOG_W, 0)
 	dialog.mouse_filter = Control.MOUSE_FILTER_STOP  # 패널 안 탭은 배경으로 새지 않는다
-	dialog.add_theme_stylebox_override("panel", HudScript.round_box(DIALOG_BG, 28, 24))
+	dialog.add_theme_stylebox_override("panel", UiKit.panel(DIALOG_BG, 18.0, 24))
 	back.add_child(dialog)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 14)
@@ -167,12 +168,5 @@ func _button(text: String, color: Color = HudScript.ACCENT) -> Button:
 	b.text = text
 	b.custom_minimum_size = Vector2(0, 56)
 	b.add_theme_font_size_override("font_size", 28)
-	b.add_theme_stylebox_override("normal", HudScript.round_box(color, HudScript.RADIUS + 6, 0))
-	b.add_theme_stylebox_override("hover", HudScript.round_box(color.lightened(0.12), HudScript.RADIUS + 6, 0))
-	b.add_theme_stylebox_override("pressed", HudScript.round_box(color.darkened(0.15), HudScript.RADIUS + 6, 0))
-	b.add_theme_stylebox_override("disabled", HudScript.round_box(Color(0.6, 0.62, 0.66, 0.8), HudScript.RADIUS + 6, 0))
-	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	for c in ["font_color", "font_hover_color", "font_pressed_color"]:
-		b.add_theme_color_override(c, Color.WHITE)
-	b.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.7))
+	UiKit.apply_button(b, color, 14.0)
 	return b

@@ -6,6 +6,8 @@ extends Node2D
 const BAR_W := 34.0           # 논리 px(720 폭 기준). 줌과 무관
 const BAR_H := 5.0
 const BORDER := 1.5
+const CHAMFER := 1.5          # 바 모서리 깎기 px
+const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const SCREEN_MARGIN := 40.0   # 화면 밖 이만큼까지는 그린다(가장자리 걸친 유닛)
 const HERO_COLOR := Color(0.35, 0.85, 0.40)
 const MONSTER_COLOR := Color(0.92, 0.28, 0.22)
@@ -35,5 +37,8 @@ func _draw_group(group: String, color: Color, view: Rect2) -> void:
 			continue
 		var w: float = BAR_W * u.bar_scale()
 		var top_left := p - Vector2(w / 2.0, BAR_H / 2.0)
-		draw_rect(Rect2(top_left - Vector2(BORDER, BORDER), Vector2(w + BORDER * 2.0, BAR_H + BORDER * 2.0)), BACK)
-		draw_rect(Rect2(top_left, Vector2(w * clampf(u.hp_ratio(), 0.0, 1.0), BAR_H)), color)
+		# 각진 테두리: 모서리를 깎은 8각 폴리곤 하나 + 채움 하나(호출 2번 유지)
+		draw_colored_polygon(LowpolyBox.octagon(Rect2(top_left - Vector2(BORDER, BORDER), Vector2(w + BORDER * 2.0, BAR_H + BORDER * 2.0)), CHAMFER + BORDER), BACK)
+		var fw := w * clampf(u.hp_ratio(), 0.0, 1.0)
+		if fw > 0.5:
+			draw_colored_polygon(LowpolyBox.octagon(Rect2(top_left, Vector2(fw, BAR_H)), CHAMFER), color)
