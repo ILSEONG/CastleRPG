@@ -1052,6 +1052,7 @@ func _attack_sync() -> void:
 
 ## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 사이클) 마리를 내고, 스테이지 모드는 변화가 없다.
 func _fever_spawn() -> void:
+	var mode0: int = GameState.mode
 	var counts := {}
 	for k in ["idle", "idle_fever", "stage", "stage_fever"]:
 		Fever.reset()
@@ -1069,7 +1070,7 @@ func _fever_spawn() -> void:
 		holder.queue_free()
 		await _frames(1)
 	Fever.reset()
-	GameState.mode = GameState.Mode.STAGE
+	GameState.mode = mode0
 	_clear_monsters()
 	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= 4, "(fever) FEVER triples the idle spawn count over the same time (±1 cycle)", str(counts))
 	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))
