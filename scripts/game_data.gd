@@ -57,6 +57,8 @@ const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_pro
 const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count"]  # 1 이상 정수(나머지는 0보다 크다)
 const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 단계 표 "레벨:값|…"(hero_slots·Balance.INTERIOR_TILES를 대신)
 const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
+const KEEP_SLOT_STEP := 4  # 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 서버 seed.SLOT_STEP
+const MAX_HERO_SLOTS := 12  # 서버 seed.MAX_HERO_SLOTS
 const LEVELUP_INT_KEYS := ["hero_max_level_per_promotion", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만, 15: 승급당)
 const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
 
@@ -629,7 +631,7 @@ static func _check_contents(t: Dictionary) -> void:
 
 ## 건물 표·설정(개정 12, 서버 seed.checkBuildings와 같은 규칙): 최대 레벨 1 이상 정수, 비용 0 이상 정수, base_sec > 0, 선행은 표 안,
 ## 성채·성문 필수, 자원 건물은 건물 표에, 비용 자원(wood·stone·food)은 자원 표에. 효과 설정은 0 이상(주점 증가분 ≤ 1, 인구는 정수),
-## 단계 표는 "레벨:값|…"(1부터 오름차순, 값은 1 이상 정수). 앱이 그릴 수 없는 내용도 거부한다: 배치(Balance.BUILDINGS)에 없는
+## 단계 표는 "레벨:값|…"(1부터 오름차순, 값은 1 이상 정수)이고 둘이 같은 레벨로 움직인다(_check_keep_tiers). 앱이 그릴 수 없는 내용도 거부한다: 배치(Balance.BUILDINGS)에 없는
 ## 건물(성문 제외), 성 내부 MIN_INTERIOR_TILES 미만.
 static func _check_buildings(t: Dictionary) -> void:
 	var ids := {}
@@ -667,11 +669,33 @@ static func _check_buildings(t: Dictionary) -> void:
 			_err("config", 0, k, "missing or not a number")
 		elif not (s.to_float() >= 0.0 and (not tavern or s.to_float() <= 1.0) and (not pop or s.to_float() == floorf(s.to_float()))):
 			_err("config", 0, k, "must be %s: '%s'" % ["in 0..1" if tavern else ("a non-negative integer" if pop else "0 or more"), s])
+	var tables := {}
 	for k in CONFIG_TIER_KEYS:
 		var low := MIN_INTERIOR_TILES if k == "keep_interior_tiers" else 1
 		var tiers := parse_tiers(String(t.config.get(k, "")))
 		if tiers.is_empty() or not tiers.all(func(x): return x[1] == floorf(x[1]) and x[1] >= low):
 			_err("config", 0, k, "must be a tier table 'level:value|…' (levels from 1 ascending, integer values of at least %d): '%s'" % [low, t.config.get(k, "")])
+		else:
+			tables[k] = tiers
+	if tables.size() == 2:  # 형식이 틀린 표는 위에서 이미 알렸다
+		_check_keep_tiers(tables.keep_slot_tiers, tables.keep_interior_tiers)
+
+
+## 성채 단계 표 둘은 함께 움직인다(사용자 규칙: 성이 넓어질 때마다 영웅 슬롯 +4, 최대 12). 서버 seed.checkKeepTiers와 같은 규칙:
+## 슬롯 표의 레벨 = 내부 표의 레벨, 슬롯 값 = KEEP_SLOT_STEP × 단계 번호(4, 8, 12 — MAX_HERO_SLOTS 이하), 내부 값은 단계마다 커진다.
+static func _check_keep_tiers(slots: Array, interior: Array) -> void:
+	var levels := func(tiers: Array) -> Array: return tiers.map(func(x): return int(x[0]))
+	if levels.call(slots) != levels.call(interior):
+		_err("config", 0, "keep_slot_tiers", "levels must match keep_interior_tiers: %s vs %s" % [levels.call(slots), levels.call(interior)])
+	for i in slots.size():
+		if slots[i][1] != KEEP_SLOT_STEP * (i + 1) or slots[i][1] > MAX_HERO_SLOTS:
+			_err("config", 0, "keep_slot_tiers", "values must be %d x tier (%d, %d, %d — at most %d): %s" % [KEEP_SLOT_STEP, KEEP_SLOT_STEP,
+				KEEP_SLOT_STEP * 2, KEEP_SLOT_STEP * 3, MAX_HERO_SLOTS, slots.map(func(x): return int(x[1]))])
+			break
+	for i in range(1, interior.size()):
+		if interior[i][1] <= interior[i - 1][1]:
+			_err("config", 0, "keep_interior_tiers", "values must grow every tier: %s" % [interior.map(func(x): return int(x[1]))])
+			break
 
 
 ## 병종 표·설정(개정 13, 서버 seed.checkSoldiers와 같은 규칙): 건물은 건물 표에 있고 병종마다 다르다, hp·range·atk_interval·speed > 0,

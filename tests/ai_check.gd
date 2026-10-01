@@ -1053,7 +1053,7 @@ func _attack_sync() -> void:
 
 
 ## (S) 개정 13 병사. 영웅 처리는 끄고(몬스터를 치지 않게) 시험 몬스터를 성 안에 놓는다.
-##  - 방치 모드에서 배치하면 곧바로 성채 앞 대열(Formation.soldier_spots)에 선다: 크기 0.75, 기병은 말, HP 바 + 티어 갈매기
+##  - 방치 모드에서 배치하면 곧바로 성채 앞 대열(Formation.soldier_spots)에 선다: 크기 Art.SOLDIER_SCALE(0.9), 기병은 말, HP 바 + 티어 갈매기
 ##  - 티어 2 능력치 = 1티어 × 2, 기병 이동 속도 = 보병 × 2(실제로 걸어 잰다)
 ##  - 방치 모드: 성 안 보스가 병사를 노려 쳐도 피해 0, 병사는 제자리에서 싸우지 않는다
 ##  - 스테이지 모드: 성 안 보스와 싸운다(화살이 난다), 보스도 병사를 친다. 근접은 타격 순간, 궁병은 화살 도착 순간에 피해
@@ -1078,7 +1078,7 @@ func _soldier_cases() -> void:
 		var s = ss[i]
 		placed = placed and s.home.is_equal_approx(spots[i]) and s.global_position.is_equal_approx(s.home) and Formation.is_inside(_half, s.home) \
 			and is_equal_approx(s._model.scale.x, Art.SOLDIER_SCALE) and (s._horse != null) == (s.type == "cavalry")
-	_check(placed and bars.octagons == oct0 + 6 * 2 + 2 * 7, "(S) a deploy in idle mode spawns the soldiers at once in front of the keep (0.75 size, cavalry on a horse, HP bars + tier chevrons)",
+	_check(placed and bars.octagons == oct0 + 6 * 2 + 2 * 7, "(S) a deploy in idle mode spawns the soldiers at once in front of the keep (0.9 size, cavalry on a horse, HP bars + tier chevrons)",
 		"sent=%s soldiers=%d octagons %d -> %d" % [sent, ss.size(), oct0, bars.octagons])
 	var inf1 = ss.filter(func(s): return s.type == "infantry" and s.tier == 1)[0]
 	var inf2 = ss.filter(func(s): return s.type == "infantry" and s.tier == 2)[0]

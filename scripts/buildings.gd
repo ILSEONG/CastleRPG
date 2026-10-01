@@ -2,14 +2,14 @@ extends Node3D
 ## 성 안 건물(코드로 만든 로우폴리 메시, 기능 없음 — 서브프로젝트 2)과 성 밖 자연물·테두리 산 장식.
 ## 건물은 TownKit 레시피를 부지 중심에 그대로 놓는다(레시피가 부지 안에 맞춰져 있다 — 테스트).
 ## 자연물·산은 시드 고정 변형 몇 개를 시드 고정 난수로 흩고, 변형마다 MultiMesh 하나로 그린다.
-## 건물 레벨업(개정 12 §2.5): 이름표 "벌목장 Lv 3"(Economy.changed마다), 짓는 중인 건물에 로우폴리 비계(기둥 4 + 가로대, 건물 AABB 둘레 —
-## 성문은 문루 넷), 완료되면 비계를 걷고 빛 조각(Fx.repair)과 알림 "벌목장 Lv 4 완료". 머리 위 진행 막대·남은 시간은 badges.gd(화면 공간).
+## 건물 레벨업(개정 12 §2.5): 짓는 중인 건물에 로우폴리 비계(기둥 4 + 가로대, 건물 AABB 둘레 — 성문은 문루 넷), 완료되면 비계를 걷고
+## 빛 조각(Fx.repair)과 알림 "벌목장 Lv 4 완료". 이름표 "벌목장 Lv 3"·"상인"은 world_tags.gd(화면 공간, 개정 15)가 tag_anchors·merchant_anchor에
+## 그린다. 머리 위 진행 막대·남은 시간은 badges.gd(화면 공간, 이름표 위).
 
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
-const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
@@ -23,10 +23,11 @@ const SCAFFOLD_MARGIN := 0.35  # 비계 기둥이 건물 AABB 밖으로 떨어�
 const SCAFFOLD_POST := 0.28  # 기둥 굵기
 const SCAFFOLD_RAIL := 0.14  # 가로대 굵기
 const DONE_TEXT := "%s Lv %d 완료"
+const TAG_UP := 0.3  # 지붕(메시 AABB 윗면) 위 이 높이가 이름표 아랫변 기준점
 
 var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
-var merchant_label: Label3D  # 상인 이름표 "상인" — 시세·남은 시간은 상인을 눌러 여는 거래 창에서 본다
-var labels := {}  # 건물 id → 이름표 Label3D("이름 Lv N")
+var merchant_anchor: Vector3  # 상인 이름표 "상인" 기준점(머리 위) — 시세·남은 시간은 상인을 눌러 여는 거래 창에서 본다
+var tag_anchors := {}  # 건물 id → 이름표("이름 Lv N") 기준점: 지붕 가운데 위 TAG_UP
 var sites := {}  # 건물 id → [AABB(월드), …] — 비계·진행 막대 자리. 성문은 문루 넷
 var scaffold_id := ""  # 지금 비계를 두른 건물 id(없으면 "")
 var _scaffolds: Array = []
@@ -53,11 +54,11 @@ func _place_building(b: Dictionary) -> void:
 	add_child(mi)
 	var h: float = mi.mesh.get_aabb().end.y
 	_add_tap_body(center, Vector3(b.size.x * Balance.TILE, h, b.size.y * Balance.TILE)).set_meta("building", b.id)
-	labels[b.id] = _add_label("", center + Vector3(0, h + 1.0, 0))
+	tag_anchors[b.id] = center + Vector3(0, h + TAG_UP, 0)
 	sites[b.id] = [AABB(center + mi.mesh.get_aabb().position, mi.mesh.get_aabb().size)]
 
 
-## 상인 NPC(대기, 카메라 쪽 +X+Z 대각을 봄) + 수레 + 이름표 + 탭 판정체(상인·수레를 함께 덮음).
+## 상인 NPC(대기, 카메라 쪽 +X+Z 대각을 봄) + 수레 + 이름표 기준점 + 탭 판정체(상인·수레를 함께 덮음).
 func _place_merchant() -> void:
 	var npc := UnitModelScript.new()
 	npc.setup(Art.MERCHANT_MODEL)
@@ -69,7 +70,7 @@ func _place_merchant() -> void:
 	cart.material_override = Art.lowpoly_vc_material()
 	cart.position = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
 	add_child(cart)
-	merchant_label = _add_label("상인", Balance.MERCHANT_POS + Vector3(0, Art.HEAD_HEIGHT + 0.6, 0))
+	merchant_anchor = Balance.MERCHANT_POS + Vector3(0, Art.HEAD_HEIGHT + 0.1, 0)
 	var r := Vector3(Balance.MERCHANT_RADIUS, Art.HEAD_HEIGHT, Balance.MERCHANT_RADIUS)
 	var box := AABB(Balance.MERCHANT_POS - Vector3(r.x, 0, r.z), r * 2.0 * Vector3(1, 0.5, 1))  # 상인 기둥
 	box = box.merge(AABB(cart.position + cart.mesh.get_aabb().position, cart.mesh.get_aabb().size))
@@ -89,23 +90,6 @@ func _add_tap_body(ground_center: Vector3, size: Vector3, layer := LAYER_TAP) ->
 	body.position = ground_center + Vector3(0, size.y / 2.0, 0)
 	add_child(body)
 	return body
-
-
-func _add_label(text: String, pos: Vector3) -> Label3D:
-	var label := Label3D.new()
-	label.text = text
-	label.font = FONT
-	label.font_size = 48
-	label.outline_size = 12
-	label.pixel_size = 0.03
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	label.modulate = Color(0.18, 0.18, 0.22)
-	label.outline_modulate = Color(1, 1, 1, 0.9)
-	label.position = pos
-	add_child(label)
-	return label
 
 
 ## 성벽 근처·괴물 진입로(두 축)·서로 가까운 자리를 피해 나무·덤불·바위를 흩는다. 나무 자리는 2~4그루 숲(같은 변형, 회전·크기만 다름).
@@ -203,10 +187,8 @@ func _add_gate_sites() -> void:
 	sites[GameData.GATE] = boxes
 
 
-## 이름표 "이름 Lv N"과 비계를 Economy(레벨·일꾼)에 맞춘다. 비계는 짓는 건물이 바뀔 때만 다시 만든다.
+## 비계를 Economy 일꾼에 맞춘다. 짓는 건물이 바뀔 때만 다시 만든다(이름표 "이름 Lv N"은 world_tags가 Economy.changed마다).
 func _sync_build() -> void:
-	for id in labels:
-		labels[id].text = "%s Lv %d" % [GameData.building_def(id).name, Economy.building_level(id)]
 	var id := str(Economy.build.get("id", ""))
 	if not sites.has(id):
 		id = ""

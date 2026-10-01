@@ -26,6 +26,7 @@ const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 const BadgesScript := preload("res://scripts/badges.gd")
+const WorldTagsScript := preload("res://scripts/world_tags.gd")
 const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
@@ -70,6 +71,11 @@ func _build_world() -> void:
 	var rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
+	var tags = WorldTagsScript.new()  # 건물·상인·문루 이름표(개정 15, 화면 공간) — HP 바·말풍선보다 아래 캔버스
+	tags.camera = camera
+	tags.scenery = scenery
+	tags.castle = castle
+	add_child(tags)
 	var bars = HpBarsScript.new()
 	bars.camera = camera
 	add_child(bars)
@@ -79,6 +85,8 @@ func _build_world() -> void:
 	var badges = BadgesScript.new()
 	badges.camera = camera
 	badges.scenery = scenery  # 건설 진행 막대 자리
+	badges.tags = tags  # 막대·말풍선은 이름표 위에 쌓는다
+	tags.badges = badges  # 이름표 덩어리 = 이름표 + 막대·말풍선
 	add_child(badges)
 	_formation = FormationScript.new()
 	if rebuilds == 0 and OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():

@@ -1,9 +1,10 @@
 extends Node2D
 ## 자원 건물 말풍선(쌓인 게 5분 이상이면 이름표 위에 자원 아이콘)과 수집 "+N" 떠오르기.
 ## hp_bars 방식: 화면 공간에 매 프레임 한 번에 그린다. 건물 위치·높이는 Balance.BUILDINGS와 TownKit 메시 AABB에서.
-## 건물 이름표(buildings.gd)가 높이+1.0m에 있다 — 말풍선 꼬리 끝은 그 위(높이+ANCHOR_UP).
 ## 건설 중(개정 12 §2.5): 짓는 건물(성문은 문루 넷) 이름표 위에 진행 막대 + 남은 시간(UiKit.duration, 초가 바뀔 때마다 글자가 바뀐다).
 ## 그 건물의 말풍선은 막대 위로 올린다. 자리는 scenery(buildings.gd).sites.
+## 개정 15: 막대·말풍선은 화면 공간 이름표(world_tags.gd, tags)의 윗변(tags.top) 위에 쌓는다 — 이름표와 한 덩어리로 겹침·병사 대열을 피한다
+## (덩어리 크기 = stack_size). tags가 없으면 예전처럼 지붕 위 ANCHOR_UP 월드 좌표에.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -12,7 +13,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const FONT :=preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ANCHOR_UP := 1.9   # 건물 지붕 위 m: 이름표(+1.0, 글자 높이 ~1.4) 위
+const ANCHOR_UP := 1.9   # 건물 지붕 위 m: "+N" 시작 지점(이름표 높이쯤), tags가 없을 때 말풍선·막대 자리
 const BUBBLE_R := 22.0   # 논리 px(720 폭 기준)
 const BOB_PX := 3.0
 const BOB_HZ := 0.8
@@ -22,10 +23,14 @@ const POP_FONT := 28
 const INK := Color(0.16, 0.18, 0.24)
 const BUILD_BAR := Vector2(96, 12)  # 건설 진행 막대(논리 px)
 const BUILD_FONT := 22
-const BUILD_LIFT_PX := 38.0  # 짓는 중인 자원 건물의 말풍선을 막대·글자 위로 올리는 양
+const BUILD_LIFT_PX := 44.0  # 막대 + 남은 시간 글자 덩어리 높이 — 짓는 중인 자원 건물의 말풍선을 이만큼 위로 올린다
+const BUILD_W := 104.0  # 막대·남은 시간 덩어리 폭
+const BUILD_AT_PX := 10.0  # 이름표 윗변 → 막대 가운데
+const BUBBLE_BLOCK := 58.0  # 말풍선 덩어리 높이(꼬리 2 + 지름 + 8 + 흔들림)
 
 var camera: Camera3D
 var scenery  # 건물(buildings.gd) — 건설 막대 자리(sites). main이 넣는다
+var tags  # world_tags.gd — 이름표 자리(top). main이 넣는다(없으면 지붕 위 월드 좌표)
 var last_pop := {}  # 마지막 pop 인자(테스트·디버그용): {pos, kind, amount}
 
 var _anchors := {}  # 건물 id → 말풍선 기준 월드 좌표(지붕 위)
@@ -73,12 +78,17 @@ func _draw() -> void:
 	var view := get_viewport_rect().grow(BUBBLE_R * 2.0)
 	var bob := sin(_t * TAU * BOB_HZ) * BOB_PX
 	var now := Economy.time_now()
-	for p in build_anchors():
-		var at := camera.unproject_position(p)
-		if view.has_point(at):
-			_draw_build_bar(at, Economy.build_progress(now), UiKit.duration(Economy.build_left(now)))
+	var bid := str(Economy.build.get("id", ""))
+	var bars := build_anchors()
+	for i in bars.size():
+		var at = _base(bid if bid != GameData.GATE else "gate:%d" % i, bars[i])
+		if at != null and view.has_point(at):
+			_draw_build_bar(at + Vector2(0, -BUILD_AT_PX if tags != null else 0.0), Economy.build_progress(now), UiKit.duration(Economy.build_left(now)))
 	for id in badge_ids(now):
-		var tip := camera.unproject_position(anchor(id)) + Vector2(0, bob - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
+		var at = _base(id, anchor(id))
+		if at == null:
+			continue
+		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
 		if view.has_point(tip):
 			_draw_bubble(tip, Economy.res_of(id))
 	for p in _pops:
@@ -108,6 +118,23 @@ func _draw_pop(at: Vector2, p: Dictionary) -> void:
 	var pos := Vector2(x0 + icon_px + 4.0, at.y + POP_FONT * 0.35)
 	draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, 8, Color(1, 1, 1, a))
 	draw_string(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, Color(INK, a))
+
+
+## 막대·말풍선을 쌓을 바닥 화면 좌표: 이름표(tag_id)의 윗변 가운데(이름표가 화면 밖이면 null). tags가 없으면 월드 좌표 world를 그대로.
+func _base(tag_id: String, world: Vector3):
+	return tags.top(tag_id) if tags != null else camera.unproject_position(world)
+
+
+## 이름표 tag_id(건물 id, 성문은 "gate:<면>") 위에 쌓을 덩어리 크기 Vector2(최소 폭, 높이) — world_tags가 이름표와 한 덩어리로 놓는다.
+## 짓는 중이면 막대 + 남은 시간, 말풍선이 뜨면 그 위에 말풍선.
+func stack_size(tag_id: String, now: float) -> Vector2:
+	var id := tag_id.get_slice(":", 0)
+	var out := Vector2.ZERO
+	if Economy.is_building(id):
+		out = Vector2(BUILD_W, BUILD_LIFT_PX)
+	if _anchors.has(id) and Economy.show_badge(id, now):
+		out = Vector2(maxf(out.x, BUBBLE_R * 2.0 + 4.0), out.y + BUBBLE_BLOCK)
+	return out
 
 
 ## 지금 짓는 건물의 진행 막대 자리(월드, 지붕 위 ANCHOR_UP). 쉬면 [].

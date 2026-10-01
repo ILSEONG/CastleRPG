@@ -160,7 +160,8 @@ func _phase1(state_path: String) -> void:
 	_check(Economy.res["wood"] == 0 and Economy.server_gold_tenths == gold0 + gain and Economy.gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
 		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()
-	_check(_scenery.merchant_label.text == "상인", "(e) merchant name tag is just the name (rates and countdown live in the trade window)", "label=%s" % _scenery.merchant_label.text)
+	var wt = _main.get_children().filter(func(c): return c.get_script() == preload("res://scripts/world_tags.gd"))[0]
+	_check(wt.text("merchant") == "상인" and _scenery.merchant_anchor.y > 2.0, "(e) merchant name tag is just the name (rates and countdown live in the trade window)", "label=%s" % wt.text("merchant"))
 
 	# (f) next_change가 지나면 /v1/player로 시세를 한 번 갱신한다
 	var p0: int = Net.requested.get("/v1/player", 0)

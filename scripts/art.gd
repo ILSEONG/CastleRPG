@@ -81,7 +81,7 @@ const SOLDIERS := {
 	"archer": {"gear": "2H_Crossbow", "role": "ranged", "color": Color("#6AA84F")},
 	"cavalry": {"gear": "1H_Sword", "role": "melee", "color": Color("#4F81BD"), "horse": true},
 }
-const SOLDIER_SCALE := 0.75
+const SOLDIER_SCALE := 0.9  # 개정 15: 0.75는 성채 앞 대열이 너무 작아 보였다(격자 0.9 m 간격 그대로)
 const SOLDIER_BAR := Color(0.45, 0.78, 0.98)  # 병사 HP 바(하늘색)
 
 

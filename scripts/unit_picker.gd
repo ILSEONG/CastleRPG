@@ -6,6 +6,7 @@ extends Node
 ## HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
 ## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
 ## 상인 탭은 거래 창, 주점 탭은 모집 창, 자원 건물 탭은 쌓인 게 있으면 수집(+N)·없으면 건물 창, 그 밖의 건물 탭은 건물 창(개정 12 §2.5).
+## 건물은 레이가 꿴 판정체 중 화면 중심이 탭에 가장 가까운 것(_building_hit, 개정 15 — 앞 건물 상자가 뒤 병사 건물 지붕을 가리지 않게).
 ## 성문 탭은 선택된 영웅이 있으면 그 영웅의 성문 명령이 먼저이고, 없으면 성문 건물 창. 모두 영웅 선택은 건드리지 않는다.
 ## 길게 누르기(LONG_PRESS_MS, 같은 탭 조건: 움직이지 않고 두 번째 손가락 없음): 건물·성문이면 누른 채로 건물 창을 열고 그 누름은 탭이
 ## 되지 않는다(주점·자원 건물도 건물 창). 건물이 아니면(바닥·영웅·상인) 아무 일 없이 뗄 때 보통 탭이다.
@@ -27,6 +28,7 @@ const HERO_TAP_PRECISE_PX := 12.0  # 영웅 선택 중에는 이만큼 가까워
 const GROUND_MARGIN := 4.0   # 바닥 명령 지점을 맵 가장자리에서 이만큼 안으로 자른다
 const MARKER_SEC := 0.5
 const LONG_PRESS_MS := 500
+const MAX_TAP_HITS := 4  # 한 탭 레이가 꿰어 보는 건물 판정체 수(_building_hit)
 
 var camera: Camera3D
 var selected
@@ -121,13 +123,34 @@ func _pick(screen_pos: Vector2, layer_mask: int) -> Dictionary:
 	return camera.get_world_3d().direct_space_state.intersect_ray(q)
 
 
+## 탭 위치의 건물 id(없으면 ""). 레이가 건물 판정체(부지 상자) 여럿을 꿰면 — 기본 카메라에서 앞 건물(주점·성채) 상자가 뒤 병사 건물
+## 지붕까지 덮는다 — 판정체 중심(상자 가운데)의 화면 위치가 탭에 가장 가까운 건물을 고른다(개정 15). 앞 건물 앞면을 누르면 그 건물이 더 가깝다.
+func _building_hit(screen_pos: Vector2) -> String:
+	var from := camera.project_ray_origin(screen_pos)
+	var q := PhysicsRayQueryParameters3D.create(from, from + camera.project_ray_normal(screen_pos) * camera.far, LAYER_TAP)
+	var space := camera.get_world_3d().direct_space_state
+	var skip: Array[RID] = []
+	var best := ""
+	var best_d := INF
+	for i in MAX_TAP_HITS:
+		q.exclude = skip
+		var hit := space.intersect_ray(q)
+		if hit.is_empty():
+			break
+		var d := camera.unproject_position(hit.collider.global_position).distance_to(screen_pos)
+		if d < best_d:
+			best_d = d
+			best = hit.collider.get_meta("building", "")
+		skip.append(hit.rid)
+	return best
+
+
 ## 상인(레이어 32) → 건물(레이어 16) → 성문(레이어 2, 선택된 영웅이 없을 때만 여기 온다) 탭. 처리했으면 true.
 func _tap_object(screen_pos: Vector2) -> bool:
 	if not _pick(screen_pos, LAYER_MERCHANT).is_empty():
 		panel.open()
 		return true
-	var hit := _pick(screen_pos, LAYER_TAP)
-	var id: String = hit.collider.get_meta("building", "") if not hit.is_empty() else ""
+	var id := _building_hit(screen_pos)
 	if id == "tavern" and recruit != null:
 		recruit.open()
 		return true
@@ -146,9 +169,9 @@ func _tap_object(screen_pos: Vector2) -> bool:
 func _building_at(screen_pos: Vector2) -> String:
 	if not _pick(screen_pos, LAYER_MERCHANT).is_empty():
 		return ""  # 상인은 건물이 아니다 — 뒤쪽 건물 상자가 대신 잡히지 않게
-	var hit := _pick(screen_pos, LAYER_TAP)
-	if not hit.is_empty():
-		return hit.collider.get_meta("building", "")
+	var id := _building_hit(screen_pos)
+	if id != "":
+		return id
 	return GameData.GATE if not _pick(screen_pos, LAYER_GATE).is_empty() else ""
 
 

@@ -91,6 +91,8 @@ func _init() -> void:
 	test_rotate_hold_state()
 	test_fever()
 	test_portraits()
+	test_keep_tier_lockstep()
+	test_soldier_figures()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -235,7 +237,8 @@ func _remote_checks() -> int:
 	p.stages = p.stages.slice(0, 10)
 	p.stages.reverse()  # 순서가 뒤섞여도 stage 번호로 정렬해 읽는다
 	p.config.castle_hp = "2000"
-	p.config.keep_slot_tiers = "1:5|9:9"
+	p.config.keep_slot_tiers = "1:4|3:8|6:12"  # 단계 표 둘은 같은 레벨로 함께 옮긴다(개정 15)
+	p.config.keep_interior_tiers = "1:20|3:24|6:28"
 	p.config.starter_heroes = "jack|kyle"
 	p.heroes[1].s1a = 5  # 서버 행처럼: 숫자는 숫자, 빈 칸은 null
 	p.heroes[1].skill2 = null
@@ -244,10 +247,10 @@ func _remote_checks() -> int:
 	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 22 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
 	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0]}, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
-	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(1) == 5 and GameData.hero_slots(9) == 9, "remote config replaces the table")
+	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(2) == 4 and GameData.hero_slots(3) == 8 and GameData.interior_tiles(6) == 28, "remote config replaces the table")
 	check(is_equal_approx(GameData.stage(10).hp_mult, 1.9) and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
 	var gs = GameStateScript.new()  # 표가 바뀐 뒤에는 새 값으로 시작한다
-	check(gs.castle_hp_max == 2000.0 and gs.hero_count() == 5, "GameState reads the replaced tables")
+	check(gs.castle_hp_max == 2000.0 and gs.hero_count() == 4, "GameState reads the replaced tables")
 	gs.free()
 	# 틀린 payload는 거부하고 위 상태를 그대로 둔다. [이름, 고치는 함수, 오류 수]
 	var bad := [
@@ -2251,27 +2254,28 @@ func test_portraits() -> void:
 	var fy := int(P.feet_y() * P.PLACEHOLDER_PX)
 	check(sil.get_pixel(32, fy - 2).a > 0.5 and sil.get_pixel(32, fy + 2).a == 0.0 and sil.get_pixel(2, 2).a == 0.0 and P.feet_y() > 0.75 and P.feet_y() < 0.95,
 		"the silhouette stands on the figure's feet line (y %.2f), background transparent" % P.feet_y())
-	check(P.spec_of("hero:arteon") == Art.hero_spec(GameData.hero("arteon")) and P.spec_of("soldier:cavalry").is_empty() and P.spec_of("hero:nobody").is_empty(),
-		"spec_of: hero keys use the in-game model spec (gear shown); soldier keys have no mesh yet")
+	check(P.spec_of("hero:arteon") == Art.hero_spec(GameData.hero("arteon")) and P.spec_of("soldier:cavalry") == Art.soldier_spec("cavalry", "Knight")
+		and P.spec_of("soldier:dragon").is_empty() and P.spec_of("hero:nobody").is_empty(),
+		"spec_of: hero and soldier keys use the in-game model spec (gear shown); unknown keys have none")
 	var p = P.new()
 	P.current = p  # 월드 안이라면 _enter_tree가 한다
 	check(not p.can_render, "headless: no renderer")
 	P.portrait("hero:hans")
 	check(p.queue.is_empty(), "headless: requests are skipped, placeholder only")
 	p.can_render = true  # 렌더러가 있는 척 — 큐만 본다(_show는 트리 밖에서 못 쓴다)
-	for key in ["hero:hans", "hero:hans", "hero:jack", "soldier:cavalry", "hero:nobody"]:
+	for key in ["hero:hans", "hero:hans", "hero:jack", "soldier:cavalry", "hero:nobody", "soldier:dragon"]:
 		P.portrait(key)
-	check(p.queue == ["hero:hans", "hero:jack"], "requests queue once per key in order; keys without a model are not queued: %s" % [p.queue])
+	check(p.queue == ["hero:hans", "hero:jack", "soldier:cavalry"], "requests queue once per key in order; keys without a model are not queued: %s" % [p.queue])
 	p.live_key = "hero:arteon"
 	p._process(0.016)
-	check(p.queue == ["hero:hans", "hero:jack"] and p._pending == "", "the queue waits while the live preview uses the viewport")
+	check(p.queue == ["hero:hans", "hero:jack", "soldier:cavalry"] and p._pending == "", "the queue waits while the live preview uses the viewport")
 	p.live_key = ""
 	var got := []
 	p.portrait_ready.connect(func(k): got.append(k))
 	var tex := ImageTexture.create_from_image(P.silhouette(Color.BLUE))
 	p.store("hero:hans", tex)
 	P.portrait("hero:hans")
-	check(got == ["hero:hans"] and p.queue == ["hero:jack"] and P.portrait("hero:hans") == tex and P.has_portrait("hero:hans"),
+	check(got == ["hero:hans"] and p.queue == ["hero:jack", "soldier:cavalry"] and P.portrait("hero:hans") == tex and P.has_portrait("hero:hans"),
 		"a finished render is cached, leaves the queue, fires portrait_ready(key) and is not queued again")
 	p.can_render = false
 	p.set_live("hero:arteon")
@@ -2307,3 +2311,94 @@ func test_portraits() -> void:
 		"the unique color is a two-tone pedestal centered under the figure's feet")
 	check(card.figure_texture() == P.portrait("hero:dorik") and card.figure_texture() == P.placeholder("hero:dorik"), "the card draws the placeholder until the figure is rendered")
 	card.free()
+
+
+## 개정 15: 성채 단계 표 둘은 함께 움직인다(사용자 규칙: 성이 넓어질 때마다 영웅 슬롯 +4, 최대 12). CSV(load_tables)와 원격 표(apply_remote)
+## 모두 슬롯 표 레벨 = 내부 표 레벨, 슬롯 값 = 4 × 단계(4, 8, 12), 내부 값은 단계마다 커져야 한다. 서버 seed.checkKeepTiers와 같은 규칙.
+func test_keep_tier_lockstep() -> void:
+	GameData.load_tables()
+	var logged := _errors.count
+	var bad := [  # [이름, 슬롯 표, 내부 표]
+		["slot levels differ", "1:4|6:8|10:12", "1:20|5:24|10:28"],
+		["interior has fewer tiers", "1:4|5:8|10:12", "1:20|5:24"],
+		["slot value not 4 x tier", "1:4|5:9|10:12", "1:20|5:24|10:28"],
+		["slots above 12", "1:4|5:8|10:12|15:16", "1:20|5:24|10:28|15:32"],
+		["first tier not 4 slots", "1:6|5:8|10:12", "1:20|5:24|10:28"],
+		["interior does not grow", "1:4|5:8|10:12", "1:20|5:24|10:24"],
+	]
+	var csv := FileAccess.get_file_as_string(GameData.CONFIG_PATH)
+	var cp := "user://t_tiers.csv"
+	for entry in bad:
+		_write(cp, csv.replace("keep_slot_tiers,1:4|5:8|10:12", "keep_slot_tiers," + entry[1]).replace("keep_interior_tiers,1:20|5:24|10:28", "keep_interior_tiers," + entry[2]))
+		GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
+		check(GameData.errors == 1, "config.csv keep tiers rejected: %s (errors %d)" % [entry[0], GameData.errors])
+	DirAccess.remove_absolute(cp)
+	GameData.load_tables()
+	var before := _tables_hash()
+	for entry in bad:
+		var q := _payload()
+		q.config.keep_slot_tiers = entry[1]
+		q.config.keep_interior_tiers = entry[2]
+		check(not GameData.apply_remote(q) and GameData.errors == 1 and _tables_hash() == before, "apply_remote keep tiers rejected: %s (errors %d)" % [entry[0], GameData.errors])
+	var ok := _payload()
+	ok.config.keep_slot_tiers = "1:4|4:8|8:12"  # 같은 레벨로 함께 옮기면 통과
+	ok.config.keep_interior_tiers = "1:20|4:22|8:26"
+	check(GameData.apply_remote(ok) and [1, 4, 8].map(func(l): return GameData.hero_slots(l)) == [4, 8, 12] and GameData.interior_tiles(4) == 22,
+		"keep tiers moved together in lockstep are accepted")
+	ok.config.keep_slot_tiers = "1:4|5:8"  # 단계 둘(최대 8)도 규칙 안
+	ok.config.keep_interior_tiers = "1:20|5:24"
+	check(GameData.apply_remote(ok) and GameData.hero_slots(30) == 8, "two keep tiers (up to 8 slots) are within the rule")
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.hero_slots(10) == 12, "default tables restored after the keep tier test")
+
+
+## 개정 15: 병종 몸(SoldierBody — 월드 병사와 병사 피규어가 같이 쓴다)과 병사 크기 0.9. 트리 밖이라 모델 안(GLB)은 만들지 않고 조립만 본다.
+## 크기를 키워도 대열 격자(11 × 6, 0.9 m)는 그대로이고, 병사·말 발자리가 건물 메시·상인·수레에 닿지 않는다.
+func test_soldier_figures() -> void:
+	const SoldierBody := preload("res://scripts/soldier_body.gd")
+	check(Art.SOLDIER_SCALE == 0.9 and is_equal_approx(SoldierBody.RIDER_Y, (TownKitScript.HORSE_BACK - SoldierBody.RIDER_HIP) * 0.9),
+		"soldiers are drawn at 0.9 and the knight sits on the horse's back (rider y %.2f)" % SoldierBody.RIDER_Y)
+	var bodies := {}
+	for type in ["infantry", "archer", "cavalry", "cavalry"]:
+		var root := Node3D.new()
+		var b: Array = SoldierBody.build(root, type)
+		bodies[type] = b
+		var m = b[0]
+		var ok: bool = root.get_child_count() == (2 if type == "cavalry" else 1) and root.get_child(0) == m and is_equal_approx(m.scale.x, Art.SOLDIER_SCALE * Art.CHARACTER_SCALE)
+		ok = ok and m._spec == Art.soldier_spec(type, GameData.soldier(type).model) and not m.manual
+		if type == "cavalry":
+			ok = ok and b[1] is MeshInstance3D and is_equal_approx(b[1].scale.x, Art.SOLDIER_SCALE) and is_equal_approx(m.position.y, SoldierBody.RIDER_Y)
+		else:
+			ok = ok and b[1] == null and m.position.y == 0.0
+		check(ok, "SoldierBody.build(%s): the soldier model (gear %s)%s" % [type, Art.SOLDIERS[type].gear, " on a horse" if type == "cavalry" else ""])
+		root.free()
+	var inf: Dictionary = Art.soldier_spec("infantry", "Knight")
+	var arc: Dictionary = Art.soldier_spec("archer", "Rogue_Hooded")
+	check(GameData.soldier("infantry").model == "Knight" and not inf.hide.has("1H_Sword") and not inf.hide.has("Rectangle_Shield") and inf.hide.has("2H_Sword")
+		and GameData.soldier("archer").model == "Rogue_Hooded" and not arc.hide.has("2H_Crossbow") and arc.hide.has("Knife"),
+		"infantry = Knight with sword and shield; archer = Rogue_Hooded with the crossbow")
+	# 0.9 크기 발자리: 보병·궁병 0.8 m 정사각, 기병은 말(+Z를 본다) — 건물 메시·상인·수레와 겹치지 않는다
+	var units := []
+	for i in 66:
+		units.append({"type": ["infantry", "archer", "cavalry"][i % 3], "tier": 1})
+	var spots: Array = FormationScript.soldier_spots(units)
+	var hb: AABB = TownKitScript.horse().get_aabb()
+	var s := Art.SOLDIER_SCALE
+	var blocks := []
+	for b in Balance.BUILDINGS:
+		var c := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
+		var box: AABB = TownKitScript.building(b.id).get_aabb()
+		blocks.append([b.id, Rect2(c.x + box.position.x, c.z + box.position.z, box.size.x, box.size.z)])
+	var cart: AABB = TownKitScript.merchant_cart().get_aabb()
+	var cc: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
+	blocks.append(["cart", Rect2(cc.x + cart.position.x, cc.z + cart.position.z, cart.size.x, cart.size.z)])
+	blocks.append(["merchant", Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS)])
+	var hits := []
+	for i in spots.size():
+		var p: Vector3 = spots[i]
+		var foot := Rect2(p.x + hb.position.x * s, p.z + hb.position.z * s, hb.size.x * s, hb.size.z * s) if units[i].type == "cavalry" else Rect2(p.x - 0.4, p.z - 0.4, 0.8, 0.8)
+		for blk in blocks:
+			if foot.intersects(blk[1]):
+				hits.append([units[i].type, p, blk[0]])
+	check(FormationScript.soldier_grid() == Vector2i(11, 6) and hits.is_empty(), "at 0.9 the 66-soldier formation (horses %.2f m long) still clears every building mesh, the merchant and the cart: %s" % [hb.size.z * s, hits.slice(0, 3)])
