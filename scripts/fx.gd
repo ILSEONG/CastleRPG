@@ -47,6 +47,21 @@ static func foot_ring(grade_color: Color, color: Color) -> MeshInstance3D:
 	return mi
 
 
+## 병사 발밑 원판(개정 13 §7): 병종 색 8각 원판 + 진한 테두리(영웅 6각 고리와 구분). radius = 바깥 반지름(기병은 말 길이만큼 크게).
+static func soldier_disc(color: Color, radius := 0.45) -> MeshInstance3D:
+	var key := "disc%s%.2f" % [color.to_html(), radius]
+	if not _meshes.has(key):
+		var k = MeshKit.new()
+		k.prism_n(Vector3.ZERO, 8, radius, radius, 0.04, color.darkened(0.3), PI / 8.0)
+		k.prism_n(Vector3.ZERO, 8, radius * 0.8, radius * 0.8, 0.05, color, PI / 8.0)
+		_meshes[key] = k.commit()
+	var mi := MeshInstance3D.new()
+	mi.mesh = _meshes[key]
+	mi.material_override = material()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
 ## 투사체 모양(projectile.gd가 부른다): "bolt" = 고유 색 20면체(마법), "axe" = 도끼, "arrow" = 화살 모델. 투사체 노드 proj(정면 -Z)의
 ## 자식으로 붙이고 상한 수에 넣는다. 상한이면 붙이지 않고 null(투사체는 모양 없이 난다).
 static func dress_projectile(proj: Node3D, kind: String, color: Color) -> Node3D:

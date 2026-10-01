@@ -450,7 +450,7 @@ func _refresh_detail() -> void:
 	level_label.text = "Lv %d / %d" % [lv, mx]
 	level_bar.max_value = mx
 	level_bar.value = lv
-	var now := GameData.hero_stats(h, lv, copies, Economy.levels)  # 막사·연구소 보너스 포함(개정 12)
+	var now := GameData.hero_stats(h, lv, copies, Economy.levels)  # 연구소 보너스 포함(개정 12, 개정 13: 막사 보너스 없음)
 	var nxt := GameData.hero_stats(h, lv + 1, copies, Economy.levels)
 	var grow := lv < mx
 	var rows := [

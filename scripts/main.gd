@@ -5,9 +5,11 @@ extends Node3D
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 ## 영웅은 배치(GameState.deploy·hero_copies·hero_level)대로 만들고, 배치·별·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
-## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 막사·연구소 → 영웅 능력치(방치면 곧바로,
+## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 연구소 → 영웅 공격(방치면 곧바로,
 ## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
+## 병사(개정 13): 병사 배치(Economy.soldier_deploy)대로 성채 앞 광장에 병사를 세운다(Formation.soldier_spots). 배치가 바뀌면 다음 리필 때
+## (방치 모드면 곧바로) 다시 만든다.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -16,6 +18,7 @@ const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const FormationScript := preload("res://scripts/formation.gd")
 const HeroScript := preload("res://scripts/hero.gd")
+const SoldierScript := preload("res://scripts/soldier.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -39,7 +42,9 @@ var castle
 
 var _formation
 var _picker
-var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies, level, 막사, 연구소]}(만들 때 값)
+var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, copies, level, 연구소]}(만들 때 값)
+var soldiers: Array = []  # 성채 앞 병사 노드(개정 13)
+var _soldier_key = null  # 병사를 만들 때의 배치(바뀌면 다시 만든다)
 var _built_slots := 0  # 이 월드를 만들 때의 영웅 슬롯 수(성채 단계)
 var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점에 월드를 다시 만든다
 
@@ -78,6 +83,7 @@ func _build_world() -> void:
 		_apply_dev_heroes()
 	_built_slots = GameState.hero_count()
 	_sync_heroes()
+	_sync_soldiers()
 	var picker = PickerScript.new()
 	picker.camera = camera
 	picker.badges = badges
@@ -100,8 +106,10 @@ func _build_world() -> void:
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 11): 성·영웅·모집·상인
 	tabs.windows = {"hero": hero_panel, "recruit": recruit, "merchant": panel}
 	add_child(tabs)
-	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별·막사·연구소 반영
+	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·별·연구소 반영
+	GameState.refilled.connect(_sync_soldiers)
 	Economy.roster_changed.connect(_on_roster_changed)
+	Economy.soldiers_changed.connect(_on_soldiers_changed)
 	Economy.building_done.connect(_on_building_done)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
@@ -162,7 +170,7 @@ func _sync_heroes() -> void:
 	for i in deploy.size():
 		var id = deploy[i]
 		var key := [id, GameState.hero_copies(id) if id != null else 0, GameState.hero_level(id) if id != null else 0,
-			GameState.building_level(GameData.BARRACKS), GameState.building_level(GameData.LAB)]
+			GameState.building_level(GameData.LAB)]
 		if _slots.has(i) and _slots[i].key == key:
 			continue
 		_retire(i)
@@ -184,6 +192,37 @@ func _retire(i: int) -> void:
 	h.retire()
 
 
+## 병사 배치(Economy.soldier_deploy)대로 성채 앞 병사를 만든다. 배치가 만들 때와 같으면 그대로(생산·합성만 바뀐 경우), 다르면 전부 다시.
+func _sync_soldiers() -> void:
+	var d: Dictionary = Economy.soldier_deploy()
+	if d == _soldier_key:
+		return
+	_soldier_key = d
+	for s in soldiers:
+		s.retire()
+	soldiers.clear()
+	var units := []
+	for k in d:
+		var p: Array = Economy.parse_soldier_key(k)
+		if not p.is_empty():
+			for i in int(d[k]):
+				units.append({"type": p[0], "tier": p[1]})
+	var spots: Array = FormationScript.soldier_spots(units)
+	for i in units.size():
+		if spots[i] == null:
+			continue  # 66칸을 넘는 배치(인구 상한이 막는다)
+		var s = SoldierScript.new()
+		s.setup(units[i].type, units[i].tier, spots[i], castle)
+		add_child(s)
+		soldiers.append(s)
+
+
+## 방치 모드면 병사 배치 변경을 곧바로, 아니면 다음 리필 때.
+func _on_soldiers_changed() -> void:
+	if GameState.mode == GameState.Mode.IDLE:
+		_sync_soldiers()
+
+
 ## 방치 모드(대기)면 배치·별 변경을 곧바로 반영한다. 스테이지 중이면 다음 리필 때.
 ## 바뀐 슬롯의 영웅은 새로 만들어 HP가 가득 찬다(방치 모드의 공짜 회복이지만 해는 없다 — 스테이지 중에는 리필까지 기다린다).
 func _on_roster_changed() -> void:
@@ -191,12 +230,12 @@ func _on_roster_changed() -> void:
 		_sync_heroes()
 
 
-## 건설 완료(개정 12): 성채·성문 → 최대 HP. 막사·연구소 → 영웅 능력치(방치면 곧바로 다시 만들고, 아니면 다음 리필에 _sync_heroes가 key로
-## 알아챈다). 성채가 단계를 넘어 성 내부·슬롯 수가 이 월드와 달라지면 월드를 다시 만든다(_expand).
+## 건설 완료(개정 12): 성채·성문 → 최대 HP. 연구소 → 영웅 공격(방치면 곧바로 다시 만들고, 아니면 다음 리필에 _sync_heroes가 key로
+## 알아챈다. 개정 13: 막사는 영웅 HP를 올리지 않는다 — 병사 생산). 성채가 단계를 넘어 성 내부·슬롯 수가 이 월드와 달라지면 월드를 다시 만든다(_expand).
 func _on_building_done(id: String, level: int) -> void:
 	if id == GameData.KEEP or id == GameData.GATE:
 		GameState.apply_levels()
-	if (id == GameData.BARRACKS or id == GameData.LAB) and GameState.mode == GameState.Mode.IDLE:
+	if id == GameData.LAB and GameState.mode == GameState.Mode.IDLE:
 		_sync_heroes()
 	if id == GameData.KEEP and (GameData.interior_half(level) != castle.half or GameData.hero_slots(level) != _built_slots):
 		_expand()

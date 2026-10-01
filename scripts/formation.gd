@@ -253,3 +253,49 @@ static func crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
 ## 높이를 무시한 수평 거리. 사거리 판정은 전부 이것으로 한다.
 static func flat_distance(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+# --- 병사 자리(개정 13 §7) ---
+
+## 병종 → 대열 자리: 보병은 앞줄(성문 쪽 z 큰 쪽), 궁병은 뒷줄(성채 쪽), 기병은 양 끝 열. 표에 없는 병종은 보병처럼 앞줄.
+const SOLDIER_LINE := {"infantry": "front", "archer": "back", "cavalry": "flank"}
+const SOLDIER_FIRST := ["flank", "front", "back"]  # 자리를 고르는 순서 — 기병이 먼저 양 끝을 잡는다
+
+
+## 격자 크기 Vector2i(열, 줄) = (11, 6): Balance.SOLDIER_X·Z 범위를 SOLDIER_GAP 간격으로.
+static func soldier_grid() -> Vector2i:
+	return Vector2i(floori((Balance.SOLDIER_X.y - Balance.SOLDIER_X.x) / Balance.SOLDIER_GAP + 0.001) + 1,
+		floori((Balance.SOLDIER_Z.y - Balance.SOLDIER_Z.x) / Balance.SOLDIER_GAP + 0.001) + 1)
+
+
+## 병사 자리(순수 함수). units = [{type, tier}] → 같은 순서의 자리 Vector3(칸이 모자라 못 선 병사는 null, 최대 66칸).
+## 같은 병종은 티어 높은 순으로 가운데부터(기병은 양 끝 열의 앞부터) 채운다. 기병은 말이 길어(≈ 1.65 m) 한 줄 건너(0, 2, 4줄) 먼저 선다.
+static func soldier_spots(units: Array) -> Array:
+	var size := soldier_grid()
+	var mid := (size.x - 1) / 2.0
+	var out := []
+	out.resize(units.size())
+	var taken := {}
+	for line in SOLDIER_FIRST:
+		var mine := range(units.size()).filter(func(i): return SOLDIER_LINE.get(units[i].type, "front") == line)
+		mine.sort_custom(func(a, b): return units[a].tier > units[b].tier or (units[a].tier == units[b].tier and a < b))
+		var cells := []  # [우선순위, 칸(열, 줄 — 줄 0 = 앞)]
+		for c in size.x:
+			for r in size.y:
+				var key: float
+				match line:
+					"flank": key = mini(c, size.x - 1 - c) * 1000.0 + (r % 2) * 100.0 + r * 10.0 + c * 0.01
+					"back": key = (size.y - 1 - r) * 1000.0 + absf(c - mid) * 10.0 + c * 0.01
+					_: key = r * 1000.0 + absf(c - mid) * 10.0 + c * 0.01
+				cells.append([key, Vector2i(c, r)])
+		cells.sort_custom(func(a, b): return a[0] < b[0])
+		var k := 0
+		for i in mine:
+			while k < cells.size() and taken.has(cells[k][1]):
+				k += 1
+			if k == cells.size():
+				break
+			var cell: Vector2i = cells[k][1]
+			taken[cell] = true
+			out[i] = Vector3(Balance.SOLDIER_X.x + cell.x * Balance.SOLDIER_GAP, 0.0, Balance.SOLDIER_Z.x + (size.y - 1 - cell.y) * Balance.SOLDIER_GAP)
+	return out
