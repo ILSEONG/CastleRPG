@@ -57,7 +57,7 @@ var level_button: Button
 var ten_button: Button
 var deploy_button: Button
 var promote_button: Button
-var promote_preview: Label  # 승급 미리보기 "승급 ★1 → ★2: HP·공격 → ×1.5 · 최대 레벨 30 → 40"
+var promote_preview: Label  # 승급 미리보기 "승급하면 HP·공격 → ×1.5 · 최대 레벨 30 → 40"(최대면 "최대 승급 ★5 — HP·공격 ×7.59")
 var reason_label: Label  # [레벨업] 못 하는 이유
 var promote_reason: Label  # [승급] 못 하는 이유("조각 부족"·"최대 승급")
 var prev_button: Button

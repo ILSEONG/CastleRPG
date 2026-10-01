@@ -1343,7 +1343,7 @@ func _figures(heroes_win) -> void:
 func _promotion_ui(heroes_win, recruit) -> void:
 	var arteon := GameData.hero("arteon")
 	heroes_win.show_detail("arteon")
-	await _guard_wait()
+	await _unguarded(heroes_win)
 	await _frames(2)
 	var card: Rect2 = heroes_win.big_card.get_global_rect()
 	var fig: Rect2 = heroes_win.big_card.figure_rect()
@@ -1375,7 +1375,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.changed.emit()
 	_check(ac.can_promote and ac.shard_text() == "조각 30 / 25" and not ac.can_level, "(x3) with 30 shards the card shows the gold ⬆ (not the green ▲)", "")
 	heroes_win.show_detail("arteon")
-	await _guard_wait()
+	await _unguarded(heroes_win)
 	_check(not heroes_win.promote_button.disabled and heroes_win._promo.line.text == "조각 30 / 25" and heroes_win.promote_reason.text == "", "(x3) 30 shards: [승급] on", "")
 	var lv := Economy.level_of("arteon")
 	var hp0: String = heroes_win.stat_values[0].text
@@ -1420,14 +1420,18 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.gold_tenths = 3000
 	heroes_win.close()
 	recruit.open()
-	await _guard_wait()
+	await _unguarded(recruit)
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
 	var rc = recruit.cards[0] if recruit.cards.size() == 1 else null
 	var got: String = rc.hero_id if rc != null else ""
-	_check(rc != null and rc.badge == recruit.DUP_TEXT and rc.shards == Economy.shards_of(got) and rc.shards == int(keep[1].get(got, 0)) + 1
+	print("INPUT INFO: repeat pull %s card shards %d (kept %d, now %d) bar %s size %s cards %d" % [got, rc.shards if rc else -1, int(keep[1].get(got, 0)),
+		Economy.shards_of(got), rc.shard_bar_rect() if rc else Rect2(), rc.size if rc else Vector2.ZERO, recruit.cards.size()])
+	_check(rc != null and Economy.gold_tenths == 0 and rc.badge == recruit.DUP_TEXT and rc.shards == Economy.shards_of(got) and rc.shards == int(keep[1].get(got, 0)) + 1
 		and rc.shard_text() == "조각 %d / %d" % [rc.shards, Economy.promote_cost(got)] and rc.shard_bar_rect().size.x > 50.0,
-		"(x3) a repeat pull shows +1 조각 and that hero's shard bar (offline: shards +1)", "card=%s badge=%s shards=%d" % [got, rc.badge if rc else "", rc.shards if rc else -1])
+		"(x3) a repeat pull shows +1 조각 and that hero's shard bar (offline: shards +1)",
+		"card=%s badge=%s shards=%d econ=%d kept=%d text=%s need=%d bar=%s size=%s" % [got, rc.badge if rc else "", rc.shards if rc else -1, Economy.shards_of(got),
+			int(keep[1].get(got, 0)), rc.shard_text() if rc else "", Economy.promote_cost(got), rc.shard_bar_rect() if rc else Rect2(), rc.size if rc else Vector2.ZERO])
 	recruit._on_gacha_done([{"hero_id": "jack", "grade": "R", "new": true, "copies": 1, "shards": 0}])
 	_check(recruit.cards[0].badge == "NEW" and recruit.cards[0].shard_bar_rect().size.x == 0.0, "(x3) a new hero shows NEW and no bar", "")
 	recruit.close()
@@ -1438,8 +1442,15 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.changed.emit()
 	heroes_win.open()
 	heroes_win.show_detail("hans")
-	await _guard_wait()
+	await _unguarded(heroes_win)
 
 
 func _alive_heroes() -> Array:
 	return get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+
+
+## 창의 연 직후 보호 시간이 확실히 지나게(타이머 0.45초 뒤에도 실제 시각으로 아직이면 프레임을 더 기다린다 — 부하에 따라 엇갈린다).
+func _unguarded(win) -> void:
+	await _guard_wait()
+	while win.is_guarded():
+		await _frames(1)
