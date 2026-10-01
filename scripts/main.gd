@@ -361,5 +361,7 @@ func _econ_demo() -> void:
 	for id in Economy.res:
 		Economy.res[id] = 500
 	Economy.gold = 9999
+	Economy.soldiers = {"infantry:1": 7, "infantry:2": 2, "archer:1": 5, "cavalry:1": 3}  # 병사 탭·[합성] 캡처용(생산은 3시간)
 	Economy.changed.emit()
-	print("[econ-demo] gold 9999, resources 500")
+	Economy.soldiers_changed.emit()
+	print("[econ-demo] gold 9999, resources 500, soldiers 17")
