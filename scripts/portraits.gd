@@ -6,7 +6,7 @@ extends Node
 ## portrait_ready(key)(Node에 이미 ready 시그널이 있어 이 이름이다). 큐는 한 프레임에 하나: 모델을 띄우고 대기 자세를 곧바로 적용
 ## (AnimationPlayer.advance(0) — 안 하면 이 프레임은 T자 기본 자세) + UPDATE_ONCE → 그 프레임 RenderingServer.frame_post_draw에서
 ## get_texture().get_image()로 읽는다.
-## 살아 있는 미리보기(상세 큰 카드): set_live(key) 동안 같은 SubViewport를 매 프레임 그리고(UPDATE_ALWAYS, 대기 애니메이션) 큐는 쉰다.
+## 살아 있는 미리보기(상세 큰 카드): set_live(key) 동안 같은 SubViewport를 매 프레임 그리고(UPDATE_ALWAYS, 대기 애니메이션 × LIVE_ANIM_SPEED) 큐는 쉰다.
 ## turn(px)로 모델을 돌린다. 카드는 live_texture()(ViewportTexture)를 직접 그린다 — SubViewportContainer도 안에서 같은 일을 하므로
 ## 공유 뷰포트를 컨테이너 자식으로 옮기거나 입력을 3D로 넘길 필요가 없다.
 ## 헤드리스(렌더러 없음): 렌더·읽기를 건너뛰고 자리표시만 쓴다(frame_post_draw가 오지 않고 get_image는 오류를 낸다).
@@ -23,6 +23,7 @@ const LOOK_AT := Vector3(0, 1.3, 0)
 const CAM_ROT := Vector3(-18, -30, 0)  # 살짝 위·왼쪽에서 본 3/4 시점(모델 정면 +Z). 직교 — 로우폴리 셰이더 법선 규약과 같다
 const SUN_ROT := Vector3(-50, -110, 0)  # main처럼 해가 화면 왼쪽 위에서(카메라 요 기준 main과 비슷한 각), 정면도 조금 밝게
 const TURN_DEG_PER_PX := 0.6
+const LIVE_ANIM_SPEED := 0.6  # 미리보기 대기 애니메이션 속도 배율
 const PLACEHOLDER_PX := 64
 const NEUTRAL := Color("8C9AB0")  # 등급 없는 키(병사) 자리표시
 
@@ -198,8 +199,8 @@ func _on_drawn() -> void:
 	var img := _vp.get_texture().get_image()
 	if queue.is_empty():
 		_show("")  # 다 그렸다 — 보이지 않는 애니메이션을 돌리지 않게 치운다
-	if img == null or img.is_empty():
-		return  # 자리표시 유지
+	if img == null or img.is_empty() or img.is_invisible():
+		return  # 못 그렸다(빈 그림) — 빈 피규어를 굳히지 않고 자리표시 유지. 카드가 다시 그릴 때 다시 요청한다
 	img.convert(Image.FORMAT_RGBA8)
 	img.fix_alpha_edges()  # 투명 테두리 색을 이웃 색으로 — 줄여 그릴 때 검은 테두리가 생기지 않게
 	img.generate_mipmaps()  # 목록·슬롯 카드는 1/2~1/5 크기로 그린다
@@ -220,4 +221,6 @@ func _show(key: String) -> void:
 	var m = UnitModelScript.new()
 	m.setup(spec)
 	_pivot.add_child(m)
-	(m.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer).advance(0.0)  # 대기 첫 프레임을 지금 적용
+	var ap := m.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	ap.advance(0.0)  # 대기 첫 프레임을 지금 적용
+	ap.speed_scale = LIVE_ANIM_SPEED  # 미리보기는 천천히(스냅샷은 첫 프레임이라 상관없다)

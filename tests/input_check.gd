@@ -984,6 +984,17 @@ func _figures(heroes_win) -> void:
 	var p = P.current
 	var mine: Array = _main.get_children().filter(func(c): return c.get_script() == P)
 	_check(mine.size() == 1 and p == mine[0] and not p.can_render and p.queue.is_empty(), "(x2) main has one Portraits node; headless renders nothing (placeholders only)", "")
+	var feet: Vector2 = p._cam.unproject_position(Vector3.ZERO) / P.SIZE
+	_check(is_equal_approx(feet.x, 0.5) and absf(feet.y - P.feet_y()) < 0.002, "(x2) the portrait camera puts the model's feet where cards draw the pedestal", "feet=%s feet_y=%.3f" % [feet, P.feet_y()])
+	p._show("hero:hans")  # 렌더 직전 단계만(헤드리스): 모델을 띄운 그 프레임에 대기 자세여야 한다
+	var skel := p._pivot.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var hand := skel.get_bone_global_pose(skel.find_bone("hand.r")).origin
+	var rest := skel.get_bone_global_rest(skel.find_bone("hand.r")).origin
+	var gear: Node3D = p._pivot.find_child("2H_Sword", true, false)
+	_check(p._pivot.get_child_count() == 1 and hand.y < rest.y - 0.2 and gear != null and not gear.visible,
+		"(x2) a figure is in its idle pose (not the T-pose) the frame it is staged, with only its own gear", "hand=%s rest=%s" % [hand, rest])
+	p._show("")
+	_check(p._pivot.get_child_count() == 0, "(x2) the viewport model is cleared when done", "")
 	_check(p.live_key == "hero:hans" and heroes_win.big_card.figure_texture() == P.placeholder("hero:hans"),
 		"(x2) the detail's big card runs the live preview of its hero (headless: the placeholder)", "live=%s" % p.live_key)
 	var c: Vector2 = heroes_win.big_card.get_global_rect().get_center()
