@@ -159,6 +159,7 @@ func _retire(i: int) -> void:
 
 
 ## 방치 모드(대기)면 배치·별 변경을 곧바로 반영한다. 스테이지 중이면 다음 리필 때.
+## 바뀐 슬롯의 영웅은 새로 만들어 HP가 가득 찬다(방치 모드의 공짜 회복이지만 해는 없다 — 스테이지 중에는 리필까지 기다린다).
 func _on_roster_changed() -> void:
 	if GameState.mode == GameState.Mode.IDLE:
 		_sync_heroes()
