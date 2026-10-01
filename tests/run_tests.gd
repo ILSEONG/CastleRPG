@@ -13,6 +13,7 @@ const TownKitScript := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
+const HpBarsScript := preload("res://scripts/hp_bars.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -62,6 +63,7 @@ func _init() -> void:
 	test_merchant_spot()
 	test_icon_shapes()
 	test_lowpoly_box()
+	test_hp_bars_batch()
 	test_gold_tenths()
 	test_heroes_table()
 	test_skill_formulas()
@@ -1095,6 +1097,26 @@ func test_lowpoly_box() -> void:
 	check(UiKit.button_styles(UiKit.AMBER) == styles and UiKit.panel(UiKit.CREAM) == UiKit.panel(UiKit.CREAM), "kit styleboxes are reused")
 	check(UiKit.bar(UiKit.AMBER).has("fill") and UiKit.bar(UiKit.AMBER).has("background"), "bar has fill and background")
 	check(UiKit.GRADE_COLORS.has("R") and UiKit.GRADE_COLORS.has("SR") and UiKit.GRADE_COLORS.has("SSR"), "grade colors R/SR/SSR")
+
+
+## HP 바: 프레임의 8각형을 한 배열에 모은다(LowpolyBox.octagon과 같은 점), 인덱스는 칸마다 부채꼴 6삼각형.
+## 다음 프레임에 수가 줄었다 늘어도 배열 길이·인덱스가 맞다(멤버 배열 재사용).
+func test_hp_bars_batch() -> void:
+	var hb = HpBarsScript.new()
+	hb.add_octagon(Vector2(10, 20), Vector2(34, 5), 1.5, Color.RED)
+	hb.add_octagon(Vector2(50, 60), Vector2(20, 8), 3.0, Color.BLUE)
+	check(hb._flush() and hb.octagons == 2 and hb._pts.size() == 16 and hb._cols.size() == 16 and hb._idx.size() == 36, "two bars: 16 points, 36 indices")
+	check(hb._pts.slice(0, 8) == LowpolyBoxScript.octagon(Rect2(10, 20, 34, 5), 1.5) and hb._pts.slice(8, 16) == LowpolyBoxScript.octagon(Rect2(50, 60, 20, 8), 3.0),
+		"bar octagons match LowpolyBox.octagon")
+	check(hb._cols[0] == Color.RED and hb._cols[15] == Color.BLUE, "one color per octagon")
+	check(hb._idx.slice(18, 36) == PackedInt32Array([8, 9, 10, 8, 10, 11, 8, 11, 12, 8, 12, 13, 8, 13, 14, 8, 14, 15]), "second octagon is a fan from its first point: %s" % [hb._idx.slice(18, 36)])
+	hb._n = 0
+	hb._flush()
+	check(hb.octagons == 0, "no bars: nothing to draw")
+	for i in 3:
+		hb.add_octagon(Vector2(i * 40, 0), Vector2(34, 5), 1.5, Color.WHITE)
+	check(hb._flush() and hb._pts.size() == 24 and hb._idx.size() == 54 and hb._idx[36] == 16 and hb._idx[53] == 23 and hb._idx[0] == 0, "three bars after a frame with none: sizes and indices refilled")
+	hb.free()
 
 
 ## 개정 10: 골드 tenths. 표시는 floor, 저장 v1(정수 골드) → v2(tenths) 이전, 오프라인 처치는 tenths로 더한다.
