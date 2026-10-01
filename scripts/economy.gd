@@ -121,6 +121,10 @@ func show_badge(building_id: String, now: float) -> bool:
 
 ## 쌓인 양을 보유량에 더하고 마지막 수집 시각을 옮긴다(§2). 수집량을 돌려준다.
 func collect(building_id: String, now: float) -> int:
+	if res_of(building_id) != "" and now < float(last_collect[building_id]):  # 시계를 되돌림: 지금부터 다시 쌓는다
+		last_collect[building_id] = now
+		save()
+		return 0
 	var amount := pending(building_id, now)
 	if amount == 0:
 		return 0
@@ -174,11 +178,17 @@ func save() -> void:
 	_save_cd = SAVE_INTERVAL
 	if save_path == "":
 		return
-	var f := FileAccess.open(save_path, FileAccess.WRITE)
+	# 임시 파일에 다 쓴 뒤 바꿔 끼운다 — 쓰다 끊겨도 이전 저장은 남는다.
+	var tmp := save_path + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		push_warning("economy save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold": gold, "res": res, "last_collect": last_collect, "levels": levels}))
+	f.close()
+	var err := DirAccess.rename_absolute(tmp, save_path)
+	if err != OK:
+		push_warning("economy save rename failed: %s" % error_string(err))
 
 
 ## 없는 파일은 조용히, 깨진 파일은 경고와 함께 기본값으로 시작한다.
@@ -193,9 +203,9 @@ func load_save(now: float) -> void:
 	changed.emit()
 
 
-## 형 검사 후 반영. JSON 숫자는 float이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
+## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or int(data.get("version", 0)) != SAVE_VERSION or not (data.get("gold") is float):
+	if not (data is Dictionary) or not _num(data.get("version")) or int(data.version) != SAVE_VERSION or not _num(data.get("gold")):
 		return false
 	var r := {}
 	var lc := {}
@@ -207,7 +217,7 @@ func _apply(data) -> bool:
 		var vs = data.get("levels")
 		if not (rs is Dictionary and ls is Dictionary and vs is Dictionary):
 			return false
-		if not (rs.get(id) is float and ls.get(b) is float and vs.get(b) is float):
+		if not (_num(rs.get(id)) and _num(ls.get(b)) and _num(vs.get(b))):
 			return false
 		r[id] = maxi(0, int(rs[id]))
 		lc[b] = float(ls[b])
@@ -217,3 +227,7 @@ func _apply(data) -> bool:
 	last_collect = lc
 	levels = lv
 	return true
+
+
+static func _num(v) -> bool:
+	return v is float or v is int

@@ -13,6 +13,7 @@ const RATE_LOW := Color(0.85, 0.22, 0.2)
 const RATE_HIGH := Color(0.15, 0.6, 0.25)
 const RATE_JACKPOT := Color(0.9, 0.62, 0.05)
 const DIALOG_W := 600
+const OPEN_GUARD_MS := 400  # 연 직후 이 시간 동안 배경 누름은 닫지 않는다
 
 var dialog: PanelContainer
 var sell_buttons := {}  # 자원 id → [판매] 버튼
@@ -23,6 +24,7 @@ var _timer_label: Label
 var _amount_labels := {}
 var _value_labels := {}
 var _last_sec := -1
+var _opened_ms := 0
 
 
 func _ready() -> void:
@@ -32,6 +34,7 @@ func _ready() -> void:
 	back.color = DIM
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	back.mouse_filter = Control.MOUSE_FILTER_STOP
+	back.mouse_force_pass_scroll_events = false  # 휠 줌이 뒤 카메라로 새지 않게
 	back.gui_input.connect(_on_back_input)
 	add_child(back)
 
@@ -73,6 +76,7 @@ func _process(_delta: float) -> void:
 
 func open() -> void:
 	visible = true
+	_opened_ms = Time.get_ticks_msec()
 	_refresh(_now())
 
 
@@ -90,7 +94,8 @@ func _now() -> float:
 
 func _on_back_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
-	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+	# 연타(더블 탭)의 두 번째 누름이 연 창을 바로 닫지 않게 잠깐 무시
+	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and Time.get_ticks_msec() - _opened_ms > OPEN_GUARD_MS:
 		close()
 
 
@@ -99,7 +104,7 @@ func _refresh(now: float) -> void:
 	var rate := Economy.current_rate(now)
 	_rate_label.text = "현재 시세 ×%.1f" % rate
 	_rate_label.add_theme_color_override("font_color", rate_color(rate))
-	var left := ceili(Economy.seconds_to_next_rate(now))
+	var left := floori(Economy.seconds_to_next_rate(now))  # 59:59 → 00:00
 	_timer_label.text = "다음 시세까지 %02d:%02d" % [left / 60, left % 60]
 	var any := false
 	for id in Balance.RESOURCES:

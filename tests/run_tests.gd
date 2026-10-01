@@ -708,7 +708,7 @@ func test_economy_collect() -> void:
 	e.last_collect.quarry = 1000.0 - 800 * 60.0  # 상한 초과
 	check(e.collect("quarry", 1000.0) == 720 * 5 and e.last_collect.quarry == 1000.0, "collect at the cap snaps last_collect to now")
 	e.last_collect.farm = 5000.0  # 시계를 되돌림
-	check(e.collect("farm", 1000.0) == 0 and e.last_collect.farm == 5000.0, "collect with negative elapsed gives 0 and changes nothing")
+	check(e.collect("farm", 1000.0) == 0 and e.last_collect.farm == 1000.0, "collect with negative elapsed gives 0 and restarts from now")
 	e.last_collect.farm = 1000.0 - 4 * 60.0
 	check(not e.show_badge("farm", 1000.0), "no badge under 5 minutes")
 	e.last_collect.farm = 1000.0 - 5 * 60.0
@@ -766,10 +766,13 @@ func test_economy_save() -> void:
 	e.last_collect.lumber = now - 90.5
 	e.levels.farm = 3
 	e.save()
+	e.gold = 78
+	e.save()  # 이미 있는 파일 위로 다시 저장(임시 파일 → 바꿔 끼우기)
+	check(not FileAccess.file_exists(ECON_TMP + ".tmp"), "save leaves no temp file behind")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(now + 5.0)
-	check(e2.gold == 77 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
+	check(e2.gold == 78 and e2.res.wood == 12 and e2.res.wood is int and e2.levels.farm == 3 and e2.levels.farm is int and is_equal_approx(e2.last_collect.lumber, now - 90.5), "save round-trips with int types restored")
 	for junk in ["{not json", "[1,2]", "{\"version\":1,\"gold\":5}", "{\"version\":2,\"gold\":1,\"res\":{},\"last_collect\":{},\"levels\":{}}"]:
 		var f := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 		f.store_string(junk)
@@ -787,6 +790,8 @@ func test_economy_save() -> void:
 	check(not FileAccess.file_exists(ECON_TMP), "save_path empty writes no file")
 	e.free()
 	e2.free()
+
+
 ## 상인(반경 0.6 m)과 수레(AABB)는 건물 부지·십자 도로·안쪽 통로 고리(깊이 half−3, 레벨 1~3)를 침범하지 않고, 수레는 크기 한계 안.
 func test_merchant_spot() -> void:
 	var box := TownKitScript.merchant_cart().get_aabb()
@@ -803,11 +808,16 @@ func test_merchant_spot() -> void:
 		for b in Balance.BUILDINGS:
 			var plot := Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE)
 			check(not rc.intersects(plot), "merchant spot %s clear of %s plot" % [rc, b.id])
-		check(rc.position.x > 2.0 and rc.position.y > 2.0, "merchant spot %s off the cross roads (tiles -1..0 = +-2 m)" % rc)
+		var off_x: bool = rc.position.x >= 2.0 or rc.end.x <= -2.0
+		var off_z: bool = rc.position.y >= 2.0 or rc.end.y <= -2.0
+		check(off_x and off_z, "merchant spot %s off the cross roads (tiles -1..0 = +-2 m)" % rc)
+		# 사각형 안 |x|, |z|의 범위(축을 걸치지 않음 — 위 검사) → max(|x|,|z|) 범위
+		var ax := [minf(absf(rc.position.x), absf(rc.end.x)), maxf(absf(rc.position.x), absf(rc.end.x))]
+		var az := [minf(absf(rc.position.y), absf(rc.end.y)), maxf(absf(rc.position.y), absf(rc.end.y))]
 		for level in [1, 2, 3]:
 			var lane := Balance.interior_half(level) - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN
-			var lo := maxf(rc.position.x, rc.position.y)  # 사각형 안 max(|x|,|z|) 범위(첫 사분면)
-			var hi := maxf(rc.end.x, rc.end.y)
+			var lo: float = maxf(ax[0], az[0])
+			var hi: float = maxf(ax[1], az[1])
 			check(hi < lane - 1.0 or lo > lane + 1.0, "merchant spot %s clear of level %d lane ring (depth %.1f)" % [rc, level, lane])
 
 

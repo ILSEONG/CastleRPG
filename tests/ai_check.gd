@@ -25,7 +25,7 @@ func _ready() -> void:
 	OS.add_logger(_errors)
 	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
 	Economy.reset(Time.get_unix_time_from_system())
-	_main =preload("res://scenes/main.tscn").instantiate()
+	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(5)
 	for c in _main.get_children():

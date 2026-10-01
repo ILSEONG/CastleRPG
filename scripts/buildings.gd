@@ -11,7 +11,8 @@ const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const EconomyScript := preload("res://scripts/economy.gd")  # 정적 규칙만 쓴다(오토로드 아님)
 
-const LAYER_TAP := 16  # 건물·상인 탭 판정체 (성문 2, 성벽 8과 별도)
+const LAYER_TAP := 16  # 건물 탭 판정체 (성문 2, 성벽 8과 별도)
+const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물보다 먼저 본다(앞쪽 건물 상자에 가리지 않게)
 
 const MOUNTAIN_VARIANTS := 5
 
@@ -70,13 +71,13 @@ func _place_merchant() -> void:
 	var r := Vector3(Balance.MERCHANT_RADIUS, Art.HEAD_HEIGHT, Balance.MERCHANT_RADIUS)
 	var box := AABB(Balance.MERCHANT_POS - Vector3(r.x, 0, r.z), r * 2.0 * Vector3(1, 0.5, 1))  # 상인 기둥
 	box = box.merge(AABB(cart.position + cart.mesh.get_aabb().position, cart.mesh.get_aabb().size))
-	_add_tap_body(Vector3(box.get_center().x, 0, box.get_center().z), Vector3(box.size.x, box.end.y, box.size.z)).set_meta("merchant", true)
+	_add_tap_body(Vector3(box.get_center().x, 0, box.get_center().z), Vector3(box.size.x, box.end.y, box.size.z), LAYER_MERCHANT).set_meta("merchant", true)
 
 
-## 탭 판정체: 물리 이동과 무관(마스크 0), 레이어 16 = 건물·상인 탭. 바닥 중심 ground_center, 크기 size.
-func _add_tap_body(ground_center: Vector3, size: Vector3) -> StaticBody3D:
+## 탭 판정체: 물리 이동과 무관(마스크 0). 바닥 중심 ground_center, 크기 size.
+func _add_tap_body(ground_center: Vector3, size: Vector3, layer := LAYER_TAP) -> StaticBody3D:
 	var body := StaticBody3D.new()
-	body.collision_layer = LAYER_TAP
+	body.collision_layer = layer
 	body.collision_mask = 0
 	var cs := CollisionShape3D.new()
 	var shape := BoxShape3D.new()

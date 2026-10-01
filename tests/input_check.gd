@@ -253,7 +253,7 @@ func _run() -> void:
 	# (o) 상인 탭 → 창 열림, 선택 유지. 창 안(제목) 탭은 닫지 않는다
 	_picker._select(warrior)
 	var mp := _camera.unproject_position(Balance.MERCHANT_POS + Vector3(0, 1.0, 0))
-	_check(_picker._pick(mp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(mp, PickerScript.LAYER_TAP).collider.has_meta("merchant") and not _open_hero(mp),
+	_check(not _picker._pick(mp, PickerScript.LAYER_MERCHANT).is_empty() and not _open_hero(mp),
 		"(o) precondition: merchant tap point hits the merchant body", "px=%s" % mp)
 	var free_before: Vector3 = warrior.free_pos
 	await _tap(mp)
@@ -290,11 +290,23 @@ func _run() -> void:
 	await _frames(2)
 	_check(rig.position == cam_pos and panel.is_open(), "(q) dragging while the window is open does not pan the camera", "pos=%s" % rig.position)
 	var hero_state := [warrior.side, warrior.post, warrior.free_pos]
+	await get_tree().create_timer(0.45).timeout  # 연 직후 배경 누름 무시 시간(OPEN_GUARD_MS)이 지나게
 	await _tap(bg)
 	_check(not panel.is_open() and _picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == hero_state,
 		"(q) tapping the backdrop over open ground closes the window and does not move the hero", "open=%s state=%s" % [panel.is_open(), [warrior.side, warrior.post, warrior.free_pos]])
 	await _tap(bg)
 	_check(warrior.free_pos != hero_state[2], "(q) after closing, the same ground tap moves the hero again", "free=%s" % warrior.free_pos)
+
+	# (r) 수레를 탭해도 창이 열린다 — 수레 바퀴·바닥 높이(0.4 m)도 앞쪽 건물 상자보다 상인 판정이 먼저
+	_picker._select(null)
+	var cp := _camera.unproject_position(Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET + Vector3(0, 0.4, 0))
+	_check(not _picker._pick(cp, PickerScript.LAYER_MERCHANT).is_empty() and not _open_hero(cp), "(r) precondition: cart point hits the merchant body", "px=%s" % cp)
+	await _tap(cp)
+	await _frames(2)
+	_check(panel.is_open(), "(r) tapping the cart opens the trade window", "open=%s" % panel.is_open())
+	await _tap(bg)  # 더블 탭의 두 번째 누름
+	_check(panel.is_open(), "(r) a backdrop press right after opening (double tap) does not close the window", "open=%s" % panel.is_open())
+	panel.close()
 
 
 func _check(cond: bool, what: String, detail: String) -> void:

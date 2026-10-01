@@ -13,7 +13,7 @@ const BUBBLE_R := 22.0   # 논리 px(720 폭 기준)
 const BOB_PX := 3.0
 const BOB_HZ := 0.8
 const POP_RISE_PX := 40.0
-const POP_SEC := 1.0
+const POP_SEC := 1.2
 const POP_FONT := 28
 const INK := Color(0.16, 0.18, 0.24)
 
@@ -85,11 +85,12 @@ func _draw_bubble(tip: Vector2, kind: String) -> void:
 ## 아이콘 + "+N". 글자는 서서히 사라지고 아이콘은 줄어든다(draw_icon은 투명도를 받지 않는다).
 func _draw_pop(at: Vector2, p: Dictionary) -> void:
 	var k: float = p.age / POP_SEC
+	var a := clampf((1.0 - k) / 0.4, 0.0, 1.0)  # 처음 60%는 또렷하게, 마지막 40%에 사라진다
 	var text := "+%d" % p.amount
 	var w := FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT).x
 	var icon_px := 30.0 * (1.0 - 0.5 * k)
 	var x0 := at.x - (icon_px + 4.0 + w) / 2.0
 	IconsScript.draw_icon(self, p.kind, Vector2(x0 + icon_px / 2.0, at.y), icon_px)
 	var pos := Vector2(x0 + icon_px + 4.0, at.y + POP_FONT * 0.35)
-	draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, 8, Color(1, 1, 1, 1.0 - k))
-	draw_string(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, Color(INK, 1.0 - k))
+	draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, 8, Color(1, 1, 1, a))
+	draw_string(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, POP_FONT, Color(INK, a))

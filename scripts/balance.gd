@@ -80,7 +80,7 @@ const BUILDINGS := [
 ]
 
 ## 상인 자리 (개정 7). 막사·벌목장·채석장 사이 빈 터(십자 도로 밖). 수레는 상인 +X 쪽.
-const MERCHANT_POS := Vector3(3.5, 0, 6.5)
+const MERCHANT_POS := Vector3(-5.5, 0, 6.5)  # 성채 정문 앞 광장 왼쪽 — 벌목장·채석장 말풍선과 화면에서 겹치지 않는 자리
 const MERCHANT_CART_OFFSET := Vector3(2.0, 0, 0)
 const MERCHANT_RADIUS := 0.6
 

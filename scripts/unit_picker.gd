@@ -15,7 +15,8 @@ const Art := preload("res://scripts/art.gd")
 
 const LAYER_GATE := 2
 const LAYER_WALL := 8
-const LAYER_TAP := 16  # 건물·상인 탭 판정체(buildings.gd)
+const LAYER_TAP := 16  # 건물 탭 판정체(buildings.gd)
+const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — 건물보다 먼저 본다(앞쪽 벌목장·채석장 상자에 가리지 않게)
 const TAP_MAX_PX := 12.0
 const HERO_TAP_PX := 32.0  # 화면(논리 720px 폭 기준)에서 영웅 중심까지 이 거리 안이면 그 영웅. 줌과 무관
 const HERO_TAP_PRECISE_PX := 12.0  # 영웅 선택 중에는 이만큼 가까워야 성문·성벽보다 영웅이 먼저
@@ -98,16 +99,15 @@ func _pick(screen_pos: Vector2, layer_mask: int) -> Dictionary:
 	return camera.get_world_3d().direct_space_state.intersect_ray(q)
 
 
-## 상인·자원 건물 탭(레이어 16). 처리했으면 true. 기능 없는 건물은 적중을 무시(false)해 다음 판정으로 넘긴다.
+## 상인(레이어 32) → 자원 건물(레이어 16) 탭. 처리했으면 true. 기능 없는 건물은 적중을 무시(false)해 다음 판정으로 넘긴다.
 func _tap_object(screen_pos: Vector2) -> bool:
+	if not _pick(screen_pos, LAYER_MERCHANT).is_empty():
+		panel.open()
+		return true
 	var hit := _pick(screen_pos, LAYER_TAP)
 	if hit.is_empty():
 		return false
-	var body = hit.collider
-	if body.has_meta("merchant"):
-		panel.open()
-		return true
-	var id: String = body.get_meta("building", "")
+	var id: String = hit.collider.get_meta("building", "")
 	var res_id: String = Economy.res_of(id)
 	if res_id == "":
 		return false
