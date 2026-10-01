@@ -617,6 +617,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _soldiers_ui(tabs, hud)
 	await _soldier_picks()
 	await _soldier_figures(tabs)
+	await _world_tags()
 	await _rotate_ui(hud)
 	await _fever_ui(hud)
 	await _top_hud(hud)
@@ -627,9 +628,10 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 func _top_hud(hud) -> void:
 	var half: float = _main.castle.half
 	var rig = _camera.get_parent()
-	_check(_main.castle.side_labels.map(func(l): return l.text) == ["북", "동", "남", "서"]
-		and _main.castle.side_labels.all(func(l): return l.position.y > Balance.WALL_H + 2.0),
-		"(z) direction letters 북·동·남·서 float above the four gatehouses", "")
+	var wt = _child(preload("res://scripts/world_tags.gd"))
+	_check(range(4).map(func(s): return wt.text("gate:%d" % s)) == ["북", "동", "남", "서"]
+		and _main.castle.side_anchors.all(func(a): return a.y > Balance.WALL_H + 2.0),
+		"(z) direction letters 북·동·남·서 float above the four gatehouses (screen-space tags)", "")
 	print("INPUT INFO: stage button %s, title %s, castle bar %s, gate bars %s (720x1280 logical)" % [hud._button.get_global_rect(), hud._stage_label.get_global_rect(),
 		hud._castle_bar.get_global_rect(), hud._gate_tiles.map(func(t): return t.get_global_rect())])
 	var names: Array = hud._gate_tiles.map(func(t): return t.get_child(0).get_child(1).text)
@@ -854,9 +856,11 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.changed.emit()
 	badges.last_pop = {}
 	var lp := _building_px("lumber")
-	_check(Economy.levels.values().all(func(l): return l == 1) and Economy.build.is_empty() and scenery.labels.lumber.text == "벌목장 Lv 1"
-		and scenery.labels.keep.text == "성채 Lv 1" and scenery.labels.size() == Balance.BUILDINGS.size(), "(B) every building's name tag reads '이름 Lv N'",
-		"lumber=%s keep=%s" % [scenery.labels.lumber.text, scenery.labels.keep.text])
+	var wt = _child(preload("res://scripts/world_tags.gd"))
+	_check(Economy.levels.values().all(func(l): return l == 1) and Economy.build.is_empty() and wt.text("lumber") == "벌목장 Lv 1"
+		and wt.text("keep") == "성채 Lv 1" and scenery.tag_anchors.size() == Balance.BUILDINGS.size()
+		and Balance.BUILDINGS.all(func(b): return wt.text(b.id) == "%s Lv 1" % b.name), "(B) every building's name tag reads '이름 Lv N'",
+		"lumber=%s keep=%s" % [wt.text("lumber"), wt.text("keep")])
 
 	# 길게 누르기(0.5초): 누른 채 건물 창이 열리고, 뗀 뒤에도 수집하지 않는다. 창을 닫은 뒤 누르지 않은 마우스 움직임은 카메라를 못 옮긴다
 	var held: String = await _long_press(lp, bwin)
@@ -966,9 +970,9 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.finish_build_now()
 	await _frames(1)
 	_check(Economy.building_level("keep") == 2 and Economy.build.is_empty() and scenery.scaffold_id == "" and scenery._scaffolds.is_empty() and badges.build_anchors().is_empty()
-		and scenery.labels.keep.text == "성채 Lv 2" and get_tree().get_nodes_in_group("fx").size() >= fx0 + 5 and hud._toast.visible and hud._toast.text == "성채 Lv 2 완료",
+		and wt.text("keep") == "성채 Lv 2" and get_tree().get_nodes_in_group("fx").size() >= fx0 + 5 and hud._toast.visible and hud._toast.text == "성채 Lv 2 완료",
 		"(B) pulling the time in completes it: keep Lv 2, scaffold gone, tag '성채 Lv 2', light shards, notice '성채 Lv 2 완료'",
-		"keep=%d scaffold=%s tag=%s fx=%d->%d toast=%s" % [Economy.building_level("keep"), scenery.scaffold_id, scenery.labels.keep.text, fx0,
+		"keep=%d scaffold=%s tag=%s fx=%d->%d toast=%s" % [Economy.building_level("keep"), scenery.scaffold_id, wt.text("keep"), fx0,
 			get_tree().get_nodes_in_group("fx").size(), hud._toast.text])
 
 	# 벌목장 업그레이드 → 다른 건물(채석장)은 일꾼이 바빠 비활성(무엇을 짓는지·남은 시간)
@@ -985,7 +989,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	bwin.close()
 	Economy.finish_build_now()
 	await _frames(1)
-	_check(Economy.building_level("lumber") == 2 and scenery.labels.lumber.text == "벌목장 Lv 2" and hud._toast.text == "벌목장 Lv 2 완료", "(B) lumber Lv 2 completes with its notice", hud._toast.text)
+	_check(Economy.building_level("lumber") == 2 and wt.text("lumber") == "벌목장 Lv 2" and hud._toast.text == "벌목장 Lv 2 완료", "(B) lumber Lv 2 completes with its notice", hud._toast.text)
 
 	# 성문 건설은 네 문루를 모두 두른다
 	Economy.build = {"id": "gate", "finish": Economy.time_now() + 45.0}
@@ -1426,3 +1430,135 @@ func _soldier_figures(tabs) -> void:
 	await _frames(1)
 	_check(linked.call(bwin.merge_rows[0].icon), "(F) the barracks window's merge cells use the same soldier figure cells", "")
 	bwin.close()
+
+
+## (T) 개정 15 화면 공간 이름표(world_tags): 건물 "이름 Lv N"·상인·문루 글자가 Label3D 없이 한 노드에, 글자 ~20 px, 그리기 호출 상한.
+##     겹침 피하기: 기본 카메라에서 원래 겹치던 무리(민가·성채·기병 마구간, 주점·궁병 훈련소)도 덩어리끼리 겹치지 않고, 8 px 넘게 밀린
+##     덩어리마다 지시선, 안 밀린 태그는 기준점 바로 위. 회전(요 +40°)·확대·축소에서도 같다. 병사 대열(병사 상자)은 덮지 않는다 —
+##     벌목장·채석장 말풍선이 떠도(덩어리 = 이름표 + 말풍선). place()는 순수 함수.
+func _world_tags() -> void:
+	var WT = preload("res://scripts/world_tags.gd")
+	var wt = _child(WT)
+	var badges = _child(preload("res://scripts/badges.gd"))
+	var rig = _camera.get_parent()
+	var cam0 := [rig.position, rig.rotation_degrees.y, _camera.size]
+	rig.position = Vector3.ZERO  # 기본 카메라
+	rig.rotation_degrees.y = 0.0
+	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
+	var now := Economy.time_now()
+	for b in Economy.last_collect:
+		Economy.last_collect[b] = now  # 말풍선 없이 시작
+	Economy.changed.emit()
+	await _frames(2)
+	_check(_main.find_children("*", "Label3D", true, false).is_empty() and wt.tags.size() == Balance.BUILDINGS.size() + 1 + 4 and wt.text("merchant") == "상인"
+		and wt.text("houses") == "민가 Lv 1" and WT.NAME_SIZE == 20 and wt.rects.size() == wt.tags.size(),
+		"(T) one screen-space tag layer: 10 buildings + merchant + 4 gate letters (no Label3D), 20 px names, all on screen at the default camera",
+		"tags=%d rects=%d" % [wt.tags.size(), wt.rects.size()])
+	var strings := 0
+	for t in wt.tags:
+		strings += 2 if t.lv != "" else 1
+	_check(wt.draw_calls <= 3 + strings and wt.draw_calls <= 3 + 2 * WT.MAX_TAGS, "(T) draw calls are capped: one triangle array, two line batches, at most two strings per tag",
+		"calls=%d strings=%d" % [wt.draw_calls, strings])
+	_check(_any_overlap(wt.desired, ["houses", "keep", "stable"]) and _any_overlap(wt.desired, ["tavern", "archery"]),
+		"(T) precondition: at the default camera the 민가/성채/기병 마구간 and 주점/궁병 훈련소 tags would overlap where they want to sit", "")
+	_tags_ok(wt, "default camera")
+	print("INPUT INFO: default camera tags (id: tag rect, pushed px): %s" % [wt.tags.map(func(t): return "%s: %s, %d" % [t.id, wt.rects[t.id],
+		roundi(wt.desired[t.id].position.y - wt.stacks[t.id].position.y)] if wt.rects.has(t.id) else t.id + ": off")])
+	rig.rotation_degrees.y = 40.0
+	await _frames(2)
+	_tags_ok(wt, "camera yaw +40")
+	rig.rotation_degrees.y = 0.0
+	rig.zoom_by(30.0 / _camera.size)
+	await _frames(2)
+	_tags_ok(wt, "zoomed in (30 m)")
+	rig.zoom_by(130.0 / _camera.size)
+	await _frames(2)
+	_tags_ok(wt, "zoomed out (130 m)")
+	print("INPUT INFO: zoomed out (130 m) tags pushed px: %s" % [wt.stacks.keys().map(func(id): return [id, roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
+	# 병사 대열: 30명(인구 30) + 벌목장·채석장 말풍선 — 이름표·말풍선 덩어리가 병사 상자를 덮지 않는다
+	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
+	Economy.levels["houses"] = 13
+	Economy.soldiers = {"infantry:1": 12, "archer:2": 12, "cavalry:1": 6}
+	Economy.set_soldier_deploy(Economy.soldiers.duplicate())
+	Economy.last_collect["lumber"] = now - 900.0
+	Economy.last_collect["quarry"] = now - 900.0
+	Economy.changed.emit()
+	await _frames(3)
+	var lumber_h: float = wt.stacks.lumber.size.y
+	_check(wt.obstacles.size() == 30 and _main.soldiers.size() == 30 and lumber_h >= WT.TAG_H + badges.BUBBLE_BLOCK and wt.top("lumber") != null
+		and badges.badge_ids(Economy.time_now()).has("lumber"),
+		"(T) precondition: 30 soldiers stand in front of the keep; the lumber mill's bubble rides on its tag (stack %.0f px)" % lumber_h, "obstacles=%d" % wt.obstacles.size())
+	_check(wt.desired.keys().any(func(id): return wt.obstacles.any(func(o): return wt.desired[id].intersects(o))),
+		"(T) precondition: at least one tag stack would cover the soldiers where it wants to sit", "")
+	_soldiers_clear(wt, "default camera")
+	_tags_ok(wt, "default camera with soldiers")
+	var fr: Rect2 = wt.obstacles[0]
+	for o in wt.obstacles:
+		fr = fr.merge(o)
+	print("INPUT INFO: default camera with 30 soldiers: formation box %s; stacks (id: stack, pushed px): %s" % [fr, wt.stacks.keys().map(func(id): return "%s: %s, %d" % [id, wt.stacks[id],
+		roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
+	rig.zoom_by(30.0 / _camera.size)
+	await _frames(2)
+	_soldiers_clear(wt, "zoomed in (30 m)")
+	_tags_ok(wt, "zoomed in with soldiers")
+	rig.rotation_degrees.y = -30.0
+	await _frames(2)
+	_soldiers_clear(wt, "zoomed in, yaw -30")
+	# place(): 아래부터 놓고 위로 민다. 장애물은 덜 움직이는 쪽(아래 끝에 걸치면 아래로, 위 끝이면 위로)
+	var a := Rect2(0, 100, 50, 20)
+	var b := Rect2(10, 90, 50, 20)
+	var o := Rect2(-20, 200, 100, 60)
+	var got: Array = WT.place([a, b, Rect2(0, 250, 40, 20), Rect2(0, 185, 40, 20)], [o], 3.0)
+	_check(got[0] == a and got[1].end.y <= a.position.y - 3.0 and got[1].position.x == b.position.x and got[2].position.y >= o.end.y + 3.0 and got[3].end.y <= o.position.y - 3.0,
+		"(T) place(): the lower tag keeps its spot, the upper one goes above it; an obstacle sends a tag to its nearer side", "%s" % [got])
+	Economy.soldiers = {}
+	Economy.set_soldier_deploy({})
+	Economy.levels["houses"] = 1
+	Economy.last_collect["lumber"] = now
+	Economy.last_collect["quarry"] = now
+	Economy.changed.emit()
+	rig.position = cam0[0]
+	rig.rotation_degrees.y = cam0[1]
+	rig.zoom_by(cam0[2] / _camera.size)
+	await _frames(2)
+
+
+## ids 중 둘의 상자가 겹치는지(rects: id → Rect2, 없는 id는 건너뛴다).
+func _any_overlap(rects: Dictionary, ids: Array) -> bool:
+	for i in ids.size():
+		for j in range(i + 1, ids.size()):
+			if rects.has(ids[i]) and rects.has(ids[j]) and (rects[ids[i]] as Rect2).intersects(rects[ids[j]]):
+				return true
+	return false
+
+
+## 이름표 덩어리끼리 겹치지 않고, 8 px 넘게 움직인 덩어리마다 지시선 하나, 안 움직인 태그는 기준점(화면) 바로 위 가운데.
+func _tags_ok(wt, what: String) -> void:
+	wt.layout(true)
+	var ids: Array = wt.stacks.keys()
+	var hits := []
+	for i in ids.size():
+		for j in range(i + 1, ids.size()):
+			if (wt.stacks[ids[i]] as Rect2).intersects(wt.stacks[ids[j]]):
+				hits.append([ids[i], ids[j]])
+	var moved := ids.filter(func(id): return absf(wt.stacks[id].position.y - wt.desired[id].position.y) > wt.LEADER_PX)
+	var seated := true
+	for t in wt.tags:
+		if wt.rects.has(t.id) and not moved.has(t.id) and wt.stacks[t.id] == wt.desired[t.id]:
+			var p := _camera.unproject_position(t.anchor)
+			seated = seated and absf(wt.rects[t.id].get_center().x - p.x) < 0.5 and absf(wt.rects[t.id].end.y - p.y) < 0.5
+	_check(ids.size() >= 6 and hits.is_empty() and wt.leaders.size() == moved.size() and seated,
+		"(T) %s: %d tag stacks, none overlap; %d moved more than 8 px, each with a leader line; unmoved tags sit on their anchors" % [what, ids.size(), moved.size()],
+		"overlaps=%s leaders=%d moved=%s" % [hits, wt.leaders.size(), moved])
+
+
+## 어느 이름표 덩어리도 병사 상자에 닿지 않는다.
+func _soldiers_clear(wt, what: String) -> void:
+	wt.layout(true)
+	var hits := []
+	for id in wt.stacks:
+		for o in wt.obstacles:
+			if (wt.stacks[id] as Rect2).intersects(o):
+				hits.append(id)
+				break
+	_check(not wt.obstacles.is_empty() and hits.is_empty(), "(T) %s: no tag or bubble covers the soldier formation (%d soldier boxes)" % [what, wt.obstacles.size()], "covering=%s" % [hits])

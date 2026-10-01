@@ -11,15 +11,13 @@ const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 
-const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
-
 const LAYER_GATE := 2
 const LAYER_WALL := 8
 const TAP_MARGIN := Vector3(1, 1, 1)  # 탭 판정 박스 여유
-const SIDE_LABEL_Y := Balance.WALL_H + 3.0  # 문루(기둥 지붕 끝 ~5.3 m) 위 방향 글자 높이
+const SIDE_TAG_Y := Balance.WALL_H + 2.5  # 문루(기둥 지붕 끝 ~5.3 m) 위 방향 글자 이름표 아랫변 기준점 높이
 
 var half: float = 0.0
-var side_labels: Array = []  # side -> 문루 위 방향 글자 Label3D(북·동·남·서)
+var side_anchors: Array = []  # side -> 문루 위 방향 글자(북·동·남·서) 이름표 기준점 — 그리기는 world_tags.gd(화면 공간, 개정 15)
 var _gate_doors: Array = []  # side -> 문짝 MeshInstance3D
 
 
@@ -38,7 +36,7 @@ func _ready() -> void:
 		var facing := Basis(Vector3.UP, atan2(dir.x, dir.z))  # 로컬 +Z가 성 바깥을 보게
 		_add_mesh(gate_mesh, Transform3D(facing, center))
 		_gate_doors.append(_add_mesh(doors_mesh, Transform3D(facing, center)))
-		side_labels.append(_add_side_label(Formation.SIDE_NAMES[side], center + Vector3(0, SIDE_LABEL_Y, 0)))
+		side_anchors.append(center + Vector3(0, SIDE_TAG_Y, 0))
 		_add_tap_area(center, _along(perp, Balance.GATE_W, Balance.WALL_H, Balance.WALL_T), LAYER_GATE, side)
 		var seg_len := half + Balance.WALL_T - Balance.GATE_W / 2.0
 		for s in [-1.0, 1.0]:
@@ -86,24 +84,6 @@ func _along(perp: Vector3, length: float, height: float, thickness: float) -> Ve
 	if absf(perp.x) > 0.5:
 		return Vector3(length, height, thickness)
 	return Vector3(thickness, height, length)
-
-
-## 문루 위 방향 글자: 건물 이름표(buildings._add_label)와 같은 스타일, 크기 70%(pixel_size 0.03 → 0.021).
-func _add_side_label(text: String, pos: Vector3) -> Label3D:
-	var label := Label3D.new()
-	label.text = text
-	label.font = FONT
-	label.font_size = 48
-	label.outline_size = 12
-	label.pixel_size = 0.03 * 0.7
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	label.modulate = Color(0.18, 0.18, 0.22)
-	label.outline_modulate = Color(1, 1, 1, 0.9)
-	label.position = pos
-	add_child(label)
-	return label
 
 
 func _add_tap_area(ground_center: Vector3, size: Vector3, layer: int, side: int) -> void:
