@@ -1,10 +1,10 @@
 // 마이그레이션·시드: CSV 행 수 = DB 행 수, CSV 규칙(BOM·빈 줄·쉼표만 줄·열 순서), 오류 위치, 사라진 키 삭제.
 import assert from 'node:assert/strict'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { migrate, openDb } from '../src/db.ts'
+import { MIGRATIONS_DIR, migrate, openDb } from '../src/db.ts'
 import type { Db } from '../src/db.ts'
 import { CsvError, DATA_DIR, parseCsv, readTables, seed, TABLES } from '../src/seed.ts'
 
@@ -29,11 +29,32 @@ function dataCopy(changes: Record<string, string> = {}): string {
 
 const csvRows = (file: string) => readFileSync(join(DATA_DIR, file), 'utf8').split('\n').slice(1).filter((l) => l.replace(/,/g, '').trim() !== '').length
 
+const ALL_MIGRATIONS = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()
+
 test('마이그레이션: 적용하고 기록, 두 번째는 아무것도 안 함', async () => {
-  assert.deepEqual(await migrate(db), ['001_init.sql', '002_kill_seq_stage_clear.sql'])
+  assert.deepEqual(await migrate(db), ALL_MIGRATIONS)
   assert.deepEqual(await migrate(db), [])
-  const rows = await db.query('select name from schema_migrations')
-  assert.deepEqual(rows.map((r) => r.name), ['001_init.sql', '002_kill_seq_stage_clear.sql'])
+  const rows = await db.query('select name from schema_migrations order by name')
+  assert.deepEqual(rows.map((r) => r.name), ALL_MIGRATIONS)
+})
+
+test('마이그레이션 003: 001·002만 적용된 DB에서 올리면 gold가 gold_tenths(× 10)가 된다', async () => {
+  const old = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(old)
+  for (const f of ['001_init.sql', '002_kill_seq_stage_clear.sql']) cpSync(join(MIGRATIONS_DIR, f), join(old, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, old)
+    const [p] = await d.query("insert into players (device_id) values ('mig-test-device-0001') returning id")
+    await d.query('insert into player_state (player_id, gold) values ($1, 7)', [p.id])
+    const applied = await migrate(d)
+    assert.equal(applied[0], '003_gold_tenths.sql')
+    const [s] = await d.query('select gold_tenths from player_state where player_id = $1', [p.id])
+    assert.equal(Number(s.gold_tenths), 70)
+    await assert.rejects(d.query('select gold from player_state'))
+  } finally {
+    await d.close()
+  }
 })
 
 test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async () => {
@@ -47,7 +68,7 @@ test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async (
     }
   }
   const [s2] = await db.query('select atk_mult from stages where stage = 2')
-  assert.equal(s2.atk_mult, 1.15) // real 왕복이 1.149999…로 바뀌지 않는다
+  assert.equal(s2.atk_mult, 1.1) // real 왕복이 1.149999…로 바뀌지 않는다
   const [w] = await db.query("select name, building, per_min, price from resources where id = 'wood'")
   assert.deepEqual(w, { name: '목재', building: 'lumber', per_min: 10, price: 1 })
   const [cfg] = await db.query("select value from game_config where key = 'hero_slots'")
