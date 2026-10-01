@@ -1,6 +1,6 @@
 extends Node3D
 ## 쿼터뷰 직교 카메라 리그. 리그 위치 = 화면 중앙이 바라보는 바닥 지점.
-## 한 손가락/마우스 드래그로 이동(DRAG_THRESHOLD_PX 넘으면 드래그 확정), 휠·두 손가락 핀치로 줌.
+## 한 손가락/마우스 드래그로 이동(DRAG_THRESHOLD_PX 넘으면 드래그 확정), 휠·두 손가락 핀치로 줌. pan_to = 지점으로 부드럽게 이동(HUD 성문 막대 탭).
 ## 한 손가락 터치 팬은 emulate_mouse_from_touch로 들어온다(0번 손가락 → 마우스 이벤트) —
 ## pan_pixels는 InputEventScreenDrag에서는 호출되지 않고 InputEventMouseMotion 쪽에서만 호출된다.
 ## 입력을 소비하지 않는다 — 탭 판정(UnitPicker)도 같은 이벤트를 본다.
@@ -19,6 +19,7 @@ var camera: Camera3D
 var _press_pos: Vector2 = Vector2.INF
 var _dragging := false
 var _touches := {}  # 터치 index -> 화면 위치 (핀치용)
+var _pan: Tween  # pan_to 진행 중(손으로 끌면 멈춘다)
 
 
 func _ready() -> void:
@@ -72,8 +73,20 @@ func _notification(what: int) -> void:
 		_dragging = false
 
 
+## 화면 가운데가 바닥 지점 target(높이 무시)을 보도록 sec초 동안 부드럽게 옮긴다(개정 12-2 §2). 줌은 그대로, 팬 한계 안.
+func pan_to(target: Vector3, sec: float) -> void:
+	if _pan != null:
+		_pan.kill()
+	var limit := Balance.MAP_HALF - PAN_LIMIT_MARGIN
+	var dest := Vector3(clampf(target.x, -limit, limit), position.y, clampf(target.z, -limit, limit))
+	_pan = create_tween()
+	_pan.tween_property(self, "position", dest, sec).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
 ## 화면 픽셀 이동량만큼 바닥이 손가락을 따라오게 리그를 옮긴다.
 func pan_pixels(rel: Vector2) -> void:
+	if _pan != null:
+		_pan.kill()  # 손이 이긴다
 	var world_per_px := camera.size / get_viewport().get_visible_rect().size.x
 	var right := camera.global_basis.x
 	right.y = 0.0

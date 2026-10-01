@@ -15,6 +15,7 @@ const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
 const SIDE_DIR: Array[Vector3] = [
 	Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0),
 ]
+const SIDE_NAMES := ["북", "동", "남", "서"]  # 면 방향 이름(HUD 성문 막대·문루 글자)
 
 static var _keep_half: float = Balance.building("keep").size.x * Balance.TILE / 2.0  # 성채 외벽 절반 크기. 로드 때 한 번 계산
 

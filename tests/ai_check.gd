@@ -12,6 +12,8 @@ const HeroScript := preload("res://scripts/hero.gd")
 const Fx := preload("res://scripts/fx.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
+const ProjectileScript := preload("res://scripts/projectile.gd")
+const Art := preload("res://scripts/art.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -299,8 +301,8 @@ func _skill_cases(heroes: Array) -> void:
 	await _frames(1)
 	var fe = _add_hero("felix", 102)
 	_g = _spawn("epic_boss", 2, fe.global_position + Vector3(0, 0, 1.5))
-	await _wait_until(func(): return fe._attacks >= 4, 6.0)
-	_check(fe._attacks >= 4 and _alive(_g) and _g.is_stunned(), "(m) felix's 4th attack stuns its target", "attacks=%d stunned=%s" % [fe._attacks, _alive(_g) and _g.is_stunned()])
+	await _wait_until(func(): return _alive(_g) and _g.is_stunned(), 6.0)  # 기절은 4번째 공격의 타격 순간에(개정 12-2)
+	_check(fe._attacks == 4 and _alive(_g) and _g.is_stunned(), "(m) felix's 4th attack stuns its target", "attacks=%d stunned=%s" % [fe._attacks, _alive(_g) and _g.is_stunned()])
 	_remove_hero(fe)
 	_clear_monsters()
 	await _frames(1)
@@ -373,6 +375,7 @@ func _skill_cases(heroes: Array) -> void:
 	GameState.mode = GameState.Mode.IDLE
 	await _levelup_case()
 	await _idle_invincible_case()
+	await _attack_sync()
 
 
 ## hero.gd가 스킬을 실제로 적용하는 방식(스펙 §3.2). 시험 영웅·몬스터는 처리를 끄고(제자리) 공격 함수를 직접 부른다.
@@ -408,7 +411,7 @@ func _skill_application(heroes: Array) -> void:
 		ms.append(_still("epic_boss", gp + off))
 	await _frames(1)
 	gk._target = ms[0]
-	gk._attack()
+	await _attack_now(gk)
 	var a: float = gk.atk * 1.15
 	_check(is_equal_approx(_dmg(ms[0]), a) and is_equal_approx(_dmg(ms[1]), a) and _dmg(ms[2]) == 0.0 and _dmg(ms[3]) == 0.0,
 		"(r) multishot a=2 hits the target and the nearest other in range, each for atk x aura (%.1f)" % a, "damage=%s" % [ms.map(_dmg)])
@@ -428,7 +431,7 @@ func _skill_application(heroes: Array) -> void:
 	var cdd = _still("epic_boss", cc.global_position + side_x * 5.0)
 	await _frames(1)
 	se._target = ca
-	se._attack()
+	await _attack_now(se)
 	var d0: float = se.atk * se._aura_mult()
 	_check(is_equal_approx(_dmg(ca), d0) and is_equal_approx(_dmg(cb), d0 * 0.7) and is_equal_approx(_dmg(cc), d0 * 0.49) and _dmg(cdd) == 0.0,
 		"(s) chain bounces to the nearest monster not yet hit (x b% each) and stops when none is within c m",
@@ -448,7 +451,7 @@ func _skill_application(heroes: Array) -> void:
 	var far = _still("epic_boss", t0 + pz * 2.5)
 	await _frames(1)
 	dk._target = tt
-	dk._attack()
+	await _attack_now(dk)
 	var dd: float = dk.atk * dk._aura_mult()
 	_check(is_equal_approx(_dmg(tt), dd) and is_equal_approx(_dmg(n1), dd * 0.5) and is_equal_approx(_dmg(n2), dd * 0.5) and _dmg(far) == 0.0,
 		"(t) cleave deals b% of the hit to other monsters within a m of the target only", "damage=%s" % [[_dmg(tt), _dmg(n1), _dmg(n2), _dmg(far)]])
@@ -602,12 +605,12 @@ func _damage_numbers() -> void:
 	var m = _still("grunt", Vector3(0, 0, -(_half + 6.0)))
 	dn._list.clear()
 	h._target = m
-	h._attack()
+	await _attack_now(h)
 	var kinds: Array = dn._list.map(func(e): return e.kind)
 	_check(kinds == [K.HIT] and dn._list[0].text == str(roundi(h.atk)), "(dn) a plain attack makes one white damage number", "kinds=%s text=%s atk=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-", h.atk])
 	dn._list.clear()
 	hc._target = m
-	hc._attack()
+	await _attack_now(hc)
 	kinds = dn._list.map(func(e): return e.kind)
 	_check(kinds == [K.CRIT] and dn._list[0].text == "%d!" % roundi(hc.atk * 2.0) and DamageNumbersScript.STYLE[K.CRIT][0] == Color(1.0, 0.62, 0.15),
 		"(dn) a 100% crit hero makes an orange crit number with '!'", "kinds=%s text=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-"])
@@ -784,3 +787,159 @@ func _idle_invincible_case() -> void:
 		if is_instance_valid(h):
 			h.set_process(true)
 	await _frames(2)
+
+
+## 시험 영웅의 공격 한 번을 끝까지(개정 12-2): 시작 → 곧바로 타격(발사) 순간 → 원거리면 투사체가 다 도착(또는 사라질) 때까지.
+func _attack_now(h) -> void:
+	h._attack(1.0)
+	h._release()
+	await _wait_until(func(): return _flying() == 0, 5.0)
+
+
+## 날고 있는 투사체 수.
+func _flying() -> int:
+	return _main.get_children().filter(func(c): return c.get_script() == ProjectileScript).size()
+
+
+## (A) 개정 12-2 §3 공격 동기화: 피해는 모션의 타격 순간(근접)·투사체 도착 순간(원거리)에. 시험 영웅·몬스터는 처리를 끄고
+##     휘두름 시간(_tick_swing)을 직접 흘린다(투사체는 실제 프레임으로 난다). 마지막 DPS 사례만 영웅 처리를 켠다.
+func _attack_sync() -> void:
+	_clear_monsters()
+	GameState.refill()
+	await _frames(1)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(false)
+	var melee: Dictionary = GameData.hero("hans").duplicate(true)  # 기사 한손 내려치기, 간격 0.8초
+	melee.skills = {}
+	var h = _add_hero_def(melee, 320)
+	h.set_process(false)
+	var out: Vector3 = Formation.SIDE_DIR[h.side]
+	var m = _still("epic_boss", _flat(h.global_position) + out * 1.2)
+	await _frames(1)
+	var a: float = h.atk * h._aura_mult()
+
+	# 근접: 간격(0.8초)보다 긴 애니메이션은 빨리 돌고(길이 ≤ 간격 × 0.9), 타격 순간도 같은 비율로 당겨진다. 시작 직후엔 HP 그대로, 타격 순간에 준다
+	var anim: String = h._model._spec.anims.attack
+	var length: float = h._model._anim.get_animation(anim).length
+	var speed := maxf(1.0, length / (0.8 * Art.ATTACK_FIT))
+	h._target = m
+	h._attack(0.8)
+	var at: float = h._swing_left
+	_check(anim == "1H_Melee_Attack_Chop" and speed > 1.0 and is_equal_approx(at, length * Art.HIT_FRAC[anim] / speed)
+		and is_equal_approx(h._model._anim.get_playing_speed(), speed) and length / speed <= 0.8 * Art.ATTACK_FIT + 0.001,
+		"(A) an animation longer than the interval plays faster (length / speed <= interval x 0.9) and its hit moment moves with it",
+		"anim=%s len=%.3f speed=%.2f hit=%.3f" % [anim, length, h._model._anim.get_playing_speed(), at])
+	h._tick_swing(at - 0.02)
+	var before := _dmg(m)
+	h._tick_swing(0.04)
+	_check(before == 0.0 and is_equal_approx(_dmg(m), a), "(A) melee: HP is unchanged right after the swing starts and drops by atk at the hit moment (%.2f s)" % at,
+		"before=%.1f after=%.1f atk=%.1f" % [before, _dmg(m), a])
+
+	# 근접 헛스윙: 타격 순간 대상이 사거리 + 0.6 m 밖이면 피해 없음
+	var hp0: float = m.hp
+	h._attack(0.8)
+	m.global_position += out * 3.0
+	h._tick_swing(1.0)
+	_check(m.hp == hp0, "(A) melee: a target beyond range + 0.6 m at the hit moment is a miss", "hp %.1f -> %.1f" % [hp0, m.hp])
+	m.global_position -= out * 3.0
+
+	# 근접: 타격 전에 대상이 죽으면 피해가 없다(휩쓸기도 없음). 산 대상이면 옆 몬스터가 휩쓸린다(대조)
+	h._sk = {"cleave": [2.0, 100.0, 0.0]}
+	var n = _still("epic_boss", m.global_position + Formation.perp(h.side) * 1.0)
+	await _frames(1)
+	h._attack(0.8)
+	m.take_damage(1.0e6)
+	h._tick_swing(1.0)
+	var n_dead := _dmg(n)
+	var m2 = _still("epic_boss", _flat(h.global_position) + out * 1.2)
+	await _frames(1)
+	h._target = m2
+	h._attack(0.8)
+	h._tick_swing(1.0)
+	_check(n_dead == 0.0 and _dmg(n) > 0.0, "(A) melee: a target killed before the hit moment takes no hit and nothing is cleaved (a live one is)",
+		"neighbour %.1f then %.1f" % [n_dead, _dmg(n)])
+	_clear_monsters()
+	await _frames(1)
+
+	# 원거리: 발사 순간 화살이 나가고(30 m/s), 나는 동안 HP 그대로, 도착 순간 줄어든다
+	var ranged: Dictionary = GameData.hero("ella").duplicate(true)  # 쇠뇌(2H_Ranged_Shoot)
+	ranged.skills = {}
+	var r = _add_hero_def(ranged, 321)
+	r.set_process(false)
+	var rout: Vector3 = Formation.SIDE_DIR[r.side]
+	var t = _still("epic_boss", _flat(r.global_position) + rout * 8.0)
+	await _frames(1)
+	var ra: float = r.atk * r._aura_mult()
+	r._target = t
+	r._attack(1.0)
+	r._tick_swing(r._swing_left - 0.01)
+	var pre_release := _flying()
+	r._tick_swing(0.02)
+	var dist: float = (r.global_position + HeroScript.MUZZLE).distance_to(t.global_position + ProjectileScript.AIM)
+	var full_in_flight := _flying() == 1 and _dmg(t) == 0.0
+	var flew := 0.0
+	while _flying() > 0 and flew < 3.0:
+		await get_tree().process_frame
+		flew += get_process_delta_time()
+		full_in_flight = full_in_flight and (_flying() == 0 or _dmg(t) == 0.0)
+	_check(pre_release == 0 and full_in_flight and is_equal_approx(_dmg(t), ra) and flew >= dist / HeroScript.ARROW_SPEED * 0.9 and flew < dist / HeroScript.ARROW_SPEED + 0.3,
+		"(A) ranged: the arrow leaves at the release moment, HP stays full in flight and drops on arrival (%.1f m at 30 m/s)" % dist,
+		"shots before release=%d full=%s flew %.2f s dmg=%.1f" % [pre_release, full_in_flight, flew, _dmg(t)])
+
+	# 원거리: 도착 전에 대상이 죽으면 투사체는 사라지고 피해가 없다(연쇄도 없음)
+	r._sk = {"chain": [3.0, 70.0, 4.0]}
+	var t2 = _still("epic_boss", t.global_position + Formation.perp(r.side) * 6.0)
+	var n2 = _still("epic_boss", t2.global_position + Formation.perp(r.side) * 1.5)
+	await _frames(1)
+	r._target = t2
+	r._attack(1.0)
+	r._tick_swing(1.0)
+	await _frames(1)
+	var shot := _flying()
+	t2.take_damage(1.0e6)
+	await _wait_until(func(): return _flying() == 0, 2.0)
+	_check(shot == 1 and _flying() == 0 and _dmg(n2) == 0.0 and is_equal_approx(_dmg(t), ra),
+		"(A) ranged: if the target dies before arrival the projectile vanishes and hits nothing (no chain)", "shot=%d flying=%d n2=%.1f" % [shot, _flying(), _dmg(n2)])
+	_remove_hero(r)
+	_clear_monsters()
+	await _frames(1)
+
+	# 몬스터도 같다: 성문 HP는 휘두름 시작이 아니라 타격 순간에 준다. 방치 무적(개정 12 §3)과 무관하게 보려고 잠깐 스테이지 모드로 둔다
+	var mode0: int = GameState.mode
+	GameState.mode = GameState.Mode.STAGE
+	var gs := 0
+	var g = _still("grunt", _main.castle.gate_target(gs))
+	await _frames(1)
+	var gate0: float = GameState.gate_hp[gs]
+	g._swing(null, gs, _main.castle.gate_target(gs))
+	var g_at: float = g._swing_left
+	g._tick_swing(g_at - 0.02)
+	var gate_mid: float = GameState.gate_hp[gs]
+	g._tick_swing(0.04)
+	GameState.mode = mode0
+	_check(g_at > 0.1 and gate_mid == gate0 and is_equal_approx(gate0 - GameState.gate_hp[gs], g.atk), "(A) monster: the gate loses HP at the swing's hit moment (%.2f s), not at its start" % g_at,
+		"gate %.1f -> %.1f -> %.1f atk=%.1f" % [gate0, gate_mid, GameState.gate_hp[gs], g.atk])
+	_clear_monsters()
+	GameState.refill()
+	await _frames(1)
+
+	# DPS 그대로: 오래 돌려도 간격(0.8초)마다 한 번 공격하고, 피해는 그 수만큼(마지막 하나는 아직 타격 전일 수 있다)
+	h._sk = {}
+	var boss = _still("epic_boss", _flat(h.global_position) + out * 1.2)
+	boss.hp_max = 1.0e6
+	boss.hp = 1.0e6
+	await _frames(1)
+	h._attacks = 0
+	h._atk_cd = 0.0
+	h.set_process(true)
+	var ran := 0.0
+	while ran < 4.0:
+		await get_tree().process_frame
+		ran += get_process_delta_time()
+	h.set_process(false)
+	var hits := roundi(_dmg(boss) / a)
+	_check(absf(h._attacks - ran / 0.8) <= 1.0 and (hits == h._attacks or hits == h._attacks - 1) and is_equal_approx(_dmg(boss), hits * a),
+		"(A) DPS unchanged: one attack per interval over %.1f s, each one hit for atk" % ran, "attacks=%d hits=%d dmg=%.1f" % [h._attacks, hits, _dmg(boss)])
+	_remove_hero(h)
+	_clear_monsters()
+	await _frames(1)

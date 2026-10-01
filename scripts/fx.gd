@@ -1,5 +1,5 @@
 extends RefCounted
-## 영웅 시각(스펙 §3.4): 발밑 6각 링, 투사체(마법 20면체·도끼), 스킬 이펙트. 전부 MeshKit 로우폴리 메시 +
+## 영웅 시각(스펙 §3.4): 발밑 6각 링, 투사체 모양(마법 20면체·도끼·화살 — 나는 건 projectile.gd), 스킬 이펙트. 전부 MeshKit 로우폴리 메시 +
 ## 공유 정점 색 재질 하나(양면, 그림자 없음). 이펙트는 짧게(≤0.6초) 살고 스스로 해제되며, 동시 수는 MAX_LIVE까지만.
 ## 메시는 (종류, 색)마다 한 번 만들어 캐시한다. 오토로드 참조 없음.
 ## 상한은 살아 있는 수를 세어 본다(track이 더하고 트리에서 빠질 때 뺀다) — 생성마다 그룹 배열을 만들지 않는다.
@@ -7,9 +7,9 @@ extends RefCounted
 const Art := preload("res://scripts/art.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
 
-const MAX_LIVE := 48  # 동시에 살아 있는 이펙트·투사체 상한(넘으면 그 이펙트는 건너뛴다)
+const MAX_LIVE := 48  # 동시에 살아 있는 이펙트·투사체 모양 상한(넘으면 그 이펙트는 건너뛴다)
 const GROUP := "fx"
-const BOLT_SEC := 0.18
+const ARROW_PITCH_FIX := PI / 2.0  # 화살 모델은 길이 축 Y, 촉이 -Y → X축 +90°로 촉을 -Z(look_at 정면)에 맞춘다
 const HEAL_GREEN := Color(0.40, 0.85, 0.45)
 const STUN_YELLOW := Color(1.0, 0.85, 0.2)
 const SLOW_BLUE := Color(0.55, 0.85, 1.0)
@@ -47,24 +47,25 @@ static func foot_ring(grade_color: Color, color: Color) -> MeshInstance3D:
 	return mi
 
 
-## 투사체: 마법 20면체(고유 색). 피해는 쏜 즉시 — 시각만.
-static func bolt(parent: Node, from: Vector3, to: Vector3, color: Color) -> void:
-	var mi := _spawn(parent, _mesh("bolt", color), from)
-	if mi != null:
-		var tw := mi.create_tween()
-		tw.tween_property(mi, "global_position", to, BOLT_SEC)
-		tw.tween_callback(mi.queue_free)
-
-
-## 투사체: 회전하는 도끼.
-static func axe(parent: Node, from: Vector3, to: Vector3) -> void:
-	var mi := _spawn(parent, _mesh("axe"), from)
-	if mi != null:
-		mi.look_at(to + Vector3(0, 0.001, 0))
-		var tw := mi.create_tween().set_parallel()
-		tw.tween_property(mi, "global_position", to, BOLT_SEC)
-		tw.tween_property(mi, "rotation:x", mi.rotation.x - TAU * 1.5, BOLT_SEC)
-		tw.chain().tween_callback(mi.queue_free)
+## 투사체 모양(projectile.gd가 부른다): "bolt" = 고유 색 20면체(마법), "axe" = 도끼, "arrow" = 화살 모델. 투사체 노드 proj(정면 -Z)의
+## 자식으로 붙이고 상한 수에 넣는다. 상한이면 붙이지 않고 null(투사체는 모양 없이 난다).
+static func dress_projectile(proj: Node3D, kind: String, color: Color) -> Node3D:
+	if full(proj):
+		return null
+	var look: Node3D
+	if kind == "arrow":
+		look = Art.instance(Art.ARROW_MODEL)
+		look.scale = Vector3.ONE * Art.ARROW_SCALE
+		look.rotation.x = ARROW_PITCH_FIX
+	else:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _mesh(kind, color if kind == "bolt" else Color.WHITE)
+		mi.material_override = material()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		look = mi
+	proj.add_child(look)
+	track(look)
+	return look
 
 
 ## aoe_blast: 고유 색 20면체가 반경까지 커졌다가 사라진다.
@@ -142,7 +143,7 @@ static func full(parent: Node) -> bool:
 	return parent == null or not parent.is_inside_tree() or _live >= MAX_LIVE
 
 
-## 트리에 넣은 이펙트 노드를 상한 수에 넣는다. 트리에서 빠질 때(queue_free·부모 해제) 저절로 빠진다. hero의 화살도 쓴다.
+## 트리에 넣은 이펙트 노드를 상한 수에 넣는다. 트리에서 빠질 때(queue_free·부모 해제) 저절로 빠진다. 투사체 모양도 쓴다.
 static func track(node: Node) -> void:
 	node.add_to_group(GROUP)
 	_live += 1
