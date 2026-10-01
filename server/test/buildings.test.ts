@@ -7,11 +7,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { MIGRATIONS_DIR, migrate, openDb } from '../src/db.ts'
-import type { Query } from '../src/db.ts'
 import * as R from '../src/rules.ts'
 import { createApp } from '../src/app.ts'
 import { CsvError, DATA_DIR, readTables, seed, TABLES } from '../src/seed.ts'
-import { setup, T0 } from './helpers.ts'
+import { barrier, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 let S: Setup
@@ -101,7 +100,7 @@ test('새 플레이어: 모든 건물 레벨 1·일꾼 없음. 업그레이드 �
   const { token, id } = await S.login()
   let p = await player(token)
   assert.deepEqual(Object.fromEntries(Object.entries(p.buildings).map(([k, v]: [string, any]) => [k, v.level])),
-    { keep: 1, gate: 1, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 1, quarry: 1, farm: 1 })
+    { keep: 1, gate: 1, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 1, quarry: 1, farm: 1, archery: 1, stable: 1 })
   assert.equal(p.build, null)
   let r = await upgrade(token, 'keep')
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough'])
@@ -301,7 +300,7 @@ test('마이그레이션 007: 006까지 적용된 DB의 기존 플레이어는 �
     await d.query("insert into player_buildings (player_id, building, level, last_collect) values ($1, 'lumber', 2, to_timestamp($2))", [p.id, T0 - 100])
     assert.deepEqual(await migrate(d), all.filter((f) => f >= '007'))
     const rows = await d.query('select building, level from player_buildings where player_id = $1 order by building', [p.id])
-    assert.deepEqual(rows.map((r) => `${r.building}:${r.level}`), ['gate:2', 'keep:3', 'lumber:2'])
+    assert.deepEqual(rows.map((r) => `${r.building}:${r.level}`), ['archery:1', 'gate:2', 'keep:3', 'lumber:2', 'stable:1']) // 008: 병사 건물 둘
     const [s] = await d.query('select build_id, build_finish from player_state where player_id = $1', [p.id])
     assert.deepEqual(s, { build_id: null, build_finish: null })
     await seed(d)
@@ -315,7 +314,7 @@ test('마이그레이션 007: 006까지 적용된 DB의 기존 플레이어는 �
     const { token } = await call('POST', '/v1/auth/guest', undefined, { device_id: dev })
     const pl = (await call('GET', '/v1/player', token)).player
     assert.deepEqual(Object.fromEntries(Object.entries(pl.buildings).map(([k, v]: [string, any]) => [k, v.level])),
-      { keep: 3, gate: 2, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 2, quarry: 1, farm: 1 })
+      { keep: 3, gate: 2, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 2, quarry: 1, farm: 1, archery: 1, stable: 1 })
     assert.deepEqual([pl.buildings.lumber.last_collect, pl.buildings.keep.last_collect, pl.keep_level, pl.build], [T0 - 100, undefined, 3, null])
     assert.equal(pl.deploy.length, 4) // 성채 3: 첫 단계
   } finally {
@@ -330,7 +329,7 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
   const bld = readFileSync(join(DATA_DIR, 'buildings.csv'), 'utf8')
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const cases: [string, string, RegExp][] = [
-    ['buildings.csv', bld.replace('tavern,주점,30,180,100,150,40,barracks,', 'tavern,주점,30,180,100,150,40,stable,'), /buildings\.csv line 5 column 'req1': unknown building 'stable'/],
+    ['buildings.csv', bld.replace('tavern,주점,30,180,100,150,40,barracks,', 'tavern,주점,30,180,100,150,40,mine,'), /buildings\.csv line 5 column 'req1': unknown building 'mine'/],
     ['buildings.csv', bld.replace('lab,연구소,30,150,200,80,', 'lab,연구소,30,-150,200,80,'), /buildings\.csv line 6 column 'wood': must be 0 or more: -150/],
     ['buildings.csv', bld.replace('lab,연구소,30,150,200,80,', 'lab,연구소,30,150.5,200,80,'), /column 'wood': not an integer: '150\.5'/],
     ['buildings.csv', bld.replace('houses,민가,30,160,80,120,30', 'houses,민가,30,160,80,120,0'), /line 7 column 'base_sec': must be greater than 0: 0/],
@@ -341,7 +340,7 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|5:24|10:28', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|5:24|10:28', 'keep_interior_tiers,2:20'), /not a tier table/],
     ['config.csv', cfg.replace('tavern_sr_per_level,0.003', 'tavern_sr_per_level,1.5'), /tavern_sr_per_level must be in 0\.\.1: '1\.5'/],
-    ['config.csv', cfg.replace('barracks_hp_per_level,0.03', 'barracks_hp_per_level,-0.03'), /barracks_hp_per_level must be 0 or more/],
+    ['config.csv', cfg.replace('lab_atk_per_level,0.03', 'lab_atk_per_level,-0.03'), /lab_atk_per_level must be 0 or more/],
     ['config.csv', cfg.replace(/^pop_per_house,.*\n/m, ''), /missing key 'pop_per_house'/],
     ['config.csv', cfg.replace('pop_base,6', 'pop_base,6.5'), /pop_base must be a non-negative integer: '6\.5'/],
   ]
@@ -357,20 +356,3 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
   }
   await readTables(dir) // 원래대로면 통과
 })
-
-// 처음 두 번의 플레이어 읽기를 서로 기다리게 한다 — 두 요청이 반드시 같은 version을 읽은 뒤 쓰기를 겨룬다(concurrency.test와 같다).
-function barrier() {
-  let armed = false
-  let arrived = 0
-  let release = () => {}
-  const both = new Promise<void>((r) => (release = r))
-  const wrap = (q: Query): Query => async (text, params) => {
-    if (armed && text.includes('from player_state s where') && arrived < 2) {
-      arrived++
-      if (arrived === 2) release()
-      await both
-    }
-    return q(text, params)
-  }
-  return { wrap, arm: () => (armed = true), arrived: () => arrived }
-}

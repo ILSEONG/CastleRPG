@@ -12,6 +12,11 @@ spawn_spacing_sec,0.5
 accum_cap_min,720
 pop_base,6
 pop_per_house,2
+soldier_max_tier,5
+soldier_tier_mult,2
+soldier_prod_sec,10800
+soldier_prod_level_factor,0.95
+soldier_merge_count,5
 badge_min,5
 merchant_jackpot_p,0.05
 merchant_jackpot_rate,2
@@ -24,7 +29,6 @@ kill_burst_sec,60
 starter_heroes,hans|ella|dorik|nina
 hero_max_stars,5
 hero_star_bonus,0.1
-barracks_hp_per_level,0.03
 lab_atk_per_level,0.03
 gacha_cost_1,300
 gacha_cost_10,2700

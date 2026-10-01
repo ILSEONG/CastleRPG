@@ -1,0 +1,4 @@
+id,name,building,hp,atk,range,atk_interval,speed,aggro,model
+infantry,보병,barracks,320,22,1.6,1.0,4.0,7,Knight
+archer,궁병,archery,180,18,8,1.2,4.0,10,Rogue_Hooded
+cavalry,기병,stable,240,18,1.8,0.9,8.0,10,Knight
