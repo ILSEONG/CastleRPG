@@ -27,6 +27,7 @@ var hp_max: float = 0.0
 var atk: float = 0.0
 
 var _stats: Dictionary = {}
+var _speed := 0.0  # 기본 이동속도 × 스테이지 배율(개정 22 §3, setup)
 var _model
 var _target_hero
 var _atk_cd := 0.0
@@ -44,8 +45,8 @@ var _swing_side := -1     # 치려는 것: AT_HERO, 성(-1), 성문 면(0..3)
 var _swing_at := Vector3.ZERO  # 성문·성을 칠 때 그 지점
 
 
-## add_child 전에 호출.
-func setup(p_kind: String, p_side: int, p_stage: int, p_castle) -> void:
+## add_child 전에 호출. p_stage = 전체 라운드 g. hp_mult = 추가 HP 배율(라운드 25 보스 boss_round_mult).
+func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0) -> void:
 	assert(not GameData.monster(p_kind).is_empty(), "unknown monster kind: " + p_kind)
 	kind = p_kind
 	side = p_side
@@ -53,9 +54,10 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle) -> void:
 	castle = p_castle
 	_stats = GameData.monster(kind)
 	var st := GameData.stage(stage)
-	hp = _stats.hp * st.hp_mult
+	hp = _stats.hp * st.hp_mult * hp_mult
 	hp_max = hp
 	atk = _stats.atk * st.atk_mult
+	_speed = float(_stats.speed) * GameData.enemy_speed_mult(stage)
 
 
 func _ready() -> void:
@@ -189,9 +191,9 @@ func _release() -> void:
 			GameState.damage_gate(_swing_side, atk)
 
 
-## 지금 이동 속도(slow 반영).
+## 지금 이동 속도(스테이지 배율·slow 반영).
 func speed() -> float:
-	return float(_stats.speed) * (1.0 - _slow_pct / 100.0) if _slow_t > 0.0 else float(_stats.speed)
+	return _speed * (1.0 - _slow_pct / 100.0) if _slow_t > 0.0 else _speed
 
 
 ## slow: 이동 속도 −pct%, sec초(갱신). 발밑 결정은 끝날 때까지.

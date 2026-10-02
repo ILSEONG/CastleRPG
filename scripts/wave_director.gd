@@ -9,9 +9,10 @@ const MODE_IDLE := 0
 const MODE_STAGE := 1
 
 
-## 반환: [{time: float, kind: String, side: int, lane: int, lanes: int}] 시간 오름차순(보스는 lane 없음).
+## 반환: [{time: float, kind: String, side: int, lane: int, lanes: int}] 시간 오름차순(보스는 lane 없이 hp_mult).
 ## MODE_IDLE은 한 사이클(면마다 스폰 한 번, idle_interval 간격)만. Spawner가 소진되면 다시 build()한다.
-## MODE_STAGE: 웨이브마다 wave_size번 스폰, spawn_spacing_sec 간격, 면은 웨이브 안 순번 % 4, 웨이브 사이 wave_gap_sec, 끝에 보스.
+## MODE_STAGE: 웨이브마다 wave_size번 스폰, spawn_spacing_sec 간격, 면은 웨이브 안 순번 % 4, 웨이브 사이 wave_gap_sec.
+## 보스는 라운드 25(스테이지 마지막, 개정 22 §2)에만 끝에 하나 — HP × boss_round_mult. stage = 전체 라운드 g.
 static func build(stage: int, mode: int) -> Array:
 	var events: Array = []
 	if mode == MODE_IDLE:
@@ -27,9 +28,11 @@ static func build(stage: int, mode: int) -> Array:
 		for i in size:
 			_add_group(events, t + i * spacing, i % 4)
 		t += size * spacing + GameData.config_num("wave_gap_sec")
+	if not GameData.is_boss_round(stage):
+		return events
 	var rng := RandomNumberGenerator.new()
 	rng.seed = stage
-	events.append({"time": t, "kind": "epic_boss", "side": rng.randi_range(0, 3)})
+	events.append({"time": t, "kind": "epic_boss", "side": rng.randi_range(0, 3), "hp_mult": GameData.config_num("boss_round_mult")})
 	return events
 
 
