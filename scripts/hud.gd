@@ -5,6 +5,18 @@ extends CanvasLayer
 ## 하단에는 탭 바만 있다(끊김 띠·알림은 그 위).
 
 const INK := Color(0.16, 0.18, 0.24)
+const TIPS := [
+	"영웅을 탭한 뒤 성문·성벽을 탭하면 위치를 옮길 수 있어요",
+	"궁병은 성벽 위, 보병은 성문 앞을 지킵니다",
+	"FEVER가 가득 차면 버튼을 눌러 보세요",
+	"같은 영웅 조각을 모아 승급하면 스킬이 열립니다",
+	"막사 레벨을 올리면 훈련이 빨라집니다",
+	"성문이 부서지면 괴물이 성채를 직접 공격해요",
+	"성장 탭에서 골드로 공격력·체력을 올릴 수 있어요",
+	"연구소 레벨이 오르면 영웅 공격력이 강해집니다",
+	"남는 재료는 상인에게 팔아 골드로 바꾸세요",
+	"스테이지가 끝나면 영웅이 시작 자리로 돌아옵니다",
+]
 const PANEL_BG := Color(0.984, 0.969, 0.933, 0.78)  # UiKit.CREAM_PANEL
 const ACCENT := Color(0.98, 0.70, 0.20)
 const TOAST_SEC := 1.6
@@ -35,6 +47,8 @@ var _compass_yaw := CameraRig.YAW_DEG
 var _gate_tiles: Array = [] # side -> 성문 막대 줄(탭하면 gate_tapped)
 var _hp := {}  # CASTLE·면 → {bar, num, flash: 테두리 번쩍임 Control, left: 남은 번쩍임 초, last: 지난 HP}
 var _center: Label
+var hint: Label  # 카운트다운 안내(테스트가 읽는다)
+var _tip_n := -1
 var _button: Button
 var _auto: Button  # 연속 진행 체크박스(진행 버튼 오른쪽)
 var _fever: Button  # FEVER 버튼(fever_button.gd)
@@ -126,6 +140,21 @@ func _ready() -> void:
 	_center.add_theme_color_override("font_outline_color", Color(INK, 0.85))
 	_center.add_theme_constant_override("outline_size", 18)
 	root.add_child(_center)
+	hint = Label.new()  # 카운트다운 안내: 큰 숫자 아래 작은 글씨(상황 한 줄 + 팁 한 줄)
+	hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	hint.offset_left = -330.0
+	hint.offset_right = 330.0
+	hint.offset_top = 60.0
+	hint.offset_bottom = 130.0
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint.add_theme_font_size_override("font_size", 26)
+	hint.add_theme_color_override("font_color", Color.WHITE)
+	hint.add_theme_color_override("font_outline_color", Color(INK, 0.85))
+	hint.add_theme_constant_override("outline_size", 10)
+	hint.visible = false
+	root.add_child(hint)
 	_build_link_ui()
 
 	GameState.auto_continue = Fever.auto_next
@@ -298,6 +327,10 @@ func _on_mode_changed(mode: int) -> void:
 	_stage_label.text = "스테이지 %d" % GameState.stage
 	if mode == GameState.Mode.IDLE or mode == GameState.Mode.STAGE:
 		_center.text = ""
+	hint.visible = mode == GameState.Mode.COUNTDOWN
+	if hint.visible:
+		_tip_n += 1
+		hint.text = "곧 스테이지 %d이(가) 시작됩니다\n%s" % [GameState.stage, TIPS[_tip_n % TIPS.size()]]
 	_refresh_button()
 
 

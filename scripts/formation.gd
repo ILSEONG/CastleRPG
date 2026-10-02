@@ -40,6 +40,11 @@ func claim(hero_id: int, side: int, post: int) -> int:
 	return -1
 
 
+## 정확한 슬롯으로 되돌린다(스테이지 시작 자리 복원용). 호출 전에 전원 release해 충돌이 없어야 한다.
+func restore(hero_id: int, side: int, post: int, slot: int) -> void:
+	_claims[hero_id] = {"side": side, "post": post, "slot": slot}
+
+
 func release(hero_id: int) -> void:
 	_claims.erase(hero_id)
 

@@ -44,6 +44,7 @@ var camera: Camera3D
 var castle
 
 var _formation
+var _hero_snap := []  # 스테이지 시작 때 영웅 자리: [{i, side, post, slot, free_pos}]
 var _picker
 var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, 승급, level, 연구소]}(만들 때 값)
 var soldiers: Array = []  # 성채 앞 병사 노드(개정 13)
@@ -126,7 +127,9 @@ func _build_world() -> void:
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 13 §7.1): 영웅·병사·모집·상인
 	tabs.windows = {"hero": hero_panel, "soldier": soldier_panel, "recruit": recruit, "merchant": panel}
 	add_child(tabs)
-	GameState.refilled.connect(_sync_heroes)  # 다음 리필(스테이지 사이) 때 배치·승급·레벨·연구소 반영
+	GameState.mode_changed.connect(_on_mode_for_snapshot)
+	GameState.refilled.connect(_restore_hero_posts)  # _sync_heroes보다 먼저: 남아 있는 영웅만 복원
+	GameState.refilled.connect(_sync_heroes) # 다음 리필(스테이지 사이) 때 배치·승급·레벨·연구소 반영
 	GameState.refilled.connect(_sync_soldiers)
 	Economy.roster_changed.connect(_on_roster_changed)
 	Economy.soldiers_changed.connect(_on_soldiers_changed)
@@ -202,6 +205,34 @@ func _sync_heroes() -> void:
 		hero.setup(i, GameData.hero(id), castle, _formation, key[1], key[2])
 		add_child(hero)
 		_slots[i] = {"node": hero, "key": key}
+
+
+## 스테이지 시작 때 영웅 자리 기록, 그 스테이지를 끝내는 리필에서 복원(start_stage의 리필은 기록이 없어 건너뜀).
+func _on_mode_for_snapshot(mode: int) -> void:
+	if mode != GameState.Mode.STAGE:
+		return
+	_hero_snap.clear()
+	for i in _slots:
+		var h = _slots[i].node
+		_hero_snap.append({"i": i, "side": h.side, "post": h.post, "slot": h.slot, "free_pos": h.free_pos})
+
+
+func _restore_hero_posts() -> void:
+	var snap := _hero_snap
+	_hero_snap = []
+	for e in snap:
+		_formation.release(e.i)
+	for e in snap:
+		if not _slots.has(e.i):
+			continue  # 그 사이 빠지거나 다시 만들어진 영웅은 건너뜀
+		var h = _slots[e.i].node
+		if e.post != FormationScript.POST_FREE:
+			_formation.restore(e.i, e.side, e.post, e.slot)
+		h.side = e.side
+		h.post = e.post
+		h.slot = e.slot
+		h.free_pos = e.free_pos
+		h.reset()  # 자리로 순간이동 + 체력 회복
 
 
 func _retire(i: int) -> void:

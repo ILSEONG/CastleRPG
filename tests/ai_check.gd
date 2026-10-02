@@ -387,6 +387,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _skill_unlock_cases()
 	await _hold_ground_case()
 	await _group_spawn()
+	await _stage_return_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -1452,3 +1453,43 @@ func _group_spawn() -> void:
 	GameState.mode = mode0
 	_clear_monsters()
 	await _frames(1)
+
+
+## 스테이지 시작 자리 복원: 스테이지 중 옮긴 영웅은 끝(클리어·중지) 뒤 시작 자리로 돌아가고, 방치 중 옮긴 자리는 [진행] 뒤에도 유지된다.
+func _stage_return_cases() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	await _frames(2)
+	var h = _main._slots[0].node
+	GameState.start_stage()  # 한 번 돌고 멈춘 뒤(IDLE 진입 직후)에도 방치 이동이 유지되어야 한다
+	GameState.stop_stage()
+	var start := [h.side, h.post, h.slot]
+	# 방치 중 옮김 → [진행] 뒤에도 그대로(start_stage의 리필은 복원하지 않는다)
+	_check(h.move_to((h.side + 1) % 4, h.post), "(R0) idle move accepted", "")
+	var idle_spot := [h.side, h.post, h.slot]
+	h.reset()
+	GameState.start_stage()
+	_check([h.side, h.post, h.slot] == idle_spot and h.global_position.is_equal_approx(h.stand_position()),
+		"(R1) a move made in IDLE sticks through [start]", "now=%s want=%s" % [[h.side, h.post, h.slot], idle_spot])
+	# 스테이지 중 다른 성문으로 → 연속 클리어 뒤 시작 자리(= 방치에서 옮긴 자리)로 복귀
+	_check(h.move_to((h.side + 2) % 4, h.post), "(R2) mid-stage move accepted", "")
+	h.global_position = h.stand_position()
+	GameState.auto_continue = true
+	GameState.on_all_monsters_dead()
+	GameState.advance(GameData.config_num("result_sec") + 0.1)
+	_check(GameState.mode == GameState.Mode.COUNTDOWN and [h.side, h.post, h.slot] == idle_spot
+		and h.global_position.is_equal_approx(h.stand_position()),
+		"(R2) after a continuous clear the hero is back at its stage-start slot", "now=%s want=%s mode=%d" % [[h.side, h.post, h.slot], idle_spot, GameState.mode])
+	# 다음 STAGE는 새 기록: 거기서 옮기고 중지 → 그 자리로
+	GameState.advance(GameData.config_num("countdown_sec") + 0.1)
+	_check(GameState.mode == GameState.Mode.STAGE, "(R3) countdown ends in STAGE", "mode=%d" % GameState.mode)
+	_check(h.move_to((h.side + 3) % 4, h.post), "(R3) second stage move accepted", "")
+	GameState.stop_stage()
+	_check([h.side, h.post, h.slot] == idle_spot and h.global_position.is_equal_approx(h.stand_position()),
+		"(R3) after a stop the hero is back at its stage-start slot", "now=%s want=%s" % [[h.side, h.post, h.slot], idle_spot])
+	# 기록은 한 번 쓰면 사라진다: 방치 중 옮기고 다시 리필해도 유지
+	h.move_to(start[0], start[1])
+	GameState.refill()
+	_check([h.side, h.post] == [start[0], start[1]], "(R4) the snapshot is consumed: a later refill keeps idle moves", "side=%d post=%d" % [h.side, h.post])
+	GameState.mode = GameState.Mode.IDLE

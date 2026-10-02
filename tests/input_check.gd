@@ -345,6 +345,16 @@ func _recruit_and_heroes(rig) -> void:
 			hud = c
 		elif c.get_script() == preload("res://scripts/tab_bar.gd"):
 			tabs = c
+	_check(not hud.hint.visible, "(hint) hidden in IDLE", "")
+	var mode0: int = GameState.mode
+	GameState.mode = GameState.Mode.COUNTDOWN
+	GameState._timer = 3.0
+	GameState.mode_changed.emit(GameState.mode)
+	_check(hud.hint.visible and hud.hint.text.contains("스테이지") and hud.hint.text.split("\n").size() == 2 and hud.hint.text.split("\n")[1] != "",
+		"(hint) visible with context and tip during the countdown", hud.hint.text)
+	GameState.mode = mode0
+	GameState.mode_changed.emit(mode0)
+	_check(not hud.hint.visible, "(hint) hidden again outside the countdown", "")
 	_picker._select(null)
 	Economy.gold_tenths = 27005  # 2700.5골드: 10회도 된다 — 연타가 10회를 누르지 않는지 본다
 	Economy.rng.seed = 3
