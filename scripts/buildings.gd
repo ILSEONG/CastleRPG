@@ -31,6 +31,9 @@ var tag_anchors := {}  # 건물 id → 이름표("이름 Lv N") 기준점: 지�
 var sites := {}  # 건물 id → [AABB(월드), …] — 비계·진행 막대 자리. 성문은 문루 넷
 var scaffold_id := ""  # 지금 비계를 두른 건물 id(없으면 "")
 var _scaffolds: Array = []
+## 자연물·산 MultiMesh마다 {mm, recipe(TownKit 레시피), idx(레시피 안 변형 번호), state(만들기 전 rng 상태), base(기본 메시)}.
+## seasons.gd(개정 22)가 같은 rng 상태 + 계절 팔레트로 다시 만든 메시를 갈아 끼운다.
+var season_slots: Array = []
 
 
 func _ready() -> void:
@@ -98,8 +101,10 @@ func _scatter_nature() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Art.NATURE_SEED
 	var variants: Array[Mesh] = []
+	var info := []  # 변형마다 [레시피, 레시피 안 번호, 만들기 전 rng 상태]
 	for pair in [[TownKit.tree_pine, 4], [TownKit.tree_round, 3], [TownKit.bush, 2], [TownKit.rock_cluster, 3]]:  # 레시피, 변형 수
 		for i in pair[1]:
+			info.append([pair[0], i, rng.state])
 			variants.append(pair[0].call(rng))
 	var trees := 7  # 앞의 변형 7개(침엽수 4 + 활엽수 3)가 나무
 	var keep_out := half + Balance.WALL_T + Art.NATURE_CASTLE_MARGIN
@@ -129,7 +134,7 @@ func _scatter_nature() -> void:
 			if _nature_spot_ok(q, keep_out):
 				by_variant[v].append(Transform3D(basis, Vector3(q.x, 0, q.y)))
 	for v in by_variant:
-		_add_multimesh(variants[v], by_variant[v])
+		_add_season_slot(_add_multimesh(variants[v], by_variant[v]), info[v])
 
 
 ## 플레이 영역 바깥 띠에 로우폴리 산을 한 바퀴 두른다(유닛은 들어가지 않는다). 시드 고정, 변형별 MultiMesh.
@@ -137,7 +142,9 @@ func _ring_mountains() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Art.BORDER_SEED
 	var variants: Array[Mesh] = []
+	var info := []
 	for i in MOUNTAIN_VARIANTS:
+		info.append([TownKit.mountain, i, rng.state])
 		variants.append(TownKit.mountain(rng))
 	var inner := Balance.MAP_HALF + Art.BORDER_INNER
 	var outer := Balance.MAP_HALF + Art.BORDER_OUTER
@@ -154,10 +161,14 @@ func _ring_mountains() -> void:
 				by_variant[v] = []
 			by_variant[v].append(Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), pos))
 	for v in by_variant:
-		_add_multimesh(variants[v], by_variant[v])
+		_add_season_slot(_add_multimesh(variants[v], by_variant[v]), info[v])
 
 
-func _add_multimesh(mesh: Mesh, placements: Array) -> void:
+func _add_season_slot(mm: MultiMesh, info: Array) -> void:
+	season_slots.append({"mm": mm, "recipe": info[0], "idx": info[1], "state": info[2], "base": mm.mesh})
+
+
+func _add_multimesh(mesh: Mesh, placements: Array) -> MultiMesh:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
@@ -168,6 +179,7 @@ func _add_multimesh(mesh: Mesh, placements: Array) -> void:
 	mmi.multimesh = mm
 	mmi.material_override = Art.lowpoly_vc_material()
 	add_child(mmi)
+	return mm
 
 
 ## 자연물 자리 규칙: 성벽 바깥 여유 밖, 괴물 진입로(두 축) 밖.

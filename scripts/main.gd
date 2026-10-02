@@ -6,6 +6,7 @@ extends Node3D
 ## 영웅은 배치(GameState.deploy·hero_promotion·hero_level)대로 만들고, 배치·승급(별)·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
 ## 개발용 `-- --debug-win`(웹 `?debug-win`, 개정 18): 디버그 빌드에서 Economy.debug_win_on — 던전 장면이 도전을 곧바로 승리로 끝낸다(Economy.debug_win).
+## 개발용 `-- --season=N`(웹 `?season=N`, N 0~3, 개정 22): 디버그 빌드에서 그 계절로 시작(seasons.gd).
 ## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 연구소 → 영웅 공격(방치면 곧바로,
 ## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
@@ -37,6 +38,7 @@ const TabBarScript := preload("res://scripts/tab_bar.gd")
 const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
+const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
 
@@ -55,6 +57,9 @@ var command  # 전술 지휘관(soldier_command.gd)
 var _soldier_key = null  # 병사를 만들 때의 배치(연속 진행 중 바뀌면 다음 스테이지에 다시 만든다)
 var _built_slots := 0  # 이 월드를 만들 때의 영웅 슬롯 수(성채 단계)
 var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점에 월드를 다시 만든다
+var _env: Environment  # 계절(개정 22)이 하늘·빛·바닥 색을 바꾼다
+var _sun: DirectionalLight3D
+var _ground_mat: ShaderMaterial
 
 
 func _ready() -> void:
@@ -79,6 +84,9 @@ func _build_world() -> void:
 	var rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
+	var seasons = SeasonsScript.new()  # 개정 22 §4: 스테이지마다 계절(시작은 현재 스테이지 계절로 바로)
+	seasons.setup(_env, _sun, _ground_mat, scenery, camera)
+	add_child(seasons)
 	var tags = WorldTagsScript.new()  # 건물·상인·문루 이름표(개정 15, 화면 공간) — HP 바·말풍선보다 아래 캔버스
 	tags.camera = camera
 	tags.scenery = scenery
@@ -364,7 +372,9 @@ func _build_environment() -> void:
 	e.ambient_light_energy = 0.9
 	env.environment = e
 	add_child(env)
+	_env = e
 	var sun := DirectionalLight3D.new()
+	_sun = sun
 	sun.light_color = Color(1.0, 0.96, 0.88)
 	sun.light_energy = 1.1
 	sun.shadow_enabled = true
@@ -386,6 +396,7 @@ func _build_ground(interior_half: float) -> void:
 	mat.set_shader_parameter("tile_size", Balance.TILE)
 	mat.set_shader_parameter("interior_half", interior_half)
 	mat.set_shader_parameter("road_half", Balance.TILE)
+	_ground_mat = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane
 	mi.material_override = mat
