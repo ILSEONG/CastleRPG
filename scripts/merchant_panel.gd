@@ -5,6 +5,7 @@ extends "res://scripts/ui_window.gd"
 
 const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const QtyBox := preload("res://scripts/qty_box.gd")
 
 const RATE_LOW := Color(0.85, 0.22, 0.2)
 const RATE_HIGH := Color(0.15, 0.6, 0.25)
@@ -22,9 +23,9 @@ var _amount_labels := {}
 var _value_labels := {}
 var _last_sec := -1
 
-# 수량 판매(스펙 §4): 한 번에 한 행만 펼친다
-const HOLD_DELAY := 0.4  # 누르고 있으면 이 시간 뒤부터 가속(초당 10 → 50)
-var qty_boxes := {}  # 자원 id → 수량 칸(VBox)
+# 수량 판매(스펙 §4): 한 번에 한 행만 펼친다. 수량 입력은 qty_box.gd(개정 16에서 훈련 칸과 같이 쓰려고 떼어 냈다)
+var qty_boxes := {}  # 자원 id → 수량 칸(VBox: 수량 입력 + 골드·[판매])
+var qty_inputs := {}  # 자원 id → 수량 입력(qty_box.gd)
 var qty_edits := {}
 var qty_sliders := {}
 var qty_gold_labels := {}
@@ -33,10 +34,9 @@ var qty_minus := {}
 var qty_plus := {}
 var qty_max := {}
 var open_res := ""
-var qty := 0
-var _hold_dir := 0
-var _hold_t := 0.0
-var _hold_acc := 0.0
+var qty: int:  # 펼친 행의 수량(접혀 있으면 0)
+	get:
+		return qty_inputs[open_res].value if open_res != "" else 0
 
 
 func _ready() -> void:
@@ -57,10 +57,9 @@ func _ready() -> void:
 	Economy.changed.connect(func(): if visible: _refresh(_now()))
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if not visible:
 		return
-	_tick_hold(delta)
 	var glow := 0.8 + 0.2 * sin(Time.get_ticks_msec() / 150.0)  # 금색 반짝임
 	for id in _jackpot:
 		rate_labels[id].modulate = Color(glow, glow, glow) if _jackpot[id] else Color.WHITE
@@ -70,7 +69,6 @@ func _process(delta: float) -> void:
 
 
 func _on_open() -> void:
-	_hold_dir = 0
 	_open_qty("")
 	_refresh(_now())
 
@@ -149,39 +147,14 @@ func _main_row(id: String) -> HBoxContainer:
 
 
 
-## 수량 칸: [−] 입력 [+] / 슬라이더 / [최대] → N골드 [판매]
+## 수량 칸: 수량 입력([−] 입력 [+] [최대] / 슬라이더, 0..보유) → N골드 [판매]
 func _qty_box(id: String) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
 	box.visible = false
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 8)
-	var minus := _button("−", Color(0.55, 0.6, 0.7))
-	minus.custom_minimum_size = Vector2(64, 52)
-	minus.button_down.connect(func(): _hold_start(-1))
-	minus.button_up.connect(func(): _hold_dir = 0)
-	var edit := LineEdit.new()
-	edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-	edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	edit.add_theme_font_size_override("font_size", 28)
-	edit.custom_minimum_size = Vector2(150, 52)
-	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	edit.text_changed.connect(_on_edit)
-	var plus := _button("+", Color(0.55, 0.6, 0.7))
-	plus.custom_minimum_size = Vector2(64, 52)
-	plus.button_down.connect(func(): _hold_start(1))
-	plus.button_up.connect(func(): _hold_dir = 0)
-	var mx := _button("최대", Color(0.55, 0.6, 0.7))
-	mx.custom_minimum_size = Vector2(90, 52)
-	mx.pressed.connect(func(): _set_qty(Economy.res[id]))
-	for n in [minus, edit, plus, mx]:
-		top.add_child(n)
-	box.add_child(top)
-	var slider := HSlider.new()
-	slider.step = 1
-	slider.custom_minimum_size = Vector2(0, 36)
-	slider.value_changed.connect(func(v: float): _set_qty(int(v)))
-	box.add_child(slider)
+	var q = QtyBox.new()
+	q.value_changed.connect(func(_v): _qty_labels(_now()))
+	box.add_child(q)
 	var bottom := HBoxContainer.new()
 	var gold := _label("", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	gold.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -192,73 +165,45 @@ func _qty_box(id: String) -> VBoxContainer:
 	bottom.add_child(confirm)
 	box.add_child(bottom)
 	qty_boxes[id] = box
-	qty_edits[id] = edit
-	qty_sliders[id] = slider
+	qty_inputs[id] = q
+	qty_edits[id] = q.edit
+	qty_sliders[id] = q.slider
 	qty_gold_labels[id] = gold
 	qty_confirms[id] = confirm
-	qty_minus[id] = minus
-	qty_plus[id] = plus
-	qty_max[id] = mx
+	qty_minus[id] = q.minus
+	qty_plus[id] = q.plus
+	qty_max[id] = q.max_button
 	return box
 
 
-## 그 행의 수량 칸을 펼친다(다른 행은 접힌다). ""이면 모두 접는다.
+## 그 행의 수량 칸을 펼친다(다른 행은 접힌다, 수량 0). ""이면 모두 접는다.
 func _open_qty(id: String) -> void:
 	open_res = id
-	qty = 0
 	for k in qty_boxes:
 		qty_boxes[k].visible = k == id
+		qty_inputs[k]._hold_dir = 0
+	if id != "":
+		qty_inputs[id].set_range(0, Economy.res[id])
+		qty_inputs[id].set_value(0)
 	_refresh_qty(_now())
 	_fit()
 
 
 func _set_qty(n: int) -> void:
-	if open_res == "":
-		return
-	qty = clampi(n, 0, Economy.res[open_res])
-	_refresh_qty(_now())
+	if open_res != "":
+		qty_inputs[open_res].set_value(n)
 
 
-func _on_edit(text: String) -> void:
-	var n := int(text) if text.is_valid_int() else 0  # 문자·음수는 0, 보유 초과는 보유로(_set_qty)
-	_set_qty(maxi(n, 0))
-	var edit: LineEdit = qty_edits[open_res]
-	if text != str(qty) and text != "":  # 규칙에 맞게 고쳐 쓴다(빈 칸은 쓰는 중이라 둔다)
-		edit.text = str(qty)
-		edit.caret_column = edit.text.length()
-
-
+## 범위(0..보유)를 맞추고 골드·[판매]를 고친다.
 func _refresh_qty(now: float) -> void:
 	if open_res == "":
 		return
-	var have: int = Economy.res[open_res]
-	qty = clampi(qty, 0, have)
-	var edit: LineEdit = qty_edits[open_res]
-	if edit.text != str(qty) and not (edit.text == "" and qty == 0):
-		edit.text = str(qty)
-	var slider: HSlider = qty_sliders[open_res]
-	slider.max_value = maxi(have, 1)
-	slider.set_value_no_signal(qty)
+	qty_inputs[open_res].set_range(0, Economy.res[open_res])
+	_qty_labels(now)
+
+
+func _qty_labels(now: float) -> void:
+	if open_res == "":
+		return
 	qty_gold_labels[open_res].text = "→ %s골드" % HudScript.commas(Economy.sell_value(open_res, qty, Economy.current_rate(open_res, now)))
 	qty_confirms[open_res].disabled = qty == 0
-
-
-func _hold_start(dir: int) -> void:
-	_hold_dir = dir
-	_hold_t = 0.0
-	_hold_acc = 0.0
-	_set_qty(qty + dir)
-
-
-## 누르고 있는 동안: 0.4초 뒤부터 초당 10, 시간이 갈수록 50까지.
-func _tick_hold(delta: float) -> void:
-	if _hold_dir == 0:
-		return
-	_hold_t += delta
-	if _hold_t < HOLD_DELAY:
-		return
-	_hold_acc += delta * minf(10.0 + (_hold_t - HOLD_DELAY) * 20.0, 50.0)
-	var steps := int(_hold_acc)
-	if steps > 0:
-		_hold_acc -= steps
-		_set_qty(qty + _hold_dir * steps)
