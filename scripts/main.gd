@@ -54,6 +54,9 @@ var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점�
 
 func _ready() -> void:
 	GameState.roster = Economy  # 영웅 보유·배치·건물 레벨 공급자
+	if OS.is_debug_build() and not Net.is_online() and Net.arg_value("arena") != "":
+		add_child(preload("res://scripts/arena_preview.gd").new())  # 개발용 던전 무대 미리보기(--arena=plains|castle, 개정 18)
+		return
 	if Net.is_online() and not Net.ready_once:
 		await _wait_for_server()
 	_build_world()
