@@ -10,15 +10,15 @@ const MODE_STAGE := 1
 
 
 ## 반환: [{time: float, kind: String, side: int, lane: int, lanes: int}] 시간 오름차순(보스는 lane 없이 hp_mult).
-## MODE_IDLE은 한 사이클(면마다 스폰 한 번, idle_interval 간격)만. Spawner가 소진되면 다시 build()한다.
+## MODE_IDLE은 한 사이클(idle_interval에 네 면이 동시에 한 무리씩)만. Spawner가 소진되면 다시 build()한다.
 ## MODE_STAGE: 웨이브마다 wave_size번 스폰, spawn_spacing_sec 간격, 면은 웨이브 안 순번 % 4, 웨이브 사이 wave_gap_sec.
 ## 보스는 라운드 25(스테이지 마지막, 개정 22 §2)에만 끝에 하나 — HP × boss_round_mult. stage = 전체 라운드 g.
 static func build(stage: int, mode: int) -> Array:
 	var events: Array = []
 	if mode == MODE_IDLE:
 		var interval: float = GameData.stage(stage).idle_interval
-		for side in 4:
-			_add_group(events, interval * (side + 1), side)
+		for side in 4:  # 네 면 동시: 한 번에 면마다 한 무리
+			_add_group(events, interval, side)
 		return events
 	var t := 0.0
 	var st := GameData.stage(stage)

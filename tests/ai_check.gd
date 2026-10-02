@@ -1442,7 +1442,7 @@ func _fever_spawn() -> void:
 		var sp = SpawnerScript.new()
 		sp.castle = _main.castle
 		holder.add_child(sp)  # _ready가 모드의 스케줄을 읽는다
-		for i in 800:  # 40 s
+		for i in 400:  # 20 s (FEVER 3배도 상한 120 아래)
 			sp._process(0.05)
 		counts[k] = sp._live
 		holder.queue_free()
@@ -1452,9 +1452,10 @@ func _fever_spawn() -> void:
 	_clear_monsters()
 	# 스폰 한 번 = spawn_group(3)마리라 수는 3 단위. 허용 오차: 방치 쪽 스폰 한 번이 끝자락에 들고 안 들고의 3배
 	var grp := int(GameData.config_num("spawn_group"))
-	var whole: bool = counts.idle % grp == 0 and counts.idle_fever % grp == 0
-	_check(counts.idle >= 4 * grp and whole and absi(counts.idle_fever - 3 * counts.idle) <= 3 * grp,
-		"(fever) FEVER triples the idle spawn count over the same time (in groups of 3, ±1 group)", str(counts))
+	var ev := 4 * grp  # 방치 한 번 = 네 면 × 무리
+	var whole: bool = counts.idle % ev == 0 and counts.idle_fever % ev == 0
+	_check(counts.idle >= ev and whole and absi(counts.idle_fever - 3 * counts.idle) <= ev,
+		"(fever) FEVER triples the idle spawn count over the same time (whole events of 4 sides x 3, ±1 event)", str(counts))
 	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))
 
 
@@ -1684,6 +1685,17 @@ func _group_spawn() -> void:
 		var near := ms.all(func(m): return Formation.flat_distance(m.global_position, Formation.spawn_center(_half, m.side)) <= Balance.SPAWN_SPREAD + 0.01)
 		var sides: Array = ms.map(func(m): return m.side)
 		var when_ok := clock >= 7.95 and clock <= 8.11 if k == "idle" else clock <= 0.06
+		if k == "idle":  # 네 면 동시 12마리 — 아래 검사는 북쪽 무리만
+			var all4: bool = ms.size() == 12 and [0, 1, 2, 3].all(func(sd): return ms.filter(func(m): return m.side == sd).size() == 3)
+			_check(all4, "(group) idle: 12 monsters at once, 3 on each of the 4 sides", "n=%d sides=%s" % [ms.size(), ms.map(func(m): return m.side)])
+			ms = ms.filter(func(m): return m.side == 0)
+			offs = ms.map(func(m): return m.global_position.dot(Formation.perp(0)))
+			offs.sort()
+			gap = INF
+			for i in range(1, offs.size()):
+				gap = minf(gap, offs[i] - offs[i - 1])
+			sides = ms.map(func(m): return m.side)
+			near = ms.all(func(m): return Formation.flat_distance(m.global_position, Formation.spawn_center(_half, m.side)) <= Balance.SPAWN_SPREAD + 0.01)
 		_check(ms.size() == 3 and sides == [0, 0, 0] and near and gap >= 1.99 and when_ok,
 			"(group) %s: the first spawn is 3 monsters at once on one side, spread sideways >= 2 m apart" % k,
 			"n=%d at %.2f s sides=%s near=%s offsets=%s" % [ms.size(), clock, sides, near, offs])

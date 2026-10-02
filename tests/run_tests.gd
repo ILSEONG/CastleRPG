@@ -108,6 +108,7 @@ func _init() -> void:
 	test_arena_kit()
 	test_dungeon_monsters()
 	test_spawn_groups()
+	test_idle_four_sides_at_once()
 	test_dungeon_tables()
 	test_dungeons_offline()
 	test_equipment_offline()
@@ -438,7 +439,7 @@ func test_wave_idle_cycle() -> void:
 	check(ev.size() == 12, "idle cycle spawns 4 groups of 3")
 	check(ev[0].time > 0.0, "first idle spawn is not at t=0")
 	var sides: Array = ev.map(func(e): return e.side)
-	check(sides == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3], "idle sides rotate 0..3, one group per side")
+	check(sides == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3], "idle sides 0..3, one group per side")
 	for e in ev:
 		check(e.kind == "grunt", "idle spawns grunts only")
 
@@ -3140,7 +3141,7 @@ func test_spawn_groups() -> void:
 		and GameData.config_num("spawn_spacing_sec") == 1.0, "spawn_group 3, idle_interval 8 (extrapolated too), spawn_spacing_sec 1.0")
 	var idle := WaveDirector.build(1, WaveDirector.MODE_IDLE)
 	var times: Array = idle.map(func(e): return e.time)
-	check(times == [8.0, 8.0, 8.0, 16.0, 16.0, 16.0, 24.0, 24.0, 24.0, 32.0, 32.0, 32.0], "idle: a group of 3 every 8 s %s" % [times])
+	check(times.all(func(t): return t == 8.0), "idle: all 12 at t = 8 s %s" % [times])
 	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3 on one side")
 	for stage in [1, 5, 25, 30]:
 		var st := GameData.stage(stage)
@@ -3487,3 +3488,13 @@ func test_seasons() -> void:
 	check(s.stage == 4, "Seasons.set_stage without a live world is a no-op")
 	s.free()
 	sun.free()
+
+
+## 방치 한 번 = 네 면 × 3마리가 같은 시각(동서남북 동시, 순차 아님).
+func test_idle_four_sides_at_once() -> void:
+	GameData.load_tables()
+	var ev := WaveDirector.build(1, WaveDirector.MODE_IDLE)
+	var ok := ev.size() == 12 and ev.all(func(e): return e.time == ev[0].time)
+	for side in 4:
+		ok = ok and ev.filter(func(e): return e.side == side).map(func(e): return e.lane) == [0, 1, 2]
+	check(ok, "idle event: 4 sides x 3 lanes at the same time")
