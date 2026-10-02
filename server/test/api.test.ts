@@ -518,3 +518,30 @@ test('알 수 없는 경로는 404 JSON, CORS 기본 *', async () => {
   const no = await only.request('/v1/health', { headers: { origin: 'http://evil.example' } })
   assert.equal(no.headers.get('access-control-allow-origin'), null)
 })
+
+test('여러 자원 판매: items 한 번에 원자적, 하나라도 초과면 전부 취소, 중복 400', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await S.req('POST', '/v1/test/age', { token, body: { minutes: 7 } })
+  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // wood 70
+  await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } }) // stone 35
+  const sell = (items: unknown) => S.req('POST', '/v1/sell', { token, body: { items } })
+  let r = await sell([{ res: 'wood', amount: 71 }, { res: 'stone', amount: 5 }])
+  assert.equal(r.status, 409)
+  assert.equal(r.json.error, 'not_enough')
+  const p = (await S.req('GET', '/v1/player', { token })).json.player
+  assert.equal(p.res.wood, 70)
+  assert.equal(p.res.stone, 35)
+  assert.equal(p.gold_tenths, 0)
+  for (const bad of [[], [{ res: 'wood', amount: 1 }, { res: 'wood', amount: 2 }], [{ res: 'wood', amount: 0 }], 'x', [1]]) {
+    assert.equal((await sell(bad)).status, 400)
+  }
+  r = await sell([{ res: 'wood', amount: 30 }, { res: 'stone', amount: 5 }])
+  assert.equal(r.status, 200)
+  const gold = R.sellValue(30, 1, r.json.rates.wood) + R.sellValue(5, 2, r.json.rates.stone)
+  assert.equal(r.json.gold_gained, gold)
+  assert.equal(r.json.player.res.wood, 40)
+  assert.equal(r.json.player.res.stone, 30)
+  assert.equal(r.json.player.gold_tenths, gold * 10)
+  assert.equal((await logs(id, 'sell')).length, 1)
+})

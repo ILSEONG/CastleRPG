@@ -505,6 +505,35 @@ export function createApp(opts: AppOptions) {
 
   app.post('/v1/sell', auth, async (c) => {
     const b = await body(c)
+    if (b.items !== undefined) {
+      // 여러 자원 한 번에(1~3개, 자원 중복 불가). 하나라도 보유 초과면 아무것도 안 판다
+      const items = b.items
+      if (!Array.isArray(items) || items.length < 1 || items.length > 3) throw new ApiError(400, 'bad_request', "'items' must be an array of 1..3")
+      const want = new Map<string, number>()
+      for (const it of items) {
+        if (!it || typeof it !== 'object' || Array.isArray(it)) throw new ApiError(400, 'bad_request', 'each item must be an object')
+        const o = it as Record<string, unknown>
+        const id = strField(o, 'res')
+        if (want.has(id)) throw new ApiError(400, 'bad_request', `duplicate res '${id}'`)
+        want.set(id, intField(o, 'amount', 1, MAX_INT4))
+      }
+      return mutate(c, (p, g, now) => {
+        const rates = R.merchantRates(R.hourIndex(now), g.config, g.resources.map((x) => x.id))
+        let gold = 0
+        const sold: Record<string, number> = {}
+        const delta: Record<string, number> = {}
+        for (const [id, amount] of want) {
+          const r = g.resources.find((x) => x.id === id)
+          if (!r) throw new ApiError(400, 'unknown_resource', `unknown resource '${id}'`)
+          const have = p.res[id] ?? 0
+          if (amount > have) throw new ApiError(409, 'not_enough', `only ${have} ${id} to sell`)
+          gold += R.sellValue(amount, r.price, rates[id])
+          sold[id] = amount
+          delta[id] = -amount
+        }
+        return { change: { goldTenths: gold * 10, res: delta, log: { kind: 'sell', detail: { res: 'items', sold, rates: Object.fromEntries(Object.keys(sold).map((id) => [id, rates[id]])), gold, gold_tenths: gold * 10 } } }, extra: { gold_gained: gold, rates } }
+      })
+    }
     const target = strField(b, 'res')
     // 수량 판매(개정 14 §4): amount 생략 = 전량. 'all'이면 amount는 쓰지 않는다
     const want = target !== 'all' && b.amount !== undefined ? intField(b, 'amount', 1, MAX_INT4) : undefined
