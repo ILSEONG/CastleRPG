@@ -1978,7 +1978,8 @@ func _dungeon_cases() -> void:
 func _dk_cases() -> void:
 	Economy.bag.append({"id": 9001, "slot": "top", "weapon_kind": null, "grade": "SR", "level": 5})
 	Economy.bag.append({"id": 9002, "slot": "weapon", "weapon_kind": "sword", "grade": "R", "level": 3})
-	var eq_ok: bool = Economy.equip("hans", "top", 9001) and Economy.equip("hans", "weapon", 9002)
+	Economy.bag.append({"id": 9003, "slot": "shoes", "weapon_kind": null, "grade": "N", "level": 1})
+	var eq_ok: bool = Economy.equip("hans", "top", 9001) and Economy.equip("hans", "weapon", 9002) and Economy.equip("hans", "shoes", 9003)
 	var d = await _enter_dungeon("equip", ["hans", "ella", "dorik", "nina"])
 	await _frames(2)
 	var dk = d.boss
@@ -1986,8 +1987,14 @@ func _dk_cases() -> void:
 	var bare := GameData.hero_stats(hans.def, Economy.level_of("hans"), Economy.promotion_of("hans"), Economy.levels, {})
 	var top := GameData.item_stats(Economy.item(9001))
 	var sword := GameData.item_stats(Economy.item(9002))
-	_check(eq_ok and is_equal_approx(hans.hp_max, bare.hp + top.hp) and is_equal_approx(hans.atk, bare.atk + sword.atk) and top.hp > 0 and sword.atk > 0,
-		"(DG4) equipment adds to the arena hero: HP = base + top, attack = base + sword", "hp=%.1f want %.1f atk=%.1f want %.1f" % [hans.hp_max, bare.hp + top.hp, hans.atk, bare.atk + sword.atk])
+	var shoes := GameData.item_stats(Economy.item(9003))
+	_check(eq_ok and is_equal_approx(hans.hp_max, bare.hp + top.hp + shoes.hp) and is_equal_approx(hans.atk, bare.atk + sword.atk) and top.hp > 0 and sword.atk > 0,
+		"(DG4) equipment adds to the arena hero: HP = base + top + shoes, attack = base + sword", "hp=%.1f want %.1f atk=%.1f want %.1f" % [hans.hp_max, bare.hp + top.hp + shoes.hp, hans.atk, bare.atk + sword.atk])
+	# 신발 이동속도 +3%: 성장 이동속도와 같은 한 곳(hero.refresh_stats)에서 — 아레나 영웅도 걷는 거리 × (1 + 성장 + 0.03)
+	var want_walk: float = float(hans.def.speed) * (1.0 + Economy.upgrade_bonus().mspd_pct + shoes.speed_pct / 100.0) * 0.1
+	var walked := _walk(hans, 0.1)
+	_check(shoes.speed_pct == 3.0 and is_equal_approx(walked, want_walk), "(DG4) shoes +3% move speed reach the arena hero (walk x1.03 with no growth)",
+		"walked=%.4f want=%.4f speed=%.2f" % [walked, want_walk, float(hans.def.speed)])
 	for h in d.heroes:
 		h.set_process(false)
 	dk.set_process(false)
@@ -2030,6 +2037,7 @@ func _dk_cases() -> void:
 	_check(far._stun_t < stun0 and far._attacks == 0, "(DG3) a stunned hero does not act while the stun runs down", "stun %.2f -> %.2f" % [stun0, far._stun_t])
 	Economy.unequip("hans", "top")
 	Economy.unequip("hans", "weapon")
+	Economy.unequip("hans", "shoes")
 
 
 ## 던전 시작(오프라인) → main이 다음 프레임에 장면을 바꾼다. 새 던전 장면(실패면 null).
