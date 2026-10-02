@@ -558,6 +558,7 @@ func _start_world() -> bool:
 	if not built:
 		return false
 	await _frames(3)
+	GameData._config.fx_shake = "0"  # 테스트에서는 카메라 흔들림을 끈다(개정 17, 서버 표를 받은 뒤)
 	for c in _main.get_children():
 		var s = c.get_script()
 		if s == PickerScript:

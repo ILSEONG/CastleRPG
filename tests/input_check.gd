@@ -33,6 +33,7 @@ func _ready() -> void:
 	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
 	Fever.save_path = ""
 	Fever.reset()
+	GameData._config.fx_shake = "0"  # 테스트에서는 카메라 흔들림을 끈다(개정 17)
 	Economy.reset(Time.get_unix_time_from_system())
 	get_window().size = Vector2i(360, 640)
 	_main = preload("res://scenes/main.tscn").instantiate()

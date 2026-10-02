@@ -623,8 +623,9 @@ func _damage_numbers() -> void:
 	hc._target = m
 	await _attack_now(hc)
 	kinds = dn._list.map(func(e): return e.kind)
-	_check(kinds == [K.CRIT] and dn._list[0].text == "%d!" % roundi(hc.atk * 2.0) and DamageNumbersScript.STYLE[K.CRIT][0] == Color(1.0, 0.62, 0.15),
-		"(dn) a 100% crit hero makes an orange crit number with '!'", "kinds=%s text=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-"])
+	_check(kinds == [K.CRIT, K.BANNER] and dn._list[0].text == "%d!" % roundi(hc.atk * 2.0) and DamageNumbersScript.STYLE[K.CRIT][0] == Color(1.0, 0.62, 0.15)
+		and dn._list[1].text == "치명타!",
+		"(dn) a 100% crit hero makes an orange crit number with '!' and the 치명타! banner (r17)", "kinds=%s text=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-"])
 	dn._list.clear()
 	h.take_damage(10.0, m)
 	hd.take_damage(10.0, m)
