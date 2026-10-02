@@ -1324,6 +1324,8 @@ func _stage_return_cases() -> void:
 	GameState.refill()
 	await _frames(2)
 	var h = _main._slots[0].node
+	GameState.start_stage()  # 한 번 돌고 멈춘 뒤(IDLE 진입 직후)에도 방치 이동이 유지되어야 한다
+	GameState.stop_stage()
 	var start := [h.side, h.post, h.slot]
 	# 방치 중 옮김 → [진행] 뒤에도 그대로(start_stage의 리필은 복원하지 않는다)
 	_check(h.move_to((h.side + 1) % 4, h.post), "(R0) idle move accepted", "")
