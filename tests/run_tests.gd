@@ -94,6 +94,9 @@ func _init() -> void:
 	test_portraits()
 	test_keep_tier_lockstep()
 	test_soldier_figures()
+	test_upgrade_tables()
+	test_crit_roll_params()
+	test_growth_economy()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -226,7 +229,8 @@ func _payload() -> Dictionary:
 		cfg["train_cost_" + sd.id] = String(GameData._config["train_cost_" + sd.id])
 	return {"version": "t", "monsters": [GameData.monster("grunt").duplicate(), GameData.monster("epic_boss").duplicate()],
 		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true),
-		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true), "config": cfg}
+		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true),
+		"upgrades": GameData.upgrades().duplicate(true), "config": cfg}
 
 
 ## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
@@ -268,6 +272,7 @@ func _remote_checks() -> int:
 		["gacha cost not an integer", 1], ["gacha cost negative", 1], ["gacha guarantee not an integer", 1], ["gacha rate above 1", 1],
 		["gacha rates sum above 1", 1], ["a grade with no heroes", 1], ["multishot 0", 1], ["skill cooldown 0", 1], ["haste -100", 1],
 		["stun every 2.5th attack", 1], ["hero attack interval 0", 1], ["hero hp negative", 1],
+		["upgrade unit unknown", 1], ["upgrade growth below 1", 1], ["upgrade max level 0", 1], ["upgrade cost 0", 1], ["upgrades missing", 1], ["duplicate upgrade id", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -282,7 +287,7 @@ func _remote_checks() -> int:
 
 ## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
 func _tables_hash() -> int:
-	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._config])
+	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._upgrades, GameData._config])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
@@ -326,6 +331,12 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"stun every 2.5th attack": q.heroes[9].s2a = 2.5  # 네브
 		"hero attack interval 0": q.heroes[0].atk_interval = 0
 		"hero hp negative": q.heroes[0].hp = -5
+		"upgrade unit unknown": q.upgrades[0].unit = "percent"
+		"upgrade growth below 1": q.upgrades[1].cost_growth = 0.9
+		"upgrade max level 0": q.upgrades[2].max_level = 0
+		"upgrade cost 0": q.upgrades[3].cost_base = 0
+		"upgrades missing": q.erase("upgrades")
+		"duplicate upgrade id": q.upgrades[1].id = "atk"
 		"resource building not in the layout": q.resources[0].building = "mine"  # 배치에 없다(badges.gd가 깨진다)
 
 
@@ -2085,9 +2096,9 @@ func test_soldiers() -> void:
 	e7.save_path = ECON_TMP
 	e7.load_save(now)
 	var raw7 = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw7.version) == 7 and EconomyScript.SAVE_VERSION == 7 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
+	check(int(raw7.version) == 8 and EconomyScript.SAVE_VERSION == 8 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
 		and absf(e7.train_queues.archery.finish - e.train_queues.archery.finish) < 0.01 and e7.soldiers == e.soldiers and not raw7.last_collect.has("archery"),
-		"save v7 round-trips the training queue and keeps no production clocks: %s" % [e7.train_queues])
+		"save v8 round-trips the training queue and keeps no production clocks: %s" % [e7.train_queues])
 	var v6 := {"version": 6, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now, "barracks": now - 100 * 3600.0, "stable": 1.0},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 1, "level": 1, "shards": 0, "promotion": 0}}, "deploy": ["hans"], "soldiers": {"infantry:1": 2}, "soldier_deploy": {}}
 	_write(ECON_TMP, JSON.stringify(v6))
@@ -2483,3 +2494,131 @@ func test_economy_sell_many() -> void:
 	check(g == want and e.res.wood == 25 and e.res.stone == 0 and e.res.food == 13 and e.gold_tenths == want * 10, "sell_many sells each at its own rate, clamps to holdings, skips 0")
 	check(e.sell_many([], now) == 0 and e.sell_many([{"res": "stone", "amount": 5}], now) == 0 and e.gold_tenths == want * 10, "sell_many with nothing to sell changes nothing")
 	e.free()
+
+
+## 성장(개정 20 §2) 표·비용·효과: 서버 upgrades.test.ts와 같은 숫자.
+func test_upgrade_tables() -> void:
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"], "upgrades.csv loads in file order")
+	var a := GameData.upgrade_def("aspd")
+	check(a.name == "공격속도" and a.unit == "pct" and a.per_level == 0.25 and a.max_level == 100.0 and a.cost_base == 5000.0 and is_equal_approx(a.cost_growth, 1.07), "aspd row")
+	check(GameData.upgrade_def("nope").is_empty() and GameData.upgrade_cost("nope", 3) == 0, "unknown upgrade is empty / cost 0")
+	# 비용 = round(base × growth^L), L은 현재 레벨(0부터)
+	check(GameData.upgrade_cost("atk", 0) == 1000 and GameData.upgrade_cost("atk", 1) == 1050 and GameData.upgrade_cost("atk", 2) == 1103, "atk costs 1000 / 1050 / 1103")
+	check(GameData.upgrade_cost("aspd", 0) == 5000 and GameData.upgrade_cost("aspd", 1) == 5350 and GameData.upgrade_cost("crit_rate", 0) == 6000 and GameData.upgrade_cost("mspd", 0) == 4000, "first-level costs 5000 / 5350 / 6000 / 4000")
+	var c49 := GameData.upgrade_cost("atk", 49)
+	check(c49 == roundi(1000.0 * pow(1.05, 49)) and c49 > 10000 and c49 < 12000, "atk level 50 costs about 11k (%d)" % c49)
+	check(GameData.upgrade_cost("atk", 199) > 15000000 and GameData.upgrade_cost("atk", 199) < 17000000, "atk level 200 costs about 16m")
+	# 효과: 분수. 레벨은 0..max로 자른다
+	var b0 := GameData.upgrade_bonus({})
+	check(b0 == {"atk_pct": 0.0, "hp_pct": 0.0, "aspd_pct": 0.0, "mspd_pct": 0.0, "crit_rate": 0.0, "crit_dmg": 0.0}, "no upgrades = no bonus")
+	var b := GameData.upgrade_bonus({"atk": 23, "hp": 200, "aspd": 100, "mspd": 80, "crit_rate": 100, "crit_dmg": 100})
+	check(is_equal_approx(b.atk_pct, 0.115) and is_equal_approx(b.hp_pct, 1.0) and is_equal_approx(b.aspd_pct, 0.25) and is_equal_approx(b.mspd_pct, 0.2) \
+		and is_equal_approx(b.crit_rate, 0.1) and is_equal_approx(b.crit_dmg, 0.5), "max levels give +100% / +100% / +25% / +20% / +10%p / +50%p, atk 23 = +11.5%")
+	var over := GameData.upgrade_bonus({"atk": 9999, "crit_dmg": -5, "ghost": 7})
+	check(is_equal_approx(over.atk_pct, 1.0) and over.crit_dmg == 0.0 and over.size() == 6, "levels clamp to 0..max, unknown ids are ignored")
+
+
+## 치명타 결합(개정 20 §3): 굴림은 한 번, 확률·배율을 더한다.
+func test_crit_roll_params() -> void:
+	var none := GameData.upgrade_bonus({})
+	var r := GameData.crit_roll_params(0.0, 0.0, none)
+	check(r.rate == 0.0 and r.mult == 1.5, "no skill, no growth: never crits, base mult 1.5")
+	var grown := GameData.upgrade_bonus({"crit_rate": 50, "crit_dmg": 40})
+	r = GameData.crit_roll_params(0.0, 0.0, grown)
+	check(is_equal_approx(r.rate, 0.05) and is_equal_approx(r.mult, 1.7), "no skill + growth: rate = crit_rate, mult = 1.5 + crit_dmg")
+	r = GameData.crit_roll_params(0.25, 2.0, grown)
+	check(is_equal_approx(r.rate, 0.30) and is_equal_approx(r.mult, 2.2), "skill + growth: rates add, mult = skill mult + crit_dmg (one roll)")
+	r = GameData.crit_roll_params(0.25, 2.0, none)
+	check(is_equal_approx(r.rate, 0.25) and r.mult == 2.0, "skill alone is unchanged")
+	r = GameData.crit_roll_params(0.95, 2.0, GameData.upgrade_bonus({"crit_rate": 100}))
+	check(r.rate == 1.0, "rate is capped at 1")
+	r = GameData.crit_roll_params(0.25, 0.0, grown)
+	check(is_equal_approx(r.rate, 0.05), "a skill rate without a skill mult is not a skill")
+
+
+## 온라인 흉내: send를 기록만 한다.
+class GrowthNet extends RefCounted:
+	var up := true
+	var last_error := ""
+	var sent: Array = []
+	var refreshed := 0
+	func flush_kills() -> void:
+		pass
+	func send(method: String, path: String, body = null, done := Callable(), fail := Callable(), _auth := true, once := false) -> void:
+		sent.append({"method": method, "path": path, "body": body, "done": done, "fail": fail, "once": once})
+	func refresh() -> void:
+		refreshed += 1
+
+
+## 성장 Economy: 오프라인 강화(골드 합계·최대·부족·저장), 온라인(한 번 보내고 재전송 없음·응답 대기), apply_server, 저장 복원.
+func test_growth_economy() -> void:
+	GameData.load_tables()
+	var e = _econ(1.8e9)
+	var notes: Array = []
+	e.notice.connect(func(t): notes.append(t))
+	var sig := [0]
+	e.upgrades_changed.connect(func(): sig[0] += 1)
+	e.gold = 50000
+	check(e.upgrade_level("atk") == 0 and e.upgrade_total_cost("atk", 3) == 1000 + 1050 + 1103 and e.upgrade_total_cost("atk", 0) == 0, "total cost sums the next n levels")
+	check(e.upgrade_count_affordable("atk", 10) == 10 and e.upgrade_count_affordable("atk", 3) == 3, "affordable is capped by max_n")
+	e.gold = 3152
+	check(e.upgrade_count_affordable("atk", 10) == 2 and e.upgrade_count_affordable("aspd", 10) == 0, "affordable stops where the summed cost passes gold")
+	e.gold = 100000
+	check(e.growth_up("atk", 3) and e.upgrade_level("atk") == 3 and e.gold_tenths == (100000 - 3153) * 10 and sig[0] == 1, "offline upgrade x3 takes the summed gold and signals")
+	check(is_equal_approx(e.upgrade_bonus().atk_pct, 3 * 0.5 / 100.0), "upgrade_bonus reads the state")
+	e.gold = 10
+	check(not e.growth_up("atk", 1) and notes == ["골드 부족"] and e.upgrade_level("atk") == 3 and e.gold_tenths == 100, "short on gold: no change, notice")
+	check(not e.growth_up("zzz", 1) and not e.growth_up("atk", 0) and e.upgrade_level("zzz") == 0, "unknown id / count 0 are refused")
+	e.gold = 100000000
+	e.upgrades["mspd"] = 79
+	check(not e.growth_up("mspd", 2) and e.growth_block("mspd", 2) == "최대 레벨" and e.upgrade_level("mspd") == 79 and e.upgrade_count_affordable("mspd", 10) == 1, "over the cap is refused whole; affordable stops at max")
+	check(e.growth_up("mspd", 1) and e.upgrade_level("mspd") == 80 and e.upgrade_count_affordable("mspd", 10) == 0 and e.upgrade_total_cost("mspd", 5) == 0, "max level reached")
+	# 저장 복원(v8)
+	e.save_path = ECON_TMP
+	e.save()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(1.8e9)
+	check(e2.upgrades == {"atk": 3, "mspd": 80}, "save v8 restores the upgrades")
+	e2.free()
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
+	raw.erase("upgrades")
+	raw.version = 7
+	var e3 = _econ(0.0)
+	check(e3._apply(raw) and e3.upgrades.is_empty(), "a v7 save without upgrades loads as none")
+	raw.version = 8
+	raw.upgrades = {"atk": 5, "ghost": 3, "hp": 0, "aspd": 9999}
+	check(e3._apply(raw) and e3.upgrades == {"atk": 5, "aspd": 100}, "unknown ids and zero are dropped, levels clamp to the max")
+	raw.upgrades = {"atk": "x"}
+	check(not e3._apply(raw), "a malformed upgrades block is a corrupt save")
+	e3.free()
+	DirAccess.remove_absolute(ECON_TMP)
+	e.free()
+	# 온라인: 보내고 응답을 기다린다. 재전송 없음(once), 대기 중 재탭은 무시
+	var o = _econ(1.8e9)
+	var n := GrowthNet.new()
+	o.net = n
+	o.gold = 100000
+	var notes2: Array = []
+	o.notice.connect(func(t): notes2.append(t))
+	check(o.growth_up("hp", 2) and o.upgrades_waiting() and o.upgrade_level("hp") == 0 and o.gold == 100000, "online: nothing changes until the reply")
+	check(n.sent.size() == 1 and n.sent[0].path == "/v1/upgrade" and n.sent[0].body == {"id": "hp", "count": 2} and n.sent[0].once, "online: one request to /v1/upgrade, sent once (never resent)")
+	check(not o.growth_up("hp", 1) and n.sent.size() == 1 and notes2.is_empty(), "a tap while waiting is ignored without a notice")
+	var reply := {"player": {"gold_tenths": 1000000 - 20 * 1000, "stage": 1, "res": {}, "buildings": {}, "upgrades": {"hp": 2, "ghost": 4}},
+		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	var sig2 := [0]
+	o.upgrades_changed.connect(func(): sig2[0] += 1)
+	n.sent[0].done.call(reply)
+	check(not o.upgrades_waiting() and o.upgrade_level("hp") == 2 and o.upgrades == {"hp": 2} and sig2[0] == 1, "reply sets the levels (unknown ids dropped) and signals once")
+	check(o.apply_server(reply) and sig2[0] == 1, "the same levels again do not signal")
+	check(o.growth_up("hp", 1) and n.sent.size() == 2, "after the reply a new upgrade can go")
+	n.last_error = "not_enough_gold"
+	n.sent[1].fail.call()
+	check(not o.upgrades_waiting() and notes2 == [EconomyScript.NO_GOLD_TEXT] and n.refreshed == 1, "a rejected upgrade notifies and refreshes the state")
+	n.last_error = ""
+	check(o.growth_up("hp", 1), "can retry after failure")
+	n.sent[2].fail.call()
+	check(notes2.size() == 2 and notes2[1] == EconomyScript.GROWTH_FAIL_TEXT and n.refreshed == 2, "a lost reply notifies with the generic text and refreshes")
+	o.net = null
+	o.free()
