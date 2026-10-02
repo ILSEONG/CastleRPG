@@ -14,7 +14,6 @@ const NAMES := ["봄", "여름", "가을", "겨울"]
 const BANNER_TEXT := "스테이지 %d · %s"
 const BLEND_SEC := 1.2
 const BANNER_SEC := 1.8  # 띠가 다 보이는 시간(나타남·사라짐 제외)
-const ROUNDS_PER_STAGE := 25  # 설정 rounds_per_stage가 없을 때
 const MAX_PARTICLES := 150
 const PARTICLE_AHEAD := 25.0  # 입자 판: 카메라가 보는 바닥 지점에서 카메라 쪽으로 이만큼(성채 지붕 위)
 const PARTICLE_LIFE := 7.0
@@ -78,14 +77,9 @@ static func season_of_stage(s: int) -> int:
 	return posmod(s - 1, 4)
 
 
-static func rounds_per_stage() -> int:
-	var n := int(GameData.config_num("rounds_per_stage"))
-	return n if n > 0 else ROUNDS_PER_STAGE
-
-
-## 전체 라운드 g → 스테이지 S.
+## 전체 라운드 g → 스테이지 S(GameData.round_stage).
 static func stage_of_round(g: int) -> int:
-	return floori((maxi(g, 1) - 1) / float(rounds_per_stage())) + 1
+	return GameData.round_stage(g)
 
 
 ## 라운드 로직 훅: 스테이지 S로(같으면 무시). 살아 있는 월드가 없으면 아무 일 없음.

@@ -76,3 +76,7 @@ equip_drop_count,5
 equip_weapon_p,0.2
 equip_bag_cap,300
 equip_sell_base,10
+rounds_per_stage,25
+stage_speed_step,0.08
+stage_speed_cap,2.0
+boss_round_mult,1.5

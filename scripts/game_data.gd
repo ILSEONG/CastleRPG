@@ -34,7 +34,8 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "promote_mult",
 	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
 	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
-	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group"]
+	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group",
+	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult"]
 const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
 const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항목 수 = 이 값. 서버 rules.MAX_PROMOTION
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
@@ -568,6 +569,33 @@ static func stage(n: int) -> Dictionary:
 	return out
 
 
+## 라운드(개정 22 §1): 전체 라운드 g(= GameState.stage, 표 행·서버 stage) → 스테이지 S·라운드 r(1..rounds_per_stage), 표기 "S-r".
+static func round_stage(g: int) -> int:
+	return (maxi(g, 1) - 1) / rounds_per_stage() + 1
+
+
+static func round_in_stage(g: int) -> int:
+	return (maxi(g, 1) - 1) % rounds_per_stage() + 1
+
+
+static func round_label(g: int) -> String:
+	return "%d-%d" % [round_stage(g), round_in_stage(g)]
+
+
+static func rounds_per_stage() -> int:
+	return maxi(1, int(config_num("rounds_per_stage")))
+
+
+## 보스 라운드(§2): 스테이지 마지막 라운드에만 에픽 보스.
+static func is_boss_round(g: int) -> bool:
+	return round_in_stage(g) == rounds_per_stage()
+
+
+## 적 이동속도 배율(§3) = min(stage_speed_cap, 1 + stage_speed_step × (S − 1)). 스테이지 안 라운드는 모두 같다.
+static func enemy_speed_mult(g: int) -> float:
+	return minf(config_num("stage_speed_cap"), 1.0 + config_num("stage_speed_step") * (round_stage(g) - 1))
+
+
 ## 처치 골드(tenths, 0.1 단위 정수) = max(1, round(gold × gold_mult × 10)). 서버 killGoldTenths와 같은 식.
 static func kill_gold_tenths(id: String, stage_n: int) -> int:
 	return maxi(1, roundi(float(monster(id).get("gold", 0)) * float(stage(stage_n).get("gold_mult", 1.0)) * 10.0))
@@ -978,6 +1006,7 @@ static func _check_contents(t: Dictionary) -> void:
 		if Balance.building(r.building).is_empty():
 			_err("resources", r._line, "building", "building '%s' is not in this app's layout" % r.building)
 	_check_gacha(t.config)
+	_check_rounds(t.config)
 	for g in GRADES:  # 모집은 등급을 먼저 정하고 그 등급 안에서 뽑는다 — 빈 등급이면 roll_gacha가 깨진다
 		if not t.heroes.any(func(h): return h.grade == g):
 			_err("heroes", 0, "grade", "no %s heroes to recruit" % g)
@@ -1195,6 +1224,20 @@ static func _check_gacha(cfg: Dictionary) -> void:
 			_err("config", 0, k, "must be an integer in 0..%d: '%s'" % [MAX_PROMOTION, s])
 	if stars.size() == 2 and stars[0] > stars[1]:
 		_err("config", 0, "skill3_unlock_star", "must be at least skill2_unlock_star: %d < %d" % [stars[1], stars[0]])
+
+
+## 라운드 설정(개정 22, 서버 seed와 같은 규칙): 스테이지당 라운드는 1 이상 정수, 속도 증가분 0 이상, 상한 1 이상, 보스 배율은 0보다 크다.
+## 숫자가 아닌 값은 CONFIG_NUM_KEYS 검사가 이미 알렸다.
+static func _check_rounds(cfg: Dictionary) -> void:
+	var want := {"rounds_per_stage": "an integer of at least 1", "stage_speed_step": "0 or more", "stage_speed_cap": "1 or more", "boss_round_mult": "greater than 0"}
+	for k in want:
+		var s := String(cfg.get(k, ""))
+		if not s.is_valid_float():
+			continue
+		var v := s.to_float()
+		var ok: bool = (v >= 1.0 and v == floorf(v)) if k == "rounds_per_stage" else (v >= 0.0 if k == "stage_speed_step" else (v >= 1.0 if k == "stage_speed_cap" else v > 0.0))
+		if not ok:
+			_err("config", 0, k, "must be %s: '%s'" % [want[k], s])
 
 
 ## key,value 행 → {키: 문자열}. 키가 겹치면 오류.

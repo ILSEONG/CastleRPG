@@ -99,7 +99,8 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
   'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
-  'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group']
+  'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
+  'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
@@ -253,6 +254,17 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   if (stat !== null && !(stat >= 0)) err('hero_level_stat', `must be 0 or more: '${raw('hero_level_stat')}'`)
   const mult = num('promote_mult')
   if (mult !== null && !(mult >= 1)) err('promote_mult', `must be 1 or more: '${raw('promote_mult')}'`)
+  // 개정 22 라운드(앱 GameData._check_rounds와 같은 규칙): 스테이지당 라운드는 1 이상 정수, 속도 증가분 0 이상, 상한 1 이상, 보스 배율 0보다 크다
+  const rounds: [string, (v: number) => boolean, string][] = [
+    ['rounds_per_stage', (v) => Number.isInteger(v) && v >= 1, 'an integer of at least 1'],
+    ['stage_speed_step', (v) => v >= 0, '0 or more'],
+    ['stage_speed_cap', (v) => v >= 1, '1 or more'],
+    ['boss_round_mult', (v) => v > 0, 'greater than 0'],
+  ]
+  for (const [k, ok, why] of rounds) {
+    const v = num(k)
+    if (v !== null && !ok(v)) err(k, `must be ${why}: '${raw(k)}'`)
+  }
   // 개정 17 스킬 해금 승급: 0..MAX_PROMOTION 정수, skill2 ≤ skill3
   const stars: number[] = []
   for (const k of ['skill2_unlock_star', 'skill3_unlock_star']) {

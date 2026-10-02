@@ -289,6 +289,11 @@ test('레벨업·승급 설정 검증: 비용·승급당 상한은 0 이상 정�
     ['hero_level_stat', '-0.01', /hero_level_stat must be 0 or more: '-0\.01'/],
     ['levelup_gold_SSR', '1.5', /levelup_gold_SSR must be a non-negative integer: '1\.5'/],
     ['levelup_gold_R', '-10', /levelup_gold_R must be a non-negative integer: '-10'/],
+    ['rounds_per_stage', '0', /rounds_per_stage must be an integer of at least 1: '0'/], // 개정 22 라운드
+    ['rounds_per_stage', '2.5', /rounds_per_stage must be an integer of at least 1/],
+    ['stage_speed_step', '-0.1', /stage_speed_step must be 0 or more: '-0\.1'/],
+    ['stage_speed_cap', '0.9', /stage_speed_cap must be 1 or more: '0\.9'/],
+    ['boss_round_mult', '0', /boss_round_mult must be greater than 0: '0'/],
   ]
   for (const [key, value, re] of cases) {
     await assert.rejects(readTables(withCfg(key, value)), (e: unknown) => {
@@ -303,7 +308,7 @@ test('레벨업·승급 설정 검증: 비용·승급당 상한은 0 이상 정�
   await readTables(withCfg('levelup_gold_R', '0')) // 0원·0배율은 받는다
   await readTables(withCfg('hero_level_stat', '0'))
   await readTables(withCfg('promote_mult', '1'))
-  for (const k of ['promote_shards', 'promote_mult', 'hero_max_level_per_promotion']) {
+  for (const k of ['promote_shards', 'promote_mult', 'hero_max_level_per_promotion', 'rounds_per_stage']) {
     writeFileSync(join(dir, 'config.csv'), cfg.replace(new RegExp(`^${k},.*\\n`, 'm'), ''))
     await assert.rejects(readTables(dir), new RegExp(`missing key '${k}'`))
   }
