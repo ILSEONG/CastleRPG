@@ -7,6 +7,7 @@ extends Node3D
 
 const Art := preload("res://scripts/art.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
+const HeroKit := preload("res://scripts/hero_kit.gd")
 
 var manual := false  # true면 애니메이션을 스스로 돌리지 않는다 — 쓰는 쪽이 advance(초)로 돌린다(병사 화면 밖 간헐 갱신, 개정 13). add_child 전에
 var _spec: Dictionary = {}
@@ -33,22 +34,30 @@ func _ready() -> void:
 	play_idle()
 
 
-## 스펙대로 모델을 꾸민다(트리 밖에서도 된다): 안 쓰는 부착물 숨김, 메시 색(tint), 무기(gltf)·코드 부품(parts: [뼈, ArenaKit id])을 뼈에 붙임.
+## 스펙대로 모델을 꾸민다(트리 밖에서도 된다): 안 쓰는 부착물 숨김, 메시 색(tint), 영웅 칸 색(palette, 개정 23), 몸 크기(body_scale),
+## 무기 바꿈(swap: gear를 숨기고 같은 손 슬롯에 HeroKit 무기), 무기(gltf)·코드 부품(parts: [뼈, HeroKit 또는 ArenaKit id])을 뼈에 붙임.
 static func dress(model: Node3D, spec: Dictionary) -> void:
 	for mesh_name in spec.hide:
 		var n := model.find_child(mesh_name, true, false) as Node3D
 		if n != null:
 			n.visible = false
+	for gear_name in spec.get("swap", {}):
+		var g := model.find_child(gear_name, true, false) as Node3D
+		g.visible = false
+		g.get_parent().add_child(HeroKit.part(spec.swap[gear_name]))  # 손 슬롯(BoneAttachment3D) 공간 = 무기 공간
 	for mesh_name in spec.get("tint", {}):
 		var mi := model.find_child(mesh_name, true, false) as MeshInstance3D
 		if mi != null:
 			Art.tint(mi, spec.tint[mesh_name])
+	if spec.has("palette"):
+		Art.remap(model, spec.look, spec.palette)
+	model.scale = Vector3.ONE * spec.get("body_scale", 1.0)
 	var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var attach := []
 	if spec.has("weapon"):
 		attach.append([Art.WEAPON_BONE, Art.instance(spec.weapon)])
 	for p in spec.get("parts", []):
-		attach.append([p[0], ArenaKit.part(p[1])])
+		attach.append([p[0], HeroKit.part(p[1]) if HeroKit.has_part(p[1]) else ArenaKit.part(p[1])])
 	for a in attach:
 		var slot := BoneAttachment3D.new()
 		slot.bone_name = a[0]
