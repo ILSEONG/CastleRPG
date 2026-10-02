@@ -70,6 +70,7 @@ var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
 var _patrol: Array[Vector3] = []  # 기병 순찰 점 셋(맡은 성문 앞 · 모서리 · 옆 성문 앞)
 var _pi := 0
 var _pdir := 1
+var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
 
 
 ## add_child 전에 호출.
@@ -90,7 +91,8 @@ func setup(p_type: String, p_tier: int, p_side: int, p_slot: int, p_spawn: Vecto
 ## 능력치를 다시 읽는 한 곳(개정 20): 병종·티어(GameData.soldier_stats) × 성장 — HP·공격 × (1 + %), stats의 공격 간격 ÷ (1 + 공격속도),
 ## 이동 × (1 + 이동속도). HP 비율 유지, 다음 공격부터 새 간격.
 func refresh_stats() -> void:
-	var b: Dictionary = Economy.upgrade_bonus()
+	_bonus = Economy.upgrade_bonus()
+	var b := _bonus
 	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
 	stats = GameData.soldier_stats(type, tier)
 	stats.atk_interval /= 1.0 + b.aspd_pct
@@ -409,7 +411,7 @@ func _release() -> void:
 		return
 	if not _ranged:
 		if Formation.flat_distance(global_position, m.global_position) <= float(stats.range) + SWING_SLACK:
-			m.take_damage(atk, DamageNumbers.Kind.HIT)
+			_hit(m)
 		return
 	var p = ProjectileScript.new()
 	p.target = m
@@ -420,8 +422,12 @@ func _release() -> void:
 	p.global_position = global_position + MUZZLE
 
 
+## 한 번 맞히기(근접 타격 순간·화살 도착). 성장 기본 치명타(개정 20 §3: 확률 crit_rate, 배율 150% + crit_dmg)를 한 번 굴린다.
+## 확률 0이면 굴리지 않는다(난수열이 그대로 — E2E 재현).
 func _hit(m) -> void:
-	m.take_damage(atk, DamageNumbers.Kind.HIT)
+	var cp := GameData.crit_roll_params(0.0, 0.0, _bonus)
+	var crit: bool = cp.rate > 0.0 and randf() < cp.rate
+	m.take_damage(atk * (float(cp.mult) if crit else 1.0), DamageNumbers.Kind.CRIT if crit else DamageNumbers.Kind.HIT)
 
 
 func _set_walking(on: bool) -> void:

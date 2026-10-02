@@ -1857,6 +1857,25 @@ func _growth_cases() -> void:
 	_check(is_equal_approx(s.atk, sb.atk * 2.0) and is_equal_approx(s.hp_max, sb.hp * 2.0) and is_equal_approx(s.hp, s.hp_max) and is_equal_approx(s._atk_cd, sb.atk_interval / 1.25)
 		and is_equal_approx(s_walk, sb.speed * 1.2 * 0.1), "(G) soldiers take growth at once too: atk/HP x2, attack interval / 1.25, walk x1.2",
 		"atk=%.1f hp=%.1f/%.1f cd=%.3f walk=%.3f" % [s.atk, s.hp, s.hp_max, s._atk_cd, s_walk])
+	# 병사 치명타(개정 20 §3: 모든 아군 공격의 기본 치명타): crit_rate 100% 주입 → 타격마다 150% + crit_dmg 50%p = x2.0, 치명타 숫자
+	cr.per_level = 1.0
+	Economy.upgrades = {"crit_rate": 100, "crit_dmg": 100}
+	Economy.upgrades_changed.emit()
+	s.global_position = _flat(m.global_position) - out * 0.5
+	var dn = DamageNumbersScript.current
+	var s_hits := []
+	var s_kinds := []
+	for i in 5:
+		var d0 := _dmg(m)
+		dn._list.clear()
+		s._target = m
+		s._attack()
+		s._release()  # 근접 타격 순간
+		s_hits.append(_dmg(m) - d0)
+		s_kinds.append_array(dn._list.map(func(e): return e.kind))
+	cr.per_level = per0
+	_check(s_hits.all(func(d): return is_equal_approx(d, sb.atk * 2.0)) and s_kinds.size() == 5 and s_kinds.all(func(k): return k == DamageNumbersScript.Kind.CRIT),
+		"(G) a soldier crits with growth crit_rate 100%: every hit x2.0 (base 150% + crit_dmg 50%p) with a crit number", "hits=%s kinds=%s atk=%.1f" % [s_hits, s_kinds, sb.atk])
 	s.queue_free()
 	Economy.upgrades = {}
 	Economy.upgrades_changed.emit()
