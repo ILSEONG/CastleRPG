@@ -11,6 +11,8 @@ extends Node3D
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
 ## 병사(개정 13): 병사 배치(Economy.soldier_deploy)대로 성채 앞 광장에 병사를 세운다(Formation.soldier_spots). 배치가 바뀌면 다음 리필 때
 ## (방치 모드면 곧바로) 다시 만든다.
+## 던전(개정 18): Economy.dungeon_started → 이 월드를 트리에서 떼어 두고 던전 장면(dungeon.gd)을 붙인다(_enter_dungeon), [나가기] → leave_dungeon.
+## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`): 디버그·오프라인에서 곧바로 그 던전 1단계(_dev_dungeon).
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -52,6 +54,8 @@ var soldiers: Array = []  # 성채 앞 병사 노드(개정 13)
 var _soldier_key = null  # 병사를 만들 때의 배치(바뀌면 다시 만든다)
 var _built_slots := 0  # 이 월드를 만들 때의 영웅 슬롯 수(성채 단계)
 var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점에 월드를 다시 만든다
+var _dungeon = null  # 던전 장면(개정 18, 던전 중에만). 그동안 이 노드는 트리 밖
+var _host: Node = null  # 던전 동안 이 노드와 던전 장면의 부모
 
 
 func _ready() -> void:
@@ -126,9 +130,17 @@ func _build_world() -> void:
 	picker.building_panel = building_panel
 	var soldier_panel = SoldierPanelScript.new()
 	add_child(soldier_panel)
-	var tabs = TabBarScript.new()  # 하단 탭 바(개정 13 §7.1): 영웅·병사·모집·상인
-	tabs.windows = {"hero": hero_panel, "soldier": soldier_panel, "recruit": recruit, "merchant": panel}
+	var growth_panel = preload("res://scripts/growth_panel.gd").new()  # 개정 20 성장 시트
+	add_child(growth_panel)
+	var bag = preload("res://scripts/bag_panel.gd").new()  # 개정 18 보관함·장비 고르기(층 4)
+	var dungeon_panel = preload("res://scripts/dungeon_panel.gd").new()
+	dungeon_panel.bag = bag
+	hero_panel.bag = bag
+	add_child(dungeon_panel)
+	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집(상인은 NPC 탭)
+	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit}
 	add_child(tabs)
+	add_child(bag)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_restore_hero_posts)  # _sync_heroes보다 먼저: 남아 있는 영웅만 복원
 	GameState.refilled.connect(_sync_heroes) # 다음 리필(스테이지 사이) 때 배치·승급·레벨·연구소 반영
@@ -136,6 +148,7 @@ func _build_world() -> void:
 	Economy.roster_changed.connect(_on_roster_changed)
 	Economy.soldiers_changed.connect(_on_soldiers_changed)
 	Economy.building_done.connect(_on_building_done)
+	Economy.dungeon_started.connect(_on_dungeon_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
 		_connect_dev_log()  # 람다(오토로드 시그널)라 다시 만든 월드에서 또 붙이면 두 번 찍힌다
@@ -148,6 +161,58 @@ func _build_world() -> void:
 		GameState.auto_continue = true  # 저장된 체크 해제 상태와 무관하게 E2E는 연속
 		seed(1)  # 스폰 흩어짐 고정 → E2E 로그 재현
 		GameState.start_stage()
+	if rebuilds == 0 and OS.is_debug_build() and not Net.is_online() and Net.arg_value("dungeon") in GameData.DUNGEON_TYPES:
+		_dev_dungeon(Net.arg_value("dungeon"))
+
+
+## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.
+## `--debug-win`과 함께면 결과 화면까지 바로 간다(캡처용).
+func _dev_dungeon(type: String) -> void:
+	Economy.save_path = ""
+	Fever.save_path = ""
+	for h in GameData.heroes():
+		if Economy.heroes.size() >= GameData.party_size(type):
+			break
+		Economy.heroes[h.id] = maxi(1, int(Economy.heroes.get(h.id, 0)))
+	Economy.start_dungeon(type, 1, Economy.default_party(type))
+
+
+# --- 던전 장면 전환(개정 18 §9): 성 월드(이 노드)를 트리에서 떼어 두고 던전 장면을 같은 부모에 붙인다. 오토로드는 그대로,
+# GameState 처리를 멈춰 성 스테이지 흐름(결과·카운트다운 타이머)도 멈춘다. 방치 진행(수집·훈련)은 시각 기반이라 그대로 흐른다.
+# 돌아오면 다시 붙이고 카메라·GameState를 되돌린다(스테이지 중이었으면 그 자리에서 이어진다).
+
+func _on_dungeon_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run)  # 버튼 입력 처리 중에 트리를 바꾸지 않게
+
+
+func _enter_dungeon(run: Dictionary) -> void:
+	var d = preload("res://scripts/dungeon.gd").new()
+	d.run = run
+	d.main = self
+	if _dungeon != null:  # 결과 화면에서 다음 도전: 던전 장면만 새로
+		_host.remove_child(_dungeon)
+		_dungeon.queue_free()
+	elif is_inside_tree():
+		_host = get_parent()
+		GameState.process_mode = Node.PROCESS_MODE_DISABLED
+		_host.remove_child(self)
+	else:
+		return
+	_dungeon = d
+	_host.add_child(d)
+
+
+func leave_dungeon() -> void:
+	if _dungeon == null:
+		return
+	_host.remove_child(_dungeon)
+	_dungeon.queue_free()
+	_dungeon = null
+	_host.add_child(self)
+	GameState.process_mode = Node.PROCESS_MODE_INHERIT
+	camera.make_current()
+	_on_mode_changed(GameState.mode)  # 던전 동안 성이 넓어졌으면 지금 다시 만든다
 
 
 ## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.

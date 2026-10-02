@@ -1,6 +1,7 @@
 extends CanvasLayer
-## 하단 탭 바(스펙 §2.3, 개정 13 §7.1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 4개 —
-## 영웅(영웅 목록)·병사(병사 시트)·모집(주점 창)·상인(거래 창). [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
+## 하단 탭 바(스펙 §2.3, 개정 13 §7.1, 개정 18 §1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 5개 —
+## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·던전(던전 시트)·모집(주점 창). 상인은 탭이 없다(성 안 상인 NPC를 탭).
+## [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
 ## 탭마다 각진 아이콘 + 글자. 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다
 ## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
 ## 층 3: 창(층 2)의 어두운 배경 위라 창이 열려 있어도 탭 바는 계속 누를 수 있다(창의 연 직후 보호 시간에는 누름이 버려진다).
@@ -11,7 +12,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const UiWindow := preload("res://scripts/ui_window.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TABS := [["hero", "영웅"], ["soldier", "병사"], ["recruit", "모집"], ["merchant", "상인"]]
+const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["dungeon", "던전"], ["recruit", "모집"]]
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0
@@ -101,9 +102,34 @@ static func draw_shapes(ci: CanvasItem, shapes: Array, center: Vector2, size_px:
 			ci.draw_polyline(pts, IconsScript.OUTLINE, maxf(1.0, size_px / 30.0))
 
 
-## 탭 아이콘(각진 평면 로우폴리): 영웅 = 방패·병사 = 쇠 투구(둘 다 밝은 왼쪽 면), 모집 = 맥주잔, 상인 = 금화(자원 아이콘).
+## 탭 아이콘(각진 평면 로우폴리): 영웅 = 방패·병사 = 쇠 투구(둘 다 밝은 왼쪽 면), 모집 = 맥주잔, 성장 = 위 화살 셋(초록),
+## 던전 = 돌 아치 문 + 해골.
 static func tab_shapes(id: String) -> Array:
 	match id:
+		"growth":  # 위로 쌓인 각진 화살 셋(밝은 왼쪽 면)
+			var out := []
+			for k in 3:
+				var y := 0.3 - k * 0.28
+				var a := [Vector2(-0.4, y + 0.12), Vector2(0.0, y - 0.2), Vector2(0.4, y + 0.12), Vector2(0.4, y + 0.26), Vector2(0.0, y - 0.06), Vector2(-0.4, y + 0.26)]
+				out.append([a, Color(0.3, 0.68, 0.32).lightened(k * 0.12), true])
+				out.append([[a[0], a[1], a[4], a[5]], Color(0.55, 0.85, 0.5).lightened(k * 0.1), false])
+			return out
+		"dungeon":  # 각진 돌 아치(밝은 왼쪽 면) + 어두운 문간 + 해골(눈 둘)
+			var arch := [Vector2(-0.44, 0.44), Vector2(-0.44, -0.12), Vector2(-0.3, -0.36), Vector2(0.0, -0.46), Vector2(0.3, -0.36), Vector2(0.44, -0.12),
+				Vector2(0.44, 0.44)]
+			var door := [Vector2(-0.26, 0.44), Vector2(-0.26, -0.06), Vector2(-0.16, -0.22), Vector2(0.0, -0.28), Vector2(0.16, -0.22), Vector2(0.26, -0.06),
+				Vector2(0.26, 0.44)]
+			var skull := [Vector2(-0.13, -0.02), Vector2(-0.07, -0.12), Vector2(0.07, -0.12), Vector2(0.13, -0.02), Vector2(0.1, 0.1), Vector2(0.05, 0.16),
+				Vector2(-0.05, 0.16), Vector2(-0.1, 0.1)]
+			return [
+				[arch, Color(0.5, 0.48, 0.5), true],
+				[[arch[0], arch[1], arch[2], arch[3], door[3], door[2], door[1], door[0]], Color(0.68, 0.66, 0.66), false],
+				[door, Color(0.2, 0.15, 0.17), true],
+				[skull, Color(0.95, 0.92, 0.84), true],
+				[[Vector2(-0.08, -0.04), Vector2(-0.02, -0.04), Vector2(-0.03, 0.03), Vector2(-0.08, 0.03)], Color(0.2, 0.15, 0.17), false],
+				[[Vector2(0.02, -0.04), Vector2(0.08, -0.04), Vector2(0.08, 0.03), Vector2(0.03, 0.03)], Color(0.2, 0.15, 0.17), false],
+				[arch, Color(0, 0, 0, 0), true],
+			]
 		"soldier":  # 쇠 투구: 각진 돔(왼쪽 면 밝게) + 챙 + 코 가리개 + 눈 틈 둘
 			var dome := [Vector2(-0.38, 0.28), Vector2(-0.36, -0.08), Vector2(-0.22, -0.34), Vector2(0.0, -0.44), Vector2(0.22, -0.34),
 				Vector2(0.36, -0.08), Vector2(0.38, 0.28)]
@@ -134,6 +160,4 @@ static func tab_shapes(id: String) -> Array:
 				[[Vector2(-0.34, -0.22), Vector2(-0.12, -0.22), Vector2(-0.12, 0.44), Vector2(-0.34, 0.44)], Color(1.0, 0.82, 0.4), false],
 				[[Vector2(-0.4, -0.2), Vector2(-0.3, -0.38), Vector2(-0.08, -0.44), Vector2(0.12, -0.38), Vector2(0.24, -0.2)], Color(0.99, 0.97, 0.9), true],
 			]
-		"merchant":
-			return IconsScript.shapes("gold")
 	return []
