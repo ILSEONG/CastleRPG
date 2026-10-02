@@ -118,6 +118,7 @@ func _init() -> void:
 	test_hero_looks_unique()
 	test_hero_look_builder()
 	test_portrait_looks()
+	test_scene_snap()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3654,3 +3655,55 @@ func test_portrait_looks() -> void:
 			and s.swap == look.get("swap", {}) and s.body_scale == look.get("scale", 1.0), "portrait of %s carries its look" % h.id)
 	check(not Art.soldier_spec("infantry", "Knight").has("palette") and not PortraitsScript.spec_of("soldier:archer").has("palette"),
 		"soldiers keep the plain model (no hero look)")
+
+
+## 장면 스냅샷(scene_snap): 헤드리스는 자리표시만, 요청은 키마다 한 번(순서·크기·데울 프레임), 렌더 중인 키는 다시 넣지 않음,
+## 끝난 렌더는 정적 캐시 + snap_ready. 던전 띠 장면(dungeon_snaps)은 카메라·조명과 모델을 넣고, 모든 모델이 카메라 앞 띠 폭 안에 선다.
+func test_scene_snap() -> void:
+	const S := preload("res://scripts/scene_snap.gd")
+	const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
+	var unit_script := preload("res://scripts/unit_model.gd")  # 람다가 지역 상수를 못 본다
+	var p = S.new()
+	S.current = p  # node()가 루트에 새로 만들지 않게
+	var built := []
+	var b := func(root: Node3D): built.append(root)
+	var ph: Texture2D = S.snap("t:a", Vector2i(64, 16), b)
+	check(not p.can_render and p.queue.is_empty() and ph == S.placeholder() and ph.get_height() == 16 and S.cached("t:a") == null and built.is_empty(),
+		"scene snap headless: nothing queued, the shared placeholder comes back, nothing cached")
+	p.can_render = true  # 렌더러가 있는 척 — 큐·캐시만 본다
+	for k in ["t:a", "t:b", "t:a"]:
+		S.snap(k, Vector2i(64, 16), b, 5)
+	check(p.queue.map(func(q): return q.key) == ["t:a", "t:b"] and p.queue[0].warm == 5 and p.queue[0].size == Vector2i(64, 16),
+		"scene snap: requests queue once per key, in order, with size and warm frames")
+	p._process(0.016)
+	S.snap("t:a", Vector2i(64, 16), b)
+	check(p.busy == "t:a" and built.size() == 1 and built[0].get_parent() == p._vp and p._vp.size == Vector2i(64, 16) and p._vp.world_3d != null
+		and p.queue.map(func(q): return q.key) == ["t:b"], "scene snap: one render at a time in its own world; the busy key is not queued again")
+	for i in 5:
+		p._on_drawn()
+	check(p._left == 0 and p.busy == "t:a", "scene snap: warm frames count down before the capture")
+	var got := []
+	p.snap_ready.connect(func(k): got.append(k))
+	var tex := ImageTexture.create_from_image(Image.create_empty(4, 4, false, Image.FORMAT_RGBA8))
+	p.store("t:a", tex)
+	S.snap("t:a", Vector2i(64, 16), b)
+	check(got == ["t:a"] and S.cached("t:a") == tex and S.snap("t:a", Vector2i(64, 16), b) == tex and p.queue.size() == 1,
+		"scene snap: a finished render is cached, fires snap_ready(key) and is not queued again")
+	S.current = null
+	p.free()
+	check(S.cached("t:a") == tex, "scene snap: the cache is static (outlives the node)")
+	S._cache.erase("t:a")
+	for t in ["gold", "equip"]:
+		var root := Node3D.new()
+		DungeonSnaps.build(root, t, ["arteon", "nobody", "hans", "ignis", "kyle"])
+		var cams := root.find_children("*", "Camera3D", true, false)
+		var units := root.find_children("*", "", true, false).filter(func(n): return n.get_script() == unit_script)
+		var cam: Camera3D = cams[0]
+		var half_w := tan(deg_to_rad(cam.fov / 2.0)) * DungeonSnaps.SIZE.aspect()  # 가로 반 화각 tan(세로 화각 기준)
+		var inside := true
+		for u in units:
+			var l: Vector3 = cam.transform.affine_inverse() * (u.position + Vector3(0, 1.0, 0))
+			inside = inside and l.z < -1.0 and absf(l.x / -l.z) < half_w * 0.95
+		check(cams.size() == 1 and root.find_children("*", "WorldEnvironment", true, false).size() == 1 and units.size() == (11 if t == "gold" else 4) and inside,
+			"%s band scene: one camera, the arena lighting, %d models (3 heroes; unknown id skipped), all in front of the camera inside the band width" % [t, units.size()])
+		root.free()
