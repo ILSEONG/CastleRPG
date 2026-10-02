@@ -7,20 +7,22 @@ extends Node
 ## 건물(개정 12): 모든 건물 레벨(levels)과 일꾼(build)도 여기 있다. UI(건물 창·[성] 탭)가 쓰는 API는 아래 "건물 레벨업" 한 곳 —
 ## upgrade_block·requirements·upgrade_cost·upgrade_sec·upgrade·build_left·build_progress·population, 시그널 build_started·building_done.
 ## 완료는 보정 시각으로 판정한다: 오프라인은 여기서 게으른 완료(complete_due), 온라인은 서버가 완료하고 /v1/player로 받는다.
-## 병사(개정 13): 보유·배치(soldiers·soldier_deployed, "병종:티어" → 수)와 병사 건물 생산 시각(last_collect)도 여기 있다. 병사 탭·건물 창(S2)이
-## 쓰는 API는 아래 "병사" 한 곳 — soldier_counts·soldier_deploy·deployed_total·population·set_soldier_deploy·auto_deploy·can_merge·
-## merge_soldiers·soldier_production·soldier_stats, 시그널 soldiers_changed·soldier_made(+ 알림 "보병 +1").
+## 병사(개정 13): 보유·배치(soldiers·soldier_deployed, "병종:티어" → 수)도 여기 있다. 병사 탭이 쓰는 API는 아래 "병사" 한 곳 —
+## soldier_counts·soldier_deploy·deployed_total·population·set_soldier_deploy·auto_deploy·can_merge·merge_soldiers·soldier_stats, 시그널 soldiers_changed.
+## 훈련(개정 16, 자동 생산을 대신한다): 병사 건물마다 대기열 하나(train_queues). 건물 창·월드가 쓰는 API는 아래 "훈련" 한 곳 —
+## training·train_cost·train_time·train_max·train_block·start_training·collect_training·cancel_training, 시그널 training_changed(+ 수령 알림 "보병 +n").
 ## 승급(개정 15): 영웅별 조각(hero_shards)·승급 단계(hero_promotions). UI가 쓰는 API는 shards_of·promotion_of·promote_block·promote·
 ## promote_waiting, 시그널 promoted. 모집 중복은 조각 +1.
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 6  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 7  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
-# 5: soldiers·soldier_deploy {"병종:티어": 수}, last_collect에 병사 건물(개정 13). 4 이하는 병사 없음, 생산은 불러온 때부터
+# 5: soldiers·soldier_deploy {"병종:티어": 수}(개정 13). 4 이하는 병사 없음
 # 6: heroes {id: {copies, level, shards, promotion}}(개정 15). 5 이하는 옛 별(중복)을 조각으로: shards = copies − 1, promotion 0
+# 7: training {병사 건물: {count, finish}}(개정 16). 6 이하의 자동 생산 시계(last_collect의 병사 건물)는 버리고 대기열은 빈다
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -48,6 +50,13 @@ const SOLDIER_TEXT := {
 }
 const MERGE_FAIL_TEXT := "합성 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
 const SOLDIER_DEPLOY_FAIL_TEXT := "병사 배치를 저장하지 못했습니다"
+## 훈련 못 하는 이유 코드 → 문구(train_block, 서버 409 코드 training·ready_to_collect·not_enough·not_ready·empty와 같다. 나머지는 앱만).
+const TRAIN_TEXT := {
+	"unknown": "병사 건물이 아닙니다", "bad_count": "훈련 수량을 고르세요", "training": "훈련 중입니다", "ready_to_collect": "훈련 완료 — 먼저 수령하세요",
+	"not_enough": "자원 부족", "not_ready": "아직 훈련 중입니다", "empty": "훈련 중인 병사가 없습니다", "waiting": "응답 대기 중",
+}
+const TRAIN_FAIL_TEXT := "훈련 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
+const CANCEL_TEXT := "훈련을 취소했습니다 — 비용 50% 환불"
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
@@ -58,8 +67,8 @@ signal promoted(hero_id: String, promotion: int)  # 승급 성공(온라인은 �
 signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
 signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
 signal building_done(building_id: String, level: int)  # 건설 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
-signal soldiers_changed  # 병사 보유·배치·생산 시각·합성 대기가 바뀌었다(개정 13)
-signal soldier_made(type: String, count: int)  # 생산 — 1티어 count마리(온라인은 응답에서 늘어난 것을 봤을 때). 알림 "보병 +1"은 notice로 함께
+signal soldiers_changed  # 병사 보유·배치·합성 대기가 바뀌었다(개정 13)
+signal training_changed  # 훈련 대기열·응답 대기가 바뀌었다(개정 16). 완료(끝나는 시각 지남)는 시그널 없이 training().ready로 본다
 
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
 var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
@@ -68,7 +77,7 @@ var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면
 	set(v):
 		gold_tenths = v * 10
 var res: Dictionary = {}           # 자원 id → int
-var last_collect: Dictionary = {}  # 자원 건물 id → 마지막 수집, 병사 건물 id → 마지막 생산(개정 13). 유닉스 초(float)
+var last_collect: Dictionary = {}  # 자원 건물 id → 마지막 수집. 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 모든 건물)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
@@ -78,6 +87,7 @@ var hero_promotions: Dictionary = {}  # 영웅 id → 승급 0..MAX_PROMOTION(�
 var deploy: Array = []             # 배치 슬롯 i → 영웅 id 또는 null(저장된 그대로 — 쓰는 쪽은 deploy_slots)
 var soldiers: Dictionary = {}          # 병사 보유 "병종:티어" → 수(> 0, 개정 13)
 var soldier_deployed: Dictionary = {}  # 병사 배치 "병종:티어" → 수(> 0). 각 ≤ 보유, 합 ≤ 인구
+var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
 
@@ -98,7 +108,6 @@ var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(�
 var _deploys_out := 0
 var _synced := false  # 온라인: 서버 응답을 한 번이라도 반영했다(첫 반영의 레벨 차이는 완료가 아니다)
 var _build_poll_at := 0.0  # 온라인: 다 지은 건설을 다시 물어볼 시각
-var _prod_poll_at := 0.0  # 온라인: 생산될 때가 된 병사를 다시 물어볼 시각
 var _pending_soldier_deploy = null  # 온라인: 보냈고 답을 기다리는 병사 배치(_pending_deploy와 같은 규칙)
 var _soldier_deploys_out := 0
 
@@ -203,7 +212,6 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	produce_due(time_now())  # 서버처럼 생산을 완료보다 먼저
 	complete_due(time_now())
 	if not _dirty:
 		return
@@ -233,13 +241,11 @@ func reset(now: float) -> void:
 		res[id] = 0
 		last_collect[b] = now
 		levels[b] = 1
-	for s in GameData.soldiers():  # 병사 건물: 생산은 지금부터(개정 13)
-		last_collect[s.building] = now
 	soldiers = {}
 	soldier_deployed = {}
+	train_queues = {}
 	_pending_soldier_deploy = null
 	_soldier_deploys_out = 0
-	_prod_poll_at = 0.0
 	heroes = {}
 	hero_levels = {}
 	hero_shards = {}
@@ -254,6 +260,7 @@ func reset(now: float) -> void:
 	changed.emit()
 	roster_changed.emit()
 	soldiers_changed.emit()
+	training_changed.emit()
 
 
 func pending(building_id: String, now: float) -> int:
@@ -334,6 +341,28 @@ func sell_all(now: float) -> int:
 	var total := 0
 	for r in GameData.resources():
 		total += sell(r.id, now)
+	return total
+
+
+## 여러 자원을 한 번에 판다. items = [{res, amount}, ...]. 얻은 골드를 돌려준다(온라인은 요청만 보내고 0).
+func sell_many(items: Array, now: float) -> int:
+	var list := []
+	for it in items:
+		var n := mini(int(it.amount), res[it.res])
+		if n > 0:
+			list.append({"res": it.res, "amount": n})
+	if list.is_empty():
+		return 0
+	if net != null:
+		_sell_many_online(list)
+		return 0
+	var total := 0
+	for it in list:
+		total += sell_value(it.res, it.amount, current_rate(it.res, now))
+		res[it.res] -= it.amount
+	gold_tenths += total * 10
+	changed.emit()
+	save()
 	return total
 
 
@@ -677,7 +706,7 @@ func finish_build_now() -> void:
 	complete_due(time_now())
 
 
-# --- 병사(개정 13 §1·§4~§6) — 병사 탭·건물 창 합성 칸(S2)이 쓰는 API는 여기 한 곳 ---
+# --- 병사(개정 13 §1·§5·§6) — 병사 탭(배치·합성)이 쓰는 API는 여기 한 곳 ---
 
 ## 보유·배치 키 "병종:티어".
 static func soldier_key(type: String, tier: int) -> String:
@@ -693,17 +722,6 @@ static func parse_soldier_key(key) -> Array:
 	if str(tier) != parts[1] or tier < 1 or tier > int(GameData.config_num("soldier_max_tier")):
 		return []
 	return [parts[0], tier]
-
-
-## 게으른 생산 한 번(서버 rules.soldierProdStep과 같다): 지난 시간(축적 상한 cap_min분까지) / 한 마리 시간만큼 만들고 남은 시간은 유지
-## (상한이면 지금으로). 시계가 되돌아갔으면 0마리, 지금부터. {count, last, changed}
-static func prod_step(last: float, now: float, unit_sec: float, cap_min: float) -> Dictionary:
-	if now < last:
-		return {"count": 0, "last": now, "changed": true}
-	var count := floori(minf(now - last, cap_min * 60.0) / unit_sec)
-	if count == 0:
-		return {"count": 0, "last": last, "changed": false}
-	return {"count": count, "last": now if now - last >= cap_min * 60.0 else last + count * unit_sec, "changed": true}
 
 
 ## 배치를 보유로 자른다(합성 뒤, 서버 rules.trimDeploy와 같다). 0이 되면 키를 뺀다.
@@ -759,19 +777,6 @@ func deployed_total() -> int:
 ## 티어 tier 병종 type의 능력치 {hp, atk, range, atk_interval, speed, aggro}(HP·공격 × 2^(t−1)). 모르는 병종이면 {}.
 func soldier_stats(type: String, tier: int) -> Dictionary:
 	return GameData.soldier_stats(type, tier)
-
-
-## 병사 건물 생산 상태 {type, level, per_unit_sec, next_in_sec}(다음 한 마리까지 남은 초, 0 = 곧 — 온라인은 서버 응답 대기). 병사 건물이
-## 아니면 {}. now = 보정 시각(기본 time_now()).
-func soldier_production(building_id: String, now := -1.0) -> Dictionary:
-	var type := GameData.soldier_of_building(building_id)
-	if type == "":
-		return {}
-	if now < 0.0:
-		now = time_now()
-	var unit := GameData.soldier_unit_sec(building_level(building_id))
-	var left := unit - (now - float(last_collect.get(building_id, now)))
-	return {"type": type, "level": building_level(building_id), "per_unit_sec": unit, "next_in_sec": clampf(left, 0.0, unit)}
 
 
 ## 합성 못 하는 이유 코드(문구는 SOLDIER_TEXT). 되면 "". 순서(서버와 같다): unknown → max_tier → not_enough(soldier_merge_count 미만), 앱만 waiting.
@@ -854,48 +859,138 @@ func auto_deploy() -> Dictionary:
 	return auto_deploy_for(soldiers, population())
 
 
-## 게으른 생산(스펙 §4): 오프라인은 병사 건물마다 prod_step으로 1티어를 보유에 더하고(저장·soldiers_changed·soldier_made·알림 "보병 +1"),
-## 온라인은 서버가 만든다 — 다음 한 마리 시각(보정 시각)이 지났으면 BUILD_POLL_SEC마다 /v1/player로 받는다. 매 프레임 불러도 가볍다.
-func produce_due(now: float) -> void:
+# --- 훈련(개정 16 §1·§3) — 건물 창·월드 말풍선·탭 수령이 쓰는 API는 여기 한 곳 ---
+
+## 병사 건물 훈련 대기열 {count, finish, ready}(ready = 끝나는 시각이 지났다, 보정 시각). 비었으면 count 0.
+func training(building_id: String) -> Dictionary:
+	var q: Dictionary = train_queues.get(building_id, {})
+	if q.is_empty():
+		return {"count": 0, "finish": 0.0, "ready": false}
+	return {"count": int(q.count), "finish": float(q.finish), "ready": time_now() >= float(q.finish)}
+
+
+## 훈련 진행 0..1(비었으면 0). 전체 시간 = 지금 레벨의 count × 1마리 시간.
+# ponytail: 시작 시각을 두지 않아 진행 중 레벨이 오르면 막대가 조금 뒤로 간다(끝나는 시각은 그대로). 거슬리면 대기열에 시작 시각을 둔다.
+func train_progress(building_id: String) -> float:
+	var q := training(building_id)
+	var total := train_time(building_id, q.count)
+	return clampf(1.0 - (q.finish - time_now()) / total, 0.0, 1.0) if total > 0.0 else 0.0
+
+
+## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × n, 0인 자원은 뺀다).
+static func train_cost(type: String, n: int) -> Dictionary:
+	var out := {}
+	var one := GameData.train_unit_cost(type)
+	for r in one:
+		if int(one[r]) * n > 0:
+			out[r] = int(one[r]) * n
+	return out
+
+
+## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨).
+func train_time(building_id: String, n: int) -> float:
+	return n * GameData.soldier_unit_sec(building_level(building_id))
+
+
+## 그 건물의 묶음 상한(레벨로 는다).
+func train_max(building_id: String) -> int:
+	return GameData.train_max(building_level(building_id))
+
+
+## n마리 훈련을 못 하는 이유 코드(문구는 TRAIN_TEXT, 서버와 같은 순서). 되면 "".
+##   unknown(병사 건물 아님) → bad_count(1..묶음 상한 밖) → training / ready_to_collect(대기열이 차 있다) → not_enough → waiting(앱만)
+func train_block(building_id: String, n: int) -> String:
+	var type := GameData.soldier_of_building(building_id)
+	if type == "":
+		return "unknown"
+	if n < 1 or n > train_max(building_id):
+		return "bad_count"
+	var q := training(building_id)
+	if q.count > 0:
+		return "ready_to_collect" if q.ready else "training"
+	var cost := train_cost(type, n)
+	for r in cost:
+		if int(res.get(r, 0)) < int(cost[r]):
+			return "not_enough"
+	return "waiting" if _waiting.has("train:" + building_id) else ""
+
+
+## 훈련 시작(스펙 §1): 비용을 바로 빼고 끝나는 시각 = 지금 + n × 1마리 시간. 안 되면 알림만. 오프라인은 바로 저장,
+## 온라인은 /v1/soldiers/train(once — 다시 보내면 두 번 빠질 수 있어 재전송하지 않는다. 실패면 알림 + 상태 새로 받기). 했거나 보냈으면 true.
+func start_training(building_id: String, n: int) -> bool:
+	var why := train_block(building_id, n)
+	if why != "":
+		notice.emit(TRAIN_TEXT.get(why, TRAIN_FAIL_TEXT))
+		return false
 	if net != null:
-		if net.up and _synced and now >= _prod_poll_at and _production_due(now):
-			_prod_poll_at = now + BUILD_POLL_SEC
-			net.refresh()
-		return
-	var made := {}
-	var moved := false
-	for s in GameData.soldiers():
-		var b: String = s.building
-		if not last_collect.has(b):
-			continue
-		var st := prod_step(float(last_collect[b]), now, GameData.soldier_unit_sec(building_level(b)), GameData.config_num("accum_cap_min"))
-		if not st.changed:
-			continue
-		last_collect[b] = st.last
-		moved = true
-		if st.count > 0:
-			var k := soldier_key(s.id, 1)
-			soldiers[k] = int(soldiers.get(k, 0)) + st.count
-			made[s.id] = st.count
-	if not moved:
-		return
+		return _train_online("train", building_id, {"building": building_id, "count": n}, true)
+	var cost := train_cost(GameData.soldier_of_building(building_id), n)
+	for r in cost:
+		res[r] = int(res.get(r, 0)) - int(cost[r])
+	train_queues[building_id] = {"count": n, "finish": time_now() + train_time(building_id, n)}
+	save()
+	changed.emit()
+	training_changed.emit()
+	return true
+
+
+## 수령: 끝났으면 1티어 보유 += count, 대기열 비우기, 알림 "보병 +n". 아니면 false(알림 없음 — 건물 탭이 쓴다). 오프라인은 바로 저장,
+## 온라인은 /v1/soldiers/collect(멱등이라 Net 기본 재시도 — 두 번째는 409 empty). 했거나 보냈으면 true.
+func collect_training(building_id: String) -> bool:
+	var q := training(building_id)
+	if not q.ready or _waiting.has("collect:" + building_id):
+		return false
+	if net != null:
+		return _train_online("collect", building_id, {"building": building_id}, false)
+	var type := GameData.soldier_of_building(building_id)
+	var k := soldier_key(type, 1)
+	soldiers[k] = int(soldiers.get(k, 0)) + q.count
+	train_queues.erase(building_id)
 	save()
 	soldiers_changed.emit()
-	for t in made:
-		_announce(t, made[t])
+	training_changed.emit()
+	_announce(type, q.count)
+	return true
 
 
-## 한 마리 이상 만들 때가 된 병사 건물이 있다(온라인 생산 확인).
-func _production_due(now: float) -> bool:
-	for s in GameData.soldiers():
-		if now - float(last_collect.get(s.building, now)) >= GameData.soldier_unit_sec(building_level(s.building)):
-			return true
-	return false
+## 취소(진행 중만): 비용의 50%(자원마다 내림)를 돌려주고 비운다. 온라인은 /v1/soldiers/cancel(once). 했거나 보냈으면 true.
+func cancel_training(building_id: String) -> bool:
+	var q := training(building_id)
+	if q.count == 0 or q.ready or _waiting.has("cancel:" + building_id):
+		return false
+	if net != null:
+		return _train_online("cancel", building_id, {"building": building_id}, true)
+	var cost := train_cost(GameData.soldier_of_building(building_id), q.count)
+	for r in cost:
+		res[r] = int(res.get(r, 0)) + int(cost[r]) / 2
+	train_queues.erase(building_id)
+	save()
+	changed.emit()
+	training_changed.emit()
+	notice.emit(CANCEL_TEXT)
+	return true
+
+
+## 응답 대기 중(op = "train"·"collect"·"cancel") — 건물 창이 버튼을 끈다.
+func training_waiting(building_id: String, op: String) -> bool:
+	return _waiting.has(op + ":" + building_id)
+
+
+## 테스트 훅(입력·통합 체크): 진행 중 훈련을 지금 끝낸다. 오프라인은 끝나는 시각을 지금으로, 온라인은 POST /v1/test/age(남은 분만큼 —
+## ALLOW_TEST_HOOKS 서버만. 모든 건물 시각을 당기므로 자원도 그만큼 쌓인다)의 응답을 반영한다.
+func finish_training_now(building_id: String) -> void:
+	var q := training(building_id)
+	if q.count == 0:
+		return
+	if net != null:
+		net.send("POST", "/v1/test/age", {"minutes": ceili(maxf(0.0, q.finish - time_now()) / 60.0)}, apply_server)
+		return
+	train_queues[building_id].finish = time_now()
+	training_changed.emit()
 
 
 func _announce(type: String, count: int) -> void:
 	notice.emit("%s +%d" % [GameData.soldier(type).get("name", type), count])
-	soldier_made.emit(type, count)
 
 
 # --- 온라인 ---
@@ -908,11 +1003,19 @@ func apply_server(data: Dictionary) -> bool:
 			and p.get("buildings") is Dictionary and _rates_ok(m.get("rates")) and _num(m.get("next_change")) \
 			and (p.get("heroes") == null or p.heroes is Dictionary) and (p.get("deploy") == null or p.deploy is Array) \
 			and (p.get("build") == null or p.build is Dictionary) \
-			and (p.get("soldiers") == null or p.soldiers is Dictionary) and (p.get("soldier_deploy") == null or p.soldier_deploy is Dictionary)):
+			and (p.get("soldiers") == null or p.soldiers is Dictionary) and (p.get("soldier_deploy") == null or p.soldier_deploy is Dictionary) \
+			and (p.get("training") == null or p.training is Dictionary)):
 		push_error("bad player response: %s" % str(data))
 		return false
 	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
-	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate(), _soldier_clocks()]
+	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate()]
+	var queues_before := train_queues.duplicate(true)
+	if p.get("training") is Dictionary:  # 개정 16: {병사 건물: {count, finish} 또는 null}
+		train_queues = {}
+		for s in GameData.soldiers():
+			var q = p.training.get(s.building)
+			if q is Dictionary and _num(q.get("count")) and int(q.count) > 0 and _num(q.get("finish")):
+				train_queues[s.building] = {"count": int(q.count), "finish": float(q.finish)}
 	if p.get("soldiers") is Dictionary:  # 개정 13: {"병종:티어": 수}
 		soldiers = _soldier_dict(p.soldiers)
 	if p.get("soldier_deploy") is Dictionary:
@@ -953,9 +1056,6 @@ func apply_server(data: Dictionary) -> bool:
 		r[id] = int(p.res.get(id, 0)) if _num(p.res.get(id)) else 0
 		lc[bid] = float(b.last_collect) if ok else time_now()
 		lv[bid] = int(b.level) if ok else 1
-	for row in GameData.soldiers():  # 병사 건물: 마지막 생산 시각(개정 13)
-		var b = p.buildings.get(row.building)
-		lc[row.building] = float(b.last_collect) if b is Dictionary and _num(b.get("last_collect")) else time_now()
 	res = r
 	last_collect = lc
 	var levels_before := levels
@@ -974,17 +1074,14 @@ func apply_server(data: Dictionary) -> bool:
 	changed.emit()
 	if [heroes, deploy, hero_levels, hero_shards, hero_promotions] != roster_before:
 		roster_changed.emit()
-	if [soldiers, soldier_deployed, _soldier_clocks()] != troops_before:
+	if [soldiers, soldier_deployed] != troops_before:
 		soldiers_changed.emit()
+	if train_queues != queues_before:
+		training_changed.emit()
 	if _synced:  # 서버가 완료한 건설(게으른 완료) — 첫 반영의 레벨 차이는 완료가 아니라 접속이다
 		for id in levels:
 			if int(levels[id]) > int(levels_before.get(id, 1)):
 				building_done.emit(id, levels[id])
-		for s in GameData.soldiers():  # 서버가 생산한 병사(1티어가 늘었다 — 합성은 1티어를 늘리지 않는다)
-			var k := soldier_key(s.id, 1)
-			var more := int(soldiers.get(k, 0)) - int(troops_before[0].get(k, 0))
-			if more > 0:
-				_announce(s.id, more)
 	_synced = true
 	return true
 
@@ -996,11 +1093,6 @@ func _soldier_dict(src: Dictionary) -> Dictionary:
 		if not parse_soldier_key(k).is_empty() and _num(src[k]) and int(src[k]) > 0:
 			out[k] = int(src[k])
 	return out
-
-
-## 병사 건물 생산 시각(바뀌면 생산 상태 줄이 바뀐다).
-func _soldier_clocks() -> Array:
-	return GameData.soldiers().map(func(s): return last_collect.get(s.building))
 
 
 ## 쌓인 처치를 보낼 몫으로 옮긴다(Net.flush_kills).
@@ -1092,6 +1184,17 @@ func _sell_online(target: String, amount := -1) -> void:
 	if amount >= 0 and target != "all":
 		body["amount"] = amount
 	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unwait.bind(key))
+
+
+## 여러 자원 판매는 사용자 동작이라 한 번만 보낸다(once: 다시 보내지 않는다).
+func _sell_many_online(list: Array) -> void:
+	if _waiting.has("sell:many"):
+		return
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return
+	_waiting["sell:many"] = true
+	net.send("POST", "/v1/sell", {"items": list}, _on_sold.bind("sell:many"), _unwait.bind("sell:many"), true, true)
 
 
 func _on_sold(data: Dictionary, key: String) -> void:
@@ -1233,6 +1336,41 @@ func _on_merge_failed() -> void:
 	soldiers_changed.emit()
 
 
+## 온라인 훈련(개정 16): op = "train"·"cancel"은 once(다시 보내면 두 번 빠지거나 돌려받을 수 있다), "collect"는 멱등이라 Net 기본 재시도.
+## 답이 올 때까지 _waiting["<op>:<건물>"](train_block = "waiting", 건물 창이 버튼을 끈다).
+func _train_online(op: String, building_id: String, body: Dictionary, once: bool) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var key := op + ":" + building_id
+	_waiting[key] = true
+	net.send("POST", "/v1/soldiers/" + op, body, _on_trained.bind(key), _on_train_failed.bind(key), true, once)
+	training_changed.emit()
+	return true
+
+
+func _on_trained(data: Dictionary, key: String) -> void:
+	_waiting.erase(key)
+	apply_server(data)
+	var got = data.get("collected")
+	if got is Dictionary and got.get("type") is String and _num(got.get("count")):
+		soldiers_changed.emit()
+		_announce(got.type, int(got.count))
+	if data.get("refund") is Dictionary:
+		notice.emit(CANCEL_TEXT)
+	training_changed.emit()
+
+
+## 거부(409 training·ready_to_collect·not_enough·not_ready·empty, 400)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
+## 수령의 409 empty는 앞선 같은 수령이 이미 반영된 것(응답 유실 뒤 재전송)이라 알리지 않는다.
+func _on_train_failed(key: String) -> void:
+	_waiting.erase(key)
+	if not (key.begins_with("collect:") and net.last_error == "empty"):
+		notice.emit(TRAIN_TEXT.get(net.last_error, TRAIN_FAIL_TEXT))
+	net.refresh()
+	training_changed.emit()
+
+
 func _on_soldiers_deployed(data: Dictionary) -> void:
 	_soldier_deploy_answered()
 	apply_server(data)
@@ -1295,7 +1433,8 @@ func save() -> void:
 	for id in heroes:
 		hs[id] = {"copies": heroes[id], "level": level_of(id), "shards": shards_of(id), "promotion": promotion_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
-		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed}))
+		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
+		"training": train_queues}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -1314,13 +1453,13 @@ func load_save(now: float) -> void:
 	changed.emit()
 	roster_changed.emit()
 	soldiers_changed.emit()
-	produce_due(now)  # 앱이 꺼져 있는 동안 만든 병사(축적 상한까지)
+	training_changed.emit()
 	complete_due(now)  # 앱이 꺼져 있는 동안 끝난 건설
 
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, SAVE_VERSION]:
 		return false
 	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v6: bool = int(data.version) >= 6  # v6: + shards, promotion. 그 전은 옛 별(중복)을 조각으로(copies − 1), 승급 0
@@ -1356,19 +1495,24 @@ func _apply(data) -> bool:
 		if not (bd is Dictionary and bd.get("id") is String and not GameData.building_def(bd.id).is_empty() and _num(bd.get("finish"))):
 			return false
 		bld = {"id": bd.id, "finish": float(bd.finish)}
-	# 병사(개정 13, v5): 병사 건물 생산 시각은 있으면 숫자, 없으면(v4 이하·새 건물) reset()의 지금. 보유·배치는 있으면 {키: 숫자}
-	# (표에 없는 키·0은 버린다), 없으면 빈 것
-	for s in GameData.soldiers():
-		var t = data.last_collect.get(s.building)
-		if t != null and not _num(t):
-			return false
-		lc[s.building] = float(t) if t != null else float(last_collect.get(s.building, 0.0))
+	# 병사(개정 13, v5): 보유·배치는 있으면 {키: 숫자}(표에 없는 키·0은 버린다), 없으면 빈 것. v6 이하의 병사 건물 생산 시각은 읽지 않는다(개정 16)
 	var troops := []
 	for key in ["soldiers", "soldier_deploy"]:
 		var src = data.get(key, {})
 		if not src is Dictionary or not src.values().all(func(v): return _num(v)):
 			return false
 		troops.append(_soldier_dict(src))
+	# 훈련(개정 16, v7): {병사 건물: {count, finish}} — 형이 틀리면 깨진 저장. 표에 없는 건물·0마리는 버린다. 없으면(v6 이하) 빈 대기열
+	var tq := {}
+	var ts = data.get("training", {})
+	if not ts is Dictionary:
+		return false
+	for b in ts:
+		var q = ts[b]
+		if not (q is Dictionary and _num(q.get("count")) and _num(q.get("finish"))):
+			return false
+		if GameData.soldier_of_building(str(b)) != "" and int(q.count) > 0:
+			tq[str(b)] = {"count": int(q.count), "finish": float(q.finish)}
 	# 영웅(개정 10): 없으면(v1, 영웅 전 v2) reset()의 시작 영웅 그대로. 있으면 둘 다 형이 맞아야 한다
 	var hs = data.get("heroes")
 	var ds = data.get("deploy")
@@ -1420,6 +1564,7 @@ func _apply(data) -> bool:
 	deploy = d
 	soldiers = troops[0]
 	soldier_deployed = trim_deploy(troops[1], soldiers)
+	train_queues = tq
 	return true
 
 

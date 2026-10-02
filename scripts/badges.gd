@@ -5,11 +5,14 @@ extends Node2D
 ## 그 건물의 말풍선은 막대 위로 올린다. 자리는 scenery(buildings.gd).sites.
 ## 개정 15: 막대·말풍선은 화면 공간 이름표(world_tags.gd, tags)의 윗변(tags.top) 위에 쌓는다 — 이름표와 한 덩어리로 겹침·병사 대열을 피한다
 ## (덩어리 크기 = stack_size). tags가 없으면 예전처럼 지붕 위 ANCHOR_UP 월드 좌표에.
+## 훈련(개정 16): 병사 건물이 훈련 중이면 건설 막대와 같은 막대 + 남은 시간(h:mm:ss), 끝났으면 병사 피규어 말풍선(자원 말풍선과 같은 8각 면).
+## 같은 건물을 짓는 중이면 건설 막대 위에 쌓는다. 쌓는 순서(아래 → 위): 이름표, 건설 막대, 훈련 막대 또는 말풍선.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const PortraitsScript := preload("res://scripts/portraits.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const FONT :=preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
@@ -33,14 +36,14 @@ var scenery  # 건물(buildings.gd) — 건설 막대 자리(sites). main이 넣
 var tags  # world_tags.gd — 이름표 자리(top). main이 넣는다(없으면 지붕 위 월드 좌표)
 var last_pop := {}  # 마지막 pop 인자(테스트·디버그용): {pos, kind, amount}
 
-var _anchors := {}  # 건물 id → 말풍선 기준 월드 좌표(지붕 위)
+var _anchors := {}  # 자원·병사 건물 id → 말풍선 기준 월드 좌표(지붕 위)
 var _pops: Array = []  # {pos, kind, amount, age}
 var _t := 0.0
 
 
 func _ready() -> void:
-	for r in GameData.resources():
-		var b := Balance.building(r.building)
+	for id in GameData.resources().map(func(r): return r.building) + GameData.soldiers().map(func(x): return x.building):
+		var b := Balance.building(id)
 		var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
 		_anchors[b.id] = center + Vector3(0, TownKit.building(b.id).get_aabb().end.y, 0)
 
@@ -50,12 +53,22 @@ func anchor(building_id: String) -> Vector3:
 	return _anchors[building_id] + Vector3(0, ANCHOR_UP, 0)
 
 
-## 지금 말풍선을 띄울 건물 id들.
+## 지금 자원 말풍선을 띄울 건물 id들.
 func badge_ids(now: float) -> Array:
 	var out := []
 	for id in _anchors:
-		if Economy.show_badge(id, now):
+		if Economy.res_of(id) != "" and Economy.show_badge(id, now):
 			out.append(id)
+	return out
+
+
+## 지금 훈련 중(막대)·완료(병사 말풍선)인 병사 건물 id들 {bars, ready}(개정 16).
+func training_ids() -> Dictionary:
+	var out := {"bars": [], "ready": []}
+	for s in GameData.soldiers():
+		var q := Economy.training(s.building)
+		if q.count > 0:
+			out["ready" if q.ready else "bars"].append(s.building)
 	return out
 
 
@@ -91,19 +104,36 @@ func _draw() -> void:
 		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
 		if view.has_point(tip):
 			_draw_bubble(tip, Economy.res_of(id))
+	var tr := training_ids()
+	for id in tr.bars:
+		var at = _base(id, anchor(id))
+		if at != null:
+			at += Vector2(0, (-BUILD_AT_PX if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
+			if view.has_point(at):
+				_draw_build_bar(at, Economy.train_progress(id), UiKit.clock(maxf(0.0, Economy.training(id).finish - now)))
+	for id in tr.ready:
+		var at = _base(id, anchor(id))
+		if at == null:
+			continue
+		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
+		if view.has_point(tip):
+			_draw_bubble(tip, "", GameData.soldier_of_building(id))
 	for p in _pops:
 		var at := camera.unproject_position(p.pos) + Vector2(0, -POP_RISE_PX * p.age / POP_SEC)
 		_draw_pop(at, p)
 
 
-## tip = 꼬리 끝(건물 쪽). 흰 둥근 말풍선이 그 위에 뜬다.
-func _draw_bubble(tip: Vector2, kind: String) -> void:
+## tip = 꼬리 끝(건물 쪽). 흰 둥근 말풍선이 그 위에 뜬다. 안에는 자원 아이콘(kind) 또는 병종 피규어(soldier — 훈련 완료, 개정 16).
+func _draw_bubble(tip: Vector2, kind: String, soldier := "") -> void:
 	var c := tip + Vector2(0, -BUBBLE_R - 8.0)
 	var tail := PackedVector2Array([tip, c + Vector2(-7, BUBBLE_R - 3), c + Vector2(7, BUBBLE_R - 3)])
 	draw_colored_polygon(tail, UiKit.CREAM)
 	draw_polyline(PackedVector2Array([tail[1], tail[0], tail[2]]), UiKit.OUTLINE, 1.5, true)
 	UiKit.draw_gem(self, c, BUBBLE_R, UiKit.CREAM, 8)  # 8각 면 말풍선
-	IconsScript.draw_icon(self, kind, c, BUBBLE_R * 1.3)
+	if soldier != "":
+		draw_texture_rect(PortraitsScript.portrait("soldier:" + soldier), Rect2(c - Vector2.ONE * BUBBLE_R * 0.95, Vector2.ONE * BUBBLE_R * 1.9), false)
+	else:
+		IconsScript.draw_icon(self, kind, c, BUBBLE_R * 1.3)
 
 
 ## 아이콘 + "+N". 글자는 서서히 사라지고 아이콘은 줄어든다(draw_icon은 투명도를 받지 않는다).
@@ -126,13 +156,16 @@ func _base(tag_id: String, world: Vector3):
 
 
 ## 이름표 tag_id(건물 id, 성문은 "gate:<면>") 위에 쌓을 덩어리 크기 Vector2(최소 폭, 높이) — world_tags가 이름표와 한 덩어리로 놓는다.
-## 짓는 중이면 막대 + 남은 시간, 말풍선이 뜨면 그 위에 말풍선.
+## 짓는 중이면 막대 + 남은 시간, 그 위에 훈련 막대(개정 16), 말풍선(자원·훈련 완료)이 뜨면 맨 위에 말풍선.
 func stack_size(tag_id: String, now: float) -> Vector2:
 	var id := tag_id.get_slice(":", 0)
 	var out := Vector2.ZERO
 	if Economy.is_building(id):
 		out = Vector2(BUILD_W, BUILD_LIFT_PX)
-	if _anchors.has(id) and Economy.show_badge(id, now):
+	var q := Economy.training(id)
+	if q.count > 0 and not q.ready:
+		out = Vector2(BUILD_W, out.y + BUILD_LIFT_PX)
+	if (Economy.res_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready):
 		out = Vector2(maxf(out.x, BUBBLE_R * 2.0 + 4.0), out.y + BUBBLE_BLOCK)
 	return out
 

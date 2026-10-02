@@ -1,10 +1,12 @@
 extends "res://scripts/ui_window.gd"
 ## [병사] 탭 시트(개정 13 §6·§7.1): 위 "배치 d / 인구 (인구)", 보유 병종·티어 행(티어 높은 순, 같은 티어는 자동 배치 순서 보병 → 기병 → 궁병) —
-## 병종 그림(unit_icon: figure + 오른위 갈매기 티어)·"보병 T2"·보유 N·[−] d [+]([+]는 보유·인구 상한에서, [−]는 0에서 비활성).
+## 병종 그림(unit_icon: figure + 오른위 갈매기 티어)·"보병 T2"·보유 N·[합성 5→1]·[−] d [+]([+]는 보유·인구 상한에서, [−]는 0에서 비활성).
+## [합성](사용자 규칙 2026-10-02 — 병사 건물 창에서 옮겼다): 그 병종·티어 soldier_merge_count마리 → 한 티어 위 1마리(Economy.merge_soldiers).
+##   못 하면 비활성 + 이름 아래 빨간 이유(Economy.merge_block). 반영되면(윗 티어 수가 늘면) 그 행 그림이 튀어 오르고 보유가 초록으로 반짝이며
+##   알림 "보병 T2 합성 완료".
 ## [자동 배치](Economy.auto_deploy — 적용 안 함)·[모두 해제]·[적용](편집이 지금 배치와 같으면 비활성) → Economy.set_soldier_deploy.
-## 아래 병사 건물 생산 상태 3줄 "보병 막사 Lv 3 · 다음 2:41:10"(열려 있는 동안 매 프레임 글자만 고친다).
 ## 편집(work)은 열 때 지금 배치로 시작하고, 합성으로 보유가 줄면 보유로 자른다. 영웅 시트처럼 칩 줄 아래 ~ 탭 바 위를 채우고 뒤 입력을 막는다.
-## unit_icon·figure는 건물 창(병사 건물 합성 칸)도 쓴다.
+## 훈련 상태는 이 시트에 없다(건물 창·월드 막대·말풍선이 보여 준다). unit_icon·figure는 건물 창 훈련 칸도 쓴다.
 
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
@@ -18,17 +20,20 @@ const ROW_ICON_PX := 72.0
 const CHEVRON := Color(1.0, 0.84, 0.3)  # hp_bars 갈매기와 같은 금색 + 진한 테두리
 const CHEVRON_EDGE := Color(0.12, 0.10, 0.14)
 const ALL := 1 << 30  # 인구 무제한(행 순서 = 자동 배치 순서)
+const GREEN := Color(0.13, 0.58, 0.24)
+const RED := Color(0.78, 0.22, 0.18)
 
 var work := {}  # 편집 중인 배치 "병종:티어" → 수(> 0만)
-var rows := {}  # 키 → {box, count, have, minus, plus}(표시 순서)
+var rows := {}  # 키 → {box, icon, count, have, reason, merge, minus, plus}(표시 순서)
 var summary_label: Label
 var empty_label: Label
 var auto_button: Button
 var clear_button: Button
 var apply_button: Button
-var prod_labels := {}  # 병사 건물 id → 생산 상태 Label
+var celebrations := 0  # 합성 성공 연출 횟수(테스트용)
 
 var _rows_box: VBoxContainer
+var _merge_watch := []  # [윗 티어 키, 누를 때 수] — 그 수가 늘면 합성 성공 연출
 
 
 func _ready() -> void:
@@ -60,10 +65,6 @@ func _ready() -> void:
 	for b in [auto_button, clear_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		bar.add_child(b)
-	for s in GameData.soldiers():
-		var l := _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
-		content.add_child(l)
-		prod_labels[s.building] = l
 	_fit()
 	Economy.soldiers_changed.connect(_refresh)
 	Economy.changed.connect(_refresh)  # 인구(민가 레벨)
@@ -75,12 +76,8 @@ func _fit() -> void:
 
 func _on_open() -> void:
 	work = Economy.soldier_deploy()
+	_merge_watch = []
 	_refresh()
-
-
-func _process(_delta: float) -> void:
-	if visible:
-		_tick_production()
 
 
 ## 행 key의 배치 수를 d만큼 — 0 아래, 보유 위, 인구 위([+]일 때)로는 가지 않는다(버튼 비활성과 같은 규칙).
@@ -93,6 +90,15 @@ func step(key: String, d: int) -> void:
 	else:
 		work[key] = n
 	_refresh()
+
+
+## 행 key(병종·티어)의 [합성]. 윗 티어 수가 늘면(오프라인 곧바로, 온라인 응답 때) _refresh가 연출한다.
+func merge(key: String) -> void:
+	var p := EconomyScript.parse_soldier_key(key)
+	var up := EconomyScript.soldier_key(p[0], p[1] + 1)
+	_merge_watch = [up, int(Economy.soldiers.get(up, 0))]
+	if not Economy.merge_soldiers(p[0], p[1]):
+		_merge_watch = []
 
 
 func apply() -> void:
@@ -128,15 +134,39 @@ func _refresh() -> void:
 	for k in rows:
 		var n := int(work.get(k, 0))
 		var r: Dictionary = rows[k]
+		var p := EconomyScript.parse_soldier_key(k)
+		var why := Economy.merge_block(p[0], p[1])
 		r.count.text = str(n)
 		r.have.text = "보유 %d" % int(owned[k])
 		r.minus.disabled = n == 0
 		r.plus.disabled = n >= int(owned[k]) or total >= pop
+		r.merge.disabled = why != ""
+		r.reason.text = EconomyScript.SOLDIER_TEXT.get(why, "")
+		r.reason.visible = why != ""
 	empty_label.visible = rows.is_empty()
 	apply_button.disabled = work == Economy.soldier_deploy() or Economy.soldier_deploy_block(work) != ""
 	clear_button.disabled = work.is_empty()
 	auto_button.disabled = work == Economy.auto_deploy()
-	_tick_production()
+	if not _merge_watch.is_empty() and int(owned.get(_merge_watch[0], 0)) > _merge_watch[1] and rows.has(_merge_watch[0]):
+		var up: String = _merge_watch[0]
+		_merge_watch = []
+		_celebrate(up)
+
+
+## 합성 성공 연출: 새 티어 행의 그림이 튀어 오르고 "보유 N"이 초록으로 반짝인다 + 알림 "보병 T2 합성 완료".
+func _celebrate(key: String) -> void:
+	celebrations += 1
+	var r: Dictionary = rows[key]
+	var icon: Control = r.icon
+	icon.pivot_offset = icon.custom_minimum_size / 2.0
+	var tw := icon.create_tween()
+	tw.tween_property(icon, "scale", Vector2.ONE * 1.35, 0.12)
+	tw.tween_property(icon, "scale", Vector2.ONE, 0.18)
+	var have: Label = r.have
+	have.add_theme_color_override("font_color", GREEN)
+	have.create_tween().tween_property(have, "theme_override_colors/font_color", HudScript.INK.lightened(0.3), 0.6)
+	var p := EconomyScript.parse_soldier_key(key)
+	Economy.notice.emit("%s T%d 합성 완료" % [GameData.soldier(p[0]).name, p[1]])
 
 
 func _rebuild_rows(keys: Array) -> void:
@@ -148,14 +178,22 @@ func _rebuild_rows(keys: Array) -> void:
 		var p := EconomyScript.parse_soldier_key(k)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		row.add_child(unit_icon(p[0], p[1], ROW_ICON_PX))
+		var icon := unit_icon(p[0], p[1], ROW_ICON_PX)
+		row.add_child(icon)
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.alignment = BoxContainer.ALIGNMENT_CENTER
 		info.add_child(_label("%s T%d" % [GameData.soldier(p[0]).name, p[1]], 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 		var have := _label("", 22, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_LEFT)
 		info.add_child(have)
+		var reason := _label("", 18, RED, HORIZONTAL_ALIGNMENT_LEFT)
+		info.add_child(reason)
 		row.add_child(info)
+		var mg := _button("합성 %d→1" % int(GameData.config_num("soldier_merge_count")), HudScript.ACCENT, 22)
+		mg.custom_minimum_size = Vector2(124, 56)
+		mg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mg.pressed.connect(merge.bind(k))
+		row.add_child(mg)
 		var minus := _step_button("−", k, -1)
 		var count := _label("", 30)
 		count.custom_minimum_size = Vector2(56, 0)
@@ -164,7 +202,7 @@ func _rebuild_rows(keys: Array) -> void:
 		for c in [minus, count, plus]:
 			row.add_child(c)
 		_rows_box.add_child(row)
-		rows[k] = {"box": row, "count": count, "have": have, "minus": minus, "plus": plus}
+		rows[k] = {"box": row, "icon": icon, "count": count, "have": have, "reason": reason, "merge": mg, "minus": minus, "plus": plus}
 
 
 func _step_button(text: String, key: String, d: int) -> Button:
@@ -175,20 +213,7 @@ func _step_button(text: String, key: String, d: int) -> Button:
 	return b
 
 
-func _tick_production() -> void:
-	var now := Economy.time_now()
-	for b in prod_labels:
-		prod_labels[b].text = production_line(b, now)
-
-
-## "보병 막사 Lv 3 · 다음 2:41:10". 남은 0초는 "곧"(온라인은 서버가 만들 때까지 0에 머문다).
-func production_line(building_id: String, now: float) -> String:
-	var p := Economy.soldier_production(building_id, now)
-	var left: float = p.next_in_sec
-	return "%s Lv %d · 다음 %s" % [GameData.building_def(building_id).name, p.level, UiKit.clock(left) if left > 0.0 else "곧"]
-
-
-# --- 병종 그림(시트 행·건물 창 합성 칸) ---
+# --- 병종 그림(시트 행·건물 창 훈련 칸·월드 병사 말풍선) ---
 
 ## 병종 그림 텍스처 = 병사 피규어(Portraits "soldier:<병종>" — 월드 병사와 같은 몸). 렌더 전에는 자리표시를 주고 렌더를 요청한다.
 ## 병사 행·칸은 모두 이것으로 그린다(렌더가 끝나면 portrait_ready에 칸을 다시 그린다 — unit_icon).

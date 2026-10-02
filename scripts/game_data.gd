@@ -55,8 +55,10 @@ const POP_KEYS := ["pop_base", "pop_per_house"]
 const SOLDIER_STR_COLS := ["id", "name", "building", "model"]
 const SOLDIER_NUM_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]  # 1티어 기준
 const SOLDIER_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 크다(나머지는 0 이상)
-const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_prod_sec", "soldier_prod_level_factor", "soldier_merge_count"]
-const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count"]  # 1 이상 정수(나머지는 0보다 크다)
+const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_prod_sec", "soldier_prod_level_factor", "soldier_merge_count",
+	"train_batch_base", "train_batch_per_level"]
+const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count", "train_batch_base"]  # 1 이상 정수(나머지는 0보다 크다)
+const SOLDIER_INT0_KEYS := ["train_batch_per_level"]  # 0 이상 정수(개정 16)
 const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 단계 표 "레벨:값|…"(hero_slots·Balance.INTERIOR_TILES를 대신)
 const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
 const KEEP_SLOT_STEP := 4  # 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 서버 seed.SLOT_STEP
@@ -300,9 +302,38 @@ static func soldier_of_building(building_id: String) -> String:
 	return ""
 
 
-## 한 마리 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 서버와 같은 값). Lv 1 3시간, Lv 10 약 1시간 54분.
+## 1마리 훈련 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 서버와 같은 값). Lv 1 3시간, Lv 10 약 1시간 54분.
 static func soldier_unit_sec(level: int) -> float:
 	return _grown(config_num("soldier_prod_sec"), config_num("soldier_prod_level_factor"), maxi(level, 1) - 1)
+
+
+# --- 훈련(개정 16 §1). 서버 rules.parseTrainCost·trainMax와 같은 식 ---
+
+## 1마리 비용 "자원:수|…"(자원 = BUILD_RES, 수 0 이상 정수, 겹치면 안 된다) → {자원: 수}. "0"이면 무료 {}. 틀리면 null.
+static func parse_train_cost(s: String):
+	if s.strip_edges() == "0":
+		return {}
+	var out := {}
+	for part in s.split("|"):
+		var kv := part.split(":")
+		var n := kv[1].strip_edges() if kv.size() == 2 else ""
+		var r := kv[0].strip_edges()
+		if kv.size() != 2 or not r in BUILD_RES or out.has(r) or n.is_empty() or not n.is_valid_int() or n.begins_with("-") or n.begins_with("+"):
+			return null
+		out[r] = n.to_int()
+	return out
+
+
+## 병종 type 1마리 비용 {자원: 수}(설정이 틀리면 {} — 검증이 막는다).
+static func train_unit_cost(type: String) -> Dictionary:
+	_ensure()
+	var c = parse_train_cost(String(_config.get("train_cost_" + type, "")))
+	return c if c is Dictionary else {}
+
+
+## 묶음 상한 = train_batch_base + train_batch_per_level × (L − 1).
+static func train_max(level: int) -> int:
+	return int(config_num("train_batch_base")) + int(config_num("train_batch_per_level")) * (maxi(level, 1) - 1)
 
 
 ## 티어 t 능력치 {hp, atk, range, atk_interval, speed, aggro}: HP·공격 × soldier_tier_mult^(t−1), 나머지는 같다. 모르는 병종이면 {}.
@@ -731,8 +762,8 @@ static func _check_keep_tiers(slots: Array, interior: Array) -> void:
 
 
 ## 병종 표·설정(개정 13, 서버 seed.checkSoldiers와 같은 규칙): 건물은 건물 표에 있고 병종마다 다르다, hp·range·atk_interval·speed > 0,
-## atk·aggro ≥ 0. 최대 티어·합성 수는 1 이상 정수, 티어 배율·한 마리 시간·레벨 계수는 0보다 크다. 앱이 그릴 수 없는 병종(Art.SOLDIERS에
-## 없는 id, 없는 모델)도 거부한다.
+## atk·aggro ≥ 0. 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 티어 배율·한 마리 시간·레벨 계수는 0보다 크다.
+## 훈련 비용(개정 16): 병종마다 train_cost_<병종>이 parse_train_cost로 읽힌다. 앱이 그릴 수 없는 병종(Art.SOLDIERS에 없는 id, 없는 모델)도 거부한다.
 static func _check_soldiers(t: Dictionary) -> void:
 	var buildings := {}
 	for b in t.buildings:
@@ -749,13 +780,18 @@ static func _check_soldiers(t: Dictionary) -> void:
 				_err("soldiers", s._line, c, "must be %s: %s" % ["greater than 0" if c in SOLDIER_POSITIVE_COLS else "0 or more", s[c]])
 		if not Art.SOLDIERS.has(s.id) or not Art.HERO_MODELS.has(s.model):
 			_err("soldiers", s._line, "id", "soldier '%s' (model %s) cannot be drawn by this app" % [s.id, s.model])
+		var cost_key: String = "train_cost_" + s.id  # 개정 16: 병종마다 1마리 훈련 비용
+		if parse_train_cost(String(t.config.get(cost_key, ""))) == null:
+			_err("config", 0, cost_key, "must be 'res:amount|…' (res wood/stone/food, amount a non-negative integer) or 0: '%s'" % t.config.get(cost_key, ""))
 	for k in SOLDIER_NUM_KEYS:
 		var v := String(t.config.get(k, ""))
 		var int_key: bool = k in SOLDIER_INT_KEYS
+		var int0: bool = k in SOLDIER_INT0_KEYS
+		var f := v.to_float()
 		if not v.is_valid_float():
 			_err("config", 0, k, "missing or not a number")
-		elif not ((v.to_float() >= 1.0 and v.to_float() == floorf(v.to_float())) if int_key else v.to_float() > 0.0):
-			_err("config", 0, k, "must be %s: '%s'" % ["an integer of at least 1" if int_key else "greater than 0", v])
+		elif not ((f >= 1.0 and f == floorf(f)) if int_key else ((f >= 0.0 and f == floorf(f)) if int0 else f > 0.0)):
+			_err("config", 0, k, "must be %s: '%s'" % ["an integer of at least 1" if int_key else ("a non-negative integer" if int0 else "greater than 0"), v])
 
 
 ## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.

@@ -285,13 +285,14 @@ func _run() -> void:
 	var expect := Economy.sell_value("wood", 200, rate)
 	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("다음 시세까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
-	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [판매]로 전량
+	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [선택 판매]로 전량
 	await _tap(panel.qty_max["wood"].get_global_rect().get_center())
-	await _tap(panel.qty_confirms["wood"].get_global_rect().get_center())
+	await _tap(panel.sell_selected_button.get_global_rect().get_center())
 	_check(Economy.res["wood"] == 0 and Economy.gold_tenths == 105 + expect * 10 and Economy.gold == 10 + expect and Economy.res["stone"] == 7 and panel.is_open(),
 		"(p) [sell] on wood zeroes wood and adds floor(200 x price x wood's own rate) whole gold (x10 tenths, 0.5 kept); others stay", "wood=%d tenths=%d expect=%d" % [Economy.res["wood"], Economy.gold_tenths, 105 + expect * 10])
 	_check(panel.sell_buttons["wood"].disabled and not panel.sell_buttons["stone"].disabled, "(p) sell button is disabled at 0 holdings only", "")
 	await _qty_sell_checks(panel)
+	await _multi_sell_checks(panel)
 	await _tap(panel.sell_all_button.get_global_rect().get_center())
 	_check(Economy.res["stone"] == 0 and Economy.res["food"] == 0 and panel.sell_all_button.disabled, "(p) [sell all] clears everything", "stone=%d" % Economy.res["stone"])
 
@@ -949,8 +950,13 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	print("INPUT INFO: keep window (Lv 1, can upgrade) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
 	_check(bwin.building_id == "keep" and rows == ["✓ 성문 Lv 1 필요", "✓ 보병 막사 Lv 1 필요"] and bwin.reqs.get_child(0).get_theme_color("font_color") == bwin.GREEN
 		and not bwin.upgrade_button.disabled and not bwin.reason_label.visible and bwin.time_label.text == "건설 시간 01:00"
-		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child(2).get_child_count() == 1,
-		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200 (unchanged slots show no arrow), [업그레이드] on, 01:00", "reqs=%s" % [rows])
+		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child_count() == 2,
+		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 01:00", "reqs=%s" % [rows])
+	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
+	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 4).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "24칸"]]
+		and names.call(5) == ["건물 최대", "성 HP"] and names.call(9).size() == 4 and names.call(30) == ["건물 최대", "성 HP"],
+		"(B) keep slot/area lines only when the next level changes them: Lv 1 none, Lv 4 → 5 영웅 슬롯 4 → 8 and 성 넓이 20칸 → 24칸, Lv 5 none, Lv 9 → 10 both, max level none",
+		"Lv1=%s Lv4=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 4), names.call(30)])
 	await _guard_wait()
 	await _tap(bwin.upgrade_button.get_global_rect().get_center())
 	var keep_box: AABB = scenery.sites.keep[0]
@@ -1010,28 +1016,32 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	print("INPUT INFO: tabs %s (720x1280 logical)" % [tabs.buttons.values().map(func(b): return b.get_global_rect())])
 
 
-## (S) 개정 13 §5·§6 병사 UI(오프라인): [병사] 시트 — 행 순서(강한 순)·[+]·[−]·보유 상한·인구 상한·[적용](방치 모드라 곧바로 성채 앞)·
-##     [모두 해제]·[자동 배치]·생산 3줄 매초·시트 안 탭/끌기는 뒤로 안 샌다. 보병 막사 길게 누르기 → 1마리 시간·다음 보병까지·
-##     티어별 보유·[합성 5→1](불가 이유)·성공 연출·배치 자르기·최대 티어.
+## (S) 개정 13 §6 병사 UI(오프라인) + 사용자 규칙(2026-10-02): [병사] 시트 — 행 순서(강한 순)·[+]·[−]·보유 상한·인구 상한·[적용](방치 모드라
+##     곧바로 성채 앞)·[모두 해제]·[자동 배치]·아래 건물 상태 줄 없음·행 [합성 5→1](불가 이유)·성공 연출·배치 자르기·최대 티어·시트 안 탭/끌기는
+##     뒤로 안 샌다. 보병 막사 길게 누르기 → 1마리 시간·훈련 칸(합성 칸 없음). 훈련(개정 16 §3): 수량 [+]·[최대]·입력 → 총비용·총시간 →
+##     [훈련](자원↓, 진행 막대·월드 막대) → 시간 당기기(테스트 훅) → 완료 칸·병사 말풍선 → 건물 탭 수령(보유↑, 알림) → [취소] 50% 환불.
 func _soldiers_ui(tabs, hud) -> void:
 	var sw = tabs.windows.soldier
 	var bwin = _building_win()
+	var badges = _child(preload("res://scripts/badges.gd"))
 	var rig = _camera.get_parent()
 	_picker._select(null)
 	Economy.levels["houses"] = 1  # 인구 6
 	Economy.soldiers = {"infantry:1": 5, "archer:1": 3, "cavalry:2": 1, "infantry:2": 4}
 	Economy.soldier_deployed = {}
-	Economy.last_collect["barracks"] = Economy.time_now() - 30.0
 	Economy.soldiers_changed.emit()
 	await _tap(_tab_px(tabs, "soldier"))
 	await _guard_wait()
-	print("INPUT INFO: soldier sheet %s, [+] rows %s, [자동 배치] %s, [적용] %s (720x1280 logical)" % [sw.dialog.get_global_rect(),
-		sw.rows.values().map(func(r): return r.plus.get_global_rect()), sw.auto_button.get_global_rect(), sw.apply_button.get_global_rect()])
+	print("INPUT INFO: soldier sheet %s, [+] rows %s, [합성] rows %s, [자동 배치] %s, [적용] %s (720x1280 logical)" % [sw.dialog.get_global_rect(),
+		sw.rows.values().map(func(r): return r.plus.get_global_rect()), sw.rows.values().map(func(r): return r.merge.get_global_rect()),
+		sw.auto_button.get_global_rect(), sw.apply_button.get_global_rect()])
 	var keys: Array = sw.rows.keys()
 	_check(sw.is_open() and GameState.mode == GameState.Mode.IDLE and keys == ["infantry:2", "cavalry:2", "infantry:1", "archer:1"] and sw.summary_label.text == "배치 0 / 6 (인구)"
 		and sw.rows["archer:1"].have.text == "보유 3" and sw.rows["infantry:1"].minus.disabled and sw.apply_button.disabled and sw.clear_button.disabled and not sw.empty_label.visible,
 		"(S) [병사] sheet: rows strongest first (tier, then 보병 -> 기병 -> 궁병), 배치 0 / 6 (인구), 보유 N; [−]·[모두 해제]·[적용] off",
 		"keys=%s summary=%s" % [keys, sw.summary_label.text])
+	var status: Array = sw.content.find_children("*", "Label", true, false).map(func(l): return l.text).filter(func(t): return t.contains("막사") or t.contains("훈련") or t.contains("다음 "))
+	_check(status.is_empty() and not "prod_labels" in sw, "(S) the sheet has no building status lines at the bottom (no '보병 막사 Lv 1 · …', no training lines)", "lines=%s" % [status])
 	var inf = sw.rows["infantry:1"]
 	await _tap(_center(inf.plus))
 	await _tap(_center(inf.plus))
@@ -1066,12 +1076,24 @@ func _soldiers_ui(tabs, hud) -> void:
 	await _frames(2)
 	_check(Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1, "infantry:1": 1} and _main.soldiers.size() == 6, "(S) and [적용] puts that line-up in front of the keep",
 		"deployed=%s n=%d" % [Economy.soldier_deployed, _main.soldiers.size()])
-	var line0: String = sw.prod_labels.barracks.text
-	_check(sw.prod_labels.size() == 3 and line0.begins_with("보병 막사 Lv 1 · 다음 2:59:") and sw.prod_labels.archery.text.begins_with("궁병 훈련소 Lv 1 · 다음 ")
-		and sw.prod_labels.stable.text.begins_with("기병 마구간 Lv 1 · 다음 "), "(S) three production lines: '보병 막사 Lv 1 · 다음 2:59:..'",
-		"lines=%s" % [sw.prod_labels.values().map(func(l): return l.text)])
-	await get_tree().create_timer(1.1).timeout
-	_check(sw.prod_labels.barracks.text != line0, "(S) the production countdown ticks every second", "%s -> %s" % [line0, sw.prod_labels.barracks.text])
+	# 합성은 시트 행에서(사용자 규칙): 보병 T1 5 → [합성 5→1] 켜짐, 보병 T2 4 → 꺼짐 + 이유
+	var r1 = sw.rows["infantry:1"]
+	var r2 = sw.rows["infantry:2"]
+	_check(r1.merge.text == "합성 5→1" and not r1.merge.disabled and not r1.reason.visible and r2.merge.disabled and r2.reason.visible and r2.reason.text == Economy.SOLDIER_TEXT.not_enough
+		and sw.rows["archer:1"].merge.disabled, "(S) each row has [합성 5→1]: 보병 T1 (5) on; 보병 T2 (4) and 궁병 T1 (3) off with '병사가 부족합니다'",
+		"T1=%s T2=%s why=%s" % [r1.merge.disabled, r2.merge.disabled, r2.reason.text])
+	await _tap(_center(r1.merge))
+	await _frames(2)
+	_check(Economy.soldiers == {"infantry:2": 5, "archer:1": 3, "cavalry:2": 1} and Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1}
+		and sw.celebrations == 1 and not sw.rows.has("infantry:1") and not sw.rows["infantry:2"].merge.disabled and sw.rows["infantry:2"].have.text == "보유 5"
+		and sw.work == {"infantry:2": 4, "cavalry:2": 1} and _main.soldiers.size() == 5 and hud._toast.text == "보병 T2 합성 완료",
+		"(S) [합성] on the 보병 T1 row: 5 → T2 +1, the T1 row goes, the deployed T1 is trimmed (front line 5), T2 now mergeable; success pop + notice '보병 T2 합성 완료'",
+		"owned=%s deployed=%s celebrations=%d toast=%s" % [Economy.soldiers, Economy.soldier_deployed, sw.celebrations, hud._toast.text])
+	Economy.soldiers["infantry:5"] = 5
+	Economy.soldiers_changed.emit()
+	await _frames(1)
+	_check(sw.rows.has("infantry:5") and sw.rows["infantry:5"].merge.disabled and sw.rows["infantry:5"].reason.text == Economy.SOLDIER_TEXT.max_tier,
+		"(S) the top tier (T5) row shows its count but [합성] is off: '최대 티어입니다'", "rows=%s" % [sw.rows.keys()])
 	# 시트 안 탭·끌기는 전장으로 새지 않는다(영웅 이동·카메라 이동 없음)
 	var hero = get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())[0]
 	var state := [hero.side, hero.post, hero.free_pos]
@@ -1090,50 +1112,93 @@ func _soldiers_ui(tabs, hud) -> void:
 	await _tap(_tab_px(tabs, "soldier"))
 	_check(not sw.is_open() and tabs.selected == "", "(S) [병사] again closes the sheet", "")
 
-	# 보병 막사 지붕 길게 누르기 → 건물 창(부지 중심은 바로 앞 주점 상자에 가린다): 1마리 3:00:00 → 2:51:00, 다음 보병까지,
-	# 티어 행 T1(5 — [합성] 켜짐)·T2(4 — 부족 이유), T3 이상 숨김
+	# 보병 막사 지붕 길게 누르기 → 건물 창(부지 중심은 바로 앞 주점 상자에 가린다): 1마리 3:00:00 → 2:51:00, 훈련 칸(비었을 때), 합성 칸 없음
+	Economy.soldiers = {}
+	Economy.soldier_deployed = {}
+	Economy.soldiers_changed.emit()
+	Economy.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	Economy.changed.emit()
 	var bp := _roof_px("barracks")
 	_check(_picker._pick(bp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(bp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "barracks"
 		and not _open_hero(bp), "(S) precondition: the barracks roof point hits the barracks body", "px=%s" % bp)
 	var held: String = await _long_press(bp, bwin)
 	await _frames(1)
-	var rows: Array = bwin.merge_rows
 	var eff: HBoxContainer = bwin.effects.get_child(0)
-	print("INPUT INFO: barracks window dialog %s, [합성] T1 %s, T2 %s (720x1280 logical)" % [bwin.dialog.get_global_rect(), rows[0].button.get_global_rect(), rows[1].button.get_global_rect()])
+	var q = bwin.qty
+	print("INPUT INFO: barracks window dialog %s, qty [+] %s, [최대] %s, [훈련] %s (720x1280 logical)" % [bwin.dialog.get_global_rect(), q.plus.get_global_rect(),
+		q.max_button.get_global_rect(), bwin.train_button.get_global_rect()])
 	_check(held == "barracks" and bwin.title_label.text == "보병 막사 Lv 1" and eff.get_child(0).text == "1마리 3:00:00" and eff.get_child(1).text == "→ 2:51:00"
-		and bwin.soldier_box.visible and bwin.next_label.text.begins_with("다음 보병까지 2:5"),
-		"(S) a long press on the barracks opens its window: 1마리 3:00:00 → 2:51:00, '다음 보병까지 2:5x:xx'",
-		"held=%s title=%s eff=%s next=%s" % [held, bwin.title_label.text, [eff.get_child(0).text, eff.get_child(1).text], bwin.next_label.text])
-	_check(rows.size() == 5 and rows[0].box.visible and rows[1].box.visible and not rows[2].box.visible and rows[0].have.text == "T1 보유 5" and not rows[0].button.disabled
-		and rows[0].button.text == "합성 5→1" and rows[0].reason.text == "" and rows[1].have.text == "T2 보유 4" and rows[1].button.disabled
-		and rows[1].reason.text == Economy.SOLDIER_TEXT.not_enough, "(S) tier rows T1..T2: T1 5 -> [합성 5→1] on; T2 4 -> off with '병사가 부족합니다'; T3+ hidden",
-		"have=%s off=%s why=%s" % [rows.map(func(r): return r.have.text), rows.map(func(r): return r.button.disabled), rows.map(func(r): return r.reason.text)])
+		and bwin.train_box.visible and bwin.empty_box.visible and not bwin.run_box.visible and not bwin.done_box.visible and bwin.unit_label.text == "1마리 3:00:00"
+		and bwin._train_type == "infantry" and bwin._unit_icon.is_visible_in_tree() and not "merge_rows" in bwin,
+		"(S) a long press on the barracks opens its window: 1마리 3:00:00 → 2:51:00 and the empty training section (infantry figure, '1마리 3:00:00'); no merge section",
+		"held=%s title=%s unit=%s" % [held, bwin.title_label.text, bwin.unit_label.text])
+	_check(q.value == 1 and q.min_value == 1 and q.max_value == 10 and bwin.train_cost_labels.food.text == "30" and bwin.train_cost_labels.wood.text == "20"
+		and not bwin.train_cost_labels.stone.visible and bwin.train_time_label.text == "훈련 시간 3:00:00" and not bwin.train_button.disabled and not bwin.train_reason.visible,
+		"(S) the quantity starts at 1 of 1..10 (batch cap): cost 30 food / 20 wood, 훈련 시간 3:00:00, [훈련] on",
+		"qty=%d..%d=%d food=%s wood=%s time=%s" % [q.min_value, q.max_value, q.value, bwin.train_cost_labels.food.text, bwin.train_cost_labels.wood.text, bwin.train_time_label.text])
 	await _guard_wait()
-	await _tap(_center(rows[0].button))
+	await _tap(_center(q.plus))
+	await _tap(_center(q.plus))
+	_check(q.value == 3 and q.edit.text == "3" and bwin.train_cost_labels.food.text == "90" and bwin.train_time_label.text == "훈련 시간 9:00:00",
+		"(S) [+] twice: 3 — cost and time follow (90 food, 9:00:00)", "qty=%d food=%s time=%s" % [q.value, bwin.train_cost_labels.food.text, bwin.train_time_label.text])
+	await _tap(_center(q.max_button))
+	_check(q.value == 10, "(S) [최대] picks the batch cap (10)", "qty=%d" % q.value)
+	q.edit.text = "8"
+	q.edit.text_changed.emit("8")
+	await _frames(1)
+	_check(q.value == 8 and bwin.train_cost_labels.food.text == "240" and bwin.train_cost_labels.wood.text == "160" and bwin.train_time_label.text == "훈련 시간 24:00:00",
+		"(S) typing 8: cost 240 food / 160 wood, 훈련 시간 24:00:00", "qty=%d food=%s" % [q.value, bwin.train_cost_labels.food.text])
+	await _tap(_center(bwin.train_button))
+	await _frames(1)
+	var tq := Economy.training("barracks")
+	_check(Economy.res == {"wood": 840, "stone": 1000, "food": 760} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
+		and (bwin.run_label.text == "보병 ×8 · 남은 24:00:00" or bwin.run_label.text.begins_with("보병 ×8 · 남은 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
+		and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUILD_LIFT_PX,
+		"(S) [훈련]: resources go down at once (food 240 / wood 160), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
+		"res=%s q=%s run=%s" % [Economy.res, tq, bwin.run_label.text])
+	var errors0: int = _errors.count
+	await _frames(2)  # 월드 막대·이름표 배치가 그려진다
+	_check(_errors.count == errors0, "(S) the training bar draws over the barracks tag", "errors=%d" % (_errors.count - errors0))
+	Economy.finish_training_now("barracks")  # 테스트 훅: 시간 당기기
 	await _frames(2)
-	_check(Economy.soldiers == {"infantry:2": 5, "archer:1": 3, "cavalry:2": 1} and Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1}
-		and bwin.celebrations == 1 and rows[0].have.text == "T1 보유 0" and rows[0].button.disabled and rows[1].have.text == "T2 보유 5" and not rows[1].button.disabled
-		and _main.soldiers.size() == 5 and hud._toast.text == "보병 T2 합성 완료",
-		"(S) [합성] T1: 5 → T2 +1, the deployed T1 is trimmed (front line 5), T2 now mergeable; success pop + notice '보병 T2 합성 완료'",
-		"owned=%s deployed=%s celebrations=%d toast=%s" % [Economy.soldiers, Economy.soldier_deployed, bwin.celebrations, hud._toast.text])
-	Economy.soldiers["infantry:5"] = 5
-	Economy.soldiers_changed.emit()
-	_check(rows.all(func(r): return r.box.visible) and rows[4].button.disabled and rows[4].reason.text == Economy.SOLDIER_TEXT.max_tier,
-		"(S) the top tier (T5) row shows its count but [합성] is off: '최대 티어입니다'", "why=%s" % rows[4].reason.text)
+	_check(Economy.training("barracks").ready and bwin.done_box.visible and not bwin.run_box.visible and bwin.done_label.text == "보병 ×8 훈련 완료" and not bwin.collect_button.disabled
+		and badges.training_ids().ready == ["barracks"] and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUBBLE_BLOCK and _errors.count == errors0,
+		"(S) pulled forward: the window shows '보병 ×8 훈련 완료' + [수령], a soldier bubble floats over the barracks", "q=%s done=%s" % [Economy.training("barracks"), bwin.done_label.text])
+	bwin.close()
+	await _tap(bp)  # 수령할 게 있으면 탭 = 수령(창은 안 열린다)
+	_check(Economy.soldiers == {"infantry:1": 8} and Economy.training("barracks").count == 0 and not bwin.is_open() and hud._toast.text == "보병 +8" and badges.training_ids().ready.is_empty(),
+		"(S) a tap on the barracks collects: 보병 +8 owned, the bubble goes, notice '보병 +8', no window", "owned=%s open=%s toast=%s" % [Economy.soldiers, bwin.is_open(), hud._toast.text])
+	await _tap(bp)  # 수령할 게 없으면 건물 창
+	await _guard_wait()
+	_check(bwin.is_open() and bwin.building_id == "barracks" and bwin.empty_box.visible, "(S) with nothing to collect the tap opens the window again (empty section)", "open=%s" % bwin.is_open())
+	q.set_value(3)
+	await _tap(_center(bwin.train_button))
+	await _frames(1)
+	_check(Economy.res == {"wood": 780, "stone": 1000, "food": 670} and bwin.run_box.visible and bwin.cancel_button.text == "취소(50% 환불)",
+		"(S) a 3-soldier batch (food 90 / wood 60) runs with [취소(50% 환불)]", "res=%s" % [Economy.res])
+	await _tap(_center(bwin.cancel_button))
+	await _frames(1)
+	_check(Economy.res == {"wood": 810, "stone": 1000, "food": 715} and Economy.training("barracks").count == 0 and bwin.empty_box.visible and hud._toast.text == Economy.CANCEL_TEXT
+		and Economy.soldiers == {"infantry:1": 8}, "(S) [취소] refunds half (45 food / 30 wood) and empties the queue",
+		"res=%s toast=%s" % [Economy.res, hud._toast.text])
+	Economy.res = {"wood": 1000, "stone": 0, "food": 1000}
+	Economy.changed.emit()
 	bwin.close()
 	bwin.open_building("stable")
 	await _frames(1)
-	_check(bwin.title_label.text == "기병 마구간 Lv 1" and bwin.merge_rows[0].have.text == "T1 보유 0" and bwin.merge_rows[1].have.text == "T2 보유 1"
-		and bwin.next_label.text.begins_with("다음 기병까지 ") and not bwin.merge_rows[2].box.visible, "(S) the stable window shows cavalry: T1 0, T2 1, '다음 기병까지'",
-		"have=%s next=%s" % [bwin.merge_rows.map(func(r): return r.have.text), bwin.next_label.text])
+	_check(bwin.title_label.text == "기병 마구간 Lv 1" and bwin._train_type == "cavalry" and bwin.unit_label.text == "1마리 3:00:00" and bwin.train_button.disabled
+		and bwin.train_reason.text == Economy.TRAIN_TEXT.not_enough and bwin.train_cost_labels.stone.get_theme_color("font_color") == bwin.RED,
+		"(S) the stable window trains cavalry; no stone -> cost in red, [훈련] off with '자원 부족'", "type=%s why=%s" % [bwin._train_type, bwin.train_reason.text])
 	bwin.close()
 	bwin.open_building("lumber")
 	await _frames(1)
-	_check(not bwin.soldier_box.visible, "(S) a resource building has no soldier section", "")
+	_check(not bwin.train_box.visible, "(S) a resource building has no training section", "")
 	bwin.close()
 	Economy.soldiers = {}
 	Economy.soldier_deployed = {}
+	Economy.train_queues = {}
 	Economy.soldiers_changed.emit()
+	Economy.training_changed.emit()
 	await _frames(2)
 
 
@@ -1166,44 +1231,45 @@ func _roof_px(id: String) -> Vector2:
 func _qty_sell_checks(panel) -> void:
 	var stone_btn: Button = panel.sell_buttons["stone"]
 	await _tap(stone_btn.get_global_rect().get_center())
-	_check(panel.qty_boxes["stone"].visible and not panel.qty_boxes["wood"].visible and panel.qty == 0 and panel.qty_confirms["stone"].disabled,
-		"(p2) [sell] expands that row's quantity box (others folded); quantity 0 disables [sell]", "open=%s qty=%d" % [panel.open_res, panel.qty])
+	_check(panel.qty_boxes["stone"].visible and not panel.qty_boxes["wood"].visible and panel.qtys["stone"] == 0 and panel.sell_selected_button.disabled,
+		"(p2) [sell] expands that row's quantity box (others folded); quantity 0 disables [sell]", "open=%s qty=%d" % [panel.qty_boxes["stone"].visible, panel.qtys["stone"]])
 	var plus: Vector2 = panel.qty_plus["stone"].get_global_rect().get_center()
 	await _tap(plus)
 	await _tap(plus)
 	await _tap(plus)
 	await _tap(panel.qty_minus["stone"].get_global_rect().get_center())
-	_check(panel.qty == 2 and panel.qty_edits["stone"].text == "2" and panel.qty_sliders["stone"].value == 2 and not panel.qty_confirms["stone"].disabled,
-		"(p2) [+] x3 then [-] gives 2 (input and slider follow)", "qty=%d text=%s" % [panel.qty, panel.qty_edits["stone"].text])
+	_check(panel.qtys["stone"] == 2 and panel.qty_edits["stone"].text == "2" and panel.qty_sliders["stone"].value == 2 and not panel.sell_selected_button.disabled,
+		"(p2) [+] x3 then [-] gives 2 (input and slider follow)", "qty=%d text=%s" % [panel.qtys["stone"], panel.qty_edits["stone"].text])
 	var edit: LineEdit = panel.qty_edits["stone"]
 	edit.text = "99"
 	edit.text_changed.emit("99")
-	var over: bool = panel.qty == 7 and edit.text == "7"
+	var over: bool = panel.qtys["stone"] == 7 and edit.text == "7"
 	edit.text = "abc"
 	edit.text_changed.emit("abc")
-	var junk: bool = panel.qty == 0 and edit.text == "0"
+	var junk: bool = panel.qtys["stone"] == 0 and edit.text == "0"
 	edit.text = "-4"
 	edit.text_changed.emit("-4")
-	_check(over and junk and panel.qty == 0, "(p2) input above holdings becomes holdings; text and negatives become 0", "over=%s junk=%s qty=%d" % [over, junk, panel.qty])
+	_check(over and junk and panel.qtys["stone"] == 0, "(p2) input above holdings becomes holdings; text and negatives become 0", "over=%s junk=%s qty=%d" % [over, junk, panel.qtys["stone"]])
 	await _tap(panel.qty_max["stone"].get_global_rect().get_center())
-	_check(panel.qty == 7, "(p2) [max] sets the holdings", "qty=%d" % panel.qty)
+	_check(panel.qtys["stone"] == 7, "(p2) [max] sets the holdings", "qty=%d" % panel.qtys["stone"])
 	panel.qty_sliders["stone"].value = 3
 	var rate: float = Economy.current_rate("stone", Time.get_unix_time_from_system())
-	_check(panel.qty == 3 and panel.qty_gold_labels["stone"].text == "→ %s골드" % HudScript.commas(Economy.sell_value("stone", 3, rate)), "(p2) slider sets 3; label shows floor(3 x price x rate)", "qty=%d label=%s" % [panel.qty, panel.qty_gold_labels["stone"].text])
-	var q0: int = panel.qty
-	panel._hold_start(1)
-	panel._tick_hold(0.3)
-	var early: int = panel.qty
-	panel._tick_hold(1.0)
-	panel._hold_dir = 0
-	_check(early == q0 + 1 and panel.qty > early, "(p2) holding [+]: one step at once, no repeat before 0.4 s, then it accelerates", "q0=%d early=%d after=%d" % [q0, early, panel.qty])
-	panel._set_qty(3)
+	_check(panel.qtys["stone"] == 3 and panel.qty_gold_labels["stone"].text == "→ %s골드" % HudScript.commas(Economy.sell_value("stone", 3, rate)), "(p2) slider sets 3; label shows floor(3 x price x rate)", "qty=%d label=%s" % [panel.qtys["stone"], panel.qty_gold_labels["stone"].text])
+	var q0: int = panel.qtys["stone"]
+	var qb = panel.qty_inputs["stone"]  # 수량 입력은 qty_box.gd(개정 16에서 훈련 칸과 같이 쓴다)
+	qb._hold_start(1)
+	qb._tick_hold(0.3)
+	var early: int = panel.qtys["stone"]
+	qb._tick_hold(1.0)
+	qb._hold_dir = 0
+	_check(early == q0 + 1 and panel.qtys["stone"] > early, "(p2) holding [+]: one step at once, no repeat before 0.4 s, then it accelerates", "q0=%d early=%d after=%d" % [q0, early, panel.qtys["stone"]])
+	panel._set_qty("stone", 3)
 	var gold0: int = Economy.gold_tenths
-	await _tap(panel.qty_confirms["stone"].get_global_rect().get_center())
+	await _tap(panel.sell_selected_button.get_global_rect().get_center())
 	_check(Economy.res["stone"] == 4 and Economy.gold_tenths == gold0 + Economy.sell_value("stone", 3, rate) * 10 and panel.qty_boxes["stone"].visible,
 		"(p2) quantity [sell] sells only that many (holdings drop, gold rises)", "stone=%d gold=%d->%d" % [Economy.res["stone"], gold0, Economy.gold_tenths])
 	await _tap(stone_btn.get_global_rect().get_center())  # 다시 누르면 접힌다
-	_check(not panel.qty_boxes["stone"].visible and panel.open_res == "", "(p2) tapping [sell] again folds the box", "open=%s" % panel.open_res)
+	_check(not panel.qty_boxes["stone"].visible and panel.qtys["stone"] == 0, "(p2) tapping [sell] again folds the box", "open=%s" % panel.qty_boxes["stone"].visible)
 
 
 ## (R) 개정 14 §1 꾹 누르고 드래그 = 화면 회전: 0.35초 뒤 회전 대기 표시 → 가로 이동으로 요가 돈다(0.4°/px), 명령 없음. 회전 뒤 탭 판정(벌목장 수집)·나침반 화살이 맞다.
@@ -1448,6 +1514,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.gold_tenths = keep[2]
 	Economy.roster_changed.emit()
 	Economy.changed.emit()
+	await _recruit_repeat(recruit)
 	heroes_win.open()
 	heroes_win.show_detail("hans")
 	await _unguarded(heroes_win)
@@ -1505,7 +1572,7 @@ func _soldier_picks() -> void:
 	await _frames(2)
 
 
-## (F) 개정 15 병사 피규어: 병사 칸(시트 행·건물 창 합성 칸)은 Portraits "soldier:<병종>"을 그리고(헤드리스는 자리표시), 렌더가 끝나면
+## (F) 개정 15 병사 피규어: 병사 칸(시트 행·건물 창 훈련 칸)은 Portraits "soldier:<병종>"을 그리고(헤드리스는 자리표시), 렌더가 끝나면
 ##     (portrait_ready) 칸을 다시 그린다 — 칸이 사라지면 연결도 끊긴다. 피규어 몸은 월드 병사와 같은 SoldierBody(기병 = 같은 말 메시 + 기사), 대기 자세.
 func _soldier_figures(tabs) -> void:
 	var P = preload("res://scripts/portraits.gd")
@@ -1555,7 +1622,7 @@ func _soldier_figures(tabs) -> void:
 	var bwin = _building_win()
 	bwin.open_building("barracks")
 	await _frames(1)
-	_check(linked.call(bwin.merge_rows[0].icon), "(F) the barracks window's merge cells use the same soldier figure cells", "")
+	_check(linked.call(bwin._unit_icon), "(F) the barracks window's training section uses the same soldier figure cell", "")
 	bwin.close()
 
 
@@ -1733,3 +1800,149 @@ func _skill_unlock_ui(heroes_win) -> void:
 	Economy.roster_changed.emit()
 	Economy.changed.emit()
 	heroes_win.show_detail("hans")
+
+
+## (rr) 재모집·자동 모집: [재모집]이 같은 모집을 되풀이, 골드 부족 비활성, 자동이 골드 부족·SSR에서 멈춤, [확인]이 자동을 멈춤, 체크 저장(임시 파일).
+func _recruit_repeat(recruit) -> void:
+	var keep := [Economy.gold_tenths, Fever.auto_recruit, Fever.auto_next, Fever.save_path]
+	recruit.auto_delay = 0.05
+	recruit.auto_box.button_pressed = false
+	# [재모집]: 10회 결과 → 재모집 → 2700↓. 3300 → 600이 되면 비활성 + 골드 부족
+	Economy.gold_tenths = 60000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit._recruit(10)
+	await _frames(2)
+	_check(recruit.is_showing_results() and Economy.gold == 3300 and recruit.again_button.text == "재모집 2700" and not recruit.again_button.disabled and recruit.cards.size() == 10,
+		"(rr) the 10-pull result shows [재모집 2700] enabled", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
+	await _unguarded(recruit)
+	await _tap(recruit.again_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.gold == 600 and recruit.cards.size() == 10 and recruit.again_button.disabled and recruit.again_button.text.contains("골드 부족"),
+		"(rr) [재모집] repeats the 10-pull (gold -2700) and is disabled with 골드 부족 at 600 gold", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
+	recruit.close()
+	# 시드: 10연차 3번에 SSR이 없는 시드(골드 부족 정지), 1회 두 번째에 SSR이 처음 나오는 시드(SSR 정지)
+	var lvl: int = Economy.building_level(GameData.TAVERN)
+	var seed_no_ssr := -1
+	var seed_ssr2 := -1
+	for s in range(1, 400):
+		var r := RandomNumberGenerator.new()
+		r.seed = s
+		var ssr_seen := false
+		for i in 3:
+			ssr_seen = ssr_seen or Economy.roll_gacha(10, r.randf, lvl).any(func(x): return x.grade == "SSR")
+		if not ssr_seen and seed_no_ssr < 0:
+			seed_no_ssr = s
+		var r2 := RandomNumberGenerator.new()
+		r2.seed = s
+		var a: bool = Economy.roll_gacha(1, r2.randf, lvl)[0].grade == "SSR"
+		var b: bool = Economy.roll_gacha(1, r2.randf, lvl)[0].grade == "SSR"
+		if not a and b and seed_ssr2 < 0:
+			seed_ssr2 = s
+	_check(seed_no_ssr > 0 and seed_ssr2 > 0, "(rr) precondition: found RNG seeds for the auto cases", "no_ssr=%d ssr2=%d" % [seed_no_ssr, seed_ssr2])
+	# 자동: 8200골드 = 10회 3번 + 100 → 3번 뽑고 멈춤
+	Economy.rng.seed = seed_no_ssr
+	Economy.gold_tenths = 82000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(10)
+	for i in 120:
+		await _frames(1)
+	_check(Economy.gold == 100 and recruit.again_button.disabled and not recruit.auto_running() and recruit.auto_box.button_pressed,
+		"(rr) auto loops 10-pulls until gold is short (8200 -> 100), then stops", "gold=%d running=%s" % [Economy.gold, recruit.auto_running()])
+	recruit.close()
+	# 자동: 1회 모집 두 번째에서 SSR → 멈추고 SSR 카드 강조, 골드는 남아도 더 안 뽑는다
+	Economy.rng.seed = seed_ssr2
+	Economy.gold_tenths = 10000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(1)
+	for i in 120:
+		await _frames(1)
+	_check(Economy.gold == 400 and not recruit.auto_running() and recruit.cards.size() == 1 and recruit.cards[0].highlight and recruit.is_showing_results()
+		and recruit.again_button.text == "재모집 300" and not recruit.again_button.disabled,
+		"(rr) auto stops when an SSR is pulled (2nd pull): results stay up, the SSR card is highlighted, [재모집] is manual again",
+		"gold=%d running=%s hl=%s" % [Economy.gold, recruit.auto_running(), recruit.cards[0].highlight if recruit.cards.size() == 1 else null])
+	recruit.close()
+	# [확인]은 자동을 멈추고 체크를 푼다
+	Economy.rng.seed = seed_no_ssr
+	Economy.gold_tenths = 82000
+	Economy.changed.emit()
+	recruit.auto_delay = 5.0
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(10)
+	await _frames(2)
+	_check(recruit.auto_running() and recruit.again_button.text == "자동 중…", "(rr) while auto runs [재모집] reads 자동 중…", "text=%s" % recruit.again_button.text)
+	recruit.confirm_button.pressed.emit()
+	recruit.auto_delay = 0.05
+	var g0: int = Economy.gold
+	for i in 40:
+		await _frames(1)
+	_check(not recruit.auto_box.button_pressed and not recruit.auto_running() and Economy.gold == g0 and not recruit.is_showing_results(),
+		"(rr) [확인] stops auto (box unchecked) and no further pull happens", "gold=%d->%d" % [g0, Economy.gold])
+	recruit.close()
+	# 체크 저장: 임시 파일, 다른 키는 그대로
+	var tmp := "user://test_local_recruit.json"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"other": 7}))
+	f.close()
+	Fever.save_path = tmp
+	recruit.auto_box.button_pressed = true
+	var data = JSON.parse_string(FileAccess.get_file_as_string(tmp))
+	Fever.auto_recruit = false
+	Fever.load_save()
+	_check(data is Dictionary and data.get("auto_recruit") == true and data.get("other") == 7 and Fever.auto_recruit,
+		"(rr) the 자동 모집 checkbox persists in local.json (other keys kept) and loads back", "data=%s" % [data])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+	Fever.save_path = keep[3]
+	Fever.auto_recruit = keep[1]
+	Fever.auto_next = keep[2]
+	recruit.auto_box.set_pressed_no_signal(false)
+	Economy.gold_tenths = keep[0]
+	Economy.changed.emit()
+
+
+## 상인 창: 여러 칸을 동시에 열고 [선택 판매]로 한 번에 판다(판 뒤 수량 0, 칸은 열림). 세 칸이 720x1280 안에 들어간다.
+func _multi_sell_checks(panel) -> void:
+	Economy.res["wood"] = 30
+	Economy.res["stone"] = 4
+	Economy.res["food"] = 20
+	Economy.changed.emit()
+	await _frames(2)
+	for id in ["wood", "stone", "food"]:
+		await _tap(panel.sell_buttons[id].get_global_rect().get_center())
+		await _frames(3)  # 펼친 뒤 레이아웃이 자리 잡는 것을 기다린다
+	var all_open: bool = panel.qty_boxes["wood"].visible and panel.qty_boxes["stone"].visible and panel.qty_boxes["food"].visible
+	var r: Rect2 = panel.dialog.get_global_rect()
+	_check(all_open and r.position.y >= 0.0 and r.end.y <= 1280.0 and panel.sell_selected_button.get_global_rect().end.y <= 1280.0 and panel.sell_selected_button.disabled,
+		"(p3) opening another row keeps the others open; three boxes fit 720x1280; [sell selected] disabled at total 0", "open=%s rect=%s qtys=%s" % [all_open, r, panel.qtys])
+	panel._set_qty("wood", 10)
+	panel._set_qty("stone", 2)
+	panel._set_qty("food", 5)
+	var now := Time.get_unix_time_from_system()
+	var items := {"wood": 10, "stone": 2, "food": 5}
+	var gold := 0
+	for id in items:
+		gold += Economy.sell_value(id, items[id], Economy.current_rate(id, now))
+	_check(panel.sell_selected_button.text == "선택 판매 · %s골드" % HudScript.commas(gold) and not panel.sell_selected_button.disabled,
+		"(p3) [sell selected] shows the sum of floor(amount x price x each rate)", "text=%s gold=%d" % [panel.sell_selected_button.text, gold])
+	var g0: int = Economy.gold_tenths
+	await _tap(panel.sell_selected_button.get_global_rect().get_center())
+	_check(Economy.res["wood"] == 20 and Economy.res["stone"] == 2 and Economy.res["food"] == 15 and Economy.gold_tenths == g0 + gold * 10,
+		"(p3) [sell selected] sells every open box's amount in one action", "wood=%d stone=%d food=%d gold=%d->%d" % [Economy.res["wood"], Economy.res["stone"], Economy.res["food"], g0, Economy.gold_tenths])
+	var kept: bool = panel.qty_boxes["wood"].visible and panel.qty_boxes["stone"].visible and panel.qty_boxes["food"].visible
+	_check(kept and panel.qtys["wood"] == 0 and panel.qtys["stone"] == 0 and panel.qtys["food"] == 0 and panel.sell_selected_button.disabled,
+		"(p3) after selling the amounts reset to 0 and the boxes stay open", "kept=%s" % kept)
+	panel._set_qty("wood", 3)
+	await _tap(panel.sell_buttons["wood"].get_global_rect().get_center())
+	_check(not panel.qty_boxes["wood"].visible and panel.qtys["wood"] == 0 and panel.qty_boxes["stone"].visible and panel.sell_selected_button.disabled,
+		"(p3) tapping a row's [sell] again folds only that box and zeroes its amount", "wood_open=%s" % panel.qty_boxes["wood"].visible)
+	await _tap(panel.sell_buttons["stone"].get_global_rect().get_center())
+	await _tap(panel.sell_buttons["food"].get_global_rect().get_center())

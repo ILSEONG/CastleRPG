@@ -152,16 +152,18 @@ func _phase1(state_path: String) -> void:
 	_panel.open()
 	_check(_panel.rate_labels["wood"].text == "×%.1f" % rate and _panel.rate_labels["food"].text == "×%.1f" % float(Economy.merchant.rates.food), "(e) trade window rows show the server rate of each resource", "wood=%s food=%s" % [_panel.rate_labels["wood"].text, _panel.rate_labels["food"].text])
 	var sell0: int = Net.requested.get("/v1/sell", 0)
-	_panel.sell_buttons["wood"].pressed.emit()  # 수량 칸 펼침 → [최대] → [판매]
+	_panel.sell_buttons["wood"].pressed.emit()  # 수량 칸 펼침 → [최대] → [선택 판매]
 	_panel.qty_max["wood"].pressed.emit()
-	_panel.qty_confirms["wood"].pressed.emit()
-	_panel.qty_confirms["wood"].pressed.emit()  # 응답 전 재탭
+	_panel.sell_selected_button.pressed.emit()
+	_panel.sell_selected_button.pressed.emit()  # 응답 전 재탭
 	await _wait_until(func(): return Economy.res["wood"] == 0, 10.0)
 	_check(Economy.res["wood"] == 0 and Economy.server_gold_tenths == gold0 + gain and Economy.gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
 		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()
 	var wt = _main.get_children().filter(func(c): return c.get_script() == preload("res://scripts/world_tags.gd"))[0]
 	_check(wt.text("merchant") == "상인" and _scenery.merchant_anchor.y > 2.0, "(e) merchant name tag is just the name (rates and countdown live in the trade window)", "label=%s" % wt.text("merchant"))
+
+	await _sell_many_online_check()
 
 	# (f) next_change가 지나면 /v1/player로 시세를 한 번 갱신한다
 	var p0: int = Net.requested.get("/v1/player", 0)
@@ -790,48 +792,96 @@ func _buildings_restored(state_path: String) -> void:
 		"levels=%s build=%s saved=%s" % [Economy.levels, Economy.build, saved])
 
 
-## (v) 개정 13 서버 병사: test/age(병사 건물 생산 시각도 당긴다)로 3시간 앞당기면 서버가 병종마다 1마리씩 만들고 앱은 생산 알림(soldier_made·"보병 +1").
-##     합성: 요청 한 번(응답 전 재탭 무시) → 1티어 −5·2티어 +1. 재전송 금지: 서버가 사라진 채 합성 → 버리고 알림, 다시 연결돼도 두 번째 요청 없음.
-##     서버 거부(409 max_tier) → 알림. 배치: 서버가 저장하고(응답 soldier_deploy) 월드에 그 병사들이 선다. 인구를 넘는 배치는 400.
-##     끝 상태를 <state>.soldiers에 쓴다 — phase 2가 재접속 복원을 본다.
+## (v) 개정 16 서버 훈련: 막사 6·궁병 훈련소 5 훈련 → 서버가 비용을 빼고 대기열(응답 training)을 준다 — 요청 한 번(응답 전 재탭 무시).
+##     시간이 흘러도(test/age) 수령 전엔 보유 그대로, 수령 전 수령은 409. 시간 당기기(finish_training_now = test/age) → 완료 → 수령(보유 +n,
+##     알림 "보병 +6"), 다시 수령은 409 empty(알림 없음). 취소: 기병 훈련 → [취소] → 비용 50% 환불. 재전송 금지: 서버가 사라진 채 시작 →
+##     버리고 알림, 다시 연결돼도 두 번째 요청 없음. 합성(개정 13): 요청 한 번 → 1티어 −5·2티어 +1, 재전송 금지, 409 max_tier 알림.
+##     배치: 서버 저장·월드에 선다, 인구 초과 400. 끝에 기병 1마리 훈련을 걸어 둔 채 <state>.soldiers에 쓴다 — phase 2가 재접속 복원을 본다.
 func _soldiers_online(state_path: String) -> void:
-	var made := []
 	var notices := []
-	var on_made := func(t, n): made.append([t, n])
 	var on_notice := func(t): notices.append(t)
-	Economy.soldier_made.connect(on_made)
 	Economy.notice.connect(on_notice)
+	await _request("POST", "/v1/test/age", {"minutes": 720})  # 훈련 비용
+	for b in ["lumber", "quarry", "farm"]:
+		await _request("POST", "/v1/collect", {"building": b})
 	var c0 := Economy.soldier_counts()
-	await _request("POST", "/v1/test/age", {"minutes": 180})
-	var c1 := Economy.soldier_counts()
-	var plus_one := true
-	for s in GameData.soldiers():
-		var k: String = s.id + ":1"
-		plus_one = plus_one and int(c1.get(k, 0)) == int(c0.get(k, 0)) + 1
-	_check(plus_one and made == [["infantry", 1], ["archer", 1], ["cavalry", 1]] and notices.has("보병 +1") and int(c1.get("infantry:1", 0)) >= 6,
-		"(v) test/age 3 h -> the server makes one soldier per soldier building, the app announces '보병 +1'", "before=%s after=%s made=%s" % [c0, c1, made])
+	var res0: Dictionary = Economy.res.duplicate()
+	var t0: int = Net.requested.get("/v1/soldiers/train", 0)
+	var sent := Economy.start_training("barracks", 6)
+	var again := Economy.start_training("barracks", 6)  # 응답 전 재탭
+	_check(sent and not again and Economy.train_block("barracks", 6) == "waiting" and Net.requested.get("/v1/soldiers/train", 0) == t0 + 1 and Economy.res == res0,
+		"(v) one training request; a second tap before the reply is ignored and nothing changes yet", "requests=%d" % [Net.requested.get("/v1/soldiers/train", 0) - t0])
+	await _wait_until(func(): return Economy.training("barracks").count == 6 and not Economy.training_waiting("barracks", "train"), 15.0)
+	Economy.start_training("archery", 5)
+	await _wait_until(func(): return Economy.training("archery").count == 5, 15.0)
+	var q := Economy.training("barracks")
+	_check(q.count == 6 and not q.ready and absf(q.finish - (Economy.time_now() + 6 * 10800.0)) < 30.0 and Economy.res.food == res0.food - 180 - 125
+		and Economy.res.wood == res0.wood - 120 - 150 and Economy.soldier_counts() == c0,
+		"(v) the server takes the cost at once (6 infantry 180 food / 120 wood, 5 archers 125 / 150) and queues them (finish = server time + n x 3 h)",
+		"q=%s res=%s -> %s" % [q, res0, Economy.res])
+	await _request("POST", "/v1/test/age", {"minutes": 60})
+	var r0 := _warned("server rejected")
+	await _request("POST", "/v1/soldiers/collect", {"building": "barracks"})
+	_check(Economy.soldier_counts() == c0 and not Economy.training("barracks").ready and not Economy.collect_training("barracks") and _warned("server rejected") == r0 + 1,
+		"(v) time passing adds no soldiers; collecting before the finish is refused (409 not_ready)", "soldiers=%s" % [Economy.soldier_counts()])
+	Economy.finish_training_now("barracks")  # POST /v1/test/age(남은 분) — 궁병(더 짧다)도 끝난다
+	await _wait_until(func(): return Economy.training("barracks").ready and Economy.training("archery").ready, 15.0)
+	var c0_inf := int(c0.get("infantry:1", 0))
+	var collected := Economy.collect_training("barracks") and Economy.collect_training("archery")
+	await _wait_until(func(): return Economy.train_queues.is_empty() and not Economy.training_waiting("archery", "collect"), 15.0)
+	_check(collected and int(Economy.soldiers.get("infantry:1", 0)) == c0_inf + 6 and int(Economy.soldiers.get("archer:1", 0)) == int(c0.get("archer:1", 0)) + 5
+		and notices.has("보병 +6") and notices.has("궁병 +5"), "(v) pulled forward and collected: 보병 +6, 궁병 +5 from the server, notices '보병 +6'",
+		"soldiers=%s notices=%s" % [Economy.soldiers, notices])
+	var n0 := notices.size()
+	Economy._train_online("collect", "barracks", {"building": "barracks"}, false)  # 응답을 잃은 수령의 재전송 흉내 — 409 empty
+	await _wait_until(func(): return not Economy.training_waiting("barracks", "collect"), 15.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	_check(int(Economy.soldiers.get("infantry:1", 0)) == c0_inf + 6 and notices.size() == n0, "(v) a repeated collect (409 empty) adds nothing and shows no notice", "notices=%s" % [notices.slice(n0)])
+	# 취소: 기병 2마리(식량 80·석재 40) → 절반 환불
+	var res1: Dictionary = Economy.res.duplicate()
+	Economy.start_training("stable", 2)
+	await _wait_until(func(): return Economy.training("stable").count == 2, 15.0)
+	var c1: int = Net.requested.get("/v1/soldiers/cancel", 0)
+	var canceled := Economy.cancel_training("stable")
+	await _wait_until(func(): return Economy.training("stable").count == 0 and not Economy.training_waiting("stable", "cancel"), 15.0)
+	_check(canceled and Net.requested.get("/v1/soldiers/cancel", 0) == c1 + 1 and Economy.res.food == res1.food - 40 and Economy.res.stone == res1.stone - 20
+		and notices.has(Economy.CANCEL_TEXT), "(v) [취소] on the server refunds half (2 cavalry: 80 / 40 -> back 40 / 20) and empties the queue", "res=%s -> %s" % [res1, Economy.res])
+	# 재전송 금지(시작)
+	var live := Net.api_base
+	var w0 := _warned("not resending")
+	var t1: int = Net.requested.get("/v1/soldiers/train", 0)
+	Net.api_base = DEAD_API
+	var sent2 := Economy.start_training("archery", 1)
+	var dropped := await _wait_until(func(): return not Net.up and not Economy.training_waiting("archery", "train"), 20.0)
+	_check(sent2 and dropped and notices.has(Economy.TRAIN_FAIL_TEXT) and _warned("not resending") == w0 + 1,
+		"(v) a training start that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s" % [sent2, dropped])
+	Net.api_base = live
+	var back := await _wait_until(func(): return Net.up, 40.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	await _frames(3)
+	_check(back and Net.requested.get("/v1/soldiers/train", 0) == t1 + 1 and Economy.training("archery").count == 0,
+		"(v) after reconnecting the training start is not resent (the archery queue stays empty)", "requests=%d" % [Net.requested.get("/v1/soldiers/train", 0) - t1])
 	# 합성: 한 번만 보낸다(응답 전 재탭은 무시)
 	var m0: int = Net.requested.get("/v1/soldiers/merge", 0)
 	var inf1 := int(Economy.soldiers.get("infantry:1", 0))
 	var inf2 := int(Economy.soldiers.get("infantry:2", 0))
-	var sent := Economy.merge_soldiers("infantry", 1)
-	var again := Economy.merge_soldiers("infantry", 1)
-	_check(sent and not again and Economy.merge_block("infantry", 1) == "waiting" and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 1,
+	var msent := Economy.merge_soldiers("infantry", 1)
+	var magain := Economy.merge_soldiers("infantry", 1)
+	_check(msent and not magain and Economy.merge_block("infantry", 1) == "waiting" and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 1,
 		"(v) one merge request; a second tap before the reply is ignored", "requests=%d" % [Net.requested.get("/v1/soldiers/merge", 0) - m0])
 	await _wait_until(func(): return not Economy._waiting.has("merge"), 15.0)
 	_check(int(Economy.soldiers.get("infantry:1", 0)) == inf1 - 5 and int(Economy.soldiers.get("infantry:2", 0)) == inf2 + 1,
 		"(v) the server merges 5 tier-1 infantry into 1 tier-2", "infantry:1 %d -> %d, infantry:2 %d -> %d" % [inf1, Economy.soldiers.get("infantry:1", 0), inf2, Economy.soldiers.get("infantry:2", 0)])
-	# 재전송 금지
-	var live := Net.api_base
-	var w0 := _warned("not resending")
+	# 재전송 금지(합성)
+	w0 = _warned("not resending")
 	var arc1 := int(Economy.soldiers.get("archer:1", 0))
 	Net.api_base = DEAD_API
-	var sent2 := Economy.merge_soldiers("archer", 1)
-	var dropped := await _wait_until(func(): return not Net.up and not Economy._waiting.has("merge"), 20.0)
-	_check(sent2 and dropped and notices.has(Economy.MERGE_FAIL_TEXT) and _warned("not resending") == w0 + 1,
-		"(v) a merge that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent2, dropped, notices])
+	var msent2 := Economy.merge_soldiers("archer", 1)
+	dropped = await _wait_until(func(): return not Net.up and not Economy._waiting.has("merge"), 20.0)
+	_check(msent2 and dropped and notices.has(Economy.MERGE_FAIL_TEXT) and _warned("not resending") == w0 + 1,
+		"(v) a merge that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [msent2, dropped, notices])
 	Net.api_base = live
-	var back := await _wait_until(func(): return Net.up, 40.0)
+	back = await _wait_until(func(): return Net.up, 40.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	await _frames(3)
 	_check(back and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 2 and int(Economy.soldiers.get("archer:1", 0)) == arc1,
@@ -842,27 +892,51 @@ func _soldiers_online(state_path: String) -> void:
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	_check(notices.has(Economy.SOLDIER_TEXT.max_tier) and Net.up, "(v) a refused merge (409 max_tier) shows the reason", "notices=%s" % [notices])
 	# 배치: 서버 저장 → 월드에 선다. 인구(6)를 넘는 배치는 400
-	var d := {"infantry:2": 1, "archer:1": 3, "cavalry:1": 2}
+	var d := {"infantry:2": 1, "archer:1": 5}
 	var d0: int = Net.requested.get("/v1/soldiers/deploy", 0)
 	var ok := Economy.set_soldier_deploy(d)
 	await _wait_until(func(): return Economy._pending_soldier_deploy == null, 15.0)
 	var p := await _request("GET", "/v1/player")
 	var server_d = p.get("player", {}).get("soldier_deploy", {})
-	var stored: bool = server_d is Dictionary and server_d.size() == 3 and d.keys().all(func(k): return int(server_d.get(k, -1)) == d[k])
+	var stored: bool = server_d is Dictionary and server_d.size() == 2 and d.keys().all(func(k): return int(server_d.get(k, -1)) == d[k])
 	await _frames(2)
 	_check(ok and Net.requested.get("/v1/soldiers/deploy", 0) == d0 + 1 and stored and Economy.soldier_deploy() == d and _main.soldiers.size() == 6 and GameState.mode == GameState.Mode.IDLE,
 		"(v) the soldier deploy is saved on the server and the six soldiers stand in front of the keep", "server=%s app=%s spawned=%d" % [server_d, Economy.soldier_deploy(), _main.soldiers.size()])
-	var r0 := _warned("server rejected")
-	await _request("POST", "/v1/soldiers/deploy", {"deploy": {"archer:1": 4, "cavalry:1": 3}})
+	r0 = _warned("server rejected")
+	await _request("POST", "/v1/soldiers/deploy", {"deploy": {"archer:1": 5, "infantry:1": 1, "infantry:2": 1}})
 	_check(_warned("server rejected") == r0 + 1 and Economy.soldier_deploy() == d, "(v) a deploy above the population is refused (400)", "warnings=%d" % [_warned("server rejected") - r0])
-	Economy.soldier_made.disconnect(on_made)
+	# phase 2가 볼 대기열: 기병 1마리(3시간)
+	Economy.start_training("stable", 1)
+	await _wait_until(func(): return Economy.training("stable").count == 1 and not Economy.training_waiting("stable", "train"), 15.0)
 	Economy.notice.disconnect(on_notice)
 	var f := FileAccess.open(state_path + ".soldiers", FileAccess.WRITE)
-	f.store_string(JSON.stringify({"soldiers": Economy.soldiers, "deploy": Economy.soldier_deployed}))
+	f.store_string(JSON.stringify({"soldiers": Economy.soldiers, "deploy": Economy.soldier_deployed, "training": Economy.train_queues}))
 	f.close()
 
 
-## (p2) 재접속하면 병사 보유·배치가 그대로이고 월드에 그 병사들이 선다.
+## (e2) 선택 판매: 열린 두 칸을 요청 한 번으로 판다(응답 전 재탭은 무시). 서버 시세·골드와 일치.
+func _sell_many_online_check() -> void:
+	await _request("POST", "/v1/test/age", {"minutes": 7})
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/collect", {"building": "quarry"})
+	var w: int = Economy.res["wood"]
+	var s: int = Economy.res["stone"]
+	var gold0: int = Economy.server_gold_tenths
+	var gain := (Economy.sell_value("wood", w, float(Economy.merchant.rates.wood)) + Economy.sell_value("stone", s, float(Economy.merchant.rates.stone))) * 10
+	var sell0: int = Net.requested.get("/v1/sell", 0)
+	_panel.open()
+	for id in ["wood", "stone"]:
+		_panel.sell_buttons[id].pressed.emit()
+		_panel.qty_max[id].pressed.emit()
+	_panel.sell_selected_button.pressed.emit()
+	_panel.sell_selected_button.pressed.emit()  # 재탭(수량은 0이라 보내지 않는다)
+	await _wait_until(func(): return Economy.res["wood"] == 0 and Economy.res["stone"] == 0, 10.0)
+	_check(w > 0 and s > 0 and Economy.server_gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
+		"(e2) [sell selected] online: one items request sells both boxes at the server rates", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
+	_panel.close()
+
+
+## (p2) 재접속하면 병사 보유·배치·훈련 대기열(개정 16)이 그대로이고 월드에 그 병사들이 선다.
 func _soldiers_restored(state_path: String) -> void:
 	var json := JSON.new()
 	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".soldiers")) == OK and json.data is Dictionary
@@ -877,3 +951,7 @@ func _soldiers_restored(state_path: String) -> void:
 		same = same and int(Economy.soldier_deployed.get(k, 0)) == int(saved.deploy[k])
 	_check(same and _main.soldiers.size() == 6, "(p2) reconnecting restores the soldiers and their deploy, and the world spawns them",
 		"soldiers=%s deploy=%s saved=%s spawned=%d" % [Economy.soldiers, Economy.soldier_deployed, saved, _main.soldiers.size()])
+	var tq: Dictionary = saved.get("training", {})
+	var q := Economy.training("stable")
+	_check(tq.keys() == ["stable"] and Economy.train_queues.keys() == ["stable"] and q.count == int(tq.stable.count) and absf(q.finish - float(tq.stable.finish)) < 0.01 and not q.ready,
+		"(p2) reconnecting restores the training queue (stable: 1 cavalry, same finish)", "queues=%s saved=%s" % [Economy.train_queues, tq])
