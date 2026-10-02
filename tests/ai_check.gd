@@ -2004,7 +2004,8 @@ func _dungeon_cases() -> void:
 	d = await _enter_dungeon("gold", Economy.default_party("gold"))
 	await _frames(2)
 	for h in d.heroes:
-		h.take_damage(h.hp_max * 100.0)
+		while h.is_alive():  # 회피(dodge) 스킬은 무작위로 한 대를 비킨다 — 쓰러질 때까지
+			h.take_damage(h.hp_max * 100.0)
 	await _frames(2)
 	_check(d.phase == d.Phase.RESULT and not d.result.win and d.result.rewards.is_empty() and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.current_run.is_empty(),
 		"(DG2) every hero down = defeat: the run closes, no reward, keys unchanged", "phase=%d result=%s" % [d.phase, d.result])
