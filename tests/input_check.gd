@@ -623,6 +623,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _buildings_ui(tabs, hud, recruit)
 	await _soldiers_ui(tabs, hud)
 	await _soldier_picks()
+	await _soldier_tap()
 	await _soldier_figures(tabs)
 	await _world_tags()
 	await _rotate_ui(hud)
@@ -822,6 +823,56 @@ func _building_px(id: String) -> Vector2:
 ## px 근처(HERO_TAP_PX)에 영웅이 있는지 — 영웅 판정이 건물 탭을 가로채지 않는지 사전 확인용.
 func _open_hero(px: Vector2) -> bool:
 	return _picker._hero_at(px, PickerScript.HERO_TAP_PX) != null
+
+
+## (P) 개정 21 §1: 병사는 조종하지 않는다 — 스테이지 중 영웅에서 먼(화면 40 px 넘게) 병사를 탭해도 아무도 선택되지 않는다.
+##     병사는 처리를 끄고 등장 자리(광장 바닥)에 세워 둔다. 끝나면 중지(병사는 사라진다).
+func _soldier_tap() -> void:
+	var rig = _camera.get_parent()
+	var cam0 := [rig.position, rig.rotation_degrees.y, _camera.size]
+	rig.position = Vector3.ZERO  # 기본 카메라
+	rig.rotation_degrees.y = 0.0
+	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
+	_picker._select(null)
+	var houses0: int = Economy.levels.get("houses", 1)
+	Economy.levels["houses"] = 13
+	Economy.soldiers = {"infantry:1": 4, "archer:1": 4, "cavalry:1": 4}
+	Economy.set_soldier_deploy(Economy.soldiers.duplicate())
+	GameState.start_stage()
+	await _frames(1)
+	var ss := get_tree().get_nodes_in_group("soldiers")
+	for s in ss:
+		s.set_process(false)
+		s.global_position = s.spawn
+	await _frames(1)
+	var pick = null
+	var px := Vector2.ZERO
+	var best := 0.0
+	for s in ss:
+		var p := _camera.unproject_position(s.global_position + Vector3(0, 0.8, 0))
+		var d := INF
+		for h in _heroes:
+			if is_instance_valid(h) and h.is_alive():
+				d = minf(d, _camera.unproject_position(h.global_position + Vector3(0, 0.8, 0)).distance_to(p))
+		if get_viewport().get_visible_rect().has_point(p) and d > best:
+			best = d
+			pick = s
+			px = p
+	_check(ss.size() == 12 and pick != null and best > 40.0, "(P) precondition: a stage spawns the 12 deployed soldiers; one stands on screen away from every hero (%.0f px)" % best, "n=%d" % ss.size())
+	await _tap(px)
+	_check(_picker.selected == null, "(P) a tap on a soldier selects nothing (soldiers are not controllable)", "selected=%s" % [_picker.selected])
+	var bwin = _building_win()
+	if bwin.is_open():
+		bwin.close()
+	GameState.stop_stage()
+	await _frames(1)
+	Economy.soldiers = {}
+	Economy.set_soldier_deploy({})
+	Economy.levels["houses"] = houses0
+	rig.position = cam0[0]
+	rig.rotation_degrees.y = cam0[1]
+	rig.zoom_by(cam0[2] / _camera.size)
+	await _frames(2)
 
 
 ## 건물 창(building_panel.gd). main 자식에서 찾는다.
@@ -1061,12 +1112,11 @@ func _soldiers_ui(tabs, hud) -> void:
 		"(S) population cap: at 6 / 6 every [+] is off and a press adds nothing", "work=%s plus=%s" % [sw.work, sw.rows.values().map(func(r): return r.plus.disabled)])
 	await _tap(_center(sw.apply_button))
 	await _frames(2)
-	var front: Array = _main.soldiers.filter(func(s): return is_instance_valid(s))
-	var kinds: Array = front.map(func(s): return "%s:%d" % [s.type, s.tier])
-	kinds.sort()
+	var in_world: int = get_tree().get_nodes_in_group("soldiers").size()
 	_check(Economy.soldier_deployed == {"infantry:1": 1, "archer:1": 3, "cavalry:2": 1, "infantry:2": 1} and sw.apply_button.disabled
-		and kinds == ["archer:1", "archer:1", "archer:1", "cavalry:2", "infantry:1", "infantry:2"] and hud._toast.text == "병사 배치를 적용했습니다",
-		"(S) [적용] saves the deploy; idle mode stands those 6 soldiers in front of the keep at once", "deployed=%s kinds=%s toast=%s" % [Economy.soldier_deployed, kinds, hud._toast.text])
+		and _main.soldiers.is_empty() and in_world == 0 and hud._toast.text == "병사 배치를 적용했습니다",
+		"(S) [적용] saves the deploy; in idle mode no soldier appears in the world (rev 21: they come with the next stage)",
+		"deployed=%s in world=%d toast=%s" % [Economy.soldier_deployed, in_world, hud._toast.text])
 	await _tap(_center(sw.clear_button))
 	_check(sw.work.is_empty() and sw.summary_label.text == "배치 0 / 6 (인구)" and sw.clear_button.disabled and not sw.apply_button.disabled and Economy.soldier_deployed.size() == 4,
 		"(S) [모두 해제] empties the edit only (not applied)", "work=%s" % [sw.work])
@@ -1075,7 +1125,7 @@ func _soldiers_ui(tabs, hud) -> void:
 		"(S) [자동 배치] fills strongest first up to the population: 보병 T2 x4, 기병 T2 x1, 보병 T1 x1", "work=%s" % [sw.work])
 	await _tap(_center(sw.apply_button))
 	await _frames(2)
-	_check(Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1, "infantry:1": 1} and _main.soldiers.size() == 6, "(S) and [적용] puts that line-up in front of the keep",
+	_check(Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1, "infantry:1": 1} and _main.soldiers.is_empty(), "(S) and [적용] saves that line-up (still no soldiers in idle)",
 		"deployed=%s n=%d" % [Economy.soldier_deployed, _main.soldiers.size()])
 	# 합성은 시트 행에서(사용자 규칙): 보병 T1 5 → [합성 5→1] 켜짐, 보병 T2 4 → 꺼짐 + 이유
 	var r1 = sw.rows["infantry:1"]
@@ -1087,8 +1137,8 @@ func _soldiers_ui(tabs, hud) -> void:
 	await _frames(2)
 	_check(Economy.soldiers == {"infantry:2": 5, "archer:1": 3, "cavalry:2": 1} and Economy.soldier_deployed == {"infantry:2": 4, "cavalry:2": 1}
 		and sw.celebrations == 1 and not sw.rows.has("infantry:1") and not sw.rows["infantry:2"].merge.disabled and sw.rows["infantry:2"].have.text == "보유 5"
-		and sw.work == {"infantry:2": 4, "cavalry:2": 1} and _main.soldiers.size() == 5 and hud._toast.text == "보병 T2 합성 완료",
-		"(S) [합성] on the 보병 T1 row: 5 → T2 +1, the T1 row goes, the deployed T1 is trimmed (front line 5), T2 now mergeable; success pop + notice '보병 T2 합성 완료'",
+		and sw.work == {"infantry:2": 4, "cavalry:2": 1} and _main.soldiers.is_empty() and hud._toast.text == "보병 T2 합성 완료",
+		"(S) [합성] on the 보병 T1 row: 5 → T2 +1, the T1 row goes, the deployed T1 is trimmed (deploy 5), T2 now mergeable; success pop + notice '보병 T2 합성 완료'",
 		"owned=%s deployed=%s celebrations=%d toast=%s" % [Economy.soldiers, Economy.soldier_deployed, sw.celebrations, hud._toast.text])
 	Economy.soldiers["infantry:5"] = 5
 	Economy.soldiers_changed.emit()
@@ -1629,8 +1679,8 @@ func _soldier_figures(tabs) -> void:
 
 ## (T) 개정 15 화면 공간 이름표(world_tags): 건물 "이름 Lv N"·상인·문루 글자가 Label3D 없이 한 노드에, 글자 ~20 px, 그리기 호출 상한.
 ##     겹침 피하기: 기본 카메라에서 원래 겹치던 무리(민가·성채·기병 마구간, 주점·궁병 훈련소)도 덩어리끼리 겹치지 않고, 8 px 넘게 밀린
-##     덩어리마다 지시선, 안 밀린 태그는 기준점 바로 위. 회전(요 +40°)·확대·축소에서도 같다. 병사 대열(병사 상자)은 덮지 않는다 —
-##     벌목장·채석장 말풍선이 떠도(덩어리 = 이름표 + 말풍선). place()는 순수 함수.
+##     덩어리마다 지시선, 안 밀린 태그는 기준점 바로 위. 회전(요 +40°)·확대·축소에서도 같다. 방치 모드엔 병사가 없어(개정 21)
+##     벌목장·채석장 말풍선이 떠도(덩어리 = 이름표 + 말풍선) 덩어리끼리만 피한다. place()는 순수 함수.
 func _world_tags() -> void:
 	var WT = preload("res://scripts/world_tags.gd")
 	var wt = _child(WT)
@@ -1670,7 +1720,7 @@ func _world_tags() -> void:
 	await _frames(2)
 	_tags_ok(wt, "zoomed out (130 m)")
 	print("INPUT INFO: zoomed out (130 m) tags pushed px: %s" % [wt.stacks.keys().map(func(id): return [id, roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
-	# 병사 대열: 30명(인구 30) + 벌목장·채석장 말풍선 — 이름표·말풍선 덩어리가 병사 상자를 덮지 않는다
+	# 병사 30명 배치(인구 30) + 벌목장·채석장 말풍선: 방치 모드라 병사는 월드에 없고(개정 21) 덩어리끼리만 피한다
 	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
 	Economy.levels["houses"] = 13
 	Economy.soldiers = {"infantry:1": 12, "archer:2": 12, "cavalry:1": 6}
@@ -1680,32 +1730,20 @@ func _world_tags() -> void:
 	Economy.changed.emit()
 	await _frames(3)
 	var lumber_h: float = wt.stacks.lumber.size.y
-	_check(wt.obstacles.size() == 30 and _main.soldiers.size() == 30 and lumber_h >= WT.TAG_H + badges.BUBBLE_BLOCK and wt.top("lumber") != null
-		and badges.badge_ids(Economy.time_now()).has("lumber"),
-		"(T) precondition: 30 soldiers stand in front of the keep; the lumber mill's bubble rides on its tag (stack %.0f px)" % lumber_h, "obstacles=%d" % wt.obstacles.size())
-	_check(wt.desired.keys().any(func(id): return wt.obstacles.any(func(o): return wt.desired[id].intersects(o))),
-		"(T) precondition: at least one tag stack would cover the soldiers where it wants to sit", "")
-	_soldiers_clear(wt, "default camera")
-	_tags_ok(wt, "default camera with soldiers")
-	var fr: Rect2 = wt.obstacles[0]
-	for o in wt.obstacles:
-		fr = fr.merge(o)
-	print("INPUT INFO: default camera with 30 soldiers: formation box %s; stacks (id: stack, pushed px): %s" % [fr, wt.stacks.keys().map(func(id): return "%s: %s, %d" % [id, wt.stacks[id],
-		roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
+	_check(Economy.deployed_total() == 30 and _main.soldiers.is_empty() and get_tree().get_nodes_in_group("soldiers").is_empty() and lumber_h >= WT.TAG_H + badges.BUBBLE_BLOCK
+		and wt.top("lumber") != null and badges.badge_ids(Economy.time_now()).has("lumber"),
+		"(T) idle mode with 30 soldiers deployed: none stands in the world; the lumber mill's bubble rides on its tag (stack %.0f px)" % lumber_h, "n=%d" % _main.soldiers.size())
+	_tags_ok(wt, "default camera with bubbles")
 	rig.zoom_by(30.0 / _camera.size)
 	await _frames(2)
-	_soldiers_clear(wt, "zoomed in (30 m)")
-	_tags_ok(wt, "zoomed in with soldiers")
-	rig.rotation_degrees.y = -30.0
-	await _frames(2)
-	_soldiers_clear(wt, "zoomed in, yaw -30")
-	# place(): 아래부터 놓고 위로 민다. 장애물은 덜 움직이는 쪽(아래 끝에 걸치면 아래로, 위 끝이면 위로)
+	_tags_ok(wt, "zoomed in with bubbles")
+	# place(): 아래부터 놓고 위로 민다
 	var a := Rect2(0, 100, 50, 20)
 	var b := Rect2(10, 90, 50, 20)
-	var o := Rect2(-20, 200, 100, 60)
-	var got: Array = WT.place([a, b, Rect2(0, 250, 40, 20), Rect2(0, 185, 40, 20)], [o], 3.0)
-	_check(got[0] == a and got[1].end.y <= a.position.y - 3.0 and got[1].position.x == b.position.x and got[2].position.y >= o.end.y + 3.0 and got[3].end.y <= o.position.y - 3.0,
-		"(T) place(): the lower tag keeps its spot, the upper one goes above it; an obstacle sends a tag to its nearer side", "%s" % [got])
+	var c := Rect2(0, 300, 40, 20)
+	var got: Array = WT.place([a, b, c], 3.0)
+	_check(got[0] == a and got[1].end.y <= a.position.y - 3.0 and got[1].position.x == b.position.x and got[2] == c,
+		"(T) place(): the lower tag keeps its spot, the upper one goes above it; a tag clear of the others stays put", "%s" % [got])
 	Economy.soldiers = {}
 	Economy.set_soldier_deploy({})
 	Economy.levels["houses"] = 1
@@ -1745,18 +1783,6 @@ func _tags_ok(wt, what: String) -> void:
 	_check(ids.size() >= 6 and hits.is_empty() and wt.leaders.size() == moved.size() and seated,
 		"(T) %s: %d tag stacks, none overlap; %d moved more than 8 px, each with a leader line; unmoved tags sit on their anchors" % [what, ids.size(), moved.size()],
 		"overlaps=%s leaders=%d moved=%s" % [hits, wt.leaders.size(), moved])
-
-
-## 어느 이름표 덩어리도 병사 상자에 닿지 않는다.
-func _soldiers_clear(wt, what: String) -> void:
-	wt.layout(true)
-	var hits := []
-	for id in wt.stacks:
-		for o in wt.obstacles:
-			if (wt.stacks[id] as Rect2).intersects(o):
-				hits.append(id)
-				break
-	_check(not wt.obstacles.is_empty() and hits.is_empty(), "(T) %s: no tag or bubble covers the soldier formation (%d soldier boxes)" % [what, wt.obstacles.size()], "covering=%s" % [hits])
 
 
 ## (U) 개정 17 §4: 상세 스킬 줄(R 2줄, SSR 3줄) — 잠긴 줄은 회색·자물쇠·"★3에서 해금", 승급 미리보기 둘째 줄에 다음 해금,
