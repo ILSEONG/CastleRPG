@@ -16,6 +16,8 @@ const ProjectileScript := preload("res://scripts/projectile.gd")
 const Art := preload("res://scripts/art.gd")
 const MainScript := preload("res://scripts/main.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const SoldierScript := preload("res://scripts/soldier.gd")
+const SOLDIER_TIME_SCALE := 4.0  # (S) 병사 사례 동안 게임 시간 배속(걷는 구간이 길다)
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -1058,12 +1060,14 @@ func _attack_sync() -> void:
 	await _frames(1)
 
 
-## (S) 개정 13 병사. 영웅 처리는 끄고(몬스터를 치지 않게) 시험 몬스터를 성 안에 놓는다.
-##  - 방치 모드에서 배치하면 곧바로 성채 앞 대열(Formation.soldier_spots)에 선다: 크기 Art.SOLDIER_SCALE(0.9), 기병은 말, HP 바 + 티어 갈매기
-##  - 티어 2 능력치 = 1티어 × 2, 기병 이동 속도 = 보병 × 2(실제로 걸어 잰다)
-##  - 방치 모드: 성 안 보스가 병사를 노려 쳐도 피해 0, 병사는 제자리에서 싸우지 않는다
-##  - 스테이지 모드: 성 안 보스와 싸운다(화살이 난다), 보스도 병사를 친다. 근접은 타격 순간, 궁병은 화살 도착 순간에 피해
-##  - 죽은 병사는 리필 때 되살아나 제자리로. 스테이지 중 배치 변경은 다음 리필에 다시 만든다. 화면 밖은 4프레임마다 애니메이션
+## (S) 개정 21 병사 인공지능. 영웅 처리는 끄고(제자리, 방어력에는 센다) 스포너는 멈춘 채 실제 모드 전환(start_stage·stop_stage·결과·리필)을 쓴다.
+## 걷는 구간이 길어 이 사례 동안 Engine.time_scale = SOLDIER_TIME_SCALE(기다림은 모두 게임 시간). 지휘관은 지원 사례에서만 돈다(다른 사례의 시험 몬스터가 지원을 부르지 않게).
+##  - 방치 모드: 배치해도 병사 노드가 없다. 스테이지 시작: 배치 수만큼 광장에서 솟아오르고(T2 = T1 × 2) 역할 자리로 간다 —
+##    궁병 성벽 위(y = WALL_H, 병사 성벽 자리), 보병 성문 앞 줄, 기병 순찰 고리
+##  - 궁병은 쏘며 자리를 지키고, 성문 앞 몬스터는 보병을 노린다. 보병은 HOLD_RADIUS 밖으로 쫓지 않고 돌아온다. 기병은 돌진했다 순찰로
+##  - 지원: 북문에만 큰 무리 → 기병 먼저, 모자란 만큼만 다른 면 보병(최소 집합), 각 면 보병 1명 이상, 조용해지고 3초 뒤 복귀
+##  - 타격 동기화(근접 타격 순간·화살 도착 순간), 화면 밖 애니메이션 4프레임마다, 기병 속도 = 보병 × 2, 부서진 성문 → 보병은 안쪽 막는 줄
+##  - 연속 진행 클리어: 같은 병사가 스테이지 시작 자리로(HP 가득·지원 해제), 카운트다운 동안 서 있다 다음 스테이지 그대로. 방치로(연속 끔 클리어·패배·중지): 0명
 func _soldier_cases() -> void:
 	_clear_monsters()
 	GameState.mode = GameState.Mode.IDLE
@@ -1071,63 +1075,232 @@ func _soldier_cases() -> void:
 	await _frames(1)
 	for x in get_tree().get_nodes_in_group("heroes"):
 		x.set_process(false)
-	var bars = _main.get_children().filter(func(c): return c.get_script() == HpBarsScript)[0]
+	var keep := [Economy.levels.get("houses", 1), GameState.stage, GameState.auto_continue]
+	_main.command.set_process(false)
+	Economy.levels["houses"] = 13  # 인구 30
+	Economy.soldiers = {"infantry:1": 8, "archer:1": 3, "archer:2": 1, "cavalry:1": 4}  # 북 방어력을 낮게(지원 사례: 필요량 구간)
+	var sent := Economy.set_soldier_deploy(Economy.soldiers.duplicate())
 	await _frames(2)
-	var oct0: int = bars.octagons
-	Economy.soldiers = {"infantry:1": 3, "infantry:2": 1, "archer:1": 2, "cavalry:1": 1}
-	var sent := Economy.set_soldier_deploy({"infantry:1": 2, "infantry:2": 1, "archer:1": 2, "cavalry:1": 1})
-	await _frames(2)
+	_check(sent and _main.soldiers.is_empty() and get_tree().get_nodes_in_group("soldiers").is_empty(),
+		"(S) idle mode: a soldier deploy puts no soldier in the world (no 'soldiers' nodes, no formation in front of the keep)", "sent=%s n=%d" % [sent, _main.soldiers.size()])
+	GameState.start_stage()
+	await _frames(1)
 	var ss: Array = _main.soldiers.duplicate()
 	var spots: Array = Formation.soldier_spots(ss.map(func(s): return {"type": s.type, "tier": s.tier}))
-	var placed := sent and ss.size() == 6 and get_tree().get_nodes_in_group("soldiers").size() == 6
+	var rising := ss.size() == 16 and get_tree().get_nodes_in_group("soldiers").size() == 16
 	for i in ss.size():
-		var s = ss[i]
-		placed = placed and s.home.is_equal_approx(spots[i]) and s.global_position.is_equal_approx(s.home) and Formation.is_inside(_half, s.home) \
-			and is_equal_approx(s._model.scale.x, Art.SOLDIER_SCALE) and (s._horse != null) == (s.type == "cavalry")
-	_check(placed and bars.octagons == oct0 + 6 * 2 + 2 * 7, "(S) a deploy in idle mode spawns the soldiers at once in front of the keep (0.9 size, cavalry on a horse, HP bars + tier chevrons)",
-		"sent=%s soldiers=%d octagons %d -> %d" % [sent, ss.size(), oct0, bars.octagons])
-	var inf1 = ss.filter(func(s): return s.type == "infantry" and s.tier == 1)[0]
-	var inf2 = ss.filter(func(s): return s.type == "infantry" and s.tier == 2)[0]
-	var cav = ss.filter(func(s): return s.type == "cavalry")[0]
-	_check(inf1.hp_max == 320.0 and inf1.atk == 22.0 and inf2.hp_max == 2.0 * inf1.hp_max and inf2.atk == 2.0 * inf1.atk and inf2.hp == inf2.hp_max,
-		"(S) tier 2 stats are twice tier 1 (infantry 640 / 44)", "t1=%.0f/%.0f t2=%.0f/%.0f" % [inf1.hp_max, inf1.atk, inf2.hp_max, inf2.atk])
-	# 이동 속도: 스테이지 모드(몬스터 없음)에서 자리 3 m 앞에 놓으면 걸어 돌아온다 — 같은 프레임 동안 기병이 보병의 2배를 간다
-	GameState.mode = GameState.Mode.STAGE
-	for s in [inf1, cav]:
-		s.global_position = s.home + Vector3(0, 0, -3.0)
-	await _seconds(0.25)
-	var moved_inf: float = 3.0 - inf1.global_position.distance_to(inf1.home)
-	var moved_cav: float = 3.0 - cav.global_position.distance_to(cav.home)
-	_check(moved_inf > 0.5 and absf(moved_cav / moved_inf - 2.0) < 0.05, "(S) cavalry walks twice as fast as infantry", "infantry %.2f m, cavalry %.2f m" % [moved_inf, moved_cav])
-	await _wait_until(func(): return ss.all(func(s): return s.global_position.distance_to(s.home) < 0.06), 3.0)
-	# 방치 모드: 성 안 보스가 병사를 노리고 쳐도 피해 0, 병사는 제자리에서 싸우지 않는다
-	GameState.mode = GameState.Mode.IDLE
-	_g = _spawn("epic_boss", 2, inf2.home + Vector3(0.4, 0, 1.4))
-	await _seconds(3.0)
-	var targets_soldier: bool = _alive(_g) and _g._target_hero != null and _g._target_hero.is_in_group("soldiers")
-	_check(targets_soldier and _g.hp == _g.hp_max and ss.all(func(s): return s.hp == s.hp_max and s.global_position.is_equal_approx(s.home)),
-		"(S) idle mode: a boss inside the castle targets the soldiers, but they take no damage, stay in place and do not fight",
-		"target soldier=%s boss hp %.0f soldiers=%s" % [targets_soldier, _g.hp if _alive(_g) else 0.0, ss.map(func(s): return s.hp)])
-	# 스테이지 모드: 맞서 싸운다(궁병 화살), 보스도 병사를 친다
-	GameState.mode = GameState.Mode.STAGE
+		rising = rising and ss[i].spawn.is_equal_approx(spots[i]) and ss[i]._rise > 0.0 and ss[i].global_position.y < 0.0 \
+			and is_equal_approx(ss[i]._model.scale.x, Art.SOLDIER_SCALE) and (ss[i]._horse != null) == (ss[i].type == "cavalry")
+	var dust: int = get_tree().get_nodes_in_group(Fx.GROUP).filter(func(n): return n.get_meta("fx", "") == "dust").size()
+	_check(rising and dust > 0, "(S) stage start: all 16 deployed soldiers rise out of the plaza in front of the keep (0.9 size, cavalry on a horse, dust rings)",
+		"n=%d dust=%d" % [ss.size(), dust])
+	var arc2 = ss.filter(func(s): return s.type == "archer" and s.tier == 2)[0]
+	var arc1 = ss.filter(func(s): return s.type == "archer" and s.tier == 1)[0]
+	var inf1 = ss.filter(func(s): return s.type == "infantry")[0]
+	var inf_n = ss.filter(func(s): return s.type == "infantry" and s.side == 0 and s.slot == 0)[0]
+	_check(inf1.hp_max == 320.0 and inf1.atk == 22.0 and arc1.hp_max == 180.0 and arc2.hp_max == 2.0 * arc1.hp_max and arc2.atk == 2.0 * arc1.atk and arc2.side == 0 and arc2.slot == 0,
+		"(S) tier 2 stats are twice tier 1 (archer 360 / 36); the highest tier takes the north first", "t2=%.0f/%.0f side %d" % [arc2.hp_max, arc2.atk, arc2.side])
+	Engine.time_scale = SOLDIER_TIME_SCALE
+	await _wait_until(func(): return ss.all(func(s): return _soldier_home(s)), 60.0)
+	var by: Dictionary = {"archer": [], "infantry": [], "cavalry": []}
+	for s in ss:
+		by[s.type].append(s)
+	var on_wall := func(s): return s.is_on_wall() and absf(s.global_position.y - Balance.WALL_H) < 0.01 and s.global_position.distance_to(Formation.soldier_wall_spot(_half, s.side, s.slot)) < 0.06
+	var in_row := func(s): return not Formation.is_inside(_half, s.global_position) and s.global_position.distance_to(Formation.gate_row_spot(_half, s.side, s.slot)) < 0.06
+	var arch_ok: bool = by.archer.size() == 4 and by.archer.all(on_wall)
+	var inf_ok: bool = by.infantry.size() == 8 and by.infantry.all(in_row)
+	var cav_ok: bool = by.cavalry.size() == 4 and by.cavalry.all(func(s): return s.patrolling() and absf(_cheb(s.global_position) - Formation.patrol_radius(_half)) < 0.3)
+	var sides := [0, 0, 0, 0]
+	for s in ss:
+		sides[s.side] += 1
+	_check(arch_ok and inf_ok and cav_ok and sides == [4, 4, 4, 4],
+		"(S) they walk to their role posts: archers on the wall top (y = WALL_H, soldier wall spots), infantry in the gate rows, cavalry on the patrol ring; 4 per side",
+		"archers=%s infantry=%s cavalry=%s sides=%s" % [arch_ok, inf_ok, cav_ok, sides])
+	# 궁병: 성벽 아래 몬스터를 쏘며 자리를 지킨다
+	var arc = by.archer.filter(func(s): return s.side == 0)[0]
+	var apos: Vector3 = arc.global_position
+	_g = _still("epic_boss", _flat(apos) + Vector3(-1.5, 0, -4.0))
+	_g.hp_max = 1.0e6
+	_g.hp = 1.0e6
 	var saw_arrow := false
-	var hurt := false
 	var t := 0.0
-	while t < 8.0 and _alive(_g):
+	while t < 2.0:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 		saw_arrow = saw_arrow or _flying() > 0
-		hurt = hurt or ss.any(func(s): return s.hp < s.hp_max)
-	_check(not _alive(_g) and saw_arrow and hurt, "(S) stage mode: the soldiers fight the boss inside the castle (arrows fly) and the boss hits soldiers",
-		"boss alive=%s arrow=%s soldier hurt=%s after %.1f s" % [_alive(_g), saw_arrow, hurt, t])
-	await _wait_until(func(): return ss.all(func(s): return not s.is_alive() or s.global_position.distance_to(s.home) < 0.06), 4.0)
-	_check(ss.all(func(s): return not s.is_alive() or s.global_position.distance_to(s.home) < 0.06), "(S) with no target left the soldiers walk back to their places",
-		"%s" % [ss.map(func(s): return s.global_position.distance_to(s.home))])
-	# 타격 동기화: 근접은 타격 순간에, 궁병은 화살 도착 순간에
+	_check(saw_arrow and _dmg(_g) > 0.0 and arc.global_position.distance_to(apos) < 0.01, "(S) a wall archer shoots monsters below and never leaves its spot",
+		"arrow=%s boss dmg=%.0f moved=%.2f" % [saw_arrow, _dmg(_g), arc.global_position.distance_to(apos)])
+	_clear_monsters()
+	await _frames(1)
+	# 성문 앞 몬스터는 그 앞 보병을 노린다(근처에 기병이 없는 면)
+	var gate_inf = null
+	var best := -1.0
+	for s in by.infantry:
+		if s.slot == 0 and s.side != 0:
+			var spot: Vector3 = s.global_position + Formation.SIDE_DIR[s.side] * 3.0
+			var dmin: float = by.cavalry.map(func(c): return Formation.flat_distance(c.global_position, spot)).min()
+			if dmin > best:
+				best = dmin
+				gate_inf = s
+	var grunt = _spawn("grunt", gate_inf.side, gate_inf.global_position + Formation.SIDE_DIR[gate_inf.side] * 3.0)
+	await _frames(2)
+	_check(_alive(grunt) and grunt._target_hero == gate_inf, "(S) a monster in front of a gate goes for the infantry standing there",
+		"target=%s nearest cavalry %.1f m" % [grunt._target_hero if _alive(grunt) else null, best])
+	_clear_monsters()
+	await _frames(1)
+	await _wait_until(func(): return ss.all(func(s): return _soldier_home(s)), 15.0)
+	# 보병: 자리에서 aggro 안 적에게 다가가지만 HOLD_RADIUS 밖으로는 안 나간다. 적이 멀어지면 머문 뒤 자리로
+	var post0: Vector3 = inf_n.post()
+	var out: Vector3 = Formation.SIDE_DIR[0]
+	_g = _still("epic_boss", post0 + out * 6.8)
+	_g.hp_max = 1.0e6
+	_g.hp = 1.0e6
+	var far := 0.0
+	await _wait_until(func(): return _dmg(_g) >= inf_n.atk, 4.0)
+	var hit_once: bool = _dmg(_g) >= inf_n.atk
+	t = 0.0
+	while t < 2.5:  # 몬스터를 바깥으로 끌어낸다(초당 3 m)
+		await get_tree().process_frame
+		var dt := get_process_delta_time()
+		t += dt
+		_g.global_position += out * 3.0 * dt
+		far = maxf(far, Formation.flat_distance(inf_n.global_position, post0))
+	_check(hit_once and far > 5.0 and far <= SoldierScript.HOLD_RADIUS + 0.01, "(S) infantry engages a monster within aggro of its post but never chases past hold_radius (6 m)",
+		"hit=%s max distance from post %.2f" % [hit_once, far])
+	_clear_monsters()
+	await _wait_until(func(): return inf_n.global_position.distance_to(post0) < 0.06, 6.0)
+	_check(inf_n.global_position.distance_to(post0) < 0.06, "(S) with the monster gone it lingers, then walks back to its post", "d=%.2f" % inf_n.global_position.distance_to(post0))
+	# 기병: 순찰 중 aggro(10) 안 적에게 돌진했다가 순찰로 돌아간다
+	var cav = by.cavalry[0]
+	var r: float = Formation.patrol_radius(_half)
+	var cpos: Vector3 = cav.global_position
+	_g = _still("grunt", cpos + (cpos / _cheb(cpos)).normalized() * 6.0)
+	_g.hp_max = 1.0e6
+	_g.hp = 1.0e6
+	await _wait_until(func(): return _dmg(_g) > 0.0, 4.0)
+	var charged: bool = _dmg(_g) > 0.0 and absf(_cheb(cav.global_position) - r) > 1.0 and cav.engaged()
+	_clear_monsters()
+	await _frames(1)
+	await _wait_until(func(): return cav._linger <= 0.0 and cav._path.is_empty() and absf(_cheb(cav.global_position) - r) < 0.3, 8.0)
+	_check(charged and cav.patrolling() and absf(_cheb(cav.global_position) - r) < 0.3, "(S) patrolling cavalry charges a monster within 10 m, then returns to its patrol ring",
+		"charged=%s ring offset %.2f" % [charged, absf(_cheb(cav.global_position) - r)])
+	await _wait_until(func(): return ss.all(func(s): return _soldier_home(s)), 15.0)
+	_main.command.set_process(true)
+	await _reinforce_case(ss)
+	_main.command.set_process(false)
+	await _strike_sync(inf1, by.archer[1])
+	await _clear_and_stop(ss)
+	Engine.time_scale = 1.0
+	_main.command.set_process(true)
+	Economy.soldiers = {}
+	Economy.set_soldier_deploy({})
+	Economy.levels["houses"] = keep[0]
+	GameState.stage = keep[1]
+	GameState.auto_continue = keep[2]
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(true)
+	_clear_monsters()
+	await _frames(1)
+
+
+## 사각 거리 max(|x|, |z|) — 순찰 고리(정사각형) 위인지 본다.
+func _cheb(p: Vector3) -> float:
+	return maxf(absf(p.x), absf(p.z))
+
+
+## 병사가 자기 자리에 와 있다(등장·경로 끝, 순찰 기병은 고리 위, 나머지는 post()).
+func _soldier_home(s) -> bool:
+	if not s.is_alive() or s._rise > 0.0 or not s._path.is_empty():
+		return false
+	if s.patrolling():
+		return absf(_cheb(s.global_position) - Formation.patrol_radius(_half)) < 0.3
+	return s.global_position.distance_to(s.post()) < 0.06
+
+
+## 지원: 북문에만 보스 + 졸개 6을 몰아 북을 심각하게 만든다(처리 끈 몬스터, 매 프레임 HP를 채워 위협이 그대로다). 위협은 그 순간 북 방어력 D에서
+## 필요량이 "기병 셋 + 보병 둘" 구간(가운데)이 되게 정한다. 판단(decide)을 바로 불러 본다: 기병 먼저, 가까운 동·서 보병 하나씩만(최소 집합).
+## 지원이 북에 닿는 동안 더 보내지 않고 각 면 보병 1명 이상. 몬스터를 치우면 3초 조용한 뒤 복귀 지시, 모두 원래 자리로 돌아간다.
+func _reinforce_case(ss: Array) -> void:
+	const SC := preload("res://scripts/soldier_command.gd")
+	var cmd = _main.command
+	var d_n: float = cmd.decide().defense[0]  # 몬스터 없음: 방어력만 본다
+	var lo := maxf(0.43 * d_n, 3 * 4800.0 + 7040.0)  # 심각(위협 > D × 1.3)이면 필요량 > 0.43 D. 기병 셋 + 보병 하나보다 크고
+	var hi := 3 * 4800.0 + 2 * 7040.0                  # 기병 셋 + 보병 둘 이하
+	_check(lo < hi, "(S) reinforce precondition: the north defense (%.0f) leaves room for a need of 3 cavalry + 2 infantry" % d_n, "lo=%.0f hi=%.0f" % [lo, hi])
+	var threat := ((lo + hi) / 2.0 + d_n) / SC.NEED
+	var gt: Vector3 = Formation.gate_target(_half, 0)
+	var mass := []
+	for i in 6:
+		var g = _still("grunt", gt + Vector3(-3.0 + i * 1.2, 0, -2.0))
+		g.hp_max = 300.0  # 전투력 3000(× 초당 10)
+		g.hp = 300.0
+		mass.append(g)
+	var boss = _still("epic_boss", gt + Vector3(0, 0, -4.0))
+	boss.hp_max = (threat - 6 * 3000.0) * 1.2 / 20.0
+	boss.hp = boss.hp_max
+	mass.append(boss)
+	var p: Dictionary = cmd.decide()
+	var nodes := {}
 	for s in ss:
+		nodes[s.get_instance_id()] = s
+	var sent: Array = p.send.map(func(e): return nodes[e[0]])
+	var types: Array = sent.map(func(s): return s.type)
+	var powers: Array = sent.map(func(s): return s.power())
+	var total: float = powers.reduce(func(a, b): return a + b, 0.0)
+	var cands: int = ss.filter(func(s): return s.side != 0 and s.type != "archer").size()
+	var inf_sides: Array = sent.filter(func(s): return s.type == "infantry").map(func(s): return s.side)
+	inf_sides.sort()
+	_check(p.severe == [true, false, false, false] and types == ["cavalry", "cavalry", "cavalry", "infantry", "infantry"] and inf_sides == [1, 3],
+		"(S) reinforce: a mass at the north gate makes only the north severe; the 3 other cavalry go first, then the nearest east/west infantry",
+		"severe=%s sent=%s infantry sides=%s" % [p.severe, types, inf_sides])
+	_check(sent.size() < cands and total >= p.need[0] and total - powers[-1] < p.need[0] and sent.all(func(s): return s.reinforce == 0),
+		"(S) reinforce: only the minimal set goes (%d of %d candidates; %.0f >= need %.0f, %.0f without the last)" % [sent.size(), cands, total, p.need[0], total - powers[-1]],
+		"reinforce=%s" % [sent.map(func(s): return s.reinforce)])
+	var floor_ok := true
+	var most := 0
+	var t := 0.0
+	while t < 40.0 and not sent.all(func(s): return s._path.is_empty() and Formation.flat_distance(s.global_position, gt) < 12.0):
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		for m in mass:
+			if _alive(m):
+				m.hp = m.hp_max
+		floor_ok = floor_ok and _infantry_floor(ss)
+		most = maxi(most, ss.filter(func(s): return s.reinforce >= 0).size())
+	_check(floor_ok and most == sent.size() and sent.all(func(s): return s.reinforce == 0 and Formation.flat_distance(s.global_position, gt) < 12.0),
+		"(S) the reinforcements reach the north gate; nobody else is sent and every side keeps at least one infantry the whole time",
+		"floor=%s most=%d sent=%d after %.1f s" % [floor_ok, most, sent.size(), t])
+	_clear_monsters()
+	await _frames(1)
+	var early := false
+	t = 0.0
+	while t < 2.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		early = early or sent.any(func(s): return s.reinforce < 0)
+	await _wait_until(func(): return sent.all(func(s): return s.reinforce < 0), 3.0)
+	var back: bool = sent.all(func(s): return s.reinforce < 0)
+	_check(not early and back, "(S) with the threat gone they stay ~3 s, then are sent home", "early=%s back=%s" % [early, back])
+	await _wait_until(func(): return ss.all(func(s): return _soldier_home(s)), 60.0)
+	_check(ss.all(func(s): return _soldier_home(s)) and _infantry_floor(ss), "(S) every reinforcement walks back to its own post",
+		"not home: %s" % [ss.filter(func(s): return not _soldier_home(s)).map(func(s): return "%s@%d" % [s.type, s.side])])
+
+
+## 각 면에 자기 자리를 지키는 산 보병이 1명 이상.
+func _infantry_floor(ss: Array) -> bool:
+	var n := [0, 0, 0, 0]
+	for s in ss:
+		if s.type == "infantry" and s.is_alive() and s.reinforce < 0:
+			n[s.side] += 1
+	return n.all(func(k): return k >= 1)
+
+
+## 타격 동기화(근접 타격 순간·궁병 화살 도착 순간), 화면 밖 애니메이션, 기병 속도 = 보병 × 2, 부서진 성문 → 보병은 안쪽 막는 줄.
+func _strike_sync(inf1, arc) -> void:
+	Engine.time_scale = 1.0  # 화살 비행을 프레임 단위로 본다
+	for s in _main.soldiers:
 		s.set_process(false)
-	var m = _still("epic_boss", inf1.global_position + Vector3(0, 0, 1.2))
-	var arc = ss.filter(func(s): return s.type == "archer")[0]
+	var m = _still("epic_boss", inf1.global_position + Formation.SIDE_DIR[inf1.side] * 1.2)
 	await _frames(1)
 	inf1._target = m
 	inf1._attack()
@@ -1144,49 +1317,100 @@ func _soldier_cases() -> void:
 	await _frames(1)
 	var in_flight: bool = _flying() == 1 and m.hp == hp0
 	await _wait_until(func(): return _flying() == 0, 3.0)
-	_check(in_flight and is_equal_approx(hp0 - m.hp, arc.atk), "(S) an archer shoots an arrow at the release moment; the boss loses HP only when it lands",
+	_check(in_flight and is_equal_approx(hp0 - m.hp, arc.atk), "(S) an archer shoots an arrow at the release moment; the monster loses HP only when it lands",
 		"flying=%s dmg=%.1f atk=%.1f" % [in_flight, hp0 - m.hp, arc.atk])
 	_clear_monsters()
 	await _frames(1)
-	# 죽은 병사는 리필 때 되살아나 제자리로
-	inf2.global_position = inf2.home + Vector3(1, 0, 1)
-	inf2.take_damage(1.0e6)
-	var dead: bool = not inf2.is_alive()
-	GameState.refill()
-	await _frames(1)
-	_check(dead and inf2.is_alive() and inf2.hp == inf2.hp_max and inf2.global_position.is_equal_approx(inf2.home) and _main.soldiers.has(inf2),
-		"(S) a dead soldier comes back to life at its place on refill", "dead=%s alive=%s hp=%.0f" % [dead, inf2.is_alive(), inf2.hp])
-	# 화면 밖: 애니메이션은 4프레임마다(쌓인 시간만큼)
 	var counts := []
-	for where in [inf1.home, Vector3(0, 0, 500)]:
+	var home: Vector3 = inf1.global_position
+	for where in [Vector3(0, 0, 0), Vector3(0, 0, 500)]:
 		inf1.global_position = where
 		var n := 0
 		for i in 8:
 			inf1._animate(0.016)
 			n += 1 if inf1._anim_acc == 0.0 else 0
 		counts.append(n)
-	inf1.global_position = inf1.home
+	inf1.global_position = home
 	_check(counts == [8, 2], "(S) on screen a soldier animates every frame, off screen every 4th frame", "advances=%s" % [counts])
-	for s in ss:
+	Engine.time_scale = SOLDIER_TIME_SCALE
+	inf1._target = null
+	arc._target = null
+	for s in _main.soldiers:
 		s.set_process(true)
-	# 스테이지 중 배치 변경은 다음 리필에
-	var ids0: Array = ss.map(func(s): return s.get_instance_id())
-	Economy.set_soldier_deploy({"infantry:1": 3})
-	await _frames(2)
-	var kept: bool = _main.soldiers.map(func(s): return s.get_instance_id()) == ids0
-	GameState.refill()
-	await _frames(2)
-	var now_types: Array = _main.soldiers.map(func(s): return s.type)
-	_check(kept and now_types == ["infantry", "infantry", "infantry"] and ids0.all(func(id): return not is_instance_id_valid(id)),
-		"(S) a deploy change during a stage waits for the next refill, then the soldiers are rebuilt", "kept=%s now=%s" % [kept, now_types])
-	GameState.mode = GameState.Mode.IDLE
-	Economy.set_soldier_deploy({})
-	await _frames(2)
-	_check(_main.soldiers.is_empty() and get_tree().get_nodes_in_group("soldiers").is_empty(), "(S) an empty deploy in idle removes the soldiers at once", "soldiers=%d" % _main.soldiers.size())
-	for x in get_tree().get_nodes_in_group("heroes"):
-		x.set_process(true)
-	_clear_monsters()
+	# 속도: 자리 3 m 바깥에서 곧장 돌아오는 거리 — 기병(자기 면 지원 칸으로 보내 자리를 지키게 한 뒤)은 2배
+	var cav = _main.soldiers.filter(func(s): return s.type == "cavalry")[0]
+	cav.order(cav.side, 9, -100.0)
+	for s in [inf1, cav]:
+		s._path.clear()
+		s.global_position = s.post() + Formation.SIDE_DIR[s.side_now()] * 3.0
+	await _seconds(0.25)
+	var moved_inf: float = 3.0 - inf1.global_position.distance_to(inf1.post())
+	var moved_cav: float = 3.0 - cav.global_position.distance_to(cav.post())
+	_check(moved_inf > 0.5 and absf(moved_cav / moved_inf - 2.0) < 0.05, "(S) cavalry walks twice as fast as infantry", "infantry %.2f m, cavalry %.2f m" % [moved_inf, moved_cav])
+	cav.order(-1, 0, -100.0)
+	# 부서진 성문: 그 면 보병은 안쪽 막는 줄로 물러선다
+	var north: Array = _main.soldiers.filter(func(s): return s.type == "infantry" and s.side == 0)
+	GameState.damage_gate(0, 1.0e9)
 	await _frames(1)
+	_check(GameState.is_gate_broken(0) and north.all(func(s): return Formation.is_inside(_half, s.post()) and not s._path.is_empty()),
+		"(S) a broken gate sends that side's infantry back to blocking rows inside the gate", "%s" % [north.map(func(s): return s.post())])
+	await _wait_until(func(): return north.all(func(s): return _soldier_home(s)), 30.0)
+	_check(north.all(func(s): return _soldier_home(s) and Formation.is_inside(_half, s.global_position)), "(S) and they reach those rows", "")
+
+
+## 스테이지 끝: 연속 진행 클리어면 같은 병사가 스테이지 시작 자리로(죽은 병사도 되살아나 HP 가득, 지원 해제) 카운트다운 동안 서 있다가 다음 스테이지를
+## 그대로 시작한다. 방치로 돌아가면(연속 끔 클리어·패배·중지) 0명.
+func _clear_and_stop(ss: Array) -> void:
+	var a = ss.filter(func(s): return s.type == "infantry")[0]
+	var b = ss.filter(func(s): return s.type == "infantry")[1]
+	var c = ss.filter(func(s): return s.type == "cavalry")[1]
+	a.take_damage(1.0e6)
+	b.global_position += Vector3(2, 0, 2)
+	b.hp = 1.0
+	c.order((c.side + 1) % 4, 7, -100.0)
+	var dead: bool = not a.is_alive()
+	var ids: Array = ss.map(func(s): return s.get_instance_id())
+	GameState.auto_continue = true
+	GameState.on_all_monsters_dead()
+	GameState.advance(GameData.config_num("result_sec") + 0.01)
+	await _frames(1)
+	var reset_ok: bool = dead and GameState.mode == GameState.Mode.COUNTDOWN and _main.soldiers.map(func(s): return s.get_instance_id()) == ids
+	for s in ss:
+		var spot: Vector3 = s._patrol[0] if s.type == "cavalry" else s.post()
+		reset_ok = reset_ok and s.is_alive() and s.hp == s.hp_max and s.reinforce < 0 and s._path.is_empty() and s.global_position.distance_to(spot) < 0.01
+	_check(reset_ok and not GameState.is_gate_broken(0),
+		"(S) continuous clear: at the refill the same soldiers snap back to their stage-start posts (the dead one revived, full HP, reinforcement cleared)",
+		"mode=%d revived=%s b hp=%.0f c reinforce=%d" % [GameState.mode, a.is_alive(), b.hp, c.reinforce])
+	var at0: Array = ss.map(func(s): return s.global_position)
+	await _seconds(0.5)
+	var stood: bool = ss.map(func(s): return s.global_position) == at0
+	GameState.advance(GameData.config_num("countdown_sec") + 0.01)
+	await _frames(1)
+	_check(stood and GameState.mode == GameState.Mode.STAGE and _main.soldiers.map(func(s): return s.get_instance_id()) == ids and ss.all(func(s): return s._rise == 0.0),
+		"(S) they stand through the countdown and the next stage starts with them in place (no re-spawn)", "stood=%s mode=%d" % [stood, GameState.mode])
+	GameState.auto_continue = false
+	GameState.on_all_monsters_dead()
+	GameState.advance(GameData.config_num("result_sec") + 0.01)
+	await _frames(1)
+	_check(GameState.mode == GameState.Mode.IDLE and _main.soldiers.is_empty() and get_tree().get_nodes_in_group("soldiers").is_empty(),
+		"(S) a clear with continuous play off goes back to idle: no soldiers", "mode=%d n=%d" % [GameState.mode, get_tree().get_nodes_in_group("soldiers").size()])
+	await _seconds(0.4)
+	_check(ids.all(func(id): return not is_instance_id_valid(id)), "(S) the vanished soldiers are freed after shrinking away (0.3 s)", "")
+	GameState.start_stage()
+	await _frames(1)
+	var n_again := get_tree().get_nodes_in_group("soldiers").size()
+	GameState.damage_castle(1.0e9)
+	GameState.advance(GameData.config_num("result_sec") + 0.01)
+	await _frames(1)
+	_check(n_again == 16 and GameState.mode == GameState.Mode.IDLE and get_tree().get_nodes_in_group("soldiers").is_empty(),
+		"(S) a defeat goes back to idle: the next stage's soldiers vanish too", "again=%d mode=%d" % [n_again, GameState.mode])
+	GameState.start_stage()
+	await _frames(1)
+	n_again = get_tree().get_nodes_in_group("soldiers").size()
+	GameState.stop_stage()
+	await _frames(1)
+	_check(n_again == 16 and GameState.mode == GameState.Mode.IDLE and get_tree().get_nodes_in_group("soldiers").is_empty() and _main.soldiers.is_empty(),
+		"(S) ■ stop goes back to idle: no soldiers", "again=%d" % n_again)
 
 
 ## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 사이클) 마리를 내고, 스테이지 모드는 변화가 없다.

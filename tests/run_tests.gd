@@ -2695,8 +2695,8 @@ func test_soldier_command() -> void:
 	check(SC.severe(3000.0, 2000.0, 1.0, 0.0) and not SC.severe(2500.0, 2000.0, 1.0, 0.0) and not SC.severe(1900.0, 0.0, 1.0, 0.0)
 		and SC.severe(0.0, 9999.0, 0.4, 0.2) and not SC.severe(0.0, 9999.0, 0.4, 0.1) and not SC.severe(0.0, 9999.0, 0.5, 0.3),
 		"severe: threat > defense x 1.3 above min_threat, or gate < 45% after losing > 15% in 5 s")
-	check(is_equal_approx(SC.need(10000.0, 4000.0), 7000.0) and SC.calm_next([2.5, 1.0, 0.0, 0.0], [0.0, 600.0, 0.0, 0.0], [100.0, 1000.0, 0.0, 0.0], 1.0) == [3.5, 0.0, 0.0, 0.0],
-		"need = threat x 1.1 - defense; calm time grows only while threat < defense x 0.5")
+	check(is_equal_approx(SC.need(10000.0, 4000.0), 7000.0) and SC.calm_next([2.5, 1.0, -1.0, 0.0], [0.0, 600.0, 0.0, 0.0], [100.0, 1000.0, 100.0, 0.0], 1.0) == [3.5, -1.0, 0.0, -1.0],
+		"need = threat x 1.1 - defense; calm time (-1 = not calm) starts at 0 and grows only while threat < defense x 0.5")
 	# 후보 선택: 기병 셋(가까운 순) → 그다음 가까운 보병. 필요량을 넘는 순간 멈춘다. 지원받는 면(0)은 내주지 않는다
 	var cands := [{"id": "c2", "type": "cavalry", "side": 2, "power": 4800.0, "dist": 30.0, "prio": 0}, {"id": "c1", "type": "cavalry", "side": 1, "power": 4800.0, "dist": 10.0, "prio": 0},
 		{"id": "c3", "type": "cavalry", "side": 3, "power": 4800.0, "dist": 20.0, "prio": 0}, {"id": "i1", "type": "infantry", "side": 1, "power": 7040.0, "dist": 12.0, "prio": 1},

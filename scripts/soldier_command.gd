@@ -28,7 +28,7 @@ var last_plan := {}  # 마지막 판단(plan 반환값 — 테스트·디버그)
 var _gs  # GameState(오토로드 — 이름 대신 노드로)
 var _clock := 0.0  # 스테이지 모드에서만 흐르는 시계(병사 last_order와 같은 기준)
 var _acc := 0.0
-var _calm := [0.0, 0.0, 0.0, 0.0]
+var _calm := [-1.0, -1.0, -1.0, -1.0]  # 면별 조용한 시간(calm_next)
 var _hist := []  # [시각, 면별 성문 HP 비율] 최근 DROP_SEC초
 
 
@@ -93,11 +93,11 @@ static func need(threat: float, defense: float) -> float:
 	return threat * NEED - defense
 
 
-## 조용한 시간: 위협 < 방어력 × 0.5면 dt만큼 늘고, 아니면 0으로.
+## 조용한 시간(초, −1 = 조용하지 않음): 위협 < 방어력 × 0.5면 처음 본 판단은 0, 그 뒤 dt씩 는다 — 복귀는 "3초 넘게" 조용했을 때만.
 static func calm_next(calm: Array, threat: Array, defense: Array, dt: float) -> Array:
 	var out := []
 	for s in 4:
-		out.append(calm[s] + dt if threat[s] < defense[s] * CALM else 0.0)
+		out.append((calm[s] + dt if calm[s] >= 0.0 else 0.0) if threat[s] < defense[s] * CALM else -1.0)
 	return out
 
 
@@ -184,7 +184,7 @@ func _ready() -> void:
 
 ## 리필(스테이지 시작·끝): 조용한 시간·성문 기록을 비운다.
 func reset_memory() -> void:
-	_calm = [0.0, 0.0, 0.0, 0.0]
+	_calm = [-1.0, -1.0, -1.0, -1.0]
 	_hist.clear()
 	_acc = 0.0
 	last_plan = {}

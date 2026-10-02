@@ -4,13 +4,10 @@ extends Node2D
 ## 자리: 기준점(anchor — 지붕·머리·문루 위 월드 좌표)의 화면 위치 바로 위. 태그 위에는 badges.gd의 건설 막대·말풍선이 쌓인다 —
 ## 태그와 한 덩어리(stack, 크기는 badges.stack_size)로 놓고, badges는 top(id)(태그 윗변 가운데)에서 그린다.
 ## 매 프레임 겹침 피하기(place, 욕심쟁이 한 번): 기준점이 화면 아래인 덩어리부터 놓고, 이미 놓은 덩어리와 GAP보다 가까우면 그 위로 민다.
-## 성채 앞 병사 대열(병사마다 발 ~ HP 바·티어 갈매기 화면 상자, 자리 home 기준)은 장애물 — 덩어리와 가로로 겹치는 병사 상자를 합친
-## 기둥의 건물 쪽(기준점이 기둥 가운데 아래면 아래, 아니면 위)으로 먼저 비킨다(말풍선·이름표가 대열을 덮지 않게).
 ## LEADER_PX 넘게 움직인 덩어리는 기준점까지 가는 선을 긋는다.
 ## 그리기 호출 상한: 지시선 draw_multiline 한 번 + 알약 삼각형 전부 canvas_item_add_triangle_array 한 번 + 외곽선 draw_multiline 한 번 +
 ## 태그마다 글자 ≤ 2(태그 ≤ MAX_TAGS). layout()은 프레임마다 한 번만 계산한다(badges가 먼저 불러도 같은 결과).
 
-const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -30,11 +27,6 @@ const GAP := 3.0  # 덩어리 사이 최소 간격(px)
 const LEADER_PX := 8.0  # 이보다 많이 움직인 덩어리는 지시선
 const MAX_TAGS := 16  # 한 프레임에 그리는 태그 상한(지금 건물 10 + 상인 + 문루 4 = 15)
 const SCREEN_MARGIN := 80.0  # 기준점이 화면 밖 이만큼까지는 그린다
-const SOLDIER_HALF_M := 0.5  # 병사 상자 반폭(m, 기병은 말 때문에 SOLDIER_HORSE_HALF_M)
-const SOLDIER_HORSE_HALF_M := 0.9
-const SOLDIER_BAR_PX := 6.0  # HP 바(hp_bars, bar_height 위 ±2.5 + 테두리)
-const SOLDIER_CHEVRON_PX := 9.0  # 티어 갈매기 하나(hp_bars CHEVRON_H + CHEVRON_GAP)
-const SOLDIER_FOOT_PX := 4.0
 const FILL := UiKit.CREAM
 const LV_FILL := Color(0.29, 0.35, 0.45)
 const EDGE := UiKit.OUTLINE
@@ -50,7 +42,6 @@ var rects := {}  # id → 이번 프레임 태그 알약 Rect2(화면 밖이면 
 var stacks := {}  # id → 이번 프레임 덩어리 Rect2(태그 + 위에 쌓인 것)
 var desired := {}  # id → 겹침 피하기 전 덩어리 Rect2(테스트용)
 var leaders: Array = []  # 이번 프레임 지시선 [[기준점, 덩어리 쪽 끝], …]
-var obstacles: Array = []  # 이번 프레임 병사 화면 상자
 var draw_calls := 0  # 지난 그리기의 그리기 호출 수(테스트용)
 
 var _frame := -1
@@ -160,8 +151,7 @@ func layout(force := false) -> void:
 		var h: float = t.size.y + extra.y
 		want.append(Rect2(p.x - w / 2.0, p.y - h, w, h))
 		shown.append([t, p])
-	obstacles = soldier_boxes()
-	var placed := place(want, obstacles)
+	var placed := place(want)
 	for i in shown.size():
 		var t: Dictionary = shown[i][0]
 		var p: Vector2 = shown[i][1]
@@ -173,60 +163,28 @@ func layout(force := false) -> void:
 			leaders.append([p, Vector2(clampf(p.x, s.position.x, s.end.x), clampf(p.y, s.position.y, s.end.y))])
 
 
-## 이번 프레임 병사 화면 상자: 살아 있는 병사마다 자리(home — 싸우러 나가도 대열 자리를 비운다)의 발 ~ HP 바·티어 갈매기 위.
-func soldier_boxes() -> Array:
-	var out := []
-	var px_per_m := get_viewport_rect().size.x / camera.size  # 직교 카메라 KEEP_WIDTH: size = 화면 가로 m
-	for s in get_tree().get_nodes_in_group("soldiers"):
-		if not s.is_alive():
-			continue
-		var feet := camera.unproject_position(s.home)
-		var head := camera.unproject_position(s.home + Vector3(0, s.bar_height(), 0))
-		var half := px_per_m * (SOLDIER_HORSE_HALF_M if Art.SOLDIERS.get(s.type, {}).get("horse", false) else SOLDIER_HALF_M)
-		var y0 := minf(head.y, feet.y) - SOLDIER_BAR_PX - SOLDIER_CHEVRON_PX * int(s.tier)
-		var y1 := maxf(head.y, feet.y) + SOLDIER_FOOT_PX
-		out.append(Rect2(minf(head.x, feet.x) - half, y0, absf(head.x - feet.x) + half * 2.0, y1 - y0))
-	return out
-
-
 ## 욕심쟁이 겹침 피하기(순수 함수). want[i] = 덩어리 i가 가고 싶은 화면 상자(아랫변 = 기준점). 아랫변이 화면 아래인 것부터 놓고,
-## 놓은 상자와 gap보다 가까우면 그 위로 민다(위로만 움직여 반드시 끝난다). obstacles는 덩어리와 가로로 겹치는 것을 합친 기둥으로 보고,
-## 닿으면 먼저 건물이 있는 쪽으로 비킨다: 기준점이 기둥 가운데보다 아래(대열 앞 건물)면 기둥 아래로, 아니면 위로 — 대열 앞 건물 이름표가
-## 대열 위로 올라가 뒤 건물 이름표를 줄줄이 밀어 올리지 않게. 그 뒤 위로 밀려 기둥에 다시 닿으면 기둥 위로. 반환 = 같은 순서의 최종 상자.
-static func place(want: Array, obstacles: Array, gap := GAP) -> Array:
+## 놓은 상자와 gap보다 가까우면 그 위로 민다(위로만 움직여 반드시 끝난다). 반환 = 같은 순서의 최종 상자.
+## (개정 21: 방치 모드에 병사 대열이 없어 병사 장애물은 뺐다.)
+static func place(want: Array, gap := GAP) -> Array:
 	var order := range(want.size())
 	order.sort_custom(func(a, b): return want[a].end.y > want[b].end.y or (want[a].end.y == want[b].end.y and want[a].position.x < want[b].position.x))
 	var out := []
 	out.resize(want.size())
 	var placed := []
-	var all := _column(obstacles, -INF, INF)  # 병사 상자 전체 — 가로로 안 겹치는 덩어리는 하나씩 보지 않는다
 	for i in order:
 		var r: Rect2 = want[i]
-		var col := _column(obstacles, r.position.x, r.end.x) if all.has_area() and r.position.x < all.end.x and r.end.x > all.position.x else Rect2()
-		if col.has_area() and _near(r, col, gap):
-			r.position.y = col.end.y + gap if r.end.y > col.get_center().y else col.position.y - gap - r.size.y
-		for _guard in placed.size() + 2:
+		for _guard in placed.size() + 1:
 			var hit = null
 			for q in placed:
 				if _near(r, q, gap):
 					hit = q
 					break
-			if hit == null and col.has_area() and _near(r, col, gap):
-				hit = col
 			if hit == null:
 				break
 			r.position.y = hit.position.y - gap - r.size.y
 		placed.append(r)
 		out[i] = r
-	return out
-
-
-## 가로 [x0, x1]과 겹치는 상자들을 합친 상자(없으면 빈 Rect2).
-static func _column(boxes: Array, x0: float, x1: float) -> Rect2:
-	var out := Rect2()
-	for b in boxes:
-		if b.position.x < x1 and b.end.x > x0:
-			out = b if not out.has_area() else out.merge(b)
 	return out
 
 
