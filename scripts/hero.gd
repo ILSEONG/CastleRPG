@@ -20,6 +20,7 @@ const Skills := preload("res://scripts/skills.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
+const Crowd := preload("res://scripts/crowd.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
@@ -118,6 +119,7 @@ func _place_default() -> void:
 
 func _ready() -> void:
 	add_to_group("heroes")
+	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
 	_model.setup(Art.hero_spec(def))
 	add_child(_model)
@@ -282,7 +284,7 @@ func _process(delta: float) -> void:
 		_model.face(wp - global_position)
 		_model.play_walk()
 		global_position = global_position.move_toward(wp, _speed * delta)
-		if global_position.distance_to(wp) <= ARRIVE_EPS:
+		if global_position.distance_to(wp) <= Crowd.arrive_r(_path, ARRIVE_EPS):
 			_path.pop_front()
 		return
 	_scan_cd -= delta
@@ -594,6 +596,15 @@ func refresh_stats() -> void:
 
 func hp_ratio() -> float:
 	return hp / hp_max if hp_max > 0.0 else 0.0
+
+
+## 겹침 해소(crowd.gd): 몸 반지름, 밀리는 무게(걷는 중이 아니면 — 자리를 지키거나 싸우는 중 — 무겁다).
+func radius() -> float:
+	return Crowd.HUMAN_R * Art.CHARACTER_SCALE
+
+
+func push_mass() -> float:
+	return Crowd.mass(radius(), state != State.MOVE)
 
 
 func bar_height() -> float:

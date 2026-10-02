@@ -255,6 +255,46 @@ static func crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
 	return true
 
 
+## 겹침 해소(crowd.gd)의 밀림 from → to를 from의 자리 안으로 되돌린다 — 밀림은 성벽·성문을 넘기지 않는다(드나드는 건 제 걸음으로만).
+## 성벽 위: 그 면 성벽을 따라서만(모서리 탑 앞까지, 깊이·높이 그대로). 성 밖: 바깥면 밖·맵 안(성문이 닫혔든 부서졌든 밀려 들어가지 않는다).
+## 성문 통로(성벽 띠): 성문 폭 안, 바깥면 안쪽. 성 안: 안쪽 면 안, 건물 부지 밖(밖에서 밀려 들어가는 축만 부지 가장자리에 붙인다).
+static func clamp_push(half: float, from: Vector3, to: Vector3) -> Vector3:
+	var outer := half + Balance.WALL_T
+	if region(half, from) == REGION_WALL:
+		var t := perp(side_of(from))
+		var lim := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0
+		return from + t * (clampf(t.dot(to), -lim, lim) - t.dot(from))
+	if not is_inside(half, from):
+		var out := Vector3(clampf(to.x, -Balance.MAP_HALF, Balance.MAP_HALF), to.y, clampf(to.z, -Balance.MAP_HALF, Balance.MAP_HALF))
+		if maxf(absf(out.x), absf(out.z)) < outer:
+			if absf(from.x) >= absf(from.z):
+				out.x = signf(from.x) * outer
+			else:
+				out.z = signf(from.z) * outer
+		return out
+	if maxf(absf(from.x), absf(from.z)) >= half:
+		var s := side_of(from)
+		var t := perp(s)
+		var p := to + t * (clampf(t.dot(to), -Balance.GATE_W / 2.0, Balance.GATE_W / 2.0) - t.dot(to))
+		return p - SIDE_DIR[s] * maxf(0.0, SIDE_DIR[s].dot(p) - (outer - 0.01))
+	var lim := half - 0.01
+	var out := Vector3(clampf(to.x, -lim, lim), to.y, clampf(to.z, -lim, lim))
+	for b in Balance.BUILDINGS:
+		var lo := Vector2(b.cell) * Balance.TILE
+		var hi := lo + Vector2(b.size) * Balance.TILE
+		if out.x > lo.x and out.x < hi.x and out.z > lo.y and out.z < hi.y \
+				and not (from.x > lo.x and from.x < hi.x and from.z > lo.y and from.z < hi.y):
+			if from.x <= lo.x:
+				out.x = lo.x
+			elif from.x >= hi.x:
+				out.x = hi.x
+			if from.z <= lo.y:
+				out.z = lo.y
+			elif from.z >= hi.y:
+				out.z = hi.y
+	return out
+
+
 ## 높이를 무시한 수평 거리. 사거리 판정은 전부 이것으로 한다.
 static func flat_distance(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
