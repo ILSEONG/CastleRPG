@@ -64,6 +64,8 @@ func _spawn(ev: Dictionary) -> void:
 	m.setup(ev.kind, ev.side, GameState.stage, castle)
 	m.died.connect(_on_monster_died)
 	get_parent().add_child(m)
+	if ev.get("lanes", 1) > 1:  # 무리: 옆으로 칸을 나눠 겹치지 않게(_ready가 정한 아무 자리를 덮어쓴다)
+		m.global_position = castle.spawn_position(ev.side, ev.lane, ev.lanes)
 	_live += 1
 
 

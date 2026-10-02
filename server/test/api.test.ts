@@ -397,7 +397,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 60, atk: 10, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 2 })
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
-  assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 4 })
+  assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 8 })
   assert.equal(g.heroes.length, 22)
   assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
   assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['crit', null]) // 개정 17: R은 스킬 2개
@@ -413,7 +413,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 56) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2
+  assert.equal(Object.keys(g.config).length, 57) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group)
   assert.equal(g.config.train_cost_cavalry, 'food:40|stone:20')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13

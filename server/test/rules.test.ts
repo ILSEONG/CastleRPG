@@ -97,7 +97,7 @@ test('stageRow: 표 안은 그대로, 31행부터 마지막 12행 평균 기울�
   assert.equal(s31.waves, 13) // 13 + 1/3
   assert.equal(R.stageRow(32, STAGES).waves, 14) // 13 + 2/3
   assert.equal(R.stageRow(33, STAGES).waves, 14)
-  assert.equal(s31.idle_interval, 4)
+  assert.equal(s31.idle_interval, 8)
 })
 
 test('stageRow: 정수 열 ≥ 1, 방치 간격 ≥ 0.5, 1행 표는 기울기 0', () => {

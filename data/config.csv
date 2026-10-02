@@ -8,7 +8,8 @@ max_live_monsters,120
 countdown_sec,3
 result_sec,2
 wave_gap_sec,8
-spawn_spacing_sec,0.5
+spawn_spacing_sec,1.0
+spawn_group,3
 accum_cap_min,720
 pop_base,6
 pop_per_house,2

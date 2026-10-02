@@ -385,6 +385,8 @@ func _skill_cases(heroes: Array) -> void:
 	await _soldier_cases()
 	await _fever_spawn()
 	await _skill_unlock_cases()
+	await _hold_ground_case()
+	await _group_spawn()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -1189,7 +1191,7 @@ func _soldier_cases() -> void:
 	await _frames(1)
 
 
-## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 사이클) 마리를 내고, 스테이지 모드는 변화가 없다.
+## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 무리) 마리를 내고, 스테이지 모드는 변화가 없다.
 func _fever_spawn() -> void:
 	var mode0: int = GameState.mode
 	var counts := {}
@@ -1211,7 +1213,9 @@ func _fever_spawn() -> void:
 	Fever.reset()
 	GameState.mode = mode0
 	_clear_monsters()
-	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= 4, "(fever) FEVER triples the idle spawn count over the same time (±1 cycle)", str(counts))
+	# 허용 오차: 방치 쪽 무리 하나(spawn_group마리)가 끝자락에 들고 안 들고의 3배
+	var tol := 3 * int(GameData.config_num("spawn_group"))
+	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= tol, "(fever) FEVER triples the idle spawn count over the same time (±1 group)", str(counts))
 	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))
 
 
@@ -1313,4 +1317,138 @@ func _skill_unlock_cases() -> void:
 		_remove_hero(h)
 	await _wait_until(func(): return Fx.live() == 0, 3.0)
 	GameState.refill()
+	await _frames(1)
+
+
+## (R) 공격 뒤 뒷걸음 없음: 자리 바깥쪽 한 줄로 놓은 제자리 괴물(뒤 괴물일수록 멀다)을 차례로 잡는 동안 자리 쪽으로 물러나지 않고
+##     (표적이 죽으면 같은 프레임에 다시 찾는다), 마지막 처치 뒤 RETURN_DELAY(1.5초) 동안 머물다 자리로 돌아간다. 머무는 중에 나타난
+##     괴물은 그 자리에서 맞는다. 근접 영웅(북 성문 앞)과 보병(성 안, 스테이지 모드) 둘 다.
+func _hold_ground_case() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.STAGE
+	GameState.refill()
+	await _frames(1)
+	var others := get_tree().get_nodes_in_group("heroes")
+	for x in others:
+		x.set_process(false)
+	var h = _add_hero("hans", 100)  # 북(0) 성문 앞 근접
+	await _frames(1)
+	var home: Vector3 = h.stand_position()
+	var out: Vector3 = Formation.SIDE_DIR[0]
+	var r: Dictionary = await _kill_row(h, home, out, [2.6, 4.6, 6.6])
+	_check(r.cleared and r.back < 0.05, "(R) a melee hero does not step back toward its post between kills", "cleared=%s back=%.2f m" % [r.cleared, r.back])
+	# 머무는 중(0.6초 뒤) 더 바깥에 나타난 괴물: 자리로 가지 않고 그 자리에서 다가가 친다
+	var stand := Formation.flat_distance(h.global_position, home)
+	var back := 0.0
+	var t := 0.0
+	while t < 0.6:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		back = maxf(back, stand - Formation.flat_distance(h.global_position, home))
+	_g = _still("grunt", home + out * (stand + 2.5))
+	t = 0.0
+	while t < 5.0 and _alive(_g):
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		back = maxf(back, stand - Formation.flat_distance(h.global_position, home))
+	_check(not _alive(_g) and back < 0.05, "(R) a monster that shows up while the hero lingers is engaged from where it stands", "alive=%s back=%.2f m" % [_alive(_g), back])
+	# 마지막 처치 뒤: 1.5초 머문 뒤에야 자리 쪽으로 걷고, 끝내 자리에 선다
+	var left: float = await _return_time(h, home, 6.0)
+	var hd := Formation.flat_distance(h.global_position, home)
+	_check(left >= 1.4 and hd < 0.1, "(R) the hero walks home only after no target has been in range for RETURN_DELAY (1.5 s)", "left after %.2f s, d=%.2f" % [left, hd])
+	_remove_hero(h)
+	# 보병: 성 안 자리 앞(남쪽 +Z) 한 줄
+	GameState.mode = GameState.Mode.IDLE
+	Economy.soldiers = {"infantry:1": 1}
+	Economy.set_soldier_deploy({"infantry:1": 1})
+	await _frames(2)
+	GameState.mode = GameState.Mode.STAGE
+	var s = _main.soldiers[0]
+	var sdir := Vector3(0, 0, 1)
+	var inside: bool = [2.2, 4.0, 5.8].all(func(d): return Formation.is_inside(_half, s.home + sdir * d))
+	r = await _kill_row(s, s.home, sdir, [2.2, 4.0, 5.8])
+	_check(inside and r.cleared and r.back < 0.05, "(R) an infantry soldier does not step back toward its place between kills", "inside=%s cleared=%s back=%.2f m" % [inside, r.cleared, r.back])
+	left = await _return_time(s, s.home, 6.0)
+	hd = Formation.flat_distance(s.global_position, s.home)
+	_check(left >= 1.4 and hd < 0.1, "(R) the soldier walks back only after RETURN_DELAY (1.5 s) without a target", "left after %.2f s, d=%.2f" % [left, hd])
+	GameState.mode = GameState.Mode.IDLE
+	Economy.set_soldier_deploy({})
+	await _frames(2)
+	for x in others:
+		if is_instance_valid(x):
+			x.set_process(true)
+	_clear_monsters()
+	await _frames(1)
+
+
+## 제자리 괴물을 home + dir × 거리마다 놓고 다 죽을 때까지(최대 15초) u의 home 거리를 본다.
+## back = 첫 처치 뒤, 그때까지 가장 멀리 나간 곳에서 home 쪽으로 돌아온 최대 거리(뒤 괴물이 더 멀어 물러날 까닭이 없다).
+func _kill_row(u, home: Vector3, dir: Vector3, dists: Array) -> Dictionary:
+	var row := []
+	for d in dists:
+		row.append(_still("grunt", home + dir * d))
+	var peak := 0.0
+	var back := 0.0
+	var t := 0.0
+	while t < 15.0 and row.any(_alive):
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		var d := Formation.flat_distance(u.global_position, home)
+		peak = maxf(peak, d)
+		if not _alive(row[0]):
+			back = maxf(back, peak - d)
+	return {"cleared": not row.any(_alive), "back": back}
+
+
+## 지금 위치에서 home 쪽으로 0.05 m 넘게 다가가기 시작한 초(timeout 안에 안 가면 INF). home에 닿을 때까지(최대 timeout) 기다린다.
+func _return_time(u, home: Vector3, timeout: float) -> float:
+	var stand := Formation.flat_distance(u.global_position, home)
+	var left := INF
+	var t := 0.0
+	while t < timeout and Formation.flat_distance(u.global_position, home) > 0.05:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		if left == INF and Formation.flat_distance(u.global_position, home) < stand - 0.05:
+			left = t
+	return left
+
+
+## 무리 스폰(스포너): 방치 첫 무리는 idle_interval(8초)에 3마리가 한꺼번에 한 면(북)에 나오고, 옆으로 칸을 나눠 서로 2 m 넘게
+##     떨어진다(겹쳐 나오지 않는다). 스테이지 첫 무리는 곧바로 3마리가 한꺼번에 이웃 면(북·동·남)에 한 마리씩.
+func _group_spawn() -> void:
+	var mode0: int = GameState.mode
+	Fever.reset()
+	for k in ["idle", "stage"]:
+		_clear_monsters()
+		await _frames(1)
+		GameState.mode = GameState.Mode.IDLE if k == "idle" else GameState.Mode.STAGE
+		var holder := Node.new()
+		add_child(holder)
+		var sp = SpawnerScript.new()
+		sp.castle = _main.castle
+		holder.add_child(sp)
+		var clock := 0.0
+		while sp._live == 0 and clock < 20.0:
+			sp._process(0.05)
+			clock += 0.05
+		var ms: Array = holder.get_children().filter(func(c): return c != sp)
+		var side: int = ms[0].side if ms.size() > 0 else -1
+		var offs: Array = ms.map(func(m): return m.global_position.dot(Formation.perp(side)))
+		offs.sort()
+		var gap := INF
+		for i in range(1, offs.size()):
+			gap = minf(gap, offs[i] - offs[i - 1])
+		var near := ms.all(func(m): return Formation.flat_distance(m.global_position, Formation.spawn_center(_half, m.side)) <= Balance.SPAWN_SPREAD + 0.01)
+		var sides: Array = ms.map(func(m): return m.side)
+		if k == "idle":
+			_check(ms.size() == 3 and sides == [0, 0, 0] and near and gap >= 1.99 and clock >= 7.95 and clock <= 8.11,
+				"(group) idle: the first spawn is 3 monsters at once on one side after 8 s, spread sideways >= 2 m apart",
+				"n=%d at %.2f s sides=%s near=%s offsets=%s" % [ms.size(), clock, sides, near, offs])
+		else:
+			_check(ms.size() == 3 and sides == [0, 1, 2] and near and clock <= 0.06, "(group) stage: the first spawn is 3 monsters at once, one per neighbouring side",
+				"n=%d at %.2f s sides=%s near=%s" % [ms.size(), clock, sides, near])
+		holder.queue_free()
+		await _frames(1)
+	GameState.mode = mode0
+	_clear_monsters()
 	await _frames(1)

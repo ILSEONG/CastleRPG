@@ -17,6 +17,7 @@ const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 
 const SCAN_INTERVAL := 0.2
+const RETURN_DELAY := 1.5  # 교전이 끝나고 이만큼 제자리에 머문 뒤 자리로 돌아간다(영웅과 같다)
 const ARRIVE_EPS := 0.05
 const SWING_SLACK := 0.6  # 근접 타격 순간 대상이 사거리 + 이만큼 안이면 맞는다(영웅과 같다)
 const MUZZLE := Vector3(0, 1.33 * Art.SOLDIER_SCALE, 0)  # 화살이 나가는 높이(모델 1.33 m × 병사 크기)
@@ -44,6 +45,7 @@ var _disc: MeshInstance3D
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
+var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
 var _swing  # 휘두르는(쏘려는) 공격의 고정 대상. null = 없음
 var _swing_left := 0.0
 var _walking := false
@@ -84,6 +86,7 @@ func reset() -> void:
 	hp = hp_max
 	_target = null
 	_swing = null
+	_linger = 0.0
 	_atk_cd = 0.0
 	global_position = home
 	_model.reset_pose()
@@ -155,10 +158,14 @@ func _process(delta: float) -> void:
 	_atk_cd -= delta
 	_tick_swing(delta)
 	_scan_cd -= delta
-	if _scan_cd <= 0.0:
+	# 표적이 죽거나 사라지면 같은 프레임에 다시 찾는다. 휘두르는 중인 사거리 안 표적은 스캔이 놓치지 않는다(영웅과 같다)
+	var lost: bool = _target != null and not (is_instance_valid(_target) and _target.is_alive())
+	if _scan_cd <= 0.0 or lost:
 		_scan_cd = SCAN_INTERVAL
-		_target = _find_target()
+		if not _swinging_at(_target):
+			_target = _find_target()
 	if _target != null and is_instance_valid(_target) and _target.is_alive():
+		_linger = RETURN_DELAY
 		var tpos: Vector3 = _target.global_position
 		_face(tpos - global_position)
 		if Formation.flat_distance(global_position, tpos) <= float(stats.range):
@@ -174,7 +181,11 @@ func _process(delta: float) -> void:
 			global_position = next
 			return
 	_target = null
+	_linger -= delta
 	if global_position.distance_to(home) > ARRIVE_EPS:
+		if _linger > 0.0:  # 교전 뒤 잠시 제자리(곧장 돌아서면 다음 괴물마다 왔다 갔다 한다)
+			_set_walking(false)
+			return
 		_face(home - global_position)
 		_set_walking(true)
 		global_position = global_position.move_toward(home, float(stats.speed) * delta)
@@ -197,6 +208,12 @@ func _find_target():
 			best_d = d
 			best = m
 	return best
+
+
+## m을 휘두르는(쏘려는) 중이고 m이 살아서 사거리 안인가.
+func _swinging_at(m) -> bool:
+	return m != null and _swing == m and is_instance_valid(m) and m.is_alive() \
+		and Formation.flat_distance(global_position, m.global_position) <= float(stats.range)
 
 
 ## 공격 시작(개정 12-2 §3): 대상을 고정하고 모션을 재생한다(간격에 맞춰 빨라질 수 있다). 피해는 타격 순간(_release)에.

@@ -104,6 +104,7 @@ func _init() -> void:
 	test_item_icons()
 	test_arena_kit()
 	test_dungeon_monsters()
+	test_spawn_groups()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -131,7 +132,7 @@ func test_game_data() -> void:
 	for s in range(1, 31):  # 1~30행은 직선 공식(개정 10: HP·공격력 10%, 골드 20%)
 		var r := GameData.stage(s)
 		check(is_equal_approx(r.hp_mult, 1.0 + 0.10 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.10 * (s - 1)), "hp/atk mult at stage %d" % s)
-		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 4.0, "waves/size/idle at stage %d" % s)
+		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 8.0, "waves/size/idle at stage %d" % s)
 		check(is_equal_approx(r.gold_mult, 1.0 + 0.2 * (s - 1)), "gold_mult at stage %d" % s)
 	var r31 := GameData.stage(31)  # 직선 연장
 	var r30 := GameData.stage(30)
@@ -203,7 +204,7 @@ func test_game_tables() -> void:
 	check(GameData.resource("wood").building == "lumber" and GameData.resource("food").per_min == 10.0 and GameData.resource("food").building == "farm", "wood/food rows")
 	check(GameData.resource_of_building("farm") == "food" and GameData.resource_of_building("keep") == "", "resource_of_building")
 	var nums := {"castle_hp": 1000.0, "gate_hp_per_level": 400.0, "max_live_monsters": 120.0, "countdown_sec": 3.0, "result_sec": 2.0,
-		"wave_gap_sec": 8.0, "spawn_spacing_sec": 0.5, "accum_cap_min": 720.0, "badge_min": 5.0, "merchant_jackpot_p": 0.05,
+		"wave_gap_sec": 8.0, "spawn_spacing_sec": 1.0, "spawn_group": 3.0, "accum_cap_min": 720.0, "badge_min": 5.0, "merchant_jackpot_p": 0.05,
 		"merchant_jackpot_rate": 2.0, "merchant_rate_min": 0.5, "merchant_rate_max": 1.5, "merchant_rate_step": 0.1,
 		"merchant_low_high_ratio": 3.0, "kill_rate_cap": 5.0}
 	for key in nums:
@@ -383,10 +384,10 @@ func test_wave_total_monotonic() -> void:
 
 func test_wave_idle_cycle() -> void:
 	var ev := WaveDirector.build(1, WaveDirector.MODE_IDLE)
-	check(ev.size() == 4, "idle cycle spawns 4")
+	check(ev.size() == 12, "idle cycle spawns 4 groups of 3")
 	check(ev[0].time > 0.0, "first idle spawn is not at t=0")
 	var sides: Array = ev.map(func(e): return e.side)
-	check(sides == [0, 1, 2, 3], "idle sides rotate 0..3")
+	check(sides == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3], "idle sides rotate 0..3, one group per side")
 	for e in ev:
 		check(e.kind == "grunt", "idle spawns grunts only")
 
@@ -2882,3 +2883,39 @@ func test_dungeon_monsters() -> void:
 			check(head.call(again) == head.call(model), "two goblins share one tinted skin material")
 			again.free()
 		model.free()
+
+
+## 무리 스폰: 몬스터는 spawn_group(3)마리씩 같은 시각에 나온다. 방치는 idle_interval(8초 = 예전 4초의 2배)마다 한 면에 한 무리,
+## 스테이지는 웨이브 크기 그대로 무리 간격 spawn_spacing_sec(1초 = 예전 0.5초의 2배), 무리는 이웃 면에 한 마리씩(면 = 웨이브 안 순번 % 4,
+## 예전과 같다), 웨이브 사이·보스는 그대로.
+func test_spawn_groups() -> void:
+	GameData.load_tables()
+	check(WaveDirector.group_size() == 3 and GameData.stage(1).idle_interval == 8.0 and GameData.stage(40).idle_interval == 8.0
+		and GameData.config_num("spawn_spacing_sec") == 1.0, "spawn_group 3, idle_interval 8 (extrapolated too), spawn_spacing_sec 1.0")
+	var idle := WaveDirector.build(1, WaveDirector.MODE_IDLE)
+	var times: Array = idle.map(func(e): return e.time)
+	check(times == [8.0, 8.0, 8.0, 16.0, 16.0, 16.0, 24.0, 24.0, 24.0, 32.0, 32.0, 32.0], "idle: a group of 3 every 8 s %s" % [times])
+	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3 on one side")
+	for stage in [1, 5, 30]:
+		var st := GameData.stage(stage)
+		var ev := WaveDirector.build(stage, WaveDirector.MODE_STAGE)
+		var grunts := ev.filter(func(e): return e.kind == "grunt")
+		check(grunts.size() == int(st.waves) * int(st.wave_size) and ev[-1].kind == "epic_boss", "stage %d: wave size unchanged, boss last" % stage)
+		var groups := {}  # 시각 → 그 시각 몬스터들
+		for e in grunts:
+			groups[e.time] = groups.get(e.time, []) + [e]
+		var keys: Array = groups.keys()
+		var per_wave := ceili(int(st.wave_size) / 3.0)
+		var sizes_ok := true
+		for i in keys.size():
+			var want := 3 if i % per_wave < per_wave - 1 or int(st.wave_size) % 3 == 0 else int(st.wave_size) % 3
+			var base := (i % per_wave) * 3  # 웨이브 안 이 무리 첫 몬스터 순번
+			var sides: Array = groups[keys[i]].map(func(e): return e.side)
+			sizes_ok = sizes_ok and sides.size() == want and sides == range(base, base + want).map(func(n): return n % 4)
+		check(keys.size() == int(st.waves) * per_wave and sizes_ok, "stage %d: groups of 3 (last of a wave = rest), one per neighbouring side (side = index in wave %% 4)" % stage)
+		var gaps_ok := true
+		for i in range(1, keys.size()):
+			var want: float = 1.0 if i % per_wave != 0 else 1.0 + GameData.config_num("wave_gap_sec")
+			gaps_ok = gaps_ok and is_equal_approx(keys[i] - keys[i - 1], want)
+		gaps_ok = gaps_ok and is_equal_approx(ev[-1].time - keys[-1], 1.0 + GameData.config_num("wave_gap_sec"))
+		check(gaps_ok, "stage %d: 1 s between groups, wave gap and boss timing unchanged" % stage)
