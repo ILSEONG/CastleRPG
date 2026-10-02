@@ -2138,6 +2138,9 @@ func _dungeon_ui(tabs) -> void:
 	print("INPUT INFO: result panel %s, [다음 단계] %s, [다시] %s, [나가기] %s, 다음 단계 자동 %s, 현재 단계 자동 반복 %s" % [hud.result_title.get_parent().get_global_rect(),
 		hud.next_button.get_global_rect(), hud.again_button.get_global_rect(), hud.exit_button.get_global_rect(), hud.auto_next_box.get_global_rect(),
 		hud.auto_repeat_box.get_global_rect()])
+	var xs := [hud.exit_button, hud.again_button, hud.next_button].map(func(b): return b.get_global_rect().get_center().x)
+	_check(xs[0] < xs[1] and xs[1] < xs[2] and hud.auto_repeat_box.get_global_rect().get_center().x < hud.auto_next_box.get_global_rect().get_center().x,
+		"(D) result buttons read [나가기] [다시] [다음 단계] left to right; 현재 단계 자동 반복 is left of 다음 단계 자동 도전", "xs=%s" % [xs])
 	await _tap(hud.auto_next_box.get_global_rect().get_center())
 	var first_on := [Fever.dungeon_auto, hud.auto_next_box.button_pressed, hud.auto_repeat_box.button_pressed]
 	await _tap(hud.auto_repeat_box.get_global_rect().get_center())

@@ -2,8 +2,8 @@ extends CanvasLayer
 ## 던전 전투 화면(개정 18 §8). 위 패널: 던전 이름·단계, 남은 시간, [포기](싸우는 중만), 보스 큰 HP 막대(이름·숫자 — 나오기 전엔 "남은 적 n").
 ## 아래: 출전 영웅 띠(피규어 + HP 막대, 쓰러지면 흐리게). 가운데 띠("승리!"·"결과 확인 중…")와 짧은 알림(Economy.notice — 성 HUD는 트리 밖).
 ## 결과 화면(show_result): 어두운 배경 + 가운데 패널 — "승리!"/"패배"(실패면 그 이유), 던전·단계, 보상(골드 / 장비 칸: 등급 테두리·이름·Lv,
-## 패배면 "보상 없음 · 열쇠는 그대로"), [다음 단계](이겼고 최고 + 1 이하일 때)·[다시]·[나가기], 체크 둘 "다음 단계 자동 도전"·
-## "현재 단계 자동 반복"(서로 배타, Fever.dungeon_auto), 자동 상태 한 줄("2초 뒤 자동 도전"·"자동 도전을 멈췄습니다").
+## 패배면 "보상 없음 · 열쇠는 그대로"), [나가기]·[다시]·[다음 단계](이겼고 최고 + 1 이하일 때), 체크 둘 "현재 단계 자동 반복"·
+## "다음 단계 자동 도전"(서로 배타, Fever.dungeon_auto), 자동 상태 한 줄("2초 뒤 자동 도전"·"자동 도전을 멈췄습니다").
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
@@ -203,7 +203,7 @@ func _build_result(root: Control) -> void:
 	again_button.pressed.connect(func(): dungeon.retry())
 	exit_button = _button("나가기", UiKit.STEEL)
 	exit_button.pressed.connect(func(): dungeon.leave())
-	for b in [next_button, again_button, exit_button]:
+	for b in [exit_button, again_button, next_button]:  # 왼쪽부터 나가기·다시·다음 단계(사용자 요청)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	var checks := HBoxContainer.new()
@@ -214,8 +214,8 @@ func _build_result(root: Control) -> void:
 	auto_next_box.toggled.connect(_on_auto.bind("next"))
 	auto_repeat_box = _checkbox("현재 단계 자동 반복")
 	auto_repeat_box.toggled.connect(_on_auto.bind("repeat"))
+	checks.add_child(auto_repeat_box)  # 왼쪽 현재 단계 자동 반복, 오른쪽 다음 단계 자동 도전(사용자 요청)
 	checks.add_child(auto_next_box)
-	checks.add_child(auto_repeat_box)
 	auto_label = _label("", 22, MainHud.INK.lightened(0.25))
 	box.add_child(auto_label)
 
