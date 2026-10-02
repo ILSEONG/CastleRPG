@@ -336,6 +336,8 @@ func _skill_cases(heroes: Array) -> void:
 	var se = _add_hero("seraphine", 100, 3)
 	se.atk = GameData.hero_stats(se.def, 1, 0, GameState.building_levels()).atk  # ★3 공격 배율이면 grunt가 한 방에 죽는다 — 공격은 ★0 그대로
 	_g = _spawn("grunt", 0, Vector3(-6, 0, -(north_out + 4.0)))
+	_g.hp = 60.0  # 표 HP 24는 공격 44 한 방에 죽는다 — 예전 HP로 한 방은 버티게
+	_g.hp_max = 60.0
 	await _wait_until(func(): return _alive(_g) and _g._slow_t > 0.0, 3.0)
 	var base_speed: float = _g._stats.speed
 	# process_frame은 각 _process 전에 온다: 이 프레임의 delta(이 뒤에 움직일 몫)부터 센다 — 프레임 간격이 들쭉날쭉해도 맞게
@@ -617,6 +619,8 @@ func _damage_numbers() -> void:
 	for x in [h, hc, hd]:
 		x.set_process(false)
 	var m = _still("grunt", Vector3(0, 0, -(_half + 6.0)))
+	m.hp_max = 1000.0  # 표 HP 24는 첫 방에 죽는다 — 두 번 맞아도 살아 있게
+	m.hp = m.hp_max
 	dn._list.clear()
 	h._target = m
 	await _attack_now(h)

@@ -129,7 +129,8 @@ func test_game_data() -> void:
 	GameData.load_tables()
 	check(GameData.errors == 0, "default tables load without errors")
 	var grunt := GameData.monster("grunt")
-	check(grunt.hp == 60.0 and grunt.gold == 2 and GameData.monster("epic_boss").gold == 50, "monster table values")
+	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 그대로
+	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 2 and GameData.monster("epic_boss").gold == 50, "monster table values")
 	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
 		for kind in ["grunt", "epic_boss"]:
 			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])

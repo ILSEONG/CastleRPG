@@ -399,7 +399,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   const g = r.json
   assert.match(g.version, /^[0-9a-f]{16}$/)
   assert.equal(r.headers.get('etag'), `"${g.version}"`)
-  assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 60, atk: 10, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 2 })
+  assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 24, atk: 4, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 2 })
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
   assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 8 })
