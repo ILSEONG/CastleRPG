@@ -391,6 +391,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _skill_unlock_cases()
 	await _hold_ground_case()
 	await _group_spawn()
+	await _round_cases()
 	await _stage_return_cases()
 	await _rebuilt_post_case()
 	await _growth_cases()
@@ -1685,6 +1686,62 @@ func _group_spawn() -> void:
 			"n=%d at %.2f s sides=%s near=%s offsets=%s" % [ms.size(), clock, sides, near, offs])
 		holder.queue_free()
 		await _frames(1)
+	GameState.mode = mode0
+	_clear_monsters()
+	await _frames(1)
+
+
+## 개정 22 §2 §3: 스테이지 모드 스포너는 라운드 1-1·1-24(g = 1·24)에 보스를 내지 않고 1-25에만 HP × boss_round_mult 보스를 낸다
+## (24·25행은 잠시 웨이브 1 × 2로 줄인다 — 수천 마리를 만들지 않게). 스테이지 2(g = 26) 적은 스테이지 1보다 1.08배 빨리 걷는다
+## (같은 자리에서 진로로 1초 — 졸개·보스).
+func _round_cases() -> void:
+	var mode0: int = GameState.mode
+	var g0: int = GameState.stage
+	var rows: Array = GameData._stages.duplicate(true)
+	for i in [23, 24]:
+		GameData._stages[i].waves = 1
+		GameData._stages[i].wave_size = 2
+	var bosses := {}
+	var grunts := {}
+	for g in [1, 24, 25]:
+		_clear_monsters()
+		await _frames(1)
+		GameState.stage = g
+		GameState.mode = GameState.Mode.STAGE
+		var holder := Node.new()
+		add_child(holder)
+		var sp = SpawnerScript.new()
+		sp.castle = _main.castle
+		holder.add_child(sp)  # _ready가 g의 스테이지 스케줄을 읽는다
+		for i in 3000:  # 스케줄 끝까지(몬스터가 살아 있어 전멸 감지는 안 된다)
+			if sp._cursor >= sp._events.size():
+				break
+			sp._process(0.1)
+		var ms: Array = holder.get_children().filter(func(c): return c != sp)
+		bosses[g] = ms.filter(func(m): return m.kind == "epic_boss").map(func(m): return m.hp_max)
+		grunts[g] = ms.filter(func(m): return m.kind == "grunt").size()
+		holder.queue_free()
+		await _frames(1)
+	GameData._stages = rows
+	var boss_hp: float = GameData.monster("epic_boss").hp * GameData.stage(25).hp_mult * GameData.config_num("boss_round_mult")
+	_check(bosses[1].is_empty() and bosses[24].is_empty() and bosses[25].size() == 1 and is_equal_approx(bosses[25][0], boss_hp) and grunts[1] == 72 and grunts[25] == 6,
+		"(round) rounds 1-1 and 1-24 spawn no boss; round 1-25 spawns one boss with hp x boss_round_mult", "bosses=%s grunts=%s want hp %.0f" % [bosses, grunts, boss_hp])
+	var moved := {}
+	for g in [1, 26]:
+		for kind in ["grunt", "epic_boss"]:
+			var m = MonsterScript.new()
+			m.setup(kind, 0, g, _main.castle)
+			_main.add_child(m)
+			m.set_process(false)
+			var p0 := Vector3(0, 0, -(_half + Balance.WALL_T + 30.0))
+			m.global_position = p0
+			m._advance(1.0)
+			moved["%s@%d" % [kind, g]] = Formation.flat_distance(p0, m.global_position)
+			m.queue_free()
+	_check(is_equal_approx(moved["grunt@1"], 2.5) and is_equal_approx(moved["grunt@26"] / moved["grunt@1"], 1.08)
+		and is_equal_approx(moved["epic_boss@26"] / moved["epic_boss@1"], 1.08),
+		"(round) stage 2 (g = 26) grunts and bosses walk 1.08x as far in 1 s as stage 1", str(moved))
+	GameState.stage = g0
 	GameState.mode = mode0
 	_clear_monsters()
 	await _frames(1)

@@ -266,7 +266,7 @@ func _phase1(state_path: String) -> void:
 	_check(Economy.server_gold_tenths == gold3 + boss3 and Economy.gold_tenths == Economy.server_gold_tenths, "(i) the server pays it at the server stage, matching the estimate",
 		"server=%d expect=%d" % [Economy.server_gold_tenths, gold3 + boss3])
 	GameState.start_stage()  # 경계: refill → 서버 stage
-	_check(GameState.stage == 3 and Economy.server_stage == 3 and GameState.mode == GameState.Mode.STAGE and _hud._stage_label.text == "스테이지 3",
+	_check(GameState.stage == 3 and Economy.server_stage == 3 and GameState.mode == GameState.Mode.STAGE and _hud._stage_label.text == "1-3",  # 표기는 S-r(개정 22)
 		"(i) at the next stage start GameState.stage and the HUD follow the server stage 3", "stage=%d label=%s" % [GameState.stage, _hud._stage_label.text])
 	GameState.damage_castle(1e9)  # 클리어 없이 끝낸다(패배 → 대기, 스테이지 유지)
 	await _wait_until(func(): return GameState.mode == GameState.Mode.IDLE, 10.0)

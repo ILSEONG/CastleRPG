@@ -1,6 +1,6 @@
 extends CanvasLayer
 ## HUD. GameState·Economy·Net 시그널만 구독. 게임 오브젝트 직접 참조 없음(성문 막대 탭은 gate_tapped로 알리고 main이 카메라를 옮긴다).
-## 상단 스테이지 패널(개정 12-2): 첫 줄 왼쪽 "스테이지 N"(_title_box — 방치 무적 표시가 그 옆에 붙는다), 오른쪽 진행 버튼.
+## 상단 스테이지 패널(개정 12-2): 첫 줄 왼쪽 제목 "S-r"과 작게 "스테이지 S · 라운드 r/25"(개정 22 §1, _title_box), 오른쪽 진행 버튼.
 ## 그 아래 성 막대("성" + 숫자)와 성문 막대 4개(2×2: 나침반 삼각형 + 북·동·남·서 + 숫자, 피해 때 테두리 번쩍임, 부서지면 회색 "파괴").
 ## 하단에는 탭 바만 있다(끊김 띠·알림은 그 위).
 
@@ -21,6 +21,7 @@ const PANEL_BG := Color(0.984, 0.969, 0.933, 0.78)  # UiKit.CREAM_PANEL
 const ACCENT := Color(0.98, 0.70, 0.20)
 const TOAST_SEC := 1.6
 const IconsScript := preload("res://scripts/icons.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const Formation := preload("res://scripts/formation.gd")
 const CameraRig := preload("res://scripts/camera_rig.gd")
@@ -38,7 +39,8 @@ const CASTLE := -1  # _hp 키: 성(성문은 면 0..3)
 
 signal gate_tapped(side: int)
 
-var _stage_label: Label
+var _stage_label: Label  # 제목 "S-r"(개정 22 §1)
+var _round_label: Label  # 그 옆 작게 "스테이지 S · 라운드 r/25"
 var _title_box: HBoxContainer  # 첫 줄 왼쪽: 스테이지 글자 + (개정 12 §3) 방치 무적 표시 자리
 var _castle_bar: ProgressBar
 var _gate_bars: Array = []
@@ -99,6 +101,13 @@ func _ready() -> void:
 	_stage_label.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))  # 제목: 외곽선
 	_stage_label.add_theme_constant_override("outline_size", 6)
 	_title_box.add_child(_stage_label)
+	_round_label = Label.new()  # 작게 "스테이지 S · 라운드 r/25" — 좁으면 말줄임(버튼을 밀지 않게)
+	_round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_round_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_round_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_round_label.add_theme_font_size_override("font_size", 16)
+	_round_label.add_theme_color_override("font_color", Color(INK, 0.8))
+	_title_box.add_child(_round_label)
 	_button = Button.new()
 	_button.custom_minimum_size = STAGE_BUTTON
 	_button.focus_mode = Control.FOCUS_NONE
@@ -316,7 +325,7 @@ func _set_hp(key: int, hp: float, hp_max: float) -> void:
 
 
 func _on_cleared(stage: int) -> void:
-	_center.text = "스테이지 %d 클리어" % stage
+	_center.text = "%s 클리어" % GameData.round_label(stage)
 
 
 func _on_failed(_stage: int) -> void:
@@ -324,13 +333,15 @@ func _on_failed(_stage: int) -> void:
 
 
 func _on_mode_changed(mode: int) -> void:
-	_stage_label.text = "스테이지 %d" % GameState.stage
+	var g: int = GameState.stage  # 전체 라운드 g → 표기 "S-r"
+	_stage_label.text = GameData.round_label(g)
+	_round_label.text = "스테이지 %d · 라운드 %d/%d" % [GameData.round_stage(g), GameData.round_in_stage(g), GameData.rounds_per_stage()]
 	if mode == GameState.Mode.IDLE or mode == GameState.Mode.STAGE:
 		_center.text = ""
 	hint.visible = mode == GameState.Mode.COUNTDOWN
 	if hint.visible:
 		_tip_n += 1
-		hint.text = "곧 스테이지 %d이(가) 시작됩니다\n%s" % [GameState.stage, TIPS[_tip_n % TIPS.size()]]
+		hint.text = "곧 %s 라운드가 시작됩니다\n%s" % [GameData.round_label(g), TIPS[_tip_n % TIPS.size()]]
 	_refresh_button()
 
 

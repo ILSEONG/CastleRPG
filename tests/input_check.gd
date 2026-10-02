@@ -346,12 +346,19 @@ func _recruit_and_heroes(rig) -> void:
 		elif c.get_script() == preload("res://scripts/tab_bar.gd"):
 			tabs = c
 	_check(not hud.hint.visible, "(hint) hidden in IDLE", "")
+	# 개정 22 §1: 제목 "S-r" + 작게 "스테이지 S · 라운드 r/25", 카운트다운 안내도 라운드 표기(g = GameState.stage)
+	_check(GameState.stage == 1 and hud._stage_label.text == "1-1" and hud._round_label.text == "스테이지 1 · 라운드 1/25",
+		"(hint) HUD title '1-1' with '스테이지 1 · 라운드 1/25' at g = 1", "g=%d title=%s sub=%s" % [GameState.stage, hud._stage_label.text, hud._round_label.text])
 	var mode0: int = GameState.mode
+	var g0: int = GameState.stage
+	GameState.stage = 27
 	GameState.mode = GameState.Mode.COUNTDOWN
 	GameState._timer = 3.0
 	GameState.mode_changed.emit(GameState.mode)
-	_check(hud.hint.visible and hud.hint.text.contains("스테이지") and hud.hint.text.split("\n").size() == 2 and hud.hint.text.split("\n")[1] != "",
-		"(hint) visible with context and tip during the countdown", hud.hint.text)
+	_check(hud.hint.visible and hud.hint.text.split("\n")[0] == "곧 2-2 라운드가 시작됩니다" and hud.hint.text.split("\n").size() == 2 and hud.hint.text.split("\n")[1] != ""
+		and hud._stage_label.text == "2-2" and hud._round_label.text == "스테이지 2 · 라운드 2/25",
+		"(hint) g = 27: countdown '곧 2-2 라운드가 시작됩니다' + tip, title '2-2'", "%s | %s | %s" % [hud.hint.text, hud._stage_label.text, hud._round_label.text])
+	GameState.stage = g0
 	GameState.mode = mode0
 	GameState.mode_changed.emit(mode0)
 	_check(not hud.hint.visible, "(hint) hidden again outside the countdown", "")

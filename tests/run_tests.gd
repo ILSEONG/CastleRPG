@@ -36,6 +36,7 @@ func _init() -> void:
 	test_game_tables()
 	test_apply_remote()
 	test_wave_stage_ends_with_boss()
+	test_rounds()
 	test_wave_total_monotonic()
 	test_wave_idle_cycle()
 	test_gamestate_win_loop()
@@ -296,6 +297,7 @@ func _remote_checks() -> int:
 		["upgrade unit unknown", 1], ["upgrade growth below 1", 1], ["upgrade max level 0", 1], ["upgrade cost 0", 1], ["upgrades missing", 1], ["duplicate upgrade id", 1],
 		["dungeon type unknown", 1], ["dungeon table missing", 1], ["no equip dungeon enemy", 1], ["dungeon count 0", 1], ["drop min_level gap", 1],
 		["drop weight negative", 1], ["dungeon config missing", 1], ["reset hour 24", 1], ["weapon chance above 1", 1],
+		["rounds per stage 0", 1], ["rounds per stage 2.5", 1], ["speed step negative", 1], ["speed cap below 1", 1], ["boss mult 0", 1], ["round config missing", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -371,6 +373,12 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"dungeon config missing": q.config.erase("gold_dg_base")
 		"reset hour 24": q.config.daily_reset_utc_hour = "24"
 		"weapon chance above 1": q.config.equip_weapon_p = "1.5"
+		"rounds per stage 0": q.config.rounds_per_stage = "0"  # 개정 22: g → S-r 나눗셈이 0으로
+		"rounds per stage 2.5": q.config.rounds_per_stage = "2.5"
+		"speed step negative": q.config.stage_speed_step = "-0.1"
+		"speed cap below 1": q.config.stage_speed_cap = "0.9"
+		"boss mult 0": q.config.boss_round_mult = "0"
+		"round config missing": q.config.erase("rounds_per_stage")
 
 
 func test_apply_remote() -> void:
@@ -383,16 +391,38 @@ func test_apply_remote() -> void:
 	check(GameData.errors == 0 and GameData.hero("arteon").hp == 1040.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 22, "default tables restored after apply_remote tests")
 
 
+## 개정 22 §2: 에픽 보스는 라운드 25(스테이지 마지막)에만, 끝에 하나 — HP × boss_round_mult. 라운드 1~24는 졸개만.
 func test_wave_stage_ends_with_boss() -> void:
-	var ev := WaveDirector.build(1, WaveDirector.MODE_STAGE)
+	var ev := WaveDirector.build(25, WaveDirector.MODE_STAGE)
 	check(ev.size() > 1, "stage schedule has events")
-	check(ev[-1].kind == "epic_boss", "last event is epic_boss")
+	check(ev[-1].kind == "epic_boss" and ev[-1].hp_mult == 1.5, "round 1-25 ends with epic_boss (hp x boss_round_mult 1.5)")
 	for i in range(1, ev.size()):
 		check(ev[i].time >= ev[i - 1].time, "events sorted at %d" % i)
 	var bosses := ev.filter(func(e): return e.kind == "epic_boss").size()
 	check(bosses == 1, "exactly one boss")
 	for e in ev:
 		check(e.side >= 0 and e.side <= 3, "side in range")
+	var boss_rounds := []
+	for g in range(1, 52):
+		if WaveDirector.build(g, WaveDirector.MODE_STAGE).any(func(e): return e.kind == "epic_boss"):
+			boss_rounds.append(GameData.round_label(g))
+	check(boss_rounds == ["1-25", "2-25"], "g 1..51: a boss only on round 25 of each stage %s" % [boss_rounds])
+
+
+## 개정 22 §1 §3: 전체 라운드 g ↔ 스테이지 S·라운드 r("S-r"), 적 이동속도 배율 min(2.0, 1 + 0.08 × (S − 1)).
+func test_rounds() -> void:
+	check(GameData.rounds_per_stage() == 25 and GameData.config_num("stage_speed_step") == 0.08 and GameData.config_num("stage_speed_cap") == 2.0
+		and GameData.config_num("boss_round_mult") == 1.5, "round config: 25 rounds, step 0.08, cap 2.0, boss x1.5")
+	var sr: Array = [1, 25, 26, 50, 51].map(func(g): return [GameData.round_stage(g), GameData.round_in_stage(g), GameData.round_label(g)])
+	check(sr == [[1, 1, "1-1"], [1, 25, "1-25"], [2, 1, "2-1"], [2, 25, "2-25"], [3, 1, "3-1"]], "g -> S, r, 'S-r' for 1, 25, 26, 50, 51: %s" % [sr])
+	check([1, 24, 25, 26, 50].map(func(g): return GameData.is_boss_round(g)) == [false, false, true, false, true], "boss round = r 25")
+	var mults: Array = [1, 2, 5, 13, 20].map(func(s): return GameData.enemy_speed_mult((s - 1) * 25 + 1))
+	var want := [1.0, 1.08, 1.32, 1.96, 2.0]
+	var ok := true
+	for i in want.size():
+		ok = ok and is_equal_approx(mults[i], want[i])
+	check(ok, "speed mult for stage 1, 2, 5, 13, 20 = 1.00, 1.08, 1.32, 1.96, 2.0 (cap) %s" % [mults])
+	check(GameData.enemy_speed_mult(25) == 1.0 and is_equal_approx(GameData.enemy_speed_mult(50), 1.08), "speed is the same for all 25 rounds of a stage")
 
 
 func test_wave_total_monotonic() -> void:
@@ -3103,7 +3133,7 @@ func test_dungeon_monsters() -> void:
 
 
 ## 무리 스폰: 스폰 횟수·면 순서는 예전(한 번에 한 마리) 그대로, 스폰 한 번에 spawn_group(3)마리가 같은 시각·같은 면에 나란히 —
-## 몬스터 3배. 간격은 2배: 방치 idle_interval 8초(예전 4초), 스테이지 spawn_spacing_sec 1초(예전 0.5초). 웨이브 사이·보스 하나는 그대로.
+## 몬스터 3배. 간격은 2배: 방치 idle_interval 8초(예전 4초), 스테이지 spawn_spacing_sec 1초(예전 0.5초). 웨이브 사이는 그대로, 보스는 라운드 25에만(개정 22).
 func test_spawn_groups() -> void:
 	GameData.load_tables()
 	check(WaveDirector.group_size() == 3 and GameData.stage(1).idle_interval == 8.0 and GameData.stage(40).idle_interval == 8.0
@@ -3112,13 +3142,14 @@ func test_spawn_groups() -> void:
 	var times: Array = idle.map(func(e): return e.time)
 	check(times == [8.0, 8.0, 8.0, 16.0, 16.0, 16.0, 24.0, 24.0, 24.0, 32.0, 32.0, 32.0], "idle: a group of 3 every 8 s %s" % [times])
 	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3 on one side")
-	for stage in [1, 5, 30]:
+	for stage in [1, 5, 25, 30]:
 		var st := GameData.stage(stage)
 		var size := int(st.wave_size)
 		var ev := WaveDirector.build(stage, WaveDirector.MODE_STAGE)
 		var grunts := ev.filter(func(e): return e.kind == "grunt")
-		check(grunts.size() == 3 * int(st.waves) * size and ev.filter(func(e): return e.kind == "epic_boss").size() == 1 and ev[-1].kind == "epic_boss",
-			"stage %d: 3 x waves x wave_size grunts, one boss last" % stage)
+		var boss := 1 if stage == 25 else 0  # 개정 22: 보스는 라운드 25에만
+		check(grunts.size() == 3 * int(st.waves) * size and ev.filter(func(e): return e.kind == "epic_boss").size() == boss and (boss == 0 or ev[-1].kind == "epic_boss"),
+			"stage %d: 3 x waves x wave_size grunts, a boss last only on round 25" % stage)
 		var groups := {}  # 시각 → 그 시각 몬스터들
 		for e in grunts:
 			groups[e.time] = groups.get(e.time, []) + [e]
@@ -3133,7 +3164,8 @@ func test_spawn_groups() -> void:
 		for i in range(1, keys.size()):
 			var want: float = 1.0 if i % size != 0 else 1.0 + GameData.config_num("wave_gap_sec")
 			gaps_ok = gaps_ok and is_equal_approx(keys[i] - keys[i - 1], want)
-		gaps_ok = gaps_ok and is_equal_approx(ev[-1].time - keys[-1], 1.0 + GameData.config_num("wave_gap_sec"))
+		if boss == 1:
+			gaps_ok = gaps_ok and is_equal_approx(ev[-1].time - keys[-1], 1.0 + GameData.config_num("wave_gap_sec"))
 		check(gaps_ok, "stage %d: 1 s between spawns, wave gap and boss timing unchanged" % stage)
 
 
