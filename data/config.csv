@@ -39,10 +39,10 @@ gacha_gold_cost_base,3000
 gacha_gold_cost_growth,1.15
 gacha_gold_level_max,10
 gacha_gold_level_pulls,30
-gacha_gold_ssr_base,0.03
-gacha_gold_ssr_step,0.004
-gacha_gold_sr_base,0.17
-gacha_gold_sr_step,0.01
+gacha_gold_ssr_base,0.005
+gacha_gold_ssr_step,0.001
+gacha_gold_sr_base,0.05
+gacha_gold_sr_step,0.005
 gacha_dia_cost_1,300
 gacha_dia_cost_10,2700
 gacha_dia_ssr,0.08

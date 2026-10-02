@@ -385,7 +385,7 @@ func _recruit_and_heroes(rig) -> void:
 	await _guard_wait()
 	Economy.gold_tenths = 30005  # 3000.5골드: 1회만 된다
 	Economy.changed.emit()
-	_check(not recruit.one_button.disabled and recruit.ten_button.disabled and recruit.rates_text() == "SSR 3% · SR 17% · R 80%",
+	_check(not recruit.one_button.disabled and recruit.ten_button.disabled and recruit.rates_text() == "SSR 0.5% · SR 5% · R 94.5%",
 		"(s) rates line; [1회 3,000] on, [10회 30,000] off at 3000 gold", "one=%s ten=%s rates=%s" % [recruit.one_button.disabled, recruit.ten_button.disabled, recruit.rates_text()])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
@@ -1945,7 +1945,9 @@ func _recruit_repeat(recruit) -> void:
 	var lvl: Dictionary = GameData.gacha_rates("gold", 1, Economy.building_level(GameData.TAVERN))  # 아래 자동 모집은 골드 Lv 1에서 뽑는다
 	var seed_no_ssr := -1
 	var seed_ssr2 := -1
-	for s in range(1, 400):
+	for s in range(1, 5000):  # Lv 1 SSR 0.5%: "두 번째에 처음 SSR"은 시드 200개에 하나꼴
+		if seed_no_ssr > 0 and seed_ssr2 > 0:
+			break
 		var r := RandomNumberGenerator.new()
 		r.seed = s
 		var ssr_seen := false
@@ -2311,8 +2313,8 @@ func _recruit23_ui(recruit) -> void:
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.gacha_state().gold_level == 2 and recruit.level_label.text == "골드 모집 Lv 2" and recruit.progress_label.text == "다음 레벨까지 0/60"
-		and recruit.one_button.text.contains("3,450") and recruit.rates_label.text == "SSR 3.4% · SR 18% · R 78.6%" and hud._toast.visible and hud._toast.text == "골드 모집 Lv 2! SSR 3.4%",
-		"(r23) the 30th gold pull levels up: Lv 2 badge, 0/60, cost 3,450, SSR 3.4%, notice", "st=%s lv=%s rates=%s toast=%s" % [Economy.gacha_state(), recruit.level_label.text, recruit.rates_label.text, hud._toast.text])
+		and recruit.one_button.text.contains("3,450") and recruit.rates_label.text == "SSR 0.6% · SR 5.5% · R 93.9%" and hud._toast.visible and hud._toast.text == "골드 모집 Lv 2! SSR 0.6%",
+		"(r23) the 30th gold pull levels up: Lv 2 badge, 0/60, cost 3,450, SSR 0.6%, notice", "st=%s lv=%s rates=%s toast=%s" % [Economy.gacha_state(), recruit.level_label.text, recruit.rates_label.text, hud._toast.text])
 	recruit.confirm_button.pressed.emit()
 	await _unguarded(recruit)
 	await _frames(2)

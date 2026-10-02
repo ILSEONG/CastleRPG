@@ -237,11 +237,11 @@ test('모집 설정 검증(개정 23): 비용·보장 수는 0 이상 정수, �
     ['gacha_dia_pity', '0', /gacha_dia_pity must be an integer of at least 1: '0'/],
     ['gacha_gold_cost_growth', '0.9', /gacha_gold_cost_growth must be 1 or more: '0\.9'/],
     ['gacha_gold_ssr_step', '-0.001', /gacha_gold_ssr_step must be 0 or more: '-0\.001'/],
-    ['gacha_gold_sr_step', '0.09', /gacha_gold_sr_step makes the max-level gold rates above 1: SSR 0\.066 \+ SR 0\.98/],
-    // 다이아는 골드 최대 레벨(SSR 6.6% · SR 26%)보다 좋아야 한다
-    ['gacha_dia_ssr', '0.066', /gacha_dia_ssr must be above the max-level gold SSR rate 0\.066: '0\.066'/],
-    ['gacha_dia_sr', '0.2', /gacha_dia_sr must be above the max-level gold SR rate 0\.26: '0\.2'/],
-    ['gacha_gold_ssr_step', '0.01', /gacha_dia_ssr must be above the max-level gold SSR rate 0\.12: '0\.08'/],
+    ['gacha_gold_sr_step', '0.11', /gacha_gold_sr_step makes the max-level gold rates above 1: SSR 0\.014 \+ SR 1\.04/],
+    // 다이아는 골드 최대 레벨(SSR 1.4% · SR 9.5%)보다 좋아야 한다
+    ['gacha_dia_ssr', '0.014', /gacha_dia_ssr must be above the max-level gold SSR rate 0\.014: '0\.014'/],
+    ['gacha_dia_sr', '0.095', /gacha_dia_sr must be above the max-level gold SR rate 0\.095: '0\.095'/],
+    ['gacha_gold_ssr_step', '0.01', /gacha_dia_ssr must be above the max-level gold SSR rate 0\.095: '0\.08'/],
   ]
   for (const [key, value, re] of cases) {
     await assert.rejects(readTables(withCfg(key, value)), (e: unknown) => {
