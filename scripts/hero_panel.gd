@@ -307,7 +307,6 @@ func _build_equip_slots() -> void:
 		b.add_child(tile)
 		var dot := Control.new()  # 낄 수 있는 더 좋은 장비가 있으면 오른쪽 위 빨간 점
 		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		dot.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 		dot.custom_minimum_size = Vector2(DOT_R * 2.0, DOT_R * 2.0)
 		dot.position = Vector2(EQUIP_PX - DOT_R * 1.6, -DOT_R * 0.4)
 		dot.size = Vector2(DOT_R * 2.0, DOT_R * 2.0)
