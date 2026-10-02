@@ -14,16 +14,23 @@ const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
 const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
 const DUP_TEXT := "+1 조각"  # 이미 가진 영웅(개정 15)
-
+const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
+const SSR_TEXT := "SSR 등장 — 자동 모집을 멈췄습니다"
 var one_button: Button
 var ten_button: Button
 var confirm_button: Button
+var again_button: Button  # [재모집 N] — 자동 중엔 "자동 중…"
+var auto_box: Button  # 자동 모집 체크박스(Fever.auto_recruit에 저장)
+var auto_delay := AUTO_DELAY  # 테스트가 줄인다
 var cards: Array = []  # 지금 보이는 결과 카드
 
 var _pick_view: VBoxContainer
 var _result_view: VBoxContainer
 var _grid: GridContainer
 var _waiting := false
+var _count := 1  # 마지막 모집 장수([재모집]·자동이 되풀이한다)
+var _halted := false  # 골드 부족·SSR·실패·창 닫힘으로 자동이 멈춤(체크는 그대로, 다음에 직접 모집하면 다시 돈다)
+var _auto_left := 0.0  # 다음 자동 모집까지 남은 초
 var _late: Array = []  # 다른 창이 열려 있어 못 보여 준 결과(다음에 열 때)
 var _rates_label: Label
 
@@ -57,9 +64,23 @@ func _ready() -> void:
 	_grid.add_theme_constant_override("h_separation", 8)
 	_grid.add_theme_constant_override("v_separation", 12)
 	center.add_child(_grid)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	_result_view.add_child(row)
+	again_button = _button("재모집", UiKit.AMBER)
+	again_button.custom_minimum_size = Vector2(0, 72)
+	again_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	again_button.pressed.connect(_again)
+	row.add_child(again_button)
 	confirm_button = _button("확인")
-	confirm_button.pressed.connect(_show_pick)
-	_result_view.add_child(confirm_button)
+	confirm_button.custom_minimum_size = Vector2(0, 72)
+	confirm_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	confirm_button.pressed.connect(_on_confirm)
+	row.add_child(confirm_button)
+	auto_box = UiKit.checkbox("자동 모집")
+	auto_box.set_pressed_no_signal(Fever.auto_recruit)
+	auto_box.toggled.connect(_on_auto_toggled)
+	_result_view.add_child(auto_box)
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.gacha_done.connect(_on_gacha_done)
 
@@ -89,9 +110,13 @@ static func rates_text() -> String:
 func _recruit(count: int) -> void:
 	if _waiting:
 		return  # 응답 전 재탭
+	_count = count
+	_halted = false
+	_auto_left = 0.0
 	_waiting = true  # 오프라인은 gacha 안에서 바로 gacha_done이 온다 — 그 전에 둔다
 	_refresh()
 	if not Economy.gacha(count):
+		_halted = true
 		_waiting = false
 		_refresh()
 
@@ -99,6 +124,7 @@ func _recruit(count: int) -> void:
 func _on_gacha_done(results: Array) -> void:
 	_waiting = false
 	if results.is_empty():
+		_halted = true  # 온라인 실패(알림은 Economy가 띄운다) — 자동을 멈춘다
 		_refresh()
 		return
 	if not visible:
@@ -131,10 +157,18 @@ func _show_results(results: Array) -> void:
 			card.shard_need = Economy.promote_cost(r.hero_id)
 		_grid.add_child(card)
 		cards.append(card)
+	var stop := auto_running() and results.any(func(r): return r.grade == "SSR")
+	if stop:  # 안전: 자동 중 SSR이 나오면 멈추고 그 카드를 강조(반짝임은 카드가 이미 낸다)
+		_halted = true
+		Economy.notice.emit(SSR_TEXT)
+	for i in results.size():
+		cards[i].highlight = stop and results[i].grade == "SSR"
+	_auto_left = auto_delay
 	_pick_view.visible = false
 	_result_view.visible = true
 	_fit()
 	_arm_guard()
+	_refresh()
 
 
 func _show_pick() -> void:
@@ -144,6 +178,57 @@ func _show_pick() -> void:
 	_refresh()
 
 
+func auto_running() -> bool:
+	return auto_box.button_pressed and not _halted
+
+
+func _again() -> void:
+	if not _waiting and not again_button.disabled:
+		_recruit(_count)
+
+
+## [확인]: 자동이 돌고 있었다면 멈추고(체크도 푼다) 결과 화면을 닫는다.
+func _on_confirm() -> void:
+	if auto_running():
+		auto_box.button_pressed = false
+	_halted = true
+	_show_pick()
+
+
+func _on_auto_toggled(on: bool) -> void:
+	Fever.auto_recruit = on
+	Fever.save()  # save_path가 ""이면(테스트) 쓰지 않는다
+	_halted = false
+	_auto_left = auto_delay
+	_refresh()
+
+
+func close() -> void:
+	_halted = true
+	super.close()
+
+
+## 자동 모집: 결과를 보여 준 지 auto_delay초 뒤 같은 모집을 되풀이. 골드가 모자라면 멈춘다.
+func _process(delta: float) -> void:
+	if not (visible and _result_view.visible and auto_running() and not _waiting):
+		return
+	_auto_left -= delta
+	if _auto_left > 0.0:
+		return
+	if Economy.gold < EconomyScript.gacha_cost(_count):
+		_halted = true
+		_refresh()
+		return
+	_recruit(_count)
+
+
 func _refresh() -> void:
 	one_button.disabled = _waiting or Economy.gold < EconomyScript.gacha_cost(1)
 	ten_button.disabled = _waiting or Economy.gold < EconomyScript.gacha_cost(10)
+	var cost := EconomyScript.gacha_cost(_count)
+	var short := Economy.gold < cost
+	if auto_running() and not short:
+		again_button.text = "자동 중…"
+	else:
+		again_button.text = "재모집 %d" % cost + ("\n골드 부족" if short else "")
+	again_button.disabled = _waiting or short or auto_running()

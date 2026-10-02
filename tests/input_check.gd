@@ -1446,6 +1446,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.gold_tenths = keep[2]
 	Economy.roster_changed.emit()
 	Economy.changed.emit()
+	await _recruit_repeat(recruit)
 	heroes_win.open()
 	heroes_win.show_detail("hans")
 	await _unguarded(heroes_win)
@@ -1687,3 +1688,110 @@ func _soldiers_clear(wt, what: String) -> void:
 				hits.append(id)
 				break
 	_check(not wt.obstacles.is_empty() and hits.is_empty(), "(T) %s: no tag or bubble covers the soldier formation (%d soldier boxes)" % [what, wt.obstacles.size()], "covering=%s" % [hits])
+
+
+## (rr) 재모집·자동 모집: [재모집]이 같은 모집을 되풀이, 골드 부족 비활성, 자동이 골드 부족·SSR에서 멈춤, [확인]이 자동을 멈춤, 체크 저장(임시 파일).
+func _recruit_repeat(recruit) -> void:
+	var keep := [Economy.gold_tenths, Fever.auto_recruit, Fever.auto_next, Fever.save_path]
+	recruit.auto_delay = 0.05
+	recruit.auto_box.button_pressed = false
+	# [재모집]: 10회 결과 → 재모집 → 2700↓. 3300 → 600이 되면 비활성 + 골드 부족
+	Economy.gold_tenths = 60000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit._recruit(10)
+	await _frames(2)
+	_check(recruit.is_showing_results() and Economy.gold == 3300 and recruit.again_button.text == "재모집 2700" and not recruit.again_button.disabled and recruit.cards.size() == 10,
+		"(rr) the 10-pull result shows [재모집 2700] enabled", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
+	await _unguarded(recruit)
+	await _tap(recruit.again_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.gold == 600 and recruit.cards.size() == 10 and recruit.again_button.disabled and recruit.again_button.text.contains("골드 부족"),
+		"(rr) [재모집] repeats the 10-pull (gold -2700) and is disabled with 골드 부족 at 600 gold", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
+	recruit.close()
+	# 시드: 10연차 3번에 SSR이 없는 시드(골드 부족 정지), 1회 두 번째에 SSR이 처음 나오는 시드(SSR 정지)
+	var lvl: int = Economy.building_level(GameData.TAVERN)
+	var seed_no_ssr := -1
+	var seed_ssr2 := -1
+	for s in range(1, 400):
+		var r := RandomNumberGenerator.new()
+		r.seed = s
+		var ssr_seen := false
+		for i in 3:
+			ssr_seen = ssr_seen or Economy.roll_gacha(10, r.randf, lvl).any(func(x): return x.grade == "SSR")
+		if not ssr_seen and seed_no_ssr < 0:
+			seed_no_ssr = s
+		var r2 := RandomNumberGenerator.new()
+		r2.seed = s
+		var a: bool = Economy.roll_gacha(1, r2.randf, lvl)[0].grade == "SSR"
+		var b: bool = Economy.roll_gacha(1, r2.randf, lvl)[0].grade == "SSR"
+		if not a and b and seed_ssr2 < 0:
+			seed_ssr2 = s
+	_check(seed_no_ssr > 0 and seed_ssr2 > 0, "(rr) precondition: found RNG seeds for the auto cases", "no_ssr=%d ssr2=%d" % [seed_no_ssr, seed_ssr2])
+	# 자동: 8200골드 = 10회 3번 + 100 → 3번 뽑고 멈춤
+	Economy.rng.seed = seed_no_ssr
+	Economy.gold_tenths = 82000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(10)
+	for i in 120:
+		await _frames(1)
+	_check(Economy.gold == 100 and recruit.again_button.disabled and not recruit.auto_running() and recruit.auto_box.button_pressed,
+		"(rr) auto loops 10-pulls until gold is short (8200 -> 100), then stops", "gold=%d running=%s" % [Economy.gold, recruit.auto_running()])
+	recruit.close()
+	# 자동: 1회 모집 두 번째에서 SSR → 멈추고 SSR 카드 강조, 골드는 남아도 더 안 뽑는다
+	Economy.rng.seed = seed_ssr2
+	Economy.gold_tenths = 10000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(1)
+	for i in 120:
+		await _frames(1)
+	_check(Economy.gold == 400 and not recruit.auto_running() and recruit.cards.size() == 1 and recruit.cards[0].highlight and recruit.is_showing_results()
+		and recruit.again_button.text == "재모집 300" and not recruit.again_button.disabled,
+		"(rr) auto stops when an SSR is pulled (2nd pull): results stay up, the SSR card is highlighted, [재모집] is manual again",
+		"gold=%d running=%s hl=%s" % [Economy.gold, recruit.auto_running(), recruit.cards[0].highlight if recruit.cards.size() == 1 else null])
+	recruit.close()
+	# [확인]은 자동을 멈추고 체크를 푼다
+	Economy.rng.seed = seed_no_ssr
+	Economy.gold_tenths = 82000
+	Economy.changed.emit()
+	recruit.auto_delay = 5.0
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(10)
+	await _frames(2)
+	_check(recruit.auto_running() and recruit.again_button.text == "자동 중…", "(rr) while auto runs [재모집] reads 자동 중…", "text=%s" % recruit.again_button.text)
+	recruit.confirm_button.pressed.emit()
+	recruit.auto_delay = 0.05
+	var g0: int = Economy.gold
+	for i in 40:
+		await _frames(1)
+	_check(not recruit.auto_box.button_pressed and not recruit.auto_running() and Economy.gold == g0 and not recruit.is_showing_results(),
+		"(rr) [확인] stops auto (box unchecked) and no further pull happens", "gold=%d->%d" % [g0, Economy.gold])
+	recruit.close()
+	# 체크 저장: 임시 파일, 다른 키는 그대로
+	var tmp := "user://test_local_recruit.json"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"other": 7}))
+	f.close()
+	Fever.save_path = tmp
+	recruit.auto_box.button_pressed = true
+	var data = JSON.parse_string(FileAccess.get_file_as_string(tmp))
+	Fever.auto_recruit = false
+	Fever.load_save()
+	_check(data is Dictionary and data.get("auto_recruit") == true and data.get("other") == 7 and Fever.auto_recruit,
+		"(rr) the 자동 모집 checkbox persists in local.json (other keys kept) and loads back", "data=%s" % [data])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+	Fever.save_path = keep[3]
+	Fever.auto_recruit = keep[1]
+	Fever.auto_next = keep[2]
+	recruit.auto_box.set_pressed_no_signal(false)
+	Economy.gold_tenths = keep[0]
+	Economy.changed.emit()
