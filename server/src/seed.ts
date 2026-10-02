@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost } from './rules.ts'
+import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, UPGRADE_UNITS } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -60,6 +60,12 @@ export const TABLES: TableSpec[] = [
     name: 'soldiers', table: 'soldier_defs', file: 'soldiers.csv', ordered: true,
     cols: { id: 'key', name: 'text', building: 'text', hp: 'num', atk: 'num', range: 'num', atk_interval: 'num', speed: 'num', aggro: 'num', model: 'text' },
     sql: { id: 'text', name: 'text', building: 'text', ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']), model: 'text' },
+  },
+  {
+    // 개정 20: 공용 업그레이드 표(스펙 §2). unit = pct(%) | pp(%p)
+    name: 'upgrades', table: 'upgrade_defs', file: 'upgrades.csv', ordered: true,
+    cols: { id: 'key', name: 'text', per_level: 'num', unit: 'text', max_level: 'int', cost_base: 'num', cost_growth: 'num' },
+    sql: { id: 'text', name: 'text', per_level: 'real', unit: 'text', max_level: 'integer', cost_base: 'real', cost_growth: 'real' },
   },
   {
     name: 'config', table: 'game_config', file: 'config.csv', ordered: false,
@@ -315,6 +321,17 @@ function checkSoldiers(t: Tables, errors: string[]) {
   }
 }
 
+// 업그레이드 표(개정 20, 앱 GameData와 같은 규칙): per_level·cost_base > 0, cost_growth ≥ 1, max_level ≥ 1, unit은 pct·pp만.
+function checkUpgrades(t: Tables, errors: string[]) {
+  const err = (line: unknown, col: string, why: string) => errors.push(`upgrades.csv line ${line} column '${col}': ${why}`)
+  for (const u of t.upgrades ?? []) {
+    for (const c of ['per_level', 'cost_base']) if (!(Number(u[c]) > 0)) err(u._line, c, `must be greater than 0: ${u[c]}`)
+    if (!(Number(u.cost_growth) >= 1)) err(u._line, 'cost_growth', `must be 1 or more: ${u.cost_growth}`)
+    if (!(Number(u.max_level) >= 1)) err(u._line, 'max_level', `must be at least 1: ${u.max_level}`)
+    if (!UPGRADE_UNITS.includes(String(u.unit))) err(u._line, 'unit', `must be one of ${UPGRADE_UNITS.join('/')}: '${u.unit}'`)
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -339,6 +356,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   if (out.config) checkGacha(out.config, errors)
   checkBuildings(out, errors)
   checkSoldiers(out, errors)
+  checkUpgrades(out, errors)
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {

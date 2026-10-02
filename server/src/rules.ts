@@ -378,3 +378,22 @@ export function clampKills(kills: { id: string; count: number; gold: number }[],
   }
   return { kept, clamped: true }
 }
+
+// 개정 20 공용 업그레이드(성장). L → L+1 비용 = round(cost_base × cost_growth^L), L = 현재 레벨(0부터)
+export interface UpgradeDef {
+  id: string
+  name: string
+  per_level: number
+  unit: string
+  max_level: number
+  cost_base: number
+  cost_growth: number
+}
+export const UPGRADE_UNITS = ['pct', 'pp']
+export const upgradeStepCost = (d: UpgradeDef, level: number) => roundHalfAway(Number(d.cost_base) * Number(d.cost_growth) ** level)
+// level에서 count번 올리는 비용 합계
+export function upgradeCost(d: UpgradeDef, level: number, count: number): number {
+  let gold = 0
+  for (let l = level; l < level + count; l++) gold += upgradeStepCost(d, l)
+  return gold
+}
