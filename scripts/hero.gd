@@ -20,6 +20,7 @@ const ProjectileScript := preload("res://scripts/projectile.gd")
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
 const SCAN_INTERVAL := 0.2
+const RETURN_DELAY := 1.5  # 교전이 끝나고 이만큼 제자리에 머문 뒤 자리로 돌아간다(그새 오는 괴물과 바로 싸운다)
 const ARRIVE_EPS := 0.05
 const HIT_HEIGHT := Vector3(0, 0.8, 0)
 const HOLD_EPS := 0.5  # 이만큼 안이면 자기 자리를 지키고 있다(gate_repair)
@@ -57,6 +58,7 @@ var _foot: MeshInstance3D
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
+var _linger := 0.0     # 교전 뒤 제자리에 더 머물 초(0 이하 = 자리로 돌아간다)
 var _attacks := 0      # 공격 횟수(stun N번째)
 var _swing             # 휘두르는(쏘려는) 중인 공격의 고정 대상. null = 없음
 var _swing_left := 0.0  # 타격(발사) 순간까지 남은 초
@@ -120,6 +122,7 @@ func reset() -> void:
 	state = State.IDLE
 	_target = null
 	_swing = null
+	_linger = 0.0
 	_attacks = 0
 	_heal_cd = _sk.heal_aura[0] if _sk.has("heal_aura") else 0.0
 	_repair_cd = _sk.gate_repair[0] if _sk.has("gate_repair") else 0.0
@@ -229,6 +232,7 @@ func _process(delta: float) -> void:
 		state = State.MOVE
 		_target = null
 		_swing = null  # 이동 명령은 휘두르던 공격을 거둔다
+		_linger = 0.0
 		_model.face(wp - global_position)
 		_model.play_walk()
 		global_position = global_position.move_toward(wp, float(def.speed) * delta)
@@ -236,12 +240,17 @@ func _process(delta: float) -> void:
 			_path.pop_front()
 		return
 	_scan_cd -= delta
-	if _scan_cd <= 0.0:
+	# 표적이 죽거나 사라지면 다음 스캔을 기다리지 않고 이 프레임에 다시 찾는다(기다리는 동안 자리 쪽으로 물러나지 않게).
+	# 휘두르는 중인 사거리 안 표적은 스캔이 놓쳐도(aggro 경계 등) 그대로 둔다.
+	var lost: bool = _target != null and not (is_instance_valid(_target) and _target.is_alive())
+	if _scan_cd <= 0.0 or lost:
 		_scan_cd = SCAN_INTERVAL
-		_target = _find_target()
+		if not _swinging_at(_target):
+			_target = _find_target()
 	# 성벽 위 영웅은 쫓지 않는다: 스캔 사이에 사거리를 벗어난 표적은 놓는다(안 그러면 성벽 높이로 떠서 따라간다).
 	if _target != null and is_instance_valid(_target) and _target.is_alive() \
 			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= float(def.range)):
+		_linger = RETURN_DELAY
 		var tpos: Vector3 = _target.global_position
 		_model.face(tpos - global_position)
 		if Formation.flat_distance(global_position, tpos) <= float(def.range):
@@ -263,8 +272,15 @@ func _process(delta: float) -> void:
 			global_position = next
 			return
 	_target = null
+	_linger -= delta
 	var home := stand_position()
 	if global_position.distance_to(home) > ARRIVE_EPS:
+		if _linger > 0.0:
+			# 교전 뒤 잠시 제자리(스캔은 계속): 곧장 돌아서면 다음 괴물이 올 때마다 공격 → 뒷걸음 → 앞걸음을 되풀이한다
+			if state == State.MOVE:
+				_model.play_idle()  # 공격 모션은 끝날 때 스스로 대기로 돌아간다
+			state = State.IDLE
+			return
 		if not is_on_wall() and Formation.route(castle.half, global_position, home).size() == 1:
 			# 추격 뒤 복귀: 곧장 갈 수 있으면(같은 영역, 성 모서리를 가로지르지 않음) 곧장(도중에 새 표적을 만나면 다시 교전)
 			state = State.MOVE
@@ -305,6 +321,12 @@ func _find_target():
 			best_d = d
 			best = m
 	return best
+
+
+## m을 휘두르는(쏘려는) 중이고 m이 살아서 사거리 안인가 — 그 사이 스캔이 표적을 바꾸거나 놓지 않는다.
+func _swinging_at(m) -> bool:
+	return m != null and _swing == m and is_instance_valid(m) and m.is_alive() \
+		and Formation.flat_distance(global_position, m.global_position) <= float(def.range)
 
 
 # --- 스킬 ---
