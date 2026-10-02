@@ -1240,6 +1240,7 @@ func _reinforce_case(ss: Array) -> void:
 	var mass := []
 	for i in 6:
 		var g = _still("grunt", gt + Vector3(-3.0 + i * 1.2, 0, -2.0))
+		g.atk = 10.0  # 졸개 기본 공격이 바뀌어도(개정 스폰 밸런스) 이 사례의 위협 크기는 고정
 		g.hp_max = 300.0  # 전투력 3000(× 초당 10)
 		g.hp = 300.0
 		mass.append(g)
