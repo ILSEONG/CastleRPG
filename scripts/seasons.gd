@@ -154,10 +154,16 @@ func _ready() -> void:
 	var dbg := _debug_season()
 	if dbg >= 0:
 		start = dbg
-		print("[season] %d" % dbg)
 	apply(start, true)
+	if dbg >= 0 and scenery != null:  # 캡처·스모크 확인용: 갈아 끼운 MultiMesh 수 / 전체
+		print("[season] %d swapped=%d/%d" % [dbg, scenery.season_slots.filter(func(sl): return sl.mm.mesh != sl.base).size(), scenery.season_slots.size()])
 	if gs != null:
-		gs.refilled.connect(func(): change_stage(stage_of_round(gs.stage)))  # 라운드 사이 리필에서 스테이지가 넘어갔으면
+		gs.refilled.connect(_on_refilled)  # 메서드 연결: 월드를 다시 만들면 이 노드와 함께 끊긴다(람다는 남는다)
+
+
+## 라운드 사이 리필에서 스테이지가 넘어갔으면 바꾼다.
+func _on_refilled() -> void:
+	change_stage(stage_of_round(get_node("/root/GameState").stage))
 
 
 ## 스테이지 S로 바꾼다: 계절 전환(섞기) + 띠. 같은 S면 무시.

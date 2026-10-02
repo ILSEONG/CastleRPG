@@ -6,6 +6,7 @@ extends Node3D
 ## 영웅은 배치(GameState.deploy·hero_promotion·hero_level)대로 만들고, 배치·승급(별)·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
 ## 개발용 `-- --debug-win`(웹 `?debug-win`, 개정 18): 디버그 빌드에서 Economy.debug_win_on — 던전 장면이 도전을 곧바로 승리로 끝낸다(Economy.debug_win).
+## 개발용 `-- --season=N`(웹 `?season=N`, N 0~3, 개정 22): 디버그 빌드에서 그 계절로 시작(seasons.gd).
 ## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 연구소 → 영웅 공격(방치면 곧바로,
 ## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
