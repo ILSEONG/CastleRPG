@@ -151,7 +151,7 @@ npm --prefix server test
   - Neon: 007 마이그레이션과 시드(건물 표, 설정 `hero_slots` 삭제·건물 설정 9개)를 새 서버와 같이 올린다.
 - 병사(개정 13, 마이그레이션 008: `soldier_defs` = `data/soldiers.csv`, `player_soldiers(type, tier, count ≥ 0)`, `player_state.soldier_deploy`, 기존 플레이어에게 `archery`·`stable` 행(레벨 1), 막사 포함 병사 건물 생산 시각 = 지금)
   - 개정 16: 자동 생산은 없다(시간이 흘러도 보유는 그대로). 병사 건물(`soldiers.csv`의 `building`)마다 훈련 대기열 하나(마이그레이션 010: `player_buildings.train_count`·`train_finish`, 비면 0·null — 제약 `train_queue`).
-  - 훈련 시작: 1티어 n마리(1..`train_batch_base` + `train_batch_per_level` × (L−1)), 비용 = `train_cost_<병종>`("자원:수|…", "0"이면 무료) × n을 바로 뺀다. 끝나는 시각 = 지금 + n × 1마리 시간(초, `soldier_prod_sec` × `soldier_prod_level_factor`^(L−1)). 레벨이 올라도 진행 중인 묶음은 그대로다.
+  - 훈련 시작(개정 19): 건물 레벨이 정한 티어 t = min(최대, 1 + ⌊(L−1)/k⌋)(k = `train_base_min`/`train_step_min`) n마리(1..`train_batch_base` + `train_batch_per_level` × (L−1)), 비용 = `train_cost_<병종>`("자원:수|…", "0"이면 무료) × `train_cost_tier_mult`^(t−1) × n을 바로 뺀다. 끝나는 시각 = 지금 + n × 1마리 시간((`train_base_min` − `train_step_min` × ((L−1) mod k)) 분). 레벨이 올라도 진행 중인 묶음은 티어(`train_tier`)·끝나는 시각 그대로다. 수령은 그 티어에 더한다.
   - 수령: 끝났으면 보유 += n, 대기열 비움. 취소: 진행 중이면 비용의 50%(자원마다 내림) 환불. 차감·대기열·보유·`economy_log`(`train_start`·`train_collect`·`train_cancel`)는 version 가드 한 문장이다. 앱은 시작·취소를 다시 보내지 않는다(수령은 멱등이라 다시 보내도 된다).
   - Neon: 010 마이그레이션과 시드(설정 `train_*` 5개)를 새 서버와 같이 올린다.
   - 합성: 티어 t `soldier_merge_count`마리 → t+1 한 마리(HP·공격 × `soldier_tier_mult`, 앱이 계산). 배치는 보유로 자른다. 보유·배치·`economy_log`(`soldier_merge`)는 version 가드 한 문장이다. 앱은 합성을 다시 보내지 않는다.

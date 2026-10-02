@@ -1,9 +1,30 @@
 extends Control
-## 자원 아이콘(골드·목재·석재·식량): 평면 로우폴리 — 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽.
-## 도형은 단위 좌표(-0.5..0.5)로 정의하고 draw_icon이 크기를 곱한다 → 어느 크기에서도 같은 모양. 오토로드 참조 없음.
+## 자원 아이콘(골드·목재·석재·식량)과 장비 아이콘(개정 18: 방어구 6·무기 5): 평면 로우폴리 — 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽.
+## 도형은 단위 좌표(-0.5..0.5)로 정의하고 draw_icon이 크기를 곱한다 → 어느 크기에서도 같은 모양. 장비 칸은 draw_item(등급 배경·테두리). 오토로드 참조 없음.
 
-const KINDS := ["gold", "wood", "stone", "food"]
+const Art := preload("res://scripts/art.gd")
+
+const KINDS := ["gold", "wood", "stone", "food"]  # 자원(HUD 칩이 이 순서로 쓴다)
+const ITEM_KINDS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves", "sword", "axe", "staff", "crossbow", "dagger"]
 const OUTLINE := Color(0.16, 0.11, 0.07)
+const ITEM_ICON_FRAC := 0.74  # 장비 칸 한 변 중 아이콘 크기
+const TILE_CHAMFER := 0.22  # 장비 칸 모서리 깎기(반 변 대비)
+# 장비 팔레트
+const STEEL := Color(0.66, 0.70, 0.77)
+const STEEL_LIGHT := Color(0.86, 0.89, 0.93)
+const STEEL_DARK := Color(0.42, 0.46, 0.53)
+const GOLD := Color(0.95, 0.74, 0.22)
+const LEATHER := Color(0.58, 0.37, 0.21)
+const LEATHER_LIGHT := Color(0.72, 0.50, 0.30)
+const LEATHER_DARK := Color(0.38, 0.23, 0.13)
+const WOOD := Color(0.60, 0.40, 0.22)
+const WOOD_LIGHT := Color(0.76, 0.55, 0.33)
+const CLOTH := Color(0.28, 0.40, 0.64)
+const CLOTH_LIGHT := Color(0.40, 0.54, 0.78)
+const CLOTH_DARK := Color(0.19, 0.28, 0.47)
+const PLUME := Color(0.82, 0.22, 0.20)
+const SLIT := Color(0.10, 0.10, 0.14)
+const GEM := Color(0.36, 0.86, 0.96)
 
 var kind := "gold":
 	set(v):
@@ -77,7 +98,221 @@ static func shapes(kind_name: String) -> Array:
 				# 받침
 				[[Vector2(-0.18, 0.34), Vector2(0.18, 0.34), Vector2(0.22, 0.46), Vector2(-0.22, 0.46)], Color(0.24, 0.42, 0.50), true],
 			]
+	return _item_shapes(kind_name)
+
+
+## 장비 칸 하나(개정 18 §8): 등급 색 배경 면(모서리 깎은 사각, 왼쪽 위 절반 밝게) + 등급 색 테두리 + kind 아이콘.
+## LR 테두리는 무지개 금이 t(초)에 따라 흐른다 — 쓰는 쪽이 매 프레임 queue_redraw. t < 0이면 지금 시각.
+static func draw_item(ci: CanvasItem, kind_name: String, grade: String, center: Vector2, size_px: float, t := -1.0) -> void:
+	if t < 0.0:
+		t = Time.get_ticks_msec() / 1000.0
+	var base: Color = Art.ITEM_GRADE_COLORS.get(grade, Art.ITEM_GRADE_COLORS.N)
+	var pts := PackedVector2Array()
+	for p in item_tile():
+		pts.append(center + p * size_px)
+	ci.draw_colored_polygon(pts, base.darkened(0.6))
+	ci.draw_colored_polygon(PackedVector2Array([pts[6], pts[7], pts[0], pts[1], pts[2]]), base.darkened(0.48))
+	var ring := PackedVector2Array()
+	for i in 8:  # 테두리: 변마다 4등분(LR 무지개가 부드럽게 흐르게)
+		for j in 4:
+			ring.append(pts[i].lerp(pts[(i + 1) % 8], j / 4.0))
+	ring.append(pts[0])
+	ci.draw_polyline_colors(ring, border_colors(grade, ring.size(), t), maxf(2.0, size_px / 14.0))
+	draw_icon(ci, kind_name, center, size_px * ITEM_ICON_FRAC)
+
+
+## 장비 칸 외곽(단위 좌표, 한 변 0.96): 모서리 깎은 8각, 위 왼쪽부터 시계 방향.
+static func item_tile() -> Array:
+	var h := 0.48
+	var c := h * TILE_CHAMFER
+	return [Vector2(-h + c, -h), Vector2(h - c, -h), Vector2(h, -h + c), Vector2(h, h - c),
+		Vector2(h - c, h), Vector2(-h + c, h), Vector2(-h, h - c), Vector2(-h, -h + c)]
+
+
+## 테두리 점 n개의 색: 등급 색 하나. LR은 둘레를 따라 무지개(금빛 섞음)가 t에 따라 흐른다(끝점 = 첫 점 색이라 이음매 없음).
+static func border_colors(grade: String, n: int, t: float) -> PackedColorArray:
+	var base: Color = Art.ITEM_GRADE_COLORS.get(grade, Art.ITEM_GRADE_COLORS.N)
+	var out := PackedColorArray()
+	for i in n:
+		if grade == "LR":
+			out.append(Color.from_hsv(fposmod(float(i) / (n - 1) - t * 0.35, 1.0), 0.6, 1.0).lerp(base, 0.35))
+		else:
+			out.append(base)
+	return out
+
+
+## 장비 도형(단위 좌표, 그리기 순서). 무기는 왼쪽 아래 → 오른쪽 위 대각선 축 좌표(_ax)로 그린다.
+static func _item_shapes(kind_name: String) -> Array:
+	match kind_name:
+		"hat":  # 투구: 앞을 막은 통투구 + 가로 눈구멍 + 숨구멍, 위에 붉은 깃털
+			return [
+				[[Vector2(-0.06, -0.34), Vector2(0.02, -0.46), Vector2(0.20, -0.48), Vector2(0.34, -0.40), Vector2(0.18, -0.30)], PLUME, true],
+				[[Vector2(-0.36, 0.42), Vector2(-0.38, -0.06), Vector2(-0.30, -0.26), Vector2(-0.14, -0.36), Vector2(0.14, -0.36),
+					Vector2(0.30, -0.26), Vector2(0.38, -0.06), Vector2(0.36, 0.42)], STEEL, true],
+				[[Vector2(-0.38, -0.06), Vector2(-0.30, -0.26), Vector2(-0.14, -0.36), Vector2(-0.02, -0.36), Vector2(-0.02, 0.42), Vector2(-0.36, 0.42)], STEEL_LIGHT, false],
+				[[Vector2(-0.02, -0.36), Vector2(0.02, -0.36), Vector2(0.02, 0.42), Vector2(-0.02, 0.42)], STEEL_DARK, false],
+				[[Vector2(-0.31, -0.07), Vector2(0.31, -0.07), Vector2(0.31, 0.03), Vector2(-0.31, 0.03)], SLIT, false],
+				[[Vector2(0.10, 0.14), Vector2(0.16, 0.14), Vector2(0.16, 0.20), Vector2(0.10, 0.20)], SLIT, false],
+				[[Vector2(0.20, 0.14), Vector2(0.26, 0.14), Vector2(0.26, 0.20), Vector2(0.20, 0.20)], SLIT, false],
+				[[Vector2(0.15, 0.25), Vector2(0.21, 0.25), Vector2(0.21, 0.31), Vector2(0.15, 0.31)], SLIT, false],
+				[[Vector2(-0.36, 0.33), Vector2(0.36, 0.33), Vector2(0.36, 0.42), Vector2(-0.36, 0.42)], GOLD, true],
+			]
+		"top":  # 갑옷 상의: 어깨 판 + 목 파임 흉갑, 가운데 능선, 배 마디, 허리띠
+			var body := [Vector2(-0.20, -0.40), Vector2(-0.07, -0.30), Vector2(0.07, -0.30), Vector2(0.20, -0.40), Vector2(0.42, -0.33),
+				Vector2(0.45, -0.12), Vector2(0.30, -0.06), Vector2(0.28, 0.30), Vector2(0.20, 0.42), Vector2(-0.20, 0.42),
+				Vector2(-0.28, 0.30), Vector2(-0.30, -0.06), Vector2(-0.45, -0.12), Vector2(-0.42, -0.33)]
+			return [
+				[body, STEEL, true],
+				[[Vector2(-0.07, -0.30), Vector2(0.0, -0.30), Vector2(0.0, 0.42), Vector2(-0.20, 0.42), Vector2(-0.28, 0.30), Vector2(-0.30, -0.06)], STEEL_LIGHT, false],
+				[[Vector2(-0.20, -0.40), Vector2(-0.42, -0.33), Vector2(-0.45, -0.12), Vector2(-0.30, -0.08), Vector2(-0.24, -0.30)], STEEL_DARK, true],
+				[[Vector2(0.20, -0.40), Vector2(0.42, -0.33), Vector2(0.45, -0.12), Vector2(0.30, -0.08), Vector2(0.24, -0.30)], STEEL_DARK, true],
+				[[Vector2(-0.015, -0.30), Vector2(0.015, -0.30), Vector2(0.015, 0.28), Vector2(-0.015, 0.28)], STEEL_DARK, false],
+				[[Vector2(-0.29, 0.08), Vector2(0.29, 0.08), Vector2(0.29, 0.11), Vector2(-0.29, 0.11)], STEEL_DARK, false],
+				[[Vector2(-0.285, 0.18), Vector2(0.285, 0.18), Vector2(0.285, 0.21), Vector2(-0.285, 0.21)], STEEL_DARK, false],
+				[[Vector2(-0.28, 0.28), Vector2(0.28, 0.28), Vector2(0.26, 0.37), Vector2(-0.26, 0.37)], LEATHER, true],
+				[[Vector2(-0.05, 0.27), Vector2(0.05, 0.27), Vector2(0.05, 0.38), Vector2(-0.05, 0.38)], GOLD, true],
+				[[Vector2(-0.20, -0.40), Vector2(-0.07, -0.30), Vector2(0.07, -0.30), Vector2(0.20, -0.40), Vector2(0.16, -0.43),
+					Vector2(0.06, -0.35), Vector2(-0.06, -0.35), Vector2(-0.16, -0.43)], GOLD, false],
+			]
+		"bottom":  # 바지: 허리띠(금 버클) + 두 다리(가랑이 틈), 무릎 보호대
+			return [
+				[[Vector2(-0.32, -0.32), Vector2(0.32, -0.32), Vector2(0.36, 0.44), Vector2(0.07, 0.44), Vector2(0.0, -0.02),
+					Vector2(-0.07, 0.44), Vector2(-0.36, 0.44)], CLOTH, true],
+				[[Vector2(-0.32, -0.32), Vector2(-0.12, -0.32), Vector2(-0.20, 0.44), Vector2(-0.36, 0.44)], CLOTH_LIGHT, false],
+				[[Vector2(0.0, -0.02), Vector2(0.07, 0.44), Vector2(0.17, 0.44), Vector2(0.09, -0.02)], CLOTH_DARK, false],
+				[[Vector2(-0.36, 0.37), Vector2(-0.07, 0.37), Vector2(-0.07, 0.44), Vector2(-0.36, 0.44)], CLOTH_DARK, false],
+				[[Vector2(0.07, 0.37), Vector2(0.36, 0.37), Vector2(0.36, 0.44), Vector2(0.07, 0.44)], CLOTH_DARK, false],
+				[[Vector2(-0.29, 0.14), Vector2(-0.20, 0.06), Vector2(-0.11, 0.14), Vector2(-0.20, 0.22)], STEEL, true],
+				[[Vector2(0.11, 0.14), Vector2(0.20, 0.06), Vector2(0.29, 0.14), Vector2(0.20, 0.22)], STEEL, true],
+				[[Vector2(-0.34, -0.45), Vector2(0.34, -0.45), Vector2(0.34, -0.31), Vector2(-0.34, -0.31)], LEATHER_DARK, true],
+				[[Vector2(-0.07, -0.44), Vector2(0.07, -0.44), Vector2(0.07, -0.32), Vector2(-0.07, -0.32)], GOLD, true],
+			]
+		"shoes":  # 장화(옆모습, 발끝 오른쪽): 접힌 목 + 버클 띠 + 굽 있는 밑창
+			return [
+				[[Vector2(-0.28, -0.40), Vector2(0.08, -0.40), Vector2(0.10, 0.06), Vector2(0.34, 0.14), Vector2(0.44, 0.26),
+					Vector2(0.44, 0.36), Vector2(-0.28, 0.36)], LEATHER, true],
+				[[Vector2(-0.28, -0.32), Vector2(-0.14, -0.32), Vector2(-0.14, 0.30), Vector2(-0.28, 0.30)], LEATHER_LIGHT, false],
+				[[Vector2(0.10, 0.06), Vector2(0.34, 0.14), Vector2(0.44, 0.26), Vector2(0.30, 0.22), Vector2(0.10, 0.16)], LEATHER_LIGHT, false],
+				[[Vector2(-0.28, -0.12), Vector2(0.09, -0.12), Vector2(0.09, -0.04), Vector2(-0.28, -0.04)], LEATHER_DARK, false],
+				[[Vector2(-0.12, -0.14), Vector2(-0.02, -0.14), Vector2(-0.02, -0.02), Vector2(-0.12, -0.02)], GOLD, true],
+				[[Vector2(-0.33, -0.47), Vector2(0.13, -0.47), Vector2(0.13, -0.33), Vector2(-0.33, -0.33)], LEATHER_LIGHT, true],
+				[[Vector2(-0.30, 0.34), Vector2(0.45, 0.34), Vector2(0.45, 0.42), Vector2(-0.30, 0.42)], LEATHER_DARK, true],
+				[[Vector2(-0.30, 0.34), Vector2(-0.06, 0.34), Vector2(-0.08, 0.47), Vector2(-0.30, 0.47)], LEATHER_DARK, true],
+			]
+		"pauldron":  # 견장: 목 가리개 양옆 어깨 판 한 쌍(둥근 윗판 + 바깥 아래로 겹친 판 둘, 금 테두리·징) — 몸통이 없어 상의와 구별된다
+			var out := [
+				[[Vector2(-0.17, -0.14), Vector2(0.17, -0.14), Vector2(0.21, 0.08), Vector2(0.0, 0.16), Vector2(-0.21, 0.08)], STEEL_DARK, true],
+				[[Vector2(-0.11, -0.14), Vector2(0.11, -0.14), Vector2(0.07, -0.07), Vector2(0.0, -0.05), Vector2(-0.07, -0.07)], SLIT, false],
+			]
+			for s in [-1.0, 1.0]:
+				var m := func(pts: Array) -> Array: return pts.map(func(p): return Vector2(p.x * s, p.y))
+				out.append_array([
+					[m.call([Vector2(0.28, -0.30), Vector2(0.36, -0.46), Vector2(0.40, -0.28)]), STEEL_LIGHT, true],
+					[m.call([Vector2(0.18, 0.12), Vector2(0.45, 0.20), Vector2(0.43, 0.32), Vector2(0.20, 0.25)]), STEEL_DARK, true],
+					[m.call([Vector2(0.16, 0.02), Vector2(0.48, 0.08), Vector2(0.47, 0.21), Vector2(0.18, 0.14)]), STEEL, true],
+					[m.call([Vector2(0.12, -0.14), Vector2(0.17, -0.27), Vector2(0.28, -0.34), Vector2(0.40, -0.31), Vector2(0.48, -0.18),
+						Vector2(0.49, 0.04), Vector2(0.14, 0.02)]), STEEL, true],
+					[m.call([Vector2(0.17, -0.27), Vector2(0.28, -0.34), Vector2(0.40, -0.31), Vector2(0.30, -0.18), Vector2(0.16, -0.16)]), STEEL_LIGHT, false],
+					[m.call([Vector2(0.14, 0.02), Vector2(0.49, 0.04), Vector2(0.49, 0.09), Vector2(0.14, 0.07)]), GOLD, false],
+					[_ngon(6, 0.03, 0.0).map(func(p): return p + Vector2(0.34 * s, -0.10)), GOLD, true],
+				])
+			return out
+		"gloves":  # 장갑: 손가락 넷 + 엄지 + 손바닥, 쇠 손등판, 넓은 손목
+			var fingers := []
+			for f in [[-0.195, -0.36], [-0.07, -0.44], [0.055, -0.42], [0.175, -0.32]]:
+				var x: float = f[0]
+				var top: float = f[1]
+				fingers.append([[Vector2(x - 0.055, -0.08), Vector2(x - 0.055, top + 0.03), Vector2(x - 0.03, top), Vector2(x + 0.03, top),
+					Vector2(x + 0.055, top + 0.03), Vector2(x + 0.055, -0.08)], LEATHER, true])
+				fingers.append([[Vector2(x - 0.055, top + 0.13), Vector2(x + 0.055, top + 0.13), Vector2(x + 0.055, top + 0.155), Vector2(x - 0.055, top + 0.155)], LEATHER_DARK, false])
+			var thumb := [Vector2(-0.24, 0.16), Vector2(-0.24, -0.02), Vector2(-0.34, -0.14), Vector2(-0.40, -0.17), Vector2(-0.45, -0.12),
+				Vector2(-0.43, -0.04), Vector2(-0.34, 0.08)]
+			return [[thumb, LEATHER, true]] + fingers + [
+				[[Vector2(-0.25, -0.12), Vector2(0.23, -0.12), Vector2(0.25, 0.22), Vector2(-0.25, 0.22)], LEATHER, true],
+				[[Vector2(-0.25, -0.12), Vector2(-0.08, -0.12), Vector2(-0.10, 0.22), Vector2(-0.25, 0.22)], LEATHER_LIGHT, false],
+				[[Vector2(-0.27, -0.16), Vector2(0.25, -0.16), Vector2(0.25, -0.03), Vector2(-0.27, -0.03)], STEEL, true],
+				[[Vector2(-0.27, -0.16), Vector2(-0.05, -0.16), Vector2(-0.05, -0.03), Vector2(-0.27, -0.03)], STEEL_LIGHT, false],
+				[[Vector2(-0.30, 0.18), Vector2(0.30, 0.18), Vector2(0.35, 0.46), Vector2(-0.35, 0.46)], LEATHER_DARK, true],
+				[[Vector2(-0.30, 0.18), Vector2(0.30, 0.18), Vector2(0.31, 0.23), Vector2(-0.31, 0.23)], GOLD, false],
+			]
+		"sword":  # 검: 길고 곧은 칼날(밝은 반쪽·홈) + 금 코등이 + 가죽 손잡이 + 금 폼멜
+			var a := Vector2(-0.40, 0.40)
+			var b := Vector2(0.42, -0.42)
+			return [
+				[_ax(a, b, [Vector2(0.30, 0.075), Vector2(1.04, 0.075), Vector2(1.16, 0.0), Vector2(1.04, -0.075), Vector2(0.30, -0.075)]), STEEL, true],
+				[_ax(a, b, [Vector2(0.30, 0.075), Vector2(1.04, 0.075), Vector2(1.16, 0.0), Vector2(0.30, 0.0)]), STEEL_LIGHT, false],
+				[_ax(a, b, [Vector2(0.36, 0.014), Vector2(0.92, 0.014), Vector2(0.92, -0.014), Vector2(0.36, -0.014)]), STEEL_DARK, false],
+				[_ax(a, b, [Vector2(0.07, 0.042), Vector2(0.26, 0.042), Vector2(0.26, -0.042), Vector2(0.07, -0.042)]), LEATHER, true],
+				[_ax(a, b, [Vector2(0.24, 0.20), Vector2(0.31, 0.20), Vector2(0.31, -0.20), Vector2(0.24, -0.20)]), GOLD, true],
+				[_ax(a, b, [Vector2(0.0, 0.0), Vector2(0.05, 0.065), Vector2(0.10, 0.0), Vector2(0.05, -0.065)]), GOLD, true],
+			]
+		"axe":  # 도끼: 나무 자루(가죽 손잡이) + 위쪽 왼편에 크고 넓은 초승달 날(밝은 날 끝) + 반대쪽 짧은 가시
+			var a := Vector2(-0.24, 0.46)
+			var b := Vector2(0.32, -0.12)
+			return [
+				[_ax(a, b, [Vector2(0.0, 0.045), Vector2(0.92, 0.045), Vector2(0.92, -0.045), Vector2(0.0, -0.045)]), WOOD, true],
+				[_ax(a, b, [Vector2(0.0, 0.045), Vector2(0.92, 0.045), Vector2(0.92, 0.0), Vector2(0.0, 0.0)]), WOOD_LIGHT, false],
+				[_ax(a, b, [Vector2(0.03, 0.056), Vector2(0.24, 0.056), Vector2(0.24, -0.056), Vector2(0.03, -0.056)]), LEATHER_DARK, true],
+				[_ax(a, b, [Vector2(0.66, -0.05), Vector2(0.76, -0.22), Vector2(0.84, -0.05)]), STEEL_DARK, true],
+				[_ax(a, b, [Vector2(0.58, 0.04), Vector2(0.50, 0.16), Vector2(0.40, 0.34), Vector2(0.50, 0.45), Vector2(0.66, 0.49),
+					Vector2(0.82, 0.45), Vector2(0.90, 0.32), Vector2(0.84, 0.16), Vector2(0.80, 0.04)]), STEEL, true],
+				[_ax(a, b, [Vector2(0.40, 0.34), Vector2(0.50, 0.45), Vector2(0.66, 0.49), Vector2(0.82, 0.45), Vector2(0.90, 0.32),
+					Vector2(0.84, 0.30), Vector2(0.78, 0.39), Vector2(0.66, 0.42), Vector2(0.53, 0.39), Vector2(0.46, 0.30)]), STEEL_LIGHT, false],
+				[_ax(a, b, [Vector2(0.56, 0.065), Vector2(0.84, 0.065), Vector2(0.84, -0.065), Vector2(0.56, -0.065)]), STEEL_DARK, true],
+			]
+		"staff":  # 지팡이: 나무 자루(금 띠) + 꼭대기 갈퀴 둘이 쥔 하늘색 수정(빛 번짐)
+			var a := Vector2(-0.38, 0.44)
+			var b := Vector2(0.14, -0.14)
+			var c := Vector2(0.22, -0.28)
+			return [
+				[_ngon(8, 0.20, PI / 8.0).map(func(p): return p + c), Color(GEM, 0.35), false],
+				[_ax(a, b, [Vector2(0.0, 0.04), Vector2(0.78, 0.035), Vector2(0.78, -0.035), Vector2(0.0, -0.04)]), WOOD, true],
+				[_ax(a, b, [Vector2(0.0, 0.04), Vector2(0.78, 0.035), Vector2(0.78, 0.0), Vector2(0.0, 0.0)]), WOOD_LIGHT, false],
+				[_ax(a, b, [Vector2(0.55, 0.05), Vector2(0.61, 0.05), Vector2(0.61, -0.05), Vector2(0.55, -0.05)]), GOLD, true],
+				[_ax(a, b, [Vector2(0.0, 0.045), Vector2(0.06, 0.045), Vector2(0.06, -0.045), Vector2(0.0, -0.045)]), GOLD, true],
+				[[c + Vector2(-0.04, 0.17), c + Vector2(-0.16, 0.03), c + Vector2(-0.12, 0.0), c + Vector2(-0.01, 0.12)], WOOD, true],
+				[[c + Vector2(0.04, 0.17), c + Vector2(0.16, 0.03), c + Vector2(0.12, 0.0), c + Vector2(0.01, 0.12)], WOOD, true],
+				[[c + Vector2(0.0, -0.17), c + Vector2(0.11, 0.0), c + Vector2(0.0, 0.14), c + Vector2(-0.11, 0.0)], GEM, true],
+				[[c + Vector2(0.0, -0.17), c + Vector2(0.0, 0.0), c + Vector2(-0.11, 0.0)], GEM.lightened(0.45), false],
+				[[c + Vector2(0.0, 0.0), c + Vector2(0.11, 0.0), c + Vector2(0.0, 0.14)], GEM.darkened(0.25), false],
+			]
+		"crossbow":  # 석궁(위에서 본 모습, 위를 겨눔): 휜 활(쇠) + 시위 + 나무 개머리 + 장전된 볼트
+			return [
+				[_quad(Vector2(-0.42, 0.04), Vector2(0.0, 0.12), 0.012), SLIT, false],
+				[_quad(Vector2(0.42, 0.04), Vector2(0.0, 0.12), 0.012), SLIT, false],
+				[[Vector2(-0.46, 0.04), Vector2(-0.34, -0.12), Vector2(-0.14, -0.22), Vector2(0.14, -0.22), Vector2(0.34, -0.12), Vector2(0.46, 0.04),
+					Vector2(0.39, 0.06), Vector2(0.29, -0.06), Vector2(0.12, -0.15), Vector2(-0.12, -0.15), Vector2(-0.29, -0.06), Vector2(-0.39, 0.06)], STEEL_DARK, true],
+				[[Vector2(-0.065, -0.24), Vector2(0.065, -0.24), Vector2(0.075, 0.26), Vector2(0.11, 0.44), Vector2(-0.11, 0.44), Vector2(-0.075, 0.26)], WOOD, true],
+				[[Vector2(-0.065, -0.24), Vector2(0.0, -0.24), Vector2(0.0, 0.44), Vector2(-0.11, 0.44), Vector2(-0.075, 0.26)], WOOD_LIGHT, false],
+				[[Vector2(0.065, 0.14), Vector2(0.13, 0.17), Vector2(0.12, 0.24), Vector2(0.07, 0.22)], SLIT, false],
+				[[Vector2(-0.018, -0.36), Vector2(0.018, -0.36), Vector2(0.018, 0.12), Vector2(-0.018, 0.12)], LEATHER_LIGHT, false],
+				[[Vector2(-0.05, 0.06), Vector2(0.0, 0.02), Vector2(0.05, 0.06), Vector2(0.0, 0.12)], PLUME, false],
+				[[Vector2(-0.055, -0.33), Vector2(0.0, -0.47), Vector2(0.055, -0.33)], STEEL, true],
+			]
+		"dagger":  # 단검: 짧고 넓은 나뭇잎 칼날 + 짧은 쇠 코등이 + 감은 손잡이 + 고리 폼멜
+			var a := Vector2(-0.30, 0.34)
+			var b := Vector2(0.36, -0.32)
+			var ring: Array = _ngon(8, 0.06, PI / 8.0).map(func(p): return p + _ax(a, b, [Vector2(0.0, 0.0)])[0])
+			return [
+				[ring, STEEL_DARK, true],
+				[_ax(a, b, [Vector2(0.28, 0.115), Vector2(0.62, 0.095), Vector2(0.93, 0.0), Vector2(0.62, -0.095), Vector2(0.28, -0.115)]), STEEL, true],
+				[_ax(a, b, [Vector2(0.28, 0.115), Vector2(0.62, 0.095), Vector2(0.93, 0.0), Vector2(0.28, 0.0)]), STEEL_LIGHT, false],
+				[_ax(a, b, [Vector2(0.05, 0.045), Vector2(0.24, 0.045), Vector2(0.24, -0.045), Vector2(0.05, -0.045)]), LEATHER_DARK, true],
+				[_ax(a, b, [Vector2(0.11, 0.046), Vector2(0.13, 0.046), Vector2(0.13, -0.046), Vector2(0.11, -0.046)]), LEATHER_LIGHT, false],
+				[_ax(a, b, [Vector2(0.17, 0.046), Vector2(0.19, 0.046), Vector2(0.19, -0.046), Vector2(0.17, -0.046)]), LEATHER_LIGHT, false],
+				[_ax(a, b, [Vector2(0.22, 0.15), Vector2(0.29, 0.13), Vector2(0.29, -0.13), Vector2(0.22, -0.15)]), STEEL_DARK, true],
+			]
 	return []
+
+
+## 축 좌표 → 단위 좌표: p0에서 p1 쪽으로 s(=x), 진행 방향 왼쪽(화면에서 위·왼쪽) 법선으로 t(=y). 무기를 대각선으로 그릴 때.
+static func _ax(p0: Vector2, p1: Vector2, st: Array) -> Array:
+	var d := (p1 - p0).normalized()
+	var n := Vector2(d.y, -d.x)
+	var out := []
+	for q in st:
+		out.append(p0 + d * q.x + n * q.y)
+	return out
 
 
 ## 정 n각형(원점 중심, 반지름 r, 시작각 rot).

@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost } from './rules.ts'
+import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, UPGRADE_UNITS } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -64,6 +64,12 @@ export const TABLES: TableSpec[] = [
     sql: { id: 'text', name: 'text', building: 'text', ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']), model: 'text' },
   },
   {
+    // 개정 20: 공용 업그레이드 표(스펙 §2). unit = pct(%) | pp(%p)
+    name: 'upgrades', table: 'upgrade_defs', file: 'upgrades.csv', ordered: true,
+    cols: { id: 'key', name: 'text', per_level: 'num', unit: 'text', max_level: 'int', cost_base: 'num', cost_growth: 'num' },
+    sql: { id: 'text', name: 'text', per_level: 'real', unit: 'text', max_level: 'integer', cost_base: 'real', cost_growth: 'real' },
+  },
+  {
     name: 'config', table: 'game_config', file: 'config.csv', ordered: false,
     cols: { key: 'key', value: 'text' },
     sql: { key: 'text', value: 'text' },
@@ -76,7 +82,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
   'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
-  'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star']
+  'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group']
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
@@ -85,9 +91,9 @@ export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
 // 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 나머지는 0보다 크다.
 // 개정 16 훈련: 병종마다 1마리 비용 train_cost_<병종>("자원:수|…", rules.parseTrainCost)도 필수다
-export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'soldier_prod_sec', 'soldier_prod_level_factor', 'soldier_merge_count',
+export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'train_base_min', 'train_step_min', 'train_cost_tier_mult', 'soldier_merge_count',
   'train_batch_base', 'train_batch_per_level']
-const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base']
+const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base', 'train_base_min', 'train_step_min', 'train_cost_tier_mult']
 const SOLDIER_INT0_KEYS = ['train_batch_per_level']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
 export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 앱 GameData.KEEP_SLOT_STEP
@@ -347,6 +353,17 @@ function checkHeroSkills(rows: CsvRow[], errors: string[]) {
   }
 }
 
+// 업그레이드 표(개정 20, 앱 GameData와 같은 규칙): per_level·cost_base > 0, cost_growth ≥ 1, max_level ≥ 1, unit은 pct·pp만.
+function checkUpgrades(t: Tables, errors: string[]) {
+  const err = (line: unknown, col: string, why: string) => errors.push(`upgrades.csv line ${line} column '${col}': ${why}`)
+  for (const u of t.upgrades ?? []) {
+    for (const c of ['per_level', 'cost_base']) if (!(Number(u[c]) > 0)) err(u._line, c, `must be greater than 0: ${u[c]}`)
+    if (!(Number(u.cost_growth) >= 1)) err(u._line, 'cost_growth', `must be 1 or more: ${u.cost_growth}`)
+    if (!(Number(u.max_level) >= 1)) err(u._line, 'max_level', `must be at least 1: ${u.max_level}`)
+    if (!UPGRADE_UNITS.includes(String(u.unit))) err(u._line, 'unit', `must be one of ${UPGRADE_UNITS.join('/')}: '${u.unit}'`)
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -371,6 +388,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   if (out.config) checkGacha(out.config, errors)
   checkBuildings(out, errors)
   checkSoldiers(out, errors)
+  checkUpgrades(out, errors)
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {

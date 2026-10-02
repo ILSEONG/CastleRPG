@@ -46,6 +46,7 @@ interface Game {
   resources: { id: string; name: string; building: string; per_min: number; price: number }[]
   buildings: R.BuildingDef[] // 개정 12 건물 표(파일 순서)
   soldiers: R.SoldierDef[] // 개정 13 병종 표(파일 순서)
+  upgrades: R.UpgradeDef[] // 개정 20 공용 업그레이드 표(파일 순서)
   config: R.Config
 }
 
@@ -65,10 +66,12 @@ interface Player {
   build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
   soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
   soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
+  upgrades: Record<string, number> // 개정 20: 업그레이드 id → 레벨(0 초과만)
 }
 
 interface Train {
   count: number
+  tier: number // 시작할 때의 훈련 티어(개정 19) — 레벨업해도 그대로
   finish: number // 유닉스 초(서버 시각)
 }
 
@@ -96,6 +99,7 @@ interface Change {
   soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
   soldierDeploy?: Record<string, number> // 새 병사 배치
   train?: Record<string, Train | null> // 병사 건물 → 새 훈련 대기열(null = 비움, 개정 16)
+  upgrades?: Record<string, number> // 업그레이드 id → 레벨 증가(개정 20)
   log?: { kind: string; detail: unknown }
 }
 
@@ -110,12 +114,13 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
 
 const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
+  coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   extract(epoch from s.build_finish)::float8 as build_finish,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8,
-      'train_count', train_count, 'train_finish', extract(epoch from train_finish)::float8))
+      'train_count', train_count, 'train_tier', train_tier, 'train_finish', extract(epoch from train_finish)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
   coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level, 'shards', shards, 'promotion', promotion))
     from player_heroes where player_id = s.player_id), '{}'::json) as heroes
@@ -208,7 +213,7 @@ export function createApp(opts: AppOptions) {
     const [r] = await query(GAME_SQL)
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
-      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), config: json(r.config),
+      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades), config: json(r.config),
     }
   }
 
@@ -223,7 +228,7 @@ export function createApp(opts: AppOptions) {
       for (const [k, v] of Object.entries(json(r.res) as Record<string, unknown>)) res[k] = Number(v)
       const buildings: Player['buildings'] = {}
       for (const [k, v] of Object.entries(json(r.buildings) as Record<string, any>)) {
-        const train = Number(v.train_count) > 0 ? { count: Number(v.train_count), finish: Number(v.train_finish) } : null
+        const train = Number(v.train_count) > 0 ? { count: Number(v.train_count), tier: Number(v.train_tier ?? 1), finish: Number(v.train_finish) } : null
         buildings[k] = { level: Number(v.level), last_collect: Number(v.last_collect), train }
       }
       const missing = game.resources.some((x) => !(x.id in res) || !(x.building in buildings)) || game.buildings.some((b) => !(b.id in buildings))
@@ -241,7 +246,7 @@ export function createApp(opts: AppOptions) {
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
-        soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)),
+        soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)), upgrades: counts(json(r.upgrades)),
       }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
@@ -266,6 +271,8 @@ export function createApp(opts: AppOptions) {
       const b = p.buildings[r.building]
       buildings[r.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
     }
+    const upgrades: Record<string, number> = {}
+    for (const u of game.upgrades) if ((p.upgrades[u.id] ?? 0) > 0) upgrades[u.id] = p.upgrades[u.id]
     const training: Record<string, Train | null> = {}
     for (const s of game.soldiers) training[s.building] = p.buildings[s.building]?.train ?? null
     const maxTier = game.soldiers.length ? R.cfgNum(game.config, 'soldier_max_tier') : 0
@@ -284,7 +291,7 @@ export function createApp(opts: AppOptions) {
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
         kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
-        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training,
+        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -342,9 +349,15 @@ export function createApp(opts: AppOptions) {
         where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
     })
     Object.entries(ch.train ?? {}).forEach(([b, t], i) => {
-      ctes.push(`t${i} as (update player_buildings set train_count = ${p(t?.count ?? 0)}::int, train_finish = to_timestamp(${p(t?.finish ?? null)}::float8)
+      ctes.push(`t${i} as (update player_buildings set train_count = ${p(t?.count ?? 0)}::int, train_tier = ${p(t?.tier ?? null)}::int, train_finish = to_timestamp(${p(t?.finish ?? null)}::float8)
         where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
     })
+    if (ch.upgrades && Object.keys(ch.upgrades).length) {
+      // from s: version 가드가 실패하면 레벨도 안 오른다. 새 행은 증가분이 곧 레벨
+      ctes.push(`u as (insert into player_upgrades (player_id, id, level) select s.player_id, x.key, x.value::int
+        from s, jsonb_each_text(${p(JSON.stringify(ch.upgrades))}::jsonb) as x
+        on conflict (player_id, id) do update set level = player_upgrades.level + excluded.level returning 1)`)
+    }
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
@@ -375,6 +388,7 @@ export function createApp(opts: AppOptions) {
     if (ch.build !== undefined) pl.build = ch.build
     for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
     if (ch.soldierDeploy !== undefined) pl.soldier_deploy = ch.soldierDeploy
+    for (const [k, d] of Object.entries(ch.upgrades ?? {})) pl.upgrades[k] = (pl.upgrades[k] ?? 0) + d
     pl.version += 1
   }
 
@@ -459,7 +473,7 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
-    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, config: g.config }
+    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, upgrades: g.upgrades, config: g.config }
     const version = createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16)
     const etag = `"${version}"`
     c.header('ETag', etag)
@@ -700,6 +714,30 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // 공용 업그레이드(개정 20 §4): count 1..100. 모르는 id는 404 unknown_upgrade, 최대 레벨을 넘으면 409 max_level, 골드가 모자라면 409 not_enough_gold.
+  // 골드(정수, × 10 tenths) 차감·레벨·economy_log upgrade는 version 가드 한 문장 — 같이 들어가거나 같이 안 들어간다.
+  app.post('/v1/upgrade', auth, async (c) => {
+    const b = await body(c)
+    const id = strField(b, 'id')
+    const count = intField(b, 'count', 1, MAX_LEVELUP_COUNT)
+    return mutate(c, (p, g) => {
+      const def = g.upgrades.find((u) => u.id === id)
+      if (!def) throw new ApiError(404, 'unknown_upgrade', `upgrade '${id}' does not exist`)
+      const from = p.upgrades[id] ?? 0
+      const to = from + count
+      if (to > def.max_level) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${def.max_level}`)
+      const gold = R.upgradeCost(def, from, count)
+      if (Math.floor(p.gold_tenths / 10) < gold) throw new ApiError(409, 'not_enough_gold', `levels ${from} -> ${to} cost ${gold} gold`)
+      return {
+        change: {
+          goldTenths: -gold * 10, upgrades: { [id]: count },
+          log: { kind: 'upgrade', detail: { id, from, to, count, gold, gold_tenths: -gold * 10 } },
+        },
+        extra: { level: to },
+      }
+    })
+  })
+
   // 승급(개정 15 §2): 검사 순서 보유(404 not_owned) → 최대 승급(409 max_promotion) → 조각(409 not_enough_shards).
   // 조각 −비용·승급 +1·economy_log promote는 version 가드 한 문장 — 같은 순간 두 번 보내도 조각이 1회분이면 하나는 409다.
   app.post('/v1/hero/promote', auth, async (c) => {
@@ -787,19 +825,20 @@ export function createApp(opts: AppOptions) {
       if (count > max) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${max}`)
       const q = p.buildings[building].train
       if (q) throw new ApiError(409, q.finish > now ? 'training' : 'ready_to_collect', `'${building}' already has ${q.count} in training`)
-      const cost = R.trainCost(g.config, s.id, count)
+      const tier = R.trainTier(g.config, lv)
+      const cost = R.trainCost(g.config, s.id, count, tier)
       if (Object.entries(cost).some(([r, v]) => (p.res[r] ?? 0) < v)) throw new ApiError(409, 'not_enough', `training ${count} costs ${JSON.stringify(cost)}`)
       const unit = R.soldierUnitSec(g.config, lv)
-      const train = { count, finish: now + count * unit }
+      const train = { count, tier, finish: now + count * unit }
       const res = Object.fromEntries(Object.entries(cost).filter(([, v]) => v > 0).map(([r, v]) => [r, -v]))
       return {
-        change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, level: lv, unit_sec: unit, cost, finish: train.finish } } },
+        change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, tier, level: lv, unit_sec: unit, cost, finish: train.finish } } },
         extra: { training: { building, ...train } },
       }
     })
   })
 
-  // 훈련 수령(개정 16 §2): 끝났으면 1티어 보유 += count, 대기열 비우기, economy_log train_collect(version 가드 한 문장).
+  // 훈련 수령(개정 16 §2): 끝났으면 그 묶음 티어 보유 += count, 대기열 비우기, economy_log train_collect(version 가드 한 문장).
   // 비었으면 409 empty, 아직이면 409 not_ready — 응답을 잃고 다시 보내도 두 번 받지 않는다(멱등).
   app.post('/v1/soldiers/collect', auth, async (c) => {
     const building = strField(await body(c), 'building')
@@ -809,8 +848,8 @@ export function createApp(opts: AppOptions) {
       if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
       if (q.finish > now) throw new ApiError(409, 'not_ready', `'${building}' finishes training at ${q.finish}`)
       return {
-        change: { soldiers: { [R.soldierKey(s.id, 1)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail: { building, type: s.id, ...q } } },
-        extra: { collected: { type: s.id, count: q.count } },
+        change: { soldiers: { [R.soldierKey(s.id, q.tier)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail: { building, type: s.id, ...q } } },
+        extra: { collected: { type: s.id, count: q.count, tier: q.tier } },
       }
     })
   })
@@ -825,7 +864,7 @@ export function createApp(opts: AppOptions) {
       const q = p.buildings[building].train
       if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
       if (q.finish <= now) throw new ApiError(409, 'ready_to_collect', `'${building}' finished training; collect it`)
-      const refund = R.trainRefund(R.trainCost(g.config, s.id, q.count))
+      const refund = R.trainRefund(R.trainCost(g.config, s.id, q.count, q.tier))
       return {
         change: {
           res: Object.fromEntries(Object.entries(refund).filter(([, v]) => v > 0)), train: { [building]: null },
@@ -857,6 +896,17 @@ export function createApp(opts: AppOptions) {
       const id = c.get('playerId') as string
       await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
         update player_heroes set shards = $3 where player_id = (select player_id from s) and hero_id = $2`, [id, heroId, shards])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(개정 19): 병사 건물 레벨을 바로 정한다(막사 Lv 7 = T2를 6번 업그레이드 없이 본다). 병사 건물이 아니면 400.
+    app.post('/v1/test/barracks_level', auth, async (c) => {
+      const level = intField(await body(c), 'level', 1, 30)
+      const id = c.get('playerId') as string
+      await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
+        update player_buildings set level = $2 where player_id = (select player_id from s) and building = 'barracks'`, [id, level])
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))

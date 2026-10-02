@@ -66,6 +66,7 @@ func _init() -> void:
 	test_economy_sell()
 	test_economy_sell_amount()
 	test_economy_sell_many()
+	test_training_tiers()
 	test_economy_save()
 	test_economy_online()
 	test_merchant_spot()
@@ -99,6 +100,13 @@ func _init() -> void:
 	test_skill_unlock()
 	test_skill_unlock_validation()
 	test_fx_r17_meshes()
+	test_upgrade_tables()
+	test_crit_roll_params()
+	test_growth_economy()
+	test_item_icons()
+	test_arena_kit()
+	test_dungeon_monsters()
+	test_spawn_groups()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -126,7 +134,7 @@ func test_game_data() -> void:
 	for s in range(1, 31):  # 1~30행은 직선 공식(개정 10: HP·공격력 10%, 골드 20%)
 		var r := GameData.stage(s)
 		check(is_equal_approx(r.hp_mult, 1.0 + 0.10 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.10 * (s - 1)), "hp/atk mult at stage %d" % s)
-		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 4.0, "waves/size/idle at stage %d" % s)
+		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 8.0, "waves/size/idle at stage %d" % s)
 		check(is_equal_approx(r.gold_mult, 1.0 + 0.2 * (s - 1)), "gold_mult at stage %d" % s)
 	var r31 := GameData.stage(31)  # 직선 연장
 	var r30 := GameData.stage(30)
@@ -198,7 +206,7 @@ func test_game_tables() -> void:
 	check(GameData.resource("wood").building == "lumber" and GameData.resource("food").per_min == 10.0 and GameData.resource("food").building == "farm", "wood/food rows")
 	check(GameData.resource_of_building("farm") == "food" and GameData.resource_of_building("keep") == "", "resource_of_building")
 	var nums := {"castle_hp": 1000.0, "gate_hp_per_level": 400.0, "max_live_monsters": 120.0, "countdown_sec": 3.0, "result_sec": 2.0,
-		"wave_gap_sec": 8.0, "spawn_spacing_sec": 0.5, "accum_cap_min": 720.0, "badge_min": 5.0, "merchant_jackpot_p": 0.05,
+		"wave_gap_sec": 8.0, "spawn_spacing_sec": 1.0, "spawn_group": 3.0, "accum_cap_min": 720.0, "badge_min": 5.0, "merchant_jackpot_p": 0.05,
 		"merchant_jackpot_rate": 2.0, "merchant_rate_min": 0.5, "merchant_rate_max": 1.5, "merchant_rate_step": 0.1,
 		"merchant_low_high_ratio": 3.0, "kill_rate_cap": 5.0}
 	for key in nums:
@@ -232,7 +240,8 @@ func _payload() -> Dictionary:
 		cfg["train_cost_" + sd.id] = String(GameData._config["train_cost_" + sd.id])
 	return {"version": "t", "monsters": [GameData.monster("grunt").duplicate(), GameData.monster("epic_boss").duplicate()],
 		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true),
-		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true), "config": cfg}
+		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true),
+		"upgrades": GameData.upgrades().duplicate(true), "config": cfg}
 
 
 ## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
@@ -277,6 +286,7 @@ func _remote_checks() -> int:
 		["gacha cost not an integer", 1], ["gacha cost negative", 1], ["gacha guarantee not an integer", 1], ["gacha rate above 1", 1],
 		["gacha rates sum above 1", 1], ["a grade with no heroes", 1], ["multishot 0", 1], ["skill cooldown 0", 1], ["haste -100", 1],
 		["stun every 2.5th attack", 1], ["hero attack interval 0", 1], ["hero hp negative", 1],
+		["upgrade unit unknown", 1], ["upgrade growth below 1", 1], ["upgrade max level 0", 1], ["upgrade cost 0", 1], ["upgrades missing", 1], ["duplicate upgrade id", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -291,7 +301,7 @@ func _remote_checks() -> int:
 
 ## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
 func _tables_hash() -> int:
-	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._config])
+	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._upgrades, GameData._config])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
@@ -335,6 +345,12 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"stun every 2.5th attack": q.heroes[9].s2a = 2.5  # 네브
 		"hero attack interval 0": q.heroes[0].atk_interval = 0
 		"hero hp negative": q.heroes[0].hp = -5
+		"upgrade unit unknown": q.upgrades[0].unit = "percent"
+		"upgrade growth below 1": q.upgrades[1].cost_growth = 0.9
+		"upgrade max level 0": q.upgrades[2].max_level = 0
+		"upgrade cost 0": q.upgrades[3].cost_base = 0
+		"upgrades missing": q.erase("upgrades")
+		"duplicate upgrade id": q.upgrades[1].id = "atk"
 		"resource building not in the layout": q.resources[0].building = "mine"  # 배치에 없다(badges.gd가 깨진다)
 
 
@@ -370,10 +386,10 @@ func test_wave_total_monotonic() -> void:
 
 func test_wave_idle_cycle() -> void:
 	var ev := WaveDirector.build(1, WaveDirector.MODE_IDLE)
-	check(ev.size() == 4, "idle cycle spawns 4")
+	check(ev.size() == 12, "idle cycle spawns 4 groups of 3")
 	check(ev[0].time > 0.0, "first idle spawn is not at t=0")
 	var sides: Array = ev.map(func(e): return e.side)
-	check(sides == [0, 1, 2, 3], "idle sides rotate 0..3")
+	check(sides == [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3], "idle sides rotate 0..3, one group per side")
 	for e in ev:
 		check(e.kind == "grunt", "idle spawns grunts only")
 
@@ -2033,8 +2049,8 @@ func test_soldiers() -> void:
 	check(i1 == {"hp": 320.0, "atk": 22.0, "range": 1.6, "atk_interval": 1.0, "speed": 4.0, "aggro": 7.0} and i2.hp == 640.0 and i2.atk == 44.0 and i2.range == 1.6 and i2.speed == 4.0
 		and GameData.soldier_stats("cavalry", 5).hp == 240.0 * 16.0 and GameData.soldier_stats("knight", 1).is_empty(), "tier t: hp/atk x 2^(t-1), the rest unchanged: %s" % [i2])
 	check(GameData.soldier_stats("cavalry", 1).speed == 2.0 * GameData.soldier_stats("infantry", 1).speed, "cavalry moves twice as fast as infantry")
-	check(GameData.soldier_unit_sec(1) == 10800.0 and absf(GameData.soldier_unit_sec(10) - 6806.7) < 0.1 and absf(GameData.soldier_unit_sec(30) / 60.0 - 40.7) < 0.1,
-		"unit time = 10800 x 0.95^(L-1): Lv 10 about 1 h 54 min, Lv 30 about 41 min")
+	check(GameData.soldier_unit_sec(1) == 10800.0 and GameData.soldier_unit_sec(2) == 9000.0 and GameData.soldier_unit_sec(6) == 1800.0 and GameData.soldier_unit_sec(7) == 10800.0,
+		"unit time = 180 - 30 x step min (rev 19): Lv 1 3:00, Lv 2 2:30, Lv 6 0:30, Lv 7 back to 3:00 (next tier)")
 	check(GameData.train_max(1) == 10 and GameData.train_max(5) == 18 and GameData.train_max(30) == 68, "batch cap = 10 + 2 x (L - 1)")
 	check(EconomyScript.train_cost("infantry", 8) == {"food": 240, "wood": 160} and EconomyScript.train_cost("archer", 3) == {"food": 75, "wood": 90}
 		and EconomyScript.train_cost("cavalry", 1) == {"food": 40, "stone": 20} and EconomyScript.train_cost("knight", 1).is_empty(), "train cost = unit cost x n (food:30|wood:20 ...)")
@@ -2055,7 +2071,7 @@ func test_soldiers() -> void:
 	e.notice.connect(func(t): notes.append(t))
 	e.training_changed.connect(func(): changes[0] += 1)
 	check(e.soldier_counts().is_empty() and e.soldier_deploy().is_empty() and e.deployed_total() == 0 and e.population() == 6 and e.train_queues.is_empty()
-		and not e.last_collect.has("barracks") and e.training("barracks") == {"count": 0, "finish": 0.0, "ready": false}, "new game: no soldiers, empty training queues, no production clocks")
+		and not e.last_collect.has("barracks") and e.training("barracks") == {"count": 0, "tier": 1, "finish": 0.0, "ready": false}, "new game: no soldiers, empty training queues, no production clocks")
 	check(e.train_block("lab", 1) == "unknown" and e.train_block("barracks", 0) == "bad_count" and e.train_block("barracks", 11) == "bad_count"
 		and e.train_block("barracks", 1) == "not_enough" and not e.start_training("barracks", 1) and notes[-1] == EconomyScript.TRAIN_TEXT.not_enough and e.train_queues.is_empty(),
 		"train_block: not a soldier building / count outside 1..10 / not enough resources; a refused start only shows the reason")
@@ -2094,9 +2110,9 @@ func test_soldiers() -> void:
 	e7.save_path = ECON_TMP
 	e7.load_save(now)
 	var raw7 = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw7.version) == 7 and EconomyScript.SAVE_VERSION == 7 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
+	check(int(raw7.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION == 9 and e7.train_queues.archery.tier == 1 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
 		and absf(e7.train_queues.archery.finish - e.train_queues.archery.finish) < 0.01 and e7.soldiers == e.soldiers and not raw7.last_collect.has("archery"),
-		"save v7 round-trips the training queue and keeps no production clocks: %s" % [e7.train_queues])
+		"save v9 round-trips the training queue (with tier) and keeps no production clocks: %s" % [e7.train_queues])
 	var v6 := {"version": 6, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now, "barracks": now - 100 * 3600.0, "stable": 1.0},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 1, "level": 1, "shards": 0, "promotion": 0}}, "deploy": ["hans"], "soldiers": {"infantry:1": 2}, "soldier_deploy": {}}
 	_write(ECON_TMP, JSON.stringify(v6))
@@ -2115,7 +2131,7 @@ func test_soldiers() -> void:
 	odd.training = {"lab": {"count": 3, "finish": 1.0}, "barracks": {"count": 0, "finish": 1.0}, "stable": {"count": 2, "finish": 5.0}}
 	_write(ECON_TMP, JSON.stringify(odd))
 	e7.load_save(now)
-	check(e7.train_queues == {"stable": {"count": 2, "finish": 5.0}}, "v7 load keeps only soldier buildings with a batch: %s" % [e7.train_queues])
+	check(e7.train_queues == {"stable": {"count": 2, "tier": 1, "finish": 5.0}}, "v7 load (no tier = 1) keeps only soldier buildings with a batch: %s" % [e7.train_queues])
 	DirAccess.remove_absolute(ECON_TMP)
 	e7.free()
 	e.save_path = ""
@@ -2178,7 +2194,7 @@ func test_soldiers() -> void:
 		"training": {"barracks": {"count": 4, "finish": 5000.0}, "archery": null, "stable": {"count": 0, "finish": 1.0}, "lab": {"count": 2, "finish": 1.0}}},
 		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
 	check(o.apply_server(reply) and o.soldiers == {"infantry:1": 3} and o.soldier_deployed == {"infantry:1": 2} and o.building_level("barracks") == 2
-		and o.train_queues == {"barracks": {"count": 4, "finish": 5000.0}} and oc[0] == 1,
+		and o.train_queues == {"barracks": {"count": 4, "tier": 1, "finish": 5000.0}} and oc[0] == 1,
 		"reply: soldiers (known keys only), deploy, training queues of soldier buildings only, training_changed: %s" % [o.train_queues])
 	check(o.apply_server(reply) and oc[0] == 1, "the same reply again does not signal training_changed")
 	reply.player.training = {"barracks": null}
@@ -2193,7 +2209,7 @@ func test_soldiers() -> void:
 	o.free()
 	# apply_remote: 병종 표·설정 검증 — 틀리면 아무것도 안 바꾼다
 	var before := _tables_hash()
-	for entry in [["building unknown", 1], ["building shared", 1], ["hp 0", 1], ["atk negative", 1], ["not drawable", 2], ["table missing", 1], ["max tier 0", 1], ["prod sec missing", 1],
+	for entry in [["building unknown", 1], ["building shared", 1], ["hp 0", 1], ["atk negative", 1], ["not drawable", 2], ["table missing", 1], ["max tier 0", 1], ["train step 0", 1],
 			["train cost bad", 1], ["train cost missing", 1], ["batch base 0", 1], ["batch per level fraction", 1]]:
 		var q := _payload()
 		match entry[0]:
@@ -2204,7 +2220,7 @@ func test_soldiers() -> void:
 			"not drawable": q.soldiers[0].id = "dragon"  # 개정 16: train_cost_dragon도 없다(오류 2)
 			"table missing": q.erase("soldiers")
 			"max tier 0": q.config.soldier_max_tier = "0"
-			"prod sec missing": q.config.erase("soldier_prod_sec")
+			"train step 0": q.config.train_step_min = "0"
 			"train cost bad": q.config.train_cost_archer = "food:25|gold:30"
 			"train cost missing": q.config.erase("train_cost_cavalry")
 			"batch base 0": q.config.train_batch_base = "0"
@@ -2784,3 +2800,320 @@ func _command_units(half: float) -> Array:
 		sol.append({"id": "c%d" % s, "type": "cavalry", "side": s, "at": s, "power": 4800.0, "pos": FormationScript.patrol_points(half, s, 1)[0], "last": -INF, "engaged": false})
 		sol.append({"id": "a%d" % s, "type": "archer", "side": s, "at": s, "power": 2700.0, "pos": FormationScript.soldier_wall_spot(half, s, 0), "last": -INF, "engaged": false})
 	return sol
+
+
+## 개정 19: 막사 레벨이 훈련 티어·시간을 정하고 비용은 티어마다 ×5, 진행 중 묶음은 시작 티어·시각 고정.
+func test_training_tiers() -> void:
+	var want := [[1, 1, 180], [2, 1, 150], [6, 1, 30], [7, 2, 180], [12, 2, 30], [13, 3, 180], [19, 4, 180], [25, 5, 180], [30, 5, 30], [31, 5, 30]]
+	var table_ok := true
+	for w in want:
+		table_ok = table_ok and GameData.train_tier(w[0]) == w[1] and GameData.soldier_unit_sec(w[0]) == w[2] * 60.0
+	check(table_ok, "tier/time table: Lv 1,2,6,7,12,13,19,25,30,31 -> T1 3:00, T1 2:30, T1 0:30, T2 3:00, T2 0:30, T3 3:00, T4, T5 3:00, T5 0:30, T5 0:30")
+	check(EconomyScript.train_cost("infantry", 2) == {"food": 60, "wood": 40} and EconomyScript.train_cost("infantry", 2, 2) == {"food": 300, "wood": 200}
+		and EconomyScript.train_cost("infantry", 1, 3) == {"food": 750, "wood": 500}, "cost x 5^(tier-1): T2 x5, T3 x25")
+	var now := 1.8e9
+	var e = _econ(now)
+	e.res = {"wood": 100000, "stone": 100000, "food": 100000}
+	e.levels.barracks = 7
+	var t0: float = e.time_now()
+	check(e.train_tier("barracks") == 2 and e.start_training("barracks", 2) and e.res.food == 100000 - 300 and e.res.wood == 100000 - 200
+		and e.training("barracks").tier == 2 and absf(e.training("barracks").finish - (t0 + 2 * 10800.0)) < 2.0, "Lv 7 barracks trains T2: 3:00 each, cost x5")
+	var fin: float = e.training("barracks").finish
+	e.levels.barracks = 13  # 진행 중 레벨업: 묶음은 T2·끝나는 시각 그대로
+	check(e.training("barracks").tier == 2 and e.training("barracks").finish == fin and e.train_tier("barracks") == 3, "a level-up keeps the running batch's tier and finish")
+	e.finish_training_now("barracks")
+	check(e.collect_training("barracks") and e.soldiers == {"infantry:2": 2}, "collect adds the batch's tier (infantry:2), not the current one")
+	e.levels.barracks = 7
+	e.start_training("barracks", 2)
+	e.levels.barracks = 13
+	var before: Dictionary = e.res.duplicate()
+	check(e.cancel_training("barracks") and e.res.food == before.food + 150 and e.res.wood == before.wood + 100, "cancel refunds half of the batch tier's cost")
+	e.free()
+
+
+## 성장(개정 20 §2) 표·비용·효과: 서버 upgrades.test.ts와 같은 숫자.
+func test_upgrade_tables() -> void:
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"], "upgrades.csv loads in file order")
+	var a := GameData.upgrade_def("aspd")
+	check(a.name == "공격속도" and a.unit == "pct" and a.per_level == 0.25 and a.max_level == 100.0 and a.cost_base == 5000.0 and is_equal_approx(a.cost_growth, 1.07), "aspd row")
+	check(GameData.upgrade_def("nope").is_empty() and GameData.upgrade_cost("nope", 3) == 0, "unknown upgrade is empty / cost 0")
+	# 비용 = round(base × growth^L), L은 현재 레벨(0부터)
+	check(GameData.upgrade_cost("atk", 0) == 1000 and GameData.upgrade_cost("atk", 1) == 1050 and GameData.upgrade_cost("atk", 2) == 1103, "atk costs 1000 / 1050 / 1103")
+	check(GameData.upgrade_cost("aspd", 0) == 5000 and GameData.upgrade_cost("aspd", 1) == 5350 and GameData.upgrade_cost("crit_rate", 0) == 6000 and GameData.upgrade_cost("mspd", 0) == 4000, "first-level costs 5000 / 5350 / 6000 / 4000")
+	var c49 := GameData.upgrade_cost("atk", 49)
+	check(c49 == roundi(1000.0 * pow(1.05, 49)) and c49 > 10000 and c49 < 12000, "atk level 50 costs about 11k (%d)" % c49)
+	check(GameData.upgrade_cost("atk", 199) > 15000000 and GameData.upgrade_cost("atk", 199) < 17000000, "atk level 200 costs about 16m")
+	# 효과: 분수. 레벨은 0..max로 자른다
+	var b0 := GameData.upgrade_bonus({})
+	check(b0 == {"atk_pct": 0.0, "hp_pct": 0.0, "aspd_pct": 0.0, "mspd_pct": 0.0, "crit_rate": 0.0, "crit_dmg": 0.0}, "no upgrades = no bonus")
+	var b := GameData.upgrade_bonus({"atk": 23, "hp": 200, "aspd": 100, "mspd": 80, "crit_rate": 100, "crit_dmg": 100})
+	check(is_equal_approx(b.atk_pct, 0.115) and is_equal_approx(b.hp_pct, 1.0) and is_equal_approx(b.aspd_pct, 0.25) and is_equal_approx(b.mspd_pct, 0.2) \
+		and is_equal_approx(b.crit_rate, 0.1) and is_equal_approx(b.crit_dmg, 0.5), "max levels give +100% / +100% / +25% / +20% / +10%p / +50%p, atk 23 = +11.5%")
+	var over := GameData.upgrade_bonus({"atk": 9999, "crit_dmg": -5, "ghost": 7})
+	check(is_equal_approx(over.atk_pct, 1.0) and over.crit_dmg == 0.0 and over.size() == 6, "levels clamp to 0..max, unknown ids are ignored")
+
+
+## 치명타 결합(개정 20 §3): 굴림은 한 번, 확률·배율을 더한다.
+func test_crit_roll_params() -> void:
+	var none := GameData.upgrade_bonus({})
+	var r := GameData.crit_roll_params(0.0, 0.0, none)
+	check(r.rate == 0.0 and r.mult == 1.5, "no skill, no growth: never crits, base mult 1.5")
+	var grown := GameData.upgrade_bonus({"crit_rate": 50, "crit_dmg": 40})
+	r = GameData.crit_roll_params(0.0, 0.0, grown)
+	check(is_equal_approx(r.rate, 0.05) and is_equal_approx(r.mult, 1.7), "no skill + growth: rate = crit_rate, mult = 1.5 + crit_dmg")
+	r = GameData.crit_roll_params(0.25, 2.0, grown)
+	check(is_equal_approx(r.rate, 0.30) and is_equal_approx(r.mult, 2.2), "skill + growth: rates add, mult = skill mult + crit_dmg (one roll)")
+	r = GameData.crit_roll_params(0.25, 2.0, none)
+	check(is_equal_approx(r.rate, 0.25) and r.mult == 2.0, "skill alone is unchanged")
+	r = GameData.crit_roll_params(0.95, 2.0, GameData.upgrade_bonus({"crit_rate": 100}))
+	check(r.rate == 1.0, "rate is capped at 1")
+	r = GameData.crit_roll_params(0.25, 0.0, grown)
+	check(is_equal_approx(r.rate, 0.05), "a skill rate without a skill mult is not a skill")
+
+
+## 온라인 흉내: send를 기록만 한다.
+class GrowthNet extends RefCounted:
+	var up := true
+	var last_error := ""
+	var sent: Array = []
+	var refreshed := 0
+	func flush_kills() -> void:
+		pass
+	func send(method: String, path: String, body = null, done := Callable(), fail := Callable(), _auth := true, once := false) -> void:
+		sent.append({"method": method, "path": path, "body": body, "done": done, "fail": fail, "once": once})
+	func refresh() -> void:
+		refreshed += 1
+
+
+## 성장 Economy: 오프라인 강화(골드 합계·최대·부족·저장), 온라인(한 번 보내고 재전송 없음·응답 대기), apply_server, 저장 복원.
+func test_growth_economy() -> void:
+	GameData.load_tables()
+	var e = _econ(1.8e9)
+	var notes: Array = []
+	e.notice.connect(func(t): notes.append(t))
+	var sig := [0]
+	e.upgrades_changed.connect(func(): sig[0] += 1)
+	e.gold = 50000
+	check(e.upgrade_level("atk") == 0 and e.upgrade_total_cost("atk", 3) == 1000 + 1050 + 1103 and e.upgrade_total_cost("atk", 0) == 0, "total cost sums the next n levels")
+	check(e.upgrade_count_affordable("atk", 10) == 10 and e.upgrade_count_affordable("atk", 3) == 3, "affordable is capped by max_n")
+	e.gold = 3152
+	check(e.upgrade_count_affordable("atk", 10) == 2 and e.upgrade_count_affordable("aspd", 10) == 0, "affordable stops where the summed cost passes gold")
+	e.gold = 100000
+	check(e.growth_up("atk", 3) and e.upgrade_level("atk") == 3 and e.gold_tenths == (100000 - 3153) * 10 and sig[0] == 1, "offline upgrade x3 takes the summed gold and signals")
+	check(is_equal_approx(e.upgrade_bonus().atk_pct, 3 * 0.5 / 100.0), "upgrade_bonus reads the state")
+	e.gold = 10
+	check(not e.growth_up("atk", 1) and notes == ["골드 부족"] and e.upgrade_level("atk") == 3 and e.gold_tenths == 100, "short on gold: no change, notice")
+	check(not e.growth_up("zzz", 1) and not e.growth_up("atk", 0) and e.upgrade_level("zzz") == 0, "unknown id / count 0 are refused")
+	e.gold = 100000000
+	e.upgrades["mspd"] = 79
+	check(not e.growth_up("mspd", 2) and e.growth_block("mspd", 2) == "최대 레벨" and e.upgrade_level("mspd") == 79 and e.upgrade_count_affordable("mspd", 10) == 1, "over the cap is refused whole; affordable stops at max")
+	check(e.growth_up("mspd", 1) and e.upgrade_level("mspd") == 80 and e.upgrade_count_affordable("mspd", 10) == 0 and e.upgrade_total_cost("mspd", 5) == 0, "max level reached")
+	# 저장 복원(v9) — 사슬: v7 → v8(훈련 tier 1) → v9(성장 0)
+	e.save_path = ECON_TMP
+	e.save()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(1.8e9)
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
+	check(int(raw.version) == 9 and e2.upgrades == {"atk": 3, "mspd": 80}, "save v9 writes and restores the upgrades")
+	e2.free()
+	raw.erase("upgrades")
+	raw.version = 7
+	raw.training = {"barracks": {"count": 2, "finish": 5.0}}
+	var e3 = _econ(0.0)
+	check(e3._apply(raw) and e3.upgrades.is_empty() and e3.train_queues == {"barracks": {"count": 2, "tier": 1, "finish": 5.0}},
+		"v7 -> v9: the batch gets tier 1 and there are no upgrades: %s" % [e3.train_queues])
+	raw.version = 8
+	raw.training = {"barracks": {"count": 2, "tier": 3, "finish": 5.0}}
+	check(e3._apply(raw) and e3.upgrades.is_empty() and e3.train_queues == {"barracks": {"count": 2, "tier": 3, "finish": 5.0}},
+		"v8 -> v9: the batch keeps its tier and upgrades default to none: %s" % [e3.train_queues])
+	raw.version = 10
+	check(not e3._apply(raw), "a save from a newer version (10) is refused")
+	raw.version = 9
+	raw.upgrades = {"atk": 5, "ghost": 3, "hp": 0, "aspd": 9999}
+	check(e3._apply(raw) and e3.upgrades == {"atk": 5, "aspd": 100}, "unknown ids and zero are dropped, levels clamp to the max")
+	raw.upgrades = {"atk": "x"}
+	check(not e3._apply(raw), "a malformed upgrades block is a corrupt save")
+	e3.free()
+	DirAccess.remove_absolute(ECON_TMP)
+	e.free()
+	# 온라인: 보내고 응답을 기다린다. 재전송 없음(once), 대기 중 재탭은 무시
+	var o = _econ(1.8e9)
+	var n := GrowthNet.new()
+	o.net = n
+	o.gold = 100000
+	var notes2: Array = []
+	o.notice.connect(func(t): notes2.append(t))
+	check(o.growth_up("hp", 2) and o.upgrades_waiting() and o.upgrade_level("hp") == 0 and o.gold == 100000, "online: nothing changes until the reply")
+	check(n.sent.size() == 1 and n.sent[0].path == "/v1/upgrade" and n.sent[0].body == {"id": "hp", "count": 2} and n.sent[0].once, "online: one request to /v1/upgrade, sent once (never resent)")
+	check(not o.growth_up("hp", 1) and n.sent.size() == 1 and notes2.is_empty(), "a tap while waiting is ignored without a notice")
+	var reply := {"player": {"gold_tenths": 1000000 - 20 * 1000, "stage": 1, "res": {}, "buildings": {}, "upgrades": {"hp": 2, "ghost": 4}},
+		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	var sig2 := [0]
+	o.upgrades_changed.connect(func(): sig2[0] += 1)
+	n.sent[0].done.call(reply)
+	check(not o.upgrades_waiting() and o.upgrade_level("hp") == 2 and o.upgrades == {"hp": 2} and sig2[0] == 1, "reply sets the levels (unknown ids dropped) and signals once")
+	check(o.apply_server(reply) and sig2[0] == 1, "the same levels again do not signal")
+	check(o.growth_up("hp", 1) and n.sent.size() == 2, "after the reply a new upgrade can go")
+	n.last_error = "not_enough_gold"
+	n.sent[1].fail.call()
+	check(not o.upgrades_waiting() and notes2 == [EconomyScript.NO_GOLD_TEXT] and n.refreshed == 1, "a rejected upgrade notifies and refreshes the state")
+	n.last_error = ""
+	check(o.growth_up("hp", 1), "can retry after failure")
+	n.sent[2].fail.call()
+	check(notes2.size() == 2 and notes2[1] == EconomyScript.GROWTH_FAIL_TEXT and n.refreshed == 2, "a lost reply notifies with the generic text and refreshes")
+	o.net = null
+	o.free()
+
+
+# --- 개정 18 던전 아트 ---
+
+## 장비 아이콘 11종: 도형 ≥ 3(외곽선 있는 면 포함), 모든 점이 단위 박스 안, 모든 다각형이 삼각분할된다(draw_colored_polygon이 그릴 수 있다),
+## 종류마다 모양이 다르다. 장비 칸: 6등급 색 순서, 외곽 8각이 단위 박스 안, 등급 테두리는 등급 색 그대로이고 LR만 시간에 따라 흐른다(이음매 없음).
+func test_item_icons() -> void:
+	var seen := {}
+	for kind in IconsScript.ITEM_KINDS:
+		var shapes: Array = IconsScript.shapes(kind)
+		check(shapes.size() >= 3 and shapes.any(func(s): return s[2]), "item icon %s has shapes with an outline" % kind)
+		for s in shapes:
+			var pts := PackedVector2Array(s[0])
+			check(pts.size() >= 3 and Geometry2D.triangulate_polygon(pts).size() >= 3, "item icon %s polygon triangulates: %s" % [kind, pts])
+			for p in pts:
+				check(absf(p.x) <= 0.5 and absf(p.y) <= 0.5, "item icon %s point %s inside the unit box" % [kind, p])
+		var sig := str(shapes)
+		check(not seen.has(sig), "item icon %s differs from %s" % [kind, seen.get(sig, "")])
+		seen[sig] = kind
+	check(IconsScript.ITEM_KINDS.size() == 11 and not IconsScript.KINDS.has("sword"), "11 equipment kinds; resource chip kinds stay resources")
+	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR"], "six item grades in order")
+	check(IconsScript.item_tile().all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "item tile inside the unit box")
+	var n := 33
+	var sr := IconsScript.border_colors("SR", n, 0.0)
+	check(sr.size() == n and sr == IconsScript.border_colors("SR", n, 5.0) and sr[0] == Art.ITEM_GRADE_COLORS.SR, "SR border = grade colour, still")
+	var lr0 := IconsScript.border_colors("LR", n, 0.0)
+	check(lr0 != IconsScript.border_colors("LR", n, 0.5) and lr0[0].is_equal_approx(lr0[n - 1]), "LR border flows over time and wraps seamlessly")
+
+
+## 던전 무대: 평야 = 영웅 6·고블린 15·왕, 성 내부 = 영웅 4·데스나이트. 자리는 바닥에, 전투 자리 안(평야 반경 / 홀 안)에, 서로 1 m 넘게 떨어지고,
+## 영웅은 모든 적보다 화면 아래. 조명 설정 키·점광원 ≤ 3(그림자 없음). 이펙트(불꽃·연기·불씨·빛기둥)는 그림자 없음, 평야 반복물은 MultiMesh.
+## 드랍 상자(등급마다 메시 하나, 작음, 바닥에 놓임)·빛기둥(높이 PILLAR_H) 그림자 없음.
+func test_arena_kit() -> void:
+	const ArenaKit := preload("res://scripts/arena_kit.gd")
+	for kind in ["plains", "castle"]:
+		var st: Dictionary = ArenaKit.plains() if kind == "plains" else ArenaKit.castle()
+		var want: Array = [6, 15] if kind == "plains" else [4, 0]
+		check(st.heroes.size() == want[0] and st.enemies.size() == want[1] and st.boss is Vector3, "%s: %d hero spots, %d goblin spots + boss" % [kind, want[0], want[1]])
+		var spots: Array = st.heroes + st.enemies + [st.boss]
+		for i in spots.size():
+			var p: Vector3 = spots[i]
+			var hall: Vector3 = Basis(Vector3.UP, ArenaKit.HALL_YAW).inverse() * p
+			var inside := p.length() < ArenaKit.PLAINS_FIGHT_R if kind == "plains" else maxf(absf(hall.x), absf(hall.z)) < ArenaKit.HALL_HALF - 1.0
+			check(inside and p.y == 0.0, "%s spot %d on the floor inside the fight area: %s" % [kind, i, p])
+			for j in range(i + 1, spots.size()):
+				check(p.distance_to(spots[j]) > 1.0, "%s spots %d and %d apart" % [kind, i, j])
+		var lowest_enemy: float = (st.enemies + [st.boss]).map(func(p): return p.dot(ArenaKit.DOWN)).max()
+		check(st.heroes.all(func(p): return p.dot(ArenaKit.DOWN) > lowest_enemy + 10.0), "%s heroes start below every enemy on screen" % kind)
+		var light: Dictionary = st.light
+		var keys := ["background", "ambient", "ambient_energy", "sun_color", "sun_energy", "sun_rot", "shadows", "omni"]
+		check(keys.all(func(k): return light.has(k)) and light.omni.size() <= 3, "%s light settings complete, <= 3 omni lights" % kind)
+		var lit: Node3D = ArenaKit.lighting(light)
+		var omnis := lit.find_children("*", "OmniLight3D", true, false)
+		check(omnis.size() == light.omni.size() and omnis.all(func(o): return not o.shadow_enabled) and lit.find_children("*", "WorldEnvironment", true, false).size() == 1,
+			"%s lighting node: environment + sun + %d shadowless omni lights" % [kind, light.omni.size()])
+		lit.free()
+		var effects := 0
+		for gi in st.root.find_children("*", "GeometryInstance3D", true, false):
+			var m: Material = gi.material_override
+			if gi is CPUParticles3D or (m is ShaderMaterial and (m.shader == ArenaKit.GlowShader or m.shader == ArenaKit.SmokeShader)):
+				effects += 1
+				check(gi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s effect %s casts no shadow" % [kind, gi.name])
+		if kind == "castle":
+			check(effects == 3 and st.root.find_children("*", "CPUParticles3D", true, false).size() == 1, "castle: one flame MultiMesh, one smoke MultiMesh, one ember emitter")
+		else:
+			check(st.root.find_children("*", "MultiMeshInstance3D", true, false).size() >= 10, "plains: hills, trees, rocks, mountains as MultiMesh")
+		st.root.free()
+	for g in Art.ITEM_GRADE_COLORS:
+		var c: MeshInstance3D = ArenaKit.drop_chest(g)
+		var box := c.mesh.get_aabb()
+		var p: MeshInstance3D = ArenaKit.light_pillar(g)
+		check(box.size.x <= 1.0 and box.size.y < 1.0 and absf(box.position.y) < 0.01 and c.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			and is_equal_approx(p.mesh.get_aabb().size.y, ArenaKit.PILLAR_H) and p.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+			"%s drop chest small on the floor, light pillar %.0f m, no shadows" % [g, ArenaKit.PILLAR_H])
+		c.free()
+		p.free()
+	var a: MeshInstance3D = ArenaKit.drop_chest("SR")
+	var b: MeshInstance3D = ArenaKit.drop_chest("SR")
+	var u: MeshInstance3D = ArenaKit.drop_chest("UR")
+	check(a.mesh == b.mesh and a.mesh != u.mesh, "drop chest mesh shared per grade")
+	a.free()
+	b.free()
+	u.free()
+
+
+## 던전 몬스터: 크기 0.8·1.7·2.2, UnitModel.dress 뒤 tint 메시 재질 = 원본 albedo × 색(발광 눈은 색 자체), parts는 그 뼈의 BoneAttachment3D 아래
+## 코드 부품으로 붙고, 같은 (재질, 색)은 몬스터끼리 공유한다. (애니메이션·숨김 메시·사망 길이는 test_art_assets가 본다.)
+func test_dungeon_monsters() -> void:
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	var scales := {"goblin": 0.8, "goblin_king": 1.7, "death_knight": 2.2}
+	for key in scales:
+		var spec: Dictionary = Art.MONSTER_MODELS[key]
+		check(is_equal_approx(spec.scale, scales[key]), "%s drawn at x%.1f" % [key, scales[key]])
+		var model: Node3D = Art.instance(spec.scene)
+		UnitModelScript.dress(model, spec)
+		for mesh_name in spec.tint:
+			var mi := model.find_child(mesh_name, true, false) as MeshInstance3D
+			var want: Color = spec.tint[mesh_name]
+			var m: Material = mi.get_active_material(0) if mi != null else null
+			var ok: bool = (m is ShaderMaterial and (m.get_shader_parameter("albedo_color") as Color).is_equal_approx(want)) \
+				or (m is BaseMaterial3D and m.emission_enabled and m.albedo_color.is_equal_approx(want))
+			check(ok, "%s mesh %s tinted %s" % [key, mesh_name, want])
+		var attached := 0
+		for ba in model.find_children("*", "BoneAttachment3D", true, false):
+			var part: Node = ba.get_child(0) if ba.get_child_count() == 1 else null
+			if part != null and (part.name == "DkEyes" or (part is MeshInstance3D and part.material_override == Art.lowpoly_vc_material())):
+				attached += 1
+				check(spec.parts.any(func(pp): return pp[0] == ba.bone_name), "%s part on a listed bone (%s)" % [key, ba.bone_name])
+		check(attached == spec.parts.size(), "%s: all %d code parts attached" % [key, spec.parts.size()])
+		if key == "goblin":
+			var again: Node3D = Art.instance(spec.scene)
+			UnitModelScript.dress(again, spec)
+			var head := func(root: Node) -> Material: return (root.find_child("Rogue_Head", true, false) as MeshInstance3D).get_active_material(0)
+			check(head.call(again) == head.call(model), "two goblins share one tinted skin material")
+			again.free()
+		model.free()
+
+
+## 무리 스폰: 몬스터는 spawn_group(3)마리씩 같은 시각에 나온다. 방치는 idle_interval(8초 = 예전 4초의 2배)마다 한 면에 한 무리,
+## 스테이지는 웨이브 크기 그대로 무리 간격 spawn_spacing_sec(1초 = 예전 0.5초의 2배), 무리는 이웃 면에 한 마리씩(면 = 웨이브 안 순번 % 4,
+## 예전과 같다), 웨이브 사이·보스는 그대로.
+func test_spawn_groups() -> void:
+	GameData.load_tables()
+	check(WaveDirector.group_size() == 3 and GameData.stage(1).idle_interval == 8.0 and GameData.stage(40).idle_interval == 8.0
+		and GameData.config_num("spawn_spacing_sec") == 1.0, "spawn_group 3, idle_interval 8 (extrapolated too), spawn_spacing_sec 1.0")
+	var idle := WaveDirector.build(1, WaveDirector.MODE_IDLE)
+	var times: Array = idle.map(func(e): return e.time)
+	check(times == [8.0, 8.0, 8.0, 16.0, 16.0, 16.0, 24.0, 24.0, 24.0, 32.0, 32.0, 32.0], "idle: a group of 3 every 8 s %s" % [times])
+	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3 on one side")
+	for stage in [1, 5, 30]:
+		var st := GameData.stage(stage)
+		var ev := WaveDirector.build(stage, WaveDirector.MODE_STAGE)
+		var grunts := ev.filter(func(e): return e.kind == "grunt")
+		check(grunts.size() == int(st.waves) * int(st.wave_size) and ev[-1].kind == "epic_boss", "stage %d: wave size unchanged, boss last" % stage)
+		var groups := {}  # 시각 → 그 시각 몬스터들
+		for e in grunts:
+			groups[e.time] = groups.get(e.time, []) + [e]
+		var keys: Array = groups.keys()
+		var per_wave := ceili(int(st.wave_size) / 3.0)
+		var sizes_ok := true
+		for i in keys.size():
+			var want := 3 if i % per_wave < per_wave - 1 or int(st.wave_size) % 3 == 0 else int(st.wave_size) % 3
+			var base := (i % per_wave) * 3  # 웨이브 안 이 무리 첫 몬스터 순번
+			var sides: Array = groups[keys[i]].map(func(e): return e.side)
+			sizes_ok = sizes_ok and sides.size() == want and sides == range(base, base + want).map(func(n): return n % 4)
+		check(keys.size() == int(st.waves) * per_wave and sizes_ok, "stage %d: groups of 3 (last of a wave = rest), one per neighbouring side (side = index in wave %% 4)" % stage)
+		var gaps_ok := true
+		for i in range(1, keys.size()):
+			var want: float = 1.0 if i % per_wave != 0 else 1.0 + GameData.config_num("wave_gap_sec")
+			gaps_ok = gaps_ok and is_equal_approx(keys[i] - keys[i - 1], want)
+		gaps_ok = gaps_ok and is_equal_approx(ev[-1].time - keys[-1], 1.0 + GameData.config_num("wave_gap_sec"))
+		check(gaps_ok, "stage %d: 1 s between groups, wave gap and boss timing unchanged" % stage)

@@ -6,6 +6,7 @@ extends Node3D
 # 몬스터 그림자 끄기, 스켈레톤당 메시 수 줄이기, 또는 화면 표시 상한 낮추기.
 
 const Art := preload("res://scripts/art.gd")
+const ArenaKit := preload("res://scripts/arena_kit.gd")
 
 var manual := false  # true면 애니메이션을 스스로 돌리지 않는다 — 쓰는 쪽이 advance(초)로 돌린다(병사 화면 밖 간헐 갱신, 개정 13). add_child 전에
 var _spec: Dictionary = {}
@@ -22,16 +23,7 @@ func setup(spec: Dictionary, extra_scale := 1.0) -> void:
 func _ready() -> void:
 	var model := Art.instance(_spec.scene)
 	add_child(model)
-	for mesh_name in _spec.hide:
-		var n := model.find_child(mesh_name, true, false) as Node3D
-		if n != null:
-			n.visible = false
-	if _spec.has("weapon"):
-		var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-		var slot := BoneAttachment3D.new()
-		slot.bone_name = Art.WEAPON_BONE
-		skel.add_child(slot)
-		slot.add_child(Art.instance(_spec.weapon))
+	dress(model, _spec)
 	_anim = model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	if manual:
 		_anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
@@ -39,6 +31,29 @@ func _ready() -> void:
 		_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR  # 공유 리소스라 한 번 바꾸면 전부 적용
 	_anim.animation_finished.connect(_on_finished)
 	play_idle()
+
+
+## 스펙대로 모델을 꾸민다(트리 밖에서도 된다): 안 쓰는 부착물 숨김, 메시 색(tint), 무기(gltf)·코드 부품(parts: [뼈, ArenaKit id])을 뼈에 붙임.
+static func dress(model: Node3D, spec: Dictionary) -> void:
+	for mesh_name in spec.hide:
+		var n := model.find_child(mesh_name, true, false) as Node3D
+		if n != null:
+			n.visible = false
+	for mesh_name in spec.get("tint", {}):
+		var mi := model.find_child(mesh_name, true, false) as MeshInstance3D
+		if mi != null:
+			Art.tint(mi, spec.tint[mesh_name])
+	var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var attach := []
+	if spec.has("weapon"):
+		attach.append([Art.WEAPON_BONE, Art.instance(spec.weapon)])
+	for p in spec.get("parts", []):
+		attach.append([p[0], ArenaKit.part(p[1])])
+	for a in attach:
+		var slot := BoneAttachment3D.new()
+		slot.bone_name = a[0]
+		skel.add_child(slot)
+		slot.add_child(a[1])
 
 
 func play_idle() -> void:

@@ -17,12 +17,14 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 7  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 9  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 # 5: soldiers·soldier_deploy {"병종:티어": 수}(개정 13). 4 이하는 병사 없음
 # 6: heroes {id: {copies, level, shards, promotion}}(개정 15). 5 이하는 옛 별(중복)을 조각으로: shards = copies − 1, promotion 0
 # 7: training {병사 건물: {count, finish}}(개정 16). 6 이하의 자동 생산 시계(last_collect의 병사 건물)는 버리고 대기열은 빈다
+# 8: training {…: {count, tier, finish}}(개정 19). 7 이하의 진행 중 묶음은 tier 1
+# 9: upgrades {성장 항목 id: 레벨}(개정 20). 8 이하는 성장 0(빈 사전)
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -56,6 +58,7 @@ const TRAIN_TEXT := {
 	"not_enough": "자원 부족", "not_ready": "아직 훈련 중입니다", "empty": "훈련 중인 병사가 없습니다", "waiting": "응답 대기 중",
 }
 const TRAIN_FAIL_TEXT := "훈련 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
+const GROWTH_FAIL_TEXT := "강화 결과를 받지 못했습니다 — 성장 상태를 다시 확인합니다"
 const CANCEL_TEXT := "훈련을 취소했습니다 — 비용 50% 환불"
 
 signal changed
@@ -68,6 +71,7 @@ signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응
 signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
 signal building_done(building_id: String, level: int)  # 건설 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
 signal soldiers_changed  # 병사 보유·배치·합성 대기가 바뀌었다(개정 13)
+signal upgrades_changed  # 성장(공용 업그레이드) 레벨이 바뀌었다(개정 20)
 signal training_changed  # 훈련 대기열·응답 대기가 바뀌었다(개정 16). 완료(끝나는 시각 지남)는 시그널 없이 training().ready로 본다
 
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
@@ -87,7 +91,8 @@ var hero_promotions: Dictionary = {}  # 영웅 id → 승급 0..MAX_PROMOTION(�
 var deploy: Array = []             # 배치 슬롯 i → 영웅 id 또는 null(저장된 그대로 — 쓰는 쪽은 deploy_slots)
 var soldiers: Dictionary = {}          # 병사 보유 "병종:티어" → 수(> 0, 개정 13)
 var soldier_deployed: Dictionary = {}  # 병사 배치 "병종:티어" → 수(> 0). 각 ≤ 보유, 합 ≤ 인구
-var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
+var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), tier(시작할 때 티어 — 개정 19), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
+var upgrades: Dictionary = {}       # 성장 항목 id → 레벨(> 0, 개정 20). 없으면 0
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
 
@@ -244,6 +249,7 @@ func reset(now: float) -> void:
 	soldiers = {}
 	soldier_deployed = {}
 	train_queues = {}
+	upgrades = {}
 	_pending_soldier_deploy = null
 	_soldier_deploys_out = 0
 	heroes = {}
@@ -261,6 +267,7 @@ func reset(now: float) -> void:
 	roster_changed.emit()
 	soldiers_changed.emit()
 	training_changed.emit()
+	upgrades_changed.emit()
 
 
 func pending(building_id: String, now: float) -> int:
@@ -471,6 +478,75 @@ func level_up(hero_id: String, count := 1) -> bool:
 ## 레벨업 응답을 기다리는 중(UI는 버튼을 끈다).
 func levelup_waiting() -> bool:
 	return _waiting.has("levelup")
+
+
+# --- 성장: 공용 업그레이드(개정 20 §2·§5). 건물 upgrade(id, now)와 이름이 겹치지 않게 growth_* ---
+
+func upgrade_level(id: String) -> int:
+	return maxi(0, int(upgrades.get(id, 0)))
+
+
+## 성장 효과 {atk_pct, hp_pct, aspd_pct, mspd_pct, crit_rate, crit_dmg}(분수, GameData.upgrade_bonus).
+func upgrade_bonus() -> Dictionary:
+	return GameData.upgrade_bonus(upgrades)
+
+
+## 현재 레벨에서 n번 올리는 비용 합계(정수 골드, UI [강화 N]·[×10]). 최대 레벨을 넘는 몫은 세지 않는다.
+func upgrade_total_cost(id: String, n: int) -> int:
+	var u := GameData.upgrade_def(id)
+	var lv := upgrade_level(id)
+	var total := 0
+	for l in range(lv, mini(lv + n, int(u.get("max_level", 0)))):
+		total += GameData.upgrade_cost(id, l)
+	return total
+
+
+## 지금 감당할 수 있는 강화 횟수(최대 max_n, 최대 레벨까지).
+func upgrade_count_affordable(id: String, max_n := 10) -> int:
+	var u := GameData.upgrade_def(id)
+	var lv := upgrade_level(id)
+	var n := 0
+	var total := 0
+	while n < max_n and lv + n < int(u.get("max_level", 0)):
+		total += GameData.upgrade_cost(id, lv + n)
+		if total > gold:
+			break
+		n += 1
+	return n
+
+
+## count번 강화를 못 하는 이유(UI 문구). 되면 "".
+func growth_block(id: String, count := 1) -> String:
+	var u := GameData.upgrade_def(id)
+	if u.is_empty() or count < 1:
+		return "알 수 없는 항목"
+	if _waiting.has("growth"):
+		return "응답 대기 중"
+	if upgrade_level(id) + count > int(u.max_level):
+		return "최대 레벨"
+	return "골드 부족" if gold < upgrade_total_cost(id, count) else ""
+
+
+## 성장 강화 count번. 안 되면 알림만. 오프라인은 골드(× 10 tenths)를 빼고 올려 저장, 온라인은 /v1/upgrade(once — 다시 보내면 두 번 오를 수 있어
+## 재전송하지 않는다. 응답에서 upgrades_changed). 올렸거나 보냈으면 true.
+func growth_up(id: String, count := 1) -> bool:
+	var why := growth_block(id, count)
+	if why != "":
+		if why != "응답 대기 중":
+			notice.emit(why)
+		return false
+	if net != null:
+		return _growth_online(id, count)
+	gold_tenths -= upgrade_total_cost(id, count) * 10
+	upgrades[id] = upgrade_level(id) + count
+	changed.emit()
+	upgrades_changed.emit()
+	save()
+	return true
+
+
+func upgrades_waiting() -> bool:
+	return _waiting.has("growth")
 
 
 # --- 승급(개정 15 §1·§3) ---
@@ -861,12 +937,12 @@ func auto_deploy() -> Dictionary:
 
 # --- 훈련(개정 16 §1·§3) — 건물 창·월드 말풍선·탭 수령이 쓰는 API는 여기 한 곳 ---
 
-## 병사 건물 훈련 대기열 {count, finish, ready}(ready = 끝나는 시각이 지났다, 보정 시각). 비었으면 count 0.
+## 병사 건물 훈련 대기열 {count, tier, finish, ready}(ready = 끝나는 시각이 지났다, 보정 시각). 비었으면 count 0.
 func training(building_id: String) -> Dictionary:
 	var q: Dictionary = train_queues.get(building_id, {})
 	if q.is_empty():
-		return {"count": 0, "finish": 0.0, "ready": false}
-	return {"count": int(q.count), "finish": float(q.finish), "ready": time_now() >= float(q.finish)}
+		return {"count": 0, "tier": 1, "finish": 0.0, "ready": false}
+	return {"count": int(q.count), "tier": int(q.get("tier", 1)), "finish": float(q.finish), "ready": time_now() >= float(q.finish)}
 
 
 ## 훈련 진행 0..1(비었으면 0). 전체 시간 = 지금 레벨의 count × 1마리 시간.
@@ -877,14 +953,19 @@ func train_progress(building_id: String) -> float:
 	return clampf(1.0 - (q.finish - time_now()) / total, 0.0, 1.0) if total > 0.0 else 0.0
 
 
-## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × n, 0인 자원은 뺀다).
-static func train_cost(type: String, n: int) -> Dictionary:
+## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × 티어 배수 × n, 0인 자원은 뺀다).
+static func train_cost(type: String, n: int, tier := 1) -> Dictionary:
 	var out := {}
-	var one := GameData.train_unit_cost(type)
+	var one := GameData.train_unit_cost(type, tier)
 	for r in one:
 		if int(one[r]) * n > 0:
 			out[r] = int(one[r]) * n
 	return out
+
+
+## 그 건물이 지금 만드는 병사 티어(건물 레벨이 정한다, 개정 19).
+func train_tier(building_id: String) -> int:
+	return GameData.train_tier(building_level(building_id))
 
 
 ## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨).
@@ -908,7 +989,7 @@ func train_block(building_id: String, n: int) -> String:
 	var q := training(building_id)
 	if q.count > 0:
 		return "ready_to_collect" if q.ready else "training"
-	var cost := train_cost(type, n)
+	var cost := train_cost(type, n, train_tier(building_id))
 	for r in cost:
 		if int(res.get(r, 0)) < int(cost[r]):
 			return "not_enough"
@@ -924,17 +1005,17 @@ func start_training(building_id: String, n: int) -> bool:
 		return false
 	if net != null:
 		return _train_online("train", building_id, {"building": building_id, "count": n}, true)
-	var cost := train_cost(GameData.soldier_of_building(building_id), n)
+	var cost := train_cost(GameData.soldier_of_building(building_id), n, train_tier(building_id))
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
-	train_queues[building_id] = {"count": n, "finish": time_now() + train_time(building_id, n)}
+	train_queues[building_id] = {"count": n, "tier": train_tier(building_id), "finish": time_now() + train_time(building_id, n)}
 	save()
 	changed.emit()
 	training_changed.emit()
 	return true
 
 
-## 수령: 끝났으면 1티어 보유 += count, 대기열 비우기, 알림 "보병 +n". 아니면 false(알림 없음 — 건물 탭이 쓴다). 오프라인은 바로 저장,
+## 수령: 끝났으면 그 묶음 티어 보유 += count, 대기열 비우기, 알림 "보병 +n". 아니면 false(알림 없음 — 건물 탭이 쓴다). 오프라인은 바로 저장,
 ## 온라인은 /v1/soldiers/collect(멱등이라 Net 기본 재시도 — 두 번째는 409 empty). 했거나 보냈으면 true.
 func collect_training(building_id: String) -> bool:
 	var q := training(building_id)
@@ -943,7 +1024,7 @@ func collect_training(building_id: String) -> bool:
 	if net != null:
 		return _train_online("collect", building_id, {"building": building_id}, false)
 	var type := GameData.soldier_of_building(building_id)
-	var k := soldier_key(type, 1)
+	var k := soldier_key(type, q.tier)
 	soldiers[k] = int(soldiers.get(k, 0)) + q.count
 	train_queues.erase(building_id)
 	save()
@@ -960,7 +1041,7 @@ func cancel_training(building_id: String) -> bool:
 		return false
 	if net != null:
 		return _train_online("cancel", building_id, {"building": building_id}, true)
-	var cost := train_cost(GameData.soldier_of_building(building_id), q.count)
+	var cost := train_cost(GameData.soldier_of_building(building_id), q.count, q.tier)
 	for r in cost:
 		res[r] = int(res.get(r, 0)) + int(cost[r]) / 2
 	train_queues.erase(building_id)
@@ -1004,18 +1085,21 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("heroes") == null or p.heroes is Dictionary) and (p.get("deploy") == null or p.deploy is Array) \
 			and (p.get("build") == null or p.build is Dictionary) \
 			and (p.get("soldiers") == null or p.soldiers is Dictionary) and (p.get("soldier_deploy") == null or p.soldier_deploy is Dictionary) \
-			and (p.get("training") == null or p.training is Dictionary)):
+			and (p.get("training") == null or p.training is Dictionary) and (p.get("upgrades") == null or p.upgrades is Dictionary)):
 		push_error("bad player response: %s" % str(data))
 		return false
 	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
 	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate()]
 	var queues_before := train_queues.duplicate(true)
+	var upgrades_before := upgrades.duplicate()
+	if p.get("upgrades") is Dictionary:  # 개정 20: {id: 레벨}
+		upgrades = _upgrade_dict(p.upgrades)
 	if p.get("training") is Dictionary:  # 개정 16: {병사 건물: {count, finish} 또는 null}
 		train_queues = {}
 		for s in GameData.soldiers():
 			var q = p.training.get(s.building)
 			if q is Dictionary and _num(q.get("count")) and int(q.count) > 0 and _num(q.get("finish")):
-				train_queues[s.building] = {"count": int(q.count), "finish": float(q.finish)}
+				train_queues[s.building] = {"count": int(q.count), "tier": maxi(1, int(q.get("tier", 1))), "finish": float(q.finish)}
 	if p.get("soldiers") is Dictionary:  # 개정 13: {"병종:티어": 수}
 		soldiers = _soldier_dict(p.soldiers)
 	if p.get("soldier_deploy") is Dictionary:
@@ -1078,6 +1162,8 @@ func apply_server(data: Dictionary) -> bool:
 		soldiers_changed.emit()
 	if train_queues != queues_before:
 		training_changed.emit()
+	if upgrades != upgrades_before:
+		upgrades_changed.emit()
 	if _synced:  # 서버가 완료한 건설(게으른 완료) — 첫 반영의 레벨 차이는 완료가 아니라 접속이다
 		for id in levels:
 			if int(levels[id]) > int(levels_before.get(id, 1)):
@@ -1092,6 +1178,16 @@ func _soldier_dict(src: Dictionary) -> Dictionary:
 	for k in src:
 		if not parse_soldier_key(k).is_empty() and _num(src[k]) and int(src[k]) > 0:
 			out[k] = int(src[k])
+	return out
+
+
+## {id: 레벨} → 표에 있는 항목의 양의 정수(최대 레벨로 자름)만.
+func _upgrade_dict(src: Dictionary) -> Dictionary:
+	var out := {}
+	for k in src:
+		var u := GameData.upgrade_def(str(k))
+		if not u.is_empty() and _num(src[k]) and int(src[k]) > 0:
+			out[str(k)] = mini(int(src[k]), int(u.max_level))
 	return out
 
 
@@ -1250,6 +1346,31 @@ func _levelup_online(hero_id: String, count: int) -> bool:
 	net.send("POST", "/v1/hero/levelup", {"hero_id": hero_id, "count": count}, _on_levelup.bind(hero_id), _on_levelup_failed, true, true)
 	changed.emit()  # UI가 응답 전 버튼을 끈다
 	return true
+
+
+func _growth_online(id: String, count: int) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["growth"] = true
+	net.flush_kills()
+	net.send("POST", "/v1/upgrade", {"id": id, "count": count}, _on_growth, _on_growth_failed, true, true)
+	changed.emit()  # UI가 응답 전 버튼을 끈다
+	return true
+
+
+func _on_growth(data: Dictionary) -> void:
+	_waiting.erase("growth")
+	apply_server(data)
+
+
+## 거부(409 max_level·not_enough_gold, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
+func _on_growth_failed() -> void:
+	_waiting.erase("growth")
+	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}
+	notice.emit(why.get(net.last_error, GROWTH_FAIL_TEXT))
+	net.refresh()
+	changed.emit()
 
 
 func _on_levelup(data: Dictionary, hero_id: String) -> void:
@@ -1434,7 +1555,7 @@ func save() -> void:
 		hs[id] = {"copies": heroes[id], "level": level_of(id), "shards": shards_of(id), "promotion": promotion_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
-		"training": train_queues}))
+		"training": train_queues, "upgrades": upgrades}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -1454,12 +1575,13 @@ func load_save(now: float) -> void:
 	roster_changed.emit()
 	soldiers_changed.emit()
 	training_changed.emit()
+	upgrades_changed.emit()
 	complete_due(now)  # 앱이 꺼져 있는 동안 끝난 건설
 
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, SAVE_VERSION]:
 		return false
 	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v6: bool = int(data.version) >= 6  # v6: + shards, promotion. 그 전은 옛 별(중복)을 조각으로(copies − 1), 승급 0
@@ -1502,7 +1624,7 @@ func _apply(data) -> bool:
 		if not src is Dictionary or not src.values().all(func(v): return _num(v)):
 			return false
 		troops.append(_soldier_dict(src))
-	# 훈련(개정 16, v7): {병사 건물: {count, finish}} — 형이 틀리면 깨진 저장. 표에 없는 건물·0마리는 버린다. 없으면(v6 이하) 빈 대기열
+	# 훈련(개정 16, v7·개정 19 v8 + tier): {병사 건물: {count, tier, finish}} — 형이 틀리면 깨진 저장. 표에 없는 건물·0마리는 버린다. 없으면(v6 이하) 빈 대기열
 	var tq := {}
 	var ts = data.get("training", {})
 	if not ts is Dictionary:
@@ -1512,7 +1634,11 @@ func _apply(data) -> bool:
 		if not (q is Dictionary and _num(q.get("count")) and _num(q.get("finish"))):
 			return false
 		if GameData.soldier_of_building(str(b)) != "" and int(q.count) > 0:
-			tq[str(b)] = {"count": int(q.count), "finish": float(q.finish)}
+			tq[str(b)] = {"count": int(q.count), "tier": maxi(1, int(q.get("tier", 1))), "finish": float(q.finish)}
+	# 성장(개정 20, v9): {항목 id: 레벨} — 형이 틀리면 깨진 저장. 표에 없는 항목·0 이하는 버린다. 없으면(v8 이하) 빈 사전
+	var us = data.get("upgrades", {})
+	if not (us is Dictionary and us.values().all(func(v): return _num(v))):
+		return false
 	# 영웅(개정 10): 없으면(v1, 영웅 전 v2) reset()의 시작 영웅 그대로. 있으면 둘 다 형이 맞아야 한다
 	var hs = data.get("heroes")
 	var ds = data.get("deploy")
@@ -1565,6 +1691,7 @@ func _apply(data) -> bool:
 	soldiers = troops[0]
 	soldier_deployed = trim_deploy(troops[1], soldiers)
 	train_queues = tq
+	upgrades = _upgrade_dict(us)
 	return true
 
 

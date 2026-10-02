@@ -6,7 +6,7 @@ extends Node3D
 ## 역할(§2): 궁병 = 성벽 위 병사 자리(사거리 안 적을 쏘고 떠나지 않는다), 보병 = 성문 앞 줄(자리에서 aggro 안·같은 영역 적, HOLD_RADIUS 밖으로는
 ## 쫓지 않는다. 성문이 부서지면 안쪽 막는 줄), 기병 = 순찰 고리에서 맡은 두 성문 사이를 오가며 aggro 안 성 밖 적에게 돌진(성 안에 들어가지 않는다.
 ## 맡은 성문이 부서지면 그 성문 앞). 지원(SoldierCommand)은 order(면)로 받는다: 그 면 성문 앞 지원 칸에서 보병처럼 지키고, order(-1)이면 원래 자리로.
-## 대상이 죽으면 곧바로 다시 찾고, 없으면 LINGER초 머문 뒤 자리로(영웅과 같은 원칙). 공격은 개정 12-2 타격 동기화(근접 = 모션 타격 순간,
+## 대상이 죽으면 같은 프레임에 다시 찾고(휘두르는 중인 사거리 안 대상은 놓지 않는다), 없으면 RETURN_DELAY초 머문 뒤 자리로(영웅과 같다). 공격은 개정 12-2 타격 동기화(근접 = 모션 타격 순간,
 ## 궁병 = 그 순간 화살 → 도착 순간 피해). 방치 모드는 무적. hp_bars 인터페이스: is_alive·hp_ratio·bar_height·bar_scale·tier.
 # ponytail: 병사 하나 = KayKit 스켈레톤 하나(+ 기병은 말 메시). 상한 64명 + 몬스터 120 + 영웅 12면 모바일 웹은 스켈레톤 수가 한계다 —
 # 화면 밖은 OFFSCREEN_EVERY 프레임마다만 애니메이션을 돌린다. 더 필요하면 화면 밖 병사 처리 자체를 건너뛰거나 병종·티어별 대표만 그린다.
@@ -31,7 +31,7 @@ const RIDER_Y := SoldierBody.RIDER_Y  # 기사 모델 높이(말 등 − 엉덩�
 const BOB := 0.06  # 말이 걸을 때 위아래 흔들림(m)
 const BOB_HZ := 2.5
 const HOLD_RADIUS := 6.0  # 자리를 지키는 병사는 자리에서 이만큼 밖으로 쫓지 않는다
-const LINGER := 1.5  # 대상이 없어진 뒤 그 자리에서 머무는 초
+const RETURN_DELAY := 1.5  # 교전이 끝나고 이만큼 제자리에 머문 뒤 자리로 돌아간다(영웅과 같다)
 const RISE_SEC := 0.4
 const RISE_DEPTH := 1.6
 const VANISH_SEC := 0.3
@@ -66,7 +66,7 @@ var _frame := 0
 var _anim_acc := 0.0
 var _path: Array[Vector3] = []
 var _rise := 0.0  # 솟아오르는 남은 초
-var _linger := 0.0
+var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
 var _patrol: Array[Vector3] = []  # 기병 순찰 점 셋(맡은 성문 앞 · 모서리 · 옆 성문 앞)
 var _pi := 0
 var _pdir := 1
@@ -235,11 +235,12 @@ func _process(delta: float) -> void:
 		_walk_path(delta)
 		return
 	_scan_cd -= delta
-	if _scan_cd <= 0.0 or (_target != null and not engaged()):  # 대상이 죽으면 곧바로 다시 찾는다
+	if _scan_cd <= 0.0 or (_target != null and not engaged()):  # 대상이 죽으면 같은 프레임에 다시 찾는다
 		_scan_cd = SCAN_INTERVAL
-		_target = _find_target()
+		if not _swinging_at(_target):  # 휘두르는 중인 사거리 안 대상은 스캔이 놓치지 않는다(영웅과 같다)
+			_target = _find_target()
 	if engaged():
-		_linger = LINGER
+		_linger = RETURN_DELAY
 		if _fight(delta):
 			return
 	_target = null
@@ -365,6 +366,12 @@ func _on_gate_broken(s: int) -> void:
 		return
 	if (type != "cavalry" and side_now() == s) or (reinforce < 0 and not _patrol.is_empty() and _broken_patrol_gate() == s):
 		_replan()
+
+
+## m을 휘두르는(쏘려는) 중이고 m이 살아서 사거리 안인가.
+func _swinging_at(m) -> bool:
+	return m != null and _swing == m and is_instance_valid(m) and m.is_alive() \
+		and Formation.flat_distance(global_position, m.global_position) <= float(stats.range)
 
 
 ## 공격 시작(개정 12-2 §3): 대상을 고정하고 모션을 재생한다(간격에 맞춰 빨라질 수 있다). 피해는 타격 순간(_release)에.
