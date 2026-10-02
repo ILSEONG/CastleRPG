@@ -9,6 +9,7 @@ const Formation := preload("res://scripts/formation.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HeroScript := preload("res://scripts/hero.gd")
+const SoldierScript := preload("res://scripts/soldier.gd")
 const Fx := preload("res://scripts/fx.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
@@ -16,7 +17,6 @@ const ProjectileScript := preload("res://scripts/projectile.gd")
 const Art := preload("res://scripts/art.gd")
 const MainScript := preload("res://scripts/main.gd")
 const HudScript := preload("res://scripts/hud.gd")
-const SoldierScript := preload("res://scripts/soldier.gd")
 const SOLDIER_TIME_SCALE := 4.0  # (S) 병사 사례 동안 게임 시간 배속(걷는 구간이 길다)
 
 class ErrorCounter extends Logger:
@@ -392,6 +392,8 @@ func _skill_cases(heroes: Array) -> void:
 	await _hold_ground_case()
 	await _group_spawn()
 	await _stage_return_cases()
+	await _rebuilt_post_case()
+	await _growth_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -1726,3 +1728,166 @@ func _stage_return_cases() -> void:
 	GameState.refill()
 	_check([h.side, h.post] == [start[0], start[1]], "(R4) the snapshot is consumed: a later refill keeps idle moves", "side=%d post=%d" % [h.side, h.post])
 	GameState.mode = GameState.Mode.IDLE
+
+
+## (R5) 스테이지 중 레벨이 올라(승급·장비도 같은 경로) 그 스테이지를 끝내는 리필에서 다시 만든 영웅도 스테이지 시작 자리로 간다(main 기록은 영웅 id로).
+func _rebuilt_post_case() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	await _frames(2)
+	var h = _main._slots[0].node
+	var id: String = h.def.id
+	var old_id: int = h.get_instance_id()
+	_check(h.move_to((h.side + 1) % 4, h.post), "(R5) precondition: idle move off the default side", "")
+	h.reset()
+	var start := [h.side, h.post, h.slot]  # 방치 중 옮긴 자리 = 스테이지 시작 자리(기본 자리 index % 4와 다르다)
+	GameState.start_stage()
+	h.move_to((h.side + 2) % 4, h.post)  # 스테이지 중 다른 성문으로
+	Economy.gold_tenths = 10000000
+	var leveled := Economy.level_up(id, 1)  # 스테이지 중이라 다음 리필에 다시 만든다
+	var kept_now: bool = _main._slots[0].node.get_instance_id() == old_id
+	GameState.stop_stage()
+	await _frames(1)
+	var nh = _main._slots[0].node
+	_check(leveled and kept_now and nh.get_instance_id() != old_id and nh.def.id == id and [nh.side, nh.post, nh.slot] == start
+		and nh.global_position.is_equal_approx(nh.stand_position()) and _main._formation.assignment(0) == {"side": start[0], "post": start[1], "slot": start[2]},
+		"(R5) a hero rebuilt on refill (level up mid-stage) stands at its stage-start post, not the default one",
+		"leveled=%s kept=%s rebuilt=%s now=%s want=%s" % [leveled, kept_now, nh.get_instance_id() != old_id, [nh.side, nh.post, nh.slot], start])
+
+
+## (G) 개정 20 성장의 전투 반영: 성장 레벨(Economy.upgrades → upgrades_changed)이 영웅·병사의 공격·HP·공격 간격·이동·치명타에 곧바로 들어간다.
+##     치명타 확률 100%는 표의 per_level을 잠시 키워 주입한다(실제 경로: Economy → upgrade_bonus → refresh_stats → 타격). 신발 이동속도도 같이.
+func _growth_cases() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.STAGE  # 리필이 영웅을 다시 만들지 않게(장비 변경), 피해가 들어가게
+	GameState.refill()
+	await _frames(1)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(false)
+	var plain: Dictionary = GameData.hero("hans").duplicate(true)  # 기사(근접), 스킬 없음 — 신발을 끼울 수 있게 id는 한스
+	plain.skills = {}
+	var h = _add_hero_def(plain, 330)
+	h.set_process(false)
+	var base := GameData.hero_stats(plain, 1, 0, GameState.building_levels())
+	var out: Vector3 = Formation.SIDE_DIR[h.side]
+	var m = _still("epic_boss", _flat(h.global_position) + out * 1.2)
+	m.hp_max = 1.0e6  # 이 사례의 타격을 다 받아도 죽지 않게
+	m.hp = m.hp_max
+	await _frames(1)
+	h._target = m
+	# 공격·HP +100%(Lv 200): 곧바로. HP는 비율을 지킨다(반 깎인 채 강화 → 새 최대의 반)
+	h.take_damage(h.hp_max / 2.0)
+	Economy.upgrades = {"atk": 200, "hp": 200}
+	Economy.upgrades_changed.emit()
+	await _attack_now(h)
+	_check(is_equal_approx(h.atk, base.atk * 2.0) and is_equal_approx(h.hp_max, base.hp * 2.0) and is_equal_approx(h.hp, base.hp) and is_equal_approx(_dmg(m), base.atk * 2.0 * h._aura_mult()),
+		"(G) growth atk/hp +100% apply at once: atk x2 (the hit too), max HP x2 keeping the HP ratio",
+		"atk=%.1f hp=%.1f/%.1f dmg=%.1f base=%s" % [h.atk, h.hp, h.hp_max, _dmg(m), base])
+	# 공격속도 +25%(Lv 100): 지금 쿨은 그대로, 다음 공격 간격 = 기본 ÷ 1.25
+	h._scan_cd = 1.0
+	h._atk_cd = 0.0
+	h._process(0.0)  # 사거리 안 표적 → 공격, 쿨 = 간격
+	var cd0: float = h._atk_cd
+	Economy.upgrades["aspd"] = 100
+	Economy.upgrades_changed.emit()
+	var cd_kept: float = h._atk_cd
+	h._atk_cd = 0.0
+	h._process(0.0)
+	_check(is_equal_approx(cd0, plain.atk_interval) and cd_kept == cd0 and is_equal_approx(h._atk_cd, plain.atk_interval / 1.25),
+		"(G) growth aspd +25%: the cooldown running keeps going, the next attack waits base / 1.25", "before=%.3f kept=%.3f next=%.3f" % [cd0, cd_kept, h._atk_cd])
+	# 이동속도 +20%(Lv 80): 0.1초에 def.speed × 1.2 × 0.1 m. 신발(+3%)을 끼면 곧바로 × (1 + 0.20 + 0.03)
+	Economy.upgrades["mspd"] = 80
+	Economy.upgrades_changed.emit()
+	var walked := _walk(h, 0.1)
+	var item_id: int = Economy.next_item_id + 900
+	Economy.bag.append({"id": item_id, "slot": "shoes", "weapon_kind": null, "grade": "N", "level": 1})
+	var worn := Economy.equip("hans", "shoes", item_id)
+	var walked_shoes := _walk(h, 0.1)
+	_check(is_equal_approx(walked, plain.speed * 1.2 * 0.1) and worn and is_equal_approx(walked_shoes, plain.speed * 1.23 * 0.1),
+		"(G) growth mspd +20% walks 1.2x as far; shoes add +3% at once (x1.23)", "walked=%.4f shoes=%.4f speed=%.2f" % [walked, walked_shoes, plain.speed])
+	Economy.unequip("hans", "shoes")
+	Economy.bag = Economy.bag.filter(func(it): return int(it.id) != item_id)
+	Economy.items_changed.emit()
+	# 치명타 100% 주입(crit_rate per_level 1.0 → Lv 100 = +100%p) + 배율 Lv 100 = +50%p
+	var cr := GameData.upgrade_def("crit_rate")
+	var per0: float = cr.per_level
+	cr.per_level = 1.0
+	Economy.upgrades = {"crit_rate": 100, "crit_dmg": 100}
+	Economy.upgrades_changed.emit()
+	var plain_hits := await _hits(h, m, 5)
+	_check(plain_hits.all(func(d): return is_equal_approx(d, base.atk * 2.0 * h._aura_mult())), "(G) 100% growth crit, no crit skill: every hit is base 150% + crit_dmg 50%p = x2.0",
+		"hits=%s atk=%.1f" % [plain_hits, base.atk])
+	var sk: Dictionary = plain.duplicate(true)
+	sk.id = "crit_test"
+	sk.skills = {"crit": [25.0, 200.0, 0.0]}
+	var c = _add_hero_def(sk, 334)
+	c.set_process(false)
+	c.global_position = h.global_position  # 같은 표적 사거리 안
+	var skill_hits := await _hits(c, m, 5)
+	_check(skill_hits.all(func(d): return is_equal_approx(d, base.atk * 2.5 * c._aura_mult())), "(G) 100% crit with a crit skill: skill 200% + crit_dmg 50%p = x2.5, rolled once (never x5)",
+		"hits=%s" % [skill_hits])
+	# 확률 결합: 스킬 60% + 성장 40%(per_level 0.4) = 100% — 둘 중 하나만 세면 10번 중 빗나간다
+	c._sk = {"crit": [60.0, 200.0, 0.0]}
+	cr.per_level = 0.4
+	Economy.upgrades_changed.emit()
+	var sum_hits := await _hits(c, m, 10)
+	_check(sum_hits.all(func(d): return is_equal_approx(d, base.atk * 2.5 * c._aura_mult())), "(G) crit chance = skill 60% + growth 40% = 100%: all 10 hits crit", "hits=%s" % [sum_hits])
+	cr.per_level = per0
+	# 병사: 공격·HP %, 공격 간격 ÷, 이동 × — 만든 뒤 성장이 바뀌어도 곧바로
+	Economy.upgrades = {}
+	Economy.upgrades_changed.emit()
+	var home: Vector3 = Formation.soldier_spots([{"type": "infantry", "tier": 1}])[0]
+	var s = SoldierScript.new()
+	s.setup("infantry", 1, 0, 0, home, _main.castle)
+	_main.add_child(s)
+	s.set_process(false)
+	s._rise = 0.0  # 등장 연출 생략
+	var sb := GameData.soldier_stats("infantry", 1)
+	Economy.upgrades = {"atk": 200, "hp": 200, "aspd": 100, "mspd": 80}
+	Economy.upgrades_changed.emit()
+	s._target = null
+	s.global_position = home
+	s._path.assign([home + Vector3(0, 0, -3.0)])
+	s._process(0.1)  # 경로 한 점 → 걷는다
+	var s_walk: float = home.distance_to(s.global_position)
+	s._path.clear()
+	s._target = m
+	s._attack()
+	_check(is_equal_approx(s.atk, sb.atk * 2.0) and is_equal_approx(s.hp_max, sb.hp * 2.0) and is_equal_approx(s.hp, s.hp_max) and is_equal_approx(s._atk_cd, sb.atk_interval / 1.25)
+		and is_equal_approx(s_walk, sb.speed * 1.2 * 0.1), "(G) soldiers take growth at once too: atk/HP x2, attack interval / 1.25, walk x1.2",
+		"atk=%.1f hp=%.1f/%.1f cd=%.3f walk=%.3f" % [s.atk, s.hp, s.hp_max, s._atk_cd, s_walk])
+	s.queue_free()
+	Economy.upgrades = {}
+	Economy.upgrades_changed.emit()
+	_remove_hero(h)
+	_remove_hero(c)
+	_clear_monsters()
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(true)
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	await _frames(2)
+
+
+## 영웅이 바깥쪽으로 dt초 걷는 거리(경로 한 점, 처리는 직접 부른다). 걷고 나면 제자리로 되돌린다.
+func _walk(h, dt: float) -> float:
+	var p0: Vector3 = h.global_position
+	h._path.clear()
+	h._path.append(p0 + Formation.SIDE_DIR[h.side] * 5.0)
+	h._process(dt)
+	var d := p0.distance_to(h.global_position)
+	h._path.clear()
+	h.global_position = p0
+	return d
+
+
+## 영웅 h의 공격 n번(_attack_now) 각각의 피해.
+func _hits(h, m, n: int) -> Array:
+	var out := []
+	for i in n:
+		var before := _dmg(m)
+		h._target = m
+		await _attack_now(h)
+		out.append(_dmg(m) - before)
+	return out

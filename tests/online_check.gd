@@ -998,6 +998,7 @@ func _growth_online(state_path: String) -> void:
 	var gold0: int = Economy.server_gold_tenths
 	var cost3 := Economy.upgrade_total_cost("atk", 3)
 	var u0: int = Net.requested.get("/v1/upgrade", 0)
+	var ids0: Array = get_tree().get_nodes_in_group("heroes").map(func(h): return h.get_instance_id())
 	_check(Economy.upgrades.is_empty() and Economy.gold_tenths == gold0 and Economy.gold >= cost3 + 1000, "(z) precondition: no upgrades, gold from the server covers atk x3 and one more",
 		"upgrades=%s gold=%d cost=%d" % [Economy.upgrades, Economy.gold, cost3])
 	var sent := Economy.growth_up("atk", 3)
@@ -1008,6 +1009,13 @@ func _growth_online(state_path: String) -> void:
 	_check(done and Net.requested.get("/v1/upgrade", 0) == u0 + 1 and Economy.server_gold_tenths == gold0 - cost3 * 10 and Economy.upgrades == {"atk": 3} \
 		and is_equal_approx(Economy.upgrade_bonus().atk_pct, 0.015), "(z) the server took the summed gold (x 10 tenths) and set atk Lv 3 (+1.5%)",
 		"requests=%d gold=%d->%d upgrades=%s" % [Net.requested.get("/v1/upgrade", 0) - u0, gold0, Economy.server_gold_tenths, Economy.upgrades])
+	# 서버 응답(upgrades_changed)이 월드 영웅에 곧바로: 다시 만들지 않고 공격 × 1.015
+	var world := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
+	var grown := not world.is_empty()
+	for h in world:
+		grown = grown and is_equal_approx(h.atk, GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id), Economy.levels).atk * 1.015)
+	_check(grown and world.all(func(h): return ids0.has(h.get_instance_id())), "(z) the server growth applies at once to the world heroes (same nodes, atk x1.015)",
+		"atk=%s" % [world.map(func(h): return [h.def.id, h.atk])])
 	var gold1: int = Economy.server_gold_tenths
 	var cc := Economy.upgrade_total_cost("crit_dmg", 1)
 	Economy.growth_up("crit_dmg", 1)
@@ -1100,7 +1108,7 @@ func _dungeons_online(state_path: String) -> void:
 	var st_eq := GameData.hero_stats(def, lv, pr, Economy.levels) if ok else {}
 	var st_bare := GameData.hero_stats(def, lv, pr, Economy.levels, {}) if ok else {}
 	_check(ok and int(Economy.equipment.get(pick.hero, {}).get(pick.item.slot, -1)) == pick.item.id and Economy.item_owner(pick.item.id) == pick.hero
-		and st_eq != st_bare and node != null and is_equal_approx(node.hp_max, st_eq.hp) and is_equal_approx(node.atk, st_eq.atk),
+		and st_eq != st_bare and node != null and is_equal_approx(node.hp_max, st_eq.hp) and is_equal_approx(node.atk, st_eq.atk * (1.0 + Economy.upgrade_bonus().atk_pct)),
 		"(z) equipping on the server; the respawned world hero carries base x multipliers + the item", "pick=%s eq=%s with=%s bare=%s" % [pick, Economy.equipment, st_eq, st_bare])
 	# 서버 거부: 다른 부위에 끼우기(409 wrong_slot) — 화면이 막는 요청을 직접 보낸다
 	r0 = _warned("server rejected")
@@ -1174,7 +1182,7 @@ func _dungeons_restored(state_path: String) -> void:
 	var node = _hero_node(hero)
 	var def := GameData.hero(hero)
 	var st := GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels) if not def.is_empty() else {}
-	_check(node != null and is_equal_approx(node.hp_max, st.hp) and is_equal_approx(node.atk, st.atk) and st != GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels, {}),
+	_check(node != null and is_equal_approx(node.hp_max, st.hp) and is_equal_approx(node.atk, st.atk * (1.0 + Economy.upgrade_bonus().atk_pct)) and st != GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels, {}),
 		"(p2) the equipped hero spawns with its equipment after reconnecting", "hero=%s" % hero)
 	# 골드 던전: 6명
 	for id in ["arteon", "ignis", "kyle"]:

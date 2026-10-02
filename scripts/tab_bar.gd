@@ -1,6 +1,6 @@
 extends CanvasLayer
-## 하단 탭 바(스펙 §2.3, 개정 13 §7.1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 4개 —
-## 영웅(영웅 목록)·병사(병사 시트)·모집(주점 창)·상인(거래 창). [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
+## 하단 탭 바(스펙 §2.3, 개정 13 §7.1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 5개 —
+## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·모집(주점 창)·상인(거래 창). [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
 ## 탭마다 각진 아이콘 + 글자. 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다
 ## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
 ## 층 3: 창(층 2)의 어두운 배경 위라 창이 열려 있어도 탭 바는 계속 누를 수 있다(창의 연 직후 보호 시간에는 누름이 버려진다).
@@ -11,7 +11,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const UiWindow := preload("res://scripts/ui_window.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TABS := [["hero", "영웅"], ["soldier", "병사"], ["recruit", "모집"], ["merchant", "상인"]]
+const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["recruit", "모집"], ["merchant", "상인"]]  # 개정 20: 성장 맨 왼쪽
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0
@@ -136,4 +136,13 @@ static func tab_shapes(id: String) -> Array:
 			]
 		"merchant":
 			return IconsScript.shapes("gold")
+		"growth":  # 오르는 초록 막대 셋 + 각진 금색 위쪽 화살표
+			var bar := Color(0.30, 0.68, 0.34)
+			return [
+				[[Vector2(-0.42, 0.42), Vector2(-0.20, 0.42), Vector2(-0.20, 0.16), Vector2(-0.42, 0.16)], bar, true],
+				[[Vector2(-0.12, 0.42), Vector2(0.10, 0.42), Vector2(0.10, -0.02), Vector2(-0.12, -0.02)], bar, true],
+				[[Vector2(0.18, 0.42), Vector2(0.40, 0.42), Vector2(0.40, -0.18), Vector2(0.18, -0.18)], bar, true],
+				[[Vector2(-0.375, 0.063), Vector2(0.234, -0.287), Vector2(0.274, -0.217), Vector2(0.40, -0.44), Vector2(0.144, -0.443),
+					Vector2(0.184, -0.373), Vector2(-0.425, -0.023)], UiKit.AMBER, true],
+			]
 	return []

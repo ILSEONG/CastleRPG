@@ -80,13 +80,24 @@ func setup(p_type: String, p_tier: int, p_side: int, p_slot: int, p_spawn: Vecto
 	slot = p_slot
 	spawn = p_spawn
 	castle = p_castle
-	stats = GameData.soldier_stats(type, tier)
-	hp_max = stats.hp
-	hp = hp_max
-	atk = stats.atk
+	refresh_stats()
+	Economy.upgrades_changed.connect(refresh_stats)  # 성장은 곧바로(개정 20)
 	_ranged = Art.SOLDIERS[type].role == "ranged"
 	if type == "cavalry":  # 같은 면 기병은 번갈아 시계·반시계 방향 — 네 면 사이가 다 덮인다
 		_patrol = Formation.patrol_points(castle.half, side, 1 if slot % 2 == 0 else -1)
+
+
+## 능력치를 다시 읽는 한 곳(개정 20): 병종·티어(GameData.soldier_stats) × 성장 — HP·공격 × (1 + %), stats의 공격 간격 ÷ (1 + 공격속도),
+## 이동 × (1 + 이동속도). HP 비율 유지, 다음 공격부터 새 간격.
+func refresh_stats() -> void:
+	var b: Dictionary = Economy.upgrade_bonus()
+	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
+	stats = GameData.soldier_stats(type, tier)
+	stats.atk_interval /= 1.0 + b.aspd_pct
+	stats.speed *= 1.0 + b.mspd_pct
+	hp_max = stats.hp * (1.0 + b.hp_pct)
+	atk = stats.atk * (1.0 + b.atk_pct)
+	hp = hp_max * ratio
 
 
 func _ready() -> void:

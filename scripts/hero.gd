@@ -45,8 +45,8 @@ var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
 var _path: Array[Vector3] = []
 var hp: float = 0.0
-var hp_max: float = 0.0  # 레벨·승급 반영
-var atk: float = 0.0     # 레벨·승급 반영(오라 전)
+var hp_max: float = 0.0  # 레벨·승급·장비·성장 반영(refresh_stats)
+var atk: float = 0.0     # 레벨·승급·장비·성장 반영(오라 전)
 var state: int = State.IDLE
 var selected := false:
 	set(v):
@@ -72,11 +72,15 @@ var _swing_left := 0.0  # 타격(발사) 순간까지 남은 초
 var _heal_cd := 0.0
 var _repair_cd := 0.0
 var _blast_cd := 0.0
+var _level := 1
+var _promotion := 0
+var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
+var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
+var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)
 
 
 ## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default).
-## promotion = 승급 단계(개정 15), level = 영웅 레벨. HP·공격 = 기본 × 레벨 배율 × 승급 배율(공격은 × 연구소 보너스 — GameData.hero_stats,
-## 건물 레벨은 GameState.building_levels, 개정 12·13).
+## promotion = 승급 단계(개정 15), level = 영웅 레벨. 능력치는 refresh_stats.
 func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 0, level := 1) -> void:
 	index = p_index
 	def = p_def
@@ -85,9 +89,9 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 
 	role = def.role
 	_sk = GameData.active_skills(def, promotion)
 	_color = Color(def.color)
-	var st := GameData.hero_stats(def, level, promotion, GameState.building_levels())
-	hp_max = st.hp
-	atk = st.atk
+	_level = level
+	_promotion = promotion
+	refresh_stats()
 	_place_default()
 
 
@@ -125,6 +129,8 @@ func _ready() -> void:
 	_aura_ring.visible = false
 	add_child(_aura_ring)
 	GameState.refilled.connect(reset)
+	Economy.upgrades_changed.connect(refresh_stats)  # 성장·장비는 곧바로(개정 20)
+	Economy.items_changed.connect(refresh_stats)
 	reset()
 
 
@@ -247,7 +253,7 @@ func _process(delta: float) -> void:
 		_linger = 0.0
 		_model.face(wp - global_position)
 		_model.play_walk()
-		global_position = global_position.move_toward(wp, float(def.speed) * delta)
+		global_position = global_position.move_toward(wp, _speed * delta)
 		if global_position.distance_to(wp) <= ARRIVE_EPS:
 			_path.pop_front()
 		return
@@ -273,11 +279,11 @@ func _process(delta: float) -> void:
 					_target = null  # 폭발이 죽인 표적은 치지 않는다(공격·쿨을 아끼고, 시체에서 투사체·연쇄가 나가지 않게)
 					return
 			if _atk_cd <= 0.0:
-				_atk_cd = Skills.interval(_sk, float(def.atk_interval), hp_ratio())
+				_atk_cd = Skills.interval(_sk, float(def.atk_interval) / _aspd, hp_ratio())
 				_attack(_atk_cd)
 			return
 		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
-		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(def.speed) * delta)
+		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), _speed * delta)
 		if Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position):
 			state = State.MOVE
 			_model.play_walk()
@@ -298,7 +304,7 @@ func _process(delta: float) -> void:
 			state = State.MOVE
 			_model.face(home - global_position)
 			_model.play_walk()
-			global_position = global_position.move_toward(home, float(def.speed) * delta)
+			global_position = global_position.move_toward(home, _speed * delta)
 			return
 		_replan()  # 다른 영역이거나 성을 가로지르면 성문 경로로
 		return
@@ -431,17 +437,20 @@ func _release() -> void:
 ## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun(attack_no번째 공격)·lifesteal·cleave·chain.
 ## 연출(개정 17): crit = 큰 별 불꽃, execute·boss_slayer = 붉은 X, crit·execute·stun = 이름 띠.
 func _strike(m, a: float, primary: bool, attack_no: int) -> void:
-	var roll := randf()
 	var ratio: float = m.hp_ratio()
 	var boss: bool = m.kind == "epic_boss"
-	var d := Skills.damage(_sk, a, roll, ratio, boss)
-	var crit: bool = _sk.has("crit") and roll < _sk.crit[0] / 100.0
+	# 치명타(개정 20 §3): 스킬 확률·배율 + 성장을 합쳐(crit_roll_params) 한 번만 굴린다. Skills.damage엔 빗나가는 굴림 1.0 — 두 번 세지 않게
+	var has_crit := _sk.has("crit")
+	var cp := GameData.crit_roll_params(_sk.crit[0] / 100.0 if has_crit else 0.0, _sk.crit[1] / 100.0 if has_crit else 0.0, _bonus)
+	var crit: bool = randf() < cp.rate
+	var d := Skills.damage(_sk, a, 1.0, ratio, boss) * (float(cp.mult) if crit else 1.0)
 	var execute: bool = _sk.has("execute") and ratio <= _sk.execute[0] / 100.0
 	var at: Vector3 = m.global_position + HIT_HEIGHT
 	m.take_damage(d, DamageNumbers.Kind.CRIT if crit else DamageNumbers.Kind.HIT)
 	if crit:
 		Fx.spark(get_parent(), at, Fx.CRIT_ORANGE, 1.0)
-		_announce("crit")
+		if has_crit:
+			_announce("crit")  # 이름 띠는 치명타 스킬만(성장 기본 치명타는 숫자·불꽃만)
 	if execute or (boss and _sk.has("boss_slayer")):
 		Fx.slash(get_parent(), at)
 		if execute:
@@ -536,6 +545,20 @@ func _aura_mult() -> float:
 				and Formation.flat_distance(h.global_position, global_position) <= hs.atk_aura[0]:
 			best = maxf(best, hs.atk_aura[1])
 	return Skills.aura_mult(best)
+
+
+## 최종 능력치를 다시 읽는 한 곳(개정 20): HP·공격 = hero_stats(기본 × 레벨 × 승급, 공격 × 연구소, + 장비) × (1 + 성장 %),
+## 공격 간격 ÷ (1 + 성장 공격속도), 이동 × (1 + 성장 이동속도 + 신발 %). 성장·장비가 바뀌면 곧바로 — HP 비율 유지, 다음 공격부터 새 간격.
+func refresh_stats() -> void:
+	_bonus = Economy.upgrade_bonus()
+	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
+	var st := GameData.hero_stats(def, _level, _promotion, GameState.building_levels())
+	hp_max = st.hp * (1.0 + _bonus.hp_pct)
+	atk = st.atk * (1.0 + _bonus.atk_pct)
+	hp = hp_max * ratio
+	_aspd = 1.0 + _bonus.aspd_pct
+	var shoes: float = Economy.equipment_bonus(str(def.get("id", ""))).get("speed_pct", 0.0)
+	_speed = float(def.speed) * (1.0 + _bonus.mspd_pct + shoes / 100.0)
 
 
 func hp_ratio() -> float:
