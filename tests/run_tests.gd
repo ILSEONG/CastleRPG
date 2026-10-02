@@ -1395,7 +1395,7 @@ func test_skill_formulas() -> void:
 	var ex := {"execute": [30.0, 100.0, 0.0]}
 	check(Skills.damage(ex, 50.0, 0.9, 0.3, false) == 100.0 and Skills.damage(ex, 50.0, 0.9, 0.31, false) == 50.0, "execute: +b% at or below a% target HP")
 	var boss := {"boss_slayer": [150.0, 0.0, 0.0]}
-	check(Skills.damage(boss, 60.0, 0.9, 1.0, true) == 150.0 and Skills.damage(boss, 60.0, 0.9, 1.0, false) == 60.0, "boss_slayer: +a% to epic_boss only")
+	check(Skills.damage(boss, 60.0, 0.9, 1.0, true) == 150.0 and Skills.damage(boss, 60.0, 0.9, 1.0, false) == 60.0, "boss_slayer: +a% to bosses only")
 	check(is_equal_approx(Skills.damage(GameData.hero("kyle").skills, 81.0, 0.0, 0.2, false), 81.0 * 2.5 * 2.0), "crit and execute multiply (kyle)")
 	var cd := Skills.chain_damages({"chain": [3.0, 70.0, 4.0]}, 100.0)
 	check(cd.size() == 3 and is_equal_approx(cd[0], 70.0) and is_equal_approx(cd[1], 49.0) and is_equal_approx(cd[2], 34.3), "chain: a bounces, each x b/100: %s" % [cd])

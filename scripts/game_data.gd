@@ -16,6 +16,7 @@ const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
 const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "scale", "gold"]
+const BOSS_KINDS := ["epic_boss", "goblin_king", "death_knight"]  # 보스 종류(성 + 던전) — monster.is_boss(거인 사냥 boss_slayer, 던전 보스 자리)
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 const HERO_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]
 const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "model", "gear", "color", "desc"]

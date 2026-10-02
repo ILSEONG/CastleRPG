@@ -24,7 +24,6 @@ const HudScript := preload("res://scripts/dungeon_hud.gd")
 
 enum Phase { FIGHT, WON, REPORT, LOOT, RESULT }
 
-const BOSSES := ["goblin_king", "death_knight"]
 const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0}
 const AUTO_DELAY := 2.0
 const LOOT_SEC := 1.6  # 상자가 다 떨어지고 결과 화면이 뜰 때까지
@@ -104,7 +103,7 @@ func _plan_waves(stage: Dictionary) -> void:
 	for row in run.enemies:
 		var at := []
 		for i in int(row.count):
-			if row.kind in BOSSES or spots.is_empty():
+			if row.kind in GameData.BOSS_KINDS or spots.is_empty():
 				at.append(stage.boss + ArenaKit.RIGHT * 1.5 * i)
 			else:
 				at.append(spots.pop_front())
@@ -125,7 +124,7 @@ func _spawn(w: Dictionary) -> void:
 		m.died.connect(_on_enemy_died)
 		add_child(m)
 		_live += 1
-		if w.row.kind in BOSSES:
+		if m.is_boss:
 			boss = m
 
 
