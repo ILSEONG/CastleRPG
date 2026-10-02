@@ -68,6 +68,7 @@ func setup_arena(row: Dictionary) -> void:
 	hp = float(row.hp)
 	hp_max = hp
 	atk = float(row.atk)
+	_speed = float(row.speed)  # 던전은 스테이지 속도 배율 없음
 
 
 func _ready() -> void:

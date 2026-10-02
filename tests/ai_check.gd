@@ -1990,6 +1990,8 @@ func _dungeon_cases() -> void:
 		and d.heroes.size() == 6 and goblins.size() == 10 and goblins.all(func(m): return m.kind == "goblin") and d.enemies_left() == 16 and castle_heroes > 0,
 		"(DG1) gold dungeon: the castle world leaves the tree (GameState paused), 6 arena heroes vs 10 goblins first (16 in all)",
 		"heroes=%d goblins=%d left=%d" % [get_tree().get_nodes_in_group("heroes").size(), goblins.size(), d.enemies_left() if d != null else -1])
+	_check(not goblins.is_empty() and goblins.all(func(m): return m.speed() > 0.0 and m.speed() == float(m._stats.speed)),
+		"(DG1) arena enemies walk at their dungeon row speed (no stage speed mult, r22)", str(goblins.map(func(m): return m.speed())))
 	await _wait_until(func(): return d.clock >= 5.3, 10.0)
 	var all := _arena_monsters()
 	var dead: int = 16 - d.enemies_left()
