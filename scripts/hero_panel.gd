@@ -12,6 +12,8 @@ extends "res://scripts/ui_window.gd"
 ## 레벨업 성공: 빛 조각·레벨 튀어 오름·바뀐 숫자 초록 반짝임. 승급 성공: 금색 빛 조각이 피규어 주위로 퍼지고 별 하나가 날아와 박히고
 ## 바뀐 숫자 초록 반짝임. [이전]·[다음]·좌우 스와이프로 목록 순서대로, [닫기]는 목록으로.
 ## 목록 ↔ 상세 전환 때 연 직후처럼 보호 시간을 다시 건다(카드 연타가 그 자리의 [레벨업]을 누르지 않게).
+## 개정 17: 스킬 줄은 칸마다 하나(SSR·SR 3, R 2). 잠긴 칸은 회색·자물쇠·"★3에서 해금", 승급 미리보기 둘째 줄에 다음 해금
+## ("★3 달성 시 스킬 해금: 화상"), 승급으로 열리면 알림 "스킬 해금! 화상" + 그 줄 금색 반짝임.
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
@@ -34,6 +36,8 @@ const REASON_COLOR := Color(0.78, 0.22, 0.18)
 const SWIPE_PX := 80.0
 const TEN := 10
 const STAT_NAMES := ["HP", "공격", "공격 간격", "사거리", "전투력"]
+const LOCKED_GRAY := Color(0.55, 0.55, 0.58)  # 잠긴 스킬 줄
+const UNLOCK_GOLD := Color("C8901A")  # 해금 반짝임
 
 var slot_cards: Array = []
 var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
@@ -51,7 +55,7 @@ var level_label: Label
 var level_bar: ProgressBar
 var stat_values: Array = []  # 능력치 값 Label(STAT_NAMES 순서)
 var stat_nexts: Array = []   # 다음 레벨 값 Label(초록)
-var skills_label: Label
+var skill_ui: Array = []  # 스킬 칸마다 {box, lock, label}(개정 17)
 var desc_label: Label
 var level_button: Button
 var ten_button: Button
@@ -64,6 +68,7 @@ var prev_button: Button
 var next_button: Button
 var celebrations := 0  # 성공 연출 횟수(테스트용)
 var promotions_shown := 0  # 승급 성공 연출 횟수(테스트용)
+var unlocks_shown := 0  # 스킬 해금 반짝임 횟수(테스트용)
 
 var _list_view: VBoxContainer
 var _detail_view: VBoxContainer
@@ -209,8 +214,21 @@ func _build_detail() -> void:
 	info_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_box.add_theme_constant_override("separation", 4)
 	info.add_child(info_box)
-	skills_label = _wrap_label(21, HudScript.INK)
-	info_box.add_child(skills_label)
+	for i in GameData.HERO_SKILL_COLS.size():
+		var box := HBoxContainer.new()
+		box.add_theme_constant_override("separation", 6)
+		info_box.add_child(box)
+		var lock := Control.new()
+		lock.custom_minimum_size = Vector2(22, 26)
+		lock.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lock.draw.connect(_draw_lock.bind(lock))
+		box.add_child(lock)
+		var l := _wrap_label(21, HudScript.INK)
+		l.custom_minimum_size.x = 570.0  # 자물쇠 칸만큼 좁게(설명문 600과 같은 폭)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.add_child(l)
+		skill_ui.append({"box": box, "lock": lock, "label": l})
 	desc_label = _wrap_label(19, HudScript.INK.lightened(0.3))
 	info_box.add_child(desc_label)
 	# [레벨업] [×10] [승급], 아래 칸마다 못 하는 이유
@@ -488,7 +506,12 @@ func _press_promote() -> void:
 
 
 ## 승급 성공 연출: 큰 카드 금색 빛 조각 + 별 하나가 날아와 박힘, 최대 레벨 글자 튀어 오름, 바뀐 능력치 숫자 초록 반짝임.
-func _on_promoted(id: String, _promotion: int) -> void:
+## 이 승급으로 열린 스킬(개정 17)은 알림 "스킬 해금! 이름"(상세를 안 보고 있어도) + 그 줄 금색 반짝임.
+func _on_promoted(id: String, promotion: int) -> void:
+	var rows := skill_rows(GameData.hero(id), promotion) if not GameData.hero(id).is_empty() else []
+	var opened := range(rows.size()).filter(func(i): return rows[i].star == promotion and promotion > 0)
+	for i in opened:
+		Economy.notice.emit("스킬 해금! " + rows[i].name)
 	if not is_showing_detail() or id != detail_id:
 		return
 	_refresh_detail()
@@ -496,6 +519,12 @@ func _on_promoted(id: String, _promotion: int) -> void:
 	big_card.promote_fx()
 	_pop(level_label)
 	_flash_changed()
+	for i in opened:
+		var l: Label = skill_ui[i].label
+		l.add_theme_color_override("font_color", UNLOCK_GOLD)
+		l.create_tween().tween_property(l, "theme_override_colors/font_color", HudScript.INK, 0.9)
+		_pop(l)
+		unlocks_shown += 1
 
 
 ## 글자를 잠깐 키웠다 되돌린다.
@@ -557,7 +586,14 @@ func _refresh_detail() -> void:
 		else:
 			stat_values[i].text = UiKit.commas(r[0])
 			stat_nexts[i].text = "→ %s (+%s)" % [UiKit.commas(r[1]), UiKit.commas(r[1] - r[0])] if grow else ""
-	skills_label.text = "\n".join(skill_lines(h))
+	var sk_rows := skill_rows(h, pr)
+	for i in skill_ui.size():
+		var ui: Dictionary = skill_ui[i]
+		ui.box.visible = i < sk_rows.size()
+		if i < sk_rows.size():
+			ui.label.text = sk_rows[i].text
+			ui.lock.visible = sk_rows[i].locked
+			ui.label.add_theme_color_override("font_color", LOCKED_GRAY if sk_rows[i].locked else HudScript.INK)
 	desc_label.text = h.desc
 	var waiting: bool = Economy.levelup_waiting()
 	var why := Economy.levelup_block(id)
@@ -577,6 +613,9 @@ func _refresh_detail() -> void:
 	promote_reason.text = Economy.PROMOTE_TEXT.get(pwhy, "") if pwhy != "waiting" else ""
 	if need > 0:
 		promote_preview.text = "승급하면 HP·공격 → ×%s · 최대 레벨 %d → %d" % [Skills.num_text(GameData.config_num("promote_mult")), mx, GameData.max_level(pr + 1)]
+		var next := sk_rows.filter(func(r): return r.locked)
+		if not next.is_empty():  # 개정 17: 다음 해금
+			promote_preview.text += "\n★%d 달성 시 스킬 해금: %s" % [next[0].star, next[0].name]
 	else:
 		promote_preview.text = "최대 승급 ★%d — HP·공격 ×%s" % [pr, Skills.num_text(GameData.promote_mult(pr))]
 	var d := GameState.deploy()
@@ -606,9 +645,21 @@ func _on_detail_input(event: InputEvent) -> void:
 			step(-1 if d.x > 0.0 else 1)
 
 
-## 스킬 두 개(있는 만큼): "이름 — 숫자를 넣은 설명".
-static func skill_lines(h: Dictionary) -> Array:
+## 스킬 줄(칸 순서, 개정 17): {kind, name, star(해금 승급), locked, text}. 해금 = "이름 — 숫자를 넣은 설명", 잠김 = "이름 — ★3에서 해금".
+static func skill_rows(h: Dictionary, promotion: int) -> Array:
 	var out := []
-	for kind in h.skills:
-		out.append("%s — %s" % [Skills.NAMES.get(kind, kind), Skills.describe(kind, h.skills[kind])])
+	var kinds: Array = h.skills.keys()
+	for i in kinds.size():
+		var star := GameData.skill_unlock_star(i)
+		var nm := Skills.name_of(kinds[i], h.id)
+		var locked := promotion < star
+		out.append({"kind": kinds[i], "name": nm, "star": star, "locked": locked,
+			"text": "%s — %s" % [nm, "★%d에서 해금" % star if locked else Skills.describe(kinds[i], h.skills[kinds[i]])]})
 	return out
+
+
+## 자물쇠(잠긴 스킬 줄): 고리 + 몸통.
+func _draw_lock(c: Control) -> void:
+	c.draw_arc(Vector2(11, 12), 6.0, PI, TAU, 10, LOCKED_GRAY, 3.0)
+	c.draw_rect(Rect2(3, 12, 16, 12), LOCKED_GRAY)
+	c.draw_rect(Rect2(10, 16, 2, 4), Color.WHITE)

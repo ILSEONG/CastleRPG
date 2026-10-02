@@ -27,6 +27,7 @@ var _press_pos: Vector2 = Vector2.INF
 var _dragging := false
 var _touches := {}  # 터치 index -> 화면 위치 (핀치용)
 var _pan: Tween  # pan_to 진행 중(손으로 끌면 멈춘다)
+var _shake: Tween  # 흔드는 중(개정 17)
 
 
 func _ready() -> void:
@@ -164,6 +165,24 @@ func pan_pixels(rel: Vector2) -> void:
 	var limit := Balance.MAP_HALF - PAN_LIMIT_MARGIN
 	position.x = clampf(position.x, -limit, limit)
 	position.z = clampf(position.z, -limit, limit)
+
+
+## 카메라 흔들림(개정 17 §3, 폭발): sec초 동안 화면 평면으로 최대 amp m, 점점 줄어 0으로. 흔드는 중이면 겹치지 않는다(합치지 않음).
+## 위치·줌 대신 카메라 h_offset·v_offset만 쓴다 — 팬·회전과 다투지 않는다.
+func shake(sec: float, amp: float) -> void:
+	if _shake != null and _shake.is_running():
+		return
+	_shake = create_tween()
+	_shake.tween_method(_shake_at.bind(amp), 1.0, 0.0, sec)
+
+
+func _shake_at(k: float, amp: float) -> void:
+	camera.h_offset = randf_range(-amp, amp) * k
+	camera.v_offset = randf_range(-amp, amp) * k
+
+
+func is_shaking() -> bool:
+	return _shake != null and _shake.is_running()
 
 
 ## factor < 1 이면 확대.

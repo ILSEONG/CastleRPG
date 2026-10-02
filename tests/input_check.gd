@@ -533,9 +533,10 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 30",
 		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,560 -> 1,654 (+94)); Lv 1 / 30 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
-	_check(heroes_win.skills_label.text.contains("6초마다 반경 6m") and heroes_win.skills_label.text.contains("받는 피해를 25% 줄입니다") and heroes_win.desc_label.text == arteon.desc
+	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
+	_check(sk[0].contains("6초마다 반경 6m") and sk[1] == "철벽 — ★3에서 해금" and sk[2] == "용기의 오라 — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
 		and heroes_win.title_label.text == "빛의 성기사 아르테온" and heroes_win.grade_label.text.begins_with("SSR"),
-		"(x) title, grade, both skill sentences with numbers and the description", "")
+		"(x) title, grade, the unlocked skill sentence with numbers, the locked ones with their star, and the description", "skills=%s" % [sk])
 	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드 부족" and heroes_win.deploy_button.text == "배치 중"
 		and heroes_win.deploy_button.disabled, "(x) no gold: [레벨업]·[×10] off with the reason; a deployed hero shows 배치 중", "reason=%s" % heroes_win.reason_label.text)
 	var c1 := GameData.levelup_cost("SSR", 1)
@@ -589,6 +590,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _guard_wait()
 	await _figures(heroes_win)
 	await _promotion_ui(heroes_win, recruit)
+	await _skill_unlock_ui(heroes_win)
 	await _guard_wait()  # _figures가 창을 다시 열어 0.4초 보호가 다시 걸린다
 	await _tap(heroes_win.prev_button.get_parent().get_child(1).get_global_rect().get_center())  # [닫기]
 	_check(heroes_win.is_open() and not heroes_win.is_showing_detail() and heroes_win.is_guarded() and heroes_win.hero_cards.arteon.level == 5,
@@ -1369,7 +1371,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
 		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
 	_check(heroes_win._promo.line.text == "조각 2 / 25" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
-		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.5 · 최대 레벨 30 → 40" and heroes_win.big_card.stars == 1,
+		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.5 · 최대 레벨 30 → 40\n★3 달성 시 스킬 해금: 철벽" and heroes_win.big_card.stars == 1,
 		"(x3) [승급] shows 조각 2 / 25 inside, is off with the reason 조각 부족, and previews x1.5 and max level 30 -> 40",
 		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
@@ -1687,3 +1689,47 @@ func _soldiers_clear(wt, what: String) -> void:
 				hits.append(id)
 				break
 	_check(not wt.obstacles.is_empty() and hits.is_empty(), "(T) %s: no tag or bubble covers the soldier formation (%d soldier boxes)" % [what, wt.obstacles.size()], "covering=%s" % [hits])
+
+
+## (U) 개정 17 §4: 상세 스킬 줄(R 2줄, SSR 3줄) — 잠긴 줄은 회색·자물쇠·"★3에서 해금", 승급 미리보기 둘째 줄에 다음 해금,
+##     [승급]으로 ★3이 되면 알림 "스킬 해금! 철벽" + 그 줄이 열려 금색으로 반짝인다. 끝나면 보유·승급을 되돌린다.
+func _skill_unlock_ui(heroes_win) -> void:
+	var keep := [Economy.heroes.duplicate(), Economy.hero_shards.duplicate(), Economy.hero_promotions.duplicate()]
+	var ui: Array = heroes_win.skill_ui
+	Economy.hero_promotions["hans"] = 0
+	heroes_win.show_detail("hans")
+	await _unguarded(heroes_win)
+	var shown: Array = ui.filter(func(u): return u.box.visible)
+	_check(shown.size() == 2 and not ui[0].lock.visible and ui[1].lock.visible and ui[0].label.text.begins_with("흡혈 — ") and ui[1].label.text == "철벽 — ★3에서 해금"
+		and ui[1].label.get_theme_color("font_color") == heroes_win.LOCKED_GRAY and ui[0].label.get_theme_color("font_color") == HudScript.INK,
+		"(U) R hans at ★0: two skill rows, the second grey with a lock and ★3에서 해금", "rows=%s" % [shown.map(func(u): return u.label.text)])
+	Economy.heroes["ignis"] = maxi(1, int(Economy.heroes.get("ignis", 0)))
+	Economy.hero_promotions["ignis"] = 0
+	heroes_win.show_detail("ignis")
+	_check(ui.all(func(u): return u.box.visible) and ui[1].label.text == "화상 — ★3에서 해금" and ui[2].label.text == "신속 — ★5에서 해금"
+		and heroes_win.promote_preview.text.ends_with("\n★3 달성 시 스킬 해금: 화상"),
+		"(U) SSR ignis at ★0: three rows (화상 at ★3, 신속 at ★5) and the preview names the next unlock", "rows=%s preview=%s" % [ui.map(func(u): return u.label.text), heroes_win.promote_preview.text])
+	var notices := []
+	var grab := func(t: String): notices.append(t)
+	Economy.notice.connect(grab)
+	Economy.hero_shards["arteon"] = GameData.promote_cost(2)
+	Economy.hero_promotions["arteon"] = 2
+	heroes_win.show_detail("arteon")
+	await _unguarded(heroes_win)
+	var locked_before: bool = ui[1].lock.visible
+	var shown0: int = heroes_win.unlocks_shown
+	await _tap(heroes_win.promote_button.get_global_rect().get_center())
+	await _frames(2)
+	var col: Color = ui[1].label.get_theme_color("font_color")
+	_check(locked_before and Economy.promotion_of("arteon") == 3 and notices.has("스킬 해금! 철벽") and heroes_win.unlocks_shown == shown0 + 1 and not ui[1].lock.visible
+		and ui[1].label.text.contains("받는 피해를 25% 줄입니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
+		and heroes_win.promote_preview.text.ends_with("\n★5 달성 시 스킬 해금: 용기의 오라"),
+		"(U) [승급] to ★3 unlocks 철벽: notice 스킬 해금! 철벽, the row opens and flashes gold, the preview moves on to ★5",
+		"promo=%d notices=%s shown=%d row=%s color=%s preview=%s" % [Economy.promotion_of("arteon"), notices, heroes_win.unlocks_shown, ui[1].label.text, col, heroes_win.promote_preview.text])
+	Economy.notice.disconnect(grab)
+	Economy.heroes = keep[0]
+	Economy.hero_shards = keep[1]
+	Economy.hero_promotions = keep[2]
+	Economy.roster_changed.emit()
+	Economy.changed.emit()
+	heroes_win.show_detail("hans")

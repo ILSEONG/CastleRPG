@@ -44,6 +44,9 @@ hero_max_level_base,20
 hero_max_level_per_promotion,10
 promote_shards,5|25|50|100|200
 promote_mult,1.5
+skill2_unlock_star,3
+skill3_unlock_star,5
+fx_shake,1
 hero_level_stat,0.06
 levelup_gold_R,30
 levelup_gold_SR,60

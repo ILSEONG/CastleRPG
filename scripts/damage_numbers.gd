@@ -1,9 +1,9 @@
 extends Node2D
 ## 떠오르는 피해·회복·회피 숫자(스펙 §3). hp_bars처럼 화면 공간 Node2D 하나가 모든 숫자를 그린다(숫자당 테두리 1 + 본문 1).
 ## 영웅·몬스터가 피해가 실제 적용되는 곳에서 정적 함수 DamageNumbers.pop(대상, 양, 종류)를 부른다(씬에 없으면 아무 일도 없다).
-## 독은 대상별로 1초 모아 하나로 보인다.
+## 독은 대상별로 1초 모아 하나로 보인다. 스킬 이름 띠(개정 17 §3, banner)도 여기서 그린다: 머리 위 고유 색 띠 + 흰 글자.
 
-enum Kind { HIT, CRIT, SKILL, POISON, HURT, DODGE, HEAL }
+enum Kind { HIT, CRIT, SKILL, POISON, HURT, DODGE, HEAL, BANNER }
 
 const MAX_NUMBERS := 80
 const LIFE := 0.8
@@ -14,13 +14,15 @@ const CRIT_POP_SCALE := 1.3
 const SHAKE := 12.0
 const POISON_SEC := 1.0
 const SCREEN_MARGIN := 40.0
+const BANNER_LIFT := 0.9  # 띠는 숫자보다 이만큼(m) 위
+const BANNER_PAD := Vector2(12, 4)
 const OUTLINE := Color(0.10, 0.08, 0.12)
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 ## 종류 → [색, 글자 크기]
 const STYLE := {
 	Kind.HIT: [Color(1, 1, 1), 22], Kind.CRIT: [Color(1.0, 0.62, 0.15), 28], Kind.SKILL: [Color(1.0, 0.9, 0.25), 22],
 	Kind.POISON: [Color(0.45, 0.9, 0.35), 16], Kind.HURT: [Color(0.95, 0.25, 0.22), 22],
-	Kind.DODGE: [Color(0.7, 0.7, 0.72), 22], Kind.HEAL: [Color(0.45, 0.95, 0.5), 22],
+	Kind.DODGE: [Color(0.7, 0.7, 0.72), 22], Kind.HEAL: [Color(0.45, 0.95, 0.5), 22], Kind.BANNER: [Color(1, 1, 1), 24],
 }
 const CACHE_MAX := 512
 
@@ -48,6 +50,15 @@ func _exit_tree() -> void:
 static func pop(target, amount: float, kind: int) -> void:
 	if current != null and is_instance_valid(target):
 		current.add(target, amount, kind)
+
+
+## 스킬 이름 띠 하나를 띄운다(LIFE초). color = 띠 색(영웅 고유 색).
+static func banner(target, text: String, color: Color) -> void:
+	if current == null or not is_instance_valid(target):
+		return
+	if current._list.size() >= MAX_NUMBERS:
+		current._list.pop_front()
+	current._list.append({"pos": current._anchor(target) + Vector3(0, BANNER_LIFT, 0), "text": text, "kind": Kind.BANNER, "age": 0.0, "dx": 0.0, "bg": color})
 
 
 func add(target, amount: float, kind: int) -> void:
@@ -134,7 +145,13 @@ func _draw() -> void:
 		col.a = alpha
 		var oc := OUTLINE
 		oc.a = alpha
-		var pos := p - Vector2(font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x / 2.0, 0.0)
+		var text_w := font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		var pos := p - Vector2(text_w / 2.0, 0.0)
+		if e.kind == Kind.BANNER:
+			var bg: Color = e.bg
+			bg.a = alpha * 0.85
+			draw_rect(Rect2(pos - Vector2(BANNER_PAD.x, size * 0.8 + BANNER_PAD.y), Vector2(text_w + BANNER_PAD.x * 2.0, size + BANNER_PAD.y * 2.0)), bg)
+			draws += 1
 		draw_string_outline(font, pos, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 6, oc)
 		draw_string(font, pos, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
 		draws += 2

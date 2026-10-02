@@ -12,13 +12,14 @@ var target
 var speed := 30.0
 var kind := "arrow"
 var color := Color.WHITE
+var tail := false  # multishot: 고유 색 꼬리(개정 17)
 var on_hit: Callable
 
 var _look: Node3D
 
 
 func _ready() -> void:
-	_look = Fx.dress_projectile(self, kind, color)
+	_look = Fx.dress_projectile(self, kind, color, tail)
 
 
 func _process(delta: float) -> void:

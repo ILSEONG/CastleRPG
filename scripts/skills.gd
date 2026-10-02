@@ -30,6 +30,15 @@ const NAMES := {
 	"poison": "독", "gate_repair": "성문 수리",
 }
 
+## 영웅별 이름(개정 17 §2 표의 괄호·§3 예시): 영웅 id → {종류: 이름}. 없으면 NAMES.
+const HERO_NAMES := {"ignis": {"poison": "화상", "aoe_blast": "화염구"}}
+
+
+## 스킬 이름(영웅별 이름이 있으면 그것).
+static func name_of(kind: String, hero_id := "") -> String:
+	return HERO_NAMES.get(hero_id, {}).get(kind, NAMES.get(kind, kind))
+
+
 ## 종류 → 설명 틀. {a}·{b}·{c} = 숫자, {bx} = b / 100(배수). 스펙 §3.2 표의 효과를 그대로 문장으로.
 const TEXTS := {
 	"heal_aura": "{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 각자 최대 HP의 {c}%만큼 회복합니다.",

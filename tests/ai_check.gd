@@ -35,6 +35,7 @@ func _ready() -> void:
 	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
 	Fever.save_path = ""
 	Fever.reset()
+	GameData._config.fx_shake = "0"  # 테스트에서는 카메라 흔들림을 끈다(개정 17)
 	Economy.reset(Time.get_unix_time_from_system())
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -331,8 +332,8 @@ func _skill_cases(heroes: Array) -> void:
 	GameState.refill()
 	await _frames(1)
 
-	# (o) slow: 세라핀(북 성벽 위)에게 맞은 grunt는 30% 느리게 걷는다
-	var se = _add_hero("seraphine", 100)
+	# (o) slow: 세라핀(북 성벽 위, ★3 — slow는 스킬 2)에게 맞은 grunt는 30% 느리게 걷는다
+	var se = _add_hero("seraphine", 100, 3)
 	_g = _spawn("grunt", 0, Vector3(-6, 0, -(north_out + 4.0)))
 	await _wait_until(func(): return _alive(_g) and _g._slow_t > 0.0, 3.0)
 	var base_speed: float = _g._stats.speed
@@ -382,6 +383,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _attack_sync()
 	await _soldier_cases()
 	await _fever_spawn()
+	await _skill_unlock_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -391,8 +393,9 @@ func _skill_application(heroes: Array) -> void:
 	GameState.refill()
 	await _frames(1)
 
-	# (q) atk_aura: 반경 안 "다른" 영웅에게만, 여럿이면 가장 큰 것 하나. 공격에 실제로 곱해진다(multishot과 같이 본다)
-	var lu = _add_hero("lumina", 300)
+	# (q) atk_aura: 반경 안 "다른" 영웅에게만, 여럿이면 가장 큰 것 하나. 공격에 실제로 곱해진다(multishot과 같이 본다).
+	#     루미나의 오라는 스킬 2 → ★3. 고르크는 ★0(스킬 2 boss_slayer 잠김 — 보스에게도 배율 없음)
+	var lu = _add_hero("lumina", 300, 3)
 	var gk = _add_hero("gork", 301)
 	for h in [lu, gk]:
 		h.set_process(false)
@@ -646,13 +649,14 @@ func _damage_numbers() -> void:
 	await _frames(1)
 
 
-func _add_hero(id: String, idx: int):
-	return _add_hero_def(GameData.hero(id), idx)
+func _add_hero(id: String, idx: int, promotion := 0):
+	return _add_hero_def(GameData.hero(id), idx, promotion)
 
 
-func _add_hero_def(def: Dictionary, idx: int):
+## promotion = 승급(개정 17: 스킬 2는 ★3, 3은 ★5에서 해금).
+func _add_hero_def(def: Dictionary, idx: int, promotion := 0):
 	var h = HeroScript.new()
-	h.setup(idx, def, _main.castle, get_tree().get_first_node_in_group("heroes").formation)
+	h.setup(idx, def, _main.castle, get_tree().get_first_node_in_group("heroes").formation, promotion)
 	_main.add_child(h)
 	return h
 
@@ -1207,3 +1211,104 @@ func _fever_spawn() -> void:
 	_clear_monsters()
 	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= 4, "(fever) FEVER triples the idle spawn count over the same time (±1 cycle)", str(counts))
 	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))
+
+
+## 개정 17 §5: ★0 영웅은 스킬 2를 쓰지 않고(세라핀 slow 없음) ★3이면 쓴다. aoe_blast가 이펙트 노드(파편·고리·섬광)를 만들고 상한을 넘지 않는다.
+## 이름 띠(1.5초에 한 번)·발밑 맥동, 기절 별은 기절 동안만, 오라를 받는 영웅 발밑 고리, 테스트에서는 흔들림 끔. 영웅·몬스터는 처리를 끈다.
+func _skill_unlock_cases() -> void:
+	_clear_monsters()
+	GameState.refill()
+	await _frames(1)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(false)
+	var dn = DamageNumbersScript.current
+	var K = DamageNumbersScript.Kind
+	# (U1) 세라핀 ★0: 연쇄만 — 맞아도 느려지지 않는다. ★3: slow가 열려 느려지고 발밑 결정이 남는다
+	var s0 = _add_hero("seraphine", 342, 0)
+	var s3 = _add_hero("seraphine", 346, 3)
+	for h in [s0, s3]:
+		h.set_process(false)
+	var m0 = _still("epic_boss", _flat(s0.global_position) + Formation.SIDE_DIR[2] * 3.0)
+	await _frames(1)
+	s0._target = m0
+	await _attack_now(s0)
+	_check(s0._sk.keys() == ["chain"] and _dmg(m0) > 0.0 and m0._slow_t <= 0.0 and m0.status_fx("slow") == null,
+		"(U1) seraphine at ★0 uses only skill 1: her hit does not slow", "skills=%s dmg=%.1f slow=%.2f" % [s0._sk.keys(), _dmg(m0), m0._slow_t])
+	var m3 = _still("epic_boss", _flat(s3.global_position) + Formation.SIDE_DIR[2] * 3.0)
+	await _frames(1)
+	s3._target = m3
+	await _attack_now(s3)
+	_check(s3._sk.keys() == ["chain", "slow"] and m3._slow_t > 0.0 and m3.status_fx("slow") != null,
+		"(U1) at ★3 skill 2 is unlocked: the hit slows and leaves ice crystals at its feet", "skills=%s slow=%.2f" % [s3._sk.keys(), m3._slow_t])
+	_remove_hero(s0)
+	_remove_hero(s3)
+	_clear_monsters()
+	await _frames(1)
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+
+	# (U2) 기절 별: 크게, 기절 동안 하나만 남고, 끝나면 사라진다
+	var ms = _still("grunt", Vector3(0, 0, -(_half + Balance.WALL_T + 20.0)))
+	await _frames(1)
+	ms.apply_stun(0.5)
+	var star = ms.status_fx("stun")
+	ms.apply_stun(0.3)
+	var stars: int = ms.get_children().filter(func(c): return c.get_meta("fx", "") == "stun").size()
+	ms._process(0.3)
+	var kept: bool = star != null and is_instance_valid(star) and not star.is_queued_for_deletion()
+	ms._process(0.3)
+	await _frames(1)
+	_check(kept and stars == 1 and not is_instance_valid(star) and ms._status.is_empty(), "(U2) stun stars stay (one per monster) while stunned and vanish when it ends",
+		"kept=%s stars=%d status=%s" % [kept, stars, ms._status.keys()])
+	_clear_monsters()
+	await _frames(1)
+
+	# (U3) 이그니스(SSR ★0) 폭발: 20면체·충격파 고리·섬광·파편 8~12, 이름 띠 "화염구!"(고유 색)·발밑 맥동, 흔들림 끔. 1.5초 안 두 번째는 띠 없음
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+	var ig = _add_hero("ignis", 343, 0)
+	ig.set_process(false)
+	var mb = _still("epic_boss", _flat(ig.global_position) + Formation.SIDE_DIR[3] * 3.0)
+	await _frames(1)
+	dn._list.clear()
+	ig._blast(mb.global_position)
+	var tags := {}
+	for n in get_tree().get_nodes_in_group(Fx.GROUP):
+		var t: String = n.get_meta("fx", "")
+		tags[t] = tags.get(t, 0) + 1
+	var banners: Array = dn._list.filter(func(e): return e.kind == K.BANNER)
+	_check(tags.get("blast", 0) == 1 and tags.get("shock", 0) == 1 and tags.get("flash", 0) == 1 and tags.get("shard", 0) >= Fx.SHARDS_MIN
+		and tags.get("shard", 0) <= Fx.SHARDS_MAX and Fx.live() <= Fx.MAX_LIVE, "(U3) aoe_blast makes an icosahedron, a shockwave ring, a flash and 8-12 shards", str(tags))
+	_check(banners.size() == 1 and banners[0].text == "화염구!" and banners[0].bg == Color(ig.def.color) and tags.get("pulse", 0) == 1,
+		"(U3) the blast shows ignis's name banner in her color and pulses her foot ring", "banners=%s tags=%s" % [banners.map(func(e): return e.text), tags])
+	var rig = get_viewport().get_camera_3d().get_parent()
+	_check(rig.has_method("is_shaking") and not rig.is_shaking() and not GameData.fx_shake(), "(U3) with fx_shake off (tests) the SSR blast does not shake the camera", "")
+	ig._blast(mb.global_position)
+	_check(dn._list.filter(func(e): return e.kind == K.BANNER).size() == 1, "(U3) a second blast within 1.5 s shows no second banner", "")
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+	for i in Fx.MAX_LIVE - 5:
+		Fx.heal_ring(_main, Vector3(0, 0, -5.0), 2.0)
+	ig._blast(mb.global_position)
+	_check(Fx.live() == Fx.MAX_LIVE and get_tree().get_nodes_in_group(Fx.GROUP).size() == Fx.MAX_LIVE, "(U3) a blast near the cap stops at MAX_LIVE (extra shards are skipped)",
+		"live=%d" % Fx.live())
+	_remove_hero(ig)
+	_clear_monsters()
+	await _frames(1)
+
+	# (U4) atk_aura 버프 표시: ★0 루미나 곁(오라 잠김)이면 없고, ★3 루미나 곁이면 고르크 발밑에 주황 고리
+	var lu0 = _add_hero("lumina", 340, 0)
+	var gk = _add_hero("gork", 341, 0)
+	var lu3 = _add_hero("lumina", 345, 3)
+	for h in [lu0, gk, lu3]:
+		h.set_process(false)
+	lu0.global_position = gk.global_position + Vector3(0, 0, 3.0)
+	lu3.global_position = gk.global_position + Vector3(0, 0, -40.0)
+	gk._tick_skills(0.3)
+	var off: bool = gk._aura_ring.visible
+	lu3.global_position = gk.global_position + Vector3(0, 0, -3.0)
+	gk._tick_skills(0.3)
+	_check(not off and gk._aura_ring.visible, "(U4) an unlocked atk_aura (lumina ★3) puts an orange ring under the buffed hero; a locked one (★0) does not",
+		"locked=%s unlocked=%s" % [off, gk._aura_ring.visible])
+	for h in [lu0, gk, lu3]:
+		_remove_hero(h)
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+	GameState.refill()
+	await _frames(1)

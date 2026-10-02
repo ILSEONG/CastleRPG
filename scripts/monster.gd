@@ -1,7 +1,7 @@
 extends Node3D
 ## 괴물(근접). 자기 위치에서 aggro 안·같은 영역(성 안/밖)의 지상 영웅(성 안이면 병사도)을 쫓아가 치고, 없으면 진로(_advance)로 돌아가 성문·성채를 친다.
 ## 성벽 위 영웅은 표적으로 삼지 않는다.
-## 영웅 스킬 상태: slow(이동 −%), stun(이동·공격 정지), poison(초당 피해). 영웅을 칠 때 자신을 출처로 넘긴다(thorns 반사 대상).
+## 영웅 스킬 상태: slow(이동 −%), stun(이동·공격 정지), poison(초당 피해) — 이펙트(Fx)는 지속 동안 남는다(개정 17). 영웅을 칠 때 자신을 출처로 넘긴다(thorns 반사 대상).
 ## 공격은 시작(_swing) 때 대상을 고정하고, 피해는 모션의 타격 순간(_release, 개정 12-2 §3)에 들어간다.
 
 const Balance := preload("res://scripts/balance.gd")
@@ -37,6 +37,7 @@ var _slow_t := 0.0
 var _stun_t := 0.0
 var _poison_dps := 0.0
 var _poison_t := 0.0
+var _status := {}  # 상태 이펙트 노드 "stun"·"slow"·"poison"(개정 17: 지속 동안 남는다, 상한이면 null) — 상태가 끝나거나 죽으면 지운다
 var _swing_left := -1.0  # 타격 순간까지 남은 초(음수 = 휘두르는 중 아님)
 var _swing_hero           # 치려는 영웅(_swing_side == AT_HERO일 때)
 var _swing_side := -1     # 치려는 것: AT_HERO, 성(-1), 성문 면(0..3)
@@ -78,6 +79,10 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 	if hp == 0.0:
 		_dead = true
 		remove_from_group("monsters")  # 즉시 표적 대상에서 빠진다
+		for n in _status.values():  # 상태 이펙트는 시체에 남기지 않는다
+			if is_instance_valid(n):
+				n.queue_free()
+		_status.clear()
 		died.emit(self)
 		_model.play_death()
 		get_tree().create_timer(Art.CORPSE_SEC).timeout.connect(queue_free)
@@ -94,6 +99,8 @@ func _process(delta: float) -> void:
 		take_damage(_poison_dps * dt, DamageNumbers.Kind.POISON)
 		if _dead:
 			return
+	if not _status.is_empty():
+		_end_status()
 	if _stun_t > 0.0:
 		_swing_left = -1.0  # 기절은 휘두르던 공격도 끊는다
 		_model.play_idle()
@@ -187,26 +194,43 @@ func speed() -> float:
 	return float(_stats.speed) * (1.0 - _slow_pct / 100.0) if _slow_t > 0.0 else float(_stats.speed)
 
 
-## slow: 이동 속도 −pct%, sec초(갱신).
+## slow: 이동 속도 −pct%, sec초(갱신). 발밑 결정은 끝날 때까지.
 func apply_slow(pct: float, sec: float) -> void:
-	if _slow_t <= 0.0:
-		Fx.slow(self)
+	if not _status.has("slow"):
+		_status.slow = Fx.slow(self)
 	_slow_pct = clampf(pct, 0.0, 100.0)
 	_slow_t = sec
 
 
-## stun: sec초 이동·공격 정지(남은 시간보다 길 때만 늘린다).
+## stun: sec초 이동·공격 정지(남은 시간보다 길 때만 늘린다). 머리 위 별은 끝날 때까지.
 func apply_stun(sec: float) -> void:
 	_stun_t = maxf(_stun_t, sec)
-	Fx.stun(self, bar_height() + 0.3)
+	if not _status.has("stun"):
+		_status.stun = Fx.stun(self, bar_height() + 0.3)
 
 
-## poison: sec초 동안 초당 dps 피해(갱신).
+## poison: sec초 동안 초당 dps 피해(갱신). 발밑 거품은 끝날 때까지.
 func apply_poison(dps: float, sec: float) -> void:
-	if _poison_t <= 0.0:
-		Fx.poison(self, bar_height())
+	if not _status.has("poison"):
+		_status.poison = Fx.poison(self)
 	_poison_dps = dps
 	_poison_t = sec
+
+
+## 끝난 상태(남은 시간 ≤ 0)의 이펙트를 지운다.
+func _end_status() -> void:
+	for k in _status.keys():
+		var left: float = _stun_t if k == "stun" else (_slow_t if k == "slow" else _poison_t)
+		if left <= 0.0:
+			if is_instance_valid(_status[k]):
+				_status[k].queue_free()
+			_status.erase(k)
+
+
+## 상태 이펙트 노드(테스트용): 없으면 null.
+func status_fx(k: String):
+	var n = _status.get(k)
+	return n if is_instance_valid(n) else null
 
 
 func is_stunned() -> bool:

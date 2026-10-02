@@ -6,6 +6,8 @@ extends Node3D
 ## 사망 시 부활 없음, GameState.refilled에서만 배정 자리로 복귀.
 ## 스킬(스펙 §3.2): 수식은 Skills(순수 함수), 적용은 여기 — 공격(_attack·_release·_strike·_chain·_cleave·_blast), 쿨 스킬(_tick_skills),
 ## 받는 피해(take_damage). 몬스터 상태(slow·stun·poison)는 monster.gd.
+## 개정 17: 쓰는 스킬은 승급으로 해금된 것만(GameData.active_skills — 스킬 2는 ★3, 3은 ★5). 쿨·확률 스킬이 터지면 머리 위 이름 띠 +
+## 발밑 링 맥동(_announce, 같은 영웅은 BANNER_GAP초에 한 번). 오라를 받는 동안 발밑 주황 고리.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -28,6 +30,8 @@ const MUZZLE := Vector3(0, 1.3, 0)  # 투사체가 나가는 높이
 ## 모델 → 투사체 [모양, 속도 m/s](개정 12-2 §3). 없으면 화살.
 const SHOTS := {"Mage": ["bolt", 18.0], "Barbarian": ["axe", 20.0]}
 const ARROW_SPEED := 30.0
+const BANNER_GAP := 1.5  # 같은 영웅의 스킬 이름 띠 최소 간격(초)
+const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
 
 var castle
 var formation
@@ -49,11 +53,14 @@ var selected := false:
 		if _ring != null:
 			_ring.visible = v and state != State.DEAD
 
-var _sk: Dictionary = {}  # def.skills
+var _sk: Dictionary = {}  # 쓰는 스킬 = def.skills 중 승급으로 해금된 것(개정 17)
 var _color := Color.WHITE
 var _model
 var _ring: MeshInstance3D
 var _foot: MeshInstance3D
+var _aura_ring: MeshInstance3D  # atk_aura를 받는 중 표시
+var _aura_cd := 0.0
+var _banner_at := -INF  # 마지막 이름 띠 시각(초)
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
@@ -74,7 +81,7 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 
 	castle = p_castle
 	formation = p_formation
 	role = def.role
-	_sk = def.skills
+	_sk = GameData.active_skills(def, promotion)
 	_color = Color(def.color)
 	var st := GameData.hero_stats(def, level, promotion, GameState.building_levels())
 	hp_max = st.hp
@@ -111,6 +118,10 @@ func _ready() -> void:
 	_foot = Fx.foot_ring(Art.GRADE_COLORS[def.grade], _color)
 	_foot.position.y = 0.02
 	add_child(_foot)
+	_aura_ring = Fx.aura_ring()
+	_aura_ring.position.y = 0.03
+	_aura_ring.visible = false
+	add_child(_aura_ring)
 	GameState.refilled.connect(reset)
 	reset()
 
@@ -186,6 +197,7 @@ func take_damage(amount: float, source = null) -> void:
 		_model.play_death()
 		_ring.visible = false
 		_foot.visible = false
+		_aura_ring.visible = false
 
 
 ## 회복(최대 HP 상한). 실제로 오른 양.
@@ -312,6 +324,10 @@ func _find_target():
 ## 쿨 스킬: heal_aura(반경 안 아군 회복), gate_repair(자기 면 성문 회복), aoe_blast 쿨 감소(발사는 교전 중에만).
 func _tick_skills(delta: float) -> void:
 	_blast_cd -= delta
+	_aura_cd -= delta
+	if _aura_cd <= 0.0:
+		_aura_cd = AURA_SCAN
+		_aura_ring.visible = _aura_mult() > 1.0
 	if _sk.has("heal_aura"):
 		_heal_cd -= delta
 		if _heal_cd <= 0.0:
@@ -328,10 +344,13 @@ func _heal_aura() -> void:
 	var radius: float = _sk.heal_aura[1]
 	var healed := false
 	for h in get_tree().get_nodes_in_group("heroes"):
-		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= radius:
-			healed = h.heal(h.hp_max * _sk.heal_aura[2] / 100.0) > 0.0 or healed
+		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= radius \
+				and h.heal(h.hp_max * _sk.heal_aura[2] / 100.0) > 0.0:
+			healed = true
+			Fx.heal_cross(h)
 	if healed:
 		Fx.heal_ring(get_parent(), global_position, radius)
+		_announce("heal_aura")
 
 
 ## 자기 면 성문 앞이나 같은 면 성벽 위 자리에 서 있을 때만(이동·추격 중이면 아님). 부서진 성문은 GameState가 거른다.
@@ -340,6 +359,7 @@ func _gate_repair() -> void:
 		return
 	if GameState.repair_gate(side, GameState.gate_hp_max * _sk.gate_repair[1] / 100.0) > 0.0:
 		Fx.repair(get_parent(), Formation.gate_position(castle.half, side))
+		_announce("gate_repair")
 
 
 ## 공격 시작(개정 12-2 §3): 대상을 고정하고 모션을 재생한다(간격 interval에 맞춰 빨라질 수 있다). 피해는 모션의 타격 순간(_release)에.
@@ -380,21 +400,36 @@ func _release() -> void:
 		p.kind = shot[0]
 		p.speed = shot[1]
 		p.color = _color
+		p.tail = _sk.has("multishot")
 		p.on_hit = _strike.bind(a, i == 0, _attacks)
 		get_parent().add_child(p)
 		p.global_position = global_position + MUZZLE
 
 
 ## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun(attack_no번째 공격)·lifesteal·cleave·chain.
+## 연출(개정 17): crit = 큰 별 불꽃, execute·boss_slayer = 붉은 X, crit·execute·stun = 이름 띠.
 func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 	var roll := randf()
-	var d := Skills.damage(_sk, a, roll, m.hp_ratio(), m.kind == "epic_boss")
-	m.take_damage(d, DamageNumbers.Kind.CRIT if _sk.has("crit") and roll < _sk.crit[0] / 100.0 else DamageNumbers.Kind.HIT)
+	var ratio: float = m.hp_ratio()
+	var boss: bool = m.kind == "epic_boss"
+	var d := Skills.damage(_sk, a, roll, ratio, boss)
+	var crit: bool = _sk.has("crit") and roll < _sk.crit[0] / 100.0
+	var execute: bool = _sk.has("execute") and ratio <= _sk.execute[0] / 100.0
+	var at: Vector3 = m.global_position + HIT_HEIGHT
+	m.take_damage(d, DamageNumbers.Kind.CRIT if crit else DamageNumbers.Kind.HIT)
+	if crit:
+		Fx.spark(get_parent(), at, Fx.CRIT_ORANGE, 1.0)
+		_announce("crit")
+	if execute or (boss and _sk.has("boss_slayer")):
+		Fx.slash(get_parent(), at)
+		if execute:
+			_announce("execute")
 	_on_hit(m, a)
 	if not primary:
 		return
 	if Skills.stuns(_sk, attack_no) and m.is_alive():
 		m.apply_stun(_sk.stun[1])
+		_announce("stun")
 	if _sk.has("lifesteal"):
 		heal(d * _sk.lifesteal[0] / 100.0)
 	if _sk.has("cleave") and role == "melee":
@@ -441,7 +476,8 @@ func _blast(center: Vector3) -> void:
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
-	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1])
+	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade == "SSR" and GameData.fx_shake())  # SSR이면 카메라를 약하게 흔든다
+	_announce("aoe_blast")
 
 
 ## from 주변 radius 안 살아 있는 몬스터(exclude 빼고) 가까운 순 최대 n마리. 지상 영웅은 자기 영역(성 안/밖)만.
@@ -459,11 +495,21 @@ func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
 	return out.slice(0, n)
 
 
-## atk_aura: 반경 안 다른 영웅들의 오라 중 가장 큰 것 하나.
+## 스킬 발동 표시(개정 17 §3): 머리 위 이름 띠(고유 색, 0.8초) + 발밑 링 맥동. 같은 영웅은 BANNER_GAP초에 한 번.
+func _announce(kind: String) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _banner_at < BANNER_GAP or not is_inside_tree():
+		return
+	_banner_at = now
+	DamageNumbers.banner(self, Skills.name_of(kind, def.id) + "!", _color)
+	Fx.pulse(self, _foot, _color)
+
+
+## atk_aura: 반경 안 다른 영웅들의 오라(해금된 것만) 중 가장 큰 것 하나.
 func _aura_mult() -> float:
 	var best := 0.0
 	for h in get_tree().get_nodes_in_group("heroes"):
-		var hs: Dictionary = h.def.skills
+		var hs: Dictionary = h._sk
 		if h != self and h.is_alive() and hs.has("atk_aura") \
 				and Formation.flat_distance(h.global_position, global_position) <= hs.atk_aura[0]:
 			best = maxf(best, hs.atk_aura[1])

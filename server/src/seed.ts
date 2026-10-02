@@ -36,12 +36,14 @@ export const TABLES: TableSpec[] = [
     cols: {
       id: 'key', name: 'text', title: 'text', grade: 'text', role: 'text', archetype: 'text', model: 'text', gear: 'text', color: 'text',
       hp: 'num', atk: 'num', range: 'num', atk_interval: 'num', speed: 'num', aggro: 'num',
-      skill1: 'opt', s1a: 'optnum', s1b: 'optnum', s1c: 'optnum', skill2: 'opt', s2a: 'optnum', s2b: 'optnum', s2c: 'optnum', desc: 'text',
+      skill1: 'opt', s1a: 'optnum', s1b: 'optnum', s1c: 'optnum', skill2: 'opt', s2a: 'optnum', s2b: 'optnum', s2c: 'optnum',
+      skill3: 'opt', s3a: 'optnum', s3b: 'optnum', s3c: 'optnum', desc: 'text', // 개정 17: 스킬 3(★5)
     },
     sql: {
       ...Object.fromEntries(['id', 'name', 'title', 'grade', 'role', 'archetype', 'model', 'gear', 'color'].map((n) => [n, 'text'])),
       ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']),
-      skill1: 'text', ...real(['s1a', 's1b', 's1c']), skill2: 'text', ...real(['s2a', 's2b', 's2c']), desc: 'text',
+      skill1: 'text', ...real(['s1a', 's1b', 's1c']), skill2: 'text', ...real(['s2a', 's2b', 's2c']),
+      skill3: 'text', ...real(['s3a', 's3b', 's3c']), desc: 'text',
     },
   },
   {
@@ -74,7 +76,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
   'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
   'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
-  'fever_kills', 'fever_sec', 'fever_spawn_mult']
+  'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star']
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
@@ -93,6 +95,11 @@ export const MAX_HERO_SLOTS = 12 // 앱 GameData.MAX_HERO_SLOTS
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
 export const GRADES = ['R', 'SR', 'SSR']
+// 개정 17: 등급별 스킬 수(skill1부터 빈틈없이)와 스킬 종류 — 앱 GameData.GRADE_SKILLS·Skills.KINDS와 같다
+export const GRADE_SKILLS: Record<string, number> = { R: 2, SR: 3, SSR: 3 }
+export const SKILL_KINDS = ['heal_aura', 'atk_aura', 'dmg_reduce', 'dodge', 'thorns', 'lifesteal', 'haste', 'rage', 'crit', 'execute',
+  'boss_slayer', 'cleave', 'multishot', 'chain', 'aoe_blast', 'slow', 'stun', 'poison', 'gate_repair']
+const SKILL_COLS = ['skill1', 'skill2', 'skill3']
 
 const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/
 export const isNum = (s: string) => NUM_RE.test(s)
@@ -215,6 +222,13 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   if (stat !== null && !(stat >= 0)) err('hero_level_stat', `must be 0 or more: '${raw('hero_level_stat')}'`)
   const mult = num('promote_mult')
   if (mult !== null && !(mult >= 1)) err('promote_mult', `must be 1 or more: '${raw('promote_mult')}'`)
+  // 개정 17 스킬 해금 승급: 0..MAX_PROMOTION 정수, skill2 ≤ skill3
+  const stars: number[] = []
+  for (const k of ['skill2_unlock_star', 'skill3_unlock_star']) {
+    if (/^\d+$/.test(raw(k)) && Number(raw(k)) <= MAX_PROMOTION) stars.push(Number(raw(k)))
+    else if (num(k) !== null) err(k, `must be an integer in 0..${MAX_PROMOTION}: '${raw(k)}'`)
+  }
+  if (stars.length === 2 && stars[0] > stars[1]) err('skill3_unlock_star', `must be at least skill2_unlock_star: ${stars[1]} < ${stars[0]}`)
   const shards = raw('promote_shards').split('|').map((x) => x.trim())
   if (byKey.has('promote_shards') && !(shards.length === MAX_PROMOTION && shards.every((x) => /^\d+$/.test(x) && Number(x) >= 1))) {
     err('promote_shards', `must be ${MAX_PROMOTION} integers of at least 1 separated by '|': '${raw('promote_shards')}'`)
@@ -315,6 +329,24 @@ function checkSoldiers(t: Tables, errors: string[]) {
   }
 }
 
+// 영웅 스킬(개정 17, 앱 GameData와 같은 규칙): 등급별 개수(SSR·SR 3, R 2)를 skill1부터 빈틈없이, 알려진 종류만, 한 영웅에 같은 종류 둘 없음.
+// 숫자 범위는 앱이 본다(Skills.RULES). 모르는 등급은 DB 제약이 막는다.
+function checkHeroSkills(rows: CsvRow[], errors: string[]) {
+  for (const h of rows) {
+    const err = (col: string, why: string) => errors.push(`heroes.csv line ${h._line} column '${col}': ${why}`)
+    const want = GRADE_SKILLS[String(h.grade)] ?? 3
+    const gap = SKILL_COLS.findIndex((c, i) => (h[c] === null) !== (i >= want))
+    if (gap >= 0) err(SKILL_COLS[gap], `${h.grade} heroes have exactly ${want} skills (skill1..skill${want})`)
+    const seen = new Set<string>()
+    for (const c of SKILL_COLS) {
+      const k = h[c]
+      if (k === null) continue
+      if (!SKILL_KINDS.includes(String(k)) || seen.has(String(k))) err(c, `unknown or repeated skill '${k}'`)
+      seen.add(String(k))
+    }
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -344,6 +376,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
     for (const g of GRADES) {
       if (!out.heroes.some((h) => h.grade === g)) errors.push(`heroes.csv line 0 column 'grade': no ${g} heroes to recruit`)
     }
+    checkHeroSkills(out.heroes, errors)
   }
   if (errors.length) throw new CsvError(errors)
   return out

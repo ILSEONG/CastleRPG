@@ -93,6 +93,9 @@ func _init() -> void:
 	test_portraits()
 	test_keep_tier_lockstep()
 	test_soldier_figures()
+	test_skill_unlock()
+	test_skill_unlock_validation()
+	test_fx_r17_meshes()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -179,10 +182,11 @@ func test_game_tables() -> void:
 	var w := GameData.hero("hans")
 	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
 		and w.color == "#95A5A6" and w.hp == 440.0 and w.atk == 30.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
-		and w.skills == {"lifesteal": [10.0, 0.0, 0.0]}, "hans row")
+		and w.skills == {"lifesteal": [10.0, 0.0, 0.0], "dmg_reduce": [10.0, 0.0, 0.0]}, "hans row (R: two skills)")
 	var a := GameData.hero("arteon")
-	check(a.skills == {"heal_aura": [6.0, 6.0, 8.0], "dmg_reduce": [25.0, 0.0, 0.0]} and a.desc.begins_with("성문 앞을"), "arteon row: two skills, empty numbers are 0, desc")
-	check(GameData.hero("ignis").skills.size() == 1, "an empty skill2 is no skill")
+	check(a.skills == {"heal_aura": [6.0, 6.0, 8.0], "dmg_reduce": [25.0, 0.0, 0.0], "atk_aura": [6.0, 15.0, 0.0]} and a.desc.begins_with("성문 앞을"),
+		"arteon row: three skills in column order, empty numbers are 0, desc")
+	check(GameData.hero("hans").skills.size() == 2 and GameData.hero("ignis").skills.keys() == ["aoe_blast", "poison", "haste"], "an empty skill3 is no skill (R)")
 	check(GameData.hero("nobody").is_empty(), "unknown hero is empty")
 	var res := GameData.resources()
 	check(res.size() == 3 and res[0].id == "wood" and res[1].id == "stone" and res[2].id == "food", "resources keep file order")
@@ -241,11 +245,14 @@ func _remote_checks() -> int:
 	p.config.keep_interior_tiers = "1:20|3:24|6:28"
 	p.config.starter_heroes = "jack|kyle"
 	p.heroes[1].s1a = 5  # 서버 행처럼: 숫자는 숫자, 빈 칸은 null
-	p.heroes[1].skill2 = null
-	p.heroes[1].s2a = null
+	p.heroes[1].s2c = null
+	p.heroes[1].s3b = null
+	p.heroes[17].skill3 = null  # 한스(R): 셋째 칸 없음
+	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
 	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 22 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
-	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0]}, "remote hero row with numbers and nulls parses skills")
+	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "poison": [40.0, 3.0, 0.0], "haste": [25.0, 0.0, 0.0]}
+		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(2) == 4 and GameData.hero_slots(3) == 8 and GameData.interior_tiles(6) == 28, "remote config replaces the table")
 	check(is_equal_approx(GameData.stage(10).hp_mult, 1.9) and GameData.stage(1).hp_mult == 1.0, "remote stages replace the table")
@@ -2402,3 +2409,99 @@ func test_soldier_figures() -> void:
 			if foot.intersects(blk[1]):
 				hits.append([units[i].type, p, blk[0]])
 	check(FormationScript.soldier_grid() == Vector2i(11, 6) and hits.is_empty(), "at 0.9 the 66-soldier formation (horses %.2f m long) still clears every building mesh, the merchant and the cart: %s" % [hb.size.z * s, hits.slice(0, 3)])
+
+
+## 개정 17 §1·§2: 스킬 해금 함수(등급·★별 쓰는 스킬), 표 22행 × 칸 수(SSR·SR 3, R 2), 잠긴 스킬은 전투 수식에 안 들어간다.
+func test_skill_unlock() -> void:
+	const Skills := preload("res://scripts/skills.gd")
+	GameData.load_tables()
+	check(range(3).map(func(i): return GameData.skill_unlock_star(i)) == [0, 3, 5], "unlock stars: skill1 0, skill2 3, skill3 5")
+	var se := GameData.hero("seraphine")
+	var by_star := range(6).map(func(p): return GameData.active_skills(se, p).keys())
+	check(by_star == [["chain"], ["chain"], ["chain"], ["chain", "slow"], ["chain", "slow"], ["chain", "slow", "stun"]], "SSR seraphine: chain, +slow at 3, +stun at 5: %s" % [by_star])
+	var hans := GameData.hero("hans")
+	check(GameData.active_skills(hans, 0).keys() == ["lifesteal"] and GameData.active_skills(hans, 3).keys() == ["lifesteal", "dmg_reduce"]
+		and GameData.active_skills(hans, 5).size() == 2, "R hans: skill2 at 3, nothing more at 5")
+	check(GameData.active_skills(se, 5) == se.skills and GameData.active_skills({}, 5).is_empty(), "everything unlocked at 5 equals the table; no skills -> empty")
+	var counts := {"SSR": 0, "SR": 0, "R": 0}
+	for h in GameData.heroes():
+		counts[h.grade] += 1
+		check(h.skills.size() == GameData.GRADE_SKILLS[h.grade], "hero %s (%s) has %d skills" % [h.id, h.grade, h.skills.size()])
+	check(GameData.heroes().size() == 22 and counts == {"SSR": 10, "SR": 7, "R": 5}, "22 rows: 10 SSR, 7 SR, 5 R")
+	# 잠긴 스킬은 전투 수식에 안 들어간다(능력치는 승급 배율만)
+	var kyle := GameData.hero("kyle")
+	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 81.0, 0.0, 0.2, false), 81.0 * 2.5)
+		and is_equal_approx(Skills.damage(GameData.active_skills(kyle, 3), 81.0, 0.0, 0.2, false), 81.0 * 2.5 * 2.0), "kyle: execute (skill2) only adds damage from 3")
+	var nev := GameData.hero("nev")
+	check(not Skills.stuns(GameData.active_skills(nev, 2), 5) and Skills.stuns(GameData.active_skills(nev, 3), 5), "nev: stun (skill2) only from 3")
+	var rian := GameData.hero("rian")
+	check(Skills.incoming(GameData.active_skills(rian, 0), 100.0, 0.0) == Vector2(100.0, 0.0) and Skills.incoming(GameData.active_skills(rian, 3), 100.0, 0.0) == Vector2.ZERO,
+		"rian: dodge (skill2) only from 3")
+	var ig := GameData.hero("ignis")
+	check(Skills.interval(GameData.active_skills(ig, 4), 1.2, 1.0) == 1.2 and is_equal_approx(Skills.interval(GameData.active_skills(ig, 5), 1.2, 1.0), 1.2 / 1.25),
+		"ignis: haste (skill3) only from 5")
+	check(GameData.hero_stats(ig, 1, 3).hp == float(ig.hp) * GameData.promote_mult(3), "stats do not depend on unlocked skills")
+	check(Skills.name_of("poison", "ignis") == "화상" and Skills.name_of("poison", "mira") == "독" and Skills.name_of("aoe_blast") == "폭발", "per-hero skill names (ignis poison = 화상)")
+	check(GameData.fx_shake(), "fx_shake is on by default")
+	GameData._config.fx_shake = "0"
+	check(not GameData.fx_shake(), "fx_shake 0 turns the camera shake off")
+	GameData._config.erase("fx_shake")
+	check(GameData.fx_shake(), "a missing fx_shake means on")
+	GameData.load_tables()
+
+
+## 개정 17 앱 검증(CSV·apply_remote): 등급별 스킬 수(SSR·SR 3, R 2, skill1부터 빈틈없이), 해금 설정 0..5 정수·오름차순.
+func test_skill_unlock_validation() -> void:
+	var logged := _errors.count
+	GameData.load_tables()
+	var before := _tables_hash()
+	for what in ["SR hero without skill3", "R hero with a third skill", "skill2 empty but skill3 set", "unlock star above max",
+			"unlock star not an integer", "unlock stars descending", "unlock key missing"]:
+		var q := _payload()
+		_corrupt_r17(q, what)
+		check(not GameData.apply_remote(q) and GameData.errors == 1, "apply_remote rejects: %s (errors %d)" % [what, GameData.errors])
+		check(_tables_hash() == before, "tables unchanged after: %s" % what)
+	var q := _payload()
+	q.config.skill2_unlock_star = "0"
+	q.config.skill3_unlock_star = "0"
+	check(GameData.apply_remote(q) and GameData.active_skills(GameData.hero("seraphine"), 0).size() == 3, "unlock stars 0 open every skill at once")
+	# CSV: 같은 규칙(SR 브론의 셋째 칸을 비운다)
+	var hp := "user://t_heroes.csv"
+	var csv := FileAccess.get_file_as_string(GameData.HEROES_PATH)
+	check(csv.contains(",thorns,15,,,lifesteal,8,,,"), "precondition: bron's row has thorns then lifesteal")
+	_write(hp, csv.replace(",thorns,15,,,lifesteal,8,,,", ",thorns,15,,,,,,,"))
+	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, hp)
+	check(GameData.errors == 1, "CSV: an SR row with two skills is one error (got %d)" % GameData.errors)
+	DirAccess.remove_absolute(hp)
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0, "default tables restored after unlock validation")
+
+
+func _corrupt_r17(q: Dictionary, what: String) -> void:
+	match what:
+		"SR hero without skill3": q.heroes[10].skill3 = null  # 브론
+		"R hero with a third skill":  # 한스
+			q.heroes[17].skill3 = "haste"
+			q.heroes[17].s3a = 10
+		"skill2 empty but skill3 set": q.heroes[0].skill2 = ""
+		"unlock star above max": q.config.skill3_unlock_star = "6"
+		"unlock star not an integer": q.config.skill2_unlock_star = "2.5"
+		"unlock stars descending":
+			q.config.skill2_unlock_star = "5"
+			q.config.skill3_unlock_star = "4"
+		"unlock key missing": q.config.erase("skill2_unlock_star")
+
+
+## 개정 17 이펙트 메시: 새 종류마다 한 면, 가산 재질 하나(공유), atk_aura 고리는 늘 있는 노드(상한 밖).
+func test_fx_r17_meshes() -> void:
+	const Fx := preload("res://scripts/fx.gd")
+	for kind in ["flash", "shock", "shard", "cross", "hammer", "star", "slash", "glow_ring", "aura", "tail"]:
+		var m: Mesh = Fx._mesh(kind, Color.RED)
+		check(m != null and m.get_surface_count() == 1, "fx mesh %s builds" % kind)
+	var g := Fx.glow_material()
+	check(g == Fx.glow_material() and g.blend_mode == BaseMaterial3D.BLEND_MODE_ADD and g.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED, "one shared additive material")
+	var live := Fx.live()
+	var ring := Fx.aura_ring()
+	check(Fx.live() == live and ring.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and ring.material_override == Fx.material(), "aura ring: not counted, no shadow, shared material")
+	ring.free()

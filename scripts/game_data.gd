@@ -18,8 +18,10 @@ const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 const HERO_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]
 const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "model", "gear", "color", "desc"]
-const HERO_SKILL_COLS := [["skill1", "s1a", "s1b", "s1c"], ["skill2", "s2a", "s2b", "s2c"]]  # 빈 칸 = 없음(서버는 null)
+const HERO_SKILL_COLS := [["skill1", "s1a", "s1b", "s1c"], ["skill2", "s2a", "s2b", "s2c"], ["skill3", "s3a", "s3b", "s3c"]]  # 빈 칸 = 없음(서버는 null)
 const GRADES := ["R", "SR", "SSR"]
+const GRADE_SKILLS := {"R": 2, "SR": 3, "SSR": 3}  # 등급별 스킬 수(개정 17) — skill1부터 빈틈없이. 서버 seed.GRADE_SKILLS
+const UNLOCK_KEYS := ["skill2_unlock_star", "skill3_unlock_star"]  # 스킬 2·3이 열리는 승급(0..MAX_PROMOTION, 오름차순)
 const ROLES := ["melee", "ranged"]
 const HERO_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 커야 한다(간격 0이면 매 프레임 공격)
 const HERO_NONNEG_COLS := ["atk", "aggro"]
@@ -31,7 +33,7 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "promote_mult",
 	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
 	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
-	"fever_kills", "fever_sec", "fever_spawn_mult"]
+	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star"]
 const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
 const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항목 수 = 이 값. 서버 rules.MAX_PROMOTION
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
@@ -80,7 +82,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
 		"stages": _read(stages_path, ["stage"] + STAGE_COLS),
-		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1]),
+		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1] + HERO_SKILL_COLS[2]),
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
 		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS),
 		"soldiers": _read(soldiers_path, SOLDIER_STR_COLS + SOLDIER_NUM_COLS),
@@ -347,6 +349,30 @@ static func promote_cost(promotion: int) -> int:
 	return int(list[promotion]) if promotion >= 0 and promotion < mini(list.size(), MAX_PROMOTION) else 0
 
 
+# --- 스킬 해금(개정 17 §1) ---
+
+## 스킬 칸 i(0 = skill1)가 열리는 승급 단계: skill1은 0, 나머지는 skill2_unlock_star·skill3_unlock_star.
+static func skill_unlock_star(i: int) -> int:
+	return 0 if i <= 0 else int(config_num(UNLOCK_KEYS[mini(i, UNLOCK_KEYS.size()) - 1]))
+
+
+## 승급 promotion에서 쓰는 스킬 {종류: [a, b, c]}(칸 순서). 잠긴 칸은 빠진다 — 전투(hero.gd)는 이것만 본다.
+## def.skills는 skill1부터 빈틈없이 채워져 있어(검증) 사전 순서 = 칸 순서다.
+static func active_skills(def: Dictionary, promotion: int) -> Dictionary:
+	var out := {}
+	var kinds: Array = def.get("skills", {}).keys()
+	for i in kinds.size():
+		if promotion >= skill_unlock_star(i):
+			out[kinds[i]] = def.skills[kinds[i]]
+	return out
+
+
+## 카메라 흔들림 설정 fx_shake(없으면 켬, "0"이면 끔).
+static func fx_shake() -> bool:
+	_ensure()
+	return String(_config.get("fx_shake", "1")).strip_edges() != "0"
+
+
 # --- 영웅 레벨(개정 11 §2.1). 서버 rules.heroMaxLevel·levelupCost와 같은 식 ---
 
 ## 레벨 배율 = 1 + hero_level_stat × (L − 1)(1레벨 기준 직선).
@@ -474,7 +500,7 @@ static func _blank(v) -> bool:
 	return v == null or (v is String and v.strip_edges().is_empty())
 
 
-## skill1·skill2 열 → {종류: [a, b, c]}(빈 숫자 0). 빈 종류 = 없음. 모르는 종류, 필요한 숫자 빠짐, 숫자 아님, 범위 밖(Skills.RULES),
+## skill1~skill3 열 → {종류: [a, b, c]}(칸 순서, 빈 숫자 0). 빈 종류 = 없음(개수·빈틈은 _check_contents가 본다). 모르는 종류, 필요한 숫자 빠짐, 숫자 아님, 범위 밖(Skills.RULES),
 ## 같은 종류 둘 = 오류(null).
 static func _hero_skills(row: Dictionary):
 	var sk := {}
@@ -605,6 +631,12 @@ static func _check_contents(t: Dictionary) -> void:
 			_err("heroes", h._line, "role", "role must be melee or ranged: '%s'" % h.role)
 		if not (h.color.length() == 7 and h.color.begins_with("#") and h.color.substr(1).is_valid_hex_number()):
 			_err("heroes", h._line, "color", "color must be #RRGGBB: '%s'" % h.color)
+		var want: int = GRADE_SKILLS.get(h.grade, 3)  # 개정 17: SSR·SR 3, R 2 — skill1부터 빈틈없이(모르는 등급은 위에서 알렸다)
+		for i in HERO_SKILL_COLS.size():
+			var col: String = HERO_SKILL_COLS[i][0]
+			if _blank(h[col]) != (i >= want):
+				_err("heroes", h._line, col, "%s heroes have exactly %d skills (skill1..skill%d): '%s'" % [h.grade, want, want, str(h[col])])
+				break
 		for c in HERO_POSITIVE_COLS:
 			if not h[c] > 0.0:
 				_err("heroes", h._line, c, "must be greater than 0: %s" % h[c])
@@ -761,6 +793,16 @@ static func _check_gacha(cfg: Dictionary) -> void:
 	var mult := String(cfg.get("promote_mult", ""))
 	if mult.is_valid_float() and not mult.to_float() >= 1.0:
 		_err("config", 0, "promote_mult", "must be 1 or more: '%s'" % mult)
+	# 스킬 해금(개정 17, 서버 seed와 같은 규칙): 0..MAX_PROMOTION 정수, skill2 ≤ skill3
+	var stars := []
+	for k in UNLOCK_KEYS:
+		var s := String(cfg.get(k, "")).strip_edges()
+		if s.is_valid_int() and not s.begins_with("+") and s.to_int() >= 0 and s.to_int() <= MAX_PROMOTION:
+			stars.append(s.to_int())
+		elif s.is_valid_float():
+			_err("config", 0, k, "must be an integer in 0..%d: '%s'" % [MAX_PROMOTION, s])
+	if stars.size() == 2 and stars[0] > stars[1]:
+		_err("config", 0, "skill3_unlock_star", "must be at least skill2_unlock_star: %d < %d" % [stars[1], stars[0]])
 
 
 ## key,value 행 → {키: 문자열}. 키가 겹치면 오류.
