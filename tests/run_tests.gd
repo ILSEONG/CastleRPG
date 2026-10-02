@@ -2486,8 +2486,9 @@ func test_economy_sell_many() -> void:
 	e.free()
 
 
-## 무리 스폰: 몬스터는 spawn_group(3)마리씩 같은 시각·같은 면에 나온다. 방치는 idle_interval(8초 = 예전 4초의 2배)마다 한 무리,
-## 스테이지는 웨이브 크기 그대로 무리 간격 spawn_spacing_sec(1초 = 예전 0.5초의 2배), 웨이브 사이·보스는 그대로.
+## 무리 스폰: 몬스터는 spawn_group(3)마리씩 같은 시각에 나온다. 방치는 idle_interval(8초 = 예전 4초의 2배)마다 한 면에 한 무리,
+## 스테이지는 웨이브 크기 그대로 무리 간격 spawn_spacing_sec(1초 = 예전 0.5초의 2배), 무리는 이웃 면에 한 마리씩(면 = 웨이브 안 순번 % 4,
+## 예전과 같다), 웨이브 사이·보스는 그대로.
 func test_spawn_groups() -> void:
 	GameData.load_tables()
 	check(WaveDirector.group_size() == 3 and GameData.stage(1).idle_interval == 8.0 and GameData.stage(40).idle_interval == 8.0
@@ -2495,7 +2496,7 @@ func test_spawn_groups() -> void:
 	var idle := WaveDirector.build(1, WaveDirector.MODE_IDLE)
 	var times: Array = idle.map(func(e): return e.time)
 	check(times == [8.0, 8.0, 8.0, 16.0, 16.0, 16.0, 24.0, 24.0, 24.0, 32.0, 32.0, 32.0], "idle: a group of 3 every 8 s %s" % [times])
-	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3")
+	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3 on one side")
 	for stage in [1, 5, 30]:
 		var st := GameData.stage(stage)
 		var ev := WaveDirector.build(stage, WaveDirector.MODE_STAGE)
@@ -2505,13 +2506,14 @@ func test_spawn_groups() -> void:
 		for e in grunts:
 			groups[e.time] = groups.get(e.time, []) + [e]
 		var keys: Array = groups.keys()
-		var one_side := keys.all(func(k): return groups[k].all(func(e): return e.side == groups[k][0].side and e.lanes == groups[k].size()))
 		var per_wave := ceili(int(st.wave_size) / 3.0)
 		var sizes_ok := true
 		for i in keys.size():
 			var want := 3 if i % per_wave < per_wave - 1 or int(st.wave_size) % 3 == 0 else int(st.wave_size) % 3
-			sizes_ok = sizes_ok and groups[keys[i]].size() == want and groups[keys[i]][0].side == i % 4
-		check(keys.size() == int(st.waves) * per_wave and one_side and sizes_ok, "stage %d: groups of 3 (last of a wave = rest) on one side each, sides cycle per group" % stage)
+			var base := (i % per_wave) * 3  # 웨이브 안 이 무리 첫 몬스터 순번
+			var sides: Array = groups[keys[i]].map(func(e): return e.side)
+			sizes_ok = sizes_ok and sides.size() == want and sides == range(base, base + want).map(func(n): return n % 4)
+		check(keys.size() == int(st.waves) * per_wave and sizes_ok, "stage %d: groups of 3 (last of a wave = rest), one per neighbouring side (side = index in wave %% 4)" % stage)
 		var gaps_ok := true
 		for i in range(1, keys.size()):
 			var want: float = 1.0 if i % per_wave != 0 else 1.0 + GameData.config_num("wave_gap_sec")
