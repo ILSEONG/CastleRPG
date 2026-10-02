@@ -46,6 +46,7 @@ interface Game {
   resources: { id: string; name: string; building: string; per_min: number; price: number }[]
   buildings: R.BuildingDef[] // 개정 12 건물 표(파일 순서)
   soldiers: R.SoldierDef[] // 개정 13 병종 표(파일 순서)
+  upgrades: R.UpgradeDef[] // 개정 20 공용 업그레이드 표(파일 순서)
   config: R.Config
 }
 
@@ -65,6 +66,7 @@ interface Player {
   build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
   soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
   soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
+  upgrades: Record<string, number> // 개정 20: 업그레이드 id → 레벨(0 초과만)
 }
 
 interface Train {
@@ -97,6 +99,7 @@ interface Change {
   soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
   soldierDeploy?: Record<string, number> // 새 병사 배치
   train?: Record<string, Train | null> // 병사 건물 → 새 훈련 대기열(null = 비움, 개정 16)
+  upgrades?: Record<string, number> // 업그레이드 id → 레벨 증가(개정 20)
   log?: { kind: string; detail: unknown }
 }
 
@@ -111,6 +114,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
 
 const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
+  coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   extract(epoch from s.build_finish)::float8 as build_finish,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
@@ -209,7 +213,7 @@ export function createApp(opts: AppOptions) {
     const [r] = await query(GAME_SQL)
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
-      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), config: json(r.config),
+      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades), config: json(r.config),
     }
   }
 
@@ -242,7 +246,7 @@ export function createApp(opts: AppOptions) {
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
-        soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)),
+        soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)), upgrades: counts(json(r.upgrades)),
       }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
@@ -267,6 +271,8 @@ export function createApp(opts: AppOptions) {
       const b = p.buildings[r.building]
       buildings[r.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
     }
+    const upgrades: Record<string, number> = {}
+    for (const u of game.upgrades) if ((p.upgrades[u.id] ?? 0) > 0) upgrades[u.id] = p.upgrades[u.id]
     const training: Record<string, Train | null> = {}
     for (const s of game.soldiers) training[s.building] = p.buildings[s.building]?.train ?? null
     const maxTier = game.soldiers.length ? R.cfgNum(game.config, 'soldier_max_tier') : 0
@@ -285,7 +291,7 @@ export function createApp(opts: AppOptions) {
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
         kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
-        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training,
+        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -346,6 +352,12 @@ export function createApp(opts: AppOptions) {
       ctes.push(`t${i} as (update player_buildings set train_count = ${p(t?.count ?? 0)}::int, train_tier = ${p(t?.tier ?? null)}::int, train_finish = to_timestamp(${p(t?.finish ?? null)}::float8)
         where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
     })
+    if (ch.upgrades && Object.keys(ch.upgrades).length) {
+      // from s: version 가드가 실패하면 레벨도 안 오른다. 새 행은 증가분이 곧 레벨
+      ctes.push(`u as (insert into player_upgrades (player_id, id, level) select s.player_id, x.key, x.value::int
+        from s, jsonb_each_text(${p(JSON.stringify(ch.upgrades))}::jsonb) as x
+        on conflict (player_id, id) do update set level = player_upgrades.level + excluded.level returning 1)`)
+    }
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
@@ -376,6 +388,7 @@ export function createApp(opts: AppOptions) {
     if (ch.build !== undefined) pl.build = ch.build
     for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
     if (ch.soldierDeploy !== undefined) pl.soldier_deploy = ch.soldierDeploy
+    for (const [k, d] of Object.entries(ch.upgrades ?? {})) pl.upgrades[k] = (pl.upgrades[k] ?? 0) + d
     pl.version += 1
   }
 
@@ -460,7 +473,7 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
-    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, config: g.config }
+    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, upgrades: g.upgrades, config: g.config }
     const version = createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16)
     const etag = `"${version}"`
     c.header('ETag', etag)
@@ -695,6 +708,30 @@ export function createApp(opts: AppOptions) {
         change: {
           goldTenths: -cost.gold * 10, heroLevels: { [heroId]: count },
           log: { kind: 'levelup', detail: { hero_id: heroId, from: own.level, to, count, gold: cost.gold, gold_tenths: -cost.gold * 10 } },
+        },
+        extra: { level: to },
+      }
+    })
+  })
+
+  // 공용 업그레이드(개정 20 §4): count 1..100. 모르는 id는 404 unknown_upgrade, 최대 레벨을 넘으면 409 max_level, 골드가 모자라면 409 not_enough_gold.
+  // 골드(정수, × 10 tenths) 차감·레벨·economy_log upgrade는 version 가드 한 문장 — 같이 들어가거나 같이 안 들어간다.
+  app.post('/v1/upgrade', auth, async (c) => {
+    const b = await body(c)
+    const id = strField(b, 'id')
+    const count = intField(b, 'count', 1, MAX_LEVELUP_COUNT)
+    return mutate(c, (p, g) => {
+      const def = g.upgrades.find((u) => u.id === id)
+      if (!def) throw new ApiError(404, 'unknown_upgrade', `upgrade '${id}' does not exist`)
+      const from = p.upgrades[id] ?? 0
+      const to = from + count
+      if (to > def.max_level) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${def.max_level}`)
+      const gold = R.upgradeCost(def, from, count)
+      if (Math.floor(p.gold_tenths / 10) < gold) throw new ApiError(409, 'not_enough_gold', `levels ${from} -> ${to} cost ${gold} gold`)
+      return {
+        change: {
+          goldTenths: -gold * 10, upgrades: { [id]: count },
+          log: { kind: 'upgrade', detail: { id, from, to, count, gold, gold_tenths: -gold * 10 } },
         },
         extra: { level: to },
       }

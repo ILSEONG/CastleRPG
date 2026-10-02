@@ -11,6 +11,7 @@ const RESOURCES_PATH := "res://data/resources.csv"
 const CONFIG_PATH := "res://data/config.csv"
 const BUILDINGS_PATH := "res://data/buildings.csv"
 const SOLDIERS_PATH := "res://data/soldiers.csv"
+const UPGRADES_PATH := "res://data/upgrades.csv"
 const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하는 정수 열
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
@@ -64,6 +65,11 @@ const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가�
 const KEEP_SLOT_STEP := 4  # 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 서버 seed.SLOT_STEP
 const MAX_HERO_SLOTS := 12  # 서버 seed.MAX_HERO_SLOTS
 const LEVELUP_INT_KEYS := ["hero_max_level_per_promotion", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만, 15: 승급당)
+const UPGRADE_STR_COLS := ["id", "name", "unit"]  # 개정 20 공용 업그레이드(성장). unit = pct(%) | pp(%p)
+const UPGRADE_NUM_COLS := ["per_level", "max_level", "cost_base", "cost_growth"]
+const UPGRADE_UNITS := ["pct", "pp"]
+const UPGRADE_KEYS := {"atk": "atk_pct", "hp": "hp_pct", "aspd": "aspd_pct", "mspd": "mspd_pct", "crit_rate": "crit_rate", "crit_dmg": "crit_dmg"}  # 항목 id → upgrade_bonus 키
+const BASE_CRIT_MULT := 1.5  # 모든 아군 공격의 기본 치명타 배율(개정 20 §3)
 const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
@@ -74,12 +80,13 @@ static var _resources: Array = []  # 파일 순서
 static var _config := {}  # 키 → 문자열
 static var _buildings: Array = []  # 파일 순서(개정 12)
 static var _soldiers: Array = []  # 파일 순서(개정 13)
+static var _upgrades: Array = []  # 파일 순서(개정 20)
 static var _loaded := false
 
 
 ## 기본 표를 다시 읽게 한다. 경로를 주면 그 파일을 쓴다(테스트용). 오류가 있어도 읽은 만큼은 쓴다.
 static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PATH, heroes_path := HEROES_PATH,
-		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH, soldiers_path := SOLDIERS_PATH) -> void:
+		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH, soldiers_path := SOLDIERS_PATH, upgrades_path := UPGRADES_PATH) -> void:
 	errors = 0
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
@@ -88,6 +95,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
 		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS),
 		"soldiers": _read(soldiers_path, SOLDIER_STR_COLS + SOLDIER_NUM_COLS),
+		"upgrades": _read(upgrades_path, UPGRADE_STR_COLS + UPGRADE_NUM_COLS),
 		"config": _config_map(_read(config_path, ["key", "value"])),
 	}))
 
@@ -97,7 +105,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 static func apply_remote(payload: Dictionary) -> bool:
 	errors = 0
 	var raw := {}
-	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers"]:
+	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers", "upgrades"]:
 		var rows = payload.get(table)
 		var out: Array = []
 		if rows is Array:
@@ -443,6 +451,50 @@ static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	return {"gold": gold}
 
 
+# --- 공용 업그레이드(개정 20 §2·§3). 서버 rules.upgradeCost와 같은 식 ---
+
+## 업그레이드 표(파일 순서). 행 = {id, name, unit, per_level, max_level, cost_base, cost_growth}(숫자는 float).
+static func upgrades() -> Array:
+	_ensure()
+	return _upgrades
+
+
+static func upgrade_def(id: String) -> Dictionary:
+	for u in upgrades():
+		if u.id == id:
+			return u
+	return {}
+
+
+## 레벨 level → level + 1 비용(정수 골드) = round(cost_base × cost_growth^level), level은 0부터. 모르는 id는 0.
+static func upgrade_cost(id: String, level: int) -> int:
+	var u := upgrade_def(id)
+	if u.is_empty():
+		return 0
+	return roundi(float(u.cost_base) * pow(float(u.cost_growth), level))
+
+
+## levels(id → 레벨)의 효과. 전부 비율(분수)이다: 0.115 = +11.5% / +11.5%p. 레벨은 0..max_level로 자른다. 쓰는 쪽:
+## 공격·HP × (1 + atk_pct·hp_pct), 공격 간격 ÷ (1 + aspd_pct), 이동 × (1 + mspd_pct), 치명타 확률 + crit_rate, 배율 + crit_dmg(crit_roll_params).
+static func upgrade_bonus(levels: Dictionary) -> Dictionary:
+	var out := {}
+	for key in UPGRADE_KEYS.values():
+		out[key] = 0.0
+	for u in upgrades():
+		if UPGRADE_KEYS.has(u.id):
+			out[UPGRADE_KEYS[u.id]] = clampi(int(levels.get(u.id, 0)), 0, int(u.max_level)) * float(u.per_level) / 100.0
+	return out
+
+
+## 치명타 굴림 한 번의 확률·배율(개정 20 §3). skill_rate = 치명타 스킬 확률(분수, 0.25), skill_mult = 스킬 배율(2.0 = 200%, 스킬 없음 = 0 이하),
+## bonus = upgrade_bonus. 스킬 없음: 확률 = crit_rate, 배율 = 1.5 + crit_dmg. 스킬 있음: 확률 = 스킬 + crit_rate(최대 1), 배율 = 스킬 배율 + crit_dmg.
+static func crit_roll_params(skill_rate: float, skill_mult: float, bonus: Dictionary) -> Dictionary:
+	var has_skill := skill_mult > 0.0
+	var rate := (skill_rate if has_skill else 0.0) + float(bonus.get("crit_rate", 0.0))
+	var mult := (skill_mult if has_skill else BASE_CRIT_MULT) + float(bonus.get("crit_dmg", 0.0))
+	return {"rate": clampf(rate, 0.0, 1.0), "mult": mult}
+
+
 ## 최종 HP = 표 기본값 × 레벨 배율 × 승급 배율(개정 15), 공격 = … × (1 + 연구소 보너스)(개정 12, 개정 13: 막사 HP 보너스 없음). {hp, atk}
 ## buildings = 건물 id → 레벨(Economy.levels). 비우면 연구소 1(보너스 없음).
 static func hero_stats(def: Dictionary, level: int, promotion: int, buildings := {}) -> Dictionary:
@@ -495,6 +547,7 @@ static func _install(t: Dictionary) -> void:
 	_resources = t.resources
 	_buildings = t.buildings
 	_soldiers = t.soldiers
+	_upgrades = t.upgrades
 	_config = t.config
 	_loaded = true
 
@@ -584,7 +637,7 @@ static func _hero_skills(row: Dictionary):
 
 ## 원시 표들 → 검사한 표들. 오류는 errors에 센다(교체 여부는 호출자가 결정).
 static func _build(raw: Dictionary) -> Dictionary:
-	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "soldiers": [], "config": raw.config}
+	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "soldiers": [], "upgrades": [], "config": raw.config}
 	for row in _convert(raw.monsters, ["id"], MONSTER_COLS):
 		if t.monsters.has(row.id):
 			_err("monsters", row._line, "id", "duplicate id '%s'" % row.id)
@@ -650,6 +703,13 @@ static func _build(raw: Dictionary) -> Dictionary:
 		else:
 			ids[row.id] = true
 			t.soldiers.append(row)
+	ids = {}
+	for row in _convert(raw.upgrades, UPGRADE_STR_COLS, UPGRADE_NUM_COLS):  # 개정 20
+		if ids.has(row.id):
+			_err("upgrades", row._line, "id", "duplicate id '%s'" % row.id)
+		else:
+			ids[row.id] = true
+			t.upgrades.append(row)
 	if errors == 0:
 		_check_contents(t)
 	return t
@@ -661,7 +721,7 @@ static func _check_contents(t: Dictionary) -> void:
 	for id in ["grunt", "epic_boss"]:
 		if not t.monsters.has(id):
 			_err("monsters", 0, "id", "missing required monster '%s'" % id)
-	for table in ["stages", "heroes", "resources", "buildings", "soldiers"]:
+	for table in ["stages", "heroes", "resources", "buildings", "soldiers", "upgrades"]:
 		if t[table].is_empty():
 			_err(table, 0, "", "table is empty")
 	for k in CONFIG_NUM_KEYS:
@@ -672,6 +732,7 @@ static func _check_contents(t: Dictionary) -> void:
 			_err("config", 0, k, "missing or empty list")
 	_check_buildings(t)
 	_check_soldiers(t)
+	_check_upgrades(t)
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
 		if not h.grade in GRADES:
@@ -810,6 +871,20 @@ static func _check_soldiers(t: Dictionary) -> void:
 			_err("config", 0, k, "missing or not a number")
 		elif not ((f >= 1.0 and f == floorf(f)) if int_key else ((f >= 0.0 and f == floorf(f)) if int0 else f > 0.0)):
 			_err("config", 0, k, "must be %s: '%s'" % ["an integer of at least 1" if int_key else ("a non-negative integer" if int0 else "greater than 0"), v])
+
+
+## 업그레이드 표(개정 20, 서버 seed.checkUpgrades와 같은 규칙): per_level·cost_base > 0, cost_growth ≥ 1, max_level ≥ 1 정수, unit은 pct·pp만.
+static func _check_upgrades(t: Dictionary) -> void:
+	for u in t.upgrades:
+		for c in ["per_level", "cost_base"]:
+			if not u[c] > 0.0:
+				_err("upgrades", u._line, c, "must be greater than 0: %s" % u[c])
+		if not u.cost_growth >= 1.0:
+			_err("upgrades", u._line, "cost_growth", "must be 1 or more: %s" % u.cost_growth)
+		if not (u.max_level >= 1.0 and u.max_level == floorf(u.max_level)):
+			_err("upgrades", u._line, "max_level", "must be an integer of at least 1: %s" % u.max_level)
+		if not u.unit in UPGRADE_UNITS:
+			_err("upgrades", u._line, "unit", "must be pct or pp: '%s'" % u.unit)
 
 
 ## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.

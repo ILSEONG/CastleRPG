@@ -1,0 +1,7 @@
+id,name,per_level,unit,max_level,cost_base,cost_growth
+atk,공격력,0.5,pct,200,1000,1.05
+hp,체력,0.5,pct,200,1000,1.05
+aspd,공격속도,0.25,pct,100,5000,1.07
+mspd,이동속도,0.25,pct,80,4000,1.07
+crit_rate,치명타 확률,0.1,pp,100,6000,1.07
+crit_dmg,치명타 배율,0.5,pp,100,6000,1.07

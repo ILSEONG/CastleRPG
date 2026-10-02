@@ -100,6 +100,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       deploy: ['hans', 'ella', 'dorik', 'nina'],
       soldiers: {}, soldier_deploy: {}, // 개정 13
       training: { barracks: null, archery: null, stable: null }, // 개정 16: 병사 건물 훈련 대기열
+      upgrades: {}, // 개정 20
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })
