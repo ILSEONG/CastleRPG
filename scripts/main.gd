@@ -85,6 +85,9 @@ func _build_world() -> void:
 	add_child(preload("res://scripts/portraits.gd").new())  # 영웅 피규어(개정 14 §2) — 카드(창)보다 먼저
 	castle = CastleScript.new()
 	add_child(castle)
+	var crowd = preload("res://scripts/crowd.gd").new()  # 유닛 겹침 해소(성벽·성문·건물 부지 안 넘김)
+	crowd.half = castle.half
+	add_child(crowd)
 	_build_ground(castle.half)
 	var scenery = BuildingsScript.new()
 	scenery.half = castle.half

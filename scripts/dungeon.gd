@@ -60,6 +60,9 @@ func _ready() -> void:
 	var stage: Dictionary = ArenaKit.plains() if type == "gold" else ArenaKit.castle()
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
+	var crowd = preload("res://scripts/crowd.gd").new()  # 유닛 겹침 해소(전투 자리 밖으로 밀지 않는다)
+	crowd.arena_r = ArenaKit.PLAINS_FIGHT_R if type == "gold" else ArenaKit.HALL_HALF
+	add_child(crowd)
 	add_child(PortraitsScript.new())  # 아래 영웅 띠 피규어(성 월드의 것은 트리 밖)
 	var rig = CameraRigScript.new()
 	add_child(rig)

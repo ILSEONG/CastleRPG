@@ -119,6 +119,7 @@ func _init() -> void:
 	test_hero_look_builder()
 	test_portrait_looks()
 	test_scene_snap()
+	test_crowd()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3707,3 +3708,127 @@ func test_scene_snap() -> void:
 		check(cams.size() == 1 and root.find_children("*", "WorldEnvironment", true, false).size() == 1 and units.size() == (11 if t == "gold" else 4) and inside,
 			"%s band scene: one camera, the arena lighting, %d models (3 heroes; unknown id skipped), all in front of the camera inside the band width" % [t, units.size()])
 		root.free()
+
+
+# --- 겹침 해소(crowd.gd) ---
+const CrowdScript := preload("res://scripts/crowd.gd")
+
+
+## 한 번 해소(층 lv, 아레나 = half < 0). mv = 이번 프레임 제 걸음(없으면 모두 제자리).
+func _crowd_run(half: float, pts: Array, radii: Array, w: Array, lv: Array, mv := []) -> PackedVector2Array:
+	var c = CrowdScript.new()
+	c.half = half
+	var steps := PackedVector2Array(mv)
+	steps.resize(pts.size())
+	var out: PackedVector2Array = c.separate(PackedVector2Array(pts), PackedFloat32Array(radii), PackedFloat32Array(w), PackedInt32Array(lv), steps)
+	c.free()
+	return out
+
+
+func test_crowd() -> void:
+	GameData.load_tables()
+	# 근접 사거리(중심 거리)는 맞닿는 거리(반지름 합) + 0.1보다 길다 — 밀려 붙어도 친다(사거리 판정은 그대로라 밸런스 유지)
+	var hero_r := CrowdScript.HUMAN_R * Art.CHARACTER_SCALE
+	var foot_r := hero_r * Art.SOLDIER_SCALE
+	var castle_kinds := {"grunt": GameData.monster("grunt"), "epic_boss": GameData.monster("epic_boss")}
+	var short := []
+	for kind in castle_kinds:
+		var m: Dictionary = castle_kinds[kind]
+		var mr: float = CrowdScript.MONSTER_R[kind] * float(m.scale)
+		for h in GameData.heroes():
+			if h.role == "melee" and float(h.range) < hero_r + mr + 0.1:
+				short.append("%s vs %s" % [h.id, kind])
+		for s in GameData.soldiers():
+			var sr: float = CrowdScript.CAVALRY_R if s.id == "cavalry" else foot_r
+			if float(s.range) < 3.0 and float(s.range) < sr + mr + 0.1:
+				short.append("%s vs %s" % [s.id, kind])
+			if float(m.range) < sr + mr + 0.1:
+				short.append("%s vs %s" % [kind, s.id])
+		if float(m.range) < hero_r + mr + 0.1:
+			short.append("%s vs hero" % kind)
+	for type in GameData.DUNGEON_TYPES:
+		for row in GameData.dungeon_rows(type):
+			var mr: float = CrowdScript.MONSTER_R[row.kind] * float(row.scale)
+			if float(row.range) < hero_r + mr + 0.1:
+				short.append("%s vs hero" % row.kind)
+			for h in GameData.heroes():
+				if h.role == "melee" and float(h.range) < hero_r + mr + 0.1:
+					short.append("%s vs %s" % [h.id, row.kind])
+	check(short.is_empty(), "every melee range reaches past contact distance (radius sum + 0.1): %s" % [short])
+	check(is_equal_approx(CrowdScript.MONSTER_R.grunt * float(castle_kinds.grunt.scale), 0.4) and CrowdScript.MONSTER_R.epic_boss * float(castle_kinds.epic_boss.scale) > 0.75,
+		"radii: grunt 0.4, epic boss ~0.8 (x model scale)")
+	# 같은 자리 둘 → 반지름 합만큼 떨어진다. 무게 역수로 나눈다(가벼운 쪽이 4배 더), 처리가 꺼진(w 0) 유닛은 안 밀린다, 다른 층끼리는 안 부딪는다
+	var q := _crowd_run(-1.0, [Vector2(1, 1), Vector2(1, 1)], [0.4, 0.4], [1.0, 1.0], [0, 0])
+	check(absf(q[0].distance_to(q[1]) - 0.8) < 0.001, "two units on one spot end a radius sum apart (%.3f)" % q[0].distance_to(q[1]))
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.4, 0)], [0.4, 0.4], [4.0, 1.0], [0, 0])
+	check(q[0].is_equal_approx(Vector2(-0.32, 0)) and q[1].is_equal_approx(Vector2(0.48, 0)), "the push splits by inverse mass (light moves 0.32, heavy 0.08): %s" % [q])
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.4, 0)], [0.4, 0.4], [0.0, 1.0], [0, 0])
+	check(q[0] == Vector2.ZERO and q[1].is_equal_approx(Vector2(0.8, 0)), "an immovable unit (w 0) stays, the other takes the whole push")
+	# 정면으로 마주 걸어 부딪치면 서로 옆으로 비킨다(같은 줄에서 막혀 멈추지 않는다). 길목에 선 유닛에 걸어 들어가도 옆으로 돈다
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.6, 0)], [0.4, 0.4], [1.0, 1.0], [0, 0], [Vector2(0.05, 0), Vector2(-0.05, 0)])
+	check(q[0].y * q[1].y < 0.0 and absf(q[0].y) > 0.05, "head-on walkers sidestep to opposite sides: %s" % [q])
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.6, 0)], [0.4, 0.4], [1.0, 0.0], [0, 0], [Vector2(0.05, 0), Vector2.ZERO])
+	check(absf(q[0].y) > 0.05 and q[1] == Vector2(0.6, 0), "a walker that bumps a unit standing in its line slides around it: %s" % [q])
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.2, 0)], [0.4, 0.4], [1.0, 1.0], [0, 1])
+	check(q[0] == Vector2.ZERO and q[1] == Vector2(0.2, 0), "ground and wall-top units do not push each other")
+	var c = CrowdScript.new()
+	c.arena_r = 10.0
+	q = c.separate(PackedVector2Array([Vector2(9.9, 0), Vector2(9.5, 0)]), PackedFloat32Array([0.4, 0.4]), PackedFloat32Array([1.0, 0.0]), PackedInt32Array([0, 0]),
+		PackedVector2Array([Vector2.ZERO, Vector2.ZERO]))
+	c.free()
+	check(q[0].length() <= 10.001, "arena: a push never leaves the arena radius (%.2f)" % q[0].length())
+	# 성 전장: 밀림은 성벽·성문을 넘기지 않는다
+	var half := GameData.interior_half(1)
+	var outer := half + Balance.WALL_T
+	q = _crowd_run(half, [Vector2(0, -(outer + 0.1)), Vector2(0.1, -(outer + 0.5))], [0.4, 0.4], [1.0, 0.0], [0, 0])
+	check(not FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "a monster pressed against the closed north gate is not pushed through it: %s" % q[0])
+	q = _crowd_run(half, [Vector2(6, -(outer + 0.1)), Vector2(6.1, -(outer + 0.5))], [0.4, 0.4], [1.0, 0.0], [0, 0])
+	check(not FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "nor through the wall beside it")
+	q = _crowd_run(half, [Vector2(6, -(half - 0.1)), Vector2(6.1, -(half - 0.5))], [0.45, 0.45], [1.0, 0.0], [0, 0])
+	check(maxf(absf(q[0].x), absf(q[0].y)) < half, "an inside unit is not pushed into the wall: %s" % q[0])
+	q = _crowd_run(half, [Vector2(1.8, -(half + 1.0)), Vector2(1.4, -(half + 1.0))], [0.45, 0.45], [1.0, 0.0], [0, 0])
+	check(absf(q[0].x) <= Balance.GATE_W / 2.0 + 0.001 and FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "a unit in the gate passage stays inside the gate width: %s" % q[0])
+	var wall := -(half + Balance.WALL_T / 2.0)
+	q = _crowd_run(half, [Vector2(4.0, wall), Vector2(4.1, wall + 0.2)], [0.45, 0.45], [1.0, 0.0], [1, 1])
+	check(absf(q[0].y - wall) <= FormationScript.WALK_HALF + 0.001 and q[0].distance_to(q[1]) > 0.85,
+		"a wall-top unit shoved off the walk stops at its edge (center line +-0.55 m) and slides along: %s" % [q])
+	q = _crowd_run(half, [Vector2(4.0, wall + 0.4), Vector2(4.1, wall + 0.5)], [0.45, 0.45], [0.0, 1.0], [1, 1])
+	check(absf(q[1].y - wall) <= FormationScript.WALK_HALF + 0.001 and absf(q[1].x - 4.0) > 0.5,
+		"pushed toward the inner edge, it moves along the wall instead of falling off: %s" % [q])
+	var lim := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0
+	q = _crowd_run(half, [Vector2(lim - 0.1, wall), Vector2(lim - 0.4, wall)], [0.45, 0.45], [1.0, 0.0], [1, 1])
+	check(q[0].x <= lim + 0.001, "and never past the corner tower (%.2f <= %.2f)" % [q[0].x, lim])
+	q = _crowd_run(half, [Vector2(0, 4.2), Vector2(0.1, 4.5)], [0.4, 0.4], [1.0, 0.0], [0, 0])
+	check(q[0].y >= 3.999, "a unit is not pushed into the keep plot (z %.2f >= 4)" % q[0].y)
+	# 200 유닛(30 m 사각형, 빽빽함): 시간을 찍고 수 ms 안(느슨한 확인). 한 번에 겹침이 크게 준다
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var pts := []
+	var radii := []
+	var ws := []
+	var lvs := []
+	for i in 200:
+		pts.append(Vector2(rng.randf_range(-15.0, 15.0), rng.randf_range(-15.0, 15.0)))
+		radii.append(rng.randf_range(0.35, 0.8))
+		ws.append(1.0 / CrowdScript.mass(radii[i], rng.randf() < 0.5))
+		lvs.append(0)
+	var t0 := Time.get_ticks_usec()
+	q = _crowd_run(-1.0, pts, radii, ws, lvs)
+	var usec := Time.get_ticks_usec() - t0
+	var before := _worst_overlap(PackedVector2Array(pts), radii)
+	for k in 9:  # 프레임마다 한 번씩 10프레임
+		q = _crowd_run(-1.0, Array(q), radii, ws, lvs)
+	var after := _worst_overlap(q, radii)
+	print("crowd: 200 units resolved in %.2f ms (worst overlap %.0f%% -> %.1f%% after 10 frames)" % [usec / 1000.0, before * 100.0, after * 100.0])
+	check(usec < 8000, "200 units resolve in a few ms headless (%.2f ms)" % [usec / 1000.0])
+	check(after < 0.05, "a dense random pile spreads within 10 frames (worst overlap %.2f -> %.3f of the radius sum)" % [before, after])
+
+
+## 가장 큰 겹침 / 반지름 합(0 = 안 겹침).
+func _worst_overlap(p: PackedVector2Array, radii: Array) -> float:
+	var worst := 0.0
+	for i in p.size():
+		for j in range(i + 1, p.size()):
+			var s: float = radii[i] + radii[j]
+			worst = maxf(worst, (s - p[i].distance_to(p[j])) / s)
+	return worst

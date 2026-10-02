@@ -12,6 +12,7 @@ const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
+const Crowd := preload("res://scripts/crowd.gd")
 
 const SCAN_INTERVAL := 0.2
 const SWING_SLACK := 0.6  # 타격 순간 대상(영웅·성문·성 지점)이 사거리 + 이만큼 안이면 맞는다(밖이면 헛스윙)
@@ -45,6 +46,7 @@ var _swing_left := -1.0  # 타격 순간까지 남은 초(음수 = 휘두르는 
 var _swing_hero           # 치려는 영웅(_swing_side == AT_HERO일 때)
 var _swing_side := -1     # 치려는 것: AT_HERO, 성(-1), 성문 면(0..3)
 var _swing_at := Vector3.ZERO  # 성문·성을 칠 때 그 지점
+var _walking := false  # 이번 프레임에 걸었다(겹침 해소 무게)
 
 
 ## add_child 전에 호출. p_stage = 전체 라운드 g. hp_mult = 추가 HP 배율(라운드 25 보스 boss_round_mult).
@@ -76,6 +78,7 @@ func setup_arena(row: Dictionary) -> void:
 
 func _ready() -> void:
 	add_to_group("monsters")
+	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
 	_model.setup(Art.MONSTER_MODELS[kind], float(_stats.scale))
 	add_child(_model)
@@ -108,6 +111,7 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 func _process(delta: float) -> void:
 	if _dead:
 		return
+	_walking = false
 	_slow_t -= delta
 	_stun_t -= delta
 	if _poison_t > 0.0:
@@ -138,6 +142,7 @@ func _process(delta: float) -> void:
 				_advance(delta)
 				return
 			_model.play_walk()
+			_walking = true
 			global_position = next
 		elif _atk_cd <= 0.0:
 			_swing(_target_hero, AT_HERO, Vector3.ZERO)
@@ -159,20 +164,27 @@ func _advance(delta: float) -> void:
 	var dest: Vector3
 	var strikes := true
 	if inside:
-		dest = castle.keep_target(side)
+		dest = _spread(castle.keep_target(side), Formation._keep_half)
 	elif GameState.is_gate_broken(side):
 		strikes = false
 		var aligned := absf(Formation.perp(side).dot(global_position)) < Balance.GATE_W / 2.0 - 0.5
 		dest = Formation.gate_inner(half, side) if aligned else castle.gate_target(side)
 	else:
-		dest = castle.gate_target(side)
+		dest = _spread(castle.gate_target(side), Balance.GATE_W / 2.0)
 	_model.face(dest - global_position)
 	var stop: float = _stats.range if strikes else 0.1
 	if Formation.flat_distance(global_position, dest) > stop:
 		_model.play_walk()
+		_walking = true
 		global_position = global_position.move_toward(dest, speed() * delta)
 	elif strikes and _atk_cd <= 0.0:
 		_swing(null, -1 if inside else side, dest)
+
+
+## 성문·성채를 치는 지점 p를 그 면을 따라(±w) 자기 쪽으로 옮긴다 — 무리가 한 점에 몰리지 않고 문·외벽 폭에 퍼져 선다(겹침 해소).
+func _spread(p: Vector3, w: float) -> Vector3:
+	var t := Formation.perp(side)
+	return p + t * clampf(t.dot(global_position - p), -w, w)
 
 
 ## 공격 시작(개정 12-2 §3): 대상(what = AT_HERO면 영웅 hero, 성(-1)·성문 면(0..3)이면 그 지점 at)을 고정하고 모션을 재생한다. 피해는 타격 순간(_release)에.
@@ -277,6 +289,15 @@ func _find_hero():
 
 func hp_ratio() -> float:
 	return hp / hp_max if hp_max > 0.0 else 0.0
+
+
+## 겹침 해소(crowd.gd): 몸 반지름(종류별 × 표 scale — 보스는 크다), 밀리는 무게(걷는 중이 아니면 — 싸우는 중 — 무겁다).
+func radius() -> float:
+	return Crowd.MONSTER_R.get(kind, 0.4) * float(_stats.scale)
+
+
+func push_mass() -> float:
+	return Crowd.mass(radius(), not _walking)
 
 
 func bar_height() -> float:

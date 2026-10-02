@@ -20,6 +20,7 @@ const SoldierCommand := preload("res://scripts/soldier_command.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
+const Crowd := preload("res://scripts/crowd.gd")
 
 const SCAN_INTERVAL := 0.2
 const ARRIVE_EPS := 0.05
@@ -104,6 +105,7 @@ func refresh_stats() -> void:
 
 func _ready() -> void:
 	add_to_group("soldiers")
+	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	var art: Dictionary = Art.SOLDIERS[type]
 	var body := SoldierBody.build(self, type, true)  # 모델 + 기병이면 말(병사 피규어도 같은 것으로 만든다)
 	_model = body[0]
@@ -214,6 +216,15 @@ func hp_ratio() -> float:
 	return hp / hp_max if hp_max > 0.0 else 0.0
 
 
+## 겹침 해소(crowd.gd): 몸 반지름(기병은 말), 밀리는 무게(걷는 중이 아니면 무겁다).
+func radius() -> float:
+	return Crowd.CAVALRY_R if type == "cavalry" else Crowd.HUMAN_R * Art.CHARACTER_SCALE * Art.SOLDIER_SCALE
+
+
+func push_mass() -> float:
+	return Crowd.mass(radius(), not _walking)
+
+
 func bar_height() -> float:
 	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE * Art.SOLDIER_SCALE + (RIDER_Y if _horse != null else 0.0)
 
@@ -317,7 +328,7 @@ func _go_home(delta: float) -> void:
 	var half: float = castle.half
 	if patrolling():
 		var p: Vector3 = _patrol[_pi]
-		if Formation.flat_distance(global_position, p) <= ARRIVE_EPS:
+		if Formation.flat_distance(global_position, p) <= Crowd.PASS_R:  # 옆 면 기병과 같은 점을 쓴다 — 가까이 오면 돈다
 			if _pi + _pdir < 0 or _pi + _pdir >= _patrol.size():
 				_pdir = -_pdir
 			_pi += _pdir
@@ -351,7 +362,7 @@ func _walk_path(delta: float) -> void:
 	_target = null
 	_swing = null
 	_step_to(wp, delta)
-	if global_position.distance_to(wp) <= ARRIVE_EPS:
+	if global_position.distance_to(wp) <= Crowd.arrive_r(_path, ARRIVE_EPS):
 		_path.pop_front()
 
 
