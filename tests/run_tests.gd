@@ -105,6 +105,10 @@ func _init() -> void:
 	test_arena_kit()
 	test_dungeon_monsters()
 	test_spawn_groups()
+	test_dungeon_tables()
+	test_dungeons_offline()
+	test_equipment_offline()
+	test_dungeon_save_and_server()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -219,7 +223,7 @@ func test_game_tables() -> void:
 	_write(cp, "key,value\ncastle_hp,1000\nkeep_slot_tiers,1:4|5:8|10:12\nkeep_interior_tiers,1:20|5:24|10:28\nstarter_heroes,hans|ella\n")
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
 	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.CONFIG_LIST_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size() + GameData.SOLDIER_NUM_KEYS.size()
-		+ GameData.soldiers().size(), "config file missing keys reports one error per key (rev 16: train_cost_<type> per soldier)")
+		+ GameData.soldiers().size() + GameData.DUNGEON_NUM_KEYS.size(), "config file missing keys reports one error per key (rev 16: train_cost_<type> per soldier, rev 18: dungeon keys)")
 	_errors.count = logged
 	DirAccess.remove_absolute(cp)
 	GameData.load_tables()
@@ -232,14 +236,15 @@ func _payload() -> Dictionary:
 		var r := GameData.stage(s).duplicate()
 		stages.append(r)
 	var cfg := {}
-	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS + GameData.SOLDIER_NUM_KEYS:
+	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS + GameData.SOLDIER_NUM_KEYS + GameData.DUNGEON_NUM_KEYS:
 		cfg[k] = String(GameData._config[k])
 	for sd in GameData.soldiers():  # 개정 16 훈련 비용
 		cfg["train_cost_" + sd.id] = String(GameData._config["train_cost_" + sd.id])
 	return {"version": "t", "monsters": [GameData.monster("grunt").duplicate(), GameData.monster("epic_boss").duplicate()],
 		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true),
 		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true),
-		"upgrades": GameData.upgrades().duplicate(true), "config": cfg}
+		"upgrades": GameData.upgrades().duplicate(true), "config": cfg,
+		"dungeons": GameData._dungeons.duplicate(true), "equip_drop": GameData._equip_drop.duplicate(true)}
 
 
 ## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
@@ -285,6 +290,8 @@ func _remote_checks() -> int:
 		["gacha rates sum above 1", 1], ["a grade with no heroes", 1], ["multishot 0", 1], ["skill cooldown 0", 1], ["haste -100", 1],
 		["stun every 2.5th attack", 1], ["hero attack interval 0", 1], ["hero hp negative", 1],
 		["upgrade unit unknown", 1], ["upgrade growth below 1", 1], ["upgrade max level 0", 1], ["upgrade cost 0", 1], ["upgrades missing", 1], ["duplicate upgrade id", 1],
+		["dungeon type unknown", 1], ["dungeon table missing", 1], ["no equip dungeon enemy", 1], ["dungeon count 0", 1], ["drop min_level gap", 1],
+		["drop weight negative", 1], ["dungeon config missing", 1], ["reset hour 24", 1], ["weapon chance above 1", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -299,7 +306,8 @@ func _remote_checks() -> int:
 
 ## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
 func _tables_hash() -> int:
-	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._upgrades, GameData._config])
+	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._upgrades, GameData._config,
+		GameData._dungeons, GameData._equip_drop])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
@@ -350,6 +358,15 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"upgrades missing": q.erase("upgrades")
 		"duplicate upgrade id": q.upgrades[1].id = "atk"
 		"resource building not in the layout": q.resources[0].building = "mine"  # 배치에 없다(badges.gd가 깨진다)
+		"dungeon type unknown": q.dungeons[2].type = "fire"  # 개정 18
+		"dungeon table missing": q.erase("dungeons")
+		"no equip dungeon enemy": q.dungeons = q.dungeons.filter(func(d): return d.type != "equip")
+		"dungeon count 0": q.dungeons[0].count = 0
+		"drop min_level gap": q.equip_drop[0].min_level = 2
+		"drop weight negative": q.equip_drop[1].N = -1
+		"dungeon config missing": q.config.erase("gold_dg_base")
+		"reset hour 24": q.config.daily_reset_utc_hour = "24"
+		"weapon chance above 1": q.config.equip_weapon_p = "1.5"
 
 
 func test_apply_remote() -> void:
@@ -2108,9 +2125,9 @@ func test_soldiers() -> void:
 	e7.save_path = ECON_TMP
 	e7.load_save(now)
 	var raw7 = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw7.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION == 9 and e7.train_queues.archery.tier == 1 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
+	check(int(raw7.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION == 10 and e7.train_queues.archery.tier == 1 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
 		and absf(e7.train_queues.archery.finish - e.train_queues.archery.finish) < 0.01 and e7.soldiers == e.soldiers and not raw7.last_collect.has("archery"),
-		"save v9 round-trips the training queue (with tier) and keeps no production clocks: %s" % [e7.train_queues])
+		"save v10 round-trips the training queue (with tier) and keeps no production clocks: %s" % [e7.train_queues])
 	var v6 := {"version": 6, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now, "barracks": now - 100 * 3600.0, "stable": 1.0},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 1, "level": 1, "shards": 0, "promotion": 0}}, "deploy": ["hans"], "soldiers": {"infantry:1": 2}, "soldier_deploy": {}}
 	_write(ECON_TMP, JSON.stringify(v6))
@@ -2711,27 +2728,27 @@ func test_growth_economy() -> void:
 	e.upgrades["mspd"] = 79
 	check(not e.growth_up("mspd", 2) and e.growth_block("mspd", 2) == "최대 레벨" and e.upgrade_level("mspd") == 79 and e.upgrade_count_affordable("mspd", 10) == 1, "over the cap is refused whole; affordable stops at max")
 	check(e.growth_up("mspd", 1) and e.upgrade_level("mspd") == 80 and e.upgrade_count_affordable("mspd", 10) == 0 and e.upgrade_total_cost("mspd", 5) == 0, "max level reached")
-	# 저장 복원(v9) — 사슬: v7 → v8(훈련 tier 1) → v9(성장 0)
+	# 저장 복원(v10) — 사슬: v7 → v8(훈련 tier 1) → v9(성장 0) → v10(던전·장비 기본값)
 	e.save_path = ECON_TMP
 	e.save()
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(1.8e9)
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == 9 and e2.upgrades == {"atk": 3, "mspd": 80}, "save v9 writes and restores the upgrades")
+	check(int(raw.version) == 10 and e2.upgrades == {"atk": 3, "mspd": 80}, "save v10 writes and restores the upgrades")
 	e2.free()
 	raw.erase("upgrades")
 	raw.version = 7
 	raw.training = {"barracks": {"count": 2, "finish": 5.0}}
 	var e3 = _econ(0.0)
 	check(e3._apply(raw) and e3.upgrades.is_empty() and e3.train_queues == {"barracks": {"count": 2, "tier": 1, "finish": 5.0}},
-		"v7 -> v9: the batch gets tier 1 and there are no upgrades: %s" % [e3.train_queues])
+		"v7 -> v10: the batch gets tier 1 and there are no upgrades: %s" % [e3.train_queues])
 	raw.version = 8
 	raw.training = {"barracks": {"count": 2, "tier": 3, "finish": 5.0}}
 	check(e3._apply(raw) and e3.upgrades.is_empty() and e3.train_queues == {"barracks": {"count": 2, "tier": 3, "finish": 5.0}},
-		"v8 -> v9: the batch keeps its tier and upgrades default to none: %s" % [e3.train_queues])
-	raw.version = 10
-	check(not e3._apply(raw), "a save from a newer version (10) is refused")
+		"v8 -> v10: the batch keeps its tier and upgrades default to none: %s" % [e3.train_queues])
+	raw.version = 11
+	check(not e3._apply(raw), "a save from a newer version (11) is refused")
 	raw.version = 9
 	raw.upgrades = {"atk": 5, "ghost": 3, "hp": 0, "aspd": 9999}
 	check(e3._apply(raw) and e3.upgrades == {"atk": 5, "aspd": 100}, "unknown ids and zero are dropped, levels clamp to the max")
@@ -2919,3 +2936,251 @@ func test_spawn_groups() -> void:
 			gaps_ok = gaps_ok and is_equal_approx(keys[i] - keys[i - 1], want)
 		gaps_ok = gaps_ok and is_equal_approx(ev[-1].time - keys[-1], 1.0 + GameData.config_num("wave_gap_sec"))
 		check(gaps_ok, "stage %d: 1 s between groups, wave gap and boss timing unchanged" % stage)
+
+
+# --- 던전·장비(개정 18) ---
+
+const DG_LAST := 1789916400.0  # 2026-09-20 15:00 UTC = 09-21 00:00 KST(서버 테스트 T0가 속한 날)
+const DG_MID := DG_LAST + 86400.0
+const GOLD6 := ["hans", "ella", "dorik", "nina", "arteon", "ignis"]
+const EQ4 := ["hans", "ella", "dorik", "nina"]  # Knight·Rogue_Hooded·Barbarian·Mage
+
+
+## 고정 난수열 Callable(서버 rules.rollDrops와 같은 호출 순서 확인용).
+func _seq(values: Array) -> Callable:
+	var i := [0]
+	return func():
+		var v: float = values[i[0] % values.size()]
+		i[0] += 1
+		return v
+
+
+## 표·공식(서버 rules와 같은 값): 적 능력치·보상·등급 표·장비 능력치·판매 값·무기 종류·일일 리셋, 장비 합계가 영웅 최종 능력치에 더해진다.
+func test_dungeon_tables() -> void:
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.dungeon_rows("gold").size() == 3 and GameData.dungeon_rows("equip").size() == 1, "dungeons.csv: 3 gold rows and 1 equip row")
+	var g1 := GameData.dungeon_enemies("gold", 1)
+	check(g1.map(func(x): return [x.id, x.kind, x.count, x.delay, x.hp, x.atk]) == [["gold_goblin_a", "goblin", 10, 0.0, 120.0, 14.0], ["gold_goblin_b", "goblin", 5, 5.0, 120.0, 14.0],
+		["gold_king", "goblin_king", 1, 5.0, 1500.0, 40.0]] and g1[2].scale == 1.7, "gold level 1: 10 goblins, 5 more + the king after 5 s (HP 120 / atk 14, king 1500 / 40, x1.7): %s" % [g1])
+	var g3 := GameData.dungeon_enemies("gold", 3)
+	var dk := GameData.dungeon_enemies("equip", 2)
+	check(is_equal_approx(g3[0].hp, 120.0 * 1.12 * 1.12) and is_equal_approx(g3[2].atk, 40.0 * 1.12 * 1.12) and dk.size() == 1 and dk[0].kind == "death_knight"
+		and is_equal_approx(dk[0].hp, 6900.0) and is_equal_approx(dk[0].atk, 67.2) and dk[0].scale == 2.2, "enemy stats x growth^(n-1): goblins 1.12, death knight HP 1.15 / atk 1.12")
+	check([1, 2, 3, 10].map(func(n): return GameData.gold_reward(n)) == [4000, 4400, 4840, 9432], "gold reward = round(4000 x 1.1^(n-1))")
+	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
+		and GameData.drop_weights(5).UR == 1.0 and GameData.drop_weights(19).LR == 0.5 and GameData.drop_weights(20).SR == 34.0 and GameData.drop_weights(34).LR == 2.0
+		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0, "grade table bands 1-4, 5-9, 10-19, 20-34, 35+")
+	# 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급. 서버 테스트와 같은 난수열 → 같은 결과
+	var fixed := GameData.roll_drops(1, 2, _seq([0.1, 0.5, 0.95, 0.9, 0.0, 0.995]))
+	check(fixed == [{"slot": "weapon", "weapon_kind": "staff", "grade": "SR", "level": 1}, {"slot": "hat", "weapon_kind": null, "grade": "SSR", "level": 1}],
+		"roll_drops draws slot -> kind/armor -> grade in the server order: %s" % [fixed])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 18
+	var many := GameData.roll_drops(12, 60000, rng.randf)
+	var share := func(f: Callable) -> float: return many.filter(f).size() / 60000.0
+	var w := [20.0, 35.0, 28.0, 13.0, 3.5, 0.5]
+	var grades_ok := true
+	for i in GameData.EQUIP_GRADES.size():
+		var gname: String = GameData.EQUIP_GRADES[i]
+		grades_ok = grades_ok and absf(share.call(func(x): return x.grade == gname) - w[i] / 100.0) < 0.007
+	check(many.size() == 60000 and absf(share.call(func(x): return x.slot == "weapon") - 0.2) < 0.007 and absf(share.call(func(x): return x.slot == "gloves") - 0.8 / 6.0) < 0.007
+		and grades_ok and many.all(func(x): return (x.slot == "weapon") == (x.weapon_kind != null)), "drop sample: weapons 20%, armor slots even, grades follow the weights")
+	var st := func(slot: String, grade: String, n: int) -> Dictionary: return GameData.item_stats({"slot": slot, "weapon_kind": "sword" if slot == "weapon" else null, "grade": grade, "level": n})
+	check(st.call("weapon", "N", 1) == {"hp": 0, "atk": 12, "speed_pct": 0.0} and st.call("weapon", "SR", 3).atk == 40 and st.call("gloves", "R", 1).atk == 8
+		and st.call("gloves", "N", 2).atk == 6 and st.call("shoes", "LR", 1) == {"hp": 260, "atk": 0, "speed_pct": 3.0} and st.call("top", "UR", 5).hp == 736
+		and st.call("bottom", "N", 1).hp == 80 and st.call("hat", "SSR", 10).hp == 506 and st.call("pauldron", "R", 2).hp == 93, "item stats = round((base + per level x (n-1)) x grade mult), shoes +3% speed")
+	check(GameData.item_sell_value({"grade": "SR", "level": 3}) == 66 and GameData.item_sell_value({"grade": "N", "level": 1}) == 10
+		and GameData.item_sell_value({"grade": "LR", "level": 7}) == 455, "sell value = round(10 x mult x level)")
+	check(GameData.equip_total([{"slot": "weapon", "weapon_kind": "sword", "grade": "SR", "level": 3}, {"slot": "shoes", "grade": "LR", "level": 1, "weapon_kind": null},
+		{"slot": "gloves", "grade": "R", "level": 1, "weapon_kind": null}]) == {"hp": 260, "atk": 48, "speed_pct": 3.0}, "equip_total sums the items")
+	check(GameData.weapon_of("Knight") == "sword" and GameData.weapon_of("Barbarian") == "axe" and GameData.weapon_of("Mage") == "staff" and GameData.weapon_of("Rogue_Hooded") == "crossbow"
+		and GameData.weapon_of("Rogue") == "dagger" and GameData.heroes().all(func(h): return GameData.weapon_of(h.model) != ""), "every hero model has its own weapon kind")
+	# 일일 리셋: 15:00 UTC 경계, 놓친 날 × 지급을 상한까지
+	var d := {"best_level": 4, "keys": 0, "extra_today": 2, "last_reset": DG_LAST}
+	check(GameData.reset_day(DG_MID - 1.0) + 1 == GameData.reset_day(DG_MID) and GameData.apply_reset("gold", d, DG_MID - 1.0) == d and GameData.next_reset(DG_MID - 1.0) == DG_MID,
+		"daily reset: 23:59:59 KST is still the same day")
+	check(GameData.apply_reset("gold", d, DG_MID) == {"best_level": 4, "keys": 3, "extra_today": 0, "last_reset": DG_MID}
+		and GameData.apply_reset("gold", d, DG_MID + 2 * 86400.0 + 5.0).keys == 9 and GameData.apply_reset("gold", d, DG_MID + 3 * 86400.0).keys == 10
+		and GameData.apply_reset("gold", {"best_level": 0, "keys": 12, "extra_today": 0, "last_reset": DG_LAST}, DG_MID + 9 * 86400.0).keys == 12
+		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
+		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
+	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 5000
+		and GameData.extra_cost(2) == 15000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
+		"fresh dungeon = today's keys; extra run cost 5000 x (1 + runs today); party 6 / 4")
+	# 영웅 최종 능력치 = (기본 × 레벨 × 승급 × 연구소) + 장비 합계
+	var hans := GameData.hero("hans")
+	check(GameData.hero_stats(hans, 1, 0, {}, {"hp": 100, "atk": 12}) == {"hp": 540.0, "atk": 42.0} and is_equal_approx(GameData.hero_stats(hans, 1, 0, {"lab": 3}, {"atk": 12}).atk, 30.0 * 1.06 + 12.0)
+		and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0} and GameData.hero_power(hans, 1, 0, {}, {"hp": 100, "atk": 12}) == roundi(54.0 + 42.0 * 2.0 / 0.8),
+		"hero stats add the equipment total flat after the multipliers (no source, no equipment: unchanged)")
+
+
+## 오프라인 도전(서버와 같은 규칙): 시작 검사, 열쇠·골드는 승리 때만, 타당성, 같은 run 재전송은 같은 결과, 장비 5개, 골드 추가 도전, 보관함 상한, 일일 리셋.
+func test_dungeons_offline() -> void:
+	var t0 := Time.get_unix_time_from_system()
+	var e = _econ(t0)
+	var started := []
+	var finished := []
+	var notes := []
+	e.dungeon_started.connect(func(r): started.append(r))
+	e.dungeon_finished.connect(func(r): finished.append(r))
+	e.notice.connect(func(t): notes.append(t))
+	for id in ["arteon", "ignis"]:
+		e.heroes[id] = 1
+	var gs: Dictionary = e.dungeon_state("gold")
+	var es: Dictionary = e.dungeon_state("equip")
+	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 1 and es.key_cap == 3 and es.extra_cost == 5000
+		and absf(gs.next_reset - GameData.next_reset(t0)) < 1.0 and gs.reset_in > 0.0 and gs.reset_in <= 86400.0, "new game: gold 3 / 10, equip 1 / 3, next reset at 00:00 KST")
+	check(e.dungeon_reward("gold", 2) == {"gold": 4400} and e.dungeon_reward("equip", 10).count == 5 and e.dungeon_reward("equip", 10).weights.LR == 0.5
+		and e.dungeon_enemies("gold", 1).size() == 3, "reward preview and enemy list")
+	var party: Array = e.default_party("gold")
+	check(party.size() == 6 and GOLD6.all(func(h): return party.has(h)) and e.default_party("equip").size() == 4, "default party = the strongest owned heroes, 6 / 4: %s" % [party])
+	check(e.dungeon_block("gold", 2, GOLD6) == "locked" and e.dungeon_block("gold", 1, EQ4) == "bad_party" and e.dungeon_block("gold", 1, ["hans", "hans", "ella", "dorik", "nina", "arteon"]) == "bad_party"
+		and e.dungeon_block("gold", 1, ["hans", "ella", "dorik", "nina", "arteon", "kyle"]) == "bad_party" and e.dungeon_block("fire", 1, GOLD6) == "unknown"
+		and e.dungeon_block("equip", 1, GOLD6) == "bad_party" and e.dungeon_block("gold", 1, GOLD6) == "", "dungeon_block: unknown / locked / party size, duplicate, not owned")
+	check(not e.start_dungeon("gold", 2, GOLD6) and notes[-1] == EconomyScript.DUNGEON_TEXT.locked and started.is_empty(), "a refused start only shows the reason")
+	check(e.start_dungeon("gold", 1, GOLD6) and started.size() == 1 and started[0].run_id == e.current_run.run_id and started[0].enemies.size() == 3 and started[0].paid_with == "key"
+		and e.dungeon_state("gold").keys == 3, "start: a run with the enemies; nothing is spent yet")
+	var run_id: String = e.current_run.run_id
+	e.finish_dungeon(run_id, true, 30.0)  # 실제 경과 0초 < 30 − 5
+	check(finished[-1].get("error") == "implausible" and e.current_run.run_id == run_id and e.dungeon_state("gold").keys == 3 and e.gold_tenths == 0
+		and notes[-1] == EconomyScript.DUNGEON_TEXT.implausible, "a win faster than real time is implausible; the run stays open and nothing changes")
+	e.current_run.started_at -= 26.0
+	e.finish_dungeon(run_id, true, 30.0)
+	check(finished[-1].win and finished[-1].rewards == {"gold_tenths": 40000} and e.gold_tenths == 40000 and e.dungeon_state("gold").keys == 2 and e.dungeon_state("gold").best_level == 1
+		and e.current_run.is_empty(), "gold win: key -1, gold +4000, best level 1")
+	e.finish_dungeon(run_id, true, 30.0)
+	check(finished[-1].repeated and finished[-1].rewards == {"gold_tenths": 40000} and e.gold_tenths == 40000 and e.dungeon_state("gold").keys == 2, "the same run again returns the same result (idempotent)")
+	e.start_dungeon("gold", 2, GOLD6)
+	e.finish_dungeon(e.current_run.run_id, false, 5.0)
+	check(not finished[-1].win and finished[-1].rewards.is_empty() and e.dungeon_state("gold").keys == 2 and e.dungeon_state("gold").best_level == 1 and e.gold_tenths == 40000,
+		"a loss spends no key and changes nothing but the run")
+	# 장비 던전: 즉시 승리 훅 → 장비 5개
+	check(e.start_dungeon("equip", 1, EQ4) and e.debug_win() and finished[-1].win and finished[-1].rewards.items.size() == 5 and e.bag.size() == 5
+		and e.bag.map(func(x): return x.id) == [1, 2, 3, 4, 5] and e.next_item_id == 6 and e.dungeon_state("equip").keys == 0 and e.dungeon_state("equip").best_level == 1
+		and e.bag.all(func(x): return x.level == 1 and x.grade in GameData.EQUIP_GRADES and (x.slot == "weapon") == (x.weapon_kind != null)),
+		"equip win (debug_win hook): exactly 5 items with ids 1..5, key -1: %s" % [e.bag])
+	check(e.dungeon_block("equip", 1, EQ4) == "not_enough_gold", "no key and 4000 gold < 5000: no extra run")
+	e.gold = 16000
+	check(e.dungeon_block("equip", 2, EQ4) == "" and e.start_dungeon("equip", 2, EQ4) and started[-1].paid_with == "gold" and e.gold == 16000, "an extra run with gold starts without paying yet")
+	e.debug_win()
+	var es2: Dictionary = e.dungeon_state("equip")
+	check(e.gold == 11000 and es2.extra_today == 1 and es2.extra_cost == 10000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays 5000 gold; the next one costs 10000")
+	e.start_dungeon("equip", 1, EQ4)
+	e.finish_dungeon(e.current_run.run_id, false, 25.0)
+	check(e.gold == 11000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
+	for i in 286:  # 10 + 286 = 296, + 5 > 300
+		e.bag.append({"id": e.next_item_id + i, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1})
+	e.next_item_id += 286
+	check(e.bag_full() and e.dungeon_block("equip", 1, EQ4) == "bag_full" and not e.start_dungeon("equip", 1, EQ4) and notes[-1] == "보관함이 가득 찼습니다"
+		and e.dungeon_block("gold", 1, GOLD6) == "", "bag cap 300: an equip run is blocked before it starts ('보관함이 가득 찼습니다'); the gold dungeon is not")
+	# 일일 리셋(오프라인, 앱 시계)
+	e.dungeons.gold = {"best_level": 1, "keys": 0, "extra_today": 0, "last_reset": GameData.reset_at(GameData.reset_day(t0) - 4)}
+	e.dungeons.equip.last_reset = GameData.reset_at(GameData.reset_day(t0) - 1)
+	check(e.dungeon_state("gold").keys == 10 and e.dungeon_state("equip").keys == 1 and e.dungeon_state("equip").extra_today == 0, "offline daily reset: 4 missed days -> 10 (cap), equip +1 and extra runs back to 0")
+	check(not e.finish_dungeon("nope", true, 30.0) or finished[-1].get("error") == "unknown_run", "an unknown run is refused")
+	e.free()
+
+
+## 장착·해제·옮기기·판매(오프라인): 무기 종류 규칙, 장비 합계가 능력치에(equip_source), 장착 중은 못 판다.
+func test_equipment_offline() -> void:
+	var e = _econ(Time.get_unix_time_from_system())
+	var notes := []
+	var roster := [0]
+	e.notice.connect(func(t): notes.append(t))
+	e.roster_changed.connect(func(): roster[0] += 1)
+	e.bag = [{"id": 1, "slot": "weapon", "weapon_kind": "sword", "grade": "SR", "level": 3}, {"id": 2, "slot": "weapon", "weapon_kind": "axe", "grade": "N", "level": 1},
+		{"id": 3, "slot": "hat", "weapon_kind": null, "grade": "R", "level": 2}, {"id": 4, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1},
+		{"id": 5, "slot": "shoes", "weapon_kind": null, "grade": "LR", "level": 1}]
+	e.next_item_id = 6
+	check(e.equip_block("hans", "weapon", 2) == "wrong_weapon" and e.equip_block("nina", "weapon", 1) == "wrong_weapon" and e.equip_block("dorik", "weapon", 2) == ""
+		and e.equip_block("hans", "weapon", 1) == "" and e.equip_block("hans", "hat", 5) == "wrong_slot" and e.equip_block("hans", "weapon", 3) == "wrong_slot"
+		and e.equip_block("hans", "hat", 99) == "unknown_item" and e.equip_block("kyle", "hat", 3) == "not_owned" and e.equip_block("hans", "cape", 3) == "bad_slot",
+		"equip_block: a weapon only fits its model's kind (Knight sword, Barbarian axe); slot, item and hero checks")
+	check(not e.equip("hans", "weapon", 2) and notes[-1] == EconomyScript.EQUIP_TEXT.wrong_weapon and e.equipment.is_empty(), "a refused equip only shows the reason")
+	var r0: int = roster[0]
+	check(e.equip("hans", "weapon", 1) and e.equipment == {"hans": {"weapon": 1}} and e.equipment_bonus("hans") == {"hp": 0, "atk": 40, "speed_pct": 0.0} and roster[0] == r0 + 1
+		and e.item_owner(1) == "hans" and e.hero_equipment("hans").weapon.weapon_kind == "sword", "equip: the sword on hans gives atk +40 and fires roster_changed")
+	e.equip("hans", "hat", 3)
+	e.equip("ella", "hat", 3)  # 옮긴다
+	check(e.equipment == {"hans": {"weapon": 1}, "ella": {"hat": 3}} and e.item_owner(3) == "ella", "equipping an item another hero wears moves it: %s" % [e.equipment])
+	check(e.unequip("ella", "hat") and e.equipment == {"hans": {"weapon": 1}} and not e.unequip("ella", "hat"), "unequip empties the slot; an empty slot cannot be unequipped")
+	e.equip("hans", "shoes", 5)
+	check(e.equipment_bonus("hans") == {"hp": 260, "atk": 40, "speed_pct": 3.0}, "shoes add HP and +3% speed")
+	GameData.equip_source = e  # 오토로드 Economy처럼
+	var hans := GameData.hero("hans")
+	var st := GameData.hero_stats(hans, 1, 0)
+	GameData.equip_source = null
+	check(st == {"hp": 700.0, "atk": 70.0} and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0}, "with Economy as the equipment source, hero_stats adds hans's gear: %s" % [st])
+	check(e.sell_block([1]) == "equipped" and e.sell_block([]) == "bad_request" and e.sell_block([3, 3]) == "bad_request" and e.sell_block([3, 99]) == "unknown_item"
+		and e.sell_items([1, 3]) == 0 and notes[-1] == EconomyScript.EQUIP_TEXT.equipped and e.bag.size() == 5, "sell_block: equipped / empty / duplicate / unknown; a refused sale sells nothing")
+	check(e.sell_items([3, 4]) == 40 and e.gold_tenths == 400 and e.bag.map(func(x): return x.id) == [1, 2, 5], "sell: round(10 x 1.5 x 2) + 10 = 40 gold, the items leave the bag")
+	e.free()
+
+
+## 저장 v10(왕복·v9 → v10·깨진 v10·끊긴 장착은 버림)과 서버 응답(dungeons·items·equipment) 반영.
+func test_dungeon_save_and_server() -> void:
+	var t0 := Time.get_unix_time_from_system()
+	var tmp := OS.get_temp_dir().path_join("castle_d1_econ_%d.json" % OS.get_process_id())  # user:// 밖(다른 워크트리 체크와 겹치지 않게)
+	var e = _econ(t0)
+	e.dungeons.gold = {"best_level": 7, "keys": 4, "extra_today": 0, "last_reset": GameData.reset_at(GameData.reset_day(t0))}
+	e.dungeons.equip = {"best_level": 3, "keys": 0, "extra_today": 2, "last_reset": GameData.reset_at(GameData.reset_day(t0))}
+	e.bag = [{"id": 4, "slot": "weapon", "weapon_kind": "sword", "grade": "UR", "level": 6}, {"id": 9, "slot": "gloves", "weapon_kind": null, "grade": "N", "level": 2}]
+	e.equipment = {"hans": {"weapon": 4}}
+	e.next_item_id = 10
+	e.save_path = tmp
+	e.save()
+	var e8 = _econ(0.0)
+	e8.save_path = tmp
+	e8.load_save(t0)
+	var raw = JSON.parse_string(FileAccess.get_file_as_string(tmp))
+	check(int(raw.version) == 10 and EconomyScript.SAVE_VERSION == 10 and e8.dungeons == e.dungeons and e8.bag == e.bag and e8.equipment == e.equipment and e8.next_item_id == 10
+		and e8.bag[0].id is int and e8.dungeon_state("equip").extra_today == 2 and e8.equipment_bonus("hans").atk == roundi(27.0 * 4.6),
+		"save v10 round-trips dungeons, the bag, equipment and next_item_id: %s %s" % [e8.dungeons, e8.bag])
+	var v9: Dictionary = raw.duplicate(true)
+	v9.version = 9
+	for k in ["dungeons", "items", "equipment", "next_item_id"]:
+		v9.erase(k)
+	_write(tmp, JSON.stringify(v9))
+	e8.load_save(t0)
+	check(e8.gold_tenths == e.gold_tenths and e8.dungeon_state("gold").keys == 3 and e8.dungeon_state("equip").keys == 1 and e8.bag.is_empty() and e8.equipment.is_empty() and e8.next_item_id == 1,
+		"save v9 -> v10: today's keys and an empty bag")
+	for junk in [{"items": {}}, {"dungeons": []}, {"equipment": {"hans": 4}}, {"items": [{"slot": "hat"}]}, {"dungeons": {"gold": {"keys": "x"}}}, {"next_item_id": "3"}]:
+		var bad: Dictionary = raw.duplicate(true)
+		bad.merge(junk, true)
+		_write(tmp, JSON.stringify(bad))
+		e8.load_save(t0)
+		check(e8.bag.is_empty() and e8.dungeon_state("gold").best_level == 0, "malformed v10 (%s) is a corrupt save" % [junk])
+	var odd: Dictionary = raw.duplicate(true)
+	odd.items = raw.items + [{"id": 11, "slot": "cape", "weapon_kind": null, "grade": "N", "level": 1}, {"id": 12, "slot": "weapon", "weapon_kind": null, "grade": "N", "level": 1},
+		{"id": 13, "slot": "hat", "weapon_kind": null, "grade": "XR", "level": 1}, {"id": 14, "slot": "top", "weapon_kind": null, "grade": "LR", "level": 2}]
+	# JSON.stringify는 키를 정렬한다 — ella가 먼저: top 14는 ella, 검(4)은 Rogue_Hooded가 못 낀다
+	odd.equipment = {"hans": {"weapon": 4, "hat": 9, "top": 14, "pauldron": 77}, "ella": {"top": 14, "weapon": 4}, "ghost": {"hat": 9}}
+	odd.next_item_id = 2
+	_write(tmp, JSON.stringify(odd))
+	e8.load_save(t0)
+	check(e8.bag.map(func(x): return x.id) == [4, 9, 14] and e8.equipment == {"hans": {"weapon": 4}, "ella": {"top": 14}} and e8.next_item_id == 15,
+		"v10 load drops unknown items and wrong-slot / wrong-weapon / missing / doubled / unknown-hero equipment, next_item_id stays above the ids: %s %s" % [e8.bag, e8.equipment])
+	DirAccess.remove_absolute(tmp)
+	e8.free()
+	e.save_path = ""
+	# 서버 응답(개정 18 부분)
+	var reply := {"player": {"gold_tenths": 50, "stage": 1, "res": {}, "buildings": {},
+		"dungeons": {"gold": {"keys": 2, "key_cap": 10, "key_daily": 3, "best_level": 5, "extra_today": 0, "extra_cost": null, "last_reset": DG_LAST, "next_reset": DG_MID},
+			"equip": {"keys": 0, "key_cap": 3, "key_daily": 1, "best_level": 1, "extra_today": 1, "extra_cost": 10000, "last_reset": DG_LAST, "next_reset": DG_MID}},
+		"items": [{"id": 31, "slot": "weapon", "weapon_kind": "axe", "grade": "SSR", "level": 4}, {"id": 30, "slot": "hat", "weapon_kind": null, "grade": "R", "level": 1}],
+		"equipment": {"dorik": {"weapon": 31}}}, "merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	var sig := [0, 0, 0]
+	e.dungeons_changed.connect(func(): sig[0] += 1)
+	e.items_changed.connect(func(): sig[1] += 1)
+	e.roster_changed.connect(func(): sig[2] += 1)
+	check(e.apply_server(reply) and e.dungeons.gold == {"best_level": 5, "keys": 2, "extra_today": 0, "last_reset": DG_LAST} and e.bag.map(func(x): return x.id) == [30, 31]
+		and e.equipment == {"dorik": {"weapon": 31}} and e.equipment_bonus("dorik").atk == roundi(21.0 * 3.2) and sig[0] >= 1 and sig[1] >= 1 and sig[2] >= 1,
+		"apply_server takes dungeons, the bag (id order) and equipment, and fires dungeons_changed / items_changed / roster_changed")
+	var gold_keys: int = e.dungeon_state("gold").keys
+	check(gold_keys == GameData.apply_reset("gold", e.dungeons.gold, e.time_now()).keys and gold_keys >= 2, "online dungeon_state counts the daily reset from the server's last_reset")
+	var logged := _errors.count
+	var bad_reply: Dictionary = reply.duplicate(true)
+	bad_reply.player.items = {}
+	check(not e.apply_server(bad_reply) and e.bag.size() == 2, "apply_server rejects items that are not an array")
+	_errors.count = logged  # 거부는 push_error로 알린다
+	e.free()

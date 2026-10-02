@@ -101,6 +101,11 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       soldiers: {}, soldier_deploy: {}, // 개정 13
       training: { barracks: null, archery: null, stable: null }, // 개정 16: 병사 건물 훈련 대기열
       upgrades: {}, // 개정 20
+      dungeons: { // 개정 18: 그날 지급분, 리셋 = 15:00 UTC(00:00 KST) — T0는 23:13:20 KST
+        gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 },
+        equip: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: 5000, last_reset: 1789916400, next_reset: 1790002800 },
+      },
+      items: [], equipment: {},
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })
@@ -413,7 +418,10 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 57) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group)
+  assert.equal(Object.keys(g.config).length, 77) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20
+  assert.deepEqual(g.dungeons.map((d: any) => [d.id, d.type, d.kind, d.count, d.delay]), [['gold_goblin_a', 'gold', 'goblin', 10, 0], ['gold_goblin_b', 'gold', 'goblin', 5, 5],
+    ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0]]) // 개정 18: 파일 순서
+  assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })
   assert.equal(g.config.train_cost_cavalry, 'food:40|stone:20')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13

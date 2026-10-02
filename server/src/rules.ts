@@ -406,3 +406,141 @@ export function upgradeCost(d: UpgradeDef, level: number, count: number): number
   for (let l = level; l < level + count; l++) gold += upgradeStepCost(d, l)
   return gold
 }
+
+// --- 던전·장비 (개정 18 §2~§5) — 앱 GameData(던전·장비 블록)와 같은 식 ---
+
+export const DUNGEON_TYPES = ['gold', 'equip']
+export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR'] // 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
+export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5 }
+export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves'] // 모든 영웅이 쓴다
+export const EQUIP_SLOTS = ['weapon', ...ARMOR_SLOTS]
+export const WEAPON_OF: Record<string, string> = { Knight: 'sword', Barbarian: 'axe', Mage: 'staff', Rogue_Hooded: 'crossbow', Rogue: 'dagger' } // 영웅 모델 → 무기 종류
+export const WEAPON_KINDS = ['sword', 'axe', 'staff', 'crossbow', 'dagger']
+// 부위 → [능력치, 1레벨 값, 레벨당 증가]. 값 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율)
+export const SLOT_STAT: Record<string, [string, number, number]> = {
+  weapon: ['atk', 12, 3], top: ['hp', 80, 20], bottom: ['hp', 80, 20], hat: ['hp', 50, 12], pauldron: ['hp', 50, 12], gloves: ['atk', 5, 1.2], shoes: ['hp', 40, 10],
+}
+export const SHOES_SPEED_PCT = 3 // 신발 이동속도 +3%(등급 무관)
+export const RUN_TTL_SEC = 1800 // run 만료(30분)
+export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed − 5
+export const MAX_DUNGEON_LEVEL = 300 // 보상 골드 tenths가 bigint를 넘지 않게(4000 × 1.1^299 × 10 < 2^63)
+
+export interface DungeonState {
+  best_level: number
+  keys: number
+  extra_today: number // 그날 골드 추가 도전 횟수(장비 던전)
+  last_reset: number // 마지막으로 반영한 리셋 시각(유닉스 초)
+}
+
+export interface DungeonDef {
+  id: string
+  type: string
+  kind: string
+  count: number
+  delay: number
+  hp: number
+  atk: number
+  speed: number
+  range: number
+  atk_interval: number
+  aggro: number
+  scale: number
+}
+
+export interface EquipItem {
+  id?: number
+  slot: string
+  weapon_kind: string | null
+  grade: string
+  level: number
+}
+
+// 리셋 날짜 번호: 하루가 daily_reset_utc_hour시(UTC)에 시작한다(15 = 00:00 KST).
+export const resetDay = (t: number, hour: number) => Math.floor((t - hour * 3600) / 86400)
+export const resetAt = (day: number, hour: number) => day * 86400 + hour * 3600
+export function nextReset(now: number, config: Config): number {
+  const h = cfgNum(config, 'daily_reset_utc_hour')
+  return resetAt(resetDay(now, h) + 1, h)
+}
+
+// 처음 보는 던전: 오늘 지급분(열쇠 = 하루 지급), 최고 단계 0.
+export function freshDungeon(type: string, now: number, config: Config): DungeonState {
+  const h = cfgNum(config, 'daily_reset_utc_hour')
+  return { best_level: 0, keys: cfgNum(config, `${type}_key_daily`), extra_today: 0, last_reset: resetAt(resetDay(now, h), h) }
+}
+
+// 게으른 일일 리셋: 놓친 리셋 수 × 하루 지급을 상한까지 더하고(이미 상한 위면 그대로) 추가 도전 횟수를 0으로. 리셋이 없으면 그대로.
+export function applyReset(type: string, d: DungeonState, now: number, config: Config): DungeonState {
+  const h = cfgNum(config, 'daily_reset_utc_hour')
+  const days = resetDay(now, h) - resetDay(d.last_reset, h)
+  if (days <= 0) return d
+  const cap = cfgNum(config, `${type}_key_cap`)
+  const keys = Math.max(d.keys, Math.min(cap, d.keys + days * cfgNum(config, `${type}_key_daily`)))
+  return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h) }
+}
+
+// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 그날 추가 도전 횟수).
+export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * (1 + extraToday)
+export const partySize = (config: Config, type: string) => cfgNum(config, `${type}_dg_party`)
+export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `${type}_dg_min_sec`)
+
+// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)).
+export const goldReward = (config: Config, level: number) => roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1))
+
+// 적 능력치 성장: 골드 던전은 HP·공격 모두 gold_dg_growth, 장비 던전은 equip_dg_hp_growth·equip_dg_atk_growth.
+export function dungeonGrowth(config: Config, type: string) {
+  if (type === 'gold') return { hp: cfgNum(config, 'gold_dg_growth'), atk: cfgNum(config, 'gold_dg_growth') }
+  return { hp: cfgNum(config, 'equip_dg_hp_growth'), atk: cfgNum(config, 'equip_dg_atk_growth') }
+}
+
+// 단계 n의 적 목록(표 순서): HP·공격 = 기본 × 성장^(n−1)(곱셈 n−1번), 나머지는 표 그대로.
+export function dungeonEnemies(defs: DungeonDef[], type: string, level: number, config: Config) {
+  const g = dungeonGrowth(config, type)
+  return defs.filter((d) => d.type === type).map((d) => ({
+    id: d.id, kind: d.kind, count: Number(d.count), delay: Number(d.delay), hp: grown(Number(d.hp), g.hp, level - 1), atk: grown(Number(d.atk), g.atk, level - 1),
+    speed: Number(d.speed), range: Number(d.range), atk_interval: Number(d.atk_interval), aggro: Number(d.aggro), scale: Number(d.scale),
+  }))
+}
+
+// 단계 n의 등급 가중치(equip_drop.csv의 min_level ≤ n인 마지막 행) — EQUIP_GRADES 순서.
+export function dropWeights(rows: Record<string, unknown>[], level: number): number[] {
+  let row = rows[0]
+  for (const r of rows) if (Number(r.min_level) <= level) row = r
+  return EQUIP_GRADES.map((g) => Number(row?.[g] ?? 0))
+}
+
+// 장비 count개(서버는 암호학적 난수). 장마다: 부위(무기 equip_weapon_p, 아니면 방어구 6부위 균등) → 무기면 종류 균등 → 등급(가중치).
+export function rollDrops(rows: Record<string, unknown>[], level: number, count: number, weaponP: number, rand: () => number): EquipItem[] {
+  const w = dropWeights(rows, level)
+  const total = w.reduce((s, x) => s + x, 0)
+  const pickIdx = (n: number) => Math.min(Math.floor(rand() * n), n - 1)
+  const out: EquipItem[] = []
+  for (let i = 0; i < count; i++) {
+    const weapon = rand() < weaponP
+    const slot = weapon ? 'weapon' : ARMOR_SLOTS[pickIdx(ARMOR_SLOTS.length)]
+    const weapon_kind = weapon ? WEAPON_KINDS[pickIdx(WEAPON_KINDS.length)] : null
+    let pick = rand() * total
+    let grade = EQUIP_GRADES[0]
+    for (let g = 0; g < EQUIP_GRADES.length; g++) {
+      if (w[g] <= 0) continue
+      grade = EQUIP_GRADES[g]
+      pick -= w[g]
+      if (pick < 0) break
+    }
+    out.push({ slot, weapon_kind, grade, level })
+  }
+  return out
+}
+
+// 장비 능력치 {hp, atk, speed_pct}.
+export function itemStats(item: EquipItem) {
+  const out = { hp: 0, atk: 0, speed_pct: 0 }
+  const s = SLOT_STAT[item.slot]
+  if (!s) return out
+  out[s[0] as 'hp' | 'atk'] = roundHalfAway((s[1] + s[2] * (item.level - 1)) * (EQUIP_GRADE_MULT[item.grade] ?? 0))
+  if (item.slot === 'shoes') out.speed_pct = SHOES_SPEED_PCT
+  return out
+}
+
+// 판매 값 = round(equip_sell_base × 등급 배율 × 레벨).
+export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0) * item.level)

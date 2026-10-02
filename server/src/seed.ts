@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, UPGRADE_UNITS } from './rules.ts'
+import { BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, UPGRADE_UNITS, WEAPON_OF } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -19,6 +19,22 @@ export interface TableSpec {
 }
 
 const real = (names: string[]) => Object.fromEntries(names.map((n) => [n, 'real']))
+
+// 개정 18 던전 표(스펙 §7): 적 행 = 던전 종류(type)별 기본 능력치(단계 성장은 config), 장비 등급 가중치 = 단계 구간(min_level)별 행.
+// equip_drop 가중치 열 이름 = 등급(N…LR, 대문자 — ident가 따옴표로 감싼다)
+const DUNGEON_NUM = ['delay', 'hp', 'atk', 'speed', 'range', 'atk_interval', 'aggro', 'scale']
+const DUNGEON_TABLES: TableSpec[] = [
+  {
+    name: 'dungeons', table: 'dungeon_defs', file: 'dungeons.csv', ordered: true,
+    cols: { id: 'key', type: 'text', kind: 'text', count: 'int', ...Object.fromEntries(DUNGEON_NUM.map((n) => [n, 'num' as ColType])) },
+    sql: { id: 'text', type: 'text', kind: 'text', count: 'integer', ...real(DUNGEON_NUM) },
+  },
+  {
+    name: 'equip_drop', table: 'equip_drop', file: 'equip_drop.csv', ordered: false,
+    cols: { min_level: 'key', ...Object.fromEntries(EQUIP_GRADES.map((g) => [g, 'num' as ColType])) },
+    sql: { min_level: 'integer', ...real(EQUIP_GRADES) },
+  },
+]
 
 export const TABLES: TableSpec[] = [
   {
@@ -63,6 +79,7 @@ export const TABLES: TableSpec[] = [
     cols: { id: 'key', name: 'text', building: 'text', hp: 'num', atk: 'num', range: 'num', atk_interval: 'num', speed: 'num', aggro: 'num', model: 'text' },
     sql: { id: 'text', name: 'text', building: 'text', ...real(['hp', 'atk', 'range', 'atk_interval', 'speed', 'aggro']), model: 'text' },
   },
+  ...DUNGEON_TABLES,
   {
     // 개정 20: 공용 업그레이드 표(스펙 §2). unit = pct(%) | pp(%p)
     name: 'upgrades', table: 'upgrade_defs', file: 'upgrades.csv', ordered: true,
@@ -96,6 +113,13 @@ export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'tra
 const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base', 'train_base_min', 'train_step_min', 'train_cost_tier_mult']
 const SOLDIER_INT0_KEYS = ['train_batch_per_level']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
+// 개정 18 던전·장비 설정(checkDungeons가 범위를 본다). 정수 키는 0 이상 정수(INT1은 1 이상), 확률은 0..1, 성장·배율·제한 시간은 0보다 크다
+export const CONFIG_DUNGEON_NUM = ['daily_reset_utc_hour', 'gold_key_daily', 'gold_key_cap', 'equip_key_daily', 'equip_key_cap', 'equip_extra_gold_base',
+  'gold_dg_base', 'gold_dg_mult', 'gold_dg_growth', 'equip_dg_hp_growth', 'equip_dg_atk_growth', 'gold_dg_party', 'equip_dg_party',
+  'gold_dg_min_sec', 'equip_dg_min_sec', 'dungeon_time_limit', 'equip_drop_count', 'equip_weapon_p', 'equip_bag_cap', 'equip_sell_base']
+const DUNGEON_INT_KEYS = ['gold_key_daily', 'gold_key_cap', 'equip_key_daily', 'equip_key_cap', 'equip_extra_gold_base', 'gold_dg_base', 'equip_sell_base',
+  'gold_dg_min_sec', 'equip_dg_min_sec']
+const DUNGEON_INT1_KEYS = ['gold_dg_party', 'equip_dg_party', 'equip_drop_count', 'equip_bag_cap']
 export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 앱 GameData.KEEP_SLOT_STEP
 export const MAX_HERO_SLOTS = 12 // 앱 GameData.MAX_HERO_SLOTS
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
@@ -192,12 +216,13 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
     }
     rows = out
   }
+  if (spec.name === 'equip_drop') rows = checkDropRows(rows, err) // 개정 18
   if (spec.name === 'config') {
     const byKey = new Map(rows.map((r) => [String(r.key), r]))
-    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_SOLDIER_NUM, ...CONFIG_TIERS]) {
+    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_SOLDIER_NUM, ...CONFIG_TIERS, ...CONFIG_DUNGEON_NUM]) {
       const r = byKey.get(k)
       if (!r) err(0, 'key', `missing key '${k}'`)
-      else if ((CONFIG_NUM.includes(k) || CONFIG_BUILDING_NUM.includes(k) || CONFIG_SOLDIER_NUM.includes(k)) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
+      else if ((CONFIG_NUM.includes(k) || CONFIG_BUILDING_NUM.includes(k) || CONFIG_SOLDIER_NUM.includes(k) || CONFIG_DUNGEON_NUM.includes(k)) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
       else if (CONFIG_LIST.includes(k) && String(r.value).split('|').some((p) => p.trim() === '')) err(Number(r._line), 'value', `empty list item: '${r.value}'`)
       else if (CONFIG_TIERS.includes(k) && !parseTiers(String(r.value))?.every(([, v]) => Number.isInteger(v) && v >= 1)) {
         err(Number(r._line), 'value', `not a tier table 'level:value|…' (levels from 1 ascending, values integers >= 1): '${r.value}'`)
@@ -364,6 +389,55 @@ function checkUpgrades(t: Tables, errors: string[]) {
   }
 }
 
+// --- 개정 18 던전·장비 (앱 GameData._check_dungeons와 같은 규칙) ---
+
+// equip_drop.csv: min_level은 1부터 오름차순 정수(행 = 그 단계부터의 구간), 가중치는 0 이상, 행 합 > 0. min_level을 숫자로 바꾼다.
+function checkDropRows(rows: CsvRow[], err: (line: number, col: string, why: string) => void): CsvRow[] {
+  const out: CsvRow[] = []
+  for (const r of rows) {
+    const lv = Number(r.min_level)
+    const prev = out.length ? Number(out[out.length - 1].min_level) : 0
+    if (!/^\d+$/.test(String(r.min_level)) || (out.length === 0 ? lv !== 1 : lv <= prev)) {
+      err(Number(r._line), 'min_level', 'min_level must start at 1 and go up')
+      break
+    }
+    if (EQUIP_GRADES.some((g) => !(Number(r[g]) >= 0))) err(Number(r._line), EQUIP_GRADES.find((g) => !(Number(r[g]) >= 0)) ?? '', 'weights must be 0 or more')
+    else if (!(EQUIP_GRADES.reduce((s, g) => s + Number(r[g]), 0) > 0)) err(Number(r._line), 'N', 'weights must not all be 0')
+    out.push({ ...r, min_level: lv })
+  }
+  return out
+}
+
+// 적 표(dungeons.csv): type은 gold·equip, 종류마다 행 하나 이상, count 1 이상, delay ≥ 0, hp·speed·range·atk_interval·scale > 0, atk·aggro ≥ 0.
+// 설정: 정수 키는 0 이상 정수(파티·드랍 수·보관함은 1 이상), 리셋 시각 0..23, 무기 확률 0..1, 성장·배율·제한 시간 > 0.
+// 모든 영웅 모델은 무기 종류가 있어야 한다(rules.WEAPON_OF — 없으면 무기를 못 낀다).
+function checkDungeons(t: Tables, errors: string[]) {
+  const err = (line: unknown, col: string, why: string) => errors.push(`dungeons.csv line ${line} column '${col}': ${why}`)
+  const rows = t.dungeons ?? []
+  for (const d of rows) {
+    if (!DUNGEON_TYPES.includes(String(d.type))) err(d._line, 'type', `type must be ${DUNGEON_TYPES.join(' or ')}: '${d.type}'`)
+    if (!(Number(d.count) >= 1)) err(d._line, 'count', `must be at least 1: ${d.count}`)
+    for (const c of ['hp', 'speed', 'range', 'atk_interval', 'scale']) if (!(Number(d[c]) > 0)) err(d._line, c, `must be greater than 0: ${d[c]}`)
+    for (const c of ['delay', 'atk', 'aggro']) if (!(Number(d[c]) >= 0)) err(d._line, c, `must be 0 or more: ${d[c]}`)
+  }
+  if (t.dungeons) for (const type of DUNGEON_TYPES) if (!rows.some((d) => d.type === type)) err(0, 'type', `no enemies for the ${type} dungeon`)
+  for (const h of t.heroes ?? []) {
+    if (!Object.hasOwn(WEAPON_OF, String(h.model))) errors.push(`heroes.csv line ${h._line} column 'model': model '${h.model}' has no weapon kind`)
+  }
+  const byKey = new Map((t.config ?? []).map((r) => [String(r.key), r]))
+  for (const k of CONFIG_DUNGEON_NUM) {
+    const r = byKey.get(k)
+    if (!r || !isNum(String(r.value))) continue // 빠짐·숫자 아님은 checkTable이 알렸다
+    const v = Number(r.value)
+    const why = DUNGEON_INT_KEYS.includes(k) ? (Number.isInteger(v) && v >= 0 ? '' : 'a non-negative integer')
+      : DUNGEON_INT1_KEYS.includes(k) ? (Number.isInteger(v) && v >= 1 ? '' : 'an integer of at least 1')
+        : k === 'daily_reset_utc_hour' ? (Number.isInteger(v) && v >= 0 && v <= 23 ? '' : 'an integer in 0..23')
+          : k === 'equip_weapon_p' ? (v >= 0 && v <= 1 ? '' : 'in 0..1')
+            : v > 0 ? '' : 'greater than 0'
+    if (why) errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${why}: '${r.value}'`)
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -389,6 +463,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   checkBuildings(out, errors)
   checkSoldiers(out, errors)
   checkUpgrades(out, errors)
+  checkDungeons(out, errors) // 개정 18
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {
