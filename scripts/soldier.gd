@@ -1,23 +1,27 @@
 extends Node3D
-## 병사(개정 13 §7). 병종·티어(능력치 = GameData.soldier_stats)와 자리(home: 성채 정문 앞 광장 격자, Formation.soldier_spots)로 만든다.
-## 방치 모드: 제자리에 서 있고 싸우지 않으며 피해를 받지 않는다(방치는 영웅만 방어). 그 밖의 모드: 성 안(Formation.is_inside)에 들어온
-## 몬스터가 자리에서 인식 범위(궁병은 사거리) 안이면 맞서 싸운다(최후 방어선) — 근접은 쫓아가 치고, 궁병은 제자리에서 쏜다.
-## 대상이 없으면 자리로 돌아간다. 공격은 개정 12-2 타격 동기화: 모션의 타격 순간(UnitModel.play_attack) 근접 피해, 원거리는 그 순간
-## 투사체(projectile.gd)가 나가 도착 순간 피해. 죽으면 GameState.refilled 때 되살아나 제자리로(영구히 죽지 않는다).
-## 몬스터도 성 안에서는 병사를 노린다(monster._find_hero). hp_bars 인터페이스: is_alive·hp_ratio·bar_height·bar_scale·tier.
-# ponytail: 병사 하나 = KayKit 스켈레톤 하나(+ 기병은 말 메시). 상한 66명 + 몬스터 120 + 영웅 12면 모바일 웹은 스켈레톤 수가 한계다 —
+## 병사(개정 13 §7, 개정 21). 병종·티어(능력치 = GameData.soldier_stats)와 역할 자리(면 side · 그 면 병종 칸 slot, SoldierCommand.assign_posts)로 만든다.
+## 스테이지 동안만 있다(개정 21 §1): main이 스테이지 시작에 성채 정문 앞 광장 자리(spawn, Formation.soldier_spots)에서 RISE_SEC 동안 솟아오르게
+## 만들고(먼지 고리), 곧바로 역할 자리로 간다(Formation.soldier_entry_route). 연속 진행 클리어의 리필은 reset(되살아나 자리로 순간 이동),
+## 방치로 돌아가면 vanish(VANISH_SEC 동안 작아지며 사라짐).
+## 역할(§2): 궁병 = 성벽 위 병사 자리(사거리 안 적을 쏘고 떠나지 않는다), 보병 = 성문 앞 줄(자리에서 aggro 안·같은 영역 적, HOLD_RADIUS 밖으로는
+## 쫓지 않는다. 성문이 부서지면 안쪽 막는 줄), 기병 = 순찰 고리에서 맡은 두 성문 사이를 오가며 aggro 안 성 밖 적에게 돌진(성 안에 들어가지 않는다.
+## 맡은 성문이 부서지면 그 성문 앞). 지원(SoldierCommand)은 order(면)로 받는다: 그 면 성문 앞 지원 칸에서 보병처럼 지키고, order(-1)이면 원래 자리로.
+## 대상이 죽으면 같은 프레임에 다시 찾고(휘두르는 중인 사거리 안 대상은 놓지 않는다), 없으면 RETURN_DELAY초 머문 뒤 자리로(영웅과 같다). 공격은 개정 12-2 타격 동기화(근접 = 모션 타격 순간,
+## 궁병 = 그 순간 화살 → 도착 순간 피해). 방치 모드는 무적. hp_bars 인터페이스: is_alive·hp_ratio·bar_height·bar_scale·tier.
+# ponytail: 병사 하나 = KayKit 스켈레톤 하나(+ 기병은 말 메시). 상한 64명 + 몬스터 120 + 영웅 12면 모바일 웹은 스켈레톤 수가 한계다 —
 # 화면 밖은 OFFSCREEN_EVERY 프레임마다만 애니메이션을 돌린다. 더 필요하면 화면 밖 병사 처리 자체를 건너뛰거나 병종·티어별 대표만 그린다.
 
+const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const SoldierBody := preload("res://scripts/soldier_body.gd")
+const SoldierCommand := preload("res://scripts/soldier_command.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 
 const SCAN_INTERVAL := 0.2
-const RETURN_DELAY := 1.5  # 교전이 끝나고 이만큼 제자리에 머문 뒤 자리로 돌아간다(영웅과 같다)
 const ARRIVE_EPS := 0.05
 const SWING_SLACK := 0.6  # 근접 타격 순간 대상이 사거리 + 이만큼 안이면 맞는다(영웅과 같다)
 const MUZZLE := Vector3(0, 1.33 * Art.SOLDIER_SCALE, 0)  # 화살이 나가는 높이(모델 1.33 m × 병사 크기)
@@ -26,16 +30,25 @@ const OFFSCREEN_EVERY := 4  # 화면 밖이면 애니메이션을 이 프레임�
 const RIDER_Y := SoldierBody.RIDER_Y  # 기사 모델 높이(말 등 − 엉덩이) × 병사 크기
 const BOB := 0.06  # 말이 걸을 때 위아래 흔들림(m)
 const BOB_HZ := 2.5
-const FACE := Vector3(0, 0, 1)  # 서 있을 때 보는 쪽: 남(+Z) 성문
+const HOLD_RADIUS := 6.0  # 자리를 지키는 병사는 자리에서 이만큼 밖으로 쫓지 않는다
+const RETURN_DELAY := 1.5  # 교전이 끝나고 이만큼 제자리에 머문 뒤 자리로 돌아간다(영웅과 같다)
+const RISE_SEC := 0.4
+const RISE_DEPTH := 1.6
+const VANISH_SEC := 0.3
 
 var type := ""
 var tier := 1
-var home := Vector3.ZERO
+var side := 0  # 원래 면(역할 자리)
+var slot := 0  # 원래 면에서 그 병종의 몇 번째
+var spawn := Vector3.ZERO  # 등장 자리(광장)
 var castle
 var stats := {}  # GameData.soldier_stats
 var hp := 0.0
 var hp_max := 0.0
 var atk := 0.0
+var reinforce := -1  # 지원 가 있는 면(-1 = 원래 자리)
+var rslot := 0  # 지원 면의 성문 앞 칸
+var last_order := -INF  # 마지막 배정·복귀 시각(SoldierCommand 시계 — 흔들림 방지)
 
 var _dead := false
 var _ranged := false
@@ -45,25 +58,35 @@ var _disc: MeshInstance3D
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
-var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
 var _swing  # 휘두르는(쏘려는) 공격의 고정 대상. null = 없음
 var _swing_left := 0.0
 var _walking := false
 var _bob_t := 0.0
 var _frame := 0
 var _anim_acc := 0.0
+var _path: Array[Vector3] = []
+var _rise := 0.0  # 솟아오르는 남은 초
+var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
+var _patrol: Array[Vector3] = []  # 기병 순찰 점 셋(맡은 성문 앞 · 모서리 · 옆 성문 앞)
+var _pi := 0
+var _pdir := 1
 
 
 ## add_child 전에 호출.
-func setup(p_type: String, p_tier: int, p_home: Vector3, p_castle) -> void:
+func setup(p_type: String, p_tier: int, p_side: int, p_slot: int, p_spawn: Vector3, p_castle) -> void:
 	type = p_type
 	tier = p_tier
-	home = p_home
+	side = p_side
+	slot = p_slot
+	spawn = p_spawn
 	castle = p_castle
 	stats = GameData.soldier_stats(type, tier)
 	hp_max = stats.hp
+	hp = hp_max
 	atk = stats.atk
 	_ranged = Art.SOLDIERS[type].role == "ranged"
+	if type == "cavalry":  # 같은 면 기병은 번갈아 시계·반시계 방향 — 네 면 사이가 다 덮인다
+		_patrol = Formation.patrol_points(castle.half, side, 1 if slot % 2 == 0 else -1)
 
 
 func _ready() -> void:
@@ -76,26 +99,77 @@ func _ready() -> void:
 	_disc.position.y = 0.02
 	add_child(_disc)
 	_frame = get_instance_id() % OFFSCREEN_EVERY  # 병사마다 다른 프레임에 갱신(한 프레임에 몰리지 않게)
-	GameState.refilled.connect(reset)
-	reset()
+	GameState.gate_broken.connect(_on_gate_broken)
+	_seat(0.0)
+	_face(Formation.SIDE_DIR[side])
+	global_position = spawn - Vector3(0, RISE_DEPTH, 0)
+	_rise = RISE_SEC
+	Fx.dust(get_parent(), spawn)
 
 
-## 리필: 되살아나 HP를 채우고 제자리에 선다.
+## 연속 진행 클리어의 리필: 되살아나 HP를 채우고 지원을 풀고 스테이지 시작 자리(역할 자리, 기병은 순찰 첫 점)에 선다.
 func reset() -> void:
 	_dead = false
 	hp = hp_max
+	reinforce = -1
+	last_order = -INF
 	_target = null
 	_swing = null
-	_linger = 0.0
 	_atk_cd = 0.0
-	global_position = home
+	_linger = 0.0
+	_rise = 0.0
+	_path.clear()
+	_pi = 0
+	_pdir = 1
+	global_position = post()
 	_model.reset_pose()
 	_walking = false
 	_seat(0.0)
-	_face(FACE)
+	_face(Formation.SIDE_DIR[side])
 	_disc.visible = true
 	if _horse != null:
 		_horse.visible = true
+
+
+## 지원 명령(SoldierCommand): s = 지원 갈 면(-1 = 원래 자리로), rs = 그 면 성문 앞 칸, now = 지휘관 시계. 경로를 다시 계산한다.
+func order(s: int, rs: int, now: float) -> void:
+	reinforce = s
+	rslot = rs
+	last_order = now
+	_replan()
+
+
+## 지금 지키는 면.
+func side_now() -> int:
+	return reinforce if reinforce >= 0 else side
+
+
+## 순찰 중인가(기병, 지원 아님, 맡은 두 성문이 멀쩡함).
+func patrolling() -> bool:
+	return not _patrol.is_empty() and reinforce < 0 and _broken_patrol_gate() < 0
+
+
+## 지금 서야 할 자리. 순찰 중 기병은 다음 순찰 점.
+func post() -> Vector3:
+	var half: float = castle.half
+	if reinforce >= 0:
+		return Formation.gate_row_spot(half, reinforce, rslot, type != "cavalry" and GameState.is_gate_broken(reinforce))
+	match type:
+		"archer":
+			return Formation.soldier_wall_spot(half, side, slot)
+		"cavalry":
+			var b := _broken_patrol_gate()
+			return Formation.gate_row_spot(half, b, slot) if b >= 0 else _patrol[_pi]
+	return Formation.gate_row_spot(half, side, slot, GameState.is_gate_broken(side))
+
+
+## 싸우는 중(살아 있는 대상이 있다) — 지휘관은 싸우는 기병을 보내지 않는다.
+func engaged() -> bool:
+	return _target != null and is_instance_valid(_target) and _target.is_alive()
+
+
+func power() -> float:
+	return SoldierCommand.power(hp, atk, float(stats.atk_interval))
 
 
 ## 받는 피해(몬스터가 타격 순간에 부른다). 방치 모드는 무적(개정 12 §3과 같이 0, 숫자 없음).
@@ -118,8 +192,9 @@ func is_alive() -> bool:
 	return not _dead
 
 
+## 실제 높이로 판정한다 — 계단을 오르내리는 중에는 지상 취급(몬스터 표적 규칙).
 func is_on_wall() -> bool:
-	return false
+	return global_position.y > Balance.WALL_H / 2.0
 
 
 func hp_ratio() -> float:
@@ -134,80 +209,163 @@ func bar_scale() -> float:
 	return 0.8
 
 
-## 배치에서 빠짐(main._sync_soldiers): 표적·바에서 빠지고 프레임 끝에 사라진다. 리필 중이어도 되살아나지 않게 연결을 끊는다.
-func retire() -> void:
+## 스테이지가 끝나 방치로(main.clear_soldiers): 표적·바·지휘에서 곧바로 빠지고 VANISH_SEC 동안 작아져 사라진다.
+func vanish() -> void:
 	_dead = true
-	if GameState.refilled.is_connected(reset):
-		GameState.refilled.disconnect(reset)
 	remove_from_group("soldiers")
-	queue_free()
+	set_process(false)
+	var tw := create_tween()
+	tw.tween_property(self, "scale", Vector3.ONE * 0.01, VANISH_SEC)
+	tw.tween_callback(queue_free)
 
 
 func _process(delta: float) -> void:
 	_animate(delta)
-	if _dead:
+	if _dead or GameState.mode == GameState.Mode.COUNTDOWN:  # 연속 진행 카운트다운: 리필로 돌아온 자리에 서 있는다
 		return
-	if GameState.mode == GameState.Mode.IDLE:  # 방치: 제자리, 싸우지 않음
-		_swing = null
-		_target = null
-		global_position = home
-		if _walking:
-			_set_walking(false)
-			_face(FACE)
+	if _rise > 0.0:  # 등장: 아래에서 솟아오른 뒤 역할 자리로
+		_rise = maxf(0.0, _rise - delta)
+		global_position.y = -RISE_DEPTH * _rise / RISE_SEC
+		if _rise == 0.0:
+			_path = Formation.soldier_entry_route(castle.half, spawn, post())
 		return
 	_atk_cd -= delta
 	_tick_swing(delta)
+	if not _path.is_empty():
+		_walk_path(delta)
+		return
 	_scan_cd -= delta
-	# 표적이 죽거나 사라지면 같은 프레임에 다시 찾는다. 휘두르는 중인 사거리 안 표적은 스캔이 놓치지 않는다(영웅과 같다)
-	var lost: bool = _target != null and not (is_instance_valid(_target) and _target.is_alive())
-	if _scan_cd <= 0.0 or lost:
+	if _scan_cd <= 0.0 or (_target != null and not engaged()):  # 대상이 죽으면 같은 프레임에 다시 찾는다
 		_scan_cd = SCAN_INTERVAL
-		if not _swinging_at(_target):
+		if not _swinging_at(_target):  # 휘두르는 중인 사거리 안 대상은 스캔이 놓치지 않는다(영웅과 같다)
 			_target = _find_target()
-	if _target != null and is_instance_valid(_target) and _target.is_alive():
+	if engaged():
 		_linger = RETURN_DELAY
-		var tpos: Vector3 = _target.global_position
-		_face(tpos - global_position)
-		if Formation.flat_distance(global_position, tpos) <= float(stats.range):
-			_set_walking(false)
-			if _atk_cd <= 0.0:
-				_attack()
-			return
-		if _ranged:
-			return  # 궁병은 제자리에서 다음 스캔을 기다린다
-		var next := global_position.move_toward(Vector3(tpos.x, 0.0, tpos.z), float(stats.speed) * delta)
-		if Formation.is_inside(castle.half, next):  # 성 밖으로는 쫓지 않는다
-			_set_walking(true)
-			global_position = next
+		if _fight(delta):
 			return
 	_target = null
-	_linger -= delta
-	if global_position.distance_to(home) > ARRIVE_EPS:
-		if _linger > 0.0:  # 교전 뒤 잠시 제자리(곧장 돌아서면 다음 괴물마다 왔다 갔다 한다)
-			_set_walking(false)
-			return
-		_face(home - global_position)
-		_set_walking(true)
-		global_position = global_position.move_toward(home, float(stats.speed) * delta)
-		return
-	if _walking:
+	if _linger > 0.0:  # 싸운 자리에서 잠깐 머문다
+		_linger -= delta
 		_set_walking(false)
-		_face(FACE)
+		return
+	_go_home(delta)
 
 
-## 표적: 성 안의 살아 있는 몬스터 중 자리에서 인식 범위(궁병은 사거리) 안, 지금 위치에서 가장 가까운 것.
+## 대상과 싸운다. 사거리 안이면 공격, 밖이면 근접은 다가간다(성벽·성 경계를 넘지 않고, 자리를 지키는 병사는 HOLD_RADIUS 안에서만).
+## 대상을 놓아야 하면 false.
+func _fight(delta: float) -> bool:
+	var tpos: Vector3 = _target.global_position
+	_face(tpos - global_position)
+	if Formation.flat_distance(global_position, tpos) <= float(stats.range):
+		_set_walking(false)
+		if _atk_cd <= 0.0:
+			_attack()
+		return true
+	if _ranged:
+		return false  # 궁병은 자리를 떠나지 않는다
+	var next := global_position.move_toward(Vector3(tpos.x, 0.0, tpos.z), float(stats.speed) * delta)
+	if Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position):
+		return false
+	if not patrolling() and Formation.flat_distance(next, post()) > HOLD_RADIUS:
+		_set_walking(false)  # 줄 끝에서 기다린다
+		return true
+	_set_walking(true)
+	global_position = next
+	return true
+
+
+## 표적(가장 가까운 것): 궁병 = 지금 위치에서 사거리 안(영역 무관). 순찰 기병 = 지금 위치에서 aggro 안 성 밖 몬스터.
+## 자리를 지키는 병사 = 자리에서 aggro 안·자리와 같은 영역. 성 밖에서 곧장 가면 성을 가로지르는 몬스터는 잡지 않는다.
 func _find_target():
+	var half: float = castle.half
+	var roam := patrolling()
+	var origin := global_position if _ranged or roam else post()
 	var reach: float = float(stats.range) if _ranged else float(stats.aggro)
+	var inside := false if roam else Formation.is_inside(half, origin)
 	var best = null
 	var best_d := INF
 	for m in get_tree().get_nodes_in_group("monsters"):
-		if not m.is_alive() or not Formation.is_inside(castle.half, m.global_position) or Formation.flat_distance(home, m.global_position) > reach:
+		if not m.is_alive() or Formation.flat_distance(origin, m.global_position) > reach:
 			continue
+		if not _ranged:
+			if Formation.is_inside(half, m.global_position) != inside:
+				continue
+			if not inside and Formation.crosses_castle(half, global_position, m.global_position):
+				continue
 		var d := Formation.flat_distance(global_position, m.global_position)
 		if d < best_d:
 			best_d = d
 			best = m
 	return best
+
+
+## 대상이 없을 때: 순찰 기병은 순찰 점을 오가고(성을 가로지르면 고리로 돌아서), 나머지는 자리로(곧장 못 가면 경로로).
+func _go_home(delta: float) -> void:
+	var half: float = castle.half
+	if patrolling():
+		var p: Vector3 = _patrol[_pi]
+		if Formation.flat_distance(global_position, p) <= ARRIVE_EPS:
+			if _pi + _pdir < 0 or _pi + _pdir >= _patrol.size():
+				_pdir = -_pdir
+			_pi += _pdir
+			return
+		if Formation.crosses_castle(half, global_position, p):
+			_path = Formation.ring_route(half, global_position, p)
+			return
+		_step_to(p, delta)
+		return
+	var home := post()
+	if global_position.distance_to(home) > ARRIVE_EPS:
+		if not is_on_wall() and Formation.route(half, global_position, home).size() == 1:
+			_step_to(home, delta)
+		else:
+			_replan()
+		return
+	if _walking:
+		_set_walking(false)
+		_face(Formation.SIDE_DIR[side_now()])
+
+
+func _step_to(p: Vector3, delta: float) -> void:
+	_face(p - global_position)
+	_set_walking(true)
+	global_position = global_position.move_toward(p, float(stats.speed) * delta)
+
+
+## 경로 따라 걷기(이동 중엔 적을 무시 — 영웅과 같다).
+func _walk_path(delta: float) -> void:
+	var wp: Vector3 = _path[0]
+	_target = null
+	_swing = null
+	_step_to(wp, delta)
+	if global_position.distance_to(wp) <= ARRIVE_EPS:
+		_path.pop_front()
+
+
+## 목적지가 바뀌었다: 경로를 다시 계산한다(등장 중이면 등장이 끝날 때 계산한다).
+func _replan() -> void:
+	_target = null
+	_swing = null
+	_linger = 0.0
+	if _rise <= 0.0 and is_inside_tree():
+		_path = SoldierCommand.travel(castle.half, type, global_position, post())
+
+
+## 맡은 순찰 성문 중 부서진 것(없으면 -1).
+func _broken_patrol_gate() -> int:
+	for p in [_patrol[0], _patrol[2]]:
+		var s := Formation.side_of(p)
+		if GameState.is_gate_broken(s):
+			return s
+	return -1
+
+
+## 성문이 부서졌다: 그 면을 지키는 보병(안쪽 막는 줄로)·그 성문을 맡은 기병(그 성문 앞으로)은 경로를 다시 계산한다.
+func _on_gate_broken(s: int) -> void:
+	if _dead or _ranged:
+		return
+	if (type != "cavalry" and side_now() == s) or (reinforce < 0 and not _patrol.is_empty() and _broken_patrol_gate() == s):
+		_replan()
 
 
 ## m을 휘두르는(쏘려는) 중이고 m이 살아서 사거리 안인가.

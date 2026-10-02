@@ -95,6 +95,8 @@ func _init() -> void:
 	test_portraits()
 	test_keep_tier_lockstep()
 	test_soldier_figures()
+	test_soldier_posts()
+	test_soldier_command()
 	test_skill_unlock()
 	test_skill_unlock_validation()
 	test_fx_r17_meshes()
@@ -2619,6 +2621,202 @@ func test_economy_sell_many() -> void:
 	check(g == want and e.res.wood == 25 and e.res.stone == 0 and e.res.food == 13 and e.gold_tenths == want * 10, "sell_many sells each at its own rate, clamps to holdings, skips 0")
 	check(e.sell_many([], now) == 0 and e.sell_many([{"res": "stone", "amount": 5}], now) == 0 and e.gold_tenths == want * 10, "sell_many with nothing to sell changes nothing")
 	e.free()
+
+
+## 개정 21 §2 병사 역할 자리(순수 함수): 궁병 성벽 자리(영웅 성벽 자리·계단 착지점과 안 겹침), 보병 성문 앞 줄(영웅 성문 앞 1.5 m보다 바깥)·
+## 부서진 성문 안쪽 막는 줄(성문 폭 안), 기병 순찰 점·고리 경로(성 안에 안 들어감), 광장 → 역할 자리 등장 경로(건물 부지를 안 지남),
+## 역할 배정(병종마다 티어 높은 순 북·동·남·서 차례).
+func test_soldier_posts() -> void:
+	const SC := preload("res://scripts/soldier_command.gd")
+	var half := GameData.interior_half(1)
+	var offs: Array = FormationScript.soldier_wall_offsets(half)
+	check(offs == [2.5, -2.5, 6.0, -6.0, 10.0, -10.0, 13.0, -13.0, 16.5, -16.5], "soldier wall offsets ±2.5 ±6 ±10 ±13 then every 3.5 m up to the corner tower: %s" % [offs])
+	var wall_ok := true
+	for s in 4:
+		for k in offs.size() * 2:
+			var p := FormationScript.soldier_wall_spot(half, s, k)
+			wall_ok = wall_ok and is_equal_approx(p.y, Balance.WALL_H) and FormationScript.region(half, p) == FormationScript.REGION_WALL and FormationScript.side_of(p) == s
+			for slot in Balance.WALL_TOP_SLOTS.size():
+				wall_ok = wall_ok and FormationScript.flat_distance(p, FormationScript.slot_position(half, s, FormationScript.POST_WALL, slot)) >= 0.49
+			for e in [-1.0, 1.0]:
+				wall_ok = wall_ok and FormationScript.flat_distance(p, FormationScript.wall_landing(half, s, e)) >= 0.49
+			var depth := FormationScript.SIDE_DIR[s].dot(p)
+			wall_ok = wall_ok and depth > half and depth < half + Balance.WALL_T
+	check(wall_ok, "archer wall spots: on the wall top (y = WALL_H) of their side, clear of the hero wall slots and the stair landings")
+	var rows_ok := true
+	var seen := {}
+	for k in 16:
+		var p := FormationScript.gate_row_spot(half, 0, k)
+		seen[str(p)] = true
+		var out := -p.z - (half + Balance.WALL_T)
+		rows_ok = rows_ok and not FormationScript.is_inside(half, p) and out >= FormationScript.GATE_ROW_FIRST - 0.001 and out > Balance.GATE_FRONT_OFFSET
+		var q := FormationScript.gate_row_spot(half, 0, k, true)
+		rows_ok = rows_ok and FormationScript.is_inside(half, q) and absf(q.x) <= Balance.GATE_W / 2.0 and -q.z < half
+	var r0 := [FormationScript.gate_row_spot(half, 0, 0), FormationScript.gate_row_spot(half, 0, 1), FormationScript.gate_row_spot(half, 0, 3)]
+	check(rows_ok and seen.size() == 16 and r0[0].is_equal_approx(Vector3(0, 0, -(half + 5.2))) and r0[1].is_equal_approx(Vector3(-2.4, 0, -(half + 5.2)))
+		and r0[2].is_equal_approx(Vector3(-1.0, 0, -(half + 6.8))),
+		"infantry rows: 3.2 m row 0/-2.4/+2.4, 4.8 m row -1/+1/-3.2/+3.2 … outside the hero gate slots; a broken gate moves them to blocking rows inside the gate width: %s" % [r0])
+	var r := FormationScript.patrol_radius(half)
+	var pts := FormationScript.patrol_points(half, 0, 1)
+	var pts2 := FormationScript.patrol_points(half, 0, -1)
+	check(is_equal_approx(r, half + Balance.WALL_T + 7.0) and pts[0].is_equal_approx(Vector3(0, 0, -r)) and pts[1].is_equal_approx(Vector3(r, 0, -r)) and pts[2].is_equal_approx(Vector3(r, 0, 0))
+		and pts2[2].is_equal_approx(Vector3(-r, 0, 0)), "cavalry patrol: gate front -> ring corner -> the next gate front (ring radius half + wall + 7), either direction")
+	var ring_ok := true
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	for i in 200:
+		var pair := []
+		for j in 2:  # 성 밖 점: 사각 거리(max |x|, |z|)가 성벽 바깥면 + 1 ~ 고리 + 6
+			var dir := Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1))
+			pair.append(dir / maxf(absf(dir.x), absf(dir.z)) * rng.randf_range(half + Balance.WALL_T + 1.0, r + 6.0))
+		var a: Vector3 = pair[0]
+		var b: Vector3 = pair[1]
+		var path := FormationScript.ring_route(half, a, b)
+		var prev := a
+		for p in path:
+			ring_ok = ring_ok and not FormationScript.crosses_castle(half, prev, p)
+			prev = p
+		ring_ok = ring_ok and path[-1] == b
+	check(ring_ok, "ring_route never enters the castle (200 random pairs around the ring)")
+	var plots := []
+	for bd in Balance.BUILDINGS:
+		plots.append(Rect2(Vector2(bd.cell) * Balance.TILE, Vector2(bd.size) * Balance.TILE))
+	var entry_ok := true
+	var units := []
+	for i in 66:
+		units.append({"type": "infantry", "tier": 1})
+	for spot in FormationScript.soldier_spots(units):
+		for post in [FormationScript.soldier_wall_spot(half, 0, 3), FormationScript.gate_row_spot(half, 1, 2), FormationScript.patrol_points(half, 3, 1)[0]]:
+			var path := FormationScript.soldier_entry_route(half, spot, post)
+			entry_ok = entry_ok and path[-1] == post
+			var prev: Vector3 = spot
+			for p in path.slice(0, 2):  # 광장 → 가운데 길 → 남문 안쪽(그 뒤는 route — 통로 고리 테스트가 본다)
+				for pl in plots:
+					entry_ok = entry_ok and not _segment_hits(pl, prev, p)
+				prev = p
+	check(entry_ok, "entry route: plaza spot -> middle road -> south gate inside -> route(); the plaza legs cross no building plot and end at the post")
+	var posts: Array = SC.assign_posts([{"type": "infantry", "tier": 1}, {"type": "infantry", "tier": 3}, {"type": "archer", "tier": 1}, {"type": "infantry", "tier": 2},
+		{"type": "infantry", "tier": 1}, {"type": "infantry", "tier": 1}, {"type": "cavalry", "tier": 1}])
+	var want := [{"side": 2, "slot": 0}, {"side": 0, "slot": 0}, {"side": 0, "slot": 0}, {"side": 1, "slot": 0}, {"side": 3, "slot": 0}, {"side": 0, "slot": 1}, {"side": 0, "slot": 0}]
+	check(posts == want, "assign_posts: per type, highest tier first, round robin N/E/S/W: %s" % [posts])
+
+
+## 수평 선분 a→b가 직사각형 r(x, z)을 지나는가(0.1 m 간격 샘플).
+func _segment_hits(r: Rect2, a: Vector3, b: Vector3) -> bool:
+	var n := maxi(1, ceili(FormationScript.flat_distance(a, b) / 0.1))
+	for i in n + 1:
+		var p := a.lerp(b, float(i) / n)
+		if r.has_point(Vector2(p.x, p.z)):
+			return true
+	return false
+
+
+## 개정 21 §3 전술 지휘관(순수 함수): 위협(반경·성문 배율·부서짐 × 2.5, 몬스터마다 면 하나), 방어력, 심각(두 조건·잔챙이 무시), 필요량,
+## 후보 선택(기병 먼저·가까운 순·필요량을 넘으면 멈춤 = 최소 집합), 보내는 면 보호(위협 × 1.2·보병 1명), 흔들림 방지(4초), 복귀(3초 조용·자기 면 심각).
+func test_soldier_command() -> void:
+	const SC := preload("res://scripts/soldier_command.gd")
+	var half := GameData.interior_half(1)
+	var gt := FormationScript.gate_target(half, 0)
+	var ms := [{"pos": gt + Vector3(0, 0, -3), "power": 1000.0}, {"pos": gt + Vector3(0, 0, -20), "power": 500.0},
+		{"pos": FormationScript.gate_inner(half, 1) + Vector3(-2, 0, 1), "power": 300.0}, {"pos": Vector3(0, 0, 0), "power": 700.0}]
+	var t: Array = SC.threats(half, ms, [1.0, 1.0, 1.0, 1.0])
+	check(t == [1000.0, 300.0, 0.0, 0.0], "threat: monsters within 14 m outside the gate or 8 m inside the passage count for that side only; far ones do not: %s" % [t])
+	t = SC.threats(half, ms, [0.5, 0.0, 1.0, 1.0])
+	check(is_equal_approx(t[0], 1750.0) and is_equal_approx(t[1], 750.0), "threat x (1 + 1.5 x (1 - gate ratio)): half gate x1.75, broken gate x2.5: %s" % [t])
+	check(SC.power(320.0, 22.0, 1.0) == 7040.0 and SC.defenses([{"side": 0, "power": 5.0}, {"side": 2, "power": 3.0}, {"side": 0, "power": 1.0}]) == [6.0, 0.0, 3.0, 0.0],
+		"power = HP x damage per second; defense sums per side")
+	check(SC.severe(3000.0, 2000.0, 1.0, 0.0) and not SC.severe(2500.0, 2000.0, 1.0, 0.0) and not SC.severe(1900.0, 0.0, 1.0, 0.0)
+		and SC.severe(0.0, 9999.0, 0.4, 0.2) and not SC.severe(0.0, 9999.0, 0.4, 0.1) and not SC.severe(0.0, 9999.0, 0.5, 0.3),
+		"severe: threat > defense x 1.3 above min_threat, or gate < 45% after losing > 15% in 5 s")
+	check(is_equal_approx(SC.need(10000.0, 4000.0), 7000.0) and SC.calm_next([2.5, 1.0, -1.0, 0.0], [0.0, 600.0, 0.0, 0.0], [100.0, 1000.0, 100.0, 0.0], 1.0) == [3.5, -1.0, 0.0, -1.0],
+		"need = threat x 1.1 - defense; calm time (-1 = not calm) starts at 0 and grows only while threat < defense x 0.5")
+	# 후보 선택: 기병 셋(가까운 순) → 그다음 가까운 보병. 필요량을 넘는 순간 멈춘다. 지원받는 면(0)은 내주지 않는다
+	var cands := [{"id": "c2", "type": "cavalry", "side": 2, "power": 4800.0, "dist": 30.0, "prio": 0}, {"id": "c1", "type": "cavalry", "side": 1, "power": 4800.0, "dist": 10.0, "prio": 0},
+		{"id": "c3", "type": "cavalry", "side": 3, "power": 4800.0, "dist": 20.0, "prio": 0}, {"id": "i1", "type": "infantry", "side": 1, "power": 7040.0, "dist": 12.0, "prio": 1},
+		{"id": "i3", "type": "infantry", "side": 3, "power": 7040.0, "dist": 11.0, "prio": 1}, {"id": "i2", "type": "infantry", "side": 2, "power": 7040.0, "dist": 40.0, "prio": 1},
+		{"id": "n0", "type": "cavalry", "side": 0, "power": 4800.0, "dist": 0.0, "prio": 0}]
+	var left := [0.0, 20000.0, 20000.0, 20000.0]
+	var inf := [2, 2, 2, 2]
+	var got: Array = SC.pick(20000.0, 0, cands, [0.0, 0.0, 0.0, 0.0], left, inf)
+	check(got == ["c1", "c3", "c2", "i3"] and left == [0.0, 15200.0, 15200.0, 8160.0] and inf == [2, 2, 2, 1],
+		"pick: cavalry first (nearest first), then the nearest infantry, stop once the need is met (minimal set; the target side never donates): %s" % [got])
+	left = [0.0, 6000.0, 20000.0, 20000.0]
+	inf = [2, 1, 2, 2]
+	got = SC.pick(30000.0, 0, cands, [0.0, 4000.0, 0.0, 0.0], left, inf)
+	check(got == ["c3", "c2", "i3", "i2"] and inf == [2, 1, 1, 1],
+		"pick floors: the east keeps defense >= its threat x 1.2 (no cavalry) and its only infantry; others give one infantry each: %s" % [got])
+	# plan: 북에 큰 위협 — 다른 면 기병 셋 + 보병은 가까운 순(동·서 다음 남 — 면마다 1명은 남긴다). 궁병은 안 간다. 다음 판단은 더 보내지 않는다
+	var sol := _command_units(half)
+	var snap := {"half": half, "now": 100.0, "dt": 1.0, "calm": [0.0, 0.0, 0.0, 0.0], "monsters": [{"pos": gt, "power": 48000.0}], "ratio": [1.0, 1.0, 1.0, 1.0],
+		"drop": [0.0, 0.0, 0.0, 0.0], "heroes": [], "soldiers": sol}
+	var p: Dictionary = SC.plan(snap)
+	var sent: Array = p.send.map(func(e): return e[0])
+	var powers: Array = sent.map(func(id): return 4800.0 if id.begins_with("c") else 7040.0)
+	var total: float = powers.reduce(func(a, b): return a + b, 0.0)
+	var need0: float = 48000.0 * 1.1 - (2 * 7040.0 + 4800.0 + 2700.0)
+	var inf_order: Array = sent.filter(func(id): return id.begins_with("i")).map(func(id): return int(id[1]))
+	check(p.severe == [true, false, false, false] and sent.size() == 6 and sent.slice(0, 3).all(func(id): return id.begins_with("c")) and not sent.has("c0"),
+		"plan: a mass at the north gate makes it severe; the three other cavalry go first: %s" % [sent])
+	check(inf_order.size() == 3 and inf_order[2] == 2 and inf_order.slice(0, 2).all(func(s): return s == 1 or s == 3) and total >= need0 and total - powers[-1] < need0
+		and p.send.all(func(e): return e[1] == 0),
+		"plan: then infantry nearest first (east, west, then south — the floor keeps the second east/west one home) until the need %.0f is met — sent %.0f, without the last %.0f (minimal)"
+		% [need0, total, total - powers[-1]])
+	var home_inf := [0, 0, 0, 0]
+	for u in sol:
+		if u.type == "infantry" and not sent.has(u.id):
+			home_inf[u.side] += 1
+	check(home_inf.all(func(n): return n >= 1) and not sent.any(func(id): return id.begins_with("a")), "plan: every side keeps at least one infantry; archers never go: %s" % [home_inf])
+	for u in sol:
+		if sent.has(u.id):
+			u.at = 0
+			u.last = 100.0
+	snap.now = 101.0
+	p = SC.plan(snap)
+	check(p.send.is_empty() and p.recall.is_empty() and p.need[0] <= 0.0, "plan: next tick the sent units count for the north; nothing more goes (need %.0f)" % p.need[0])
+	# 복귀: 지원 면이 3초 넘게 조용해야, 그리고 배정 4초 뒤에만
+	snap.monsters = []
+	snap.calm = [5.0, 0.0, 0.0, 0.0]
+	snap.now = 102.0
+	p = SC.plan(snap)
+	check(p.recall.is_empty() and p.calm[0] == 6.0, "anti-flap: units ordered 2 s ago do not return yet even though the north is calm: %s" % [p.recall])
+	snap.now = 104.5
+	snap.calm = [1.0, 0.0, 0.0, 0.0]
+	p = SC.plan(snap)
+	check(p.recall.is_empty(), "return waits for 3 s of calm (calm 2 s): %s" % [p.recall])
+	snap.calm = [2.5, 0.0, 0.0, 0.0]
+	p = SC.plan(snap)
+	var back: Array = p.recall.duplicate()
+	back.sort()
+	var want_back: Array = sent.duplicate()
+	want_back.sort()
+	check(back == want_back, "after 3 s of calm (4 s past the order) every reinforcement returns home: %s" % [back])
+	# 자기 면이 심각해지면 그 면 출신만 돌아간다
+	snap.calm = [0.0, 0.0, 0.0, 0.0]
+	snap.monsters = [{"pos": gt, "power": 30000.0}, {"pos": FormationScript.gate_target(half, 1), "power": 60000.0}]
+	p = SC.plan(snap)
+	var east: Array = sent.filter(func(id): return id[1] == "1")
+	var east_back: Array = p.recall.duplicate()
+	east_back.sort()
+	east.sort()
+	check(east.size() == 2 and east_back == east, "a reinforcement goes home when its own side (east) turns severe; the others stay: %s" % [p.recall])
+	# 흔들림 방지: 2초 전에 배정된 병사는 후보가 아니다
+	sol = _command_units(half)
+	sol[6].last = 98.0  # 동 기병 c1(면마다 i0·i1·c·a 순)
+	snap = {"half": half, "now": 100.0, "dt": 1.0, "calm": [0.0, 0.0, 0.0, 0.0], "monsters": [{"pos": gt, "power": 40000.0}], "ratio": [1.0, 1.0, 1.0, 1.0],
+		"drop": [0.0, 0.0, 0.0, 0.0], "heroes": [], "soldiers": sol}
+	sent = SC.plan(snap).send.map(func(e): return e[0])
+	check(sol[6].id == "c1" and not sent.has("c1") and sent.has("c3"), "anti-flap: a unit ordered 2 s ago is not picked again: %s" % [sent])
+
+
+## 지휘관 시험 병사: 면마다 보병 2(i<면><칸>)·기병 1(c<면>)·궁병 1(a<면>), 모두 자기 자리.
+func _command_units(half: float) -> Array:
+	var sol := []
+	for s in 4:
+		for k in 2:
+			sol.append({"id": "i%d%d" % [s, k], "type": "infantry", "side": s, "at": s, "power": 7040.0, "pos": FormationScript.gate_row_spot(half, s, k), "last": -INF, "engaged": false})
+		sol.append({"id": "c%d" % s, "type": "cavalry", "side": s, "at": s, "power": 4800.0, "pos": FormationScript.patrol_points(half, s, 1)[0], "last": -INF, "engaged": false})
+		sol.append({"id": "a%d" % s, "type": "archer", "side": s, "at": s, "power": 2700.0, "pos": FormationScript.soldier_wall_spot(half, s, 0), "last": -INF, "engaged": false})
+	return sol
 
 
 ## 개정 19: 막사 레벨이 훈련 티어·시간을 정하고 비용은 티어마다 ×5, 진행 중 묶음은 시작 티어·시각 고정.

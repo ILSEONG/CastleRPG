@@ -9,8 +9,9 @@ extends Node3D
 ## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 연구소 → 영웅 공격(방치면 곧바로,
 ## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
-## 병사(개정 13): 병사 배치(Economy.soldier_deploy)대로 성채 앞 광장에 병사를 세운다(Formation.soldier_spots). 배치가 바뀌면 다음 리필 때
-## (방치 모드면 곧바로) 다시 만든다.
+## 병사(개정 21 §1): 방치 모드에는 없다. 스테이지가 시작되면(GameState.Mode.STAGE) 병사 배치(Economy.soldier_deploy)대로 성채 정문 앞
+## 광장(Formation.soldier_spots)에 등장시키고 역할 자리(SoldierCommand.assign_posts)로 보낸다. 리필 때는 스테이지 시작 자리로 되돌리고
+## (연속 진행이면 그대로 다음 스테이지 — 배치가 바뀌었으면 그때 다시 만든다), 방치로 돌아가면 사라진다. 지원 판단은 SoldierCommand 하나.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -20,6 +21,7 @@ const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const FormationScript := preload("res://scripts/formation.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const SoldierScript := preload("res://scripts/soldier.gd")
+const SoldierCommandScript := preload("res://scripts/soldier_command.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -48,8 +50,9 @@ var _formation
 var _hero_snap := []  # 스테이지 시작 때 영웅 자리: [{i, side, post, slot, free_pos}]
 var _picker
 var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, 승급, level, 연구소]}(만들 때 값)
-var soldiers: Array = []  # 성채 앞 병사 노드(개정 13)
-var _soldier_key = null  # 병사를 만들 때의 배치(바뀌면 다시 만든다)
+var soldiers: Array = []  # 이번 스테이지 병사 노드(개정 21 — 스테이지 동안만)
+var command  # 전술 지휘관(soldier_command.gd)
+var _soldier_key = null  # 병사를 만들 때의 배치(연속 진행 중 바뀌면 다음 스테이지에 다시 만든다)
 var _built_slots := 0  # 이 월드를 만들 때의 영웅 슬롯 수(성채 단계)
 var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점에 월드를 다시 만든다
 
@@ -101,7 +104,9 @@ func _build_world() -> void:
 		Economy.debug_win_on = OS.is_debug_build() and _flag_requested("debug-win")  # 개정 18 테스트 훅: 던전 즉시 승리(Economy.debug_win)
 	_built_slots = GameState.hero_count()
 	_sync_heroes()
-	_sync_soldiers()
+	command = SoldierCommandScript.new()
+	command.castle = castle
+	add_child(command)
 	var picker = PickerScript.new()
 	picker.camera = camera
 	picker.badges = badges
@@ -132,9 +137,8 @@ func _build_world() -> void:
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_restore_hero_posts)  # _sync_heroes보다 먼저: 남아 있는 영웅만 복원
 	GameState.refilled.connect(_sync_heroes) # 다음 리필(스테이지 사이) 때 배치·승급·레벨·연구소 반영
-	GameState.refilled.connect(_sync_soldiers)
+	GameState.refilled.connect(_reset_soldiers)
 	Economy.roster_changed.connect(_on_roster_changed)
-	Economy.soldiers_changed.connect(_on_soldiers_changed)
 	Economy.building_done.connect(_on_building_done)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
@@ -247,15 +251,13 @@ func _retire(i: int) -> void:
 	h.retire()
 
 
-## 병사 배치(Economy.soldier_deploy)대로 성채 앞 병사를 만든다. 배치가 만들 때와 같으면 그대로(생산·합성만 바뀐 경우), 다르면 전부 다시.
-func _sync_soldiers() -> void:
+## 스테이지 시작: 병사 배치(Economy.soldier_deploy)대로 광장에 등장시킨다. 연속 진행으로 이미 서 있고 배치도 같으면 그대로 둔다.
+func spawn_soldiers() -> void:
 	var d: Dictionary = Economy.soldier_deploy()
-	if d == _soldier_key:
+	if not soldiers.is_empty() and d == _soldier_key:
 		return
+	clear_soldiers()
 	_soldier_key = d
-	for s in soldiers:
-		s.retire()
-	soldiers.clear()
 	var units := []
 	for k in d:
 		var p: Array = Economy.parse_soldier_key(k)
@@ -263,19 +265,29 @@ func _sync_soldiers() -> void:
 			for i in int(d[k]):
 				units.append({"type": p[0], "tier": p[1]})
 	var spots: Array = FormationScript.soldier_spots(units)
+	var posts: Array = SoldierCommandScript.assign_posts(units)
 	for i in units.size():
 		if spots[i] == null:
 			continue  # 66칸을 넘는 배치(인구 상한이 막는다)
 		var s = SoldierScript.new()
-		s.setup(units[i].type, units[i].tier, spots[i], castle)
+		s.setup(units[i].type, units[i].tier, posts[i].side, posts[i].slot, spots[i], castle)
 		add_child(s)
 		soldiers.append(s)
 
 
-## 방치 모드면 병사 배치 변경을 곧바로, 아니면 다음 리필 때.
-func _on_soldiers_changed() -> void:
-	if GameState.mode == GameState.Mode.IDLE:
-		_sync_soldiers()
+## 방치로 돌아감: 병사가 사라진다.
+func clear_soldiers() -> void:
+	for s in soldiers:
+		if is_instance_valid(s):
+			s.vanish()
+	soldiers.clear()
+
+
+## 리필: 스테이지 시작 자리로 되돌린다(연속 진행 클리어면 그대로 다음 스테이지까지 서 있고, 방치로 가면 곧이어 사라진다).
+func _reset_soldiers() -> void:
+	for s in soldiers:
+		if is_instance_valid(s):
+			s.reset()
 
 
 ## 방치 모드(대기)면 배치·승급·레벨 변경을 곧바로 반영한다. 스테이지 중이면 다음 리필 때.
@@ -309,6 +321,10 @@ func _expand() -> void:
 
 
 func _on_mode_changed(mode: int) -> void:
+	if mode == GameState.Mode.STAGE:
+		spawn_soldiers()
+	elif mode == GameState.Mode.IDLE:
+		clear_soldiers()
 	if _expand_pending and mode == GameState.Mode.IDLE:
 		_rebuild_world.call_deferred()
 

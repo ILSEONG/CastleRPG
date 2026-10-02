@@ -20,6 +20,7 @@ const REPAIR_GOLD := Color(0.95, 0.75, 0.25)
 const CRIT_ORANGE := Color(1.0, 0.62, 0.15)
 const SLASH_RED := Color(0.9, 0.12, 0.1)
 const AURA_ORANGE := Color(1.0, 0.55, 0.15)
+const DUST := Color(0.72, 0.62, 0.48)
 const AXE_WOOD := Color(0.55, 0.38, 0.24)
 const AXE_METAL := Color(0.62, 0.64, 0.68)
 const SHARDS_MIN := 8
@@ -140,6 +141,16 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 		ts.tween_callback(s.queue_free)
 	if shake:
 		shake_camera(parent)
+
+
+## 병사 등장(개정 21 §1): 발밑에서 작은 흙빛 6각 고리가 퍼지며 사라진다(0.4초).
+static func dust(parent: Node, pos: Vector3) -> void:
+	var mi := _spawn(parent, _mesh("shock", DUST), pos + Vector3(0, 0.05, 0), "dust")
+	if mi != null:
+		mi.scale = Vector3.ONE * 0.3
+		var tw := mi.create_tween()
+		tw.tween_property(mi, "scale", Vector3.ONE * 0.9, 0.4).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(mi.queue_free)
 
 
 ## heal_aura: 초록 6각 고리가 반경까지 퍼진다.

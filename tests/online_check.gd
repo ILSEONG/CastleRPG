@@ -896,7 +896,7 @@ func _soldiers_online(state_path: String) -> void:
 	await _wait_until(func(): return not Economy._waiting.has("merge"), 15.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	_check(notices.has(Economy.SOLDIER_TEXT.max_tier) and Net.up, "(v) a refused merge (409 max_tier) shows the reason", "notices=%s" % [notices])
-	# 배치: 서버 저장 → 월드에 선다. 인구(6)를 넘는 배치는 400
+	# 배치: 서버 저장(방치 모드라 월드에는 안 선다 — 개정 21). 인구(6)를 넘는 배치는 400
 	var d := {"infantry:2": 1, "archer:1": 5}
 	var d0: int = Net.requested.get("/v1/soldiers/deploy", 0)
 	var ok := Economy.set_soldier_deploy(d)
@@ -905,8 +905,8 @@ func _soldiers_online(state_path: String) -> void:
 	var server_d = p.get("player", {}).get("soldier_deploy", {})
 	var stored: bool = server_d is Dictionary and server_d.size() == 2 and d.keys().all(func(k): return int(server_d.get(k, -1)) == d[k])
 	await _frames(2)
-	_check(ok and Net.requested.get("/v1/soldiers/deploy", 0) == d0 + 1 and stored and Economy.soldier_deploy() == d and _main.soldiers.size() == 6 and GameState.mode == GameState.Mode.IDLE,
-		"(v) the soldier deploy is saved on the server and the six soldiers stand in front of the keep", "server=%s app=%s spawned=%d" % [server_d, Economy.soldier_deploy(), _main.soldiers.size()])
+	_check(ok and Net.requested.get("/v1/soldiers/deploy", 0) == d0 + 1 and stored and Economy.soldier_deploy() == d and _main.soldiers.is_empty() and GameState.mode == GameState.Mode.IDLE,
+		"(v) the soldier deploy is saved on the server; idle mode puts no soldier in the world (rev 21)", "server=%s app=%s spawned=%d" % [server_d, Economy.soldier_deploy(), _main.soldiers.size()])
 	r0 = _warned("server rejected")
 	await _request("POST", "/v1/soldiers/deploy", {"deploy": {"archer:1": 5, "infantry:1": 1, "infantry:2": 1}})
 	_check(_warned("server rejected") == r0 + 1 and Economy.soldier_deploy() == d, "(v) a deploy above the population is refused (400)", "warnings=%d" % [_warned("server rejected") - r0])
@@ -942,7 +942,7 @@ func _sell_many_online_check() -> void:
 	_panel.close()
 
 
-## (p2) 재접속하면 병사 보유·배치·훈련 대기열(개정 16)이 그대로이고 월드에 그 병사들이 선다.
+## (p2) 재접속하면 병사 보유·배치·훈련 대기열(개정 16)이 그대로다(방치 모드라 월드에는 병사가 없다 — 개정 21).
 func _soldiers_restored(state_path: String) -> void:
 	var json := JSON.new()
 	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".soldiers")) == OK and json.data is Dictionary
@@ -955,7 +955,7 @@ func _soldiers_restored(state_path: String) -> void:
 		same = same and int(Economy.soldiers.get(k, 0)) == int(saved.soldiers[k])
 	for k in saved.deploy:
 		same = same and int(Economy.soldier_deployed.get(k, 0)) == int(saved.deploy[k])
-	_check(same and _main.soldiers.size() == 6, "(p2) reconnecting restores the soldiers and their deploy, and the world spawns them",
+	_check(same and _main.soldiers.is_empty(), "(p2) reconnecting restores the soldiers and their deploy (idle: none in the world until a stage starts)",
 		"soldiers=%s deploy=%s saved=%s spawned=%d" % [Economy.soldiers, Economy.soldier_deployed, saved, _main.soldiers.size()])
 	var tq: Dictionary = saved.get("training", {})
 	var q := Economy.training("stable")

@@ -304,3 +304,94 @@ static func soldier_spots(units: Array) -> Array:
 			taken[cell] = true
 			out[i] = Vector3(Balance.SOLDIER_X.x + cell.x * Balance.SOLDIER_GAP, 0.0, Balance.SOLDIER_Z.x + (size.y - 1 - cell.y) * Balance.SOLDIER_GAP)
 	return out
+
+
+# --- 병사 역할 자리(개정 21 §2) ---
+
+const SOLDIER_WALL_OFFSETS := [2.5, 6.0, 10.0, 13.0]  # 성벽 위 병사 자리 좌우 거리 — 그 뒤로 3.5 m씩(모서리 탑 앞까지). 영웅 자리 ±4·±8과 엇갈린다
+const SOLDIER_WALL_STEP := 3.5
+const SOLDIER_WALL_OUT := 0.5  # 성벽 중심선(영웅 자리·계단 윗단 착지점 줄)보다 총안 쪽으로. 넘치면 둘째 줄은 안쪽
+const GATE_ROW_FIRST := 3.2  # 보병 첫 줄: 성벽 바깥면에서(영웅 성문 앞 자리 1.5 m보다 바깥)
+const GATE_ROW_GAP := 1.6
+const GATE_ROWS := [[0.0, -2.4, 2.4], [-1.0, 1.0, -3.2, 3.2]]  # 줄마다 번갈아(가운데부터)
+const INNER_ROW_FIRST := 1.0  # 성문이 부서지면: 성벽 안쪽 면에서 막는 첫 줄까지
+const INNER_ROWS := [[0.0, -1.2, 1.2], [-0.6, 0.6, -1.8, 1.8]]  # 성문 폭 안(계단 띠 ±2.5 밖은 안 쓴다)
+const PATROL_OUT := 7.0  # 기병 순찰 고리 반지름 = half + WALL_T + 이만큼
+
+
+## 성벽 위 병사 자리 좌우 거리 [+2.5, -2.5, +6, -6, …] — 모서리 탑(중심선 끝 − 탑 반 − 0.5 m) 앞까지.
+static func soldier_wall_offsets(half: float) -> Array:
+	var limit := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0 - 0.5
+	var out := []
+	var d: float = SOLDIER_WALL_OFFSETS[0]
+	var i := 0
+	while d <= limit:
+		out.append_array([d, -d])
+		i += 1
+		d = SOLDIER_WALL_OFFSETS[i] if i < SOLDIER_WALL_OFFSETS.size() else d + SOLDIER_WALL_STEP
+	return out
+
+
+## 면 side의 k번째 궁병 성벽 자리(y = WALL_H). 칸이 모자라면 둘째 줄(중심선 안쪽)을 쓰고, 그것도 넘치면 다시 첫 줄과 겹친다.
+static func soldier_wall_spot(half: float, side: int, k: int) -> Vector3:
+	var offs := soldier_wall_offsets(half)
+	var row := (k / offs.size()) % 2
+	var depth := half + Balance.WALL_T / 2.0 + (SOLDIER_WALL_OUT if row == 0 else -SOLDIER_WALL_OUT)
+	return SIDE_DIR[side] * depth + perp(side) * float(offs[k % offs.size()]) + Vector3(0, Balance.WALL_H, 0)
+
+
+## 면 side의 k번째 보병 자리: 성문 앞 줄(3.2 m 줄 3칸, 4.8 m 줄 4칸, … 번갈아). inner = 성문이 부서져 안쪽 통로 앞을 막는 줄.
+static func gate_row_spot(half: float, side: int, k: int, inner := false) -> Vector3:
+	var rows: Array = INNER_ROWS if inner else GATE_ROWS
+	var r := 0
+	while k >= rows[r % 2].size():
+		k -= rows[r % 2].size()
+		r += 1
+	var depth := half - INNER_ROW_FIRST - r * GATE_ROW_GAP if inner else half + Balance.WALL_T + GATE_ROW_FIRST + r * GATE_ROW_GAP
+	return SIDE_DIR[side] * depth + perp(side) * float(rows[r % 2][k])
+
+
+static func patrol_radius(half: float) -> float:
+	return half + Balance.WALL_T + PATROL_OUT
+
+
+## 기병 순찰 점: 면 side 성문 앞 → 고리 꼭짓점(모서리) → 옆 면(dir = +1 시계 방향, −1 반대) 성문 앞. 이 셋을 오간다.
+static func patrol_points(half: float, side: int, dir: int) -> Array[Vector3]:
+	var r := patrol_radius(half)
+	var next := (side + dir + 4) % 4
+	return [SIDE_DIR[side] * r, (SIDE_DIR[side] + SIDE_DIR[next]) * r, SIDE_DIR[next] * r]
+
+
+## 성 밖 두 점 사이 기병 경로(도착점 포함): 곧장 가면 성을 가로지를 때만 순찰 고리 꼭짓점을 돈다(성 안으로 들어가지 않는다).
+static func ring_route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if crosses_castle(half, from, to):
+		var r := patrol_radius(half)
+		var sa := side_of(from)
+		var sb := side_of(to)
+		if (sa + 2) % 4 != sb:
+			out.append((SIDE_DIR[sa] + SIDE_DIR[sb]) * r)
+		else:
+			var t := 1.0 if perp(sa).dot(from + to) >= 0.0 else -1.0
+			out.append((SIDE_DIR[sa] + perp(sa) * t) * r)
+			out.append((SIDE_DIR[sb] + perp(sa) * t) * r)
+	out.append(to)
+	return out
+
+
+## 등장 자리(성채 정문 앞 광장) → 역할 자리: 광장 가운데 길(x = 0)로 나가 남문 안쪽을 거쳐 route()로 — 건물을 가로지르지 않는다.
+static func soldier_entry_route(half: float, spot: Vector3, post: Vector3) -> Array[Vector3]:
+	var south := gate_inner(half, 2)
+	var out: Array[Vector3] = [Vector3(0, 0, spot.z), south]
+	out.append_array(route(half, south, post))
+	return out
+
+
+## 경로 길이(from에서 점들을 차례로 잇는 수평 거리 합).
+static func path_length(from: Vector3, path: Array) -> float:
+	var d := 0.0
+	var prev := from
+	for p in path:
+		d += flat_distance(prev, p)
+		prev = p
+	return d
