@@ -2712,21 +2712,22 @@ func test_soldier_command() -> void:
 	got = SC.pick(30000.0, 0, cands, [0.0, 4000.0, 0.0, 0.0], left, inf)
 	check(got == ["c3", "c2", "i3", "i2"] and inf == [2, 1, 1, 1],
 		"pick floors: the east keeps defense >= its threat x 1.2 (no cavalry) and its only infantry; others give one infantry each: %s" % [got])
-	# plan: 북에 큰 위협 — 다른 면 기병 셋 + 가까운 동·서 보병 하나씩만. 각 면 보병 1명 이상, 궁병은 안 간다. 다음 판단은 더 보내지 않는다
+	# plan: 북에 큰 위협 — 다른 면 기병 셋 + 보병은 가까운 순(동·서 다음 남 — 면마다 1명은 남긴다). 궁병은 안 간다. 다음 판단은 더 보내지 않는다
 	var sol := _command_units(half)
-	var snap := {"half": half, "now": 100.0, "dt": 1.0, "calm": [0.0, 0.0, 0.0, 0.0], "monsters": [{"pos": gt, "power": 40000.0}], "ratio": [1.0, 1.0, 1.0, 1.0],
+	var snap := {"half": half, "now": 100.0, "dt": 1.0, "calm": [0.0, 0.0, 0.0, 0.0], "monsters": [{"pos": gt, "power": 48000.0}], "ratio": [1.0, 1.0, 1.0, 1.0],
 		"drop": [0.0, 0.0, 0.0, 0.0], "heroes": [], "soldiers": sol}
 	var p: Dictionary = SC.plan(snap)
 	var sent: Array = p.send.map(func(e): return e[0])
 	var powers: Array = sent.map(func(id): return 4800.0 if id.begins_with("c") else 7040.0)
 	var total: float = powers.reduce(func(a, b): return a + b, 0.0)
-	var need0: float = 40000.0 * 1.1 - (2 * 7040.0 + 4800.0 + 2700.0)
-	var inf_sides: Array = sent.filter(func(id): return id.begins_with("i")).map(func(id): return int(id[1]))
-	inf_sides.sort()
-	check(p.severe == [true, false, false, false] and sent.size() == 5 and sent.slice(0, 3).all(func(id): return id.begins_with("c")) and not sent.has("c0"),
+	var need0: float = 48000.0 * 1.1 - (2 * 7040.0 + 4800.0 + 2700.0)
+	var inf_order: Array = sent.filter(func(id): return id.begins_with("i")).map(func(id): return int(id[1]))
+	check(p.severe == [true, false, false, false] and sent.size() == 6 and sent.slice(0, 3).all(func(id): return id.begins_with("c")) and not sent.has("c0"),
 		"plan: a mass at the north gate makes it severe; the three other cavalry go first: %s" % [sent])
-	check(inf_sides == [1, 3] and total >= need0 and total - powers[-1] < need0 and p.send.all(func(e): return e[1] == 0),
-		"plan: then only the nearest infantry (east, west) until the need %.0f is met — sent %.0f, without the last %.0f (minimal, not everyone)" % [need0, total, total - powers[-1]])
+	check(inf_order.size() == 3 and inf_order[2] == 2 and inf_order.slice(0, 2).all(func(s): return s == 1 or s == 3) and total >= need0 and total - powers[-1] < need0
+		and p.send.all(func(e): return e[1] == 0),
+		"plan: then infantry nearest first (east, west, then south — the floor keeps the second east/west one home) until the need %.0f is met — sent %.0f, without the last %.0f (minimal)"
+		% [need0, total, total - powers[-1]])
 	var home_inf := [0, 0, 0, 0]
 	for u in sol:
 		if u.type == "infantry" and not sent.has(u.id):

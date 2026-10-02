@@ -1218,15 +1218,16 @@ func _soldier_home(s) -> bool:
 
 
 ## 지원: 북문에만 보스 + 졸개 6을 몰아 북을 심각하게 만든다(처리 끈 몬스터, 매 프레임 HP를 채워 위협이 그대로다). 위협은 그 순간 북 방어력 D에서
-## 필요량이 "기병 셋 + 보병 둘" 구간(가운데)이 되게 정한다. 판단(decide)을 바로 불러 본다: 기병 먼저, 가까운 동·서 보병 하나씩만(최소 집합).
+## 필요량이 "기병 셋 + 보병 셋" 구간(가운데)이 되게 정한다 — 면마다 보병 둘이라 보호 하한(1명 남김)이 걸리는 크기. 판단(decide)을 바로 불러 본다:
+## 기병 먼저, 보병은 가까운 순으로 동·서·남 하나씩(둘째 동·서 보병은 하한이 막는다), 필요량을 넘으면 멈춘다(최소 집합).
 ## 지원이 북에 닿는 동안 더 보내지 않고 각 면 보병 1명 이상. 몬스터를 치우면 3초 조용한 뒤 복귀 지시, 모두 원래 자리로 돌아간다.
 func _reinforce_case(ss: Array) -> void:
 	const SC := preload("res://scripts/soldier_command.gd")
 	var cmd = _main.command
 	var d_n: float = cmd.decide().defense[0]  # 몬스터 없음: 방어력만 본다
-	var lo := maxf(0.43 * d_n, 3 * 4800.0 + 7040.0)  # 심각(위협 > D × 1.3)이면 필요량 > 0.43 D. 기병 셋 + 보병 하나보다 크고
-	var hi := 3 * 4800.0 + 2 * 7040.0                  # 기병 셋 + 보병 둘 이하
-	_check(lo < hi, "(S) reinforce precondition: the north defense (%.0f) leaves room for a need of 3 cavalry + 2 infantry" % d_n, "lo=%.0f hi=%.0f" % [lo, hi])
+	var lo := maxf(0.43 * d_n, 3 * 4800.0 + 2 * 7040.0)  # 심각(위협 > D × 1.3)이면 필요량 > 0.43 D. 기병 셋 + 보병 둘보다 크고
+	var hi := 3 * 4800.0 + 3 * 7040.0                      # 기병 셋 + 보병 셋 이하
+	_check(lo < hi, "(S) reinforce precondition: the north defense (%.0f) leaves room for a need of 3 cavalry + 3 infantry" % d_n, "lo=%.0f hi=%.0f" % [lo, hi])
 	var threat := ((lo + hi) / 2.0 + d_n) / SC.NEED
 	var gt: Vector3 = Formation.gate_target(_half, 0)
 	var mass := []
@@ -1248,11 +1249,11 @@ func _reinforce_case(ss: Array) -> void:
 	var powers: Array = sent.map(func(s): return s.power())
 	var total: float = powers.reduce(func(a, b): return a + b, 0.0)
 	var cands: int = ss.filter(func(s): return s.side != 0 and s.type != "archer").size()
-	var inf_sides: Array = sent.filter(func(s): return s.type == "infantry").map(func(s): return s.side)
-	inf_sides.sort()
-	_check(p.severe == [true, false, false, false] and types == ["cavalry", "cavalry", "cavalry", "infantry", "infantry"] and inf_sides == [1, 3],
-		"(S) reinforce: a mass at the north gate makes only the north severe; the 3 other cavalry go first, then the nearest east/west infantry",
-		"severe=%s sent=%s infantry sides=%s" % [p.severe, types, inf_sides])
+	var inf_order: Array = sent.filter(func(s): return s.type == "infantry").map(func(s): return s.side)
+	_check(p.severe == [true, false, false, false] and types == ["cavalry", "cavalry", "cavalry", "infantry", "infantry", "infantry"] and inf_order.size() == 3
+		and inf_order[2] == 2 and inf_order.slice(0, 2).all(func(s): return s == 1 or s == 3),
+		"(S) reinforce: a mass at the north gate makes only the north severe; the 3 other cavalry go first, then infantry nearest first (east, west, then south)",
+		"severe=%s sent=%s infantry sides=%s" % [p.severe, types, inf_order])
 	_check(sent.size() < cands and total >= p.need[0] and total - powers[-1] < p.need[0] and sent.all(func(s): return s.reinforce == 0),
 		"(S) reinforce: only the minimal set goes (%d of %d candidates; %.0f >= need %.0f, %.0f without the last)" % [sent.size(), cands, total, p.need[0], total - powers[-1]],
 		"reinforce=%s" % [sent.map(func(s): return s.reinforce)])
