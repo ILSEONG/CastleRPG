@@ -115,6 +115,11 @@ test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·
   assert.deepEqual([1, 4, 5, 9, 10, 19, 20, 34, 35, 300].map((n) => R.dropWeights(rows, n).join('/')),
     ['60/30/9/1/0/0', '60/30/9/1/0/0', '40/35/18/6/1/0', '40/35/18/6/1/0', '20/35/28/13/3.5/0.5', '20/35/28/13/3.5/0.5', '8/25/34/22/9/2',
       '8/25/34/22/9/2', '2/13/30/30/18/7', '2/13/30/30/18/7'])
+  // 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급. 앱 GameData.roll_drops 테스트와 같은 난수열 → 같은 결과
+  const seq = [0.1, 0.5, 0.95, 0.9, 0.0, 0.995]
+  let k = 0
+  assert.deepEqual(R.rollDrops(rows, 1, 2, 0.2, () => seq[k++ % seq.length]),
+    [{ slot: 'weapon', weapon_kind: 'staff', grade: 'SR', level: 1 }, { slot: 'hat', weapon_kind: null, grade: 'SSR', level: 1 }])
   const n = 120_000
   const items = R.rollDrops(rows, 12, n, 0.2, R.mulberry32(18))
   assert.equal(items.length, n)

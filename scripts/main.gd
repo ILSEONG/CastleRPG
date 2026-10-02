@@ -5,6 +5,7 @@ extends Node3D
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 ## 영웅은 배치(GameState.deploy·hero_promotion·hero_level)대로 만들고, 배치·승급(별)·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
+## 개발용 `-- --debug-win`(웹 `?debug-win`, 개정 18): 디버그 빌드에서 Economy.debug_win_on — 던전 장면이 도전을 곧바로 승리로 끝낸다(Economy.debug_win).
 ## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 연구소 → 영웅 공격(방치면 곧바로,
 ## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
@@ -93,6 +94,7 @@ func _build_world() -> void:
 		_econ_demo()  # --heroes보다 먼저: Economy.reset이 개발용 영웅 보유·배치를 지우지 않게
 	if rebuilds == 0:
 		_apply_dev_heroes()
+		Economy.debug_win_on = OS.is_debug_build() and _flag_requested("debug-win")  # 개정 18 테스트 훅: 던전 즉시 승리(Economy.debug_win)
 	_built_slots = GameState.hero_count()
 	_sync_heroes()
 	_sync_soldiers()
@@ -189,7 +191,7 @@ func _sync_heroes() -> void:
 	for i in deploy.size():
 		var id = deploy[i]
 		var key := [id, GameState.hero_promotion(id) if id != null else 0, GameState.hero_level(id) if id != null else 0,
-			GameState.building_level(GameData.LAB)]
+			GameState.building_level(GameData.LAB), Economy.equipment_bonus(id) if id != null else {}]  # 개정 18: 장비가 바뀌면 다시 만든다
 		if _slots.has(i) and _slots[i].key == key:
 			continue
 		_retire(i)

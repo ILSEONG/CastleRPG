@@ -63,6 +63,32 @@ const KEEP_SLOT_STEP := 4  # 성이 넓어질 때마다 영웅 슬롯 +4(사용�
 const MAX_HERO_SLOTS := 12  # 서버 seed.MAX_HERO_SLOTS
 const LEVELUP_INT_KEYS := ["hero_max_level_per_promotion", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만, 15: 승급당)
 const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
+# --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
+const DUNGEONS_PATH := "res://data/dungeons.csv"
+const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
+const DUNGEON_TYPES := ["gold", "equip"]
+const DUNGEON_STR_COLS := ["id", "type", "kind"]
+const DUNGEON_NUM_COLS := ["count", "delay", "hp", "atk", "speed", "range", "atk_interval", "aggro", "scale"]
+const DUNGEON_POSITIVE_COLS := ["hp", "speed", "range", "atk_interval", "scale"]  # 0보다 크다(delay·atk·aggro는 0 이상, count는 1 이상 정수)
+const EQUIP_GRADES := ["N", "R", "SR", "SSR", "UR", "LR"]  # 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
+const EQUIP_GRADE_MULT := {"N": 1.0, "R": 1.5, "SR": 2.2, "SSR": 3.2, "UR": 4.6, "LR": 6.5}
+const ARMOR_SLOTS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves"]  # 모든 영웅이 쓴다
+const EQUIP_SLOTS := ["weapon", "hat", "top", "bottom", "shoes", "pauldron", "gloves"]
+const WEAPON_OF := {"Knight": "sword", "Barbarian": "axe", "Mage": "staff", "Rogue_Hooded": "crossbow", "Rogue": "dagger"}  # 영웅 모델 → 무기 종류
+const WEAPON_KINDS := ["sword", "axe", "staff", "crossbow", "dagger"]
+## 부위 → [능력치, 1레벨 값, 레벨당 증가]. 값 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율)
+const SLOT_STAT := {"weapon": ["atk", 12.0, 3.0], "top": ["hp", 80.0, 20.0], "bottom": ["hp", 80.0, 20.0], "hat": ["hp", 50.0, 12.0],
+	"pauldron": ["hp", 50.0, 12.0], "gloves": ["atk", 5.0, 1.2], "shoes": ["hp", 40.0, 10.0]}
+const SHOES_SPEED_PCT := 3.0  # 신발 이동속도 +3%(등급 무관)
+const RUN_TTL_SEC := 1800.0  # run 만료(30분)
+const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed − 5
+const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
+const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base",
+	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
+	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base"]
+const DUNGEON_INT_KEYS := ["gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "gold_dg_base", "equip_sell_base",
+	"gold_dg_min_sec", "equip_dg_min_sec"]  # 0 이상 정수
+const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap"]  # 1 이상 정수
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
 static var _monsters := {}
@@ -72,12 +98,18 @@ static var _resources: Array = []  # 파일 순서
 static var _config := {}  # 키 → 문자열
 static var _buildings: Array = []  # 파일 순서(개정 12)
 static var _soldiers: Array = []  # 파일 순서(개정 13)
+static var _dungeons: Array = []  # 던전 적 표, 파일 순서(개정 18)
+static var _equip_drop: Array = []  # 등급 가중치, min_level 순(개정 18)
+## 장비 합계 공급자(개정 18): equipment_bonus(hero_id) -> {hp, atk, speed_pct}. 오토로드 Economy가 _ready에서 넣는다(테스트의 .new()는
+## 트리에 안 들어가 넣지 않는다 — hero_stats가 순수하게 남는다).
+static var equip_source = null
 static var _loaded := false
 
 
 ## 기본 표를 다시 읽게 한다. 경로를 주면 그 파일을 쓴다(테스트용). 오류가 있어도 읽은 만큼은 쓴다.
 static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PATH, heroes_path := HEROES_PATH,
-		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH, soldiers_path := SOLDIERS_PATH) -> void:
+		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH, soldiers_path := SOLDIERS_PATH,
+		dungeons_path := DUNGEONS_PATH, equip_drop_path := EQUIP_DROP_PATH) -> void:
 	errors = 0
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
@@ -86,6 +118,8 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
 		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS),
 		"soldiers": _read(soldiers_path, SOLDIER_STR_COLS + SOLDIER_NUM_COLS),
+		"dungeons": _read(dungeons_path, DUNGEON_STR_COLS + DUNGEON_NUM_COLS),  # 개정 18
+		"equip_drop": _read(equip_drop_path, ["min_level"] + EQUIP_GRADES),
 		"config": _config_map(_read(config_path, ["key", "value"])),
 	}))
 
@@ -95,7 +129,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 static func apply_remote(payload: Dictionary) -> bool:
 	errors = 0
 	var raw := {}
-	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers"]:
+	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers", "dungeons", "equip_drop"]:
 		var rows = payload.get(table)
 		var out: Array = []
 		if rows is Array:
@@ -111,6 +145,7 @@ static func apply_remote(payload: Dictionary) -> bool:
 			_err("remote", 0, table, "missing or not an array")
 		raw[table] = out
 	raw.stages.sort_custom(func(a, b): return _num_or_zero(a.get("stage")) < _num_or_zero(b.get("stage")))  # 순서와 무관하게 1부터 이어졌는지 본다
+	raw.equip_drop.sort_custom(func(a, b): return _num_or_zero(a.get("min_level")) < _num_or_zero(b.get("min_level")))  # 개정 18
 	var cfg = payload.get("config")
 	var cfg_map := {}
 	if cfg is Dictionary:
@@ -401,14 +436,17 @@ static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 
 ## 최종 HP = 표 기본값 × 레벨 배율 × 승급 배율(개정 15), 공격 = … × (1 + 연구소 보너스)(개정 12, 개정 13: 막사 HP 보너스 없음). {hp, atk}
 ## buildings = 건물 id → 레벨(Economy.levels). 비우면 연구소 1(보너스 없음).
-static func hero_stats(def: Dictionary, level: int, promotion: int, buildings := {}) -> Dictionary:
+## 개정 18: + 장비 합계(더하기). equip = {hp, atk} 사전({}면 장비 없이), null이면 equip_source(오토로드 Economy)의 그 영웅 장비, 공급자가 없으면 0.
+static func hero_stats(def: Dictionary, level: int, promotion: int, buildings := {}, equip = null) -> Dictionary:
 	var m := level_mult(level) * promote_mult(promotion)
-	return {"hp": float(def.hp) * m, "atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1))))}
+	var eq = equip if equip is Dictionary else (equip_source.equipment_bonus(str(def.get("id", ""))) if equip_source != null else {})
+	return {"hp": float(def.hp) * m + float(eq.get("hp", 0.0)),
+		"atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1)))) + float(eq.get("atk", 0.0))}
 
 
-## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(건물 보너스 포함).
-static func hero_power(def: Dictionary, level: int, promotion: int, buildings := {}) -> int:
-	var s := hero_stats(def, level, promotion, buildings)
+## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(건물 보너스·장비 포함).
+static func hero_power(def: Dictionary, level: int, promotion: int, buildings := {}, equip = null) -> int:
+	var s := hero_stats(def, level, promotion, buildings, equip)
 	return roundi(s.hp / 10.0 + s.atk * 2.0 / float(def.atk_interval))
 
 
@@ -439,6 +477,156 @@ static func kill_gold_tenths(id: String, stage_n: int) -> int:
 	return maxi(1, roundi(float(monster(id).get("gold", 0)) * float(stage(stage_n).get("gold_mult", 1.0)) * 10.0))
 
 
+# --- 던전·장비(개정 18 §2~§5). 서버 rules.ts(던전·장비 블록)와 같은 식 ---
+
+## 던전 적 표 중 그 종류의 행(파일 순서). 행 = {id, type, kind, count, delay, hp, atk, speed, range, atk_interval, aggro, scale}(숫자는 float).
+static func dungeon_rows(type: String) -> Array:
+	_ensure()
+	return _dungeons.filter(func(d): return d.type == type)
+
+
+## 적 성장 {hp, atk}: 골드 던전은 둘 다 gold_dg_growth, 장비 던전은 equip_dg_hp_growth·equip_dg_atk_growth.
+static func dungeon_growth(type: String) -> Dictionary:
+	if type == "gold":
+		return {"hp": config_num("gold_dg_growth"), "atk": config_num("gold_dg_growth")}
+	return {"hp": config_num("equip_dg_hp_growth"), "atk": config_num("equip_dg_atk_growth")}
+
+
+## 단계 n의 적 목록(표 순서) [{id, kind, count(int), delay, hp, atk, speed, range, atk_interval, aggro, scale}]:
+## HP·공격 = 기본 × 성장^(n−1)(곱셈 n−1번 — 서버와 같은 값), 나머지는 표 그대로. 서버 start 응답의 enemies와 같다.
+static func dungeon_enemies(type: String, level: int) -> Array:
+	var g := dungeon_growth(type)
+	var out := []
+	for d in dungeon_rows(type):
+		out.append({"id": d.id, "kind": d.kind, "count": int(d.count), "delay": d.delay, "hp": _grown(d.hp, g.hp, level - 1),
+			"atk": _grown(d.atk, g.atk, level - 1), "speed": d.speed, "range": d.range, "atk_interval": d.atk_interval, "aggro": d.aggro, "scale": d.scale})
+	return out
+
+
+## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)). 1단계 4000, 2단계 4400.
+static func gold_reward(level: int) -> int:
+	return roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+
+
+## 단계 n의 등급 가중치 {N: w, …}(equip_drop.csv의 min_level ≤ n인 마지막 행).
+static func drop_weights(level: int) -> Dictionary:
+	_ensure()
+	var row: Dictionary = _equip_drop[0] if not _equip_drop.is_empty() else {}
+	for r in _equip_drop:
+		if r.min_level <= level:
+			row = r
+	var out := {}
+	for g in EQUIP_GRADES:
+		out[g] = float(row.get(g, 0.0))
+	return out
+
+
+## 장비 count개 [{slot, weapon_kind(무기만, 아니면 null), grade, level}]. 장마다 부위(무기 equip_weapon_p, 아니면 방어구 6부위 균등) → 무기면 종류 균등
+## → 등급(가중치). rand = [0, 1) 난수 Callable. 서버 rules.rollDrops와 같은 순서(같은 난수열이면 같은 결과).
+static func roll_drops(level: int, count: int, rand: Callable) -> Array:
+	var w := drop_weights(level)
+	var total := 0.0
+	for g in EQUIP_GRADES:
+		total += w[g]
+	var weapon_p := config_num("equip_weapon_p")
+	var out := []
+	for i in count:
+		var weapon: bool = rand.call() < weapon_p
+		var slot: String = "weapon" if weapon else ARMOR_SLOTS[mini(floori(rand.call() * ARMOR_SLOTS.size()), ARMOR_SLOTS.size() - 1)]
+		var kind = WEAPON_KINDS[mini(floori(rand.call() * WEAPON_KINDS.size()), WEAPON_KINDS.size() - 1)] if weapon else null
+		var pick: float = rand.call() * total
+		var grade: String = EQUIP_GRADES[0]
+		for g in EQUIP_GRADES:
+			if w[g] <= 0.0:
+				continue
+			grade = g
+			pick -= w[g]
+			if pick < 0.0:
+				break
+		out.append({"slot": slot, "weapon_kind": kind, "grade": grade, "level": level})
+	return out
+
+
+## 장비 능력치 {hp, atk, speed_pct}: 부위 능력치 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율), 신발은 이동속도 +3%(등급 무관).
+static func item_stats(item: Dictionary) -> Dictionary:
+	var out := {"hp": 0, "atk": 0, "speed_pct": 0.0}
+	var s = SLOT_STAT.get(item.get("slot", ""))
+	if s == null:
+		return out
+	out[s[0]] = roundi((s[1] + s[2] * (int(item.get("level", 1)) - 1)) * float(EQUIP_GRADE_MULT.get(item.get("grade", ""), 0.0)))
+	if item.slot == "shoes":
+		out.speed_pct = SHOES_SPEED_PCT
+	return out
+
+
+## 장비들의 합계 {hp, atk, speed_pct}(영웅 최종 능력치에 더한다 — hero_stats).
+static func equip_total(items: Array) -> Dictionary:
+	var out := {"hp": 0, "atk": 0, "speed_pct": 0.0}
+	for it in items:
+		var s := item_stats(it)
+		out.hp += s.hp
+		out.atk += s.atk
+		out.speed_pct += s.speed_pct
+	return out
+
+
+## 판매 값 = round(equip_sell_base × 등급 배율 × 레벨).
+static func item_sell_value(item: Dictionary) -> int:
+	return roundi(config_num("equip_sell_base") * float(EQUIP_GRADE_MULT.get(item.get("grade", ""), 0.0)) * int(item.get("level", 1)))
+
+
+## 영웅 모델의 무기 종류(없으면 ""). 무기는 이 종류만 낀다.
+static func weapon_of(model: String) -> String:
+	return WEAPON_OF.get(model, "")
+
+
+## 리셋 날짜 번호: 하루가 daily_reset_utc_hour시(UTC)에 시작한다(15 = 00:00 KST). 서버 rules.resetDay.
+static func reset_day(t: float) -> int:
+	return floori((t - config_num("daily_reset_utc_hour") * 3600.0) / 86400.0)
+
+
+static func reset_at(day: int) -> float:
+	return day * 86400.0 + config_num("daily_reset_utc_hour") * 3600.0
+
+
+## 다음 리셋 시각(유닉스 초).
+static func next_reset(now: float) -> float:
+	return reset_at(reset_day(now) + 1)
+
+
+## 처음 보는 던전: 오늘 지급분(열쇠 = 하루 지급), 최고 단계 0. {best_level, keys, extra_today, last_reset}
+static func fresh_dungeon(type: String, now: float) -> Dictionary:
+	return {"best_level": 0, "keys": int(config_num(type + "_key_daily")), "extra_today": 0, "last_reset": reset_at(reset_day(now))}
+
+
+## 게으른 일일 리셋(서버 rules.applyReset): 놓친 리셋 수 × 하루 지급을 상한까지(이미 상한 위면 그대로), 추가 도전 횟수 0. 리셋이 없으면 그대로(사본).
+static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
+	var out := st.duplicate()
+	var days := reset_day(now) - reset_day(float(st.last_reset))
+	if days <= 0:
+		return out
+	var keys := int(st.keys)
+	out.keys = maxi(keys, mini(int(config_num(type + "_key_cap")), keys + days * int(config_num(type + "_key_daily"))))
+	out.extra_today = 0
+	out.last_reset = reset_at(reset_day(now))
+	return out
+
+
+## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 그날 추가 도전 횟수).
+static func extra_cost(extra_today: int) -> int:
+	return int(config_num("equip_extra_gold_base")) * (1 + extra_today)
+
+
+## 출전 인원(골드 6, 장비 4).
+static func party_size(type: String) -> int:
+	return int(config_num(type + "_dg_party"))
+
+
+## 승리로 인정하는 최소 전투 시간(골드 15초, 장비 20초).
+static func min_clear_sec(type: String) -> float:
+	return config_num(type + "_dg_min_sec")
+
+
 static func _ensure() -> void:
 	if not _loaded:
 		load_tables()
@@ -451,6 +639,8 @@ static func _install(t: Dictionary) -> void:
 	_resources = t.resources
 	_buildings = t.buildings
 	_soldiers = t.soldiers
+	_dungeons = t.dungeons
+	_equip_drop = t.equip_drop
 	_config = t.config
 	_loaded = true
 
@@ -606,9 +796,30 @@ static func _build(raw: Dictionary) -> Dictionary:
 		else:
 			ids[row.id] = true
 			t.soldiers.append(row)
+	_build_dungeons(raw, t)
 	if errors == 0:
 		_check_contents(t)
 	return t
+
+
+## 개정 18: 던전 적 표(id 겹침 금지)와 등급 가중치 표(min_level은 1부터 오름차순 정수 — 서버 seed.checkDropRows).
+static func _build_dungeons(raw: Dictionary, t: Dictionary) -> void:
+	t.dungeons = []
+	t.equip_drop = []
+	var ids := {}
+	for row in _convert(raw.get("dungeons", []), DUNGEON_STR_COLS, DUNGEON_NUM_COLS):
+		if ids.has(row.id):
+			_err("dungeons", row._line, "id", "duplicate id '%s'" % row.id)
+		else:
+			ids[row.id] = true
+			t.dungeons.append(row)
+	for row in _convert(raw.get("equip_drop", []), [], ["min_level"] + EQUIP_GRADES):
+		var lv: float = row.min_level
+		var ok: bool = lv == floorf(lv) and (lv == 1.0 if t.equip_drop.is_empty() else lv > t.equip_drop[-1].min_level)
+		if not ok:
+			_err("equip_drop", row._line, "min_level", "min_level must start at 1 and go up")
+			break
+		t.equip_drop.append(row)
 
 
 ## 읽기만으로는 못 잡는 필수 내용(게임이 꺼내 쓰는 것들)을 확인한다. 앱이 그릴 수 없는 내용(배치에 없는 건물,
@@ -628,6 +839,7 @@ static func _check_contents(t: Dictionary) -> void:
 			_err("config", 0, k, "missing or empty list")
 	_check_buildings(t)
 	_check_soldiers(t)
+	_check_dungeons(t)
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
 		if not h.grade in GRADES:
@@ -760,6 +972,57 @@ static func _check_soldiers(t: Dictionary) -> void:
 			_err("config", 0, k, "missing or not a number")
 		elif not ((f >= 1.0 and f == floorf(f)) if int_key else ((f >= 0.0 and f == floorf(f)) if int0 else f > 0.0)):
 			_err("config", 0, k, "must be %s: '%s'" % ["an integer of at least 1" if int_key else ("a non-negative integer" if int0 else "greater than 0"), v])
+
+
+## 던전·장비(개정 18, 서버 seed.checkDungeons·checkDropRows와 같은 규칙): 적 표 type은 gold·equip이고 종류마다 행 하나 이상, count 1 이상 정수,
+## hp·speed·range·atk_interval·scale > 0, delay·atk·aggro ≥ 0. 등급 표는 비지 않고 가중치 ≥ 0·행 합 > 0. 설정: 정수 키는 0 이상 정수(파티·드랍 수·
+## 보관함은 1 이상), 리셋 시각 0..23 정수, 무기 확률 0..1, 나머지(성장·배율·제한 시간) > 0. 영웅 모델마다 무기 종류(WEAPON_OF)가 있어야 한다.
+static func _check_dungeons(t: Dictionary) -> void:
+	for table in ["dungeons", "equip_drop"]:
+		if t[table].is_empty():
+			_err(table, 0, "", "table is empty")
+	for d in t.dungeons:
+		if not d.type in DUNGEON_TYPES:
+			_err("dungeons", d._line, "type", "type must be gold or equip: '%s'" % d.type)
+		if not (d.count >= 1.0 and d.count == floorf(d.count)):
+			_err("dungeons", d._line, "count", "must be an integer of at least 1: %s" % d.count)
+		for c in DUNGEON_NUM_COLS:
+			if c != "count" and not (d[c] > 0.0 if c in DUNGEON_POSITIVE_COLS else d[c] >= 0.0):
+				_err("dungeons", d._line, c, "must be %s: %s" % ["greater than 0" if c in DUNGEON_POSITIVE_COLS else "0 or more", d[c]])
+	if not t.dungeons.is_empty():
+		for type in DUNGEON_TYPES:
+			if not t.dungeons.any(func(d): return d.type == type):
+				_err("dungeons", 0, "type", "no enemies for the %s dungeon" % type)
+	for r in t.equip_drop:
+		var sum := 0.0
+		for g in EQUIP_GRADES:
+			sum += r[g]
+			if not r[g] >= 0.0:
+				_err("equip_drop", r._line, g, "weights must be 0 or more")
+		if not sum > 0.0:
+			_err("equip_drop", r._line, "N", "weights must not all be 0")
+	for k in DUNGEON_NUM_KEYS:
+		var s := String(t.config.get(k, ""))
+		var f := s.to_float()
+		if not s.is_valid_float():
+			_err("config", 0, k, "missing or not a number")
+			continue
+		var why := ""
+		if k in DUNGEON_INT_KEYS:
+			why = "" if f >= 0.0 and f == floorf(f) else "a non-negative integer"
+		elif k in DUNGEON_INT1_KEYS:
+			why = "" if f >= 1.0 and f == floorf(f) else "an integer of at least 1"
+		elif k == "daily_reset_utc_hour":
+			why = "" if f >= 0.0 and f <= 23.0 and f == floorf(f) else "an integer in 0..23"
+		elif k == "equip_weapon_p":
+			why = "" if f >= 0.0 and f <= 1.0 else "in 0..1"
+		elif not f > 0.0:
+			why = "greater than 0"
+		if why != "":
+			_err("config", 0, k, "must be %s: '%s'" % [why, s])
+	for h in t.heroes:
+		if not WEAPON_OF.has(h.model) and Art.HERO_MODELS.has(h.model):  # 앱에 없는 모델은 _check_contents가 이미 알렸다
+			_err("heroes", h._line, "model", "model '%s' has no weapon kind" % h.model)
 
 
 ## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.
