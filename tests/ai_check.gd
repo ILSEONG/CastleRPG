@@ -242,7 +242,7 @@ func _run() -> void:
 	spawner._spawn({"kind": "grunt", "side": 0, "time": 0.0})
 	var kid: Node = _main.get_child(_main.get_child_count() - 1)
 	kid.take_damage(1.0e6)
-	_check(Economy.gold_tenths == gold0 + GameData.kill_gold_tenths("grunt", GameState.stage) and GameData.kill_gold_tenths("grunt", 1) == 20, "(j) killing a grunt gives GameData.kill_gold_tenths (stage 1 = 20 tenths)", "gold %d -> %d" % [gold0, Economy.gold_tenths])
+	_check(Economy.gold_tenths == gold0 + GameData.kill_gold_tenths("grunt", GameState.stage) and GameData.kill_gold_tenths("grunt", 1) == 100, "(j) killing a grunt gives GameData.kill_gold_tenths (stage 1 = 100 tenths)", "gold %d -> %d" % [gold0, Economy.gold_tenths])
 	spawner._spawn({"kind": "grunt", "side": 0, "time": 0.0})
 	GameState.refill()
 	await _frames(1)

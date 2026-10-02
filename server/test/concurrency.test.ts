@@ -84,9 +84,9 @@ test('같은 seq 처치 보고 2건이 겹쳐도(재전송이 원래 요청과 �
     const body = { seq: 1, stage: 1, kills: { grunt: 10 } }
     const [r1, r2] = await Promise.all([S.req('POST', '/v1/kills', { token, body }), S.req('POST', '/v1/kills', { token, body })])
     assert.equal(b.arrived(), 2, 'both requests read kill_seq 0 before either wrote')
-    assert.deepEqual([r1.json.gold_gained_tenths, r2.json.gold_gained_tenths].sort((x, y) => x - y), [0, 200])
+    assert.deepEqual([r1.json.gold_gained_tenths, r2.json.gold_gained_tenths].sort((x, y) => x - y), [0, 1000])
     const p = await S.req('GET', '/v1/player', { token })
-    assert.deepEqual([p.json.player.gold_tenths, p.json.player.kill_seq], [200, 1])
+    assert.deepEqual([p.json.player.gold_tenths, p.json.player.kill_seq], [1000, 1])
     const n = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'kills'", [id])
     assert.equal(n[0].n, 1)
   } finally {

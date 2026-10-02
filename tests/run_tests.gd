@@ -141,8 +141,8 @@ func test_game_data() -> void:
 	GameData.load_tables()
 	check(GameData.errors == 0, "default tables load without errors")
 	var grunt := GameData.monster("grunt")
-	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 그대로
-	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 2 and GameData.monster("epic_boss").gold == 50, "monster table values")
+	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 ×5(grunt 2 → 10, epic_boss 50 → 250)
+	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 10 and GameData.monster("epic_boss").gold == 250, "monster table values")
 	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
 		for kind in ["grunt", "epic_boss"]:
 			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])
@@ -156,8 +156,8 @@ func test_game_data() -> void:
 	var r29 := GameData.stage(29)
 	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.10 * 39), "stage beyond table extrapolates hp_mult")
 	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 14, "extrapolated int columns follow the 12-row slope and round (waves 33 = 14, same as the old 3 + floor(s/3))")
-	check(GameData.kill_gold_tenths("grunt", 1) == 20 and GameData.kill_gold_tenths("grunt", 2) == 24 and GameData.kill_gold_tenths("grunt", 3) == 28, "kill_gold_tenths keeps one decimal (2 x 1.2 = 2.4 -> 24, 2 x 1.4 = 2.8 -> 28)")
-	check(GameData.kill_gold_tenths("epic_boss", 2) == 600 and GameData.kill_gold_tenths("grunt", 31) == 140, "kill_gold_tenths boss and extrapolated stage")
+	check(GameData.kill_gold_tenths("grunt", 1) == 100 and GameData.kill_gold_tenths("grunt", 2) == 120 and GameData.kill_gold_tenths("grunt", 3) == 140, "kill_gold_tenths = gold x gold_mult in tenths (grunt 10: 10 x 1.2 = 12 -> 120, 10 x 1.4 = 14 -> 140)")
+	check(GameData.kill_gold_tenths("epic_boss", 2) == 3000 and GameData.kill_gold_tenths("grunt", 31) == 700, "kill_gold_tenths boss (250 x 1.2) and extrapolated stage")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
 	var mp := "user://t_monsters.csv"
 	var sp := "user://t_stages.csv"
@@ -1365,17 +1365,17 @@ func test_gold_tenths() -> void:
 	check(e.gold == 12, "display gold floors tenths (129 -> 12)")
 	e.gold = 7
 	check(e.gold_tenths == 70, "setting whole gold writes x10 tenths")
-	e.gold_tenths = 0
+	e.gold_tenths = 5
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 24 and e.gold == 2, "an offline kill adds 2.4 gold at stage 2 and shows 2")
+	check(e.gold_tenths == 125 and e.gold == 12, "an offline kill adds 12 gold at stage 2 on top of 0.5 and shows 12")
 	e.add_kill("grunt", 2)
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 72 and e.gold == 7, "tenths accumulate across kills (0.8 + 7.2 shows 7)")
+	check(e.gold_tenths == 365 and e.gold == 36, "tenths accumulate across kills (0.5 + 36 shows 36)")
 	e.save()
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var saved = JSON.parse_string(f.get_as_text())
 	f.close()
-	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 72 and not saved.has("gold"), "save writes the current version with gold_tenths")
+	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 365 and not saved.has("gold"), "save writes the current version with gold_tenths")
 	var v1 := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 	v1.store_string(JSON.stringify({"version": 1, "gold": 41, "res": {"wood": 3, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}))
 	v1.close()

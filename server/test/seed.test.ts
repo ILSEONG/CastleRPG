@@ -179,12 +179,12 @@ test('시드는 한 트랜잭션: 뒤 문장이 실패하면 앞 표도 안 바�
   const failing = { batch: (s: { text: string; params?: unknown[] }[]) => db.batch([...s, { text: 'select 1 / 0' }]) }
   await assert.rejects(seed(failing, dir))
   assert.equal((await db.query('select count(*)::int as n from monsters'))[0].n, 2)
-  assert.equal((await db.query("select gold from monsters where id = 'grunt'"))[0].gold, 2)
+  assert.equal((await db.query("select gold from monsters where id = 'grunt'"))[0].gold, 10)
 })
 
 test('CSV 규칙: BOM, CRLF, 빈 줄, 쉼표만 있는 줄, 열 순서가 달라도 같은 결과', async () => {
   const plain = await readTables(DATA_DIR)
-  const messy = '﻿gold,id,scale,aggro,atk_interval,range,speed,atk,hp\r\n\r\n,,,,,,,,\r\n2,grunt,1.0,6.0,1.0,1.2,2.5,4,24\r\n  \r\n50,epic_boss,1.6,8.0,1.2,1.8,1.8,20,400\r\n,,,\r\n'
+  const messy = '﻿gold,id,scale,aggro,atk_interval,range,speed,atk,hp\r\n\r\n,,,,,,,,\r\n10,grunt,1.0,6.0,1.0,1.2,2.5,4,24\r\n  \r\n250,epic_boss,1.6,8.0,1.2,1.8,1.8,20,400\r\n,,,\r\n'
   const t = await readTables(dataCopy({ 'monsters.csv': messy }))
   const strip = (rows: Record<string, unknown>[]) => rows.map(({ _line, ...r }) => r)
   assert.deepEqual(strip(t.monsters), strip(plain.monsters))
