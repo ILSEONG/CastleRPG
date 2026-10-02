@@ -3,6 +3,7 @@ extends Node3D
 ## 성벽 위 영웅은 표적으로 삼지 않는다.
 ## 영웅 스킬 상태: slow(이동 −%), stun(이동·공격 정지), poison(초당 피해) — 이펙트(Fx)는 지속 동안 남는다(개정 17). 영웅을 칠 때 자신을 출처로 넘긴다(thorns 반사 대상).
 ## 공격은 시작(_swing) 때 대상을 고정하고, 피해는 모션의 타격 순간(_release, 개정 12-2 §3)에 들어간다.
+## 개정 18 아레나(던전): setup_arena(던전 적 행) — castle 없음. 거리 제한 없이 가장 가까운 영웅을 쫓고, 없으면 제자리. 자리는 쓰는 쪽이 정한다.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -60,13 +61,23 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0) 
 	_speed = float(_stats.speed) * GameData.enemy_speed_mult(stage)
 
 
+## 아레나(개정 18): row = 던전 적 한 행(Economy.dungeon_enemies — kind·hp·atk·speed·range·atk_interval·aggro·scale). add_child 전에.
+func setup_arena(row: Dictionary) -> void:
+	kind = row.kind
+	_stats = row
+	hp = float(row.hp)
+	hp_max = hp
+	atk = float(row.atk)
+
+
 func _ready() -> void:
 	add_to_group("monsters")
 	_model = UnitModelScript.new()
 	_model.setup(Art.MONSTER_MODELS[kind], float(_stats.scale))
 	add_child(_model)
-	global_position = castle.spawn_position(side)
-	GameState.refilled.connect(_vanish)
+	if castle != null:
+		global_position = castle.spawn_position(side)
+		GameState.refilled.connect(_vanish)
 
 
 func is_alive() -> bool:
@@ -118,7 +129,7 @@ func _process(delta: float) -> void:
 		_model.face(hpos - global_position)
 		if Formation.flat_distance(global_position, hpos) > _stats.range:
 			var next := global_position.move_toward(Vector3(hpos.x, 0.0, hpos.z), speed() * delta)
-			if Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position):
+			if castle != null and Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position):
 				_target_hero = null  # 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 진로로 간다
 				_advance(delta)
 				return
@@ -134,6 +145,9 @@ func _process(delta: float) -> void:
 ## 진로: 성 밖이면 지금 가장 가까운 면의 성문으로(끌려간 뒤 재조준). 멀쩡하면 성문을 치고,
 ## 부서졌으면 성문 축에 맞춘 뒤 안쪽 지점을 거쳐 들어간다(성벽을 뚫지 않게). 성 안이면 성채를 친다.
 func _advance(delta: float) -> void:
+	if castle == null:  # 아레나: 영웅이 없으면 제자리
+		_model.play_idle()
+		return
 	var half: float = castle.half
 	var inside := Formation.is_inside(half, global_position)
 	if not inside:
@@ -241,14 +255,14 @@ func is_stunned() -> bool:
 
 ## 표적: 자기 위치에서 aggro 안, 같은 영역의 살아 있는 지상 영웅·병사 중 가장 가까운 것(개정 21: 성문 앞 보병·기병, 성 안 병사). 성벽 위 궁병은 못 친다.
 func _find_hero():
-	var here_inside := Formation.is_inside(castle.half, global_position)
+	var here_inside := castle != null and Formation.is_inside(castle.half, global_position)
 	var best = null
-	var best_d: float = float(_stats.aggro)
+	var best_d: float = float(_stats.aggro) if castle != null else INF  # 아레나는 거리 제한 없음
 	for group in ["heroes", "soldiers"]:
 		for h in get_tree().get_nodes_in_group(group):
 			if not h.is_alive() or h.is_on_wall():
 				continue
-			if Formation.is_inside(castle.half, h.global_position) != here_inside:
+			if castle != null and Formation.is_inside(castle.half, h.global_position) != here_inside:
 				continue
 			var d := Formation.flat_distance(global_position, h.global_position)
 			if d <= best_d:

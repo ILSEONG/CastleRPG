@@ -399,17 +399,25 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(recruit.confirm_button.get_global_rect().get_center())
 	_check(recruit.is_open() and not recruit.is_showing_results() and recruit.one_button.disabled, "(s) [확인] goes back; [1회] is off at 0 gold", "")
 
-	# (t) 하단 탭 바(개정 13 §7.1): 탭 4개(영웅·병사·모집·상인, [성] 없음), 건물 탭으로 연 모집 창도 [모집] 선택(올라옴). 창이 열린 동안
-	#     끌기는 카메라를 못 움직이고, 탭 바는 창 위에서도 동작한다: [상인] → 모집 창 닫고 거래 창, 같은 탭 다시 → 닫고 선택 없음,
-	#     [병사] → 병사 시트(아직 병사 없음), 다시 → 닫힘
+	# (t) 하단 탭 바(개정 18 §1): 탭 5개 [성장][영웅][병사][던전][모집](같은 폭, 왼쪽부터, 상인·[성] 없음), 건물 탭으로 연 모집 창도
+	#     [모집] 선택(올라옴). 창이 열린 동안 끌기는 카메라를 못 움직이고, 탭 바는 창 위에서도 동작한다: [던전] → 모집 창 닫고 던전 시트,
+	#     같은 탭 다시 → 닫고 선택 없음, [병사] → 병사 시트(아직 병사 없음), 다시 → 닫힘
 	var merchant: Node = null
 	for c in _main.get_children():
 		if c.get_script() == preload("res://scripts/merchant_panel.gd"):
 			merchant = c
+	var dungeon_win: Node = tabs.windows.dungeon
 	var bar_rect: Rect2 = tabs._bar.get_global_rect()
 	var big: Rect2 = hud._button.get_global_rect()
-	_check(tabs.buttons.keys() == ["growth", "hero", "soldier", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
-		"(t) the tab bar has 성장·영웅·병사·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
+	var tab_ids := ["growth", "hero", "soldier", "dungeon", "recruit"]
+	var xs: Array = tab_ids.map(func(id): return tabs.buttons[id].get_global_rect().get_center().x)
+	var ws: Array = tab_ids.map(func(id): return tabs.buttons[id].get_global_rect().size.x)
+	var sorted_xs := xs.duplicate()
+	sorted_xs.sort()
+	_check(tabs.buttons.keys() == tab_ids and preload("res://scripts/tab_bar.gd").TABS.map(func(t): return t[1]) == ["성장", "영웅", "병사", "던전", "모집"] and xs == sorted_xs
+		and ws.all(func(w): return absf(w - ws[0]) < 1.0) and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
+		"(t) the tab bar is [성장][영웅][병사][던전][모집] left to right, equal widths (no 상인); the tavern-opened recruit window selects [모집] (raised)",
+		"tabs=%s xs=%s ws=%s selected=%s" % [tabs.buttons.keys(), xs, ws, tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
 		and big.end.x < 600.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
@@ -424,14 +432,18 @@ func _recruit_and_heroes(rig) -> void:
 	await _frames(2)
 	_check(rig.position == cam_pos, "(t) dragging on the window does not pan the camera", "pos=%s" % rig.position)
 	await _guard_wait()
-	await _tap(_tab_px(tabs, "merchant"))
-	_check(not recruit.is_open() and merchant.is_open() and tabs.selected == "merchant", "(t) [상인] works over the open recruit window: it closes it and opens the trade window",
-		"recruit=%s merchant=%s selected=%s" % [recruit.is_open(), merchant.is_open(), tabs.selected])
+	await _tap(_tab_px(tabs, "dungeon"))
+	_check(not recruit.is_open() and dungeon_win.is_open() and tabs.selected == "dungeon", "(t) [던전] works over the open recruit window: it closes it and opens the dungeon sheet",
+		"recruit=%s dungeon=%s selected=%s" % [recruit.is_open(), dungeon_win.is_open(), tabs.selected])
 	await _tap(_tab_px(tabs, "hero"))  # 연 직후 보호 시간: 탭 바 누름도 버린다
-	_check(merchant.is_open(), "(t) a tab press right after a window opens is ignored too", "")
+	_check(dungeon_win.is_open(), "(t) a tab press right after a window opens is ignored too", "")
 	await _guard_wait()
-	await _tap(_tab_px(tabs, "merchant"))
-	_check(not merchant.is_open() and tabs.selected == "" and _picker.selected == null, "(t) the selected tab again closes its window and no tab is selected (battlefield)", "selected=%s" % tabs.selected)
+	await _tap(_tab_px(tabs, "dungeon"))
+	_check(not dungeon_win.is_open() and tabs.selected == "" and _picker.selected == null, "(t) the selected tab again closes its window and no tab is selected (battlefield)", "selected=%s" % tabs.selected)
+	await _tap(_tab_px(tabs, "growth"))
+	_check(tabs.windows.growth.is_open() and tabs.selected == "growth", "(t) [성장] opens the growth sheet", "")
+	await _guard_wait()
+	await _tap(_tab_px(tabs, "growth"))
 	await _tap(_tab_px(tabs, "recruit"))
 	_check(recruit.is_open() and tabs.selected == "recruit", "(t) [모집] opens the recruit window", "")
 	await _guard_wait()
@@ -643,6 +655,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _soldier_picks()
 	await _soldier_tap()
 	await _soldier_figures(tabs)
+	await _dungeon_ui(tabs)
 	await _world_tags()
 	await _rotate_ui(hud)
 	await _fever_ui(hud)
@@ -2072,3 +2085,170 @@ func _barracks_t2_window() -> void:
 	Economy.levels.barracks = 1
 	Economy.changed.emit()
 	await _frames(1)
+
+
+## (D) 개정 18 던전(오프라인, 즉시 승리 훅 Economy.debug_win_on): [던전] 탭 → 카드(열쇠·보상) → 골드 [도전] → 편성(6칸 = 전투력 상위, 영웅 카드 탭으로
+##     빼고 넣기) → [출전] → 던전 장면(성 월드는 트리 밖) → 결과(승리·+4,000 골드·열쇠 −1) → 자동 체크 둘은 배타 → "현재 단계 자동 반복"이
+##     2초마다 같은 단계를 돌고 열쇠 0에서 멈춤(알림) → [나가기] → 성. 장비 던전 → 상자 5개 → 결과 칸 5개. 영웅 상세 장비 칸 → 장착·해제.
+##     보관함 → 장착 중은 못 고름, 여러 개 판매, 부위 필터. 캡처 좌표(720×1280 논리)를 INFO로 찍는다.
+func _dungeon_ui(tabs) -> void:
+	var dwin = tabs.windows.dungeon
+	for id in ["arteon", "ignis", "kyle"]:
+		Economy.heroes[id] = maxi(1, int(Economy.heroes.get(id, 0)))
+	Economy.gold_tenths = 0
+	Economy.rng.seed = 18  # 장비 드랍 고정
+	Economy.debug_win_on = true
+	Economy.changed.emit()
+	Economy.roster_changed.emit()
+	var keys0: int = Economy.dungeon_state("gold").keys
+	await _tap(_tab_px(tabs, "dungeon"))
+	await _guard_wait()
+	var gc: Dictionary = dwin.cards.gold
+	var ec: Dictionary = dwin.cards.equip
+	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "1 / 3" and gc.reward.text == "보상 4,000 골드"
+		and gc.level.text == "1단계" and gc.prev.disabled and gc.next.disabled and not gc.go.disabled and ec.reward.text.begins_with("장비 5개 · N 60% · R 30% · SR 9% · SSR 1%"),
+		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 4,000; equip card 1 / 3 with the grade odds", "gold=%s equip=%s" % [gc.reward.text, ec.reward.text])
+	print("INPUT INFO: dungeon tab %s, gold [도전] %s, equip [도전] %s, [보관함] %s (720x1280 logical)" % [tabs.buttons.dungeon.get_global_rect(), gc.go.get_global_rect(),
+		ec.go.get_global_rect(), dwin.bag_button.get_global_rect()])
+	await _tap(gc.go.get_global_rect().get_center())
+	_check(dwin.is_showing_form() and dwin.slot_cards.size() == 6 and dwin.party == Economy.default_party("gold") and dwin.party.size() == 6 and not dwin.go_button.disabled
+		and dwin.hero_cards.keys() == dwin.owned_by_power(), "(D) [도전] opens the formation: 6 slots filled with the top-power heroes, hero figures by power", "party=%s" % [dwin.party])
+	await _guard_wait()
+	var first: String = dwin.party[0]
+	await _tap(dwin.hero_cards[first].get_global_rect().get_center())
+	_check(dwin.party.size() == 5 and not dwin.party.has(first) and dwin.go_button.disabled and dwin.form_reason.text == "출전 5 / 6명" and dwin.slot_cards[5].hero_id == "",
+		"(D) tapping a deployed hero takes it out: 5 / 6, [출전] off", "party=%s reason=%s" % [dwin.party, dwin.form_reason.text])
+	await _tap(dwin.hero_cards[first].get_global_rect().get_center())
+	_check(dwin.party.size() == 6 and not dwin.go_button.disabled, "(D) tapping it again puts it back", "party=%s" % [dwin.party])
+	print("INPUT INFO: formation [출전] %s, [자동 편성] %s" % [dwin.go_button.get_global_rect(), dwin.auto_button.get_global_rect()])
+	var started := [0]
+	var on_start := func(r): if not r.is_empty(): started[0] += 1
+	Economy.dungeon_started.connect(on_start)
+	await _tap(dwin.go_button.get_global_rect().get_center())
+	await _frames(3)
+	var d = _main._dungeon
+	_check(d != null and d.is_inside_tree() and not _main.is_inside_tree() and GameState.process_mode == Node.PROCESS_MODE_DISABLED and Fever.dungeon_party.get("gold") == d.run.party,
+		"(D) [출전] swaps the castle world for the dungeon scene (formation saved per dungeon)", "dungeon=%s" % d)
+	if d == null:
+		return
+	var hud = d.hud
+	_check(d.phase == d.Phase.RESULT and d.result.win and hud.result_layer.visible and hud.result_title.text == "승리!" and hud.gold_label.text == "+4,000 골드"
+		and Economy.gold == 4000 and Economy.dungeon_state("gold").keys == keys0 - 1 and hud.next_button.visible and not hud.next_button.disabled,
+		"(D) instant-win hook: result 승리!, +4,000 골드, one key spent, [다음 단계] shown", "phase=%d result=%s gold=%d" % [d.phase, d.result, Economy.gold])
+	print("INPUT INFO: result panel %s, [다음 단계] %s, [다시] %s, [나가기] %s, 다음 단계 자동 %s, 현재 단계 자동 반복 %s" % [hud.result_title.get_parent().get_global_rect(),
+		hud.next_button.get_global_rect(), hud.again_button.get_global_rect(), hud.exit_button.get_global_rect(), hud.auto_next_box.get_global_rect(),
+		hud.auto_repeat_box.get_global_rect()])
+	await _tap(hud.auto_next_box.get_global_rect().get_center())
+	var first_on := [Fever.dungeon_auto, hud.auto_next_box.button_pressed, hud.auto_repeat_box.button_pressed]
+	await _tap(hud.auto_repeat_box.get_global_rect().get_center())
+	_check(first_on == ["next", true, false] and Fever.dungeon_auto == "repeat" and not hud.auto_next_box.button_pressed and hud.auto_repeat_box.button_pressed
+		and d.auto_left > 1.5 and hud.auto_label.text == "2초 뒤 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
+		"first=%s now=%s left=%.2f label=%s" % [first_on, Fever.dungeon_auto, d.auto_left, hud.auto_label.text])
+	await _wait_until(func(): return Economy.dungeon_state("gold").keys == 0 and _main._dungeon != null and _main._dungeon.auto_halted, 15.0)
+	d = _main._dungeon
+	hud = d.hud
+	_check(started[0] == 3 and Economy.dungeon_state("gold").keys == 0 and Economy.gold == 12000 and d.run.level == 1 and d.auto_halted and hud.toast.visible
+		and hud.toast.text == d.STOP_KEYS and hud.auto_label.text == "자동 도전을 멈췄습니다",
+		"(D) auto repeat reruns level 1 every 2 s (keys 2 -> 1 -> 0) and stops with a notice when the keys run out",
+		"starts=%d keys=%d gold=%d halted=%s toast=%s" % [started[0], Economy.dungeon_state("gold").keys, Economy.gold, d.auto_halted, hud.toast.text])
+	await get_tree().create_timer(2.5).timeout
+	_check(started[0] == 3 and _main._dungeon == d, "(D) and no further run starts", "starts=%d" % started[0])
+	Fever.dungeon_auto = ""
+	await _tap(hud.exit_button.get_global_rect().get_center())
+	await _frames(3)
+	_check(_main.is_inside_tree() and _main._dungeon == null and GameState.process_mode == Node.PROCESS_MODE_INHERIT and get_viewport().get_camera_3d() == _camera
+		and dwin.is_open() and not dwin.is_showing_form() and gc.keys.text == "0 / 10" and gc.go.disabled and gc.reason.text == "열쇠가 없습니다",
+		"(D) [나가기] returns to the castle: the dungeon sheet shows 0 / 10 and [도전] off (열쇠가 없습니다)",
+		"in_tree=%s keys=%s reason=%s" % [_main.is_inside_tree(), gc.keys.text, gc.reason.text])
+	# 장비 던전: 시체에서 빛기둥 + 상자 5개 → 결과 칸 5개
+	await _tap(ec.go.get_global_rect().get_center())
+	await _guard_wait()
+	await _tap(dwin.go_button.get_global_rect().get_center())
+	await _frames(3)
+	d = _main._dungeon
+	_check(d != null and d.run.type == "equip" and d.phase == d.Phase.LOOT and d.drops.size() == 5 and d.result.rewards.items.size() == 5 and Economy.bag.size() == 5
+		and not d.hud.result_layer.visible, "(D) equip dungeon win: 5 grade chests pop out of the corpse before the result screen", "d=%s" % d)
+	if d == null:
+		return
+	await _wait_until(func(): return d.phase == d.Phase.RESULT, 3.0)
+	_check(d.hud.result_layer.visible and d.hud.reward_tiles.size() == 5 and d.hud.reward_tiles.map(func(t): return t.grade) == d.result.rewards.items.map(func(i): return i.grade)
+		and d.drops.all(func(c): return absf(c.position.y) < 0.01) and Economy.dungeon_state("equip").keys == 0,
+		"(D) then the result shows the 5 items as grade tiles; the chests have landed; the equip key is spent", "phase=%d" % d.phase)
+	print("INPUT INFO: equip result tiles %s" % [d.hud.reward_tiles.map(func(t): return t.get_global_rect())])
+	await _tap(d.hud.exit_button.get_global_rect().get_center())
+	await _frames(3)
+	# 영웅 상세 장비 칸 → 장착·해제
+	var hwin = tabs.windows.hero
+	var bag = hwin.bag
+	var armor: Array = Economy.items().filter(func(x): return x.slot != "weapon")
+	_check(not armor.is_empty(), "(D) precondition: an armor piece dropped (fixed seed)", "items=%s" % [Economy.items()])
+	if armor.is_empty():
+		return
+	var it: Dictionary = armor[0]
+	dwin.close()
+	hwin.open()
+	hwin.show_detail("hans")
+	await _guard_wait()
+	var slot_b: Button = hwin.equip_slots[it.slot].button
+	var card: Rect2 = hwin.big_card.get_global_rect()
+	_check(hwin.equip_slots.size() == 7 and hwin.equip_slots.values().all(func(s): return s.tile.grade == "" and card.encloses(s.button.get_global_rect()))
+		and not hwin.equip_label.visible and hwin.equip_slots.weapon.tile.kind == "sword",
+		"(D) hero detail: 7 empty equipment slots on the big card (hans's weapon slot shows a sword)", "card=%s" % card)
+	print("INPUT INFO: hero equipment slots %s" % [hwin.equip_slots.keys().map(func(s): return [s, hwin.equip_slots[s].button.get_global_rect()])])
+	await _tap(slot_b.get_global_rect().get_center())
+	_check(bag.is_open() and bag.mode == "pick" and bag.slot == it.slot and bag.rows.has(it.id) and bag.rows[it.id].equip.text == "장착" and bag.unequip_button.disabled,
+		"(D) tapping a slot opens that slot's items with [장착] ([해제] off while empty)", "open=%s rows=%s" % [bag.is_open(), bag.rows.keys()])
+	await _guard_wait()
+	var hp0: String = hwin.stat_values[0].text
+	await _tap(bag.rows[it.id].equip.get_global_rect().get_center())
+	await _frames(2)
+	var want := GameData.hero_stats(GameData.hero("hans"), Economy.level_of("hans"), Economy.promotion_of("hans"), Economy.levels)
+	_check(not bag.is_open() and int(Economy.equipment.get("hans", {}).get(it.slot, -1)) == it.id and hwin.equip_slots[it.slot].tile.grade == it.grade
+		and hwin.equip_label.visible and hwin.equip_label.text == "장비 " + preload("res://scripts/bag_panel.gd").stat_text(it)
+		and hwin.stat_values[0].text == UiKit.commas(roundi(want.hp)) and hwin.stat_values[0].text != hp0,
+		"(D) [장착] equips it: the slot shows its grade, HP includes it and the total line reads 장비 HP +n", "eq=%s label=%s hp %s -> %s" % [Economy.equipment, hwin.equip_label.text, hp0, hwin.stat_values[0].text])
+	await _guard_wait()
+	await _tap(slot_b.get_global_rect().get_center())
+	await _guard_wait()
+	await _tap(bag.unequip_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(not bag.is_open() and not Economy.equipment.get("hans", {}).has(it.slot) and hwin.equip_slots[it.slot].tile.grade == "" and not hwin.equip_label.visible
+		and hwin.stat_values[0].text == hp0, "(D) [해제] takes it off again", "eq=%s" % [Economy.equipment])
+	# 보관함: 장착 중은 못 고름, 두 개 골라 판매, 부위 필터
+	Economy.equip("hans", it.slot, it.id)
+	hwin.close()
+	dwin.open()
+	await _guard_wait()
+	await _tap(dwin.bag_button.get_global_rect().get_center())
+	_check(bag.is_open() and bag.mode == "bag" and bag.title_label.text == "보관함 5 / 300" and bag.rows.size() == 5 and bag.rows[it.id].check.disabled and bag.sell_button.disabled,
+		"(D) [보관함] lists the 5 items; the equipped one cannot be picked; [판매] off", "title=%s rows=%d" % [bag.title_label.text, bag.rows.size()])
+	print("INPUT INFO: bag rows %s, [판매] %s" % [bag.rows.values().map(func(r): return r.box.get_global_rect()), bag.sell_button.get_global_rect()])
+	await _guard_wait()
+	var ids: Array = bag.rows.keys().filter(func(x): return x != it.id).slice(0, 2)
+	var value := 0
+	for x in ids:
+		value += GameData.item_sell_value(Economy.item(x))
+		await _tap(bag.rows[x].check.get_global_rect().get_center())
+	_check(bag.selected.size() == 2 and bag.sum_label.text == "2개 선택 · +%s 골드" % UiKit.commas(value) and not bag.sell_button.disabled,
+		"(D) ticking two rows shows 2개 선택 and their sell value", "sum=%s" % bag.sum_label.text)
+	var g0: int = Economy.gold
+	await _tap(bag.sell_button.get_global_rect().get_center())
+	_check(Economy.bag.size() == 3 and Economy.gold == g0 + value and ids.all(func(x): return Economy.item(x).is_empty()) and bag.title_label.text == "보관함 3 / 300"
+		and bag.selected.is_empty(), "(D) [판매] sells both for round(10 x grade mult x level) each", "bag=%d gold %d -> %d" % [Economy.bag.size(), g0, Economy.gold])
+	await _tap(bag.slot_button.get_global_rect().get_center())
+	_check(bag.slot_filter == "weapon" and bag.slot_button.text == "부위: 무기" and bag.rows.keys().all(func(x): return Economy.item(x).slot == "weapon"),
+		"(D) [부위] filter cycles to 무기 and lists only weapons", "filter=%s rows=%s" % [bag.slot_filter, bag.rows.keys()])
+	bag.slot_filter = ""
+	bag.close()
+	dwin.close()
+	Economy.unequip("hans", it.slot)
+	Economy.debug_win_on = false
+	Economy.dungeon_started.disconnect(on_start)
+
+
+## cond가 참이 될 때까지(최대 timeout초) 기다린다.
+func _wait_until(cond: Callable, timeout: float) -> void:
+	var t := 0.0
+	while not cond.call() and t < timeout:
+		await get_tree().process_frame
+		t += get_process_delta_time()

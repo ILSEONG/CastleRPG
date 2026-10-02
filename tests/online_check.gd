@@ -1051,6 +1051,7 @@ func _growth_restored(state_path: String) -> void:
 ## 즉시 승리 훅(debug_win → test/dungeon_age) → 열쇠 −1·장비 5개(서버 id), 같은 run 재전송은 같은 5개, 장착 → 월드 영웅 능력치에 장비 합계,
 ## 서버 거부(409 wrong_slot), 판매(골드 = 판매 값). 끝 상태를 --state.dungeons에 쓴다(phase 2가 복원을 본다).
 func _dungeons_online(state_path: String) -> void:
+	Economy.dungeon_started.disconnect(_main._on_dungeon_started)  # API 검사: 성 월드를 그대로 두고 던전 장면은 띄우지 않는다
 	var started := []
 	var finished := []
 	var on_start := func(r): started.append(r)
@@ -1161,6 +1162,7 @@ func _hero_node(hero_id: String):
 ## (p2) 재접속하면 보관함·장착·던전 진행이 그대로이고 장착한 영웅이 장비 능력치로 선다. 그 뒤 골드 던전(6명 — 영웅 둘을 test/grant_hero로 준다):
 ## 즉시 승리 → 열쇠 −1·골드 +4000(서버), 같은 run 재전송은 같은 보상.
 func _dungeons_restored(state_path: String) -> void:
+	Economy.dungeon_started.disconnect(_main._on_dungeon_started)  # API 검사 동안 던전 장면 없음(_dungeon_scene_online이 다시 붙인다)
 	var json := JSON.new()
 	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".dungeons")) == OK and json.data is Dictionary
 	_check(ok, "(p2) phase 1 dungeons state file", state_path)
@@ -1209,3 +1211,30 @@ func _dungeons_restored(state_path: String) -> void:
 		and Economy.dungeon_state("gold").keys == keys0 - 1, "(p2) resending the gold run returns the same reward once", "finished=%s" % [finished.slice(1)])
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
+	await _dungeon_scene_online()
+
+
+## 개정 18 앱 흐름(온라인): 던전 시트 편성 [출전] → 서버 start → 던전 장면(성 월드는 트리 밖) → 즉시 승리 훅(test/dungeon_age → finish) → 결과 화면
+## (2단계 4,400 골드, 열쇠 −1, 최고 2단계) → [나가기] → 성 월드가 돌아온다.
+func _dungeon_scene_online() -> void:
+	Economy.dungeon_started.connect(_main._on_dungeon_started)
+	var dwin = _tabs.windows.dungeon
+	var keys0: int = Economy.dungeon_state("gold").keys
+	var gold0: int = Economy.server_gold_tenths
+	Economy.debug_win_on = true
+	dwin.open()
+	dwin.open_form("gold")
+	var lv: int = dwin.level_of("gold")
+	dwin.deploy()
+	var done := await _wait_until(func(): return _main._dungeon != null and _main._dungeon.phase == _main._dungeon.Phase.RESULT, 30.0)
+	var d = _main._dungeon
+	_check(done and not _main.is_inside_tree() and lv == 2 and d.result.win and d.result.rewards == {"gold_tenths": 44000} and Economy.server_gold_tenths == gold0 + 44000
+		and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.dungeon_state("gold").best_level == 2 and d.hud.gold_label.text == "+4,400 골드",
+		"(p2) app flow online: formation [출전] -> server start -> dungeon scene -> instant win -> result 4,400 gold (level 2), key spent",
+		"done=%s lv=%d result=%s gold %d -> %d" % [done, lv, d.result if d != null else {}, gold0, Economy.server_gold_tenths])
+	Economy.debug_win_on = false
+	if d != null:
+		d.leave()
+	var back := await _wait_until(func(): return _main.is_inside_tree() and _main._dungeon == null, 5.0)
+	_check(back and GameState.process_mode == Node.PROCESS_MODE_INHERIT and get_viewport().get_camera_3d() == _main.camera, "(p2) [나가기] brings the castle world back", "")
+	dwin.close()

@@ -14,11 +14,18 @@ extends "res://scripts/ui_window.gd"
 ## 목록 ↔ 상세 전환 때 연 직후처럼 보호 시간을 다시 건다(카드 연타가 그 자리의 [레벨업]을 누르지 않게).
 ## 개정 17: 스킬 줄은 칸마다 하나(SSR·SR 3, R 2). 잠긴 칸은 회색·자물쇠·"★3에서 해금", 승급 미리보기 둘째 줄에 다음 해금
 ## ("★3 달성 시 스킬 해금: 화상"), 승급으로 열리면 알림 "스킬 해금! 화상" + 그 줄 금색 반짝임.
+## 개정 18: 큰 카드 양옆에 장비 칸 7개(왼쪽 무기·모자·상의·하의, 오른쪽 신발·견장·장갑 — 아이콘 + 등급 테두리, 빈 칸은 흐린 아이콘).
+## 칸을 탭하면 그 부위 장비 고르기(bag_panel.open_pick — [장착]·[해제]). 능력치는 장비 포함, 그 아래 줄에 장비 합계("장비 HP +350 · 공격 +35").
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const ItemTileScript := preload("res://scripts/item_tile.gd")
+const BagPanel := preload("res://scripts/bag_panel.gd")
+const EQUIP_PX := 72.0  # 장비 칸 한 변
+const EQUIP_LEFT := 4  # 왼쪽 줄 칸 수(GameData.EQUIP_SLOTS 앞에서부터)
+const EQUIP_COLOR := Color(0.2, 0.42, 0.75)
 
 const SLOT_SIZE := Vector2(140, 150)
 const CARD_SIZE := Vector2(200, 240)
@@ -39,6 +46,9 @@ const STAT_NAMES := ["HP", "공격", "공격 간격", "사거리", "전투력"]
 const LOCKED_GRAY := Color(0.55, 0.55, 0.58)  # 잠긴 스킬 줄
 const UNLOCK_GOLD := Color("C8901A")  # 해금 반짝임
 
+var bag  # 장비 고르기 창(bag_panel). main이 넣는다
+var equip_slots := {}  # 부위 → {button, tile}(개정 18)
+var equip_label: Label  # 장비 합계 줄(장비가 없으면 숨김)
 var slot_cards: Array = []
 var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
 var apply_button: Button
@@ -90,6 +100,7 @@ func _ready() -> void:
 	_fit()
 	Economy.roster_changed.connect(_refresh)
 	Economy.changed.connect(_refresh)
+	Economy.items_changed.connect(_refresh)  # 개정 18 장비 칸
 	Economy.leveled.connect(_on_leveled)
 	Economy.promoted.connect(_on_promoted)
 
@@ -150,6 +161,7 @@ func _build_detail() -> void:
 	big_card.size_flags_stretch_ratio = 3.0
 	big_card.live = true  # 개정 14 §2: 실시간 피규어(대기 애니메이션), 끌어서 돌린다
 	_detail_view.add_child(big_card)
+	_build_equip_slots()
 	# 이름·등급 + [배치]
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
@@ -201,6 +213,8 @@ func _build_detail() -> void:
 		nx.custom_minimum_size = Vector2(130, 0)
 		stats.add_child(nx)
 		stat_nexts.append(nx)
+	equip_label = _label("", 21, EQUIP_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
+	_detail_view.add_child(equip_label)
 	promote_preview = _label("", 22, PREVIEW_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
 	promote_preview.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_detail_view.add_child(promote_preview)
@@ -266,6 +280,37 @@ func _build_detail() -> void:
 	for b in [prev_button, close_button, next_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nav.add_child(b)
+
+
+## 장비 칸 7개(개정 18): 큰 카드 안 양옆 세로 줄(피규어 칸 바깥). 칸 = 평면 버튼 + 장비 그림(item_tile).
+func _build_equip_slots() -> void:
+	var cols := []
+	for side in 2:
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 8)
+		col.grow_horizontal = Control.GROW_DIRECTION_END if side == 0 else Control.GROW_DIRECTION_BEGIN
+		col.grow_vertical = Control.GROW_DIRECTION_BOTH
+		big_card.add_child(col)
+		col.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT if side == 0 else Control.PRESET_CENTER_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 14)
+		cols.append(col)
+	for i in GameData.EQUIP_SLOTS.size():
+		var s: String = GameData.EQUIP_SLOTS[i]
+		var b := Button.new()
+		b.flat = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(EQUIP_PX, EQUIP_PX)
+		b.pressed.connect(press_equip.bind(s))
+		var tile = ItemTileScript.new()
+		tile.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		b.add_child(tile)
+		cols[0 if i < EQUIP_LEFT else 1].add_child(b)
+		equip_slots[s] = {"button": b, "tile": tile}
+
+
+## 장비 칸 탭: 그 부위 장비 고르기(장착·해제).
+func press_equip(s: String) -> void:
+	if bag != null and detail_id != "":
+		bag.open_pick(detail_id, s)
 
 
 ## 비용 버튼: 위 제목, 아래 [골드 아이콘 숫자](버튼 안, 입력은 버튼이 받는다).
@@ -595,6 +640,7 @@ func _refresh_detail() -> void:
 			ui.lock.visible = sk_rows[i].locked
 			ui.label.add_theme_color_override("font_color", LOCKED_GRAY if sk_rows[i].locked else HudScript.INK)
 	desc_label.text = h.desc
+	_refresh_equip(id, h)
 	var waiting: bool = Economy.levelup_waiting()
 	var why := Economy.levelup_block(id)
 	_set_cost(_one, "레벨업", 1 if grow else 0, h.grade, lv)
@@ -623,6 +669,25 @@ func _refresh_detail() -> void:
 	deploy_button.disabled = d.has(id) or not d.has(null)
 	prev_button.disabled = order.size() < 2
 	next_button.disabled = order.size() < 2
+
+
+## 장비 칸 그림(낀 장비 등급 테두리, 빈 칸은 그 부위·무기 종류 흐린 아이콘)과 장비 합계 줄.
+func _refresh_equip(id: String, h: Dictionary) -> void:
+	var eq := Economy.hero_equipment(id)
+	for s in equip_slots:
+		var it: Dictionary = eq.get(s, {})
+		var kind: String = GameData.weapon_of(h.model) if s == "weapon" else s
+		equip_slots[s].tile.set_item(BagPanel.item_kind(it) if not it.is_empty() else kind, str(it.get("grade", "")))
+	var b := Economy.equipment_bonus(id)
+	var parts := []
+	if b.hp > 0:
+		parts.append("HP +%s" % UiKit.commas(b.hp))
+	if b.atk > 0:
+		parts.append("공격 +%s" % UiKit.commas(b.atk))
+	if b.speed_pct > 0.0:
+		parts.append("이동 +%d%%" % roundi(b.speed_pct))
+	equip_label.text = "장비 " + " · ".join(parts) if not parts.is_empty() else ""
+	equip_label.visible = not parts.is_empty()
 
 
 func _set_cost(btn: Dictionary, title: String, count: int, grade: String, lv: int) -> void:

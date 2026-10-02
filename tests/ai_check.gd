@@ -18,6 +18,7 @@ const Art := preload("res://scripts/art.gd")
 const MainScript := preload("res://scripts/main.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const SOLDIER_TIME_SCALE := 4.0  # (S) 병사 사례 동안 게임 시간 배속(걷는 구간이 길다)
+const ArenaKit := preload("res://scripts/arena_kit.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -395,6 +396,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _stage_return_cases()
 	await _rebuilt_post_case()
 	await _growth_cases()
+	await _dungeon_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -1967,3 +1969,141 @@ func _hits(h, m, n: int) -> Array:
 		await _attack_now(h)
 		out.append(_dmg(m) - before)
 	return out
+
+
+## (DG) 개정 18 던전(전투는 hero.gd·monster.gd 아레나): 성 월드는 트리 밖(GameState 정지), 방치 모드여도 아레나 영웅은 피해를 받는다.
+##  DG1 골드 던전 6명 대 고블린 10 → 5초 뒤 고블린 5 + 왕(16) — 서로 싸우고, 전멸이면 최소 시간 뒤 승리(+4,000·열쇠 −1).
+##  DG2 패배: 출전 영웅 전멸 / 제한 시간 — 열쇠는 그대로. DG3 데스나이트 휩쓸기(반경 3 m 공격 × 1.5)·돌진(가장 먼 영웅 기절).
+##  DG4 장비를 끼면 아레나 영웅 능력치 = 기본 × 배율 + 장비, 실제 타격 피해도 그 공격력.
+func _dungeon_cases() -> void:
+	_clear_monsters()
+	Economy.debug_win_on = false
+	for id in ["arteon", "ignis", "kyle"]:
+		Economy.heroes[id] = maxi(1, int(Economy.heroes.get(id, 0)))
+	var keys0: int = Economy.dungeon_state("gold").keys
+	var gold0: int = Economy.gold_tenths
+	var castle_heroes := get_tree().get_nodes_in_group("heroes").size()
+	var d = await _enter_dungeon("gold", Economy.default_party("gold"))
+	await _frames(2)
+	var goblins := _arena_monsters()
+	_check(d != null and not _main.is_inside_tree() and GameState.process_mode == Node.PROCESS_MODE_DISABLED and get_tree().get_nodes_in_group("heroes") == d.heroes
+		and d.heroes.size() == 6 and goblins.size() == 10 and goblins.all(func(m): return m.kind == "goblin") and d.enemies_left() == 16 and castle_heroes > 0,
+		"(DG1) gold dungeon: the castle world leaves the tree (GameState paused), 6 arena heroes vs 10 goblins first (16 in all)",
+		"heroes=%d goblins=%d left=%d" % [get_tree().get_nodes_in_group("heroes").size(), goblins.size(), d.enemies_left() if d != null else -1])
+	await _wait_until(func(): return d.clock >= 5.3, 10.0)
+	var all := _arena_monsters()
+	var dead: int = 16 - d.enemies_left()
+	var hurt_m: int = all.filter(func(m): return m.hp < m.hp_max).size() + dead
+	var hurt_h: int = d.heroes.filter(func(h): return h.hp < h.hp_max).size()
+	_check(d.boss != null and d.boss.kind == "goblin_king" and is_equal_approx(d.boss.hp_max, 1500.0) and all.size() + dead == 16 and hurt_m > 0 and hurt_h > 0
+		and d.phase == d.Phase.FIGHT, "(DG1) after 5 s the late 5 goblins and the goblin king arrive; heroes and goblins hurt each other (idle mode does not shield arena heroes)",
+		"boss=%s alive=%d dead=%d hurt monsters=%d heroes=%d" % [d.boss, all.size(), dead, hurt_m, hurt_h])
+	for m in _arena_monsters():
+		m.take_damage(m.hp)
+	await _frames(2)
+	_check(d.phase == d.Phase.WON and Economy.dungeon_state("gold").keys == keys0, "(DG1) all enemies dead = victory, held until the minimum time (no finish yet)", "phase=%d" % d.phase)
+	Economy.current_run.started_at = float(Economy.current_run.started_at) - 15.0  # 실제 경과도 최소 시간만큼
+	d.clock = GameData.min_clear_sec("gold") - 0.01
+	await _wait_until(func(): return d.phase == d.Phase.RESULT, 3.0)
+	_check(d.phase == d.Phase.RESULT and d.result.win and Economy.gold_tenths == gold0 + 40000 and Economy.dungeon_state("gold").keys == keys0 - 1
+		and Economy.dungeon_state("gold").best_level >= 1 and d.hud.result_layer.visible, "(DG1) at the minimum time the run finishes as a win: +4,000 gold, one key spent, result screen",
+		"phase=%d result=%s gold %d -> %d keys=%d" % [d.phase, d.result, gold0, Economy.gold_tenths, Economy.dungeon_state("gold").keys])
+	# DG2 패배: 영웅 전멸
+	d = await _enter_dungeon("gold", Economy.default_party("gold"))
+	await _frames(2)
+	for h in d.heroes:
+		h.take_damage(h.hp_max * 100.0)
+	await _frames(2)
+	_check(d.phase == d.Phase.RESULT and not d.result.win and d.result.rewards.is_empty() and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.current_run.is_empty(),
+		"(DG2) every hero down = defeat: the run closes, no reward, keys unchanged", "phase=%d result=%s" % [d.phase, d.result])
+	# DG2 패배: 제한 시간
+	d = await _enter_dungeon("gold", Economy.default_party("gold"))
+	await _frames(2)
+	d.clock = d.time_limit() - 0.01
+	await _frames(3)
+	_check(d.phase == d.Phase.RESULT and not d.result.win and d.heroes.any(func(h): return h.is_alive()) and Economy.dungeon_state("gold").keys == keys0 - 1,
+		"(DG2) the time limit (120 s) = defeat even with heroes alive", "phase=%d result=%s" % [d.phase, d.result])
+	await _dk_cases()
+	d = _main._dungeon
+	d.leave()
+	await _frames(3)
+	_check(_main.is_inside_tree() and _main._dungeon == null and GameState.process_mode == Node.PROCESS_MODE_INHERIT and get_viewport().get_camera_3d() == _main.camera
+		and get_tree().get_nodes_in_group("heroes").size() == castle_heroes, "(DG) [나가기] puts the castle world back (camera, GameState, castle heroes)", "")
+
+
+## DG3·DG4: 장비 던전(한스·엘라·도릭·니나 — ★0이라 스킬 1만, 받는 피해를 바꾸는 스킬 없음). 영웅은 처리를 끄고 자리를 놓는다.
+func _dk_cases() -> void:
+	Economy.bag.append({"id": 9001, "slot": "top", "weapon_kind": null, "grade": "SR", "level": 5})
+	Economy.bag.append({"id": 9002, "slot": "weapon", "weapon_kind": "sword", "grade": "R", "level": 3})
+	Economy.bag.append({"id": 9003, "slot": "shoes", "weapon_kind": null, "grade": "N", "level": 1})
+	var eq_ok: bool = Economy.equip("hans", "top", 9001) and Economy.equip("hans", "weapon", 9002) and Economy.equip("hans", "shoes", 9003)
+	var d = await _enter_dungeon("equip", ["hans", "ella", "dorik", "nina"])
+	await _frames(2)
+	var dk = d.boss
+	var hans = d.heroes[0]
+	var bare := GameData.hero_stats(hans.def, Economy.level_of("hans"), Economy.promotion_of("hans"), Economy.levels, {})
+	var top := GameData.item_stats(Economy.item(9001))
+	var sword := GameData.item_stats(Economy.item(9002))
+	var shoes := GameData.item_stats(Economy.item(9003))
+	_check(eq_ok and is_equal_approx(hans.hp_max, bare.hp + top.hp + shoes.hp) and is_equal_approx(hans.atk, bare.atk + sword.atk) and top.hp > 0 and sword.atk > 0,
+		"(DG4) equipment adds to the arena hero: HP = base + top + shoes, attack = base + sword", "hp=%.1f want %.1f atk=%.1f want %.1f" % [hans.hp_max, bare.hp + top.hp + shoes.hp, hans.atk, bare.atk + sword.atk])
+	# 신발 이동속도 +3%: 성장 이동속도와 같은 한 곳(hero.refresh_stats)에서 — 아레나 영웅도 걷는 거리 × (1 + 성장 + 0.03)
+	var want_walk: float = float(hans.def.speed) * (1.0 + Economy.upgrade_bonus().mspd_pct + shoes.speed_pct / 100.0) * 0.1
+	var walked := _walk(hans, 0.1)
+	_check(shoes.speed_pct == 3.0 and is_equal_approx(walked, want_walk), "(DG4) shoes +3% move speed reach the arena hero (walk x1.03 with no growth)",
+		"walked=%.4f want=%.4f speed=%.2f" % [walked, want_walk, float(hans.def.speed)])
+	for h in d.heroes:
+		h.set_process(false)
+	dk.set_process(false)
+	var p: Vector3 = dk.global_position
+	hans.global_position = p + ArenaKit.RIGHT * 2.0
+	hans.set_process(true)  # DG4: 한스 혼자 데스나이트를 친다(오라 없음)
+	await _wait_until(func(): return dk.hp < dk.hp_max, 4.0)
+	_check(is_equal_approx(dk.hp_max - dk.hp, hans.atk), "(DG4) and the real hit deals that attack", "dmg=%.1f atk=%.1f" % [dk.hp_max - dk.hp, hans.atk])
+	hans.set_process(false)
+	var spots := [ArenaKit.RIGHT * 2.0, ArenaKit.RIGHT * -2.8, ArenaKit.DOWN * 6.0, ArenaKit.DOWN * 12.0]
+	for i in 4:
+		d.heroes[i].global_position = p + spots[i]
+		d.heroes[i].hp = d.heroes[i].hp_max
+	dk._atk_cd = 100.0  # 일반 공격 빼고 패턴만
+	dk.charge_cd = 100.0
+	dk.sweep_cd = 0.001
+	dk.set_process(true)
+	await _frames(2)
+	dk.set_process(false)
+	var lost: Array = d.heroes.map(func(h): return h.hp_max - h.hp)
+	var sweep: float = dk.atk * 1.5
+	_check(dk.sweeps == 1 and is_equal_approx(lost[0], sweep) and is_equal_approx(lost[1], sweep) and lost[2] == 0.0 and lost[3] == 0.0 and is_equal_approx(dk.atk, 60.0),
+		"(DG3) death knight sweep: heroes within 3 m take attack x1.5 (90), farther ones nothing", "sweeps=%d lost=%s" % [dk.sweeps, lost])
+	for h in d.heroes:
+		h.hp = h.hp_max
+	dk.sweep_cd = 100.0
+	dk.charge_cd = 0.001
+	dk.set_process(true)
+	await _wait_until(func(): return dk.charges == 1 and not dk.is_charging(), 3.0)
+	dk.set_process(false)
+	var far = d.heroes[3]
+	_check(dk.charges == 1 and far.is_stunned() and is_equal_approx(far.hp_max - far.hp, dk.atk) and d.heroes.slice(0, 3).all(func(h): return not h.is_stunned())
+		and Formation.flat_distance(dk.global_position, far.global_position) <= float(dk._stats.range) + 0.01,
+		"(DG3) death knight charge: runs to the farthest hero, hits it and stuns it (others not stunned)",
+		"charges=%d stunned=%s lost=%.1f dist=%.2f" % [dk.charges, d.heroes.map(func(h): return h.is_stunned()), far.hp_max - far.hp, Formation.flat_distance(dk.global_position, far.global_position)])
+	var stun0: float = far._stun_t
+	far.set_process(true)
+	await _frames(3)
+	far.set_process(false)
+	_check(far._stun_t < stun0 and far._attacks == 0, "(DG3) a stunned hero does not act while the stun runs down", "stun %.2f -> %.2f" % [stun0, far._stun_t])
+	Economy.unequip("hans", "top")
+	Economy.unequip("hans", "weapon")
+	Economy.unequip("hans", "shoes")
+
+
+## 던전 시작(오프라인) → main이 다음 프레임에 장면을 바꾼다. 새 던전 장면(실패면 null).
+func _enter_dungeon(type: String, party: Array):
+	var before: int = _main._dungeon.get_instance_id() if _main._dungeon != null else 0
+	Economy.start_dungeon(type, 1, party)
+	await _wait_until(func(): return _main._dungeon != null and _main._dungeon.get_instance_id() != before and _main._dungeon.is_inside_tree(), 2.0)
+	return _main._dungeon if _main._dungeon != null and _main._dungeon.get_instance_id() != before else null
+
+
+func _arena_monsters() -> Array:
+	return get_tree().get_nodes_in_group("monsters").filter(func(m): return m.is_alive())

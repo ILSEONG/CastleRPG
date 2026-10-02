@@ -9,6 +9,8 @@ var gauge := 0
 var left := 0.0  # 남은 FEVER 초(0이면 꺼짐)
 var auto_next := true  # 연속 진행 체크(HUD). 같은 파일에 저장
 var auto_recruit := false  # 자동 모집 체크(모집 창). 같은 파일에 저장
+var dungeon_auto := ""  # 개정 18 던전 결과 자동: "" · "next"(다음 단계 자동 도전) · "repeat"(현재 단계 자동 반복). 같은 파일에 저장
+var dungeon_party := {}  # 개정 18 던전별 출전 편성 종류 → [영웅 id]. 같은 파일에 저장
 var save_path := "user://local.json"  # ""이면 저장하지 않는다
 
 var _dirty := false
@@ -89,7 +91,8 @@ func save() -> void:
 		var json := JSON.new()
 		if json.parse(FileAccess.get_file_as_string(save_path)) == OK and json.data is Dictionary:
 			data = json.data
-	data.merge({"gauge": gauge, "left": left, "auto_next": auto_next, "auto_recruit": auto_recruit}, true)
+	data.merge({"gauge": gauge, "left": left, "auto_next": auto_next, "auto_recruit": auto_recruit, "dungeon_auto": dungeon_auto,
+		"dungeon_party": dungeon_party}, true)
 	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
 		push_warning("fever save failed: %s" % error_string(FileAccess.get_open_error()))
@@ -103,6 +106,8 @@ func load_save() -> void:
 	reset()
 	auto_next = true
 	auto_recruit = false
+	dungeon_auto = ""
+	dungeon_party = {}
 	if save_path == "" or not FileAccess.file_exists(save_path):
 		return
 	var json := JSON.new()
@@ -110,6 +115,13 @@ func load_save() -> void:
 		return
 	auto_next = json.data.get("auto_next", true) != false
 	auto_recruit = json.data.get("auto_recruit", false) == true
+	var da = json.data.get("dungeon_auto", "")
+	dungeon_auto = da if da in ["next", "repeat"] else ""
+	var dp = json.data.get("dungeon_party", {})
+	if dp is Dictionary:
+		for t in dp:
+			if dp[t] is Array and dp[t].all(func(x): return x is String):
+				dungeon_party[t] = dp[t]
 	var g = json.data.get("gauge")
 	var l = json.data.get("left")
 	if (g is float or g is int) and (l is float or l is int):
