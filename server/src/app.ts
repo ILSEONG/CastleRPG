@@ -1,11 +1,11 @@
 // Hono 앱 팩토리. 시계(now)·쿼리 함수를 주입받아 테스트에서 포트 없이 app.request()로 돌린다.
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
-import type { Query } from './db.ts'
+import type { Query, Row } from './db.ts'
 import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 
@@ -26,6 +26,8 @@ const MAX_KILL_COUNT = 10_000 // 몬스터 한 종류의 한 번 보고 수
 const MAX_INT4 = 2_147_483_647
 const MAX_AGE_MIN = 100_000
 const MAX_LEVELUP_COUNT = 100
+const MAX_SELL_ITEMS = 1000 // 개정 18: 장비 판매 한 번의 개수
+const RUN_KEEP_SEC = 86400 // 끝난 run은 하루 남긴다(재전송 멱등), 그 뒤 새 start가 지운다
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -47,7 +49,28 @@ interface Game {
   buildings: R.BuildingDef[] // 개정 12 건물 표(파일 순서)
   soldiers: R.SoldierDef[] // 개정 13 병종 표(파일 순서)
   upgrades: R.UpgradeDef[] // 개정 20 공용 업그레이드 표(파일 순서)
+  dungeons: R.DungeonDef[] // 개정 18 던전 적 표(파일 순서)
+  equip_drop: Record<string, number>[] // 개정 18 등급 가중치(min_level 순)
   config: R.Config
+}
+
+// 개정 18: 보관함 장비(id = player_items.id), 장착 행
+type Item = R.EquipItem & { id: number }
+interface Equipped {
+  hero_id: string
+  slot: string
+  item_id: number
+}
+// 던전 run(dungeon_runs 행)
+interface Run {
+  run_id: string
+  type: string
+  level: number
+  party: string[]
+  seed: number
+  started_at: number
+  closed: boolean
+  result: { win?: boolean; rewards?: Record<string, unknown> } | null
 }
 
 interface Player {
@@ -67,6 +90,9 @@ interface Player {
   soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
   soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
   upgrades: Record<string, number> // 개정 20: 업그레이드 id → 레벨(0 초과만)
+  dungeons: Record<string, R.DungeonState> // 개정 18: 종류 → 저장된 상태(일일 리셋 전 값 — 쓰는 쪽이 R.applyReset)
+  items: Item[] // 보관함(id 순)
+  equipment: Equipped[]
 }
 
 interface Train {
@@ -100,6 +126,13 @@ interface Change {
   soldierDeploy?: Record<string, number> // 새 병사 배치
   train?: Record<string, Train | null> // 병사 건물 → 새 훈련 대기열(null = 비움, 개정 16)
   upgrades?: Record<string, number> // 업그레이드 id → 레벨 증가(개정 20)
+  // 개정 18 던전·장비
+  dungeon?: { type: string; state: R.DungeonState } // 그 던전 행을 이 값으로(일일 리셋을 반영한 값)
+  runOpen?: { run_id: string; type: string; level: number; party: string[]; seed: number } // 새 run(그 플레이어의 열린 run은 닫는다)
+  runClose?: { run_id: string; result: { win: boolean; rewards: Record<string, unknown> } } // run 닫기 — 아직 열려 있을 때만 전체가 적용된다
+  items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
+  sellItems?: number[] // 지울 장비 id
+  equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   log?: { kind: string; detail: unknown }
 }
 
@@ -123,8 +156,22 @@ const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s
       'train_count', train_count, 'train_tier', train_tier, 'train_finish', extract(epoch from train_finish)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
   coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level, 'shards', shards, 'promotion', promotion))
-    from player_heroes where player_id = s.player_id), '{}'::json) as heroes
+    from player_heroes where player_id = s.player_id), '{}'::json) as heroes,
+  coalesce((select json_object_agg(type, json_build_object('best_level', best_level, 'keys', keys, 'extra_today', extra_today,
+      'last_reset', extract(epoch from last_reset)::float8)) from player_dungeons where player_id = s.player_id), '{}'::json) as dungeons,
+  coalesce((select json_agg(json_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind, 'grade', grade, 'level', level) order by id)
+    from player_items where player_id = s.player_id), '[]'::json) as items,
+  coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
+    from player_equipment where player_id = s.player_id), '[]'::json) as equipment
   from player_state s where s.player_id = $1`
+
+// 개정 18: 빠진 던전 행을 그날 지급분으로 채운다($2 = 오늘 리셋 시각, $3 = [{type, keys}]).
+const ENSURE_DUNGEONS_SQL = `insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset)
+  select $1, x.type, 0, x.keys, 0, to_timestamp($2::float8) from jsonb_to_recordset($3::jsonb) as x(type text, keys integer)
+  on conflict do nothing`
+
+const RUN_SQL = `select run_id, type, level, party, seed, extract(epoch from started_at)::float8 as started_at, closed, result
+  from dungeon_runs where run_id = $1 and player_id = $2`
 
 // 플레이어를 찾거나 만들고(last_seen 갱신), 빠진 상태·자원·건물 행을 채운다 — 한 문장이라 중간에 끊겨도 반쪽 계정이 없다.
 // 새 상태 행이면 시작 영웅($3, JSON 배열)을 copies 1로 주고 그 순서로 배치한다.
@@ -214,6 +261,18 @@ export function createApp(opts: AppOptions) {
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
       resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades), config: json(r.config),
+      dungeons: json(r.dungeons), equip_drop: json(r.equip_drop),
+    }
+  }
+
+  // 개정 18: run 한 행(그 플레이어 것만). 없으면 null.
+  async function loadRun(runId: string, playerId: string): Promise<Run | null> {
+    const [r] = await query(RUN_SQL, [runId, playerId])
+    if (!r) return null
+    const party = json(r.party)
+    return {
+      run_id: String(r.run_id), type: String(r.type), level: Number(r.level), party: Array.isArray(party) ? party : [], seed: Number(r.seed),
+      started_at: Number(r.started_at), closed: r.closed === true, result: r.result ? json(r.result) : null,
     }
   }
 
@@ -221,7 +280,8 @@ export function createApp(opts: AppOptions) {
   // (게으른 완료, 개정 12) 다시 읽는다. 빠진 자원·건물 행은 한 번 채우고 다시 읽는다.
   async function loadPlayer(id: string, game: Game, now: number): Promise<Player> {
     let ensured = false
-    for (let i = 0; i < MAX_ATTEMPTS + 1; i++) { // 행 채우기·완료가 한 번씩 다시 읽게 한다
+    let ensuredDungeons = false
+    for (let i = 0; i < MAX_ATTEMPTS + 2; i++) { // 행 채우기(자원·건물, 던전)·완료가 한 번씩 다시 읽게 한다
       const [r] = await query(PLAYER_SQL, [id])
       if (!r) throw new ApiError(401, 'unknown_player', 'player not found; log in again')
       const res: Record<string, number> = {}
@@ -238,6 +298,19 @@ export function createApp(opts: AppOptions) {
         await query(ENSURE_ROWS_SQL, [id, now, R.KEEP, R.GATE]) // 나중에 추가된 자원·건물 — 행을 채우고 다시 읽는다
         continue
       }
+      // 개정 18: 던전 행이 없으면(새 플레이어·012 이전 플레이어) 그날 지급분으로 채우고 다시 읽는다
+      const dungeons: Player['dungeons'] = {}
+      for (const [k, v] of Object.entries(json(r.dungeons) as Record<string, any>)) {
+        dungeons[k] = { best_level: Number(v.best_level), keys: Number(v.keys), extra_today: Number(v.extra_today), last_reset: Number(v.last_reset) }
+      }
+      const lacking = R.DUNGEON_TYPES.filter((t) => !Object.hasOwn(dungeons, t))
+      if (lacking.length) {
+        if (ensuredDungeons) throw new ApiError(500, 'internal', 'dungeon rows missing')
+        ensuredDungeons = true
+        const fresh = lacking.map((t) => R.freshDungeon(t, now, game.config))
+        await query(ENSURE_DUNGEONS_SQL, [id, fresh[0].last_reset, JSON.stringify(lacking.map((t, j) => ({ type: t, keys: fresh[j].keys })))])
+        continue
+      }
       const heroes: Player['heroes'] = {}
       for (const [k, v] of Object.entries(json(r.heroes) as Record<string, any>)) heroes[k] = { copies: Number(v.copies), level: Number(v.level), shards: Number(v.shards), promotion: Number(v.promotion) }
       const deploy = json(r.deploy)
@@ -247,6 +320,9 @@ export function createApp(opts: AppOptions) {
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
         soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)), upgrades: counts(json(r.upgrades)),
+        dungeons,
+        items: (json(r.items) as any[]).map((x) => ({ id: Number(x.id), slot: String(x.slot), weapon_kind: x.weapon_kind ?? null, grade: String(x.grade), level: Number(x.level) })),
+        equipment: (json(r.equipment) as any[]).map((x) => ({ hero_id: String(x.hero_id), slot: String(x.slot), item_id: Number(x.item_id) })),
       }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
@@ -286,20 +362,44 @@ export function createApp(opts: AppOptions) {
       const id = p.deploy[i]
       return typeof id === 'string' && Object.hasOwn(heroes, id) ? id : null
     })
+    // 개정 18: 장착 = 영웅 → {부위: 장비 id}(표에 있고 보유한 영웅만)
+    const equipment: Record<string, Record<string, number>> = {}
+    for (const e of p.equipment) if (Object.hasOwn(heroes, e.hero_id)) (equipment[e.hero_id] ??= {})[e.slot] = e.item_id
     return {
       server_now: now,
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
         kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
         soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
+        dungeons: dungeonsView(p, game, now), items: p.items, equipment,
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
   }
 
+  // 개정 18: 지금(서버 시각) 기준 던전 상태 — 일일 리셋을 반영한다(DB 행은 쓸 때 바뀐다).
+  const dungeonState = (p: Player, g: Game, type: string, now: number) =>
+    R.applyReset(type, p.dungeons[type] ?? R.freshDungeon(type, now, g.config), now, g.config)
+
+  // 던전 응답(스펙 §7 GET /v1/dungeon·플레이어 응답 dungeons): 종류 → {keys, key_cap, key_daily, best_level, extra_today,
+  // extra_cost(장비만, 골드는 null), last_reset, next_reset}. 앱은 last_reset으로 같은 리셋 규칙을 이어서 센다.
+  function dungeonsView(p: Player, g: Game, now: number) {
+    const out: Record<string, unknown> = {}
+    for (const t of R.DUNGEON_TYPES) {
+      const st = dungeonState(p, g, t, now)
+      out[t] = {
+        keys: st.keys, key_cap: R.cfgNum(g.config, `${t}_key_cap`), key_daily: R.cfgNum(g.config, `${t}_key_daily`), best_level: st.best_level,
+        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, st.extra_today) : null, last_reset: st.last_reset,
+        next_reset: R.nextReset(now, g.config),
+      }
+    }
+    return out
+  }
+
   // --- 쓰기: version 낙관적 잠금 + 한 문장(CTE) ---
 
-  async function commit(playerId: string, version: number, ch: Change, now: number): Promise<boolean> {
+  // 성공하면 결과 행({n, run_result?}), version이 달랐으면(또는 닫을 run이 이미 닫혔으면) null.
+  async function commit(playerId: string, version: number, ch: Change, now: number): Promise<Row | null> {
     const params: unknown[] = [playerId, version]
     const p = (v: unknown) => {
       params.push(v)
@@ -314,7 +414,9 @@ export function createApp(opts: AppOptions) {
     if (ch.deploy !== undefined) sets.push(`deploy = ${p(JSON.stringify(ch.deploy))}::jsonb`)
     if (ch.build !== undefined) sets.push(`build_id = ${p(ch.build?.id ?? null)}::text, build_finish = to_timestamp(${p(ch.build?.finish ?? null)}::float8)`)
     if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
-    const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2 returning player_id)`]
+    // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
+    const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
+    const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
     if (ch.soldiers && Object.keys(ch.soldiers).length) {
       // "병종:티어" → 증감. from s: version 가드가 실패하면 보유도 안 바뀐다. 더하기는 upsert, 빼기는 검사한 기존 행의 update
       // (insert의 후보 행이 음수면 충돌 처리 전에 count ≥ 0 제약에 걸린다)
@@ -358,12 +460,70 @@ export function createApp(opts: AppOptions) {
         from s, jsonb_each_text(${p(JSON.stringify(ch.upgrades))}::jsonb) as x
         on conflict (player_id, id) do update set level = player_upgrades.level + excluded.level returning 1)`)
     }
+    dungeonCtes(ch, now, ctes, p)
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
     }
-    const [r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n from s`, params)
-    return Number(r.n) === 1
+    const runResult = ch.runClose ? ', (select result from rc) as run_result' : ''
+    const [r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult} from s`, params)
+    return Number(r.n) === 1 ? r : null
+  }
+
+  // 개정 18 던전·장비 변경의 CTE들(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
+  function dungeonCtes(ch: Change, now: number, ctes: string[], p: (v: unknown) => string) {
+    const sid = '(select player_id from s)'
+    if (ch.dungeon) {
+      const d = ch.dungeon.state
+      ctes.push(`dg as (insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset)
+        select player_id, ${p(ch.dungeon.type)}, ${p(d.best_level)}::int, ${p(d.keys)}::int, ${p(d.extra_today)}::int, to_timestamp(${p(d.last_reset)}::float8) from s
+        on conflict (player_id, type) do update set best_level = excluded.best_level, keys = excluded.keys, extra_today = excluded.extra_today,
+          last_reset = excluded.last_reset returning 1)`)
+    }
+    if (ch.runOpen) {
+      // 한 번에 run 하나: 열린 run은 결과 없이 닫고(그 run의 finish는 409 run_closed), 하루 지난 run은 지운다
+      const r = ch.runOpen
+      const keep = p(now - RUN_KEEP_SEC)
+      ctes.push(`ro0 as (update dungeon_runs set closed = true where player_id = ${sid} and not closed and started_at >= to_timestamp(${keep}::float8) returning 1)`)
+      ctes.push(`ro1 as (delete from dungeon_runs where player_id = ${sid} and started_at < to_timestamp(${keep}::float8) returning 1)`)
+      ctes.push(`ro2 as (insert into dungeon_runs (run_id, player_id, type, level, party, seed, started_at)
+        select ${p(r.run_id)}::uuid, player_id, ${p(r.type)}, ${p(r.level)}::int, ${p(JSON.stringify(r.party))}::jsonb, ${p(r.seed)}::bigint, to_timestamp(${p(now)}::float8)
+        from s returning 1)`)
+    }
+    if (ch.items?.length) {
+      ctes.push(`it as (insert into player_items (player_id, slot, weapon_kind, grade, level, created_at)
+        select s.player_id, x.slot, x.weapon_kind, x.grade, x.level, to_timestamp(${p(now)}::float8)
+        from s, jsonb_to_recordset(${p(JSON.stringify(ch.items))}::jsonb) as x(slot text, weapon_kind text, grade text, level integer)
+        returning id, slot, weapon_kind, grade, level)`)
+    }
+    if (ch.runClose) {
+      // 결과 = {win, rewards}. 장비를 넣었으면 rewards.items에 새 id와 함께 남긴다(재전송이 같은 결과를 받는다)
+      const res = `${p(JSON.stringify(ch.runClose.result))}::jsonb`
+      const value = ch.items?.length
+        ? `jsonb_set(${res}, '{rewards,items}', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind,
+            'grade', grade, 'level', level) order by id), '[]'::jsonb) from it))`
+        : res
+      ctes.push(`rc as (update dungeon_runs set closed = true, result = ${value}
+        where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = ${sid} and not closed returning result)`)
+    }
+    if (ch.sellItems?.length) {
+      ctes.push(`si as (delete from player_items where player_id = ${sid}
+        and id in (select x::bigint from jsonb_array_elements_text(${p(JSON.stringify(ch.sellItems))}::jsonb) as x) returning 1)`)
+    }
+    if (ch.equip) {
+      const hero = p(ch.equip.hero_id)
+      const slot = p(ch.equip.slot)
+      if (ch.equip.item_id === null) {
+        ctes.push(`eq as (delete from player_equipment where player_id = ${sid} and hero_id = ${hero} and slot = ${slot} returning 1)`)
+      } else {
+        // 다른 자리에서 빼고 이 자리에 끼운다 — item_id 유일은 문장 끝에 검사한다(012: deferrable)
+        const item = p(String(ch.equip.item_id))
+        ctes.push(`eq0 as (delete from player_equipment where player_id = ${sid} and item_id = ${item}::bigint
+          and not (hero_id = ${hero} and slot = ${slot}) returning 1)`)
+        ctes.push(`eq1 as (insert into player_equipment (player_id, hero_id, slot, item_id) select player_id, ${hero}, ${slot}, ${item}::bigint from s
+          on conflict (player_id, hero_id, slot) do update set item_id = excluded.item_id returning 1)`)
+      }
+    }
   }
 
   function applyLocal(pl: Player, ch: Change) {
@@ -392,19 +552,27 @@ export function createApp(opts: AppOptions) {
     pl.version += 1
   }
 
-  type Plan = { change?: Change; extra?: Record<string, unknown> }
+  // reload: 쓴 뒤 플레이어를 다시 읽어 응답한다(applyLocal이 모르는 개정 18 변경). after: 쓴 결과 행으로 응답에 더할 값.
+  type Plan = { change?: Change; extra?: Record<string, unknown>; reload?: boolean; after?: (r: Row) => Record<string, unknown> }
 
   // 읽기 → 계산 → 조건부 쓰기. 다른 요청이 먼저 바꿨으면(version 불일치) 다시 읽고 다시 계산한다.
-  async function mutate(c: Context, plan: (p: Player, game: Game, now: number) => Plan) {
+  // pre: 플레이어를 읽은 뒤 시도마다 더 읽을 것(개정 18 run) — plan의 네 번째 인자.
+  async function mutate(c: Context, plan: (p: Player, game: Game, now: number, ctx?: any) => Plan, pre?: (id: string) => Promise<unknown>) {
     const id = c.get('playerId') as string
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       const now = clock()
       const game = await loadGame()
-      const pl = await loadPlayer(id, game, now)
-      const { change, extra } = plan(pl, game, now)
-      if (change && !(await commit(id, pl.version, change, now))) continue
-      if (change) applyLocal(pl, change)
-      return c.json({ ...view(pl, game, now), ...extra })
+      let pl = await loadPlayer(id, game, now)
+      const { change, extra, reload, after } = plan(pl, game, now, pre ? await pre(id) : undefined)
+      let more = {}
+      if (change) {
+        const r = await commit(id, pl.version, change, now)
+        if (!r) continue
+        if (reload) pl = await loadPlayer(id, game, now)
+        else applyLocal(pl, change)
+        if (after) more = after(r)
+      }
+      return c.json({ ...view(pl, game, now), ...extra, ...more })
     }
     throw new ApiError(409, 'conflict', 'concurrent update; try again')
   }
@@ -473,7 +641,8 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
-    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, upgrades: g.upgrades, config: g.config }
+    const data = { monsters: g.monsters, stages: g.stages, heroes: g.heroes, resources: g.resources, buildings: g.buildings, soldiers: g.soldiers, upgrades: g.upgrades,
+      dungeons: g.dungeons, equip_drop: g.equip_drop, config: g.config }
     const version = createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 16)
     const etag = `"${version}"`
     c.header('ETag', etag)
@@ -875,7 +1044,203 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // --- 던전·장비 (개정 18 §6·§7) ---
+
+  const bagFull = (p: Player, g: Game) => p.items.length + R.cfgNum(g.config, 'equip_drop_count') > R.cfgNum(g.config, 'equip_bag_cap')
+
+  app.get('/v1/dungeon', auth, async (c) => {
+    const now = clock()
+    const game = await loadGame()
+    const p = await loadPlayer(c.get('playerId') as string, game, now)
+    return c.json({ server_now: now, dungeons: dungeonsView(p, game, now) })
+  })
+
+  app.get('/v1/items', auth, async (c) => {
+    const now = clock()
+    const game = await loadGame()
+    const p = await loadPlayer(c.get('playerId') as string, game, now)
+    return c.json({ server_now: now, items: p.items })
+  })
+
+  // 도전 시작(스펙 §6.1): {type, level, party}. 검사 순서 type·level 형식(400 bad_request) → party 형식(400 bad_party) → 단계 열림(409 locked:
+  // 최고 + 1까지) → 인원(6/4)·중복·보유(400 bad_party) → 보관함(장비, 409 bag_full: 보유 + 드랍 수 > 상한) → 열쇠(409 no_key) — 장비 던전은
+  // 열쇠가 없으면 골드 추가 도전 비용(409 not_enough_gold). 아무것도 소모하지 않는다(클리어 때). run을 만들고(열린 run은 닫는다) 응답에
+  // run_id·seed·enemies(능력치)·started_at·time_limit·paid_with('key'|'gold')를 더한다.
+  app.post('/v1/dungeon/start', auth, async (c) => {
+    const b = await body(c)
+    const type = b.type
+    if (typeof type !== 'string' || !R.DUNGEON_TYPES.includes(type)) throw new ApiError(400, 'bad_request', `'type' must be ${R.DUNGEON_TYPES.join(' or ')}`)
+    const lvl = intField(b, 'level', 1, R.MAX_DUNGEON_LEVEL)
+    const party = b.party
+    if (!Array.isArray(party) || party.some((x) => typeof x !== 'string' || x === '')) throw new ApiError(400, 'bad_party', "'party' must be an array of hero ids")
+    return mutate(c, (p, g, now) => {
+      const st = dungeonState(p, g, type, now)
+      if (lvl > st.best_level + 1) throw new ApiError(409, 'locked', `level ${lvl} is locked (best ${st.best_level})`)
+      const size = R.partySize(g.config, type)
+      if (party.length !== size) throw new ApiError(400, 'bad_party', `the ${type} dungeon takes ${size} heroes`)
+      if (new Set(party).size !== party.length) throw new ApiError(400, 'bad_party', 'a hero can go only once')
+      const known = new Set(g.heroes.map((h) => String(h.id)))
+      for (const id of party) if (!known.has(id) || !Object.hasOwn(p.heroes, id)) throw new ApiError(400, 'bad_party', `hero '${id}' is not owned`)
+      if (type === 'equip' && bagFull(p, g)) throw new ApiError(409, 'bag_full', 'the item bag is full')
+      if (st.keys < 1) {
+        if (type !== 'equip') throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
+        const cost = R.extraCost(g.config, st.extra_today)
+        if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
+      }
+      const run = { run_id: randomUUID(), type, level: lvl, party: party as string[], seed: Math.floor(random() * 2 ** 31) }
+      return {
+        change: { runOpen: run },
+        extra: {
+          ...run, enemies: R.dungeonEnemies(g.dungeons, type, lvl, g.config), started_at: now, time_limit: R.cfgNum(g.config, 'dungeon_time_limit'),
+          paid_with: st.keys >= 1 ? 'key' : 'gold',
+        },
+        reload: true,
+      }
+    })
+  })
+
+  // 결과(스펙 §6.3): {run_id, win, elapsed}. 없는 run(남의 run 포함) 404 unknown_run. 닫힌 run은 저장한 결과를 그대로 돌려준다(멱등,
+  // repeated: true) — 다른 start가 닫은 run(결과 없음)은 409 run_closed. 30분이 지났으면 409 run_expired.
+  // 패배: run만 닫는다. 승리: 타당성(elapsed ≥ 최소(골드 15·장비 20초), ≤ 제한 시간, 실제 경과 ≥ elapsed − 5 — 아니면 409 implausible, run은
+  // 열린 채) → 열쇠(없으면 장비는 골드 추가 도전 비용, 409 no_key·not_enough_gold) → 보관함(409 bag_full). 열쇠·골드 차감, 보상(골드 tenths 또는
+  // 장비 equip_drop_count개 — 암호학적 난수), 최고 단계, run 닫기(결과 저장), economy_log dungeon_clear는 version 가드 + 열린 run 가드 한 문장.
+  app.post('/v1/dungeon/finish', auth, async (c) => {
+    const b = await body(c)
+    const runId = b.run_id
+    if (typeof runId !== 'string' || !UUID_RE.test(runId)) throw new ApiError(400, 'bad_request', "'run_id' must be a run id")
+    const win = b.win
+    if (typeof win !== 'boolean') throw new ApiError(400, 'bad_request', "'win' must be true or false")
+    const elapsed = b.elapsed
+    if (typeof elapsed !== 'number' || !Number.isFinite(elapsed) || elapsed < 0 || elapsed > R.RUN_TTL_SEC) {
+      throw new ApiError(400, 'bad_request', `'elapsed' must be seconds in 0..${R.RUN_TTL_SEC}`)
+    }
+    return mutate(c, (p, g, now, run: Run | null) => {
+      if (!run) throw new ApiError(404, 'unknown_run', 'no such run')
+      if (run.closed) {
+        if (!run.result) throw new ApiError(409, 'run_closed', 'a newer run replaced this run')
+        return { extra: { run_id: runId, win: run.result.win === true, rewards: run.result.rewards ?? {}, repeated: true } }
+      }
+      const real = now - run.started_at
+      if (real > R.RUN_TTL_SEC) throw new ApiError(409, 'run_expired', 'the run expired')
+      if (!win) {
+        return { change: { runClose: { run_id: runId, result: { win: false, rewards: {} } } }, extra: { run_id: runId, win: false, rewards: {} }, reload: true }
+      }
+      const type = run.type
+      const min = R.minClearSecOf(g.config, type)
+      const limit = R.cfgNum(g.config, 'dungeon_time_limit')
+      if (elapsed < min || elapsed > limit || real < elapsed - R.RUN_SLACK_SEC) {
+        throw new ApiError(409, 'implausible', `a win needs ${min}..${limit} s of battle and as much real time (elapsed ${elapsed}, real ${real.toFixed(1)})`)
+      }
+      const st = dungeonState(p, g, type, now)
+      const next = { ...st, best_level: Math.max(st.best_level, run.level) }
+      let cost = 0
+      if (st.keys >= 1) next.keys = st.keys - 1
+      else if (type === 'equip') {
+        cost = R.extraCost(g.config, st.extra_today)
+        if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
+        next.extra_today = st.extra_today + 1
+      } else throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
+      const rewards: Record<string, unknown> = {}
+      let items: R.EquipItem[] = []
+      let gain = 0
+      if (type === 'gold') {
+        gain = R.goldReward(g.config, run.level)
+        rewards.gold_tenths = gain * 10
+      } else {
+        if (bagFull(p, g)) throw new ApiError(409, 'bag_full', 'the item bag is full')
+        items = R.rollDrops(g.equip_drop, run.level, R.cfgNum(g.config, 'equip_drop_count'), R.cfgNum(g.config, 'equip_weapon_p'), random)
+      }
+      return {
+        change: {
+          goldTenths: (gain - cost) * 10, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
+          log: {
+            kind: 'dungeon_clear', detail: {
+              run_id: runId, type, level: run.level, elapsed, real, party: run.party, paid: cost ? { gold: cost } : { key: 1 }, keys_after: next.keys,
+              best_level: next.best_level, gold_tenths: gain * 10, items,
+            },
+          },
+        },
+        extra: { run_id: runId, win: true },
+        reload: true,
+        after: (r) => ({ rewards: json(r.run_result)?.rewards ?? rewards }),
+      }
+    }, (id) => loadRun(runId, id))
+  })
+
+  // 장착·해제(스펙 §7): {hero_id, slot, item_id|null}. 보유하지 않은 영웅 404 not_owned, 모르는 부위 400 bad_slot, 남의·없는 장비 404 unknown_item,
+  // 부위가 다르면 409 wrong_slot, 무기는 그 영웅 모델의 종류만(409 wrong_weapon). 다른 영웅이 끼고 있으면 옮긴다. 같은 요청을 다시 보내도 같다(멱등).
+  app.post('/v1/equip', auth, async (c) => {
+    const b = await body(c)
+    const heroId = strField(b, 'hero_id')
+    const slot = strField(b, 'slot')
+    if (!R.EQUIP_SLOTS.includes(slot)) throw new ApiError(400, 'bad_slot', `'slot' must be one of ${R.EQUIP_SLOTS.join(', ')}`)
+    const itemId = b.item_id
+    if (itemId !== null && !isInt(itemId, 1, Number.MAX_SAFE_INTEGER)) throw new ApiError(400, 'bad_request', "'item_id' must be an item id or null")
+    return mutate(c, (p, g) => {
+      const def = g.heroes.find((h) => h.id === heroId)
+      if (!def || !Object.hasOwn(p.heroes, heroId)) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      const cur = p.equipment.find((e) => e.hero_id === heroId && e.slot === slot)
+      if (itemId === null) return cur ? { change: { equip: { hero_id: heroId, slot, item_id: null } }, reload: true } : {}
+      const item = p.items.find((x) => x.id === itemId)
+      if (!item) throw new ApiError(404, 'unknown_item', `item ${itemId} is not in the bag`)
+      if (item.slot !== slot) throw new ApiError(409, 'wrong_slot', `item ${itemId} is a ${item.slot}, not a ${slot}`)
+      if (slot === 'weapon' && item.weapon_kind !== R.WEAPON_OF[String(def.model)]) {
+        throw new ApiError(409, 'wrong_weapon', `hero '${heroId}' (${def.model}) cannot use a ${item.weapon_kind}`)
+      }
+      if (cur?.item_id === itemId) return {}
+      return { change: { equip: { hero_id: heroId, slot, item_id: itemId } }, reload: true }
+    })
+  })
+
+  // 장비 판매(스펙 §5): {item_ids: [...]}(1..1000개, 겹치면 400). 남의·없는 장비 404 unknown_item, 장착 중이면 409 equipped(하나라도 그러면
+  // 아무것도 안 판다). 값 = round(equip_sell_base × 등급 배율 × 레벨)의 합. 장비 삭제·골드·economy_log item_sell은 version 가드 한 문장.
+  app.post('/v1/items/sell', auth, async (c) => {
+    const ids = (await body(c)).item_ids
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_SELL_ITEMS || ids.some((x) => !isInt(x, 1, Number.MAX_SAFE_INTEGER)) || new Set(ids).size !== ids.length) {
+      throw new ApiError(400, 'bad_request', `'item_ids' must be 1..${MAX_SELL_ITEMS} distinct item ids`)
+    }
+    return mutate(c, (p, g) => {
+      const byId = new Map(p.items.map((x) => [x.id, x]))
+      let gold = 0
+      for (const id of ids as number[]) {
+        const it = byId.get(id)
+        if (!it) throw new ApiError(404, 'unknown_item', `item ${id} is not in the bag`)
+        if (p.equipment.some((e) => e.item_id === id)) throw new ApiError(409, 'equipped', `item ${id} is equipped`)
+        gold += R.itemSellValue(g.config, it)
+      }
+      return {
+        change: { goldTenths: gold * 10, sellItems: ids, log: { kind: 'item_sell', detail: { items: ids.map((id) => byId.get(id)), gold, gold_tenths: gold * 10 } } },
+        extra: { gold_gained: gold },
+        reload: true,
+      }
+    })
+  })
+
   if (opts.allowTestHooks) {
+    // 통합 테스트용(개정 18): 열린 run의 시작 시각을 seconds초 앞당긴다 — 즉시 승리 훅(앱 Economy.debug_win)이 타당성 검사를 지나게.
+    app.post('/v1/test/dungeon_age', auth, async (c) => {
+      const b = await body(c)
+      const runId = b.run_id
+      if (typeof runId !== 'string' || !UUID_RE.test(runId)) throw new ApiError(400, 'bad_request', "'run_id' must be a run id")
+      const seconds = intField(b, 'seconds', 0, R.RUN_TTL_SEC)
+      const id = c.get('playerId') as string
+      await query(`update dungeon_runs set started_at = started_at - $3::float8 * interval '1 second' where run_id = $2 and player_id = $1 and not closed`, [id, runId, seconds])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(개정 18): 영웅 한 명을 보유하게 한다(골드 던전 6명 편성 — 서버 모집은 암호학적 난수라 정할 수 없다). 이미 있으면 그대로.
+    app.post('/v1/test/grant_hero', auth, async (c) => {
+      const heroId = strField(await body(c), 'hero_id')
+      const id = c.get('playerId') as string
+      await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
+        insert into player_heroes (player_id, hero_id) select player_id, $2 from s on conflict do nothing`, [id, heroId])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
     // 통합 테스트용: 그 플레이어 건물의 last_collect(자원 건물 수집)와 훈련 끝나는 시각(개정 16)을 minutes분 앞당긴다.
     app.post('/v1/test/age', auth, async (c) => {
       const minutes = intField(await body(c), 'minutes', 0, MAX_AGE_MIN)

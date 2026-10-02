@@ -13,11 +13,15 @@ extends Node
 ## training·train_cost·train_time·train_max·train_block·start_training·collect_training·cancel_training, 시그널 training_changed(+ 수령 알림 "보병 +n").
 ## 승급(개정 15): 영웅별 조각(hero_shards)·승급 단계(hero_promotions). UI가 쓰는 API는 shards_of·promotion_of·promote_block·promote·
 ## promote_waiting, 시그널 promoted. 모집 중복은 조각 +1.
+## 던전·장비(개정 18): 열쇠·최고 단계(dungeons), 보관함(bag), 장착(equipment)도 여기 있다. UI·던전 장면이 쓰는 API는 아래 "던전·장비" 한 곳 —
+## dungeon_state·dungeon_reward·dungeon_enemies·dungeon_block·default_party·start_dungeon·finish_dungeon·debug_win·items·item·item_stats·item_owner·
+## equip_block·equip·unequip·sell_block·sell_items·hero_equipment·equipment_bonus, 시그널 dungeons_changed·items_changed·dungeon_started·dungeon_finished.
+## 장비 합계는 GameData.hero_stats가 더한다(오토로드면 _ready에서 GameData.equip_source = self).
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 9  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 10  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 # 5: soldiers·soldier_deploy {"병종:티어": 수}(개정 13). 4 이하는 병사 없음
@@ -25,6 +29,8 @@ const SAVE_VERSION := 9  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮
 # 7: training {병사 건물: {count, finish}}(개정 16). 6 이하의 자동 생산 시계(last_collect의 병사 건물)는 버리고 대기열은 빈다
 # 8: training {…: {count, tier, finish}}(개정 19). 7 이하의 진행 중 묶음은 tier 1
 # 9: upgrades {성장 항목 id: 레벨}(개정 20). 8 이하는 성장 0(빈 사전)
+# 10: dungeons {종류: {best_level, keys, extra_today, last_reset}}, items [{id, slot, weapon_kind, grade, level}], equipment {영웅: {부위: 장비 id}},
+# next_item_id(개정 18). 9 이하는 그날 지급분 열쇠·빈 보관함
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -60,6 +66,19 @@ const TRAIN_TEXT := {
 const TRAIN_FAIL_TEXT := "훈련 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
 const GROWTH_FAIL_TEXT := "강화 결과를 받지 못했습니다 — 성장 상태를 다시 확인합니다"
 const CANCEL_TEXT := "훈련을 취소했습니다 — 비용 50% 환불"
+## 던전 못 하는 이유 코드 → 문구(dungeon_block·finish 거부, 서버 409/400 코드와 같다. waiting은 앱만).
+const DUNGEON_TEXT := {
+	"unknown": "알 수 없는 던전", "locked": "아직 열리지 않은 단계입니다", "bad_party": "출전 영웅을 확인하세요", "bag_full": "보관함이 가득 찼습니다",
+	"no_key": "열쇠가 없습니다", "not_enough_gold": "골드가 부족합니다", "waiting": "응답 대기 중", "implausible": "전투 기록이 맞지 않습니다",
+	"run_expired": "도전 시간이 지났습니다", "run_closed": "끝난 도전입니다", "unknown_run": "끝난 도전입니다",
+}
+const DUNGEON_FAIL_TEXT := "던전 결과를 받지 못했습니다 — 상태를 다시 확인합니다"
+## 장착·판매 못 하는 이유 코드 → 문구(equip_block·sell_block, 서버 코드와 같다).
+const EQUIP_TEXT := {
+	"not_owned": "보유하지 않은 영웅", "bad_slot": "알 수 없는 부위", "unknown_item": "보관함에 없는 장비", "wrong_slot": "부위가 맞지 않습니다",
+	"wrong_weapon": "이 영웅이 쓸 수 없는 무기입니다", "equipped": "장착 중인 장비는 팔 수 없습니다", "bad_request": "팔 장비를 고르세요", "waiting": "응답 대기 중",
+}
+const EQUIP_FAIL_TEXT := "장비 결과를 받지 못했습니다 — 보관함을 다시 확인합니다"
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
@@ -73,6 +92,10 @@ signal building_done(building_id: String, level: int)  # 건설 완료 — 새 �
 signal soldiers_changed  # 병사 보유·배치·합성 대기가 바뀌었다(개정 13)
 signal upgrades_changed  # 성장(공용 업그레이드) 레벨이 바뀌었다(개정 20)
 signal training_changed  # 훈련 대기열·응답 대기가 바뀌었다(개정 16). 완료(끝나는 시각 지남)는 시그널 없이 training().ready로 본다
+signal dungeons_changed  # 개정 18: 열쇠·최고 단계·추가 도전 횟수·응답 대기가 바뀌었다(일일 리셋은 시그널 없이 dungeon_state가 센다)
+signal items_changed  # 보관함·장착이 바뀌었다(장착이 바뀌면 roster_changed도 — 영웅 능력치)
+signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, level, party, enemies, started_at, time_limit, paid_with}. 실패면 {}
+signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
 
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
 var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
@@ -93,6 +116,12 @@ var soldiers: Dictionary = {}          # 병사 보유 "병종:티어" → 수(>
 var soldier_deployed: Dictionary = {}  # 병사 배치 "병종:티어" → 수(> 0). 각 ≤ 보유, 합 ≤ 인구
 var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), tier(시작할 때 티어 — 개정 19), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
 var upgrades: Dictionary = {}       # 성장 항목 id → 레벨(> 0, 개정 20). 없으면 0
+var dungeons := {}  # 개정 18: 종류 → {best_level, keys, extra_today, last_reset}(마지막으로 반영한 값 — dungeon_state가 일일 리셋을 센다)
+var bag: Array = []  # 보관함 [{id(int), slot, weapon_kind(무기만, 아니면 null), grade, level(int)}](id 순)
+var equipment := {}  # 영웅 id → {부위: 장비 id}
+var next_item_id := 1  # 오프라인 장비 id
+var current_run := {}  # 진행 중 도전(dungeon_started의 값). 결과가 오면 비운다
+var debug_win_on := false  # 개발 플래그(main의 -- --debug-win): 던전 장면은 시작하자마자 debug_win()을 부른다
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
 
@@ -115,6 +144,7 @@ var _synced := false  # 온라인: 서버 응답을 한 번이라도 반영했�
 var _build_poll_at := 0.0  # 온라인: 다 지은 건설을 다시 물어볼 시각
 var _pending_soldier_deploy = null  # 온라인: 보냈고 답을 기다리는 병사 배치(_pending_deploy와 같은 규칙)
 var _soldier_deploys_out := 0
+var _last_finish := {}  # 오프라인: 마지막 결과(같은 run_id 재전송은 이 값 — 서버 멱등과 같다)
 
 
 func _init() -> void:
@@ -213,6 +243,7 @@ static func _pick(pools: Dictionary, grade: String, rand: Callable) -> Dictionar
 # --- 상태 ---
 
 func _ready() -> void:
+	GameData.equip_source = self  # 개정 18: 영웅 최종 능력치에 장비 합계(GameData.hero_stats)
 	load_save(Time.get_unix_time_from_system())
 
 
@@ -262,12 +293,22 @@ func reset(now: float) -> void:
 		deploy.append(str(id))
 	_pending_deploy = null
 	_deploys_out = 0
+	dungeons = {}  # 개정 18: 그날 지급분, 빈 보관함
+	for type in GameData.DUNGEON_TYPES:
+		dungeons[type] = GameData.fresh_dungeon(type, now)
+	bag = []
+	equipment = {}
+	next_item_id = 1
+	current_run = {}
+	_last_finish = {}
 	_dirty = false
 	changed.emit()
 	roster_changed.emit()
 	soldiers_changed.emit()
 	training_changed.emit()
 	upgrades_changed.emit()
+	dungeons_changed.emit()
+	items_changed.emit()
 
 
 func pending(building_id: String, now: float) -> int:
@@ -1074,6 +1115,356 @@ func _announce(type: String, count: int) -> void:
 	notice.emit("%s +%d" % [GameData.soldier(type).get("name", type), count])
 
 
+# --- 던전·장비(개정 18 §2~§6) — 던전 탭·편성·던전 장면·결과·보관함·영웅 장비 칸이 쓰는 API는 여기 한 곳 ---
+
+## 지금(보정 시각) 던전 상태 {keys, key_cap, key_daily, best_level, max_level(도전 가능한 최고 단계 = 최고 + 1), extra_today, extra_cost(장비만,
+## 골드는 0), next_reset(유닉스 초), reset_in(초)}. 일일 리셋(00:00 KST)은 여기서 센다 — 온라인도 서버가 준 last_reset에서 같은 규칙.
+func dungeon_state(type: String) -> Dictionary:
+	var now := time_now()
+	var st := _dungeon_now(type, now)
+	var nr := GameData.next_reset(now)
+	return {"keys": int(st.keys), "key_cap": int(GameData.config_num(type + "_key_cap")), "key_daily": int(GameData.config_num(type + "_key_daily")),
+		"best_level": int(st.best_level), "max_level": mini(int(st.best_level) + 1, GameData.MAX_DUNGEON_LEVEL), "extra_today": int(st.extra_today),
+		"extra_cost": GameData.extra_cost(int(st.extra_today)) if type == "equip" else 0, "next_reset": nr, "reset_in": maxf(0.0, nr - now)}
+
+
+func _dungeon_now(type: String, now: float) -> Dictionary:
+	return GameData.apply_reset(type, dungeons.get(type, GameData.fresh_dungeon(type, now)), now)
+
+
+## 단계 보상 미리보기: 골드 던전 {gold}, 장비 던전 {count, weights: {N: w, …}}(결과 화면·카드).
+func dungeon_reward(type: String, level: int) -> Dictionary:
+	if type == "gold":
+		return {"gold": GameData.gold_reward(level)}
+	return {"count": int(GameData.config_num("equip_drop_count")), "weights": GameData.drop_weights(level)}
+
+
+## 단계 적 목록(GameData.dungeon_enemies) — 서버 start 응답의 enemies와 같은 값.
+func dungeon_enemies(type: String, level: int) -> Array:
+	return GameData.dungeon_enemies(type, level)
+
+
+## 기본 편성: 보유 영웅 전투력(장비 포함) 상위 파티 인원만큼(같으면 표 순서).
+func default_party(type: String) -> Array:
+	var ids := heroes.keys().filter(func(id): return int(heroes[id]) >= 1 and not GameData.hero(id).is_empty())
+	var power := {}
+	for id in ids:
+		power[id] = GameData.hero_power(GameData.hero(id), level_of(id), promotion_of(id), levels, equipment_bonus(id))
+	var order: Array = GameData.heroes().map(func(h): return h.id)
+	ids.sort_custom(func(a, b): return power[a] > power[b] or (power[a] == power[b] and order.find(a) < order.find(b)))
+	return ids.slice(0, GameData.party_size(type))
+
+
+## 도전 못 하는 이유 코드(문구 DUNGEON_TEXT, 서버와 같은 순서). 되면 "".
+##   unknown(종류) → locked(최고 + 1 초과) → bad_party(인원·중복·보유) → bag_full(장비: 보유 + 드랍 수 > 상한) → no_key / not_enough_gold
+##   (장비 던전은 열쇠가 없으면 골드 추가 도전) → waiting(앱만)
+func dungeon_block(type: String, level: int, party: Array) -> String:
+	if not type in GameData.DUNGEON_TYPES:
+		return "unknown"
+	var st := _dungeon_now(type, time_now())
+	if level < 1 or level > int(st.best_level) + 1 or level > GameData.MAX_DUNGEON_LEVEL:
+		return "locked"
+	var seen := {}
+	for id in party:
+		if not id is String or seen.has(id) or int(heroes.get(id, 0)) < 1 or GameData.hero(id).is_empty():
+			return "bad_party"
+		seen[id] = true
+	if party.size() != GameData.party_size(type):
+		return "bad_party"
+	if type == "equip" and bag_full():
+		return "bag_full"
+	if int(st.keys) < 1:
+		if type != "equip":
+			return "no_key"
+		if gold < GameData.extra_cost(int(st.extra_today)):
+			return "not_enough_gold"
+	return "waiting" if _waiting.has("dungeon") else ""
+
+
+## 보관함이 드랍 한 번을 못 받는다(보유 + equip_drop_count > equip_bag_cap).
+func bag_full() -> bool:
+	return bag.size() + int(GameData.config_num("equip_drop_count")) > int(GameData.config_num("equip_bag_cap"))
+
+
+## 도전 시작(스펙 §6.1). 안 되면 알림만 하고 false. 아무것도 소모하지 않는다(클리어 때). 오프라인: run을 만들어 current_run에 두고 곧바로
+## dungeon_started. 온라인: /v1/dungeon/start(once) — 응답에 dungeon_started(실패면 {} + 알림). 시작했거나 보냈으면 true.
+func start_dungeon(type: String, level: int, party: Array) -> bool:
+	var why := dungeon_block(type, level, party)
+	if why != "":
+		notice.emit(DUNGEON_TEXT.get(why, DUNGEON_FAIL_TEXT))
+		return false
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return false
+		_waiting["dungeon"] = true
+		net.flush_kills()  # 장비 추가 도전 골드는 서버 골드로 판정한다
+		net.send("POST", "/v1/dungeon/start", {"type": type, "level": level, "party": party}, _on_dungeon_started, _on_dungeon_start_failed, true, true)
+		dungeons_changed.emit()
+		return true
+	var st := _dungeon_now(type, time_now())
+	current_run = {"run_id": "%08x%08x" % [rng.randi(), rng.randi()], "seed": rng.randi() % 2147483648, "type": type, "level": level, "party": party.duplicate(),
+		"enemies": GameData.dungeon_enemies(type, level), "started_at": time_now(), "time_limit": GameData.config_num("dungeon_time_limit"),
+		"paid_with": "key" if int(st.keys) >= 1 else "gold"}
+	dungeon_started.emit(current_run.duplicate(true))
+	return true
+
+
+## 결과(스펙 §6.3). run_id = dungeon_started가 준 값, elapsed = 전투 시간(초). 오프라인: 서버와 같은 규칙(만료 → 패배면 닫기 → 타당성(최소 시간·
+## 제한 시간·실제 경과 ≥ elapsed − 5) → 열쇠(장비는 없으면 골드) → 보관함 → 보상)으로 곧바로 반영·저장하고 dungeon_finished. 같은 run_id를
+## 다시 보내면 같은 결과(repeated). 온라인: /v1/dungeon/finish(멱등이라 Net 기본 재시도) — 응답에 dungeon_finished. 거부·버림이면
+## {run_id, win: false, rewards: {}, error: 코드} + 알림. 처리했거나 보냈으면 true.
+func finish_dungeon(run_id: String, win: bool, elapsed: float) -> bool:
+	if net != null:
+		if _waiting.has("finish:" + run_id):
+			return false
+		_waiting["finish:" + run_id] = true
+		net.flush_kills()
+		net.send("POST", "/v1/dungeon/finish", {"run_id": run_id, "win": win, "elapsed": elapsed}, _on_dungeon_finished.bind(run_id),
+			_on_dungeon_finish_failed.bind(run_id))
+		return true
+	var res := _finish_offline(run_id, win, elapsed)
+	if res.has("error"):
+		notice.emit(DUNGEON_TEXT.get(res.error, DUNGEON_FAIL_TEXT))
+	dungeon_finished.emit(res)
+	return true
+
+
+func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
+	var fail := {"run_id": run_id, "win": false, "rewards": {}}
+	if not _last_finish.is_empty() and _last_finish.run_id == run_id:
+		var again: Dictionary = _last_finish.duplicate(true)
+		again.repeated = true
+		return again
+	if current_run.is_empty() or current_run.run_id != run_id:
+		fail.error = "unknown_run"
+		return fail
+	var now := time_now()
+	var run := current_run
+	var real := now - float(run.started_at)
+	if real > GameData.RUN_TTL_SEC:
+		current_run = {}
+		fail.error = "run_expired"
+		return fail
+	var type: String = run.type
+	var res := {"run_id": run_id, "win": false, "rewards": {}, "repeated": false}
+	if win:
+		if elapsed < GameData.min_clear_sec(type) or elapsed > GameData.config_num("dungeon_time_limit") or real < elapsed - GameData.RUN_SLACK_SEC:
+			fail.error = "implausible"  # run은 열린 채
+			return fail
+		var st := _dungeon_now(type, now)
+		var nxt := st.duplicate()
+		nxt.best_level = maxi(int(st.best_level), int(run.level))
+		var cost := 0
+		if int(st.keys) >= 1:
+			nxt.keys = int(st.keys) - 1
+		elif type == "equip" and gold >= GameData.extra_cost(int(st.extra_today)):
+			cost = GameData.extra_cost(int(st.extra_today))
+			nxt.extra_today = int(st.extra_today) + 1
+		else:
+			fail.error = "no_key" if type != "equip" else "not_enough_gold"
+			return fail
+		if type == "equip" and bag_full():
+			fail.error = "bag_full"
+			return fail
+		res.win = true
+		gold_tenths -= cost * 10
+		if type == "gold":
+			var gain := GameData.gold_reward(int(run.level))
+			gold_tenths += gain * 10
+			res.rewards = {"gold_tenths": gain * 10}
+		else:
+			var got := []
+			for it in GameData.roll_drops(int(run.level), int(GameData.config_num("equip_drop_count")), rng.randf):
+				it.id = next_item_id
+				next_item_id += 1
+				got.append(it)
+			bag.append_array(got.duplicate(true))
+			_reindex_items()
+			res.rewards = {"items": got}
+		dungeons[type] = nxt
+	current_run = {}
+	_last_finish = res.duplicate(true)
+	save()
+	changed.emit()
+	dungeons_changed.emit()
+	if res.rewards.has("items"):
+		items_changed.emit()
+	return res
+
+
+## 테스트 훅(입력·통합 체크, 개발 플래그 --debug-win): 진행 중 도전(run_id, 비우면 current_run)을 즉시 승리로 끝낸다. 시작 시각을 최소 시간만큼
+## 당긴 뒤(오프라인은 직접, 온라인은 POST /v1/test/dungeon_age — ALLOW_TEST_HOOKS 서버만) elapsed = 최소 시간으로 finish_dungeon. 보냈으면 true.
+func debug_win(run_id := "") -> bool:
+	var id := run_id if run_id != "" else str(current_run.get("run_id", ""))
+	var type := str(current_run.get("type", "gold")) if current_run.get("run_id", "") == id else "gold"
+	if id == "":
+		return false
+	var sec := GameData.min_clear_sec(type)
+	if net == null:
+		if current_run.get("run_id", "") == id:
+			current_run.started_at = float(current_run.started_at) - sec
+		return finish_dungeon(id, true, sec)
+	net.send("POST", "/v1/test/dungeon_age", {"run_id": id, "seconds": ceili(sec)}, func(_d): finish_dungeon(id, true, sec), Callable())
+	return true
+
+
+## 보관함(사본, id 순) [{id, slot, weapon_kind(무기만, 아니면 null), grade, level}].
+func items() -> Array:
+	return bag.duplicate(true)
+
+
+## 장비 id → 그 장비(사본), 없으면 {}.
+func item(item_id: int) -> Dictionary:
+	for it in bag:
+		if int(it.id) == item_id:
+			return it.duplicate()
+	return {}
+
+
+## 장비 능력치 {hp, atk, speed_pct}(GameData.item_stats).
+func item_stats(it: Dictionary) -> Dictionary:
+	return GameData.item_stats(it)
+
+
+## 그 장비를 낀 영웅 id(안 끼었으면 "").
+func item_owner(item_id: int) -> String:
+	for h in equipment:
+		for s in equipment[h]:
+			if int(equipment[h][s]) == item_id:
+				return h
+	return ""
+
+
+## 영웅 장비 {부위: 장비(사본)}(낀 부위만).
+func hero_equipment(hero_id: String) -> Dictionary:
+	var out := {}
+	var eq: Dictionary = equipment.get(hero_id, {})
+	for s in eq:
+		var it := item(int(eq[s]))
+		if not it.is_empty():
+			out[s] = it
+	return out
+
+
+## 영웅 장비 합계 {hp, atk, speed_pct} — 영웅 최종 능력치에 더한다(GameData.hero_stats가 equip_source로 부른다). 이동속도 %는 전투가 쓴다.
+func equipment_bonus(hero_id: String) -> Dictionary:
+	return GameData.equip_total(hero_equipment(hero_id).values())
+
+
+## 장착 못 하는 이유 코드(문구 EQUIP_TEXT, 서버와 같은 순서). 되면 "". not_owned → bad_slot → unknown_item → wrong_slot → wrong_weapon(그 영웅
+## 모델의 무기 종류만) → waiting(앱만).
+func equip_block(hero_id: String, slot: String, item_id: int) -> String:
+	var h := GameData.hero(hero_id)
+	if h.is_empty() or int(heroes.get(hero_id, 0)) < 1:
+		return "not_owned"
+	if not slot in GameData.EQUIP_SLOTS:
+		return "bad_slot"
+	var it := item(item_id)
+	if it.is_empty():
+		return "unknown_item"
+	if it.slot != slot:
+		return "wrong_slot"
+	if slot == "weapon" and it.weapon_kind != GameData.weapon_of(h.model):
+		return "wrong_weapon"
+	return "waiting" if _waiting.has("equip") else ""
+
+
+## 장착(스펙 §7): 다른 영웅이 끼고 있으면 옮긴다. 안 되면 알림만. 오프라인은 바로 저장, 온라인은 /v1/equip(멱등이라 Net 기본 재시도).
+## items_changed + roster_changed(능력치 — main이 영웅을 다시 만든다). 했거나 보냈으면 true.
+func equip(hero_id: String, slot: String, item_id: int) -> bool:
+	var why := equip_block(hero_id, slot, item_id)
+	if why != "":
+		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
+		return false
+	if net != null:
+		return _equip_online(hero_id, slot, item_id)
+	for h in equipment:
+		for s in equipment[h].keys():
+			if int(equipment[h][s]) == item_id:
+				equipment[h].erase(s)
+	var eq: Dictionary = equipment.get(hero_id, {})
+	eq[slot] = item_id
+	equipment[hero_id] = eq
+	_equipment_saved()
+	return true
+
+
+## 해제. 빈 자리면 false. 오프라인은 바로 저장, 온라인은 /v1/equip {item_id: null}. 했거나 보냈으면 true.
+func unequip(hero_id: String, slot: String) -> bool:
+	if not equipment.get(hero_id, {}).has(slot) or _waiting.has("equip"):
+		return false
+	if net != null:
+		return _equip_online(hero_id, slot, null)
+	equipment[hero_id].erase(slot)
+	if equipment[hero_id].is_empty():
+		equipment.erase(hero_id)
+	_equipment_saved()
+	return true
+
+
+func _equipment_saved() -> void:
+	for h in equipment.keys():
+		if equipment[h].is_empty():
+			equipment.erase(h)
+	save()
+	items_changed.emit()
+	roster_changed.emit()
+
+
+## 판매 못 하는 이유(문구 EQUIP_TEXT): bad_request(빈 목록·겹침) → unknown_item → equipped(장착 중) → waiting. 되면 "".
+func sell_block(ids: Array) -> String:
+	if ids.is_empty() or ids.size() != _unique(ids).size():
+		return "bad_request"
+	for id in ids:
+		if not (id is int or id is float) or item(int(id)).is_empty():
+			return "unknown_item"
+		if item_owner(int(id)) != "":
+			return "equipped"
+	return "waiting" if _waiting.has("sell_items") else ""
+
+
+## 장비 판매(분해, 스펙 §5): 값 = round(10 × 배율 × 레벨)의 합. 안 되면 알림만 하고 0. 오프라인은 얻은 골드를 돌려주고 저장, 온라인은
+## /v1/items/sell(once — 실패면 알림 + 상태 새로 받기)을 보내고 0(응답이 apply_server로 골드·보관함을 바꾼다).
+func sell_items(ids: Array) -> int:
+	var why := sell_block(ids)
+	if why != "":
+		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
+		return 0
+	var int_ids: Array = ids.map(func(x): return int(x))
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return 0
+		_waiting["sell_items"] = true
+		net.send("POST", "/v1/items/sell", {"item_ids": int_ids}, _on_items_sold, _on_items_sell_failed, true, true)
+		items_changed.emit()
+		return 0
+	var g := 0
+	for id in int_ids:
+		g += GameData.item_sell_value(item(id))
+	bag = bag.filter(func(it): return not int(it.id) in int_ids)
+	_reindex_items()
+	gold_tenths += g * 10
+	save()
+	changed.emit()
+	items_changed.emit()
+	return g
+
+
+static func _unique(a: Array) -> Array:
+	var out := []
+	for x in a:
+		if not out.has(x):
+			out.append(x)
+	return out
+
+
+## 보관함을 id 순으로(서버 응답과 같은 순서).
+func _reindex_items() -> void:
+	bag.sort_custom(func(a, b): return int(a.id) < int(b.id))
+
+
 # --- 온라인 ---
 
 ## 서버 플레이어 응답 반영. 형이 틀리면 아무것도 안 바꾸고 false. heroes·deploy는 있으면 반영(형은 검사).
@@ -1088,7 +1479,10 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("training") == null or p.training is Dictionary) and (p.get("upgrades") == null or p.upgrades is Dictionary)):
 		push_error("bad player response: %s" % str(data))
 		return false
-	var roster_before := [heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
+	if not _shape18_ok(p):  # 개정 18: dungeons·items·equipment
+		push_error("bad player response: %s" % str(data))
+		return false
+	var roster_before :=[heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
 	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate()]
 	var queues_before := train_queues.duplicate(true)
 	var upgrades_before := upgrades.duplicate()
@@ -1169,6 +1563,7 @@ func apply_server(data: Dictionary) -> bool:
 			if int(levels[id]) > int(levels_before.get(id, 1)):
 				building_done.emit(id, levels[id])
 	_synced = true
+	_apply_server18(p)
 	return true
 
 
@@ -1537,6 +1932,169 @@ func _on_upgrade_failed() -> void:
 	changed.emit()
 
 
+# --- 던전·장비 온라인(개정 18) ---
+
+func _on_dungeon_started(data: Dictionary) -> void:
+	_waiting.erase("dungeon")
+	apply_server(data)
+	var ok: bool = data.get("run_id") is String and data.get("type") is String and _num(data.get("level")) and data.get("enemies") is Array \
+		and _num(data.get("started_at")) and _num(data.get("seed"))
+	current_run = {}
+	if ok:
+		current_run = {"run_id": data.run_id, "seed": int(data.seed), "type": data.type, "level": int(data.level),
+			"party": data.party if data.get("party") is Array else [], "enemies": data.enemies, "started_at": float(data.started_at),
+			"time_limit": float(data.get("time_limit", GameData.config_num("dungeon_time_limit"))), "paid_with": str(data.get("paid_with", "key"))}
+	else:
+		notice.emit(DUNGEON_FAIL_TEXT)
+	dungeons_changed.emit()
+	dungeon_started.emit(current_run.duplicate(true))
+
+
+## 거부(409 locked·no_key·not_enough_gold·bag_full, 400 bad_party)나 응답 유실: 알림 + 상태 새로 받기, dungeon_started({}).
+func _on_dungeon_start_failed() -> void:
+	_waiting.erase("dungeon")
+	notice.emit(DUNGEON_TEXT.get(net.last_error, DUNGEON_FAIL_TEXT))
+	net.refresh()
+	dungeons_changed.emit()
+	dungeon_started.emit({})
+
+
+func _on_dungeon_finished(data: Dictionary, run_id: String) -> void:
+	_waiting.erase("finish:" + run_id)
+	apply_server(data)
+	if current_run.get("run_id", "") == run_id:
+		current_run = {}
+	var rw = data.get("rewards")
+	var rewards := {}
+	if rw is Dictionary:
+		if _num(rw.get("gold_tenths")):
+			rewards.gold_tenths = int(rw.gold_tenths)
+		if rw.get("items") is Array:
+			rewards.items = _item_list(rw.items)
+	dungeon_finished.emit({"run_id": run_id, "win": data.get("win") == true, "rewards": rewards, "repeated": data.get("repeated") == true})
+
+
+## 거부(409 implausible·run_expired·run_closed·no_key·not_enough_gold·bag_full, 404)나 재시도 소진: 알림 + 상태 새로 받기.
+func _on_dungeon_finish_failed(run_id: String) -> void:
+	_waiting.erase("finish:" + run_id)
+	var code: String = net.last_error
+	if code in ["run_expired", "run_closed", "unknown_run"] and current_run.get("run_id", "") == run_id:
+		current_run = {}
+	notice.emit(DUNGEON_TEXT.get(code, DUNGEON_FAIL_TEXT))
+	net.refresh()
+	dungeon_finished.emit({"run_id": run_id, "win": false, "rewards": {}, "error": code if code != "" else "failed"})
+
+
+## 온라인 장착·해제: 멱등이라 Net 기본 재시도. 답이 올 때까지 equip_block = "waiting".
+func _equip_online(hero_id: String, slot: String, item_id) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["equip"] = true
+	net.send("POST", "/v1/equip", {"hero_id": hero_id, "slot": slot, "item_id": item_id}, _on_equipped, _on_equip_failed)
+	items_changed.emit()
+	return true
+
+
+func _on_equipped(data: Dictionary) -> void:
+	_waiting.erase("equip")
+	apply_server(data)
+	items_changed.emit()
+
+
+## 거부(409 wrong_slot·wrong_weapon, 404, 400)나 응답 유실: 알림 + 상태를 새로 받는다.
+func _on_equip_failed() -> void:
+	_waiting.erase("equip")
+	notice.emit(EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT))
+	net.refresh()
+	items_changed.emit()
+
+
+func _on_items_sold(data: Dictionary) -> void:
+	_waiting.erase("sell_items")
+	apply_server(data)
+	items_changed.emit()
+
+
+func _on_items_sell_failed() -> void:
+	_waiting.erase("sell_items")
+	notice.emit(EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT))
+	net.refresh()
+	items_changed.emit()
+
+
+## 서버·저장 장비 목록 → [{id(int), slot, weapon_kind, grade, level(int)}](id 순). 모르는 부위·등급·무기 종류, 겹친 id는 버린다.
+func _item_list(src: Array) -> Array:
+	var out := []
+	var seen := {}
+	for x in src:
+		if not (x is Dictionary and _num(x.get("id")) and x.get("slot") in GameData.EQUIP_SLOTS and x.get("grade") in GameData.EQUIP_GRADES and _num(x.get("level"))):
+			continue
+		var kind = x.get("weapon_kind")
+		if (x.slot == "weapon") != (kind is String and kind in GameData.WEAPON_KINDS) or seen.has(int(x.id)):
+			continue
+		seen[int(x.id)] = true
+		out.append({"id": int(x.id), "slot": x.slot, "weapon_kind": kind if x.slot == "weapon" else null, "grade": x.grade, "level": maxi(1, int(x.level))})
+	out.sort_custom(func(a, b): return a.id < b.id)
+	return out
+
+
+## 서버·저장 장착 {영웅: {부위: id}} → 표에 있는 영웅, 보관함에 있고 부위가 맞는 장비(무기는 그 모델의 종류)만. 장비 하나는 한 곳에만.
+func _equipment_dict(src: Dictionary, items_list: Array) -> Dictionary:
+	var by_id := {}
+	for it in items_list:
+		by_id[it.id] = it
+	var used := {}
+	var out := {}
+	for h in src:
+		var def := GameData.hero(str(h))
+		if not src[h] is Dictionary or def.is_empty():
+			continue
+		for s in src[h]:
+			var v = src[h][s]
+			if not _num(v) or not by_id.has(int(v)) or by_id[int(v)].slot != s or used.has(int(v)):
+				continue
+			if s == "weapon" and by_id[int(v)].weapon_kind != GameData.weapon_of(def.model):
+				continue
+			used[int(v)] = true
+			if not out.has(str(h)):
+				out[str(h)] = {}
+			out[str(h)][s] = int(v)
+	return out
+
+
+## 서버·저장 던전 {종류: {best_level, keys, extra_today, last_reset}} → 표의 종류만(숫자가 아니면 그 종류는 버림). 없는 종류는 base 값.
+func _dungeon_dict(src: Dictionary, base: Dictionary) -> Dictionary:
+	var out := base.duplicate(true)
+	for type in GameData.DUNGEON_TYPES:
+		var v = src.get(type)
+		if v is Dictionary and _num(v.get("best_level")) and _num(v.get("keys")) and _num(v.get("extra_today")) and _num(v.get("last_reset")):
+			out[type] = {"best_level": maxi(0, int(v.best_level)), "keys": maxi(0, int(v.keys)), "extra_today": maxi(0, int(v.extra_today)), "last_reset": float(v.last_reset)}
+	return out
+
+
+## 서버 플레이어 응답의 개정 18 부분(dungeons·items·equipment) 반영. 형이 틀리면 false(apply_server가 아무것도 안 바꾼다 — 먼저 검사).
+func _shape18_ok(p: Dictionary) -> bool:
+	return (p.get("dungeons") == null or p.dungeons is Dictionary) and (p.get("items") == null or p.items is Array) \
+		and (p.get("equipment") == null or p.equipment is Dictionary)
+
+
+func _apply_server18(p: Dictionary) -> void:
+	var before := [dungeons.duplicate(true), bag.duplicate(true), equipment.duplicate(true)]
+	if p.get("dungeons") is Dictionary:
+		dungeons = _dungeon_dict(p.dungeons, dungeons)
+	if p.get("items") is Array:
+		bag = _item_list(p.items)
+	if p.get("equipment") is Dictionary:
+		equipment = _equipment_dict(p.equipment, bag)
+	if dungeons != before[0]:
+		dungeons_changed.emit()
+	if bag != before[1] or equipment != before[2]:
+		items_changed.emit()
+	if equipment != before[2]:
+		roster_changed.emit()  # 장비가 바뀌면 영웅 능력치가 바뀐다
+
+
 # --- 저장 ---
 
 func save() -> void:
@@ -1555,7 +2113,7 @@ func save() -> void:
 		hs[id] = {"copies": heroes[id], "level": level_of(id), "shards": shards_of(id), "promotion": promotion_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
-		"training": train_queues, "upgrades": upgrades}))
+		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -1576,12 +2134,17 @@ func load_save(now: float) -> void:
 	soldiers_changed.emit()
 	training_changed.emit()
 	upgrades_changed.emit()
+	dungeons_changed.emit()
+	items_changed.emit()
 	complete_due(now)  # 앱이 꺼져 있는 동안 끝난 건설
 
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, 9, SAVE_VERSION]:
+		return false
+	var v10 = _load_v10(data)  # 개정 18(저장 v10): 던전·보관함·장착(형이 틀리면 깨진 저장)
+	if v10 == null:
 		return false
 	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v6: bool = int(data.version) >= 6  # v6: + shards, promotion. 그 전은 옛 별(중복)을 조각으로(copies − 1), 승급 0
@@ -1692,7 +2255,34 @@ func _apply(data) -> bool:
 	soldier_deployed = trim_deploy(troops[1], soldiers)
 	train_queues = tq
 	upgrades = _upgrade_dict(us)
+	dungeons = v10.dungeons
+	bag = v10.items
+	equipment = v10.equipment
+	next_item_id = v10.next_item_id
 	return true
+
+
+## 저장 v10(개정 18): dungeons {종류: {best_level, keys, extra_today, last_reset}}, items, equipment {영웅: {부위: id}}, next_item_id.
+## v9 이하는 reset()의 그날 지급분·빈 보관함. 형이 틀리면(사전·배열·숫자가 아님) null = 깨진 저장. 모르는 장비·끊긴 장착은 버린다.
+func _load_v10(data: Dictionary):
+	if int(data.version) < 10:
+		return {"dungeons": dungeons, "items": [], "equipment": {}, "next_item_id": 1}
+	var ds = data.get("dungeons")
+	var its = data.get("items")
+	var eq = data.get("equipment")
+	if not (ds is Dictionary and its is Array and eq is Dictionary and _num(data.get("next_item_id"))):
+		return null
+	for type in ds:
+		var v = ds[type]
+		if not (v is Dictionary and _num(v.get("best_level")) and _num(v.get("keys")) and _num(v.get("extra_today")) and _num(v.get("last_reset"))):
+			return null
+	if not its.all(func(x): return x is Dictionary and _num(x.get("id"))) or not eq.values().all(func(x): return x is Dictionary):
+		return null
+	var list := _item_list(its)
+	var top := 0
+	for it in list:
+		top = maxi(top, int(it.id))
+	return {"dungeons": _dungeon_dict(ds, dungeons), "items": list, "equipment": _equipment_dict(eq, list), "next_item_id": maxi(int(data.next_item_id), top + 1)}
 
 
 static func _num(v) -> bool:
