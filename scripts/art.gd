@@ -85,7 +85,7 @@ const HERO_LOOKS := {
 	# 마법사 — 화염 대마법사: 진홍 모자·붉은 로브·검은 망토, 모자 끝과 지팡이 머리에 불꽃
 	"ignis": {"palette": {"robe": Color("B8261A"), "hat": Color("7A1410"), "cape": Color("2A1612"), "band": Color("F0B030"),
 		"buckle": Color("F0D060"), "accent": Color("FFB020"), "boots": Color("3A2016"), "gem": Color("FF6A10")},
-		"parts": [["head", "ignis_flame"], ["handslot.r", "ignis_fire"]], "scale": 1.04},
+		"parts": [["head", "ignis_flame"], ["handslot.r", "ignis_fire"]], "scale": 1.03},
 	# 서리 마녀: 모자 벗고 흰 머리에 얼음 왕관, 얼음빛 로브·짙은 파랑 망토, 완드 끝 얼음 결정
 	"seraphine": {"palette": {"robe": Color("9ED4F0"), "cape": Color("2A5C9E"), "band": Color("EAF6FF"), "buckle": Color("CFEFFF"),
 		"accent": Color("7FE6FF"), "boots": Color("E8F4FA"), "gloves": Color("CFEFFF"), "hair": Color("EEF3F8")},

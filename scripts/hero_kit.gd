@@ -61,7 +61,7 @@ static func _build(id: String, k) -> void:
 		"felix_plume": _felix_plume(k)
 		"felix_spear": _felix_spear(k)
 		"hans_kettle": _hans_kettle(k)
-		"ignis_flame": _flame(k, Vector3(-0.03, 1.36, -0.32), 0.55, 1.0)
+		"ignis_flame": _flame(k, Vector3(-0.03, 1.36, -0.32), 0.42, 1.0)  # 끝 ≈ 1.8 — 피규어 그림 위(≈ 3.1 m)에 걸리지 않게
 		"ignis_fire": _flame(k, Vector3(0, 1.05, 0), 0.6, 1.2)
 		"seraphine_crown": _seraphine_crown(k)
 		"seraphine_ice": _ice_crystal(k)
@@ -255,7 +255,7 @@ static func _felix_plume(k) -> void:
 	var blue := Color("2E86C1")
 	for i in 5:
 		var x := (i - 2) * 0.17
-		_leaf(k, Vector3(x * 0.3, 1.12, 0.05), Vector3(x, 1.9 - absf(x) * 0.5, -0.32 - absf(x) * 0.6), 0.28, 0.12,
+		_leaf(k, Vector3(x * 0.3, 1.12, 0.05), Vector3(x, 1.74 - absf(x) * 0.5, -0.4 - absf(x) * 0.6), 0.28, 0.12,
 			Vector3(1, 0, x * 2.0), WHITE if i == 2 else blue.darkened(0.08 * absf(i - 2)))
 
 
