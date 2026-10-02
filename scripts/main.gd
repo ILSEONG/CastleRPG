@@ -34,6 +34,7 @@ const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
+const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
@@ -126,8 +127,10 @@ func _build_world() -> void:
 	picker.building_panel = building_panel
 	var soldier_panel = SoldierPanelScript.new()
 	add_child(soldier_panel)
-	var tabs = TabBarScript.new()  # 하단 탭 바(개정 13 §7.1): 영웅·병사·모집·상인
-	tabs.windows = {"hero": hero_panel, "soldier": soldier_panel, "recruit": recruit, "merchant": panel}
+	var growth_panel = GrowthPanelScript.new()  # 성장 시트(개정 20 §5)
+	add_child(growth_panel)
+	var tabs = TabBarScript.new()  # 하단 탭 바(개정 13 §7.1, 개정 20): 성장·영웅·병사·모집·상인
+	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "recruit": recruit, "merchant": panel}
 	add_child(tabs)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원 + 배치·승급·레벨·연구소·장비 반영

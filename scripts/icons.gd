@@ -1,5 +1,5 @@
 extends Control
-## 자원 아이콘(골드·목재·석재·식량)과 장비 아이콘(개정 18: 방어구 6·무기 5): 평면 로우폴리 — 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽.
+## 자원 아이콘(골드·목재·석재·식량)과 장비 아이콘(개정 18: 방어구 6·무기 5), 성장 줄 아이콘(개정 20: 하트·시계·과녁·폭발 별): 평면 로우폴리 — 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽.
 ## 도형은 단위 좌표(-0.5..0.5)로 정의하고 draw_icon이 크기를 곱한다 → 어느 크기에서도 같은 모양. 장비 칸은 draw_item(등급 배경·테두리). 오토로드 참조 없음.
 
 const Art := preload("res://scripts/art.gd")
@@ -98,7 +98,69 @@ static func shapes(kind_name: String) -> Array:
 				# 받침
 				[[Vector2(-0.18, 0.34), Vector2(0.18, 0.34), Vector2(0.22, 0.46), Vector2(-0.22, 0.46)], Color(0.24, 0.42, 0.50), true],
 			]
-	return _item_shapes(kind_name)
+	var growth := _growth_shapes(kind_name)
+	return growth if not growth.is_empty() else _item_shapes(kind_name)
+
+
+## 성장 줄 아이콘(개정 20 §5): 하트(체력)·쌍화살표 시계(공격속도)·과녁(치명타 확률)·폭발 별(치명타 배율). 공격력은 "sword", 이동속도는 "shoes".
+static func _growth_shapes(kind_name: String) -> Array:
+	match kind_name:
+		"heart":  # 각진 하트: 밝은 왼쪽 면 + 오른 아래 그늘 + 흰 빛
+			var red := Color(0.86, 0.20, 0.24)
+			var left := [Vector2(0.0, 0.44), Vector2(-0.42, 0.02), Vector2(-0.47, -0.16), Vector2(-0.40, -0.34), Vector2(-0.24, -0.42), Vector2(-0.08, -0.36), Vector2(0.0, -0.24)]
+			var whole: Array = left + [Vector2(0.08, -0.36), Vector2(0.24, -0.42), Vector2(0.40, -0.34), Vector2(0.47, -0.16), Vector2(0.42, 0.02)]
+			return [
+				[whole, red, true],
+				[left, red.lightened(0.22), false],
+				[[Vector2(0.0, 0.44), Vector2(0.42, 0.02), Vector2(0.18, 0.04)], red.darkened(0.25), false],
+				[[Vector2(-0.34, -0.26), Vector2(-0.24, -0.33), Vector2(-0.16, -0.28), Vector2(-0.28, -0.17)], Color(1.0, 0.86, 0.86), false],
+				[whole, Color(0, 0, 0, 0), true],
+			]
+		"haste":  # 쌍화살표 시계: 파란 테 시계(눈금 넷·바늘 둘) + 오른 아래 금색 ≫
+			var c := Vector2(-0.08, -0.04)
+			var out := [
+				[_ngon(12, 0.40, PI / 12.0).map(func(p): return p + c), CLOTH, true],
+				[_ngon(12, 0.31, PI / 12.0).map(func(p): return p + c), Color(0.98, 0.96, 0.90), true],
+			]
+			for k in 4:
+				var dir := Vector2.from_angle(k * PI / 2.0)
+				out.append([_quad(c + dir * 0.23, c + dir * 0.29, 0.022), SLIT, false])
+			out.append([_quad(c, c + Vector2(0, -0.20), 0.03), SLIT, false])
+			out.append([_quad(c, c + Vector2(0.15, 0.08), 0.03), SLIT, false])
+			out.append([_ngon(6, 0.045, 0.0).map(func(p): return p + c), PLUME, false])
+			for x0 in [0.10, 0.24]:
+				out.append([[Vector2(x0, 0.0), Vector2(x0 + 0.12, 0.0), Vector2(x0 + 0.26, 0.21), Vector2(x0 + 0.12, 0.42), Vector2(x0, 0.42),
+					Vector2(x0 + 0.14, 0.21)], GOLD, true])
+			return out
+		"target":  # 과녁(빨강·흰 고리, 금 한가운데) + 가운데 꽂힌 화살(자루·파란 깃)
+			var red := Color(0.84, 0.20, 0.22)
+			var a := Vector2(0.0, 0.0)
+			var b := Vector2(0.42, -0.42)
+			return [
+				[_ngon(16, 0.46, 0.0), red, true],
+				[_ngon(16, 0.35, 0.0), Color(0.98, 0.96, 0.90), false],
+				[_ngon(16, 0.24, 0.0), red, false],
+				[_ngon(16, 0.12, 0.0), GOLD, true],
+				[_ax(a, b, [Vector2(0.0, 0.022), Vector2(0.58, 0.022), Vector2(0.58, -0.022), Vector2(0.0, -0.022)]), LEATHER_DARK, true],
+				[_ax(a, b, [Vector2(0.40, 0.02), Vector2(0.48, 0.10), Vector2(0.58, 0.10), Vector2(0.52, 0.02)]), CLOTH_LIGHT, true],
+				[_ax(a, b, [Vector2(0.40, -0.02), Vector2(0.48, -0.10), Vector2(0.58, -0.10), Vector2(0.52, -0.02)]), CLOTH, true],
+			]
+		"burst":  # 폭발 별: 들쭉날쭉 8갈래 주황 별(밝은 왼쪽 반) + 노란 속별 + 흰 가운데(치명타 불꽃 색)
+			var star := []
+			var core := []
+			for i in 16:
+				var ang := -PI / 2.0 + TAU * i / 16.0
+				star.append(Vector2.from_angle(ang) * ([0.48, 0.22, 0.38, 0.22][i % 4]))
+				core.append(Vector2.from_angle(ang) * (0.28 if i % 2 == 0 else 0.13))
+			var orange := Color(0.96, 0.45, 0.12)
+			return [
+				[star, orange, true],
+				[[Vector2.ZERO] + star.slice(8) + [star[0]], orange.lightened(0.2), false],
+				[core, Color(1.0, 0.84, 0.30), false],
+				[_ngon(8, 0.07, 0.0), Color(1.0, 0.98, 0.86), false],
+				[star, Color(0, 0, 0, 0), true],
+			]
+	return []
 
 
 ## 장비 칸 하나(개정 18 §8): 등급 색 배경 면(모서리 깎은 사각, 왼쪽 위 절반 밝게) + 등급 색 테두리 + kind 아이콘.
