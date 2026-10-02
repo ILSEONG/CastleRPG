@@ -292,7 +292,6 @@ func _phase1(state_path: String) -> void:
 	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
 	await _soldiers_online(state_path)
 	await _dungeons_online(state_path)  # 개정 18: 골드(판매)가 바뀐다 — 끝 상태를 쓰기 전에
-	await _recruit23_online(state_path)  # 개정 23: 골드를 쓴다 — 끝 상태를 쓰기 전에
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
@@ -553,7 +552,7 @@ func _phase2(state_path: String) -> void:
 	_soldiers_restored(state_path)
 	_growth_restored(state_path)
 	await _dungeons_restored(state_path)  # 개정 18: 복원 확인 뒤 골드 던전(영웅을 더 준다 — 위 영웅 검사 뒤에)
-	_recruit23_restored(state_path)
+	await _recruit23_online()  # 개정 23: 영웅이 늘어난다 — phase 1·2 영웅·조각 검사 뒤 맨 끝에
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
@@ -1261,8 +1260,9 @@ func _pulls(n: int, count: int, currency: String) -> Array:
 
 ## (r23) 서버 골드 모집 레벨업: grant_gold로 골드 → 10연차 3번(요청 3번) = 30회 → 서버 Lv 2(넘김은 서버 규칙 그대로), 골드 −81,000, 알림·시그널.
 ## 다이아: grant_diamonds 16,000 → 1회 + 10연차 5번 = 51회(−13,800). 결과 순서로 센 천장 = 서버 dia_pity, 50회 안에 SSR이 한 장 이상(천장).
-## 끝 상태(다이아·모집 상태)를 state_path.r23.json에 써 두면 phase 2가 재접속 복원을 본다.
-func _recruit23_online(state_path: String) -> void:
+## 재접속: 앱의 다이아·모집 상태를 비우고 토큰을 틀리게 해 다시 로그인 → /v1/player가 서버 값을 그대로 돌려준다(상단 다이아 칩도).
+## phase 2 맨 끝에 돈다 — 모집이 영웅·조각을 늘려 phase 1·2의 영웅 복원 검사(서버 모집 한 장)를 흔들지 않게.
+func _recruit23_online() -> void:
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
 	await _request("POST", "/v1/test/grant_gold", {"amount": 81000})
 	var gold0: int = Economy.server_gold_tenths
@@ -1300,17 +1300,17 @@ func _recruit23_online(state_path: String) -> void:
 		and int(p.get("gacha", {}).get("dia_pity", -1)) == pity and Economy.gacha_dia_pity == pity and Economy.gacha_state().gold_level == 2,
 		"(r23) server diamond recruit: 51 cards for 13,800 diamonds, an SSR within 50 (pity), the server pity count matches the results",
 		"cards=%d dia %d -> %d pity=%d server=%s ssr50=%s" % [cards.size(), dia0, Economy.diamonds, pity, p.get("gacha"), ssr_in_50])
-	var f := FileAccess.open(state_path + ".r23.json", FileAccess.WRITE)
-	f.store_string(JSON.stringify({"diamonds": Economy.diamonds, "gacha": Economy.gacha_state()}))
-	f.close()
-
-
-## (p2 r23) 재접속: 다이아·골드 모집 레벨·누적·천장이 서버에서 그대로 돌아오고 상단 다이아 칩이 그 값이다.
-func _recruit23_restored(state_path: String) -> void:
-	var saved = JSON.parse_string(FileAccess.get_file_as_string(state_path + ".r23.json"))
-	var ok: bool = saved is Dictionary and saved.get("gacha") is Dictionary
-	_check(ok and Economy.diamonds == int(saved.diamonds) and Economy.diamonds > 0 and Economy.gacha_state().gold_level == 2
-		and Economy.gacha_state().gold_level == int(saved.gacha.gold_level) and Economy.gacha_gold_pulls == int(saved.gacha.gold_pulls) and Economy.gacha_dia_pity == int(saved.gacha.dia_pity)
+	var saved := [Economy.diamonds, Economy.gacha_state()]
+	Economy.diamonds = 0
+	Economy.gacha_gold_level = 1
+	Economy.gacha_gold_pulls = 0
+	Economy.gacha_dia_pity = 0
+	Economy.changed.emit()
+	var logins: int = Net.logins
+	Net.token = "not-a-token"
+	r = await _request("GET", "/v1/player")
+	await _frames(2)
+	_check(not r.is_empty() and Net.logins == logins + 1 and saved[0] == 2200 and Economy.diamonds == saved[0] and Economy.gacha_state() == saved[1]
 		and _hud._chips["diamond"].text == _hud.commas(Economy.diamonds),
-		"(p2) reconnecting restores diamonds and the recruit state (gold Lv 2, pulls, pity); the top diamond chip shows them",
-		"saved=%s now=%d %s" % [saved, Economy.diamonds, Economy.gacha_state()])
+		"(r23) reconnecting (new login) restores diamonds and the recruit state (gold Lv 2, pulls, pity) from the server; the top diamond chip shows them",
+		"saved=%s now=%d %s logins=%d" % [saved, Economy.diamonds, Economy.gacha_state(), Net.logins - logins])
