@@ -14,8 +14,9 @@ pop_base,6
 pop_per_house,2
 soldier_max_tier,5
 soldier_tier_mult,2
-soldier_prod_sec,10800
-soldier_prod_level_factor,0.95
+train_base_min,180
+train_step_min,30
+train_cost_tier_mult,5
 soldier_merge_count,5
 train_batch_base,10
 train_batch_per_level,2

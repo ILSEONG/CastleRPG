@@ -235,9 +235,17 @@ export function parseSoldierKey(key: string, defs: SoldierDef[], maxTier: number
   return { type: m[1], tier: Number(m[2]) }
 }
 
-// 1마리 훈련 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 앱과 같은 반올림 없는 값). n마리는 n × 이 값(개정 16).
-export const soldierUnitSec = (config: Config, level: number) =>
-  grown(cfgNum(config, 'soldier_prod_sec'), cfgNum(config, 'soldier_prod_level_factor'), Math.max(level, 1) - 1)
+// 훈련 티어(개정 19): 한 티어 = k(= train_base_min / train_step_min)레벨. t = min(최대 티어, 1 + floor((L−1)/k)).
+const trainK = (config: Config) => Math.max(1, Math.floor(cfgNum(config, 'train_base_min') / cfgNum(config, 'train_step_min')))
+export const trainTier = (config: Config, level: number) =>
+  Math.min(cfgNum(config, 'soldier_max_tier'), 1 + Math.floor((Math.max(level, 1) - 1) / trainK(config)))
+// 1마리 훈련 시간(초) = (train_base_min − train_step_min × s) × 60, s = (L−1) mod k(마지막 티어 뒤는 k−1로 고정). n마리는 n × 이 값.
+export function soldierUnitSec(config: Config, level: number): number {
+  const k = trainK(config)
+  const L = Math.max(level, 1) - 1
+  const s = L >= cfgNum(config, 'soldier_max_tier') * k ? k - 1 : L % k
+  return (cfgNum(config, 'train_base_min') - cfgNum(config, 'train_step_min') * s) * 60
+}
 
 // --- 훈련 (개정 16) — 앱 GameData.train_unit_cost·train_max와 같은 식 ---
 
@@ -253,11 +261,12 @@ export function parseTrainCost(text: string): Record<string, number> | null {
   return out
 }
 
-// n마리 비용 {자원: 수} = 1마리 비용 × n.
-export function trainCost(config: Config, type: string, n: number): Record<string, number> {
+// n마리 비용 {자원: 수} = 1마리 비용 × train_cost_tier_mult^(tier−1) × n(개정 19).
+export function trainCost(config: Config, type: string, n: number, tier = 1): Record<string, number> {
   const one = parseTrainCost(config[`train_cost_${type}`] ?? '')
   if (!one) throw new Error(`config 'train_cost_${type}' is missing or not 'res:amount|…'`)
-  return Object.fromEntries(Object.entries(one).map(([r, v]) => [r, v * n]))
+  const m = cfgNum(config, 'train_cost_tier_mult') ** (tier - 1)
+  return Object.fromEntries(Object.entries(one).map(([r, v]) => [r, v * m * n]))
 }
 
 // 묶음 상한 = train_batch_base + train_batch_per_level × (L − 1).

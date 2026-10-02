@@ -83,9 +83,9 @@ export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
 // 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 나머지는 0보다 크다.
 // 개정 16 훈련: 병종마다 1마리 비용 train_cost_<병종>("자원:수|…", rules.parseTrainCost)도 필수다
-export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'soldier_prod_sec', 'soldier_prod_level_factor', 'soldier_merge_count',
+export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'train_base_min', 'train_step_min', 'train_cost_tier_mult', 'soldier_merge_count',
   'train_batch_base', 'train_batch_per_level']
-const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base']
+const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base', 'train_base_min', 'train_step_min', 'train_cost_tier_mult']
 const SOLDIER_INT0_KEYS = ['train_batch_per_level']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
 export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 앱 GameData.KEEP_SLOT_STEP

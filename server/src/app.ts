@@ -69,6 +69,7 @@ interface Player {
 
 interface Train {
   count: number
+  tier: number // 시작할 때의 훈련 티어(개정 19) — 레벨업해도 그대로
   finish: number // 유닉스 초(서버 시각)
 }
 
@@ -115,7 +116,7 @@ const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8,
-      'train_count', train_count, 'train_finish', extract(epoch from train_finish)::float8))
+      'train_count', train_count, 'train_tier', train_tier, 'train_finish', extract(epoch from train_finish)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
   coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level, 'shards', shards, 'promotion', promotion))
     from player_heroes where player_id = s.player_id), '{}'::json) as heroes
@@ -223,7 +224,7 @@ export function createApp(opts: AppOptions) {
       for (const [k, v] of Object.entries(json(r.res) as Record<string, unknown>)) res[k] = Number(v)
       const buildings: Player['buildings'] = {}
       for (const [k, v] of Object.entries(json(r.buildings) as Record<string, any>)) {
-        const train = Number(v.train_count) > 0 ? { count: Number(v.train_count), finish: Number(v.train_finish) } : null
+        const train = Number(v.train_count) > 0 ? { count: Number(v.train_count), tier: Number(v.train_tier ?? 1), finish: Number(v.train_finish) } : null
         buildings[k] = { level: Number(v.level), last_collect: Number(v.last_collect), train }
       }
       const missing = game.resources.some((x) => !(x.id in res) || !(x.building in buildings)) || game.buildings.some((b) => !(b.id in buildings))
@@ -342,7 +343,7 @@ export function createApp(opts: AppOptions) {
         where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
     })
     Object.entries(ch.train ?? {}).forEach(([b, t], i) => {
-      ctes.push(`t${i} as (update player_buildings set train_count = ${p(t?.count ?? 0)}::int, train_finish = to_timestamp(${p(t?.finish ?? null)}::float8)
+      ctes.push(`t${i} as (update player_buildings set train_count = ${p(t?.count ?? 0)}::int, train_tier = ${p(t?.tier ?? null)}::int, train_finish = to_timestamp(${p(t?.finish ?? null)}::float8)
         where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
     })
     if (ch.log) {
@@ -787,19 +788,20 @@ export function createApp(opts: AppOptions) {
       if (count > max) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${max}`)
       const q = p.buildings[building].train
       if (q) throw new ApiError(409, q.finish > now ? 'training' : 'ready_to_collect', `'${building}' already has ${q.count} in training`)
-      const cost = R.trainCost(g.config, s.id, count)
+      const tier = R.trainTier(g.config, lv)
+      const cost = R.trainCost(g.config, s.id, count, tier)
       if (Object.entries(cost).some(([r, v]) => (p.res[r] ?? 0) < v)) throw new ApiError(409, 'not_enough', `training ${count} costs ${JSON.stringify(cost)}`)
       const unit = R.soldierUnitSec(g.config, lv)
-      const train = { count, finish: now + count * unit }
+      const train = { count, tier, finish: now + count * unit }
       const res = Object.fromEntries(Object.entries(cost).filter(([, v]) => v > 0).map(([r, v]) => [r, -v]))
       return {
-        change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, level: lv, unit_sec: unit, cost, finish: train.finish } } },
+        change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, tier, level: lv, unit_sec: unit, cost, finish: train.finish } } },
         extra: { training: { building, ...train } },
       }
     })
   })
 
-  // 훈련 수령(개정 16 §2): 끝났으면 1티어 보유 += count, 대기열 비우기, economy_log train_collect(version 가드 한 문장).
+  // 훈련 수령(개정 16 §2): 끝났으면 그 묶음 티어 보유 += count, 대기열 비우기, economy_log train_collect(version 가드 한 문장).
   // 비었으면 409 empty, 아직이면 409 not_ready — 응답을 잃고 다시 보내도 두 번 받지 않는다(멱등).
   app.post('/v1/soldiers/collect', auth, async (c) => {
     const building = strField(await body(c), 'building')
@@ -809,8 +811,8 @@ export function createApp(opts: AppOptions) {
       if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
       if (q.finish > now) throw new ApiError(409, 'not_ready', `'${building}' finishes training at ${q.finish}`)
       return {
-        change: { soldiers: { [R.soldierKey(s.id, 1)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail: { building, type: s.id, ...q } } },
-        extra: { collected: { type: s.id, count: q.count } },
+        change: { soldiers: { [R.soldierKey(s.id, q.tier)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail: { building, type: s.id, ...q } } },
+        extra: { collected: { type: s.id, count: q.count, tier: q.tier } },
       }
     })
   })
@@ -825,7 +827,7 @@ export function createApp(opts: AppOptions) {
       const q = p.buildings[building].train
       if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
       if (q.finish <= now) throw new ApiError(409, 'ready_to_collect', `'${building}' finished training; collect it`)
-      const refund = R.trainRefund(R.trainCost(g.config, s.id, q.count))
+      const refund = R.trainRefund(R.trainCost(g.config, s.id, q.count, q.tier))
       return {
         change: {
           res: Object.fromEntries(Object.entries(refund).filter(([, v]) => v > 0)), train: { [building]: null },
