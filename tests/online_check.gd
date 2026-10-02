@@ -290,6 +290,7 @@ func _phase1(state_path: String) -> void:
 
 	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
 	await _soldiers_online(state_path)
+	await _dungeons_online(state_path)  # 개정 18: 골드(판매)가 바뀐다 — 끝 상태를 쓰기 전에
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
@@ -547,6 +548,7 @@ func _phase2(state_path: String) -> void:
 	_check_band_layout("(p2)")
 	_buildings_restored(state_path)
 	_soldiers_restored(state_path)
+	await _dungeons_restored(state_path)  # 개정 18: 복원 확인 뒤 골드 던전(영웅을 더 준다 — 위 영웅 검사 뒤에)
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
@@ -955,3 +957,167 @@ func _soldiers_restored(state_path: String) -> void:
 	var q := Economy.training("stable")
 	_check(tq.keys() == ["stable"] and Economy.train_queues.keys() == ["stable"] and q.count == int(tq.stable.count) and absf(q.finish - float(tq.stable.finish)) < 0.01 and not q.ready,
 		"(p2) reconnecting restores the training queue (stable: 1 cavalry, same finish)", "queues=%s saved=%s" % [Economy.train_queues, tq])
+
+
+## (z) 개정 18 장비 던전(서버 권위): 서버 열쇠·리셋 시각, 시작은 한 번(응답 전 재탭 무시)·소모 없음, 패배는 소모 없음, 너무 빠른 승리는 409 implausible,
+## 즉시 승리 훅(debug_win → test/dungeon_age) → 열쇠 −1·장비 5개(서버 id), 같은 run 재전송은 같은 5개, 장착 → 월드 영웅 능력치에 장비 합계,
+## 서버 거부(409 wrong_slot), 판매(골드 = 판매 값). 끝 상태를 --state.dungeons에 쓴다(phase 2가 복원을 본다).
+func _dungeons_online(state_path: String) -> void:
+	var started := []
+	var finished := []
+	var on_start := func(r): started.append(r)
+	var on_finish := func(r): finished.append(r)
+	Economy.dungeon_started.connect(on_start)
+	Economy.dungeon_finished.connect(on_finish)
+	var es: Dictionary = Economy.dungeon_state("equip")
+	var gs: Dictionary = Economy.dungeon_state("gold")
+	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 1 and es.key_cap == 3 and es.best_level == 0 and es.extra_cost == 5000
+		and absf(es.next_reset - GameData.next_reset(Economy.time_now())) < 1.0 and Economy.items().is_empty(),
+		"(z) server dungeon state: gold 3 / 10, equip 1 / 3, next reset at 00:00 KST, empty bag", "gold=%s equip=%s" % [gs, es])
+	var party: Array = Economy.default_party("equip")
+	var s0: int = Net.requested.get("/v1/dungeon/start", 0)
+	var sent := Economy.start_dungeon("equip", 1, party)
+	var again := Economy.start_dungeon("equip", 1, party)  # 응답 전 재탭
+	await _wait_until(func(): return started.size() == 1, 15.0)
+	_check(sent and not again and started.size() == 1 and started[0].get("run_id", "") != "" and started[0].enemies.size() == 1 and started[0].enemies[0].kind == "death_knight"
+		and Net.requested.get("/v1/dungeon/start", 0) == s0 + 1 and Economy.dungeon_state("equip").keys == 1 and Economy.current_run.run_id == started[0].run_id,
+		"(z) one start request (a second tap waits); the run carries the server's death knight and nothing is spent", "started=%s" % [started])
+	Economy.finish_dungeon(started[0].run_id, false, 8.0)
+	await _wait_until(func(): return finished.size() == 1, 15.0)
+	_check(finished.size() == 1 and not finished[0].win and finished[0].rewards.is_empty() and Economy.dungeon_state("equip").keys == 1 and Economy.current_run.is_empty(),
+		"(z) a lost run spends no key", "finished=%s" % [finished])
+	Economy.start_dungeon("equip", 1, party)
+	await _wait_until(func(): return started.size() == 2, 15.0)
+	var run_id: String = started[1].get("run_id", "")
+	var r0 := _warned("server rejected")
+	Economy.finish_dungeon(run_id, true, 20.0)  # 시작하자마자 20초 승리
+	await _wait_until(func(): return finished.size() == 2, 20.0)
+	await _wait_until(func(): return not Net._refreshing, 10.0)
+	_check(finished.size() == 2 and finished[1].get("error") == "implausible" and Economy.dungeon_state("equip").keys == 1 and Economy.items().is_empty()
+		and Economy.current_run.get("run_id", "") == run_id and _warned("server rejected") > r0,
+		"(z) a win faster than real time is refused (409 implausible); the run stays open, nothing changes", "finished=%s" % [finished.slice(1)])
+	Economy.debug_win()  # POST /v1/test/dungeon_age → finish(win, 20)
+	await _wait_until(func(): return finished.size() == 3, 20.0)
+	var got: Array = finished[2].rewards.get("items", []) if finished.size() == 3 else []
+	_check(finished.size() == 3 and finished[2].win and got.size() == 5 and Economy.items() == got and Economy.dungeon_state("equip").keys == 0
+		and Economy.dungeon_state("equip").best_level == 1 and got.all(func(x): return x.id is int and x.level == 1),
+		"(z) debug_win on the server: key -1, best level 1, exactly 5 items with server ids land in the bag", "rewards=%s bag=%d" % [got, Economy.items().size()])
+	Economy.finish_dungeon(run_id, true, 20.0)  # 같은 run 재전송
+	await _wait_until(func(): return finished.size() == 4, 15.0)
+	_check(finished.size() == 4 and finished[3].repeated and finished[3].rewards.get("items", []) == got and Economy.items().size() == 5 and Economy.dungeon_state("equip").keys == 0,
+		"(z) resending the finished run returns the same 5 items and changes nothing", "finished=%s" % [finished.slice(3)])
+	# 장착: 방어구는 니나(배치된 Mage)에게, 방어구가 없으면 무기 종류가 맞는 영웅에게
+	var pick := _equip_pick(got)
+	var ok: bool = not pick.is_empty() and Economy.equip_block(pick.hero, pick.item.slot, pick.item.id) == ""
+	if ok:
+		Economy.equip(pick.hero, pick.item.slot, pick.item.id)
+		await _wait_until(func(): return not Economy._waiting.has("equip"), 15.0)
+		await _frames(3)
+	var node = _hero_node(pick.get("hero", ""))
+	var def := GameData.hero(pick.get("hero", "nina"))
+	var lv: int = Economy.level_of(def.get("id", ""))
+	var pr: int = Economy.promotion_of(def.get("id", ""))
+	var st_eq := GameData.hero_stats(def, lv, pr, Economy.levels) if ok else {}
+	var st_bare := GameData.hero_stats(def, lv, pr, Economy.levels, {}) if ok else {}
+	_check(ok and int(Economy.equipment.get(pick.hero, {}).get(pick.item.slot, -1)) == pick.item.id and Economy.item_owner(pick.item.id) == pick.hero
+		and st_eq != st_bare and node != null and is_equal_approx(node.hp_max, st_eq.hp) and is_equal_approx(node.atk, st_eq.atk),
+		"(z) equipping on the server; the respawned world hero carries base x multipliers + the item", "pick=%s eq=%s with=%s bare=%s" % [pick, Economy.equipment, st_eq, st_bare])
+	# 서버 거부: 다른 부위에 끼우기(409 wrong_slot) — 화면이 막는 요청을 직접 보낸다
+	r0 = _warned("server rejected")
+	var wrong_slot := "gloves" if pick.get("item", {}).get("slot", "") != "gloves" else "hat"
+	await _request("POST", "/v1/equip", {"hero_id": "nina", "slot": wrong_slot, "item_id": pick.get("item", {}).get("id", 0)})
+	_check(_warned("server rejected") == r0 + 1 and Economy.equipment.get("nina", {}).get(wrong_slot) == null, "(z) the server refuses an item in the wrong slot (409)", "eq=%s" % [Economy.equipment])
+	# 판매: 장착하지 않은 하나
+	var spare: Dictionary = {}
+	for it in got:
+		if it.id != pick.get("item", {}).get("id", -1):
+			spare = it
+			break
+	var gold0: int = Economy.server_gold_tenths
+	Economy.sell_items([spare.id])
+	await _wait_until(func(): return not Economy._waiting.has("sell_items"), 15.0)
+	_check(Economy.items().size() == 4 and Economy.item(spare.id).is_empty() and Economy.server_gold_tenths == gold0 + GameData.item_sell_value(spare) * 10,
+		"(z) selling an item on the server pays its sell value", "gold %d -> %d, value %d" % [gold0, Economy.server_gold_tenths, GameData.item_sell_value(spare)])
+	Economy.dungeon_started.disconnect(on_start)
+	Economy.dungeon_finished.disconnect(on_finish)
+	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)
+	f.store_string(JSON.stringify({"items": Economy.items(), "equipment": Economy.equipment, "gold_keys": Economy.dungeon_state("gold").keys,
+		"equip_best": Economy.dungeon_state("equip").best_level, "hero": pick.get("hero", "")}))
+	f.close()
+
+
+## 장착할 (영웅, 장비): 배치된 영웅 중 한스가 아닌 영웅(phase 2가 한스 HP를 승급 배율로 따로 본다). 방어구가 있으면 첫 영웅, 없으면(무기만 5개)
+## 그 무기 종류를 쓰는 영웅.
+func _equip_pick(items: Array) -> Dictionary:
+	var deployed: Array = GameState.deploy().filter(func(id): return id != null and id != "hans")
+	if deployed.is_empty():
+		return {}
+	for it in items:
+		if it.slot != "weapon":
+			return {"hero": deployed[0], "item": it}
+	for it in items:
+		for id in deployed:
+			if GameData.weapon_of(GameData.hero(id).get("model", "")) == it.weapon_kind:
+				return {"hero": id, "item": it}
+	return {}
+
+
+## 월드에 선 그 영웅 노드(없으면 null).
+func _hero_node(hero_id: String):
+	for h in get_tree().get_nodes_in_group("heroes"):
+		if h.def.id == hero_id and h.is_alive():
+			return h
+	return null
+
+
+## (p2) 재접속하면 보관함·장착·던전 진행이 그대로이고 장착한 영웅이 장비 능력치로 선다. 그 뒤 골드 던전(6명 — 영웅 둘을 test/grant_hero로 준다):
+## 즉시 승리 → 열쇠 −1·골드 +4000(서버), 같은 run 재전송은 같은 보상.
+func _dungeons_restored(state_path: String) -> void:
+	var json := JSON.new()
+	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".dungeons")) == OK and json.data is Dictionary
+	_check(ok, "(p2) phase 1 dungeons state file", state_path)
+	if not ok:
+		return
+	var saved: Dictionary = json.data
+	var same_items: bool = Economy.items().size() == saved.items.size() and Economy.items().size() == 4
+	for i in mini(Economy.items().size(), saved.items.size()):
+		var a: Dictionary = Economy.items()[i]
+		var b: Dictionary = saved.items[i]
+		same_items = same_items and a.id == int(b.id) and a.slot == b.slot and a.grade == b.grade and a.level == int(b.level) and a.weapon_kind == b.weapon_kind
+	var same_eq: bool = Economy.equipment.size() == saved.equipment.size()
+	for h in saved.equipment:
+		for s in saved.equipment[h]:
+			same_eq = same_eq and int(Economy.equipment.get(h, {}).get(s, -1)) == int(saved.equipment[h][s])
+	_check(same_items and same_eq and Economy.dungeon_state("equip").best_level == int(saved.equip_best) and Economy.dungeon_state("gold").keys >= int(saved.gold_keys),
+		"(p2) reconnecting restores the bag (4 items), equipment and dungeon progress", "items=%s eq=%s saved=%s" % [Economy.items(), Economy.equipment, saved])
+	var hero: String = saved.get("hero", "")
+	var node = _hero_node(hero)
+	var def := GameData.hero(hero)
+	var st := GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels) if not def.is_empty() else {}
+	_check(node != null and is_equal_approx(node.hp_max, st.hp) and is_equal_approx(node.atk, st.atk) and st != GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels, {}),
+		"(p2) the equipped hero spawns with its equipment after reconnecting", "hero=%s" % hero)
+	# 골드 던전: 6명
+	for id in ["arteon", "ignis", "kyle"]:
+		await _request("POST", "/v1/test/grant_hero", {"hero_id": id})
+	var started := []
+	var finished := []
+	var on_start := func(r): started.append(r)
+	var on_finish := func(r): finished.append(r)
+	Economy.dungeon_started.connect(on_start)
+	Economy.dungeon_finished.connect(on_finish)
+	var keys0: int = Economy.dungeon_state("gold").keys
+	var party: Array = Economy.default_party("gold")
+	var sent := Economy.start_dungeon("gold", 1, party)
+	await _wait_until(func(): return started.size() == 1, 15.0)
+	var gold0: int = Economy.server_gold_tenths
+	Economy.debug_win()
+	await _wait_until(func(): return finished.size() == 1, 20.0)
+	_check(sent and party.size() == 6 and finished.size() == 1 and finished[0].win and finished[0].rewards == {"gold_tenths": 40000} and Economy.server_gold_tenths == gold0 + 40000
+		and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.dungeon_state("gold").best_level == 1,
+		"(p2) gold dungeon with 6 heroes: debug_win pays 4000 gold on the server and spends one key", "finished=%s gold %d -> %d" % [finished, gold0, Economy.server_gold_tenths])
+	Economy.finish_dungeon(started[0].get("run_id", ""), true, 15.0)
+	await _wait_until(func(): return finished.size() == 2, 15.0)
+	_check(finished.size() == 2 and finished[1].repeated and finished[1].rewards == {"gold_tenths": 40000} and Economy.server_gold_tenths == gold0 + 40000
+		and Economy.dungeon_state("gold").keys == keys0 - 1, "(p2) resending the gold run returns the same reward once", "finished=%s" % [finished.slice(1)])
+	Economy.dungeon_started.disconnect(on_start)
+	Economy.dungeon_finished.disconnect(on_finish)
