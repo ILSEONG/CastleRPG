@@ -1,6 +1,6 @@
 extends "res://scripts/ui_window.gd"
-## 주점 모집 창(스펙 §5, 개정 23: 골드·다이아 모집, 주점 탭으로 연다): 위 가운데 키 아트(이그니스가 화염구를 쏘는 순간 — 느린 줌 인/아웃 +
-## 가장자리 비네트 + 외곽선 제목 "주점 · 영웅 모집"), 그 아래 탭 [골드 모집] [다이아 모집].
+## 영웅 모집 창(스펙 §5, 개정 23: 골드·다이아 모집, 주점 탭으로 연다): 위 가운데 키 아트(이그니스가 화염구를 쏘는 순간 — 움직이지 않는
+## 정지 그림 + 가장자리 비네트 + 외곽선 제목 "영웅 모집"), 그 아래 탭 [골드 모집] [다이아 모집].
 ## 골드 탭: 레벨 배지 "골드 모집 Lv n", 진행 막대 + "다음 레벨까지 a/b", 다음 레벨 확률·비용 미리보기, 확률 한 줄, [1회 3,000] [10회 30,000](10회 = 1회 × 10, 보장 없음).
 ## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, 천장 "SSR 확정까지 n회", [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장], [다이아 상점].
 ## 재화가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
@@ -22,13 +22,11 @@ const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
 const GOLD := GameData.GACHA_GOLD
 const DIA := GameData.GACHA_DIA
-const TITLE := "주점 · 영웅 모집"
+const TITLE := "영웅 모집"
 const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
 const DUP_TEXT := "+1 조각"  # 이미 가진 영웅(개정 15)
 const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
 const SSR_TEXT := "SSR 등장 — 자동 모집을 멈췄습니다"
-const KB_PERIOD := 14.0  # 키 아트 줌 인/아웃 한 번(초)
-const KB_ZOOM := Vector2(1.03, 1.10)  # 줌 배율 범위
 var gold_tab: Button
 var dia_tab: Button
 var one_button: Button
@@ -52,7 +50,6 @@ var shop  # 다이아 상점 창
 
 var _art_box: Control
 var _btn_gems: Array = []  # [1회]·[10회] 앞 보석(다이아 탭만)
-var _kb_t := 0.0
 var _pick_view: VBoxContainer
 var _result_view: VBoxContainer
 var _gold_box: VBoxContainer
@@ -166,7 +163,7 @@ func _ready() -> void:
 	set_currency(GOLD)
 
 
-## 키 아트 자리: 창 내용 폭 × RecruitArt.VIEW.y, 넘치는 줌은 잘라 낸다. 위에 가장자리 비네트와 외곽선 제목.
+## 키 아트 자리: 창 내용 폭 × RecruitArt.VIEW.y에 정지 그림(채워 덮고 넘치는 쪽은 잘라 낸다). 위에 가장자리 비네트와 외곽선 제목.
 func _build_art() -> Control:
 	_art_box = Control.new()
 	_art_box.custom_minimum_size = RecruitArt.VIEW
@@ -369,15 +366,13 @@ func close() -> void:
 	super.close()
 
 
-## 키 아트 느린 줌 인/아웃. 자동 모집: 결과를 보여 준 지 auto_delay초 뒤 같은 모집을 되풀이. 골드가 모자라면 멈춘다.
+## 키 아트 렌더가 끝나면 바꿔 끼운다(정지 그림 — 움직이지 않는다, 사용자 요청). 자동 모집: 결과를 보여 준 지 auto_delay초 뒤
+## 같은 모집을 되풀이. 골드가 모자라면 멈춘다.
 func _process(delta: float) -> void:
 	if visible:
 		var shot := SceneSnap.cached(RecruitArt.KEY)
 		if shot != null and art.texture != shot:
 			art.texture = shot  # 렌더가 끝났다
-		_kb_t += delta
-		art.pivot_offset = art.size / 2.0
-		art.scale = Vector2.ONE * lerpf(KB_ZOOM.x, KB_ZOOM.y, 0.5 - 0.5 * cos(_kb_t * TAU / KB_PERIOD))
 	if not (visible and _result_view.visible and auto_running() and not _waiting):
 		return
 	_auto_left -= delta

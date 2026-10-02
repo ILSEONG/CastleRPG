@@ -2297,6 +2297,12 @@ func _recruit23_ui(recruit) -> void:
 	_check(recruit.art.texture != null and absf(art.size.x - 632.0) < 2.0 and absf(art.size.y - 300.0) < 2.0 and art.position.y - dlg.position.y < 40.0
 		and absf(art.get_center().x - 360.0) < 2.0 and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
 		"(r23) the key art (632 x 300, placeholder headless) sits at the top centre; the gold tab window fits 720x1280", "art=%s dialog=%s" % [art, dlg])
+	var still: Array = [recruit.art.scale, recruit.art.get_global_rect()]
+	await _frames(30)
+	var titles: Array = recruit._art_box.get_children().filter(func(c): return c is Label).map(func(c): return c.text)
+	_check(still == [Vector2.ONE, recruit.art.get_global_rect()] and recruit.art.scale == Vector2.ONE and titles == ["영웅 모집"],
+		"(r23) the key art stays still (no zoom or pan over 30 frames) under the title 영웅 모집",
+		"scale=%s rect=%s -> %s titles=%s" % [recruit.art.scale, still[1], recruit.art.get_global_rect(), titles])
 	_check(recruit.level_label.text == "골드 모집 Lv 1" and recruit.progress_label.text == "다음 레벨까지 0/30" and recruit.one_button.text.contains("3,000")
 		and recruit.ten_button.text.strip_edges() == "10회 30,000" and recruit.preview_label.text.contains("Lv 2") and recruit.preview_label.text.contains("3,450")
 		and recruit._gold_box.visible and not recruit._dia_box.visible and not recruit.shop_button.visible,
