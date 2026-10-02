@@ -45,7 +45,7 @@ var camera: Camera3D
 var castle
 
 var _formation
-var _hero_snap := []  # 스테이지 시작 때 영웅 자리: [{i, side, post, slot, free_pos}]
+var _hero_snap := {}  # 스테이지 시작 때 영웅 자리: 영웅 id → {side, post, slot, free_pos}(다시 만든 영웅도 찾게 id로)
 var _picker
 var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, 승급, level, 연구소]}(만들 때 값)
 var soldiers: Array = []  # 성채 앞 병사 노드(개정 13)
@@ -130,8 +130,7 @@ func _build_world() -> void:
 	tabs.windows = {"hero": hero_panel, "soldier": soldier_panel, "recruit": recruit, "merchant": panel}
 	add_child(tabs)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
-	GameState.refilled.connect(_restore_hero_posts)  # _sync_heroes보다 먼저: 남아 있는 영웅만 복원
-	GameState.refilled.connect(_sync_heroes) # 다음 리필(스테이지 사이) 때 배치·승급·레벨·연구소 반영
+	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원 + 배치·승급·레벨·연구소·장비 반영
 	GameState.refilled.connect(_sync_soldiers)
 	Economy.roster_changed.connect(_on_roster_changed)
 	Economy.soldiers_changed.connect(_on_soldiers_changed)
@@ -189,7 +188,8 @@ func _wait_for_server() -> void:
 
 
 ## 배치(GameState.deploy)·승급·레벨을 만들어 둔 영웅에 맞춘다. 바뀐 슬롯만 빼고 다시 만든다(나머지는 그대로).
-func _sync_heroes() -> void:
+## snap(리필 때 스테이지 시작 자리, 영웅 id → 자리)에 있는 영웅을 다시 만들면 그 자리에 세운다.
+func _sync_heroes(snap := {}) -> void:
 	var deploy: Array = GameState.deploy()  # 슬롯 i → 영웅 id 또는 null(빈 슬롯)
 	for i in _slots.keys():
 		if i >= deploy.size():
@@ -205,6 +205,8 @@ func _sync_heroes() -> void:
 			continue
 		var hero = HeroScript.new()
 		hero.setup(i, GameData.hero(id), castle, _formation, key[1], key[2])
+		if snap.has(id):
+			_put_post(hero, snap[id])  # 스테이지 중 레벨·승급·장비가 바뀌어 다시 만든 영웅도 시작 자리로
 		add_child(hero)
 		_slots[i] = {"node": hero, "key": key}
 
@@ -216,25 +218,43 @@ func _on_mode_for_snapshot(mode: int) -> void:
 	_hero_snap.clear()
 	for i in _slots:
 		var h = _slots[i].node
-		_hero_snap.append({"i": i, "side": h.side, "post": h.post, "slot": h.slot, "free_pos": h.free_pos})
+		_hero_snap[h.def.id] = {"side": h.side, "post": h.post, "slot": h.slot, "free_pos": h.free_pos}
 
 
-func _restore_hero_posts() -> void:
+## 리필: 기록이 있으면(스테이지를 끝내는 리필) 남은 영웅을 시작 자리로 되돌린 뒤 바뀐 슬롯을 다시 만든다 — 다시 만든 영웅도 같은 기록으로.
+func _on_refilled() -> void:
 	var snap := _hero_snap
-	_hero_snap = []
-	for e in snap:
-		_formation.release(e.i)
-	for e in snap:
-		if not _slots.has(e.i):
-			continue  # 그 사이 빠지거나 다시 만들어진 영웅은 건너뜀
-		var h = _slots[e.i].node
-		if e.post != FormationScript.POST_FREE:
-			_formation.restore(e.i, e.side, e.post, e.slot)
-		h.side = e.side
-		h.post = e.post
-		h.slot = e.slot
-		h.free_pos = e.free_pos
+	_hero_snap = {}
+	_restore_hero_posts(snap)
+	_sync_heroes(snap)
+
+
+func _restore_hero_posts(snap: Dictionary) -> void:
+	var back := []
+	for i in _slots:
+		var h = _slots[i].node
+		if snap.has(h.def.id):
+			_formation.release(i)  # 전부 먼저 풀어야 서로 바꾼 칸도 겹치지 않는다
+			back.append(h)
+	for h in back:
+		_put_post(h, snap[h.def.id])
 		h.reset()  # 자리로 순간이동 + 체력 회복
+
+
+## 영웅 h에 스테이지 시작 자리 e를 준다. 다른 영웅이 그 칸을 쥐고 있으면(그 사이 배치가 바뀌었다) 지금 자리 그대로.
+func _put_post(h, e: Dictionary) -> void:
+	if e.post != FormationScript.POST_FREE:
+		for j in _slots:
+			var a: Dictionary = _formation.assignment(j)
+			if j != h.index and a.get("side") == e.side and a.get("post") == e.post and a.get("slot") == e.slot:
+				return
+		_formation.restore(h.index, e.side, e.post, e.slot)
+	else:
+		_formation.release(h.index)
+	h.side = e.side
+	h.post = e.post
+	h.slot = e.slot
+	h.free_pos = e.free_pos
 
 
 func _retire(i: int) -> void:
