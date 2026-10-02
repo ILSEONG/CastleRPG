@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers } from './rules.ts'
+import { BUILD_RES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -81,9 +81,12 @@ export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'lab_atk_per_level',
   'tavern_ssr_per_level', 'tavern_sr_per_level']
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
-// 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수는 1 이상 정수, 나머지는 0보다 크다
-export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'soldier_prod_sec', 'soldier_prod_level_factor', 'soldier_merge_count']
-const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count']
+// 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 나머지는 0보다 크다.
+// 개정 16 훈련: 병종마다 1마리 비용 train_cost_<병종>("자원:수|…", rules.parseTrainCost)도 필수다
+export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'soldier_prod_sec', 'soldier_prod_level_factor', 'soldier_merge_count',
+  'train_batch_base', 'train_batch_per_level']
+const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base']
+const SOLDIER_INT0_KEYS = ['train_batch_per_level']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
 export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 앱 GameData.KEEP_SLOT_STEP
 export const MAX_HERO_SLOTS = 12 // 앱 GameData.MAX_HERO_SLOTS
@@ -280,7 +283,8 @@ function checkKeepTiers(byKey: Map<string, CsvRow>, errors: string[]) {
 }
 
 // 병종 표(개정 13, 앱 GameData와 같은 규칙): 건물은 건물 표에 있고 병종마다 다르다(건물 하나 = 병종 하나), hp·range·atk_interval·speed > 0,
-// atk·aggro ≥ 0. 병사 설정: 최대 티어·합성 수는 1 이상 정수, 티어 배율·한 마리 시간·레벨 계수는 0보다 크다.
+// atk·aggro ≥ 0. 병사 설정: 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 티어 배율·한 마리 시간·레벨 계수는
+// 0보다 크다. 훈련 비용(개정 16): 병종마다 train_cost_<병종>이 "자원:수|…"(자원 = wood·stone·food, 수 0 이상 정수) 또는 "0".
 function checkSoldiers(t: Tables, errors: string[]) {
   const rows = t.soldiers ?? []
   const err = (line: unknown, col: string, why: string) => errors.push(`soldiers.csv line ${line} column '${col}': ${why}`)
@@ -294,12 +298,19 @@ function checkSoldiers(t: Tables, errors: string[]) {
     for (const c of ['atk', 'aggro']) if (!(Number(s[c]) >= 0)) err(s._line, c, `must be 0 or more: ${s[c]}`)
   }
   const byKey = new Map((t.config ?? []).map((r) => [String(r.key), r]))
+  for (const s of t.config ? rows : []) {
+    const k = `train_cost_${s.id}`
+    const r = byKey.get(k)
+    if (!r) errors.push(`config.csv line 0 column 'key': missing key '${k}'`)
+    else if (!parseTrainCost(String(r.value))) errors.push(`config.csv line ${r._line} column 'value': ${k} must be 'res:amount|…' (res wood/stone/food, amount a non-negative integer) or 0: '${r.value}'`)
+  }
   for (const k of CONFIG_SOLDIER_NUM) {
     const r = byKey.get(k)
     const v = Number(r?.value)
     const int = SOLDIER_INT_KEYS.includes(k)
-    if (r && isNum(String(r.value)) && !(int ? Number.isInteger(v) && v >= 1 : v > 0)) {
-      errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${int ? 'an integer of at least 1' : 'greater than 0'}: '${r.value}'`)
+    const int0 = SOLDIER_INT0_KEYS.includes(k)
+    if (r && isNum(String(r.value)) && !(int ? Number.isInteger(v) && v >= 1 : int0 ? Number.isInteger(v) && v >= 0 : v > 0)) {
+      errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${int ? 'an integer of at least 1' : int0 ? 'a non-negative integer' : 'greater than 0'}: '${r.value}'`)
     }
   }
 }

@@ -17,6 +17,11 @@ soldier_tier_mult,2
 soldier_prod_sec,10800
 soldier_prod_level_factor,0.95
 soldier_merge_count,5
+train_batch_base,10
+train_batch_per_level,2
+train_cost_infantry,food:30|wood:20
+train_cost_archer,food:25|wood:30
+train_cost_cavalry,food:40|stone:20
 badge_min,5
 merchant_jackpot_p,0.05
 merchant_jackpot_rate,2

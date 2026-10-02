@@ -55,7 +55,7 @@ curl http://127.0.0.1:8787/v1/health
 | `JWT_SECRET` | HS256 비밀. `DATABASE_URL`이 있는데 비었거나 32자 미만이면 **시작을 거부한다**. |
 | `CORS_ORIGINS` | 허용할 출처(쉼표 목록). 비우면 `*`다. **운영에서는 웹 빌드 출처로 정한다.** |
 | `PORT` | 기본 8787이다. |
-| `ALLOW_TEST_HOOKS` | `1`이면 `POST /v1/test/age`가 생긴다. `DATABASE_URL`과 같이 있으면 **시작을 거부한다**. |
+| `ALLOW_TEST_HOOKS` | `1`이면 `POST /v1/test/age`(수집 시각·훈련 끝나는 시각 당기기) 같은 테스트 훅이 생긴다. `DATABASE_URL`과 같이 있으면 **시작을 거부한다**. |
 | `HOST` | (선택) 듣는 주소. 기본은 개발 `127.0.0.1`, 운영 `0.0.0.0`이다. 고정 개발 비밀(`JWT_SECRET` 없음)인데 루프백(`127.x`, `localhost`, `::1`)이 아니면 **시작을 거부한다**. |
 | `PGLITE_DIR` | (선택) 개발 PGlite 위치. `memory`면 메모리다. |
 
@@ -109,16 +109,20 @@ npm --prefix server test
 | `POST /v1/hero/promote {hero_id}` | Bearer | 플레이어 응답 + `promotion`(새 승급). 보유하지 않은 영웅은 404 `not_owned`, 최대 승급(5)이면 409 `max_promotion`, 조각이 모자라면 409 `not_enough_shards`(이 순서로 검사) |
 | `POST /v1/test/shards {hero_id, shards}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. 보유 영웅의 조각 수를 정한다(서버 모집은 암호학적 난수라 통합 테스트가 중복을 만들 수 없다) |
 | `POST /v1/soldiers/merge {type, tier}` | Bearer | 플레이어 응답 + `merged: {type, tier}`(새 티어). 모르는 병종은 400 `unknown_soldier`, tier는 1 이상 정수(아니면 400). 최대 티어면 409 `max_tier`, `soldier_merge_count`마리보다 적으면 409 `not_enough` |
+| `POST /v1/soldiers/train {building, count}` | Bearer | 플레이어 응답 + `training: {building, count, finish}`. 병사 건물이 아니면 400 `not_soldier_building`, count가 1..묶음 상한이 아니면 400. 대기열이 진행 중이면 409 `training`, 끝났는데 수령 전이면 409 `ready_to_collect`, 자원이 모자라면 409 `not_enough`(개정 16) |
+| `POST /v1/soldiers/collect {building}` | Bearer | 플레이어 응답 + `collected: {type, count}`. 비었으면 409 `empty`, 아직이면 409 `not_ready`. 멱등(두 번째는 409 `empty`) |
+| `POST /v1/soldiers/cancel {building}` | Bearer | 플레이어 응답 + `refund: {자원: 수}`(비용의 50%, 내림). 비었으면 409 `empty`, 이미 끝났으면 409 `ready_to_collect` |
 | `POST /v1/soldiers/deploy {deploy}` | Bearer | 플레이어 응답. deploy = `{"병종:티어": 수}`(0 이상 정수). 키 형식·보유 이하·합계 ≤ 인구가 아니면 400 `bad_deploy`. 멱등 |
-| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집·병사 생산 시각)를 당긴다 |
+| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집)와 훈련 끝나는 시각(`train_finish`)을 당긴다 |
 
 플레이어 응답은 다음과 같다.
 
 ```
 {server_now, player: {gold_tenths, gold, res: {wood, stone, food}, stage, keep_level, gate_level, kill_seq,
- buildings: {keep: {level}, gate: {level}, ..., lumber: {level, last_collect}, quarry: ..., farm: ..., barracks: {level, last_collect}, archery: ..., stable: ...},
+ buildings: {keep: {level}, gate: {level}, ..., lumber: {level, last_collect}, quarry: ..., farm: ..., barracks: {level}, archery: ..., stable: ...},
  build: {id, finish} | null, population, heroes: {hero_id: {copies, level, shards, promotion}}, deploy: [hero_id | null, ...],
- soldiers: {"infantry:1": n, ...}, soldier_deploy: {"infantry:1": n, ...}},
+ soldiers: {"infantry:1": n, ...}, soldier_deploy: {"infantry:1": n, ...},
+ training: {barracks: {count, finish} | null, archery: ..., stable: ...}},
  merchant: {rates: {wood, stone, food}, next_change}}
 ```
 
@@ -146,8 +150,10 @@ npm --prefix server test
   - 효과: 영웅 슬롯 = `keep_slot_tiers`(성채 단계 `레벨:값|…`), 성 HP = `castle_hp` + `castle_hp_per_level` × (성채 − 1), 인구(`player.population`) = `pop_base` + `pop_per_house` × (민가 − 1), 모집 확률 + 주점 × `tavern_ssr_per_level`·`tavern_sr_per_level`. 성 내부(`keep_interior_tiers`)·연구소(영웅 공격)·성문 HP는 앱이 쓴다.
   - Neon: 007 마이그레이션과 시드(건물 표, 설정 `hero_slots` 삭제·건물 설정 9개)를 새 서버와 같이 올린다.
 - 병사(개정 13, 마이그레이션 008: `soldier_defs` = `data/soldiers.csv`, `player_soldiers(type, tier, count ≥ 0)`, `player_state.soldier_deploy`, 기존 플레이어에게 `archery`·`stable` 행(레벨 1), 막사 포함 병사 건물 생산 시각 = 지금)
-  - 병사 건물(`soldiers.csv`의 `building`)마다 1티어를 만든다. 한 마리 시간(초) = `soldier_prod_sec` × `soldier_prod_level_factor`^(L−1).
-  - 게으른 생산: 플레이어 상태를 읽는 모든 요청이 완료보다 먼저, 지난 시간(`accum_cap_min`분까지) / 한 마리 시간만큼 보유에 더한다(남은 시간 유지, 상한이면 지금으로). 생산 시각·보유·`economy_log`(`soldier_prod`)는 version 가드 한 문장이다.
+  - 개정 16: 자동 생산은 없다(시간이 흘러도 보유는 그대로). 병사 건물(`soldiers.csv`의 `building`)마다 훈련 대기열 하나(마이그레이션 010: `player_buildings.train_count`·`train_finish`, 비면 0·null — 제약 `train_queue`).
+  - 훈련 시작: 1티어 n마리(1..`train_batch_base` + `train_batch_per_level` × (L−1)), 비용 = `train_cost_<병종>`("자원:수|…", "0"이면 무료) × n을 바로 뺀다. 끝나는 시각 = 지금 + n × 1마리 시간(초, `soldier_prod_sec` × `soldier_prod_level_factor`^(L−1)). 레벨이 올라도 진행 중인 묶음은 그대로다.
+  - 수령: 끝났으면 보유 += n, 대기열 비움. 취소: 진행 중이면 비용의 50%(자원마다 내림) 환불. 차감·대기열·보유·`economy_log`(`train_start`·`train_collect`·`train_cancel`)는 version 가드 한 문장이다. 앱은 시작·취소를 다시 보내지 않는다(수령은 멱등이라 다시 보내도 된다).
+  - Neon: 010 마이그레이션과 시드(설정 `train_*` 5개)를 새 서버와 같이 올린다.
   - 합성: 티어 t `soldier_merge_count`마리 → t+1 한 마리(HP·공격 × `soldier_tier_mult`, 앱이 계산). 배치는 보유로 자른다. 보유·배치·`economy_log`(`soldier_merge`)는 version 가드 한 문장이다. 앱은 합성을 다시 보내지 않는다.
   - 막사는 영웅 HP를 올리지 않는다(`barracks_hp_per_level` 삭제).
   - Neon: 008 마이그레이션과 시드(병종 표, 건물 표 2행·막사 이름, 설정 `soldier_*` 5개 추가·`barracks_hp_per_level` 삭제)를 새 서버와 같이 올린다.

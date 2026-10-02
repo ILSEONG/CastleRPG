@@ -1,5 +1,5 @@
-// 병사(개정 13 §8): 생산 공식·게으른 생산(시계 주입: 3시간 → 1마리, 레벨 반영, 상한), 합성(원자성, 부족·최대), 배치(인구 상한, 보유 상한,
-// 키 형식, 합성 후 자르기), 008 업그레이드, 플레이어 격리, 시드 검증.
+// 병사(개정 13 §8): 합성(원자성, 부족·최대), 배치(인구 상한, 보유 상한, 키 형식, 합성 후 자르기), 008 업그레이드, 플레이어 격리, 시드 검증.
+// 훈련(개정 16 §2): 비용·시간·묶음 상한, 400·409 3종, 수령 전·후, 취소 환불, 동시 시작 원자성, 자동 생산 없음, test/age, 010 업그레이드.
 import assert from 'node:assert/strict'
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -41,42 +41,153 @@ async function give(q: Setup['db']['query'], id: string, s: Record<string, numbe
 }
 const setLevel = (id: string, b: string, l: number) => S.db.query('update player_buildings set level = $3 where player_id = $1 and building = $2', [id, b, l])
 
-test('생산 공식: 한 마리 = 10800 × 0.95^(L−1)(Lv10 약 1시간 54분, Lv30 약 41분), 지난 시간 / 한 마리(남은 시간 유지), 상한 720분이면 지금으로, 시계 되돌림은 0', () => {
+const train = (token: string, body: unknown) => S.req('POST', '/v1/soldiers/train', { token, body })
+const collect = (token: string, building: string) => S.req('POST', '/v1/soldiers/collect', { token, body: { building } })
+const cancel = (token: string, building: string) => S.req('POST', '/v1/soldiers/cancel', { token, body: { building } })
+const setRes = (id: string, r: Record<string, number>) => Promise.all(Object.entries(r).map(([res, n]) =>
+  S.db.query('update player_resources set amount = $3 where player_id = $1 and res = $2', [id, res, n])))
+const NONE = { barracks: null, archery: null, stable: null }
+
+test('훈련 공식: 1마리 = 10800 × 0.95^(L−1)(Lv10 약 1시간 54분, Lv30 약 41분), 묶음 상한 = 10 + 2(L−1), 비용 "자원:수|…" × n, 환불은 절반 내림', () => {
+  const cfg: R.Config = { ...CFG, train_batch_base: '10', train_batch_per_level: '2', train_cost_infantry: 'food:30|wood:20', train_cost_archer: '0' }
   assert.equal(R.soldierUnitSec(CFG, 1), H3)
   assert.equal(R.soldierUnitSec(CFG, 10), R.grown(H3, 0.95, 9))
   assert.ok(Math.abs(R.soldierUnitSec(CFG, 10) - 6806.7) < 0.1 && Math.abs(R.soldierUnitSec(CFG, 30) / 60 - 40.7) < 0.1)
-  assert.deepEqual(R.soldierProdStep(T0, T0 + H3 - 1, H3, 720), { count: 0, last: T0, changed: false })
-  assert.deepEqual(R.soldierProdStep(T0, T0 + H3, H3, 720), { count: 1, last: T0 + H3, changed: true })
-  assert.deepEqual(R.soldierProdStep(T0, T0 + 3 * H3 + 5, H3, 720), { count: 3, last: T0 + 3 * H3, changed: true }) // 5초는 남긴다
-  assert.deepEqual(R.soldierProdStep(T0, T0 + 100 * 3600, H3, 720), { count: 4, last: T0 + 100 * 3600, changed: true }) // 꺼진 동안은 12시간까지
-  assert.deepEqual(R.soldierProdStep(T0, T0 - 50, H3, 720), { count: 0, last: T0 - 50, changed: true })
+  assert.deepEqual([R.trainMax(cfg, 1), R.trainMax(cfg, 5), R.trainMax(cfg, 30)], [10, 18, 68])
+  assert.deepEqual(R.trainCost(cfg, 'infantry', 8), { food: 240, wood: 160 })
+  assert.deepEqual(R.trainCost(cfg, 'archer', 8), {}) // "0" = 무료
+  assert.throws(() => R.trainCost(cfg, 'cavalry', 1), /train_cost_cavalry/)
+  assert.deepEqual(R.parseTrainCost(' food : 40 | stone:20 '), { food: 40, stone: 20 })
+  for (const bad of ['', 'food', 'food:-1', 'food:1.5', 'gold:5', 'food:1|food:2', 'food:1|', 'food:1,wood:2']) assert.equal(R.parseTrainCost(bad), null, bad)
+  assert.deepEqual(R.trainRefund({ food: 75, wood: 90, stone: 1 }), { food: 37, wood: 45, stone: 0 })
   assert.deepEqual(R.trimDeploy({ 'infantry:1': 5, 'archer:1': 2, 'cavalry:2': 1 }, { 'infantry:1': 3, 'archer:1': 2 }), { 'infantry:1': 3, 'archer:1': 2 })
 })
 
-test('게으른 생산(시계 주입): 3시간 → 병사 건물마다 1티어 1마리·로그 한 번, 레벨이 시간을 줄이고, 꺼진 동안은 상한(720분)까지, 응답 last_collect', async () => {
+test('자동 생산 없음: 시간이 흘러도(100시간) 보유는 그대로, 병사 건물은 생산 시각을 주지 않고 대기열은 null, soldier_prod 로그 없음', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  S.clock.t = T0 + H3 - 1
-  assert.deepEqual((await player(token)).soldiers, {})
-  S.clock.t = T0 + H3
+  S.clock.t = T0 + 100 * 3600
   const p = await player(token)
-  assert.deepEqual(p.soldiers, { 'infantry:1': 1, 'archer:1': 1, 'cavalry:1': 1 })
-  assert.deepEqual([p.buildings.barracks, p.buildings.stable], [{ level: 1, last_collect: T0 + H3 }, { level: 1, last_collect: T0 + H3 }])
-  const [l] = await logs(id, 'soldier_prod')
-  assert.deepEqual(l.detail.map((x: any) => [x.type, x.count, x.level, x.from, x.to]), [['infantry', 1, 1, T0, T0 + H3], ['archer', 1, 1, T0, T0 + H3], ['cavalry', 1, 1, T0, T0 + H3]])
-  assert.equal((await player(token)).soldiers['infantry:1'], 1) // 같은 시각에 다시 읽어도 그대로
-  // 막사 Lv 10: 한 마리 약 6,807초 — 보병만 하나 더
-  await setLevel(id, 'barracks', 10)
-  S.clock.t = T0 + H3 + Math.ceil(R.soldierUnitSec(CFG, 10))
-  assert.deepEqual((await player(token)).soldiers, { 'infantry:1': 2, 'archer:1': 1, 'cavalry:1': 1 })
-  // 100시간 꺼져 있었다: 궁병 +4(12시간 상한), 보병 Lv 10은 floor(43200 / 6806.7) = 6
-  S.clock.t += 100 * 3600
-  const q = await player(token)
-  assert.deepEqual(q.soldiers, { 'infantry:1': 8, 'archer:1': 5, 'cavalry:1': 5 })
-  assert.equal(q.buildings.archery.last_collect, S.clock.t)
-  assert.equal((await logs(id, 'soldier_prod')).length, 3)
-  // test/age가 병사 건물도 당긴다: 3시간 앞당기면 하나씩
-  assert.deepEqual((await S.req('POST', '/v1/test/age', { token, body: { minutes: 180 } })).json.player.soldiers, { 'infantry:1': 9, 'archer:1': 6, 'cavalry:1': 6 })
+  assert.deepEqual([p.soldiers, p.training, p.buildings.barracks, p.buildings.stable], [{}, NONE, { level: 1 }, { level: 1 }])
+  assert.deepEqual((await S.req('POST', '/v1/test/age', { token, body: { minutes: 6000 } })).json.player.soldiers, {})
+  assert.equal((await logs(id, 'soldier_prod')).length, 0)
+})
+
+test('훈련: 비용 즉시 차감·끝나는 시각 = 지금 + n × 1마리, 진행 중 409 training, 수령 전 409 not_ready, 수령 → 1티어 +n·대기열 비움, 다시 수령 409 empty, 로그', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await setRes(id, { food: 1000, wood: 1000, stone: 1000 })
+  let r = await train(token, { building: 'barracks', count: 8 })
+  const fin = T0 + 8 * H3
+  assert.deepEqual([r.status, r.json.player.res, r.json.player.training, r.json.training], [200, { food: 760, wood: 840, stone: 1000 },
+    { ...NONE, barracks: { count: 8, finish: fin } }, { building: 'barracks', count: 8, finish: fin }])
+  r = await train(token, { building: 'barracks', count: 1 })
+  assert.deepEqual([r.status, r.json.error], [409, 'training'])
+  r = await collect(token, 'barracks')
+  assert.deepEqual([r.status, r.json.error], [409, 'not_ready'])
+  S.clock.t = fin - 1
+  assert.deepEqual([(await collect(token, 'barracks')).json.error, (await player(token)).soldiers], ['not_ready', {}]) // 시간이 흘러도 저절로 들어오지 않는다
+  S.clock.t = fin + 3600
+  r = await train(token, { building: 'barracks', count: 1 }) // 끝났지만 수령 전
+  assert.deepEqual([r.status, r.json.error, (await player(token)).soldiers], [409, 'ready_to_collect', {}])
+  r = await collect(token, 'barracks')
+  assert.deepEqual([r.status, r.json.player.soldiers, r.json.player.training, r.json.collected], [200, { 'infantry:1': 8 }, NONE, { type: 'infantry', count: 8 }])
+  r = await collect(token, 'barracks') // 응답을 잃고 다시 보내도 두 번 받지 않는다
+  assert.deepEqual([r.status, r.json.error, (await player(token)).soldiers], [409, 'empty', { 'infantry:1': 8 }])
+  assert.deepEqual((await player(token)).res, { food: 760, wood: 840, stone: 1000 }) // 거부는 아무것도 안 바꿨다
+  assert.deepEqual((await logs(id, 'train_start')).map((l) => l.detail), [{ building: 'barracks', type: 'infantry', count: 8, level: 1, unit_sec: H3, cost: { food: 240, wood: 160 }, finish: fin }])
+  assert.deepEqual((await logs(id, 'train_collect')).map((l) => l.detail), [{ building: 'barracks', type: 'infantry', count: 8, finish: fin }])
+  // 기병: 식량 40·석재 20, 막사와 따로 돈다
+  r = await train(token, { building: 'stable', count: 10 })
+  assert.deepEqual([r.status, r.json.player.res, r.json.player.training.stable.count], [200, { food: 360, wood: 840, stone: 800 }, 10])
+})
+
+test('훈련 검사: 병사 건물 아님·count 범위(1..묶음 상한, 레벨로 는다) 400, 자원 부족 409 not_enough, 레벨이 1마리 시간을 줄이고 진행 중 레벨업은 끝나는 시각을 안 바꾼다', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await setRes(id, { food: 100, wood: 100, stone: 0 })
+  const bad: [unknown, string][] = [[{ building: 'lumber', count: 1 }, 'not_soldier_building'], [{ building: 'nope', count: 1 }, 'not_soldier_building'],
+    [{ building: '__proto__', count: 1 }, 'not_soldier_building'], [{ building: 'barracks', count: 11 }, 'bad_request'], [{ building: 'barracks', count: 0 }, 'bad_request'],
+    [{ building: 'barracks', count: 1.5 }, 'bad_request'], [{ building: 'barracks', count: '2' }, 'bad_request'], [{ building: 'barracks' }, 'bad_request'], [{ count: 1 }, 'bad_request']]
+  for (const [body, code] of bad) {
+    const r = await train(token, body)
+    assert.deepEqual([r.status, r.json.error], [400, code], JSON.stringify(body))
+  }
+  for (const [b, code] of [['lumber', 'not_soldier_building'], ['archery', 'empty']]) {
+    assert.deepEqual([(await collect(token, b)).json.error, (await cancel(token, b)).json.error], [code, code], b)
+  }
+  let r = await train(token, { building: 'barracks', count: 4 }) // 식량 120 > 100
+  assert.deepEqual([r.status, r.json.error], [409, 'not_enough'])
+  r = await train(token, { building: 'stable', count: 1 }) // 석재 0
+  assert.deepEqual([r.status, r.json.error, (await player(token)).training], [409, 'not_enough', NONE])
+  await setRes(id, { food: 10000, wood: 10000 })
+  await setLevel(id, 'barracks', 5) // 상한 18, 1마리 10800 × 0.95^4
+  assert.equal((await train(token, { building: 'barracks', count: 19 })).status, 400)
+  r = await train(token, { building: 'barracks', count: 18 })
+  const fin = T0 + 18 * R.soldierUnitSec(CFG, 5)
+  assert.deepEqual([r.status, r.json.player.training.barracks], [200, { count: 18, finish: fin }])
+  await setLevel(id, 'barracks', 9) // 진행 중 레벨이 올라도 끝나는 시각은 그대로
+  assert.deepEqual((await player(token)).training.barracks, { count: 18, finish: fin })
+  assert.equal((await logs(id, 'train_start'))[0].detail.unit_sec, R.soldierUnitSec(CFG, 5))
+})
+
+test('훈련 취소: 진행 중이면 비용의 50%(자원마다 내림) 환불·대기열 비움·로그, 끝난 뒤엔 409 ready_to_collect, 무료("0") 설정이면 비용 없이 훈련', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await setRes(id, { food: 1000, wood: 1000, stone: 1000 })
+  assert.equal((await train(token, { building: 'archery', count: 3 })).status, 200) // 식량 75·목재 90
+  S.clock.t = T0 + 60
+  let r = await cancel(token, 'archery')
+  assert.deepEqual([r.status, r.json.player.res, r.json.player.training, r.json.refund], [200, { food: 962, wood: 955, stone: 1000 }, NONE, { food: 37, wood: 45 }])
+  assert.deepEqual((await cancel(token, 'archery')).json.error, 'empty')
+  assert.deepEqual((await logs(id, 'train_cancel')).map((l) => l.detail), [{ building: 'archery', type: 'archer', count: 3, finish: T0 + 3 * H3, refund: { food: 37, wood: 45 } }])
+  assert.equal((await train(token, { building: 'archery', count: 1 })).status, 200)
+  S.clock.t += H3
+  r = await cancel(token, 'archery')
+  assert.deepEqual([r.status, r.json.error], [409, 'ready_to_collect'])
+  assert.deepEqual((await collect(token, 'archery')).json.player.soldiers, { 'archer:1': 1 })
+  await S.db.query("update game_config set value = '0' where key = 'train_cost_archer'")
+  try {
+    await setRes(id, { food: 0, wood: 0, stone: 0 })
+    r = await train(token, { building: 'archery', count: 2 })
+    assert.deepEqual([r.status, r.json.player.res, r.json.player.training.archery.count], [200, { food: 0, wood: 0, stone: 0 }, 2])
+    assert.deepEqual((await cancel(token, 'archery')).json.refund, {})
+  } finally {
+    await S.db.query("update game_config set value = 'food:25|wood:30' where key = 'train_cost_archer'")
+  }
+})
+
+test('훈련 원자성: 같은 version을 읽은 시작 2건 — 하나 200, 하나 409 training, 비용·대기열·로그는 한 번만', async () => {
+  const b = barrier()
+  const T = await setup({ wrapQuery: b.wrap })
+  try {
+    T.clock.t = T0
+    const { token, id } = await T.login()
+    await T.db.query("update player_resources set amount = 1000 where player_id = $1", [id])
+    b.arm()
+    const body = { building: 'stable', count: 5 }
+    const [r1, r2] = await Promise.all([T.req('POST', '/v1/soldiers/train', { token, body }), T.req('POST', '/v1/soldiers/train', { token, body })])
+    assert.equal(b.arrived(), 2, 'both requests read the same version before either wrote')
+    assert.deepEqual([r1.status, r2.status].sort(), [200, 409])
+    assert.equal((r1.status === 409 ? r1 : r2).json.error, 'training')
+    const res = await T.db.query('select res, amount::int as n from player_resources where player_id = $1 order by res', [id])
+    assert.deepEqual(res, [{ res: 'food', n: 800 }, { res: 'stone', n: 900 }, { res: 'wood', n: 1000 }])
+    const [q] = await T.db.query("select train_count, extract(epoch from train_finish)::float8 as f from player_buildings where player_id = $1 and building = 'stable'", [id])
+    assert.deepEqual(q, { train_count: 5, f: T0 + 5 * H3 })
+    assert.equal((await T.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'train_start'", [id]))[0].n, 1)
+  } finally {
+    await T.close()
+  }
+})
+
+test('test/age가 훈련 끝나는 시각도 당긴다(통합 테스트 훅): 3시간 앞당기면 1마리 묶음을 바로 수령', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await setRes(id, { food: 100, wood: 100 })
+  assert.equal((await train(token, { building: 'barracks', count: 1 })).status, 200)
+  const r = await S.req('POST', '/v1/test/age', { token, body: { minutes: 180 } })
+  assert.deepEqual(r.json.player.training.barracks, { count: 1, finish: T0 })
+  assert.deepEqual((await collect(token, 'barracks')).json.player.soldiers, { 'infantry:1': 1 })
 })
 
 test('합성: 같은 병종·티어 5마리 → 한 티어 위 1마리, 부족은 409 not_enough, 최대 티어는 409 max_tier, 모르는 병종·틀린 티어는 400, 로그', async () => {
@@ -157,7 +268,7 @@ test('배치: 보유 이하·합계 ≤ 인구·키 형식(400 bad_deploy), 저�
   assert.deepEqual((await logs(id, 'soldier_merge'))[0].detail, { type: 'infantry', tier: 1, count: 5, have: 10, deployed: 9, deployed_after: 5 })
 })
 
-test('플레이어 격리: 한 플레이어의 생산·합성·배치는 다른 플레이어 보유·배치에 닿지 않는다', async () => {
+test('플레이어 격리: 한 플레이어의 훈련·합성·배치는 다른 플레이어 보유·배치·대기열에 닿지 않는다', async () => {
   S.clock.t = T0
   const a = await S.login()
   const b = await S.login()
@@ -168,9 +279,13 @@ test('플레이어 격리: 한 플레이어의 생산·합성·배치는 다른 
   const pb = await player(b.token)
   assert.deepEqual([pb.soldiers, pb.soldier_deploy], [{}, {}])
   assert.equal((await S.db.query('select count(*)::int as n from player_soldiers where player_id = $1', [b.id]))[0].n, 0)
-  S.clock.t = T0 + H3
-  assert.deepEqual((await player(b.token)).soldiers, { 'infantry:1': 1, 'archer:1': 1, 'cavalry:1': 1 })
-  assert.deepEqual((await player(a.token)).soldiers, { 'infantry:1': 1, 'archer:1': 1, 'cavalry:1': 2, 'cavalry:2': 1 })
+  await setRes(b.id, { food: 100, wood: 100 })
+  assert.equal((await train(b.token, { building: 'barracks', count: 2 })).status, 200)
+  assert.deepEqual((await collect(a.token, 'barracks')).json.error, 'empty') // a의 대기열은 비어 있다
+  S.clock.t = T0 + 2 * H3
+  assert.deepEqual((await collect(b.token, 'barracks')).json.player.soldiers, { 'infantry:1': 2 })
+  const pa = await player(a.token)
+  assert.deepEqual([pa.soldiers, pa.training], [{ 'cavalry:1': 1, 'cavalry:2': 1 }, NONE])
 })
 
 test('마이그레이션 008: 007까지 적용된 DB의 기존 플레이어는 궁병 훈련소·기병 마구간 Lv 1 행을 받고(생산 시각 = 지금), 막사 생산 시각도 지금, 배치 {}·보유 없음', async () => {
@@ -199,6 +314,30 @@ test('마이그레이션 008: 007까지 적용된 DB의 기존 플레이어는 �
   }
 })
 
+test('마이그레이션 010: 009까지 적용된 DB의 병사 건물 행은 빈 대기열(0·null)을 받고, 수·끝나는 시각이 어긋난 행은 제약이 막는다', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  const all = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()
+  for (const f of all.filter((f) => f < '010')) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, dir)
+    const [p] = await d.query("insert into players (device_id) values ('mig-010-device-0001') returning id")
+    await d.query('insert into player_state (player_id) values ($1)', [p.id])
+    await d.query("insert into player_buildings (player_id, building, level) values ($1, 'barracks', 3), ($1, 'lumber', 2)", [p.id])
+    assert.deepEqual(await migrate(d), all.filter((f) => f >= '010'))
+    const rows = await d.query('select building, level, train_count, train_finish from player_buildings where player_id = $1 order by building', [p.id])
+    assert.deepEqual(rows, [{ building: 'barracks', level: 3, train_count: 0, train_finish: null }, { building: 'lumber', level: 2, train_count: 0, train_finish: null }])
+    await assert.rejects(d.query("update player_buildings set train_count = 3 where player_id = $1 and building = 'barracks'", [p.id]), /train_queue/)
+    await assert.rejects(d.query("update player_buildings set train_finish = now() where player_id = $1 and building = 'barracks'", [p.id]), /train_queue/)
+    await assert.rejects(d.query("update player_buildings set train_count = -1, train_finish = now() where player_id = $1 and building = 'barracks'", [p.id]), /check/)
+    const cfg = await d.query("select key, value from game_config where key like 'train_%' order by key")
+    assert.deepEqual(cfg.map((r) => r.key), ['train_batch_base', 'train_batch_per_level', 'train_cost_archer', 'train_cost_cavalry', 'train_cost_infantry'])
+  } finally {
+    await d.close()
+  }
+})
+
 test('시드 검증: 병종 건물은 건물 표에·병종마다 다르게, hp·range·atk_interval·speed > 0, atk·aggro ≥ 0, 병사 설정 범위·필수', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'castle-data-'))
   tmp.push(dir)
@@ -216,6 +355,11 @@ test('시드 검증: 병종 건물은 건물 표에·병종마다 다르게, hp�
     ['config.csv', cfg.replace('soldier_merge_count,5', 'soldier_merge_count,2.5'), /soldier_merge_count must be an integer of at least 1/],
     ['config.csv', cfg.replace('soldier_prod_sec,10800', 'soldier_prod_sec,0'), /soldier_prod_sec must be greater than 0/],
     ['config.csv', cfg.replace(/^soldier_tier_mult,.*\n/m, ''), /missing key 'soldier_tier_mult'/],
+    ['config.csv', cfg.replace('train_batch_base,10', 'train_batch_base,0'), /train_batch_base must be an integer of at least 1: '0'/],
+    ['config.csv', cfg.replace('train_batch_per_level,2', 'train_batch_per_level,1.5'), /train_batch_per_level must be a non-negative integer: '1.5'/],
+    ['config.csv', cfg.replace(/^train_cost_archer,.*\n/m, ''), /missing key 'train_cost_archer'/],
+    ['config.csv', cfg.replace('train_cost_cavalry,food:40|stone:20', 'train_cost_cavalry,food:40|gold:20'), /line \d+ column 'value': train_cost_cavalry must be 'res:amount\|…'/],
+    ['config.csv', cfg.replace('train_cost_infantry,food:30|wood:20', 'train_cost_infantry,food:-30'), /train_cost_infantry must be/],
   ]
   for (const [file, text, re] of cases) {
     writeFileSync(join(dir, file), text)

@@ -59,12 +59,17 @@ interface Player {
   last_stage_clear: number
   kill_seq: number
   res: Record<string, number>
-  buildings: Record<string, { level: number; last_collect: number }>
+  buildings: Record<string, { level: number; last_collect: number; train: Train | null }> // train: 병사 건물 훈련 대기열(개정 16), 비면 null
   heroes: Record<string, Hero> // 영웅 id → 보유 수·레벨·조각·승급(개정 15)
   deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
   build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
   soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
   soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
+}
+
+interface Train {
+  count: number
+  finish: number // 유닉스 초(서버 시각)
 }
 
 interface Hero {
@@ -90,6 +95,7 @@ interface Change {
   build?: { id: string; finish: number } | null // 새 일꾼 상태(개정 12)
   soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
   soldierDeploy?: Record<string, number> // 새 병사 배치
+  train?: Record<string, Train | null> // 병사 건물 → 새 훈련 대기열(null = 비움, 개정 16)
   log?: { kind: string; detail: unknown }
 }
 
@@ -108,7 +114,8 @@ const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
-  coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8))
+  coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8,
+      'train_count', train_count, 'train_finish', extract(epoch from train_finish)::float8))
     from player_buildings where player_id = s.player_id), '{}'::json) as buildings,
   coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level, 'shards', shards, 'promotion', promotion))
     from player_heroes where player_id = s.player_id), '{}'::json) as heroes
@@ -160,29 +167,11 @@ function counts(v: unknown): Record<string, number> {
   return out
 }
 
-// 게으른 생산(개정 13 §4): 병사 건물마다 마지막 생산 시각(last_collect)부터 지난 시간(축적 상한까지) / 한 마리 시간만큼 1티어를 만든다
-// (남은 시간 유지). 바뀐 게 없으면 null. 건설 중에도 이어진다.
-// ponytail: loadPlayer가 완료보다 먼저 생산하므로 끝나는 시각 ~ 그 뒤 첫 요청 사이(앱은 2초마다 묻는다)는 이전 레벨로 센다.
-// 정확해야 하면 완료 처리에서 끝나는 시각까지 이전 레벨로 생산한다.
-function production(p: Player, game: Game, now: number): Change | null {
-  if (game.soldiers.length === 0) return null // 시드 전 DB
-  const cap = R.cfgNum(game.config, 'accum_cap_min')
-  const buildings: Record<string, number> = {}
-  const soldiers: Record<string, number> = {}
-  const made: unknown[] = []
-  for (const s of game.soldiers) {
-    const b = p.buildings[s.building]
-    if (!b) continue
-    const st = R.soldierProdStep(b.last_collect, now, R.soldierUnitSec(game.config, b.level), cap)
-    if (!st.changed) continue
-    buildings[s.building] = st.last
-    if (st.count > 0) {
-      soldiers[R.soldierKey(s.id, 1)] = st.count
-      made.push({ building: s.building, type: s.id, count: st.count, level: b.level, from: b.last_collect, to: st.last })
-    }
-  }
-  if (Object.keys(buildings).length === 0) return null
-  return { buildings, soldiers, log: made.length ? { kind: 'soldier_prod', detail: made } : undefined }
+// 병사 건물 id의 병종 정의(개정 16 훈련). 병사 건물이 아니면 400 not_soldier_building.
+function soldierAt(game: Game, building: string): R.SoldierDef {
+  const s = game.soldiers.find((x) => x.building === building)
+  if (!s) throw new ApiError(400, 'not_soldier_building', `'${building}' is not a soldier building`)
+  return s
 }
 
 export function createApp(opts: AppOptions) {
@@ -227,13 +216,16 @@ export function createApp(opts: AppOptions) {
   // (게으른 완료, 개정 12) 다시 읽는다. 빠진 자원·건물 행은 한 번 채우고 다시 읽는다.
   async function loadPlayer(id: string, game: Game, now: number): Promise<Player> {
     let ensured = false
-    for (let i = 0; i < MAX_ATTEMPTS + 2; i++) { // 행 채우기·생산·완료가 한 번씩 다시 읽게 한다
+    for (let i = 0; i < MAX_ATTEMPTS + 1; i++) { // 행 채우기·완료가 한 번씩 다시 읽게 한다
       const [r] = await query(PLAYER_SQL, [id])
       if (!r) throw new ApiError(401, 'unknown_player', 'player not found; log in again')
       const res: Record<string, number> = {}
       for (const [k, v] of Object.entries(json(r.res) as Record<string, unknown>)) res[k] = Number(v)
       const buildings: Player['buildings'] = {}
-      for (const [k, v] of Object.entries(json(r.buildings) as Record<string, any>)) buildings[k] = { level: Number(v.level), last_collect: Number(v.last_collect) }
+      for (const [k, v] of Object.entries(json(r.buildings) as Record<string, any>)) {
+        const train = Number(v.train_count) > 0 ? { count: Number(v.train_count), finish: Number(v.train_finish) } : null
+        buildings[k] = { level: Number(v.level), last_collect: Number(v.last_collect), train }
+      }
       const missing = game.resources.some((x) => !(x.id in res) || !(x.building in buildings)) || game.buildings.some((b) => !(b.id in buildings))
       if (missing) {
         if (ensured) throw new ApiError(500, 'internal', 'player rows missing')
@@ -251,11 +243,6 @@ export function createApp(opts: AppOptions) {
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
         soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)),
       }
-      const made = production(p, game, now) // 게으른 생산(개정 13) — 완료와 같은 자리, commit의 version 가드 한 문장
-      if (made) {
-        await commit(id, p.version, made, now)
-        continue // 이겼든 졌든 다시 읽는다(졌으면 다른 요청이 이미 생산했다)
-      }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
         await query(COMPLETE_SQL, [id, p.version, p.build.id, now, R.KEEP, R.GATE,
@@ -267,9 +254,9 @@ export function createApp(opts: AppOptions) {
     throw new ApiError(409, 'conflict', 'concurrent update; try again')
   }
 
-  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원·병사 건물은 last_collect(병사는 마지막 생산 시각)도.
+  // 플레이어 응답(스펙 §4 공통). buildings = 건물 표의 모든 건물 {level}, 자원 건물은 last_collect도.
   // build = 일꾼 또는 null, population = 민가 레벨의 인구(개정 12). soldiers = 표에 있는 병종의 보유 "병종:티어" → 수(0 초과),
-  // soldier_deploy = 배치(보유로 자름, 개정 13).
+  // soldier_deploy = 배치(보유로 자름, 개정 13). training = 병사 건물 → 훈련 대기열 {count, finish} 또는 null(개정 16).
   function view(p: Player, game: Game, now: number) {
     const res: Record<string, number> = {}
     const buildings: Record<string, { level: number; last_collect?: number }> = {}
@@ -279,10 +266,8 @@ export function createApp(opts: AppOptions) {
       const b = p.buildings[r.building]
       buildings[r.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
     }
-    for (const s of game.soldiers) {
-      const b = p.buildings[s.building]
-      buildings[s.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
-    }
+    const training: Record<string, Train | null> = {}
+    for (const s of game.soldiers) training[s.building] = p.buildings[s.building]?.train ?? null
     const maxTier = game.soldiers.length ? R.cfgNum(game.config, 'soldier_max_tier') : 0
     const soldiers: Record<string, number> = {}
     for (const [k, n] of Object.entries(p.soldiers)) if (n > 0 && R.parseSoldierKey(k, game.soldiers, maxTier)) soldiers[k] = n
@@ -299,7 +284,7 @@ export function createApp(opts: AppOptions) {
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
         kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
-        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers),
+        soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training,
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -356,6 +341,10 @@ export function createApp(opts: AppOptions) {
       ctes.push(`b${i} as (update player_buildings set last_collect = to_timestamp(${p(t)}::float8)
         where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
     })
+    Object.entries(ch.train ?? {}).forEach(([b, t], i) => {
+      ctes.push(`t${i} as (update player_buildings set train_count = ${p(t?.count ?? 0)}::int, train_finish = to_timestamp(${p(t?.finish ?? null)}::float8)
+        where player_id = (select player_id from s) and building = ${p(b)} returning 1)`)
+    })
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
@@ -372,6 +361,7 @@ export function createApp(opts: AppOptions) {
     if (ch.killSeq !== undefined) pl.kill_seq = ch.killSeq
     for (const [k, d] of Object.entries(ch.res ?? {})) pl.res[k] = (pl.res[k] ?? 0) + d
     for (const [k, t] of Object.entries(ch.buildings ?? {})) pl.buildings[k].last_collect = t
+    for (const [k, t] of Object.entries(ch.train ?? {})) pl.buildings[k].train = t
     for (const [k, d] of Object.entries(ch.heroes ?? {})) {
       const h = pl.heroes[k]
       pl.heroes[k] = h ? { ...h, copies: h.copies + d, shards: h.shards + d } : { copies: d, level: 1, shards: d - 1, promotion: 0 }
@@ -754,13 +744,76 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // 훈련 시작(개정 16 §2): {building, count}. 병사 건물이 아니면 400 not_soldier_building, count가 1..묶음 상한(train_batch_*)이 아니면 400.
+  // 대기열이 차 있으면 409 training(진행 중)·ready_to_collect(수령 대기), 자원이 모자라면 409 not_enough. 비용 차감·대기열(끝나는 시각 =
+  // 지금 + count × 1마리 시간)·economy_log train_start는 version 가드 한 문장 — 같은 순간 두 번 보내도 하나는 409 training이다.
+  app.post('/v1/soldiers/train', auth, async (c) => {
+    const b = await body(c)
+    const building = strField(b, 'building')
+    const count = intField(b, 'count', 1, MAX_INT4)
+    return mutate(c, (p, g, now) => {
+      const s = soldierAt(g, building)
+      const lv = level(p, building)
+      const max = R.trainMax(g.config, lv)
+      if (count > max) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${max}`)
+      const q = p.buildings[building].train
+      if (q) throw new ApiError(409, q.finish > now ? 'training' : 'ready_to_collect', `'${building}' already has ${q.count} in training`)
+      const cost = R.trainCost(g.config, s.id, count)
+      if (Object.entries(cost).some(([r, v]) => (p.res[r] ?? 0) < v)) throw new ApiError(409, 'not_enough', `training ${count} costs ${JSON.stringify(cost)}`)
+      const unit = R.soldierUnitSec(g.config, lv)
+      const train = { count, finish: now + count * unit }
+      const res = Object.fromEntries(Object.entries(cost).filter(([, v]) => v > 0).map(([r, v]) => [r, -v]))
+      return {
+        change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, level: lv, unit_sec: unit, cost, finish: train.finish } } },
+        extra: { training: { building, ...train } },
+      }
+    })
+  })
+
+  // 훈련 수령(개정 16 §2): 끝났으면 1티어 보유 += count, 대기열 비우기, economy_log train_collect(version 가드 한 문장).
+  // 비었으면 409 empty, 아직이면 409 not_ready — 응답을 잃고 다시 보내도 두 번 받지 않는다(멱등).
+  app.post('/v1/soldiers/collect', auth, async (c) => {
+    const building = strField(await body(c), 'building')
+    return mutate(c, (p, g, now) => {
+      const s = soldierAt(g, building)
+      const q = p.buildings[building].train
+      if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
+      if (q.finish > now) throw new ApiError(409, 'not_ready', `'${building}' finishes training at ${q.finish}`)
+      return {
+        change: { soldiers: { [R.soldierKey(s.id, 1)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail: { building, type: s.id, ...q } } },
+        extra: { collected: { type: s.id, count: q.count } },
+      }
+    })
+  })
+
+  // 훈련 취소(개정 16 §2): 진행 중이면 비용의 50%(자원마다 내림)를 돌려주고 비운다. economy_log train_cancel. 비었으면 409 empty,
+  // 이미 끝났으면 409 ready_to_collect(수령한다).
+  // ponytail: 환불은 지금 설정의 비용으로 센다 — 시작 뒤 운영자가 비용을 바꾸면 낸 것과 다르다. 정확해야 하면 낸 비용을 대기열 열에 둔다.
+  app.post('/v1/soldiers/cancel', auth, async (c) => {
+    const building = strField(await body(c), 'building')
+    return mutate(c, (p, g, now) => {
+      const s = soldierAt(g, building)
+      const q = p.buildings[building].train
+      if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
+      if (q.finish <= now) throw new ApiError(409, 'ready_to_collect', `'${building}' finished training; collect it`)
+      const refund = R.trainRefund(R.trainCost(g.config, s.id, q.count))
+      return {
+        change: {
+          res: Object.fromEntries(Object.entries(refund).filter(([, v]) => v > 0)), train: { [building]: null },
+          log: { kind: 'train_cancel', detail: { building, type: s.id, ...q, refund } },
+        },
+        extra: { refund },
+      }
+    })
+  })
+
   if (opts.allowTestHooks) {
-    // 통합 테스트용: 그 플레이어 건물의 last_collect를 minutes분 앞당긴다(자원 건물 수집, 병사 건물 생산 — 개정 13).
+    // 통합 테스트용: 그 플레이어 건물의 last_collect(자원 건물 수집)와 훈련 끝나는 시각(개정 16)을 minutes분 앞당긴다.
     app.post('/v1/test/age', auth, async (c) => {
       const minutes = intField(await body(c), 'minutes', 0, MAX_AGE_MIN)
       const id = c.get('playerId') as string
       await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
-        update player_buildings set last_collect = last_collect - $2::float8 * interval '1 second'
+        update player_buildings set last_collect = last_collect - $2::float8 * interval '1 second', train_finish = train_finish - $2::float8 * interval '1 second'
         where player_id = (select player_id from s)`, [id, minutes * 60])
       const now = clock()
       const game = await loadGame()

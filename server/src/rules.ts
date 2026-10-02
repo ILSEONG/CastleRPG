@@ -212,7 +212,7 @@ export function tierValue(config: Config, key: string, level: number): number {
 export const population = (config: Config, housesLevel: number) =>
   cfgNum(config, 'pop_base') + cfgNum(config, 'pop_per_house') * (Math.max(housesLevel, 1) - 1)
 
-// --- 병사 (개정 13) — 앱 GameData.soldier_unit_sec·Economy.prod_step·auto_deploy와 같은 식 ---
+// --- 병사 (개정 13) — 앱 GameData.soldier_unit_sec·Economy.auto_deploy와 같은 식 ---
 
 export interface SoldierDef {
   id: string
@@ -235,19 +235,37 @@ export function parseSoldierKey(key: string, defs: SoldierDef[], maxTier: number
   return { type: m[1], tier: Number(m[2]) }
 }
 
-// 한 마리 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 앱과 같은 반올림 없는 값).
+// 1마리 훈련 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 앱과 같은 반올림 없는 값). n마리는 n × 이 값(개정 16).
 export const soldierUnitSec = (config: Config, level: number) =>
   grown(cfgNum(config, 'soldier_prod_sec'), cfgNum(config, 'soldier_prod_level_factor'), Math.max(level, 1) - 1)
 
-// 게으른 생산 한 번: 지난 시간(축적 상한 capMin분까지) / 한 마리 시간만큼 만들고, 남은 시간은 유지(상한이면 지금으로).
-// 시계가 마지막 생산보다 뒤로 갔으면 0마리, 지금부터 다시. 아무것도 안 바뀌면 changed = false.
-export function soldierProdStep(last: number, now: number, unitSec: number, capMin: number) {
-  if (now < last) return { count: 0, last: now, changed: true }
-  const elapsed = Math.min(now - last, capMin * 60)
-  const count = Math.floor(elapsed / unitSec)
-  if (count === 0) return { count: 0, last, changed: false }
-  return { count, last: now - last >= capMin * 60 ? now : last + count * unitSec, changed: true }
+// --- 훈련 (개정 16) — 앱 GameData.train_unit_cost·train_max와 같은 식 ---
+
+// 1마리 비용 "자원:수|…"(train_cost_<병종>, 수는 0 이상 정수, 자원은 BUILD_RES, 겹치면 안 된다). "0"이면 무료 {}. 틀리면 null.
+export function parseTrainCost(text: string): Record<string, number> | null {
+  if (String(text).trim() === '0') return {}
+  const out: Record<string, number> = {}
+  for (const part of String(text).split('|')) {
+    const m = /^\s*([a-z]+)\s*:\s*(\d+)\s*$/.exec(part)
+    if (!m || !BUILD_RES.includes(m[1]) || Object.hasOwn(out, m[1])) return null
+    out[m[1]] = Number(m[2])
+  }
+  return out
 }
+
+// n마리 비용 {자원: 수} = 1마리 비용 × n.
+export function trainCost(config: Config, type: string, n: number): Record<string, number> {
+  const one = parseTrainCost(config[`train_cost_${type}`] ?? '')
+  if (!one) throw new Error(`config 'train_cost_${type}' is missing or not 'res:amount|…'`)
+  return Object.fromEntries(Object.entries(one).map(([r, v]) => [r, v * n]))
+}
+
+// 묶음 상한 = train_batch_base + train_batch_per_level × (L − 1).
+export const trainMax = (config: Config, level: number) =>
+  cfgNum(config, 'train_batch_base') + cfgNum(config, 'train_batch_per_level') * (Math.max(level, 1) - 1)
+
+// 취소 환불 = 비용의 절반(자원마다 내림).
+export const trainRefund = (cost: Record<string, number>) => Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, Math.floor(v / 2)]))
 
 // 합성 뒤 배치 자르기: 배치 수를 보유 수로(0이면 키를 뺀다).
 export function trimDeploy(deploy: Record<string, number>, owned: Record<string, number>): Record<string, number> {

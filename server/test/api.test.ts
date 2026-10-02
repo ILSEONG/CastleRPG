@@ -72,7 +72,7 @@ test('JWT: 없음·위조·다른 비밀·만료·이상한 sub는 401', async (
   const exp = await S.req('GET', '/v1/player', { token })
   assert.equal(exp.status, 401)
   assert.equal(exp.json.error, 'token_expired')
-  for (const p of ['/v1/collect', '/v1/sell', '/v1/kills', '/v1/stage/clear', '/v1/gacha', '/v1/deploy', '/v1/test/age']) {
+  for (const p of ['/v1/collect', '/v1/sell', '/v1/kills', '/v1/stage/clear', '/v1/gacha', '/v1/deploy', '/v1/test/age', '/v1/soldiers/train', '/v1/soldiers/collect', '/v1/soldiers/cancel']) {
     assert.equal((await S.req('POST', p, { body: {} })).status, 401, p)
   }
 })
@@ -92,15 +92,14 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         lumber: { level: 1, last_collect: T0 + 0.25 },
         quarry: { level: 1, last_collect: T0 + 0.25 },
         farm: { level: 1, last_collect: T0 + 0.25 },
-        barracks: { level: 1, last_collect: T0 + 0.25 }, // 개정 13: 병사 건물은 마지막 생산 시각
-        archery: { level: 1, last_collect: T0 + 0.25 },
-        stable: { level: 1, last_collect: T0 + 0.25 },
+        barracks: { level: 1 }, archery: { level: 1 }, stable: { level: 1 }, // 개정 16: 자동 생산 시계 없음
       },
       build: null,
       population: 6, // 민가 1: pop_base
       heroes: Object.fromEntries(['hans', 'ella', 'dorik', 'nina'].map((h) => [h, { copies: 1, level: 1, shards: 0, promotion: 0 }])), // 개정 15: 조각·승급
       deploy: ['hans', 'ella', 'dorik', 'nina'],
       soldiers: {}, soldier_deploy: {}, // 개정 13
+      training: { barracks: null, archery: null, stable: null }, // 개정 16: 병사 건물 훈련 대기열
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })
@@ -411,7 +410,8 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 47) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3
+  assert.equal(Object.keys(g.config).length, 52) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5
+  assert.equal(g.config.train_cost_cavalry, 'food:40|stone:20')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })
