@@ -101,6 +101,9 @@ func _init() -> void:
 	test_upgrade_tables()
 	test_crit_roll_params()
 	test_growth_economy()
+	test_item_icons()
+	test_arena_kit()
+	test_dungeon_monsters()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -2763,3 +2766,119 @@ func test_growth_economy() -> void:
 	check(notes2.size() == 2 and notes2[1] == EconomyScript.GROWTH_FAIL_TEXT and n.refreshed == 2, "a lost reply notifies with the generic text and refreshes")
 	o.net = null
 	o.free()
+
+
+# --- 개정 18 던전 아트 ---
+
+## 장비 아이콘 11종: 도형 ≥ 3(외곽선 있는 면 포함), 모든 점이 단위 박스 안, 모든 다각형이 삼각분할된다(draw_colored_polygon이 그릴 수 있다),
+## 종류마다 모양이 다르다. 장비 칸: 6등급 색 순서, 외곽 8각이 단위 박스 안, 등급 테두리는 등급 색 그대로이고 LR만 시간에 따라 흐른다(이음매 없음).
+func test_item_icons() -> void:
+	var seen := {}
+	for kind in IconsScript.ITEM_KINDS:
+		var shapes: Array = IconsScript.shapes(kind)
+		check(shapes.size() >= 3 and shapes.any(func(s): return s[2]), "item icon %s has shapes with an outline" % kind)
+		for s in shapes:
+			var pts := PackedVector2Array(s[0])
+			check(pts.size() >= 3 and Geometry2D.triangulate_polygon(pts).size() >= 3, "item icon %s polygon triangulates: %s" % [kind, pts])
+			for p in pts:
+				check(absf(p.x) <= 0.5 and absf(p.y) <= 0.5, "item icon %s point %s inside the unit box" % [kind, p])
+		var sig := str(shapes)
+		check(not seen.has(sig), "item icon %s differs from %s" % [kind, seen.get(sig, "")])
+		seen[sig] = kind
+	check(IconsScript.ITEM_KINDS.size() == 11 and not IconsScript.KINDS.has("sword"), "11 equipment kinds; resource chip kinds stay resources")
+	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR"], "six item grades in order")
+	check(IconsScript.item_tile().all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "item tile inside the unit box")
+	var n := 33
+	var sr := IconsScript.border_colors("SR", n, 0.0)
+	check(sr.size() == n and sr == IconsScript.border_colors("SR", n, 5.0) and sr[0] == Art.ITEM_GRADE_COLORS.SR, "SR border = grade colour, still")
+	var lr0 := IconsScript.border_colors("LR", n, 0.0)
+	check(lr0 != IconsScript.border_colors("LR", n, 0.5) and lr0[0].is_equal_approx(lr0[n - 1]), "LR border flows over time and wraps seamlessly")
+
+
+## 던전 무대: 평야 = 영웅 6·고블린 15·왕, 성 내부 = 영웅 4·데스나이트. 자리는 바닥에, 전투 자리 안(평야 반경 / 홀 안)에, 서로 1 m 넘게 떨어지고,
+## 영웅은 모든 적보다 화면 아래. 조명 설정 키·점광원 ≤ 3(그림자 없음). 이펙트(불꽃·연기·불씨·빛기둥)는 그림자 없음, 평야 반복물은 MultiMesh.
+## 드랍 상자(등급마다 메시 하나, 작음, 바닥에 놓임)·빛기둥(높이 PILLAR_H) 그림자 없음.
+func test_arena_kit() -> void:
+	const ArenaKit := preload("res://scripts/arena_kit.gd")
+	for kind in ["plains", "castle"]:
+		var st: Dictionary = ArenaKit.plains() if kind == "plains" else ArenaKit.castle()
+		var want: Array = [6, 15] if kind == "plains" else [4, 0]
+		check(st.heroes.size() == want[0] and st.enemies.size() == want[1] and st.boss is Vector3, "%s: %d hero spots, %d goblin spots + boss" % [kind, want[0], want[1]])
+		var spots: Array = st.heroes + st.enemies + [st.boss]
+		for i in spots.size():
+			var p: Vector3 = spots[i]
+			var hall: Vector3 = Basis(Vector3.UP, ArenaKit.HALL_YAW).inverse() * p
+			var inside := p.length() < ArenaKit.PLAINS_FIGHT_R if kind == "plains" else maxf(absf(hall.x), absf(hall.z)) < ArenaKit.HALL_HALF - 1.0
+			check(inside and p.y == 0.0, "%s spot %d on the floor inside the fight area: %s" % [kind, i, p])
+			for j in range(i + 1, spots.size()):
+				check(p.distance_to(spots[j]) > 1.0, "%s spots %d and %d apart" % [kind, i, j])
+		var lowest_enemy: float = (st.enemies + [st.boss]).map(func(p): return p.dot(ArenaKit.DOWN)).max()
+		check(st.heroes.all(func(p): return p.dot(ArenaKit.DOWN) > lowest_enemy + 10.0), "%s heroes start below every enemy on screen" % kind)
+		var light: Dictionary = st.light
+		var keys := ["background", "ambient", "ambient_energy", "sun_color", "sun_energy", "sun_rot", "shadows", "omni"]
+		check(keys.all(func(k): return light.has(k)) and light.omni.size() <= 3, "%s light settings complete, <= 3 omni lights" % kind)
+		var lit: Node3D = ArenaKit.lighting(light)
+		var omnis := lit.find_children("*", "OmniLight3D", true, false)
+		check(omnis.size() == light.omni.size() and omnis.all(func(o): return not o.shadow_enabled) and lit.find_children("*", "WorldEnvironment", true, false).size() == 1,
+			"%s lighting node: environment + sun + %d shadowless omni lights" % [kind, light.omni.size()])
+		lit.free()
+		var effects := 0
+		for gi in st.root.find_children("*", "GeometryInstance3D", true, false):
+			var m: Material = gi.material_override
+			if gi is CPUParticles3D or (m is ShaderMaterial and (m.shader == ArenaKit.GlowShader or m.shader == ArenaKit.SmokeShader)):
+				effects += 1
+				check(gi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s effect %s casts no shadow" % [kind, gi.name])
+		if kind == "castle":
+			check(effects == 3 and st.root.find_children("*", "CPUParticles3D", true, false).size() == 1, "castle: one flame MultiMesh, one smoke MultiMesh, one ember emitter")
+		else:
+			check(st.root.find_children("*", "MultiMeshInstance3D", true, false).size() >= 10, "plains: hills, trees, rocks, mountains as MultiMesh")
+		st.root.free()
+	for g in Art.ITEM_GRADE_COLORS:
+		var c: MeshInstance3D = ArenaKit.drop_chest(g)
+		var box := c.mesh.get_aabb()
+		var p: MeshInstance3D = ArenaKit.light_pillar(g)
+		check(box.size.x <= 1.0 and box.size.y < 1.0 and absf(box.position.y) < 0.01 and c.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			and is_equal_approx(p.mesh.get_aabb().size.y, ArenaKit.PILLAR_H) and p.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+			"%s drop chest small on the floor, light pillar %.0f m, no shadows" % [g, ArenaKit.PILLAR_H])
+		c.free()
+		p.free()
+	var a: MeshInstance3D = ArenaKit.drop_chest("SR")
+	var b: MeshInstance3D = ArenaKit.drop_chest("SR")
+	var u: MeshInstance3D = ArenaKit.drop_chest("UR")
+	check(a.mesh == b.mesh and a.mesh != u.mesh, "drop chest mesh shared per grade")
+	a.free()
+	b.free()
+	u.free()
+
+
+## 던전 몬스터: 크기 0.8·1.7·2.2, UnitModel.dress 뒤 tint 메시 재질 = 원본 albedo × 색(발광 눈은 색 자체), parts는 그 뼈의 BoneAttachment3D 아래
+## 코드 부품으로 붙고, 같은 (재질, 색)은 몬스터끼리 공유한다. (애니메이션·숨김 메시·사망 길이는 test_art_assets가 본다.)
+func test_dungeon_monsters() -> void:
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	var scales := {"goblin": 0.8, "goblin_king": 1.7, "death_knight": 2.2}
+	for key in scales:
+		var spec: Dictionary = Art.MONSTER_MODELS[key]
+		check(is_equal_approx(spec.scale, scales[key]), "%s drawn at x%.1f" % [key, scales[key]])
+		var model: Node3D = Art.instance(spec.scene)
+		UnitModelScript.dress(model, spec)
+		for mesh_name in spec.tint:
+			var mi := model.find_child(mesh_name, true, false) as MeshInstance3D
+			var want: Color = spec.tint[mesh_name]
+			var m: Material = mi.get_active_material(0) if mi != null else null
+			var ok: bool = (m is ShaderMaterial and (m.get_shader_parameter("albedo_color") as Color).is_equal_approx(want)) \
+				or (m is BaseMaterial3D and m.emission_enabled and m.albedo_color.is_equal_approx(want))
+			check(ok, "%s mesh %s tinted %s" % [key, mesh_name, want])
+		var attached := 0
+		for ba in model.find_children("*", "BoneAttachment3D", true, false):
+			var part: Node = ba.get_child(0) if ba.get_child_count() == 1 else null
+			if part != null and (part.name == "DkEyes" or (part is MeshInstance3D and part.material_override == Art.lowpoly_vc_material())):
+				attached += 1
+				check(spec.parts.any(func(pp): return pp[0] == ba.bone_name), "%s part on a listed bone (%s)" % [key, ba.bone_name])
+		check(attached == spec.parts.size(), "%s: all %d code parts attached" % [key, spec.parts.size()])
+		if key == "goblin":
+			var again: Node3D = Art.instance(spec.scene)
+			UnitModelScript.dress(again, spec)
+			var head := func(root: Node) -> Material: return (root.find_child("Rogue_Head", true, false) as MeshInstance3D).get_active_material(0)
+			check(head.call(again) == head.call(model), "two goblins share one tinted skin material")
+			again.free()
+		model.free()

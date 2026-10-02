@@ -47,6 +47,11 @@ const MERCHANT_MODEL := {
 	"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "2H_Ranged_Shoot", "death": "Death_A"},
 }
 
+const GOBLIN_TINT := Color(0.55, 0.85, 0.40)  # Rogue 살색(복숭아) × 이 색 ≈ 고블린 녹색(ArenaKit 귀·코 색과 맞춤)
+const KING_TINT := Color(0.46, 0.62, 0.30)    # 더 짙은 올리브
+const DK_METAL := Color(0.36, 0.34, 0.40)     # 뼈·투구 × 이 색 = 검은 쇠
+const DK_EYES := Color(1.0, 0.12, 0.05)       # 발광 눈 재질은 이 색 자체
+
 const MONSTER_MODELS := {
 	"grunt": {
 		"scene": CHAR_DIR + "Skeleton_Minion.glb",
@@ -60,6 +65,43 @@ const MONSTER_MODELS := {
 		"weapon": PROP_DIR + "Skeleton_Axe.gltf",
 		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
 	},
+	# 개정 18 던전. tint = 메시 이름 → 곱할 색(UnitModel.dress), parts = [뼈, ArenaKit.part id] — 코드 메시를 그 뼈에 붙인다.
+	# scale = 던전 그림 크기(UnitModel은 쓰지 않는다 — 몬스터 표 scale로 넘긴다). Rogue의 Death_A(0.8초)는 CORPSE_SEC보다 짧아 Death_B.
+	"goblin": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Throwable", "Rogue_Cape"],  # 단검(Knife)만 든다
+		"tint": {"Rogue_Head": GOBLIN_TINT, "Rogue_ArmLeft": GOBLIN_TINT, "Rogue_ArmRight": GOBLIN_TINT, "Rogue_LegLeft": GOBLIN_TINT,
+			"Rogue_LegRight": GOBLIN_TINT},
+		"parts": [["head", "goblin_face"]],
+		"scale": 0.8,
+		"anims": {"idle": "Idle", "walk": "Running_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"goblin_king": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"],
+		"tint": {"Rogue_Head": KING_TINT, "Rogue_ArmLeft": KING_TINT, "Rogue_ArmRight": KING_TINT, "Rogue_LegLeft": KING_TINT,
+			"Rogue_LegRight": KING_TINT, "Rogue_Cape": Color(0.85, 0.30, 0.30)},
+		"parts": [["head", "king_face"], ["head", "crown"], ["handslot.r", "king_club"]],
+		"scale": 1.7,
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"death_knight": {
+		"scene": CHAR_DIR + "Skeleton_Warrior.glb",
+		"hide": [],
+		"tint": {"Skeleton_Warrior_Helmet": DK_METAL, "Skeleton_Warrior_ArmLeft": DK_METAL, "Skeleton_Warrior_ArmRight": DK_METAL,
+			"Skeleton_Warrior_Body": DK_METAL, "Skeleton_Warrior_Head": DK_METAL, "Skeleton_Warrior_Jaw": DK_METAL,
+			"Skeleton_Warrior_LegLeft": DK_METAL, "Skeleton_Warrior_LegRight": DK_METAL,
+			"Skeleton_Warrior_Cloak": Color(0.55, 0.12, 0.12), "Skeleton_Warrior_Eyes": DK_EYES},
+		"parts": [["head", "dk_eyes"], ["chest", "dk_cape"], ["handslot.r", "dk_sword"]],
+		"scale": 2.2,
+		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
+	},
+}
+
+## 장비 등급 색(개정 18 §5). LR은 무지개 금 — 정적인 곳(드랍 상자)은 이 금색, 아이콘 테두리는 Icons.draw_item이 흐르게 그린다.
+const ITEM_GRADE_COLORS := {
+	"N": Color(0.62, 0.64, 0.67), "R": Color(0.36, 0.73, 0.39), "SR": Color(0.29, 0.56, 0.89),
+	"SSR": Color(0.63, 0.36, 0.88), "UR": Color(0.94, 0.54, 0.14), "LR": Color(0.98, 0.80, 0.28),
 }
 const WEAPON_BONE := "handslot.r"
 
@@ -114,6 +156,7 @@ static func _attack_anim(model: String, gear: PackedStringArray, role: String) -
 
 
 static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
+static var _tint_cache := {}  # "재질 id:색" -> 색 입힌 재질
 static var _vc_material: ShaderMaterial
 
 
@@ -152,6 +195,23 @@ static func lowpoly_material(src: Material) -> Material:
 		m.set_shader_parameter("albedo_tex", base.albedo_texture)
 	_lowpoly_cache[src] = m
 	return m
+
+
+## 메시의 모든 표면에 색을 입힌다(개정 18 던전 몬스터): 로우폴리 재질은 albedo × 색, 발광 재질(해골 눈)은 색 자체.
+## (원본 재질, 색)마다 하나를 공유한다.
+static func tint(mi: MeshInstance3D, color: Color) -> void:
+	for i in mi.mesh.get_surface_count():
+		var src := mi.get_active_material(i)
+		var key := "%d:%s" % [src.get_instance_id(), color.to_html()]
+		if not _tint_cache.has(key):
+			var m: Material = src.duplicate()
+			if m is ShaderMaterial:
+				m.set_shader_parameter("albedo_color", (m.get_shader_parameter("albedo_color") as Color) * color)
+			elif m is BaseMaterial3D:
+				m.albedo_color = color
+				m.emission = color
+			_tint_cache[key] = m
+		mi.set_surface_override_material(i, _tint_cache[key])
 
 
 ## 모델의 모든 표면 재질을 로우폴리 재질로 바꾼다.
