@@ -65,9 +65,13 @@ func slot_position(side: int, post: int, slot: int) -> Vector3:
 	return Formation.slot_position(half, side, post, slot)
 
 
-func spawn_position(side: int) -> Vector3:
-	return Formation.spawn_center(half, side) \
-		+ Formation.perp(side) * randf_range(-Balance.SPAWN_SPREAD, Balance.SPAWN_SPREAD)
+## 스폰 지점: 면 중심에서 옆으로 ±SPAWN_SPREAD. 무리(lanes마리)면 그 폭을 lanes칸으로 나눠 lane번째 칸 가운데 절반 안 —
+## 같이 나온 몬스터가 겹치지 않는다(3마리면 칸 중심 −4·0·4 m, 이웃과 2 m 이상).
+func spawn_position(side: int, lane := 0, lanes := 1) -> Vector3:
+	var w := 2.0 * Balance.SPAWN_SPREAD / maxi(lanes, 1)
+	var jitter := w / 2.0 if lanes <= 1 else w / 4.0
+	var off := -Balance.SPAWN_SPREAD + w * (lane + 0.5) + randf_range(-jitter, jitter)
+	return Formation.spawn_center(half, side) + Formation.perp(side) * off
 
 
 func _add_mesh(m: Mesh, xf: Transform3D) -> MeshInstance3D:

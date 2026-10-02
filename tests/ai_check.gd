@@ -383,6 +383,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _soldier_cases()
 	await _fever_spawn()
 	await _hold_ground_case()
+	await _group_spawn()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -1184,7 +1185,7 @@ func _soldier_cases() -> void:
 	await _frames(1)
 
 
-## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 사이클) 마리를 내고, 스테이지 모드는 변화가 없다.
+## 개정 14 §3 FEVER 스폰: 방치 스포너는 FEVER 중 같은 시간에 3배(±1 무리) 마리를 내고, 스테이지 모드는 변화가 없다.
 func _fever_spawn() -> void:
 	var mode0: int = GameState.mode
 	var counts := {}
@@ -1206,7 +1207,9 @@ func _fever_spawn() -> void:
 	Fever.reset()
 	GameState.mode = mode0
 	_clear_monsters()
-	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= 4, "(fever) FEVER triples the idle spawn count over the same time (±1 cycle)", str(counts))
+	# 허용 오차: 방치 쪽 무리 하나(spawn_group마리)가 끝자락에 들고 안 들고의 3배
+	var tol := 3 * int(GameData.config_num("spawn_group"))
+	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= tol, "(fever) FEVER triples the idle spawn count over the same time (±1 group)", str(counts))
 	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))
 
 
@@ -1301,3 +1304,39 @@ func _return_time(u, home: Vector3, timeout: float) -> float:
 		if left == INF and Formation.flat_distance(u.global_position, home) < stand - 0.05:
 			left = t
 	return left
+
+
+## 무리 스폰(스포너): 방치 첫 무리는 idle_interval(8초)에, 스테이지 첫 무리는 곧바로 3마리가 한꺼번에 한 면에 나오고,
+##     옆으로 칸을 나눠 서로 2 m 넘게 떨어진다(겹쳐 나오지 않는다).
+func _group_spawn() -> void:
+	var mode0: int = GameState.mode
+	Fever.reset()
+	for k in ["idle", "stage"]:
+		_clear_monsters()
+		await _frames(1)
+		GameState.mode = GameState.Mode.IDLE if k == "idle" else GameState.Mode.STAGE
+		var holder := Node.new()
+		add_child(holder)
+		var sp = SpawnerScript.new()
+		sp.castle = _main.castle
+		holder.add_child(sp)
+		var clock := 0.0
+		while sp._live == 0 and clock < 20.0:
+			sp._process(0.05)
+			clock += 0.05
+		var ms: Array = holder.get_children().filter(func(c): return c != sp)
+		var side: int = ms[0].side if ms.size() > 0 else -1
+		var offs: Array = ms.map(func(m): return m.global_position.dot(Formation.perp(side)))
+		offs.sort()
+		var gap := INF
+		for i in range(1, offs.size()):
+			gap = minf(gap, offs[i] - offs[i - 1])
+		var near := ms.all(func(m): return m.side == side and Formation.flat_distance(m.global_position, Formation.spawn_center(_half, side)) <= Balance.SPAWN_SPREAD + 0.01)
+		var when_ok := clock >= 7.95 and clock <= 8.11 if k == "idle" else clock <= 0.06
+		_check(ms.size() == 3 and near and gap >= 1.99 and when_ok, "(group) %s: the first spawn is 3 monsters at once on one side, spread sideways >= 2 m apart" % k,
+			"n=%d at %.2f s side=%d near=%s offsets=%s" % [ms.size(), clock, side, near, offs])
+		holder.queue_free()
+		await _frames(1)
+	GameState.mode = mode0
+	_clear_monsters()
+	await _frames(1)
