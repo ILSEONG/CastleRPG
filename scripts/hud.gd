@@ -27,6 +27,10 @@ const Formation := preload("res://scripts/formation.gd")
 const CameraRig := preload("res://scripts/camera_rig.gd")
 const FeverButtonScript := preload("res://scripts/fever_button.gd")
 const TAB_BAR_H := 104  # 하단 탭 바 높이(tab_bar.gd, 개정 11 §2.3)
+const CHIP_SIDE := 12  # 상단 재화 칩 줄 좌우 여백(개정 23: 칩 5개가 720에 들어가게 16 → 12)
+const CHIP_GAP := 6
+const CHIP_ICON := 26
+const CHIP_FONT := 18  # "9,999,999"가 칩 하나에 잘리지 않는 크기(입력 체크가 잰다 — 20이면 99px > 칸 92px)
 const STAGE_BUTTON := Vector2(150, 64)  # 상단 스테이지 버튼(개정 12-2 §1)
 const BAND_BOTTOM := -(TAB_BAR_H + 12)  # 끊김 띠는 탭 바 위 12px에서 위로 자란다
 const BAR_H := 24
@@ -54,7 +58,7 @@ var _tip_n := -1
 var _button: Button
 var _auto: Button  # 연속 진행 체크박스(진행 버튼 오른쪽)
 var _fever: Button  # FEVER 버튼(fever_button.gd)
-var _chips := {}  # 아이콘 kind(gold·wood·stone·food) → 숫자 Label
+var _chips := {}  # 아이콘 kind(gold·wood·stone·food·diamond) → 숫자 Label
 var _chip_row: Control
 var _banner: Control  # 온라인 띠(아래 버튼 위): 끊김 "서버 연결 중…" + 웹 비영구 저장소 경고
 var _link_label: Label
@@ -364,30 +368,30 @@ func _on_auto_toggled(on: bool) -> void:
 	Fever.auto_next = on
 	Fever.save()  # save_path가 ""이면(테스트·auto-stage) 쓰지 않는다
 
-## 맨 위 둥근 칩 4개: 골드·목재·석재·식량(아이콘 + 쉼표 숫자). 입력은 통과시킨다.
+## 맨 위 둥근 칩 5개: 골드·목재·석재·식량·다이아(아이콘 + 쉼표 숫자, 개정 23). 같은 폭으로 720 안에. 입력은 통과시킨다.
 func _build_chips(root: Control) -> void:
 	var row := HBoxContainer.new()
 	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	row.offset_left = 16
-	row.offset_right = -16
+	row.offset_left = CHIP_SIDE
+	row.offset_right = -CHIP_SIDE
 	row.offset_top = 16
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", CHIP_GAP)
 	root.add_child(row)
 	_chip_row = row
 	for kind in IconsScript.KINDS:
 		var chip := PanelContainer.new()
 		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.add_theme_stylebox_override("panel", UiKit.panel(PANEL_BG, 10.0, 8))
+		chip.add_theme_stylebox_override("panel", UiKit.panel(PANEL_BG, 10.0, 6))
 		row.add_child(chip)
 		var inner := HBoxContainer.new()
 		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_theme_constant_override("separation", 6)
+		inner.add_theme_constant_override("separation", 4)
 		chip.add_child(inner)
 		var icon = IconsScript.new()
 		icon.kind = kind
-		icon.custom_minimum_size = Vector2(32, 32)
+		icon.custom_minimum_size = Vector2(CHIP_ICON, CHIP_ICON)
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		inner.add_child(icon)
@@ -395,7 +399,7 @@ func _build_chips(root: Control) -> void:
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		label.clip_text = true
-		label.add_theme_font_size_override("font_size", 24)
+		label.add_theme_font_size_override("font_size", CHIP_FONT)
 		label.add_theme_color_override("font_color", INK)
 		inner.add_child(label)
 		_chips[kind] = label
@@ -474,6 +478,7 @@ func _on_notice(text: String) -> void:
 
 func _refresh_chips() -> void:
 	_chips["gold"].text = commas(Economy.gold)
+	_chips["diamond"].text = commas(Economy.diamonds)
 	for id in Economy.res:
 		_chips[id].text = commas(Economy.res[id])
 

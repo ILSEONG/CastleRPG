@@ -17,11 +17,14 @@ extends Node
 ## dungeon_state·dungeon_reward·dungeon_enemies·dungeon_block·default_party·start_dungeon·finish_dungeon·debug_win·items·item·item_stats·item_owner·
 ## equip_block·equip·unequip·sell_block·sell_items·hero_equipment·equipment_bonus, 시그널 dungeons_changed·items_changed·dungeon_started·dungeon_finished.
 ## 장비 합계는 GameData.hero_stats가 더한다(오토로드면 _ready에서 GameData.equip_source = self).
+## 모집(개정 23): 골드 모집 레벨(gacha_gold_level·gacha_gold_pulls)·다이아(diamonds)·다이아 천장(gacha_dia_pity). 모집 창이 쓰는 API는
+## gacha_state·gacha_cost·gacha_rates·wallet·gacha(count, currency), 시그널 gacha_done·gacha_leveled(+ 알림 "골드 모집 Lv n! SSR x%").
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
+const Skills := preload("res://scripts/skills.gd")
 
-const SAVE_VERSION := 10  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 11  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 # 5: soldiers·soldier_deploy {"병종:티어": 수}(개정 13). 4 이하는 병사 없음
@@ -31,10 +34,13 @@ const SAVE_VERSION := 10  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 # 9: upgrades {성장 항목 id: 레벨}(개정 20). 8 이하는 성장 0(빈 사전)
 # 10: dungeons {종류: {best_level, keys, extra_today, last_reset}}, items [{id, slot, weapon_kind, grade, level}], equipment {영웅: {부위: 장비 id}},
 # next_item_id(개정 18). 9 이하는 그날 지급분 열쇠·빈 보관함
+# 11: diamonds, gacha {gold_level, gold_pulls, dia_pity}(개정 23). 10 이하는 다이아 0·골드 모집 Lv 1·누적 0·천장 0
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
+const NO_DIA_TEXT := "다이아가 부족합니다"
+const GACHA_LEVEL_TEXT := "골드 모집 Lv %d! SSR %s%%"  # 레벨업 알림(개정 23)
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
 const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
@@ -85,6 +91,7 @@ signal collected(building_id: String, res_id: String, amount: int)  # 수집 성
 signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 signal roster_changed  # 보유 영웅(copies)이나 배치가 바뀌었다
 signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies, shards}]. 실패(온라인)면 빈 배열
+signal gacha_leveled(level: int)  # 골드 모집 레벨이 올랐다(개정 23, 온라인은 서버 응답에서 본 때)
 signal promoted(hero_id: String, promotion: int)  # 승급 성공(온라인은 응답이 왔을 때, 개정 15)
 signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
 signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
@@ -120,6 +127,10 @@ var dungeons := {}  # 개정 18: 종류 → {best_level, keys, extra_today, last
 var bag: Array = []  # 보관함 [{id(int), slot, weapon_kind(무기만, 아니면 null), grade, level(int)}](id 순)
 var equipment := {}  # 영웅 id → {부위: 장비 id}
 var next_item_id := 1  # 오프라인 장비 id
+var diamonds := 0  # 개정 23: 다이아(현금 재화, 온라인은 서버 값)
+var gacha_gold_level := 1  # 골드 모집 레벨(1..gacha_gold_level_max)
+var gacha_gold_pulls := 0  # 그 레벨 안 누적 모집 수
+var gacha_dia_pity := 0  # 다이아 천장: SSR 없이 뽑은 다이아 모집 수
 var current_run := {}  # 진행 중 도전(dungeon_started의 값). 결과가 오면 비운다
 var debug_win_on := false  # 개발 플래그(main의 -- --debug-win): 던전 장면은 시작하자마자 debug_win()을 부른다
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
@@ -204,26 +215,35 @@ static func res_of(building_id: String) -> String:
 	return GameData.resource_of_building(building_id)
 
 
-## 모집 비용(정수 골드). 가능 조건은 gold(= floor(tenths / 10)) ≥ 비용, 차감은 비용 × 10.
-static func gacha_cost(count: int) -> int:
-	return int(GameData.config_num("gacha_cost_10" if count == 10 else "gacha_cost_1"))
+## 모집 비용(골드는 정수 골드 — 가능 조건 gold(= floor(tenths / 10)) ≥ 비용, 차감은 비용 × 10. 다이아는 다이아). 골드는 지금 모집 레벨 값.
+func gacha_cost(currency: String, count: int) -> int:
+	return GameData.gacha_cost(currency, count, gacha_gold_level)
 
 
-## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(SSR rate_ssr, SR rate_sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
+## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
 ## 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand = [0, 1) 난수 Callable(테스트는 주입).
-## 확률은 주점 레벨로 오른다(개정 12, GameData.gacha_rates). 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
-static func roll_gacha(count: int, rand: Callable, tavern_level := 1) -> Array:
+## rates = GameData.gacha_rates(비면 골드 Lv 1·주점 1). pity(다이아, 개정 23) {n, max}가 있으면 장마다 n += 1, n ≥ max면 SSR 확정,
+## SSR이면 n = 0 — pity를 바꿔 둔다. 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
+static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> Array:
 	var pools := {"SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
 		if pools.has(h.grade):
 			pools[h.grade].append(h.id)
-	var rates := GameData.gacha_rates(tavern_level)
+	if rates.is_empty():
+		rates = GameData.gacha_rates(GameData.GACHA_GOLD, 1, 1)
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
 	var out := []
 	for i in count:
 		var r: float = rand.call()
-		out.append(_pick(pools, "SSR" if r < ssr else ("SR" if r < ssr + sr else "R"), rand))
+		var grade := "SSR" if r < ssr else ("SR" if r < ssr + sr else "R")
+		if not pity.is_empty():
+			pity.n += 1
+			if pity.n >= pity.max:
+				grade = "SSR"
+			if grade == "SSR":
+				pity.n = 0
+		out.append(_pick(pools, grade, rand))
 	if count == 10:
 		var need := int(GameData.config_num("gacha_10_min_sr")) - out.filter(func(x): return x.grade != "R").size()
 		for i in range(out.size() - 1, -1, -1):
@@ -281,6 +301,10 @@ func reset(now: float) -> void:
 	soldier_deployed = {}
 	train_queues = {}
 	upgrades = {}
+	diamonds = 0
+	gacha_gold_level = 1
+	gacha_gold_pulls = 0
+	gacha_dia_pity = 0
 	_pending_soldier_deploy = null
 	_soldier_deploys_out = 0
 	heroes = {}
@@ -430,19 +454,31 @@ func deploy_slots(slots: int) -> Array:
 	return out
 
 
-## 모집 count장(1 또는 10). 골드가 모자라면 알림만. 오프라인은 바로 뽑아 저장하고 gacha_done, 온라인은 요청(응답에 gacha_done).
+## 모집 count장(1 또는 10), currency = 골드 | 다이아(개정 23). 재화가 모자라면 알림만. 오프라인은 바로 뽑아 저장하고 gacha_done,
+## 온라인은 요청(응답에 gacha_done). 골드는 모집 레벨 비용·확률로 뽑고 장수만큼 누적해 레벨업, 다이아는 천장을 센다.
 ## 뽑았거나 요청을 보냈으면 true.
-func gacha(count: int) -> bool:
-	if not count in [1, 10]:
+func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
+	if not count in [1, 10] or not currency in [GameData.GACHA_GOLD, GameData.GACHA_DIA]:
 		return false
-	if gold < gacha_cost(count):
-		notice.emit(NO_GOLD_TEXT)
+	var dia := currency == GameData.GACHA_DIA
+	var cost := gacha_cost(currency, count)
+	if wallet(currency) < cost:
+		notice.emit(NO_DIA_TEXT if dia else NO_GOLD_TEXT)
 		return false
 	if net != null:
-		return _gacha_online(count)
-	gold_tenths -= gacha_cost(count) * 10
+		return _gacha_online(count, currency)
+	var rates := gacha_rates(currency)
+	var pity := {"n": gacha_dia_pity, "max": int(GameData.config_num("gacha_dia_pity"))} if dia else {}
+	var cards := roll_gacha(count, rng.randf, rates, pity)
+	if dia:
+		diamonds -= cost
+		gacha_dia_pity = pity.n
+	else:
+		gold_tenths -= cost * 10
+		var up := GameData.gacha_level_up(gacha_gold_level, gacha_gold_pulls, count)
+		_set_gold_level(up.level, up.pulls)
 	var results := []
-	for r in roll_gacha(count, rng.randf, building_level(GameData.TAVERN)):
+	for r in cards:
 		var c := int(heroes.get(r.id, 0)) + 1
 		if c > 1:  # 개정 15: 중복은 조각 +1
 			hero_shards[r.id] = shards_of(r.id) + 1
@@ -706,9 +742,30 @@ func population() -> int:
 	return GameData.population(building_level(GameData.HOUSES))
 
 
-## 지금 모집 확률 {ssr, sr}(주점 레벨). 모집 창 확률 줄.
-func gacha_rates() -> Dictionary:
-	return GameData.gacha_rates(building_level(GameData.TAVERN))
+## 지금 모집 확률 {ssr, sr}(골드 모집 레벨·주점 레벨). 모집 창 확률 줄.
+func gacha_rates(currency := GameData.GACHA_GOLD) -> Dictionary:
+	return GameData.gacha_rates(currency, gacha_gold_level, building_level(GameData.TAVERN))
+
+
+## 모집 상태(개정 23): {gold_level, gold_pulls, gold_next(다음 레벨까지 필요한 누적, 최대면 0), dia_pity, pity_left(SSR 확정까지 남은 수)}.
+func gacha_state() -> Dictionary:
+	return {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "gold_next": GameData.gacha_gold_next(gacha_gold_level),
+		"dia_pity": gacha_dia_pity, "pity_left": maxi(1, int(GameData.config_num("gacha_dia_pity")) - gacha_dia_pity)}
+
+
+## 모집 재화 보유(골드는 정수 골드).
+func wallet(currency: String) -> int:
+	return diamonds if currency == GameData.GACHA_DIA else gold
+
+
+## 골드 모집 레벨·누적을 바꾼다. 레벨이 오르면 gacha_leveled + 알림 "골드 모집 Lv n! SSR x%".
+func _set_gold_level(level: int, pulls: int) -> void:
+	var before := gacha_gold_level
+	gacha_gold_level = maxi(1, level)
+	gacha_gold_pulls = maxi(0, pulls)
+	if gacha_gold_level > before:
+		gacha_leveled.emit(gacha_gold_level)
+		notice.emit(GACHA_LEVEL_TEXT % [gacha_gold_level, Skills.num_text(gacha_rates().ssr * 100.0)])
 
 
 ## 지금 업그레이드 못 하는 이유 코드(upgrade_block_for + "waiting": 온라인 응답 대기). 되면 "". now = 보정 시각(time_now) —
@@ -1482,6 +1539,9 @@ func apply_server(data: Dictionary) -> bool:
 	if not _shape18_ok(p):  # 개정 18: dungeons·items·equipment
 		push_error("bad player response: %s" % str(data))
 		return false
+	if not ((p.get("diamonds") == null or _num(p.diamonds)) and (p.get("gacha") == null or p.gacha is Dictionary)):  # 개정 23
+		push_error("bad player response: %s" % str(data))
+		return false
 	var roster_before :=[heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
 	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate()]
 	var queues_before := train_queues.duplicate(true)
@@ -1548,6 +1608,7 @@ func apply_server(data: Dictionary) -> bool:
 	for k in m.rates:
 		rates[str(k)] = float(m.rates[k])
 	merchant = {"rates": rates, "next_change": float(m.next_change)}
+	_apply_gacha(p)  # 개정 23: 다이아·모집 상태(changed 전에)
 	_recalc_gold()
 	changed.emit()
 	if [heroes, deploy, hero_levels, hero_shards, hero_promotions] != roster_before:
@@ -1565,6 +1626,23 @@ func apply_server(data: Dictionary) -> bool:
 	_synced = true
 	_apply_server18(p)
 	return true
+
+
+## 서버 다이아·모집 상태(개정 23). 첫 반영의 레벨 차이는 레벨업이 아니라 접속이다(알림 없음).
+func _apply_gacha(p: Dictionary) -> void:
+	if _num(p.get("diamonds")):
+		diamonds = maxi(0, int(p.diamonds))
+	var g = p.get("gacha")
+	if not g is Dictionary:
+		return
+	if _num(g.get("dia_pity")):
+		gacha_dia_pity = maxi(0, int(g.dia_pity))
+	if _num(g.get("gold_level")) and _num(g.get("gold_pulls")):
+		if _synced:
+			_set_gold_level(int(g.gold_level), int(g.gold_pulls))
+		else:
+			gacha_gold_level = maxi(1, int(g.gold_level))
+			gacha_gold_pulls = maxi(0, int(g.gold_pulls))
 
 
 ## 서버 {"병종:티어": 수} → 표에 있는 키의 양의 정수만.
@@ -1699,7 +1777,7 @@ func _unwait(key: String) -> void:
 
 ## 온라인 모집: 쌓인 처치를 먼저 보내(서버 골드를 표시 골드에 맞춤) 뒤 /v1/gacha. once — 실패해도 다시 보내지 않는다
 ## (서버가 반영했는데 답만 잃었으면 두 번 뽑힌다). 실패하면 알림, Net이 /v1/player로 상태를 새로 받는다(뽑힌 영웅은 거기 보인다).
-func _gacha_online(count: int) -> bool:
+func _gacha_online(count: int, currency: String) -> bool:
 	if _waiting.has("gacha"):
 		return false
 	if not net.up:
@@ -1707,7 +1785,7 @@ func _gacha_online(count: int) -> bool:
 		return false
 	_waiting["gacha"] = true
 	net.flush_kills()
-	net.send("POST", "/v1/gacha", {"count": count}, _on_gacha, _on_gacha_failed, true, true)
+	net.send("POST", "/v1/gacha", {"count": count, "currency": currency}, _on_gacha, _on_gacha_failed, true, true)
 	return true
 
 
@@ -1725,7 +1803,7 @@ func _on_gacha(data: Dictionary) -> void:
 
 func _on_gacha_failed() -> void:
 	_waiting.erase("gacha")
-	notice.emit(NO_GOLD_TEXT if net.last_error == "not_enough_gold" else GACHA_FAIL_TEXT)
+	notice.emit({"not_enough_gold": NO_GOLD_TEXT, "not_enough_diamonds": NO_DIA_TEXT}.get(net.last_error, GACHA_FAIL_TEXT))
 	gacha_done.emit([])
 
 
@@ -2113,7 +2191,8 @@ func save() -> void:
 		hs[id] = {"copies": heroes[id], "level": level_of(id), "shards": shards_of(id), "promotion": promotion_of(id)}
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
-		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id}))
+		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
+		"diamonds": diamonds, "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity}}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -2141,10 +2220,13 @@ func load_save(now: float) -> void:
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, 9, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, SAVE_VERSION]:
 		return false
 	var v10 = _load_v10(data)  # 개정 18(저장 v10): 던전·보관함·장착(형이 틀리면 깨진 저장)
 	if v10 == null:
+		return false
+	var v11 = _load_v11(data)  # 개정 23(저장 v11): 다이아·모집 상태
+	if v11 == null:
 		return false
 	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v6: bool = int(data.version) >= 6  # v6: + shards, promotion. 그 전은 옛 별(중복)을 조각으로(copies − 1), 승급 0
@@ -2259,7 +2341,21 @@ func _apply(data) -> bool:
 	bag = v10.items
 	equipment = v10.equipment
 	next_item_id = v10.next_item_id
+	diamonds = v11.diamonds
+	gacha_gold_level = v11.gold_level
+	gacha_gold_pulls = v11.gold_pulls
+	gacha_dia_pity = v11.dia_pity
 	return true
+
+
+## 저장 v11(개정 23): diamonds, gacha {gold_level, gold_pulls, dia_pity}. v10 이하는 다이아 0·Lv 1·누적 0·천장 0. 형이 틀리면 null = 깨진 저장.
+func _load_v11(data: Dictionary):
+	if int(data.version) < 11:
+		return {"diamonds": 0, "gold_level": 1, "gold_pulls": 0, "dia_pity": 0}
+	var g = data.get("gacha")
+	if not (_num(data.get("diamonds")) and g is Dictionary and _num(g.get("gold_level")) and _num(g.get("gold_pulls")) and _num(g.get("dia_pity"))):
+		return null
+	return {"diamonds": maxi(0, int(data.diamonds)), "gold_level": maxi(1, int(g.gold_level)), "gold_pulls": maxi(0, int(g.gold_pulls)), "dia_pity": maxi(0, int(g.dia_pity))}
 
 
 ## 저장 v10(개정 18): dungeons {종류: {best_level, keys, extra_today, last_reset}}, items, equipment {영웅: {부위: id}}, next_item_id.

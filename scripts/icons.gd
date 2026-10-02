@@ -1,10 +1,10 @@
 extends Control
-## 자원 아이콘(골드·목재·석재·식량)과 장비 아이콘(개정 18: 방어구 6·무기 5), 성장 줄 아이콘(개정 20: 하트·시계·과녁·폭발 별): 평면 로우폴리 — 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽.
+## 자원 아이콘(골드·목재·석재·식량, 개정 23 다이아)과 장비 아이콘(개정 18: 방어구 6·무기 5), 성장 줄 아이콘(개정 20: 하트·시계·과녁·폭발 별): 평면 로우폴리 — 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽.
 ## 도형은 단위 좌표(-0.5..0.5)로 정의하고 draw_icon이 크기를 곱한다 → 어느 크기에서도 같은 모양. 장비 칸은 draw_item(등급 배경·테두리). 오토로드 참조 없음.
 
 const Art := preload("res://scripts/art.gd")
 
-const KINDS := ["gold", "wood", "stone", "food"]  # 자원(HUD 칩이 이 순서로 쓴다)
+const KINDS := ["gold", "wood", "stone", "food", "diamond"]  # 재화(HUD 칩이 이 순서로 쓴다, 개정 23: 다이아 칩)
 const ITEM_KINDS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves", "sword", "axe", "staff", "crossbow", "dagger"]
 const OUTLINE := Color(0.16, 0.11, 0.07)
 const ITEM_ICON_FRAC := 0.74  # 장비 칸 한 변 중 아이콘 크기
@@ -97,6 +97,26 @@ static func shapes(kind_name: String) -> Array:
 				[[Vector2(-0.46, 0.0), Vector2(0.46, 0.0), Vector2(0.44, 0.06), Vector2(-0.44, 0.06)], Color(0.22, 0.40, 0.48), false],
 				# 받침
 				[[Vector2(-0.18, 0.34), Vector2(0.18, 0.34), Vector2(0.22, 0.46), Vector2(-0.22, 0.46)], Color(0.24, 0.42, 0.50), true],
+			]
+		"diamond":  # 개정 23 다이아: 각진 하늘색 보석(브릴리언트 컷 — 위 테이블·크라운 3면, 아래 파빌리온 3면, 흰 반짝임)
+			var tl := Vector2(-0.30, -0.30)
+			var tr := Vector2(0.30, -0.30)
+			var l := Vector2(-0.46, -0.08)
+			var r := Vector2(0.46, -0.08)
+			var b := Vector2(0.0, 0.44)
+			var t1 := Vector2(-0.12, -0.30)
+			var t2 := Vector2(0.12, -0.30)
+			var g1 := Vector2(-0.20, -0.08)
+			var g2 := Vector2(0.20, -0.08)
+			return [
+				[[tl, t1, g1, l], Color(0.62, 0.90, 1.0), false],
+				[[t1, t2, g2, g1], Color(0.84, 0.97, 1.0), false],
+				[[t2, tr, r, g2], Color(0.45, 0.80, 0.97), false],
+				[[l, g1, b], Color(0.40, 0.76, 0.96), false],
+				[[g1, g2, b], Color(0.28, 0.64, 0.90), false],
+				[[g2, r, b], Color(0.18, 0.48, 0.78), false],
+				[[Vector2(-0.24, -0.25), Vector2(-0.19, -0.29), Vector2(-0.14, -0.25), Vector2(-0.19, -0.21)], Color(1, 1, 1, 0.95), false],
+				[[tl, tr, r, b, l], Color(0, 0, 0, 0), true],
 			]
 	var growth := _growth_shapes(kind_name)
 	return growth if not growth.is_empty() else _item_shapes(kind_name)

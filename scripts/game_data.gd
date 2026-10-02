@@ -27,16 +27,23 @@ const UNLOCK_KEYS := ["skill2_unlock_star", "skill3_unlock_star"]  # 스킬 2·3
 const ROLES := ["melee", "ranged"]
 const HERO_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 커야 한다(간격 0이면 매 프레임 공격)
 const HERO_NONNEG_COLS := ["atk", "aggro"]
-const GACHA_INT_KEYS := ["gacha_cost_1", "gacha_cost_10", "gacha_10_min_sr"]  # 0 이상 정수
-const GACHA_RATE_KEYS := ["gacha_rate_ssr", "gacha_rate_sr"]  # 0..1, 합 ≤ 1
+const GACHA_INT_KEYS := ["gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_10_min_sr"]  # 0 이상 정수
+# 개정 23 모집(서버 seed.GACHA_KEYS): 골드 레벨 비용·확률, 다이아 비용·확률·천장
+const GACHA_KEYS := ["gacha_gold_cost_base", "gacha_gold_cost_growth", "gacha_gold_level_max", "gacha_gold_level_pulls",
+	"gacha_gold_ssr_base", "gacha_gold_ssr_step", "gacha_gold_sr_base", "gacha_gold_sr_step",
+	"gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_dia_ssr", "gacha_dia_sr", "gacha_dia_pity"]
+const GACHA_GOLD := "gold"
+const GACHA_DIA := "diamond"
+const GOLD_COST_STEP := 50  # 골드 1회 비용 반올림 단위(서버 rules.GOLD_COST_STEP)
+const GOLD_TEN_MULT := 9  # 10회 = 1회 × 10 × 0.9
 const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "promote_mult",
-	"gacha_cost_1", "gacha_cost_10", "gacha_rate_ssr", "gacha_rate_sr", "gacha_10_min_sr",
+	"gacha_10_min_sr",
 	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
 	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group",
-	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult"]
+	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult"] + GACHA_KEYS
 const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
 const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항목 수 = 이 값. 서버 rules.MAX_PROMOTION
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
@@ -414,11 +421,43 @@ static func lab_atk_bonus(level: int) -> float:
 	return config_num("lab_atk_per_level") * (maxi(level, 1) - 1)
 
 
-## 모집 확률(주점) {ssr, sr}: SSR + tavern_ssr_per_level × (L − 1), SR + tavern_sr_per_level × (L − 1). R은 나머지.
-static func gacha_rates(tavern_level: int) -> Dictionary:
-	var k := maxi(tavern_level, 1) - 1
-	return {"ssr": config_num("gacha_rate_ssr") + config_num("tavern_ssr_per_level") * k,
-		"sr": config_num("gacha_rate_sr") + config_num("tavern_sr_per_level") * k}
+## 모집 확률 {ssr, sr}(R은 나머지, 서버 rules.gachaRates와 같은 식). 골드 = base + step × (모집 레벨 − 1), 다이아 = 고정(개정 23).
+## 둘 다 주점 보너스 tavern_*_per_level × (주점 − 1)을 더한다.
+static func gacha_rates(currency: String, gold_level: int, tavern_level: int) -> Dictionary:
+	var t := maxi(tavern_level, 1) - 1
+	var k := _gold_level(gold_level) - 1
+	var dia := currency == GACHA_DIA
+	var ssr := config_num("gacha_dia_ssr") if dia else config_num("gacha_gold_ssr_base") + config_num("gacha_gold_ssr_step") * k
+	var sr := config_num("gacha_dia_sr") if dia else config_num("gacha_gold_sr_base") + config_num("gacha_gold_sr_step") * k
+	return {"ssr": ssr + config_num("tavern_ssr_per_level") * t, "sr": sr + config_num("tavern_sr_per_level") * t}
+
+
+## 모집 비용(정수 골드 또는 다이아). 골드 1회 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림, 10회 = × 9.
+static func gacha_cost(currency: String, count: int, gold_level: int) -> int:
+	if currency == GACHA_DIA:
+		return int(config_num("gacha_dia_cost_10" if count == 10 else "gacha_dia_cost_1"))
+	var one := roundi(_grown(config_num("gacha_gold_cost_base"), config_num("gacha_gold_cost_growth"), _gold_level(gold_level) - 1) / GOLD_COST_STEP) * GOLD_COST_STEP
+	return one * (GOLD_TEN_MULT if count == 10 else 1)
+
+
+## 골드 모집 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L. 최대 레벨이면 0.
+static func gacha_gold_next(level: int) -> int:
+	return 0 if level >= int(config_num("gacha_gold_level_max")) else int(config_num("gacha_gold_level_pulls")) * level
+
+
+## 골드 모집 add회 누적 → {level, pulls}. 한 번에 여러 레벨, 남은 횟수는 넘긴다. 최대 레벨이면 누적 0(서버 rules.goldLevelUp).
+static func gacha_level_up(level: int, pulls: int, add: int) -> Dictionary:
+	var next := gacha_gold_next(level)
+	pulls += add
+	while next > 0 and pulls >= next:
+		pulls -= next
+		level += 1
+		next = gacha_gold_next(level)
+	return {"level": level, "pulls": pulls if next > 0 else 0}
+
+
+static func _gold_level(level: int) -> int:
+	return clampi(level, 1, int(config_num("gacha_gold_level_max")))
 
 
 ## 오프라인 기본 배치: starter_heroes를 슬롯 수만큼(넘치면 자르고, 모자라면 null).
@@ -1180,24 +1219,14 @@ static func _check_dungeons(t: Dictionary) -> void:
 			_err("heroes", h._line, "model", "model '%s' has no weapon kind" % h.model)
 
 
-## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 비용·10연차 보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1.
+## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 다이아 비용·10연차 보장 수는 0 이상 정수, 확률·레벨은 _check_gacha_rates(개정 23).
 ## 숫자가 아닌 값은 CONFIG_NUM_KEYS 검사가 이미 알렸다.
 static func _check_gacha(cfg: Dictionary) -> void:
 	for k in GACHA_INT_KEYS:
 		var s := String(cfg.get(k, ""))
 		if s.is_valid_float() and not (s.to_float() >= 0.0 and s.to_float() == floorf(s.to_float())):
 			_err("config", 0, k, "must be a non-negative integer: '%s'" % s)
-	var rates := []
-	for k in GACHA_RATE_KEYS:
-		var s := String(cfg.get(k, ""))
-		if not s.is_valid_float():
-			continue
-		if s.to_float() >= 0.0 and s.to_float() <= 1.0:
-			rates.append(s.to_float())
-		else:
-			_err("config", 0, k, "must be in 0..1: '%s'" % s)
-	if rates.size() == 2 and rates[0] + rates[1] > 1.0 + 1e-9:
-		_err("config", 0, "gacha_rate_sr", "gacha_rate_ssr + gacha_rate_sr must be at most 1: %s + %s" % [cfg.gacha_rate_ssr, cfg.gacha_rate_sr])
+	_check_gacha_rates(cfg)
 	# 레벨업(개정 11, 서버 seed와 같은 규칙): 비용·승급당 상한은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상
 	for k in LEVELUP_INT_KEYS + ["hero_max_level_base"]:
 		var s := String(cfg.get(k, ""))
@@ -1225,6 +1254,41 @@ static func _check_gacha(cfg: Dictionary) -> void:
 			_err("config", 0, k, "must be an integer in 0..%d: '%s'" % [MAX_PROMOTION, s])
 	if stars.size() == 2 and stars[0] > stars[1]:
 		_err("config", 0, "skill3_unlock_star", "must be at least skill2_unlock_star: %d < %d" % [stars[1], stars[0]])
+
+
+## 개정 23 모집 확률·레벨(서버 seed.checkGachaRates와 같은 규칙): 골드 최대 레벨·레벨당 횟수·천장은 1 이상 정수, 기본 비용·확률 base·step은 0 이상,
+## 비용 성장은 1 이상, 다이아 확률은 0..1이고 합 ≤ 1, 골드 최대 레벨 확률 합 ≤ 1, 다이아는 골드 최대 레벨보다 SSR·SR 모두 높다.
+static func _check_gacha_rates(cfg: Dictionary) -> void:
+	var v := {}  # 검사를 지난 값만
+	var rules := [
+		["gacha_gold_level_max", "int1"], ["gacha_gold_level_pulls", "int1"], ["gacha_dia_pity", "int1"], ["gacha_gold_cost_base", "nonneg"],
+		["gacha_gold_cost_growth", "ge1"], ["gacha_gold_ssr_base", "nonneg"], ["gacha_gold_ssr_step", "nonneg"], ["gacha_gold_sr_base", "nonneg"],
+		["gacha_gold_sr_step", "nonneg"], ["gacha_dia_ssr", "unit"], ["gacha_dia_sr", "unit"],
+	]
+	var why := {"int1": "an integer of at least 1", "nonneg": "0 or more", "ge1": "1 or more", "unit": "in 0..1"}
+	for r in rules:
+		var s := String(cfg.get(r[0], ""))
+		if not s.is_valid_float():
+			continue
+		var x := s.to_float()
+		var ok: bool = {"int1": x >= 1.0 and x == floorf(x), "nonneg": x >= 0.0, "ge1": x >= 1.0, "unit": x >= 0.0 and x <= 1.0}[r[1]]
+		if ok:
+			v[r[0]] = x
+		else:
+			_err("config", 0, r[0], "must be %s: '%s'" % [why[r[1]], s])
+	if v.has("gacha_dia_ssr") and v.has("gacha_dia_sr") and v.gacha_dia_ssr + v.gacha_dia_sr > 1.0 + 1e-9:
+		_err("config", 0, "gacha_dia_sr", "gacha_dia_ssr + gacha_dia_sr must be at most 1: %s + %s" % [cfg.gacha_dia_ssr, cfg.gacha_dia_sr])
+	if not ["gacha_gold_level_max", "gacha_gold_ssr_base", "gacha_gold_ssr_step", "gacha_gold_sr_base", "gacha_gold_sr_step"].all(func(k): return v.has(k)):
+		return
+	var ssr_max: float = v.gacha_gold_ssr_base + v.gacha_gold_ssr_step * (v.gacha_gold_level_max - 1.0)
+	var sr_max: float = v.gacha_gold_sr_base + v.gacha_gold_sr_step * (v.gacha_gold_level_max - 1.0)
+	if ssr_max + sr_max > 1.0 + 1e-9:
+		_err("config", 0, "gacha_gold_sr_step", "makes the max-level gold rates above 1: SSR %s + SR %s" % [ssr_max, sr_max])
+		return
+	if v.has("gacha_dia_ssr") and not v.gacha_dia_ssr > ssr_max + 1e-9:
+		_err("config", 0, "gacha_dia_ssr", "must be above the max-level gold SSR rate %s: '%s'" % [ssr_max, cfg.gacha_dia_ssr])
+	if v.has("gacha_dia_sr") and not v.gacha_dia_sr > sr_max + 1e-9:
+		_err("config", 0, "gacha_dia_sr", "must be above the max-level gold SR rate %s: '%s'" % [sr_max, cfg.gacha_dia_sr])
 
 
 ## 라운드 설정(개정 22, 서버 seed와 같은 규칙): 스테이지당 라운드는 1 이상 정수, 속도 증가분 0 이상, 상한 1 이상, 보스 배율은 0보다 크다.

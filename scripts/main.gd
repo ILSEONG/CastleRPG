@@ -509,7 +509,7 @@ func _flag_requested(flag: String) -> bool:
 	return false
 
 
-## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 9999(10연차 확인용). 영웅을 만들기 전(_build_world 앞부분)에
+## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 30,000(10연차 확인용), 다이아 3,000(개정 23). 영웅을 만들기 전(_build_world 앞부분)에
 ## 불러 --heroes(_apply_dev_heroes)가 그 뒤에 보유·배치를 덮게 한다.
 func _econ_demo() -> void:
 	var now := Time.get_unix_time_from_system()
@@ -519,11 +519,12 @@ func _econ_demo() -> void:
 		Economy.last_collect[b] = now - 1800.0
 	for id in Economy.res:
 		Economy.res[id] = 500
-	Economy.gold = 9999
+	Economy.gold = 30000  # 10연차(골드 Lv 1 27,000) 한 번
+	Economy.diamonds = 3000  # 개정 23: 다이아 모집·상점 캡처용(실결제 전)
 	Economy.soldiers = {"infantry:1": 7, "infantry:2": 2, "archer:1": 5, "cavalry:1": 3}  # 병사 탭·[합성] 캡처용(훈련은 1마리 3시간)
 	Economy.hero_shards = {"hans": 7, "ella": 3}  # 승급 캡처용(개정 15): 한스는 승급 가능(7 / 5), 엘라는 3 / 5
 	Economy.hero_promotions = {"nina": 2}  # 금색 별 2개
 	Economy.changed.emit()
 	Economy.soldiers_changed.emit()
 	Economy.roster_changed.emit()
-	print("[econ-demo] gold 9999, resources 500, soldiers 17, shards hans 7 / ella 3, nina promotion 2")
+	print("[econ-demo] gold 30000, diamonds 3000, resources 500, soldiers 17, shards hans 7 / ella 3, nina promotion 2")

@@ -365,8 +365,8 @@ static func effect_lines(id: String, lv: int) -> Array:
 		"houses":
 			return [["인구", str(GameData.population(lv)), str(GameData.population(n))]]
 		"tavern":
-			var a := GameData.gacha_rates(lv)
-			var b := GameData.gacha_rates(n)
+			var a := GameData.gacha_rates(GameData.GACHA_GOLD, 1, lv)  # 골드 Lv 1 기준(주점 보너스만 보인다)
+			var b := GameData.gacha_rates(GameData.GACHA_GOLD, 1, n)
 			return [["SSR 확률", _pct(a.ssr), _pct(b.ssr)], ["SR 확률", _pct(a.sr), _pct(b.sr)]]
 	return []
 

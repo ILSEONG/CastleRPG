@@ -114,6 +114,7 @@ func _init() -> void:
 	test_equipment_offline()
 	test_dungeon_save_and_server()
 	test_seasons()
+	test_recruit_r23()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -222,7 +223,7 @@ func test_game_tables() -> void:
 	check(GameData.config_list("merchant_rate_step") == [0.1], "config_list parses numbers")
 	check(GameData.config_list("starter_heroes") == ["hans", "ella", "dorik", "nina"], "config_list keeps strings")
 	check(GameData.config_list("nope").is_empty() and GameData.config_num("nope") == 0.0, "unknown config key is empty / 0")
-	check(GameData.config_num("promote_mult") == 1.5 and GameData.config_list("promote_shards") == [5.0, 25.0, 50.0, 100.0, 200.0] and GameData.config_num("gacha_cost_10") == 2700.0, "hero/gacha/promotion config")
+	check(GameData.config_num("promote_mult") == 1.5 and GameData.config_list("promote_shards") == [5.0, 25.0, 50.0, 100.0, 200.0] and GameData.config_num("gacha_dia_cost_10") == 2700.0, "hero/gacha/promotion config")
 	# 깨진 config 파일: 필수 키 빠짐
 	var logged := _errors.count
 	var cp := "user://t_config.csv"
@@ -346,11 +347,11 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"grade unknown": q.heroes[0].grade = "UR"
 		"role unknown": q.heroes[0].role = "flying"
 		"color not #RRGGBB": q.heroes[0].color = "gold"
-		"gacha cost not an integer": q.config.gacha_cost_1 = "300.5"  # 서버 BigInt(-cost × 10)가 throw
-		"gacha cost negative": q.config.gacha_cost_10 = "-1"
+		"gacha cost not an integer": q.config.gacha_dia_cost_1 = "300.5"  # 서버 BigInt(-cost)가 throw
+		"gacha cost negative": q.config.gacha_dia_cost_10 = "-1"
 		"gacha guarantee not an integer": q.config.gacha_10_min_sr = "1.5"
-		"gacha rate above 1": q.config.gacha_rate_ssr = "1.5"
-		"gacha rates sum above 1": q.config.gacha_rate_sr = "0.98"
+		"gacha rate above 1": q.config.gacha_dia_ssr = "1.5"
+		"gacha rates sum above 1": q.config.gacha_dia_sr = "0.98"
 		"a grade with no heroes": q.heroes = q.heroes.filter(func(h): return h.grade != "SR")  # roll_gacha가 빈 풀에서 깨진다
 		"multishot 0": q.heroes[2].s1a = 0  # 실바나: slice(0, -1)
 		"skill cooldown 0": q.heroes[1].s1a = 0  # 이그니스 aoe_blast: 매 프레임 폭발
@@ -1509,15 +1510,15 @@ func test_gacha_offline() -> void:
 	var rigged: Array = EconomyScript.roll_gacha(10, all_r)
 	check(rigged.slice(0, 9).all(func(x): return x.id == "jack") and rigged[9] == {"id": "felix", "grade": "SR"}, "a 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
 	check(EconomyScript.roll_gacha(1, all_r) == [{"id": "jack", "grade": "R"}], "a single pull has no guarantee")
-	check(EconomyScript.gacha_cost(1) == 300 and EconomyScript.gacha_cost(10) == 2700, "costs 300 / 2700")
+	check(GameData.gacha_cost("gold", 1, 1) == 3000 and GameData.gacha_cost("gold", 10, 1) == 27000, "gold Lv 1 costs 3000 / 27000 (rev 23)")
 	var e = _econ(1000.0)
 	e.rng.seed = 7
 	var got := []
 	var notices := []
 	e.gacha_done.connect(func(r): got.append(r))
 	e.notice.connect(func(t): notices.append(t))
-	e.gold_tenths = 30005
-	check(e.gacha(10) and e.gold_tenths == 3005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 2700 gold (27000 tenths) and returns 10 cards")
+	e.gold_tenths = 300005
+	check(e.gacha(10) and e.gold_tenths == 30005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 27000 gold (270000 tenths) and returns 10 cards")
 	var seen := _econ_starters()
 	var consistent := true
 	for r in got[0]:
@@ -1527,7 +1528,7 @@ func test_gacha_offline() -> void:
 	check(consistent and seen == e.heroes, "results: new only on the first copy, copies count up per card, heroes updated: %s" % [got[0]])
 	check(e.heroes.keys().all(func(id): return e.shards_of(id) == int(e.heroes[id]) - 1) and e.hero_promotions.is_empty(),
 		"rev 15: a repeat pull adds a shard (new heroes start at 0); recruiting never promotes: %s" % [e.hero_shards])
-	check(e.gacha(1) and e.gold_tenths == 5 and got.size() == 2, "1 pull costs 300 (3000 tenths), the 0.5 fraction stays")
+	check(e.gacha(1) and e.gold_tenths == 5 and got.size() == 2, "1 pull costs 3000 (30000 tenths), the 0.5 fraction stays")
 	check(not e.gacha(1) and e.gold_tenths == 5 and got.size() == 2 and notices == [EconomyScript.NO_GOLD_TEXT], "not enough gold: nothing happens, one notice")
 	e.gold = 99999
 	check(not e.gacha(3) and e.gold == 99999, "only 1 or 10 pulls")
@@ -1535,8 +1536,8 @@ func test_gacha_offline() -> void:
 	var b = _econ(0.0)
 	a.rng.seed = 99
 	b.rng.seed = 99
-	a.gold = 2700
-	b.gold = 2700
+	a.gold = 27000
+	b.gold = 27000
 	a.gacha(10)
 	b.gacha(10)
 	check(a.heroes == b.heroes and a.heroes != _econ_starters(), "same seed, same pulls")
@@ -1892,8 +1893,8 @@ func test_buildings() -> void:
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
 	check(GameData.lab_atk_bonus(1) == 0.0 and is_equal_approx(GameData.lab_atk_bonus(11), 0.3), "lab +3% per level above 1")
-	var r1 := GameData.gacha_rates(1)
-	var r11 := GameData.gacha_rates(11)
+	var r1 := GameData.gacha_rates("gold", 1, 1)
+	var r11 := GameData.gacha_rates("gold", 1, 11)
 	check(is_equal_approx(r1.ssr, 0.03) and is_equal_approx(r1.sr, 0.17) and is_equal_approx(r11.ssr, 0.04) and is_equal_approx(r11.sr, 0.2), "tavern: SSR +0.1%p, SR +0.3%p per level")
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0, {"barracks": 5, "lab": 3})
@@ -1901,7 +1902,7 @@ func test_buildings() -> void:
 		"hero atk x(1 + lab); the barracks no longer raises hero HP (rev 13): %s" % [st])
 	check(GameData.hero_power(hans, 1, 0, {"barracks": 5, "lab": 3}) == roundi(440.0 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the lab bonus")
 	var rig := func(): return 0.0305  # 등급 굴림 0.0305: 주점 1(SSR 3%)은 SR, 주점 2(3.1%)는 SSR
-	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, 2)[0].grade == "SSR", "offline recruiting uses the tavern odds")
+	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 1, 2))[0].grade == "SSR", "offline recruiting uses the tavern odds")
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
 	var none := {"wood": 0, "stone": 0, "food": 0}
 	var rich := {"wood": 1000000, "stone": 1000000, "food": 1000000}
@@ -2160,7 +2161,7 @@ func test_soldiers() -> void:
 	e7.save_path = ECON_TMP
 	e7.load_save(now)
 	var raw7 = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw7.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION == 10 and e7.train_queues.archery.tier == 1 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
+	check(int(raw7.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION >= 10 and e7.train_queues.archery.tier == 1 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
 		and absf(e7.train_queues.archery.finish - e.train_queues.archery.finish) < 0.01 and e7.soldiers == e.soldiers and not raw7.last_collect.has("archery"),
 		"save v10 round-trips the training queue (with tier) and keeps no production clocks: %s" % [e7.train_queues])
 	var v6 := {"version": 6, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now, "barracks": now - 100 * 3600.0, "stable": 1.0},
@@ -2966,7 +2967,7 @@ func test_growth_economy() -> void:
 	e2.save_path = ECON_TMP
 	e2.load_save(1.8e9)
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == 10 and e2.upgrades == {"atk": 3, "mspd": 80}, "save v10 writes and restores the upgrades")
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and e2.upgrades == {"atk": 3, "mspd": 80}, "save v10 writes and restores the upgrades")
 	e2.free()
 	raw.erase("upgrades")
 	raw.version = 7
@@ -2978,8 +2979,8 @@ func test_growth_economy() -> void:
 	raw.training = {"barracks": {"count": 2, "tier": 3, "finish": 5.0}}
 	check(e3._apply(raw) and e3.upgrades.is_empty() and e3.train_queues == {"barracks": {"count": 2, "tier": 3, "finish": 5.0}},
 		"v8 -> v10: the batch keeps its tier and upgrades default to none: %s" % [e3.train_queues])
-	raw.version = 11
-	check(not e3._apply(raw), "a save from a newer version (11) is refused")
+	raw.version = EconomyScript.SAVE_VERSION + 1
+	check(not e3._apply(raw), "a save from a newer version (SAVE_VERSION + 1) is refused")
 	raw.version = 9
 	raw.upgrades = {"atk": 5, "ghost": 3, "hp": 0, "aspd": 9999}
 	check(e3._apply(raw) and e3.upgrades == {"atk": 5, "aspd": 100}, "unknown ids and zero are dropped, levels clamp to the max")
@@ -3365,7 +3366,7 @@ func test_dungeon_save_and_server() -> void:
 	e8.save_path = tmp
 	e8.load_save(t0)
 	var raw = JSON.parse_string(FileAccess.get_file_as_string(tmp))
-	check(int(raw.version) == 10 and EconomyScript.SAVE_VERSION == 10 and e8.dungeons == e.dungeons and e8.bag == e.bag and e8.equipment == e.equipment and e8.next_item_id == 10
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION >= 10 and e8.dungeons == e.dungeons and e8.bag == e.bag and e8.equipment == e.equipment and e8.next_item_id == 10
 		and e8.bag[0].id is int and e8.dungeon_state("equip").extra_today == 2 and e8.equipment_bonus("hans").atk == roundi(27.0 * 4.6),
 		"save v10 round-trips dungeons, the bag, equipment and next_item_id: %s %s" % [e8.dungeons, e8.bag])
 	var v9: Dictionary = raw.duplicate(true)
@@ -3498,3 +3499,150 @@ func test_idle_four_sides_at_once() -> void:
 	for side in 4:
 		ok = ok and ev.filter(func(e): return e.side == side).map(func(e): return e.lane) == [0, 1, 2]
 	check(ok, "idle event: 4 sides x 3 lanes at the same time")
+
+
+## 개정 23 모집: 골드 레벨 비용·확률·레벨업(누적·넘김·최대), 다이아 확률(골드 최대보다 좋다)·천장 50, 오프라인 모집·알림·시그널,
+## 저장 v11(v10 → 기본값, 깨진 v11), 서버 응답 diamonds·gacha, 설정 검증, 다이아 아이콘, 스냅 API·키 아트 노드 구조.
+func test_recruit_r23() -> void:
+	const SceneSnap := preload("res://scripts/scene_snap.gd")
+	const RecruitArt := preload("res://scripts/recruit_art.gd")
+	GameData.load_tables()
+	# 공식(서버 rules와 같은 값)
+	check([1, 2, 5, 10].map(func(l): return GameData.gacha_cost("gold", 1, l)) == [3000, 3450, 5250, 10550], "rev 23: gold 1-pull 3000 / 3450 / 5250 / 10550 at Lv 1 / 2 / 5 / 10")
+	check(GameData.gacha_cost("gold", 10, 10) == 94950 and GameData.gacha_cost("gold", 1, 99) == 10550 and GameData.gacha_cost("diamond", 1, 7) == 300
+		and GameData.gacha_cost("diamond", 10, 7) == 2700, "rev 23: 10-pull = 1-pull x 9, levels clamp to the max, diamonds ignore the level")
+	var l4 := GameData.gacha_rates("gold", 4, 1)
+	var l10 := GameData.gacha_rates("gold", 10, 1)
+	var dia := GameData.gacha_rates("diamond", 1, 1)
+	check(is_equal_approx(l4.ssr, 0.042) and is_equal_approx(l4.sr, 0.2) and is_equal_approx(l10.ssr, 0.066) and is_equal_approx(l10.sr, 0.26),
+		"rev 23: gold rates SSR 3%% + 0.4%%p, SR 17%% + 1%%p per level: %s %s" % [l4, l10])
+	check(is_equal_approx(dia.ssr, 0.08) and is_equal_approx(dia.sr, 0.3) and dia.ssr > l10.ssr and dia.sr > l10.sr and is_equal_approx(GameData.gacha_rates("diamond", 1, 3).ssr, 0.082),
+		"rev 23: diamond rates 8% / 30% beat gold max level; the tavern bonus applies too")
+	# 레벨업
+	check([1, 2, 9, 10].map(func(l): return GameData.gacha_gold_next(l)) == [30, 60, 270, 0], "rev 23: next level at 30 x L, none at max")
+	check(GameData.gacha_level_up(1, 29, 1) == {"level": 2, "pulls": 0} and GameData.gacha_level_up(1, 28, 1) == {"level": 1, "pulls": 29}
+		and GameData.gacha_level_up(1, 25, 10) == {"level": 2, "pulls": 5} and GameData.gacha_level_up(1, 0, 1000) == {"level": 8, "pulls": 160}
+		and GameData.gacha_level_up(9, 265, 10) == {"level": 10, "pulls": 0} and GameData.gacha_level_up(10, 0, 10) == {"level": 10, "pulls": 0},
+		"rev 23: level-up accumulates, carries over, climbs several levels at once and stops at 10")
+	# 천장
+	var all_r := func(): return 0.99
+	var pity := {"n": 0, "max": 50}
+	var first: Array = EconomyScript.roll_gacha(49, all_r, dia, pity)
+	var fiftieth: Array = EconomyScript.roll_gacha(1, all_r, dia, pity)
+	check(first.all(func(x): return x.grade == "R") and fiftieth[0].grade == "SSR" and pity.n == 0, "rev 23: the 50th diamond pull without an SSR is an SSR; the counter resets")
+	pity.n = 45
+	var ten: Array = EconomyScript.roll_gacha(10, all_r, dia, pity)
+	check(ten.map(func(x): return x.grade) == ["R", "R", "R", "R", "SSR", "R", "R", "R", "R", "R"] and pity.n == 5, "rev 23: pity inside a 10-pull (5th card)")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var sample: Array = EconomyScript.roll_gacha(100000, rng.randf, l10)
+	var ssr := sample.filter(func(x): return x.grade == "SSR").size() / 100000.0
+	check(absf(ssr - 0.066) <= 0.004, "rev 23: gold Lv 10 sample SSR 6.6%%: %s" % ssr)
+	# 오프라인 골드: 10연차 3번 = 30회 → Lv 2(알림·시그널·비용)
+	var e = _econ(1000.0)
+	var notes := []
+	var ups := []
+	var got := []
+	e.notice.connect(func(t): notes.append(t))
+	e.gacha_leveled.connect(func(l): ups.append(l))
+	e.gacha_done.connect(func(r): got.append(r))
+	e.gold = 81000
+	check(e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 20 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: two 10-pulls are 20/30 at Lv 1")
+	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 60, "dia_pity": 0, "pity_left": 50}
+		and ups == [2] and notes == ["골드 모집 Lv 2! SSR 3.4%"] and e.gacha_cost("gold", 1) == 3450,
+		"rev 23: the 30th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
+	# 오프라인 다이아
+	notes.clear()
+	check(not e.gacha(1, "diamond") and notes == [EconomyScript.NO_DIA_TEXT] and got.size() == 3, "rev 23: no diamonds: a notice only")
+	e.diamonds = 3000
+	check(e.gacha(10, "diamond") and e.diamonds == 300 and e.gacha_state().gold_pulls == 0 and e.gacha_state().gold_level == 2 and e.gold == 0,
+		"rev 23: a diamond 10-pull takes 2700 diamonds and leaves gold and the gold level alone")
+	e.gacha_dia_pity = 49
+	check(e.gacha(1, "diamond") and got[-1][0].grade == "SSR" and e.gacha_dia_pity == 0 and e.diamonds == 0, "rev 23: offline pity — pull 50 is an SSR")
+	check(not e.gacha(1, "ruby") and not e.gacha(3, "diamond"), "rev 23: unknown currency or count does nothing")
+	# 저장 v11 왕복, v10은 기본값, 모집 상태가 빠진 v11은 깨진 저장
+	var tmp := "user://test_r23_save.json"
+	e.save_path = tmp
+	e.diamonds = 1234
+	e.gacha_gold_level = 3
+	e.gacha_gold_pulls = 7
+	e.gacha_dia_pity = 11
+	e.save()
+	var raw = JSON.parse_string(FileAccess.get_file_as_string(tmp))
+	var e2 = _econ(0.0)
+	e2.save_path = tmp
+	e2.load_save(1000.0)
+	check(int(raw.version) == 11 and EconomyScript.SAVE_VERSION == 11 and e2.diamonds == 1234 and e2.gacha_state().gold_level == 3 and e2.gacha_gold_pulls == 7 and e2.gacha_dia_pity == 11,
+		"rev 23: save v11 round-trips diamonds and the recruit state")
+	var v10: Dictionary = raw.duplicate(true)
+	v10.version = 10
+	v10.erase("diamonds")
+	v10.erase("gacha")
+	_write(tmp, JSON.stringify(v10))
+	e2.load_save(1000.0)
+	check(e2.diamonds == 0 and e2.gacha_gold_level == 1 and e2.gacha_gold_pulls == 0 and e2.gacha_dia_pity == 0 and e2.heroes == e.heroes, "rev 23: a v10 save loads with 0 diamonds and gold recruit Lv 1")
+	var broken: Dictionary = raw.duplicate(true)
+	broken.erase("gacha")
+	_write(tmp, JSON.stringify(broken))
+	e2.load_save(1000.0)
+	check(e2.diamonds == 0 and e2.heroes == _econ_starters(), "rev 23: a v11 save without the recruit state is corrupt (defaults)")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+	e.save_path = ""
+	# 서버 응답: 첫 반영은 접속(알림 없음), 그 뒤 레벨이 오르면 알림·시그널. 형이 틀리면 거부
+	var o = _econ(1000.0)
+	var o_ups := []
+	o.gacha_leveled.connect(func(l): o_ups.append(l))
+	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "diamonds": 2700,
+		"gacha": {"gold_level": 4, "gold_pulls": 12, "gold_next": 120, "dia_pity": 37}}, "merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	check(o.apply_server(reply) and o.diamonds == 2700 and o.gacha_state().gold_level == 4 and o.gacha_gold_pulls == 12 and o.gacha_state().pity_left == 13 and o_ups.is_empty(),
+		"rev 23: apply_server takes diamonds and the recruit state (first sync is not a level-up)")
+	reply.player.gacha.gold_level = 5
+	check(o.apply_server(reply) and o_ups == [5], "rev 23: a later server level-up fires gacha_leveled")
+	var logged := _errors.count
+	var bad: Dictionary = reply.duplicate(true)
+	bad.player.diamonds = "lots"
+	check(not o.apply_server(bad) and o.diamonds == 2700, "rev 23: apply_server rejects non-number diamonds")
+	_errors.count = logged  # 거부는 push_error로 알린다
+	o.free()
+	e.free()
+	e2.free()
+	# 설정 검증(서버 seed와 같은 규칙): 다이아는 골드 최대 레벨보다 좋아야 한다 등
+	var cases := [["gacha_dia_ssr", "0.066"], ["gacha_dia_sr", "0.2"], ["gacha_gold_ssr_step", "0.01"], ["gacha_gold_level_max", "0"],
+		["gacha_gold_level_pulls", "2.5"], ["gacha_dia_pity", "0"], ["gacha_gold_cost_growth", "0.9"], ["gacha_gold_sr_step", "0.09"]]
+	logged = _errors.count
+	var errs := 0
+	for c in cases:
+		var q := _payload()
+		q.config[c[0]] = c[1]
+		var ok: bool = GameData.apply_remote(q)
+		check(not ok and GameData.errors == 1, "rev 23: config %s = %s is rejected with one error (got %d)" % [c[0], c[1], GameData.errors])
+		errs += GameData.errors
+	check(_errors.count - logged == errs, "rev 23: each rejected recruit config reports through push_error")
+	_errors.count = logged
+	GameData.load_tables()
+	check(GameData.errors == 0 and GameData.config_num("gacha_dia_pity") == 50.0, "rev 23: default tables are back")
+	# 다이아 아이콘·HUD 칩 종류
+	check(IconsScript.KINDS == ["gold", "wood", "stone", "food", "diamond"] and IconsScript.shapes("diamond").size() >= 6, "rev 23: a diamond icon and a fifth resource chip kind")
+	# 스냅 API(헤드리스 = 자리표시, 같은 키는 같은 텍스처, build는 렌더러가 있을 때만)
+	var calls := [0]
+	var t1: Texture2D = SceneSnap.snap("r23_test", Vector2i(160, 80), func(_r): calls[0] += 1)
+	check(t1 != null and SceneSnap.snap("r23_test", Vector2i(160, 80), func(_r): calls[0] += 1) == t1 and t1.get_width() == 20 and t1.get_height() == 10 and calls[0] == 0,
+		"rev 23: SceneSnap.snap returns a cached placeholder of the size's aspect headless (no build)")
+	# 키 아트 노드 구조
+	var root := Node3D.new()
+	RecruitArt.build(root)
+	var names := ["Environment", "Camera", "KeyLight", "RimLight", "FireLight", "Backdrop", "Pedestal", "PedestalGlow", "Pillar", "Ignis", "Fireball", "Shards", "Embers"]
+	check(names.all(func(n): return root.get_node_or_null(n) != null), "rev 23: key art builds %s: %s" % [names, root.get_children().map(func(c): return c.name)])
+	var cam: Camera3D = root.get_node("Camera")
+	var ignis = root.get_node("Ignis")
+	var ball: Node3D = root.get_node("Fireball")
+	var fwd := -cam.transform.basis.z
+	var to_ball := (ball.position - cam.position).normalized()
+	check(ignis.get_script() == preload("res://scripts/unit_model.gd") and ignis._spec.scene == Art.hero_spec(GameData.hero("ignis")).scene and ignis.manual,
+		"rev 23: Ignis is the hero model (hero look), posed by hand (manual animation)")
+	check(cam.current and fwd.y > 0.0 and rad_to_deg(fwd.angle_to(to_ball)) < cam.fov / 2.0 and ball.position.z > ignis.position.z,
+		"rev 23: low heroic angle (camera looks up), the fireball is in front of Ignis and in view")
+	var rim: OmniLight3D = root.get_node("RimLight")
+	check(rim.position.z < ignis.position.z and rim.position.y > 2.0 and ball.get_node("Core").mesh.get_faces().size() == 20 * 3 and ball.get_node("Shell").mesh.get_faces().size() == 20 * 3,
+		"rev 23: rim light from behind and above; the fireball is a 20-face icosahedron (core + shell)")
+	root.free()
