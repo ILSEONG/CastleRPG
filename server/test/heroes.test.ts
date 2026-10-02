@@ -39,49 +39,49 @@ test('새 플레이어: 시작 영웅 4종 copies 1, 배치 = 시작 영웅 순�
   assert.deepEqual([copiesOf(again.heroes), again.deploy], [{ hans: 1, ella: 1, dorik: 1, nina: 1 }, ['nina', null, 'hans', null]])
 })
 
-test('모집 1회: floor(gold) ≥ 300이면 tenths 3000 차감(소수는 남음), 결과 {hero_id, grade, new, copies}, 중복은 copies +1, economy_log', async () => {
+test('모집 1회: floor(gold) ≥ 3000(골드 Lv 1)이면 tenths 30000 차감(소수는 남음), 결과 {hero_id, grade, new, copies}, 중복은 copies +1, economy_log', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setGold(id, 3005)
+  await setGold(id, 30005)
   rand.next = [0.5, 0] // R(0.5 ≥ 0.03 + 0.17), R 풀 첫째 = hans(이미 보유)
   let r = await gacha(token, 1)
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.results, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }])
   assert.deepEqual([r.json.player.gold_tenths, r.json.player.gold, r.json.player.heroes.hans.copies], [5, 0, 2])
-  await setGold(id, 3000)
+  await setGold(id, 30000)
   rand.next = [0.02, 0] // SSR(< 0.03), SSR 풀 첫째 = arteon(새로)
   r = await gacha(token, 1)
   assert.deepEqual(r.json.results, [{ hero_id: 'arteon', grade: 'SSR', new: true, copies: 1, shards: 0 }])
   assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.arteon.copies], [0, 1])
   rand.next = [0.19, 0.99] // SR 경계(0.03 ≤ r < 0.2), SR 풀 마지막 = felix
-  await setGold(id, 3000)
+  await setGold(id, 30000)
   assert.deepEqual((await gacha(token, 1)).json.results, [{ hero_id: 'felix', grade: 'SR', new: true, copies: 1, shards: 0 }])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.deepEqual(copiesOf(p.heroes), { hans: 2, ella: 1, dorik: 1, nina: 1, arteon: 1, felix: 1 })
   const l = await logs(id, 'gacha')
   assert.equal(l.length, 3)
-  assert.deepEqual([l[0].detail.count, l[0].detail.cost, l[0].detail.gold_tenths, l[0].detail.results], [1, 300, -3000, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }]])
+  assert.deepEqual([l[0].detail.count, l[0].detail.cost, l[0].detail.gold_tenths, l[0].detail.results], [1, 3000, -30000, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }]])
 })
 
-test('모집: 골드 부족(floor 299)은 409 not_enough_gold이고 아무것도 안 바뀐다. count가 1·10이 아니면 400', async () => {
+test('모집: 골드 부족(floor 2999)은 409 not_enough_gold이고 아무것도 안 바뀐다. count가 1·10이 아니면 400', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setGold(id, 2999)
+  await setGold(id, 29999)
   const r = await gacha(token, 1)
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_gold'])
-  await setGold(id, 26999)
+  await setGold(id, 269999)
   assert.equal((await gacha(token, 10)).status, 409)
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.gold_tenths, copiesOf(p.heroes)], [26999, { hans: 1, ella: 1, dorik: 1, nina: 1 }])
+  assert.deepEqual([p.gold_tenths, copiesOf(p.heroes)], [269999, { hans: 1, ella: 1, dorik: 1, nina: 1 }])
   assert.equal((await logs(id, 'gacha')).length, 0)
   for (const count of [0, 2, 5, 11, '1', 1.5, null]) assert.equal((await gacha(token, count)).status, 400, String(count))
   assert.equal((await S.req('POST', '/v1/gacha', { token, body: {} })).status, 400)
 })
 
-test('10연차: 2700(tenths 27000) 차감, 10장, SR 이상이 없으면 마지막 1장을 SR로 바꾼다, 같은 영웅은 장마다 copies 누적', async () => {
+test('10연차: 27000(tenths 270000) 차감, 10장, SR 이상이 없으면 마지막 1장을 SR로 바꾼다, 같은 영웅은 장마다 copies 누적', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setGold(id, 27007)
+  await setGold(id, 270007)
   rand.next = Array(30).fill(0.99) // 전부 R, R 풀 마지막 = jack. 보장: SR 풀 마지막 = felix
   const r = await gacha(token, 10)
   assert.equal(r.status, 200)
@@ -132,7 +132,7 @@ test('배치: 저장되고 다시 읽으면 그대로. 길이·보유·중복·�
   assert.deepEqual((await S.req('GET', '/v1/player', { token })).json.player.deploy, ['nina', null, 'hans', null])
   r = await deploy(token, [null, null, null, null])
   assert.deepEqual(r.json.player.deploy, [null, null, null, null])
-  await setGold(id, 3000)
+  await setGold(id, 30000)
   rand.next = [0.02, 0.1] // SSR 풀 둘째 = ignis
   assert.equal((await gacha(token, 1)).json.results[0].hero_id, 'ignis')
   r = await deploy(token, ['ignis', 'ella', 'dorik', 'nina'])

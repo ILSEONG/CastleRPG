@@ -93,6 +93,8 @@ interface Player {
   dungeons: Record<string, R.DungeonState> // 개정 18: 종류 → 저장된 상태(일일 리셋 전 값 — 쓰는 쪽이 R.applyReset)
   items: Item[] // 보관함(id 순)
   equipment: Equipped[]
+  diamonds: number // 개정 23: 다이아(현금 재화)
+  gacha: { gold_level: number; gold_pulls: number; dia_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터
 }
 
 interface Train {
@@ -133,6 +135,8 @@ interface Change {
   items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
   sellItems?: number[] // 지울 장비 id
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
+  diamonds?: number // 다이아 증감(개정 23)
+  gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
   log?: { kind: string; detail: unknown }
 }
 
@@ -145,7 +149,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold_tenths, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
+const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   extract(epoch from s.build_finish)::float8 as build_finish,
@@ -323,6 +327,8 @@ export function createApp(opts: AppOptions) {
         dungeons,
         items: (json(r.items) as any[]).map((x) => ({ id: Number(x.id), slot: String(x.slot), weapon_kind: x.weapon_kind ?? null, grade: String(x.grade), level: Number(x.level) })),
         equipment: (json(r.equipment) as any[]).map((x) => ({ hero_id: String(x.hero_id), slot: String(x.slot), item_id: Number(x.item_id) })),
+        diamonds: Number(r.diamonds),
+        gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity) },
       }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
@@ -372,6 +378,8 @@ export function createApp(opts: AppOptions) {
         kill_seq: p.kill_seq, buildings, build: p.build, population: R.population(game.config, level(p, R.HOUSES)), heroes, deploy,
         soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
         dungeons: dungeonsView(p, game, now), items: p.items, equipment,
+        diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
+        gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -414,6 +422,10 @@ export function createApp(opts: AppOptions) {
     if (ch.deploy !== undefined) sets.push(`deploy = ${p(JSON.stringify(ch.deploy))}::jsonb`)
     if (ch.build !== undefined) sets.push(`build_id = ${p(ch.build?.id ?? null)}::text, build_finish = to_timestamp(${p(ch.build?.finish ?? null)}::float8)`)
     if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
+    if (ch.diamonds) sets.push(`diamonds = diamonds + ${p(bigint(ch.diamonds))}::bigint`)
+    if (ch.gacha?.gold_level !== undefined) sets.push(`gacha_gold_level = ${p(ch.gacha.gold_level)}::int`)
+    if (ch.gacha?.gold_pulls !== undefined) sets.push(`gacha_gold_pulls = ${p(ch.gacha.gold_pulls)}::int`)
+    if (ch.gacha?.dia_pity !== undefined) sets.push(`gacha_dia_pity = ${p(ch.gacha.dia_pity)}::int`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
@@ -549,6 +561,8 @@ export function createApp(opts: AppOptions) {
     for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
     if (ch.soldierDeploy !== undefined) pl.soldier_deploy = ch.soldierDeploy
     for (const [k, d] of Object.entries(ch.upgrades ?? {})) pl.upgrades[k] = (pl.upgrades[k] ?? 0) + d
+    pl.diamonds += ch.diamonds ?? 0
+    pl.gacha = { ...pl.gacha, ...ch.gacha }
     pl.version += 1
   }
 
@@ -811,27 +825,41 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // 모집(스펙 §3.6·§3.7): 비용(정수 골드)은 floor(gold_tenths / 10)로 판정하고 × 10을 뺀다(소수 부분은 남는다).
-  // 골드 차감·영웅 copies·조각·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
+  // 모집(스펙 §3.6·§3.7, 개정 23): currency = gold(생략 시, 하위 호환) | diamond. 골드 비용(정수)은 floor(gold_tenths / 10)로 판정하고
+  // × 10을 뺀다(소수 부분은 남는다). 골드는 모집 레벨의 비용·확률을 쓰고 장수만큼 누적해 레벨업, 다이아는 다이아를 빼고 천장을 센다.
+  // 재화 차감·영웅 copies·조각·모집 상태·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
   // 개정 15: 이미 가진 영웅이 다시 나오면 copies +1, 조각 +1. 결과 항목의 shards = 그 장까지 반영한 조각.
   app.post('/v1/gacha', auth, async (c) => {
-    const count = (await body(c)).count
+    const b = await body(c)
+    const count = b.count
     if (count !== 1 && count !== 10) throw new ApiError(400, 'bad_request', "'count' must be 1 or 10")
+    const currency = b.currency ?? R.GACHA_GOLD
+    if (typeof currency !== 'string' || !R.GACHA_CURRENCIES.includes(currency)) throw new ApiError(400, 'bad_request', "'currency' must be gold or diamond")
+    const dia = currency === R.GACHA_DIA
     return mutate(c, (p, g) => {
-      const cost = R.cfgNum(g.config, count === 10 ? 'gacha_cost_10' : 'gacha_cost_1')
-      if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `recruiting ${count} costs ${cost} gold`)
+      const lv = p.gacha.gold_level
+      const cost = R.gachaCost(g.config, currency, count, lv)
+      if (dia ? p.diamonds < cost : Math.floor(p.gold_tenths / 10) < cost) {
+        throw new ApiError(409, dia ? 'not_enough_diamonds' : 'not_enough_gold', `recruiting ${count} costs ${cost} ${dia ? 'diamonds' : 'gold'}`)
+      }
       const owned: Record<string, { copies: number; shards: number }> = {}
       for (const [id, h] of Object.entries(p.heroes)) owned[id] = { copies: h.copies, shards: h.shards }
       const add: Record<string, number> = {}
-      const results = R.rollGacha(count, g.heroes, g.config, random, level(p, R.TAVERN)).map(({ id, grade }) => {
+      const pity = dia ? { n: p.gacha.dia_pity, max: R.cfgNum(g.config, 'gacha_dia_pity') } : undefined
+      const rates = R.gachaRates(g.config, currency, lv, level(p, R.TAVERN))
+      const results = R.rollGacha(count, g.heroes, g.config, random, rates, pity).map(({ id, grade }) => {
         const o = owned[id]
         const isNew = !(o?.copies > 0)
         owned[id] = isNew ? { copies: 1, shards: 0 } : { copies: o.copies + 1, shards: o.shards + 1 }
         add[id] = (add[id] ?? 0) + 1
         return { hero_id: id, grade, new: isNew, copies: owned[id].copies, shards: owned[id].shards }
       })
+      const up = R.goldLevelUp(g.config, lv, p.gacha.gold_pulls, count)
+      const gacha = pity ? { dia_pity: pity.n } : { gold_level: up.level, gold_pulls: up.pulls }
+      const paid = dia ? { diamonds: -cost } : { gold_tenths: -cost * 10 }
+      const detail = { currency, count, cost, ...paid, level: lv, pity: p.gacha.dia_pity, after: gacha, results }
       return {
-        change: { goldTenths: -cost * 10, heroes: add, log: { kind: 'gacha', detail: { count, cost, gold_tenths: -cost * 10, results } } },
+        change: { ...(dia ? { diamonds: -cost } : { goldTenths: -cost * 10 }), heroes: add, gacha, log: { kind: 'gacha', detail } },
         extra: { results },
       }
     })
@@ -1276,6 +1304,18 @@ export function createApp(opts: AppOptions) {
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
+
+    // 개정 23: 다이아·골드를 amount만큼 준다(실결제는 범위 밖 — 개발·통합 테스트용). 골드 모집 레벨업은 30회 × 3,000골드가 든다.
+    for (const [path, set] of [['grant_diamonds', 'diamonds = diamonds + $2::bigint'], ['grant_gold', 'gold_tenths = gold_tenths + $2::bigint * 10']]) {
+      app.post(`/v1/test/${path}`, auth, async (c) => {
+        const amount = intField(await body(c), 'amount', 1, 1_000_000_000)
+        const id = c.get('playerId') as string
+        await query(`update player_state set version = version + 1, ${set} where player_id = $1`, [id, amount])
+        const now = clock()
+        const game = await loadGame()
+        return c.json(view(await loadPlayer(id, game, now), game, now))
+      })
+    }
 
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
     app.post('/v1/test/build_now', auth, async (c) => {

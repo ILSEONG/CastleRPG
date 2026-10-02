@@ -93,11 +93,15 @@ export const TABLES: TableSpec[] = [
   },
 ]
 
+// 개정 23 모집 설정(checkGacha가 범위를 본다): 골드 레벨 비용·확률, 다이아 비용·확률·천장
+export const GACHA_KEYS = ['gacha_gold_cost_base', 'gacha_gold_cost_growth', 'gacha_gold_level_max', 'gacha_gold_level_pulls',
+  'gacha_gold_ssr_base', 'gacha_gold_ssr_step', 'gacha_gold_sr_base', 'gacha_gold_sr_step',
+  'gacha_dia_cost_1', 'gacha_dia_cost_10', 'gacha_dia_ssr', 'gacha_dia_sr', 'gacha_dia_pity']
 // 서버·앱이 쓰는 설정 키(스펙 §2). 숫자 키는 숫자여야 하고, 목록 키는 `|` 구분 항목이 비지 않아야 한다.
 export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters', 'countdown_sec', 'result_sec', 'wave_gap_sec',
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
-  'gacha_cost_1', 'gacha_cost_10', 'gacha_rate_ssr', 'gacha_rate_sr', 'gacha_10_min_sr',
+  'gacha_10_min_sr', ...GACHA_KEYS,
   'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
@@ -234,8 +238,9 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
   return rows
 }
 
-// 모집 설정(스펙 §3.6): 비용·10연차 보장 수는 0 이상 정수(소수 비용이면 BigInt(-cost × 10)가 throw → 500), 확률은 0..1이고
-// SSR + SR ≤ 1. 레벨업 설정(개정 11 §2.1): 비용·승급당 최대 레벨은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상.
+// 모집 설정(스펙 §3.6·개정 23): 다이아 비용·10연차 보장 수는 0 이상 정수(소수 비용이면 BigInt가 throw → 500), 골드 레벨 최대·레벨당 횟수·천장은
+// 1 이상 정수, 골드 기본 비용·확률 base·step은 0 이상, 비용 성장은 1 이상. 확률은 0..1이고 SSR + SR ≤ 1(골드는 최대 레벨 값으로),
+// 다이아는 골드 최대 레벨보다 SSR·SR 모두 높다. 레벨업 설정(개정 11 §2.1): 비용·승급당 최대 레벨은 0 이상 정수, 최대 레벨 기본은 1 이상 정수, 레벨 배율은 0 이상.
 // 승급(개정 15): promote_shards는 MAX_PROMOTION개의 1 이상 정수, promote_mult는 1 이상.
 // 숫자가 아닌 값은 checkTable이 이미 알렸으므로 건너뛴다.
 const LEVELUP_INT_KEYS = ['hero_max_level_per_promotion', ...GRADES.map((g) => `levelup_gold_${g}`)]
@@ -244,10 +249,11 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   const raw = (k: string) => String(byKey.get(k)?.value ?? '')
   const num = (k: string) => (isNum(raw(k)) ? Number(raw(k)) : null)
   const err = (k: string, why: string) => errors.push(`config.csv line ${byKey.get(k)?._line} column 'value': ${k} ${why}`)
-  for (const k of ['gacha_cost_1', 'gacha_cost_10', 'gacha_10_min_sr', ...LEVELUP_INT_KEYS]) {
+  for (const k of ['gacha_dia_cost_1', 'gacha_dia_cost_10', 'gacha_10_min_sr', ...LEVELUP_INT_KEYS]) {
     const v = num(k)
     if (v !== null && !(Number.isInteger(v) && v >= 0)) err(k, `must be a non-negative integer: '${raw(k)}'`)
   }
+  checkGachaRates(num, raw, err)
   const base = num('hero_max_level_base')
   if (base !== null && !(Number.isInteger(base) && base >= 1)) err('hero_max_level_base', `must be an integer of at least 1: '${raw('hero_max_level_base')}'`)
   const stat = num('hero_level_stat')
@@ -276,15 +282,35 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   if (byKey.has('promote_shards') && !(shards.length === MAX_PROMOTION && shards.every((x) => /^\d+$/.test(x) && Number(x) >= 1))) {
     err('promote_shards', `must be ${MAX_PROMOTION} integers of at least 1 separated by '|': '${raw('promote_shards')}'`)
   }
-  const inUnit = (v: number | null) => v !== null && v >= 0 && v <= 1
-  for (const k of ['gacha_rate_ssr', 'gacha_rate_sr']) {
-    if (num(k) !== null && !inUnit(num(k))) err(k, `must be in 0..1: '${raw(k)}'`)
+}
+
+// 개정 23 모집 확률·레벨(앱 GameData._check_gacha_rates와 같은 규칙). 숫자가 아닌 값은 checkTable이 이미 알렸다.
+function checkGachaRates(num: (k: string) => number | null, raw: (k: string) => string, err: (k: string, why: string) => void) {
+  const ok = (k: string, test: (v: number) => boolean, why: string) => {
+    const v = num(k)
+    if (v === null) return null
+    if (test(v)) return v
+    err(k, `must be ${why}: '${raw(k)}'`)
+    return null
   }
-  const ssr = num('gacha_rate_ssr')
-  const sr = num('gacha_rate_sr')
-  if (ssr !== null && sr !== null && inUnit(ssr) && inUnit(sr) && ssr + sr > 1 + 1e-9) {
-    err('gacha_rate_sr', `plus gacha_rate_ssr must be at most 1: ${raw('gacha_rate_ssr')} + ${raw('gacha_rate_sr')}`)
-  }
+  const int1 = (v: number) => Number.isInteger(v) && v >= 1
+  const max = ok('gacha_gold_level_max', int1, 'an integer of at least 1')
+  ok('gacha_gold_level_pulls', int1, 'an integer of at least 1')
+  ok('gacha_dia_pity', int1, 'an integer of at least 1')
+  ok('gacha_gold_cost_base', (v) => v >= 0, '0 or more')
+  ok('gacha_gold_cost_growth', (v) => v >= 1, '1 or more')
+  const [ssrBase, ssrStep, srBase, srStep] = ['gacha_gold_ssr_base', 'gacha_gold_ssr_step', 'gacha_gold_sr_base', 'gacha_gold_sr_step'].map((k) => ok(k, (v) => v >= 0, '0 or more'))
+  const unit = (v: number) => v >= 0 && v <= 1
+  const dSsr = ok('gacha_dia_ssr', unit, 'in 0..1')
+  const dSr = ok('gacha_dia_sr', unit, 'in 0..1')
+  if (dSsr !== null && dSr !== null && dSsr + dSr > 1 + 1e-9) err('gacha_dia_sr', `plus gacha_dia_ssr must be at most 1: ${raw('gacha_dia_ssr')} + ${raw('gacha_dia_sr')}`)
+  if (max === null || ssrBase === null || ssrStep === null || srBase === null || srStep === null) return
+  const r6 = (v: number) => Math.round(v * 1e6) / 1e6
+  const ssrMax = ssrBase + ssrStep * (max - 1)
+  const srMax = srBase + srStep * (max - 1)
+  if (ssrMax + srMax > 1 + 1e-9) return err('gacha_gold_sr_step', `makes the max-level gold rates above 1: SSR ${r6(ssrMax)} + SR ${r6(srMax)}`)
+  if (dSsr !== null && !(dSsr > ssrMax + 1e-9)) err('gacha_dia_ssr', `must be above the max-level gold SSR rate ${r6(ssrMax)}: '${raw('gacha_dia_ssr')}'`)
+  if (dSr !== null && !(dSr > srMax + 1e-9)) err('gacha_dia_sr', `must be above the max-level gold SR rate ${r6(srMax)}: '${raw('gacha_dia_sr')}'`)
 }
 
 // 건물 표(개정 12 §2.2, 앱 GameData와 같은 규칙): 최대 레벨 1 이상, 비용 0 이상(정수는 열 형이 본다), base_sec > 0,

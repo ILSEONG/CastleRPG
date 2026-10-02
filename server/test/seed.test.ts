@@ -218,7 +218,7 @@ test('CSV 오류: 파일·줄·열을 알리고 아무것도 쓰지 않는다', 
   await seed(db)
 })
 
-test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1, 등급마다 영웅이 하나 이상', async () => {
+test('모집 설정 검증(개정 23): 비용·보장 수는 0 이상 정수, 레벨·천장은 1 이상 정수, 확률은 0..1이고 SSR + SR ≤ 1(골드는 최대 레벨), 다이아 > 골드 최대, 등급마다 영웅이 하나 이상', async () => {
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const dir = dataCopy() // 사본 하나에 config.csv·heroes.csv만 바꿔 쓴다(임시 폴더를 적게)
   const withCfg = (key: string, value: string) => {
@@ -226,12 +226,22 @@ test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..
     return dir
   }
   const cases: [string, string, RegExp][] = [
-    ['gacha_cost_1', '300.5', /gacha_cost_1 must be a non-negative integer: '300\.5'/],
-    ['gacha_cost_10', '-1', /gacha_cost_10 must be a non-negative integer: '-1'/],
+    ['gacha_dia_cost_1', '300.5', /gacha_dia_cost_1 must be a non-negative integer: '300\.5'/],
+    ['gacha_dia_cost_10', '-1', /gacha_dia_cost_10 must be a non-negative integer: '-1'/],
     ['gacha_10_min_sr', '1.5', /gacha_10_min_sr must be a non-negative integer: '1\.5'/],
-    ['gacha_rate_ssr', '1.5', /gacha_rate_ssr must be in 0\.\.1: '1\.5'/],
-    ['gacha_rate_sr', '-0.1', /gacha_rate_sr must be in 0\.\.1: '-0\.1'/],
-    ['gacha_rate_sr', '0.98', /gacha_rate_sr plus gacha_rate_ssr must be at most 1: 0\.03 \+ 0\.98/],
+    ['gacha_dia_ssr', '1.5', /gacha_dia_ssr must be in 0\.\.1: '1\.5'/],
+    ['gacha_dia_sr', '-0.1', /gacha_dia_sr must be in 0\.\.1: '-0\.1'/],
+    ['gacha_dia_sr', '0.98', /gacha_dia_sr plus gacha_dia_ssr must be at most 1: 0\.08 \+ 0\.98/],
+    ['gacha_gold_level_max', '0', /gacha_gold_level_max must be an integer of at least 1: '0'/],
+    ['gacha_gold_level_pulls', '2.5', /gacha_gold_level_pulls must be an integer of at least 1: '2\.5'/],
+    ['gacha_dia_pity', '0', /gacha_dia_pity must be an integer of at least 1: '0'/],
+    ['gacha_gold_cost_growth', '0.9', /gacha_gold_cost_growth must be 1 or more: '0\.9'/],
+    ['gacha_gold_ssr_step', '-0.001', /gacha_gold_ssr_step must be 0 or more: '-0\.001'/],
+    ['gacha_gold_sr_step', '0.09', /gacha_gold_sr_step makes the max-level gold rates above 1: SSR 0\.066 \+ SR 0\.98/],
+    // 다이아는 골드 최대 레벨(SSR 6.6% · SR 26%)보다 좋아야 한다
+    ['gacha_dia_ssr', '0.066', /gacha_dia_ssr must be above the max-level gold SSR rate 0\.066: '0\.066'/],
+    ['gacha_dia_sr', '0.2', /gacha_dia_sr must be above the max-level gold SR rate 0\.26: '0\.2'/],
+    ['gacha_gold_ssr_step', '0.01', /gacha_dia_ssr must be above the max-level gold SSR rate 0\.12: '0\.08'/],
   ]
   for (const [key, value, re] of cases) {
     await assert.rejects(readTables(withCfg(key, value)), (e: unknown) => {
@@ -247,8 +257,8 @@ test('모집 설정 검증: 비용·보장 수는 0 이상 정수, 확률은 0..
   writeFileSync(join(dir, 'heroes.csv'), noSr)
   await assert.rejects(readTables(dir), /heroes\.csv line 0 column 'grade': no SR heroes to recruit/)
   writeFileSync(join(dir, 'heroes.csv'), lines.join('\n'))
-  await readTables(withCfg('gacha_cost_1', '0')) // 0원 모집·확률 경계(합 1)는 받는다
-  await readTables(withCfg('gacha_rate_sr', '0.97'))
+  await readTables(withCfg('gacha_dia_cost_1', '0')) // 0원 모집·확률 경계(합 1)는 받는다
+  await readTables(withCfg('gacha_dia_sr', '0.92'))
 })
 
 test('마이그레이션 006: 005까지 적용된 DB의 보유 영웅은 level 1이 되고, level은 1 이상이어야 한다', async () => {

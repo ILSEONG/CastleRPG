@@ -32,7 +32,8 @@ after(async () => {
 
 const CFG: R.Config = {
   keep_slot_tiers: '1:4|5:8|10:12', keep_interior_tiers: '1:20|5:24|10:28', pop_base: '6', pop_per_house: '2',
-  gacha_rate_ssr: '0.03', gacha_rate_sr: '0.17', tavern_ssr_per_level: '0.001', tavern_sr_per_level: '0.003',
+  gacha_gold_ssr_base: '0.03', gacha_gold_ssr_step: '0.004', gacha_gold_sr_base: '0.17', gacha_gold_sr_step: '0.01', gacha_gold_level_max: '10',
+  tavern_ssr_per_level: '0.001', tavern_sr_per_level: '0.003',
 }
 const defs = async () => (await S.db.query('select id, name, max_level, wood, stone, food, base_sec, req1, req2 from building_defs order by ord')) as R.BuildingDef[]
 const def = async (id: string) => (await defs()).find((d) => d.id === id) as R.BuildingDef
@@ -74,8 +75,8 @@ test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 �
   assert.deepEqual([0, 1, 5, 10].map((l) => R.tierValue(CFG, 'keep_interior_tiers', l)), [20, 20, 24, 28])
   assert.throws(() => R.heroSlots({ keep_slot_tiers: '4|8|12' }, 1), /tier table/)
   assert.deepEqual([0, 1, 2, 3, 30].map((l) => R.population(CFG, l)), [6, 6, 8, 10, 64]) // 인구 = 6 + 2 × (민가 − 1)
-  const r11 = R.gachaRates(CFG, 11)
-  assert.deepEqual(R.gachaRates(CFG, 1), { ssr: 0.03, sr: 0.17 })
+  const r11 = R.gachaRates(CFG, 'gold', 1, 11)
+  assert.deepEqual(R.gachaRates(CFG, 'gold', 1, 1), { ssr: 0.03, sr: 0.17 })
   assert.ok(Math.abs(r11.ssr - 0.04) < 1e-12 && Math.abs(r11.sr - 0.2) < 1e-12, JSON.stringify(r11))
 })
 

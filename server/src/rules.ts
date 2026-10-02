@@ -286,13 +286,51 @@ export function trimDeploy(deploy: Record<string, number>, owned: Record<string,
   return out
 }
 
-// 모집 확률(주점): SSR + tavern_ssr_per_level × (L − 1), SR + tavern_sr_per_level × (L − 1). R은 나머지.
-export function gachaRates(config: Config, tavernLevel: number) {
-  const k = Math.max(tavernLevel, 1) - 1
-  return {
-    ssr: cfgNum(config, 'gacha_rate_ssr') + cfgNum(config, 'tavern_ssr_per_level') * k,
-    sr: cfgNum(config, 'gacha_rate_sr') + cfgNum(config, 'tavern_sr_per_level') * k,
+// --- 모집 (개정 23: 골드 레벨·다이아 천장) — 앱 GameData.gacha_*와 같은 식 ---
+
+export const GACHA_GOLD = 'gold'
+export const GACHA_DIA = 'diamond'
+export const GACHA_CURRENCIES = [GACHA_GOLD, GACHA_DIA]
+export const GOLD_COST_STEP = 50 // 골드 1회 비용 반올림 단위(스펙 예시 3,450·5,250·10,550과 맞는 값)
+export const GOLD_TEN_MULT = 9 // 10회 = 1회 × 10 × 0.9
+
+// 골드 모집 레벨을 1..gacha_gold_level_max로(설정 최대가 줄어도 확률이 검사한 범위를 넘지 않게)
+const goldLevel = (config: Config, level: number) => Math.min(Math.max(level, 1), cfgNum(config, 'gacha_gold_level_max'))
+
+// 골드 1회 비용 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림.
+export const goldCost1 = (config: Config, level: number) =>
+  roundHalfAway(grown(cfgNum(config, 'gacha_gold_cost_base'), cfgNum(config, 'gacha_gold_cost_growth'), goldLevel(config, level) - 1) / GOLD_COST_STEP) * GOLD_COST_STEP
+
+// 모집 비용(정수 골드 또는 다이아).
+export function gachaCost(config: Config, currency: string, count: number, level: number): number {
+  if (currency === GACHA_DIA) return cfgNum(config, count === 10 ? 'gacha_dia_cost_10' : 'gacha_dia_cost_1')
+  return goldCost1(config, level) * (count === 10 ? GOLD_TEN_MULT : 1)
+}
+
+// 모집 확률 {ssr, sr}(R은 나머지). 골드 = base + step × (L − 1), 다이아 = 고정. 둘 다 주점 보너스(tavern_*_per_level × (주점 − 1))를 더한다.
+export function gachaRates(config: Config, currency: string, level: number, tavernLevel: number) {
+  const t = Math.max(tavernLevel, 1) - 1
+  const k = goldLevel(config, level) - 1
+  const dia = currency === GACHA_DIA
+  const ssr = dia ? cfgNum(config, 'gacha_dia_ssr') : cfgNum(config, 'gacha_gold_ssr_base') + cfgNum(config, 'gacha_gold_ssr_step') * k
+  const sr = dia ? cfgNum(config, 'gacha_dia_sr') : cfgNum(config, 'gacha_gold_sr_base') + cfgNum(config, 'gacha_gold_sr_step') * k
+  return { ssr: ssr + cfgNum(config, 'tavern_ssr_per_level') * t, sr: sr + cfgNum(config, 'tavern_sr_per_level') * t }
+}
+
+// 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L. 최대 레벨이면 null.
+export const goldNext = (config: Config, level: number) =>
+  level >= cfgNum(config, 'gacha_gold_level_max') ? null : cfgNum(config, 'gacha_gold_level_pulls') * level
+
+// 골드 모집 add회 누적 → 레벨업(한 번에 여러 레벨, 남은 횟수는 넘긴다). 최대 레벨이면 누적 0.
+export function goldLevelUp(config: Config, level: number, pulls: number, add: number) {
+  let next = goldNext(config, level)
+  pulls += add
+  while (next !== null && pulls >= next) {
+    pulls -= next
+    level += 1
+    next = goldNext(config, level)
   }
+  return { level, pulls: next === null ? 0 : pulls }
 }
 
 // 업그레이드를 못 하는 이유(앱 Economy.upgrade_block_for와 같은 순서·코드). 되면 ''. 스펙 §2.4 검사 순서:
@@ -312,10 +350,12 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
   return ''
 }
 
-// 모집(스펙 §3.6): 장마다 등급(SSR rate_ssr, SR rate_sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
+// 모집(스펙 §3.6): 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
 // 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand는 [0, 1) 난수(서버는 암호학적 난수).
-// 확률은 주점 레벨로 오른다(개정 12, gachaRates). 앱 Economy.roll_gacha와 같은 규칙.
-export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number, tavernLevel = 1) {
+// rates = gachaRates(기본: 골드 Lv 1·주점 1). pity(다이아, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다.
+// 앱 Economy.roll_gacha와 같은 규칙.
+export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
+  rates = gachaRates(config, GACHA_GOLD, 1, 1), pity?: { n: number; max: number }) {
   const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {
@@ -323,11 +363,17 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
     if (pool.length === 0) throw new Error(`no ${grade} heroes to recruit`)
     return { id: pool[Math.floor(rand() * pool.length)], grade }
   }
-  const { ssr, sr } = gachaRates(config, tavernLevel)
+  const { ssr, sr } = rates
   const out: { id: string; grade: string }[] = []
   for (let i = 0; i < count; i++) {
     const r = rand()
-    out.push(pick(r < ssr ? 'SSR' : r < ssr + sr ? 'SR' : 'R'))
+    let grade = r < ssr ? 'SSR' : r < ssr + sr ? 'SR' : 'R'
+    if (pity) {
+      pity.n += 1
+      if (pity.n >= pity.max) grade = 'SSR'
+      if (grade === 'SSR') pity.n = 0
+    }
+    out.push(pick(grade))
   }
   if (count === 10) {
     let need = cfgNum(config, 'gacha_10_min_sr') - out.filter((x) => x.grade !== 'R').length
