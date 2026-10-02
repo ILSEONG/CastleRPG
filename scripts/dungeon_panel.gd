@@ -3,7 +3,7 @@ extends "res://scripts/ui_window.gd"
 ## - 골드 던전: 평야 그림 띠, 열쇠 n / 10, "다음 지급 hh:mm:ss · 최고 n단계", 그 단계 보상 골드, ◀ n단계 ▶, [도전]
 ## - 장비 던전: 불타는 성 띠, 열쇠 n / 3, 그 밑 "열쇠가 없으면 골드로 도전 (동전) 현재 골드 / 추가 도전 비용"(모자라면 현재 골드가 빨강),
 ##   그 단계 등급 확률 요약, ◀ n단계 ▶, [도전]
-## 그림 띠: 던전 3D 장면 스냅샷(dungeon_snaps + scene_snap — 시트를 처음 열 때 한 장씩 렌더, 캐시)을 깎은 모서리 틀에 넣고 천천히 훑는다(켄 번스).
+## 그림 띠: 던전 3D 장면 스냅샷(dungeon_snaps + scene_snap — 시트를 처음 열 때 한 장씩 렌더, 캐시)을 깎은 모서리 틀에 넣는다(움직이지 않는다).
 ## 스냅샷이 오기 전·헤드리스는 평면 그림(_draw_flat_band).
 ## 단계는 1 ~ 최고 + 1(처음엔 최고 + 1). [도전]이 안 되면(Economy.dungeon_block — 기본 편성으로) 비활성 + 빨간 이유.
 ## 아래 [보관함 n / 상한] → bag_panel.open_bag.
@@ -23,8 +23,6 @@ const NAMES := {"gold": "골드 던전", "equip": "장비 던전"}
 const BAND_H := 180.0  # 720 화면 띠 628×180 = DungeonSnaps.SIZE의 반(다른 비율이면 스냅샷을 잘라 채운다)
 const BAND_CHAMFER := 12.0
 const SNAP_KEY := "dungeon_band:%s"
-const PAN_SEC := 20.0  # 켄 번스: 좌우 한 번 왕복(초)
-const PAN_ZOOM := 1.08  # 그만큼 확대해 남는 폭을 훑는다
 const SLOT_SIZE := Vector2(98, 124)
 const CARD_SIZE := Vector2(150, 184)
 const GRID_COLUMNS := 4
@@ -199,14 +197,20 @@ func _on_open() -> void:
 	# ponytail: 키가 종류뿐 — 띠의 영웅은 처음 연 때의 편성 앞 셋, 실행 중 편성이 바뀌어도 그대로. 따라가야 하면 키에 id를 넣는다.
 	for t in TYPES:  # 처음 열 때 띠 스냅샷 요청(이미 있거나 대기 중이면 아무 일 없음, 헤드리스는 자리표시만)
 		SceneSnap.snap(SNAP_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
+	if not SceneSnap.node().snap_ready.is_connected(_on_snap_ready):
+		SceneSnap.node().snap_ready.connect(_on_snap_ready)
+
+
+## 스냅샷이 오면 그 띠만 한 번 다시 그린다(배경은 움직이지 않는다 — 사용자 요청).
+func _on_snap_ready(key: String) -> void:
+	for t in bands:
+		if key == SNAP_KEY % t:
+			bands[t].queue_redraw()
 
 
 func _process(delta: float) -> void:
 	if not visible or _form_view.visible:
 		return
-	for t in bands:  # 스냅샷이 있으면 켄 번스로 매 프레임
-		if SceneSnap.cached(SNAP_KEY % t) != null:
-			bands[t].queue_redraw()
 	_tick -= delta
 	if _tick <= 0.0:
 		_tick = 1.0  # "다음 지급" 초 단위
@@ -412,7 +416,7 @@ static func draw_key(c: Control) -> void:
 		c.draw_rect(Rect2(o + Vector2(s * x - s * 0.05, s * 0.05), Vector2(s * 0.08, s * 0.14)), KEY_GOLD)
 
 
-## 카드 그림 띠: 깎은 모서리(8각) 틀 안에 스냅샷(PAN_ZOOM 확대, PAN_SEC 주기로 좌우로 훑음) — 없으면 평면 그림 + 모서리를 카드 색으로 덮는다.
+## 카드 그림 띠: 깎은 모서리(8각) 틀 안에 스냅샷(가운데를 잘라 고정) — 없으면 평면 그림 + 모서리를 카드 색으로 덮는다.
 ## 위쪽 옅은 그림자 그러데이션, 안쪽 흰 빛 선, 진한 외곽선.
 func _draw_band(c: Control, t: String) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
@@ -420,9 +424,8 @@ func _draw_band(c: Control, t: String) -> void:
 	var tex := SceneSnap.cached(SNAP_KEY % t)
 	if tex != null:
 		var k := (c.size.x / c.size.y) / (float(tex.get_width()) / tex.get_height())  # 띠 비율 ÷ 그림 비율 — 늘이지 않고 잘라 채운다
-		var uv := (Vector2(1.0, 1.0 / k) if k > 1.0 else Vector2(k, 1.0)) / PAN_ZOOM
-		var pan := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU / PAN_SEC)
-		var src := Rect2((Vector2.ONE - uv) * Vector2(pan, 0.5), uv)  # 0..1 UV
+		var uv := Vector2(1.0, 1.0 / k) if k > 1.0 else Vector2(k, 1.0)
+		var src := Rect2((Vector2.ONE - uv) * 0.5, uv)  # 0..1 UV, 가운데 고정
 		var uvs := PackedVector2Array()
 		for p in oct:
 			uvs.append(src.position + p / c.size * src.size)

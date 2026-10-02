@@ -1,7 +1,7 @@
 extends RefCounted
 ## 던전 탭 카드 그림 띠의 3D 장면(scene_snap.gd가 한 번 찍어 캐시). 무대·조명 = ArenaKit, 몬스터·영웅 = UnitModel + Art 스펙. 오토로드 참조 없음.
 ## 골드: 평야 — 낮은 옆 시점(망원). 왼쪽 영웅들이 오른쪽을 보고, 오른쪽엔 고블린 무리와 그 뒤 큰 고블린 왕, 멀리 산.
-## 장비: 불타는 성 홀 — 앞에서 낮게 올려다본다. 부서진 아치 앞 데스나이트가 가운데, 양옆 앞에 영웅들의 등, 화로·바닥 불·불씨.
+## 장비: 불타는 성 홀 — 데스나이트를 가까이 낮게 올려다본다(띠 가운데를 크게 채움, 앞·뒤 빛으로 또렷하게). 영웅들은 양옆 바깥, 화로·바닥 불·불씨.
 ## 골드 자리는 카메라 기준 (옆 x = 화면 오른쪽, 깊이 z = 카메라 앞, m), 장비 자리는 홀 좌표(ArenaKit: +Z = 화면 아래).
 
 const ArenaKit := preload("res://scripts/arena_kit.gd")
@@ -22,11 +22,12 @@ const GOLD_GOBLINS := [Vector2(1.4, 17.0), Vector2(2.7, 19.0), Vector2(4.3, 16.5
 	Vector2(9.4, 21.0), Vector2(9.9, 19.0)]  # 화면 x ≈ 0.55 ~ 0.92
 const GOLD_KING := Vector2(5.6, 23.5)  # 화면 x ≈ 0.68, 고블린 너머(상체가 무리 위로)
 
-const HALL_EYE := Vector3(0, 1.2, 13.0)
-const HALL_LOOK := Vector3(0, 3.5, -6.0)  # 데스나이트 가슴 위(무대 boss = 홀 (0, 0, −6)) — 7° 올려다봄
-const HALL_FOV := 28.6  # 세로(가로 ≈ 84° — 홀 폭이 다 든다)
-const HALL_HEROES := [Vector3(-5.6, 0, 4.5), Vector3(5.2, 0, 5.0), Vector3(-3.0, 0, 0.5)]  # 앞 양옆(발끝만 잘림) + 왼쪽 가운데 — 화면 x ≈ 0.13, 0.87, 0.37
-const HALL_FILL := [Vector3(0, 2.5, -1.0), Color(1.0, 0.5, 0.25), 1.4, 9.0]  # 데스나이트 앞면 채움 빛 [자리, 색, 세기, 범위]
+const HALL_EYE := Vector3(0, 1.6, 6.0)  # 데스나이트(무대 boss = 홀 (0, 0, −6))에서 12 m — 띠 높이의 ~70%를 채운다(사용자 요청: 또렷하게)
+const HALL_LOOK := Vector3(0, 2.6, -6.0)  # 가슴 아래 — 살짝 올려다봄, 발끝·투구가 다 든다
+const HALL_FOV := 30.0  # 세로(가로 ≈ 86°)
+const HALL_HEROES := [Vector3(-5.8, 0, -3.0), Vector3(5.8, 0, -3.0), Vector3(8.4, 0, -5.8)]  # 양옆 바깥 조금 뒤(가운데 데스나이트를 가리지 않게) — 화면 x ≈ 0.17, 0.83, 0.9
+const HALL_FILL := [Vector3(0, 3.4, -2.2), Color(1.0, 0.85, 0.7), 9.0, 10.0]  # 데스나이트 앞면 채움 빛 [자리, 색, 세기, 범위]
+const HALL_RIM := [Vector3(0, 5.0, -9.5), Color(1.0, 0.45, 0.2), 6.0, 7.0]  # 등 뒤 테두리 빛 — 어두운 배경에서 윤곽을 뗀다
 
 
 ## type "gold" | "equip". hero_ids = 출전 편성 영웅 id(앞 HEROES개만, 표에 없는 id는 뺀다). SceneSnap.snap의 build로 bind해서 쓴다.
@@ -69,12 +70,13 @@ static func _hall(root: Node3D, heroes: Array) -> void:
 	for i in mini(heroes.size(), HEROES):
 		var p: Vector3 = hw * HALL_HEROES[i]
 		_unit(root, heroes[i], p, st.boss - p)
-	var fill := OmniLight3D.new()
-	fill.position = hw * HALL_FILL[0]
-	fill.light_color = HALL_FILL[1]
-	fill.light_energy = HALL_FILL[2]
-	fill.omni_range = HALL_FILL[3]
-	root.add_child(fill)
+	for l in [HALL_FILL, HALL_RIM]:
+		var o := OmniLight3D.new()
+		o.position = hw * l[0]
+		o.light_color = l[1]
+		o.light_energy = l[2]
+		o.omni_range = l[3]
+		root.add_child(o)
 	_camera(root, hw * HALL_EYE, hw * HALL_LOOK, HALL_FOV)
 
 
