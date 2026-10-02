@@ -53,9 +53,9 @@ const POP_KEYS := ["pop_base", "pop_per_house"]
 const SOLDIER_STR_COLS := ["id", "name", "building", "model"]
 const SOLDIER_NUM_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]  # 1티어 기준
 const SOLDIER_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 크다(나머지는 0 이상)
-const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_prod_sec", "soldier_prod_level_factor", "soldier_merge_count",
+const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "train_base_min", "train_step_min", "train_cost_tier_mult", "soldier_merge_count",
 	"train_batch_base", "train_batch_per_level"]
-const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count", "train_batch_base"]  # 1 이상 정수(나머지는 0보다 크다)
+const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count", "train_batch_base", "train_base_min", "train_step_min", "train_cost_tier_mult"]  # 1 이상 정수(나머지는 0보다 크다)
 const SOLDIER_INT0_KEYS := ["train_batch_per_level"]  # 0 이상 정수(개정 16)
 const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 단계 표 "레벨:값|…"(hero_slots·Balance.INTERIOR_TILES를 대신)
 const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
@@ -300,9 +300,22 @@ static func soldier_of_building(building_id: String) -> String:
 	return ""
 
 
-## 1마리 훈련 시간(초) = soldier_prod_sec × soldier_prod_level_factor^(L−1)(곱셈 n번 — 서버와 같은 값). Lv 1 3시간, Lv 10 약 1시간 54분.
+## 한 티어 안 레벨 수 k = train_base_min / train_step_min(개정 19, 서버 rules.trainK).
+static func _train_k() -> int:
+	return maxi(1, floori(config_num("train_base_min") / config_num("train_step_min")))
+
+
+## 훈련 티어 t = min(최대 티어, 1 + floor((L−1)/k)). 병사 건물 레벨 L이 정한다(서버 rules.trainTier와 같다).
+static func train_tier(level: int) -> int:
+	return mini(int(config_num("soldier_max_tier")), 1 + (maxi(level, 1) - 1) / _train_k())
+
+
+## 1마리 훈련 시간(초) = (train_base_min − train_step_min × s) × 60, s = (L−1) mod k(마지막 티어 뒤는 k−1). 3:00 → 0:30, 다음 티어에서 다시 3:00.
 static func soldier_unit_sec(level: int) -> float:
-	return _grown(config_num("soldier_prod_sec"), config_num("soldier_prod_level_factor"), maxi(level, 1) - 1)
+	var k := _train_k()
+	var l := maxi(level, 1) - 1
+	var s := k - 1 if l >= int(config_num("soldier_max_tier")) * k else l % k
+	return (config_num("train_base_min") - config_num("train_step_min") * s) * 60.0
 
 
 # --- 훈련(개정 16 §1). 서버 rules.parseTrainCost·trainMax와 같은 식 ---
@@ -322,11 +335,16 @@ static func parse_train_cost(s: String):
 	return out
 
 
-## 병종 type 1마리 비용 {자원: 수}(설정이 틀리면 {} — 검증이 막는다).
-static func train_unit_cost(type: String) -> Dictionary:
+## 병종 type 1마리 비용 {자원: 수}: 기본 비용 × train_cost_tier_mult^(tier−1)(설정이 틀리면 {} — 검증이 막는다).
+static func train_unit_cost(type: String, tier := 1) -> Dictionary:
 	_ensure()
 	var c = parse_train_cost(String(_config.get("train_cost_" + type, "")))
-	return c if c is Dictionary else {}
+	if not c is Dictionary:
+		return {}
+	var m := int(pow(config_num("train_cost_tier_mult"), tier - 1))
+	for r in c:
+		c[r] = int(c[r]) * m
+	return c
 
 
 ## 묶음 상한 = train_batch_base + train_batch_per_level × (L − 1).

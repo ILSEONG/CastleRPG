@@ -864,6 +864,17 @@ export function createApp(opts: AppOptions) {
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
 
+    // 통합 테스트용(개정 19): 병사 건물 레벨을 바로 정한다(막사 Lv 7 = T2를 6번 업그레이드 없이 본다). 병사 건물이 아니면 400.
+    app.post('/v1/test/barracks_level', auth, async (c) => {
+      const level = intField(await body(c), 'level', 1, 30)
+      const id = c.get('playerId') as string
+      await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
+        update player_buildings set level = $2 where player_id = (select player_id from s) and building = 'barracks'`, [id, level])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
     app.post('/v1/test/build_now', auth, async (c) => {
       const id = c.get('playerId') as string

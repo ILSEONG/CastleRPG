@@ -51,7 +51,8 @@ var upgrade_button: Button
 # 훈련 칸(병사 건물일 때만 보인다, 개정 16)
 var train_box: VBoxContainer
 var empty_box: VBoxContainer  # 비었을 때
-var unit_label: Label  # "1마리 2:51:00"
+var unit_label: Label  # "T2 보병 · 1마리 3:00:00"
+var next_label: Label  # 다음 레벨 미리보기 "Lv 7 → T2 해금" 또는 "1마리 2:30:00 → 2:00:00"(개정 19)
 var qty  # 수량 입력(qty_box.gd)
 var train_cost_labels := {}  # 자원 id → 총비용 숫자 Label
 var train_time_label: Label  # "훈련 시간 23:00:00"
@@ -65,7 +66,7 @@ var done_box: VBoxContainer  # 완료
 var done_label: Label  # "보병 ×8 훈련 완료"
 var collect_button: Button
 
-var _train_type := ""  # 훈련 칸 피규어를 만든 병종
+var _train_type := ""  # 훈련 칸 피규어를 만든 "병종:티어"
 var _unit_icon: Control
 var _train_cost_row: HBoxContainer
 var _reqs_title: Label
@@ -218,6 +219,8 @@ func _build_train_box() -> void:
 	unit_label = _label("", 28)
 	unit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	head.add_child(unit_label)
+	next_label = _label("", 24, GREEN)
+	empty_box.add_child(next_label)
 	qty = QtyBox.new()
 	qty.value_changed.connect(func(_v): if visible: _refresh())
 	empty_box.add_child(qty)
@@ -272,16 +275,17 @@ func _refresh_training(type: String) -> void:
 	train_box.visible = type != ""
 	if type == "":
 		return
-	if type != _train_type:  # 병종 피규어(렌더가 끝나면 다시 그린다 — SoldierPanel.unit_icon)
-		_train_type = type
+	var id := building_id
+	var q := Economy.training(id)
+	var tier: int = q.tier if q.count > 0 else Economy.train_tier(id)  # 진행 중 묶음은 시작할 때 티어(개정 19)
+	if "%s:%d" % [type, tier] != _train_type:  # 병종 피규어 + 티어 갈매기(렌더가 끝나면 다시 그린다 — SoldierPanel.unit_icon)
+		_train_type = "%s:%d" % [type, tier]
 		if _unit_icon != null:
 			_unit_icon.queue_free()
-		_unit_icon = SoldierPanel.unit_icon(type, 0, TRAIN_ICON_PX)
+		_unit_icon = SoldierPanel.unit_icon(type, tier, TRAIN_ICON_PX)
 		var head: HBoxContainer = empty_box.get_node("Head")
 		head.add_child(_unit_icon)
 		head.move_child(_unit_icon, 0)
-	var id := building_id
-	var q := Economy.training(id)
 	var nm: String = GameData.soldier(type).name
 	empty_box.visible = q.count == 0
 	run_box.visible = q.count > 0 and not q.ready
@@ -289,15 +293,18 @@ func _refresh_training(type: String) -> void:
 	if q.count > 0:
 		var left := maxf(0.0, float(q.finish) - Economy.time_now())
 		train_bar.value = Economy.train_progress(id)
-		run_label.text = "%s ×%d · 남은 %s" % [nm, q.count, UiKit.clock(left)]
-		done_label.text = "%s ×%d 훈련 완료" % [nm, q.count]
+		run_label.text = "T%d %s ×%d · 남은 %s" % [tier, nm, q.count, UiKit.clock(left)]
+		done_label.text = "T%d %s ×%d 훈련 완료" % [tier, nm, q.count]
 		cancel_button.disabled = Economy.training_waiting(id, "cancel")
 		collect_button.disabled = Economy.training_waiting(id, "collect")
 		return
-	qty.set_range(1, maxi(1, mini(Economy.train_max(id), _affordable(type))))
+	qty.set_range(1, maxi(1, mini(Economy.train_max(id), _affordable(type, tier))))
 	var n: int = qty.value
-	unit_label.text = "1마리 " + UiKit.clock(GameData.soldier_unit_sec(Economy.building_level(id)))
-	var cost := EconomyScript.train_cost(type, n)
+	var lv := Economy.building_level(id)
+	unit_label.text = "T%d %s · 1마리 %s" % [tier, nm, UiKit.clock(GameData.soldier_unit_sec(lv))]
+	next_label.text = train_preview(id, lv)
+	next_label.visible = next_label.text != ""
+	var cost := EconomyScript.train_cost(type, n, tier)
 	for r in train_cost_labels:
 		var need := int(cost.get(r, 0))
 		train_cost_labels[r].text = UiKit.commas(need)
@@ -312,10 +319,19 @@ func _refresh_training(type: String) -> void:
 	train_reason.visible = why != ""
 
 
+## 다음 레벨 미리보기(개정 19): 티어가 바뀌면 "Lv 7 → T2 해금", 아니면 "1마리 2:30:00 → 2:00:00", 최대 레벨이면 "".
+static func train_preview(id: String, lv: int) -> String:
+	if lv >= int(GameData.building_def(id).get("max_level", 0)):
+		return ""
+	if GameData.train_tier(lv + 1) > GameData.train_tier(lv):
+		return "Lv %d → T%d 해금" % [lv + 1, GameData.train_tier(lv + 1)]
+	return "1마리 %s → %s" % [UiKit.clock(GameData.soldier_unit_sec(lv)), UiKit.clock(GameData.soldier_unit_sec(lv + 1))]
+
+
 ## 지금 자원으로 훈련할 수 있는 수(무료면 아주 큰 수).
-static func _affordable(type: String) -> int:
+static func _affordable(type: String, tier := 1) -> int:
 	var n := 1 << 30
-	var one := GameData.train_unit_cost(type)
+	var one := GameData.train_unit_cost(type, tier)
 	for r in one:
 		if int(one[r]) > 0:
 			n = mini(n, int(Economy.res.get(r, 0)) / int(one[r]))
@@ -331,7 +347,9 @@ static func effect_lines(id: String, lv: int) -> Array:
 	if res != "":
 		return [["생산", "%d/분" % EconomyScript.rate_per_min(res, lv), "%d/분" % EconomyScript.rate_per_min(res, n)]]
 	if GameData.soldier_of_building(id) != "":
-		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv)), UiKit.clock(GameData.soldier_unit_sec(n))]]
+		var tn := GameData.train_tier(n)
+		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n))
+		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv)), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
 	match id:
 		"keep":
 			var rows := [["건물 최대", "Lv %d" % lv, "Lv %d" % n],
