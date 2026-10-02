@@ -146,8 +146,8 @@ test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async (
   assert.equal(cfg.value, '1:4|5:8|10:12')
   const [gate] = await db.query("select name, max_level, wood, stone, food, base_sec, req1, req2 from building_defs where id = 'gate'")
   assert.deepEqual(gate, { name: '성문', max_level: 30, wood: 150, stone: 250, food: 0, base_sec: 45, req1: 'quarry', req2: null })
-  const [ig] = await db.query(`select title, grade, gear, s1b, skill2, s2a, "desc" from heroes where id = 'ignis'`)
-  assert.deepEqual(ig, { title: '화염 대마법사', grade: 'SSR', gear: '2H_Staff', s1b: 3.5, skill2: null, s2a: null, desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다' })
+  const [ig] = await db.query(`select title, grade, gear, s1b, skill2, s2a, skill3, s3a, s3b, "desc" from heroes where id = 'ignis'`)
+  assert.deepEqual(ig, { title: '화염 대마법사', grade: 'SSR', gear: '2H_Staff', s1b: 3.5, skill2: 'poison', s2a: 40, skill3: 'haste', s3a: 25, s3b: null, desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다' })
   const [st] = await db.query("select value from game_config where key = 'starter_heroes'")
   assert.equal(st.value, 'hans|ella|dorik|nina')
 })
@@ -330,4 +330,58 @@ test('마이그레이션 009: 008까지 적용된 DB의 보유 영웅은 조각 
   } finally {
     await d.close()
   }
+})
+
+test('마이그레이션 011: 010까지 적용된 DB의 heroes에 skill3·s3a..s3c(null)를 더하고 시드가 채운다. 시드 전에도 해금 설정 기본값', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
+  tmp.push(dir)
+  for (const f of ALL_MIGRATIONS.filter((f) => f < '011')) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  const d = await openDb({})
+  try {
+    await migrate(d, dir)
+    await assert.rejects(d.query('select skill3 from heroes'))
+    assert.deepEqual(await migrate(d), ALL_MIGRATIONS.filter((f) => f >= '011'))
+    assert.deepEqual(await d.query('select skill3, s3a, s3b, s3c from heroes'), [])
+    const cfg = await d.query("select key, value from game_config where key like 'skill%_unlock_star' order by key")
+    assert.deepEqual(cfg.map((r) => `${r.key}=${r.value}`), ['skill2_unlock_star=3', 'skill3_unlock_star=5'])
+    await seed(d)
+    const rows = await d.query("select id, skill3, s3a, s3b from heroes where id in ('seraphine', 'bron', 'hans') order by id")
+    assert.deepEqual(rows, [{ id: 'bron', skill3: 'lifesteal', s3a: 8, s3b: null }, { id: 'hans', skill3: null, s3a: null, s3b: null },
+      { id: 'seraphine', skill3: 'stun', s3a: 6, s3b: 1 }])
+  } finally {
+    await d.close()
+  }
+})
+
+test('영웅 스킬 검증(개정 17): 등급별 개수(SSR·SR 3, R 2, skill1부터 빈틈없이), 알려진 종류만, 같은 종류 둘 없음. 해금 설정은 0..5 정수·오름차순', async () => {
+  const heroes = readFileSync(join(DATA_DIR, 'heroes.csv'), 'utf8')
+  const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
+  const dir = dataCopy()
+  const fails = async (heroCsv: string, cfgCsv: string, re: RegExp) => {
+    writeFileSync(join(dir, 'heroes.csv'), heroCsv)
+    writeFileSync(join(dir, 'config.csv'), cfgCsv)
+    await assert.rejects(readTables(dir), (e: unknown) => {
+      assert.ok(e instanceof CsvError)
+      assert.equal(e.errors.length, 1, e.errors.join(' | '))
+      assert.match(e.errors[0], re)
+      return true
+    })
+  }
+  const hero = (from: string, to: string) => {
+    assert.ok(heroes.includes(from), from)
+    return heroes.replace(from, to)
+  }
+  const withCfg = (key: string, value: string) => cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`)
+  await fails(hero(',thorns,15,,,lifesteal,8,,,', ',thorns,15,,,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
+  await fails(hero(',dmg_reduce,10,,,,,,,', ',dmg_reduce,10,,,haste,10,,,'), cfg, /line 19 column 'skill3': R heroes have exactly 2 skills/) // 한스
+  await fails(hero(',heal_aura,6,6,8,dmg_reduce,25,,,', ',heal_aura,6,6,8,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
+  await fails(hero(',atk_aura,6,15,,', ',meteor,6,15,,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'meteor'/)
+  await fails(hero(',atk_aura,6,15,,', ',heal_aura,6,15,,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'heal_aura'/)
+  await fails(heroes, withCfg('skill3_unlock_star', '6'), /skill3_unlock_star must be an integer in 0\.\.5: '6'/)
+  await fails(heroes, withCfg('skill2_unlock_star', '2.5'), /skill2_unlock_star must be an integer in 0\.\.5: '2\.5'/)
+  await fails(heroes, withCfg('skill2_unlock_star', '5').replace(/^skill3_unlock_star,.*$/m, 'skill3_unlock_star,4'), /skill3_unlock_star must be at least skill2_unlock_star: 4 < 5/)
+  await fails(heroes, cfg.replace(/^skill2_unlock_star,.*\n/m, ''), /missing key 'skill2_unlock_star'/)
+  writeFileSync(join(dir, 'heroes.csv'), heroes)
+  writeFileSync(join(dir, 'config.csv'), withCfg('skill2_unlock_star', '0').replace(/^skill3_unlock_star,.*$/m, 'skill3_unlock_star,0'))
+  await readTables(dir) // 0·0(처음부터 다 열림)은 받는다
 })

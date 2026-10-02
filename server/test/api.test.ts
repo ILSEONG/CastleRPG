@@ -399,10 +399,12 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 4 })
   assert.equal(g.heroes.length, 22)
   assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
+  assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['crit', null]) // 개정 17: R은 스킬 2개
   assert.deepEqual(g.heroes[1], {
     id: 'ignis', name: '이그니스', title: '화염 대마법사', grade: 'SSR', role: 'ranged', archetype: 'caster', model: 'Mage', gear: '2H_Staff',
     color: '#E8553A', hp: 396, atk: 44, range: 8, atk_interval: 1.2, speed: 6, aggro: 12,
-    skill1: 'aoe_blast', s1a: 5, s1b: 3.5, s1c: 220, skill2: null, s2a: null, s2b: null, s2c: null,
+    skill1: 'aoe_blast', s1a: 5, s1b: 3.5, s1c: 220, skill2: 'poison', s2a: 40, s2b: 3, s2c: null,
+    skill3: 'haste', s3a: 25, s3b: null, s3c: null, // 개정 17: 스킬 3열
     desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다',
   })
   assert.deepEqual(g.resources.map((x: any) => x.id), ['wood', 'stone', 'food']) // 파일 순서
@@ -410,7 +412,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 52) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5
+  assert.equal(Object.keys(g.config).length, 55) // 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 17: 해금 +2, fx_shake +1
   assert.equal(g.config.train_cost_cavalry, 'food:40|stone:20')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13

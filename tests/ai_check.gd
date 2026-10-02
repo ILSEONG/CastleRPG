@@ -334,6 +334,7 @@ func _skill_cases(heroes: Array) -> void:
 
 	# (o) slow: 세라핀(북 성벽 위, ★3 — slow는 스킬 2)에게 맞은 grunt는 30% 느리게 걷는다
 	var se = _add_hero("seraphine", 100, 3)
+	se.atk = GameData.hero_stats(se.def, 1, 0, GameState.building_levels()).atk  # ★3 공격 배율이면 grunt가 한 방에 죽는다 — 공격은 ★0 그대로
 	_g = _spawn("grunt", 0, Vector3(-6, 0, -(north_out + 4.0)))
 	await _wait_until(func(): return _alive(_g) and _g._slow_t > 0.0, 3.0)
 	var base_speed: float = _g._stats.speed
