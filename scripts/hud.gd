@@ -92,7 +92,8 @@ func _ready() -> void:
 	_button.pressed.connect(_on_button)
 	UiKit.apply_button(_button, UiKit.AMBER, 14.0)
 	head.add_child(_button)
-	_auto = _auto_box()
+	_auto = UiKit.checkbox("연속 진행")
+	_auto.toggled.connect(_on_auto_toggled)
 	head.add_child(_auto)
 	var castle_row := HBoxContainer.new()
 	castle_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -312,42 +313,6 @@ func _on_button() -> void:
 		GameState.start_stage()
 	else:
 		GameState.stop_stage()
-
-
-## 연속 진행 체크박스: 각진 상자 + 각진 체크, 오른쪽에 글자. 탭 = 토글, 저장.
-func _auto_box() -> Button:
-	var b := Button.new()
-	b.toggle_mode = true
-	b.flat = true
-	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(136, 64)
-	b.toggled.connect(_on_auto_toggled)
-	var box := Control.new()
-	box.position = Vector2(0, 12)
-	box.size = Vector2(40, 40)
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.draw.connect(func():
-		var r := Rect2(Vector2.ZERO, box.size)
-		var on := b.button_pressed
-		box.draw_colored_polygon(UiKit.LowpolyBox.octagon(r, 9.0), UiKit.AMBER if on else Color(1, 1, 1, 0.9))
-		var o := UiKit.LowpolyBox.octagon(r.grow(-1.0), 9.0)
-		o.append(o[0])
-		box.draw_polyline(o, INK, 2.5)
-		if on:
-			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), Color.WHITE, 5.0, false)
-			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), INK, 1.5, false))
-	b.add_child(box)
-	b.toggled.connect(func(_on): box.queue_redraw())
-	var l := Label.new()
-	l.text = "연속 진행"
-	l.position = Vector2(46, 0)
-	l.size = Vector2(90, 64)
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", 20)
-	l.add_theme_color_override("font_color", INK)
-	b.add_child(l)
-	return b
 
 
 func _on_auto_toggled(on: bool) -> void:

@@ -195,3 +195,38 @@ static func facet_card_geometry(rect: Rect2, grade_color: Color, inner_color: Co
 	var line := outer.duplicate()
 	line.append(outer[0])
 	return [pts, cols, line]
+
+
+## 체크박스(토글 버튼): 각진 상자 + 각진 체크, 오른쪽에 글자(연속 진행·자동 모집). 상태는 button_pressed.
+static func checkbox(text: String) -> Button:
+	var b := Button.new()
+	b.toggle_mode = true
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(136, 64)
+	var box := Control.new()
+	box.position = Vector2(0, 12)
+	box.size = Vector2(40, 40)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.draw.connect(func():
+		var r := Rect2(Vector2.ZERO, box.size)
+		var on := b.button_pressed
+		box.draw_colored_polygon(LowpolyBox.octagon(r, 9.0), AMBER if on else Color(1, 1, 1, 0.9))
+		var o := LowpolyBox.octagon(r.grow(-1.0), 9.0)
+		o.append(o[0])
+		box.draw_polyline(o, INK, 2.5)
+		if on:
+			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), Color.WHITE, 5.0, false)
+			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), INK, 1.5, false))
+	b.add_child(box)
+	b.toggled.connect(func(_on): box.queue_redraw())
+	var l := Label.new()
+	l.text = text
+	l.position = Vector2(46, 0)
+	l.size = Vector2(90, 64)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", 20)
+	l.add_theme_color_override("font_color", INK)
+	b.add_child(l)
+	return b
