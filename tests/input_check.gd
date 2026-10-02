@@ -656,6 +656,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _soldier_tap()
 	await _soldier_figures(tabs)
 	await _dungeon_ui(tabs)
+	await _dungeon_gold_line(tabs)
 	await _world_tags()
 	await _rotate_ui(hud)
 	await _fever_ui(hud)
@@ -2255,3 +2256,33 @@ func _wait_until(cond: Callable, timeout: float) -> void:
 	while not cond.call() and t < timeout:
 		await get_tree().process_frame
 		t += get_process_delta_time()
+
+
+## 장비 던전 카드 열쇠 밑 골드 줄 "현재 골드 / 추가 도전 비용": 모자라면 현재 골드가 빨강, 골드가 오르면 원래 색(Economy.changed로 바로).
+## 열쇠 없이 골드로 추가 도전(오프라인 start_dungeon + debug_win)하면 비용이 올라 바로 바뀐다(dungeons_changed).
+func _dungeon_gold_line(tabs) -> void:
+	var dwin = tabs.windows.dungeon
+	var ec: Dictionary = dwin.cards.equip
+	var g0: int = Economy.gold_tenths
+	dwin.open()
+	await _frames(1)
+	var st0 := Economy.dungeon_state("equip")
+	var cost: int = st0.extra_cost
+	Economy.add_gold_tenths((cost - 1) * 10 - Economy.gold_tenths)
+	var short := [ec.gold.text, ec.cost.text, ec.gold.get_theme_color("font_color")]
+	Economy.add_gold_tenths(10)
+	var enough := [ec.gold.text, ec.cost.text, ec.gold.get_theme_color("font_color")]
+	_check(short == [UiKit.commas(cost - 1), "/ " + UiKit.commas(cost), dwin.RED] and enough == [UiKit.commas(cost), "/ " + UiKit.commas(cost), HudScript.INK]
+		and ec.gold.is_visible_in_tree() and ec.gold.get_global_rect().position.y > ec.keys.get_global_rect().end.y - 4.0,
+		"(D) equip card: gold line under the keys reads <gold> / <cost>; red while short, normal once gold reaches the cost", "short=%s enough=%s" % [short, enough])
+	print("INPUT INFO: equip card gold line %s, keys %s, band %s" % [ec.gold.get_parent().get_global_rect(), ec.keys.get_global_rect(), dwin.bands.equip.get_global_rect()])
+	_check(st0.keys == 0, "(D) precondition: no equip key left (the next run is paid with gold)", "keys=%d" % st0.keys)
+	Economy.dungeon_started.disconnect(_main._on_dungeon_started)  # 장면은 바꾸지 않고 오프라인 API만
+	var ok := Economy.start_dungeon("equip", 1, Economy.default_party("equip")) and Economy.debug_win()
+	Economy.dungeon_started.connect(_main._on_dungeon_started)
+	var st := Economy.dungeon_state("equip")
+	_check(ok and st.extra_today == st0.extra_today + 1 and st.extra_cost > cost and Economy.gold == 0 and ec.gold.text == "0"
+		and ec.cost.text == "/ " + UiKit.commas(st.extra_cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
+		"(D) an extra run paid with gold raises the cost and the line follows at once (0 / new cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
+	Economy.add_gold_tenths(g0 - Economy.gold_tenths)
+	dwin.close()
