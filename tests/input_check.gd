@@ -2197,6 +2197,8 @@ func _dungeon_ui(tabs) -> void:
 	_check(hwin.equip_slots.size() == 7 and hwin.equip_slots.values().all(func(s): return s.tile.grade == "" and card.encloses(s.button.get_global_rect()))
 		and not hwin.equip_label.visible and hwin.equip_slots.weapon.tile.kind == "sword",
 		"(D) hero detail: 7 empty equipment slots on the big card (hans's weapon slot shows a sword)", "card=%s" % card)
+	_check(hwin.equip_slots[it.slot].dot.visible and hwin.equip_slots.values().all(func(q): return q.dot.visible == Economy.equip_upgrade_available("hans", hwin.equip_slots.find_key(q))),
+		"(D) an empty slot with an unequipped item for it shows the red dot (top right)", "dot=%s" % hwin.equip_slots[it.slot].dot.visible)
 	print("INPUT INFO: hero equipment slots %s" % [hwin.equip_slots.keys().map(func(s): return [s, hwin.equip_slots[s].button.get_global_rect()])])
 	await _tap(slot_b.get_global_rect().get_center())
 	_check(bag.is_open() and bag.mode == "pick" and bag.slot == it.slot and bag.rows.has(it.id) and bag.rows[it.id].equip.text == "장착" and bag.unequip_button.disabled,
@@ -2210,6 +2212,8 @@ func _dungeon_ui(tabs) -> void:
 		and hwin.equip_label.visible and hwin.equip_label.text == "장비 " + preload("res://scripts/bag_panel.gd").stat_text(it)
 		and hwin.stat_values[0].text == UiKit.commas(roundi(want.hp)) and hwin.stat_values[0].text != hp0,
 		"(D) [장착] equips it: the slot shows its grade, HP includes it and the total line reads 장비 HP +n", "eq=%s label=%s hp %s -> %s" % [Economy.equipment, hwin.equip_label.text, hp0, hwin.stat_values[0].text])
+	_check(hwin.equip_slots[it.slot].dot.visible == Economy.equip_upgrade_available("hans", it.slot),
+		"(D) after equipping, the slot dot shows only if a better unequipped item for that slot remains", "dot=%s" % hwin.equip_slots[it.slot].dot.visible)
 	await _guard_wait()
 	await _tap(slot_b.get_global_rect().get_center())
 	await _guard_wait()

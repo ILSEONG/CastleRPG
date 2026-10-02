@@ -114,6 +114,7 @@ func _init() -> void:
 	test_equipment_offline()
 	test_dungeon_save_and_server()
 	test_seasons()
+	test_equip_upgrade_dot()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3498,3 +3499,21 @@ func test_idle_four_sides_at_once() -> void:
 	for side in 4:
 		ok = ok and ev.filter(func(e): return e.side == side).map(func(e): return e.lane) == [0, 1, 2]
 	check(ok, "idle event: 4 sides x 3 lanes at the same time")
+
+
+## 영웅 장비 칸 빨간 점(사용자 요청): 그 부위에 아무도 안 낀, 지금보다 점수 높은 장비가 있으면 true. 무기는 그 영웅 모델 종류만.
+func test_equip_upgrade_dot() -> void:
+	var e = _econ(Time.get_unix_time_from_system())
+	e.bag = [{"id": 1, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1}, {"id": 2, "slot": "hat", "weapon_kind": null, "grade": "SR", "level": 1},
+		{"id": 3, "slot": "weapon", "weapon_kind": "axe", "grade": "SSR", "level": 1}]
+	e.next_item_id = 4
+	check(e.equip_upgrade_available("hans", "hat") and not e.equip_upgrade_available("hans", "weapon") and e.equip_upgrade_available("dorik", "weapon")
+		and not e.equip_upgrade_available("hans", "top") and not e.equip_upgrade_available("kyle", "hat"),
+		"dot: empty hat slot with a hat in the bag; Knight can't use an axe; Barbarian can; no top items; unowned hero none")
+	e.equipment = {"hans": {"hat": 2}}
+	check(not e.equip_upgrade_available("hans", "hat") and not e.equip_upgrade_available("nina", "hat") == false,
+		"dot: wearing the best hat hides it; another hero still sees the unequipped N hat (the SR one is taken)")
+	e.equipment = {"hans": {"hat": 1}}
+	check(e.equip_upgrade_available("hans", "hat"), "dot: a better unequipped hat (SR over N) shows the dot")
+	e.free()
+
