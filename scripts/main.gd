@@ -35,6 +35,7 @@ const TabBarScript := preload("res://scripts/tab_bar.gd")
 const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
+const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
 
@@ -52,6 +53,9 @@ var soldiers: Array = []  # 성채 앞 병사 노드(개정 13)
 var _soldier_key = null  # 병사를 만들 때의 배치(바뀌면 다시 만든다)
 var _built_slots := 0  # 이 월드를 만들 때의 영웅 슬롯 수(성채 단계)
 var _expand_pending := false  # 성채 단계가 바뀌어 다음 방치 시점에 월드를 다시 만든다
+var _env: Environment  # 계절(개정 22)이 하늘·빛·바닥 색을 바꾼다
+var _sun: DirectionalLight3D
+var _ground_mat: ShaderMaterial
 
 
 func _ready() -> void:
@@ -76,6 +80,9 @@ func _build_world() -> void:
 	var rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
+	var seasons = SeasonsScript.new()  # 개정 22 §4: 스테이지마다 계절(시작은 현재 스테이지 계절로 바로)
+	seasons.setup(_env, _sun, _ground_mat, scenery, camera)
+	add_child(seasons)
 	var tags = WorldTagsScript.new()  # 건물·상인·문루 이름표(개정 15, 화면 공간) — HP 바·말풍선보다 아래 캔버스
 	tags.camera = camera
 	tags.scenery = scenery
@@ -348,7 +355,9 @@ func _build_environment() -> void:
 	e.ambient_light_energy = 0.9
 	env.environment = e
 	add_child(env)
+	_env = e
 	var sun := DirectionalLight3D.new()
+	_sun = sun
 	sun.light_color = Color(1.0, 0.96, 0.88)
 	sun.light_energy = 1.1
 	sun.shadow_enabled = true
@@ -370,6 +379,7 @@ func _build_ground(interior_half: float) -> void:
 	mat.set_shader_parameter("tile_size", Balance.TILE)
 	mat.set_shader_parameter("interior_half", interior_half)
 	mat.set_shader_parameter("road_half", Balance.TILE)
+	_ground_mat = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane
 	mi.material_override = mat

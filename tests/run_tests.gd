@@ -109,6 +109,7 @@ func _init() -> void:
 	test_dungeons_offline()
 	test_equipment_offline()
 	test_dungeon_save_and_server()
+	test_seasons()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3184,3 +3185,75 @@ func test_dungeon_save_and_server() -> void:
 	check(not e.apply_server(bad_reply) and e.bag.size() == 2, "apply_server rejects items that are not an array")
 	_errors.count = logged  # 거부는 push_error로 알린다
 	e.free()
+
+
+# --- 계절 (개정 22 §4) ---
+const SeasonsScript := preload("res://scripts/seasons.gd")
+
+
+## 정점 색 중 target(또는 MeshKit.rock이 0~12% 어둡게 한 target)인 것의 수. 정점 색은 8비트로 저장돼 오차를 둔다.
+func _count_like(mesh: Mesh, target: Color) -> int:
+	var n := 0
+	for c in mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
+		var f: float = c.g / target.g
+		if f > 0.86 and f < 1.02 and absf(c.r - target.r * f) < 0.02 and absf(c.b - target.b * f) < 0.02:
+			n += 1
+	return n
+
+
+func test_seasons() -> void:
+	check([1, 2, 3, 4, 5, 9].map(func(s): return SeasonsScript.season_of_stage(s)) == [0, 1, 2, 3, 0, 0],
+		"season cycle: stage 1 spring, 2 summer, 3 autumn, 4 winter, 5 spring again")
+	check([1, 25, 26, 50, 51].map(func(g): return SeasonsScript.stage_of_round(g)) == [1, 1, 2, 2, 3], "global round g -> stage S (25 rounds per stage)")
+	check(SeasonsScript.PALETTES.size() == 4 and SeasonsScript.PALETTES.all(func(p): return p.particles.get("amount", 0) <= SeasonsScript.MAX_PARTICLES)
+		and SeasonsScript.PALETTES[1].particles.is_empty(), "four seasons, particles at most 150, summer has none")
+	# 실제 레시피로 만든 가짜 풍경(buildings.gd season_slots와 같은 모양)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var slots := []
+	for pair in [[TownKitScript.tree_pine, 0], [TownKitScript.tree_round, 0], [TownKitScript.tree_round, 1], [TownKitScript.bush, 0],
+			[TownKitScript.mountain, 0], [TownKitScript.rock_cluster, 0]]:
+		var st: int = rng.state
+		var mm := MultiMesh.new()
+		mm.mesh = pair[0].call(rng)
+		slots.append({"mm": mm, "recipe": pair[0], "idx": pair[1], "state": st, "base": mm.mesh})
+	var replay := RandomNumberGenerator.new()
+	replay.state = slots[0].state
+	check(TownKitScript.tree_pine(replay).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] == slots[0].base.surface_get_arrays(0)[Mesh.ARRAY_VERTEX],
+		"the saved rng state rebuilds the same shape (default palette keeps the old rng order)")
+	var env := Environment.new()
+	var sun := DirectionalLight3D.new()
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/ground_grid.gdshader")
+	var s = SeasonsScript.new()
+	s.setup(env, sun, mat, {"season_slots": slots}, null)
+	s.apply(SeasonsScript.season_of_stage(3), true)
+	var au: Dictionary = SeasonsScript.PALETTES[2]
+	check(mat.get_shader_parameter("grass_a") == au.grass_a and mat.get_shader_parameter("grass_b") == au.grass_b and env.background_color == au.sky
+		and env.ambient_light_color == au.ambient and sun.light_color == au.sun and is_equal_approx(sun.light_energy, au.sun_energy), "autumn sets ground, sky, ambient and sun")
+	check(slots.slice(0, 5).all(func(sl): return sl.mm.mesh != sl.base) and slots[5].mm.mesh == slots[5].base, "autumn swaps tree, bush and mountain meshes; rocks stay")
+	check(_count_like(slots[1].mm.mesh, au.tree_round[0].leaf) > 0 and _count_like(slots[1].mm.mesh, TownKitScript.LEAF) == 0
+		and _count_like(slots[2].mm.mesh, au.tree_round[1].leaf) > 0, "autumn canopies: orange and red variants, no summer green")
+	check(s._particles.emitting and s._particles.amount == au.particles.amount, "autumn: falling leaves")
+	var autumn_tree: Mesh = slots[1].mm.mesh
+	s.apply(3, true)
+	check(_count_like(slots[0].mm.mesh, TownKitScript.SNOW) > 0 and _count_like(slots[0].base, TownKitScript.SNOW) == 0, "winter: snow caps on the pines")
+	var bare: Mesh = slots[1].mm.mesh
+	check(_count_like(bare, TownKitScript.WOOD) + _count_like(bare, TownKitScript.WOOD_DARK) == bare.surface_get_arrays(0)[Mesh.ARRAY_COLOR].size(),
+		"winter: round trees are bare wood branches, no canopy")
+	check(_count_like(slots[4].mm.mesh, TownKitScript.SNOW) > _count_like(slots[4].base, TownKitScript.SNOW), "winter: the mountain snow band reaches lower")
+	check(mat.get_shader_parameter("edge_snow") > 0.0 and s._particles.emitting and s._particles.amount <= SeasonsScript.MAX_PARTICLES, "winter: paving edge snow, snowfall within 150")
+	s.apply(2, true)
+	check(slots[1].mm.mesh == autumn_tree, "season variants are built once and cached")
+	s.apply(1, true)
+	check(slots.all(func(sl): return sl.mm.mesh == sl.base) and not s._particles.emitting and mat.get_shader_parameter("edge_snow") == 0.0
+		and mat.get_shader_parameter("grass_a") == SeasonsScript.PALETTES[1].grass_a, "summer: base meshes, no particles, no snow")
+	s.apply(0, true)
+	check(_count_like(slots[1].mm.mesh, SeasonsScript.PALETTES[0].tree_round[0].leaf) > 0, "spring: a blossom tree variant")
+	s.stage = 1
+	s.change_stage(4)
+	check(s.stage == 4 and s.season == 3 and _count_like(slots[0].mm.mesh, TownKitScript.SNOW) > 0, "change_stage(4) moves to winter (outside the tree: at once)")
+	SeasonsScript.set_stage(5)  # 살아 있는 월드가 없으면 무시
+	check(s.stage == 4, "Seasons.set_stage without a live world is a no-op")
+	s.free()
+	sun.free()

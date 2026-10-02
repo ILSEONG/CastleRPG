@@ -401,8 +401,10 @@ static func _log(k, start: Vector3, length: float, r: float) -> void:
 
 # --- 성 밖 자연물·산 (바닥 y=0, 한 표면) ---
 
-## 침엽수: 5각 줄기 + 원뿔 3층(위로 갈수록 작게), 높이 약 5~7m.
-static func tree_pine(rng: RandomNumberGenerator) -> ArrayMesh:
+## 계절 팔레트 pal(개정 22, seasons.gd가 넘긴다): 빈 사전 = 기본색(여름). 없는 키는 기본색. 같은 rng 상태면 같은 모양.
+
+## 침엽수: 5각 줄기 + 원뿔 3층(위로 갈수록 작게), 높이 약 5~7m. pal: leaf·leaf_dark, snow = 층마다 눈 모자.
+static func tree_pine(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
 	var k = MeshKit.new()
 	var s := rng.randf_range(1.0, 1.3)
 	k.prism_n(Vector3.ZERO, 5, 0.3 * s, 0.25 * s, 1.2 * s, WOOD)
@@ -410,28 +412,40 @@ static func tree_pine(rng: RandomNumberGenerator) -> ArrayMesh:
 	var r := 1.9 * s
 	for i in 3:
 		var h := (2.4 - 0.3 * i) * s
-		k.cone(Vector3(0, y, 0), rng.randi_range(6, 7), r, h, LEAF if i % 2 == 0 else LEAF_DARK, rng.randf_range(0.0, TAU))
+		var sides := rng.randi_range(6, 7)
+		var rot := rng.randf_range(0.0, TAU)
+		k.cone(Vector3(0, y, 0), sides, r, h, pal.get("leaf", LEAF) if i % 2 == 0 else pal.get("leaf_dark", LEAF_DARK), rot)
+		if pal.get("snow", false):  # 층 위쪽을 덮는 조금 큰 원뿔(겹친 면 깜빡임 없게 바깥으로)
+			k.cone(Vector3(0, y + h * 0.45, 0), sides, r * 0.6, h * 0.58, SNOW, rot)
 		y += h * 0.55
 		r *= 0.72
 	return k.commit()
 
 
-## 활엽수: 5각 줄기 + 각진 둥근 수관(흔든 20면체).
-static func tree_round(rng: RandomNumberGenerator) -> ArrayMesh:
+## 활엽수: 5각 줄기 + 각진 둥근 수관(흔든 20면체). pal: leaf(수관 색), bare = 수관 없이 앙상한 가지(겨울).
+static func tree_round(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
 	var k = MeshKit.new()
 	var r := rng.randf_range(1.6, 2.2)
 	var trunk := rng.randf_range(1.4, 2.0)
-	k.prism_n(Vector3.ZERO, 5, 0.32, 0.26, trunk + r * 0.5, WOOD)
-	k.rock(Vector3(0, trunk + r * 0.8, 0), r, LEAF, rng, 0.9)
+	var top := trunk + r * 0.5
+	k.prism_n(Vector3.ZERO, 5, 0.32, 0.26, top, WOOD)
+	if not pal.get("bare", false):
+		k.rock(Vector3(0, trunk + r * 0.8, 0), r, pal.get("leaf", LEAF), rng, 0.9)
+		return k.commit()
+	for i in 5:  # 위로 벌어진 가는 가지 5개(둘레를 돌며 높이 번갈아)
+		var tilt := Basis(Vector3.BACK, rng.randf_range(0.45, 0.85))
+		k.xform = Transform3D(Basis(Vector3.UP, TAU * i / 5.0 + rng.randf_range(-0.3, 0.3)) * tilt, Vector3(0, top - 0.25 - 0.35 * (i % 2), 0))
+		k.prism_n(Vector3.ZERO, 4, 0.11, 0.04, r * rng.randf_range(0.9, 1.25), WOOD_DARK)
+	k.xform = Transform3D.IDENTITY
 	return k.commit()
 
 
-## 덤불: 작은 각진 덩어리 2~3개.
-static func bush(rng: RandomNumberGenerator) -> ArrayMesh:
+## 덤불: 작은 각진 덩어리 2~3개. pal: bush.
+static func bush(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
 	var k = MeshKit.new()
 	for i in rng.randi_range(2, 3):
 		var r := rng.randf_range(0.55, 0.9)
-		k.rock(Vector3(rng.randf_range(-0.7, 0.7), r * 0.4, rng.randf_range(-0.7, 0.7)), r, LEAF_DARK, rng, 0.8, 0.0)
+		k.rock(Vector3(rng.randf_range(-0.7, 0.7), r * 0.4, rng.randf_range(-0.7, 0.7)), r, pal.get("bush", LEAF_DARK), rng, 0.8, 0.0)
 	return k.commit()
 
 
@@ -447,20 +461,20 @@ static func rock_cluster(rng: RandomNumberGenerator) -> ArrayMesh:
 
 
 ## 산: 7~9각 원뿔을 흔든 봉우리(반지름 14~20, 높이 16~26). 면마다 한 색(면 중심 높이): 아래 1/3 초록, 가운데 바위, 꼭대기 눈.
-## 절반은 옆에 낮은 봉우리를 하나 더 붙인다.
-static func mountain(rng: RandomNumberGenerator) -> ArrayMesh:
+## 절반은 옆에 낮은 봉우리를 하나 더 붙인다. pal: low(아래 띠 색), rock_line·snow_line(띠 경계 높이 비율, 기본 1/3·2/3).
+static func mountain(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
 	var k = MeshKit.new()
 	var r := rng.randf_range(14.0, 20.0)
 	var h := rng.randf_range(16.0, 26.0)
-	_peak(k, Vector3.ZERO, r, h, h, rng)
+	_peak(k, Vector3.ZERO, r, h, h, rng, pal)
 	if rng.randf() < 0.5:
 		var a := rng.randf_range(0.0, TAU)
-		_peak(k, Vector3(cos(a), 0, sin(a)) * r * 0.6, r * 0.7, h * rng.randf_range(0.55, 0.75), h, rng)
+		_peak(k, Vector3(cos(a), 0, sin(a)) * r * 0.6, r * 0.7, h * rng.randf_range(0.55, 0.75), h, rng, pal)
 	return k.commit()
 
 
 ## 봉우리 하나: 바닥 고리·중간 고리 둘(흔듦) + 꼭짓점. band_h = 색 띠를 나누는 전체 높이.
-static func _peak(k, base: Vector3, radius: float, height: float, band_h: float, rng: RandomNumberGenerator) -> void:
+static func _peak(k, base: Vector3, radius: float, height: float, band_h: float, rng: RandomNumberGenerator, pal := {}) -> void:
 	var n := rng.randi_range(7, 9)
 	var rings := []
 	for ring in [[0.0, 1.0], [0.36, 0.66], [0.64, 0.36]]:  # (높이 비율, 반지름 비율)
@@ -476,16 +490,17 @@ static func _peak(k, base: Vector3, radius: float, height: float, band_h: float,
 	for ri in 2:
 		for i in n:
 			var j := (i + 1) % n
-			_mtri(k, [rings[ri][i], rings[ri][j], rings[ri + 1][j]], below, band_h)
-			_mtri(k, [rings[ri][i], rings[ri + 1][j], rings[ri + 1][i]], below, band_h)
+			_mtri(k, [rings[ri][i], rings[ri][j], rings[ri + 1][j]], below, band_h, pal)
+			_mtri(k, [rings[ri][i], rings[ri + 1][j], rings[ri + 1][i]], below, band_h, pal)
 	for i in n:
-		_mtri(k, [rings[2][i], rings[2][(i + 1) % n], apex], below, band_h)
+		_mtri(k, [rings[2][i], rings[2][(i + 1) % n], apex], below, band_h, pal)
 
 
-static func _mtri(k, tri: Array, below: Vector3, band_h: float) -> void:
+static func _mtri(k, tri: Array, below: Vector3, band_h: float, pal: Dictionary) -> void:
 	var c: Vector3 = (tri[0] + tri[1] + tri[2]) / 3.0
 	var t := c.y / band_h
-	k.face(tri, c - below, LEAF_DARK if t < 1.0 / 3.0 else (ROCK if t < 2.0 / 3.0 else SNOW))
+	var col: Color = pal.get("low", LEAF_DARK) if t < pal.get("rock_line", 1.0 / 3.0) else (ROCK if t < pal.get("snow_line", 2.0 / 3.0) else SNOW)
+	k.face(tri, c - below, col)
 
 
 # --- 상인 수레 (원점 = 수레 중심 바닥, 폭 X ≤ 2.4, 깊이 Z ≤ 1.6, 높이 ≤ 2.6) ---

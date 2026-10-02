@@ -13,6 +13,9 @@ uniform vec4 road : source_color = vec4(0.471, 0.438, 0.384, 1.0);
 uniform vec4 line_color : source_color = vec4(0.0, 0.0, 0.0, 0.12);
 uniform float line_width = 0.03;
 uniform float facet_variation = 0.045;  // 타일을 대각선으로 나눈 두 삼각형의 명암 차이 폭
+// 계절(개정 22): grass_a·grass_b를 seasons.gd가 바꾼다. edge_snow > 0 이면 성 안 포장 가장자리 삼각형 일부가 눈 얼룩(겨울).
+uniform float edge_snow = 0.0;
+uniform vec4 snow_color : source_color = vec4(0.70, 0.73, 0.78, 1.0);
 
 varying vec3 world_pos;
 
@@ -38,6 +41,8 @@ void fragment() {
 	vec3 q = fract(vec3(cell.xyx + upper * vec3(0.37, 0.71, 0.37)) * 0.1031);
 	q += dot(q, q.yzx + 33.33);
 	float h = fract((q.x + q.y) * q.z);
+	float edge = edge_snow * (1.0 - smoothstep(0.0, 2.5 * tile_size, interior_half - max(a.x, a.y)));
+	base = mix(base, snow_color.rgb, step(1.0 - edge, h) * step(max(a.x, a.y), interior_half));
 	base *= 1.0 + facet_variation * (h * 2.0 - 1.0);
 	vec2 to_line = 0.5 - abs(fract(p) - 0.5);  // 격자선에서 0
 	vec2 aa = fwidth(p);
