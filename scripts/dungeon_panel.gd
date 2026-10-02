@@ -457,7 +457,7 @@ func _draw_flat_band(c: Control, t: String) -> void:
 		c.draw_rect(Rect2(0, h * 0.45, w, h * 0.55), Color(0.78, 0.89, 0.97))
 		for i in 6:  # 먼 산
 			var x := w * (i / 5.0)
-			c.draw_colored_polygon(PackedVector2Array([Vector2(x - w * 0.14, h * 0.62), Vector2(x, h * (0.2 + 0.08 * (i % 2))), Vector2(x + w * 0.14, h * 0.62)]),
+			c.draw_colored_polygon(PackedVector2Array([Vector2(maxf(x - w * 0.14, 0.0), h * 0.62), Vector2(x, h * (0.2 + 0.08 * (i % 2))), Vector2(minf(x + w * 0.14, w), h * 0.62)]),  # 양끝 산은 띠 안에서 자른다
 				Color(0.56, 0.64, 0.74) if i % 2 == 0 else Color(0.62, 0.70, 0.80))
 		c.draw_colored_polygon(PackedVector2Array([Vector2(0, h * 0.62), Vector2(w * 0.3, h * 0.5), Vector2(w * 0.65, h * 0.6), Vector2(w, h * 0.48),
 			Vector2(w, h), Vector2(0, h)]), Color(0.47, 0.62, 0.33))
