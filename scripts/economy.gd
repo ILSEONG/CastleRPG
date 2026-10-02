@@ -221,9 +221,10 @@ func gacha_cost(currency: String, count: int) -> int:
 
 
 ## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
-## 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand = [0, 1) 난수 Callable(테스트는 주입).
-## rates = GameData.gacha_rates(비면 골드 Lv 1·주점 1). pity(다이아, 개정 23) {n, max}가 있으면 장마다 n += 1, n ≥ max면 SSR 확정,
-## SSR이면 n = 0 — pity를 바꿔 둔다. 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
+## rand = [0, 1) 난수 Callable(테스트는 주입). rates = GameData.gacha_rates(비면 골드 Lv 1·주점 1).
+## pity(다이아 모집만, 개정 23) {n, max}가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — pity를 바꿔 둔다. 다이아 10연차는 또
+## SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
+## 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
 static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> Array:
 	var pools := {"SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
@@ -244,7 +245,7 @@ static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> A
 			if grade == "SSR":
 				pity.n = 0
 		out.append(_pick(pools, grade, rand))
-	if count == 10:
+	if count == 10 and not pity.is_empty():
 		var need := int(GameData.config_num("gacha_10_min_sr")) - out.filter(func(x): return x.grade != "R").size()
 		for i in range(out.size() - 1, -1, -1):
 			if need <= 0:

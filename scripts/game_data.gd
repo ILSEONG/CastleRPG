@@ -35,7 +35,6 @@ const GACHA_KEYS := ["gacha_gold_cost_base", "gacha_gold_cost_growth", "gacha_go
 const GACHA_GOLD := "gold"
 const GACHA_DIA := "diamond"
 const GOLD_COST_STEP := 50  # 골드 1회 비용 반올림 단위(서버 rules.GOLD_COST_STEP)
-const GOLD_TEN_MULT := 9  # 10회 = 1회 × 10 × 0.9
 const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
@@ -432,12 +431,12 @@ static func gacha_rates(currency: String, gold_level: int, tavern_level: int) ->
 	return {"ssr": ssr + config_num("tavern_ssr_per_level") * t, "sr": sr + config_num("tavern_sr_per_level") * t}
 
 
-## 모집 비용(정수 골드 또는 다이아). 골드 1회 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림, 10회 = × 9.
+## 모집 비용(정수 골드 또는 다이아). 골드 1회 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림, 10회 = × 10(할인 없음).
 static func gacha_cost(currency: String, count: int, gold_level: int) -> int:
 	if currency == GACHA_DIA:
 		return int(config_num("gacha_dia_cost_10" if count == 10 else "gacha_dia_cost_1"))
 	var one := roundi(_grown(config_num("gacha_gold_cost_base"), config_num("gacha_gold_cost_growth"), _gold_level(gold_level) - 1) / GOLD_COST_STEP) * GOLD_COST_STEP
-	return one * (GOLD_TEN_MULT if count == 10 else 1)
+	return one * count
 
 
 ## 골드 모집 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L. 최대 레벨이면 0.
@@ -1219,7 +1218,7 @@ static func _check_dungeons(t: Dictionary) -> void:
 			_err("heroes", h._line, "model", "model '%s' has no weapon kind" % h.model)
 
 
-## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 다이아 비용·10연차 보장 수는 0 이상 정수, 확률·레벨은 _check_gacha_rates(개정 23).
+## 모집 설정(스펙 §3.6, 서버 seed와 같은 규칙): 다이아 비용·다이아 10연차 보장 수는 0 이상 정수, 확률·레벨은 _check_gacha_rates(개정 23).
 ## 숫자가 아닌 값은 CONFIG_NUM_KEYS 검사가 이미 알렸다.
 static func _check_gacha(cfg: Dictionary) -> void:
 	for k in GACHA_INT_KEYS:

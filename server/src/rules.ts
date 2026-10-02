@@ -292,7 +292,6 @@ export const GACHA_GOLD = 'gold'
 export const GACHA_DIA = 'diamond'
 export const GACHA_CURRENCIES = [GACHA_GOLD, GACHA_DIA]
 export const GOLD_COST_STEP = 50 // 골드 1회 비용 반올림 단위(스펙 예시 3,450·5,250·10,550과 맞는 값)
-export const GOLD_TEN_MULT = 9 // 10회 = 1회 × 10 × 0.9
 
 // 골드 모집 레벨을 1..gacha_gold_level_max로(설정 최대가 줄어도 확률이 검사한 범위를 넘지 않게)
 const goldLevel = (config: Config, level: number) => Math.min(Math.max(level, 1), cfgNum(config, 'gacha_gold_level_max'))
@@ -301,10 +300,10 @@ const goldLevel = (config: Config, level: number) => Math.min(Math.max(level, 1)
 export const goldCost1 = (config: Config, level: number) =>
   roundHalfAway(grown(cfgNum(config, 'gacha_gold_cost_base'), cfgNum(config, 'gacha_gold_cost_growth'), goldLevel(config, level) - 1) / GOLD_COST_STEP) * GOLD_COST_STEP
 
-// 모집 비용(정수 골드 또는 다이아).
+// 모집 비용(정수 골드 또는 다이아). 골드 10회 = 1회 × 10(할인 없음).
 export function gachaCost(config: Config, currency: string, count: number, level: number): number {
   if (currency === GACHA_DIA) return cfgNum(config, count === 10 ? 'gacha_dia_cost_10' : 'gacha_dia_cost_1')
-  return goldCost1(config, level) * (count === 10 ? GOLD_TEN_MULT : 1)
+  return goldCost1(config, level) * count
 }
 
 // 모집 확률 {ssr, sr}(R은 나머지). 골드 = base + step × (L − 1), 다이아 = 고정. 둘 다 주점 보너스(tavern_*_per_level × (주점 − 1))를 더한다.
@@ -351,8 +350,9 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
 }
 
 // 모집(스펙 §3.6): 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
-// 10연차는 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. rand는 [0, 1) 난수(서버는 암호학적 난수).
-// rates = gachaRates(기본: 골드 Lv 1·주점 1). pity(다이아, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다.
+// rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1·주점 1).
+// pity(다이아 모집만, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다. 다이아 10연차는 또
+// SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 // 앱 Economy.roll_gacha와 같은 규칙.
 export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
   rates = gachaRates(config, GACHA_GOLD, 1, 1), pity?: { n: number; max: number }) {
@@ -375,7 +375,7 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
     }
     out.push(pick(grade))
   }
-  if (count === 10) {
+  if (count === 10 && pity) {
     let need = cfgNum(config, 'gacha_10_min_sr') - out.filter((x) => x.grade !== 'R').length
     for (let i = out.length - 1; i >= 0 && need > 0; i--) {
       if (out[i].grade === 'R') {

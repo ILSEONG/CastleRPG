@@ -1,7 +1,7 @@
 extends "res://scripts/ui_window.gd"
 ## 주점 모집 창(스펙 §5, 개정 23: 골드·다이아 모집, 주점 탭으로 연다): 위 가운데 키 아트(이그니스가 화염구를 쏘는 순간 — 느린 줌 인/아웃 +
 ## 가장자리 비네트 + 외곽선 제목 "주점 · 영웅 모집"), 그 아래 탭 [골드 모집] [다이아 모집].
-## 골드 탭: 레벨 배지 "골드 모집 Lv n", 진행 막대 + "다음 레벨까지 a/b", 다음 레벨 확률·비용 미리보기, 확률 한 줄, [1회 3,000] [10회 27,000 · SR 이상 1장].
+## 골드 탭: 레벨 배지 "골드 모집 Lv n", 진행 막대 + "다음 레벨까지 a/b", 다음 레벨 확률·비용 미리보기, 확률 한 줄, [1회 3,000] [10회 30,000](10회 = 1회 × 10, 보장 없음).
 ## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, 천장 "SSR 확정까지 n회", [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장], [다이아 상점].
 ## 재화가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
 ## 새 영웅은 "NEW", 중복은 "+1 조각"과 그 영웅의 조각 막대(개정 15), SSR은 반짝임) + [재모집]·[확인]·자동 모집(개정 17) — 마지막에 뽑은 재화로 되풀이한다.
@@ -409,7 +409,9 @@ func _refresh() -> void:
 	var unit := "다이아 " if currency == DIA else ""
 	var pad := "      " if currency == DIA else ""  # 버튼 앞 보석 자리
 	one_button.text = "%s1회 %s%s" % [pad, unit, UiKit.commas(Economy.gacha_cost(currency, 1))]
-	ten_button.text = "%s10회 %s%s · SR 이상 %d장" % [pad, unit, UiKit.commas(Economy.gacha_cost(currency, 10)), int(GameData.config_num("gacha_10_min_sr"))]
+	ten_button.text = "%s10회 %s%s" % [pad, unit, UiKit.commas(Economy.gacha_cost(currency, 10))]
+	if currency == DIA:  # SR 이상 보장은 다이아 10연차만
+		ten_button.text += " · SR 이상 %d장" % int(GameData.config_num("gacha_10_min_sr"))
 	var have := Economy.wallet(currency)
 	one_button.disabled = _waiting or have < Economy.gacha_cost(currency, 1)
 	ten_button.disabled = _waiting or have < Economy.gacha_cost(currency, 10)

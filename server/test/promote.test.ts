@@ -94,7 +94,7 @@ test('최대 레벨은 승급 기준: 승급 0은 20(넘으면 409 max_level), �
   assert.equal((await lv(1)).json.error, 'max_level')
 })
 
-test('모집 중복 → 조각 +1(결과 shards), 새 영웅은 조각 0. 10연차 같은 영웅 9장 = 새 1장 + 조각 8', async () => {
+test('모집 중복 → 조각 +1(결과 shards), 새 영웅은 조각 0. 골드 10연차 같은 영웅 10장 = 새 1장 + 조각 9', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await S.db.query('update player_state set gold_tenths = 30000 where player_id = $1', [id])
@@ -102,13 +102,11 @@ test('모집 중복 → 조각 +1(결과 shards), 새 영웅은 조각 0. 10연�
   let r = await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })
   assert.deepEqual(r.json.results, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }])
   assert.deepEqual(r.json.player.heroes.hans, { copies: 2, level: 1, shards: 1, promotion: 0 })
-  await S.db.query('update player_state set gold_tenths = 270000 where player_id = $1', [id])
-  rand.next = Array(30).fill(0.99) // 전부 R 풀 마지막 = jack(새로), 보장 SR = felix
+  await S.db.query('update player_state set gold_tenths = 300000 where player_id = $1', [id])
+  rand.next = Array(30).fill(0.99) // 전부 R 풀 마지막 = jack(새로) — 골드 10연차는 SR 보장이 없다
   r = await S.req('POST', '/v1/gacha', { token, body: { count: 10 } })
-  assert.deepEqual(r.json.results.slice(0, 9).map((x: any) => [x.new, x.copies, x.shards]), Array.from({ length: 9 }, (_, i) => [i === 0, i + 1, i]))
-  assert.deepEqual(r.json.results[9], { hero_id: 'felix', grade: 'SR', new: true, copies: 1, shards: 0 })
-  assert.deepEqual([await row(id, 'jack'), await row(id, 'felix'), await row(id, 'hans')], [
-    { copies: 9, level: 1, shards: 8, promotion: 0 }, { copies: 1, level: 1, shards: 0, promotion: 0 }, { copies: 2, level: 1, shards: 1, promotion: 0 }])
-  assert.deepEqual(r.json.player.heroes.jack, { copies: 9, level: 1, shards: 8, promotion: 0 })
+  assert.deepEqual(r.json.results.map((x: any) => [x.hero_id, x.new, x.copies, x.shards]), Array.from({ length: 10 }, (_, i) => ['jack', i === 0, i + 1, i]))
+  assert.deepEqual([await row(id, 'jack'), await row(id, 'hans')], [{ copies: 10, level: 1, shards: 9, promotion: 0 }, { copies: 2, level: 1, shards: 1, promotion: 0 }])
+  assert.deepEqual(r.json.player.heroes.jack, { copies: 10, level: 1, shards: 9, promotion: 0 })
   rand.next = []
 })

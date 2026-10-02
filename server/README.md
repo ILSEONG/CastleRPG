@@ -160,7 +160,7 @@ npm --prefix server test
 - 영웅(개정 10)
   - 새 플레이어는 `starter_heroes`를 copies 1로 받고, 배치는 그 순서다. 마이그레이션 005는 기존 플레이어에게 같은 것을 채운다.
   - 응답 `deploy`의 길이는 슬롯 수(`keep_slot_tiers`의 성채 단계 값)다. 표에서 빠진 영웅은 `heroes`·`deploy`에서 거른다.
-  - 모집: 가능 조건은 `floor(gold_tenths / 10) ≥ 비용`이고 `비용 × 10`을 뺀다. 장마다 등급(SSR `gacha_rate_ssr`, SR `gacha_rate_sr`, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다. 10연차에 SR 이상이 `gacha_10_min_sr`장보다 적으면 뒤에서부터 R을 SR로 바꾼다. 난수는 암호학적 난수(`randomBytes`)다.
+  - 모집: 가능 조건은 `floor(gold_tenths / 10) ≥ 비용`이고 `비용 × 10`을 뺀다. 장마다 등급(SSR `gacha_rate_ssr`, SR `gacha_rate_sr`, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다. 다이아 10연차에 SR 이상이 `gacha_10_min_sr`장보다 적으면 뒤에서부터 R을 SR로 바꾼다(골드 10연차는 보장 없음, 비용은 1회 × 10). 난수는 암호학적 난수(`randomBytes`)다.
   - 골드 차감·copies 증가·`economy_log`(`gacha`)는 version 가드 한 문장이다. 같은 순간 두 번 보내도 골드가 1회분이면 하나는 409다. 앱은 모집을 다시 보내지 않는다.
 - 영웅 승급(개정 15, 마이그레이션 009 `player_heroes.shards`·`promotion`, 기존 행은 조각 = copies − 1·승급 0)
   - 모집에서 이미 가진 영웅이 다시 나오면 copies +1, 조각 +1이다(새 영웅은 조각 0).

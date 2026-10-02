@@ -1495,7 +1495,7 @@ func test_fx_meshes() -> void:
 	ring.free()
 
 
-## 개정 10 모집(오프라인, 스펙 §3.6): 10만 장 표본 확률, 10연차 보장(표본 + 조작 난수), 비용 tenths(소수 남음), copies·NEW, 부족하면 알림만,
+## 개정 10 모집(오프라인, 스펙 §3.6): 10만 장 표본 확률, 다이아 10연차만 보장(표본 + 조작 난수 — 골드는 없음), 비용 tenths(소수 남음), copies·NEW, 부족하면 알림만,
 ## 같은 seed면 같은 결과.
 func test_gacha_offline() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -1507,24 +1507,27 @@ func test_gacha_offline() -> void:
 		c[x.grade] += 1
 	check(out.size() == n and absf(c.SSR / float(n) - 0.03) <= 0.004 and absf(c.SR / float(n) - 0.17) <= 0.008, "gacha rates SSR 3%% +- 0.4%%, SR 17%% +- 0.8%%: %s" % [c])
 	check(out.slice(0, 200).all(func(x): return GameData.hero(x.id).grade == x.grade), "each pull is a hero of its grade")
+	var dia := GameData.gacha_rates("diamond", 1, 1)
 	var all_ten := true
 	for i in 2000:
-		var ten: Array = EconomyScript.roll_gacha(10, rng.randf)
+		var ten: Array = EconomyScript.roll_gacha(10, rng.randf, dia, {"n": 0, "max": 50})
 		all_ten = all_ten and ten.size() == 10 and ten.any(func(x): return x.grade != "R")
-	check(all_ten, "every 10-pull has an SR or better (2000 samples)")
+	check(all_ten, "every diamond 10-pull has an SR or better (2000 samples)")
 	var all_r := func(): return 0.99  # 전부 R, 풀 마지막(jack)
-	var rigged: Array = EconomyScript.roll_gacha(10, all_r)
-	check(rigged.slice(0, 9).all(func(x): return x.id == "jack") and rigged[9] == {"id": "felix", "grade": "SR"}, "a 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
+	var rigged: Array = EconomyScript.roll_gacha(10, all_r, dia, {"n": 0, "max": 50})
+	check(rigged.slice(0, 9).all(func(x): return x.id == "jack") and rigged[9] == {"id": "felix", "grade": "SR"}, "a diamond 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
+	var gold_ten: Array = EconomyScript.roll_gacha(10, all_r)
+	check(gold_ten.size() == 10 and gold_ten.all(func(x): return x == {"id": "jack", "grade": "R"}), "a gold 10-pull has no SR guarantee (all R stays all R): %s" % [gold_ten])
 	check(EconomyScript.roll_gacha(1, all_r) == [{"id": "jack", "grade": "R"}], "a single pull has no guarantee")
-	check(GameData.gacha_cost("gold", 1, 1) == 3000 and GameData.gacha_cost("gold", 10, 1) == 27000, "gold Lv 1 costs 3000 / 27000 (rev 23)")
+	check(GameData.gacha_cost("gold", 1, 1) == 3000 and GameData.gacha_cost("gold", 10, 1) == 30000, "gold Lv 1 costs 3000 / 30000 (10-pull = 1-pull x 10, no discount)")
 	var e = _econ(1000.0)
 	e.rng.seed = 7
 	var got := []
 	var notices := []
 	e.gacha_done.connect(func(r): got.append(r))
 	e.notice.connect(func(t): notices.append(t))
-	e.gold_tenths = 300005
-	check(e.gacha(10) and e.gold_tenths == 30005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 27000 gold (270000 tenths) and returns 10 cards")
+	e.gold_tenths = 330005
+	check(e.gacha(10) and e.gold_tenths == 30005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 30000 gold (300000 tenths) and returns 10 cards")
 	var seen := _econ_starters()
 	var consistent := true
 	for r in got[0]:
@@ -1542,8 +1545,8 @@ func test_gacha_offline() -> void:
 	var b = _econ(0.0)
 	a.rng.seed = 99
 	b.rng.seed = 99
-	a.gold = 27000
-	b.gold = 27000
+	a.gold = 30000
+	b.gold = 30000
 	a.gacha(10)
 	b.gacha(10)
 	check(a.heroes == b.heroes and a.heroes != _econ_starters(), "same seed, same pulls")
@@ -3515,8 +3518,8 @@ func test_recruit_r23() -> void:
 	GameData.load_tables()
 	# 공식(서버 rules와 같은 값)
 	check([1, 2, 5, 10].map(func(l): return GameData.gacha_cost("gold", 1, l)) == [3000, 3450, 5250, 10550], "rev 23: gold 1-pull 3000 / 3450 / 5250 / 10550 at Lv 1 / 2 / 5 / 10")
-	check(GameData.gacha_cost("gold", 10, 10) == 94950 and GameData.gacha_cost("gold", 1, 99) == 10550 and GameData.gacha_cost("diamond", 1, 7) == 300
-		and GameData.gacha_cost("diamond", 10, 7) == 2700, "rev 23: 10-pull = 1-pull x 9, levels clamp to the max, diamonds ignore the level")
+	check(GameData.gacha_cost("gold", 10, 10) == 105500 and GameData.gacha_cost("gold", 1, 99) == 10550 and GameData.gacha_cost("diamond", 1, 7) == 300
+		and GameData.gacha_cost("diamond", 10, 7) == 2700, "rev 23: gold 10-pull = 1-pull x 10 (no discount), levels clamp to the max, diamonds ignore the level")
 	var l4 := GameData.gacha_rates("gold", 4, 1)
 	var l10 := GameData.gacha_rates("gold", 10, 1)
 	var dia := GameData.gacha_rates("diamond", 1, 1)
@@ -3552,7 +3555,7 @@ func test_recruit_r23() -> void:
 	e.notice.connect(func(t): notes.append(t))
 	e.gacha_leveled.connect(func(l): ups.append(l))
 	e.gacha_done.connect(func(r): got.append(r))
-	e.gold = 81000
+	e.gold = 90000
 	check(e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 20 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: two 10-pulls are 20/30 at Lv 1")
 	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 60, "dia_pity": 0, "pity_left": 50}
 		and ups == [2] and notes == ["골드 모집 Lv 2! SSR 3.4%"] and e.gacha_cost("gold", 1) == 3450,
