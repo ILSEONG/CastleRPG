@@ -6,11 +6,26 @@ uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable
 uniform vec4 albedo_color : source_color = vec4(1.0);
 uniform bool use_texture = true;
 uniform bool use_vertex_color = false;
+// 영웅 생김새(개정 23): KayKit 텍스처는 8×4 칸 색 아틀라스. remap_tex(8×4, 칸마다 한 픽셀)의 알파가 1인 칸은
+// 그 색 × (텍셀 밝기 / 칸 가운데 밝기)로 바꾼다 — 칸의 위아래 명암(그라데이션)은 그대로, 색만 바뀐다.
+uniform bool use_remap = false;
+uniform sampler2D remap_tex : source_color, filter_nearest;
 
 void fragment() {
 	vec4 c = albedo_color;
 	if (use_texture) {
-		c *= texture(albedo_tex, UV);
+		vec4 t = texture(albedo_tex, UV);
+		if (use_remap) {
+			ivec2 cell = clamp(ivec2(floor(UV * vec2(8.0, 4.0))), ivec2(0), ivec2(7, 3));
+			vec4 r = texelFetch(remap_tex, cell, 0);
+			if (r.a > 0.5) {
+				vec3 mid = textureLod(albedo_tex, (vec2(cell) + 0.5) / vec2(8.0, 4.0), 0.0).rgb;
+				vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+				float k = dot(t.rgb, luma) / max(dot(mid, luma), 0.01);
+				t.rgb = r.rgb * clamp(k, 0.0, 1.6);
+			}
+		}
+		c *= t;
 	}
 	if (use_vertex_color) {
 		// 정점 색은 sRGB로 적는다(팔레트 그대로). 이 렌더러(Compatibility/WebGL)는 fragment()에 오기 전에 이미

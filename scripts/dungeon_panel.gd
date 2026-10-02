@@ -1,7 +1,10 @@
 extends "res://scripts/ui_window.gd"
 ## [던전] 탭 시트(개정 18 §8). 카드 둘(종류마다 같은 모양):
 ## - 골드 던전: 평야 그림 띠, 열쇠 n / 10, "다음 지급 hh:mm:ss · 최고 n단계", 그 단계 보상 골드, ◀ n단계 ▶, [도전]
-## - 장비 던전: 불타는 성 띠, 열쇠 n / 3, 그 단계 등급 확률 요약 + 골드 추가 도전 비용, ◀ n단계 ▶, [도전]
+## - 장비 던전: 불타는 성 띠, 열쇠 n / 3, 그 밑 "열쇠가 없으면 골드로 도전 (동전) 현재 골드 / 추가 도전 비용"(모자라면 현재 골드가 빨강),
+##   그 단계 등급 확률 요약, ◀ n단계 ▶, [도전]
+## 그림 띠: 던전 3D 장면 스냅샷(dungeon_snaps + scene_snap — 시트를 처음 열 때 한 장씩 렌더, 캐시)을 깎은 모서리 틀에 넣고 천천히 훑는다(켄 번스).
+## 스냅샷이 오기 전·헤드리스는 평면 그림(_draw_flat_band).
 ## 단계는 1 ~ 최고 + 1(처음엔 최고 + 1). [도전]이 안 되면(Economy.dungeon_block — 기본 편성으로) 비활성 + 빨간 이유.
 ## 아래 [보관함 n / 상한] → bag_panel.open_bag.
 ## [도전] → 출전 편성(같은 시트): 슬롯 6(골드)·4(장비) + 보유 영웅 피규어 격자(전투력 순, 출전 중은 호박색 테두리). 영웅 카드 탭 = 넣기·빼기,
@@ -11,10 +14,17 @@ extends "res://scripts/ui_window.gd"
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
+const IconsScript := preload("res://scripts/icons.gd")
+const SceneSnap := preload("res://scripts/scene_snap.gd")
+const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
 
 const TYPES := ["gold", "equip"]
 const NAMES := {"gold": "골드 던전", "equip": "장비 던전"}
-const BAND_H := 96.0
+const BAND_H := 180.0  # 720 화면 띠 628×180 = DungeonSnaps.SIZE의 반(다른 비율이면 스냅샷을 잘라 채운다)
+const BAND_CHAMFER := 12.0
+const SNAP_KEY := "dungeon_band:%s"
+const PAN_SEC := 20.0  # 켄 번스: 좌우 한 번 왕복(초)
+const PAN_ZOOM := 1.08  # 그만큼 확대해 남는 폭을 훑는다
 const SLOT_SIZE := Vector2(98, 124)
 const CARD_SIZE := Vector2(150, 184)
 const GRID_COLUMNS := 4
@@ -22,7 +32,8 @@ const RED := Color(0.78, 0.22, 0.18)
 const KEY_GOLD := Color(0.95, 0.72, 0.2)
 
 var bag  # 보관함 창(bag_panel). main이 넣는다
-var cards := {}  # 종류 → {keys, info, reward, level, prev, next, go, reason}
+var cards := {}  # 종류 → {keys, info, reward, level, prev, next, go, reason}(장비는 + gold, cost)
+var bands := {}  # 종류 → 그림 띠 Control
 var levels := {}  # 종류 → 고른 단계
 var bag_button: Button
 var form_type := ""  # 편성 중인 던전(카드 화면이면 "")
@@ -78,8 +89,10 @@ func _build_card(t: String) -> Control:
 	var band := Control.new()
 	band.custom_minimum_size = Vector2(0, BAND_H)
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # 2배 스냅샷을 줄여 그린다
 	band.draw.connect(_draw_band.bind(band, t))
 	box.add_child(band)
+	bands[t] = band
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 8)
 	box.add_child(head)
@@ -94,6 +107,22 @@ func _build_card(t: String) -> Control:
 	head.add_child(key)
 	var keys := _label("", 28)
 	head.add_child(keys)
+	var money := {}
+	if t == "equip":  # 열쇠 밑: 골드 추가 도전 — (동전) 현재 골드 / 비용
+		var row_g := HBoxContainer.new()
+		row_g.add_theme_constant_override("separation", 8)
+		box.add_child(row_g)
+		var note := _label("열쇠가 없으면 골드로 도전", 20, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_LEFT)
+		note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		note.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row_g.add_child(note)
+		var coin = IconsScript.new()
+		coin.custom_minimum_size = Vector2(34, 34)
+		coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row_g.add_child(coin)
+		money = {"gold": _label("", 28), "cost": _label("", 28)}
+		row_g.add_child(money.gold)
+		row_g.add_child(money.cost)
 	var info := _label("", 20, HudScript.INK.lightened(0.2), HORIZONTAL_ALIGNMENT_LEFT)
 	box.add_child(info)
 	var reward := _label("", 21, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
@@ -119,6 +148,7 @@ func _build_card(t: String) -> Control:
 	var reason := _label("", 20, RED)
 	box.add_child(reason)
 	cards[t] = {"keys": keys, "info": info, "reward": reward, "level": level, "prev": prev, "next": next, "go": go, "reason": reason}
+	cards[t].merge(money)
 	return panel
 
 
@@ -166,11 +196,17 @@ func _build_form() -> void:
 
 func _on_open() -> void:
 	_show_list(false)
+	# ponytail: 키가 종류뿐 — 띠의 영웅은 처음 연 때의 편성 앞 셋, 실행 중 편성이 바뀌어도 그대로. 따라가야 하면 키에 id를 넣는다.
+	for t in TYPES:  # 처음 열 때 띠 스냅샷 요청(이미 있거나 대기 중이면 아무 일 없음, 헤드리스는 자리표시만)
+		SceneSnap.snap(SNAP_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
 
 
 func _process(delta: float) -> void:
 	if not visible or _form_view.visible:
 		return
+	for t in bands:  # 스냅샷이 있으면 켄 번스로 매 프레임
+		if SceneSnap.cached(SNAP_KEY % t) != null:
+			bands[t].queue_redraw()
 	_tick -= delta
 	if _tick <= 0.0:
 		_tick = 1.0  # "다음 지급" 초 단위
@@ -234,7 +270,10 @@ func _refresh() -> void:
 		if t == "gold":
 			c.reward.text = "보상 %s 골드" % UiKit.commas(rw.gold)
 		else:
-			c.reward.text = "장비 %d개 · %s\n열쇠가 없으면 %s 골드로 도전" % [rw.count, odds_text(rw.weights), UiKit.commas(st.extra_cost)]
+			c.reward.text = "장비 %d개 · %s" % [rw.count, odds_text(rw.weights)]
+			c.gold.text = UiKit.commas(Economy.gold)
+			c.gold.add_theme_color_override("font_color", RED if Economy.gold < int(st.extra_cost) else HudScript.INK)
+			c.cost.text = "/ %s" % UiKit.commas(st.extra_cost)
 		c.level.text = "%d단계" % lv
 		c.prev.disabled = lv <= 1
 		c.next.disabled = lv >= int(st.max_level)
@@ -373,8 +412,40 @@ static func draw_key(c: Control) -> void:
 		c.draw_rect(Rect2(o + Vector2(s * x - s * 0.05, s * 0.05), Vector2(s * 0.08, s * 0.14)), KEY_GOLD)
 
 
-## 카드 그림 띠: 골드 = 평야(하늘·먼 산·풀 언덕·나무), 장비 = 불타는 성(붉은 하늘·성 실루엣·불꽃).
+## 카드 그림 띠: 깎은 모서리(8각) 틀 안에 스냅샷(PAN_ZOOM 확대, PAN_SEC 주기로 좌우로 훑음) — 없으면 평면 그림 + 모서리를 카드 색으로 덮는다.
+## 위쪽 옅은 그림자 그러데이션, 안쪽 흰 빛 선, 진한 외곽선.
 func _draw_band(c: Control, t: String) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	var oct := UiKit.LowpolyBox.octagon(r, BAND_CHAMFER)
+	var tex := SceneSnap.cached(SNAP_KEY % t)
+	if tex != null:
+		var k := (c.size.x / c.size.y) / (float(tex.get_width()) / tex.get_height())  # 띠 비율 ÷ 그림 비율 — 늘이지 않고 잘라 채운다
+		var uv := (Vector2(1.0, 1.0 / k) if k > 1.0 else Vector2(k, 1.0)) / PAN_ZOOM
+		var pan := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU / PAN_SEC)
+		var src := Rect2((Vector2.ONE - uv) * Vector2(pan, 0.5), uv)  # 0..1 UV
+		var uvs := PackedVector2Array()
+		for p in oct:
+			uvs.append(src.position + p / c.size * src.size)
+		c.draw_colored_polygon(oct, Color.WHITE, uvs, tex)
+	else:
+		_draw_flat_band(c, t)
+		for i in [0, 2, 4, 6]:  # 모서리 삼각형을 카드 바탕으로 덮는다
+			var corner := Vector2(r.end.x if i in [2, 4] else 0.0, r.end.y if i in [4, 6] else 0.0)
+			c.draw_colored_polygon(PackedVector2Array([corner, oct[i], oct[(i + 7) % 8]]), UiKit.CREAM)
+	var g := c.size.y * 0.45
+	var shade := Color(0, 0, 0, 0.3)
+	var mid := Color(shade, shade.a * (1.0 - BAND_CHAMFER / g))
+	c.draw_polygon(PackedVector2Array([oct[0], oct[1], oct[2], Vector2(c.size.x, g), Vector2(0, g), oct[7]]),
+		PackedColorArray([shade, shade, mid, Color(shade, 0.0), Color(shade, 0.0), mid]))
+	var inner := UiKit.LowpolyBox.octagon(r.grow(-2.5), BAND_CHAMFER - 1.0)
+	inner.append(inner[0])
+	c.draw_polyline(inner, Color(1, 1, 1, 0.35), 1.5, true)
+	oct.append(oct[0])
+	c.draw_polyline(oct, UiKit.OUTLINE, 2.5, true)
+
+
+## 평면 그림(스냅샷 전 자리표시): 골드 = 평야(하늘·먼 산·풀 언덕·나무), 장비 = 불타는 성(붉은 하늘·성 실루엣·불꽃).
+func _draw_flat_band(c: Control, t: String) -> void:
 	var w := c.size.x
 	var h := c.size.y
 	var r := Rect2(Vector2.ZERO, c.size)
@@ -407,4 +478,3 @@ func _draw_band(c: Control, t: String) -> void:
 			c.draw_colored_polygon(PackedVector2Array([b + Vector2(-22, 0), b + Vector2(-6, -h * 0.55), b + Vector2(4, -h * 0.3), b + Vector2(14, -h * 0.7),
 				b + Vector2(24, 0)]), Color(0.95, 0.42, 0.1))
 			c.draw_colored_polygon(PackedVector2Array([b + Vector2(-10, 0), b + Vector2(2, -h * 0.35), b + Vector2(12, 0)]), Color(1.0, 0.8, 0.3))
-	c.draw_rect(r, UiKit.OUTLINE, false, 2.0)

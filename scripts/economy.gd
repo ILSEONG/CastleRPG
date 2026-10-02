@@ -1409,6 +1409,33 @@ func equipment_bonus(hero_id: String) -> Dictionary:
 	return GameData.equip_total(hero_equipment(hero_id).values())
 
 
+## 장비 점수(같은 부위끼리 비교용): HP + 공격 × 25 — 전투력 식(HP/10 + 공격×2/간격)에서 공격 1 ≈ HP 25.
+static func item_score(it: Dictionary) -> float:
+	var st := GameData.item_stats(it)
+	return float(st.hp) + float(st.atk) * 25.0
+
+
+## 그 영웅 그 부위에 지금보다 좋은(빈 칸이면 아무거나) 낄 수 있는 장비가 보관함에 있나 — 아무도 안 낀 장비만(영웅 장비 칸 빨간 점).
+func equip_upgrade_available(hero_id: String, slot: String) -> bool:
+	var h := GameData.hero(hero_id)
+	if h.is_empty() or int(heroes.get(hero_id, 0)) < 1:
+		return false
+	var cur: Dictionary = hero_equipment(hero_id).get(slot, {})
+	var best := item_score(cur) if not cur.is_empty() else -1.0
+	var used := {}
+	for hid in equipment:
+		for s in equipment[hid]:
+			used[int(equipment[hid][s])] = true
+	for it in bag:
+		if it.slot != slot or used.has(int(it.id)):
+			continue
+		if slot == "weapon" and it.weapon_kind != GameData.weapon_of(h.model):
+			continue
+		if item_score(it) > best:
+			return true
+	return false
+
+
 ## 장착 못 하는 이유 코드(문구 EQUIP_TEXT, 서버와 같은 순서). 되면 "". not_owned → bad_slot → unknown_item → wrong_slot → wrong_weapon(그 영웅
 ## 모델의 무기 종류만) → waiting(앱만).
 func equip_block(hero_id: String, slot: String, item_id: int) -> String:

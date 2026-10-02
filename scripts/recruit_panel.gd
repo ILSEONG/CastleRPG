@@ -238,8 +238,8 @@ func set_currency(id: String) -> void:
 
 
 func _on_open() -> void:
-	if art.texture == null:  # 처음 열 때 한 번 렌더(캐시) — 그동안·헤드리스는 자리표시 그라데이션
-		art.texture = SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, Callable(RecruitArt, "build"))
+	if SceneSnap.cached(RecruitArt.KEY) == null:  # 처음 열 때 렌더를 요청(캐시) — 그동안·헤드리스는 자리표시 그러데이션, 끝나면 _process가 바꿔 끼운다
+		art.texture = SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
 	if _late.is_empty():
 		_show_pick()
 		return
@@ -372,6 +372,9 @@ func close() -> void:
 ## 키 아트 느린 줌 인/아웃. 자동 모집: 결과를 보여 준 지 auto_delay초 뒤 같은 모집을 되풀이. 골드가 모자라면 멈춘다.
 func _process(delta: float) -> void:
 	if visible:
+		var shot := SceneSnap.cached(RecruitArt.KEY)
+		if shot != null and art.texture != shot:
+			art.texture = shot  # 렌더가 끝났다
 		_kb_t += delta
 		art.pivot_offset = art.size / 2.0
 		art.scale = Vector2.ONE * lerpf(KB_ZOOM.x, KB_ZOOM.y, 0.5 - 0.5 * cos(_kb_t * TAU / KB_PERIOD))

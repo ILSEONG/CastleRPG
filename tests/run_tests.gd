@@ -115,6 +115,12 @@ func _init() -> void:
 	test_dungeon_save_and_server()
 	test_seasons()
 	test_recruit_r23()
+	test_equip_upgrade_dot()
+	test_hero_looks_unique()
+	test_hero_look_builder()
+	test_portrait_looks()
+	test_scene_snap()
+	test_crowd()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3623,11 +3629,19 @@ func test_recruit_r23() -> void:
 	check(GameData.errors == 0 and GameData.config_num("gacha_dia_pity") == 50.0, "rev 23: default tables are back")
 	# 다이아 아이콘·HUD 칩 종류
 	check(IconsScript.KINDS == ["gold", "wood", "stone", "food", "diamond"] and IconsScript.shapes("diamond").size() >= 6, "rev 23: a diamond icon and a fifth resource chip kind")
-	# 스냅 API(헤드리스 = 자리표시, 같은 키는 같은 텍스처, build는 렌더러가 있을 때만)
-	var calls := [0]
-	var t1: Texture2D = SceneSnap.snap("r23_test", Vector2i(160, 80), func(_r): calls[0] += 1)
-	check(t1 != null and SceneSnap.snap("r23_test", Vector2i(160, 80), func(_r): calls[0] += 1) == t1 and t1.get_width() == 20 and t1.get_height() == 10 and calls[0] == 0,
-		"rev 23: SceneSnap.snap returns a cached placeholder of the size's aspect headless (no build)")
+	# 스냅 API(공용 scene_snap): 헤드리스는 자리표시, 렌더러가 있으면 키 아트를 크기·데우기 프레임과 함께 한 번 큐에 넣고 뷰포트 안에서 build
+	var snapper = SceneSnap.new()
+	SceneSnap.current = snapper  # node()가 루트에 새로 만들지 않게
+	check(SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM) == SceneSnap.placeholder() and snapper.queue.is_empty(),
+		"rev 23: headless, the key art is the shared placeholder (nothing queued)")
+	snapper.can_render = true  # 렌더러가 있는 척 — 큐·장면만 본다
+	SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
+	check(snapper.queue.size() == 1 and snapper.queue[0].size == Vector2i(1264, 600) and snapper.queue[0].warm == RecruitArt.WARM,
+		"rev 23: the key art queues once at 2x (1264 x 600) with its warm frames")
+	snapper._process(0.016)
+	check(snapper.busy == RecruitArt.KEY and snapper._vp.get_child(0).get_node_or_null("Ignis") != null, "rev 23: scene_snap builds the key art inside its viewport")
+	SceneSnap.current = null
+	snapper.free()
 	# 키 아트 노드 구조
 	var root := Node3D.new()
 	RecruitArt.build(root)
@@ -3646,3 +3660,331 @@ func test_recruit_r23() -> void:
 	check(rim.position.z < ignis.position.z and rim.position.y > 2.0 and ball.get_node("Core").mesh.get_faces().size() == 20 * 3 and ball.get_node("Shell").mesh.get_faces().size() == 20 * 3,
 		"rev 23: rim light from behind and above; the fireball is a 20-face icosahedron (core + shell)")
 	root.free()
+
+
+## 영웅 장비 칸 빨간 점(사용자 요청): 그 부위에 아무도 안 낀, 지금보다 점수 높은 장비가 있으면 true. 무기는 그 영웅 모델 종류만.
+func test_equip_upgrade_dot() -> void:
+	var e = _econ(Time.get_unix_time_from_system())
+	e.bag = [{"id": 1, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1}, {"id": 2, "slot": "hat", "weapon_kind": null, "grade": "SR", "level": 1},
+		{"id": 3, "slot": "weapon", "weapon_kind": "axe", "grade": "SSR", "level": 1}]
+	e.next_item_id = 4
+	check(e.equip_upgrade_available("hans", "hat") and not e.equip_upgrade_available("hans", "weapon") and e.equip_upgrade_available("dorik", "weapon")
+		and not e.equip_upgrade_available("hans", "top") and not e.equip_upgrade_available("kyle", "hat"),
+		"dot: empty hat slot with a hat in the bag; Knight can't use an axe; Barbarian can; no top items; unowned hero none")
+	e.equipment = {"hans": {"hat": 2}}
+	check(not e.equip_upgrade_available("hans", "hat") and not e.equip_upgrade_available("nina", "hat") == false,
+		"dot: wearing the best hat hides it; another hero still sees the unequipped N hat (the SR one is taken)")
+	e.equipment = {"hans": {"hat": 1}}
+	check(e.equip_upgrade_available("hans", "hat"), "dot: a better unequipped hat (SR over N) shows the dot")
+	e.free()
+
+
+
+## 개정 23 영웅 생김새: 22명 모두 생김새가 있고 (모델·팔레트·머리·등·무기·크기) 묶음의 해시가 서로 다르다. 같은 모델끼리는
+## 팔레트·머리·무기 중 둘 이상이 다르다. 머리 = 머리 뼈 부품 + 벗긴 모자·투구, 등 = 가슴 부품 + 벗긴 망토, 무기 = gear + swap + 손 부품.
+func test_hero_looks_unique() -> void:
+	var heroes: Array = GameData.heroes()
+	check(heroes.size() == 22 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
+	var seen := {}
+	var looks := {}
+	for h in heroes:
+		var t := _look_tuple(h)
+		looks[h.id] = t
+		var key := var_to_str([h.model, t.palette, t.head, t.back, t.weapon, t.scale]).hash()
+		check(not seen.has(key), "%s has its own look (same tuple as %s)" % [h.id, seen.get(key, "")])
+		seen[key] = h.id
+	for i in heroes.size():
+		for j in range(i + 1, heroes.size()):
+			var a: Dictionary = heroes[i]
+			var b: Dictionary = heroes[j]
+			if a.model != b.model:
+				continue
+			var ta: Dictionary = looks[a.id]
+			var tb: Dictionary = looks[b.id]
+			var diff := int(ta.palette != tb.palette) + int(ta.head != tb.head) + int(ta.weapon != tb.weapon)
+			check(diff >= 2, "%s vs %s (both %s) differ in %d of palette / headgear / weapon, need 2" % [a.id, b.id, a.model, diff])
+
+
+func _look_tuple(h: Dictionary) -> Dictionary:
+	var spec := Art.hero_spec(h)
+	var cells: Array = spec.palette.keys()
+	cells.sort()
+	var head := []
+	var back := []
+	var hand := []
+	for p in spec.parts:
+		if p[0] == "head":
+			head.append(p[1])
+		elif String(p[0]).begins_with("handslot"):
+			hand.append(p[1])
+		else:
+			back.append(p[1])
+	for m in Art.HERO_LOOKS[h.id].get("hide", []):
+		if String(m).ends_with("Cape"):
+			back.append(m)
+		else:
+			head.append(m)
+	head.sort()
+	back.sort()
+	var swap: Dictionary = spec.swap
+	var sw: Array = swap.keys().map(func(g): return "%s>%s" % [g, swap[g]])
+	sw.sort()
+	return {"palette": ",".join(cells.map(func(c): return "%d:%s" % [c, (spec.palette[c] as Color).to_html()])), "head": head,
+		"back": back, "weapon": [h.gear, sw, hand], "scale": snappedf(spec.body_scale, 0.001)}
+
+
+## 생김새 빌더(UnitModel.dress, 성·던전·피규어·줄 세우기 공통): 영웅마다 부품이 적힌 뼈의 BoneAttachment3D 아래(이름 = id, 공유 정점 색 재질),
+## swap gear는 숨고 그 손 슬롯에 코드 무기, 벗긴 모자는 숨고 나머지 gear는 보이며, 몸 크기 = scale(±10%), 텍스처 표면은 전부 그 영웅의
+## 8×4 칸 색표 재질(팔레트 칸만 알파 1). 같은 영웅 = 같은 재질(캐시), 영웅끼리 다르다. 부품 메시는 id마다 하나. 셰이더가 remap 유니폼과 함께 컴파일된다.
+func test_hero_look_builder() -> void:
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	const HeroKit := preload("res://scripts/hero_kit.gd")
+	for sh in [Art.LOWPOLY_SHADER, Art.LOWPOLY_DOUBLE_SHADER]:
+		var names: Array = (sh as Shader).get_shader_uniform_list().map(func(u): return u.name)
+		check(names.has("use_remap") and names.has("remap_tex") and names.has("albedo_tex"), "%s compiles with the remap uniforms: %s" % [sh.resource_path, names])
+	var used := {}
+	for h in GameData.heroes():
+		var spec := Art.hero_spec(h)
+		var model: Node3D = Art.instance(spec.scene)
+		UnitModelScript.dress(model, spec)
+		var found := []
+		for ba in model.find_children("*", "BoneAttachment3D", true, false):
+			for c in ba.get_children():
+				if HeroKit.has_part(String(c.name)):
+					found.append([String(ba.bone_name), String(c.name)])
+					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.lowpoly_vc_material(),
+						"%s part %s is a shared low-poly vertex-color mesh" % [h.id, c.name])
+					used[String(c.name)] = true
+		var want: Array = spec.parts.duplicate()
+		for g in spec.swap:
+			var gear := model.find_child(g, true, false) as Node3D
+			check(gear != null and not gear.visible, "%s swaps out %s" % [h.id, g])
+			want.append([String((gear.get_parent() as BoneAttachment3D).bone_name), spec.swap[g]])
+		found.sort()
+		want.sort()
+		check(found == want, "%s: parts on their bones %s (want %s)" % [h.id, found, want])
+		for m in Art.HERO_LOOKS[h.id].get("hide", []):
+			check(not (model.find_child(m, true, false) as Node3D).visible, "%s takes off %s" % [h.id, m])
+		for g in h.gear.split("|"):
+			check(spec.swap.has(g) or (model.find_child(g, true, false) as Node3D).visible, "%s still shows gear %s" % [h.id, g])
+		check(model.scale.is_equal_approx(Vector3.ONE * spec.body_scale) and absf(spec.body_scale - 1.0) <= 0.1001,
+			"%s drawn at x%.2f (within 10%%)" % [h.id, spec.body_scale])
+		var tex: ImageTexture = Art.remap_texture(h.id, spec.palette)
+		var img := tex.get_image()
+		var ok: bool = img.get_size() == Vector2i(8, 4) and not spec.palette.is_empty()
+		for cell in 32:
+			var px := img.get_pixel(cell % 8, cell / 8)
+			ok = ok and (px.a > 0.5) == spec.palette.has(cell) and (not spec.palette.has(cell) or px.is_equal_approx(Color(spec.palette[cell], 1.0)))
+		check(ok, "%s color table: 8x4, alpha only on its %d palette cells" % [h.id, spec.palette.size()])
+		var textured := 0
+		var remapped := 0
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			for i in (mi as MeshInstance3D).mesh.get_surface_count():
+				var m := (mi as MeshInstance3D).get_active_material(i) as ShaderMaterial
+				if m != null and m.get_shader_parameter("use_texture"):
+					textured += 1
+					if m.get_shader_parameter("use_remap") == true and m.get_shader_parameter("remap_tex") == tex:
+						remapped += 1
+		check(textured > 5 and remapped == textured, "%s: all %d textured surfaces use its color table (%d)" % [h.id, textured, remapped])
+		model.free()
+	check(used.size() == HeroKit.PARTS.size(), "every HeroKit part is used by some hero (%d / %d)" % [used.size(), HeroKit.PARTS.size()])
+	var body := func(id: String) -> Material:
+		var spec := Art.hero_spec(GameData.hero(id))
+		var m: Node3D = Art.instance(spec.scene)
+		preload("res://scripts/unit_model.gd").dress(m, spec)  # 람다에선 함수 지역 상수가 안 보인다
+		var mat := (m.find_child("Knight_Body", true, false) as MeshInstance3D).get_active_material(0)
+		m.free()
+		return mat
+	check(body.call("arteon") == body.call("arteon") and body.call("arteon") != body.call("bron"), "a hero's skin material is cached; two heroes differ")
+	var p1: MeshInstance3D = HeroKit.part("lumina_halo")
+	var p2: MeshInstance3D = HeroKit.part("lumina_halo")
+	check(p1.mesh == p2.mesh and p1 != p2, "part meshes are built once per id")
+	p1.free()
+	p2.free()
+
+
+## 피규어(목록·상세 미리보기·모집 결과 카드)도 같은 생김새: Portraits.spec_of("hero:id") == Art.hero_spec — 팔레트·부품·swap·크기까지. 병사는 그대로.
+func test_portrait_looks() -> void:
+	for h in GameData.heroes():
+		var s: Dictionary = PortraitsScript.spec_of("hero:" + h.id)
+		var look: Dictionary = Art.HERO_LOOKS[h.id]
+		check(s == Art.hero_spec(h) and s.look == h.id and s.palette == Art.look_cells(h.model, look.palette) and s.parts == look.get("parts", [])
+			and s.swap == look.get("swap", {}) and s.body_scale == look.get("scale", 1.0), "portrait of %s carries its look" % h.id)
+	check(not Art.soldier_spec("infantry", "Knight").has("palette") and not PortraitsScript.spec_of("soldier:archer").has("palette"),
+		"soldiers keep the plain model (no hero look)")
+
+
+## 장면 스냅샷(scene_snap): 헤드리스는 자리표시만, 요청은 키마다 한 번(순서·크기·데울 프레임), 렌더 중인 키는 다시 넣지 않음,
+## 끝난 렌더는 정적 캐시 + snap_ready. 던전 띠 장면(dungeon_snaps)은 카메라·조명과 모델을 넣고, 모든 모델이 카메라 앞 띠 폭 안에 선다.
+func test_scene_snap() -> void:
+	const S := preload("res://scripts/scene_snap.gd")
+	const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
+	var unit_script := preload("res://scripts/unit_model.gd")  # 람다가 지역 상수를 못 본다
+	var p = S.new()
+	S.current = p  # node()가 루트에 새로 만들지 않게
+	var built := []
+	var b := func(root: Node3D): built.append(root)
+	var ph: Texture2D = S.snap("t:a", Vector2i(64, 16), b)
+	check(not p.can_render and p.queue.is_empty() and ph == S.placeholder() and ph.get_height() == 16 and S.cached("t:a") == null and built.is_empty(),
+		"scene snap headless: nothing queued, the shared placeholder comes back, nothing cached")
+	p.can_render = true  # 렌더러가 있는 척 — 큐·캐시만 본다
+	for k in ["t:a", "t:b", "t:a"]:
+		S.snap(k, Vector2i(64, 16), b, 5)
+	check(p.queue.map(func(q): return q.key) == ["t:a", "t:b"] and p.queue[0].warm == 5 and p.queue[0].size == Vector2i(64, 16),
+		"scene snap: requests queue once per key, in order, with size and warm frames")
+	p._process(0.016)
+	S.snap("t:a", Vector2i(64, 16), b)
+	check(p.busy == "t:a" and built.size() == 1 and built[0].get_parent() == p._vp and p._vp.size == Vector2i(64, 16) and p._vp.world_3d != null
+		and p.queue.map(func(q): return q.key) == ["t:b"], "scene snap: one render at a time in its own world; the busy key is not queued again")
+	for i in 5:
+		p._on_drawn()
+	check(p._left == 0 and p.busy == "t:a", "scene snap: warm frames count down before the capture")
+	var got := []
+	p.snap_ready.connect(func(k): got.append(k))
+	var tex := ImageTexture.create_from_image(Image.create_empty(4, 4, false, Image.FORMAT_RGBA8))
+	p.store("t:a", tex)
+	S.snap("t:a", Vector2i(64, 16), b)
+	check(got == ["t:a"] and S.cached("t:a") == tex and S.snap("t:a", Vector2i(64, 16), b) == tex and p.queue.size() == 1,
+		"scene snap: a finished render is cached, fires snap_ready(key) and is not queued again")
+	S.current = null
+	p.free()
+	check(S.cached("t:a") == tex, "scene snap: the cache is static (outlives the node)")
+	S._cache.erase("t:a")
+	for t in ["gold", "equip"]:
+		var root := Node3D.new()
+		DungeonSnaps.build(root, t, ["arteon", "nobody", "hans", "ignis", "kyle"])
+		var cams := root.find_children("*", "Camera3D", true, false)
+		var units := root.find_children("*", "", true, false).filter(func(n): return n.get_script() == unit_script)
+		var cam: Camera3D = cams[0]
+		var half_w := tan(deg_to_rad(cam.fov / 2.0)) * DungeonSnaps.SIZE.aspect()  # 가로 반 화각 tan(세로 화각 기준)
+		var inside := true
+		for u in units:
+			var l: Vector3 = cam.transform.affine_inverse() * (u.position + Vector3(0, 1.0, 0))
+			inside = inside and l.z < -1.0 and absf(l.x / -l.z) < half_w * 0.95
+		check(cams.size() == 1 and root.find_children("*", "WorldEnvironment", true, false).size() == 1 and units.size() == (11 if t == "gold" else 4) and inside,
+			"%s band scene: one camera, the arena lighting, %d models (3 heroes; unknown id skipped), all in front of the camera inside the band width" % [t, units.size()])
+		root.free()
+
+
+# --- 겹침 해소(crowd.gd) ---
+const CrowdScript := preload("res://scripts/crowd.gd")
+
+
+## 한 번 해소(층 lv, 아레나 = half < 0). mv = 이번 프레임 제 걸음(없으면 모두 제자리).
+func _crowd_run(half: float, pts: Array, radii: Array, w: Array, lv: Array, mv := []) -> PackedVector2Array:
+	var c = CrowdScript.new()
+	c.half = half
+	var steps := PackedVector2Array(mv)
+	steps.resize(pts.size())
+	var out: PackedVector2Array = c.separate(PackedVector2Array(pts), PackedFloat32Array(radii), PackedFloat32Array(w), PackedInt32Array(lv), steps)
+	c.free()
+	return out
+
+
+func test_crowd() -> void:
+	GameData.load_tables()
+	# 근접 사거리(중심 거리)는 맞닿는 거리(반지름 합) + 0.1보다 길다 — 밀려 붙어도 친다(사거리 판정은 그대로라 밸런스 유지)
+	var hero_r := CrowdScript.HUMAN_R * Art.CHARACTER_SCALE
+	var foot_r := hero_r * Art.SOLDIER_SCALE
+	var castle_kinds := {"grunt": GameData.monster("grunt"), "epic_boss": GameData.monster("epic_boss")}
+	var short := []
+	for kind in castle_kinds:
+		var m: Dictionary = castle_kinds[kind]
+		var mr: float = CrowdScript.MONSTER_R[kind] * float(m.scale)
+		for h in GameData.heroes():
+			if h.role == "melee" and float(h.range) < hero_r + mr + 0.1:
+				short.append("%s vs %s" % [h.id, kind])
+		for s in GameData.soldiers():
+			var sr: float = CrowdScript.CAVALRY_R if s.id == "cavalry" else foot_r
+			if float(s.range) < 3.0 and float(s.range) < sr + mr + 0.1:
+				short.append("%s vs %s" % [s.id, kind])
+			if float(m.range) < sr + mr + 0.1:
+				short.append("%s vs %s" % [kind, s.id])
+		if float(m.range) < hero_r + mr + 0.1:
+			short.append("%s vs hero" % kind)
+	for type in GameData.DUNGEON_TYPES:
+		for row in GameData.dungeon_rows(type):
+			var mr: float = CrowdScript.MONSTER_R[row.kind] * float(row.scale)
+			if float(row.range) < hero_r + mr + 0.1:
+				short.append("%s vs hero" % row.kind)
+			for h in GameData.heroes():
+				if h.role == "melee" and float(h.range) < hero_r + mr + 0.1:
+					short.append("%s vs %s" % [h.id, row.kind])
+	check(short.is_empty(), "every melee range reaches past contact distance (radius sum + 0.1): %s" % [short])
+	check(is_equal_approx(CrowdScript.MONSTER_R.grunt * float(castle_kinds.grunt.scale), 0.4) and CrowdScript.MONSTER_R.epic_boss * float(castle_kinds.epic_boss.scale) > 0.75,
+		"radii: grunt 0.4, epic boss ~0.8 (x model scale)")
+	# 같은 자리 둘 → 반지름 합만큼 떨어진다. 무게 역수로 나눈다(가벼운 쪽이 4배 더), 처리가 꺼진(w 0) 유닛은 안 밀린다, 다른 층끼리는 안 부딪는다
+	var q := _crowd_run(-1.0, [Vector2(1, 1), Vector2(1, 1)], [0.4, 0.4], [1.0, 1.0], [0, 0])
+	check(absf(q[0].distance_to(q[1]) - 0.8) < 0.001, "two units on one spot end a radius sum apart (%.3f)" % q[0].distance_to(q[1]))
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.4, 0)], [0.4, 0.4], [4.0, 1.0], [0, 0])
+	check(q[0].is_equal_approx(Vector2(-0.32, 0)) and q[1].is_equal_approx(Vector2(0.48, 0)), "the push splits by inverse mass (light moves 0.32, heavy 0.08): %s" % [q])
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.4, 0)], [0.4, 0.4], [0.0, 1.0], [0, 0])
+	check(q[0] == Vector2.ZERO and q[1].is_equal_approx(Vector2(0.8, 0)), "an immovable unit (w 0) stays, the other takes the whole push")
+	# 정면으로 마주 걸어 부딪치면 서로 옆으로 비킨다(같은 줄에서 막혀 멈추지 않는다). 길목에 선 유닛에 걸어 들어가도 옆으로 돈다
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.6, 0)], [0.4, 0.4], [1.0, 1.0], [0, 0], [Vector2(0.05, 0), Vector2(-0.05, 0)])
+	check(q[0].y * q[1].y < 0.0 and absf(q[0].y) > 0.05, "head-on walkers sidestep to opposite sides: %s" % [q])
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.6, 0)], [0.4, 0.4], [1.0, 0.0], [0, 0], [Vector2(0.05, 0), Vector2.ZERO])
+	check(absf(q[0].y) > 0.05 and q[1] == Vector2(0.6, 0), "a walker that bumps a unit standing in its line slides around it: %s" % [q])
+	q = _crowd_run(-1.0, [Vector2(0, 0), Vector2(0.2, 0)], [0.4, 0.4], [1.0, 1.0], [0, 1])
+	check(q[0] == Vector2.ZERO and q[1] == Vector2(0.2, 0), "ground and wall-top units do not push each other")
+	var c = CrowdScript.new()
+	c.arena_r = 10.0
+	q = c.separate(PackedVector2Array([Vector2(9.9, 0), Vector2(9.5, 0)]), PackedFloat32Array([0.4, 0.4]), PackedFloat32Array([1.0, 0.0]), PackedInt32Array([0, 0]),
+		PackedVector2Array([Vector2.ZERO, Vector2.ZERO]))
+	c.free()
+	check(q[0].length() <= 10.001, "arena: a push never leaves the arena radius (%.2f)" % q[0].length())
+	# 성 전장: 밀림은 성벽·성문을 넘기지 않는다
+	var half := GameData.interior_half(1)
+	var outer := half + Balance.WALL_T
+	q = _crowd_run(half, [Vector2(0, -(outer + 0.1)), Vector2(0.1, -(outer + 0.5))], [0.4, 0.4], [1.0, 0.0], [0, 0])
+	check(not FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "a monster pressed against the closed north gate is not pushed through it: %s" % q[0])
+	q = _crowd_run(half, [Vector2(6, -(outer + 0.1)), Vector2(6.1, -(outer + 0.5))], [0.4, 0.4], [1.0, 0.0], [0, 0])
+	check(not FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "nor through the wall beside it")
+	q = _crowd_run(half, [Vector2(6, -(half - 0.1)), Vector2(6.1, -(half - 0.5))], [0.45, 0.45], [1.0, 0.0], [0, 0])
+	check(maxf(absf(q[0].x), absf(q[0].y)) < half, "an inside unit is not pushed into the wall: %s" % q[0])
+	q = _crowd_run(half, [Vector2(1.8, -(half + 1.0)), Vector2(1.4, -(half + 1.0))], [0.45, 0.45], [1.0, 0.0], [0, 0])
+	check(absf(q[0].x) <= Balance.GATE_W / 2.0 + 0.001 and FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "a unit in the gate passage stays inside the gate width: %s" % q[0])
+	var wall := -(half + Balance.WALL_T / 2.0)
+	q = _crowd_run(half, [Vector2(4.0, wall), Vector2(4.1, wall + 0.2)], [0.45, 0.45], [1.0, 0.0], [1, 1])
+	check(absf(q[0].y - wall) <= FormationScript.WALK_HALF + 0.001 and q[0].distance_to(q[1]) > 0.85,
+		"a wall-top unit shoved off the walk stops at its edge (center line +-0.55 m) and slides along: %s" % [q])
+	q = _crowd_run(half, [Vector2(4.0, wall + 0.4), Vector2(4.1, wall + 0.5)], [0.45, 0.45], [0.0, 1.0], [1, 1])
+	check(absf(q[1].y - wall) <= FormationScript.WALK_HALF + 0.001 and absf(q[1].x - 4.0) > 0.5,
+		"pushed toward the inner edge, it moves along the wall instead of falling off: %s" % [q])
+	var lim := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0
+	q = _crowd_run(half, [Vector2(lim - 0.1, wall), Vector2(lim - 0.4, wall)], [0.45, 0.45], [1.0, 0.0], [1, 1])
+	check(q[0].x <= lim + 0.001, "and never past the corner tower (%.2f <= %.2f)" % [q[0].x, lim])
+	q = _crowd_run(half, [Vector2(0, 4.2), Vector2(0.1, 4.5)], [0.4, 0.4], [1.0, 0.0], [0, 0])
+	check(q[0].y >= 3.999, "a unit is not pushed into the keep plot (z %.2f >= 4)" % q[0].y)
+	# 200 유닛(30 m 사각형, 빽빽함): 시간을 찍고 수 ms 안(느슨한 확인). 한 번에 겹침이 크게 준다
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var pts := []
+	var radii := []
+	var ws := []
+	var lvs := []
+	for i in 200:
+		pts.append(Vector2(rng.randf_range(-15.0, 15.0), rng.randf_range(-15.0, 15.0)))
+		radii.append(rng.randf_range(0.35, 0.8))
+		ws.append(1.0 / CrowdScript.mass(radii[i], rng.randf() < 0.5))
+		lvs.append(0)
+	var t0 := Time.get_ticks_usec()
+	q = _crowd_run(-1.0, pts, radii, ws, lvs)
+	var usec := Time.get_ticks_usec() - t0
+	var before := _worst_overlap(PackedVector2Array(pts), radii)
+	for k in 9:  # 프레임마다 한 번씩 10프레임
+		q = _crowd_run(-1.0, Array(q), radii, ws, lvs)
+	var after := _worst_overlap(q, radii)
+	print("crowd: 200 units resolved in %.2f ms (worst overlap %.0f%% -> %.1f%% after 10 frames)" % [usec / 1000.0, before * 100.0, after * 100.0])
+	check(usec < 8000, "200 units resolve in a few ms headless (%.2f ms)" % [usec / 1000.0])
+	check(after < 0.05, "a dense random pile spreads within 10 frames (worst overlap %.2f -> %.3f of the radius sum)" % [before, after])
+
+
+## 가장 큰 겹침 / 반지름 합(0 = 안 겹침).
+func _worst_overlap(p: PackedVector2Array, radii: Array) -> float:
+	var worst := 0.0
+	for i in p.size():
+		for j in range(i + 1, p.size()):
+			var s: float = radii[i] + radii[j]
+			worst = maxf(worst, (s - p[i].distance_to(p[j])) / s)
+	return worst

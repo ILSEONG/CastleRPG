@@ -398,6 +398,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _growth_cases()
 	await _boss_slayer_case()
 	await _dungeon_cases()
+	await _crowd_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
 
@@ -2171,3 +2172,176 @@ func _enter_dungeon(type: String, party: Array):
 
 func _arena_monsters() -> Array:
 	return get_tree().get_nodes_in_group("monsters").filter(func(m): return m.is_alive())
+
+
+# --- (CR) 겹침 해소(crowd.gd) ---
+const Crowd := preload("res://scripts/crowd.gd")
+const CROWD_TOL := 0.05  # 겹침 허용: 반지름 합의 5%
+
+
+## (CR) 유닛은 바닥을 차지한다: 성문에 몰린 무리는 겹치지 않고 문 앞에 퍼져 서고, 밀려서 성벽·닫힌 성문을 넘지 않는다. 성벽 위 궁수는
+##      성벽 길 안(중심선 ± 0.55 m)에서만 밀리고 제자리로 돌아간다. 근접 영웅의 피해 속도는 해소를 끈 것과 같다(±10%). 던전 아레나도 겹치지 않는다.
+##      해소를 한 번 끄면 같은 겹침 검사가 실패한다(검사가 문다).
+func _crowd_cases() -> void:
+	_clear_monsters()
+	var mode0: int = GameState.mode
+	GameState.mode = GameState.Mode.STAGE
+	GameState.refill()
+	await _frames(1)
+	var crowd = _main.get_children().filter(func(c): return c.get_script() == Crowd)[0]
+	var heroes := get_tree().get_nodes_in_group("heroes")
+	for h in heroes:  # 지상 영웅은 멀리 치워 둔다 — 성문 앞 무리가 영웅이 아니라 성문을 친다(성벽 위 영웅은 그대로 쏜다)
+		if not h.is_on_wall():
+			h.set_process(false)
+			h.global_position = Vector3(-90.0 + 3.0 * h.index, 0, 90.0)
+	var gate0: float = GameState.gate_hp[1]
+	var r: Dictionary = await _gate_crowd(40, 3.0)
+	var ms: Array = r.ms
+	var standing: int = ms.filter(func(m): return not m._walking).size()
+	var lateral: Array = ms.map(func(m): return Formation.perp(1).dot(m.global_position))
+	print("crowd: %d units at the east gate, worst overlap %.1f%%, resolve avg %.2f ms, max %.2f ms per frame" % [r.units, r.worst * 100.0, r.avg_ms, r.max_ms])
+	_check(r.worst <= CROWD_TOL, "(CR) after 3 s of 40 grunts on the east gate no two units overlap by more than 5% of their radius sum",
+		"worst %.3f %s" % [r.worst, r.what])
+	_check(not r.crossed and GameState.gate_hp[1] == gate0 and lateral.max() - lateral.min() > Balance.GATE_W, "(CR) the crowd stays outside the closed gate and spreads wider than the gate (a blob, not a stack)",
+		"crossed=%s gate %.0f -> %.0f spread %.1f m" % [r.crossed, gate0, GameState.gate_hp[1], lateral.max() - lateral.min()])
+	_check(standing >= 8, "(CR) many of them stand and strike at once along the gate (not one stack)", "standing %d of %d" % [standing, ms.size()])
+	crowd.enabled = false
+	var off: Dictionary = await _gate_crowd(40, 3.0)
+	crowd.enabled = true
+	_check(off.worst > CROWD_TOL, "(CR) with the resolver switched off the same check fails (the overlap check bites)", "worst %.3f" % off.worst)
+	_clear_monsters()
+	await _frames(1)
+
+	# 성벽 위: 동 성벽 원거리 영웅 셋을 한 점에 겹쳐 놓는다 → 성벽 길 안에서만 벌어지고(높이 그대로, 중심선 ± 0.55 m) 서로 비켜 저마다 자리로 돌아간다
+	var wall_hs := []
+	for k in 3:
+		wall_hs.append(_add_hero(["nina", "mira", "echo"][k], 401 + 4 * k))  # 면 1(동), 성벽 위 빈 자리
+	await _frames(1)
+	var spot: Vector3 = wall_hs[0].stand_position()
+	var depth: float = Formation.SIDE_DIR[1].dot(spot)
+	for k in wall_hs.size():
+		wall_hs[k]._path.clear()
+		wall_hs[k].global_position = spot + Formation.perp(1) * 0.01 * k
+	var on_wall := true
+	var t := 0.0
+	while t < 6.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		for h in wall_hs:
+			var p: Vector3 = h.global_position
+			on_wall = on_wall and absf(p.y - Balance.WALL_H) < 0.01 and absf(Formation.SIDE_DIR[1].dot(p) - depth) <= Formation.WALK_HALF + 0.01
+	var home := wall_hs.all(func(h): return h.global_position.distance_to(h.stand_position()) < 0.06 and h.is_on_wall())
+	_check(wall_hs.all(func(h): return h.post == Formation.POST_WALL and h.side == 1) and on_wall and home,
+		"(CR) wall-top archers piled on one spot stay on the wall walk (height kept, center line +-0.55 m) and get past each other to their own posts",
+		"on_wall=%s home=%s pos=%s" % [on_wall, home, wall_hs.map(func(h): return h.global_position)])
+	for h in wall_hs:
+		_remove_hero(h)
+	await _frames(1)
+
+	# 근접 영웅의 피해 속도: 해소를 켜도(무리가 둘러싸도) 끈 것과 ±10% 안
+	var on_dmg: float = await _melee_rate(crowd, true)
+	var off_dmg: float = await _melee_rate(crowd, false)
+	_check(on_dmg > 0.0 and absf(on_dmg / off_dmg - 1.0) <= 0.1, "(CR) a melee hero ringed by grunts deals damage at the same rate with the resolver on (+-10%)",
+		"on %.0f off %.0f" % [on_dmg, off_dmg])
+	for h in heroes:
+		if is_instance_valid(h):
+			h.set_process(true)
+			h.reset()
+	_clear_monsters()
+	await _frames(1)
+
+	# 던전 아레나(골드): 영웅 6과 고블린이 싸우는 동안 겹치지 않는다
+	var d = await _enter_dungeon("gold", Economy.default_party("gold"))
+	var worst := 0.0
+	var what := ""
+	t = 0.0
+	while d != null and t < 6.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		if t > 0.5:
+			var o: Array = _overlap(d)
+			if o[0] > worst:
+				worst = o[0]
+				what = o[1]
+	var fought: bool = d != null and d.heroes.any(func(h): return h.hp < h.hp_max)
+	_check(d != null and fought and worst <= CROWD_TOL, "(CR) dungeon arena: heroes and goblins fight without overlapping (6 s)", "fought=%s worst %.3f %s" % [fought, worst, what])
+	if d != null:
+		d.give_up()
+		await _wait_until(func(): return _main.is_inside_tree(), 2.0)
+		await _frames(2)
+	GameState.mode = mode0
+
+
+## 동(1) 성문 앞 3~9 m에 grunt n마리(공격 0·HP 큼 — 성문이 안 부서지고 안 죽는다)를 놓고 sec초. 끝의 가장 큰 겹침, 몬스터, 성 안에 든 적이 있었는지.
+func _gate_crowd(n: int, sec: float) -> Dictionary:
+	_clear_monsters()
+	await _frames(1)
+	var ms := []
+	for i in n:
+		var p: Vector3 = Formation.gate_target(_half, 1) + Formation.SIDE_DIR[1] * (3.0 + (i / 8) * 1.5) + Formation.perp(1) * ((i % 8) - 3.5) * 1.5
+		var m = _spawn("grunt", 1, p)
+		m.atk = 0.0
+		m.hp_max = 1.0e6
+		m.hp = 1.0e6
+		ms.append(m)
+	var crowd = _main.get_children().filter(func(c): return c.get_script() == Crowd)[0]
+	var crossed := false
+	var t := 0.0
+	var usec := []
+	while t < sec:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		crossed = crossed or ms.any(func(m): return Formation.is_inside(_half, m.global_position))
+		usec.append(crowd.last_usec)
+	var o: Array = _overlap(_main)
+	return {"worst": o[0], "what": o[1], "units": o[2], "ms": ms, "crossed": crossed,
+		"avg_ms": usec.reduce(func(a, b): return a + b, 0) / 1000.0 / usec.size(), "max_ms": usec.max() / 1000.0}
+
+
+## parent 아래 살아 있는 유닛(같은 층) 쌍 중 가장 큰 겹침 / 반지름 합. [비율, 그 쌍, 유닛 수]
+func _overlap(parent) -> Array:
+	var us := get_tree().get_nodes_in_group("crowd").filter(func(u): return u.get_parent() == parent and u.is_alive() and Crowd.level(u.global_position.y) >= 0)
+	var worst := 0.0
+	var what := ""
+	for i in us.size():
+		for j in range(i + 1, us.size()):
+			var a = us[i]
+			var b = us[j]
+			if Crowd.level(a.global_position.y) != Crowd.level(b.global_position.y):
+				continue
+			var s: float = a.radius() + b.radius()
+			var o: float = (s - Formation.flat_distance(a.global_position, b.global_position)) / s
+			if o > worst:
+				worst = o
+				what = "%s@%s / %s@%s" % [a.name, _flat(a.global_position), b.name, _flat(b.global_position)]
+	return [worst, what, us.size()]
+
+
+## 북동 벌판의 근접 영웅(한스, 스킬 1 = 흡혈 — 피해는 공격력 그대로) 둘레 3.5 m에 grunt 8(공격 0·HP 큼). 첫 타격부터 7.6초(0.8초 간격 10번) 동안 준 피해.
+func _melee_rate(crowd, on: bool) -> float:
+	crowd.enabled = on
+	_clear_monsters()
+	await _frames(1)
+	var h = _add_hero("hans", 500)
+	await _frames(1)
+	var outer := _half + Balance.WALL_T
+	var p := Vector3(outer + 12.0, 0, -(outer + 22.0))
+	h.move_to_point(p)
+	h._path.clear()
+	h.global_position = p
+	var ms := []
+	for k in 8:
+		var m = _spawn("grunt", 0, p + Vector3.FORWARD.rotated(Vector3.UP, TAU * k / 8.0) * 3.5)
+		m.atk = 0.0
+		m.hp_max = 1.0e6
+		m.hp = 1.0e6
+		ms.append(m)
+	var dealt := func(): return ms.reduce(func(acc, m): return acc + _dmg(m), 0.0)
+	await _wait_until(func(): return dealt.call() > 0.0, 3.0)
+	await _seconds(7.6)
+	var total: float = dealt.call()
+	_remove_hero(h)
+	_clear_monsters()
+	crowd.enabled = true
+	await _frames(1)
+	return total

@@ -656,6 +656,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _soldier_tap()
 	await _soldier_figures(tabs)
 	await _dungeon_ui(tabs)
+	await _dungeon_gold_line(tabs)
 	await _world_tags()
 	await _rotate_ui(hud)
 	await _fever_ui(hud)
@@ -2202,6 +2203,8 @@ func _dungeon_ui(tabs) -> void:
 	_check(hwin.equip_slots.size() == 7 and hwin.equip_slots.values().all(func(s): return s.tile.grade == "" and card.encloses(s.button.get_global_rect()))
 		and not hwin.equip_label.visible and hwin.equip_slots.weapon.tile.kind == "sword",
 		"(D) hero detail: 7 empty equipment slots on the big card (hans's weapon slot shows a sword)", "card=%s" % card)
+	_check(hwin.equip_slots[it.slot].dot.visible and hwin.equip_slots.values().all(func(q): return q.dot.visible == Economy.equip_upgrade_available("hans", hwin.equip_slots.find_key(q))),
+		"(D) an empty slot with an unequipped item for it shows the red dot (top right)", "dot=%s" % hwin.equip_slots[it.slot].dot.visible)
 	print("INPUT INFO: hero equipment slots %s" % [hwin.equip_slots.keys().map(func(s): return [s, hwin.equip_slots[s].button.get_global_rect()])])
 	await _tap(slot_b.get_global_rect().get_center())
 	_check(bag.is_open() and bag.mode == "pick" and bag.slot == it.slot and bag.rows.has(it.id) and bag.rows[it.id].equip.text == "장착" and bag.unequip_button.disabled,
@@ -2215,6 +2218,8 @@ func _dungeon_ui(tabs) -> void:
 		and hwin.equip_label.visible and hwin.equip_label.text == "장비 " + preload("res://scripts/bag_panel.gd").stat_text(it)
 		and hwin.stat_values[0].text == UiKit.commas(roundi(want.hp)) and hwin.stat_values[0].text != hp0,
 		"(D) [장착] equips it: the slot shows its grade, HP includes it and the total line reads 장비 HP +n", "eq=%s label=%s hp %s -> %s" % [Economy.equipment, hwin.equip_label.text, hp0, hwin.stat_values[0].text])
+	_check(hwin.equip_slots[it.slot].dot.visible == Economy.equip_upgrade_available("hans", it.slot),
+		"(D) after equipping, the slot dot shows only if a better unequipped item for that slot remains", "dot=%s" % hwin.equip_slots[it.slot].dot.visible)
 	await _guard_wait()
 	await _tap(slot_b.get_global_rect().get_center())
 	await _guard_wait()
@@ -2368,3 +2373,33 @@ func _recruit23_ui(recruit) -> void:
 	Fever.auto_recruit = keep[5]
 	recruit.set_currency("gold")
 	Economy.changed.emit()
+
+
+## 장비 던전 카드 열쇠 밑 골드 줄 "현재 골드 / 추가 도전 비용": 모자라면 현재 골드가 빨강, 골드가 오르면 원래 색(Economy.changed로 바로).
+## 열쇠 없이 골드로 추가 도전(오프라인 start_dungeon + debug_win)하면 비용이 올라 바로 바뀐다(dungeons_changed).
+func _dungeon_gold_line(tabs) -> void:
+	var dwin = tabs.windows.dungeon
+	var ec: Dictionary = dwin.cards.equip
+	var g0: int = Economy.gold_tenths
+	dwin.open()
+	await _frames(1)
+	var st0 := Economy.dungeon_state("equip")
+	var cost: int = st0.extra_cost
+	Economy.add_gold_tenths((cost - 1) * 10 - Economy.gold_tenths)
+	var short := [ec.gold.text, ec.cost.text, ec.gold.get_theme_color("font_color")]
+	Economy.add_gold_tenths(10)
+	var enough := [ec.gold.text, ec.cost.text, ec.gold.get_theme_color("font_color")]
+	_check(short == [UiKit.commas(cost - 1), "/ " + UiKit.commas(cost), dwin.RED] and enough == [UiKit.commas(cost), "/ " + UiKit.commas(cost), HudScript.INK]
+		and ec.gold.is_visible_in_tree() and ec.gold.get_global_rect().position.y > ec.keys.get_global_rect().end.y - 4.0,
+		"(D) equip card: gold line under the keys reads <gold> / <cost>; red while short, normal once gold reaches the cost", "short=%s enough=%s" % [short, enough])
+	print("INPUT INFO: equip card gold line %s, keys %s, band %s" % [ec.gold.get_parent().get_global_rect(), ec.keys.get_global_rect(), dwin.bands.equip.get_global_rect()])
+	_check(st0.keys == 0, "(D) precondition: no equip key left (the next run is paid with gold)", "keys=%d" % st0.keys)
+	Economy.dungeon_started.disconnect(_main._on_dungeon_started)  # 장면은 바꾸지 않고 오프라인 API만
+	var ok := Economy.start_dungeon("equip", 1, Economy.default_party("equip")) and Economy.debug_win()
+	Economy.dungeon_started.connect(_main._on_dungeon_started)
+	var st := Economy.dungeon_state("equip")
+	_check(ok and st.extra_today == st0.extra_today + 1 and st.extra_cost > cost and Economy.gold == 0 and ec.gold.text == "0"
+		and ec.cost.text == "/ " + UiKit.commas(st.extra_cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
+		"(D) an extra run paid with gold raises the cost and the line follows at once (0 / new cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
+	Economy.add_gold_tenths(g0 - Economy.gold_tenths)
+	dwin.close()

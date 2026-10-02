@@ -90,3 +90,8 @@ func _tick_charge(delta: float) -> void:
 
 func is_charging() -> bool:
 	return _charge_to != null
+
+
+## 돌진 중에는 밀리지 않는다(영웅을 밀쳐 낸다 — 겹침 해소).
+func push_mass() -> float:
+	return INF if is_charging() else super.push_mass()

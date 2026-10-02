@@ -1,5 +1,5 @@
 extends RefCounted
-## 모집 창 키 아트(개정 23 §5): 이그니스(SSR 화염 대마법사)가 화염구를 쏘는 순간. SceneSnap.snap(KEY, SIZE, build)로 한 번 렌더해 캐시한다.
+## 모집 창 키 아트(개정 23 §5): 이그니스(SSR 화염 대마법사)가 화염구를 쏘는 순간. SceneSnap.snap(KEY, SIZE, build, WARM)으로 한 번 렌더해 캐시한다.
 ## 장면(build가 root 아래에 만든다): 어두운 그라데이션 배경 판, 각진 원형 단상(+ 빛나는 테두리), 공격 자세(발사 순간 프레임)의 이그니스
 ## (영웅 외형 = Art.hero_spec → UnitModel, 영웅 외형 작업이 바꾸면 그대로 따른다), 앞쪽 큰 화염 20면체(노란 핵 + 주황 가산 껍질),
 ## 불꽃 파편, 빛기둥, 불씨, 뒤에서 비추는 림 라이트, 살짝 낮은 각도(올려다보는) 카메라.
@@ -15,6 +15,7 @@ const UnitModelScript := preload("res://scripts/unit_model.gd")
 const KEY := "recruit_key_art"
 const VIEW := Vector2(632, 300)  # 창 안 표시 크기(논리 px, 창 내용 폭 × 약 300)
 const SIZE := Vector2i(1264, 600)  # 2배로 렌더
+const WARM := 6  # 찍기 전 프레임(시전 자세·가산 재질이 자리 잡게)
 const HERO := "ignis"
 const HERO_YAW := 28.0  # 화염구(오른쪽 앞)를 향해 돈다
 const FIREBALL_POS := Vector3(1.75, 1.75, 1.0)

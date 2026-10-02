@@ -24,6 +24,8 @@ const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
 const EQUIP_PX := 72.0  # 장비 칸 한 변
+const DOT_R := 9.0  # 장비 칸 빨간 점 반지름(논리 px)
+const DOT_RED := Color(0.9, 0.18, 0.15)
 const EQUIP_LEFT := 4  # 왼쪽 줄 칸 수(GameData.EQUIP_SLOTS 앞에서부터)
 const EQUIP_COLOR := Color(0.2, 0.42, 0.75)
 
@@ -303,8 +305,16 @@ func _build_equip_slots() -> void:
 		var tile = ItemTileScript.new()
 		tile.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		b.add_child(tile)
+		var dot := Control.new()  # 낄 수 있는 더 좋은 장비가 있으면 오른쪽 위 빨간 점
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.custom_minimum_size = Vector2(DOT_R * 2.0, DOT_R * 2.0)
+		dot.position = Vector2(EQUIP_PX - DOT_R * 1.6, -DOT_R * 0.4)
+		dot.size = Vector2(DOT_R * 2.0, DOT_R * 2.0)
+		dot.draw.connect(func(): dot.draw_circle(Vector2(DOT_R, DOT_R), DOT_R, Color.WHITE); dot.draw_circle(Vector2(DOT_R, DOT_R), DOT_R - 2.0, DOT_RED))
+		dot.visible = false
+		b.add_child(dot)
 		cols[0 if i < EQUIP_LEFT else 1].add_child(b)
-		equip_slots[s] = {"button": b, "tile": tile}
+		equip_slots[s] = {"button": b, "tile": tile, "dot": dot}
 
 
 ## 장비 칸 탭: 그 부위 장비 고르기(장착·해제).
@@ -678,6 +688,7 @@ func _refresh_equip(id: String, h: Dictionary) -> void:
 		var it: Dictionary = eq.get(s, {})
 		var kind: String = GameData.weapon_of(h.model) if s == "weapon" else s
 		equip_slots[s].tile.set_item(BagPanel.item_kind(it) if not it.is_empty() else kind, str(it.get("grade", "")))
+		equip_slots[s].dot.visible = Economy.equip_upgrade_available(id, s)
 	var b := Economy.equipment_bonus(id)
 	var parts := []
 	if b.hp > 0:
