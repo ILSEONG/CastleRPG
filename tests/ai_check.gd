@@ -338,6 +338,8 @@ func _skill_cases(heroes: Array) -> void:
 	var se = _add_hero("seraphine", 100, 3)
 	se.atk = GameData.hero_stats(se.def, 1, 0, GameState.building_levels()).atk  # ★3 공격 배율이면 grunt가 한 방에 죽는다 — 공격은 ★0 그대로
 	_g = _spawn("grunt", 0, Vector3(-6, 0, -(north_out + 4.0)))
+	_g.hp = 60.0  # 표 HP 24는 공격 44 한 방에 죽는다 — 예전 HP로 한 방은 버티게
+	_g.hp_max = 60.0
 	await _wait_until(func(): return _alive(_g) and _g._slow_t > 0.0, 3.0)
 	var base_speed: float = _g._stats.speed
 	# process_frame은 각 _process 전에 온다: 이 프레임의 delta(이 뒤에 움직일 몫)부터 센다 — 프레임 간격이 들쭉날쭉해도 맞게
@@ -619,6 +621,8 @@ func _damage_numbers() -> void:
 	for x in [h, hc, hd]:
 		x.set_process(false)
 	var m = _still("grunt", Vector3(0, 0, -(_half + 6.0)))
+	m.hp_max = 1000.0  # 표 HP 24는 첫 방에 죽는다 — 두 번 맞아도 살아 있게
+	m.hp = m.hp_max
 	dn._list.clear()
 	h._target = m
 	await _attack_now(h)
@@ -1439,9 +1443,11 @@ func _fever_spawn() -> void:
 	Fever.reset()
 	GameState.mode = mode0
 	_clear_monsters()
-	# 허용 오차: 방치 쪽 무리 하나(spawn_group마리)가 끝자락에 들고 안 들고의 3배
-	var tol := 3 * int(GameData.config_num("spawn_group"))
-	_check(counts.idle >= 8 and absi(counts.idle_fever - 3 * counts.idle) <= tol, "(fever) FEVER triples the idle spawn count over the same time (±1 group)", str(counts))
+	# 스폰 한 번 = spawn_group(3)마리라 수는 3 단위. 허용 오차: 방치 쪽 스폰 한 번이 끝자락에 들고 안 들고의 3배
+	var grp := int(GameData.config_num("spawn_group"))
+	var whole: bool = counts.idle % grp == 0 and counts.idle_fever % grp == 0
+	_check(counts.idle >= 4 * grp and whole and absi(counts.idle_fever - 3 * counts.idle) <= 3 * grp,
+		"(fever) FEVER triples the idle spawn count over the same time (in groups of 3, ±1 group)", str(counts))
 	_check(counts.stage == counts.stage_fever and counts.stage > 0, "(fever) stage mode spawns are unchanged by FEVER", str(counts))
 
 
@@ -1643,8 +1649,8 @@ func _return_time(u, home: Vector3, timeout: float) -> float:
 	return left
 
 
-## 무리 스폰(스포너): 방치 첫 무리는 idle_interval(8초)에 3마리가 한꺼번에 한 면(북)에 나오고, 옆으로 칸을 나눠 서로 2 m 넘게
-##     떨어진다(겹쳐 나오지 않는다). 스테이지 첫 무리는 곧바로 3마리가 한꺼번에 이웃 면(북·동·남)에 한 마리씩.
+## 무리 스폰(스포너): 첫 스폰은 3마리가 한꺼번에 한 면(북)에 나오고(방치는 idle_interval 8초에, 스테이지는 곧바로),
+##     옆으로 칸을 나눠 서로 2 m 넘게 떨어진다(겹쳐 나오지 않는다).
 func _group_spawn() -> void:
 	var mode0: int = GameState.mode
 	Fever.reset()
@@ -1670,13 +1676,10 @@ func _group_spawn() -> void:
 			gap = minf(gap, offs[i] - offs[i - 1])
 		var near := ms.all(func(m): return Formation.flat_distance(m.global_position, Formation.spawn_center(_half, m.side)) <= Balance.SPAWN_SPREAD + 0.01)
 		var sides: Array = ms.map(func(m): return m.side)
-		if k == "idle":
-			_check(ms.size() == 3 and sides == [0, 0, 0] and near and gap >= 1.99 and clock >= 7.95 and clock <= 8.11,
-				"(group) idle: the first spawn is 3 monsters at once on one side after 8 s, spread sideways >= 2 m apart",
-				"n=%d at %.2f s sides=%s near=%s offsets=%s" % [ms.size(), clock, sides, near, offs])
-		else:
-			_check(ms.size() == 3 and sides == [0, 1, 2] and near and clock <= 0.06, "(group) stage: the first spawn is 3 monsters at once, one per neighbouring side",
-				"n=%d at %.2f s sides=%s near=%s" % [ms.size(), clock, sides, near])
+		var when_ok := clock >= 7.95 and clock <= 8.11 if k == "idle" else clock <= 0.06
+		_check(ms.size() == 3 and sides == [0, 0, 0] and near and gap >= 1.99 and when_ok,
+			"(group) %s: the first spawn is 3 monsters at once on one side, spread sideways >= 2 m apart" % k,
+			"n=%d at %.2f s sides=%s near=%s offsets=%s" % [ms.size(), clock, sides, near, offs])
 		holder.queue_free()
 		await _frames(1)
 	GameState.mode = mode0

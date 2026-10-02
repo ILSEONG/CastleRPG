@@ -132,7 +132,8 @@ func test_game_data() -> void:
 	GameData.load_tables()
 	check(GameData.errors == 0, "default tables load without errors")
 	var grunt := GameData.monster("grunt")
-	check(grunt.hp == 60.0 and grunt.gold == 2 and GameData.monster("epic_boss").gold == 50, "monster table values")
+	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 그대로
+	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 2 and GameData.monster("epic_boss").gold == 50, "monster table values")
 	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
 		for kind in ["grunt", "epic_boss"]:
 			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])
@@ -3101,9 +3102,8 @@ func test_dungeon_monsters() -> void:
 		model.free()
 
 
-## 무리 스폰: 몬스터는 spawn_group(3)마리씩 같은 시각에 나온다. 방치는 idle_interval(8초 = 예전 4초의 2배)마다 한 면에 한 무리,
-## 스테이지는 웨이브 크기 그대로 무리 간격 spawn_spacing_sec(1초 = 예전 0.5초의 2배), 무리는 이웃 면에 한 마리씩(면 = 웨이브 안 순번 % 4,
-## 예전과 같다), 웨이브 사이·보스는 그대로.
+## 무리 스폰: 스폰 횟수·면 순서는 예전(한 번에 한 마리) 그대로, 스폰 한 번에 spawn_group(3)마리가 같은 시각·같은 면에 나란히 —
+## 몬스터 3배. 간격은 2배: 방치 idle_interval 8초(예전 4초), 스테이지 spawn_spacing_sec 1초(예전 0.5초). 웨이브 사이·보스 하나는 그대로.
 func test_spawn_groups() -> void:
 	GameData.load_tables()
 	check(WaveDirector.group_size() == 3 and GameData.stage(1).idle_interval == 8.0 and GameData.stage(40).idle_interval == 8.0
@@ -3114,27 +3114,27 @@ func test_spawn_groups() -> void:
 	check(idle.map(func(e): return e.lane) == [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2] and idle.all(func(e): return e.lanes == 3), "idle: each group fills lanes 0..2 of 3 on one side")
 	for stage in [1, 5, 30]:
 		var st := GameData.stage(stage)
+		var size := int(st.wave_size)
 		var ev := WaveDirector.build(stage, WaveDirector.MODE_STAGE)
 		var grunts := ev.filter(func(e): return e.kind == "grunt")
-		check(grunts.size() == int(st.waves) * int(st.wave_size) and ev[-1].kind == "epic_boss", "stage %d: wave size unchanged, boss last" % stage)
+		check(grunts.size() == 3 * int(st.waves) * size and ev.filter(func(e): return e.kind == "epic_boss").size() == 1 and ev[-1].kind == "epic_boss",
+			"stage %d: 3 x waves x wave_size grunts, one boss last" % stage)
 		var groups := {}  # 시각 → 그 시각 몬스터들
 		for e in grunts:
 			groups[e.time] = groups.get(e.time, []) + [e]
 		var keys: Array = groups.keys()
-		var per_wave := ceili(int(st.wave_size) / 3.0)
-		var sizes_ok := true
+		var groups_ok := true
 		for i in keys.size():
-			var want := 3 if i % per_wave < per_wave - 1 or int(st.wave_size) % 3 == 0 else int(st.wave_size) % 3
-			var base := (i % per_wave) * 3  # 웨이브 안 이 무리 첫 몬스터 순번
-			var sides: Array = groups[keys[i]].map(func(e): return e.side)
-			sizes_ok = sizes_ok and sides.size() == want and sides == range(base, base + want).map(func(n): return n % 4)
-		check(keys.size() == int(st.waves) * per_wave and sizes_ok, "stage %d: groups of 3 (last of a wave = rest), one per neighbouring side (side = index in wave %% 4)" % stage)
+			var g: Array = groups[keys[i]]
+			groups_ok = groups_ok and g.map(func(e): return e.side) == [(i % size) % 4, (i % size) % 4, (i % size) % 4] \
+				and g.map(func(e): return e.lane) == [0, 1, 2] and g.all(func(e): return e.lanes == 3)
+		check(keys.size() == int(st.waves) * size and groups_ok, "stage %d: wave_size spawns per wave, each 3 at once on one side in lanes 0..2 (side = index in wave %% 4)" % stage)
 		var gaps_ok := true
 		for i in range(1, keys.size()):
-			var want: float = 1.0 if i % per_wave != 0 else 1.0 + GameData.config_num("wave_gap_sec")
+			var want: float = 1.0 if i % size != 0 else 1.0 + GameData.config_num("wave_gap_sec")
 			gaps_ok = gaps_ok and is_equal_approx(keys[i] - keys[i - 1], want)
 		gaps_ok = gaps_ok and is_equal_approx(ev[-1].time - keys[-1], 1.0 + GameData.config_num("wave_gap_sec"))
-		check(gaps_ok, "stage %d: 1 s between groups, wave gap and boss timing unchanged" % stage)
+		check(gaps_ok, "stage %d: 1 s between spawns, wave gap and boss timing unchanged" % stage)
 
 
 # --- 던전·장비(개정 18) ---
