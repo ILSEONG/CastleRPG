@@ -396,6 +396,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _stage_return_cases()
 	await _rebuilt_post_case()
 	await _growth_cases()
+	await _boss_slayer_case()
 	await _dungeon_cases()
 	await _building_cases()  # 월드를 다시 만든다 — 마지막
 
@@ -1948,6 +1949,54 @@ func _growth_cases() -> void:
 	await _frames(2)
 
 
+## (BS) 거인 사냥(boss_slayer)은 모든 보스에게: 성 대보스·왕고블린·데스나이트(monster.is_boss ← GameData.BOSS_KINDS), 졸개·고블린은 아니다.
+##      같은 영웅(스킬은 boss_slayer 50%만, 성장 없음 — 치명타 0)이 종류마다 한 대씩 친다.
+func _boss_slayer_case() -> void:
+	_clear_monsters()
+	Economy.upgrades = {}
+	Economy.upgrades_changed.emit()
+	await _frames(1)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(false)
+	var def: Dictionary = GameData.hero("hans").duplicate(true)
+	def.id = "slayer_test"
+	var h = _add_hero_def(def, 335)
+	h.set_process(false)
+	h._sk = {"boss_slayer": [50.0, 0.0, 0.0]}
+	var at: Vector3 = _flat(h.global_position) + Formation.SIDE_DIR[h.side] * 1.2
+	var rows := {}
+	for r in GameData.dungeon_enemies("gold", 1) + GameData.dungeon_enemies("equip", 1):
+		rows[r.kind] = r
+	var hits := {}
+	var flags := {}
+	for kind in ["grunt", "epic_boss", "goblin", "goblin_king", "death_knight"]:
+		var m
+		if rows.has(kind):
+			m = (preload("res://scripts/death_knight.gd") if kind == "death_knight" else MonsterScript).new()
+			m.setup_arena(rows[kind])
+			_main.add_child(m)
+			m.global_position = at
+			m.set_process(false)
+		else:
+			m = _still(kind, at)
+		m.hp_max = 1.0e6
+		m.hp = m.hp_max
+		h._target = m
+		await _attack_now(h)
+		hits[kind] = _dmg(m)
+		flags[kind] = m.is_boss
+		m.queue_free()
+		await _frames(1)
+	var plain: float = hits.grunt
+	_check(plain > 0.0 and is_equal_approx(hits.goblin, plain) and ["epic_boss", "goblin_king", "death_knight"].all(func(k): return is_equal_approx(hits[k], plain * 1.5))
+		and flags == {"grunt": false, "epic_boss": true, "goblin": false, "goblin_king": true, "death_knight": true},
+		"(BS) boss_slayer +50% hits every boss (epic boss, goblin king, death knight via is_boss) and no normal enemy (grunt, goblin)", "hits=%s is_boss=%s" % [hits, flags])
+	_remove_hero(h)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(true)
+	await _frames(1)
+
+
 ## 영웅이 바깥쪽으로 dt초 걷는 거리(경로 한 점, 처리는 직접 부른다). 걷고 나면 제자리로 되돌린다.
 func _walk(h, dt: float) -> float:
 	var p0: Vector3 = h.global_position
@@ -2014,7 +2063,8 @@ func _dungeon_cases() -> void:
 	d = await _enter_dungeon("gold", Economy.default_party("gold"))
 	await _frames(2)
 	for h in d.heroes:
-		h.take_damage(h.hp_max * 100.0)
+		while h.is_alive():  # 회피(dodge) 스킬은 무작위로 한 대를 비킨다 — 쓰러질 때까지
+			h.take_damage(h.hp_max * 100.0)
 	await _frames(2)
 	_check(d.phase == d.Phase.RESULT and not d.result.win and d.result.rewards.is_empty() and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.current_run.is_empty(),
 		"(DG2) every hero down = defeat: the run closes, no reward, keys unchanged", "phase=%d result=%s" % [d.phase, d.result])

@@ -15,11 +15,12 @@ cleanup() {
   if [ -n "$SERVER_PID" ]; then
     kill "$SERVER_PID" 2>/dev/null
     wait "$SERVER_PID" 2>/dev/null
+    # 그래도 남아 있으면 그 포트를 쥔 프로세스를 끈다(시작 전에 비어 있음을 확인했으니 우리 서버다).
+    # 서버를 띄우지 않았으면(포트가 이미 쓰이는 중) 남의 서버라 건드리지 않는다.
+    local wpid
+    wpid=$(netstat -ano 2>/dev/null | grep -E "127\.0\.0\.1:$PORT .*LISTEN" | awk '{print $5}' | head -1)
+    if [ -n "$wpid" ]; then taskkill //F //PID "$wpid" >/dev/null 2>&1; fi
   fi
-  # 그래도 남아 있으면 그 포트를 쥔 프로세스를 끈다(시작 전에 비어 있음을 확인했으니 우리 서버다)
-  local wpid
-  wpid=$(netstat -ano 2>/dev/null | grep -E "127\.0\.0\.1:$PORT .*LISTEN" | awk '{print $5}' | head -1)
-  if [ -n "$wpid" ]; then taskkill //F //PID "$wpid" >/dev/null 2>&1; fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT

@@ -469,7 +469,7 @@ func _release() -> void:
 ## 연출(개정 17): crit = 큰 별 불꽃, execute·boss_slayer = 붉은 X, crit·execute·stun = 이름 띠.
 func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 	var ratio: float = m.hp_ratio()
-	var boss: bool = m.kind == "epic_boss"
+	var boss: bool = m.is_boss  # 성 대보스·왕고블린·데스나이트(monster.is_boss)
 	# 치명타(개정 20 §3): 스킬 확률·배율 + 성장을 합쳐(crit_roll_params) 한 번만 굴린다. Skills.damage엔 빗나가는 굴림 1.0 — 두 번 세지 않게
 	var has_crit := _sk.has("crit")
 	var cp := GameData.crit_roll_params(_sk.crit[0] / 100.0 if has_crit else 0.0, _sk.crit[1] / 100.0 if has_crit else 0.0, _bonus)

@@ -26,6 +26,7 @@ var stage: int = 1
 var hp: float = 0.0
 var hp_max: float = 0.0
 var atk: float = 0.0
+var is_boss := false  # 보스(GameData.BOSS_KINDS — 성 대보스·왕고블린·데스나이트): 거인 사냥(boss_slayer) 대상
 
 var _stats: Dictionary = {}
 var _speed := 0.0  # 기본 이동속도 × 스테이지 배율(개정 22 §3, setup)
@@ -50,6 +51,7 @@ var _swing_at := Vector3.ZERO  # 성문·성을 칠 때 그 지점
 func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0) -> void:
 	assert(not GameData.monster(p_kind).is_empty(), "unknown monster kind: " + p_kind)
 	kind = p_kind
+	is_boss = kind in GameData.BOSS_KINDS
 	side = p_side
 	stage = p_stage
 	castle = p_castle
@@ -64,6 +66,7 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0) 
 ## 아레나(개정 18): row = 던전 적 한 행(Economy.dungeon_enemies — kind·hp·atk·speed·range·atk_interval·aggro·scale). add_child 전에.
 func setup_arena(row: Dictionary) -> void:
 	kind = row.kind
+	is_boss = kind in GameData.BOSS_KINDS
 	_stats = row
 	hp = float(row.hp)
 	hp_max = hp
