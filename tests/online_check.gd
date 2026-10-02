@@ -906,6 +906,7 @@ func _soldiers_online(state_path: String) -> void:
 	r0 = _warned("server rejected")
 	await _request("POST", "/v1/soldiers/deploy", {"deploy": {"archer:1": 5, "infantry:1": 1, "infantry:2": 1}})
 	_check(_warned("server rejected") == r0 + 1 and Economy.soldier_deploy() == d, "(v) a deploy above the population is refused (400)", "warnings=%d" % [_warned("server rejected") - r0])
+	await _tier_online()
 	# phase 2가 볼 대기열: 기병 1마리(3시간)
 	Economy.start_training("stable", 1)
 	await _wait_until(func(): return Economy.training("stable").count == 1 and not Economy.training_waiting("stable", "train"), 15.0)
@@ -956,3 +957,25 @@ func _soldiers_restored(state_path: String) -> void:
 	var q := Economy.training("stable")
 	_check(tq.keys() == ["stable"] and Economy.train_queues.keys() == ["stable"] and q.count == int(tq.stable.count) and absf(q.finish - float(tq.stable.finish)) < 0.01 and not q.ready,
 		"(p2) reconnecting restores the training queue (stable: 1 cavalry, same finish)", "queues=%s saved=%s" % [Economy.train_queues, tq])
+
+
+## (t) 개정 19 서버 T2 훈련: 막사 Lv 7(테스트 훅)이면 훈련 티어 2, 응답 대기열에 tier 2, 비용 ×5, 수령하면 infantry:2.
+func _tier_online() -> void:
+	await _request("POST", "/v1/test/age", {"minutes": 720})
+	for b in ["lumber", "quarry", "farm"]:
+		await _request("POST", "/v1/collect", {"building": b})
+	await _request("POST", "/v1/test/barracks_level", {"level": 7})
+	var res0: Dictionary = Economy.res.duplicate()
+	var inf2 := int(Economy.soldiers.get("infantry:2", 0))
+	var started := Economy.start_training("barracks", 2)
+	await _wait_until(func(): return Economy.training("barracks").count == 2 and not Economy.training_waiting("barracks", "train"), 15.0)
+	var q := Economy.training("barracks")
+	_check(started and Economy.building_level("barracks") == 7 and q.tier == 2 and absf(q.finish - Economy.time_now() - 2 * 10800.0) < 30.0
+		and Economy.res.food == res0.food - 300 and Economy.res.wood == res0.wood - 200,
+		"(t) a Lv 7 barracks trains T2 on the server: queue tier 2, 3:00 each, cost x5 (300 food / 200 wood)", "q=%s res=%s -> %s" % [q, res0, Economy.res])
+	Economy.finish_training_now("barracks")
+	await _wait_until(func(): return Economy.training("barracks").ready, 15.0)
+	var collected := Economy.collect_training("barracks")
+	await _wait_until(func(): return not Economy.train_queues.has("barracks") and not Economy.training_waiting("barracks", "collect"), 15.0)
+	_check(collected and int(Economy.soldiers.get("infantry:2", 0)) == inf2 + 2, "(t) collecting adds the batch's tier: infantry:2 +2", "soldiers=%s" % [Economy.soldiers])
+	await _request("POST", "/v1/test/barracks_level", {"level": 1})

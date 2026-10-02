@@ -66,6 +66,7 @@ func _init() -> void:
 	test_economy_sell()
 	test_economy_sell_amount()
 	test_economy_sell_many()
+	test_training_tiers()
 	test_economy_save()
 	test_economy_online()
 	test_merchant_spot()
@@ -2031,8 +2032,8 @@ func test_soldiers() -> void:
 	check(i1 == {"hp": 320.0, "atk": 22.0, "range": 1.6, "atk_interval": 1.0, "speed": 4.0, "aggro": 7.0} and i2.hp == 640.0 and i2.atk == 44.0 and i2.range == 1.6 and i2.speed == 4.0
 		and GameData.soldier_stats("cavalry", 5).hp == 240.0 * 16.0 and GameData.soldier_stats("knight", 1).is_empty(), "tier t: hp/atk x 2^(t-1), the rest unchanged: %s" % [i2])
 	check(GameData.soldier_stats("cavalry", 1).speed == 2.0 * GameData.soldier_stats("infantry", 1).speed, "cavalry moves twice as fast as infantry")
-	check(GameData.soldier_unit_sec(1) == 10800.0 and absf(GameData.soldier_unit_sec(10) - 6806.7) < 0.1 and absf(GameData.soldier_unit_sec(30) / 60.0 - 40.7) < 0.1,
-		"unit time = 10800 x 0.95^(L-1): Lv 10 about 1 h 54 min, Lv 30 about 41 min")
+	check(GameData.soldier_unit_sec(1) == 10800.0 and GameData.soldier_unit_sec(2) == 9000.0 and GameData.soldier_unit_sec(6) == 1800.0 and GameData.soldier_unit_sec(7) == 10800.0,
+		"unit time = 180 - 30 x step min (rev 19): Lv 1 3:00, Lv 2 2:30, Lv 6 0:30, Lv 7 back to 3:00 (next tier)")
 	check(GameData.train_max(1) == 10 and GameData.train_max(5) == 18 and GameData.train_max(30) == 68, "batch cap = 10 + 2 x (L - 1)")
 	check(EconomyScript.train_cost("infantry", 8) == {"food": 240, "wood": 160} and EconomyScript.train_cost("archer", 3) == {"food": 75, "wood": 90}
 		and EconomyScript.train_cost("cavalry", 1) == {"food": 40, "stone": 20} and EconomyScript.train_cost("knight", 1).is_empty(), "train cost = unit cost x n (food:30|wood:20 ...)")
@@ -2053,7 +2054,7 @@ func test_soldiers() -> void:
 	e.notice.connect(func(t): notes.append(t))
 	e.training_changed.connect(func(): changes[0] += 1)
 	check(e.soldier_counts().is_empty() and e.soldier_deploy().is_empty() and e.deployed_total() == 0 and e.population() == 6 and e.train_queues.is_empty()
-		and not e.last_collect.has("barracks") and e.training("barracks") == {"count": 0, "finish": 0.0, "ready": false}, "new game: no soldiers, empty training queues, no production clocks")
+		and not e.last_collect.has("barracks") and e.training("barracks") == {"count": 0, "tier": 1, "finish": 0.0, "ready": false}, "new game: no soldiers, empty training queues, no production clocks")
 	check(e.train_block("lab", 1) == "unknown" and e.train_block("barracks", 0) == "bad_count" and e.train_block("barracks", 11) == "bad_count"
 		and e.train_block("barracks", 1) == "not_enough" and not e.start_training("barracks", 1) and notes[-1] == EconomyScript.TRAIN_TEXT.not_enough and e.train_queues.is_empty(),
 		"train_block: not a soldier building / count outside 1..10 / not enough resources; a refused start only shows the reason")
@@ -2092,9 +2093,9 @@ func test_soldiers() -> void:
 	e7.save_path = ECON_TMP
 	e7.load_save(now)
 	var raw7 = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw7.version) == 7 and EconomyScript.SAVE_VERSION == 7 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
+	check(int(raw7.version) == 8 and EconomyScript.SAVE_VERSION == 8 and e7.train_queues.archery.tier == 1 and e7.train_queues.keys() == ["archery"] and e7.train_queues.archery.count == 2
 		and absf(e7.train_queues.archery.finish - e.train_queues.archery.finish) < 0.01 and e7.soldiers == e.soldiers and not raw7.last_collect.has("archery"),
-		"save v7 round-trips the training queue and keeps no production clocks: %s" % [e7.train_queues])
+		"save v8 round-trips the training queue and keeps no production clocks: %s" % [e7.train_queues])
 	var v6 := {"version": 6, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now, "barracks": now - 100 * 3600.0, "stable": 1.0},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "build": null, "heroes": {"hans": {"copies": 1, "level": 1, "shards": 0, "promotion": 0}}, "deploy": ["hans"], "soldiers": {"infantry:1": 2}, "soldier_deploy": {}}
 	_write(ECON_TMP, JSON.stringify(v6))
@@ -2113,7 +2114,7 @@ func test_soldiers() -> void:
 	odd.training = {"lab": {"count": 3, "finish": 1.0}, "barracks": {"count": 0, "finish": 1.0}, "stable": {"count": 2, "finish": 5.0}}
 	_write(ECON_TMP, JSON.stringify(odd))
 	e7.load_save(now)
-	check(e7.train_queues == {"stable": {"count": 2, "finish": 5.0}}, "v7 load keeps only soldier buildings with a batch: %s" % [e7.train_queues])
+	check(e7.train_queues == {"stable": {"count": 2, "tier": 1, "finish": 5.0}}, "v7 load (no tier = 1) keeps only soldier buildings with a batch: %s" % [e7.train_queues])
 	DirAccess.remove_absolute(ECON_TMP)
 	e7.free()
 	e.save_path = ""
@@ -2176,7 +2177,7 @@ func test_soldiers() -> void:
 		"training": {"barracks": {"count": 4, "finish": 5000.0}, "archery": null, "stable": {"count": 0, "finish": 1.0}, "lab": {"count": 2, "finish": 1.0}}},
 		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
 	check(o.apply_server(reply) and o.soldiers == {"infantry:1": 3} and o.soldier_deployed == {"infantry:1": 2} and o.building_level("barracks") == 2
-		and o.train_queues == {"barracks": {"count": 4, "finish": 5000.0}} and oc[0] == 1,
+		and o.train_queues == {"barracks": {"count": 4, "tier": 1, "finish": 5000.0}} and oc[0] == 1,
 		"reply: soldiers (known keys only), deploy, training queues of soldier buildings only, training_changed: %s" % [o.train_queues])
 	check(o.apply_server(reply) and oc[0] == 1, "the same reply again does not signal training_changed")
 	reply.player.training = {"barracks": null}
@@ -2191,7 +2192,7 @@ func test_soldiers() -> void:
 	o.free()
 	# apply_remote: 병종 표·설정 검증 — 틀리면 아무것도 안 바꾼다
 	var before := _tables_hash()
-	for entry in [["building unknown", 1], ["building shared", 1], ["hp 0", 1], ["atk negative", 1], ["not drawable", 2], ["table missing", 1], ["max tier 0", 1], ["prod sec missing", 1],
+	for entry in [["building unknown", 1], ["building shared", 1], ["hp 0", 1], ["atk negative", 1], ["not drawable", 2], ["table missing", 1], ["max tier 0", 1], ["train step 0", 1],
 			["train cost bad", 1], ["train cost missing", 1], ["batch base 0", 1], ["batch per level fraction", 1]]:
 		var q := _payload()
 		match entry[0]:
@@ -2202,7 +2203,7 @@ func test_soldiers() -> void:
 			"not drawable": q.soldiers[0].id = "dragon"  # 개정 16: train_cost_dragon도 없다(오류 2)
 			"table missing": q.erase("soldiers")
 			"max tier 0": q.config.soldier_max_tier = "0"
-			"prod sec missing": q.config.erase("soldier_prod_sec")
+			"train step 0": q.config.train_step_min = "0"
 			"train cost bad": q.config.train_cost_archer = "food:25|gold:30"
 			"train cost missing": q.config.erase("train_cost_cavalry")
 			"batch base 0": q.config.train_batch_base = "0"
@@ -2585,4 +2586,33 @@ func test_economy_sell_many() -> void:
 	var g: int = e.sell_many([{"res": "wood", "amount": 15}, {"res": "stone", "amount": 99}, {"res": "food", "amount": 0}], now)
 	check(g == want and e.res.wood == 25 and e.res.stone == 0 and e.res.food == 13 and e.gold_tenths == want * 10, "sell_many sells each at its own rate, clamps to holdings, skips 0")
 	check(e.sell_many([], now) == 0 and e.sell_many([{"res": "stone", "amount": 5}], now) == 0 and e.gold_tenths == want * 10, "sell_many with nothing to sell changes nothing")
+	e.free()
+
+
+## 개정 19: 막사 레벨이 훈련 티어·시간을 정하고 비용은 티어마다 ×5, 진행 중 묶음은 시작 티어·시각 고정.
+func test_training_tiers() -> void:
+	var want := [[1, 1, 180], [2, 1, 150], [6, 1, 30], [7, 2, 180], [12, 2, 30], [13, 3, 180], [19, 4, 180], [25, 5, 180], [30, 5, 30], [31, 5, 30]]
+	var table_ok := true
+	for w in want:
+		table_ok = table_ok and GameData.train_tier(w[0]) == w[1] and GameData.soldier_unit_sec(w[0]) == w[2] * 60.0
+	check(table_ok, "tier/time table: Lv 1,2,6,7,12,13,19,25,30,31 -> T1 3:00, T1 2:30, T1 0:30, T2 3:00, T2 0:30, T3 3:00, T4, T5 3:00, T5 0:30, T5 0:30")
+	check(EconomyScript.train_cost("infantry", 2) == {"food": 60, "wood": 40} and EconomyScript.train_cost("infantry", 2, 2) == {"food": 300, "wood": 200}
+		and EconomyScript.train_cost("infantry", 1, 3) == {"food": 750, "wood": 500}, "cost x 5^(tier-1): T2 x5, T3 x25")
+	var now := 1.8e9
+	var e = _econ(now)
+	e.res = {"wood": 100000, "stone": 100000, "food": 100000}
+	e.levels.barracks = 7
+	var t0: float = e.time_now()
+	check(e.train_tier("barracks") == 2 and e.start_training("barracks", 2) and e.res.food == 100000 - 300 and e.res.wood == 100000 - 200
+		and e.training("barracks").tier == 2 and absf(e.training("barracks").finish - (t0 + 2 * 10800.0)) < 2.0, "Lv 7 barracks trains T2: 3:00 each, cost x5")
+	var fin: float = e.training("barracks").finish
+	e.levels.barracks = 13  # 진행 중 레벨업: 묶음은 T2·끝나는 시각 그대로
+	check(e.training("barracks").tier == 2 and e.training("barracks").finish == fin and e.train_tier("barracks") == 3, "a level-up keeps the running batch's tier and finish")
+	e.finish_training_now("barracks")
+	check(e.collect_training("barracks") and e.soldiers == {"infantry:2": 2}, "collect adds the batch's tier (infantry:2), not the current one")
+	e.levels.barracks = 7
+	e.start_training("barracks", 2)
+	e.levels.barracks = 13
+	var before: Dictionary = e.res.duplicate()
+	check(e.cancel_training("barracks") and e.res.food == before.food + 150 and e.res.wood == before.wood + 100, "cancel refunds half of the batch tier's cost")
 	e.free()

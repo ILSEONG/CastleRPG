@@ -17,12 +17,13 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 7  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 8  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 # 5: soldiers·soldier_deploy {"병종:티어": 수}(개정 13). 4 이하는 병사 없음
 # 6: heroes {id: {copies, level, shards, promotion}}(개정 15). 5 이하는 옛 별(중복)을 조각으로: shards = copies − 1, promotion 0
 # 7: training {병사 건물: {count, finish}}(개정 16). 6 이하의 자동 생산 시계(last_collect의 병사 건물)는 버리고 대기열은 빈다
+# 8: training {…: {count, tier, finish}}(개정 19). 7 이하의 진행 중 묶음은 tier 1
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -87,7 +88,7 @@ var hero_promotions: Dictionary = {}  # 영웅 id → 승급 0..MAX_PROMOTION(�
 var deploy: Array = []             # 배치 슬롯 i → 영웅 id 또는 null(저장된 그대로 — 쓰는 쪽은 deploy_slots)
 var soldiers: Dictionary = {}          # 병사 보유 "병종:티어" → 수(> 0, 개정 13)
 var soldier_deployed: Dictionary = {}  # 병사 배치 "병종:티어" → 수(> 0). 각 ≤ 보유, 합 ≤ 인구
-var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
+var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), tier(시작할 때 티어 — 개정 19), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
 
@@ -861,12 +862,12 @@ func auto_deploy() -> Dictionary:
 
 # --- 훈련(개정 16 §1·§3) — 건물 창·월드 말풍선·탭 수령이 쓰는 API는 여기 한 곳 ---
 
-## 병사 건물 훈련 대기열 {count, finish, ready}(ready = 끝나는 시각이 지났다, 보정 시각). 비었으면 count 0.
+## 병사 건물 훈련 대기열 {count, tier, finish, ready}(ready = 끝나는 시각이 지났다, 보정 시각). 비었으면 count 0.
 func training(building_id: String) -> Dictionary:
 	var q: Dictionary = train_queues.get(building_id, {})
 	if q.is_empty():
-		return {"count": 0, "finish": 0.0, "ready": false}
-	return {"count": int(q.count), "finish": float(q.finish), "ready": time_now() >= float(q.finish)}
+		return {"count": 0, "tier": 1, "finish": 0.0, "ready": false}
+	return {"count": int(q.count), "tier": int(q.get("tier", 1)), "finish": float(q.finish), "ready": time_now() >= float(q.finish)}
 
 
 ## 훈련 진행 0..1(비었으면 0). 전체 시간 = 지금 레벨의 count × 1마리 시간.
@@ -877,14 +878,19 @@ func train_progress(building_id: String) -> float:
 	return clampf(1.0 - (q.finish - time_now()) / total, 0.0, 1.0) if total > 0.0 else 0.0
 
 
-## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × n, 0인 자원은 뺀다).
-static func train_cost(type: String, n: int) -> Dictionary:
+## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × 티어 배수 × n, 0인 자원은 뺀다).
+static func train_cost(type: String, n: int, tier := 1) -> Dictionary:
 	var out := {}
-	var one := GameData.train_unit_cost(type)
+	var one := GameData.train_unit_cost(type, tier)
 	for r in one:
 		if int(one[r]) * n > 0:
 			out[r] = int(one[r]) * n
 	return out
+
+
+## 그 건물이 지금 만드는 병사 티어(건물 레벨이 정한다, 개정 19).
+func train_tier(building_id: String) -> int:
+	return GameData.train_tier(building_level(building_id))
 
 
 ## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨).
@@ -908,7 +914,7 @@ func train_block(building_id: String, n: int) -> String:
 	var q := training(building_id)
 	if q.count > 0:
 		return "ready_to_collect" if q.ready else "training"
-	var cost := train_cost(type, n)
+	var cost := train_cost(type, n, train_tier(building_id))
 	for r in cost:
 		if int(res.get(r, 0)) < int(cost[r]):
 			return "not_enough"
@@ -924,17 +930,17 @@ func start_training(building_id: String, n: int) -> bool:
 		return false
 	if net != null:
 		return _train_online("train", building_id, {"building": building_id, "count": n}, true)
-	var cost := train_cost(GameData.soldier_of_building(building_id), n)
+	var cost := train_cost(GameData.soldier_of_building(building_id), n, train_tier(building_id))
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
-	train_queues[building_id] = {"count": n, "finish": time_now() + train_time(building_id, n)}
+	train_queues[building_id] = {"count": n, "tier": train_tier(building_id), "finish": time_now() + train_time(building_id, n)}
 	save()
 	changed.emit()
 	training_changed.emit()
 	return true
 
 
-## 수령: 끝났으면 1티어 보유 += count, 대기열 비우기, 알림 "보병 +n". 아니면 false(알림 없음 — 건물 탭이 쓴다). 오프라인은 바로 저장,
+## 수령: 끝났으면 그 묶음 티어 보유 += count, 대기열 비우기, 알림 "보병 +n". 아니면 false(알림 없음 — 건물 탭이 쓴다). 오프라인은 바로 저장,
 ## 온라인은 /v1/soldiers/collect(멱등이라 Net 기본 재시도 — 두 번째는 409 empty). 했거나 보냈으면 true.
 func collect_training(building_id: String) -> bool:
 	var q := training(building_id)
@@ -943,7 +949,7 @@ func collect_training(building_id: String) -> bool:
 	if net != null:
 		return _train_online("collect", building_id, {"building": building_id}, false)
 	var type := GameData.soldier_of_building(building_id)
-	var k := soldier_key(type, 1)
+	var k := soldier_key(type, q.tier)
 	soldiers[k] = int(soldiers.get(k, 0)) + q.count
 	train_queues.erase(building_id)
 	save()
@@ -960,7 +966,7 @@ func cancel_training(building_id: String) -> bool:
 		return false
 	if net != null:
 		return _train_online("cancel", building_id, {"building": building_id}, true)
-	var cost := train_cost(GameData.soldier_of_building(building_id), q.count)
+	var cost := train_cost(GameData.soldier_of_building(building_id), q.count, q.tier)
 	for r in cost:
 		res[r] = int(res.get(r, 0)) + int(cost[r]) / 2
 	train_queues.erase(building_id)
@@ -1015,7 +1021,7 @@ func apply_server(data: Dictionary) -> bool:
 		for s in GameData.soldiers():
 			var q = p.training.get(s.building)
 			if q is Dictionary and _num(q.get("count")) and int(q.count) > 0 and _num(q.get("finish")):
-				train_queues[s.building] = {"count": int(q.count), "finish": float(q.finish)}
+				train_queues[s.building] = {"count": int(q.count), "tier": maxi(1, int(q.get("tier", 1))), "finish": float(q.finish)}
 	if p.get("soldiers") is Dictionary:  # 개정 13: {"병종:티어": 수}
 		soldiers = _soldier_dict(p.soldiers)
 	if p.get("soldier_deploy") is Dictionary:
@@ -1459,7 +1465,7 @@ func load_save(now: float) -> void:
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, SAVE_VERSION]:
 		return false
 	var v3: bool = int(data.version) >= 3  # v3 이상: heroes {id: {copies, level}}. 그 전은 {id: copies}이고 level 1
 	var v6: bool = int(data.version) >= 6  # v6: + shards, promotion. 그 전은 옛 별(중복)을 조각으로(copies − 1), 승급 0
@@ -1502,7 +1508,7 @@ func _apply(data) -> bool:
 		if not src is Dictionary or not src.values().all(func(v): return _num(v)):
 			return false
 		troops.append(_soldier_dict(src))
-	# 훈련(개정 16, v7): {병사 건물: {count, finish}} — 형이 틀리면 깨진 저장. 표에 없는 건물·0마리는 버린다. 없으면(v6 이하) 빈 대기열
+	# 훈련(개정 16, v7·개정 19 v8 + tier): {병사 건물: {count, tier, finish}} — 형이 틀리면 깨진 저장. 표에 없는 건물·0마리는 버린다. 없으면(v6 이하) 빈 대기열
 	var tq := {}
 	var ts = data.get("training", {})
 	if not ts is Dictionary:
@@ -1512,7 +1518,7 @@ func _apply(data) -> bool:
 		if not (q is Dictionary and _num(q.get("count")) and _num(q.get("finish"))):
 			return false
 		if GameData.soldier_of_building(str(b)) != "" and int(q.count) > 0:
-			tq[str(b)] = {"count": int(q.count), "finish": float(q.finish)}
+			tq[str(b)] = {"count": int(q.count), "tier": maxi(1, int(q.get("tier", 1))), "finish": float(q.finish)}
 	# 영웅(개정 10): 없으면(v1, 영웅 전 v2) reset()의 시작 영웅 그대로. 있으면 둘 다 형이 맞아야 한다
 	var hs = data.get("heroes")
 	var ds = data.get("deploy")
