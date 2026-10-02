@@ -8,6 +8,8 @@ extends Node3D
 ## 받는 피해(take_damage). 몬스터 상태(slow·stun·poison)는 monster.gd.
 ## 개정 17: 쓰는 스킬은 승급으로 해금된 것만(GameData.active_skills — 스킬 2는 ★3, 3은 ★5). 쿨·확률 스킬이 터지면 머리 위 이름 띠 +
 ## 발밑 링 맥동(_announce, 같은 영웅은 BANNER_GAP초에 한 번). 오라를 받는 동안 발밑 주황 고리.
+## 개정 18 아레나(던전): castle·formation = null로 setup하고 add_child 전에 free_pos·idle_dir을 넣는다. 성 전용 로직(자리·성문·
+## 계단·영역·리필·방치 무적)은 건너뛰고 거리 제한 없이 가장 가까운 괴물과 싸운다. 기절(apply_stun)은 데스나이트 돌진.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -43,6 +45,7 @@ var side: int = 0
 var post: int = Formation.POST_GATE
 var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
+var idle_dir := Vector3.FORWARD  # 아레나 대기 방향(성에서는 면 바깥)
 var _path: Array[Vector3] = []
 var hp: float = 0.0
 var hp_max: float = 0.0  # 레벨·승급 반영
@@ -72,6 +75,8 @@ var _swing_left := 0.0  # 타격(발사) 순간까지 남은 초
 var _heal_cd := 0.0
 var _repair_cd := 0.0
 var _blast_cd := 0.0
+var _stun_t := 0.0  # 기절 남은 초
+var _stun_fx: Node3D
 
 
 ## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default).
@@ -94,6 +99,9 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 
 ## 기본 자리(면 index % 4의 역할 자리). 게임 중 다시 만든 영웅(배치·승급·레벨 변경)은 다른 영웅들이 옮겨 와 그 자리가 차 있을 수 있다 —
 ## 같은 면 다른 자리 → 다른 면들(역할 자리 먼저) → 그래도 다 차면 그 면 성문 앞 바닥(자유 위치)에 선다.
 func _place_default() -> void:
+	if castle == null:
+		post = Formation.POST_FREE  # 아레나: 쓰는 쪽이 free_pos를 정한다
+		return
 	var home := index % 4
 	var first := Formation.POST_WALL if role == "ranged" else Formation.POST_GATE
 	var second := Formation.POST_GATE if first == Formation.POST_WALL else Formation.POST_WALL
@@ -124,7 +132,8 @@ func _ready() -> void:
 	_aura_ring.position.y = 0.03
 	_aura_ring.visible = false
 	add_child(_aura_ring)
-	GameState.refilled.connect(reset)
+	if castle != null:
+		GameState.refilled.connect(reset)
 	reset()
 
 
@@ -141,7 +150,7 @@ func reset() -> void:
 	global_position = stand_position()
 	_path.clear()
 	_model.reset_pose()
-	_model.face(Formation.SIDE_DIR[side])  # 대기 중엔 성 바깥을 본다
+	_model.face(Formation.SIDE_DIR[side] if castle != null else idle_dir)  # 대기 중엔 성 바깥(아레나는 적 쪽)을 본다
 	_ring.visible = selected
 	_foot.visible = true
 
@@ -185,7 +194,7 @@ func is_on_wall() -> bool:
 
 ## 받는 피해: dodge → dmg_reduce → thorns(source = 때린 몬스터에게 되돌림). 방치 모드는 무적(개정 12): 숫자·가시 없이 0.
 func take_damage(amount: float, source = null) -> void:
-	if state == State.DEAD or GameState.mode == GameState.Mode.IDLE:
+	if state == State.DEAD or (castle != null and GameState.mode == GameState.Mode.IDLE):
 		return
 	var r := Skills.incoming(_sk, amount, randf())
 	if r.x <= 0.0:
@@ -217,6 +226,20 @@ func is_alive() -> bool:
 	return state != State.DEAD
 
 
+## 기절(개정 18): sec초 이동·공격 정지(남은 시간보다 길 때만 늘린다). 머리 위 별은 끝날 때까지.
+func apply_stun(sec: float) -> void:
+	if state == State.DEAD:
+		return
+	_stun_t = maxf(_stun_t, sec)
+	_swing = null
+	if not is_instance_valid(_stun_fx):
+		_stun_fx = Fx.stun(self, bar_height() + 0.3)
+
+
+func is_stunned() -> bool:
+	return _stun_t > 0.0
+
+
 ## 배정된 성문 앞·성벽 위 자리에 서 있는가(자유 위치·이동 중·추격 중이면 false).
 func holds_post() -> bool:
 	return post != Formation.POST_FREE and _path.is_empty() and global_position.distance_to(stand_position()) <= HOLD_EPS
@@ -235,6 +258,11 @@ func retire() -> void:
 
 func _process(delta: float) -> void:
 	if state == State.DEAD:
+		return
+	if _stun_t > 0.0:  # 기절(개정 18)
+		_stun_t -= delta
+		if _stun_t <= 0.0 and is_instance_valid(_stun_fx):
+			_stun_fx.queue_free()
 		return
 	_atk_cd -= delta
 	_tick_skills(delta)
@@ -278,7 +306,7 @@ func _process(delta: float) -> void:
 			return
 		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
 		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), float(def.speed) * delta)
-		if Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position):
+		if castle == null or Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position):
 			state = State.MOVE
 			_model.play_walk()
 			global_position = next
@@ -293,7 +321,7 @@ func _process(delta: float) -> void:
 				_model.play_idle()  # 공격 모션은 끝날 때 스스로 대기로 돌아간다
 			state = State.IDLE
 			return
-		if not is_on_wall() and Formation.route(castle.half, global_position, home).size() == 1:
+		if not is_on_wall() and (castle == null or Formation.route(castle.half, global_position, home).size() == 1):
 			# 추격 뒤 복귀: 곧장 갈 수 있으면(같은 영역, 성 모서리를 가로지르지 않음) 곧장(도중에 새 표적을 만나면 다시 교전)
 			state = State.MOVE
 			_model.face(home - global_position)
@@ -305,12 +333,15 @@ func _process(delta: float) -> void:
 	if state != State.IDLE:
 		state = State.IDLE
 		_model.play_idle()
-		_model.face(Formation.SIDE_DIR[side])
+		_model.face(Formation.SIDE_DIR[side] if castle != null else idle_dir)
 
 
 ## 표적: 지상 영웅은 자기 자리에서 aggro 안·자리와 같은 영역(자기도 그 영역에 있을 때만), 성벽 위 영웅은 지금 위치에서 사거리 안(영역 무관). 가장 가까운 것.
 ## ponytail: 추격은 직선이다 — 성(모서리)을 가로질러야 닿는 표적은 포기한다(모서리 너머 괴물과는 안 싸운다). 필요하면 추격에도 route() 사용.
 func _find_target():
+	if castle == null:  # 아레나: 거리·영역 제한 없이 가장 가까운 괴물
+		var near := _nearest_others(null, global_position, INF, 1)
+		return near[0] if not near.is_empty() else null
 	var on_wall := is_on_wall()
 	var origin := global_position if on_wall else stand_position()
 	var reach: float = float(def.range) if on_wall else float(def.aggro)
@@ -505,8 +536,8 @@ func _blast(center: Vector3) -> void:
 ## from 주변 radius 안 살아 있는 몬스터(exclude 빼고) 가까운 순 최대 n마리. 지상 영웅은 자기 영역(성 안/밖)만.
 func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
 	var out := []
-	var ground := not is_on_wall()
-	var here_inside := Formation.is_inside(castle.half, global_position)
+	var ground := not is_on_wall() and castle != null  # 아레나는 영역이 없다
+	var here_inside := ground and Formation.is_inside(castle.half, global_position)
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if m == exclude or not m.is_alive() or Formation.flat_distance(from, m.global_position) > radius:
 			continue
