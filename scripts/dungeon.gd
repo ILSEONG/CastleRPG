@@ -86,6 +86,7 @@ func _ready() -> void:
 		add_child(h)
 		heroes.append(h)
 	_plan_waves(stage)
+	_spawn_due()  # 처음 무리는 곧바로(즉시 승리 훅도 시체에서 드랍)
 	hud = HudScript.new()
 	hud.dungeon = self
 	add_child(hud)
@@ -109,6 +110,11 @@ func _plan_waves(stage: Dictionary) -> void:
 				at.append(spots.pop_front())
 		_waves.append({"t": float(row.delay), "row": row, "at": at})
 	_waves.sort_custom(func(a, b): return a.t < b.t)
+
+
+func _spawn_due() -> void:
+	while not _waves.is_empty() and clock >= _waves[0].t:
+		_spawn(_waves.pop_front())
 
 
 func _spawn(w: Dictionary) -> void:
@@ -145,8 +151,7 @@ func _process(delta: float) -> void:
 	match phase:
 		Phase.FIGHT:
 			clock += delta
-			while not _waves.is_empty() and clock >= _waves[0].t:
-				_spawn(_waves.pop_front())
+			_spawn_due()
 			if _waves.is_empty() and _live == 0:
 				phase = Phase.WON
 			elif clock >= time_limit() or not heroes.any(func(h): return h.is_alive()):
