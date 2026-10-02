@@ -363,7 +363,7 @@ func _recruit_and_heroes(rig) -> void:
 	GameState.mode_changed.emit(mode0)
 	_check(not hud.hint.visible, "(hint) hidden again outside the countdown", "")
 	_picker._select(null)
-	Economy.gold_tenths = 27005  # 2700.5골드: 10회도 된다 — 연타가 10회를 누르지 않는지 본다
+	Economy.gold_tenths = 270005  # 27000.5골드: 10회(골드 Lv 1)도 된다 — 연타가 10회를 누르지 않는지 본다
 	Economy.rng.seed = 3
 	Economy.changed.emit()
 
@@ -375,23 +375,23 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(tp)
 	await _frames(2)
 	_check(recruit.is_open() and _picker.selected == null, "(s) tavern tap opens the recruit window", "open=%s" % recruit.is_open())
-	_check(not recruit.ten_button.disabled and recruit.is_guarded(), "(s) precondition: [10회 모집] is on at 2700 gold and the window is still in its open guard",
+	_check(not recruit.ten_button.disabled and recruit.is_guarded(), "(s) precondition: [10회 모집] is on at 27000 gold and the window is still in its open guard",
 		"ten disabled=%s guarded=%s" % [recruit.ten_button.disabled, recruit.is_guarded()])
 	await _tap(recruit.ten_button.get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.gold_tenths == 27005 and _copies() == copies0 and not recruit.is_showing_results() and recruit.is_open(),
+	_check(Economy.gold_tenths == 270005 and _copies() == copies0 and not recruit.is_showing_results() and recruit.is_open(),
 		"(s) double tap: a press on [10회 모집] right after the window opens is ignored (gold unchanged)",
 		"tenths=%d copies=%d->%d results=%s" % [Economy.gold_tenths, copies0, _copies(), recruit.is_showing_results()])
 	await _guard_wait()
-	Economy.gold_tenths = 3005  # 300.5골드: 1회만 된다
+	Economy.gold_tenths = 30005  # 3000.5골드: 1회만 된다
 	Economy.changed.emit()
 	_check(not recruit.one_button.disabled and recruit.ten_button.disabled and recruit.rates_text() == "SSR 3% · SR 17% · R 80%",
-		"(s) rates line; [1회 300] on, [10회 2700] off at 300 gold", "one=%s ten=%s rates=%s" % [recruit.one_button.disabled, recruit.ten_button.disabled, recruit.rates_text()])
+		"(s) rates line; [1회 3,000] on, [10회 27,000] off at 3000 gold", "one=%s ten=%s rates=%s" % [recruit.one_button.disabled, recruit.ten_button.disabled, recruit.rates_text()])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.gold_tenths == 5 and Economy.gold == 0 and _copies() == copies0 + 1 and recruit.is_showing_results() and recruit.cards.size() == 1
 		and recruit.cards[0].hero_id != "" and int(Economy.heroes.get(recruit.cards[0].hero_id, 0)) >= 1,
-		"(s) [1회 모집] takes 300 gold (3000 tenths), adds one hero and shows one result card",
+		"(s) [1회 모집] takes 3000 gold (30000 tenths), adds one hero and shows one result card",
 		"tenths=%d copies=%d->%d cards=%d" % [Economy.gold_tenths, copies0, _copies(), recruit.cards.size()])
 	await _tap(recruit.confirm_button.get_global_rect().get_center())  # 결과가 막 떴다(오프라인은 곧바로) — 보호 시간
 	_check(recruit.is_showing_results(), "(s) a press on [확인] right after the results appear is ignored (results stay up)", "")
@@ -1631,7 +1631,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	var keep := [Economy.heroes.duplicate(), Economy.hero_shards.duplicate(), Economy.gold_tenths]
 	for h in GameData.heroes():
 		Economy.heroes[h.id] = maxi(1, int(Economy.heroes.get(h.id, 0)))
-	Economy.gold_tenths = 3000
+	Economy.gold_tenths = 30000
 	heroes_win.close()
 	recruit.open()
 	await _unguarded(recruit)
@@ -1655,6 +1655,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.roster_changed.emit()
 	Economy.changed.emit()
 	await _recruit_repeat(recruit)
+	await _recruit23_ui(recruit)
 	heroes_win.open()
 	heroes_win.show_detail("hans")
 	await _unguarded(heroes_win)
@@ -1923,23 +1924,24 @@ func _recruit_repeat(recruit) -> void:
 	var keep := [Economy.gold_tenths, Fever.auto_recruit, Fever.auto_next, Fever.save_path]
 	recruit.auto_delay = 0.05
 	recruit.auto_box.button_pressed = false
-	# [재모집]: 10회 결과 → 재모집 → 2700↓. 3300 → 600이 되면 비활성 + 골드 부족
-	Economy.gold_tenths = 60000
+	# [재모집]: 10회 결과 → 재모집 → 27,000↓. 33,000 → 6,000이 되면 비활성 + 골드 부족(개정 23: 골드 모집 Lv 1부터)
+	_gold_lv1()
+	Economy.gold_tenths = 600000
 	Economy.changed.emit()
 	recruit.open()
 	await _unguarded(recruit)
 	recruit._recruit(10)
 	await _frames(2)
-	_check(recruit.is_showing_results() and Economy.gold == 3300 and recruit.again_button.text == "재모집 2700" and not recruit.again_button.disabled and recruit.cards.size() == 10,
-		"(rr) the 10-pull result shows [재모집 2700] enabled", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
+	_check(recruit.is_showing_results() and Economy.gold == 33000 and recruit.again_button.text == "재모집 27,000" and not recruit.again_button.disabled and recruit.cards.size() == 10,
+		"(rr) the 10-pull result shows [재모집 27,000] enabled", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
 	await _unguarded(recruit)
 	await _tap(recruit.again_button.get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.gold == 600 and recruit.cards.size() == 10 and recruit.again_button.disabled and recruit.again_button.text.contains("골드 부족"),
-		"(rr) [재모집] repeats the 10-pull (gold -2700) and is disabled with 골드 부족 at 600 gold", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
+	_check(Economy.gold == 6000 and recruit.cards.size() == 10 and recruit.again_button.disabled and recruit.again_button.text.contains("골드 부족"),
+		"(rr) [재모집] repeats the 10-pull (gold -27,000) and is disabled with 골드 부족 at 6,000 gold", "gold=%d text=%s" % [Economy.gold, recruit.again_button.text])
 	recruit.close()
 	# 시드: 10연차 3번에 SSR이 없는 시드(골드 부족 정지), 1회 두 번째에 SSR이 처음 나오는 시드(SSR 정지)
-	var lvl: int = Economy.building_level(GameData.TAVERN)
+	var lvl: Dictionary = GameData.gacha_rates("gold", 1, Economy.building_level(GameData.TAVERN))  # 아래 자동 모집은 골드 Lv 1에서 뽑는다
 	var seed_no_ssr := -1
 	var seed_ssr2 := -1
 	for s in range(1, 400):
@@ -1957,9 +1959,10 @@ func _recruit_repeat(recruit) -> void:
 		if not a and b and seed_ssr2 < 0:
 			seed_ssr2 = s
 	_check(seed_no_ssr > 0 and seed_ssr2 > 0, "(rr) precondition: found RNG seeds for the auto cases", "no_ssr=%d ssr2=%d" % [seed_no_ssr, seed_ssr2])
-	# 자동: 8200골드 = 10회 3번 + 100 → 3번 뽑고 멈춤
+	# 자동: 82,000골드 = 10회 3번 + 1,000 → 3번 뽑고 멈춤(세 번째로 30회 → Lv 2, 다음 10회 31,050)
+	_gold_lv1()
 	Economy.rng.seed = seed_no_ssr
-	Economy.gold_tenths = 82000
+	Economy.gold_tenths = 820000
 	Economy.changed.emit()
 	recruit.open()
 	await _unguarded(recruit)
@@ -1967,12 +1970,13 @@ func _recruit_repeat(recruit) -> void:
 	recruit._recruit(10)
 	for i in 120:
 		await _frames(1)
-	_check(Economy.gold == 100 and recruit.again_button.disabled and not recruit.auto_running() and recruit.auto_box.button_pressed,
-		"(rr) auto loops 10-pulls until gold is short (8200 -> 100), then stops", "gold=%d running=%s" % [Economy.gold, recruit.auto_running()])
+	_check(Economy.gold == 1000 and recruit.again_button.disabled and not recruit.auto_running() and recruit.auto_box.button_pressed,
+		"(rr) auto loops 10-pulls until gold is short (82,000 -> 1,000), then stops", "gold=%d running=%s" % [Economy.gold, recruit.auto_running()])
 	recruit.close()
 	# 자동: 1회 모집 두 번째에서 SSR → 멈추고 SSR 카드 강조, 골드는 남아도 더 안 뽑는다
+	_gold_lv1()
 	Economy.rng.seed = seed_ssr2
-	Economy.gold_tenths = 10000
+	Economy.gold_tenths = 100000
 	Economy.changed.emit()
 	recruit.open()
 	await _unguarded(recruit)
@@ -1980,14 +1984,15 @@ func _recruit_repeat(recruit) -> void:
 	recruit._recruit(1)
 	for i in 120:
 		await _frames(1)
-	_check(Economy.gold == 400 and not recruit.auto_running() and recruit.cards.size() == 1 and recruit.cards[0].highlight and recruit.is_showing_results()
-		and recruit.again_button.text == "재모집 300" and not recruit.again_button.disabled,
+	_check(Economy.gold == 4000 and not recruit.auto_running() and recruit.cards.size() == 1 and recruit.cards[0].highlight and recruit.is_showing_results()
+		and recruit.again_button.text == "재모집 3,000" and not recruit.again_button.disabled,
 		"(rr) auto stops when an SSR is pulled (2nd pull): results stay up, the SSR card is highlighted, [재모집] is manual again",
 		"gold=%d running=%s hl=%s" % [Economy.gold, recruit.auto_running(), recruit.cards[0].highlight if recruit.cards.size() == 1 else null])
 	recruit.close()
 	# [확인]은 자동을 멈추고 체크를 푼다
+	_gold_lv1()
 	Economy.rng.seed = seed_no_ssr
-	Economy.gold_tenths = 82000
+	Economy.gold_tenths = 820000
 	Economy.changed.emit()
 	recruit.auto_delay = 5.0
 	recruit.open()
@@ -2255,3 +2260,111 @@ func _wait_until(cond: Callable, timeout: float) -> void:
 	while not cond.call() and t < timeout:
 		await get_tree().process_frame
 		t += get_process_delta_time()
+
+
+## 골드 모집 Lv 1·누적 0(개정 23 — 앞 사례의 누적이 비용을 바꾸지 않게).
+func _gold_lv1() -> void:
+	Economy.gacha_gold_level = 1
+	Economy.gacha_gold_pulls = 0
+
+
+## (r23) 개정 23 모집 창: 위 가운데 키 아트(헤드리스는 자리표시)·창이 720x1280 안, [골드 모집]·[다이아 모집] 탭 전환, 골드 1회(골드↓·누적↑),
+## 30회째 레벨업(배지·진행·비용·확률·알림), 다이아 1회(다이아↓·천장 카운트↓, 결과에 자동 체크 없음), 다이아 부족 비활성,
+## 다이아 상점 [구매] 비활성 "준비 중"(눌러도 아무 일 없음), 상단 다이아 칩(칩 5개가 720 안, 9,999,999가 잘리지 않는다).
+func _recruit23_ui(recruit) -> void:
+	var hud = _child(preload("res://scripts/hud.gd"))
+	var keep := [Economy.gold_tenths, Economy.diamonds, Economy.gacha_gold_level, Economy.gacha_gold_pulls, Economy.gacha_dia_pity, Fever.auto_recruit]
+	recruit.auto_box.set_pressed_no_signal(false)
+	_gold_lv1()
+	Economy.gold_tenths = 100000  # 10,000골드
+	Economy.diamonds = 600
+	Economy.gacha_dia_pity = 0
+	Economy.changed.emit()
+	recruit.set_currency("gold")
+	recruit.open()
+	await _unguarded(recruit)
+	await _frames(2)
+	var art: Rect2 = recruit._art_box.get_global_rect()
+	var dlg: Rect2 = recruit.dialog.get_global_rect()
+	print("INPUT INFO: recruit window %s, key art %s (720x1280 logical)" % [dlg, art])
+	_check(recruit.art.texture != null and absf(art.size.x - 632.0) < 2.0 and absf(art.size.y - 300.0) < 2.0 and art.position.y - dlg.position.y < 40.0
+		and absf(art.get_center().x - 360.0) < 2.0 and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
+		"(r23) the key art (632 x 300, placeholder headless) sits at the top centre; the gold tab window fits 720x1280", "art=%s dialog=%s" % [art, dlg])
+	_check(recruit.level_label.text == "골드 모집 Lv 1" and recruit.progress_label.text == "다음 레벨까지 0/30" and recruit.one_button.text.contains("3,000")
+		and recruit.ten_button.text.contains("27,000") and recruit.preview_label.text.contains("Lv 2") and recruit.preview_label.text.contains("3,450")
+		and recruit._gold_box.visible and not recruit._dia_box.visible and not recruit.shop_button.visible,
+		"(r23) gold tab: Lv 1 badge, 0/30, [1회 3,000] [10회 27,000], Lv 2 preview", "lv=%s prog=%s one=%s preview=%s" % [recruit.level_label.text, recruit.progress_label.text, recruit.one_button.text, recruit.preview_label.text])
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.gold == 7000 and Economy.gacha_state().gold_pulls == 1 and recruit.is_showing_results() and recruit.auto_box.visible and recruit.progress_label.text == "다음 레벨까지 1/30",
+		"(r23) gold [1회]: gold -3,000 and 1/30 toward Lv 2; gold results keep the 자동 모집 box", "gold=%d st=%s" % [Economy.gold, Economy.gacha_state()])
+	recruit.confirm_button.pressed.emit()
+	await _unguarded(recruit)  # 결과 화면이 건 보호 시간
+	await _frames(2)
+	Economy.gacha_gold_pulls = 29
+	Economy.changed.emit()
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.gacha_state().gold_level == 2 and recruit.level_label.text == "골드 모집 Lv 2" and recruit.progress_label.text == "다음 레벨까지 0/60"
+		and recruit.one_button.text.contains("3,450") and recruit.rates_label.text == "SSR 3.4% · SR 18% · R 78.6%" and hud._toast.visible and hud._toast.text == "골드 모집 Lv 2! SSR 3.4%",
+		"(r23) the 30th gold pull levels up: Lv 2 badge, 0/60, cost 3,450, SSR 3.4%, notice", "st=%s lv=%s rates=%s toast=%s" % [Economy.gacha_state(), recruit.level_label.text, recruit.rates_label.text, hud._toast.text])
+	recruit.confirm_button.pressed.emit()
+	await _unguarded(recruit)
+	await _frames(2)
+	var gold0: int = Economy.gold
+	await _tap(recruit.dia_tab.get_global_rect().get_center())
+	await _frames(2)
+	dlg = recruit.dialog.get_global_rect()
+	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.shop_button.visible and recruit.dia_label.text == "보유 600"
+		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and not recruit.one_button.disabled and recruit.ten_button.disabled
+		and recruit.rates_label.text == "SSR 8% · SR 30% · R 62%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
+		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 8/30/62, [1회 다이아 300] on, [10회 2,700] off; fits 720x1280",
+		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	var ssr: bool = recruit.cards.size() == 1 and GameData.hero(recruit.cards[0].hero_id).grade == "SSR"
+	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회" % (50 if ssr else 49)
+		and Economy.gold == gold0 and recruit.is_showing_results() and not recruit.auto_box.visible and recruit.again_button.text == "재모집 다이아 300",
+		"(r23) diamond [1회]: diamonds -300, the pity count goes down, gold untouched; no 자동 모집 box on diamond results",
+		"dia=%d pity=%d text=%s gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, recruit.pity_label.text, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])
+	recruit.confirm_button.pressed.emit()
+	await _unguarded(recruit)
+	await _frames(2)
+	Economy.diamonds = 299
+	Economy.changed.emit()
+	_check(recruit.one_button.disabled and recruit.ten_button.disabled, "(r23) short of diamonds: [1회]·[10회] are off", "")
+	await _tap(recruit.shop_button.get_global_rect().get_center())
+	await _frames(2)
+	var shop = recruit.shop
+	var sr: Rect2 = shop.dialog.get_global_rect()
+	_check(shop.is_open() and shop.layer > recruit.layer and shop.buy_buttons.size() == 4 and shop.buy_buttons.all(func(b): return b.disabled and b.text == "준비 중")
+		and shop.note.text == "결제 기능은 출시 전에 연결됩니다" and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
+		"(r23) [다이아 상점] opens over the recruit window: 4 products, [구매] off reading 준비 중, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
+	await _unguarded(shop)
+	var d0: int = Economy.diamonds
+	await _tap(shop.buy_buttons[0].get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.diamonds == d0 and shop.is_open(), "(r23) tapping a disabled [구매] does nothing", "")
+	recruit.close()
+	_check(not shop.is_open() and not recruit.is_open(), "(r23) closing the recruit window closes the shop too", "")
+	Economy.diamonds = 9999999
+	Economy.gold = 9999999
+	Economy.changed.emit()
+	await _frames(2)
+	var row: Rect2 = hud._chip_row.get_global_rect()
+	var chips: Array = hud._chip_row.get_children()
+	var dl: Label = hud._chips["diamond"]
+	var need: float = dl.get_theme_font("font").get_string_size("9,999,999", HORIZONTAL_ALIGNMENT_LEFT, -1, dl.get_theme_font_size("font_size")).x
+	print("INPUT INFO: top chips %s, label widths %s, 9,999,999 needs %.1f px" % [row, hud._chips.values().map(func(l): return l.size.x), need])
+	_check(chips.size() == 5 and hud._chips.keys() == ["gold", "wood", "stone", "food", "diamond"] and row.position.x >= 0.0 and row.end.x <= 720.0
+		and chips.all(func(c): return c.get_global_rect().end.x <= 720.0 and c.get_global_rect().end.y <= 76.0) and hud._chips.values().all(func(l): return l.size.x >= need)
+		and dl.text == "9,999,999" and chips[4].get_child(0).get_child(0).kind == "diamond",
+		"(r23) the top bar has 5 chips ending with diamonds and fits 720 px; every chip shows 9,999,999 unclipped", "row=%s need=%.1f" % [row, need])
+	Economy.gold_tenths = keep[0]
+	Economy.diamonds = keep[1]
+	Economy.gacha_gold_level = keep[2]
+	Economy.gacha_gold_pulls = keep[3]
+	Economy.gacha_dia_pity = keep[4]
+	Fever.auto_recruit = keep[5]
+	recruit.set_currency("gold")
+	Economy.changed.emit()
