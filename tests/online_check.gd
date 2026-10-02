@@ -288,6 +288,7 @@ func _phase1(state_path: String) -> void:
 	await _levelup_online()
 	await _promote_online()
 
+	await _growth_online(state_path)  # 개정 20: 골드를 쓴다 — 건물 단계 전에
 	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
 	await _soldiers_online(state_path)
 
@@ -547,6 +548,7 @@ func _phase2(state_path: String) -> void:
 	_check_band_layout("(p2)")
 	_buildings_restored(state_path)
 	_soldiers_restored(state_path)
+	_growth_restored(state_path)
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
@@ -955,3 +957,57 @@ func _soldiers_restored(state_path: String) -> void:
 	var q := Economy.training("stable")
 	_check(tq.keys() == ["stable"] and Economy.train_queues.keys() == ["stable"] and q.count == int(tq.stable.count) and absf(q.finish - float(tq.stable.finish)) < 0.01 and not q.ready,
 		"(p2) reconnecting restores the training queue (stable: 1 cavalry, same finish)", "queues=%s saved=%s" % [Economy.train_queues, tq])
+
+
+## (z) 개정 20 서버 성장 강화: 골드를 만든 뒤 atk ×3 → /v1/upgrade 한 번(응답 전 재탭 무시, 재전송 없음), 서버 골드 −합계 × 10 tenths, Lv 3.
+##     crit_dmg 한 번 더, 서버 거부(409 max_level)는 알림만. 끝 상태를 <state>.growth에 써서 phase 2가 재접속 복원을 본다.
+func _growth_online(state_path: String) -> void:
+	var notices := []
+	var on_notice := func(t): notices.append(t)
+	Economy.notice.connect(on_notice)
+	await _request("POST", "/v1/test/age", {"minutes": 720})
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/sell", {"res": "wood"})
+	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
+	var gold0: int = Economy.server_gold_tenths
+	var cost3 := Economy.upgrade_total_cost("atk", 3)
+	var u0: int = Net.requested.get("/v1/upgrade", 0)
+	_check(Economy.upgrades.is_empty() and Economy.gold_tenths == gold0 and Economy.gold >= cost3 + 1000, "(z) precondition: no upgrades, gold from the server covers atk x3 and one more",
+		"upgrades=%s gold=%d cost=%d" % [Economy.upgrades, Economy.gold, cost3])
+	var sent := Economy.growth_up("atk", 3)
+	var again := Economy.growth_up("atk", 1)  # 응답 전 재탭
+	_check(sent and not again and Economy.upgrades_waiting() and Economy.upgrade_level("atk") == 0 and Net.requested.get("/v1/upgrade", 0) == u0 + 1,
+		"(z) one /v1/upgrade request; a second tap before the reply is ignored and nothing changes yet", "requests=%d" % [Net.requested.get("/v1/upgrade", 0) - u0])
+	var done := await _wait_until(func(): return Economy.upgrade_level("atk") == 3 and not Economy.upgrades_waiting(), 15.0)
+	_check(done and Net.requested.get("/v1/upgrade", 0) == u0 + 1 and Economy.server_gold_tenths == gold0 - cost3 * 10 and Economy.upgrades == {"atk": 3} \
+		and is_equal_approx(Economy.upgrade_bonus().atk_pct, 0.015), "(z) the server took the summed gold (x 10 tenths) and set atk Lv 3 (+1.5%)",
+		"requests=%d gold=%d->%d upgrades=%s" % [Net.requested.get("/v1/upgrade", 0) - u0, gold0, Economy.server_gold_tenths, Economy.upgrades])
+	var gold1: int = Economy.server_gold_tenths
+	var cc := Economy.upgrade_total_cost("crit_dmg", 1)
+	Economy.growth_up("crit_dmg", 1)
+	await _wait_until(func(): return Economy.upgrade_level("crit_dmg") == 1 and not Economy.upgrades_waiting(), 15.0)
+	_check(Economy.upgrades == {"atk": 3, "crit_dmg": 1} and Economy.server_gold_tenths == gold1 - cc * 10 and Net.requested.get("/v1/upgrade", 0) == u0 + 2,
+		"(z) a second upgrade (crit_dmg Lv 1) is charged on its own cost", "gold=%d upgrades=%s" % [Economy.server_gold_tenths, Economy.upgrades])
+	Economy._growth_online("mspd", 100)  # 화면이 막는 요청을 직접 보낸다 — 서버가 409 max_level
+	await _wait_until(func(): return not Economy.upgrades_waiting(), 15.0)
+	_check(notices.has("최대 레벨입니다") and Economy.upgrades == {"atk": 3, "crit_dmg": 1} and Economy.server_gold_tenths == gold1 - cc * 10 and Net.up,
+		"(z) the server refuses 409 max_level: a notice, nothing charged", "notices=%s gold=%d" % [notices, Economy.server_gold_tenths])
+	Economy.notice.disconnect(on_notice)
+	var f := FileAccess.open(state_path + ".growth", FileAccess.WRITE)
+	f.store_string(JSON.stringify({"upgrades": Economy.upgrades}))
+	f.close()
+
+
+## (p2) 재접속하면 성장 레벨이 그대로다.
+func _growth_restored(state_path: String) -> void:
+	var json := JSON.new()
+	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".growth")) == OK and json.data is Dictionary
+	_check(ok, "(p2) phase 1 growth state file", state_path)
+	if not ok:
+		return
+	var saved: Dictionary = json.data.upgrades
+	var same: bool = saved.size() == 2 and Economy.upgrades.size() == saved.size()
+	for k in saved:
+		same = same and Economy.upgrade_level(k) == int(saved[k])
+	_check(same and Economy.upgrade_level("atk") == 3 and Economy.upgrade_level("crit_dmg") == 1, "(p2) reconnecting restores the growth levels (atk 3, crit_dmg 1)",
+		"upgrades=%s saved=%s" % [Economy.upgrades, saved])
