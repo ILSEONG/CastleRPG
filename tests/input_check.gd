@@ -401,8 +401,8 @@ func _recruit_and_heroes(rig) -> void:
 			merchant = c
 	var bar_rect: Rect2 = tabs._bar.get_global_rect()
 	var big: Rect2 = hud._button.get_global_rect()
-	_check(tabs.buttons.keys() == ["hero", "soldier", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
-		"(t) the tab bar has 영웅·병사·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
+	_check(tabs.buttons.keys() == ["growth", "hero", "soldier", "recruit", "merchant"] and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
+		"(t) the tab bar has 성장·영웅·병사·모집·상인; the tavern-opened recruit window selects [모집] (raised)", "tabs=%s selected=%s" % [tabs.buttons.keys(), tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
 		and big.end.x < 600.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
@@ -632,6 +632,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _guard_wait()
 	await _buildings_ui(tabs, hud, recruit)
 	await _soldiers_ui(tabs, hud)
+	await _growth_ui(tabs)
 	await _soldier_picks()
 	await _soldier_figures(tabs)
 	await _world_tags()
@@ -1216,6 +1217,63 @@ func _soldiers_ui(tabs, hud) -> void:
 
 func _center(c: Control) -> Vector2:
 	return c.get_global_rect().get_center()
+
+
+## (G) 개정 20 성장 시트: [성장] 탭 → 6줄(아이콘·"Lv 0 / 200"·"+0.0% → +0.5%"·[강화 1,000]·[×10]), 위 보유 골드, 아래 안내.
+##     [강화] 탭 → 골드 −비용·Lv +1, [×10] → 10번 합계, [강화]를 누르고 있으면 0.4초 뒤부터 이어 오르고 떼면 멈춘다. 골드가 모자라면 둘 다 꺼진다.
+func _growth_ui(tabs) -> void:
+	var gw = tabs.windows.growth
+	var icons := preload("res://scripts/icons.gd")
+	_picker._select(null)
+	Economy.upgrades = {}
+	Economy.gold_tenths = 100000 * 10
+	Economy.upgrades_changed.emit()
+	Economy.changed.emit()
+	await _tap(_tab_px(tabs, "growth"))
+	await _unguarded(gw)
+	var atk = gw.rows.atk
+	print("INPUT INFO: growth sheet %s, atk [강화] %s, [×10] %s (720x1280 logical)" % [gw.dialog.get_global_rect(), atk.up.button.get_global_rect(), atk.ten.button.get_global_rect()])
+	var ids: Array = gw.rows.keys()
+	var note: bool = gw.content.find_children("*", "Label", true, false).any(func(l): return l.text == gw.NOTE)
+	_check(gw.is_open() and tabs.selected == "growth" and ids == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"]
+		and ids.all(func(id): return not icons.shapes(gw.ICONS[id]).is_empty()) and atk.lv.text == "Lv 0 / 200" and atk.effect.text == "+0.0% → +0.5%"
+		and gw.rows.crit_rate.effect.text == "+0.0%p → +0.1%p" and gw.gold_label.text == "보유 골드 100,000" and atk.up.gold.text == "1,000" and not atk.up.button.disabled and note,
+		"(G) [성장] tab: 6 rows with icons, 'Lv 0 / 200', '+0.0% → +0.5%' (%p for crit), gold line, [강화 1,000], the note",
+		"open=%s ids=%s lv=%s effect=%s gold=%s cost=%s note=%s" % [gw.is_open(), ids, atk.lv.text, atk.effect.text, gw.gold_label.text, atk.up.gold.text, note])
+	await _tap(_center(atk.up.button))
+	_check(Economy.upgrade_level("atk") == 1 and Economy.gold == 99000 and atk.lv.text == "Lv 1 / 200" and atk.effect.text == "+0.5% → +1.0%" and atk.up.gold.text == "1,050"
+		and gw.gold_label.text == "보유 골드 99,000", "(G) [강화] tap: gold -1,000, atk Lv 1, the row shows +0.5% → +1.0% and the next cost 1,050",
+		"lv=%d gold=%d text=%s cost=%s" % [Economy.upgrade_level("atk"), Economy.gold, atk.effect.text, atk.up.gold.text])
+	var cost10 := Economy.upgrade_total_cost("atk", 10)
+	var g0 := Economy.gold
+	_check(atk.ten.title.text == "×10 (10회)" and atk.ten.gold.text == UiKit.commas(cost10), "(G) [×10] shows 10 times and their summed cost", "title=%s cost=%s" % [atk.ten.title.text, atk.ten.gold.text])
+	await _tap(_center(atk.ten.button))
+	_check(Economy.upgrade_level("atk") == 11 and Economy.gold == g0 - cost10, "(G) [×10] tap: Lv 1 -> 11, gold minus the summed cost",
+		"lv=%d gold %d -> %d (cost %d)" % [Economy.upgrade_level("atk"), g0, Economy.gold, cost10])
+	var hp_px := _center(gw.rows.hp.up.button)
+	_mouse_button(hp_px, true)
+	await _frames(2)
+	var first := Economy.upgrade_level("hp")
+	await get_tree().create_timer(0.25).timeout
+	var early := Economy.upgrade_level("hp")
+	await get_tree().create_timer(1.0).timeout
+	_mouse_button(hp_px, false)
+	await _frames(2)
+	var held := Economy.upgrade_level("hp")
+	await get_tree().create_timer(0.4).timeout
+	_check(first == 1 and early == 1 and held >= 6 and Economy.upgrade_level("hp") == held, "(G) holding [강화]: one step at once, more only after 0.4 s (accelerating), release stops it",
+		"first=%d at 0.25 s=%d held=%d after release=%d" % [first, early, held, Economy.upgrade_level("hp")])
+	Economy.gold_tenths = 100
+	Economy.changed.emit()
+	await _frames(1)
+	var aspd = gw.rows.aspd
+	await _tap(_center(aspd.up.button))
+	_check(aspd.up.button.disabled and aspd.ten.button.disabled and Economy.upgrade_level("aspd") == 0 and Economy.gold == 10,
+		"(G) short of gold [강화]·[×10] are off and a tap does nothing", "up=%s ten=%s lv=%d" % [aspd.up.button.disabled, aspd.ten.button.disabled, Economy.upgrade_level("aspd")])
+	gw.close()
+	Economy.upgrades = {}
+	Economy.upgrades_changed.emit()
+	await _frames(2)
 
 
 ## 건물 지붕(탭 판정체 윗면 0.3 m 아래) 5×5 점을 가운데에 가까운 순으로 보며, 그 건물 판정체가 맞는 첫 화면 좌표 — 부지 중심은 앞 건물
