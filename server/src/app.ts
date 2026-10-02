@@ -1191,6 +1191,17 @@ export function createApp(opts: AppOptions) {
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
 
+    // 통합 테스트용(개정 18): 영웅 한 명을 보유하게 한다(골드 던전 6명 편성 — 서버 모집은 암호학적 난수라 정할 수 없다). 이미 있으면 그대로.
+    app.post('/v1/test/grant_hero', auth, async (c) => {
+      const heroId = strField(await body(c), 'hero_id')
+      const id = c.get('playerId') as string
+      await query(`with s as (update player_state set version = version + 1 where player_id = $1 returning player_id)
+        insert into player_heroes (player_id, hero_id) select player_id, $2 from s on conflict do nothing`, [id, heroId])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
     // 통합 테스트용: 그 플레이어 건물의 last_collect(자원 건물 수집)와 훈련 끝나는 시각(개정 16)을 minutes분 앞당긴다.
     app.post('/v1/test/age', auth, async (c) => {
       const minutes = intField(await body(c), 'minutes', 0, MAX_AGE_MIN)

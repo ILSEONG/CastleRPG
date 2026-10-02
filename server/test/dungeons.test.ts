@@ -432,8 +432,13 @@ test('test/dungeon_age: 열린 run 시작 시각을 앞당긴다(즉시 승리 �
   assert.equal((await S.req('POST', '/v1/test/dungeon_age', { token, body: { run_id: s.json.run_id, seconds: 15 } })).status, 200)
   assert.deepEqual((await finish(token, { run_id: s.json.run_id, win: true, elapsed: 15 })).json.rewards, { gold_tenths: 40000 })
   const off = S.makeApp({ allowTestHooks: false })
-  const res = await off.request('/v1/test/dungeon_age', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{}' })
-  assert.equal(res.status, 404)
+  for (const path of ['/v1/test/dungeon_age', '/v1/test/grant_hero']) {
+    const res = await off.request(path, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{}' })
+    assert.equal(res.status, 404, path)
+  }
+  const g = await S.req('POST', '/v1/test/grant_hero', { token, body: { hero_id: 'kyle' } })
+  assert.deepEqual([g.status, g.json.player.heroes.kyle], [200, { copies: 1, level: 1, shards: 0, promotion: 0 }])
+  assert.deepEqual((await S.req('POST', '/v1/test/grant_hero', { token, body: { hero_id: 'kyle' } })).json.player.heroes.kyle.copies, 1) // 이미 있으면 그대로
 })
 
 test('finish 원자성(동시): 같은 version을 읽은 finish 2건 — 보상·열쇠 소모·장비·로그는 한 번, 두 응답의 보상은 같다', async () => {
