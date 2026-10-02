@@ -23,20 +23,23 @@ var _amount_labels := {}
 var _value_labels := {}
 var _last_sec := -1
 
-# 수량 판매(스펙 §4): 한 번에 한 행만 펼친다. 수량 입력은 qty_box.gd(개정 16에서 훈련 칸과 같이 쓰려고 떼어 냈다)
-var qty_boxes := {}  # 자원 id → 수량 칸(VBox: 수량 입력 + 골드·[판매])
+# 수량 판매(스펙 §4): 행마다 따로 펼친다(여럿 동시에 열 수 있다). [선택 판매]가 열린 칸의 수량을 한 번에 판다.
+# 수량 입력은 qty_box.gd(개정 16에서 훈련 칸과 같이 쓰려고 떼어 냈다)
+var qty_boxes := {}  # 자원 id → 수량 칸(VBox: 수량 입력 + 골드)
 var qty_inputs := {}  # 자원 id → 수량 입력(qty_box.gd)
 var qty_edits := {}
 var qty_sliders := {}
 var qty_gold_labels := {}
-var qty_confirms := {}
 var qty_minus := {}
 var qty_plus := {}
 var qty_max := {}
-var open_res := ""
-var qty: int:  # 펼친 행의 수량(접혀 있으면 0)
+var sell_selected_button: Button
+var qtys: Dictionary:  # 자원 id → 고른 수량(접힌 칸은 0)
 	get:
-		return qty_inputs[open_res].value if open_res != "" else 0
+		var d := {}
+		for id in qty_inputs:
+			d[id] = qty_inputs[id].value if qty_boxes[id].visible else 0
+		return d
 
 
 func _ready() -> void:
@@ -48,6 +51,9 @@ func _ready() -> void:
 	for r in GameData.resources():
 		var id: String = r.id
 		col.add_child(_row(id))
+	sell_selected_button = _button("선택 판매 · 0골드")
+	sell_selected_button.pressed.connect(_sell_selected)
+	col.add_child(sell_selected_button)
 	sell_all_button = _button("전부 판매")
 	sell_all_button.pressed.connect(func(): Economy.sell_all(_now()))
 	col.add_child(sell_all_button)
@@ -69,7 +75,10 @@ func _process(_delta: float) -> void:
 
 
 func _on_open() -> void:
-	_open_qty("")
+	for id in qty_boxes:
+		qty_boxes[id].visible = false
+		qty_inputs[id].set_value(0)
+	_fit()
 	_refresh(_now())
 
 
@@ -93,9 +102,9 @@ func _refresh(now: float) -> void:
 		_value_labels[id].text = "→ %s골드" % HudScript.commas(Economy.sell_value(id, amount, rate))
 		sell_buttons[id].disabled = amount == 0
 		any = any or amount > 0
+		if qty_boxes[id].visible and amount == 0:
+			_toggle_qty(id)  # 다 팔았으면 접는다
 	sell_all_button.disabled = not any
-	if open_res != "" and Economy.res[open_res] == 0:
-		_open_qty("")  # 다 팔았으면 접는다
 	_refresh_qty(now)
 
 
@@ -137,7 +146,7 @@ func _main_row(id: String) -> HBoxContainer:
 	row.add_child(value)
 	var sell := _button("판매")
 	sell.custom_minimum_size = Vector2(110, 52)
-	sell.pressed.connect(func(): _open_qty("" if open_res == id else id))
+	sell.pressed.connect(func(): _toggle_qty(id))
 	row.add_child(sell)
 	_amount_labels[id] = amount
 	rate_labels[id] = rate
@@ -146,8 +155,7 @@ func _main_row(id: String) -> HBoxContainer:
 	return row
 
 
-
-## 수량 칸: 수량 입력([−] 입력 [+] [최대] / 슬라이더, 0..보유) → N골드 [판매]
+## 수량 칸: 수량 입력([−] 입력 [+] [최대] / 슬라이더, 0..보유) / → N골드
 func _qty_box(id: String) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
@@ -155,55 +163,65 @@ func _qty_box(id: String) -> VBoxContainer:
 	var q = QtyBox.new()
 	q.value_changed.connect(func(_v): _qty_labels(_now()))
 	box.add_child(q)
-	var bottom := HBoxContainer.new()
 	var gold := _label("", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
-	gold.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var confirm := _button("판매")
-	confirm.custom_minimum_size = Vector2(130, 52)
-	confirm.pressed.connect(func(): Economy.sell(id, _now(), qty))
-	bottom.add_child(gold)
-	bottom.add_child(confirm)
-	box.add_child(bottom)
+	box.add_child(gold)
 	qty_boxes[id] = box
 	qty_inputs[id] = q
 	qty_edits[id] = q.edit
 	qty_sliders[id] = q.slider
 	qty_gold_labels[id] = gold
-	qty_confirms[id] = confirm
 	qty_minus[id] = q.minus
 	qty_plus[id] = q.plus
 	qty_max[id] = q.max_button
 	return box
 
 
-## 그 행의 수량 칸을 펼친다(다른 행은 접힌다, 수량 0). ""이면 모두 접는다.
-func _open_qty(id: String) -> void:
-	open_res = id
-	for k in qty_boxes:
-		qty_boxes[k].visible = k == id
-		qty_inputs[k]._hold_dir = 0
-	if id != "":
-		qty_inputs[id].set_range(0, Economy.res[id])
-		qty_inputs[id].set_value(0)
+## 그 행의 수량 칸을 펼치거나 접는다(다른 행은 그대로). 펼치든 접든 수량은 0.
+func _toggle_qty(id: String) -> void:
+	qty_boxes[id].visible = not qty_boxes[id].visible
+	qty_inputs[id].set_value(0)  # 접힌 칸은 누르고 있던 [+]·[−]도 qty_box가 멈춘다
 	_refresh_qty(_now())
 	_fit()
 
 
-func _set_qty(n: int) -> void:
-	if open_res != "":
-		qty_inputs[open_res].set_value(n)
+func _set_qty(id: String, n: int) -> void:
+	if qty_boxes[id].visible:
+		qty_inputs[id].set_value(n)
 
 
-## 범위(0..보유)를 맞추고 골드·[판매]를 고친다.
+## 열린 칸마다 범위(0..보유)를 맞추고 골드·[선택 판매]를 고친다.
 func _refresh_qty(now: float) -> void:
-	if open_res == "":
-		return
-	qty_inputs[open_res].set_range(0, Economy.res[open_res])
+	for id in qty_boxes:
+		if qty_boxes[id].visible:
+			qty_inputs[id].set_range(0, Economy.res[id])
 	_qty_labels(now)
 
 
+## 열린 칸마다 → N골드, [선택 판매]에 그 합계.
 func _qty_labels(now: float) -> void:
-	if open_res == "":
+	var total_amount := 0
+	var total_gold := 0
+	for id in qty_boxes:
+		if not qty_boxes[id].visible:
+			continue
+		var q: int = qty_inputs[id].value
+		var g := Economy.sell_value(id, q, Economy.current_rate(id, now))
+		qty_gold_labels[id].text = "→ %s골드" % HudScript.commas(g)
+		total_amount += q
+		total_gold += g
+	sell_selected_button.text = "선택 판매 · %s골드" % HudScript.commas(total_gold)
+	sell_selected_button.disabled = total_amount == 0
+
+
+## 열린 칸들의 수량을 한 번에 판다. 판 뒤 수량은 0, 칸은 열어 둔다.
+func _sell_selected() -> void:
+	var items := []
+	for id in qty_boxes:
+		if qty_boxes[id].visible and qty_inputs[id].value > 0:
+			items.append({"res": id, "amount": qty_inputs[id].value})
+	if items.is_empty():
 		return
-	qty_gold_labels[open_res].text = "→ %s골드" % HudScript.commas(Economy.sell_value(open_res, qty, Economy.current_rate(open_res, now)))
-	qty_confirms[open_res].disabled = qty == 0
+	Economy.sell_many(items, _now())
+	for it in items:
+		qty_inputs[it.res].set_value(0)
+	_refresh(_now())

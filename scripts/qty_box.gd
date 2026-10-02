@@ -77,8 +77,10 @@ func set_value(n: int) -> void:
 func _show() -> void:
 	if edit.text != str(value) and not (edit.text == "" and value == min_value):
 		edit.text = str(value)
+	slider.set_block_signals(true)  # 범위를 바꾸며 슬라이더 값이 잘려도 value_changed로 값이 덮이지 않게
 	slider.max_value = maxi(max_value, min_value + 1)  # 범위가 한 점이어도 슬라이더가 깨지지 않게
 	slider.min_value = min_value
+	slider.set_block_signals(false)
 	slider.set_value_no_signal(value)
 
 
