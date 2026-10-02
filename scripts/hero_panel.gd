@@ -285,12 +285,13 @@ func _build_detail() -> void:
 ## 장비 칸 7개(개정 18): 큰 카드 안 양옆 세로 줄(피규어 칸 바깥). 칸 = 평면 버튼 + 장비 그림(item_tile).
 func _build_equip_slots() -> void:
 	var cols := []
-	for preset in [Control.PRESET_CENTER_LEFT, Control.PRESET_CENTER_RIGHT]:
+	for side in 2:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 8)
-		big_card.add_child(col)
-		col.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, 14)
+		col.grow_horizontal = Control.GROW_DIRECTION_END if side == 0 else Control.GROW_DIRECTION_BEGIN
 		col.grow_vertical = Control.GROW_DIRECTION_BOTH
+		big_card.add_child(col)
+		col.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT if side == 0 else Control.PRESET_CENTER_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 14)
 		cols.append(col)
 	for i in GameData.EQUIP_SLOTS.size():
 		var s: String = GameData.EQUIP_SLOTS[i]
