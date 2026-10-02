@@ -115,6 +115,9 @@ func _init() -> void:
 	test_dungeon_save_and_server()
 	test_seasons()
 	test_equip_upgrade_dot()
+	test_hero_looks_unique()
+	test_hero_look_builder()
+	test_portrait_looks()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3517,3 +3520,137 @@ func test_equip_upgrade_dot() -> void:
 	check(e.equip_upgrade_available("hans", "hat"), "dot: a better unequipped hat (SR over N) shows the dot")
 	e.free()
 
+
+
+## 개정 23 영웅 생김새: 22명 모두 생김새가 있고 (모델·팔레트·머리·등·무기·크기) 묶음의 해시가 서로 다르다. 같은 모델끼리는
+## 팔레트·머리·무기 중 둘 이상이 다르다. 머리 = 머리 뼈 부품 + 벗긴 모자·투구, 등 = 가슴 부품 + 벗긴 망토, 무기 = gear + swap + 손 부품.
+func test_hero_looks_unique() -> void:
+	var heroes: Array = GameData.heroes()
+	check(heroes.size() == 22 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
+	var seen := {}
+	var looks := {}
+	for h in heroes:
+		var t := _look_tuple(h)
+		looks[h.id] = t
+		var key := var_to_str([h.model, t.palette, t.head, t.back, t.weapon, t.scale]).hash()
+		check(not seen.has(key), "%s has its own look (same tuple as %s)" % [h.id, seen.get(key, "")])
+		seen[key] = h.id
+	for i in heroes.size():
+		for j in range(i + 1, heroes.size()):
+			var a: Dictionary = heroes[i]
+			var b: Dictionary = heroes[j]
+			if a.model != b.model:
+				continue
+			var ta: Dictionary = looks[a.id]
+			var tb: Dictionary = looks[b.id]
+			var diff := int(ta.palette != tb.palette) + int(ta.head != tb.head) + int(ta.weapon != tb.weapon)
+			check(diff >= 2, "%s vs %s (both %s) differ in %d of palette / headgear / weapon, need 2" % [a.id, b.id, a.model, diff])
+
+
+func _look_tuple(h: Dictionary) -> Dictionary:
+	var spec := Art.hero_spec(h)
+	var cells: Array = spec.palette.keys()
+	cells.sort()
+	var head := []
+	var back := []
+	var hand := []
+	for p in spec.parts:
+		if p[0] == "head":
+			head.append(p[1])
+		elif String(p[0]).begins_with("handslot"):
+			hand.append(p[1])
+		else:
+			back.append(p[1])
+	for m in Art.HERO_LOOKS[h.id].get("hide", []):
+		if String(m).ends_with("Cape"):
+			back.append(m)
+		else:
+			head.append(m)
+	head.sort()
+	back.sort()
+	var swap: Dictionary = spec.swap
+	var sw: Array = swap.keys().map(func(g): return "%s>%s" % [g, swap[g]])
+	sw.sort()
+	return {"palette": ",".join(cells.map(func(c): return "%d:%s" % [c, (spec.palette[c] as Color).to_html()])), "head": head,
+		"back": back, "weapon": [h.gear, sw, hand], "scale": snappedf(spec.body_scale, 0.001)}
+
+
+## 생김새 빌더(UnitModel.dress, 성·던전·피규어·줄 세우기 공통): 영웅마다 부품이 적힌 뼈의 BoneAttachment3D 아래(이름 = id, 공유 정점 색 재질),
+## swap gear는 숨고 그 손 슬롯에 코드 무기, 벗긴 모자는 숨고 나머지 gear는 보이며, 몸 크기 = scale(±10%), 텍스처 표면은 전부 그 영웅의
+## 8×4 칸 색표 재질(팔레트 칸만 알파 1). 같은 영웅 = 같은 재질(캐시), 영웅끼리 다르다. 부품 메시는 id마다 하나. 셰이더가 remap 유니폼과 함께 컴파일된다.
+func test_hero_look_builder() -> void:
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	const HeroKit := preload("res://scripts/hero_kit.gd")
+	for sh in [Art.LOWPOLY_SHADER, Art.LOWPOLY_DOUBLE_SHADER]:
+		var names: Array = (sh as Shader).get_shader_uniform_list().map(func(u): return u.name)
+		check(names.has("use_remap") and names.has("remap_tex") and names.has("albedo_tex"), "%s compiles with the remap uniforms: %s" % [sh.resource_path, names])
+	var used := {}
+	for h in GameData.heroes():
+		var spec := Art.hero_spec(h)
+		var model: Node3D = Art.instance(spec.scene)
+		UnitModelScript.dress(model, spec)
+		var found := []
+		for ba in model.find_children("*", "BoneAttachment3D", true, false):
+			for c in ba.get_children():
+				if HeroKit.has_part(String(c.name)):
+					found.append([String(ba.bone_name), String(c.name)])
+					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.lowpoly_vc_material(),
+						"%s part %s is a shared low-poly vertex-color mesh" % [h.id, c.name])
+					used[String(c.name)] = true
+		var want: Array = spec.parts.duplicate()
+		for g in spec.swap:
+			var gear := model.find_child(g, true, false) as Node3D
+			check(gear != null and not gear.visible, "%s swaps out %s" % [h.id, g])
+			want.append([String((gear.get_parent() as BoneAttachment3D).bone_name), spec.swap[g]])
+		found.sort()
+		want.sort()
+		check(found == want, "%s: parts on their bones %s (want %s)" % [h.id, found, want])
+		for m in Art.HERO_LOOKS[h.id].get("hide", []):
+			check(not (model.find_child(m, true, false) as Node3D).visible, "%s takes off %s" % [h.id, m])
+		for g in h.gear.split("|"):
+			check(spec.swap.has(g) or (model.find_child(g, true, false) as Node3D).visible, "%s still shows gear %s" % [h.id, g])
+		check(model.scale.is_equal_approx(Vector3.ONE * spec.body_scale) and absf(spec.body_scale - 1.0) <= 0.1001,
+			"%s drawn at x%.2f (within 10%%)" % [h.id, spec.body_scale])
+		var tex: ImageTexture = Art.remap_texture(h.id, spec.palette)
+		var img := tex.get_image()
+		var ok: bool = img.get_size() == Vector2i(8, 4) and not spec.palette.is_empty()
+		for cell in 32:
+			var px := img.get_pixel(cell % 8, cell / 8)
+			ok = ok and (px.a > 0.5) == spec.palette.has(cell) and (not spec.palette.has(cell) or px.is_equal_approx(Color(spec.palette[cell], 1.0)))
+		check(ok, "%s color table: 8x4, alpha only on its %d palette cells" % [h.id, spec.palette.size()])
+		var textured := 0
+		var remapped := 0
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			for i in (mi as MeshInstance3D).mesh.get_surface_count():
+				var m := (mi as MeshInstance3D).get_active_material(i) as ShaderMaterial
+				if m != null and m.get_shader_parameter("use_texture"):
+					textured += 1
+					if m.get_shader_parameter("use_remap") == true and m.get_shader_parameter("remap_tex") == tex:
+						remapped += 1
+		check(textured > 5 and remapped == textured, "%s: all %d textured surfaces use its color table (%d)" % [h.id, textured, remapped])
+		model.free()
+	check(used.size() == HeroKit.PARTS.size(), "every HeroKit part is used by some hero (%d / %d)" % [used.size(), HeroKit.PARTS.size()])
+	var body := func(id: String) -> Material:
+		var spec := Art.hero_spec(GameData.hero(id))
+		var m: Node3D = Art.instance(spec.scene)
+		preload("res://scripts/unit_model.gd").dress(m, spec)  # 람다에선 함수 지역 상수가 안 보인다
+		var mat := (m.find_child("Knight_Body", true, false) as MeshInstance3D).get_active_material(0)
+		m.free()
+		return mat
+	check(body.call("arteon") == body.call("arteon") and body.call("arteon") != body.call("bron"), "a hero's skin material is cached; two heroes differ")
+	var p1: MeshInstance3D = HeroKit.part("lumina_halo")
+	var p2: MeshInstance3D = HeroKit.part("lumina_halo")
+	check(p1.mesh == p2.mesh and p1 != p2, "part meshes are built once per id")
+	p1.free()
+	p2.free()
+
+
+## 피규어(목록·상세 미리보기·모집 결과 카드)도 같은 생김새: Portraits.spec_of("hero:id") == Art.hero_spec — 팔레트·부품·swap·크기까지. 병사는 그대로.
+func test_portrait_looks() -> void:
+	for h in GameData.heroes():
+		var s: Dictionary = PortraitsScript.spec_of("hero:" + h.id)
+		var look: Dictionary = Art.HERO_LOOKS[h.id]
+		check(s == Art.hero_spec(h) and s.look == h.id and s.palette == Art.look_cells(h.model, look.palette) and s.parts == look.get("parts", [])
+			and s.swap == look.get("swap", {}) and s.body_scale == look.get("scale", 1.0), "portrait of %s carries its look" % h.id)
+	check(not Art.soldier_spec("infantry", "Knight").has("palette") and not PortraitsScript.spec_of("soldier:archer").has("palette"),
+		"soldiers keep the plain model (no hero look)")

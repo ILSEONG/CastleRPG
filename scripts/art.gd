@@ -40,6 +40,114 @@ const HERO_MODELS := {
 }
 const GRADE_COLORS := {"R": Color("#8FA3B8"), "SR": Color("#9B6CD6"), "SSR": Color("#F2B233")}
 
+## 영웅 생김새(개정 23) — 모델 텍스처(8×4 칸 아틀라스, 칸 = 왼쪽 위부터 0~31)에서 부위 이름 → 칸. GLB 메시마다 쓰는 칸을 세고
+## 칸 하나씩 칠해 본 렌더로 정했다. 무기 칸도 있다(같은 칸을 쓰는 부착물은 같이 바뀐다 — 기사 steel = 칼날·방패 면).
+const ROGUE_SLOTS := {"tunic": [8], "hood": [9], "arms": [21], "strap": [5], "belt": [6], "boots": [19], "hair": [1],
+	"blade": [10], "wood": [11], "fit": [13, 14, 16]}
+const LOOK_SLOTS := {
+	"Knight": {"armor": [3], "trim": [7], "cape": [8], "ribbon": [9], "belt": [6], "buckle": [10], "hair": [1], "steel": [11], "grip": [13], "rim": [14]},
+	"Mage": {"robe": [8], "hat": [9], "cape": [10], "band": [5], "buckle": [3], "accent": [18], "boots": [19], "gloves": [23], "hair": [1],
+		"gem": [22], "book": [16, 17]},
+	"Barbarian": {"shirt": [8], "sleeve": [9], "leather": [6], "fur": [7], "beard": [1], "trim": [10], "boots": [19], "gloves": [23],
+		"steel": [11], "edge": [18], "wood": [13]},
+	"Rogue": ROGUE_SLOTS,
+	"Rogue_Hooded": ROGUE_SLOTS,
+}
+
+## 영웅 id → 생김새(이름·칭호에서): palette = LOOK_SLOTS 이름 → 색, hide = 숨길 모델 메시(모자·투구·망토), parts = [뼈, HeroKit id],
+## swap = gear 메시 → HeroKit 무기 id(그 gear를 숨기고 같은 손에 코드 무기 — 공격 동작은 gear 그대로), scale = 몸 크기(±10%).
+## 같은 모델끼리는 팔레트·머리·무기 중 둘 이상이 다르다(테스트). 머리 = 머리 뼈 부품 + 숨긴 모자, 무기 = gear + swap + 손 부품.
+const HERO_LOOKS := {
+	# 기사 — 빛의 성기사: 상아 갑옷·금 장식·흰 날개 투구·금 어깨
+	"arteon": {"palette": {"armor": Color("EDE6D6"), "trim": Color("E8B530"), "cape": Color("E9B83A"), "ribbon": Color("FFFFFF"),
+		"belt": Color("C8963A"), "buckle": Color("F0C850"), "steel": Color("F2E2A8"), "rim": Color("E8B530")},
+		"parts": [["head", "arteon_wings"], ["chest", "arteon_pauldrons"]], "scale": 1.05},
+	# 철벽 수문장: 검은 쇠·남색 망토·가시 어깨·투구 가시, 가장 큰 기사
+	"baldur": {"palette": {"armor": Color("59616B"), "trim": Color("2E333A"), "cape": Color("22304A"), "ribbon": Color("8C9AA8"),
+		"belt": Color("3A2E26"), "buckle": Color("8C9AA8"), "steel": Color("7D8590"), "rim": Color("3A3F46")},
+		"parts": [["head", "baldur_spikes"], ["chest", "baldur_pauldrons"]], "scale": 1.1},
+	# 방패병 대장: 청동 갑옷·초록 망토·가로 붉은 볏
+	"bron": {"palette": {"armor": Color("B8874A"), "trim": Color("7A5428"), "cape": Color("2F6B3A"), "ribbon": Color("E8D8B0"),
+		"belt": Color("5A3A22"), "buckle": Color("D8B060"), "steel": Color("C8A266"), "rim": Color("2F6B3A"), "grip": Color("4A2E1A")},
+		"parts": [["head", "bron_crest"]]},
+	# 전투 사제: 투구 벗고 흰 주교관, 보라 망토, 칼 대신 금 철퇴
+	"torvin": {"palette": {"armor": Color("CFD4DA"), "trim": Color("D4AC0D"), "cape": Color("6A3D9A"), "ribbon": Color("F4F2EC"),
+		"belt": Color("6A3D9A"), "buckle": Color("D4AC0D"), "hair": Color("6B4A2E"), "steel": Color("E8E4D8"), "rim": Color("D4AC0D")},
+		"hide": ["Knight_Helmet"], "parts": [["head", "torvin_mitre"]], "swap": {"1H_Sword": "torvin_mace"}},
+	# 기사단 창병: 푸른 강철·파란 망토·파란 깃털, 대검 대신 깃발 창
+	"felix": {"palette": {"armor": Color("A9BCD0"), "trim": Color("1F5F9A"), "cape": Color("2E86C1"), "ribbon": Color("FFFFFF"),
+		"belt": Color("3A2E26"), "buckle": Color("C8D0D8"), "steel": Color("D0DAE4")},
+		"parts": [["head", "felix_plume"]], "swap": {"2H_Sword": "felix_spear"}, "scale": 1.03},
+	# 민병대 검사: 투구 벗고 쇠 챙모자, 가죽 누비 갑옷·검붉은 망토, 작게
+	"hans": {"palette": {"armor": Color("8E6E4E"), "trim": Color("5A4430"), "cape": Color("8A2E2A"), "ribbon": Color("D8C8A0"),
+		"belt": Color("4A3626"), "buckle": Color("A0A0A0"), "hair": Color("7A4E2A"), "steel": Color("B0B4B8")},
+		"hide": ["Knight_Helmet"], "parts": [["head", "hans_kettle"]], "scale": 0.96},
+	# 마법사 — 화염 대마법사: 진홍 모자·붉은 로브·검은 망토, 모자 끝과 지팡이 머리에 불꽃
+	"ignis": {"palette": {"robe": Color("B8261A"), "hat": Color("7A1410"), "cape": Color("2A1612"), "band": Color("F0B030"),
+		"buckle": Color("F0D060"), "accent": Color("FFB020"), "boots": Color("3A2016"), "gem": Color("FF6A10")},
+		"parts": [["head", "ignis_flame"], ["handslot.r", "ignis_fire"]], "scale": 1.03},
+	# 서리 마녀: 모자 벗고 흰 머리에 얼음 왕관, 얼음빛 로브·짙은 파랑 망토, 완드 끝 얼음 결정
+	"seraphine": {"palette": {"robe": Color("9ED4F0"), "cape": Color("2A5C9E"), "band": Color("EAF6FF"), "buckle": Color("CFEFFF"),
+		"accent": Color("7FE6FF"), "boots": Color("E8F4FA"), "gloves": Color("CFEFFF"), "hair": Color("EEF3F8")},
+		"hide": ["Mage_Hat"], "parts": [["head", "seraphine_crown"], ["handslot.r", "seraphine_ice"]]},
+	# 성녀: 모자 벗고 금발에 후광, 흰 로브·금 망토, 등에 흰 날개
+	"lumina": {"palette": {"robe": Color("F6F2E6"), "cape": Color("E5B840"), "band": Color("E5B840"), "buckle": Color("FFE07A"),
+		"accent": Color("F0C850"), "boots": Color("F0E8D4"), "gloves": Color("FFFFFF"), "hair": Color("F2CD5A"), "book": Color("F4E4B0")},
+		"hide": ["Mage_Hat"], "parts": [["head", "lumina_halo"], ["chest", "lumina_wings"]]},
+	# 견습 화염술사: 갈색 가죽 모자·주황 로브·붉은 목도리, 완드 끝 작은 불꽃, 작게
+	"echo": {"palette": {"robe": Color("F2A23A"), "hat": Color("6A4426"), "cape": Color("8A5A2E"), "band": Color("D8402A"),
+		"buckle": Color("F0C040"), "accent": Color("FF6A1A"), "boots": Color("4A3020")},
+		"parts": [["chest", "echo_scarf"], ["handslot.r", "echo_spark"]], "scale": 0.9},
+	# 견습 치유사: 모자 벗고 밤색 머리에 꽃 화관, 민트 로브·흰 망토, 지팡이에 분홍 꽃, 작게
+	"nina": {"palette": {"robe": Color("8FD6AE"), "cape": Color("F4F4EC"), "band": Color("F08AAE"), "buckle": Color("FFFFFF"),
+		"accent": Color("F08AAE"), "boots": Color("8A5A3A"), "hair": Color("A0602E"), "gem": Color("FF9EC4")},
+		"hide": ["Mage_Hat"], "parts": [["head", "nina_wreath"], ["handslot.r", "nina_bloom"]], "scale": 0.92},
+	# 두건 사수 — 바람의 명사수: 잎새 초록 두건·크림 옷, 두건에 긴 흰 깃털, 등에 화살통, 흰 나무 쇠뇌
+	"sylvana": {"palette": {"hood": Color("3DB45C"), "tunic": Color("EFE6CC"), "arms": Color("A8784A"), "strap": Color("D8B060"),
+		"belt": Color("7A5232"), "boots": Color("6A4A2E"), "wood": Color("EDE2C4"), "fit": Color("D8B060")},
+		"parts": [["head", "sylvana_feather"], ["chest", "sylvana_quiver"]], "scale": 1.02},
+	# 천둥 궁수: 남색 두건·노란 옷, 두건 양쪽에 번개 뿔, 노란 쇠뇌
+	"nev": {"palette": {"hood": Color("26346E"), "tunic": Color("F1C40F"), "arms": Color("2E2E3A"), "strap": Color("F1C40F"),
+		"belt": Color("1E1E28"), "boots": Color("2E2E3A"), "wood": Color("3A3A4A"), "fit": Color("FFE04A")},
+		"parts": [["head", "nev_bolts"]]},
+	# 독화살 사냥꾼: 올리브 두건·보라 옷, 검은 복면, 가슴에 독병 띠, 검은 쇠뇌에 연두 쇠붙이
+	"mira": {"palette": {"hood": Color("55702A"), "tunic": Color("5A3A72"), "arms": Color("3A2A22"), "strap": Color("2A2230"),
+		"belt": Color("2A2230"), "boots": Color("3A2A22"), "wood": Color("3A2E24"), "fit": Color("9CE03A")},
+		"parts": [["head", "mira_mask"], ["chest", "mira_vials"]]},
+	# 마을 궁수: 빨간 두건(빨간 모자)·연두 옷, 두건에 데이지, 작게
+	"ella": {"palette": {"hood": Color("C8402E"), "tunic": Color("8ED6A2"), "arms": Color("C8A070"), "strap": Color("8A5A3A"),
+		"belt": Color("8A5A3A"), "boots": Color("8A5A3A"), "wood": Color("A87A4A")},
+		"parts": [["head", "ella_flower"]], "scale": 0.94},
+	# 도적 — 그림자 암살자: 검은 옷·보라 망토·은발, 보라 빛줄 검은 복면, 보랏빛 단검
+	"kyle": {"palette": {"tunic": Color("24212C"), "hood": Color("4A2A70"), "arms": Color("2E2B38"), "strap": Color("3A2E4A"),
+		"belt": Color("2A2632"), "boots": Color("1E1C24"), "hair": Color("DCDCE6"), "blade": Color("A888FF")},
+		"parts": [["head", "kyle_mask"]]},
+	# 쌍검사: 청록 옷·흰 망토·검은 머리, 붉은 머리띠와 리본, 단검 대신 휜 장검 두 자루
+	"rian": {"palette": {"tunic": Color("2FAF94"), "hood": Color("F0F0EA"), "arms": Color("1F6E5E"), "strap": Color("E8E8E0"),
+		"belt": Color("1F3E38"), "boots": Color("1F3E38"), "hair": Color("22222A")},
+		"parts": [["head", "rian_band"]], "swap": {"Knife": "rian_saber", "Knife_Offhand": "rian_saber"}},
+	# 떠돌이 도적: 망토 없이 잿빛 갈색 옷, 두건(반다나)과 안대, 작게
+	"jack": {"palette": {"tunic": Color("7A6E5E"), "arms": Color("5A4632"), "strap": Color("4A3A2A"), "belt": Color("3A2E22"),
+		"boots": Color("3A2E22"), "hair": Color("4A3424")},
+		"hide": ["Rogue_Cape"], "parts": [["head", "jack_bandana"]], "scale": 0.92},
+	# 야만전사 — 대지의 광전사: 곰 모자 벗고 뿔 투구, 황토 옷·녹슨 붉은 수염, 가장 크게
+	"grom": {"palette": {"shirt": Color("A07A3A"), "sleeve": Color("8A6630"), "leather": Color("4A3424"), "fur": Color("5A4632"),
+		"beard": Color("A0522D"), "trim": Color("D8C8A0"), "boots": Color("3A2A1E"), "gloves": Color("4A3424"), "steel": Color("8A8F96")},
+		"hide": ["Barbarian_Hat"], "parts": [["head", "grom_horns"]], "scale": 1.1},
+	# 용사냥꾼: 붉은 용가죽 모자·망토, 강철빛 옷·금빛 수염, 왼 어깨 용 해골, 도끼 대신 거대한 대검
+	"harald": {"palette": {"fur": Color("8E2418"), "shirt": Color("4A4E56"), "sleeve": Color("3A3E46"), "leather": Color("2A2220"),
+		"beard": Color("D8B060"), "trim": Color("E8DCC4"), "boots": Color("2A2220"), "gloves": Color("2A2220")},
+		"parts": [["chest", "harald_skull"]], "swap": {"2H_Axe": "harald_sword"}, "scale": 1.05},
+	# 도끼 투척꾼: 모자 벗고 주황 모히칸·주황 수염, 청록 옷, 등에 엇갈린 손도끼
+	"gork": {"palette": {"shirt": Color("2E7A8A"), "sleeve": Color("255F6B"), "leather": Color("B8864A"), "fur": Color("6A4A2E"),
+		"beard": Color("E0702A"), "trim": Color("F0E0C0"), "steel": Color("C0C6CC"), "edge": Color("E06A1A")},
+		"hide": ["Barbarian_Hat"], "parts": [["head", "gork_mohawk"], ["chest", "gork_axes"]]},
+	# 나무꾼 전사: 모자 벗고 겨자색 털모자, 초록 옷·짙은 갈색 수염
+	"dorik": {"palette": {"shirt": Color("3E7A3A"), "sleeve": Color("2C5A2A"), "leather": Color("7A5232"), "fur": Color("7A5232"),
+		"beard": Color("5A3A22"), "trim": Color("E8DCC4"), "steel": Color("A8AEB4"), "wood": Color("A87A4A")},
+		"hide": ["Barbarian_Hat"], "parts": [["head", "dorik_beanie"]], "scale": 0.97},
+}
+
 ## 상인 NPC: 두건 없는 Rogue, 무기·투척물 숨김(Cape는 망토라 유지). attack/death는 UnitModel 계약상 채움(쓰지 않음).
 const MERCHANT_MODEL := {
 	"scene": CHAR_DIR + "Rogue.glb",
@@ -136,12 +244,32 @@ static func soldier_spec(type: String, model: String) -> Dictionary:
 	return spec
 
 ## 영웅 정의(GameData.hero) → UnitModel 스펙: gear만 보이고, 공격 애니메이션은 역할·모델·주무기로 고른다.
+## 영웅마다 생김새(HERO_LOOKS, 개정 23)가 있으면 더한다: palette = 텍스처 칸 → 색(remap), hide += 모자·무기 바꿈, parts = 코드 부품, body_scale.
+## 성·던전·피규어·모집 결과가 모두 이 스펙으로 모델을 만든다(UnitModel.dress) — 생김새가 한 곳에서 붙는다.
 static func hero_spec(h: Dictionary) -> Dictionary:
 	var m: Dictionary = HERO_MODELS[h.model]
 	var gear: PackedStringArray = h.gear.split("|")
 	var anims := HERO_ANIMS.duplicate()
 	anims.attack = _attack_anim(h.model, gear, h.role)
-	return {"scene": m.scene, "hide": m.gear.filter(func(g): return not gear.has(g)), "anims": anims}
+	var spec := {"scene": m.scene, "hide": m.gear.filter(func(g): return not gear.has(g)), "anims": anims}
+	var look: Dictionary = HERO_LOOKS.get(h.get("id", ""), {})
+	if not look.is_empty():
+		spec.hide += look.get("hide", [])
+		spec.look = h.id
+		spec.palette = look_cells(h.model, look.palette)
+		spec.parts = look.get("parts", [])
+		spec.swap = look.get("swap", {})
+		spec.body_scale = look.get("scale", 1.0)
+	return spec
+
+
+## 이름 붙은 팔레트(LOOK_SLOTS 이름 → 색) → 칸 번호 → 색.
+static func look_cells(model: String, palette: Dictionary) -> Dictionary:
+	var out := {}
+	for slot in palette:
+		for cell in LOOK_SLOTS[model][slot]:
+			out[cell] = palette[slot]
+	return out
 
 
 static func _attack_anim(model: String, gear: PackedStringArray, role: String) -> String:
@@ -157,6 +285,8 @@ static func _attack_anim(model: String, gear: PackedStringArray, role: String) -
 
 static var _lowpoly_cache := {}  # 원본 재질 -> 로우폴리 재질 (같은 원본은 하나를 공유)
 static var _tint_cache := {}  # "재질 id:색" -> 색 입힌 재질
+static var _remap_cache := {}  # "재질 id:영웅 id" -> 칸 색 바꾼 재질
+static var _remap_tex := {}  # 영웅 id -> 8×4 칸 색표
 static var _vc_material: ShaderMaterial
 
 
@@ -212,6 +342,34 @@ static func tint(mi: MeshInstance3D, color: Color) -> void:
 				m.emission = color
 			_tint_cache[key] = m
 		mi.set_surface_override_material(i, _tint_cache[key])
+
+
+## 영웅 생김새 칠(개정 23): 텍스처를 쓰는 로우폴리 표면을 같은 재질 + 칸 색 바꿈(remap_tex)으로 바꾼다. 원본 텍스처 복사 없음 —
+## 영웅마다 8×4 색표 하나, (원본 재질, 영웅)마다 재질 하나를 공유한다. palette = 칸 번호(0~31) → 색.
+static func remap(root: Node, key: String, palette: Dictionary) -> void:
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		for i in mi.mesh.get_surface_count():
+			var src := mi.get_active_material(i) as ShaderMaterial
+			if src == null or not src.get_shader_parameter("use_texture"):
+				continue
+			var k := "%d:%s" % [src.get_instance_id(), key]
+			if not _remap_cache.has(k):
+				var m: ShaderMaterial = src.duplicate()
+				m.set_shader_parameter("use_remap", true)
+				m.set_shader_parameter("remap_tex", remap_texture(key, palette))
+				_remap_cache[k] = m
+			mi.set_surface_override_material(i, _remap_cache[k])
+
+
+## 영웅의 8×4 칸 색표(알파 1 = 바꾸는 칸). 키마다 하나.
+static func remap_texture(key: String, palette: Dictionary) -> ImageTexture:
+	if not _remap_tex.has(key):
+		var img := Image.create_empty(8, 4, false, Image.FORMAT_RGBA8)
+		for cell in palette:
+			img.set_pixel(cell % 8, cell / 8, Color(palette[cell], 1.0))
+		_remap_tex[key] = ImageTexture.create_from_image(img)
+	return _remap_tex[key]
 
 
 ## 모델의 모든 표면 재질을 로우폴리 재질로 바꾼다.

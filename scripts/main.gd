@@ -72,6 +72,9 @@ func _ready() -> void:
 	if OS.is_debug_build() and not Net.is_online() and Net.arg_value("arena") != "":
 		add_child(preload("res://scripts/arena_preview.gd").new())  # 개발용 던전 무대 미리보기(--arena=plains|castle, 개정 18)
 		return
+	if OS.is_debug_build() and not Net.is_online() and _flag_requested("lineup"):
+		add_child(preload("res://scripts/hero_lineup.gd").new())  # 개발용 영웅 생김새 줄 세우기(--lineup, 개정 23)
+		return
 	if Net.is_online() and not Net.ready_once:
 		await _wait_for_server()
 	_build_world()
