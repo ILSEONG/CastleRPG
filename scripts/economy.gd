@@ -337,6 +337,28 @@ func sell_all(now: float) -> int:
 	return total
 
 
+## 여러 자원을 한 번에 판다. items = [{res, amount}, ...]. 얻은 골드를 돌려준다(온라인은 요청만 보내고 0).
+func sell_many(items: Array, now: float) -> int:
+	var list := []
+	for it in items:
+		var n := mini(int(it.amount), res[it.res])
+		if n > 0:
+			list.append({"res": it.res, "amount": n})
+	if list.is_empty():
+		return 0
+	if net != null:
+		_sell_many_online(list)
+		return 0
+	var total := 0
+	for it in list:
+		total += sell_value(it.res, it.amount, current_rate(it.res, now))
+		res[it.res] -= it.amount
+	gold_tenths += total * 10
+	changed.emit()
+	save()
+	return total
+
+
 func add_gold_tenths(n: int) -> void:
 	gold_tenths += n
 	_dirty = true
@@ -1092,6 +1114,17 @@ func _sell_online(target: String, amount := -1) -> void:
 	if amount >= 0 and target != "all":
 		body["amount"] = amount
 	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unwait.bind(key))
+
+
+## 여러 자원 판매는 사용자 동작이라 한 번만 보낸다(once: 다시 보내지 않는다).
+func _sell_many_online(list: Array) -> void:
+	if _waiting.has("sell:many"):
+		return
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return
+	_waiting["sell:many"] = true
+	net.send("POST", "/v1/sell", {"items": list}, _on_sold.bind("sell:many"), _unwait.bind("sell:many"), true, true)
 
 
 func _on_sold(data: Dictionary, key: String) -> void:

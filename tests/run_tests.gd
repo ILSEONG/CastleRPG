@@ -65,6 +65,7 @@ func _init() -> void:
 	test_economy_merchant()
 	test_economy_sell()
 	test_economy_sell_amount()
+	test_economy_sell_many()
 	test_economy_save()
 	test_economy_online()
 	test_merchant_spot()
@@ -2402,3 +2403,17 @@ func test_soldier_figures() -> void:
 			if foot.intersects(blk[1]):
 				hits.append([units[i].type, p, blk[0]])
 	check(FormationScript.soldier_grid() == Vector2i(11, 6) and hits.is_empty(), "at 0.9 the 66-soldier formation (horses %.2f m long) still clears every building mesh, the merchant and the cart: %s" % [hb.size.z * s, hits.slice(0, 3)])
+
+
+## 여러 자원 한 번에 판매(오프라인): 자원마다 자기 시세, 보유 초과는 보유로 자름, 0은 무시.
+func test_economy_sell_many() -> void:
+	var now := 3600.0 * 480000.0
+	var e = _econ(now)
+	e.res.wood = 40
+	e.res.stone = 9
+	e.res.food = 13
+	var want: int = EconomyScript.sell_value("wood", 15, e.current_rate("wood", now)) + EconomyScript.sell_value("stone", 9, e.current_rate("stone", now))
+	var g: int = e.sell_many([{"res": "wood", "amount": 15}, {"res": "stone", "amount": 99}, {"res": "food", "amount": 0}], now)
+	check(g == want and e.res.wood == 25 and e.res.stone == 0 and e.res.food == 13 and e.gold_tenths == want * 10, "sell_many sells each at its own rate, clamps to holdings, skips 0")
+	check(e.sell_many([], now) == 0 and e.sell_many([{"res": "stone", "amount": 5}], now) == 0 and e.gold_tenths == want * 10, "sell_many with nothing to sell changes nothing")
+	e.free()

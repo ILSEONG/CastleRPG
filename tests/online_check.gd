@@ -152,16 +152,18 @@ func _phase1(state_path: String) -> void:
 	_panel.open()
 	_check(_panel.rate_labels["wood"].text == "×%.1f" % rate and _panel.rate_labels["food"].text == "×%.1f" % float(Economy.merchant.rates.food), "(e) trade window rows show the server rate of each resource", "wood=%s food=%s" % [_panel.rate_labels["wood"].text, _panel.rate_labels["food"].text])
 	var sell0: int = Net.requested.get("/v1/sell", 0)
-	_panel.sell_buttons["wood"].pressed.emit()  # 수량 칸 펼침 → [최대] → [판매]
+	_panel.sell_buttons["wood"].pressed.emit()  # 수량 칸 펼침 → [최대] → [선택 판매]
 	_panel.qty_max["wood"].pressed.emit()
-	_panel.qty_confirms["wood"].pressed.emit()
-	_panel.qty_confirms["wood"].pressed.emit()  # 응답 전 재탭
+	_panel.sell_selected_button.pressed.emit()
+	_panel.sell_selected_button.pressed.emit()  # 응답 전 재탭
 	await _wait_until(func(): return Economy.res["wood"] == 0, 10.0)
 	_check(Economy.res["wood"] == 0 and Economy.server_gold_tenths == gold0 + gain and Economy.gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
 		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()
 	var wt = _main.get_children().filter(func(c): return c.get_script() == preload("res://scripts/world_tags.gd"))[0]
 	_check(wt.text("merchant") == "상인" and _scenery.merchant_anchor.y > 2.0, "(e) merchant name tag is just the name (rates and countdown live in the trade window)", "label=%s" % wt.text("merchant"))
+
+	await _sell_many_online_check()
 
 	# (f) next_change가 지나면 /v1/player로 시세를 한 번 갱신한다
 	var p0: int = Net.requested.get("/v1/player", 0)
@@ -860,6 +862,28 @@ func _soldiers_online(state_path: String) -> void:
 	var f := FileAccess.open(state_path + ".soldiers", FileAccess.WRITE)
 	f.store_string(JSON.stringify({"soldiers": Economy.soldiers, "deploy": Economy.soldier_deployed}))
 	f.close()
+
+
+## (e2) 선택 판매: 열린 두 칸을 요청 한 번으로 판다(응답 전 재탭은 무시). 서버 시세·골드와 일치.
+func _sell_many_online_check() -> void:
+	await _request("POST", "/v1/test/age", {"minutes": 7})
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/collect", {"building": "quarry"})
+	var w: int = Economy.res["wood"]
+	var s: int = Economy.res["stone"]
+	var gold0: int = Economy.server_gold_tenths
+	var gain := (Economy.sell_value("wood", w, float(Economy.merchant.rates.wood)) + Economy.sell_value("stone", s, float(Economy.merchant.rates.stone))) * 10
+	var sell0: int = Net.requested.get("/v1/sell", 0)
+	_panel.open()
+	for id in ["wood", "stone"]:
+		_panel.sell_buttons[id].pressed.emit()
+		_panel.qty_max[id].pressed.emit()
+	_panel.sell_selected_button.pressed.emit()
+	_panel.sell_selected_button.pressed.emit()  # 재탭(수량은 0이라 보내지 않는다)
+	await _wait_until(func(): return Economy.res["wood"] == 0 and Economy.res["stone"] == 0, 10.0)
+	_check(w > 0 and s > 0 and Economy.server_gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
+		"(e2) [sell selected] online: one items request sells both boxes at the server rates", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
+	_panel.close()
 
 
 ## (p2) 재접속하면 병사 보유·배치가 그대로이고 월드에 그 병사들이 선다.
