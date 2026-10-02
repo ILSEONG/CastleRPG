@@ -260,6 +260,7 @@ func retire() -> void:
 	if GameState.refilled.is_connected(reset):
 		GameState.refilled.disconnect(reset)
 	remove_from_group("heroes")
+	remove_from_group("crowd")
 	formation.release(index)
 	queue_free()
 

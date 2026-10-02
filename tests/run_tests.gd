@@ -3569,8 +3569,12 @@ func test_crowd() -> void:
 	q = _crowd_run(half, [Vector2(1.8, -(half + 1.0)), Vector2(1.4, -(half + 1.0))], [0.45, 0.45], [1.0, 0.0], [0, 0])
 	check(absf(q[0].x) <= Balance.GATE_W / 2.0 + 0.001 and FormationScript.is_inside(half, Vector3(q[0].x, 0, q[0].y)), "a unit in the gate passage stays inside the gate width: %s" % q[0])
 	var wall := -(half + Balance.WALL_T / 2.0)
-	q = _crowd_run(half, [Vector2(4.0, wall), Vector2(4.2, wall + 0.3)], [0.45, 0.45], [1.0, 1.0], [1, 1])
-	check(absf(q[0].y - wall) < 0.001 and absf(q[1].y - (wall + 0.3)) < 0.001 and q[1].x - q[0].x > 0.6, "wall-top units are pushed only along the wall walk: %s" % [q])
+	q = _crowd_run(half, [Vector2(4.0, wall), Vector2(4.1, wall + 0.2)], [0.45, 0.45], [1.0, 0.0], [1, 1])
+	check(absf(q[0].y - wall) <= FormationScript.WALK_HALF + 0.001 and q[0].distance_to(q[1]) > 0.85,
+		"a wall-top unit shoved off the walk stops at its edge (center line +-0.55 m) and slides along: %s" % [q])
+	q = _crowd_run(half, [Vector2(4.0, wall + 0.4), Vector2(4.1, wall + 0.5)], [0.45, 0.45], [0.0, 1.0], [1, 1])
+	check(absf(q[1].y - wall) <= FormationScript.WALK_HALF + 0.001 and absf(q[1].x - 4.0) > 0.5,
+		"pushed toward the inner edge, it moves along the wall instead of falling off: %s" % [q])
 	var lim := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0
 	q = _crowd_run(half, [Vector2(lim - 0.1, wall), Vector2(lim - 0.4, wall)], [0.45, 0.45], [1.0, 0.0], [1, 1])
 	check(q[0].x <= lim + 0.001, "and never past the corner tower (%.2f <= %.2f)" % [q[0].x, lim])

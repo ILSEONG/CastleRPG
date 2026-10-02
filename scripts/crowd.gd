@@ -1,13 +1,13 @@
 extends Node
 ## 유닛이 바닥을 차지한다(서로 겹치지 않음). 영웅·병사·몬스터는 _ready에서 "crowd" 그룹에 들고(죽거나 트리를 떠나면 빠진다)
 ## radius()(몸 반지름 m)와 push_mass()(밀리는 무게)를 낸다. 매 프레임 모든 유닛이 움직인 뒤(process_priority) 이 노드가 한 번:
-## 같은 부모(성 월드·던전 장면) 아래 살아 있는 유닛을 공간 해시(CELL m 칸)에 넣어 이웃 쌍을 모으고, PASSES번 돌며 겹친 만큼
+## 같은 부모(성 월드·던전 장면) 아래 살아 있는 유닛을 공간 해시(CELL m 칸)에 넣어 이웃 쌍을 모으고, 최대 PASSES번 돌며 겹친 만큼
 ## 바닥 평면에서 밀어낸다 — 무게의 역수로 나눈다(자리를 지키거나 싸우는 유닛·덩치 큰 보스는 덜 밀린다).
-## 처리가 꺼진 유닛과 push_mass() = INF(돌진하는 데스나이트)는 밀리지 않는다(남은 민다. 둘 다 그러면 그냥 겹친다).
+## push_mass() = INF(돌진하는 데스나이트)면 밀리지 않고 남만 민다(둘 다 그러면 그냥 겹친다). 처리가 꺼진 유닛(멈춘 장면·테스트)은 빠진다.
 ## 같은 층(지상·성벽 위)끼리만 부딪고, 계단을 오르내리거나 땅에서 솟는 중이면 빠진다.
-## 밀린 자리는 Formation.clamp_push(성 전장 — 성벽·성문을 넘지 않고, 성벽 위는 성벽을 따라서만, 건물 부지·맵 밖 금지)나
+## 밀린 자리는 Formation.clamp_push(성 전장 — 성벽·성문을 넘지 않고, 성벽 위는 성벽 길 안에서만, 건물 부지·맵 밖 금지)나
 ## 아레나 반경(arena_r)으로 되돌린다. 사거리는 그대로 중심 거리 — 근접 사거리는 모두 맞닿는 거리(반지름 합)보다 길다(run_tests).
-# ponytail: GDScript 해시(Dictionary) + 가우스-자이델 PASSES번. 유닛 200에 헤드리스 수 ms 안(run_tests가 시간을 찍는다).
+# ponytail: GDScript 해시(Dictionary) + 가우스-자이델 최대 PASSES번. 유닛 200에 헤드리스 수 ms 안(run_tests가 시간을 찍는다).
 # 400을 넘거나 모바일에서 프레임을 먹으면 칸 버킷을 고정 배열로 바꾸거나 GDExtension으로.
 
 const Balance := preload("res://scripts/balance.gd")
@@ -19,7 +19,8 @@ const MONSTER_R := {"grunt": 0.4, "goblin": 0.35, "epic_boss": 0.5, "goblin_king
 const BRACED := 4.0  # 걷는 중이 아니면(자리를 지킴·공격) 무게 ×
 const CELL := 2.5  # 해시 칸(m) ≥ 가장 큰 반지름 합 + SLACK
 const SLACK := 0.3  # 이웃 쌍: 반지름 합 + 이만큼 안(해소 중 밀려 가까워지는 쌍까지)
-const PASSES := 3
+const PASSES := 5  # 최대 — 겹침이 DONE 밑으로 풀리면 일찍 멈춘다(드문드문하면 1~2번)
+const DONE := 0.01  # m
 const PASS_R := 0.5  # 경로 중간 점·순찰 점은 이만큼 안이면 지나간 것(arrive_r)
 const LEVEL_EPS := 0.3
 const NEIGHBORS := [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(-1, 1, 0), Vector3i(0, 1, 0), Vector3i(1, 1, 0)]  # 자기 칸 + 반쪽 이웃(쌍을 한 번씩)
@@ -70,7 +71,7 @@ func _process(_delta: float) -> void:
 	var mv := PackedVector2Array()
 	var parent := get_parent()
 	for u in get_tree().get_nodes_in_group("crowd"):
-		if u.get_parent() != parent or not u.is_alive():
+		if u.get_parent() != parent or not u.is_alive() or not u.is_processing():
 			continue
 		var g: Vector3 = u.global_position
 		var l := level(g.y)
@@ -80,7 +81,7 @@ func _process(_delta: float) -> void:
 		units.append(u)
 		p.append(g2)
 		r.append(u.radius())
-		w.append(1.0 / u.push_mass() if u.is_processing() else 0.0)  # 1 / INF = 0
+		w.append(1.0 / u.push_mass())  # 1 / INF = 0
 		lv.append(l)
 		mv.append(g2 - _prev.get(u, g2))
 	var q := separate(p, r, w, lv, mv)
@@ -122,6 +123,7 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 	_lv = lv
 	var q := p.duplicate()
 	for pass_i in PASSES:
+		var worst := 0.0
 		for t in range(0, pairs.size(), 2):
 			var i := pairs[t]
 			var j := pairs[t + 1]
@@ -131,13 +133,20 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 			if dd >= need * need:
 				continue
 			var dist := sqrt(dd)
+			worst = maxf(worst, need - dist)
 			var n := d / dist if dist > 1e-4 else Vector2.from_angle(i * 2.4)  # 같은 자리: 유닛마다 다른 고정 방향(재현)
 			var o := (need - dist) / (w[i] + w[j])
-			q[i] += (n + _slide(n, mv[i])) * o * w[i]
-			q[j] += (_slide(-n, mv[j]) - n) * o * w[j]
+			if pass_i == 0:  # 미끄러짐은 첫 번에만 — 나머지는 겹침만 푼다(옆으로 민 자리가 남과 겹친 채 끝나지 않게)
+				q[i] += (n + _slide(n, mv[i])) * o * w[i]
+				q[j] += (_slide(-n, mv[j]) - n) * o * w[j]
+			else:
+				q[i] += n * o * w[i]
+				q[j] -= n * o * w[j]
 		for i in q.size():
 			if q[i] != p[i]:
 				q[i] = _keep(i, q[i])
+		if worst < DONE:
+			break
 	return q
 
 

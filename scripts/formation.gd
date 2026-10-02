@@ -9,6 +9,7 @@ const POST_GATE := 0
 const POST_WALL := 1
 const POST_FREE := 2          # 자유 위치 (슬롯 없음)
 const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점·계단 앞 지점이 성벽 바깥면·계단 띠에서 떨어진 거리
+const WALK_HALF := 0.55  # 성벽 길: 중심선에서 이만큼 안(성벽 두께 2 m − 몸) — 밀려도 여기를 벗어나지 않는다(clamp_push)
 const REGION_OUTSIDE := 0
 const REGION_INSIDE := 1
 const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
@@ -256,14 +257,20 @@ static func crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
 
 
 ## 겹침 해소(crowd.gd)의 밀림 from → to를 from의 자리 안으로 되돌린다 — 밀림은 성벽·성문을 넘기지 않는다(드나드는 건 제 걸음으로만).
-## 성벽 위: 그 면 성벽을 따라서만(모서리 탑 앞까지, 깊이·높이 그대로). 성 밖: 바깥면 밖·맵 안(성문이 닫혔든 부서졌든 밀려 들어가지 않는다).
+## 성벽 위: 그 면 성벽 길 안에서만(중심선 ± WALK_HALF — 둘이 나란히 비켜 지나갈 폭, 모서리 탑 앞까지, 높이 그대로. 계단 윗단처럼 길 밖이면 깊이도 그대로).
+## 성 밖: 바깥면 밖·맵 안(성문이 닫혔든 부서졌든 밀려 들어가지 않는다).
 ## 성문 통로(성벽 띠): 성문 폭 안, 바깥면 안쪽. 성 안: 안쪽 면 안, 건물 부지 밖(밖에서 밀려 들어가는 축만 부지 가장자리에 붙인다).
 static func clamp_push(half: float, from: Vector3, to: Vector3) -> Vector3:
 	var outer := half + Balance.WALL_T
 	if region(half, from) == REGION_WALL:
-		var t := perp(side_of(from))
+		var s := side_of(from)
+		var t := perp(s)
 		var lim := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0
-		return from + t * (clampf(t.dot(to), -lim, lim) - t.dot(from))
+		var mid := half + Balance.WALL_T / 2.0
+		var depth := SIDE_DIR[s].dot(from)
+		if absf(depth - mid) <= WALK_HALF:
+			depth = clampf(SIDE_DIR[s].dot(to), mid - WALK_HALF, mid + WALK_HALF)
+		return SIDE_DIR[s] * depth + t * clampf(t.dot(to), -lim, lim) + Vector3(0, from.y, 0)
 	if not is_inside(half, from):
 		var out := Vector3(clampf(to.x, -Balance.MAP_HALF, Balance.MAP_HALF), to.y, clampf(to.z, -Balance.MAP_HALF, Balance.MAP_HALF))
 		if maxf(absf(out.x), absf(out.z)) < outer:
