@@ -326,7 +326,28 @@ func _run() -> void:
 	await _tap(bg)  # 더블 탭의 두 번째 누름
 	_check(panel.is_open(), "(r) a backdrop press right after opening (double tap) does not close the window", "open=%s" % panel.is_open())
 	panel.close()
+	await _offline_report()
 	await _recruit_and_heroes(rig)
+
+
+## 방치 보상 개요 창: 시험 시작(Economy.reset)은 정산할 것이 없어 창이 닫혀 있다. 정산(3시간 12분, 5,400마리, 27,000골드)이 오면
+## 열려 시간·처치·골드·안내(50%, 최대 12시간)를 보이고, [확인] 탭으로 닫힌다.
+func _offline_report() -> void:
+	var w = null
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/offline_panel.gd"):
+			w = c
+	_check(w != null and not w.is_open() and Economy.offline_report.is_empty(), "(off) the offline summary exists and stays closed when there is nothing to claim",
+		"panel=%s report=%s" % [w, Economy.offline_report])
+	Economy._report_offline(3.0 * 3600.0 + 12.0 * 60.0 + 5.0, 5400, 270000)
+	await _frames(2)
+	_check(w.is_open() and w.away_label.text == "방치 시간  3시간 12분" and w.kills_label.text == "처치한 적  5,400마리" and w.gold_label.text == "+27,000 골드"
+		and w.note_label.text == "앱을 끈 동안 처치 골드는 50%만 쌓입니다 (최대 12시간)" and Economy.offline_report.is_empty(),
+		"(off) a claim opens the summary: away time, kills, gold, the 50% / 12 h note",
+		"away=%s kills=%s gold=%s note=%s" % [w.away_label.text, w.kills_label.text, w.gold_label.text, w.note_label.text])
+	await _guard_wait()
+	await _tap(_center(w.ok_button))
+	_check(not w.is_open(), "(off) [확인] closes the summary", "open=%s" % w.is_open())
 
 
 ## 개정 10: 주점 탭 → 모집 창 → 1회 모집(오프라인), 창이 열린 동안 뒤 입력 차단.
@@ -1635,7 +1656,7 @@ func _rotate_ui(hud) -> void:
 func _fever_ui(hud) -> void:
 	var fb = hud._fever
 	Fever.reset()
-	Fever.gauge = 73
+	Fever.gauge = 1080
 	await _frames(2)
 	var fr: Rect2 = fb.get_global_rect()
 	var br: Rect2 = hud._button.get_global_rect()
@@ -1643,7 +1664,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == 73 and hud._toast.visible and hud._toast.text == "몬스터 127마리 더",
+	_check(not Fever.active() and Fever.gauge == 1080 and hud._toast.visible and hud._toast.text == "몬스터 1920마리 더",
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)

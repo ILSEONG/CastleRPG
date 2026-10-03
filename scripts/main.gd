@@ -41,6 +41,7 @@ const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
 const ResearchPanelScript := preload("res://scripts/research_panel.gd")
+const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -166,6 +167,7 @@ func _build_world() -> void:
 	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit}
 	add_child(tabs)
 	add_child(bag)
+	add_child(OfflinePanelScript.new())  # 방치 보상 개요(앱을 껐다 켜면 — Economy.offline_reported)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원(영웅 id로, 다시 만든 영웅도) + 배치·승급·레벨·장비 반영
 	GameState.refilled.connect(_reset_soldiers)
@@ -187,6 +189,8 @@ func _build_world() -> void:
 		GameState.start_stage()
 	if rebuilds == 0 and OS.is_debug_build() and not Net.is_online() and Net.arg_value("dungeon") in GameData.DUNGEON_TYPES:
 		_dev_dungeon(Net.arg_value("dungeon"))
+	elif rebuilds == 0 and not _auto_stage_requested():
+		Economy.claim_offline(GameState.stage)  # 앱을 켰다: 끈 동안의 방치 처치 골드(× offline_gold_mult) 정산 → 개요 창
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.

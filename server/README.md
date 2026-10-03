@@ -102,6 +102,7 @@ npm --prefix server test
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
 | `POST /v1/kills {seq, stage, kills}` | Bearer | 플레이어 응답 + `gold_gained` |
 | `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 + `cleared` |
+| `POST /v1/offline {}` | Bearer | 플레이어 응답 + `offline {away_sec, kills, gold_gained_tenths}` — 지난 활동(상태를 바꾼 마지막 요청) 이후를 방치 처치로 쳐서 골드 × `offline_gold_mult`(상한 `accum_cap_min`분, 60초 미만 0). 앱을 켤 때·백그라운드에서 돌아올 때 |
 | `POST /v1/building/upgrade {building}` | Bearer | 플레이어 응답 + `build: {id, finish}`. 모르는 건물은 400 `unknown_building`, 아니면 409 `max_level` / `keep_cap` / `prereq` / `builder_busy` / `not_enough`(이 순서로 검사) |
 | `POST /v1/test/build_now` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. 진행 중 건설의 끝나는 시각을 지금으로(같은 응답이 완료를 반영) |
 | `POST /v1/gacha {count}` | Bearer | 플레이어 응답 + `results: [{hero_id, grade, new, copies, shards}]`. count는 1 또는 10. 골드가 모자라면 409 `not_enough_gold` |

@@ -122,6 +122,7 @@ func _init() -> void:
 	test_scene_snap()
 	test_crowd()
 	test_research_r24()
+	test_offline_gold()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -2379,21 +2380,21 @@ func test_economy_sell_amount() -> void:
 	check(e.sell("wood", now) == EconomyScript.sell_value("wood", 9, rate) and e.res.wood == 0, "sell without amount still sells all")
 
 
-## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 200에서 가득, FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
+## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 3000에서 가득, FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
 func test_fever() -> void:
 	GameData.load_tables()
 	var f = preload("res://scripts/fever.gd").new()
 	f.save_path = ""
-	check(f.kills_needed() == 200 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
+	check(f.kills_needed() == 3000 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
 	for i in 50:
 		f.add_kill(false)  # 스테이지 모드 처치는 세지 않는다
 	check(f.gauge == 0, "stage-mode kills do not charge the gauge")
-	for i in 199:
+	for i in 2999:
 		f.add_kill(true)
-	check(f.gauge == 199 and not f.full() and not f.start() and f.mult() == 1.0, "199 idle kills: not full, cannot start, spawn mult 1")
+	check(f.gauge == 2999 and not f.full() and not f.start() and f.mult() == 1.0, "2999 idle kills: not full, cannot start, spawn mult 1")
 	f.add_kill(true)
 	f.add_kill(true)
-	check(f.gauge == 200 and f.full() and f.ratio() == 1.0, "200 idle kills fill the gauge (and stay at 200)")
+	check(f.gauge == 3000 and f.full() and f.ratio() == 1.0, "3000 idle kills fill the gauge (and stay at 3000)")
 	check(f.start() and f.active() and f.gauge == 0 and f.left == 180.0 and f.mult() == 3.0, "start: 180 s, gauge back to 0, spawn mult 3")
 	f.add_kill(true)
 	check(f.gauge == 0 and not f.start(), "the gauge does not charge during FEVER")
@@ -4171,3 +4172,37 @@ func test_research_r24() -> void:
 		check(shapes.size() >= 4, "research icon %s has shapes" % kind)
 		for s in shapes:
 			check(Array(s[0]).size() >= 3 and Array(s[0]).all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "research icon %s polygon inside the unit box: %s" % [kind, s[0]])
+
+
+## 오프라인 처치 골드: 방치 스폰(idle_interval초마다 네 면 × spawn_group)을 다 잡았다고 보고 처치 골드 × offline_gold_mult(0.5),
+## 상한 accum_cap_min분, 60초 미만 없음(서버 rules.offlineReward와 같은 값). 저장의 last_active부터 정산, 두 번 받지 않음, 개요 시그널.
+func test_offline_gold() -> void:
+	GameData.load_tables()
+	var per := GameData.kill_gold_tenths("grunt", 1)
+	check(per == 100 and GameData.config_num("offline_gold_mult") == 0.5 and GameData.config_num("fever_kills") == 3000.0, "grunt 100 tenths at stage 1, mult 0.5, fever 3000")
+	check(EconomyScript.offline_reward(3600.0, 1, per) == {"sec": 3600.0, "kills": 5400, "tenths": 270000}, "1 h: 5400 kills, 27,000 gold (half)")
+	check(EconomyScript.offline_reward(59.9, 1, per).tenths == 0 and EconomyScript.offline_reward(60.0, 1, per) == {"sec": 60.0, "kills": 90, "tenths": 4500}, "under 60 s nothing")
+	check(EconomyScript.offline_reward(360000.0, 1, per) == {"sec": 43200.0, "kills": 64800, "tenths": 3240000}, "capped at 12 h")
+	var tmp := OS.get_temp_dir().path_join("castle_offline_%d.json" % OS.get_process_id())
+	var e = _econ(1.8e9)
+	e.save_path = tmp
+	e.save()
+	var e2 = _econ(1.8e9)
+	e2.save_path = tmp
+	e2.load_save(1.8e9)
+	var from: float = e2._away_from
+	var got := []
+	e2.offline_reported.connect(func(r): got.append(r))
+	e2.claim_offline(1, from + 3600.0)
+	check(from > 0.0 and e2.gold_tenths == 270000 and got == [{"away_sec": 3600.0, "kills": 5400, "gold_tenths": 270000}] and e2.offline_report == got[0],
+		"load → claim after 1 h: +27,000 gold and one report (from=%s gold=%d got=%s)" % [from, e2.gold_tenths, got])
+	e2.claim_offline(1, from + 7200.0)
+	check(e2.gold_tenths == 270000 and got.size() == 1, "a second claim without leaving again gives nothing")
+	e2._away_from = from + 7200.0  # 백그라운드로 갔다(PAUSED)
+	e2.claim_offline(1, from + 7230.0)
+	check(e2.gold_tenths == 270000 and got.size() == 1, "back after 30 s: no gold, no report")
+	var e3 = _econ(1.8e9)
+	e3.claim_offline(1, 1.8e9)
+	check(e3.gold_tenths == 0 and e3.offline_report.is_empty(), "a new game (no save) has nothing to claim")
+	DirAccess.remove_absolute(tmp)
+

@@ -42,6 +42,8 @@ const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 # 12: research {levels: {노드: 레벨}, current: {id, finish} 또는 null}(개정 24). 11 이하는 연구 없음
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
+const OFFLINE_MIN_SEC := 60.0  # 오프라인 처치 골드: 이보다 짧게 떠났으면 없음(서버 rules.OFFLINE_MIN_SEC)
+const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
 const NO_DIA_TEXT := "다이아가 부족합니다"
@@ -119,7 +121,10 @@ signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, le
 signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
 signal research_changed  # 개정 24: 연구 레벨·진행 중 연구·응답 대기가 바뀌었다(전투 능력치는 곧바로 다시 읽는다 — hero·soldier refresh_stats)
 signal research_done(id: String, level: int)  # 연구 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
+signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
+var offline_report := {}  # 마지막 오프라인 정산 {away_sec, kills, gold_tenths}(개요 창이 보여 주고 비운다). 없으면 {}
+var _away_from := 0.0  # 오프라인 모드: 떠난 시각(불러온 저장의 "last_active" = 마지막 저장 시각, 백그라운드로 갈 때 그 시각). 0 = 기록 없음
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
 var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
 	get:
@@ -298,6 +303,8 @@ func _process(delta: float) -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_away_from = time_now()  # 백그라운드로 간다(모바일) — 돌아오면(GameState가 RESUMED에서 claim_offline) 여기부터 센다
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED \
 			or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		save()
@@ -305,6 +312,8 @@ func _notification(what: int) -> void:
 
 func reset(now: float) -> void:
 	gold_tenths = 0
+	offline_report = {}
+	_away_from = 0.0
 	res = {}
 	last_collect = {}
 	levels = {}
@@ -380,6 +389,52 @@ func show_badge(building_id: String, now: float) -> bool:
 ## 서버 보정 시각(오프라인은 로컬 시각 그대로).
 func time_now() -> float:
 	return Time.get_unix_time_from_system() + clock_offset
+
+
+# --- 오프라인 처치 골드: 앱을 끈(백그라운드) 동안도 방치 처치가 이어진 것으로 치고 골드는 × offline_gold_mult ---
+
+## 떠나 있던 away초의 방치 처치 보상(서버 rules.offlineReward와 같은 식). 방치 스폰(idle_interval초마다 네 면에 spawn_group마리)을
+## 모두 잡았다고 본다. 초 = min(away, accum_cap_min분), OFFLINE_MIN_SEC 미만이면 0. per_kill = 처치 1회 tenths(연구 반영).
+## 반환 {sec, kills, tenths}.
+static func offline_reward(away: float, stage_n: int, per_kill: int) -> Dictionary:
+	var sec := clampf(away, 0.0, GameData.config_num("accum_cap_min") * 60.0)
+	var interval := float(GameData.stage(stage_n).get("idle_interval", 0.0))
+	if sec < OFFLINE_MIN_SEC or interval <= 0.0:
+		return {"sec": sec, "kills": 0, "tenths": 0}
+	var kills := floori(sec * 4.0 * maxi(1, roundi(GameData.config_num("spawn_group"))) / interval)
+	return {"sec": sec, "kills": kills, "tenths": floori(kills * per_kill * maxf(0.0, GameData.config_num("offline_gold_mult")))}
+
+
+## 오프라인 정산(앱을 켤 때·백그라운드에서 돌아올 때 한 번). 온라인은 POST /v1/offline(서버가 지난 활동 시각으로 센다 — stage는 서버 값),
+## 오프라인은 떠난 시각(_away_from: 저장의 last_active, 백그라운드로 간 시각)부터로 곧바로 더하고 저장한다. 떠난 시간이 OFFLINE_MIN_SEC 이상이면
+## offline_report를 채우고 offline_reported(main이 개요 창을 띄운다).
+func claim_offline(stage_n: int, now := -1.0) -> void:
+	if net != null:
+		net.send("POST", "/v1/offline", {}, _on_offline)
+		return
+	if now < 0.0:
+		now = time_now()
+	var away := now - _away_from if _away_from > 0.0 else 0.0
+	_away_from = 0.0
+	var r := offline_reward(away, stage_n, kill_tenths(OFFLINE_KIND, stage_n))
+	if r.tenths > 0:
+		add_gold_tenths(r.tenths)
+	_report_offline(away, r.kills, r.tenths)
+	save()
+
+
+func _on_offline(data: Dictionary) -> void:
+	apply_server(data)
+	var o = data.get("offline")
+	if o is Dictionary and _num(o.get("away_sec")) and _num(o.get("kills")) and _num(o.get("gold_gained_tenths")):
+		_report_offline(float(o.away_sec), int(o.kills), int(o.gold_gained_tenths))
+
+
+func _report_offline(away: float, kills: int, tenths: int) -> void:
+	if away < OFFLINE_MIN_SEC:
+		return
+	offline_report = {"away_sec": away, "kills": kills, "gold_tenths": tenths}
+	offline_reported.emit(offline_report)
 
 
 ## 쌓인 양을 보유량에 더하고 마지막 수집 시각을 옮긴다(§2). 수집량을 돌려준다. 온라인은 요청만 보내고 0(결과는 collected).
@@ -2505,7 +2560,8 @@ func save() -> void:
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
 		"diamonds": diamonds, "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
-		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current}}))
+		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
+		"last_active": time_now()}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -2521,6 +2577,8 @@ func load_save(now: float) -> void:
 	if json.parse(FileAccess.get_file_as_string(save_path)) != OK or not _apply(json.data):
 		push_warning("economy save is corrupt; starting from defaults")
 		return
+	var la = json.data.get("last_active")  # 오프라인 처치 골드 기준(없으면 0 — 첫 정산은 없음)
+	_away_from = float(la) if _num(la) else 0.0
 	changed.emit()
 	roster_changed.emit()
 	soldiers_changed.emit()

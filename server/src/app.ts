@@ -82,6 +82,7 @@ interface Player {
   version: number
   last_kill_report: number
   last_stage_clear: number
+  last_active: number | null // 마지막으로 상태를 바꾼 요청의 서버 시각(commit이 쓴다). null = 아직 없음 — 오프라인 처치 골드 기준
   kill_seq: number
   res: Record<string, number>
   buildings: Record<string, { level: number; last_collect: number; train: Train | null }> // train: 병사 건물 훈련 대기열(개정 16), 비면 null
@@ -162,6 +163,7 @@ const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gach
   extract(epoch from s.build_finish)::float8 as build_finish,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
+  extract(epoch from s.last_active)::float8 as last_active,
   coalesce((select json_object_agg(res, amount) from player_resources where player_id = s.player_id), '{}'::json) as res,
   coalesce((select json_object_agg(building, json_build_object('level', level, 'last_collect', extract(epoch from last_collect)::float8,
       'train_count', train_count, 'train_tier', train_tier, 'train_finish', extract(epoch from train_finish)::float8))
@@ -331,6 +333,7 @@ export function createApp(opts: AppOptions) {
       const p: Player = {
         gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
+        last_active: r.last_active == null ? null : Number(r.last_active),
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
         soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)), upgrades: counts(json(r.upgrades)),
@@ -438,7 +441,7 @@ export function createApp(opts: AppOptions) {
       params.push(v)
       return `$${params.length}`
     }
-    const sets = ['version = version + 1']
+    const sets = ['version = version + 1', `last_active = to_timestamp(${p(now)}::float8)`] // 상태를 바꾸는 요청은 모두 활동(오프라인 골드 기준)
     if (ch.goldTenths) sets.push(`gold_tenths = gold_tenths + ${p(bigint(ch.goldTenths))}::bigint`)
     if (ch.stage !== undefined) sets.push(`stage = ${p(ch.stage)}::int`)
     if (ch.lastKillReport !== undefined) sets.push(`last_kill_report = to_timestamp(${p(ch.lastKillReport)}::float8)`)
@@ -806,6 +809,23 @@ export function createApp(opts: AppOptions) {
       const keptTotal = priced.reduce((s, k) => s + kept[k.id], 0)
       const log = total > 0 ? { kind: 'kills', detail: { seq, stage, asked_stage: askedStage, kills, kept, cap: bucket.cap, clamped, gold_tenths: tenths } } : undefined
       return { change: { goldTenths: tenths, lastKillReport: bucket.after(keptTotal), killSeq: seq, log }, extra: { gold_gained_tenths: tenths } }
+    })
+  })
+
+  // 오프라인 처치 골드(앱을 켤 때·다시 돌아올 때 한 번): 지난 활동(last_active)부터 지금까지를 방치 처치로 쳐서(rules.offlineReward,
+  // 현재 스테이지·연구 kill_gold_pct 반영) 골드 × offline_gold_mult를 준다. 활동 시각은 commit이 지금으로 옮긴다 — 다시 보내도 두 번 받지 않는다.
+  // 응답 offline = {away_sec, kills, gold_gained_tenths}(away_sec는 상한 전 실제 초, 기록이 없으면 0).
+  app.post('/v1/offline', auth, async (c) => {
+    return mutate(c, (p, g, now) => {
+      const away = p.last_active == null ? 0 : Math.max(0, now - p.last_active)
+      const grunt = g.monsters.find((m) => m.id === R.OFFLINE_KIND)
+      const row = R.stageRow(p.stage, g.stages)
+      const per = grunt ? Math.floor(R.killGoldTenths(Number(grunt.gold), row) * (100 + bonus(p, g).kill_gold_pct) / 100) : 0
+      const r = R.offlineReward(away, R.cfgNum(g.config, 'accum_cap_min'), Number(row.idle_interval), R.cfgNum(g.config, 'spawn_group'), per,
+        R.cfgNum(g.config, 'offline_gold_mult'))
+      const offline = { away_sec: away, kills: r.kills, gold_gained_tenths: r.tenths }
+      const log = r.tenths > 0 ? { kind: 'offline', detail: { stage: p.stage, away_sec: away, sec: r.sec, kills: r.kills, gold_tenths: r.tenths } } : undefined
+      return { change: { goldTenths: r.tenths, log }, extra: { offline } }
     })
   })
 

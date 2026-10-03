@@ -36,6 +36,13 @@ func _process(delta: float) -> void:
 	advance(delta)
 
 
+## 백그라운드에서 돌아왔다(모바일): 떠나 있던 동안의 방치 처치 골드를 정산한다(Economy.claim_offline — 개요 창은 main이 띄운다).
+## roster가 없으면(로직 테스트) 아무것도 안 한다. 앱을 새로 켤 때는 main이 첫 월드를 만들며 부른다.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED and roster != null:
+		roster.claim_offline(stage)
+
+
 ## 영웅 슬롯 수 = 성채 단계(개정 12).
 func hero_count() -> int:
 	return GameData.hero_slots(building_level(GameData.KEEP))
