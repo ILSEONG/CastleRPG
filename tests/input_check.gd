@@ -1473,6 +1473,16 @@ func _research_ui(tabs, hud) -> void:
 	await _frames(2)
 	_check(rw.is_open() and not bwin.is_open(), "(RS) with the bubble up, tapping the lab opens the research window directly", "research=%s building=%s" % [rw.is_open(), bwin.is_open()])
 	rw.close()
+	await _frames(1)
+	# 말풍선 자체(이름표 덩어리 맨 위)를 눌러도 연구 창 — 레이로는 뒤 건물이 잡히던 문제
+	var wtags = _child(preload("res://scripts/world_tags.gd"))
+	wtags.layout(true)
+	var stack: Rect2 = wtags.stacks.get("lab", Rect2())
+	await _tap(Vector2(stack.get_center().x, stack.position.y + 18.0))
+	await _frames(2)
+	_check(stack.size.y > 0.0 and rw.is_open() and not bwin.is_open(), "(RS) tapping the flask bubble itself opens the research window", "stack=%s research=%s building=%s" % [stack, rw.is_open(), bwin.is_open()])
+	rw.close()
+	bwin.close()
 	Economy.start_research("hero_weapon")
 	_check(not badges.research_bubble(), "(RS) no bubble while a research runs", "")
 	Economy.research_levels = {}

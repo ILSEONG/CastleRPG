@@ -30,6 +30,7 @@ const GROUND_MARGIN := 4.0   # 바닥 명령 지점을 맵 가장자리에서 �
 const MARKER_SEC := 0.5
 const LONG_PRESS_MS := 500
 const MAX_TAP_HITS := 4  # 한 탭 레이가 꿰어 보는 건물 판정체 수(_building_hit)
+const TAG_TAP_PAD := 6.0  # 말풍선 탭 여유(논리 px)
 
 var camera: Camera3D
 var selected
@@ -147,12 +148,28 @@ func _building_hit(screen_pos: Vector2) -> String:
 	return best
 
 
-## 상인(레이어 32) → 건물(레이어 16) → 성문(레이어 2, 선택된 영웅이 없을 때만 여기 온다) 탭. 처리했으면 true.
+## 화면 공간 말풍선(자원·훈련 완료·연구 플라스크 — 이름표 덩어리 맨 위 BUBBLE_BLOCK)을 누른 건물 id. 말풍선은 건물에서 떠 있어
+## 레이로는 뒤 건물이 잡힌다 — 그 건물로 본다. 이름표 자체는 보지 않는다(다른 건물·바닥 탭을 가리지 않게). 없으면 "".
+func _bubble_hit(screen_pos: Vector2) -> String:
+	var tags = badges.tags if badges != null else null
+	if tags == null:
+		return ""
+	tags.layout()
+	for id in badges.bubble_ids(Economy.time_now()):
+		var s: Rect2 = tags.stacks.get(id, Rect2())
+		if s.size.y > 0.0 and Rect2(s.position, Vector2(s.size.x, badges.BUBBLE_BLOCK)).grow(TAG_TAP_PAD).has_point(screen_pos):
+			return id
+	return ""
+
+
+## 말풍선(화면 공간) → 상인(레이어 32) → 건물(레이어 16) → 성문(레이어 2, 선택된 영웅이 없을 때만 여기 온다) 탭. 처리했으면 true.
 func _tap_object(screen_pos: Vector2) -> bool:
-	if not _pick(screen_pos, LAYER_MERCHANT).is_empty():
+	var id := _bubble_hit(screen_pos)
+	if id == "" and not _pick(screen_pos, LAYER_MERCHANT).is_empty():
 		panel.open()
 		return true
-	var id := _building_hit(screen_pos)
+	if id == "":
+		id = _building_hit(screen_pos)
 	if id == "tavern" and recruit != null:
 		recruit.open()
 		return true

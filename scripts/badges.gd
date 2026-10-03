@@ -79,6 +79,14 @@ func research_bubble() -> bool:
 	return Economy.research_available()
 
 
+## 지금 말풍선이 뜬 건물 id들(자원·훈련 완료·연구 플라스크) — 말풍선 탭 판정(unit_picker)용. stack_size의 말풍선 조건과 같다.
+func bubble_ids(now: float) -> Array:
+	var out: Array = badge_ids(now) + training_ids().ready
+	if research_bubble():
+		out.append(GameData.LAB)
+	return out
+
+
 func pop(world_pos: Vector3, kind: String, amount: int) -> void:
 	last_pop = {"pos": world_pos, "kind": kind, "amount": amount}
 	_pops.append({"pos": world_pos, "kind": kind, "amount": amount, "age": 0.0})
