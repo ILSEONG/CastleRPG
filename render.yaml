@@ -1,0 +1,36 @@
+# Render Blueprint: API 서버 하나(server/, Node 24, `node src/main.ts`). Render 대시보드 New → Blueprint → 이 레포를 고르면 이 파일대로 만든다.
+# sync: false 인 값은 만들 때 Render 화면에서 넣는다(레포에 비밀을 두지 않는다). 운영 모드(DATABASE_URL 있음)는 시작할 때 마이그레이션·시드를
+# 하지 않는다 — 배포 전에 로컬에서 `npm --prefix server run neon:migrate` / `neon:seed`(server/README.md "Neon 배포").
+services:
+  - type: web
+    name: castlerpg-api            # 주소가 https://castlerpg-api.onrender.com 이 된다(이미 쓰는 이름이면 Render가 뒤에 글자를 붙인다)
+    runtime: node
+    region: singapore              # Neon 프로젝트(ap-southeast-1)와 같은 지역
+    plan: free                     # 15분 쉬면 잠들고 첫 요청에 ~1분 걸린다. 늘 깨어 있으려면 starter
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: node src/main.ts
+    healthCheckPath: /v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DATABASE_URL          # Neon 접속 문자열(?sslmode=require)
+        sync: false
+      - key: JWT_SECRET            # 32자 이상 무작위: node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+        sync: false
+      - key: PUBLIC_URL            # 이 서비스의 주소 그대로(https://castlerpg-api.onrender.com, 끝에 / 없이). provider 콘솔의 리다이렉트 URI 앞부분
+        sync: false
+      - key: OAUTH_GOOGLE_ID
+        sync: false
+      - key: OAUTH_GOOGLE_SECRET
+        sync: false
+      - key: OAUTH_KAKAO_ID
+        sync: false
+      - key: OAUTH_KAKAO_SECRET
+        sync: false
+      - key: OAUTH_NAVER_ID
+        sync: false
+      - key: OAUTH_NAVER_SECRET
+        sync: false
+      # CORS_ORIGINS: 웹 빌드를 올리면 그 출처로 정한다(비우면 *). APK만 쓰는 동안은 없어도 된다.
+      # ALLOW_TEST_HOOKS 는 두지 않는다 — 운영에서 1이면 서버가 시작을 거부한다.

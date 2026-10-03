@@ -263,6 +263,7 @@ provider 콘솔(사용자 몫): 셋 다 "웹" 타입으로 등록하고 리다�
    - CSV에 오류가 있으면 파일·줄·열을 출력하고, 아무것도 쓰지 않는다.
    - 운영 중 수치 조정은 Neon 콘솔 SQL 편집기에서 한다. DB가 진실이다. 다시 시드하면 CSV 값으로 덮어써진다.
 4. 호스팅(Fly.io, Render, Railway, VPS 등 Node 24를 돌리는 곳)에 `server/`를 올린다.
+   - Render: 레포 루트의 `render.yaml`(Blueprint)이 서비스 하나를 정의한다 — New → Blueprint → 이 레포 → `sync: false` 값(DATABASE_URL, JWT_SECRET, PUBLIC_URL, OAUTH_*)만 넣는다. Root Directory `server`, `npm ci`, `node src/main.ts`, 헬스 체크 `/v1/health`, Node 24, 싱가포르.
    - 환경 변수 `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`(웹 빌드 출처), `PORT`를 설정한다.
    - 실행 명령은 `node src/main.ts`다(작업 디렉터리 `server/`). 운영 모드는 시작할 때 마이그레이션·시드를 하지 않는다. 3단계로 먼저 적용한다.
    - Vercel·Cloudflare Workers처럼 Node 서버가 아닌 곳은 `src/app.ts`의 `createApp`을 그 플랫폼 진입점에 연결해야 한다. 지금 코드는 `node:fs`·`node:crypto`를 쓰므로 그 플랫폼의 Node 호환 모드가 필요하다(확인하지 않음).
