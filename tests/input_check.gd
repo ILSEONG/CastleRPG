@@ -1986,10 +1986,11 @@ func _world_tags() -> void:
 	rig.zoom_by(30.0 / _camera.size)
 	await _frames(2)
 	_tags_ok(wt, "zoomed in (30 m)")
-	rig.zoom_by(130.0 / _camera.size)
+	rig.zoom_by(90.0 / _camera.size)
 	await _frames(2)
-	_tags_ok(wt, "zoomed out (130 m)")
-	print("INPUT INFO: zoomed out (130 m) tags pushed px: %s" % [wt.stacks.keys().map(func(id): return [id, roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
+	_check(not wt.names_hidden, "(T) at 90 m the names are still shown", "")
+	_tags_ok(wt, "zoomed out (90 m)")
+	print("INPUT INFO: zoomed out (90 m) tags pushed px: %s" % [wt.stacks.keys().map(func(id): return [id, roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
 	# 병사 30명 배치(인구 30) + 벌목장·채석장 말풍선: 방치 모드라 병사는 월드에 없고(개정 21) 덩어리끼리만 피한다
 	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
 	Economy.levels["houses"] = 13
@@ -2014,6 +2015,18 @@ func _world_tags() -> void:
 	var got: Array = WT.place([a, b, c], 3.0)
 	_check(got[0] == a and got[1].end.y <= a.position.y - 3.0 and got[1].position.x == b.position.x and got[2] == c,
 		"(T) place(): the lower tag keeps its spot, the upper one goes above it; a tag clear of the others stays put", "%s" % [got])
+	# 많이 축소하면 이름표를 그리지 않는다(자리도 없음) — 자원 말풍선은 건물 위에 그대로
+	Economy.last_collect["lumber"] = now - 3600.0
+	Economy.changed.emit()
+	rig.zoom_by(Balance.CAMERA_SIZE_MAX / _camera.size)
+	await _frames(2)
+	var flat: bool = wt.rects.values().all(func(r): return r.size == Vector2.ZERO)
+	_check(wt.names_hidden and flat and wt.draw_calls <= 1 and wt.stacks.get("lumber", Rect2()).size.y > 0.0,
+		"(T) zoomed far out: building names are hidden (no pills, no strings) but the lumber bubble still stacks above its building",
+		"hidden=%s flat=%s draws=%d lumber=%s" % [wt.names_hidden, flat, wt.draw_calls, wt.stacks.get("lumber")])
+	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
+	await _frames(2)
+	_check(not wt.names_hidden and wt.draw_calls > 3, "(T) zooming back in shows the names again", "draws=%d" % wt.draw_calls)
 	Economy.soldiers = {}
 	Economy.set_soldier_deploy({})
 	Economy.levels["houses"] = 1
