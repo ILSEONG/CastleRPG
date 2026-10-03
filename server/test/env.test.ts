@@ -40,3 +40,11 @@ test('소셜 로그인 설정: ID·SECRET 둘 다 있어야 켜진다, 운영에
   assert.throws(() => readEnv({ DATABASE_URL: URL, JWT_SECRET: LONG, OAUTH_NAVER_ID: 'n', OAUTH_NAVER_SECRET: 's' }), /PUBLIC_URL/)
   assert.equal(readEnv({ DATABASE_URL: URL, JWT_SECRET: LONG, OAUTH_NAVER_ID: 'n', OAUTH_NAVER_SECRET: 's', PUBLIC_URL: 'https://x.test' }).publicUrl, 'https://x.test')
 })
+
+test('자기 깨우기: KEEP_ALIVE_MIN은 PUBLIC_URL이 있어야 하고 0 이상의 수', () => {
+  assert.equal(readEnv({}).keepAliveMin, 0)
+  assert.equal(readEnv({ KEEP_ALIVE_MIN: '10', PUBLIC_URL: 'https://x.test' }).keepAliveMin, 10)
+  assert.throws(() => readEnv({ KEEP_ALIVE_MIN: '10' }), /PUBLIC_URL/)
+  assert.throws(() => readEnv({ KEEP_ALIVE_MIN: 'soon', PUBLIC_URL: 'https://x.test' }), /KEEP_ALIVE_MIN/)
+  assert.throws(() => readEnv({ KEEP_ALIVE_MIN: '-1', PUBLIC_URL: 'https://x.test' }), /KEEP_ALIVE_MIN/)
+})

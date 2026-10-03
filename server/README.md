@@ -60,6 +60,7 @@ curl http://127.0.0.1:8787/v1/health
 | `PGLITE_DIR` | (선택) 개발 PGlite 위치. `memory`면 메모리다. |
 | `OAUTH_GOOGLE_ID` / `OAUTH_GOOGLE_SECRET`, `OAUTH_KAKAO_*`, `OAUTH_NAVER_*` | (선택) 소셜 로그인. ID와 SECRET을 둘 다 주면 그 provider가 켜진다(하나만 주면 **시작을 거부한다**). 아래 "계정 연동" |
 | `PUBLIC_URL` | (선택) 이 서버의 공개 주소(리다이렉트 URI의 앞부분). `DATABASE_URL`과 provider가 있으면 **필수**. 비우면 요청의 origin이다. |
+| `KEEP_ALIVE_MIN` | (선택) 이 분마다 `PUBLIC_URL/v1/health`를 스스로 친다 — Render 무료 인스턴스가 15분 무요청에 잠드는 것을 막는다(`render.yaml`은 10). `PUBLIC_URL`이 없으면 **시작을 거부한다**. 0·빈 값이면 안 한다. |
 
 ## 테스트
 

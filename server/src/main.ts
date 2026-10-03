@@ -31,6 +31,13 @@ const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)
 })
 
+// 자기 깨우기: 공개 주소로 들어오는 요청이어야 호스팅이 "활동"으로 센다(Render 무료 인스턴스 15분 규칙). 실패해도 경고만.
+if (cfg.keepAliveMin > 0) {
+  const url = `${cfg.publicUrl}/v1/health`
+  setInterval(() => fetch(url).catch((e) => console.warn(`[server] keep-alive ping failed: ${(e as Error).message}`)), cfg.keepAliveMin * 60_000).unref()
+  console.log(`[server] keep-alive: GET ${url} every ${cfg.keepAliveMin} min`)
+}
+
 let stopping = false
 async function stop() {
   if (stopping) return

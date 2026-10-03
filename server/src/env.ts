@@ -36,12 +36,17 @@ export function readEnv(env: Record<string, string | undefined>) {
   }
   const publicUrl = (env.PUBLIC_URL?.trim() ?? '').replace(/\/+$/, '')
   if (databaseUrl && Object.keys(oauth).length && !publicUrl) throw new Error('PUBLIC_URL is required when an OAuth provider is configured with DATABASE_URL')
+  // 자기 깨우기(Render 무료 인스턴스는 15분 무요청이면 잠든다): KEEP_ALIVE_MIN분마다 PUBLIC_URL/v1/health를 친다. 0·빈 값이면 안 한다
+  const keepAliveMin = Number(env.KEEP_ALIVE_MIN?.trim() || 0)
+  if (!Number.isFinite(keepAliveMin) || keepAliveMin < 0) throw new Error('KEEP_ALIVE_MIN must be a non-negative number of minutes')
+  if (keepAliveMin > 0 && !publicUrl) throw new Error('KEEP_ALIVE_MIN needs PUBLIC_URL (the address to ping)')
   return {
     databaseUrl,
     secret,
     allowTestHooks,
     oauth,
     publicUrl,
+    keepAliveMin,
     hostname,
     port: Number(env.PORT || 8787),
     corsOrigins: (env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),

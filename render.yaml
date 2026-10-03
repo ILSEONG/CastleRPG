@@ -14,6 +14,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "24"
+      - key: KEEP_ALIVE_MIN          # 10분마다 자기 PUBLIC_URL/v1/health를 쳐서 무료 인스턴스가 잠들지 않게(15분 규칙). 유료로 올리면 지워도 된다
+        value: "10"
       - key: DATABASE_URL          # Neon 접속 문자열(?sslmode=require)
         sync: false
       - key: JWT_SECRET            # 32자 이상 무작위: node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
