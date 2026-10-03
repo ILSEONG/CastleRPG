@@ -34,7 +34,11 @@ merchant_low_high_ratio,3
 kill_rate_cap,5
 kill_burst_sec,60
 starter_heroes,hans|ella|dorik|nina
-lab_atk_per_level,0.03
+research_cost_growth,1.3
+research_time_growth,1.35
+lab_research_speed_per_level,0.02
+research_cancel_refund,0.5
+research_dia_per_min,1
 gacha_gold_cost_base,3000
 gacha_gold_cost_growth,1.15
 gacha_gold_level_max,10
