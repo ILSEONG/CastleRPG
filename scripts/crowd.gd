@@ -7,6 +7,7 @@ extends Node
 ## 같은 층(지상·성벽 위)끼리만 부딪고, 계단을 오르내리거나 땅에서 솟는 중이면 빠진다.
 ## 밀린 자리는 Formation.clamp_push(성 전장 — 성벽·성문을 넘지 않고, 성벽 위는 성벽 길 안에서만, 건물 부지·맵 밖 금지)나
 ## 아레나 반경(arena_r)으로 되돌린다. 사거리는 그대로 중심 거리 — 근접 사거리는 모두 맞닿는 거리(반지름 합)보다 길다(run_tests).
+## 붐비면(유닛 ≥ BUSY_AT) BUSY_EVERY 프레임마다 한 번만 푼다 — 한 프레임 걸음(수 cm)만큼 잠깐 겹쳐도 보이지 않는다.
 # ponytail: GDScript 해시(Dictionary) + 가우스-자이델 최대 PASSES번. 유닛 200에 헤드리스 수 ms 안(run_tests가 시간을 찍는다).
 # 400을 넘거나 모바일에서 프레임을 먹으면 칸 버킷을 고정 배열로 바꾸거나 GDExtension으로.
 
@@ -23,6 +24,8 @@ const PASSES := 5  # 최대 — 겹침이 DONE 밑으로 풀리면 일찍 멈춘
 const DONE := 0.01  # m
 const PASS_R := 0.5  # 경로 중간 점·순찰 점은 이만큼 안이면 지나간 것(arrive_r)
 const LEVEL_EPS := 0.3
+const BUSY_AT := 80
+const BUSY_EVERY := 2
 const NEIGHBORS := [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(-1, 1, 0), Vector3i(0, 1, 0), Vector3i(1, 1, 0)]  # 자기 칸 + 반쪽 이웃(쌍을 한 번씩)
 
 var half := -1.0  # 성 내부 절반(성 전장). 음수 = 아레나
@@ -33,6 +36,7 @@ var last_usec := 0  # 지난 해소에 걸린 시간(µs)
 var _from := PackedVector2Array()
 var _lv := PackedInt32Array()
 var _prev := {}  # 유닛 → 지난 해소 뒤 바닥 위치(이번 프레임 제 걸음 = 지금 − 이것)
+var _skip := false  # 붐빌 때: 이번 프레임은 쉰다
 
 
 func _init() -> void:
@@ -62,6 +66,10 @@ static func level(y: float) -> int:
 func _process(_delta: float) -> void:
 	if not enabled:
 		return
+	if _skip:
+		_skip = false
+		last_usec = 0
+		return
 	var t0 := Time.get_ticks_usec()
 	var units := []
 	var p := PackedVector2Array()
@@ -84,6 +92,7 @@ func _process(_delta: float) -> void:
 		w.append(1.0 / u.push_mass())  # 1 / INF = 0
 		lv.append(l)
 		mv.append(g2 - _prev.get(u, g2))
+	_skip = units.size() >= BUSY_AT and BUSY_EVERY > 1
 	var q := separate(p, r, w, lv, mv)
 	_prev = {}
 	for i in units.size():
@@ -122,8 +131,11 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 	_from = p
 	_lv = lv
 	var q := p.duplicate()
+	var moved := PackedByteArray()
+	moved.resize(p.size())
 	for pass_i in PASSES:
 		var worst := 0.0
+		moved.fill(0)
 		for t in range(0, pairs.size(), 2):
 			var i := pairs[t]
 			var j := pairs[t + 1]
@@ -142,8 +154,10 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 			else:
 				q[i] += n * o * w[i]
 				q[j] -= n * o * w[j]
-		for i in q.size():
-			if q[i] != p[i]:
+			moved[i] = 1
+			moved[j] = 1
+		for i in q.size():  # 이번 번에 밀린 것만 되돌린다(전에 되돌린 자리는 그대로 안쪽)
+			if moved[i] == 1 and q[i] != p[i]:
 				q[i] = _keep(i, q[i])
 		if worst < DONE:
 			break

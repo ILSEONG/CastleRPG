@@ -80,6 +80,7 @@ func _ready() -> void:
 	add_to_group("monsters")
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
+	_model.crowd_lod = true  # 화면 밖·붐빌 때 애니메이션 간헐 갱신, 붐비면 그림자 끔
 	_model.setup(Art.MONSTER_MODELS[kind], float(_stats.scale))
 	add_child(_model)
 	if castle != null:
@@ -274,16 +275,17 @@ func _find_hero():
 	var here_inside := castle != null and Formation.is_inside(castle.half, global_position)
 	var best = null
 	var best_d: float = float(_stats.aggro) if castle != null else INF  # 아레나는 거리 제한 없음
+	var here := global_position
 	for group in ["heroes", "soldiers"]:
 		for h in get_tree().get_nodes_in_group(group):
-			if not h.is_alive() or h.is_on_wall():
+			var hp: Vector3 = h.global_position
+			var d := Vector2(hp.x - here.x, hp.z - here.z).length()  # = flat_distance. 거리 먼저 — 대부분 여기서 걸러진다
+			if d > best_d or not h.is_alive() or h.is_on_wall():
 				continue
-			if castle != null and Formation.is_inside(castle.half, h.global_position) != here_inside:
+			if castle != null and Formation.is_inside(castle.half, hp) != here_inside:
 				continue
-			var d := Formation.flat_distance(global_position, h.global_position)
-			if d <= best_d:
-				best_d = d
-				best = h
+			best_d = d
+			best = h
 	return best
 
 
