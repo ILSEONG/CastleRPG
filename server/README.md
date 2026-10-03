@@ -270,6 +270,7 @@ provider 콘솔(사용자 몫): 셋 다 "웹" 타입으로 등록하고 리다�
    - 실행 명령은 `node src/main.ts`다(작업 디렉터리 `server/`). 운영 모드는 시작할 때 마이그레이션·시드를 하지 않는다. 3단계로 먼저 적용한다.
    - Vercel·Cloudflare Workers처럼 Node 서버가 아닌 곳은 `src/app.ts`의 `createApp`을 그 플랫폼 진입점에 연결해야 한다. 지금 코드는 `node:fs`·`node:crypto`를 쓰므로 그 플랫폼의 Node 호환 모드가 필요하다(확인하지 않음).
 5. 앱 프로젝트 설정 `castle/api_base_url`에 서버 주소(`https://...`)를 넣고 **릴리스로** 빌드한다(`--export-release`).
+   - 지금은 `castle/api_base_url.template`(내보낸 빌드에만 적용되는 기능 태그 오버라이드)에 Render 주소가 있다 — APK·웹 빌드는 온라인, 에디터 실행·헤드리스 테스트는 기본값 ""(오프라인)이다.
 
    ```bash
    ./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . --export-release "Web" export/web/index.html
