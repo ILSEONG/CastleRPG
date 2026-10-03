@@ -52,7 +52,10 @@ const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문�
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
 
 static var rebuilds := 0  # 월드를 다시 만든 횟수(성채 단계 변경). 개발용 1회 설정(econ-demo·--heroes·auto-stage)은 첫 월드에서만
-static var _expanded_notice := false  # 방치 중 단계가 바뀌어 곧바로 다시 만들었다 — 새 월드에서 알린다(옛 HUD는 사라진다)
+static var _expanded_notice := false
+static var _scaling_hooked := false  # 3D 해상도 맞추기를 루트 창 크기 변화에 한 번만 잇는다
+const RENDER_3D_WIDTH := 720.0  # 3D는 가로 이만큼(논리 화면 폭)의 픽셀로 그린다 — 고해상도 폰의 픽셀 부담을 줄인다(UI는 원래 해상도)
+const RENDER_3D_MIN := 0.5  # 방치 중 단계가 바뀌어 곧바로 다시 만들었다 — 새 월드에서 알린다(옛 HUD는 사라진다)
 
 var camera: Camera3D
 var castle
@@ -74,6 +77,7 @@ var _host: Node = null  # 던전 동안 이 노드와 던전 장면의 부모
 
 
 func _ready() -> void:
+	_hook_3d_scaling()
 	GameState.roster = Economy  # 영웅 보유·배치·건물 레벨 공급자
 	if OS.is_debug_build() and not Net.is_online() and Net.arg_value("arena") != "":
 		add_child(preload("res://scripts/arena_preview.gd").new())  # 개발용 던전 무대 미리보기(--arena=plains|castle, 개정 18)
@@ -252,6 +256,23 @@ func leave_dungeon() -> void:
 
 ## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.
 ## 웹 저장소가 영구가 아니면 경고 한 줄을 더한다(접속은 그대로 진행).
+## 3D 해상도: 루트 뷰포트 3D를 가로 RENDER_3D_WIDTH 픽셀 정도로 그리고 늘려 보인다(쌍선형, Compatibility 렌더러도 된다).
+## 1080×2400 폰이면 0.67배 — 바닥 셰이더·로우폴리 법선·그림자 필터 같은 픽셀 일이 2배 넘게 준다. UI(캔버스)는 원래 해상도 그대로.
+## 던전 장면도 같은 루트 뷰포트라 함께 적용된다. 창 크기가 바뀌면(웹 창 조절) 다시 맞춘다.
+func _hook_3d_scaling() -> void:
+	var root := get_tree().root
+	root.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	root.scaling_3d_scale = scale_3d_for(root.size.x)
+	if not _scaling_hooked:
+		_scaling_hooked = true
+		root.size_changed.connect(func(): root.scaling_3d_scale = scale_3d_for(root.size.x))
+
+
+## 창 가로 픽셀 → 3D 배율(RENDER_3D_MIN..1).
+static func scale_3d_for(width_px: int) -> float:
+	return clampf(RENDER_3D_WIDTH / maxf(1.0, width_px), RENDER_3D_MIN, 1.0)
+
+
 ## 로그인(필요하면 로그인 화면) → 접속. 저장한 소셜 세션이 거절되면(Net.session_lost) 로그인 화면부터 다시.
 func _connect_online() -> void:
 	Economy.claims_open = false  # 첫 월드에서 연다(_build_world)
