@@ -1407,6 +1407,8 @@ func _research_ui(tabs, hud) -> void:
 		and rw.detail_time.text == "연구 시간 01:00" and not rw.start_button.disabled and rw.start_button.visible and not rw.detail_run.visible,
 		"(RS) card tap opens the detail: name, effect 현재 +0% → 다음 +5%, ✓ lab Lv 1, cost 보유/필요, time 01:00, [연구] on",
 		"open=%s name=%s effect=%s cost=%s time=%s" % [rw.is_detail_open(), rw.detail_name.text, rw.detail_effect.text, rw.detail_cost.wood.text, rw.detail_time.text])
+	print("INPUT INFO: research sheet %s, wood card %s, detail panel %s, [연구] %s (720x1280 logical)" % [rw.dialog.get_global_rect(), rw.cards.wood_tech.button.get_global_rect(),
+		rw.detail.get_child(0).get_global_rect(), rw.start_button.get_global_rect()])
 	await _unguarded(rw)
 	await _tap(_center(rw.start_button))
 	await _frames(1)

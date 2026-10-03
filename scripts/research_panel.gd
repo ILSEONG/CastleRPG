@@ -197,6 +197,7 @@ func _build_detail() -> void:
 	panel.offset_left = SHEET_SIDE
 	panel.offset_right = -SHEET_SIDE
 	panel.offset_bottom = -(HudScript.TAB_BAR_H + 8)
+	panel.offset_top = panel.offset_bottom  # 높이 0에서 내용 크기만큼 위로 자란다
 	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 18.0, 20))
