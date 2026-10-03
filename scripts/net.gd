@@ -20,6 +20,7 @@ const STORAGE_TEXT := "브라우저 저장소가 꺼져 있어 진행이 저장�
 
 signal connected     # 끊긴 상태(또는 첫 접속 전)에서 서버에 닿았다
 signal disconnected  # 연결된 상태에서 요청이 서버에 닿지 못했다(연결 불가·시간 초과) 또는 연속 401
+signal restarted     # restart(): 접속을 처음부터 다시 한다(소셜 로그인으로 다른 플레이어가 됐다) — main이 월드를 다시 만든다
 
 var api_base := ""  # ""이면 오프라인
 var device_path := "user://device.json"  # 테스트는 start() 전에 임시 경로로 바꾼다
@@ -77,6 +78,38 @@ func start() -> void:
 	send("GET", "/v1/gamedata", null, _on_gamedata, Callable(), false)
 	send("GET", "/v1/player", null, _on_first_player, _retry_first_player)
 	set_process(true)
+
+
+## 접속을 처음부터 다시 한다(계정 창: 소셜 로그인으로 이 기기가 다른 플레이어에 묶였다). 보내던 요청·큐·토큰·이전 계정의 처치를 버리고
+## restarted를 낸다 — main이 월드를 다시 만들고 start()를 다시 부르면 게스트 로그인이 새 플레이어로 간다(기기가 그 플레이어에 묶였으니).
+## 응답 콜백(done) 안에서 불려도 되게 다음 프레임에 한다 — 지금 처리 중인 응답이 끝난 뒤 큐를 비운다.
+func restart() -> void:
+	_restart.call_deferred()
+
+
+func _restart() -> void:
+	if not _started:
+		return
+	_http.cancel_request()
+	_queue.clear()
+	_busy = false
+	token = ""
+	up = false
+	ready_once = false
+	_started = false
+	_refreshing = false
+	_fails = 0
+	_auth_retries = 0
+	_clears_out = 0
+	_first_tries = 0
+	_flush_cd = FLUSH_SEC
+	GameState.stage_cleared.disconnect(_on_stage_cleared)
+	GameState.refilled.disconnect(_on_refilled)
+	connected.disconnect(flush_kills)
+	Economy.take_kills()
+	Economy.kills_sent = {}
+	set_process(false)
+	restarted.emit()
 
 
 ## 요청을 큐 끝에 넣는다. done(data: Dictionary)은 2xx 응답, fail()은 그 요청을 버렸을 때(4xx·재시도 소진).

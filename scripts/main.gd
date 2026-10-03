@@ -41,6 +41,7 @@ const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
 const ResearchPanelScript := preload("res://scripts/research_panel.gd")
+const AccountPanelScript := preload("res://scripts/account_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -138,6 +139,11 @@ func _build_world() -> void:
 	var hud = HudScript.new()
 	add_child(hud)
 	hud.gate_tapped.connect(func(side): rig.pan_to(FormationScript.gate_position(castle.half, side), GATE_PAN_SEC))  # 성문 막대 탭(개정 12-2 §2)
+	if Net.is_online():
+		var account = AccountPanelScript.new()  # 계정 창(소셜 로그인 연동·전환): HUD [계정]
+		add_child(account)
+		hud.account_tapped.connect(account.open)
+		Net.restarted.connect(_on_net_restarted)
 	var panel = MerchantPanelScript.new()
 	add_child(panel)
 	picker.panel = panel
@@ -436,6 +442,12 @@ func _on_mode_changed(mode: int) -> void:
 		clear_soldiers()
 	if _expand_pending and mode == GameState.Mode.IDLE:
 		_rebuild_world.call_deferred()
+
+
+## 소셜 로그인으로 다른 플레이어가 됐다(Net.restart()): 월드를 다시 만든다 — 새 main이 "서버 연결 중…"부터 다시 접속해 그 플레이어 값으로 만든다.
+func _on_net_restarted() -> void:
+	_expand_pending = true
+	_rebuild_world()
 
 
 ## 월드를 다시 만든다(씬 다시 읽기). 상태는 오토로드(Economy·GameState·Net)에 있어 그대로 이어지고, 새 main이 그 레벨로 성·영웅을 만든다.
