@@ -11,7 +11,7 @@ export const T0 = 1_790_000_000 // 2026-09-21, 정시 아님
 export interface Setup {
   db: Db
   clock: { t: number }
-  req: (method: string, path: string, o?: { token?: string; body?: unknown; headers?: Record<string, string> }) => Promise<{ status: number; headers: Headers; json: any }>
+  req: (method: string, path: string, o?: { token?: string; body?: unknown; headers?: Record<string, string> }) => Promise<{ status: number; headers: Headers; json: any; text: string }>
   login: (device?: string) => Promise<{ token: string; id: string }>
   makeApp: (o?: Partial<AppOptions>) => ReturnType<typeof createApp>
   close: () => Promise<void>
@@ -36,7 +36,7 @@ export function barrier() {
   return { wrap, arm: () => (armed = true), arrived: () => arrived }
 }
 
-export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number } = {}): Promise<Setup> {
+export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number; oauth?: AppOptions['oauth']; fetch?: typeof fetch } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)
   await seed(db)
@@ -47,6 +47,8 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
     jwtSecret: o.secret ?? 'test-secret-0123456789abcdef0123456789',
     allowTestHooks: o.allowTestHooks ?? true,
     random: o.random,
+    oauth: o.oauth,
+    fetch: o.fetch,
     ...extra,
   })
   const app = makeApp()
@@ -60,7 +62,13 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
       body: r.body === undefined ? undefined : typeof r.body === 'string' ? r.body : JSON.stringify(r.body),
     })
     const text = await res.text()
-    return { status: res.status, headers: res.headers, json: text ? JSON.parse(text) : null }
+    let json: any = null
+    try {
+      json = text ? JSON.parse(text) : null
+    } catch {
+      json = null // HTML(소셜 로그인 콜백 페이지) — 본문은 text로
+    }
+    return { status: res.status, headers: res.headers, json, text }
   }
   const login = async (device = randomDevice()) => {
     const r = await req('POST', '/v1/auth/guest', { body: { device_id: device } })

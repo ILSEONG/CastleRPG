@@ -1,7 +1,10 @@
 extends Node
 ## 서버 접속(개정 9 온라인 모드). 오토로드 Net. API 주소가 비면 오프라인 모드 — 아무것도 하지 않는다.
 ## 주소: 프로젝트 설정 castle/api_base_url. 디버그 빌드에선 `-- --api=<url>`(네이티브)·`?api=<url>`(웹)이 앞선다.
-## start(): 게스트 로그인 → /v1/gamedata(GameData.apply_remote) → /v1/player. 그 뒤 connected를 낸다(main이 월드를 만든다).
+## start(): 로그인 → /v1/gamedata(GameData.apply_remote) → /v1/player. 그 뒤 connected를 낸다(main이 월드를 만든다).
+## 로그인: 저장한 소셜 세션(user://auth.json, login_screen이 Google·카카오·네이버 로그인으로 받는다)이 있으면 /v1/auth/session,
+## 없으면 게스트(/v1/auth/guest, 기기 id). 세션을 서버가 모르면(로그아웃 등, 401 bad_session) 세션을 지우고 큐를 멈춘 뒤
+## session_lost — 소셜 계정을 쓰던 기기가 게스트 계정으로 몰래 넘어가지 않게. 첫 접속 전이면 main이 로그인 화면을 다시 띄우고 start()를 다시 부른다.
 ## 첫 /v1/player가 틀렸거나 버려지면 백오프 뒤 다시 받는다.
 ## 요청은 HTTPRequest 하나로 한 번에 하나(큐). 응답 처리는 classify() 참고 — 끊김 띠는 연결 불가·시간 초과에만 뜨고,
 ## 서버가 답한 실패(5xx·409·4xx)는 횟수를 정해 다시 보내거나 버려 큐를 무한히 막지 않는다. 토큰은 메모리에만 둔다.
@@ -16,14 +19,20 @@ const FLUSH_SEC := 10.0  # 처치 골드 보고 간격
 const AUTH_MAX := 3  # 연속 401(다시 로그인해도 또 401) 허용 횟수. 넘으면 끊김 상태로 RETRY_MAX_SEC마다 다시 로그인
 const SERVER_TRIES := 4  # 접속 뒤 5xx·408·429는 한 요청을 이만큼 다시 보내고 버린다
 const DEVICE_RE := "^[A-Za-z0-9-]{16,128}$"
+const SESSION_RE := "^[0-9a-f]{64}$"
+const LOGIN_PROVIDERS := ["google", "kakao", "naver"]
 const STORAGE_TEXT := "브라우저 저장소가 꺼져 있어 진행이 저장되지 않을 수 있습니다"
 
 signal connected     # 끊긴 상태(또는 첫 접속 전)에서 서버에 닿았다
 signal disconnected  # 연결된 상태에서 요청이 서버에 닿지 못했다(연결 불가·시간 초과) 또는 연속 401
+signal session_lost  # 저장한 소셜 세션을 서버가 거절했다(세션은 지웠다) — 다시 로그인해야 한다
 
 var api_base := ""  # ""이면 오프라인
 var device_path := "user://device.json"  # 테스트는 start() 전에 임시 경로로 바꾼다
 var device_id := ""
+var auth_path := "user://auth.json"  # 로그인 방식 {mode: "guest"|"google"|"kakao"|"naver", session}. 테스트는 바꾼다
+var auth_mode := ""  # "" = 아직 고르지 않음(로그인 화면), "guest", 또는 소셜 제공자
+var session := ""  # 소셜 자동 로그인 비밀(64 hex). 게스트면 ""
 var token := ""  # 메모리에만
 var up := false  # 지금 서버와 연결됨
 var ready_once := false  # 첫 접속(gamedata + player)을 마쳤다
@@ -44,6 +53,7 @@ var _first_tries := 0
 var _flush_cd := FLUSH_SEC
 var _refreshing := false
 var _started := false
+var _halted := false  # session_lost 뒤: 큐를 보내지 않는다(start()가 다시 풀어 준다)
 
 
 func _ready() -> void:
@@ -60,9 +70,74 @@ func is_online() -> bool:
 	return api_base != ""
 
 
-## 접속 시작(온라인 모드에서 main이 부른다). 두 번째 호출은 무시.
+## 로그인 방식을 골랐는가(저장된 소셜 세션 또는 게스트). 아니면 main이 로그인 화면을 띄운다.
+func has_credentials() -> bool:
+	return session != "" or auth_mode == "guest"
+
+
+## 저장한 로그인 방식 읽기(main이 로그인 화면 여부를 정하기 전에). 깨졌으면 비운다.
+func load_auth() -> void:
+	auth_mode = ""
+	session = ""
+	if not FileAccess.file_exists(auth_path):
+		return
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(auth_path)) == OK and json.data is Dictionary:
+		var m = json.data.get("mode")
+		var s = json.data.get("session")
+		if m == "guest":
+			auth_mode = "guest"
+		elif m in LOGIN_PROVIDERS and s is String and RegEx.create_from_string(SESSION_RE).search(s) != null:
+			auth_mode = m
+			session = s
+
+
+## 로그인 방식을 저장한다: 게스트(provider "guest", 세션 없음) 또는 소셜(provider, 서버가 준 세션).
+func set_auth(provider: String, new_session := "") -> void:
+	auth_mode = provider
+	session = new_session
+	_save_auth()
+
+
+## 로그아웃: 서버 세션을 지우고(응답은 기다리지 않는다) 저장한 로그인 방식을 비운다 — 다음 실행은 로그인 화면.
+func logout() -> void:
+	if session != "" and is_online():
+		var h := HTTPRequest.new()
+		add_child(h)
+		h.request_completed.connect(func(_r, _c, _hd, _b): h.queue_free())
+		h.request(api_base + "/v1/auth/logout", PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_POST, JSON.stringify({"session": session}))
+	set_auth("", "")
+
+
+func _save_auth() -> void:
+	var f := FileAccess.open(auth_path, FileAccess.WRITE)
+	if f == null:
+		push_warning("auth save failed: %s" % error_string(FileAccess.get_open_error()))
+		return
+	f.store_string(JSON.stringify({"mode": auth_mode, "session": session}))
+	f.close()
+
+
+## 기기 id(게스트 계정 열쇠)를 읽어 둔다 — 로그인 화면이 소셜 로그인 시작에 넘겨 그 기기의 게스트 진행을 잇는다.
+func ensure_device_id() -> String:
+	if device_id == "":
+		device_id = load_device_id(device_path)
+	return device_id
+
+
+## 접속 시작(온라인 모드에서 main이 부른다). 첫 접속 전에 세션을 잃었다면(session_lost) 다시 불러 로그인부터 다시 한다.
+## 그 밖의 두 번째 호출은 무시.
 func start() -> void:
-	if _started or not is_online():
+	if not is_online():
+		return
+	if _started:
+		if not ready_once and _halted:
+			_halted = false
+			_queue.clear()
+			_busy = false
+			_queue.append(_login_item())
+			send("GET", "/v1/gamedata", null, _on_gamedata, Callable(), false)
+			send("GET", "/v1/player", null, _on_first_player, _retry_first_player)
 		return
 	_started = true
 	Economy.net = self
@@ -72,7 +147,7 @@ func start() -> void:
 	connected.connect(flush_kills)  # 다시 연결되면 쌓아 둔 처치를 보낸다
 	if not storage_persistent:
 		push_warning("user storage is not persistent: the device id (guest account key) may not survive this visit")
-	device_id = load_device_id(device_path)
+	ensure_device_id()
 	_queue.append(_login_item())
 	send("GET", "/v1/gamedata", null, _on_gamedata, Callable(), false)
 	send("GET", "/v1/player", null, _on_first_player, _retry_first_player)
@@ -198,11 +273,26 @@ func _item(method: String, path: String, body, done: Callable, fail: Callable, a
 
 
 func _login_item() -> Dictionary:
+	if session != "":
+		return _item("POST", "/v1/auth/session", {"session": session}, _on_login, _on_session_dropped, false)
 	return _item("POST", "/v1/auth/guest", {"device_id": device_id}, _on_login, Callable(), false)
 
 
+## 세션 로그인이 버려졌다: 서버가 세션을 모르면(bad_session) 세션을 지우고 멈춘다(게스트로 넘어가지 않는다). 그 밖의 이유면
+## 다음 401이 다시 로그인한다.
+func _on_session_dropped() -> void:
+	if last_error != "bad_session":
+		return
+	set_auth("", "")
+	token = ""
+	_halted = true
+	_queue.clear()
+	_go_down()
+	session_lost.emit()
+
+
 func _pump() -> void:
-	if _busy or _queue.is_empty():
+	if _busy or _queue.is_empty() or _halted:
 		return
 	_busy = true
 	_send_head()

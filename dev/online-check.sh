@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 온라인 통합 체크(개정 9 §7): API 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1, 포트 8790)를 띄우고
-# Godot 헤드리스로 tests/online_check를 두 번 돌린다(두 번째는 같은 기기 id — 골드·자원·스테이지 복원).
+# Godot 헤드리스로 tests/online_check를 다섯 번 돌린다(2: 같은 기기 id — 골드·자원·스테이지 복원, 3~5: 소셜 로그인·자동 로그인·낡은 세션).
 # 서버는 트랩으로 항상 끈다. 둘 다 통과하면 마지막 줄이 ONLINE ALL PASSED.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -49,7 +49,7 @@ fi
 echo "[online-check] server up on $API"
 
 ok=1
-for phase in 1 2; do
+for phase in 1 2 3 4 5; do
   timeout "${ONLINE_TIMEOUT:-300}" "$GODOT" --headless --path . res://tests/online_check.tscn -- \
     --api="$API" --device="$WTMP/device.json" --state="$WTMP/state.json" --phase=$phase > "$TMP/phase$phase.log" 2>&1
   rc=$?

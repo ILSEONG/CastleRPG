@@ -123,6 +123,7 @@ signal research_changed  # 개정 24: 연구 레벨·진행 중 연구·응답 �
 signal research_done(id: String, level: int)  # 연구 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
+var claims_open := true  # false면 claim_offline이 아무것도 안 한다(main: 로그인·접속 중 — 브라우저에서 돌아온 RESUMED가 정산하지 않게)
 var offline_report := {}  # 마지막 오프라인 정산 {away_sec, kills, gold_tenths}(개요 창이 보여 주고 비운다). 없으면 {}
 var _away_from := 0.0  # 오프라인 모드: 떠난 시각(불러온 저장의 "last_active" = 마지막 저장 시각, 백그라운드로 갈 때 그 시각). 0 = 기록 없음
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
@@ -409,6 +410,8 @@ static func offline_reward(away: float, stage_n: int, per_kill: int) -> Dictiona
 ## 오프라인은 떠난 시각(_away_from: 저장의 last_active, 백그라운드로 간 시각)부터로 곧바로 더하고 저장한다. 떠난 시간이 OFFLINE_MIN_SEC 이상이면
 ## offline_report를 채우고 offline_reported(main이 개요 창을 띄운다).
 func claim_offline(stage_n: int, now := -1.0) -> void:
+	if not claims_open:
+		return
 	if net != null:
 		net.send("POST", "/v1/offline", {}, _on_offline)
 		return

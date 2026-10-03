@@ -58,6 +58,10 @@ curl http://127.0.0.1:8787/v1/health
 | `ALLOW_TEST_HOOKS` | `1`이면 `POST /v1/test/age`(수집 시각·훈련 끝나는 시각 당기기) 같은 테스트 훅이 생긴다. `DATABASE_URL`과 같이 있으면 **시작을 거부한다**. |
 | `HOST` | (선택) 듣는 주소. 기본은 개발 `127.0.0.1`, 운영 `0.0.0.0`이다. 고정 개발 비밀(`JWT_SECRET` 없음)인데 루프백(`127.x`, `localhost`, `::1`)이 아니면 **시작을 거부한다**. |
 | `PGLITE_DIR` | (선택) 개발 PGlite 위치. `memory`면 메모리다. |
+| `OAUTH_REDIRECT_BASE` | (소셜 로그인) 이 서버의 공개 주소(예: `https://api.example.com`). 각 제공자 콘솔에 콜백 `<주소>/v1/auth/oauth/<google\|kakao\|naver>/callback`을 등록한다. 비우면 소셜 로그인이 꺼진다. |
+| `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` | Google Cloud 콘솔 → OAuth 클라이언트(웹 애플리케이션). 범위는 `openid`만 쓴다. |
+| `KAKAO_REST_API_KEY` · `KAKAO_CLIENT_SECRET` | Kakao Developers → 앱 키(REST API 키), 카카오 로그인 활성화. Client Secret은 켰을 때만. 동의 항목은 필요 없다(회원번호만 쓴다). |
+| `NAVER_CLIENT_ID` · `NAVER_CLIENT_SECRET` | 네이버 개발자센터 → 애플리케이션(네이버 로그인). 필수 정보 없이 회원 식별자만 쓴다. |
 
 ## 테스트
 
@@ -102,6 +106,12 @@ npm --prefix server test
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
 | `POST /v1/kills {seq, stage, kills}` | Bearer | 플레이어 응답 + `gold_gained` |
 | `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 + `cleared` |
+| `GET /v1/auth/providers` | 없음 | `{providers}` 켜진 소셜 로그인 |
+| `POST /v1/auth/oauth/start {provider, challenge, device_id?}` | 없음 | `{url, state, expires_in}` — 앱이 url을 브라우저로 연다. challenge = sha256(verifier) hex. device_id의 게스트 계정에 아직 소셜 계정이 없으면 그 계정에 잇는다 |
+| `GET /v1/auth/oauth/:provider/callback` | 제공자 | 안내 HTML. code → 제공자 사용자 id → 플레이어(없으면 만든다 — 회원가입 없음) |
+| `POST /v1/auth/oauth/poll {state, verifier}` | 없음 | 202 `{pending}` 또는 한 번만 `{token, player_id, session, provider, is_new}`. 401 `login_denied`·`login_failed`, 410 `login_expired`(10분) |
+| `POST /v1/auth/session {session}` | 없음 | `{token, player_id, provider}` 자동 로그인. 모르면 401 `bad_session` |
+| `POST /v1/auth/logout {session}` | 없음 | `{ok}` 그 세션만 지운다 |
 | `POST /v1/offline {}` | Bearer | 플레이어 응답 + `offline {away_sec, kills, gold_gained_tenths}` — 지난 활동(상태를 바꾼 마지막 요청) 이후를 방치 처치로 쳐서 골드 × `offline_gold_mult`(상한 `accum_cap_min`분, 60초 미만 0). 앱을 켤 때·백그라운드에서 돌아올 때 |
 | `POST /v1/building/upgrade {building}` | Bearer | 플레이어 응답 + `build: {id, finish}`. 모르는 건물은 400 `unknown_building`, 아니면 409 `max_level` / `keep_cap` / `prereq` / `builder_busy` / `not_enough`(이 순서로 검사) |
 | `POST /v1/test/build_now` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. 진행 중 건설의 끝나는 시각을 지금으로(같은 응답이 완료를 반영) |

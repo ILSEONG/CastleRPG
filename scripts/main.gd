@@ -1,7 +1,9 @@
 extends Node3D
 ## 월드 조립. 씬 파일은 이것 하나. 나머지는 코드로 생성.
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
-## 온라인 모드(Net.is_online())면 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다 —
+## 온라인 모드(Net.is_online())면 저장한 로그인 방식(Net.load_auth)이 없을 때 로그인 화면(login_screen.gd — Google·카카오·네이버·게스트)을
+## 먼저 띄우고, 그다음 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다(접속 중 저장한 소셜 세션이
+## 거절되면 로그인 화면으로 돌아간다) —
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 ## 영웅은 배치(GameState.deploy·hero_promotion·hero_level)대로 만들고, 배치·승급(별)·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
@@ -42,6 +44,7 @@ const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
 const ResearchPanelScript := preload("res://scripts/research_panel.gd")
 const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
+const LoginScreenScript := preload("res://scripts/login_screen.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -78,7 +81,7 @@ func _ready() -> void:
 		add_child(preload("res://scripts/hero_lineup.gd").new())  # 개발용 영웅 생김새 줄 세우기(--lineup, 개정 23)
 		return
 	if Net.is_online() and not Net.ready_once:
-		await _wait_for_server()
+		await _connect_online()
 	_build_world()
 
 
@@ -190,6 +193,7 @@ func _build_world() -> void:
 	if rebuilds == 0 and OS.is_debug_build() and not Net.is_online() and Net.arg_value("dungeon") in GameData.DUNGEON_TYPES:
 		_dev_dungeon(Net.arg_value("dungeon"))
 	elif rebuilds == 0 and not _auto_stage_requested():
+		Economy.claims_open = true
 		Economy.claim_offline(GameState.stage)  # 앱을 켰다: 끈 동안의 방치 처치 골드(× offline_gold_mult) 정산 → 개요 창
 
 
@@ -245,7 +249,25 @@ func leave_dungeon() -> void:
 
 ## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.
 ## 웹 저장소가 영구가 아니면 경고 한 줄을 더한다(접속은 그대로 진행).
-func _wait_for_server() -> void:
+## 로그인(필요하면 로그인 화면) → 접속. 저장한 소셜 세션이 거절되면(Net.session_lost) 로그인 화면부터 다시.
+func _connect_online() -> void:
+	Economy.claims_open = false  # 첫 월드에서 연다(_build_world)
+	Net.load_auth()
+	while true:
+		if not Net.has_credentials():
+			var screen = LoginScreenScript.new()
+			add_child(screen)
+			await screen.logged_in
+			screen.queue_free()
+		if await _wait_for_server():
+			return
+
+
+signal _server_waited(ok: bool)
+
+
+## "서버 연결 중…" 화면을 띄우고 접속을 기다린다. 접속했으면 true, 세션이 거절됐으면 false.
+func _wait_for_server() -> bool:
 	var layer := CanvasLayer.new()
 	var back := ColorRect.new()
 	back.color = Color(0.86, 0.91, 0.96)  # 월드 배경색
@@ -275,10 +297,16 @@ func _wait_for_server() -> void:
 		warn.add_theme_color_override("font_color", HudScript.INK)
 		lines.add_child(warn)
 	add_child(layer)
+	var up := func(): _server_waited.emit(true)
+	var lost := func(): _server_waited.emit(false)
+	Net.connected.connect(up)
+	Net.session_lost.connect(lost)
 	Net.start()
-	if not Net.ready_once:
-		await Net.connected
+	var ok: bool = true if Net.ready_once else await _server_waited
+	Net.connected.disconnect(up)
+	Net.session_lost.disconnect(lost)
 	layer.queue_free()
+	return ok
 
 
 ## 배치(GameState.deploy)·승급·레벨을 만들어 둔 영웅에 맞춘다. 바뀐 슬롯만 빼고 다시 만든다(나머지는 그대로).

@@ -1,5 +1,5 @@
 // Hono 앱 팩토리. 시계(now)·쿼리 함수를 주입받아 테스트에서 포트 없이 app.request()로 돌린다.
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -8,6 +8,7 @@ import { sign, verify } from 'hono/jwt'
 import type { Query, Row } from './db.ts'
 import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
+import * as O from './oauth.ts'
 
 export interface AppOptions {
   query: Query
@@ -16,6 +17,8 @@ export interface AppOptions {
   allowTestHooks?: boolean
   corsOrigins?: string[] // 비면 *
   random?: () => number // [0, 1) 난수(모집). 기본은 암호학적 난수(R.cryptoRandom) — 테스트만 주입한다
+  oauth?: O.OAuthConfig // 소셜 로그인 제공자 키·공개 주소(없으면 소셜 로그인 꺼짐)
+  fetch?: typeof fetch // 제공자 호출(테스트는 가짜)
 }
 
 const TOKEN_TTL = 30 * 86400
@@ -30,6 +33,9 @@ const MAX_SELL_ITEMS = 1000 // 개정 18: 장비 판매 한 번의 개수
 const RUN_KEEP_SEC = 86400 // 끝난 run은 하루 남긴다(재전송 멱등), 그 뒤 새 start가 지운다
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge·세션 비밀(32바이트 hex)
+const OAUTH_TTL = 600 // 진행 중 소셜 로그인 유효 시간(초)
+const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
 
 export class ApiError extends Error {
   status: number
@@ -673,6 +679,17 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/health', (c) => c.json({ ok: true, server_now: clock() }))
 
+  // 시작 영웅(새 플레이어). 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(영웅 0명이 되지 않게)
+  async function starters(): Promise<string[]> {
+    const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
+    return String(cfg?.value ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
+  }
+
+  async function issueToken(playerId: string, now: number): Promise<string> {
+    const iat = Math.floor(now)
+    return sign({ sub: playerId, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
+  }
+
   app.post('/v1/auth/guest', async (c) => {
     const b = await body(c)
     const device = b.device_id
@@ -680,13 +697,130 @@ export function createApp(opts: AppOptions) {
       throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
     }
     const now = clock()
-    // 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(새 플레이어가 영웅 0명이 되지 않게)
-    const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
-    const starters = String(cfg?.value ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
-    const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(starters)])
-    const iat = Math.floor(now)
-    const token = await sign({ sub: r.id, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
-    return c.json({ token, player_id: r.id })
+    const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(await starters())])
+    return c.json({ token: await issueToken(r.id, now), player_id: r.id })
+  })
+
+  // --- 소셜 로그인(Google·카카오·네이버, oauth.ts). 회원가입 없음 — 처음 로그인하면 계정이 생긴다 ---
+  // 테스트 훅 서버(ALLOW_TEST_HOOKS)는 설정이 없으면 세 제공자를 가짜 키로 켠다 — /v1/test/oauth_complete로 앱 로그인 흐름을 끝까지 시험한다
+  const oauth: O.OAuthConfig = opts.oauth ?? (opts.allowTestHooks ? O.TEST_CONFIG : { redirectBase: '', providers: {} })
+  const fetchFn = opts.fetch ?? fetch
+
+  // 켜진 제공자(로그인 화면이 버튼을 고를 때 쓸 수 있다)
+  app.get('/v1/auth/providers', (c) => c.json({ providers: O.enabledProviders(oauth) }))
+
+  // 로그인 시작 {provider, challenge = sha256(verifier) hex, device_id?}: 진행 행을 만들고 제공자 로그인 주소를 준다.
+  // device_id가 있으면 그 기기의 게스트 계정에 이을 후보로 둔다(그 계정에 아직 소셜 계정이 없을 때만 콜백이 잇는다 — 진행 유지).
+  app.post('/v1/auth/oauth/start', async (c) => {
+    const b = await body(c)
+    const provider = b.provider
+    if (!O.isProvider(provider)) throw new ApiError(400, 'unknown_provider', `provider must be one of ${O.PROVIDERS.join(', ')}`)
+    if (!O.enabledProviders(oauth).includes(provider)) throw new ApiError(503, 'provider_unavailable', `${provider} login is not configured on this server`)
+    if (typeof b.challenge !== 'string' || !HEX64_RE.test(b.challenge)) throw new ApiError(400, 'bad_challenge', 'challenge must be 64 lowercase hex characters')
+    const device = b.device_id
+    if (device !== undefined && (typeof device !== 'string' || !DEVICE_RE.test(device))) throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
+    const now = clock()
+    await query('delete from oauth_logins where created_at < to_timestamp($1::float8)', [now - 86400]) // 오래된 진행 행 정리
+    let link: string | null = null
+    if (typeof device === 'string') link = (await query('select id from players where device_id = $1', [device]))[0]?.id ?? null
+    const state = randomBytes(32).toString('hex')
+    await query('insert into oauth_logins (state, provider, challenge, link_player, created_at) values ($1, $2, $3, $4, to_timestamp($5::float8))',
+      [state, provider, b.challenge, link, now])
+    return c.json({ url: O.authorizeUrl(oauth, provider, state), state, expires_in: OAUTH_TTL })
+  })
+
+  // 제공자 → 서버 콜백(브라우저). code를 제공자 사용자 id로 바꾸고 플레이어를 찾거나 만들어 진행 행에 적는다. 결과는 안내 페이지.
+  app.get('/v1/auth/oauth/:provider/callback', async (c) => {
+    const p = c.req.param('provider')
+    const state = c.req.query('state') ?? ''
+    const code = c.req.query('code') ?? ''
+    const page = (ok: boolean, status: number) => c.html(O.resultPage(ok), status as any)
+    if (!O.isProvider(p) || !HEX64_RE.test(state)) return page(false, 400)
+    const now = clock()
+    const [row] = await query(`select provider, link_player, extract(epoch from created_at)::float8 as created_at, player_id, error
+      from oauth_logins where state = $1`, [state])
+    if (!row || row.provider !== p || row.player_id || row.error || now - Number(row.created_at) > OAUTH_TTL) return page(false, 400)
+    const fail = async (error: string, status: number) => {
+      await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, error])
+      return page(false, status)
+    }
+    if (c.req.query('error') || !code || !O.enabledProviders(oauth).includes(p)) return fail('denied', 200) // 사용자가 취소·거부
+    let uid: string
+    try {
+      uid = await O.fetchUid(oauth, p, code, state, fetchFn)
+    } catch (e) {
+      console.warn(`[server] oauth: ${(e as Error).message}`)
+      return fail('provider_error', 502)
+    }
+    const r = await resolvePlayer(p, uid, row.link_player ?? null, now)
+    await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew])
+    return page(true, 200)
+  })
+
+  // 제공자 계정 → 플레이어: 이은 플레이어 → (없으면) 이을 게스트 계정(소셜 계정이 하나도 없을 때) → (없으면) 새 플레이어.
+  async function resolvePlayer(p: O.Provider, uid: string, link: string | null, now: number): Promise<{ id: string; isNew: boolean }> {
+    const known = async () => (await query('select player_id from player_identities where provider = $1 and provider_uid = $2', [p, uid]))[0]?.player_id
+    const k = await known()
+    if (k) return { id: String(k), isNew: false }
+    const linkSql = `insert into player_identities (provider, provider_uid, player_id, created_at)
+      select $1, $2, $3::uuid, to_timestamp($4::float8) where not exists (select 1 from player_identities where player_id = $3::uuid)
+      on conflict do nothing returning player_id`
+    if (link && (await query(linkSql, [p, uid, link, now])).length) return { id: link, isNew: false }
+    const [made] = await query(ENSURE_SQL, [`oauth:${p}:${randomUUID()}`, now, JSON.stringify(await starters())])
+    if ((await query(linkSql, [p, uid, made.id, now])).length) return { id: String(made.id), isNew: true }
+    await query('delete from players where id = $1', [made.id]) // 같은 계정의 다른 로그인이 먼저 이었다 — 방금 만든 빈 계정은 지운다
+    const again = await known()
+    if (!again) throw new ApiError(409, 'conflict', 'concurrent login; try again')
+    return { id: String(again), isNew: false }
+  }
+
+  // 결과 기다리기 {state, verifier}: 아직이면 202 {pending}. 끝났으면 한 번만 {token, player_id, session, provider, is_new}
+  // — session은 자동 로그인 비밀(앱이 저장, 서버는 sha256만). 취소·거부 401 login_denied, 제공자 오류 401 login_failed, 시간 초과 410.
+  app.post('/v1/auth/oauth/poll', async (c) => {
+    const b = await body(c)
+    if (typeof b.state !== 'string' || !HEX64_RE.test(b.state)) throw new ApiError(400, 'bad_state', 'state must be 64 lowercase hex characters')
+    if (typeof b.verifier !== 'string' || !HEX64_RE.test(b.verifier)) throw new ApiError(400, 'bad_verifier', 'verifier must be 64 lowercase hex characters')
+    const now = clock()
+    const [row] = await query(`select provider, challenge, extract(epoch from created_at)::float8 as created_at, player_id, error, is_new
+      from oauth_logins where state = $1`, [b.state])
+    if (!row) throw new ApiError(404, 'unknown_login', 'no such login (finished or never started)')
+    if (sha256hex(b.verifier) !== row.challenge) throw new ApiError(403, 'bad_verifier', 'verifier does not match')
+    if (row.error) {
+      await query('delete from oauth_logins where state = $1', [b.state])
+      throw new ApiError(401, row.error === 'denied' ? 'login_denied' : 'login_failed', 'login was cancelled or failed')
+    }
+    if (!row.player_id) {
+      if (now - Number(row.created_at) > OAUTH_TTL) {
+        await query('delete from oauth_logins where state = $1', [b.state])
+        throw new ApiError(410, 'login_expired', 'login took too long; start again')
+      }
+      return c.json({ pending: true }, 202)
+    }
+    const [done] = await query('delete from oauth_logins where state = $1 and player_id is not null returning player_id', [b.state])
+    if (!done) throw new ApiError(404, 'unknown_login', 'no such login (finished or never started)')
+    const session = randomBytes(32).toString('hex')
+    await query('insert into player_sessions (hash, player_id, provider, created_at, last_used) values ($1, $2, $3, to_timestamp($4::float8), to_timestamp($4::float8))',
+      [sha256hex(session), done.player_id, row.provider, now])
+    return c.json({ token: await issueToken(String(done.player_id), now), player_id: done.player_id, session, provider: row.provider, is_new: row.is_new === true })
+  })
+
+  // 자동 로그인 {session} → 새 토큰. 모르는(로그아웃한) 세션이면 401 bad_session — 앱은 저장한 세션을 지우고 로그인 화면으로.
+  app.post('/v1/auth/session', async (c) => {
+    const b = await body(c)
+    const now = clock()
+    const s = typeof b.session === 'string' && HEX64_RE.test(b.session)
+      ? (await query('update player_sessions set last_used = to_timestamp($2::float8) where hash = $1 returning player_id, provider', [sha256hex(b.session), now]))[0]
+      : undefined
+    if (!s) throw new ApiError(401, 'bad_session', 'session is unknown or logged out; log in again')
+    await query('update players set last_seen = to_timestamp($2::float8) where id = $1', [s.player_id, now])
+    return c.json({ token: await issueToken(String(s.player_id), now), player_id: s.player_id, provider: s.provider })
+  })
+
+  // 로그아웃 {session}: 그 세션만 지운다(다른 기기는 그대로). 몰라도 200.
+  app.post('/v1/auth/logout', async (c) => {
+    const b = await body(c)
+    if (typeof b.session === 'string' && HEX64_RE.test(b.session)) await query('delete from player_sessions where hash = $1', [sha256hex(b.session)])
+    return c.json({ ok: true })
   })
 
   app.get('/v1/gamedata', async (c) => {
@@ -1390,6 +1524,20 @@ export function createApp(opts: AppOptions) {
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(소셜 로그인): 제공자 없이 진행 중 로그인을 끝낸다 {state, provider_uid} 또는 {state, error: "denied"} — 콜백과 같은 처리.
+    app.post('/v1/test/oauth_complete', async (c) => {
+      const b = await body(c)
+      const [row] = await query('select provider, link_player from oauth_logins where state = $1 and player_id is null and error is null', [String(b.state ?? '')])
+      if (!row) throw new ApiError(404, 'unknown_login', 'no pending login with that state')
+      if (b.error !== undefined) {
+        await query('update oauth_logins set error = $2 where state = $1', [b.state, String(b.error)])
+        return c.json({ ok: true })
+      }
+      const r = await resolvePlayer(row.provider, strField(b, 'provider_uid'), row.link_player ?? null, clock())
+      await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1', [b.state, r.id, r.isNew])
+      return c.json({ ok: true, player_id: r.id, is_new: r.isNew })
     })
 
     // 통합 테스트용: 그 플레이어 건물의 last_collect(자원 건물 수집)와 훈련 끝나는 시각(개정 16), 연구 끝나는 시각(개정 24)을 minutes분 앞당긴다.
