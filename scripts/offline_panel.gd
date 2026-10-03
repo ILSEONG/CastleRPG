@@ -1,9 +1,8 @@
 extends "res://scripts/ui_window.gd"
 ## 방치 보상 개요 창: 앱을 껐다(백그라운드에서) 돌아오면 떠나 있던 시간·그동안 처치한 적·얻은 골드를 보여 준다(Economy.offline_reported).
-## 앱을 끈 동안의 처치 골드는 offline_gold_mult(0.4)배, 최대 accum_cap_min분까지만 쌓인다(Economy.offline_reward). [확인] 또는 배경 탭으로 닫는다.
+## 처치 골드 배율·상한(offline_gold_mult·accum_cap_min, Economy.offline_reward)은 창에 적지 않는다. [확인] 또는 배경 탭으로 닫는다.
 ## 창을 만들기 전에 정산이 끝났으면(온라인 응답이 먼저 옴) 만들 때 Economy.offline_report로 곧바로 연다.
 
-const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 
 const DIALOG_W := 560.0
@@ -12,7 +11,6 @@ const TITLE := "방치 보상"
 var away_label: Label
 var kills_label: Label
 var gold_label: Label
-var note_label: Label
 var ok_button: Button
 
 
@@ -33,9 +31,6 @@ func _ready() -> void:
 	gold_label = _label("", 38, HudScript.INK)
 	row.add_child(gold_label)
 	content.add_child(row)
-	note_label = _label("", 20, HudScript.INK.lightened(0.3))
-	note_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(note_label)
 	ok_button = _button("확인")
 	ok_button.pressed.connect(close)
 	content.add_child(ok_button)
@@ -48,14 +43,9 @@ func _ready() -> void:
 func show_report(r: Dictionary) -> void:
 	Economy.offline_report = {}
 	var away := float(r.get("away_sec", 0.0))
-	var cap := GameData.config_num("accum_cap_min") * 60.0
 	away_label.text = "방치 시간  " + away_text(away)
 	kills_label.text = "처치한 적  %s마리" % UiKit.commas(int(r.get("kills", 0)))
 	gold_label.text = "+%s 골드" % UiKit.commas(int(r.get("gold_tenths", 0)) / 10)
-	var pct := roundi(GameData.config_num("offline_gold_mult") * 100.0)
-	note_label.text = "앱을 끈 동안 처치 골드는 %d%%만 쌓입니다 (최대 %s)" % [pct, away_text(cap)]
-	if away > cap:
-		note_label.text += "\n최대 시간까지만 적립되었습니다"
 	_fit()
 	open()
 

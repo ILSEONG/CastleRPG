@@ -331,7 +331,7 @@ func _run() -> void:
 
 
 ## 방치 보상 개요 창: 시험 시작(Economy.reset)은 정산할 것이 없어 창이 닫혀 있다. 정산(3시간 12분, 5,400마리, 27,000골드)이 오면
-## 열려 시간·처치·골드·안내(50%, 최대 12시간)를 보이고, [확인] 탭으로 닫힌다.
+## 열려 시간·처치·골드를 보이고, [확인] 탭으로 닫힌다.
 func _offline_report() -> void:
 	var w = null
 	for c in _main.get_children():
@@ -342,9 +342,9 @@ func _offline_report() -> void:
 	Economy._report_offline(3.0 * 3600.0 + 12.0 * 60.0 + 5.0, 5400, 270000)
 	await _frames(2)
 	_check(w.is_open() and w.away_label.text == "방치 시간  3시간 12분" and w.kills_label.text == "처치한 적  5,400마리" and w.gold_label.text == "+27,000 골드"
-		and w.note_label.text == "앱을 끈 동안 처치 골드는 40%만 쌓입니다 (최대 12시간)" and Economy.offline_report.is_empty(),
-		"(off) a claim opens the summary: away time, kills, gold, the 40% / 12 h note",
-		"away=%s kills=%s gold=%s note=%s" % [w.away_label.text, w.kills_label.text, w.gold_label.text, w.note_label.text])
+		and Economy.offline_report.is_empty(),
+		"(off) a claim opens the summary: away time, kills, gold (no rate note)",
+		"away=%s kills=%s gold=%s" % [w.away_label.text, w.kills_label.text, w.gold_label.text])
 	await _guard_wait()
 	await _tap(_center(w.ok_button))
 	_check(not w.is_open(), "(off) [확인] closes the summary", "open=%s" % w.is_open())
