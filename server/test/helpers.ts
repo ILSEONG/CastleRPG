@@ -36,7 +36,7 @@ export function barrier() {
   return { wrap, arm: () => (armed = true), arrived: () => arrived }
 }
 
-export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number } = {}): Promise<Setup> {
+export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number; app?: Partial<AppOptions> } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)
   await seed(db)
@@ -47,6 +47,7 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
     jwtSecret: o.secret ?? 'test-secret-0123456789abcdef0123456789',
     allowTestHooks: o.allowTestHooks ?? true,
     random: o.random,
+    ...(o.app ?? {}),
     ...extra,
   })
   const app = makeApp()

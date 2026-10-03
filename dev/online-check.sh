@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 온라인 통합 체크(개정 9 §7): API 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1, 포트 8790)를 띄우고
+# 온라인 통합 체크(개정 9 §7): API 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1, 구글 로그인만 켬(가짜 키 — 계정 창 검사), 포트 8790)를 띄우고
 # Godot 헤드리스로 tests/online_check를 두 번 돌린다(두 번째는 같은 기기 id — 골드·자원·스테이지 복원).
 # 서버는 트랩으로 항상 끈다. 둘 다 통과하면 마지막 줄이 ONLINE ALL PASSED.
 set -uo pipefail
@@ -32,7 +32,7 @@ if curl -s -o /dev/null "$API/v1/health"; then
 fi
 
 cd server
-PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=$PORT node src/main.ts > "$TMP/server.log" 2>&1 &
+PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=$PORT OAUTH_GOOGLE_ID=test OAUTH_GOOGLE_SECRET=test PUBLIC_URL=$API node src/main.ts > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 cd ..
 

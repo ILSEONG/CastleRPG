@@ -30,3 +30,13 @@ test('시작 거부: 고정 개발 비밀은 루프백 HOST에서만', () => {
   assert.equal(readEnv({ HOST: '0.0.0.0', JWT_SECRET: 'my-own-secret' }).hostname, '0.0.0.0')
   assert.equal(readEnv({ ALLOW_TEST_HOOKS: '1', PORT: '8790' }).allowTestHooks, true)
 })
+
+test('소셜 로그인 설정: ID·SECRET 둘 다 있어야 켜진다, 운영에서 provider를 켰으면 PUBLIC_URL 필수', () => {
+  const on = readEnv({ OAUTH_GOOGLE_ID: 'g', OAUTH_GOOGLE_SECRET: 's', PUBLIC_URL: 'https://api.example.test/' })
+  assert.deepEqual(on.oauth, { google: { id: 'g', secret: 's' } })
+  assert.equal(on.publicUrl, 'https://api.example.test')
+  assert.deepEqual(readEnv({}).oauth, {})
+  assert.throws(() => readEnv({ OAUTH_KAKAO_ID: 'k' }), /OAUTH_KAKAO_ID and OAUTH_KAKAO_SECRET/)
+  assert.throws(() => readEnv({ DATABASE_URL: URL, JWT_SECRET: LONG, OAUTH_NAVER_ID: 'n', OAUTH_NAVER_SECRET: 's' }), /PUBLIC_URL/)
+  assert.equal(readEnv({ DATABASE_URL: URL, JWT_SECRET: LONG, OAUTH_NAVER_ID: 'n', OAUTH_NAVER_SECRET: 's', PUBLIC_URL: 'https://x.test' }).publicUrl, 'https://x.test')
+})

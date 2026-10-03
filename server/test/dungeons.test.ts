@@ -555,7 +555,7 @@ test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)�
   const f = await openDb({})
   try {
     assert.deepEqual(await migrate(f), all)
-    assert.equal(all.length, 16) // 개정 24: 016
+    assert.equal(all.length, 17) // 계정 연동: 017
   } finally {
     await f.close()
   }
