@@ -45,6 +45,7 @@ const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
 const ResearchPanelScript := preload("res://scripts/research_panel.gd")
 const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
 const LoginScreenScript := preload("res://scripts/login_screen.gd")
+const PreloaderScript := preload("res://scripts/preloader.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -171,6 +172,8 @@ func _build_world() -> void:
 	add_child(tabs)
 	add_child(bag)
 	add_child(OfflinePanelScript.new())  # 방치 보상 개요(앱을 껐다 켜면 — Economy.offline_reported)
+	if not PreloaderScript.done:
+		add_child(PreloaderScript.new())  # 첫 로딩 화면: 리소스·피규어·배너를 다 준비한 뒤 걷힌다(자리표시가 보였다 바뀌지 않게)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원(영웅 id로, 다시 만든 영웅도) + 배치·승급·레벨·장비 반영
 	GameState.refilled.connect(_reset_soldiers)
