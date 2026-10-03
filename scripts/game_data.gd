@@ -12,6 +12,7 @@ const CONFIG_PATH := "res://data/config.csv"
 const BUILDINGS_PATH := "res://data/buildings.csv"
 const SOLDIERS_PATH := "res://data/soldiers.csv"
 const UPGRADES_PATH := "res://data/upgrades.csv"
+const RESEARCH_PATH := "res://data/research.csv"
 const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하는 정수 열
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
@@ -54,10 +55,10 @@ const BUILD_COST_GROWTH := 1.35  # L → L+1 비용 = round(값 × 1.35^(L−1))
 const BUILD_TIME_GROWTH := 1.5   # L → L+1 시간 = round(base_sec × 1.5^(L−1))
 const KEEP := "keep"  # 다른 건물의 상한·영웅 슬롯·성 내부·성 HP
 const GATE := "gate"  # 성문 HP(네 성문이 레벨 하나). 배치(Balance.BUILDINGS)에 없는 성 구조물
-const LAB := "lab"  # 영웅 공격
+const LAB := "lab"  # 연구소: 상위 연구 잠금(lab_req)·연구 속도(개정 24)
 const HOUSES := "houses"  # 인구
 const TAVERN := "tavern"  # 모집 확률
-const BUILDING_NUM_KEYS := ["castle_hp_per_level", "pop_base", "pop_per_house", "lab_atk_per_level",
+const BUILDING_NUM_KEYS := ["castle_hp_per_level", "pop_base", "pop_per_house",
 	"tavern_ssr_per_level", "tavern_sr_per_level"]  # 0 이상, 주점 증가분은 1 이하, 인구는 정수
 const POP_KEYS := ["pop_base", "pop_per_house"]
 # --- 병사(개정 13). 서버 rules.ts·seed.ts와 같은 규칙 ---
@@ -105,6 +106,17 @@ const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_c
 const DUNGEON_INT_KEYS := ["gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "gold_dg_base", "equip_sell_base",
 	"gold_dg_min_sec", "equip_dg_min_sec"]  # 0 이상 정수
 const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap"]  # 1 이상 정수
+# --- 연구(개정 24). 서버 rules.ts·seed.ts(연구 블록)와 같은 규칙 ---
+const RESEARCH_STR_COLS := ["id", "branch", "name", "effect"]
+const RESEARCH_NUM_COLS := ["tier", "per_level", "max_level", "lab_req", "wood", "stone", "food", "gold", "base_sec"]
+const RESEARCH_REQS := [["req1", "req1_lv"], ["req2", "req2_lv"]]  # 선행 노드·레벨. 빈 칸 = 없음("" · 0)
+const RESEARCH_BRANCHES := ["economy", "military", "hero"]  # 탭 순서
+const RESEARCH_RES := ["wood", "stone", "food", "gold"]  # 비용 열(골드는 정수 골드)
+const RESEARCH_EFFECTS := ["wood_pct", "stone_pct", "food_pct", "res_pct", "build_speed_pct", "research_speed_pct", "sell_pct", "kill_gold_pct",
+	"inf_pct", "arc_pct", "cav_pct", "soldier_pct", "castle_hp_pct", "gate_hp_pct", "train_speed_pct", "train_cost_pct", "pop_add",
+	"hero_atk_pct", "hero_hp_pct", "skill_pct"]  # 단위 %(pop_add만 명)
+const SOLDIER_RESEARCH := {"infantry": "inf_pct", "archer": "arc_pct", "cavalry": "cav_pct"}  # 병종 → 그 병종 연구 효과
+const RESEARCH_NUM_KEYS := ["research_cost_growth", "research_time_growth", "lab_research_speed_per_level", "research_cancel_refund", "research_dia_per_min"]
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
 static var _monsters := {}
@@ -115,6 +127,7 @@ static var _config := {}  # 키 → 문자열
 static var _buildings: Array = []  # 파일 순서(개정 12)
 static var _soldiers: Array = []  # 파일 순서(개정 13)
 static var _upgrades: Array = []  # 파일 순서(개정 20)
+static var _research: Array = []  # 연구 노드, 파일 순서(개정 24)
 static var _dungeons: Array = []  # 던전 적 표, 파일 순서(개정 18)
 static var _equip_drop: Array = []  # 등급 가중치, min_level 순(개정 18)
 ## 장비 합계 공급자(개정 18): equipment_bonus(hero_id) -> {hp, atk, speed_pct}. 오토로드 Economy가 _ready에서 넣는다(테스트의 .new()는
@@ -126,7 +139,7 @@ static var _loaded := false
 ## 기본 표를 다시 읽게 한다. 경로를 주면 그 파일을 쓴다(테스트용). 오류가 있어도 읽은 만큼은 쓴다.
 static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PATH, heroes_path := HEROES_PATH,
 		resources_path := RESOURCES_PATH, config_path := CONFIG_PATH, buildings_path := BUILDINGS_PATH, soldiers_path := SOLDIERS_PATH, upgrades_path := UPGRADES_PATH,
-		dungeons_path := DUNGEONS_PATH, equip_drop_path := EQUIP_DROP_PATH) -> void:
+		dungeons_path := DUNGEONS_PATH, equip_drop_path := EQUIP_DROP_PATH, research_path := RESEARCH_PATH) -> void:
 	errors = 0
 	_install(_build({
 		"monsters": _read(monsters_path, ["id"] + MONSTER_COLS),
@@ -138,6 +151,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 		"upgrades": _read(upgrades_path, UPGRADE_STR_COLS + UPGRADE_NUM_COLS),
 		"dungeons": _read(dungeons_path, DUNGEON_STR_COLS + DUNGEON_NUM_COLS),  # 개정 18
 		"equip_drop": _read(equip_drop_path, ["min_level"] + EQUIP_GRADES),
+		"research": _read(research_path, RESEARCH_STR_COLS + RESEARCH_NUM_COLS + RESEARCH_REQS[0] + RESEARCH_REQS[1]),  # 개정 24
 		"config": _config_map(_read(config_path, ["key", "value"])),
 	}))
 
@@ -147,7 +161,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 static func apply_remote(payload: Dictionary) -> bool:
 	errors = 0
 	var raw := {}
-	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers", "upgrades", "dungeons", "equip_drop"]:
+	for table in ["monsters", "stages", "heroes", "resources", "buildings", "soldiers", "upgrades", "dungeons", "equip_drop", "research"]:
 		var rows = payload.get(table)
 		var out: Array = []
 		if rows is Array:
@@ -415,11 +429,6 @@ static func soldier_stats(type: String, tier: int) -> Dictionary:
 		"speed": float(d.speed), "aggro": float(d.aggro)}
 
 
-## 연구소: 영웅 공격 + lab_atk_per_level × (L − 1).
-static func lab_atk_bonus(level: int) -> float:
-	return config_num("lab_atk_per_level") * (maxi(level, 1) - 1)
-
-
 ## 모집 확률 {ssr, sr}(R은 나머지, 서버 rules.gachaRates와 같은 식). 골드 = base + step × (모집 레벨 − 1), 다이아 = 고정(개정 23).
 ## 둘 다 주점 보너스 tavern_*_per_level × (주점 − 1)을 더한다.
 static func gacha_rates(currency: String, gold_level: int, tavern_level: int) -> Dictionary:
@@ -570,19 +579,121 @@ static func crit_roll_params(skill_rate: float, skill_mult: float, bonus: Dictio
 	return {"rate": clampf(rate, 0.0, 1.0), "mult": mult}
 
 
-## 최종 HP = 표 기본값 × 레벨 배율 × 승급 배율(개정 15), 공격 = … × (1 + 연구소 보너스)(개정 12, 개정 13: 막사 HP 보너스 없음). {hp, atk}
-## buildings = 건물 id → 레벨(Economy.levels). 비우면 연구소 1(보너스 없음).
-## 개정 18: + 장비 합계(더하기). equip = {hp, atk} 사전({}면 장비 없이), null이면 equip_source(오토로드 Economy)의 그 영웅 장비, 공급자가 없으면 0.
-static func hero_stats(def: Dictionary, level: int, promotion: int, buildings := {}, equip = null) -> Dictionary:
+# --- 연구(개정 24 §2·§3). 서버 rules.ts(연구 블록)와 같은 식 ---
+
+## 연구 노드 표(파일 순서). 행 = {id, branch, name, effect, tier, per_level, max_level, lab_req, req1, req1_lv, req2, req2_lv, wood, stone, food, gold,
+## base_sec}(숫자는 float, 선행이 없으면 "" · 0).
+static func research_defs() -> Array:
+	_ensure()
+	return _research
+
+
+static func research_def(id: String) -> Dictionary:
+	for d in research_defs():
+		if d.id == id:
+			return d
+	return {}
+
+
+## 레벨 n → n+1 비용 {wood, stone, food, gold}(정수, 골드는 정수 골드) = round(값 × research_cost_growth^n), n은 0부터. 모르는 노드면 {}.
+static func research_cost(id: String, level: int) -> Dictionary:
+	var d := research_def(id)
+	if d.is_empty():
+		return {}
+	var out := {}
+	for r in RESEARCH_RES:
+		out[r] = roundi(_grown(float(d[r]), config_num("research_cost_growth"), level))
+	return out
+
+
+## 레벨 n → n+1 시간(초, 정수) = round(base_sec × research_time_growth^n ÷ (1 + speed)). speed = research_speed(분수). 모르는 노드면 0.
+static func research_sec(id: String, level: int, speed: float) -> int:
+	var d := research_def(id)
+	return roundi(_grown(float(d.base_sec), config_num("research_time_growth"), level) / (1.0 + speed)) if not d.is_empty() else 0
+
+
+## 연구 속도(분수) = research_speed_pct / 100 + lab_research_speed_per_level × (연구소 − 1). bonus = research_bonus.
+static func research_speed(bonus: Dictionary, lab_level: int) -> float:
+	return float(bonus.get("research_speed_pct", 0.0)) / 100.0 + config_num("lab_research_speed_per_level") * (maxi(lab_level, 1) - 1)
+
+
+## levels(id → 레벨)의 효과 합 {효과: 합}(RESEARCH_EFFECTS 전부, 없으면 0). 노드 레벨 × per_level을 같은 효과끼리 파일 순서로 더한다
+## (예: hero_atk_pct = 무기 연마 + 전설의 무기). 레벨은 0..max_level로 자른다. 단위 %(pop_add만 명).
+static func research_bonus(levels: Dictionary) -> Dictionary:
+	var out := {}
+	for k in RESEARCH_EFFECTS:
+		out[k] = 0.0
+	for d in research_defs():
+		out[d.effect] = float(out.get(d.effect, 0.0)) + clampi(int(levels.get(d.id, 0)), 0, int(d.max_level)) * float(d.per_level)
+	return out
+
+
+## 연구 못 하는 이유 코드(순수, 서버 rules.researchBlock과 같은 순서·코드 — 진행 중(research_busy)은 쓰는 쪽이 먼저 본다). 되면 "".
+##   unknown_research → max_level → locked(연구소 Lv < lab_req, 선행 노드 Lv < 요구) → not_enough_resources(목재·석재·식량) → not_enough_gold.
+## have = {wood, stone, food, gold(정수 골드)}.
+static func research_block(id: String, levels: Dictionary, lab_level: int, have: Dictionary) -> String:
+	var d := research_def(id)
+	if d.is_empty():
+		return "unknown_research"
+	var lv := int(levels.get(id, 0))
+	if lv >= int(d.max_level):
+		return "max_level"
+	if not research_unlocked(d, levels, lab_level):
+		return "locked"
+	var cost := research_cost(id, lv)
+	for r in BUILD_RES:
+		if int(have.get(r, 0)) < int(cost[r]):
+			return "not_enough_resources"
+	return "not_enough_gold" if int(have.get("gold", 0)) < int(cost.gold) else ""
+
+
+## 잠금이 풀렸나: 연구소 Lv ≥ lab_req, 선행 노드 Lv ≥ 요구(빈 칸은 조건 없음).
+static func research_unlocked(d: Dictionary, levels: Dictionary, lab_level: int) -> bool:
+	if lab_level < int(d.lab_req):
+		return false
+	for rq in RESEARCH_REQS:
+		if d[rq[0]] != "" and int(levels.get(d[rq[0]], 0)) < int(d[rq[1]]):
+			return false
+	return true
+
+
+## 다이아 즉시 완료 비용 = max(1, ceil(남은 초 / 60) × research_dia_per_min).
+static func research_dia_cost(left_sec: float) -> int:
+	return maxi(1, ceili(left_sec / 60.0) * int(config_num("research_dia_per_min")))
+
+
+## 취소 환불 {자원: 수} = 그 레벨 비용 × research_cancel_refund(자원마다 내림, 0은 뺀다).
+static func research_refund(cost: Dictionary) -> Dictionary:
+	var out := {}
+	for r in cost:
+		var v := floori(int(cost[r]) * config_num("research_cancel_refund"))
+		if v > 0:
+			out[r] = v
+	return out
+
+
+## 정수 v × (1 + pct/100)를 내림(생산·판매·처치 골드 연구 효과 — 서버 Math.floor(v × (100 + pct) / 100)와 같은 곱셈 순서).
+static func pct_floor(v: int, pct: float) -> int:
+	return floori(v * (100.0 + pct) / 100.0)
+
+
+## 병종 공격·HP 연구 배율 = 1 + (그 병종 % + soldier_pct) / 100.
+static func soldier_research_mult(type: String, bonus: Dictionary) -> float:
+	return 1.0 + (float(bonus.get(SOLDIER_RESEARCH.get(type, ""), 0.0)) + float(bonus.get("soldier_pct", 0.0))) / 100.0
+
+
+## 최종 HP·공격 = 표 기본값 × 레벨 배율 × 승급 배율(개정 15) + 장비 합계(개정 18). {hp, atk}
+## 개정 24: 연구소 레벨 공격 보너스는 없어졌다 — 연구 hero_atk_pct·hero_hp_pct는 성장처럼 hero.gd refresh_stats가 곱한다.
+## equip = {hp, atk} 사전({}면 장비 없이), null이면 equip_source(오토로드 Economy)의 그 영웅 장비, 공급자가 없으면 0.
+static func hero_stats(def: Dictionary, level: int, promotion: int, equip = null) -> Dictionary:
 	var m := level_mult(level) * promote_mult(promotion)
 	var eq = equip if equip is Dictionary else (equip_source.equipment_bonus(str(def.get("id", ""))) if equip_source != null else {})
-	return {"hp": float(def.hp) * m + float(eq.get("hp", 0.0)),
-		"atk": float(def.atk) * m * (1.0 + lab_atk_bonus(int(buildings.get(LAB, 1)))) + float(eq.get("atk", 0.0))}
+	return {"hp": float(def.hp) * m + float(eq.get("hp", 0.0)), "atk": float(def.atk) * m + float(eq.get("atk", 0.0))}
 
 
-## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(건물 보너스·장비 포함).
-static func hero_power(def: Dictionary, level: int, promotion: int, buildings := {}, equip = null) -> int:
-	var s := hero_stats(def, level, promotion, buildings, equip)
+## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(장비 포함).
+static func hero_power(def: Dictionary, level: int, promotion: int, equip = null) -> int:
+	var s := hero_stats(def, level, promotion, equip)
 	return roundi(s.hp / 10.0 + s.atk * 2.0 / float(def.atk_interval))
 
 
@@ -803,6 +914,7 @@ static func _install(t: Dictionary) -> void:
 	_buildings = t.buildings
 	_soldiers = t.soldiers
 	_upgrades = t.upgrades
+	_research = t.research
 	_dungeons = t.dungeons
 	_equip_drop = t.equip_drop
 	_config = t.config
@@ -894,7 +1006,7 @@ static func _hero_skills(row: Dictionary):
 
 ## 원시 표들 → 검사한 표들. 오류는 errors에 센다(교체 여부는 호출자가 결정).
 static func _build(raw: Dictionary) -> Dictionary:
-	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "soldiers": [], "upgrades": [], "config": raw.config}
+	var t := {"monsters": {}, "stages": [], "heroes": [], "resources": [], "buildings": [], "soldiers": [], "upgrades": [], "research": [], "config": raw.config}
 	for row in _convert(raw.monsters, ["id"], MONSTER_COLS):
 		if t.monsters.has(row.id):
 			_err("monsters", row._line, "id", "duplicate id '%s'" % row.id)
@@ -967,10 +1079,42 @@ static func _build(raw: Dictionary) -> Dictionary:
 		else:
 			ids[row.id] = true
 			t.upgrades.append(row)
+	_build_research(raw, t)
 	_build_dungeons(raw, t)
 	if errors == 0:
 		_check_contents(t)
 	return t
+
+
+## 개정 24: 연구 표(id 겹침 금지). 선행 칸(노드·레벨)은 둘 다 비거나(CSV 빈 칸·서버 null → "" · 0) 둘 다 있어야 한다.
+static func _build_research(raw: Dictionary, t: Dictionary) -> void:
+	var ids := {}
+	for src in raw.get("research", []):
+		var conv := _convert([src], RESEARCH_STR_COLS, RESEARCH_NUM_COLS)
+		if conv.is_empty():
+			continue
+		var row: Dictionary = conv[0]
+		var ok := true
+		for rq in RESEARCH_REQS:
+			var v = src.get(rq[0])
+			var n = src.get(rq[1])
+			var num: bool = n is float or n is int or (n is String and n.strip_edges().is_valid_float())
+			if _blank(v) and _blank(n):
+				row[rq[0]] = ""
+				row[rq[1]] = 0.0
+			elif v is String and not _blank(v) and num:
+				row[rq[0]] = v.strip_edges()
+				row[rq[1]] = n.strip_edges().to_float() if n is String else float(n)
+			else:
+				_err(src._src, src._line, rq[0], "a prerequisite needs both a node id and a level (or neither): '%s', '%s'" % [str(v), str(n)])
+				ok = false
+		if not ok:
+			continue
+		if ids.has(row.id):
+			_err("research", row._line, "id", "duplicate id '%s'" % row.id)
+		else:
+			ids[row.id] = true
+			t.research.append(row)
 
 
 ## 개정 18: 던전 적 표(id 겹침 금지)와 등급 가중치 표(min_level은 1부터 오름차순 정수 — 서버 seed.checkDropRows).
@@ -999,7 +1143,7 @@ static func _check_contents(t: Dictionary) -> void:
 	for id in ["grunt", "epic_boss"]:
 		if not t.monsters.has(id):
 			_err("monsters", 0, "id", "missing required monster '%s'" % id)
-	for table in ["stages", "heroes", "resources", "buildings", "soldiers", "upgrades"]:
+	for table in ["stages", "heroes", "resources", "buildings", "soldiers", "upgrades", "research"]:
 		if t[table].is_empty():
 			_err(table, 0, "", "table is empty")
 	for k in CONFIG_NUM_KEYS:
@@ -1011,6 +1155,7 @@ static func _check_contents(t: Dictionary) -> void:
 	_check_buildings(t)
 	_check_soldiers(t)
 	_check_upgrades(t)
+	_check_research(t)
 	_check_dungeons(t)
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
@@ -1165,6 +1310,48 @@ static func _check_upgrades(t: Dictionary) -> void:
 			_err("upgrades", u._line, "max_level", "must be an integer of at least 1: %s" % u.max_level)
 		if not u.unit in UPGRADE_UNITS:
 			_err("upgrades", u._line, "unit", "must be pct or pp: '%s'" % u.unit)
+
+
+## 연구 표·설정(개정 24, 서버 seed.checkResearch와 같은 규칙): 분야·효과는 아는 것만, tier·max_level은 1 이상 정수, lab_req·비용은 0 이상 정수,
+## per_level ≥ 0, base_sec > 0, 선행은 표 안의 노드이고 요구 Lv은 1..그 노드 max_level 정수.
+## 설정: 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분은 0 이상 정수.
+static func _check_research(t: Dictionary) -> void:
+	var by_id := {}
+	for d in t.research:
+		by_id[d.id] = d
+	var rules := {"tier": [1.0, true], "max_level": [1.0, true], "lab_req": [0.0, true], "wood": [0.0, true], "stone": [0.0, true], "food": [0.0, true],
+		"gold": [0.0, true], "per_level": [0.0, false]}  # 열 → [최소, 정수]
+	for d in t.research:
+		if not d.branch in RESEARCH_BRANCHES:
+			_err("research", d._line, "branch", "branch must be economy, military or hero: '%s'" % d.branch)
+		if not d.effect in RESEARCH_EFFECTS:
+			_err("research", d._line, "effect", "unknown effect '%s'" % d.effect)
+		for c in rules:
+			var low: float = rules[c][0]
+			if not (d[c] >= low and (not rules[c][1] or d[c] == floorf(d[c]))):
+				_err("research", d._line, c, "must be %s: %s" % [("an integer of at least %d" % low) if rules[c][1] else "0 or more", d[c]])
+		if not d.base_sec > 0.0:
+			_err("research", d._line, "base_sec", "must be greater than 0: %s" % d.base_sec)
+		for rq in RESEARCH_REQS:
+			if d[rq[0]] == "":
+				continue
+			var p: Dictionary = by_id.get(d[rq[0]], {})
+			if p.is_empty():
+				_err("research", d._line, rq[0], "unknown research '%s'" % d[rq[0]])
+			elif not (d[rq[1]] >= 1.0 and d[rq[1]] == floorf(d[rq[1]]) and d[rq[1]] <= p.max_level):
+				_err("research", d._line, rq[1], "must be an integer in 1..%d (max level of %s): %s" % [int(p.max_level), p.id, d[rq[1]]])
+	var want := {"research_cost_growth": "1 or more", "research_time_growth": "1 or more", "lab_research_speed_per_level": "0 or more",
+		"research_cancel_refund": "in 0..1", "research_dia_per_min": "a non-negative integer"}
+	for k in RESEARCH_NUM_KEYS:
+		var s := String(t.config.get(k, ""))
+		var f := s.to_float()
+		if not s.is_valid_float():
+			_err("config", 0, k, "missing or not a number")
+			continue
+		var ok: bool = {"1 or more": f >= 1.0, "0 or more": f >= 0.0, "in 0..1": f >= 0.0 and f <= 1.0,
+			"a non-negative integer": f >= 0.0 and f == floorf(f)}[want[k]]
+		if not ok:
+			_err("config", 0, k, "must be %s: '%s'" % [want[k], s])
 
 
 ## 던전·장비(개정 18, 서버 seed.checkDungeons·checkDropRows와 같은 규칙): 적 표 type은 gold·equip이고 종류마다 행 하나 이상, count 1 이상 정수,

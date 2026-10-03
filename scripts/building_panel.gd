@@ -8,6 +8,8 @@ extends "res://scripts/ui_window.gd"
 ##   비었을 때: 병종 피규어 + "1마리 2:51:00", 수량 입력(qty_box.gd, 1..min(묶음 상한, 자원으로 되는 수)), 총비용(아이콘, 모자라면 빨강),
 ##   총시간, [훈련](못 하면 비활성 + 이유) / 훈련 중: 진행 막대, "보병 ×8 · 남은 12:34:56", [취소(50% 환불)] / 완료: "보병 ×8 훈련 완료", [수령].
 ## 성채 효과(사용자 규칙 2026-10-02): 영웅 슬롯·성 넓이 줄은 다음 레벨에서 그 값이 바뀔 때(단계 경계)만 쓴다.
+## 연구소(개정 24 §1): 설명 아래 큰 [연구](research_panel을 연다), 효과 "연구 속도 +0% → +2%". 효과 값(생산·인구·성/성문 HP·1마리 시간)은
+## 지금 연구 효과를 넣어 보인다(Economy.research_bonus).
 
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
@@ -21,6 +23,7 @@ const GREEN := Color(0.13, 0.58, 0.24)
 const RED := Color(0.78, 0.22, 0.18)
 const UPGRADE_TEXT := "업그레이드"
 const TRAIN_ICON_PX := 72.0
+const RESEARCH_TEXT := "연구"
 const CANCEL_TEXT := "취소(50% 환불)"
 const TIERED_KEEP := ["영웅 슬롯", "성 넓이"]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
 const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
@@ -30,7 +33,7 @@ const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"archery": "궁병을 훈련합니다.",
 	"stable": "기병을 훈련합니다.",
 	"tavern": "영웅을 모집합니다.",
-	"lab": "영웅의 공격을 연구합니다.",
+	"lab": "기술을 연구합니다. 레벨이 오르면 상위 연구가 열리고 연구 속도가 빨라집니다.",
 	"houses": "주민이 사는 집. 인구가 병사 배치 상한입니다.",
 	"lumber": "목재를 생산합니다.",
 	"quarry": "석재를 생산합니다.",
@@ -38,8 +41,10 @@ const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 }
 
 var building_id := ""
+var research  # 연구 창(research_panel.gd, 개정 24). main이 넣는다
 var title_label: Label
 var desc_label: Label
+var research_button: Button  # 연구소만: [연구] → 연구 창
 var effects: VBoxContainer  # 효과 줄: HBox[지금(검정), → 다음(초록)]
 var reqs: VBoxContainer  # 선행 조건 줄 Label
 var cost_labels := {}  # 자원 id → 비용 숫자 Label(아이콘과 한 칸)
@@ -80,7 +85,13 @@ func _ready() -> void:
 	title_label = _title("")
 	content.add_child(title_label)
 	desc_label = _label("", 24, HudScript.INK.lightened(0.3))
+	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_label.custom_minimum_size = Vector2(DIALOG_W - 48, 0)
 	content.add_child(desc_label)
+	research_button = _button(RESEARCH_TEXT, UiKit.GRADE_COLORS.SR, 32)
+	research_button.custom_minimum_size = Vector2(0, 84)
+	research_button.pressed.connect(open_research)
+	content.add_child(research_button)
 	_build_train_box()
 	effects = VBoxContainer.new()
 	content.add_child(effects)
@@ -125,6 +136,7 @@ func _ready() -> void:
 	content.add_child(close_button)
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.training_changed.connect(func(): if visible: _refresh())
+	Economy.research_changed.connect(func(): if visible: _refresh())  # 개정 24: 연구 효과(생산·인구·HP·훈련)
 
 
 ## id 건물 창을 연다(건물 표에 없는 id면 열지 않는다).
@@ -137,6 +149,14 @@ func open_building(id: String) -> void:
 
 func _on_open() -> void:
 	_refresh()
+
+
+## 연구소 [연구]: 이 창을 닫고 연구 창을 연다.
+func open_research() -> void:
+	if research == null:
+		return
+	close()
+	research.open()
 
 
 func _process(_delta: float) -> void:
@@ -161,6 +181,7 @@ func _refresh() -> void:
 	var building: bool = Economy.is_building(id)
 	title_label.text = "%s Lv %d" % [d.name, lv]
 	desc_label.text = DESC.get(id, "")
+	research_button.visible = id == GameData.LAB
 	_clear(effects)
 	for row in effect_lines(id, lv):
 		var line := HBoxContainer.new()
@@ -301,10 +322,10 @@ func _refresh_training(type: String) -> void:
 	qty.set_range(1, maxi(1, mini(Economy.train_max(id), _affordable(type, tier))))
 	var n: int = qty.value
 	var lv := Economy.building_level(id)
-	unit_label.text = "T%d %s · 1마리 %s" % [tier, nm, UiKit.clock(GameData.soldier_unit_sec(lv))]
+	unit_label.text = "T%d %s · 1마리 %s" % [tier, nm, UiKit.clock(Economy.train_time(id, 1))]
 	next_label.text = train_preview(id, lv)
 	next_label.visible = next_label.text != ""
-	var cost := EconomyScript.train_cost(type, n, tier)
+	var cost := Economy.train_cost_now(type, n, tier)
 	for r in train_cost_labels:
 		var need := int(cost.get(r, 0))
 		train_cost_labels[r].text = UiKit.commas(need)
@@ -325,7 +346,8 @@ static func train_preview(id: String, lv: int) -> String:
 		return ""
 	if GameData.train_tier(lv + 1) > GameData.train_tier(lv):
 		return "Lv %d → T%d 해금" % [lv + 1, GameData.train_tier(lv + 1)]
-	return "1마리 %s → %s" % [UiKit.clock(GameData.soldier_unit_sec(lv)), UiKit.clock(GameData.soldier_unit_sec(lv + 1))]
+	var k := 1.0 + float(Economy.research_bonus().train_speed_pct) / 100.0  # 개정 24 훈련 교범
+	return "1마리 %s → %s" % [UiKit.clock(GameData.soldier_unit_sec(lv) / k), UiKit.clock(GameData.soldier_unit_sec(lv + 1) / k)]
 
 
 ## 지금 자원으로 훈련할 수 있는 수(무료면 아주 큰 수).
@@ -343,27 +365,33 @@ static func _affordable(type: String, tier := 1) -> int:
 ## 성채의 영웅 슬롯·성 넓이 줄은 다음 레벨에서 값이 바뀔 때만(단계 경계 — keep_slot_tiers·keep_interior_tiers) 넣는다. 최대 레벨이면 다음이 없어 둘 다 빠진다.
 static func effect_lines(id: String, lv: int) -> Array:
 	var n := lv + 1
+	var b: Dictionary = Economy.research_bonus()  # 개정 24: 지금 연구 효과를 넣은 값
 	var res := GameData.resource_of_building(id)
 	if res != "":
-		return [["생산", "%d/분" % EconomyScript.rate_per_min(res, lv), "%d/분" % EconomyScript.rate_per_min(res, n)]]
+		var pct := Economy.res_pct(res)
+		return [["생산", "%d/분" % EconomyScript.rate_per_min(res, lv, pct), "%d/분" % EconomyScript.rate_per_min(res, n, pct)]]
 	if GameData.soldier_of_building(id) != "":
+		var k := 1.0 + float(b.train_speed_pct) / 100.0
 		var tn := GameData.train_tier(n)
-		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n))
-		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv)), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
+		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n) / k)
+		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
 	match id:
 		"keep":
+			var hp := 1.0 + float(b.castle_hp_pct) / 100.0
 			var rows := [["건물 최대", "Lv %d" % lv, "Lv %d" % n],
-				["성 HP", UiKit.commas(roundi(GameData.castle_hp_max(lv))), UiKit.commas(roundi(GameData.castle_hp_max(n)))],
+				["성 HP", UiKit.commas(roundi(GameData.castle_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.castle_hp_max(n) * hp))],
 				["영웅 슬롯", str(GameData.hero_slots(lv)), str(GameData.hero_slots(n))],
 				["성 넓이", "%d칸" % GameData.interior_tiles(lv), "%d칸" % GameData.interior_tiles(n)]]
 			var maxed := lv >= int(GameData.building_def("keep").get("max_level", 0))
 			return rows.filter(func(r): return not r[0] in TIERED_KEEP or (r[1] != r[2] and not maxed))
 		"gate":
-			return [["성문 HP", UiKit.commas(roundi(GameData.gate_hp_max(lv))), UiKit.commas(roundi(GameData.gate_hp_max(n)))]]
-		"lab":
-			return [["영웅 공격", _pct(GameData.lab_atk_bonus(lv), "+"), _pct(GameData.lab_atk_bonus(n), "+")]]
+			var hp := 1.0 + float(b.gate_hp_pct) / 100.0
+			return [["성문 HP", UiKit.commas(roundi(GameData.gate_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.gate_hp_max(n) * hp))]]
+		"lab":  # 연구소 몫의 연구 속도만(연구 방법론은 연구 창 위에 합쳐 보인다)
+			return [["연구 속도", _pct(GameData.research_speed({}, lv), "+"), _pct(GameData.research_speed({}, n), "+")]]
 		"houses":
-			return [["인구", str(GameData.population(lv)), str(GameData.population(n))]]
+			var add := int(b.pop_add)
+			return [["인구", str(GameData.population(lv) + add), str(GameData.population(n) + add)]]
 		"tavern":
 			var a := GameData.gacha_rates(GameData.GACHA_GOLD, 1, lv)  # 골드 Lv 1 기준(주점 보너스만 보인다)
 			var b := GameData.gacha_rates(GameData.GACHA_GOLD, 1, n)

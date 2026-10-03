@@ -6,7 +6,7 @@ extends Node
 ## HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
 ## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
 ## 상인 탭은 거래 창, 주점 탭은 모집 창, 자원 건물 탭은 쌓인 게 있으면 수집(+N)·없으면 건물 창, 병사 건물 탭은 훈련이 끝났으면 수령
-## (개정 16, 알림 "보병 +n")·아니면 건물 창, 그 밖의 건물 탭은 건물 창(개정 12 §2.5).
+## (개정 16, 알림 "보병 +n")·아니면 건물 창, 연구소 탭은 플라스크 말풍선이 떠 있으면 연구 창(개정 24)·아니면 건물 창, 그 밖의 건물 탭은 건물 창(개정 12 §2.5).
 ## 건물은 레이가 꿴 판정체 중 화면 중심이 탭에 가장 가까운 것(_building_hit, 개정 15 — 앞 건물 상자가 뒤 병사 건물 지붕을 가리지 않게).
 ## 성문 탭은 선택된 영웅이 있으면 그 영웅의 성문 명령이 먼저이고, 없으면 성문 건물 창. 모두 영웅 선택은 건드리지 않는다.
 ## 길게 누르기(LONG_PRESS_MS, 같은 탭 조건: 움직이지 않고 두 번째 손가락 없음): 건물·성문이면 누른 채로 건물 창을 열고 그 누름은 탭이
@@ -37,6 +37,7 @@ var badges  # 수집 "+N" 표시(badges.gd)
 var panel   # 상인 거래 창(merchant_panel.gd)
 var recruit  # 주점 모집 창(recruit_panel.gd)
 var building_panel  # 건물 창(building_panel.gd)
+var research  # 연구 창(research_panel.gd, 개정 24) — 연구소 말풍선 탭
 
 var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
@@ -160,6 +161,9 @@ func _tap_object(screen_pos: Vector2) -> bool:
 		return true
 	if id != "" and Economy.training(id).ready:
 		Economy.collect_training(id)  # 알림 "보병 +n"(온라인은 응답이 왔을 때)
+		return true
+	if id == GameData.LAB and research != null and badges.research_bubble():
+		research.open()  # 개정 24: 플라스크 말풍선이 떠 있으면 곧바로 연구 창
 		return true
 	if id == "" and not _pick(screen_pos, LAYER_GATE).is_empty():
 		id = GameData.GATE

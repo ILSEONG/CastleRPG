@@ -315,7 +315,7 @@ func owned_by_power() -> Array:
 	var ids := Economy.heroes.keys().filter(func(id): return int(Economy.heroes[id]) >= 1 and not GameData.hero(id).is_empty())
 	var power := {}
 	for id in ids:
-		power[id] = GameData.hero_power(GameData.hero(id), Economy.level_of(id), Economy.promotion_of(id), Economy.levels)
+		power[id] = GameData.hero_power(GameData.hero(id), Economy.level_of(id), Economy.promotion_of(id))
 	var order: Array = GameData.heroes().map(func(h): return h.id)
 	ids.sort_custom(func(a, b): return power[a] > power[b] or (power[a] == power[b] and order.find(a) < order.find(b)))
 	return ids
@@ -389,7 +389,7 @@ func _refresh_form() -> void:
 		var c = hero_cards[id]
 		c.stars = Economy.promotion_of(id)
 		c.level = Economy.level_of(id)
-		c.power = GameData.hero_power(GameData.hero(id), c.level, c.stars, Economy.levels)
+		c.power = GameData.hero_power(GameData.hero(id), c.level, c.stars)
 		c.highlight = party.has(id)
 		c.queue_redraw()
 	var lv := level_of(form_type)

@@ -99,7 +99,7 @@ func _refresh(now: float) -> void:
 		rate_labels[id].add_theme_color_override("font_color", rate_color(rate))
 		_jackpot[id] = rate >= GameData.config_num("merchant_jackpot_rate")
 		_amount_labels[id].text = HudScript.commas(amount)
-		_value_labels[id].text = "→ %s골드" % HudScript.commas(Economy.sell_value(id, amount, rate))
+		_value_labels[id].text = "→ %s골드" % HudScript.commas(Economy.sell_gold(id, amount, rate))
 		sell_buttons[id].disabled = amount == 0
 		any = any or amount > 0
 		if qty_boxes[id].visible and amount == 0:
@@ -205,7 +205,7 @@ func _qty_labels(now: float) -> void:
 		if not qty_boxes[id].visible:
 			continue
 		var q: int = qty_inputs[id].value
-		var g := Economy.sell_value(id, q, Economy.current_rate(id, now))
+		var g := Economy.sell_gold(id, q, Economy.current_rate(id, now))
 		qty_gold_labels[id].text = "→ %s골드" % HudScript.commas(g)
 		total_amount += q
 		total_gold += g

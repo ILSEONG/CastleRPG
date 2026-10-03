@@ -121,6 +121,7 @@ func _init() -> void:
 	test_portrait_looks()
 	test_scene_snap()
 	test_crowd()
+	test_research_r24()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -236,7 +237,7 @@ func test_game_tables() -> void:
 	_write(cp, "key,value\ncastle_hp,1000\nkeep_slot_tiers,1:4|5:8|10:12\nkeep_interior_tiers,1:20|5:24|10:28\nstarter_heroes,hans|ella\n")
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
 	check(GameData.errors == GameData.CONFIG_NUM_KEYS.size() - 1 + GameData.CONFIG_LIST_KEYS.size() - 1 + GameData.BUILDING_NUM_KEYS.size() + GameData.SOLDIER_NUM_KEYS.size()
-		+ GameData.soldiers().size() + GameData.DUNGEON_NUM_KEYS.size(), "config file missing keys reports one error per key (rev 16: train_cost_<type> per soldier, rev 18: dungeon keys)")
+		+ GameData.soldiers().size() + GameData.DUNGEON_NUM_KEYS.size() + GameData.RESEARCH_NUM_KEYS.size(), "config file missing keys reports one error per key (rev 16: train_cost_<type> per soldier, rev 18: dungeon keys, rev 24: research keys)")
 	_errors.count = logged
 	DirAccess.remove_absolute(cp)
 	GameData.load_tables()
@@ -249,7 +250,7 @@ func _payload() -> Dictionary:
 		var r := GameData.stage(s).duplicate()
 		stages.append(r)
 	var cfg := {}
-	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS + GameData.SOLDIER_NUM_KEYS + GameData.DUNGEON_NUM_KEYS:
+	for k in GameData.CONFIG_NUM_KEYS + GameData.CONFIG_LIST_KEYS + GameData.BUILDING_NUM_KEYS + GameData.CONFIG_TIER_KEYS + GameData.SOLDIER_NUM_KEYS + GameData.DUNGEON_NUM_KEYS + GameData.RESEARCH_NUM_KEYS:
 		cfg[k] = String(GameData._config[k])
 	for sd in GameData.soldiers():  # 개정 16 훈련 비용
 		cfg["train_cost_" + sd.id] = String(GameData._config["train_cost_" + sd.id])
@@ -257,7 +258,20 @@ func _payload() -> Dictionary:
 		"stages": stages, "heroes": GameData.heroes().duplicate(true), "resources": GameData.resources().duplicate(true),
 		"buildings": GameData.buildings().duplicate(true), "soldiers": GameData.soldiers().duplicate(true),
 		"upgrades": GameData.upgrades().duplicate(true), "config": cfg,
-		"dungeons": GameData._dungeons.duplicate(true), "equip_drop": GameData._equip_drop.duplicate(true)}
+		"dungeons": GameData._dungeons.duplicate(true), "equip_drop": GameData._equip_drop.duplicate(true), "research": _research_rows()}
+
+
+## 연구 표를 서버 행처럼(개정 24): 빈 선행은 null.
+func _research_rows() -> Array:
+	var out := []
+	for d in GameData.research_defs():
+		var r: Dictionary = d.duplicate()
+		for rq in GameData.RESEARCH_REQS:
+			if r[rq[0]] == "":
+				r[rq[0]] = null
+				r[rq[1]] = null
+		out.append(r)
+	return out
 
 
 ## 교체 성공은 새 값으로, 실패는 직전 상태 그대로. 호출자가 끝에 기본 표를 복구한다(실패해도 복구되게 분리).
@@ -306,6 +320,9 @@ func _remote_checks() -> int:
 		["dungeon type unknown", 1], ["dungeon table missing", 1], ["no equip dungeon enemy", 1], ["dungeon count 0", 1], ["drop min_level gap", 1],
 		["drop weight negative", 1], ["dungeon config missing", 1], ["reset hour 24", 1], ["weapon chance above 1", 1],
 		["rounds per stage 0", 1], ["rounds per stage 2.5", 1], ["speed step negative", 1], ["speed cap below 1", 1], ["boss mult 0", 1], ["round config missing", 1],
+		["research branch unknown", 1], ["research effect unknown", 1], ["research prereq unknown", 1], ["research prereq level above max", 1],
+		["research prereq without level", 1], ["research base_sec 0", 1], ["research max level 0", 1], ["research table missing", 1], ["duplicate research id", 1],
+		["research refund above 1", 1], ["research growth below 1", 1], ["research dia per min 1.5", 1], ["research config missing", 1],
 	]
 	var before := _tables_hash()
 	for entry in bad:
@@ -321,7 +338,7 @@ func _remote_checks() -> int:
 ## 모든 표의 내용 해시(깊은 비교) — 거부된 payload가 표를 하나도 안 바꿨는지 본다.
 func _tables_hash() -> int:
 	return hash([GameData._monsters, GameData._stages, GameData._heroes, GameData._resources, GameData._buildings, GameData._soldiers, GameData._upgrades, GameData._config,
-		GameData._dungeons, GameData._equip_drop])
+		GameData._dungeons, GameData._equip_drop, GameData._research])
 
 
 ## payload q를 이름에 맞게 한 곳(또는 둘) 망가뜨린다.
@@ -387,6 +404,19 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"speed cap below 1": q.config.stage_speed_cap = "0.9"
 		"boss mult 0": q.config.boss_round_mult = "0"
 		"round config missing": q.config.erase("rounds_per_stage")
+		"research branch unknown": q.research[0].branch = "magic"  # 개정 24
+		"research effect unknown": q.research[0].effect = "fly_pct"
+		"research prereq unknown": q.research[3].req1 = "nope"  # 건축학
+		"research prereq level above max": q.research[3].req1_lv = 11
+		"research prereq without level": q.research[3].req1_lv = null
+		"research base_sec 0": q.research[0].base_sec = 0
+		"research max level 0": q.research[21].max_level = 0  # 불굴의 의지(아무도 선행으로 쓰지 않는다)
+		"research table missing": q.erase("research")
+		"duplicate research id": q.research[1].id = "wood_tech"
+		"research refund above 1": q.config.research_cancel_refund = "1.5"
+		"research growth below 1": q.config.research_cost_growth = "0.9"
+		"research dia per min 1.5": q.config.research_dia_per_min = "1.5"
+		"research config missing": q.config.erase("research_time_growth")
 
 
 func test_apply_remote() -> void:
@@ -1901,15 +1931,15 @@ func test_buildings() -> void:
 	# 효과 수치
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
-	check(GameData.lab_atk_bonus(1) == 0.0 and is_equal_approx(GameData.lab_atk_bonus(11), 0.3), "lab +3% per level above 1")
+	check(is_equal_approx(GameData.research_speed({}, 1), 0.0) and is_equal_approx(GameData.research_speed({}, 30), 0.58), "lab: research speed +2% per level above 1 (Lv 30 = +58%)")
 	var r1 := GameData.gacha_rates("gold", 1, 1)
 	var r11 := GameData.gacha_rates("gold", 1, 11)
 	check(is_equal_approx(r1.ssr, 0.005) and is_equal_approx(r1.sr, 0.05) and is_equal_approx(r11.ssr, 0.015) and is_equal_approx(r11.sr, 0.08), "tavern: SSR +0.1%p, SR +0.3%p per level")
 	var hans := GameData.hero("hans")
-	var st := GameData.hero_stats(hans, 1, 0, {"barracks": 5, "lab": 3})
-	check(st.hp == 440.0 and is_equal_approx(st.atk, 30.0 * 1.06) and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0},
-		"hero atk x(1 + lab); the barracks no longer raises hero HP (rev 13): %s" % [st])
-	check(GameData.hero_power(hans, 1, 0, {"barracks": 5, "lab": 3}) == roundi(440.0 / 10.0 + 30.0 * 1.06 * 2.0 / 0.8), "power uses the lab bonus")
+	var st := GameData.hero_stats(hans, 1, 0)
+	check(st == {"hp": 440.0, "atk": 30.0} and not GameData.CONFIG_NUM_KEYS.has("lab_atk_per_level") and not GameData.BUILDING_NUM_KEYS.has("lab_atk_per_level")
+		and GameData.config_num("lab_atk_per_level") == 0.0 and GameData.hero_power(hans, 1, 0) == roundi(440.0 / 10.0 + 30.0 * 2.0 / 0.8),
+		"rev 24: the lab no longer raises hero attack (no lab_atk_per_level); stats and power ignore building levels: %s" % [st])
 	var rig := func(): return 0.0055  # 등급 굴림 0.0055: 주점 1(SSR 0.5%)은 SR, 주점 2(0.6%)는 SSR
 	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 1, 2))[0].grade == "SSR", "offline recruiting uses the tavern odds")
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
@@ -3249,10 +3279,10 @@ func test_dungeon_tables() -> void:
 	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 5000
 		and GameData.extra_cost(2) == 15000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
 		"fresh dungeon = today's keys; extra run cost 5000 x (1 + runs today); party 6 / 4")
-	# 영웅 최종 능력치 = (기본 × 레벨 × 승급 × 연구소) + 장비 합계
+	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
-	check(GameData.hero_stats(hans, 1, 0, {}, {"hp": 100, "atk": 12}) == {"hp": 540.0, "atk": 42.0} and is_equal_approx(GameData.hero_stats(hans, 1, 0, {"lab": 3}, {"atk": 12}).atk, 30.0 * 1.06 + 12.0)
-		and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0} and GameData.hero_power(hans, 1, 0, {}, {"hp": 100, "atk": 12}) == roundi(54.0 + 42.0 * 2.0 / 0.8),
+	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 540.0, "atk": 42.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 30.0 * 1.06 + 12.0)
+		and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0} and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) == roundi(54.0 + 42.0 * 2.0 / 0.8),
 		"hero stats add the equipment total flat after the multipliers (no source, no equipment: unchanged)")
 
 
@@ -3582,8 +3612,8 @@ func test_recruit_r23() -> void:
 	var e2 = _econ(0.0)
 	e2.save_path = tmp
 	e2.load_save(1000.0)
-	check(int(raw.version) == 11 and EconomyScript.SAVE_VERSION == 11 and e2.diamonds == 1234 and e2.gacha_state().gold_level == 3 and e2.gacha_gold_pulls == 7 and e2.gacha_dia_pity == 11,
-		"rev 23: save v11 round-trips diamonds and the recruit state")
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and e2.diamonds == 1234 and e2.gacha_state().gold_level == 3 and e2.gacha_gold_pulls == 7 and e2.gacha_dia_pity == 11,
+		"rev 23: the save (now v12) round-trips diamonds and the recruit state")
 	var v10: Dictionary = raw.duplicate(true)
 	v10.version = 10
 	v10.erase("diamonds")
@@ -3992,3 +4022,152 @@ func _worst_overlap(p: PackedVector2Array, radii: Array) -> float:
 			var s: float = radii[i] + radii[j]
 			worst = maxf(worst, (s - p[i].distance_to(p[j])) / s)
 	return worst
+
+
+
+## 개정 24 연구: 표(22행·파일 순서·빈 선행), 비용·시간·속도 공식(서버 research.test와 같은 값), 효과 합(같은 효과끼리 더함·최대로 자름),
+## 잠금·이유 코드 순서, 오프라인 시작(즉시 차감)·한 번에 하나·게으른 완료·취소 환불·다이아 즉시 완료, 서버 권위 효과의 오프라인 반영
+## (생산·건설·판매·처치 골드·훈련 시간·비용·인구)과 성·성문 HP·병종 배율, 저장 v12 왕복·v11 → v12·깨진 v12, 서버 응답(research), 아이콘.
+func test_research_r24() -> void:
+	GameData.load_tables()
+	var ids: Array = GameData.research_defs().map(func(d): return d.id)
+	check(GameData.errors == 0 and ids.size() == 22 and ids[0] == "wood_tech" and ids[7] == "abundance" and ids[16] == "elite" and ids[21] == "legend_armor",
+		"research.csv: 22 nodes in file order: %s" % [ids])
+	var c := GameData.research_def("construct")
+	var w := GameData.research_def("wood_tech")
+	check(c.branch == "economy" and c.tier == 2.0 and c.req1 == "wood_tech" and c.req1_lv == 3.0 and c.req2 == "stone_tech" and c.req2_lv == 3.0 and c.lab_req == 3.0
+		and w.req1 == "" and w.req1_lv == 0.0 and w.req2 == "", "construct needs wood/stone tech Lv 3 and lab 3; empty prerequisites are \"\" / 0")
+	# 비용: round(값 × 1.3^n), n = 지금 레벨(0부터). 시간: round(base × 1.35^n ÷ (1 + 속도))
+	check(GameData.research_cost("wood_tech", 0) == {"wood": 120, "stone": 80, "food": 100, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 156, "stone": 104, "food": 130, "gold": 0}
+		and GameData.research_cost("construct", 2) == {"wood": 676, "stone": 507, "food": 592, "gold": 845} and GameData.research_cost("nope", 0).is_empty(),
+		"research cost = round(value x 1.3^n) (591.5 rounds away from zero): %s" % [GameData.research_cost("construct", 2)])
+	check(GameData.research_sec("wood_tech", 0, 0.0) == 60 and GameData.research_sec("wood_tech", 9, 0.0) == 894 and GameData.research_sec("elite", 9, 0.0) == 53617
+		and GameData.research_sec("wood_tech", 0, 0.5) == 40 and GameData.research_sec("wood_tech", 1, 0.58) == 51 and GameData.research_sec("nope", 0, 0.0) == 0,
+		"research time = round(base x 1.35^n / (1 + speed)): wood Lv 10 about 15 min, elite Lv 10 about 15 h, lab 30 (+58%%) 81 s -> 51 s: %s" % [[GameData.research_sec("wood_tech", 9, 0.0), GameData.research_sec("elite", 9, 0.0), GameData.research_sec("wood_tech", 1, 0.58)]])
+	check(is_equal_approx(GameData.research_speed({"research_speed_pct": 30.0}, 11), 0.5) and GameData.research_speed({}, 0) == 0.0,
+		"research speed = method % / 100 + 0.02 x (lab - 1)")
+	var b := GameData.research_bonus({"hero_weapon": 3, "legend_weapon": 2, "wood_tech": 12, "nope": 5, "stone_tech": -2})
+	check(b.size() == GameData.RESEARCH_EFFECTS.size() and b.hero_atk_pct == 17.0 and b.wood_pct == 50.0 and b.stone_pct == 0.0 and b.pop_add == 0.0,
+		"bonus: same effect adds up (3 x 3 + 2 x 4 = 17), levels clamp to 0..max, unknown nodes ignored: %s" % [b])
+	# 잠금·이유 코드: unknown → max_level → locked(연구소·선행) → not_enough_resources → not_enough_gold
+	var rich := {"wood": 9999, "stone": 9999, "food": 9999, "gold": 9999}
+	var both := {"wood_tech": 3, "stone_tech": 3}
+	check(GameData.research_block("nope", {}, 30, rich) == "unknown_research" and GameData.research_block("wood_tech", {"wood_tech": 10}, 30, rich) == "max_level"
+		and GameData.research_block("construct", both, 2, rich) == "locked" and GameData.research_block("construct", {"wood_tech": 3, "stone_tech": 2}, 3, rich) == "locked"
+		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 400, "stone": 300, "food": 349, "gold": 9999}) == "not_enough_resources"
+		and GameData.research_block("construct", both, 3, {"wood": 400, "stone": 300, "food": 350, "gold": 499}) == "not_enough_gold"
+		and GameData.research_block("construct", both, 3, {"wood": 400, "stone": 300, "food": 350, "gold": 500}) == "",
+		"research_block order: unknown, max, locked (lab, prerequisite), resources, gold")
+	check([0.0, 0.5, 60.0, 60.5, 3600.0].map(func(s): return GameData.research_dia_cost(s)) == [1, 1, 1, 2, 60] and GameData.research_refund({"wood": 156, "stone": 105, "food": 0, "gold": 845}) == {"wood": 78, "stone": 52, "gold": 422},
+		"instant finish = max(1, ceil(left / 60)) diamonds; cancel refund = floor(cost x 0.5), zero dropped")
+	# 오프라인: 시작(비용 즉시) → 한 번에 하나 → 게으른 완료(알림) → 취소 환불 → 다이아 즉시 완료
+	var t := Time.get_unix_time_from_system()
+	var e = _econ(t)
+	var notes := []
+	var done := []
+	e.notice.connect(func(s): notes.append(s))
+	e.research_done.connect(func(id, lv): done.append([id, lv]))
+	e.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	e.gold = 3000
+	check(e.research_available() and e.research_block("construct") == "locked" and e.research_block("wood_tech") == "", "a fresh save can research tier 1, tier 2 is locked")
+	check(e.start_research("wood_tech") and e.res == {"wood": 880, "stone": 920, "food": 900} and e.gold == 3000 and e.research_current.id == "wood_tech"
+		and absf(e.research_left(e.time_now()) - 60.0) < 1.0 and not e.research_available(), "start: the cost leaves at once, 60 s on the clock, no bubble while busy")
+	check(not e.start_research("stone_tech") and e.research_block("stone_tech") == "research_busy" and notes[-1] == EconomyScript.RESEARCH_TEXT.research_busy
+		and e.res.wood == 880 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
+	e.complete_due(e.time_now() + 30.0)
+	check(e.research_level("wood_tech") == 0 and not e.research_current.is_empty(), "not done before the finish time")
+	e.complete_due(e.time_now() + 61.0)
+	check(e.research_level("wood_tech") == 1 and e.research_current.is_empty() and done == [["wood_tech", 1]] and notes[-1] == "연구 완료: 벌목술 Lv 1",
+		"lazy completion: level +1, research_done, notice '연구 완료: 벌목술 Lv 1'")
+	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 820, "stone": 880, "food": 850} and e.research_current.is_empty()
+		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (120/80/100 -> 60/40/50 back)")
+	e.start_research("wood_tech")  # Lv 1 → 2: 81 s → 다이아 2
+	check(e.research_dia_cost(e.time_now()) == 2 and not e.finish_research_now() and notes[-1] == EconomyScript.NO_DIA_TEXT and e.research_level("wood_tech") == 1,
+		"instant finish needs ceil(81 / 60) = 2 diamonds; with none it is refused")
+	e.diamonds = 10
+	check(e.finish_research_now() and e.diamonds == 8 and e.research_level("wood_tech") == 2 and e.research_current.is_empty() and done[-1] == ["wood_tech", 2],
+		"instant finish spends 2 diamonds and completes at once")
+	# 서버 권위 효과의 오프라인 반영(서버 research.test와 같은 식)
+	e.research_levels = {"wood_tech": 2, "abundance": 1}  # 목재 +13%
+	e.levels.lumber = 3
+	e.last_collect.lumber = t
+	check(EconomyScript.rate_per_min("wood", 3, 13.0) == 33 and e.pending("lumber", t + 600.0) == 330 and EconomyScript.rate_per_min("wood", 3) == 30,
+		"production: floor(10 x 3 x 1.13) = 33 / min (10 min = 330); no research = 30")
+	e.research_levels = {"construct": 5}
+	check(e.upgrade_sec("keep") == 52 and e.upgrade_sec("lumber") == 39, "build time = round(60 / 1.15) = 52 s (lumber Lv 3: 45 / 1.15 = 39)")
+	e.research_levels = {"commerce": 3}
+	check(e.sell_gold("wood", 100, 1.0) == 109 and EconomyScript.sell_value("stone", 7, 1.3, 9.0) == 19 and EconomyScript.sell_value("wood", 100, 1.0) == 100,
+		"sell = floor(base x 1.09) (stone 7 x 2 x 1.3 = 18 -> 19)")
+	e.research_levels = {"plunder": 2}
+	var g0: int = e.gold_tenths
+	e.add_kill("grunt", 1)
+	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3300, "kill gold = floor(tenths x 1.10): grunt 100 -> 110")
+	e.research_levels = {"drill_manual": 5, "logistics": 5}
+	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 81, "wood": 54}
+		and EconomyScript.train_cost("infantry", 3) == {"food": 90, "wood": 60}, "training: time / 1.15, cost x 0.90 rounded (90/60 -> 81/54)")
+	e.research_levels = {"barracks_ext": 2}
+	check(e.population() == 8, "population 6 + 2 (barracks extension Lv 2)")
+	var gs = GameStateScript.new()
+	gs.roster = e
+	e.research_levels = {}
+	gs.refill()
+	gs.castle_hp = 500.0
+	gs.gate_hp[1] = 100.0
+	gs.gate_hp[2] = 0.0
+	e.research_levels = {"wall_fort": 2, "gate_fort": 4}
+	gs.apply_levels(true)
+	check(is_equal_approx(gs.castle_hp_max, 1100.0) and is_equal_approx(gs.castle_hp, 550.0) and is_equal_approx(gs.gate_hp_max, 480.0) and is_equal_approx(gs.gate_hp[0], 480.0)
+		and is_equal_approx(gs.gate_hp[1], 120.0) and gs.gate_hp[2] == 0.0,
+		"castle +10%% / gate +20%%: max HP up, current HP up by the same ratio (a broken gate stays broken): %s" % [[gs.castle_hp_max, gs.castle_hp, gs.gate_hp_max, gs.gate_hp]])
+	gs.refill()
+	check(is_equal_approx(gs.castle_hp, 1100.0) and is_equal_approx(gs.gate_hp_max, 480.0), "refill uses the research max HP")
+	gs.free()
+	check(is_equal_approx(GameData.soldier_research_mult("infantry", {"inf_pct": 9.0, "soldier_pct": 3.0, "cav_pct": 30.0}), 1.12)
+		and GameData.soldier_research_mult("archer", {"inf_pct": 9.0}) == 1.0, "soldier multiplier = 1 + (type % + elite %) / 100")
+	# 저장 v12 왕복, v11 → v12(연구 없음), 깨진 v12
+	var tmp := OS.get_temp_dir().path_join("castle_r24_econ_%d.json" % OS.get_process_id())  # user:// 밖(다른 워크트리 체크와 겹치지 않게)
+	e.save_path = tmp
+	e.research_levels = {"wood_tech": 3, "arcana": 2}
+	e.research_current = {"id": "stone_tech", "finish": t + 500.0}
+	e.save()
+	var raw = JSON.parse_string(FileAccess.get_file_as_string(tmp))
+	var e2 = _econ(t)
+	e2.save_path = tmp
+	e2.load_save(t)
+	check(int(raw.version) == 12 and EconomyScript.SAVE_VERSION == 12 and e2.research_levels == {"wood_tech": 3, "arcana": 2} and e2.research_current == {"id": "stone_tech", "finish": t + 500.0},
+		"save v12 round-trips research levels and the running research")
+	var v11: Dictionary = raw.duplicate(true)
+	v11.version = 11
+	v11.erase("research")
+	_write(tmp, JSON.stringify(v11))
+	e2.load_save(t)
+	check(e2.research_levels.is_empty() and e2.research_current.is_empty() and e2.diamonds == e.diamonds and e2.res == e.res, "a v11 save migrates to v12 with no research (the rest kept)")
+	for bad in [{"levels": [], "current": null}, {"levels": {"wood_tech": "x"}, "current": null}, {"levels": {}, "current": {"id": 5, "finish": 1.0}}, 7]:
+		var v: Dictionary = raw.duplicate(true)
+		v.research = bad
+		_write(tmp, JSON.stringify(v))
+		e2.load_save(t)
+		check(e2.research_levels.is_empty() and e2.diamonds == 0, "a broken v12 research (%s) is a corrupt save" % [bad])
+	DirAccess.remove_absolute(tmp)
+	e2.free()
+	# 서버 응답: research {levels, current} — 표에 없는 노드·0 레벨은 버림, 첫 반영은 완료가 아니다
+	var srv = _econ(t)
+	var fired := []
+	srv.research_done.connect(func(id, lv): fired.append([id, lv]))
+	var reply := func(levels, current): return {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "research": {"levels": levels, "current": current}},
+		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
+	check(srv.apply_server(reply.call({"wood_tech": 2, "bogus": 3, "stone_tech": 0, "hero_armor": 99}, {"id": "construct", "finish": 5000})) and srv.research_levels == {"wood_tech": 2, "hero_armor": 10}
+		and srv.research_current == {"id": "construct", "finish": 5000.0} and fired.is_empty(), "apply_server reads research (unknown/0 dropped, clamped to max); the first reply is not a completion")
+	check(srv.apply_server(reply.call({"wood_tech": 3}, null)) and srv.research_current.is_empty() and fired == [["wood_tech", 3]], "a later reply with a higher level fires research_done")
+	var logged := _errors.count
+	check(not srv.apply_server({"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "research": []}, "merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}})
+		and srv.research_levels == {"wood_tech": 3}, "a malformed research field rejects the reply")
+	_errors.count = logged
+	srv.free()
+	e.free()
+	# 아이콘(사용자 규칙: 바로 알아보게) — 연구 노드 그림은 단위 상자 안 다각형
+	for kind in IconsScript.RESEARCH_KINDS:
+		var shapes: Array = IconsScript.shapes(kind)
+		check(shapes.size() >= 4, "research icon %s has shapes" % kind)
+		for s in shapes:
+			check(Array(s[0]).size() >= 3 and Array(s[0]).all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "research icon %s polygon inside the unit box: %s" % [kind, s[0]])

@@ -50,22 +50,32 @@ func building_level(id: String) -> int:
 	return gate_level if id == GameData.GATE else 1
 
 
-## 건물 id → 레벨 전부(영웅 능력치의 막사·연구소 보너스, GameData.hero_stats). roster가 없으면 {}(전부 1).
-func building_levels() -> Dictionary:
-	return roster.levels if roster != null else {}
+## 성 최대 HP = 성채 레벨 값(GameData.castle_hp_max) × (1 + 연구 성벽 보강 %/100)(개정 24). roster가 없으면 연구 없음.
+func castle_max() -> float:
+	return GameData.castle_hp_max(building_level(GameData.KEEP)) * (1.0 + _research_pct("castle_hp_pct") / 100.0)
 
 
-## 성채·성문 레벨이 바뀌었다(건설 완료): 최대 HP를 새 레벨로 두고 늘어난 만큼 지금 HP도 올린다(무너진 성·부서진 성문은 그대로).
-func apply_levels() -> void:
-	var c_max := GameData.castle_hp_max(building_level(GameData.KEEP))
+## 성문 최대 HP = 성문 레벨 값 × (1 + 연구 성문 보강 %/100).
+func gate_max() -> float:
+	return GameData.gate_hp_max(building_level(GameData.GATE)) * (1.0 + _research_pct("gate_hp_pct") / 100.0)
+
+
+func _research_pct(key: String) -> float:
+	return float(roster.research_bonus().get(key, 0.0)) if roster != null else 0.0
+
+
+## 성채·성문 레벨이나 연구가 바뀌었다: 최대 HP를 새 값으로 두고 지금 HP도 올린다(무너진 성·부서진 성문은 그대로).
+## 건설 완료는 늘어난 만큼 더하고, 연구 완료(by_ratio, 개정 24 §2)는 같은 비율로 올린다.
+func apply_levels(by_ratio := false) -> void:
+	var c_max := castle_max()
 	if castle_hp > 0.0:
-		castle_hp = clampf(castle_hp + c_max - castle_hp_max, 1.0, c_max)
+		castle_hp = castle_hp * c_max / castle_hp_max if by_ratio and castle_hp_max > 0.0 else clampf(castle_hp + c_max - castle_hp_max, 1.0, c_max)
 	castle_hp_max = c_max
 	castle_hp_changed.emit(castle_hp, castle_hp_max)
-	var g_max := GameData.gate_hp_max(building_level(GameData.GATE))
+	var g_max := gate_max()
 	for side in 4:
 		if gate_hp[side] > 0.0:
-			gate_hp[side] = clampf(gate_hp[side] + g_max - gate_hp_max, 1.0, g_max)
+			gate_hp[side] = gate_hp[side] * g_max / gate_hp_max if by_ratio and gate_hp_max > 0.0 else clampf(gate_hp[side] + g_max - gate_hp_max, 1.0, g_max)
 	gate_hp_max = g_max
 	for side in 4:
 		gate_hp_changed.emit(side, gate_hp[side], gate_hp_max)
@@ -158,9 +168,9 @@ func on_all_monsters_dead() -> void:
 
 ## 영웅·성문·성 HP 전부 초기화. 영웅/몬스터 노드는 refilled를 받아 스스로 리셋/제거.
 func refill() -> void:
-	castle_hp_max = GameData.castle_hp_max(building_level(GameData.KEEP))  # 표·레벨이 바뀌었을 수 있어 매번 읽는다
+	castle_hp_max = castle_max()  # 표·레벨·연구가 바뀌었을 수 있어 매번 읽는다
 	castle_hp = castle_hp_max
-	gate_hp_max = GameData.gate_hp_max(building_level(GameData.GATE))
+	gate_hp_max = gate_max()
 	gate_hp.resize(4)
 	gate_hp.fill(gate_hp_max)
 	castle_hp_changed.emit(castle_hp, castle_hp_max)

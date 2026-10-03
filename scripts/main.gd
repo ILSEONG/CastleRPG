@@ -7,8 +7,8 @@ extends Node3D
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
 ## 개발용 `-- --debug-win`(웹 `?debug-win`, 개정 18): 디버그 빌드에서 Economy.debug_win_on — 던전 장면이 도전을 곧바로 승리로 끝낸다(Economy.debug_win).
 ## 개발용 `-- --season=N`(웹 `?season=N`, N 0~3, 개정 22): 디버그 빌드에서 그 계절로 시작(seasons.gd).
-## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels), 연구소 → 영웅 공격(방치면 곧바로,
-## 아니면 다음 리필). 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
+## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels). 연구 완료(개정 24, Economy.research_done) →
+## 성·성문 최대 HP(같은 비율로, apply_levels(true)) — 영웅·병사 능력치는 각자 research_changed로 곧바로 다시 읽는다. 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
 ## 병사(개정 21 §1): 방치 모드에는 없다. 스테이지가 시작되면(GameState.Mode.STAGE) 병사 배치(Economy.soldier_deploy)대로 성채 정문 앞
 ## 광장(Formation.soldier_spots)에 등장시키고 역할 자리(SoldierCommand.assign_posts)로 보낸다. 리필 때는 스테이지 시작 자리로 되돌리고
@@ -40,6 +40,7 @@ const TabBarScript := preload("res://scripts/tab_bar.gd")
 const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
+const ResearchPanelScript := preload("res://scripts/research_panel.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -54,7 +55,7 @@ var castle
 var _formation
 var _hero_snap := {}  # 스테이지 시작 때 영웅 자리: 영웅 id → {side, post, slot, free_pos}(다시 만든 영웅도 찾게 id로)
 var _picker
-var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, 승급, level, 연구소]}(만들 때 값)
+var _slots := {}  # 배치 슬롯 i → {node: 영웅, key: [영웅 id, 승급, level, 장비]}(만들 때 값)
 var soldiers: Array = []  # 이번 스테이지 병사 노드(개정 21 — 스테이지 동안만)
 var command  # 전술 지휘관(soldier_command.gd)
 var _soldier_key = null  # 병사를 만들 때의 배치(연속 진행 중 바뀌면 다음 스테이지에 다시 만든다)
@@ -148,6 +149,10 @@ func _build_world() -> void:
 	var building_panel = BuildingPanelScript.new()  # 건물 창(개정 12 §2.5): 건물 탭·길게 누르기
 	add_child(building_panel)
 	picker.building_panel = building_panel
+	var research_panel = ResearchPanelScript.new()  # 연구 창(개정 24): 연구소 건물 창 [연구]·플라스크 말풍선
+	add_child(research_panel)
+	building_panel.research = research_panel
+	picker.research = research_panel
 	var soldier_panel = SoldierPanelScript.new()
 	add_child(soldier_panel)
 	var growth_panel = GrowthPanelScript.new()  # 성장 시트(개정 20 §5)
@@ -162,10 +167,11 @@ func _build_world() -> void:
 	add_child(tabs)
 	add_child(bag)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
-	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원(영웅 id로, 다시 만든 영웅도) + 배치·승급·레벨·연구소·장비 반영
+	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원(영웅 id로, 다시 만든 영웅도) + 배치·승급·레벨·장비 반영
 	GameState.refilled.connect(_reset_soldiers)
 	Economy.roster_changed.connect(_on_roster_changed)
 	Economy.building_done.connect(_on_building_done)
+	Economy.research_done.connect(_on_research_done)
 	Economy.dungeon_started.connect(_on_dungeon_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
@@ -281,7 +287,7 @@ func _sync_heroes(snap := {}) -> void:
 	for i in deploy.size():
 		var id = deploy[i]
 		var key := [id, GameState.hero_promotion(id) if id != null else 0, GameState.hero_level(id) if id != null else 0,
-			GameState.building_level(GameData.LAB), Economy.equipment_bonus(id) if id != null else {}]  # 개정 18: 장비가 바뀌면 다시 만든다
+			Economy.equipment_bonus(id) if id != null else {}]  # 개정 18: 장비가 바뀌면 다시 만든다
 		if _slots.has(i) and _slots[i].key == key:
 			continue
 		_retire(i)
@@ -397,15 +403,18 @@ func _on_roster_changed() -> void:
 		_sync_heroes()
 
 
-## 건설 완료(개정 12): 성채·성문 → 최대 HP. 연구소 → 영웅 공격(방치면 곧바로 다시 만들고, 아니면 다음 리필에 _sync_heroes가 key로
-## 알아챈다. 개정 13: 막사는 영웅 HP를 올리지 않는다 — 병사 생산). 성채가 단계를 넘어 성 내부·슬롯 수가 이 월드와 달라지면 월드를 다시 만든다(_expand).
+## 건설 완료(개정 12): 성채·성문 → 최대 HP(개정 13: 막사는 영웅 HP를 올리지 않는다, 개정 24: 연구소는 영웅 공격을 올리지 않는다).
+## 성채가 단계를 넘어 성 내부·슬롯 수가 이 월드와 달라지면 월드를 다시 만든다(_expand).
 func _on_building_done(id: String, level: int) -> void:
 	if id == GameData.KEEP or id == GameData.GATE:
 		GameState.apply_levels()
-	if id == GameData.LAB and GameState.mode == GameState.Mode.IDLE:
-		_sync_heroes()
 	if id == GameData.KEEP and (GameData.interior_half(level) != castle.half or GameData.hero_slots(level) != _built_slots):
 		_expand()
+
+
+## 연구 완료(개정 24 §2): 성벽·성문 보강은 최대 HP를 올리고 지금 HP는 같은 비율로(다른 연구면 그대로 — 비율 1).
+func _on_research_done(_id: String, _level: int) -> void:
+	GameState.apply_levels(true)
 
 
 ## 성이 넓어졌다: 방치면 곧바로 다시 만들고 새 월드에서 알린다. 아니면 지금 알리고 방치로 돌아올 때(_on_mode_changed) 다시 만든다.

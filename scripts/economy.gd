@@ -19,12 +19,16 @@ extends Node
 ## 장비 합계는 GameData.hero_stats가 더한다(오토로드면 _ready에서 GameData.equip_source = self).
 ## 모집(개정 23): 골드 모집 레벨(gacha_gold_level·gacha_gold_pulls)·다이아(diamonds)·다이아 천장(gacha_dia_pity). 모집 창이 쓰는 API는
 ## gacha_state·gacha_cost·gacha_rates·wallet·gacha(count, currency), 시그널 gacha_done·gacha_leveled(+ 알림 "골드 모집 Lv n! SSR x%").
+## 연구(개정 24): 노드 레벨(research_levels)·진행 중 연구(research_current, 하나만 — 건설 일꾼과 따로). 연구 창·월드 말풍선이 쓰는 API는 아래
+## "연구" 한 곳 — research_level·research_bonus·research_speed·research_cost·research_sec·research_block·research_requirements·start_research·
+## cancel_research·finish_research_now·research_left·research_progress·research_dia_cost·research_available, 시그널 research_changed·research_done
+## (+ 알림 "연구 완료: 벌목술 Lv 3"). 서버 권위 효과(생산·건설·판매·처치 골드·훈련 시간·비용·인구)는 오프라인도 여기서 같은 식으로 반영한다.
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 
-const SAVE_VERSION := 11  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
+const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
 # GameState 레벨은 저장된 적이 없어 늘 1이다), 일꾼 없음
 # 5: soldiers·soldier_deploy {"병종:티어": 수}(개정 13). 4 이하는 병사 없음
@@ -35,6 +39,7 @@ const SAVE_VERSION := 11  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 # 10: dungeons {종류: {best_level, keys, extra_today, last_reset}}, items [{id, slot, weapon_kind, grade, level}], equipment {영웅: {부위: 장비 id}},
 # next_item_id(개정 18). 9 이하는 그날 지급분 열쇠·빈 보관함
 # 11: diamonds, gacha {gold_level, gold_pulls, dia_pity}(개정 23). 10 이하는 다이아 0·골드 모집 Lv 1·누적 0·천장 0
+# 12: research {levels: {노드: 레벨}, current: {id, finish} 또는 null}(개정 24). 11 이하는 연구 없음
 const SAVE_INTERVAL := 10.0
 const WAIT_TEXT := "연결 대기 중"
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -85,6 +90,15 @@ const EQUIP_TEXT := {
 	"wrong_weapon": "이 영웅이 쓸 수 없는 무기입니다", "equipped": "장착 중인 장비는 팔 수 없습니다", "bad_request": "팔 장비를 고르세요", "waiting": "응답 대기 중",
 }
 const EQUIP_FAIL_TEXT := "장비 결과를 받지 못했습니다 — 보관함을 다시 확인합니다"
+## 연구 못 하는 이유 코드 → 문구(research_block, 서버 404/409 코드와 같다. waiting은 앱만, 개정 24).
+const RESEARCH_TEXT := {
+	"unknown_research": "알 수 없는 연구", "research_busy": "다른 연구가 진행 중입니다", "max_level": "최대 레벨", "locked": "잠긴 연구입니다",
+	"not_enough_resources": "자원 부족", "not_enough_gold": "골드 부족", "no_research": "진행 중인 연구가 없습니다",
+	"not_enough_diamonds": "다이아가 부족합니다", "waiting": "응답 대기 중",
+}
+const RESEARCH_DONE_TEXT := "연구 완료: %s Lv %d"
+const RESEARCH_CANCEL_TEXT := "연구를 취소했습니다 — 비용 50% 환불"
+const RESEARCH_FAIL_TEXT := "연구 결과를 받지 못했습니다 — 연구 상태를 다시 확인합니다"
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
@@ -103,6 +117,8 @@ signal dungeons_changed  # 개정 18: 열쇠·최고 단계·추가 도전 횟�
 signal items_changed  # 보관함·장착이 바뀌었다(장착이 바뀌면 roster_changed도 — 영웅 능력치)
 signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, level, party, enemies, started_at, time_limit, paid_with}. 실패면 {}
 signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
+signal research_changed  # 개정 24: 연구 레벨·진행 중 연구·응답 대기가 바뀌었다(전투 능력치는 곧바로 다시 읽는다 — hero·soldier refresh_stats)
+signal research_done(id: String, level: int)  # 연구 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
 
 var gold_tenths := 0  # 골드는 0.1 단위 정수로 센다(개정 10). 표시·교환은 gold(= floor(tenths / 10))
 var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면 tenths = v × 10
@@ -131,6 +147,8 @@ var diamonds := 0  # 개정 23: 다이아(현금 재화, 온라인은 서버 값
 var gacha_gold_level := 1  # 골드 모집 레벨(1..gacha_gold_level_max)
 var gacha_gold_pulls := 0  # 그 레벨 안 누적 모집 수
 var gacha_dia_pity := 0  # 다이아 천장: SSR 없이 뽑은 다이아 모집 수
+var research_levels := {}  # 개정 24: 연구 노드 id → 레벨(> 0). 없으면 0
+var research_current := {}  # 진행 중 연구 {id, finish(유닉스 초, 보정 시각)}, 없으면 {}
 var current_run := {}  # 진행 중 도전(dungeon_started의 값). 결과가 오면 비운다
 var debug_win_on := false  # 개발 플래그(main의 -- --debug-win): 던전 장면은 시작하자마자 debug_win()을 부른다
 var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트는 seed를 정한다)
@@ -153,6 +171,7 @@ var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(�
 var _deploys_out := 0
 var _synced := false  # 온라인: 서버 응답을 한 번이라도 반영했다(첫 반영의 레벨 차이는 완료가 아니다)
 var _build_poll_at := 0.0  # 온라인: 다 지은 건설을 다시 물어볼 시각
+var _research_poll_at := 0.0  # 온라인: 끝난 연구를 다시 물어볼 시각(개정 24)
 var _pending_soldier_deploy = null  # 온라인: 보냈고 답을 기다리는 병사 배치(_pending_deploy와 같은 규칙)
 var _soldier_deploys_out := 0
 var _last_finish := {}  # 오프라인: 마지막 결과(같은 run_id 재전송은 이 값 — 서버 멱등과 같다)
@@ -164,15 +183,16 @@ func _init() -> void:
 
 # --- 순수 규칙 ---
 
-static func rate_per_min(res_id: String, level: int) -> int:
-	return int(GameData.resource(res_id).per_min) * level
+## 분당 생산 = floor(per_min × L × (1 + pct/100))(개정 24: pct = 그 자원 연구 % + res_pct, 서버 rules.pendingAmount와 같다).
+static func rate_per_min(res_id: String, level: int, pct := 0.0) -> int:
+	return GameData.pct_floor(int(GameData.resource(res_id).per_min) * level, pct)
 
 
 ## 쌓인 양 = floor(min(경과, 상한)/60) × 분당. 경과가 음수면 0.
-static func pending_amount(res_id: String, level: int, elapsed_sec: float) -> int:
+static func pending_amount(res_id: String, level: int, elapsed_sec: float, pct := 0.0) -> int:
 	if elapsed_sec <= 0.0:
 		return 0
-	return floori(minf(elapsed_sec, GameData.config_num("accum_cap_min") * 60.0) / 60.0) * rate_per_min(res_id, level)
+	return floori(minf(elapsed_sec, GameData.config_num("accum_cap_min") * 60.0) / 60.0) * rate_per_min(res_id, level, pct)
 
 
 static func hour_index(unix: float) -> int:
@@ -205,9 +225,9 @@ static func merchant_rate(hour: int, res_id: String) -> float:
 	return float(lo + n - 1) / per_unit
 
 
-## floor(수량 × 단가 × 배율). 배율은 0.1 단위 정수로 바꿔 정수 연산(부동소수 내림 오차 없음).
-static func sell_value(res_id: String, amount: int, rate: float) -> int:
-	return amount * int(GameData.resource(res_id).price) * roundi(rate * 10.0) / 10
+## floor(수량 × 단가 × 배율). 배율은 0.1 단위 정수로 바꿔 정수 연산(부동소수 내림 오차 없음). 개정 24: × (1 + pct/100) 내림(연구 상업).
+static func sell_value(res_id: String, amount: int, rate: float, pct := 0.0) -> int:
+	return GameData.pct_floor(amount * int(GameData.resource(res_id).price) * roundi(rate * 10.0) / 10, pct)
 
 
 ## 자원 건물이 아니면 "".
@@ -306,6 +326,9 @@ func reset(now: float) -> void:
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
 	gacha_dia_pity = 0
+	research_levels = {}
+	research_current = {}
+	_research_poll_at = 0.0
 	_pending_soldier_deploy = null
 	_soldier_deploys_out = 0
 	heroes = {}
@@ -334,13 +357,20 @@ func reset(now: float) -> void:
 	upgrades_changed.emit()
 	dungeons_changed.emit()
 	items_changed.emit()
+	research_changed.emit()
 
 
 func pending(building_id: String, now: float) -> int:
 	var id := res_of(building_id)
 	if id == "":
 		return 0
-	return pending_amount(id, levels[building_id], now - float(last_collect[building_id]))
+	return pending_amount(id, levels[building_id], now - float(last_collect[building_id]), res_pct(id))
+
+
+## 그 자원의 생산 연구 %(개정 24) = <자원>_pct + res_pct.
+func res_pct(res_id: String) -> float:
+	var b := research_bonus()
+	return float(b.get(res_id + "_pct", 0.0)) + float(b.res_pct)
 
 
 func show_badge(building_id: String, now: float) -> bool:
@@ -399,12 +429,17 @@ func sell(res_id: String, now: float, amount := -1) -> int:
 	var n: int = res[res_id] if amount < 0 else mini(amount, res[res_id])
 	if n <= 0:
 		return 0
-	var g := sell_value(res_id, n, current_rate(res_id, now))
+	var g := sell_gold(res_id, n, current_rate(res_id, now))
 	res[res_id] -= n
 	gold_tenths += g * 10  # 판매 골드는 정수
 	changed.emit()
 	save()
 	return g
+
+
+## 지금 연구(상업 sell_pct)를 넣은 판매 골드(상인 창 미리보기·오프라인 판매).
+func sell_gold(res_id: String, amount: int, rate: float) -> int:
+	return sell_value(res_id, amount, rate, float(research_bonus().sell_pct))
 
 
 func sell_all(now: float) -> int:
@@ -431,7 +466,7 @@ func sell_many(items: Array, now: float) -> int:
 		return 0
 	var total := 0
 	for it in list:
-		total += sell_value(it.res, it.amount, current_rate(it.res, now))
+		total += sell_gold(it.res, it.amount, current_rate(it.res, now))
 		res[it.res] -= it.amount
 	gold_tenths += total * 10
 	changed.emit()
@@ -698,13 +733,18 @@ func grant_dev_heroes(ids: Array) -> Array:
 ## 몬스터 처치. 오프라인은 바로 골드, 온라인은 쌓아 두고 Net이 /v1/kills로 보낸다.
 func add_kill(kind: String, stage: int) -> void:
 	if net == null:
-		add_gold_tenths(GameData.kill_gold_tenths(kind, stage))
+		add_gold_tenths(kill_tenths(kind, stage))
 		return
 	var per: Dictionary = kills_pending.get(stage, {})
 	per[kind] = int(per.get(kind, 0)) + 1
 	kills_pending[stage] = per
 	_recalc_gold()
 	changed.emit()
+
+
+## 처치 1회 골드(tenths) = floor(GameData.kill_gold_tenths × (1 + kill_gold_pct/100))(개정 24 연구 전리품 수집, 서버와 같다).
+func kill_tenths(kind: String, stage: int) -> int:
+	return GameData.pct_floor(GameData.kill_gold_tenths(kind, stage), float(research_bonus().kill_gold_pct))
 
 
 # --- 건물 레벨업(개정 12 §2.2~2.5) — UI가 쓰는 API는 여기 한 곳 ---
@@ -738,9 +778,9 @@ func building_level(id: String) -> int:
 	return maxi(1, int(levels.get(id, 1)))
 
 
-## 인구 = 민가 레벨로(GameData.population). 병사 배치 상한(병사는 다음 개정).
+## 인구 = 민가 레벨로(GameData.population) + 연구 병영 확장(pop_add, 개정 24). 병사 배치 상한.
 func population() -> int:
-	return GameData.population(building_level(GameData.HOUSES))
+	return GameData.population(building_level(GameData.HOUSES)) + int(research_bonus().pop_add)
 
 
 ## 지금 모집 확률 {ssr, sr}(골드 모집 레벨·주점 레벨). 모집 창 확률 줄.
@@ -787,10 +827,15 @@ func upgrade_cost(id: String) -> Dictionary:
 	return GameData.build_cost(id, building_level(id)) if not d.is_empty() and building_level(id) < int(d.max_level) else {}
 
 
-## 다음 레벨 건설 시간(초, 최대 레벨이면 0).
+## 다음 레벨 건설 시간(초, 최대 레벨이면 0). 개정 24: round(기본 ÷ (1 + 건축학 %/100)).
 func upgrade_sec(id: String) -> int:
 	var d := GameData.building_def(id)
-	return GameData.build_sec(id, building_level(id)) if not d.is_empty() and building_level(id) < int(d.max_level) else 0
+	return _build_sec(id, building_level(id)) if not d.is_empty() and building_level(id) < int(d.max_level) else 0
+
+
+## L → L+1 건설 시간에 연구 build_speed_pct를 넣은 값(서버 /v1/building/upgrade와 같은 식).
+func _build_sec(id: String, level: int) -> int:
+	return roundi(GameData.build_sec(id, level) / (1.0 + float(research_bonus().build_speed_pct) / 100.0))
 
 
 ## 선행 조건 목록(건물 창 ✓/✗): [{id, need, have, ok}]. 성채가 아니면 성채 상한(성채 Lv 목표 필요)이 먼저, 그다음 req1·req2
@@ -822,7 +867,7 @@ func build_left(now: float) -> float:
 func build_progress(now: float) -> float:
 	if build.is_empty():
 		return 0.0
-	var total := float(GameData.build_sec(str(build.id), building_level(str(build.id))))
+	var total := float(_build_sec(str(build.id), building_level(str(build.id))))
 	return clampf(1.0 - build_left(now) / total, 0.0, 1.0) if total > 0.0 else 1.0
 
 
@@ -854,6 +899,7 @@ func upgrade(id: String, now: float) -> bool:
 ## 게으른 완료: 끝나는 시각(보정 시각)이 지났으면 오프라인은 레벨 +1 · 일꾼 비움 · 저장 · building_done. 온라인은 서버가 완료한다 —
 ## BUILD_POLL_SEC마다 한 번 /v1/player로 새 상태를 받는다(레벨이 오르면 apply_server가 building_done). 매 프레임 불러도 가볍다.
 func complete_due(now: float) -> void:
+	_complete_research_due(now)
 	if build.is_empty() or now < float(build.finish):
 		return
 	if net != null:
@@ -1052,14 +1098,21 @@ func train_progress(building_id: String) -> float:
 	return clampf(1.0 - (q.finish - time_now()) / total, 0.0, 1.0) if total > 0.0 else 0.0
 
 
-## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × 티어 배수 × n, 0인 자원은 뺀다).
-static func train_cost(type: String, n: int, tier := 1) -> Dictionary:
+## 병종 type n마리 비용 {자원: 수}(설정 train_cost_<병종> × 티어 배수 × n, 0인 자원은 뺀다). 개정 24: pct = 보급술 % —
+## 자원마다 round(값 × (100 − pct) / 100)(서버와 같은 곱셈 순서).
+static func train_cost(type: String, n: int, tier := 1, pct := 0.0) -> Dictionary:
 	var out := {}
 	var one := GameData.train_unit_cost(type, tier)
 	for r in one:
-		if int(one[r]) * n > 0:
-			out[r] = int(one[r]) * n
+		var v := maxi(0, roundi(int(one[r]) * n * (100.0 - pct) / 100.0))
+		if v > 0:
+			out[r] = v
 	return out
+
+
+## 지금 연구(보급술)를 넣은 n마리 비용 — 훈련 칸·시작·취소 환불이 쓴다.
+func train_cost_now(type: String, n: int, tier := 1) -> Dictionary:
+	return train_cost(type, n, tier, float(research_bonus().train_cost_pct))
 
 
 ## 그 건물이 지금 만드는 병사 티어(건물 레벨이 정한다, 개정 19).
@@ -1067,9 +1120,9 @@ func train_tier(building_id: String) -> int:
 	return GameData.train_tier(building_level(building_id))
 
 
-## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨).
+## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨) ÷ (1 + 훈련 교범 %/100)(개정 24, 서버와 같은 순서).
 func train_time(building_id: String, n: int) -> float:
-	return n * GameData.soldier_unit_sec(building_level(building_id))
+	return n * GameData.soldier_unit_sec(building_level(building_id)) / (1.0 + float(research_bonus().train_speed_pct) / 100.0)
 
 
 ## 그 건물의 묶음 상한(레벨로 는다).
@@ -1088,7 +1141,7 @@ func train_block(building_id: String, n: int) -> String:
 	var q := training(building_id)
 	if q.count > 0:
 		return "ready_to_collect" if q.ready else "training"
-	var cost := train_cost(type, n, train_tier(building_id))
+	var cost := train_cost_now(type, n, train_tier(building_id))
 	for r in cost:
 		if int(res.get(r, 0)) < int(cost[r]):
 			return "not_enough"
@@ -1104,7 +1157,7 @@ func start_training(building_id: String, n: int) -> bool:
 		return false
 	if net != null:
 		return _train_online("train", building_id, {"building": building_id, "count": n}, true)
-	var cost := train_cost(GameData.soldier_of_building(building_id), n, train_tier(building_id))
+	var cost := train_cost_now(GameData.soldier_of_building(building_id), n, train_tier(building_id))
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
 	train_queues[building_id] = {"count": n, "tier": train_tier(building_id), "finish": time_now() + train_time(building_id, n)}
@@ -1140,7 +1193,7 @@ func cancel_training(building_id: String) -> bool:
 		return false
 	if net != null:
 		return _train_online("cancel", building_id, {"building": building_id}, true)
-	var cost := train_cost(GameData.soldier_of_building(building_id), q.count, q.tier)
+	var cost := train_cost_now(GameData.soldier_of_building(building_id), q.count, q.tier)
 	for r in cost:
 		res[r] = int(res.get(r, 0)) + int(cost[r]) / 2
 	train_queues.erase(building_id)
@@ -1171,6 +1224,226 @@ func finish_training_now(building_id: String) -> void:
 
 func _announce(type: String, count: int) -> void:
 	notice.emit("%s +%d" % [GameData.soldier(type).get("name", type), count])
+
+
+# --- 연구(개정 24 §3·§5) — 연구 창·건물 창 [연구]·월드 말풍선이 쓰는 API는 여기 한 곳 ---
+
+func research_level(id: String) -> int:
+	return maxi(0, int(research_levels.get(id, 0)))
+
+
+## 연구 효과 합 {효과: 합}(GameData.research_bonus — 단위 %, pop_add만 명).
+func research_bonus() -> Dictionary:
+	return GameData.research_bonus(research_levels)
+
+
+## 지금 연구 속도(분수) = 연구 방법론 % / 100 + 연구소 보너스(GameData.research_speed).
+func research_speed() -> float:
+	return GameData.research_speed(research_bonus(), building_level(GameData.LAB))
+
+
+## 다음 레벨 비용 {wood, stone, food, gold}(최대 레벨·모르는 노드면 {}).
+func research_cost(id: String) -> Dictionary:
+	var d := GameData.research_def(id)
+	return GameData.research_cost(id, research_level(id)) if not d.is_empty() and research_level(id) < int(d.max_level) else {}
+
+
+## 다음 레벨 연구 시간(초, 지금 속도. 최대 레벨·모르는 노드면 0).
+func research_sec(id: String) -> int:
+	var d := GameData.research_def(id)
+	return GameData.research_sec(id, research_level(id), research_speed()) if not d.is_empty() and research_level(id) < int(d.max_level) else 0
+
+
+## 연구 못 하는 이유 코드(문구 RESEARCH_TEXT, 서버와 같은 순서). 되면 "".
+##   unknown_research → research_busy(진행 중인 연구가 있다 — 한 번에 하나) → max_level → locked → not_enough_resources → not_enough_gold
+##   → waiting(앱만)
+func research_block(id: String) -> String:
+	if GameData.research_def(id).is_empty():
+		return "unknown_research"
+	if not research_current.is_empty():
+		return "research_busy"
+	var have := {"wood": int(res.get("wood", 0)), "stone": int(res.get("stone", 0)), "food": int(res.get("food", 0)), "gold": gold}
+	var why := GameData.research_block(id, research_levels, building_level(GameData.LAB), have)
+	if why != "":
+		return why
+	return "waiting" if _waiting.has("research") else ""
+
+
+## 조건 목록(상세 창 ✓/✗): [{kind: "lab" | "node", id, need, have, ok}] — 연구소 Lv 먼저, 그다음 선행 노드. 모르는 노드면 [].
+func research_requirements(id: String) -> Array:
+	var d := GameData.research_def(id)
+	if d.is_empty():
+		return []
+	var lab := building_level(GameData.LAB)
+	var out := [{"kind": "lab", "id": GameData.LAB, "need": int(d.lab_req), "have": lab, "ok": lab >= int(d.lab_req)}]
+	for rq in GameData.RESEARCH_REQS:
+		if d[rq[0]] != "":
+			var lv := research_level(d[rq[0]])
+			out.append({"kind": "node", "id": d[rq[0]], "need": int(d[rq[1]]), "have": lv, "ok": lv >= int(d[rq[1]])})
+	return out
+
+
+## 연구 시작(스펙 §3): 비용 전부 즉시 차감, 끝나는 시각 = 지금 + 연구 시간. 안 되면 알림만. 오프라인은 바로 저장, 온라인은 /v1/research/start
+## (once — 다시 보내면 두 번 빠질 수 있어 재전송하지 않는다. 쌓인 처치를 먼저 보내 서버 골드를 맞춘다). 시작했거나 보냈으면 true.
+func start_research(id: String) -> bool:
+	var why := research_block(id)
+	if why != "":
+		if why != "waiting":
+			notice.emit(RESEARCH_TEXT.get(why, RESEARCH_FAIL_TEXT))
+		return false
+	if net != null:
+		return _research_online("start", {"id": id})
+	var cost := research_cost(id)
+	for r in GameData.BUILD_RES:
+		res[r] = int(res.get(r, 0)) - int(cost[r])
+	gold_tenths -= int(cost.gold) * 10
+	research_current = {"id": id, "finish": time_now() + research_sec(id)}
+	save()
+	changed.emit()
+	research_changed.emit()
+	return true
+
+
+## 취소: 그 레벨 비용 × research_cancel_refund(자원마다 내림, 골드 포함)를 돌려주고 비운다. 온라인은 /v1/research/cancel(once). 했거나 보냈으면 true.
+func cancel_research() -> bool:
+	if research_current.is_empty() or _waiting.has("research"):
+		return false
+	if net != null:
+		return _research_online("cancel", {})
+	var refund := GameData.research_refund(research_cost(str(research_current.id)))
+	for r in refund:
+		if r == "gold":
+			gold_tenths += int(refund.gold) * 10
+		else:
+			res[r] = int(res.get(r, 0)) + int(refund[r])
+	research_current = {}
+	save()
+	changed.emit()
+	research_changed.emit()
+	notice.emit(RESEARCH_CANCEL_TEXT)
+	return true
+
+
+## 다이아 즉시 완료(스펙 §3): 비용 = research_dia_cost. 모자라면 알림만. 오프라인은 다이아를 빼고 완료(레벨 +1·research_done·알림), 온라인은
+## /v1/research/finish(once — 응답의 레벨이 오르면 apply_server가 research_done). 했거나 보냈으면 true.
+func finish_research_now() -> bool:
+	if research_current.is_empty() or _waiting.has("research"):
+		return false
+	if diamonds < research_dia_cost(time_now()):
+		notice.emit(NO_DIA_TEXT)
+		return false
+	if net != null:
+		return _research_online("finish", {})
+	diamonds -= research_dia_cost(time_now())
+	_research_complete()
+	return true
+
+
+## 진행 중 연구를 끝낸다(오프라인): 레벨 +1, 비움, 저장, research_done + 알림 "연구 완료: 벌목술 Lv 3".
+func _research_complete() -> void:
+	var id := str(research_current.id)
+	research_levels[id] = research_level(id) + 1
+	research_current = {}
+	save()
+	changed.emit()
+	research_changed.emit()
+	_announce_research(id)
+
+
+func _announce_research(id: String) -> void:
+	research_done.emit(id, research_level(id))
+	notice.emit(RESEARCH_DONE_TEXT % [GameData.research_def(id).get("name", id), research_level(id)])
+
+
+## 게으른 완료(complete_due가 매 프레임): 끝나는 시각(보정 시각)이 지났으면 오프라인은 완료, 온라인은 BUILD_POLL_SEC마다 /v1/player
+## (서버가 완료한다 — 레벨이 오르면 apply_server가 research_done).
+func _complete_research_due(now: float) -> void:
+	if research_current.is_empty() or now < float(research_current.finish):
+		return
+	if net != null:
+		if net.up and now >= _research_poll_at:
+			_research_poll_at = now + BUILD_POLL_SEC
+			net.refresh()
+		return
+	_research_complete()
+
+
+## 남은 초(없으면 0).
+func research_left(now: float) -> float:
+	return maxf(0.0, float(research_current.finish) - now) if not research_current.is_empty() else 0.0
+
+
+## 진행 0..1(없으면 0). 전체 시간 = 지금 레벨·속도의 연구 시간.
+# ponytail: 시작 시각을 두지 않아 진행 중 연구소 레벨이 오르면 막대가 조금 앞으로 간다(끝나는 시각은 그대로). 거슬리면 시작 시각을 둔다.
+func research_progress(now: float) -> float:
+	if research_current.is_empty():
+		return 0.0
+	var total := float(research_sec(str(research_current.id)))
+	return clampf(1.0 - research_left(now) / total, 0.0, 1.0) if total > 0.0 else 1.0
+
+
+## 다이아 즉시 완료 비용(없으면 0) = max(1, ceil(남은 초 / 60) × research_dia_per_min).
+func research_dia_cost(now: float) -> int:
+	return GameData.research_dia_cost(research_left(now)) if not research_current.is_empty() else 0
+
+
+## 월드 말풍선(스펙 §5): 진행 중인 연구가 없고 지금 시작할 수 있는 노드가 있다.
+func research_available() -> bool:
+	if not research_current.is_empty():
+		return false
+	for d in GameData.research_defs():
+		if research_block(d.id) == "":
+			return true
+	return false
+
+
+func research_waiting() -> bool:
+	return _waiting.has("research")
+
+
+## 온라인 연구(op = start·cancel·finish): once로 보낸다(다시 보내면 두 번 빠지거나 오를 수 있다). 답이 올 때까지 research_block = "waiting".
+func _research_online(op: String, body: Dictionary) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["research"] = true
+	if op == "start":
+		net.flush_kills()  # 골드 비용은 서버 골드로 판정한다
+	net.send("POST", "/v1/research/" + op, body, _on_research.bind(op), _on_research_failed, true, true)
+	research_changed.emit()  # UI가 응답 전 버튼을 끈다
+	return true
+
+
+func _on_research(data: Dictionary, op: String) -> void:
+	_waiting.erase("research")
+	apply_server(data)
+	if op == "cancel" and data.get("refund") is Dictionary:
+		notice.emit(RESEARCH_CANCEL_TEXT)
+	research_changed.emit()
+
+
+## 거부(409 research_busy·max_level·locked·not_enough_*·no_research·not_enough_diamonds, 404)나 응답 유실: 알림 + 상태를 새로 받는다.
+func _on_research_failed() -> void:
+	_waiting.erase("research")
+	notice.emit(RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
+	net.refresh()
+	research_changed.emit()
+
+
+## 서버·저장 연구 {levels: {id: L}, current: {id, finish} 또는 null} → [레벨(표에 있는 노드의 양의 정수, 최대로 자름), 진행 중({id, finish} 또는 {})].
+static func _research_state(src: Dictionary) -> Array:
+	var lv := {}
+	var levels_src = src.get("levels")
+	if levels_src is Dictionary:
+		for k in levels_src:
+			var d := GameData.research_def(str(k))
+			if not d.is_empty() and _num(levels_src[k]) and int(levels_src[k]) > 0:
+				lv[str(k)] = mini(int(levels_src[k]), int(d.max_level))
+	var cur = src.get("current")
+	var c := {}
+	if cur is Dictionary and cur.get("id") is String and not GameData.research_def(cur.id).is_empty() and _num(cur.get("finish")):
+		c = {"id": cur.id, "finish": float(cur.finish)}
+	return [lv, c]
 
 
 # --- 던전·장비(개정 18 §2~§6) — 던전 탭·편성·던전 장면·결과·보관함·영웅 장비 칸이 쓰는 API는 여기 한 곳 ---
@@ -1207,7 +1480,7 @@ func default_party(type: String) -> Array:
 	var ids := heroes.keys().filter(func(id): return int(heroes[id]) >= 1 and not GameData.hero(id).is_empty())
 	var power := {}
 	for id in ids:
-		power[id] = GameData.hero_power(GameData.hero(id), level_of(id), promotion_of(id), levels, equipment_bonus(id))
+		power[id] = GameData.hero_power(GameData.hero(id), level_of(id), promotion_of(id), equipment_bonus(id))
 	var order: Array = GameData.heroes().map(func(h): return h.id)
 	ids.sort_custom(func(a, b): return power[a] > power[b] or (power[a] == power[b] and order.find(a) < order.find(b)))
 	return ids.slice(0, GameData.party_size(type))
@@ -1567,9 +1840,15 @@ func apply_server(data: Dictionary) -> bool:
 	if not _shape18_ok(p):  # 개정 18: dungeons·items·equipment
 		push_error("bad player response: %s" % str(data))
 		return false
-	if not ((p.get("diamonds") == null or _num(p.diamonds)) and (p.get("gacha") == null or p.gacha is Dictionary)):  # 개정 23
+	if not ((p.get("diamonds") == null or _num(p.diamonds)) and (p.get("gacha") == null or p.gacha is Dictionary)  # 개정 23
+			and (p.get("research") == null or p.research is Dictionary)):  # 개정 24
 		push_error("bad player response: %s" % str(data))
 		return false
+	var research_before := [research_levels.duplicate(), research_current.duplicate()]
+	if p.get("research") is Dictionary:  # {levels: {id: L}, current: {id, finish} 또는 null}
+		var rs := _research_state(p.research)
+		research_levels = rs[0]
+		research_current = rs[1]
 	var roster_before :=[heroes.duplicate(), deploy.duplicate(), hero_levels.duplicate(), hero_shards.duplicate(), hero_promotions.duplicate()]
 	var troops_before := [soldiers.duplicate(), soldier_deployed.duplicate()]
 	var queues_before := train_queues.duplicate(true)
@@ -1647,10 +1926,15 @@ func apply_server(data: Dictionary) -> bool:
 		training_changed.emit()
 	if upgrades != upgrades_before:
 		upgrades_changed.emit()
-	if _synced:  # 서버가 완료한 건설(게으른 완료) — 첫 반영의 레벨 차이는 완료가 아니라 접속이다
+	if [research_levels, research_current] != research_before:
+		research_changed.emit()
+	if _synced:  # 서버가 완료한 건설·연구(게으른 완료·즉시 완료) — 첫 반영의 레벨 차이는 완료가 아니라 접속이다
 		for id in levels:
 			if int(levels[id]) > int(levels_before.get(id, 1)):
 				building_done.emit(id, levels[id])
+		for id in research_levels:
+			if int(research_levels[id]) > int(research_before[0].get(id, 0)):
+				_announce_research(id)
 	_synced = true
 	_apply_server18(p)
 	return true
@@ -1747,7 +2031,7 @@ func _kills_tenths(kills: Dictionary) -> int:
 	for stage in kills:
 		var s: int = mini(stage, server_stage) if server_stage > 0 else stage
 		for id in kills[stage]:
-			g += GameData.kill_gold_tenths(id, s) * int(kills[stage][id])
+			g += kill_tenths(id, s) * int(kills[stage][id])
 	return g
 
 
@@ -2220,7 +2504,8 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
-		"diamonds": diamonds, "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity}}))
+		"diamonds": diamonds, "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current}}))
 	f.close()
 	var err := DirAccess.rename_absolute(tmp, save_path)
 	if err != OK:
@@ -2243,12 +2528,16 @@ func load_save(now: float) -> void:
 	upgrades_changed.emit()
 	dungeons_changed.emit()
 	items_changed.emit()
-	complete_due(now)  # 앱이 꺼져 있는 동안 끝난 건설
+	research_changed.emit()
+	complete_due(now)  # 앱이 꺼져 있는 동안 끝난 건설·연구
 
 
 ## 형 검사 후 반영. JSON 숫자는 float(혹시 int여도 받는다)이라 int로 되돌린다. 하나라도 틀리면 false(부분 반영 없음).
 func _apply(data) -> bool:
-	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, SAVE_VERSION]:
+	if not (data is Dictionary) or not _num(data.get("version")) or not int(data.version) in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, SAVE_VERSION]:
+		return false
+	var v12 = _load_v12(data)  # 개정 24(저장 v12): 연구
+	if v12 == null:
 		return false
 	var v10 = _load_v10(data)  # 개정 18(저장 v10): 던전·보관함·장착(형이 틀리면 깨진 저장)
 	if v10 == null:
@@ -2373,7 +2662,23 @@ func _apply(data) -> bool:
 	gacha_gold_level = v11.gold_level
 	gacha_gold_pulls = v11.gold_pulls
 	gacha_dia_pity = v11.dia_pity
+	research_levels = v12[0]
+	research_current = v12[1]
 	return true
+
+
+## 저장 v12(개정 24): research {levels: {노드: 레벨}, current: {id, finish} 또는 null}. v11 이하는 연구 없음. 형이 틀리면 null = 깨진 저장.
+## 표에서 빠진 노드·0 이하 레벨은 버린다(_research_state).
+func _load_v12(data: Dictionary):
+	if int(data.version) < 12:
+		return [{}, {}]
+	var r = data.get("research")
+	if not (r is Dictionary and r.get("levels") is Dictionary and r.levels.values().all(func(v): return _num(v))):
+		return null
+	var cur = r.get("current")
+	if not (cur == null or (cur is Dictionary and cur.get("id") is String and _num(cur.get("finish")))):
+		return null
+	return _research_state(r)
 
 
 ## 저장 v11(개정 23): diamonds, gacha {gold_level, gold_pulls, dia_pity}. v10 이하는 다이아 0·Lv 1·누적 0·천장 0. 형이 틀리면 null = 깨진 저장.

@@ -404,7 +404,7 @@ func owned_sorted(mode := sort_mode) -> Array:
 	var key := {}
 	for id in ids:
 		var h := GameData.hero(id)
-		var p := GameData.hero_power(h, Economy.level_of(id), Economy.promotion_of(id), Economy.levels)
+		var p := GameData.hero_power(h, Economy.level_of(id), Economy.promotion_of(id))
 		match mode:
 			"grade": key[id] = [GRADE_RANK[h.grade], h.name]
 			"level": key[id] = [-Economy.level_of(id), -p, h.name]
@@ -506,7 +506,7 @@ func _rebuild() -> void:
 		var pr := Economy.promotion_of(id)
 		c.stars = pr
 		c.level = Economy.level_of(id)
-		c.power = GameData.hero_power(GameData.hero(id), c.level, pr, Economy.levels)
+		c.power = GameData.hero_power(GameData.hero(id), c.level, pr)
 		c.deployed = deployed.has(id)
 		c.can_level = Economy.levelup_block(id) == ""
 		c.shards = Economy.shards_of(id)  # 개정 15: 조각 막대·금색 ⬆
@@ -627,12 +627,12 @@ func _refresh_detail() -> void:
 	level_label.text = "Lv %d / %d" % [lv, mx]
 	level_bar.max_value = mx
 	level_bar.value = lv
-	var now := GameData.hero_stats(h, lv, pr, Economy.levels)  # 연구소 보너스 포함(개정 12, 개정 13: 막사 보너스 없음)
-	var nxt := GameData.hero_stats(h, lv + 1, pr, Economy.levels)
+	var now := GameData.hero_stats(h, lv, pr)  # 기본 × 레벨 × 승급 + 장비(개정 24: 연구소 보너스 없음)
+	var nxt := GameData.hero_stats(h, lv + 1, pr)
 	var grow := lv < mx
 	var rows := [
 		[roundi(now.hp), roundi(nxt.hp)], [roundi(now.atk), roundi(nxt.atk)], null, null,
-		[GameData.hero_power(h, lv, pr, Economy.levels), GameData.hero_power(h, lv + 1, pr, Economy.levels)]]
+		[GameData.hero_power(h, lv, pr), GameData.hero_power(h, lv + 1, pr)]]
 	for i in rows.size():
 		var r = rows[i]
 		if r == null:

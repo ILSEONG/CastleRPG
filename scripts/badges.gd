@@ -7,6 +7,8 @@ extends Node2D
 ## (덩어리 크기 = stack_size). tags가 없으면 예전처럼 지붕 위 ANCHOR_UP 월드 좌표에.
 ## 훈련(개정 16): 병사 건물이 훈련 중이면 건설 막대와 같은 막대 + 남은 시간(h:mm:ss), 끝났으면 병사 피규어 말풍선(자원 말풍선과 같은 8각 면).
 ## 같은 건물을 짓는 중이면 건설 막대 위에 쌓는다. 쌓는 순서(아래 → 위): 이름표, 건설 막대, 훈련 막대 또는 말풍선.
+## 연구(개정 24): 연구가 비어 있고 시작할 수 있는 노드가 있으면(Economy.research_available) 연구소 위에 플라스크 말풍선(자원 말풍선과 같은 모양) —
+## 연구소를 탭하면 연구 창이 열린다(unit_picker).
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -42,7 +44,7 @@ var _t := 0.0
 
 
 func _ready() -> void:
-	for id in GameData.resources().map(func(r): return r.building) + GameData.soldiers().map(func(x): return x.building):
+	for id in GameData.resources().map(func(r): return r.building) + GameData.soldiers().map(func(x): return x.building) + [GameData.LAB]:
 		var b := Balance.building(id)
 		var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
 		_anchors[b.id] = center + Vector3(0, TownKit.building(b.id).get_aabb().end.y, 0)
@@ -70,6 +72,11 @@ func training_ids() -> Dictionary:
 		if q.count > 0:
 			out["ready" if q.ready else "bars"].append(s.building)
 	return out
+
+
+## 연구소 플라스크 말풍선을 띄우나(개정 24): 연구가 비어 있고 지금 시작할 수 있는 노드가 있다.
+func research_bubble() -> bool:
+	return Economy.research_available()
 
 
 func pop(world_pos: Vector3, kind: String, amount: int) -> void:
@@ -118,6 +125,12 @@ func _draw() -> void:
 		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
 		if view.has_point(tip):
 			_draw_bubble(tip, "", GameData.soldier_of_building(id))
+	if research_bubble():
+		var at = _base(GameData.LAB, anchor(GameData.LAB))
+		if at != null:
+			var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(GameData.LAB) else 0.0))
+			if view.has_point(tip):
+				_draw_bubble(tip, "flask")
 	for p in _pops:
 		var at := camera.unproject_position(p.pos) + Vector2(0, -POP_RISE_PX * p.age / POP_SEC)
 		_draw_pop(at, p)
@@ -165,7 +178,7 @@ func stack_size(tag_id: String, now: float) -> Vector2:
 	var q := Economy.training(id)
 	if q.count > 0 and not q.ready:
 		out = Vector2(BUILD_W, out.y + BUILD_LIFT_PX)
-	if (Economy.res_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready):
+	if (Economy.res_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()):
 		out = Vector2(maxf(out.x, BUBBLE_R * 2.0 + 4.0), out.y + BUBBLE_BLOCK)
 	return out
 

@@ -81,6 +81,7 @@ var _promotion := 0
 var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
 var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
 var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)
+var _skill_mult := 1.0  # 스킬 피해 배율 = 1 + 연구 비전 연구 %(개정 24) — 따로 들어가는 스킬 피해(가르기·연쇄·폭발·독·가시)에 곱한다
 var _stun_t := 0.0  # 기절 남은 초
 var _stun_fx: Node3D
 
@@ -140,8 +141,9 @@ func _ready() -> void:
 	add_child(_aura_ring)
 	if castle != null:
 		GameState.refilled.connect(reset)
-	Economy.upgrades_changed.connect(refresh_stats)  # 성장·장비는 곧바로(개정 20)
+	Economy.upgrades_changed.connect(refresh_stats)  # 성장·장비·연구는 곧바로(개정 20·24)
 	Economy.items_changed.connect(refresh_stats)
+	Economy.research_changed.connect(refresh_stats)
 	reset()
 
 
@@ -211,7 +213,7 @@ func take_damage(amount: float, source = null) -> void:
 	hp = maxf(0.0, hp - r.x)
 	DamageNumbers.pop(self, r.x, DamageNumbers.Kind.HURT)
 	if r.y > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
-		source.take_damage(r.y, DamageNumbers.Kind.SKILL)
+		source.take_damage(r.y * _skill_mult, DamageNumbers.Kind.SKILL)
 	if hp == 0.0:
 		state = State.DEAD
 		_model.play_death()
@@ -499,7 +501,7 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		heal(d * _sk.lifesteal[0] / 100.0)
 	if _sk.has("cleave") and role == "melee":
 		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):
-			o.take_damage(d * _sk.cleave[1] / 100.0, DamageNumbers.Kind.SKILL)
+			o.take_damage(d * _sk.cleave[1] / 100.0 * _skill_mult, DamageNumbers.Kind.SKILL)
 	if _sk.has("chain"):
 		_chain(m, d, a)
 
@@ -510,7 +512,7 @@ func _on_hit(m, a: float) -> void:
 	if _sk.has("slow"):
 		m.apply_slow(_sk.slow[0], _sk.slow[1])
 	if _sk.has("poison"):
-		m.apply_poison(a * _sk.poison[0] / 100.0, _sk.poison[1])
+		m.apply_poison(a * _sk.poison[0] / 100.0 * _skill_mult, _sk.poison[1])
 
 
 ## chain: 맞은 대상에서 c m 안 가장 가까운(아직 안 맞은) 몬스터로 a번, 매번 피해 × b/100.
@@ -528,7 +530,7 @@ func _chain(first, d: float, a: float) -> void:
 			break
 		hit.append(next)
 		pts.append(next.global_position + HIT_HEIGHT)
-		next.take_damage(dmg, DamageNumbers.Kind.SKILL)
+		next.take_damage(dmg * _skill_mult, DamageNumbers.Kind.SKILL)
 		_on_hit(next, a)
 		cur = next
 	Fx.lightning(get_parent(), pts, _color)
@@ -537,7 +539,7 @@ func _chain(first, d: float, a: float) -> void:
 ## aoe_blast: 대상 위치 반경 안 모든 몬스터에게 공격력 × c%.
 func _blast(center: Vector3) -> void:
 	_blast_cd = _sk.aoe_blast[0]
-	var dmg: float = atk * _aura_mult() * _sk.aoe_blast[2] / 100.0
+	var dmg: float = atk * _aura_mult() * _sk.aoe_blast[2] / 100.0 * _skill_mult
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
@@ -581,14 +583,17 @@ func _aura_mult() -> float:
 	return Skills.aura_mult(best)
 
 
-## 최종 능력치를 다시 읽는 한 곳(개정 20): HP·공격 = hero_stats(기본 × 레벨 × 승급, 공격 × 연구소, + 장비) × (1 + 성장 %),
-## 공격 간격 ÷ (1 + 성장 공격속도), 이동 × (1 + 성장 이동속도 + 신발 %). 성장·장비가 바뀌면 곧바로 — HP 비율 유지, 다음 공격부터 새 간격.
+## 최종 능력치를 다시 읽는 한 곳(개정 20): HP·공격 = hero_stats(기본 × 레벨 × 승급 + 장비) × (1 + 성장 %) × (1 + 연구 %, 개정 24),
+## 공격 간격 ÷ (1 + 성장 공격속도), 이동 × (1 + 성장 이동속도 + 신발 %), 스킬 피해 × (1 + 연구 비전 %). 성장·장비·연구가 바뀌면 곧바로 —
+## HP 비율 유지, 다음 공격부터 새 간격.
 func refresh_stats() -> void:
 	_bonus = Economy.upgrade_bonus()
+	var r: Dictionary = Economy.research_bonus()
 	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
-	var st := GameData.hero_stats(def, _level, _promotion, GameState.building_levels())
-	hp_max = st.hp * (1.0 + _bonus.hp_pct)
-	atk = st.atk * (1.0 + _bonus.atk_pct)
+	var st := GameData.hero_stats(def, _level, _promotion)
+	hp_max = st.hp * (1.0 + _bonus.hp_pct) * (1.0 + r.hero_hp_pct / 100.0)
+	atk = st.atk * (1.0 + _bonus.atk_pct) * (1.0 + r.hero_atk_pct / 100.0)
+	_skill_mult = 1.0 + r.skill_pct / 100.0
 	hp = hp_max * ratio
 	_aspd = 1.0 + _bonus.aspd_pct
 	var shoes: float = Economy.equipment_bonus(str(def.get("id", ""))).get("speed_pct", 0.0)
