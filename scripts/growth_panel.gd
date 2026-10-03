@@ -1,7 +1,7 @@
 extends "res://scripts/ui_window.gd"
 ## [성장] 탭 시트(개정 20 §5): 공용 업그레이드 6줄. 위 보유 골드 한 줄, 아래 안내 "성장은 모든 영웅·병사에게 적용됩니다".
 ## 줄: 아이콘(검·하트·쌍화살표 시계·장화·과녁·폭발 별) · 이름 · "Lv 23 / 200" · 현재 → 다음 효과("+11.5% → +12.0%", 최대면 "(최대)") ·
-## [강화 비용](골드 부족·최대 레벨이면 비활성) · [×10](감당 가능한 횟수와 그 합계 — Economy.upgrade_count_affordable·upgrade_total_cost).
+## [강화 비용](골드 부족·최대 레벨이면 비활성) · [×10](10번 합계 — 10번을 다 못 하면(골드 부족·최대 레벨까지 10 미만) 비활성).
 ## [강화]는 누르는 순간 한 번, 누르고 있으면 HOLD_DELAY 뒤부터 가속(qty_box와 같은 초당 10 → 50). 강화는 Economy.growth_up
 ## (오프라인은 곧바로, 온라인은 응답 때 — 응답을 기다리는 동안 길게 누르기는 쉬었다 잇는다). 영웅 시트처럼 칩 줄 아래 ~ 탭 바 위를 채운다.
 
@@ -68,11 +68,10 @@ func _process(delta: float) -> void:
 	_tick_hold(delta)
 
 
-## [×10]: 감당 가능한 만큼(최대 10번) 한 번에.
+## [×10]: 정확히 10번 한 번에. 10번을 다 못 하면 아무것도 하지 않는다(버튼도 꺼져 있다).
 func press_ten(id: String) -> void:
-	var n := Economy.upgrade_count_affordable(id, TEN)
-	if n > 0:
-		Economy.growth_up(id, n)
+	if Economy.growth_block(id, TEN) == "":
+		Economy.growth_up(id, TEN)
 
 
 ## [강화] 누름: 곧바로 한 번, 누르고 있으면 _tick_hold가 잇는다.
@@ -119,11 +118,9 @@ func _refresh() -> void:
 		r.up.title.text = "강화" if lv < mx else "MAX"
 		r.up.gold.text = UiKit.commas(GameData.upgrade_cost(id, lv)) if lv < mx else "-"
 		r.up.button.disabled = why != "" and why != WAIT
-		var n := Economy.upgrade_count_affordable(id, TEN)
-		var shown := n if n > 0 else mini(TEN, mx - lv)
-		r.ten.title.text = "×10 (%d회)" % shown if shown > 0 else "×10"
-		r.ten.gold.text = UiKit.commas(Economy.upgrade_total_cost(id, shown)) if shown > 0 else "-"
-		r.ten.button.disabled = n == 0 or waiting
+		r.ten.title.text = "×10"
+		r.ten.gold.text = UiKit.commas(Economy.upgrade_total_cost(id, TEN)) if lv + TEN <= mx else "-"
+		r.ten.button.disabled = Economy.growth_block(id, TEN) != "" or waiting
 
 
 ## 효과 글자: 11.5 → "+11.5%", 12 → "+12.0%", 0.75 → "+0.75%"(소수 첫째 자리는 늘 보인다).

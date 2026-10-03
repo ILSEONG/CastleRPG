@@ -1318,7 +1318,7 @@ func _growth_ui(tabs) -> void:
 		"lv=%d gold=%d text=%s cost=%s" % [Economy.upgrade_level("atk"), Economy.gold, atk.effect.text, atk.up.gold.text])
 	var cost10 := Economy.upgrade_total_cost("atk", 10)
 	var g0 := Economy.gold
-	_check(atk.ten.title.text == "×10 (10회)" and atk.ten.gold.text == UiKit.commas(cost10), "(G) [×10] shows 10 times and their summed cost", "title=%s cost=%s" % [atk.ten.title.text, atk.ten.gold.text])
+	_check(atk.ten.title.text == "×10" and atk.ten.gold.text == UiKit.commas(cost10) and not atk.ten.button.disabled, "(G) [×10] shows the summed cost of 10 and is on", "title=%s cost=%s" % [atk.ten.title.text, atk.ten.gold.text])
 	await _tap(_center(atk.ten.button))
 	_check(Economy.upgrade_level("atk") == 11 and Economy.gold == g0 - cost10, "(G) [×10] tap: Lv 1 -> 11, gold minus the summed cost",
 		"lv=%d gold %d -> %d (cost %d)" % [Economy.upgrade_level("atk"), g0, Economy.gold, cost10])
@@ -1335,6 +1335,13 @@ func _growth_ui(tabs) -> void:
 	await get_tree().create_timer(0.4).timeout
 	_check(first == 1 and early == 1 and held >= 6 and Economy.upgrade_level("hp") == held, "(G) holding [강화]: one step at once, more only after 0.4 s (accelerating), release stops it",
 		"first=%d at 0.25 s=%d held=%d after release=%d" % [first, early, held, Economy.upgrade_level("hp")])
+	var lv9 := Economy.upgrade_level("atk")
+	Economy.gold_tenths = Economy.upgrade_total_cost("atk", 9) * 10
+	Economy.changed.emit()
+	await _frames(1)
+	await _tap(_center(atk.ten.button))
+	_check(not atk.up.button.disabled and atk.ten.button.disabled and Economy.upgrade_level("atk") == lv9,
+		"(G) gold for 9 but not 10: [강화] on, [×10] off and a tap does nothing", "up=%s ten=%s lv=%d" % [atk.up.button.disabled, atk.ten.button.disabled, Economy.upgrade_level("atk")])
 	Economy.gold_tenths = 100
 	Economy.changed.emit()
 	await _frames(1)
