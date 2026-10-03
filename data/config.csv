@@ -11,7 +11,7 @@ wave_gap_sec,8
 spawn_spacing_sec,1.0
 spawn_group,3
 accum_cap_min,720
-offline_gold_mult,0.5
+offline_gold_mult,0.4
 pop_base,6
 pop_per_house,2
 soldier_max_tier,5
@@ -67,7 +67,7 @@ hero_level_stat,0.06
 levelup_gold_R,30
 levelup_gold_SR,60
 levelup_gold_SSR,120
-fever_kills,3000
+fever_kills,2000
 fever_sec,180
 fever_spawn_mult,3
 daily_reset_utc_hour,15

@@ -1,6 +1,6 @@
 extends "res://scripts/ui_window.gd"
 ## 방치 보상 개요 창: 앱을 껐다(백그라운드에서) 돌아오면 떠나 있던 시간·그동안 처치한 적·얻은 골드를 보여 준다(Economy.offline_reported).
-## 앱을 끈 동안의 처치 골드는 offline_gold_mult(0.5)배, 최대 accum_cap_min분까지만 쌓인다(Economy.offline_reward). [확인] 또는 배경 탭으로 닫는다.
+## 앱을 끈 동안의 처치 골드는 offline_gold_mult(0.4)배, 최대 accum_cap_min분까지만 쌓인다(Economy.offline_reward). [확인] 또는 배경 탭으로 닫는다.
 ## 창을 만들기 전에 정산이 끝났으면(온라인 응답이 먼저 옴) 만들 때 Economy.offline_report로 곧바로 연다.
 
 const GameData := preload("res://scripts/game_data.gd")

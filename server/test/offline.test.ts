@@ -14,7 +14,7 @@ test('offlineReward: 처치 = floor(초 × 4 × group / idle_interval), tenths =
   assert.deepEqual(R.offlineReward(3600, 720, 8, 3, 101, 0.5), { sec: 3600, kills: 5400, tenths: 272_700 })
 })
 
-test('POST /v1/offline: 첫 정산 0 → 1시간 뒤 방치 처치 × 0.5(스테이지 1 grunt 100 tenths), 곧바로 다시 보내면 0, 로그', async () => {
+test('POST /v1/offline: 첫 정산 0 → 1시간 뒤 방치 처치 × 0.4(스테이지 1 grunt 100 tenths), 곧바로 다시 보내면 0, 로그', async () => {
   const S = await setup()
   try {
     S.clock.t = T0
@@ -23,19 +23,19 @@ test('POST /v1/offline: 첫 정산 0 → 1시간 뒤 방치 처치 × 0.5(스테
     assert.deepEqual([r.status, r.json.offline, r.json.player.gold_tenths], [200, { away_sec: 0, kills: 0, gold_gained_tenths: 0 }, 0])
     S.clock.t = T0 + 3600
     r = await S.req('POST', '/v1/offline', { token, body: {} })
-    assert.deepEqual([r.status, r.json.offline, r.json.player.gold_tenths], [200, { away_sec: 3600, kills: 5400, gold_gained_tenths: 270_000 }, 270_000])
+    assert.deepEqual([r.status, r.json.offline, r.json.player.gold_tenths], [200, { away_sec: 3600, kills: 5400, gold_gained_tenths: 216_000 }, 216_000])
     r = await S.req('POST', '/v1/offline', { token, body: {} })
-    assert.deepEqual([r.json.offline, r.json.player.gold_tenths], [{ away_sec: 0, kills: 0, gold_gained_tenths: 0 }, 270_000])
+    assert.deepEqual([r.json.offline, r.json.player.gold_tenths], [{ away_sec: 0, kills: 0, gold_gained_tenths: 0 }, 216_000])
     S.clock.t += 30
     r = await S.req('POST', '/v1/offline', { token, body: {} })
-    assert.deepEqual([r.json.offline, r.json.player.gold_tenths], [{ away_sec: 30, kills: 0, gold_gained_tenths: 0 }, 270_000]) // 60초 미만
+    assert.deepEqual([r.json.offline, r.json.player.gold_tenths], [{ away_sec: 30, kills: 0, gold_gained_tenths: 0 }, 216_000]) // 60초 미만
     S.clock.t += 100 * 3600
     r = await S.req('POST', '/v1/offline', { token, body: {} })
-    assert.deepEqual([r.json.offline.kills, r.json.offline.gold_gained_tenths], [64_800, 3_240_000]) // 12시간(accum_cap_min) 상한
+    assert.deepEqual([r.json.offline.kills, r.json.offline.gold_gained_tenths], [64_800, 2_592_000]) // 12시간(accum_cap_min) 상한
     assert.equal(r.json.offline.away_sec, 100 * 3600)
     const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'offline' order by id", [id])
-    assert.deepEqual(logs.map((l: any) => l.detail.gold_tenths), [270_000, 3_240_000])
-    assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold_tenths, 270_000 + 3_240_000)
+    assert.deepEqual(logs.map((l: any) => l.detail.gold_tenths), [216_000, 2_592_000])
+    assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold_tenths, 216_000 + 2_592_000)
   } finally {
     await S.close()
   }
@@ -52,7 +52,7 @@ test('상태를 바꾸는 요청(처치 보고)은 활동 시각을 옮긴다 �
     assert.equal(k.status, 200)
     S.clock.t = T0 + 700
     const r = await S.req('POST', '/v1/offline', { token, body: {} })
-    assert.deepEqual(r.json.offline, { away_sec: 100, kills: 150, gold_gained_tenths: 7500 })
+    assert.deepEqual(r.json.offline, { away_sec: 100, kills: 150, gold_gained_tenths: 6000 })
   } finally {
     await S.close()
   }

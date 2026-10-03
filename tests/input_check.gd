@@ -342,8 +342,8 @@ func _offline_report() -> void:
 	Economy._report_offline(3.0 * 3600.0 + 12.0 * 60.0 + 5.0, 5400, 270000)
 	await _frames(2)
 	_check(w.is_open() and w.away_label.text == "방치 시간  3시간 12분" and w.kills_label.text == "처치한 적  5,400마리" and w.gold_label.text == "+27,000 골드"
-		and w.note_label.text == "앱을 끈 동안 처치 골드는 50%만 쌓입니다 (최대 12시간)" and Economy.offline_report.is_empty(),
-		"(off) a claim opens the summary: away time, kills, gold, the 50% / 12 h note",
+		and w.note_label.text == "앱을 끈 동안 처치 골드는 40%만 쌓입니다 (최대 12시간)" and Economy.offline_report.is_empty(),
+		"(off) a claim opens the summary: away time, kills, gold, the 40% / 12 h note",
 		"away=%s kills=%s gold=%s note=%s" % [w.away_label.text, w.kills_label.text, w.gold_label.text, w.note_label.text])
 	await _guard_wait()
 	await _tap(_center(w.ok_button))
@@ -1656,7 +1656,7 @@ func _rotate_ui(hud) -> void:
 func _fever_ui(hud) -> void:
 	var fb = hud._fever
 	Fever.reset()
-	Fever.gauge = 1080
+	Fever.gauge = 720
 	await _frames(2)
 	var fr: Rect2 = fb.get_global_rect()
 	var br: Rect2 = hud._button.get_global_rect()
@@ -1664,7 +1664,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == 1080 and hud._toast.visible and hud._toast.text == "몬스터 1920마리 더",
+	_check(not Fever.active() and Fever.gauge == 720 and hud._toast.visible and hud._toast.text == "몬스터 1280마리 더",
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)
