@@ -1,6 +1,8 @@
 extends CanvasLayer
-## 첫 로딩 화면: 게임이 처음 보이기 전에 정적 리소스를 한 번에 준비해, 배너·그림·피규어가 자리표시로 보였다가 바뀌지 않게 한다.
-## main이 첫 월드를 만든 직후 붙인다(월드 위를 덮고 입력을 막는다). 순서:
+## 첫 로딩 화면(하나뿐): 게임이 처음 보이기 전에 정적 리소스를 한 번에 준비해, 배너·그림·피규어가 자리표시로 보였다가 바뀌지 않게 한다.
+## 온라인이면 서버 연결 단계부터 같은 화면이다(connecting — main이 접속 전에 붙이고, 막대 앞 CONNECT_SHARE를 로그인·gamedata·player
+## 응답에 맞춰 채운다). 월드를 만들면 main이 begin()을 불러 같은 화면·같은 막대로 이어서 불러온다. 오프라인은 main이 첫 월드를 만든 직후
+## 붙이고 곧바로 불러온다(월드 위를 덮고 입력을 막는다). 불러오기 순서:
 ##  1) res://assets 아래 리소스 전부(모델 glb·gltf, 텍스처, 글꼴)를 스레드로 불러 _keep에 쥔다 — 처음 쓰는 순간 디스크에서 읽지 않게.
 ##  2) 피규어(Portraits): 모든 영웅 "hero:<id>"와 병종 "soldier:<id>" — 영웅·병사 카드, 말풍선, 던전 HUD가 쓴다.
 ##  3) 장면 스냅샷(SceneSnap): 던전 카드 띠 둘(골드·장비, 지금 출전 편성 — dungeon_panel과 같은 키), 모집 창 키 아트.
@@ -23,12 +25,21 @@ const TIMEOUT_SEC := 20.0
 const FADE_SEC := 0.25
 const DUNGEON_TYPES := ["gold", "equip"]  # dungeon_panel.TYPES
 const DUNGEON_KEY := "dungeon_band:%s"  # dungeon_panel.SNAP_KEY
+const CONNECT_TEXT := "서버에 연결하는 중…"
+const LOAD_TEXT := "게임 데이터를 불러오는 중…"
+const CONNECT_SHARE := 0.3  # 온라인: 막대에서 서버 연결 몫(나머지가 불러오기)
 
 static var _keep: Array = []  # 불러 둔 리소스(쥐고 있어야 캐시에 남는다)
 static var done := false  # 이번 실행에서 한 번 끝냈다(월드를 다시 만들 때는 다시 하지 않는다)
 
 var bar: ProgressBar
 var label: Label
+var connecting := false  # add_child 전에 true: 서버 연결 단계부터 보이고, begin()을 부를 때까지 불러오지 않는다
+
+var _started := false
+var _base := 0.0  # 불러오기가 시작된 막대 비율(연결 몫)
+var _steps := 0  # 서버 연결: 지난 단계 수(로그인·gamedata·player)
+var _step_t := 0.0  # 그 단계에서 기다린 초(막대가 다음 단계 쪽으로 조금씩 나아간다)
 
 var _paths: Array = []
 var _loading: Array = []  # 아직 스레드로 불러오는 경로
@@ -42,9 +53,28 @@ var _closing := false
 func _ready() -> void:
 	layer = 20
 	if done or DisplayServer.get_name() == "headless":
-		_finish.call_deferred(true)
+		if not connecting:
+			_finish.call_deferred(true)
 		return
 	_build_ui()
+	if connecting:
+		label.text = CONNECT_TEXT
+		return
+	begin()
+
+
+## 불러오기 시작(연결 단계였으면 같은 화면·막대를 이어서). 이미 했으면 아무 일 없다. 헤드리스는 곧바로 끝낸다.
+func begin() -> void:
+	if _started or _closing:
+		return
+	_started = true
+	if done or bar == null:
+		_finish.call_deferred(true)
+		return
+	if connecting:  # 연결 몫은 다 찼다(월드를 만들 때 부른다)
+		bar.value = maxf(bar.value, 100.0 * CONNECT_SHARE)
+	_base = bar.value / 100.0
+	label.text = LOAD_TEXT
 	_paths = resource_paths(ROOT)
 	for p in _paths:
 		if ResourceLoader.load_threaded_request(p) == OK:
@@ -75,7 +105,10 @@ static func resource_paths(dir: String) -> Array:
 
 
 func _process(delta: float) -> void:
-	if _closing:
+	if _closing or bar == null:
+		return
+	if not _started:
+		_connect_progress(delta)
 		return
 	_t += delta
 	for p in _loading.duplicate():
@@ -96,11 +129,22 @@ func _process(delta: float) -> void:
 	var total := _paths.size() + _portraits.size() + _snaps.size()
 	var left := _loading.size() + _portraits.filter(func(k): return not PortraitsScript.has_portrait(k)).size() \
 		+ _snaps.filter(func(k): return SceneSnap.cached(k) == null).size()
-	bar.value = 100.0 * (total - left) / maxf(1.0, total)
+	bar.value = 100.0 * (_base + (1.0 - _base) * (total - left) / maxf(1.0, total))
 	if left == 0 or _t >= TIMEOUT_SEC:
 		if left > 0:
 			push_warning("preloader: %d items not ready after %.0f s; showing the game anyway" % [left, TIMEOUT_SEC])
 		_finish(false)
+
+
+## 서버 연결 단계 막대: 로그인·gamedata·player 응답마다 CONNECT_SHARE의 1/3씩, 기다리는 동안은 다음 단계 쪽으로 조금씩(넘지 않게).
+func _connect_progress(delta: float) -> void:
+	var steps := int(Net.logins > 0) + int(Net.gamedata_version != "") + int(Net.ready_once)
+	if steps != _steps:
+		_steps = steps
+		_step_t = 0.0
+	_step_t += delta
+	var creep := 0.8 * (1.0 - exp(-_step_t / 2.0)) if steps < 3 else 0.0
+	bar.value = maxf(bar.value, 100.0 * CONNECT_SHARE * (steps + creep) / 3.0)
 
 
 func _finish(instant: bool) -> void:
@@ -159,3 +203,14 @@ func _build_ui() -> void:
 	bar.add_theme_stylebox_override("background", back)
 	bar.add_theme_stylebox_override("fill", fill)
 	box.add_child(bar)
+	if Net.is_online() and not Net.storage_persistent:  # 웹 사생활 모드 등: 진행이 저장되지 않을 수 있다
+		var warn := Label.new()
+		warn.text = Net.STORAGE_TEXT
+		warn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		warn.custom_minimum_size = Vector2(520, 0)
+		warn.add_theme_font_size_override("font_size", 20)
+		warn.add_theme_color_override("font_color", Color.WHITE)
+		warn.add_theme_color_override("font_outline_color", UiKit.INK)
+		warn.add_theme_constant_override("outline_size", 6)
+		box.add_child(warn)

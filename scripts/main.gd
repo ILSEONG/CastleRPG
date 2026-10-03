@@ -2,7 +2,8 @@ extends Node3D
 ## 월드 조립. 씬 파일은 이것 하나. 나머지는 코드로 생성.
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
 ## 온라인 모드(Net.is_online())면 저장한 로그인 방식(Net.load_auth)이 없을 때 로그인 화면(login_screen.gd — Google·카카오·네이버·게스트)을
-## 먼저 띄우고, 그다음 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다(접속 중 저장한 소셜 세션이
+## 먼저 띄우고, 그다음 로딩 화면(preloader.gd, 서버 연결 단계)을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다 — 같은 로딩 화면이
+## 이어서 리소스를 불러온다(로딩 화면은 하나). 접속 중 저장한 소셜 세션이
 ## 거절되면 로그인 화면으로 돌아간다) —
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 ## 영웅은 배치(GameState.deploy·hero_promotion·hero_level)대로 만들고, 배치·승급(별)·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
@@ -46,6 +47,7 @@ const ResearchPanelScript := preload("res://scripts/research_panel.gd")
 const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
 const LoginScreenScript := preload("res://scripts/login_screen.gd")
 const PreloaderScript := preload("res://scripts/preloader.gd")
+var _loading = null  # 로딩 화면(온라인: 서버 연결부터, 첫 월드에서 begin()으로 이어서 불러온다)
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
@@ -176,8 +178,11 @@ func _build_world() -> void:
 	add_child(tabs)
 	add_child(bag)
 	add_child(OfflinePanelScript.new())  # 방치 보상 개요(앱을 껐다 켜면 — Economy.offline_reported)
-	if not PreloaderScript.done:
-		add_child(PreloaderScript.new())  # 첫 로딩 화면: 리소스·피규어·배너를 다 준비한 뒤 걷힌다(자리표시가 보였다 바뀌지 않게)
+	if not PreloaderScript.done:  # 첫 로딩 화면: 리소스·피규어·배너를 다 준비한 뒤 걷힌다(자리표시가 보였다 바뀌지 않게)
+		if _loading != null and is_instance_valid(_loading):
+			_loading.begin()  # 온라인: 서버 연결부터 보이던 같은 화면으로 이어서
+		else:
+			add_child(PreloaderScript.new())
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원(영웅 id로, 다시 만든 영웅도) + 배치·승급·레벨·장비 반영
 	GameState.refilled.connect(_reset_soldiers)
@@ -290,37 +295,13 @@ func _connect_online() -> void:
 signal _server_waited(ok: bool)
 
 
-## "서버 연결 중…" 화면을 띄우고 접속을 기다린다. 접속했으면 true, 세션이 거절됐으면 false.
+## 로딩 화면(서버 연결 단계)을 띄우고 접속을 기다린다. 접속했으면 true(화면은 남아 월드를 만들 때 이어서 불러온다),
+## 세션이 거절됐으면 false(화면을 걷고 로그인 화면으로).
 func _wait_for_server() -> bool:
-	var layer := CanvasLayer.new()
-	var back := ColorRect.new()
-	back.color = Color(0.86, 0.91, 0.96)  # 월드 배경색
-	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(back)
-	var box := PanelContainer.new()
-	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	box.add_theme_stylebox_override("panel", UiKit.panel(HudScript.PANEL_BG, 16.0, 28))
-	back.add_child(box)
-	var lines := VBoxContainer.new()
-	box.add_child(lines)
-	var label := Label.new()
-	label.text = "서버 연결 중…"
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 40)
-	label.add_theme_color_override("font_color", HudScript.INK)
-	lines.add_child(label)
-	if not Net.storage_persistent:
-		var warn := Label.new()
-		warn.text = Net.STORAGE_TEXT
-		warn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		warn.custom_minimum_size = Vector2(520, 0)
-		warn.add_theme_font_size_override("font_size", 22)
-		warn.add_theme_color_override("font_color", HudScript.INK)
-		lines.add_child(warn)
-	add_child(layer)
+	if _loading == null or not is_instance_valid(_loading):
+		_loading = PreloaderScript.new()
+		_loading.connecting = true
+		add_child(_loading)
 	var up := func(): _server_waited.emit(true)
 	var lost := func(): _server_waited.emit(false)
 	Net.connected.connect(up)
@@ -329,7 +310,9 @@ func _wait_for_server() -> bool:
 	var ok: bool = true if Net.ready_once else await _server_waited
 	Net.connected.disconnect(up)
 	Net.session_lost.disconnect(lost)
-	layer.queue_free()
+	if not ok and is_instance_valid(_loading):
+		_loading.queue_free()
+		_loading = null
 	return ok
 
 
