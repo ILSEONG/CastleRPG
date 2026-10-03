@@ -201,7 +201,7 @@ func _process(delta: float) -> void:
 static func resolve_api_base() -> String:
 	var url := arg_value("api") if OS.is_debug_build() else ""
 	if url == "":
-		url = str(ProjectSettings.get_setting("castle/api_base_url", ""))
+		url = str(ProjectSettings.get_setting_with_override("castle/api_base_url"))  # .template 오버라이드(내보낸 빌드) — get_setting은 피처 태그를 안 본다
 	return url.strip_edges().trim_suffix("/")
 
 
