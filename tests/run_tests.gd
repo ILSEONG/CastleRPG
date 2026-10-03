@@ -18,6 +18,8 @@ const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
+const MeshMergeScript := preload("res://scripts/mesh_merge.gd")
+const UnitModelScript2 := preload("res://scripts/unit_model.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -123,6 +125,7 @@ func _init() -> void:
 	test_crowd()
 	test_research_r24()
 	test_offline_gold()
+	test_mesh_merge()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3144,6 +3147,7 @@ func test_arena_kit() -> void:
 ## 던전 몬스터: 크기 0.8·1.7·2.2, UnitModel.dress 뒤 tint 메시 재질 = 원본 albedo × 색(발광 눈은 색 자체), parts는 그 뼈의 BoneAttachment3D 아래
 ## 코드 부품으로 붙고, 같은 (재질, 색)은 몬스터끼리 공유한다. (애니메이션·숨김 메시·사망 길이는 test_art_assets가 본다.)
 func test_dungeon_monsters() -> void:
+	MeshMergeScript.enabled = false  # 부위 메시를 이름으로 본다 — 합치기 전 모습(합치기는 test_mesh_merge)
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
 	var scales := {"goblin": 0.8, "goblin_king": 1.7, "death_knight": 2.2}
 	for key in scales:
@@ -3172,6 +3176,7 @@ func test_dungeon_monsters() -> void:
 			check(head.call(again) == head.call(model), "two goblins share one tinted skin material")
 			again.free()
 		model.free()
+	MeshMergeScript.enabled = true
 
 
 ## 무리 스폰: 스폰 횟수·면 순서는 예전(한 번에 한 마리) 그대로, 스폰 한 번에 spawn_group(3)마리가 같은 시각·같은 면에 나란히 —
@@ -3772,6 +3777,7 @@ func _look_tuple(h: Dictionary) -> Dictionary:
 ## swap gear는 숨고 그 손 슬롯에 코드 무기, 벗긴 모자는 숨고 나머지 gear는 보이며, 몸 크기 = scale(±10%), 텍스처 표면은 전부 그 영웅의
 ## 8×4 칸 색표 재질(팔레트 칸만 알파 1). 같은 영웅 = 같은 재질(캐시), 영웅끼리 다르다. 부품 메시는 id마다 하나. 셰이더가 remap 유니폼과 함께 컴파일된다.
 func test_hero_look_builder() -> void:
+	MeshMergeScript.enabled = false  # 부위 메시를 이름으로 본다 — 합치기 전 모습(합치기는 test_mesh_merge)
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
 	const HeroKit := preload("res://scripts/hero_kit.gd")
 	for sh in [Art.LOWPOLY_SHADER, Art.LOWPOLY_DOUBLE_SHADER]:
@@ -3836,6 +3842,7 @@ func test_hero_look_builder() -> void:
 	check(p1.mesh == p2.mesh and p1 != p2, "part meshes are built once per id")
 	p1.free()
 	p2.free()
+	MeshMergeScript.enabled = true
 
 
 ## 피규어(목록·상세 미리보기·모집 결과 카드)도 같은 생김새: Portraits.spec_of("hero:id") == Art.hero_spec — 팔레트·부품·swap·크기까지. 병사는 그대로.
@@ -4205,4 +4212,53 @@ func test_offline_gold() -> void:
 	e3.claim_offline(1, 1.8e9)
 	check(e3.gold_tenths == 0 and e3.offline_report.is_empty(), "a new game (no save) has nothing to claim")
 	DirAccess.remove_absolute(tmp)
+
+
+## 캐릭터 메시 합치기(mesh_merge.gd): 영웅(스킨 부위 + 뼈 부착 무기·모자·코드 부품) → 스켈레톤 아래 "Merged" 하나(재질마다 표면 하나),
+## 정점 수 = 보이던 메시 합, Skin bind = 원래 + 단단한 부위마다 하나, 숨긴 장비는 빠지고 빈 부착 노드는 지운다, 같은 스펙은 메시·Skin 공유.
+func test_mesh_merge() -> void:
+	GameData.load_tables()
+	var spec: Dictionary = Art.hero_spec(GameData.hero("arteon"))
+	MeshMergeScript.enabled = false
+	var plain := Art.instance(spec.scene)
+	UnitModelScript2.dress(plain, spec)
+	MeshMergeScript.enabled = true
+	var verts := 0
+	var mats := {}
+	var rigid := 0
+	var skel0 := plain.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	for n in skel0.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		var shown := true
+		var q: Node = mi
+		while q != plain:
+			shown = shown and (not (q is Node3D) or q.visible)
+			q = q.get_parent()
+		if not shown:
+			continue
+		rigid += 0 if mi.skin != null else 1
+		for s in mi.mesh.get_surface_count():
+			verts += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+			mats[mi.get_active_material(s)] = true
+	var a := Art.instance(spec.scene)
+	UnitModelScript2.dress(a, spec)
+	var b := Art.instance(spec.scene)
+	UnitModelScript2.dress(b, spec)
+	var skel := a.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var meshes := skel.find_children("*", "MeshInstance3D", true, false).filter(func(m): return m.visible and (not (m.get_parent() is Node3D) or m.get_parent().visible))  # 숨긴 장비는 그대로 남는다
+	var merged: MeshInstance3D = skel.get_node_or_null("Merged")
+	var mverts := 0
+	if merged != null:
+		for s in merged.mesh.get_surface_count():
+			mverts += (merged.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var base_binds: int = skel0.find_children("*", "MeshInstance3D", true, false).filter(func(m): return m.skin != null)[0].skin.get_bind_count()
+	check(merged != null and meshes.size() == 1 and merged.mesh.get_surface_count() == mats.size() and mverts == verts and rigid > 0
+		and merged.skin.get_bind_count() == base_binds + rigid and merged.skeleton == NodePath(".."),
+		"arteon merged: one mesh, %d surfaces (one per material), %d vertices, %d + %d binds (meshes=%d surfaces=%d verts=%d)" % [mats.size(), verts, base_binds, rigid,
+			meshes.size(), merged.mesh.get_surface_count() if merged else -1, mverts])
+	check(skel.get_children().all(func(c): return not (c is BoneAttachment3D) or c.is_queued_for_deletion() or c.get_child_count() > 0), "empty bone attachments are removed")
+	var merged_b: MeshInstance3D = (b.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D).get_node_or_null("Merged")
+	check(merged_b != null and merged_b.mesh == merged.mesh and merged_b.skin == merged.skin, "the same spec shares one merged mesh and skin")
+	for m in [plain, a, b]:
+		m.free()
 

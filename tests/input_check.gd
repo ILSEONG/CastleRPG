@@ -1908,11 +1908,14 @@ func _soldier_figures(tabs) -> void:
 		and is_equal_approx(kids[0].scale.x, preload("res://scripts/art.gd").SOLDIER_SCALE) and hand.y < rest.y - 0.2,
 		"(F) the cavalry figure is the world soldier's body: the shared horse mesh with the knight on its back, in the idle pose", "kids=%d hand=%s rest=%s" % [kids.size(), hand, rest])
 	var gear := {"soldier:infantry": [["1H_Sword", "Rectangle_Shield"], ["2H_Sword"]], "soldier:archer": [["2H_Crossbow"], ["Knife", "1H_Crossbow"]]}
+	var MM = preload("res://scripts/mesh_merge.gd")
+	MM.enabled = false  # 부위 노드를 이름으로 본다 — 합치기 전 모습(합치기는 run_tests test_mesh_merge)
 	for key in gear:
 		p._show(key)
 		var shown: bool = gear[key][0].all(func(g): return p._pivot.find_child(g, true, false).visible) and gear[key][1].all(func(g): return not p._pivot.find_child(g, true, false).visible)
 		_check(p._pivot.get_child_count() == 1 and shown, "(F) %s figure shows only its gear %s" % [key, gear[key][0]], "")
 	p._show("")
+	MM.enabled = true
 	# 시트 행 칸: portrait_ready에 다시 그리고, 행이 사라지면 연결이 끊긴다
 	var sw = tabs.windows.soldier
 	Economy.soldiers = {"infantry:1": 1, "archer:2": 1}
