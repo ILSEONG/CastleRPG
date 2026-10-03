@@ -365,19 +365,19 @@ static func _affordable(type: String, tier := 1) -> int:
 ## 성채의 영웅 슬롯·성 넓이 줄은 다음 레벨에서 값이 바뀔 때만(단계 경계 — keep_slot_tiers·keep_interior_tiers) 넣는다. 최대 레벨이면 다음이 없어 둘 다 빠진다.
 static func effect_lines(id: String, lv: int) -> Array:
 	var n := lv + 1
-	var b: Dictionary = Economy.research_bonus()  # 개정 24: 지금 연구 효과를 넣은 값
+	var rb: Dictionary = Economy.research_bonus()  # 개정 24: 지금 연구 효과를 넣은 값
 	var res := GameData.resource_of_building(id)
 	if res != "":
 		var pct := Economy.res_pct(res)
 		return [["생산", "%d/분" % EconomyScript.rate_per_min(res, lv, pct), "%d/분" % EconomyScript.rate_per_min(res, n, pct)]]
 	if GameData.soldier_of_building(id) != "":
-		var k := 1.0 + float(b.train_speed_pct) / 100.0
+		var k := 1.0 + float(rb.train_speed_pct) / 100.0
 		var tn := GameData.train_tier(n)
 		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n) / k)
 		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
 	match id:
 		"keep":
-			var hp := 1.0 + float(b.castle_hp_pct) / 100.0
+			var hp := 1.0 + float(rb.castle_hp_pct) / 100.0
 			var rows := [["건물 최대", "Lv %d" % lv, "Lv %d" % n],
 				["성 HP", UiKit.commas(roundi(GameData.castle_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.castle_hp_max(n) * hp))],
 				["영웅 슬롯", str(GameData.hero_slots(lv)), str(GameData.hero_slots(n))],
@@ -385,12 +385,12 @@ static func effect_lines(id: String, lv: int) -> Array:
 			var maxed := lv >= int(GameData.building_def("keep").get("max_level", 0))
 			return rows.filter(func(r): return not r[0] in TIERED_KEEP or (r[1] != r[2] and not maxed))
 		"gate":
-			var hp := 1.0 + float(b.gate_hp_pct) / 100.0
+			var hp := 1.0 + float(rb.gate_hp_pct) / 100.0
 			return [["성문 HP", UiKit.commas(roundi(GameData.gate_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.gate_hp_max(n) * hp))]]
 		"lab":  # 연구소 몫의 연구 속도만(연구 방법론은 연구 창 위에 합쳐 보인다)
 			return [["연구 속도", _pct(GameData.research_speed({}, lv), "+"), _pct(GameData.research_speed({}, n), "+")]]
 		"houses":
-			var add := int(b.pop_add)
+			var add := int(rb.pop_add)
 			return [["인구", str(GameData.population(lv) + add), str(GameData.population(n) + add)]]
 		"tavern":
 			var a := GameData.gacha_rates(GameData.GACHA_GOLD, 1, lv)  # 골드 Lv 1 기준(주점 보너스만 보인다)

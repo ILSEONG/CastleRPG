@@ -431,7 +431,7 @@ func _draw_card(face: Control, id: String) -> void:
 	var st := card_state(id)
 	var r := Rect2(Vector2.ZERO, face.size).grow(-3.0)
 	var oct := LowpolyBox.octagon(r, 14.0)
-	var fill := {"open": UiKit.CREAM, "locked": Color(0.86, 0.86, 0.87), "running": Color(1.0, 0.97, 0.88), "max": Color(1.0, 0.95, 0.80)}[st]
+	var fill: Color = {"open": UiKit.CREAM, "locked": Color(0.86, 0.86, 0.87), "running": Color(1.0, 0.97, 0.88), "max": Color(1.0, 0.95, 0.80)}[st]
 	face.draw_colored_polygon(oct, fill)
 	var ring := oct.duplicate()
 	ring.append(oct[0])

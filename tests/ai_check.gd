@@ -337,7 +337,7 @@ func _skill_cases(heroes: Array) -> void:
 
 	# (o) slow: 세라핀(북 성벽 위, ★3 — slow는 스킬 2)에게 맞은 grunt는 30% 느리게 걷는다
 	var se = _add_hero("seraphine", 100, 3)
-	se.atk = GameData.hero_stats(se.def, 1, 0, GameState.building_levels()).atk  # ★3 공격 배율이면 grunt가 한 방에 죽는다 — 공격은 ★0 그대로
+	se.atk = GameData.hero_stats(se.def, 1, 0).atk  # ★3 공격 배율이면 grunt가 한 방에 죽는다 — 공격은 ★0 그대로
 	_g = _spawn("grunt", 0, Vector3(-6, 0, -(north_out + 4.0)))
 	_g.hp = 60.0  # 표 HP 24는 공격 44 한 방에 죽는다 — 예전 HP로 한 방은 버티게
 	_g.hp_max = 60.0
@@ -396,6 +396,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _stage_return_cases()
 	await _rebuilt_post_case()
 	await _growth_cases()
+	await _research_cases()
 	await _boss_slayer_case()
 	await _dungeon_cases()
 	await _crowd_cases()
@@ -777,8 +778,8 @@ func _levelup_case() -> void:
 
 
 ## (B) 개정 12 건물(오프라인, 실제 완료 경로: 끝난 일꾼을 Economy._process가 완료 → building_done → main).
-## 막사 Lv 5 → 영웅은 그대로(개정 13: 막사는 영웅 HP를 올리지 않는다), 연구소 Lv 3 → 방치 모드라 영웅을 곧바로 다시 만들고 공격 +6%
-## (레벨·승급 배율 위에 곱). 영웅이 그 공격으로 친다.
+## 막사 Lv 5 → 영웅은 그대로(개정 13: 막사는 영웅 HP를 올리지 않는다), 연구소 Lv 3 → 영웅도 그대로(개정 24: 연구소 레벨 공격 보너스 없음)
+## — 영웅이 그 공격으로 친다.
 ## 성문 Lv 2 → 성문 최대 HP 800. 성채가 단계(5)를 넘으면 "성이 넓어졌습니다!"와 함께 월드를 다시 만든다 — 새 main(성 내부 24타일, 슬롯 8,
 ## 성 HP 1800)이고 오토로드 상태(Economy 골드·자원·건물·영웅, GameState 스테이지)는 그대로. 월드가 바뀌므로 마지막 사례.
 func _building_cases() -> void:
@@ -804,8 +805,8 @@ func _building_cases() -> void:
 	var atk_ok := not live.is_empty()
 	for h in live:
 		var base := GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id))
-		atk_ok = atk_ok and not before.has(h) and is_equal_approx(h.hp_max, base.hp) and is_equal_approx(h.atk, base.atk * 1.06)
-	_check(Economy.building_level("lab") == 3 and atk_ok, "(B) lab Lv 3 done in idle: heroes rebuilt at once with attack x1.06 (HP unchanged)",
+		atk_ok = atk_ok and before.has(h) and is_equal_approx(h.hp_max, base.hp) and is_equal_approx(h.atk, base.atk)
+	_check(Economy.building_level("lab") == 3 and atk_ok, "(B) lab Lv 3 done in idle: hero attack and HP unchanged, heroes not rebuilt (rev 24: the lab level gives no attack bonus)",
 		"lab=%d heroes=%s" % [Economy.building_level("lab"), live.map(func(h): return [h.def.id, h.hp_max, h.atk])])
 	var hero = live[0]
 	for h in live:
@@ -813,8 +814,8 @@ func _building_cases() -> void:
 	var m = _still("epic_boss", hero.global_position + Formation.SIDE_DIR[hero.side] * 1.2)
 	hero._sk = {}  # 순수 타격으로 공격력만 본다
 	await _wait_until(func(): return _dmg(m) > 0.0, 3.0)
-	_check(is_equal_approx(_dmg(m), hero.atk) and is_equal_approx(hero.atk, GameData.hero_stats(hero.def, Economy.level_of(hero.def.id), Economy.promotion_of(hero.def.id), Economy.levels).atk),
-		"(B) a hero hits for its lab-boosted attack", "dmg=%.2f atk=%.2f" % [_dmg(m), hero.atk])
+	_check(is_equal_approx(_dmg(m), hero.atk) and is_equal_approx(hero.atk, GameData.hero_stats(hero.def, Economy.level_of(hero.def.id), Economy.promotion_of(hero.def.id)).atk),
+		"(B) a hero hits for its plain attack (no lab bonus)", "dmg=%.2f atk=%.2f" % [_dmg(m), hero.atk])
 	_clear_monsters()
 	await _frames(1)
 	Economy.build = {"id": "gate", "finish": Economy.time_now() - 1.0}
@@ -1842,7 +1843,7 @@ func _growth_cases() -> void:
 	plain.skills = {}
 	var h = _add_hero_def(plain, 330)
 	h.set_process(false)
-	var base := GameData.hero_stats(plain, 1, 0, GameState.building_levels())
+	var base := GameData.hero_stats(plain, 1, 0)
 	var out: Vector3 = Formation.SIDE_DIR[h.side]
 	var m = _still("epic_boss", _flat(h.global_position) + out * 1.2)
 	m.hp_max = 1.0e6  # 이 사례의 타격을 다 받아도 죽지 않게
@@ -1954,6 +1955,114 @@ func _growth_cases() -> void:
 	Economy.upgrades_changed.emit()
 	_remove_hero(h)
 	_remove_hero(c)
+	_clear_monsters()
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(true)
+	GameState.mode = GameState.Mode.IDLE
+	GameState.refill()
+	await _frames(2)
+
+
+## (RS) 개정 24 연구의 전투 반영. 실제 경로: 끝난 연구(research_current)를 Economy._process가 완료 → research_changed·research_done →
+##     영웅·병사 refresh_stats(곧바로, HP 비율 유지), main → GameState.apply_levels(true)(성·성문 최대 HP, 지금 HP는 같은 비율).
+##     영웅 공격·HP %(같은 효과끼리 더함, 성장과 곱), 비전 연구(스킬 피해 %), 병종 %·정예 %, 성벽 보강. 연구소 레벨만으로는 영웅 공격이 그대로다.
+func _research_cases() -> void:
+	_clear_monsters()
+	GameState.mode = GameState.Mode.STAGE  # 피해·HP가 들어가게
+	GameState.refill()
+	await _frames(1)
+	for x in get_tree().get_nodes_in_group("heroes"):
+		x.set_process(false)
+	var plain: Dictionary = GameData.hero("hans").duplicate(true)
+	plain.id = "research_test"  # 장비 없음
+	plain.skills = {}
+	var h = _add_hero_def(plain, 337)
+	h.set_process(false)
+	var base := GameData.hero_stats(plain, 1, 0)
+	var m = _still("epic_boss", _flat(h.global_position) + Formation.SIDE_DIR[h.side] * 1.2)
+	m.hp_max = 1.0e6
+	m.hp = m.hp_max
+	await _frames(1)
+	# 연구소 레벨만 올리면(연구 없음) 영웅 공격은 그대로
+	var lab0: int = Economy.levels.get("lab", 1)
+	Economy.levels["lab"] = 20
+	Economy.changed.emit()
+	h.refresh_stats()
+	_check(is_equal_approx(h.atk, base.atk) and is_equal_approx(h.hp_max, base.hp), "(RS) lab Lv 20 alone does not raise hero attack (rev 24)",
+		"atk=%.2f base=%.2f" % [h.atk, base.atk])
+	Economy.levels["lab"] = lab0
+	# 무기 연마 5(+15%) + 전설의 무기 2(+8%) = +23%, 갑옷 단련 Lv 3 → 4 완료(+12%): 끝난 연구를 게으른 완료가 처리한다
+	h.take_damage(h.hp_max / 2.0)
+	Economy.research_levels = {"hero_weapon": 5, "legend_weapon": 2, "hero_armor": 3}
+	Economy.research_current = {"id": "hero_armor", "finish": Economy.time_now() - 1.0}
+	await _frames(2)
+	h._target = m
+	await _attack_now(h)
+	_check(Economy.research_level("hero_armor") == 4 and Economy.research_current.is_empty() and is_equal_approx(h.atk, base.atk * 1.23) and is_equal_approx(h.hp_max, base.hp * 1.12)
+		and is_equal_approx(h.hp, base.hp * 1.12 / 2.0) and is_equal_approx(_dmg(m), base.atk * 1.23 * h._aura_mult()),
+		"(RS) research done: hero attack +23% (weapon 5 x 3 + legend 2 x 4, the hit too), HP +12% keeping the HP ratio",
+		"armor=%d atk=%.2f hp=%.1f/%.1f dmg=%.2f base=%s" % [Economy.research_level("hero_armor"), h.atk, h.hp, h.hp_max, _dmg(m), base])
+	Economy.upgrades = {"atk": 200}  # 성장 +100%와 곱
+	Economy.upgrades_changed.emit()
+	_check(is_equal_approx(h.atk, base.atk * 2.0 * 1.23), "(RS) research multiplies with growth: atk x2 x1.23", "atk=%.2f" % h.atk)
+	Economy.upgrades = {}
+	Economy.upgrades_changed.emit()
+	# 비전 연구 5(+20%): 따로 들어가는 스킬 피해(폭발)
+	h._sk = {"aoe_blast": [5.0, 3.0, 200.0]}
+	var d0 := _dmg(m)
+	h._blast(m.global_position)
+	var blast0 := _dmg(m) - d0
+	Economy.research_levels["arcana"] = 5
+	Economy.research_changed.emit()
+	d0 = _dmg(m)
+	h._blast(m.global_position)
+	var blast1 := _dmg(m) - d0
+	_check(is_equal_approx(blast0, h.atk * h._aura_mult() * 2.0) and is_equal_approx(blast1, blast0 * 1.2), "(RS) arcana +20%: skill damage (aoe blast) x1.2",
+		"blast %.2f -> %.2f" % [blast0, blast1])
+	h._sk = {}
+	# 병사: 보병 훈련 10(+30%) + 정예 전술 2(+6%) = 보병 x1.36, 궁병은 정예만 x1.06 — 만든 뒤 연구가 바뀌어도 곧바로
+	var spots: Array = Formation.soldier_spots([{"type": "infantry", "tier": 1}, {"type": "archer", "tier": 1}])
+	var inf = SoldierScript.new()
+	inf.setup("infantry", 1, 0, 0, spots[0], _main.castle)
+	_main.add_child(inf)
+	var arc = SoldierScript.new()
+	arc.setup("archer", 1, 0, 0, spots[1], _main.castle)
+	_main.add_child(arc)
+	for s in [inf, arc]:
+		s.set_process(false)
+		s._rise = 0.0
+	var ib := GameData.soldier_stats("infantry", 1)
+	var ab := GameData.soldier_stats("archer", 1)
+	Economy.research_levels["inf_drill"] = 10
+	Economy.research_levels["elite"] = 2
+	Economy.research_changed.emit()
+	_check(is_equal_approx(inf.atk, ib.atk * 1.36) and is_equal_approx(inf.hp_max, ib.hp * 1.36) and is_equal_approx(inf.hp, inf.hp_max)
+		and is_equal_approx(arc.atk, ab.atk * 1.06) and is_equal_approx(arc.hp_max, ab.hp * 1.06),
+		"(RS) soldier research: infantry +30% + elite +6% = x1.36 atk/HP, archers only the elite x1.06",
+		"inf atk=%.2f hp=%.1f arc atk=%.2f" % [inf.atk, inf.hp_max, arc.atk])
+	inf.global_position = _flat(m.global_position) - Formation.SIDE_DIR[h.side] * 0.5
+	d0 = _dmg(m)
+	inf._target = m
+	inf._attack()
+	inf._release()
+	_check(is_equal_approx(_dmg(m) - d0, ib.atk * 1.36), "(RS) the infantry hits for its research attack", "dmg=%.2f" % (_dmg(m) - d0))
+	inf.queue_free()
+	arc.queue_free()
+	# 성벽 보강 Lv 1 → 2 완료(+10%): 성 최대 HP가 오르고 지금 HP는 같은 비율
+	Economy.research_levels = {"wall_fort": 1}
+	Economy.research_changed.emit()
+	GameState.apply_levels(true)
+	var c_base := GameData.castle_hp_max(GameState.building_level("keep"))
+	GameState.castle_hp = GameState.castle_hp_max * 0.5
+	Economy.research_current = {"id": "wall_fort", "finish": Economy.time_now() - 1.0}
+	await _frames(2)
+	_check(Economy.research_level("wall_fort") == 2 and is_equal_approx(GameState.castle_hp_max, c_base * 1.10) and is_equal_approx(GameState.castle_hp, c_base * 1.10 * 0.5),
+		"(RS) wall reinforcement Lv 2 done: castle max HP x1.10, current HP the same ratio (half)",
+		"max=%.1f hp=%.1f base=%.1f" % [GameState.castle_hp_max, GameState.castle_hp, c_base])
+	Economy.research_levels = {}
+	Economy.research_current = {}
+	Economy.research_changed.emit()
+	_remove_hero(h)
 	_clear_monsters()
 	for x in get_tree().get_nodes_in_group("heroes"):
 		x.set_process(true)
@@ -2106,7 +2215,7 @@ func _dk_cases() -> void:
 	await _frames(2)
 	var dk = d.boss
 	var hans = d.heroes[0]
-	var bare := GameData.hero_stats(hans.def, Economy.level_of("hans"), Economy.promotion_of("hans"), Economy.levels, {})
+	var bare := GameData.hero_stats(hans.def, Economy.level_of("hans"), Economy.promotion_of("hans"), {})
 	var top := GameData.item_stats(Economy.item(9001))
 	var sword := GameData.item_stats(Economy.item(9002))
 	var shoes := GameData.item_stats(Economy.item(9003))

@@ -290,8 +290,10 @@ func _phase1(state_path: String) -> void:
 
 	await _growth_online(state_path)  # 개정 20: 골드를 쓴다 — 건물 단계 전에
 	await _buildings_online(state_path)  # 자원이 바뀐다 — 끝 상태를 쓰기 전에
+	await _research_online()  # 개정 24: test/age로 시각을 당긴다 — 훈련 대기열을 저장하는 병사 단계 전에(건물 단계 뒤: 벌목장 Lv 2)
 	await _soldiers_online(state_path)
 	await _dungeons_online(state_path)  # 개정 18: 골드(판매)가 바뀐다 — 끝 상태를 쓰기 전에
+	await _research_leave_running(state_path)  # 하나를 진행 중으로 두고 끝 상태를 쓴다(이 뒤로 test/age 없음)
 
 	var f := FileAccess.open(state_path, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"device_id": Net.device_id, "gold_tenths": Economy.server_gold_tenths, "res": Economy.res, "stage": Economy.server_stage,
@@ -551,6 +553,7 @@ func _phase2(state_path: String) -> void:
 	_buildings_restored(state_path)
 	_soldiers_restored(state_path)
 	_growth_restored(state_path)
+	_research_restored(state_path)
 	await _dungeons_restored(state_path)  # 개정 18: 복원 확인 뒤 골드 던전(영웅을 더 준다 — 위 영웅 검사 뒤에)
 	await _recruit23_online()  # 개정 23: 영웅이 늘어난다 — phase 1·2 영웅·조각 검사 뒤 맨 끝에
 
@@ -1015,7 +1018,7 @@ func _growth_online(state_path: String) -> void:
 	var world := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var grown := not world.is_empty()
 	for h in world:
-		grown = grown and is_equal_approx(h.atk, GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id), Economy.levels).atk * 1.015)
+		grown = grown and is_equal_approx(h.atk, GameData.hero_stats(h.def, Economy.level_of(h.def.id), Economy.promotion_of(h.def.id)).atk * 1.015)
 	_check(grown and world.all(func(h): return ids0.has(h.get_instance_id())), "(z) the server growth applies at once to the world heroes (same nodes, atk x1.015)",
 		"atk=%s" % [world.map(func(h): return [h.def.id, h.atk])])
 	var gold1: int = Economy.server_gold_tenths
@@ -1032,6 +1035,85 @@ func _growth_online(state_path: String) -> void:
 	var f := FileAccess.open(state_path + ".growth", FileAccess.WRITE)
 	f.store_string(JSON.stringify({"upgrades": Economy.upgrades}))
 	f.close()
+
+
+## (RS) 개정 24 서버 연구: 시작은 한 번(응답 전 재탭 무시)·서버가 비용을 뺀다, 진행 중 두 번째 시작은 서버도 409 research_busy(알림),
+##     다이아 즉시 완료(Lv +1·다이아 −1·알림), 끝나는 시각이 지나면 서버가 완료(test/age 응답에 반영), 서버 권위 효과(수집량 = 앱 예상과 같은
+##     연구 % 적용 값). 다이아는 즉시 완료 비용만큼만 받는다(phase 2 모집 검사가 남은 다이아를 센다).
+func _research_online() -> void:
+	var notices := []
+	var on_notice := func(t): notices.append(t)
+	Economy.notice.connect(on_notice)
+	await _request("POST", "/v1/test/age", {"minutes": 720})
+	for b in ["lumber", "quarry", "farm"]:
+		await _request("POST", "/v1/collect", {"building": b})
+	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
+	var res0: Dictionary = Economy.res.duplicate()
+	var r0: int = Net.requested.get("/v1/research/start", 0)
+	_check(Economy.research_levels.is_empty() and Economy.research_current.is_empty() and Economy.research_block("wood_tech") == "" and res0.wood >= 400,
+		"(RS) precondition: no research yet, wood tech affordable", "levels=%s current=%s res=%s" % [Economy.research_levels, Economy.research_current, res0])
+	var sent := Economy.start_research("wood_tech")
+	var again := Economy.start_research("wood_tech")  # 응답 전 재탭
+	_check(sent and not again and Economy.research_waiting() and Net.requested.get("/v1/research/start", 0) == r0 + 1,
+		"(RS) one /v1/research/start; a second tap before the reply sends nothing", "requests=%d" % [Net.requested.get("/v1/research/start", 0) - r0])
+	var started := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "wood_tech" and not Economy.research_waiting(), 15.0)
+	_check(started and Economy.res.wood == res0.wood - 120 and Economy.res.stone == res0.stone - 80 and Economy.res.food == res0.food - 100
+		and absf(Economy.research_left(Economy.time_now()) - 60.0) < 5.0, "(RS) the server started wood tech: cost 120/80/100 taken, about 60 s left",
+		"current=%s res=%s left=%.1f" % [Economy.research_current, Economy.res, Economy.research_left(Economy.time_now())])
+	Economy._research_online("start", {"id": "stone_tech"})  # 화면이 막는 두 번째 시작을 직접 보낸다 — 서버가 409 research_busy
+	await _wait_until(func(): return not Economy.research_waiting(), 15.0)
+	_check(notices.has(Economy.RESEARCH_TEXT.research_busy) and str(Economy.research_current.get("id", "")) == "wood_tech" and Economy.res.stone == res0.stone - 80,
+		"(RS) one research at a time on the server too: 409 research_busy, a notice, nothing charged", "notices=%s" % [notices])
+	var dia_cost := Economy.research_dia_cost(Economy.time_now())
+	await _request("POST", "/v1/test/grant_diamonds", {"amount": dia_cost})
+	var dia0: int = Economy.diamonds
+	var fin := Economy.finish_research_now()
+	var finished := await _wait_until(func(): return Economy.research_level("wood_tech") == 1 and not Economy.research_waiting(), 15.0)
+	_check(dia_cost == 1 and fin and finished and Economy.research_current.is_empty() and Economy.diamonds == dia0 - 1 and notices.has("연구 완료: 벌목술 Lv 1"),
+		"(RS) instant finish on the server: Lv 1, one diamond (ceil(60 s / 60)), notice '연구 완료: 벌목술 Lv 1'", "cost=%d dia %d -> %d levels=%s" % [dia_cost, dia0, Economy.diamonds, Economy.research_levels])
+	Economy.start_research("stone_tech")
+	await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "stone_tech" and not Economy.research_waiting(), 15.0)
+	await _request("POST", "/v1/test/age", {"minutes": 2})  # 끝나는 시각을 2분 당긴다 — 이 응답을 만드는 읽기가 서버 완료
+	_check(Economy.research_level("stone_tech") == 1 and Economy.research_current.is_empty() and notices.has("연구 완료: 채석술 Lv 1"),
+		"(RS) once the finish time passes the server completes the research by itself (lazy), the app sees Lv 1", "levels=%s current=%s" % [Economy.research_levels, Economy.research_current])
+	# 서버 권위 효과: 수집량 = 앱이 같은 식(목재 +5%)으로 예상한 값
+	await _request("POST", "/v1/collect", {"building": "lumber"})
+	await _request("POST", "/v1/test/age", {"minutes": 30})
+	var lv: int = Economy.building_level("lumber")
+	var want := Economy.pending("lumber", Economy.time_now())
+	var got: Dictionary = await _request("POST", "/v1/collect", {"building": "lumber"})
+	_check(int(got.get("amount", -1)) == want and want == 30 * (10 * lv * 105 / 100) and want > 30 * 10 * lv, "(RS) the server collect applies wood tech +5%: the same amount the app predicts",
+		"amount=%s want=%d lumber Lv %d" % [got.get("amount"), want, lv])
+	Economy.notice.disconnect(on_notice)
+
+
+## phase 1 끝: 농경술을 진행 중으로 두고 연구 상태를 --state.research에 쓴다(phase 2가 재접속 복원을 본다).
+func _research_leave_running(state_path: String) -> void:
+	Economy.start_research("food_tech")
+	var ok := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "food_tech" and not Economy.research_waiting(), 15.0)
+	_check(ok, "(RS) food tech left running for phase 2", "current=%s" % [Economy.research_current])
+	var f := FileAccess.open(state_path + ".research", FileAccess.WRITE)
+	f.store_string(JSON.stringify({"levels": Economy.research_levels, "current": Economy.research_current}))
+	f.close()
+
+
+## (p2) 재접속하면 연구 레벨과 진행 중 연구(끝나는 시각)가 그대로다 — 그새 끝났으면 서버가 완료해 Lv +1.
+func _research_restored(state_path: String) -> void:
+	var json := JSON.new()
+	var ok := json.parse(FileAccess.get_file_as_string(state_path + ".research")) == OK and json.data is Dictionary
+	_check(ok, "(p2) phase 1 research state file", state_path)
+	if not ok:
+		return
+	var saved: Dictionary = json.data
+	var cur: Dictionary = saved.get("current", {}) if saved.get("current") is Dictionary else {}
+	var running: bool = not cur.is_empty() and Economy.time_now() < float(cur.finish)
+	var same: bool = Economy.research_level("wood_tech") == 1 and Economy.research_level("stone_tech") == 1 and cur.get("id", "") == "food_tech"
+	if running:
+		same = same and str(Economy.research_current.get("id", "")) == "food_tech" and absf(float(Economy.research_current.finish) - float(cur.finish)) < 0.01
+	else:
+		same = same and Economy.research_current.is_empty() and Economy.research_level("food_tech") == 1
+	_check(same, "(p2) reconnecting restores research levels (wood 1, stone 1) and the running food tech (or its completion)",
+		"levels=%s current=%s saved=%s" % [Economy.research_levels, Economy.research_current, saved])
 
 
 ## (p2) 재접속하면 성장 레벨이 그대로다.
@@ -1108,8 +1190,8 @@ func _dungeons_online(state_path: String) -> void:
 	var def := GameData.hero(pick.get("hero", "nina"))
 	var lv: int = Economy.level_of(def.get("id", ""))
 	var pr: int = Economy.promotion_of(def.get("id", ""))
-	var st_eq := GameData.hero_stats(def, lv, pr, Economy.levels) if ok else {}
-	var st_bare := GameData.hero_stats(def, lv, pr, Economy.levels, {}) if ok else {}
+	var st_eq := GameData.hero_stats(def, lv, pr) if ok else {}
+	var st_bare := GameData.hero_stats(def, lv, pr, {}) if ok else {}
 	_check(ok and int(Economy.equipment.get(pick.hero, {}).get(pick.item.slot, -1)) == pick.item.id and Economy.item_owner(pick.item.id) == pick.hero
 		and st_eq != st_bare and node != null and is_equal_approx(node.hp_max, st_eq.hp) and is_equal_approx(node.atk, st_eq.atk * (1.0 + Economy.upgrade_bonus().atk_pct)),
 		"(z) equipping on the server; the respawned world hero carries base x multipliers + the item", "pick=%s eq=%s with=%s bare=%s" % [pick, Economy.equipment, st_eq, st_bare])
@@ -1185,8 +1267,8 @@ func _dungeons_restored(state_path: String) -> void:
 	var hero: String = saved.get("hero", "")
 	var node = _hero_node(hero)
 	var def := GameData.hero(hero)
-	var st := GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels) if not def.is_empty() else {}
-	_check(node != null and is_equal_approx(node.hp_max, st.hp) and is_equal_approx(node.atk, st.atk * (1.0 + Economy.upgrade_bonus().atk_pct)) and st != GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), Economy.levels, {}),
+	var st := GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero)) if not def.is_empty() else {}
+	_check(node != null and is_equal_approx(node.hp_max, st.hp) and is_equal_approx(node.atk, st.atk * (1.0 + Economy.upgrade_bonus().atk_pct)) and st != GameData.hero_stats(def, Economy.level_of(hero), Economy.promotion_of(hero), {}),
 		"(p2) the equipped hero spawns with its equipment after reconnecting", "hero=%s" % hero)
 	# 골드 던전: 6명
 	for id in ["arteon", "ignis", "kyle"]:

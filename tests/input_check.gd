@@ -652,6 +652,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _buildings_ui(tabs, hud, recruit)
 	await _soldiers_ui(tabs, hud)
 	await _growth_ui(tabs)
+	await _research_ui(tabs, hud)
 	await _soldier_picks()
 	await _soldier_tap()
 	await _soldier_figures(tabs)
@@ -1020,9 +1021,9 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"(B) cost 60/80/40 with icons (stone short = red, wood 100 ok), 건설 시간 00:20",
 		"wood=%s stone=%s time=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.time_label.text])
 	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 1) == [["1마리", "3:00:00", "2:30:00"]]
-		and bwin.effect_lines("stable", 3) == [["1마리", "2:00:00", "1:30:00"]] and bwin.effect_lines("barracks", 6) == [["1마리", "30:00", "T2 3:00:00"]] and bwin.effect_lines("lab", 2)[0] == ["영웅 공격", "+3%", "+6%"]
+		and bwin.effect_lines("stable", 3) == [["1마리", "2:00:00", "1:30:00"]] and bwin.effect_lines("barracks", 6) == [["1마리", "30:00", "T2 3:00:00"]] and bwin.effect_lines("lab", 2)[0] == ["연구 속도", "+2%", "+4%"]
 		and UiKit.duration(3900) == "1시간 5분" and UiKit.duration(59.2) == "01:00",
-		"(B) effect sentences: 인구 6 → 8, soldier buildings 1마리 3:00:00 → 2:30:00 (Lv 6 30:00 → T2 3:00:00), lab +3% → +6%; times mm:ss / h시간 m분",
+		"(B) effect sentences: 인구 6 → 8, soldier buildings 1마리 3:00:00 → 2:30:00 (Lv 6 30:00 → T2 3:00:00), lab research speed +2% → +4%; times mm:ss / h시간 m분",
 		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
 	bwin.close()
 
@@ -1344,6 +1345,141 @@ func _growth_ui(tabs) -> void:
 	gw.close()
 	Economy.upgrades = {}
 	Economy.upgrades_changed.emit()
+	await _frames(2)
+
+
+## (RS) 개정 24 연구 창(오프라인): 연구소 탭 → 건물 창(새 설명·연구 속도 효과·큰 [연구]) → [연구] → 연구 창(제목·속도·진행 없음 안내·분야 탭·
+##     단 줄·잠긴 단 "연구소 Lv 3 필요"·카드). 카드 탭 → 상세(효과·조건·보유/필요·시간) → [연구]: 자원이 줄고 진행 막대. 두 번째 연구는 막힌다
+##     (비활성 + 이유). [다이아 즉시 완료] → Lv +1, 다이아 −1, 알림. [취소] → 50% 환불. 잠긴 노드 [연구] 비활성. 분야 탭 전환(군사 = 병사 초상).
+##     월드: 연구가 비고 시작할 수 있으면 연구소 위 플라스크 말풍선, 그때 연구소 탭은 곧바로 연구 창.
+func _research_ui(tabs, hud) -> void:
+	var rw = _child(preload("res://scripts/research_panel.gd"))
+	var bwin = _building_win()
+	var badges = _child(preload("res://scripts/badges.gd"))
+	_picker._select(null)
+	Economy.research_levels = {}
+	Economy.research_current = {}
+	Economy.levels["lab"] = 1
+	Economy.res = {"wood": 0, "stone": 0, "food": 0}
+	Economy.gold_tenths = 0
+	Economy.diamonds = 0
+	Economy.changed.emit()
+	Economy.research_changed.emit()
+	await _frames(2)
+	var lab_px := _building_px("lab")
+	if _picker._building_hit(lab_px) != "lab":
+		lab_px = _roof_px("lab")
+	_check(not badges.research_bubble() and lab_px != Vector2.INF, "(RS) precondition: nothing affordable — no flask bubble; the lab is tappable", "px=%s" % lab_px)
+	await _tap(lab_px)
+	await _frames(2)
+	var eff: HBoxContainer = bwin.effects.get_child(0)
+	_check(bwin.is_open() and bwin.building_id == "lab" and bwin.desc_label.text == "기술을 연구합니다. 레벨이 오르면 상위 연구가 열리고 연구 속도가 빨라집니다."
+		and bwin.research_button.visible and bwin.research_button.text == "연구" and eff.get_child(0).text == "연구 속도 +0%" and eff.get_child(1).text == "→ +2%",
+		"(RS) lab building window: new description, effect '연구 속도 +0% → +2%', a big [연구] button",
+		"open=%s id=%s desc=%s button=%s eff=%s" % [bwin.is_open(), bwin.building_id, bwin.desc_label.text, bwin.research_button.visible, eff.get_child(0).text])
+	Economy.res = {"wood": 5000, "stone": 5000, "food": 5000}
+	Economy.gold_tenths = 50000 * 10
+	Economy.changed.emit()
+	await _unguarded(bwin)
+	await _tap(_center(bwin.research_button))
+	await _frames(2)
+	_check(rw.is_open() and not bwin.is_open(), "(RS) [연구] closes the building window and opens the research window", "research=%s building=%s" % [rw.is_open(), bwin.is_open()])
+	await _unguarded(rw)
+	var eco: Array = GameData.research_defs().filter(func(d): return d.branch == "economy").map(func(d): return d.id)
+	_check(rw.title_label.text == "연구소 Lv 1" and rw.speed_label.text == "연구 속도 +0%" and rw.idle_label.visible and rw.idle_label.text == rw.IDLE_TEXT and not rw.cur_row.visible
+		and rw.branch == "economy" and rw.cards.keys() == eco and rw.tier_marks.keys() == [1, 2, 3, 4] and rw.tier_marks[2].need.text == "연구소 Lv 3 필요" and rw.tier_marks[2].lock.visible
+		and not rw.tier_marks[1].lock.visible and rw.cards.wood_tech.state.text == rw.AVAILABLE_TEXT and rw.cards.wood_tech.lv.text == "Lv 0/10"
+		and rw.card_state("construct") == "locked" and rw.cards.construct.lock.visible,
+		"(RS) research window: 연구소 Lv 1 · 연구 속도 +0%, the idle line, economy tab with tiers 1-4 (tier 2 locked: 연구소 Lv 3 필요), cards Lv 0/10, construct locked",
+		"title=%s speed=%s idle=%s cards=%s tiers=%s need2=%s state=%s" % [rw.title_label.text, rw.speed_label.text, rw.idle_label.visible, rw.cards.keys(), rw.tier_marks.keys(),
+		rw.tier_marks[2].need.text, rw.cards.wood_tech.state.text])
+	var icons := preload("res://scripts/icons.gd")
+	var all_icons := GameData.research_defs().all(func(d): return rw.soldier_of_node(d.id) != "" or not icons.shapes(rw.icon_kind(d.id)).is_empty())
+	var soldier_nodes: Array = GameData.research_defs().filter(func(d): return rw.soldier_of_node(d.id) != "").map(func(d): return [d.id, rw.soldier_of_node(d.id)])
+	_check(all_icons and soldier_nodes == [["inf_drill", "infantry"], ["arc_drill", "archer"], ["cav_drill", "cavalry"]] and rw.icon_kind("construct") == "hammer"
+		and rw.icon_kind("method") == "flask" and rw.icon_kind("legend_armor") == "heart_shield",
+		"(RS) every node has an icon: soldier nodes use the real soldier figures, the rest low-poly pictures (hammer, flask, heart shield…)", "soldiers=%s" % [soldier_nodes])
+	# 카드 탭 → 상세 → [연구]
+	await _tap(_center(rw.cards.wood_tech.button))
+	await _frames(1)
+	_check(rw.is_detail_open() and rw.detail_id == "wood_tech" and rw.detail_name.text == "벌목술 Lv 0/10" and rw.detail_effect.text == "목재 생산  현재 +0% → 다음 +5%"
+		and rw.detail_reqs.get_child(0).text == "✓ 연구소 Lv 1 필요" and rw.detail_cost.wood.text == "5,000/120" and not rw.detail_cost.gold.visible
+		and rw.detail_time.text == "연구 시간 01:00" and not rw.start_button.disabled and rw.start_button.visible and not rw.detail_run.visible,
+		"(RS) card tap opens the detail: name, effect 현재 +0% → 다음 +5%, ✓ lab Lv 1, cost 보유/필요, time 01:00, [연구] on",
+		"open=%s name=%s effect=%s cost=%s time=%s" % [rw.is_detail_open(), rw.detail_name.text, rw.detail_effect.text, rw.detail_cost.wood.text, rw.detail_time.text])
+	await _unguarded(rw)
+	await _tap(_center(rw.start_button))
+	await _frames(1)
+	_check(Economy.research_current.get("id", "") == "wood_tech" and Economy.res == {"wood": 4880, "stone": 4920, "food": 4900} and rw.detail_run.visible and not rw.start_button.visible
+		and rw.cur_row.visible and rw.cur_name.text == "벌목술 Lv 1" and not rw.idle_label.visible and rw.card_state("wood_tech") == "running" and rw.dia_button.text.ends_with("1 즉시 완료"),
+		"(RS) [연구]: resources -120/80/100, the research runs (bar + [다이아 1 즉시 완료] + [취소] in the detail and on top)",
+		"current=%s res=%s top=%s" % [Economy.research_current, Economy.res, rw.cur_name.text])
+	rw.close_detail()
+	await _tap(_center(rw.cards.stone_tech.button))
+	await _frames(1)
+	var res0: Dictionary = Economy.res.duplicate()
+	_check(rw.detail_id == "stone_tech" and rw.start_button.disabled and rw.detail_reason.visible and rw.detail_reason.text.begins_with(Economy.RESEARCH_TEXT.research_busy)
+		and "벌목술" in rw.detail_reason.text, "(RS) a second research is blocked: [연구] off with the reason (and what is running)", "reason=%s" % rw.detail_reason.text)
+	await _unguarded(rw)
+	await _tap(_center(rw.start_button))
+	await _frames(1)
+	_check(Economy.research_current.id == "wood_tech" and Economy.res == res0, "(RS) tapping the disabled [연구] does nothing", "current=%s" % [Economy.research_current])
+	rw.close_detail()
+	# 다이아 즉시 완료(위 막대)
+	_check(rw.dia_button.disabled, "(RS) with no diamonds the instant finish is off", "")
+	Economy.diamonds = 5
+	Economy.changed.emit()
+	await _frames(1)
+	await _tap(_center(rw.dia_button))
+	await _frames(2)
+	_check(Economy.research_level("wood_tech") == 1 and Economy.research_current.is_empty() and Economy.diamonds == 4 and rw.cards.wood_tech.lv.text == "Lv 1/10"
+		and rw.idle_label.visible and hud._toast.visible and hud._toast.text == "연구 완료: 벌목술 Lv 1",
+		"(RS) [다이아 1 즉시 완료]: wood tech Lv 1 at once, diamonds 5 -> 4, toast '연구 완료: 벌목술 Lv 1'",
+		"lv=%d dia=%d toast=%s" % [Economy.research_level("wood_tech"), Economy.diamonds, hud._toast.text])
+	# 취소 → 50% 환불
+	await _tap(_center(rw.cards.stone_tech.button))
+	await _unguarded(rw)
+	await _tap(_center(rw.start_button))
+	await _frames(1)
+	var res1: Dictionary = Economy.res.duplicate()
+	rw.close_detail()
+	await _tap(_center(rw.cancel_button))
+	await _frames(1)
+	_check(Economy.research_current.is_empty() and Economy.res.wood == res1.wood + 60 and Economy.res.stone == res1.stone + 40 and Economy.res.food == res1.food + 50
+		and hud._toast.text == Economy.RESEARCH_CANCEL_TEXT, "(RS) [취소]: 50% of 120/80/100 comes back", "res %s -> %s" % [res1, Economy.res])
+	# 잠긴 노드
+	await _tap(_center(rw.cards.construct.button))
+	await _frames(1)
+	_check(rw.detail_id == "construct" and rw.start_button.disabled and rw.detail_reason.text == Economy.RESEARCH_TEXT.locked
+		and rw.detail_reqs.get_child(0).text == "✗ 연구소 Lv 3 필요 (현재 1)" and rw.detail_reqs.get_child(1).text == "✗ 벌목술 Lv 3 필요 (현재 1)",
+		"(RS) a locked node: [연구] off, ✗ lab Lv 3 / ✗ wood tech Lv 3", "reason=%s reqs=%s" % [rw.detail_reason.text, rw.detail_reqs.get_children().map(func(l): return l.text)])
+	rw.close_detail()
+	await _unguarded(rw)  # 상세를 연 직후 보호 시간
+	# 분야 탭
+	await _tap(_center(rw.branch_buttons.military))
+	await _frames(1)
+	var mil: Array = GameData.research_defs().filter(func(d): return d.branch == "military").map(func(d): return d.id)
+	_check(rw.branch == "military" and rw.cards.keys() == mil and rw.tier_marks.keys() == [1, 2, 3, 4, 5], "(RS) [군사] tab: military nodes in tiers 1-5", "cards=%s" % [rw.cards.keys()])
+	await _tap(_center(rw.branch_buttons.hero))
+	await _frames(1)
+	_check(rw.branch == "hero" and rw.cards.keys() == ["hero_weapon", "hero_armor", "arcana", "legend_weapon", "legend_armor"], "(RS) [영웅] tab: hero nodes", "cards=%s" % [rw.cards.keys()])
+	rw.close()
+	await _frames(1)
+	# 월드 말풍선: 연구가 비고 시작할 수 있으면 플라스크 → 연구소 탭은 곧바로 연구 창
+	_check(badges.research_bubble() and badges.stack_size("lab", Economy.time_now()).y > 0.0, "(RS) idle research with an affordable node shows the flask bubble over the lab", "")
+	await _tap(lab_px)
+	await _frames(2)
+	_check(rw.is_open() and not bwin.is_open(), "(RS) with the bubble up, tapping the lab opens the research window directly", "research=%s building=%s" % [rw.is_open(), bwin.is_open()])
+	rw.close()
+	Economy.start_research("hero_weapon")
+	_check(not badges.research_bubble(), "(RS) no bubble while a research runs", "")
+	Economy.research_levels = {}
+	Economy.research_current = {}
+	Economy.res = {"wood": 0, "stone": 0, "food": 0}
+	Economy.gold_tenths = 0
+	Economy.diamonds = 0
+	Economy.changed.emit()
+	Economy.research_changed.emit()
 	await _frames(2)
 
 
@@ -2215,7 +2351,7 @@ func _dungeon_ui(tabs) -> void:
 	var hp0: String = hwin.stat_values[0].text
 	await _tap(bag.rows[it.id].equip.get_global_rect().get_center())
 	await _frames(2)
-	var want := GameData.hero_stats(GameData.hero("hans"), Economy.level_of("hans"), Economy.promotion_of("hans"), Economy.levels)
+	var want := GameData.hero_stats(GameData.hero("hans"), Economy.level_of("hans"), Economy.promotion_of("hans"))
 	_check(not bag.is_open() and int(Economy.equipment.get("hans", {}).get(it.slot, -1)) == it.id and hwin.equip_slots[it.slot].tile.grade == it.grade
 		and hwin.equip_label.visible and hwin.equip_label.text == "장비 " + preload("res://scripts/bag_panel.gd").stat_text(it)
 		and hwin.stat_values[0].text == UiKit.commas(roundi(want.hp)) and hwin.stat_values[0].text != hp0,
