@@ -1,5 +1,5 @@
 // Hono 앱 팩토리. 시계(now)·쿼리 함수를 주입받아 테스트에서 포트 없이 app.request()로 돌린다.
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -16,7 +16,29 @@ export interface AppOptions {
   allowTestHooks?: boolean
   corsOrigins?: string[] // 비면 *
   random?: () => number // [0, 1) 난수(모집). 기본은 암호학적 난수(R.cryptoRandom) — 테스트만 주입한다
+  oauth?: Record<string, { id: string; secret: string }> // 소셜 로그인 provider(google·kakao·naver) → 클라이언트 id·비밀. 없으면 그 provider는 꺼짐
+  publicUrl?: string // 이 서버의 공개 주소(리다이렉트 URI 앞부분). 비면 요청의 origin
+  fetch?: typeof fetch // provider와 통신(테스트만 주입한다)
 }
+
+// 소셜 로그인(계정 연동): 서버 주도 OAuth 2.0 authorization code. 앱은 provider 코드가 없다 — start로 받은 URL을 시스템 브라우저로 열고,
+// provider가 callback으로 돌아오면 서버가 code를 교환해 사용자 id(subject)를 얻고, 앱은 poll로 결과(새 토큰)를 가져간다.
+// state = nonce(무작위 32바이트 hex, login_attempts에 한 번만). 로그인 시도는 NONCE_TTL 안에 끝나야 한다.
+interface Provider {
+  auth: string
+  token: string
+  me: string
+  scope?: string
+  subject: (j: any) => unknown // 사용자 정보 응답 → 사용자 id
+}
+const PROVIDERS: Record<string, Provider> = {
+  google: { auth: 'https://accounts.google.com/o/oauth2/v2/auth', token: 'https://oauth2.googleapis.com/token', me: 'https://openidconnect.googleapis.com/v1/userinfo', scope: 'openid', subject: (j) => j?.sub },
+  kakao: { auth: 'https://kauth.kakao.com/oauth/authorize', token: 'https://kauth.kakao.com/oauth/token', me: 'https://kapi.kakao.com/v2/user/me', subject: (j) => j?.id },
+  naver: { auth: 'https://nid.naver.com/oauth2.0/authorize', token: 'https://nid.naver.com/oauth2.0/token', me: 'https://openapi.naver.com/v1/nid/me', subject: (j) => j?.response?.id },
+}
+const NONCE_TTL = 600 // 로그인 시도 유효 초(브라우저에서 로그인을 마칠 때까지)
+const NONCE_RE = /^[0-9a-f]{64}$/
+const page = (title: string, text: string) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font-family:sans-serif;text-align:center;padding:3rem 1rem"><h1>${title}</h1><p>${text}</p></body>`
 
 const TOKEN_TTL = 30 * 86400
 const MAX_ATTEMPTS = 4 // 첫 시도 + 충돌 시 재시도 3회
@@ -677,13 +699,137 @@ export function createApp(opts: AppOptions) {
       throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
     }
     const now = clock()
-    // 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(새 플레이어가 영웅 0명이 되지 않게)
-    const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
-    const starters = String(cfg?.value ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
-    const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(starters)])
+    // 기기가 이미 어떤 플레이어에 묶여 있으면(만든 플레이어, 또는 소셜 로그인으로 옮겨 간 플레이어) 그 플레이어
+    const [d] = await query('select player_id from devices where device_id = $1', [device])
+    let id: string
+    if (d) {
+      id = String(d.player_id)
+      await query('update players set last_seen = to_timestamp($2::float8) where id = $1', [id, now])
+    } else {
+      // 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(새 플레이어가 영웅 0명이 되지 않게)
+      const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
+      const starters = String(cfg?.value ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
+      const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(starters)])
+      id = String(r.id)
+      await query('insert into devices (device_id, player_id) values ($1, $2) on conflict do nothing', [device, id])
+    }
+    return c.json({ token: await issue(id, now), player_id: id })
+  })
+
+  // --- 계정 연동(소셜 로그인) ---
+
+  async function issue(id: string, now: number) {
     const iat = Math.floor(now)
-    const token = await sign({ sub: r.id, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
-    return c.json({ token, player_id: r.id })
+    return sign({ sub: id, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
+  }
+
+  const available = () => Object.keys(PROVIDERS).filter((p) => opts.oauth?.[p])
+  const redirectUri = (c: Context, provider: string) => `${opts.publicUrl || new URL(c.req.url).origin}/v1/auth/${provider}/callback`
+
+  // 연동 상태: 켜진 provider와 이 플레이어가 연동한 provider
+  app.get('/v1/auth/links', auth, async (c) => {
+    const rows = await query('select provider from player_identities where player_id = $1 order by provider', [c.get('playerId')])
+    return c.json({ available: available(), linked: rows.map((r) => String(r.provider)) })
+  })
+
+  // 로그인 시작: 시도(nonce)를 만들고 provider 로그인 URL을 준다. 앱이 시스템 브라우저로 연다.
+  app.post('/v1/auth/link/start', auth, async (c) => {
+    const b = await body(c)
+    const provider = strField(b, 'provider')
+    if (!PROVIDERS[provider]) throw new ApiError(400, 'unknown_provider', `provider must be one of ${Object.keys(PROVIDERS).join(', ')}`)
+    const cfg = opts.oauth?.[provider]
+    if (!cfg) throw new ApiError(409, 'provider_unavailable', `${provider} login is not configured on this server`)
+    const device = b.device_id
+    if (typeof device !== 'string' || !DEVICE_RE.test(device)) throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
+    const id = c.get('playerId') as string
+    const now = clock()
+    const nonce = randomBytes(32).toString('hex')
+    await query("delete from login_attempts where created_at < to_timestamp($1::float8) - interval '1 hour'", [now])
+    await query('insert into login_attempts (nonce, player_id, device_id, provider, created_at) values ($1, $2, $3, $4, to_timestamp($5::float8))', [nonce, id, device, provider, now])
+    const p = PROVIDERS[provider]
+    const q = new URLSearchParams({ client_id: cfg.id, redirect_uri: redirectUri(c, provider), response_type: 'code', state: nonce })
+    if (p.scope) q.set('scope', p.scope)
+    return c.json({ url: `${p.auth}?${q}`, nonce })
+  })
+
+  // provider가 준 code를 토큰으로 바꾸고 사용자 id를 얻는다. 실패하면 null(이유는 로그).
+  const fetchFn = opts.fetch ?? globalThis.fetch
+  async function exchange(provider: string, code: string, state: string, redirect: string): Promise<string | null> {
+    const p = PROVIDERS[provider]
+    const cfg = opts.oauth![provider]
+    try {
+      const form = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirect, client_id: cfg.id, client_secret: cfg.secret, state })
+      const tr = await fetchFn(p.token, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form.toString() })
+      const tj: any = tr.ok ? await tr.json() : null
+      if (typeof tj?.access_token !== 'string') {
+        console.warn(`[server] ${provider} token exchange failed: ${tr.status}`)
+        return null
+      }
+      const ur = await fetchFn(p.me, { headers: { authorization: `Bearer ${tj.access_token}` } })
+      const sub = ur.ok ? p.subject(await ur.json()) : null
+      if (typeof sub === 'string' && sub) return sub
+      if (typeof sub === 'number' && Number.isFinite(sub)) return String(sub)
+      console.warn(`[server] ${provider} userinfo failed: ${ur.status}`)
+      return null
+    } catch (e) {
+      console.warn(`[server] ${provider} login error: ${(e as Error).message}`)
+      return null
+    }
+  }
+
+  // 시도를 끝낸다: 그 신원이 이미 다른 플레이어 것이면 그 플레이어로 바꾸고(switched) 기기를 옮겨 묶는다(게스트 진행은 버린다).
+  // 처음 보는 신원이면 지금 플레이어에 연동한다. 결과는 시도 행에 남고 poll이 가져간다.
+  async function finish(attempt: Row, subject: string): Promise<void> {
+    const provider = String(attempt.provider)
+    const mine = String(attempt.player_id)
+    let [ex] = await query('select player_id from player_identities where provider = $1 and subject = $2', [provider, subject])
+    if (!ex) {
+      [ex] = await query('insert into player_identities (provider, subject, player_id) values ($1, $2, $3) on conflict do nothing returning player_id', [provider, subject, mine])
+      if (!ex) [ex] = await query('select player_id from player_identities where provider = $1 and subject = $2', [provider, subject]) // 같은 순간 같은 신원
+    }
+    const target = String(ex.player_id)
+    const switched = target !== mine
+    if (switched) await query('insert into devices (device_id, player_id) values ($1, $2) on conflict (device_id) do update set player_id = excluded.player_id', [attempt.device_id, target])
+    await query('update login_attempts set done_player = $2, switched = $3 where nonce = $1', [attempt.nonce, target, switched])
+  }
+
+  const loadAttempt = async (nonce: unknown) => (typeof nonce === 'string' && NONCE_RE.test(nonce)
+    ? (await query('select *, extract(epoch from created_at)::float8 as created from login_attempts where nonce = $1', [nonce]))[0] : undefined)
+  const expired = (a: Row, now: number) => Number(a.created) + NONCE_TTL <= now
+
+  // provider 콜백(브라우저). 결과는 사람이 읽는 HTML — 앱은 poll로 안다.
+  app.get('/v1/auth/:provider/callback', async (c) => {
+    const provider = c.req.param('provider')
+    const a = await loadAttempt(c.req.query('state'))
+    if (!a || String(a.provider) !== provider || a.done_player || a.error) return c.html(page('잘못된 요청', '로그인 요청을 찾을 수 없습니다. 앱에서 다시 시도해 주세요.'), 400)
+    const fail = async (why: string) => {
+      await query('update login_attempts set error = $2 where nonce = $1', [a.nonce, why])
+      return c.html(page('로그인 실패', '로그인하지 못했습니다. 앱으로 돌아가 다시 시도해 주세요.'))
+    }
+    if (expired(a, clock())) return fail('expired')
+    const code = c.req.query('code')
+    if (!code || c.req.query('error')) return fail('denied')
+    const subject = await exchange(provider, code, String(a.nonce), redirectUri(c, provider))
+    if (!subject) return fail('provider')
+    await finish(a, subject)
+    return c.html(page('로그인 완료', '앱으로 돌아가 주세요. 이 창은 닫아도 됩니다.'))
+  })
+
+  // 앱이 결과를 가져간다(시도를 만든 플레이어만). done이면 그 플레이어의 새 토큰과 함께 시도를 지운다.
+  app.get('/v1/auth/link/poll', auth, async (c) => {
+    const a = await loadAttempt(c.req.query('nonce'))
+    if (!a || String(a.player_id) !== c.get('playerId')) throw new ApiError(404, 'unknown_nonce', 'no such login attempt')
+    const now = clock()
+    let error = a.error ? String(a.error) : ''
+    if (!a.done_player && !error && expired(a, now)) error = 'expired'
+    if (error) {
+      await query('delete from login_attempts where nonce = $1', [a.nonce])
+      return c.json({ status: 'error', error })
+    }
+    if (!a.done_player) return c.json({ status: 'pending' })
+    await query('delete from login_attempts where nonce = $1', [a.nonce])
+    const id = String(a.done_player)
+    return c.json({ status: 'done', token: await issue(id, now), player_id: id, switched: a.switched === true })
   })
 
   app.get('/v1/gamedata', async (c) => {
@@ -1420,6 +1566,15 @@ export function createApp(opts: AppOptions) {
         return c.json(view(await loadPlayer(id, game, now), game, now))
       })
     }
+
+    // 통합 테스트용(계정 연동): provider 콜백 대신 그 시도를 subject로 끝낸다(브라우저·provider 없이 연동·전환을 본다). 내 시도만.
+    app.post('/v1/test/link_done', auth, async (c) => {
+      const b = await body(c)
+      const a = await loadAttempt(b.nonce)
+      if (!a || String(a.player_id) !== c.get('playerId') || a.done_player || a.error) throw new ApiError(404, 'unknown_nonce', 'no such open login attempt')
+      await finish(a, strField(b, 'subject'))
+      return c.json({ ok: true })
+    })
 
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
     app.post('/v1/test/build_now', auth, async (c) => {
