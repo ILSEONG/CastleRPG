@@ -32,18 +32,19 @@ export const roundHalfAway = (v: number) => Math.sign(v) * Math.round(Math.abs(v
 
 // --- 축적과 수집 (개정 7 §2) ---
 
-// 쌓인 양 = floor(min(경과, 상한)/60) × 분당 × 레벨. 경과가 0 이하면 0.
-export function pendingAmount(perMin: number, level: number, elapsedSec: number, capMin: number): number {
+// 쌓인 양 = floor(min(경과, 상한)/60) × 분당 생산. 분당 생산 = floor(분당 × 레벨 × (100 + pct) / 100)(pct = 연구 생산 %, 개정 24).
+// 경과가 0 이하면 0.
+export function pendingAmount(perMin: number, level: number, elapsedSec: number, capMin: number, pct = 0): number {
   if (elapsedSec <= 0) return 0
-  return Math.floor(Math.min(elapsedSec, capMin * 60) / 60) * perMin * level
+  return Math.floor(Math.min(elapsedSec, capMin * 60) / 60) * Math.floor(perMin * level * (100 + pct) / 100)
 }
 
 // 수집 한 번: 상한 미만이면 수집한 분만큼만 옮기고(남은 초 유지), 상한이면 지금으로, 경과가 음수면 지금으로(수집 0).
 // 쌓인 양이 0이면 changed = false(아무것도 안 바뀜).
-export function collectStep(lastCollect: number, now: number, perMin: number, level: number, capMin: number) {
+export function collectStep(lastCollect: number, now: number, perMin: number, level: number, capMin: number, pct = 0) {
   if (now < lastCollect) return { amount: 0, lastCollect: now, changed: true }
   const elapsed = now - lastCollect
-  const amount = pendingAmount(perMin, level, elapsed, capMin)
+  const amount = pendingAmount(perMin, level, elapsed, capMin, pct)
   if (amount === 0) return { amount: 0, lastCollect, changed: false }
   const next = elapsed >= capMin * 60 ? now : lastCollect + Math.floor(elapsed / 60) * 60
   return { amount, lastCollect: next, changed: true }
@@ -156,6 +157,7 @@ export const KEEP = 'keep' // 다른 건물의 상한·영웅 슬롯·성 HP
 export const GATE = 'gate' // 성문 HP
 export const HOUSES = 'houses' // 인구(병사 배치 상한, 개정 13)
 export const TAVERN = 'tavern' // 모집 확률
+export const LAB = 'lab' // 연구 잠금·속도(개정 24)
 
 export interface BuildingDef {
   id: string
@@ -261,12 +263,13 @@ export function parseTrainCost(text: string): Record<string, number> | null {
   return out
 }
 
-// n마리 비용 {자원: 수} = 1마리 비용 × train_cost_tier_mult^(tier−1) × n(개정 19).
-export function trainCost(config: Config, type: string, n: number, tier = 1): Record<string, number> {
+// n마리 비용 {자원: 수} = 1마리 비용 × train_cost_tier_mult^(tier−1) × n(개정 19). 개정 24: 연구 할인 pct% —
+// 자원마다 round(v × (100 − pct) / 100)(0 이상), 0인 자원은 뺀다.
+export function trainCost(config: Config, type: string, n: number, tier = 1, pct = 0): Record<string, number> {
   const one = parseTrainCost(config[`train_cost_${type}`] ?? '')
   if (!one) throw new Error(`config 'train_cost_${type}' is missing or not 'res:amount|…'`)
   const m = cfgNum(config, 'train_cost_tier_mult') ** (tier - 1)
-  return Object.fromEntries(Object.entries(one).map(([r, v]) => [r, v * m * n]))
+  return Object.fromEntries(Object.entries(one).map(([r, v]) => [r, Math.max(0, roundHalfAway(v * m * n * (100 - pct) / 100))]).filter(([, v]) => v > 0))
 }
 
 // 묶음 상한 = train_batch_base + train_batch_per_level × (L − 1).
@@ -590,3 +593,79 @@ export function itemStats(item: EquipItem) {
 
 // 판매 값 = round(equip_sell_base × 등급 배율 × 레벨).
 export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0) * item.level)
+
+// --- 연구 테크트리 (개정 24) — 앱 GameData.research_*와 같은 식 ---
+
+export const RESEARCH_BRANCHES = ['economy', 'military', 'hero']
+export const RESEARCH_EFFECTS = ['wood_pct', 'stone_pct', 'food_pct', 'res_pct', 'build_speed_pct', 'research_speed_pct', 'sell_pct', 'kill_gold_pct',
+  'inf_pct', 'arc_pct', 'cav_pct', 'soldier_pct', 'castle_hp_pct', 'gate_hp_pct', 'train_speed_pct', 'train_cost_pct', 'pop_add',
+  'hero_atk_pct', 'hero_hp_pct', 'skill_pct']
+export const RESEARCH_RES = ['wood', 'stone', 'food', 'gold'] // 비용 열(골드는 정수 골드)
+
+export interface ResearchDef {
+  id: string
+  branch: string
+  tier: number
+  name: string
+  effect: string
+  per_level: number
+  max_level: number
+  lab_req: number
+  req1: string | null
+  req1_lv: number | null
+  req2: string | null
+  req2_lv: number | null
+  wood: number
+  stone: number
+  food: number
+  gold: number
+  base_sec: number
+}
+
+// 효과 합계 {effect: 합}(모든 키, 없으면 0). 노드마다(표 순서) 레벨(0..max_level로 자름) × per_level을 더한다. % 단위, pop_add는 명.
+export function researchBonus(defs: ResearchDef[], levels: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries(RESEARCH_EFFECTS.map((e) => [e, 0]))
+  for (const d of defs) {
+    const lv = Math.min(Math.max(levels[d.id] ?? 0, 0), d.max_level)
+    out[d.effect] += lv * d.per_level
+  }
+  return out
+}
+
+// n → n+1 비용(n = 현재 레벨, 0부터) {wood, stone, food, gold} = round(값 × research_cost_growth^n).
+export function researchCost(config: Config, def: ResearchDef, n: number): Record<string, number> {
+  const g = cfgNum(config, 'research_cost_growth')
+  return Object.fromEntries(RESEARCH_RES.map((r) => [r, roundHalfAway(grown(Number(def[r as 'wood']), g, n))]))
+}
+
+// 연구 속도 = research_speed_pct / 100 + lab_research_speed_per_level × (연구소 − 1).
+export const researchSpeed = (config: Config, bonus: Record<string, number>, labLevel: number) =>
+  bonus.research_speed_pct / 100 + cfgNum(config, 'lab_research_speed_per_level') * (Math.max(labLevel, 1) - 1)
+
+// n → n+1 시간(초) = round(base_sec × research_time_growth^n / (1 + 속도)).
+export const researchSec = (config: Config, def: ResearchDef, n: number, speed: number) =>
+  roundHalfAway(grown(Number(def.base_sec), cfgNum(config, 'research_time_growth'), n) / (1 + speed))
+
+// 연구를 못 하는 이유(앱 GameData.research_block과 같은 순서·코드). 되면 ''. 진행 중(research_busy)은 부르는 쪽이 먼저 본다.
+// 최대 레벨(max_level) → 연구소·선행(locked) → 자원(not_enough_resources) → 골드(not_enough_gold). have.gold = 정수 골드.
+export function researchBlock(def: ResearchDef, levels: Record<string, number>, labLevel: number, have: Record<string, number>, config: Config): string {
+  const n = levels[def.id] ?? 0
+  if (n >= def.max_level) return 'max_level'
+  const reqs: [string | null, number | null][] = [[def.req1, def.req1_lv], [def.req2, def.req2_lv]]
+  if (labLevel < def.lab_req || reqs.some(([id, lv]) => id && (levels[id] ?? 0) < Number(lv))) return 'locked'
+  const cost = researchCost(config, def, n)
+  if (BUILD_RES.some((r) => (have[r] ?? 0) < cost[r])) return 'not_enough_resources'
+  if ((have.gold ?? 0) < cost.gold) return 'not_enough_gold'
+  return ''
+}
+
+// 취소 환불 = 그 레벨 비용 × research_cancel_refund(자원·골드마다 내림).
+export const researchRefund = (config: Config, cost: Record<string, number>) =>
+  Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, Math.floor(v * cfgNum(config, 'research_cancel_refund'))]))
+
+// 다이아 즉시 완료 = max(1, ceil(남은 초 / 60) × research_dia_per_min).
+export const researchDiaCost = (config: Config, finish: number, now: number) =>
+  Math.max(1, Math.ceil((finish - now) / 60) * cfgNum(config, 'research_dia_per_min'))
+
+// 자원 생산 % = 그 자원 % + res_pct(pendingAmount의 pct).
+export const researchProdPct = (bonus: Record<string, number>, resId: string) => (bonus[`${resId}_pct`] ?? 0) + bonus.res_pct

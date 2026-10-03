@@ -193,7 +193,7 @@ test('마이그레이션 015: 014까지 적용된 DB의 기존 플레이어는 �
     const [p] = await d.query("insert into players (device_id) values ('mig-015-device-0001') returning id")
     await d.query('insert into player_state (player_id, gold_tenths) values ($1, 70)', [p.id])
     await d.query("insert into game_config (key, value) values ('gacha_cost_1', '300'), ('gacha_rate_ssr', '0.03')")
-    assert.deepEqual(await migrate(d), ['015_recruit_diamonds.sql'])
+    assert.deepEqual(await migrate(d), all.filter((f) => f >= '015'))
     const [s] = await d.query('select gold_tenths, diamonds, gacha_gold_level, gacha_gold_pulls, gacha_dia_pity from player_state where player_id = $1', [p.id])
     assert.deepEqual([Number(s.gold_tenths), Number(s.diamonds), s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity], [70, 0, 1, 0, 0])
     const keys = (await d.query("select key from game_config where key like 'gacha%' order by key")).map((r) => r.key)

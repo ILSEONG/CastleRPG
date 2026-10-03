@@ -3,7 +3,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, UPGRADE_UNITS, WEAPON_OF } from './rules.ts'
+import { BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, RESEARCH_BRANCHES, RESEARCH_EFFECTS, UPGRADE_UNITS,
+  WEAPON_OF } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
 
@@ -87,6 +88,18 @@ export const TABLES: TableSpec[] = [
     sql: { id: 'text', name: 'text', per_level: 'real', unit: 'text', max_level: 'integer', cost_base: 'real', cost_growth: 'real' },
   },
   {
+    // 개정 24: 연구 테크트리(스펙 §2). req1·req2(선행 노드)와 그 레벨은 비면 null(선행 없음)
+    name: 'research', table: 'research_defs', file: 'research.csv', ordered: true,
+    cols: {
+      id: 'key', branch: 'text', tier: 'int', name: 'text', effect: 'text', per_level: 'num', max_level: 'int', lab_req: 'int',
+      req1: 'opt', req1_lv: 'optnum', req2: 'opt', req2_lv: 'optnum', wood: 'int', stone: 'int', food: 'int', gold: 'int', base_sec: 'num',
+    },
+    sql: {
+      id: 'text', branch: 'text', tier: 'integer', name: 'text', effect: 'text', per_level: 'real', max_level: 'integer', lab_req: 'integer',
+      req1: 'text', req1_lv: 'integer', req2: 'text', req2_lv: 'integer', wood: 'integer', stone: 'integer', food: 'integer', gold: 'integer', base_sec: 'real',
+    },
+  },
+  {
     name: 'config', table: 'game_config', file: 'config.csv', ordered: false,
     cols: { key: 'key', value: 'text' },
     sql: { key: 'text', value: 'text' },
@@ -108,8 +121,9 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
-export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'lab_atk_per_level',
-  'tavern_ssr_per_level', 'tavern_sr_per_level']
+export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'tavern_ssr_per_level', 'tavern_sr_per_level']
+// 개정 24 연구 설정(checkResearch가 범위를 본다): 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분 0 이상 정수
+export const CONFIG_RESEARCH_NUM = ['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min']
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
 // 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 나머지는 0보다 크다.
 // 개정 16 훈련: 병종마다 1마리 비용 train_cost_<병종>("자원:수|…", rules.parseTrainCost)도 필수다
@@ -224,10 +238,11 @@ function checkTable(spec: TableSpec, rows: CsvRow[], errors: string[]): CsvRow[]
   if (spec.name === 'equip_drop') rows = checkDropRows(rows, err) // 개정 18
   if (spec.name === 'config') {
     const byKey = new Map(rows.map((r) => [String(r.key), r]))
-    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_SOLDIER_NUM, ...CONFIG_TIERS, ...CONFIG_DUNGEON_NUM]) {
+    const nums = [...CONFIG_NUM, ...CONFIG_BUILDING_NUM, ...CONFIG_SOLDIER_NUM, ...CONFIG_DUNGEON_NUM, ...CONFIG_RESEARCH_NUM]
+    for (const k of [...CONFIG_NUM, ...CONFIG_LIST, ...CONFIG_BUILDING_NUM, ...CONFIG_SOLDIER_NUM, ...CONFIG_TIERS, ...CONFIG_DUNGEON_NUM, ...CONFIG_RESEARCH_NUM]) {
       const r = byKey.get(k)
       if (!r) err(0, 'key', `missing key '${k}'`)
-      else if ((CONFIG_NUM.includes(k) || CONFIG_BUILDING_NUM.includes(k) || CONFIG_SOLDIER_NUM.includes(k) || CONFIG_DUNGEON_NUM.includes(k)) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
+      else if (nums.includes(k) && !isNum(String(r.value))) err(Number(r._line), 'value', `not a number: '${r.value}'`)
       else if (CONFIG_LIST.includes(k) && String(r.value).split('|').some((p) => p.trim() === '')) err(Number(r._line), 'value', `empty list item: '${r.value}'`)
       else if (CONFIG_TIERS.includes(k) && !parseTiers(String(r.value))?.every(([, v]) => Number.isInteger(v) && v >= 1)) {
         err(Number(r._line), 'value', `not a tier table 'level:value|…' (levels from 1 ascending, values integers >= 1): '${r.value}'`)
@@ -476,6 +491,43 @@ function checkDungeons(t: Tables, errors: string[]) {
   }
 }
 
+// 연구 표(개정 24, 앱 GameData와 같은 규칙): 알려진 branch·effect만, 숫자 0 이상(tier·max_level ≥ 1, base_sec > 0),
+// 선행(req1·req2)은 표 안의 id이고 그 레벨(req_lv)과 함께 있거나 함께 비며, req_lv는 1..그 노드의 max_level 정수.
+// 설정: 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분 0 이상 정수(숫자 아님·빠짐은 checkTable이 알렸다).
+function checkResearch(t: Tables, errors: string[]) {
+  const rows = t.research ?? []
+  const err = (line: unknown, col: string, why: string) => errors.push(`research.csv line ${line} column '${col}': ${why}`)
+  const byId = new Map(rows.map((r) => [String(r.id), r]))
+  for (const r of rows) {
+    if (!RESEARCH_BRANCHES.includes(String(r.branch))) err(r._line, 'branch', `must be one of ${RESEARCH_BRANCHES.join('/')}: '${r.branch}'`)
+    if (!RESEARCH_EFFECTS.includes(String(r.effect))) err(r._line, 'effect', `unknown effect '${r.effect}'`)
+    for (const c of ['tier', 'max_level']) if (!(Number(r[c]) >= 1)) err(r._line, c, `must be at least 1: ${r[c]}`)
+    for (const c of ['per_level', 'lab_req', 'wood', 'stone', 'food', 'gold']) if (!(Number(r[c]) >= 0)) err(r._line, c, `must be 0 or more: ${r[c]}`)
+    if (!(Number(r.base_sec) > 0)) err(r._line, 'base_sec', `must be greater than 0: ${r.base_sec}`)
+    for (const [c, lc] of [['req1', 'req1_lv'], ['req2', 'req2_lv']]) {
+      const req = r[c]
+      const lv = Number(r[lc])
+      const node = byId.get(String(req))
+      if ((req === null) !== (r[lc] === null)) err(r._line, req === null ? c : lc, `${c} and ${lc} must be both set or both empty`)
+      else if (req === null) continue
+      else if (!node) err(r._line, c, `unknown research '${req}'`)
+      else if (!(Number.isInteger(lv) && lv >= 1 && lv <= Number(node.max_level))) err(r._line, lc, `must be an integer in 1..${node.max_level} (max level of '${req}'): ${r[lc]}`)
+    }
+  }
+  const byKey = new Map((t.config ?? []).map((r) => [String(r.key), r]))
+  const rules: [string, (v: number) => boolean, string][] = [
+    ['research_cost_growth', (v) => v >= 1, '1 or more'],
+    ['research_time_growth', (v) => v >= 1, '1 or more'],
+    ['lab_research_speed_per_level', (v) => v >= 0, '0 or more'],
+    ['research_cancel_refund', (v) => v >= 0 && v <= 1, 'in 0..1'],
+    ['research_dia_per_min', (v) => Number.isInteger(v) && v >= 0, 'a non-negative integer'],
+  ]
+  for (const [k, ok, why] of rules) {
+    const r = byKey.get(k)
+    if (r && isNum(String(r.value)) && !ok(Number(r.value))) errors.push(`config.csv line ${r._line} column 'value': ${k} must be ${why}: '${r.value}'`)
+  }
+}
+
 // data 폴더의 CSV 전부를 읽어 검증한다. 오류가 있으면 CsvError.
 export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   const errors: string[] = []
@@ -502,6 +554,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   checkSoldiers(out, errors)
   checkUpgrades(out, errors)
   checkDungeons(out, errors) // 개정 18
+  checkResearch(out, errors) // 개정 24
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {

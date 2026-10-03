@@ -85,6 +85,7 @@ npm --prefix server test
   - gamedata version
   - 테스트 훅 404
   - 플레이어 격리
+  - 연구(`test/research.test.ts`): 비용·시간 공식, 잠금·바쁨·부족 409, 취소 환불, 다이아 즉시 완료, 자동 완료, 서버 권위 효과, 원자성, 마이그레이션 016, 시드 검증
 
 ## API 요약 (스펙 §4)
 
@@ -95,7 +96,7 @@ npm --prefix server test
 |---|---|---|
 | `GET /v1/health` | - | `{ok, server_now}` |
 | `POST /v1/auth/guest {device_id}` | - | `{token, player_id}`. device_id는 16~128자 `[A-Za-z0-9-]`, 토큰은 30일 유효 |
-| `GET /v1/gamedata` | - | `{version, monsters, stages, heroes, resources, buildings, soldiers, config}`. `ETag` = `"version"`이고, `If-None-Match`가 맞으면 304 |
+| `GET /v1/gamedata` | - | `{version, monsters, stages, heroes, resources, buildings, soldiers, upgrades, dungeons, equip_drop, research, config}`. `ETag` = `"version"`이고, `If-None-Match`가 맞으면 304 |
 | `GET /v1/player` | Bearer | 플레이어 응답 |
 | `POST /v1/collect {building}` | Bearer | 플레이어 응답 + `amount` |
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
@@ -113,7 +114,10 @@ npm --prefix server test
 | `POST /v1/soldiers/collect {building}` | Bearer | 플레이어 응답 + `collected: {type, count}`. 비었으면 409 `empty`, 아직이면 409 `not_ready`. 멱등(두 번째는 409 `empty`) |
 | `POST /v1/soldiers/cancel {building}` | Bearer | 플레이어 응답 + `refund: {자원: 수}`(비용의 50%, 내림). 비었으면 409 `empty`, 이미 끝났으면 409 `ready_to_collect` |
 | `POST /v1/soldiers/deploy {deploy}` | Bearer | 플레이어 응답. deploy = `{"병종:티어": 수}`(0 이상 정수). 키 형식·보유 이하·합계 ≤ 인구가 아니면 400 `bad_deploy`. 멱등 |
-| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집)와 훈련 끝나는 시각(`train_finish`)을 당긴다 |
+| `POST /v1/research/start {id}` | Bearer | 플레이어 응답(`research.current = {id, finish}`). 모르는 노드는 404 `unknown_research`, 아니면 409 `research_busy` / `max_level` / `locked` / `not_enough_resources` / `not_enough_gold`(이 순서로 검사, 개정 24) |
+| `POST /v1/research/cancel` | Bearer | 플레이어 응답 + `refund: {wood, stone, food, gold}`(그 레벨 비용 × `research_cancel_refund`, 내림). 진행 중이 아니면 409 `no_research` |
+| `POST /v1/research/finish` | Bearer | 플레이어 응답 + `diamonds_spent`(= max(1, ⌈남은 초 / 60⌉ × `research_dia_per_min`)). 진행 중이 아니면 409 `no_research`, 다이아가 모자라면 409 `not_enough_diamonds` |
+| `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집)와 훈련 끝나는 시각(`train_finish`), 연구 끝나는 시각(`research_finish`)을 당긴다 |
 
 플레이어 응답은 다음과 같다.
 
@@ -122,7 +126,8 @@ npm --prefix server test
  buildings: {keep: {level}, gate: {level}, ..., lumber: {level, last_collect}, quarry: ..., farm: ..., barracks: {level}, archery: ..., stable: ...},
  build: {id, finish} | null, population, heroes: {hero_id: {copies, level, shards, promotion}}, deploy: [hero_id | null, ...],
  soldiers: {"infantry:1": n, ...}, soldier_deploy: {"infantry:1": n, ...},
- training: {barracks: {count, finish} | null, archery: ..., stable: ...}},
+ training: {barracks: {count, finish} | null, archery: ..., stable: ...},
+ research: {levels: {id: L}, current: {id, finish} | null}},
  merchant: {rates: {wood, stone, food}, next_change}}
 ```
 
@@ -147,7 +152,7 @@ npm --prefix server test
   - L → L+1 비용(목재·석재·식량) = round(값 × 1.35^(L−1)), 시간(초) = round(`base_sec` × 1.5^(L−1)). 성채를 뺀 건물은 목표 레벨 ≤ 성채 레벨, 선행 `req1`·`req2` ≥ 목표 − 1. 일꾼은 1명.
   - 자원 건물은 시작할 때 먼저 자동 수집(수집 규칙 그대로)하고 그 양까지 비용에 쓴다. 수집·차감·일꾼·`economy_log`(`build_start`)는 version 가드 한 문장이다.
   - 게으른 완료: 플레이어 상태를 읽는 모든 요청이 먼저 `build_finish ≤ 지금`인 건설을 완료한다(레벨 +1, 성채·성문이면 `keep_level`·`gate_level`도, 일꾼 비움, `build_done` 로그 — version 가드 한 문장). 앱은 업그레이드를 다시 보내지 않는다.
-  - 효과: 영웅 슬롯 = `keep_slot_tiers`(성채 단계 `레벨:값|…`), 성 HP = `castle_hp` + `castle_hp_per_level` × (성채 − 1), 인구(`player.population`) = `pop_base` + `pop_per_house` × (민가 − 1), 모집 확률 + 주점 × `tavern_ssr_per_level`·`tavern_sr_per_level`. 성 내부(`keep_interior_tiers`)·연구소(영웅 공격)·성문 HP는 앱이 쓴다.
+  - 효과: 영웅 슬롯 = `keep_slot_tiers`(성채 단계 `레벨:값|…`), 성 HP = `castle_hp` + `castle_hp_per_level` × (성채 − 1), 인구(`player.population`) = `pop_base` + `pop_per_house` × (민가 − 1) + 연구 `pop_add`, 모집 확률 + 주점 × `tavern_ssr_per_level`·`tavern_sr_per_level`. 성 내부(`keep_interior_tiers`)·성문 HP는 앱이 쓴다. 연구소 레벨은 연구 잠금·속도만 정한다(개정 24, 영웅 공격 보너스 `lab_atk_per_level`은 없앴다).
   - Neon: 007 마이그레이션과 시드(건물 표, 설정 `hero_slots` 삭제·건물 설정 9개)를 새 서버와 같이 올린다.
 - 병사(개정 13, 마이그레이션 008: `soldier_defs` = `data/soldiers.csv`, `player_soldiers(type, tier, count ≥ 0)`, `player_state.soldier_deploy`, 기존 플레이어에게 `archery`·`stable` 행(레벨 1), 막사 포함 병사 건물 생산 시각 = 지금)
   - 개정 16: 자동 생산은 없다(시간이 흘러도 보유는 그대로). 병사 건물(`soldiers.csv`의 `building`)마다 훈련 대기열 하나(마이그레이션 010: `player_buildings.train_count`·`train_finish`, 비면 0·null — 제약 `train_queue`).
@@ -157,6 +162,19 @@ npm --prefix server test
   - 합성: 티어 t `soldier_merge_count`마리 → t+1 한 마리(HP·공격 × `soldier_tier_mult`, 앱이 계산). 배치는 보유로 자른다. 보유·배치·`economy_log`(`soldier_merge`)는 version 가드 한 문장이다. 앱은 합성을 다시 보내지 않는다.
   - 막사는 영웅 HP를 올리지 않는다(`barracks_hp_per_level` 삭제).
   - Neon: 008 마이그레이션과 시드(병종 표, 건물 표 2행·막사 이름, 설정 `soldier_*` 5개 추가·`barracks_hp_per_level` 삭제)를 새 서버와 같이 올린다.
+- 연구 테크트리(개정 24, 마이그레이션 016: `research_defs` = `data/research.csv`, `player_research(id, level ≥ 0)`, `player_state.research_id`·`research_finish`(둘 다 null이거나 둘 다 값), 연구 설정 5개 기본값, `lab_atk_per_level` 삭제)
+  - 한 번에 하나(건설 일꾼과 따로). 시작 조건: 진행 중 없음 → 최대 레벨 아님 → 연구소 Lv ≥ `lab_req`·선행 `req1`·`req2` ≥ `req1_lv`·`req2_lv` → 자원·골드.
+  - n → n+1 비용 = round(값 × `research_cost_growth`^n)(자원·골드, 시작할 때 전부 뺀다), 시간 = round(`base_sec` × `research_time_growth`^n ÷ (1 + 속도)), 속도 = `research_speed_pct`/100 + `lab_research_speed_per_level` × (연구소 − 1). 거듭제곱은 곱셈 n번(앱과 같은 반올림).
+  - 게으른 완료: 플레이어 상태를 읽는 모든 요청이 먼저 `research_finish ≤ 지금`인 연구를 완료한다(레벨 +1, 진행 비움, `research` 로그 `done` — version 가드 한 문장). 차감·환불·다이아·진행·레벨·`economy_log`(`research`: `start`·`cancel`·`finish`·`done`)도 version 가드 한 문장이다. 앱은 연구 요청을 다시 보내지 않는다.
+  - 효과 합계 = 노드마다 레벨(0..`max_level`) × `per_level`을 effect별로 더한다(`rules.researchBonus`). 서버가 쓰는 효과(b = 합계):
+    - 생산: 분당 = floor(`per_min` × 레벨 × (100 + `<자원>_pct` + `res_pct`) / 100), 수집량 = 분 수 × 분당(`/v1/collect`, 업그레이드 자동 수집)
+    - 건설 시간 = round(기존 ÷ (1 + `build_speed_pct`/100))
+    - 판매 = 자원마다 floor(기존 × (100 + `sell_pct`) / 100)
+    - 처치 골드 = 처치 1회 tenths마다 floor(기존 × (100 + `kill_gold_pct`) / 100)
+    - 훈련 시간 = n × 1마리 시간 ÷ (1 + `train_speed_pct`/100)(반올림 없음), 훈련 비용 = 자원마다 round(기존 × (100 − `train_cost_pct`) / 100)(0인 자원은 뺀다, 취소 환불도 이 비용의 절반)
+    - 인구 + floor(`pop_add`)
+    - 병종·영웅·스킬·성·성문 효과는 앱(전투)만 쓴다.
+  - Neon: 016 마이그레이션과 시드(연구 표, 설정 5개 추가·`lab_atk_per_level` 삭제)를 새 서버와 같이 올린다.
 - 영웅(개정 10)
   - 새 플레이어는 `starter_heroes`를 copies 1로 받고, 배치는 그 순서다. 마이그레이션 005는 기존 플레이어에게 같은 것을 채운다.
   - 응답 `deploy`의 길이는 슬롯 수(`keep_slot_tiers`의 성채 단계 값)다. 표에서 빠진 영웅은 `heroes`·`deploy`에서 거른다.

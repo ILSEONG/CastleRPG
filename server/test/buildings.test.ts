@@ -341,7 +341,7 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|5:24|10:28', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|5:24|10:28', 'keep_interior_tiers,2:20'), /not a tier table/],
     ['config.csv', cfg.replace('tavern_sr_per_level,0.003', 'tavern_sr_per_level,1.5'), /tavern_sr_per_level must be in 0\.\.1: '1\.5'/],
-    ['config.csv', cfg.replace('lab_atk_per_level,0.03', 'lab_atk_per_level,-0.03'), /lab_atk_per_level must be 0 or more/],
+    ['config.csv', cfg.replace('castle_hp_per_level,200', 'castle_hp_per_level,-200'), /castle_hp_per_level must be 0 or more/], // 개정 24: lab_atk_per_level 삭제
     ['config.csv', cfg.replace(/^pop_per_house,.*\n/m, ''), /missing key 'pop_per_house'/],
     ['config.csv', cfg.replace('pop_base,6', 'pop_base,6.5'), /pop_base must be a non-negative integer: '6\.5'/],
   ]

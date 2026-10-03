@@ -533,7 +533,7 @@ test('마이그레이션 012: 011까지 적용된 DB에 던전·장비 표와 �
   assert.deepEqual([dd.gold.keys, dd.equip.keys, dd.gold.last_reset], [3, 1, MIDNIGHT + 3 * DAY])
 })
 
-test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)에도 012만 적용되고 던전 표·설정 기본값이 생긴다. 새 DB는 001~015 전부', async () => {
+test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)에도 012만 적용되고 던전 표·설정 기본값이 생긴다. 새 DB는 001~016 전부', async () => {
   const all = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()
   assert.deepEqual(['011', '012', '013', '014', '015'].map((n) => all.some((f) => f.startsWith(n + '_'))), [true, true, true, true, true])
   const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
@@ -555,7 +555,7 @@ test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)�
   const f = await openDb({})
   try {
     assert.deepEqual(await migrate(f), all)
-    assert.equal(all.length, 15)
+    assert.equal(all.length, 16) // 개정 24: 016
   } finally {
     await f.close()
   }
