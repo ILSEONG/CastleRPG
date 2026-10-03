@@ -235,8 +235,8 @@ func set_currency(id: String) -> void:
 
 
 func _on_open() -> void:
-	if SceneSnap.cached(RecruitArt.KEY) == null:  # 처음 열 때 렌더를 요청(캐시) — 그동안·헤드리스는 자리표시 그러데이션, 끝나면 _process가 바꿔 끼운다
-		art.texture = SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
+	# 보통은 로딩 화면(preloader)이 미리 렌더해 캐시에 있다. 없으면 요청 — 그동안·헤드리스는 자리표시 그러데이션, 끝나면 _process가 바꿔 끼운다
+	art.texture = SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
 	if _late.is_empty():
 		_show_pick()
 		return

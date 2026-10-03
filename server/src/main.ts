@@ -3,6 +3,8 @@ import { serve } from '@hono/node-server'
 import { createApp } from './app.ts'
 import { migrate, openDb } from './db.ts'
 import { readEnv } from './env.ts'
+import { enabledProviders } from './oauth.ts'
+import type { OAuthConfig } from './oauth.ts'
 import { planningEmpty, seed } from './seed.ts'
 
 let cfg: ReturnType<typeof readEnv>
@@ -25,7 +27,15 @@ if (!databaseUrl) {
   }
 }
 
-const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth: cfg.oauth, publicUrl: cfg.publicUrl })
+// 소셜 로그인 설정(env.ts: OAUTH_<PROVIDER>_ID/SECRET + PUBLIC_URL — 콜백은 PUBLIC_URL/v1/auth/<provider>/callback).
+// 테스트 훅 서버에 제공자 키가 없으면 앱이 가짜 설정(oauth.TEST_CONFIG)을 쓴다 — /v1/test/oauth_complete로 로그인 흐름을 시험한다
+const envOauth: OAuthConfig = {
+  redirectBase: cfg.publicUrl,
+  providers: Object.fromEntries(Object.entries(cfg.oauth).map(([p, k]) => [p, { clientId: k.id, clientSecret: k.secret }])),
+}
+const oauth = cfg.allowTestHooks && enabledProviders(envOauth).length === 0 ? undefined : envOauth
+console.log(`[server] social login: ${oauth ? enabledProviders(oauth).join(', ') || 'off' : 'test providers (ALLOW_TEST_HOOKS)'}${oauth?.redirectBase ? ` (callbacks under ${oauth.redirectBase})` : ''}`)
+const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)

@@ -326,7 +326,28 @@ func _run() -> void:
 	await _tap(bg)  # 더블 탭의 두 번째 누름
 	_check(panel.is_open(), "(r) a backdrop press right after opening (double tap) does not close the window", "open=%s" % panel.is_open())
 	panel.close()
+	await _offline_report()
 	await _recruit_and_heroes(rig)
+
+
+## 방치 보상 개요 창: 시험 시작(Economy.reset)은 정산할 것이 없어 창이 닫혀 있다. 정산(3시간 12분, 5,400마리, 27,000골드)이 오면
+## 열려 시간·처치·골드를 보이고, [확인] 탭으로 닫힌다.
+func _offline_report() -> void:
+	var w = null
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/offline_panel.gd"):
+			w = c
+	_check(w != null and not w.is_open() and Economy.offline_report.is_empty(), "(off) the offline summary exists and stays closed when there is nothing to claim",
+		"panel=%s report=%s" % [w, Economy.offline_report])
+	Economy._report_offline(3.0 * 3600.0 + 12.0 * 60.0 + 5.0, 5400, 270000)
+	await _frames(2)
+	_check(w.is_open() and w.away_label.text == "방치 시간  3시간 12분" and w.kills_label.text == "처치한 적  5,400마리" and w.gold_label.text == "+27,000 골드"
+		and Economy.offline_report.is_empty(),
+		"(off) a claim opens the summary: away time, kills, gold (no rate note)",
+		"away=%s kills=%s gold=%s" % [w.away_label.text, w.kills_label.text, w.gold_label.text])
+	await _guard_wait()
+	await _tap(_center(w.ok_button))
+	_check(not w.is_open(), "(off) [확인] closes the summary", "open=%s" % w.is_open())
 
 
 ## 개정 10: 주점 탭 → 모집 창 → 1회 모집(오프라인), 창이 열린 동안 뒤 입력 차단.
@@ -1318,7 +1339,7 @@ func _growth_ui(tabs) -> void:
 		"lv=%d gold=%d text=%s cost=%s" % [Economy.upgrade_level("atk"), Economy.gold, atk.effect.text, atk.up.gold.text])
 	var cost10 := Economy.upgrade_total_cost("atk", 10)
 	var g0 := Economy.gold
-	_check(atk.ten.title.text == "×10 (10회)" and atk.ten.gold.text == UiKit.commas(cost10), "(G) [×10] shows 10 times and their summed cost", "title=%s cost=%s" % [atk.ten.title.text, atk.ten.gold.text])
+	_check(atk.ten.title.text == "×10" and atk.ten.gold.text == UiKit.commas(cost10) and not atk.ten.button.disabled, "(G) [×10] shows the summed cost of 10 and is on", "title=%s cost=%s" % [atk.ten.title.text, atk.ten.gold.text])
 	await _tap(_center(atk.ten.button))
 	_check(Economy.upgrade_level("atk") == 11 and Economy.gold == g0 - cost10, "(G) [×10] tap: Lv 1 -> 11, gold minus the summed cost",
 		"lv=%d gold %d -> %d (cost %d)" % [Economy.upgrade_level("atk"), g0, Economy.gold, cost10])
@@ -1335,6 +1356,13 @@ func _growth_ui(tabs) -> void:
 	await get_tree().create_timer(0.4).timeout
 	_check(first == 1 and early == 1 and held >= 6 and Economy.upgrade_level("hp") == held, "(G) holding [강화]: one step at once, more only after 0.4 s (accelerating), release stops it",
 		"first=%d at 0.25 s=%d held=%d after release=%d" % [first, early, held, Economy.upgrade_level("hp")])
+	var lv9 := Economy.upgrade_level("atk")
+	Economy.gold_tenths = Economy.upgrade_total_cost("atk", 9) * 10
+	Economy.changed.emit()
+	await _frames(1)
+	await _tap(_center(atk.ten.button))
+	_check(not atk.up.button.disabled and atk.ten.button.disabled and Economy.upgrade_level("atk") == lv9,
+		"(G) gold for 9 but not 10: [강화] on, [×10] off and a tap does nothing", "up=%s ten=%s lv=%d" % [atk.up.button.disabled, atk.ten.button.disabled, Economy.upgrade_level("atk")])
 	Economy.gold_tenths = 100
 	Economy.changed.emit()
 	await _frames(1)
@@ -1628,7 +1656,7 @@ func _rotate_ui(hud) -> void:
 func _fever_ui(hud) -> void:
 	var fb = hud._fever
 	Fever.reset()
-	Fever.gauge = 73
+	Fever.gauge = 720
 	await _frames(2)
 	var fr: Rect2 = fb.get_global_rect()
 	var br: Rect2 = hud._button.get_global_rect()
@@ -1636,7 +1664,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == 73 and hud._toast.visible and hud._toast.text == "몬스터 127마리 더",
+	_check(not Fever.active() and Fever.gauge == 720 and hud._toast.visible and hud._toast.text == "몬스터 1280마리 더",
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)
@@ -1880,11 +1908,14 @@ func _soldier_figures(tabs) -> void:
 		and is_equal_approx(kids[0].scale.x, preload("res://scripts/art.gd").SOLDIER_SCALE) and hand.y < rest.y - 0.2,
 		"(F) the cavalry figure is the world soldier's body: the shared horse mesh with the knight on its back, in the idle pose", "kids=%d hand=%s rest=%s" % [kids.size(), hand, rest])
 	var gear := {"soldier:infantry": [["1H_Sword", "Rectangle_Shield"], ["2H_Sword"]], "soldier:archer": [["2H_Crossbow"], ["Knife", "1H_Crossbow"]]}
+	var MM = preload("res://scripts/mesh_merge.gd")
+	MM.enabled = false  # 부위 노드를 이름으로 본다 — 합치기 전 모습(합치기는 run_tests test_mesh_merge)
 	for key in gear:
 		p._show(key)
 		var shown: bool = gear[key][0].all(func(g): return p._pivot.find_child(g, true, false).visible) and gear[key][1].all(func(g): return not p._pivot.find_child(g, true, false).visible)
 		_check(p._pivot.get_child_count() == 1 and shown, "(F) %s figure shows only its gear %s" % [key, gear[key][0]], "")
 	p._show("")
+	MM.enabled = true
 	# 시트 행 칸: portrait_ready에 다시 그리고, 행이 사라지면 연결이 끊긴다
 	var sw = tabs.windows.soldier
 	Economy.soldiers = {"infantry:1": 1, "archer:2": 1}
@@ -1955,10 +1986,11 @@ func _world_tags() -> void:
 	rig.zoom_by(30.0 / _camera.size)
 	await _frames(2)
 	_tags_ok(wt, "zoomed in (30 m)")
-	rig.zoom_by(130.0 / _camera.size)
+	rig.zoom_by(90.0 / _camera.size)
 	await _frames(2)
-	_tags_ok(wt, "zoomed out (130 m)")
-	print("INPUT INFO: zoomed out (130 m) tags pushed px: %s" % [wt.stacks.keys().map(func(id): return [id, roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
+	_check(not wt.names_hidden, "(T) at 90 m the names are still shown", "")
+	_tags_ok(wt, "zoomed out (90 m)")
+	print("INPUT INFO: zoomed out (90 m) tags pushed px: %s" % [wt.stacks.keys().map(func(id): return [id, roundi(wt.desired[id].position.y - wt.stacks[id].position.y)])])
 	# 병사 30명 배치(인구 30) + 벌목장·채석장 말풍선: 방치 모드라 병사는 월드에 없고(개정 21) 덩어리끼리만 피한다
 	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
 	Economy.levels["houses"] = 13
@@ -1983,6 +2015,18 @@ func _world_tags() -> void:
 	var got: Array = WT.place([a, b, c], 3.0)
 	_check(got[0] == a and got[1].end.y <= a.position.y - 3.0 and got[1].position.x == b.position.x and got[2] == c,
 		"(T) place(): the lower tag keeps its spot, the upper one goes above it; a tag clear of the others stays put", "%s" % [got])
+	# 많이 축소하면 이름표를 그리지 않는다(자리도 없음) — 자원 말풍선은 건물 위에 그대로
+	Economy.last_collect["lumber"] = now - 3600.0
+	Economy.changed.emit()
+	rig.zoom_by(Balance.CAMERA_SIZE_MAX / _camera.size)
+	await _frames(2)
+	var flat: bool = wt.rects.values().all(func(r): return r.size == Vector2.ZERO)
+	_check(wt.names_hidden and flat and wt.draw_calls <= 1 and wt.stacks.get("lumber", Rect2()).size.y > 0.0,
+		"(T) zoomed far out: building names are hidden (no pills, no strings) but the lumber bubble still stacks above its building",
+		"hidden=%s flat=%s draws=%d lumber=%s" % [wt.names_hidden, flat, wt.draw_calls, wt.stacks.get("lumber")])
+	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
+	await _frames(2)
+	_check(not wt.names_hidden and wt.draw_calls > 3, "(T) zooming back in shows the names again", "draws=%d" % wt.draw_calls)
 	Economy.soldiers = {}
 	Economy.set_soldier_deploy({})
 	Economy.levels["houses"] = 1

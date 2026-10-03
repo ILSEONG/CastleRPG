@@ -122,6 +122,7 @@ func _ready() -> void:
 	add_to_group("heroes")
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
+	_model.lod = true  # 화면 밖이면 애니메이션 간헐 갱신(화면 안은 매 프레임, 그림자 늘)
 	_model.setup(Art.hero_spec(def))
 	add_child(_model)
 	var torus := TorusMesh.new()
@@ -361,16 +362,16 @@ func _find_target():
 		return null  # 자리 반대편(성벽 너머)에 와 있으면 아무것도 잡지 않고 성문 경로로 돌아간다 — 성벽을 가로지르는 추격 방지
 	var best = null
 	var best_d := INF
+	var here := global_position
 	for m in get_tree().get_nodes_in_group("monsters"):
-		if not m.is_alive():
+		var mp: Vector3 = m.global_position
+		if Vector2(mp.x - origin.x, mp.z - origin.z).length() > reach or not m.is_alive():  # 거리 먼저(= flat_distance)
 			continue
-		if not on_wall and Formation.is_inside(castle.half, m.global_position) != here_inside:
+		if not on_wall and Formation.is_inside(castle.half, mp) != here_inside:
 			continue
-		if Formation.flat_distance(origin, m.global_position) > reach:
-			continue
-		if not here_inside and Formation.crosses_castle(castle.half, global_position, m.global_position):
+		if not here_inside and Formation.crosses_castle(castle.half, here, mp):
 			continue  # 성 밖에서 직선 추격이 성(모서리)을 가로지르는 표적은 잡지 않는다
-		var d := Formation.flat_distance(global_position, m.global_position)
+		var d := Formation.flat_distance(here, mp)
 		if d < best_d:
 			best_d = d
 			best = m

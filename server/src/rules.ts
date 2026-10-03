@@ -131,6 +131,18 @@ export function killGoldTenths(monsterGold: number, stage: StageRow): number {
   return Math.max(1, roundHalfAway(monsterGold * stage.gold_mult * 10))
 }
 
+// 오프라인 처치 골드(앱을 끈 동안의 방치 처치, 앱 Economy.offline_reward와 같은 식). 방치 스폰(WaveDirector MODE_IDLE: idle_interval초마다
+// 네 면에 spawn_group마리씩, 전부 grunt)을 모두 잡았다고 본다. 초 = min(away, capMin분), OFFLINE_MIN_SEC 미만이면 0.
+// 처치 = floor(초 × 4 × group / idleInterval), 골드 tenths = floor(처치 × 1회 tenths × mult).
+export const OFFLINE_MIN_SEC = 60
+export const OFFLINE_KIND = 'grunt'
+export function offlineReward(awaySec: number, capMin: number, idleInterval: number, group: number, perKillTenths: number, mult: number) {
+  const sec = Math.min(Math.max(0, awaySec), capMin * 60)
+  if (!(sec >= OFFLINE_MIN_SEC) || !(idleInterval > 0)) return { sec: Math.max(0, sec), kills: 0, tenths: 0 }
+  const kills = Math.floor(sec * 4 * Math.max(1, Math.round(group)) / idleInterval)
+  return { sec, kills, tenths: Math.floor(kills * perKillTenths * Math.max(0, mult)) }
+}
+
 // 처치 토큰 버킷. 지난 보고 시각은 최대 burstSec초 전까지만 인정한다(from) — 쌓이는 상한이 burstSec × rate로 묶인다.
 // 상한 = max(0, ceil((now − from) × rate)). kept개를 인정하면 다음 보고 시각 = from + kept / rate(쓴 만큼만 앞으로).
 // 같은 순간 여러 번 보내도 합쳐서 버킷 이상은 못 얻는다.

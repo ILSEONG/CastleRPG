@@ -1,7 +1,9 @@
 extends Node3D
 ## 월드 조립. 씬 파일은 이것 하나. 나머지는 코드로 생성.
 ## 개발용 auto-stage: 네이티브는 유저 인자 `-- --auto-stage`, 웹은 URL에 `?auto-stage` → 시작 즉시 스테이지 진행.
-## 온라인 모드(Net.is_online())면 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다 —
+## 온라인 모드(Net.is_online())면 저장한 로그인 방식(Net.load_auth)이 없을 때 로그인 화면(login_screen.gd — Google·카카오·네이버·게스트)을
+## 먼저 띄우고, 그다음 "서버 연결 중…" 화면을 띄우고 접속(로그인·gamedata·player)을 마친 뒤 월드를 만든다(접속 중 저장한 소셜 세션이
+## 거절되면 로그인 화면으로 돌아간다) —
 ## 영웅·몬스터·스테이지가 서버 값으로 시작한다. 오프라인은 바로 만든다.
 ## 영웅은 배치(GameState.deploy·hero_promotion·hero_level)대로 만들고, 배치·승급(별)·레벨이 바뀌면 다음 리필 때(방치 모드면 곧바로) 바뀐 슬롯만 다시 만든다.
 ## 개발용 `-- --heroes=id1,id2`(웹 `?heroes=id1,id2`): 디버그·오프라인에서만 그 영웅들을 주고 이번 실행의 배치로 쓴다(저장 안 함).
@@ -41,14 +43,19 @@ const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
 const ResearchPanelScript := preload("res://scripts/research_panel.gd")
-const AccountPanelScript := preload("res://scripts/account_panel.gd")
+const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
+const LoginScreenScript := preload("res://scripts/login_screen.gd")
+const PreloaderScript := preload("res://scripts/preloader.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
 const EXPANDED_TEXT := "성이 넓어졌습니다!"
 
 static var rebuilds := 0  # 월드를 다시 만든 횟수(성채 단계 변경). 개발용 1회 설정(econ-demo·--heroes·auto-stage)은 첫 월드에서만
-static var _expanded_notice := false  # 방치 중 단계가 바뀌어 곧바로 다시 만들었다 — 새 월드에서 알린다(옛 HUD는 사라진다)
+static var _expanded_notice := false
+static var _scaling_hooked := false  # 3D 해상도 맞추기를 루트 창 크기 변화에 한 번만 잇는다
+const RENDER_3D_WIDTH := 720.0  # 3D는 가로 이만큼(논리 화면 폭)의 픽셀로 그린다 — 고해상도 폰의 픽셀 부담을 줄인다(UI는 원래 해상도)
+const RENDER_3D_MIN := 0.5  # 방치 중 단계가 바뀌어 곧바로 다시 만들었다 — 새 월드에서 알린다(옛 HUD는 사라진다)
 
 var camera: Camera3D
 var castle
@@ -70,6 +77,7 @@ var _host: Node = null  # 던전 동안 이 노드와 던전 장면의 부모
 
 
 func _ready() -> void:
+	_hook_3d_scaling()
 	GameState.roster = Economy  # 영웅 보유·배치·건물 레벨 공급자
 	if OS.is_debug_build() and not Net.is_online() and Net.arg_value("arena") != "":
 		add_child(preload("res://scripts/arena_preview.gd").new())  # 개발용 던전 무대 미리보기(--arena=plains|castle, 개정 18)
@@ -78,7 +86,7 @@ func _ready() -> void:
 		add_child(preload("res://scripts/hero_lineup.gd").new())  # 개발용 영웅 생김새 줄 세우기(--lineup, 개정 23)
 		return
 	if Net.is_online() and not Net.ready_once:
-		await _wait_for_server()
+		await _connect_online()
 	_build_world()
 
 
@@ -139,11 +147,6 @@ func _build_world() -> void:
 	var hud = HudScript.new()
 	add_child(hud)
 	hud.gate_tapped.connect(func(side): rig.pan_to(FormationScript.gate_position(castle.half, side), GATE_PAN_SEC))  # 성문 막대 탭(개정 12-2 §2)
-	if Net.is_online():
-		var account = AccountPanelScript.new()  # 계정 창(소셜 로그인 연동·전환): HUD [계정]
-		add_child(account)
-		hud.account_tapped.connect(account.open)
-		Net.restarted.connect(_on_net_restarted)
 	var panel = MerchantPanelScript.new()
 	add_child(panel)
 	picker.panel = panel
@@ -172,6 +175,9 @@ func _build_world() -> void:
 	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit}
 	add_child(tabs)
 	add_child(bag)
+	add_child(OfflinePanelScript.new())  # 방치 보상 개요(앱을 껐다 켜면 — Economy.offline_reported)
+	if not PreloaderScript.done:
+		add_child(PreloaderScript.new())  # 첫 로딩 화면: 리소스·피규어·배너를 다 준비한 뒤 걷힌다(자리표시가 보였다 바뀌지 않게)
 	GameState.mode_changed.connect(_on_mode_for_snapshot)
 	GameState.refilled.connect(_on_refilled)  # 스테이지 시작 자리 복원(영웅 id로, 다시 만든 영웅도) + 배치·승급·레벨·장비 반영
 	GameState.refilled.connect(_reset_soldiers)
@@ -193,6 +199,9 @@ func _build_world() -> void:
 		GameState.start_stage()
 	if rebuilds == 0 and OS.is_debug_build() and not Net.is_online() and Net.arg_value("dungeon") in GameData.DUNGEON_TYPES:
 		_dev_dungeon(Net.arg_value("dungeon"))
+	elif rebuilds == 0 and not _auto_stage_requested():
+		Economy.claims_open = true
+		Economy.claim_offline(GameState.stage)  # 앱을 켰다: 끈 동안의 방치 처치 골드(× offline_gold_mult) 정산 → 개요 창
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.
@@ -247,7 +256,42 @@ func leave_dungeon() -> void:
 
 ## 접속 화면(HUD 스타일: 하늘색 바탕 + 둥근 흰 패널). 첫 접속을 마치면 치운다. 실패는 Net이 계속 다시 시도한다.
 ## 웹 저장소가 영구가 아니면 경고 한 줄을 더한다(접속은 그대로 진행).
-func _wait_for_server() -> void:
+## 3D 해상도: 루트 뷰포트 3D를 가로 RENDER_3D_WIDTH 픽셀 정도로 그리고 늘려 보인다(쌍선형, Compatibility 렌더러도 된다).
+## 1080×2400 폰이면 0.67배 — 바닥 셰이더·로우폴리 법선·그림자 필터 같은 픽셀 일이 2배 넘게 준다. UI(캔버스)는 원래 해상도 그대로.
+## 던전 장면도 같은 루트 뷰포트라 함께 적용된다. 창 크기가 바뀌면(웹 창 조절) 다시 맞춘다.
+func _hook_3d_scaling() -> void:
+	var root := get_tree().root
+	root.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	root.scaling_3d_scale = scale_3d_for(root.size.x)
+	if not _scaling_hooked:
+		_scaling_hooked = true
+		root.size_changed.connect(func(): root.scaling_3d_scale = scale_3d_for(root.size.x))
+
+
+## 창 가로 픽셀 → 3D 배율(RENDER_3D_MIN..1).
+static func scale_3d_for(width_px: int) -> float:
+	return clampf(RENDER_3D_WIDTH / maxf(1.0, width_px), RENDER_3D_MIN, 1.0)
+
+
+## 로그인(필요하면 로그인 화면) → 접속. 저장한 소셜 세션이 거절되면(Net.session_lost) 로그인 화면부터 다시.
+func _connect_online() -> void:
+	Economy.claims_open = false  # 첫 월드에서 연다(_build_world)
+	Net.load_auth()
+	while true:
+		if not Net.has_credentials():
+			var screen = LoginScreenScript.new()
+			add_child(screen)
+			await screen.logged_in
+			screen.queue_free()
+		if await _wait_for_server():
+			return
+
+
+signal _server_waited(ok: bool)
+
+
+## "서버 연결 중…" 화면을 띄우고 접속을 기다린다. 접속했으면 true, 세션이 거절됐으면 false.
+func _wait_for_server() -> bool:
 	var layer := CanvasLayer.new()
 	var back := ColorRect.new()
 	back.color = Color(0.86, 0.91, 0.96)  # 월드 배경색
@@ -277,10 +321,16 @@ func _wait_for_server() -> void:
 		warn.add_theme_color_override("font_color", HudScript.INK)
 		lines.add_child(warn)
 	add_child(layer)
+	var up := func(): _server_waited.emit(true)
+	var lost := func(): _server_waited.emit(false)
+	Net.connected.connect(up)
+	Net.session_lost.connect(lost)
 	Net.start()
-	if not Net.ready_once:
-		await Net.connected
+	var ok: bool = true if Net.ready_once else await _server_waited
+	Net.connected.disconnect(up)
+	Net.session_lost.disconnect(lost)
 	layer.queue_free()
+	return ok
 
 
 ## 배치(GameState.deploy)·승급·레벨을 만들어 둔 영웅에 맞춘다. 바뀐 슬롯만 빼고 다시 만든다(나머지는 그대로).
@@ -442,12 +492,6 @@ func _on_mode_changed(mode: int) -> void:
 		clear_soldiers()
 	if _expand_pending and mode == GameState.Mode.IDLE:
 		_rebuild_world.call_deferred()
-
-
-## 소셜 로그인으로 다른 플레이어가 됐다(Net.restart()): 월드를 다시 만든다 — 새 main이 "서버 연결 중…"부터 다시 접속해 그 플레이어 값으로 만든다.
-func _on_net_restarted() -> void:
-	_expand_pending = true
-	_rebuild_world()
 
 
 ## 월드를 다시 만든다(씬 다시 읽기). 상태는 오토로드(Economy·GameState·Net)에 있어 그대로 이어지고, 새 main이 그 레벨로 성·영웅을 만든다.

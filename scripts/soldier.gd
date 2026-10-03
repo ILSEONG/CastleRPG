@@ -9,7 +9,7 @@ extends Node3D
 ## 대상이 죽으면 같은 프레임에 다시 찾고(휘두르는 중인 사거리 안 대상은 놓지 않는다), 없으면 RETURN_DELAY초 머문 뒤 자리로(영웅과 같다). 공격은 개정 12-2 타격 동기화(근접 = 모션 타격 순간,
 ## 궁병 = 그 순간 화살 → 도착 순간 피해). 방치 모드는 무적. hp_bars 인터페이스: is_alive·hp_ratio·bar_height·bar_scale·tier.
 # ponytail: 병사 하나 = KayKit 스켈레톤 하나(+ 기병은 말 메시). 상한 64명 + 몬스터 120 + 영웅 12면 모바일 웹은 스켈레톤 수가 한계다 —
-# 화면 밖은 OFFSCREEN_EVERY 프레임마다만 애니메이션을 돌린다. 더 필요하면 화면 밖 병사 처리 자체를 건너뛰거나 병종·티어별 대표만 그린다.
+# 애니메이션 간헐 갱신·붐빌 때 그림자 끄기는 UnitModel.crowd_lod. 더 필요하면 화면 밖 병사 처리 자체를 건너뛰거나 병종·티어별 대표만 그린다.
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -27,7 +27,6 @@ const ARRIVE_EPS := 0.05
 const SWING_SLACK := 0.6  # 근접 타격 순간 대상이 사거리 + 이만큼 안이면 맞는다(영웅과 같다)
 const MUZZLE := Vector3(0, 1.33 * Art.SOLDIER_SCALE, 0)  # 화살이 나가는 높이(모델 1.33 m × 병사 크기)
 const ARROW_SPEED := 30.0
-const OFFSCREEN_EVERY := 4  # 화면 밖이면 애니메이션을 이 프레임마다 한 번(쌓인 시간만큼)
 const RIDER_Y := SoldierBody.RIDER_Y  # 기사 모델 높이(말 등 − 엉덩이) × 병사 크기
 const BOB := 0.06  # 말이 걸을 때 위아래 흔들림(m)
 const BOB_HZ := 2.5
@@ -63,8 +62,6 @@ var _swing  # 휘두르는(쏘려는) 공격의 고정 대상. null = 없음
 var _swing_left := 0.0
 var _walking := false
 var _bob_t := 0.0
-var _frame := 0
-var _anim_acc := 0.0
 var _path: Array[Vector3] = []
 var _rise := 0.0  # 솟아오르는 남은 초
 var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
@@ -109,13 +106,12 @@ func _ready() -> void:
 	add_to_group("soldiers")
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	var art: Dictionary = Art.SOLDIERS[type]
-	var body := SoldierBody.build(self, type, true)  # 모델 + 기병이면 말(병사 피규어도 같은 것으로 만든다)
+	var body := SoldierBody.build(self, type, true)  # 모델(crowd_lod) + 기병이면 말(병사 피규어도 같은 것으로 만든다)
 	_model = body[0]
 	_horse = body[1]
 	_disc = Fx.soldier_disc(art.color, 0.75 if _horse != null else 0.42)
 	_disc.position.y = 0.02
 	add_child(_disc)
-	_frame = get_instance_id() % OFFSCREEN_EVERY  # 병사마다 다른 프레임에 갱신(한 프레임에 몰리지 않게)
 	GameState.gate_broken.connect(_on_gate_broken)
 	_seat(0.0)
 	_face(Formation.SIDE_DIR[side])
@@ -246,7 +242,7 @@ func vanish() -> void:
 
 
 func _process(delta: float) -> void:
-	_animate(delta)
+	_bob(delta)
 	if _dead or GameState.mode == GameState.Mode.COUNTDOWN:  # 연속 진행 카운트다운: 리필로 돌아온 자리에 서 있는다
 		return
 	if _rise > 0.0:  # 등장: 아래에서 솟아오른 뒤 역할 자리로
@@ -310,15 +306,17 @@ func _find_target():
 	var inside := false if roam else Formation.is_inside(half, origin)
 	var best = null
 	var best_d := INF
+	var here := global_position
 	for m in get_tree().get_nodes_in_group("monsters"):
-		if not m.is_alive() or Formation.flat_distance(origin, m.global_position) > reach:
+		var mp: Vector3 = m.global_position
+		if Vector2(mp.x - origin.x, mp.z - origin.z).length() > reach or not m.is_alive():  # 거리 먼저(= flat_distance) — 대부분 여기서 걸러진다
 			continue
 		if not _ranged:
-			if Formation.is_inside(half, m.global_position) != inside:
+			if Formation.is_inside(half, mp) != inside:
 				continue
-			if not inside and Formation.crosses_castle(half, global_position, m.global_position):
+			if not inside and Formation.crosses_castle(half, here, mp):
 				continue
-		var d := Formation.flat_distance(global_position, m.global_position)
+		var d := Formation.flat_distance(here, mp)
 		if d < best_d:
 			best_d = d
 			best = m
@@ -466,14 +464,8 @@ func _seat(y: float) -> void:
 		_model.position.y = RIDER_Y + y
 
 
-## 애니메이션: 화면 안이면 매 프레임, 밖이면 OFFSCREEN_EVERY 프레임마다 쌓인 시간만큼(타격 시점은 _swing_left라 그대로). 말은 걸을 때 흔들린다.
-func _animate(delta: float) -> void:
-	_frame += 1
-	_anim_acc += delta
-	var cam := get_viewport().get_camera_3d()
-	if cam == null or cam.is_position_in_frustum(global_position) or _frame % OFFSCREEN_EVERY == 0:
-		_model.advance(_anim_acc)
-		_anim_acc = 0.0
+## 말은 걸을 때 위아래로 흔들린다(애니메이션 자체는 UnitModel.crowd_lod가 돌린다).
+func _bob(delta: float) -> void:
 	if _horse != null and not _dead:
 		_bob_t = _bob_t + delta if _walking else 0.0
 		_seat(absf(sin(_bob_t * PI * BOB_HZ)) * BOB)

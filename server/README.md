@@ -58,7 +58,7 @@ curl http://127.0.0.1:8787/v1/health
 | `ALLOW_TEST_HOOKS` | `1`이면 `POST /v1/test/age`(수집 시각·훈련 끝나는 시각 당기기) 같은 테스트 훅이 생긴다. `DATABASE_URL`과 같이 있으면 **시작을 거부한다**. |
 | `HOST` | (선택) 듣는 주소. 기본은 개발 `127.0.0.1`, 운영 `0.0.0.0`이다. 고정 개발 비밀(`JWT_SECRET` 없음)인데 루프백(`127.x`, `localhost`, `::1`)이 아니면 **시작을 거부한다**. |
 | `PGLITE_DIR` | (선택) 개발 PGlite 위치. `memory`면 메모리다. |
-| `OAUTH_GOOGLE_ID` / `OAUTH_GOOGLE_SECRET`, `OAUTH_KAKAO_*`, `OAUTH_NAVER_*` | (선택) 소셜 로그인. ID와 SECRET을 둘 다 주면 그 provider가 켜진다(하나만 주면 **시작을 거부한다**). 아래 "계정 연동" |
+| `OAUTH_GOOGLE_ID` / `OAUTH_GOOGLE_SECRET`, `OAUTH_KAKAO_*`, `OAUTH_NAVER_*` | (선택) 소셜 로그인. ID와 SECRET을 둘 다 주면 그 provider가 켜진다(하나만 주면 **시작을 거부한다**). 아래 "소셜 로그인" |
 | `PUBLIC_URL` | (선택) 이 서버의 공개 주소(리다이렉트 URI의 앞부분). `DATABASE_URL`과 provider가 있으면 **필수**. 비우면 요청의 origin이다. |
 | `KEEP_ALIVE_MIN` | (선택) 이 분마다 `PUBLIC_URL/v1/health`를 스스로 친다 — Render 무료 인스턴스가 15분 무요청에 잠드는 것을 막는다(`render.yaml`은 10). `PUBLIC_URL`이 없으면 **시작을 거부한다**. 0·빈 값이면 안 한다. |
 
@@ -89,7 +89,7 @@ npm --prefix server test
   - 테스트 훅 404
   - 플레이어 격리
   - 연구(`test/research.test.ts`): 비용·시간 공식, 잠금·바쁨·부족 409, 취소 환불, 다이아 즉시 완료, 자동 완료, 서버 권위 효과, 원자성, 마이그레이션 016, 시드 검증
-  - 계정 연동(`test/accounts.test.ts`): start URL, 콜백(가짜 fetch)·연동·전환·기기 옮겨 묶기, poll 한 번만, 실패·만료·남의 시도, 테스트 훅, 마이그레이션 017 백필
+  - 소셜 로그인(`test/social.test.ts`): 흐름·게스트 잇기·취소/오류/만료·세션. 오프라인 처치 골드(`test/offline.test.ts`)
 
 ## API 요약 (스펙 §4)
 
@@ -106,6 +106,13 @@ npm --prefix server test
 | `POST /v1/sell {res}` | Bearer | 플레이어 응답 + `gold_gained`, `rate`. res는 자원 id 또는 `"all"` |
 | `POST /v1/kills {seq, stage, kills}` | Bearer | 플레이어 응답 + `gold_gained` |
 | `POST /v1/stage/clear {stage}` | Bearer | 플레이어 응답 + `cleared` |
+| `GET /v1/auth/providers` | 없음 | `{providers}` 켜진 소셜 로그인 |
+| `POST /v1/auth/oauth/start {provider, challenge, device_id?}` | 없음 | `{url, state, expires_in}` — 앱이 url을 브라우저로 연다. challenge = sha256(verifier) hex. device_id의 게스트 계정에 아직 소셜 계정이 없으면 그 계정에 잇는다 |
+| `GET /v1/auth/:provider/callback` | 제공자 | 안내 HTML. code → 제공자 사용자 id → 플레이어(없으면 만든다 — 회원가입 없음) |
+| `POST /v1/auth/oauth/poll {state, verifier}` | 없음 | 202 `{pending}` 또는 한 번만 `{token, player_id, session, provider, is_new}`. 401 `login_denied`·`login_failed`, 410 `login_expired`(10분) |
+| `POST /v1/auth/session {session}` | 없음 | `{token, player_id, provider}` 자동 로그인. 모르면 401 `bad_session` |
+| `POST /v1/auth/logout {session}` | 없음 | `{ok}` 그 세션만 지운다 |
+| `POST /v1/offline {}` | Bearer | 플레이어 응답 + `offline {away_sec, kills, gold_gained_tenths}` — 지난 활동(상태를 바꾼 마지막 요청) 이후를 방치 처치로 쳐서 골드 × `offline_gold_mult`(상한 `accum_cap_min`분, 60초 미만 0). 앱을 켤 때·백그라운드에서 돌아올 때 |
 | `POST /v1/building/upgrade {building}` | Bearer | 플레이어 응답 + `build: {id, finish}`. 모르는 건물은 400 `unknown_building`, 아니면 409 `max_level` / `keep_cap` / `prereq` / `builder_busy` / `not_enough`(이 순서로 검사) |
 | `POST /v1/test/build_now` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. 진행 중 건설의 끝나는 시각을 지금으로(같은 응답이 완료를 반영) |
 | `POST /v1/gacha {count}` | Bearer | 플레이어 응답 + `results: [{hero_id, grade, new, copies, shards}]`. count는 1 또는 10. 골드가 모자라면 409 `not_enough_gold` |
@@ -121,11 +128,6 @@ npm --prefix server test
 | `POST /v1/research/start {id}` | Bearer | 플레이어 응답(`research.current = {id, finish}`). 모르는 노드는 404 `unknown_research`, 아니면 409 `research_busy` / `max_level` / `locked` / `not_enough_resources` / `not_enough_gold`(이 순서로 검사, 개정 24) |
 | `POST /v1/research/cancel` | Bearer | 플레이어 응답 + `refund: {wood, stone, food, gold}`(그 레벨 비용 × `research_cancel_refund`, 내림). 진행 중이 아니면 409 `no_research` |
 | `POST /v1/research/finish` | Bearer | 플레이어 응답 + `diamonds_spent`(= max(1, ⌈남은 초 / 60⌉ × `research_dia_per_min`)). 진행 중이 아니면 409 `no_research`, 다이아가 모자라면 409 `not_enough_diamonds` |
-| `GET /v1/auth/links` | Bearer | `{available: [provider…], linked: [provider…]}`. 서버가 켠 provider와 이 플레이어가 연동한 provider(`google`·`kakao`·`naver`) |
-| `POST /v1/auth/link/start {provider, device_id}` | Bearer | `{url, nonce}`. 앱이 `url`을 시스템 브라우저로 연다. 모르는 provider는 400 `unknown_provider`, 서버에 꺼진 provider는 409 `provider_unavailable` |
-| `GET /v1/auth/<provider>/callback?code&state` | - (브라우저) | HTML 한 쪽("로그인 완료" / "로그인 실패" / 400 "잘못된 요청"). provider가 돌려보내는 곳 — 콘솔에 `<PUBLIC_URL>/v1/auth/<provider>/callback`을 등록한다 |
-| `GET /v1/auth/link/poll?nonce` | Bearer | `{status: "pending"}` / `{status: "done", token, player_id, switched}` / `{status: "error", error: "denied"\|"expired"\|"provider"}`. 시도를 만든 플레이어만(아니면 404 `unknown_nonce`). done·error는 한 번만 — 가져가면 시도가 사라진다 |
-| `POST /v1/test/link_done {nonce, subject}` | Bearer | `{ok}`. `ALLOW_TEST_HOOKS=1`일 때만 있다. provider 콜백 대신 내 시도를 그 subject로 끝낸다(통합 테스트) |
 | `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집)와 훈련 끝나는 시각(`train_finish`), 연구 끝나는 시각(`research_finish`)을 당긴다 |
 
 플레이어 응답은 다음과 같다.
@@ -200,21 +202,18 @@ npm --prefix server test
   - 골드·식량 차감, 레벨 증가, `economy_log`(`levelup`)는 version 가드 한 문장이다. 앱은 레벨업을 다시 보내지 않는다(실패하면 알림 + 상태 새로 받기).
   - Neon: 006 마이그레이션과 시드(레벨업 설정 9개)를 새 서버와 같이 올린다.
 
-## 계정 연동(소셜 로그인)
+## 소셜 로그인(Google·카카오·네이버)
 
-서버 주도 OAuth 2.0 authorization code. 앱에는 provider SDK도 비밀도 없다 — Godot 웹·Android 빌드가 같은 코드로 돈다(gradle 빌드·딥링크 없음).
+서버 주도 OAuth 2.0 authorization code(`src/oauth.ts`). 앱에는 provider SDK도 비밀도 없다 — 웹·Android 빌드가 같은 코드로 돈다(gradle·딥링크 없음). 회원가입 없음: 처음 로그인하면 계정이 생긴다.
 
-1. 앱 `[계정]` 창에서 `[Google로 계속]` → `POST /v1/auth/link/start` → 서버가 시도(`login_attempts`, nonce = OAuth `state`)를 만들고 provider 로그인 URL을 준다.
-2. 앱이 그 URL을 시스템 브라우저로 연다(`OS.shell_open`). 사용자가 로그인하면 provider가 `/v1/auth/<provider>/callback`으로 돌려보낸다.
-3. 서버가 `code`를 토큰으로 바꾸고 사용자 id(`subject`: Google `sub`, Kakao `id`, Naver `response.id`)를 얻는다.
-   - 처음 보는 신원이면 지금 플레이어에 묶는다(`player_identities`). 연동.
-   - 이미 다른 플레이어의 신원이면 **그 플레이어가 된다**(`switched`). 이 기기를 그 플레이어에 옮겨 묶는다(`devices`) — 지금 게스트 진행은 버린다. 병합하지 않는다.
-4. 앱은 2초마다 `GET /v1/auth/link/poll`로 결과를 가져간다(브라우저에서 돌아오면 이어진다). `switched`면 처음부터 다시 접속해 월드를 다시 만든다(스테이지 중이면 끝난 뒤).
-   - 다음 실행의 게스트 로그인(`/v1/auth/guest`)은 `devices`를 먼저 보므로 같은 플레이어로 간다. `players.device_id`는 만든 기기로 남는다(마이그레이션 017이 `devices`를 백필한다).
+1. 로그인 화면(`scripts/login_screen.gd`)에서 제공자 버튼 → `POST /v1/auth/oauth/start {provider, challenge = sha256(verifier), device_id}` → 진행 행(`oauth_logins`, state 10분)과 제공자 로그인 URL.
+2. 앱이 URL을 시스템 브라우저로 연다(`OS.shell_open`). 사용자가 로그인하면 제공자가 `/v1/auth/<provider>/callback`으로 돌려보낸다.
+3. 서버가 `code`를 토큰으로 바꾸고 제공자 사용자 id만 읽는다(Google `sub`, Kakao `id`, Naver `response.id`). 플레이어 찾기: 이은 플레이어 → (없으면) 그 기기의 게스트 계정에 아직 소셜 계정이 없으면 거기에 잇는다(진행 유지) → (없으면) 새 플레이어.
+4. 앱은 2초마다 `POST /v1/auth/oauth/poll {state, verifier}`로 결과를 가져간다(한 번만): 토큰 + 자동 로그인 세션(`player_sessions`에는 sha256만). 다음 실행은 `POST /v1/auth/session`으로 바로 들어가고, 로그아웃은 그 세션만 지운다.
 
-provider 콘솔(사용자 몫): 셋 다 "웹" 타입으로 등록하고 리다이렉트 URI에 `<PUBLIC_URL>/v1/auth/<provider>/callback`을 넣는다. Google은 Cloud Console OAuth 클라이언트(웹 애플리케이션, https 필수 — 로컬 시험은 터널 필요), Kakao는 developers.kakao.com 앱의 REST API 키(카카오 로그인 ON, Client Secret 켜면 그 값), Naver는 developers.naver.com 애플리케이션의 Client ID/Secret(네이버 로그인 API). 값은 `server/.env`(개발)·배포 환경 변수(운영)의 `OAUTH_*`에 둔다.
+제공자 콘솔(사용자 몫): 셋 다 "웹" 타입으로 등록하고 리다이렉트 URI에 `<PUBLIC_URL>/v1/auth/<provider>/callback`을 넣는다. Google은 Cloud Console OAuth 클라이언트(웹 애플리케이션, https 필수), Kakao는 REST API 키(카카오 로그인 ON, Client Secret 활성화), Naver는 Client ID/Secret(네이버 로그인 API, PC 웹). 값은 `OAUTH_<PROVIDER>_ID/SECRET`과 `PUBLIC_URL`(Render Environment / `server/.env`)에 둔다.
 
-- 시도는 10분 안에 끝나야 한다(`expired`). 로그인 취소는 `denied`, provider 통신 실패·사용자 id 없음은 `provider`(서버 로그에 상태 코드).
+- 테스트 훅 서버(`ALLOW_TEST_HOOKS=1`)에 제공자 키가 없으면 가짜 설정으로 셋 다 켜지고 `POST /v1/test/oauth_complete`가 콜백을 대신한다(dev/online-check.sh phase 3~5).
 - 요청 속도 제한·연동 해제·계정 병합은 범위 밖이다.
 
 ## 동시성
@@ -253,7 +252,8 @@ provider 콘솔(사용자 몫): 셋 다 "웹" 타입으로 등록하고 리다�
    ```
 
    - 2026-10-01: 프로젝트 Neon DB(`ep-divine-credit-azirouja`, ap-southeast-1, PostgreSQL 18)에 001·002를 적용하고 시드했다. API 전 경로와 게임 접속을 확인했고, 시험 계정은 지웠다.
-   - 2026-10-03: 같은 DB에 017까지 적용하고 다시 시드했다(Render 배포 준비). 운영 모드 서버를 로컬에서 띄워 health·gamedata·게스트 로그인을 확인했고, 시험 계정은 지웠다.
+   - 2026-10-03: 같은 DB에 016까지 적용하고 다시 시드했다(Render 배포 준비). 운영 모드 서버를 로컬에서 띄워 health·gamedata·게스트 로그인을 확인했고, 시험 계정은 지웠다.
+   - 2026-10-04: 계정 연동 초안(017_accounts: player_identities·devices·login_attempts)을 되돌리고(표 삭제, schema_migrations 행 삭제) 017_offline_gold·018_social_login을 적용했다. 플레이어 0명이었다.
 
    - **개정 10 올리기(003~005)는 마이그레이션·시드·새 서버 배포를 한 번에 한다.**
      - 003은 `player_state.gold`를 `gold_tenths`로 바꾸고, 004는 `hero_roles`를 지운다. 그래서 개정 9 서버는 마이그레이션이 적용되는 순간부터 깨진다.

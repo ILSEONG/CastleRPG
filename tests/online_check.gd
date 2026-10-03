@@ -4,6 +4,10 @@ extends Node
 ## phase 1: 접속·월드·응답 처리 규칙(classify)·처치 골드·재로그인·4xx 버림·수집·판매·시세 갱신·끊김·스테이지 클리어·
 ##   끊긴 동안 쌓인 클리어 둘 중 두 번째 거부 → 다음 경계에서 서버 stage로·처치 묶음 나누기. 끝 상태를 --state 파일에 쓴다.
 ## phase 2: 같은 기기 id로 다시 접속해 골드·자원·스테이지가 그대로인지 본다. 웹 비영구 저장소 경고 띠와 띠 위치도 본다.
+## phase 1·2는 게스트로 고른 상태(--device 옆 auth 파일)로 시작한다. 소셜 로그인(제공자 없이 /v1/test/oauth_complete로 끝낸다):
+## phase 3: 로그인 방식이 없으면 로그인 화면(제공자 셋·게스트) — [카카오] → 기다림 → 완료 → 같은 기기 게스트 계정(1·2단계 진행)에 이어져 월드.
+## phase 4: 저장한 세션으로 로그인 화면 없이 자동 로그인(같은 플레이어) → 로그아웃하면 저장이 비고 서버도 그 세션을 거절. 낡은 세션을 다시 둔다.
+## phase 5: 낡은 세션으로 시작 → 거절(session_lost) → 로그인 화면이 다시 → [게스트로 시작하기] → 같은 기기 계정으로 월드.
 ## 오토로드를 쓰므로 tests/run_tests.gd(-s)에서 preload 금지. user://save.json·device.json을 쓰지 않는다(온라인은 저장 안 함, 기기 id는 임시 파일).
 
 const Balance := preload("res://scripts/balance.gd")
@@ -17,7 +21,6 @@ const BuildingsScript := preload("res://scripts/buildings.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
-const AccountPanelScript := preload("res://scripts/account_panel.gd")
 const MainScript := preload("res://scripts/main.gd")
 const DEAD_API := "http://127.0.0.1:1"  # 아무도 듣지 않는 포트 — 끊김 흉내
 
@@ -42,7 +45,6 @@ var _scenery
 var _recruit
 var _hero_panel
 var _tabs
-var _account  # 계정 창(account_panel.gd)
 var _resp = null  # _request의 응답
 var _resp_done := false
 
@@ -55,14 +57,24 @@ func _ready() -> void:
 	var phase := Net.arg_value("phase")
 	var device := Net.arg_value("device")
 	var state_path := Net.arg_value("state")
-	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2"], "online mode with --api, --device, --state, --phase",
+	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5"], "online mode with --api, --device, --state, --phase",
 		"api=%s device=%s state=%s phase=%s" % [Net.api_base, device, state_path, phase])
 	if _fails == 0:
 		Net.device_path = device  # start() 전에
-		if phase == "1":
-			await _phase1(state_path)
-		else:
-			await _phase2(state_path)
+		Net.auth_path = device.get_base_dir().path_join("auth.json")
+		if phase in ["1", "2"]:
+			Net.set_auth("guest")  # 로그인 화면 없이 게스트(이전 동작)
+		match phase:
+			"1":
+				await _phase1(state_path)
+			"2":
+				await _phase2(state_path)
+			"3":
+				await _phase3_social(state_path)
+			"4":
+				await _phase4_session(state_path)
+			"5":
+				await _phase5_lost()
 	if _errors.count > 0:
 		print("ONLINE SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -559,10 +571,95 @@ func _phase2(state_path: String) -> void:
 	_research_restored(state_path)
 	await _dungeons_restored(state_path)  # 개정 18: 복원 확인 뒤 골드 던전(영웅을 더 준다 — 위 영웅 검사 뒤에)
 	await _recruit23_online()  # 개정 23: 영웅이 늘어난다 — phase 1·2 영웅·조각 검사 뒤 맨 끝에
-	await _account_online(saved)  # 계정 연동·전환: 다른 기기로 다시 접속한다 — 맨 끝에
 
 
 ## main을 띄워 접속을 기다린다. 월드가 생기면 스포너를 멈추고 몬스터를 치운다.
+# --- 소셜 로그인(phase 3~5) ---
+
+func _login_screen():
+	for c in _main.get_children():
+		if c.get_script() == preload("res://scripts/login_screen.gd"):
+			return c
+	return null
+
+
+func _phase3_social(state_path: String) -> void:
+	var saved: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(state_path))
+	DirAccess.remove_absolute(Net.auth_path)
+	_main = preload("res://scenes/main.tscn").instantiate()
+	add_child(_main)
+	await _frames(3)
+	var ls = _login_screen()
+	_check(ls != null and ls.visible and ls.buttons.keys() == ["google", "kakao", "naver"] and ls.guest_button != null and Net.logins == 0 and not Net.ready_once,
+		"(s1) no saved login: the login screen shows Google, Kakao, Naver and guest; nothing is sent yet", "screen=%s logins=%d" % [ls, Net.logins])
+	if ls == null:
+		return
+	var opened := []
+	ls.opener = func(u): opened.append(u)
+	ls.press_provider("kakao")
+	var waiting := await _wait_until(func(): return ls.wait_panel.visible and ls._state != "", 10.0)
+	_check(waiting and opened.size() == 1 and opened[0].begins_with("http://127.0.0.1") == false and opened[0].contains("kauth.kakao.com") and opened[0].contains(ls._state),
+		"(s1) [카카오로 시작하기] opens the Kakao login page in the browser and waits", "opened=%s" % [opened])
+	await _frames(int(ls.POLL_SEC * 60.0) + 10)
+	_check(ls.wait_panel.visible and Net.logins == 0, "(s1) polling while the browser login is unfinished keeps waiting", "")
+	var done := await _post_json("/v1/test/oauth_complete", {"state": ls._state, "provider_uid": "kakao-user-1"})
+	_check(done.get("ok") == true and done.get("is_new") == false, "(s1) test hook finishes the login on the device's guest account (linked, not new)", str(done))
+	var built := await _wait_until(func(): return _main.camera != null, 30.0)
+	var auth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Net.auth_path))
+	_check(built and Net.auth_mode == "kakao" and auth.mode == "kakao" and str(auth.session).length() == 64 and Net.logins == 1,
+		"(s1) after the poll the world is built, logged in by the saved Kakao session", "built=%s mode=%s auth=%s logins=%d" % [built, Net.auth_mode, auth, Net.logins])
+	_check(GameState.stage == int(saved.stage) and Economy.server_gold_tenths >= int(saved.gold_tenths) and Economy.upgrade_level("atk") == 3 and Economy.upgrade_level("crit_dmg") == 1,
+		"(s1) the Kakao account kept the device's guest progress (stage, gold incl. phase 2 dungeon rewards, growth atk 3 / crit_dmg 1)", "stage=%d/%d gold=%d/%d" % [GameState.stage, saved.stage, Economy.server_gold_tenths, saved.gold_tenths])
+	saved.player_id = str(done.get("player_id"))
+	var f := FileAccess.open(state_path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(saved))
+	f.close()
+
+
+func _phase4_session(state_path: String) -> void:
+	var saved: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(state_path))
+	if not await _start_world():
+		return
+	var old: String = Net.session
+	_check(Net.auth_mode == "kakao" and old.length() == 64 and Net.logins == 1 and _login_screen() == null and Net.requested.get("/v1/auth/session", 0) == 1,
+		"(s2) a saved session logs in automatically without the login screen", "mode=%s logins=%d" % [Net.auth_mode, Net.logins])
+	_check(GameState.stage == int(saved.stage) and Economy.server_gold_tenths >= int(saved.gold_tenths), "(s2) same account as the Kakao login",
+		"stage=%d gold=%d" % [GameState.stage, Economy.server_gold_tenths])
+	Net.logout()
+	await get_tree().create_timer(1.0).timeout
+	var auth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Net.auth_path))
+	var again := await _post_json("/v1/auth/session", {"session": old})
+	_check(not Net.has_credentials() and auth.mode == "" and auth.session == "" and again.get("error") == "bad_session",
+		"(s2) logout clears the saved login and the server rejects that session", "auth=%s again=%s" % [auth, again])
+	var f := FileAccess.open(Net.auth_path, FileAccess.WRITE)  # 다른 기기에서 로그아웃한 것처럼 낡은 세션을 둔다(phase 5)
+	f.store_string(JSON.stringify({"mode": "kakao", "session": old}))
+	f.close()
+
+
+func _phase5_lost() -> void:
+	_main = preload("res://scenes/main.tscn").instantiate()
+	add_child(_main)
+	var shown := await _wait_until(func(): return _login_screen() != null, 20.0)
+	_check(shown and Net.auth_mode == "" and Net.session == "" and not Net.ready_once and Net.logins == 0,
+		"(s3) a rejected saved session clears it and brings the login screen back (no silent guest login)", "shown=%s mode=%s" % [shown, Net.auth_mode])
+	if not shown:
+		return
+	_login_screen().press_guest()
+	var built := await _wait_until(func(): return _main.camera != null, 30.0)
+	_check(built and Net.auth_mode == "guest" and Net.logins == 1, "(s3) [게스트로 시작하기] then starts the world as the device guest", "built=%s logins=%d" % [built, Net.logins])
+
+
+## 서버에 JSON POST 하나(Net 큐와 따로). 응답 사전(실패면 {}).
+func _post_json(path: String, body: Dictionary) -> Dictionary:
+	var h := HTTPRequest.new()
+	add_child(h)
+	h.request(Net.api_base + path, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_POST, JSON.stringify(body))
+	var res: Array = await h.request_completed
+	h.queue_free()
+	var data = JSON.parse_string((res[3] as PackedByteArray).get_string_from_utf8()) if (res[3] as PackedByteArray).size() > 0 else null
+	return data if data is Dictionary else {}
+
+
 func _start_world() -> bool:
 	add_child(preload("res://scenes/main.tscn").instantiate())
 	return await _world_ready("(a) world is built after connecting (login, gamedata, player)")
@@ -608,8 +705,6 @@ func _world_ready(what: String, old = null) -> bool:
 			_hero_panel = c
 		elif s == TabBarScript:
 			_tabs = c
-		elif s == AccountPanelScript:
-			_account = c
 	_spawner.set_process(false)
 	for m in get_tree().get_nodes_in_group("monsters"):
 		m.queue_free()
@@ -1419,65 +1514,3 @@ func _recruit23_online() -> void:
 		"(r23) reconnecting (new login) restores diamonds and the recruit state (gold Lv 2, pulls, pity) from the server; the top diamond chip shows them",
 		"saved=%s now=%d %s logins=%d" % [saved, Economy.diamonds, Economy.gacha_state(), Net.logins - logins])
 
-
-## 계정 연동(소셜 로그인): [계정] → 창(구글만 켜짐 — 서버 env), [Google로 계속] → 시도(nonce) → 콜백 대신 테스트 훅으로 끝냄 → poll done, 연동됨.
-## 전환: 새 기기(다른 임시 파일)로 다시 접속하면 새 플레이어(골드 0·스테이지 1). 거기서 같은 구글 계정으로 로그인하면 switched →
-## Net.restart() → 월드가 다시 만들어지고 원래 플레이어(골드·스테이지)로 돌아온다 — 그 기기의 게스트 로그인이 이제 원래 플레이어다.
-func _account_online(saved: Dictionary) -> void:
-	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
-	var gold0 := Economy.server_gold_tenths
-	var stage0 := GameState.stage
-	var logins0 := Net.logins
-	_check(_hud.account_button != null and _account != null and not _account.visible, "(acct) online HUD has [계정] and main made the account window",
-		"button=%s account=%s" % [_hud.account_button, _account])
-	if _account == null:
-		return
-	_account.open_browser = false
-	_hud.account_button.pressed.emit()
-	await _wait_until(func(): return not _account.available.is_empty(), 10.0)
-	var b: Dictionary = _account.buttons
-	_check(_account.visible and _account.available == ["google"] and _account.linked.is_empty() and not b.google.disabled and b.kakao.disabled and b.naver.disabled
-		and _account.status.text == _account.GUEST_TEXT and not _account.wait_label.visible,
-		"(acct) window: guest status, only the server-enabled provider (google) is pressable", "available=%s linked=%s status=%s" % [_account.available, _account.linked, _account.status.text])
-	b.google.pressed.emit()
-	var started := await _wait_until(func(): return _account.nonce != "", 10.0)
-	_check(started and _account.nonce.length() == 64 and _account.wait_label.visible and b.google.disabled,
-		"(acct) start: a 64-hex nonce, wait text, buttons disabled while the attempt is open", "nonce=%s" % _account.nonce)
-	var r := await _request("POST", "/v1/test/link_done", {"nonce": _account.nonce, "subject": "online-check-google"})
-	_check(r.get("ok") == true, "(acct) the test hook finishes the attempt in place of the provider callback", str(r))
-	var done := await _wait_until(func(): return _account.last_result == "done" and _account.linked == ["google"], 15.0)
-	_check(done and _account.nonce == "" and _account.status.text == "연동: Google" and b.google.text == "Google 연동됨" and not b.google.disabled and _main == _current_main(),
-		"(acct) poll: done without a switch — the window shows google linked and the world stays", "result=%s linked=%s status=%s" % [_account.last_result, _account.linked, _account.status.text])
-	_account.close()
-	# 새 기기로 다시 접속: 새 게스트 플레이어
-	var device1 := Net.device_id
-	Net.device_path = Net.device_path.get_base_dir().path_join("device2.json")
-	DirAccess.remove_absolute(Net.device_path)
-	Net.restart()
-	if not await _world_ready("(acct) Net.restart() rebuilds the world and connects again", _main):
-		return
-	_check(Net.device_id != device1 and Net.logins == logins0 + 1 and Economy.server_gold_tenths == 0 and GameState.stage == 1 and Net.up,
-		"(acct) a new device is a new guest player (gold 0, stage 1)", "device=%s logins=%d gold=%d stage=%d" % [Net.device_id, Net.logins, Economy.server_gold_tenths, GameState.stage])
-	var device2 := Net.device_id
-	_account.open_browser = false
-	_account.open()
-	await _wait_until(func(): return not _account.available.is_empty(), 10.0)
-	_check(_account.linked.is_empty(), "(acct) the new player has no links", "linked=%s" % [_account.linked])
-	_account.buttons.google.pressed.emit()
-	await _wait_until(func(): return _account.nonce != "", 10.0)
-	r = await _request("POST", "/v1/test/link_done", {"nonce": _account.nonce, "subject": "online-check-google"})
-	_check(r.get("ok") == true and GameState.mode == GameState.Mode.IDLE, "(acct) same google account from the new device (idle)", "r=%s mode=%d" % [r, GameState.mode])
-	var old_account: WeakRef = weakref(_account)  # 전환하면 옛 main과 함께 사라진다
-	var switched := await _wait_until(func(): return old_account.get_ref() == null or old_account.get_ref().last_result == "done", 15.0)
-	_check(switched, "(acct) poll: done with switched", "")
-	if not await _world_ready("(acct) switched: the world is rebuilt as the original player", _main):
-		return
-	_check(Net.device_id == device2 and Net.logins == logins0 + 2 and Economy.server_gold_tenths == gold0 and Economy.gold_tenths == gold0 and GameState.stage == stage0
-		and GameState.stage == int(saved.stage) and Net.up and not _hud._link_label.visible,
-		"(acct) the second device now logs in as the original player: gold and stage restored, connected, no disconnect band",
-		"device=%s logins=%d gold=%d/%d stage=%d/%d" % [Net.device_id, Net.logins, Economy.server_gold_tenths, gold0, GameState.stage, stage0])
-	_account.open_browser = false
-	_account.open()
-	await _wait_until(func(): return not _account.available.is_empty(), 10.0)
-	_check(_account.linked == ["google"] and _account.status.text == "연동: Google", "(acct) and sees the google link", "linked=%s" % [_account.linked])
-	_account.close()

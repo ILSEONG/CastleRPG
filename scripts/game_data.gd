@@ -43,7 +43,7 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"gacha_10_min_sr",
 	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
 	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group",
-	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult"] + GACHA_KEYS
+	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult", "offline_gold_mult"] + GACHA_KEYS
 const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
 const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항목 수 = 이 값. 서버 rules.MAX_PROMOTION
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---

@@ -42,7 +42,6 @@ const FLASH_SEC := 0.3
 const CASTLE := -1  # _hp 키: 성(성문은 면 0..3)
 
 signal gate_tapped(side: int)
-signal account_tapped  # 첫 줄 왼쪽 [계정](온라인 모드만) — main이 계정 창을 연다
 
 var _stage_label: Label  # 제목 "S-r"(개정 22 §1)
 var _round_label: Label  # 그 옆 작게 "스테이지 S · 라운드 r/25"
@@ -57,7 +56,6 @@ var _center: Label
 var hint: Label  # 카운트다운 안내(테스트가 읽는다)
 var _tip_n := -1
 var _button: Button
-var account_button: Button  # [계정](온라인 모드만, 첫 줄 맨 왼쪽)
 var _auto: Button  # 연속 진행 체크박스(진행 버튼 오른쪽)
 var _fever: Button  # FEVER 버튼(fever_button.gd)
 var _chips := {}  # 아이콘 kind(gold·wood·stone·food·diamond) → 숫자 Label
@@ -98,16 +96,6 @@ func _ready() -> void:
 	_title_box.add_theme_constant_override("separation", 8)
 	head.add_child(_title_box)
 	head.add_theme_constant_override("separation", 8)
-	if Net.is_online():  # 계정 연동은 서버가 있어야 뜻이 있다
-		account_button = Button.new()
-		account_button.text = "계정"
-		account_button.custom_minimum_size = Vector2(64, STAGE_BUTTON.y)
-		account_button.focus_mode = Control.FOCUS_NONE
-		account_button.add_theme_font_size_override("font_size", 20)
-		account_button.pressed.connect(account_tapped.emit)
-		UiKit.apply_button(account_button, UiKit.STEEL, 14.0)
-		head.add_child(account_button)
-		head.move_child(account_button, 0)
 	_fever = FeverButtonScript.new()  # [진행] 바로 왼쪽(개정 14 §3)
 	head.add_child(_fever)
 	_stage_label = Label.new()

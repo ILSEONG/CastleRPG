@@ -1344,8 +1344,7 @@ func _strike_sync(inf1, arc) -> void:
 		inf1.global_position = where
 		var n := 0
 		for i in 8:
-			inf1._animate(0.016)
-			n += 1 if inf1._anim_acc == 0.0 else 0
+			n += 1 if inf1._model.tick(0.016) else 0
 		counts.append(n)
 	inf1.global_position = home
 	_check(counts == [8, 2], "(S) on screen a soldier animates every frame, off screen every 4th frame", "advances=%s" % [counts])
