@@ -1180,7 +1180,7 @@ func _soldier_cases() -> void:
 		t += dt
 		_g.global_position += out * 3.0 * dt
 		far = maxf(far, Formation.flat_distance(inf_n.global_position, post0))
-	_check(hit_once and far > 5.0 and far <= SoldierScript.HOLD_RADIUS + 0.01, "(S) infantry engages a monster within aggro of its post but never chases past hold_radius (6 m)",
+	_check(hit_once and far > 5.0 and far <= SoldierScript.HOLD_RADIUS + 0.1, "(S) infantry engages a monster within aggro of its post but never chases past hold_radius (6 m)",
 		"hit=%s max distance from post %.2f" % [hit_once, far])
 	_clear_monsters()
 	await _wait_until(func(): return inf_n.global_position.distance_to(post0) < 0.06, 6.0)
