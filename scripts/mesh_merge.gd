@@ -5,7 +5,7 @@ extends RefCounted
 ##  - 스킨 부위: 정점 배열을 그대로 잇는다(같은 Skin — 뼈 번호가 같다).
 ##  - 단단한 부위: 뼈 rest 공간으로 옮기고(rest × 부착 안 변환) 그 뼈에 가중치 1로 묶는다(Skin에 bind = rest⁻¹를 더한다) —
 ##    움직이는 뼈를 그대로 따라간다(pose × rest⁻¹ × rest × 부착 변환 = pose × 부착 변환, 부착과 같다).
-## 합친 메시는 원래 메시처럼 자동 LOD를 만든다(ImporterMesh.generate_lods). 합친 메시·Skin은 키(UnitModel 스펙)마다 한 번 만들어 같은 모습의 유닛이 공유한다. 원래 메시 노드와 빈 부착 노드는 지운다.
+## 합친 메시의 LOD는 부위마다 가져오기 때 만든 LOD를 이어 붙인다(merged_lods — 메시 전체로 새로 만들면 작은 부위가 사라진다). 합친 메시·Skin은 키(UnitModel 스펙)마다 한 번 만들어 같은 모습의 유닛이 공유한다. 원래 메시 노드와 빈 부착 노드는 지운다.
 ## 합치지 않는 것: 숨긴 메시, 그림자 설정이 기본이 아닌 메시(빛 부품 등), material_overlay, 삼각형이 아닌 표면, 8가중치 표면,
 ## 다른 Skin·변환을 가진 스킨 메시, 뼈 부착 밖 메시 — 그대로 남아 따로 그려진다.
 
@@ -135,16 +135,74 @@ static func _build(skel: Skeleton3D, parts: Array) -> Variant:
 				sig += "1" if a[k] != null else "0"
 			var gk := "%d|%s" % [mat.get_instance_id(), sig]
 			if not groups.has(gk):
-				groups[gk] = {"mat": mat, "arrays": _empty(a)}
+				groups[gk] = {"mat": mat, "arrays": _empty(a), "parts": []}
 				order.append(gk)
-			_append(groups[gk].arrays, a)
-	# 원래 glb 메시는 가져올 때 자동 LOD가 있어 멀리 있는 유닛은 적은 삼각형으로 그린다 — 합친 메시도 LOD를 만든다(가져오기와 같은
-	# 법선 합치기 각 60°). 안 그러면 그리기 호출은 줄어도 그리는 삼각형이 두 배가 된다. LOD 생성이 없는 빌드면 LOD 없이 그대로.
-	var im := ImporterMesh.new()
+			var g: Dictionary = groups[gk]
+			var first: int = (g.arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()  # 이 부위 첫 정점 번호
+			g.parts.append({"base": first, "full": _indices(a), "lods": surface_lods(mi.mesh, s)})
+			_append(g.arrays, a)
+	var mesh := ArrayMesh.new()
 	for gk in order:
-		im.add_surface(Mesh.PRIMITIVE_TRIANGLES, groups[gk].arrays, [], {}, groups[gk].mat)
-	im.generate_lods(60.0, 25.0, [])
-	return {"mesh": im.get_mesh(), "skin": skin}
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, groups[gk].arrays, [], merged_lods(groups[gk].parts))
+		mesh.surface_set_material(mesh.get_surface_count() - 1, groups[gk].mat)
+	return {"mesh": mesh, "skin": skin}
+
+
+## 부위 표면의 가져오기 LOD [[edge_length, 인덱스], …](거친 쪽으로). 렌더러에서 읽는다 — 없거나(헤드리스·코드 메시) 못 읽으면 [].
+static func surface_lods(mesh: Mesh, s: int) -> Array:
+	var d: Dictionary = RenderingServer.mesh_get_surface(mesh.get_rid(), s)
+	var out := []
+	var wide: bool = int(d.get("vertex_count", 0)) > 65536  # 인덱스 폭: 정점 65536개 이하면 16비트(RenderingServer 규칙)
+	for l in d.get("lods", []):
+		var raw: PackedByteArray = l.get("index_data", PackedByteArray())
+		var idx := PackedInt32Array()
+		if wide:
+			idx = raw.to_int32_array()
+		else:
+			idx.resize(raw.size() / 2)
+			for i in idx.size():
+				idx[i] = raw.decode_u16(i * 2)
+		if idx.size() >= 3:
+			out.append([float(l.get("edge_length", 0.0)), idx])
+	return out
+
+
+## 합친 표면의 LOD: 단계 k마다 부위들의 k번째 LOD(그 부위 LOD가 모자라면 가장 거친 것, LOD가 없는 부위는 원래 인덱스)를 이어 붙인다.
+## 단계의 edge_length = 그 단계가 있는 부위들 중 가장 작은 값(원래처럼 멀어지는 만큼 곧바로 거칠게 — 큰 값을 쓰면 삼각형이 두 배가 된다).
+## 부위마다 자기 크기에 맞춘 LOD라 다리·무기 같은 작은 부위도 모양이 남는다.
+## 메시 전체로 LOD를 새로 만들면 작은 부위가 통째로 빠진다(멀리서 몸 없이 머리만 떠 보였다). 부위에 LOD가 하나도 없으면 {}.
+static func merged_lods(parts: Array) -> Dictionary:
+	var levels := 0
+	for p in parts:
+		levels = maxi(levels, p.lods.size())
+	var out := {}
+	var last := 0.0
+	for k in levels:
+		var idx := PackedInt32Array()
+		var edge := INF
+		for p in parts:
+			var src: PackedInt32Array = p.full
+			if not p.lods.is_empty():
+				var l: Array = p.lods[mini(k, p.lods.size() - 1)]
+				if k < p.lods.size():
+					edge = minf(edge, l[0])
+				src = l[1]
+			for i in src:
+				idx.append(p.base + i)
+		edge = maxf(edge, last * 1.0001 + 1e-6)  # 단계마다 더 거칠게(같은 키 금지)
+		last = edge
+		out[edge] = idx
+	return out
+
+
+## 표면 인덱스(없으면 0..n-1).
+static func _indices(a: Array) -> PackedInt32Array:
+	if a[Mesh.ARRAY_INDEX] != null:
+		return a[Mesh.ARRAY_INDEX]
+	var idx := PackedInt32Array()
+	for i in (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size():
+		idx.append(i)
+	return idx
 
 
 ## 단단한 표면 → 스킨 표면: 정점·법선·접선을 xf로 옮기고 모든 정점을 bind 하나에 가중치 1로 묶는다.
