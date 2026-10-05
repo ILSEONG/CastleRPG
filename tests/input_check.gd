@@ -609,7 +609,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,404 -> 1,467 (+63), melee growth 4.5%); Lv 1 / 30 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
-	_check(sk[0].contains("6초마다 반경 6m") and sk[1] == "철벽 — ★3에서 해금" and sk[2] == "용기의 오라 — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
+	_check(sk[0].contains("9초마다 3초 동안 반경 5m") and sk[1] == "수호의 오라 — ★3에서 해금" and sk[2] == "심판의 빛 — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
 		and heroes_win.title_label.text == "빛의 성기사 아르테온" and heroes_win.grade_label.text.begins_with("SSR"),
 		"(x) title, grade, the unlocked skill sentence with numbers, the locked ones with their star, and the description", "skills=%s" % [sk])
 	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드 부족" and heroes_win.deploy_button.text == "배치 중"
@@ -1777,7 +1777,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
 		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
 	_check(heroes_win._promo.line.text == "조각 2 / 25" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
-		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.5 · 최대 레벨 30 → 40\n★3 달성 시 스킬 해금: 철벽" and heroes_win.big_card.stars == 1,
+		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.5 · 최대 레벨 30 → 40\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
 		"(x3) [승급] shows 조각 2 / 25 inside, is off with the reason 조각 부족, and previews x1.5 and max level 30 -> 40",
 		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
@@ -2092,7 +2092,7 @@ func _tags_ok(wt, what: String) -> void:
 
 
 ## (U) 개정 17 §4: 상세 스킬 줄(R 2줄, SSR 3줄) — 잠긴 줄은 회색·자물쇠·"★3에서 해금", 승급 미리보기 둘째 줄에 다음 해금,
-##     [승급]으로 ★3이 되면 알림 "스킬 해금! 철벽" + 그 줄이 열려 금색으로 반짝인다. 끝나면 보유·승급을 되돌린다.
+##     [승급]으로 ★3이 되면 알림 "스킬 해금! 수호의 오라" + 그 줄이 열려 금색으로 반짝인다. 끝나면 보유·승급을 되돌린다.
 func _skill_unlock_ui(heroes_win) -> void:
 	var keep := [Economy.heroes.duplicate(), Economy.hero_shards.duplicate(), Economy.hero_promotions.duplicate()]
 	var ui: Array = heroes_win.skill_ui
@@ -2121,10 +2121,10 @@ func _skill_unlock_ui(heroes_win) -> void:
 	await _tap(heroes_win.promote_button.get_global_rect().get_center())
 	await _frames(2)
 	var col: Color = ui[1].label.get_theme_color("font_color")
-	_check(locked_before and Economy.promotion_of("arteon") == 3 and notices.has("스킬 해금! 철벽") and heroes_win.unlocks_shown == shown0 + 1 and not ui[1].lock.visible
-		and ui[1].label.text.contains("받는 피해를 25% 줄입니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
-		and heroes_win.promote_preview.text.ends_with("\n★5 달성 시 스킬 해금: 용기의 오라"),
-		"(U) [승급] to ★3 unlocks 철벽: notice 스킬 해금! 철벽, the row opens and flashes gold, the preview moves on to ★5",
+	_check(locked_before and Economy.promotion_of("arteon") == 3 and notices.has("스킬 해금! 수호의 오라") and heroes_win.unlocks_shown == shown0 + 1 and not ui[1].lock.visible
+		and ui[1].label.text.contains("받는 피해가 15% 줄어듭니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
+		and heroes_win.promote_preview.text.ends_with("\n★5 달성 시 스킬 해금: 심판의 빛"),
+		"(U) [승급] to ★3 unlocks 수호의 오라: notice 스킬 해금! 수호의 오라, the row opens and flashes gold, the preview moves on to ★5",
 		"promo=%d notices=%s shown=%d row=%s color=%s preview=%s" % [Economy.promotion_of("arteon"), notices, heroes_win.unlocks_shown, ui[1].label.text, col, heroes_win.promote_preview.text])
 	Economy.notice.disconnect(grab)
 	Economy.heroes = keep[0]
