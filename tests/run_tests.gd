@@ -3832,7 +3832,20 @@ func test_hero_look_builder() -> void:
 						remapped += 1
 		check(textured > 5 and remapped == textured, "%s: all %d textured surfaces use its color table (%d)" % [h.id, textured, remapped])
 		model.free()
-	check(used.size() == HeroKit.PARTS.size(), "every HeroKit part is used by some hero (%d / %d)" % [used.size(), HeroKit.PARTS.size()])
+	# 표에 있는 영웅의 생김새 부품은 모두 붙고, HeroKit 부품은 모두 어떤 생김새가 쓴다(표보다 생김새가 먼저 들어올 수 있다)
+	var named := {}
+	var named_listed := {}
+	for id in Art.HERO_LOOKS:
+		var look: Dictionary = Art.HERO_LOOKS[id]
+		for p in look.get("parts", []).map(func(q): return q[1]) + look.get("swap", {}).values():
+			named[p] = true
+			if not GameData.hero(id).is_empty():
+				named_listed[p] = true
+	check(used.keys().all(func(p): return named_listed.has(p)) and used.size() == named_listed.size(),
+		"listed heroes' parts are all built (%d / %d)" % [used.size(), named_listed.size()])
+	var known: Array = HeroKit.PARTS  # 람다에선 함수 지역 상수가 안 보인다
+	check(named.size() == known.size() and named.keys().all(func(p): return known.has(p)),
+		"every HeroKit part is used by some look (%d / %d)" % [named.size(), HeroKit.PARTS.size()])
 	var body := func(id: String) -> Material:
 		var spec := Art.hero_spec(GameData.hero(id))
 		var m: Node3D = Art.instance(spec.scene)

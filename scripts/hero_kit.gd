@@ -27,7 +27,11 @@ const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pau
 	"felix_plume", "felix_spear", "hans_kettle", "ignis_flame", "ignis_fire", "seraphine_crown", "seraphine_ice", "lumina_halo",
 	"lumina_wings", "echo_scarf", "echo_spark", "nina_wreath", "nina_bloom", "sylvana_feather", "sylvana_quiver", "nev_bolts",
 	"mira_mask", "mira_vials", "ella_flower", "kyle_mask", "rian_band", "rian_saber", "jack_bandana", "grom_horns", "harald_skull",
-	"harald_sword", "gork_mohawk", "gork_axes", "dorik_beanie"]
+	"harald_sword", "gork_mohawk", "gork_axes", "dorik_beanie",
+	"valen_crown", "valen_flames", "valen_orb", "frieda_crown", "frieda_collar", "frieda_flake", "morgana_horns", "morgana_skulls",
+	"gaia_crown", "gaia_staff", "selene_stars", "pip_hat", "pip_spirit", "tia_hat", "thorgar_crown", "thorgar_boulders", "thorgar_maul",
+	"orin_wolf", "grit_helmet", "grit_hammer", "dante_horns", "dante_wings", "kaz_goggles", "kaz_pack", "luna_tiara", "luna_blade",
+	"raven_crest", "raven_mantle"]
 
 static var _meshes := {}
 
@@ -87,6 +91,34 @@ static func _build(id: String, k) -> void:
 		"gork_mohawk": _gork_mohawk(k)
 		"gork_axes": _gork_axes(k)
 		"dorik_beanie": _dorik_beanie(k)
+		"valen_crown": _valen_crown(k)
+		"valen_flames": _valen_flames(k)
+		"valen_orb": _valen_orb(k)
+		"frieda_crown": _frieda_crown(k)
+		"frieda_collar": _frieda_collar(k)
+		"frieda_flake": _frieda_flake(k)
+		"morgana_horns": _morgana_horns(k)
+		"morgana_skulls": _morgana_skulls(k)
+		"gaia_crown": _gaia_crown(k)
+		"gaia_staff": _gaia_staff(k)
+		"selene_stars": _selene_stars(k)
+		"pip_hat": _pip_hat(k)
+		"pip_spirit": _pip_spirit(k)
+		"tia_hat": _tia_hat(k)
+		"thorgar_crown": _thorgar_crown(k)
+		"thorgar_boulders": _thorgar_boulders(k)
+		"thorgar_maul": _thorgar_maul(k)
+		"orin_wolf": _orin_wolf(k)
+		"grit_helmet": _grit_helmet(k)
+		"grit_hammer": _grit_hammer(k)
+		"dante_horns": _dante_horns(k)
+		"dante_wings": _dante_wings(k)
+		"kaz_goggles": _kaz_goggles(k)
+		"kaz_pack": _kaz_pack(k)
+		"luna_tiara": _luna_tiara(k)
+		"luna_blade": _luna_blade(k)
+		"raven_crest": _raven_crest(k)
+		"raven_mantle": _raven_mantle(k)
 		_: push_error("unknown hero part %s" % id)
 
 
@@ -482,3 +514,405 @@ static func _dorik_beanie(k) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	k.rock(Vector3(0, 1.1, 0), 0.15, WHITE, rng, 1.0)
+
+
+
+# --- 새 영웅(개정 24) 도형 도우미 ---
+
+## 가운데 c, 크기 size의 닫힌 상자(밑면까지 — 무기 머리처럼 아래에서도 보이는 덩어리).
+static func _block(k, c: Vector3, size: Vector3, color: Color) -> void:
+	var h := size / 2.0
+	_slab(k, [c + Vector3(-h.x, 0, -h.z), c + Vector3(h.x, 0, -h.z), c + Vector3(h.x, 0, h.z), c + Vector3(-h.x, 0, h.z)], Vector3.UP, size.y, color)
+
+
+## 가운데 c, n 방향을 보는 다섯 꼭지 별(바깥 반지름 r, 두께 t). 볼록한 연(가운데·안 꼭짓점 둘·끝) 다섯 장.
+static func _star(k, c: Vector3, n: Vector3, r: float, t: float, color: Color) -> void:
+	n = n.normalized()
+	var u := n.cross(Vector3.RIGHT if absf(n.x) < 0.9 else Vector3.UP).normalized()
+	var v := n.cross(u)
+	for i in 5:
+		var a := TAU * i / 5.0
+		var tip := c + (v * cos(a) + u * sin(a)) * r
+		var a0 := c + (v * cos(a - PI / 5.0) + u * sin(a - PI / 5.0)) * r * 0.42
+		var a1 := c + (v * cos(a + PI / 5.0) + u * sin(a + PI / 5.0)) * r * 0.42
+		_slab(k, [c, a0, tip, a1], n, t, color)
+
+
+## 초승달(k.xform 공간의 XY 면, +Z를 본다): 바깥 반원(반지름 r, 왼쪽) − 안쪽 납작 반원. 두 끝 (0, ±r), 가운데 두께 0.55r.
+static func _crescent(k, r: float, t: float, color: Color) -> void:
+	var n := 8
+	for i in n:
+		var a0 := PI / 2.0 + PI * i / n
+		var a1 := PI / 2.0 + PI * (i + 1) / n
+		var pts := [Vector3(r * cos(a0), r * sin(a0), 0), Vector3(r * cos(a1), r * sin(a1), 0)]
+		if i < n - 1:
+			pts.append(Vector3(0.45 * r * cos(a1), r * sin(a1), 0))
+		if i > 0:
+			pts.append(Vector3(0.45 * r * cos(a0), r * sin(a0), 0))
+		_slab(k, pts, Vector3.BACK, t, color)
+
+
+# --- 새 마법사 ---
+
+## 불꽃 군주: 금 머리띠 위 금 뾰족 다섯(앞이 가장 높다), 뾰족마다 불꽃.
+static func _valen_crown(k) -> void:
+	k.prism_n(Vector3(0, 0.7, 0.02), 10, 0.55, 0.56, 0.12, GOLD_DARK)
+	for i in 5:
+		var a := (i - 2) * 0.62
+		var d := Vector3(sin(a), 0, cos(a))
+		var h := 0.26 + 0.14 * (1.0 - absf(i - 2) / 2.0)
+		var base := Vector3(0, 0.8, 0.02) + d * 0.54
+		_tube(k, base, base + Vector3(0, h, 0) + d * 0.05, 0.11, 0.0, 4, GOLD)
+		_flame(k, base + Vector3(0, h * 0.75, 0) + d * 0.05, 0.3 + 0.12 * (1.0 - absf(i - 2) / 2.0), 0.55)
+	k.prism_n(Vector3(0, 0.74, 0.57), 6, 0.07, 0.05, 0.05, FIRE)
+
+
+## 불꽃 군주: 검은 쇠 어깨받이(금 테) 위로 타오르는 불꽃.
+static func _valen_flames(k) -> void:
+	_pauldrons(k, Color("2A1A16"), GOLD, 0.0)
+	for s in [-1.0, 1.0]:
+		_flame(k, Vector3(s * 0.5, 0.3, 0.0), 0.42, 0.8)
+
+
+## 불꽃 군주 지팡이 머리: 흑요석 덩이를 감싼 금 갈퀴 넷 + 위로 솟는 큰 불꽃.
+static func _valen_orb(k) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	k.rock(Vector3(0, 1.16, 0), 0.17, Color("3A1A12"), rng, 1.0)
+	for i in 4:
+		var d := Vector3(cos(TAU * i / 4.0 + 0.4), 0, sin(TAU * i / 4.0 + 0.4))
+		_tube(k, Vector3(0, 0.98, 0) + d * 0.05, Vector3(0, 1.3, 0) + d * 0.2, 0.035, 0.0, 4, GOLD)
+	_flame(k, Vector3(0, 1.2, 0), 0.62, 1.1)
+
+
+## 빙하의 여왕: 은 머리띠 + 바깥으로 벌어진 큰 얼음 가시 아홉(앞 가운데가 가장 높은 왕관) + 이마 푸른 보석.
+static func _frieda_crown(k) -> void:
+	k.prism_n(Vector3(0, 0.7, 0.02), 12, 0.54, 0.56, 0.1, Color("D8E4EE"))
+	for i in 9:
+		var a := (i - 4) * 0.4
+		var d := Vector3(sin(a), 0, cos(a))
+		var h := 0.3 + 0.55 * pow(1.0 - absf(i - 4) / 4.0, 1.5)
+		var base := Vector3(0, 0.76, 0.02) + d * 0.52
+		_tube(k, base, base + Vector3(0, h, 0) + d * 0.16, 0.08 + 0.03 * (1.0 - absf(i - 4) / 4.0), 0.0, 4, ICE if i % 2 == 0 else WHITE)
+	_leaf(k, Vector3(0, 0.72, 0.6), Vector3(0, 0.98, 0.62), 0.16, 0.08, Vector3.BACK, ICE_DEEP, 0.5)
+
+
+## 빙하의 여왕: 목 뒤로 높이 선 얼음 깃(부채꼴 고드름 일곱).
+static func _frieda_collar(k) -> void:
+	for i in 7:
+		var a := (i - 3) * 0.36
+		var base := Vector3(sin(a) * 0.3, 0.28, -0.4 + absf(sin(a)) * 0.12)
+		var tip := base + Vector3(sin(a) * 0.5, 0.55 + 0.35 * cos(a * 1.4), -0.12)
+		_tube(k, base, tip, 0.1, 0.0, 4, ICE if i % 2 == 0 else WHITE)
+	k.prism_n(Vector3(0, 0.22, 0.0), 10, 0.42, 0.4, 0.1, WHITE)
+
+
+## 빙하의 여왕 완드 끝 눈송이(앞을 보는 여섯 가지, 가지마다 작은 곁가지 둘).
+static func _frieda_flake(k) -> void:
+	var c := Vector3(0, 0.88, 0)
+	k.prism_n(Vector3(0, 0.62, 0), 6, 0.05, 0.03, 0.18, ICE_DEEP)
+	for i in 6:
+		var a := TAU * i / 6.0
+		var d := Vector3(cos(a), sin(a), 0)
+		var side := Vector3(-sin(a), cos(a), 0)
+		_leaf(k, c, c + d * 0.26, 0.06, 0.04, Vector3.BACK, WHITE if i % 2 == 0 else ICE, 0.5)
+		for s in [-1.0, 1.0]:
+			_leaf(k, c + d * 0.14, c + d * 0.21 + side * s * 0.07, 0.035, 0.03, Vector3.BACK, ICE, 0.5)
+
+
+## 망자의 여왕: 뼈 머리띠 + 이마 작은 해골 + 머리 옆에서 뒤로 휘어 오르는 검은 뿔 둘(끝은 보라).
+static func _morgana_horns(k) -> void:
+	k.prism_n(Vector3(0, 0.66, 0.02), 10, 0.54, 0.55, 0.08, BONE)
+	k.prism_n(Vector3(0, 0.7, 0.5), 6, 0.12, 0.1, 0.17, BONE)
+	k.box(Vector3(0, 0.64, 0.55), Vector3(0.14, 0.07, 0.08), BONE.darkened(0.15))
+	for x in [-0.045, 0.045]:
+		k.box(Vector3(x, 0.76, 0.6), Vector3(0.05, 0.05, 0.03), Color("201A18"))
+	for s in [-1.0, 1.0]:
+		var pts := [Vector3(s * 0.4, 0.8, 0.05), Vector3(s * 0.64, 1.04, -0.08), Vector3(s * 0.7, 1.3, -0.34), Vector3(s * 0.56, 1.46, -0.6),
+			Vector3(s * 0.4, 1.42, -0.78)]
+		var rs := [0.15, 0.12, 0.09, 0.06, 0.0]
+		for i in 4:
+			_tube(k, pts[i], pts[i + 1], rs[i], rs[i + 1] if i < 3 else 0.0, 6, Color("2A2030") if i < 3 else Color("8A4FC0"))
+
+
+## 망자의 여왕: 양 어깨에 얹은 해골(뼈 머리통, 검은 눈구멍, 턱).
+static func _morgana_skulls(k) -> void:
+	for s in [-1.0, 1.0]:
+		var c := Vector3(s * 0.44, 0.2, 0.02)
+		k.prism_n(c, 7, 0.17, 0.14, 0.2, BONE)
+		k.cone(c + Vector3(0, 0.2, 0), 7, 0.14, 0.06, BONE.lightened(0.05))
+		k.box(c + Vector3(0, -0.07, 0.06), Vector3(0.18, 0.08, 0.14), BONE.darkened(0.12))
+		for x in [-0.06, 0.06]:
+			k.box(c + Vector3(x, 0.07, 0.13), Vector3(0.06, 0.06, 0.05), Color("201A18"))
+		k.box(c + Vector3(0, 0.02, 0.15), Vector3(0.03, 0.04, 0.03), Color("201A18"))
+
+
+## 숲의 대현자: 잎 왕관(위로 선 잎 열둘) + 머리 옆에서 갈라져 오르는 나무 뿔 둘.
+static func _gaia_crown(k) -> void:
+	k.prism_n(Vector3(0, 0.68, 0.02), 10, 0.54, 0.55, 0.08, Color("5A3E26"))
+	for i in 12:
+		var a := TAU * i / 12.0
+		var d := Vector3(sin(a), 0, cos(a))
+		var h := 0.26 + 0.12 * (cos(a) + 1.0) / 2.0
+		_leaf(k, Vector3(0, 0.72, 0.02) + d * 0.52, Vector3(0, 0.74 + h, 0.02) + d * 0.66, 0.2, 0.05, d, Color("4CAF50") if i % 2 == 0 else Color("7CCB50"), 0.4)
+	for s in [-1.0, 1.0]:
+		var a := Vector3(s * 0.4, 0.86, -0.06)
+		var b := Vector3(s * 0.62, 1.3, -0.16)
+		var c := Vector3(s * 0.6, 1.62, -0.3)
+		_tube(k, a, b, 0.07, 0.055, 5, WOOD)
+		_tube(k, b, c, 0.055, 0.0, 5, WOOD)
+		_tube(k, b + (c - b) * 0.2, Vector3(s * 0.9, 1.5, -0.12), 0.045, 0.0, 5, WOOD)
+		_tube(k, a + (b - a) * 0.5, Vector3(s * 0.38, 1.36, 0.05), 0.04, 0.0, 5, WOOD)
+		_leaf(k, c - (c - b) * 0.3, c + Vector3(s * 0.16, 0.0, 0.1), 0.12, 0.04, Vector3(0, 1, 0.3), Color("7CCB50"), 0.4)
+
+
+## 숲의 대현자 지팡이(지팡이 자리): 굽은 나무 자루, 꼭대기 나뭇가지 셋이 감싼 초록 빛구슬, 잎 넷. 길이 ≈ 2.2.
+static func _gaia_staff(k) -> void:
+	var pts := [Vector3(0, -0.75, 0), Vector3(0.04, -0.2, 0.02), Vector3(-0.04, 0.4, -0.02), Vector3(0.04, 0.92, 0.0), Vector3(0, 1.12, 0)]
+	for i in 4:
+		_tube(k, pts[i], pts[i + 1], 0.065 - 0.005 * i, 0.06 - 0.005 * i, 6, WOOD if i % 2 == 0 else WOOD.darkened(0.1))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	k.rock(Vector3(0, 1.32, 0), 0.13, Color("9CFF7A"), rng, 1.0)
+	for i in 3:
+		var d := Vector3(cos(TAU * i / 3.0), 0, sin(TAU * i / 3.0))
+		_tube(k, Vector3(0, 1.1, 0), Vector3(0, 1.26, 0) + d * 0.2, 0.045, 0.035, 5, WOOD)
+		_tube(k, Vector3(0, 1.26, 0) + d * 0.2, Vector3(0, 1.52, 0) + d * 0.04, 0.035, 0.0, 5, WOOD)
+	for i in 4:
+		var d := Vector3(cos(TAU * i / 4.0 + 0.8), 0, sin(TAU * i / 4.0 + 0.8))
+		_leaf(k, Vector3(0, 1.08, 0) + d * 0.05, Vector3(0, 1.0, 0) + d * 0.32, 0.14, 0.04, Vector3.UP, Color("5FBF4A"), 0.45)
+
+
+## 별의 예언자: 모자 끝에 큰 금 별 + 모자 둘레에 떠 있는 작은 별 셋.
+static func _selene_stars(k) -> void:
+	_star(k, Vector3(0, 1.52, -0.36), Vector3(0, 0.2, 1), 0.24, 0.09, Color("FFD84A"))  # 끝 ≈ 1.76 — 피규어 그림 위에 걸리지 않게
+	_star(k, Vector3(0.78, 1.12, 0.1), Vector3(0.3, 0.2, 1), 0.12, 0.06, Color("FFE88A"))
+	_star(k, Vector3(-0.74, 1.3, -0.1), Vector3(-0.3, 0.2, 1), 0.1, 0.05, Color("FFE88A"))
+	_star(k, Vector3(-0.2, 1.24, 0.62), Vector3(0, 0.2, 1), 0.08, 0.05, WHITE)
+
+
+## 견습 정령술사: 비스듬히 얹은 작은 뾰족 모자(하늘색, 흰 띠, 끝에 작은 별).
+static func _pip_hat(k) -> void:
+	var cyan := Color("4FC3D7")
+	k.xform = Transform3D(Basis(Vector3.BACK, -0.32), Vector3(0.06, 0.9, 0.0))
+	k.prism_n(Vector3(0, 0, 0), 10, 0.42, 0.38, 0.05, cyan.darkened(0.15))
+	k.prism_n(Vector3(0, 0.05, 0), 10, 0.27, 0.24, 0.08, WHITE)
+	k.prism_n(Vector3(0, 0.13, 0), 10, 0.24, 0.12, 0.3, cyan)
+	k.cone(Vector3(0, 0.43, 0), 10, 0.12, 0.24, cyan.lightened(0.1))
+	k.xform = Transform3D.IDENTITY
+	_star(k, Vector3(0.29, 1.52, 0.0), Vector3(0, 0, 1), 0.1, 0.05, Color("FFE07A"))
+
+
+## 견습 정령술사: 어깨 위에 떠 있는 작은 물 정령(하늘색 덩이, 검은 눈, 꼬리).
+static func _pip_spirit(k) -> void:
+	var c := Vector3(-0.66, 0.78, 0.18)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4
+	k.rock(c, 0.17, Color("B2F5FF"), rng, 1.0)
+	_leaf(k, c + Vector3(0, -0.06, -0.05), c + Vector3(0.12, -0.42, -0.12), 0.18, 0.08, Vector3.BACK, Color("80DEEA"), 0.2)
+	for x in [-0.06, 0.06]:
+		k.box(c + Vector3(x, 0.0, 0.15), Vector3(0.045, 0.07, 0.04), Color("1A2A3A"))
+
+
+## 늪지 마녀: 축 처진 넓은 챙 + 뒤로 꺾인 이끼색 모자, 보라 띠, 챙 위 붉은 버섯 둘과 늘어진 이끼.
+static func _tia_hat(k) -> void:
+	var moss := Color("4E6B2A")
+	k.prism_n(Vector3(0, 0.6, 0.0), 12, 1.0, 0.58, 0.14, moss.darkened(0.15))
+	var pts := [Vector3(0, 0.72, 0), Vector3(0, 1.08, -0.06), Vector3(-0.06, 1.4, -0.22), Vector3(0.12, 1.6, -0.5), Vector3(0.34, 1.6, -0.66)]
+	var rs := [0.56, 0.4, 0.24, 0.12, 0.0]
+	for i in 4:
+		_tube(k, pts[i], pts[i + 1], rs[i], rs[i + 1], 9, moss if i % 2 == 0 else moss.lightened(0.06))
+	k.prism_n(Vector3(0, 0.72, 0.0), 12, 0.56, 0.52, 0.1, Color("6A2E7A"))
+	for m in [[Vector3(0.62, 0.66, 0.3), 1.0], [Vector3(0.42, 0.68, 0.52), 0.7]]:
+		var p: Vector3 = m[0]
+		var sz: float = m[1]
+		k.prism_n(p, 6, 0.045 * sz, 0.04 * sz, 0.18 * sz, WHITE)
+		k.prism_n(p + Vector3(0, 0.16 * sz, 0), 8, 0.15 * sz, 0.13 * sz, 0.04 * sz, Color("C8302A"))
+		k.cone(p + Vector3(0, 0.2 * sz, 0), 8, 0.13 * sz, 0.08 * sz, Color("D8402A"))
+	for a in [-1.1, -0.2, 0.9, 2.2, 3.2]:
+		var d := Vector3(sin(a), 0, cos(a))
+		_leaf(k, Vector3(0, 0.6, 0) + d * 0.92, Vector3(0, 0.3, 0) + d * 0.96, 0.12, 0.04, d, Color("7A9A3A"), 0.3)
+
+
+# --- 새 야만전사 ---
+
+## 대지의 거인: 이끼 띠 위 바위 기둥 일곱(앞이 가장 높은 돌 왕관) + 이마 호박색 결정.
+static func _thorgar_crown(k) -> void:
+	var stone := Color("8A8276")
+	k.prism_n(Vector3(0, 0.5, 0.0), 10, 0.62, 0.62, 0.12, Color("5F7F3A"))
+	for i in 7:
+		var a := TAU * i / 7.0
+		var d := Vector3(sin(a), 0, cos(a))
+		var h := 0.24 + 0.24 * pow((cos(a) + 1.0) / 2.0, 2.0)
+		k.prism_n(Vector3(0, 0.6, 0) + d * 0.54, 5, 0.15, 0.07, h, stone.darkened(0.08 * (i % 3)), a)
+	_tube(k, Vector3(0, 0.56, 0.62), Vector3(0, 0.86, 0.66), 0.09, 0.0, 4, Color("F0A030"))
+
+
+## 대지의 거인: 양 어깨에 얹힌 큰 바위(이끼 덮개, 호박색 결정).
+static func _thorgar_boulders(k) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	for s in [-1.0, 1.0]:
+		var c := Vector3(s * 0.48, 0.2, 0.0)
+		k.rock(c, 0.34, Color("8A8276"), rng, 0.75)
+		k.rock(c + Vector3(0, 0.2, 0), 0.24, Color("5F8F3A"), rng, 0.45)
+		_tube(k, c + Vector3(s * 0.12, 0.18, -0.1), c + Vector3(s * 0.3, 0.48, -0.16), 0.07, 0.0, 4, Color("F0A030"))
+
+
+## 대지의 거인 망치(도끼 자리): 굵은 나무 자루, 쇠 띠 두른 큰 돌 머리. 길이 ≈ 2.3.
+static func _thorgar_maul(k) -> void:
+	k.prism_n(Vector3(0, -0.6, 0), 6, 0.07, 0.065, 2.0, WOOD_DARK)
+	k.prism_n(Vector3(0, -0.2, 0), 6, 0.08, 0.08, 0.3, Color("3A2A1E"))
+	_block(k, Vector3(0, 1.3, 0), Vector3(0.66, 0.44, 0.42), Color("8A8276"))
+	for x in [-0.2, 0.2]:
+		_block(k, Vector3(x, 1.27, 0), Vector3(0.08, 0.5, 0.48), IRON_DARK)
+	for s in [-1.0, 1.0]:
+		_block(k, Vector3(s * 0.35, 1.34, 0), Vector3(0.05, 0.3, 0.3), Color("9E968A"))
+
+
+## 야수 조련사: 늑대 머리 두건(회색 머리통, 앞으로 나온 주둥이·검은 코·송곳니, 노란 눈, 선 귀) + 등으로 늘어진 털가죽.
+static func _orin_wolf(k) -> void:
+	var fur := Color("8A8A90")
+	_cap(k, 0.52, 0.64, 0.5, fur)
+	_block(k, Vector3(0, 0.66, 0.66), Vector3(0.36, 0.24, 0.44), fur.lightened(0.08))
+	_block(k, Vector3(0, 0.82, 0.62), Vector3(0.3, 0.1, 0.36), fur.darkened(0.06))
+	_block(k, Vector3(0, 0.78, 0.88), Vector3(0.14, 0.1, 0.08), Color("1A1A1E"))
+	for x in [-0.12, 0.12]:
+		k.xform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(x, 0.67, 0.82))
+		k.cone(Vector3.ZERO, 4, 0.035, 0.12, WHITE)
+		k.xform = Transform3D.IDENTITY
+	for s in [-1.0, 1.0]:
+		k.box(Vector3(s * 0.22, 0.86, 0.5), Vector3(0.1, 0.06, 0.06), Color("F0C030"))
+		_tube(k, Vector3(s * 0.34, 0.92, 0.0), Vector3(s * 0.48, 1.28, -0.04), 0.13, 0.0, 4, fur.darkened(0.12))
+	_slab(k, [Vector3(-0.42, 0.74, -0.46), Vector3(0.42, 0.74, -0.46), Vector3(0.32, 0.02, -0.64), Vector3(0, -0.2, -0.68),
+		Vector3(-0.32, 0.02, -0.64)], Vector3(0, 0.2, -1), 0.08, fur.darkened(0.08))
+
+
+## 광산 대장장이: 노란 광부 모자(둥근 몸통 + 챙) + 이마 쇠 등잔과 빛나는 등.
+static func _grit_helmet(k) -> void:
+	var yellow := Color("E8B020")
+	k.prism_n(Vector3(0, 0.52, 0.04), 12, 0.74, 0.64, 0.07, yellow.darkened(0.15))
+	_cap(k, 0.58, 0.62, 0.48, yellow)
+	k.box(Vector3(0, 0.98, 0.0), Vector3(0.12, 0.08, 1.0), yellow.darkened(0.1))
+	_tube(k, Vector3(0, 0.78, 0.56), Vector3(0, 0.78, 0.78), 0.14, 0.13, 8, IRON_DARK)
+	_tube(k, Vector3(0, 0.78, 0.78), Vector3(0, 0.78, 0.82), 0.11, 0.11, 8, Color("FFF2A0"))
+
+
+## 광산 대장장이 망치(손도끼 자리): 나무 자루, 가로 쇠 머리(한쪽 넓은 면·한쪽 뾰족). 길이 ≈ 1.2.
+static func _grit_hammer(k) -> void:
+	k.prism_n(Vector3(0, -0.3, 0), 6, 0.045, 0.04, 1.15, WOOD)
+	_block(k, Vector3(0.0, 0.76, 0), Vector3(0.42, 0.24, 0.24), IRON)
+	_block(k, Vector3(0.24, 0.74, 0), Vector3(0.08, 0.28, 0.28), STEEL.darkened(0.15))
+	_tube(k, Vector3(-0.2, 0.88, 0), Vector3(-0.42, 0.88, 0), 0.1, 0.0, 4, IRON_DARK)
+
+
+# --- 새 기사 ---
+
+## 용기사: 투구 옆에서 뒤로 휘어 뻗은 용 뿔 둘 + 정수리 앞뒤로 선 붉은 지느러미 볏.
+static func _dante_horns(k) -> void:
+	for s in [-1.0, 1.0]:
+		var pts := [Vector3(s * 0.5, 0.98, 0.05), Vector3(s * 0.7, 1.22, -0.18), Vector3(s * 0.78, 1.42, -0.52), Vector3(s * 0.72, 1.6, -0.86)]
+		var rs := [0.13, 0.1, 0.06, 0.0]
+		for i in 3:
+			_tube(k, pts[i], pts[i + 1], rs[i], rs[i + 1], 6, Color("2A1E1E").lightened(0.1 * i))
+	_slab(k, [Vector3(0, 1.16, 0.42), Vector3(0, 1.48, 0.1), Vector3(0, 1.56, -0.3), Vector3(0, 1.36, -0.66), Vector3(0, 1.12, -0.5)],
+		Vector3.RIGHT, 0.08, Color("C0392B"))
+	for z in [0.1, -0.3]:
+		_tube(k, Vector3(0, 1.46, z), Vector3(0, 1.72, z - 0.14), 0.05, 0.0, 4, GOLD)
+
+
+## 용기사: 등에 펼친 박쥐 날개 한 쌍(검은 뼈대, 붉은 막).
+static func _dante_wings(k) -> void:
+	var skin := Color("8E2418")
+	var spar := Color("2A1E1E")
+	for s in [-1.0, 1.0]:
+		var root := Vector3(s * 0.14, 0.18, -0.44)
+		var elbow := Vector3(s * 0.62, 0.78, -0.62)
+		var tips := [Vector3(s * 1.2, 1.0, -0.72), Vector3(s * 1.32, 0.44, -0.74), Vector3(s * 1.02, -0.08, -0.66)]
+		_tube(k, root, elbow, 0.06, 0.05, 5, spar)
+		for t in tips:
+			_tube(k, elbow, t, 0.04, 0.0, 4, spar)
+		for i in tips.size() - 1:
+			var mid: Vector3 = (tips[i] + tips[i + 1]) / 2.0 * 0.82 + elbow * 0.18
+			_slab(k, [elbow, tips[i], mid], Vector3.BACK, 0.03, skin.lightened(0.05 * i))
+			_slab(k, [elbow, mid, tips[i + 1]], Vector3.BACK, 0.03, skin.darkened(0.05 * i))
+		_slab(k, [root, elbow, tips[2]], Vector3.BACK, 0.03, skin.darkened(0.12))
+
+
+# --- 새 도적 ---
+
+## 떠돌이 기계공: 머리를 감은 가죽 끈 + 이마에 올린 놋쇠 고글 둘(호박색 렌즈).
+static func _kaz_goggles(k) -> void:
+	var brass := Color("C8902A")
+	k.prism_n(Vector3(0, 0.6, 0.0), 12, 0.56, 0.56, 0.09, Color("4A3022"))
+	for x in [-0.19, 0.19]:
+		_tube(k, Vector3(x, 0.66, 0.44), Vector3(x, 0.66, 0.62), 0.15, 0.13, 8, brass)
+		_tube(k, Vector3(x, 0.66, 0.62), Vector3(x, 0.66, 0.65), 0.1, 0.1, 8, Color("FFB040"))
+	k.box(Vector3(0, 0.62, 0.56), Vector3(0.12, 0.06, 0.06), brass.darkened(0.2))
+
+
+## 떠돌이 기계공: 등에 멘 가죽 짐(옆에 놋쇠 톱니바퀴, 위로 구리 굴뚝관).
+static func _kaz_pack(k) -> void:
+	var brass := Color("C8902A")
+	_block(k, Vector3(0, -0.32, -0.6), Vector3(0.62, 0.66, 0.36), Color("7A5232"))
+	_block(k, Vector3(0, 0.28, -0.6), Vector3(0.66, 0.1, 0.4), Color("5A3A22"))
+	for x in [-0.2, 0.2]:
+		k.box(Vector3(x, -0.34, -0.4), Vector3(0.08, 0.64, 0.04), Color("4A3022"))
+	k.xform = Transform3D(Basis(Vector3.BACK, -PI / 2.0), Vector3(0.3, 0.0, -0.6))
+	k.prism_n(Vector3.ZERO, 8, 0.2, 0.2, 0.06, brass)
+	for i in 8:
+		var a := TAU * i / 8.0 + PI / 8.0
+		k.box(Vector3(cos(a) * 0.23, 0, sin(a) * 0.23), Vector3(0.08, 0.06, 0.08), brass.darkened(0.1))
+	k.prism_n(Vector3(0, 0.06, 0), 6, 0.06, 0.06, 0.03, IRON_DARK)
+	k.xform = Transform3D.IDENTITY
+	_tube(k, Vector3(-0.18, 0.34, -0.66), Vector3(-0.2, 0.74, -0.7), 0.06, 0.06, 6, Color("B86A3A"))
+	k.prism_n(Vector3(-0.2, 0.72, -0.7), 6, 0.09, 0.09, 0.06, Color("8A4A2A"))
+
+
+## 달빛 무희: 은 머리띠 + 이마 위 은빛 초승달(양 끝이 위) + 연보라 보석.
+static func _luna_tiara(k) -> void:
+	k.prism_n(Vector3(0, 0.6, 0.0), 12, 0.56, 0.56, 0.06, Color("E4E4F0"))
+	k.xform = Transform3D(Basis(Vector3.BACK, PI / 2.0), Vector3(0, 0.86, 0.56))
+	_crescent(k, 0.22, 0.06, Color("F4F2FF"))
+	k.xform = Transform3D.IDENTITY
+	k.prism_n(Vector3(0, 0.62, 0.55), 6, 0.06, 0.04, 0.08, Color("B9A8FF"))
+
+
+## 달빛 무희 초승달 칼(단검 자리, 양손 같은 메시): 검은 손잡이, 은 코등이, 휘어 오르는 연보라 칼날. 길이 ≈ 1.1.
+static func _luna_blade(k) -> void:
+	k.prism_n(Vector3(0, -0.22, 0), 6, 0.035, 0.035, 0.28, Color("2A2440"))
+	k.box(Vector3(0, 0.04, 0), Vector3(0.2, 0.04, 0.08), Color("E4E4F0"))
+	var blade := Color("D8D0FF")
+	var ys := [0.08, 0.38, 0.64, 0.84]
+	var xs := [0.0, 0.05, 0.14, 0.27]
+	var ws := [0.05, 0.075, 0.07, 0.05]
+	for i in 3:
+		_slab(k, [Vector3(xs[i] - ws[i], ys[i], 0), Vector3(xs[i] + ws[i], ys[i], 0), Vector3(xs[i + 1] + ws[i + 1], ys[i + 1], 0),
+			Vector3(xs[i + 1] - ws[i + 1], ys[i + 1], 0)], Vector3.BACK, 0.035, blade)
+	_slab(k, [Vector3(xs[3] - ws[3], ys[3], 0), Vector3(xs[3] + ws[3], ys[3], 0), Vector3(0.42, 0.96, 0)], Vector3.BACK, 0.035, blade)
+
+
+## 그림자 명궁: 두건 꼭대기에서 뒤로 선 검은 깃 볏(일곱, 끝은 남보라) + 관자놀이에서 뒤로 뻗은 긴 깃 둘.
+static func _raven_crest(k) -> void:
+	var black := Color("1E1F2A")
+	for i in 7:
+		var z := 0.3 - 0.12 * i
+		var h := 0.3 + 0.2 * sin(PI * (i + 0.5) / 7.0)
+		_leaf(k, Vector3(0, 0.9 - absf(z) * 0.2, z), Vector3(0, 0.96 + h, z - 0.3), 0.2, 0.08, Vector3.RIGHT,
+			black if i % 2 == 0 else Color("3A3F68"), 0.35)
+	for s in [-1.0, 1.0]:
+		_leaf(k, Vector3(s * 0.44, 0.62, 0.0), Vector3(s * 0.8, 0.96, -0.6), 0.2, 0.06, Vector3(s, 0.4, 0), black, 0.4)
+		_leaf(k, Vector3(s * 0.46, 0.56, -0.04), Vector3(s * 0.84, 0.66, -0.66), 0.16, 0.06, Vector3(s, 0.4, 0), Color("4A4F80"), 0.4)
+
+
+## 그림자 명궁: 어깨를 덮은 검은 깃 망토(어깨마다 아래로 겹친 깃 다섯) + 목 뒤 깃 고리.
+static func _raven_mantle(k) -> void:
+	var black := Color("1E1F2A")
+	for s in [-1.0, 1.0]:
+		for i in 5:
+			var z := 0.2 - 0.12 * i
+			_leaf(k, Vector3(s * 0.18, 0.32, z), Vector3(s * 0.66, -0.12 - 0.04 * (i % 2), z * 1.2), 0.22, 0.05, Vector3(s, 1.2, 0),
+				black if i % 2 == 0 else Color("2E3350"), 0.35)
+	for i in 5:
+		var a := (i - 2) * 0.5
+		_leaf(k, Vector3(sin(a) * 0.2, 0.26, -0.36), Vector3(sin(a) * 0.4, 0.62, -0.5), 0.2, 0.05, Vector3(0, 0.2, -1), black, 0.35)
