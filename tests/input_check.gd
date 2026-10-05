@@ -1972,7 +1972,7 @@ func _world_tags() -> void:
 	var strings := 0
 	for t in wt.tags:
 		strings += 2 if t.lv != "" else 1
-	_check(wt.draw_calls <= 3 + strings and wt.draw_calls <= 3 + 2 * WT.MAX_TAGS, "(T) draw calls are capped: one triangle array, two line batches, at most two strings per tag",
+	_check(wt.draw_calls <= 3 + strings and wt.draw_calls <= 3 + 2 * WT.MAX_TAGS, "(T) draw calls are capped: one triangle array, one outline batch, at most two strings per tag",
 		"calls=%d strings=%d" % [wt.draw_calls, strings])
 	_check(_any_overlap(wt.desired, ["houses", "keep", "stable"]) and _any_overlap(wt.desired, ["tavern", "archery"]),
 		"(T) precondition: at the default camera the 민가/성채/기병 마구간 and 주점/궁병 훈련소 tags would overlap where they want to sit", "")
@@ -2057,15 +2057,15 @@ func _tags_ok(wt, what: String) -> void:
 		for j in range(i + 1, ids.size()):
 			if (wt.stacks[ids[i]] as Rect2).intersects(wt.stacks[ids[j]]):
 				hits.append([ids[i], ids[j]])
-	var moved := ids.filter(func(id): return absf(wt.stacks[id].position.y - wt.desired[id].position.y) > wt.LEADER_PX)
+	var moved := ids.filter(func(id): return absf(wt.stacks[id].position.y - wt.desired[id].position.y) > wt.MOVED_PX)
 	var seated := true
 	for t in wt.tags:
 		if wt.rects.has(t.id) and not moved.has(t.id) and wt.stacks[t.id] == wt.desired[t.id]:
 			var p := _camera.unproject_position(t.anchor)
 			seated = seated and absf(wt.rects[t.id].get_center().x - p.x) < 0.5 and absf(wt.rects[t.id].end.y - p.y) < 0.5
-	_check(ids.size() >= 6 and hits.is_empty() and wt.leaders.size() == moved.size() and seated,
-		"(T) %s: %d tag stacks, none overlap; %d moved more than 8 px, each with a leader line; unmoved tags sit on their anchors" % [what, ids.size(), moved.size()],
-		"overlaps=%s leaders=%d moved=%s" % [hits, wt.leaders.size(), moved])
+	_check(ids.size() >= 6 and hits.is_empty() and seated and not "leaders" in wt,
+		"(T) %s: %d tag stacks, none overlap; %d moved more than 8 px (no leader lines); unmoved tags sit on their anchors" % [what, ids.size(), moved.size()],
+		"overlaps=%s moved=%s" % [hits, moved])
 
 
 ## (U) 개정 17 §4: 상세 스킬 줄(R 2줄, SSR 3줄) — 잠긴 줄은 회색·자물쇠·"★3에서 해금", 승급 미리보기 둘째 줄에 다음 해금,

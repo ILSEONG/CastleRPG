@@ -4,9 +4,9 @@ extends Node2D
 ## 자리: 기준점(anchor — 지붕·머리·문루 위 월드 좌표)의 화면 위치 바로 위. 태그 위에는 badges.gd의 건설 막대·말풍선이 쌓인다 —
 ## 태그와 한 덩어리(stack, 크기는 badges.stack_size)로 놓고, badges는 top(id)(태그 윗변 가운데)에서 그린다.
 ## 매 프레임 겹침 피하기(place, 욕심쟁이 한 번): 기준점이 화면 아래인 덩어리부터 놓고, 이미 놓은 덩어리와 GAP보다 가까우면 그 위로 민다.
-## LEADER_PX 넘게 움직인 덩어리는 기준점까지 가는 선을 긋는다.
+## 밀려 올라간 덩어리도 건물까지 잇는 선(지시선)은 긋지 않는다.
 ## 많이 축소하면(카메라 폭 > NAMES_HIDE_SIZE) 이름표는 그리지 않는다(자리도 차지하지 않는다) — 막대·말풍선만 기준점 위에 남는다.
-## 그리기 호출 상한: 지시선 draw_multiline 한 번 + 알약 삼각형 전부 canvas_item_add_triangle_array 한 번 + 외곽선 draw_multiline 한 번 +
+## 그리기 호출 상한: 알약 삼각형 전부 canvas_item_add_triangle_array 한 번 + 외곽선 draw_multiline 한 번 +
 ## 태그마다 글자 ≤ 2(태그 ≤ MAX_TAGS). layout()은 프레임마다 한 번만 계산한다(badges가 먼저 불러도 같은 결과).
 
 const Formation := preload("res://scripts/formation.gd")
@@ -25,14 +25,13 @@ const LV_PAD := 5.0  # Lv 칸 안 글자 좌우 여백
 const LV_INSET := 3.0  # Lv 칸이 알약 테두리에서 들어간 양
 const CHAMFER := 7.0
 const GAP := 3.0  # 덩어리 사이 최소 간격(px)
-const LEADER_PX := 8.0  # 이보다 많이 움직인 덩어리는 지시선
+const MOVED_PX := 8.0  # 이보다 많이 밀린 덩어리는 "밀렸다"(테스트용 — 지시선은 없다)
 const NAMES_HIDE_SIZE := 95.0  # 카메라 가로 폭(m)이 이보다 넓으면(많이 축소) 이름표를 그리지 않는다(기본 66, 최대 150)
 const MAX_TAGS := 16  # 한 프레임에 그리는 태그 상한(지금 건물 10 + 상인 + 문루 4 = 15)
 const SCREEN_MARGIN := 80.0  # 기준점이 화면 밖 이만큼까지는 그린다
 const FILL := UiKit.CREAM
 const LV_FILL := Color(0.29, 0.35, 0.45)
 const EDGE := UiKit.OUTLINE
-const LEADER := Color(0.16, 0.18, 0.24, 0.7)
 
 var camera: Camera3D
 var scenery  # buildings.gd — tag_anchors·merchant_anchor
@@ -43,7 +42,6 @@ var tags: Array = []  # [{id, anchor, name, lv, font, size, pts, cols, segs, nam
 var rects := {}  # id → 이번 프레임 태그 알약 Rect2(화면 밖이면 없음)
 var stacks := {}  # id → 이번 프레임 덩어리 Rect2(태그 + 위에 쌓인 것)
 var desired := {}  # id → 겹침 피하기 전 덩어리 Rect2(테스트용)
-var leaders: Array = []  # 이번 프레임 지시선 [[기준점, 덩어리 쪽 끝], …]
 var draw_calls := 0  # 지난 그리기의 그리기 호출 수(테스트용)
 var names_hidden := false  # 이번 프레임 많이 축소해 이름표를 숨겼다 — 막대·말풍선은 기준점 바로 위에 그대로 쌓인다
 
@@ -138,7 +136,6 @@ func layout(force := false) -> void:
 	rects.clear()
 	stacks.clear()
 	desired.clear()
-	leaders.clear()
 	var view := get_viewport_rect().grow(SCREEN_MARGIN)
 	var now := Economy.time_now()
 	names_hidden = camera.size > NAMES_HIDE_SIZE
@@ -159,14 +156,11 @@ func layout(force := false) -> void:
 	var placed := place(want)
 	for i in shown.size():
 		var t: Dictionary = shown[i][0]
-		var p: Vector2 = shown[i][1]
 		var s: Rect2 = placed[i]
 		desired[t.id] = want[i]
 		stacks[t.id] = s
 		var tsz: Vector2 = Vector2.ZERO if names_hidden else t.size
 		rects[t.id] = Rect2(Vector2(s.get_center().x - tsz.x / 2.0, s.end.y - tsz.y), tsz)
-		if absf(s.position.y - want[i].position.y) > LEADER_PX:
-			leaders.append([p, Vector2(clampf(p.x, s.position.x, s.end.x), clampf(p.y, s.position.y, s.end.y))])
 
 
 ## 욕심쟁이 겹침 피하기(순수 함수). want[i] = 덩어리 i가 가고 싶은 화면 상자(아랫변 = 기준점). 아랫변이 화면 아래인 것부터 놓고,
@@ -204,12 +198,6 @@ func _draw() -> void:
 	draw_calls = 0
 	if rects.is_empty():
 		return
-	if not leaders.is_empty():  # 지시선은 알약 아래
-		var lines := PackedVector2Array()
-		for l in leaders:
-			lines.append_array(PackedVector2Array([l[0], l[1]]))
-		draw_multiline(lines, LEADER, 1.5, true)
-		draw_calls += 1
 	if names_hidden:
 		return
 	var pts := PackedVector2Array()
