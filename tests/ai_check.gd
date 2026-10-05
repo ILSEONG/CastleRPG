@@ -1526,6 +1526,8 @@ func _skill_unlock_cases() -> void:
 		and tags.get("shard", 0) <= Fx.SHARDS_MAX and Fx.live() <= Fx.MAX_LIVE, "(U3) aoe_blast makes an icosahedron, a shockwave ring, a flash and 8-12 shards", str(tags))
 	_check(banners.size() == 1 and banners[0].text == "화염구!" and banners[0].bg == Color(ig.def.color) and tags.get("pulse", 0) == 1,
 		"(U3) the blast shows ignis's name banner in her color and pulses her foot ring", "banners=%s tags=%s" % [banners.map(func(e): return e.text), tags])
+	_check(tags.get("burst", 0) == 1 and tags.get("wave", 0) >= 1 and tags.get("pillar", 0) >= 1 and tags.get("rays", 0) == 1 and tags.get("motes", 0) >= 1,
+		"(U3) SSR tier: the blast adds a ground flare, a second shockwave, a light pillar and embers; the activation raises light rays", str(tags))
 	var rig = get_viewport().get_camera_3d().get_parent()
 	_check(rig.has_method("is_shaking") and not rig.is_shaking() and not GameData.fx_shake(), "(U3) with fx_shake off (tests) the SSR blast does not shake the camera", "")
 	ig._blast(mb.global_position)
@@ -1557,6 +1559,20 @@ func _skill_unlock_cases() -> void:
 	for h in [lu0, gk, lu3]:
 		_remove_hero(h)
 	await _wait_until(func(): return Fx.live() == 0, 3.0)
+
+	# (U5) 등급 연출: 같은 발동이 R은 고리·광선 2겹, SR은 입자까지 3겹, SSR은 빛기둥·파동까지 5겹
+	var layers := []
+	for t in [0, 1, 2]:
+		await _wait_until(func(): return Fx.live() == 0, 3.0)
+		var probe := Node3D.new()
+		_main.add_child(probe)
+		var foot := Fx.foot_ring(Color.WHITE, Color.RED)
+		probe.add_child(foot)
+		Fx.pulse(probe, foot, Color.RED, t)
+		layers.append(Fx.live())
+		probe.queue_free()
+	await _frames(1)
+	_check(layers == [2, 3, 5] and Fx.live() == 0, "(U5) skill activation layers grow with grade: R 2, SR 3, SSR 5 effect nodes", str(layers))
 	GameState.refill()
 	await _frames(1)
 

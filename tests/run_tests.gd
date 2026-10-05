@@ -2679,7 +2679,7 @@ func _corrupt_r17(q: Dictionary, what: String) -> void:
 ## 개정 17 이펙트 메시: 새 종류마다 한 면, 가산 재질 하나(공유), atk_aura 고리는 늘 있는 노드(상한 밖).
 func test_fx_r17_meshes() -> void:
 	const Fx := preload("res://scripts/fx.gd")
-	for kind in ["flash", "shock", "shard", "cross", "hammer", "star", "slash", "glow_ring", "aura", "tail"]:
+	for kind in ["flash", "shock", "shard", "cross", "hammer", "star", "slash", "glow_ring", "aura", "tail", "rays", "pillar", "motes", "burst", "crescent"]:
 		var m: Mesh = Fx._mesh(kind, Color.RED)
 		check(m != null and m.get_surface_count() == 1, "fx mesh %s builds" % kind)
 	var g := Fx.glow_material()

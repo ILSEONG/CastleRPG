@@ -63,6 +63,7 @@ var _color := Color.WHITE
 var _model
 var _ring: MeshInstance3D
 var _foot: MeshInstance3D
+var _tier := 0  # 연출 단계(Fx.tier_of 등급): 높을수록 스킬 이펙트가 크고 화려하다
 var _aura_ring: MeshInstance3D  # atk_aura를 받는 중 표시
 var _aura_cd := 0.0
 var _banner_at := -INF  # 마지막 이름 띠 시각(초)
@@ -96,6 +97,7 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 
 	role = def.role
 	_sk = GameData.active_skills(def, promotion)
 	_color = Color(def.color)
+	_tier = Fx.tier_of(str(def.grade))
 	_level = level
 	_promotion = promotion
 	refresh_stats()
@@ -414,7 +416,7 @@ func _heal_aura() -> void:
 			healed = true
 			Fx.heal_cross(h)
 	if healed:
-		Fx.heal_ring(get_parent(), global_position, radius)
+		Fx.heal_ring(get_parent(), global_position, radius, _tier)
 		_announce("heal_aura")
 
 
@@ -423,7 +425,7 @@ func _gate_repair() -> void:
 	if not holds_post():
 		return
 	if GameState.repair_gate(side, GameState.gate_hp_max * _sk.gate_repair[1] / 100.0) > 0.0:
-		Fx.repair(get_parent(), Formation.gate_position(castle.half, side))
+		Fx.repair(get_parent(), Formation.gate_position(castle.half, side), _tier)
 		_announce("gate_repair")
 
 
@@ -472,7 +474,8 @@ func _release() -> void:
 
 
 ## 한 대상 타격: crit·execute·boss_slayer 배율 → 피해 → slow·poison. 첫 대상만 stun(attack_no번째 공격)·lifesteal·cleave·chain.
-## 연출(개정 17): crit = 큰 별 불꽃, execute·boss_slayer = 붉은 X, crit·execute·stun = 이름 띠.
+## 연출(개정 17): crit = 큰 별 불꽃, execute·boss_slayer = 붉은 X, crit·execute·stun = 이름 띠. stun = 노란 불꽃·파동, cleave = 초승달 궤적
+## (등급 단계 _tier만큼 크고 겹이 많다).
 func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 	var ratio: float = m.hp_ratio()
 	var boss: bool = m.is_boss  # 성 대보스·왕고블린·데스나이트(monster.is_boss)
@@ -489,7 +492,7 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		if has_crit:
 			_announce("crit")  # 이름 띠는 치명타 스킬만(성장 기본 치명타는 숫자·불꽃만)
 	if execute or (boss and _sk.has("boss_slayer")):
-		Fx.slash(get_parent(), at)
+		Fx.slash(get_parent(), at, _tier)
 		if execute:
 			_announce("execute")
 	_on_hit(m, a)
@@ -497,10 +500,12 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		return
 	if Skills.stuns(_sk, attack_no) and m.is_alive():
 		m.apply_stun(_sk.stun[1])
+		Fx.stun_hit(get_parent(), at, _tier)
 		_announce("stun")
 	if _sk.has("lifesteal"):
 		heal(d * _sk.lifesteal[0] / 100.0)
 	if _sk.has("cleave") and role == "melee":
+		Fx.cleave(get_parent(), m.global_position, _color, _sk.cleave[0], _tier)
 		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):
 			o.take_damage(d * _sk.cleave[1] / 100.0 * _skill_mult, DamageNumbers.Kind.SKILL)
 	if _sk.has("chain"):
@@ -534,7 +539,7 @@ func _chain(first, d: float, a: float) -> void:
 		next.take_damage(dmg * _skill_mult, DamageNumbers.Kind.SKILL)
 		_on_hit(next, a)
 		cur = next
-	Fx.lightning(get_parent(), pts, _color)
+	Fx.lightning(get_parent(), pts, _color, _tier)
 
 
 ## aoe_blast: 대상 위치 반경 안 모든 몬스터에게 공격력 × c%.
@@ -544,7 +549,7 @@ func _blast(center: Vector3) -> void:
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
-	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade == "SSR" and GameData.fx_shake())  # SSR이면 카메라를 약하게 흔든다
+	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade == "SSR" and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
 	_announce("aoe_blast")
 
 
@@ -570,7 +575,7 @@ func _announce(kind: String) -> void:
 		return
 	_banner_at = now
 	DamageNumbers.banner(self, Skills.name_of(kind, def.id) + "!", _color)
-	Fx.pulse(self, _foot, _color)
+	Fx.pulse(self, _foot, _color, _tier)
 
 
 ## atk_aura: 반경 안 다른 영웅들의 오라(해금된 것만) 중 가장 큰 것 하나.
