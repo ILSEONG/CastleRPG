@@ -2,7 +2,7 @@ extends "res://scripts/monster.gd"
 ## 데스나이트(개정 18 §4, 장비 던전 보스): monster.gd 아레나 모드(일반 공격) + 패턴 둘.
 ## 휩쓸기: SWEEP_SEC마다 주변 SWEEP_R m 안 영웅 모두에게 공격 × SWEEP_MULT(붉은 충격파).
 ## 돌진: CHARGE_SEC마다 가장 먼 영웅에게 CHARGE_SPEED로 달려가 공격 피해 + 기절 STUN_SEC. CHARGE_MAX_SEC 안에 못 닿으면 그만둔다.
-## 돌진 중에는 상태(독·감속·기절) 시간이 흐르지 않는다.
+## 돌진 중에는 상태(독·감속·기절 등) 시간이 흐르지 않는다. 피해는 hit_damage(weaken 반영), 묶이면(root) 돌진하지 않는다.
 
 const SWEEP_SEC := 8.0
 const SWEEP_R := 3.0
@@ -35,7 +35,7 @@ func _process(delta: float) -> void:
 	charge_cd -= delta
 	if sweep_cd <= 0.0:
 		sweep()
-	elif charge_cd <= 0.0:
+	elif charge_cd <= 0.0 and _root_t <= 0.0:  # 묶이면 돌진을 미룬다
 		charge()
 
 
@@ -48,7 +48,7 @@ func sweep() -> void:
 	Fx.blast(get_parent(), global_position, SWEEP_COLOR, SWEEP_R)
 	for h in get_tree().get_nodes_in_group("heroes"):
 		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= SWEEP_R:
-			h.take_damage(atk * SWEEP_MULT, self)
+			h.take_damage(hit_damage() * SWEEP_MULT, self)
 
 
 ## 돌진 시작: 가장 먼 살아 있는 영웅.
@@ -84,7 +84,7 @@ func _tick_charge(delta: float) -> void:
 	_charge_to = null
 	_atk_cd = float(_stats.atk_interval)
 	_model.play_attack(float(_stats.atk_interval))
-	h.take_damage(atk, self)
+	h.take_damage(hit_damage(), self)
 	h.apply_stun(STUN_SEC)
 
 
