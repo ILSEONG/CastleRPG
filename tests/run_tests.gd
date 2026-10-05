@@ -103,6 +103,7 @@ func _init() -> void:
 	test_skill_unlock()
 	test_skill_unlock_validation()
 	test_fx_r17_meshes()
+	test_toon_materials()
 	test_upgrade_tables()
 	test_crit_roll_params()
 	test_growth_economy()
@@ -2677,6 +2678,34 @@ func _corrupt_r17(q: Dictionary, what: String) -> void:
 		"unlock key missing": q.config.erase("skill2_unlock_star")
 
 
+## 카툰 렌더링(영웅·몬스터): 로우폴리 재질 → 같은 알베도의 카툰 재질(공유, next_pass 외곽선 하나), 다른 재질은 그대로,
+## 꾸민 모델(UnitModel.dress)의 표면은 모두 카툰 재질.
+func test_toon_materials() -> void:
+	const Art := preload("res://scripts/art.gd")
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	var vc := Art.lowpoly_vc_material()
+	var t := Art.toon_material(vc) as ShaderMaterial
+	check(t != null and t.shader == Art.TOON_SHADER and t.next_pass == Art.toon_outline() and Art.toon_material(vc) == t
+		and t.get_shader_parameter("use_vertex_color") == true, "toon material: toon shader, shared outline pass, cached, keeps the albedo inputs")
+	var plain := StandardMaterial3D.new()
+	check(Art.toon_material(plain) == plain and Art.toon_material(t) == t, "toon material: non-low-poly materials stay as they are")
+	GameData.load_tables()
+	var spec := Art.hero_spec(GameData.hero("arteon"))
+	var model: Node3D = Art.instance(spec.scene)
+	UnitModelScript.dress(model, spec)
+	var all_toon := true
+	var n := 0
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		if not mi.visible or mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			var m := mi.get_active_material(i) as ShaderMaterial
+			n += 1
+			all_toon = all_toon and m != null and (m.shader == Art.TOON_SHADER or m.shader == Art.TOON_DOUBLE_SHADER) and m.next_pass == Art.toon_outline()
+	check(n > 0 and all_toon, "a dressed hero draws every surface with the toon shader and outline (%d surfaces)" % n)
+	model.free()
+
+
 ## 개정 17 이펙트 메시: 새 종류마다 한 면, 가산 재질 하나(공유), atk_aura 고리는 늘 있는 노드(상한 밖).
 func test_fx_r17_meshes() -> void:
 	const Fx := preload("res://scripts/fx.gd")
@@ -3170,7 +3199,7 @@ func test_dungeon_monsters() -> void:
 		var attached := 0
 		for ba in model.find_children("*", "BoneAttachment3D", true, false):
 			var part: Node = ba.get_child(0) if ba.get_child_count() == 1 else null
-			if part != null and (part.name == "DkEyes" or (part is MeshInstance3D and part.material_override == Art.lowpoly_vc_material())):
+			if part != null and (part.name == "DkEyes" or (part is MeshInstance3D and part.material_override == Art.toon_material(Art.lowpoly_vc_material()))):
 				attached += 1
 				check(spec.parts.any(func(pp): return pp[0] == ba.bone_name), "%s part on a listed bone (%s)" % [key, ba.bone_name])
 		check(attached == spec.parts.size(), "%s: all %d code parts attached" % [key, spec.parts.size()])
@@ -3798,8 +3827,8 @@ func test_hero_look_builder() -> void:
 			for c in ba.get_children():
 				if HeroKit.has_part(String(c.name)):
 					found.append([String(ba.bone_name), String(c.name)])
-					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.lowpoly_vc_material(),
-						"%s part %s is a shared low-poly vertex-color mesh" % [h.id, c.name])
+					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.toon_material(Art.lowpoly_vc_material()),
+						"%s part %s is a shared vertex-color mesh (its toon material, shared)" % [h.id, c.name])
 					used[String(c.name)] = true
 		var want: Array = spec.parts.duplicate()
 		for g in spec.swap:

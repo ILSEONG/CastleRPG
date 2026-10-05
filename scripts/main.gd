@@ -21,6 +21,7 @@ extends Node3D
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
+const Art := preload("res://scripts/art.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -263,14 +264,17 @@ func leave_dungeon() -> void:
 ## 웹 저장소가 영구가 아니면 경고 한 줄을 더한다(접속은 그대로 진행).
 ## 3D 해상도: 루트 뷰포트 3D를 가로 RENDER_3D_WIDTH 픽셀 정도로 그리고 늘려 보인다(쌍선형, Compatibility 렌더러도 된다).
 ## 1080×2400 폰이면 0.67배 — 바닥 셰이더·로우폴리 법선·그림자 필터 같은 픽셀 일이 2배 넘게 준다. UI(캔버스)는 원래 해상도 그대로.
-## 던전 장면도 같은 루트 뷰포트라 함께 적용된다. 창 크기가 바뀌면(웹 창 조절) 다시 맞춘다.
+## 던전 장면도 같은 루트 뷰포트라 함께 적용된다. 창 크기가 바뀌면(웹 창 조절) 다시 맞춘다. 카툰 외곽선 두께도 이 3D 높이에 맞춘다.
 func _hook_3d_scaling() -> void:
 	var root := get_tree().root
 	root.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	root.scaling_3d_scale = scale_3d_for(root.size.x)
+	Art.toon_view_height(root.size.y * root.scaling_3d_scale)  # 카툰 외곽선 두께(3D 픽셀)
 	if not _scaling_hooked:
 		_scaling_hooked = true
-		root.size_changed.connect(func(): root.scaling_3d_scale = scale_3d_for(root.size.x))
+		root.size_changed.connect(func():
+			root.scaling_3d_scale = scale_3d_for(root.size.x)
+			Art.toon_view_height(root.size.y * root.scaling_3d_scale))
 
 
 ## 창 가로 픽셀 → 3D 배율(RENDER_3D_MIN..1).

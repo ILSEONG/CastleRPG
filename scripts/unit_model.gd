@@ -63,7 +63,7 @@ func _ready() -> void:
 
 ## 스펙대로 모델을 꾸민다(트리 밖에서도 된다): 안 쓰는 부착물 숨김, 메시 색(tint), 영웅 칸 색(palette, 개정 23), 몸 크기(body_scale),
 ## 무기 바꿈(swap: gear를 숨기고 같은 손 슬롯에 HeroKit 무기), 무기(gltf)·코드 부품(parts: [뼈, HeroKit 또는 ArenaKit id])을 뼈에 붙임.
-## 마지막에 보이는 부위 메시를 재질마다 하나로 합친다(MeshMerge — 스펙이 같으면 합친 메시를 공유).
+## 재질을 카툰으로 바꾼 뒤(Art.toonify) 마지막에 보이는 부위 메시를 재질마다 하나로 합친다(MeshMerge — 스펙이 같으면 합친 메시를 공유).
 static func dress(model: Node3D, spec: Dictionary) -> void:
 	for mesh_name in spec.hide:
 		var n := model.find_child(mesh_name, true, false) as Node3D
@@ -91,6 +91,8 @@ static func dress(model: Node3D, spec: Dictionary) -> void:
 		slot.bone_name = a[0]
 		skel.add_child(slot)
 		slot.add_child(a[1])
+	if Art.toon:
+		Art.toonify(model)  # 영웅·몬스터는 카툰 렌더링(단계 음영 + 외곽선) — 성·건물·이펙트는 로우폴리 그대로
 	MeshMerge.merge(model, str(spec.hash()))  # 부위 메시를 재질마다 하나로(그리기 호출 ~10 → 1~3, mesh_merge.gd)
 
 

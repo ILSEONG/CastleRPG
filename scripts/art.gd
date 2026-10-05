@@ -18,6 +18,10 @@ const NATURE_CASTLE_MARGIN := 6.0  # 성벽 바깥면에서 이 거리 안에는
 const LANE_HALF_WIDTH := 9.0       # 괴물 진입로(두 축) 양옆 이 거리 안에는 자연물 없음
 const LOWPOLY_SHADER := preload("res://shaders/lowpoly.gdshader")
 const LOWPOLY_DOUBLE_SHADER := preload("res://shaders/lowpoly_double.gdshader")  # 원본이 양면(CULL_DISABLED)인 재질용
+const TOON_SHADER := preload("res://shaders/toon.gdshader")  # 영웅·몬스터 카툰(UnitModel.dress가 toonify)
+const TOON_DOUBLE_SHADER := preload("res://shaders/toon_double.gdshader")
+const TOON_OUTLINE_SHADER := preload("res://shaders/toon_outline.gdshader")
+const TOON_PARAMS := ["albedo_tex", "albedo_color", "use_texture", "use_vertex_color", "use_remap", "remap_tex"]
 const BORDER_INNER := 12.0        # 플레이 영역 가장자리(MAP_HALF)에서 테두리 띠 안쪽까지
 const BORDER_OUTER := 40.0        # 테두리 띠 바깥쪽까지
 const BORDER_SPACING := 22.0      # 테두리 산 간격(m)
@@ -430,6 +434,58 @@ static func remap_texture(key: String, palette: Dictionary) -> ImageTexture:
 			img.set_pixel(cell % 8, cell / 8, Color(palette[cell], 1.0))
 		_remap_tex[key] = ImageTexture.create_from_image(img)
 	return _remap_tex[key]
+
+
+static var toon := true  # 영웅·몬스터 카툰 렌더링(끄면 로우폴리 그대로 — 비교·저사양용)
+static var _toon_cache := {}  # 로우폴리 재질 id -> 카툰 재질
+static var _outline: ShaderMaterial
+
+
+## 카툰 렌더링(영웅·몬스터): 모델의 로우폴리 재질(텍스처·칸 색 바꿈·정점 색, 겹쳐 쓴 재질 포함)을 같은 알베도의 카툰 재질로 바꾼다 —
+## 부드러운 법선 + 두 단계 음영 + 테두리 빛, next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
+static func toonify(root: Node) -> void:
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		if mi.material_override != null:
+			mi.material_override = toon_material(mi.material_override)
+			continue
+		for i in mi.mesh.get_surface_count():
+			var src := mi.get_active_material(i)
+			if src != null:
+				mi.set_surface_override_material(i, toon_material(src))
+
+
+## 로우폴리 재질 → 카툰 재질(로우폴리 셰이더가 아니면 그대로).
+static func toon_material(src: Material) -> Material:
+	var sm := src as ShaderMaterial
+	if sm == null or not (sm.shader == LOWPOLY_SHADER or sm.shader == LOWPOLY_DOUBLE_SHADER):
+		return src
+	var key := sm.get_instance_id()
+	if not _toon_cache.has(key):
+		var m := ShaderMaterial.new()
+		m.shader = TOON_DOUBLE_SHADER if sm.shader == LOWPOLY_DOUBLE_SHADER else TOON_SHADER
+		for p in TOON_PARAMS:
+			var v = sm.get_shader_parameter(p)
+			if v != null:
+				m.set_shader_parameter(p, v)
+		m.next_pass = toon_outline()
+		_toon_cache[key] = m
+	return _toon_cache[key]
+
+
+## 외곽선 두께를 화면 픽셀로 맞추려고 화면 높이를 알려 준다(main이 창 크기가 바뀔 때마다 부른다).
+static func toon_view_height(h: float) -> void:
+	toon_outline().set_shader_parameter("view_h", maxf(1.0, h))
+
+
+## 카툰 외곽선 재질(하나를 공유).
+static func toon_outline() -> ShaderMaterial:
+	if _outline == null:
+		_outline = ShaderMaterial.new()
+		_outline.shader = TOON_OUTLINE_SHADER
+	return _outline
 
 
 ## 모델의 모든 표면 재질을 로우폴리 재질로 바꾼다.
