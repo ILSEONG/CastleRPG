@@ -68,7 +68,7 @@ const HERO_LOOKS := {
 	# 기사 — 빛의 성기사: 상아 갑옷·금 장식·흰 날개 투구·금 어깨
 	"arteon": {"palette": {"armor": Color("EDE6D6"), "trim": Color("E8B530"), "cape": Color("E9B83A"), "ribbon": Color("FFFFFF"),
 		"belt": Color("C8963A"), "buckle": Color("F0C850"), "steel": Color("F2E2A8"), "rim": Color("E8B530")},
-		"parts": [["head", "arteon_wings"], ["chest", "arteon_pauldrons"]], "scale": 1.05},
+		"parts": [["head", "arteon_wings"], ["chest", "arteon_pauldrons"]], "scale": 1.05, "body": "arteon"},
 	# 철벽 수문장: 검은 쇠·남색 망토·가시 어깨·투구 가시, 가장 큰 기사
 	"baldur": {"palette": {"armor": Color("59616B"), "trim": Color("2E333A"), "cape": Color("22304A"), "ribbon": Color("8C9AA8"),
 		"belt": Color("3A2E26"), "buckle": Color("8C9AA8"), "steel": Color("7D8590"), "rim": Color("3A3F46")},
@@ -88,7 +88,7 @@ const HERO_LOOKS := {
 	# 민병대 검사: 투구 벗고 쇠 챙모자, 가죽 누비 갑옷·검붉은 망토, 작게
 	"hans": {"palette": {"armor": Color("8E6E4E"), "trim": Color("5A4430"), "cape": Color("8A2E2A"), "ribbon": Color("D8C8A0"),
 		"belt": Color("4A3626"), "buckle": Color("A0A0A0"), "hair": Color("7A4E2A"), "steel": Color("B0B4B8")},
-		"hide": ["Knight_Helmet"], "parts": [["head", "hans_kettle"]], "scale": 0.96},
+		"hide": ["Knight_Helmet"], "parts": [["head", "hans_kettle"]], "scale": 0.96, "body": "hans"},
 	# 마법사 — 화염 대마법사: 진홍 모자·붉은 로브·검은 망토, 모자 끝과 지팡이 머리에 불꽃
 	"ignis": {"palette": {"robe": Color("B8261A"), "hat": Color("7A1410"), "cape": Color("2A1612"), "band": Color("F0B030"),
 		"buckle": Color("F0D060"), "accent": Color("FFB020"), "boots": Color("3A2016"), "gem": Color("FF6A10")},
@@ -208,7 +208,7 @@ const HERO_LOOKS := {
 	# 달빛 무희: 연보라 옷·흰 망토·남색 머리, 은 초승달 머리띠, 단검 대신 초승달 칼 두 자루
 	"luna": {"palette": {"tunic": Color("B9A8FF"), "hood": Color("F0EEFF"), "arms": Color("7A6AB8"), "strap": Color("E8E4F8"),
 		"belt": Color("4A3E70"), "boots": Color("4A3E70"), "hair": Color("2A2A5A")},
-		"parts": [["head", "luna_tiara"]], "swap": {"Knife": "luna_blade", "Knife_Offhand": "luna_blade"}, "scale": 0.96},
+		"parts": [["head", "luna_tiara"]], "swap": {"Knife": "luna_blade", "Knife_Offhand": "luna_blade"}, "scale": 0.96, "body": "luna"},
 	# 두건 사수 — 그림자 명궁: 잿빛 남색 두건·검은 옷, 두건에 까마귀 깃 볏, 어깨 깃 망토, 검은 쇠뇌에 보랏빛 쇠붙이
 	"raven": {"palette": {"hood": Color("3B3F58"), "tunic": Color("1E2030"), "arms": Color("2E3148"), "strap": Color("6A5ACD"),
 		"belt": Color("1A1A24"), "boots": Color("1A1A24"), "wood": Color("22222C"), "fit": Color("8E7CC3")},
@@ -231,6 +231,7 @@ const MONSTER_MODELS := {
 	"grunt": {
 		"scene": CHAR_DIR + "Skeleton_Minion.glb",
 		"hide": [],
+		"body": "grunt",
 		"weapon": PROP_DIR + "Skeleton_Blade.gltf",
 		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "1H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
 	},
@@ -327,6 +328,8 @@ static func hero_spec(h: Dictionary) -> Dictionary:
 		spec.parts = look.get("parts", [])
 		spec.swap = look.get("swap", {})
 		spec.body_scale = look.get("scale", 1.0)
+		if look.has("body"):
+			spec.body = look.body  # 코드 몸(CharKit 시제품)
 	return spec
 
 

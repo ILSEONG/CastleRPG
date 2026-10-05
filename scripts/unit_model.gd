@@ -11,6 +11,7 @@ extends Node3D
 
 const Art := preload("res://scripts/art.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
+const CharKit := preload("res://scripts/char_kit.gd")
 const HeroKit := preload("res://scripts/hero_kit.gd")
 const MeshMerge := preload("res://scripts/mesh_merge.gd")
 
@@ -61,10 +62,13 @@ func _ready() -> void:
 	play_idle()
 
 
-## 스펙대로 모델을 꾸민다(트리 밖에서도 된다): 안 쓰는 부착물 숨김, 메시 색(tint), 영웅 칸 색(palette, 개정 23), 몸 크기(body_scale),
+## 스펙대로 모델을 꾸민다(트리 밖에서도 된다): 코드 몸(body — CharKit: KayKit 몸 메시를 숨기고 뼈마다 새 조각, 시제품), 안 쓰는 부착물 숨김, 메시 색(tint), 영웅 칸 색(palette, 개정 23), 몸 크기(body_scale),
 ## 무기 바꿈(swap: gear를 숨기고 같은 손 슬롯에 HeroKit 무기), 무기(gltf)·코드 부품(parts: [뼈, HeroKit 또는 ArenaKit id])을 뼈에 붙임.
 ## 재질을 그림 방식대로 바꾼 뒤(Art.stylize) 마지막에 보이는 부위 메시를 재질마다 하나로 합친다(MeshMerge — 스펙이 같으면 합친 메시를 공유).
 static func dress(model: Node3D, spec: Dictionary) -> void:
+	var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	if spec.has("body") and CharKit.enabled:
+		CharKit.dress(model, skel, spec.body)
 	for mesh_name in spec.hide:
 		var n := model.find_child(mesh_name, true, false) as Node3D
 		if n != null:
@@ -80,11 +84,12 @@ static func dress(model: Node3D, spec: Dictionary) -> void:
 	if spec.has("palette"):
 		Art.remap(model, spec.look, spec.palette)
 	model.scale = Vector3.ONE * spec.get("body_scale", 1.0)
-	var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var attach := []
 	if spec.has("weapon"):
 		attach.append([Art.WEAPON_BONE, Art.instance(spec.weapon)])
 	for p in spec.get("parts", []):
+		if spec.has("body") and CharKit.enabled and not str(p[0]).begins_with("handslot"):
+			continue  # 코드 몸은 머리·등 장식을 스스로 그린다 — 손 부품(무기 끝 불꽃 등)만
 		attach.append([p[0], HeroKit.part(p[1]) if HeroKit.has_part(p[1]) else ArenaKit.part(p[1])])
 	for a in attach:
 		var slot := BoneAttachment3D.new()
@@ -92,7 +97,7 @@ static func dress(model: Node3D, spec: Dictionary) -> void:
 		skel.add_child(slot)
 		slot.add_child(a[1])
 	Art.stylize(model)  # 영웅·몬스터 그림 방식(Art.unit_style: 실사풍·카툰·로우폴리) — 성·건물·이펙트는 로우폴리 그대로
-	MeshMerge.merge(model, str(spec.hash()))  # 부위 메시를 재질마다 하나로(그리기 호출 ~10 → 1~3, mesh_merge.gd)
+	MeshMerge.merge(model, str(spec.hash()) + (":body" if spec.has("body") and CharKit.enabled else ""))  # 부위 메시를 재질마다 하나로(그리기 호출 ~10 → 1~3, mesh_merge.gd)
 
 
 func play_idle() -> void:

@@ -50,7 +50,7 @@ static func merge(model: Node3D, key: String) -> bool:
 	return true
 
 
-## 합칠 메시들(스킨 부위 먼저, 노드 순서). 같은 Skin을 쓰는 스킨 부위가 하나도 없으면 [].
+## 합칠 메시들(스킨 부위 먼저, 노드 순서). 스킨 부위가 없으면 단단한 부위만(코드 몸 CharKit — 새 Skin을 만든다), 둘 다 없으면 [].
 static func _parts(model: Node3D, skel: Skeleton3D) -> Array:
 	var skin: Skin = null
 	var skinned := []
@@ -67,7 +67,7 @@ static func _parts(model: Node3D, skel: Skeleton3D) -> Array:
 			skinned.append(mi)
 		elif _bone_of(mi, skel) >= 0:
 			rigid.append(mi)
-	return [] if skin == null else skinned + rigid
+	return skinned + rigid
 
 
 static func _shown(n: Node, root: Node) -> bool:
@@ -107,9 +107,9 @@ static func _attachment_of(mi: Node, skel: Skeleton3D) -> Node3D:
 
 ## 합친 ArrayMesh(재질·배열 구성마다 표면 하나)와 Skin(원래 bind + 단단한 부위마다 bind 하나).
 static func _build(skel: Skeleton3D, parts: Array) -> Variant:
-	var base: Skin = parts[0].skin
+	var base: Skin = parts[0].skin if parts[0].skin != null else Skin.new()
 	var skin: Skin = base.duplicate()
-	var named := base.get_bind_count() > 0 and base.get_bind_name(0) != &""
+	var named := base.get_bind_count() == 0 or base.get_bind_name(0) != &""
 	var groups := {}  # 재질 id|배열 구성 → {mat, arrays}
 	var order := []
 	for p in parts:
