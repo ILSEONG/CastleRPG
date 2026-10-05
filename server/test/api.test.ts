@@ -405,9 +405,9 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
   assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 8 })
-  assert.equal(g.heroes.length, 22)
+  assert.equal(g.heroes.length, 36)
   assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
-  assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['poison', null]) // 개정 17: R은 스킬 2개
+  assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['opportunist', null]) // 개정 17: R은 스킬 2개
   assert.deepEqual(g.heroes[1], {
     id: 'ignis', name: '이그니스', title: '화염 대마법사', grade: 'SSR', role: 'ranged', archetype: 'caster', model: 'Mage', gear: '2H_Staff',
     color: '#E8553A', hp: 396, atk: 44, range: 8, atk_interval: 1.2, speed: 6, aggro: 12,

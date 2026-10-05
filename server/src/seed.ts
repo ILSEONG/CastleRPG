@@ -148,7 +148,18 @@ export const GRADES = ['R', 'SR', 'SSR']
 // 개정 17: 등급별 스킬 수(skill1부터 빈틈없이)와 스킬 종류 — 앱 GameData.GRADE_SKILLS·Skills.KINDS와 같다
 export const GRADE_SKILLS: Record<string, number> = { R: 2, SR: 3, SSR: 3 }
 export const SKILL_KINDS = ['heal_aura', 'atk_aura', 'dmg_reduce', 'dodge', 'thorns', 'lifesteal', 'haste', 'rage', 'crit', 'execute',
-  'boss_slayer', 'cleave', 'multishot', 'chain', 'aoe_blast', 'slow', 'stun', 'poison', 'gate_repair']
+  'boss_slayer', 'cleave', 'multishot', 'chain', 'aoe_blast', 'slow', 'stun', 'poison', 'gate_repair',
+  // 스킬 100종 확장(앱 Skills.KINDS와 같은 순서)
+  'meteor', 'inferno', 'earthquake', 'ground_slam', 'blizzard', 'tornado', 'thunder_storm', 'arrow_rain', 'poison_cloud',
+  'frost_nova', 'whirlwind', 'war_cry', 'shockwave', 'spear_throw', 'ice_spikes', 'dragon_breath', 'starfall', 'sky_bolt',
+  'comet', 'holy_smite', 'shadow_strike', 'void_rift', 'solar_flare', 'abyss_hand', 'lava_burst', 'sanctuary', 'mass_heal',
+  'resurrection', 'battle_hymn', 'shield_ally', 'shield', 'taunt', 'summon_wolf', 'summon_skeleton', 'summon_golem',
+  'summon_treant', 'summon_spirit', 'summon_phoenix', 'summon_hawk', 'summon_turret', 'burn_hit', 'bleed_hit', 'curse_hit',
+  'freeze_hit', 'root_hit', 'shock_hit', 'knockback_hit', 'armor_break', 'weaken_hit', 'hunter_mark', 'double_strike', 'barrage',
+  'splash', 'pierce', 'ricochet', 'echo_strike', 'heavy_blow', 'corpse_explosion', 'soul_harvest', 'bloodlust', 'frost_shatter',
+  'wildfire', 'frenzy', 'last_stand', 'opportunist', 'pyromancy', 'first_strike', 'focus', 'sharpshooter', 'brawler',
+  'berserker', 'regen', 'revive', 'block', 'fortify', 'second_wind', 'invincible', 'stoneskin', 'counter', 'haste_aura',
+  'guard_aura', 'regen_aura']
 const SKILL_COLS = ['skill1', 'skill2', 'skill3']
 
 const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/

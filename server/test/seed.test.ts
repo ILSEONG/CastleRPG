@@ -64,7 +64,7 @@ test('마이그레이션 003: 001·002만 적용된 DB에서 올리면 gold가 g
   }
 })
 
-test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroes로 바꾸고, 시드가 22행을 채운다', async () => {
+test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroes로 바꾸고, 시드가 36행을 채운다', async () => {
   const old = await openDb({})
   const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
   tmp.push(dir)
@@ -75,7 +75,7 @@ test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroe
   assert.equal((await old.query("select to_regclass('hero_roles') as t"))[0].t, null)
   assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 0)
   await seed(old)
-  assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 22)
+  assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 36)
   await old.close()
 })
 
@@ -102,7 +102,7 @@ test('마이그레이션 003~005: 001·002만 적용된 DB에서 올리면 gold 
     }
     await assert.rejects(d.query("insert into player_heroes (player_id, hero_id, copies) values ($1, 'jack', 0)", [ids[0]]))
     await seed(d)
-    assert.equal((await d.query('select count(*)::int as n from heroes'))[0].n, 22)
+    assert.equal((await d.query('select count(*)::int as n from heroes'))[0].n, 36)
   } finally {
     await d.close()
   }
@@ -362,8 +362,8 @@ test('마이그레이션 011: 010까지 적용된 DB의 heroes에 skill3·s3a..s
     assert.deepEqual(cfg.map((r) => `${r.key}=${r.value}`), ['skill2_unlock_star=3', 'skill3_unlock_star=5'])
     await seed(d)
     const rows = await d.query("select id, skill3, s3a, s3b from heroes where id in ('seraphine', 'bron', 'hans') order by id")
-    assert.deepEqual(rows, [{ id: 'bron', skill3: 'lifesteal', s3a: 8, s3b: null }, { id: 'hans', skill3: null, s3a: null, s3b: null },
-      { id: 'seraphine', skill3: 'stun', s3a: 6, s3b: 1 }])
+    assert.deepEqual(rows, [{ id: 'bron', skill3: 'stoneskin', s3a: 2, s3b: null }, { id: 'hans', skill3: null, s3a: null, s3b: null },
+      { id: 'seraphine', skill3: 'frost_nova', s3a: 10, s3b: 4 }])
   } finally {
     await d.close()
   }
@@ -388,11 +388,11 @@ test('영웅 스킬 검증(개정 17): 등급별 개수(SSR·SR 3, R 2, skill1�
     return heroes.replace(from, to)
   }
   const withCfg = (key: string, value: string) => cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`)
-  await fails(hero(',thorns,15,,,lifesteal,8,,,', ',thorns,15,,,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
+  await fails(hero(',taunt,10,5,3,stoneskin,2,,,', ',taunt,10,5,3,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
   await fails(hero(',dmg_reduce,10,,,,,,,', ',dmg_reduce,10,,,haste,10,,,'), cfg, /line 19 column 'skill3': R heroes have exactly 2 skills/) // 한스
-  await fails(hero(',heal_aura,6,6,8,dmg_reduce,25,,,', ',heal_aura,6,6,8,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
-  await fails(hero(',atk_aura,6,15,,', ',meteor,6,15,,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'meteor'/)
-  await fails(hero(',atk_aura,6,15,,', ',heal_aura,6,15,,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'heal_aura'/)
+  await fails(hero(',sanctuary,9,5,4,guard_aura,6,15,,', ',sanctuary,9,5,4,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
+  await fails(hero(',holy_smite,8,250,50,', ',warp,8,250,50,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'warp'/)
+  await fails(hero(',holy_smite,8,250,50,', ',sanctuary,8,250,50,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'sanctuary'/)
   await fails(heroes, withCfg('skill3_unlock_star', '6'), /skill3_unlock_star must be an integer in 0\.\.5: '6'/)
   await fails(heroes, withCfg('skill2_unlock_star', '2.5'), /skill2_unlock_star must be an integer in 0\.\.5: '2\.5'/)
   await fails(heroes, withCfg('skill2_unlock_star', '5').replace(/^skill3_unlock_star,.*$/m, 'skill3_unlock_star,4'), /skill3_unlock_star must be at least skill2_unlock_star: 4 < 5/)

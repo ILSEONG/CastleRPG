@@ -53,11 +53,11 @@ test('모집 1회: floor(gold) ≥ 3000(골드 Lv 1)이면 tenths 30000 차감(�
   r = await gacha(token, 1)
   assert.deepEqual(r.json.results, [{ hero_id: 'arteon', grade: 'SSR', new: true, copies: 1, shards: 0 }])
   assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.arteon.copies], [0, 1])
-  rand.next = [0.054, 0.99] // SR 경계(0.005 ≤ r < 0.055), SR 풀 마지막 = felix
+  rand.next = [0.054, 0.99] // SR 경계(0.005 ≤ r < 0.055), SR 풀 마지막 = selene
   await setGold(id, 30000)
-  assert.deepEqual((await gacha(token, 1)).json.results, [{ hero_id: 'felix', grade: 'SR', new: true, copies: 1, shards: 0 }])
+  assert.deepEqual((await gacha(token, 1)).json.results, [{ hero_id: 'selene', grade: 'SR', new: true, copies: 1, shards: 0 }])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual(copiesOf(p.heroes), { hans: 2, ella: 1, dorik: 1, nina: 1, arteon: 1, felix: 1 })
+  assert.deepEqual(copiesOf(p.heroes), { hans: 2, ella: 1, dorik: 1, nina: 1, arteon: 1, selene: 1 })
   const l = await logs(id, 'gacha')
   assert.equal(l.length, 3)
   assert.deepEqual([l[0].detail.count, l[0].detail.cost, l[0].detail.gold_tenths, l[0].detail.results], [1, 3000, -30000, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }]])
@@ -86,8 +86,8 @@ test('골드 10연차: 30000(tenths 300000 = 1회 × 10) 차감, 10장, SR 이�
   const r = await gacha(token, 10)
   assert.equal(r.status, 200)
   const res = r.json.results
-  assert.deepEqual(res.map((x: any) => [x.hero_id, x.grade, x.new, x.copies]), Array.from({ length: 10 }, (_, i) => ['jack', 'R', i === 0, i + 1]))
-  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.jack.copies, r.json.player.heroes.felix], [7, 10, undefined])
+  assert.deepEqual(res.map((x: any) => [x.hero_id, x.grade, x.new, x.copies]), Array.from({ length: 10 }, (_, i) => ['tia', 'R', i === 0, i + 1]))
+  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.tia.copies, r.json.player.heroes.selene], [7, 10, undefined])
   rand.next = []
 })
 

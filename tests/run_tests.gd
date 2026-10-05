@@ -209,13 +209,13 @@ func test_game_tables() -> void:
 	check(GameData.errors == 0, "default tables incl. heroes/resources/config load without errors")
 	# Balance에서 옮긴 값 — 이전 상수와 같다(하드코딩 기대값)
 	var heroes := GameData.heroes()
-	check(heroes.size() == 22 and heroes[0].id == "arteon" and heroes[21].id == "jack", "heroes keep file order")
+	check(heroes.size() == 36 and heroes[0].id == "arteon" and heroes[21].id == "jack" and heroes[35].id == "tia", "heroes keep file order")
 	var w := GameData.hero("hans")
 	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
 		and w.color == "#95A5A6" and w.hp == 396.0 and w.atk == 23.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
 		and w.skills == {"lifesteal": [10.0, 0.0, 0.0], "dmg_reduce": [10.0, 0.0, 0.0]}, "hans row (R: two skills)")
 	var a := GameData.hero("arteon")
-	check(a.skills == {"heal_aura": [6.0, 6.0, 8.0], "dmg_reduce": [25.0, 0.0, 0.0], "atk_aura": [6.0, 15.0, 0.0]} and a.desc.begins_with("성문 앞을"),
+	check(a.skills == {"sanctuary": [9.0, 5.0, 4.0], "guard_aura": [6.0, 15.0, 0.0], "holy_smite": [8.0, 250.0, 50.0]} and a.desc.begins_with("성문 앞을"),
 		"arteon row: three skills in column order, empty numbers are 0, desc")
 	check(GameData.hero("hans").skills.size() == 2 and GameData.hero("ignis").skills.keys() == ["aoe_blast", "poison", "haste"], "an empty skill3 is no skill (R)")
 	check(GameData.hero("nobody").is_empty(), "unknown hero is empty")
@@ -299,7 +299,7 @@ func _remote_checks() -> int:
 	p.heroes[17].skill3 = null  # 한스(R): 셋째 칸 없음
 	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
-	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 22 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
+	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 36 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
 	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "poison": [40.0, 3.0, 0.0], "haste": [25.0, 0.0, 0.0]}
 		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
@@ -382,8 +382,8 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"a grade with no heroes": q.heroes = q.heroes.filter(func(h): return h.grade != "SR")  # roll_gacha가 빈 풀에서 깨진다
 		"multishot 0": q.heroes[2].s1a = 0  # 실바나: slice(0, -1)
 		"skill cooldown 0": q.heroes[1].s1a = 0  # 이그니스 aoe_blast: 매 프레임 폭발
-		"haste -100": q.heroes[13].s1a = -100  # 리안: 간격 ÷ 0
-		"stun every 2.5th attack": q.heroes[9].s2a = 2.5  # 네브
+		"haste -100": q.heroes[1].s3a = -100  # 이그니스 haste: 간격 ÷ 0
+		"stun every 2.5th attack": q.heroes[16].s1a = 2.5  # 펠릭스
 		"hero attack interval 0": q.heroes[0].atk_interval = 0
 		"hero hp negative": q.heroes[0].hp = -5
 		"upgrade unit unknown": q.upgrades[0].unit = "percent"
@@ -430,7 +430,7 @@ func test_apply_remote() -> void:
 	check(_errors.count - logged == expected, "rejected payloads report each error through push_error")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 22, "default tables restored after apply_remote tests")
+	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 36, "default tables restored after apply_remote tests")
 
 
 ## 개정 22 §2: 에픽 보스는 라운드 25(스테이지 마지막)에만, 끝에 하나 — HP × boss_round_mult. 라운드 1~24는 졸개만.
@@ -1427,7 +1427,7 @@ func test_heroes_table() -> void:
 	const Skills := preload("res://scripts/skills.gd")
 	GameData.load_tables()
 	var hs := GameData.heroes()
-	check(hs.size() == 22, "22 heroes, got %d" % hs.size())
+	check(hs.size() == 36, "36 heroes, got %d" % hs.size())
 	var grades := {"SSR": 0, "SR": 0, "R": 0}
 	var used := {}
 	for h in hs:
@@ -1439,7 +1439,7 @@ func test_heroes_table() -> void:
 			used[k] = true
 		for g in h.gear.split("|"):
 			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
-	check(grades == {"SSR": 10, "SR": 7, "R": 5}, "grades 10/7/5: %s" % grades)
+	check(grades == {"SSR": 16, "SR": 12, "R": 8}, "grades 16/12/8: %s" % grades)
 	# crit 스킬은 영웅 표에서 뺐다(성장 치명타와 헷갈리지 않게) — 종류는 남아 있어 표에 다시 쓸 수 있다
 	check(used.size() == Skills.KINDS.size() - 1 and not used.has("crit"), "every skill kind but crit is used: %d/%d" % [used.size(), Skills.KINDS.size()])
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
@@ -1549,12 +1549,12 @@ func test_gacha_offline() -> void:
 		var ten: Array = EconomyScript.roll_gacha(10, rng.randf, dia, {"n": 0, "max": 50})
 		all_ten = all_ten and ten.size() == 10 and ten.any(func(x): return x.grade != "R")
 	check(all_ten, "every diamond 10-pull has an SR or better (2000 samples)")
-	var all_r := func(): return 0.99  # 전부 R, 풀 마지막(jack)
+	var all_r := func(): return 0.99  # 전부 R, 풀 마지막(tia)
 	var rigged: Array = EconomyScript.roll_gacha(10, all_r, dia, {"n": 0, "max": 50})
-	check(rigged.slice(0, 9).all(func(x): return x.id == "jack") and rigged[9] == {"id": "felix", "grade": "SR"}, "a diamond 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
+	check(rigged.slice(0, 9).all(func(x): return x.id == "tia") and rigged[9] == {"id": "selene", "grade": "SR"}, "a diamond 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
 	var gold_ten: Array = EconomyScript.roll_gacha(10, all_r)
-	check(gold_ten.size() == 10 and gold_ten.all(func(x): return x == {"id": "jack", "grade": "R"}), "a gold 10-pull has no SR guarantee (all R stays all R): %s" % [gold_ten])
-	check(EconomyScript.roll_gacha(1, all_r) == [{"id": "jack", "grade": "R"}], "a single pull has no guarantee")
+	check(gold_ten.size() == 10 and gold_ten.all(func(x): return x == {"id": "tia", "grade": "R"}), "a gold 10-pull has no SR guarantee (all R stays all R): %s" % [gold_ten])
+	check(EconomyScript.roll_gacha(1, all_r) == [{"id": "tia", "grade": "R"}], "a single pull has no guarantee")
 	check(GameData.gacha_cost("gold", 1, 1) == 3000 and GameData.gacha_cost("gold", 10, 1) == 30000, "gold Lv 1 costs 3000 / 30000 (10-pull = 1-pull x 10, no discount)")
 	var e = _econ(1000.0)
 	e.rng.seed = 7
@@ -2601,7 +2601,7 @@ func test_skill_unlock() -> void:
 	check(range(3).map(func(i): return GameData.skill_unlock_star(i)) == [0, 3, 5], "unlock stars: skill1 0, skill2 3, skill3 5")
 	var se := GameData.hero("seraphine")
 	var by_star := range(6).map(func(p): return GameData.active_skills(se, p).keys())
-	check(by_star == [["chain"], ["chain"], ["chain"], ["chain", "slow"], ["chain", "slow"], ["chain", "slow", "stun"]], "SSR seraphine: chain, +slow at 3, +stun at 5: %s" % [by_star])
+	check(by_star == [["chain"], ["chain"], ["chain"], ["chain", "slow"], ["chain", "slow"], ["chain", "slow", "frost_nova"]], "SSR seraphine: chain, +slow at 3, +frost_nova at 5: %s" % [by_star])
 	var hans := GameData.hero("hans")
 	check(GameData.active_skills(hans, 0).keys() == ["lifesteal"] and GameData.active_skills(hans, 3).keys() == ["lifesteal", "dmg_reduce"]
 		and GameData.active_skills(hans, 5).size() == 2, "R hans: skill2 at 3, nothing more at 5")
@@ -2610,16 +2610,17 @@ func test_skill_unlock() -> void:
 	for h in GameData.heroes():
 		counts[h.grade] += 1
 		check(h.skills.size() == GameData.GRADE_SKILLS[h.grade], "hero %s (%s) has %d skills" % [h.id, h.grade, h.skills.size()])
-	check(GameData.heroes().size() == 22 and counts == {"SSR": 10, "SR": 7, "R": 5}, "22 rows: 10 SSR, 7 SR, 5 R")
+	check(GameData.heroes().size() == 36 and counts == {"SSR": 16, "SR": 12, "R": 8}, "36 rows: 16 SSR, 12 SR, 8 R")
 	# 잠긴 스킬은 전투 수식에 안 들어간다(능력치는 승급 배율만)
 	var kyle := GameData.hero("kyle")
 	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 61.0, 0.0, 0.2, false), 61.0)
 		and is_equal_approx(Skills.damage(GameData.active_skills(kyle, 3), 61.0, 0.0, 0.2, false), 61.0 * 2.0), "kyle: execute (skill2) only adds damage from 3")
-	var nev := GameData.hero("nev")
-	check(not Skills.stuns(GameData.active_skills(nev, 2), 5) and Skills.stuns(GameData.active_skills(nev, 3), 5), "nev: stun (skill2) only from 3")
-	var rian := GameData.hero("rian")
-	check(Skills.incoming(GameData.active_skills(rian, 0), 100.0, 0.0) == Vector2(100.0, 0.0) and Skills.incoming(GameData.active_skills(rian, 3), 100.0, 0.0) == Vector2.ZERO,
-		"rian: dodge (skill2) only from 3")
+	var felix := GameData.hero("felix")
+	check(Skills.stuns(GameData.active_skills(felix, 0), 4) and not GameData.active_skills(felix, 2).has("spear_throw") and GameData.active_skills(felix, 3).has("spear_throw"),
+		"felix: stun (skill1) from 0, spear_throw (skill2) only from 3")
+	var jack := GameData.hero("jack")
+	check(Skills.incoming(GameData.active_skills(jack, 0), 100.0, 0.0) == Vector2.ZERO and GameData.active_skills(jack, 3).has("opportunist") and not GameData.active_skills(jack, 0).has("opportunist"),
+		"jack: dodge (skill1) at 0, opportunist (skill2) only from 3")
 	var ig := GameData.hero("ignis")
 	check(Skills.interval(GameData.active_skills(ig, 4), 1.2, 1.0) == 1.2 and is_equal_approx(Skills.interval(GameData.active_skills(ig, 5), 1.2, 1.0), 1.2 / 1.25),
 		"ignis: haste (skill3) only from 5")
@@ -2651,8 +2652,8 @@ func test_skill_unlock_validation() -> void:
 	# CSV: 같은 규칙(SR 브론의 셋째 칸을 비운다)
 	var hp := "user://t_heroes.csv"
 	var csv := FileAccess.get_file_as_string(GameData.HEROES_PATH)
-	check(csv.contains(",thorns,15,,,lifesteal,8,,,"), "precondition: bron's row has thorns then lifesteal")
-	_write(hp, csv.replace(",thorns,15,,,lifesteal,8,,,", ",thorns,15,,,,,,,"))
+	check(csv.contains(",taunt,10,5,3,stoneskin,2,,,"), "precondition: bron's row has taunt then stoneskin")
+	_write(hp, csv.replace(",taunt,10,5,3,stoneskin,2,,,", ",taunt,10,5,3,,,,,"))
 	GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, hp)
 	check(GameData.errors == 1, "CSV: an SR row with two skills is one error (got %d)" % GameData.errors)
 	DirAccess.remove_absolute(hp)
@@ -3728,7 +3729,7 @@ func test_equip_upgrade_dot() -> void:
 ## 팔레트·머리·무기 중 둘 이상이 다르다. 머리 = 머리 뼈 부품 + 벗긴 모자·투구, 등 = 가슴 부품 + 벗긴 망토, 무기 = gear + swap + 손 부품.
 func test_hero_looks_unique() -> void:
 	var heroes: Array = GameData.heroes()
-	check(heroes.size() == 22 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
+	check(heroes.size() == 36 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
 	var seen := {}
 	var looks := {}
 	for h in heroes:

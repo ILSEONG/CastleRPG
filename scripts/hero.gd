@@ -21,6 +21,7 @@ const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Crowd := preload("res://scripts/crowd.gd")
+const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
@@ -84,6 +85,7 @@ var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
 var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)
 var _skill_mult := 1.0  # 스킬 피해 배율 = 1 + 연구 비전 연구 %(개정 24) — 따로 들어가는 스킬 피해(가르기·연쇄·폭발·독·가시)에 곱한다
 var _stun_t := 0.0  # 기절 남은 초
+var _skx  # 스킬 100종 확장(hero_skills.gd) — 새 종류의 발동·타격·처치·방어·오라
 var _stun_fx: Node3D
 
 
@@ -96,6 +98,8 @@ func setup(p_index: int, p_def: Dictionary, p_castle, p_formation, promotion := 
 	formation = p_formation
 	role = def.role
 	_sk = GameData.active_skills(def, promotion)
+	_skx = HeroSkillsScript.new(self)
+	_skx.set_skills(_sk)
 	_color = Color(def.color)
 	_tier = Fx.tier_of(str(def.grade))
 	_level = level
@@ -160,6 +164,7 @@ func reset() -> void:
 	_heal_cd = _sk.heal_aura[0] if _sk.has("heal_aura") else 0.0
 	_repair_cd = _sk.gate_repair[0] if _sk.has("gate_repair") else 0.0
 	_blast_cd = 0.0
+	_skx.reset()
 	global_position = stand_position()
 	_path.clear()
 	_model.reset_pose()
@@ -209,6 +214,9 @@ func is_on_wall() -> bool:
 func take_damage(amount: float, source = null) -> void:
 	if state == State.DEAD or (castle != null and GameState.mode == GameState.Mode.IDLE):
 		return
+	amount = _skx.incoming(amount)  # 금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·보호막
+	if amount <= 0.0:
+		return
 	var r := Skills.incoming(_sk, amount, randf())
 	if r.x <= 0.0:
 		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
@@ -217,12 +225,28 @@ func take_damage(amount: float, source = null) -> void:
 	DamageNumbers.pop(self, r.x, DamageNumbers.Kind.HURT)
 	if r.y > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
 		source.take_damage(r.y * _skill_mult, DamageNumbers.Kind.SKILL)
+	if hp == 0.0 and _skx.try_revive():  # 불굴: 쓰러지는 대신 다시 일어난다
+		return
 	if hp == 0.0:
 		state = State.DEAD
 		_model.play_death()
 		_ring.visible = false
 		_foot.visible = false
 		_aura_ring.visible = false
+		return
+	_skx.after_hurt(source)  # 반격·재기·금강불괴
+
+
+## 되살아남(부활의 기도): 쓰러진 영웅이 최대 HP의 pct%로 그 자리에서 일어난다.
+func revive(pct: float) -> void:
+	if state != State.DEAD or not is_inside_tree():
+		return
+	state = State.IDLE
+	hp = maxf(1.0, hp_max * pct / 100.0)
+	_model.reset_pose()
+	_foot.visible = true
+	_ring.visible = selected
+	Fx.revive(self)
 
 
 ## 회복(최대 HP 상한). 실제로 오른 양.
@@ -315,7 +339,7 @@ func _process(delta: float) -> void:
 					_target = null  # 폭발이 죽인 표적은 치지 않는다(공격·쿨을 아끼고, 시체에서 투사체·연쇄가 나가지 않게)
 					return
 			if _atk_cd <= 0.0:
-				_atk_cd = Skills.interval(_sk, float(def.atk_interval) / _aspd, hp_ratio())
+				_atk_cd = Skills.interval(_sk, float(def.atk_interval) / _aspd, hp_ratio()) / _skx.speed_mult()
 				_attack(_atk_cd)
 			return
 		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
@@ -390,6 +414,7 @@ func _swinging_at(m) -> bool:
 
 ## 쿨 스킬: heal_aura(반경 안 아군 회복), gate_repair(자기 면 성문 회복), aoe_blast 쿨 감소(발사는 교전 중에만).
 func _tick_skills(delta: float) -> void:
+	_skx.tick(delta)
 	_blast_cd -= delta
 	_aura_cd -= delta
 	if _aura_cd <= 0.0:
@@ -483,7 +508,8 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 	var has_crit := _sk.has("crit")
 	var cp := GameData.crit_roll_params(_sk.crit[0] / 100.0 if has_crit else 0.0, _sk.crit[1] / 100.0 if has_crit else 0.0, _bonus)
 	var crit: bool = randf() < cp.rate
-	var d := Skills.damage(_sk, a, 1.0, ratio, boss) * (float(cp.mult) if crit else 1.0)
+	var was := HeroSkillsScript.snap(m)  # 처치 효과가 볼 상태(죽으면 지워진다)
+	var d: float = Skills.damage(_sk, a, 1.0, ratio, boss) * (float(cp.mult) if crit else 1.0) * _skx.damage_mult(m, attack_no, primary)
 	var execute: bool = _sk.has("execute") and ratio <= _sk.execute[0] / 100.0
 	var at: Vector3 = m.global_position + HIT_HEIGHT
 	m.take_damage(d, DamageNumbers.Kind.CRIT if crit else DamageNumbers.Kind.HIT)
@@ -496,6 +522,7 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		if execute:
 			_announce("execute")
 	_on_hit(m, a)
+	_skx.on_hit(m, d, primary, attack_no, was)  # 새 타격·처치 효과(화상·빙결·관통·도탄 …)
 	if not primary:
 		return
 	if Skills.stuns(_sk, attack_no) and m.is_alive():
@@ -545,7 +572,7 @@ func _chain(first, d: float, a: float) -> void:
 ## aoe_blast: 대상 위치 반경 안 모든 몬스터에게 공격력 × c%.
 func _blast(center: Vector3) -> void:
 	_blast_cd = _sk.aoe_blast[0]
-	var dmg: float = atk * _aura_mult() * _sk.aoe_blast[2] / 100.0 * _skill_mult
+	var dmg: float = atk * _aura_mult() * _skx.atk_mult() * _sk.aoe_blast[2] / 100.0 * _skill_mult
 	for m in get_tree().get_nodes_in_group("monsters"):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
