@@ -17,7 +17,7 @@ const STAIR_W := 2.0      # 계단 폭(성벽 안쪽 면에 붙은 1타일 띠)
 const STAIR_GAP := 0.5    # 성문 가장자리 ~ 계단 윗단
 const STAIR_RUN := 6.0    # 계단 수평 길이(윗단 → 아랫단, 성문 반대 방향)
 const STAIR_STEPS := 8    # 계단 단 수(시각)
-const CAMERA_SIZE_DEFAULT := 66.0     # 직교 카메라 가로 폭(미터)
+const CAMERA_SIZE_DEFAULT := 46.0     # 직교 카메라 가로 폭(미터). 아트 방향: 영웅이 화면에서 ~34 px(720 폭) — 네 성문 전투가 다 보이는 가장 가까운 줌
 const CAMERA_SIZE_MIN := 16.0
 const CAMERA_SIZE_MAX := 150.0
 

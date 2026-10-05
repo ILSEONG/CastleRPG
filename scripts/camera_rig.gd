@@ -17,6 +17,10 @@ const HOLD_SEC := 0.35  # 이만큼 덜 움직이고 누르면 회전 대기(개
 const ROTATE_DEG_PER_PX := 0.4
 const INDICATOR_COLOR := Color("ffd23f")
 const INDICATOR_SEC := 0.3
+const PUNCH_ZOOM := 0.93  # 큰 스킬(SSR 발동) 때 잠깐 당기는 줌 배율
+const PUNCH_IN_SEC := 0.12
+const PUNCH_OUT_SEC := 0.45
+const PUNCH_GAP := 2.0  # 당김 최소 간격(초) — 잦으면 어지럽다
 
 var camera: Camera3D
 
@@ -28,6 +32,9 @@ var _dragging := false
 var _touches := {}  # 터치 index -> 화면 위치 (핀치용)
 var _pan: Tween  # pan_to 진행 중(손으로 끌면 멈춘다)
 var _shake: Tween  # 흔드는 중(개정 17)
+var _punch: Tween  # 당김 중
+var _punch_base := 0.0  # 당기기 전 줌(손으로 줌하면 이 값 기준으로 바뀐다)
+var _punch_at := -INF
 
 
 func _ready() -> void:
@@ -185,10 +192,35 @@ func is_shaking() -> bool:
 	return _shake != null and _shake.is_running()
 
 
-## factor < 1 이면 확대.
+## factor < 1 이면 확대. 당김 중이면 당김을 멈추고 당기기 전 줌을 기준으로 바꾼다(손이 이긴다).
 func zoom_by(factor: float) -> void:
+	if is_punching():
+		_punch.kill()
+		camera.size = _punch_base
 	camera.size = clampf(camera.size * factor, Balance.CAMERA_SIZE_MIN, Balance.CAMERA_SIZE_MAX)
 	_fit_depth()
+
+
+## 큰 순간 강조(아트 방향 §4 — SSR 스킬 발동): 화면 안의 at 쪽은 그대로 두고 줌만 PUNCH_ZOOM배로 잠깐 당겼다가 되돌린다.
+## PUNCH_GAP초에 한 번, 흔드는 설정(fx_shake)을 끄면 부르는 쪽이 부르지 않는다. 팬·회전과 다투지 않는다(줌만).
+func punch() -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	if is_punching() or now - _punch_at < PUNCH_GAP:
+		return false
+	_punch_at = now
+	_punch_base = camera.size
+	_punch = create_tween()
+	_punch.tween_method(_punch_size, 1.0, PUNCH_ZOOM, PUNCH_IN_SEC).set_ease(Tween.EASE_OUT)
+	_punch.tween_method(_punch_size, PUNCH_ZOOM, 1.0, PUNCH_OUT_SEC).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return true
+
+
+func _punch_size(k: float) -> void:
+	camera.size = _punch_base * k
+
+
+func is_punching() -> bool:
+	return _punch != null and _punch.is_running()
 
 
 ## 줌에 맞춰 카메라를 뒤로 빼고 far를 늘린다 — 직교 카메라라 그림은 같고 바닥이 near/far 밖으로 잘리지 않는다.

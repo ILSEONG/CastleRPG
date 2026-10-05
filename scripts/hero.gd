@@ -603,6 +603,15 @@ func _announce(kind: String) -> void:
 	_banner_at = now
 	DamageNumbers.banner(self, Skills.name_of(kind, def.id) + "!", _color)
 	Fx.pulse(self, _foot, _color, _tier)
+	if _tier >= 2 and GameData.fx_shake():  # SSR 발동: 화면이 잠깐 당겨진다(아트 방향 §4, 흔들림 설정을 따른다)
+		var cam := get_viewport().get_camera_3d()
+		if cam != null and cam.get_parent().has_method("punch") and _on_screen(cam):
+			cam.get_parent().punch()
+
+
+## 화면 안에 보이는가(머리 높이 지점이 뷰포트 안).
+func _on_screen(cam: Camera3D) -> bool:
+	return get_viewport().get_visible_rect().has_point(cam.unproject_position(global_position + HIT_HEIGHT))
 
 
 ## atk_aura: 반경 안 다른 영웅들의 오라(해금된 것만) 중 가장 큰 것 하나.

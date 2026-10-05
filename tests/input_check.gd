@@ -758,6 +758,24 @@ func _top_hud(hud) -> void:
 	_check(_picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == state, "(z) the gate bar tap does not reach the battlefield (no hero order)",
 		"selected=%s" % _name(_picker.selected))
 	_picker._select(null)
+	# 큰 스킬 강조(아트 방향 §4): punch → 잠깐 당겼다 같은 줌으로 돌아온다, 간격 안 두 번째는 무시, 손 줌이 당김을 이긴다
+	await get_tree().create_timer(2.1).timeout  # PUNCH_GAP
+	var z0 := _camera.size
+	var first: bool = rig.punch()
+	await get_tree().create_timer(0.1).timeout
+	var pulled := _camera.size
+	var second: bool = rig.punch()
+	await get_tree().create_timer(0.6).timeout
+	_check(first and not second and pulled < z0 and is_equal_approx(_camera.size, z0) and not rig.is_punching(),
+		"(z) a skill punch zooms in briefly and returns to the same zoom; a second punch inside the gap is ignored",
+		"z0=%.2f pulled=%.2f end=%.2f" % [z0, pulled, _camera.size])
+	await get_tree().create_timer(2.1).timeout
+	rig.punch()
+	await get_tree().create_timer(0.05).timeout
+	rig.zoom_by(0.5)
+	_check(not rig.is_punching() and is_equal_approx(_camera.size, maxf(z0 * 0.5, Balance.CAMERA_SIZE_MIN)),
+		"(z) zooming by hand during a punch stops it and zooms from the pre-punch size", "size=%.2f" % _camera.size)
+	rig.zoom_by(z0 / _camera.size)
 
 	# 상단 버튼: 대기 "▶ 진행" → 탭 = 시작 → "■ 중지" → 탭 = 즉시 중지(같은 스테이지, 대기)
 	var bp: Vector2 = hud._button.get_global_rect().get_center()
