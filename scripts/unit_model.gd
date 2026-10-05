@@ -73,6 +73,8 @@ static func dress(model: Node3D, spec: Dictionary) -> void:
 		var g := model.find_child(gear_name, true, false) as Node3D
 		g.visible = false
 		g.get_parent().add_child(HeroKit.part(spec.swap[gear_name]))  # 손 슬롯(BoneAttachment3D) 공간 = 무기 공간
+	if spec.has("body"):
+		Art.put_body(model, spec.body)  # Meshy 몸(Art.MESHY_HERO_DIR)
 	for mesh_name in spec.get("tint", {}):
 		var mi := model.find_child(mesh_name, true, false) as MeshInstance3D
 		if mi != null:
