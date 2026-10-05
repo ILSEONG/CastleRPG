@@ -146,6 +146,66 @@ const HERO_LOOKS := {
 	"dorik": {"palette": {"shirt": Color("3E7A3A"), "sleeve": Color("2C5A2A"), "leather": Color("7A5232"), "fur": Color("7A5232"),
 		"beard": Color("5A3A22"), "trim": Color("E8DCC4"), "steel": Color("A8AEB4"), "wood": Color("A87A4A")},
 		"hide": ["Barbarian_Hat"], "parts": [["head", "dorik_beanie"]], "scale": 0.97},
+	# 개정 24 새 영웅 — 마법사
+	# 불꽃 군주: 모자 벗고 검붉은 머리에 불꽃 금관, 숯빛 로브·주황 망토, 어깨 불꽃, 지팡이 머리 흑요석과 큰 불꽃
+	"valen": {"palette": {"robe": Color("2E1C18"), "cape": Color("FF6A1A"), "band": Color("F0B030"), "buckle": Color("FFD060"),
+		"accent": Color("FF8A20"), "boots": Color("1E1210"), "gloves": Color("3A2016"), "hair": Color("7A1A10"), "gem": Color("FF4A10")},
+		"hide": ["Mage_Hat"], "parts": [["head", "valen_crown"], ["chest", "valen_flames"], ["handslot.r", "valen_orb"]], "scale": 1.06},
+	# 빙하의 여왕: 모자 벗고 은발에 높은 얼음 왕관, 흰 로브·옅은 하늘 망토, 목 뒤 얼음 깃, 완드 끝 눈송이
+	"frieda": {"palette": {"robe": Color("F2FAFF"), "cape": Color("9FE3FF"), "band": Color("B8D0E0"), "buckle": Color("FFFFFF"),
+		"accent": Color("9FE3FF"), "boots": Color("C8E8F8"), "gloves": Color("FFFFFF"), "hair": Color("D6E8F4"), "gem": Color("6FD0FF")},
+		"hide": ["Mage_Hat"], "parts": [["head", "frieda_crown"], ["chest", "frieda_collar"], ["handslot.r", "frieda_flake"]], "scale": 1.04},
+	# 망자의 여왕: 모자 벗고 잿빛 머리에 검은 뿔·뼈 머리띠, 검은 로브·보라 망토, 어깨 해골, 검보라 마법서
+	"morgana": {"palette": {"robe": Color("2A1E30"), "cape": Color("7A3FA0"), "band": Color("4A2A5A"), "buckle": Color("E8DFC8"),
+		"accent": Color("9CE03A"), "boots": Color("1E1622"), "gloves": Color("1E1622"), "hair": Color("D8D2E0"), "gem": Color("7CFF6A"),
+		"book": Color("3A2448")},
+		"hide": ["Mage_Hat"], "parts": [["head", "morgana_horns"], ["chest", "morgana_skulls"]], "scale": 1.04},
+	# 숲의 대현자: 모자 벗고 흰 머리에 잎 왕관과 나무 뿔, 초록 로브·갈색 망토, 지팡이 대신 굽은 나무 지팡이(초록 빛구슬)
+	"gaia": {"palette": {"robe": Color("4CAF50"), "cape": Color("6A4A2E"), "band": Color("C8A050"), "buckle": Color("E8D080"),
+		"accent": Color("A8E070"), "boots": Color("5A3E26"), "gloves": Color("8A6A40"), "hair": Color("F0F0E8"), "gem": Color("9CFF7A")},
+		"hide": ["Mage_Hat"], "parts": [["head", "gaia_crown"]], "swap": {"2H_Staff": "gaia_staff"}, "scale": 1.03},
+	# 별의 예언자: 남색 모자 끝 큰 금 별과 떠 있는 작은 별, 짙은 남색 로브·밤하늘 망토, 금 띠, 은빛 머리
+	"selene": {"palette": {"robe": Color("2A3270"), "hat": Color("3F51B5"), "cape": Color("1A1E48"), "band": Color("F0C850"),
+		"buckle": Color("FFE07A"), "accent": Color("F0C850"), "boots": Color("1A1E48"), "gloves": Color("EDEBFF"), "hair": Color("F4EEDC"),
+		"gem": Color("FFE07A"), "book": Color("F0E0A0")},
+		"parts": [["head", "selene_stars"]]},
+	# 견습 정령술사: 모자 벗고 주황 머리에 비스듬한 작은 뾰족 모자, 하늘색 로브, 어깨 위 물 정령, 가장 작게
+	"pip": {"palette": {"robe": Color("80DEEA"), "cape": Color("2E8A9A"), "band": Color("FFFFFF"), "buckle": Color("F0D060"),
+		"accent": Color("B2F5FF"), "boots": Color("6A4A2E"), "gloves": Color("E0F8FC"), "hair": Color("D07A2A"), "gem": Color("B2F5FF")},
+		"hide": ["Mage_Hat"], "parts": [["head", "pip_hat"], ["chest", "pip_spirit"]], "scale": 0.9},
+	# 늪지 마녀: 모자 벗고 축 처진 이끼 모자(버섯·늘어진 이끼), 올리브 로브·진흙 망토·보라 띠, 짙은 머리
+	"tia": {"palette": {"robe": Color("689F38"), "cape": Color("3A2E22"), "band": Color("7A3A8A"), "buckle": Color("C8B060"),
+		"accent": Color("A0D050"), "boots": Color("3A2E22"), "gloves": Color("4A5A2A"), "hair": Color("3A2A3A"), "gem": Color("B0FF50")},
+		"hide": ["Mage_Hat"], "parts": [["head", "tia_hat"]], "scale": 0.94},
+	# 야만전사 — 대지의 거인: 모자 벗고 돌 왕관, 흙빛 옷·잿빛 수염, 어깨에 이끼 바위, 도끼 대신 돌 망치, 가장 크게
+	"thorgar": {"palette": {"shirt": Color("8D6E4A"), "sleeve": Color("6E5638"), "leather": Color("5A5650"), "fur": Color("4A4A44"),
+		"beard": Color("B8B4A8"), "trim": Color("7FA050"), "boots": Color("3A3630"), "gloves": Color("4A4640")},
+		"hide": ["Barbarian_Hat"], "parts": [["head", "thorgar_crown"], ["chest", "thorgar_boulders"]], "swap": {"2H_Axe": "thorgar_maul"},
+		"scale": 1.1},
+	# 야수 조련사: 모자 벗고 늑대 머리 두건, 갈색 옷·회색 털·검은 수염
+	"orin": {"palette": {"shirt": Color("6D4C2F"), "sleeve": Color("5A3E26"), "leather": Color("3A2A1E"), "fur": Color("9A9AA0"),
+		"beard": Color("2A1E16"), "trim": Color("C8B090"), "boots": Color("2A1E16"), "gloves": Color("3A2A1E"), "steel": Color("A8AEB4")},
+		"hide": ["Barbarian_Hat"], "parts": [["head", "orin_wolf"]], "scale": 1.02},
+	# 광산 대장장이: 모자 벗고 노란 광부 모자(이마 등), 그을린 잿빛 옷·갈색 가죽·검은 수염, 손도끼 대신 대장장이 망치, 작게
+	"grit": {"palette": {"shirt": Color("4A4A4E"), "sleeve": Color("3A3A3E"), "leather": Color("795548"), "fur": Color("5A3E2E"),
+		"beard": Color("22201E"), "trim": Color("D8A060"), "boots": Color("2A2622"), "gloves": Color("6A4A32"), "steel": Color("6A6E74")},
+		"hide": ["Barbarian_Hat"], "parts": [["head", "grit_helmet"]], "swap": {"1H_Axe": "grit_hammer"}, "scale": 0.95},
+	# 기사 — 용기사: 진홍 갑옷·검은 망토·금 테, 투구에 용 뿔과 붉은 볏, 등에 박쥐 날개
+	"dante": {"palette": {"armor": Color("8E2A20"), "trim": Color("2A1E1E"), "cape": Color("2A1E22"), "ribbon": Color("F0C040"),
+		"belt": Color("2A1E1E"), "buckle": Color("F0C040"), "steel": Color("D0D4DA"), "grip": Color("3A1E1A"), "rim": Color("F0C040")},
+		"parts": [["head", "dante_horns"], ["chest", "dante_wings"]], "scale": 1.04},
+	# 도적 — 떠돌이 기계공: 망토 없이 겨자색 옷·생강색 머리, 이마에 놋쇠 고글, 등에 톱니바퀴 짐, 구리 쇠붙이 쇠뇌
+	"kaz": {"palette": {"tunic": Color("C9A227"), "arms": Color("5A4632"), "strap": Color("3A2E22"), "belt": Color("4A3626"),
+		"boots": Color("3A2E22"), "hair": Color("B8501E"), "wood": Color("8A5A32"), "fit": Color("B87333")},
+		"hide": ["Rogue_Cape"], "parts": [["head", "kaz_goggles"], ["chest", "kaz_pack"]]},
+	# 달빛 무희: 연보라 옷·흰 망토·남색 머리, 은 초승달 머리띠, 단검 대신 초승달 칼 두 자루
+	"luna": {"palette": {"tunic": Color("B9A8FF"), "hood": Color("F0EEFF"), "arms": Color("7A6AB8"), "strap": Color("E8E4F8"),
+		"belt": Color("4A3E70"), "boots": Color("4A3E70"), "hair": Color("2A2A5A")},
+		"parts": [["head", "luna_tiara"]], "swap": {"Knife": "luna_blade", "Knife_Offhand": "luna_blade"}, "scale": 0.96},
+	# 두건 사수 — 그림자 명궁: 잿빛 남색 두건·검은 옷, 두건에 까마귀 깃 볏, 어깨 깃 망토, 검은 쇠뇌에 보랏빛 쇠붙이
+	"raven": {"palette": {"hood": Color("3B3F58"), "tunic": Color("1E2030"), "arms": Color("2E3148"), "strap": Color("6A5ACD"),
+		"belt": Color("1A1A24"), "boots": Color("1A1A24"), "wood": Color("22222C"), "fit": Color("8E7CC3")},
+		"parts": [["head", "raven_crest"], ["chest", "raven_mantle"]], "scale": 1.04},
 }
 
 ## 상인 NPC: 두건 없는 Rogue, 무기·투척물 숨김(Cape는 망토라 유지). attack/death는 UnitModel 계약상 채움(쓰지 않음).
