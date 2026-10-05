@@ -31,6 +31,8 @@ const SHARDS_MAX := 12
 const STUN_SCALE := 1.7  # 개정 17: 기절 별을 크게
 const SHAKE_SEC := 0.15
 const SHAKE_AMP := 0.25
+const SKY_H := 9.0  # 번개가 떨어지기 시작하는 높이(땅에서 m)
+const BOLT_HIT_Y := 0.8  # 번개 맞은 지점(hero HIT_HEIGHT)에서 땅까지
 const TIER := {"R": 0, "SR": 1, "SSR": 2}  # 등급 → 연출 단계
 const TIER_SCALE := [1.0, 1.3, 1.65]  # 단계 → 스킬 이펙트 크기 배율
 
@@ -210,37 +212,55 @@ static func heal_cross(target: Node3D) -> void:
 	_pop(target, _mesh("cross"), target.global_position + Vector3(0, 1.4, 0), Vector3(0, 0.9, 0), "cross", 0.7)
 
 
-## chain: 점들을 잇는 각진 번개(구간마다 4~6번 꺾임) — 굵은 가산 빛(두께 2배) + 가는 밝은 선. 맞는 지점마다 작은 별 불꽃. 메시는 매번 만든다(0.3초).
-## tier: 굵기 TIER_SCALE배, 불꽃도 크게. tier 1+: 맞는 지점마다 바닥 파동(zap).
+## chain: 맞는 지점마다 하늘(SKY_H m 위)에서 각진 번개가 내리꽂힌다 — 7~9번 꺾이며 아래로 갈수록 덜 흔들리고, 중간에서 곁가지가
+## 갈라진다(tier 1+면 둘). 굵은 가산 빛 + 가는 밝은 심을 한 메시씩(노드 둘)에 담아 번쩍·꺼짐·번쩍으로 깜빡이다 사라진다(0.32초).
+## 땅에 닿는 곳마다 별 불꽃 + 바닥 방사 섬광(tier 1+면 파동도). tier: 굵기·불꽃이 TIER_SCALE배. points = 맞은 지점(HIT_HEIGHT 높이).
 static func lightning(parent: Node, points: Array, color: Color, tier := 0) -> void:
-	if points.size() < 2 or full(parent):
+	if points.is_empty() or full(parent):
 		return
 	var glow = MeshKit.new()
 	var core = MeshKit.new()
 	var sc: float = TIER_SCALE[tier]
-	for i in points.size() - 1:
-		var a: Vector3 = points[i]
-		var b: Vector3 = points[i + 1]
-		var side := (b - a).cross(Vector3.UP).normalized() * 0.35
-		var bends := randi_range(4, 6)
-		var prev := a
+	for hit in points:
+		var ground: Vector3 = hit - Vector3(0, BOLT_HIT_Y, 0)
+		var top := ground + Vector3(randf_range(-0.8, 0.8), SKY_H, randf_range(-0.8, 0.8))
+		var bends := randi_range(7, 9)
+		var prev := top
+		var path := [top]
 		for j in range(1, bends + 2):
-			var p := a.lerp(b, float(j) / (bends + 1))
+			var f := float(j) / (bends + 1)
+			var p := top.lerp(ground, f)
 			if j <= bends:
-				p += side * (1.0 if j % 2 == 1 else -1.0) * randf_range(0.5, 1.0)
-			_ribbon(glow, prev, p, 0.18 * sc, color.darkened(0.35))
-			_ribbon(core, prev, p, 0.05 * sc, color.lightened(0.7))
+				var jitter := 0.55 * (1.0 - f * 0.6)
+				p += Vector3(randf_range(-jitter, jitter), 0, randf_range(-jitter, jitter))
+			_ribbon(glow, prev, p, 0.22 * sc, color.darkened(0.3))
+			_ribbon(core, prev, p, 0.06 * sc, color.lightened(0.75))
+			path.append(p)
 			prev = p
+		for k in 1 + mini(tier, 1):  # 곁가지: 위쪽 마디에서 비스듬히 아래로 3마디
+			var bp: Vector3 = path[randi_range(2, 4)]
+			var dir := Vector3(randf_range(-1, 1), -1.4, randf_range(-1, 1)).normalized()
+			for _m in 3:
+				var q := bp + dir * randf_range(0.5, 0.8) + Vector3(randf_range(-0.2, 0.2), 0, randf_range(-0.2, 0.2))
+				_ribbon(glow, bp, q, 0.12 * sc, color.darkened(0.3))
+				_ribbon(core, bp, q, 0.035 * sc, color.lightened(0.75))
+				bp = q
 	for mk in [[glow, glow_material()], [core, null]]:
 		var mi := _spawn(parent, mk[0].commit(), Vector3.ZERO, "lightning", mk[1])
 		if mi != null:
 			var tw := mi.create_tween()
-			tw.tween_interval(0.3)
+			tw.tween_interval(0.07)
+			tw.tween_callback(func(): mi.visible = false)
+			tw.tween_interval(0.04)
+			tw.tween_callback(func(): mi.visible = true)
+			tw.tween_interval(0.21)
 			tw.tween_callback(mi.queue_free)
-	for i in range(1, points.size()):
-		spark(parent, points[i], color.lightened(0.4), 0.5 * sc)
+	for hit in points:
+		var ground: Vector3 = hit - Vector3(0, BOLT_HIT_Y, 0)
+		spark(parent, hit, color.lightened(0.4), 0.6 * sc)
+		_flare(parent, _mesh("burst", color), ground + Vector3(0, 0.06, 0), "bolt_flare", 1.0 * sc, 0.3)
 		if tier >= 1:
-			_wave(parent, points[i] - Vector3(0, 0.75, 0), color.lightened(0.3), 1.0 * sc, 0.3, 0.0, "zap")
+			_wave(parent, ground, color.lightened(0.3), 1.2 * sc, 0.3, 0.0, "zap")
 
 
 ## 각진 8각 별 불꽃(카메라를 본다): 0.2초 튀어나왔다 사라진다. crit은 크게(size 1), chain 맞은 지점은 작게.
