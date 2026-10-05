@@ -430,7 +430,10 @@ func _skill_application(heroes: Array) -> void:
 	_check(is_equal_approx(gk._aura_mult(), 1.15), "(q) an aura hero out of its radius gives nothing", "gork %.2f" % gk._aura_mult())
 	_remove_hero(lu2)
 
-	# (r) multishot: 고르크(a=2)의 한 번 공격 = 표적 + 사거리 안 가장 가까운 하나. 각자 공격력 × 오라, 먼 몬스터·사거리 밖은 안 맞는다
+	# (r) multishot: 고르크(multishot a=2만 쥐게 한다 — 표의 고르크는 도탄)의 한 번 공격 = 표적 + 사거리 안 가장 가까운 하나.
+	# 각자 공격력 × 오라, 먼 몬스터·사거리 밖은 안 맞는다
+	gk._sk = {"multishot": [2.0, 0.0, 0.0]}
+	gk._skx.set_skills(gk._sk)
 	var gp := _flat(gk.global_position)
 	var ms := []
 	for off in [Vector3(2.5, 0, 0), Vector3(3.0, 0, 1.0), Vector3(4.5, 0, -1.0), Vector3(9.0, 0, 0)]:
