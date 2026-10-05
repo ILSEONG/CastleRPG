@@ -21,6 +21,9 @@ const LOWPOLY_DOUBLE_SHADER := preload("res://shaders/lowpoly_double.gdshader") 
 const TOON_SHADER := preload("res://shaders/toon.gdshader")  # 영웅·몬스터 카툰(UnitModel.dress가 toonify)
 const TOON_DOUBLE_SHADER := preload("res://shaders/toon_double.gdshader")
 const TOON_OUTLINE_SHADER := preload("res://shaders/toon_outline.gdshader")
+const REAL_SHADER := preload("res://shaders/real.gdshader")  # 영웅·몬스터 실사풍(질감·금속 광택·하늘 반사)
+const REAL_DOUBLE_SHADER := preload("res://shaders/real_double.gdshader")
+const STYLES := ["lowpoly", "toon", "real"]  # 영웅·몬스터 그림 방식(Art.unit_style)
 const TOON_PARAMS := ["albedo_tex", "albedo_color", "use_texture", "use_vertex_color", "use_remap", "remap_tex"]
 const BORDER_INNER := 12.0        # 플레이 영역 가장자리(MAP_HALF)에서 테두리 띠 안쪽까지
 const BORDER_OUTER := 40.0        # 테두리 띠 바깥쪽까지
@@ -436,25 +439,66 @@ static func remap_texture(key: String, palette: Dictionary) -> ImageTexture:
 	return _remap_tex[key]
 
 
-static var toon := true  # 영웅·몬스터 카툰 렌더링(끄면 로우폴리 그대로 — 비교·저사양용)
+static var unit_style := "real"  # 영웅·몬스터 그림 방식: lowpoly(원래 각진 면) · toon(카툰) · real(실사풍). 성·건물·이펙트는 늘 로우폴리
 static var _toon_cache := {}  # 로우폴리 재질 id -> 카툰 재질
+static var _real_cache := {}  # 로우폴리 재질 id -> 실사풍 재질
+
+
+## 영웅·몬스터 모델의 재질을 unit_style대로 바꾼다(UnitModel.dress가 합치기 전에 부른다).
+static func stylize(root: Node) -> void:
+	match unit_style:
+		"toon":
+			toonify(root)
+		"real":
+			_swap_materials(root, real_material)
+
+
+## 지금 그림 방식에서 로우폴리 재질 src가 바뀌는 재질(lowpoly면 그대로).
+static func style_material(src: Material) -> Material:
+	match unit_style:
+		"toon":
+			return toon_material(src)
+		"real":
+			return real_material(src)
+	return src
+
+
+## 로우폴리 재질 → 실사풍 재질(같은 알베도 입력, 로우폴리 셰이더가 아니면 그대로). 원본마다 하나를 공유한다.
+static func real_material(src: Material) -> Material:
+	var sm := src as ShaderMaterial
+	if sm == null or not (sm.shader == LOWPOLY_SHADER or sm.shader == LOWPOLY_DOUBLE_SHADER):
+		return src
+	var key := sm.get_instance_id()
+	if not _real_cache.has(key):
+		var m := ShaderMaterial.new()
+		m.shader = REAL_DOUBLE_SHADER if sm.shader == LOWPOLY_DOUBLE_SHADER else REAL_SHADER
+		for p in TOON_PARAMS:
+			var v = sm.get_shader_parameter(p)
+			if v != null:
+				m.set_shader_parameter(p, v)
+		_real_cache[key] = m
+	return _real_cache[key]
+
+
+static func _swap_materials(root: Node, f: Callable) -> void:
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		if mi.material_override != null:
+			mi.material_override = f.call(mi.material_override)
+			continue
+		for i in mi.mesh.get_surface_count():
+			var src := mi.get_active_material(i)
+			if src != null:
+				mi.set_surface_override_material(i, f.call(src))
 static var _outline: ShaderMaterial
 
 
 ## 카툰 렌더링(영웅·몬스터): 모델의 로우폴리 재질(텍스처·칸 색 바꿈·정점 색, 겹쳐 쓴 재질 포함)을 같은 알베도의 카툰 재질로 바꾼다 —
 ## 부드러운 법선 + 두 단계 음영 + 테두리 빛, next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
 static func toonify(root: Node) -> void:
-	for node in root.find_children("*", "MeshInstance3D", true, false):
-		var mi := node as MeshInstance3D
-		if mi.mesh == null:
-			continue
-		if mi.material_override != null:
-			mi.material_override = toon_material(mi.material_override)
-			continue
-		for i in mi.mesh.get_surface_count():
-			var src := mi.get_active_material(i)
-			if src != null:
-				mi.set_surface_override_material(i, toon_material(src))
+	_swap_materials(root, toon_material)
 
 
 ## 로우폴리 재질 → 카툰 재질(로우폴리 셰이더가 아니면 그대로).
