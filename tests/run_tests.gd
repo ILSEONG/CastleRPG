@@ -2679,7 +2679,7 @@ func _corrupt_r17(q: Dictionary, what: String) -> void:
 
 
 ## 영웅·몬스터 그림 방식: 로우폴리 재질 → 같은 알베도의 카툰 재질(공유, next_pass 외곽선 하나)·실사풍 재질(공유, 외곽선 없음),
-## 다른 재질은 그대로. 기본은 실사풍. 카툰으로 꾸민 모델(UnitModel.dress)의 표면은 모두 카툰 재질.
+## 다른 재질은 그대로. 기본은 카툰(아트 방향 문서). 카툰으로 꾸민 모델(UnitModel.dress)의 표면은 모두 카툰 재질.
 func test_toon_materials() -> void:
 	const Art := preload("res://scripts/art.gd")
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
@@ -2692,7 +2692,7 @@ func test_toon_materials() -> void:
 	var r := Art.real_material(vc) as ShaderMaterial
 	check(r != null and r.shader == Art.REAL_SHADER and r.next_pass == null and Art.real_material(vc) == r and Art.real_material(plain) == plain,
 		"real material: realistic shader, no outline, cached; non-low-poly materials stay")
-	check(Art.unit_style == "real" and Art.style_material(vc) == r, "units are drawn in the realistic style by default")
+	check(Art.unit_style == "toon" and Art.style_material(vc) == t, "units are drawn in the toon style by default (docs/art-direction.md)")
 	GameData.load_tables()
 	var keep_style := Art.unit_style
 	Art.unit_style = "toon"

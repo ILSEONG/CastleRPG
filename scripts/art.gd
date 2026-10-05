@@ -439,7 +439,7 @@ static func remap_texture(key: String, palette: Dictionary) -> ImageTexture:
 	return _remap_tex[key]
 
 
-static var unit_style := "real"  # 영웅·몬스터 그림 방식: lowpoly(원래 각진 면) · toon(카툰) · real(실사풍). 성·건물·이펙트는 늘 로우폴리
+static var unit_style := "toon"  # 영웅·몬스터 그림 방식: lowpoly(원래 각진 면) · toon(카툰) · real(실사풍). 성·건물·이펙트는 늘 로우폴리
 static var _toon_cache := {}  # 로우폴리 재질 id -> 카툰 재질
 static var _real_cache := {}  # 로우폴리 재질 id -> 실사풍 재질
 
