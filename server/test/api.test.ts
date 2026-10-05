@@ -407,7 +407,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 8 })
   assert.equal(g.heroes.length, 22)
   assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
-  assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['crit', null]) // 개정 17: R은 스킬 2개
+  assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['poison', null]) // 개정 17: R은 스킬 2개
   assert.deepEqual(g.heroes[1], {
     id: 'ignis', name: '이그니스', title: '화염 대마법사', grade: 'SSR', role: 'ranged', archetype: 'caster', model: 'Mage', gear: '2H_Staff',
     color: '#E8553A', hp: 396, atk: 44, range: 8, atk_interval: 1.2, speed: 6, aggro: 12,
@@ -420,7 +420,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 95) // 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
+  assert.equal(Object.keys(g.config).length, 96) // 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
   assert.deepEqual(g.dungeons.map((d: any) => [d.id, d.type, d.kind, d.count, d.delay]), [['gold_goblin_a', 'gold', 'goblin', 10, 0], ['gold_goblin_b', 'gold', 'goblin', 5, 5],
     ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0]]) // 개정 18: 파일 순서
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })

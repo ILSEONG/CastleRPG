@@ -41,7 +41,7 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "promote_mult",
 	"gacha_10_min_sr",
-	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
+	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "hero_level_stat_melee", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
 	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group",
 	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult", "offline_gold_mult"] + GACHA_KEYS
 const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
@@ -516,9 +516,9 @@ static func fx_shake() -> bool:
 
 # --- 영웅 레벨(개정 11 §2.1). 서버 rules.heroMaxLevel·levelupCost와 같은 식 ---
 
-## 레벨 배율 = 1 + hero_level_stat × (L − 1)(1레벨 기준 직선).
-static func level_mult(level: int) -> float:
-	return 1.0 + config_num("hero_level_stat") * (level - 1)
+## 레벨 배율 = 1 + 레벨 계수 × (L − 1)(1레벨 기준 직선). 계수는 근접(role melee)이 hero_level_stat_melee, 그 밖은 hero_level_stat.
+static func level_mult(level: int, role := "") -> float:
+	return 1.0 + config_num("hero_level_stat_melee" if role == "melee" else "hero_level_stat") * (level - 1)
 
 
 ## 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
@@ -686,7 +686,7 @@ static func soldier_research_mult(type: String, bonus: Dictionary) -> float:
 ## 개정 24: 연구소 레벨 공격 보너스는 없어졌다 — 연구 hero_atk_pct·hero_hp_pct는 성장처럼 hero.gd refresh_stats가 곱한다.
 ## equip = {hp, atk} 사전({}면 장비 없이), null이면 equip_source(오토로드 Economy)의 그 영웅 장비, 공급자가 없으면 0.
 static func hero_stats(def: Dictionary, level: int, promotion: int, equip = null) -> Dictionary:
-	var m := level_mult(level) * promote_mult(promotion)
+	var m := level_mult(level, str(def.get("role", ""))) * promote_mult(promotion)
 	var eq = equip if equip is Dictionary else (equip_source.equipment_bonus(str(def.get("id", ""))) if equip_source != null else {})
 	return {"hp": float(def.hp) * m + float(eq.get("hp", 0.0)), "atk": float(def.atk) * m + float(eq.get("atk", 0.0))}
 
@@ -1419,9 +1419,10 @@ static func _check_gacha(cfg: Dictionary) -> void:
 		var low := 1.0 if k == "hero_max_level_base" else 0.0
 		if s.is_valid_float() and not (s.to_float() >= low and s.to_float() == floorf(s.to_float())):
 			_err("config", 0, k, "must be an integer of at least %d: '%s'" % [low, s])
-	var stat := String(cfg.get("hero_level_stat", ""))
-	if stat.is_valid_float() and not stat.to_float() >= 0.0:
-		_err("config", 0, "hero_level_stat", "must be 0 or more: '%s'" % stat)
+	for k in ["hero_level_stat", "hero_level_stat_melee"]:
+		var stat := String(cfg.get(k, ""))
+		if stat.is_valid_float() and not stat.to_float() >= 0.0:
+			_err("config", 0, k, "must be 0 or more: '%s'" % stat)
 	# 승급(개정 15, 서버 seed와 같은 규칙): 조각은 1 이상 정수 MAX_PROMOTION개, 배율은 1 이상. 빈 목록은 CONFIG_LIST_KEYS 검사가 알렸다
 	var shards := String(cfg.get("promote_shards", ""))
 	var parts := Array(shards.split("|")).map(func(x): return x.strip_edges())

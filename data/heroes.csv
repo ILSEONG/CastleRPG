@@ -1,23 +1,23 @@
 id,name,title,grade,role,archetype,model,gear,color,hp,atk,range,atk_interval,speed,aggro,skill1,s1a,s1b,s1c,skill2,s2a,s2b,s2c,skill3,s3a,s3b,s3c,desc
-arteon,아르테온,빛의 성기사,SSR,melee,tank,Knight,1H_Sword|Badge_Shield,#F5D76E,1040,42,1.8,0.8,5,8,heal_aura,6,6,8,dmg_reduce,25,,,atk_aura,6,15,,성문 앞을 지키며 주변 영웅을 빛으로 치유하는 불굴의 기사
+arteon,아르테온,빛의 성기사,SSR,melee,tank,Knight,1H_Sword|Badge_Shield,#F5D76E,936,32,1.8,0.8,5,8,heal_aura,6,6,8,dmg_reduce,25,,,atk_aura,6,15,,성문 앞을 지키며 주변 영웅을 빛으로 치유하는 불굴의 기사
 ignis,이그니스,화염 대마법사,SSR,ranged,caster,Mage,2H_Staff,#E8553A,396,44,8,1.2,6,12,aoe_blast,5,3.5,220,poison,40,3,,haste,25,,,몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다
-sylvana,실바나,바람의 명사수,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#5FBF6A,440,40,11,1.0,6,12,multishot,3,,,crit,25,200,,execute,25,80,,바람을 읽어 세 발을 동시에 날리고 급소를 꿰뚫는다
-grom,그롬,대지의 광전사,SSR,melee,bruiser,Barbarian,2H_Axe,#A0522D,880,60,1.8,0.8,6,8,cleave,2.5,80,,rage,80,,,lifesteal,15,,,다칠수록 거세지는 도끼질로 주변을 쓸어버린다
+sylvana,실바나,바람의 명사수,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#5FBF6A,440,40,11,1.0,6,12,multishot,3,,,haste,25,,,execute,25,80,,바람을 타고 쉼 없이 세 발씩 날리며 급소를 꿰뚫는다
+grom,그롬,대지의 광전사,SSR,melee,bruiser,Barbarian,2H_Axe,#A0522D,792,45,1.8,0.8,6,8,cleave,2.5,80,,rage,80,,,lifesteal,15,,,다칠수록 거세지는 도끼질로 주변을 쓸어버린다
 seraphine,세라핀,서리 마녀,SSR,ranged,caster,Mage,1H_Wand,#7FC8F0,396,44,8,1.2,6,12,chain,3,70,4,slow,30,2,,stun,6,1,,얼음 번개가 적 사이를 튕기며 발을 묶는다
-kyle,카일,그림자 암살자,SSR,melee,assassin,Rogue,Knife|Knife_Offhand,#5A4E7A,640,81,1.8,0.64,7,9,crit,40,250,,execute,30,100,,dodge,25,,,빈틈을 노려 치명타를 꽂고 약해진 적을 확실히 끝낸다
-baldur,발두르,철벽 수문장,SSR,melee,tank,Knight,1H_Sword|Spike_Shield,#8C9AA8,1040,42,1.8,0.8,5,8,gate_repair,8,3,,thorns,30,,,dmg_reduce,30,,,성문을 수리하며 버티고 때린 자에게 가시로 되갚는다
+kyle,카일,그림자 암살자,SSR,melee,assassin,Rogue,Knife|Knife_Offhand,#5A4E7A,576,61,1.8,0.64,7,9,poison,40,3,,execute,30,100,,dodge,25,,,독 묻은 단검을 꽂고 약해진 적을 확실히 끝낸다
+baldur,발두르,철벽 수문장,SSR,melee,tank,Knight,1H_Sword|Spike_Shield,#8C9AA8,936,32,1.8,0.8,5,8,gate_repair,8,3,,thorns,30,,,dmg_reduce,30,,,성문을 수리하며 버티고 때린 자에게 가시로 되갚는다
 lumina,루미나,성녀,SSR,ranged,support,Mage,Spellbook_open,#F7E9A0,440,24,9,1.0,6,12,heal_aura,4,8,6,atk_aura,8,15,,gate_repair,10,2,,기도로 아군을 치유하고 곁의 영웅에게 힘을 불어넣는다
-harald,하랄드,용사냥꾼,SSR,melee,bruiser,Barbarian,2H_Axe,#C0392B,880,60,1.8,0.8,6,8,boss_slayer,150,,,cleave,1.8,50,,stun,5,1.2,,거대한 적일수록 눈을 빛내는 전설의 사냥꾼
+harald,하랄드,용사냥꾼,SSR,melee,bruiser,Barbarian,2H_Axe,#C0392B,792,45,1.8,0.8,6,8,boss_slayer,150,,,cleave,1.8,50,,stun,5,1.2,,거대한 적일수록 눈을 빛내는 전설의 사냥꾼
 nev,네브,천둥 궁수,SSR,ranged,marksman,Rogue_Hooded,1H_Crossbow,#F1C40F,440,40,11,1.0,6,12,chain,4,60,4,stun,5,1,,slow,25,1.5,,천둥을 실은 화살이 적을 연쇄로 감전시켜 멈춰 세운다
-bron,브론,방패병 대장,SR,melee,tank,Knight,1H_Sword|Rectangle_Shield,#7F8C8D,728,29,1.8,0.8,5,8,dmg_reduce,30,,,thorns,15,,,lifesteal,8,,,큰 방패로 공격을 받아내는 노련한 대장
+bron,브론,방패병 대장,SR,melee,tank,Knight,1H_Sword|Rectangle_Shield,#7F8C8D,655,22,1.8,0.8,5,8,dmg_reduce,30,,,thorns,15,,,lifesteal,8,,,큰 방패로 공격을 받아내는 노련한 대장
 mira,미라,독화살 사냥꾼,SR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#6B8E23,308,28,11,1.0,6,12,poison,30,4,,slow,20,2,,multishot,2,,,독을 바른 화살로 적을 서서히 쓰러뜨린다
-torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,560,25,1.8,0.8,6,8,heal_aura,8,5,5,dmg_reduce,15,,,atk_aura,5,10,,싸우면서도 기도를 멈추지 않는 사제
-rian,리안,쌍검사,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#48C9B0,448,57,1.8,0.64,7,9,haste,30,,,dodge,15,,,crit,20,180,,두 자루 검으로 눈보다 빠르게 벤다
+torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,504,19,1.8,0.8,6,8,heal_aura,8,5,5,dmg_reduce,15,,,atk_aura,5,10,,싸우면서도 기도를 멈추지 않는 사제
+rian,리안,쌍검사,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#48C9B0,403,43,1.8,0.64,7,9,haste,30,,,dodge,15,,,lifesteal,10,,,두 자루 검으로 눈보다 빠르게 벤다
 echo,에코,견습 화염술사,SR,ranged,caster,Mage,1H_Wand,#F39C12,277,31,8,1.2,6,12,aoe_blast,7,2.5,140,poison,25,3,,haste,15,,,아직 서툴지만 불꽃만큼은 진짜인 마법사
 gork,고르크,도끼 투척꾼,SR,ranged,bruiser,Barbarian,1H_Axe|1H_Axe_Offhand,#935116,370,28,6,1.0,6,10,multishot,2,,,boss_slayer,50,,,rage,50,,,양손 도끼를 짧은 거리에서 두 적에게 던진다
-felix,펠릭스,기사단 창병,SR,melee,bruiser,Knight,2H_Sword,#2E86C1,616,42,1.8,0.8,6,8,stun,4,0.8,,thorns,10,,,boss_slayer,60,,,묵직한 일격으로 적을 잠시 멈춰 세운다
-hans,한스,민병대 검사,R,melee,bruiser,Knight,1H_Sword,#95A5A6,440,30,1.8,0.8,6,8,lifesteal,10,,,dmg_reduce,10,,,,,,,마을을 지키려 칼을 든 성실한 민병
-ella,엘라,마을 궁수,R,ranged,marksman,Rogue_Hooded,2H_Crossbow,#82E0AA,220,20,11,1.0,6,12,crit,15,150,,multishot,2,,,,,,,가끔 놀라운 한 발을 꽂는 사냥꾼의 딸
-dorik,도릭,나무꾼 전사,R,melee,bruiser,Barbarian,1H_Axe,#A04000,440,30,1.8,0.8,6,8,cleave,1.5,50,,rage,40,,,,,,,나무 베던 솜씨로 두셋을 함께 벤다
+felix,펠릭스,기사단 창병,SR,melee,bruiser,Knight,2H_Sword,#2E86C1,554,32,1.8,0.8,6,8,stun,4,0.8,,thorns,10,,,boss_slayer,60,,,묵직한 일격으로 적을 잠시 멈춰 세운다
+hans,한스,민병대 검사,R,melee,bruiser,Knight,1H_Sword,#95A5A6,396,23,1.8,0.8,6,8,lifesteal,10,,,dmg_reduce,10,,,,,,,마을을 지키려 칼을 든 성실한 민병
+ella,엘라,마을 궁수,R,ranged,marksman,Rogue_Hooded,2H_Crossbow,#82E0AA,220,20,11,1.0,6,12,slow,15,1.5,,multishot,2,,,,,,,다리를 노린 화살로 적의 발을 늦추는 사냥꾼의 딸
+dorik,도릭,나무꾼 전사,R,melee,bruiser,Barbarian,1H_Axe,#A04000,396,23,1.8,0.8,6,8,cleave,1.5,50,,rage,40,,,,,,,나무 베던 솜씨로 두셋을 함께 벤다
 nina,니나,견습 치유사,R,ranged,support,Mage,2H_Staff,#A9DFBF,220,12,9,1.0,6,12,heal_aura,10,4,4,atk_aura,4,8,,,,,,서툴지만 다친 동료를 지나치지 못한다
-jack,잭,떠돌이 도적,R,melee,assassin,Rogue,Knife,#616A6B,320,40,1.8,0.64,7,9,dodge,20,,,crit,15,160,,,,,,날렵하게 몸을 피하며 틈을 노린다
+jack,잭,떠돌이 도적,R,melee,assassin,Rogue,Knife,#616A6B,288,30,1.8,0.64,7,9,dodge,20,,,poison,15,3,,,,,,날렵하게 몸을 피하며 틈을 노린다

@@ -212,7 +212,7 @@ func test_game_tables() -> void:
 	check(heroes.size() == 22 and heroes[0].id == "arteon" and heroes[21].id == "jack", "heroes keep file order")
 	var w := GameData.hero("hans")
 	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
-		and w.color == "#95A5A6" and w.hp == 440.0 and w.atk == 30.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
+		and w.color == "#95A5A6" and w.hp == 396.0 and w.atk == 23.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
 		and w.skills == {"lifesteal": [10.0, 0.0, 0.0], "dmg_reduce": [10.0, 0.0, 0.0]}, "hans row (R: two skills)")
 	var a := GameData.hero("arteon")
 	check(a.skills == {"heal_aura": [6.0, 6.0, 8.0], "dmg_reduce": [25.0, 0.0, 0.0], "atk_aura": [6.0, 15.0, 0.0]} and a.desc.begins_with("성문 앞을"),
@@ -430,7 +430,7 @@ func test_apply_remote() -> void:
 	check(_errors.count - logged == expected, "rejected payloads report each error through push_error")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.hero("arteon").hp == 1040.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 22, "default tables restored after apply_remote tests")
+	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 22, "default tables restored after apply_remote tests")
 
 
 ## 개정 22 §2: 에픽 보스는 라운드 25(스테이지 마지막)에만, 끝에 하나 — HP × boss_round_mult. 라운드 1~24는 졸개만.
@@ -1440,7 +1440,8 @@ func test_heroes_table() -> void:
 		for g in h.gear.split("|"):
 			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
 	check(grades == {"SSR": 10, "SR": 7, "R": 5}, "grades 10/7/5: %s" % grades)
-	check(used.size() == Skills.KINDS.size(), "every skill kind is used: %d/%d" % [used.size(), Skills.KINDS.size()])
+	# crit 스킬은 영웅 표에서 뺐다(성장 치명타와 헷갈리지 않게) — 종류는 남아 있어 표에 다시 쓸 수 있다
+	check(used.size() == Skills.KINDS.size() - 1 and not used.has("crit"), "every skill kind but crit is used: %d/%d" % [used.size(), Skills.KINDS.size()])
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
@@ -1468,7 +1469,8 @@ func test_skill_formulas() -> void:
 	check(Skills.damage(ex, 50.0, 0.9, 0.3, false) == 100.0 and Skills.damage(ex, 50.0, 0.9, 0.31, false) == 50.0, "execute: +b% at or below a% target HP")
 	var boss := {"boss_slayer": [150.0, 0.0, 0.0]}
 	check(Skills.damage(boss, 60.0, 0.9, 1.0, true) == 150.0 and Skills.damage(boss, 60.0, 0.9, 1.0, false) == 60.0, "boss_slayer: +a% to bosses only")
-	check(is_equal_approx(Skills.damage(GameData.hero("kyle").skills, 81.0, 0.0, 0.2, false), 81.0 * 2.5 * 2.0), "crit and execute multiply (kyle)")
+	check(is_equal_approx(Skills.damage({"crit": [40.0, 250.0, 0.0], "execute": [30.0, 100.0, 0.0]}, 81.0, 0.0, 0.2, false), 81.0 * 2.5 * 2.0), "crit and execute multiply")
+	check(GameData.heroes().all(func(h): return not h.skills.has("crit")), "no hero has the crit skill (crit comes from growth only)")
 	var cd := Skills.chain_damages({"chain": [3.0, 70.0, 4.0]}, 100.0)
 	check(cd.size() == 3 and is_equal_approx(cd[0], 70.0) and is_equal_approx(cd[1], 49.0) and is_equal_approx(cd[2], 34.3), "chain: a bounces, each x b/100: %s" % [cd])
 	check(Skills.chain_damages({}, 100.0).is_empty(), "no chain: no bounces")
@@ -1767,10 +1769,12 @@ func test_hero_levels() -> void:
 	GameData.load_tables()
 	var hans := GameData.hero("hans")
 	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.54) and is_equal_approx(GameData.level_mult(70), 5.14), "level x(1 + 0.06 x (L - 1))")
-	var st := GameData.hero_stats(hans, 10, 2)  # 440 × 1.54 × 1.5², 30 × 1.54 × 1.5²
-	check(is_equal_approx(st.hp, 440.0 * 1.54 * 2.25) and is_equal_approx(st.atk, 30.0 * 1.54 * 2.25), "stats = base x level mult x promotion mult (1.5^p on base and level-ups alike): %s" % [st])
-	check(GameData.hero_power(hans, 1, 0) == 119 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 317 \
-		and GameData.hero_power(hans, 10, 2) == roundi(440.0 * 3.465 / 10.0 + 30.0 * 3.465 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 179,
+	check(GameData.level_mult(1, "melee") == 1.0 and is_equal_approx(GameData.level_mult(10, "melee"), 1.405) and is_equal_approx(GameData.level_mult(10, "ranged"), 1.54),
+		"melee heroes grow slower: x(1 + 0.045 x (L - 1))")
+	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.405 × 1.5², 23 × 1.405 × 1.5²
+	check(is_equal_approx(st.hp, 396.0 * 1.405 * 2.25) and is_equal_approx(st.atk, 23.0 * 1.405 * 2.25), "stats = base x level mult x promotion mult (1.5^p on base and level-ups alike): %s" % [st])
+	check(GameData.hero_power(hans, 1, 0) == 97 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 248 \
+		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 3.16125 / 10.0 + 23.0 * 3.16125 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 146,
 		"power = round(HP / 10 + atk x 2 / interval): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
@@ -1841,7 +1845,7 @@ func test_hero_levels() -> void:
 	e2.free()
 	# apply_remote: 레벨업 설정 검증(서버 seed와 같은 규칙)
 	var logged := _errors.count
-	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_promotion", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_gold_R", "-10"], ["hero_level_stat", "-0.1"],
+	for bad in [["hero_max_level_base", "0"], ["hero_max_level_per_promotion", "-1"], ["levelup_gold_SSR", "1.5"], ["levelup_gold_R", "-10"], ["hero_level_stat", "-0.1"], ["hero_level_stat_melee", "-0.1"],
 			["promote_shards", "5|25|50|100"], ["promote_shards", "5|25|50|100|0"], ["promote_shards", "5|25|x|100|200"], ["promote_shards", ""], ["promote_mult", "0.9"], ["promote_mult", "x"]]:
 		var p := _payload()
 		p.config[bad[0]] = bad[1]
@@ -1899,7 +1903,7 @@ func test_promotion() -> void:
 	check(e2.gold_tenths == 5 and e2.shards_of("hans") == 3 and e2.promotion_of("hans") == 0 and e2.shards_of("ignis") == 0 and e2.level_of("hans") == 9 and e2.heroes == {"hans": 4, "ignis": 1},
 		"save v5 -> v6: old stars become shards (copies - 1 = 3), promotion 0, levels kept")
 	var hp_v5: float = GameData.hero_stats(GameData.hero("hans"), 9, e2.promotion_of("hans")).hp
-	check(is_equal_approx(hp_v5, 440.0 * 1.48), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
+	check(is_equal_approx(hp_v5, 396.0 * 1.36), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
 	var v6 := v5.duplicate(true)
 	v6.version = 6
 	_write(ECON_TMP, JSON.stringify(v6))  # v6인데 shards·promotion이 없다
@@ -1941,8 +1945,8 @@ func test_buildings() -> void:
 	check(is_equal_approx(r1.ssr, 0.005) and is_equal_approx(r1.sr, 0.05) and is_equal_approx(r11.ssr, 0.015) and is_equal_approx(r11.sr, 0.08), "tavern: SSR +0.1%p, SR +0.3%p per level")
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
-	check(st == {"hp": 440.0, "atk": 30.0} and not GameData.CONFIG_NUM_KEYS.has("lab_atk_per_level") and not GameData.BUILDING_NUM_KEYS.has("lab_atk_per_level")
-		and GameData.config_num("lab_atk_per_level") == 0.0 and GameData.hero_power(hans, 1, 0) == roundi(440.0 / 10.0 + 30.0 * 2.0 / 0.8),
+	check(st == {"hp": 396.0, "atk": 23.0} and not GameData.CONFIG_NUM_KEYS.has("lab_atk_per_level") and not GameData.BUILDING_NUM_KEYS.has("lab_atk_per_level")
+		and GameData.config_num("lab_atk_per_level") == 0.0 and GameData.hero_power(hans, 1, 0) == roundi(396.0 / 10.0 + 23.0 * 2.0 / 0.8),
 		"rev 24: the lab no longer raises hero attack (no lab_atk_per_level); stats and power ignore building levels: %s" % [st])
 	var rig := func(): return 0.0055  # 등급 굴림 0.0055: 주점 1(SSR 0.5%)은 SR, 주점 2(0.6%)는 SSR
 	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 1, 2))[0].grade == "SSR", "offline recruiting uses the tavern odds")
@@ -2609,8 +2613,8 @@ func test_skill_unlock() -> void:
 	check(GameData.heroes().size() == 22 and counts == {"SSR": 10, "SR": 7, "R": 5}, "22 rows: 10 SSR, 7 SR, 5 R")
 	# 잠긴 스킬은 전투 수식에 안 들어간다(능력치는 승급 배율만)
 	var kyle := GameData.hero("kyle")
-	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 81.0, 0.0, 0.2, false), 81.0 * 2.5)
-		and is_equal_approx(Skills.damage(GameData.active_skills(kyle, 3), 81.0, 0.0, 0.2, false), 81.0 * 2.5 * 2.0), "kyle: execute (skill2) only adds damage from 3")
+	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 61.0, 0.0, 0.2, false), 61.0)
+		and is_equal_approx(Skills.damage(GameData.active_skills(kyle, 3), 61.0, 0.0, 0.2, false), 61.0 * 2.0), "kyle: execute (skill2) only adds damage from 3")
 	var nev := GameData.hero("nev")
 	check(not Skills.stuns(GameData.active_skills(nev, 2), 5) and Skills.stuns(GameData.active_skills(nev, 3), 5), "nev: stun (skill2) only from 3")
 	var rian := GameData.hero("rian")
@@ -3287,8 +3291,8 @@ func test_dungeon_tables() -> void:
 		"fresh dungeon = today's keys; extra run cost 5000 x (1 + runs today); party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
-	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 540.0, "atk": 42.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 30.0 * 1.06 + 12.0)
-		and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0} and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) == roundi(54.0 + 42.0 * 2.0 / 0.8),
+	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.045 + 12.0)
+		and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0} and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) == roundi(49.6 + 35.0 * 2.0 / 0.8),
 		"hero stats add the equipment total flat after the multipliers (no source, no equipment: unchanged)")
 
 
@@ -3388,7 +3392,7 @@ func test_equipment_offline() -> void:
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
 	GameData.equip_source = null
-	check(st == {"hp": 700.0, "atk": 70.0} and GameData.hero_stats(hans, 1, 0) == {"hp": 440.0, "atk": 30.0}, "with Economy as the equipment source, hero_stats adds hans's gear: %s" % [st])
+	check(st == {"hp": 656.0, "atk": 63.0} and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0}, "with Economy as the equipment source, hero_stats adds hans's gear: %s" % [st])
 	check(e.sell_block([1]) == "equipped" and e.sell_block([]) == "bad_request" and e.sell_block([3, 3]) == "bad_request" and e.sell_block([3, 99]) == "unknown_item"
 		and e.sell_items([1, 3]) == 0 and notes[-1] == EconomyScript.EQUIP_TEXT.equipped and e.bag.size() == 5, "sell_block: equipped / empty / duplicate / unknown; a refused sale sells nothing")
 	check(e.sell_items([3, 4]) == 40 and e.gold_tenths == 400 and e.bag.map(func(x): return x.id) == [1, 2, 5], "sell: round(10 x 1.5 x 2) + 10 = 40 gold, the items leave the bag")

@@ -297,6 +297,7 @@ test('레벨업·승급 설정 검증: 비용·승급당 상한은 0 이상 정�
     ['promote_shards', '5|25|50|100|200|400', /promote_shards must be 5 integers/],
     ['promote_mult', '0.9', /promote_mult must be 1 or more: '0\.9'/],
     ['hero_level_stat', '-0.01', /hero_level_stat must be 0 or more: '-0\.01'/],
+    ['hero_level_stat_melee', '-0.01', /hero_level_stat_melee must be 0 or more: '-0\.01'/],
     ['levelup_gold_SSR', '1.5', /levelup_gold_SSR must be a non-negative integer: '1\.5'/],
     ['levelup_gold_R', '-10', /levelup_gold_R must be a non-negative integer: '-10'/],
     ['rounds_per_stage', '0', /rounds_per_stage must be an integer of at least 1: '0'/], // 개정 22 라운드

@@ -743,7 +743,7 @@ func _check(ok: bool, what: String, detail: String) -> void:
 
 
 ## (L) 개정 11 레벨업: 방치 모드에서 오프라인 레벨업(Economy.level_up)하면 그 슬롯 영웅만 다시 만들어지고 HP·공격이
-##     기본 × (1 + 0.06 × (L − 1)) × 승급 배율이다(개정 15). 실제 타격 피해도 그 공격력이다(오라 없는 혼자 공격).
+##     기본 × (1 + 0.045 × (L − 1), 근접 계수) × 승급 배율이다(개정 15). 실제 타격 피해도 그 공격력이다(오라 없는 혼자 공격).
 func _levelup_case() -> void:
 	GameState.refill()
 	await _frames(1)
@@ -761,11 +761,11 @@ func _levelup_case() -> void:
 	await _frames(1)
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var dorik = live.filter(func(h): return h.index == slot)[0]
-	var mult := (1.0 + 0.06 * 9) * 2.25
+	var mult := (1.0 + 0.045 * 9) * 2.25  # 도릭은 근접(hero_level_stat_melee)
 	var others_kept := live.filter(func(h): return h.index != slot).all(func(h): return before.has(h))
 	_check(ok and Economy.level_of("dorik") == 10 and dorik.def.id == "dorik" and not before.has(dorik) and others_kept
-		and is_equal_approx(dorik.hp_max, 440.0 * mult) and is_equal_approx(dorik.atk, 30.0 * mult) and is_equal_approx(dorik.hp, dorik.hp_max),
-		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.06 x 9) x 1.5^2 (promotion 2)",
+		and is_equal_approx(dorik.hp_max, 396.0 * mult) and is_equal_approx(dorik.atk, 23.0 * mult) and is_equal_approx(dorik.hp, dorik.hp_max),
+		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.045 x 9, melee) x 1.5^2 (promotion 2)",
 		"ok=%s hp=%.2f atk=%.2f kept=%s" % [ok, dorik.hp_max, dorik.atk, others_kept])
 	for h in live:
 		h.set_process(h == dorik)

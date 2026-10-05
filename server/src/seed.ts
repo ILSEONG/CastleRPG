@@ -115,7 +115,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
   'gacha_10_min_sr', ...GACHA_KEYS,
-  'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
+  'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'hero_level_stat_melee', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult',
   'offline_gold_mult'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
@@ -272,8 +272,10 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   checkGachaRates(num, raw, err)
   const base = num('hero_max_level_base')
   if (base !== null && !(Number.isInteger(base) && base >= 1)) err('hero_max_level_base', `must be an integer of at least 1: '${raw('hero_max_level_base')}'`)
-  const stat = num('hero_level_stat')
-  if (stat !== null && !(stat >= 0)) err('hero_level_stat', `must be 0 or more: '${raw('hero_level_stat')}'`)
+  for (const k of ['hero_level_stat', 'hero_level_stat_melee']) {
+    const stat = num(k)
+    if (stat !== null && !(stat >= 0)) err(k, `must be 0 or more: '${raw(k)}'`)
+  }
   const mult = num('promote_mult')
   if (mult !== null && !(mult >= 1)) err('promote_mult', `must be 1 or more: '${raw('promote_mult')}'`)
   // 개정 22 라운드(앱 GameData._check_rounds와 같은 규칙): 스테이지당 라운드는 1 이상 정수, 속도 증가분 0 이상, 상한 1 이상, 보스 배율 0보다 크다
