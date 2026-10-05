@@ -20,7 +20,6 @@ const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const MeshMergeScript := preload("res://scripts/mesh_merge.gd")
 const UnitModelScript2 := preload("res://scripts/unit_model.gd")
-const CharKitScript := preload("res://scripts/char_kit.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -128,7 +127,6 @@ func _init() -> void:
 	test_research_r24()
 	test_offline_gold()
 	test_mesh_merge()
-	test_char_kit()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -3821,7 +3819,6 @@ func _look_tuple(h: Dictionary) -> Dictionary:
 ## 8×4 칸 색표 재질(팔레트 칸만 알파 1). 같은 영웅 = 같은 재질(캐시), 영웅끼리 다르다. 부품 메시는 id마다 하나. 셰이더가 remap 유니폼과 함께 컴파일된다.
 func test_hero_look_builder() -> void:
 	MeshMergeScript.enabled = false  # 부위 메시를 이름으로 본다 — 합치기 전 모습(합치기는 test_mesh_merge)
-	CharKitScript.enabled = false  # KayKit 생김새(팔레트·부품)를 본다 — 코드 몸은 test_char_kit
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
 	const HeroKit := preload("res://scripts/hero_kit.gd")
 	for sh in [Art.LOWPOLY_SHADER, Art.LOWPOLY_DOUBLE_SHADER]:
@@ -3899,7 +3896,6 @@ func test_hero_look_builder() -> void:
 	check(p1.mesh == p2.mesh and p1 != p2, "part meshes are built once per id")
 	p1.free()
 	p2.free()
-	CharKitScript.enabled = true
 	MeshMergeScript.enabled = true
 
 
@@ -4276,7 +4272,6 @@ func test_offline_gold() -> void:
 ## 정점 수 = 보이던 메시 합, Skin bind = 원래 + 단단한 부위마다 하나, 숨긴 장비는 빠지고 빈 부착 노드는 지운다, 같은 스펙은 메시·Skin 공유.
 func test_mesh_merge() -> void:
 	GameData.load_tables()
-	CharKitScript.enabled = false  # KayKit 스킨 부위 + 단단한 부품 합치기(코드 몸만 합치기는 test_char_kit)
 	var spec: Dictionary = Art.hero_spec(GameData.hero("arteon"))
 	MeshMergeScript.enabled = false
 	var plain := Art.instance(spec.scene)
@@ -4318,77 +4313,6 @@ func test_mesh_merge() -> void:
 	check(skel.get_children().all(func(c): return not (c is BoneAttachment3D) or c.is_queued_for_deletion() or c.get_child_count() > 0), "empty bone attachments are removed")
 	var merged_b: MeshInstance3D = (b.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D).get_node_or_null("Merged")
 	check(merged_b != null and merged_b.mesh == merged.mesh and merged_b.skin == merged.skin, "the same spec shares one merged mesh and skin")
-	CharKitScript.enabled = true
 	for m in [plain, a, b]:
 		m.free()
 
-
-## 코드 몸(CharKit 시제품): 몸마다 조각이 KayKit 뼈대에 있는 뼈에만 붙고 삼각형 예산 안, dress하면 KayKit 몸 메시는 숨고 손 무기는 남으며
-## 머리·등 부품(HERO_LOOKS parts)은 빼고 손 부품만 붙는다. 합치면 코드 몸 전체가 스킨 메시 하나(새 Skin, 조각마다 bind)이고
-## 휴식 자세에서 조각 정점이 스켈레톤 공간 설계 위치(발바닥 0 ~ 머리 위)에 놓인다. 같은 몸은 메시를 공유한다.
-func test_char_kit() -> void:
-	GameData.load_tables()
-	var skel_src := Art.instance(Art.MONSTER_MODELS.grunt.scene)
-	var sk := skel_src.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-	for body in CharKitScript.BODIES:
-		var parts: Dictionary = CharKitScript.meshes(sk, body)
-		var tris := 0
-		var lo := INF
-		var hi := -INF
-		for bone in parts:
-			check(sk.find_bone(bone) >= 0, "%s: piece on an existing bone (%s)" % [body, bone])
-			var rest := sk.get_bone_global_rest(sk.find_bone(bone))
-			var v: PackedVector3Array = (parts[bone] as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-			tris += v.size() / 3
-			for p in v:
-				var y: float = (rest * p).y
-				lo = minf(lo, y)
-				hi = maxf(hi, y)
-		check(parts.size() >= 14 and tris > 300 and tris < 3000, "%s: %d bone pieces, %d triangles (budget 3000)" % [body, parts.size(), tris])
-		check(lo > -0.05 and lo < 0.05 and hi > 2.0 and hi < 2.6, "%s: rest pose spans feet %.2f to head top %.2f" % [body, lo, hi])
-		check(CharKitScript.meshes(sk, body) == parts and parts[parts.keys()[0]] == CharKitScript.meshes(sk, body)[parts.keys()[0]], "%s: meshes shared" % body)
-	skel_src.free()
-	var spec := Art.hero_spec(GameData.hero("arteon"))
-	check(spec.get("body", "") == "arteon", "arteon spec carries its code body")
-	MeshMergeScript.enabled = false
-	var plain := Art.instance(spec.scene)
-	UnitModelScript2.dress(plain, spec)
-	var shown := []
-	for mi in plain.find_children("*", "MeshInstance3D", true, false):
-		var vis := true
-		var q: Node = mi
-		while q != plain:
-			vis = vis and (not (q is Node3D) or q.visible)
-			q = q.get_parent()
-		if vis:
-			shown.append(str(mi.name))
-	var want := ["1H_Sword", "Badge_Shield"]
-	check(shown.filter(func(n): return not n.begins_with("arteon_")).all(func(n): return want.has(n)) and want.all(func(n): return shown.has(n))
-		and shown.filter(func(n): return n.begins_with("arteon_")).size() >= 14,
-		"arteon dressed: KayKit body hidden, sword + shield kept, code pieces shown (%s)" % [shown])
-	check(plain.find_child("arteon_wings", true, false) == null and plain.find_child("arteon_pauldrons", true, false) == null,
-		"head/back look parts are left to the code body")
-	plain.free()
-	MeshMergeScript.enabled = true
-	for s in [Art.MONSTER_MODELS.grunt, spec]:
-		var m := Art.instance(s.scene)
-		UnitModelScript2.dress(m, s)
-		var skel := m.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-		var merged: MeshInstance3D = skel.get_node_or_null("Merged")
-		var others := skel.find_children("*", "MeshInstance3D", true, false).filter(func(n): return n != merged and n.visible \
-			and (not (n.get_parent() is Node3D) or n.get_parent().visible) and not n.is_queued_for_deletion())
-		var code_surf := -1
-		if merged != null:
-			for i in merged.mesh.get_surface_count():
-				if merged.mesh.surface_get_material(i) == Art.style_material(Art.lowpoly_vc_material()):
-					code_surf = i
-		check(merged != null and code_surf >= 0 and merged.skin.get_bind_count() >= 14 and others.is_empty(),
-			"%s: code body merged into one skinned mesh (%d surfaces, %d binds, %d left apart)" % [s.scene.get_file(),
-				merged.mesh.get_surface_count() if merged else -1, merged.skin.get_bind_count() if merged else -1, others.size()])
-		m.free()
-	CharKitScript.enabled = false
-	var off := Art.instance(spec.scene)
-	UnitModelScript2.dress(off, spec)
-	check(off.find_children("*", "BoneAttachment3D", true, false).all(func(b): return not str(b.name).begins_with("body_")), "CharKit.enabled = false keeps the KayKit body")
-	off.free()
-	CharKitScript.enabled = true
