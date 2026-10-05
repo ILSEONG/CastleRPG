@@ -16,6 +16,8 @@ extends "res://scripts/ui_window.gd"
 ## ("★3 달성 시 스킬 해금: 화상"), 승급으로 열리면 알림 "스킬 해금! 화상" + 그 줄 금색 반짝임.
 ## 개정 18: 큰 카드 양옆에 장비 칸 7개(왼쪽 무기·모자·상의·하의, 오른쪽 신발·견장·장갑 — 아이콘 + 등급 테두리, 빈 칸은 흐린 아이콘).
 ## 칸을 탭하면 그 부위 장비 고르기(bag_panel.open_pick — [장착]·[해제]). 능력치는 장비 포함, 그 아래 줄에 장비 합계("장비 HP +350 · 공격 +35").
+## 큰 카드 오른쪽 아래 [장비 자동착용]: 부위마다 아무도 안 낀 더 좋은 장비(빨간 점과 같은 규칙)를 한 번에 낀다(Economy.auto_equip). 바꿀 게 없으면 비활성.
+## 보유 격자 뒤에 미보유 영웅(등급 SSR → SR → R, 같으면 표 순서): 흐린 카드 + "미보유", Lv·전투력 없음. 배치·상세 안 됨(탭하면 알림).
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
@@ -47,12 +49,19 @@ const TEN := 10
 const STAT_NAMES := ["HP", "공격", "공격 간격", "사거리", "전투력"]
 const LOCKED_GRAY := Color(0.55, 0.55, 0.58)  # 잠긴 스킬 줄
 const UNLOCK_GOLD := Color("C8901A")  # 해금 반짝임
+const LOCKED_MODULATE := Color(0.5, 0.5, 0.55, 0.8)  # 미보유 카드(흐리게)
+const UNOWNED_TEXT := "미보유"
+const UNOWNED_NOTICE := "아직 보유하지 않은 영웅입니다"
+const AUTO_EQUIP_TEXT := "장비 자동착용"
+const AUTO_EQUIP_PX := Vector2(150, 50)  # [장비 자동착용] 크기(큰 카드 오른쪽 아래)
 
 var bag  # 장비 고르기 창(bag_panel). main이 넣는다
 var equip_slots := {}  # 부위 → {button, tile}(개정 18)
 var equip_label: Label  # 장비 합계 줄(장비가 없으면 숨김)
+var auto_equip_button: Button  # [장비 자동착용](바꿀 게 없거나 응답 대기면 비활성)
 var slot_cards: Array = []
 var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
+var locked_cards := {}  # 영웅 id → 미보유 카드(보유 카드 뒤, unowned_sorted 순서)
 var apply_button: Button
 var sort_button: Button
 var work: Array = []  # 편집 중인 배치(슬롯 i → 영웅 id 또는 null)
@@ -315,12 +324,32 @@ func _build_equip_slots() -> void:
 		b.add_child(dot)
 		cols[0 if i < EQUIP_LEFT else 1].add_child(b)
 		equip_slots[s] = {"button": b, "tile": tile, "dot": dot}
+	# [장비 자동착용]: 큰 카드 오른쪽 아래(오른쪽 장비 줄 밑 — 별 줄과 안 겹친다, 상세 높이를 더 쓰지 않는다)
+	auto_equip_button = _button(AUTO_EQUIP_TEXT, EQUIP_COLOR, 19)
+	auto_equip_button.custom_minimum_size = AUTO_EQUIP_PX
+	auto_equip_button.size = AUTO_EQUIP_PX
+	auto_equip_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	auto_equip_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	auto_equip_button.pressed.connect(auto_equip)
+	big_card.add_child(auto_equip_button)
+	auto_equip_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 10)
 
 
 ## 장비 칸 탭: 그 부위 장비 고르기(장착·해제).
 func press_equip(s: String) -> void:
 	if bag != null and detail_id != "":
 		bag.open_pick(detail_id, s)
+
+
+## [장비 자동착용]: 부위마다 더 좋은 장비를 낀다(오프라인은 곧바로, 온라인은 부위마다 /v1/equip). 바꿀 게 없으면 알림만.
+func auto_equip() -> void:
+	if detail_id == "" or not owns(detail_id):
+		return
+	var n := Economy.auto_equip(detail_id)
+	if n > 0:
+		Economy.notice.emit("장비 %d개를 착용했습니다" % n)
+	elif not Economy.equip_waiting() and Economy.auto_equip_plan(detail_id).is_empty():
+		Economy.notice.emit("더 좋은 장비가 없습니다")
 
 
 ## 비용 버튼: 위 제목, 아래 [골드 아이콘 숫자](버튼 안, 입력은 버튼이 받는다).
@@ -413,6 +442,22 @@ func owned_sorted(mode := sort_mode) -> Array:
 	return ids
 
 
+## 미보유 영웅 id(표에 있는 것): 등급(SSR → SR → R) → 표 순서. 정렬 버튼과 상관없다.
+func unowned_sorted() -> Array:
+	var all := GameData.heroes()
+	var key := {}
+	for i in all.size():
+		if not owns(all[i].id):
+			key[all[i].id] = [GRADE_RANK.get(all[i].grade, GRADE_RANK.size()), i]
+	var ids := key.keys()
+	ids.sort_custom(func(a, b): return key[a] < key[b])
+	return ids
+
+
+static func owns(id: String) -> bool:
+	return int(Economy.heroes.get(id, 0)) >= 1
+
+
 func cycle_sort() -> void:
 	sort_mode = SORTS[(SORTS.find(sort_mode) + 1) % SORTS.size()]
 	_rebuild()
@@ -423,8 +468,11 @@ func tap_slot(i: int) -> void:
 	_rebuild()
 
 
-## 영웅 카드 탭: 고른 슬롯이 있으면 거기에 놓는다(다른 슬롯에 있으면 서로 바꾼다). 없으면 상세.
+## 영웅 카드 탭: 고른 슬롯이 있으면 거기에 놓는다(다른 슬롯에 있으면 서로 바꾼다). 없으면 상세. 미보유는 알림만(고른 슬롯은 그대로).
 func tap_hero(id: String) -> void:
+	if not owns(id):
+		Economy.notice.emit(UNOWNED_NOTICE)
+		return
 	if selected_slot < 0:
 		show_detail(id)
 		return
@@ -480,18 +528,26 @@ func _rebuild() -> void:
 			_slot_grid.add_child(card)
 			slot_cards.append(card)
 	var ids := owned_sorted()
-	if ids != hero_cards.keys():
-		for c in hero_cards.values():
+	var locked := unowned_sorted()
+	if ids != hero_cards.keys() or locked != locked_cards.keys():
+		for c in hero_cards.values() + locked_cards.values():
 			_hero_grid.remove_child(c)
 			c.queue_free()
 		hero_cards.clear()
-		for id in ids:
+		locked_cards.clear()
+		for id in ids + locked:
 			var card = HeroCardScript.new()
 			card.custom_minimum_size = CARD_SIZE
 			card.hero_id = id
 			card.tapped.connect(func(_c): tap_hero(id))
 			_hero_grid.add_child(card)
-			hero_cards[id] = card
+			if owns(id):
+				hero_cards[id] = card
+			else:  # 미보유: 흐리게, 별 자리에 "미보유"(Lv·전투력·조각 막대 없음)
+				card.modulate = LOCKED_MODULATE
+				card.badge = UNOWNED_TEXT
+				card.badge_color = HudScript.INK.lightened(0.2)
+				locked_cards[id] = card
 	var deployed := GameState.deploy()
 	for i in slot_cards.size():
 		var c = slot_cards[i]
@@ -520,7 +576,7 @@ func _rebuild() -> void:
 # --- 상세 ---
 
 func show_detail(id: String) -> void:
-	if GameData.hero(id).is_empty():
+	if GameData.hero(id).is_empty() or not owns(id):
 		return
 	detail_id = id
 	order = owned_sorted()
@@ -699,6 +755,7 @@ func _refresh_equip(id: String, h: Dictionary) -> void:
 		parts.append("이동 +%d%%" % roundi(b.speed_pct))
 	equip_label.text = "장비 " + " · ".join(parts) if not parts.is_empty() else ""
 	equip_label.visible = not parts.is_empty()
+	auto_equip_button.disabled = Economy.equip_waiting() or Economy.auto_equip_plan(id).is_empty()
 
 
 func _set_cost(btn: Dictionary, title: String, count: int, grade: String, lv: int) -> void:

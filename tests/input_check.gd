@@ -539,6 +539,29 @@ func _recruit_and_heroes(rig) -> void:
 	var by_grade: Array = heroes_win.owned_sorted("grade").map(func(id): return GameData.hero(id).grade)
 	_check(sorts == ["grade", "level", "power"] and heroes_win.sort_button.text == "정렬: 전투력" and by_grade[0] == "SSR" and by_grade[-1] == "R",
 		"(u) [정렬] cycles power -> grade -> level -> power", "sorts=%s grades=%s" % [sorts, by_grade])
+	# 미보유 영웅: 보유 카드 뒤에 등급(SSR → SR → R) → 표 순서, 흐린 카드·"미보유"·Lv·전투력 없음, 배치·상세 안 됨
+	var locked: Array = heroes_win.locked_cards.keys()
+	var want_locked: Array = GameData.heroes().filter(func(h): return int(Economy.heroes.get(h.id, 0)) < 1).map(func(h): return h.id)
+	var rank := {"SSR": 0, "SR": 1, "R": 2}
+	var file_order := GameData.heroes().map(func(h): return h.id)
+	want_locked.sort_custom(func(a, b): return [rank[GameData.hero(a).grade], file_order.find(a)] < [rank[GameData.hero(b).grade], file_order.find(b)])
+	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
+	_check(not locked.is_empty() and locked == want_locked and grid_ids == heroes_win.hero_cards.keys() + locked and heroes_win.unowned_sorted() == want_locked,
+		"(u) unowned heroes follow every owned hero in the grid, SSR -> SR -> R then file order", "grid=%s locked=%s" % [grid_ids, locked])
+	var dim: bool = not heroes_win.hero_cards.values().any(func(c): return c.modulate != Color.WHITE)
+	for id in locked:
+		var c = heroes_win.locked_cards[id]
+		dim = dim and c.modulate.v < 0.7 and c.badge == "미보유" and c.level == 0 and c.power == 0 and c.stars == 0 and c.shards < 0 and not c.deployed and not c.can_level and not c.can_promote
+	_check(dim, "(u) unowned cards are dimmed with 미보유 and no Lv, power, stars or shard bar", "")
+	var lk: String = locked[0]
+	var work0: Array = heroes_win.work.duplicate()
+	await _tap(heroes_win.slot_cards[0].get_global_rect().get_center())
+	heroes_win.tap_hero(lk)
+	_check(heroes_win.work == work0 and heroes_win.selected_slot == 0 and hud._toast.visible and hud._toast.text == heroes_win.UNOWNED_NOTICE,
+		"(u) tapping an unowned card with a slot picked does not place it (notice only)", "work=%s sel=%d" % [heroes_win.work, heroes_win.selected_slot])
+	await _tap(heroes_win.slot_cards[0].get_global_rect().get_center())
+	heroes_win.show_detail(lk)
+	_check(heroes_win.selected_slot == -1 and not heroes_win.is_showing_detail(), "(u) an unowned hero has no detail view", "")
 	Economy.gold_tenths = 0
 	Economy.res["food"] = 0
 	Economy.changed.emit()
@@ -563,7 +586,7 @@ func _recruit_and_heroes(rig) -> void:
 	live.sort_custom(func(a, b): return a.index < b.index)
 	var ids := live.map(func(h): return h.def.id)
 	_check(Economy.deploy == ["ella", "arteon", "dorik", "nina"] and heroes_win.apply_button.disabled and ids == ["ella", "arteon", "dorik", "nina"]
-		and is_equal_approx(live[1].hp_max, 1040.0 * 1.5) and live[1].side == 1 and live[1].post == Formation.POST_GATE and hud._toast.visible,
+		and is_equal_approx(live[1].hp_max, 936.0 * 1.5) and live[1].side == 1 and live[1].post == Formation.POST_GATE and hud._toast.visible,
 		"(w) [적용] saves the deploy and, in idle mode, swaps the heroes at once (arteon slot 2 at the east gate, promotion x1.5)",
 		"deploy=%s ids=%s" % [Economy.deploy, ids])
 	_check(not is_instance_valid(pre[0]) and not is_instance_valid(pre[1]) and live[2] == pre[2] and live[3] == pre[3],
@@ -580,10 +603,10 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _frames(2)
 	_check(heroes_win.is_showing_detail() and heroes_win.detail_id == "arteon" and heroes_win.is_guarded() and heroes_win.work == ["ella", "arteon", "dorik", "nina"],
 		"(x) a card tap (no slot picked) opens its detail and re-arms the open guard", "detail=%s" % heroes_win.detail_id)
-	_check(heroes_win.stat_values[0].text == "1,560" and heroes_win.stat_nexts[0].text == "→ 1,654 (+94)" and heroes_win.stat_values[1].text == "63"
-		and heroes_win.stat_nexts[1].text == "→ 67 (+4)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
+	_check(heroes_win.stat_values[0].text == "1,404" and heroes_win.stat_nexts[0].text == "→ 1,467 (+63)" and heroes_win.stat_values[1].text == "48"
+		and heroes_win.stat_nexts[1].text == "→ 50 (+2)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
 		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 30",
-		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,560 -> 1,654 (+94)); Lv 1 / 30 at promotion 1",
+		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,404 -> 1,467 (+63), melee growth 4.5%); Lv 1 / 30 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
 	_check(sk[0].contains("6초마다 반경 6m") and sk[1] == "철벽 — ★3에서 해금" and sk[2] == "용기의 오라 — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
@@ -607,13 +630,13 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	live.sort_custom(func(a, b): return a.index < b.index)
 	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 30"
-		and heroes_win.stat_values[0].text == "1,654" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
+		and heroes_win.stat_values[0].text == "1,467" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
 		"(x) [레벨업] takes 120 gold (1200 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
-	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 1040.0 * 1.06 * 1.5)
-		and is_equal_approx(live[1].atk, 42.0 * 1.06 * 1.5) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
-		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.06) x 1.5", "hp=%.1f" % live[1].hp_max)
+	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 936.0 * 1.045 * 1.5)
+		and is_equal_approx(live[1].atk, 32.0 * 1.045 * 1.5) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
+		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.045, melee) x 1.5", "hp=%.1f" % live[1].hp_max)
 	var c3 := GameData.levelup_cost("SSR", 2, 3)
 	Economy.gold_tenths = int(c3.gold) * 10
 	Economy.res["food"] = 0
@@ -1773,15 +1796,15 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	var pre := _alive_heroes()
 	await _tap(heroes_win.promote_button.get_global_rect().get_center())
 	await _frames(2)
-	var mult := 1.0 + 0.06 * (lv - 1)
+	var mult := 1.0 + 0.045 * (lv - 1)  # 아르테온은 근접(hero_level_stat_melee)
 	var hero = _alive_heroes().filter(func(h): return h.def.id == "arteon")
 	_check(Economy.shards_of("arteon") == 5 and Economy.promotion_of("arteon") == 2 and heroes_win.big_card.stars == 2 and heroes_win.big_card.is_promoting()
 		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 40" % lv
-		and heroes_win.stat_values[0].text == UiKit.commas(roundi(1040.0 * mult * 2.25)) and heroes_win.stat_values[0].text != hp0
+		and heroes_win.stat_values[0].text == UiKit.commas(roundi(936.0 * mult * 2.25)) and heroes_win.stat_values[0].text != hp0
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win._promo.line.text == "조각 5 / 50",
 		"(x3) [승급] spends 25 shards: ★2 (a star flies in, gold shards burst), HP x1.5 flashes green, Lv %d / 40, next 조각 5 / 50" % lv,
 		"shards=%d promo=%d hp=%s->%s label=%s" % [Economy.shards_of("arteon"), Economy.promotion_of("arteon"), hp0, heroes_win.stat_values[0].text, heroes_win.level_label.text])
-	_check(hero.size() == 1 and not pre.has(hero[0]) and is_equal_approx(hero[0].hp_max, 1040.0 * mult * 2.25) and is_equal_approx(hero[0].atk, 42.0 * mult * 2.25),
+	_check(hero.size() == 1 and not pre.has(hero[0]) and is_equal_approx(hero[0].hp_max, 936.0 * mult * 2.25) and is_equal_approx(hero[0].atk, 32.0 * mult * 2.25),
 		"(x3) idle mode rebuilds the promoted hero at once with HP/atk x1.5^2", "hp=%s" % [hero.map(func(h): return h.hp_max)])
 	await get_tree().create_timer(1.0).timeout
 	_check(not heroes_win.big_card.is_promoting() and heroes_win.big_card._flying == -1, "(x3) the effect ends and the new star stays in place", "")
@@ -2421,6 +2444,7 @@ func _dungeon_ui(tabs) -> void:
 	await _frames(2)
 	_check(not bag.is_open() and not Economy.equipment.get("hans", {}).has(it.slot) and hwin.equip_slots[it.slot].tile.grade == "" and not hwin.equip_label.visible
 		and hwin.stat_values[0].text == hp0, "(D) [해제] takes it off again", "eq=%s" % [Economy.equipment])
+	await _auto_equip_ui(hwin)
 	# 보관함: 장착 중은 못 고름, 두 개 골라 판매, 부위 필터
 	Economy.equip("hans", it.slot, it.id)
 	hwin.close()
@@ -2451,6 +2475,51 @@ func _dungeon_ui(tabs) -> void:
 	Economy.unequip("hans", it.slot)
 	Economy.debug_win_on = false
 	Economy.dungeon_started.disconnect(on_start)
+
+
+## 영웅 상세 [장비 자동착용](오프라인): 부위마다 아무도 안 낀 장비 중 item_score 최고(지금보다 좋을 때만)를 낀다 — 낮은 모자는 높은 모자로
+## 바뀌고, 다른 무기 종류·다른 영웅이 낀 장비는 안 가져온다. 바꿀 게 없으면 비활성. 끝나면 넣은 장비를 치운다(보관함 5개로).
+func _auto_equip_ui(hwin) -> void:
+	var fake := [{"id": 990001, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1}, {"id": 990002, "slot": "hat", "weapon_kind": null, "grade": "LR", "level": 5},
+		{"id": 990003, "slot": "weapon", "weapon_kind": "staff", "grade": "LR", "level": 9}, {"id": 990004, "slot": "gloves", "weapon_kind": null, "grade": "LR", "level": 9}]
+	for f in fake:
+		Economy.bag.append(f.duplicate())
+	Economy.equip("hans", "hat", 990001)
+	Economy.equip("ella", "gloves", 990004)
+	var want := {}  # 기대: 부위마다 빈(아무도 안 낀) 맞는 장비 중 점수 최고, 지금보다 높을 때
+	for s in GameData.EQUIP_SLOTS:
+		var cur: Dictionary = Economy.hero_equipment("hans").get(s, {})
+		var best := Economy.item_score(cur) if not cur.is_empty() else -1.0
+		for x in Economy.items():
+			if x.slot == s and Economy.item_owner(x.id) == "" and (s != "weapon" or x.weapon_kind == "sword") and Economy.item_score(x) > best:
+				best = Economy.item_score(x)
+				want[s] = x.id
+	await _guard_wait()
+	var ab: Rect2 = hwin.auto_equip_button.get_global_rect()
+	_check(hwin.big_card.get_global_rect().encloses(ab) and not hwin.equip_slots.values().any(func(q): return q.button.get_global_rect().intersects(ab)) and ab.size.y >= 48.0,
+		"(D) [장비 자동착용] sits inside the big card (bottom right) clear of the equipment slots", "button=%s" % ab)
+	_check(not hwin.auto_equip_button.disabled and want.get("hat") == 990002 and want.get("weapon") != 990003 and Economy.auto_equip_plan("hans") == want,
+		"(D) [장비 자동착용] is on while a better unequipped item exists (plan = best score per slot)", "want=%s plan=%s" % [want, Economy.auto_equip_plan("hans")])
+	var before := {}
+	for s in GameData.EQUIP_SLOTS:
+		before[s] = int(Economy.equipment.get("hans", {}).get(s, 0))
+	await _tap(hwin.auto_equip_button.get_global_rect().get_center())
+	await _frames(2)
+	var eq: Dictionary = Economy.equipment.get("hans", {})
+	var got := GameData.EQUIP_SLOTS.all(func(s): return int(eq.get(s, 0)) == int(want.get(s, before[s])))
+	_check(got and int(eq.get("hat", 0)) == 990002 and int(eq.get("weapon", 0)) != 990003 and int(Economy.equipment.get("ella", {}).get("gloves", 0)) == 990004
+		and hwin.auto_equip_button.disabled and hwin.equip_slots.values().all(func(q): return not q.dot.visible)
+		and hwin.equip_slots.hat.tile.grade == "LR" and _child(HudScript)._toast.text == "장비 %d개를 착용했습니다" % want.size(),
+		"(D) [장비 자동착용] puts on the best bag item per slot (N hat -> LR hat), skips other weapon kinds and items worn by others, then turns off",
+		"eq=%s want=%s ella=%s" % [eq, want, Economy.equipment.get("ella", {})])
+	_check(Economy.auto_equip("hans") == 0, "(D) a second auto-equip changes nothing", "")
+	for s in GameData.EQUIP_SLOTS:
+		Economy.unequip("hans", s)
+	Economy.unequip("ella", "gloves")
+	Economy.bag = Economy.bag.filter(func(x): return int(x.id) < 990001)
+	Economy.items_changed.emit()
+	_check(Economy.bag.size() == 5 and not Economy.equipment.has("hans") and hwin.auto_equip_button.disabled == Economy.auto_equip_plan("hans").is_empty(),
+		"(D) cleanup: injected items removed, hans bare again", "bag=%d eq=%s" % [Economy.bag.size(), Economy.equipment])
 
 
 ## cond가 참이 될 때까지(최대 timeout초) 기다린다.

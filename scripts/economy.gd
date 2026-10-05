@@ -1749,23 +1749,69 @@ static func item_score(it: Dictionary) -> float:
 
 ## 그 영웅 그 부위에 지금보다 좋은(빈 칸이면 아무거나) 낄 수 있는 장비가 보관함에 있나 — 아무도 안 낀 장비만(영웅 장비 칸 빨간 점).
 func equip_upgrade_available(hero_id: String, slot: String) -> bool:
+	return best_free_item(hero_id, slot) != 0
+
+
+## 그 영웅 그 부위에 낄 장비 id: 아무도 안 낀 보관함 장비 중 item_score가 가장 높고 지금 낀 것보다 높은 것(같으면 id가 작은 것). 없으면 0.
+func best_free_item(hero_id: String, slot: String) -> int:
 	var h := GameData.hero(hero_id)
 	if h.is_empty() or int(heroes.get(hero_id, 0)) < 1:
-		return false
+		return 0
 	var cur: Dictionary = hero_equipment(hero_id).get(slot, {})
 	var best := item_score(cur) if not cur.is_empty() else -1.0
 	var used := {}
 	for hid in equipment:
 		for s in equipment[hid]:
 			used[int(equipment[hid][s])] = true
+	var out := 0
 	for it in bag:
 		if it.slot != slot or used.has(int(it.id)):
 			continue
 		if slot == "weapon" and it.weapon_kind != GameData.weapon_of(h.model):
 			continue
 		if item_score(it) > best:
-			return true
-	return false
+			best = item_score(it)
+			out = int(it.id)
+	return out
+
+
+## 장비 자동착용 계획 {부위: 장비 id}(GameData.EQUIP_SLOTS 순): 부위마다 best_free_item(빨간 점이 뜬 부위만). 바꿀 게 없으면 {}.
+func auto_equip_plan(hero_id: String) -> Dictionary:
+	var out := {}
+	for s in GameData.EQUIP_SLOTS:
+		var id := best_free_item(hero_id, s)
+		if id != 0:
+			out[s] = id
+	return out
+
+
+## 장착·해제(자동착용 포함) 응답 대기 중인가(온라인).
+func equip_waiting() -> bool:
+	return _waiting.has("equip")
+
+
+## 장비 자동착용(영웅 상세 [장비 자동착용]): auto_equip_plan을 낀다. 오프라인은 한 번에 저장, 온라인은 /v1/equip를 부위마다 차례로
+## (앞 응답이 오면 다음 — 그동안 equip_block = "waiting"). 바꾼(보낸) 부위 수, 못 하면 0.
+func auto_equip(hero_id: String) -> int:
+	if _waiting.has("equip"):
+		return 0
+	var plan := auto_equip_plan(hero_id)
+	if plan.is_empty():
+		return 0
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return 0
+		_waiting["equip"] = true
+		_auto_equip_send(hero_id, plan.duplicate())
+		items_changed.emit()
+		return plan.size()
+	var eq: Dictionary = equipment.get(hero_id, {})
+	for s in plan:
+		eq[s] = plan[s]
+	equipment[hero_id] = eq
+	_equipment_saved()
+	return plan.size()
 
 
 ## 장착 못 하는 이유 코드(문구 EQUIP_TEXT, 서버와 같은 순서). 되면 "". not_owned → bad_slot → unknown_item → wrong_slot → wrong_weapon(그 영웅
@@ -2442,6 +2488,23 @@ func _equip_online(hero_id: String, slot: String, item_id) -> bool:
 	net.send("POST", "/v1/equip", {"hero_id": hero_id, "slot": slot, "item_id": item_id}, _on_equipped, _on_equip_failed)
 	items_changed.emit()
 	return true
+
+
+## 자동착용 남은 부위 하나를 보낸다(rest에서 뺀다). 실패하면 _on_equip_failed가 나머지를 버린다.
+func _auto_equip_send(hero_id: String, rest: Dictionary) -> void:
+	var s: String = rest.keys()[0]
+	var id: int = rest[s]
+	rest.erase(s)
+	net.send("POST", "/v1/equip", {"hero_id": hero_id, "slot": s, "item_id": id}, _on_auto_equipped.bind(hero_id, rest), _on_equip_failed)
+
+
+func _on_auto_equipped(data: Dictionary, hero_id: String, rest: Dictionary) -> void:
+	apply_server(data)
+	if rest.is_empty():
+		_waiting.erase("equip")
+	else:
+		_auto_equip_send(hero_id, rest)
+	items_changed.emit()
 
 
 func _on_equipped(data: Dictionary) -> void:
