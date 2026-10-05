@@ -11,3 +11,4 @@ server/.env
 server/.env.*
 !server/.env.example
 .superpowers/
+dev/meshy/out/

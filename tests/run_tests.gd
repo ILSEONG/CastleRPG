@@ -121,6 +121,7 @@ func _init() -> void:
 	test_equip_upgrade_dot()
 	test_hero_looks_unique()
 	test_hero_look_builder()
+	test_meshy_bodies()
 	test_portrait_looks()
 	test_scene_snap()
 	test_crowd()
@@ -3763,7 +3764,9 @@ func test_equip_upgrade_dot() -> void:
 
 ## 개정 23 영웅 생김새: 22명 모두 생김새가 있고 (모델·팔레트·머리·등·무기·크기) 묶음의 해시가 서로 다르다. 같은 모델끼리는
 ## 팔레트·머리·무기 중 둘 이상이 다르다. 머리 = 머리 뼈 부품 + 벗긴 모자·투구, 등 = 가슴 부품 + 벗긴 망토, 무기 = gear + swap + 손 부품.
+## KayKit 생김새(Art.meshy_bodies = false일 때 돌아가는 모습)를 본다 — Meshy 몸은 영웅마다 제 파일이다(test_meshy_bodies).
 func test_hero_looks_unique() -> void:
+	Art.meshy_bodies = false
 	var heroes: Array = GameData.heroes()
 	check(heroes.size() == 36 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
 	var seen := {}
@@ -3784,6 +3787,7 @@ func test_hero_looks_unique() -> void:
 			var tb: Dictionary = looks[b.id]
 			var diff := int(ta.palette != tb.palette) + int(ta.head != tb.head) + int(ta.weapon != tb.weapon)
 			check(diff >= 2, "%s vs %s (both %s) differ in %d of palette / headgear / weapon, need 2" % [a.id, b.id, a.model, diff])
+	Art.meshy_bodies = true
 
 
 func _look_tuple(h: Dictionary) -> Dictionary:
@@ -3861,6 +3865,8 @@ func test_hero_look_builder() -> void:
 		var textured := 0
 		var remapped := 0
 		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			if mi.name == Art.MESHY_BODY:
+				continue  # Meshy 몸 텍스처는 칸 아틀라스가 아니다(test_meshy_bodies)
 			for i in (mi as MeshInstance3D).mesh.get_surface_count():
 				var m := (mi as MeshInstance3D).get_active_material(i) as ShaderMaterial
 				if m != null and m.get_shader_parameter("use_texture"):
@@ -3876,7 +3882,9 @@ func test_hero_look_builder() -> void:
 		var look: Dictionary = Art.HERO_LOOKS[id]
 		for p in look.get("parts", []).map(func(q): return q[1]) + look.get("swap", {}).values():
 			named[p] = true
-			if not GameData.hero(id).is_empty():
+		if not GameData.hero(id).is_empty():  # 표에 있는 영웅 = 스펙이 다는 부품(Meshy 몸이면 손 부품만)
+			var spec := Art.hero_spec(GameData.hero(id))
+			for p in spec.parts.map(func(q): return q[1]) + spec.swap.values():
 				named_listed[p] = true
 	check(used.keys().all(func(p): return named_listed.has(p)) and used.size() == named_listed.size(),
 		"listed heroes' parts are all built (%d / %d)" % [used.size(), named_listed.size()])
@@ -3899,12 +3907,72 @@ func test_hero_look_builder() -> void:
 	MeshMergeScript.enabled = true
 
 
+## Meshy 몸(docs/meshy-assets.md, Art.MESHY_HERO_DIR): 파일이 있는 영웅만 spec.body = 그 파일이고 부품은 손 부품만(머리·가슴 장식은 몸에 있다).
+## 입히면 KayKit 몸(손 슬롯 밖 메시 전부)은 숨고 스켈레톤 아래 MESHY_BODY 하나가 보인다 — KayKit 몸과 같은 Skin·변환(같은 뼈 번호),
+## 삼각형 5천 이하, 칸 색표 없이 자기 텍스처, 무기(gear)는 그대로. 파일의 Skin bind도 KayKit과 같다(이름·뼈·자세). 영웅 전원이 Meshy 몸. 끄면 KayKit 생김새.
+func test_meshy_bodies() -> void:
+	MeshMergeScript.enabled = false
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	var n := 0
+	for h in GameData.heroes():
+		var spec := Art.hero_spec(h)
+		var path: String = Art.MESHY_HERO_DIR + h.id + ".glb"
+		check(spec.has("body") == ResourceLoader.exists(path), "%s has a Meshy body iff %s exists" % [h.id, path])
+		if not spec.has("body"):
+			continue
+		n += 1
+		check(spec.body == path and spec.parts.all(func(p): return String(p[0]).begins_with("handslot")),
+			"%s: Meshy body, hand parts only %s" % [h.id, spec.parts])
+		var model: Node3D = Art.instance(spec.scene)
+		UnitModelScript.dress(model, spec)
+		var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		var body := skel.get_node_or_null(NodePath(Art.MESHY_BODY)) as MeshInstance3D
+		var kay: MeshInstance3D = null
+		var hidden := true
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			var slot := mi.get_parent() as BoneAttachment3D
+			if mi == body or (slot != null and String(slot.bone_name).begins_with("handslot")):
+				continue
+			hidden = hidden and not mi.visible
+			if kay == null and mi.skin != null:
+				kay = mi
+		check(body != null and kay != null and body.visible and body.skin == kay.skin and body.transform == kay.transform and hidden,
+			"%s wears its Meshy body on the KayKit skin, KayKit body hidden" % h.id)
+		if body == null:
+			model.free()
+			continue
+		var tris: int = body.mesh.get_faces().size() / 3
+		check(tris > 1000 and tris <= 5000, "%s Meshy body within 5,000 triangles (%d)" % [h.id, tris])
+		var m := body.get_active_material(0) as ShaderMaterial
+		check(m != null and m.get_shader_parameter("use_texture") and m.get_shader_parameter("use_remap") != true,
+			"%s Meshy body draws its own texture (no color table)" % h.id)
+		for g in h.gear.split("|"):
+			check(spec.swap.has(g) or (model.find_child(g, true, false) as Node3D).visible, "%s still holds %s" % [h.id, g])
+		var src := Art.instance(path)
+		var own := (src.find_child(Art.MESHY_BODY, true, false) as MeshInstance3D).skin
+		var same: bool = own.get_bind_count() == kay.skin.get_bind_count()
+		for i in mini(own.get_bind_count(), kay.skin.get_bind_count()):
+			same = same and own.get_bind_name(i) == kay.skin.get_bind_name(i) and own.get_bind_bone(i) == kay.skin.get_bind_bone(i) \
+				and own.get_bind_pose(i).is_equal_approx(kay.skin.get_bind_pose(i))
+		check(same, "%s body file binds match the %s skin" % [h.id, h.model])
+		src.free()
+		model.free()
+	check(n == GameData.heroes().size(), "every hero has a Meshy body (%d of %d)" % [n, GameData.heroes().size()])
+	Art.meshy_bodies = false
+	check(not Art.hero_spec(GameData.hero("arteon")).has("body"), "meshy_bodies off: back to the KayKit look")
+	Art.meshy_bodies = true
+	MeshMergeScript.enabled = true
+
+
 ## 피규어(목록·상세 미리보기·모집 결과 카드)도 같은 생김새: Portraits.spec_of("hero:id") == Art.hero_spec — 팔레트·부품·swap·크기까지. 병사는 그대로.
 func test_portrait_looks() -> void:
 	for h in GameData.heroes():
 		var s: Dictionary = PortraitsScript.spec_of("hero:" + h.id)
 		var look: Dictionary = Art.HERO_LOOKS[h.id]
-		check(s == Art.hero_spec(h) and s.look == h.id and s.palette == Art.look_cells(h.model, look.palette) and s.parts == look.get("parts", [])
+		var parts: Array = look.get("parts", [])
+		if s.has("body"):
+			parts = parts.filter(func(p): return String(p[0]).begins_with("handslot"))
+		check(s == Art.hero_spec(h) and s.look == h.id and s.palette == Art.look_cells(h.model, look.palette) and s.parts == parts
 			and s.swap == look.get("swap", {}) and s.body_scale == look.get("scale", 1.0), "portrait of %s carries its look" % h.id)
 	check(not Art.soldier_spec("infantry", "Knight").has("palette") and not PortraitsScript.spec_of("soldier:archer").has("palette"),
 		"soldiers keep the plain model (no hero look)")

@@ -215,6 +215,14 @@ const HERO_LOOKS := {
 		"parts": [["head", "raven_crest"], ["chest", "raven_mantle"]], "scale": 1.04},
 }
 
+## Meshy 몸(docs/meshy-assets.md): 영웅 id 파일이 있으면 KayKit 몸(스킨 부위 + 모자·망토)을 숨기고 그 자리에 Meshy 메시를 단다.
+## 파일 = KayKit 뼈대(같은 뼈·순서·bind) + 스킨 메시 MESHY_BODY 하나 — dev/meshy_fit.py가 T자세 Meshy 메시를 KayKit T자세에 맞추고
+## KayKit 몸 가중치를 옮겨 만든다. 애니메이션·무기(손 슬롯)·타격 시점·팔레트(무기 칸)는 KayKit 그대로. 머리·가슴 부품은 몸에 이미 있어 빼고
+## 손 부품(handslot)만 단다. meshy_bodies = false면 KayKit 생김새로 돌아간다.
+const MESHY_HERO_DIR := "res://assets/models/meshy/heroes/"
+const MESHY_BODY := "MeshyBody"
+static var meshy_bodies := true
+
 ## 상인 NPC: 두건 없는 Rogue, 무기·투척물 숨김(Cape는 망토라 유지). attack/death는 UnitModel 계약상 채움(쓰지 않음).
 const MERCHANT_MODEL := {
 	"scene": CHAR_DIR + "Rogue.glb",
@@ -327,7 +335,41 @@ static func hero_spec(h: Dictionary) -> Dictionary:
 		spec.parts = look.get("parts", [])
 		spec.swap = look.get("swap", {})
 		spec.body_scale = look.get("scale", 1.0)
+		var body := meshy_body(h.id)
+		if body != "":
+			spec.body = body
+			spec.parts = spec.parts.filter(func(p): return String(p[0]).begins_with("handslot"))
 	return spec
+
+
+## 영웅 id의 Meshy 몸 파일(없거나 꺼져 있으면 "").
+static func meshy_body(id: String) -> String:
+	var path := MESHY_HERO_DIR + id + ".glb"
+	return path if meshy_bodies and ResourceLoader.exists(path) else ""
+
+
+## KayKit 모델의 몸(손 슬롯 무기를 뺀 메시 전부)을 숨기고 path의 MESHY_BODY를 스켈레톤 아래에 단다 — KayKit 몸과 같은 Skin·변환이라
+## 같은 뼈 번호로 움직이고 MeshMerge가 무기와 함께 합친다(UnitModel.dress, 트리 밖에서도 된다).
+static func put_body(model: Node3D, path: String) -> void:
+	var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var skinned: MeshInstance3D = null
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		var slot := mi.get_parent() as BoneAttachment3D
+		if slot != null and String(slot.bone_name).begins_with("handslot"):
+			continue
+		if skinned == null and mi.skin != null:
+			skinned = mi
+		mi.visible = false
+	var src := instance(path)
+	var body := src.find_child(MESHY_BODY, true, false) as MeshInstance3D
+	body.get_parent().remove_child(body)
+	src.free()
+	body.owner = null
+	skel.add_child(body)
+	body.transform = skinned.transform
+	body.skin = skinned.skin
+	body.skeleton = NodePath("..")
 
 
 ## 이름 붙은 팔레트(LOOK_SLOTS 이름 → 색) → 칸 번호 → 색.
@@ -416,6 +458,8 @@ static func tint(mi: MeshInstance3D, color: Color) -> void:
 static func remap(root: Node, key: String, palette: Dictionary) -> void:
 	for node in root.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
+		if mi.name == MESHY_BODY:
+			continue  # Meshy 몸 텍스처는 칸 아틀라스가 아니다 — 팔레트는 KayKit 무기에만
 		for i in mi.mesh.get_surface_count():
 			var src := mi.get_active_material(i) as ShaderMaterial
 			if src == null or not src.get_shader_parameter("use_texture"):
