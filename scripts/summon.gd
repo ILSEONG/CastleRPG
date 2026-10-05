@@ -14,9 +14,12 @@ extends Node3D
 ## 피해 = dmg(쓰는 쪽이 계산해 넘긴다) → m.take_damage(dmg, DamageNumbers.Kind.SKILL). 추가 효과(knockback·apply_root·apply_dot)는
 ## 몬스터에 그 함수가 있을 때만 부른다.
 ## 모양: MeshKit 로우폴리 부품 ≤ 3개(MeshInstance3D, 그림자 없음, Fx 공유 재질) — 몸통은 주인 색 섞음, 눈·부리·불꽃 등은 고정 강조색.
+## MESHY_DIR에 종류 id 파일이 있으면(meshy = true) 그 Meshy 모델의 부품(Part0 몸통, Part1·2 = 코드 모양의 1·2번 부품과 같은 관절)을
+## 영웅과 같은 그림 방식(Art.stylize) 텍스처 재질로 쓴다 — 움직임은 같다(dev/meshy_summon_fit.py, docs/meshy-assets.md "소환수").
 ## 메시는 (종류, 색)마다 한 번 만들어 캐시한다. 걷기 흔들림·날갯짓·공격 돌진(나는 것은 급강하)은 매 프레임 부품 변환만 바꾼다(할당 없음).
 ## 성벽 위 주인이 부르면(첫 프레임에 위치가 성벽 높이) 움직이는 소환수는 그 면 성벽 바깥 땅으로 내려선다 — 포탑만 성벽 위에 남는다.
 
+const Art := preload("res://scripts/art.gd")
 const Balance := preload("res://scripts/balance.gd")
 const Formation := preload("res://scripts/formation.gd")
 const Fx := preload("res://scripts/fx.gd")
@@ -55,7 +58,10 @@ const BURN_SEC := 2.0
 const ROOT_SEC := 0.5
 const KNOCK_M := 1.0
 
-static var _meshes := {}  # "종류#색" -> [[메시, 관절 위치, 재질 0 = 정점 색 / 1 = 가산 빛 / 2 = 반투명], …]
+const MESHY_DIR := "res://assets/models/meshy/summons/"
+
+static var meshy := true  # false면 Meshy 모델이 있어도 코드로 만든 모양
+static var _meshes := {}  # "종류#색" -> [[메시, 관절 위치, 재질 0 = 정점 색 / 1 = 가산 빛 / 2 = 반투명 / 3 = 넷째 칸 재질], …]
 
 var kind := "wolf"
 var owner_hero
@@ -126,7 +132,15 @@ func _ready() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = p[0]
 		mi.position = p[1]
-		mi.material_override = Fx.soft_material() if p[2] == 2 else (Fx.glow_material() if p[2] == 1 else Fx.material())
+		match p[2]:
+			3:
+				mi.material_override = p[3]
+			2:
+				mi.material_override = Fx.soft_material()
+			1:
+				mi.material_override = Fx.glow_material()
+			_:
+				mi.material_override = Fx.material()
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_pivot.add_child(mi)
 		_parts.append(mi)
@@ -491,12 +505,33 @@ static func _fx_mesh(what: String, c: Color) -> Mesh:
 	return _meshes[key]
 
 
-## 종류·색의 부품들 [[메시, 관절 위치(피벗 기준), 재질 0/1/2], …](최대 3개). 첫 부품이 몸통. 캐시한다.
+## 종류·색의 부품들 [[메시, 관절 위치(피벗 기준), 재질 0/1/2(/3 + 재질)], …](최대 3개). 첫 부품이 몸통. 캐시한다.
 static func parts_of(p_kind: String, c: Color) -> Array:
-	var key := p_kind + "#" + c.to_html()
+	var path := meshy_path(p_kind)
+	var key := p_kind + "#" + c.to_html() + ("" if path == "" else "#" + Art.unit_style)
 	if not _meshes.has(key):
-		_meshes[key] = _build(p_kind, c)
+		_meshes[key] = _build(p_kind, c) if path == "" else _meshy_parts(path)
 	return _meshes[key]
+
+
+## 종류의 Meshy 모델 파일(없거나 꺼져 있으면 "").
+static func meshy_path(p_kind: String) -> String:
+	var path := MESHY_DIR + p_kind + ".glb"
+	return path if meshy and ResourceLoader.exists(path) else ""
+
+
+## Meshy 부품 GLB(노드 Part0·1·2, 원점 = 관절) → 부품. 재질은 지금 그림 방식(Art.stylize)으로 바꾼 텍스처 재질(주인 색 섞지 않음).
+static func _meshy_parts(path: String) -> Array:
+	var src := Art.instance(path)
+	Art.stylize(src)
+	var out := []
+	for i in 3:
+		var mi := src.get_node_or_null("Part%d" % i) as MeshInstance3D
+		if mi == null:
+			break
+		out.append([mi.mesh, mi.position, 3, mi.get_active_material(0)])
+	src.free()
+	return out
 
 
 static func _build(p_kind: String, c: Color) -> Array:

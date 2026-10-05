@@ -31,3 +31,13 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
 4. 게임: `Art.hero_spec`이 `MESHY_HERO_DIR/<id>.glb`가 있으면 `spec.body`를 넣고, `UnitModel.dress`가 KayKit 몸(손 슬롯 무기 밖 메시)을
    숨긴 뒤 `MeshyBody`를 같은 Skin으로 스켈레톤에 단다. 팔레트는 무기에만, 머리·가슴 부품은 빼고 손 부품만 단다.
    `Art.meshy_bodies = false`면 KayKit 생김새. 검사: tests/run_tests.gd `test_meshy_bodies`.
+
+## 소환수
+소환수(scripts/summon.gd)는 KayKit 뼈대 없이 부품 ≤ 3개를 코드로 흔든다(몸통 + 팔·날개 등). Meshy 모델도 같은 부품으로 나눠 넣는다.
+1. 컨셉: `dev/meshy_summons.py concept <kind>`(아르테온 컨셉 참조, nano-banana-2 6 크레딧). 따로 움직이는 부위(골렘 팔)는 몸에서
+   떨어져 떠 있는 모양으로 그린다 — 메시에서 섬으로 나뉘어 자르지 않고 부품이 된다.
+2. 3D: `dev/meshy_summons.py model <kind>`(meshy-t2 smart-topology + 텍스처 15 크레딧, 4천 삼각형 안팎). 소환수 하나 21 크레딧.
+3. 부품: `python3 dev/meshy_summon_fit.py golem <meshy>.glb assets/models/meshy/summons/golem.glb` — 정면을 −Z로 돌리고 키 2.3 m·발 y = 0,
+   바깥쪽 섬 = 팔(Part1 −X, Part2 +X), 관절 = 그 위 어깨 덩이 중심, 나머지 = 몸통(Part0). 노드 원점 = 관절.
+4. 게임: `summon.gd`가 `MESHY_DIR/<kind>.glb`가 있으면 그 부품을 영웅과 같은 그림 방식(Art.stylize)으로 쓴다. 움직임 코드는 그대로.
+   `meshy = false`면 코드 모양. 검사: tests/summon_check.gd `(A2)`.

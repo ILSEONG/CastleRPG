@@ -41,3 +41,4 @@ Meshy(meshy.ai) Pro 플랜으로 생성 — 유료 플랜 생성물은 생성자
 | `heroes/pip.glb` | 2026-10-05 | image-to-3d `01a10d07-9b22-7438-afa9-12b24550bcc2`(meshy-t2) | image-to-image `01a10d03-a8fe-774b-9c9b-5ff5e4416309`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `heroes/grit.glb` | 2026-10-05 | image-to-3d `01a10d07-9e6b-74c5-a3f3-d246ccdabd9d`(meshy-t2) | image-to-image `01a10d03-ac37-763c-b246-ad92a2319c04`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `heroes/tia.glb` | 2026-10-05 | image-to-3d `01a10d07-a36c-7717-a1fc-2782e29e5e50`(meshy-t2) | image-to-image `01a10d03-af69-7278-af54-34a77458cd72`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/golem.glb` | 2026-10-05 | image-to-3d `01a10e47-4b1a-717a-8177-c57be8d36edd`(meshy-t2) | image-to-image `01a10e46-4ae6-7274-a718-ab93ab172fc9`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
