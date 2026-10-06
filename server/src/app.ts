@@ -62,6 +62,7 @@ interface Game {
   dungeons: R.DungeonDef[] // 개정 18 던전 적 표(파일 순서)
   equip_drop: Record<string, number>[] // 개정 18 등급 가중치(min_level 순)
   research: R.ResearchDef[] // 개정 24 연구 노드 표(파일 순서)
+  quests: R.QuestDef[] // 튜토리얼·반복 퀘스트 표(파일 순서)
   config: R.Config
 }
 
@@ -109,6 +110,9 @@ interface Player {
   gacha: { gold_level: number; gold_pulls: number; dia_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터
   research: Record<string, number> // 개정 24: 연구 노드 id → 레벨(0 초과만)
   research_cur: { id: string; finish: number } | null // 진행 중인 연구(끝나는 시각 = 유닉스 초), 쉬면 null
+  quest: { tut_state: string; tut_step: number; rep_n: number; last_claim: number | null } // 튜토리얼·반복 퀘스트 진행
+  dia_tickets: number // 다이아 모집권(튜토리얼 보상)
+  unbuilt: string[] // 튜토리얼 공터(아직 짓지 않은 건물 — 레벨 행은 1)
 }
 
 interface Train {
@@ -152,6 +156,8 @@ interface Change {
   diamonds?: number // 다이아 증감(개정 23)
   gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
   research?: { id: string; finish: number } | null // 새 진행 중 연구(개정 24)
+  quest?: { tut_state?: string; tut_step?: number; rep_n?: number; last_claim?: number } // 퀘스트 진행
+  diaTickets?: number // 다이아 모집권 증감
   researchUp?: string // 연구 노드 레벨 +1(개정 24)
   log?: { kind: string; detail: unknown }
   shards?: Record<string, number> // 영웅 → 조각 증가(길드 상점)
@@ -176,7 +182,8 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
+const PLAYER_SQL = `select s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
+  s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   coalesce((select json_object_agg(id, level) from player_research where player_id = s.player_id and level > 0), '{}'::json) as research,
@@ -212,8 +219,12 @@ const RUN_SQL = `select run_id, type, level, party, seed, extract(epoch from sta
 const ENSURE_SQL = `with p as (
     insert into players (device_id, created_at, last_seen) values ($1, to_timestamp($2::float8), to_timestamp($2::float8))
     on conflict (device_id) do update set last_seen = excluded.last_seen returning id),
-  s as (insert into player_state (player_id, last_kill_report, last_stage_clear, deploy)
-    select id, to_timestamp($2::float8), to_timestamp($2::float8), $3::jsonb from p on conflict do nothing returning player_id),
+  t as (select coalesce((select value from game_config where key = 'tutorial_new_players'), '0') = '1' as tut),
+  s as (insert into player_state (player_id, last_kill_report, last_stage_clear, deploy, tut_state, unbuilt)
+    select id, to_timestamp($2::float8), to_timestamp($2::float8), $3::jsonb, case when t.tut then 'active' else 'skipped' end,
+      case when t.tut then array(select x.id from (select building as id from resources union select id from building_defs) as x
+        where x.id not in ('${R.KEEP}', '${R.GATE}') order by x.id) else '{}'::text[] end
+    from p, t on conflict do nothing returning player_id),
   h as (insert into player_heroes (player_id, hero_id) select s.player_id, x from s, jsonb_array_elements_text($3::jsonb) as x
     on conflict do nothing),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
@@ -232,10 +243,13 @@ const ENSURE_ROWS_SQL = `with p as (select $1::uuid as id),
 
 // 게으른 완료(개정 12 §2.4): 다 지은 건물 레벨 +1(성채·성문이면 player_state 레벨도 — 하위 호환), 일꾼 비우기,
 // economy_log build_done을 version 가드 한 문장으로. 다른 요청이 먼저 바꿨으면 0행 — 다시 읽는다.
-const COMPLETE_SQL = `with s as (update player_state set version = version + 1, build_id = null, build_finish = null,
+const COMPLETE_SQL = `with w as (select $3 = any(unbuilt) as lot, build_finish from player_state where player_id = $1 and version = $2),
+  s as (update player_state set version = version + 1, build_id = null, build_finish = null, unbuilt = array_remove(unbuilt, $3),
     keep_level = keep_level + (case when build_id = $5 then 1 else 0 end), gate_level = gate_level + (case when build_id = $6 then 1 else 0 end)
     where player_id = $1 and version = $2 and build_id = $3 returning player_id),
-  b as (update player_buildings set level = level + 1 where player_id = (select player_id from s) and building = $3 returning 1),
+  b as (update player_buildings set level = level + (case when (select lot from w) then 0 else 1 end),
+    last_collect = case when (select lot from w) then (select build_finish from w) else last_collect end
+    where player_id = (select player_id from s) and building = $3 returning 1),
   l as (insert into economy_log (player_id, kind, detail, at) select player_id, 'build_done', $7::jsonb, to_timestamp($4::float8) from s returning 1)
   select count(*)::int as n from s`
 
@@ -254,6 +268,13 @@ function counts(v: unknown): Record<string, number> {
     for (const [k, n] of Object.entries(v as Record<string, unknown>)) if (Number.isInteger(Number(n))) out[k] = Number(n)
   }
   return out
+}
+
+// 튜토리얼 공터 짓기를 못 하는 이유(앱 Economy.upgrade_block의 공터 분기와 같다): 일꾼이 바쁘면 in_progress·builder_busy, Lv 1 비용이 모자라면 not_enough.
+function lotBlock(def: R.BuildingDef, build: Player['build'], res: Record<string, number>): string {
+  if (build) return build.id === def.id ? 'in_progress' : 'builder_busy'
+  const cost = R.buildCost(def, 1)
+  return R.BUILD_RES.some((r) => (res[r] ?? 0) < cost[r]) ? 'not_enough' : ''
 }
 
 // 병사 건물 id의 병종 정의(개정 16 훈련). 병사 건물이 아니면 400 not_soldier_building.
@@ -298,7 +319,7 @@ export function createApp(opts: AppOptions) {
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
       resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades), config: json(r.config),
-      dungeons: json(r.dungeons), equip_drop: json(r.equip_drop), research: json(r.research),
+      dungeons: json(r.dungeons), equip_drop: json(r.equip_drop), research: json(r.research), quests: json(r.quests),
     }
   }
 
@@ -365,9 +386,14 @@ export function createApp(opts: AppOptions) {
         gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity) },
         research: counts(json(r.research)),
         research_cur: typeof r.research_id === 'string' ? { id: r.research_id, finish: Number(r.research_finish) } : null,
+        quest: { tut_state: String(r.tut_state ?? 'skipped'), tut_step: Number(r.tut_step ?? 0), rep_n: Number(r.rep_n ?? 0),
+          last_claim: r.last_quest_claim == null ? null : Number(r.last_quest_claim) },
+        dia_tickets: Number(r.dia_tickets ?? 0),
+        unbuilt: Array.isArray(r.unbuilt) ? r.unbuilt.map(String) : [],
       }
       if (p.build && p.build.finish <= now) {
-        const from = level(p, p.build.id)
+        const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
+        const from = lot ? 0 : level(p, p.build.id)
         await query(COMPLETE_SQL, [id, p.version, p.build.id, now, R.KEEP, R.GATE,
           JSON.stringify({ building: p.build.id, from, to: from + 1, finish: p.build.finish })])
         continue // 이겼든 졌든(다른 요청이 먼저 완료했으면 build_id가 비어 있다) 다시 읽는다
@@ -429,6 +455,8 @@ export function createApp(opts: AppOptions) {
         diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
+        quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n }, // 튜토리얼·반복 퀘스트 진행
+        dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => game.buildings.some((d) => d.id === b) || game.resources.some((r) => r.building === b)),
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -475,6 +503,11 @@ export function createApp(opts: AppOptions) {
     if (ch.gacha?.gold_level !== undefined) sets.push(`gacha_gold_level = ${p(ch.gacha.gold_level)}::int`)
     if (ch.gacha?.gold_pulls !== undefined) sets.push(`gacha_gold_pulls = ${p(ch.gacha.gold_pulls)}::int`)
     if (ch.gacha?.dia_pity !== undefined) sets.push(`gacha_dia_pity = ${p(ch.gacha.dia_pity)}::int`)
+    if (ch.quest?.tut_state !== undefined) sets.push(`tut_state = ${p(ch.quest.tut_state)}::text`)
+    if (ch.quest?.tut_step !== undefined) sets.push(`tut_step = ${p(ch.quest.tut_step)}::int`)
+    if (ch.quest?.rep_n !== undefined) sets.push(`rep_n = ${p(ch.quest.rep_n)}::int`)
+    if (ch.quest?.last_claim !== undefined) sets.push(`last_quest_claim = to_timestamp(${p(ch.quest.last_claim)}::float8)`)
+    if (ch.diaTickets) sets.push(`dia_tickets = dia_tickets + ${p(ch.diaTickets)}::int`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
@@ -655,6 +688,11 @@ export function createApp(opts: AppOptions) {
     pl.gacha = { ...pl.gacha, ...ch.gacha }
     if (ch.research !== undefined) pl.research_cur = ch.research
     if (ch.researchUp) pl.research[ch.researchUp] = (pl.research[ch.researchUp] ?? 0) + 1
+    if (ch.quest) {
+      const { last_claim, ...rest } = ch.quest
+      pl.quest = { ...pl.quest, ...rest, ...(last_claim !== undefined ? { last_claim } : {}) }
+    }
+    pl.dia_tickets += ch.diaTickets ?? 0
     for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
     pl.version += 1
   }
@@ -897,6 +935,7 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g, now) => {
       const r = g.resources.find((x) => x.building === building)
       if (!r) throw new ApiError(400, 'not_resource_building', `'${building}' is not a resource building`)
+      if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
       const b = p.buildings[building]
       const st = R.collectStep(b.last_collect, now, r.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'), R.researchProdPct(bonus(p, g), r.id))
       if (!st.changed) return { extra: { amount: 0 } }
@@ -1033,12 +1072,13 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g, now) => {
       const def = g.buildings.find((d) => d.id === building)
       if (!def) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
+      const lot = p.unbuilt.includes(building) // 튜토리얼 공터 짓기(0 → 1): 일꾼과 Lv 1 비용·시간만 본다(선행·성채 상한 없음, 자동 수집 없음)
       const from = level(p, building)
       const res: Record<string, number> = { ...p.res }
       const rdef = g.resources.find((r) => r.building === building)
       const rb = bonus(p, g)
       let collect: { res: string; amount: number; from: number; to: number } | null = null
-      if (rdef) {
+      if (rdef && !lot) {
         const b = p.buildings[building]
         const st = R.collectStep(b.last_collect, now, rdef.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'), R.researchProdPct(rb, rdef.id))
         if (st.changed) {
@@ -1047,9 +1087,9 @@ export function createApp(opts: AppOptions) {
         }
       }
       const levels: Record<string, number> = {}
-      for (const d of g.buildings) levels[d.id] = level(p, d.id)
-      const why = R.upgradeBlock(building, g.buildings, levels, p.build !== null, res)
-      if (why) throw new ApiError(409, why, `cannot upgrade '${building}' from level ${from}: ${why}`)
+      for (const d of g.buildings) levels[d.id] = p.unbuilt.includes(d.id) ? 0 : level(p, d.id)
+      const why = lot ? lotBlock(def, p.build, res) : R.upgradeBlock(building, g.buildings, levels, p.build !== null, res)
+      if (why) throw new ApiError(409, why, `cannot upgrade '${building}' from level ${lot ? 0 : from}: ${why}`)
       const cost = R.buildCost(def, from)
       const finish = now + R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100)) // 개정 24: 연구 build_speed_pct
       const delta: Record<string, number> = {}
@@ -1060,7 +1100,7 @@ export function createApp(opts: AppOptions) {
       return {
         change: {
           res: delta, buildings: collect ? { [building]: collect.to } : {}, build: { id: building, finish },
-          log: { kind: 'build_start', detail: { building, from, to: from + 1, cost, finish, collect } },
+          log: { kind: 'build_start', detail: { building, from: lot ? 0 : from, to: lot ? 1 : from + 1, cost, finish, collect } },
         },
         extra: { build: { id: building, finish } },
       }
@@ -1076,19 +1116,23 @@ export function createApp(opts: AppOptions) {
     const count = b.count
     if (count !== 1 && count !== 10) throw new ApiError(400, 'bad_request', "'count' must be 1 or 10")
     const currency = b.currency ?? R.GACHA_GOLD
-    if (typeof currency !== 'string' || !R.GACHA_CURRENCIES.includes(currency)) throw new ApiError(400, 'bad_request', "'currency' must be gold or diamond")
-    const dia = currency === R.GACHA_DIA
+    if (typeof currency !== 'string' || ![...R.GACHA_CURRENCIES, R.GACHA_TICKET].includes(currency)) {
+      throw new ApiError(400, 'bad_request', "'currency' must be gold, diamond or ticket")
+    }
+    const ticket = currency === R.GACHA_TICKET // 다이아 모집권: 다이아 모집과 같은 확률·천장, 1장 = 1회
+    const dia = currency === R.GACHA_DIA || ticket
     return mutate(c, (p, g) => {
       const lv = p.gacha.gold_level
-      const cost = R.gachaCost(g.config, currency, count, lv)
-      if (dia ? p.diamonds < cost : Math.floor(p.gold_tenths / 10) < cost) {
-        throw new ApiError(409, dia ? 'not_enough_diamonds' : 'not_enough_gold', `recruiting ${count} costs ${cost} ${dia ? 'diamonds' : 'gold'}`)
+      const cost = ticket ? count : R.gachaCost(g.config, currency, count, lv)
+      if (ticket ? p.dia_tickets < cost : dia ? p.diamonds < cost : Math.floor(p.gold_tenths / 10) < cost) {
+        const code = ticket ? 'not_enough_tickets' : dia ? 'not_enough_diamonds' : 'not_enough_gold'
+        throw new ApiError(409, code, `recruiting ${count} costs ${cost} ${ticket ? 'tickets' : dia ? 'diamonds' : 'gold'}`)
       }
       const owned: Record<string, { copies: number; shards: number }> = {}
       for (const [id, h] of Object.entries(p.heroes)) owned[id] = { copies: h.copies, shards: h.shards }
       const add: Record<string, number> = {}
       const pity = dia ? { n: p.gacha.dia_pity, max: R.cfgNum(g.config, 'gacha_dia_pity') } : undefined
-      const rates = R.gachaRates(g.config, currency, lv, level(p, R.TAVERN))
+      const rates = R.gachaRates(g.config, dia ? R.GACHA_DIA : currency, lv, level(p, R.TAVERN))
       const results = R.rollGacha(count, g.heroes, g.config, random, rates, pity).map(({ id, grade }) => {
         const o = owned[id]
         const isNew = !(o?.copies > 0)
@@ -1098,12 +1142,63 @@ export function createApp(opts: AppOptions) {
       })
       const up = R.goldLevelUp(g.config, lv, p.gacha.gold_pulls, count)
       const gacha = pity ? { dia_pity: pity.n } : { gold_level: up.level, gold_pulls: up.pulls }
-      const paid = dia ? { diamonds: -cost } : { gold_tenths: -cost * 10 }
+      const paid = ticket ? { dia_tickets: -cost } : dia ? { diamonds: -cost } : { gold_tenths: -cost * 10 }
       const detail = { currency, count, cost, ...paid, level: lv, pity: p.gacha.dia_pity, after: gacha, results }
       return {
-        change: { ...(dia ? { diamonds: -cost } : { goldTenths: -cost * 10 }), heroes: add, gacha, log: { kind: 'gacha', detail } },
+        change: { ...(ticket ? { diaTickets: -cost } : dia ? { diamonds: -cost } : { goldTenths: -cost * 10 }), heroes: add, gacha, log: { kind: 'gacha', detail } },
         extra: { results },
       }
+    })
+  })
+
+  // 퀘스트 보상 받기(튜토리얼 미션·반복 퀘스트). body = {type: 'tutorial', step} | {type: 'repeat', n} — 지금 진행 번호와 같아야 한다
+  // (아니면 409 stale: 이미 받았거나 앞섰다 — 재전송이 두 번 받지 않는다). 튜토리얼은 needs(서버가 볼 수 있는 조건: 지은 건물·레벨)를 보고,
+  // 나머지 완료 판정은 앱을 믿는다(사건 수 — 서버가 세지 않는다). 반복 퀘스트는 quest_repeat_min_sec 간격으로만(409 too_soon).
+  // 보상(자원·골드·다이아·모집권·던전 열쇠)·진행·economy_log quest를 version 가드 한 문장으로.
+  app.post('/v1/quest/claim', auth, async (c) => {
+    const b = await body(c)
+    const type = b.type
+    if (type !== 'tutorial' && type !== 'repeat') throw new ApiError(400, 'bad_request', "'type' must be tutorial or repeat")
+    const num = intField(b, type === 'tutorial' ? 'step' : 'n', 0, MAX_INT4)
+    return mutate(c, (p, g, now) => {
+      const q = p.quest
+      let reward: Record<string, number>
+      let quest: NonNullable<Change['quest']>
+      let id: string
+      if (type === 'tutorial') {
+        const rows = g.quests.filter((d) => d.type === 'tutorial')
+        if (q.tut_state !== 'active' || !rows.length) throw new ApiError(409, 'no_tutorial', 'the tutorial is not running')
+        if (num !== q.tut_step || num >= rows.length) throw new ApiError(409, 'stale', `tutorial step is ${q.tut_step}`)
+        const def = rows[num]
+        const need = R.parseNeeds(def.needs)
+        if (need && (p.unbuilt.includes(need.building) || level(p, need.building) < need.level)) {
+          throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
+        }
+        reward = R.parseReward(def.reward) ?? {}
+        id = def.id
+        quest = { tut_step: num + 1, ...(num + 1 >= rows.length ? { tut_state: 'done' } : {}) }
+      } else {
+        if (q.tut_state === 'active') throw new ApiError(409, 'tutorial_running', 'finish the tutorial first')
+        const rq = R.repeatQuest(g.quests, num)
+        if (!rq) throw new ApiError(409, 'no_quests', 'no repeat quests')
+        if (num !== q.rep_n) throw new ApiError(409, 'stale', `repeat quest is ${q.rep_n}`)
+        if (q.last_claim !== null && now - q.last_claim < R.cfgNum(g.config, 'quest_repeat_min_sec')) throw new ApiError(409, 'too_soon', 'claimed too soon')
+        reward = R.repeatReward(rq.def, rq.cycle)
+        id = rq.def.id
+        quest = { rep_n: num + 1, last_claim: now }
+      }
+      const change: Change = { quest, log: { kind: 'quest', detail: { type, num, id, reward } } }
+      const res = Object.fromEntries(R.BUILD_RES.filter((r) => (reward[r] ?? 0) > 0).map((r) => [r, reward[r]]))
+      if (Object.keys(res).length) change.res = res
+      if (reward.gold) change.goldTenths = reward.gold * 10
+      if (reward.diamonds) change.diamonds = reward.diamonds
+      if (reward.tickets) change.diaTickets = reward.tickets
+      const keyType = R.DUNGEON_TYPES.find((t) => (reward[`keys_${t}`] ?? 0) > 0)
+      if (keyType) {
+        const st = dungeonState(p, g, keyType, now)
+        change.dungeon = { type: keyType, state: { ...st, keys: st.keys + reward[`keys_${keyType}`] } }
+      }
+      return { change, extra: { reward }, reload: Boolean(keyType) }
     })
   })
 
@@ -1259,8 +1354,10 @@ export function createApp(opts: AppOptions) {
     const count = intField(b, 'count', 1, MAX_INT4)
     return mutate(c, (p, g, now) => {
       const s = soldierAt(g, building)
+      if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
       const lv = level(p, building)
-      const max = R.trainMax(g.config, lv)
+      const tut = p.quest.tut_state === 'active' // 튜토리얼 중: 1마리씩, tutorial_train_sec초
+      const max = tut ? 1 : R.trainMax(g.config, lv)
       if (count > max) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${max}`)
       const q = p.buildings[building].train
       if (q) throw new ApiError(409, q.finish > now ? 'training' : 'ready_to_collect', `'${building}' already has ${q.count} in training`)
@@ -1268,8 +1365,8 @@ export function createApp(opts: AppOptions) {
       const rb = bonus(p, g) // 개정 24: 연구 train_cost_pct(비용 할인)·train_speed_pct(시간 ÷ (1 + b/100), 반올림 없음)
       const cost = R.trainCost(g.config, s.id, count, tier, rb.train_cost_pct)
       if (Object.entries(cost).some(([r, v]) => (p.res[r] ?? 0) < v)) throw new ApiError(409, 'not_enough', `training ${count} costs ${JSON.stringify(cost)}`)
-      const unit = R.soldierUnitSec(g.config, lv)
-      const train = { count, tier, finish: now + count * unit / (1 + rb.train_speed_pct / 100) }
+      const unit = tut ? R.cfgNum(g.config, 'tutorial_train_sec') : R.soldierUnitSec(g.config, lv)
+      const train = { count, tier, finish: now + count * (tut ? unit : unit / (1 + rb.train_speed_pct / 100)) }
       const res = Object.fromEntries(Object.entries(cost).filter(([, v]) => v > 0).map(([r, v]) => [r, -v]))
       return {
         change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, tier, level: lv, unit_sec: unit, cost, finish: train.finish } } },
@@ -1326,6 +1423,7 @@ export function createApp(opts: AppOptions) {
       const def = g.research.find((d) => d.id === id)
       if (!def) throw new ApiError(404, 'unknown_research', `research '${id}' does not exist`)
       if (p.research_cur) throw new ApiError(409, 'research_busy', `'${p.research_cur.id}' is already being researched`)
+      if (p.unbuilt.includes(R.LAB)) throw new ApiError(409, 'lab_unbuilt', 'build the lab first')
       const lab = level(p, R.LAB)
       const from = p.research[id] ?? 0
       const why = R.researchBlock(def, p.research, lab, { ...p.res, gold: Math.floor(p.gold_tenths / 10) }, g.config)
@@ -1990,6 +2088,15 @@ export function createApp(opts: AppOptions) {
     })
 
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
+    // 통합 체크용: 설정 값 하나를 바꾼다(dev/online-check.sh가 새 플레이어 튜토리얼을 끄고 옛 훈련 묶음 상한을 쓴다)
+    app.post('/v1/test/config', async (c) => {
+      const b = await body(c)
+      const key = strField(b, 'key')
+      const value = strField(b, 'value')
+      await query('insert into game_config (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [key, value])
+      return c.json({ ok: true })
+    })
+
     app.post('/v1/test/build_now', auth, async (c) => {
       const id = c.get('playerId') as string
       await query('update player_state set version = version + 1, build_finish = to_timestamp($2::float8) where player_id = $1 and build_id is not null', [id, clock()])

@@ -720,6 +720,24 @@ static func stage(n: int) -> Dictionary:
 	return out
 
 
+## 성 방어 적 모습(능력치·골드와 무관 — 표 id는 grunt·epic_boss 그대로): 일반 적은 스테이지 안에서 LOOK_ROUNDS 라운드마다 다음 모습,
+## 다음 스테이지는 이어서 다음 모습부터(1스테이지 1~5라운드 = 해골 그대로). 보스는 스테이지마다 다음 모습.
+## 던전 적(고블린·고블린 왕·데스나이트)은 던전 전용이라 쓰지 않는다.
+const ENEMY_LOOKS := ["grunt", "zombie", "lizardman", "bandit", "werewolf", "imp", "skeleton_warrior", "ratman", "mushroom", "orc", "frost_troll"]
+const BOSS_LOOKS := ["epic_boss", "ogre_warlord", "orc_chief", "demon_lord", "bandit_chief", "minotaur"]
+const LOOK_ROUNDS := 5
+
+
+static func enemy_look(g: int) -> String:
+	var blocks := ceili(float(rounds_per_stage()) / LOOK_ROUNDS)  # 한 스테이지의 모습 묶음 수
+	var block := (round_in_stage(g) - 1) / LOOK_ROUNDS + (round_stage(g) - 1) * blocks
+	return ENEMY_LOOKS[block % ENEMY_LOOKS.size()]
+
+
+static func boss_look(g: int) -> String:
+	return BOSS_LOOKS[(round_stage(g) - 1) % BOSS_LOOKS.size()]
+
+
 ## 라운드(개정 22 §1): 전체 라운드 g(= GameState.stage, 표 행·서버 stage) → 스테이지 S·라운드 r(1..rounds_per_stage), 표기 "S-r".
 static func round_stage(g: int) -> int:
 	return (maxi(g, 1) - 1) / rounds_per_stage() + 1

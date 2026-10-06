@@ -38,6 +38,7 @@ func _init() -> void:
 	test_game_tables()
 	test_apply_remote()
 	test_wave_stage_ends_with_boss()
+	test_enemy_looks()
 	test_rounds()
 	test_wave_total_monotonic()
 	test_wave_idle_cycle()
@@ -131,6 +132,7 @@ func _init() -> void:
 	test_mesh_merge()
 	test_guild()
 	test_tutorial()
+	test_tutorial_online()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -478,6 +480,25 @@ func test_wave_total_monotonic() -> void:
 		var n := WaveDirector.build(stage, WaveDirector.MODE_STAGE).size()
 		check(n >= prev, "spawn count non-decreasing at stage %d" % stage)
 		prev = n
+
+
+func test_enemy_looks() -> void:
+	var looks := {}
+	for g in range(1, 26):
+		looks[GameData.enemy_look(g)] = true
+	check(looks.size() == 5, "five different enemy looks within one stage")
+	check(GameData.enemy_look(1) == "grunt" and GameData.enemy_look(5) == "grunt" and GameData.enemy_look(6) == "zombie", "look changes every 5 rounds, stage 1 starts with skeletons")
+	check(GameData.enemy_look(26) == "imp" and GameData.enemy_look(51) == "frost_troll", "next stage continues with the next looks")
+	check(GameData.boss_look(25) == "epic_boss" and GameData.boss_look(50) == "ogre_warlord" and GameData.boss_look(75) == "orc_chief", "boss look changes per stage")
+	for look in GameData.ENEMY_LOOKS + GameData.BOSS_LOOKS:
+		check(not look in ["goblin", "goblin_king", "death_knight"], "dungeon monsters stay in dungeons: " + look)
+	for look in GameData.ENEMY_LOOKS + GameData.BOSS_LOOKS:
+		check(Art.MONSTER_MODELS.has(look), "look has a model: " + look)
+	for e in WaveDirector.build(6, WaveDirector.MODE_STAGE) + WaveDirector.build(6, WaveDirector.MODE_IDLE):
+		check(e.kind in ["grunt", "epic_boss"], "looks keep the monster table ids (stats, gold)")
+		check(e.kind != "grunt" or e.look == "zombie", "round 6 grunts look like zombies")
+	var boss: Array = WaveDirector.build(50, WaveDirector.MODE_STAGE).filter(func(e): return e.kind == "epic_boss")
+	check(boss.size() == 1 and boss[0].look == "ogre_warlord", "stage 2 boss looks like the ogre warlord")
 
 
 func test_wave_idle_cycle() -> void:
@@ -3984,7 +4005,8 @@ func test_meshy_bodies() -> void:
 func test_meshy_enemies() -> void:
 	MeshMergeScript.enabled = false
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
-	for kind in ["goblin", "goblin_king", "death_knight"]:
+	for kind in ["goblin", "goblin_king", "death_knight", "zombie", "lizardman", "werewolf", "imp", "ratman", "mushroom", "frost_troll",
+			"ogre_warlord", "demon_lord", "minotaur"]:
 		var spec := Art.monster_spec(kind)
 		check(spec.get("body", "") == Art.MESHY_ENEMY_DIR + kind + ".glb" and not spec.has("tint")
 			and spec.parts.all(func(p): return String(p[0]).begins_with("handslot")), "%s: Meshy body, hand parts only %s" % [kind, spec.get("parts")])
@@ -4688,7 +4710,81 @@ func test_tutorial() -> void:
 
 
 
-## 옛 훈련 설정(1마리 3:00, 묶음 10 + 2 × (L − 1)) — 훈련 규칙 테스트가 쓴다. 실제 설정은 1마리씩·18분(사용자 2026-10-06).
+## 온라인 튜토리얼·반복 퀘스트: 서버 표 data/quests.csv가 이 규칙(MISSIONS·reward·REPEATS)과 같은지, apply_server가 quest·unbuilt·dia_tickets를
+## 받는지, Tutorial이 서버 진행을 따르는지(받기 전엔 카드 없음, 단계가 바뀌면 사건 수를 새로, 끝나면 알림). net은 null(요청은 안 보낸다).
+func test_tutorial_online() -> void:
+	GameData.load_tables()
+	var enc := func(r: Dictionary) -> String:
+		var parts := []
+		for k in ["wood", "stone", "food", "gold", "diamonds", "tickets", "keys_gold", "keys_equip"]:
+			if r.has(k):
+				parts.append("%s:%d" % [k, int(r[k])])
+		return "|".join(parts)
+	var rows := []
+	var f := FileAccess.open("res://data/quests.csv", FileAccess.READ)
+	f.get_csv_line()
+	while not f.eof_reached():
+		var line := f.get_csv_line()
+		if line.size() >= 5:
+			rows.append(line)
+	var tmp = TutorialScript.new()
+	tmp.save_path = ""
+	var tut := rows.filter(func(x): return x[1] == "tutorial")
+	var rep := rows.filter(func(x): return x[1] == "repeat")
+	var same: bool = tut.size() == TutorialScript.MISSIONS.size() and rep.size() == TutorialScript.REPEATS.size()
+	var bad := ""
+	if same:
+		for i in tut.size():
+			var m: Dictionary = TutorialScript.MISSIONS[i]
+			var needs := ""
+			if m.kind == "build":
+				needs = "build:%s" % m.arg
+			elif m.kind == "level":
+				needs = "level:%s:%d" % [m.arg[0], int(m.arg[1])]
+			if tut[i][0] != m.id or tut[i][2] != needs or tut[i][3] != enc.call(tmp.reward(i)):
+				bad = "%s: %s" % [m.id, tut[i]]
+		for i in rep.size():
+			var d: Dictionary = TutorialScript.REPEATS[i]
+			if rep[i][0] != "rep_" + d.kind or rep[i][3] != enc.call(d.get("reward", {})) or rep[i][4] != enc.call(d.get("fixed", {})):
+				bad = "%s: %s" % [d.kind, rep[i]]
+	tmp.free()
+	check(same and bad == "", "quests.csv matches the tutorial rewards and repeat quests (regenerate it when costs change) %s" % bad)
+	var now := 1.8e9
+	var e = _econ(now)
+	var reply := {"player": {"gold_tenths": 1005, "stage": 3, "res": {"wood": 4}, "buildings": {}, "dia_tickets": 7, "unbuilt": ["lumber", "nope"],
+		"quest": {"tut_state": "active", "tut_step": 3, "rep_n": 0}}, "merchant": {"rates": {"wood": 1.2, "stone": 0.8, "food": 2.0}, "next_change": 3600.0}}
+	var gs = GameStateScript.new()
+	gs.roster = e
+	var t = TutorialScript.new()
+	t.save_path = ""
+	t.econ = e
+	t.gs = gs
+	t._connect()
+	t.go_online()
+	check(t.online and t.mission().is_empty() and not t.active(), "online tutorial: no card until the server says where the player is")
+	check(e.apply_server(reply) and e.dia_tickets == 7 and e.unbuilt == {"lumber": true} and e.server_quest == {"tut_state": "active", "tut_step": 3, "rep_n": 0},
+		"apply_server reads quest progress, lots (known buildings only) and tickets")
+	check(t.active() and t.step == 3 and t.mission().id == TutorialScript.MISSIONS[3].id and e.tutorial_training, "online tutorial follows the server step")
+	t.count = 5
+	e.apply_server(reply)
+	check(t.count == 5, "the same server step keeps the event count")
+	reply.player.quest = {"tut_state": "active", "tut_step": 4, "rep_n": 0}
+	reply.player.unbuilt = []
+	var notes := []
+	e.notice.connect(func(x): notes.append(x))
+	e.apply_server(reply)
+	check(t.step == 4 and t.count == 0 and e.unbuilt.is_empty(), "a new server step starts counting again")
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 2}
+	e.apply_server(reply)
+	check(not t.active() and t.repeating() and t.rep_n == 2 and t.mission().kind == TutorialScript.REPEATS[2].kind and notes.has(TutorialScript.DONE_TEXT)
+		and not e.tutorial_training, "online: tutorial done → repeat quest from the server's number")
+	check(not e.quest_claim_online({"type": "repeat", "n": 2}), "no network, no claim")
+	t.free()
+	gs.free()
+	e.free()
+
+
+## 옛 훈련 설정(1마리 3:00, 묶음 10 + 2 × (L − 1)) — 훈련 규칙 테스트가 쓴다. 실제 설정은 1마리씩·3시간(사용자 2026-10-06).
 func _legacy_training() -> void:
 	GameData._config.train_base_min = "180"
 	GameData._config.train_step_min = "30"
