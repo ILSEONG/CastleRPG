@@ -3,3 +3,5 @@ gold_goblin_a,gold,goblin,10,0,120,14,4.0,1.3,1.0,5.0,1.0
 gold_goblin_b,gold,goblin,5,5,120,14,4.0,1.3,1.0,5.0,1.0
 gold_king,gold,goblin_king,1,5,1500,40,3.0,2.0,1.5,9.0,1.7
 equip_death_knight,equip,death_knight,1,0,6000,60,3.2,2.6,1.8,10.0,2.2
+ticket_golem,ticket,rock_golem,1,0,7000,70,2.2,2.6,2.4,10.0,2.4
+ticket_golemite,ticket,golemite,2,0,1200,28,3.0,1.6,1.4,8.0,1.2

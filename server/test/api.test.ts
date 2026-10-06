@@ -83,6 +83,9 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
   const r = await S.req('GET', '/v1/player', { token })
   assert.equal(r.status, 200)
   const cfg = await CONFIG()
+  const helpers = r.json.player.dungeons.ticket.helpers // 모집권 던전 도우미는 플레이어 id로 섞인다 — 모양만 본다
+  assert.equal(helpers.length, 3)
+  for (const h of helpers) assert.deepEqual(Object.keys(h).sort(), ['hero_id', 'level', 'power', 'promotion'])
   assert.deepEqual(r.json, {
     server_now: T0 + 0.25,
     player: {
@@ -104,9 +107,11 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       dungeons: { // 개정 18: 그날 지급분, 리셋 = 15:00 UTC(00:00 KST) — T0는 23:13:20 KST
         gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 },
         equip: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: 5000, last_reset: 1789916400, next_reset: 1790002800 },
+        ticket: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800,
+          helpers, helpers_used: [] }, // 모집권 던전
       },
       items: [], equipment: {},
-      diamonds: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 30, dia_pity: 0 }, // 개정 23
+      diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 30, dia_pity: 0 }, // 개정 23
       research: { levels: {}, current: null }, // 개정 24
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
@@ -420,9 +425,10 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|5:8|10:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 96) // 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
+  assert.equal(Object.keys(g.config).length, 104) // 모집권 던전 +8. 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
   assert.deepEqual(g.dungeons.map((d: any) => [d.id, d.type, d.kind, d.count, d.delay]), [['gold_goblin_a', 'gold', 'goblin', 10, 0], ['gold_goblin_b', 'gold', 'goblin', 5, 5],
-    ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0]]) // 개정 18: 파일 순서
+    ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0],
+    ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0]]) // 개정 18: 파일 순서
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })
   assert.equal(g.config.train_cost_cavalry, 'food:40|stone:20')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서

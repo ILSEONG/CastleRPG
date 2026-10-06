@@ -75,12 +75,14 @@ interface Run {
   level: number
   party: string[]
   seed: number
+  helper: R.Helper | null // 모집권 던전 도우미(그 밖은 null)
   started_at: number
   closed: boolean
   result: { win?: boolean; rewards?: Record<string, unknown> } | null
 }
 
 interface Player {
+  id: string // players.id
   gold_tenths: number
   stage: number
   keep_level: number
@@ -102,6 +104,7 @@ interface Player {
   items: Item[] // 보관함(id 순)
   equipment: Equipped[]
   diamonds: number // 개정 23: 다이아(현금 재화)
+  dia_tickets: number // 다이아 모집권(모집권 던전 보상·튜토리얼 보상)
   gacha: { gold_level: number; gold_pulls: number; dia_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터
   research: Record<string, number> // 개정 24: 연구 노드 id → 레벨(0 초과만)
   research_cur: { id: string; finish: number } | null // 진행 중인 연구(끝나는 시각 = 유닉스 초), 쉬면 null
@@ -140,12 +143,13 @@ interface Change {
   upgrades?: Record<string, number> // 업그레이드 id → 레벨 증가(개정 20)
   // 개정 18 던전·장비
   dungeon?: { type: string; state: R.DungeonState } // 그 던전 행을 이 값으로(일일 리셋을 반영한 값)
-  runOpen?: { run_id: string; type: string; level: number; party: string[]; seed: number } // 새 run(그 플레이어의 열린 run은 닫는다)
+  runOpen?: { run_id: string; type: string; level: number; party: string[]; seed: number; helper?: R.Helper | null } // 새 run(그 플레이어의 열린 run은 닫는다)
   runClose?: { run_id: string; result: { win: boolean; rewards: Record<string, unknown> } } // run 닫기 — 아직 열려 있을 때만 전체가 적용된다
   items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
   sellItems?: number[] // 지울 장비 id
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   diamonds?: number // 다이아 증감(개정 23)
+  diaTickets?: number // 다이아 모집권 증감(모집권 던전)
   gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
   research?: { id: string; finish: number } | null // 새 진행 중 연구(개정 24)
   researchUp?: string // 연구 노드 레벨 +1(개정 24)
@@ -161,7 +165,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
+const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.dia_tickets, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   coalesce((select json_object_agg(id, level) from player_research where player_id = s.player_id and level > 0), '{}'::json) as research,
@@ -177,7 +181,7 @@ const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gach
   coalesce((select json_object_agg(hero_id, json_build_object('copies', copies, 'level', level, 'shards', shards, 'promotion', promotion))
     from player_heroes where player_id = s.player_id), '{}'::json) as heroes,
   coalesce((select json_object_agg(type, json_build_object('best_level', best_level, 'keys', keys, 'extra_today', extra_today,
-      'last_reset', extract(epoch from last_reset)::float8)) from player_dungeons where player_id = s.player_id), '{}'::json) as dungeons,
+      'last_reset', extract(epoch from last_reset)::float8, 'helpers_used', helpers_used)) from player_dungeons where player_id = s.player_id), '{}'::json) as dungeons,
   coalesce((select json_agg(json_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind, 'grade', grade, 'level', level) order by id)
     from player_items where player_id = s.player_id), '[]'::json) as items,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
@@ -189,7 +193,7 @@ const ENSURE_DUNGEONS_SQL = `insert into player_dungeons (player_id, type, best_
   select $1, x.type, 0, x.keys, 0, to_timestamp($2::float8) from jsonb_to_recordset($3::jsonb) as x(type text, keys integer)
   on conflict do nothing`
 
-const RUN_SQL = `select run_id, type, level, party, seed, extract(epoch from started_at)::float8 as started_at, closed, result
+const RUN_SQL = `select run_id, type, level, party, seed, helper, extract(epoch from started_at)::float8 as started_at, closed, result
   from dungeon_runs where run_id = $1 and player_id = $2`
 
 // 플레이어를 찾거나 만들고(last_seen 갱신), 빠진 상태·자원·건물 행을 채운다 — 한 문장이라 중간에 끊겨도 반쪽 계정이 없다.
@@ -294,6 +298,7 @@ export function createApp(opts: AppOptions) {
     const party = json(r.party)
     return {
       run_id: String(r.run_id), type: String(r.type), level: Number(r.level), party: Array.isArray(party) ? party : [], seed: Number(r.seed),
+      helper: r.helper ? json(r.helper) : null,
       started_at: Number(r.started_at), closed: r.closed === true, result: r.result ? json(r.result) : null,
     }
   }
@@ -324,6 +329,7 @@ export function createApp(opts: AppOptions) {
       const dungeons: Player['dungeons'] = {}
       for (const [k, v] of Object.entries(json(r.dungeons) as Record<string, any>)) {
         dungeons[k] = { best_level: Number(v.best_level), keys: Number(v.keys), extra_today: Number(v.extra_today), last_reset: Number(v.last_reset) }
+        if (k === 'ticket') dungeons[k].helpers_used = Array.isArray(json(v.helpers_used)) ? (json(v.helpers_used) as unknown[]).map(String) : []
       }
       const lacking = R.DUNGEON_TYPES.filter((t) => !Object.hasOwn(dungeons, t))
       if (lacking.length) {
@@ -337,6 +343,7 @@ export function createApp(opts: AppOptions) {
       for (const [k, v] of Object.entries(json(r.heroes) as Record<string, any>)) heroes[k] = { copies: Number(v.copies), level: Number(v.level), shards: Number(v.shards), promotion: Number(v.promotion) }
       const deploy = json(r.deploy)
       const p: Player = {
+        id,
         gold_tenths: Number(r.gold_tenths), stage: Number(r.stage), keep_level: Number(r.keep_level), gate_level: Number(r.gate_level),
         version: Number(r.version), last_kill_report: Number(r.last_kill_report), last_stage_clear: Number(r.last_stage_clear),
         last_active: r.last_active == null ? null : Number(r.last_active),
@@ -347,6 +354,7 @@ export function createApp(opts: AppOptions) {
         items: (json(r.items) as any[]).map((x) => ({ id: Number(x.id), slot: String(x.slot), weapon_kind: x.weapon_kind ?? null, grade: String(x.grade), level: Number(x.level) })),
         equipment: (json(r.equipment) as any[]).map((x) => ({ hero_id: String(x.hero_id), slot: String(x.slot), item_id: Number(x.item_id) })),
         diamonds: Number(r.diamonds),
+        dia_tickets: Number(r.dia_tickets ?? 0),
         gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity) },
         research: counts(json(r.research)),
         research_cur: typeof r.research_id === 'string' ? { id: r.research_id, finish: Number(r.research_finish) } : null,
@@ -411,7 +419,7 @@ export function createApp(opts: AppOptions) {
         kill_seq: p.kill_seq, buildings, build: p.build, population: population(p, game), heroes, deploy,
         soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
         dungeons: dungeonsView(p, game, now), items: p.items, equipment,
-        diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
+        diamonds: p.diamonds, dia_tickets: p.dia_tickets, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
       },
@@ -421,7 +429,25 @@ export function createApp(opts: AppOptions) {
 
   // 개정 18: 지금(서버 시각) 기준 던전 상태 — 일일 리셋을 반영한다(DB 행은 쓸 때 바뀐다).
   const dungeonState = (p: Player, g: Game, type: string, now: number) =>
-    R.applyReset(type, p.dungeons[type] ?? R.freshDungeon(type, now, g.config), now, g.config)
+    R.applyReset(type, p.dungeons[type] ?? { ...R.freshDungeon(type, now, g.config), ...(type === 'ticket' ? { helpers_used: [] } : {}) }, now, g.config)
+
+  // 모집권 던전 도우미 후보(친구 목록이 없어 시스템이 고른 3명 — R.helperCandidates). 오늘 쓴 영웅은 빠진다.
+  function helpersOf(p: Player, g: Game, st: R.DungeonState, now: number): R.Helper[] {
+    const defs = new Map(g.heroes.map((h) => [String(h.id), h]))
+    const items = new Map(p.items.map((it) => [it.id, it]))
+    const owned = Object.entries(p.heroes).filter(([id, h]) => defs.has(id) && h.copies >= 1).map(([id, h]) => {
+      const eq = { hp: 0, atk: 0 }
+      for (const e of p.equipment) {
+        const it = e.hero_id === id ? items.get(e.item_id) : undefined
+        if (!it) continue
+        const s = R.itemStats(it)
+        eq.hp += s.hp
+        eq.atk += s.atk
+      }
+      return { def: defs.get(id)!, level: h.level, promotion: h.promotion, equip: eq }
+    })
+    return R.helperCandidates(g.heroes, owned, st.helpers_used ?? [], p.id, R.resetDay(now, R.cfgNum(g.config, 'daily_reset_utc_hour')), g.config)
+  }
 
   // 던전 응답(스펙 §7 GET /v1/dungeon·플레이어 응답 dungeons): 종류 → {keys, key_cap, key_daily, best_level, extra_today,
   // extra_cost(장비만, 골드는 null), last_reset, next_reset}. 앱은 last_reset으로 같은 리셋 규칙을 이어서 센다.
@@ -433,6 +459,7 @@ export function createApp(opts: AppOptions) {
         keys: st.keys, key_cap: R.cfgNum(g.config, `${t}_key_cap`), key_daily: R.cfgNum(g.config, `${t}_key_daily`), best_level: st.best_level,
         extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, st.extra_today) : null, last_reset: st.last_reset,
         next_reset: R.nextReset(now, g.config),
+        ...(t === 'ticket' ? { helpers: helpersOf(p, g, st, now), helpers_used: st.helpers_used ?? [] } : {}),
       }
     }
     return out
@@ -457,6 +484,7 @@ export function createApp(opts: AppOptions) {
     if (ch.build !== undefined) sets.push(`build_id = ${p(ch.build?.id ?? null)}::text, build_finish = to_timestamp(${p(ch.build?.finish ?? null)}::float8)`)
     if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
     if (ch.diamonds) sets.push(`diamonds = diamonds + ${p(bigint(ch.diamonds))}::bigint`)
+    if (ch.diaTickets) sets.push(`dia_tickets = dia_tickets + ${p(ch.diaTickets)}::int`)
     if (ch.gacha?.gold_level !== undefined) sets.push(`gacha_gold_level = ${p(ch.gacha.gold_level)}::int`)
     if (ch.gacha?.gold_pulls !== undefined) sets.push(`gacha_gold_pulls = ${p(ch.gacha.gold_pulls)}::int`)
     if (ch.gacha?.dia_pity !== undefined) sets.push(`gacha_dia_pity = ${p(ch.gacha.dia_pity)}::int`)
@@ -527,10 +555,11 @@ export function createApp(opts: AppOptions) {
     const sid = '(select player_id from s)'
     if (ch.dungeon) {
       const d = ch.dungeon.state
-      ctes.push(`dg as (insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset)
-        select player_id, ${p(ch.dungeon.type)}, ${p(d.best_level)}::int, ${p(d.keys)}::int, ${p(d.extra_today)}::int, to_timestamp(${p(d.last_reset)}::float8) from s
+      ctes.push(`dg as (insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset, helpers_used)
+        select player_id, ${p(ch.dungeon.type)}, ${p(d.best_level)}::int, ${p(d.keys)}::int, ${p(d.extra_today)}::int, to_timestamp(${p(d.last_reset)}::float8),
+          ${p(JSON.stringify(d.helpers_used ?? []))}::jsonb from s
         on conflict (player_id, type) do update set best_level = excluded.best_level, keys = excluded.keys, extra_today = excluded.extra_today,
-          last_reset = excluded.last_reset returning 1)`)
+          last_reset = excluded.last_reset, helpers_used = excluded.helpers_used returning 1)`)
     }
     if (ch.runOpen) {
       // 한 번에 run 하나: 열린 run은 결과 없이 닫고(그 run의 finish는 409 run_closed), 하루 지난 run은 지운다
@@ -538,8 +567,9 @@ export function createApp(opts: AppOptions) {
       const keep = p(now - RUN_KEEP_SEC)
       ctes.push(`ro0 as (update dungeon_runs set closed = true where player_id = ${sid} and not closed and started_at >= to_timestamp(${keep}::float8) returning 1)`)
       ctes.push(`ro1 as (delete from dungeon_runs where player_id = ${sid} and started_at < to_timestamp(${keep}::float8) returning 1)`)
-      ctes.push(`ro2 as (insert into dungeon_runs (run_id, player_id, type, level, party, seed, started_at)
-        select ${p(r.run_id)}::uuid, player_id, ${p(r.type)}, ${p(r.level)}::int, ${p(JSON.stringify(r.party))}::jsonb, ${p(r.seed)}::bigint, to_timestamp(${p(now)}::float8)
+      ctes.push(`ro2 as (insert into dungeon_runs (run_id, player_id, type, level, party, seed, helper, started_at)
+        select ${p(r.run_id)}::uuid, player_id, ${p(r.type)}, ${p(r.level)}::int, ${p(JSON.stringify(r.party))}::jsonb, ${p(r.seed)}::bigint,
+          ${p(r.helper ? JSON.stringify(r.helper) : null)}::jsonb, to_timestamp(${p(now)}::float8)
         from s returning 1)`)
     }
     if (ch.items?.length) {
@@ -1358,6 +1388,8 @@ export function createApp(opts: AppOptions) {
     const lvl = intField(b, 'level', 1, R.MAX_DUNGEON_LEVEL)
     const party = b.party
     if (!Array.isArray(party) || party.some((x) => typeof x !== 'string' || x === '')) throw new ApiError(400, 'bad_party', "'party' must be an array of hero ids")
+    const helperId = b.helper
+    if (type === 'ticket' && (typeof helperId !== 'string' || helperId === '')) throw new ApiError(400, 'bad_party', "'helper' must be a hero id")
     return mutate(c, (p, g, now) => {
       const st = dungeonState(p, g, type, now)
       if (lvl > st.best_level + 1) throw new ApiError(409, 'locked', `level ${lvl} is locked (best ${st.best_level})`)
@@ -1367,12 +1399,20 @@ export function createApp(opts: AppOptions) {
       const known = new Set(g.heroes.map((h) => String(h.id)))
       for (const id of party) if (!known.has(id) || !Object.hasOwn(p.heroes, id)) throw new ApiError(400, 'bad_party', `hero '${id}' is not owned`)
       if (type === 'equip' && bagFull(p, g)) throw new ApiError(409, 'bag_full', 'the item bag is full')
+      // 모집권 던전: 도우미는 오늘의 후보 중 하나(오늘 쓴 영웅은 후보에서 빠진다), 편성과 같은 영웅은 안 된다
+      let helper: R.Helper | null = null
+      if (type === 'ticket') {
+        if ((st.helpers_used ?? []).includes(helperId as string)) throw new ApiError(409, 'helper_used', `helper '${helperId}' was already used today`)
+        helper = helpersOf(p, g, st, now).find((h) => h.hero_id === helperId) ?? null
+        if (!helper) throw new ApiError(409, 'helper_unavailable', `helper '${helperId}' is not offered now`)
+        if (party.includes(helper.hero_id)) throw new ApiError(400, 'bad_party', 'the helper hero is already in the party')
+      }
       if (st.keys < 1) {
         if (type !== 'equip') throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
         const cost = R.extraCost(g.config, st.extra_today)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
       }
-      const run = { run_id: randomUUID(), type, level: lvl, party: party as string[], seed: Math.floor(random() * 2 ** 31) }
+      const run = { run_id: randomUUID(), type, level: lvl, party: party as string[], seed: Math.floor(random() * 2 ** 31), ...(helper ? { helper } : {}) }
       return {
         change: { runOpen: run },
         extra: {
@@ -1428,20 +1468,25 @@ export function createApp(opts: AppOptions) {
       const rewards: Record<string, unknown> = {}
       let items: R.EquipItem[] = []
       let gain = 0
+      let tickets = 0
       if (type === 'gold') {
         gain = R.goldReward(g.config, run.level)
         rewards.gold_tenths = gain * 10
+      } else if (type === 'ticket') {
+        tickets = R.ticketReward(g.config, run.level)
+        rewards.tickets = tickets
+        if (run.helper) next.helpers_used = [...(st.helpers_used ?? []), run.helper.hero_id] // 클리어에 쓴 도우미는 오늘 다시 못 쓴다
       } else {
         if (bagFull(p, g)) throw new ApiError(409, 'bag_full', 'the item bag is full')
         items = R.rollDrops(g.equip_drop, run.level, R.cfgNum(g.config, 'equip_drop_count'), R.cfgNum(g.config, 'equip_weapon_p'), random)
       }
       return {
         change: {
-          goldTenths: (gain - cost) * 10, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
+          goldTenths: (gain - cost) * 10, diaTickets: tickets, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
           log: {
             kind: 'dungeon_clear', detail: {
               run_id: runId, type, level: run.level, elapsed, real, party: run.party, paid: cost ? { gold: cost } : { key: 1 }, keys_after: next.keys,
-              best_level: next.best_level, gold_tenths: gain * 10, items,
+              best_level: next.best_level, gold_tenths: gain * 10, items, ...(type === 'ticket' ? { tickets, helper: run.helper } : {}),
             },
           },
         },

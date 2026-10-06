@@ -470,7 +470,7 @@ export function upgradeCost(d: UpgradeDef, level: number, count: number): number
 
 // --- 던전·장비 (개정 18 §2~§5) — 앱 GameData(던전·장비 블록)와 같은 식 ---
 
-export const DUNGEON_TYPES = ['gold', 'equip']
+export const DUNGEON_TYPES = ['gold', 'equip', 'ticket'] // ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 영웅 1, 보상 다이아 모집권
 export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR'] // 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
 export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5 }
 export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves'] // 모든 영웅이 쓴다
@@ -491,6 +491,15 @@ export interface DungeonState {
   keys: number
   extra_today: number // 그날 골드 추가 도전 횟수(장비 던전)
   last_reset: number // 마지막으로 반영한 리셋 시각(유닉스 초)
+  helpers_used?: string[] // 모집권 던전: 오늘 클리어에 쓴 도우미 영웅 id(그날은 다시 못 쓴다, 리셋 때 비운다)
+}
+
+// 모집권 던전 도우미(친구 목록이 없어 시스템이 고른 영웅): 그 영웅·레벨·승급(장비 없음)
+export interface Helper {
+  hero_id: string
+  level: number
+  promotion: number
+  power: number
 }
 
 export interface DungeonDef {
@@ -537,7 +546,7 @@ export function applyReset(type: string, d: DungeonState, now: number, config: C
   if (days <= 0) return d
   const cap = cfgNum(config, `${type}_key_cap`)
   const keys = Math.max(d.keys, Math.min(cap, d.keys + days * cfgNum(config, `${type}_key_daily`)))
-  return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h) }
+  return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h), ...(d.helpers_used ? { helpers_used: [] } : {}) }
 }
 
 // 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 그날 추가 도전 횟수).
@@ -548,10 +557,63 @@ export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `$
 // 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)).
 export const goldReward = (config: Config, level: number) => roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1))
 
-// 적 능력치 성장: 골드 던전은 HP·공격 모두 gold_dg_growth, 장비 던전은 equip_dg_hp_growth·equip_dg_atk_growth.
+// 적 능력치 성장: 골드 던전은 HP·공격 모두 gold_dg_growth, 장비·모집권 던전은 <종류>_dg_hp_growth·<종류>_dg_atk_growth.
 export function dungeonGrowth(config: Config, type: string) {
   if (type === 'gold') return { hp: cfgNum(config, 'gold_dg_growth'), atk: cfgNum(config, 'gold_dg_growth') }
-  return { hp: cfgNum(config, 'equip_dg_hp_growth'), atk: cfgNum(config, 'equip_dg_atk_growth') }
+  return { hp: cfgNum(config, `${type}_dg_hp_growth`), atk: cfgNum(config, `${type}_dg_atk_growth`) }
+}
+
+// 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step).
+export const ticketReward = (config: Config, level: number) =>
+  cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step')))
+
+// --- 영웅 전투력 — 앱 GameData.hero_stats·hero_power와 같은 식(모집권 던전 도우미 고르기에만 쓴다) ---
+export const levelMult = (config: Config, level: number, role: string) =>
+  1 + cfgNum(config, role === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (level - 1)
+export const promoteMult = (config: Config, promotion: number) => grown(1, cfgNum(config, 'promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
+// 전투력 = round(HP / 10 + 공격 × 2 / 공격 간격), HP·공격 = 표 × 레벨 배율 × 승급 배율 + 장비.
+export function heroPower(def: Record<string, any>, level: number, promotion: number, equip: { hp: number; atk: number }, config: Config): number {
+  const m = levelMult(config, level, String(def.role ?? '')) * promoteMult(config, promotion)
+  const hp = Number(def.hp) * m + equip.hp
+  const atk = Number(def.atk) * m + equip.atk
+  return roundHalfAway(hp / 10 + (atk * 2) / Number(def.atk_interval))
+}
+
+// FNV-1a 32비트(도우미 순서 섞기 — 앱 GameData.fnv32와 같다).
+export function fnv32(s: string): number {
+  let h = 0x811c9dc5
+  for (const b of new TextEncoder().encode(s)) h = Math.imul(h ^ b, 0x01000193) >>> 0
+  return h
+}
+
+export const HELPER_COUNT = 3
+export const HELPER_FIT = 0.1 // 도우미 전투력이 기준 ±10% 안이면 "적당한 스펙"
+
+// 모집권 던전 도우미 후보 3명(친구 목록이 없을 때 시스템이 고른다, 앱 GameData.helper_candidates와 같은 규칙):
+// 기준 전투력 = 내 영웅 전투력(장비 포함) 상위 4명 평균, 승급 = 그 4명 승급 평균(반올림). 영웅 표에서 오늘 쓴 영웅을 빼고
+// fnv32("<key>:<리셋 날짜>:<영웅 id>") 순으로 보며, 영웅마다 기준에 가장 가까운 레벨(1..최대, 같으면 낮은 레벨)을 고른다.
+// 기준 ±10% 안인 영웅을 앞에서부터 3명, 모자라면 나머지에서 가까운 순으로 채운다. owned = [{def, level, promotion, equip}].
+export function helperCandidates(heroDefs: Record<string, any>[], owned: { def: Record<string, any>; level: number; promotion: number; equip: { hp: number; atk: number } }[],
+  used: string[], key: string, day: number, config: Config): Helper[] {
+  const top = owned.map((o) => ({ power: heroPower(o.def, o.level, o.promotion, o.equip, config), promotion: o.promotion }))
+    .sort((a, b) => b.power - a.power).slice(0, 4)
+  const ref = top.length ? top.reduce((s, x) => s + x.power, 0) / top.length : 0
+  const promotion = top.length ? Math.round(top.reduce((s, x) => s + x.promotion, 0) / top.length) : 0
+  const maxLv = heroMaxLevel(promotion, config)
+  const pool = heroDefs.filter((d) => !used.includes(String(d.id)))
+    .map((d) => ({ d, h: fnv32(`${key}:${day}:${d.id}`) })).sort((a, b) => a.h - b.h || (String(a.d.id) < String(b.d.id) ? -1 : 1))
+  const picks = pool.map(({ d }) => {
+    let best = { level: 1, power: heroPower(d, 1, promotion, { hp: 0, atk: 0 }, config) }
+    for (let l = 2; l <= maxLv; l++) {
+      const pw = heroPower(d, l, promotion, { hp: 0, atk: 0 }, config)
+      if (Math.abs(pw - ref) < Math.abs(best.power - ref)) best = { level: l, power: pw }
+      if (pw > ref) break // 레벨이 오를수록 커진다
+    }
+    return { hero_id: String(d.id), level: best.level, promotion, power: best.power, diff: Math.abs(best.power - ref) / Math.max(ref, 1) }
+  })
+  const out = picks.filter((x) => x.diff <= HELPER_FIT).slice(0, HELPER_COUNT)
+  if (out.length < HELPER_COUNT) out.push(...picks.filter((x) => !out.includes(x)).sort((a, b) => a.diff - b.diff).slice(0, HELPER_COUNT - out.length))
+  return out.map(({ hero_id, level, promotion: pr, power }) => ({ hero_id, level, promotion: pr, power }))
 }
 
 // 단계 n의 적 목록(표 순서): HP·공격 = 기본 × 성장^(n−1)(곱셈 n−1번), 나머지는 표 그대로.

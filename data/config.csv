@@ -91,6 +91,14 @@ equip_drop_count,5
 equip_weapon_p,0.2
 equip_bag_cap,300
 equip_sell_base,10
+ticket_key_daily,1
+ticket_key_cap,3
+ticket_dg_party,4
+ticket_dg_min_sec,20
+ticket_dg_hp_growth,1.15
+ticket_dg_atk_growth,1.12
+ticket_reward_base,1
+ticket_reward_step,10
 rounds_per_stage,25
 stage_speed_step,0.08
 stage_speed_cap,2.0

@@ -17,7 +17,7 @@ from meshy_heroes import REF, STYLE, TAIL, req  # noqa: E402
 ms.OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshy", "out", "enemies")
 ms.STATE = os.path.join(ms.OUT, "state.json")
 
-BOSS = {"goblin_king", "death_knight"}
+BOSS = {"goblin_king", "death_knight", "rock_golem"}
 DESC = {
     "goblin": ("goblin raider, small green-skinned goblin with long pointed ears, big nose and a toothy grin, ragged brown "
                "leather vest and hood pushed back, dark gray pants, rope belt, bare green arms and feet wrapped in cloth."),
@@ -25,13 +25,21 @@ DESC = {
                     "a spiky golden crown, red royal cape with white fur collar, purple tunic, gold belt with a big buckle."),
     "death_knight": ("death knight, tall undead knight in black iron plate armor with spiked pauldrons, a horned black helmet "
                      "with glowing red eyes in the visor slit, tattered dark red cape, skull emblem on the chest."),
+    # 모집권 던전 보스(2026-10-06): 클래시 오브 클랜 골렘 느낌의 우리 바위 골렘 — 큰 머리 대신 어깨에 묻힌 작은 머리라 STYLE을 따로 쓴다
+    "rock_golem": ("rock golem, a hulking giant built from big chunky gray-brown boulders with green moss patches, huge broad "
+                   "boulder shoulders, very thick arms ending in massive rock fists, a small rock head sunk low between the shoulders "
+                   "with two glowing amber eyes, glowing amber cracks across the chest, short thick legs."),
 }
+OWN_STYLE = {"rock_golem": ("Same art style, T-pose, front camera and plain light gray background as the reference image: stylized "
+                            "low-poly faceted 3D game monster, flat-shaded crisp facets, chunky toon proportions. New character: ",
+                            " Arms straight out horizontally, fists at the ends, nothing held. Full body, front view.")}
 
 
 def concept(kinds):
     ref = "data:image/png;base64," + base64.b64encode(open(REF, "rb").read()).decode()
     for k in kinds:
-        prompt = STYLE + DESC[k] + TAIL
+        style, tail = OWN_STYLE.get(k, (STYLE, TAIL))
+        prompt = style + DESC[k] + tail
         assert len(prompt) <= 600, (k, len(prompt))
         t = req("POST", "/image-to-image", {"ai_model": "nano-banana-2", "prompt": prompt, "reference_image_urls": [ref]})
         s = ms.load()

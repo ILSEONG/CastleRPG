@@ -141,6 +141,9 @@ test('GET /v1/dungeon: 새 플레이어는 그날 지급분(골드 3/10, 장비 
   const { token } = await fresh()
   const r = await S.req('GET', '/v1/dungeon', { token })
   assert.equal(r.status, 200)
+  const ticket = r.json.dungeons.ticket // 모집권 던전(ticket_dungeon.test.ts가 자세히 본다)
+  assert.deepEqual([ticket.keys, ticket.key_cap, ticket.helpers.length, ticket.helpers_used], [1, 3, 3, []])
+  delete r.json.dungeons.ticket
   assert.deepEqual(r.json, {
     server_now: T0,
     dungeons: {
@@ -510,7 +513,7 @@ test('마이그레이션 012: 011까지 적용된 DB에 던전·장비 표와 �
     await d.query('insert into player_state (player_id) values ($1)', [p.id])
     assert.deepEqual(await migrate(d), all.filter((f) => f >= '012'))
     const cfg = await d.query("select key, value from game_config where key like '%dg%' or key like '%key%' or key like 'equip%' or key like 'dungeon%' or key = 'daily_reset_utc_hour' order by key")
-    assert.equal(cfg.length, 20)
+    assert.equal(cfg.length, 26) // 모집권 던전 022 +6
     assert.deepEqual(cfg.find((r) => r.key === 'equip_bag_cap'), { key: 'equip_bag_cap', value: '300' })
     assert.deepEqual(await d.query('select * from player_dungeons'), [])
     await assert.rejects(d.query("insert into player_items (player_id, slot, grade, level) values ($1, 'weapon', 'N', 1)", [p.id]), /weapon_has_kind/)
@@ -538,11 +541,11 @@ test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)�
   assert.deepEqual(['011', '012', '013', '014', '015'].map((n) => all.some((f) => f.startsWith(n + '_'))), [true, true, true, true, true])
   const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
   tmp.push(dir)
-  for (const f of all.filter((f) => !f.startsWith('012_'))) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
+  for (const f of all.filter((f) => !f.startsWith('012_') && f < '022')) cpSync(join(MIGRATIONS_DIR, f), join(dir, f))
   const d = await openDb({})
   try {
-    assert.deepEqual(await migrate(d, dir), all.filter((f) => !f.startsWith('012_')))
-    assert.deepEqual(await migrate(d), all.filter((f) => f.startsWith('012_')))
+    assert.deepEqual(await migrate(d, dir), all.filter((f) => !f.startsWith('012_') && f < '022'))
+    assert.deepEqual(await migrate(d), all.filter((f) => f.startsWith('012_') || f >= '022')) // 022(모집권 던전)는 012의 던전 표를 바꾼다
     assert.deepEqual(await migrate(d), [])
     const cfg = await d.query("select key from game_config where key in ('equip_bag_cap', 'train_base_min') order by key")
     assert.deepEqual(cfg.map((r) => r.key), ['equip_bag_cap', 'train_base_min'])
@@ -555,7 +558,7 @@ test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)�
   const f = await openDb({})
   try {
     assert.deepEqual(await migrate(f), all)
-    assert.equal(all.length, 18) // 개정 24: 016, 오프라인 골드: 017, 소셜 로그인: 018
+    assert.equal(all.length, 19) // 모집권 던전: 022, 개정 24: 016, 오프라인 골드: 017, 소셜 로그인: 018
   } finally {
     await f.close()
   }
@@ -567,7 +570,7 @@ test('시드 검증: dungeons.csv(type·count·능력치 범위, 종류마다 �
   for (const t of TABLES) cpSync(join(DATA_DIR, t.file), join(dir, t.file))
   const files = Object.fromEntries(['dungeons.csv', 'equip_drop.csv', 'config.csv', 'heroes.csv'].map((f) => [f, readFileSync(join(DATA_DIR, f), 'utf8')]))
   const cases: [string, (s: string) => string, RegExp][] = [
-    ['dungeons.csv', (s) => s.replace('gold_king,gold,', 'gold_king,fire,'), /dungeons\.csv line 4 column 'type': type must be gold or equip: 'fire'/],
+    ['dungeons.csv', (s) => s.replace('gold_king,gold,', 'gold_king,fire,'), /dungeons\.csv line 4 column 'type': type must be gold or equip or ticket: 'fire'/],
     ['dungeons.csv', (s) => s.replace('gold_goblin_b,gold,goblin,5,', 'gold_goblin_b,gold,goblin,0,'), /line 3 column 'count': must be at least 1: 0/],
     ['dungeons.csv', (s) => s.replace(',1500,40,', ',0,40,'), /line 4 column 'hp': must be greater than 0: 0/],
     ['dungeons.csv', (s) => s.replace(',6000,60,', ',6000,-1,'), /line 5 column 'atk': must be 0 or more: -1/],
