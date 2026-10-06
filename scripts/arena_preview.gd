@@ -17,8 +17,8 @@ func _ready() -> void:
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	for p in stage.enemies:
-		_unit(Art.MONSTER_MODELS.goblin, p, ArenaKit.DOWN)
-	_unit(Art.MONSTER_MODELS.death_knight if castle else Art.MONSTER_MODELS.goblin_king, stage.boss, ArenaKit.DOWN)
+		_unit(Art.monster_spec("goblin"), p, ArenaKit.DOWN)
+	_unit(Art.monster_spec("death_knight" if castle else "goblin_king"), stage.boss, ArenaKit.DOWN)
 	var heroes: Array = GameData.heroes()
 	for i in stage.heroes.size():
 		_unit(Art.hero_spec(heroes[i % heroes.size()]), stage.heroes[i], -ArenaKit.DOWN)

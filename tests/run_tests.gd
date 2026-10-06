@@ -122,6 +122,7 @@ func _init() -> void:
 	test_hero_looks_unique()
 	test_hero_look_builder()
 	test_meshy_bodies()
+	test_meshy_enemies()
 	test_portrait_looks()
 	test_scene_snap()
 	test_crowd()
@@ -3963,6 +3964,32 @@ func test_meshy_bodies() -> void:
 	check(n == GameData.heroes().size(), "every hero has a Meshy body (%d of %d)" % [n, GameData.heroes().size()])
 	Art.meshy_bodies = false
 	check(not Art.hero_spec(GameData.hero("arteon")).has("body"), "meshy_bodies off: back to the KayKit look")
+	Art.meshy_bodies = true
+	MeshMergeScript.enabled = true
+
+
+## 던전 적 Meshy 몸(Art.monster_spec): 고블린·고블린 왕·데스나이트는 KayKit 뼈대에 Meshy 몸을 입고 몸 색(tint)·머리·가슴 부품은 빠지며
+## 손 부품(곤봉·대검)과 KayKit 단검은 남는다. 성 몬스터(grunt·epic_boss)는 그대로. meshy_bodies = false면 MONSTER_MODELS 그대로.
+func test_meshy_enemies() -> void:
+	MeshMergeScript.enabled = false
+	const UnitModelScript := preload("res://scripts/unit_model.gd")
+	for kind in ["goblin", "goblin_king", "death_knight"]:
+		var spec := Art.monster_spec(kind)
+		check(spec.get("body", "") == Art.MESHY_ENEMY_DIR + kind + ".glb" and not spec.has("tint")
+			and spec.parts.all(func(p): return String(p[0]).begins_with("handslot")), "%s: Meshy body, hand parts only %s" % [kind, spec.get("parts")])
+		var model: Node3D = Art.instance(spec.scene)
+		UnitModelScript.dress(model, spec)
+		var skel := model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		var body := skel.get_node_or_null(NodePath(Art.MESHY_BODY)) as MeshInstance3D
+		var tris: int = body.mesh.get_faces().size() / 3 if body != null else 0
+		check(body != null and body.visible and tris > 1000 and tris <= 5000, "%s wears a Meshy body within 5,000 triangles (%d)" % [kind, tris])
+		model.free()
+	check((Art.monster_spec("goblin").hide as Array).has("Knife_Offhand") and not (Art.monster_spec("goblin").hide as Array).has("Knife"),
+		"goblins still hold the KayKit knife")
+	check(Art.monster_spec("grunt") == Art.MONSTER_MODELS.grunt and Art.monster_spec("epic_boss") == Art.MONSTER_MODELS.epic_boss,
+		"castle monsters keep the KayKit skeletons")
+	Art.meshy_bodies = false
+	check(Art.monster_spec("death_knight") == Art.MONSTER_MODELS.death_knight, "meshy_bodies off: dungeon enemies back to KayKit")
 	Art.meshy_bodies = true
 	MeshMergeScript.enabled = true
 
