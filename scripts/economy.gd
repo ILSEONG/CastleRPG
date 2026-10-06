@@ -2635,6 +2635,34 @@ func _predict(key: String, apply: Callable, gold := 0) -> void:
 	changed.emit()
 
 
+## 다른 스크립트(미션 등)용: 보상(자원·골드·다이아·모집권·주머니 — 열쇠는 응답 때)을 응답 전에 곧바로 보이게 한다. extra는 함께 다시 할 일
+## (받은 기록 표시 등). 그 요청의 응답이 오면 settle(key) 뒤 apply_server, 거절되면 unpredict(key).
+func predict_reward(key: String, reward: Dictionary, extra := Callable()) -> void:
+	var pz := pouches_in(reward)
+	_predict(key, func():
+		for r in GameData.BUILD_RES:
+			if reward.has(r):
+				res[r] = int(res.get(r, 0)) + int(reward[r])
+		diamonds += int(reward.get("diamonds", 0))
+		dia_tickets += int(reward.get("tickets", 0))
+		if not pz.is_empty():
+			pouches = pouches.duplicate()
+			for id in pz:
+				pouches[id] = int(pouches.get(id, 0)) + int(pz[id])
+		if extra.is_valid():
+			extra.call(), int(reward.get("gold", 0)) * 10)
+	if not pz.is_empty():
+		pouches_changed.emit()
+
+
+func settle(key: String) -> void:
+	_predicts.erase(key)
+
+
+func unpredict(key: String) -> void:
+	_unpredict(key)
+
+
 ## 서버가 거절했거나 응답을 잃었다: 즉시 반영을 빼고 마지막 서버 상태로 곧바로 되돌린다(새 상태는 요청한 쪽이 다시 받는다).
 func _unpredict(key: String) -> void:
 	if not _predicts.has(key):

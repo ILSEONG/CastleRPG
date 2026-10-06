@@ -133,7 +133,7 @@ func _head() -> void:
 
 ## 보이는 줄의 순서와 상태(받기·이동·완료·응답 대기·반복 횟수).
 func _signature() -> String:
-	var parts := [tab, Missions.waiting]
+	var parts := [tab]
 	for m in _sorted():
 		parts.append("%s:%d:%d:%d" % [m.id, 0 if Missions.can_claim(m) else (2 if Missions.is_claimed(m) else 1), Missions.times(m.id), Missions.target(m)])
 	return "|".join(parts)
@@ -232,8 +232,7 @@ func _row(m: Dictionary) -> Control:
 		return card
 	var b: Button
 	if ok:
-		b = _button("받기" if Missions.waiting != m.id else "…", UiKit.AMBER, 24)
-		b.disabled = Missions.waiting != ""
+		b = _button("받기", UiKit.AMBER, 24)  # 누르면 곧바로 받는다(서버 확인은 뒤에서 — Missions.claim)
 		b.pressed.connect(func(): Missions.claim(m.id))
 		buttons["claim:" + m.id] = b
 	elif Missions.goto_of(m) != "":
