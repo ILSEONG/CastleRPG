@@ -1,8 +1,10 @@
 // 길드전(공성전) 규칙(순수 함수). 앱 scripts/war_rules.gd·guild_war.gd와 같은 수치·식.
 // 한 길드 = 한 주(월요일 리셋)에 상대 길드 하나. 상대는 가상 길드(enemy_seed로 매번 같은 값을 계산한다) — 길드원마다 수비 영웅 4명이 네 성문에 나뉘어 선다.
-// 공성 전투: 하루 1번, 첫 길드원이 들어가면 시작해 BATTLE_SEC초. 그 사이 누구나 합류한다(실시간 방: war_live.ts). 가상 길드원 공격 분대는 AI.
+// 공성 전투: 한 주에 1번(2026-10-06 사용자). 시각은 길드원이 정한다(guild_wars.battle_at — 아무도 안 정하면 토요일 21:00). 그 시각부터 BATTLE_SEC초 동안
+// 열리고 그 사이 누구나 합류한다(실시간 방: war_live.ts). 가상 길드원 공격 분대는 AI.
 // 성 상태(성문·성채 체력, 수비 영웅별 남은 체력 비율)는 전쟁 행(guild_wars.castle)에 저장되고 전투 결과로만 줄어든다(mergeCastle — 늘지 않는다).
-// 점수: 수비 영웅 처치 1 · 성문 20 · 성채 100(서버가 성 상태 차이로 센다). 상대 점수 = 가상 상대가 하루 한 번 우리 성을 친 결과(enemyPoints).
+// 점수: 수비 영웅 처치 1 · 성문 10 · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
+// 우리 공성 시간이 끝나면 보인다.
 import { mulberry32, powerOf } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
@@ -10,15 +12,18 @@ export const BATTLE_SEC = 600
 export const RESPAWN_SEC = 30
 export const SQUAD = 4
 export const PTS_KILL = 1
-export const PTS_GATE = 20
-export const PTS_KEEP = 100
+export const PTS_GATE = 10
+export const KEEP_STEP = 0.03 // 성채 최대 체력의 이만큼을 깎을 때마다 1점
+export const KEEP_MAX_PTS = Math.floor(1 / KEEP_STEP + 1e-9)
+export const DEFAULT_DAY = 5 // 길드원이 시각을 안 정하면: 토요일(주 안 5번째 날, 0 = 월요일)
+export const DEFAULT_HOUR = 21 // 21:00(리셋 시각 기준 — KST)
 export const REWARD_WIN = { coins: 300, diamonds: 100 }
 export const REWARD_LOSE = { coins: 100, diamonds: 30 }
 export const GATE_HP_SHARE = 3.0
 export const KEEP_HP_SHARE = 6.0
 export const MIN_GATE_HP = 3000
 export const MIN_KEEP_HP = 8000
-export const ENEMY_DAY_BASE = 45 // 같은 힘의 상대가 하루에 얻는 점수(± ENEMY_DAY_SPREAD)
+export const ENEMY_DAY_BASE = 45 // 같은 힘의 상대가 한 번의 공성으로 얻는 점수(± ENEMY_DAY_SPREAD)
 export const ENEMY_DAY_SPREAD = 0.25
 export const ENEMY_POWER_RANGE: [number, number] = [0.85, 1.15] // 상대 길드원 힘 = 우리 길드원 평균 × 이 범위
 export const VIRTUAL_POWER_RANGE: [number, number] = [0.8, 1.05] // 우리 가상 길드원 공격 분대 힘 = 그 길드원 전투력 기준
@@ -26,8 +31,9 @@ export const STAT_CAP = 4 // 앱이 보낸 영웅 능력치 상한 = 기본(레�
 export const MAX_PROMOTION = 5
 export const MIN_POWER = 250
 
-export const weekOf = (day: number) => Math.floor((day + 3) / 7) // 리셋 날(유닉스 일 기준) → 주. 월요일에 바뀐다
-export const weekStart = (week: number) => week * 7 - 3
+// 리셋 날 d = KST 날짜 d+1(리셋이 15:00 UTC = 00:00 KST)이라 KST 월요일에 바뀌려면 +4(미션 missions.ts와 같다). 예전 +3은 화요일에 바뀌었다.
+export const weekOf = (day: number) => Math.floor((day + 4) / 7) // 리셋 날 → 주. KST 월요일 00:00에 바뀐다
+export const weekStart = (week: number) => week * 7 - 4
 export const dayInWeek = (day: number) => day - weekStart(weekOf(day)) // 0 = 월요일
 
 export interface HeroDef { id: string; role: string; hp: number; atk: number; atk_interval: number; grade: string }
@@ -126,8 +132,11 @@ export const ratioOf = (c: Castle, uid: number) => (Object.hasOwn(c.dead, String
 export const killsIn = (c: Castle) => Object.values(c.dead).filter((v) => v <= 0).length
 export const gatesDown = (c: Castle) => c.gates.filter((g) => g <= 0).length
 
-// 성 점수(전쟁 전체 누적 = 지금 성 상태로 센다).
-export const castlePoints = (c: Castle) => killsIn(c) * PTS_KILL + gatesDown(c) * PTS_GATE + (c.keep <= 0 ? PTS_KEEP : 0)
+// 성채 점수: 최대 체력의 KEEP_STEP(3%)를 깎을 때마다 1점.
+export const keepPoints = (keep: number, max: number) => (max > 0 ? Math.min(KEEP_MAX_PTS, Math.floor((1 - Math.max(0, keep) / max) / KEEP_STEP + 1e-9)) : 0)
+
+// 성 점수(전쟁 전체 누적 = 지금 성 상태로 센다). keepMax = castleMax(...).keep.
+export const castlePoints = (c: Castle, keepMax: number) => killsIn(c) * PTS_KILL + gatesDown(c) * PTS_GATE + keepPoints(c.keep, keepMax)
 
 // 전투 결과(방장 기기가 보낸 성 상태)를 합친다: 줄어든 값만 받는다(체력이 늘거나 부활하지 않는다). 모르는 uid·범위 밖 값은 버린다.
 export function mergeCastle(c: Castle, r: { gates?: unknown; keep?: unknown; defenders?: unknown }, defs: Defender[]): Castle {
@@ -153,22 +162,27 @@ export function mergeCastle(c: Castle, r: { gates?: unknown; keep?: unknown; def
   return out
 }
 
-// 상대(가상)가 우리 성을 친 점수 합: 이번 주 지난 날 + 오늘(날마다 리셋 때 한 번). ratio = 상대 힘 ÷ 우리 수비 힘.
-export function enemyPoints(seed: number, week: number, daysDone: number, ratio: number, cap: number): number[] {
-  const out: number[] = []
-  let total = 0
-  for (let d = 0; d < daysDone; d++) {
-    const r = mulberry32(mix(seed, week >>> 0, 900 + d))
-    const v = Math.round(ENEMY_DAY_BASE * Math.max(0.2, Math.min(2.5, ratio)) * (1 - ENEMY_DAY_SPREAD + 2 * ENEMY_DAY_SPREAD * r()))
-    const add = Math.max(0, Math.min(v, cap - total))
-    total += add
-    out.push(add)
-  }
-  return out
+// 상대(가상)가 그 주 한 번의 공성으로 우리 성을 친 점수. ratio = 상대 힘 ÷ 우리 수비 힘.
+export function enemyPoints(seed: number, week: number, ratio: number, cap: number): number {
+  const r = mulberry32(mix(seed, week >>> 0, 900))
+  const v = Math.round(ENEMY_DAY_BASE * Math.max(0.2, Math.min(2.5, ratio)) * (1 - ENEMY_DAY_SPREAD + 2 * ENEMY_DAY_SPREAD * r()))
+  return Math.max(0, Math.min(v, cap))
 }
 
 // 우리 성 만점(상대 점수 상한): 우리 길드원 수 × 4 처치 + 성문 4 + 성채.
-export const castleCap = (members: number) => members * SQUAD * PTS_KILL + 4 * PTS_GATE + PTS_KEEP
+export const castleCap = (members: number) => members * SQUAD * PTS_KILL + 4 * PTS_GATE + KEEP_MAX_PTS
+
+// 그 주 공성 시각: 길드원이 정한 값(saved), 없으면 토요일 21:00. resetAt = (날, 리셋 시) → 그날 리셋 시각.
+export function battleAt(week: number, saved: number | null, resetAt: (day: number) => number): number {
+  return saved ?? resetAt(weekStart(week) + DEFAULT_DAY) + DEFAULT_HOUR * 3600
+}
+
+// 길드원이 고른 (주 안 날 0~6, 시 0~23) → 시각. 이번 주 안이고 전투가 다음 주 리셋 전에 끝나야 한다.
+export function pickAt(week: number, day: number, hour: number, resetAt: (day: number) => number): number | null {
+  if (!Number.isInteger(day) || !Number.isInteger(hour) || day < 0 || day > 6 || hour < 0 || hour > 23) return null
+  const at = resetAt(weekStart(week) + day) + hour * 3600
+  return at + BATTLE_SEC <= resetAt(weekStart(week + 1)) ? at : null
+}
 
 export const enemySeed = (guildSeed: number, week: number) => mix(guildSeed, week >>> 0, 77)
 

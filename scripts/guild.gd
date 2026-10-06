@@ -1,6 +1,7 @@
 extends Node
 ## 길드(오프라인 로컬). 오토로드 Guild. 흐름: 가입(추천 길드 가입·직접 창설) → 매일 출석·기부로 길드 경험치 → 길드 레벨 → 길드 버프
-## (모든 영웅 공격력·체력 %, hero.refresh_stats가 곱한다) → 길드 보스(하루 BOSS_TRIES번, 길드 전체 누적 피해로 보스 단계가 오른다) →
+## (모든 영웅 공격력·체력 %, hero.refresh_stats가 곱한다 — 레벨 끝 없음) → 길드 보스 드래곤(길드원마다 하루 BOSS_TRIES번, 매 판 Lv 1에서 시작해
+## 쓰러뜨릴 때마다 같은 판에서 레벨이 오른다. 판 점수 = 준 피해, 내 점수 = 오늘 판 점수 합, 길드 점수 = 길드원 점수 합) →
 ## 길드 코인으로 길드 상점. 다른 길드원은 가상 길드원이다: 길드 seed와 날짜로 정해지는 시각에 출석·기부·보스 공격을 한다(_simulate).
 ## 오프라인: 보상·비용은 Economy에 바로 반영하고 둘 다 저장한다. 온라인(econ.net != null, 내보낸 APK): 서버 길드(/v1/guild*)가 진실이다 —
 ## 실제 유저 + 가상 길드원(서버가 계산). 응답의 guild 값을 이 스크립트의 같은 필드(guild·me·coins·shop_*)에 옮겨 담아 창은 두 모드를 같은 코드로 그린다.
@@ -13,8 +14,8 @@ const GameData := preload("res://scripts/game_data.gd")
 
 const SAVE_VERSION := 1
 const UNLOCK_ROUND := 11  # GameState.stage가 이 이상(= 1-10 클리어)이면 열린다. 한 번 열리면 저장한다
-const MAX_LEVEL := 6
-const MEMBERS_BASE := 15  # 길드 인원(나 포함) — 최대 레벨(MAX_LEVEL)이 되면 MEMBERS_MAX
+const FULL_LEVEL := 6  # 길드 레벨은 끝이 없다(2026-10-06). 인원(나 포함)은 이 레벨부터 MEMBERS_MAX(최대 20명 유지)
+const MEMBERS_BASE := 15
 const MEMBERS_MAX := 20
 const MAX_MEMBERS := MEMBERS_MAX
 const BUFF_PER_LEVEL := 1.0  # 길드 레벨당 영웅 공격력·체력 +%
@@ -39,18 +40,17 @@ const DONATION_ORDER := ["gold", "dia", "royal"]
 const BOSS_TRIES := 2
 const BOSS_FIGHT_SEC := 20.0  # 실제 전투 시간(초) — 이 동안 배치 영웅이 드래곤에 준 피해가 내 피해
 const BOSS_DMG_CAP := 3.0  # 받는 피해 상한 = 시작 때 배치 영웅 초당 피해 합 × 전투 초 × 이것(서버 guild.ts와 같다, 조작 방지)
-const BOSS_HP_BASE := 40000.0
+const BOSS_HP_BASE := 1000.0  # 드래곤 Lv n 최대 HP = BASE × GROWTH^(n−1) — 매 판 Lv 1부터(서버 guild.ts와 같다)
 const BOSS_HP_GROWTH := 1.22
-const BOSS_NAMES := ["드래곤"]  # 길드 보스는 드래곤 하나(단계만 오른다)
-## 피해 등급: [등급, 보스 최대 HP 대비 비율 이상, 코인, 골드]
-const BOSS_GRADES := [["S", 0.20, 120, 30000], ["A", 0.10, 90, 20000], ["B", 0.05, 60, 12000], ["C", 0.02, 40, 8000], ["D", 0.0, 25, 5000]]
-const BOSS_KILL_REWARD := {"coins": 50, "diamonds": 30}  # 길드가 보스를 쓰러뜨리면 길드원 모두
+const BOSS_NAMES := ["드래곤"]
+## 판 등급: [등급, 도달한 드래곤 레벨 이상, 코인, 골드]
+const BOSS_GRADES := [["S", 15, 120, 30000], ["A", 10, 90, 20000], ["B", 6, 60, 12000], ["C", 3, 40, 8000], ["D", 1, 25, 5000]]
 
-## 길드 상점. give 키: gold·diamonds·food·shards(보유 영웅 무작위 조각)·ssr_shards(보유 SSR 무작위 조각). period: day | week
+## 길드 상점. give 키: gold·diamonds·equip(장비 상자 — 장비 던전 최고 단계 드롭 1개)·shards(보유 영웅 무작위 조각)·ssr_shards(보유 SSR 무작위 조각). period: day | week
 const SHOP := [
 	{"id": "dia", "name": "다이아 50", "give": {"diamonds": 50}, "price": 150, "limit": 2, "period": "day"},
 	{"id": "gold", "name": "골드 30,000", "give": {"gold": 30000}, "price": 60, "limit": 3, "period": "day"},
-	{"id": "food", "name": "식량 800", "give": {"food": 800}, "price": 50, "limit": 3, "period": "day"},
+	{"id": "equip", "name": "장비 상자", "give": {"equip": 1}, "price": 50, "limit": 3, "period": "day"},
 	{"id": "shards", "name": "영웅 조각 상자", "give": {"shards": 3}, "price": 200, "limit": 5, "period": "week"},
 	{"id": "ssr", "name": "SSR 조각", "give": {"ssr_shards": 1}, "price": 600, "limit": 2, "period": "week"},
 ]
@@ -65,10 +65,10 @@ const EMBLEMS := 8  # 문장 모양·색 수(guild_panel이 그린다)
 
 signal changed  # 길드 상태(가입·출석·기부·보스·상점·가상 길드원 활동)가 바뀌었다
 signal buff_changed  # 길드 버프(공격력·체력 %)가 바뀌었다 — 영웅 능력치를 다시 읽는다
-signal notice(text: String)  # 짧은 알림(레벨업·보스 처치)
+signal notice(text: String)  # 짧은 알림(레벨업)
 signal boss_started(run: Dictionary)  # 보스 전투 시작 {run_id, sec, level, hp, max} — main이 드래곤 전투 장면을 연다
 signal acted(kind: String)  # 미션(Missions)이 세는 행동: guild_attend(출석 성공 — 온라인은 응답이 왔을 때)
-signal boss_done(result: Dictionary)  # 보스 전투 결과 {dmg, grade, coins, gold, killed, level, claim?} 또는 {error}. 온라인은 응답이 왔을 때
+signal boss_done(result: Dictionary)  # 보스 전투 결과 {dmg, grade, coins, gold, level(도달), killed, total(오늘 내 점수)} 또는 {error}. 온라인은 응답이 왔을 때
 
 var save_path := "user://guild.json"  # ""이면 저장하지 않는다
 var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
@@ -100,7 +100,7 @@ const ERROR_TEXT := {
 	"no_tries": "오늘 도전 횟수를 다 썼습니다", "no_heroes": "배치된 영웅이 없습니다", "nothing": "받을 보상이 없습니다",
 	"sold_out": "구매 한도에 도달했습니다", "not_enough_coins": "길드 코인이 부족합니다", "no_guild": "길드에 가입하세요",
 	"no_such_guild": "길드를 찾을 수 없습니다", "bad_name": "길드 이름은 2~8글자입니다",
-	"no_run": "보스 전투 기록을 찾지 못했습니다", "too_early": "보스 전투가 아직 끝나지 않았습니다",
+	"no_run": "보스 전투 기록을 찾지 못했습니다", "too_early": "보스 전투가 아직 끝나지 않았습니다", "bag_full": "장비 보관함이 가득 찼습니다",
 }
 
 
@@ -173,13 +173,13 @@ static func exp_need(level: int) -> int:
 	return roundi(150.0 * pow(float(level), 1.3))
 
 
-## 길드 레벨 → 인원(나 포함): 1~5레벨 15명, 6레벨(최대) 20명. 가상 길드원은 남는 자리만 채운다(실제 유저 우선).
+## 길드 레벨 → 인원(나 포함): 1~5레벨 15명, 6레벨부터 20명. 가상 길드원은 남는 자리만 채운다(실제 유저 우선).
 static func capacity(level: int) -> int:
-	return MEMBERS_MAX if level >= MAX_LEVEL else MEMBERS_BASE
+	return MEMBERS_MAX if level >= FULL_LEVEL else MEMBERS_BASE
 
 
 static func buff_of(level: int) -> float:
-	return BUFF_PER_LEVEL * clampi(level, 0, MAX_LEVEL)
+	return BUFF_PER_LEVEL * maxi(level, 0)
 
 
 ## 지금 길드 버프(영웅 공격력·체력 %). 길드가 없거나 온라인이면 0.
@@ -192,12 +192,10 @@ func _add_exp(n: int, quiet := false) -> void:
 		return
 	guild.exp = int(guild.exp) + n
 	var up := false
-	while int(guild.level) < MAX_LEVEL and int(guild.exp) >= exp_need(int(guild.level)):
+	while int(guild.exp) >= exp_need(int(guild.level)):
 		guild.exp = int(guild.exp) - exp_need(int(guild.level))
 		guild.level = int(guild.level) + 1
 		up = true
-	if int(guild.level) >= MAX_LEVEL:
-		guild.exp = 0
 	if up:
 		if not quiet:
 			notice.emit("길드 레벨 업! Lv %d · 영웅 공격력·체력 +%d%%" % [int(guild.level), roundi(buff_pct())])
@@ -221,12 +219,35 @@ static func boss_name(level: int) -> String:
 	return BOSS_NAMES[(maxi(level, 1) - 1) % BOSS_NAMES.size()]
 
 
-static func boss_grade(dmg: float, level: int) -> Array:
-	var r := dmg / boss_max(level)
+## 한 판 피해 → 도달한 드래곤 레벨(Lv 1부터 쓰러뜨린 만큼, 서버 bossOf와 같다).
+static func boss_reach(dmg: float) -> int:
+	var lv := 1
+	var left := maxf(0.0, dmg)
+	while left >= boss_max(lv) and lv < 10000:
+		left -= boss_max(lv)
+		lv += 1
+	return lv
+
+
+## 판 등급(도달 레벨로): [등급, 레벨 이상, 코인, 골드]
+static func boss_grade(dmg: float) -> Array:
+	var lv := boss_reach(dmg)
 	for g in BOSS_GRADES:
-		if r >= float(g[1]):
+		if lv >= int(g[1]):
 			return g
 	return BOSS_GRADES[-1]
+
+
+## 오늘 길드 드래곤 점수(길드원 오늘 점수의 합, 나 포함).
+func boss_score() -> float:
+	if not joined():
+		return 0.0
+	if online():
+		return float(guild.get("boss", {}).get("score", 0))
+	var n := float(me.get("boss_total", 0.0))
+	for m in members_now():
+		n += float(m.get("dmg", 0.0))
+	return n
 
 
 ## 내 배치 영웅의 초당 피해 합(성장·연구·길드 버프·공격속도 반영).
@@ -276,7 +297,7 @@ func boss_block() -> String:
 	return ""
 
 
-## 보스 도전 시작(실제 전투): 도전 1회를 쓰고 boss_started(run {run_id, sec, level, hp, max})를 낸다 — main이 드래곤 전투 장면(guild_boss.gd)을 연다.
+## 보스 도전 시작(실제 전투): 도전 1회를 쓰고 boss_started(run {run_id, sec, level(1), hp, max})를 낸다 — main이 드래곤 전투 장면(guild_boss.gd)을 연다.
 ## 온라인은 서버(/v1/guild/boss/start)가 횟수를 쓰고 run을 준다. 못 하면 false(이유는 boss_block).
 func start_boss(now := -1.0) -> bool:
 	if now < 0.0:
@@ -289,8 +310,7 @@ func start_boss(now := -1.0) -> bool:
 		return true
 	tick(now)
 	me.boss_tries = int(me.boss_tries) + 1
-	var lv := int(guild.boss.level)
-	_boss_run = {"run_id": "local-%d" % int(now * 1000.0), "sec": BOSS_FIGHT_SEC, "level": lv, "hp": float(guild.boss.hp), "max": boss_max(lv),
+	_boss_run = {"run_id": "local-%d" % int(now * 1000.0), "sec": BOSS_FIGHT_SEC, "level": 1, "hp": boss_max(1), "max": boss_max(1),
 		"cap": roundf(team_dps() * BOSS_FIGHT_SEC * BOSS_DMG_CAP)}
 	save()
 	changed.emit()
@@ -298,17 +318,14 @@ func start_boss(now := -1.0) -> bool:
 	return true
 
 
-## 보스 전투 끝: 영웅이 드래곤에 준 피해 dmg를 낸다. 결과는 boss_done({dmg, grade, coins, gold, killed, level, claim?}) — 실패면 {error}.
+## 보스 전투 끝: 영웅이 드래곤에 준 피해 dmg(= 판 점수)를 낸다. 결과는 boss_done({dmg, grade, coins, gold, level, killed, total}) — 실패면 {error}.
 ## 피해 상한 = 시작 때 초당 피해 × 초 × BOSS_DMG_CAP(서버와 같다).
 func finish_boss(run_id: String, dmg: float, now := -1.0) -> void:
 	if now < 0.0:
 		now = now_t()
 	dmg = maxf(0.0, roundf(dmg))
 	if online():
-		_post("boss/finish", {"run_id": run_id, "dmg": int(dmg)}, func(d):
-			var res: Dictionary = d.get("result", {})
-			res.claim = int(res.get("killed", 0)) > 0
-			boss_done.emit(res))
+		_post("boss/finish", {"run_id": run_id, "dmg": int(dmg)}, func(d): boss_done.emit(d.get("result", {})))
 		if not busy:  # 연결이 없어 보내지 못했다
 			boss_done.emit({"error": "offline"})
 		return
@@ -316,35 +333,18 @@ func finish_boss(run_id: String, dmg: float, now := -1.0) -> void:
 		boss_done.emit({"error": "no_run"})
 		return
 	dmg = minf(dmg, float(_boss_run.cap))
-	var lv := int(_boss_run.level)
 	_boss_run = {}
 	tick(now)
-	var g := boss_grade(dmg, lv)
+	var lv := boss_reach(dmg)
+	var g := boss_grade(dmg)
 	me.boss_best = maxf(float(me.boss_best), dmg)
 	me.boss_total = float(me.boss_total) + dmg
 	me.contrib = int(me.contrib) + 10
 	_grant({"coins": int(g[2]), "gold": int(g[3])})
-	_log("%s님이 %s에게 %s 피해" % [MY_NAME, boss_name(lv), _commas(int(dmg))], now)
-	var killed := _hit_boss(dmg, MY_NAME, now)
+	_log("%s님이 %s Lv %d까지 · %s점" % [MY_NAME, boss_name(lv), lv, _commas(int(dmg))], now)
 	save()
 	changed.emit()
-	boss_done.emit({"dmg": dmg, "grade": g[0], "coins": int(g[2]), "gold": int(g[3]), "killed": killed, "level": lv})
-
-
-## 보스에 피해. 쓰러뜨리면 다음 단계(남은 피해는 넘긴다)와 처치 보상. 반환 처치 수.
-func _hit_boss(dmg: float, who: String, now: float, quiet := false) -> int:
-	var kills := 0
-	guild.boss.hp = float(guild.boss.hp) - dmg
-	while float(guild.boss.hp) <= 0.0:
-		var lv := int(guild.boss.level)
-		_log("%s님이 %s Lv %d 처치!" % [who, boss_name(lv), lv], now)
-		guild.boss.level = lv + 1
-		guild.boss.hp = float(guild.boss.hp) + boss_max(lv + 1)
-		_grant(BOSS_KILL_REWARD)
-		kills += 1
-		if not quiet:
-			notice.emit("길드 보스 처치! 길드 코인 +%d · 다이아 +%d" % [BOSS_KILL_REWARD.coins, BOSS_KILL_REWARD.diamonds])
-	return kills
+	boss_done.emit({"dmg": dmg, "grade": g[0], "coins": int(g[2]), "gold": int(g[3]), "level": lv, "killed": lv - 1, "total": float(me.boss_total)})
 
 
 # --- 하루 ---
@@ -523,6 +523,8 @@ func buy_block(id: String) -> String:
 		return "길드 코인이 부족합니다"
 	if (it.give.has("shards") and _owned("").is_empty()) or (it.give.has("ssr_shards") and _owned("SSR").is_empty()):
 		return "조각을 받을 영웅이 없습니다"
+	if it.give.has("equip") and econ != null and econ.bag.size() + int(it.give.equip) > int(GameData.config_num("equip_bag_cap")):
+		return "장비 보관함이 가득 찼습니다"
 	return ""
 
 
@@ -536,6 +538,8 @@ func buy(id: String) -> String:
 			var parts := []
 			for hid in d.get("result", {}).get("shards", {}):
 				parts.append("%s 조각 +%d" % [GameData.hero(hid).get("name", hid), int(d.result.shards[hid])])
+			for x in d.get("result", {}).get("items", []):
+				parts.append(item_text(x))
 			notice.emit(" · ".join(parts) if not parts.is_empty() else "%s 구매 완료" % it.name))
 		return ""
 	coins -= int(it.price)
@@ -581,6 +585,16 @@ func _grant(give: Dictionary) -> String:
 				if econ != null:
 					econ.res["food"] = int(econ.res.get("food", 0)) + n
 				parts.append("식량 +%d" % n)
+			"equip":  # 장비 상자: 장비 던전 최고 단계(없으면 1)의 드롭(서버 grant와 같다)
+				if econ != null:
+					var lv := maxi(1, int(econ.dungeons.get("equip", {}).get("best_level", 0)))
+					for it in GameData.roll_drops(lv, n, rng.randf):
+						it.id = econ.next_item_id
+						econ.next_item_id += 1
+						econ.bag.append(it)
+						parts.append(item_text(it))
+					econ._reindex_items()
+					econ.items_changed.emit()
 			"shards", "ssr_shards":
 				var pool := _owned("SSR" if k == "ssr_shards" else "")
 				for i in n:
@@ -595,6 +609,12 @@ func _grant(give: Dictionary) -> String:
 			econ.roster_changed.emit()
 		econ.save()
 	return " · ".join(parts)
+
+
+## 장비 한 줄 설명: "SR 무기 Lv 3"
+static func item_text(it: Dictionary) -> String:
+	var slot_names := {"weapon": "무기", "helmet": "투구", "armor": "갑옷", "gloves": "장갑", "shoes": "신발", "belt": "허리띠", "ring": "반지"}
+	return "%s %s Lv %d 획득" % [str(it.get("grade", "")), slot_names.get(str(it.get("slot", "")), "장비"), int(it.get("level", 1))]
 
 
 func _pay(gold_n: int, dia_n: int) -> void:
@@ -621,7 +641,7 @@ func recommendations(now := -1.0) -> Array:
 	for i in 5:
 		r.seed = hash([GameData.reset_day(now), recommend_n, i])
 		var s := r.randi()
-		var lv := clampi(r.randi_range(2, 14), 1, MAX_LEVEL)
+		var lv := r.randi_range(2, 14)
 		out.append({"seed": s, "name": _guild_name(r), "emblem": r.randi_range(0, EMBLEMS - 1), "level": lv,
 			"count": mini(r.randi_range(14, 28), capacity(lv) - 1), "notice": NOTICES[r.randi_range(0, NOTICES.size() - 1)], "power": 300 + lv * 120 + r.randi_range(0, 400)})
 	return out
@@ -662,8 +682,6 @@ func join(rec: Dictionary, now := -1.0) -> bool:
 	if members.size() > 2:
 		members[1].role = ROLES[1]
 	_set_guild(rec.name, int(rec.emblem), int(rec.level), r.randi_range(0, exp_need(int(rec.level)) / 2), int(rec.seed), false, str(rec.notice), members, now)
-	guild.boss.level = maxi(1, int(rec.level) / 2)
-	guild.boss.hp = boss_max(int(guild.boss.level)) * r.randf_range(0.3, 1.0)
 	guild.sim_t = GameData.reset_at(GameData.reset_day(now))  # 오늘 이미 한 길드원 활동은 보이게
 	_log("%s님이 길드에 가입했습니다" % MY_NAME, now)
 	tick(now, true)
@@ -685,7 +703,7 @@ func create_block(name_text: String) -> String:
 	return ""
 
 
-## 직접 창설: 혼자 시작하고, 가입 신청한 가상 길드원이 몇 시간마다 한 명씩 들어온다(길드 인원 capacity까지 — 6레벨이면 더 들어온다).
+## 직접 창설: 혼자 시작하고, 가입 신청한 가상 길드원이 몇 시간마다 한 명씩 들어온다(길드 인원 capacity까지 — 6레벨부터 더 들어온다).
 func create(name_text: String, emblem: int, now := -1.0) -> bool:
 	if now < 0.0:
 		now = now_t()
@@ -729,7 +747,7 @@ func leave() -> bool:
 
 func _set_guild(gname: String, emblem: int, level: int, exp_n: int, s: int, mine: bool, note: String, members: Array, now: float) -> void:
 	guild = {"name": gname, "emblem": emblem, "level": level, "exp": exp_n, "seed": s, "mine": mine, "notice": note, "members": members,
-		"boss": {"level": 1, "hp": boss_max(1)}, "sim_t": now, "today": GameData.reset_day(now), "log": [], "joined_t": now}
+		"boss": {}, "sim_t": now, "today": GameData.reset_day(now), "log": [], "joined_t": now}
 
 
 ## 가상 길드원 하나. join_t < 0 = 처음부터 있음.
@@ -782,33 +800,27 @@ func tick(now: float, quiet := false) -> void:
 			var roll := r.randf()
 			var kind := "royal" if roll < 0.04 else ("dia" if roll < 0.2 else ("gold" if roll < 0.85 else ""))
 			var hits := r.randi_range(1, BOSS_TRIES)
-			var share := r.randf_range(0.012, 0.04) * clampf(float(m.power) / (400.0 + 120.0 * float(guild.boss.level)), 0.3, 1.0)
-			events.append({"t": t, "i": i, "day": d, "kind": kind, "hits": hits, "share": share})
+			var dmg := 0.0  # 그날 드래곤 점수(판마다 Lv 1부터 — 전투력 × 2.8~4.2, 서버 virtualDay와 같은 식)
+			for h in hits:
+				dmg += roundf(float(m.power) * r.randf_range(2.8, 4.2))
+			events.append({"t": t, "i": i, "day": d, "kind": kind, "hits": hits, "dmg": dmg})
 	events.sort_custom(func(a, b): return a.t < b.t)
-	var kills := 0
 	for e in events:
 		var m: Dictionary = guild.members[e.i]
 		var today := int(e.day) == GameData.reset_day(now)
 		var exp_n := ATTEND_EXP + (int(DONATIONS[e.kind].exp) if e.kind != "" else 0)
 		_add_exp(exp_n, quiet)
 		m.last = e.t
-		var dmg := 0.0
-		for h in int(e.hits):
-			var one := roundf(boss_max(int(guild.boss.level)) * float(e.share))
-			dmg += one
-			kills += _hit_boss(one, m.name, e.t, true)
 		if today:
 			m.att = true
 			m.contrib = int(m.contrib) + exp_n + 10 * int(e.hits)
-			m.dmg = float(m.dmg) + dmg
+			m.dmg = float(m.dmg) + float(e.dmg)
 			if e.kind != "":
 				_log("%s님이 %s를 했습니다" % [m.name, DONATIONS[e.kind].name], e.t)
 			else:
 				_log("%s님이 출석했습니다" % m.name, e.t)
 	guild.sim_t = now
 	if not events.is_empty():
-		if kills > 0 and not quiet:
-			notice.emit("길드원이 보스를 쓰러뜨렸습니다! 길드 코인 +%d · 다이아 +%d" % [BOSS_KILL_REWARD.coins * kills, BOSS_KILL_REWARD.diamonds * kills])
 		save()
 		changed.emit()
 
@@ -832,20 +844,6 @@ static func _commas(n: int) -> String:
 
 
 # --- 온라인(서버 길드) ---
-
-## 처치 보상 대기 수(온라인 — 오프라인은 처치 때 바로 준다).
-func boss_pending() -> int:
-	return int(remote.get("boss_pending", 0)) if online() else 0
-
-
-func claim_kills() -> bool:
-	if not online() or busy or boss_pending() <= 0:
-		return false
-	_post("claim", {}, func(d):
-		var r: Dictionary = d.get("result", {})
-		notice.emit("길드 보스 처치 보상 %d회: 길드 코인 +%d · 다이아 +%d" % [int(r.get("kills", 0)), int(r.get("coins", 0)), int(r.get("diamonds", 0))]))
-	return true
-
 
 ## GET /v1/guild(창을 열 때·새로고침·접속 직후).
 func fetch() -> void:
@@ -953,12 +951,12 @@ func load_save() -> void:
 	if d.get("shop_week") is Dictionary and d.shop_week.get("bought") is Dictionary:
 		shop_week = d.shop_week
 	var g = d.get("guild")
-	if g is Dictionary and g.get("members") is Array and g.get("boss") is Dictionary and g.has("name") and g.has("level"):
+	if g is Dictionary and g.get("members") is Array and g.has("name") and g.has("level"):
 		guild = g
 		for k in ["level", "exp", "seed", "emblem", "today"]:
 			guild[k] = int(guild.get(k, 0))
-		guild.level = clampi(int(guild.level), 1, MAX_LEVEL)
-		guild.boss.level = maxi(1, int(guild.boss.get("level", 1)))
+		guild.level = maxi(1, int(guild.level))
+		guild.boss = {}
 		if not (guild.get("log") is Array):
 			guild.log = []
 	_last_buff = buff_pct()

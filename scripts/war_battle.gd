@@ -469,8 +469,14 @@ func keep_broken_now() -> bool:
 	return float(plan.get("keep", {}).get("hp", 1.0)) > 0.0 and not keep.is_alive()
 
 
+## 이 전투에서 깎은 성채 점수(시작 때 이미 깎여 있던 만큼은 뺀다).
+func keep_points_now() -> int:
+	var mx := float(plan.get("keep", {}).get("max", 0.0))
+	return WarRules.keep_points(keep.hp if keep.is_alive() else 0.0, mx) - WarRules.keep_points(float(plan.get("keep", {}).get("hp", mx)), mx)
+
+
 func points_now() -> int:
-	return WarRules.points(kills, gates_broken_now(), keep_broken_now())
+	return WarRules.points(kills, gates_broken_now(), keep_points_now())
 
 
 func time_left() -> float:
@@ -482,7 +488,8 @@ func _finish() -> void:
 		return
 	done = true
 	result = state_now()
-	result.merge({"kills": kills, "gates_broken": gates_broken_now(), "keep_broken": keep_broken_now(), "points": points_now(), "clock": snappedf(clock, 0.1)})
+	result.merge({"kills": kills, "gates_broken": gates_broken_now(), "keep_broken": keep_broken_now(), "keep_points": keep_points_now(), "points": points_now(),
+		"clock": snappedf(clock, 0.1)})
 	for u in _att + _def:
 		u.set_process(false)
 	print("[war] finished %s" % result)

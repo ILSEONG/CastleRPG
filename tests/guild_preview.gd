@@ -1,6 +1,7 @@
 extends Node
 ## 길드 화면 미리보기(개발용, 화면 필요): 로컬 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1)에 게스트로 접속해 실제 플레이어가 보는 길드 화면을 한 장씩 찍는다 —
-## 잠김 → 추천 길드·창설 → 홈(출석·기부) → 보스 탭 → 드래곤 전투(시작·교전·결과) → 상점 → 길드원 → 길드전 탭(공격·수비 편성) → 공성 전투(시작·교전·성문) → 전투 뒤 탭.
+## 잠김 → 추천 길드·창설 → 홈(출석·기부) → 보스 탭 → 드래곤 전투(시작·교전·결과) → 상점 → 길드원 → 길드전 탭(공성 시각 대기·수비 편성)
+## → (테스트 훅 /v1/test/war_now로 공성 시각을 지금으로) 공성 열림 → 공성 전투(시작·교전·성문) → 전투 뒤 탭.
 ## 실행: cd server && PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=8790 node src/main.ts &
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/guild_preview.tscn -- --api=http://127.0.0.1:8790 --device=/tmp/x/device.json --out=/tmp/guild_preview
 ## 코드·숫자는 건드리지 않는다. 파일은 <out>_NN_이름.png.
@@ -102,6 +103,14 @@ func _ready() -> void:
 		await _snap("war_defense")
 		_panel.buttons["war_mode:attack"].pressed.emit()
 		await _frames(4)
+	# 공성은 길드원이 정한 시각에 열린다 — 테스트 훅으로 이번 주 공성 시각을 지금으로 당긴다
+	_resp_done = false
+	Net.send("POST", "/v1/test/war_now", {}, func(d):
+		GuildWar._take(d)
+		_resp_done = true, func(): _resp_done = true)
+	await _wait_until(func(): return _resp_done, 10.0)
+	_panel._rebuild()
+	await _snap("war_live")
 	if _panel.buttons.has("war_act"):
 		_panel.buttons["war_act"].pressed.emit()
 		var battle = null

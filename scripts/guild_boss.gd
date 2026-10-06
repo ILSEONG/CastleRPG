@@ -1,9 +1,9 @@
 extends Node3D
 ## 길드 보스 실제 전투 장면: 배치 영웅이 run.sec초(20초) 동안 드래곤(dragon.gd)과 싸운다. main이 던전처럼 성 월드를 떼어 두고 붙인다
 ## (Guild.boss_started → main._enter_dungeon(run, 이 스크립트)) — [확인]으로 main.leave_dungeon.
-## 무대는 골드 던전과 같은 평야(ArenaKit.plains — 붉은 드래곤이 잘 보인다), 영웅·스킬·피해 숫자도 던전과 같다(hero.gd 아레나). 드래곤은 지금 길드 보스 HP로 나오고,
-## 0이 되면 그 단계 처치(배너) 뒤 다음 단계 HP로 찬다. 시간이 다 되면 드래곤이 받은 피해 합(dragon.dealt)을 Guild.finish_boss로 내고
-## 결과(boss_done: 등급·코인·골드·처치)를 띄운다. 온라인은 서버가 피해를 받아 등급·보상을 정한다(상한은 서버 guild.ts BOSS_DMG_CAP).
+## 무대는 골드 던전과 같은 평야(ArenaKit.plains — 붉은 드래곤이 잘 보인다), 영웅·스킬·피해 숫자도 던전과 같다(hero.gd 아레나). 드래곤은 매 판 Lv 1로 나오고,
+## 0이 되면 그 레벨 처치(배너) 뒤 같은 판에서 다음 레벨 HP로 찬다(공격력도 오른다). 시간이 다 되면 드래곤이 받은 피해 합(dragon.dealt = 판 점수)을
+## Guild.finish_boss로 내고 결과(boss_done: 등급·코인·골드·도달 레벨)를 띄운다. 온라인은 서버가 피해를 받아 등급·보상을 정한다(상한은 서버 guild.ts BOSS_DMG_CAP).
 
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
@@ -266,14 +266,12 @@ func _show_result() -> void:
 		head.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
 		head.add_theme_constant_override("outline_size", 10)
 		_result_box.add_child(head)
-		_result_box.add_child(_label("드래곤에게 준 피해 %s" % UiKit.commas(int(result.dmg)), 32, MainHud.INK))
+		_result_box.add_child(_label("드래곤 Lv %d 도달 · 점수 %s" % [int(result.get("level", 1)), UiKit.commas(int(result.dmg))], 32, MainHud.INK))
 		if float(result.get("sent", result.dmg)) > float(result.dmg) + 0.5:
 			_result_box.add_child(_label("(이번 도전 인정 한도까지)", 20, GuildPanel.SUB))
 		_result_box.add_child(_label("길드 코인 +%d · 골드 +%s" % [int(result.coins), UiKit.commas(int(result.gold))], 28, GOLD.darkened(0.15)))
-		if int(result.get("killed", 0)) > 0:
-			var kt := "드래곤 처치! 길드 탭에서 처치 보상을 받으세요" if result.get("claim", false) else "드래곤 처치! 코인 +%d · 다이아 +%d" % [
-				GuildScript.BOSS_KILL_REWARD.coins * int(result.killed), GuildScript.BOSS_KILL_REWARD.diamonds * int(result.killed)]
-			_result_box.add_child(_label(kt, 24, GuildPanel.GREEN, true))
+		if result.has("total"):
+			_result_box.add_child(_label("오늘 내 점수 %s · 길드 점수에 더해집니다" % UiKit.commas(int(result.total)), 24, GuildPanel.GREEN, true))
 	var ok := Button.new()
 	ok.text = "확인"
 	ok.custom_minimum_size = Vector2(0, 76)

@@ -2128,7 +2128,7 @@ export function createApp(opts: AppOptions) {
 
   function guildState(g: GuildRow, now: number, hour: number) {
     const vt = G.virtualTotals({ id: g.id, seed: g.seed, created_at: g.created_at, virtual_n: g.virtual_n, system: g.owner == null && g.virtual_n >= G.SYSTEM_VIRTUAL[0] }, now, hour)
-    return { vt, lv: G.levelOf(g.exp + vt.exp), boss: G.bossOf(g.boss_damage + vt.dmg) }
+    return { vt, lv: G.levelOf(g.exp + vt.exp) }
   }
 
   async function guildCtx(id: string, pl: Player, game: Game, now: number): Promise<GuildCtx> {
@@ -2199,10 +2199,12 @@ export function createApp(opts: AppOptions) {
     const st = x.st
     const members: Record<string, unknown>[] = []
     let att = x.mine.attended ? 1 : 0
+    let score = x.mine.boss_total // 오늘 길드 드래곤 점수 = 길드원 점수(오늘 두 판 피해 합)의 합
     for (const m of x.members) {
       if (m.player_id === x.id) continue
       const mm = G.mineToday(m.mine, x.now, x.hour)
       if (mm.attended) att++
+      score += mm.boss_total
       members.push({ name: G.playerName(m.player_id), role: m.player_id === g.owner ? '길드장' : '길드원', power: m.power, contrib: mm.contrib, att: mm.attended,
         dmg: mm.boss_total, last: m.last_active ?? 0, real: true })
     }
@@ -2210,16 +2212,16 @@ export function createApp(opts: AppOptions) {
     for (const vm of G.seated(st.vt.members, x.now, cap, x.members.length)) {
       const d = st.vt.day[vm.i]
       if (d.att) att++
+      score += d.dmg
       const role = g.owner != null && vm.role === '길드장' ? '정예' : vm.role
       members.push({ name: vm.name, role, power: d.power, contrib: d.contrib, att: d.att, dmg: d.dmg, last: d.last })
     }
     const logs = (await query(`select extract(epoch from at)::float8 as t, text from guild_log where guild_id = $1 and at > to_timestamp($2::float8)
       order by at desc limit 20`, [g.id, x.now - 2 * 86400])).map((r) => ({ t: Number(r.t), text: String(r.text) }))
     const log = [...logs, ...st.vt.log].sort((a, b) => a.t - b.t).slice(-30)
-    out.boss_pending = Math.max(0, Math.min(G.BOSS_CLAIM_MAX, st.boss.level - x.pg.boss_seen))
     out.guild = {
       id: g.id, name: g.name, emblem: g.emblem, notice: g.notice, mine: g.owner === x.id, level: st.lv.level, exp: st.lv.exp, need: st.lv.need,
-      buff: G.buffPct(st.lv.level), boss: { level: st.boss.level, hp: st.boss.hp, max: st.boss.max }, members, attend_count: att, log,
+      buff: G.buffPct(st.lv.level), boss: { score }, members, attend_count: att, log,
       capacity: cap,
     }
     return out
@@ -2259,6 +2261,11 @@ export function createApp(opts: AppOptions) {
       else if (k === 'gold') ch.goldTenths = (ch.goldTenths ?? 0) + n * 10
       else if (k === 'diamonds') ch.diamonds = (ch.diamonds ?? 0) + n
       else if (k === 'food') ch.res = { ...(ch.res ?? {}), food: (ch.res?.food ?? 0) + n }
+      else if (k === 'equip') {
+        // 장비 상자: 장비 던전 최고 단계(없으면 1)에서 드롭 하나와 같은 규칙(등급 가중치·부위)
+        const level = Math.max(1, Number(x.pl.dungeons?.equip?.best_level ?? 0))
+        ch.items = [...(ch.items ?? []), ...R.rollDrops(x.game.equip_drop, level, n, R.cfgNum(x.game.config, 'equip_weapon_p'), random)]
+      }
       else if (k === 'shards' || k === 'ssr_shards') {
         const pool = Object.keys(x.pl.heroes).filter((id) => x.game.heroes.some((h) => h.id === id && (k === 'shards' || h.grade === 'SSR'))).sort()
         for (let i = 0; i < n && pool.length; i++) {
@@ -2289,7 +2296,7 @@ export function createApp(opts: AppOptions) {
       const [{ n }] = await query('select count(*)::int as n from player_guild where guild_id = $1', [gid])
       const st = guildState(g, x.now, x.hour)
       if (Number(n) >= G.capacity(st.lv.level)) throw blocked('full', 'guild is full')
-      return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: st.boss.level }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드에 가입했습니다` } } } }
+      return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드에 가입했습니다` } } } }
     })
   })
 
@@ -2378,50 +2385,41 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // 보스 전투 시작: 도전 1회를 쓰고 전투 표(run_id·초·단계·HP)를 준다. 앱이 영웅으로 드래곤과 싸운 뒤 /boss/finish로 피해를 낸다.
+  // 보스 전투 시작: 도전 1회를 쓰고 전투 표(run_id·초·Lv 1 HP)를 준다. 드래곤은 매 판 Lv 1에서 시작한다. 앱이 영웅으로 싸운 뒤 /boss/finish로 피해를 낸다.
   app.post('/v1/guild/boss/start', auth, async (c) => guildMutate(c, (x) => {
-    const { st } = needGuild(x)
+    needGuild(x)
     if (x.mine.boss_tries >= G.BOSS_TRIES) throw blocked('no_tries', 'no boss tries left today')
     if (x.dps <= 0) throw blocked('no_heroes', 'no heroes deployed')
-    const run = { id: randomUUID(), t: x.now, cap: Math.round(x.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP), level: st.boss.level }
+    const run = { id: randomUUID(), t: x.now, cap: Math.round(x.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP), level: 1 }
     const mine = { ...x.mine, boss_tries: x.mine.boss_tries + 1, boss_run: run }
     return { change: { guild: { row: rowOf(x, { mine }) } },
-      result: { run_id: run.id, sec: G.BOSS_FIGHT_SEC, level: st.boss.level, hp: st.boss.hp, max: st.boss.max } }
+      result: { run_id: run.id, sec: G.BOSS_FIGHT_SEC, level: 1, hp: G.bossMax(1), max: G.bossMax(1) } }
   }))
 
-  // 보스 전투 끝: 앱이 낸 피해(상한 cap)로 등급·보상·길드 누적 피해. 너무 이르면 too_early, 오래 지났으면 피해 0.
+  // 보스 전투 끝: 앱이 낸 피해(상한 cap) = 이 판 점수. 도달 레벨로 등급·보상, 내 오늘 점수·길드 누적 점수에 더한다. 너무 이르면 too_early, 오래 지났으면 0.
   app.post('/v1/guild/boss/finish', auth, async (c) => {
     const b = await body(c)
     const runId = strField(b, 'run_id')
     const sent = intField(b, 'dmg', 0, 1e12)
     return guildMutate(c, (x) => {
-      const { g, st } = needGuild(x)
+      const { g } = needGuild(x)
       const run = x.mine.boss_run
       if (!run || run.id !== runId) throw blocked('no_run', 'no such boss fight')
       const age = x.now - run.t
       if (age < G.BOSS_FIGHT_SEC - G.BOSS_SLACK_SEC) throw blocked('too_early', `the fight lasts ${G.BOSS_FIGHT_SEC} s (${age.toFixed(1)} s so far)`)
       const dmg = age > G.BOSS_RUN_TTL ? 0 : Math.min(sent, run.cap)
-      const before = st.boss.level
-      const grade = G.bossGrade(dmg, run.level)
-      const after = G.bossOf(g.boss_damage + st.vt.dmg + dmg).level
+      const reached = G.bossOf(dmg).level
+      const grade = G.bossGrade(dmg)
       const ch: Change = {}
       const coins = { n: x.pg.coins }
       grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
-        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 ${G.bossName(before)}에게 ${dmg.toLocaleString('en-US')} 피해` } }
-      return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: run.level, killed: after - before } }
+        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 드래곤 Lv ${reached}까지 · ${dmg.toLocaleString('en-US')}점` } }
+      return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
     })
   })
 
-  app.post('/v1/guild/claim', auth, async (c) => guildMutate(c, (x) => {
-    const { st } = needGuild(x)
-    const n = Math.min(G.BOSS_CLAIM_MAX, st.boss.level - x.pg.boss_seen)
-    if (n <= 0) throw blocked('nothing', 'no boss kill rewards')
-    const ch: Change = { diamonds: G.BOSS_KILL_REWARD.diamonds * n }
-    ch.guild = { row: rowOf(x, { coins: x.pg.coins + G.BOSS_KILL_REWARD.coins * n, boss_seen: st.boss.level }) }
-    return { change: ch, result: { kills: n, coins: G.BOSS_KILL_REWARD.coins * n, diamonds: G.BOSS_KILL_REWARD.diamonds * n } }
-  }))
 
   app.post('/v1/guild/buy', auth, async (c) => {
     const itemId = strField(await body(c), 'id')
@@ -2431,6 +2429,7 @@ export function createApp(opts: AppOptions) {
       const bag = it.period === 'day' ? x.mine.shop_day : x.mine.shop_week
       if ((bag.bought[it.id] ?? 0) >= it.limit) throw blocked('sold_out', 'purchase limit reached')
       if (x.pg.coins < it.price) throw blocked('not_enough_coins', 'not enough guild coins')
+      if (it.give.equip && x.pl.items.length + it.give.equip > R.cfgNum(x.game.config, 'equip_bag_cap')) throw blocked('bag_full', 'equipment bag is full')
       const ch: Change = {}
       const coins = { n: x.pg.coins - it.price }
       grant(x, it.give, ch, coins)
@@ -2438,7 +2437,7 @@ export function createApp(opts: AppOptions) {
       const nb = { ...bag, bought: { ...bag.bought, [it.id]: (bag.bought[it.id] ?? 0) + 1 } }
       const mine = it.period === 'day' ? { ...x.mine, shop_day: nb as G.Mine['shop_day'] } : { ...x.mine, shop_week: nb as G.Mine['shop_week'] }
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }) }
-      return { change: ch, result: { shards: ch.shards ?? {} } }
+      return { change: ch, result: { shards: ch.shards ?? {}, items: ch.items ?? [] } }
     })
   })
 
@@ -2611,7 +2610,7 @@ export function createApp(opts: AppOptions) {
     }
   }
   registerGuildWar(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, rowOf, needGuild, grant, ApiError,
-    verifyToken }, opts.warLive)
+    verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
 
   return app
 }

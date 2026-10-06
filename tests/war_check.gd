@@ -3,7 +3,7 @@ extends Node
 ## 사례: (1) AI 공격 4분대 vs AI 수비 4분대 — 처치가 나고 스크립트 오류 없음, 분대 집중 공격이 보인다.
 ## (2) 약한 수비 — 공격이 성문을 부수고 성 안으로 들어가 성채를 친다. (3) 원거리 수비는 근접 적이 붙으면 물러난다.
 ## (4) 꼭두각시 장면이 방장 스냅샷을 따른다. (5) 영웅 상태 효과(독·둔화·속박·취약·약화·넉백·도발)가 영웅에게도 걸린다.
-## (6) 오프라인 GuildWar: 상대 길드·성·전투 열기·결과 저장(줄기만)·하루 한 번·다음 주 보상.
+## (6) 오프라인 GuildWar: 상대 길드·성·공성 시각(기본·고르기)·전투 열기·결과 저장(줄기만)·한 주 한 번·성채 3% 점수·다음 주 보상.
 
 const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
@@ -61,9 +61,20 @@ func _case_offline_war() -> void:
 	_check(w.enemy.members == 20 and w.castle.defenders == 80, "level-6 guild meets a 20-member enemy with 80 defenders (%d, %d)" % [w.enemy.members, w.castle.defenders])
 	var e1: Dictionary = GuildWar.enemy_of()
 	_check(GuildWar.enemy_guild(int(GuildWar.local.seed), 20, float(GuildWar.local.power)).hash() == e1.hash(), "enemy is deterministic")
-	_check(w.battle.state == "ready" and w.points == 0, "battle ready, no points yet")
 	var ids: Array = GuildWar.default_squad()
 	_check(ids.size() == 4, "default squad has 4 heroes")
+	var def_at := GuildWar.battle_at(int(w.week), -1.0)
+	_check(w.battle.state == "waiting" and w.points == 0 and is_equal_approx(float(w.schedule.at), def_at) and GuildWar.at_text(def_at) == "토요일 21:00"
+		and GuildWar.enter_block(ids) != "", "weekly siege waits for its time (default saturday 21:00: %s)" % GuildWar.at_text(float(w.schedule.at)))
+	_check(GuildWar.schedule_block(0, 0) != "" and GuildWar.set_schedule(1, 20), "members pick a later time this week (tuesday 20:00)")
+	w = GuildWar.war
+	var at := float(w.schedule.at)
+	_check(GuildWar.at_text(at) == "화요일 20:00" and w.schedule.set and w.battle.state == "waiting", "the picked time shows: %s" % GuildWar.at_text(at))
+	t0 = at + 5.0
+	GuildWar.fixed_now = t0
+	Guild.fixed_now = t0
+	GuildWar.fetch()
+	_check(GuildWar.war.battle.state == "live" and not GuildWar.war.schedule.can_change, "at the time the siege opens and the time is locked")
 	var plan := GuildWar.local_enter(ids.map(func(id): return GuildWar.hero_entry(id)), t0)
 	_check(plan.defenders.size() == 80 and plan.attackers.size() == Guild.members_now().size() + 1, "plan: 80 defenders, one squad per member (%d)" % plan.attackers.size())
 	_check(plan.attackers.filter(func(sq): return not sq.ai).size() == 1, "only my squad is player-controlled")
@@ -72,16 +83,23 @@ func _case_offline_war() -> void:
 	GuildWar.local_save_state(r, false, t0 + 60)
 	w = GuildWar.war
 	_check(w.points == WarRules.PTS_KILL + WarRules.PTS_GATE and w.castle.gates[1].hp == plan.gates[1].hp, "points from the castle state; gates never heal (%d)" % w.points)
-	_check(w.battle.state == "live", "leaving early keeps today's battle open")
+	_check(w.battle.state == "live" and w.enemy_points == 0, "leaving early keeps the battle open; enemy score hidden until our siege ends")
 	var again := GuildWar.local_enter(ids.map(func(id): return GuildWar.hero_entry(id)), t0 + 120)
-	_check(again.battle_id == plan.battle_id and not again.defenders.any(func(dd): return dd.uid == d1.uid) and absf(again.clock - 120.0) < 1.0, "re-entering resumes the same battle without the fallen defender")
-	GuildWar.local_save_state(r, true, t0 + 130)
-	_check(GuildWar.war.battle.state == "done" and GuildWar.enter_block(ids) != "", "one battle a day")
+	_check(again.battle_id == plan.battle_id and not again.defenders.any(func(dd): return dd.uid == d1.uid) and absf(again.clock - 125.0) < 1.0, "re-entering resumes the same battle without the fallen defender")
+	# 성채 3%마다 1점
+	var kp := {"battle_id": plan.battle_id, "keep": float(plan.keep.max) * 0.935}
+	GuildWar.local_save_state(kp, true, t0 + 130)
+	_check(GuildWar.war.battle.state == "done" and GuildWar.enter_block(ids) != "", "one battle a week")
+	_check(GuildWar.war.points == WarRules.PTS_KILL + WarRules.PTS_GATE + 2, "keep: 6.5%% off = 2 points (%d)" % GuildWar.war.points)
+	GuildWar.fixed_now = at + WarRules.BATTLE_SEC + 1.0
+	GuildWar.fetch()
+	_check(GuildWar.war.enemy_days.size() == 1 and GuildWar.war.enemy_points == GuildWar.war.enemy_days[0], "enemy score shows after our siege time")
 	GuildWar.fixed_now = t0 + 7 * 86400.0
 	Guild.fixed_now = GuildWar.fixed_now
 	GuildWar.fetch()
 	w = GuildWar.war
-	_check(w.points == 0 and w.claim is Dictionary and int(w.claim.points) == WarRules.PTS_KILL + WarRules.PTS_GATE, "next week: new enemy, last week's result can be claimed")
+	_check(w.points == 0 and w.claim is Dictionary and int(w.claim.points) == WarRules.PTS_KILL + WarRules.PTS_GATE + 2 and not w.schedule.set,
+		"next week: new enemy, default time again, last week's result can be claimed")
 	var dia: int = Economy.diamonds
 	GuildWar.claim()
 	_check(Economy.diamonds == dia + int(w.claim.reward.diamonds) and GuildWar.war.claim == null, "claim pays once")

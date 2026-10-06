@@ -214,7 +214,7 @@ func _row(e: Dictionary, b: String) -> Control:
 	v.add_child(name_row)
 	var sub := ""
 	if b == "guild":
-		sub = "길드원 %d명 · 보스 %d단계" % [int(e.get("members", 0)), int(e.get("boss", 1))]
+		sub = "길드원 %d명 · 드래곤 점수 %s" % [int(e.get("members", 0)), UiKit.commas(int(e.get("boss", 0)))]
 	elif e.has("guild"):
 		sub = "길드 " + str(e.guild)
 	if sub != "":

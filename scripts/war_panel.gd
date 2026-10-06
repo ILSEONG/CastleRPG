@@ -1,7 +1,7 @@
 extends RefCounted
 ## 길드 창 [길드전] 하위 탭 내용(guild_panel.gd가 build(창)을 부른다 — 창의 _card·_label·_button을 쓴다). 값은 GuildWar.war.
 ## 위에서부터: 이번 주 상대(문장·이름·전투력)와 점수(우리 : 상대), 상대 성(성문 4개·성채 체력 막대, 수비 영웅 처치 수),
-## 오늘 공성전(상태·남은 시간) + [공격 분대][수비 분대] 고르기 + 영웅 격자(보유 영웅, 전투력 순, 4명) + [공성 시작/전투 합류] 또는 [수비 영웅 저장],
+## 이번 주 공성전(공성 시각 — 길드원이 요일·시를 고른다, 상태·남은 시간) + [공격 분대][수비 분대] 고르기 + 영웅 격자(보유 영웅, 전투력 순, 4명) + [공성 시작/전투 합류] 또는 [수비 영웅 저장],
 ## 지난 주 보상([보상 받기]), 규칙 한 장.
 
 const WarRules := preload("res://scripts/war_rules.gd")
@@ -64,7 +64,7 @@ static func _enemy_card(p, w: Dictionary) -> void:
 	score.add_child(p._label("%d 상대" % int(w.enemy_points), 40, RED))
 	v.add_child(score)
 	var left := maxf(0.0, float(w.get("week_ends", 0.0)) - GuildWar.now_t())
-	v.add_child(p._label("주간 결산까지 %s · 상대도 매일 우리 성을 공격합니다" % UiKit.duration(left), 19, SUB))
+	v.add_child(p._label("주간 결산까지 %s · 상대 점수는 우리 공성 시간이 끝나면 나옵니다" % UiKit.duration(left), 19, SUB))
 	p.body.add_child(c)
 
 
@@ -107,7 +107,9 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 	var v: VBoxContainer = c.get_child(0)
 	var b: Dictionary = w.get("battle", {})
 	var state := str(b.get("state", "ready"))
-	var head := "오늘 공성전"
+	var sch: Dictionary = w.get("schedule", {})
+	var at := float(sch.get("at", 0.0))
+	var head := ""
 	match state:
 		"live":
 			var left := maxf(0.0, float(b.get("ends_at", 0.0)) - GuildWar.now_t())
@@ -115,10 +117,15 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 			if b.has("joined"):
 				head += " · 참가 %d명" % int(b.joined)
 		"done":
-			head = "오늘 공성전은 끝났습니다 · 내일 다시"
+			head = "이번 주 공성전은 끝났습니다 · 다음 주에 다시"
 		_:
-			head = "오늘 공성전 · 첫 길드원이 들어가면 %d분 동안 열립니다" % roundi(WarRules.BATTLE_SEC / 60.0)
+			head = "이번 주 공성 %s · %s 뒤 %d분 동안 열립니다" % [GuildWar.at_text(at), UiKit.duration(maxf(0.0, at - GuildWar.now_t())),
+				roundi(WarRules.BATTLE_SEC / 60.0)]
 	v.add_child(p._label(head, 22, MainHud.INK))
+	var who := ("%s님이 정한 시각" % str(sch.by)) if sch.get("set", false) and str(sch.get("by", "")) != "" else "길드원이 정하지 않으면 토요일 21:00"
+	v.add_child(p._label(who, 18, SUB))
+	if sch.get("can_change", false):
+		_schedule_picker(p, v, at)
 	var modes := HBoxContainer.new()
 	modes.add_theme_constant_override("separation", 8)
 	for m in [["attack", "공격 분대"], ["defense", "수비 분대"]]:
@@ -156,6 +163,54 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 	v.add_child(act)
 	p.buttons["war_act"] = act
 	p.body.add_child(c)
+
+
+## 공성 시각 고르기: 요일 7칸 + [−] 시 [+] + [시각 정하기]. 고르는 값은 창에 둔다(war_at).
+static func _schedule_picker(p, v: VBoxContainer, at: float) -> void:
+	if not p.has_meta("war_at"):
+		var d := GameData.reset_day(at)
+		p.set_meta("war_at", {"day": GuildWar.day_in_week(d), "hour": roundi((at - GameData.reset_at(d)) / 3600.0)})
+	var pick: Dictionary = p.get_meta("war_at")
+	var days := HBoxContainer.new()
+	days.add_theme_constant_override("separation", 4)
+	for i in 7:
+		var db = p._button(WarRules.DAY_NAMES[i], UiKit.AMBER if int(pick.day) == i else UiKit.STEEL, 20)
+		db.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		db.custom_minimum_size = Vector2(0, 50)
+		db.pressed.connect(func():
+			pick.day = i
+			p._rebuild())
+		days.add_child(db)
+		p.buttons["war_day:%d" % i] = db
+	v.add_child(days)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	for step in [-1, 1]:
+		var hb = p._button("−" if step < 0 else "+", UiKit.STEEL, 26)
+		hb.custom_minimum_size = Vector2(64, 54)
+		hb.pressed.connect(func():
+			pick.hour = posmod(int(pick.hour) + step, 24)
+			p._rebuild())
+		p.buttons["war_hour:%d" % step] = hb
+		if step < 0:
+			row.add_child(hb)
+			row.add_child(p._label("%s요일 %02d:00" % [WarRules.DAY_NAMES[int(pick.day)], int(pick.hour)], 26, MainHud.INK))
+		else:
+			row.add_child(hb)
+	var why := GuildWar.schedule_block(int(pick.day), int(pick.hour))
+	var same := absf(GuildWar.pick_at(int(GuildWar.war.get("week", 0)), int(pick.day), int(pick.hour)) - at) < 1.0
+	var sb = p._button("시각 정하기", UiKit.AMBER, 22)
+	sb.custom_minimum_size = Vector2(170, 54)
+	sb.disabled = why != "" or same
+	sb.pressed.connect(func():
+		if GuildWar.set_schedule(int(pick.day), int(pick.hour)):
+			p.remove_meta("war_at"))
+	row.add_child(sb)
+	p.buttons["war_schedule"] = sb
+	v.add_child(row)
+	if why != "" and not same and not GuildWar.busy:
+		v.add_child(p._label(why, 18, RED))
 
 
 static func _tile(p, id: String, picked: Array) -> Control:
@@ -219,9 +274,10 @@ static func _rules_card(p) -> void:
 	var v: VBoxContainer = c.get_child(0)
 	v.add_child(p._label("공성전 규칙", 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for t in ["길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.",
-			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다. 쓰러뜨린 수비 영웅과 부순 성문은 그 주 내내 그대로입니다.",
-			"점수: 수비 영웅 처치 %d · 성문 파괴 %d · 성채 함락 %d" % [WarRules.PTS_KILL, WarRules.PTS_GATE, WarRules.PTS_KEEP],
-			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(전투마다 목숨 %d개). 모두 목숨을 다 쓰면 그날 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],
+			"공성전은 한 주에 한 번, 길드원이 정한 시각에 %d분 동안 열립니다. 아무도 정하지 않으면 토요일 21:00입니다." % roundi(WarRules.BATTLE_SEC / 60.0),
+			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.",
+			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점 · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, roundi(WarRules.KEEP_STEP * 100.0)],
+			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(목숨 %d개). 모두 목숨을 다 쓰면 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],
 			"수비 영웅은 성벽 앞에서 싸워 체력 ×%s · 공격력 ×%s 수성 보너스를 받습니다." % [str(WarRules.DEF_HP_MULT), str(WarRules.DEF_ATK_MULT)],
 			"주간 보상: 승리 길드 코인 %d · 다이아 %d / 패배 길드 코인 %d · 다이아 %d" % [WarRules.REWARD_WIN.coins, WarRules.REWARD_WIN.diamonds,
 				WarRules.REWARD_LOSE.coins, WarRules.REWARD_LOSE.diamonds]]:

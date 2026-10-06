@@ -204,8 +204,8 @@ func _build_result(root: Control) -> void:
 
 func show_result(r: Dictionary) -> void:
 	result_title.text = "성채 함락!" if r.get("keep_broken", false) else "공성 종료"
-	result_body.text = "이번 전투 %d점\n수비 영웅 처치 %d · 성문 파괴 %d%s" % [int(r.points), int(r.kills), int(r.gates_broken),
-		" · 성채 함락" if r.get("keep_broken", false) else ""]
+	result_body.text = "이번 전투 %d점\n수비 영웅 처치 %d · 성문 파괴 %d · 성채 %d점%s" % [int(r.points), int(r.kills), int(r.gates_broken),
+		int(r.get("keep_points", 0)), " · 성채 함락" if r.get("keep_broken", false) else ""]
 	result_layer.visible = true
 
 

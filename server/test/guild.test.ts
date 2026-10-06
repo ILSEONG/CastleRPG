@@ -33,8 +33,13 @@ test('guild rules: levels, boss steps and virtual members are deterministic', ()
   const b = G.bossOf(G.bossMax(1) + 10)
   assert.equal(b.level, 2)
   assert.equal(b.hp, G.bossMax(2) - 10)
-  assert.equal(G.bossGrade(G.bossMax(1) * 0.25, 1)[0], 'S')
-  assert.equal(G.bossGrade(1, 1)[0], 'D')
+  // 판 등급 = 한 판에서 도달한 드래곤 레벨(Lv 1부터)
+  const reach = (lv: number) => Array.from({ length: lv - 1 }, (_, i) => G.bossMax(i + 1)).reduce((a, b2) => a + b2, 0)
+  assert.equal(G.bossOf(reach(15)).level, 15)
+  assert.equal(G.bossGrade(reach(15))[0], 'S')
+  assert.equal(G.bossGrade(reach(15) - 1)[0], 'A')
+  assert.equal(G.bossGrade(reach(3))[0], 'C')
+  assert.equal(G.bossGrade(1)[0], 'D')
   const g = { id: 'x', seed: 123, created_at: T0 - 10 * 86400, virtual_n: 15, system: true }
   const a = G.virtualTotals(g, T0, 15)
   assert.deepEqual(a.exp, G.virtualTotals(g, T0, 15).exp)
@@ -43,10 +48,10 @@ test('guild rules: levels, boss steps and virtual members are deterministic', ()
   const made = G.virtualMembers({ ...g, system: false, created_at: T0, virtual_n: 10 })
   assert.ok(made.every((m, i) => i === 0 || m.join_t > made[i - 1].join_t), 'created guild: virtual members join one by one')
   assert.equal(G.playerName('8f1e0a0e-0000-4000-8000-000000000001'), G.playerName('8f1e0a0e-0000-4000-8000-000000000001'))
-  // 최대 6레벨, 인원 15명(6레벨 20명), 버프 최대 6%
-  assert.equal(G.levelOf(1e12).level, 6)
-  assert.equal(G.buffPct(6), 6)
-  assert.deepEqual([1, 5, 6].map(G.capacity), [15, 15, 20])
+  // 레벨 끝 없음(레벨마다 버프 +1%), 인원 15명 → 6레벨부터 20명(그 뒤로도 20명)
+  assert.ok(G.levelOf(1e9).level > 6)
+  assert.equal(G.buffPct(40), 40)
+  assert.deepEqual([1, 5, 6, 30].map(G.capacity), [15, 15, 20, 20])
   const vm = G.virtualMembers({ ...g, virtual_n: 18 })
   assert.equal(G.seated(vm, T0, 15, 3).length, 12, 'virtual members only fill the seats real players leave')
 })
@@ -63,7 +68,7 @@ test('guild: locked before round 1-10, then 5 recommendations', async () => {
   assert.equal(v.unlocked, true)
   assert.equal(v.guild, null)
   assert.equal(v.recommendations.length, 5)
-  assert.ok(v.recommendations.every((x: any) => x.level >= 1 && x.level <= 6 && x.count >= 12 && x.count <= x.capacity && x.capacity === G.capacity(x.level) && typeof x.name === 'string'))
+  assert.ok(v.recommendations.every((x: any) => x.level >= 1 && x.count >= 12 && x.count <= x.capacity && x.capacity === G.capacity(x.level) && typeof x.name === 'string'))
 })
 
 test('guild: join, attend, box, donate, leave keeps coins', async () => {
@@ -156,7 +161,7 @@ test('guild: create costs 500,000 gold, names are unique, owner leaving hands ov
   S.clock.t -= 86400
 })
 
-test('guild: real boss fight — start uses a try, finish takes the damage (capped, not too early), kill rewards, daily reset', async () => {
+test('guild: real boss fight — every fight starts at Lv 1, finish takes the damage (capped, not too early), score adds up, daily reset', async () => {
   const p = await ready()
   const rec = (await guild(p.token)).recommendations[2]
   await post(p.token, 'join', { guild_id: rec.id })
@@ -166,8 +171,9 @@ test('guild: real boss fight — start uses a try, finish takes the damage (capp
   assert.equal(r.status, 200, JSON.stringify(r.json))
   const run = r.json.result
   assert.equal(run.sec, G.BOSS_FIGHT_SEC)
-  assert.equal(run.level, v0.guild.boss.level)
-  assert.equal(run.hp, v0.guild.boss.hp)
+  assert.equal(run.level, 1)
+  assert.equal(run.hp, G.bossMax(1))
+  const score0 = v0.guild.boss.score
   assert.equal(r.json.guild.me.boss_tries, 1, 'starting uses a try')
   assert.equal((await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1000 })).json.error, 'too_early')
   S.clock.t += G.BOSS_FIGHT_SEC
@@ -176,7 +182,9 @@ test('guild: real boss fight — start uses a try, finish takes the damage (capp
   assert.equal(r.status, 200, JSON.stringify(r.json))
   const res = r.json.result
   assert.equal(res.dmg, 1234)
-  assert.equal(res.grade, G.bossGrade(1234, run.level)[0])
+  assert.equal(res.grade, G.bossGrade(1234)[0])
+  assert.equal(res.level, G.bossOf(1234).level)
+  assert.ok(r.json.guild.guild.boss.score >= score0 + 1234, 'guild score = sum of member scores')
   assert.equal(r.json.guild.coins, res.coins)
   assert.equal(r.json.guild.me.boss_best, 1234)
   assert.equal(r.json.guild.me.boss_run, null)
@@ -188,17 +196,8 @@ test('guild: real boss fight — start uses a try, finish takes the damage (capp
   r = await post(p.token, 'boss/finish', { run_id: run2.run_id, dmg: 1e11 })
   assert.ok(Math.abs(r.json.result.dmg - v0.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP) <= G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP, 'capped (view dps is rounded)')
   assert.equal(r.json.result.sent, 1e11)
+  assert.equal(r.json.guild.me.boss_total, 1234 + r.json.result.dmg, 'my score = both fights')
   S.clock.t -= 2 * G.BOSS_FIGHT_SEC
-  // 보스를 쓰러뜨리면(실제 누적을 크게) 처치 보상이 쌓이고 한 번에 받는다
-  await S.db.query('update guilds set boss_damage = boss_damage + $2 where id = $1', [rec.id, G.bossMax(50) * 3])
-  const v = await guild(p.token)
-  assert.ok(v.boss_pending >= 1)
-  const dia0 = (await S.req('GET', '/v1/player', { token: p.token })).json.player.diamonds
-  r = await post(p.token, 'claim')
-  assert.equal(r.status, 200)
-  assert.equal(r.json.player.diamonds, dia0 + G.BOSS_KILL_REWARD.diamonds * v.boss_pending)
-  assert.equal(r.json.guild.boss_pending, 0)
-  assert.equal((await post(p.token, 'claim')).json.error, 'nothing')
   S.clock.t += 86400
   const nx = await guild(p.token)
   assert.equal(nx.me.boss_tries, 0)
@@ -237,5 +236,13 @@ test('guild: shop spends coins with limits and gives shards of owned heroes', as
   assert.equal(r.status, 200)
   assert.equal(shards(r.json.player), before + 3)
   assert.equal(r.json.guild.coins, 500)
+  // 장비 상자(식량 대신): 장비 던전 최고 단계(없으면 1)의 드롭 하나
+  assert.equal(G.SHOP.some((s2) => s2.id === 'food'), false)
+  const items0 = r.json.player.items.length
+  r = await post(p.token, 'buy', { id: 'equip' })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.player.items.length, items0 + 1)
+  assert.equal(r.json.player.items.at(-1).level, 1)
+  assert.equal(r.json.guild.coins, 450)
   assert.equal((await post(p.token, 'buy', { id: 'nope' })).status, 400)
 })

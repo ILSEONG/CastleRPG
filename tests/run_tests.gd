@@ -4611,9 +4611,9 @@ func test_guild() -> void:
 	check(g.donate("gold", now) and e.gold == 5000 and g.donate_block("gold") == "골드가 부족합니다", "guild: gold donation costs 10,000")
 	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
 		"guild: diamond donation once a day")
-	# 인원·최대 레벨: 1~5레벨 15명, 6레벨 20명(나 포함), 최대 6레벨·버프 6%
-	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(5) == 15 and GuildScript.capacity(6) == 20 and GuildScript.buff_of(99) == 6.0,
-		"guild: 15 members, 20 at max level 6, buff caps at 6%")
+	# 인원·레벨: 1~5레벨 15명, 6레벨부터 20명(나 포함, 최대 20명), 레벨 끝 없음·버프 레벨당 1%
+	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(5) == 15 and GuildScript.capacity(6) == 20 and GuildScript.capacity(40) == 20 and GuildScript.buff_of(99) == 99.0,
+		"guild: 15 members, 20 from level 6 on, levels and buff have no cap")
 	check(g.members_now(now).size() + 1 <= GuildScript.capacity(int(g.guild.level)), "guild: members + me fit the capacity")
 	g.guild.level = 1
 	g.guild.exp = 0
@@ -4623,28 +4623,33 @@ func test_guild() -> void:
 	check(int(g.guild.level) > lv and g.buff_pct() == float(g.guild.level), "guild: exp levels the guild and the buff follows")
 	# 보스
 	check(g.team_dps() > 0.0, "guild: starting deploy has damage: %s" % g.team_dps())
-	g.guild.boss.level = 1
-	g.guild.boss.hp = 10.0
 	var runs := []
 	var results := []
 	g.boss_started.connect(func(r): runs.append(r))
 	g.boss_done.connect(func(r): results.append(r))
 	check(g.start_boss(now) and int(g.me.boss_tries) == 1, "guild: starting a boss fight uses a try")
 	var run: Dictionary = g._boss_run.duplicate()
-	check(run.level == 1 and float(run.hp) == 10.0 and float(run.cap) == roundf(g.team_dps() * GuildScript.BOSS_FIGHT_SEC * GuildScript.BOSS_DMG_CAP),
-		"guild: boss run carries level, hp and damage cap: %s" % [run])
+	check(run.level == 1 and float(run.hp) == GuildScript.boss_max(1) and float(run.cap) == roundf(g.team_dps() * GuildScript.BOSS_FIGHT_SEC * GuildScript.BOSS_DMG_CAP),
+		"guild: every boss run starts at Lv 1 with a damage cap: %s" % [run])
+	var score0 := g.boss_score()
 	g.finish_boss(str(run.run_id), 5000.0, now)
 	var r1: Dictionary = results.back() if not results.is_empty() else {}
-	check(r1.get("dmg", 0.0) == 5000.0 and r1.killed >= 1 and int(g.guild.boss.level) >= 2 and float(g.guild.boss.hp) > 0.0 and float(g.guild.boss.hp) <= GuildScript.boss_max(int(g.guild.boss.level)),
-		"guild: the fight's damage counts and a kill carries leftover damage to the next level: %s" % [r1])
+	check(r1.get("dmg", 0.0) == 5000.0 and int(r1.level) == GuildScript.boss_reach(5000.0) and int(r1.level) >= 2 and float(g.me.boss_total) == 5000.0
+		and absf(g.boss_score() - score0 - 5000.0) < 0.5,
+		"guild: the fight's damage is my score, the dragon levels up within the fight, guild score = sum: %s" % [r1])
 	g.finish_boss(str(run.run_id), 5000.0, now)
 	check(results.back().get("error", "") == "no_run", "guild: a fight finishes once")
 	g.start_boss(now)
 	g.finish_boss(str(g._boss_run.run_id), 1e12, now)
 	check(results.back().dmg == float(run.cap), "guild: damage is capped at dps × sec × cap: %s" % [results.back()])
 	check(g.boss_block() == "오늘 도전 횟수를 다 썼습니다" and not g.start_boss(now), "guild: 2 boss tries a day")
-	check(GuildScript.boss_grade(GuildScript.boss_max(1) * 0.25, 1)[0] == "S" and GuildScript.boss_grade(GuildScript.boss_max(1) * 0.03, 1)[0] == "C"
-		and GuildScript.boss_grade(1.0, 1)[0] == "D", "guild: damage grade by share of boss max HP")
+	var reach := func(lv: int) -> float:
+		var n := 0.0
+		for i in range(1, lv):
+			n += GuildScript.boss_max(i)
+		return n
+	check(GuildScript.boss_grade(reach.call(15))[0] == "S" and GuildScript.boss_grade(reach.call(15) - 1.0)[0] == "A" and GuildScript.boss_grade(reach.call(3))[0] == "C"
+		and GuildScript.boss_grade(1.0)[0] == "D", "guild: fight grade by the dragon level reached")
 	# 상점
 	g.coins = 1000
 	var dia0: int = e.diamonds
@@ -4658,6 +4663,10 @@ func test_guild() -> void:
 	for id in e.heroes:
 		shards1 += e.shards_of(id)
 	check(shards1 == shards0 + 3, "guild: shard box gives 3 shards of owned heroes")
+	var bag0: int = e.bag.size()
+	var got_equip := g.buy("equip")
+	check(got_equip != "" and e.bag.size() == bag0 + 1 and int(e.bag.back().level) >= 1 and g.coins == 1000 - 300 - 200 - 50 and not GuildScript.SHOP.any(func(it): return it.id == "food"),
+		"guild: equipment box (instead of food) adds one item: %s" % got_equip)
 	# 다음 날: 한도·출석 초기화, 가상 길드원이 활동한다
 	var exp_before := int(g.guild.exp) + int(g.guild.level) * 100000
 	var next := now + 86400.0 + 18.0 * 3600.0  # 다음 날 19:00

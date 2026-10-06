@@ -80,7 +80,7 @@ export function guildEntries(rows: Row[], now: number, hour: number): Entry[] {
     const virtualNow = vt.members.filter((m) => m.join_t <= now).length
     out.push({
       key: g.id, name: String(r.name), emblem: Number(r.emblem), value: G.levelOf(exp).level, tie: exp, t: g.created_at,
-      members: virtualNow + Number(r.real_n), exp, boss: G.bossOf(Number(r.boss_damage) + vt.dmg).level,
+      members: virtualNow + Number(r.real_n), exp, boss: Number(r.boss_damage) + vt.dmg, // 드래곤 누적 점수(길드원 판 점수의 합)
     })
   }
   return sortEntries(out)

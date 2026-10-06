@@ -263,8 +263,8 @@ func _build_joined() -> void:
 	UiKit.apply_bar(bar, UiKit.AMBER)
 	var need := GuildScript.exp_need(int(g.level))
 	bar.max_value = need
-	bar.value = int(g.exp) if int(g.level) < GuildScript.MAX_LEVEL else need
-	var bl := _label("MAX" if int(g.level) >= GuildScript.MAX_LEVEL else "%s / %s" % [UiKit.commas(int(g.exp)), UiKit.commas(need)], 18, HudScript.INK)
+	bar.value = int(g.exp)
+	var bl := _label("%s / %s" % [UiKit.commas(int(g.exp)), UiKit.commas(need)], 18, HudScript.INK)
 	bl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bar.add_child(bl)
 	info.add_child(bar)
@@ -297,20 +297,7 @@ func _build_joined() -> void:
 			_build_home()
 
 
-## 온라인: 길드가 쓰러뜨린 보스의 처치 보상(대기 수가 있을 때만).
-func _claim_button() -> void:
-	var n := Guild.boss_pending()
-	if n <= 0:
-		return
-	var b := _button("보스 처치 보상 받기 (%d회)" % n, GREEN.lightened(0.15), 24)
-	b.custom_minimum_size = Vector2(0, 60)
-	b.pressed.connect(func(): Guild.claim_kills())
-	body.add_child(b)
-	buttons["claim"] = b
-
-
 func _build_home() -> void:
-	_claim_button()
 	var g: Dictionary = Guild.guild
 	var note := _card()
 	var nv: VBoxContainer = note.get_child(0)
@@ -444,28 +431,23 @@ func _build_home() -> void:
 
 
 func _build_boss() -> void:
-	var g: Dictionary = Guild.guild
-	var lv := int(g.boss.level)
 	var card := _card()
 	var v: VBoxContainer = card.get_child(0)
-	v.add_child(_label("Lv %d  %s" % [lv, GuildScript.boss_name(lv)], 30))
+	v.add_child(_label(GuildScript.boss_name(1), 30))
 	v.add_child(dragon_view(Vector2(560, 300)))
-	var hp := ProgressBar.new()
-	hp.custom_minimum_size = Vector2(0, 30)
-	hp.show_percentage = false
-	hp.max_value = GuildScript.boss_max(lv)
-	hp.value = maxf(0.0, float(g.boss.hp))
-	UiKit.apply_bar(hp, RED)
-	var hl := _label("%s / %s" % [UiKit.commas(int(g.boss.hp)), UiKit.commas(int(GuildScript.boss_max(lv)))], 19, Color.WHITE)
-	hl.add_theme_color_override("font_outline_color", Color(HudScript.INK, 0.85))
-	hl.add_theme_constant_override("outline_size", 5)
-	hl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hp.add_child(hl)
-	v.add_child(hp)
-	v.add_child(_label("길드원 모두의 피해가 쌓입니다. 쓰러뜨리면 모두 코인 +%d · 다이아 +%d" % [GuildScript.BOSS_KILL_REWARD.coins,
-		GuildScript.BOSS_KILL_REWARD.diamonds], 18, SUB))
+	var desc := _label("하루 %d번 도전. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수예요." % GuildScript.BOSS_TRIES, 18, SUB)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(desc)
+	var sc := HBoxContainer.new()
+	sc.alignment = BoxContainer.ALIGNMENT_CENTER
+	sc.add_theme_constant_override("separation", 28)
+	sc.add_child(_label("내 점수 %s" % UiKit.commas(int(Guild.me.get("boss_total", 0))), 26, HudScript.ACCENT.darkened(0.2)))
+	sc.add_child(_label("길드 점수 %s" % UiKit.commas(int(Guild.boss_score())), 26, GREEN))
+	v.add_child(sc)
 	var tries := GuildScript.BOSS_TRIES - int(Guild.me.get("boss_tries", 0))
-	v.add_child(_label("내 팀 초당 피해 %s · 오늘 최고 %s" % [UiKit.commas(roundi(Guild.team_dps())), UiKit.commas(int(Guild.me.get("boss_best", 0)))], 22))
+	var best := float(Guild.me.get("boss_best", 0))
+	v.add_child(_label("내 팀 초당 피해 %s · 오늘 최고 %s%s" % [UiKit.commas(roundi(Guild.team_dps())), UiKit.commas(int(best)),
+		(" (Lv %d)" % GuildScript.boss_reach(best)) if best > 0.0 else ""], 22))
 	var why := Guild.boss_block()
 	var b := _button("도전  (%d/%d)" % [tries, GuildScript.BOSS_TRIES] if why == "" or tries > 0 else "내일 다시 도전", UiKit.AMBER, 30)
 	b.custom_minimum_size = Vector2(0, 72)
@@ -476,17 +458,16 @@ func _build_boss() -> void:
 	if why != "" and tries > 0:
 		v.add_child(_label(why, 20, RED))
 	body.add_child(card)
-	_claim_button()
 	# 등급표
 	var gc := _card()
 	var gv: VBoxContainer = gc.get_child(0)
-	gv.add_child(_label("피해 등급 보상(보스 최대 HP 대비)", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	gv.add_child(_label("판 등급 보상(도달한 드래곤 레벨)", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for gr in GuildScript.BOSS_GRADES:
 		var r := HBoxContainer.new()
 		var gl := _label(gr[0], 26, GRADE_COLORS[gr[0]])
 		gl.custom_minimum_size = Vector2(40, 0)
 		r.add_child(gl)
-		var cond := _label(("%d%% 이상" % roundi(float(gr[1]) * 100.0)) if float(gr[1]) > 0.0 else "참여", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		var cond := _label(("Lv %d 이상" % int(gr[1])) if int(gr[1]) > 1 else "참여", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		cond.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r.add_child(cond)
 		r.add_child(_label("코인 %d · 골드 %s" % [gr[2], UiKit.commas(gr[3])], 20, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT))
@@ -495,7 +476,7 @@ func _build_boss() -> void:
 	# 오늘 피해 순위
 	var rk := _card()
 	var rv: VBoxContainer = rk.get_child(0)
-	rv.add_child(_label("오늘 피해 순위", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	rv.add_child(_label("오늘 점수 순위", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var list := []
 	for m in Guild.members_now():
 		if float(m.dmg) > 0.0:
@@ -534,6 +515,8 @@ func _build_shop() -> void:
 		v.add_theme_constant_override("separation", 0)
 		v.add_child(_label(it.name, 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 		var desc := "보유 영웅 중 무작위 조각 %d개" % give.shards if give.has("shards") else ("보유 SSR 영웅 무작위 조각 1개" if give.has("ssr_shards") else _give_text(give))
+		if give.has("equip"):
+			desc = "장비 던전 최고 단계(Lv %d) 장비 1개, 등급·부위 무작위" % maxi(1, int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
 		v.add_child(_label(desc, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 		v.add_child(_label("%s %d/%d" % ["오늘" if it.period == "day" else "이번 주", Guild.shop_left(it.id), it.limit], 19, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
 		r.add_child(v)
@@ -741,6 +724,8 @@ func _draw_give_icon(ci: Control, give: Dictionary) -> void:
 		IconsScript.draw_icon(ci, "gold", c, ci.size.x * 0.9)
 	elif give.has("food"):
 		IconsScript.draw_icon(ci, "food", c, ci.size.x * 0.9)
+	elif give.has("equip"):
+		draw_chest(ci, c + Vector2(0, 2), ci.size.x * 0.9, false)
 	else:  # 조각: 등급 보석 위 작은 별
 		UiKit.draw_gem(ci, c, ci.size.x * 0.36, UiKit.GRADE_COLORS.SSR if give.has("ssr_shards") else UiKit.GRADE_COLORS.SR, 6)
 

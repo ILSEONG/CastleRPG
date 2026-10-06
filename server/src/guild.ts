@@ -3,11 +3,12 @@
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
 import { mulberry32, powerOf, resetAt, resetDay } from './rules.ts'
 
-export const MAX_LEVEL = 6
-// 길드 인원(실제 + 가상): 1~5레벨 15명, 6레벨(최대) 20명. 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
+// 길드 레벨은 끝이 없다(2026-10-06 사용자: "길드 레벨은 무제한"). 레벨마다 영웅 공격력·체력 +BUFF_PER_LEVEL %.
+// 길드 인원(실제 + 가상): 1~5레벨 15명, FULL_LEVEL(6)부터 20명(최대 20명 유지). 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
+export const FULL_LEVEL = 6
 export const MEMBERS_BASE = 15
 export const MEMBERS_MAX = 20
-export const capacity = (level: number) => (level >= MAX_LEVEL ? MEMBERS_MAX : MEMBERS_BASE)
+export const capacity = (level: number) => (level >= FULL_LEVEL ? MEMBERS_MAX : MEMBERS_BASE)
 export const BUFF_PER_LEVEL = 1 // 길드 레벨당 영웅 공격력·체력 %
 export const UNLOCK_STAGE = 11 // 서버 stage(전체 라운드)가 이 이상 = 1-10 클리어
 export const CREATE_GOLD = 500_000
@@ -22,23 +23,24 @@ export const DONATIONS: Record<string, { name: string; gold: number; diamonds: n
 }
 export const BOSS_TRIES = 2
 export const BOSS_FIGHT_SEC = 20
-export const BOSS_HP_BASE = 40000
+// 드래곤(2026-10-06 개편): 길드원마다 하루 BOSS_TRIES번 따로 친다. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 같은 판 안에서 다음 레벨로 오른다.
+// 한 판 점수 = 그 판에서 드래곤에 준 피해. 내 점수 = 오늘 두 판의 합, 길드 점수 = 길드원 점수의 합(오늘). Lv n 최대 HP = BASE × GROWTH^(n−1).
+export const BOSS_HP_BASE = 1000
 export const BOSS_HP_GROWTH = 1.22
-export const BOSS_NAMES = ['드래곤'] // 길드 보스는 드래곤 하나(단계만 오른다)
+export const BOSS_NAMES = ['드래곤']
 // 실제 전투(앱이 BOSS_FIGHT_SEC초 동안 영웅으로 드래곤을 친다): 시작에 도전 1회를 쓰고, 끝에 앱이 낸 피해를 받는다.
 // 받는 피해 상한 = 시작 때 내 팀 초당 피해 × 초 × BOSS_DMG_CAP(조작 방지 — 실제 전투가 이보다 많이 내면 잘린다).
 // 시작 뒤 BOSS_FIGHT_SEC − BOSS_SLACK_SEC초 전에 끝내면 거절(too_early), BOSS_RUN_TTL초가 지나면 피해 0으로 끝난다.
 export const BOSS_DMG_CAP = 3
 export const BOSS_SLACK_SEC = 2
 export const BOSS_RUN_TTL = 600
-export const BOSS_GRADES: [string, number, number, number][] = [['S', 0.2, 120, 30000], ['A', 0.1, 90, 20000], ['B', 0.05, 60, 12000],
-  ['C', 0.02, 40, 8000], ['D', 0, 25, 5000]]
-export const BOSS_KILL_REWARD = { coins: 50, diamonds: 30 }
-export const BOSS_CLAIM_MAX = 20 // 한 번에 받는 처치 보상 수(오래 쉬다 와도 이만큼)
+// 판 등급: [등급, 도달한 드래곤 레벨 이상, 코인, 골드]
+export const BOSS_GRADES: [string, number, number, number][] = [['S', 15, 120, 30000], ['A', 10, 90, 20000], ['B', 6, 60, 12000],
+  ['C', 3, 40, 8000], ['D', 1, 25, 5000]]
 export const SHOP: { id: string; give: Record<string, number>; price: number; limit: number; period: 'day' | 'week' }[] = [
   { id: 'dia', give: { diamonds: 50 }, price: 150, limit: 2, period: 'day' },
   { id: 'gold', give: { gold: 30000 }, price: 60, limit: 3, period: 'day' },
-  { id: 'food', give: { food: 800 }, price: 50, limit: 3, period: 'day' },
+  { id: 'equip', give: { equip: 1 }, price: 50, limit: 3, period: 'day' }, // 장비 상자: 장비 던전 최고 단계 드롭 1개(2026-10-06, 식량 대신)
   { id: 'shards', give: { shards: 3 }, price: 200, limit: 5, period: 'week' },
   { id: 'ssr', give: { ssr_shards: 1 }, price: 600, limit: 2, period: 'week' },
 ]
@@ -95,11 +97,11 @@ export const expNeed = (level: number) => Math.round(150 * level ** 1.3)
 export function levelOf(total: number) {
   let level = 1
   let left = Math.max(0, total)
-  while (level < MAX_LEVEL && left >= expNeed(level)) {
+  while (left >= expNeed(level)) {
     left -= expNeed(level)
     level++
   }
-  return { level, exp: level >= MAX_LEVEL ? 0 : left, need: expNeed(level) }
+  return { level, exp: left, need: expNeed(level) }
 }
 
 // 자리에 앉은 가상 길드원: 지금까지 들어온 순서대로 (인원 − 실제 길드원 수)명까지.
@@ -107,11 +109,11 @@ export function seated<T extends { join_t: number }>(members: T[], now: number, 
   return members.filter((m) => m.join_t <= now).sort((a, b) => a.join_t - b.join_t).slice(0, Math.max(0, cap - real))
 }
 
-export const buffPct = (level: number) => BUFF_PER_LEVEL * Math.min(Math.max(level, 0), MAX_LEVEL)
+export const buffPct = (level: number) => BUFF_PER_LEVEL * Math.max(level, 0)
 export const bossMax = (level: number) => Math.round(BOSS_HP_BASE * BOSS_HP_GROWTH ** (Math.max(level, 1) - 1))
 export const bossName = (level: number) => BOSS_NAMES[(Math.max(level, 1) - 1) % BOSS_NAMES.length]
 
-// 누적 피해 → {level(지금 단계), hp(남은 HP)}
+// 한 판 피해 → {level(도달한 레벨), hp(그 레벨 남은 HP)} — Lv 1부터 쓰러뜨린 만큼 오른다.
 export function bossOf(damage: number) {
   let level = 1
   let left = Math.max(0, damage)
@@ -122,9 +124,9 @@ export function bossOf(damage: number) {
   return { level, hp: bossMax(level) - left, max: bossMax(level) }
 }
 
-export function bossGrade(dmg: number, level: number) {
-  const r = dmg / bossMax(level)
-  return BOSS_GRADES.find((g) => r >= g[1]) ?? BOSS_GRADES[BOSS_GRADES.length - 1]
+export function bossGrade(dmg: number) {
+  const lv = bossOf(dmg).level
+  return BOSS_GRADES.find((g) => lv >= g[1]) ?? BOSS_GRADES[BOSS_GRADES.length - 1]
 }
 
 // --- 가상 길드원 ---

@@ -1,5 +1,5 @@
 // 길드전(공성전, 마이그레이션 021, guild_war.ts·war_routes.ts·war_live.ts): 규칙(주·상대·성 합치기·점수), 수비 영웅, 전투 열기·합류·끝,
-// 하루 한 번, 주간 보상, 실시간 방(방장·중계·명령·방장 넘김·끝 저장).
+// 한 주 한 번(길드원이 시각을 정한다, 기본 토요일 21:00), 주간 보상, 실시간 방(방장·중계·명령·방장 넘김·끝 저장).
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { serve } from '@hono/node-server'
@@ -33,12 +33,16 @@ async function member(gid?: string) {
 }
 
 const war = async (token: string) => (await S.req('GET', '/v1/guild/war', { token })).json.war
+const HOUR = 15 // 테스트 서버 리셋 시(UTC) = 00:00 KST
+const resetAt = (d: number) => d * 86400 + HOUR * 3600
+// t가 든 주의 기본 공성 시각(토요일 21:00 KST)
+const defaultAt = (t: number) => W.battleAt(W.weekOf(Math.floor((t - HOUR * 3600) / 86400)), null, resetAt)
 
 test('war rules: monday weeks, deterministic enemy, castle only goes down', () => {
-  // 유닉스 일 4 = 1970-01-05(월)
-  assert.equal(W.weekOf(4), W.weekOf(10))
-  assert.notEqual(W.weekOf(3), W.weekOf(4))
-  assert.equal(W.dayInWeek(4), 0)
+  // 리셋 날 3 = KST 1970-01-05(월)
+  assert.equal(W.weekOf(3), W.weekOf(9))
+  assert.notEqual(W.weekOf(2), W.weekOf(3))
+  assert.equal(W.dayInWeek(3), 0)
   const cfg = (k: string) => ({ hero_level_stat: 0.042, hero_level_stat_melee: 0.0315, promote_mult: 1.3, hero_max_level_base: 20, hero_max_level_per_promotion: 10 } as Record<string, number>)[k]
   const heroes = [
     { id: 'a', role: 'melee', hp: 900, atk: 30, atk_interval: 0.8, grade: 'R' }, { id: 'b', role: 'ranged', hp: 400, atk: 40, atk_interval: 1.0, grade: 'R' },
@@ -61,16 +65,44 @@ test('war rules: monday weeks, deterministic enemy, castle only goes down', () =
   assert.deepEqual(c1.dead, { 1: 0, 2: 0.5 })
   const c2 = W.mergeCastle(c1, { defenders: { 1: 1, 2: 0.7 } }, e1.defenders)
   assert.deepEqual(c2.dead, { 1: 0, 2: 0.5 }, 'defenders never come back')
-  assert.equal(W.castlePoints(c2), 1 * W.PTS_KILL + 1 * W.PTS_GATE)
-  const ep = W.enemyPoints(7, 100, 7, 1, W.castleCap(15))
-  assert.equal(ep.length, 7)
-  assert.ok(ep.every((v) => v >= 0) && ep.reduce((a, b) => a + b, 0) <= W.castleCap(15))
+  const mx = W.castleMax(e1.defenders)
+  assert.equal(W.castlePoints(c2, mx.keep), 1 * W.PTS_KILL + 1 * W.PTS_GATE)
+  // 점수: 처치 1 · 성문 10 · 성채 최대 체력 3%마다 1
+  assert.equal(W.PTS_GATE, 10)
+  assert.equal(W.keepPoints(mx.keep, mx.keep), 0)
+  assert.equal(W.keepPoints(mx.keep * 0.97, mx.keep), 1)
+  assert.equal(W.keepPoints(mx.keep * 0.9401, mx.keep), 1)
+  assert.equal(W.keepPoints(mx.keep * 0.94, mx.keep), 2)
+  assert.equal(W.keepPoints(0, mx.keep), 33)
+  const ep = W.enemyPoints(7, 100, 1, W.castleCap(15))
+  assert.ok(ep >= 0 && ep <= W.castleCap(15))
+  assert.equal(ep, W.enemyPoints(7, 100, 1, W.castleCap(15)))
+  // 공성 시각: 기본 토요일 21:00, 고른 시각은 그 주 안
+  const wk = W.weekOf(3)
+  assert.equal(W.battleAt(wk, null, resetAt), resetAt(W.weekStart(wk) + 5) + 21 * 3600)
+  assert.equal(W.pickAt(wk, 6, 23, resetAt), resetAt(W.weekStart(wk) + 6) + 23 * 3600)
+  assert.equal(W.pickAt(wk, 7, 0, resetAt), null)
+  assert.equal(W.pickAt(wk, 0, 24, resetAt), null)
 })
 
-test('war: view, defense heroes, enter opens the daily battle with AI squads, a second member joins', async () => {
+test('war: view, defense heroes, members pick the weekly time, enter opens the battle with AI squads, a second member joins', async () => {
   const a = await member()
   let w = await war(a.token)
-  assert.equal(w.battle.state, 'ready')
+  assert.equal(w.battle.state, 'waiting')
+  assert.equal(w.schedule.at, defaultAt(S.clock.t), 'default: saturday 21:00')
+  assert.equal(w.schedule.set, false)
+  assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: a.token, body: { heroes: squad() } })).json.error, 'not_yet')
+  // 시각 정하기: 지금보다 뒤, 이번 주 안
+  const nowDay = W.dayInWeek(Math.floor((S.clock.t - HOUR * 3600) / 86400))
+  let s = await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: nowDay, hour: 0 } })
+  assert.equal(s.json.error, 'schedule_past')
+  s = await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 6, hour: 20 } })
+  assert.equal(s.status, 200, JSON.stringify(s.json))
+  assert.equal(s.json.war.schedule.set, true)
+  const at = s.json.war.schedule.at
+  assert.equal(at, W.pickAt(W.weekOf(Math.floor((S.clock.t - HOUR * 3600) / 86400)), 6, 20, resetAt))
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 9, hour: 0 } })).status, 400)
+  S.clock.t = at + 5
   assert.equal(w.castle.gates.length, 4)
   assert.ok(w.enemy.members >= 15 && w.castle.defenders === w.enemy.members * 4)
   assert.equal(w.points, 0)
@@ -106,16 +138,14 @@ test('war: view, defense heroes, enter opens the daily battle with AI squads, a 
   assert.equal(fin.status, 200, JSON.stringify(fin.json))
   assert.equal(fin.json.war.points, W.PTS_KILL + W.PTS_GATE)
   assert.equal(fin.json.war.battle.state, 'done')
-  assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: b.token, body: { heroes: squad() } })).json.error, 'battle_done', 'one battle a day')
-  // 다음 날: 새 전투, 쓰러진 수비는 빠진 채로
-  S.clock.t += 86400
-  const n = await S.req('POST', '/v1/guild/war/enter', { token: a.token, body: { heroes: squad() } })
-  if (W.weekOf(Math.floor((S.clock.t - 15 * 3600) / 86400)) === W.weekOf(Math.floor((S.clock.t - 86400 - 15 * 3600) / 86400))) {
-    assert.equal(n.status, 200, JSON.stringify(n.json))
-    assert.notEqual(n.json.plan.battle_id, plan.battle_id)
-    assert.ok(!n.json.plan.defenders.some((dd: any) => dd.uid === d1.uid), 'a fallen defender stays down for the week')
-    assert.equal(n.json.plan.gates[0].hp, 0)
-  }
+  assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: b.token, body: { heroes: squad() } })).json.error, 'battle_done', 'one battle a week')
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 6, hour: 23 } })).json.error, 'schedule_locked')
+  // 우리 공성 시간이 끝나면 상대 점수가 보인다
+  assert.equal(fin.json.war.enemy_points, 0)
+  S.clock.t = at + W.BATTLE_SEC + 1
+  const after = await war(a.token)
+  assert.equal(after.enemy_days.length, 1)
+  assert.equal(after.enemy_points, after.enemy_days[0])
   S.clock.t = T0
 })
 
@@ -146,7 +176,7 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
       body: body ? JSON.stringify(body) : undefined })
     return { status: res.status, json: await res.json() as any }
   }
-  S.clock.t += 2 * 86400 // 앞 테스트가 오늘 전투를 닫았다
+  S.clock.t = defaultAt(T0 + 7 * 86400) + 5 // 다음 주 기본 공성 시각(앞 테스트가 이번 주 전투를 닫았다)
   try {
     const a = await member()
     const b = await member(a.gid)
