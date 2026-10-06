@@ -3,6 +3,7 @@ extends Node
 ## 사례: (1) AI 공격 4분대 vs AI 수비 4분대 — 처치가 나고 스크립트 오류 없음, 분대 집중 공격이 보인다.
 ## (2) 약한 수비 — 공격이 성문을 부수고 성 안으로 들어가 성채를 친다. (3) 원거리 수비는 근접 적이 붙으면 물러난다.
 ## (4) 꼭두각시 장면이 방장 스냅샷을 따른다. (5) 영웅 상태 효과(독·둔화·속박·취약·약화·넉백·도발)가 영웅에게도 걸린다.
+## (6) 오프라인 GuildWar: 상대 길드·성·전투 열기·결과 저장(줄기만)·하루 한 번·다음 주 보상.
 
 const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
@@ -36,9 +37,56 @@ func _ready() -> void:
 	await _case_kite()
 	await _case_puppet()
 	await _case_status()
+	await _case_offline_war()
 	_check(_errors.count == 0, "no script errors (%d, first: %s)" % [_errors.count, _errors.first])
 	print("WAR CHECK %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
 	get_tree().quit(1 if _fails > 0 else 0)
+
+
+func _case_offline_war() -> void:
+	print("(6) offline guild war flow")
+	Guild.save_path = ""
+	GuildWar.save_path = ""
+	Guild.load_save()
+	GuildWar.load_save()
+	Guild.unlocked = true
+	var t0 := 1790000000.0  # 고정 시각
+	Guild.fixed_now = t0
+	GuildWar.fixed_now = t0
+	var rec: Dictionary = Guild.recommendations()[0]
+	rec.level = 6
+	_check(Guild.join(rec), "joined a guild")
+	GuildWar.fetch()
+	var w: Dictionary = GuildWar.war
+	_check(w.enemy.members == 20 and w.castle.defenders == 80, "level-6 guild meets a 20-member enemy with 80 defenders (%d, %d)" % [w.enemy.members, w.castle.defenders])
+	var e1: Dictionary = GuildWar.enemy_of()
+	_check(GuildWar.enemy_guild(int(GuildWar.local.seed), 20, float(GuildWar.local.power)).hash() == e1.hash(), "enemy is deterministic")
+	_check(w.battle.state == "ready" and w.points == 0, "battle ready, no points yet")
+	var ids: Array = GuildWar.default_squad()
+	_check(ids.size() == 4, "default squad has 4 heroes")
+	var plan := GuildWar.local_enter(ids.map(func(id): return GuildWar.hero_entry(id)), t0)
+	_check(plan.defenders.size() == 80 and plan.attackers.size() == Guild.members_now().size() + 1, "plan: 80 defenders, one squad per member (%d)" % plan.attackers.size())
+	_check(plan.attackers.filter(func(sq): return not sq.ai).size() == 1, "only my squad is player-controlled")
+	var d1: Dictionary = plan.defenders[0]
+	var r := {"battle_id": plan.battle_id, "defenders": {str(d1.uid): 0.0, str(plan.defenders[1].uid): 0.5}, "gates": [0.0, plan.gates[1].hp + 99, plan.gates[2].hp, plan.gates[3].hp], "keep": plan.keep.hp}
+	GuildWar.local_save_state(r, false, t0 + 60)
+	w = GuildWar.war
+	_check(w.points == WarRules.PTS_KILL + WarRules.PTS_GATE and w.castle.gates[1].hp == plan.gates[1].hp, "points from the castle state; gates never heal (%d)" % w.points)
+	_check(w.battle.state == "live", "leaving early keeps today's battle open")
+	var again := GuildWar.local_enter(ids.map(func(id): return GuildWar.hero_entry(id)), t0 + 120)
+	_check(again.battle_id == plan.battle_id and not again.defenders.any(func(dd): return dd.uid == d1.uid) and absf(again.clock - 120.0) < 1.0, "re-entering resumes the same battle without the fallen defender")
+	GuildWar.local_save_state(r, true, t0 + 130)
+	_check(GuildWar.war.battle.state == "done" and GuildWar.enter_block(ids) != "", "one battle a day")
+	GuildWar.fixed_now = t0 + 7 * 86400.0
+	Guild.fixed_now = GuildWar.fixed_now
+	GuildWar.fetch()
+	w = GuildWar.war
+	_check(w.points == 0 and w.claim is Dictionary and int(w.claim.points) == WarRules.PTS_KILL + WarRules.PTS_GATE, "next week: new enemy, last week's result can be claimed")
+	var dia: int = Economy.diamonds
+	GuildWar.claim()
+	_check(Economy.diamonds == dia + int(w.claim.reward.diamonds) and GuildWar.war.claim == null, "claim pays once")
+	Guild.fixed_now = -1.0
+	GuildWar.fixed_now = -1.0
 
 
 func _check(ok: bool, what: String) -> void:

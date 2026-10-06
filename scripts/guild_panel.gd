@@ -5,6 +5,7 @@ extends "res://scripts/ui_window.gd"
 ## - 가입: 머리(문장·이름·Lv·경험치 막대·길드 코인) + 버프 한 줄 + 하위 탭 [홈][보스][상점][길드원].
 ##   홈 = 공지·출석(출석 인원 막대 + 5/10/15/20명 상자)·기부 3종·활동 기록·[길드 탈퇴](두 번 눌러 확인).
 ##   보스 = 드래곤(Meshy 모델 미리보기)·길드 누적 HP 막대·남은 도전·[도전] → 실제 전투 장면(guild_boss.gd: 영웅이 20초 동안 드래곤과 싸운다) → 결과(등급·보상).
+##   길드전 = 공성전(war_panel.gd, 상태는 GuildWar 오토로드).
 ##   상점 = 길드 코인 상품(일일·주간 한도). 길드원 = 오늘 기여도 순(나 포함): 직위·이름·전투력·출석·마지막 활동.
 ## 내용은 Guild.changed 때 다시 만든다(스크롤 위치는 지킨다).
 
@@ -13,8 +14,9 @@ const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const DragonModelScript := preload("res://scripts/dragon_model.gd")
+const WarPanel := preload("res://scripts/war_panel.gd")
 
-const SUBTABS := [["home", "홈"], ["boss", "보스"], ["shop", "상점"], ["members", "길드원"]]
+const SUBTABS := [["home", "홈"], ["boss", "보스"], ["war", "길드전"], ["shop", "상점"], ["members", "길드원"]]
 const EMBLEM_COLORS := [Color(0.80, 0.22, 0.20), Color(0.22, 0.42, 0.78), Color(0.24, 0.60, 0.32), Color(0.56, 0.30, 0.70),
 	Color(0.92, 0.62, 0.16), Color(0.18, 0.55, 0.60), Color(0.35, 0.36, 0.42), Color(0.86, 0.40, 0.58)]
 const GREEN := Color(0.13, 0.50, 0.22)
@@ -285,6 +287,8 @@ func _build_joined() -> void:
 	match tab:
 		"boss":
 			_build_boss()
+		"war":
+			WarPanel.build(self)  # 길드전(공성전) — war_panel.gd
 		"shop":
 			_build_shop()
 		"members":

@@ -201,6 +201,7 @@ func _build_world() -> void:
 	Economy.research_done.connect(_on_research_done)
 	Economy.dungeon_started.connect(_on_dungeon_started)
 	Guild.boss_started.connect(_on_guild_boss_started)
+	GuildWar.battle_started.connect(_on_guild_war_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
 		_connect_dev_log()  # 람다(오토로드 시그널)라 다시 만든 월드에서 또 붙이면 두 번 찍힌다
@@ -274,6 +275,12 @@ func _on_dungeon_started(run: Dictionary) -> void:
 func _on_guild_boss_started(run: Dictionary) -> void:
 	if not run.is_empty():
 		_enter_dungeon.call_deferred(run, preload("res://scripts/guild_boss.gd"))
+
+
+## 길드전 공성 전투(GuildWar.battle_started): 같은 자리에 공성 전투 장면(war_battle.gd)을 붙인다.
+func _on_guild_war_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run, preload("res://scripts/war_battle.gd"))
 
 
 func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scripts/dungeon.gd")) -> void:

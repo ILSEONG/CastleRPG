@@ -1,5 +1,6 @@
 extends Node3D
-## 길드전 공성 전투 장면(main이 성 전장을 떼어 두고 붙인다 — 던전과 같은 방식, main.enter_war·leave_war).
+## 길드전 공성 전투 장면(main이 성 전장을 떼어 두고 붙인다 — 던전과 같은 방식: GuildWar.battle_started → main._enter_dungeon(run, 이 스크립트), [나가기] → main.leave_dungeon).
+## run = {plan, role, online}(guild_war.gd). online이면 war_net.gd를 붙인다. 오프라인(solo)은 끝·나가기 때 GuildWar.finish로 성 상태를 저장한다.
 ## 무대: 넓은 풀밭 + 상대 길드의 성(성벽 4면·성문 4개·모서리 탑·가운데 성채, 성 안 건물은 장식) + 성 밖 숲·산.
 ## 수비: 상대 길드원마다 분대(영웅 4명, 미리 고른 수비 영웅) — 길드원을 차례로 네 성문에 나눠(WarRules.lane_of) 성문 앞 두 줄(근접 앞, 원거리 성벽 쪽)에 선다.
 ## 공격: 우리 길드원마다 분대(영웅 4명) — 맡은 면 진영(성벽 바깥면에서 CAMP_D)에서 나온다. 내 분대는 탭으로 고르고 바닥 탭으로 옮긴다(unit_picker),
@@ -27,6 +28,7 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const PickerScript := preload("res://scripts/unit_picker.gd")
 const CrowdScript := preload("res://scripts/crowd.gd")
 const HudScript := preload("res://scripts/war_hud.gd")
+const NetScript := preload("res://scripts/war_net.gd")
 
 signal finished(result)
 signal command_sent(uid, pos)  # 꼭두각시 기기: 내 영웅 이동 명령(war_net이 방장에게)
@@ -39,6 +41,7 @@ const RANGED_D := 1.6  # 원거리 수비 줄
 const ROW_MAX := 9  # 한 줄 최대(넘으면 바깥으로 한 줄 더)
 const CAMERA_SIZE := 46.0
 
+var run := {}  # {plan, role, online} — main이 넣는다
 var plan := {}
 var main
 var role := "solo"  # "solo" | "host" | "puppet"
@@ -68,6 +71,9 @@ var _leaving := false
 
 
 func _ready() -> void:
+	if not run.is_empty():
+		plan = run.get("plan", {})
+		role = str(run.get("role", "solo"))
 	my_id = str(plan.get("my_id", ""))
 	half = GameData.interior_half(WarRules.KEEP_LEVEL)
 	duration = float(plan.get("duration", WarRules.BATTLE_SEC))
@@ -105,6 +111,15 @@ func _ready() -> void:
 	hud.battle = self
 	add_child(hud)
 	set_role(role)
+	if run.get("online", false):
+		var n = NetScript.new()
+		n.battle = self
+		var net = get_node_or_null("/root/Net")
+		if net != null and str(plan.get("live", "")) != "":
+			n.url = NetScript.live_url(net.api_base, str(plan.live), str(plan.get("battle_id", "")), net.token)
+		add_child(n)
+	elif main != null:
+		finished.connect(func(r): GuildWar.finish(r))
 	print("[war] role %s defenders %d attackers %d half %.1f" % [role, _def.size(), _att.size(), half])
 
 
@@ -271,8 +286,8 @@ func add_squad(s: Dictionary) -> void:
 		var uid := 1000 + squad * WarRules.SQUAD + i
 		if def.is_empty() or units_by_uid.has(uid):
 			continue
-		var stats := {}
-		if not (mine_squad and role != "puppet") and h.has("hp"):
+		var stats := {}  # 모든 기기가 같은 값(서버가 자른 능력치)으로 싸운다 — 방장이 바뀌어도 그대로
+		if h.has("hp"):
 			stats = {"hp": float(h.hp), "atk": float(h.atk)}
 		var u = WarHeroScript.new()
 		u.setup_war(uid, def, 0, int(h.get("level", 1)), int(h.get("promotion", 0)), stats)
@@ -436,20 +451,30 @@ func _finish() -> void:
 	if done:
 		return
 	done = true
-	var defs := {}
-	for u in _def:
-		defs[str(u.uid)] = snappedf(u.hp_ratio() if u.is_alive() else 0.0, 0.001)
-	var gs := []
-	for g in gates:
-		gs.append(roundf(g.hp))
-	result = {"battle_id": plan.get("battle_id", ""), "defenders": defs, "gates": gs, "keep": roundf(keep.hp), "kills": kills,
-		"gates_broken": gates_broken_now(), "keep_broken": keep_broken_now(), "points": points_now(), "clock": snappedf(clock, 0.1)}
+	result = state_now()
+	result.merge({"kills": kills, "gates_broken": gates_broken_now(), "keep_broken": keep_broken_now(), "points": points_now(), "clock": snappedf(clock, 0.1)})
 	for u in _att + _def:
 		u.set_process(false)
 	print("[war] finished %s" % result)
 	if hud != null:
 		hud.show_result(result)
 	finished.emit(result)
+
+
+## 지금 성 상태(서버 mergeCastle 입력): 수비 영웅별 남은 체력 비율, 성문·성채 체력.
+func state_now() -> Dictionary:
+	var defs := {}
+	for u in _def:
+		defs[str(u.uid)] = snappedf(u.hp_ratio() if u.is_alive() else 0.0, 0.001)
+	var gs := []
+	for g in gates:
+		gs.append(roundf(g.hp))
+	return {"battle_id": plan.get("battle_id", ""), "defenders": defs, "gates": gs, "keep": roundf(keep.hp)}
+
+
+## 꼭두각시: 방장이 전투를 끝냈다(서버 end) — 마지막 스냅샷 상태로 결과를 띄운다.
+func end_from_host() -> void:
+	_finish()
 
 
 # --- 온라인(war_net.gd) ---
@@ -537,8 +562,12 @@ func _focus_camera(rig) -> void:
 
 
 func leave() -> void:
+	if _leaving:
+		return
 	_leaving = true
+	if not done and not run.get("online", false) and main != null:
+		GuildWar.finish(state_now(), false)  # 오프라인: 지금까지 깎은 성은 남고, 오늘 전투 시간 안에는 다시 들어올 수 있다
 	if main != null:
-		main.leave_war.call_deferred()
+		main.leave_dungeon.call_deferred()
 	else:
 		queue_free()
