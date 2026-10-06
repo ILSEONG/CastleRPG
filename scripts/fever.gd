@@ -69,6 +69,14 @@ func start() -> bool:
 	return true
 
 
+## FEVER를 바로 끝낸다(스테이지 시작 확인에서 [예]). 게이지는 이미 0이라 그대로.
+func stop() -> void:
+	if left <= 0.0:
+		return
+	left = 0.0
+	save()
+
+
 func advance(delta: float) -> void:
 	if left > 0.0:
 		left = maxf(0.0, left - delta)

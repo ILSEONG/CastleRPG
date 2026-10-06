@@ -2,8 +2,8 @@ key,value
 castle_hp,1000
 castle_hp_per_level,200
 gate_hp_per_level,400
-keep_slot_tiers,1:4|5:8|10:12
-keep_interior_tiers,1:20|5:24|10:28
+keep_slot_tiers,1:4|9:8|22:12
+keep_interior_tiers,1:20|9:24|22:28
 max_live_monsters,120
 countdown_sec,3
 result_sec,2

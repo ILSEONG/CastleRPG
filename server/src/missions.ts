@@ -2,7 +2,7 @@
 // 일일 = 리셋 날짜(daily_reset_utc_hour, 00:00 KST)마다, 주간 = 월요일 리셋마다 받은 기록이 지워진다. 반복 = 받을 때마다 목표가 step만큼 커지고 끝없이 받는다.
 // 사건 수(처치·수집·모집…)는 앱이 센다(튜토리얼·반복 퀘스트와 같다 — 서버는 받은 기록·기간·순서만 본다). 서버가 직접 보는 것:
 // daily_count(오늘 받은 다른 일일 미션 수)·daily_bonus(이번 주에 일일 보너스를 받은 날 수).
-// 보상 키: 자원(wood·stone·food)·gold·diamonds·tickets(다이아 모집권)·keys_<던전 종류>(열쇠). 보상은 반복 미션도 늘지 않는다.
+// 보상 키: 자원(wood·stone·food)·gold·diamonds·tickets(다이아 모집권)·keys_<던전 종류>(열쇠)·pouch_<id>(방치 주머니, pouches.ts). 보상은 반복 미션도 늘지 않는다.
 
 export type MissionType = 'daily' | 'weekly' | 'repeat'
 
@@ -20,29 +20,29 @@ const RES = (n: number) => ({ wood: n, stone: n, food: n })
 
 export const DEFS: MissionDef[] = [
   // 일일(8 + 보너스)
-  { id: 'd_kill', type: 'daily', kind: 'kill', title: '몬스터 %d마리 처치', target: 300, reward: { gold: 3000 } },
-  { id: 'd_collect', type: 'daily', kind: 'collect', title: '자원 %d번 수집', target: 5, reward: RES(300) },
+  { id: 'd_kill', type: 'daily', kind: 'kill', title: '몬스터 %d마리 처치', target: 300, reward: { gold: 3000, pouch_gold_10: 1 } },
+  { id: 'd_collect', type: 'daily', kind: 'collect', title: '자원 %d번 수집', target: 5, reward: { ...RES(300), pouch_res_10: 1 } },
   { id: 'd_sell', type: 'daily', kind: 'sell', title: '상인과 %d번 거래', target: 2, reward: { gold: 2000 } },
   { id: 'd_hero', type: 'daily', kind: 'hero_level', title: '영웅 레벨업 %d회', target: 5, reward: { gold: 3000 } },
   { id: 'd_growth', type: 'daily', kind: 'growth', title: '성장 강화 %d회', target: 3, reward: { gold: 3000 } },
   { id: 'd_gacha', type: 'daily', kind: 'gacha', title: '영웅 %d회 모집', target: 10, reward: { diamonds: 30 } },
   { id: 'd_dungeon', type: 'daily', kind: 'dungeon_win', title: '던전 %d번 클리어', target: 2, reward: { diamonds: 30 } },
   { id: 'd_guild', type: 'daily', kind: 'guild_attend', title: '길드 출석', target: 1, reward: { diamonds: 20 } },
-  { id: 'd_all', type: 'daily', kind: 'daily_count', title: '일일 미션 %d개 완료', target: 6, reward: { diamonds: 100, tickets: 1 } },
+  { id: 'd_all', type: 'daily', kind: 'daily_count', title: '일일 미션 %d개 완료', target: 6, reward: { diamonds: 100, tickets: 1, pouch_gold_60: 1 } },
   // 주간
-  { id: 'w_bonus', type: 'weekly', kind: 'daily_bonus', title: '일일 미션 보너스 %d일 받기', target: 5, reward: { tickets: 5 } },
-  { id: 'w_kill', type: 'weekly', kind: 'kill', title: '몬스터 %d마리 처치', target: 3000, reward: { gold: 30000 } },
+  { id: 'w_bonus', type: 'weekly', kind: 'daily_bonus', title: '일일 미션 보너스 %d일 받기', target: 5, reward: { tickets: 5, pouch_gold_360: 1, pouch_res_360: 1 } },
+  { id: 'w_kill', type: 'weekly', kind: 'kill', title: '몬스터 %d마리 처치', target: 3000, reward: { gold: 30000, pouch_gold_240: 1 } },
   { id: 'w_dungeon', type: 'weekly', kind: 'dungeon_win', title: '던전 %d번 클리어', target: 10, reward: { diamonds: 150 } },
   { id: 'w_gacha', type: 'weekly', kind: 'gacha', title: '영웅 %d회 모집', target: 50, reward: { diamonds: 150 } },
   { id: 'w_hero', type: 'weekly', kind: 'hero_level', title: '영웅 레벨업 %d회', target: 30, reward: { gold: 30000 } },
-  { id: 'w_build', type: 'weekly', kind: 'build_up', title: '건물 레벨업 %d번 완료', target: 3, reward: RES(2000) },
+  { id: 'w_build', type: 'weekly', kind: 'build_up', title: '건물 레벨업 %d번 완료', target: 3, reward: { ...RES(2000), pouch_res_240: 1 } },
   { id: 'w_research', type: 'weekly', kind: 'research', title: '연구 %d번 시작', target: 2, reward: { gold: 20000 } },
   { id: 'w_train', type: 'weekly', kind: 'train', title: '병사 훈련 %d번', target: 3, reward: { gold: 10000 } },
   { id: 'w_boss', type: 'weekly', kind: 'guild_boss', title: '길드 보스 %d번 도전', target: 3, reward: { diamonds: 100 } },
   // 반복(목표 = target + step × 받은 횟수)
-  { id: 'r_kill', type: 'repeat', kind: 'kill', title: '몬스터 %d마리 처치', target: 1000, step: 500, reward: { gold: 5000 } },
+  { id: 'r_kill', type: 'repeat', kind: 'kill', title: '몬스터 %d마리 처치', target: 1000, step: 500, reward: { gold: 5000, pouch_gold_30: 1 } },
   { id: 'r_stage', type: 'repeat', kind: 'stage', title: '라운드 %d번 클리어', target: 10, step: 5, reward: { diamonds: 20 } },
-  { id: 'r_collect', type: 'repeat', kind: 'collect', title: '자원 %d번 수집', target: 20, step: 10, reward: RES(500) },
+  { id: 'r_collect', type: 'repeat', kind: 'collect', title: '자원 %d번 수집', target: 20, step: 10, reward: { ...RES(500), pouch_res_30: 1 } },
   { id: 'r_sell', type: 'repeat', kind: 'sell', title: '상인과 %d번 거래', target: 10, step: 5, reward: { gold: 5000 } },
   { id: 'r_hero', type: 'repeat', kind: 'hero_level', title: '영웅 레벨업 %d회', target: 20, step: 10, reward: { gold: 5000 } },
   { id: 'r_growth', type: 'repeat', kind: 'growth', title: '성장 강화 %d회', target: 20, step: 10, reward: { gold: 5000 } },

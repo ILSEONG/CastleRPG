@@ -143,7 +143,7 @@ test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async (
   const [w] = await db.query("select name, building, per_min, price from resources where id = 'wood'")
   assert.deepEqual(w, { name: '목재', building: 'lumber', per_min: 10, price: 1 })
   const [cfg] = await db.query("select value from game_config where key = 'keep_slot_tiers'")
-  assert.equal(cfg.value, '1:4|5:8|10:12')
+  assert.equal(cfg.value, '1:4|9:8|22:12')
   const [gate] = await db.query("select name, max_level, wood, stone, food, base_sec, req1, req2 from building_defs where id = 'gate'")
   assert.deepEqual(gate, { name: '성문', max_level: 30, wood: 150, stone: 250, food: 0, base_sec: 45, req1: 'quarry', req2: null })
   const [ig] = await db.query(`select title, grade, gear, s1b, skill2, s2a, skill3, s3a, s3b, "desc" from heroes where id = 'ignis'`)

@@ -19,7 +19,7 @@ const MIN_GATE_HP := 3000.0
 const MIN_KEEP_HP := 8000.0
 const DEF_HP_MULT := 1.5  # 수성 보너스: 수비 영웅 체력·공격 배율(성벽 뒤에서 싸운다). 앱만 쓴다(서버는 전투를 계산하지 않는다)
 const DEF_ATK_MULT := 1.3
-const KEEP_LEVEL := 6  # 공성 성 크기(성채 레벨 → GameData.interior_half)
+const KEEP_LEVEL := 9  # 공성 성 크기(성채 레벨 → GameData.interior_half). 9 = 24칸 단계(단계 표 개편 전 레벨 6과 같은 크기)
 const CAMP_D := 24.0  # 공격 진영: 성벽 바깥면에서 이 거리
 const SIDE_NAMES := ["북문", "동문", "남문", "서문"]
 

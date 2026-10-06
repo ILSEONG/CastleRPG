@@ -192,8 +192,10 @@ func _build_world() -> void:
 	add_child(card)
 	var mission_panel = preload("res://scripts/mission_panel.gd").new()  # 미션 시트(일일·주간·반복): 오른쪽 아래 메뉴가 연다
 	add_child(mission_panel)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [미션][랭킹][친구][이벤트]
-	side_menu.windows = {"mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
+	var pouch_panel = preload("res://scripts/pouch_panel.gd").new()  # 가방(방치 주머니): 오른쪽 아래 메뉴가 연다
+	add_child(pouch_panel)
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [가방][미션][랭킹][친구][이벤트]
+	side_menu.windows = {"bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
 	side_menu.card = card
 	add_child(side_menu)
 	_hud = hud
@@ -266,8 +268,7 @@ func _tutorial_goto(target: String) -> void:
 			if not _tutorial_ui.recruit.is_open():
 				_tutorial_ui.tabs.press("recruit")
 		"stage":
-			if GameState.mode == GameState.Mode.IDLE:
-				GameState.start_stage()
+			_hud.request_stage()  # FEVER 중이면 끊을지 묻는다
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.

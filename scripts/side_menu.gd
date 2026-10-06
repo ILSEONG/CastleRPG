@@ -1,14 +1,15 @@
 extends CanvasLayer
-## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
+## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
 ## 자리: 오른쪽 아래, 탭 바 위. 튜토리얼 미션 카드가 보이면 카드 위로 올라간다(겹치지 않게, 매 프레임 맞춘다).
-## main.gd가 만들고 windows = {mission, ranking, friend, event}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
+## main.gd가 만들고 windows = {bag(방치 주머니), mission, ranking, friend, event}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"]]
+const ITEMS := [["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"]]
 const SIZE := Vector2(84, 84)
 const SIDE := 16.0
 const GAP := 10.0
@@ -127,6 +128,8 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 			draw_gift(c, ctr, 44.0)
 		"mission":
 			draw_scroll(c, ctr, 44.0)
+		"bag":
+			PouchPanel.draw_pouch(c, ctr, 46.0, "gold")
 		_:
 			draw_chevron(c, ctr, 30.0, is_open)
 			text = "닫기" if is_open else "메뉴"
