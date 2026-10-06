@@ -30,12 +30,12 @@ func _ready() -> void:
 	add_child(_main)
 	_check(await _wait_until(func(): return Net.ready_once and _main.camera != null, 30.0), "world built after connecting", "")
 	for c in _main.get_children():
-		if c.get_script() != null and c.get_script().resource_path == "res://scripts/ranking_button.gd":
+		if c.get_script() != null and c.get_script().resource_path == "res://scripts/side_menu.gd":
 			_button = c
-	_check(_button != null and _button.visible, "trophy button on the HUD (online)", "")
+	_check(_button != null and _button.toggle.visible and not _button.buttons.ranking.visible, "bottom-right menu toggle, folded", "")
 	if _fails > 0:
 		return _finish()
-	_panel = _button.panel
+	_panel = _button.windows.ranking
 
 	await _request("/v1/test/stage", {"stage": 37})
 	Guild.fetch()
@@ -43,9 +43,16 @@ func _ready() -> void:
 	Guild.join(Guild.recommendations()[0])
 	_check(await _wait_until(func(): return Guild.joined() and not Guild.busy, 10.0), "join a guild", "")
 	await _frames(30)
-	await _snap()  # 1. HUD 버튼
+	await _snap()  # 1. 접힌 메뉴
+	_button.toggle.pressed.emit()
+	_check(_button.buttons.ranking.visible and _button.buttons.friend.visible and _button.buttons.event.visible, "toggle unfolds 랭킹·친구·이벤트", "")
+	await _frames(20)
+	await _snap()  # 2. 펼친 메뉴
+	var tb: Rect2 = _button.toggle.get_global_rect()
+	_check(tb.end.y <= get_viewport().get_visible_rect().size.y - 104, "menu sits above the tab bar", str(tb))
 
-	_button.button.pressed.emit()
+	_button.buttons.ranking.pressed.emit()
+	_check(not _button.is_open, "picking an item folds the menu", "")
 	_check(_panel.is_open(), "button opens the ranking sheet", "")
 	_check(await _loaded("stage"), "stage board loads", "")
 	var me: Dictionary = _panel.data.stage.get("me", {})
@@ -65,6 +72,17 @@ func _ready() -> void:
 	await _snap()  # 4. 길드
 	_panel.buttons.close.pressed.emit()
 	_check(not _panel.is_open(), "top-right X closes the sheet", "")
+	_button.toggle.pressed.emit()
+	_button.buttons.friend.pressed.emit()
+	_check(_button.windows.friend.is_open(), "친구 opens the friend window", "")
+	await _frames(20)
+	await _snap()  # 친구
+	_button.windows.friend.close()
+	_button.toggle.pressed.emit()
+	_button.buttons.event.pressed.emit()
+	_check(_button.windows.event.is_open(), "이벤트 opens the coming-soon panel", "")
+	await _snap()  # 이벤트
+	_button.windows.event.close()
 	_sheet()
 	_finish()
 
