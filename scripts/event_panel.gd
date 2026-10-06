@@ -10,6 +10,7 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const GuildPanel := preload("res://scripts/guild_panel.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const TITLE := "28일 출석 이벤트"
@@ -218,6 +219,10 @@ static func reward_text(r: Dictionary) -> String:
 			parts.append("%s %d개" % [KEY_NAMES[t], int(r["keys_" + t])])
 	if r.has("tickets"):
 		parts.append("다이아 모집권 %d장" % int(r.tickets))
+	var pz := Economy.pouches_in(r)
+	for id in Economy.pouch_ids():
+		if pz.has(id):
+			parts.append(Economy.pouch_name(id) + ("" if int(pz[id]) == 1 else " %d개" % int(pz[id])))
 	return " + ".join(parts)
 
 
@@ -239,6 +244,13 @@ static func cell_lines(r: Dictionary) -> Array:
 			lines.append("x%d" % int(r["keys_" + t]))
 	if r.has("tickets"):
 		lines.append(("모집권 %d" if lines.size() > 0 else "x%d") % int(r.tickets))
+	var pz := Economy.pouches_in(r)
+	if pz.size() == 1:
+		var id: String = pz.keys()[0]
+		var m := int(Economy.pouch_parse(id).min)
+		lines.append("주머니 " + (("%d시간" % (m / 60)) if m >= 60 else ("%d분" % m)))
+	elif pz.size() > 1:
+		lines.append("주머니 %d개" % pz.size())
 	return lines
 
 
@@ -268,6 +280,9 @@ func _draw_cell(c: Control, i: int, r: Dictionary, n: int) -> void:
 	c.draw_string(FONT, Vector2(0, 22), "%d일" % day, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 18, TODAY.darkened(0.35) if big else SUB)
 	var ctr := Vector2(c.size.x / 2.0, 56)
 	_draw_reward_icon(c, r, ctr, 42.0)
+	var pz := Economy.pouches_in(r)
+	if not pz.is_empty() and r.size() > pz.size():  # 다른 보상과 함께 주는 주머니: 그림 오른쪽 위에 작은 주머니
+		PouchPanel.draw_pouch(c, ctr + Vector2(26, -14), 26.0, str(Economy.pouch_parse(pz.keys()[0]).kind))
 	var lines := cell_lines(r)
 	var y := 96.0
 	for k in mini(lines.size(), 2):
@@ -305,6 +320,10 @@ static func _draw_reward_icon(c: Control, r: Dictionary, ctr: Vector2, s: float)
 		draw_key(c, ctr, s, r)
 	elif r.has("tickets"):
 		draw_ticket(c, ctr, s)
+	else:
+		var pz := Economy.pouches_in(r)
+		if not pz.is_empty():
+			PouchPanel.draw_pouch(c, ctr, s * 1.1, str(Economy.pouch_parse(pz.keys()[0]).kind))
 
 
 ## 던전 열쇠(종류마다 고리 색): 고리 + 자루 + 이 둘.

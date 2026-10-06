@@ -13,6 +13,7 @@ import * as G from './guild.ts'
 import * as Rk from './ranking.ts'
 import * as A from './attendance.ts'
 import * as M from './missions.ts'
+import * as P from './pouches.ts'
 import { registerGuildWar } from './war_routes.ts'
 import type { WarLive } from './war_live.ts'
 
@@ -121,6 +122,7 @@ interface Player {
   unbuilt: string[] // 튜토리얼 공터(아직 짓지 않은 건물 — 레벨 행은 1)
   attend: { n: number; day: number | null } // 출석 이벤트: 받은 날 수·마지막으로 받은 리셋 날짜
   missions: unknown // 미션 상태(저장된 그대로 — 쓰는 쪽이 M.normalize)
+  pouches: Record<string, number> // 방치 주머니 id → 개수(pouches.ts)
 }
 
 interface Train {
@@ -172,6 +174,7 @@ interface Change {
   guild?: GuildChange // 길드(player_guild 행·길드 누적·기록)
   attend?: { n: number; day: number } // 출석 이벤트 진행
   missions?: M.MissionState // 미션 상태 전체
+  pouches?: Record<string, number> // 방치 주머니 보유 전체(새 값)
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -192,7 +195,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
+const PLAYER_SQL = `select s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -410,6 +413,7 @@ export function createApp(opts: AppOptions) {
         unbuilt: Array.isArray(r.unbuilt) ? r.unbuilt.map(String) : [],
         attend: { n: Number(r.attend_n ?? 0), day: r.attend_day == null ? null : Number(r.attend_day) },
         missions: r.missions == null ? {} : json(r.missions),
+        pouches: P.normalize(r.pouches == null ? {} : json(r.pouches)),
       }
       if (p.build && p.build.finish <= now) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
@@ -479,6 +483,7 @@ export function createApp(opts: AppOptions) {
         dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => game.buildings.some((d) => d.id === b) || game.resources.some((r) => r.building === b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
+        pouches: p.pouches, // 방치 주머니 id → 개수
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -564,6 +569,7 @@ export function createApp(opts: AppOptions) {
     if (ch.quest?.last_claim !== undefined) sets.push(`last_quest_claim = to_timestamp(${p(ch.quest.last_claim)}::float8)`)
     if (ch.attend) sets.push(`attend_n = ${p(ch.attend.n)}::int, attend_day = ${p(ch.attend.day)}::int`)
     if (ch.missions) sets.push(`missions = ${p(JSON.stringify(ch.missions))}::jsonb`)
+    if (ch.pouches) sets.push(`pouches = ${p(JSON.stringify(ch.pouches))}::jsonb`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
@@ -753,6 +759,7 @@ export function createApp(opts: AppOptions) {
     pl.dia_tickets += ch.diaTickets ?? 0
     if (ch.attend) pl.attend = ch.attend
     if (ch.missions) pl.missions = ch.missions
+    if (ch.pouches) pl.pouches = ch.pouches
     for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
     pl.version += 1
   }
@@ -1302,6 +1309,8 @@ export function createApp(opts: AppOptions) {
         const st = dungeonState(p, g, keyType, now)
         change.dungeon = { type: keyType, state: { ...st, keys: st.keys + (reward as any)[`keys_${keyType}`] } }
       }
+      const pz = P.fromReward(reward)
+      if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
       const got = { ...reward, ...(change.items ? { items: change.items } : {}) }
       change.log = { kind: 'attendance', detail: { day, reward: got } }
       return { change, extra: { day, reward: got }, reload: Boolean(keyType || change.items) }
@@ -1366,7 +1375,53 @@ export function createApp(opts: AppOptions) {
         const st = dungeonState(p, g, keyType, now)
         change.dungeon = { type: keyType, state: { ...st, keys: st.keys + reward[`keys_${keyType}`] } }
       }
+      const pz = P.fromReward(reward)
+      if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
       return { change, extra: { id: d.id, reward }, reload: Boolean(keyType) }
+    })
+  })
+
+  // --- 방치 주머니(pouches.ts) ---
+
+  // 주머니 하나의 값(지금의 방치 수입 × 주머니 시간): 골드 tenths(오프라인 처치 골드와 같은 식, 상한 = 주머니 시간)와
+  // 자원(자원 건물이 그 시간 동안 쌓는 양, 짓지 않은 건물은 0).
+  function pouchValue(p: Player, g: Game, id: string): { goldTenths: number; res: Record<string, number> } {
+    const pz = P.parse(id)!
+    const res: Record<string, number> = {}
+    if (pz.kind === 'gold') {
+      const grunt = g.monsters.find((m) => m.id === R.OFFLINE_KIND)
+      const row = R.stageRow(p.stage, g.stages)
+      const per = grunt ? Math.floor(R.killGoldTenths(Number(grunt.gold), row) * (100 + bonus(p, g).kill_gold_pct) / 100) : 0
+      const r = R.offlineReward(pz.min * 60, pz.min, Number(row.idle_interval), R.cfgNum(g.config, 'spawn_group'), per, R.cfgNum(g.config, 'offline_gold_mult'))
+      return { goldTenths: r.tenths, res }
+    }
+    for (const r of g.resources) {
+      const b = p.buildings[r.building]
+      if (!b || p.unbuilt.includes(r.building)) continue
+      const n = R.pendingAmount(r.per_min, b.level, pz.min * 60, pz.min, R.researchProdPct(bonus(p, g), r.id))
+      if (n > 0) res[r.id] = n
+    }
+    return { goldTenths: 0, res }
+  }
+
+  // 주머니 열기. body = {id, count}(1..보유 수, 아니면 409 not_enough). 값 = 지금의 방치 수입 × 시간 × count.
+  // 받을 것이 없으면(튜토리얼에서 자원 건물을 아직 짓지 않았다) 409 empty — 주머니는 그대로 남는다.
+  // 보유 −count·골드/자원·economy_log pouch를 version 가드 한 문장으로. 응답 opened = {id, count, gold_tenths, res}.
+  app.post('/v1/pouch/open', auth, async (c) => {
+    const b = await body(c)
+    const id = strField(b, 'id')
+    if (!P.parse(id)) throw new ApiError(404, 'unknown_pouch', `unknown pouch '${id}'`)
+    const count = intField(b, 'count', 1, P.MAX_OPEN)
+    return mutate(c, (p, g) => {
+      if ((p.pouches[id] ?? 0) < count) throw new ApiError(409, 'not_enough', `you have ${p.pouches[id] ?? 0} '${id}' pouches`)
+      const one = pouchValue(p, g, id)
+      if (one.goldTenths <= 0 && Object.keys(one.res).length === 0) throw new ApiError(409, 'empty', 'nothing to get from this pouch yet')
+      const res = Object.fromEntries(Object.entries(one.res).map(([k, v]) => [k, v * count]))
+      const opened = { id, count, gold_tenths: one.goldTenths * count, res }
+      const change: Change = { pouches: P.add(p.pouches, { [id]: -count }), log: { kind: 'pouch', detail: { stage: p.stage, ...opened } } }
+      if (opened.gold_tenths > 0) change.goldTenths = opened.gold_tenths
+      if (Object.keys(res).length) change.res = res
+      return { change, extra: { opened } }
     })
   })
 

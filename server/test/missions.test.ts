@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as M from '../src/missions.ts'
 import * as R from '../src/rules.ts'
+import * as P from '../src/pouches.ts'
 import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
@@ -46,7 +47,8 @@ test('일일 미션: 보상 반영, 하루 한 번(409 claimed), 다음 날 다�
   const before = (await S.req('GET', '/v1/player', { token })).json.player
   const r = await claim(token, { id: 'd_kill' })
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.reward, { gold: 3000 })
+  assert.deepEqual(r.json.reward, { gold: 3000, pouch_gold_10: 1 })
+  assert.deepEqual(r.json.player.pouches, { gold_10: 1 })
   assert.equal(r.json.player.gold, before.gold + 3000)
   assert.deepEqual(r.json.player.missions.d, ['d_kill'])
   assert.equal((await claim(token, { id: 'd_kill' })).json.error, 'claimed')
@@ -118,7 +120,7 @@ test('모르는 미션 404, 로그인 없이 401', async () => {
 test('표: id 유일, 보상 키는 퀘스트 보상 키, 목표 ≥ 1, 반복 미션만 step', () => {
   assert.equal(new Set(M.DEFS.map((d) => d.id)).size, M.DEFS.length)
   for (const d of M.DEFS) {
-    assert.ok(Object.keys(d.reward).length > 0 && Object.keys(d.reward).every((k) => R.QUEST_REWARD_KEYS.includes(k)), d.id)
+    assert.ok(Object.keys(d.reward).length > 0 && Object.keys(d.reward).every((k) => R.QUEST_REWARD_KEYS.includes(k) || Object.keys(P.fromReward({ [k]: 1 })).length === 1), d.id)
     assert.ok(d.target >= 1, d.id)
     assert.equal(d.step !== undefined, d.type === 'repeat', d.id)
   }

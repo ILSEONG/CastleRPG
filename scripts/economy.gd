@@ -44,6 +44,10 @@ const SAVE_INTERVAL := 10.0
 const TUTORIAL_TRAIN_SEC := 5.0  # 튜토리얼 훈련 1마리 시간(사용자 2026-10-06)
 const WAIT_TEXT := "연결 대기 중"
 const OFFLINE_MIN_SEC := 60.0  # 오프라인 처치 골드: 이보다 짧게 떠났으면 없음(서버 rules.OFFLINE_MIN_SEC)
+const POUCH_KINDS := ["gold", "res"]  # 방치 주머니(서버 pouches.ts): 골드·자원
+const POUCH_MINUTES := [10, 30, 60, 120, 240, 360]
+const POUCH_PREFIX := "pouch_"  # 보상 표 키: pouch_<id>
+const POUCH_FAIL_TEXT := "주머니를 열지 못했어요 — 보유 수를 다시 확인합니다"
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
@@ -134,6 +138,8 @@ signal friends_changed  # 친구 목록(friends)이 새로 왔거나 친구 요�
 signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받았다 — Tutorial이 맞춘다
 signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
+signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
+signal pouch_opened(opened: Dictionary)  # 주머니를 열었다 {id, count, gold_tenths, res}(온라인은 응답이 왔을 때)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
 var claims_open := true  # false면 claim_offline이 아무것도 안 한다(main: 로그인·접속 중 — 브라우저에서 돌아온 RESUMED가 정산하지 않게)
@@ -153,6 +159,7 @@ var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
 var dia_tickets := 0
+var pouches := {}  # 방치 주머니 id("gold_60"·"res_240" …, POUCH_IDS) → 개수(> 0). 저장 "pouches"(없으면 {})
 var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
 var server_missions: Dictionary = {}  # 온라인: 미션 받은 기록 {day, week, d, w, wd, r, next_day, next_week}(apply_server가 채운다 — Missions가 읽는다)
 var tutorial_training := false  # 튜토리얼 중(Tutorial이 켠다, 오프라인): 훈련은 한 번에 1마리, 1마리 TUTORIAL_TRAIN_SEC초  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
@@ -359,6 +366,7 @@ func reset(now: float) -> void:
 	upgrades = {}
 	diamonds = 0
 	dia_tickets = 0
+	pouches = {}
 	unbuilt = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
@@ -910,6 +918,11 @@ func grant(reward: Dictionary) -> void:
 	gold_tenths += int(reward.get("gold", 0)) * 10
 	diamonds += int(reward.get("diamonds", 0))
 	dia_tickets += int(reward.get("tickets", 0))
+	var pz := pouches_in(reward)
+	for id in pz:
+		pouches[id] = int(pouches.get(id, 0)) + int(pz[id])
+	if not pz.is_empty():
+		pouches_changed.emit()
 	var keys := false
 	for type in GameData.DUNGEON_TYPES:
 		var n := int(reward.get("keys_" + type, 0))
@@ -923,6 +936,130 @@ func grant(reward: Dictionary) -> void:
 		dungeons_changed.emit()
 	save()
 	granted.emit(reward)
+
+
+# --- 방치 주머니(서버 pouches.ts): 출석·미션 보상으로 받아 두었다가 연다. 값 = 여는 순간의 방치 수입 × 주머니 시간 ---
+
+static func pouch_ids() -> Array:
+	var out := []
+	for k in POUCH_KINDS:
+		for m in POUCH_MINUTES:
+			out.append("%s_%d" % [k, m])
+	return out
+
+
+## "gold_60" → {kind: "gold", min: 60}. 모르는 id면 {}.
+static func pouch_parse(id: String) -> Dictionary:
+	if not pouch_ids().has(id):
+		return {}
+	var parts := id.split("_")
+	return {"kind": parts[0], "min": int(parts[1])}
+
+
+## "골드 주머니(1시간)"
+static func pouch_name(id: String) -> String:
+	var pz := pouch_parse(id)
+	if pz.is_empty():
+		return id
+	var m: int = pz.min
+	var t := ("%d시간" % (m / 60)) if m >= 60 else ("%d분" % m)
+	return "%s 주머니(%s)" % ["골드" if pz.kind == "gold" else "자원", t]
+
+
+## 보상 → 주머니 {id: 개수}(pouch_<id> 키만).
+static func pouches_in(reward: Dictionary) -> Dictionary:
+	var out := {}
+	for k in reward:
+		var key := str(k)
+		if key.begins_with(POUCH_PREFIX) and pouch_ids().has(key.substr(POUCH_PREFIX.length())) and _num(reward[k]) and int(reward[k]) > 0:
+			var id := key.substr(POUCH_PREFIX.length())
+			out[id] = int(out.get(id, 0)) + int(reward[k])
+	return out
+
+
+static func _pouch_counts(src: Dictionary) -> Dictionary:
+	var out := {}
+	for k in src:
+		if pouch_ids().has(str(k)) and _num(src[k]) and int(src[k]) > 0:
+			out[str(k)] = int(src[k])
+	return out
+
+
+func pouch_count(id: String) -> int:
+	return int(pouches.get(id, 0))
+
+
+## 주머니 하나를 지금 열면 받는 값 {gold_tenths, res: {자원 id → 양}}(서버 app.ts pouchValue와 같은 식).
+## 골드 = 그 시간 동안의 오프라인 처치 골드(현재 스테이지·연구·offline_gold_mult), 자원 = 자원 건물이 그 시간 동안 쌓는 양(짓지 않은 건물은 0).
+func pouch_value(id: String, stage_n: int) -> Dictionary:
+	var pz := pouch_parse(id)
+	var out := {"gold_tenths": 0, "res": {}}
+	if pz.is_empty():
+		return out
+	var sec: float = pz.min * 60.0
+	if pz.kind == "gold":
+		out.gold_tenths = int(offline_reward(sec, stage_n, kill_tenths(OFFLINE_KIND, stage_n)).tenths)
+		return out
+	for r in GameData.resources():
+		var b: String = r.building
+		if unbuilt.has(b):
+			continue
+		var n := pending_amount(r.id, int(levels.get(b, 1)), sec, res_pct(r.id))
+		if n > 0:
+			out.res[r.id] = n
+	return out
+
+
+## 지금 열어도 받을 것이 없다(튜토리얼: 자원 건물을 아직 짓지 않았다) — 서버도 409 empty로 막고 주머니는 남는다.
+func pouch_empty(id: String, stage_n: int) -> bool:
+	var v := pouch_value(id, stage_n)
+	return int(v.gold_tenths) <= 0 and v.res.is_empty()
+
+
+func pouch_waiting() -> bool:
+	return _waiting.has("pouch")
+
+
+## 주머니 count개를 연다. 온라인은 POST /v1/pouch/open(응답이 오면 pouch_opened), 오프라인은 곧바로 더하고 저장한다.
+func open_pouch(id: String, count: int, stage_n: int) -> bool:
+	if count <= 0 or pouch_count(id) < count or pouch_waiting() or pouch_empty(id, stage_n):
+		return false
+	if net != null:
+		_waiting["pouch"] = true
+		net.flush_kills()
+		net.send("POST", "/v1/pouch/open", {"id": id, "count": count}, _on_pouch, _on_pouch_failed, true, true)
+		pouches_changed.emit()
+		return true
+	var one := pouch_value(id, stage_n)
+	var got := {"id": id, "count": count, "gold_tenths": int(one.gold_tenths) * count, "res": {}}
+	for r in one.res:
+		got.res[r] = int(one.res[r]) * count
+		res[r] = int(res.get(r, 0)) + got.res[r]
+	gold_tenths += got.gold_tenths
+	pouches[id] = pouch_count(id) - count
+	if pouches[id] <= 0:
+		pouches.erase(id)
+	changed.emit()
+	pouches_changed.emit()
+	save()
+	pouch_opened.emit(got)
+	return true
+
+
+func _on_pouch(data: Dictionary) -> void:
+	_waiting.erase("pouch")
+	apply_server(data)
+	pouches_changed.emit()
+	var o = data.get("opened")
+	if o is Dictionary:
+		pouch_opened.emit(o)
+
+
+func _on_pouch_failed() -> void:
+	_waiting.erase("pouch")
+	notice.emit(POUCH_FAIL_TEXT)
+	net.refresh()
+	pouches_changed.emit()
 
 
 ## 인구 = 민가 레벨로(GameData.population) + 연구 병영 확장(pop_add, 개정 24). 병사 배치 상한.
@@ -2131,6 +2268,11 @@ func apply_server(data: Dictionary) -> bool:
 		attendance = p.attendance
 	if p.get("missions") is Dictionary:
 		server_missions = p.missions
+	if p.get("pouches") is Dictionary:
+		var pz := _pouch_counts(p.pouches)
+		if pz != pouches:
+			pouches = pz
+			pouches_changed.emit()
 	var quest_before := server_quest.duplicate()
 	var sq = p.get("quest")
 	if sq is Dictionary and sq.get("tut_state") in ["active", "done", "skipped"] and _num(sq.get("tut_step")) and _num(sq.get("rep_n")):
@@ -2878,7 +3020,7 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
-		"diamonds": diamonds, "dia_tickets": dia_tickets, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -3043,6 +3185,7 @@ func _apply(data) -> bool:
 	research_levels = v12[0]
 	research_current = v12[1]
 	dia_tickets = maxi(0, int(data.get("dia_tickets", 0))) if _num(data.get("dia_tickets", 0)) else 0  # 튜토리얼(없으면 0)
+	pouches = _pouch_counts(data.get("pouches")) if data.get("pouches") is Dictionary else {}  # 방치 주머니(없으면 {})
 	unbuilt = {}
 	var ub = data.get("unbuilt", [])  # 튜토리얼 공터(없으면 모두 지어짐 — 옛 저장은 건물 그대로)
 	if ub is Array:
