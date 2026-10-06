@@ -7,6 +7,7 @@ extends CanvasLayer
 const UiKit := preload("res://scripts/ui_kit.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const SkillIcons := preload("res://scripts/skill_icons.gd")
 
 const FACE_MAX := 84.0
 const GAP := 18.0  # 영웅 칸 사이(쿨 칸이 어느 영웅 것인지 갈리게 넉넉히)
@@ -19,7 +20,6 @@ const SLOT_FRAC := 0.32  # 쿨 칸 지름 / 초상화 폭
 const SLOT_GAP := 0.0
 const READY_SEC := 0.5  # 남은 쿨이 이만큼 이하면 준비됨(조건을 기다리는 발동형은 0.5초마다 다시 본다)
 const SLOT_READY := Color(1.0, 0.8, 0.28)
-const SLOT_FILL := Color(0.55, 0.78, 1.0)
 const SLOT_DARK := Color(0.12, 0.14, 0.2, 0.82)
 const SLOT_EMPTY := Color(0.12, 0.14, 0.2, 0.28)
 
@@ -113,8 +113,8 @@ func _draw_face(c: Control, h) -> void:
 
 
 ## 초상화 양옆 쿨 칸(".O." — 사용자 2026-10-06): [왼쪽 칸][초상화][오른쪽 칸], 칸은 초상화 바깥 아래쪽(초상화를 가리지 않는다).
-## 왼쪽 = 첫 액티브, 오른쪽 = 둘째 액티브(칸 순서, hero.active_slots). 준비됨 = 금색 원, 쿨 도는 중 = 어두운 원에 시계 방향으로
-## 차오르는 하늘색 + 남은 초, 승급으로 아직 잠김 = 자물쇠, 액티브가 하나뿐(R) = 오른쪽은 흐린 빈 원(자리는 그대로).
+## 왼쪽 = 첫 액티브, 오른쪽 = 둘째 액티브(칸 순서, hero.active_slots). 칸 = 스킬 그림(skill_icons.gd, 사용자 2026-10-06). 준비됨 = 그림 + 금 테,
+## 쿨 도는 중 = 남은 몫만큼 어둡게 덮고 시계 방향으로 걷힘 + 남은 초, 승급으로 아직 잠김 = 자물쇠, 액티브가 하나뿐(R) = 오른쪽은 흐린 빈 원(자리는 그대로).
 ## 성·던전·길드전 초상화가 함께 쓴다. 칸은 초상화가 다시 그려질 때(매 프레임) 같이 다시 그린다.
 static func face_with_slots(face: Control, h, px: float) -> HBoxContainer:
 	var box := HBoxContainer.new()
@@ -157,24 +157,26 @@ static func _draw_slot(c: Control, at: Vector2, r: float, s: Dictionary) -> void
 		c.draw_circle(at, r, SLOT_EMPTY)
 		c.draw_arc(at, r, 0.0, TAU, 24, Color(UiKit.OUTLINE, 0.45), 1.5, true)
 		return
-	if s.locked:
-		c.draw_circle(at, r, SLOT_DARK)
+	var kind := String(s.get("kind", ""))
+	if s.locked:  # 회색으로 누른 스킬 그림 + 어둡게 + 자물쇠
+		SkillIcons.draw_badge(c, kind, at, r, true)
+		c.draw_circle(at, r, Color(0.08, 0.09, 0.12, 0.45))
 		var w := r * 0.8
-		c.draw_arc(at + Vector2(0, -r * 0.12), w * 0.36, PI, TAU, 10, Color(1, 1, 1, 0.75), maxf(2.0, r * 0.13), true)
-		c.draw_rect(Rect2(at + Vector2(-w * 0.5, -r * 0.12), Vector2(w, w * 0.72)), Color(1, 1, 1, 0.75))
-	elif float(s.left) <= READY_SEC:
-		c.draw_circle(at, r, SLOT_READY)
-		c.draw_circle(at, r * 0.45, Color(1, 1, 1, 0.55))
-	else:
-		c.draw_circle(at, r, SLOT_DARK)
+		c.draw_arc(at + Vector2(0, -r * 0.12), w * 0.36, PI, TAU, 10, Color(1, 1, 1, 0.9), maxf(2.0, r * 0.13), true)
+		c.draw_rect(Rect2(at + Vector2(-w * 0.5, -r * 0.12), Vector2(w, w * 0.72)), Color(1, 1, 1, 0.9))
+		c.draw_arc(at, r, 0.0, TAU, 24, UiKit.OUTLINE, 1.5, true)
+		return
+	SkillIcons.draw_badge(c, kind, at, r)
+	if float(s.left) <= READY_SEC:  # 준비됨: 그림 그대로 + 금 테
+		c.draw_arc(at, r - 1.0, 0.0, TAU, 24, SLOT_READY, maxf(2.0, r * 0.16), true)
+	else:  # 쿨: 남은 몫을 어둡게 덮고(시계 방향으로 걷힌다) 남은 초
 		var done := clampf(1.0 - float(s.left) / maxf(0.01, float(s.total)), 0.0, 1.0)
-		if done > 0.0:
-			var pts := PackedVector2Array([at])
-			var n := maxi(2, ceili(24.0 * done))
-			for i in n + 1:
-				var a := -PI / 2.0 + TAU * done * float(i) / float(n)
-				pts.append(at + Vector2(cos(a), sin(a)) * r)
-			c.draw_colored_polygon(pts, Color(SLOT_FILL, 0.6))
+		var pts := PackedVector2Array([at])
+		var n := maxi(2, ceili(24.0 * (1.0 - done)))
+		for i in n + 1:
+			var a := -PI / 2.0 + TAU * done + TAU * (1.0 - done) * float(i) / float(n)
+			pts.append(at + Vector2(cos(a), sin(a)) * r)
+		c.draw_colored_polygon(pts, SLOT_DARK)
 		var fs := int(r * 1.05)
 		var txt := str(ceili(float(s.left)))
 		var p := at + Vector2(-r, fs * 0.36)

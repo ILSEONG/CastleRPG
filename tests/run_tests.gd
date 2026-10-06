@@ -13,6 +13,7 @@ const MeshKitScript := preload("res://scripts/mesh_kit.gd")
 const TownKitScript := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
+const SkillIconsScript := preload("res://scripts/skill_icons.gd")
 const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
@@ -1491,6 +1492,9 @@ func test_heroes_table() -> void:
 		var ks: Array = h.skills.keys()
 		var want: Array = [true, false] if h.grade == "R" else [true, false, true]
 		check(ks.map(func(k): return HeroSkillsScript.is_active(k)) == want, "hero %s: active/passive slots %s" % [h.id, ks])
+	# 초상화 쿨 칸 스킬 그림(2026-10-06): 발동형마다 그림이 있고 그 그림은 도형이 있다
+	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE:
+		check(SkillIconsScript.KIND.has(k) and not SkillIconsScript.shapes(SkillIconsScript.glyph_of(k)).is_empty(), "skill %s has a thumbnail" % k)
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
