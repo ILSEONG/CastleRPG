@@ -73,6 +73,18 @@ test('튜토리얼 훈련: 1마리씩(2마리는 400), 1마리 tutorial_train_se
   assert.equal(r.json.training.finish, T0 + 5)
 })
 
+test('튜토리얼 훈련 미션을 넘기면(튜토리얼은 진행 중) 원래 훈련 시간', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  const k = (await tutorialRows()).findIndex((x) => x.id === 'train')
+  await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'barracks'), tut_step = $2 where player_id = $1", [id, k + 1])
+  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  const r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 1 } })
+  assert.equal(r.status, 200)
+  assert.equal((await player(token)).quest.tut_state, 'active')
+  assert.equal(r.json.training.finish, T0 + 180 * 60)
+})
+
 test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale), needs(지은 건물)를 본다, 보상은 표 그대로, 마지막 단계면 done', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
