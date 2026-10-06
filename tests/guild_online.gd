@@ -1,6 +1,6 @@
 extends Node
 ## 온라인 길드 체크 + 화면(개발용): 로컬 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1)에 게스트로 접속해 길드 탭을 실제로 쓴다 —
-## 잠김 → (테스트 훅으로 stage 11) 추천 5개 → 가입 → 출석 → 골드 기부 → 보스 도전 → 상점·길드원 → 탈퇴 → 창설(500,000골드).
+## 잠김 → (테스트 훅으로 stage 11) 추천 5개 → 가입 → 출석 → 골드 기부 → 보스 도전(드래곤 실제 전투 20초) → 상점·길드원 → 탈퇴 → 창설(500,000골드).
 ## 실행: cd server && PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=8790 node src/main.ts &
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/guild_online.tscn -- --api=http://127.0.0.1:8790 --device=/tmp/x/device.json --out=/tmp/guild_online.png
 ## 마지막 줄이 GUILD ONLINE PASSED(실패면 종료 코드 1).
@@ -65,13 +65,19 @@ func _ready() -> void:
 	_panel._rebuild()
 	await _snap()
 	_panel._start_fight()
-	_check(await _wait_until(func(): return _boss != null, 10.0) and float(_boss.get("dmg", 0)) > 0.0, "boss fight returns damage and grade", str(_boss))
-	await _frames(70)
-	await _snap()
-	if not _panel._fight.is_empty():
-		_panel._fight.t = 99.0
+	_check(await _wait_until(func(): return _main._dungeon != null, 10.0), "boss challenge opens the dragon fight scene", "")
+	var fight = _main._dungeon
+	if fight != null:
+		await _frames(240)
 		await _snap()
-		_panel._end_fight()
+		_check(await _wait_until(func(): return fight.phase == fight.Phase.RESULT, 40.0), "fight ends and the server result arrives", str(fight.result))
+		_check(_boss != null and float(_boss.get("dmg", 0)) > 0.0 and absf(float(_boss.dmg) - roundf(fight.dragon.dealt)) <= 1.0,
+			"server takes the damage the heroes dealt to the dragon", "%s dealt=%d" % [str(_boss), int(fight.dragon.dealt)])
+		await _frames(10)
+		await _snap()
+		fight.leave()
+		_check(await _wait_until(func(): return _main.is_inside_tree(), 5.0), "back to the castle after the fight", "")
+		await _frames(10)
 	_check(int(Guild.me.get("boss_tries", 0)) == 1, "one boss try used", str(Guild.me))
 
 	_panel.tab = "shop"

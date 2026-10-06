@@ -4475,11 +4475,24 @@ func test_guild() -> void:
 	check(g.team_dps() > 0.0, "guild: starting deploy has damage: %s" % g.team_dps())
 	g.guild.boss.level = 1
 	g.guild.boss.hp = 10.0
-	var r1: Dictionary = g.fight_boss(now)
-	check(r1.dmg > 0.0 and r1.killed >= 1 and int(g.guild.boss.level) >= 2 and float(g.guild.boss.hp) > 0.0 and float(g.guild.boss.hp) <= GuildScript.boss_max(int(g.guild.boss.level)),
-		"guild: boss kill carries leftover damage to the next level: %s" % [r1])
-	g.fight_boss(now)
-	check(g.boss_block() == "오늘 도전 횟수를 다 썼습니다" and g.fight_boss(now).is_empty(), "guild: 2 boss tries a day")
+	var runs := []
+	var results := []
+	g.boss_started.connect(func(r): runs.append(r))
+	g.boss_done.connect(func(r): results.append(r))
+	check(g.start_boss(now) and int(g.me.boss_tries) == 1, "guild: starting a boss fight uses a try")
+	var run: Dictionary = g._boss_run.duplicate()
+	check(run.level == 1 and float(run.hp) == 10.0 and float(run.cap) == roundf(g.team_dps() * GuildScript.BOSS_FIGHT_SEC * GuildScript.BOSS_DMG_CAP),
+		"guild: boss run carries level, hp and damage cap: %s" % [run])
+	g.finish_boss(str(run.run_id), 5000.0, now)
+	var r1: Dictionary = results.back() if not results.is_empty() else {}
+	check(r1.get("dmg", 0.0) == 5000.0 and r1.killed >= 1 and int(g.guild.boss.level) >= 2 and float(g.guild.boss.hp) > 0.0 and float(g.guild.boss.hp) <= GuildScript.boss_max(int(g.guild.boss.level)),
+		"guild: the fight's damage counts and a kill carries leftover damage to the next level: %s" % [r1])
+	g.finish_boss(str(run.run_id), 5000.0, now)
+	check(results.back().get("error", "") == "no_run", "guild: a fight finishes once")
+	g.start_boss(now)
+	g.finish_boss(str(g._boss_run.run_id), 1e12, now)
+	check(results.back().dmg == float(run.cap), "guild: damage is capped at dps × sec × cap: %s" % [results.back()])
+	check(g.boss_block() == "오늘 도전 횟수를 다 썼습니다" and not g.start_boss(now), "guild: 2 boss tries a day")
 	check(GuildScript.boss_grade(GuildScript.boss_max(1) * 0.25, 1)[0] == "S" and GuildScript.boss_grade(GuildScript.boss_max(1) * 0.03, 1)[0] == "C"
 		and GuildScript.boss_grade(1.0, 1)[0] == "D", "guild: damage grade by share of boss max HP")
 	# 상점

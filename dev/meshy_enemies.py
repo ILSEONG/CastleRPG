@@ -17,7 +17,8 @@ from meshy_heroes import REF, STYLE, TAIL, req  # noqa: E402
 ms.OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshy", "out", "enemies")
 ms.STATE = os.path.join(ms.OUT, "state.json")
 
-BOSS = {"goblin_king", "death_knight"}
+BOSS = {"goblin_king", "death_knight", "dragon"}
+CREATURE = {"dragon"}  # 사람 모양이 아니다: 소환수 스타일(ms.STYLE)·T자세 없음, 뼈대 대신 부품(dev/meshy_dragon_fit.py)
 DESC = {
     "goblin": ("goblin raider, small green-skinned goblin with long pointed ears, big nose and a toothy grin, ragged brown "
                "leather vest and hood pushed back, dark gray pants, rope belt, bare green arms and feet wrapped in cloth."),
@@ -25,13 +26,18 @@ DESC = {
                     "a spiky golden crown, red royal cape with white fur collar, purple tunic, gold belt with a big buckle."),
     "death_knight": ("death knight, tall undead knight in black iron plate armor with spiked pauldrons, a horned black helmet "
                      "with glowing red eyes in the visor slit, tattered dark red cape, skull emblem on the chest."),
+    # 길드 보스. 날개·목·꼬리가 따로 움직이게(부품으로 나눈다) 날개는 옆으로 넓게 편다.
+    "dragon": ("fearsome dragon boss, crimson scales, spiky back ridge, cream belly plates, two curved "
+               "ivory horns, glowing yellow eyes, toothy jaw, standing on four thick clawed legs, short thick neck, head "
+               "up, long tail with a spiked tip curving behind, two big bat wings with dark red membranes spread wide horizontally "
+               "to the sides. Seen from the front-left three-quarter view."),
 }
 
 
 def concept(kinds):
     ref = "data:image/png;base64," + base64.b64encode(open(REF, "rb").read()).decode()
     for k in kinds:
-        prompt = STYLE + DESC[k] + TAIL
+        prompt = (ms.STYLE + DESC[k] + ms.TAIL_34) if k in CREATURE else (STYLE + DESC[k] + TAIL)
         assert len(prompt) <= 600, (k, len(prompt))
         t = req("POST", "/image-to-image", {"ai_model": "nano-banana-2", "prompt": prompt, "reference_image_urls": [ref]})
         s = ms.load()
@@ -43,9 +49,11 @@ def concept(kinds):
 def model(kinds):
     for k in kinds:
         s = ms.load()
-        body = {"input_task_id": s[k]["concept"]["id"], "pose_mode": "t-pose", "should_texture": True, "target_formats": ["glb"]}
+        body = {"input_task_id": s[k]["concept"]["id"], "should_texture": True, "target_formats": ["glb"]}
+        if k not in CREATURE:
+            body["pose_mode"] = "t-pose"
         if k in BOSS:
-            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle", "target_polycount": 4500})
+            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle", "target_polycount": 6000 if k in CREATURE else 4500})
         else:
             body.update({"model_type": "smart-topology", "ai_model": "meshy-t2"})
         t = req("POST", "/image-to-3d", body)

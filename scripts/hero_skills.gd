@@ -806,7 +806,7 @@ func _combat_target():
 	var t = h._target
 	if t == null or not is_instance_valid(t) or not t.is_alive():
 		return null
-	return t if Formation.flat_distance(h.global_position, t.global_position) <= float(h.def.range) + 0.5 else null
+	return t if Formation.flat_distance(h.global_position, t.global_position) <= h._reach(t) + 0.5 else null
 
 
 ## 발동 사거리: 원거리는 사거리, 근접은 aggro.
@@ -852,7 +852,8 @@ func _near_monsters(at: Vector3, r: float, exclude = null) -> Array:
 	for m in h.get_tree().get_nodes_in_group("monsters"):
 		if m != exclude and m.is_alive():
 			var mp: Vector3 = m.global_position
-			if Vector2(mp.x - at.x, mp.z - at.z).length() <= r:
+			var d := Vector2(mp.x - at.x, mp.z - at.z).length()
+			if d <= r or d <= r + m.hit_radius():  # 큰 보스(드래곤)는 몸 바깥이 범위에 닿으면
 				out.append(m)
 	return out
 

@@ -537,6 +537,11 @@ func _find_hero():
 	return best
 
 
+## 영웅 사거리에 더하는 몸 반지름(m). 보통 괴물은 0(중심 거리 그대로), 큰 보스(드래곤)는 몸 바깥에서 맞게 크다.
+func hit_radius() -> float:
+	return 0.0
+
+
 func hp_ratio() -> float:
 	return hp / hp_max if hp_max > 0.0 else 0.0
 

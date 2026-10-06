@@ -1824,22 +1824,41 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  app.post('/v1/guild/boss', auth, async (c) => guildMutate(c, (x) => {
-    const { g, st } = needGuild(x)
+  // 보스 전투 시작: 도전 1회를 쓰고 전투 표(run_id·초·단계·HP)를 준다. 앱이 영웅으로 드래곤과 싸운 뒤 /boss/finish로 피해를 낸다.
+  app.post('/v1/guild/boss/start', auth, async (c) => guildMutate(c, (x) => {
+    const { st } = needGuild(x)
     if (x.mine.boss_tries >= G.BOSS_TRIES) throw blocked('no_tries', 'no boss tries left today')
     if (x.dps <= 0) throw blocked('no_heroes', 'no heroes deployed')
-    const before = st.boss.level
-    const dmg = Math.round(x.dps * G.BOSS_FIGHT_SEC * (0.9 + 0.25 * random()))
-    const grade = G.bossGrade(dmg, before)
-    const after = G.bossOf(g.boss_damage + st.vt.dmg + dmg).level
-    const ch: Change = {}
-    const coins = { n: x.pg.coins }
-    grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
-    const mine = { ...x.mine, boss_tries: x.mine.boss_tries + 1, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
-    ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
-      log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 ${G.bossName(before)}에게 ${dmg.toLocaleString('en-US')} 피해` } }
-    return { change: ch, result: { dmg, grade: grade[0], coins: grade[2], gold: grade[3], level: before, killed: after - before } }
+    const run = { id: randomUUID(), t: x.now, cap: Math.round(x.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP), level: st.boss.level }
+    const mine = { ...x.mine, boss_tries: x.mine.boss_tries + 1, boss_run: run }
+    return { change: { guild: { row: rowOf(x, { mine }) } },
+      result: { run_id: run.id, sec: G.BOSS_FIGHT_SEC, level: st.boss.level, hp: st.boss.hp, max: st.boss.max } }
   }))
+
+  // 보스 전투 끝: 앱이 낸 피해(상한 cap)로 등급·보상·길드 누적 피해. 너무 이르면 too_early, 오래 지났으면 피해 0.
+  app.post('/v1/guild/boss/finish', auth, async (c) => {
+    const b = await body(c)
+    const runId = strField(b, 'run_id')
+    const sent = intField(b, 'dmg', 0, 1e12)
+    return guildMutate(c, (x) => {
+      const { g, st } = needGuild(x)
+      const run = x.mine.boss_run
+      if (!run || run.id !== runId) throw blocked('no_run', 'no such boss fight')
+      const age = x.now - run.t
+      if (age < G.BOSS_FIGHT_SEC - G.BOSS_SLACK_SEC) throw blocked('too_early', `the fight lasts ${G.BOSS_FIGHT_SEC} s (${age.toFixed(1)} s so far)`)
+      const dmg = age > G.BOSS_RUN_TTL ? 0 : Math.min(sent, run.cap)
+      const before = st.boss.level
+      const grade = G.bossGrade(dmg, run.level)
+      const after = G.bossOf(g.boss_damage + st.vt.dmg + dmg).level
+      const ch: Change = {}
+      const coins = { n: x.pg.coins }
+      grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
+      const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
+      ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
+        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 ${G.bossName(before)}에게 ${dmg.toLocaleString('en-US')} 피해` } }
+      return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: run.level, killed: after - before } }
+    })
+  })
 
   app.post('/v1/guild/claim', auth, async (c) => guildMutate(c, (x) => {
     const { st } = needGuild(x)

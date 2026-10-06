@@ -21,7 +21,13 @@ export const BOSS_TRIES = 2
 export const BOSS_FIGHT_SEC = 20
 export const BOSS_HP_BASE = 40000
 export const BOSS_HP_GROWTH = 1.22
-export const BOSS_NAMES = ['바위 거인', '늪지 히드라', '서리 와이번', '용암 골렘', '그림자 군주']
+export const BOSS_NAMES = ['드래곤'] // 길드 보스는 드래곤 하나(단계만 오른다)
+// 실제 전투(앱이 BOSS_FIGHT_SEC초 동안 영웅으로 드래곤을 친다): 시작에 도전 1회를 쓰고, 끝에 앱이 낸 피해를 받는다.
+// 받는 피해 상한 = 시작 때 내 팀 초당 피해 × 초 × BOSS_DMG_CAP(조작 방지 — 실제 전투가 이보다 많이 내면 잘린다).
+// 시작 뒤 BOSS_FIGHT_SEC − BOSS_SLACK_SEC초 전에 끝내면 거절(too_early), BOSS_RUN_TTL초가 지나면 피해 0으로 끝난다.
+export const BOSS_DMG_CAP = 3
+export const BOSS_SLACK_SEC = 2
+export const BOSS_RUN_TTL = 600
 export const BOSS_GRADES: [string, number, number, number][] = [['S', 0.2, 120, 30000], ['A', 0.1, 90, 20000], ['B', 0.05, 60, 12000],
   ['C', 0.02, 40, 8000], ['D', 0, 25, 5000]]
 export const BOSS_KILL_REWARD = { coins: 50, diamonds: 30 }
@@ -217,6 +223,7 @@ export interface Mine {
   contrib: number
   shop_day: { day: number; bought: Record<string, number> }
   shop_week: { week: number; bought: Record<string, number> }
+  boss_run: { id: string; t: number; cap: number; level: number } | null // 진행 중인 보스 전투(시작에 도전 1회를 썼다)
 }
 
 // 저장된 값 → 오늘 값(날이 바뀌었으면 일일 값을 비운다).
@@ -238,6 +245,7 @@ export function mineToday(saved: Partial<Mine> | null, now: number, hour: number
     contrib: same ? Number(s.contrib ?? 0) : 0,
     shop_day: { day: sd.day, bought: { ...sd.bought } },
     shop_week: { week: sw.week, bought: { ...sw.bought } },
+    boss_run: same && s.boss_run ? { ...s.boss_run } : null,
   }
 }
 

@@ -143,20 +143,39 @@ test('guild: create costs 500,000 gold, names are unique, owner leaving hands ov
   S.clock.t -= 86400
 })
 
-test('guild: boss fight, 2 tries a day, grades, kill rewards, daily reset', async () => {
+test('guild: real boss fight — start uses a try, finish takes the damage (capped, not too early), kill rewards, daily reset', async () => {
   const p = await ready()
   const rec = (await guild(p.token)).recommendations[2]
   await post(p.token, 'join', { guild_id: rec.id })
   const v0 = await guild(p.token)
   assert.ok(v0.dps > 0)
-  let r = await post(p.token, 'boss')
+  let r = await post(p.token, 'boss/start')
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  const run = r.json.result
+  assert.equal(run.sec, G.BOSS_FIGHT_SEC)
+  assert.equal(run.level, v0.guild.boss.level)
+  assert.equal(run.hp, v0.guild.boss.hp)
+  assert.equal(r.json.guild.me.boss_tries, 1, 'starting uses a try')
+  assert.equal((await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1000 })).json.error, 'too_early')
+  S.clock.t += G.BOSS_FIGHT_SEC
+  assert.equal((await post(p.token, 'boss/finish', { run_id: 'nope', dmg: 1000 })).json.error, 'no_run')
+  r = await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1234 })
   assert.equal(r.status, 200, JSON.stringify(r.json))
   const res = r.json.result
-  assert.ok(res.dmg > 0 && ['S', 'A', 'B', 'C', 'D'].includes(res.grade))
-  assert.equal(res.grade, G.bossGrade(res.dmg, res.level)[0])
+  assert.equal(res.dmg, 1234)
+  assert.equal(res.grade, G.bossGrade(1234, run.level)[0])
   assert.equal(r.json.guild.coins, res.coins)
-  await post(p.token, 'boss')
-  assert.equal((await post(p.token, 'boss')).json.error, 'no_tries')
+  assert.equal(r.json.guild.me.boss_best, 1234)
+  assert.equal(r.json.guild.me.boss_run, null)
+  assert.equal((await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1 })).json.error, 'no_run', 'a fight finishes once')
+  // 두 번째: 상한(시작 때 초당 피해 × 초 × BOSS_DMG_CAP)을 넘는 피해는 잘린다
+  const run2 = (await post(p.token, 'boss/start')).json.result
+  assert.equal((await post(p.token, 'boss/start')).json.error, 'no_tries')
+  S.clock.t += G.BOSS_FIGHT_SEC
+  r = await post(p.token, 'boss/finish', { run_id: run2.run_id, dmg: 1e11 })
+  assert.ok(Math.abs(r.json.result.dmg - v0.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP) <= G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP, 'capped (view dps is rounded)')
+  assert.equal(r.json.result.sent, 1e11)
+  S.clock.t -= 2 * G.BOSS_FIGHT_SEC
   // 보스를 쓰러뜨리면(실제 누적을 크게) 처치 보상이 쌓이고 한 번에 받는다
   await S.db.query('update guilds set boss_damage = boss_damage + $2 where id = $1', [rec.id, G.bossMax(50) * 3])
   const v = await guild(p.token)
@@ -172,6 +191,19 @@ test('guild: boss fight, 2 tries a day, grades, kill rewards, daily reset', asyn
   assert.equal(nx.me.boss_tries, 0)
   assert.equal(nx.me.attended, false)
   S.clock.t -= 86400
+})
+
+test('guild: a boss fight left too long finishes with 0 damage', async () => {
+  const p = await ready()
+  const rec = (await guild(p.token)).recommendations[4]
+  await post(p.token, 'join', { guild_id: rec.id })
+  const run = (await post(p.token, 'boss/start')).json.result
+  S.clock.t += G.BOSS_RUN_TTL + 1
+  const r = await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 500 })
+  assert.equal(r.status, 200)
+  assert.equal(r.json.result.dmg, 0)
+  assert.equal(r.json.result.grade, 'D')
+  S.clock.t -= G.BOSS_RUN_TTL + 1
 })
 
 test('guild: shop spends coins with limits and gives shards of owned heroes', async () => {
