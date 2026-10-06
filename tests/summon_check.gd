@@ -5,6 +5,7 @@ extends Node
 ## 오토로드를 쓰므로 tests/run_tests.gd(-s)에서 preload 금지. 스포너를 멈추고 몬스터를 직접 놓는다(대부분 처리를 끈 제자리 몬스터).
 ## 주인은 대부분 가짜(FakeOwner: 위치·castle만) — 진짜 영웅이 같은 몬스터를 치면 소환수 피해를 가려낼 수 없다.
 
+const Art := preload("res://scripts/art.gd")
 const Balance := preload("res://scripts/balance.gd")
 const Formation := preload("res://scripts/formation.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
@@ -102,6 +103,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	await _look_case()
+	await _meshy_case()
 	await _melee_case()
 	await _range_and_follow_case()
 	await _ranged_case()
@@ -111,6 +113,36 @@ func _run() -> void:
 	await _life_case()
 	await _arena_case()
 	await _crowd_case()
+
+
+## (A2) Meshy 모델(SummonScript.MESHY_DIR): 파일이 있는 종류(골렘)는 그 부품 셋 — 몸통 + 양팔 관절이 좌우 대칭·같은 높이, 삼각형 합 5천 이하,
+##      영웅과 같은 그림 방식의 텍스처 재질(Fx 정점 색 재질 아님). meshy = false면 코드 모양(Fx 재질)으로 돌아간다.
+func _meshy_case() -> void:
+	var o = _owner(_field)
+	_check(SummonScript.meshy_path("golem") != "", "(A2) the golem has a Meshy model", SummonScript.MESHY_DIR)
+	var s = _summon(o, "golem", 5.0, 30.0, _field + Vector3(0, 0, -4))
+	await _frames(2)
+	var parts: Array = s._parts
+	var tris := 0
+	var textured := true
+	for mi in parts:
+		tris += (mi as MeshInstance3D).mesh.get_faces().size() / 3
+		var m := (mi as MeshInstance3D).material_override as ShaderMaterial
+		textured = textured and m != null and m != Fx.material() and m.get_shader_parameter("use_texture") == true
+	_check(parts.size() == 3 and tris > 1000 and tris <= 5000 and textured, "(A2) golem: 3 Meshy parts, 1,000-5,000 triangles, textured",
+		"parts=%d tris=%d textured=%s" % [parts.size(), tris, textured])
+	if parts.size() == 3:
+		var l: Vector3 = parts[1].position
+		var r: Vector3 = parts[2].position
+		_check(parts[0].position == Vector3.ZERO and l.x < -0.5 and r.x > 0.5 and absf(l.y - r.y) < 0.05 and l.y > 1.2,
+			"(A2) golem arms hinge at the shoulders (mirrored, same height)", "l=%s r=%s" % [l, r])
+	SummonScript.meshy = false
+	var c = _summon(o, "golem", 5.0, 30.0, _field + Vector3(3, 0, -4))
+	await _frames(2)
+	_check(c._parts.size() == 3 and c._parts[0].material_override == Fx.material(), "(A2) meshy off: the coded golem", "")
+	SummonScript.meshy = true
+	_free_summons()
+	o.queue_free()
 
 
 ## (A) 모양: 종류마다 MeshInstance3D 1~3개·그림자 없음·그룹 "summons"·등장 연기(fx "summon_puff")·몬스터 표적 아님.
