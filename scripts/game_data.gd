@@ -35,6 +35,7 @@ const GACHA_KEYS := ["gacha_gold_cost_base", "gacha_gold_cost_growth", "gacha_go
 	"gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_dia_ssr", "gacha_dia_sr", "gacha_dia_pity"]
 const GACHA_GOLD := "gold"
 const GACHA_DIA := "diamond"
+const GACHA_TICKET := "ticket"  # 다이아 모집권(튜토리얼 보상, 오프라인): 다이아 모집 1회 = 1장
 const GOLD_COST_STEP := 50  # 골드 1회 비용 반올림 단위(서버 rules.GOLD_COST_STEP)
 const RESOURCE_NUM_COLS := ["per_min", "price"]
 const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters", "countdown_sec", "result_sec", "wave_gap_sec",

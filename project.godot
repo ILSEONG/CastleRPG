@@ -23,6 +23,7 @@ Economy="*res://scripts/economy.gd"
 Net="*res://scripts/net.gd"
 Fever="*res://scripts/fever.gd"
 Guild="*res://scripts/guild.gd"
+Tutorial="*res://scripts/tutorial.gd"
 
 [castle]
 

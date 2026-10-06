@@ -47,6 +47,7 @@ const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
 const NO_DIA_TEXT := "다이아가 부족합니다"
+const NO_TICKET_TEXT := "다이아 모집권이 부족합니다"
 const GACHA_LEVEL_TEXT := "골드 모집 Lv %d! SSR %s%%"  # 레벨업 알림(개정 23)
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
@@ -61,6 +62,7 @@ const BUILD_POLL_SEC := 2.0  # 온라인: 끝나는 시각이 지난 건설을 �
 const BLOCK_TEXT := {
 	"unknown": "알 수 없는 건물", "max_level": "최대 레벨", "keep_cap": "성채 레벨이 부족합니다", "prereq": "선행 조건 미충족",
 	"in_progress": "건설 중", "builder_busy": "다른 건물 건설 중", "not_enough": "자원 부족", "waiting": "응답 대기 중",
+	"unbuilt": "아직 짓지 않은 건물",
 }
 ## 병사(개정 13). 자동 배치: 티어 높은 것부터, 같은 티어는 이 순서(스펙 §6 "보병 → 기병 → 궁병", 표에 없는 병종은 뒤에 표 순서로).
 const AUTO_ORDER := ["infantry", "cavalry", "archer"]
@@ -96,7 +98,7 @@ const EQUIP_FAIL_TEXT := "장비 결과를 받지 못했습니다 — 보관함�
 const RESEARCH_TEXT := {
 	"unknown_research": "알 수 없는 연구", "research_busy": "다른 연구가 진행 중입니다", "max_level": "최대 레벨", "locked": "잠긴 연구입니다",
 	"not_enough_resources": "자원 부족", "not_enough_gold": "골드 부족", "no_research": "진행 중인 연구가 없습니다",
-	"not_enough_diamonds": "다이아가 부족합니다", "waiting": "응답 대기 중",
+	"not_enough_diamonds": "다이아가 부족합니다", "waiting": "응답 대기 중", "lab_unbuilt": "연구소를 먼저 지으세요",
 }
 const RESEARCH_DONE_TEXT := "연구 완료: %s Lv %d"
 const RESEARCH_CANCEL_TEXT := "연구를 취소했습니다 — 비용 50% 환불"
@@ -121,6 +123,9 @@ signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, le
 signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
 signal research_changed  # 개정 24: 연구 레벨·진행 중 연구·응답 대기가 바뀌었다(전투 능력치는 곧바로 다시 읽는다 — hero·soldier refresh_stats)
 signal research_done(id: String, level: int)  # 연구 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
+signal killed(kind: String)  # 튜토리얼: 몬스터를 처치했다(성 전투·방치)
+signal sold(gold: int)  # 튜토리얼: 상인에게 자원을 팔았다(오프라인은 곧바로, 온라인은 응답이 왔을 때)
+signal granted(reward: Dictionary)  # 튜토리얼 보상을 받았다(grant)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
 var claims_open := true  # false면 claim_offline이 아무것도 안 한다(main: 로그인·접속 중 — 브라우저에서 돌아온 RESUMED가 정산하지 않게)
@@ -135,6 +140,10 @@ var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면
 var res: Dictionary = {}           # 자원 id → int
 var last_collect: Dictionary = {}  # 자원 건물 id → 마지막 수집. 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 모든 건물)
+var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않은 건물 id → true. 레벨은 1로 두고 "공터"로 보인다 — 짓기(0 → 1)는 일꾼이
+                                   # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
+var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
+var dia_tickets := 0  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
 var hero_levels: Dictionary = {}   # 영웅 id → 레벨(≥ 1, 없으면 1). 개정 11
@@ -243,6 +252,8 @@ static func res_of(building_id: String) -> String:
 
 ## 모집 비용(골드는 정수 골드 — 가능 조건 gold(= floor(tenths / 10)) ≥ 비용, 차감은 비용 × 10. 다이아는 다이아). 골드는 지금 모집 레벨 값.
 func gacha_cost(currency: String, count: int) -> int:
+	if currency == GameData.GACHA_TICKET:
+		return count  # 모집권 1장 = 1회
 	return GameData.gacha_cost(currency, count, gacha_gold_level)
 
 
@@ -333,6 +344,8 @@ func reset(now: float) -> void:
 	train_queues = {}
 	upgrades = {}
 	diamonds = 0
+	dia_tickets = 0
+	unbuilt = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
 	gacha_dia_pity = 0
@@ -372,7 +385,7 @@ func reset(now: float) -> void:
 
 func pending(building_id: String, now: float) -> int:
 	var id := res_of(building_id)
-	if id == "":
+	if id == "" or unbuilt.has(building_id):
 		return 0
 	return pending_amount(id, levels[building_id], now - float(last_collect[building_id]), res_pct(id))
 
@@ -492,6 +505,7 @@ func sell(res_id: String, now: float, amount := -1) -> int:
 	gold_tenths += g * 10  # 판매 골드는 정수
 	changed.emit()
 	save()
+	sold.emit(g)
 	return g
 
 
@@ -529,6 +543,7 @@ func sell_many(items: Array, now: float) -> int:
 	gold_tenths += total * 10
 	changed.emit()
 	save()
+	sold.emit(total)
 	return total
 
 
@@ -552,19 +567,25 @@ func deploy_slots(slots: int) -> Array:
 ## 온라인은 요청(응답에 gacha_done). 골드는 모집 레벨 비용·확률로 뽑고 장수만큼 누적해 레벨업, 다이아는 천장을 센다.
 ## 뽑았거나 요청을 보냈으면 true.
 func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
-	if not count in [1, 10] or not currency in [GameData.GACHA_GOLD, GameData.GACHA_DIA]:
+	if not count in [1, 10] or not currency in [GameData.GACHA_GOLD, GameData.GACHA_DIA, GameData.GACHA_TICKET]:
 		return false
-	var dia := currency == GameData.GACHA_DIA
+	var ticket := currency == GameData.GACHA_TICKET  # 다이아 모집권(튜토리얼 보상): 다이아 모집과 같은 확률·천장, 다이아 대신 모집권
+	var dia := currency == GameData.GACHA_DIA or ticket
 	var cost := gacha_cost(currency, count)
 	if wallet(currency) < cost:
-		notice.emit(NO_DIA_TEXT if dia else NO_GOLD_TEXT)
+		notice.emit(NO_TICKET_TEXT if ticket else (NO_DIA_TEXT if dia else NO_GOLD_TEXT))
 		return false
 	if net != null:
+		if ticket:
+			return false  # 모집권은 오프라인(튜토리얼)에만 있다
 		return _gacha_online(count, currency)
-	var rates := gacha_rates(currency)
+	var rates := gacha_rates(GameData.GACHA_DIA if dia else currency)
 	var pity := {"n": gacha_dia_pity, "max": int(GameData.config_num("gacha_dia_pity"))} if dia else {}
 	var cards := roll_gacha(count, rng.randf, rates, pity)
-	if dia:
+	if ticket:
+		dia_tickets -= cost
+		gacha_dia_pity = pity.n
+	elif dia:
 		diamonds -= cost
 		gacha_dia_pity = pity.n
 	else:
@@ -790,6 +811,7 @@ func grant_dev_heroes(ids: Array) -> Array:
 
 ## 몬스터 처치. 오프라인은 바로 골드, 온라인은 쌓아 두고 Net이 /v1/kills로 보낸다.
 func add_kill(kind: String, stage: int) -> void:
+	killed.emit(kind)
 	if net == null:
 		add_gold_tenths(kill_tenths(kind, stage))
 		return
@@ -821,7 +843,7 @@ static func upgrade_block_for(id: String, lv: Dictionary, build_id: String, have
 	if id != GameData.KEEP and level + 1 > maxi(1, int(lv.get(GameData.KEEP, 1))):
 		return "keep_cap"
 	for c in GameData.BUILDING_REQ_COLS:
-		if d[c] != "" and maxi(1, int(lv.get(d[c], 1))) < level:
+		if d[c] != "" and int(lv.get(d[c], 1)) < level:  # 공터(튜토리얼)는 0
 			return "prereq"
 	if build_id != "":
 		return "in_progress" if build_id == id else "builder_busy"
@@ -836,6 +858,59 @@ func building_level(id: String) -> int:
 	return maxi(1, int(levels.get(id, 1)))
 
 
+## 튜토리얼: 지은 건물인가(공터가 아니다).
+func is_built(id: String) -> bool:
+	return not unbuilt.has(id)
+
+
+## 보이는 레벨: 공터면 0, 아니면 building_level. 선행 조건·이름표·건물 창이 쓴다.
+func shown_level(id: String) -> int:
+	return 0 if unbuilt.has(id) else building_level(id)
+
+
+## 선행 조건 판정용 레벨 표(공터는 0).
+func _effective_levels() -> Dictionary:
+	if unbuilt.is_empty():
+		return levels
+	var lv := levels.duplicate()
+	for id in unbuilt:
+		lv[id] = 0
+	return lv
+
+
+## 튜토리얼 새 게임: keep_ids 밖의 건물을 모두 공터로 둔다(성채·성문만 지어진 채 시작). 오프라인 전용.
+func start_unbuilt(keep_ids: Array) -> void:
+	unbuilt = {}
+	for b in GameData.buildings():
+		if not b.id in keep_ids:
+			unbuilt[b.id] = true
+	changed.emit()
+	save()
+
+
+## 튜토리얼 보상을 바로 더하고 저장한다. reward 키: wood·stone·food(자원), gold, diamonds, tickets(다이아 모집권), keys_gold·keys_equip(던전 열쇠).
+func grant(reward: Dictionary) -> void:
+	for r in GameData.BUILD_RES:
+		if reward.has(r):
+			res[r] = int(res.get(r, 0)) + int(reward[r])
+	gold_tenths += int(reward.get("gold", 0)) * 10
+	diamonds += int(reward.get("diamonds", 0))
+	dia_tickets += int(reward.get("tickets", 0))
+	var keys := false
+	for type in GameData.DUNGEON_TYPES:
+		var n := int(reward.get("keys_" + type, 0))
+		if n > 0:
+			var st := _dungeon_now(type, time_now())
+			st.keys = int(st.keys) + n
+			dungeons[type] = st
+			keys = true
+	changed.emit()
+	if keys:
+		dungeons_changed.emit()
+	save()
+	granted.emit(reward)
+
+
 ## 인구 = 민가 레벨로(GameData.population) + 연구 병영 확장(pop_add, 개정 24). 병사 배치 상한.
 func population() -> int:
 	return GameData.population(building_level(GameData.HOUSES)) + int(research_bonus().pop_add)
@@ -843,6 +918,8 @@ func population() -> int:
 
 ## 지금 모집 확률 {ssr, sr}(골드 모집 레벨·주점 레벨). 모집 창 확률 줄.
 func gacha_rates(currency := GameData.GACHA_GOLD) -> Dictionary:
+	if currency == GameData.GACHA_TICKET:
+		currency = GameData.GACHA_DIA
 	return GameData.gacha_rates(currency, gacha_gold_level, building_level(GameData.TAVERN))
 
 
@@ -854,6 +931,8 @@ func gacha_state() -> Dictionary:
 
 ## 모집 재화 보유(골드는 정수 골드).
 func wallet(currency: String) -> int:
+	if currency == GameData.GACHA_TICKET:
+		return dia_tickets
 	return diamonds if currency == GameData.GACHA_DIA else gold
 
 
@@ -876,7 +955,15 @@ func upgrade_block(id: String, now: float) -> String:
 	var r := res_of(id)
 	if r != "":
 		have[r] = int(have.get(r, 0)) + pending(id, now)
-	return upgrade_block_for(id, levels, str(build.get("id", "")), have)
+	if unbuilt.has(id):  # 공터 짓기(0 → 1): 일꾼과 L1 비용만 본다
+		if build.get("id", "") != "":
+			return "in_progress" if build.id == id else "builder_busy"
+		var c := GameData.build_cost(id, 1)
+		for k in c:
+			if int(have.get(k, 0)) < int(c[k]):
+				return "not_enough"
+		return ""
+	return upgrade_block_for(id, _effective_levels(), str(build.get("id", "")), have)
 
 
 ## 다음 레벨 비용 {wood, stone, food}(최대 레벨이면 {}).
@@ -902,13 +989,15 @@ func requirements(id: String) -> Array:
 	var d := GameData.building_def(id)
 	if d.is_empty() or building_level(id) >= int(d.max_level):
 		return []
+	if unbuilt.has(id):
+		return []  # 공터 짓기는 선행 조건이 없다
 	var to := building_level(id) + 1
 	var out := []
 	if id != GameData.KEEP:
 		out.append({"id": GameData.KEEP, "need": to, "have": building_level(GameData.KEEP), "ok": building_level(GameData.KEEP) >= to})
 	for c in GameData.BUILDING_REQ_COLS:
 		if d[c] != "":
-			out.append({"id": d[c], "need": to - 1, "have": building_level(d[c]), "ok": building_level(d[c]) >= to - 1})
+			out.append({"id": d[c], "need": to - 1, "have": shown_level(d[c]), "ok": shown_level(d[c]) >= to - 1})
 	return out
 
 
@@ -966,7 +1055,12 @@ func complete_due(now: float) -> void:
 			net.refresh()
 		return
 	var id := str(build.id)
-	levels[id] = building_level(id) + 1
+	if unbuilt.has(id):  # 튜토리얼 공터 짓기: Lv 1이 된다. 생산은 다 지은 시각부터 쌓인다
+		unbuilt.erase(id)
+		if last_collect.has(id):
+			last_collect[id] = float(build.finish)
+	else:
+		levels[id] = building_level(id) + 1
 	build = {}
 	changed.emit()
 	save()
@@ -1192,7 +1286,7 @@ func train_max(building_id: String) -> int:
 ##   unknown(병사 건물 아님) → bad_count(1..묶음 상한 밖) → training / ready_to_collect(대기열이 차 있다) → not_enough → waiting(앱만)
 func train_block(building_id: String, n: int) -> String:
 	var type := GameData.soldier_of_building(building_id)
-	if type == "":
+	if type == "" or unbuilt.has(building_id):
 		return "unknown"
 	if n < 1 or n > train_max(building_id):
 		return "bad_count"
@@ -1318,6 +1412,8 @@ func research_sec(id: String) -> int:
 func research_block(id: String) -> String:
 	if GameData.research_def(id).is_empty():
 		return "unknown_research"
+	if unbuilt.has(GameData.LAB):
+		return "lab_unbuilt"
 	if not research_current.is_empty():
 		return "research_busy"
 	var have := {"wood": int(res.get("wood", 0)), "stone": int(res.get("stone", 0)), "food": int(res.get("food", 0)), "gold": gold}
@@ -1948,6 +2044,7 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("research") == null or p.research is Dictionary)):  # 개정 24
 		push_error("bad player response: %s" % str(data))
 		return false
+	unbuilt = {}  # 튜토리얼 공터는 오프라인 전용 — 서버 상태에는 없다
 	var research_before := [research_levels.duplicate(), research_current.duplicate()]
 	if p.get("research") is Dictionary:  # {levels: {id: L}, current: {id, finish} 또는 null}
 		var rs := _research_state(p.research)
@@ -2625,7 +2722,7 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
-		"diamonds": diamonds, "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"diamonds": diamonds, "dia_tickets": dia_tickets, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -2637,6 +2734,7 @@ func save() -> void:
 ## 없는 파일은 조용히, 깨진 파일은 경고와 함께 기본값으로 시작한다.
 func load_save(now: float) -> void:
 	reset(now)
+	fresh_game = save_path != "" and not FileAccess.file_exists(save_path)
 	if save_path == "" or not FileAccess.file_exists(save_path):
 		return
 	var json := JSON.new()  # parse_string은 깨진 입력에 엔진 오류를 찍는다
@@ -2788,6 +2886,13 @@ func _apply(data) -> bool:
 	gacha_dia_pity = v11.dia_pity
 	research_levels = v12[0]
 	research_current = v12[1]
+	dia_tickets = maxi(0, int(data.get("dia_tickets", 0))) if _num(data.get("dia_tickets", 0)) else 0  # 튜토리얼(없으면 0)
+	unbuilt = {}
+	var ub = data.get("unbuilt", [])  # 튜토리얼 공터(없으면 모두 지어짐 — 옛 저장은 건물 그대로)
+	if ub is Array:
+		for x in ub:
+			if x is String and not GameData.building_def(x).is_empty():
+				unbuilt[x] = true
 	return true
 
 

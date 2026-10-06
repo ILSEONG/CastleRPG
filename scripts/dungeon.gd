@@ -21,6 +21,7 @@ const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const HudScript := preload("res://scripts/dungeon_hud.gd")
+const PickerScript := preload("res://scripts/unit_picker.gd")
 
 enum Phase { FIGHT, WON, REPORT, LOOT, RESULT }
 
@@ -48,6 +49,7 @@ var starting := false  # 다음 도전 요청을 보냈다(온라인 응답 대�
 var drops: Array = []  # 드랍 상자(테스트용)
 var hud
 var camera: Camera3D
+var picker  # unit_picker.gd(arena_r) — 영웅 선택·바닥 이동
 
 var _waves: Array = []  # 아직 안 나온 적 무리 [{t, row, at: [자리]}](시각 순)
 var _live := 0
@@ -87,6 +89,10 @@ func _ready() -> void:
 		h.idle_dir = -ArenaKit.DOWN
 		add_child(h)
 		heroes.append(h)
+	picker = PickerScript.new()  # 영웅 탭 선택 → 바닥 탭 이동(성 전장과 같은 조작)
+	picker.camera = camera
+	picker.arena_r = (ArenaKit.PLAINS_FIGHT_R if type == "gold" else ArenaKit.HALL_HALF) - 1.0
+	add_child(picker)
 	_plan_waves(stage)
 	_spawn_due()  # 처음 무리는 곧바로(즉시 승리 훅도 시체에서 드랍)
 	hud = HudScript.new()

@@ -61,6 +61,7 @@ def trs(n):
 
 
 GEAR_PARENTS = {"handslot.l", "handslot.r"}
+FEET = ("foot.l", "foot.r", "toes.l", "toes.r")
 
 
 def parents(j):
@@ -292,6 +293,22 @@ def transfer(Q, base_P, base_J, base_W, njoints, idx, k=6, smooth=3):
     return top.astype(np.uint16), tw.astype(np.float32)
 
 
+def feet_centre(P, J, W, g):
+    """Centroid of the points whose strongest bone is a foot or toe bone of g's skin."""
+    names = [g.j["nodes"][n]["name"] for n in g.j["skins"][0]["joints"]]
+    dom = J[np.arange(len(J)), W.argmax(1)]
+    return P[np.isin(dom, [names.index(n) for n in FEET])].mean(0)
+
+
+def feet_shift(Q, J, W, bP, bJ, bW, g):
+    """Sideways / front-back shift (y stays) that puts the Meshy feet where the KayKit feet are. The torso match in align()
+    is thrown off by quivers, capes and bellies (up to 0.4 m on the 2026-10 batch), which left heroes off their portrait
+    base and their hands off the weapon slots; the whole body was off by about the same amount, so moving it by the feet fixes all."""
+    d = feet_centre(bP, bJ, bW, g) - feet_centre(Q, J, W, g)
+    d[1] = 0.0
+    return d
+
+
 def normals(Q, idx):
     tri = idx.reshape(-1, 3)
     fn = np.cross(Q[tri[:, 1]] - Q[tri[:, 0]], Q[tri[:, 2]] - Q[tri[:, 0]])
@@ -397,6 +414,9 @@ def main():
     Q, info = align(P, bP, g)
     info.update(info0)
     J, W = transfer(Q, bP, bJ, bW, len(g.j["skins"][0]["joints"]), idx)
+    d = feet_shift(Q, J, W, bP, bJ, bW, g)
+    Q = Q + d
+    info.update(feet_dx=float(d[0]), feet_dz=float(d[2]))
     im = Image.open(io.BytesIO(texdata)).convert("RGB")
     if max(im.size) > size:
         im = im.resize((size, size), Image.LANCZOS)

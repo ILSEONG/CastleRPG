@@ -87,7 +87,7 @@ func _sync() -> void:
 			nm = ""  # 문루 방향 글자는 그리지 않는다 — 태그는 크기 0 기준점으로만 남아 성문 건설 막대를 받친다
 		else:
 			nm = GameData.building_def(t.id).get("name", t.id)
-			lv = "Lv %d" % Economy.building_level(t.id)
+			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else "공터"  # 튜토리얼 공터
 		if nm != t.get("name") or lv != t.get("lv"):
 			t.name = nm
 			t.lv = lv

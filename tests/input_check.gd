@@ -874,6 +874,29 @@ func _mouse_motion(pos: Vector2, rel: Vector2) -> void:
 	get_viewport().push_input(ev, true)
 
 
+## (D) 던전에서도 영웅 탭 선택 → 바닥 탭 이동(피커 판정을 직접 — 결과 창이 덮어도). 이동한 영웅은 hold(그 자리 aggro 안만 노린다).
+func _dungeon_move(d) -> void:
+	var h = d.heroes[0]
+	var cam: Camera3D = d.camera
+	d.picker._pending = cam.unproject_position(h.global_position + Vector3(0, 0.8, 0))
+	await _frames(3)
+	var picked: bool = d.picker.selected == h and h.selected
+	var goal: Vector3 = h.global_position + Vector3(4.0, 0.0, 3.0)
+	d.picker._pending = cam.unproject_position(goal)
+	await _frames(3)
+	h.set_process(true)  # 즉시 승리 훅으로 전투가 이미 끝나 멈춰 있다 — 걷는지만 잠깐 본다
+	var start: Vector3 = h.global_position
+	await _wait_until(func(): return h.global_position.distance_to(goal) < 0.8, 3.0)
+	h.set_process(false)
+	_check(picked and h.hold and h.free_pos.distance_to(goal) < 0.5 and h.global_position.distance_to(goal) < 0.8,
+		"(D) in a dungeon a tapped hero is selected and a ground tap walks it there (then holds that spot)",
+		"picked=%s hold=%s free=%s start=%s pos=%s goal=%s" % [picked, h.hold, h.free_pos, start, h.global_position, goal])
+	d.picker._pending = cam.unproject_position(Vector3(500, 0, 0))
+	await _frames(3)
+	_check(Vector2(h.free_pos.x, h.free_pos.z).length() <= d.picker.arena_r + 0.01, "(D) dungeon ground taps are clamped inside the arena", "free=%s" % h.free_pos)
+	d.picker._select(null)
+
+
 func _tap(pos: Vector2) -> void:
 	_mouse_button(pos, true)
 	_mouse_button(pos, false)
@@ -2373,6 +2396,7 @@ func _dungeon_ui(tabs) -> void:
 		"(D) [출전] swaps the castle world for the dungeon scene (formation saved per dungeon)", "dungeon=%s" % d)
 	if d == null:
 		return
+	await _dungeon_move(d)
 	var hud = d.hud
 	_check(d.phase == d.Phase.RESULT and d.result.win and hud.result_layer.visible and hud.result_title.text == "승리!" and hud.gold_label.text == "+4,000 골드"
 		and Economy.gold == 4000 and Economy.dungeon_state("gold").keys == keys0 - 1 and hud.next_button.visible and not hud.next_button.disabled,

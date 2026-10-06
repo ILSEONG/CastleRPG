@@ -130,6 +130,7 @@ func _init() -> void:
 	test_offline_gold()
 	test_mesh_merge()
 	test_guild()
+	test_tutorial()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -4518,3 +4519,113 @@ func test_guild() -> void:
 	g.free()
 	h.free()
 	e.free()
+
+
+const TutorialScript := preload("res://scripts/tutorial.gd")
+
+
+## 튜토리얼: 공터(Economy.unbuilt) 짓기·생산·선행 조건, 다이아 모집권, 미션 완료·보상 규칙·탭 잠금, 저장 왕복.
+func test_tutorial() -> void:
+	GameData.load_tables()
+	var now := 1.8e9
+	var e = _econ(now)
+	var gs = GameStateScript.new()
+	gs.roster = e
+	var t = TutorialScript.new()
+	t.save_path = ""
+	t.econ = e
+	t.gs = gs
+	t._connect()  # 트리 밖: 시그널(처치·수집·판매·모집)만 잇는다
+	t.begin(true)
+	check(t.active() and e.is_built("keep") and e.is_built("gate") and not e.is_built("lumber") and e.shown_level("lumber") == 0,
+		"tutorial: new game has only keep + gate built")
+	check(e.pending("lumber", now + 3600.0) == 0, "tutorial: an unbuilt lumber mill produces nothing")
+	check(e.upgrade_block("keep", now) == "prereq" or e.upgrade_block("keep", now) == "not_enough", "tutorial: keep Lv 2 waits for its prerequisites")
+	e.res = {"wood": 0, "stone": 0, "food": 0}
+	check(e.upgrade_block("lumber", now) == "not_enough", "tutorial: building a lot costs the Lv 1 price")
+	# 1. 성채 살펴보기 — 사건(건물 창)
+	check(not t.complete() and t.tab_locked("hero") and t.tab_locked("guild") and not t.tab_locked("merchant"), "tutorial: tabs locked at the start")
+	t.note("open", 1, "lumber")
+	check(not t.complete(), "tutorial: opening another building does not count")
+	t.note("open", 1, "keep")
+	var r0: Dictionary = t.reward(0)
+	var c1 := GameData.build_cost("lumber", 1)
+	check(t.complete() and int(r0.wood) == ceili(int(c1.wood) * 1.2 / 10.0) * 10 and int(r0.stone) >= int(c1.stone),
+		"tutorial: mission 1 pays the next mission's resources + margin: %s" % [r0])
+	check(t.claim() and t.step == 1 and int(e.res.wood) == int(r0.wood), "tutorial: claim grants and advances")
+	# 2. 벌목장 건설 — 일꾼으로 0 → 1
+	check(e.upgrade_block("lumber", now) == "" and e.upgrade("lumber", now), "tutorial: lot construction starts with the reward")
+	check(e.requirements("lumber").is_empty() and not t.complete(), "tutorial: lot has no prerequisites; mission waits for the build")
+	e.complete_due(now + 100000.0)
+	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
+	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 20, "tutorial: production counts from the build finish")
+	# 보상 규칙
+	var kinds := {}
+	for i in TutorialScript.MISSIONS.size():
+		var rw: Dictionary = t.reward(i)
+		var nxt: Dictionary = TutorialScript.MISSIONS[i + 1] if i + 1 < TutorialScript.MISSIONS.size() else {}
+		var want := "tickets"
+		if nxt.get("kind", "") in ["build", "level", "train", "research"]:
+			want = "res"
+		elif nxt.get("kind", "") in ["hero_level", "growth"]:
+			want = "gold"
+		elif nxt.get("kind", "") == "dungeon":
+			want = "keys"
+		var got := "tickets" if rw.has("tickets") else ("keys" if rw.keys().any(func(k): return str(k).begins_with("keys_")) else ("res" if rw.has("wood") or rw.has("food") or rw.has("stone") else "gold"))
+		kinds[want] = true
+		check(got == want and (want != "tickets" or int(rw.tickets) == 10), "tutorial: mission %d reward is %s: %s" % [i + 1, want, rw])
+	check(kinds.size() == 4, "tutorial: all four reward kinds appear")
+	# 처치·스테이지
+	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
+	t.count = 0
+	for i in 29:
+		e.add_kill("grunt", 1)
+	check(not t.complete() and t.progress_text() == "29/30", "tutorial: kill mission counts kills")
+	e.add_kill("grunt", 1)
+	check(t.complete(), "tutorial: 30 kills complete the mission")
+	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("stage_1_3")
+	check(not t.complete(), "tutorial: 1-3 not cleared yet")
+	gs.stage = 4
+	check(t.complete(), "tutorial: reaching round 4 clears 1-3")
+	# 다이아 모집권
+	e.grant({"tickets": 10})
+	var owned: int = e.heroes.size()
+	check(e.wallet(GameData.GACHA_TICKET) == 10 and e.gacha(10, GameData.GACHA_TICKET) and e.dia_tickets == 0 and e.diamonds == 0,
+		"tutorial: 10 tickets = one diamond 10-pull, no diamonds spent")
+	check(e.heroes.size() > owned and not e.gacha(1, GameData.GACHA_TICKET), "tutorial: ticket pull adds heroes; no tickets left")
+	e.grant({"keys_gold": 2})
+	check(int(e.dungeon_state("gold").keys) == int(GameData.config_num("gold_key_daily")) + 2, "tutorial: dungeon ticket reward adds keys")
+	# 저장 왕복(공터·모집권), 옛 저장은 모두 지어짐
+	e.grant({"tickets": 3})
+	e.save_path = ECON_TMP
+	e.save()
+	var e2 = EconomyScript.new()
+	e2.save_path = ECON_TMP
+	e2.load_save(now)
+	check(e2.dia_tickets == 3 and not e2.is_built("farm") and e2.is_built("lumber") and not e2.fresh_game, "tutorial: save keeps lots and tickets")
+	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
+	var d: Dictionary = JSON.parse_string(f.get_as_text())
+	f.close()
+	d.erase("unbuilt")
+	d.erase("dia_tickets")
+	f = FileAccess.open(ECON_TMP, FileAccess.WRITE)
+	f.store_string(JSON.stringify(d))
+	f.close()
+	e2.load_save(now)
+	check(e2.unbuilt.is_empty() and e2.dia_tickets == 0, "tutorial: an older save has every building built")
+	DirAccess.remove_absolute(ECON_TMP)
+	var e3 = EconomyScript.new()
+	e3.save_path = ECON_TMP
+	e3.load_save(now)
+	check(e3.fresh_game, "tutorial: no save file = fresh game")
+	# 끝까지
+	t.step = TutorialScript.MISSIONS.size() - 1
+	t.guild = null
+	check(not t.complete() and t.tab_locked("guild") == false, "tutorial: guild tab open at the guild mission")
+	t.state = "done"
+	check(not t.tab_locked("hero") and t.mission().is_empty(), "tutorial done: nothing locked")
+	t.free()
+	gs.free()
+	e.free()
+	e2.free()
+	e3.free()
