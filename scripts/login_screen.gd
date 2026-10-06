@@ -1,6 +1,6 @@
 extends CanvasLayer
-## 로그인 화면(온라인 모드, 저장한 로그인 방식이 없을 때 main이 띄운다). 방치형 게임 첫 화면처럼: 성 그림 배경(splash) 위에 게임 이름
-## 로고, 아래쪽 어두운 그라데이션 위에 제공자 버튼 셋 — [Google로 시작하기](흰 바탕·G 로고) [카카오로 시작하기](#FEE500·말풍선)
+## 로그인 화면(온라인 모드, 저장한 로그인 방식이 없을 때 main이 띄운다). 방치형 게임 첫 화면처럼: 시작 그림(splash — 앱 아이콘 느낌의
+## 주황 하늘·성·게임 이름 로고가 그림에 들어 있다) 위, 아래쪽 따뜻한 갈색 그라데이션 위에 제공자 버튼 셋 — [Google로 시작하기](흰 바탕·G 로고) [카카오로 시작하기](#FEE500·말풍선)
 ## [네이버로 시작하기](#03C75A·N) — 그 아래 [게스트로 시작하기] 글자 버튼, 맨 아래 약관 안내와 버전. 회원가입 없음: 처음 로그인하면 계정이 생긴다.
 ## 소셜 로그인: verifier(무작위 32바이트 hex)의 sha256을 challenge로 POST /v1/auth/oauth/start → 받은 주소를 시스템 브라우저로 열고
 ## (OS.shell_open), POLL_SEC마다 POST /v1/auth/oauth/poll {state, verifier}로 결과를 기다린다(앱으로 돌아오면 곧바로 받는다).
@@ -15,11 +15,8 @@ const SPLASH := preload("res://assets/ui/splash.png")
 const POLL_SEC := 2.0
 const BUTTON_W := 560.0
 const BUTTON_H := 88.0
-const TITLE := "CASTLE RPG"
-const SUBTITLE := "방치형 디펜스 RPG"
 const TERMS := "로그인하면 이용약관 및 개인정보처리방침에 동의하게 됩니다."
-const GOLD := Color(1.0, 0.82, 0.26)
-const GOLD_DARK := Color(0.42, 0.24, 0.06)
+const SHADE := Color(0.36, 0.17, 0.04)  # 아래 그라데이션(주황 하늘의 어두운 쪽)
 ## 제공자 → [버튼 글자, 바탕, 글자색, 테두리(없으면 투명)] — 각 사 로그인 버튼 지침의 색
 const BRANDS := {
 	"google": ["Google로 시작하기", Color("FFFFFF"), Color("1F1F1F"), Color("747775")],
@@ -39,8 +36,6 @@ var buttons := {}  # 제공자 → Button
 var guest_button: Button
 var message_label: Label
 var wait_panel: Control
-var title_label: Label
-var title_box: Control
 
 var _http: HTTPRequest
 var _provider := ""
@@ -64,10 +59,10 @@ func _ready() -> void:
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
-	var shade := TextureRect.new()  # 아래쪽을 어둡게 — 버튼·글자가 잔디 위에서도 또렷하게
+	var shade := TextureRect.new()  # 아래쪽을 어둡게 — 버튼·글자가 성·하늘 위에서도 또렷하게
 	var grad := Gradient.new()
-	grad.set_color(0, Color(0.05, 0.08, 0.12, 0.0))
-	grad.set_color(1, Color(0.05, 0.08, 0.12, 0.78))
+	grad.set_color(0, Color(SHADE, 0.0))
+	grad.set_color(1, Color(SHADE, 0.8))
 	var gt := GradientTexture2D.new()
 	gt.gradient = grad
 	gt.fill_from = Vector2(0, 0)
@@ -82,8 +77,6 @@ func _ready() -> void:
 	shade.anchor_top = 0.5
 	shade.anchor_bottom = 1.0
 	root.add_child(shade)
-	title_box = _title_block()
-	root.add_child(title_box)
 	root.add_child(_button_block())
 	var terms := _text(TERMS, 18, Color(1, 1, 1, 0.8))
 	terms.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
@@ -104,9 +97,6 @@ func _ready() -> void:
 	_http.timeout = 10.0
 	_http.request_completed.connect(_on_http)
 	add_child(_http)
-	var tw := create_tween().set_loops()  # 로고가 천천히 떠오르내린다
-	tw.tween_property(title_box, "offset_top", title_box.offset_top - 10.0, 1.6).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(title_box, "offset_top", title_box.offset_top, 1.6).set_trans(Tween.TRANS_SINE)
 
 
 func _process(delta: float) -> void:
@@ -213,38 +203,6 @@ func _message(text: String) -> void:
 
 
 # --- 모양 ---
-
-func _title_block() -> Control:
-	var box := VBoxContainer.new()
-	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	box.offset_top = 150
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 6)
-	title_label = Label.new()
-	title_label.text = TITLE
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_size_override("font_size", 96)
-	title_label.add_theme_color_override("font_color", GOLD)
-	title_label.add_theme_color_override("font_outline_color", GOLD_DARK)
-	title_label.add_theme_constant_override("outline_size", 22)
-	title_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.35))
-	title_label.add_theme_constant_override("shadow_offset_y", 8)
-	box.add_child(title_label)
-	var pill := PanelContainer.new()
-	pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.12, 0.15, 0.22, 0.82)
-	sb.set_corner_radius_all(22)
-	sb.content_margin_left = 26
-	sb.content_margin_right = 26
-	sb.content_margin_top = 6
-	sb.content_margin_bottom = 8
-	pill.add_theme_stylebox_override("panel", sb)
-	pill.add_child(_text(SUBTITLE, 26, Color(1, 1, 1)))
-	box.add_child(pill)
-	return box
-
 
 func _button_block() -> Control:
 	var box := VBoxContainer.new()
