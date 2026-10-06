@@ -51,8 +51,8 @@ static func _gold(root: Node3D, heroes: Array) -> void:
 	for i in mini(heroes.size(), HEROES):
 		_unit(root, heroes[i], _gold_at(GOLD_HEROES[i]), right)
 	for p in GOLD_GOBLINS:
-		_unit(root, Art.MONSTER_MODELS.goblin, _gold_at(p), left)
-	_unit(root, Art.MONSTER_MODELS.goblin_king, _gold_at(GOLD_KING), left)
+		_unit(root, Art.monster_spec("goblin"), _gold_at(p), left)
+	_unit(root, Art.monster_spec("goblin_king"), _gold_at(GOLD_KING), left)
 	_camera(root, _gold_at(Vector2.ZERO) + Vector3(0, GOLD_EYE_H, 0), _gold_at(Vector2(GOLD_LOOK.x, GOLD_LOOK.z)) + Vector3(0, GOLD_LOOK.y, 0), GOLD_FOV)
 
 
@@ -66,7 +66,7 @@ static func _hall(root: Node3D, heroes: Array) -> void:
 	root.add_child(ArenaKit.lighting(st.light))
 	root.add_child(st.root)
 	var hw := Basis(Vector3.UP, ArenaKit.HALL_YAW)
-	_unit(root, Art.MONSTER_MODELS.death_knight, st.boss, ArenaKit.DOWN)
+	_unit(root, Art.monster_spec("death_knight"), st.boss, ArenaKit.DOWN)
 	for i in mini(heroes.size(), HEROES):
 		var p: Vector3 = hw * HALL_HEROES[i]
 		_unit(root, heroes[i], p, st.boss - p)

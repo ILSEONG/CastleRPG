@@ -37,7 +37,19 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
 1. 컨셉: `dev/meshy_summons.py concept <kind>`(아르테온 컨셉 참조, nano-banana-2 6 크레딧). 따로 움직이는 부위(골렘 팔)는 몸에서
    떨어져 떠 있는 모양으로 그린다 — 메시에서 섬으로 나뉘어 자르지 않고 부품이 된다.
 2. 3D: `dev/meshy_summons.py model <kind>`(meshy-t2 smart-topology + 텍스처 15 크레딧, 4천 삼각형 안팎). 소환수 하나 21 크레딧.
-3. 부품: `python3 dev/meshy_summon_fit.py golem <meshy>.glb assets/models/meshy/summons/golem.glb` — 정면을 −Z로 돌리고 키 2.3 m·발 y = 0,
-   바깥쪽 섬 = 팔(Part1 −X, Part2 +X), 관절 = 그 위 어깨 덩이 중심, 나머지 = 몸통(Part0). 노드 원점 = 관절.
+3. 부품: `python3 dev/meshy_summon_fit.py <kind> <meshy>.glb assets/models/meshy/summons/<kind>.glb` — 정면을 −Z로 돌리고(포탑은 90° 더)
+   종류별 크기(스크립트 KIND: 키 또는 날개 폭)로 맞춘 뒤 코드 모양과 같은 관절로 자른다. 노드 원점 = 관절.
+   골렘 = 바깥쪽 섬이 팔 · 늑대 = 배 아래 다리(앞·뒤 쌍) · 해골 = 칼 든 팔 + 골반 아래 다리 · 트렌트 = 잎 머리(초록 텍스처 위) + 떠 있는
+   가지 팔 섬 · 불사조·매 = 몸 폭 바깥 날개(아래로 늘어진 꼬리깃은 몸통) · 포탑 = 회전판 위 쇠뇌 머리 · 정령 = 몸만(수정·빛 껍질은 코드).
+   2026-10: 여덟 종류 모두 완료. 원본 컨셉·Meshy GLB는 프로젝트 파일 summons/<kind>/.
 4. 게임: `summon.gd`가 `MESHY_DIR/<kind>.glb`가 있으면 그 부품을 영웅과 같은 그림 방식(Art.stylize)으로 쓴다. 움직임 코드는 그대로.
-   `meshy = false`면 코드 모양. 검사: tests/summon_check.gd `(A2)`.
+   파일 부품이 코드 모양보다 적으면 나머지는 코드 부품. `meshy = false`면 코드 모양. 검사: tests/summon_check.gd `(A2)`.
+
+## 던전 적
+고블린·고블린 왕·데스나이트(Art.MONSTER_MODELS)는 영웅과 같은 방식으로 KayKit 뼈대(Rogue·Skeleton_Warrior)에 Meshy 몸을 입는다.
+1. 컨셉·3D: `dev/meshy_enemies.py concept|model|poll <kind>` — T자세·빈손(아르테온 참조). 보스(왕·데스나이트)는 meshy-7 + 리메시 4,500
+   (36 크레딧), 고블린은 meshy-t2(21 크레딧).
+2. 몸: `python3 dev/meshy_fit.py assets/models/characters/<Rogue|Skeleton_Warrior>.glb <meshy>.glb assets/models/meshy/enemies/<kind>.glb`.
+3. 게임: `Art.monster_spec(kind)`가 파일이 있으면 body를 넣고 몸 색(tint)과 머리·가슴 코드 부품을 뺀다(손 부품·KayKit 단검은 그대로).
+   성 몬스터(grunt·epic_boss)는 KayKit 해골 그대로. 검사: tests/run_tests.gd `test_meshy_enemies`.
+텍스처 임포트는 영웅·소환수·적 모두 손실 압축(compress/mode=1, 품질 0.7) — 무손실이면 APK가 GitHub 파일 한도(100 MiB)를 넘는다.

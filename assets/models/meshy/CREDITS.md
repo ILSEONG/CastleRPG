@@ -42,3 +42,13 @@ Meshy(meshy.ai) Pro 플랜으로 생성 — 유료 플랜 생성물은 생성자
 | `heroes/grit.glb` | 2026-10-05 | image-to-3d `01a10d07-9e6b-74c5-a3f3-d246ccdabd9d`(meshy-t2) | image-to-image `01a10d03-ac37-763c-b246-ad92a2319c04`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `heroes/tia.glb` | 2026-10-05 | image-to-3d `01a10d07-a36c-7717-a1fc-2782e29e5e50`(meshy-t2) | image-to-image `01a10d03-af69-7278-af54-34a77458cd72`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `summons/golem.glb` | 2026-10-05 | image-to-3d `01a10e47-4b1a-717a-8177-c57be8d36edd`(meshy-t2) | image-to-image `01a10e46-4ae6-7274-a718-ab93ab172fc9`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/wolf.glb` | 2026-10-06 | image-to-3d `01a10eb9-25de-70d7-bccc-f8307696c677`(meshy-t2) | image-to-image `01a10eb6-b00a-77c8-9bf3-754dbbc25087`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/skeleton.glb` | 2026-10-06 | image-to-3d `01a10eb9-28ca-7713-a170-28d8b76e48b6`(meshy-t2) | image-to-image `01a10eb6-b2df-7157-bc98-398abe9bc187`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/treant.glb` | 2026-10-06 | image-to-3d `01a10eb9-2c5e-70e1-b8e8-e9404369b407`(meshy-t2) | image-to-image `01a10eb6-b4e7-72c1-8528-04c39ef9473e`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/spirit.glb` | 2026-10-06 | image-to-3d `01a10eb9-2efb-75f5-8ec7-96d6877833f2`(meshy-t2) | image-to-image `01a10eb6-b727-7473-b4bd-c6665fed3144`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/phoenix.glb` | 2026-10-06 | image-to-3d `01a10eb9-3276-727e-85f3-f61471975e0a`(meshy-t2) | image-to-image `01a10eb6-b94e-7164-b1fe-1506c6c9c04c`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/hawk.glb` | 2026-10-06 | image-to-3d `01a10eb9-35fb-7473-89fc-1110492fae0a`(meshy-t2) | image-to-image `01a10eb6-bb9a-7431-855b-2f66f77b4234`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `summons/turret.glb` | 2026-10-06 | image-to-3d `01a10eb9-38e1-7395-a4af-5d28c296c98d`(meshy-t2) | image-to-image `01a10eb6-bda7-75ab-ae5a-bdfb92b0bbb4`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `enemies/goblin.glb` | 2026-10-06 | image-to-3d `01a10eb9-3c95-77dd-9681-f4387a361bb7`(meshy-t2) | image-to-image `01a10eb6-c018-7149-aa75-4e41c302b07c`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `enemies/goblin_king.glb` | 2026-10-06 | image-to-3d `01a10eb9-4185-76fe-bcd6-05df89b6e7c4`(meshy-7) | image-to-image `01a10eb6-c23f-77f3-8ef1-2ea90e7b2ec2`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `enemies/death_knight.glb` | 2026-10-06 | image-to-3d `01a10eb9-444b-7392-a5e0-2aff0a8e6cae`(meshy-7) | image-to-image `01a10eb6-c480-718c-a3f9-82cbaddda3ac`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |

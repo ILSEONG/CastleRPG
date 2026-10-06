@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/gork_meshy_texture.jpg-4ed81115eae74c5a91bbc8
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
