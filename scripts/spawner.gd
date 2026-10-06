@@ -61,7 +61,7 @@ func _load(events: Array, stage_mode: bool) -> void:
 
 func _spawn(ev: Dictionary) -> void:
 	var m = MonsterScript.new()
-	m.setup(ev.kind, ev.side, GameState.stage, castle, ev.get("hp_mult", 1.0))
+	m.setup(ev.kind, ev.side, GameState.stage, castle, ev.get("hp_mult", 1.0), ev.get("look", ""))
 	m.died.connect(_on_monster_died)
 	get_parent().add_child(m)
 	if ev.get("lanes", 1) > 1:  # 무리: 옆으로 칸을 나눠 겹치지 않게(_ready가 정한 아무 자리를 덮어쓴다)
