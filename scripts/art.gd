@@ -249,6 +249,30 @@ const MONSTER_MODELS := {
 		"weapon": PROP_DIR + "Skeleton_Axe.gltf",
 		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
 	},
+	# 성 방어 적 모습(GameData.enemy_look — 라운드 묶음마다 바뀐다). 능력치·골드는 grunt 그대로, 생김새만 다르다.
+	"skeleton_warrior": {
+		"scene": CHAR_DIR + "Skeleton_Warrior.glb",
+		"hide": [],
+		"tint": {"Skeleton_Warrior_Cloak": Color(0.30, 0.42, 0.75)},
+		"weapon": PROP_DIR + "Skeleton_Blade.gltf",
+		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "1H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
+	},
+	"bandit": {
+		"scene": CHAR_DIR + "Rogue_Hooded.glb",
+		"hide": ["1H_Crossbow", "2H_Crossbow", "Throwable"],  # 쌍단검
+		# 산적: 검은 두건·검붉은 옷 — 영웅 칸 색 바꿈(remap)과 같은 방식, palette = 칸 번호(ROGUE_SLOTS) → 색, look = 색표 캐시 키
+		"look": "enemy_bandit",
+		"palette": {9: Color("2B2A30"), 8: Color("6E2A26"), 21: Color("3A3438"), 5: Color("2A2220"), 6: Color("2A2220"), 19: Color("241E1C")},
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "Dualwield_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"orc": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "2H_Axe", "Mug", "Barbarian_Hat", "Barbarian_Cape"],  # 한손 도끼만
+		"tint": {"Barbarian_Head": KING_TINT, "Barbarian_ArmLeft": KING_TINT, "Barbarian_ArmRight": KING_TINT},  # 짙은 올리브 살
+		"look": "enemy_orc",  # 칸 색(Barbarian: shirt 8·sleeve 9·leather 6·fur 7) — 갈색 가죽·검은 털
+		"palette": {8: Color("5A3A24"), 9: Color("4A3020"), 6: Color("3A2618"), 7: Color("2E2A26")},
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
 	# 개정 18 던전. tint = 메시 이름 → 곱할 색(UnitModel.dress), parts = [뼈, ArenaKit.part id] — 코드 메시를 그 뼈에 붙인다.
 	# scale = 던전 그림 크기(UnitModel은 쓰지 않는다 — 몬스터 표 scale로 넘긴다). Rogue의 Death_A(0.8초)는 CORPSE_SEC보다 짧아 Death_B.
 	"goblin": {
