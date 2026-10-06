@@ -118,6 +118,8 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 		amount *= 1.0 + _vuln_pct / 100.0
 	hp = maxf(0.0, hp - amount)
 	DamageNumbers.pop(self, amount, kind)
+	if kind != DamageNumbers.Kind.POISON and hp > 0.0:  # 피격 번쩍임·찌그러짐(개정 26, 지속 피해 틱은 빼고)
+		_model.hit_react(kind == DamageNumbers.Kind.SKILL or kind == DamageNumbers.Kind.CRIT)
 	if hp == 0.0:
 		_dead = true
 		remove_from_group("monsters")  # 즉시 표적 대상에서 빠진다

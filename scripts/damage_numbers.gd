@@ -9,8 +9,9 @@ const MAX_NUMBERS := 80
 const LIFE := 0.8
 const RISE := 32.0
 const FADE_FROM := 0.6          # 수명 비율: 마지막 40%에 사라진다
-const CRIT_POP_SEC := 0.1
-const CRIT_POP_SCALE := 1.3
+const POP_SEC := 0.14
+const CRIT_POP_SCALE := 1.8
+const SKILL_POP_SCALE := 1.45
 const SHAKE := 12.0
 const POISON_SEC := 1.0
 const SCREEN_MARGIN := 40.0
@@ -20,7 +21,7 @@ const OUTLINE := Color(0.10, 0.08, 0.12)
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 ## 종류 → [색, 글자 크기]
 const STYLE := {
-	Kind.HIT: [Color(1, 1, 1), 22], Kind.CRIT: [Color(1.0, 0.62, 0.15), 28], Kind.SKILL: [Color(1.0, 0.9, 0.25), 22],
+	Kind.HIT: [Color(1, 1, 1), 22], Kind.CRIT: [Color(1.0, 0.62, 0.15), 30], Kind.SKILL: [Color(1.0, 0.9, 0.25), 24],
 	Kind.POISON: [Color(0.45, 0.9, 0.35), 16], Kind.HURT: [Color(0.95, 0.25, 0.22), 22],
 	Kind.DODGE: [Color(0.7, 0.7, 0.72), 22], Kind.HEAL: [Color(0.45, 0.95, 0.5), 22], Kind.BANNER: [Color(1, 1, 1), 24],
 }
@@ -138,8 +139,8 @@ func _draw() -> void:
 			continue
 		var st: Array = STYLE[e.kind]
 		var size: int = st[1]
-		if e.kind == Kind.CRIT and e.age < CRIT_POP_SEC:
-			size = roundi(size * lerpf(CRIT_POP_SCALE, 1.0, e.age / CRIT_POP_SEC))
+		if (e.kind == Kind.CRIT or e.kind == Kind.SKILL) and e.age < POP_SEC:  # 치명타·스킬 숫자는 크게 튀어나왔다 줄어든다(개정 26)
+			size = roundi(size * lerpf(CRIT_POP_SCALE if e.kind == Kind.CRIT else SKILL_POP_SCALE, 1.0, ease(e.age / POP_SEC, 0.4)))
 		var alpha := 1.0 if t < FADE_FROM else 1.0 - (t - FADE_FROM) / (1.0 - FADE_FROM)
 		var col: Color = st[0]
 		col.a = alpha

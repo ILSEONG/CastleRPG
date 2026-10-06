@@ -13,16 +13,21 @@ const Art := preload("res://scripts/art.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const HeroKit := preload("res://scripts/hero_kit.gd")
 const MeshMerge := preload("res://scripts/mesh_merge.gd")
+const HitFlashShader := preload("res://shaders/hit_flash.gdshader")
 
 const OFFSCREEN_EVERY := 4  # 화면 밖: 이 프레임마다 한 번
 const CROWD_EVERY := 2  # 붐비면 화면 안도 이 프레임마다 한 번(crowd_lod)
 const CROWD_AT := 60
 const SHADOW_OFF_AT := 40  # 붐비면 crowd_lod 유닛 그림자 끔
 const SHADOW_ON_AT := 30  # 이만큼으로 줄면 다시 켬(경계에서 깜빡이지 않게)
+const HIT_FLASH_SEC := 0.14  # 피격 번쩍임(개정 26)
+const HIT_SQUASH := Vector3(1.12, 0.86, 1.12)  # 피격 순간 찌그러짐(세게 맞으면 이만큼, 약하면 절반)
+const HIT_SQUASH_SEC := 0.16
 
 static var _crowd_frame := -1
 static var _crowd_n := 0
 static var _crowd_shadows := true
+static var _flash_mat: ShaderMaterial
 
 var manual := false  # true면 애니메이션을 스스로 돌리지 않는다 — 쓰는 쪽이 advance(초)로 돌린다(recruit_art 정지 자세). add_child 전에
 var lod := false  # 월드 유닛: 화면 밖이면 간헐 갱신(위). add_child 전에
@@ -34,12 +39,16 @@ var _frame := 0
 var _acc := 0.0  # 아직 돌리지 않은 애니메이션 시간(lod)
 var _meshes: Array = []  # 그림자를 끄고 켤 메시와 원래 설정 [[MeshInstance3D, cast_shadow], …](crowd_lod)
 var _shadows := true
+var _base_scale := Vector3.ONE
+var _hit_tw: Tween
+var _flash_meshes: Array = []  # 보이는 몸 메시(처음 맞을 때 찾는다)
 
 
 ## add_child 전에 호출.
 func setup(spec: Dictionary, extra_scale := 1.0) -> void:
 	_spec = spec
 	scale = Vector3.ONE * Art.CHARACTER_SCALE * extra_scale
+	_base_scale = scale
 
 
 func _ready() -> void:
@@ -129,8 +138,50 @@ func play_cast(anim_name: String) -> float:
 	return at / speed
 
 
+## 피격 반응(개정 26 — 타격감): 몸이 HIT_FLASH_SEC초 하얗게 번쩍이고(덧그림 재질, 끝나면 뗀다) 잠깐 찌그러졌다 돌아온다.
+## strong(스킬·치명타)이면 더 밝고 크게. 연달아 맞으면 처음부터 다시.
+func hit_react(strong := false) -> void:
+	if not is_inside_tree():
+		return
+	if _flash_mat == null:
+		_flash_mat = ShaderMaterial.new()
+		_flash_mat.shader = HitFlashShader
+	if _flash_meshes.is_empty():
+		for mi in find_children("*", "MeshInstance3D", true, false):
+			if mi.is_visible_in_tree():
+				_flash_meshes.append(mi)
+	if _hit_tw != null:
+		_hit_tw.kill()
+	for mi in _flash_meshes:
+		if is_instance_valid(mi):
+			mi.material_overlay = _flash_mat
+	var peak := 1.0 if strong else 0.6
+	var squash := Vector3.ONE.lerp(HIT_SQUASH, 1.0 if strong else 0.5)
+	scale = _base_scale * squash
+	_hit_tw = create_tween()
+	_hit_tw.tween_method(_set_flash, peak, 0.0, HIT_FLASH_SEC)
+	_hit_tw.parallel().tween_property(self, "scale", _base_scale, HIT_SQUASH_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_hit_tw.tween_callback(_end_flash)
+
+
+func _set_flash(v: float) -> void:
+	for mi in _flash_meshes:
+		if is_instance_valid(mi):
+			mi.set_instance_shader_parameter("flash", v)
+
+
+func _end_flash() -> void:
+	for mi in _flash_meshes:
+		if is_instance_valid(mi):
+			mi.material_overlay = null
+	scale = _base_scale
+
+
 ## 사망 애니메이션은 반복하지 않으므로 마지막 자세(쓰러짐)로 멈춘다.
 func play_death() -> void:
+	if _hit_tw != null and _hit_tw.is_valid():
+		_hit_tw.kill()
+		_end_flash()
 	_play(_spec.anims.death)
 
 

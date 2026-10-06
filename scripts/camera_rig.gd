@@ -6,6 +6,7 @@ extends Node3D
 ## 입력을 소비하지 않는다 — 탭 판정(UnitPicker)도 같은 이벤트를 본다.
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 
 const PITCH_DEG := -35.0
 const YAW_DEG := 45.0
@@ -21,6 +22,11 @@ const PUNCH_ZOOM := 0.93  # 큰 스킬(SSR 발동) 때 잠깐 당기는 줌 배�
 const PUNCH_IN_SEC := 0.12
 const PUNCH_OUT_SEC := 0.45
 const PUNCH_GAP := 2.0  # 당김 최소 간격(초) — 잦으면 어지럽다
+const KICK_SEC := 0.22  # 스킬 타격 흔들림(개정 26) 길이
+const KICK_AMP_MAX := 0.5
+const STOP_SCALE := 0.06  # 히트스톱 동안 게임 시간 배율
+const STOP_MAX := 0.08  # 히트스톱 최대 길이(실제 초)
+const STOP_GAP := 0.6  # 히트스톱 최소 간격(실제 초) — 잦으면 끊겨 보인다
 
 var camera: Camera3D
 
@@ -35,6 +41,9 @@ var _shake: Tween  # 흔드는 중(개정 17)
 var _punch: Tween  # 당김 중
 var _punch_base := 0.0  # 당기기 전 줌(손으로 줌하면 이 값 기준으로 바뀐다)
 var _punch_at := -INF
+var _shake_amp := 0.0  # 지금 흔들림의 처음 진폭(더 센 타격이 오면 덮는다)
+static var _stop_at := -INF  # 리그가 히트스톱 중에 사라져도 되돌림 타이머가 리그를 건드리지 않게 정적
+static var _stopping := false
 
 
 func _ready() -> void:
@@ -179,6 +188,7 @@ func pan_pixels(rel: Vector2) -> void:
 func shake(sec: float, amp: float) -> void:
 	if _shake != null and _shake.is_running():
 		return
+	_shake_amp = amp
 	_shake = create_tween()
 	_shake.tween_method(_shake_at.bind(amp), 1.0, 0.0, sec)
 
@@ -186,6 +196,33 @@ func shake(sec: float, amp: float) -> void:
 func _shake_at(k: float, amp: float) -> void:
 	camera.h_offset = randf_range(-amp, amp) * k
 	camera.v_offset = randf_range(-amp, amp) * k
+
+
+## 스킬 타격감(개정 26): at이 화면 안이면 흔들림 amp m(지금 흔들림보다 셀 때만 덮는다, KICK_AMP_MAX까지)과
+## 히트스톱 stop초(게임 시간을 STOP_SCALE배로 — 실제 시간 기준, STOP_GAP초에 한 번). 흔들림 설정(fx_shake)을 끄면 둘 다 없다.
+func kick(at: Vector3, amp: float, stop := 0.0) -> void:
+	if not GameData.fx_shake() or not camera.is_position_in_frustum(at):
+		return
+	amp = minf(amp, KICK_AMP_MAX)
+	if _shake == null or not _shake.is_running() or amp > _shake_amp * 0.6:
+		if _shake != null:
+			_shake.kill()
+		_shake_amp = amp
+		_shake = create_tween()
+		_shake.tween_method(_shake_at.bind(amp), 1.0, 0.0, KICK_SEC).set_ease(Tween.EASE_OUT)
+		_shake.tween_callback(func(): camera.h_offset = 0.0; camera.v_offset = 0.0)
+	var now := Time.get_ticks_msec() / 1000.0
+	if stop > 0.0 and not _stopping and now - _stop_at >= STOP_GAP and Engine.time_scale > STOP_SCALE:
+		_stop_at = now
+		_stopping = true
+		var was := Engine.time_scale
+		Engine.time_scale = was * STOP_SCALE
+		get_tree().create_timer(minf(stop, STOP_MAX), true, false, true).timeout.connect(Callable(get_script(), "_unstop").bind(was))
+
+
+static func _unstop(was: float) -> void:
+	_stopping = false
+	Engine.time_scale = was
 
 
 func is_shaking() -> bool:
