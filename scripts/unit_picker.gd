@@ -244,7 +244,7 @@ func _hero_at(screen_pos: Vector2, radius_px: float):
 	var best = null
 	var best_d := radius_px
 	for h in get_tree().get_nodes_in_group("heroes"):
-		if not h.is_alive():
+		if not h.is_alive() or h.get("mine") == false:  # 공성전: 다른 길드원 영웅은 고를 수 없다
 			continue
 		var d := camera.unproject_position(h.global_position + Vector3(0, 0.8, 0)).distance_to(screen_pos)
 		if d <= best_d:

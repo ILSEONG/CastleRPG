@@ -66,6 +66,7 @@ static var _meshes := {}  # "종류#색" -> [[메시, 관절 위치, 재질 0 = 
 
 var kind := "wolf"
 var owner_hero
+var foes := "monsters"  # 표적 그룹 = 주인의 적 그룹
 var castle
 var dmg := 0.0
 var life := 0.0  # 남은 초
@@ -111,6 +112,8 @@ func setup(p_owner, p_kind: String, p_dmg: float, sec: float, p_color: Color) ->
 	life = sec
 	color = p_color
 	castle = p_owner.get("castle") if is_instance_valid(p_owner) else null
+	if is_instance_valid(p_owner) and p_owner.get("foes") != null:
+		foes = p_owner.foes  # 공성전 수비 영웅의 소환수는 영웅을 친다
 	var s: Array = STATS[kind]
 	_speed = s[0]
 	_interval = s[1]
@@ -230,7 +233,7 @@ func _find_target():
 	var inside := check_region and Formation.is_inside(castle.half, here)
 	var best = null
 	var best_d := reach
-	for m in get_tree().get_nodes_in_group("monsters"):
+	for m in get_tree().get_nodes_in_group(foes):
 		var mp: Vector3 = m.global_position
 		var d := Vector2(mp.x - here.x, mp.z - here.z).length()
 		if d > best_d or not m.is_alive():

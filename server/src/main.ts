@@ -6,6 +6,7 @@ import { readEnv } from './env.ts'
 import { enabledProviders } from './oauth.ts'
 import type { OAuthConfig } from './oauth.ts'
 import { planningEmpty, seed } from './seed.ts'
+import { WarLive } from './war_live.ts'
 
 let cfg: ReturnType<typeof readEnv>
 try {
@@ -35,11 +36,13 @@ const envOauth: OAuthConfig = {
 }
 const oauth = cfg.allowTestHooks && enabledProviders(envOauth).length === 0 ? undefined : envOauth
 console.log(`[server] social login: ${oauth ? enabledProviders(oauth).join(', ') || 'off' : 'test providers (ALLOW_TEST_HOOKS)'}${oauth?.redirectBase ? ` (callbacks under ${oauth.redirectBase})` : ''}`)
-const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth })
+const warLive = new WarLive() // 공성전 실시간 방(WebSocket /v1/guild/war/live)
+const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)
 })
+warLive.attach(server as import('node:http').Server)
 
 // 자기 깨우기: 공개 주소로 들어오는 요청이어야 호스팅이 "활동"으로 센다(Render 무료 인스턴스 15분 규칙). 실패해도 경고만.
 if (cfg.keepAliveMin > 0) {
@@ -52,6 +55,7 @@ let stopping = false
 async function stop() {
   if (stopping) return
   stopping = true
+  warLive.close()
   server.close()
   await db.close()
   process.exit(0)

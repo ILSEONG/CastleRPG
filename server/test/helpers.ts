@@ -36,10 +36,12 @@ export function barrier() {
   return { wrap, arm: () => (armed = true), arrived: () => arrived }
 }
 
-export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number; oauth?: AppOptions['oauth']; fetch?: typeof fetch } = {}): Promise<Setup> {
+export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number; oauth?: AppOptions['oauth']; fetch?: typeof fetch; tutorial?: boolean } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)
   await seed(db)
+  // 새 플레이어 튜토리얼(공터에서 시작)은 퀘스트 테스트만 켠다 — 나머지 테스트는 건물이 다 지어진 새 플레이어를 가정한다
+  if (!o.tutorial) await db.query("update game_config set value = '0' where key = 'tutorial_new_players'")
   const clock = { t: T0 }
   const makeApp = (extra: Partial<AppOptions> = {}) => createApp({
     query: o.wrapQuery ? o.wrapQuery(db.query) : db.query,

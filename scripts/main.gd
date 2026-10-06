@@ -177,6 +177,11 @@ func _build_world() -> void:
 	add_child(dungeon_panel)
 	var guild_panel = preload("res://scripts/guild_panel.gd").new()  # 길드 시트
 	add_child(guild_panel)
+	var ranking_panel = preload("res://scripts/ranking_panel.gd").new()  # 랭킹 시트(온라인): HUD 트로피 버튼이 연다
+	add_child(ranking_panel)
+	var ranking_button = preload("res://scripts/ranking_button.gd").new()
+	ranking_button.panel = ranking_panel
+	add_child(ranking_button)
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·길드(상인은 NPC 탭)
 	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "guild": guild_panel}
 	add_child(tabs)
@@ -200,6 +205,8 @@ func _build_world() -> void:
 	Economy.building_done.connect(_on_building_done)
 	Economy.research_done.connect(_on_research_done)
 	Economy.dungeon_started.connect(_on_dungeon_started)
+	Guild.boss_started.connect(_on_guild_boss_started)
+	GuildWar.battle_started.connect(_on_guild_war_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
 		_connect_dev_log()  # 람다(오토로드 시그널)라 다시 만든 월드에서 또 붙이면 두 번 찍힌다
@@ -275,8 +282,20 @@ func _on_dungeon_started(run: Dictionary) -> void:
 		_enter_dungeon.call_deferred(run)  # 버튼 입력 처리 중에 트리를 바꾸지 않게
 
 
-func _enter_dungeon(run: Dictionary) -> void:
-	var d = preload("res://scripts/dungeon.gd").new()
+## 길드 보스 실제 전투(Guild.boss_started): 던전과 같은 자리에 드래곤 전투 장면(guild_boss.gd)을 붙인다.
+func _on_guild_boss_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run, preload("res://scripts/guild_boss.gd"))
+
+
+## 길드전 공성 전투(GuildWar.battle_started): 같은 자리에 공성 전투 장면(war_battle.gd)을 붙인다.
+func _on_guild_war_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run, preload("res://scripts/war_battle.gd"))
+
+
+func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scripts/dungeon.gd")) -> void:
+	var d = scene_script.new()
 	d.run = run
 	d.main = self
 	if _dungeon != null:  # 결과 화면에서 다음 도전: 던전 장면만 새로

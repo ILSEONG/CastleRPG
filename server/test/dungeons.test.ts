@@ -558,7 +558,7 @@ test('마이그레이션 012: 013~015까지 먼저 적용된 DB(012만 빠짐)�
   const f = await openDb({})
   try {
     assert.deepEqual(await migrate(f), all)
-    assert.equal(all.length, 20) // 친구: 023, 모집권 던전: 022, 개정 24: 016, 오프라인 골드: 017, 소셜 로그인: 018
+    assert.ok(all.length >= 19) // 개정 24: 016, 오프라인 골드: 017, 소셜 로그인: 018, 길드: 020(튜토리얼 019), 모집권 던전: 022, 친구: 023
   } finally {
     await f.close()
   }

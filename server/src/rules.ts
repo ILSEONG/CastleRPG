@@ -305,6 +305,7 @@ export function trimDeploy(deploy: Record<string, number>, owned: Record<string,
 
 export const GACHA_GOLD = 'gold'
 export const GACHA_DIA = 'diamond'
+export const GACHA_TICKET = 'ticket' // 다이아 모집권(튜토리얼 보상): 다이아 모집 1회 = 1장
 export const GACHA_CURRENCIES = [GACHA_GOLD, GACHA_DIA]
 export const GOLD_COST_STEP = 50 // 골드 1회 비용 반올림 단위(스펙 예시 3,450·5,250·10,550과 맞는 값)
 
@@ -795,3 +796,56 @@ export const researchDiaCost = (config: Config, finish: number, now: number) =>
 
 // 자원 생산 % = 그 자원 % + res_pct(pendingAmount의 pct).
 export const researchProdPct = (bonus: Record<string, number>, resId: string) => (bonus[`${resId}_pct`] ?? 0) + bonus.res_pct
+
+// --- 튜토리얼·반복 퀘스트(data/quests.csv) — 앱 tutorial.gd의 보상 규칙을 표로 옮긴 것 ---
+
+export const QUEST_TYPES = ['tutorial', 'repeat']
+export const TUT_STATES = ['active', 'done', 'skipped']
+// 보상 키: 자원(BUILD_RES)·gold·diamonds·tickets(다이아 모집권)·keys_<던전 종류>
+export const QUEST_REWARD_KEYS = [...BUILD_RES, 'gold', 'diamonds', 'tickets', ...DUNGEON_TYPES.map((t) => `keys_${t}`)]
+export const TUTORIAL_START_BUILT = [KEEP, GATE] // 새 플레이어(튜토리얼)에 지어져 있는 건물 — 나머지는 공터
+
+export interface QuestDef {
+  id: string
+  type: string
+  needs: string | null
+  reward: string | null
+  fixed: string | null
+}
+
+// "키:수|…" → {키: 수}(빈칸·null이면 {}). 모르는 키·중복·음수·정수 아님이면 null.
+export function parseReward(text: string | null | undefined): Record<string, number> | null {
+  const out: Record<string, number> = {}
+  if (text == null || String(text).trim() === '') return out
+  for (const part of String(text).split('|')) {
+    const m = /^\s*([a-z_]+)\s*:\s*(\d+)\s*$/.exec(part)
+    if (!m || !QUEST_REWARD_KEYS.includes(m[1]) || Object.hasOwn(out, m[1])) return null
+    out[m[1]] = Number(m[2])
+  }
+  return out
+}
+
+// needs 형식: 빈칸 | build:<건물> | level:<건물>:<Lv ≥ 1>. 아니면 null, 맞으면 {kind, building, level}.
+export function parseNeeds(text: string | null | undefined): { kind: string; building: string; level: number } | null | undefined {
+  if (text == null || String(text).trim() === '') return undefined
+  const b = /^build:([a-z_]+)$/.exec(String(text).trim())
+  if (b) return { kind: 'build', building: b[1], level: 1 }
+  const l = /^level:([a-z_]+):(\d+)$/.exec(String(text).trim())
+  if (l && Number(l[2]) >= 1) return { kind: 'level', building: l[1], level: Number(l[2]) }
+  return null
+}
+
+// 반복 퀘스트 n(0부터)의 정의·바퀴: 표의 repeat 행을 순서대로 돈다. 바퀴 c = floor(n / 행 수).
+export function repeatQuest(defs: QuestDef[], n: number): { def: QuestDef; cycle: number } | null {
+  const rows = defs.filter((d) => d.type === 'repeat')
+  if (!rows.length) return null
+  return { def: rows[n % rows.length], cycle: Math.floor(n / rows.length) }
+}
+
+// 반복 퀘스트 보상 = reward × (1 + 바퀴) + fixed(앱 Tutorial.repeat_reward와 같다).
+export function repeatReward(def: QuestDef, cycle: number): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(parseReward(def.reward) ?? {})) out[k] = v * (1 + cycle)
+  for (const [k, v] of Object.entries(parseReward(def.fixed) ?? {})) out[k] = (out[k] ?? 0) + v
+  return out
+}

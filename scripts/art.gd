@@ -250,7 +250,7 @@ const MONSTER_MODELS := {
 		"weapon": PROP_DIR + "Skeleton_Axe.gltf",
 		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
 	},
-	# 성 방어 적 모습(GameData.enemy_look — 라운드 묶음마다 바뀐다). 능력치·골드는 grunt 그대로, 생김새만 다르다.
+	# 성 방어 적 모습(GameData.enemy_look — 라운드 묶음마다 바뀐다). 능력치·골드는 grunt 그대로, 생김새만 다르다. 던전 적은 쓰지 않는다.
 	"skeleton_warrior": {
 		"scene": CHAR_DIR + "Skeleton_Warrior.glb",
 		"hide": [],
@@ -273,6 +273,78 @@ const MONSTER_MODELS := {
 		"look": "enemy_orc",  # 칸 색(Barbarian: shirt 8·sleeve 9·leather 6·fur 7) — 갈색 가죽·검은 털
 		"palette": {8: Color("5A3A24"), 9: Color("4A3020"), 6: Color("3A2618"), 7: Color("2E2A26")},
 		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	# 성 방어 보스 모습(GameData.boss_look) — 능력치는 epic_boss 그대로.
+	"orc_chief": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],  # 양손 도끼·뿔 투구·망토
+		"tint": {"Barbarian_Head": KING_TINT, "Barbarian_ArmLeft": KING_TINT, "Barbarian_ArmRight": KING_TINT, "Barbarian_Cape": Color(0.45, 0.16, 0.14)},
+		"look": "enemy_orc_chief",
+		"palette": {8: Color("3A2A20"), 9: Color("2E2018"), 6: Color("241810"), 7: Color("1E1A18")},
+		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"bandit_chief": {
+		"scene": CHAR_DIR + "Rogue_Hooded.glb",
+		"hide": ["1H_Crossbow", "2H_Crossbow", "Throwable"],  # 산적 두목: 붉은 두건·검은 옷·금 띠, 쌍단검
+		"look": "enemy_bandit_chief",
+		"palette": {9: Color("8A1E1A"), 8: Color("2B2A30"), 21: Color("3A3438"), 5: Color("C8A040"), 6: Color("C8A040"), 19: Color("241E1C")},
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "Dualwield_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	# 성 방어 전용 Meshy 몸(MESHY_ENEMY_DIR/<id>.glb, dev/meshy_enemies.py) — KayKit 뼈대·애니메이션 위에 입는다. 손 슬롯 무기만 남긴다.
+	"zombie": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"],  # 맨손
+		"anims": {"idle": "Unarmed_Idle", "walk": "Walking_B", "attack": "Unarmed_Melee_Attack_Punch_A", "death": "Death_B"},
+	},
+	"lizardman": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Throwable"],  # 단검
+		"anims": {"idle": "Idle", "walk": "Running_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"werewolf": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],  # 발톱(맨손)
+		"anims": {"idle": "Unarmed_Idle", "walk": "Running_A", "attack": "Unarmed_Melee_Attack_Punch_B", "death": "Death_B"},
+	},
+	"imp": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["1H_Crossbow", "2H_Crossbow", "Throwable"],  # 쌍단검
+		"body_scale": 0.85,
+		"anims": {"idle": "Idle", "walk": "Running_A", "attack": "Dualwield_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"ratman": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Throwable"],
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"mushroom": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"],
+		"body_scale": 0.9,
+		"anims": {"idle": "Unarmed_Idle", "walk": "Walking_B", "attack": "Unarmed_Melee_Attack_Kick", "death": "Death_B"},
+	},
+	"frost_troll": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug"],
+		"body_scale": 1.1,
+		"anims": {"idle": "Unarmed_Idle", "walk": "Walking_A", "attack": "Unarmed_Melee_Attack_Punch_A", "death": "Death_B"},
+	},
+	"ogre_warlord": {  # 보스
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],  # 양손 도끼
+		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"demon_lord": {  # 보스
+		"scene": CHAR_DIR + "Knight.glb",
+		"hide": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword"],  # 대검
+		"body_scale": 1.15,  # 마른 몸 — 다른 보스와 키를 맞춘다
+		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Slice", "death": "Death_B"},
+		"attacks": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop"],
+	},
+	"minotaur": {  # 보스
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
+		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
 	},
 	# 개정 18 던전. tint = 메시 이름 → 곱할 색(UnitModel.dress), parts = [뼈, ArenaKit.part id] — 코드 메시를 그 뼈에 붙인다.
 	# scale = 던전 그림 크기(UnitModel은 쓰지 않는다 — 몬스터 표 scale로 넘긴다). Rogue의 Death_A(0.8초)는 CORPSE_SEC보다 짧아 Death_B.
@@ -341,7 +413,7 @@ const WEAPON_BONE := "handslot.r"
 const HIT_FRAC := {
 	"1H_Melee_Attack_Chop": 0.56, "2H_Melee_Attack_Chop": 0.52, "2H_Melee_Attack_Slice": 0.4, "Dualwield_Melee_Attack_Chop": 0.38, "Throw": 0.54,
 	"1H_Ranged_Shoot": 0.26, "2H_Ranged_Shoot": 0.26, "Spellcast_Shoot": 0.30,
-	"Unarmed_Melee_Attack_Punch_A": 0.38, "Unarmed_Melee_Attack_Punch_B": 0.42,  # 바위 골렘 주먹(주먹을 다 뻗는 순간 — 눈대중)
+	"Unarmed_Melee_Attack_Punch_A": 0.33, "Unarmed_Melee_Attack_Punch_B": 0.29, "Unarmed_Melee_Attack_Kick": 0.38,  # 성 적·바위 골렘 맨손(주먹·발 가장 빠른~가장 앞)
 }
 const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 돌려 길이 ≤ 간격 × 이 값
 

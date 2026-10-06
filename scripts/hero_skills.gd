@@ -177,7 +177,7 @@ func _scan_auras() -> void:
 	_haste_aura = 0.0
 	_guard_aura = 0.0
 	_regen_aura = 0.0
-	for o in h.get_tree().get_nodes_in_group("heroes"):
+	for o in h.get_tree().get_nodes_in_group(h.allies):
 		if not o.is_alive():
 			continue
 		var os: Dictionary = o._sk
@@ -633,14 +633,14 @@ func _cast(k: String, dry := false) -> bool:
 				return false
 			if dry:
 				return true
-			for o in h.get_tree().get_nodes_in_group("heroes"):
+			for o in h.get_tree().get_nodes_in_group(h.allies):
 				if o.is_alive():
 					o.heal(o.hp_max * float(p[1]) / 100.0)
 					Fx.heal_ring(_world(), o.global_position, 1.2, 0)
 					Fx.heal_cross(o)
 		"resurrection":
 			var dead = null
-			for o in h.get_tree().get_nodes_in_group("heroes"):
+			for o in h.get_tree().get_nodes_in_group(h.allies):
 				if not o.is_alive() and o.has_method("revive") and o.is_inside_tree():
 					dead = o
 					break
@@ -654,7 +654,7 @@ func _cast(k: String, dry := false) -> bool:
 				return false
 			if dry:
 				return true
-			for o in h.get_tree().get_nodes_in_group("heroes"):
+			for o in h.get_tree().get_nodes_in_group(h.allies):
 				if o.is_alive() and o.get("_skx") != null:
 					o._skx.add_hymn(float(p[1]), float(p[2]))
 		"shield_ally":
@@ -806,7 +806,7 @@ func _combat_target():
 	var t = h._target
 	if t == null or not is_instance_valid(t) or not t.is_alive():
 		return null
-	return t if Formation.flat_distance(h.global_position, t.global_position) <= float(h.def.range) + 0.5 else null
+	return t if Formation.flat_distance(h.global_position, t.global_position) <= h._reach(t) + 0.5 else null
 
 
 ## 발동 사거리: 원거리는 사거리, 근접은 aggro.
@@ -841,7 +841,7 @@ func _weakest_ally(r: float):
 
 func _hurt_allies(at: Vector3, r: float) -> Array:
 	var out := []
-	for o in h.get_tree().get_nodes_in_group("heroes"):
+	for o in h.get_tree().get_nodes_in_group(h.allies):
 		if o.is_alive() and o.hp < o.hp_max and Formation.flat_distance(at, o.global_position) <= r:
 			out.append(o)
 	return out
@@ -849,10 +849,11 @@ func _hurt_allies(at: Vector3, r: float) -> Array:
 
 func _near_monsters(at: Vector3, r: float, exclude = null) -> Array:
 	var out := []
-	for m in h.get_tree().get_nodes_in_group("monsters"):
+	for m in h.get_tree().get_nodes_in_group(h.foes):
 		if m != exclude and m.is_alive():
 			var mp: Vector3 = m.global_position
-			if Vector2(mp.x - at.x, mp.z - at.z).length() <= r:
+			var d := Vector2(mp.x - at.x, mp.z - at.z).length()
+			if d <= r or d <= r + m.hit_radius():  # 큰 보스(드래곤)는 몸 바깥이 범위에 닿으면
 				out.append(m)
 	return out
 
@@ -860,7 +861,7 @@ func _near_monsters(at: Vector3, r: float, exclude = null) -> Array:
 ## from에서 dir로 길이 length, 폭 width(양쪽 width/2) 띠 안의 적.
 func _line_monsters(from: Vector3, dir: Vector3, length: float, width: float, exclude = null) -> Array:
 	var out := []
-	for m in h.get_tree().get_nodes_in_group("monsters"):
+	for m in h.get_tree().get_nodes_in_group(h.foes):
 		if m == exclude or not m.is_alive():
 			continue
 		var v := _flat(m.global_position - from)
@@ -873,7 +874,7 @@ func _line_monsters(from: Vector3, dir: Vector3, length: float, width: float, ex
 ## from에서 dir 쪽 반각 half 부채꼴, 길이 length 안의 적.
 func _cone_monsters(from: Vector3, dir: Vector3, length: float, half: float) -> Array:
 	var out := []
-	for m in h.get_tree().get_nodes_in_group("monsters"):
+	for m in h.get_tree().get_nodes_in_group(h.foes):
 		if not m.is_alive():
 			continue
 		var v := _flat(m.global_position - from)
