@@ -4040,7 +4040,7 @@ func test_hero_look_builder() -> void:
 ## Meshy 몸(docs/meshy-assets.md, Art.MESHY_HERO_DIR): 파일이 있는 영웅만 spec.body = 그 파일이고 부품은 손 부품만(머리·가슴 장식은 몸에 있다).
 ## 입히면 KayKit 몸(손 슬롯 밖 메시 전부)은 숨고 스켈레톤 아래 MESHY_BODY 하나가 보인다 — KayKit 몸과 같은 Skin·변환(같은 뼈 번호),
 ## 삼각형 5천 이하, 칸 색표 없이 자기 텍스처, 무기(gear)는 그대로. 파일의 Skin bind도 KayKit과 같다(이름·뼈·자세). 영웅 전원이 Meshy 몸. 끄면 KayKit 생김새.
-## 2026-10-06: 영웅·보스 평타 모션은 3가지 이상(모델에 있고 타격 비율이 있다), 무작위로 고르되 바로 앞 것은 다시 고르지 않는다.
+## 2026-10-06: 근접 영웅·보스 평타 모션은 3가지 이상(원거리 영웅은 하나)(모델에 있고 타격 비율이 있다), 무작위로 고르되 바로 앞 것은 다시 고르지 않는다.
 ## 병사·일반 몬스터는 하나(골렘 조각은 둘 그대로). 보스는 휘두르던 모션이 끝날 때까지 is_busy.
 func test_attack_sets() -> void:
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
@@ -4057,14 +4057,11 @@ func test_attack_sets() -> void:
 			var m := Art.instance(spec.scene)
 			players[spec.scene] = [m, m.find_children("*", "AnimationPlayer", true, false)[0]]
 		var ap: AnimationPlayer = players[spec.scene][1]
-		Art.add_cuts(ap, list)
-		var ok: bool = list.size() >= 3 and (key.begins_with("boss:") or list[0] == spec.anims.attack)
+		var ranged: bool = key.begins_with("hero:") and GameData.hero(key.substr(5)).role == "ranged"
+		var ok: bool = (list == [spec.anims.attack] if ranged else list.size() >= 3 and (key.begins_with("boss:") or list[0] == spec.anims.attack))
 		for a in list:
 			ok = ok and ap.has_animation(a) and Art.HIT_FRAC.has(a) and ap.get_animation(a).loop_mode == Animation.LOOP_NONE
-		check(ok, "%s: 3+ attack motions in the model with hit timing %s" % [key, list])
-	var hooded: AnimationPlayer = players[Art.CHAR_DIR + "Rogue_Hooded.glb"][1]
-	check(hooded.has_animation("2H_Ranged_Snap") and absf(hooded.get_animation("2H_Ranged_Snap").length - hooded.get_animation("2H_Ranged_Shooting").length * 0.25) < 0.001,
-		"snap shot = a quarter of the rapid-fire loop")
+		check(ok, "%s: 3+ attack motions (ranged heroes: one) in the model with hit timing %s" % [key, list])
 	for s in players:
 		players[s][0].free()
 	check(not Art.soldier_spec("infantry", "Knight").has("attacks") and not Art.monster_spec("grunt").has("attacks"), "soldiers and regular monsters keep one attack")

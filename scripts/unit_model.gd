@@ -67,7 +67,6 @@ func _ready() -> void:
 	if crowd_lod:
 		for mi in model.find_children("*", "MeshInstance3D", true, false):
 			_meshes.append([mi, mi.cast_shadow])
-	Art.add_cuts(_anim, _spec.get("attacks", []))
 	for anim_name in [_spec.anims.idle, _spec.anims.walk]:
 		_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR  # 공유 리소스라 한 번 바꾸면 전부 적용
 	_anim.animation_finished.connect(_on_finished)
@@ -119,7 +118,7 @@ func play_walk() -> void:
 
 
 ## 공격 때마다 처음부터. 끝나면 대기로 돌아간다. 공격 간격 interval보다 길면 길이 ≤ 간격 × ATTACK_FIT가 되게 빨리 돈다.
-## 스펙에 "attacks"(모션 이름 목록 — 영웅 Art.ATTACK_SETS, 보스 MONSTER_MODELS)가 있으면 공격마다 그중 하나를 무작위로, 바로 앞 것은 빼고 고른다
+## 스펙에 "attacks"(모션 이름 목록 — 근접 영웅 Art.ATTACK_SETS, 보스 MONSTER_MODELS)가 있으면 공격마다 그중 하나를 무작위로, 바로 앞 것은 빼고 고른다
 ## (2026-10-06 — 개정 26의 차례 돌기 대신). 반환 = 타격(발사) 순간까지 초(길이 × HIT_FRAC ÷ 속도).
 func play_attack(interval: float) -> float:
 	var list: Array = _spec.get("attacks", [_spec.anims.attack])
