@@ -769,11 +769,11 @@ func _levelup_case() -> void:
 	await _frames(1)
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	var dorik = live.filter(func(h): return h.index == slot)[0]
-	var mult := (1.0 + 0.0315 * 9) * 2.25  # 도릭은 근접(hero_level_stat_melee)
+	var mult := (1.0 + 0.0315 * 9) * 1.69  # 도릭은 근접(hero_level_stat_melee)
 	var others_kept := live.filter(func(h): return h.index != slot).all(func(h): return before.has(h))
 	_check(ok and Economy.level_of("dorik") == 10 and dorik.def.id == "dorik" and not before.has(dorik) and others_kept
 		and is_equal_approx(dorik.hp_max, 396.0 * mult) and is_equal_approx(dorik.atk, 23.0 * mult) and is_equal_approx(dorik.hp, dorik.hp_max),
-		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.0315 x 9, melee) x 1.5^2 (promotion 2)",
+		"(L) a level-up in idle mode rebuilds only that hero with HP/atk = base x (1 + 0.0315 x 9, melee) x 1.3^2 (promotion 2)",
 		"ok=%s hp=%.2f atk=%.2f kept=%s" % [ok, dorik.hp_max, dorik.atk, others_kept])
 	for h in live:
 		h.set_process(h == dorik)
@@ -2170,9 +2170,9 @@ func _boss_slayer_case() -> void:
 		m.queue_free()
 		await _frames(1)
 	var plain: float = hits.grunt
-	_check(plain > 0.0 and is_equal_approx(hits.goblin, plain) and ["epic_boss", "goblin_king", "death_knight"].all(func(k): return is_equal_approx(hits[k], plain * 1.5))
+	_check(plain > 0.0 and is_equal_approx(hits.goblin, plain) and ["epic_boss", "goblin_king", "death_knight"].all(func(k): return is_equal_approx(hits[k], plain / 1.1 * 1.5))
 		and flags == {"grunt": false, "epic_boss": true, "goblin": false, "goblin_king": true, "death_knight": true},
-		"(BS) boss_slayer +50% hits every boss (epic boss, goblin king, death knight via is_boss) and no normal enemy (grunt, goblin)", "hits=%s is_boss=%s" % [hits, flags])
+		"(BS) boss_slayer +50% hits every boss (epic boss, goblin king, death knight via is_boss), normal enemies (grunt, goblin) get a fifth (+10%)", "hits=%s is_boss=%s" % [hits, flags])
 	_remove_hero(h)
 	for x in get_tree().get_nodes_in_group("heroes"):
 		x.set_process(true)

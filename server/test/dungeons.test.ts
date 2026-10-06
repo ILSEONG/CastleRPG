@@ -100,13 +100,13 @@ test('보상·적 능력치·장비 능력치·판매 값: 골드 = round(4000 �
   assert.deepEqual(dk.map((e) => [e.kind, e.count, e.scale]), [['death_knight', 1, 2.2]])
   assert.ok(Math.abs(dk[0].hp - 6900) < 1e-9 && Math.abs(dk[0].atk - 67.2) < 1e-9, JSON.stringify(dk[0]))
   const st = (slot: string, grade: string, level: number) => R.itemStats({ slot, weapon_kind: slot === 'weapon' ? 'sword' : null, grade, level })
-  assert.deepEqual(st('weapon', 'N', 1), { hp: 0, atk: 12, speed_pct: 0 })
-  assert.deepEqual(st('weapon', 'SR', 3), { hp: 0, atk: 40, speed_pct: 0 }) // 18 × 2.2 = 39.6
-  assert.deepEqual(st('gloves', 'R', 1), { hp: 0, atk: 8, speed_pct: 0 }) // 7.5 → 8
-  assert.deepEqual(st('gloves', 'N', 2), { hp: 0, atk: 6, speed_pct: 0 }) // 6.2
-  assert.deepEqual(st('shoes', 'LR', 1), { hp: 260, atk: 0, speed_pct: 3 })
-  assert.deepEqual(st('shoes', 'N', 9), { hp: 120, atk: 0, speed_pct: 3 })
-  assert.deepEqual([st('top', 'UR', 5).hp, st('bottom', 'N', 1).hp, st('hat', 'SSR', 10).hp, st('pauldron', 'R', 2).hp], [736, 80, 506, 93])
+  assert.deepEqual(st('weapon', 'N', 1), { hp: 0, atk: 6, speed_pct: 0 })
+  assert.deepEqual(st('weapon', 'SR', 3), { hp: 0, atk: 20, speed_pct: 0 }) // 9 × 2.2 = 19.8
+  assert.deepEqual(st('gloves', 'R', 1), { hp: 0, atk: 4, speed_pct: 0 }) // 3.75 → 4
+  assert.deepEqual(st('gloves', 'N', 2), { hp: 0, atk: 3, speed_pct: 0 }) // 3.1
+  assert.deepEqual(st('shoes', 'LR', 1), { hp: 130, atk: 0, speed_pct: 3 })
+  assert.deepEqual(st('shoes', 'N', 9), { hp: 60, atk: 0, speed_pct: 3 })
+  assert.deepEqual([st('top', 'UR', 5).hp, st('bottom', 'N', 1).hp, st('hat', 'SSR', 10).hp, st('pauldron', 'R', 2).hp], [368, 40, 253, 47])
   assert.deepEqual([['N', 1], ['SR', 3], ['LR', 7]].map(([gr, n]) => R.itemSellValue(cfg, { slot: 'hat', weapon_kind: null, grade: gr as string, level: n as number })), [10, 66, 455])
 })
 

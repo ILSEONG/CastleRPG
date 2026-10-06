@@ -362,7 +362,7 @@ test('마이그레이션 011: 010까지 적용된 DB의 heroes에 skill3·s3a..s
     assert.deepEqual(cfg.map((r) => `${r.key}=${r.value}`), ['skill2_unlock_star=3', 'skill3_unlock_star=5'])
     await seed(d)
     const rows = await d.query("select id, skill3, s3a, s3b from heroes where id in ('seraphine', 'bron', 'hans') order by id")
-    assert.deepEqual(rows, [{ id: 'bron', skill3: 'stoneskin', s3a: 2, s3b: null }, { id: 'hans', skill3: null, s3a: null, s3b: null },
+    assert.deepEqual(rows, [{ id: 'bron', skill3: 'stoneskin', s3a: 25, s3b: null }, { id: 'hans', skill3: null, s3a: null, s3b: null },
       { id: 'seraphine', skill3: 'frost_nova', s3a: 10, s3b: 4 }])
   } finally {
     await d.close()
@@ -388,7 +388,7 @@ test('영웅 스킬 검증(개정 17): 등급별 개수(SSR·SR 3, R 2, skill1�
     return heroes.replace(from, to)
   }
   const withCfg = (key: string, value: string) => cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`)
-  await fails(hero(',taunt,10,5,3,stoneskin,2,,,', ',taunt,10,5,3,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
+  await fails(hero(',taunt,10,5,3,stoneskin,25,,,', ',taunt,10,5,3,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
   await fails(hero(',dmg_reduce,10,,,,,,,', ',dmg_reduce,10,,,haste,10,,,'), cfg, /line 19 column 'skill3': R heroes have exactly 2 skills/) // 한스
   await fails(hero(',sanctuary,9,5,4,guard_aura,6,15,,', ',sanctuary,9,5,4,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
   await fails(hero(',holy_smite,8,250,50,', ',warp,8,250,50,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'warp'/)

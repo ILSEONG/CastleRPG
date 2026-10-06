@@ -7,11 +7,11 @@ seraphine,세라핀,서리 마녀,SSR,ranged,caster,Mage,1H_Wand,#7FC8F0,396,44,
 kyle,카일,그림자 암살자,SSR,melee,assassin,Rogue,Knife|Knife_Offhand,#5A4E7A,576,61,1.8,0.64,7,9,bleed_hit,40,30,3,execute,30,100,,shadow_strike,6,300,,그림자에서 나타나 피를 흘리게 하고 약해진 적을 확실히 끝낸다
 baldur,발두르,철벽 수문장,SSR,melee,tank,Knight,1H_Sword|Spike_Shield,#8C9AA8,936,32,1.8,0.8,5,8,gate_repair,8,3,,thorns,30,,,fortify,25,,,성문을 수리하며 버티고 때린 자에게 가시로 되갚는다
 lumina,루미나,성녀,SSR,ranged,support,Mage,Spellbook_open,#F7E9A0,440,24,9,1.0,6,12,heal_aura,4,8,6,atk_aura,8,15,,resurrection,25,40,,기도로 아군을 치유하고 쓰러진 동료를 다시 일으킨다
-harald,하랄드,용사냥꾼,SSR,melee,bruiser,Barbarian,2H_Axe,#C0392B,792,45,1.8,0.8,6,8,boss_slayer,150,,,heavy_blow,4,250,1.5,armor_break,30,25,4,거대한 적일수록 눈을 빛내며 갑옷째 부수는 전설의 사냥꾼
+harald,하랄드,용사냥꾼,SSR,melee,bruiser,Barbarian,2H_Axe,#C0392B,792,45,1.8,0.8,6,8,boss_slayer,150,,,heavy_blow,4,250,0.5,armor_break,30,25,4,거대한 적일수록 눈을 빛내며 갑옷째 부수는 전설의 사냥꾼
 nev,네브,천둥 궁수,SSR,ranged,marksman,Rogue_Hooded,1H_Crossbow,#F1C40F,440,40,11,1.0,6,12,sky_bolt,6,3,150,shock_hit,25,80,,thunder_storm,10,4,120,하늘의 천둥을 불러 적진에 벼락을 내리꽂는다
-bron,브론,방패병 대장,SR,melee,tank,Knight,1H_Sword|Rectangle_Shield,#7F8C8D,655,22,1.8,0.8,5,8,block,30,50,,taunt,10,5,3,stoneskin,2,,,큰 방패로 적을 끌어모아 공격을 받아내는 노련한 대장
+bron,브론,방패병 대장,SR,melee,tank,Knight,1H_Sword|Rectangle_Shield,#7F8C8D,655,22,1.8,0.8,5,8,block,30,50,,taunt,10,5,3,stoneskin,25,,,큰 방패로 적을 끌어모아 공격을 받아내는 노련한 대장
 mira,미라,독화살 사냥꾼,SR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#6B8E23,308,28,11,1.0,6,12,poison_cloud,9,3,25,root_hit,20,1.2,,hunter_mark,15,4,,독구름과 덫으로 사냥감을 묶어 서서히 쓰러뜨린다
-torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,504,19,1.8,0.8,6,8,regen_aura,6,2,,shield,10,25,,battle_hymn,15,20,5,찬가와 보호막으로 동료를 지키며 싸우는 사제
+torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,504,19,1.8,0.8,6,8,regen_aura,6,1,,shield,10,25,,battle_hymn,15,20,5,찬가와 보호막으로 동료를 지키며 싸우는 사제
 rian,리안,쌍검사,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#48C9B0,403,43,1.8,0.64,7,9,double_strike,25,,,frenzy,8,5,,counter,30,100,,두 자루 검으로 눈보다 빠르게 베고 받아친다
 echo,에코,견습 화염술사,SR,ranged,caster,Mage,1H_Wand,#F39C12,277,31,8,1.2,6,12,burn_hit,35,20,3,pyromancy,30,,,wildfire,3,15,,아직 서툴지만 불꽃만큼은 진짜인 마법사
 gork,고르크,도끼 투척꾼,SR,ranged,bruiser,Barbarian,1H_Axe|1H_Axe_Offhand,#935116,370,28,6,1.0,6,10,ricochet,2,60,,knockback_hit,20,1.5,,brawler,8,40,,양손 도끼를 던져 튕겨 내고 몰려든 적 사이에서 더 거세진다
@@ -29,7 +29,7 @@ raven,레이븐,그림자 명궁,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#3
 gaia,가이아,숲의 대현자,SSR,ranged,support,Mage,2H_Staff,#4CAF50,440,24,9,1.0,6,12,summon_treant,16,60,12,mass_heal,12,15,,tornado,11,3,50,숲의 정령과 바람을 부려 아군을 지키는 대현자
 dante,단테,용기사,SR,melee,bruiser,Knight,2H_Sword,#B03A2E,554,32,1.8,0.8,6,8,dragon_breath,8,5,120,war_cry,12,5,30,last_stand,35,40,,용의 불길을 휘두르며 함성으로 적을 위축시키는 기사
 kaz,카즈,떠돌이 기계공,SR,ranged,marksman,Rogue,1H_Crossbow,#C9A227,308,28,11,1.0,6,12,summon_turret,15,80,12,splash,2,40,,shockwave,9,7,120,손수 만든 포탑과 충격파 장치로 싸우는 떠돌이 기계공
-luna,루나,달빛 무희,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#B9A8FF,403,43,1.8,0.64,7,9,echo_strike,4,2.5,80,weaken_hit,25,30,3,soul_harvest,3,8,,달빛 아래 춤추듯 베며 쓰러뜨린 적의 영혼을 거둔다
+luna,루나,달빛 무희,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#B9A8FF,403,43,1.8,0.64,7,9,echo_strike,4,2.5,50,weaken_hit,25,30,3,soul_harvest,3,8,,달빛 아래 춤추듯 베며 쓰러뜨린 적의 영혼을 거둔다
 orin,오린,야수 조련사,SR,melee,bruiser,Barbarian,1H_Axe|Barbarian_Round_Shield,#6D4C2F,554,32,1.8,0.8,6,8,summon_wolf,14,50,10,regen,1,,,second_wind,30,25,20,늑대 무리와 함께 싸우며 쓰러질 듯해도 다시 일어서는 조련사
 selene,셀레네,별의 예언자,SR,ranged,caster,Mage,Spellbook_open,#3F51B5,277,31,8,1.2,6,12,starfall,9,4,90,void_rift,12,3,25,solar_flare,10,3,80,별의 운행을 읽어 별똥별과 공허를 불러내는 예언자
 pip,핍,견습 정령술사,R,ranged,caster,Mage,1H_Wand,#80DEEA,200,22,8,1.2,6,12,summon_spirit,15,50,10,ice_spikes,10,5,80,,,,,작은 정령 친구와 얼음 가시로 싸우는 견습생
