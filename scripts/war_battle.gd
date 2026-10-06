@@ -232,7 +232,8 @@ func _spawn_defender(d: Dictionary) -> void:
 	if def.is_empty() or float(d.get("ratio", 1.0)) <= 0.0:
 		return
 	var u = WarHeroScript.new()
-	u.setup_war(int(d.uid), def, 1, int(d.get("level", 1)), int(d.get("promotion", 0)), {"hp": float(d.hp), "atk": float(d.atk)})
+	u.setup_war(int(d.uid), def, 1, int(d.get("level", 1)), int(d.get("promotion", 0)),
+		{"hp": float(d.hp) * WarRules.DEF_HP_MULT, "atk": float(d.atk) * WarRules.DEF_ATK_MULT})  # 수성 보너스
 	u.owner_id = str(d.get("owner", ""))
 	u.squad = int(d.get("squad", 0))
 	u.lane = int(d.get("lane", 0))
@@ -383,8 +384,8 @@ func _process(delta: float) -> void:
 				u.set_home(u.post_pos, false)
 	if role == "host":
 		_snap_cd -= delta
-	if clock >= duration or not keep.is_alive():
-		_finish()
+	if clock >= duration or not keep.is_alive() or (_respawn.is_empty() and not _att.any(func(u): return u.is_alive())):
+		_finish()  # 시간 끝·성채 함락·공격 영웅이 모두 목숨을 다 썼다
 
 
 func _on_unit_fell(u) -> void:
@@ -395,7 +396,9 @@ func _on_unit_fell(u) -> void:
 		score_changed.emit()
 	else:
 		attacker_deaths += 1
-		_respawn.append([u, WarRules.RESPAWN_SEC])
+		u.falls += 1
+		if u.falls < WarRules.ATTACK_LIVES:
+			_respawn.append([u, WarRules.RESPAWN_SEC])
 
 
 func _on_gate_broken(g) -> void:

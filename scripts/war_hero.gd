@@ -31,6 +31,10 @@ var kind := "hero"
 var fixed_stats := {}
 var kite_cd := 0.0
 var think_cd := 0.0
+var falls := 0  # 이 전투에서 쓰러진 횟수(공격 영웅 목숨, WarRules.ATTACK_LIVES)
+var _corpse_t := 0.0  # 쓰러진 뒤 이만큼 지나면 모델을 감추고 애니메이션을 멈춘다(성능)
+
+const CORPSE_SEC := 1.8
 
 var _base_atk := 0.0
 var _base_speed := 0.0
@@ -71,6 +75,7 @@ func setup_war(p_uid: int, p_def: Dictionary, p_team: int, level: int, promotion
 
 func _ready() -> void:
 	super._ready()
+	_model.crowd_lod = true  # 영웅 160명: 붐비면 애니메이션 간헐 갱신·그림자 끔(몬스터와 같다)
 	if team == 1:
 		add_to_group("monsters")  # 공격 영웅의 표적(적 그룹) · 빨간 HP 바
 
@@ -95,6 +100,8 @@ func refresh_stats() -> void:
 
 
 func _process(delta: float) -> void:
+	if state == State.DEAD:
+		_tick_corpse(delta)
 	if puppet:
 		_puppet_tick(delta)
 		return
@@ -123,6 +130,20 @@ func _process(delta: float) -> void:
 		global_position = Vector3(before.x, global_position.y, before.z)
 	if state == State.DEAD:
 		_send_fell()
+
+
+func _tick_corpse(delta: float) -> void:
+	if _model.visible:
+		_corpse_t += delta
+		if _corpse_t >= CORPSE_SEC:
+			_model.visible = false
+			_model.set_process(false)
+
+
+func _show_body() -> void:
+	_corpse_t = 0.0
+	_model.visible = true
+	_model.set_process(true)
 
 
 func _send_fell() -> void:
@@ -255,6 +276,7 @@ func revive(pct: float) -> void:
 	super.revive(pct)
 	if was_dead and state != State.DEAD:
 		_fell_sent = false
+		_show_body()
 
 
 ## 진영에서 다시 일어난다(공격 영웅 부활).
@@ -268,6 +290,7 @@ func respawn(at: Vector3) -> void:
 	_swing = null
 	_path.clear()
 	global_position = at
+	_show_body()
 	_model.reset_pose()
 	_foot.visible = true
 	_ring.visible = selected
@@ -468,6 +491,7 @@ func puppet_apply(row: Array) -> void:
 		state = st
 		_fell_sent = false
 		global_position = _p_pos
+		_show_body()
 		_model.reset_pose()
 		_foot.visible = true
 	elif st != State.DEAD:

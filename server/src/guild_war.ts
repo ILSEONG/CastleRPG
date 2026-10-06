@@ -7,15 +7,15 @@ import { mulberry32 } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
 export const BATTLE_SEC = 600
-export const RESPAWN_SEC = 20
+export const RESPAWN_SEC = 30
 export const SQUAD = 4
 export const PTS_KILL = 1
 export const PTS_GATE = 20
 export const PTS_KEEP = 100
 export const REWARD_WIN = { coins: 300, diamonds: 100 }
 export const REWARD_LOSE = { coins: 100, diamonds: 30 }
-export const GATE_HP_SHARE = 0.5
-export const KEEP_HP_SHARE = 0.6
+export const GATE_HP_SHARE = 3.0
+export const KEEP_HP_SHARE = 6.0
 export const MIN_GATE_HP = 3000
 export const MIN_KEEP_HP = 8000
 export const ENEMY_DAY_BASE = 45 // 같은 힘의 상대가 하루에 얻는 점수(± ENEMY_DAY_SPREAD)

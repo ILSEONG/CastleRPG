@@ -221,7 +221,8 @@ static func _rules_card(p) -> void:
 	for t in ["길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.",
 			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다. 쓰러뜨린 수비 영웅과 부순 성문은 그 주 내내 그대로입니다.",
 			"점수: 수비 영웅 처치 %d · 성문 파괴 %d · 성채 함락 %d" % [WarRules.PTS_KILL, WarRules.PTS_GATE, WarRules.PTS_KEEP],
-			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다." % roundi(WarRules.RESPAWN_SEC),
+			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(전투마다 목숨 %d개). 모두 목숨을 다 쓰면 그날 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],
+			"수비 영웅은 성벽 앞에서 싸워 체력 ×%s · 공격력 ×%s 수성 보너스를 받습니다." % [str(WarRules.DEF_HP_MULT), str(WarRules.DEF_ATK_MULT)],
 			"주간 보상: 승리 길드 코인 %d · 다이아 %d / 패배 길드 코인 %d · 다이아 %d" % [WarRules.REWARD_WIN.coins, WarRules.REWARD_WIN.diamonds,
 				WarRules.REWARD_LOSE.coins, WarRules.REWARD_LOSE.diamonds]]:
 		var l = p._label("· " + t, 18, SUB, HORIZONTAL_ALIGNMENT_LEFT)
