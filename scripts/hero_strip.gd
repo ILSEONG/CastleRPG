@@ -9,13 +9,14 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 
 const FACE_MAX := 84.0
-const GAP := 8.0
+const GAP := 18.0  # 영웅 칸 사이(쿨 칸이 어느 영웅 것인지 갈리게 넉넉히)
 const SIDE := 16.0
 const BOTTOM := 10.0
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
-const SLOT_FRAC := 0.34  # 쿨 칸 지름 / 초상화 폭
+const SLOT_FRAC := 0.32  # 쿨 칸 지름 / 초상화 폭
+const SLOT_GAP := 0.0
 const READY_SEC := 0.5  # 남은 쿨이 이만큼 이하면 준비됨(조건을 기다리는 발동형은 0.5초마다 다시 본다)
 const SLOT_READY := Color(1.0, 0.8, 0.28)
 const SLOT_FILL := Color(0.55, 0.78, 1.0)
@@ -67,7 +68,7 @@ func _rebuild(hs: Array, ids: Array) -> void:
 	var vw := 720.0
 	if is_inside_tree():
 		vw = get_viewport().get_visible_rect().size.x
-	var px := minf(FACE_MAX, floorf((vw - SIDE * 2.0 - GAP * maxf(0.0, hs.size() - 1.0)) / maxf(1.0, hs.size())))
+	var px := fit_px(hs.size(), FACE_MAX, vw - SIDE * 2.0, GAP)
 	for h in hs:
 		var cell := VBoxContainer.new()
 		cell.add_theme_constant_override("separation", 4)
@@ -80,8 +81,9 @@ func _rebuild(hs: Array, ids: Array) -> void:
 		face.pressed.connect(pick.bind(h))
 		if PortraitsScript.current != null:
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(face)
+		cell.add_child(face_with_slots(face, h, px))
 		var bar := ProgressBar.new()
+		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		bar.custom_minimum_size = Vector2(px, 12)
 		bar.show_percentage = false
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -108,20 +110,46 @@ func _draw_face(c: Control, h) -> void:
 	oct.append(oct[0])
 	var on: bool = picker != null and picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
-	draw_skill_slots(c, h)
 
 
-## 초상화 아래 양 모서리 쿨 칸(".O." — 사용자 2026-10-06): 왼쪽 = 첫 액티브, 오른쪽 = 둘째 액티브(칸 순서, hero.active_slots).
-## 준비됨 = 금색 원, 쿨 도는 중 = 어두운 원에 시계 방향으로 차오르는 하늘색 + 남은 초, 승급으로 아직 잠김 = 어두운 원에 자물쇠,
-## 액티브가 하나뿐(R) = 오른쪽 자리는 비운 흐린 원(자리는 그대로). 성·던전·길드전 초상화가 함께 쓴다.
-static func draw_skill_slots(c: Control, h) -> void:
+## 초상화 양옆 쿨 칸(".O." — 사용자 2026-10-06): [왼쪽 칸][초상화][오른쪽 칸], 칸은 초상화 바깥 아래쪽(초상화를 가리지 않는다).
+## 왼쪽 = 첫 액티브, 오른쪽 = 둘째 액티브(칸 순서, hero.active_slots). 준비됨 = 금색 원, 쿨 도는 중 = 어두운 원에 시계 방향으로
+## 차오르는 하늘색 + 남은 초, 승급으로 아직 잠김 = 자물쇠, 액티브가 하나뿐(R) = 오른쪽은 흐린 빈 원(자리는 그대로).
+## 성·던전·길드전 초상화가 함께 쓴다. 칸은 초상화가 다시 그려질 때(매 프레임) 같이 다시 그린다.
+static func face_with_slots(face: Control, h, px: float) -> HBoxContainer:
+	var box := HBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", int(SLOT_GAP))
+	var d := slot_px(px)
+	var wr: WeakRef = weakref(h)  # 영웅이 먼저 사라져도(리필 때 다시 만든 영웅) 칸이 잡고 있지 않게
+	for i in 2:
+		var s := Control.new()
+		s.custom_minimum_size = Vector2(d, px)
+		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		s.draw.connect(func(): _draw_slot_at(s, wr.get_ref(), i))
+		face.draw.connect(s.queue_redraw)
+		box.add_child(s)
+	box.add_child(face)
+	box.move_child(face, 1)
+	return box
+
+
+static func slot_px(px: float) -> float:
+	return roundf(px * SLOT_FRAC)
+
+
+## n칸이 폭 width(간격 gap)에 들어가는 초상화 크기(최대 max_px). 칸 폭 = 초상화 + 쿨 칸 둘.
+static func fit_px(n: int, max_px: float, width: float, gap: float) -> float:
+	var k := maxf(1.0, float(n))
+	return minf(max_px, floorf(((width - gap * (k - 1.0)) / k - SLOT_GAP * 2.0) / (1.0 + SLOT_FRAC * 2.0)))
+
+
+static func _draw_slot_at(s: Control, h, i: int) -> void:
 	if h == null or not is_instance_valid(h) or not h.has_method("active_slots"):
 		return
 	var slots: Array = h.active_slots()
-	var r := roundf(c.size.x * SLOT_FRAC) / 2.0
-	var y := c.size.y - r - 1.0
-	_draw_slot(c, Vector2(r + 1.0, y), r, slots[0] if slots.size() > 0 else {})
-	_draw_slot(c, Vector2(c.size.x - r - 1.0, y), r, slots[1] if slots.size() > 1 else {})
+	var r := s.size.x / 2.0
+	_draw_slot(s, Vector2(r, s.size.y - r - 1.0), r - 1.0, slots[i] if slots.size() > i else {})
 
 
 static func _draw_slot(c: Control, at: Vector2, r: float, s: Dictionary) -> void:

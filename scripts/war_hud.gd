@@ -131,22 +131,24 @@ func _build_strip(root: Control) -> void:
 	col.add_child(auto_button)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", int(HeroStrip.GAP))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(row)
+	var px := HeroStrip.fit_px(battle.my_units().size(), FACE_PX, 688.0, HeroStrip.GAP)  # 화면(720) − 양옆 16
 	for h in battle.my_units():
 		var cell := VBoxContainer.new()
 		cell.add_theme_constant_override("separation", 4)
 		var face := Button.new()
 		face.flat = true
-		face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
+		face.custom_minimum_size = Vector2(px, px)
 		face.draw.connect(_draw_face.bind(face, h.def, h))
 		face.pressed.connect(_pick.bind(h))
 		if PortraitsScript.current != null:
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(face)
+		cell.add_child(HeroStrip.face_with_slots(face, h, px))  # [쿨][초상화][쿨]
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(FACE_PX, 14)
+		bar.custom_minimum_size = Vector2(px, 14)
+		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		bar.show_percentage = false
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		UiKit.apply_bar(bar, HP_GREEN)
@@ -169,7 +171,6 @@ func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	oct.append(oct[0])
 	var on: bool = h != null and battle != null and battle.picker != null and battle.picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
-	HeroStrip.draw_skill_slots(c, h)  # 아래 양 모서리 액티브 쿨 칸
 
 
 func _build_result(root: Control) -> void:

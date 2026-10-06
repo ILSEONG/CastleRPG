@@ -135,9 +135,10 @@ func _build_strip(root: Control) -> void:
 	row.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	row.offset_bottom = -20
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", int(HeroStrip.GAP))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(row)
+	var px := HeroStrip.fit_px(dungeon.heroes.size(), FACE_PX, 688.0, HeroStrip.GAP)  # 화면(720) − 양옆 16
 	for h in dungeon.heroes:
 		var cell := VBoxContainer.new()
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -145,12 +146,12 @@ func _build_strip(root: Control) -> void:
 		var face := Button.new()  # 누르면 그 영웅 선택(사용자 2026-10-06) — 그다음 바닥 탭으로 이동
 		face.flat = true
 		face.focus_mode = Control.FOCUS_NONE
-		face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
+		face.custom_minimum_size = Vector2(px, px)
 		face.draw.connect(_draw_face.bind(face, h.def, h))
 		face.pressed.connect(pick.bind(h))
 		if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(face)
+		cell.add_child(HeroStrip.face_with_slots(face, h, px))  # [쿨][초상화][쿨]
 		if h.helper:  # 모집권 던전 도우미: 피규어 위 파란 "도우미"(친구 영웅이면 "친구") 꼬리표
 			var tag := _label(h.helper_tag, 18, Color.WHITE)
 			tag.add_theme_color_override("font_outline_color", HELPER_TAG.darkened(0.4))
@@ -160,7 +161,8 @@ func _build_strip(root: Control) -> void:
 			tag.offset_top = -6
 			face.add_child(tag)
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(FACE_PX, 14)
+		bar.custom_minimum_size = Vector2(px, 14)
+		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		bar.show_percentage = false
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		UiKit.apply_bar(bar, HP_GREEN)
@@ -186,7 +188,6 @@ func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	oct.append(oct[0])
 	var on: bool = h != null and dungeon != null and dungeon.picker != null and dungeon.picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
-	HeroStrip.draw_skill_slots(c, h)  # 아래 양 모서리 액티브 쿨 칸
 
 
 func _build_result(root: Control) -> void:
