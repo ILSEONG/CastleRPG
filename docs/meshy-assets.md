@@ -28,6 +28,9 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    스킨 메시 `MeshyBody` 하나 + 1024 JPEG 텍스처. 애니메이션·무기는 넣지 않는다(게임이 KayKit 모델 것을 쓴다).
    팔을 내리거나 A자세로 나온 메시(팔 폭 ÷ 키 < 0.7이거나 팔이 아래로 처짐, `--unpose`로 강제)는 KayKit 팔을 같은 각도로 내린
    몸에 맞는 각도·크기를 찾아 그 자세에서 가중치를 옮긴 뒤 T자세로 되돌린다. 그래도 어긋나면(손이 몸통에 붙은 경우) 다시 생성한다.
+   마지막으로 발(foot·toes 뼈가 가장 센 정점)의 가운데가 KayKit 발 가운데에 오게 몸을 좌우·앞뒤로만 옮긴다(높이는 그대로).
+   몸통 기준만 쓰면 망토·화살통·배 때문에 몸이 앞뒤로 밀려 상세 화면 받침 가운데에서 벗어난다. 이미 만든 몸은
+   `python3 dev/meshy_recenter.py [<id>...]`로 같은 보정을 GLB에 바로 한다(다시 돌려도 안 움직임).
 4. 게임: `Art.hero_spec`이 `MESHY_HERO_DIR/<id>.glb`가 있으면 `spec.body`를 넣고, `UnitModel.dress`가 KayKit 몸(손 슬롯 무기 밖 메시)을
    숨긴 뒤 `MeshyBody`를 같은 Skin으로 스켈레톤에 단다. 팔레트는 무기에만, 머리·가슴 부품은 빼고 손 부품만 단다.
    `Art.meshy_bodies = false`면 KayKit 생김새. 검사: tests/run_tests.gd `test_meshy_bodies`.
