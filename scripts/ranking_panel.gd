@@ -33,6 +33,8 @@ var _failed := {}  # 보드 → 마지막 요청 실패
 
 
 func _ready() -> void:
+	Net.booted.connect(_on_booted)  # 로딩 화면이 미리 받은 보드 셋 — 열자마자 보인다(CACHE_SEC이 지나면 열 때 새로 받는다)
+	_on_booted(Net.boot)
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -117,6 +119,14 @@ func fetch(b: String) -> void:
 	_loading[b] = true
 	_failed[b] = false
 	Net.send("GET", "/v1/ranking/" + b, null, func(d): _on_data(b, d), func(): _on_fail(b))
+
+
+func _on_booted(d: Dictionary) -> void:
+	for t in SUBTABS:
+		var v = d.get("ranking_" + t[0])
+		if v is Dictionary and not _loading.get(t[0], false):
+			data[t[0]] = v
+			_got[t[0]] = Time.get_ticks_msec()
 
 
 func _on_data(b: String, d: Dictionary) -> void:

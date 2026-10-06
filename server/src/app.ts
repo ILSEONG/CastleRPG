@@ -2390,6 +2390,25 @@ export function createApp(opts: AppOptions) {
     return c.json(await ranking.board(board, key))
   })
 
+  // 로딩 화면이 한 번에 받는 창 데이터(출석·미션·친구·길드·공성전·랭킹 셋). 같은 인증으로 각 GET을 안에서 불러 그 응답 그대로 담는다 —
+  // 창이 열릴 때 따로 받던 값과 같다. 하나가 실패하면 그 칸만 null(앱은 그 창을 열 때 다시 받는다).
+  const BOOT_PARTS: Record<string, string> = {
+    attendance: '/v1/attendance', missions: '/v1/missions', friends: '/v1/friends', guild: '/v1/guild', guild_war: '/v1/guild/war',
+    ...Object.fromEntries(Rk.BOARDS.map((b) => [`ranking_${b}`, `/v1/ranking/${b}`])),
+  }
+  app.get('/v1/boot', auth, async (c) => {
+    const headers = { authorization: c.req.header('authorization') ?? '' }
+    const parts = await Promise.all(Object.entries(BOOT_PARTS).map(async ([k, path]) => {
+      try {
+        const r = await app.request(path, { headers })
+        return [k, r.ok ? await r.json() : null] as const
+      } catch {
+        return [k, null] as const
+      }
+    }))
+    return c.json({ server_now: clock(), ...Object.fromEntries(parts) })
+  })
+
   if (opts.allowTestHooks) {
     // 통합 테스트용(개정 18): 열린 run의 시작 시각을 seconds초 앞당긴다 — 즉시 승리 훅(앱 Economy.debug_win)이 타당성 검사를 지나게.
     app.post('/v1/test/dungeon_age', auth, async (c) => {
@@ -2483,6 +2502,7 @@ export function createApp(opts: AppOptions) {
       const stage = intField(await body(c), 'stage', 1, 10_000)
       const id = c.get('playerId') as string
       await query('update player_state set version = version + 1, stage = $2 where player_id = $1', [id, stage])
+      ranking.clear() // 로딩 화면(/v1/boot)이 이미 받아 캐시한 랭킹 목록을 버린다 — 체크가 바로 새 스테이지를 보게
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))

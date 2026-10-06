@@ -40,6 +40,9 @@ var cells: Array = []  # 칸 Button(테스트용)
 
 
 func _ready() -> void:
+	Net.booted.connect(_on_booted)  # 로딩 화면이 미리 받은 출석 표 — 열자마자 보인다(열 때 다시 받아 새로 고친다)
+	if Net.boot.get("attendance") is Dictionary:
+		data = Net.boot.attendance
 	_build_window(COLS * CELL.x + (COLS - 1) * GAP + 48, 12)
 	content.add_child(_title(TITLE))
 	progress = _label("", 24, SUB)
@@ -83,6 +86,13 @@ func fetch() -> void:
 	loading = true
 	failed = false
 	Net.send("GET", "/v1/attendance", null, _on_data, _on_fail)
+
+
+func _on_booted(d: Dictionary) -> void:
+	if d.get("attendance") is Dictionary and d.attendance.get("rewards") is Array:
+		data = d.attendance
+		if visible:
+			_rebuild()
 
 
 func _on_data(d: Dictionary) -> void:

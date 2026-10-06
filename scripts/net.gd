@@ -26,6 +26,7 @@ const STORAGE_TEXT := "브라우저 저장소가 꺼져 있어 진행이 저장�
 signal connected     # 끊긴 상태(또는 첫 접속 전)에서 서버에 닿았다
 signal disconnected  # 연결된 상태에서 요청이 서버에 닿지 못했다(연결 불가·시간 초과) 또는 연속 401
 signal session_lost  # 저장한 소셜 세션을 서버가 거절했다(세션은 지웠다) — 다시 로그인해야 한다
+signal booted(data: Dictionary)  # 로딩 화면 일괄 조회(/v1/boot) 응답 — 창(출석·랭킹)이 받아 둔다. 오토로드(미션·친구·길드·공성전)는 fetch_boot가 넣는다
 
 var api_base := ""  # ""이면 오프라인
 var device_path := "user://device.json"  # 테스트는 start() 전에 임시 경로로 바꾼다
@@ -41,6 +42,8 @@ var gamedata_version := ""
 var logins := 0  # 로그인 성공 횟수(테스트용)
 var requested := {}  # 경로 → 큐에 넣은 횟수(테스트용)
 var kill_seq_sent := 0  # 마지막으로 큐에 넣은 처치 묶음 번호
+var boot_state := ""  # 로딩 화면 일괄 조회: "" 안 함 · "wait" 받는 중 · "done" 받음 · "failed" 못 받음(창을 열 때 각자 받는다)
+var boot := {}  # 마지막 /v1/boot 응답
 var last_error := ""  # 마지막으로 버린 요청의 서버 오류 코드(fail 콜백이 읽는다. 답이 없었으면 "")
 
 var _http: HTTPRequest
@@ -443,6 +446,36 @@ func _on_first_player(data: Dictionary) -> void:
 func _retry_first_player() -> void:
 	_first_tries += 1
 	get_tree().create_timer(backoff(_first_tries)).timeout.connect(send.bind("GET", "/v1/player", null, _on_first_player, _retry_first_player))
+
+
+## 로딩 화면에서 창 데이터를 한 번에 받는다(GET /v1/boot — 출석·미션·친구·길드·공성전·랭킹 셋). 받으면 미션 표·친구·길드·공성전 값을
+## 넣고 booted(창이 받아 둔다). 서버가 모르거나(옛 서버 404) 실패하면 "failed" — 창은 열 때 지금처럼 각자 받는다. 로딩을 막지 않는다.
+func fetch_boot() -> void:
+	if not up or boot_state == "wait":
+		return
+	boot_state = "wait"
+	send("GET", "/v1/boot", null, _on_boot, func(): boot_state = "failed")
+
+
+func _on_boot(data: Dictionary) -> void:
+	boot = data
+	var m = data.get("missions")
+	if m is Dictionary and m.get("defs") is Array and not m.defs.is_empty():
+		Missions.defs = m.defs
+		Missions._fetched = true
+		if m.get("missions") is Dictionary:
+			Economy.server_missions = m.missions
+		Missions.changed.emit()
+	if data.get("friends") is Dictionary:
+		Economy._on_friends(data.friends)
+	var g = data.get("guild")
+	if g is Dictionary and g.has("guild"):
+		Guild._take(g.guild)
+	if data.get("guild_war") is Dictionary:
+		GuildWar._take(data.guild_war)
+		GuildWar._fetched_at = Time.get_ticks_msec() / 1000.0
+	boot_state = "done"
+	booted.emit(data)
 
 
 func _on_refreshed(data: Dictionary) -> void:

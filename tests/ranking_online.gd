@@ -38,6 +38,7 @@ func _ready() -> void:
 	_panel = _button.windows.ranking
 
 	await _request("/v1/test/stage", {"stage": 37})
+	_panel.data.clear()  # 로딩 화면이 미리 받은 보드(스테이지를 올리기 전 값)는 버리고 새로 받게
 	Guild.fetch()
 	_check(await _wait_until(func(): return Guild.recommendations().size() == 5, 10.0), "system guilds exist", "")
 	Guild.join(Guild.recommendations()[0])
