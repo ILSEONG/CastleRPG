@@ -150,6 +150,9 @@ func _ready() -> void:
 func open_building(id: String) -> void:
 	if GameData.building_def(id).is_empty():
 		return
+	if Tutorial.build_locked(id):  # 첫 건축은 그 튜토리얼 미션에서(창은 열지 않고 몇 번째 미션인지 토스트)
+		Tutorial.lock_notice.emit(Tutorial.build_lock_text(id))
+		return
 	building_id = id
 	open()
 
