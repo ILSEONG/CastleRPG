@@ -334,7 +334,7 @@ test('마이그레이션 016: 015까지 적용된 DB에 연구 표·player_resea
     const [p] = await d.query("insert into players (device_id) values ('mig-016-device-0001') returning id")
     await d.query('insert into player_state (player_id) values ($1)', [p.id])
     await d.query("insert into game_config (key, value) values ('lab_atk_per_level', '0.03'), ('research_cost_growth', '1.5')")
-    assert.deepEqual(await migrate(d), ['016_research.sql', '017_offline_gold.sql', '018_social_login.sql', '022_ticket_dungeon.sql'])
+    assert.deepEqual(await migrate(d), ['016_research.sql', '017_offline_gold.sql', '018_social_login.sql', '022_ticket_dungeon.sql', '023_friends.sql'])
     const [s] = await d.query('select research_id, research_finish from player_state where player_id = $1', [p.id])
     assert.deepEqual(s, { research_id: null, research_finish: null })
     const cfg = await d.query("select key, value from game_config where key like 'research%' or key like 'lab_%' order by key")

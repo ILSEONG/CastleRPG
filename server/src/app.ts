@@ -108,6 +108,7 @@ interface Player {
   gacha: { gold_level: number; gold_pulls: number; dia_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터
   research: Record<string, number> // 개정 24: 연구 노드 id → 레벨(0 초과만)
   research_cur: { id: string; finish: number } | null // 진행 중인 연구(끝나는 시각 = 유닉스 초), 쉬면 null
+  friends: { id: string; hero: string | null; heroes: Record<string, { level: number; promotion: number }> }[] // 친구(수락된 것만, id 순) — 대표 영웅·보유 영웅
 }
 
 interface Train {
@@ -185,7 +186,11 @@ const PLAYER_SQL = `select s.gold_tenths, s.diamonds, s.dia_tickets, s.gacha_gol
   coalesce((select json_agg(json_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind, 'grade', grade, 'level', level) order by id)
     from player_items where player_id = s.player_id), '[]'::json) as items,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
-    from player_equipment where player_id = s.player_id), '[]'::json) as equipment
+    from player_equipment where player_id = s.player_id), '[]'::json) as equipment,
+  coalesce((select json_agg(json_build_object('id', f.id, 'hero', f.friend_hero, 'heroes', coalesce((select json_object_agg(hero_id,
+      json_build_object('level', level, 'promotion', promotion)) from player_heroes where player_id = f.id and copies >= 1), '{}'::json)) order by f.id)
+    from friend_links l join players f on f.id = case when l.a = s.player_id then l.b else l.a end
+    where l.accepted and (l.a = s.player_id or l.b = s.player_id)), '[]'::json) as friends
   from player_state s where s.player_id = $1`
 
 // 개정 18: 빠진 던전 행을 그날 지급분으로 채운다($2 = 오늘 리셋 시각, $3 = [{type, keys}]).
@@ -358,6 +363,7 @@ export function createApp(opts: AppOptions) {
         gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity) },
         research: counts(json(r.research)),
         research_cur: typeof r.research_id === 'string' ? { id: r.research_id, finish: Number(r.research_finish) } : null,
+        friends: (json(r.friends) as any[]).map((f) => ({ id: String(f.id), hero: typeof f.hero === 'string' ? f.hero : null, heroes: json(f.heroes) ?? {} })),
       }
       if (p.build && p.build.finish <= now) {
         const from = level(p, p.build.id)
@@ -431,8 +437,21 @@ export function createApp(opts: AppOptions) {
   const dungeonState = (p: Player, g: Game, type: string, now: number) =>
     R.applyReset(type, p.dungeons[type] ?? { ...R.freshDungeon(type, now, g.config), ...(type === 'ticket' ? { helpers_used: [] } : {}) }, now, g.config)
 
-  // 모집권 던전 도우미 후보(친구 목록이 없어 시스템이 고른 3명 — R.helperCandidates). 오늘 쓴 영웅은 빠진다.
+  // 모집권 던전 도우미 후보: 오늘 아직 안 쓴 친구들의 빌려주는 영웅(R.lentHero, 전투력 높은 순). 그런 친구가 없으면(친구가 없거나
+  // 오늘 다 썼으면) 시스템이 고른 3명(R.helperCandidates, 오늘 쓴 영웅은 빠진다). key = 고르는 값(친구 "f:<id>", 시스템 = 영웅 id).
   function helpersOf(p: Player, g: Game, st: R.DungeonState, now: number): R.Helper[] {
+    const used = st.helpers_used ?? []
+    const friends: R.Helper[] = []
+    for (const f of p.friends) {
+      const key = `f:${f.id}`
+      const h = used.includes(key) ? null : R.lentHero(g.heroes, f.hero, f.heroes, g.config)
+      if (h) friends.push({ ...h, key, friend: { id: f.id, name: R.friendName(f.id) } })
+    }
+    if (friends.length) return friends.sort((a, b) => b.power - a.power || (a.key! < b.key! ? -1 : 1))
+    return systemHelpers(p, g, st, now).map((h) => ({ ...h, key: h.hero_id }))
+  }
+
+  function systemHelpers(p: Player, g: Game, st: R.DungeonState, now: number): R.Helper[] {
     const defs = new Map(g.heroes.map((h) => [String(h.id), h]))
     const items = new Map(p.items.map((it) => [it.id, it]))
     const owned = Object.entries(p.heroes).filter(([id, h]) => defs.has(id) && h.copies >= 1).map(([id, h]) => {
@@ -1389,7 +1408,7 @@ export function createApp(opts: AppOptions) {
     const party = b.party
     if (!Array.isArray(party) || party.some((x) => typeof x !== 'string' || x === '')) throw new ApiError(400, 'bad_party', "'party' must be an array of hero ids")
     const helperId = b.helper
-    if (type === 'ticket' && (typeof helperId !== 'string' || helperId === '')) throw new ApiError(400, 'bad_party', "'helper' must be a hero id")
+    if (type === 'ticket' && (typeof helperId !== 'string' || helperId === '')) throw new ApiError(400, 'bad_party', "'helper' must be a helper key")
     return mutate(c, (p, g, now) => {
       const st = dungeonState(p, g, type, now)
       if (lvl > st.best_level + 1) throw new ApiError(409, 'locked', `level ${lvl} is locked (best ${st.best_level})`)
@@ -1403,7 +1422,7 @@ export function createApp(opts: AppOptions) {
       let helper: R.Helper | null = null
       if (type === 'ticket') {
         if ((st.helpers_used ?? []).includes(helperId as string)) throw new ApiError(409, 'helper_used', `helper '${helperId}' was already used today`)
-        helper = helpersOf(p, g, st, now).find((h) => h.hero_id === helperId) ?? null
+        helper = helpersOf(p, g, st, now).find((h) => h.key === helperId) ?? null
         if (!helper) throw new ApiError(409, 'helper_unavailable', `helper '${helperId}' is not offered now`)
         if (party.includes(helper.hero_id)) throw new ApiError(400, 'bad_party', 'the helper hero is already in the party')
       }
@@ -1475,7 +1494,7 @@ export function createApp(opts: AppOptions) {
       } else if (type === 'ticket') {
         tickets = R.ticketReward(g.config, run.level)
         rewards.tickets = tickets
-        if (run.helper) next.helpers_used = [...(st.helpers_used ?? []), run.helper.hero_id] // 클리어에 쓴 도우미는 오늘 다시 못 쓴다
+        if (run.helper) next.helpers_used = [...(st.helpers_used ?? []), run.helper.key ?? run.helper.hero_id] // 클리어에 쓴 도우미(친구)는 오늘 다시 못 쓴다
       } else {
         if (bagFull(p, g)) throw new ApiError(409, 'bag_full', 'the item bag is full')
         items = R.rollDrops(g.equip_drop, run.level, R.cfgNum(g.config, 'equip_drop_count'), R.cfgNum(g.config, 'equip_weapon_p'), random)
@@ -1544,6 +1563,120 @@ export function createApp(opts: AppOptions) {
         reload: true,
       }
     })
+  })
+
+  // --- 친구(2026-10-06, 모집권 던전 도우미) ---
+  // 친구 한 쌍 = friend_links 한 행(a = 신청한 쪽, accepted = 수락됨). 응답(friendsView): {code(내 친구 코드), name, hero(내가 빌려주는 영웅),
+  // friends[], incoming[](받은 신청), outgoing[](보낸 신청), recommend[](추천), cap, used_today(오늘 모집권 던전에서 함께한 친구 id)}.
+  // 사람 항목 = {id, code, name, hero: {hero_id, level, promotion, power}|null, last_seen}. 쓰기 요청은 모두 새 friendsView를 돌려준다.
+  const FRIEND_HEROES_SQL = `coalesce((select json_object_agg(hero_id, json_build_object('level', level, 'promotion', promotion))
+    from player_heroes where player_id = o.id and copies >= 1), '{}'::json) as heroes`
+  const FRIEND_LINKS_SQL = `select o.id, l.a = $1 as mine, l.accepted, o.friend_hero as hero, extract(epoch from o.last_seen)::float8 as last_seen, ${FRIEND_HEROES_SQL}
+    from friend_links l join players o on o.id = case when l.a = $1 then l.b else l.a end where l.a = $1 or l.b = $1 order by l.created_at, o.id`
+  const FRIEND_RECOMMEND_SQL = `select o.id, o.friend_hero as hero, extract(epoch from o.last_seen)::float8 as last_seen, ${FRIEND_HEROES_SQL}
+    from players o where o.id <> $1 and o.last_seen >= to_timestamp($2::float8)
+      and exists (select 1 from player_heroes h where h.player_id = o.id and h.copies >= 1)
+      and not exists (select 1 from friend_links l where (l.a = $1 and l.b = o.id) or (l.a = o.id and l.b = $1))
+    order by random() limit ${R.FRIEND_RECOMMEND}`
+
+  async function friendsView(me: string) {
+    const now = clock()
+    const g = await loadGame()
+    const p = await loadPlayer(me, g, now)
+    const person = (r: any) => ({
+      id: String(r.id), code: R.friendCode(String(r.id)), name: R.friendName(String(r.id)),
+      hero: R.lentHero(g.heroes, typeof r.hero === 'string' ? r.hero : null, json(r.heroes) ?? {}, g.config), last_seen: Number(r.last_seen),
+    })
+    const links = await query(FRIEND_LINKS_SQL, [me])
+    const recommend = await query(FRIEND_RECOMMEND_SQL, [me, now - R.FRIEND_RECENT_SEC])
+    const [mine] = await query('select friend_hero from players where id = $1', [me])
+    const myHeroes: Record<string, { level: number; promotion: number }> = {}
+    for (const [id, h] of Object.entries(p.heroes)) if (h.copies >= 1) myHeroes[id] = { level: h.level, promotion: h.promotion }
+    const used = (dungeonState(p, g, 'ticket', now).helpers_used ?? []).filter((k) => k.startsWith('f:')).map((k) => k.slice(2))
+    return {
+      server_now: now, code: R.friendCode(me), name: R.friendName(me), cap: R.FRIEND_CAP,
+      hero: R.lentHero(g.heroes, mine?.friend_hero ?? null, myHeroes, g.config), hero_chosen: mine?.friend_hero ?? null,
+      friends: links.filter((r) => r.accepted).map(person), incoming: links.filter((r) => !r.accepted && !r.mine).map(person),
+      outgoing: links.filter((r) => !r.accepted && r.mine).map(person), recommend: recommend.map(person), used_today: used,
+    }
+  }
+
+  // 친구 + 보낸 신청 수(상한 검사용)
+  async function friendLoad(id: string): Promise<{ friends: number; sent: number }> {
+    const [r] = await query(`select count(*) filter (where accepted)::int as friends, count(*) filter (where not accepted and a = $1)::int as sent
+      from friend_links where a = $1 or b = $1`, [id])
+    return { friends: Number(r.friends), sent: Number(r.sent) }
+  }
+
+  async function acceptFriend(me: string, other: string) {
+    const [mine, theirs] = [await friendLoad(me), await friendLoad(other)]
+    if (mine.friends + mine.sent >= R.FRIEND_CAP) throw new ApiError(409, 'friend_full', `you already have ${R.FRIEND_CAP} friends and requests`)
+    if (theirs.friends >= R.FRIEND_CAP) throw new ApiError(409, 'their_full', 'that player has no room for friends')
+    const done = await query('update friend_links set accepted = true where a = $1 and b = $2 and not accepted returning 1', [other, me])
+    if (!done.length) throw new ApiError(404, 'no_request', 'no friend request from that player')
+  }
+
+  const friendTarget = (b: Record<string, unknown>) => {
+    if (typeof b.id === 'string' && UUID_RE.test(b.id)) return { sql: 'select id from players where id = $1', arg: b.id.toLowerCase() }
+    if (typeof b.code === 'string' && /^[0-9A-Fa-f]{8}$/.test(b.code.trim())) return { sql: 'select id from players where friend_code = $1', arg: b.code.trim().toUpperCase() }
+    throw new ApiError(400, 'bad_request', "send 'code' (8-character friend code) or 'id'")
+  }
+
+  app.get('/v1/friends', auth, async (c) => c.json(await friendsView(c.get('playerId') as string)))
+
+  // 친구 신청: {code} 또는 {id}(추천 목록). 없는 플레이어 404 unknown_player, 자기 자신 400 self, 이미 친구 409 already_friends,
+  // 이미 보냄 409 already_requested, 상한 409 friend_full·their_full. 상대가 이미 나에게 신청했으면 바로 수락한다.
+  app.post('/v1/friends/request', auth, async (c) => {
+    const me = c.get('playerId') as string
+    const t = friendTarget(await body(c))
+    const [row] = await query(t.sql, [t.arg])
+    if (!row) throw new ApiError(404, 'unknown_player', 'no player with that friend code')
+    const other = String(row.id)
+    if (other === me) throw new ApiError(400, 'self', 'that is your own friend code')
+    const [link] = await query('select a, accepted from friend_links where (a = $1 and b = $2) or (a = $2 and b = $1)', [me, other])
+    if (link?.accepted) throw new ApiError(409, 'already_friends', 'already friends')
+    if (link && String(link.a) === me) throw new ApiError(409, 'already_requested', 'request already sent')
+    if (link) await acceptFriend(me, other)
+    else {
+      const mine = await friendLoad(me)
+      if (mine.friends + mine.sent >= R.FRIEND_CAP) throw new ApiError(409, 'friend_full', `you already have ${R.FRIEND_CAP} friends and requests`)
+      if ((await friendLoad(other)).friends >= R.FRIEND_CAP) throw new ApiError(409, 'their_full', 'that player has no room for friends')
+      const ins = await query('insert into friend_links (a, b) values ($1, $2) on conflict do nothing returning 1', [me, other])
+      if (!ins.length) throw new ApiError(409, 'already_requested', 'request already exists')
+    }
+    return c.json(await friendsView(me))
+  })
+
+  // 받은 신청 수락: {id}. 신청이 없으면 404 no_request, 상한 409 friend_full·their_full.
+  app.post('/v1/friends/accept', auth, async (c) => {
+    const me = c.get('playerId') as string
+    const id = (await body(c)).id
+    if (typeof id !== 'string' || !UUID_RE.test(id)) throw new ApiError(400, 'bad_request', "'id' must be a player id")
+    await acceptFriend(me, id.toLowerCase())
+    return c.json(await friendsView(me))
+  })
+
+  // 친구 삭제·받은 신청 거절·보낸 신청 취소(모두 그 쌍의 행을 지운다): {id}. 없으면 404 not_friend.
+  app.post('/v1/friends/remove', auth, async (c) => {
+    const me = c.get('playerId') as string
+    const id = (await body(c)).id
+    if (typeof id !== 'string' || !UUID_RE.test(id)) throw new ApiError(400, 'bad_request', "'id' must be a player id")
+    const gone = await query('delete from friend_links where (a = $1 and b = $2) or (a = $2 and b = $1) returning 1', [me, id.toLowerCase()])
+    if (!gone.length) throw new ApiError(404, 'not_friend', 'no friend or request with that player')
+    return c.json(await friendsView(me))
+  })
+
+  // 빌려줄 대표 영웅: {hero_id}(null = 가장 강한 영웅). 가지고 있지 않으면 404 not_owned.
+  app.post('/v1/friends/hero', auth, async (c) => {
+    const me = c.get('playerId') as string
+    const heroId = (await body(c)).hero_id
+    if (heroId !== null && (typeof heroId !== 'string' || heroId === '')) throw new ApiError(400, 'bad_request', "'hero_id' must be a hero id or null")
+    if (heroId !== null) {
+      const [own] = await query('select 1 from player_heroes where player_id = $1 and hero_id = $2 and copies >= 1', [me, heroId])
+      if (!own) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+    }
+    await query('update players set friend_hero = $2 where id = $1', [me, heroId])
+    return c.json(await friendsView(me))
   })
 
   if (opts.allowTestHooks) {

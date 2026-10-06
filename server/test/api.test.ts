@@ -85,7 +85,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
   const cfg = await CONFIG()
   const helpers = r.json.player.dungeons.ticket.helpers // 모집권 던전 도우미는 플레이어 id로 섞인다 — 모양만 본다
   assert.equal(helpers.length, 3)
-  for (const h of helpers) assert.deepEqual(Object.keys(h).sort(), ['hero_id', 'level', 'power', 'promotion'])
+  for (const h of helpers) assert.deepEqual(Object.keys(h).sort(), ['hero_id', 'key', 'level', 'power', 'promotion'])
   assert.deepEqual(r.json, {
     server_now: T0 + 0.25,
     player: {

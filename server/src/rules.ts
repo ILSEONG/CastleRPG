@@ -500,6 +500,8 @@ export interface Helper {
   level: number
   promotion: number
   power: number
+  key?: string // 고를 때 쓰는 값: 시스템 후보 = 영웅 id, 친구 = "f:<친구 id>"(오늘 쓴 목록 helpers_used에도 이 값이 들어간다)
+  friend?: { id: string; name: string } // 친구 영웅이면 그 친구
 }
 
 export interface DungeonDef {
@@ -614,6 +616,55 @@ export function helperCandidates(heroDefs: Record<string, any>[], owned: { def: 
   const out = picks.filter((x) => x.diff <= HELPER_FIT).slice(0, HELPER_COUNT)
   if (out.length < HELPER_COUNT) out.push(...picks.filter((x) => !out.includes(x)).sort((a, b) => a.diff - b.diff).slice(0, HELPER_COUNT - out.length))
   return out.map(({ hero_id, level, promotion: pr, power }) => ({ hero_id, level, promotion: pr, power }))
+}
+
+// --- 친구(2026-10-06) ---
+
+export const FRIEND_CAP = 30 // 친구 + 보낸 신청 상한
+export const FRIEND_RECOMMEND = 5 // 추천 친구 수(최근 3일 안에 접속한 다른 플레이어)
+export const FRIEND_RECENT_SEC = 3 * 86400
+
+// 플레이어 이름: id(uuid)에서 정해지는 별명(같은 id면 늘 같다 — 길드 guild.ts playerName과 같은 규칙·같은 낱말).
+const NICK_A = ['졸린', '용감한', '배고픈', '빠른', '느긋한', '씩씩한', '조용한', '화난', '행복한', '수상한', '귀여운', '우직한', '새침한', '엉뚱한']
+const NICK_B = ['감자', '고양이', '기사', '궁수', '곰', '여우', '도토리', '망치', '방패', '늑대', '토끼', '수염', '마법사', '호박']
+
+function mixName(...xs: number[]): number {
+  let h = 0x811c9dc5
+  for (const x of xs) {
+    h = Math.imul(h ^ (x >>> 0), 0x01000193) >>> 0
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0
+  }
+  return h >>> 0
+}
+
+export function friendName(id: string): string {
+  const hex = id.replace(/-/g, '')
+  const r = mulberry32(mixName(parseInt(hex.slice(0, 8), 16), parseInt(hex.slice(8, 16), 16)))
+  const pick = (a: string[]) => a[Math.floor(r() * a.length)]
+  let s = pick(NICK_A) + pick(NICK_B)
+  if (r() < 0.4) s += String(1 + Math.floor(r() * 99))
+  return s
+}
+
+export const friendCode = (id: string) => id.replace(/-/g, '').slice(0, 8).toUpperCase()
+
+// 친구가 빌려주는 영웅: 고른 대표 영웅(가지고 있을 때), 아니면 전투력이 가장 높은 영웅(같으면 id 순 앞). 장비는 빼고 센다
+// (도우미는 장비 없이 싸운다). heroes = 영웅 id → {level, promotion}. 영웅이 없으면 null.
+export function lentHero(heroDefs: Record<string, any>[], chosen: string | null, heroes: Record<string, { level: number; promotion: number }>,
+  config: Config): Helper | null {
+  const defs = new Map(heroDefs.map((d) => [String(d.id), d]))
+  const of = (id: string) => {
+    const h = heroes[id]
+    return { hero_id: id, level: Number(h.level), promotion: Number(h.promotion), power: heroPower(defs.get(id)!, Number(h.level), Number(h.promotion), { hp: 0, atk: 0 }, config) }
+  }
+  const ids = Object.keys(heroes).filter((id) => defs.has(id)).sort()
+  if (chosen && ids.includes(chosen)) return of(chosen)
+  let best: Helper | null = null
+  for (const id of ids) {
+    const h = of(id)
+    if (!best || h.power > best.power) best = h
+  }
+  return best
 }
 
 // 단계 n의 적 목록(표 순서): HP·공격 = 기본 × 성장^(n−1)(곱셈 n−1번), 나머지는 표 그대로.
