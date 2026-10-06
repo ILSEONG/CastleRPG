@@ -2679,17 +2679,19 @@ func _corrupt_r17(q: Dictionary, what: String) -> void:
 		"unlock key missing": q.config.erase("skill2_unlock_star")
 
 
-## 영웅·몬스터 그림 방식: 로우폴리 재질 → 같은 알베도의 카툰 재질(공유, next_pass = 같은 알베도의 외곽선)·실사풍 재질(공유, 외곽선 없음),
+## 영웅·몬스터 그림 방식: 로우폴리 재질 → 같은 알베도의 카툰 재질(공유, Art.toon_outlines면 next_pass = 같은 알베도의 외곽선)·실사풍 재질(공유, 외곽선 없음),
 ## 다른 재질은 그대로. 기본은 카툰(아트 방향 문서). 카툰으로 꾸민 모델(UnitModel.dress)의 표면은 모두 카툰 재질.
 func test_toon_materials() -> void:
 	const Art := preload("res://scripts/art.gd")
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
 	var vc := Art.lowpoly_vc_material()
 	var t := Art.toon_material(vc) as ShaderMaterial
-	var ol := t.next_pass as ShaderMaterial if t != null else null
-	check(t != null and t.shader == Art.TOON_SHADER and ol != null and ol.shader == Art.TOON_OUTLINE_SHADER and Art.toon_material(vc) == t
-		and t.get_shader_parameter("use_vertex_color") == true and ol.get_shader_parameter("use_vertex_color") == true,
-		"toon material: toon shader, outline pass tinted by the same albedo, cached, keeps the albedo inputs")
+	check(t != null and t.shader == Art.TOON_SHADER and t.next_pass == null and Art.toon_material(vc) == t
+		and t.get_shader_parameter("use_vertex_color") == true, "toon material: toon shader, no outline by default, cached, keeps the albedo inputs")
+	Art.toon_outlines = true
+	var ol := Art.toon_material(Art.lowpoly_material(StandardMaterial3D.new())).next_pass as ShaderMaterial
+	Art.toon_outlines = false
+	check(ol != null and ol.shader == Art.TOON_OUTLINE_SHADER, "toon material: with toon_outlines on, an outline pass tinted by the same albedo")
 	var plain := StandardMaterial3D.new()
 	check(Art.toon_material(plain) == plain and Art.toon_material(t) == t, "toon material: non-low-poly materials stay as they are")
 	var r := Art.real_material(vc) as ShaderMaterial
@@ -2711,9 +2713,8 @@ func test_toon_materials() -> void:
 		for i in mi.mesh.get_surface_count():
 			var m := mi.get_active_material(i) as ShaderMaterial
 			n += 1
-			all_toon = all_toon and m != null and (m.shader == Art.TOON_SHADER or m.shader == Art.TOON_DOUBLE_SHADER) and m.next_pass is ShaderMaterial \
-				and (m.next_pass as ShaderMaterial).shader == Art.TOON_OUTLINE_SHADER
-	check(n > 0 and all_toon, "a dressed hero draws every surface with the toon shader and outline (%d surfaces)" % n)
+			all_toon = all_toon and m != null and (m.shader == Art.TOON_SHADER or m.shader == Art.TOON_DOUBLE_SHADER) and m.next_pass == null
+	check(n > 0 and all_toon, "a dressed hero draws every surface with the toon shader and no outline (%d surfaces)" % n)
 	model.free()
 
 
