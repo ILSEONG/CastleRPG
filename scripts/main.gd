@@ -195,8 +195,10 @@ func _build_world() -> void:
 	add_child(mission_panel)
 	var pouch_panel = preload("res://scripts/pouch_panel.gd").new()  # 가방(방치 주머니): 오른쪽 아래 메뉴가 연다
 	add_child(pouch_panel)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [가방][미션][랭킹][친구][이벤트]
-	side_menu.windows = {"bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
+	var settings_panel = preload("res://scripts/settings_panel.gd").new()  # 설정(배경음악·화면·계정·버전): 오른쪽 아래 메뉴가 연다
+	add_child(settings_panel)
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트]
+	side_menu.windows = {"settings": settings_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
 	side_menu.card = card
 	add_child(side_menu)
 	_hud = hud
