@@ -54,5 +54,7 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    (36 크레딧), 고블린은 meshy-t2(21 크레딧).
 2. 몸: `python3 dev/meshy_fit.py assets/models/characters/<Rogue|Skeleton_Warrior>.glb <meshy>.glb assets/models/meshy/enemies/<kind>.glb`.
 3. 게임: `Art.monster_spec(kind)`가 파일이 있으면 body를 넣고 몸 색(tint)과 머리·가슴 코드 부품을 뺀다(손 부품·KayKit 단검은 그대로).
-   성 몬스터(grunt·epic_boss)는 KayKit 해골 그대로. 검사: tests/run_tests.gd `test_meshy_enemies`.
+   성 몬스터 표(grunt·epic_boss)는 그대로이고, 생김새만 GameData.enemy_look·boss_look이 라운드·스테이지마다 고른다. 성 전용 Meshy 적
+   (좀비·리자드맨·늑대인간·임프·쥐인간·버섯·서리 트롤 · 보스 오우거 군주·악마 군주·미노타우로스)도 같은 방식(Rogue·Barbarian·Knight 뼈대).
+   던전 적은 던전 전용 — 성 순환에 넣지 않는다. 검사: tests/run_tests.gd `test_meshy_enemies`, `test_enemy_looks`.
 텍스처 임포트는 영웅·소환수·적 모두 손실 압축(compress/mode=1, 품질 0.7) — 무손실이면 APK가 GitHub 파일 한도(100 MiB)를 넘는다.

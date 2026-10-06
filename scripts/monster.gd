@@ -28,6 +28,7 @@ signal died(monster)
 
 var castle
 var kind: String = "grunt"
+var look := ""  # 생김새(Art.MONSTER_MODELS 키, 비면 kind) — 성 방어 적은 라운드마다 바뀐다(GameData.enemy_look), 능력치는 kind
 var side: int = 0
 var stage: int = 1
 var hp: float = 0.0
@@ -68,10 +69,11 @@ var _swing_at := Vector3.ZERO  # 성문·성을 칠 때 그 지점
 var _walking := false  # 이번 프레임에 걸었다(겹침 해소 무게)
 
 
-## add_child 전에 호출. p_stage = 전체 라운드 g. hp_mult = 추가 HP 배율(라운드 25 보스 boss_round_mult).
-func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0) -> void:
+## add_child 전에 호출. p_stage = 전체 라운드 g. hp_mult = 추가 HP 배율(라운드 25 보스 boss_round_mult). p_look = 생김새(비면 kind).
+func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0, p_look := "") -> void:
 	assert(not GameData.monster(p_kind).is_empty(), "unknown monster kind: " + p_kind)
 	kind = p_kind
+	look = p_look
 	is_boss = kind in GameData.BOSS_KINDS
 	side = p_side
 	stage = p_stage
@@ -100,7 +102,7 @@ func _ready() -> void:
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
 	_model.crowd_lod = true  # 화면 밖·붐빌 때 애니메이션 간헐 갱신, 붐비면 그림자 끔
-	_model.setup(Art.monster_spec(kind), float(_stats.scale))
+	_model.setup(Art.monster_spec(look if look != "" else kind), float(_stats.scale))
 	add_child(_model)
 	if castle != null:
 		global_position = castle.spawn_position(side)
