@@ -14,7 +14,7 @@ const UNLOCK_ROUND := 11  # GameState.stage가 이 이상(= 1-10 클리어)이�
 const MAX_MEMBERS := 30  # 나 포함
 const MAX_LEVEL := 30
 const BUFF_PER_LEVEL := 1.0  # 길드 레벨당 영웅 공격력·체력 +%
-const CREATE_GOLD := 30000
+const CREATE_GOLD := 500000
 const SIM_DAYS_MAX := 7  # 앱을 오래 껐다 켜도 가상 길드원 활동은 최근 이 날수만 센다
 const LOG_MAX := 30
 const MY_NAME := "나"

@@ -4510,9 +4510,11 @@ func test_guild() -> void:
 	# 탈퇴: 코인은 남는다. 창설: 혼자 시작, 길드원은 시간이 지나며 들어온다
 	var c0: int = g.coins
 	check(g.leave() and not g.joined() and g.coins == c0 and g.buff_pct() == 0.0, "guild: leaving keeps coins and drops the buff")
-	e.gold = 40000
+	e.gold = 499999
+	check(g.create_block("우리길드") == "골드가 부족합니다", "guild: creating needs 500,000 gold")
+	e.gold = 510000
 	check(g.create_block("가") != "" and g.create("우리길드", 3, next) and e.gold == 10000 and g.guild.mine and g.members_now(next).is_empty()
-		and g.members_now(next + 86400.0).size() >= 5, "guild: creating costs 30,000 gold, starts alone, members join over time")
+		and g.members_now(next + 86400.0).size() >= 5, "guild: creating costs 500,000 gold, starts alone, members join over time")
 	g.free()
 	h.free()
 	e.free()
