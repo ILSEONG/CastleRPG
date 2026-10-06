@@ -430,14 +430,14 @@ func _recruit_and_heroes(rig) -> void:
 	var dungeon_win: Node = tabs.windows.dungeon
 	var bar_rect: Rect2 = tabs._bar.get_global_rect()
 	var big: Rect2 = hud._button.get_global_rect()
-	var tab_ids := ["growth", "hero", "soldier", "dungeon", "recruit"]
+	var tab_ids := ["growth", "hero", "soldier", "dungeon", "recruit", "guild"]
 	var xs: Array = tab_ids.map(func(id): return tabs.buttons[id].get_global_rect().get_center().x)
 	var ws: Array = tab_ids.map(func(id): return tabs.buttons[id].get_global_rect().size.x)
 	var sorted_xs := xs.duplicate()
 	sorted_xs.sort()
-	_check(tabs.buttons.keys() == tab_ids and preload("res://scripts/tab_bar.gd").TABS.map(func(t): return t[1]) == ["성장", "영웅", "병사", "던전", "모집"] and xs == sorted_xs
+	_check(tabs.buttons.keys() == tab_ids and preload("res://scripts/tab_bar.gd").TABS.map(func(t): return t[1]) == ["성장", "영웅", "병사", "던전", "모집", "길드"] and xs == sorted_xs
 		and ws.all(func(w): return absf(w - ws[0]) < 1.0) and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
-		"(t) the tab bar is [성장][영웅][병사][던전][모집] left to right, equal widths (no 상인); the tavern-opened recruit window selects [모집] (raised)",
+		"(t) the tab bar is [성장][영웅][병사][던전][모집][길드] left to right, equal widths (no 상인); the tavern-opened recruit window selects [모집] (raised)",
 		"tabs=%s xs=%s ws=%s selected=%s" % [tabs.buttons.keys(), xs, ws, tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x

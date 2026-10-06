@@ -174,8 +174,10 @@ func _build_world() -> void:
 	dungeon_panel.bag = bag
 	hero_panel.bag = bag
 	add_child(dungeon_panel)
-	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집(상인은 NPC 탭)
-	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit}
+	var guild_panel = preload("res://scripts/guild_panel.gd").new()  # 길드 시트
+	add_child(guild_panel)
+	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·길드(상인은 NPC 탭)
+	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "guild": guild_panel}
 	add_child(tabs)
 	add_child(bag)
 	add_child(OfflinePanelScript.new())  # 방치 보상 개요(앱을 껐다 켜면 — Economy.offline_reported)

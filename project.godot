@@ -22,6 +22,7 @@ GameState="*res://scripts/game_state.gd"
 Economy="*res://scripts/economy.gd"
 Net="*res://scripts/net.gd"
 Fever="*res://scripts/fever.gd"
+Guild="*res://scripts/guild.gd"
 
 [castle]
 
