@@ -220,6 +220,7 @@ const HERO_LOOKS := {
 ## KayKit 몸 가중치를 옮겨 만든다. 애니메이션·무기(손 슬롯)·타격 시점·팔레트(무기 칸)는 KayKit 그대로. 머리·가슴 부품은 몸에 이미 있어 빼고
 ## 손 부품(handslot)만 단다. meshy_bodies = false면 KayKit 생김새로 돌아간다.
 const MESHY_HERO_DIR := "res://assets/models/meshy/heroes/"
+const MESHY_ENEMY_DIR := "res://assets/models/meshy/enemies/"  # 던전 적(monster_spec) — 같은 몸 파일 형식, 뼈대 = MONSTER_MODELS scene
 const MESHY_BODY := "MeshyBody"
 static var meshy_bodies := true
 
@@ -349,6 +350,20 @@ static func hero_spec(h: Dictionary) -> Dictionary:
 		if body != "":
 			spec.body = body
 			spec.parts = spec.parts.filter(func(p): return String(p[0]).begins_with("handslot"))
+	return spec
+
+
+## 몬스터 종류 → UnitModel 스펙: MONSTER_MODELS[kind]에 Meshy 몸(MESHY_ENEMY_DIR/<kind>.glb, 던전 적)이 있으면 영웅처럼 KayKit 몸을
+## 그 메시로 바꾼다 — 몸 색(tint)과 머리·가슴 코드 부품(얼굴·왕관·망토)은 몸에 이미 있어 빼고 손 부품(곤봉·대검)과 KayKit 무기(단검)만 남긴다.
+static func monster_spec(kind: String) -> Dictionary:
+	var spec: Dictionary = MONSTER_MODELS[kind]
+	var path := MESHY_ENEMY_DIR + kind + ".glb"
+	if not meshy_bodies or not ResourceLoader.exists(path):
+		return spec
+	spec = spec.duplicate()
+	spec.body = path
+	spec.erase("tint")
+	spec.parts = spec.get("parts", []).filter(func(p): return String(p[0]).begins_with("handslot"))
 	return spec
 
 
@@ -548,10 +563,12 @@ static func _swap_materials(root: Node, f: Callable) -> void:
 				mi.set_surface_override_material(i, f.call(src))
 static var _outlines: Array[ShaderMaterial] = []  # 만든 외곽선 재질 전부(화면 높이를 함께 맞춘다)
 static var _view_h := 1280.0
+## 카툰 외곽선을 그리나(2026-10-06: 외곽선 없는 쪽을 쓴다). 바꾸면 그 뒤에 만드는 카툰 재질부터 적용된다.
+static var toon_outlines := false
 
 
 ## 카툰 렌더링(영웅·몬스터): 모델의 로우폴리 재질(텍스처·칸 색 바꿈·정점 색, 겹쳐 쓴 재질 포함)을 같은 알베도의 카툰 재질로 바꾼다 —
-## 부드러운 법선 + 두 단계 음영 + 테두리 빛, next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
+## 부드러운 법선 + 두 단계 음영 + 테두리 빛, toon_outlines면 next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
 static func toonify(root: Node) -> void:
 	_swap_materials(root, toon_material)
 
@@ -569,7 +586,8 @@ static func toon_material(src: Material) -> Material:
 			var v = sm.get_shader_parameter(p)
 			if v != null:
 				m.set_shader_parameter(p, v)
-		m.next_pass = toon_outline(sm)
+		if toon_outlines:
+			m.next_pass = toon_outline(sm)
 		_toon_cache[key] = m
 	return _toon_cache[key]
 

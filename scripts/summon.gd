@@ -16,6 +16,7 @@ extends Node3D
 ## 모양: MeshKit 로우폴리 부품 ≤ 3개(MeshInstance3D, 그림자 없음, Fx 공유 재질) — 몸통은 주인 색 섞음, 눈·부리·불꽃 등은 고정 강조색.
 ## MESHY_DIR에 종류 id 파일이 있으면(meshy = true) 그 Meshy 모델의 부품(Part0 몸통, Part1·2 = 코드 모양의 1·2번 부품과 같은 관절)을
 ## 영웅과 같은 그림 방식(Art.stylize) 텍스처 재질로 쓴다 — 움직임은 같다(dev/meshy_summon_fit.py, docs/meshy-assets.md "소환수").
+## 여덟 종류 모두 Meshy 모델이 있다. 정령은 몸만 Meshy이고 도는 수정·빛 껍질은 코드 부품이다.
 ## 메시는 (종류, 색)마다 한 번 만들어 캐시한다. 걷기 흔들림·날갯짓·공격 돌진(나는 것은 급강하)은 매 프레임 부품 변환만 바꾼다(할당 없음).
 ## 성벽 위 주인이 부르면(첫 프레임에 위치가 성벽 높이) 움직이는 소환수는 그 면 성벽 바깥 땅으로 내려선다 — 포탑만 성벽 위에 남는다.
 
@@ -510,7 +511,7 @@ static func parts_of(p_kind: String, c: Color) -> Array:
 	var path := meshy_path(p_kind)
 	var key := p_kind + "#" + c.to_html() + ("" if path == "" else "#" + Art.unit_style)
 	if not _meshes.has(key):
-		_meshes[key] = _build(p_kind, c) if path == "" else _meshy_parts(path)
+		_meshes[key] = _build(p_kind, c) if path == "" else _meshy_parts(path, _build(p_kind, c))
 	return _meshes[key]
 
 
@@ -521,7 +522,8 @@ static func meshy_path(p_kind: String) -> String:
 
 
 ## Meshy 부품 GLB(노드 Part0·1·2, 원점 = 관절) → 부품. 재질은 지금 그림 방식(Art.stylize)으로 바꾼 텍스처 재질(주인 색 섞지 않음).
-static func _meshy_parts(path: String) -> Array:
+## 파일 부품이 코드 모양(coded)보다 적으면 나머지는 코드 부품(정령: Meshy 몸 + 코드 수정·빛 껍질).
+static func _meshy_parts(path: String, coded: Array) -> Array:
 	var src := Art.instance(path)
 	Art.stylize(src)
 	var out := []
@@ -531,7 +533,7 @@ static func _meshy_parts(path: String) -> Array:
 			break
 		out.append([mi.mesh, mi.position, 3, mi.get_active_material(0)])
 	src.free()
-	return out
+	return out + coded.slice(out.size())
 
 
 static func _build(p_kind: String, c: Color) -> Array:

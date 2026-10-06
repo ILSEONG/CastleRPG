@@ -136,6 +136,17 @@ func _meshy_case() -> void:
 		var r: Vector3 = parts[2].position
 		_check(parts[0].position == Vector3.ZERO and l.x < -0.5 and r.x > 0.5 and absf(l.y - r.y) < 0.05 and l.y > 1.2,
 			"(A2) golem arms hinge at the shoulders (mirrored, same height)", "l=%s r=%s" % [l, r])
+	for k in SummonScript.KINDS:  # 여덟 종류 모두 Meshy: 부품 수 = 코드 모양 부품 수, 몸통은 텍스처, 삼각형 합 5천 이하
+		var meshy_parts: Array = SummonScript.parts_of(k, Color.WHITE)
+		SummonScript.meshy = false
+		var coded: Array = SummonScript.parts_of(k, Color.WHITE)
+		SummonScript.meshy = true
+		var t := 0
+		for p in meshy_parts:
+			t += (p[0] as Mesh).get_faces().size() / 3
+		_check(SummonScript.meshy_path(k) != "" and meshy_parts.size() == coded.size() and meshy_parts[0][2] == 3 and t <= 5000,
+			"(A2) %s: Meshy body, same part count as the coded shape, <= 5,000 triangles" % k,
+			"parts=%d coded=%d tris=%d" % [meshy_parts.size(), coded.size(), t])
 	SummonScript.meshy = false
 	var c = _summon(o, "golem", 5.0, 30.0, _field + Vector3(3, 0, -4))
 	await _frames(2)

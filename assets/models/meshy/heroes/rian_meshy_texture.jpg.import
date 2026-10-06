@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/rian_meshy_texture.jpg-f2e345a4189b7f42b9ca69
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -19,12 +19,31 @@ STATE = os.path.join(OUT, "state.json")
 STYLE = ("Same art style, front camera and plain light gray background as the reference image: stylized low-poly faceted 3D game "
          "creature, flat-shaded crisp facets, chunky cute proportions. New character: ")
 TAIL = " Full body, front view, symmetric, nothing held."
+TAIL_34 = " Full body, nothing else in the picture."  # DESC가 시점을 정하면(3/4·위에서)
 
 # 소환수 생김새(summon.gd 주석을 영어로).
 DESC = {
     "golem": ("stone golem, wide boulder torso of gray stone blocks with brown ore veins, small head sunk between the shoulders "
               "with glowing yellow eyes, glowing cyan crystals on the back, two short stubby legs. Arms are separate floating rock "
               "chunks with huge boulder fists, hanging beside the torso with a clear gap at the shoulder, not attached."),
+    "wolf": ("spirit wolf, gray fur with lighter chest and muzzle, pointed ears, glowing yellow eyes, bushy tail raised, standing on "
+             "four straight legs, shoulders higher than the hips. Seen from the front-left three-quarter view."),
+    "skeleton": ("skeleton soldier, bone white ribs, round skull with glowing eye sockets, dark red loincloth and belt, round wooden "
+                 "shield on the left forearm. The right arm is a separate floating bone arm holding a short sword pointing straight "
+                 "down, hanging beside the body with a clear gap at the shoulder, not attached."),
+    "treant": ("treant tree spirit, thick brown bark trunk body with glowing green eyes and a small mouth, root legs, a big round "
+               "crown of green leaves on top. The two arms are separate floating branches with leafy tips, held out to the sides "
+               "and slightly forward, with a clear gap at the shoulder, not attached."),
+    "spirit": ("tiny flame water spirit, a round glowing sky-blue blob body with a pointed flame tip on top, a short wispy tail "
+               "below, two big black eyes with white sparkles, no arms, no legs, floating."),
+    "phoenix": ("phoenix firebird, bright orange and red feathers with golden wing tips, golden crest on the head, golden beak, "
+                "long flaming tail feathers, both wings spread wide horizontally to the sides, flying. Seen from the front, slightly "
+                "from above."),
+    "hawk": ("hawk, brown feathers, white head, yellow hooked beak, short fan tail with a white band, both wings spread wide "
+             "horizontally to the sides, flying. Seen from the front, slightly from above."),
+    "turret": ("crossbow turret, a wooden tripod stand with metal feet and a small banner, a round metal turning plate on top, "
+               "a big wooden crossbow with steel bow arms and a loaded bolt, a small square shield plate under the bow. Seen from "
+               "the front-left three-quarter view."),
 }
 
 
@@ -40,7 +59,7 @@ def save(s):
 def concept(kinds):
     ref = "data:image/png;base64," + base64.b64encode(open(REF, "rb").read()).decode()
     for k in kinds:
-        prompt = STYLE + DESC[k] + TAIL
+        prompt = STYLE + DESC[k] + (TAIL_34 if "Seen from" in DESC[k] else TAIL)
         assert len(prompt) <= 600, (k, len(prompt))
         t = req("POST", "/image-to-image", {"ai_model": "nano-banana-2", "prompt": prompt, "reference_image_urls": [ref]})
         s = load()

@@ -100,7 +100,7 @@ func _ready() -> void:
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
 	_model.crowd_lod = true  # 화면 밖·붐빌 때 애니메이션 간헐 갱신, 붐비면 그림자 끔
-	_model.setup(Art.MONSTER_MODELS[kind], float(_stats.scale))
+	_model.setup(Art.monster_spec(kind), float(_stats.scale))
 	add_child(_model)
 	if castle != null:
 		global_position = castle.spawn_position(side)

@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/orin_meshy_texture.jpg-b342dd2387e020998f87de
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
