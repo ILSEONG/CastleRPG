@@ -1783,6 +1783,16 @@ func _fever_ui(hud) -> void:
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)
 	_check(fb.label_text() == "FEVER!", "(fever) a full gauge reads FEVER!", fb.label_text())
+	var mode0: int = GameState.mode
+	for m in [GameState.Mode.STAGE, GameState.Mode.RESULT, GameState.Mode.COUNTDOWN]:
+		GameState.mode = m
+		await _frames(1)
+		await _tap(fr.get_center())
+		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중엔 FEVER를 쓸 수 없습니다" and fb.modulate.a < 1.0,
+			"(fever) while pushing a stage (mode %d) FEVER can't start: dimmed, tap only toasts, gauge kept" % m,
+			"active=%s gauge=%d toast=%s a=%.2f" % [Fever.active(), Fever.gauge, hud._toast.text, fb.modulate.a])
+	GameState.mode = mode0
+	await _frames(1)
 	await _tap(fr.get_center())
 	await _frames(2)
 	_check(Fever.active() and Fever.left > 170.0 and Fever.gauge == 0 and fb.label_text() == "3:00" and fb.banner_left > 0.0,

@@ -1,6 +1,7 @@
 extends Button
 ## FEVER 버튼(개정 14 §3): 각진 불꽃 + 아래서 위로 차오르는 빨간 면 게이지 + 퍼센트. 가득 차면 불꽃 일렁임·테두리 맥동·불씨·"FEVER!".
 ## FEVER 중엔 남은 시간과 계속 타는 불꽃, 화면 가장자리 붉은 빛, 시작 때 가운데 "FEVER!" 큰 글자. 상태는 오토로드 Fever.
+## FEVER는 방치 스폰 배속이라 방치(대기) 때만 켤 수 있다. 스테이지 진행 중(스테이지·결과·카운트다운)엔 흐리게 두고 탭은 알림만.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -58,11 +59,20 @@ func _process(delta: float) -> void:
 	_edge.visible = Fever.active()
 	if _edge.visible:
 		_edge.queue_redraw()
+	modulate.a = 0.45 if blocked() and not Fever.active() else 1.0
 	queue_redraw()
+
+
+## 스테이지를 밀고 있는 동안(방치가 아닐 때)은 FEVER를 켤 수 없다.
+func blocked() -> bool:
+	return GameState.mode != GameState.Mode.IDLE
 
 
 func _on_pressed() -> void:
 	if Fever.active():
+		return
+	if blocked():
+		Economy.notice.emit("스테이지 진행 중엔 FEVER를 쓸 수 없습니다")
 		return
 	if Fever.start():
 		banner_left = BANNER_SEC
@@ -79,7 +89,7 @@ func label_text() -> String:
 
 ## 버튼에 올라가는 내용: 게이지 면, 불꽃, 글자, 가득/FEVER 중 효과.
 func _draw() -> void:
-	var hot: bool = Fever.full() or Fever.active()
+	var hot: bool = (Fever.full() and not blocked()) or Fever.active()
 	var inner := Rect2(Vector2.ZERO, size).grow(-6.0)
 	if not Fever.active():
 		var h := inner.size.y * Fever.ratio()
