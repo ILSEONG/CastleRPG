@@ -63,7 +63,7 @@ var _leaving := false
 
 func _ready() -> void:
 	var type := str(run.type)
-	var stage: Dictionary = ArenaKit.plains() if type == "gold" else (ArenaKit.quarry() if type == "ticket" else ArenaKit.castle())
+	var stage: Dictionary = ArenaKit.plains() if type == "gold" else (ArenaKit.temple() if type == "ticket" else ArenaKit.castle())
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = preload("res://scripts/crowd.gd").new()  # 유닛 겹침 해소(전투 자리 밖으로 밀지 않는다)
@@ -168,9 +168,9 @@ func _on_enemy_died(m) -> void:
 		Fx.quake(self, Vector3(at.x, 0.0, at.z), 2.2, 0)
 
 
-## 전투 자리 반경(겹침 해소·이동 선택): 평야·채석장은 PLAINS_FIGHT_R, 성은 홀 반 변.
+## 전투 자리 반경(겹침 해소·이동 선택): 평야는 PLAINS_FIGHT_R, 사원은 TEMPLE_FIGHT_R, 성은 홀 반 변.
 static func arena_r(type: String) -> float:
-	return ArenaKit.PLAINS_FIGHT_R if type == "gold" else (ArenaKit.QUARRY_FIGHT_R if type == "ticket" else ArenaKit.HALL_HALF)
+	return ArenaKit.PLAINS_FIGHT_R if type == "gold" else (ArenaKit.TEMPLE_FIGHT_R if type == "ticket" else ArenaKit.HALL_HALF)
 
 
 func time_limit() -> float:

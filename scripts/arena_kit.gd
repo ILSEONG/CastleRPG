@@ -19,9 +19,18 @@ const PLAINS_SEED := 18
 const HALL_HALF := 15.0  # 불타는 성: 홀 바닥 30×30 m(홀 좌표 원점 중심)
 const HALL_YAW := PI / 4.0  # 홀 좌표 → 월드 회전: 홀 +Z(앞) = 화면 아래, +X = 화면 오른쪽 → spot(u, v) = 홀 (v, u)
 const CASTLE_SEED := 19
-const QUARRY_FIGHT_R := 14.0  # 바위 협곡: 이 반경 안은 평평한 흙바닥(전투 자리) — 바위가 화면 가장자리에 보이게 좁다
-const QUARRY_SEED := 23
-const QUARRY_ROCK := Color(0.52, 0.48, 0.43)
+const TEMPLE_FIGHT_R := 14.0  # 사원 앞뜰: 전투 자리 반경(기둥 줄 x = ±11 안쪽쯤)
+const TEMPLE_HALF := 14.0  # 앞뜰 판석 반 변(사원 좌표)
+const TEMPLE_SEED := 23
+const COLUMN_H := 7.0
+const LANTERN_H := 1.6
+const SANDSTONE := Color(0.80, 0.70, 0.54)
+const SANDSTONE_LIGHT := Color(0.88, 0.80, 0.64)
+const SANDSTONE_DARK := Color(0.64, 0.55, 0.42)
+const STATUE := Color(0.55, 0.60, 0.56)  # 이끼 낀 회녹색 돌
+const MOSS := Color(0.40, 0.55, 0.30)
+const ROOF_RED := Color(0.66, 0.22, 0.16)
+const GOLD_TRIM := Color(0.85, 0.64, 0.20)
 const SMOKE_H := 14.0
 const PILLAR_H := 7.0
 
@@ -163,47 +172,57 @@ static func _scatter(root: Node3D, variants: Array, count: int, r_min: float, r_
 		root.add_child(_multimesh(variants[v], by[v], Art.lowpoly_vc_material(), true))
 
 
-# --- 모집권 던전: 바위 협곡(채석장) ---
+# --- 모집권 던전: 숲속 옛 사원 앞뜰 ---
 
-## 평야와 같은 방식의 넓은 바닥(먼지 낀 흙·돌 색), 전투 자리 밖 각진 바위 둔덕·큰 바위 무더기·마른 덤불, 가까이 둘러싼 바위산 고리.
-## 영웅 5(내 4 + 도우미) = 화면 아래 두 줄(3 + 2). 바위 골렘 = 위쪽 가운데. 오후 햇빛(조금 따뜻한 색).
-static func quarry() -> Dictionary:
+## 사원 좌표(홀과 같은 HALL_YAW: +Z = 화면 아래, +X = 화면 오른쪽 → spot(u, v) = 사원 (v, u)). 사암 판석 앞뜰(가운데 밝은 참배길),
+## 양옆 기둥 줄(기둥 다섯 + 위 들보), 뒤쪽 3단 돌계단 위 사당(기둥 넷·붉은 박공지붕·금 장식), 계단 양옆 수호 석상, 참배길 따라 돌등(불꽃),
+## 앞뜰 밖 풀밭·숲·먼 산. 돌 부분은 메시 하나, 불꽃은 MultiMesh 하나. 영웅 5(내 4 + 도우미) = 화면 아래 두 줄(3 + 2), 바위 골렘 = 계단 앞.
+static func temple() -> Dictionary:
 	var root := Node3D.new()
-	root.name = "Quarry"
+	root.name = "Temple"
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(600, 600)
 	var mat := ShaderMaterial.new()
 	mat.shader = GroundShader
 	mat.set_shader_parameter("tile_size", 2.0)
 	mat.set_shader_parameter("interior_half", 0.0)
-	mat.set_shader_parameter("grass_a", Color(0.50, 0.47, 0.42))
-	mat.set_shader_parameter("grass_b", Color(0.47, 0.44, 0.39))
+	mat.set_shader_parameter("grass_a", Color(0.42, 0.56, 0.32))
+	mat.set_shader_parameter("grass_b", Color(0.39, 0.53, 0.30))
 	var ground := MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(ground)
 	var rng := RandomNumberGenerator.new()
-	rng.seed = QUARRY_SEED
-	var mounds := []
-	for i in 3:
-		var k = MeshKit.new()
-		var r := rng.randf_range(5.0, 9.0)
-		k.rock(Vector3(0, r * 0.1, 0), r, QUARRY_ROCK.darkened(rng.randf_range(0.0, 0.15)), rng, 0.55, 0.0)
-		mounds.append(k.commit())
-	_scatter(root, mounds, 22, QUARRY_FIGHT_R + 7.0, 90.0, rng, 0.8, 1.5)
-	var rocks := []
-	for i in 4:
-		rocks.append(TownKit.rock_cluster(rng))
-	_scatter(root, rocks, 60, QUARRY_FIGHT_R, 100.0, rng, 0.8, 1.8, 2)
-	var shrubs := []
-	for i in 2:
-		shrubs.append(TownKit.bush(rng, {"bush": Color(0.50, 0.50, 0.30)}))
-	_scatter(root, shrubs, 30, QUARRY_FIGHT_R + 2.0, 100.0, rng, 0.7, 1.1, 2)
+	rng.seed = TEMPLE_SEED
+	var site := Node3D.new()
+	site.rotation.y = HALL_YAW
+	root.add_child(site)
+	var k = MeshKit.new()
+	_temple_floor(k, rng)
+	_temple_columns(k)
+	_temple_shrine(k)
+	var fires := []
+	for z in [-8.0, -1.0, 6.0]:
+		for x in [-5.0, 5.0]:
+			_stone_lantern(k, Vector3(x, 0, z))
+			fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.55), Vector3(x, LANTERN_H, z)))
+	for x in [-7.0, 7.0]:
+		fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.8), Vector3(x, 3.1 + 1.45, -20.5)))
+		_brazier(k, Vector3(x, 3.1, -20.5))
+	var stone := MeshInstance3D.new()
+	stone.mesh = k.commit()
+	stone.material_override = Art.lowpoly_vc_material()
+	site.add_child(stone)
+	site.add_child(_multimesh(flame_mesh(), fires, _glow(1.0, 0.0, 0.9), false))
+	var trees := []
+	for f in [TownKit.tree_pine, TownKit.tree_round, TownKit.tree_round, TownKit.bush]:
+		trees.append(f.call(rng))
+	_scatter(root, trees, 80, TEMPLE_FIGHT_R + 9.0, 110.0, rng, 0.9, 1.3, 3)
 	var peaks := []
-	for i in 5:
-		peaks.append(TownKit.mountain(rng, {"low": Color(0.56, 0.49, 0.40)}))
-	_scatter(root, peaks, 26, 80.0, 140.0, rng, 1.2, 1.8, 1, 1.4)
+	for i in 4:
+		peaks.append(TownKit.mountain(rng))
+	_scatter(root, peaks, 20, 110.0, 170.0, rng, 1.3, 1.9, 1, 1.1)
 	var heroes := []
 	for i in 5:
 		heroes.append(spot(6.0 + (i / 3) * 2.6, (i % 3 - 1) * 2.8 + (1.4 if i >= 3 else 0.0)))
@@ -211,8 +230,76 @@ static func quarry() -> Dictionary:
 	for o in [Vector2(-7, -3), Vector2(-7, 3), Vector2(-9, 0)]:
 		enemies.append(spot(o.x, o.y))
 	return {"root": root, "heroes": heroes, "enemies": enemies, "boss": spot(-8.0, 0.0), "light": {
-		"background": Color(0.78, 0.80, 0.82), "ambient": Color(0.82, 0.82, 0.84), "ambient_energy": 0.85,
-		"sun_color": Color(1.0, 0.96, 0.90), "sun_energy": 1.15, "sun_rot": Vector3(-50, -30, 0), "shadows": true, "omni": []}}
+		"background": Color(0.74, 0.86, 0.95), "ambient": Color(0.82, 0.84, 0.88), "ambient_energy": 0.9,
+		"sun_color": Color(1.0, 0.95, 0.84), "sun_energy": 1.2, "sun_rot": Vector3(-50, -35, 0), "shadows": true, "omni": []}}
+
+
+## 앞뜰 판석: 2 m 사암 판석(명암 조금씩, 이끼 낀 판석, 가끔 빠진 판석), 가운데 4 m 참배길은 밝은 판석. 밑에 줄눈 판.
+static func _temple_floor(k, rng: RandomNumberGenerator) -> void:
+	var h := TEMPLE_HALF
+	_flat(k, Vector3(-h - 1.0, 0.005, -h - 9.0), Vector3(h + 1.0, 0.005, h + 1.0), SANDSTONE_DARK.darkened(0.25))
+	for ix in int(h):
+		for iz in int(h + 4.0):
+			var x0 := -h + ix * 2.0 + 0.07
+			var z0 := -h - 8.0 + iz * 2.0 + 0.07
+			var path := absf(x0 + 0.93) < 2.1
+			if not path and rng.randf() < 0.05:
+				continue
+			var c := SANDSTONE_LIGHT if path else SANDSTONE.darkened(rng.randf_range(0.0, 0.12))
+			if not path and rng.randf() < 0.1:
+				c = c.lerp(MOSS, 0.45)
+			var y := rng.randf_range(0.02, 0.05)
+			k.face([Vector3(x0, y, z0), Vector3(x0 + 1.86, y, z0), Vector3(x0 + 1.86, y, z0 + 1.86), Vector3(x0, y, z0 + 1.86)], Vector3.UP, c)
+
+
+## 양옆 기둥 줄: x = ±11, z = −14..10에 다섯씩(받침·8각 기둥·머리), 기둥 위 들보. 앞 끝 하나는 부러진 밑동.
+static func _temple_columns(k) -> void:
+	for sx in [-1.0, 1.0]:
+		var x: float = sx * 11.0
+		for z in [-14.0, -8.0, -2.0, 4.0, 10.0]:
+			var base := Vector3(x, 0, z)
+			k.box(base, Vector3(1.8, 0.5, 1.8), SANDSTONE_DARK)
+			if z == 10.0 and sx > 0.0:
+				k.prism_n(base + Vector3(0, 0.5, 0), 8, 0.64, 0.6, 1.4, SANDSTONE, PI / 8.0)
+				continue
+			k.prism_n(base + Vector3(0, 0.5, 0), 8, 0.64, 0.56, COLUMN_H - 0.5, SANDSTONE, PI / 8.0)
+			k.box(base + Vector3(0, COLUMN_H, 0), Vector3(1.5, 0.4, 1.5), SANDSTONE_DARK)
+			k.box(base + Vector3(0, COLUMN_H + 0.4, 0), Vector3(1.8, 0.25, 1.8), GOLD_TRIM)
+		var end_z: float = 4.0 if sx > 0.0 else 10.0
+		k.box(Vector3(x, COLUMN_H + 0.65, (-14.0 + end_z) / 2.0), Vector3(1.4, 0.7, end_z + 14.0 + 1.6), SANDSTONE_DARK)
+
+
+## 사당: 3단 돌계단(z = −15부터 뒤로 높아짐) 위 단(높이 3.1), 기둥 넷 + 들보 + 붉은 박공지붕(금 용마루), 안쪽 어두운 문, 계단 양옆 수호 석상.
+static func _temple_shrine(k) -> void:
+	for i in 3:
+		k.box(Vector3(0, i * 1.0, -16.0 - i * 1.6), Vector3(24.0 - i * 2.0, 1.05, 3.6), SANDSTONE_DARK if i % 2 == 0 else SANDSTONE)
+	k.box(Vector3(0, 0, -26.0), Vector3(20.0, 3.1, 14.0), SANDSTONE_DARK)
+	var top := 3.1
+	k.box(Vector3(0, top, -27.0), Vector3(11.0, 4.6, 6.0), SANDSTONE)
+	k.box(Vector3(0, top, -23.95), Vector3(3.0, 3.4, 0.1), Color(0.16, 0.12, 0.10))
+	for x in [-5.0, -2.2, 2.2, 5.0]:
+		k.prism_n(Vector3(x, top, -22.6), 8, 0.42, 0.38, 4.6, SANDSTONE_LIGHT, PI / 8.0)
+	k.box(Vector3(0, top + 4.6, -25.0), Vector3(12.4, 0.6, 6.4), GOLD_TRIM)
+	k.gable(Vector3(0, top + 5.2, -25.0), Vector3(12.0, 0, 7.0), 3.0, ROOF_RED, 0.6)
+	k.box(Vector3(0, top + 8.1, -25.0), Vector3(13.0, 0.3, 0.4), GOLD_TRIM)
+	for x in [-7.5, 7.5]:  # 수호 석상: 받침 + 웅크린 몸 + 머리 + 귀
+		var b := Vector3(float(x), 0, -13.5)
+		k.box(b, Vector3(2.0, 1.0, 2.0), SANDSTONE_DARK)
+		k.prism_n(b + Vector3(0, 1.0, 0), 6, 0.85, 0.6, 1.7, STATUE, PI / 6.0)
+		k.box(b + Vector3(0, 2.6, 0.25), Vector3(1.1, 0.95, 1.1), STATUE)
+		k.box(b + Vector3(0, 2.75, 0.85), Vector3(0.7, 0.45, 0.25), STATUE.darkened(0.12))
+		for ex in [-0.4, 0.4]:
+			k.pyramid(b + Vector3(ex, 3.55, 0.1), 0.35, 0.5, STATUE)
+
+
+## 돌등: 받침·기둥·불 담는 집(4면 기둥 + 지붕) — 불꽃 밑 = LANTERN_H.
+static func _stone_lantern(k, p: Vector3) -> void:
+	k.box(p, Vector3(0.9, 0.3, 0.9), SANDSTONE_DARK)
+	k.prism_n(p + Vector3(0, 0.3, 0), 6, 0.22, 0.2, 1.1, SANDSTONE, PI / 6.0)
+	k.box(p + Vector3(0, 1.4, 0), Vector3(0.95, 0.15, 0.95), SANDSTONE_DARK)
+	for o in [Vector3(-0.38, 0, -0.38), Vector3(0.38, 0, -0.38), Vector3(0.38, 0, 0.38), Vector3(-0.38, 0, 0.38)]:
+		k.box(p + o + Vector3(0, 1.55, 0), Vector3(0.14, 0.6, 0.14), SANDSTONE)
+	k.pyramid(p + Vector3(0, 2.15, 0), 1.25, 0.55, ROOF_RED)
 
 
 # --- 장비 던전: 불타는 성 내부 ---

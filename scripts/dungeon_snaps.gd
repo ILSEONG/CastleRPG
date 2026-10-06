@@ -29,7 +29,7 @@ const HALL_HEROES := [Vector3(-2.8, 0, 2.0), Vector3(3.0, 0, 1.5), Vector3(-6.0,
 const HALL_FILL := [Vector3(0, 3.4, -2.2), Color(1.0, 0.85, 0.7), 9.0, 10.0]  # 데스나이트 앞면 채움 빛 [자리, 색, 세기, 범위]
 const HALL_RIM := [Vector3(0, 5.0, -9.5), Color(1.0, 0.45, 0.2), 6.0, 7.0]  # 등 뒤 테두리 빛 — 어두운 배경에서 윤곽을 뗀다
 
-# 모집권 던전(바위 협곡): 골렘(무대 boss) 기준 (옆 = 화면 오른쪽 m, 앞 = 카메라 쪽 m). 영웅들 어깨 너머로 바위 골렘을 올려다본다.
+# 모집권 던전(사원 앞뜰): 골렘(무대 boss) 기준 (옆 = 화면 오른쪽 m, 앞 = 카메라 쪽 m). 영웅들 어깨 너머로 바위 골렘을 올려다본다.
 const QUARRY_EYE := Vector3(0.0, 2.2, 15.0)  # (옆, 높이, 앞)
 const QUARRY_LOOK := Vector3(0.0, 2.8, 0.0)
 const QUARRY_FOV := 30.0
@@ -89,7 +89,7 @@ static func _hall(root: Node3D, heroes: Array) -> void:
 
 
 static func _quarry(root: Node3D, heroes: Array) -> void:
-	var st: Dictionary = ArenaKit.quarry()
+	var st: Dictionary = ArenaKit.temple()
 	root.add_child(ArenaKit.lighting(st.light))
 	root.add_child(st.root)
 	var g: Vector3 = st.boss
