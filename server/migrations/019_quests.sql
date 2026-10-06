@@ -2,7 +2,7 @@
 -- "build:<건물>" | "level:<건물>:<Lv>" | 빈칸, reward·fixed = "키:수|…"), ord = 파일 순서(seed가 넣는다).
 create table quest_defs (id text not null, type text not null, needs text, reward text, fixed text, ord integer not null default 0,
   primary key (id));
--- 플레이어 퀘스트 상태. 기존 플레이어는 튜토리얼을 건너뛴 것(skipped)으로 두고 반복 퀘스트부터 받는다. 새 플레이어는 ENSURE_SQL이 active로 만든다.
+-- 플레이어 퀘스트 상태. 새 플레이어는 ENSURE_SQL이 active(tutorial_new_players = 1)로 만든다. 이 마이그레이션 때 있던 플레이어도 튜토리얼 처음부터(아래).
 alter table player_state add column tut_state text not null default 'skipped' check (tut_state in ('active', 'done', 'skipped'));
 alter table player_state add column tut_step integer not null default 0 check (tut_step >= 0);
 alter table player_state add column rep_n integer not null default 0 check (rep_n >= 0);
@@ -13,3 +13,7 @@ alter table player_state add column if not exists dia_tickets integer not null d
 alter table player_state add column unbuilt text[] not null default '{}';
 -- 튜토리얼 중 병사 1마리 훈련 시간(초)
 insert into game_config (key, value) values ('tutorial_train_sec', '5'), ('quest_repeat_min_sec', '30'), ('tutorial_new_players', '1') on conflict (key) do nothing;
+-- 이미 있는 플레이어도 튜토리얼 1단계부터(사용자 2026-10-06 결정 — 운영 DB 3명은 막 새 시작 상태로 초기화됨): 성채·성문 밖 건물은 공터
+update player_state set tut_state = 'active', tut_step = 0,
+  unbuilt = array(select x.id from (select building as id from resources union select id from building_defs) as x
+    where x.id not in ('keep', 'gate') order by x.id);
