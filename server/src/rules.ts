@@ -27,6 +27,14 @@ export function cfgNum(config: Config, key: string): number {
   return v
 }
 
+// 무료 즉시 완료(사용자 2026-10-06): 남은 시간이 free_finish_sec초(기본 300) 이하인 건설·훈련·연구는 공짜로 바로 끝낸다.
+// 앱 시계와 서버 시계 차이만큼 FREE_FINISH_SLACK초를 더 봐준다. 시드 전 설정에 키가 없으면 300.
+export const FREE_FINISH_SLACK = 10
+export function freeFinishSec(config: Config): number {
+  return config.free_finish_sec === undefined || config.free_finish_sec.trim() === '' ? 300 : cfgNum(config, 'free_finish_sec')
+}
+export const freeFinishOk = (config: Config, finish: number, now: number) => finish - now <= freeFinishSec(config) + FREE_FINISH_SLACK
+
 // Godot roundi와 같게 .5는 0에서 먼 쪽으로.
 export const roundHalfAway = (v: number) => Math.sign(v) * Math.round(Math.abs(v))
 

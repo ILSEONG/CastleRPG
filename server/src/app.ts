@@ -1176,6 +1176,18 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // 무료 즉시 완료(사용자 2026-10-06): 남은 건설 시간이 free_finish_sec초 이하면 끝나는 시각을 지금으로 당긴다 — 완료(레벨 +1·build_done 로그)는
+  // 게으른 완료가 다시 읽을 때 한다. 짓는 중이 아니면 409 no_build, 아직 길면 409 too_long. 이미 끝났으면 그대로(멱등).
+  app.post('/v1/building/finish', auth, async (c) => {
+    return mutate(c, (p, g, now) => {
+      const b = p.build
+      if (!b) throw new ApiError(409, 'no_build', 'nothing is being built')
+      if (!R.freeFinishOk(g.config, b.finish, now)) throw new ApiError(409, 'too_long', `'${b.id}' finishes at ${b.finish}; free finish needs ${R.freeFinishSec(g.config)} s or less`)
+      if (b.finish <= now) return {}
+      return { change: { build: { id: b.id, finish: now }, log: { kind: 'build_free', detail: { building: b.id, finish: b.finish, left: b.finish - now } } }, reload: true }
+    })
+  })
+
   // 모집(스펙 §3.6·§3.7, 개정 23): currency = gold(생략 시, 하위 호환) | diamond. 골드 비용(정수)은 floor(gold_tenths / 10)로 판정하고
   // × 10을 뺀다(소수 부분은 남는다). 골드는 모집 레벨의 비용·확률을 쓰고 장수만큼 누적해 레벨업, 다이아는 다이아를 빼고 천장을 센다.
   // 재화 차감·영웅 copies·조각·모집 상태·economy_log는 version 가드 한 문장으로 같이 들어가거나 같이 안 들어간다.
@@ -1639,15 +1651,20 @@ export function createApp(opts: AppOptions) {
 
   // 훈련 수령(개정 16 §2): 끝났으면 그 묶음 티어 보유 += count, 대기열 비우기, economy_log train_collect(version 가드 한 문장).
   // 비었으면 409 empty, 아직이면 409 not_ready — 응답을 잃고 다시 보내도 두 번 받지 않는다(멱등).
+  // free: true면 무료 즉시 완료(사용자 2026-10-06) — 남은 시간이 free_finish_sec초 이하면 아직이어도 받는다(로그 detail.free = 남은 초).
   app.post('/v1/soldiers/collect', auth, async (c) => {
-    const building = strField(await body(c), 'building')
+    const b = await body(c)
+    const building = strField(b, 'building')
+    const free = b.free === true
     return mutate(c, (p, g, now) => {
       const s = soldierAt(g, building)
       const q = p.buildings[building].train
       if (!q) throw new ApiError(409, 'empty', `'${building}' has nothing in training`)
-      if (q.finish > now) throw new ApiError(409, 'not_ready', `'${building}' finishes training at ${q.finish}`)
+      const early = q.finish > now
+      if (early && !(free && R.freeFinishOk(g.config, q.finish, now))) throw new ApiError(409, 'not_ready', `'${building}' finishes training at ${q.finish}`)
+      const detail = { building, type: s.id, ...q, ...(early ? { free: q.finish - now } : {}) }
       return {
-        change: { soldiers: { [R.soldierKey(s.id, q.tier)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail: { building, type: s.id, ...q } } },
+        change: { soldiers: { [R.soldierKey(s.id, q.tier)]: q.count }, train: { [building]: null }, log: { kind: 'train_collect', detail } },
         extra: { collected: { type: s.id, count: q.count, tier: q.tier } },
       }
     })
@@ -1722,13 +1739,13 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // 다이아 즉시 완료: 진행 중이 아니면 409 no_research, 다이아가 모자라면 409 not_enough_diamonds(비용 = max(1, ceil(남은 초 / 60) ×
+  // 다이아 즉시 완료(남은 시간이 free_finish_sec초 이하면 0 다이아): 진행 중이 아니면 409 no_research, 다이아가 모자라면 409 not_enough_diamonds(비용 = max(1, ceil(남은 초 / 60) ×
   // research_dia_per_min)). 다이아 차감·진행 비우기·레벨 +1·economy_log research finish는 version 가드 한 문장.
   app.post('/v1/research/finish', auth, async (c) => {
     return mutate(c, (p, g, now) => {
       const cur = p.research_cur
       if (!cur) throw new ApiError(409, 'no_research', 'nothing is being researched')
-      const cost = R.researchDiaCost(g.config, cur.finish, now)
+      const cost = R.freeFinishOk(g.config, cur.finish, now) ? 0 : R.researchDiaCost(g.config, cur.finish, now) // 5분 이하는 무료(사용자 2026-10-06)
       if (p.diamonds < cost) throw new ApiError(409, 'not_enough_diamonds', `finishing now costs ${cost} diamonds`)
       return {
         change: {

@@ -106,5 +106,6 @@ stage_speed_cap,2.0
 boss_round_mult,1.5
 tutorial_train_sec,5
 lot_build_sec,5
+free_finish_sec,300
 quest_repeat_min_sec,30
 tutorial_new_players,1

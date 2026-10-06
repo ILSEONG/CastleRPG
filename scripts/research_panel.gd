@@ -289,6 +289,13 @@ func _dia_button(font_size: int) -> Button:
 	return b
 
 
+## 즉시 완료 버튼 글자: 다이아 비용이 있으면 "◆ n 즉시 완료", 남은 5분 이하(비용 0)면 다이아 없이 "무료 즉시 완료"(사용자 2026-10-06).
+static func _set_dia(b: Button, dia: int) -> void:
+	b.text = "무료 즉시 완료" if dia == 0 else "      %d 즉시 완료" % dia
+	for ch in b.get_children():
+		ch.visible = dia > 0
+
+
 func _bar(h: float) -> ProgressBar:
 	var p := ProgressBar.new()
 	p.custom_minimum_size = Vector2(0, h)
@@ -532,7 +539,7 @@ func _refresh_current(now: float) -> void:
 	cur_bar.value = Economy.research_progress(now)
 	cur_left.text = "남은 시간 " + UiKit.duration(Economy.research_left(now))
 	var dia := Economy.research_dia_cost(now)
-	dia_button.text = "      %d 즉시 완료" % dia
+	_set_dia(dia_button, dia)
 	dia_button.disabled = Economy.diamonds < dia or Economy.research_waiting()
 	cancel_button.disabled = Economy.research_waiting()
 
@@ -627,7 +634,7 @@ func _refresh_detail(now: float) -> void:
 		detail_bar.value = Economy.research_progress(now)
 		detail_left.text = "Lv %d → %d 연구 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.research_left(now))]
 		var dia := Economy.research_dia_cost(now)
-		detail_dia.text = "      %d 즉시 완료" % dia
+		_set_dia(detail_dia, dia)
 		detail_dia.disabled = Economy.diamonds < dia or Economy.research_waiting()
 		detail_cancel.disabled = Economy.research_waiting()
 

@@ -26,6 +26,7 @@ const BUILD_TEXT := "건설"  # 튜토리얼 공터
 const TRAIN_ICON_PX := 72.0
 const RESEARCH_TEXT := "연구"
 const CANCEL_TEXT := "취소(50% 환불)"
+const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
 const TIERED_KEEP := ["영웅 슬롯", "성 넓이", "면마다 성문"]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
 const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"keep": "성의 중심. 다른 건물의 최대 레벨을 정합니다.",
@@ -54,6 +55,8 @@ var progress: ProgressBar
 var left_label: Label
 var reason_label: Label
 var upgrade_button: Button
+var free_build_button: Button  # 건설 중 · 남은 5분 이하: [무료 즉시 완료]
+var free_train_button: Button  # 훈련 중 · 남은 5분 이하: [무료 즉시 완료]
 # 훈련 칸(병사 건물일 때만 보인다, 개정 16)
 var train_box: VBoxContainer
 var empty_box: VBoxContainer  # 비었을 때
@@ -127,6 +130,9 @@ func _ready() -> void:
 	_progress_box.add_child(progress)
 	left_label = _label("", 26)
 	_progress_box.add_child(left_label)
+	free_build_button = _button(FREE_TEXT, GREEN)  # 남은 5분 이하면 무료 즉시 완료(사용자 2026-10-06)
+	free_build_button.pressed.connect(func(): Economy.free_finish_build())
+	_progress_box.add_child(free_build_button)
 	reason_label = _label("", 24, RED)
 	content.add_child(reason_label)
 	upgrade_button = _button(UPGRADE_TEXT)
@@ -217,6 +223,7 @@ func _refresh() -> void:
 	time_label.text = "건설 시간 " + UiKit.duration(Economy.upgrade_sec(id))
 	time_label.visible = not maxed and not building
 	_progress_box.visible = building
+	free_build_button.visible = building and Economy.can_free_build(now)
 	progress.value = Economy.build_progress(now)
 	left_label.text = ("건설 중 · 남은 시간 %s" % UiKit.duration(Economy.build_left(now))) if lot \
 		else "Lv %d → %d 건설 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.build_left(now))]
@@ -285,6 +292,9 @@ func _build_train_box() -> void:
 	run_box.add_child(train_bar)
 	run_label = _label("", 26)
 	run_box.add_child(run_label)
+	free_train_button = _button(FREE_TEXT, GREEN)
+	free_train_button.pressed.connect(func(): Economy.free_finish_training(building_id))
+	run_box.add_child(free_train_button)
 	cancel_button = _button(CANCEL_TEXT, UiKit.STEEL)
 	cancel_button.pressed.connect(func(): Economy.cancel_training(building_id))
 	run_box.add_child(cancel_button)
@@ -323,6 +333,7 @@ func _refresh_training(type: String) -> void:
 		train_bar.value = Economy.train_progress(id)
 		run_label.text = "T%d %s ×%d · 남은 %s" % [tier, nm, q.count, UiKit.clock(left)]
 		done_label.text = "T%d %s ×%d 훈련 완료" % [tier, nm, q.count]
+		free_train_button.visible = Economy.can_free_train(id)
 		cancel_button.disabled = Economy.training_waiting(id, "cancel")
 		collect_button.disabled = Economy.training_waiting(id, "collect")
 		return

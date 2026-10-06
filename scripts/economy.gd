@@ -1286,6 +1286,126 @@ func complete_due(now: float) -> void:
 	building_done.emit(id, levels[id])
 
 
+# --- 무료 즉시 완료(사용자 2026-10-06): 남은 시간이 free_finish_sec초(기본 300) 이하인 건설·훈련·연구는 공짜로 바로 끝낸다 ---
+# 온라인은 곧바로 끝난 것으로 보이고(_predict) 서버가 확인한다(/v1/building/finish·/v1/soldiers/collect {free}·/v1/research/finish — 서버도
+# 같은 기준 + 시계 여유 10초). 거절되면 마지막 서버 상태로 되돌리고 ROLLBACK_TEXT.
+
+## 무료 즉시 완료 기준(초). 설정이 없으면 300.
+static func free_finish_sec() -> float:
+	var v := GameData.config_num("free_finish_sec")
+	return v if v > 0.0 else 300.0
+
+
+## 남은 초 left가 무료 즉시 완료 범위(0 초과 · 기준 이하)인가.
+static func free_finish_ok(left: float) -> bool:
+	return left > 0.0 and left <= free_finish_sec()
+
+
+## 진행 중 건설을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]).
+func can_free_build(now: float) -> bool:
+	return not build.is_empty() and free_finish_ok(build_left(now)) and not _waiting.has("build")
+
+
+## 건설 무료 즉시 완료. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은 곧바로 완료로 보이고 /v1/building/finish(once). 했거나 보냈으면 true.
+func free_finish_build() -> bool:
+	var now := time_now()
+	if not can_free_build(now):
+		return false
+	if net == null:
+		build.finish = now
+		complete_due(now)
+		return true
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var id := str(build.id)
+	_waiting["build"] = true
+	_predict("build", _local_build_done.bind(id))
+	building_done.emit(id, building_level(id))
+	net.send("POST", "/v1/building/finish", {}, _on_build_freed, _on_build_free_failed, true, true)
+	return true
+
+
+## 즉시 반영: 지금 상태에서 id를 짓는 중이면 다 지은 것으로(공터는 Lv 1, 아니면 레벨 +1, 일꾼 비움).
+func _local_build_done(id: String) -> void:
+	if str(build.get("id", "")) != id:
+		return
+	if unbuilt.has(id):
+		unbuilt.erase(id)
+	else:
+		levels[id] = building_level(id) + 1
+	build = {}
+
+
+func _on_build_freed(data: Dictionary) -> void:
+	_waiting.erase("build")
+	_predicts.erase("build")
+	apply_server(data)
+
+
+func _on_build_free_failed() -> void:
+	_waiting.erase("build")
+	_unpredict("build")
+	if net.last_error != "no_build":  # no_build = 서버가 이미 완료했다(응답 유실 뒤 재요청 등) — 새 상태에 보인다
+		notice.emit(ROLLBACK_TEXT)
+	net.refresh()
+	changed.emit()
+
+
+## 훈련을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]).
+func can_free_train(building_id: String) -> bool:
+	var q := training(building_id)
+	return q.count > 0 and not q.ready and free_finish_ok(float(q.finish) - time_now()) and not _waiting.has("collect:" + building_id)
+
+
+## 훈련 무료 즉시 완료 = 바로 수령. 오프라인은 끝나는 시각을 지금으로 두고 수령, 온라인은 곧바로 받은 것으로 보이고
+## /v1/soldiers/collect {building, free: true}(once). 했거나 보냈으면 true.
+func free_finish_training(building_id: String) -> bool:
+	if not can_free_train(building_id):
+		return false
+	if net == null:
+		train_queues[building_id].finish = time_now()
+		return collect_training(building_id)
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var q := training(building_id)
+	var type := GameData.soldier_of_building(building_id)
+	var key := "collect:" + building_id
+	_waiting[key] = true
+	_predict(key, _local_train_collect.bind(building_id, soldier_key(type, q.tier), q.count))
+	soldiers_changed.emit()
+	training_changed.emit()
+	_announce(type, q.count)
+	net.send("POST", "/v1/soldiers/collect", {"building": building_id, "free": true}, _on_train_freed.bind(key), _on_train_free_failed.bind(key), true, true)
+	return true
+
+
+## 즉시 반영: 그 건물 대기열이 그대로면 병사 += count, 대기열 비움.
+func _local_train_collect(building_id: String, k: String, count: int) -> void:
+	if not train_queues.has(building_id) or int(train_queues[building_id].count) != count:
+		return
+	soldiers[k] = int(soldiers.get(k, 0)) + count
+	train_queues.erase(building_id)
+
+
+func _on_train_freed(data: Dictionary, key: String) -> void:
+	_waiting.erase(key)
+	_predicts.erase(key)
+	apply_server(data)
+	training_changed.emit()
+
+
+func _on_train_free_failed(key: String) -> void:
+	_waiting.erase(key)
+	_unpredict(key)
+	if net.last_error != "empty":  # empty = 이미 받았다
+		notice.emit(ROLLBACK_TEXT)
+	net.refresh()
+	soldiers_changed.emit()
+	training_changed.emit()
+
+
 ## 테스트 훅(입력·통합 체크): 진행 중 건설을 지금 끝낸다. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은
 ## POST /v1/test/build_now(ALLOW_TEST_HOOKS 서버만)의 응답을 반영한다(완료는 서버가, building_done은 apply_server가).
 func finish_build_now() -> void:
@@ -1712,6 +1832,8 @@ func finish_research_now() -> bool:
 		notice.emit(NO_DIA_TEXT)
 		return false
 	if net != null:
+		if research_dia_cost(time_now()) == 0:
+			return _free_research_online()
 		return _research_online("finish", {})
 	diamonds -= research_dia_cost(time_now())
 	_research_complete()
@@ -1761,9 +1883,49 @@ func research_progress(now: float) -> float:
 	return clampf(1.0 - research_left(now) / total, 0.0, 1.0) if total > 0.0 else 1.0
 
 
-## 다이아 즉시 완료 비용(없으면 0) = max(1, ceil(남은 초 / 60) × research_dia_per_min).
+## 다이아 즉시 완료 비용(없으면 0) = max(1, ceil(남은 초 / 60) × research_dia_per_min). 남은 시간이 무료 기준 이하면 0(사용자 2026-10-06).
 func research_dia_cost(now: float) -> int:
-	return GameData.research_dia_cost(research_left(now)) if not research_current.is_empty() else 0
+	if research_current.is_empty() or free_finish_ok(research_left(now)):
+		return 0
+	return GameData.research_dia_cost(research_left(now))
+
+
+## 연구 무료 즉시 완료(온라인): 곧바로 완료로 보이고(레벨 +1·알림) /v1/research/finish(once, 서버도 0 다이아). 거절되면 되돌린다.
+func _free_research_online() -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var id := str(research_current.id)
+	_waiting["research"] = true
+	_predict("research", _local_research_done.bind(id))
+	research_changed.emit()
+	_announce_research(id)
+	net.send("POST", "/v1/research/finish", {}, _on_research_freed, _on_research_free_failed, true, true)
+	return true
+
+
+## 즉시 반영: 지금 id를 연구 중이면 레벨 +1, 비움.
+func _local_research_done(id: String) -> void:
+	if str(research_current.get("id", "")) != id:
+		return
+	research_levels[id] = research_level(id) + 1
+	research_current = {}
+
+
+func _on_research_freed(data: Dictionary) -> void:
+	_waiting.erase("research")
+	_predicts.erase("research")
+	apply_server(data)
+	research_changed.emit()
+
+
+func _on_research_free_failed() -> void:
+	_waiting.erase("research")
+	_unpredict("research")
+	if net.last_error != "no_research":  # no_research = 서버가 이미 완료했다
+		notice.emit(ROLLBACK_TEXT)
+	net.refresh()
+	research_changed.emit()
 
 
 ## 월드 말풍선(스펙 §5): 진행 중인 연구가 없고 지금 시작할 수 있는 노드가 있다.
