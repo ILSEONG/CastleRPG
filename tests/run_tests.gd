@@ -485,19 +485,19 @@ func test_enemy_looks() -> void:
 	var looks := {}
 	for g in range(1, 26):
 		looks[GameData.enemy_look(g)] = true
-	check(looks.size() == GameData.ENEMY_LOOKS.size(), "every enemy look appears within one stage")
-	check(GameData.enemy_look(1) == "grunt" and GameData.enemy_look(5) == "grunt" and GameData.enemy_look(6) == "skeleton_warrior", "look changes every 5 rounds, stage 1 starts with skeletons")
-	check(GameData.enemy_look(26) == "skeleton_warrior", "next stage starts one look further")
-	check(GameData.boss_look(25) == "epic_boss" and GameData.boss_look(50) == "orc_chief" and GameData.boss_look(75) == "bandit_chief", "boss look changes per stage")
+	check(looks.size() == 5, "five different enemy looks within one stage")
+	check(GameData.enemy_look(1) == "grunt" and GameData.enemy_look(5) == "grunt" and GameData.enemy_look(6) == "zombie", "look changes every 5 rounds, stage 1 starts with skeletons")
+	check(GameData.enemy_look(26) == "imp" and GameData.enemy_look(51) == "frost_troll", "next stage continues with the next looks")
+	check(GameData.boss_look(25) == "epic_boss" and GameData.boss_look(50) == "ogre_warlord" and GameData.boss_look(75) == "orc_chief", "boss look changes per stage")
 	for look in GameData.ENEMY_LOOKS + GameData.BOSS_LOOKS:
 		check(not look in ["goblin", "goblin_king", "death_knight"], "dungeon monsters stay in dungeons: " + look)
 	for look in GameData.ENEMY_LOOKS + GameData.BOSS_LOOKS:
 		check(Art.MONSTER_MODELS.has(look), "look has a model: " + look)
 	for e in WaveDirector.build(6, WaveDirector.MODE_STAGE) + WaveDirector.build(6, WaveDirector.MODE_IDLE):
 		check(e.kind in ["grunt", "epic_boss"], "looks keep the monster table ids (stats, gold)")
-		check(e.kind != "grunt" or e.look == "skeleton_warrior", "round 6 grunts look like skeleton warriors")
+		check(e.kind != "grunt" or e.look == "zombie", "round 6 grunts look like zombies")
 	var boss: Array = WaveDirector.build(50, WaveDirector.MODE_STAGE).filter(func(e): return e.kind == "epic_boss")
-	check(boss.size() == 1 and boss[0].look == "orc_chief", "stage 2 boss looks like the orc chief")
+	check(boss.size() == 1 and boss[0].look == "ogre_warlord", "stage 2 boss looks like the ogre warlord")
 
 
 func test_wave_idle_cycle() -> void:
@@ -4004,7 +4004,8 @@ func test_meshy_bodies() -> void:
 func test_meshy_enemies() -> void:
 	MeshMergeScript.enabled = false
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
-	for kind in ["goblin", "goblin_king", "death_knight"]:
+	for kind in ["goblin", "goblin_king", "death_knight", "zombie", "lizardman", "werewolf", "imp", "ratman", "mushroom", "frost_troll",
+			"ogre_warlord", "demon_lord", "minotaur"]:
 		var spec := Art.monster_spec(kind)
 		check(spec.get("body", "") == Art.MESHY_ENEMY_DIR + kind + ".glb" and not spec.has("tint")
 			and spec.parts.all(func(p): return String(p[0]).begins_with("handslot")), "%s: Meshy body, hand parts only %s" % [kind, spec.get("parts")])
