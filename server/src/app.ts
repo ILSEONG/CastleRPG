@@ -2326,6 +2326,16 @@ export function createApp(opts: AppOptions) {
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
 
+    // 통합 체크용: 출석 이벤트 받은 날 수를 n으로, 오늘은 아직 안 받은 것으로(tests/attendance_online.gd)
+    app.post('/v1/test/attendance', auth, async (c) => {
+      const n = intField(await body(c), 'n', 0, A.DAYS)
+      const id = c.get('playerId') as string
+      await query('update player_state set version = version + 1, attend_n = $2, attend_day = null where player_id = $1', [id, n])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
     // 통합 체크용: 설정 값 하나를 바꾼다(dev/online-check.sh가 새 플레이어 튜토리얼을 끄고 옛 훈련 묶음 상한을 쓴다)
     app.post('/v1/test/config', async (c) => {

@@ -152,6 +152,7 @@ var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
 var dia_tickets := 0
+var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
 var tutorial_training := false  # 튜토리얼 중(Tutorial이 켠다, 오프라인): 훈련은 한 번에 1마리, 1마리 TUTORIAL_TRAIN_SEC초  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
@@ -2118,6 +2119,8 @@ func apply_server(data: Dictionary) -> bool:
 				unbuilt[x] = true
 	if _num(p.get("dia_tickets")):
 		dia_tickets = maxi(0, int(p.dia_tickets))
+	if p.get("attendance") is Dictionary:
+		attendance = p.attendance
 	var quest_before := server_quest.duplicate()
 	var sq = p.get("quest")
 	if sq is Dictionary and sq.get("tut_state") in ["active", "done", "skipped"] and _num(sq.get("tut_step")) and _num(sq.get("rep_n")):

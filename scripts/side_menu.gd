@@ -24,6 +24,7 @@ var buttons := {}  # 항목 id → Button(테스트용)
 var is_open := false
 
 var _col: VBoxContainer
+var _dot := false  # 빨간 점을 그렸는지
 var _t := 0.0  # 펼침 정도 0..1
 
 
@@ -46,6 +47,11 @@ func _ready() -> void:
 	set_open(false)
 
 
+## 출석 이벤트 보상을 오늘 받을 수 있다(서버 /v1/player의 attendance).
+func has_dot() -> bool:
+	return bool(Economy.attendance.get("can_claim", false))
+
+
 func set_open(on: bool) -> void:
 	is_open = on
 	for id in buttons:
@@ -63,6 +69,11 @@ func _pick(id: String) -> void:
 
 
 func _process(delta: float) -> void:
+	var dot := has_dot()
+	if dot != _dot:  # 출석 보상을 받을 수 있으면 [메뉴]·[이벤트]에 빨간 점
+		_dot = dot
+		toggle.get_child(0).queue_redraw()
+		buttons.event.get_child(0).queue_redraw()
 	var bottom := float(HudScript.TAB_BAR_H) + ABOVE
 	if card != null and card.panel != null and card.panel.visible:
 		var vh := get_viewport().get_visible_rect().size.y
@@ -104,6 +115,10 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 		_:
 			draw_chevron(c, ctr, 30.0, is_open)
 			text = "닫기" if is_open else "메뉴"
+	if _dot and id in ["toggle", "event"]:
+		var dp := Vector2(SIZE.x - 12, 12)
+		c.draw_circle(dp, 9.0, Color(0.88, 0.22, 0.2))
+		c.draw_arc(dp, 9.0, 0, TAU, 16, Color(0.88, 0.22, 0.2).darkened(0.3), 1.5, true)
 	var y := SIZE.y - 10.0
 	c.draw_string_outline(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, 5, Color(UiKit.INK, 0.85))
 	c.draw_string(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, Color.WHITE)
