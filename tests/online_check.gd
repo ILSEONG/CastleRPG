@@ -1225,13 +1225,12 @@ func _research_online() -> void:
 	await _wait_until(func(): return not Economy.research_waiting(), 15.0)
 	_check(notices.has(Economy.RESEARCH_TEXT.research_busy) and str(Economy.research_current.get("id", "")) == "wood_tech" and Economy.res.stone == res0.stone - 80,
 		"(RS) one research at a time on the server too: 409 research_busy, a notice, nothing charged", "notices=%s" % [notices])
-	var dia_cost := Economy.research_dia_cost(Economy.time_now())
-	await _request("POST", "/v1/test/grant_diamonds", {"amount": dia_cost})
+	var dia_cost := Economy.research_dia_cost(Economy.time_now())  # 남은 약 60초 — 5분 이하는 무료 즉시 완료(사용자 2026-10-06)
 	var dia0: int = Economy.diamonds
 	var fin := Economy.finish_research_now()
 	var finished := await _wait_until(func(): return Economy.research_level("wood_tech") == 1 and not Economy.research_waiting(), 15.0)
-	_check(dia_cost == 1 and fin and finished and Economy.research_current.is_empty() and Economy.diamonds == dia0 - 1 and notices.has("연구 완료: 벌목술 Lv 1"),
-		"(RS) instant finish on the server: Lv 1, one diamond (ceil(60 s / 60)), notice '연구 완료: 벌목술 Lv 1'", "cost=%d dia %d -> %d levels=%s" % [dia_cost, dia0, Economy.diamonds, Economy.research_levels])
+	_check(dia_cost == 0 and fin and finished and Economy.research_current.is_empty() and Economy.diamonds == dia0 and notices.has("연구 완료: 벌목술 Lv 1"),
+		"(RS) instant finish on the server: Lv 1, free with 5 min or less left, notice '연구 완료: 벌목술 Lv 1'", "cost=%d dia %d -> %d levels=%s" % [dia_cost, dia0, Economy.diamonds, Economy.research_levels])
 	Economy.start_research("stone_tech")
 	await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "stone_tech" and not Economy.research_waiting(), 15.0)
 	await _request("POST", "/v1/test/age", {"minutes": 2})  # 끝나는 시각을 2분 당긴다 — 이 응답을 만드는 읽기가 서버 완료
