@@ -20,6 +20,7 @@ const HALL_HALF := 15.0  # 불타는 성: 홀 바닥 30×30 m(홀 좌표 원점 
 const HALL_YAW := PI / 4.0  # 홀 좌표 → 월드 회전: 홀 +Z(앞) = 화면 아래, +X = 화면 오른쪽 → spot(u, v) = 홀 (v, u)
 const CASTLE_SEED := 19
 const TEMPLE_FIGHT_R := 14.0  # 사원 앞뜰: 전투 자리 반경(기둥 줄 x = ±11 안쪽쯤)
+const FLOWERS := [Color(0.95, 0.85, 0.35), Color(0.95, 0.95, 0.92), Color(0.86, 0.50, 0.62)]
 const TEMPLE_HALF := 14.0  # 앞뜰 판석 반 변(사원 좌표)
 const TEMPLE_SEED := 23
 const COLUMN_H := 7.0
@@ -234,22 +235,31 @@ static func temple() -> Dictionary:
 		"sun_color": Color(1.0, 0.95, 0.84), "sun_energy": 1.2, "sun_rot": Vector3(-50, -35, 0), "shadows": true, "omni": []}}
 
 
-## 앞뜰 판석: 2 m 사암 판석(명암 조금씩, 이끼 낀 판석, 가끔 빠진 판석), 가운데 4 m 참배길은 밝은 판석. 밑에 줄눈 판.
+## 초원 위 사원(2026-10-06 사용자 "초원 + 사원"): 앞뜰은 풀밭 — 가운데 4 m 참배길만 밝은 판석으로 이어지고, 사당 앞(z < −12)은 판석 마당,
+## 나머지는 풀밭에 흩어진 옛 판석(이끼 낀 것 많음)과 들꽃.
 static func _temple_floor(k, rng: RandomNumberGenerator) -> void:
 	var h := TEMPLE_HALF
-	_flat(k, Vector3(-h - 1.0, 0.005, -h - 9.0), Vector3(h + 1.0, 0.005, h + 1.0), SANDSTONE_DARK.darkened(0.25))
+	_flat(k, Vector3(-2.2, 0.005, -h - 9.0), Vector3(2.2, 0.005, h + 1.0), SANDSTONE_DARK.darkened(0.25))
+	_flat(k, Vector3(-h - 1.0, 0.005, -h - 9.0), Vector3(h + 1.0, 0.005, -12.0), SANDSTONE_DARK.darkened(0.25))
 	for ix in int(h):
 		for iz in int(h + 4.0):
 			var x0 := -h + ix * 2.0 + 0.07
 			var z0 := -h - 8.0 + iz * 2.0 + 0.07
 			var path := absf(x0 + 0.93) < 2.1
-			if not path and rng.randf() < 0.05:
+			var yard := z0 < -12.0
+			if not path and not yard and rng.randf() > 0.12:
 				continue
 			var c := SANDSTONE_LIGHT if path else SANDSTONE.darkened(rng.randf_range(0.0, 0.12))
-			if not path and rng.randf() < 0.1:
+			if not path and rng.randf() < (0.1 if yard else 0.4):
 				c = c.lerp(MOSS, 0.45)
 			var y := rng.randf_range(0.02, 0.05)
 			k.face([Vector3(x0, y, z0), Vector3(x0 + 1.86, y, z0), Vector3(x0 + 1.86, y, z0 + 1.86), Vector3(x0, y, z0 + 1.86)], Vector3.UP, c)
+	for i in 70:  # 들꽃: 참배길 밖 풀밭에 작은 꽃
+		var p := Vector3(rng.randf_range(-h - 4.0, h + 4.0), 0, rng.randf_range(-12.0, h + 4.0))
+		if absf(p.x) < 2.6:
+			continue
+		k.pyramid(p, 0.12, 0.28, MOSS.darkened(0.1))
+		k.box(p + Vector3(0, 0.26, 0), Vector3(0.16, 0.08, 0.16), FLOWERS[i % FLOWERS.size()])
 
 
 ## 양옆 기둥 줄: x = ±11, z = −14..10에 다섯씩(받침·8각 기둥·머리), 기둥 위 들보. 앞 끝 하나는 부러진 밑동.
