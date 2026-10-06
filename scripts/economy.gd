@@ -1197,6 +1197,8 @@ func upgrade_sec(id: String) -> int:
 
 ## L → L+1 건설 시간에 연구 build_speed_pct를 넣은 값(서버 /v1/building/upgrade와 같은 식).
 func _build_sec(id: String, level: int) -> int:
+	if unbuilt.has(id):
+		return roundi(GameData.config_num("lot_build_sec"))  # 공터 첫 건설(0 → 1)은 lot_build_sec초(사용자 2026-10-06)
 	return roundi(GameData.build_sec(id, level) / (1.0 + float(research_bonus().build_speed_pct) / 100.0))
 
 
