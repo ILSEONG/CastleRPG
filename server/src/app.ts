@@ -504,17 +504,9 @@ export function createApp(opts: AppOptions) {
 
   function systemHelpers(p: Player, g: Game, st: R.DungeonState, now: number): R.Helper[] {
     const defs = new Map(g.heroes.map((h) => [String(h.id), h]))
-    const items = new Map(p.items.map((it) => [it.id, it]))
+    const equip = R.heroEquip(p.items, p.equipment)
     const owned = Object.entries(p.heroes).filter(([id, h]) => defs.has(id) && h.copies >= 1).map(([id, h]) => {
-      const eq = { hp: 0, atk: 0 }
-      for (const e of p.equipment) {
-        const it = e.hero_id === id ? items.get(e.item_id) : undefined
-        if (!it) continue
-        const s = R.itemStats(it)
-        eq.hp += s.hp
-        eq.atk += s.atk
-      }
-      return { def: defs.get(id)!, level: h.level, promotion: h.promotion, equip: eq }
+      return { def: defs.get(id)!, level: h.level, promotion: h.promotion, equip: equip[id] ?? { hp: 0, atk: 0 } }
     })
     return R.helperCandidates(g.heroes, owned, st.helpers_used ?? [], p.id, R.resetDay(now, R.cfgNum(g.config, 'daily_reset_utc_hour')), g.config)
   }
@@ -2000,7 +1992,7 @@ export function createApp(opts: AppOptions) {
     const buff = st ? G.buffPct(st.lv.level) : 0
     return {
       id, pl, game, now, hour, mine: G.mineToday(pg.mine, now, hour), pg, g, st, members,
-      dps: G.teamDps(deploy, pl.heroes, defs, cfg, up('atk'), up('aspd'), buff), power: G.teamPower(deploy, pl.heroes, defs, cfg),
+      dps: G.teamDps(deploy, pl.heroes, defs, cfg, up('atk'), up('aspd'), buff), power: G.teamPower(deploy, pl.heroes, defs, cfg, R.heroEquip(pl.items, pl.equipment)),
     }
   }
 

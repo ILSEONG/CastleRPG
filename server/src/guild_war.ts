@@ -3,7 +3,7 @@
 // 공성 전투: 하루 1번, 첫 길드원이 들어가면 시작해 BATTLE_SEC초. 그 사이 누구나 합류한다(실시간 방: war_live.ts). 가상 길드원 공격 분대는 AI.
 // 성 상태(성문·성채 체력, 수비 영웅별 남은 체력 비율)는 전쟁 행(guild_wars.castle)에 저장되고 전투 결과로만 줄어든다(mergeCastle — 늘지 않는다).
 // 점수: 수비 영웅 처치 1 · 성문 20 · 성채 100(서버가 성 상태 차이로 센다). 상대 점수 = 가상 상대가 하루 한 번 우리 성을 친 결과(enemyPoints).
-import { mulberry32 } from './rules.ts'
+import { mulberry32, powerOf } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
 export const BATTLE_SEC = 600
@@ -42,7 +42,8 @@ export function heroStats(def: HeroDef, level: number, promotion: number, cfg: C
 
 export const heroPower = (def: HeroDef, level: number, promotion: number, cfg: Cfg) => {
   const s = heroStats(def, level, promotion, cfg)
-  return Math.round(s.hp / 10 + (s.atk * 2) / def.atk_interval)
+  return powerOf(def, s.hp, s.atk) // 앱 GameData.hero_power(장비 없이)와 같은 식
+
 }
 
 export const maxLevel = (promotion: number, cfg: Cfg) => cfg('hero_max_level_base') + cfg('hero_max_level_per_promotion') * promotion

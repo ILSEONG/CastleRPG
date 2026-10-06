@@ -1,6 +1,6 @@
 // 랭킹(GET /v1/ranking/:board, 던전 랭킹은 사용자 요청으로 뺐다). 새 표 없이 지금 있는 표에서 계산한다(마이그레이션 없음).
 // - stage: 실제 플레이어의 도달 라운드(player_state.stage, 전체 라운드). 같으면 먼저 도달한 사람(last_stage_clear)이 위.
-// - power: 배치 영웅 전투력(guild.ts teamPower — 길드원 목록과 같은 값). 0이면 뺀다.
+// - power: 배치 영웅 전투력(guild.ts teamPower, 장비 포함 — 길드원 목록·영웅 목록과 같은 값). 0이면 뺀다.
 // - guild: 모든 길드(직접 만든 길드 + 서버가 만든 시스템 길드). 길드 레벨 → 누적 경험치 → 보스 단계 순. 가상 길드원 몫은
 //   길드 화면과 같은 계산(G.virtualTotals)으로 더한다.
 // 이름: 플레이어는 별명 칸이 없어 길드원 목록과 같은 G.playerName(id)을 쓴다. 목록은 RANK_CACHE_SEC 동안 재사용한다(내 순위는 그 목록에서 찾는다).
@@ -29,6 +29,8 @@ export interface Entry {
 export const PLAYERS_SQL = `select s.player_id::text as id, s.stage, extract(epoch from s.last_stage_clear)::float8 as t, s.deploy,
   coalesce((select level from player_buildings b where b.player_id = s.player_id and b.building = $1), 1) as keep,
   coalesce((select json_object_agg(hero_id, json_build_object('level', level, 'promotion', promotion)) from player_heroes h where h.player_id = s.player_id), '{}'::json) as heroes,
+  coalesce((select json_agg(json_build_object('hero_id', e.hero_id, 'item_id', i.id, 'id', i.id, 'slot', i.slot, 'grade', i.grade, 'level', i.level))
+    from player_equipment e join player_items i on i.id = e.item_id where e.player_id = s.player_id), '[]'::json) as equip,
   g.name as guild
   from player_state s left join player_guild pg on pg.player_id = s.player_id left join guilds g on g.id = pg.guild_id`
 
@@ -60,7 +62,8 @@ export function playerEntries(rows: Row[], board: Board, game: GameLike): Entry[
       const raw = json(r.deploy)
       const slots = R.heroSlots(game.config, Number(r.keep))
       const deploy = Array.isArray(raw) ? raw.slice(0, slots).filter((x): x is string => typeof x === 'string' && Object.hasOwn(heroes, x)) : []
-      const power = G.teamPower(deploy, heroes, defs, cfg)
+      const eq = (json(r.equip ?? '[]') as any[]).map((x) => ({ id: Number(x.id), hero_id: String(x.hero_id), item_id: Number(x.item_id), slot: String(x.slot), weapon_kind: null, grade: String(x.grade), level: Number(x.level) }))
+      const power = G.teamPower(deploy, heroes, defs, cfg, R.heroEquip(eq, eq))
       if (power > 0) out.push({ ...base, value: power, t: 0 })
     }
   }

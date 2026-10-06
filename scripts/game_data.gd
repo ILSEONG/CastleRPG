@@ -696,10 +696,20 @@ static func hero_stats(def: Dictionary, level: int, promotion: int, equip = null
 	return {"hp": float(def.hp) * m + float(eq.get("hp", 0.0)), "atk": float(def.atk) * m + float(eq.get("atk", 0.0))}
 
 
-## 전투력(목록 정렬·표시) = round(HP / 10 + 공격 × 2 / 공격 간격). HP·공격은 hero_stats(장비 포함).
+## 전투력(목록 정렬·표시·랭킹·매칭) = round((HP / 10 + 공격 × 2 / 공격 간격 × 원거리 배율) × 등급 배율). HP·공격은 hero_stats(장비 포함).
+## 2026-10-06 밸런스: 원거리는 성벽 위에서 맞지 않고 쏘므로 공격 점수 × POWER_RANGED, 등급 배율은 장비까지 포함한 전체에 —
+## 같은 레벨·승급·장비면 SSR > SR > R(레벨 1~70, 승급 0~5, 장비 N~LR 1~60레벨 전부 확인). 서버 rules.ts·guild.ts·guild_war.ts heroPower와 같다.
+const POWER_GRADE := {"SSR": 2.0, "SR": 1.4, "R": 1.0}
+const POWER_RANGED := 2.0
 static func hero_power(def: Dictionary, level: int, promotion: int, equip = null) -> int:
 	var s := hero_stats(def, level, promotion, equip)
-	return roundi(s.hp / 10.0 + s.atk * 2.0 / float(def.atk_interval))
+	return power_of(def, s.hp, s.atk)
+
+
+## 최종 HP·공격 → 전투력(hero_power의 식).
+static func power_of(def: Dictionary, hp: float, atk: float) -> int:
+	var ranged: float = POWER_RANGED if str(def.get("role", "")) == "ranged" else 1.0
+	return roundi((hp / 10.0 + atk * 2.0 / float(def.atk_interval) * ranged) * float(POWER_GRADE.get(str(def.get("grade", "")), 1.0)))
 
 
 ## n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장(정수 열 ≥ 1, 방치 간격 ≥ MIN_IDLE_INTERVAL) —

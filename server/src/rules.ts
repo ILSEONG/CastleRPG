@@ -575,12 +575,15 @@ export const ticketReward = (config: Config, level: number) =>
 export const levelMult = (config: Config, level: number, role: string) =>
   1 + cfgNum(config, role === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (level - 1)
 export const promoteMult = (config: Config, promotion: number) => grown(1, cfgNum(config, 'promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
-// 전투력 = round(HP / 10 + 공격 × 2 / 공격 간격), HP·공격 = 표 × 레벨 배율 × 승급 배율 + 장비.
+// 전투력 = round((HP / 10 + 공격 × 2 / 공격 간격 × 원거리 배율) × 등급 배율), HP·공격 = 표 × 레벨 배율 × 승급 배율 + 장비.
+// 2026-10-06 밸런스(앱 GameData.POWER_GRADE·POWER_RANGED와 같다): 같은 레벨·승급·장비면 SSR > SR > R.
+export const POWER_GRADE: Record<string, number> = { SSR: 2.0, SR: 1.4, R: 1.0 }
+export const POWER_RANGED = 2.0
+export const powerOf = (def: { role?: unknown; grade?: unknown; atk_interval: unknown }, hp: number, atk: number) =>
+  roundHalfAway((hp / 10 + ((atk * 2) / Number(def.atk_interval)) * (String(def.role ?? '') === 'ranged' ? POWER_RANGED : 1)) * (POWER_GRADE[String(def.grade ?? '')] ?? 1))
 export function heroPower(def: Record<string, any>, level: number, promotion: number, equip: { hp: number; atk: number }, config: Config): number {
   const m = levelMult(config, level, String(def.role ?? '')) * promoteMult(config, promotion)
-  const hp = Number(def.hp) * m + equip.hp
-  const atk = Number(def.atk) * m + equip.atk
-  return roundHalfAway(hp / 10 + (atk * 2) / Number(def.atk_interval))
+  return powerOf(def, Number(def.hp) * m + equip.hp, Number(def.atk) * m + equip.atk)
 }
 
 // FNV-1a 32비트(도우미 순서 섞기 — 앱 GameData.fnv32와 같다).
@@ -715,6 +718,21 @@ export function itemStats(item: EquipItem) {
   if (!s) return out
   out[s[0] as 'hp' | 'atk'] = roundHalfAway((s[1] + s[2] * (item.level - 1)) * (EQUIP_GRADE_MULT[item.grade] ?? 0))
   if (item.slot === 'shoes') out.speed_pct = SHOES_SPEED_PCT
+  return out
+}
+
+// 영웅 id → 장착 장비 합계 {hp, atk}(전투력용 — 앱 Economy.equipment_bonus와 같다). equipment = [{hero_id, item_id}].
+export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item_id: number }[]): Record<string, { hp: number; atk: number }> {
+  const byId = new Map(items.map((it) => [Number(it.id), it]))
+  const out: Record<string, { hp: number; atk: number }> = {}
+  for (const e of equipment) {
+    const it = byId.get(Number(e.item_id))
+    if (!it) continue
+    const s = itemStats(it)
+    const o = (out[e.hero_id] ??= { hp: 0, atk: 0 })
+    o.hp += s.hp
+    o.atk += s.atk
+  }
   return out
 }
 

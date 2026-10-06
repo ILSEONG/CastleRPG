@@ -225,7 +225,7 @@ func test_game_tables() -> void:
 		and w.color == "#95A5A6" and w.hp == 396.0 and w.atk == 23.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
 		and w.skills == {"drain_slash": [8.0, 150.0, 50.0], "dmg_reduce": [10.0, 0.0, 0.0]}, "hans row (R: two skills)")
 	var a := GameData.hero("arteon")
-	check(a.skills == {"sanctuary": [9.0, 5.0, 4.0], "guard_aura": [6.0, 15.0, 0.0], "holy_smite": [8.0, 250.0, 50.0]} and a.desc.begins_with("성문 앞을"),
+	check(a.skills == {"sanctuary": [9.0, 5.0, 5.0], "guard_aura": [6.0, 30.0, 0.0], "holy_smite": [8.0, 250.0, 50.0]} and a.desc.begins_with("성문 앞을"),
 		"arteon row: three skills in column order, empty numbers are 0, desc")
 	check(GameData.hero("hans").skills.size() == 2 and GameData.hero("ignis").skills.keys() == ["aoe_blast", "haste", "ignite"], "an empty skill3 is no skill (R)")
 	check(GameData.hero("nobody").is_empty(), "unknown hero is empty")
@@ -1820,9 +1820,9 @@ func test_hero_levels() -> void:
 		"melee heroes grow slower: x(1 + 0.0315 x (L - 1))")
 	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.2835 × 1.3², 23 × 1.2835 × 1.3²
 	check(is_equal_approx(st.hp, 396.0 * 1.2835 * 1.69) and is_equal_approx(st.atk, 23.0 * 1.2835 * 1.69), "stats = base x level mult x promotion mult (1.3^p on base and level-ups alike): %s" % [st])
-	check(GameData.hero_power(hans, 1, 0) == 97 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 248 \
+	check(GameData.hero_power(hans, 1, 0) == 97 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 496 \
 		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.169115 / 10.0 + 23.0 * 2.169115 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 126,
-		"power = round(HP / 10 + atk x 2 / interval): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
+		"power = round((HP / 10 + atk x 2 / interval) x grade): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
 		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 134, 151, 333, 923, 266690], "gold cost table = round(base x 1.12^(L-1)), same as the server")

@@ -14,6 +14,7 @@ const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 
 ## 발동형(쿨 a초). 처음엔 쿨의 FIRST_CD배만 기다린다(교전이 시작되면 곧 쓴다).
+const BULWARK_TAUNT_R := 4.0  # 방벽 도발 반경(m)
 const ACTIVE := ["meteor", "inferno", "earthquake", "ground_slam", "blizzard", "tornado", "thunder_storm", "arrow_rain", "poison_cloud",
 	"frost_nova", "whirlwind", "war_cry", "shockwave", "spear_throw", "ice_spikes", "dragon_breath", "starfall", "sky_bolt", "comet",
 	"holy_smite", "shadow_strike", "void_rift", "solar_flare", "abyss_hand", "lava_burst", "sanctuary", "mass_heal", "resurrection",
@@ -795,7 +796,9 @@ func _cast(k: String, dry := false) -> bool:
 					_end_wall()
 					_wall_t = float(p[1])
 					_wall_fx = Fx.barrier(h, STEEL)
-					Fx.nova(w, here, STEEL, 1.8, tier)
+					Fx.nova(w, here, STEEL, BULWARK_TAUNT_R, tier)
+					for o in _near_monsters(here, BULWARK_TAUNT_R):  # 2026-10-06 밸런스: 방벽 동안 주변 적이 발두르를 노린다(탱커 역할)
+						o.taunt(h, float(p[1]))
 				"parry":
 					_parry_t = float(p[1])
 					Fx.golden_tint(h, STEEL, float(p[1]))

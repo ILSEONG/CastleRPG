@@ -2213,7 +2213,7 @@ func _skill_unlock_ui(heroes_win) -> void:
 	await _frames(2)
 	var col: Color = ui[1].label.get_theme_color("font_color")
 	_check(locked_before and Economy.promotion_of("arteon") == 3 and notices.has("스킬 해금! 수호의 오라") and heroes_win.unlocks_shown == shown0 + 1 and not ui[1].lock.visible
-		and ui[1].label.text.contains("받는 피해가 15% 줄어듭니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
+		and ui[1].label.text.contains("받는 피해가 30% 줄어듭니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
 		and heroes_win.promote_preview.text.ends_with("\n★5 달성 시 스킬 해금: 심판의 빛"),
 		"(U) [승급] to ★3 unlocks 수호의 오라: notice 스킬 해금! 수호의 오라, the row opens and flashes gold, the preview moves on to ★5",
 		"promo=%d notices=%s shown=%d row=%s color=%s preview=%s" % [Economy.promotion_of("arteon"), notices, heroes_win.unlocks_shown, ui[1].label.text, col, heroes_win.promote_preview.text])

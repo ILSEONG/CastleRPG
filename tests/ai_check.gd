@@ -316,7 +316,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _frames(1)
 
 	# (n) gate_repair: 발두르(서 성문 앞)가 쿨마다 서쪽 성문을 최대치의 3% 회복
-	var ba = _add_hero("baldur", 103)
+	var ba = _add_hero("baldur", 103, 5)  # 2026-10-06 밸런스: 성문 수리는 스킬 3(★5)
 	GameState.damage_gate(3, 100.0)
 	var g0: float = GameState.gate_hp[3]
 	ba._repair_cd = 0.1  # 첫 쿨(8초)을 기다리지 않는다

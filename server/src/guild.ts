@@ -1,7 +1,7 @@
 // 길드 규칙(순수 함수, 시간 인자). 앱 scripts/guild.gd와 같은 수치·규칙.
 // 길드 경험치·보스 누적 피해 = 실제 길드원이 쌓은 값(guilds.exp·boss_damage) + 가상 길드원 몫(virtualTotals — 길드 seed·생성 시각·지금으로
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
-import { mulberry32, resetAt, resetDay } from './rules.ts'
+import { mulberry32, powerOf, resetAt, resetDay } from './rules.ts'
 
 export const MAX_LEVEL = 6
 // 길드 인원(실제 + 가상): 1~5레벨 15명, 6레벨(최대) 20명. 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
@@ -146,6 +146,10 @@ export interface VMember {
   join_t: number
 }
 
+// 가상 길드원 전투력 배율(2026-10-06 전투력 식 개편 — 등급·원거리 배율로 실제 플레이어 전투력이 약 2배가 되어 표시를 맞춘다).
+// 보스 피해는 예전 값 그대로(virtualDay에서 나눈다).
+export const VIRTUAL_POWER_SCALE = 2
+
 export function virtualMembers(g: GuildRow): VMember[] {
   const r = mulberry32(mix(g.seed, 7))
   const out: VMember[] = []
@@ -153,7 +157,7 @@ export function virtualMembers(g: GuildRow): VMember[] {
   for (let i = 0; i < g.virtual_n; i++) {
     if (!g.system) t += i === 0 ? 600 : range(r, 0.5, 3) * 3600
     const role = g.system ? (i === 0 ? '길드장' : i === 1 ? '부길드장' : i < 6 ? '정예' : '길드원') : (i < 3 ? '정예' : '길드원')
-    out.push({ i, name: nickname(mix(g.seed, 1000 + i)), role, power0: 250 + Math.floor(r() * 1100), att_p: range(r, 0.55, 0.97), join_t: g.system ? g.created_at : t })
+    out.push({ i, name: nickname(mix(g.seed, 1000 + i)), role, power0: (250 + Math.floor(r() * 1100)) * VIRTUAL_POWER_SCALE, att_p: range(r, 0.55, 0.97), join_t: g.system ? g.created_at : t })
   }
   return out
 }
@@ -170,7 +174,7 @@ export function virtualDay(g: GuildRow, m: VMember, d: number, hour: number) {
   const days = Math.max(0, (t - g.created_at) / 86400)
   const power = m.power0 * (1 + 0.04 * days)
   let dmg = 0
-  for (let h = 0; h < hits; h++) dmg += Math.round(power * range(r, 2.8, 4.2))
+  for (let h = 0; h < hits; h++) dmg += Math.round((power / VIRTUAL_POWER_SCALE) * range(r, 2.8, 4.2))
   return { t, kind, exp: ATTEND_EXP + (kind ? DONATIONS[kind].exp : 0), dmg, hits, power: Math.round(power) }
 }
 
@@ -285,7 +289,9 @@ export function teamDps(deploy: string[], heroes: Record<string, { level: number
   return out
 }
 
-export function teamPower(deploy: string[], heroes: Record<string, { level: number; promotion: number }>, defs: HeroDef[], cfg: (k: string) => number): number {
+// 배치 영웅 전투력 합(앱 GameData.hero_power와 같은 식). equip = 영웅 id → 장비 합계 {hp, atk}(없으면 0) — 영웅 목록처럼 장비 포함.
+export function teamPower(deploy: string[], heroes: Record<string, { level: number; promotion: number }>, defs: HeroDef[], cfg: (k: string) => number,
+  equip: Record<string, { hp: number; atk: number }> = {}): number {
   let out = 0
   for (const id of deploy) {
     const def = defs.find((h) => h.id === id)
@@ -294,7 +300,8 @@ export function teamPower(deploy: string[], heroes: Record<string, { level: numb
     const lv = 1 + cfg(def.role === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (h.level - 1)
     let pm = 1
     for (let i = 0; i < Math.min(h.promotion, 5); i++) pm *= cfg('promote_mult')
-    out += Math.round((def.hp * lv * pm) / 10 + (def.atk * lv * pm * 2) / def.atk_interval)
+    const eq = equip[id] ?? { hp: 0, atk: 0 }
+    out += powerOf(def, def.hp * lv * pm + eq.hp, def.atk * lv * pm + eq.atk)
   }
   return out
 }

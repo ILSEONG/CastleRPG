@@ -390,7 +390,7 @@ test('영웅 스킬 검증(개정 17): 등급별 개수(SSR·SR 3, R 2, skill1�
   const withCfg = (key: string, value: string) => cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`)
   await fails(hero(',stoneskin,25,,,shield_bash,8,2.5,100,', ',stoneskin,25,,,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
   await fails(hero(',dmg_reduce,10,,,,,,,', ',dmg_reduce,10,,,haste,10,,,'), cfg, /line 19 column 'skill3': R heroes have exactly 2 skills/) // 한스
-  await fails(hero(',sanctuary,9,5,4,guard_aura,6,15,,', ',sanctuary,9,5,4,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
+  await fails(hero(',sanctuary,9,5,5,guard_aura,6,30,,', ',sanctuary,9,5,5,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
   await fails(hero(',holy_smite,8,250,50,', ',warp,8,250,50,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'warp'/)
   await fails(hero(',holy_smite,8,250,50,', ',sanctuary,8,250,50,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'sanctuary'/)
   await fails(heroes, withCfg('skill3_unlock_star', '6'), /skill3_unlock_star must be an integer in 0\.\.5: '6'/)
