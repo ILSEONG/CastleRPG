@@ -2,7 +2,9 @@ extends Node
 ## 길드(오프라인 로컬). 오토로드 Guild. 흐름: 가입(추천 길드 가입·직접 창설) → 매일 출석·기부로 길드 경험치 → 길드 레벨 → 길드 버프
 ## (모든 영웅 공격력·체력 %, hero.refresh_stats가 곱한다) → 길드 보스(하루 BOSS_TRIES번, 길드 전체 누적 피해로 보스 단계가 오른다) →
 ## 길드 코인으로 길드 상점. 다른 길드원은 가상 길드원이다: 길드 seed와 날짜로 정해지는 시각에 출석·기부·보스 공격을 한다(_simulate).
-## 서버 길드는 없다 — 온라인 모드(econ.net != null)에서는 닫혀 있다(available). 보상·비용은 오프라인 Economy에 바로 반영하고 둘 다 저장한다.
+## 오프라인: 보상·비용은 Economy에 바로 반영하고 둘 다 저장한다. 온라인(econ.net != null, 내보낸 APK): 서버 길드(/v1/guild*)가 진실이다 —
+## 실제 유저 + 가상 길드원(서버가 계산). 응답의 guild 값을 이 스크립트의 같은 필드(guild·me·coins·shop_*)에 옮겨 담아 창은 두 모드를 같은 코드로 그린다.
+## 온라인 쓰기는 요청만 보내고(busy 동안 막힘 "응답 대기 중") 응답이 오면 Economy.apply_server + 길드 값을 반영한다.
 ## 날짜는 던전과 같은 일일 리셋(GameData.reset_day, 00:00 KST). 주간 상점은 reset_day / 7.
 ## 저장: user://guild.json(Economy 저장과 따로). 길드 코인은 탈퇴해도 남고, 오늘 기여도·출석 상자는 길드를 옮기면 새로 센다.
 ## 테스트는 .new()로 만들어 econ·gs를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎). 시각은 인자 now.
@@ -61,6 +63,7 @@ const EMBLEMS := 8  # 문장 모양·색 수(guild_panel이 그린다)
 signal changed  # 길드 상태(가입·출석·기부·보스·상점·가상 길드원 활동)가 바뀌었다
 signal buff_changed  # 길드 버프(공격력·체력 %)가 바뀌었다 — 영웅 능력치를 다시 읽는다
 signal notice(text: String)  # 짧은 알림(레벨업·보스 처치)
+signal boss_done(result: Dictionary)  # 보스 도전 결과 {dmg, grade, coins, gold, killed, level, claim?}. 온라인은 응답이 왔을 때
 
 var save_path := "user://guild.json"  # ""이면 저장하지 않는다
 var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
@@ -77,6 +80,20 @@ var fixed_now := -1.0  # 테스트: 0 이상이면 now_t()가 이 값
 
 var _sim_cd := 0.0
 var _last_buff := -1.0
+var busy := false  # 온라인: 응답 대기 중
+var remote := {}  # 온라인: 마지막 서버 길드 값(GET /v1/guild·쓰기 응답의 guild)
+var _fetched := false  # 온라인: 접속 뒤 한 번 받았다(길드 버프)
+
+const WAIT_TEXT := "응답 대기 중"
+## 서버 409 코드 → 문구
+const ERROR_TEXT := {
+	"locked": "1-10 라운드를 클리어하면 열립니다", "in_guild": "이미 길드에 가입했습니다", "full": "길드 인원이 가득 찼습니다",
+	"name_taken": "이미 있는 길드 이름입니다", "not_enough_gold": "골드가 부족합니다", "not_enough_diamonds": "다이아가 부족합니다",
+	"attended": "오늘은 이미 출석했습니다", "claimed": "이미 받은 상자입니다", "donated": "오늘 기부 횟수를 다 썼습니다",
+	"no_tries": "오늘 도전 횟수를 다 썼습니다", "no_heroes": "배치된 영웅이 없습니다", "nothing": "받을 보상이 없습니다",
+	"sold_out": "구매 한도에 도달했습니다", "not_enough_coins": "길드 코인이 부족합니다", "no_guild": "길드에 가입하세요",
+	"no_such_guild": "길드를 찾을 수 없습니다", "bad_name": "길드 이름은 2~8글자입니다",
+}
 
 
 func _ready() -> void:
@@ -94,7 +111,11 @@ func _process(delta: float) -> void:
 	_sim_cd -= delta
 	if _sim_cd <= 0.0:
 		_sim_cd = 5.0
-		if not guild.is_empty():
+		if online():
+			if not _fetched and econ.net.up:
+				_fetched = true
+				fetch()
+		elif not guild.is_empty():
 			tick(now_t())
 
 
@@ -109,16 +130,24 @@ func now_t() -> float:
 	return econ.time_now() if econ != null else Time.get_unix_time_from_system()
 
 
-## 온라인 모드(서버 권위 경제)에서는 길드를 열지 않는다 — 보상을 서버가 모른다.
+## 두 모드 모두 열린다(온라인은 서버 길드).
 func available() -> bool:
-	return econ == null or econ.net == null
+	return true
+
+
+func online() -> bool:
+	return econ != null and econ.net != null
 
 
 func is_unlocked() -> bool:
+	if online():
+		return remote.get("unlocked", false) == true or (gs != null and int(gs.stage) >= UNLOCK_ROUND)
 	return unlocked or (gs != null and int(gs.stage) >= UNLOCK_ROUND)
 
 
 func check_unlock() -> void:
+	if online():
+		return
 	if not unlocked and is_unlocked():
 		unlocked = true
 		save()
@@ -189,6 +218,8 @@ static func boss_grade(dmg: float, level: int) -> Array:
 
 ## 내 배치 영웅의 초당 피해 합(성장·연구·길드 버프·공격속도 반영).
 func team_dps() -> float:
+	if online():
+		return float(remote.get("dps", 0))
 	if econ == null:
 		return 0.0
 	var slots: int = gs.hero_count() if gs != null else 5
@@ -207,6 +238,8 @@ func team_dps() -> float:
 
 ## 배치 영웅 전투력 합(길드원 목록의 내 전투력).
 func my_power() -> int:
+	if online():
+		return int(remote.get("power", 0))
 	if econ == null:
 		return 0
 	var slots: int = gs.hero_count() if gs != null else 5
@@ -220,6 +253,8 @@ func my_power() -> int:
 func boss_block() -> String:
 	if not joined():
 		return "길드에 가입하세요"
+	if busy:
+		return WAIT_TEXT
 	_roll_day(now_t())
 	if int(me.boss_tries) >= BOSS_TRIES:
 		return "오늘 도전 횟수를 다 썼습니다"
@@ -234,6 +269,12 @@ func fight_boss(now := -1.0) -> Dictionary:
 		now = now_t()
 	if boss_block() != "":
 		return {}
+	if online():
+		_post("boss", {}, func(d):
+			var res: Dictionary = d.get("result", {})
+			res.claim = int(res.get("killed", 0)) > 0
+			boss_done.emit(res))
+		return {"pending": true}
 	tick(now)
 	var lv := int(guild.boss.level)
 	var dmg := roundf(team_dps() * BOSS_FIGHT_SEC * rng.randf_range(0.9, 1.15))
@@ -247,7 +288,9 @@ func fight_boss(now := -1.0) -> Dictionary:
 	var killed := _hit_boss(dmg, MY_NAME, now)
 	save()
 	changed.emit()
-	return {"dmg": dmg, "grade": g[0], "coins": int(g[2]), "gold": int(g[3]), "killed": killed, "level": lv}
+	var res := {"dmg": dmg, "grade": g[0], "coins": int(g[2]), "gold": int(g[3]), "killed": killed, "level": lv}
+	boss_done.emit(res)
+	return res
 
 
 ## 보스에 피해. 쓰러뜨리면 다음 단계(남은 피해는 넘긴다)와 처치 보상. 반환 처치 수.
@@ -269,6 +312,8 @@ func _hit_boss(dmg: float, who: String, now: float, quiet := false) -> int:
 # --- 하루 ---
 
 func _roll_day(now: float) -> void:
+	if online():
+		return  # 서버가 날짜를 넘긴 값을 준다
 	var d := GameData.reset_day(now)
 	if me.is_empty() or int(me.get("day", -1)) != d:
 		me = {"day": d, "attended": false, "boxes": [], "donations": {}, "boss_tries": 0, "boss_best": 0.0, "boss_total": 0.0, "contrib": 0}
@@ -290,6 +335,8 @@ func _roll_day(now: float) -> void:
 func reset_in(now := -1.0) -> float:
 	if now < 0.0:
 		now = now_t()
+	if online() and remote.has("next_reset"):
+		return maxf(0.0, float(remote.next_reset) - now)
 	return GameData.next_reset(now) - now
 
 
@@ -298,6 +345,8 @@ func reset_in(now := -1.0) -> float:
 func attend_block() -> String:
 	if not joined():
 		return "길드에 가입하세요"
+	if busy:
+		return WAIT_TEXT
 	_roll_day(now_t())
 	return "오늘은 이미 출석했습니다" if me.attended else ""
 
@@ -307,6 +356,9 @@ func attend(now := -1.0) -> bool:
 		now = now_t()
 	if attend_block() != "":
 		return false
+	if online():
+		_post("attend", {}, func(_d): notice.emit("출석 완료! 골드 +%s · 길드 코인 +%d" % [_commas(ATTEND_REWARD.gold), ATTEND_REWARD.coins]))
+		return true
 	me.attended = true
 	me.contrib = int(me.contrib) + ATTEND_EXP
 	_grant(ATTEND_REWARD)
@@ -321,6 +373,8 @@ func attend(now := -1.0) -> bool:
 func attend_count() -> int:
 	if not joined():
 		return 0
+	if online():
+		return int(guild.get("attend_count", 0))
 	var n := 1 if me.attended else 0
 	var now := now_t()
 	for m in guild.members:
@@ -340,8 +394,11 @@ func box_state(i: int) -> String:
 
 
 func claim_box(i: int) -> bool:
-	if i < 0 or i >= ATTEND_BOXES.size() or box_state(i) != "ready":
+	if i < 0 or i >= ATTEND_BOXES.size() or box_state(i) != "ready" or busy:
 		return false
+	if online():
+		_post("box", {"index": i})
+		return true
 	me.boxes.append(i)
 	_grant(ATTEND_BOXES[i][1])
 	save()
@@ -361,6 +418,8 @@ func donate_block(kind: String) -> String:
 		return "길드에 가입하세요"
 	if not DONATIONS.has(kind):
 		return "알 수 없는 기부"
+	if busy:
+		return WAIT_TEXT
 	if donations_left(kind) <= 0:
 		return "오늘 기부 횟수를 다 썼습니다"
 	var d: Dictionary = DONATIONS[kind]
@@ -377,6 +436,11 @@ func donate(kind: String, now := -1.0) -> bool:
 	if donate_block(kind) != "":
 		return false
 	var d: Dictionary = DONATIONS[kind]
+	if online():
+		if int(d.gold) > 0:
+			econ.net.flush_kills()  # 골드는 서버 값으로 판정한다
+		_post("donate", {"kind": kind})
+		return true
 	_pay(int(d.gold), int(d.diamonds))
 	me.donations[kind] = int(me.donations.get(kind, 0)) + 1
 	me.contrib = int(me.contrib) + int(d.exp)
@@ -410,6 +474,8 @@ func buy_block(id: String) -> String:
 	var it := shop_item(id)
 	if it.is_empty():
 		return "알 수 없는 상품"
+	if busy:
+		return WAIT_TEXT
 	if shop_left(id) <= 0:
 		return "구매 한도에 도달했습니다"
 	if coins < int(it.price):
@@ -424,6 +490,13 @@ func buy(id: String) -> String:
 	if buy_block(id) != "":
 		return ""
 	var it := shop_item(id)
+	if online():
+		_post("buy", {"id": id}, func(d):
+			var parts := []
+			for hid in d.get("result", {}).get("shards", {}):
+				parts.append("%s 조각 +%d" % [GameData.hero(hid).get("name", hid), int(d.result.shards[hid])])
+			notice.emit(" · ".join(parts) if not parts.is_empty() else "%s 구매 완료" % it.name))
+		return ""
 	coins -= int(it.price)
 	var bought: Dictionary = (shop_day if it.period == "day" else shop_week).bought
 	bought[id] = int(bought.get(id, 0)) + 1
@@ -497,6 +570,8 @@ func _pay(gold_n: int, dia_n: int) -> void:
 
 ## 오늘의 추천 길드 5개(새로고침하면 바뀐다). [{seed, name, emblem, level, count, notice, power}]
 func recommendations(now := -1.0) -> Array:
+	if online():
+		return remote.get("recommendations", [])
 	if now < 0.0:
 		now = now_t()
 	_roll_day(now)
@@ -512,13 +587,16 @@ func recommendations(now := -1.0) -> Array:
 
 
 func refresh_recommendations() -> void:
+	if online():
+		fetch()
+		return
 	recommend_n += 1
 	changed.emit()
 
 
 func join_block() -> String:
-	if not available():
-		return "온라인 길드는 준비 중입니다"
+	if busy:
+		return WAIT_TEXT
 	if not is_unlocked():
 		return "1-10 라운드를 클리어하면 열립니다"
 	if joined():
@@ -531,6 +609,9 @@ func join(rec: Dictionary, now := -1.0) -> bool:
 		now = now_t()
 	if join_block() != "":
 		return false
+	if online():
+		_post("join", {"guild_id": str(rec.get("id", ""))})
+		return true
 	var r := RandomNumberGenerator.new()
 	r.seed = int(rec.seed)
 	var members := []
@@ -569,6 +650,10 @@ func create(name_text: String, emblem: int, now := -1.0) -> bool:
 		now = now_t()
 	if create_block(name_text) != "":
 		return false
+	if online():
+		econ.net.flush_kills()
+		_post("create", {"name": name_text.strip_edges(), "emblem": clampi(emblem, 0, EMBLEMS - 1)})
+		return true
 	_pay(CREATE_GOLD, 0)
 	var r := RandomNumberGenerator.new()
 	r.seed = hash([name_text, now])
@@ -587,8 +672,11 @@ func create(name_text: String, emblem: int, now := -1.0) -> bool:
 
 
 func leave() -> bool:
-	if not joined():
+	if not joined() or busy:
 		return false
+	if online():
+		_post("leave")
+		return true
 	guild = {}
 	me.contrib = 0
 	me.boxes = []
@@ -621,6 +709,8 @@ func _guild_name(r: RandomNumberGenerator) -> String:
 func members_now(now := -1.0) -> Array:
 	if not joined():
 		return []
+	if online():
+		return guild.get("members", [])
 	if now < 0.0:
 		now = now_t()
 	return guild.members.filter(func(m): return float(m.join_t) <= now)
@@ -630,7 +720,7 @@ func members_now(now := -1.0) -> Array:
 
 ## sim_t부터 now까지 길드원 활동(출석·기부·보스)을 시간 순으로 반영한다. 하루에 한 번씩, 그날 seed로 정한 시각에.
 func tick(now: float, quiet := false) -> void:
-	if not joined():
+	if not joined() or online():
 		return
 	_roll_day(now)
 	var from := maxf(float(guild.sim_t), now - SIM_DAYS_MAX * 86400.0)
@@ -700,10 +790,81 @@ static func _commas(n: int) -> String:
 	return ("-" if n < 0 else "") + s + out
 
 
+# --- 온라인(서버 길드) ---
+
+## 처치 보상 대기 수(온라인 — 오프라인은 처치 때 바로 준다).
+func boss_pending() -> int:
+	return int(remote.get("boss_pending", 0)) if online() else 0
+
+
+func claim_kills() -> bool:
+	if not online() or busy or boss_pending() <= 0:
+		return false
+	_post("claim", {}, func(d):
+		var r: Dictionary = d.get("result", {})
+		notice.emit("길드 보스 처치 보상 %d회: 길드 코인 +%d · 다이아 +%d" % [int(r.get("kills", 0)), int(r.get("coins", 0)), int(r.get("diamonds", 0))]))
+	return true
+
+
+## GET /v1/guild(창을 열 때·새로고침·접속 직후).
+func fetch() -> void:
+	if not online() or not econ.net.up:
+		return
+	econ.net.send("GET", "/v1/guild", null, func(d): _take(d.get("guild")), Callable())
+
+
+func _post(op: String, body := {}, done := Callable()) -> void:
+	if not econ.net.up:
+		notice.emit("연결 대기 중")
+		return
+	busy = true
+	changed.emit()
+	econ.net.send("POST", "/v1/guild/" + op, body, _on_post.bind(done), _on_post_failed, true, true)
+
+
+func _on_post(d: Dictionary, done: Callable) -> void:
+	busy = false
+	econ.apply_server(d)
+	_take(d.get("guild"))
+	if done.is_valid():
+		done.call(d)
+
+
+## 거부(409 코드 → 문구)·응답 유실: 알림 + 길드 값을 새로 받는다.
+func _on_post_failed() -> void:
+	busy = false
+	notice.emit(ERROR_TEXT.get(econ.net.last_error, "길드 요청을 처리하지 못했습니다"))
+	fetch()
+	changed.emit()
+
+
+## 서버 길드 값 → 이 스크립트의 필드(창이 두 모드를 같은 코드로 그린다).
+func _take(v) -> void:
+	if not (v is Dictionary):
+		return
+	remote = v
+	coins = int(v.get("coins", 0))
+	var m = v.get("me")
+	if m is Dictionary:
+		me = m
+		me.boxes = (me.get("boxes", []) as Array).map(func(x): return int(x))
+		shop_day = me.get("shop_day", {"bought": {}})
+		shop_week = me.get("shop_week", {"bought": {}})
+	var g = v.get("guild")
+	if g is Dictionary:
+		guild = g
+		for x in guild.members:
+			x.join_t = -1.0
+	else:
+		guild = {}
+	changed.emit()
+	_emit_buff()
+
+
 # --- 저장 ---
 
 func save() -> void:
-	if save_path == "":
+	if save_path == "" or online():
 		return
 	var tmp := save_path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)

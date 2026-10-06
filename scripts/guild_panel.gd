@@ -37,6 +37,9 @@ var _fight := {}  # 전투 연출 {result, t, hits: [{v, t, x}], done}
 var _fight_layer: Control
 var _leave_armed := 0.0
 var _create_name := ""
+var _refetch := 0.0
+
+const REFETCH_SEC := 30.0  # 온라인: 창이 열려 있는 동안 이 간격으로 길드 값을 다시 받는다
 
 
 func _ready() -> void:
@@ -61,6 +64,7 @@ func _ready() -> void:
 	dialog.add_child(_fight_layer)
 	_fit_sheet()
 	Guild.changed.connect(_on_changed)
+	Guild.boss_done.connect(_on_boss_done)
 	Economy.changed.connect(_on_econ_changed)
 
 
@@ -70,7 +74,10 @@ func _fit() -> void:
 
 func _on_open() -> void:
 	Guild.check_unlock()
-	if Guild.joined():
+	if Guild.online():
+		Guild.fetch()  # 온라인: 길드원 활동·출석 인원을 새로 받는다
+		_refetch = REFETCH_SEC
+	elif Guild.joined():
 		Guild.tick(Guild.now_t())
 	_rebuild()
 
@@ -92,6 +99,11 @@ func _process(delta: float) -> void:
 		_fight.t = float(_fight.t) + delta
 		_fight_layer.queue_redraw()
 		return
+	if Guild.online():
+		_refetch -= delta
+		if _refetch <= 0.0:
+			_refetch = REFETCH_SEC
+			Guild.fetch()
 	if _leave_armed > 0.0:
 		_leave_armed -= delta
 		if _leave_armed <= 0.0:
@@ -118,8 +130,8 @@ func _rebuild() -> void:
 	for c in body.get_children():
 		body.remove_child(c)
 		c.queue_free()
-	if not Guild.available():
-		_center_note("온라인 길드는 준비 중입니다", "지금은 오프라인 모드에서만 길드를 이용할 수 있어요")
+	if Guild.online() and Guild.remote.is_empty():
+		_center_note("길드 정보를 불러오는 중입니다", "서버에 연결되면 바로 보여요")
 	elif not Guild.is_unlocked():
 		_center_note("1-10 라운드를 클리어하면 길드가 열립니다", "길드에 가입하면 출석·기부 보상, 길드 버프, 길드 보스가 열려요")
 	elif not Guild.joined():
@@ -302,7 +314,20 @@ func _build_joined() -> void:
 			_build_home()
 
 
+## 온라인: 길드가 쓰러뜨린 보스의 처치 보상(대기 수가 있을 때만).
+func _claim_button() -> void:
+	var n := Guild.boss_pending()
+	if n <= 0:
+		return
+	var b := _button("보스 처치 보상 받기 (%d회)" % n, GREEN.lightened(0.15), 24)
+	b.custom_minimum_size = Vector2(0, 60)
+	b.pressed.connect(func(): Guild.claim_kills())
+	body.add_child(b)
+	buttons["claim"] = b
+
+
 func _build_home() -> void:
+	_claim_button()
 	var g: Dictionary = Guild.guild
 	var note := _card()
 	var nv: VBoxContainer = note.get_child(0)
@@ -471,6 +496,7 @@ func _build_boss() -> void:
 	if why != "" and tries > 0:
 		v.add_child(_label(why, 20, RED))
 	body.add_child(card)
+	_claim_button()
 	# 등급표
 	var gc := _card()
 	var gv: VBoxContainer = gc.get_child(0)
@@ -599,9 +625,13 @@ func _build_members() -> void:
 # --- 보스 전투 연출 ---
 
 func _start_fight() -> void:
-	var res := Guild.fight_boss()
+	var res := Guild.fight_boss()  # 결과는 boss_done(온라인은 응답 때)
 	if res.is_empty():
 		Economy.notice.emit(Guild.boss_block())
+
+
+func _on_boss_done(res: Dictionary) -> void:
+	if not visible or res.is_empty() or not res.has("dmg"):
 		return
 	var hits := []
 	var n := 9
@@ -683,8 +713,9 @@ func _draw_fight() -> void:
 	var rew := "길드 코인 +%d · 골드 +%s" % [res.coins, UiKit.commas(res.gold)]
 	c.draw_string(font, Vector2(0, sz.y * 0.87), rew, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 28, Color(1, 0.92, 0.6))
 	if int(res.killed) > 0:
-		c.draw_string(font, Vector2(0, sz.y * 0.91), "보스 처치! 코인 +%d · 다이아 +%d" % [GuildScript.BOSS_KILL_REWARD.coins * int(res.killed),
-			GuildScript.BOSS_KILL_REWARD.diamonds * int(res.killed)], HORIZONTAL_ALIGNMENT_CENTER, sz.x, 26, Color(0.6, 1.0, 0.7))
+		var kt := "보스 처치! 처치 보상을 받으세요" if res.get("claim", false) else "보스 처치! 코인 +%d · 다이아 +%d" % [
+			GuildScript.BOSS_KILL_REWARD.coins * int(res.killed), GuildScript.BOSS_KILL_REWARD.diamonds * int(res.killed)]
+		c.draw_string(font, Vector2(0, sz.y * 0.91), kt, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 26, Color(0.6, 1.0, 0.7))
 	c.draw_string(font, Vector2(0, sz.y - 30), "탭해서 닫기", HORIZONTAL_ALIGNMENT_CENTER, sz.x, 22, Color(1, 1, 1, 0.7))
 
 
