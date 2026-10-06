@@ -790,6 +790,10 @@ static func is_boss_round(g: int) -> bool:
 	return round_in_stage(g) == rounds_per_stage()
 
 
+## 성 웨이브(스테이지·대기 화면) 적 행군 속도 배율(사용자 2026-10-06: 1.3배 빠르게). 던전·길드전은 안 쓴다.
+const CASTLE_WAVE_PACE := 1.3
+
+
 ## 적 이동속도 배율(§3) = min(stage_speed_cap, 1 + stage_speed_step × (S − 1)). 스테이지 안 라운드는 모두 같다.
 static func enemy_speed_mult(g: int) -> float:
 	return minf(config_num("stage_speed_cap"), 1.0 + config_num("stage_speed_step") * (round_stage(g) - 1))

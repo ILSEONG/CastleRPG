@@ -37,7 +37,7 @@ var atk: float = 0.0
 var is_boss := false  # 보스(GameData.BOSS_KINDS — 성 대보스·왕고블린·데스나이트): 거인 사냥(boss_slayer) 대상
 
 var _stats: Dictionary = {}
-var _speed := 0.0  # 기본 이동속도 × 스테이지 배율(개정 22 §3, setup)
+var _speed := 0.0  # 기본 이동속도 × 스테이지 배율(개정 22 §3) × 성 웨이브 배율(setup)
 var _model
 var _target_hero
 var _atk_cd := 0.0
@@ -83,7 +83,7 @@ func setup(p_kind: String, p_side: int, p_stage: int, p_castle, hp_mult := 1.0, 
 	hp = _stats.hp * st.hp_mult * hp_mult
 	hp_max = hp
 	atk = _stats.atk * st.atk_mult
-	_speed = float(_stats.speed) * GameData.enemy_speed_mult(stage)
+	_speed = float(_stats.speed) * GameData.enemy_speed_mult(stage) * GameData.CASTLE_WAVE_PACE
 
 
 ## 아레나(개정 18): row = 던전 적 한 행(Economy.dungeon_enemies — kind·hp·atk·speed·range·atk_interval·aggro·scale). add_child 전에.
