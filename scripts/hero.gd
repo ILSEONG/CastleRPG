@@ -83,6 +83,7 @@ var _blast_cd := 0.0
 var _level := 1
 var _promotion := 0
 var helper := false  # 모집권 던전 도우미(내 영웅이 아님): 내 장비를 끼지 않는다 — setup 전에 켠다
+var helper_tag := "도우미"  # HUD 얼굴 위 꼬리표(친구 영웅이면 "친구")
 var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
 var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
 var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)

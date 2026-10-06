@@ -97,6 +97,7 @@ func _ready() -> void:
 	if hp is Dictionary and not GameData.hero(str(hp.hero_id)).is_empty():
 		var h = HeroScript.new()
 		h.helper = true
+		h.helper_tag = "친구" if hp.has("friend") else "도우미"
 		h.setup(heroes.size(), GameData.hero(str(hp.hero_id)), null, null, int(hp.promotion), int(hp.level))
 		h.free_pos = stage.heroes[heroes.size() % stage.heroes.size()]
 		h.idle_dir = -ArenaKit.DOWN

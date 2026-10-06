@@ -128,6 +128,7 @@ signal research_done(id: String, level: int)  # 연구 완료 — 새 레벨(온
 signal killed(kind: String)  # 튜토리얼: 몬스터를 처치했다(성 전투·방치)
 signal sold(gold: int)  # 튜토리얼: 상인에게 자원을 팔았다(오프라인은 곧바로, 온라인은 응답이 왔을 때)
 signal granted(reward: Dictionary)  # 튜토리얼 보상을 받았다(grant)
+signal friends_changed  # 친구 목록(friends)이 새로 왔거나 친구 요청 응답 대기가 바뀌었다(온라인만)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
 var claims_open := true  # false면 claim_offline이 아무것도 안 한다(main: 로그인·접속 중 — 브라우저에서 돌아온 RESUMED가 정산하지 않게)
@@ -173,6 +174,8 @@ var rng := RandomNumberGenerator.new()  # 오프라인 모집 난수(테스트�
 var save_path := "user://save.json"  # ""이면 저장하지 않는다
 
 # --- 온라인 모드 ---
+var friends := {}  # 마지막 /v1/friends 응답(온라인만, 저장하지 않는다). 비면 아직 안 받음
+var friends_waiting := false
 var net = null  # Net(오토로드). null이면 오프라인: 로컬 규칙·저장(개정 7)
 var clock_offset := 0.0  # 서버 시각 − 로컬 시각(초)
 var server_gold_tenths := 0
@@ -1624,18 +1627,27 @@ func dungeon_state(type: String) -> Dictionary:
 	return out
 
 
-## 모집권 던전 도우미 후보 [{hero_id, level, promotion, power}](친구 목록이 없어 시스템이 고른 3명, 오늘 쓴 영웅 제외). 온라인 = 서버가 준 목록
-## (리셋이 지났으면 쓴 목록만 비우고 그대로 — 서버가 start에서 다시 검사한다), 오프라인 = GameData.helper_candidates(내 영웅·오늘 날짜).
+## 모집권 던전 도우미 후보 [{key, hero_id, level, promotion, power, friend?: {id, name}}]. 온라인 = 서버가 준 목록 — 오늘 아직 함께하지 않은
+## 친구들의 빌려주는 영웅(key "f:<친구 id>"), 그런 친구가 없으면 시스템이 고른 3명(key = 영웅 id). 리셋이 지났으면 쓴 목록만 비우고 그대로 —
+## 서버가 start에서 다시 검사한다. 오프라인 = 친구 없음 → GameData.helper_candidates(내 영웅·오늘 날짜).
 func helper_candidates() -> Array:
 	var st := _dungeon_now("ticket", time_now())
 	var used: Array = st.get("helpers_used", [])
 	if net != null:
-		return dungeons.get("ticket", {}).get("helpers", []).filter(func(h): return not used.has(h.hero_id))
+		return dungeons.get("ticket", {}).get("helpers", []).filter(func(h): return not used.has(h.key))
 	var owned := {}
 	for id in heroes:
 		if int(heroes[id]) >= 1:
 			owned[id] = {"level": level_of(id), "promotion": promotion_of(id), "equip": equipment_bonus(id)}
-	return GameData.helper_candidates(owned, used, "offline", GameData.reset_day(time_now()))
+	return GameData.helper_candidates(owned, used, "offline", GameData.reset_day(time_now())).map(func(h): h["key"] = h.hero_id; return h)
+
+
+## 도우미 key → 후보(없으면 {}).
+func helper_by_key(key: String) -> Dictionary:
+	for h in helper_candidates():
+		if h.key == key:
+			return h
+	return {}
 
 
 func _dungeon_now(type: String, now: float) -> Dictionary:
@@ -1687,12 +1699,13 @@ func dungeon_block(type: String, level: int, party: Array, helper = null) -> Str
 	if type == "ticket" and helper != null:
 		if str(helper) == "":
 			return "no_helper"
-		if party.has(helper):
-			return "bad_party"
 		if st.get("helpers_used", []).has(helper):
 			return "helper_used"
-		if not helper_candidates().any(func(h): return h.hero_id == helper):
+		var hc := helper_by_key(str(helper))
+		if hc.is_empty():
 			return "helper_unavailable"
+		if party.has(hc.hero_id):
+			return "bad_party"
 	if type == "equip" and bag_full():
 		return "bag_full"
 	if int(st.keys) < 1:
@@ -1732,9 +1745,9 @@ func start_dungeon(type: String, level: int, party: Array, helper := "") -> bool
 		"enemies": GameData.dungeon_enemies(type, level), "started_at": time_now(), "time_limit": GameData.config_num("dungeon_time_limit"),
 		"paid_with": "key" if int(st.keys) >= 1 else "gold"}
 	if type == "ticket":
-		for h in helper_candidates():
-			if h.hero_id == helper:
-				current_run["helper"] = h.duplicate()
+		var hc := helper_by_key(helper)
+		if not hc.is_empty():
+			current_run["helper"] = hc.duplicate(true)
 	dungeon_started.emit(current_run.duplicate(true))
 	return true
 
@@ -1807,7 +1820,7 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 			dia_tickets += n
 			res.rewards = {"tickets": n}
 			if run.get("helper") is Dictionary:  # 클리어에 쓴 도우미는 오늘 다시 못 쓴다
-				nxt["helpers_used"] = st.get("helpers_used", []) + [run.helper.hero_id]
+				nxt["helpers_used"] = st.get("helpers_used", []) + [run.helper.get("key", run.helper.hero_id)]
 		else:
 			var got := []
 			for it in GameData.roll_drops(int(run.level), int(GameData.config_num("equip_drop_count")), rng.randf):
@@ -2587,9 +2600,9 @@ func _on_dungeon_started(data: Dictionary) -> void:
 		current_run = {"run_id": data.run_id, "seed": int(data.seed), "type": data.type, "level": int(data.level),
 			"party": data.party if data.get("party") is Array else [], "enemies": data.enemies, "started_at": float(data.started_at),
 			"time_limit": float(data.get("time_limit", GameData.config_num("dungeon_time_limit"))), "paid_with": str(data.get("paid_with", "key"))}
-		var h = data.get("helper")
-		if h is Dictionary and h.get("hero_id") is String and _num(h.get("level")) and _num(h.get("promotion")):
-			current_run["helper"] = {"hero_id": h.hero_id, "level": int(h.level), "promotion": int(h.promotion), "power": int(h.get("power", 0))}
+		var h := _helper_dict(data.get("helper"))
+		if not h.is_empty():
+			current_run["helper"] = h
 	else:
 		notice.emit(DUNGEON_FAIL_TEXT)
 	dungeons_changed.emit()
@@ -2737,9 +2750,19 @@ func _dungeon_dict(src: Dictionary, base: Dictionary) -> Dictionary:
 				if v.get("helpers_used") is Array:
 					out[type]["helpers_used"] = v.helpers_used.filter(func(x): return x is String)
 				if v.get("helpers") is Array:
-					out[type]["helpers"] = v.helpers.filter(func(h): return h is Dictionary and h.get("hero_id") is String and _num(h.get("level")) \
-						and _num(h.get("promotion")) and not GameData.hero(h.hero_id).is_empty()).map(func(h): return {"hero_id": h.hero_id,
-						"level": int(h.level), "promotion": int(h.promotion), "power": int(h.get("power", 0))})
+					out[type]["helpers"] = v.helpers.map(_helper_dict).filter(func(h): return not h.is_empty())
+	return out
+
+
+## 서버 도우미 {key?, hero_id, level, promotion, power, friend?: {id, name}} → 앱 형식(key 없으면 영웅 id). 틀렸거나 모르는 영웅이면 {}.
+func _helper_dict(h) -> Dictionary:
+	if not (h is Dictionary and h.get("hero_id") is String and _num(h.get("level")) and _num(h.get("promotion"))) or GameData.hero(h.hero_id).is_empty():
+		return {}
+	var out := {"key": str(h.key) if h.get("key") is String else h.hero_id, "hero_id": h.hero_id, "level": int(h.level), "promotion": int(h.promotion),
+		"power": int(h.get("power", 0))}
+	var f = h.get("friend")
+	if f is Dictionary and f.get("id") is String and f.get("name") is String:
+		out["friend"] = {"id": f.id, "name": f.name}
 	return out
 
 
@@ -3007,3 +3030,64 @@ func _load_v10(data: Dictionary):
 
 static func _num(v) -> bool:
 	return v is float or v is int
+
+
+# --- 친구(2026-10-06, 모집권 던전 도우미 — 온라인만) ---
+
+const FRIEND_TEXT := {
+	"unknown_player": "그 친구 코드를 가진 성주가 없습니다", "self": "내 친구 코드입니다", "already_friends": "이미 친구입니다",
+	"already_requested": "이미 친구 신청을 보냈습니다", "friend_full": "친구와 보낸 신청이 가득 찼습니다", "their_full": "상대의 친구 목록이 가득 찼습니다",
+	"no_request": "친구 신청이 없어졌습니다", "not_friend": "이미 친구가 아닙니다", "not_owned": "가지고 있지 않은 영웅입니다",
+	"bad_request": "친구 코드는 8자리입니다",
+}
+const FRIEND_DONE_TEXT := {"request": "친구 신청을 보냈습니다", "accept": "친구가 되었습니다", "remove": "정리했습니다", "hero": "빌려줄 영웅을 바꿨습니다"}
+const FRIEND_OFFLINE_TEXT := "친구는 온라인에서만 쓸 수 있습니다"
+
+
+## 친구 목록 받기(GET /v1/friends). 오프라인이거나 응답 대기 중이면 아무것도 안 한다.
+func friends_load() -> void:
+	if net == null or friends_waiting:
+		return
+	friends_waiting = true
+	net.send("GET", "/v1/friends", null, _on_friends, _on_friends_failed)
+
+
+## 친구 요청: op = "request"({code} 또는 {id}) · "accept"({id}) · "remove"({id} — 삭제·거절·취소) · "hero"({hero_id}, null = 가장 강한 영웅).
+## 응답이 오면 friends를 바꾸고, 친구가 바뀌었으면 플레이어 상태(모집권 던전 도우미 목록)를 다시 받는다. 오프라인·대기 중·끊김이면 false.
+func friend_op(op: String, body: Dictionary) -> bool:
+	if net == null:
+		notice.emit(FRIEND_OFFLINE_TEXT)
+		return false
+	if friends_waiting:
+		return false
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	friends_waiting = true
+	friends_changed.emit()
+	net.send("POST", "/v1/friends/" + op, body, _on_friend_op.bind(op), _on_friends_failed, true, true)
+	return true
+
+
+func _on_friend_op(data, op: String) -> void:
+	var before: int = friends.get("friends", []).size()
+	_on_friends(data)
+	if op != "hero":
+		net.refresh()  # 도우미 목록(dungeons.ticket.helpers)은 플레이어 응답에 온다
+	# 서로 신청하면 바로 친구가 된다
+	notice.emit(FRIEND_DONE_TEXT.accept if op == "request" and friends.get("friends", []).size() > before else FRIEND_DONE_TEXT[op])
+
+
+func _on_friends(data) -> void:
+	friends_waiting = false
+	if data is Dictionary and data.get("code") is String and data.get("friends") is Array:
+		friends = data
+	friends_changed.emit()
+
+
+func _on_friends_failed(_data = null) -> void:
+	friends_waiting = false
+	var code: String = net.last_error if net != null else ""
+	if code != "":
+		notice.emit(FRIEND_TEXT.get(code, "친구 요청이 처리되지 않았습니다"))
+	friends_changed.emit()

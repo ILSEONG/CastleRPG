@@ -147,8 +147,8 @@ func _build_strip(root: Control) -> void:
 		if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
 		cell.add_child(face)
-		if h.helper:  # 모집권 던전 도우미: 피규어 위 파란 "도우미" 꼬리표
-			var tag := _label("도우미", 18, Color.WHITE)
+		if h.helper:  # 모집권 던전 도우미: 피규어 위 파란 "도우미"(친구 영웅이면 "친구") 꼬리표
+			var tag := _label(h.helper_tag, 18, Color.WHITE)
 			tag.add_theme_color_override("font_outline_color", HELPER_TAG.darkened(0.4))
 			tag.add_theme_constant_override("outline_size", 5)
 			tag.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
