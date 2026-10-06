@@ -4575,6 +4575,10 @@ func test_tutorial() -> void:
 		kinds[want] = true
 		check(got == want and (want != "tickets" or int(rw.tickets) == 10), "tutorial: mission %d reward is %s: %s" % [i + 1, want, rw])
 	check(kinds.size() == 4, "tutorial: all four reward kinds appear")
+	# 튜토리얼 훈련: 1마리씩, 5초
+	t.check()
+	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
+		"tutorial: training is one soldier in 5 s")
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
@@ -4623,7 +4627,31 @@ func test_tutorial() -> void:
 	t.guild = null
 	check(not t.complete() and t.tab_locked("guild") == false, "tutorial: guild tab open at the guild mission")
 	t.state = "done"
-	check(not t.tab_locked("hero") and t.mission().is_empty(), "tutorial done: nothing locked")
+	t.repeats_on = true
+	t.check()
+	# 반복 퀘스트: 처치 → 수집 → 스테이지 → 성장 … 바퀴마다 목표·보상이 커진다
+	var q: Dictionary = t.mission()
+	check(t.repeating() and q.kind == "kill" and int(q.arg) == 100 and int(t.repeat_reward(q).gold) == 3000, "repeat: first quest is kill 100 for 3,000 gold")
+	for i in 100:
+		e.add_kill("grunt", 1)
+	var g0: int = e.gold
+	check(t.complete() and t.claim() and e.gold == g0 + 3000 and t.mission().kind == "collect", "repeat: claim pays and moves on")
+	t.count = 3
+	t.claim()
+	gs.stage = 7
+	t.best_stage = 7
+	t.rep_quest = {}
+	q = t.mission()
+	check(q.kind == "stage" and not t.complete() and int(q.arg) == 8 and q.title == "스테이지 %s 클리어" % GameData.round_label(8), "repeat: stage target = reached + 1 (two more rounds)")
+	gs.stage = 9
+	check(t.complete() and t.claim() and t.mission().kind == "growth_up" and t.progress_text() == "0/3", "repeat: stage cleared; growth counts from now")
+	t.rep_n = TutorialScript.REPEATS.size()
+	t.rep_quest = {}
+	q = t.mission()
+	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
+	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
+	check(not e.tutorial_training and e.train_max("barracks") > 1, "tutorial done: normal training batches")
+	check(not t.tab_locked("hero") and t.repeating(), "tutorial done: nothing locked, repeat quests")
 	t.free()
 	gs.free()
 	e.free()

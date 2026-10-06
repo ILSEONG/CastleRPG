@@ -14,7 +14,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const SAVE_VERSION := 1
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
-const TRAIN_N := 5  # 보병 훈련 미션 보상이 대는 마릿수
+const TRAIN_N := 1  # 보병 훈련 미션 보상이 대는 마릿수(튜토리얼 훈련은 1마리씩, 5초 — Economy.tutorial_training)
 const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟수
 const KEYS := 2  # 던전 미션 보상 열쇠
 const RESEARCH_ID := "wood_tech"  # 연구 미션 보상이 대는 연구(1단계 아무 연구나 같은 비용)
@@ -49,7 +49,7 @@ const MISSIONS := [
 		"goto": "stage"},
 	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "보병 막사를 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
 		"goto": "building:barracks"},
-	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 훈련을 시작하세요. 훈련은 시간이 걸리니 다른 미션을 하며 기다려요.", "kind": "train",
+	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 튜토리얼에서는 5초면 끝나요.", "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
 	{"id": "build_houses", "title": "민가 건설", "desc": "민가를 지으세요. 인구가 병사 배치 상한입니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
 	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100, "goto": "stage"},
@@ -78,6 +78,27 @@ const MISSIONS := [
 	{"id": "guild", "title": "길드 가입", "desc": "[길드] 탭에서 추천 길드에 가입하거나 길드를 만드세요. 출석·기부로 길드 버프를 올립니다.", "kind": "guild",
 		"goto": "tab:guild"},
 ]
+## 반복 퀘스트(사용자 2026-10-06 "퀘스트로 할 수 있는 게 끝나면 반복 퀘스트로"): 튜토리얼을 끝냈거나 건너뛴(기존 저장) 플레이어에게 이 순서로 끝없이
+## 돈다. 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다. kind: kill·collect·sell·gacha·dungeon_win·build_up(사건 수), stage(지금 도달한
+## 라운드 + 2를 클리어), growth_up·hero_up(퀘스트를 받은 뒤 오른 성장 레벨·영웅 레벨 합). 보상은 적게: 한 바퀴에 다이아 20 + 모집권 1.
+## 목표 = base + step × c, 보상 = reward × (1 + c)(fixed는 늘지 않음).
+const REPEATS := [
+	{"kind": "kill", "base": 100, "step": 50, "title": "몬스터 %d마리 처치", "goto": "stage", "reward": {"gold": 3000}},
+	{"kind": "collect", "base": 3, "step": 1, "title": "자원 %d번 수집", "goto": "building:lumber", "reward": {"gold": 2000}},
+	{"kind": "stage", "title": "스테이지 %s 클리어", "goto": "stage", "fixed": {"diamonds": 20}},
+	{"kind": "growth_up", "base": 3, "step": 1, "title": "성장 강화 %d회", "goto": "tab:growth", "reward": {"gold": 5000}},
+	{"kind": "sell", "base": 1, "step": 0, "title": "상인에게 자원 팔기", "goto": "merchant", "reward": {"gold": 2000}},
+	{"kind": "hero_up", "base": 5, "step": 2, "title": "영웅 레벨업 %d회", "goto": "tab:hero", "reward": {"gold": 5000}},
+	{"kind": "gacha", "base": 10, "step": 0, "title": "영웅 %d회 모집", "goto": "tab:recruit", "fixed": {"tickets": 1}},
+	{"kind": "dungeon_win", "base": 1, "step": 0, "title": "던전 %d번 클리어", "goto": "tab:dungeon", "fixed": {"keys_gold": 1}},
+	{"kind": "build_up", "base": 1, "step": 0, "title": "건물 %d번 레벨업", "goto": "building:keep", "reward": {"wood": 300, "stone": 300, "food": 300}},
+]
+const REPEAT_DESC := {
+	"kill": "몬스터를 처치하세요. 방치 중 처치도 셉니다.", "collect": "생산 건물을 눌러 자원을 수집하세요.", "stage": "전투를 이어 가 목표 라운드를 클리어하세요.",
+	"growth_up": "[성장] 탭에서 강화하세요.", "sell": "상인에게 남는 자원을 파세요.", "hero_up": "[영웅] 탭에서 영웅을 레벨업하세요(여러 영웅 합산).",
+	"gacha": "골드·다이아·모집권 어느 모집이든 셉니다.", "dungeon_win": "골드·장비 던전 아무 단계나 클리어하세요.", "build_up": "아무 건물이나 레벨업을 끝내세요.",
+}
+
 ## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
 const TAB_MISSION := {"hero": "hero_level", "growth": "growth", "recruit": "gacha", "dungeon": "dungeon_gold", "soldier": "soldier_deploy",
 	"guild": "guild"}
@@ -93,6 +114,9 @@ var state := "skipped"  # active | done | skipped
 var step := 0  # 지금 미션 번호(0부터)
 var count := 0  # 사건 미션: 지금 미션이 된 뒤 센 수
 var best_stage := 1  # 도달한 최고 스테이지(오프라인 GameState.stage는 저장되지 않는다)
+var repeats_on := false  # 반복 퀘스트를 낸다(실제 게임·오프라인만 — _start가 켠다. 테스트는 직접)
+var rep_n := 0  # 끝낸 반복 퀘스트 수(다음 퀘스트 = REPEATS[rep_n % 크기], 바퀴 = rep_n / 크기)
+var rep_quest := {}  # 지금 반복 퀘스트(만들 때 목표·기준값을 정해 저장): {kind, arg, base_value, title, desc, goto}
 
 var _check_cd := 0.0
 var _was_complete := false
@@ -122,6 +146,7 @@ func _start() -> void:
 		begin(econ != null and econ.fresh_game and not online)
 	if online and state == "active":
 		state = "skipped"  # 온라인(서버 권위)에서는 공터·보상이 없다
+	repeats_on = not online
 	changed.emit()
 	check()
 
@@ -132,7 +157,10 @@ func _connect() -> void:
 		econ.sold.connect(func(_g): note("sell"))
 		econ.killed.connect(func(_k): note("kill"))
 		econ.gacha_done.connect(func(results): note("gacha", results.size()))
-		econ.building_done.connect(func(_id, _lv): check())  # 나머지 상태 미션은 _process가 1초마다 본다
+		econ.building_done.connect(func(_id, _lv):
+			note("build_up")
+			check())  # 나머지 상태 미션은 _process가 1초마다 본다
+		econ.dungeon_finished.connect(func(r): if r.get("win", false) and not r.get("repeated", false): note("dungeon_win"))
 	if gs != null:
 		gs.stage_cleared.connect(func(s): note_stage(int(s) + 1))
 	if guild != null:
@@ -140,7 +168,7 @@ func _connect() -> void:
 
 
 func _process(delta: float) -> void:
-	if state != "active":
+	if mission().is_empty():
 		return
 	_check_cd -= delta
 	if _check_cd <= 0.0:
@@ -170,8 +198,74 @@ func active() -> bool:
 	return state == "active"
 
 
+## 튜토리얼 동안 Economy 훈련을 1마리·5초로(끝나거나 건너뛰면 원래대로).
+func _sync_training() -> void:
+	if econ != null:
+		econ.tutorial_training = active()
+
+
 func mission() -> Dictionary:
-	return MISSIONS[step] if active() and step < MISSIONS.size() else {}
+	if active():
+		return MISSIONS[step] if step < MISSIONS.size() else {}
+	if not repeats_on or econ == null:
+		return {}
+	if rep_quest.is_empty():
+		rep_quest = _make_repeat(rep_n)
+		count = 0
+		_dirty = true
+	return rep_quest
+
+
+## 반복 퀘스트인가(튜토리얼이 끝났거나 건너뜀).
+func repeating() -> bool:
+	return not active() and not mission().is_empty()
+
+
+## n번째 반복 퀘스트(목표·기준값은 지금 상태로 정한다).
+func _make_repeat(n: int) -> Dictionary:
+	var d: Dictionary = REPEATS[n % REPEATS.size()]
+	var c := n / REPEATS.size()
+	var q := {"kind": d.kind, "goto": d.goto, "desc": REPEAT_DESC.get(d.kind, ""), "cycle": c, "base_value": 0}
+	if d.kind == "stage":
+		var reached := maxi(best_stage, int(gs.stage) if gs != null else 1)  # 다음에 할 라운드
+		q.arg = reached + 1  # 두 라운드 더
+		q.title = d.title % GameData.round_label(q.arg)
+	else:
+		q.arg = int(d.base) + int(d.step) * c
+		q.title = d.title % q.arg if "%d" in d.title else d.title
+	if d.kind == "growth_up":
+		q.base_value = _growth_sum()
+	elif d.kind == "hero_up":
+		q.base_value = _hero_level_sum()
+	return q
+
+
+func _growth_sum() -> int:
+	var t := 0
+	for v in econ.upgrades.values():
+		t += int(v)
+	return t
+
+
+func _hero_level_sum() -> int:
+	var t := 0
+	for id in econ.heroes:
+		t += econ.level_of(id)
+	return t
+
+
+## 반복 퀘스트 보상: reward × (1 + 바퀴) + fixed.
+func repeat_reward(q: Dictionary) -> Dictionary:
+	var d: Dictionary = {}
+	for x in REPEATS:
+		if x.kind == q.get("kind", ""):
+			d = x
+	var out := {}
+	for k in d.get("reward", {}):
+		out[k] = int(d.reward[k]) * (1 + int(q.get("cycle", 0)))
+	for k in d.get("fixed", {}):
+		out[k] = int(d.fixed[k])
+	return out
 
 
 func mission_index(id: String) -> int:
@@ -199,7 +293,7 @@ func note(kind: String, n := 1, arg = null) -> void:
 	var m := mission()
 	if m.is_empty() or m.kind != kind or _done(m):
 		return
-	if arg != null and m.get("arg") != arg:
+	if arg != null and active() and m.get("arg") != arg:
 		return
 	count += n
 	_dirty = true  # 처치는 자주 온다 — 저장은 _process가 몰아서
@@ -215,6 +309,7 @@ func note_stage(s: int) -> void:
 
 ## 완료가 바뀌었으면 changed.
 func check() -> void:
+	_sync_training()
 	var c := complete()
 	if c != _was_complete:
 		_was_complete = c
@@ -225,6 +320,17 @@ func check() -> void:
 func claim() -> bool:
 	if not complete():
 		return false
+	if repeating():
+		econ.grant(repeat_reward(rep_quest))
+		rep_n += 1
+		rep_quest = {}
+		count = 0
+		_was_complete = false
+		mission()  # 다음 퀘스트(목표·기준값을 지금 상태로)
+		save()
+		changed.emit()
+		check()
+		return true
 	var r := reward(step)
 	if econ != null:
 		econ.grant(r)
@@ -301,6 +407,8 @@ static func reward_text(r: Dictionary) -> String:
 	for res in GameData.resources():
 		if r.has(res.id):
 			parts.append("%s %s" % [res.name, _commas(int(r[res.id]))])
+	if r.has("diamonds"):
+		parts.append("다이아 %s" % _commas(int(r.diamonds)))
 	if r.has("gold"):
 		parts.append("골드 %s" % _commas(int(r.gold)))
 	if r.has("keys_gold"):
@@ -324,9 +432,17 @@ static func _commas(n: int) -> String:
 ## 진행 글자 "12/30"(횟수 미션: 처치·모집), 아니면 "".
 func progress_text() -> String:
 	var m := mission()
-	if m.is_empty() or not m.kind in ["kill", "gacha"]:
+	if m.is_empty():
+		return ""
+	if m.kind in ["growth_up", "hero_up"]:
+		return "%d/%d" % [mini(_delta(m), int(m.arg)), int(m.arg)]
+	if not m.kind in ["kill", "gacha", "collect", "dungeon_win", "build_up"] or int(m.get("arg", 1)) <= 1:
 		return ""
 	return "%d/%d" % [mini(count, int(m.arg)), int(m.arg)]
+
+
+func _delta(m: Dictionary) -> int:
+	return (_growth_sum() if m.kind == "growth_up" else _hero_level_sum()) - int(m.get("base_value", 0))
 
 
 ## 바로가기 대상 건물 id(카드가 그 건물 위에 화살표를 띄운다). 건물 미션이 아니면 "".
@@ -348,16 +464,18 @@ func _done(m: Dictionary) -> bool:
 	if econ == null:
 		return false
 	match m.kind:
-		"open", "collect", "sell":
+		"open", "sell":
 			return count >= 1
-		"gacha", "kill":
-			return count >= int(m.arg)
+		"gacha", "kill", "collect", "dungeon_win", "build_up":
+			return count >= int(m.get("arg", 1)) if repeating() or m.kind != "collect" else count >= 1
+		"growth_up", "hero_up":
+			return _delta(m) >= int(m.arg)
 		"build":
 			return econ.is_built(m.arg)
 		"level":
 			return econ.shown_level(m.arg[0]) >= int(m.arg[1])
 		"stage":
-			return maxi(best_stage, int(gs.stage) if gs != null else 1) > int(m.arg) or (int(m.arg) >= 10 and guild != null and guild.unlocked)
+			return maxi(best_stage, int(gs.stage) if gs != null else 1) > int(m.arg) or (active() and int(m.arg) >= 10 and guild != null and guild.unlocked)
 		"hero_level":
 			for id in econ.heroes:
 				if econ.level_of(id) >= 2:
@@ -393,7 +511,8 @@ func save() -> void:
 	if f == null:
 		push_warning("tutorial save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
-	f.store_string(JSON.stringify({"version": SAVE_VERSION, "state": state, "step": step, "count": count, "best_stage": best_stage}))
+	f.store_string(JSON.stringify({"version": SAVE_VERSION, "state": state, "step": step, "count": count, "best_stage": best_stage, "rep_n": rep_n,
+		"rep_quest": rep_quest}))
 	f.close()
 
 
@@ -412,6 +531,13 @@ func load_save() -> bool:
 	step = clampi(int(d.get("step", 0)), 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))
+	rep_n = maxi(0, int(d.get("rep_n", 0)))
+	var rq = d.get("rep_quest", {})
+	rep_quest = rq if rq is Dictionary and rq.has("kind") and rq.has("arg") else {}
+	if rep_quest.has("arg"):
+		rep_quest.arg = int(rep_quest.arg)
+		rep_quest.cycle = int(rep_quest.get("cycle", 0))
+		rep_quest.base_value = int(rep_quest.get("base_value", 0))
 	if state == "active" and step >= MISSIONS.size():
 		state = "done"
 	return true
