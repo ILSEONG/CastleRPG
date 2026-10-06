@@ -1,8 +1,8 @@
 extends CanvasLayer
 ## 던전 전투 화면(개정 18 §8). 위 패널: 던전 이름·단계, 남은 시간, [포기](싸우는 중만), 보스 큰 HP 막대(이름·숫자 — 나오기 전엔 "남은 적 n").
 ## 아래: 출전 영웅 띠(피규어 + HP 막대, 쓰러지면 흐리게). 가운데 띠("승리!"·"결과 확인 중…")와 짧은 알림(Economy.notice — 성 HUD는 트리 밖).
-## 결과 화면(show_result): 어두운 배경 + 가운데 패널 — "승리!"/"패배"(실패면 그 이유), 던전·단계, 보상(골드 / 장비 칸: 등급 테두리·이름·Lv,
-## 패배면 "보상 없음 · 열쇠는 그대로"), [나가기]·[다시]·[다음 단계](이겼고 최고 + 1 이하일 때), 체크 둘 "현재 단계 자동 반복"·
+## 결과 화면(show_result): 어두운 배경 + 가운데 패널 — 승리면 "승리!", 던전·단계, 보상(골드 / 장비 칸: 등급 테두리·이름·Lv).
+## 패배면 맨 위에 던전·단계, 그 밑에 "패배"(실패면 그 이유), 보상 줄 없음. [나가기]·[다시]·[다음 단계](이겼고 최고 + 1 이하일 때), 체크 둘 "현재 단계 자동 반복"·
 ## "다음 단계 자동 도전"(서로 배타, Fever.dungeon_auto), 자동 상태 한 줄("2초 뒤 자동 도전"·"자동 도전을 멈췄습니다").
 
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -229,6 +229,9 @@ func show_result() -> void:
 	result_title.add_theme_color_override("font_color", WIN_GOLD if win else LOSS_RED)
 	result_title.add_theme_font_size_override("font_size", 56 if err == "" else 32)
 	result_sub.text = "%s %d단계" % [NAMES.get(dungeon.run.type, ""), int(dungeon.run.level)]
+	# 패배면 던전·단계를 맨 위에, 그 밑에 패배 문구(사용자 요청). 승리면 제목 밑.
+	result_sub.get_parent().move_child(result_sub, 1 if win else 0)
+	result_sub.add_theme_font_size_override("font_size", 26 if win else 34)
 	for c in reward_box.get_children():
 		reward_box.remove_child(c)
 		c.queue_free()
@@ -256,8 +259,7 @@ func show_result() -> void:
 		cell.add_child(_label("Lv %d" % int(it.level), 16, MainHud.INK.lightened(0.3)))
 		reward_box.add_child(cell)
 		reward_tiles.append(tile)
-	if not win:
-		reward_box.add_child(_label("보상 없음 · 열쇠는 그대로", 26, MainHud.INK.lightened(0.25)))
+	reward_box.visible = win  # 패배면 보상 줄 없이(사용자 요청: "보상 없음 · 열쇠는 그대로" 삭제)
 	result_layer.visible = true
 	refresh_result()
 
