@@ -8,7 +8,7 @@ alter table player_state add column tut_step integer not null default 0 check (t
 alter table player_state add column rep_n integer not null default 0 check (rep_n >= 0);
 alter table player_state add column last_quest_claim timestamptz;
 -- 다이아 모집권(튜토리얼 보상): 다이아 모집 1회 = 1장
-alter table player_state add column dia_tickets integer not null default 0 check (dia_tickets >= 0);
+alter table player_state add column if not exists dia_tickets integer not null default 0 check (dia_tickets >= 0);
 -- 튜토리얼 공터: 아직 짓지 않은 건물 id(레벨 행은 1 그대로). 짓기 = 일꾼으로 Lv 1 비용·시간, 다 지으면 목록에서 빠진다
 alter table player_state add column unbuilt text[] not null default '{}';
 -- 튜토리얼 중 병사 1마리 훈련 시간(초)
