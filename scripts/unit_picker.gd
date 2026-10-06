@@ -3,7 +3,8 @@ extends Node
 ## 영웅 선택 / 선택 영웅을 성문 앞(성문 탭)·성벽 위(성벽 탭 — 누른 지점에 가장 가까운 빈 자리, 같은 면 좌↔우도)·바닥 지점(그 외)으로 이동.
 ## 판정: 선택된 산 영웅이 없으면 HERO_TAP_PX 안 영웅 선택 → 상인·건물·성문(창) → 선택 해제. 있으면
 ## HERO_TAP_PRECISE_PX 안 영웅(선택된 영웅 자신이면 해제, 아니면 그 영웅 선택) → 성문 → 성벽 →
-## HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
+## MONSTER_TAP_PX 안 괴물(선택 해제) → HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창 + 선택 해제) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
+## 영웅을 고른 채 UI(버튼·창 등 GUI가 먹는 곳)를 누르면 선택을 푼다 — 그 누름으로 선택이 바뀌었으면(초상화 줄) 그대로.
 ## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
 ## 상인 탭은 거래 창, 주점 탭은 모집 창, 자원 건물 탭은 쌓인 게 있으면 수집(+N)·없으면 건물 창, 병사 건물 탭은 훈련이 끝났으면 수령
 ## (개정 16, 알림 "보병 +n")·아니면 건물 창, 연구소 탭은 플라스크 말풍선이 떠 있으면 연구 창(개정 24)·아니면 건물 창, 그 밖의 건물 탭은 건물 창(개정 12 §2.5).
@@ -28,6 +29,7 @@ const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — 건물보다 먼�
 const TAP_MAX_PX := 12.0
 const HERO_TAP_PX := 32.0  # 화면(논리 720px 폭 기준)에서 영웅 중심까지 이 거리 안이면 그 영웅. 줌과 무관
 const HERO_TAP_PRECISE_PX := 12.0  # 영웅 선택 중에는 이만큼 가까워야 성문·성벽보다 영웅이 먼저
+const MONSTER_TAP_PX := 16.0  # 영웅 선택 중 괴물 중심에서 이 안을 누르면 선택 해제(바닥 이동 아님)
 const GROUND_MARGIN := 4.0   # 바닥 명령 지점을 맵 가장자리에서 이만큼 안으로 자른다
 const LONG_PRESS_MS := 500
 const MAX_TAP_HITS := 4  # 한 탭 레이가 꿰어 보는 건물 판정체 수(_building_hit)
@@ -46,11 +48,25 @@ var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
 var _press_yaw := 0.0  # 누른 순간 카메라 요(회전했는지 판정)
 var _press_ms := -1 # 누른 시각(길게 누르기를 아직 안 본 누름). 봤거나 누름이 아니면 -1
+var _gui_tap := false  # 이번 누름을 GUI가 먹었다(_unhandled_input에 오지 않았다)
+var _gui_sel  # 누른 순간의 선택 영웅
+var _gui_check := false  # 뗐다 — 다음 물리 프레임에 GUI 누름이면 선택 해제
 var _routes := {}  # 영웅 → 이동 경로 표시(route_marker.gd). 영웅마다 하나, 새 명령이면 바꾼다
 
 
 func _ready() -> void:
 	Economy.collected.connect(_on_collected)
+
+
+func _input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed:
+		_gui_tap = true  # _unhandled_input까지 오면 지운다
+		_gui_sel = selected
+	elif _gui_tap:
+		_gui_check = true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -67,6 +83,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if mb.pressed:
+		_gui_tap = false
 		_press_pos = mb.position
 		_press_ms = Time.get_ticks_msec()
 		_press_yaw = camera.global_rotation.y
@@ -77,6 +94,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if _gui_check:
+		_gui_check = false
+		if _gui_tap and selected != null and selected == _gui_sel:
+			_select(null)  # UI를 눌렀다(초상화로 다른 영웅을 고른 게 아니면)
+		_gui_tap = false
 	if arena_r <= 0.0 and _press_pos != Vector2.INF and _press_ms >= 0 and Time.get_ticks_msec() - _press_ms >= LONG_PRESS_MS:
 		_press_ms = -1
 		var id := _building_at(_press_pos)
@@ -98,6 +120,9 @@ func _physics_process(_delta: float) -> void:
 	if hero != null:
 		_select(null if hero == selected else hero)  # 선택된 영웅을 다시 누르면 해제
 		return
+	if _monster_at(screen_pos, MONSTER_TAP_PX):
+		_select(null)
+		return
 	if arena_r <= 0.0:
 		var hit := _pick(screen_pos, LAYER_GATE)
 		if not hit.is_empty():
@@ -116,7 +141,8 @@ func _physics_process(_delta: float) -> void:
 		_select(hero)
 		return
 	if arena_r <= 0.0 and _tap_object(screen_pos):
-		return  # 영웅 선택 유지
+		_select(null)  # 상인·건물을 눌렀다
+		return
 	var ground = _ground_point(screen_pos)
 	if ground == null:
 		_select(null)
@@ -257,6 +283,20 @@ func _hero_at(screen_pos: Vector2, radius_px: float):
 			best_d = d
 			best = h
 	return best
+
+
+## 탭 위치에서 화면상 radius_px 안에 살아 있는 괴물(적)이 있는가.
+func _monster_at(screen_pos: Vector2, radius_px: float) -> bool:
+	for m in get_tree().get_nodes_in_group("monsters"):
+		if not is_instance_valid(m) or not m.is_inside_tree() or m.get("is_structure") == true:  # 공성전 성문·성채는 괴물이 아니다
+			continue
+		if m.has_method("is_alive") and not m.is_alive():
+			continue
+		if camera.is_position_behind(m.global_position):
+			continue
+		if camera.unproject_position(m.global_position + Vector3(0, 0.8, 0)).distance_to(screen_pos) <= radius_px:
+			return true
+	return false
 
 
 func _select(hero) -> void:

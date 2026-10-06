@@ -434,7 +434,7 @@ func press_equip(s: String) -> void:
 		bag.open_pick(detail_id, s)
 
 
-## [장비 자동착용]: 부위마다 더 좋은 장비를 낀다(오프라인은 곧바로, 온라인은 부위마다 /v1/equip). 바꿀 게 없으면 알림만.
+## [장비 자동착용]: 부위마다 더 좋은 장비를 한 번에 낀다(온라인도 곧바로 보이고 /v1/equip/many 한 번으로 확인). 바꿀 게 없으면 알림만.
 func auto_equip() -> void:
 	if detail_id == "" or not owns(detail_id):
 		return
