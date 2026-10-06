@@ -1,7 +1,7 @@
 extends Node
 ## 온라인 친구 + 모집권 던전 체크(개발용, 2026-10-06): 로컬 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1)에 앱(게스트)과 봇 둘(B·C)이 접속한다.
 ## 친구가 없으면 도우미 = 시스템 추천 3 → B가 내 코드로 신청 → 친구 창에서 수락, C의 코드로 신청 → C가 수락 → 도우미 = 친구 둘의 영웅 →
-## B의 영웅과 출전(HUD "친구" 꼬리표) → 승리 → B는 오늘 다시 못 쓰고 C만 남는다.
+## [친구 추가] 탭·추천 [새로고침] → B의 영웅과 출전(HUD "친구" 꼬리표) → 승리 → B는 오늘 다시 못 쓰고 C만 남는다.
 ## 실행: cd server && PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=8791 node src/main.ts &
 ##   xvfb-run -a -s "-screen 0 720x1280x24" godot --path . --rendering-driver opengl3 --resolution 720x1280 res://tests/friend_online.tscn -- \
 ##     --api=http://127.0.0.1:8791 --device=/tmp/x/device.json [--out=DIR]
@@ -57,7 +57,19 @@ func _ready() -> void:
 	_check(await _wait_until(func(): return Economy.friends.get("incoming", []).size() == 1, 10.0), "B's request arrives", str(Economy.friends))
 	_check(Economy.friends.recommend.any(func(p): return p.id == _bots.C.id), "C is recommended", str(Economy.friends.recommend))
 	await _frames(10)
+	_check(fp.tab == "list" and fp._list_page.visible and not fp._add_page.visible and fp.tab_btns.list.text.contains("신청 1"),
+		"friend list tab first, request count on the tab", fp.tab_btns.list.text)
 	await _shot("f2_incoming")
+	# 2b. [친구 추가] 탭: 코드 입력 + 추천 성주, [새로고침]은 목록을 다시 받는다
+	fp.pick_tab("add")
+	await _frames(10)
+	_check(fp._add_page.visible and not fp._list_page.visible and fp.rec_list.get_child_count() >= 1, "add tab shows code input + recommendations", "")
+	await _shot("f2b_add_tab")
+	fp.refresh_recommend()
+	_check(Economy.friends_waiting and fp.refresh_btn.disabled, "refresh fetches again (button disabled while waiting)", "")
+	_check(await _wait_until(func(): return not Economy.friends_waiting, 10.0) and not fp.refresh_btn.disabled
+		and Economy.friends.recommend.any(func(p): return p.id == _bots.C.id), "refresh done, C still recommended", "")
+	fp.pick_tab("list")
 
 	# 3. 수락, C의 코드로 신청 → C가 수락
 	Economy.friend_op("accept", {"id": _bots.B.id})
