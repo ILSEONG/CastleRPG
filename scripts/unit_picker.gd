@@ -13,6 +13,7 @@ extends Node
 ## 되지 않는다(주점·자원 건물도 건물 창). 건물이 아니면(바닥·영웅·상인) 아무 일 없이 뗄 때 보통 탭이다.
 ## 입력을 소비하지 않는다 — 카메라 리그도 같은 이벤트를 본다(거래 창이 열려 있으면 GUI가 먼저 먹어 둘 다 못 받는다).
 ## 터치는 emulate_mouse_from_touch로 마우스 이벤트가 되므로 마우스만 처리.
+## 던전(arena_r > 0): 성문·성벽·건물·상인이 없다 — 영웅 선택과 바닥 이동만(같은 탭 규칙), 바닥 지점은 중심에서 arena_r 안으로 자른다.
 
 const Formation := preload("res://scripts/formation.gd")
 const Balance := preload("res://scripts/balance.gd")
@@ -39,6 +40,7 @@ var panel   # 상인 거래 창(merchant_panel.gd)
 var recruit  # 주점 모집 창(recruit_panel.gd)
 var building_panel  # 건물 창(building_panel.gd)
 var research  # 연구 창(research_panel.gd, 개정 24) — 연구소 말풍선 탭
+var arena_r := 0.0  # > 0이면 던전: 영웅 선택·바닥 이동만, 바닥 지점은 이 반경 안
 
 var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
@@ -74,7 +76,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if _press_pos != Vector2.INF and _press_ms >= 0 and Time.get_ticks_msec() - _press_ms >= LONG_PRESS_MS:
+	if arena_r <= 0.0 and _press_pos != Vector2.INF and _press_ms >= 0 and Time.get_ticks_msec() - _press_ms >= LONG_PRESS_MS:
 		_press_ms = -1
 		var id := _building_at(_press_pos)
 		if id != "":
@@ -87,7 +89,7 @@ func _physics_process(_delta: float) -> void:
 	# 영웅은 화면 좌표로 판정하므로 성문·성벽 탭 박스(여유 1m)에 가려질 일이 없다.
 	if selected == null or not selected.is_alive():
 		var tapped = _hero_at(screen_pos, HERO_TAP_PX)
-		if tapped == null and _tap_object(screen_pos):
+		if tapped == null and arena_r <= 0.0 and _tap_object(screen_pos):
 			return  # 상인·자원 건물: 선택은 그대로(없으면 없는 채)
 		_select(tapped)
 		return
@@ -95,19 +97,20 @@ func _physics_process(_delta: float) -> void:
 	if hero != null:
 		_select(null if hero == selected else hero)  # 선택된 영웅을 다시 누르면 해제
 		return
-	var hit := _pick(screen_pos, LAYER_GATE)
-	if not hit.is_empty():
-		selected.move_to(hit.collider.get_meta("side"), Formation.POST_GATE)
-		return
-	hit = _pick(screen_pos, LAYER_WALL)
-	if not hit.is_empty():
-		selected.move_to(hit.collider.get_meta("side"), Formation.POST_WALL)
-		return
+	if arena_r <= 0.0:
+		var hit := _pick(screen_pos, LAYER_GATE)
+		if not hit.is_empty():
+			selected.move_to(hit.collider.get_meta("side"), Formation.POST_GATE)
+			return
+		hit = _pick(screen_pos, LAYER_WALL)
+		if not hit.is_empty():
+			selected.move_to(hit.collider.get_meta("side"), Formation.POST_WALL)
+			return
 	hero = _hero_at(screen_pos, HERO_TAP_PX)
 	if hero != null and hero != selected:
 		_select(hero)
 		return
-	if _tap_object(screen_pos):
+	if arena_r <= 0.0 and _tap_object(screen_pos):
 		return  # 영웅 선택 유지
 	var ground = _ground_point(screen_pos)
 	if ground == null:
@@ -202,6 +205,8 @@ func _building_at(screen_pos: Vector2) -> String:
 
 ## 수집 결과 "+N". 오프라인은 탭 즉시, 온라인은 서버 응답의 amount로.
 func _on_collected(building_id: String, res_id: String, amount: int) -> void:
+	if badges == null:
+		return  # 던전 피커
 	badges.pop(badges.anchor(building_id), res_id, amount)
 
 
@@ -210,6 +215,9 @@ func _ground_point(screen_pos: Vector2):
 	var hit = Plane(Vector3.UP, 0.0).intersects_ray(camera.project_ray_origin(screen_pos), camera.project_ray_normal(screen_pos))
 	if hit == null:
 		return null
+	if arena_r > 0.0:
+		var flat := Vector2(hit.x, hit.z).limit_length(arena_r)
+		return Vector3(flat.x, 0.0, flat.y)
 	var lim := Balance.MAP_HALF - GROUND_MARGIN
 	return Vector3(clampf(hit.x, -lim, lim), 0.0, clampf(hit.z, -lim, lim))
 

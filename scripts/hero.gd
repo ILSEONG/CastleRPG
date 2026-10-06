@@ -48,6 +48,7 @@ var side: int = 0
 var post: int = Formation.POST_GATE
 var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
+var hold := false  # 아레나: 이동 명령을 받았다 — 표적은 free_pos에서 aggro 안(성 영웅처럼). false면 거리 제한 없이 가장 가까운 적
 var idle_dir := Vector3.FORWARD  # 아레나 대기 방향(성에서는 면 바깥)
 var _path: Array[Vector3] = []
 var hp: float = 0.0
@@ -198,17 +199,27 @@ func move_to(p_side: int, p_post: int) -> bool:
 
 
 ## 자유 이동 명령: 슬롯을 비우고 바닥 지점 p에 선다. 대기 방향은 가장 가까운 면의 바깥.
+## 아레나(던전)에서는 그 뒤로 그 지점에서 aggro 안의 적만 노린다(hold) — 안 그러면 도착하자마자 가장 가까운 적에게 다시 달려간다.
 func move_to_point(p: Vector3) -> void:
-	formation.release(index)
+	if formation != null:
+		formation.release(index)
 	post = Formation.POST_FREE
 	free_pos = Vector3(p.x, 0.0, p.z)
-	side = Formation.side_of(free_pos)
+	if castle != null:
+		side = Formation.side_of(free_pos)
+	else:
+		hold = true
 	_replan()
 
 
 func _replan() -> void:
-	if is_inside_tree():
-		_path = Formation.route(castle.half, global_position, stand_position())
+	if not is_inside_tree():
+		return
+	if castle == null:
+		_path = [stand_position()]  # 아레나: 곧장
+		_target = null
+		return
+	_path = Formation.route(castle.half, global_position, stand_position())
 
 
 ## 실제 높이로 판정한다 — 오르내리는 중에는 지상 취급.
@@ -389,7 +400,18 @@ func _process(delta: float) -> void:
 ## 표적: 지상 영웅은 자기 자리에서 aggro 안·자리와 같은 영역(자기도 그 영역에 있을 때만), 성벽 위 영웅은 지금 위치에서 사거리 안(영역 무관). 가장 가까운 것.
 ## ponytail: 추격은 직선이다 — 성(모서리)을 가로질러야 닿는 표적은 포기한다(모서리 너머 괴물과는 안 싸운다). 필요하면 추격에도 route() 사용.
 func _find_target():
-	if castle == null:  # 아레나: 거리·영역 제한 없이 가장 가까운 괴물
+	if castle == null:  # 아레나: 거리·영역 제한 없이 가장 가까운 괴물(이동 명령 뒤에는 그 자리에서 aggro 안)
+		if hold:
+			var best = null
+			var best_d := INF
+			for m in get_tree().get_nodes_in_group("monsters"):
+				if not m.is_alive() or Formation.flat_distance(free_pos, m.global_position) > maxf(float(def.aggro), float(def.range)):
+					continue
+				var d := Formation.flat_distance(global_position, m.global_position)
+				if d < best_d:
+					best_d = d
+					best = m
+			return best
 		var near := _nearest_others(null, global_position, INF, 1)
 		return near[0] if not near.is_empty() else null
 	var on_wall := is_on_wall()
