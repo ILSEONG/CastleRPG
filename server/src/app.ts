@@ -10,6 +10,7 @@ import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 import * as O from './oauth.ts'
 import * as G from './guild.ts'
+import * as Rk from './ranking.ts'
 import { registerGuildWar } from './war_routes.ts'
 import type { WarLive } from './war_live.ts'
 
@@ -1987,6 +1988,17 @@ export function createApp(opts: AppOptions) {
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }) }
       return { change: ch, result: { shards: ch.shards ?? {} } }
     })
+  })
+
+  // --- 랭킹(server/src/ranking.ts): 스테이지·전투력·던전(골드·장비)·길드. 목록은 잠깐 캐시한다 ---
+  const ranking = Rk.rankingStore(query, clock, loadGame)
+  app.get('/v1/ranking/:board', auth, async (c) => {
+    const board = c.req.param('board') as Rk.Board
+    if (!Rk.BOARDS.includes(board)) throw new ApiError(400, 'bad_request', `board must be one of ${Rk.BOARDS.join(', ')}`)
+    const id = c.get('playerId') as string
+    let key: string | null = id
+    if (board === 'guild') key = (await query('select guild_id::text from player_guild where player_id = $1', [id]))[0]?.guild_id ?? null
+    return c.json(await ranking.board(board, key))
   })
 
   if (opts.allowTestHooks) {

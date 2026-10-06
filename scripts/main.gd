@@ -177,6 +177,11 @@ func _build_world() -> void:
 	add_child(dungeon_panel)
 	var guild_panel = preload("res://scripts/guild_panel.gd").new()  # 길드 시트
 	add_child(guild_panel)
+	var ranking_panel = preload("res://scripts/ranking_panel.gd").new()  # 랭킹 시트(온라인): HUD 트로피 버튼이 연다
+	add_child(ranking_panel)
+	var ranking_button = preload("res://scripts/ranking_button.gd").new()
+	ranking_button.panel = ranking_panel
+	add_child(ranking_button)
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·길드(상인은 NPC 탭)
 	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "guild": guild_panel}
 	add_child(tabs)
