@@ -4,6 +4,7 @@ extends Node
 const GameData := preload("res://scripts/game_data.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
+const Formation := preload("res://scripts/formation.gd")
 
 var castle
 
@@ -12,6 +13,7 @@ var _cursor := 0
 var _clock := 0.0
 var _live := 0
 var _stage_mode := false
+var _group_at := NAN  # 지금 나오는 무리의 성문 옆 위치
 
 
 func _ready() -> void:
@@ -64,8 +66,11 @@ func _spawn(ev: Dictionary) -> void:
 	m.setup(ev.kind, ev.side, GameState.stage, castle, ev.get("hp_mult", 1.0), ev.get("look", ""))
 	m.died.connect(_on_monster_died)
 	get_parent().add_child(m)
-	if ev.get("lanes", 1) > 1:  # 무리: 옆으로 칸을 나눠 겹치지 않게(_ready가 정한 아무 자리를 덮어쓴다)
-		m.global_position = castle.spawn_position(ev.side, ev.lane, ev.lanes)
+	if ev.get("lanes", 1) > 1:  # 무리: 옆으로 칸을 나눠 겹치지 않게(_ready가 정한 아무 자리를 덮어쓴다), 같은 무리는 같은 성문 앞
+		if int(ev.lane) == 0 or is_nan(_group_at):
+			var offs := Formation.gate_offsets(castle.half)
+			_group_at = offs[randi() % offs.size()]
+		m.global_position = castle.spawn_position(ev.side, ev.lane, ev.lanes, _group_at)
 	_live += 1
 
 

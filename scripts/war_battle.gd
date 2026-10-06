@@ -138,6 +138,8 @@ func _build_stage() -> void:
 	mat.shader = ArenaKit.GroundShader
 	mat.set_shader_parameter("tile_size", 2.0)
 	mat.set_shader_parameter("interior_half", half)
+	mat.set_shader_parameter("gate_off", absf(float(Formation.gate_offsets(half)[0])))  # 면마다 성문 2개(±half/2) 앞 길
+	mat.set_shader_parameter("lane_depth", half - Balance.STAIR_W - Formation.GATE_PASS_MARGIN)
 	mat.set_shader_parameter("grass_a", Color(0.47, 0.58, 0.36))
 	mat.set_shader_parameter("grass_b", Color(0.44, 0.55, 0.33))
 	var ground := MeshInstance3D.new()
@@ -166,19 +168,27 @@ func _build_stage() -> void:
 ## 상대 성: castle.gd와 같은 부품(성벽·문루·문짝·모서리 탑) + 성채 + 성 안 건물(장식).
 func _build_castle(root: Node3D) -> void:
 	var c := half + Balance.WALL_T / 2.0
-	var run := c - Balance.GATE_W / 2.0
-	var wall_mesh := TownKit.wall_run(run)
 	var gate_mesh := TownKit.gatehouse()
 	var doors_mesh := TownKit.gate_doors()
+	var offs := Formation.gate_offsets(half)  # 28칸 = 면마다 성문 2개(내구도는 면마다 하나 — 같은 면 문짝은 함께 열린다)
+	var walls := {}
 	for side in 4:
 		var dir: Vector3 = Formation.SIDE_DIR[side]
-		var perp := Formation.perp(side)
-		var center := Formation.gate_position(half, side)
 		var facing := Basis(Vector3.UP, atan2(dir.x, dir.z))
-		_mesh(root, gate_mesh, Transform3D(facing, center))
-		_doors.append(_mesh(root, doors_mesh, Transform3D(facing, center)))
-		for s in [-1.0, 1.0]:
-			_mesh(root, wall_mesh, Transform3D(facing, center + perp * s * (Balance.GATE_W + run) / 2.0))
+		var doors := []
+		var edges: Array = [-c]
+		for at in offs:
+			var center := Formation.gate_position(half, side, at)
+			_mesh(root, gate_mesh, Transform3D(facing, center))
+			doors.append(_mesh(root, doors_mesh, Transform3D(facing, center)))
+			edges.append_array([at - Balance.GATE_W / 2.0, at + Balance.GATE_W / 2.0])
+		edges.append(c)
+		_doors.append(doors)
+		for i in range(0, edges.size(), 2):
+			var run: float = edges[i + 1] - edges[i]
+			if not walls.has(run):
+				walls[run] = TownKit.wall_run(run)
+			_mesh(root, walls[run], Transform3D(facing, Formation.gate_position(half, side, (edges[i] + edges[i + 1]) / 2.0)))
 	var tower_mesh := TownKit.corner_tower()
 	for corner in [Vector3(c, 0, c), Vector3(-c, 0, c), Vector3(c, 0, -c), Vector3(-c, 0, -c)]:
 		_mesh(root, tower_mesh, Transform3D(Basis.IDENTITY, corner))
@@ -199,18 +209,26 @@ func _mesh(root: Node3D, m: Mesh, xf: Transform3D) -> MeshInstance3D:
 	return mi
 
 
-## 성문 4(성벽 바깥면 앞 치는 자리)과 성채(몸통 + 면마다 치는 자리).
+## 성문 4(면마다 내구도 하나 — 그 면 첫 성문 앞 치는 자리가 몸통, 나머지 성문 앞은 몸통에 피해를 넘기는 치는 자리)과
+## 성채(몸통 + 면마다 치는 자리).
 func _build_structures() -> void:
 	var gs: Array = plan.get("gates", [])
+	var offs := Formation.gate_offsets(half)
 	for side in 4:
 		var g = StructureScript.new()
 		var row: Dictionary = gs[side] if side < gs.size() else {"hp": WarRules.MIN_GATE_HP, "max": WarRules.MIN_GATE_HP}
 		g.setup("gate", side, float(row.max), float(row.hp))
-		g.position = Formation.gate_target(half, side) - Formation.SIDE_DIR[side] * 0.6
+		g.position = Formation.gate_target(half, side, offs[0]) - Formation.SIDE_DIR[side] * 0.6
 		g.broken.connect(_on_gate_broken)
 		add_child(g)
 		gates.append(g)
-		_doors[side].visible = g.is_alive()
+		for k in range(1, offs.size()):
+			var p = StructureScript.new()
+			p.setup("gate", side, 1.0, 1.0)
+			p.link = g
+			p.position = Formation.gate_target(half, side, offs[k]) - Formation.SIDE_DIR[side] * 0.6
+			add_child(p)
+		_show_doors(side, g.is_alive())
 	var kr: Dictionary = plan.get("keep", {"hp": WarRules.MIN_KEEP_HP, "max": WarRules.MIN_KEEP_HP})
 	keep = StructureScript.new()
 	keep.setup("keep", -1, float(kr.max), float(kr.hp))
@@ -242,7 +260,8 @@ func _spawn_defender(d: Dictionary) -> void:
 	u.war_half = half
 	u.battle = self
 	u.idle_dir = Formation.SIDE_DIR[u.lane]
-	u.free_pos = Formation.gate_outer(half, u.lane) + Formation.SIDE_DIR[u.lane] * MELEE_D
+	var offs := Formation.gate_offsets(half)  # 같은 면 수비는 성문마다 나눠 선다
+	u.free_pos = Formation.gate_outer(half, u.lane, offs[u.uid % offs.size()]) + Formation.SIDE_DIR[u.lane] * MELEE_D
 	u.hold = true
 	add_child(u)
 	u.hp = u.hp_max * clampf(float(d.get("ratio", 1.0)), 0.0, 1.0)
@@ -403,9 +422,15 @@ func _on_unit_fell(u) -> void:
 			_respawn.append([u, WarRules.RESPAWN_SEC])
 
 
+func _show_doors(side: int, on: bool) -> void:
+	for d in _doors[side]:
+		d.visible = on
+
+
 func _on_gate_broken(g) -> void:
-	_doors[g.side].visible = false
-	Fx.blast(self, Formation.gate_position(half, g.side), Color(0.6, 0.5, 0.4), 3.0, GameData.fx_shake(), 1)
+	_show_doors(g.side, false)
+	for at in Formation.gate_offsets(half):
+		Fx.blast(self, Formation.gate_position(half, g.side, at), Color(0.6, 0.5, 0.4), 3.0, GameData.fx_shake(), 1)
 	if hud != null:
 		hud.flash("%s 파괴!" % WarRules.SIDE_NAMES[g.side])
 	score_changed.emit()
@@ -526,7 +551,7 @@ func apply_snapshot(s: Dictionary) -> void:
 	var gs: Array = s.get("g", [])
 	for i in mini(4, gs.size()):
 		gates[i].set_hp(float(gs[i]))
-		_doors[i].visible = gates[i].is_alive()
+		_show_doors(i, gates[i].is_alive())
 	keep.set_hp(float(s.get("k", keep.hp)))
 	if int(s.get("n", kills)) != kills:
 		kills = int(s.get("n", kills))

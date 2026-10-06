@@ -967,9 +967,10 @@ func _in_stair_footprint(half: float, p: Vector3) -> bool:
 	var lo := Balance.GATE_W / 2.0 + Balance.STAIR_GAP
 	for s in 4:
 		var depth: float = FormationScript.SIDE_DIR[s].dot(p)
-		var along: float = absf(FormationScript.perp(s).dot(p))
-		if depth > half - Balance.STAIR_W + 0.01 and depth < half - 0.01 and along > lo + 0.01 and along < lo + Balance.STAIR_RUN - 0.01:
-			return true
+		for at in FormationScript.gate_offsets(half):  # 성문마다 좌우 계단
+			var along: float = absf(FormationScript.perp(s).dot(p) - float(at))
+			if depth > half - Balance.STAIR_W + 0.01 and depth < half - 0.01 and along > lo + 0.01 and along < lo + Balance.STAIR_RUN - 0.01:
+				return true
 	return false
 
 
@@ -1010,9 +1011,10 @@ func test_buildings_clear_stairs() -> void:
 		var h := GameData.interior_half(level)
 		var spots: Array = []
 		for s in 4:
-			spots.append(F.gate_inner(h, s))
+			for at in F.gate_offsets(h):
+				spots.append(F.gate_inner(h, s, at))
 			for post in [F.POST_GATE, F.POST_WALL]:
-				for slot in F.capacity(post):
+				for slot in F.capacity(post, F.gates_per_side(h)):
 					spots.append(F.slot_position(h, s, post, slot))
 		var bad_plot: Array = []
 		var bad_stair: Array = []
@@ -1982,7 +1984,8 @@ func test_buildings() -> void:
 	var bad_tiers := ["", "4|8|12", "2:4|5:8", "1:4|5:8|5:9", "1:4|3:8|2:9", "1:x", "1:4|", "1:4|5", "a:1", "1.5:4"]
 	check(bad_tiers.all(func(s): return GameData.parse_tiers(s).is_empty()), "malformed tier tables are rejected")
 	check([1, 8, 9, 21, 22, 30].map(func(l): return GameData.hero_slots(l)) == [4, 4, 8, 8, 12, 12], "hero slots by keep tier: 4/8/12")
-	check([1, 8, 9, 22].map(func(l): return GameData.interior_tiles(l)) == [20, 20, 24, 28] and GameData.interior_half(9) == 24.0, "interior tiles by keep tier: 20/24/28")
+	check([1, 8, 9, 22].map(func(l): return GameData.interior_tiles(l)) == [20, 20, 28, 36] and GameData.interior_half(9) == 28.0, "interior tiles by keep tier: 20/28/36")
+	check([1, 8, 9, 21, 22, 30].map(func(l): return GameData.gates_at(l)) == [1, 1, 2, 2, 3, 3], "gates per side by keep tier: 1/2/3")
 	# 효과 수치
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
@@ -2569,7 +2572,7 @@ func test_keep_tier_lockstep() -> void:
 	var csv := FileAccess.get_file_as_string(GameData.CONFIG_PATH)
 	var cp := "user://t_tiers.csv"
 	for entry in bad:
-		_write(cp, csv.replace("keep_slot_tiers,1:4|9:8|22:12", "keep_slot_tiers," + entry[1]).replace("keep_interior_tiers,1:20|9:24|22:28", "keep_interior_tiers," + entry[2]))
+		_write(cp, csv.replace("keep_slot_tiers,1:4|9:8|22:12", "keep_slot_tiers," + entry[1]).replace("keep_interior_tiers,1:20|9:28|22:36", "keep_interior_tiers," + entry[2]))
 		GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
 		check(GameData.errors == 1, "config.csv keep tiers rejected: %s (errors %d)" % [entry[0], GameData.errors])
 	DirAccess.remove_absolute(cp)

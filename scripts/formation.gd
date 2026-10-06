@@ -4,6 +4,7 @@ extends RefCounted
 ## side: 0=N(-z) 1=E(+x) 2=S(+z) 3=W(-x)
 
 const Balance := preload("res://scripts/balance.gd")
+const GameData := preload("res://scripts/game_data.gd")
 
 const POST_GATE := 0
 const POST_WALL := 1
@@ -21,6 +22,7 @@ const SIDE_NAMES := ["북", "동", "남", "서"]  # 면 방향 이름(HUD 성문
 static var _keep_half: float = Balance.building("keep").size.x * Balance.TILE / 2.0  # 성채 외벽 절반 크기. 로드 때 한 번 계산
 
 var _claims := {}  # hero_id -> {"side": int, "post": int, "slot": int}
+var castle_half := 0.0  # 성 내부 절반 크기 — 면마다 성문 수(성문 앞 자리 수 = 3 × 성문 수)를 정한다. 성을 만들 때 main이 넣는다(0 = 성문 1개)
 
 
 ## 빈 슬롯 중 가장 앞 번호를 차지하고 돌려준다. 가득 차면 -1 (기존 배정 유지).
@@ -34,7 +36,7 @@ func claim(hero_id: int, side: int, post: int) -> int:
 		var c: Dictionary = _claims[id]
 		if c.side == side and c.post == post:
 			taken[c.slot] = true
-	for slot in capacity(post):
+	for slot in capacity(post, gates_per_side(castle_half)):
 		if not taken.has(slot):
 			_claims[hero_id] = {"side": side, "post": post, "slot": slot}
 			return slot
@@ -50,9 +52,9 @@ func claim_near(hero_id: int, side: int, post: int, offset: float) -> int:
 		var c: Dictionary = _claims[id]
 		if id != hero_id and c.side == side and c.post == post:
 			taken[c.slot] = true
-	var offs: Array = Balance.GATE_FRONT_SLOTS if post == POST_GATE else Balance.WALL_TOP_SLOTS
+	var offs: Array = gate_front_offsets(castle_half) if post == POST_GATE else Balance.WALL_TOP_SLOTS
 	var best := -1
-	for slot in capacity(post):
+	for slot in offs.size():
 		if not taken.has(slot) and (best < 0 or absf(float(offs[slot]) - offset) < absf(float(offs[best]) - offset)):
 			best = slot
 	if best >= 0:
@@ -73,8 +75,54 @@ func assignment(hero_id: int) -> Dictionary:
 	return _claims.get(hero_id, {})
 
 
-static func capacity(post: int) -> int:
-	return Balance.GATE_FRONT_SLOTS.size() if post == POST_GATE else Balance.WALL_TOP_SLOTS.size()
+static func capacity(post: int, n := 1) -> int:
+	return Balance.GATE_FRONT_SLOTS.size() * n if post == POST_GATE else Balance.WALL_TOP_SLOTS.size()
+
+
+# --- 성문(개정: 성 내부 단계마다 면마다 성문 하나씩 더 — 20칸 1개, 28칸 2개, 36칸 3개) ---
+# 성문 k = 면 안에서 몇 번째(음의 perp 쪽부터). 성문 내구도는 면마다 하나(같은 면 성문끼리 공유 — GameState.gate_hp[side]).
+# 성문 중앙의 옆 위치(at) = 면을 n등분한 칸의 가운데: half × (2k + 1 − n) / n — 1개 0, 2개 ±half/2, 3개 0·±2half/3.
+
+## 성 내부 절반 크기 half의 면마다 성문 수.
+static func gates_per_side(half: float) -> int:
+	return GameData.gates_per_side(half)
+
+
+static func gate_offset(half: float, k: int, n := 0) -> float:
+	if n <= 0:
+		n = gates_per_side(half)
+	return half * float(2 * k + 1 - n) / float(n)
+
+
+static func gate_offsets(half: float, n := 0) -> Array:
+	if n <= 0:
+		n = gates_per_side(half)
+	return range(n).map(func(k): return gate_offset(half, k, n))
+
+
+## 면 side에서 p에 옆으로 가장 가까운 성문 번호 k.
+static func nearest_gate(half: float, side: int, p: Vector3) -> int:
+	var n := gates_per_side(half)
+	var t := perp(side).dot(p)
+	var best := 0
+	for k in n:
+		if absf(gate_offset(half, k, n) - t) < absf(gate_offset(half, best, n) - t):
+			best = k
+	return best
+
+
+## p에 가장 가까운 성문의 옆 위치(면 side).
+static func nearest_gate_at(half: float, side: int, p: Vector3) -> float:
+	return gate_offset(half, nearest_gate(half, side, p))
+
+
+## 성문 앞 자리의 옆 위치(슬롯 순): 성문마다 GATE_FRONT_SLOTS를 돌아가며 — 슬롯 s는 성문 s % n의 s / n번째 자리.
+static func gate_front_offsets(half: float) -> Array:
+	var n := gates_per_side(half)
+	var out := []
+	for s in Balance.GATE_FRONT_SLOTS.size() * n:
+		out.append(gate_offset(half, s % n, n) + float(Balance.GATE_FRONT_SLOTS[s / n]))
+	return out
 
 
 static func perp(side: int) -> Vector3:
@@ -82,21 +130,20 @@ static func perp(side: int) -> Vector3:
 	return Vector3(-dir.z, 0, dir.x)
 
 
-## 성벽 중심선 위의 성문 중앙 (지면).
-static func gate_position(half: float, side: int) -> Vector3:
-	return SIDE_DIR[side] * (half + Balance.WALL_T / 2.0)
+## 성벽 중심선 위의 성문 중앙 (지면). at = 성문의 옆 위치(gate_offset).
+static func gate_position(half: float, side: int, at := 0.0) -> Vector3:
+	return SIDE_DIR[side] * (half + Balance.WALL_T / 2.0) + perp(side) * at
 
 
 ## 괴물이 성문을 치려고 서는 지점 (성벽 바깥면 바로 앞).
-static func gate_target(half: float, side: int) -> Vector3:
-	return SIDE_DIR[side] * (half + Balance.WALL_T + 0.8)
+static func gate_target(half: float, side: int, at := 0.0) -> Vector3:
+	return SIDE_DIR[side] * (half + Balance.WALL_T + 0.8) + perp(side) * at
 
 
 static func slot_position(half: float, side: int, post: int, slot: int) -> Vector3:
 	var dir := SIDE_DIR[side]
 	if post == POST_GATE:
-		return dir * (half + Balance.WALL_T + Balance.GATE_FRONT_OFFSET) \
-			+ perp(side) * float(Balance.GATE_FRONT_SLOTS[slot])
+		return dir * (half + Balance.WALL_T + Balance.GATE_FRONT_OFFSET) + perp(side) * float(gate_front_offsets(half)[slot])
 	return dir * (half + Balance.WALL_T / 2.0) + perp(side) * float(Balance.WALL_TOP_SLOTS[slot]) \
 		+ Vector3(0, Balance.WALL_H, 0)
 
@@ -106,8 +153,8 @@ static func keep_target(side: int) -> Vector3:
 	return SIDE_DIR[side] * (_keep_half + 0.8)
 
 
-static func spawn_center(half: float, side: int) -> Vector3:
-	return SIDE_DIR[side] * (half + Balance.WALL_T + Balance.SPAWN_MARGIN)
+static func spawn_center(half: float, side: int, at := 0.0) -> Vector3:
+	return SIDE_DIR[side] * (half + Balance.WALL_T + Balance.SPAWN_MARGIN) + perp(side) * at
 
 
 ## p가 바라보는 면 (면 방향과의 내적이 가장 큰 면).
@@ -123,12 +170,12 @@ static func side_of(p: Vector3) -> int:
 
 
 ## 성문 안쪽 통과 지점. 계단 띠(성벽 안쪽 STAIR_W) 밖이라 여기서 옆으로 가는 지상 구간이 계단을 지나지 않는다.
-static func gate_inner(half: float, side: int) -> Vector3:
-	return SIDE_DIR[side] * (half - Balance.STAIR_W - GATE_PASS_MARGIN)
+static func gate_inner(half: float, side: int, at := 0.0) -> Vector3:
+	return SIDE_DIR[side] * (half - Balance.STAIR_W - GATE_PASS_MARGIN) + perp(side) * at
 
 
-static func gate_outer(half: float, side: int) -> Vector3:
-	return SIDE_DIR[side] * (half + Balance.WALL_T + GATE_PASS_MARGIN)
+static func gate_outer(half: float, side: int, at := 0.0) -> Vector3:
+	return SIDE_DIR[side] * (half + Balance.WALL_T + GATE_PASS_MARGIN) + perp(side) * at
 
 
 static func region(half: float, p: Vector3) -> int:
@@ -139,31 +186,33 @@ static func region(half: float, p: Vector3) -> int:
 	return REGION_OUTSIDE
 
 
-## 계단: 각 면 성문 좌우(end = -1/+1)에 하나씩, 성벽 안쪽 면에 붙은 띠에서 성문 쪽으로 올라간다.
-static func stair_bottom(half: float, side: int, end: float) -> Vector3:
+## 계단: 각 성문 좌우(end = -1/+1)에 하나씩, 성벽 안쪽 면에 붙은 띠에서 성문 쪽으로 올라간다. at = 그 성문의 옆 위치.
+static func stair_bottom(half: float, side: int, end: float, at := 0.0) -> Vector3:
 	return SIDE_DIR[side] * (half - Balance.STAIR_W / 2.0) \
-		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN))
+		+ perp(side) * (at + end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN))
 
 
-static func stair_top(half: float, side: int, end: float) -> Vector3:
+static func stair_top(half: float, side: int, end: float, at := 0.0) -> Vector3:
 	return SIDE_DIR[side] * (half - Balance.STAIR_W / 2.0) \
-		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
+		+ perp(side) * (at + end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
 
 
 ## 계단 윗단에서 성벽 중심선으로 올라선 지점.
-static func wall_landing(half: float, side: int, end: float) -> Vector3:
+static func wall_landing(half: float, side: int, end: float, at := 0.0) -> Vector3:
 	return SIDE_DIR[side] * (half + Balance.WALL_T / 2.0) \
-		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
+		+ perp(side) * (at + end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP)) + Vector3(0, Balance.WALL_H, 0)
 
 
 ## 계단 아랫단 너머 지상 지점(계단 띠 밖). 지상 구간은 여기까지만 오고, 띠에는 아랫단 너머로만 들어간다.
-static func stair_approach(half: float, side: int, end: float) -> Vector3:
+static func stair_approach(half: float, side: int, end: float, at := 0.0) -> Vector3:
 	return SIDE_DIR[side] * (half - Balance.STAIR_W - GATE_PASS_MARGIN) \
-		+ perp(side) * (end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN + GATE_PASS_MARGIN))
+		+ perp(side) * (at + end * (Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN + GATE_PASS_MARGIN))
 
 
-static func _stair_end(side: int, p: Vector3) -> float:
-	return 1.0 if perp(side).dot(p) >= 0.0 else -1.0
+## p(성벽 위 또는 지상)에 가장 가까운 계단 [end, at]: 성문 중 옆으로 가장 가까운 것의, p가 있는 쪽 계단.
+static func _stair_of(half: float, side: int, p: Vector3) -> Array:
+	var at := nearest_gate_at(half, side, p)
+	return [1.0 if perp(side).dot(p) >= at else -1.0, at]
 
 
 ## from → to 이동 경로(도착점 포함). 성벽 위는 계단으로만 오르내린다(같은 면 성벽 위끼리는 곧장):
@@ -179,19 +228,19 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var ground_from := from
 	if from_wall:
 		var s := side_of(from)
-		var e := _stair_end(s, from)
-		path.append(wall_landing(half, s, e))
-		path.append(stair_top(half, s, e))
-		path.append(stair_bottom(half, s, e))
-		ground_from = stair_approach(half, s, e)
+		var st := _stair_of(half, s, from)
+		path.append(wall_landing(half, s, st[0], st[1]))
+		path.append(stair_top(half, s, st[0], st[1]))
+		path.append(stair_bottom(half, s, st[0], st[1]))
+		ground_from = stair_approach(half, s, st[0], st[1])
 		path.append(ground_from)
 	var ground_to := to
 	var tail: Array[Vector3] = []
 	if to_wall:
 		var s2 := side_of(to)
-		var e2 := _stair_end(s2, to)
-		ground_to = stair_approach(half, s2, e2)
-		tail = [stair_bottom(half, s2, e2), stair_top(half, s2, e2), wall_landing(half, s2, e2), to]
+		var st2 := _stair_of(half, s2, to)
+		ground_to = stair_approach(half, s2, st2[0], st2[1])
+		tail = [stair_bottom(half, s2, st2[0], st2[1]), stair_top(half, s2, st2[0], st2[1]), wall_landing(half, s2, st2[0], st2[1]), to]
 	path.append_array(_ground_route(half, ground_from, ground_to))
 	path.append_array(tail)
 	var out: Array[Vector3] = []
@@ -232,20 +281,29 @@ static func _ground_route(half: float, from: Vector3, to: Vector3) -> Array[Vect
 	var to_in := is_inside(half, to)
 	if from_in and not to_in:
 		var s := side_of(to)
-		path.append(gate_inner(half, s))
-		path.append(gate_outer(half, s))
+		var at := nearest_gate_at(half, s, to)
+		path.append(gate_inner(half, s, at))
+		path.append(gate_outer(half, s, at))
 	elif not from_in and to_in:
 		var s := side_of(from)
-		path.append(gate_outer(half, s))
-		path.append(gate_inner(half, s))
+		var at := nearest_gate_at(half, s, from)
+		path.append(gate_outer(half, s, at))
+		path.append(gate_inner(half, s, at))
 	elif not from_in and not to_in and crosses_castle(half, from, to):
 		var a := side_of(from)
 		var b := side_of(to)
-		path.append(gate_outer(half, a))
-		path.append(gate_inner(half, a))
+		var at_a := nearest_gate_at(half, a, from)
+		path.append(gate_outer(half, a, at_a))
+		path.append(gate_inner(half, a, at_a))
 		if b != a:
-			path.append(gate_inner(half, b))
-			path.append(gate_outer(half, b))
+			var at_b := nearest_gate_at(half, b, to)
+			path.append(gate_inner(half, b, at_b))
+			path.append(gate_outer(half, b, at_b))
+		else:
+			var at_b := nearest_gate_at(half, b, to)
+			if at_b != at_a:
+				path.append(gate_inner(half, b, at_b))
+				path.append(gate_outer(half, b, at_b))
 	path.append(to)
 	return path
 
@@ -301,7 +359,8 @@ static func clamp_push(half: float, from: Vector3, to: Vector3) -> Vector3:
 	if maxf(absf(from.x), absf(from.z)) >= half:
 		var s := side_of(from)
 		var t := perp(s)
-		var p := to + t * (clampf(t.dot(to), -Balance.GATE_W / 2.0, Balance.GATE_W / 2.0) - t.dot(to))
+		var at := nearest_gate_at(half, s, from)
+		var p := to + t * (clampf(t.dot(to), at - Balance.GATE_W / 2.0, at + Balance.GATE_W / 2.0) - t.dot(to))
 		return p - SIDE_DIR[s] * maxf(0.0, SIDE_DIR[s].dot(p) - (outer - 0.01))
 	var lim := half - 0.01
 	var out := Vector3(clampf(to.x, -lim, lim), to.y, clampf(to.z, -lim, lim))
@@ -386,13 +445,17 @@ const PATROL_OUT := 7.0  # 기병 순찰 고리 반지름 = half + WALL_T + 이�
 
 
 ## 성벽 위 병사 자리 좌우 거리 [+2.5, -2.5, +6, -6, …] — 모서리 탑(중심선 끝 − 탑 반 − 0.5 m) 앞까지.
+## 가운데가 아닌 성문 위(성문 중앙 ± 성문 반폭 + 계단 틈 + 0.5 m)는 비운다(가운데 성문 위는 첫 자리 2.5 m가 이미 비운다).
 static func soldier_wall_offsets(half: float) -> Array:
 	var limit := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0 - 0.5
+	var clear := Balance.GATE_W / 2.0 + Balance.STAIR_GAP + 0.5
+	var gates_at := gate_offsets(half).filter(func(a): return absf(a) > 0.01)
 	var out := []
 	var d: float = SOLDIER_WALL_OFFSETS[0]
 	var i := 0
 	while d <= limit:
-		out.append_array([d, -d])
+		if not gates_at.any(func(a): return absf(absf(a) - d) < clear):
+			out.append_array([d, -d])
 		i += 1
 		d = SOLDIER_WALL_OFFSETS[i] if i < SOLDIER_WALL_OFFSETS.size() else d + SOLDIER_WALL_STEP
 	return out
@@ -406,15 +469,24 @@ static func soldier_wall_spot(half: float, side: int, k: int) -> Vector3:
 	return SIDE_DIR[side] * depth + perp(side) * float(offs[k % offs.size()]) + Vector3(0, Balance.WALL_H, 0)
 
 
-## 면 side의 k번째 보병 자리: 성문 앞 줄(3.2 m 줄 3칸, 4.8 m 줄 4칸, … 번갈아). inner = 성문이 부서져 안쪽 통로 앞을 막는 줄.
+## 면 side의 k번째 보병이 맡는 성문 번호(성문마다 돌아가며 — k % n).
+static func gate_row_gate(half: float, k: int) -> int:
+	return k % gates_per_side(half)
+
+
+## 면 side의 k번째 보병 자리: 성문 gate_row_gate(k) 앞 줄(3.2 m 줄 3칸, 4.8 m 줄 4칸, … 번갈아 — 그 성문의 k / n번째).
+## inner = 그 성문이 부서져 안쪽 통로 앞을 막는 줄.
 static func gate_row_spot(half: float, side: int, k: int, inner := false) -> Vector3:
+	var n := gates_per_side(half)
+	var at := gate_offset(half, k % n, n)
+	k /= n
 	var rows: Array = INNER_ROWS if inner else GATE_ROWS
 	var r := 0
 	while k >= rows[r % 2].size():
 		k -= rows[r % 2].size()
 		r += 1
 	var depth := half - INNER_ROW_FIRST - r * GATE_ROW_GAP if inner else half + Balance.WALL_T + GATE_ROW_FIRST + r * GATE_ROW_GAP
-	return SIDE_DIR[side] * depth + perp(side) * float(rows[r % 2][k])
+	return SIDE_DIR[side] * depth + perp(side) * (at + float(rows[r % 2][k]))
 
 
 static func patrol_radius(half: float) -> float:
@@ -446,6 +518,7 @@ static func ring_route(half: float, from: Vector3, to: Vector3) -> Array[Vector3
 
 
 ## 등장 자리(성채 정문 앞 광장) → 역할 자리: 광장 가운데 길(x = 0)로 나가 남문 안쪽을 거쳐 route()로 — 건물을 가로지르지 않는다.
+## 남쪽 가운데 성문이 없으면(성문 2개) 남쪽 안쪽 통로 가운데로 나가 거기서 route() — 통로를 따라 성문으로 간다.
 static func soldier_entry_route(half: float, spot: Vector3, post: Vector3) -> Array[Vector3]:
 	var south := gate_inner(half, 2)
 	var out: Array[Vector3] = [Vector3(0, 0, spot.z), south]

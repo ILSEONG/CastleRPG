@@ -338,8 +338,8 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
     ['buildings.csv', bld.replace(/^gate,.*\n/m, '').replace('keep,성채,30,300,300,200,60,gate,barracks', 'keep,성채,30,300,300,200,60,,barracks'), /missing required building 'gate'/],
     ['buildings.csv', bld.replace(/^quarry,.*\n/m, '').replace('gate,성문,30,150,250,0,45,quarry,', 'gate,성문,30,150,250,0,45,,'), /resources\.csv line 3 column 'building': building 'quarry' is not in buildings\.csv/],
     ['config.csv', cfg.replace('keep_slot_tiers,1:4|9:8|22:12', 'keep_slot_tiers,4|8|12'), /config\.csv line 5 column 'value': not a tier table/],
-    ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:24|22:28', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
-    ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:24|22:28', 'keep_interior_tiers,2:20'), /not a tier table/],
+    ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
+    ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,2:20'), /not a tier table/],
     ['config.csv', cfg.replace('tavern_sr_per_level,0.003', 'tavern_sr_per_level,1.5'), /tavern_sr_per_level must be in 0\.\.1: '1\.5'/],
     ['config.csv', cfg.replace('castle_hp_per_level,200', 'castle_hp_per_level,-200'), /castle_hp_per_level must be 0 or more/], // 개정 24: lab_atk_per_level 삭제
     ['config.csv', cfg.replace(/^pop_per_house,.*\n/m, ''), /missing key 'pop_per_house'/],
@@ -365,7 +365,7 @@ test('시드 검증: keep_slot_tiers는 keep_interior_tiers와 같은 레벨, �
   for (const t of TABLES) cpSync(join(DATA_DIR, t.file), join(dir, t.file))
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const tiers = (slots: string, interior: string) => cfg.replace('keep_slot_tiers,1:4|9:8|22:12', `keep_slot_tiers,${slots}`)
-    .replace('keep_interior_tiers,1:20|9:24|22:28', `keep_interior_tiers,${interior}`)
+    .replace('keep_interior_tiers,1:20|9:28|22:36', `keep_interior_tiers,${interior}`)
   const cases: [string, RegExp][] = [
     [tiers('1:4|6:8|10:12', '1:20|5:24|10:28'), /config\.csv line 5 column 'value': keep_slot_tiers levels must match keep_interior_tiers: 1,6,10 vs 1,5,10/],
     [tiers('1:4|5:8|10:12', '1:20|5:24'), /keep_slot_tiers levels must match keep_interior_tiers: 1,5,10 vs 1,5$/],

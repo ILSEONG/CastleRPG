@@ -228,18 +228,25 @@ func _add_multimesh(mesh: Mesh, placements: Array) -> MultiMesh:
 
 ## 자연물 자리 규칙: 성벽 바깥 여유 밖, 괴물 진입로(두 축) 밖.
 func _nature_spot_ok(p: Vector2, keep_out: float) -> bool:
-	return maxf(absf(p.x), absf(p.y)) >= keep_out and absf(p.x) >= Art.LANE_HALF_WIDTH and absf(p.y) >= Art.LANE_HALF_WIDTH
+	if maxf(absf(p.x), absf(p.y)) < keep_out:
+		return false
+	for at in Formation.gate_offsets(half):  # 성문마다 괴물 진입로(성문 축) — 성문 옆 위치는 ±로 대칭
+		var a := absf(float(at))
+		if absf(absf(p.x) - a) < Art.LANE_HALF_WIDTH or absf(absf(p.y) - a) < Art.LANE_HALF_WIDTH:
+			return false
+	return true
 
 
 # --- 건물 레벨업 표시(개정 12 §2.5) ---
 
-## 성문 자리: 네 문루의 AABB(castle.gd와 같은 놓임 — 로컬 +Z가 성 바깥).
+## 성문 자리: 모든 문루의 AABB(castle.gd와 같은 놓임 — 로컬 +Z가 성 바깥, 면마다 성문 1·2·3개).
 func _add_gate_sites() -> void:
 	var aabb := TownKit.gatehouse().get_aabb()
 	var boxes := []
 	for side in 4:
 		var dir: Vector3 = Formation.SIDE_DIR[side]
-		boxes.append(Transform3D(Basis(Vector3.UP, atan2(dir.x, dir.z)), Formation.gate_position(half, side)) * aabb)
+		for at in Formation.gate_offsets(half):
+			boxes.append(Transform3D(Basis(Vector3.UP, atan2(dir.x, dir.z)), Formation.gate_position(half, side, at)) * aabb)
 	sites[GameData.GATE] = boxes
 
 

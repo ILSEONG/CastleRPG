@@ -100,7 +100,8 @@ func _physics_process(_delta: float) -> void:
 	if arena_r <= 0.0:
 		var hit := _pick(screen_pos, LAYER_GATE)
 		if not hit.is_empty():
-			selected.move_to(hit.collider.get_meta("side"), Formation.POST_GATE)
+			var gside: int = hit.collider.get_meta("side")
+			selected.move_to(gside, Formation.POST_GATE, float(hit.collider.get_meta("at", 0.0)))  # 누른 성문 앞 빈 자리(가까운 순)
 			return
 		hit = _pick(screen_pos, LAYER_WALL)
 		if not hit.is_empty():

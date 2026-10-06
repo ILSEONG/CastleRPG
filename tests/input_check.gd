@@ -1173,10 +1173,10 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child_count() == 2,
 		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 01:00", "reqs=%s" % [rows])
 	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
-	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 4).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "24칸"]]
-		and names.call(5) == ["건물 최대", "성 HP"] and names.call(9).size() == 4 and names.call(30) == ["건물 최대", "성 HP"],
-		"(B) keep slot/area lines only when the next level changes them: Lv 1 none, Lv 4 → 5 영웅 슬롯 4 → 8 and 성 넓이 20칸 → 24칸, Lv 5 none, Lv 9 → 10 both, max level none",
-		"Lv1=%s Lv4=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 4), names.call(30)])
+	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면마다 성문", "1개", "2개"]]
+		and names.call(9) == ["건물 최대", "성 HP"] and names.call(21).size() == 5 and names.call(30) == ["건물 최대", "성 HP"],
+		"(B) keep slot/area/gate lines only when the next level changes them: Lv 1 none, Lv 8 → 9 영웅 슬롯 4 → 8, 성 넓이 20칸 → 28칸, 성문 1 → 2, Lv 9 none, Lv 21 → 22 all, max level none",
+		"Lv1=%s Lv8=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 8), names.call(30)])
 	await _guard_wait()
 	await _tap(bwin.upgrade_button.get_global_rect().get_center())
 	var keep_box: AABB = scenery.sites.keep[0]

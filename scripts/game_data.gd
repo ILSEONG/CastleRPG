@@ -329,7 +329,7 @@ static func hero_slots(keep_level: int) -> int:
 	return int(tier_value("keep_slot_tiers", keep_level))
 
 
-## 성 내부 한 변 타일 수 = 성채 단계 표 keep_interior_tiers(1~8 → 20, 9~21 → 24, 22+ → 28).
+## 성 내부 한 변 타일 수 = 성채 단계 표 keep_interior_tiers(1~8 → 20, 9~21 → 28, 22+ → 36).
 static func interior_tiles(keep_level: int) -> int:
 	return int(tier_value("keep_interior_tiers", keep_level))
 
@@ -337,6 +337,22 @@ static func interior_tiles(keep_level: int) -> int:
 ## 성 내부 절반 크기(미터).
 static func interior_half(keep_level: int) -> float:
 	return interior_tiles(keep_level) * Balance.TILE / 2.0
+
+
+## 면마다 성문 수 = 성 내부 절반 크기 half가 도달한 성 내부 단계 수(keep_interior_tiers — 20칸 1개, 28칸 2개, 36칸 3개).
+## 단계 표에 없는 크기는 그보다 작은 단계까지 센다(최소 1).
+static func gates_per_side(half: float) -> int:
+	_ensure()
+	var n := 0
+	for t in parse_tiers(String(_config.get("keep_interior_tiers", ""))):
+		if float(t[1]) * Balance.TILE / 2.0 <= half + 0.01:
+			n += 1
+	return maxi(1, n)
+
+
+## 성채 레벨의 면마다 성문 수.
+static func gates_at(keep_level: int) -> int:
+	return gates_per_side(interior_half(keep_level))
 
 
 ## 성 HP = castle_hp + castle_hp_per_level × (성채 − 1).

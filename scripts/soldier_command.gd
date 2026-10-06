@@ -68,7 +68,8 @@ static func threats(half: float, monsters: Array, ratio: Array) -> Array:
 	for m in monsters:
 		var s := Formation.side_of(m.pos)
 		var inside := Formation.is_inside(half, m.pos)
-		var at := Formation.gate_inner(half, s) if inside else Formation.gate_target(half, s)
+		var g := Formation.nearest_gate_at(half, s, m.pos)  # 그 면 성문 중 가장 가까운 것
+		var at := Formation.gate_inner(half, s, g) if inside else Formation.gate_target(half, s, g)
 		if Formation.flat_distance(m.pos, at) <= (R_IN if inside else R_OUT):
 			t[s] += m.power
 	for s in 4:

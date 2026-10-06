@@ -212,7 +212,7 @@ func _process(delta: float) -> void:
 	_advance(delta)
 
 
-## 진로: 성 밖이면 지금 가장 가까운 면의 성문으로(끌려간 뒤 재조준). 멀쩡하면 성문을 치고,
+## 진로: 성 밖이면 지금 가장 가까운 면의, 그 면에서 옆으로 가장 가까운 성문으로(끌려간 뒤 재조준). 성문 내구도는 면마다 하나. 멀쩡하면 성문을 치고,
 ## 부서졌으면 성문 축에 맞춘 뒤 안쪽 지점을 거쳐 들어간다(성벽을 뚫지 않게). 성 안이면 성채를 친다.
 func _advance(delta: float) -> void:
 	if castle == null:  # 아레나: 영웅이 없으면 제자리
@@ -228,10 +228,11 @@ func _advance(delta: float) -> void:
 		dest = _spread(castle.keep_target(side), Formation._keep_half)
 	elif GameState.is_gate_broken(side):
 		strikes = false
-		var aligned := absf(Formation.perp(side).dot(global_position)) < Balance.GATE_W / 2.0 - 0.5
-		dest = Formation.gate_inner(half, side) if aligned else castle.gate_target(side)
+		var at := Formation.nearest_gate_at(half, side, global_position)  # 그 면 성문 중 옆으로 가장 가까운 것
+		var aligned := absf(Formation.perp(side).dot(global_position) - at) < Balance.GATE_W / 2.0 - 0.5
+		dest = Formation.gate_inner(half, side, at) if aligned else castle.gate_target(side, at)
 	else:
-		dest = _spread(castle.gate_target(side), Balance.GATE_W / 2.0)
+		dest = _spread(castle.gate_target(side, Formation.nearest_gate_at(half, side, global_position)), Balance.GATE_W / 2.0)
 	_model.face(dest - global_position)
 	var stop: float = _stats.range if strikes else 0.1
 	if Formation.flat_distance(global_position, dest) > stop:

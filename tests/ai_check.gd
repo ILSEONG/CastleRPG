@@ -834,11 +834,11 @@ func _building_cases() -> void:
 	await _frames(2)
 	_check(Economy.building_level("gate") == 2 and GameState.gate_hp_max == 800.0 and GameState.gate_hp[0] == 800.0, "(B) gate Lv 2 done: gate max HP 800 at once",
 		"gate=%d max=%.0f hp=%.0f" % [Economy.building_level("gate"), GameState.gate_hp_max, GameState.gate_hp[0]])
-	# 성채 4 → 5: 단계가 바뀌어 월드를 다시 만든다
+	# 성채 8 → 9: 단계가 바뀌어 월드를 다시 만든다
 	var old = _main
 	var keep_before := [Economy.gold_tenths, Economy.res.duplicate(), Economy.heroes.duplicate(), Economy.hero_levels.duplicate(), Economy.hero_promotions.duplicate(), GameState.stage, GameState.deploy()]
 	var rebuilds0: int = MainScript.rebuilds
-	Economy.levels["keep"] = 4
+	Economy.levels["keep"] = 8
 	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
 	var old_id: int = old.get_instance_id()  # 람다가 노드를 캡처하면 해제 뒤 호출마다 엔진 오류 — id로 본다
 	await _wait_until(func(): return not is_instance_id_valid(old_id), 3.0)
@@ -847,7 +847,7 @@ func _building_cases() -> void:
 	for c in get_children():
 		if c.get_script() == MainScript:
 			fresh = c
-	_check(not is_instance_valid(old) and fresh != null and MainScript.rebuilds == rebuilds0 + 1, "(B) keep Lv 5 crosses a tier: the world is rebuilt (new main)",
+	_check(not is_instance_valid(old) and fresh != null and MainScript.rebuilds == rebuilds0 + 1, "(B) keep Lv 9 crosses a tier: the world is rebuilt (new main)",
 		"old valid=%s fresh=%s rebuilds=%d" % [is_instance_valid(old), fresh, MainScript.rebuilds - rebuilds0])
 	if fresh == null:
 		return
@@ -857,28 +857,29 @@ func _building_cases() -> void:
 			c.set_process(false)
 	var hud = fresh.get_children().filter(func(c): return c.get_script() == HudScript)[0]
 	var deployed: int = GameState.deploy().filter(func(x): return x != null).size()
-	_check(fresh.castle.half == 24.0 and GameState.hero_count() == 8 and GameState.deploy().size() == 8 and _alive_heroes().size() == deployed and GameState.castle_hp_max == 1800.0,
-		"(B) the new world uses keep 5: interior 24 tiles, 8 slots, castle HP 1800", "half=%.1f slots=%d heroes=%d castle=%.0f" % [fresh.castle.half, GameState.hero_count(), _alive_heroes().size(), GameState.castle_hp_max])
+	_check(fresh.castle.half == 28.0 and GameState.hero_count() == 8 and GameState.deploy().size() == 8 and _alive_heroes().size() == deployed and GameState.castle_hp_max == 2600.0
+		and fresh.castle._gate_doors.all(func(d): return d.size() == 2),
+		"(B) the new world uses keep 9: interior 28 tiles, 8 slots, 2 gates per side, castle HP 2600", "half=%.1f slots=%d heroes=%d castle=%.0f" % [fresh.castle.half, GameState.hero_count(), _alive_heroes().size(), GameState.castle_hp_max])
 	var keep_after := [Economy.gold_tenths, Economy.res, Economy.heroes, Economy.hero_levels, Economy.hero_promotions, GameState.stage, GameState.deploy().slice(0, 4)]
-	_check(keep_after == keep_before and Economy.building_level("keep") == 5 and Economy.building_level("lab") == 3 and GameState.roster == Economy and not Net.is_online(),
+	_check(keep_after == keep_before and Economy.building_level("keep") == 9 and Economy.building_level("lab") == 3 and GameState.roster == Economy and not Net.is_online(),
 		"(B) autoload state carries over the rebuild (gold, resources, heroes, levels, stage, deploy)", "before=%s after=%s" % [keep_before, keep_after])
 	_check(hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!", "(B) the new HUD shows '성이 넓어졌습니다!'", "toast=%s '%s'" % [hud._toast.visible, hud._toast.text])
-	# 스테이지 중에 단계가 바뀌면(성채 9 → 10): 지금 알리고, 월드는 방치로 돌아올 때 다시 만든다
+	# 스테이지 중에 단계가 바뀌면(성채 21 → 22): 지금 알리고, 월드는 방치로 돌아올 때 다시 만든다
 	hud._toast.visible = false
 	GameState.start_stage()
 	GameState.auto_continue = false  # 결과 뒤 방치로
-	Economy.levels["keep"] = 9
+	Economy.levels["keep"] = 21
 	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
 	await _frames(3)
-	_check(is_instance_valid(fresh) and fresh.is_inside_tree() and hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!" and fresh.castle.half == 24.0,
+	_check(is_instance_valid(fresh) and fresh.is_inside_tree() and hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!" and fresh.castle.half == 28.0,
 		"(B) a tier change during a stage shows the notice now and keeps the world until idle", "valid=%s toast=%s" % [is_instance_valid(fresh), hud._toast.visible])
 	var stage_id: int = fresh.get_instance_id()
 	GameState.on_all_monsters_dead()
 	await _wait_until(func(): return not is_instance_id_valid(stage_id), GameData.config_num("result_sec") + 3.0)
 	await _frames(3)
 	var after = get_children().filter(func(c): return c.get_script() == MainScript)
-	_check(not is_instance_id_valid(stage_id) and after.size() == 1 and after[0].castle.half == 28.0 and GameState.mode == GameState.Mode.IDLE and GameState.hero_count() == 12,
-		"(B) back in idle the world is rebuilt for keep 10 (interior 28 tiles, 12 slots)", "old valid=%s mains=%d" % [is_instance_id_valid(stage_id), after.size()])
+	_check(not is_instance_id_valid(stage_id) and after.size() == 1 and after[0].castle.half == 36.0 and GameState.mode == GameState.Mode.IDLE and GameState.hero_count() == 12,
+		"(B) back in idle the world is rebuilt for keep 22 (interior 36 tiles, 12 slots)", "old valid=%s mains=%d" % [is_instance_id_valid(stage_id), after.size()])
 	if after.size() == 1:
 		_main = after[0]
 

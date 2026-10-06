@@ -133,6 +133,7 @@ func _build_world() -> void:
 	tags.badges = badges  # 이름표 덩어리 = 이름표 + 막대·말풍선
 	add_child(badges)
 	_formation = FormationScript.new()
+	_formation.castle_half = castle.half
 	if rebuilds == 0 and OS.is_debug_build() and _flag_requested("econ-demo") and not Net.is_online():
 		_econ_demo()  # --heroes보다 먼저: Economy.reset이 개발용 영웅 보유·배치를 지우지 않게
 	if rebuilds == 0:
@@ -643,6 +644,9 @@ func _build_ground(interior_half: float) -> void:
 	mat.set_shader_parameter("tile_size", Balance.TILE)
 	mat.set_shader_parameter("interior_half", interior_half)
 	mat.set_shader_parameter("road_half", Balance.TILE)
+	var offs := FormationScript.gate_offsets(interior_half)
+	mat.set_shader_parameter("gate_off", absf(float(offs[0])) if absf(float(offs[0])) > 0.01 else (absf(float(offs[-1])) if offs.size() > 1 else 0.0))
+	mat.set_shader_parameter("lane_depth", interior_half - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN)
 	_ground_mat = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane

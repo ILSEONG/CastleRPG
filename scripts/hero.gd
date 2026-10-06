@@ -531,7 +531,7 @@ func _gate_repair() -> void:
 	if not holds_post():
 		return
 	if GameState.repair_gate(side, GameState.gate_hp_max * _sk.gate_repair[1] / 100.0) > 0.0:
-		Fx.repair(get_parent(), Formation.gate_position(castle.half, side), _tier)
+		Fx.repair(get_parent(), Formation.gate_position(castle.half, side, Formation.nearest_gate_at(castle.half, side, global_position)), _tier)
 		_announce("gate_repair")
 
 
