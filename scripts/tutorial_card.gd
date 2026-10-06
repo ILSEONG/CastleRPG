@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## 튜토리얼 미션 카드(HUD 층, 하단 탭 바 바로 위 가로 띠). 왼쪽: "튜토리얼 n/27" + 미션 제목, 설명 두 줄, 보상 한 줄. 오른쪽 버튼 —
 ## 끝났으면 호박색 [보상 받기](살짝 맥동), 아니면 강철색 [바로가기](Tutorial.goto_current → main이 건물 창·탭·상인·전투를 연다).
-## 제목 줄을 누르면 설명·보상을 접는다(접으면 한 줄). 건물 미션이면 그 건물 이름표 위에 통통 튀는 호박색 화살표를 그린다(tags.stacks).
+## 설명·보상은 늘 보인다(사용자 2026-10-06: 접기 없음). 건물 미션이면 그 건물 이름표 위에 통통 튀는 호박색 화살표를 그린다(tags.stacks).
 ## 튜토리얼이 아니면(끝남·건너뜀) 숨는다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -23,7 +23,6 @@ var desc_label: Label
 var reward_label: Label
 var action_button: Button
 
-var _collapsed := false
 var _arrow: Control
 var _t := 0.0
 
@@ -54,8 +53,6 @@ func _ready() -> void:
 	row.add_child(col)
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 10)
-	head.mouse_filter = Control.MOUSE_FILTER_STOP
-	head.gui_input.connect(_on_head_input)
 	col.add_child(head)
 	step_label = _label(18, UiKit.AMBER.darkened(0.35))
 	step_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -103,12 +100,10 @@ func _refresh() -> void:
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
 	desc_label.text = str(m.desc)
 	reward_label.text = "보상: " + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
-	desc_label.visible = not _collapsed
-	reward_label.visible = not _collapsed
 	action_button.text = "보상 받기" if done else "바로가기"
 	action_button.disabled = (not done and str(m.get("goto", "")) == "") or (done and Tutorial.econ != null and Tutorial.econ.quest_waiting())
 	UiKit.apply_button(action_button, UiKit.AMBER if done else UiKit.STEEL, 12.0)
-	panel.offset_top = panel.offset_bottom  # 높이 0에서 내용만큼 위로 자란다(grow BEGIN) — 접으면 다시 줄어든다
+	panel.offset_top = panel.offset_bottom  # 높이 0에서 내용만큼 위로 자란다(grow BEGIN)
 
 
 func _on_action() -> void:
@@ -117,12 +112,6 @@ func _on_action() -> void:
 			_refresh()  # 응답 전 버튼을 끈다(응답이 오면 Tutorial.changed가 다시 그린다)
 	else:
 		Tutorial.goto_current()
-
-
-func _on_head_input(e: InputEvent) -> void:
-	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-		_collapsed = not _collapsed
-		_refresh()
 
 
 func _process(delta: float) -> void:
