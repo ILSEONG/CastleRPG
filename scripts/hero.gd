@@ -82,6 +82,7 @@ var _repair_cd := 0.0
 var _blast_cd := 0.0
 var _level := 1
 var _promotion := 0
+var helper := false  # 모집권 던전 도우미(내 영웅이 아님): 내 장비를 끼지 않는다 — setup 전에 켠다
 var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
 var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
 var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)
@@ -732,14 +733,14 @@ func refresh_stats() -> void:
 	_bonus = Economy.upgrade_bonus()
 	var r: Dictionary = Economy.research_bonus()
 	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
-	var st := GameData.hero_stats(def, _level, _promotion)
+	var st := GameData.hero_stats(def, _level, _promotion, {} if helper else null)
 	var g: float = 1.0 + Guild.buff_pct() / 100.0
 	hp_max = st.hp * (1.0 + _bonus.hp_pct) * (1.0 + r.hero_hp_pct / 100.0) * g
 	atk = st.atk * (1.0 + _bonus.atk_pct) * (1.0 + r.hero_atk_pct / 100.0) * g
 	_skill_mult = 1.0 + r.skill_pct / 100.0
 	hp = hp_max * ratio
 	_aspd = 1.0 + _bonus.aspd_pct
-	var shoes: float = Economy.equipment_bonus(str(def.get("id", ""))).get("speed_pct", 0.0)
+	var shoes: float = 0.0 if helper else Economy.equipment_bonus(str(def.get("id", ""))).get("speed_pct", 0.0)
 	_speed = float(def.speed) * (1.0 + _bonus.mspd_pct + shoes / 100.0)
 
 

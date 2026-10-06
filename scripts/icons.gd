@@ -119,6 +119,24 @@ static func shapes(kind_name: String) -> Array:
 				[[Vector2(-0.24, -0.25), Vector2(-0.19, -0.29), Vector2(-0.14, -0.25), Vector2(-0.19, -0.21)], Color(1, 1, 1, 0.95), false],
 				[[tl, tr, r, b, l], Color(0, 0, 0, 0), true],
 			]
+		"ticket":  # 다이아 모집권(모집권 던전 보상): 기울어진 보라 표(양옆 반원 홈) + 가운데 하늘색 다이아 + 금 테 줄
+			var rot := Transform2D(-0.22, Vector2.ZERO)
+			var body := [Vector2(-0.46, -0.26), Vector2(0.46, -0.26), Vector2(0.46, -0.08), Vector2(0.38, 0.0), Vector2(0.46, 0.08),
+				Vector2(0.46, 0.26), Vector2(-0.46, 0.26), Vector2(-0.46, 0.08), Vector2(-0.38, 0.0), Vector2(-0.46, -0.08)]
+			var lit := [Vector2(-0.46, -0.26), Vector2(0.46, -0.26), Vector2(0.46, -0.12), Vector2(-0.46, -0.12)]
+			var gem := [Vector2(0.0, -0.17), Vector2(0.13, -0.04), Vector2(0.0, 0.17), Vector2(-0.13, -0.04)]
+			var gem_lit := [Vector2(0.0, -0.17), Vector2(0.13, -0.04), Vector2(0.0, -0.04), Vector2(-0.13, -0.04)]
+			var line_l := [Vector2(-0.30, 0.15), Vector2(-0.18, 0.15), Vector2(-0.18, 0.19), Vector2(-0.30, 0.19)]
+			var line_r := [Vector2(0.18, 0.15), Vector2(0.30, 0.15), Vector2(0.30, 0.19), Vector2(0.18, 0.19)]
+			return [
+				[Array(rot * PackedVector2Array(body)), Color(0.56, 0.36, 0.82), true],
+				[Array(rot * PackedVector2Array(lit)), Color(0.70, 0.52, 0.92), false],
+				[Array(rot * PackedVector2Array(gem)), Color(0.36, 0.78, 0.98), true],
+				[Array(rot * PackedVector2Array(gem_lit)), Color(0.78, 0.95, 1.0), false],
+				[Array(rot * PackedVector2Array(line_l)), Color(0.98, 0.80, 0.28), false],
+				[Array(rot * PackedVector2Array(line_r)), Color(0.98, 0.80, 0.28), false],
+				[Array(rot * PackedVector2Array(body)), Color(0, 0, 0, 0), true],
+			]
 	var growth := _growth_shapes(kind_name)
 	if not growth.is_empty():
 		return growth

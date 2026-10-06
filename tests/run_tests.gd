@@ -115,6 +115,7 @@ func _init() -> void:
 	test_idle_four_sides_at_once()
 	test_dungeon_tables()
 	test_dungeons_offline()
+	test_ticket_dungeon_offline()
 	test_equipment_offline()
 	test_dungeon_save_and_server()
 	test_seasons()
@@ -3368,6 +3369,51 @@ func test_dungeon_tables() -> void:
 
 
 ## 오프라인 도전(서버와 같은 규칙): 시작 검사, 열쇠·골드는 승리 때만, 타당성, 같은 run 재전송은 같은 결과, 장비 5개, 골드 추가 도전, 보관함 상한, 일일 리셋.
+## 모집권 던전(2026-10-06): 열쇠 1 / 3, 보상 다이아 모집권, 도우미 후보 3명(전투력 ±10%·같은 날 같은 후보), 고르기 검사(빈 값·편성과 겹침·
+## 후보 아님), 시작 run에 도우미(레벨·승급), 승리 = 열쇠 −1·모집권 +1·그 도우미는 오늘 다시 못 씀(후보에서 빠짐), 패배는 그대로, 다음 날 리셋.
+func test_ticket_dungeon_offline() -> void:
+	var t0 := Time.get_unix_time_from_system()
+	var e = _econ(t0)
+	var started := []
+	var finished := []
+	e.dungeon_started.connect(func(r): started.append(r))
+	e.dungeon_finished.connect(func(r): finished.append(r))
+	for id in ["arteon", "ignis"]:
+		e.heroes[id] = 1
+	var st: Dictionary = e.dungeon_state("ticket")
+	var hs: Array = st.helpers
+	check(st.keys == 1 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 1}
+		and e.dungeon_reward("ticket", 11) == {"tickets": 2} and GameData.party_size("ticket") == 4, "ticket dungeon: 1 / 3 keys, 3 helpers, 1 ticket (+1 per 10 levels): %s" % [hs])
+	var top := []
+	for id in e.heroes:
+		top.append(GameData.hero_power(GameData.hero(id), e.level_of(id), e.promotion_of(id)))
+	top.sort()
+	top.reverse()
+	var ref: float = (top[0] + top[1] + top[2] + top[3]) / 4.0
+	check(hs.all(func(h): return absf(h.power - ref) / ref <= GameData.HELPER_FIT or h.level == 1) and e.helper_candidates() == hs,
+		"helpers are near the top-4 average power %.0f (same list on the same day): %s" % [ref, hs])
+	var helper: String = hs[0].hero_id
+	var party: Array = ["hans", "ella", "dorik", "nina", "arteon", "ignis"].filter(func(x): return x != helper).slice(0, 4)
+	check(e.dungeon_block("ticket", 1, party, "") == "no_helper" and e.dungeon_block("ticket", 1, party, "kyle" if not hs.any(func(h): return h.hero_id == "kyle") else "zzz") == "helper_unavailable"
+		and e.dungeon_block("ticket", 1, party, helper) == "" and e.dungeon_block("ticket", 1, party) == "", "helper checks: none / not offered / ok (card view skips the helper)")
+	if e.heroes.has(helper):
+		check(e.dungeon_block("ticket", 1, [helper] + party.slice(0, 3), helper) == "bad_party", "the helper hero cannot also be in the party")
+	check(e.start_dungeon("ticket", 1, party, helper) and started[-1].helper.hero_id == helper and started[-1].helper.level == hs[0].level and started[-1].enemies.size() == 2,
+		"start: the run carries the helper's level and promotion")
+	e.finish_dungeon(e.current_run.run_id, false, 10.0)
+	check(not finished[-1].win and e.dungeon_state("ticket").keys == 1 and e.dungeon_state("ticket").helpers_used == [], "a loss keeps the key and the helper")
+	e.start_dungeon("ticket", 1, party, helper)
+	e.debug_win()
+	var st2: Dictionary = e.dungeon_state("ticket")
+	check(finished[-1].win and finished[-1].rewards == {"tickets": 1} and e.dia_tickets == 1 and st2.keys == 0 and st2.best_level == 1 and st2.helpers_used == [helper]
+		and not st2.helpers.any(func(h): return h.hero_id == helper) and e.dungeon_block("ticket", 2, party, helper) == "helper_used",
+		"win: key -1, +1 ticket, that helper is used for today: %s" % [st2])
+	e.clock_offset = 86400.0
+	check(e.dungeon_state("ticket").keys == 1 and e.dungeon_state("ticket").helpers_used == [], "next day: a key and every helper again")
+	e.clock_offset = 0.0
+	# 전투 장면(도우미 영웅·골렘 조각)은 tests/ticket_check.tscn(오토로드가 필요하다)
+
+
 func test_dungeons_offline() -> void:
 	var t0 := Time.get_unix_time_from_system()
 	var e = _econ(t0)
@@ -4002,9 +4048,9 @@ func test_meshy_bodies() -> void:
 func test_meshy_enemies() -> void:
 	MeshMergeScript.enabled = false
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
-	for kind in ["goblin", "goblin_king", "death_knight"]:
+	for kind in ["goblin", "goblin_king", "death_knight", "rock_golem", "golemite"]:
 		var spec := Art.monster_spec(kind)
-		check(spec.get("body", "") == Art.MESHY_ENEMY_DIR + kind + ".glb" and not spec.has("tint")
+		check(spec.get("body", "") == Art.MESHY_ENEMY_DIR + str(Art.MONSTER_MODELS[kind].get("meshy", kind)) + ".glb" and not spec.has("tint")
 			and spec.parts.all(func(p): return String(p[0]).begins_with("handslot")), "%s: Meshy body, hand parts only %s" % [kind, spec.get("parts")])
 		var model: Node3D = Art.instance(spec.scene)
 		UnitModelScript.dress(model, spec)

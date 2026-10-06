@@ -29,6 +29,12 @@ const HALL_HEROES := [Vector3(-2.8, 0, 2.0), Vector3(3.0, 0, 1.5), Vector3(-6.0,
 const HALL_FILL := [Vector3(0, 3.4, -2.2), Color(1.0, 0.85, 0.7), 9.0, 10.0]  # 데스나이트 앞면 채움 빛 [자리, 색, 세기, 범위]
 const HALL_RIM := [Vector3(0, 5.0, -9.5), Color(1.0, 0.45, 0.2), 6.0, 7.0]  # 등 뒤 테두리 빛 — 어두운 배경에서 윤곽을 뗀다
 
+# 모집권 던전(바위 협곡): 골렘(무대 boss) 기준 (옆 = 화면 오른쪽 m, 앞 = 카메라 쪽 m). 영웅들 어깨 너머로 바위 골렘을 올려다본다.
+const QUARRY_EYE := Vector3(0.0, 2.2, 15.0)  # (옆, 높이, 앞)
+const QUARRY_LOOK := Vector3(0.0, 2.8, 0.0)
+const QUARRY_FOV := 30.0
+const QUARRY_HEROES := [Vector2(-2.8, 8.0), Vector2(3.0, 8.5), Vector2(-6.0, 10.0)]  # (옆, 앞)
+
 
 ## type "gold" | "equip". hero_ids = 출전 편성 영웅 id(앞 HEROES개만, 표에 없는 id는 뺀다). SceneSnap.snap의 build로 bind해서 쓴다.
 static func build(root: Node3D, type: String, hero_ids: Array) -> void:
@@ -38,6 +44,8 @@ static func build(root: Node3D, type: String, hero_ids: Array) -> void:
 			heroes.append(Art.hero_spec(GameData.hero(id)))
 	if type == "gold":
 		_gold(root, heroes)
+	elif type == "ticket":
+		_quarry(root, heroes)
 	else:
 		_hall(root, heroes)
 
@@ -78,6 +86,19 @@ static func _hall(root: Node3D, heroes: Array) -> void:
 		o.omni_range = l[3]
 		root.add_child(o)
 	_camera(root, hw * HALL_EYE, hw * HALL_LOOK, HALL_FOV)
+
+
+static func _quarry(root: Node3D, heroes: Array) -> void:
+	var st: Dictionary = ArenaKit.quarry()
+	root.add_child(ArenaKit.lighting(st.light))
+	root.add_child(st.root)
+	var g: Vector3 = st.boss
+	var at := func(side: float, front: float) -> Vector3: return g + ArenaKit.RIGHT * side + ArenaKit.DOWN * front
+	_unit(root, Art.monster_spec("rock_golem"), g, ArenaKit.DOWN)
+	for i in mini(heroes.size(), HEROES):
+		var p: Vector3 = at.call(QUARRY_HEROES[i].x, QUARRY_HEROES[i].y)
+		_unit(root, heroes[i], p, g - p)
+	_camera(root, at.call(QUARRY_EYE.x, QUARRY_EYE.z) + Vector3(0, QUARRY_EYE.y, 0), at.call(QUARRY_LOOK.x, QUARRY_LOOK.z) + Vector3(0, QUARRY_LOOK.y, 0), QUARRY_FOV)
 
 
 static func _unit(root: Node3D, spec: Dictionary, pos: Vector3, facing: Vector3) -> void:

@@ -87,6 +87,7 @@ const DUNGEON_TEXT := {
 	"unknown": "알 수 없는 던전", "locked": "아직 열리지 않은 단계입니다", "bad_party": "출전 영웅을 확인하세요", "bag_full": "보관함이 가득 찼습니다",
 	"no_key": "열쇠가 없습니다", "not_enough_gold": "골드가 부족합니다", "waiting": "응답 대기 중", "implausible": "전투 기록이 맞지 않습니다",
 	"run_expired": "도전 시간이 지났습니다", "run_closed": "끝난 도전입니다", "unknown_run": "끝난 도전입니다",
+	"no_helper": "함께할 도우미 영웅을 고르세요", "helper_used": "오늘 이미 함께한 영웅입니다", "helper_unavailable": "도우미 목록이 바뀌었습니다 — 다시 고르세요",
 }
 const DUNGEON_FAIL_TEXT := "던전 결과를 받지 못했습니다 — 상태를 다시 확인합니다"
 ## 장착·판매 못 하는 이유 코드 → 문구(equip_block·sell_block, 서버 코드와 같다).
@@ -1614,9 +1615,27 @@ func dungeon_state(type: String) -> Dictionary:
 	var now := time_now()
 	var st := _dungeon_now(type, now)
 	var nr := GameData.next_reset(now)
-	return {"keys": int(st.keys), "key_cap": int(GameData.config_num(type + "_key_cap")), "key_daily": int(GameData.config_num(type + "_key_daily")),
+	var out := {"keys": int(st.keys), "key_cap": int(GameData.config_num(type + "_key_cap")), "key_daily": int(GameData.config_num(type + "_key_daily")),
 		"best_level": int(st.best_level), "max_level": mini(int(st.best_level) + 1, GameData.MAX_DUNGEON_LEVEL), "extra_today": int(st.extra_today),
 		"extra_cost": GameData.extra_cost(int(st.extra_today)) if type == "equip" else 0, "next_reset": nr, "reset_in": maxf(0.0, nr - now)}
+	if type == "ticket":
+		out["helpers_used"] = st.get("helpers_used", []).duplicate()
+		out["helpers"] = helper_candidates()
+	return out
+
+
+## 모집권 던전 도우미 후보 [{hero_id, level, promotion, power}](친구 목록이 없어 시스템이 고른 3명, 오늘 쓴 영웅 제외). 온라인 = 서버가 준 목록
+## (리셋이 지났으면 쓴 목록만 비우고 그대로 — 서버가 start에서 다시 검사한다), 오프라인 = GameData.helper_candidates(내 영웅·오늘 날짜).
+func helper_candidates() -> Array:
+	var st := _dungeon_now("ticket", time_now())
+	var used: Array = st.get("helpers_used", [])
+	if net != null:
+		return dungeons.get("ticket", {}).get("helpers", []).filter(func(h): return not used.has(h.hero_id))
+	var owned := {}
+	for id in heroes:
+		if int(heroes[id]) >= 1:
+			owned[id] = {"level": level_of(id), "promotion": promotion_of(id), "equip": equipment_bonus(id)}
+	return GameData.helper_candidates(owned, used, "offline", GameData.reset_day(time_now()))
 
 
 func _dungeon_now(type: String, now: float) -> Dictionary:
@@ -1627,6 +1646,8 @@ func _dungeon_now(type: String, now: float) -> Dictionary:
 func dungeon_reward(type: String, level: int) -> Dictionary:
 	if type == "gold":
 		return {"gold": GameData.gold_reward(level)}
+	if type == "ticket":
+		return {"tickets": GameData.ticket_reward(level)}
 	return {"count": int(GameData.config_num("equip_drop_count")), "weights": GameData.drop_weights(level)}
 
 
@@ -1648,8 +1669,9 @@ func default_party(type: String) -> Array:
 
 ## 도전 못 하는 이유 코드(문구 DUNGEON_TEXT, 서버와 같은 순서). 되면 "".
 ##   unknown(종류) → locked(최고 + 1 초과) → bad_party(인원·중복·보유) → bag_full(장비: 보유 + 드랍 수 > 상한) → no_key / not_enough_gold
-##   (장비 던전은 열쇠가 없으면 골드 추가 도전) → waiting(앱만)
-func dungeon_block(type: String, level: int, party: Array) -> String:
+##   (장비 던전은 열쇠가 없으면 골드 추가 도전) → waiting(앱만). 모집권 던전은 helper(도우미 영웅 id)가 null이 아니면 bad_party 다음에
+##   no_helper(빈 값) → bad_party(편성과 같은 영웅) → helper_used(오늘 씀) → helper_unavailable(후보 아님)도 본다(카드 화면은 null — 고르기 전).
+func dungeon_block(type: String, level: int, party: Array, helper = null) -> String:
 	if not type in GameData.DUNGEON_TYPES:
 		return "unknown"
 	var st := _dungeon_now(type, time_now())
@@ -1662,6 +1684,15 @@ func dungeon_block(type: String, level: int, party: Array) -> String:
 		seen[id] = true
 	if party.size() != GameData.party_size(type):
 		return "bad_party"
+	if type == "ticket" and helper != null:
+		if str(helper) == "":
+			return "no_helper"
+		if party.has(helper):
+			return "bad_party"
+		if st.get("helpers_used", []).has(helper):
+			return "helper_used"
+		if not helper_candidates().any(func(h): return h.hero_id == helper):
+			return "helper_unavailable"
 	if type == "equip" and bag_full():
 		return "bag_full"
 	if int(st.keys) < 1:
@@ -1679,8 +1710,8 @@ func bag_full() -> bool:
 
 ## 도전 시작(스펙 §6.1). 안 되면 알림만 하고 false. 아무것도 소모하지 않는다(클리어 때). 오프라인: run을 만들어 current_run에 두고 곧바로
 ## dungeon_started. 온라인: /v1/dungeon/start(once) — 응답에 dungeon_started(실패면 {} + 알림). 시작했거나 보냈으면 true.
-func start_dungeon(type: String, level: int, party: Array) -> bool:
-	var why := dungeon_block(type, level, party)
+func start_dungeon(type: String, level: int, party: Array, helper := "") -> bool:
+	var why := dungeon_block(type, level, party, helper if type == "ticket" else null)
 	if why != "":
 		notice.emit(DUNGEON_TEXT.get(why, DUNGEON_FAIL_TEXT))
 		return false
@@ -1690,13 +1721,20 @@ func start_dungeon(type: String, level: int, party: Array) -> bool:
 			return false
 		_waiting["dungeon"] = true
 		net.flush_kills()  # 장비 추가 도전 골드는 서버 골드로 판정한다
-		net.send("POST", "/v1/dungeon/start", {"type": type, "level": level, "party": party}, _on_dungeon_started, _on_dungeon_start_failed, true, true)
+		var body := {"type": type, "level": level, "party": party}
+		if type == "ticket":
+			body["helper"] = helper
+		net.send("POST", "/v1/dungeon/start", body, _on_dungeon_started, _on_dungeon_start_failed, true, true)
 		dungeons_changed.emit()
 		return true
 	var st := _dungeon_now(type, time_now())
 	current_run = {"run_id": "%08x%08x" % [rng.randi(), rng.randi()], "seed": rng.randi() % 2147483648, "type": type, "level": level, "party": party.duplicate(),
 		"enemies": GameData.dungeon_enemies(type, level), "started_at": time_now(), "time_limit": GameData.config_num("dungeon_time_limit"),
 		"paid_with": "key" if int(st.keys) >= 1 else "gold"}
+	if type == "ticket":
+		for h in helper_candidates():
+			if h.hero_id == helper:
+				current_run["helper"] = h.duplicate()
 	dungeon_started.emit(current_run.duplicate(true))
 	return true
 
@@ -1764,6 +1802,12 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 			var gain := GameData.gold_reward(int(run.level))
 			gold_tenths += gain * 10
 			res.rewards = {"gold_tenths": gain * 10}
+		elif type == "ticket":
+			var n := GameData.ticket_reward(int(run.level))
+			dia_tickets += n
+			res.rewards = {"tickets": n}
+			if run.get("helper") is Dictionary:  # 클리어에 쓴 도우미는 오늘 다시 못 쓴다
+				nxt["helpers_used"] = st.get("helpers_used", []) + [run.helper.hero_id]
 		else:
 			var got := []
 			for it in GameData.roll_drops(int(run.level), int(GameData.config_num("equip_drop_count")), rng.randf):
@@ -2151,6 +2195,8 @@ func apply_server(data: Dictionary) -> bool:
 func _apply_gacha(p: Dictionary) -> void:
 	if _num(p.get("diamonds")):
 		diamonds = maxi(0, int(p.diamonds))
+	if _num(p.get("dia_tickets")):  # 다이아 모집권(모집권 던전·튜토리얼 보상)
+		dia_tickets = maxi(0, int(p.dia_tickets))
 	var g = p.get("gacha")
 	if not g is Dictionary:
 		return
@@ -2541,6 +2587,9 @@ func _on_dungeon_started(data: Dictionary) -> void:
 		current_run = {"run_id": data.run_id, "seed": int(data.seed), "type": data.type, "level": int(data.level),
 			"party": data.party if data.get("party") is Array else [], "enemies": data.enemies, "started_at": float(data.started_at),
 			"time_limit": float(data.get("time_limit", GameData.config_num("dungeon_time_limit"))), "paid_with": str(data.get("paid_with", "key"))}
+		var h = data.get("helper")
+		if h is Dictionary and h.get("hero_id") is String and _num(h.get("level")) and _num(h.get("promotion")):
+			current_run["helper"] = {"hero_id": h.hero_id, "level": int(h.level), "promotion": int(h.promotion), "power": int(h.get("power", 0))}
 	else:
 		notice.emit(DUNGEON_FAIL_TEXT)
 	dungeons_changed.emit()
@@ -2684,6 +2733,13 @@ func _dungeon_dict(src: Dictionary, base: Dictionary) -> Dictionary:
 		var v = src.get(type)
 		if v is Dictionary and _num(v.get("best_level")) and _num(v.get("keys")) and _num(v.get("extra_today")) and _num(v.get("last_reset")):
 			out[type] = {"best_level": maxi(0, int(v.best_level)), "keys": maxi(0, int(v.keys)), "extra_today": maxi(0, int(v.extra_today)), "last_reset": float(v.last_reset)}
+			if type == "ticket":  # 모집권 던전: 오늘 쓴 도우미, 서버가 준 후보(온라인)
+				if v.get("helpers_used") is Array:
+					out[type]["helpers_used"] = v.helpers_used.filter(func(x): return x is String)
+				if v.get("helpers") is Array:
+					out[type]["helpers"] = v.helpers.filter(func(h): return h is Dictionary and h.get("hero_id") is String and _num(h.get("level")) \
+						and _num(h.get("promotion")) and not GameData.hero(h.hero_id).is_empty()).map(func(h): return {"hero_id": h.hero_id,
+						"level": int(h.level), "promotion": int(h.promotion), "power": int(h.get("power", 0))})
 	return out
 
 

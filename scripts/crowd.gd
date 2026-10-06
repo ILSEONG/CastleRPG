@@ -16,7 +16,8 @@ const Formation := preload("res://scripts/formation.gd")
 
 const HUMAN_R := 0.45  # 사람 몸(모델 배율 1) — 영웅. 병사는 × SOLDIER_SCALE
 const CAVALRY_R := 0.6  # 말 탄 기병(말이 길어 앞뒤로는 조금 겹쳐 보인다)
-const MONSTER_R := {"grunt": 0.4, "goblin": 0.35, "epic_boss": 0.5, "goblin_king": 0.47, "death_knight": 0.45}  # × 몬스터 표 scale
+const MONSTER_R := {"grunt": 0.4, "goblin": 0.35, "epic_boss": 0.5, "goblin_king": 0.47, "death_knight": 0.45, "rock_golem": 0.5,
+	"golemite": 0.45}  # × 몬스터 표 scale
 const BRACED := 4.0  # 걷는 중이 아니면(자리를 지킴·공격) 무게 ×
 const CELL := 2.5  # 해시 칸(m) ≥ 가장 큰 반지름 합 + SLACK
 const SLACK := 0.3  # 이웃 쌍: 반지름 합 + 이만큼 안(해소 중 밀려 가까워지는 쌍까지)

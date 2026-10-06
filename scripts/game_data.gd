@@ -17,7 +17,7 @@ const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
 const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "scale", "gold"]
-const BOSS_KINDS := ["epic_boss", "goblin_king", "death_knight"]  # 보스 종류(성 + 던전) — monster.is_boss(거인 사냥 boss_slayer, 던전 보스 자리)
+const BOSS_KINDS := ["epic_boss", "goblin_king", "death_knight", "rock_golem"]  # 보스 종류(성 + 던전) — monster.is_boss(거인 사냥 boss_slayer, 던전 보스 자리)
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 const HERO_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]
 const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "model", "gear", "color", "desc"]
@@ -84,7 +84,7 @@ const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12
 # --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
 const DUNGEONS_PATH := "res://data/dungeons.csv"
 const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
-const DUNGEON_TYPES := ["gold", "equip"]
+const DUNGEON_TYPES := ["gold", "equip", "ticket"]  # ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 1, 보상 다이아 모집권
 const DUNGEON_STR_COLS := ["id", "type", "kind"]
 const DUNGEON_NUM_COLS := ["count", "delay", "hp", "atk", "speed", "range", "atk_interval", "aggro", "scale"]
 const DUNGEON_POSITIVE_COLS := ["hp", "speed", "range", "atk_interval", "scale"]  # 0보다 크다(delay·atk·aggro는 0 이상, count는 1 이상 정수)
@@ -103,10 +103,14 @@ const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed − 5
 const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
 const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base",
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
-	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base"]
+	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base",
+	"ticket_key_daily", "ticket_key_cap", "ticket_dg_party", "ticket_dg_min_sec", "ticket_dg_hp_growth", "ticket_dg_atk_growth", "ticket_reward_base",
+	"ticket_reward_step"]
 const DUNGEON_INT_KEYS := ["gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "gold_dg_base", "equip_sell_base",
-	"gold_dg_min_sec", "equip_dg_min_sec"]  # 0 이상 정수
-const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap"]  # 1 이상 정수
+	"gold_dg_min_sec", "equip_dg_min_sec", "ticket_key_daily", "ticket_key_cap", "ticket_dg_min_sec"]  # 0 이상 정수
+const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap", "ticket_dg_party", "ticket_reward_base", "ticket_reward_step"]  # 1 이상 정수
+const HELPER_COUNT := 3  # 모집권 던전 도우미 후보 수(서버 rules.HELPER_COUNT)
+const HELPER_FIT := 0.1  # 도우미 전투력이 기준 ±10% 안이면 "적당한 스펙"(서버 rules.HELPER_FIT)
 # --- 연구(개정 24). 서버 rules.ts·seed.ts(연구 블록)와 같은 규칙 ---
 const RESEARCH_STR_COLS := ["id", "branch", "name", "effect"]
 const RESEARCH_NUM_COLS := ["tier", "per_level", "max_level", "lab_req", "wood", "stone", "food", "gold", "base_sec"]
@@ -776,11 +780,71 @@ static func dungeon_rows(type: String) -> Array:
 	return _dungeons.filter(func(d): return d.type == type)
 
 
-## 적 성장 {hp, atk}: 골드 던전은 둘 다 gold_dg_growth, 장비 던전은 equip_dg_hp_growth·equip_dg_atk_growth.
+## 적 성장 {hp, atk}: 골드 던전은 둘 다 gold_dg_growth, 장비·모집권 던전은 <종류>_dg_hp_growth·<종류>_dg_atk_growth.
 static func dungeon_growth(type: String) -> Dictionary:
 	if type == "gold":
 		return {"hp": config_num("gold_dg_growth"), "atk": config_num("gold_dg_growth")}
-	return {"hp": config_num("equip_dg_hp_growth"), "atk": config_num("equip_dg_atk_growth")}
+	return {"hp": config_num(type + "_dg_hp_growth"), "atk": config_num(type + "_dg_atk_growth")}
+
+
+## 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step). 서버 rules.ticketReward.
+static func ticket_reward(level: int) -> int:
+	return int(config_num("ticket_reward_base")) + floori((level - 1) / maxf(1.0, config_num("ticket_reward_step")))
+
+
+## FNV-1a 32비트(서버 rules.fnv32와 같다 — 도우미 순서 섞기).
+static func fnv32(s: String) -> int:
+	var h := 0x811c9dc5
+	for b in s.to_utf8_buffer():
+		h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+	return h
+
+
+## 모집권 던전 도우미 후보(서버 rules.helperCandidates와 같은 규칙 — 오프라인용, 온라인은 서버가 준 값):
+## 기준 전투력 = owned(영웅 id → {level, promotion, equip}) 상위 4명 평균(장비 포함), 승급 = 그 4명 평균(반올림). 영웅 표에서 used를 빼고
+## fnv32("<key>:<리셋 날짜>:<영웅 id>") 순으로 보며 영웅마다 기준에 가장 가까운 레벨(같으면 낮은 레벨)을 고른다. 기준 ±10% 안을 앞에서부터 3명,
+## 모자라면 나머지에서 가까운 순. [{hero_id, level, promotion, power}]
+static func helper_candidates(owned: Dictionary, used: Array, key: String, day: int) -> Array:
+	var top := []
+	for id in owned:
+		var def := hero(id)
+		if not def.is_empty():
+			var o: Dictionary = owned[id]
+			top.append({"power": hero_power(def, int(o.level), int(o.promotion), o.get("equip", {})), "promotion": int(o.promotion)})
+	top.sort_custom(func(a, b): return a.power > b.power)
+	top = top.slice(0, 4)
+	var ref := 0.0
+	var promo := 0.0
+	for t in top:
+		ref += t.power
+		promo += t.promotion
+	if not top.is_empty():
+		ref /= top.size()
+		promo = roundf(promo / top.size())
+	var max_lv := max_level(int(promo))
+	var pool := []
+	for def in heroes():
+		if not used.has(def.id):
+			pool.append({"def": def, "h": fnv32("%s:%d:%s" % [key, day, def.id])})
+	pool.sort_custom(func(a, b): return a.h < b.h or (a.h == b.h and String(a.def.id) < String(b.def.id)))
+	var picks := []
+	for p in pool:
+		var best_lv := 1
+		var best := hero_power(p.def, 1, int(promo), {})
+		for l in range(2, max_lv + 1):
+			var pw := hero_power(p.def, l, int(promo), {})
+			if absf(pw - ref) < absf(best - ref):
+				best_lv = l
+				best = pw
+			if pw > ref:
+				break
+		picks.append({"hero_id": p.def.id, "level": best_lv, "promotion": int(promo), "power": best, "diff": absf(best - ref) / maxf(ref, 1.0)})
+	var out := picks.filter(func(x): return x.diff <= HELPER_FIT).slice(0, HELPER_COUNT)
+	if out.size() < HELPER_COUNT:
+		var rest := picks.filter(func(x): return not out.has(x))
+		rest.sort_custom(func(a, b): return a.diff < b.diff)
+		out.append_array(rest.slice(0, HELPER_COUNT - out.size()))
+	return out.map(func(x): return {"hero_id": x.hero_id, "level": x.level, "promotion": x.promotion, "power": x.power})
 
 
 ## 단계 n의 적 목록(표 순서) [{id, kind, count(int), delay, hp, atk, speed, range, atk_interval, aggro, scale}]:
@@ -900,6 +964,8 @@ static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
 	out.keys = maxi(keys, mini(int(config_num(type + "_key_cap")), keys + days * int(config_num(type + "_key_daily"))))
 	out.extra_today = 0
 	out.last_reset = reset_at(reset_day(now))
+	if out.has("helpers_used"):  # 모집권 던전: 쓴 도우미는 그날만
+		out["helpers_used"] = []
 	return out
 
 
@@ -1380,7 +1446,7 @@ static func _check_dungeons(t: Dictionary) -> void:
 			_err(table, 0, "", "table is empty")
 	for d in t.dungeons:
 		if not d.type in DUNGEON_TYPES:
-			_err("dungeons", d._line, "type", "type must be gold or equip: '%s'" % d.type)
+			_err("dungeons", d._line, "type", "type must be gold, equip or ticket: '%s'" % d.type)
 		if not (d.count >= 1.0 and d.count == floorf(d.count)):
 			_err("dungeons", d._line, "count", "must be an integer of at least 1: %s" % d.count)
 		for c in DUNGEON_NUM_COLS:

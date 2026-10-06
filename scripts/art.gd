@@ -233,6 +233,7 @@ const MERCHANT_MODEL := {
 
 const GOBLIN_TINT := Color(0.55, 0.85, 0.40)  # Rogue 살색(복숭아) × 이 색 ≈ 고블린 녹색(ArenaKit 귀·코 색과 맞춤)
 const KING_TINT := Color(0.46, 0.62, 0.30)    # 더 짙은 올리브
+const ROCK_TINT := Color(0.55, 0.52, 0.48)    # 바위 골렘(Meshy 몸이 없을 때만 — 회색 돌)
 const DK_METAL := Color(0.36, 0.34, 0.40)     # 뼈·투구 × 이 색 = 검은 쇠
 const DK_EYES := Color(1.0, 0.12, 0.05)       # 발광 눈 재질은 이 색 자체
 
@@ -305,6 +306,26 @@ const MONSTER_MODELS := {
 		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
 		"attacks": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop"],  # 개정 26: 가로 베기와 내려치기를 번갈아(같은 내려치기만 반복하지 않게)
 	},
+	# 모집권 던전(2026-10-06): 바위 골렘(Meshy 몸, Barbarian 뼈대 — 빈손 주먹질)과 쓰러질 때 갈라져 나오는 조각(같은 몸, 작게 — "meshy" = 몸 파일 종류).
+	"rock_golem": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe", "1H_Axe_Offhand", "Barbarian_Round_Shield", "2H_Axe", "Mug", "Barbarian_Hat", "Barbarian_Cape"],
+		"tint": {"Barbarian_Head": ROCK_TINT, "Barbarian_ArmLeft": ROCK_TINT, "Barbarian_ArmRight": ROCK_TINT, "Barbarian_Body": ROCK_TINT,
+			"Barbarian_LegLeft": ROCK_TINT, "Barbarian_LegRight": ROCK_TINT},
+		"scale": 2.4,
+		"anims": {"idle": "Unarmed_Idle", "walk": "Walking_A", "attack": "Unarmed_Melee_Attack_Punch_A", "death": "Death_B"},
+		"attacks": ["Unarmed_Melee_Attack_Punch_A", "Unarmed_Melee_Attack_Punch_B"],  # 왼·오른 주먹 번갈아
+	},
+	"golemite": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"meshy": "rock_golem",
+		"hide": ["1H_Axe", "1H_Axe_Offhand", "Barbarian_Round_Shield", "2H_Axe", "Mug", "Barbarian_Hat", "Barbarian_Cape"],
+		"tint": {"Barbarian_Head": ROCK_TINT, "Barbarian_ArmLeft": ROCK_TINT, "Barbarian_ArmRight": ROCK_TINT, "Barbarian_Body": ROCK_TINT,
+			"Barbarian_LegLeft": ROCK_TINT, "Barbarian_LegRight": ROCK_TINT},
+		"scale": 1.2,
+		"anims": {"idle": "Unarmed_Idle", "walk": "Running_A", "attack": "Unarmed_Melee_Attack_Punch_A", "death": "Death_B"},
+		"attacks": ["Unarmed_Melee_Attack_Punch_A", "Unarmed_Melee_Attack_Punch_B"],
+	},
 }
 
 ## 장비 등급 색(개정 18 §5). LR은 무지개 금 — 정적인 곳(드랍 상자)은 이 금색, 아이콘 테두리는 Icons.draw_item이 흐르게 그린다.
@@ -320,6 +341,7 @@ const WEAPON_BONE := "handslot.r"
 const HIT_FRAC := {
 	"1H_Melee_Attack_Chop": 0.56, "2H_Melee_Attack_Chop": 0.52, "2H_Melee_Attack_Slice": 0.4, "Dualwield_Melee_Attack_Chop": 0.38, "Throw": 0.54,
 	"1H_Ranged_Shoot": 0.26, "2H_Ranged_Shoot": 0.26, "Spellcast_Shoot": 0.30,
+	"Unarmed_Melee_Attack_Punch_A": 0.38, "Unarmed_Melee_Attack_Punch_B": 0.42,  # 바위 골렘 주먹(주먹을 다 뻗는 순간 — 눈대중)
 }
 const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 돌려 길이 ≤ 간격 × 이 값
 
@@ -382,7 +404,7 @@ static func hero_spec(h: Dictionary) -> Dictionary:
 ## 그 메시로 바꾼다 — 몸 색(tint)과 머리·가슴 코드 부품(얼굴·왕관·망토)은 몸에 이미 있어 빼고 손 부품(곤봉·대검)과 KayKit 무기(단검)만 남긴다.
 static func monster_spec(kind: String) -> Dictionary:
 	var spec: Dictionary = MONSTER_MODELS[kind]
-	var path := MESHY_ENEMY_DIR + kind + ".glb"
+	var path := MESHY_ENEMY_DIR + str(spec.get("meshy", kind)) + ".glb"
 	if not meshy_bodies or not ResourceLoader.exists(path):
 		return spec
 	spec = spec.duplicate()

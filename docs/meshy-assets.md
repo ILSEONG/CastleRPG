@@ -49,7 +49,8 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    파일 부품이 코드 모양보다 적으면 나머지는 코드 부품. `meshy = false`면 코드 모양. 검사: tests/summon_check.gd `(A2)`.
 
 ## 던전 적
-고블린·고블린 왕·데스나이트(Art.MONSTER_MODELS)는 영웅과 같은 방식으로 KayKit 뼈대(Rogue·Skeleton_Warrior)에 Meshy 몸을 입는다.
+고블린·고블린 왕·데스나이트·바위 골렘(Art.MONSTER_MODELS)은 영웅과 같은 방식으로 KayKit 뼈대(Rogue·Skeleton_Warrior·Barbarian)에 Meshy 몸을 입는다.
+바위 골렘(모집권 던전)은 Barbarian 뼈대, 조각(golemite)은 같은 몸을 작게 쓴다(스펙 "meshy").
 1. 컨셉·3D: `dev/meshy_enemies.py concept|model|poll <kind>` — T자세·빈손(아르테온 참조). 보스(왕·데스나이트)는 meshy-7 + 리메시 4,500
    (36 크레딧), 고블린은 meshy-t2(21 크레딧).
 2. 몸: `python3 dev/meshy_fit.py assets/models/characters/<Rogue|Skeleton_Warrior>.glb <meshy>.glb assets/models/meshy/enemies/<kind>.glb`.

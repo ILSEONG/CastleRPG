@@ -15,8 +15,9 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const NAMES := {"gold": "골드 던전", "equip": "장비 던전"}
-const BOSS_NAMES := {"goblin_king": "왕고블린", "death_knight": "데스나이트"}
+const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
+const BOSS_NAMES := {"goblin_king": "왕고블린", "death_knight": "데스나이트", "rock_golem": "바위 골렘"}
+const HELPER_TAG := Color(0.36, 0.62, 0.88)  # 모집권 던전 도우미 띠 칸 표시
 const FACE_PX := 96.0
 const TILE_PX := 96.0
 const TOAST_SEC := 1.6
@@ -146,6 +147,14 @@ func _build_strip(root: Control) -> void:
 		if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
 		cell.add_child(face)
+		if h.helper:  # 모집권 던전 도우미: 피규어 위 파란 "도우미" 꼬리표
+			var tag := _label("도우미", 18, Color.WHITE)
+			tag.add_theme_color_override("font_outline_color", HELPER_TAG.darkened(0.4))
+			tag.add_theme_constant_override("outline_size", 5)
+			tag.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+			tag.grow_horizontal = Control.GROW_DIRECTION_BOTH
+			tag.offset_top = -6
+			face.add_child(tag)
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(FACE_PX, 14)
 		bar.show_percentage = false
@@ -246,6 +255,14 @@ func show_result() -> void:
 		reward_box.add_child(icon)
 		gold_label = _label("+%s 골드" % UiKit.commas(floori(rw.gold_tenths / 10.0)), 40, WIN_GOLD.darkened(0.2))
 		reward_box.add_child(gold_label)
+	if rw.has("tickets"):  # 모집권 던전: 다이아 모집권
+		var icon = IconsScript.new()
+		icon.kind = "ticket"
+		icon.custom_minimum_size = Vector2(80, 80)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		reward_box.add_child(icon)
+		gold_label = _label("다이아 모집권 +%d" % int(rw.tickets), 40, Color(0.46, 0.28, 0.72))
+		reward_box.add_child(gold_label)
 	for it in rw.get("items", []):
 		var cell := VBoxContainer.new()
 		cell.add_theme_constant_override("separation", 0)
@@ -268,7 +285,11 @@ func show_result() -> void:
 func refresh_result() -> void:
 	if not result_layer.visible:
 		return
-	next_button.visible = dungeon.can_next()
+	next_button.visible = dungeon.can_next() and dungeon.run.type != "ticket"
+	# 모집권 던전: 도우미가 바뀌어야 하므로 다음 단계·자동은 없고, [다시]는 진 뒤(같은 도우미)만 — 이기면 던전 탭에서 새 도우미를 고른다
+	var ticket: bool = dungeon.run.type == "ticket"
+	again_button.visible = not ticket or not dungeon.result.get("win", false)
+	auto_next_box.get_parent().visible = not ticket
 	for b in [next_button, again_button]:
 		b.disabled = dungeon.starting
 	auto_next_box.set_pressed_no_signal(Fever.dungeon_auto == "next")

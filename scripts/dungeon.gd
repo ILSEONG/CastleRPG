@@ -16,6 +16,8 @@ const ArenaKit := preload("res://scripts/arena_kit.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const DeathKnightScript := preload("res://scripts/death_knight.gd")
+const RockGolemScript := preload("res://scripts/rock_golem.gd")
+const Fx := preload("res://scripts/fx.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
@@ -25,7 +27,8 @@ const PickerScript := preload("res://scripts/unit_picker.gd")
 
 enum Phase { FIGHT, WON, REPORT, LOOT, RESULT }
 
-const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0}
+const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0, "ticket": 28.0}
+const SPLIT_KIND := "golemite"  # 모집권 던전: 이 종류 행은 바위 골렘이 쓰러질 때 그 자리에서 나온다(클래시 오브 클랜 골렘처럼 갈라진다)
 const AUTO_DELAY := 2.0
 const LOOT_SEC := 1.6  # 상자가 다 떨어지고 결과 화면이 뜰 때까지
 const CHEST_FLY := 0.6
@@ -52,6 +55,7 @@ var camera: Camera3D
 var picker  # unit_picker.gd(arena_r) — 영웅 선택·바닥 이동
 
 var _waves: Array = []  # 아직 안 나온 적 무리 [{t, row, at: [자리]}](시각 순)
+var _splits: Array = []  # 보스가 쓰러지면 나올 무리(SPLIT_KIND 행) [{row, at}]
 var _live := 0
 var _corpse := Vector3.ZERO  # 보스(없으면 마지막 적)가 쓰러진 자리
 var _leaving := false
@@ -59,11 +63,11 @@ var _leaving := false
 
 func _ready() -> void:
 	var type := str(run.type)
-	var stage: Dictionary = ArenaKit.plains() if type == "gold" else ArenaKit.castle()
+	var stage: Dictionary = ArenaKit.plains() if type == "gold" else (ArenaKit.quarry() if type == "ticket" else ArenaKit.castle())
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = preload("res://scripts/crowd.gd").new()  # 유닛 겹침 해소(전투 자리 밖으로 밀지 않는다)
-	crowd.arena_r = ArenaKit.PLAINS_FIGHT_R if type == "gold" else ArenaKit.HALL_HALF
+	crowd.arena_r = arena_r(type)
 	add_child(crowd)
 	add_child(PortraitsScript.new())  # 아래 영웅 띠 피규어(성 월드의 것은 트리 밖)
 	var rig = CameraRigScript.new()
@@ -89,9 +93,18 @@ func _ready() -> void:
 		h.idle_dir = -ArenaKit.DOWN
 		add_child(h)
 		heroes.append(h)
+	var hp = run.get("helper")  # 모집권 던전 도우미: 그 레벨·승급, 내 장비 없음, 마지막 자리
+	if hp is Dictionary and not GameData.hero(str(hp.hero_id)).is_empty():
+		var h = HeroScript.new()
+		h.helper = true
+		h.setup(heroes.size(), GameData.hero(str(hp.hero_id)), null, null, int(hp.promotion), int(hp.level))
+		h.free_pos = stage.heroes[heroes.size() % stage.heroes.size()]
+		h.idle_dir = -ArenaKit.DOWN
+		add_child(h)
+		heroes.append(h)
 	picker = PickerScript.new()  # 영웅 탭 선택 → 바닥 탭 이동(성 전장과 같은 조작)
 	picker.camera = camera
-	picker.arena_r = (ArenaKit.PLAINS_FIGHT_R if type == "gold" else ArenaKit.HALL_HALF) - 1.0
+	picker.arena_r = arena_r(type) - 1.0
 	add_child(picker)
 	_plan_waves(stage)
 	_spawn_due()  # 처음 무리는 곧바로(즉시 승리 훅도 시체에서 드랍)
@@ -110,6 +123,9 @@ func _plan_waves(stage: Dictionary) -> void:
 	var spots: Array = stage.enemies.duplicate()
 	_corpse = stage.boss
 	for row in run.enemies:
+		if row.kind == SPLIT_KIND:  # 골렘 조각: 골렘이 쓰러진 자리에서(_on_enemy_died)
+			_splits.append({"row": row, "count": int(row.count)})
+			continue
 		var at := []
 		for i in int(row.count):
 			if row.kind in GameData.BOSS_KINDS or spots.is_empty():
@@ -127,7 +143,7 @@ func _spawn_due() -> void:
 
 func _spawn(w: Dictionary) -> void:
 	for p in w.at:
-		var m = (DeathKnightScript if w.row.kind == "death_knight" else MonsterScript).new()
+		var m = (DeathKnightScript if w.row.kind == "death_knight" else (RockGolemScript if w.row.kind == "rock_golem" else MonsterScript)).new()
 		m.setup_arena(w.row)
 		m.position = p
 		m.died.connect(_on_enemy_died)
@@ -141,6 +157,20 @@ func _on_enemy_died(m) -> void:
 	_live = maxi(0, _live - 1)
 	if m == boss or boss == null:
 		_corpse = m.global_position
+	if m == boss and not _splits.is_empty() and phase == Phase.FIGHT:  # 바위 골렘이 쓰러지면 조각으로 갈라진다
+		var at: Vector3 = m.global_position
+		for s in _splits:
+			var spots := []
+			for i in s.count:
+				spots.append(at + Vector3.FORWARD.rotated(Vector3.UP, TAU * i / maxf(1.0, s.count) + 0.5) * 1.6)
+			_spawn({"row": s.row, "at": spots})
+		_splits.clear()
+		Fx.quake(self, Vector3(at.x, 0.0, at.z), 2.2, 0)
+
+
+## 전투 자리 반경(겹침 해소·이동 선택): 평야·채석장은 PLAINS_FIGHT_R, 성은 홀 반 변.
+static func arena_r(type: String) -> float:
+	return ArenaKit.PLAINS_FIGHT_R if type == "gold" else (ArenaKit.QUARRY_FIGHT_R if type == "ticket" else ArenaKit.HALL_HALF)
 
 
 func time_limit() -> float:
@@ -152,6 +182,8 @@ func enemies_left() -> int:
 	var n := _live
 	for w in _waves:
 		n += w.at.size()
+	for s in _splits:
+		n += int(s.count)
 	return n
 
 
@@ -160,7 +192,7 @@ func _process(delta: float) -> void:
 		Phase.FIGHT:
 			clock += delta
 			_spawn_due()
-			if _waves.is_empty() and _live == 0:
+			if _waves.is_empty() and _splits.is_empty() and _live == 0:
 				phase = Phase.WON
 			elif clock >= time_limit() or not heroes.any(func(h): return h.is_alive()):
 				_report(false)
@@ -183,6 +215,7 @@ func _on_finished(res: Dictionary) -> void:
 	result = res
 	print("[dungeon] result win=%s clock=%.1f rewards=%s %s" % [res.win, clock, res.get("rewards", {}), res.get("error", "")])
 	_waves.clear()
+	_splits.clear()
 	if res.win:  # 즉시 승리 훅이면 남은 적을 쓰러뜨린다(시체에서 드랍)
 		for m in get_tree().get_nodes_in_group("monsters"):
 			m.take_damage(m.hp)
@@ -229,7 +262,7 @@ func _show_result() -> void:
 		return
 	phase = Phase.RESULT
 	hud.show_result()
-	if Fever.dungeon_auto != "" and not auto_halted:
+	if Fever.dungeon_auto != "" and not auto_halted and str(run.type) != "ticket":  # 모집권 던전은 자동 없음(도우미가 바뀐다)
 		if result.get("win", false):
 			auto_left = auto_delay
 			hud.refresh_result()
@@ -281,7 +314,8 @@ func start(lv: int) -> void:
 	if phase != Phase.RESULT or starting:
 		return
 	starting = true
-	if not Economy.start_dungeon(str(run.type), lv, run.party.duplicate()):
+	var helper := str(run.get("helper", {}).get("hero_id", "")) if run.get("helper") is Dictionary else ""
+	if not Economy.start_dungeon(str(run.type), lv, run.party.duplicate(), helper):
 		starting = false
 		auto_halted = auto_halted or Fever.dungeon_auto != ""
 	hud.refresh_result()

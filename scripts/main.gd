@@ -17,7 +17,7 @@ extends Node3D
 ## 광장(Formation.soldier_spots)에 등장시키고 역할 자리(SoldierCommand.assign_posts)로 보낸다. 리필 때는 스테이지 시작 자리로 되돌리고
 ## (연속 진행이면 그대로 다음 스테이지 — 배치가 바뀌었으면 그때 다시 만든다), 방치로 돌아가면 사라진다. 지원 판단은 SoldierCommand 하나.
 ## 던전(개정 18): Economy.dungeon_started → 이 월드를 트리에서 떼어 두고 던전 장면(dungeon.gd)을 붙인다(_enter_dungeon), [나가기] → leave_dungeon.
-## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`): 디버그·오프라인에서 곧바로 그 던전 1단계(_dev_dungeon).
+## 개발용 `-- --dungeon=gold|equip|ticket`(웹 `?dungeon=`): 디버그·오프라인에서 곧바로 그 던전 1단계(_dev_dungeon).
 
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -253,11 +253,17 @@ func _tutorial_goto(target: String) -> void:
 func _dev_dungeon(type: String) -> void:
 	Economy.save_path = ""
 	Fever.save_path = ""
+	var need := GameData.party_size(type) + (1 if type == "ticket" else 0)  # 모집권 던전: 도우미가 내 영웅과 겹쳐도 4명이 남게
 	for h in GameData.heroes():
-		if Economy.heroes.size() >= GameData.party_size(type):
+		if Economy.heroes.size() >= need:
 			break
 		Economy.heroes[h.id] = maxi(1, int(Economy.heroes.get(h.id, 0)))
-	Economy.start_dungeon(type, 1, Economy.default_party(type))
+	var hs: Array = Economy.helper_candidates() if type == "ticket" else []  # 모집권 던전: 첫 도우미 후보
+	var helper: String = hs[0].hero_id if not hs.is_empty() else ""
+	var party: Array = Economy.default_party(type)
+	if helper != "":
+		party = Economy.default_party("gold").filter(func(x): return x != helper).slice(0, GameData.party_size(type))
+	Economy.start_dungeon(type, 1, party, helper)
 
 
 # --- 던전 장면 전환(개정 18 §9): 성 월드(이 노드)를 트리에서 떼어 두고 던전 장면을 같은 부모에 붙인다. 오토로드는 그대로,

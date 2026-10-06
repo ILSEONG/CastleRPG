@@ -19,6 +19,9 @@ const PLAINS_SEED := 18
 const HALL_HALF := 15.0  # 불타는 성: 홀 바닥 30×30 m(홀 좌표 원점 중심)
 const HALL_YAW := PI / 4.0  # 홀 좌표 → 월드 회전: 홀 +Z(앞) = 화면 아래, +X = 화면 오른쪽 → spot(u, v) = 홀 (v, u)
 const CASTLE_SEED := 19
+const QUARRY_FIGHT_R := 14.0  # 바위 협곡: 이 반경 안은 평평한 흙바닥(전투 자리) — 바위가 화면 가장자리에 보이게 좁다
+const QUARRY_SEED := 23
+const QUARRY_ROCK := Color(0.52, 0.48, 0.43)
 const SMOKE_H := 14.0
 const PILLAR_H := 7.0
 
@@ -158,6 +161,58 @@ static func _scatter(root: Node3D, variants: Array, count: int, r_min: float, r_
 			by[v].append(Transform3D(b, Vector3(p.x, 0, p.y)))
 	for v in by:
 		root.add_child(_multimesh(variants[v], by[v], Art.lowpoly_vc_material(), true))
+
+
+# --- 모집권 던전: 바위 협곡(채석장) ---
+
+## 평야와 같은 방식의 넓은 바닥(먼지 낀 흙·돌 색), 전투 자리 밖 각진 바위 둔덕·큰 바위 무더기·마른 덤불, 가까이 둘러싼 바위산 고리.
+## 영웅 5(내 4 + 도우미) = 화면 아래 두 줄(3 + 2). 바위 골렘 = 위쪽 가운데. 오후 햇빛(조금 따뜻한 색).
+static func quarry() -> Dictionary:
+	var root := Node3D.new()
+	root.name = "Quarry"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(600, 600)
+	var mat := ShaderMaterial.new()
+	mat.shader = GroundShader
+	mat.set_shader_parameter("tile_size", 2.0)
+	mat.set_shader_parameter("interior_half", 0.0)
+	mat.set_shader_parameter("grass_a", Color(0.50, 0.47, 0.42))
+	mat.set_shader_parameter("grass_b", Color(0.47, 0.44, 0.39))
+	var ground := MeshInstance3D.new()
+	ground.mesh = plane
+	ground.material_override = mat
+	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(ground)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = QUARRY_SEED
+	var mounds := []
+	for i in 3:
+		var k = MeshKit.new()
+		var r := rng.randf_range(5.0, 9.0)
+		k.rock(Vector3(0, r * 0.1, 0), r, QUARRY_ROCK.darkened(rng.randf_range(0.0, 0.15)), rng, 0.55, 0.0)
+		mounds.append(k.commit())
+	_scatter(root, mounds, 22, QUARRY_FIGHT_R + 7.0, 90.0, rng, 0.8, 1.5)
+	var rocks := []
+	for i in 4:
+		rocks.append(TownKit.rock_cluster(rng))
+	_scatter(root, rocks, 60, QUARRY_FIGHT_R, 100.0, rng, 0.8, 1.8, 2)
+	var shrubs := []
+	for i in 2:
+		shrubs.append(TownKit.bush(rng, {"bush": Color(0.50, 0.50, 0.30)}))
+	_scatter(root, shrubs, 30, QUARRY_FIGHT_R + 2.0, 100.0, rng, 0.7, 1.1, 2)
+	var peaks := []
+	for i in 5:
+		peaks.append(TownKit.mountain(rng, {"low": Color(0.56, 0.49, 0.40)}))
+	_scatter(root, peaks, 26, 80.0, 140.0, rng, 1.2, 1.8, 1, 1.4)
+	var heroes := []
+	for i in 5:
+		heroes.append(spot(6.0 + (i / 3) * 2.6, (i % 3 - 1) * 2.8 + (1.4 if i >= 3 else 0.0)))
+	var enemies := []
+	for o in [Vector2(-7, -3), Vector2(-7, 3), Vector2(-9, 0)]:
+		enemies.append(spot(o.x, o.y))
+	return {"root": root, "heroes": heroes, "enemies": enemies, "boss": spot(-8.0, 0.0), "light": {
+		"background": Color(0.78, 0.80, 0.82), "ambient": Color(0.82, 0.82, 0.84), "ambient_energy": 0.85,
+		"sun_color": Color(1.0, 0.96, 0.90), "sun_energy": 1.15, "sun_rot": Vector3(-50, -30, 0), "shadows": true, "omni": []}}
 
 
 # --- 장비 던전: 불타는 성 내부 ---

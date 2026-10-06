@@ -10,6 +10,9 @@ extends "res://scripts/ui_window.gd"
 ## [도전] → 출전 편성(같은 시트): 슬롯 6(골드)·4(장비) + 보유 영웅 피규어 격자(전투력 순, 출전 중은 호박색 테두리). 영웅 카드 탭 = 넣기·빼기,
 ## 슬롯 탭 = 빼기. [자동 편성](Economy.default_party), [출전](편성을 Fever.dungeon_party에 저장 → Economy.start_dungeon), [뒤로].
 ## 처음 편성 = 저장된 편성(보유·인원이 맞으면), 아니면 기본 편성. 도전이 시작되면(dungeon_started) 카드 화면으로 돌아간다 — 장면은 main이 바꾼다.
+## 모집권 던전(2026-10-06): 카드 = 바위 협곡 띠, 열쇠 n / 3, 보상 다이아 모집권 n장. 편성 = 내 영웅 4 + "함께할 도우미" 줄(친구 목록이 없어
+## 시스템이 고른 전투력이 비슷한 영웅 3명 — Economy.helper_candidates, 하루 한 번씩) 중 하나를 탭해 고른다. 도우미와 같은 영웅은 편성에 못 넣는다.
+## 카드가 셋이라 목록은 스크롤된다.
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
@@ -18,8 +21,9 @@ const IconsScript := preload("res://scripts/icons.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
 
-const TYPES := ["gold", "equip"]
-const NAMES := {"gold": "골드 던전", "equip": "장비 던전"}
+const TYPES := ["gold", "equip", "ticket"]
+const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
+const HELPER_SIZE := Vector2(128, 164)
 const BAND_H := 180.0  # 720 화면 띠 628×180 = DungeonSnaps.SIZE의 반(다른 비율이면 스냅샷을 잘라 채운다)
 const BAND_CHAMFER := 12.0
 const SNAP_KEY := "dungeon_band:%s"
@@ -43,6 +47,10 @@ var form_reason: Label
 var back_button: Button
 var auto_button: Button
 var go_button: Button
+var helper_id := ""  # 모집권 던전: 고른 도우미 영웅 id(없으면 "")
+var helper_cards := {}  # 도우미 후보 영웅 id → 카드
+var helper_box: VBoxContainer
+var _helper_row: HBoxContainer
 
 var _list_view: VBoxContainer
 var _form_view: VBoxContainer
@@ -71,8 +79,16 @@ func _build_list() -> void:
 	_list_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_list_view)
 	_list_view.add_child(_title("던전"))
+	var scroll := ScrollContainer.new()  # 카드 셋 — 화면보다 길면 스크롤
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_list_view.add_child(scroll)
+	var cards_box := VBoxContainer.new()
+	cards_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cards_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(cards_box)
 	for t in TYPES:
-		_list_view.add_child(_build_card(t))
+		cards_box.add_child(_build_card(t))
 	bag_button = _button("", UiKit.STEEL, 26)
 	bag_button.pressed.connect(func(): bag.open_bag())
 	_list_view.add_child(bag_button)
@@ -164,6 +180,16 @@ func _build_form() -> void:
 	_slot_grid = GridContainer.new()
 	_slot_grid.add_theme_constant_override("h_separation", 6)
 	slots_center.add_child(_slot_grid)
+	helper_box = VBoxContainer.new()  # 모집권 던전: 함께할 도우미(후보 3명 중 하나)
+	helper_box.add_theme_constant_override("separation", 4)
+	helper_box.visible = false
+	_form_view.add_child(helper_box)
+	helper_box.add_child(_label("함께할 도우미 영웅 (영웅마다 하루 한 번)", 22, HudScript.INK))
+	var hc := CenterContainer.new()
+	helper_box.add_child(hc)
+	_helper_row = HBoxContainer.new()
+	_helper_row.add_theme_constant_override("separation", 12)
+	hc.add_child(_helper_row)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -273,6 +299,8 @@ func _refresh() -> void:
 		var rw := Economy.dungeon_reward(t, lv)
 		if t == "gold":
 			c.reward.text = "보상 %s 골드" % UiKit.commas(rw.gold)
+		elif t == "ticket":
+			c.reward.text = "보상 다이아 모집권 %d장 · 도우미 영웅 1명과 함께" % rw.tickets
 		else:
 			c.reward.text = "장비 %d개 · %s" % [rw.count, odds_text(rw.weights)]
 			c.gold.text = UiKit.commas(Economy.gold)
@@ -295,6 +323,11 @@ func open_form(t: String) -> void:
 	form_type = t
 	var saved: Array = Fever.dungeon_party.get(t, [])
 	party = saved.duplicate() if _party_ok(t, saved) else Economy.default_party(t)
+	helper_id = ""
+	if t == "ticket":  # 처음엔 첫 후보를 골라 둔다(편성과 겹치면 편성에서 뺀다)
+		var hs := Economy.helper_candidates()
+		if not hs.is_empty():
+			pick_helper(hs[0].hero_id, false)
 	_list_view.visible = false
 	_form_view.visible = true
 	_refresh_form()
@@ -325,9 +358,23 @@ func owned_by_power() -> Array:
 func tap_hero(id: String) -> void:
 	if party.has(id):
 		party.erase(id)
+	elif id == helper_id:
+		Economy.notice.emit("도우미로 고른 영웅입니다")
 	elif party.size() < GameData.party_size(form_type):
 		party.append(id)
 	_refresh_form()
+
+
+## 모집권 던전 도우미 고르기(같은 영웅이 편성에 있으면 편성에서 빼고, 기본 편성 다음 영웅으로 채운다).
+func pick_helper(id: String, refresh := true) -> void:
+	helper_id = id
+	if party.has(id):
+		party.erase(id)
+		for h in owned_by_power():
+			if party.size() < GameData.party_size(form_type) and not party.has(h) and h != id:
+				party.append(h)
+	if refresh:
+		_refresh_form()
 
 
 func tap_slot(i: int) -> void:
@@ -338,6 +385,8 @@ func tap_slot(i: int) -> void:
 
 func auto_party() -> void:
 	party = Economy.default_party(form_type)
+	if helper_id != "":
+		pick_helper(helper_id, false)
 	_refresh_form()
 
 
@@ -345,7 +394,7 @@ func auto_party() -> void:
 func deploy() -> void:
 	Fever.dungeon_party[form_type] = party.duplicate()
 	Fever.save()
-	Economy.start_dungeon(form_type, level_of(form_type), party.duplicate())
+	Economy.start_dungeon(form_type, level_of(form_type), party.duplicate(), helper_id)
 	_refresh_form()
 
 
@@ -392,13 +441,46 @@ func _refresh_form() -> void:
 		c.power = GameData.hero_power(GameData.hero(id), c.level, c.stars)
 		c.highlight = party.has(id)
 		c.queue_redraw()
+	_refresh_helpers()
 	var lv := level_of(form_type)
 	form_title.text = "%s %d단계 출전" % [NAMES[form_type], lv]
-	var why := Economy.dungeon_block(form_type, lv, party)
+	var why := Economy.dungeon_block(form_type, lv, party, helper_id if form_type == "ticket" else null)
 	go_button.disabled = why != ""
-	form_reason.text = "출전 %d / %d명" % [party.size(), size] if why in ["", "bad_party", "waiting"] else Economy.DUNGEON_TEXT.get(why, "")
+	form_reason.text = ("출전 %d / %d명" % [party.size(), size]) + (" + 도우미 %d / 1명" % int(helper_id != "") if form_type == "ticket" else "") \
+		if why in ["", "bad_party", "waiting", "no_helper"] else Economy.DUNGEON_TEXT.get(why, "")
 	form_reason.add_theme_color_override("font_color", HudScript.INK if why == "" else RED)
 	auto_button.disabled = party == Economy.default_party(form_type)
+
+
+## 도우미 줄(모집권 던전만): 후보 카드 3장(레벨·승급·전투력), 고른 카드는 호박색 테두리. 고른 영웅이 후보에서 빠지면(온라인 새 목록) 고름을 푼다.
+func _refresh_helpers() -> void:
+	helper_box.visible = form_type == "ticket"
+	if form_type != "ticket":
+		return
+	var hs := Economy.helper_candidates()
+	var ids := hs.map(func(h): return h.hero_id)
+	if not ids.has(helper_id):
+		helper_id = ""
+	if ids != helper_cards.keys():
+		for c in helper_cards.values():
+			_helper_row.remove_child(c)
+			c.queue_free()
+		helper_cards.clear()
+		for h in hs:
+			var card = HeroCardScript.new()
+			card.custom_minimum_size = HELPER_SIZE
+			card.hero_id = h.hero_id
+			card.tapped.connect(func(_c): pick_helper(h.hero_id))
+			_helper_row.add_child(card)
+			helper_cards[h.hero_id] = card
+	for h in hs:
+		var c = helper_cards[h.hero_id]
+		c.level = int(h.level)
+		c.stars = int(h.promotion)
+		c.power = int(h.power)
+		c.corner = "도우미"
+		c.highlight = h.hero_id == helper_id
+		c.queue_redraw()
 
 
 # --- 그림 ---
