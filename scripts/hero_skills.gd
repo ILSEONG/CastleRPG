@@ -32,6 +32,8 @@ const HIT := Vector3(0, 0.8, 0)  # hero.HIT_HEIGHT
 const MUZZLE := Vector3(0, 1.3, 0)  # hero.MUZZLE
 const SHOTS := {"Mage": ["bolt", 18.0], "Barbarian": ["axe", 20.0]}  # hero.SHOTS(없으면 화살 30 m/s)
 const FIRST_CD := 0.4
+## 쿨이 도는 발동형인데 hero.gd가 직접 돌리는 셋(원래 19종에서).
+const HERO_ACTIVE := ["heal_aura", "gate_repair", "aoe_blast"]
 const CAST_WAIT := 0.1  # 쿨이 찼는데 영웅이 휘두르는·시전하는 중이면 이만큼 뒤에 다시 본다
 ## 발동 모션(개정 25): 발동형 → KayKit 모션(모든 영웅 모델에 같은 이름이 있다). 발동 순간은 Art.CAST_FRAC. 없으면 그 영웅의 평타 모션.
 ## 하늘에 손을 드는 주문(낙하·광선·소환·회복) = Spellcast_Raise, 바닥 지대·균열 = Spellcast_Long, 앞으로 쏘는 주문 = Spellcast_Shoot,
@@ -107,6 +109,16 @@ var _wall_fx: Node3D
 
 func _init(hero) -> void:
 	h = hero
+
+
+## k가 쿨이 도는 발동형(액티브)인가 — 하단 초상화 쿨 칸이 쓴다.
+static func is_active(k: String) -> bool:
+	return k in ACTIVE or k in HERO_ACTIVE
+
+
+## 발동형 k의 다음 발동까지 남은 초(없으면 0).
+func cd_left(k: String) -> float:
+	return float(_cd.get(k, 0.0))
 
 
 ## 해금된 스킬이 바뀌면(setup) 다시 넣는다.

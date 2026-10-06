@@ -12,6 +12,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
+const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
@@ -25,6 +26,7 @@ const WIN_GOLD := Color("C8901A")
 const LOSS_RED := Color(0.78, 0.22, 0.18)
 const BOSS_RED := Color(0.86, 0.24, 0.2)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
+const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 
 var dungeon  # dungeon.gd
 var title_label: Label
@@ -133,20 +135,23 @@ func _build_strip(root: Control) -> void:
 	row.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	row.offset_bottom = -20
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", int(HeroStrip.GAP))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(row)
+	var px := HeroStrip.fit_px(dungeon.heroes.size(), FACE_PX, 688.0, HeroStrip.GAP)  # 화면(720) − 양옆 16
 	for h in dungeon.heroes:
 		var cell := VBoxContainer.new()
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cell.add_theme_constant_override("separation", 4)
-		var face := Control.new()
-		face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
-		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		face.draw.connect(_draw_face.bind(face, h.def))
+		var face := Button.new()  # 누르면 그 영웅 선택(사용자 2026-10-06) — 그다음 바닥 탭으로 이동
+		face.flat = true
+		face.focus_mode = Control.FOCUS_NONE
+		face.custom_minimum_size = Vector2(px, px)
+		face.draw.connect(_draw_face.bind(face, h.def, h))
+		face.pressed.connect(pick.bind(h))
 		if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(face)
+		cell.add_child(HeroStrip.face_with_slots(face, h, px))  # [쿨][초상화][쿨]
 		if h.helper:  # 모집권 던전 도우미: 피규어 위 파란 "도우미"(친구 영웅이면 "친구") 꼬리표
 			var tag := _label(h.helper_tag, 18, Color.WHITE)
 			tag.add_theme_color_override("font_outline_color", HELPER_TAG.darkened(0.4))
@@ -156,7 +161,8 @@ func _build_strip(root: Control) -> void:
 			tag.offset_top = -6
 			face.add_child(tag)
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(FACE_PX, 14)
+		bar.custom_minimum_size = Vector2(px, 14)
+		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		bar.show_percentage = false
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		UiKit.apply_bar(bar, HP_GREEN)
@@ -165,14 +171,23 @@ func _build_strip(root: Control) -> void:
 		strip.append({"hero": h, "face": face, "bar": bar})
 
 
-## 피규어 칸: 등급 색 8각 바탕 + 피규어(렌더 전엔 자리표시).
-func _draw_face(c: Control, def: Dictionary) -> void:
+## 띠 초상화 누름: 산 영웅이면 선택(이미 선택돼 있으면 해제).
+func pick(h) -> void:
+	var p = dungeon.picker if dungeon != null else null
+	if p == null or not is_instance_valid(h) or not h.is_alive():
+		return
+	p._select(null if p.selected == h else h)
+
+
+## 피규어 칸: 등급 색 8각 바탕 + 피규어(렌더 전엔 자리표시). 선택된 영웅은 금색 테두리.
+func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
 	c.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-	oct.append(oct[0])
-	c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
 	c.draw_texture_rect(PortraitsScript.portrait("hero:" + def.id), r, false)
+	oct.append(oct[0])
+	var on: bool = h != null and dungeon != null and dungeon.picker != null and dungeon.picker.selected == h
+	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
 
 
 func _build_result(root: Control) -> void:
@@ -346,6 +361,7 @@ func _update() -> void:
 	for s in strip:
 		s.bar.value = s.hero.hp_ratio() * 100.0
 		s.face.modulate.a = 1.0 if s.hero.is_alive() else 0.35
+		s.face.queue_redraw()  # 선택 테두리
 	if result_layer.visible:
 		_update_auto_label()
 

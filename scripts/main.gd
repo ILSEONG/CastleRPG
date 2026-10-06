@@ -77,6 +77,9 @@ var _sun: DirectionalLight3D
 var _ground_mat: ShaderMaterial
 var _dungeon = null  # 던전 장면(개정 18, 던전 중에만). 그동안 이 노드는 트리 밖
 var _host: Node = null  # 던전 동안 이 노드와 던전 장면의 부모
+var _battle_hide: Array = []  # 스테이지 진행 중 숨기는 메뉴 UI(하단 탭·오른쪽 아래 메뉴·건물 이름표·말풍선)
+var _hud
+var _strip  # 하단 영웅 초상화 줄(hero_strip.gd) — 스테이지 진행 중에만
 var _tutorial_ui := {}  # 튜토리얼 [바로가기]가 여는 것: rig·building(건물 창)·tabs·merchant(상인 창)·recruit(모집 창)
 
 
@@ -187,10 +190,18 @@ func _build_world() -> void:
 	var card = preload("res://scripts/tutorial_card.gd").new()  # 튜토리얼 미션 카드(새 게임만, 탭 바 위)
 	card.tags = tags
 	add_child(card)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [랭킹][친구][이벤트]
-	side_menu.windows = {"ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
+	var mission_panel = preload("res://scripts/mission_panel.gd").new()  # 미션 시트(일일·주간·반복): 오른쪽 아래 메뉴가 연다
+	add_child(mission_panel)
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [미션][랭킹][친구][이벤트]
+	side_menu.windows = {"mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
 	side_menu.card = card
 	add_child(side_menu)
+	_hud = hud
+	_strip = preload("res://scripts/hero_strip.gd").new()
+	_strip.picker = picker
+	_strip.heroes_fn = strip_heroes
+	add_child(_strip)
+	_battle_hide = [tabs, side_menu, tags, badges]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "merchant": panel, "recruit": recruit}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):
 		Tutorial.goto_requested.connect(_tutorial_goto)
@@ -211,6 +222,7 @@ func _build_world() -> void:
 	Guild.boss_started.connect(_on_guild_boss_started)
 	GuildWar.battle_started.connect(_on_guild_war_started)
 	GameState.mode_changed.connect(_on_mode_changed)
+	_set_battle_ui(GameState.mode != GameState.Mode.IDLE)
 	if OS.is_debug_build() and rebuilds == 0:
 		_connect_dev_log()  # 람다(오토로드 시그널)라 다시 만든 월드에서 또 붙이면 두 번 찍힌다
 	if _expanded_notice:
@@ -539,12 +551,36 @@ func _expand() -> void:
 
 
 func _on_mode_changed(mode: int) -> void:
+	_set_battle_ui(mode != GameState.Mode.IDLE)
 	if mode == GameState.Mode.STAGE:
 		spawn_soldiers()
 	elif mode == GameState.Mode.IDLE:
 		clear_soldiers()
 	if _expand_pending and mode == GameState.Mode.IDLE:
 		_rebuild_world.call_deferred()
+
+
+## 스테이지를 미는 동안(스테이지·결과·카운트다운, 사용자 2026-10-06): 메뉴 UI(하단 탭·오른쪽 아래 메뉴·재화 칩·건물 이름표·말풍선)를
+## 숨기고 하단에 영웅 초상화 줄(누르면 그 영웅 선택). 전투 정보(스테이지·성/성문 HP·진행/중지·FEVER)와 튜토리얼 카드는 그대로. 방치로 돌아오면 되돌린다.
+func _set_battle_ui(on: bool) -> void:
+	for n in _battle_hide:
+		if is_instance_valid(n):
+			n.visible = not on
+	if _hud != null:
+		_hud.set_battle(on)
+	if _strip != null:
+		_strip.visible = on
+
+
+## 하단 초상화 줄 영웅: 배치 슬롯 순서.
+func strip_heroes() -> Array:
+	var keys := _slots.keys()
+	keys.sort()
+	var out := []
+	for i in keys:
+		if is_instance_valid(_slots[i].node):
+			out.append(_slots[i].node)
+	return out
 
 
 ## 월드를 다시 만든다(씬 다시 읽기). 상태는 오토로드(Economy·GameState·Net)에 있어 그대로 이어지고, 새 main이 그 레벨로 성·영웅을 만든다.

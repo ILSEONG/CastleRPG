@@ -1,6 +1,6 @@
 extends Node
 ## 탭 → 영웅은 화면 좌표로, 성문·성벽은 카메라 레이캐스트로, 바닥은 y=0 평면과의 교점으로 판정 →
-## 영웅 선택 / 선택 영웅을 성문 앞(성문 탭)·성벽 위(성벽 탭)·바닥 지점(그 외)으로 이동.
+## 영웅 선택 / 선택 영웅을 성문 앞(성문 탭)·성벽 위(성벽 탭 — 누른 지점에 가장 가까운 빈 자리, 같은 면 좌↔우도)·바닥 지점(그 외)으로 이동.
 ## 판정: 선택된 산 영웅이 없으면 HERO_TAP_PX 안 영웅 선택 → 상인·건물·성문(창) → 선택 해제. 있으면
 ## HERO_TAP_PRECISE_PX 안 영웅(선택된 영웅 자신이면 해제, 아니면 그 영웅 선택) → 성문 → 성벽 →
 ## HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
@@ -104,7 +104,8 @@ func _physics_process(_delta: float) -> void:
 			return
 		hit = _pick(screen_pos, LAYER_WALL)
 		if not hit.is_empty():
-			selected.move_to(hit.collider.get_meta("side"), Formation.POST_WALL)
+			var wside: int = hit.collider.get_meta("side")
+			selected.move_to(wside, Formation.POST_WALL, Formation.perp(wside).dot(hit.position))  # 누른 쪽에 가까운 빈 자리
 			return
 	hero = _hero_at(screen_pos, HERO_TAP_PX)
 	if hero != null and hero != selected:
@@ -155,7 +156,7 @@ func _building_hit(screen_pos: Vector2) -> String:
 ## 레이로는 뒤 건물이 잡힌다 — 그 건물로 본다. 이름표 자체는 보지 않는다(다른 건물·바닥 탭을 가리지 않게). 없으면 "".
 func _bubble_hit(screen_pos: Vector2) -> String:
 	var tags = badges.tags if badges != null else null
-	if tags == null:
+	if tags == null or not badges.visible:  # 전투 중 숨긴 말풍선은 누를 수 없다
 		return ""
 	tags.layout()
 	for id in badges.bubble_ids(Economy.time_now()):

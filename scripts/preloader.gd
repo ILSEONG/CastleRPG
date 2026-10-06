@@ -14,7 +14,6 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
-const UiKit := preload("res://scripts/ui_kit.gd")
 
 signal finished
 
@@ -28,6 +27,12 @@ const DUNGEON_KEY := "dungeon_band:%s"  # dungeon_panel.SNAP_KEY
 const CONNECT_TEXT := "서버에 연결하는 중…"
 const LOAD_TEXT := "게임 데이터를 불러오는 중…"
 const CONNECT_SHARE := 0.3  # 온라인: 막대에서 서버 연결 몫(나머지가 불러오기)
+## 앱 아이콘 느낌(splash 그림과 같은 색): 글자는 흰색에 따뜻한 갈색 테두리, 막대는 크림 바탕·지붕 파랑 채움, 테두리는 각 색의 어두운 쪽
+const TEXT_EDGE := Color(0.55, 0.27, 0.07)
+const BAR_BACK := Color(1.0, 0.97, 0.9, 0.9)
+const BAR_BACK_EDGE := Color(0.72, 0.42, 0.16)
+const BAR_FILL := Color(0.25, 0.47, 0.8)
+const BAR_FILL_EDGE := Color(0.14, 0.29, 0.54)
 
 static var _keep: Array = []  # 불러 둔 리소스(쥐고 있어야 캐시에 남는다)
 static var done := false  # 이번 실행에서 한 번 끝냈다(월드를 다시 만들 때는 다시 하지 않는다)
@@ -186,20 +191,22 @@ func _build_ui() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 28)
 	label.add_theme_color_override("font_color", Color.WHITE)
-	label.add_theme_color_override("font_outline_color", UiKit.INK)
-	label.add_theme_constant_override("outline_size", 8)
+	label.add_theme_color_override("font_outline_color", TEXT_EDGE)
+	label.add_theme_constant_override("outline_size", 6)
 	box.add_child(label)
 	bar = ProgressBar.new()
-	bar.custom_minimum_size = Vector2(520, 26)
+	bar.custom_minimum_size = Vector2(520, 30)
 	bar.show_percentage = false
 	var back := StyleBoxFlat.new()
-	back.bg_color = Color(0.1, 0.12, 0.18, 0.75)
-	back.set_corner_radius_all(13)
-	back.border_color = Color(1, 1, 1, 0.85)
-	back.set_border_width_all(2)
+	back.bg_color = BAR_BACK
+	back.set_corner_radius_all(15)
+	back.border_color = BAR_BACK_EDGE
+	back.set_border_width_all(3)
 	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(1.0, 0.78, 0.25)
-	fill.set_corner_radius_all(11)
+	fill.bg_color = BAR_FILL
+	fill.set_corner_radius_all(15)
+	fill.border_color = BAR_FILL_EDGE
+	fill.set_border_width_all(3)
 	bar.add_theme_stylebox_override("background", back)
 	bar.add_theme_stylebox_override("fill", fill)
 	box.add_child(bar)
@@ -211,6 +218,6 @@ func _build_ui() -> void:
 		warn.custom_minimum_size = Vector2(520, 0)
 		warn.add_theme_font_size_override("font_size", 20)
 		warn.add_theme_color_override("font_color", Color.WHITE)
-		warn.add_theme_color_override("font_outline_color", UiKit.INK)
+		warn.add_theme_color_override("font_outline_color", TEXT_EDGE)
 		warn.add_theme_constant_override("outline_size", 6)
 		box.add_child(warn)

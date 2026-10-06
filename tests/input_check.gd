@@ -207,6 +207,19 @@ func _run() -> void:
 	_check(wd < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
 		"(j) warrior stands at its wall-top slot 8 s later", "d=%.2f pos=%s" % [wd, warrior.global_position])
 
+	# (j2) 같은 면 성벽 위 반대쪽 토막 탭 → 그쪽 빈 자리로 성벽 위를 곧장 건너간다(계단 없이)
+	var end0 := 1.0 if Formation.perp(0).dot(warrior.global_position) >= 0.0 else -1.0
+	await _tap(_wall_px(0, -end0))
+	var home2: Vector3 = warrior.stand_position()
+	var crossed := Formation.perp(0).dot(home2) * end0 < 0.0
+	_check(warrior.side == 0 and warrior.post == Formation.POST_WALL and crossed and warrior._path.size() == 1,
+		"(j2) tapping the other side of the same wall moves the wall-top hero across, straight along the wall",
+		"side/post/slot=%s home=%s path=%s" % [[warrior.side, warrior.post, warrior.slot], home2, warrior._path])
+	await get_tree().create_timer(8.0).timeout
+	var wd2: float = warrior.global_position.distance_to(home2)
+	_check(wd2 < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
+		"(j2) warrior stands at the new wall-top slot 8 s later", "d=%.2f pos=%s" % [wd2, warrior.global_position])
+
 	# --- 개정 7: 자원 건물·상인 탭, 거래 창 ---
 	var badges: Node = null
 	var panel: Node = null
@@ -786,8 +799,36 @@ func _top_hud(hud) -> void:
 	_check(GameState.mode == GameState.Mode.IDLE and hud._button.text == "▶ 진행" and bp.y < 300.0, "(z) idle: the top button reads ▶ 진행", "text=%s at %s" % [hud._button.text, bp])
 	await _tap(bp)
 	_check(GameState.mode == GameState.Mode.STAGE and hud._button.text == "■ 중지", "(z) tapping it starts the stage; it now reads ■ 중지", "mode=%d text=%s" % [GameState.mode, hud._button.text])
+	# 스테이지 진행 중: 메뉴 UI(하단 탭·오른쪽 아래 메뉴·재화 칩) 숨김, 하단 영웅 초상화 줄 — 누르면 그 영웅 선택, 다시 누르면 해제
+	var strip = _main._strip
+	await _frames(2)
+	var hidden: bool = _main._battle_hide.all(func(n): return not n.visible) and not hud._chip_row.visible
+	_check(hidden and strip.visible and strip.cells.size() == _main.strip_heroes().size() and strip.cells.size() > 0,
+		"(z) during a stage the menu UI hides and a hero portrait row shows at the bottom",
+		"hidden=%s strip=%s cells=%d heroes=%d" % [hidden, strip.visible, strip.cells.size(), _main.strip_heroes().size()])
+	# 초상화 아래 좌우 쿨 칸: 영웅 정의의 액티브(칸 순서, 잠긴 것 포함)를 읽는다. 시작 쿨이 돌고 있다
+	var slot_ok := true
+	var running := false
+	for c in strip.cells:
+		var want: Array = c.hero.def.skills.keys().filter(func(k): return preload("res://scripts/hero_skills.gd").is_active(k))
+		var got: Array = c.hero.active_slots()
+		slot_ok = slot_ok and got.map(func(e): return e.kind) == want
+		for e in got:
+			running = running or (not e.locked and e.left > 0.0 and e.left <= e.total)
+	_check(slot_ok and running, "(z) portrait cooldown slots list each hero's active skills in slot order, with the opening cooldown running",
+		"ok=%s running=%s" % [slot_ok, running])
+	_picker._select(null)
+	var c0: Dictionary = strip.cells[strip.cells.size() - 1]
+	var fr: Rect2 = c0.face.get_global_rect()
+	await _tap(fr.get_center())
+	_check(_picker.selected == c0.hero and fr.end.y > 1100.0, "(z) tapping a bottom portrait selects that hero",
+		"selected=%s want=%s rect=%s" % [_name(_picker.selected), _name(c0.hero), fr])
+	await _tap(fr.get_center())
+	_check(_picker.selected == null, "(z) tapping the selected hero's portrait again deselects it", "selected=%s" % _name(_picker.selected))
 	await _tap(bp)
 	_check(GameState.mode == GameState.Mode.IDLE and GameState.stage == st0 and hud._button.text == "▶ 진행", "(z) tapping again stops at once: idle, same stage, reads ▶ 진행", "mode=%d stage=%d text=%s" % [GameState.mode, GameState.stage, hud._button.text])
+	_check(_main._battle_hide.all(func(n): return n.visible) and hud._chip_row.visible and not strip.visible,
+		"(z) back to idle: the menu UI returns and the portrait row hides", "strip=%s" % strip.visible)
 	# 연속 진행 체크박스: 진행 버튼 오른쪽, 탭 56px 이상, 탭하면 토글(테스트는 저장 안 함), 720 안에 들어간다
 	var cr: Rect2 = hud._auto.get_global_rect()
 	_check(cr.position.x >= hud._button.get_global_rect().end.x and cr.size.x >= 56.0 and cr.size.y >= 56.0 and cr.end.x <= 720.0 and hud._fever.get_global_rect().end.x <= hud._button.get_global_rect().position.x,
@@ -837,11 +878,11 @@ func _gate_px(side: int) -> Vector2:
 	return _camera.unproject_position(Formation.gate_position(half, side) + Vector3(0, Balance.WALL_H / 2.0, 0))
 
 
-## 성문 옆 벽 토막(+perp 쪽) 중앙.
-func _wall_px(side: int) -> Vector2:
+## 성문 옆 벽 토막(end = +1이면 +perp 쪽, -1이면 -perp 쪽) 중앙.
+func _wall_px(side: int, end := 1.0) -> Vector2:
 	var half: float = _main.castle.half
 	var seg_len := half + Balance.WALL_T - Balance.GATE_W / 2.0
-	var p := Formation.gate_position(half, side) + Formation.perp(side) * (Balance.GATE_W + seg_len) / 2.0
+	var p := Formation.gate_position(half, side) + Formation.perp(side) * end * (Balance.GATE_W + seg_len) / 2.0
 	return _camera.unproject_position(p + Vector3(0, Balance.WALL_H / 2.0, 0))
 
 
@@ -896,6 +937,12 @@ func _dungeon_move(d) -> void:
 	d.picker._pending = cam.unproject_position(Vector3(500, 0, 0))
 	await _frames(3)
 	_check(Vector2(h.free_pos.x, h.free_pos.z).length() <= d.picker.arena_r + 0.01, "(D) dungeon ground taps are clamped inside the arena", "free=%s" % h.free_pos)
+	var s1: Dictionary = d.hud.strip[d.hud.strip.size() - 1]
+	s1.face.pressed.emit()  # 결과 화면이 떠 있어 실제 탭은 막힌다 — 버튼 신호로
+	var by_face: bool = d.picker.selected == s1.hero
+	s1.face.pressed.emit()
+	_check(s1.face is Button and by_face and d.picker.selected == null, "(D) pressing a bottom portrait selects that hero, pressing again deselects",
+		"by_face=%s selected=%s" % [by_face, d.picker.selected])
 	d.picker._select(null)
 
 

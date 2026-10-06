@@ -12,6 +12,7 @@ import * as O from './oauth.ts'
 import * as G from './guild.ts'
 import * as Rk from './ranking.ts'
 import * as A from './attendance.ts'
+import * as M from './missions.ts'
 import { registerGuildWar } from './war_routes.ts'
 import type { WarLive } from './war_live.ts'
 
@@ -119,6 +120,7 @@ interface Player {
   quest: { tut_state: string; tut_step: number; rep_n: number; last_claim: number | null } // 튜토리얼·반복 퀘스트 진행
   unbuilt: string[] // 튜토리얼 공터(아직 짓지 않은 건물 — 레벨 행은 1)
   attend: { n: number; day: number | null } // 출석 이벤트: 받은 날 수·마지막으로 받은 리셋 날짜
+  missions: unknown // 미션 상태(저장된 그대로 — 쓰는 쪽이 M.normalize)
 }
 
 interface Train {
@@ -169,6 +171,7 @@ interface Change {
   shards?: Record<string, number> // 영웅 → 조각 증가(길드 상점)
   guild?: GuildChange // 길드(player_guild 행·길드 누적·기록)
   attend?: { n: number; day: number } // 출석 이벤트 진행
+  missions?: M.MissionState // 미션 상태 전체
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -189,7 +192,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.attend_n, s.attend_day, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
+const PLAYER_SQL = `select s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -406,6 +409,7 @@ export function createApp(opts: AppOptions) {
           last_claim: r.last_quest_claim == null ? null : Number(r.last_quest_claim) },
         unbuilt: Array.isArray(r.unbuilt) ? r.unbuilt.map(String) : [],
         attend: { n: Number(r.attend_n ?? 0), day: r.attend_day == null ? null : Number(r.attend_day) },
+        missions: r.missions == null ? {} : json(r.missions),
       }
       if (p.build && p.build.finish <= now) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
@@ -474,6 +478,7 @@ export function createApp(opts: AppOptions) {
         quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n }, // 튜토리얼·반복 퀘스트 진행
         dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => game.buildings.some((d) => d.id === b) || game.resources.some((r) => r.building === b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
+        missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -558,6 +563,7 @@ export function createApp(opts: AppOptions) {
     if (ch.quest?.rep_n !== undefined) sets.push(`rep_n = ${p(ch.quest.rep_n)}::int`)
     if (ch.quest?.last_claim !== undefined) sets.push(`last_quest_claim = to_timestamp(${p(ch.quest.last_claim)}::float8)`)
     if (ch.attend) sets.push(`attend_n = ${p(ch.attend.n)}::int, attend_day = ${p(ch.attend.day)}::int`)
+    if (ch.missions) sets.push(`missions = ${p(JSON.stringify(ch.missions))}::jsonb`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
@@ -746,6 +752,7 @@ export function createApp(opts: AppOptions) {
     }
     pl.dia_tickets += ch.diaTickets ?? 0
     if (ch.attend) pl.attend = ch.attend
+    if (ch.missions) pl.missions = ch.missions
     for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
     pl.version += 1
   }
@@ -1298,6 +1305,68 @@ export function createApp(opts: AppOptions) {
       const got = { ...reward, ...(change.items ? { items: change.items } : {}) }
       change.log = { kind: 'attendance', detail: { day, reward: got } }
       return { change, extra: { day, reward: got }, reload: Boolean(keyType || change.items) }
+    })
+  })
+
+  // --- 미션(missions.ts): 일일·주간·반복 ---
+
+  // 미션 진행(오늘 기준으로 맞춘 것) + 다음 일일·주간 리셋 시각.
+  function missionView(p: Player, g: Game, now: number) {
+    const h = R.cfgNum(g.config, 'daily_reset_utc_hour')
+    const m = M.normalize(p.missions, today(g, now))
+    return { day: m.day, week: m.week, d: m.d, w: m.w, wd: m.wd, r: m.r, next_day: R.resetAt(m.day + 1, h), next_week: R.resetAt(M.weekStart(m.week + 1), h) }
+  }
+
+  // 미션 표와 내 진행: {server_now, defs, missions}.
+  app.get('/v1/missions', auth, async (c) => {
+    const id = c.get('playerId') as string
+    const now = clock()
+    const game = await loadGame()
+    const p = await loadPlayer(id, game, now)
+    return c.json({ server_now: now, defs: M.DEFS, missions: missionView(p, game, now) })
+  })
+
+  // 미션 보상 받기. body = {id} (반복 미션은 {id, n}: 지금까지 받은 횟수와 같아야 한다 — 아니면 409 stale, 재전송이 두 번 받지 않는다).
+  // 일일·주간은 그 기간에 한 번(409 claimed). daily_count = 오늘 받은 다른 일일 미션 수, daily_bonus = 이번 주 일일 보너스 받은 날 수를
+  // 서버가 본다(모자라면 409 not_done). 나머지 사건 수는 앱을 믿는다. 반복 미션은 quest_repeat_min_sec 간격으로만(409 too_soon).
+  // 보상(자원·골드·다이아·모집권·던전 열쇠)·진행·economy_log mission을 version 가드 한 문장으로.
+  app.post('/v1/mission/claim', auth, async (c) => {
+    const b = await body(c)
+    const mid = strField(b, 'id')
+    const d = M.def(mid)
+    if (!d) throw new ApiError(404, 'unknown_mission', `unknown mission '${mid}'`)
+    const n = d.type === 'repeat' ? intField(b, 'n', 0, MAX_INT4) : 0
+    return mutate(c, (p, g, now) => {
+      const m = M.normalize(p.missions, today(g, now))
+      if (d.type === 'daily') {
+        if (m.d.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed today')
+        if (d.kind === 'daily_count' && M.dailyCount(m) < d.target) throw new ApiError(409, 'not_done', `claim ${d.target} daily missions first`)
+        m.d = [...m.d, d.id]
+        if (d.kind === 'daily_count') m.wd += 1
+      } else if (d.type === 'weekly') {
+        if (m.w.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed this week')
+        if (d.kind === 'daily_bonus' && m.wd < d.target) throw new ApiError(409, 'not_done', `claim the daily bonus on ${d.target} days first`)
+        m.w = [...m.w, d.id]
+      } else {
+        const done = m.r[d.id] ?? 0
+        if (n !== done) throw new ApiError(409, 'stale', `mission '${d.id}' has been claimed ${done} times`)
+        if (m.rt !== null && now - m.rt < R.cfgNum(g.config, 'quest_repeat_min_sec')) throw new ApiError(409, 'too_soon', 'claimed too soon')
+        m.r = { ...m.r, [d.id]: done + 1 }
+        m.rt = now
+      }
+      const reward = d.reward
+      const change: Change = { missions: m, log: { kind: 'mission', detail: { id: d.id, n, reward } } }
+      const res = Object.fromEntries(R.BUILD_RES.filter((r) => (reward[r] ?? 0) > 0).map((r) => [r, reward[r]]))
+      if (Object.keys(res).length) change.res = res
+      if (reward.gold) change.goldTenths = reward.gold * 10
+      if (reward.diamonds) change.diamonds = reward.diamonds
+      if (reward.tickets) change.diaTickets = reward.tickets
+      const keyType = R.DUNGEON_TYPES.find((t) => (reward[`keys_${t}`] ?? 0) > 0)
+      if (keyType) {
+        const st = dungeonState(p, g, keyType, now)
+        change.dungeon = { type: keyType, state: { ...st, keys: st.keys + reward[`keys_${keyType}`] } }
+      }
+      return { change, extra: { id: d.id, reward }, reload: Boolean(keyType) }
     })
   })
 

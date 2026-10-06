@@ -6,6 +6,7 @@ extends CanvasLayer
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
+const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const WarRules := preload("res://scripts/war_rules.gd")
 
@@ -13,6 +14,7 @@ const FACE_PX := 92.0
 const GATE_RED := Color(0.86, 0.32, 0.22)
 const KEEP_RED := Color(0.72, 0.16, 0.14)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
+const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 const WIN_GOLD := Color("C8901A")
 
 var battle  # war_battle.gd
@@ -129,22 +131,24 @@ func _build_strip(root: Control) -> void:
 	col.add_child(auto_button)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", int(HeroStrip.GAP))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(row)
+	var px := HeroStrip.fit_px(battle.my_units().size(), FACE_PX, 688.0, HeroStrip.GAP)  # 화면(720) − 양옆 16
 	for h in battle.my_units():
 		var cell := VBoxContainer.new()
 		cell.add_theme_constant_override("separation", 4)
 		var face := Button.new()
 		face.flat = true
-		face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
-		face.draw.connect(_draw_face.bind(face, h.def))
+		face.custom_minimum_size = Vector2(px, px)
+		face.draw.connect(_draw_face.bind(face, h.def, h))
 		face.pressed.connect(_pick.bind(h))
 		if PortraitsScript.current != null:
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(face)
+		cell.add_child(HeroStrip.face_with_slots(face, h, px))  # [쿨][초상화][쿨]
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(FACE_PX, 14)
+		bar.custom_minimum_size = Vector2(px, 14)
+		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		bar.show_percentage = false
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		UiKit.apply_bar(bar, HP_GREEN)
@@ -158,13 +162,15 @@ func _pick(h) -> void:
 		battle.picker._select(h)
 
 
-func _draw_face(c: Control, def: Dictionary) -> void:
+## 선택된 영웅은 금색 테두리.
+func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
 	c.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-	oct.append(oct[0])
-	c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
 	c.draw_texture_rect(PortraitsScript.portrait("hero:" + def.id), r, false)
+	oct.append(oct[0])
+	var on: bool = h != null and battle != null and battle.picker != null and battle.picker.selected == h
+	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
 
 
 func _build_result(root: Control) -> void:
@@ -226,6 +232,7 @@ func _process(delta: float) -> void:
 		var h = s.hero
 		s.bar.value = h.hp_ratio() * 100.0
 		s.cell.modulate.a = 1.0 if h.is_alive() else 0.45
+		s.face.queue_redraw()  # 선택 테두리
 
 
 func _update() -> void:
