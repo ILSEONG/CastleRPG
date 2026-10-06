@@ -1126,6 +1126,61 @@ static func charge(hero: Node3D, color: Color, tier: int, sec: float) -> void:
 		tr.tween_callback(ring.queue_free)
 
 
+## 2026-10-06 새 액티브: from → to로 날아가는 메시(kind, 가산 빛) + 빛 띠. spin = 날아가며 도는 각(라디안), back = 갔다 돌아온다(회전 도끼).
+static func fly(parent: Node, kind: String, color: Color, from: Vector3, to: Vector3, sec: float, spin := Vector3.ZERO, back := false) -> void:
+	var mi := _spawn(parent, _mesh(kind, color), from, "fly_" + kind, glow_material() if kind == "dart" else null)
+	if mi == null:
+		return
+	var dir := Vector3(to.x - from.x, 0, to.z - from.z)
+	if dir.length() > 0.01:
+		mi.look_at(from + dir, Vector3.UP)
+	var base := mi.rotation
+	if kind == "dart":
+		mi.scale = Vector3(0.6, 1.0, 1.4)
+	var tw := mi.create_tween()
+	tw.tween_method(func(t: float):
+		mi.global_position = from.lerp(to, t)
+		mi.rotation = base + spin * t, 0.0, 1.0, sec)
+	tw.tween_callback(func():
+		spark(parent, to, color.lightened(0.4), 0.7)
+		impact(parent, Vector3(to.x, 0, to.z), color, 0.6, 0, 0.6))
+	if back:
+		tw.tween_method(func(t: float):
+			mi.global_position = to.lerp(from, t)
+			mi.rotation = base + spin * (1.0 + t), 0.0, 1.0, sec)
+	tw.tween_callback(mi.queue_free)
+	streak(parent, from, to, color)
+
+
+## 초승달 베기: 초승달 참격(가산)이 앞쪽 length만큼 날아가며 커지고 옅어진다.
+static func crescent_wave(parent: Node, from: Vector3, dir: Vector3, length: float, color: Color, tier := 0) -> void:
+	var sc: float = TIER_SCALE[tier]
+	var mi := _spawn(parent, _mesh("crescent", color.lightened(0.2)), from + Vector3(0, 0.6, 0), "crescent_wave", glow_material())
+	if mi == null:
+		return
+	mi.rotation.y = atan2(-dir.z, dir.x)
+	mi.scale = Vector3.ONE * 0.8 * sc
+	var tw := mi.create_tween().set_parallel()
+	tw.tween_property(mi, "global_position", from + dir * length + Vector3(0, 0.6, 0), 0.28).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mi, "scale", Vector3(1.8, 1.0, 1.8) * sc, 0.28)
+	tw.chain().tween_callback(mi.queue_free)
+	_fade(mi, 0.12, 0.18)
+	_wave(parent, from + dir * length * 0.6, color, 1.2 * sc, 0.3, 0.15)
+
+
+## 자기 강화가 이어지는 동안(sec초): 발밑 고유 색 빛 고리가 맥동하고 끝에 옅어진다(대상 자식).
+static func golden_tint(target: Node3D, color: Color, sec: float) -> void:
+	var ring := _spawn(target, _mesh("glow_ring", color), target.global_position + Vector3(0, 0.07, 0), "tint_ring", glow_material())
+	if ring == null:
+		return
+	ring.scale = Vector3.ONE * 1.3
+	var tw := ring.create_tween().set_loops(maxi(1, int(sec / 0.6)))
+	tw.tween_property(ring, "scale", Vector3.ONE * 1.6, 0.3)
+	tw.tween_property(ring, "scale", Vector3.ONE * 1.3, 0.3)
+	ring.create_tween().tween_callback(ring.queue_free).set_delay(sec)
+	_burst(target, target.global_position + Vector3(0, 0.6, 0), color.lightened(0.2), "spark", 10, 0.5, "tint_spark")
+
+
 # --- 내부 ---
 
 ## 발밑에서 솟는 겹(광선·빛기둥 — 재질 mat, 없으면 가산 빛): 가로 w·세로 h까지 튀어 오른 뒤 가늘어지며 더 높이 흩어지고 옅어진다(sec초).

@@ -169,7 +169,12 @@ export const SKILL_KINDS = ['heal_aura', 'atk_aura', 'dmg_reduce', 'dodge', 'tho
   'splash', 'pierce', 'ricochet', 'echo_strike', 'heavy_blow', 'corpse_explosion', 'soul_harvest', 'bloodlust', 'frost_shatter',
   'wildfire', 'frenzy', 'last_stand', 'opportunist', 'pyromancy', 'first_strike', 'focus', 'sharpshooter', 'brawler',
   'berserker', 'regen', 'revive', 'block', 'fortify', 'second_wind', 'invincible', 'stoneskin', 'counter', 'haste_aura',
-  'guard_aura', 'regen_aura']
+  'guard_aura', 'regen_aura',
+  // 2026-10-06 스킬 재구성(앱 Skills.KINDS와 같은 순서)
+  'ignite', 'piercing_shot', 'blood_rage', 'frost_chain', 'rend', 'bulwark', 'crushing_blow', 'sunder', 'shield_bash', 'snare',
+  'blade_flurry', 'parry', 'fire_bolt', 'firespread', 'axe_volley', 'boomerang', 'spear_sweep', 'drain_slash', 'volley',
+  'wide_swing', 'cheap_shot', 'crescent', 'lunar_veil', 'howl', 'deep_freeze', 'hex', 'scorch', 'gale', 'solar_spark',
+  'frost_spike', 'magma']
 const SKILL_COLS = ['skill1', 'skill2', 'skill3']
 
 const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/

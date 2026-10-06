@@ -307,7 +307,7 @@ func _skill_cases(heroes: Array) -> void:
 	_check(still < 0.01 and after > 0.3, "(m) a stunned monster stops, then walks again", "moved %.2f while stunned, %.2f after" % [still, after])
 	_clear_monsters()
 	await _frames(1)
-	var fe = _add_hero("felix", 102)
+	var fe = _add_hero("felix", 102, 3)  # 2026-10-06: 기절은 스킬 2(★3)
 	_g = _spawn("epic_boss", 2, fe.global_position + Vector3(0, 0, 1.5))
 	await _wait_until(func(): return _alive(_g) and _g.is_stunned(), 6.0)  # 기절은 4번째 공격의 타격 순간에(개정 12-2)
 	_check(fe._attacks == 4 and _alive(_g) and _g.is_stunned(), "(m) felix's 4th attack stuns its target", "attacks=%d stunned=%s" % [fe._attacks, _alive(_g) and _g.is_stunned()])
@@ -452,6 +452,8 @@ func _skill_application(heroes: Array) -> void:
 	# (s) chain: 세라핀(3번, 70%, 4 m). A→B→C. B에서 가장 가까운 A(이미 맞음)는 건너뛰고 C, C에서 4 m 안에 새 대상이 없으면(D는 5 m) 멈춘다
 	var se = _add_hero("seraphine", 302)
 	se.set_process(false)
+	se._sk = {"chain": [3.0, 70.0, 4.0]}  # 2026-10-06: 연쇄는 영웅 표에서 빠졌다(종류는 남아 있다) — 예전 세라핀 숫자로 넣어 본다
+	se._skx.set_skills(se._sk)
 	var sp := _flat(se.global_position)
 	var side_x: Vector3 = Formation.perp(2)
 	var ca = _still("epic_boss", sp + Formation.SIDE_DIR[2] * 3.0)
@@ -472,6 +474,8 @@ func _skill_application(heroes: Array) -> void:
 	# (t) cleave: 도릭(1.5 m, 50%)이 친 대상 주변 1.5 m 안 다른 몬스터에게 피해의 b%, 밖은 없음
 	var dk = _add_hero("dorik", 303)
 	dk.set_process(false)
+	dk._sk = {"cleave": [1.5, 50.0, 0.0]}  # 2026-10-06: 휩쓸기는 영웅 표에서 빠졌다 — 예전 도릭 숫자로
+	dk._skx.set_skills(dk._sk)
 	var t0 := _flat(dk.global_position) + Formation.SIDE_DIR[3] * 1.0
 	var pz: Vector3 = Formation.perp(3)
 	var tt = _still("epic_boss", t0)
@@ -1487,13 +1491,13 @@ func _skill_unlock_cases() -> void:
 	await _frames(1)
 	s0._target = m0
 	await _attack_now(s0)
-	_check(s0._sk.keys() == ["chain"] and _dmg(m0) > 0.0 and m0._slow_t <= 0.0 and m0.status_fx("slow") == null,
+	_check(s0._sk.keys() == ["frost_nova"] and _dmg(m0) > 0.0 and m0._slow_t <= 0.0 and m0.status_fx("slow") == null,
 		"(U1) seraphine at ★0 uses only skill 1: her hit does not slow", "skills=%s dmg=%.1f slow=%.2f" % [s0._sk.keys(), _dmg(m0), m0._slow_t])
 	var m3 = _still("epic_boss", _flat(s3.global_position) + Formation.SIDE_DIR[2] * 3.0)
 	await _frames(1)
 	s3._target = m3
 	await _attack_now(s3)
-	_check(s3._sk.keys() == ["chain", "slow"] and m3._slow_t > 0.0 and m3.status_fx("slow") != null,
+	_check(s3._sk.keys() == ["frost_nova", "slow"] and m3._slow_t > 0.0 and m3.status_fx("slow") != null,
 		"(U1) at ★3 skill 2 is unlocked: the hit slows and leaves ice crystals at its feet", "skills=%s slow=%.2f" % [s3._sk.keys(), m3._slow_t])
 	_remove_hero(s0)
 	_remove_hero(s3)

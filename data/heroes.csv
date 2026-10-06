@@ -1,37 +1,37 @@
 id,name,title,grade,role,archetype,model,gear,color,hp,atk,range,atk_interval,speed,aggro,skill1,s1a,s1b,s1c,skill2,s2a,s2b,s2c,skill3,s3a,s3b,s3c,desc
 arteon,아르테온,빛의 성기사,SSR,melee,tank,Knight,1H_Sword|Badge_Shield,#F5D76E,936,32,1.8,0.8,5,8,sanctuary,9,5,4,guard_aura,6,15,,holy_smite,8,250,50,성문 앞을 지키며 주변 영웅을 빛으로 치유하는 불굴의 기사
-ignis,이그니스,화염 대마법사,SSR,ranged,caster,Mage,2H_Staff,#E8553A,396,44,8,1.2,6,12,aoe_blast,5,3.5,220,poison,40,3,,haste,25,,,몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다
-sylvana,실바나,바람의 명사수,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#5FBF6A,440,40,11,1.0,6,12,multishot,3,,,sharpshooter,40,,,arrow_rain,7,3,80,바람을 타고 쉼 없이 세 발씩 날리며 먼 적까지 꿰뚫는다
-grom,그롬,대지의 광전사,SSR,melee,bruiser,Barbarian,2H_Axe,#A0522D,792,45,1.8,0.8,6,8,whirlwind,8,3,90,berserker,30,20,,bloodlust,40,3,,다칠수록 거세지는 도끼질로 주변을 쓸어버린다
-seraphine,세라핀,서리 마녀,SSR,ranged,caster,Mage,1H_Wand,#7FC8F0,396,44,8,1.2,6,12,chain,3,70,4,slow,30,2,,frost_nova,10,4,1.5,얼음 번개가 적 사이를 튕기며 발을 묶는다
-kyle,카일,그림자 암살자,SSR,melee,assassin,Rogue,Knife|Knife_Offhand,#5A4E7A,576,61,1.8,0.64,7,9,bleed_hit,40,30,3,execute,30,100,,shadow_strike,6,300,,그림자에서 나타나 피를 흘리게 하고 약해진 적을 확실히 끝낸다
-baldur,발두르,철벽 수문장,SSR,melee,tank,Knight,1H_Sword|Spike_Shield,#8C9AA8,936,32,1.8,0.8,5,8,gate_repair,8,3,,thorns,30,,,fortify,25,,,성문을 수리하며 버티고 때린 자에게 가시로 되갚는다
+ignis,이그니스,화염 대마법사,SSR,ranged,caster,Mage,2H_Staff,#E8553A,396,44,8,1.2,6,12,aoe_blast,5,3.5,220,haste,25,,,ignite,8,3,40,몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다
+sylvana,실바나,바람의 명사수,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#5FBF6A,440,40,11,1.0,6,12,arrow_rain,7,3,80,multishot,3,,,piercing_shot,7,11,150,바람을 타고 쉼 없이 세 발씩 날리며 먼 적까지 꿰뚫는다
+grom,그롬,대지의 광전사,SSR,melee,bruiser,Barbarian,2H_Axe,#A0522D,792,45,1.8,0.8,6,8,whirlwind,8,3,90,berserker,30,20,,blood_rage,12,5,40,다칠수록 거세지는 도끼질로 주변을 쓸어버린다
+seraphine,세라핀,서리 마녀,SSR,ranged,caster,Mage,1H_Wand,#7FC8F0,396,44,8,1.2,6,12,frost_nova,10,4,1.5,slow,30,2,,frost_chain,7,3,120,얼음 번개가 적 사이를 튕기며 발을 묶는다
+kyle,카일,그림자 암살자,SSR,melee,assassin,Rogue,Knife|Knife_Offhand,#5A4E7A,576,61,1.8,0.64,7,9,shadow_strike,6,300,,execute,30,100,,rend,7,150,30,그림자에서 나타나 피를 흘리게 하고 약해진 적을 확실히 끝낸다
+baldur,발두르,철벽 수문장,SSR,melee,tank,Knight,1H_Sword|Spike_Shield,#8C9AA8,936,32,1.8,0.8,5,8,gate_repair,8,3,,thorns,30,,,bulwark,12,4,50,성문을 수리하며 버티고 때린 자에게 가시로 되갚는다
 lumina,루미나,성녀,SSR,ranged,support,Mage,Spellbook_open,#F7E9A0,440,24,9,1.0,6,12,heal_aura,4,8,6,atk_aura,8,15,,resurrection,25,40,,기도로 아군을 치유하고 쓰러진 동료를 다시 일으킨다
-harald,하랄드,용사냥꾼,SSR,melee,bruiser,Barbarian,2H_Axe,#C0392B,792,45,1.8,0.8,6,8,boss_slayer,150,,,heavy_blow,4,250,0.5,armor_break,30,25,4,거대한 적일수록 눈을 빛내며 갑옷째 부수는 전설의 사냥꾼
+harald,하랄드,용사냥꾼,SSR,melee,bruiser,Barbarian,2H_Axe,#C0392B,792,45,1.8,0.8,6,8,crushing_blow,5,250,0.5,boss_slayer,150,,,sunder,9,3,25,거대한 적일수록 눈을 빛내며 갑옷째 부수는 전설의 사냥꾼
 nev,네브,천둥 궁수,SSR,ranged,marksman,Rogue_Hooded,1H_Crossbow,#F1C40F,440,40,11,1.0,6,12,sky_bolt,6,3,150,shock_hit,25,80,,thunder_storm,10,4,120,하늘의 천둥을 불러 적진에 벼락을 내리꽂는다
-bron,브론,방패병 대장,SR,melee,tank,Knight,1H_Sword|Rectangle_Shield,#7F8C8D,655,22,1.8,0.8,5,8,block,30,50,,taunt,10,5,3,stoneskin,25,,,큰 방패로 적을 끌어모아 공격을 받아내는 노련한 대장
-mira,미라,독화살 사냥꾼,SR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#6B8E23,308,28,11,1.0,6,12,poison_cloud,9,3,25,root_hit,20,1.2,,hunter_mark,15,4,,독구름과 덫으로 사냥감을 묶어 서서히 쓰러뜨린다
-torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,504,19,1.8,0.8,6,8,regen_aura,6,1,,shield,10,25,,battle_hymn,15,20,5,찬가와 보호막으로 동료를 지키며 싸우는 사제
-rian,리안,쌍검사,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#48C9B0,403,43,1.8,0.64,7,9,double_strike,25,,,frenzy,8,5,,counter,30,100,,두 자루 검으로 눈보다 빠르게 베고 받아친다
-echo,에코,견습 화염술사,SR,ranged,caster,Mage,1H_Wand,#F39C12,277,31,8,1.2,6,12,burn_hit,35,20,3,pyromancy,30,,,wildfire,3,15,,아직 서툴지만 불꽃만큼은 진짜인 마법사
-gork,고르크,도끼 투척꾼,SR,ranged,bruiser,Barbarian,1H_Axe|1H_Axe_Offhand,#935116,370,28,6,1.0,6,10,ricochet,2,60,,knockback_hit,20,1.5,,brawler,8,40,,양손 도끼를 던져 튕겨 내고 몰려든 적 사이에서 더 거세진다
-felix,펠릭스,기사단 창병,SR,melee,bruiser,Knight,2H_Sword,#2E86C1,554,32,1.8,0.8,6,8,stun,4,0.8,,spear_throw,8,6,150,first_strike,50,,,창을 던져 꿰뚫고 묵직한 일격으로 적을 멈춰 세운다
-hans,한스,민병대 검사,R,melee,bruiser,Knight,1H_Sword,#95A5A6,396,23,1.8,0.8,6,8,lifesteal,10,,,dmg_reduce,10,,,,,,,마을을 지키려 칼을 든 성실한 민병
-ella,엘라,마을 궁수,R,ranged,marksman,Rogue_Hooded,2H_Crossbow,#82E0AA,220,20,11,1.0,6,12,barrage,20,2,,focus,5,30,,,,,,연달아 화살을 쏘며 한 표적을 끝까지 노리는 사냥꾼의 딸
-dorik,도릭,나무꾼 전사,R,melee,bruiser,Barbarian,1H_Axe,#A04000,396,23,1.8,0.8,6,8,cleave,1.5,50,,rage,40,,,,,,,나무 베던 솜씨로 두셋을 함께 벤다
+bron,브론,방패병 대장,SR,melee,tank,Knight,1H_Sword|Rectangle_Shield,#7F8C8D,655,22,1.8,0.8,5,8,taunt,10,5,3,stoneskin,25,,,shield_bash,8,2.5,100,큰 방패로 적을 끌어모아 공격을 받아내는 노련한 대장
+mira,미라,독화살 사냥꾼,SR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#6B8E23,308,28,11,1.0,6,12,poison_cloud,9,3,25,hunter_mark,15,4,,snare,10,2.5,1.5,독구름과 덫으로 사냥감을 묶어 서서히 쓰러뜨린다
+torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,504,19,1.8,0.8,6,8,shield,10,25,,regen_aura,6,1,,battle_hymn,15,20,5,찬가와 보호막으로 동료를 지키며 싸우는 사제
+rian,리안,쌍검사,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#48C9B0,403,43,1.8,0.64,7,9,blade_flurry,7,4,80,frenzy,8,5,,parry,10,2,100,두 자루 검으로 눈보다 빠르게 베고 받아친다
+echo,에코,견습 화염술사,SR,ranged,caster,Mage,1H_Wand,#F39C12,277,31,8,1.2,6,12,fire_bolt,6,150,20,pyromancy,30,,,firespread,9,3,80,아직 서툴지만 불꽃만큼은 진짜인 마법사
+gork,고르크,도끼 투척꾼,SR,ranged,bruiser,Barbarian,1H_Axe|1H_Axe_Offhand,#935116,370,28,6,1.0,6,10,axe_volley,8,4,100,ricochet,2,60,,boomerang,8,6,120,양손 도끼를 던져 튕겨 내고 몰려든 적 사이에서 더 거세진다
+felix,펠릭스,기사단 창병,SR,melee,bruiser,Knight,2H_Sword,#2E86C1,554,32,1.8,0.8,6,8,spear_throw,8,6,150,stun,4,0.8,,spear_sweep,9,3,150,창을 던져 꿰뚫고 묵직한 일격으로 적을 멈춰 세운다
+hans,한스,민병대 검사,R,melee,bruiser,Knight,1H_Sword,#95A5A6,396,23,1.8,0.8,6,8,drain_slash,8,150,50,dmg_reduce,10,,,,,,,마을을 지키려 칼을 든 성실한 민병
+ella,엘라,마을 궁수,R,ranged,marksman,Rogue_Hooded,2H_Crossbow,#82E0AA,220,20,11,1.0,6,12,volley,7,4,60,focus,5,30,,,,,,연달아 화살을 쏘며 한 표적을 끝까지 노리는 사냥꾼의 딸
+dorik,도릭,나무꾼 전사,R,melee,bruiser,Barbarian,1H_Axe,#A04000,396,23,1.8,0.8,6,8,wide_swing,6,2.5,120,rage,40,,,,,,,나무 베던 솜씨로 두셋을 함께 벤다
 nina,니나,견습 치유사,R,ranged,support,Mage,2H_Staff,#A9DFBF,220,12,9,1.0,6,12,shield_ally,10,15,,haste_aura,6,15,,,,,,서툴지만 동료에게 보호막과 바람의 축복을 건넨다
-jack,잭,떠돌이 도적,R,melee,assassin,Rogue,Knife,#616A6B,288,30,1.8,0.64,7,9,dodge,20,,,opportunist,40,,,,,,,날렵하게 몸을 피하며 흔들린 적의 빈틈을 노린다
-valen,발렌,불꽃 군주,SSR,ranged,caster,Mage,2H_Staff,#FF6A1A,396,44,8,1.2,6,12,meteor,9,3,250,inferno,12,3,40,summon_phoenix,18,60,10,하늘에서 운석을 떨어뜨리고 불사조를 부르는 불꽃의 군주
-frieda,프리다,빙하의 여왕,SSR,ranged,caster,Mage,1H_Wand,#9FE3FF,396,44,8,1.2,6,12,blizzard,10,3.5,60,freeze_hit,15,1.2,,frost_shatter,3,120,,눈보라로 전장을 얼리고 얼어붙은 적을 산산조각 낸다
-morgana,모르가나,망자의 여왕,SSR,ranged,caster,Mage,Spellbook_open,#7A3FA0,396,44,8,1.2,6,12,summon_skeleton,15,50,12,corpse_explosion,3,80,,curse_hit,30,25,4,쓰러진 자를 일으켜 세우고 저주로 산 자를 시들게 한다
-thorgar,토르가,대지의 거인,SSR,melee,tank,Barbarian,2H_Axe,#8D6E4A,936,32,1.8,0.8,5,8,earthquake,10,4,120,ground_slam,7,3,100,invincible,25,3,30,땅을 뒤흔드는 일격으로 적을 쓸어버리는 산 같은 거인
-raven,레이븐,그림자 명궁,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#3B3F58,440,40,11,1.0,6,12,pierce,6,60,,summon_hawk,14,70,10,comet,12,3,400,그림자 속에서 혜성 같은 화살을 쏘는 고독한 명궁
-gaia,가이아,숲의 대현자,SSR,ranged,support,Mage,2H_Staff,#4CAF50,440,24,9,1.0,6,12,summon_treant,16,60,12,mass_heal,12,15,,tornado,11,3,50,숲의 정령과 바람을 부려 아군을 지키는 대현자
-dante,단테,용기사,SR,melee,bruiser,Knight,2H_Sword,#B03A2E,554,32,1.8,0.8,6,8,dragon_breath,8,5,120,war_cry,12,5,30,last_stand,35,40,,용의 불길을 휘두르며 함성으로 적을 위축시키는 기사
+jack,잭,떠돌이 도적,R,melee,assassin,Rogue,Knife,#616A6B,288,30,1.8,0.64,7,9,cheap_shot,8,150,1,dodge,20,,,,,,,날렵하게 몸을 피하며 흔들린 적의 빈틈을 노린다
+valen,발렌,불꽃 군주,SSR,ranged,caster,Mage,2H_Staff,#FF6A1A,396,44,8,1.2,6,12,meteor,9,3,250,scorch,10,3,40,summon_phoenix,18,60,10,하늘에서 운석을 떨어뜨리고 불사조를 부르는 불꽃의 군주
+frieda,프리다,빙하의 여왕,SSR,ranged,caster,Mage,1H_Wand,#9FE3FF,396,44,8,1.2,6,12,blizzard,10,3.5,60,frost_shatter,3,120,,deep_freeze,8,3,1.2,눈보라로 전장을 얼리고 얼어붙은 적을 산산조각 낸다
+morgana,모르가나,망자의 여왕,SSR,ranged,caster,Mage,Spellbook_open,#7A3FA0,396,44,8,1.2,6,12,summon_skeleton,15,50,12,corpse_explosion,3,80,,hex,9,3,25,쓰러진 자를 일으켜 세우고 저주로 산 자를 시들게 한다
+thorgar,토르가,대지의 거인,SSR,melee,tank,Barbarian,2H_Axe,#8D6E4A,936,32,1.8,0.8,5,8,earthquake,10,4,120,invincible,25,3,30,ground_slam,7,3,100,땅을 뒤흔드는 일격으로 적을 쓸어버리는 산 같은 거인
+raven,레이븐,그림자 명궁,SSR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#3B3F58,440,40,11,1.0,6,12,summon_hawk,14,70,10,pierce,6,60,,comet,12,3,400,그림자 속에서 혜성 같은 화살을 쏘는 고독한 명궁
+gaia,가이아,숲의 대현자,SSR,ranged,support,Mage,2H_Staff,#4CAF50,440,24,9,1.0,6,12,summon_treant,16,60,12,gale,10,3,50,mass_heal,12,15,,숲의 정령과 바람을 부려 아군을 지키는 대현자
+dante,단테,용기사,SR,melee,bruiser,Knight,2H_Sword,#B03A2E,554,32,1.8,0.8,6,8,dragon_breath,8,5,120,last_stand,35,40,,war_cry,12,5,30,용의 불길을 휘두르며 함성으로 적을 위축시키는 기사
 kaz,카즈,떠돌이 기계공,SR,ranged,marksman,Rogue,1H_Crossbow,#C9A227,308,28,11,1.0,6,12,summon_turret,15,80,12,splash,2,40,,shockwave,9,7,120,손수 만든 포탑과 충격파 장치로 싸우는 떠돌이 기계공
-luna,루나,달빛 무희,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#B9A8FF,403,43,1.8,0.64,7,9,echo_strike,4,2.5,50,weaken_hit,25,30,3,soul_harvest,3,8,,달빛 아래 춤추듯 베며 쓰러뜨린 적의 영혼을 거둔다
-orin,오린,야수 조련사,SR,melee,bruiser,Barbarian,1H_Axe|Barbarian_Round_Shield,#6D4C2F,554,32,1.8,0.8,6,8,summon_wolf,14,50,10,regen,1,,,second_wind,30,25,20,늑대 무리와 함께 싸우며 쓰러질 듯해도 다시 일어서는 조련사
-selene,셀레네,별의 예언자,SR,ranged,caster,Mage,Spellbook_open,#3F51B5,277,31,8,1.2,6,12,starfall,9,4,90,void_rift,12,3,25,solar_flare,10,3,80,별의 운행을 읽어 별똥별과 공허를 불러내는 예언자
-pip,핍,견습 정령술사,R,ranged,caster,Mage,1H_Wand,#80DEEA,200,22,8,1.2,6,12,summon_spirit,15,50,10,ice_spikes,10,5,80,,,,,작은 정령 친구와 얼음 가시로 싸우는 견습생
+luna,루나,달빛 무희,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#B9A8FF,403,43,1.8,0.64,7,9,crescent,7,3,150,soul_harvest,3,8,,lunar_veil,10,3,30,달빛 아래 춤추듯 베며 쓰러뜨린 적의 영혼을 거둔다
+orin,오린,야수 조련사,SR,melee,bruiser,Barbarian,1H_Axe|Barbarian_Round_Shield,#6D4C2F,554,32,1.8,0.8,6,8,summon_wolf,14,50,10,second_wind,30,25,20,howl,12,5,12,늑대 무리와 함께 싸우며 쓰러질 듯해도 다시 일어서는 조련사
+selene,셀레네,별의 예언자,SR,ranged,caster,Mage,Spellbook_open,#3F51B5,277,31,8,1.2,6,12,starfall,9,4,90,solar_spark,12,3,80,void_rift,12,3,25,별의 운행을 읽어 별똥별과 공허를 불러내는 예언자
+pip,핍,견습 정령술사,R,ranged,caster,Mage,1H_Wand,#80DEEA,200,22,8,1.2,6,12,summon_spirit,15,50,10,frost_spike,12,5,80,,,,,작은 정령 친구와 얼음 가시로 싸우는 견습생
 grit,그릿,광산 대장장이,R,melee,tank,Barbarian,1H_Axe|Barbarian_Round_Shield,#795548,420,20,1.8,0.8,5,8,summon_golem,18,60,12,revive,30,,,,,,,직접 빚은 돌 골렘과 함께 버티는 광산 대장장이
-tia,티아,늪지 마녀,R,ranged,caster,Mage,1H_Wand,#689F38,200,22,8,1.2,6,12,abyss_hand,11,3,1.5,lava_burst,9,3,90,,,,,늪 바닥의 손과 끓는 용암을 부리는 마녀
+tia,티아,늪지 마녀,R,ranged,caster,Mage,1H_Wand,#689F38,200,22,8,1.2,6,12,abyss_hand,11,3,1.5,magma,13,3,90,,,,,늪 바닥의 손과 끓는 용암을 부리는 마녀

@@ -21,6 +21,7 @@ extends "res://scripts/ui_window.gd"
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
+const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
@@ -778,7 +779,8 @@ func _on_detail_input(event: InputEvent) -> void:
 			step(-1 if d.x > 0.0 else 1)
 
 
-## 스킬 줄(칸 순서, 개정 17): {kind, name, star(해금 승급), locked, text}. 해금 = "이름 — 숫자를 넣은 설명", 잠김 = "이름 — ★3에서 해금".
+## 스킬 줄(칸 순서, 개정 17): {kind, name, star(해금 승급), locked, text}. 해금 = "이름 (액티브) — 숫자를 넣은 설명", 잠김 = "이름 (패시브) — ★3에서 해금".
+## 2026-10-06: 이름 뒤에 액티브(쿨마다 시전)·패시브를 붙인다.
 static func skill_rows(h: Dictionary, promotion: int) -> Array:
 	var out := []
 	var kinds: Array = h.skills.keys()
@@ -787,7 +789,8 @@ static func skill_rows(h: Dictionary, promotion: int) -> Array:
 		var nm := Skills.name_of(kinds[i], h.id)
 		var locked := promotion < star
 		out.append({"kind": kinds[i], "name": nm, "star": star, "locked": locked,
-			"text": "%s — %s" % [nm, "★%d에서 해금" % star if locked else Skills.describe(kinds[i], h.skills[kinds[i]])]})
+			"text": "%s (%s) — %s" % [nm, "액티브" if HeroSkillsScript.is_active(kinds[i]) else "패시브",
+				"★%d에서 해금" % star if locked else Skills.describe(kinds[i], h.skills[kinds[i]])]})
 	return out
 
 

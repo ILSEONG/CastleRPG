@@ -13,13 +13,22 @@ const HeroScript := preload("res://scripts/hero.gd")
 ## [영웅, 스킬, 카메라 크기]
 const CLIPS := [["valen", "meteor", 15.0], ["thorgar", "earthquake", 13.0], ["arteon", "holy_smite", 13.0], ["selene", "solar_flare", 15.0],
 	["nev", "thunder_storm", 15.0], ["frieda", "blizzard", 15.0], ["ignis", "aoe_blast", 15.0], ["dante", "dragon_breath", 13.0],
-	["grom", "whirlwind", 12.0], ["tia", "lava_burst", 13.0], ["pip", "ice_spikes", 13.0]]
+	["grom", "whirlwind", 12.0], ["tia", "lava_burst", 13.0], ["pip", "summon_spirit", 13.0]]
+## 2026-10-06 스킬 재구성의 새 액티브·확률 발동 패시브(--set=new 로 찍는다. 패시브는 그 클립 동안 확률 100%)
+const NEW_CLIPS := [["ignis", "ignite", 15.0], ["sylvana", "piercing_shot", 15.0], ["grom", "blood_rage", 12.0], ["seraphine", "frost_chain", 15.0],
+	["kyle", "rend", 12.0], ["baldur", "bulwark", 12.0], ["harald", "crushing_blow", 12.0], ["harald", "sunder", 12.0], ["bron", "shield_bash", 12.0],
+	["mira", "snare", 15.0], ["rian", "blade_flurry", 12.0], ["rian", "parry", 12.0], ["echo", "fire_bolt", 15.0], ["echo", "firespread", 15.0],
+	["gork", "axe_volley", 15.0], ["gork", "boomerang", 15.0], ["felix", "spear_sweep", 12.0], ["hans", "drain_slash", 12.0], ["ella", "volley", 15.0],
+	["dorik", "wide_swing", 12.0], ["jack", "cheap_shot", 12.0], ["frieda", "deep_freeze", 15.0], ["morgana", "hex", 15.0], ["luna", "crescent", 12.0],
+	["luna", "lunar_veil", 12.0], ["orin", "howl", 12.0], ["valen", "scorch", 15.0], ["gaia", "gale", 15.0], ["selene", "solar_spark", 15.0],
+	["pip", "frost_spike", 13.0], ["tia", "magma", 13.0]]
 const LEAD := 0.8  # 몬스터가 다가오는 동안(스킬 전)
 const AFTER := 2.6  # 발동 시작부터 찍는 시간
 
 var _main
 var _out := ""
 var _only := ""
+var _set := ""
 
 
 func _ready() -> void:
@@ -28,6 +37,8 @@ func _ready() -> void:
 			_out = a.substr(6)
 		elif a.begins_with("--only="):
 			_only = a.substr(7)
+		elif a.begins_with("--set="):
+			_set = a.substr(6)
 	Economy.save_path = ""
 	Fever.save_path = ""
 	Fever.reset()
@@ -41,8 +52,8 @@ func _ready() -> void:
 			c.set_process(false)
 	GameState.mode = GameState.Mode.STAGE
 	await _frames(120)  # 불러오기 화면이 걷힐 때까지
-	for c in CLIPS:
-		if _only == "" or _only == c[0]:
+	for c in (NEW_CLIPS if _set == "new" else CLIPS):
+		if _only == "" or _only == c[0] or _only == c[1]:
 			await _clip(c[0], c[1], c[2])
 	get_tree().quit(0)
 
@@ -106,6 +117,9 @@ func _clip(id: String, k: String, cam_size: float) -> void:
 		if f == lead:
 			if k == "aoe_blast":
 				h._blast_cd = 0.0
+			elif k in h._skx.PROCS:
+				h._skx.sk = h._skx.sk.duplicate(true)
+				h._skx.sk[k][0] = 100.0
 			else:
 				h._skx._cd[k] = 0.0
 		await RenderingServer.frame_post_draw

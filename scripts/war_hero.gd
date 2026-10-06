@@ -235,7 +235,7 @@ func take_damage(amount: float, source = null) -> void:
 		shown = DamageNumbers.Kind.HURT
 	if _vuln_t > 0.0:
 		amount *= 1.0 + _vuln_pct / 100.0
-	amount = _skx.incoming(amount)
+	amount = _skx.incoming(amount, source)
 	if amount <= 0.0:
 		return
 	var r := Skills.incoming(_sk, amount, randf())

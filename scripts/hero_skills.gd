@@ -18,7 +18,13 @@ const ACTIVE := ["meteor", "inferno", "earthquake", "ground_slam", "blizzard", "
 	"frost_nova", "whirlwind", "war_cry", "shockwave", "spear_throw", "ice_spikes", "dragon_breath", "starfall", "sky_bolt", "comet",
 	"holy_smite", "shadow_strike", "void_rift", "solar_flare", "abyss_hand", "lava_burst", "sanctuary", "mass_heal", "resurrection",
 	"battle_hymn", "shield_ally", "shield", "taunt", "summon_wolf", "summon_skeleton", "summon_golem", "summon_treant", "summon_spirit",
-	"summon_phoenix", "summon_hawk", "summon_turret"]
+	"summon_phoenix", "summon_hawk", "summon_turret",
+	# 2026-10-06 스킬 재구성: 패시브에서 바뀐 액티브
+	"ignite", "piercing_shot", "blood_rage", "frost_chain", "rend", "bulwark", "crushing_blow", "sunder", "shield_bash", "snare",
+	"blade_flurry", "parry", "fire_bolt", "firespread", "axe_volley", "boomerang", "spear_sweep", "drain_slash", "volley", "wide_swing",
+	"cheap_shot", "crescent", "lunar_veil", "howl", "deep_freeze", "hex"]
+## 확률 발동 패시브(2026-10-06): 예전 액티브의 효과를 평타(주 대상)에 a% 확률로 붙인다 — 화염 지대·회오리·태양 섬광·얼음 가시·용암 분출
+const PROCS := ["scorch", "gale", "solar_spark", "frost_spike", "magma"]
 ## 소환 종류 → [summon.gd 종류, 마리 수]
 const SUMMONS := {"summon_wolf": ["wolf", 2], "summon_skeleton": ["skeleton", 2], "summon_golem": ["golem", 1], "summon_treant": ["treant", 1],
 	"summon_spirit": ["spirit", 1], "summon_phoenix": ["phoenix", 1], "summon_hawk": ["hawk", 1], "summon_turret": ["turret", 1]}
@@ -44,6 +50,13 @@ const CAST_ANIM := {
 	"whirlwind": "2H_Melee_Attack_Spin", "earthquake": "Jump_Full_Short", "ground_slam": "2H_Melee_Attack_Chop", "spear_throw": "Throw",
 	"shockwave": "1H_Melee_Attack_Stab", "shadow_strike": "1H_Melee_Attack_Stab", "shield": "Block", "shield_ally": "Use_Item",
 	"arrow_rain": "Spellcast_Raise", "heal_aura": "Spellcast_Raise", "gate_repair": "Use_Item",  # 개정 26: 빠져 있던 셋(화살비·치유의 오라·성문 수리)
+	# 2026-10-06 새 액티브(관통 사격·연발 사격은 그 영웅의 평타 사격 모션)
+	"ignite": "Spellcast_Shoot", "frost_chain": "Spellcast_Shoot", "fire_bolt": "Spellcast_Shoot", "lunar_veil": "Spellcast_Raise",
+	"deep_freeze": "Spellcast_Raise", "firespread": "Spellcast_Long", "hex": "Spellcast_Long", "blood_rage": "Cheer", "howl": "Cheer",
+	"bulwark": "Block", "parry": "Block", "shield_bash": "Block_Attack", "snare": "Throw", "axe_volley": "Throw", "boomerang": "Throw",
+	"rend": "Dualwield_Melee_Attack_Slice", "crescent": "Dualwield_Melee_Attack_Slice", "blade_flurry": "Dualwield_Melee_Attack_Stab",
+	"crushing_blow": "2H_Melee_Attack_Chop", "sunder": "2H_Melee_Attack_Slice", "spear_sweep": "2H_Melee_Attack_Slice",
+	"drain_slash": "1H_Melee_Attack_Slice_Diagonal", "wide_swing": "1H_Melee_Attack_Slice_Horizontal", "cheap_shot": "1H_Melee_Attack_Stab",
 }
 const RETRY := 0.5  # 조건이 안 맞아 못 쓴 발동형은 이만큼 뒤에 다시 본다(매 프레임 찾지 않게)
 const AURA_SCAN := 0.25
@@ -58,6 +71,11 @@ const HOLY := Color(1.0, 0.9, 0.45)
 const VOID := Color(0.55, 0.3, 0.85)
 const EARTH := Color(0.62, 0.48, 0.32)
 const STORM := Color(0.7, 0.85, 1.0)
+const BLOOD := Color(0.85, 0.12, 0.15)
+const STEEL := Color(0.75, 0.82, 0.95)
+const MOON := Color(0.75, 0.8, 1.0)
+const WILD := Color(0.85, 0.65, 0.3)
+const CURSE := Color(0.45, 0.75, 0.3)
 
 var h  # 영웅(hero.gd) — 이 객체를 가진 노드
 var sk: Dictionary = {}
@@ -81,6 +99,10 @@ var _aura_cd := 0.0
 var _haste_aura := 0.0
 var _guard_aura := 0.0
 var _regen_aura := 0.0
+var _rage_t := 0.0  # 피의 격노 남은 초
+var _wall_t := 0.0  # 방벽 남은 초
+var _parry_t := 0.0  # 받아치기 남은 초
+var _wall_fx: Node3D
 
 
 func _init(hero) -> void:
@@ -113,6 +135,9 @@ func reset() -> void:
 	_inv_cd = 0.0
 	_inv_t = 0.0
 	_regen_acc = 0.0
+	_rage_t = 0.0
+	_parry_t = 0.0
+	_end_wall()
 
 
 # --- 매 프레임 ---
@@ -123,6 +148,12 @@ func tick(delta: float) -> void:
 	_inv_cd -= delta
 	_inv_t -= delta
 	_hymn_t -= delta
+	_rage_t -= delta
+	_parry_t -= delta
+	if _wall_t > 0.0:
+		_wall_t -= delta
+		if _wall_t <= 0.0:
+			_end_wall()
 	if _hymn_t <= 0.0:
 		hymn_pct = 0.0
 	for i in range(_harvest.size() - 1, -1, -1):
@@ -152,6 +183,11 @@ func _begin(k: String) -> float:
 				_cd[k] = minf(_cd[k], RETRY)):
 		return CAST_WAIT
 	return float(sk[k][0])
+
+
+## 액티브(쿨타임마다 시전 모션과 함께 발동)인가 — ACTIVE + hero.gd가 직접 쓰는 폭발·치유의 기도·성문 수리. 나머지는 패시브.
+static func is_active(k: String) -> bool:
+	return ACTIVE.has(k) or k in ["aoe_blast", "heal_aura", "gate_repair"]
 
 
 ## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).
@@ -199,6 +235,8 @@ func speed_mult() -> float:
 		m += float(sk.frenzy[0]) / 100.0 * _frenzy_n
 	if sk.has("bloodlust") and _lust_t > 0.0:
 		m += float(sk.bloodlust[0]) / 100.0
+	if sk.has("blood_rage") and _rage_t > 0.0:
+		m += float(sk.blood_rage[2]) / 100.0
 	return m
 
 
@@ -277,6 +315,9 @@ func on_hit(m, d: float, primary: bool, attack_no: int, was: int) -> void:
 		_announce("shock_hit")
 	if not primary:
 		return
+	for pk in PROCS:
+		if _roll(pk):
+			_proc(pk, m)
 	if sk.has("splash"):
 		for o in _near_monsters(m.global_position, float(sk.splash[0]), m):
 			_hit(o, d * float(sk.splash[1]) / 100.0 * h._skill_mult)
@@ -307,6 +348,21 @@ func on_hit(m, d: float, primary: bool, attack_no: int, was: int) -> void:
 					on_kill(mm, w))
 	if sk.has("barrage") and h.role == "ranged" and randf() < float(sk.barrage[0]) / 100.0:
 		_barrage(m, int(sk.barrage[1]))
+
+
+## 확률 발동 패시브(평타 주 대상 m): 불바다 = 화염 지대, 돌개바람 = 회오리, 서리 가시 = 얼음 가시, 햇빛 파편·끓는 늪 = 그 자리 폭발.
+func _proc(k: String, m) -> void:
+	var p: Array = sk[k]
+	match k:
+		"scorch":
+			_zone("inferno", p, _flat(m.global_position))
+		"gale":
+			_zone("tornado", p, _flat(m.global_position))
+		"frost_spike":
+			_line_shot(k, m, float(p[1]), _atk() * float(p[2]) / 100.0 * h._skill_mult)
+		_:
+			_spot(k, _flat(m.global_position), float(p[1]), float(p[2]), _atk())
+	_announce(k)
 
 
 ## 처치 효과. m = 방금 죽은 적, was = snap(죽기 전).
@@ -342,10 +398,19 @@ func on_kill(m, was: int) -> void:
 # --- 받는 피해 ---
 
 ## 받는 피해 조정(Skills.incoming의 회피·철벽·가시 앞에): 금강불괴 → 광전사·수호의 오라·요새화 → 돌 피부 → 방패 막기 → 보호막.
-func incoming(amount: float) -> float:
+## source = 때린 적(받아치기 반격 대상, 없으면 null).
+func incoming(amount: float, source = null) -> float:
 	if _inv_t > 0.0:
 		return 0.0
+	if _parry_t > 0.0:  # 받아치기: 막고 되받아친다
+		Fx.block(h)
+		if source != null and is_instance_valid(source) and source.has_method("is_alive") and source.is_alive():
+			_hit(source, _atk() * float(sk.parry[2]) / 100.0 * h._skill_mult)
+			Fx.slash_mark(_world(), source.global_position + HIT, STEEL)
+		return 0.0
 	var x := amount
+	if _wall_t > 0.0:
+		x *= 1.0 - float(sk.bulwark[2]) / 100.0
 	if sk.has("berserker"):
 		x *= 1.0 + float(sk.berserker[1]) / 100.0
 	x *= 1.0 - _guard_aura / 100.0
@@ -403,6 +468,13 @@ func add_barrier(amount: float) -> void:
 	barrier = minf(h.hp_max, barrier + amount)
 	if not is_instance_valid(_barrier_fx):
 		_barrier_fx = Fx.barrier(h, HOLY)
+
+
+func _end_wall() -> void:
+	_wall_t = 0.0
+	if is_instance_valid(_wall_fx):
+		_wall_fx.queue_free()
+	_wall_fx = null
 
 
 func _clear_barrier() -> void:
@@ -670,6 +742,208 @@ func _cast(k: String, dry := false) -> bool:
 			if dry:
 				return true
 			add_barrier(h.hp_max * float(p[1]) / 100.0)
+		# --- 2026-10-06 새 액티브 ---
+		"ignite", "deep_freeze", "axe_volley":  # 사거리 안 적 최대 b마리(아직 그 상태가 아닌 적부터)
+			var pool := _near_monsters(here, _reach())
+			if pool.is_empty():
+				return false
+			if dry:
+				return true
+			pool.shuffle()
+			var st: String = {"ignite": "burn", "deep_freeze": "freeze", "axe_volley": ""}[k]
+			if st != "":
+				pool.sort_custom(func(x, y): return int(x.has_status(st)) < int(y.has_status(st)))
+			var i := 0
+			for o in pool.slice(0, int(p[1])):
+				match k:
+					"ignite":
+						Fx.streak(w, here + MUZZLE, o.global_position + HIT, FIRE)
+						Fx.blast(w, _flat(o.global_position), FIRE, 0.9, false, 0)
+						o.apply_dot("burn", a * float(p[2]) / 100.0 * h._skill_mult, 3.0)
+					"deep_freeze":
+						Fx.nova(w, _flat(o.global_position), ICE, 1.1, tier)
+						Fx.line(w, _flat(o.global_position) - Vector3(0.5, 0, 0), _flat(o.global_position) + Vector3(0.5, 0, 0), ICE, "ice_spikes", 0)
+						o.apply_freeze(float(p[2]))
+					"axe_volley":
+						_shoot(o, "axe", 20.0, a * float(p[2]) / 100.0 * h._skill_mult, 0.07 * i, _axe_land)
+				i += 1
+		"piercing_shot", "boomerang":
+			if t == null:
+				return false
+			if dry:
+				return true
+			_line_shot(k, t, float(p[1]), a * float(p[2]) / 100.0 * h._skill_mult)
+		"blood_rage", "bulwark", "parry":  # 자기 강화 b초(교전 중에만)
+			if t == null:
+				return false
+			if dry:
+				return true
+			match k:
+				"blood_rage":
+					_rage_t = float(p[1])
+					Fx.nova(w, here, BLOOD, 2.0, tier)
+					Fx.buff(h, BLOOD)
+					Fx.golden_tint(h, BLOOD, float(p[1]))
+				"bulwark":
+					_end_wall()
+					_wall_t = float(p[1])
+					_wall_fx = Fx.barrier(h, STEEL)
+					Fx.nova(w, here, STEEL, 1.8, tier)
+				"parry":
+					_parry_t = float(p[1])
+					Fx.golden_tint(h, STEEL, float(p[1]))
+					Fx.block(h)
+		"frost_chain":
+			if t == null:
+				return false
+			if dry:
+				return true
+			var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
+			var hit := [t]
+			var cur = t
+			for i in int(p[1]):
+				var nxt = null
+				for o in _near_monsters(cur.global_position, 5.0, cur):
+					if not hit.has(o):
+						nxt = o
+						break
+				if nxt == null:
+					break
+				hit.append(nxt)
+				cur = nxt
+			var pts := [here + MUZZLE]
+			for o in hit:
+				pts.append(o.global_position + HIT)
+			Fx.lightning(w, pts, ICE, tier)
+			for o in hit:
+				_hit(o, dmg)
+				if is_instance_valid(o) and o.is_alive():
+					o.apply_slow(40.0, 2.0)
+		"rend", "crushing_blow", "drain_slash", "cheap_shot", "blade_flurry":  # 대상 한 명
+			if t == null:
+				return false
+			if dry:
+				return true
+			var at: Vector3 = t.global_position
+			match k:
+				"rend":
+					Fx.slash_mark(w, at + HIT + Vector3(0.15, 0.1, 0), BLOOD)
+					_later(0.08, func(): Fx.slash_mark(w, at + HIT - Vector3(0.15, 0.1, 0), BLOOD))
+					Fx.impact(w, _flat(at), BLOOD, 0.8, 1, 0.8)
+					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
+					if is_instance_valid(t) and t.is_alive():
+						t.apply_dot("bleed", a * float(p[2]) / 100.0 * h._skill_mult, 3.0)
+				"crushing_blow":
+					Fx.impact(w, _flat(at), EARTH, 1.4, 2, 0.6)
+					Fx.dust(w, _flat(at))
+					Fx.quake(w, _flat(at), 1.6, 0)
+					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
+					if is_instance_valid(t) and t.is_alive():
+						t.knockback(here, float(p[2]))
+				"drain_slash":
+					Fx.slash_mark(w, at + HIT, BLOOD)
+					Fx.impact(w, _flat(at), BLOOD, 0.7, 0, 0.8)
+					var before: float = t.hp
+					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
+					var dealt: float = before - (t.hp if is_instance_valid(t) and t.is_alive() else 0.0)
+					if dealt > 0.0 and h.heal(dealt * float(p[2]) / 100.0) > 0.0:
+						Fx.heal_cross(h)
+						Fx.soul(w, at + HIT, h)
+				"cheap_shot":
+					Fx.slash_mark(w, at + HIT, h._color)
+					Fx.stun_hit(w, at + HIT, tier)
+					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
+					if is_instance_valid(t) and t.is_alive():
+						t.apply_stun(float(p[2]))
+				"blade_flurry":
+					var tref: WeakRef = weakref(t)
+					var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
+					for i in int(p[1]):
+						_later(0.1 * i, func():
+							var tt = tref.get_ref()
+							if tt == null or not tt.is_alive():
+								return
+							var off := Vector3(randf_range(-0.3, 0.3), randf_range(-0.2, 0.3), randf_range(-0.3, 0.3))
+							Fx.slash_mark(_world(), tt.global_position + HIT + off, h._color)
+							_hit(tt, dmg))
+		"sunder", "shield_bash", "wide_swing", "howl":  # 자기 주변 반경 b
+			var r := float(p[1])
+			var near := _hurt_allies(here, r) if k == "howl" else _near_monsters(here, r)
+			if near.is_empty():
+				return false
+			if dry:
+				return true
+			match k:
+				"sunder":
+					Fx.cleave(w, here, Color(1.0, 0.45, 0.2), r, tier)
+					Fx.dust(w, here)
+					for o in near:
+						_hit(o, a * h._skill_mult)
+						if o.is_alive():
+							o.apply_vulnerable(float(p[2]), 4.0)
+				"shield_bash":
+					Fx.nova(w, here, STEEL, r, tier)
+					Fx.block(h)
+					for o in near:
+						_hit(o, a * float(p[2]) / 100.0 * h._skill_mult)
+						if o.is_alive():
+							Fx.stun_hit(w, o.global_position + HIT, 0)
+							o.knockback(here, 1.0)
+							o.apply_stun(1.0)
+				"wide_swing":
+					Fx.cleave(w, here, h._color, r, tier)
+					for o in near:
+						_hit(o, a * float(p[2]) / 100.0 * h._skill_mult)
+				"howl":
+					Fx.nova(w, here, WILD, r, tier)
+					Fx.heal_ring(w, here, 1.5, tier)
+					for o in near:
+						o.heal(o.hp_max * float(p[2]) / 100.0)
+						Fx.heal_cross(o)
+		"spear_sweep", "crescent":  # 앞쪽 부채꼴 길이 b
+			if t == null:
+				return false
+			if dry:
+				return true
+			var dir: Vector3 = _flat(t.global_position - here).normalized()
+			if dir == Vector3.ZERO:
+				dir = Vector3.FORWARD
+			var length := float(p[1])
+			var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
+			if k == "crescent":
+				Fx.crescent_wave(w, here, dir, length, MOON, tier)
+			else:
+				Fx.cleave(w, here + dir * 0.8, h._color, length, tier)
+			for o in _cone_monsters(here, dir, length, deg_to_rad(60.0 if k == "spear_sweep" else 45.0)):
+				_hit(o, dmg)
+				if k == "spear_sweep" and o.is_alive():
+					o.knockback(here, 1.0)
+		"snare", "firespread", "lunar_veil", "hex":  # 대상 자리 반경 b
+			if t == null:
+				return false
+			if dry:
+				return true
+			_spot(k, _flat(t.global_position), float(p[1]), float(p[2]), a)
+		"fire_bolt":
+			if t == null:
+				return false
+			if dry:
+				return true
+			var dmg: float = a * float(p[1]) / 100.0 * h._skill_mult
+			var burn: float = a * float(p[2]) / 100.0 * h._skill_mult
+			var after := func(m):
+				Fx.blast(_world(), _flat(m.global_position), FIRE, 1.2, false, 0)
+				if m.is_alive():
+					m.apply_dot("burn", burn, 3.0)
+			_shoot(t, "bolt", 18.0, dmg, 0.0, after, FIRE)
+		"volley":
+			if t == null:
+				return false
+			if dry:
+				return true
+			var shot: Array = SHOTS.get(h.def.model, ["arrow", 30.0])
+			for i in int(p[1]):
+				_shoot(t, shot[0], shot[1], a * float(p[2]) / 100.0 * h._skill_mult, 0.1 * i, Callable(), h._color, true)
 		_:
 			if not SUMMONS.has(k) or t == null:
 				return false
@@ -678,6 +952,108 @@ func _cast(k: String, dry := false) -> bool:
 			_summon(k, a * float(p[1]) / 100.0 * h._skill_mult, float(p[2]))
 	_announce(k)
 	return true
+
+
+## 도끼 세례가 꽂힌 자리.
+func _axe_land(m) -> void:
+	Fx.impact(_world(), _flat(m.global_position), h._color, 0.6, 0, 0.7)
+
+
+## 투사체 하나(delay초 뒤, 대상을 따라간다): 맞으면 dmg 스킬 피해 → after(맞은 적).
+func _shoot(target, kind: String, speed: float, dmg: float, delay: float, after := Callable(), color := Color(0, 0, 0, 0), tail := false) -> void:
+	var tref: WeakRef = weakref(target)
+	var col: Color = h._color if color.a == 0.0 else color
+	_later(delay, func():
+		var tt = tref.get_ref()
+		if tt == null or not tt.is_alive() or not h.is_alive():
+			return
+		var pr = ProjectileScript.new()
+		pr.target = tt
+		pr.kind = kind
+		pr.speed = speed
+		pr.color = col
+		pr.tail = tail
+		pr.on_hit = func(m):
+			if is_instance_valid(m) and m.is_alive():
+				_hit(m, dmg)
+				if after.is_valid() and is_instance_valid(m):
+					after.call(m)
+		_world().add_child(pr)
+		pr.global_position = h.global_position + MUZZLE)
+
+
+## 일직선 스킬(대상 쪽 길이 length): 관통 사격 = 빛 화살, 회전 도끼 = 갔다 돌아오는 도끼 + 밀침, 서리 가시 = 얼음 가시 + 빙결.
+func _line_shot(k: String, t, length: float, dmg: float) -> void:
+	var here: Vector3 = h.global_position
+	var dir: Vector3 = _flat(t.global_position - here).normalized()
+	if dir == Vector3.ZERO:
+		dir = Vector3.FORWARD
+	var w := _world()
+	var end := here + dir * length
+	var hits := _line_monsters(here, dir, length, 1.4 if k != "piercing_shot" else 1.2)
+	match k:
+		"piercing_shot":
+			Fx.fly(w, "dart", h._color, here + MUZZLE, end + MUZZLE, 0.18)
+			for o in hits:
+				Fx.spark(w, o.global_position + HIT, h._color.lightened(0.3), 0.6)
+		"boomerang":
+			Fx.fly(w, "axe", h._color, here + MUZZLE, end + Vector3(0, 1.0, 0), 0.3, Vector3(0, 0, TAU * 3.0), true)
+		"frost_spike":
+			Fx.line(w, here, end, ICE, "ice_spikes", h._tier)
+	for o in hits:
+		_hit(o, dmg)
+		if o.is_alive():
+			match k:
+				"boomerang":
+					o.knockback(here, 1.5)
+				"frost_spike":
+					o.apply_freeze(0.8)
+
+
+## 대상 자리 반경 r 효과(c = 표의 세 번째 숫자): 덫 · 들불 번지기 · 달빛 장막 · 역병의 저주 · 햇빛 파편 · 끓는 늪.
+func _spot(k: String, at: Vector3, r: float, c: float, a: float) -> void:
+	var w := _world()
+	var tier: int = h._tier
+	var hits := _near_monsters(at, r)
+	var m: float = h._skill_mult
+	match k:
+		"snare":
+			Fx.hands(w, at, r, Color(0.55, 0.42, 0.25))
+			Fx.dust(w, at)
+			for o in hits:
+				_hit(o, a * 0.5 * m)
+				if o.is_alive():
+					o.apply_root(c)
+		"firespread":
+			Fx.blast(w, at, FIRE, r, false, tier)
+			Fx.splash(w, at, FIRE, r * 1.2)
+			for o in hits:
+				_hit(o, a * c / 100.0 * m)
+				if o.is_alive():
+					o.apply_dot("burn", a * 0.15 * m, 3.0)
+		"lunar_veil":
+			Fx.beam(w, at, MOON, tier)
+			Fx.nova(w, at, MOON, r, tier)
+			for o in hits:
+				_hit(o, a * 0.8 * m)
+				if o.is_alive():
+					o.apply_weaken(c, 3.0)
+		"hex":
+			Fx.zone(w, at, CURSE, r, 1.2, "poison_cloud", tier)
+			for o in hits:
+				o.apply_dot("curse", a * c / 100.0 * m, 4.0)
+		"solar_spark":
+			Fx.flare_burst(w, at, HOLY, r, tier)
+			for o in hits:
+				_hit(o, a * c / 100.0 * m)
+				if o.is_alive():
+					o.apply_weaken(30.0, 3.0)
+		"magma":
+			Fx.blast(w, at, FIRE, r, false, tier)
+			for o in hits:
+				_hit(o, a * c / 100.0 * m)
+				if o.is_alive():
+					o.knockback(at, 2.0)
 
 
 ## 바닥 지대(화염 지대·독구름·눈보라·회오리·성역): 0.5초마다 안의 적(성역은 아군)에게.

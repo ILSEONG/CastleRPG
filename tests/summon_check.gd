@@ -51,6 +51,8 @@ class FakeMon extends Node3D:
 		calls.append(["apply_dot", tag, dps, sec])
 	func radius() -> float:
 		return 0.4
+	func hit_radius() -> float:  # 영웅 발동형이 주변 적을 셀 때(2026-10-06: 시작 영웅 도릭·한스도 액티브가 생겼다)
+		return 0.4
 	func hp_ratio() -> float:
 		return hp / hp_max
 	func bar_height() -> float:

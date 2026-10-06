@@ -424,6 +424,8 @@ const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 
 const CAST_FRAC := {
 	"Spellcast_Raise": 0.30, "Spellcast_Long": 0.17, "Spellcast_Shoot": 0.30, "Cheer": 0.17, "2H_Melee_Attack_Spin": 0.33,
 	"Jump_Full_Short": 0.68, "Block": 0.25, "Use_Item": 0.42, "1H_Melee_Attack_Stab": 0.35, "2H_Melee_Attack_Stab": 0.35,
+	"Dualwield_Melee_Attack_Slice": 0.4, "Dualwield_Melee_Attack_Stab": 0.35, "Block_Attack": 0.4, "1H_Melee_Attack_Slice_Diagonal": 0.45,
+	"1H_Melee_Attack_Slice_Horizontal": 0.45,  # 2026-10-06 새 액티브(어림값 — 아래 측정으로 고친다)
 }
 const CAST_WINDUP := 0.45  # 발동 순간까지 이보다 길면 모션을 빨리 돌린다(초) — 기 모으기가 늘어지지 않게
 

@@ -611,7 +611,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) stats with the promotion bonus x1.3 and the next level in green (HP 1,217 -> 1,255 (+38), melee growth 3.15%); Lv 1 / 30 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
-	_check(sk[0].contains("9초마다 3초 동안 반경 5m") and sk[1] == "수호의 오라 — ★3에서 해금" and sk[2] == "심판의 빛 — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
+	_check(sk[0].contains("9초마다 3초 동안 반경 5m") and sk[1] == "수호의 오라 (패시브) — ★3에서 해금" and sk[2] == "심판의 빛 (액티브) — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
 		and heroes_win.title_label.text == "빛의 성기사 아르테온" and heroes_win.grade_label.text.begins_with("SSR"),
 		"(x) title, grade, the unlocked skill sentence with numbers, the locked ones with their star, and the description", "skills=%s" % [sk])
 	_check(heroes_win.level_button.disabled and heroes_win.ten_button.disabled and heroes_win.reason_label.text == "골드 부족" and heroes_win.deploy_button.text == "배치 중"
@@ -2144,15 +2144,15 @@ func _skill_unlock_ui(heroes_win) -> void:
 	heroes_win.show_detail("hans")
 	await _unguarded(heroes_win)
 	var shown: Array = ui.filter(func(u): return u.box.visible)
-	_check(shown.size() == 2 and not ui[0].lock.visible and ui[1].lock.visible and ui[0].label.text.begins_with("흡혈 — ") and ui[1].label.text == "철벽 — ★3에서 해금"
+	_check(shown.size() == 2 and not ui[0].lock.visible and ui[1].lock.visible and ui[0].label.text.begins_with("흡혈 베기 (액티브) — ") and ui[1].label.text == "철벽 (패시브) — ★3에서 해금"
 		and ui[1].label.get_theme_color("font_color") == heroes_win.LOCKED_GRAY and ui[0].label.get_theme_color("font_color") == HudScript.INK,
 		"(U) R hans at ★0: two skill rows, the second grey with a lock and ★3에서 해금", "rows=%s" % [shown.map(func(u): return u.label.text)])
 	Economy.heroes["ignis"] = maxi(1, int(Economy.heroes.get("ignis", 0)))
 	Economy.hero_promotions["ignis"] = 0
 	heroes_win.show_detail("ignis")
-	_check(ui.all(func(u): return u.box.visible) and ui[1].label.text == "화상 — ★3에서 해금" and ui[2].label.text == "신속 — ★5에서 해금"
-		and heroes_win.promote_preview.text.ends_with("\n★3 달성 시 스킬 해금: 화상"),
-		"(U) SSR ignis at ★0: three rows (화상 at ★3, 신속 at ★5) and the preview names the next unlock", "rows=%s preview=%s" % [ui.map(func(u): return u.label.text), heroes_win.promote_preview.text])
+	_check(ui.all(func(u): return u.box.visible) and ui[1].label.text == "신속 (패시브) — ★3에서 해금" and ui[2].label.text == "점화 (액티브) — ★5에서 해금"
+		and heroes_win.promote_preview.text.ends_with("\n★3 달성 시 스킬 해금: 신속"),
+		"(U) SSR ignis at ★0: three rows (신속 at ★3, 점화 at ★5) and the preview names the next unlock", "rows=%s preview=%s" % [ui.map(func(u): return u.label.text), heroes_win.promote_preview.text])
 	var notices := []
 	var grab := func(t: String): notices.append(t)
 	Economy.notice.connect(grab)

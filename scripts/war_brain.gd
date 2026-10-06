@@ -26,7 +26,7 @@ const KITE_STEP := 3.5
 const KITE_CD := 1.6
 const GATE_ZONE := 14.0  # 성문 바깥면에서 이 거리 안 수비 영웅 = 그 성문을 지키는 중
 const STAGE_D := 9.0  # 공격 자동: 수비가 남은 성문 앞 이 거리에서 모인다(사거리 안으로 들어가며 싸운다)
-const HEALS := ["heal_aura", "mass_heal", "sanctuary", "resurrection", "shield_ally", "regen_aura", "battle_hymn"]
+const HEALS := ["heal_aura", "mass_heal", "sanctuary", "resurrection", "shield_ally", "regen_aura", "battle_hymn", "howl"]
 
 var battle  # war_battle.gd: half, gate(side), keep_spot(side), units(team)
 var _focus := {}  # 분대 키 → [표적, 정한 시각]

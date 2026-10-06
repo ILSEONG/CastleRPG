@@ -147,7 +147,7 @@ test('시드: 표마다 CSV 행 수 = DB 행 수, 다시 해도 같다', async (
   const [gate] = await db.query("select name, max_level, wood, stone, food, base_sec, req1, req2 from building_defs where id = 'gate'")
   assert.deepEqual(gate, { name: '성문', max_level: 30, wood: 150, stone: 250, food: 0, base_sec: 45, req1: 'quarry', req2: null })
   const [ig] = await db.query(`select title, grade, gear, s1b, skill2, s2a, skill3, s3a, s3b, "desc" from heroes where id = 'ignis'`)
-  assert.deepEqual(ig, { title: '화염 대마법사', grade: 'SSR', gear: '2H_Staff', s1b: 3.5, skill2: 'poison', s2a: 40, skill3: 'haste', s3a: 25, s3b: null, desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다' })
+  assert.deepEqual(ig, { title: '화염 대마법사', grade: 'SSR', gear: '2H_Staff', s1b: 3.5, skill2: 'haste', s2a: 25, skill3: 'ignite', s3a: 8, s3b: 3, desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다' })
   const [st] = await db.query("select value from game_config where key = 'starter_heroes'")
   assert.equal(st.value, 'hans|ella|dorik|nina')
 })
@@ -362,8 +362,8 @@ test('마이그레이션 011: 010까지 적용된 DB의 heroes에 skill3·s3a..s
     assert.deepEqual(cfg.map((r) => `${r.key}=${r.value}`), ['skill2_unlock_star=3', 'skill3_unlock_star=5'])
     await seed(d)
     const rows = await d.query("select id, skill3, s3a, s3b from heroes where id in ('seraphine', 'bron', 'hans') order by id")
-    assert.deepEqual(rows, [{ id: 'bron', skill3: 'stoneskin', s3a: 25, s3b: null }, { id: 'hans', skill3: null, s3a: null, s3b: null },
-      { id: 'seraphine', skill3: 'frost_nova', s3a: 10, s3b: 4 }])
+    assert.deepEqual(rows, [{ id: 'bron', skill3: 'shield_bash', s3a: 8, s3b: 2.5 }, { id: 'hans', skill3: null, s3a: null, s3b: null },
+      { id: 'seraphine', skill3: 'frost_chain', s3a: 7, s3b: 3 }])
   } finally {
     await d.close()
   }
@@ -388,7 +388,7 @@ test('영웅 스킬 검증(개정 17): 등급별 개수(SSR·SR 3, R 2, skill1�
     return heroes.replace(from, to)
   }
   const withCfg = (key: string, value: string) => cfg.replace(new RegExp(`^${key},.*$`, 'm'), `${key},${value}`)
-  await fails(hero(',taunt,10,5,3,stoneskin,25,,,', ',taunt,10,5,3,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
+  await fails(hero(',stoneskin,25,,,shield_bash,8,2.5,100,', ',stoneskin,25,,,,,,,'), cfg, /line 12 column 'skill3': SR heroes have exactly 3 skills/) // 브론
   await fails(hero(',dmg_reduce,10,,,,,,,', ',dmg_reduce,10,,,haste,10,,,'), cfg, /line 19 column 'skill3': R heroes have exactly 2 skills/) // 한스
   await fails(hero(',sanctuary,9,5,4,guard_aura,6,15,,', ',sanctuary,9,5,4,,,,,'), cfg, /line 2 column 'skill2': SSR heroes have exactly 3 skills/) // 아르테온: 빈틈
   await fails(hero(',holy_smite,8,250,50,', ',warp,8,250,50,'), cfg, /line 2 column 'skill3': unknown or repeated skill 'warp'/)

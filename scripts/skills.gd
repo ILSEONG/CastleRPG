@@ -19,6 +19,11 @@ const KINDS := {
 	"frenzy": 2, "last_stand": 2, "opportunist": 1, "pyromancy": 1, "first_strike": 1, "focus": 2, "sharpshooter": 1, "brawler": 2,
 	"berserker": 2, "regen": 1, "revive": 1, "block": 2, "fortify": 1, "second_wind": 3, "invincible": 3, "stoneskin": 1, "counter": 2,
 	"haste_aura": 2, "guard_aura": 2, "regen_aura": 2,
+	# 2026-10-06 스킬 재구성(SSR·SR 액티브 2 + 패시브 1, R 액티브 1 + 패시브 1): 패시브에서 바뀐 액티브 · 액티브에서 바뀐 확률 발동 패시브
+	"ignite": 3, "piercing_shot": 3, "blood_rage": 3, "frost_chain": 3, "rend": 3, "bulwark": 3, "crushing_blow": 3, "sunder": 3,
+	"shield_bash": 3, "snare": 3, "blade_flurry": 3, "parry": 3, "fire_bolt": 3, "firespread": 3, "axe_volley": 3, "boomerang": 3,
+	"spear_sweep": 3, "drain_slash": 3, "volley": 3, "wide_swing": 3, "cheap_shot": 3, "crescent": 3, "lunar_veil": 3, "howl": 3,
+	"deep_freeze": 3, "hex": 3, "scorch": 3, "gale": 3, "solar_spark": 3, "frost_spike": 3, "magma": 3,
 }
 
 
@@ -55,6 +60,17 @@ const RULES := {
 	"berserker": ["nonneg", "nonneg"], "regen": ["nonneg"], "revive": ["pct"], "block": ["pct", "pct"], "fortify": ["pct"],
 	"second_wind": ["pct", "nonneg", "pos"], "invincible": ["pct", "pos", "pos"], "stoneskin": ["pct"], "counter": ["pct", "nonneg"],
 	"haste_aura": ["pos", "nonneg"], "guard_aura": ["pos", "pct"], "regen_aura": ["pos", "nonneg"],
+	"ignite": ["pos", "int1", "nonneg"], "piercing_shot": ["pos", "pos", "nonneg"], "blood_rage": ["pos", "pos", "nonneg"],
+	"frost_chain": ["pos", "int1", "nonneg"], "rend": ["pos", "nonneg", "nonneg"], "bulwark": ["pos", "pos", "pct"],
+	"crushing_blow": ["pos", "nonneg", "nonneg"], "sunder": ["pos", "pos", "pct"], "shield_bash": ["pos", "pos", "nonneg"],
+	"snare": ["pos", "pos", "pos"], "blade_flurry": ["pos", "int1", "nonneg"], "parry": ["pos", "pos", "nonneg"],
+	"fire_bolt": ["pos", "nonneg", "nonneg"], "firespread": ["pos", "pos", "nonneg"], "axe_volley": ["pos", "int1", "nonneg"],
+	"boomerang": ["pos", "pos", "nonneg"], "spear_sweep": ["pos", "pos", "nonneg"], "drain_slash": ["pos", "nonneg", "nonneg"],
+	"volley": ["pos", "int1", "nonneg"], "wide_swing": ["pos", "pos", "nonneg"], "cheap_shot": ["pos", "nonneg", "pos"],
+	"crescent": ["pos", "pos", "nonneg"], "lunar_veil": ["pos", "pos", "pct"], "howl": ["pos", "pos", "nonneg"],
+	"deep_freeze": ["pos", "int1", "pos"], "hex": ["pos", "pos", "nonneg"], "scorch": ["pct", "pos", "nonneg"],
+	"gale": ["pct", "pos", "nonneg"], "solar_spark": ["pct", "pos", "nonneg"], "frost_spike": ["pct", "pos", "nonneg"],
+	"magma": ["pct", "pos", "nonneg"],
 }
 const RULE_TEXT := {"pos": "greater than 0", "nonneg": "0 or more", "pct": "in 0..100", "int1": "an integer of 1 or more", "mult": "100 or more"}
 
@@ -82,6 +98,12 @@ const NAMES := {
 	"sharpshooter": "저격", "brawler": "난전", "berserker": "광전사", "regen": "재생", "revive": "불굴", "block": "방패 막기",
 	"fortify": "요새화", "second_wind": "재기", "invincible": "금강불괴", "stoneskin": "돌 피부", "counter": "반격",
 	"haste_aura": "질풍의 오라", "guard_aura": "수호의 오라", "regen_aura": "생명의 오라",
+	"ignite": "점화", "piercing_shot": "관통 사격", "blood_rage": "피의 격노", "frost_chain": "서리 사슬", "rend": "난도질", "bulwark": "방벽",
+	"crushing_blow": "분쇄 일격", "sunder": "갑옷 가르기", "shield_bash": "방패 밀치기", "snare": "덫", "blade_flurry": "칼날 난무", "parry": "받아치기",
+	"fire_bolt": "화염탄", "firespread": "들불 번지기", "axe_volley": "도끼 세례", "boomerang": "회전 도끼", "spear_sweep": "창 휩쓸기",
+	"drain_slash": "흡혈 베기", "volley": "연발 사격", "wide_swing": "크게 휘두르기", "cheap_shot": "급소 찌르기", "crescent": "초승달 베기",
+	"lunar_veil": "달빛 장막", "howl": "야성의 포효", "deep_freeze": "급속 냉동", "hex": "역병의 저주", "scorch": "불바다", "gale": "돌개바람",
+	"solar_spark": "햇빛 파편", "frost_spike": "서리 가시", "magma": "끓는 늪",
 }
 
 ## 영웅별 이름(개정 17 §2 표의 괄호·§3 예시): 영웅 id → {종류: 이름}. 없으면 NAMES.
@@ -197,7 +219,37 @@ const TEXTS := {
 	"counter": "맞으면 {a}% 확률로 공격한 적에게 공격력의 {b}% 피해로 반격합니다.",
 	"haste_aura": "반경 {a}m 안 아군 영웅(자신 포함)의 공격 속도가 {b}% 빨라집니다(여럿이면 가장 큰 것 하나).",
 	"guard_aura": "반경 {a}m 안 아군 영웅(자신 포함)이 받는 피해가 {b}% 줄어듭니다(여럿이면 가장 큰 것 하나).",
-	"regen_aura": "반경 {a}m 안 아군 영웅(자신 포함)이 매초 최대 HP의 {b}%를 회복합니다(여럿이면 가장 큰 것 하나).",
+	"regen_aura": "반경 {a}m 안 아군 영웅(자신 포함)이 매초 최대 HP의 {b}%를 회복합니다(여럿이면 가장 큰 것 하나).",	"ignite": "{a}초마다 사거리 안 적 최대 {b}마리에게 불을 붙여 3초 동안 매초 공격력의 {c}% 화상 피해를 줍니다.",
+	"piercing_shot": "{a}초마다 대상 쪽으로 길이 {b}m를 꿰뚫는 화살을 쏘아 닿는 적 모두에게 공격력의 {c}% 피해를 줍니다.",
+	"blood_rage": "{a}초마다 포효하며 {b}초 동안 공격 속도가 {c}% 빨라집니다.",
+	"frost_chain": "{a}초마다 대상에게 얼음 번개를 쏘아 가까운 적으로 {b}번 튕기며, 맞은 적마다 공격력의 {c}% 피해를 주고 2초 동안 40% 늦춥니다.",
+	"rend": "{a}초마다 대상을 난도질해 공격력의 {b}% 피해를 주고 3초 동안 매초 공격력의 {c}% 출혈 피해를 줍니다.",
+	"bulwark": "{a}초마다 방패를 세워 {b}초 동안 받는 피해를 {c}% 줄입니다.",
+	"crushing_blow": "{a}초마다 대상에게 공격력의 {b}% 일격을 내리치고 {c}m 밀쳐냅니다.",
+	"sunder": "{a}초마다 주변 반경 {b}m 적을 베어 공격력의 100% 피해를 주고 4초 동안 받는 피해를 {c}% 늘립니다.",
+	"shield_bash": "{a}초마다 방패로 주변 반경 {b}m 적을 밀쳐 공격력의 {c}% 피해를 주고 1초 기절시킵니다.",
+	"snare": "{a}초마다 대상 위치에 덫을 던져 반경 {b}m 적에게 공격력의 50% 피해를 주고 {c}초 동안 묶습니다.",
+	"blade_flurry": "{a}초마다 대상을 {b}번 연달아 베어 각각 공격력의 {c}% 피해를 줍니다.",
+	"parry": "{a}초마다 {b}초 동안 받는 공격을 모두 막고, 막을 때마다 공격한 적에게 공격력의 {c}% 피해로 반격합니다.",
+	"fire_bolt": "{a}초마다 대상에게 화염탄을 쏘아 공격력의 {b}% 피해를 주고 3초 동안 매초 공격력의 {c}% 화상 피해를 줍니다.",
+	"firespread": "{a}초마다 대상 위치 반경 {b}m에 불길을 번지게 해 공격력의 {c}% 피해를 주고 3초 동안 매초 공격력의 15% 화상 피해를 줍니다.",
+	"axe_volley": "{a}초마다 사거리 안 적 최대 {b}마리에게 도끼를 던져 각각 공격력의 {c}% 피해를 줍니다.",
+	"boomerang": "{a}초마다 대상 쪽으로 길이 {b}m 회전 도끼를 던져 닿는 적에게 공격력의 {c}% 피해를 주고 1.5m 밀쳐냅니다.",
+	"spear_sweep": "{a}초마다 창을 크게 휘둘러 앞쪽 {b}m 부채꼴 적에게 공격력의 {c}% 피해를 주고 1m 밀쳐냅니다.",
+	"drain_slash": "{a}초마다 대상을 베어 공격력의 {b}% 피해를 주고 준 피해의 {c}%만큼 HP를 회복합니다.",
+	"volley": "{a}초마다 대상에게 화살 {b}발을 연달아 쏘아 각각 공격력의 {c}% 피해를 줍니다.",
+	"wide_swing": "{a}초마다 도끼를 크게 휘둘러 주변 반경 {b}m 적에게 공격력의 {c}% 피해를 줍니다.",
+	"cheap_shot": "{a}초마다 대상의 급소를 찔러 공격력의 {b}% 피해를 주고 {c}초 기절시킵니다.",
+	"crescent": "{a}초마다 앞쪽 {b}m 부채꼴에 초승달 참격을 날려 공격력의 {c}% 피해를 줍니다.",
+	"lunar_veil": "{a}초마다 대상 위치 반경 {b}m에 달빛을 내려 공격력의 80% 피해를 주고 3초 동안 공격력을 {c}% 낮춥니다.",
+	"howl": "{a}초마다 포효해 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 최대 HP의 {c}%만큼 회복합니다.",
+	"deep_freeze": "{a}초마다 사거리 안 적 최대 {b}마리를 {c}초 동안 얼립니다.",
+	"hex": "{a}초마다 대상 위치 반경 {b}m 적에게 4초 동안 저주를 걸어 매초 공격력의 {c}% 피해를 줍니다.",
+	"scorch": "공격이 {a}% 확률로 맞은 자리 반경 {b}m를 3초 동안 불태워 안의 적에게 매초 공격력의 {c}% 피해를 줍니다.",
+	"gale": "공격이 {a}% 확률로 맞은 자리에 회오리를 일으켜 3초 동안 반경 {b}m 안 적에게 매초 공격력의 {c}% 피해를 주고 늦춥니다.",
+	"solar_spark": "공격이 {a}% 확률로 맞은 자리에 섬광을 터뜨려 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 3초 동안 공격력을 30% 낮춥니다.",
+	"frost_spike": "공격이 {a}% 확률로 대상 쪽으로 길이 {b}m 얼음 가시를 솟게 해 공격력의 {c}% 피해를 주고 0.8초 얼립니다.",
+	"magma": "공격이 {a}% 확률로 맞은 자리에 용암을 뿜어 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 밀쳐냅니다.",
 }
 
 

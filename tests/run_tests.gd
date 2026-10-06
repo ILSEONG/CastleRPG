@@ -12,6 +12,7 @@ const Art := preload("res://scripts/art.gd")
 const MeshKitScript := preload("res://scripts/mesh_kit.gd")
 const TownKitScript := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
 const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
@@ -221,11 +222,11 @@ func test_game_tables() -> void:
 	var w := GameData.hero("hans")
 	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
 		and w.color == "#95A5A6" and w.hp == 396.0 and w.atk == 23.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
-		and w.skills == {"lifesteal": [10.0, 0.0, 0.0], "dmg_reduce": [10.0, 0.0, 0.0]}, "hans row (R: two skills)")
+		and w.skills == {"drain_slash": [8.0, 150.0, 50.0], "dmg_reduce": [10.0, 0.0, 0.0]}, "hans row (R: two skills)")
 	var a := GameData.hero("arteon")
 	check(a.skills == {"sanctuary": [9.0, 5.0, 4.0], "guard_aura": [6.0, 15.0, 0.0], "holy_smite": [8.0, 250.0, 50.0]} and a.desc.begins_with("성문 앞을"),
 		"arteon row: three skills in column order, empty numbers are 0, desc")
-	check(GameData.hero("hans").skills.size() == 2 and GameData.hero("ignis").skills.keys() == ["aoe_blast", "poison", "haste"], "an empty skill3 is no skill (R)")
+	check(GameData.hero("hans").skills.size() == 2 and GameData.hero("ignis").skills.keys() == ["aoe_blast", "haste", "ignite"], "an empty skill3 is no skill (R)")
 	check(GameData.hero("nobody").is_empty(), "unknown hero is empty")
 	var res := GameData.resources()
 	check(res.size() == 3 and res[0].id == "wood" and res[1].id == "stone" and res[2].id == "food", "resources keep file order")
@@ -302,13 +303,13 @@ func _remote_checks() -> int:
 	p.config.keep_interior_tiers = "1:20|3:24|6:28"
 	p.config.starter_heroes = "jack|kyle"
 	p.heroes[1].s1a = 5  # 서버 행처럼: 숫자는 숫자, 빈 칸은 null
+	p.heroes[1].s2b = null
 	p.heroes[1].s2c = null
-	p.heroes[1].s3b = null
 	p.heroes[17].skill3 = null  # 한스(R): 셋째 칸 없음
 	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
 	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 36 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
-	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "poison": [40.0, 3.0, 0.0], "haste": [25.0, 0.0, 0.0]}
+	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
 		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(2) == 4 and GameData.hero_slots(3) == 8 and GameData.interior_tiles(6) == 28, "remote config replaces the table")
@@ -388,10 +389,10 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"gacha rate above 1": q.config.gacha_dia_ssr = "1.5"
 		"gacha rates sum above 1": q.config.gacha_dia_sr = "0.98"
 		"a grade with no heroes": q.heroes = q.heroes.filter(func(h): return h.grade != "SR")  # roll_gacha가 빈 풀에서 깨진다
-		"multishot 0": q.heroes[2].s1a = 0  # 실바나: slice(0, -1)
+		"multishot 0": q.heroes[2].s2a = 0  # 실바나: slice(0, -1)
 		"skill cooldown 0": q.heroes[1].s1a = 0  # 이그니스 aoe_blast: 매 프레임 폭발
-		"haste -100": q.heroes[1].s3a = -100  # 이그니스 haste: 간격 ÷ 0
-		"stun every 2.5th attack": q.heroes[16].s1a = 2.5  # 펠릭스
+		"haste -100": q.heroes[1].s2a = -100  # 이그니스 haste: 간격 ÷ 0
+		"stun every 2.5th attack": q.heroes[16].s2a = 2.5  # 펠릭스
 		"hero attack interval 0": q.heroes[0].atk_interval = 0
 		"hero hp negative": q.heroes[0].hp = -5
 		"upgrade unit unknown": q.upgrades[0].unit = "percent"
@@ -1468,7 +1469,12 @@ func test_heroes_table() -> void:
 			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
 	check(grades == {"SSR": 16, "SR": 12, "R": 8}, "grades 16/12/8: %s" % grades)
 	# crit 스킬은 영웅 표에서 뺐다(성장 치명타와 헷갈리지 않게) — 종류는 남아 있어 표에 다시 쓸 수 있다
-	check(used.size() == Skills.KINDS.size() - 1 and not used.has("crit"), "every skill kind but crit is used: %d/%d" % [used.size(), Skills.KINDS.size()])
+	# 2026-10-06 재구성: 영웅 36명 × 고유 스킬 100종(예전 패시브 종류 일부는 표에서 빠졌지만 종류는 남아 있다)
+	check(used.size() == 100 and not used.has("crit"), "100 distinct skill kinds on heroes: %d" % used.size())
+	for h in hs:  # SSR·SR = 액티브·패시브·액티브, R = 액티브·패시브
+		var ks: Array = h.skills.keys()
+		var want: Array = [true, false] if h.grade == "R" else [true, false, true]
+		check(ks.map(func(k): return HeroSkillsScript.is_active(k)) == want, "hero %s: active/passive slots %s" % [h.id, ks])
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
@@ -2631,9 +2637,9 @@ func test_skill_unlock() -> void:
 	check(range(3).map(func(i): return GameData.skill_unlock_star(i)) == [0, 3, 5], "unlock stars: skill1 0, skill2 3, skill3 5")
 	var se := GameData.hero("seraphine")
 	var by_star := range(6).map(func(p): return GameData.active_skills(se, p).keys())
-	check(by_star == [["chain"], ["chain"], ["chain"], ["chain", "slow"], ["chain", "slow"], ["chain", "slow", "frost_nova"]], "SSR seraphine: chain, +slow at 3, +frost_nova at 5: %s" % [by_star])
+	check(by_star == [["frost_nova"], ["frost_nova"], ["frost_nova"], ["frost_nova", "slow"], ["frost_nova", "slow"], ["frost_nova", "slow", "frost_chain"]], "SSR seraphine: frost_nova, +slow at 3, +frost_chain at 5: %s" % [by_star])
 	var hans := GameData.hero("hans")
-	check(GameData.active_skills(hans, 0).keys() == ["lifesteal"] and GameData.active_skills(hans, 3).keys() == ["lifesteal", "dmg_reduce"]
+	check(GameData.active_skills(hans, 0).keys() == ["drain_slash"] and GameData.active_skills(hans, 3).keys() == ["drain_slash", "dmg_reduce"]
 		and GameData.active_skills(hans, 5).size() == 2, "R hans: skill2 at 3, nothing more at 5")
 	check(GameData.active_skills(se, 5) == se.skills and GameData.active_skills({}, 5).is_empty(), "everything unlocked at 5 equals the table; no skills -> empty")
 	var counts := {"SSR": 0, "SR": 0, "R": 0}
@@ -2646,14 +2652,14 @@ func test_skill_unlock() -> void:
 	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 61.0, 0.0, 0.2, false), 61.0)
 		and is_equal_approx(Skills.damage(GameData.active_skills(kyle, 3), 61.0, 0.0, 0.2, false), 61.0 * 2.0), "kyle: execute (skill2) only adds damage from 3")
 	var felix := GameData.hero("felix")
-	check(Skills.stuns(GameData.active_skills(felix, 0), 4) and not GameData.active_skills(felix, 2).has("spear_throw") and GameData.active_skills(felix, 3).has("spear_throw"),
-		"felix: stun (skill1) from 0, spear_throw (skill2) only from 3")
+	check(GameData.active_skills(felix, 0).has("spear_throw") and not Skills.stuns(GameData.active_skills(felix, 2), 4) and Skills.stuns(GameData.active_skills(felix, 3), 4),
+		"felix: spear_throw (skill1) from 0, stun (skill2) only from 3")
 	var jack := GameData.hero("jack")
-	check(Skills.incoming(GameData.active_skills(jack, 0), 100.0, 0.0) == Vector2.ZERO and GameData.active_skills(jack, 3).has("opportunist") and not GameData.active_skills(jack, 0).has("opportunist"),
-		"jack: dodge (skill1) at 0, opportunist (skill2) only from 3")
+	check(Skills.incoming(GameData.active_skills(jack, 0), 100.0, 0.0) == Vector2(100.0, 0.0) and Skills.incoming(GameData.active_skills(jack, 3), 100.0, 0.0) == Vector2.ZERO
+		and GameData.active_skills(jack, 0).has("cheap_shot"), "jack: cheap_shot (skill1) at 0, dodge (skill2) only from 3")
 	var ig := GameData.hero("ignis")
-	check(Skills.interval(GameData.active_skills(ig, 4), 1.2, 1.0) == 1.2 and is_equal_approx(Skills.interval(GameData.active_skills(ig, 5), 1.2, 1.0), 1.2 / 1.25),
-		"ignis: haste (skill3) only from 5")
+	check(Skills.interval(GameData.active_skills(ig, 2), 1.2, 1.0) == 1.2 and is_equal_approx(Skills.interval(GameData.active_skills(ig, 3), 1.2, 1.0), 1.2 / 1.25),
+		"ignis: haste (skill2) only from 3")
 	check(GameData.hero_stats(ig, 1, 3).hp == float(ig.hp) * GameData.promote_mult(3), "stats do not depend on unlocked skills")
 	check(Skills.name_of("poison", "ignis") == "화상" and Skills.name_of("poison", "mira") == "독" and Skills.name_of("aoe_blast") == "폭발", "per-hero skill names (ignis poison = 화상)")
 	check(GameData.fx_shake(), "fx_shake is on by default")

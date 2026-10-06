@@ -235,7 +235,7 @@ func is_on_wall() -> bool:
 func take_damage(amount: float, source = null) -> void:
 	if state == State.DEAD or (castle != null and GameState.mode == GameState.Mode.IDLE):
 		return
-	amount = _skx.incoming(amount)  # 금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·보호막
+	amount = _skx.incoming(amount, source)  # 받아치기·방벽·금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·보호막
 	if amount <= 0.0:
 		return
 	var r := Skills.incoming(_sk, amount, randf())
