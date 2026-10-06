@@ -13,7 +13,7 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
 const TRAIN_N := 1  # 보병 훈련 미션 보상이 대는 마릿수(튜토리얼 훈련은 1마리씩, 5초 — Economy.tutorial_training)
@@ -59,6 +59,8 @@ const MISSIONS := [
 		"kind": "dungeon", "arg": "gold", "goto": "tab:dungeon"},
 	{"id": "dungeon_equip", "title": "장비 던전", "desc": "[던전] 탭에서 장비 던전 1단계를 클리어해 장비를 얻으세요.", "kind": "dungeon", "arg": "equip",
 		"goto": "tab:dungeon"},
+	{"id": "dungeon_ticket", "title": "모집권 던전", "desc": "[던전] 탭에서 모집권 던전 1단계를 클리어하세요. 내 영웅 4명과 친구(없으면 추천) 도우미 1명이 바위 골렘과 싸우고, 다이아 모집권을 얻어요.",
+		"kind": "dungeon", "arg": "ticket", "goto": "tab:dungeon"},
 	{"id": "equip", "title": "장비 장착", "desc": "[영웅] 탭에서 영웅을 골라 얻은 장비를 장착하세요.", "kind": "equip", "goto": "tab:hero"},
 	{"id": "soldier_deploy", "title": "병사 배치", "desc": "훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5명은 합성해 상위 티어로 만듭니다.",
 		"kind": "soldier_deploy", "goto": "tab:soldier"},
@@ -104,6 +106,10 @@ const REPEAT_DESC := {
 ## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
 const TAB_MISSION := {"hero": "hero_level", "growth": "growth", "recruit": "gacha", "dungeon": "dungeon_gold", "soldier": "soldier_deploy",
 	"guild": "guild"}
+## 던전 → 그 던전을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 [던전] 탭의 그 카드가 열린다).
+const DUNGEON_MISSION := {"gold": "dungeon_gold", "equip": "dungeon_equip", "ticket": "dungeon_ticket"}
+## 튜토리얼 훈련(1마리·5초)은 이 미션까지만 — 보병 훈련 미션을 넘기면 원래 훈련 시간(사용자 2026-10-06 "훈련 튜토리얼 끝나도 계속 5초인 버그").
+const TRAIN_MISSION := "train"
 
 signal changed  # 미션·완료·보상 상태가 바뀌었다
 signal goto_requested(target: String)  # 카드 [바로가기] — main이 처리한다(건물 창·탭·상인·전투 시작)
@@ -249,10 +255,10 @@ func active() -> bool:
 	return state == "active"
 
 
-## 튜토리얼 동안 Economy 훈련을 1마리·5초로(끝나거나 건너뛰면 원래대로).
+## 보병 훈련 미션까지 Economy 훈련을 1마리·5초로(그 미션을 넘기거나 끝내거나 건너뛰면 원래대로).
 func _sync_training() -> void:
 	if econ != null:
-		econ.tutorial_training = active()
+		econ.tutorial_training = active() and step <= mission_index(TRAIN_MISSION)
 
 
 func mission() -> Dictionary:
@@ -339,6 +345,19 @@ func tab_locked(tab_id: String) -> bool:
 	if not active() or not TAB_MISSION.has(tab_id):
 		return false
 	return step < mission_index(TAB_MISSION[tab_id])
+
+
+## 던전이 잠겼는가: 튜토리얼 중이고 그 던전을 소개하는 미션에 아직 닿지 않았다.
+func dungeon_locked(type: String) -> bool:
+	if not active() or not DUNGEON_MISSION.has(type):
+		return false
+	return step < mission_index(DUNGEON_MISSION[type])
+
+
+## 잠긴 던전 카드 문구: "튜토리얼 「장비 던전」 미션에서 열립니다".
+func dungeon_lock_text(type: String) -> String:
+	var i := mission_index(str(DUNGEON_MISSION.get(type, "")))
+	return "튜토리얼 「%s」 미션에서 열립니다" % MISSIONS[i].title if i >= 0 else LOCKED_TEXT
 
 
 ## 사건 알림(수집·판매·모집·건물 창 열기). 지금 미션의 종류와 같으면 센다.
@@ -470,6 +489,8 @@ static func reward_text(r: Dictionary) -> String:
 		parts.append("골드 던전 입장권 %d" % int(r.keys_gold))
 	if r.has("keys_equip"):
 		parts.append("장비 던전 입장권 %d" % int(r.keys_equip))
+	if r.has("keys_ticket"):
+		parts.append("모집권 던전 입장권 %d" % int(r.keys_ticket))
 	if r.has("tickets"):
 		parts.append("다이아 모집권 %d" % int(r.tickets))
 	return " · ".join(parts)
@@ -583,7 +604,10 @@ func load_save() -> bool:
 	state = str(d.get("state", "skipped"))
 	if not state in ["active", "done", "skipped"]:
 		state = "skipped"
-	step = clampi(int(d.get("step", 0)), 0, MISSIONS.size())
+	var old_step := int(d.get("step", 0))
+	if int(d.get("version", 1)) < 2 and old_step > mission_index("dungeon_ticket") - 1:
+		old_step += 1  # 버전 1은 모집권 던전 미션이 없었다: 장비 던전을 넘긴 진행은 그대로 이어지게
+	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))
 	rep_n = maxi(0, int(d.get("rep_n", 0)))

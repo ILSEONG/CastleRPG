@@ -131,6 +131,7 @@ func _init() -> void:
 	test_scene_snap()
 	test_crowd()
 	test_research_r24()
+	test_free_finish()
 	test_offline_gold()
 	test_mesh_merge()
 	test_guild()
@@ -4313,6 +4314,30 @@ func _worst_overlap(p: PackedVector2Array, radii: Array) -> float:
 ## 개정 24 연구: 표(22행·파일 순서·빈 선행), 비용·시간·속도 공식(서버 research.test와 같은 값), 효과 합(같은 효과끼리 더함·최대로 자름),
 ## 잠금·이유 코드 순서, 오프라인 시작(즉시 차감)·한 번에 하나·게으른 완료·취소 환불·다이아 즉시 완료, 서버 권위 효과의 오프라인 반영
 ## (생산·건설·판매·처치 골드·훈련 시간·비용·인구)과 성·성문 HP·병종 배율, 저장 v12 왕복·v11 → v12·깨진 v12, 서버 응답(research), 아이콘.
+## 무료 즉시 완료(사용자 2026-10-06, 오프라인): 남은 시간이 5분(free_finish_sec) 이하인 건설·훈련은 [무료 즉시 완료]로 바로 끝난다.
+func test_free_finish() -> void:
+	GameData.load_tables()
+	check(EconomyScript.free_finish_sec() == 300.0 and EconomyScript.free_finish_ok(300.0) and not EconomyScript.free_finish_ok(300.5) and not EconomyScript.free_finish_ok(0.0),
+		"free finish window: 0 < left <= 300 s")
+	var t := Time.get_unix_time_from_system()
+	var e = _econ(t)
+	var built := []
+	e.building_done.connect(func(id, lv): built.append([id, lv]))
+	e.res = {"wood": 100000, "stone": 100000, "food": 100000}
+	e.build = {"id": "keep", "finish": e.time_now() + 600.0}
+	check(not e.can_free_build(e.time_now()) and not e.free_finish_build() and e.building_level("keep") == 1, "10 min left: no free finish")
+	e.build.finish = e.time_now() + 299.0
+	var lv: int = e.building_level("keep")
+	check(e.can_free_build(e.time_now()) and e.free_finish_build() and e.build.is_empty() and e.building_level("keep") == lv + 1 and built == [["keep", lv + 1]],
+		"5 min or less left: free finish completes the building at once")
+	e.train_queues["barracks"] = {"count": 1, "tier": 1, "finish": e.time_now() + 1000.0}
+	check(not e.can_free_train("barracks") and not e.free_finish_training("barracks"), "training with 16 min left: no free finish")
+	e.train_queues["barracks"].finish = e.time_now() + 120.0
+	var before: int = e.soldier_counts().get("infantry:1", 0)
+	check(e.can_free_train("barracks") and e.free_finish_training("barracks") and not e.train_queues.has("barracks") and e.soldier_counts().get("infantry:1", 0) == before + 1,
+		"training with 2 min left: free finish collects the soldier")
+
+
 func test_research_r24() -> void:
 	GameData.load_tables()
 	_legacy_training()
@@ -4367,12 +4392,17 @@ func test_research_r24() -> void:
 		"lazy completion: level +1, research_done, notice '연구 완료: 벌목술 Lv 1'")
 	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 820, "stone": 880, "food": 850} and e.research_current.is_empty()
 		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (120/80/100 -> 60/40/50 back)")
-	e.start_research("wood_tech")  # Lv 1 → 2: 81 s → 다이아 2
-	check(e.research_dia_cost(e.time_now()) == 2 and not e.finish_research_now() and notes[-1] == EconomyScript.NO_DIA_TEXT and e.research_level("wood_tech") == 1,
-		"instant finish needs ceil(81 / 60) = 2 diamonds; with none it is refused")
+	e.start_research("wood_tech")  # Lv 1 → 2: 81 s — 5분 이하라 무료(사용자 2026-10-06). 다이아 비용을 보려고 400초로 늘린다 → 다이아 7
+	check(e.research_dia_cost(e.time_now()) == 0, "81 s left is within the free finish window: 0 diamonds")
+	e.research_current.finish = e.time_now() + 400.0
+	check(e.research_dia_cost(e.time_now()) == 7 and not e.finish_research_now() and notes[-1] == EconomyScript.NO_DIA_TEXT and e.research_level("wood_tech") == 1,
+		"instant finish needs ceil(400 / 60) = 7 diamonds; with none it is refused")
 	e.diamonds = 10
-	check(e.finish_research_now() and e.diamonds == 8 and e.research_level("wood_tech") == 2 and e.research_current.is_empty() and done[-1] == ["wood_tech", 2],
-		"instant finish spends 2 diamonds and completes at once")
+	check(e.finish_research_now() and e.diamonds == 3 and e.research_level("wood_tech") == 2 and e.research_current.is_empty() and done[-1] == ["wood_tech", 2],
+		"instant finish spends 7 diamonds and completes at once")
+	e.start_research("wood_tech")  # Lv 2 → 3: 109 s → 무료
+	check(e.research_dia_cost(e.time_now()) == 0 and e.finish_research_now() and e.diamonds == 3 and e.research_level("wood_tech") == 3 and done[-1] == ["wood_tech", 3],
+		"5 min or less left: instant finish is free")
 	# 서버 권위 효과의 오프라인 반영(서버 research.test와 같은 식)
 	e.research_levels = {"wood_tech": 2, "abundance": 1}  # 목재 +13%
 	e.levels.lumber = 3
@@ -4722,6 +4752,23 @@ func test_tutorial() -> void:
 	t.check()
 	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
 		"tutorial: training is one soldier in 5 s")
+	var step_was: int = t.step
+	t.step = t.mission_index("train") + 1
+	t.check()
+	check(t.active() and not e.tutorial_training and e.train_time("barracks", 1) == 180 * 60.0, "tutorial: past the training mission, training is back to 3 h")
+	t.step = step_was
+	t.check()
+	# 던전 잠금: 그 던전 미션에 닿기 전엔 잠김
+	var locks := []
+	for ty in ["gold", "equip", "ticket"]:
+		var mi: int = t.mission_index(TutorialScript.DUNGEON_MISSION[ty])
+		t.step = mi - 1
+		var before: bool = t.dungeon_locked(ty)
+		t.step = mi
+		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
+	t.step = step_was
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "튜토리얼 「모집권 던전」 미션에서 열립니다" and t.reward(t.mission_index("dungeon_ticket") - 1) == {"keys_ticket": 2},
+		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
@@ -4794,7 +4841,7 @@ func test_tutorial() -> void:
 	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
 	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
 	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 180 * 60.0, "tutorial done: normal training time, still one per order")
-	check(not t.tab_locked("hero") and t.repeating(), "tutorial done: nothing locked, repeat quests")
+	check(not t.tab_locked("hero") and not t.dungeon_locked("ticket") and t.repeating(), "tutorial done: nothing locked, repeat quests")
 	t.free()
 	gs.free()
 	e.free()
@@ -4809,7 +4856,7 @@ func test_tutorial_online() -> void:
 	GameData.load_tables()
 	var enc := func(r: Dictionary) -> String:
 		var parts := []
-		for k in ["wood", "stone", "food", "gold", "diamonds", "tickets", "keys_gold", "keys_equip"]:
+		for k in ["wood", "stone", "food", "gold", "diamonds", "tickets", "keys_gold", "keys_equip", "keys_ticket"]:
 			if r.has(k):
 				parts.append("%s:%d" % [k, int(r[k])])
 		return "|".join(parts)

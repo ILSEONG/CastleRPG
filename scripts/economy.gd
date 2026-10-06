@@ -205,6 +205,7 @@ var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 �
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
+var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
 var _predicts := {}  # 온라인 즉시 반영(수집·판매·건설): 요청 키 → {apply: 서버 상태 위에 그 동작을 다시 하는 Callable, gold: 더한 골드(0.1)}. 응답 전 다른 응답이 와도 apply_server가 다시 얹는다
 var _last_server := {}  # 마지막으로 반영한 서버 응답(거절되면 이것으로 곧바로 되돌린다)
 var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(그동안 다른 응답의 옛 배치로 되돌리지 않는다)
@@ -1286,6 +1287,126 @@ func complete_due(now: float) -> void:
 	building_done.emit(id, levels[id])
 
 
+# --- 무료 즉시 완료(사용자 2026-10-06): 남은 시간이 free_finish_sec초(기본 300) 이하인 건설·훈련·연구는 공짜로 바로 끝낸다 ---
+# 온라인은 곧바로 끝난 것으로 보이고(_predict) 서버가 확인한다(/v1/building/finish·/v1/soldiers/collect {free}·/v1/research/finish — 서버도
+# 같은 기준 + 시계 여유 10초). 거절되면 마지막 서버 상태로 되돌리고 ROLLBACK_TEXT.
+
+## 무료 즉시 완료 기준(초). 설정이 없으면 300.
+static func free_finish_sec() -> float:
+	var v := GameData.config_num("free_finish_sec")
+	return v if v > 0.0 else 300.0
+
+
+## 남은 초 left가 무료 즉시 완료 범위(0 초과 · 기준 이하)인가.
+static func free_finish_ok(left: float) -> bool:
+	return left > 0.0 and left <= free_finish_sec()
+
+
+## 진행 중 건설을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]).
+func can_free_build(now: float) -> bool:
+	return not build.is_empty() and free_finish_ok(build_left(now)) and not _waiting.has("build")
+
+
+## 건설 무료 즉시 완료. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은 곧바로 완료로 보이고 /v1/building/finish(once). 했거나 보냈으면 true.
+func free_finish_build() -> bool:
+	var now := time_now()
+	if not can_free_build(now):
+		return false
+	if net == null:
+		build.finish = now
+		complete_due(now)
+		return true
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var id := str(build.id)
+	_waiting["build"] = true
+	_predict("build", _local_build_done.bind(id))
+	building_done.emit(id, building_level(id))
+	net.send("POST", "/v1/building/finish", {}, _on_build_freed, _on_build_free_failed, true, true)
+	return true
+
+
+## 즉시 반영: 지금 상태에서 id를 짓는 중이면 다 지은 것으로(공터는 Lv 1, 아니면 레벨 +1, 일꾼 비움).
+func _local_build_done(id: String) -> void:
+	if str(build.get("id", "")) != id:
+		return
+	if unbuilt.has(id):
+		unbuilt.erase(id)
+	else:
+		levels[id] = building_level(id) + 1
+	build = {}
+
+
+func _on_build_freed(data: Dictionary) -> void:
+	_waiting.erase("build")
+	_predicts.erase("build")
+	apply_server(data)
+
+
+func _on_build_free_failed() -> void:
+	_waiting.erase("build")
+	_unpredict("build")
+	if net.last_error != "no_build":  # no_build = 서버가 이미 완료했다(응답 유실 뒤 재요청 등) — 새 상태에 보인다
+		notice.emit(ROLLBACK_TEXT)
+	net.refresh()
+	changed.emit()
+
+
+## 훈련을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]).
+func can_free_train(building_id: String) -> bool:
+	var q := training(building_id)
+	return q.count > 0 and not q.ready and free_finish_ok(float(q.finish) - time_now()) and not _waiting.has("collect:" + building_id)
+
+
+## 훈련 무료 즉시 완료 = 바로 수령. 오프라인은 끝나는 시각을 지금으로 두고 수령, 온라인은 곧바로 받은 것으로 보이고
+## /v1/soldiers/collect {building, free: true}(once). 했거나 보냈으면 true.
+func free_finish_training(building_id: String) -> bool:
+	if not can_free_train(building_id):
+		return false
+	if net == null:
+		train_queues[building_id].finish = time_now()
+		return collect_training(building_id)
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var q := training(building_id)
+	var type := GameData.soldier_of_building(building_id)
+	var key := "collect:" + building_id
+	_waiting[key] = true
+	_predict(key, _local_train_collect.bind(building_id, soldier_key(type, q.tier), q.count))
+	soldiers_changed.emit()
+	training_changed.emit()
+	_announce(type, q.count)
+	net.send("POST", "/v1/soldiers/collect", {"building": building_id, "free": true}, _on_train_freed.bind(key), _on_train_free_failed.bind(key), true, true)
+	return true
+
+
+## 즉시 반영: 그 건물 대기열이 그대로면 병사 += count, 대기열 비움.
+func _local_train_collect(building_id: String, k: String, count: int) -> void:
+	if not train_queues.has(building_id) or int(train_queues[building_id].count) != count:
+		return
+	soldiers[k] = int(soldiers.get(k, 0)) + count
+	train_queues.erase(building_id)
+
+
+func _on_train_freed(data: Dictionary, key: String) -> void:
+	_waiting.erase(key)
+	_predicts.erase(key)
+	apply_server(data)
+	training_changed.emit()
+
+
+func _on_train_free_failed(key: String) -> void:
+	_waiting.erase(key)
+	_unpredict(key)
+	if net.last_error != "empty":  # empty = 이미 받았다
+		notice.emit(ROLLBACK_TEXT)
+	net.refresh()
+	soldiers_changed.emit()
+	training_changed.emit()
+
+
 ## 테스트 훅(입력·통합 체크): 진행 중 건설을 지금 끝낸다. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은
 ## POST /v1/test/build_now(ALLOW_TEST_HOOKS 서버만)의 응답을 반영한다(완료는 서버가, building_done은 apply_server가).
 func finish_build_now() -> void:
@@ -1712,6 +1833,8 @@ func finish_research_now() -> bool:
 		notice.emit(NO_DIA_TEXT)
 		return false
 	if net != null:
+		if research_dia_cost(time_now()) == 0:
+			return _free_research_online()
 		return _research_online("finish", {})
 	diamonds -= research_dia_cost(time_now())
 	_research_complete()
@@ -1761,9 +1884,49 @@ func research_progress(now: float) -> float:
 	return clampf(1.0 - research_left(now) / total, 0.0, 1.0) if total > 0.0 else 1.0
 
 
-## 다이아 즉시 완료 비용(없으면 0) = max(1, ceil(남은 초 / 60) × research_dia_per_min).
+## 다이아 즉시 완료 비용(없으면 0) = max(1, ceil(남은 초 / 60) × research_dia_per_min). 남은 시간이 무료 기준 이하면 0(사용자 2026-10-06).
 func research_dia_cost(now: float) -> int:
-	return GameData.research_dia_cost(research_left(now)) if not research_current.is_empty() else 0
+	if research_current.is_empty() or free_finish_ok(research_left(now)):
+		return 0
+	return GameData.research_dia_cost(research_left(now))
+
+
+## 연구 무료 즉시 완료(온라인): 곧바로 완료로 보이고(레벨 +1·알림) /v1/research/finish(once, 서버도 0 다이아). 거절되면 되돌린다.
+func _free_research_online() -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var id := str(research_current.id)
+	_waiting["research"] = true
+	_predict("research", _local_research_done.bind(id))
+	research_changed.emit()
+	_announce_research(id)
+	net.send("POST", "/v1/research/finish", {}, _on_research_freed, _on_research_free_failed, true, true)
+	return true
+
+
+## 즉시 반영: 지금 id를 연구 중이면 레벨 +1, 비움.
+func _local_research_done(id: String) -> void:
+	if str(research_current.get("id", "")) != id:
+		return
+	research_levels[id] = research_level(id) + 1
+	research_current = {}
+
+
+func _on_research_freed(data: Dictionary) -> void:
+	_waiting.erase("research")
+	_predicts.erase("research")
+	apply_server(data)
+	research_changed.emit()
+
+
+func _on_research_free_failed() -> void:
+	_waiting.erase("research")
+	_unpredict("research")
+	if net.last_error != "no_research":  # no_research = 서버가 이미 완료했다
+		notice.emit(ROLLBACK_TEXT)
+	net.refresh()
+	research_changed.emit()
 
 
 ## 월드 말풍선(스펙 §5): 진행 중인 연구가 없고 지금 시작할 수 있는 노드가 있다.
@@ -2166,10 +2329,10 @@ func equip_waiting() -> bool:
 	return _waiting.has("equip")
 
 
-## 장비 자동착용(영웅 상세 [장비 자동착용]): auto_equip_plan을 낀다. 오프라인은 한 번에 저장, 온라인은 /v1/equip를 부위마다 차례로
-## (앞 응답이 오면 다음 — 그동안 equip_block = "waiting"). 바꾼(보낸) 부위 수, 못 하면 0.
+## 장비 자동착용(영웅 상세 [장비 자동착용]): auto_equip_plan을 한 번에 낀다. 오프라인은 곧바로 저장, 온라인도 곧바로 보이게 끼고
+## /v1/equip/many 한 번으로 확인한다(거절·유실이면 되돌리고 알림). 바꾼 부위 수, 못 하면 0.
 func auto_equip(hero_id: String) -> int:
-	if _waiting.has("equip"):
+	if _waiting.has("equip") or _equip_predicts.has(hero_id):
 		return 0
 	var plan := auto_equip_plan(hero_id)
 	if plan.is_empty():
@@ -2178,9 +2341,14 @@ func auto_equip(hero_id: String) -> int:
 		if not net.up:
 			notice.emit(WAIT_TEXT)
 			return 0
-		_waiting["equip"] = true
-		_auto_equip_send(hero_id, plan.duplicate())
-		items_changed.emit()
+		var list := []
+		for s in plan:
+			list.append({"slot": s, "item_id": plan[s]})
+		var before := equipment.duplicate(true)
+		_equip_predicts[hero_id] = plan.duplicate()
+		_apply_equip_predicts()
+		_equip_signals(before)
+		net.send("POST", "/v1/equip/many", {"hero_id": hero_id, "items": list}, _on_auto_equipped.bind(hero_id), _on_auto_equip_failed.bind(hero_id))
 		return plan.size()
 	var eq: Dictionary = equipment.get(hero_id, {})
 	for s in plan:
@@ -3055,21 +3223,47 @@ func _equip_online(hero_id: String, slot: String, item_id) -> bool:
 	return true
 
 
-## 자동착용 남은 부위 하나를 보낸다(rest에서 뺀다). 실패하면 _on_equip_failed가 나머지를 버린다.
-func _auto_equip_send(hero_id: String, rest: Dictionary) -> void:
-	var s: String = rest.keys()[0]
-	var id: int = rest[s]
-	rest.erase(s)
-	net.send("POST", "/v1/equip", {"hero_id": hero_id, "slot": s, "item_id": id}, _on_auto_equipped.bind(hero_id, rest), _on_equip_failed)
+## 응답 안 온 자동착용을 지금 equipment 위에 다시 얹는다(서버와 같이: 다른 영웅이 끼고 있으면 옮긴다). 신호 없음.
+func _apply_equip_predicts() -> void:
+	for hid in _equip_predicts:
+		var plan: Dictionary = _equip_predicts[hid]
+		var eq := equipment.duplicate(true)
+		for other in eq.keys():
+			for s in eq[other].keys():
+				if int(eq[other][s]) in plan.values() and not (other == hid and plan.get(s) == int(eq[other][s])):
+					eq[other].erase(s)
+			if eq[other].is_empty():
+				eq.erase(other)
+		var mine: Dictionary = eq.get(hid, {})
+		for s in plan:
+			mine[s] = plan[s]
+		eq[hid] = mine
+		equipment = eq
 
 
-func _on_auto_equipped(data: Dictionary, hero_id: String, rest: Dictionary) -> void:
+func _equip_signals(before: Dictionary) -> void:
+	if equipment != before:
+		items_changed.emit()
+		roster_changed.emit()  # 장비가 바뀌면 영웅 능력치가 바뀐다
+
+
+func _on_auto_equipped(data: Dictionary, hero_id: String) -> void:
+	_equip_predicts.erase(hero_id)
 	apply_server(data)
-	if rest.is_empty():
-		_waiting.erase("equip")
-	else:
-		_auto_equip_send(hero_id, rest)
 	items_changed.emit()
+
+
+## 거부(409 wrong_slot·wrong_weapon, 404, 400)나 응답 유실: 즉시 반영을 빼고 마지막 서버 상태로 되돌린 뒤 알림 + 상태를 새로 받는다.
+func _on_auto_equip_failed(hero_id: String) -> void:
+	if not _equip_predicts.has(hero_id):
+		return
+	_equip_predicts.erase(hero_id)
+	var before := equipment.duplicate(true)
+	if not _last_server.is_empty():
+		apply_server(_last_server)
+	_equip_signals(before)
+	notice.emit(EQUIP_TEXT.get(net.last_error, ROLLBACK_TEXT))
+	net.refresh()
 
 
 func _on_equipped(data: Dictionary) -> void:
@@ -3180,6 +3374,7 @@ func _apply_server18(p: Dictionary) -> void:
 		bag = _item_list(p.items)
 	if p.get("equipment") is Dictionary:
 		equipment = _equipment_dict(p.equipment, bag)
+	_apply_equip_predicts()
 	if dungeons != before[0]:
 		dungeons_changed.emit()
 	if bag != before[1] or equipment != before[2]:

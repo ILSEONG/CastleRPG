@@ -192,16 +192,18 @@ test('다이아 즉시 완료: 비용 = max(1, ceil(남은 초 / 60) × 1), 모�
   await setGold(id, 500 * 10)
   await setLevel(id, 'lab', 3)
   await setResearch(id, { wood_tech: 3, stone_tech: 3 })
-  assert.equal((await start(token, 'construct')).status, 200) // 288초 → 5 다이아
-  await setDia(id, 4)
+  assert.equal((await start(token, 'construct')).status, 200) // 288초
+  // 5분 이하는 무료(free_finish.test.ts)라 다이아 비용을 보려고 끝나는 시각을 1000초 뒤로 늘린다 → 17 다이아
+  await S.db.query('update player_state set research_finish = to_timestamp($2::float8) where player_id = $1', [id, T0 + 1000])
+  await setDia(id, 16)
   r = await S.req('POST', '/v1/research/finish', { token })
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_diamonds'])
   let p = await player(token)
-  assert.deepEqual([p.diamonds, p.research.current], [4, { id: 'construct', finish: T0 + 288 }])
-  S.clock.t = T0 + 48 // 남은 240초 → 4 다이아
+  assert.deepEqual([p.diamonds, p.research.current], [16, { id: 'construct', finish: T0 + 1000 }])
+  S.clock.t = T0 + 280 // 남은 720초 → 12 다이아
   r = await S.req('POST', '/v1/research/finish', { token, body: {} })
-  assert.deepEqual([r.status, r.json.diamonds_spent, r.json.player.diamonds, r.json.player.research], [200, 4, 0, { levels: { wood_tech: 3, stone_tech: 3, construct: 1 }, current: null }])
-  assert.deepEqual((await logs(id)).at(-1), { action: 'finish', id: 'construct', level: 1, diamonds: 4 })
+  assert.deepEqual([r.status, r.json.diamonds_spent, r.json.player.diamonds, r.json.player.research], [200, 12, 4, { levels: { wood_tech: 3, stone_tech: 3, construct: 1 }, current: null }])
+  assert.deepEqual((await logs(id)).at(-1), { action: 'finish', id: 'construct', level: 1, diamonds: 12 })
   S.clock.t = T0 + 1000 // 이미 끝났으니 자동 완료가 다시 오르지 않는다
   p = await player(token)
   assert.equal(p.research.levels.construct, 1)
