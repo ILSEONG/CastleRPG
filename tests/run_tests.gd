@@ -1770,13 +1770,13 @@ func test_damage_numbers() -> void:
 func test_hero_levels() -> void:
 	GameData.load_tables()
 	var hans := GameData.hero("hans")
-	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.54) and is_equal_approx(GameData.level_mult(70), 5.14), "level x(1 + 0.06 x (L - 1))")
-	check(GameData.level_mult(1, "melee") == 1.0 and is_equal_approx(GameData.level_mult(10, "melee"), 1.405) and is_equal_approx(GameData.level_mult(10, "ranged"), 1.54),
-		"melee heroes grow slower: x(1 + 0.045 x (L - 1))")
-	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.405 × 1.5², 23 × 1.405 × 1.5²
-	check(is_equal_approx(st.hp, 396.0 * 1.405 * 2.25) and is_equal_approx(st.atk, 23.0 * 1.405 * 2.25), "stats = base x level mult x promotion mult (1.5^p on base and level-ups alike): %s" % [st])
+	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.378) and is_equal_approx(GameData.level_mult(70), 3.898), "level x(1 + 0.042 x (L - 1))")
+	check(GameData.level_mult(1, "melee") == 1.0 and is_equal_approx(GameData.level_mult(10, "melee"), 1.2835) and is_equal_approx(GameData.level_mult(10, "ranged"), 1.378),
+		"melee heroes grow slower: x(1 + 0.0315 x (L - 1))")
+	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.2835 × 1.5², 23 × 1.2835 × 1.5²
+	check(is_equal_approx(st.hp, 396.0 * 1.2835 * 2.25) and is_equal_approx(st.atk, 23.0 * 1.2835 * 2.25), "stats = base x level mult x promotion mult (1.5^p on base and level-ups alike): %s" % [st])
 	check(GameData.hero_power(hans, 1, 0) == 97 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 248 \
-		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 3.16125 / 10.0 + 23.0 * 3.16125 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 146,
+		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.887875 / 10.0 + 23.0 * 2.887875 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 146,
 		"power = round(HP / 10 + atk x 2 / interval): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
@@ -1905,7 +1905,7 @@ func test_promotion() -> void:
 	check(e2.gold_tenths == 5 and e2.shards_of("hans") == 3 and e2.promotion_of("hans") == 0 and e2.shards_of("ignis") == 0 and e2.level_of("hans") == 9 and e2.heroes == {"hans": 4, "ignis": 1},
 		"save v5 -> v6: old stars become shards (copies - 1 = 3), promotion 0, levels kept")
 	var hp_v5: float = GameData.hero_stats(GameData.hero("hans"), 9, e2.promotion_of("hans")).hp
-	check(is_equal_approx(hp_v5, 396.0 * 1.36), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
+	check(is_equal_approx(hp_v5, 396.0 * 1.252), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
 	var v6 := v5.duplicate(true)
 	v6.version = 6
 	_write(ECON_TMP, JSON.stringify(v6))  # v6인데 shards·promotion이 없다
@@ -3335,7 +3335,7 @@ func test_dungeon_tables() -> void:
 		"fresh dungeon = today's keys; extra run cost 5000 x (1 + runs today); party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
-	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.045 + 12.0)
+	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
 		and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0} and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) == roundi(49.6 + 35.0 * 2.0 / 0.8),
 		"hero stats add the equipment total flat after the multipliers (no source, no equipment: unchanged)")
 

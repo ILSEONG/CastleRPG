@@ -603,10 +603,10 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _frames(2)
 	_check(heroes_win.is_showing_detail() and heroes_win.detail_id == "arteon" and heroes_win.is_guarded() and heroes_win.work == ["ella", "arteon", "dorik", "nina"],
 		"(x) a card tap (no slot picked) opens its detail and re-arms the open guard", "detail=%s" % heroes_win.detail_id)
-	_check(heroes_win.stat_values[0].text == "1,404" and heroes_win.stat_nexts[0].text == "→ 1,467 (+63)" and heroes_win.stat_values[1].text == "48"
+	_check(heroes_win.stat_values[0].text == "1,404" and heroes_win.stat_nexts[0].text == "→ 1,448 (+44)" and heroes_win.stat_values[1].text == "48"
 		and heroes_win.stat_nexts[1].text == "→ 50 (+2)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
 		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 30",
-		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,404 -> 1,467 (+63), melee growth 4.5%); Lv 1 / 30 at promotion 1",
+		"(x) stats with the promotion bonus x1.5 and the next level in green (HP 1,404 -> 1,448 (+44), melee growth 3.15%); Lv 1 / 30 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
 	_check(sk[0].contains("9초마다 3초 동안 반경 5m") and sk[1] == "수호의 오라 — ★3에서 해금" and sk[2] == "심판의 빛 — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
@@ -630,13 +630,13 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	live.sort_custom(func(a, b): return a.index < b.index)
 	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 30"
-		and heroes_win.stat_values[0].text == "1,467" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
+		and heroes_win.stat_values[0].text == "1,448" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
 		"(x) [레벨업] takes 120 gold (1200 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
-	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 936.0 * 1.045 * 1.5)
-		and is_equal_approx(live[1].atk, 32.0 * 1.045 * 1.5) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
-		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.045, melee) x 1.5", "hp=%.1f" % live[1].hp_max)
+	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 936.0 * 1.0315 * 1.5)
+		and is_equal_approx(live[1].atk, 32.0 * 1.0315 * 1.5) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
+		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.0315, melee) x 1.5", "hp=%.1f" % live[1].hp_max)
 	var c3 := GameData.levelup_cost("SSR", 2, 3)
 	Economy.gold_tenths = int(c3.gold) * 10
 	Economy.res["food"] = 0
@@ -1814,7 +1814,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	var pre := _alive_heroes()
 	await _tap(heroes_win.promote_button.get_global_rect().get_center())
 	await _frames(2)
-	var mult := 1.0 + 0.045 * (lv - 1)  # 아르테온은 근접(hero_level_stat_melee)
+	var mult := 1.0 + 0.0315 * (lv - 1)  # 아르테온은 근접(hero_level_stat_melee)
 	var hero = _alive_heroes().filter(func(h): return h.def.id == "arteon")
 	_check(Economy.shards_of("arteon") == 5 and Economy.promotion_of("arteon") == 2 and heroes_win.big_card.stars == 2 and heroes_win.big_card.is_promoting()
 		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 40" % lv
