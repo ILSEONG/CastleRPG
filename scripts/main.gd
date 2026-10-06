@@ -200,6 +200,7 @@ func _build_world() -> void:
 	Economy.building_done.connect(_on_building_done)
 	Economy.research_done.connect(_on_research_done)
 	Economy.dungeon_started.connect(_on_dungeon_started)
+	Guild.boss_started.connect(_on_guild_boss_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	if OS.is_debug_build() and rebuilds == 0:
 		_connect_dev_log()  # 람다(오토로드 시그널)라 다시 만든 월드에서 또 붙이면 두 번 찍힌다
@@ -269,8 +270,14 @@ func _on_dungeon_started(run: Dictionary) -> void:
 		_enter_dungeon.call_deferred(run)  # 버튼 입력 처리 중에 트리를 바꾸지 않게
 
 
-func _enter_dungeon(run: Dictionary) -> void:
-	var d = preload("res://scripts/dungeon.gd").new()
+## 길드 보스 실제 전투(Guild.boss_started): 던전과 같은 자리에 드래곤 전투 장면(guild_boss.gd)을 붙인다.
+func _on_guild_boss_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run, preload("res://scripts/guild_boss.gd"))
+
+
+func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scripts/dungeon.gd")) -> void:
+	var d = scene_script.new()
 	d.run = run
 	d.main = self
 	if _dungeon != null:  # 결과 화면에서 다음 도전: 던전 장면만 새로

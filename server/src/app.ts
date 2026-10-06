@@ -9,6 +9,7 @@ import type { Query, Row } from './db.ts'
 import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 import * as O from './oauth.ts'
+import * as G from './guild.ts'
 
 export interface AppOptions {
   query: Query
@@ -156,6 +157,17 @@ interface Change {
   diaTickets?: number // 다이아 모집권 증감
   researchUp?: string // 연구 노드 레벨 +1(개정 24)
   log?: { kind: string; detail: unknown }
+  shards?: Record<string, number> // 영웅 → 조각 증가(길드 상점)
+  guild?: GuildChange // 길드(player_guild 행·길드 누적·기록)
+}
+
+// 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
+interface GuildChange {
+  row: { guild_id: string | null; joined_at: number | null; coins: number; mine: G.Mine; boss_seen: number; power: number } // player_guild 행 전체
+  add?: { guild_id: string; exp: number; dmg: number } // 길드 누적에 더한다
+  log?: { guild_id: string; text: string }
+  create?: { id: string; name: string; emblem: number; seed: number; virtual_n: number; notice: string }
+  leave?: { guild_id: string; owner: boolean } // 길드장이 나가면 남은 실제 길드원 중 먼저 들어온 사람이 길드장, 아무도 없으면 직접 만든 길드는 지운다
 }
 
 // 기획 표 전부를 한 쿼리로. 행 키 = CSV 열 이름(열 순서 그대로), 행 순서 = 파일 순서.
@@ -545,6 +557,11 @@ export function createApp(opts: AppOptions) {
       ctes.push(`ru as (insert into player_research (player_id, id, level) select player_id, ${p(ch.researchUp)}::text, 1 from s
         on conflict (player_id, id) do update set level = player_research.level + 1 returning 1)`)
     }
+    Object.entries(ch.shards ?? {}).forEach(([id, d], i) => {
+      ctes.push(`hs${i} as (update player_heroes set shards = shards + ${p(d)}::int
+        where player_id = (select player_id from s) and hero_id = ${p(id)} returning 1)`)
+    })
+    if (ch.guild) guildCtes(ch.guild, now, ctes, p)
     dungeonCtes(ch, now, ctes, p)
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
@@ -553,6 +570,36 @@ export function createApp(opts: AppOptions) {
     const runResult = ch.runClose ? ', (select result from rc) as run_result' : ''
     const [r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult} from s`, params)
     return Number(r.n) === 1 ? r : null
+  }
+
+  function guildCtes(gc: GuildChange, now: number, ctes: string[], p: (v: unknown) => string) {
+    const sid = '(select player_id from s)'
+    if (gc.create) {
+      const g = gc.create
+      ctes.push(`gc as (insert into guilds (id, name, emblem, notice, owner, seed, created_at, virtual_n)
+        select ${p(g.id)}::uuid, ${p(g.name)}, ${p(g.emblem)}::int, ${p(g.notice)}, player_id, ${p(g.seed)}::bigint, to_timestamp(${p(now)}::float8), ${p(g.virtual_n)}::int
+        from s returning 1)`)
+    }
+    const r = gc.row
+    ctes.push(`pg as (insert into player_guild (player_id, guild_id, joined_at, coins, mine, boss_seen, power, last_active)
+      select player_id, ${p(r.guild_id)}::uuid, to_timestamp(${p(r.joined_at)}::float8), ${p(r.coins)}::int, ${p(JSON.stringify(r.mine))}::jsonb,
+        ${p(r.boss_seen)}::int, ${p(r.power)}::int, to_timestamp(${p(now)}::float8) from s
+      on conflict (player_id) do update set guild_id = excluded.guild_id, joined_at = excluded.joined_at, coins = excluded.coins, mine = excluded.mine,
+        boss_seen = excluded.boss_seen, power = excluded.power, last_active = excluded.last_active returning 1)`)
+    if (gc.add && (gc.add.exp || gc.add.dmg)) {
+      ctes.push(`ga as (update guilds set exp = exp + ${p(gc.add.exp)}::bigint, boss_damage = boss_damage + ${p(Math.round(gc.add.dmg))}::bigint
+        where id = ${p(gc.add.guild_id)}::uuid and exists (select 1 from s) returning 1)`)
+    }
+    if (gc.log) {
+      ctes.push(`gl as (insert into guild_log (guild_id, at, text) select ${p(gc.log.guild_id)}::uuid, to_timestamp(${p(now)}::float8), ${p(gc.log.text)}
+        from s returning 1)`)
+    }
+    if (gc.leave?.owner) {
+      const gid = `${p(gc.leave.guild_id)}::uuid`
+      const next = `(select player_id from player_guild where guild_id = ${gid} and player_id <> ${sid} order by joined_at, player_id limit 1)`
+      ctes.push(`go as (update guilds set owner = ${next} where id = ${gid} and exists (select 1 from s) and ${next} is not null returning 1)`)
+      ctes.push(`gd as (delete from guilds where id = ${gid} and exists (select 1 from s) and owner = ${sid} and ${next} is null returning 1)`)
+    }
   }
 
   // 개정 18 던전·장비 변경의 CTE들(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -643,6 +690,7 @@ export function createApp(opts: AppOptions) {
       pl.quest = { ...pl.quest, ...rest, ...(last_claim !== undefined ? { last_claim } : {}) }
     }
     pl.dia_tickets += ch.diaTickets ?? 0
+    for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
     pl.version += 1
   }
 
@@ -1599,6 +1647,345 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // --- 길드(server/src/guild.ts, 마이그레이션 020) ---
+  // 모든 응답 = 플레이어 응답 + guild(guildView). 쓰기는 version 가드 한 문장(commit의 guild CTE). 막힘은 409(코드 = 앱 문구 키).
+
+  interface GuildRow { id: string; name: string; emblem: number; notice: string; owner: string | null; seed: number; created_at: number; virtual_n: number; exp: number; boss_damage: number }
+  interface PgRow { guild_id: string | null; joined_at: number | null; coins: number; mine: Partial<G.Mine> | null; boss_seen: number; power: number; last_active: number | null }
+  interface GuildCtx {
+    id: string; pl: Player; game: Game; now: number; hour: number; mine: G.Mine; pg: PgRow; g: GuildRow | null; st: ReturnType<typeof guildState> | null
+    members: (PgRow & { player_id: string })[]; dps: number; power: number
+  }
+
+  const GUILD_COLS = `id::text, name, emblem, notice, owner::text, seed, extract(epoch from created_at)::float8 as created_at, virtual_n, exp, boss_damage`
+  const toGuild = (r: Row): GuildRow => ({
+    id: String(r.id), name: String(r.name), emblem: Number(r.emblem), notice: String(r.notice), owner: r.owner == null ? null : String(r.owner),
+    seed: Number(r.seed), created_at: Number(r.created_at), virtual_n: Number(r.virtual_n), exp: Number(r.exp), boss_damage: Number(r.boss_damage),
+  })
+  const PG_COLS = `player_id::text, guild_id::text, extract(epoch from joined_at)::float8 as joined_at, coins, mine, boss_seen, power,
+    extract(epoch from last_active)::float8 as last_active`
+  const toPg = (r: Row | undefined): PgRow & { player_id: string } => ({
+    player_id: String(r?.player_id ?? ''), guild_id: r?.guild_id == null ? null : String(r.guild_id), joined_at: r?.joined_at == null ? null : Number(r.joined_at),
+    coins: Number(r?.coins ?? 0), mine: r?.mine ? json(r.mine) : null, boss_seen: Number(r?.boss_seen ?? 1), power: Number(r?.power ?? 0),
+    last_active: r?.last_active == null ? null : Number(r.last_active),
+  })
+
+  function guildState(g: GuildRow, now: number, hour: number) {
+    const vt = G.virtualTotals({ id: g.id, seed: g.seed, created_at: g.created_at, virtual_n: g.virtual_n, system: g.owner == null && g.virtual_n >= G.SYSTEM_VIRTUAL[0] }, now, hour)
+    return { vt, lv: G.levelOf(g.exp + vt.exp), boss: G.bossOf(g.boss_damage + vt.dmg) }
+  }
+
+  async function guildCtx(id: string, pl: Player, game: Game, now: number): Promise<GuildCtx> {
+    const hour = R.cfgNum(game.config, 'daily_reset_utc_hour')
+    const [pr] = await query(`select ${PG_COLS} from player_guild where player_id = $1`, [id])
+    const pg = toPg(pr)
+    let g: GuildRow | null = null
+    let members: GuildCtx['members'] = []
+    if (pg.guild_id) {
+      const [gr] = await query(`select ${GUILD_COLS} from guilds where id = $1`, [pg.guild_id])
+      if (gr) {
+        g = toGuild(gr)
+        members = (await query(`select ${PG_COLS} from player_guild where guild_id = $1 order by joined_at, player_id`, [g.id])).map(toPg)
+      } else pg.guild_id = null
+    }
+    const st = g ? guildState(g, now, hour) : null
+    const cfg = (k: string) => R.cfgNum(game.config, k)
+    const slots = R.heroSlots(game.config, level(pl, R.KEEP))
+    const deploy = Array.from({ length: slots }, (_, i) => pl.deploy[i]).filter((x): x is string => typeof x === 'string' && Object.hasOwn(pl.heroes, x))
+    const defs = game.heroes.map((h) => ({ id: String(h.id), role: String(h.role), atk: Number(h.atk), hp: Number(h.hp), atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
+    const up = (uid: string) => {
+      const d = game.upgrades.find((u) => u.id === uid)
+      return d ? Math.min(pl.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
+    }
+    const buff = st ? G.buffPct(st.lv.level) : 0
+    return {
+      id, pl, game, now, hour, mine: G.mineToday(pg.mine, now, hour), pg, g, st, members,
+      dps: G.teamDps(deploy, pl.heroes, defs, cfg, up('atk'), up('aspd'), buff), power: G.teamPower(deploy, pl.heroes, defs, cfg),
+    }
+  }
+
+  // 추천 길드: 자리가 있는 길드(실제 길드원 < 30 − 가상), 시스템 길드가 RECOMMEND_N보다 적으면 만든다.
+  async function recommendations(x: GuildCtx) {
+    const open = `select ${GUILD_COLS}, (select count(*)::int from player_guild m where m.guild_id = g.id) as real_n from guilds g`
+    let rows = (await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
+      order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)]))
+    const system = rows.filter((r) => r.owner == null).length
+    for (let k = system; k < G.RECOMMEND_N; k++) {
+      const seed = Math.floor(random() * 2 ** 31)
+      const sg = G.systemGuild(seed, x.now)
+      await query(`insert into guilds (name, emblem, notice, owner, seed, created_at, virtual_n) values ($1, $2, $3, null, $4, to_timestamp($5::float8), $6)
+        on conflict (name) do nothing`, [sg.name, sg.emblem, sg.notice, seed, sg.created_at, sg.virtual_n])
+    }
+    if (system < G.RECOMMEND_N) rows = await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
+      order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)])
+    return rows.map((r) => ({ r, g: toGuild(r) })).map(({ r, g }) => ({ r, g, st: guildState(g, x.now, x.hour) }))
+      .filter(({ r, st }) => Number(r.real_n) < G.capacity(st.lv.level)).slice(0, G.RECOMMEND_N).map(({ r, g, st }) => {
+      const cap = G.capacity(st.lv.level)
+      const vm = G.seated(st.vt.members, x.now, cap, Number(r.real_n))
+      const powers = vm.map((m) => st.vt.day[m.i].power)
+      return {
+        id: g.id, name: g.name, emblem: g.emblem, level: st.lv.level, notice: g.notice, count: vm.length + Number(r.real_n), capacity: cap,
+        power: powers.length ? Math.round(powers.reduce((a, b) => a + b, 0) / powers.length) : 0,
+      }
+    })
+  }
+
+  async function guildView(x: GuildCtx) {
+    const out: Record<string, unknown> = {
+      unlocked: x.pl.stage >= G.UNLOCK_STAGE, coins: x.pg.coins, me: x.mine, dps: Math.round(x.dps), power: x.power,
+      next_reset: R.nextReset(x.now, x.game.config), guild: null, boss_pending: 0,
+    }
+    if (!x.g || !x.st) {
+      if (x.pl.stage >= G.UNLOCK_STAGE) out.recommendations = await recommendations(x)
+      return out
+    }
+    const g = x.g
+    const st = x.st
+    const members: Record<string, unknown>[] = []
+    let att = x.mine.attended ? 1 : 0
+    for (const m of x.members) {
+      if (m.player_id === x.id) continue
+      const mm = G.mineToday(m.mine, x.now, x.hour)
+      if (mm.attended) att++
+      members.push({ name: G.playerName(m.player_id), role: m.player_id === g.owner ? '길드장' : '길드원', power: m.power, contrib: mm.contrib, att: mm.attended,
+        dmg: mm.boss_total, last: m.last_active ?? 0, real: true })
+    }
+    const cap = G.capacity(st.lv.level)
+    for (const vm of G.seated(st.vt.members, x.now, cap, x.members.length)) {
+      const d = st.vt.day[vm.i]
+      if (d.att) att++
+      const role = g.owner != null && vm.role === '길드장' ? '정예' : vm.role
+      members.push({ name: vm.name, role, power: d.power, contrib: d.contrib, att: d.att, dmg: d.dmg, last: d.last })
+    }
+    const logs = (await query(`select extract(epoch from at)::float8 as t, text from guild_log where guild_id = $1 and at > to_timestamp($2::float8)
+      order by at desc limit 20`, [g.id, x.now - 2 * 86400])).map((r) => ({ t: Number(r.t), text: String(r.text) }))
+    const log = [...logs, ...st.vt.log].sort((a, b) => a.t - b.t).slice(-30)
+    out.boss_pending = Math.max(0, Math.min(G.BOSS_CLAIM_MAX, st.boss.level - x.pg.boss_seen))
+    out.guild = {
+      id: g.id, name: g.name, emblem: g.emblem, notice: g.notice, mine: g.owner === x.id, level: st.lv.level, exp: st.lv.exp, need: st.lv.need,
+      buff: G.buffPct(st.lv.level), boss: { level: st.boss.level, hp: st.boss.hp, max: st.boss.max }, members, attend_count: att, log,
+      capacity: cap,
+    }
+    return out
+  }
+
+  // 길드 쓰기: 읽기 → plan(막히면 ApiError) → commit(version 가드) → 다시 읽어 응답. 겨루면 다시.
+  async function guildMutate(c: Context, plan: (x: GuildCtx) => { change?: Change; result?: Record<string, unknown> } | Promise<{ change?: Change; result?: Record<string, unknown> }>) {
+    const id = c.get('playerId') as string
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      const now = clock()
+      const game = await loadGame()
+      let pl = await loadPlayer(id, game, now)
+      let x = await guildCtx(id, pl, game, now)
+      const { change, result } = await plan(x)
+      if (change) {
+        if (!(await commit(id, pl.version, change, now))) continue
+        pl = await loadPlayer(id, game, now)
+        x = await guildCtx(id, pl, game, now)
+      }
+      return c.json({ ...view(pl, game, now), guild: await guildView(x), ...(result ? { result } : {}) })
+    }
+    throw new ApiError(409, 'conflict', 'concurrent update; try again')
+  }
+
+  const blocked = (code: string, msg: string) => new ApiError(409, code, msg)
+  const rowOf = (x: GuildCtx, over: Partial<GuildChange['row']> = {}): GuildChange['row'] => ({
+    guild_id: x.pg.guild_id, joined_at: x.pg.joined_at, coins: x.pg.coins, mine: x.mine, boss_seen: x.pg.boss_seen, power: x.power, ...over,
+  })
+  const needGuild = (x: GuildCtx) => {
+    if (!x.g || !x.st) throw blocked('no_guild', 'join a guild first')
+    return { g: x.g, st: x.st }
+  }
+  // 보상 → Change 조각(골드·다이아·식량·조각; 코인은 row로)
+  function grant(x: GuildCtx, give: Record<string, number>, ch: Change, coins: { n: number }) {
+    for (const [k, n] of Object.entries(give)) {
+      if (k === 'coins') coins.n += n
+      else if (k === 'gold') ch.goldTenths = (ch.goldTenths ?? 0) + n * 10
+      else if (k === 'diamonds') ch.diamonds = (ch.diamonds ?? 0) + n
+      else if (k === 'food') ch.res = { ...(ch.res ?? {}), food: (ch.res?.food ?? 0) + n }
+      else if (k === 'shards' || k === 'ssr_shards') {
+        const pool = Object.keys(x.pl.heroes).filter((id) => x.game.heroes.some((h) => h.id === id && (k === 'shards' || h.grade === 'SSR'))).sort()
+        for (let i = 0; i < n && pool.length; i++) {
+          const id = pool[Math.floor(random() * pool.length)]
+          ch.shards = { ...(ch.shards ?? {}), [id]: (ch.shards?.[id] ?? 0) + 1 }
+        }
+      }
+    }
+  }
+
+  app.get('/v1/guild', auth, async (c) => {
+    const id = c.get('playerId') as string
+    const now = clock()
+    const game = await loadGame()
+    const pl = await loadPlayer(id, game, now)
+    return c.json({ server_now: now, guild: await guildView(await guildCtx(id, pl, game, now)) })
+  })
+
+  app.post('/v1/guild/join', auth, async (c) => {
+    const gid = strField(await body(c), 'guild_id')
+    if (!UUID_RE.test(gid)) throw new ApiError(400, 'bad_request', "'guild_id' must be a uuid")
+    return guildMutate(c, async (x) => {
+      if (x.pl.stage < G.UNLOCK_STAGE) throw blocked('locked', 'clear round 1-10 first')
+      if (x.g) throw blocked('in_guild', 'already in a guild')
+      const [gr] = await query(`select ${GUILD_COLS} from guilds where id = $1`, [gid])
+      if (!gr) throw new ApiError(404, 'no_such_guild', 'guild not found')
+      const g = toGuild(gr)
+      const [{ n }] = await query('select count(*)::int as n from player_guild where guild_id = $1', [gid])
+      const st = guildState(g, x.now, x.hour)
+      if (Number(n) >= G.capacity(st.lv.level)) throw blocked('full', 'guild is full')
+      return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: st.boss.level }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드에 가입했습니다` } } } }
+    })
+  })
+
+  app.post('/v1/guild/create', auth, async (c) => {
+    const b = await body(c)
+    const name = strField(b, 'name').trim()
+    const emblem = intField(b, 'emblem', 0, G.EMBLEMS - 1)
+    if ([...name].length < 2 || [...name].length > 8) throw new ApiError(400, 'bad_name', 'name must be 2-8 characters')
+    return guildMutate(c, async (x) => {
+      if (x.pl.stage < G.UNLOCK_STAGE) throw blocked('locked', 'clear round 1-10 first')
+      if (x.g) throw blocked('in_guild', 'already in a guild')
+      if (x.pl.gold_tenths < G.CREATE_GOLD * 10) throw blocked('not_enough_gold', `creating a guild costs ${G.CREATE_GOLD} gold`)
+      const [taken] = await query('select 1 from guilds where name = $1', [name])
+      if (taken) throw blocked('name_taken', 'guild name is taken')
+      const gid = randomUUID()
+      return {
+        change: {
+          goldTenths: -G.CREATE_GOLD * 10,
+          guild: {
+            create: { id: gid, name, emblem, seed: Math.floor(random() * 2 ** 31), virtual_n: G.CREATED_VIRTUAL, notice: G.CREATED_NOTICE },
+            row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: 1 }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드를 창설했습니다` },
+          },
+          log: { kind: 'guild', detail: { action: 'create', name, gold: G.CREATE_GOLD } },
+        },
+      }
+    })
+  })
+
+  app.post('/v1/guild/leave', auth, async (c) => guildMutate(c, (x) => {
+    const { g } = needGuild(x)
+    return {
+      change: {
+        guild: {
+          row: rowOf(x, { guild_id: null, joined_at: null, mine: { ...x.mine, contrib: 0, boxes: [] } }),
+          log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 길드를 떠났습니다` }, leave: { guild_id: g.id, owner: g.owner === x.id },
+        },
+      },
+    }
+  }))
+
+  app.post('/v1/guild/attend', auth, async (c) => guildMutate(c, (x) => {
+    const { g } = needGuild(x)
+    if (x.mine.attended) throw blocked('attended', 'already attended today')
+    const ch: Change = {}
+    const coins = { n: x.pg.coins }
+    grant(x, G.ATTEND_REWARD, ch, coins)
+    ch.guild = {
+      row: rowOf(x, { coins: coins.n, mine: { ...x.mine, attended: true, contrib: x.mine.contrib + G.ATTEND_EXP } }),
+      add: { guild_id: g.id, exp: G.ATTEND_EXP, dmg: 0 }, log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 출석했습니다` },
+    }
+    return { change: ch }
+  }))
+
+  app.post('/v1/guild/box', auth, async (c) => {
+    const index = intField(await body(c), 'index', 0, G.ATTEND_BOXES.length - 1)
+    return guildMutate(c, async (x) => {
+      needGuild(x)
+      if (x.mine.boxes.includes(index)) throw blocked('claimed', 'box already claimed')
+      const v = await guildView(x)
+      if (!x.mine.attended || Number((v.guild as any).attend_count) < G.ATTEND_BOXES[index][0]) throw blocked('locked', 'not enough attendance yet')
+      const ch: Change = {}
+      const coins = { n: x.pg.coins }
+      grant(x, G.ATTEND_BOXES[index][1], ch, coins)
+      ch.guild = { row: rowOf(x, { coins: coins.n, mine: { ...x.mine, boxes: [...x.mine.boxes, index] } }) }
+      return { change: ch }
+    })
+  })
+
+  app.post('/v1/guild/donate', auth, async (c) => {
+    const kind = strField(await body(c), 'kind')
+    const d = G.DONATIONS[kind]
+    if (!d) throw new ApiError(400, 'bad_kind', `unknown donation '${kind}'`)
+    return guildMutate(c, (x) => {
+      const { g } = needGuild(x)
+      if ((x.mine.donations[kind] ?? 0) >= d.daily) throw blocked('donated', 'no donations left today')
+      if (x.pl.gold_tenths < d.gold * 10) throw blocked('not_enough_gold', 'not enough gold')
+      if (x.pl.diamonds < d.diamonds) throw blocked('not_enough_diamonds', 'not enough diamonds')
+      const mine = { ...x.mine, donations: { ...x.mine.donations, [kind]: (x.mine.donations[kind] ?? 0) + 1 }, contrib: x.mine.contrib + d.exp }
+      return {
+        change: {
+          goldTenths: d.gold ? -d.gold * 10 : undefined, diamonds: d.diamonds ? -d.diamonds : undefined,
+          guild: { row: rowOf(x, { coins: x.pg.coins + d.coins, mine }), add: { guild_id: g.id, exp: d.exp, dmg: 0 },
+            log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 ${d.name}를 했습니다` } },
+        },
+      }
+    })
+  })
+
+  // 보스 전투 시작: 도전 1회를 쓰고 전투 표(run_id·초·단계·HP)를 준다. 앱이 영웅으로 드래곤과 싸운 뒤 /boss/finish로 피해를 낸다.
+  app.post('/v1/guild/boss/start', auth, async (c) => guildMutate(c, (x) => {
+    const { st } = needGuild(x)
+    if (x.mine.boss_tries >= G.BOSS_TRIES) throw blocked('no_tries', 'no boss tries left today')
+    if (x.dps <= 0) throw blocked('no_heroes', 'no heroes deployed')
+    const run = { id: randomUUID(), t: x.now, cap: Math.round(x.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP), level: st.boss.level }
+    const mine = { ...x.mine, boss_tries: x.mine.boss_tries + 1, boss_run: run }
+    return { change: { guild: { row: rowOf(x, { mine }) } },
+      result: { run_id: run.id, sec: G.BOSS_FIGHT_SEC, level: st.boss.level, hp: st.boss.hp, max: st.boss.max } }
+  }))
+
+  // 보스 전투 끝: 앱이 낸 피해(상한 cap)로 등급·보상·길드 누적 피해. 너무 이르면 too_early, 오래 지났으면 피해 0.
+  app.post('/v1/guild/boss/finish', auth, async (c) => {
+    const b = await body(c)
+    const runId = strField(b, 'run_id')
+    const sent = intField(b, 'dmg', 0, 1e12)
+    return guildMutate(c, (x) => {
+      const { g, st } = needGuild(x)
+      const run = x.mine.boss_run
+      if (!run || run.id !== runId) throw blocked('no_run', 'no such boss fight')
+      const age = x.now - run.t
+      if (age < G.BOSS_FIGHT_SEC - G.BOSS_SLACK_SEC) throw blocked('too_early', `the fight lasts ${G.BOSS_FIGHT_SEC} s (${age.toFixed(1)} s so far)`)
+      const dmg = age > G.BOSS_RUN_TTL ? 0 : Math.min(sent, run.cap)
+      const before = st.boss.level
+      const grade = G.bossGrade(dmg, run.level)
+      const after = G.bossOf(g.boss_damage + st.vt.dmg + dmg).level
+      const ch: Change = {}
+      const coins = { n: x.pg.coins }
+      grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
+      const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
+      ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
+        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 ${G.bossName(before)}에게 ${dmg.toLocaleString('en-US')} 피해` } }
+      return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: run.level, killed: after - before } }
+    })
+  })
+
+  app.post('/v1/guild/claim', auth, async (c) => guildMutate(c, (x) => {
+    const { st } = needGuild(x)
+    const n = Math.min(G.BOSS_CLAIM_MAX, st.boss.level - x.pg.boss_seen)
+    if (n <= 0) throw blocked('nothing', 'no boss kill rewards')
+    const ch: Change = { diamonds: G.BOSS_KILL_REWARD.diamonds * n }
+    ch.guild = { row: rowOf(x, { coins: x.pg.coins + G.BOSS_KILL_REWARD.coins * n, boss_seen: st.boss.level }) }
+    return { change: ch, result: { kills: n, coins: G.BOSS_KILL_REWARD.coins * n, diamonds: G.BOSS_KILL_REWARD.diamonds * n } }
+  }))
+
+  app.post('/v1/guild/buy', auth, async (c) => {
+    const itemId = strField(await body(c), 'id')
+    const it = G.SHOP.find((s) => s.id === itemId)
+    if (!it) throw new ApiError(400, 'bad_item', `unknown shop item '${itemId}'`)
+    return guildMutate(c, (x) => {
+      const bag = it.period === 'day' ? x.mine.shop_day : x.mine.shop_week
+      if ((bag.bought[it.id] ?? 0) >= it.limit) throw blocked('sold_out', 'purchase limit reached')
+      if (x.pg.coins < it.price) throw blocked('not_enough_coins', 'not enough guild coins')
+      const ch: Change = {}
+      const coins = { n: x.pg.coins - it.price }
+      grant(x, it.give, ch, coins)
+      if ((it.give.shards || it.give.ssr_shards) && !ch.shards) throw blocked('no_heroes', 'no hero to receive shards')
+      const nb = { ...bag, bought: { ...bag.bought, [it.id]: (bag.bought[it.id] ?? 0) + 1 } }
+      const mine = it.period === 'day' ? { ...x.mine, shop_day: nb as G.Mine['shop_day'] } : { ...x.mine, shop_week: nb as G.Mine['shop_week'] }
+      ch.guild = { row: rowOf(x, { coins: coins.n, mine }) }
+      return { change: ch, result: { shards: ch.shards ?? {} } }
+    })
+  })
+
   if (opts.allowTestHooks) {
     // 통합 테스트용(개정 18): 열린 run의 시작 시각을 seconds초 앞당긴다 — 즉시 승리 훅(앱 Economy.debug_win)이 타당성 검사를 지나게.
     app.post('/v1/test/dungeon_age', auth, async (c) => {
@@ -1686,6 +2073,16 @@ export function createApp(opts: AppOptions) {
         return c.json(view(await loadPlayer(id, game, now), game, now))
       })
     }
+
+    // 통합 테스트용(길드): 스테이지를 바로 정한다(길드는 1-10 클리어 뒤 = stage 11부터 열린다).
+    app.post('/v1/test/stage', auth, async (c) => {
+      const stage = intField(await body(c), 'stage', 1, 10_000)
+      const id = c.get('playerId') as string
+      await query('update player_state set version = version + 1, stage = $2 where player_id = $1', [id, stage])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
 
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
     // 통합 체크용: 설정 값 하나를 바꾼다(dev/online-check.sh가 새 플레이어 튜토리얼을 끄고 옛 훈련 묶음 상한을 쓴다)

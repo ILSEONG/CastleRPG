@@ -1,5 +1,5 @@
 extends Node
-## 길드 화면 스냅샷(개발용): 실제 main 씬에서 길드 시트를 열고 화면(잠김 → 미가입 → 홈 → 보스 → 보스 전투·결과 → 상점 → 길드원)을 찍어 한 장으로 붙인다.
+## 길드 화면 스냅샷(개발용): 실제 main 씬에서 길드 시트를 열고 화면(잠김 → 미가입 → 홈 → 보스 → 상점 → 길드원 — 보스 전투 장면은 tests/guild_boss_shots)을 찍어 한 장으로 붙인다.
 ## 화면이 필요하다(헤드리스 불가). 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/guild_shots.tscn -- --out=/tmp/guild.png
 ## 저장 파일은 건드리지 않는다(Economy·Fever·Guild save_path = "").
 
@@ -37,12 +37,6 @@ func _ready() -> void:
 	panel.tab = "boss"
 	panel._rebuild()
 	await _snap()
-	panel._start_fight()
-	await _frames(70)
-	await _snap()
-	panel._fight.t = 99.0
-	await _snap()
-	panel._end_fight()
 	panel.tab = "shop"
 	Guild.coins = 700
 	panel._rebuild()
