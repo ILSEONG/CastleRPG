@@ -1,5 +1,6 @@
 extends CanvasLayer
-## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
+## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [음악][가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
+## [음악]은 창 대신 배경음악을 켜고 끈다(Music.toggle — 메뉴는 펼친 채로, 끄면 "음악 끔"과 빗금).
 ## 자리: 오른쪽 아래, 탭 바 위. 튜토리얼 미션 카드가 보이면 카드 위로 올라간다(겹치지 않게, 매 프레임 맞춘다).
 ## main.gd가 만들고 windows = {bag(방치 주머니), mission, ranking, friend, event}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
 
@@ -9,7 +10,7 @@ const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"]]
+const ITEMS := [["music", "음악"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"]]
 const SIZE := Vector2(84, 84)
 const SIDE := 16.0
 const GAP := 10.0
@@ -75,6 +76,10 @@ func set_open(on: bool) -> void:
 
 
 func _pick(id: String) -> void:
+	if id == "music":
+		Music.toggle()
+		buttons[id].get_child(0).queue_redraw()
+		return
 	set_open(false)
 	var w = windows.get(id)
 	if w != null and not w.is_open():
@@ -130,6 +135,10 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 			draw_scroll(c, ctr, 44.0)
 		"bag":
 			PouchPanel.draw_pouch(c, ctr, 46.0, "gold")
+		"music":
+			draw_note(c, ctr, 44.0, Music.enabled)
+			if not Music.enabled:
+				text = "음악 끔"
 		_:
 			draw_chevron(c, ctr, 30.0, is_open)
 			text = "닫기" if is_open else "메뉴"
@@ -140,6 +149,21 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 	var y := SIZE.y - 10.0
 	c.draw_string_outline(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, 5, Color(UiKit.INK, 0.85))
 	c.draw_string(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, Color.WHITE)
+
+
+## 이어진 8분음표 두 개(각진 머리 + 기둥 + 들보). off면 흐리게 + 빨간 빗금.
+static func draw_note(ci: CanvasItem, ctr: Vector2, s: float, on: bool) -> void:
+	var u := s / 44.0
+	var p := func(x: float, y: float) -> Vector2: return ctr + Vector2(x, y) * u
+	var col := Color.WHITE if on else Color(1, 1, 1, 0.45)
+	for hx: float in [-9.0, 11.0]:
+		var hy := 12.0 if hx < 0 else 9.0
+		ci.draw_colored_polygon(PackedVector2Array([p.call(hx - 7, hy + 1), p.call(hx - 2, hy - 4), p.call(hx + 4, hy - 3),
+			p.call(hx + 4, hy + 2), p.call(hx - 1, hy + 6), p.call(hx - 7, hy + 5)]), col)
+		ci.draw_line(p.call(hx + 3, hy - 1), p.call(hx + 3, hy - 22), col, 3.0 * u, true)
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-7.5, -10), p.call(15.5, -13), p.call(15.5, -7), p.call(-7.5, -4)]), col)
+	if not on:
+		ci.draw_line(p.call(-17, 17), p.call(17, -17), Color(0.92, 0.3, 0.26), 5.0 * u, true)
 
 
 ## 위(펼치기)·아래(접기) 꺾쇠 두 겹.

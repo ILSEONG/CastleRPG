@@ -296,22 +296,23 @@ func _dev_dungeon(type: String) -> void:
 
 func _on_dungeon_started(run: Dictionary) -> void:
 	if not run.is_empty():
-		_enter_dungeon.call_deferred(run)  # 버튼 입력 처리 중에 트리를 바꾸지 않게
+		_enter_dungeon.call_deferred(run, preload("res://scripts/dungeon.gd"), Music.dungeon_theme(str(run.get("type", ""))))  # 버튼 입력 처리 중에 트리를 바꾸지 않게
 
 
 ## 길드 보스 실제 전투(Guild.boss_started): 던전과 같은 자리에 드래곤 전투 장면(guild_boss.gd)을 붙인다.
 func _on_guild_boss_started(run: Dictionary) -> void:
 	if not run.is_empty():
-		_enter_dungeon.call_deferred(run, preload("res://scripts/guild_boss.gd"))
+		_enter_dungeon.call_deferred(run, preload("res://scripts/guild_boss.gd"), "dragon")
 
 
 ## 길드전 공성 전투(GuildWar.battle_started): 같은 자리에 공성 전투 장면(war_battle.gd)을 붙인다.
 func _on_guild_war_started(run: Dictionary) -> void:
 	if not run.is_empty():
-		_enter_dungeon.call_deferred(run, preload("res://scripts/war_battle.gd"))
+		_enter_dungeon.call_deferred(run, preload("res://scripts/war_battle.gd"), "guild_war")
 
 
-func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scripts/dungeon.gd")) -> void:
+## music = 그 장면의 배경음악 테마(Music.override — 나가면 성 월드 곡으로 돌아간다).
+func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scripts/dungeon.gd"), music := "") -> void:
 	var d = scene_script.new()
 	d.run = run
 	d.main = self
@@ -325,6 +326,7 @@ func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scrip
 	else:
 		return
 	_dungeon = d
+	Music.override = music
 	_host.add_child(d)
 
 
@@ -334,6 +336,7 @@ func leave_dungeon() -> void:
 	_host.remove_child(_dungeon)
 	_dungeon.queue_free()
 	_dungeon = null
+	Music.override = ""
 	_host.add_child(self)
 	GameState.process_mode = Node.PROCESS_MODE_INHERIT
 	camera.make_current()

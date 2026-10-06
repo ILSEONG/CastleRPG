@@ -26,6 +26,7 @@ Guild="*res://scripts/guild.gd"
 GuildWar="*res://scripts/guild_war.gd"
 Tutorial="*res://scripts/tutorial.gd"
 Missions="*res://scripts/missions.gd"
+Music="*res://scripts/music.gd"
 
 [castle]
 
