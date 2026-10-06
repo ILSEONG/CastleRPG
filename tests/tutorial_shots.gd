@@ -55,7 +55,7 @@ func _ready() -> void:
 	await _frames(30)
 	await _snap()  # 7. 모집권 모집 창
 	var rp = _find("res://scripts/recruit_panel.gd")
-	rp.ticket_ten.pressed.emit()
+	rp.ten_button.pressed.emit()  # 모집권이 10장이면 [10회]가 모집권 버튼
 	await _frames(30)
 	await _snap()  # 8. 결과
 	rp.close()

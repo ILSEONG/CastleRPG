@@ -2694,7 +2694,7 @@ func _recruit23_ui(recruit) -> void:
 		"scale=%s rect=%s -> %s titles=%s" % [recruit.art.scale, still[1], recruit.art.get_global_rect(), titles])
 	_check(recruit.level_label.text == "골드 모집 Lv 1" and recruit.progress_label.text == "다음 레벨까지 0/30" and recruit.one_button.text.contains("3,000")
 		and recruit.ten_button.text.strip_edges() == "10회 30,000" and recruit.preview_label.text.contains("Lv 2") and recruit.preview_label.text.contains("3,450")
-		and recruit._gold_box.visible and not recruit._dia_box.visible and not recruit.shop_button.visible,
+		and recruit._gold_box.visible and not recruit._dia_box.visible,
 		"(r23) gold tab: Lv 1 badge, 0/30, [1회 3,000] [10회 30,000] (no SR+ line), Lv 2 preview", "lv=%s prog=%s one=%s ten=%s preview=%s" % [recruit.level_label.text, recruit.progress_label.text, recruit.one_button.text, recruit.ten_button.text, recruit.preview_label.text])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
@@ -2717,10 +2717,10 @@ func _recruit23_ui(recruit) -> void:
 	await _tap(recruit.dia_tab.get_global_rect().get_center())
 	await _frames(2)
 	dlg = recruit.dialog.get_global_rect()
-	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.shop_button.visible and recruit.dia_label.text == "보유 600"
-		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and recruit.ten_button.disabled
+	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.dia_label.text == "보유 600"
+		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
 		and recruit.rates_label.text == "SSR 8% · SR 30% · R 62%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
-		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 8/30/62, [1회 다이아 300] on, [10회 다이아 2,700 · SR 이상 1장] off; fits 720x1280",
+		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 8/30/62, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
 		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
@@ -2734,14 +2734,36 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	Economy.diamonds = 299
 	Economy.changed.emit()
-	_check(recruit.one_button.disabled and recruit.ten_button.disabled, "(r23) short of diamonds: [1회]·[10회] are off", "")
-	await _tap(recruit.shop_button.get_global_rect().get_center())
+	var tk0: int = Economy.dia_tickets
+	Economy.dia_tickets = 3
+	Economy.changed.emit()
+	await _frames(2)
+	_check(recruit.one_button.text.strip_edges() == "1회 모집권 1장" and recruit.ten_button.text.contains("다이아 2,700") and not recruit._btn_gems[0].visible and recruit._btn_gems[1].visible,
+		"(r23) 3 tickets: [1회] becomes a ticket button, [10회] stays diamonds", "one=%s ten=%s" % [recruit.one_button.text, recruit.ten_button.text])
+	var hero_n: int = Economy.heroes.size()
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.dia_tickets == 2 and Economy.diamonds == 299 and recruit.is_showing_results() and recruit.again_button.text == "재모집 모집권 1장",
+		"(r23) ticket [1회] spends a ticket, not diamonds", "tk=%d dia=%d again=%s heroes %d" % [Economy.dia_tickets, Economy.diamonds, recruit.again_button.text, hero_n])
+	recruit.confirm_button.pressed.emit()
+	await _unguarded(recruit)
+	Economy.dia_tickets = 0
+	Economy.changed.emit()
+	await _frames(2)
+	_check(not recruit.one_button.disabled and not recruit.ten_button.disabled and recruit.one_button.text.contains("다이아 300") and not recruit.shop_ask.visible,
+		"(r23) short of diamonds: [1회]·[10회] stay on", "")
+	await _tap(recruit.one_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(recruit.shop_ask.visible and Economy.diamonds == 299 and not recruit.is_showing_results(), "(r23) short of diamonds: tapping [1회] asks to go to the shop, spends nothing", "")
+	Economy.dia_tickets = tk0
+	var go: Button = recruit.shop_ask.find_children("*", "Button", true, false)[0]
+	await _tap(go.get_global_rect().get_center())
 	await _frames(2)
 	var shop = recruit.shop
 	var sr: Rect2 = shop.dialog.get_global_rect()
 	_check(shop.is_open() and shop.layer > recruit.layer and shop.buy_buttons.size() == 4 and shop.buy_buttons.all(func(b): return b.disabled and b.text == "준비 중")
 		and shop.note.text == "결제 기능은 출시 전에 연결됩니다" and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
-		"(r23) [다이아 상점] opens over the recruit window: 4 products, [구매] off reading 준비 중, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
+		"(r23) [이동] opens the diamond shop over the recruit window: 4 products, [구매] off reading 준비 중, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
 	await _unguarded(shop)
 	var d0: int = Economy.diamonds
 	await _tap(shop.buy_buttons[0].get_global_rect().get_center())
