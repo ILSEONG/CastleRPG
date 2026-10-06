@@ -41,6 +41,7 @@ var kills := 0  # 이번 전투에서 처치한 단계 수(연출)
 var _intro := INTRO_SEC
 var _wait := 0.0
 var _leaving := false
+var _wiped := false
 var _hud: CanvasLayer
 var _title: Label
 var _time: Label
@@ -135,6 +136,9 @@ func _process(delta: float) -> void:
 				_set_active(true)
 		Phase.FIGHT:
 			clock += delta
+			if not _wiped and not heroes.any(func(h): return h.is_alive()):
+				_wiped = true  # 전멸해도 시간은 끝까지 흐른다(서버는 전투 시간이 지나야 결과를 받는다)
+				_show_banner("전멸!", 1.6)
 			if clock >= fight_sec():
 				_report()
 		Phase.REPORT:

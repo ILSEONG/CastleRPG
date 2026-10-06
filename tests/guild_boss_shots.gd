@@ -47,12 +47,13 @@ func _ready() -> void:
 	await _secs(6.0)
 	await _snap()
 	await _secs(6.0)
+	print("HP after 12 s: ", scene.heroes.map(func(h): return snappedf(h.hp_ratio(), 0.01)))
 	await _snap()
 	while scene.phase != scene.Phase.RESULT:
 		await get_tree().process_frame
 	var dealt: float = scene.dragon.dealt
-	print("DAMAGE level=%d promo=%d heroes=%d dealt=%d old=%d ratio=%.2f attacks=%d result=%s" % [lv, promo, scene.heroes.size(), int(dealt),
-		int(dps * 20.0), dealt / maxf(1.0, dps * 20.0), scene.dragon.attacks, scene.result])
+	print("DAMAGE level=%d promo=%d heroes=%d dealt=%d old=%d ratio=%.2f attacks=%d alive=%d result=%s" % [lv, promo, scene.heroes.size(), int(dealt),
+		int(dps * 20.0), dealt / maxf(1.0, dps * 20.0), scene.dragon.attacks, scene.heroes.filter(func(h): return h.is_alive()).size(), scene.result])
 	await _frames(20)
 	await _snap()
 	scene.leave()

@@ -1,7 +1,7 @@
 extends "res://scripts/monster.gd"
 ## 길드 보스 드래곤(guild_boss.gd 장면). monster.gd 아레나 모드 그대로(영웅 스킬 상태·지속 피해·피해 숫자) + 다른 점:
 ## - 모델은 dragon_model.gd(부품을 코드로 움직인다). 제자리에 서서(speed 0, 사거리가 무대 전체) 가장 가까운 영웅 쪽을 보고
-##   물기·불 뿜기·날개 바람을 차례로 한다. 길드 보스 피해 규칙에는 보스가 영웅에게 주는 피해가 없어서 공격은 연출만이다(영웅 HP는 그대로).
+##   물기·불 뿜기·날개 바람을 차례로 한다. 공격은 영웅 최대 체력의 HIT_PCT만큼 깎는다(쓰러진 영웅은 남은 시간 동안 못 친다).
 ## - 쓰러지지 않는다: HP가 0이 되면 그 단계를 처치한 것(level_cleared) — 다음 단계 최대 HP로 차오르고 남은 피해는 넘긴다(서버 bossOf와 같다).
 ## - 받은 피해 합(dealt)이 이번 도전 피해다. 넉백·겹침 밀림 없음.
 ## 몸 반지름 reach_r만큼 영웅 사거리가 늘어난다(hit_radius — 근접 영웅이 큰 몸 바깥에서 친다).
@@ -13,6 +13,9 @@ const SIZE := 6.5  # 키(m) — 영웅(2.2 m)의 세 배쯤
 const REACH_R := 2.8  # 몸 반지름(m): 영웅은 이만큼 더 멀리서 친다
 const ATK_INTERVAL := 2.6
 const FIRE := Color(1.0, 0.45, 0.12)
+const HIT_PCT := 0.20  # 한 번 맞을 때 영웅 최대 체력 대비(사용자 선택 대기 — 10%·20%·35%)
+const GUST_MULT := 0.5  # 날개 바람은 모두에게 절반
+const BREATH_DEG := 35.0  # 불 뿜기 부채꼴 반각
 
 signal level_cleared(level: int)
 
@@ -80,7 +83,8 @@ func bar_scale() -> float:
 	return 3.0
 
 
-## 타격 순간: 연출만(불 뿜기 = 입에서 영웅 쪽으로 불길, 물기·날개 바람 = 영웅 발밑 충격). 영웅 HP는 그대로.
+## 타격 순간: 맞는 영웅 최대 체력의 HIT_PCT만큼(레벨과 상관없이 공평하게).
+## 물기 = 노린 영웅 한 명, 불 뿜기 = 입 앞 부채꼴(BREATH_DEG) 안 모두, 날개 바람 = 모두에게 GUST_MULT배.
 func _release() -> void:
 	attacks += 1
 	var h = _swing_hero
@@ -91,10 +95,28 @@ func _release() -> void:
 		"breath":
 			var m: Vector3 = _model.mouth()
 			var dir := (at + Vector3(0, 0.6, 0) - m)
-			Fx.breath(parent, m, dir.normalized(), dir.length() + 1.5, FIRE, 2)
+			var length := dir.length() + 1.5
+			Fx.breath(parent, m, dir.normalized(), length, FIRE, 2)
 			Fx.kick(parent, at, 0.25)
+			var flat := Vector2(dir.x, dir.z).normalized()
+			for x in _alive_heroes():
+				var d := Vector2(x.global_position.x - m.x, x.global_position.z - m.z)
+				if d.length() <= length and (d.length() < 0.5 or rad_to_deg(flat.angle_to(d.normalized())) <= BREATH_DEG):
+					_hurt(x, 1.0)
 		"gust":
 			Fx.dust(parent, at)
 			Fx.impact(parent, Vector3(at.x, 0.0, at.z), Color(0.9, 0.85, 0.7), 1.4, 1)
+			for x in _alive_heroes():
+				_hurt(x, GUST_MULT)
 		_:
 			Fx.impact(parent, Vector3(at.x, 0.0, at.z), FIRE, 1.2, 1)
+			if is_instance_valid(h) and h.is_alive():
+				_hurt(h, 1.0)
+
+
+func _alive_heroes() -> Array:
+	return get_tree().get_nodes_in_group("heroes").filter(func(x): return x.is_alive())
+
+
+func _hurt(hero, mult: float) -> void:
+	hero.take_damage(float(hero.hp_max) * HIT_PCT * mult * (1.0 - _weak_pct / 100.0 if _weak_t > 0.0 else 1.0), self)
