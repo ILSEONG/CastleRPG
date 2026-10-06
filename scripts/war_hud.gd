@@ -6,6 +6,7 @@ extends CanvasLayer
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
+const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const WarRules := preload("res://scripts/war_rules.gd")
 
@@ -168,6 +169,7 @@ func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	oct.append(oct[0])
 	var on: bool = h != null and battle != null and battle.picker != null and battle.picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
+	HeroStrip.draw_skill_slots(c, h)  # 아래 양 모서리 액티브 쿨 칸
 
 
 func _build_result(root: Control) -> void:

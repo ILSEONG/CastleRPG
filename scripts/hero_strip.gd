@@ -14,6 +14,13 @@ const SIDE := 16.0
 const BOTTOM := 10.0
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
+const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
+const SLOT_FRAC := 0.34  # 쿨 칸 지름 / 초상화 폭
+const READY_SEC := 0.5  # 남은 쿨이 이만큼 이하면 준비됨(조건을 기다리는 발동형은 0.5초마다 다시 본다)
+const SLOT_READY := Color(1.0, 0.8, 0.28)
+const SLOT_FILL := Color(0.55, 0.78, 1.0)
+const SLOT_DARK := Color(0.12, 0.14, 0.2, 0.82)
+const SLOT_EMPTY := Color(0.12, 0.14, 0.2, 0.28)
 
 var heroes_fn: Callable  # () -> Array(영웅 노드)
 var picker  # unit_picker.gd
@@ -101,3 +108,48 @@ func _draw_face(c: Control, h) -> void:
 	oct.append(oct[0])
 	var on: bool = picker != null and picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
+	draw_skill_slots(c, h)
+
+
+## 초상화 아래 양 모서리 쿨 칸(".O." — 사용자 2026-10-06): 왼쪽 = 첫 액티브, 오른쪽 = 둘째 액티브(칸 순서, hero.active_slots).
+## 준비됨 = 금색 원, 쿨 도는 중 = 어두운 원에 시계 방향으로 차오르는 하늘색 + 남은 초, 승급으로 아직 잠김 = 어두운 원에 자물쇠,
+## 액티브가 하나뿐(R) = 오른쪽 자리는 비운 흐린 원(자리는 그대로). 성·던전·길드전 초상화가 함께 쓴다.
+static func draw_skill_slots(c: Control, h) -> void:
+	if h == null or not is_instance_valid(h) or not h.has_method("active_slots"):
+		return
+	var slots: Array = h.active_slots()
+	var r := roundf(c.size.x * SLOT_FRAC) / 2.0
+	var y := c.size.y - r - 1.0
+	_draw_slot(c, Vector2(r + 1.0, y), r, slots[0] if slots.size() > 0 else {})
+	_draw_slot(c, Vector2(c.size.x - r - 1.0, y), r, slots[1] if slots.size() > 1 else {})
+
+
+static func _draw_slot(c: Control, at: Vector2, r: float, s: Dictionary) -> void:
+	if s.is_empty():
+		c.draw_circle(at, r, SLOT_EMPTY)
+		c.draw_arc(at, r, 0.0, TAU, 24, Color(UiKit.OUTLINE, 0.45), 1.5, true)
+		return
+	if s.locked:
+		c.draw_circle(at, r, SLOT_DARK)
+		var w := r * 0.8
+		c.draw_arc(at + Vector2(0, -r * 0.12), w * 0.36, PI, TAU, 10, Color(1, 1, 1, 0.75), maxf(2.0, r * 0.13), true)
+		c.draw_rect(Rect2(at + Vector2(-w * 0.5, -r * 0.12), Vector2(w, w * 0.72)), Color(1, 1, 1, 0.75))
+	elif float(s.left) <= READY_SEC:
+		c.draw_circle(at, r, SLOT_READY)
+		c.draw_circle(at, r * 0.45, Color(1, 1, 1, 0.55))
+	else:
+		c.draw_circle(at, r, SLOT_DARK)
+		var done := clampf(1.0 - float(s.left) / maxf(0.01, float(s.total)), 0.0, 1.0)
+		if done > 0.0:
+			var pts := PackedVector2Array([at])
+			var n := maxi(2, ceili(24.0 * done))
+			for i in n + 1:
+				var a := -PI / 2.0 + TAU * done * float(i) / float(n)
+				pts.append(at + Vector2(cos(a), sin(a)) * r)
+			c.draw_colored_polygon(pts, Color(SLOT_FILL, 0.6))
+		var fs := int(r * 1.05)
+		var txt := str(ceili(float(s.left)))
+		var p := at + Vector2(-r, fs * 0.36)
+		c.draw_string_outline(FONT, p, txt, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, fs, 4, Color(0, 0, 0, 0.85))
+		c.draw_string(FONT, p, txt, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, fs, Color.WHITE)
+	c.draw_arc(at, r, 0.0, TAU, 24, UiKit.OUTLINE, 1.5, true)

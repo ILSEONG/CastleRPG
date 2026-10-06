@@ -184,6 +184,31 @@ func reset() -> void:
 	_foot.visible = true
 
 
+## 하단 초상화 쿨 칸(사용자 2026-10-06): 정의의 액티브 스킬을 칸 순서대로(잠긴 것 포함) → [{kind, locked, total, left}].
+## left = 다음 발동까지 남은 초(0..total). 영웅마다 액티브 수가 달라(R은 하나) 칸 수는 표에서 읽는다.
+func active_slots() -> Array:
+	var out := []
+	var skills: Dictionary = def.get("skills", {})
+	for k in skills:
+		if not HeroSkillsScript.is_active(k):
+			continue
+		var total := float(skills[k][0])
+		var locked := not _sk.has(k)
+		var left := 0.0
+		if not locked:
+			match k:
+				"heal_aura":
+					left = _heal_cd
+				"gate_repair":
+					left = _repair_cd
+				"aoe_blast":
+					left = _blast_cd
+				_:
+					left = _skx.cd_left(k)
+		out.append({"kind": k, "locked": locked, "total": total, "left": clampf(left, 0.0, total)})
+	return out
+
+
 func stand_position() -> Vector3:
 	if post == Formation.POST_FREE:
 		return free_pos

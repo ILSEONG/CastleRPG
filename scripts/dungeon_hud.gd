@@ -12,6 +12,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
+const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
@@ -185,6 +186,7 @@ func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	oct.append(oct[0])
 	var on: bool = h != null and dungeon != null and dungeon.picker != null and dungeon.picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
+	HeroStrip.draw_skill_slots(c, h)  # 아래 양 모서리 액티브 쿨 칸
 
 
 func _build_result(root: Control) -> void:

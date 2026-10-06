@@ -806,6 +806,17 @@ func _top_hud(hud) -> void:
 	_check(hidden and strip.visible and strip.cells.size() == _main.strip_heroes().size() and strip.cells.size() > 0,
 		"(z) during a stage the menu UI hides and a hero portrait row shows at the bottom",
 		"hidden=%s strip=%s cells=%d heroes=%d" % [hidden, strip.visible, strip.cells.size(), _main.strip_heroes().size()])
+	# 초상화 아래 좌우 쿨 칸: 영웅 정의의 액티브(칸 순서, 잠긴 것 포함)를 읽는다. 시작 쿨이 돌고 있다
+	var slot_ok := true
+	var running := false
+	for c in strip.cells:
+		var want: Array = c.hero.def.skills.keys().filter(func(k): return preload("res://scripts/hero_skills.gd").is_active(k))
+		var got: Array = c.hero.active_slots()
+		slot_ok = slot_ok and got.map(func(e): return e.kind) == want
+		for e in got:
+			running = running or (not e.locked and e.left > 0.0 and e.left <= e.total)
+	_check(slot_ok and running, "(z) portrait cooldown slots list each hero's active skills in slot order, with the opening cooldown running",
+		"ok=%s running=%s" % [slot_ok, running])
 	_picker._select(null)
 	var c0: Dictionary = strip.cells[strip.cells.size() - 1]
 	var fr: Rect2 = c0.face.get_global_rect()
