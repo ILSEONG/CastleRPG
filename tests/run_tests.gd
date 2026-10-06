@@ -4722,6 +4722,23 @@ func test_tutorial() -> void:
 	t.check()
 	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
 		"tutorial: training is one soldier in 5 s")
+	var step_was: int = t.step
+	t.step = t.mission_index("train") + 1
+	t.check()
+	check(t.active() and not e.tutorial_training and e.train_time("barracks", 1) == 180 * 60.0, "tutorial: past the training mission, training is back to 3 h")
+	t.step = step_was
+	t.check()
+	# 던전 잠금: 그 던전 미션에 닿기 전엔 잠김
+	var locks := []
+	for ty in ["gold", "equip", "ticket"]:
+		var mi: int = t.mission_index(TutorialScript.DUNGEON_MISSION[ty])
+		t.step = mi - 1
+		var before: bool = t.dungeon_locked(ty)
+		t.step = mi
+		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
+	t.step = step_was
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "튜토리얼 「모집권 던전」 미션에서 열립니다" and t.reward(t.mission_index("dungeon_ticket") - 1) == {"keys_ticket": 2},
+		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
@@ -4794,7 +4811,7 @@ func test_tutorial() -> void:
 	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
 	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
 	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 180 * 60.0, "tutorial done: normal training time, still one per order")
-	check(not t.tab_locked("hero") and t.repeating(), "tutorial done: nothing locked, repeat quests")
+	check(not t.tab_locked("hero") and not t.dungeon_locked("ticket") and t.repeating(), "tutorial done: nothing locked, repeat quests")
 	t.free()
 	gs.free()
 	e.free()
@@ -4809,7 +4826,7 @@ func test_tutorial_online() -> void:
 	GameData.load_tables()
 	var enc := func(r: Dictionary) -> String:
 		var parts := []
-		for k in ["wood", "stone", "food", "gold", "diamonds", "tickets", "keys_gold", "keys_equip"]:
+		for k in ["wood", "stone", "food", "gold", "diamonds", "tickets", "keys_gold", "keys_equip", "keys_ticket"]:
 			if r.has(k):
 				parts.append("%s:%d" % [k, int(r[k])])
 		return "|".join(parts)

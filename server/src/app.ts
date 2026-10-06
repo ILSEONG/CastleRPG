@@ -1618,7 +1618,9 @@ export function createApp(opts: AppOptions) {
       const s = soldierAt(g, building)
       if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
       const lv = level(p, building)
-      const tut = p.quest.tut_state === 'active' // 튜토리얼 중: 1마리씩, tutorial_train_sec초
+      // 튜토리얼 보병 훈련 미션(quests id 'train')까지만 1마리씩, tutorial_train_sec초 — 넘기면 원래 시간(앱 Tutorial._sync_training과 같다)
+      const trainStep = g.quests.filter((d) => d.type === 'tutorial').findIndex((d) => d.id === 'train')
+      const tut = p.quest.tut_state === 'active' && p.quest.tut_step <= trainStep
       const max = tut ? 1 : R.trainMax(g.config, lv)
       if (count > max) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${max}`)
       const q = p.buildings[building].train
