@@ -134,6 +134,7 @@ func _init() -> void:
 	test_guild()
 	test_tutorial()
 	test_tutorial_online()
+	test_missions()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -4858,3 +4859,69 @@ func _legacy_training() -> void:
 	GameData._config.train_step_min = "30"
 	GameData._config.train_batch_base = "10"
 	GameData._config.train_batch_per_level = "2"
+
+
+const MissionsScript := preload("res://scripts/missions.gd")
+
+
+## 미션(오프라인): 사건 수, 일일·주간·반복 받기와 보상, 일일 보너스(다른 일일 6개)·주간 보너스(5일), 날·주 리셋, 반복 목표 증가·남은 진행, 저장 왕복.
+func test_missions() -> void:
+	GameData.load_tables()
+	var now := 1.8e9
+	var e = _econ(now)
+	var m = MissionsScript.new()
+	m.save_path = ""
+	m.econ = e
+	m._connect()
+	m.roll()
+	var dk: Dictionary = m.find("d_kill")
+	check(m.progress(dk) == 0 and not m.can_claim(dk) and m.ready_count() == 0, "missions: nothing to claim at the start")
+	for i in 300:
+		e.killed.emit("goblin")
+	check(m.can_claim(dk) and m.ready_count("daily") == 1 and m.ready_count("weekly") == 0, "missions: 300 kills finish the daily kill mission")
+	var gold0: int = e.gold
+	check(m.claim("d_kill") and e.gold == gold0 + 3000 and m.is_claimed(dk) and not m.claim("d_kill"), "missions: daily reward once")
+	check(m.progress(m.find("w_kill")) == 300 and m.progress(m.find("r_kill")) == 300, "missions: kills also count for weekly and repeat")
+	# 반복: 1000 → 받으면 목표 1500, 남은 진행부터
+	for i in 800:
+		e.killed.emit("goblin")
+	var rk: Dictionary = m.find("r_kill")
+	check(m.can_claim(rk) and m.claim("r_kill") and m.times("r_kill") == 1 and m.target(rk) == 1500 and m.progress(rk) == 100,
+		"missions: repeat target grows and leftover progress carries over")
+	# 일일 보너스: 다른 일일 미션 6개
+	var dall: Dictionary = m.find("d_all")
+	for i in 5:
+		e.collected.emit("lumber", "wood", 1)
+	e.sold.emit(10)
+	e.sold.emit(10)
+	e.acted.emit("hero_level", 5)
+	e.acted.emit("growth", 3)
+	for id in ["d_collect", "d_sell", "d_hero"]:
+		m.claim(id)
+	check(m.progress(dall) == 4 and not m.can_claim(dall), "missions: daily bonus waits for 6 daily missions")
+	m.claim("d_growth")
+	e.gacha_done.emit([{}, {}, {}, {}, {}, {}, {}, {}, {}, {}])
+	var dia0: int = e.diamonds
+	m.claim("d_gacha")
+	var t0: int = e.dia_tickets
+	check(m.can_claim(dall) and m.claim("d_all") and e.diamonds == dia0 + 130 and e.dia_tickets == t0 + 1 and int(m.claimed.wd) == 1,
+		"missions: daily bonus gives diamonds + a ticket and counts a bonus day")
+	# 다음 날: 일일 기록·진행이 지워지고 주간·반복은 남는다(같은 주)
+	var d0: int = m.day
+	m.day -= 1
+	m.roll()
+	check(m.day == d0 and not m.is_claimed(dk) and m.progress(dk) == 0, "missions: a new day clears daily progress")
+	m.week -= 1
+	m.day -= 1
+	m.roll()
+	check(m.progress(m.find("w_kill")) == 0 and int(m.claimed.wd) == 0 and m.times("r_kill") == 1, "missions: a new week clears weekly, repeat stays")
+	check(MissionsScript.week_of(MissionsScript.day_of(1791126000.0, 15)) == MissionsScript.week_of(MissionsScript.day_of(1791126000.0 - 1.0, 15)) + 1,
+		"missions: weeks start Monday 00:00 KST")
+	check(m.goto_of(dk) == "stage" and m.title(m.find("r_kill")) == "몬스터 1500마리 처치", "missions: titles and shortcuts")
+	check(MissionsScript.reward_text({"wood": 300, "stone": 300, "food": 300, "tickets": 1}) == "목재·석재·식량 각 300 + 다이아 모집권 1장", "missions: reward text")
+	var seen := {}
+	for d in MissionsScript.DEFS:
+		seen[d.id] = true
+	check(seen.size() == MissionsScript.DEFS.size(), "missions: ids are unique")
+	m.free()
+	e.free()

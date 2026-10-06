@@ -133,6 +133,7 @@ signal granted(reward: Dictionary)  # 튜토리얼 보상을 받았다(grant)
 signal friends_changed  # 친구 목록(friends)이 새로 왔거나 친구 요청 응답 대기가 바뀌었다(온라인만)
 signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받았다 — Tutorial이 맞춘다
 signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
+signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
 var claims_open := true  # false면 claim_offline이 아무것도 안 한다(main: 로그인·접속 중 — 브라우저에서 돌아온 RESUMED가 정산하지 않게)
@@ -153,6 +154,7 @@ var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
 var dia_tickets := 0
 var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
+var server_missions: Dictionary = {}  # 온라인: 미션 받은 기록 {day, week, d, w, wd, r, next_day, next_week}(apply_server가 채운다 — Missions가 읽는다)
 var tutorial_training := false  # 튜토리얼 중(Tutorial이 켠다, 오프라인): 훈련은 한 번에 1마리, 1마리 TUTORIAL_TRAIN_SEC초  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
@@ -674,6 +676,7 @@ func level_up(hero_id: String, count := 1) -> bool:
 	roster_changed.emit()
 	save()
 	leveled.emit(hero_id, level_of(hero_id))
+	acted.emit("hero_level", count)
 	return true
 
 
@@ -744,6 +747,7 @@ func growth_up(id: String, count := 1) -> bool:
 	changed.emit()
 	upgrades_changed.emit()
 	save()
+	acted.emit("growth", count)
 	return true
 
 
@@ -1330,6 +1334,7 @@ func start_training(building_id: String, n: int) -> bool:
 	save()
 	changed.emit()
 	training_changed.emit()
+	acted.emit("train", 1)
 	return true
 
 
@@ -1469,6 +1474,7 @@ func start_research(id: String) -> bool:
 	save()
 	changed.emit()
 	research_changed.emit()
+	acted.emit("research", 1)
 	return true
 
 
@@ -1587,6 +1593,8 @@ func _on_research(data: Dictionary, op: String) -> void:
 	apply_server(data)
 	if op == "cancel" and data.get("refund") is Dictionary:
 		notice.emit(RESEARCH_CANCEL_TEXT)
+	if op == "start":
+		acted.emit("research", 1)
 	research_changed.emit()
 
 
@@ -2121,6 +2129,8 @@ func apply_server(data: Dictionary) -> bool:
 		dia_tickets = maxi(0, int(p.dia_tickets))
 	if p.get("attendance") is Dictionary:
 		attendance = p.attendance
+	if p.get("missions") is Dictionary:
+		server_missions = p.missions
 	var quest_before := server_quest.duplicate()
 	var sq = p.get("quest")
 	if sq is Dictionary and sq.get("tut_state") in ["active", "done", "skipped"] and _num(sq.get("tut_step")) and _num(sq.get("rep_n")):
@@ -2451,7 +2461,7 @@ func _levelup_online(hero_id: String, count: int) -> bool:
 		return false
 	_waiting["levelup"] = true
 	net.flush_kills()
-	net.send("POST", "/v1/hero/levelup", {"hero_id": hero_id, "count": count}, _on_levelup.bind(hero_id), _on_levelup_failed, true, true)
+	net.send("POST", "/v1/hero/levelup", {"hero_id": hero_id, "count": count}, _on_levelup.bind(hero_id, count), _on_levelup_failed, true, true)
 	changed.emit()  # UI가 응답 전 버튼을 끈다
 	return true
 
@@ -2462,14 +2472,15 @@ func _growth_online(id: String, count: int) -> bool:
 		return false
 	_waiting["growth"] = true
 	net.flush_kills()
-	net.send("POST", "/v1/upgrade", {"id": id, "count": count}, _on_growth, _on_growth_failed, true, true)
+	net.send("POST", "/v1/upgrade", {"id": id, "count": count}, _on_growth.bind(count), _on_growth_failed, true, true)
 	changed.emit()  # UI가 응답 전 버튼을 끈다
 	return true
 
 
-func _on_growth(data: Dictionary) -> void:
+func _on_growth(data: Dictionary, count := 1) -> void:
 	_waiting.erase("growth")
 	apply_server(data)
+	acted.emit("growth", count)
 
 
 ## 거부(409 max_level·not_enough_gold, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
@@ -2481,10 +2492,11 @@ func _on_growth_failed() -> void:
 	changed.emit()
 
 
-func _on_levelup(data: Dictionary, hero_id: String) -> void:
+func _on_levelup(data: Dictionary, hero_id: String, count := 1) -> void:
 	_waiting.erase("levelup")
 	apply_server(data)
 	leveled.emit(hero_id, level_of(hero_id))
+	acted.emit("hero_level", count)
 
 
 ## 거부(409 max_level·not_enough_gold, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
@@ -2581,6 +2593,8 @@ func _train_online(op: String, building_id: String, body: Dictionary, once: bool
 func _on_trained(data: Dictionary, key: String) -> void:
 	_waiting.erase(key)
 	apply_server(data)
+	if key.begins_with("train:"):
+		acted.emit("train", 1)
 	var got = data.get("collected")
 	if got is Dictionary and got.get("type") is String and _num(got.get("count")):
 		soldiers_changed.emit()

@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/missions_online.gd" id="1"]
+
+[node name="MissionsOnline" type="Node"]
+script = ExtResource("1")
