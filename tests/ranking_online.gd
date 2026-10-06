@@ -1,6 +1,6 @@
 extends Node
 ## 온라인 랭킹 체크 + 화면(개발용): 로컬 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1)에 게스트로 접속해 HUD 트로피 버튼 → 랭킹 시트의
-## [스테이지][전투력][던전 골드·장비][길드]를 차례로 연다. 길드 보드가 비지 않게 길드 창을 한 번 받아(시스템 길드 5개) 하나에 가입한다.
+## [스테이지][전투력][길드]를 차례로 연다. 길드 보드가 비지 않게 길드 창을 한 번 받아(시스템 길드 5개) 하나에 가입한다.
 ## 다른 플레이어가 있으면 같이 보인다(서버를 띄운 뒤 curl로 게스트 몇 명을 만들어 /v1/test/stage로 라운드를 올려 두면 된다).
 ## 실행: cd server && PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=8790 node src/main.ts &
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/ranking_online.tscn -- --api=http://127.0.0.1:8790 --device=/tmp/x/device.json --out=/tmp/ranking.png
@@ -57,16 +57,12 @@ func _ready() -> void:
 	_check(_panel.data.power.get("me") is Dictionary, "I have power from starter heroes", "")
 	await _snap()  # 3. 전투력
 
-	_panel._pick("dungeon")
-	_check(await _loaded("dungeon_gold"), "gold dungeon board loads", "")
-	await _snap()  # 4. 골드 던전(아직 기록 없음)
-
 	_panel._pick("guild")
 	_check(await _loaded("guild"), "guild board loads", "")
 	var g: Dictionary = _panel.data.guild
 	_check(int(g.get("total", 0)) >= 5, "guild board lists the system guilds", str(g.get("total")))
 	_check(g.get("me") is Dictionary and str(g.me.name) == str(Guild.guild.get("name", "")), "my guild is marked", str(g.get("me")))
-	await _snap()  # 5. 길드
+	await _snap()  # 4. 길드
 	_sheet()
 	_finish()
 

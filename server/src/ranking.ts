@@ -1,7 +1,6 @@
-// 랭킹(GET /v1/ranking/:board). 새 표 없이 지금 있는 표에서 계산한다(마이그레이션 없음).
+// 랭킹(GET /v1/ranking/:board, 던전 랭킹은 사용자 요청으로 뺐다). 새 표 없이 지금 있는 표에서 계산한다(마이그레이션 없음).
 // - stage: 실제 플레이어의 도달 라운드(player_state.stage, 전체 라운드). 같으면 먼저 도달한 사람(last_stage_clear)이 위.
 // - power: 배치 영웅 전투력(guild.ts teamPower — 길드원 목록과 같은 값). 0이면 뺀다.
-// - dungeon_gold / dungeon_equip: 던전 최고 단계(player_dungeons.best_level). 0이면 뺀다.
 // - guild: 모든 길드(직접 만든 길드 + 서버가 만든 시스템 길드). 길드 레벨 → 누적 경험치 → 보스 단계 순. 가상 길드원 몫은
 //   길드 화면과 같은 계산(G.virtualTotals)으로 더한다.
 // 이름: 플레이어는 별명 칸이 없어 길드원 목록과 같은 G.playerName(id)을 쓴다. 목록은 RANK_CACHE_SEC 동안 재사용한다(내 순위는 그 목록에서 찾는다).
@@ -9,7 +8,7 @@ import type { Query, Row } from './db.ts'
 import * as G from './guild.ts'
 import * as R from './rules.ts'
 
-export const BOARDS = ['stage', 'power', 'dungeon_gold', 'dungeon_equip', 'guild'] as const
+export const BOARDS = ['stage', 'power', 'guild'] as const
 export type Board = (typeof BOARDS)[number]
 export const TOP_N = 50
 export const RANK_CACHE_SEC = 30
@@ -17,7 +16,7 @@ export const RANK_CACHE_SEC = 30
 export interface Entry {
   key: string // 플레이어 id 또는 길드 id(응답에는 안 나간다)
   name: string
-  value: number // 정렬 값(stage = 도달 라운드, power, 던전 단계, guild = 레벨)
+  value: number // 정렬 값(stage = 도달 라운드, power, guild = 레벨)
   t: number // 같은 값끼리 순서(작을수록 위)
   guild?: string // 플레이어가 든 길드 이름
   emblem?: number
@@ -30,7 +29,6 @@ export interface Entry {
 export const PLAYERS_SQL = `select s.player_id::text as id, s.stage, extract(epoch from s.last_stage_clear)::float8 as t, s.deploy,
   coalesce((select level from player_buildings b where b.player_id = s.player_id and b.building = $1), 1) as keep,
   coalesce((select json_object_agg(hero_id, json_build_object('level', level, 'promotion', promotion)) from player_heroes h where h.player_id = s.player_id), '{}'::json) as heroes,
-  coalesce((select json_object_agg(type, best_level) from player_dungeons d where d.player_id = s.player_id), '{}'::json) as dungeons,
   g.name as guild
   from player_state s left join player_guild pg on pg.player_id = s.player_id left join guilds g on g.id = pg.guild_id`
 
@@ -57,16 +55,13 @@ export function playerEntries(rows: Row[], board: Board, game: GameLike): Entry[
     const base = { key: String(r.id), name: G.playerName(String(r.id)), guild: r.guild == null ? undefined : String(r.guild), t: Number(r.t) }
     if (board === 'stage') {
       out.push({ ...base, value: Number(r.stage) })
-    } else if (board === 'power') {
+    } else {
       const heroes = json(r.heroes) as Record<string, { level: number; promotion: number }>
       const raw = json(r.deploy)
       const slots = R.heroSlots(game.config, Number(r.keep))
       const deploy = Array.isArray(raw) ? raw.slice(0, slots).filter((x): x is string => typeof x === 'string' && Object.hasOwn(heroes, x)) : []
       const power = G.teamPower(deploy, heroes, defs, cfg)
       if (power > 0) out.push({ ...base, value: power, t: 0 })
-    } else {
-      const best = Number((json(r.dungeons) as Record<string, number>)[board === 'dungeon_gold' ? 'gold' : 'equip'] ?? 0)
-      if (best > 0) out.push({ ...base, value: best, t: 0 })
     }
   }
   return sortEntries(out)

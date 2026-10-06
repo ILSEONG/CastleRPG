@@ -46,7 +46,7 @@ test('ranking: stage board orders real players, ties go to who got there first, 
   assert.ok(r.total >= 3)
 })
 
-test('ranking: power board uses deployed heroes, dungeon boards skip players without a clear', async () => {
+test('ranking: power board uses deployed heroes; dungeon boards are gone', async () => {
   const p = await S.login()
   skip()
   const pw = await rank(p.token, 'power')
@@ -57,13 +57,7 @@ test('ranking: power board uses deployed heroes, dungeon boards skip players wit
   assert.equal((await rank(p.token, 'power')).me, null)
   assert.ok(before > 0)
 
-  assert.equal((await rank(p.token, 'dungeon_gold')).me, null)
-  await S.req('GET', '/v1/player', { token: p.token }) // 던전 행은 첫 읽기 때 생긴다
-  await S.db.query(`update player_dungeons set best_level = 7 where player_id = $1 and type = 'gold'`, [p.id])
-  skip()
-  const dg = await rank(p.token, 'dungeon_gold')
-  assert.equal(dg.me.value, 7)
-  assert.equal((await rank(p.token, 'dungeon_equip')).me, null)
+  for (const b of ['dungeon_gold', 'dungeon_equip']) assert.equal((await S.req('GET', `/v1/ranking/${b}`, { token: p.token })).status, 400)
 })
 
 test('ranking: guild board lists system guilds with level/members/boss, and my guild once I join', async () => {
