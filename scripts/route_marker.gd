@@ -1,5 +1,6 @@
 extends Node3D
-## 이동 명령 표시: 영웅이 지금 서 있는 곳 → 남은 경로(hero._path) → 도착지를 바닥에 노란 띠로 잇고, 도착지에 링을 띄운다.
+## 이동 명령 표시: 영웅이 지금 서 있는 곳 → 남은 경로(hero._path) → 도착지를 바닥에 노란 점선으로 잇고, 도착지에 링을 띄운다.
+## 점선 마디는 도착지에서부터 재므로 땅에 붙어 있다(영웅이 걸어도 흐르지 않고 뒤쪽부터 사라진다).
 ## 영웅이 걸어가면 띠가 줄어들고, 도착하면(또는 새 명령·복귀로 경로가 바뀌거나 쓰러지면) 스스로 사라진다.
 ## unit_picker가 명령마다 영웅당 하나씩 만든다(이전 것은 지운다). 공성전 꼭두각시(puppet)는 경로를 걷지 않으므로 도착지까지 곧은 선.
 
@@ -11,6 +12,8 @@ const LIFT := 0.06   # 바닥 위로 띄우는 높이(z-파이팅 방지)
 const EDGE_COLOR := Color(0.55, 0.38, 0.02, 0.75)
 const ARRIVE_R := 0.45  # 도착지와 이 거리 안이면 도착
 const PULSE_HZ := 1.6
+const DASH := 0.9  # 점선 한 마디 길이
+const GAP := 0.9  # 마디 사이 빈칸
 
 var hero
 var dest := Vector3.ZERO
@@ -112,13 +115,59 @@ func _update() -> void:
 	if pts.size() < 2:
 		queue_free()
 		return
-	_strip(_mesh, pts, WIDTH, LIFT)
-	_strip(_edge_mesh, pts, WIDTH + EDGE * 2.0, LIFT - 0.02)
+	var dashes := _dashes(pts)
+	_strips(_mesh, dashes, WIDTH, 0.0, LIFT)
+	_strips(_edge_mesh, dashes, WIDTH + EDGE * 2.0, EDGE, LIFT - 0.02)
 
 
-## 점들을 잇는 바닥 띠(폭 w, 높이 lift). 꺾이는 곳에 빈틈이 없게 각 마디를 반 폭만큼 앞뒤로 늘인다.
-static func _strip(mesh: ImmediateMesh, pts: Array[Vector3], w: float, lift: float) -> void:
+## 경로를 점선 마디(각각 점들의 배열)로 자른다. 도착지에서 거꾸로 DASH·GAP을 번갈아 잰다(도착 링 바로 앞은 빈칸).
+static func _dashes(pts: Array[Vector3]) -> Array:
+	var rev: Array[Vector3] = pts.duplicate()
+	rev.reverse()
+	var out := []
+	var cur: Array[Vector3] = []
+	var on := false
+	var left := GAP  # 지금 상태(빈칸/마디)에서 남은 길이
+	for i in rev.size() - 1:
+		var a: Vector3 = rev[i]
+		var b: Vector3 = rev[i + 1]
+		var seg := Vector2(b.x - a.x, b.z - a.z).length()
+		var t := 0.0
+		while seg - t > left:
+			t += left
+			var p := a.lerp(b, t / seg)
+			if on:
+				cur.append(p)
+				out.append(cur)
+				cur = []
+			else:
+				cur = [p]
+			on = not on
+			left = DASH if on else GAP
+		left -= seg - t
+		if on:
+			cur.append(b)
+	if on and cur.size() >= 2:
+		out.append(cur)
+	return out
+
+
+static func _strips(mesh: ImmediateMesh, dashes: Array, w: float, ext: float, lift: float) -> void:
 	var verts: Array[Vector3] = []
+	for d in dashes:
+		_strip(verts, d, w, ext, lift)
+	mesh.clear_surfaces()
+	if verts.is_empty():
+		return
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for v in verts:
+		mesh.surface_add_vertex(v)
+	mesh.surface_end()
+
+
+## 점들을 잇는 바닥 띠(폭 w, 높이 lift)의 삼각형을 verts에 붙인다. 꺾이는 곳에 빈틈이 없게 각 토막을 반 폭만큼 늘이고,
+## 양 끝은 ext만큼 더 늘인다(가장자리 띠가 노란 마디를 감싸게).
+static func _strip(verts: Array[Vector3], pts: Array, w: float, ext: float, lift: float) -> void:
 	var up := Vector3(0, lift, 0)
 	for i in pts.size() - 1:
 		var a: Vector3 = pts[i]
@@ -130,15 +179,12 @@ static func _strip(mesh: ImmediateMesh, pts: Array[Vector3], w: float, lift: flo
 		var side := Vector3(-dir.z, 0.0, dir.x) * (w / 2.0)
 		if i > 0:
 			a -= dir * (w / 2.0)
+		else:
+			a -= dir * ext
+		if i == pts.size() - 2:
+			b += dir * ext
 		var a0 := a + up - side
 		var a1 := a + up + side
 		var b0 := b + up - side
 		var b1 := b + up + side
 		verts.append_array([a0, b0, b1, a0, b1, a1])
-	mesh.clear_surfaces()
-	if verts.is_empty():
-		return
-	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for v in verts:
-		mesh.surface_add_vertex(v)
-	mesh.surface_end()
