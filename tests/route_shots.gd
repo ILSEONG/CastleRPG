@@ -55,6 +55,22 @@ func _ready() -> void:
 			break
 	_check(not is_instance_valid(ra), "route removed on arrival")
 	_shots.append(get_viewport().get_texture().get_image())
+	# 영웅을 고른 채 몬스터를 누르면 선택이 풀린다(이동 명령 없음)
+	var mon = null
+	for m in get_tree().get_nodes_in_group("monsters"):
+		var mp: Vector2 = picker.camera.unproject_position(m.global_position + Vector3(0, 0.8, 0))
+		if m.is_alive() and get_viewport().get_visible_rect().grow(-80).has_point(mp) and picker._hero_at(mp, picker.HERO_TAP_PX) == null:
+			mon = m
+			break
+	if mon != null:
+		picker._select(a)
+		var keep: Vector3 = a.free_pos
+		picker._pending = picker.camera.unproject_position(mon.global_position + Vector3(0, 0.8, 0))
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		_check(picker.selected == null and a.free_pos == keep, "monster tap clears the hero selection without a move")
+	else:
+		_check(false, "found an on-screen monster for the monster tap")
 	var out := "/tmp/route.png"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
