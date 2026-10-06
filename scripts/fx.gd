@@ -506,6 +506,72 @@ static func kick(node: Node, at: Vector3, amp: float, stop := 0.0) -> void:
 	if cam != null and cam.get_parent().has_method("kick"):
 		cam.get_parent().kick(at, amp, stop)
 
+
+# --- 보스 범위 예고(개정 26): 바닥에 범위가 먼저 보이고, 안이 빨갛게 차오르면 그때 친다. 게임 판정이라 이펙트 상한(MAX_LIVE)을 받지 않는다 ---
+
+const TELE_BASE := Color(0.55, 0.04, 0.03, 0.30)
+const TELE_EDGE := Color(1.0, 0.18, 0.12, 0.95)
+const TELE_FILL := Color(0.95, 0.08, 0.05, 0.55)
+
+## 원 범위: pos 둘레 radius m. 어두운 붉은 바닥 + 붉은 테두리, 가운데서 붉은 원이 sec초에 걸쳐 테두리까지 차오른다(다 차는 순간 = 공격).
+## 다 차면 잠깐 밝게 번쩍이고 사라진다. 반환 노드를 지우면 예고가 바로 사라진다(시전자가 쓰러질 때).
+static func telegraph_circle(parent: Node, pos: Vector3, radius: float, sec: float) -> Node3D:
+	var root := _tele_root(parent, pos)
+	var base := _tele_part(root, _mesh("tele_disc", TELE_BASE), 0.02, Vector3(radius, 1, radius))
+	var edge := _tele_part(root, _mesh("tele_ring", TELE_EDGE), 0.06, Vector3(radius, 1, radius))
+	var fill := _tele_part(root, _mesh("tele_disc", TELE_FILL), 0.04, Vector3(0.02, 1, 0.02))
+	var tw := fill.create_tween()
+	tw.tween_property(fill, "scale", Vector3(radius, 1, radius), sec)
+	_tele_end(root, [base, edge, fill], sec)
+	return root
+
+
+## 직선 범위: from에서 to까지 너비 width m. 붉은 칸이 시작점에서 끝까지 sec초에 걸쳐 차오른다.
+static func telegraph_lane(parent: Node, from: Vector3, to: Vector3, width: float, sec: float) -> Node3D:
+	var flat_to := Vector3(to.x, from.y, to.z)
+	var length := maxf(0.1, from.distance_to(flat_to))
+	var root := _tele_root(parent, from)
+	if length > 0.1:
+		root.look_at(root.global_position - (flat_to - from).normalized(), Vector3.UP)  # 직사각형 메시는 +Z로 뻗는다 → −Z(look_at 정면)를 반대로
+	var base := _tele_part(root, _mesh("tele_lane", TELE_BASE), 0.02, Vector3(width, 1, length))
+	var edge := _tele_part(root, _mesh("tele_lane_edge", TELE_EDGE), 0.06, Vector3(width, 1, length))
+	var fill := _tele_part(root, _mesh("tele_lane", TELE_FILL), 0.04, Vector3(width, 1, 0.01))
+	var tw := fill.create_tween()
+	tw.tween_property(fill, "scale", Vector3(width, 1, length), sec)
+	_tele_end(root, [base, edge, fill], sec)
+	return root
+
+
+static func _tele_root(parent: Node, pos: Vector3) -> Node3D:
+	var root := Node3D.new()
+	root.set_meta("fx", "telegraph")
+	parent.add_child(root)
+	root.global_position = Vector3(pos.x, 0.0, pos.z)
+	return root
+
+
+static func _tele_part(root: Node3D, m: Mesh, y: float, sc: Vector3) -> MeshInstance3D:
+	var mi := _static(m)
+	mi.material_override = soft_material()
+	mi.position.y = y
+	mi.scale = sc
+	root.add_child(mi)
+	return mi
+
+
+## 다 차는 순간(sec): 0.08초 밝게 번쩍(boost 대신 fade로 진하게 → 옅게) 그리고 0.2초에 사라진 뒤 지운다.
+static func _tele_end(root: Node3D, parts: Array, sec: float) -> void:
+	var tw := root.create_tween()
+	tw.tween_interval(sec)
+	tw.tween_callback(func():
+		for mi in parts:
+			mi.set_instance_shader_parameter("fade", 1.6))
+	tw.tween_interval(0.08)
+	tw.tween_method(func(v: float):
+		for mi in parts:
+			mi.set_instance_shader_parameter("fade", v), 1.0, 0.0, 0.2)
+	tw.tween_callback(root.queue_free)
+
 # --- 스킬 100종 확장 이펙트(hero_skills.gd가 부른다). 겹마다 노드 하나, 상한(MAX_LIVE) 안에서만 ---
 
 ## 둘레 폭발(서리 폭발·함성·도발): 바닥 방사 섬광 + 파동(tier 1+면 두 겹) + 빛무리 + 바닥을 따라 둥글게 퍼지는 빛줄기 + 떠오르는 빛 조각.
@@ -1342,6 +1408,20 @@ static func _build(kind: String, color: Color) -> ArrayMesh:
 			for i in 8:
 				k.face([Vector3.ZERO, Vector3(cos(TAU * i / 8.0), sin(TAU * i / 8.0), 0) * 0.16, Vector3(cos(TAU * (i + 1) / 8.0), sin(TAU * (i + 1) / 8.0), 0) * 0.16],
 					Vector3.BACK, color.lightened(0.6))
+		"tele_disc":  # 범위 예고 원판(개정 26): 32각 채운 원(XZ, 반지름 1)
+			for i in 32:
+				k.face([Vector3.ZERO, Vector3(cos(TAU * i / 32.0), 0, sin(TAU * i / 32.0)), Vector3(cos(TAU * (i + 1) / 32.0), 0, sin(TAU * (i + 1) / 32.0))], Vector3.UP, color)
+		"tele_ring":  # 범위 예고 테두리: 반지름 0.94~1 띠(XZ)
+			for i in 32:
+				var o0 := Vector3(cos(TAU * i / 32.0), 0, sin(TAU * i / 32.0))
+				var o1 := Vector3(cos(TAU * (i + 1) / 32.0), 0, sin(TAU * (i + 1) / 32.0))
+				k.face([o0 * 0.94, o0, o1, o1 * 0.94], Vector3.UP, color)
+		"tele_lane":  # 범위 예고 직사각형: x −0.5~0.5, z 0~1(XZ) — 길이는 z 배율
+			k.face([Vector3(-0.5, 0, 0), Vector3(0.5, 0, 0), Vector3(0.5, 0, 1), Vector3(-0.5, 0, 1)], Vector3.UP, color)
+		"tele_lane_edge":  # 직사각형 테두리(옆 두 줄 + 끝 한 줄, 두께는 너비의 6%)
+			for x in [-0.5, 0.44]:
+				k.face([Vector3(x, 0, 0), Vector3(x + 0.06, 0, 0), Vector3(x + 0.06, 0, 1), Vector3(x, 0, 1)], Vector3.UP, color)
+			k.face([Vector3(-0.5, 0, 0.97), Vector3(0.5, 0, 0.97), Vector3(0.5, 0, 1), Vector3(-0.5, 0, 1)], Vector3.UP, color)
 		"impact":  # 타격 섬광(개정 26): 길고 짧은 가는 가시 10개 + 하얀 심(XY 평면, 카메라를 보게 돌린다, 반지름 1)
 			for i in 10:
 				var a := TAU * i / 10.0 + rng.randf_range(-0.12, 0.12)
