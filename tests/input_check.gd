@@ -255,22 +255,23 @@ func _run() -> void:
 		"(l) a second tap with nothing to collect shows no pop and opens the lumber building window", "wood=%d pop=%s open=%s id=%s" % [Economy.res["wood"], badges.last_pop, bwin.is_open(), bwin.building_id])
 	bwin.close()
 
-	# (m) 영웅 선택 중 벌목장 탭 → 수집되고 선택·위치 유지(이동 명령 없음)
+	# (m) 영웅 선택 중 벌목장 탭 → 수집되고 선택 해제, 위치 유지(이동 명령 없음)
 	var hero_pre := [warrior.side, warrior.post, warrior.free_pos]
 	_picker._select(warrior)
 	Economy.last_collect["lumber"] = Time.get_unix_time_from_system() - 600.0
 	await _tap(lp)
-	_check(_picker.selected == warrior and Economy.res["wood"] == 200 and [warrior.side, warrior.post, warrior.free_pos] == hero_pre,
-		"(m) lumber tap with a hero selected collects and keeps the selection without a move", "selected=%s wood=%d" % [_name(_picker.selected), Economy.res["wood"]])
+	_check(_picker.selected == null and Economy.res["wood"] == 200 and [warrior.side, warrior.post, warrior.free_pos] == hero_pre,
+		"(m) lumber tap with a hero selected collects and clears the selection without a move", "selected=%s wood=%d" % [_name(_picker.selected), Economy.res["wood"]])
 
-	# (n) 성채 탭(개정 12 §2.5): 영웅 선택 중이어도 건물 창(선택·위치 그대로, 이동 명령 없음) / 없어도 건물 창(선택 없음 유지)
+	# (n) 성채 탭(개정 12 §2.5): 영웅 선택 중이어도 건물 창(선택 해제, 위치 그대로, 이동 명령 없음) / 없어도 건물 창(선택 없음 유지)
 	var gold0: int = Economy.gold
 	var kp := _building_px("keep")
 	_check(_picker._pick(kp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "keep" and not _open_hero(kp),
 		"(n) precondition: keep tap point hits the keep body, no hero nearby", "px=%s" % kp)
+	_picker._select(warrior)
 	await _tap(kp)
-	_check(bwin.is_open() and bwin.building_id == "keep" and _picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == hero_pre
-		and not panel.is_open() and Economy.gold == gold0, "(n) keep tap with a hero selected opens the keep window and keeps the hero (no move)",
+	_check(bwin.is_open() and bwin.building_id == "keep" and _picker.selected == null and [warrior.side, warrior.post, warrior.free_pos] == hero_pre
+		and not panel.is_open() and Economy.gold == gold0, "(n) keep tap with a hero selected opens the keep window and clears the selection (no move)",
 		"open=%s id=%s post=%d free=%s" % [bwin.is_open(), bwin.building_id, warrior.post, warrior.free_pos])
 	bwin.close()
 	_picker._select(null)
@@ -278,7 +279,7 @@ func _run() -> void:
 	_check(bwin.is_open() and bwin.building_id == "keep" and _picker.selected == null, "(n) keep tap with no hero selected opens the keep window too", "selected=%s" % _name(_picker.selected))
 	bwin.close()
 
-	# (o) 상인 탭 → 창 열림, 선택 유지. 창 안(제목) 탭은 닫지 않는다
+	# (o) 상인 탭 → 창 열림, 선택 해제. 창 안(제목) 탭은 닫지 않는다
 	_picker._select(warrior)
 	var mp := _camera.unproject_position(Balance.MERCHANT_POS + Vector3(0, 1.0, 0))
 	_check(not _picker._pick(mp, PickerScript.LAYER_MERCHANT).is_empty() and not _open_hero(mp),
@@ -286,8 +287,8 @@ func _run() -> void:
 	var free_before: Vector3 = warrior.free_pos
 	await _tap(mp)
 	await _frames(2)
-	_check(panel.is_open() and _picker.selected == warrior and warrior.free_pos == free_before,
-		"(o) merchant tap opens the trade window and keeps the hero selected", "open=%s selected=%s" % [panel.is_open(), _name(_picker.selected)])
+	_check(panel.is_open() and _picker.selected == null and warrior.free_pos == free_before,
+		"(o) merchant tap opens the trade window and clears the hero selection", "open=%s selected=%s" % [panel.is_open(), _name(_picker.selected)])
 	await _guard_wait()  # 연 직후 보호 시간에는 창 안 누름도 버린다 — 지난 뒤의 창 안 탭을 본다
 	await _tap(panel.dialog.get_global_rect().position + Vector2(300, 20))
 	_check(panel.is_open(), "(o) tapping inside the dialog does not close it", "open=%s" % panel.is_open())
@@ -324,10 +325,12 @@ func _run() -> void:
 	await _frames(2)
 	_check(rig.position == cam_pos and panel.is_open(), "(q) dragging while the window is open does not pan the camera", "pos=%s" % rig.position)
 	var hero_state := [warrior.side, warrior.post, warrior.free_pos]
+	_picker._select(warrior)
 	await get_tree().create_timer(0.45).timeout  # 연 직후 배경 누름 무시 시간(OPEN_GUARD_MS)이 지나게
 	await _tap(bg)
-	_check(not panel.is_open() and _picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == hero_state,
-		"(q) tapping the backdrop over open ground closes the window and does not move the hero", "open=%s state=%s" % [panel.is_open(), [warrior.side, warrior.post, warrior.free_pos]])
+	_check(not panel.is_open() and _picker.selected == null and [warrior.side, warrior.post, warrior.free_pos] == hero_state,
+		"(q) tapping the backdrop over open ground closes the window, clears the selection and does not move the hero", "open=%s state=%s" % [panel.is_open(), [warrior.side, warrior.post, warrior.free_pos]])
+	_picker._select(warrior)
 	await _tap(bg)
 	_check(warrior.free_pos != hero_state[2], "(q) after closing, the same ground tap moves the hero again", "free=%s" % warrior.free_pos)
 
@@ -771,7 +774,7 @@ func _top_hud(hud) -> void:
 	_check(start.distance_to(dest) > 5.0 and mid.distance_to(dest) > 0.5 and rig.position.distance_to(dest) < 0.01 and _camera.size == zoom0,
 		"(z) tapping the east gate bar glides the camera to the east gate (centered after 0.4 s, zoom kept)",
 		"start=%s mid=%s end=%s dest=%s zoom %.1f -> %.1f" % [start, mid, rig.position, dest, zoom0, _camera.size])
-	_check(_picker.selected == warrior and [warrior.side, warrior.post, warrior.free_pos] == state, "(z) the gate bar tap does not reach the battlefield (no hero order)",
+	_check(_picker.selected == null and [warrior.side, warrior.post, warrior.free_pos] == state, "(z) the gate bar tap does not reach the battlefield (no hero order, selection cleared)",
 		"selected=%s" % _name(_picker.selected))
 	_picker._select(null)
 	# 큰 스킬 강조(아트 방향 §4): punch → 잠깐 당겼다 같은 줌으로 돌아온다, 간격 안 두 번째는 무시, 손 줌이 당김을 이긴다
@@ -825,6 +828,13 @@ func _top_hud(hud) -> void:
 		"selected=%s want=%s rect=%s" % [_name(_picker.selected), _name(c0.hero), fr])
 	await _tap(fr.get_center())
 	_check(_picker.selected == null, "(z) tapping the selected hero's portrait again deselects it", "selected=%s" % _name(_picker.selected))
+	if strip.cells.size() > 1:
+		await _tap(fr.get_center())
+		var c1: Dictionary = strip.cells[0]
+		await _tap(c1.face.get_global_rect().get_center())
+		_check(_picker.selected == c1.hero, "(z) with a hero selected, tapping another portrait switches to that hero (UI tap does not clear it)",
+			"selected=%s want=%s" % [_name(_picker.selected), _name(c1.hero)])
+		_picker._select(null)
 	await _tap(bp)
 	_check(GameState.mode == GameState.Mode.IDLE and GameState.stage == st0 and hud._button.text == "▶ 진행", "(z) tapping again stops at once: idle, same stage, reads ▶ 진행", "mode=%d stage=%d text=%s" % [GameState.mode, GameState.stage, hud._button.text])
 	_check(_main._battle_hide.all(func(n): return n.visible) and hud._chip_row.visible and not strip.visible,
