@@ -65,6 +65,9 @@ var _link_label: Label
 var _storage_label: Label
 var _toast: Label  # 짧은 알림("연결 대기 중")
 var _toast_left := 0.0
+var fever_confirm: Control  # FEVER 중 [진행] → "FEVER를 끝내고 시작할까요?" [예]·[아니오]
+var fever_yes: Button
+var fever_no: Button
 
 
 func _ready() -> void:
@@ -169,6 +172,7 @@ func _ready() -> void:
 	hint.visible = false
 	root.add_child(hint)
 	_build_link_ui()
+	_build_fever_confirm()
 
 	GameState.auto_continue = Fever.auto_next
 	_auto.set_pressed_no_signal(GameState.auto_continue)
@@ -358,9 +362,68 @@ func _refresh_button() -> void:
 
 func _on_button() -> void:
 	if GameState.mode == GameState.Mode.IDLE:
-		GameState.start_stage()
+		request_stage()
 	else:
 		GameState.stop_stage()
+
+
+## 대기에서 스테이지 시작. FEVER 중이면 바로 시작하지 않고 끊을지 묻는다([예] = FEVER 끝 + 시작).
+func request_stage() -> void:
+	if GameState.mode != GameState.Mode.IDLE:
+		return
+	if Fever.active():
+		fever_confirm.visible = true
+		return
+	GameState.start_stage()
+
+
+func _on_fever_confirm(yes: bool) -> void:
+	fever_confirm.visible = false
+	if not yes or GameState.mode != GameState.Mode.IDLE:
+		return
+	Fever.stop()
+	GameState.start_stage()
+
+
+## 화면을 덮는 어두운 막(뒤 입력 차단) + 가운데 크림 창: 안내 두 줄과 [예]·[아니오].
+func _build_fever_confirm() -> void:
+	fever_confirm = ColorRect.new()
+	fever_confirm.color = Color(0, 0, 0, 0.45)
+	fever_confirm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fever_confirm.mouse_filter = Control.MOUSE_FILTER_STOP
+	fever_confirm.visible = false
+	add_child(fever_confirm)
+	var box := PanelContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	box.custom_minimum_size = Vector2(560, 0)
+	box.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 14.0, 28))
+	fever_confirm.add_child(box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 24)
+	box.add_child(col)
+	var msg := Label.new()
+	msg.text = "FEVER 중입니다.\nFEVER를 끝내고 스테이지를 시작할까요?"
+	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg.add_theme_font_size_override("font_size", 28)
+	msg.add_theme_color_override("font_color", INK)
+	col.add_child(msg)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	col.add_child(row)
+	fever_yes = Button.new()
+	fever_no = Button.new()
+	for pair in [[fever_yes, "예", UiKit.AMBER, true], [fever_no, "아니오", UiKit.STEEL, false]]:
+		var b: Button = pair[0]
+		b.text = pair[1]
+		b.custom_minimum_size = Vector2(180, 72)
+		b.focus_mode = Control.FOCUS_NONE
+		b.add_theme_font_size_override("font_size", 28)
+		UiKit.apply_button(b, pair[2], 12.0)
+		b.pressed.connect(_on_fever_confirm.bind(pair[3]))
+		row.add_child(b)
 
 
 ## 스테이지 진행 중(main._set_battle_ui): 재화 칩 줄을 숨긴다. 스테이지 패널(스테이지·HP·진행/중지·FEVER)은 그대로, 자리도 그대로

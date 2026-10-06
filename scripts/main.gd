@@ -268,8 +268,7 @@ func _tutorial_goto(target: String) -> void:
 			if not _tutorial_ui.recruit.is_open():
 				_tutorial_ui.tabs.press("recruit")
 		"stage":
-			if GameState.mode == GameState.Mode.IDLE:
-				GameState.start_stage()
+			_hud.request_stage()  # FEVER 중이면 끊을지 묻는다
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.

@@ -1800,6 +1800,22 @@ func _fever_ui(hud) -> void:
 	Fever.left = 119.5
 	await _frames(1)
 	_check(fb.label_text() == "2:00" or fb.label_text() == "1:59", "(fever) the button shows the time left", fb.label_text())
+	await _tap(br.get_center())
+	await _frames(2)
+	_check(hud.fever_confirm.visible and GameState.mode == GameState.Mode.IDLE and Fever.active(),
+		"(fever) [진행] during FEVER asks first: popup up, stage not started", "popup=%s mode=%d" % [hud.fever_confirm.visible, GameState.mode])
+	await _tap(hud.fever_no.get_global_rect().get_center())
+	await _frames(2)
+	_check(not hud.fever_confirm.visible and GameState.mode == GameState.Mode.IDLE and Fever.active(),
+		"(fever) [아니오] closes the popup, FEVER keeps running, no stage", "popup=%s mode=%d left=%.1f" % [hud.fever_confirm.visible, GameState.mode, Fever.left])
+	await _tap(br.get_center())
+	await _frames(2)
+	await _tap(hud.fever_yes.get_global_rect().get_center())
+	await _frames(2)
+	_check(not hud.fever_confirm.visible and GameState.mode != GameState.Mode.IDLE and not Fever.active(),
+		"(fever) [예] ends FEVER and starts the stage", "popup=%s mode=%d left=%.1f" % [hud.fever_confirm.visible, GameState.mode, Fever.left])
+	GameState.stop_stage()
+	await _frames(2)
 	Fever.reset()
 	await _frames(1)
 
