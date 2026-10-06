@@ -13,6 +13,7 @@ const FACE_PX := 92.0
 const GATE_RED := Color(0.86, 0.32, 0.22)
 const KEEP_RED := Color(0.72, 0.16, 0.14)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
+const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 const WIN_GOLD := Color("C8901A")
 
 var battle  # war_battle.gd
@@ -138,7 +139,7 @@ func _build_strip(root: Control) -> void:
 		var face := Button.new()
 		face.flat = true
 		face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
-		face.draw.connect(_draw_face.bind(face, h.def))
+		face.draw.connect(_draw_face.bind(face, h.def, h))
 		face.pressed.connect(_pick.bind(h))
 		if PortraitsScript.current != null:
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
@@ -158,13 +159,15 @@ func _pick(h) -> void:
 		battle.picker._select(h)
 
 
-func _draw_face(c: Control, def: Dictionary) -> void:
+## 선택된 영웅은 금색 테두리.
+func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
 	c.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-	oct.append(oct[0])
-	c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
 	c.draw_texture_rect(PortraitsScript.portrait("hero:" + def.id), r, false)
+	oct.append(oct[0])
+	var on: bool = h != null and battle != null and battle.picker != null and battle.picker.selected == h
+	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
 
 
 func _build_result(root: Control) -> void:
@@ -226,6 +229,7 @@ func _process(delta: float) -> void:
 		var h = s.hero
 		s.bar.value = h.hp_ratio() * 100.0
 		s.cell.modulate.a = 1.0 if h.is_alive() else 0.45
+		s.face.queue_redraw()  # 선택 테두리
 
 
 func _update() -> void:

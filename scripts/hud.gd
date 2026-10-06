@@ -363,6 +363,12 @@ func _on_button() -> void:
 		GameState.stop_stage()
 
 
+## 스테이지 진행 중(main._set_battle_ui): 재화 칩 줄을 숨긴다. 스테이지 패널(스테이지·HP·진행/중지·FEVER)은 그대로, 자리도 그대로
+## (패널을 올리면 [■ 중지]가 누르려던 손가락 밑에서 움직인다).
+func set_battle(on: bool) -> void:
+	_chip_row.visible = not on
+
+
 func _on_auto_toggled(on: bool) -> void:
 	GameState.auto_continue = on
 	Fever.auto_next = on

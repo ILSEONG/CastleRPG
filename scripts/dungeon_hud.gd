@@ -25,6 +25,7 @@ const WIN_GOLD := Color("C8901A")
 const LOSS_RED := Color(0.78, 0.22, 0.18)
 const BOSS_RED := Color(0.86, 0.24, 0.2)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
+const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 
 var dungeon  # dungeon.gd
 var title_label: Label
@@ -140,10 +141,12 @@ func _build_strip(root: Control) -> void:
 		var cell := VBoxContainer.new()
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cell.add_theme_constant_override("separation", 4)
-		var face := Control.new()
+		var face := Button.new()  # 누르면 그 영웅 선택(사용자 2026-10-06) — 그다음 바닥 탭으로 이동
+		face.flat = true
+		face.focus_mode = Control.FOCUS_NONE
 		face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
-		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		face.draw.connect(_draw_face.bind(face, h.def))
+		face.draw.connect(_draw_face.bind(face, h.def, h))
+		face.pressed.connect(pick.bind(h))
 		if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
 		cell.add_child(face)
@@ -165,14 +168,23 @@ func _build_strip(root: Control) -> void:
 		strip.append({"hero": h, "face": face, "bar": bar})
 
 
-## 피규어 칸: 등급 색 8각 바탕 + 피규어(렌더 전엔 자리표시).
-func _draw_face(c: Control, def: Dictionary) -> void:
+## 띠 초상화 누름: 산 영웅이면 선택(이미 선택돼 있으면 해제).
+func pick(h) -> void:
+	var p = dungeon.picker if dungeon != null else null
+	if p == null or not is_instance_valid(h) or not h.is_alive():
+		return
+	p._select(null if p.selected == h else h)
+
+
+## 피규어 칸: 등급 색 8각 바탕 + 피규어(렌더 전엔 자리표시). 선택된 영웅은 금색 테두리.
+func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
 	c.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-	oct.append(oct[0])
-	c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
 	c.draw_texture_rect(PortraitsScript.portrait("hero:" + def.id), r, false)
+	oct.append(oct[0])
+	var on: bool = h != null and dungeon != null and dungeon.picker != null and dungeon.picker.selected == h
+	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
 
 
 func _build_result(root: Control) -> void:
@@ -346,6 +358,7 @@ func _update() -> void:
 	for s in strip:
 		s.bar.value = s.hero.hp_ratio() * 100.0
 		s.face.modulate.a = 1.0 if s.hero.is_alive() else 0.35
+		s.face.queue_redraw()  # 선택 테두리
 	if result_layer.visible:
 		_update_auto_label()
 

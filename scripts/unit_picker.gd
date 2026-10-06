@@ -156,7 +156,7 @@ func _building_hit(screen_pos: Vector2) -> String:
 ## 레이로는 뒤 건물이 잡힌다 — 그 건물로 본다. 이름표 자체는 보지 않는다(다른 건물·바닥 탭을 가리지 않게). 없으면 "".
 func _bubble_hit(screen_pos: Vector2) -> String:
 	var tags = badges.tags if badges != null else null
-	if tags == null:
+	if tags == null or not badges.visible:  # 전투 중 숨긴 말풍선은 누를 수 없다
 		return ""
 	tags.layout()
 	for id in badges.bubble_ids(Economy.time_now()):
