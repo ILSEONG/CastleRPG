@@ -93,7 +93,7 @@ test('주간 보너스: 일일 보너스 5일, 주가 바뀌면 주간 기록·�
   assert.equal((await claim(token, { id: 'w_kill' })).status, 200)
 })
 
-test('반복 미션: n = 받은 횟수(409 stale), quest_repeat_min_sec 간격(409 too_soon), 횟수는 리셋되지 않는다', async () => {
+test('반복 미션: n = 받은 횟수(409 stale), 다른 반복 미션도 곧바로 받는다(간격 없음), 횟수는 리셋되지 않는다', async () => {
   S.clock.t = monday
   const { token } = await S.login()
   assert.equal((await claim(token, { id: 'r_kill' })).status, 400)
@@ -102,12 +102,11 @@ test('반복 미션: n = 받은 횟수(409 stale), quest_repeat_min_sec 간격(4
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.player.missions.r, { r_kill: 1 })
   assert.equal((await claim(token, { id: 'r_kill', n: 0 })).json.error, 'stale')
-  assert.equal((await claim(token, { id: 'r_stage', n: 0 })).json.error, 'too_soon')
-  S.clock.t += 30
+  assert.equal((await claim(token, { id: 'r_stage', n: 0 })).status, 200)
   assert.equal((await claim(token, { id: 'r_kill', n: 1 })).status, 200)
   S.clock.t += 8 * 86400
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual(p.missions.r, { r_kill: 2 })
+  assert.deepEqual(p.missions.r, { r_kill: 2, r_stage: 1 })
   assert.equal(M.targetOf(M.def('r_kill')!, 2), 2000)
 })
 

@@ -23,6 +23,8 @@ var buttons := {}  # 테스트용: "tab:daily" …, "claim:<id>", "go:<id>", "cl
 var _dirty := true
 var _tick := 0.0
 var _rb_cd := 0.0
+var _sig := ""  # 지금 그린 줄들의 순서·상태 — 같으면 줄을 다시 만들지 않고 진행 숫자만 바꾼다
+var _live := []  # [{m, bar, n}] 진행 중인 줄의 막대·숫자
 
 
 func _ready() -> void:
@@ -114,7 +116,10 @@ func _process(delta: float) -> void:
 	_rb_cd -= delta
 	if _dirty and _rb_cd <= 0.0:  # 처치마다 진행이 바뀐다 — 다시 그리기는 몰아서
 		_rb_cd = 0.3
-		_rebuild()
+		if _signature() == _sig:
+			_update_live()  # 버튼을 다시 만들지 않는다(누르는 도중에 버튼이 바뀌면 탭이 사라진다)
+		else:
+			_rebuild()
 
 
 func _head() -> void:
@@ -126,8 +131,40 @@ func _head() -> void:
 	head_label.text = HEAD[tab] if tab == "repeat" else "%s · 남은 시간 %s" % [HEAD[tab], UiKit.duration(maxf(0.0, left))]
 
 
+## 보이는 줄의 순서와 상태(받기·이동·완료·응답 대기·반복 횟수).
+func _signature() -> String:
+	var parts := [tab, Missions.waiting]
+	for m in _sorted():
+		parts.append("%s:%d:%d:%d" % [m.id, 0 if Missions.can_claim(m) else (2 if Missions.is_claimed(m) else 1), Missions.times(m.id), Missions.target(m)])
+	return "|".join(parts)
+
+
+func _sorted() -> Array:
+	var rows := Missions.list(tab)
+	var key := {}  # 받기 → 진행 중 → 완료, 같은 상태는 표 순서(sort_custom은 안정 정렬이 아니다)
+	for i in rows.size():
+		var m: Dictionary = rows[i]
+		key[m.id] = (0 if Missions.can_claim(m) else (2 if Missions.is_claimed(m) else 1)) * 1000 + i
+	rows.sort_custom(func(x, y): return key[x.id] < key[y.id])
+	return rows
+
+
+func _update_live() -> void:
+	_dirty = false
+	for k in buttons:
+		if k.begins_with("tab:"):
+			buttons[k].get_child(0).queue_redraw()  # 다른 탭 빨간 점
+	for e in _live:
+		var goal := Missions.target(e.m)
+		var have := mini(Missions.progress(e.m), goal)
+		e.bar.value = have
+		e.n.text = "%s / %s" % [UiKit.commas(have), UiKit.commas(goal)]
+
+
 func _rebuild() -> void:
 	_dirty = false
+	_sig = _signature()
+	_live = []
 	for k in buttons:
 		if k.begins_with("tab:"):
 			UiKit.apply_button(buttons[k], UiKit.AMBER if k == "tab:" + tab else UiKit.STEEL, 14.0)
@@ -138,11 +175,7 @@ func _rebuild() -> void:
 	for c in body.get_children():
 		c.queue_free()
 	_head()
-	var rows := Missions.list(tab)
-	var order := func(m: Dictionary) -> int:
-		return 0 if Missions.can_claim(m) else (2 if Missions.is_claimed(m) else 1)
-	rows.sort_custom(func(a, b): return order.call(a) < order.call(b))
-	for m in rows:
+	for m in _sorted():
 		body.add_child(_row(m))
 
 
@@ -182,6 +215,8 @@ func _row(m: Dictionary) -> Control:
 	var n := _label("%s / %s" % [UiKit.commas(goal if done else have), UiKit.commas(goal)], 18, SUB, HORIZONTAL_ALIGNMENT_RIGHT)
 	n.custom_minimum_size = Vector2(120, 0)
 	bar_row.add_child(n)
+	if not done and not ok:
+		_live.append({"m": m, "bar": bar, "n": n})
 	v.add_child(bar_row)
 	var rw := _label("보상: " + Missions.reward_text(m.reward), 18, REWARD if not done else SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	rw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

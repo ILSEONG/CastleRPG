@@ -1329,7 +1329,7 @@ export function createApp(opts: AppOptions) {
 
   // 미션 보상 받기. body = {id} (반복 미션은 {id, n}: 지금까지 받은 횟수와 같아야 한다 — 아니면 409 stale, 재전송이 두 번 받지 않는다).
   // 일일·주간은 그 기간에 한 번(409 claimed). daily_count = 오늘 받은 다른 일일 미션 수, daily_bonus = 이번 주 일일 보너스 받은 날 수를
-  // 서버가 본다(모자라면 409 not_done). 나머지 사건 수는 앱을 믿는다. 반복 미션은 quest_repeat_min_sec 간격으로만(409 too_soon).
+  // 서버가 본다(모자라면 409 not_done). 나머지 사건 수는 앱을 믿는다. 반복 미션은 간격 없이 연달아 받을 수 있다(여러 개를 한꺼번에 받는다).
   // 보상(자원·골드·다이아·모집권·던전 열쇠)·진행·economy_log mission을 version 가드 한 문장으로.
   app.post('/v1/mission/claim', auth, async (c) => {
     const b = await body(c)
@@ -1351,7 +1351,6 @@ export function createApp(opts: AppOptions) {
       } else {
         const done = m.r[d.id] ?? 0
         if (n !== done) throw new ApiError(409, 'stale', `mission '${d.id}' has been claimed ${done} times`)
-        if (m.rt !== null && now - m.rt < R.cfgNum(g.config, 'quest_repeat_min_sec')) throw new ApiError(409, 'too_soon', 'claimed too soon')
         m.r = { ...m.r, [d.id]: done + 1 }
         m.rt = now
       }

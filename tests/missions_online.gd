@@ -69,8 +69,34 @@ func _ready() -> void:
 		"%d %d %d" % [Missions.times("r_kill"), Missions.target(rk), Missions.progress(rk)])
 	await _frames(20)
 	await _snap()  # 5. 반복
+	# 실제 탭(누름 → 처치가 계속 들어오는 0.6초 → 뗌): 누르는 동안 창이 버튼을 다시 만들면 탭이 사라진다(2026-10-06 버그)
+	Missions.note("hero_level", 20)
+	Missions.note("growth", 20)
+	await _frames(30)
+	_check(_panel.buttons.has("claim:r_hero") and _panel.buttons.has("claim:r_growth"), "two repeat missions ready", str(_panel.buttons.keys()))
+	for id in ["r_hero", "r_growth"]:
+		var b: Button = _panel.buttons["claim:" + id]
+		var at: Vector2 = b.get_viewport().get_screen_transform() * b.get_global_rect().get_center()  # 창 좌표(720×1280 → 창 크기)
+		_tap(at, true)
+		for i in 36:
+			Missions.note("kill", 1)
+			await get_tree().process_frame
+		_tap(at, false)
+		_check(await _wait_until(func(): return Missions.waiting == "" and Missions.times(id) == 1, 10.0), "a real tap during combat claims " + id,
+			"times=%d" % Missions.times(id))
+		await _frames(10)
 	_sheet()
 	_finish()
+
+
+func _tap(at: Vector2, down: bool) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = down
+	ev.position = at
+	ev.global_position = at
+	Input.parse_input_event(ev)
+	await get_tree().process_frame
 
 
 func _finish() -> void:
