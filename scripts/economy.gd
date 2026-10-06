@@ -49,6 +49,8 @@ const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 �
 const NO_GOLD_TEXT := "골드가 부족합니다"
 const NO_DIA_TEXT := "다이아가 부족합니다"
 const NO_TICKET_TEXT := "다이아 모집권이 부족합니다"
+const QUEST_FAIL_TEXT := {"too_soon": "잠시 뒤에 다시 받아 주세요", "not_done": "아직 미션을 끝내지 않았어요", "stale": "이미 받은 보상이에요"}
+const QUEST_FAIL_DEFAULT := "보상을 받지 못했어요. 잠시 뒤에 다시 시도해 주세요"
 const GACHA_LEVEL_TEXT := "골드 모집 Lv %d! SSR %s%%"  # 레벨업 알림(개정 23)
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
@@ -127,6 +129,8 @@ signal research_done(id: String, level: int)  # 연구 완료 — 새 레벨(온
 signal killed(kind: String)  # 튜토리얼: 몬스터를 처치했다(성 전투·방치)
 signal sold(gold: int)  # 튜토리얼: 상인에게 자원을 팔았다(오프라인은 곧바로, 온라인은 응답이 왔을 때)
 signal granted(reward: Dictionary)  # 튜토리얼 보상을 받았다(grant)
+signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받았다 — Tutorial이 맞춘다
+signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
 var claims_open := true  # false면 claim_offline이 아무것도 안 한다(main: 로그인·접속 중 — 브라우저에서 돌아온 RESUMED가 정산하지 않게)
@@ -141,6 +145,7 @@ var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면
 var res: Dictionary = {}           # 자원 id → int
 var last_collect: Dictionary = {}  # 자원 건물 id → 마지막 수집. 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 모든 건물)
+var server_quest: Dictionary = {}  # 온라인: 서버 퀘스트 진행 {tut_state, tut_step, rep_n}(apply_server가 채운다, 오프라인은 비어 있다)
 var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않은 건물 id → true. 레벨은 1로 두고 "공터"로 보인다 — 짓기(0 → 1)는 일꾼이
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
@@ -578,8 +583,6 @@ func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
 		notice.emit(NO_TICKET_TEXT if ticket else (NO_DIA_TEXT if dia else NO_GOLD_TEXT))
 		return false
 	if net != null:
-		if ticket:
-			return false  # 모집권은 오프라인(튜토리얼)에만 있다
 		return _gacha_online(count, currency)
 	var rates := gacha_rates(GameData.GACHA_DIA if dia else currency)
 	var pity := {"n": gacha_dia_pity, "max": int(GameData.config_num("gacha_dia_pity"))} if dia else {}
@@ -2050,7 +2053,18 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("research") == null or p.research is Dictionary)):  # 개정 24
 		push_error("bad player response: %s" % str(data))
 		return false
-	unbuilt = {}  # 튜토리얼 공터는 오프라인 전용 — 서버 상태에는 없다
+	var unbuilt_before := unbuilt.duplicate()
+	unbuilt = {}  # 튜토리얼 공터(서버 player.unbuilt — 아직 짓지 않은 건물, 레벨은 1 그대로)
+	if p.get("unbuilt") is Array:
+		for x in p.unbuilt:
+			if x is String and not GameData.building_def(x).is_empty():
+				unbuilt[x] = true
+	if _num(p.get("dia_tickets")):
+		dia_tickets = maxi(0, int(p.dia_tickets))
+	var quest_before := server_quest.duplicate()
+	var sq = p.get("quest")
+	if sq is Dictionary and sq.get("tut_state") in ["active", "done", "skipped"] and _num(sq.get("tut_step")) and _num(sq.get("rep_n")):
+		server_quest = {"tut_state": str(sq.tut_state), "tut_step": maxi(0, int(sq.tut_step)), "rep_n": maxi(0, int(sq.rep_n))}
 	var research_before := [research_levels.duplicate(), research_current.duplicate()]
 	if p.get("research") is Dictionary:  # {levels: {id: L}, current: {id, finish} 또는 null}
 		var rs := _research_state(p.research)
@@ -2139,12 +2153,51 @@ func apply_server(data: Dictionary) -> bool:
 		for id in levels:
 			if int(levels[id]) > int(levels_before.get(id, 1)):
 				building_done.emit(id, levels[id])
+		for id in unbuilt_before:
+			if not unbuilt.has(id):  # 공터를 다 지었다(레벨은 1 그대로)
+				building_done.emit(id, building_level(id))
 		for id in research_levels:
 			if int(research_levels[id]) > int(research_before[0].get(id, 0)):
 				_announce_research(id)
 	_synced = true
 	_apply_server18(p)
+	if server_quest != quest_before:
+		quest_synced.emit()
 	return true
+
+
+## 온라인 퀘스트 보상 받기: POST /v1/quest/claim {type: tutorial, step} | {type: repeat, n}(once — 재전송하지 않는다. 서버가 같은 번호를
+## 두 번 받지 않는다). 응답 → apply_server(보상·진행) → granted(보상) → quest_claimed(true). 거부·유실이면 상태를 새로 받고 quest_claimed(false).
+## 보냈으면 true.
+func quest_claim_online(body: Dictionary) -> bool:
+	if net == null or _waiting.has("quest"):
+		return false
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	_waiting["quest"] = true
+	net.flush_kills()
+	net.send("POST", "/v1/quest/claim", body, _on_quest_claimed, _on_quest_claim_failed, true, true)
+	return true
+
+
+func quest_waiting() -> bool:
+	return _waiting.has("quest")
+
+
+func _on_quest_claimed(data: Dictionary) -> void:
+	_waiting.erase("quest")
+	apply_server(data)
+	if data.get("reward") is Dictionary:
+		granted.emit(data.reward)
+	quest_claimed.emit(true)
+
+
+func _on_quest_claim_failed() -> void:
+	_waiting.erase("quest")
+	notice.emit(QUEST_FAIL_TEXT.get(net.last_error, QUEST_FAIL_DEFAULT))
+	net.refresh()
+	quest_claimed.emit(false)
 
 
 ## 서버 다이아·모집 상태(개정 23). 첫 반영의 레벨 차이는 레벨업이 아니라 접속이다(알림 없음).
@@ -2322,7 +2375,7 @@ func _on_gacha(data: Dictionary) -> void:
 
 func _on_gacha_failed() -> void:
 	_waiting.erase("gacha")
-	notice.emit({"not_enough_gold": NO_GOLD_TEXT, "not_enough_diamonds": NO_DIA_TEXT}.get(net.last_error, GACHA_FAIL_TEXT))
+	notice.emit({"not_enough_gold": NO_GOLD_TEXT, "not_enough_diamonds": NO_DIA_TEXT, "not_enough_tickets": NO_TICKET_TEXT}.get(net.last_error, GACHA_FAIL_TEXT))
 	gacha_done.emit([])
 
 

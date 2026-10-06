@@ -57,12 +57,12 @@ func _ready() -> void:
 	var phase := Net.arg_value("phase")
 	var device := Net.arg_value("device")
 	var state_path := Net.arg_value("state")
-	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5"], "online mode with --api, --device, --state, --phase",
+	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5", "6"], "online mode with --api, --device, --state, --phase",
 		"api=%s device=%s state=%s phase=%s" % [Net.api_base, device, state_path, phase])
 	if _fails == 0:
 		Net.device_path = device  # start() 전에
 		Net.auth_path = device.get_base_dir().path_join("auth.json")
-		if phase in ["1", "2"]:
+		if phase in ["1", "2", "6"]:
 			Net.set_auth("guest")  # 로그인 화면 없이 게스트(이전 동작)
 		match phase:
 			"1":
@@ -75,6 +75,8 @@ func _ready() -> void:
 				await _phase4_session(state_path)
 			"5":
 				await _phase5_lost()
+			"6":
+				await _phase6_quests()
 	if _errors.count > 0:
 		print("ONLINE SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -555,8 +557,8 @@ func _phase2(state_path: String) -> void:
 		for id in saved.promotions:
 			promo_ok = promo_ok and Economy.promotion_of(id) == int(saved.promotions[id]) and Economy.shards_of(id) == int(saved.shards.get(id, 0))
 	var hans_node = spawned.filter(func(h): return h.def.id == "hans")
-	_check(promo_ok and hans_node.size() == 1 and is_equal_approx(hans_node[0].hp_max, GameData.hero_stats(GameData.hero("hans"), 12, 0).hp * 2.25),
-		"(p2) reconnecting restores promotions and shards (hans ★2, 10 shards); the spawned hans has HP x1.5^2",
+	_check(promo_ok and hans_node.size() == 1 and is_equal_approx(hans_node[0].hp_max, GameData.hero_stats(GameData.hero("hans"), 12, 0).hp * pow(GameData.config_num("promote_mult"), 2)),
+		"(p2) reconnecting restores promotions and shards (hans ★2, 10 shards); the spawned hans has HP x promote_mult^2",
 		"promotions=%s shards=%s saved=%s" % [Economy.hero_promotions, Economy.hero_shards, saved.get("promotions")])
 	await _frames(2)
 	_check(Net.up and _hud._banner.visible and _hud._storage_label.visible and not _hud._link_label.visible and _hud._storage_label.text == Net.STORAGE_TEXT
@@ -647,6 +649,37 @@ func _phase5_lost() -> void:
 	_login_screen().press_guest()
 	var built := await _wait_until(func(): return _main.camera != null, 30.0)
 	_check(built and Net.auth_mode == "guest" and Net.logins == 1, "(s3) [게스트로 시작하기] then starts the world as the device guest", "built=%s logins=%d" % [built, Net.logins])
+
+
+## phase 6: 튜토리얼(서버 퀘스트). 새 플레이어 튜토리얼을 켜고 새 기기로 접속 → 서버가 정한 공터·1단계 미션 카드 → 보상 받기(서버가 자원을 준다) →
+## 공터(벌목장) 짓기 → 다 지으면 공터에서 빠지고 미션 완료 → 보상 받기로 3단계. 끝나면 설정을 되돌린다.
+func _phase6_quests() -> void:
+	await _post_json("/v1/test/config", {"key": "tutorial_new_players", "value": "1"})
+	DirAccess.remove_absolute(Net.device_path)  # 새 기기 = 새 플레이어
+	Tutorial.go_online()  # 테스트 장면에서는 Tutorial._start가 건너뛴다 — 실제 게임처럼 온라인으로
+	if not await _start_world():
+		return
+	var synced := await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0)
+	_check(synced and Tutorial.active() and Tutorial.step == 0 and Tutorial.mission().id == "look_keep" and Economy.unbuilt.has("lumber") and not Economy.unbuilt.has("keep")
+		and Economy.tutorial_training, "(q) a new online player starts the tutorial from the server: card on mission 1, empty lots",
+		"quest=%s unbuilt=%s mission=%s" % [Economy.server_quest, Economy.unbuilt.keys(), Tutorial.mission()])
+	Tutorial.note("open", 1, "keep")
+	var wood0 := int(Economy.res.get("wood", 0))
+	_check(Tutorial.complete() and Tutorial.claim(), "(q) mission 1 done; claim sent to the server", "complete=%s" % Tutorial.complete())
+	var got := await _wait_until(func(): return Tutorial.step == 1, 10.0)
+	_check(got and int(Economy.res.wood) == wood0 + int(Tutorial.reward(0).wood) and Tutorial.count == 0 and Tutorial.mission().id == "build_lumber",
+		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d wood=%d->%d" % [Tutorial.step, wood0, int(Economy.res.wood)])
+	var t0 := Economy.time_now()
+	_check(Economy.upgrade_block("lumber", t0) == "" and Economy.upgrade("lumber", t0), "(q) the lumber lot can be built with the reward", Economy.upgrade_block("lumber", t0))
+	var started := await _wait_until(func(): return Economy.is_building("lumber"), 10.0)
+	Economy.finish_build_now()
+	var built := await _wait_until(func(): return not Economy.unbuilt.has("lumber"), 10.0)
+	_check(started and built and Economy.building_level("lumber") == 1 and Tutorial.complete(), "(q) the finished lot leaves the server's lot list and completes mission 2",
+		"unbuilt=%s" % [Economy.unbuilt.keys()])
+	Tutorial.claim()
+	got = await _wait_until(func(): return Tutorial.step == 2, 10.0)
+	_check(got and Economy.server_quest.tut_step == 2, "(q) claiming mission 2 moves the server to mission 3", "quest=%s" % [Economy.server_quest])
+	await _post_json("/v1/test/config", {"key": "tutorial_new_players", "value": "0"})
 
 
 ## 서버에 JSON POST 하나(Net 큐와 따로). 응답 사전(실패면 {}).
