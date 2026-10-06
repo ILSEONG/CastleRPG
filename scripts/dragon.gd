@@ -1,7 +1,8 @@
 extends "res://scripts/monster.gd"
 ## 길드 보스 드래곤(guild_boss.gd 장면). monster.gd 아레나 모드 그대로(영웅 스킬 상태·지속 피해·피해 숫자) + 다른 점:
 ## - 모델은 dragon_model.gd(부품을 코드로 움직인다). 제자리에 서서(speed 0, 사거리가 무대 전체) 가장 가까운 영웅 쪽을 보고
-##   물기·불 뿜기·날개 바람을 차례로 한다. 공격은 영웅 최대 체력의 HIT_PCT만큼 깎는다(쓰러진 영웅은 남은 시간 동안 못 친다).
+##   물기·불 뿜기·날개 바람을 차례로 한다. 공격력 = ATK_BASE × ATK_GROWTH^(단계 − 1)(atk_of), 맞은 영웅은 그만큼 체력이 깎인다
+##   (영웅 방어 스킬·weaken 반영 — hit_damage). 쓰러진 영웅은 남은 시간 동안 못 친다.
 ## - 쓰러지지 않는다: HP가 0이 되면 그 단계를 처치한 것(level_cleared) — 다음 단계 최대 HP로 차오르고 남은 피해는 넘긴다(서버 bossOf와 같다).
 ## - 받은 피해 합(dealt)이 이번 도전 피해다. 넉백·겹침 밀림 없음.
 ## 몸 반지름 reach_r만큼 영웅 사거리가 늘어난다(hit_radius — 근접 영웅이 큰 몸 바깥에서 친다).
@@ -13,8 +14,9 @@ const SIZE := 6.5  # 키(m) — 영웅(2.2 m)의 세 배쯤
 const REACH_R := 2.8  # 몸 반지름(m): 영웅은 이만큼 더 멀리서 친다
 const ATK_INTERVAL := 2.6
 const FIRE := Color(1.0, 0.45, 0.12)
-const HIT_PCT := 0.20  # 한 번 맞을 때 영웅 최대 체력 대비(사용자 선택 대기 — 10%·20%·35%)
-const GUST_MULT := 0.5  # 날개 바람은 모두에게 절반
+const ATK_BASE := 60.0  # 1단계 공격력(데스나이트 1단계와 같다) — 사용자 선택 대기(40·60·100)
+const ATK_GROWTH := 1.12  # 보스 단계마다 공격력 ×(장비 던전 적 공격 성장과 같다)
+const GUST_MULT := 0.5  # 날개 바람은 모두에게 공격력의 절반
 const BREATH_DEG := 35.0  # 불 뿜기 부채꼴 반각
 
 signal level_cleared(level: int)
@@ -28,7 +30,7 @@ var closed := false  # 전투가 끝났다(날아오던 투사체 피해는 세�
 ## add_child 전에. p_level = 지금 보스 단계, p_hp = 남은 HP.
 func setup_boss(p_level: int, p_hp: float) -> void:
 	level = maxi(1, p_level)
-	setup_arena({"kind": "dragon", "hp": maxf(1.0, p_hp), "atk": 0.0, "speed": 0.0, "range": 60.0, "atk_interval": ATK_INTERVAL,
+	setup_arena({"kind": "dragon", "hp": maxf(1.0, p_hp), "atk": atk_of(level), "speed": 0.0, "range": 60.0, "atk_interval": ATK_INTERVAL,
 		"aggro": 60.0, "scale": SIZE / 2.2})
 	hp_max = GuildScript.boss_max(level)
 	is_boss = true
@@ -40,6 +42,11 @@ func _ready() -> void:
 	_model = DragonModelScript.new()
 	_model.size = SIZE
 	add_child(_model)
+
+
+## 보스 단계 → 공격력.
+static func atk_of(p_level: int) -> float:
+	return roundf(ATK_BASE * pow(ATK_GROWTH, maxi(p_level, 1) - 1))
 
 
 func take_damage(amount: float, kind := 0) -> void:
@@ -55,6 +62,7 @@ func take_damage(amount: float, kind := 0) -> void:
 	while hp <= 0.0:
 		level_cleared.emit(level)
 		level += 1
+		atk = atk_of(level)
 		hp_max = GuildScript.boss_max(level)
 		hp += hp_max
 
@@ -83,8 +91,7 @@ func bar_scale() -> float:
 	return 3.0
 
 
-## 타격 순간: 맞는 영웅 최대 체력의 HIT_PCT만큼(레벨과 상관없이 공평하게).
-## 물기 = 노린 영웅 한 명, 불 뿜기 = 입 앞 부채꼴(BREATH_DEG) 안 모두, 날개 바람 = 모두에게 GUST_MULT배.
+## 타격 순간: 물기 = 노린 영웅 한 명, 불 뿜기 = 입 앞 부채꼴(BREATH_DEG) 안 모두에게 공격력만큼, 날개 바람 = 모두에게 GUST_MULT배.
 func _release() -> void:
 	attacks += 1
 	var h = _swing_hero
@@ -119,4 +126,4 @@ func _alive_heroes() -> Array:
 
 
 func _hurt(hero, mult: float) -> void:
-	hero.take_damage(float(hero.hp_max) * HIT_PCT * mult * (1.0 - _weak_pct / 100.0 if _weak_t > 0.0 else 1.0), self)
+	hero.take_damage(hit_damage() * mult, self)

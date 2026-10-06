@@ -47,7 +47,7 @@ func _ready() -> void:
 	await _secs(6.0)
 	await _snap()
 	await _secs(6.0)
-	print("HP after 12 s: ", scene.heroes.map(func(h): return snappedf(h.hp_ratio(), 0.01)))
+	print("dragon atk ", scene.dragon.atk, " HP after 12 s: ", scene.heroes.map(func(h): return snappedf(h.hp_ratio(), 0.01)))
 	await _snap()
 	while scene.phase != scene.Phase.RESULT:
 		await get_tree().process_frame
