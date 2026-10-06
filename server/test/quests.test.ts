@@ -48,7 +48,7 @@ test('공터: 수집·훈련·연구는 409, 짓기는 선행·성채 상한 없
   assert.equal(r.status, 200)
   const cost = R.buildCost(def, 1)
   assert.deepEqual(r.json.player.res, { wood: 1000 - cost.wood, stone: 1000 - cost.stone, food: 1000 - cost.food })
-  assert.equal(r.json.build.finish, T0 + R.buildSec(def, 1))
+  assert.equal(r.json.build.finish, T0 + 5) // 공터 첫 건설 = lot_build_sec(5)초
   assert.equal((await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'lumber' } })).json.error, 'builder_busy')
   const done = (await S.req('POST', '/v1/test/build_now', { token })).json.player
   assert.equal(done.buildings.stable.level, 1)

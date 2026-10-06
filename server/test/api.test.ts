@@ -431,7 +431,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|9:8|22:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 108) // 모집권 던전 +9(ticket_*). 퀘스트 +3(tutorial_train_sec·quest_repeat_min_sec·tutorial_new_players). 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
+  assert.equal(Object.keys(g.config).length, 109) // 공터 첫 건설 +1(lot_build_sec). 모집권 던전 +9(ticket_*). 퀘스트 +3(tutorial_train_sec·quest_repeat_min_sec·tutorial_new_players). 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
   assert.deepEqual(g.dungeons.map((d: any) => [d.id, d.type, d.kind, d.count, d.delay]), [['gold_goblin_a', 'gold', 'goblin', 10, 0], ['gold_goblin_b', 'gold', 'goblin', 5, 5],
     ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0],
     ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0]]) // 개정 18: 파일 순서
