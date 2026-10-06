@@ -63,8 +63,8 @@ promote_mult,1.5
 skill2_unlock_star,3
 skill3_unlock_star,5
 fx_shake,1
-hero_level_stat,0.06
-hero_level_stat_melee,0.045
+hero_level_stat,0.042
+hero_level_stat_melee,0.0315
 levelup_gold_R,30
 levelup_gold_SR,60
 levelup_gold_SSR,120

@@ -561,11 +561,14 @@ static func _swap_materials(root: Node, f: Callable) -> void:
 			var src := mi.get_active_material(i)
 			if src != null:
 				mi.set_surface_override_material(i, f.call(src))
-static var _outline: ShaderMaterial
+static var _outlines: Array[ShaderMaterial] = []  # 만든 외곽선 재질 전부(화면 높이를 함께 맞춘다)
+static var _view_h := 1280.0
+## 카툰 외곽선을 그리나(2026-10-06: 외곽선 없는 쪽을 쓴다). 바꾸면 그 뒤에 만드는 카툰 재질부터 적용된다.
+static var toon_outlines := false
 
 
 ## 카툰 렌더링(영웅·몬스터): 모델의 로우폴리 재질(텍스처·칸 색 바꿈·정점 색, 겹쳐 쓴 재질 포함)을 같은 알베도의 카툰 재질로 바꾼다 —
-## 부드러운 법선 + 두 단계 음영 + 테두리 빛, next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
+## 부드러운 법선 + 두 단계 음영 + 테두리 빛, toon_outlines면 next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
 static func toonify(root: Node) -> void:
 	_swap_materials(root, toon_material)
 
@@ -583,22 +586,30 @@ static func toon_material(src: Material) -> Material:
 			var v = sm.get_shader_parameter(p)
 			if v != null:
 				m.set_shader_parameter(p, v)
-		m.next_pass = toon_outline()
+		if toon_outlines:
+			m.next_pass = toon_outline(sm)
 		_toon_cache[key] = m
 	return _toon_cache[key]
 
 
 ## 외곽선 두께를 화면 픽셀로 맞추려고 화면 높이를 알려 준다(main이 창 크기가 바뀔 때마다 부른다).
 static func toon_view_height(h: float) -> void:
-	toon_outline().set_shader_parameter("view_h", maxf(1.0, h))
+	_view_h = maxf(1.0, h)
+	for m in _outlines:
+		m.set_shader_parameter("view_h", _view_h)
 
 
-## 카툰 외곽선 재질(하나를 공유).
-static func toon_outline() -> ShaderMaterial:
-	if _outline == null:
-		_outline = ShaderMaterial.new()
-		_outline.shader = TOON_OUTLINE_SHADER
-	return _outline
+## 카툰 외곽선 재질(카툰 재질마다 하나): src와 같은 알베도를 어둡게 한 색으로 그린다.
+static func toon_outline(src: ShaderMaterial) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = TOON_OUTLINE_SHADER
+	for p in ["albedo_tex", "albedo_color", "use_texture", "use_vertex_color"]:
+		var v = src.get_shader_parameter(p)
+		if v != null:
+			m.set_shader_parameter(p, v)
+	m.set_shader_parameter("view_h", _view_h)
+	_outlines.append(m)
+	return m
 
 
 ## 모델의 모든 표면 재질을 로우폴리 재질로 바꾼다.
