@@ -2399,7 +2399,8 @@ func _sell_many_online(list: Array) -> void:
 
 func _on_sold(data: Dictionary, key: String) -> void:
 	_waiting.erase(key)
-	apply_server(data)
+	if apply_server(data) and _num(data.get("gold_gained")) and int(data.gold_gained) > 0:
+		sold.emit(int(data.gold_gained))  # 튜토리얼·반복 퀘스트 "상인과 거래"(오프라인 sell과 같다)
 
 
 func _unwait(key: String) -> void:

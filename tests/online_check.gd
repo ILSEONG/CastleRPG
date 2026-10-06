@@ -679,6 +679,12 @@ func _phase6_quests() -> void:
 	Tutorial.claim()
 	got = await _wait_until(func(): return Tutorial.step == 2, 10.0)
 	_check(got and Economy.server_quest.tut_step == 2, "(q) claiming mission 2 moves the server to mission 3", "quest=%s" % [Economy.server_quest])
+	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그)
+	var sales := []
+	Economy.sold.connect(func(g): sales.append(g))
+	Economy.sell_all(Economy.time_now())
+	var sold_ok := await _wait_until(func(): return not sales.is_empty(), 10.0)
+	_check(sold_ok and int(sales[0]) > 0, "(q) an online sale reply signals sold (mission '상인과 거래')", "sales=%s res=%s" % [sales, Economy.res])
 	await _post_json("/v1/test/config", {"key": "tutorial_new_players", "value": "0"})
 
 

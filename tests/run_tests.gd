@@ -4825,6 +4825,15 @@ func test_tutorial_online() -> void:
 	check(not t.active() and t.repeating() and t.rep_n == 2 and t.mission().kind == TutorialScript.REPEATS[2].kind and notes.has(TutorialScript.DONE_TEXT)
 		and not e.tutorial_training, "online: tutorial done → repeat quest from the server's number")
 	check(not e.quest_claim_online({"type": "repeat", "n": 2}), "no network, no claim")
+	# 온라인 판매 응답도 sold를 낸다(튜토리얼 7 "상인과 거래" — 응답에서 세지 않아 깨지지 않던 버그)
+	var sales := []
+	e.sold.connect(func(g): sales.append(g))
+	var sell_reply: Dictionary = reply.duplicate(true)
+	sell_reply.gold_gained = 0
+	e._on_sold(sell_reply, "sell:all")
+	sell_reply.gold_gained = 120
+	e._on_sold(sell_reply, "sell:all")
+	check(sales == [120], "an online sale reply with gold signals sold (nothing sold, no signal)")
 	t.free()
 	gs.free()
 	e.free()
