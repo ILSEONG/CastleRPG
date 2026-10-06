@@ -164,6 +164,7 @@ interface Change {
   items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
   sellItems?: number[] // 지울 장비 id
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
+  equips?: { hero_id: string; slot: string; item_id: number }[] // 한 번에 여러 부위 장착(자동착용) — 부위·장비는 서로 다르다
   diamonds?: number // 다이아 증감(개정 23)
   diaTickets?: number // 다이아 모집권 증감(모집권 던전)
   gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
@@ -720,6 +721,15 @@ export function createApp(opts: AppOptions) {
           on conflict (player_id, hero_id, slot) do update set item_id = excluded.item_id returning 1)`)
       }
     }
+    ;(ch.equips ?? []).forEach((e, i) => {
+      const hero = p(e.hero_id)
+      const slot = p(e.slot)
+      const item = p(String(e.item_id))
+      ctes.push(`eqm${i}a as (delete from player_equipment where player_id = ${sid} and item_id = ${item}::bigint
+        and not (hero_id = ${hero} and slot = ${slot}) returning 1)`)
+      ctes.push(`eqm${i}b as (insert into player_equipment (player_id, hero_id, slot, item_id) select player_id, ${hero}, ${slot}, ${item}::bigint from s
+        on conflict (player_id, hero_id, slot) do update set item_id = excluded.item_id returning 1)`)
+    })
   }
 
   function applyLocal(pl: Player, ch: Change) {
@@ -1917,6 +1927,39 @@ export function createApp(opts: AppOptions) {
       }
       if (cur?.item_id === itemId) return {}
       return { change: { equip: { hero_id: heroId, slot, item_id: itemId } }, reload: true }
+    })
+  })
+
+  // 한 번에 여러 부위 장착(자동착용): {hero_id, items: [{slot, item_id}]}(1..부위 수, 부위·장비가 겹치면 400). 검사는 /v1/equip과 같다 —
+  // 하나라도 안 되면 아무것도 안 낀다. 다른 영웅이 끼고 있으면 옮긴다. 이미 그대로면 건너뛴다(멱등).
+  app.post('/v1/equip/many', auth, async (c) => {
+    const b = await body(c)
+    const heroId = strField(b, 'hero_id')
+    const list = b.items
+    if (!Array.isArray(list) || list.length < 1 || list.length > R.EQUIP_SLOTS.length) {
+      throw new ApiError(400, 'bad_request', `'items' must be 1..${R.EQUIP_SLOTS.length} {slot, item_id}`)
+    }
+    for (const x of list) {
+      if (!x || typeof x !== 'object' || !R.EQUIP_SLOTS.includes(x.slot)) throw new ApiError(400, 'bad_slot', `'slot' must be one of ${R.EQUIP_SLOTS.join(', ')}`)
+      if (!isInt(x.item_id, 1, Number.MAX_SAFE_INTEGER)) throw new ApiError(400, 'bad_request', "'item_id' must be an item id")
+    }
+    if (new Set(list.map((x: any) => x.slot)).size !== list.length || new Set(list.map((x: any) => x.item_id)).size !== list.length) {
+      throw new ApiError(400, 'bad_request', "'items' must have distinct slots and item ids")
+    }
+    return mutate(c, (p, g) => {
+      const def = g.heroes.find((h) => h.id === heroId)
+      if (!def || !Object.hasOwn(p.heroes, heroId)) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      const equips: { hero_id: string; slot: string; item_id: number }[] = []
+      for (const { slot, item_id: itemId } of list as { slot: string; item_id: number }[]) {
+        const item = p.items.find((x) => x.id === itemId)
+        if (!item) throw new ApiError(404, 'unknown_item', `item ${itemId} is not in the bag`)
+        if (item.slot !== slot) throw new ApiError(409, 'wrong_slot', `item ${itemId} is a ${item.slot}, not a ${slot}`)
+        if (slot === 'weapon' && item.weapon_kind !== R.WEAPON_OF[String(def.model)]) {
+          throw new ApiError(409, 'wrong_weapon', `hero '${heroId}' (${def.model}) cannot use a ${item.weapon_kind}`)
+        }
+        if (p.equipment.find((e) => e.hero_id === heroId && e.slot === slot)?.item_id !== itemId) equips.push({ hero_id: heroId, slot, item_id: itemId })
+      }
+      return equips.length ? { change: { equips }, reload: true } : {}
     })
   })
 

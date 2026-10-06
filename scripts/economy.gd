@@ -205,6 +205,7 @@ var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 �
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
+var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
 var _predicts := {}  # 온라인 즉시 반영(수집·판매·건설): 요청 키 → {apply: 서버 상태 위에 그 동작을 다시 하는 Callable, gold: 더한 골드(0.1)}. 응답 전 다른 응답이 와도 apply_server가 다시 얹는다
 var _last_server := {}  # 마지막으로 반영한 서버 응답(거절되면 이것으로 곧바로 되돌린다)
 var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(그동안 다른 응답의 옛 배치로 되돌리지 않는다)
@@ -2328,10 +2329,10 @@ func equip_waiting() -> bool:
 	return _waiting.has("equip")
 
 
-## 장비 자동착용(영웅 상세 [장비 자동착용]): auto_equip_plan을 낀다. 오프라인은 한 번에 저장, 온라인은 /v1/equip를 부위마다 차례로
-## (앞 응답이 오면 다음 — 그동안 equip_block = "waiting"). 바꾼(보낸) 부위 수, 못 하면 0.
+## 장비 자동착용(영웅 상세 [장비 자동착용]): auto_equip_plan을 한 번에 낀다. 오프라인은 곧바로 저장, 온라인도 곧바로 보이게 끼고
+## /v1/equip/many 한 번으로 확인한다(거절·유실이면 되돌리고 알림). 바꾼 부위 수, 못 하면 0.
 func auto_equip(hero_id: String) -> int:
-	if _waiting.has("equip"):
+	if _waiting.has("equip") or _equip_predicts.has(hero_id):
 		return 0
 	var plan := auto_equip_plan(hero_id)
 	if plan.is_empty():
@@ -2340,9 +2341,14 @@ func auto_equip(hero_id: String) -> int:
 		if not net.up:
 			notice.emit(WAIT_TEXT)
 			return 0
-		_waiting["equip"] = true
-		_auto_equip_send(hero_id, plan.duplicate())
-		items_changed.emit()
+		var list := []
+		for s in plan:
+			list.append({"slot": s, "item_id": plan[s]})
+		var before := equipment.duplicate(true)
+		_equip_predicts[hero_id] = plan.duplicate()
+		_apply_equip_predicts()
+		_equip_signals(before)
+		net.send("POST", "/v1/equip/many", {"hero_id": hero_id, "items": list}, _on_auto_equipped.bind(hero_id), _on_auto_equip_failed.bind(hero_id))
 		return plan.size()
 	var eq: Dictionary = equipment.get(hero_id, {})
 	for s in plan:
@@ -3217,21 +3223,47 @@ func _equip_online(hero_id: String, slot: String, item_id) -> bool:
 	return true
 
 
-## 자동착용 남은 부위 하나를 보낸다(rest에서 뺀다). 실패하면 _on_equip_failed가 나머지를 버린다.
-func _auto_equip_send(hero_id: String, rest: Dictionary) -> void:
-	var s: String = rest.keys()[0]
-	var id: int = rest[s]
-	rest.erase(s)
-	net.send("POST", "/v1/equip", {"hero_id": hero_id, "slot": s, "item_id": id}, _on_auto_equipped.bind(hero_id, rest), _on_equip_failed)
+## 응답 안 온 자동착용을 지금 equipment 위에 다시 얹는다(서버와 같이: 다른 영웅이 끼고 있으면 옮긴다). 신호 없음.
+func _apply_equip_predicts() -> void:
+	for hid in _equip_predicts:
+		var plan: Dictionary = _equip_predicts[hid]
+		var eq := equipment.duplicate(true)
+		for other in eq.keys():
+			for s in eq[other].keys():
+				if int(eq[other][s]) in plan.values() and not (other == hid and plan.get(s) == int(eq[other][s])):
+					eq[other].erase(s)
+			if eq[other].is_empty():
+				eq.erase(other)
+		var mine: Dictionary = eq.get(hid, {})
+		for s in plan:
+			mine[s] = plan[s]
+		eq[hid] = mine
+		equipment = eq
 
 
-func _on_auto_equipped(data: Dictionary, hero_id: String, rest: Dictionary) -> void:
+func _equip_signals(before: Dictionary) -> void:
+	if equipment != before:
+		items_changed.emit()
+		roster_changed.emit()  # 장비가 바뀌면 영웅 능력치가 바뀐다
+
+
+func _on_auto_equipped(data: Dictionary, hero_id: String) -> void:
+	_equip_predicts.erase(hero_id)
 	apply_server(data)
-	if rest.is_empty():
-		_waiting.erase("equip")
-	else:
-		_auto_equip_send(hero_id, rest)
 	items_changed.emit()
+
+
+## 거부(409 wrong_slot·wrong_weapon, 404, 400)나 응답 유실: 즉시 반영을 빼고 마지막 서버 상태로 되돌린 뒤 알림 + 상태를 새로 받는다.
+func _on_auto_equip_failed(hero_id: String) -> void:
+	if not _equip_predicts.has(hero_id):
+		return
+	_equip_predicts.erase(hero_id)
+	var before := equipment.duplicate(true)
+	if not _last_server.is_empty():
+		apply_server(_last_server)
+	_equip_signals(before)
+	notice.emit(EQUIP_TEXT.get(net.last_error, ROLLBACK_TEXT))
+	net.refresh()
 
 
 func _on_equipped(data: Dictionary) -> void:
@@ -3342,6 +3374,7 @@ func _apply_server18(p: Dictionary) -> void:
 		bag = _item_list(p.items)
 	if p.get("equipment") is Dictionary:
 		equipment = _equipment_dict(p.equipment, bag)
+	_apply_equip_predicts()
 	if dungeons != before[0]:
 		dungeons_changed.emit()
 	if bag != before[1] or equipment != before[2]:
