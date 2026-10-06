@@ -1,0 +1,208 @@
+extends Node
+## 헤드리스 공성전 체크(오토로드 포함). 실행: godot --headless --fixed-fps 30 --path . res://tests/war_check.tscn
+## 사례: (1) AI 공격 4분대 vs AI 수비 4분대 — 처치가 나고 스크립트 오류 없음, 분대 집중 공격이 보인다.
+## (2) 약한 수비 — 공격이 성문을 부수고 성 안으로 들어가 성채를 친다. (3) 원거리 수비는 근접 적이 붙으면 물러난다.
+## (4) 꼭두각시 장면이 방장 스냅샷을 따른다. (5) 영웅 상태 효과(독·둔화·속박·취약·약화·넉백·도발)가 영웅에게도 걸린다.
+
+const GameData := preload("res://scripts/game_data.gd")
+const Formation := preload("res://scripts/formation.gd")
+const WarRules := preload("res://scripts/war_rules.gd")
+const BattleScript := preload("res://scripts/war_battle.gd")
+
+class ErrorCounter extends Logger:
+	var count := 0
+	var first := ""
+	func _log_error(_fn: String, _file: String, _line: int, _code: String, why: String, _notify: bool, error_type: int, _bt: Array[ScriptBacktrace]) -> void:
+		if error_type != ERROR_TYPE_WARNING:
+			count += 1
+			if first == "":
+				first = "%s %s:%d %s" % [_fn, _file, _line, why if why != "" else _code]
+
+const ATT := ["arteon", "ignis", "sylvana", "grom", "baldur", "lumina", "kyle", "nev", "bron", "mira", "torvin", "echo", "felix", "ella", "dorik", "nina"]
+const DEF := ["thorgar", "valen", "raven", "harald", "seraphine", "gaia", "dante", "kaz", "luna", "orin", "selene", "grit", "hans", "tia", "pip", "jack"]
+
+var _fails := 0
+var _errors := ErrorCounter.new()
+
+
+func _ready() -> void:
+	OS.add_logger(_errors)
+	Economy.save_path = ""
+	Fever.save_path = ""
+	GameData._config.fx_shake = "0"
+	Economy.reset(Time.get_unix_time_from_system())
+	await _case_fight()
+	await _case_siege()
+	await _case_kite()
+	await _case_puppet()
+	await _case_status()
+	_check(_errors.count == 0, "no script errors (%d, first: %s)" % [_errors.count, _errors.first])
+	print("WAR CHECK %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
+	get_tree().quit(1 if _fails > 0 else 0)
+
+
+func _check(ok: bool, what: String) -> void:
+	print(("  ok   " if ok else "  FAIL ") + what)
+	if not ok:
+		_fails += 1
+
+
+static func make_plan(att_n: int, def_n: int, def_mult := 1.0, att_level := 30, def_level := 30) -> Dictionary:
+	var defs := []
+	var hp_lane := [0.0, 0.0, 0.0, 0.0]
+	var hp_all := 0.0
+	for m in def_n:
+		for i in 4:
+			var id: String = DEF[(m * 4 + i) % DEF.size()]
+			var def := GameData.hero(id)
+			var st := GameData.hero_stats(def, def_level, 2, {})
+			var lane := WarRules.lane_of(m)
+			defs.append({"uid": 1 + m * 4 + i, "owner": "d:%d" % m, "squad": m, "lane": lane, "hero": id, "level": def_level, "promotion": 2,
+				"hp": st.hp * def_mult, "atk": st.atk * def_mult, "ratio": 1.0})
+			hp_lane[lane] += st.hp * def_mult
+			hp_all += st.hp * def_mult
+	var gates := []
+	for s in 4:
+		var g := WarRules.gate_hp_max(hp_lane[s])
+		gates.append({"hp": g, "max": g})
+	var k := WarRules.keep_hp_max(hp_all)
+	var atts := []
+	for m in att_n:
+		var hs := []
+		for i in 4:
+			var id: String = ATT[(m * 4 + i) % ATT.size()]
+			var st := GameData.hero_stats(GameData.hero(id), att_level, 2, {})
+			hs.append({"hero": id, "level": att_level, "promotion": 2, "hp": st.hp, "atk": st.atk})
+		atts.append({"owner": "v:%d" % m, "name": "가상%d" % m, "squad": m, "lane": m % 4, "ai": true, "heroes": hs})
+	return {"battle_id": "test", "my_id": "me", "enemy_name": "시험 길드", "duration": 600.0, "gates": gates, "keep": {"hp": k, "max": k},
+		"defenders": defs, "attackers": atts}
+
+
+func _battle(plan: Dictionary, role := "solo"):
+	var b = BattleScript.new()
+	b.plan = plan
+	b.role = role
+	add_child(b)
+	return b
+
+
+func _run(b, sec: float, step := 1.0, cond := Callable()) -> void:
+	var t := 0.0
+	while t < sec:
+		await get_tree().create_timer(step, true, false, true).timeout
+		t += step
+		if cond.is_valid() and cond.call():
+			return
+
+
+func _case_fight() -> void:
+	print("(1) AI 4 squads vs AI 4 squads")
+	var b = _battle(make_plan(4, 4))
+	var shared := [0]
+	var check := func():
+		var by := {}
+		for u in b.units(1):
+			var t = u.current_target()
+			if u.is_alive() and t != null:
+				var key := "%d:%d" % [u.squad, t.uid]
+				by[key] = by.get(key, 0) + 1
+		for k in by:
+			if by[k] >= 2:
+				shared[0] += 1
+		return false
+	await _run(b, 90.0, 0.5, check)
+	print("    kills %d gates broken %d attackers dead now %d, attacker deaths %d" % [b.kills, b.gates_broken(), b.units(0).filter(func(u): return not u.is_alive()).size(), b.attacker_deaths])
+	_check(b.kills > 0, "attackers killed some defenders")
+	_check(b.units(0).any(func(u): return u.hp < u.hp_max or not u.is_alive()), "defenders hurt attackers")
+	_check(shared[0] > 0, "defenders focus fire within a squad (seen %d times)" % shared[0])
+	b.queue_free()
+	await get_tree().process_frame
+
+
+func _case_siege() -> void:
+	print("(2) weak defenders: gate falls, keep is hit")
+	var b = _battle(make_plan(4, 4, 0.15, 30, 1))
+	var inside := [false]
+	await _run(b, 240.0, 1.0, func():
+		for u in b.units(0):
+			if u.is_alive() and Formation.is_inside(b.half, u.global_position):
+				inside[0] = true
+		return b.done)
+	print("    kills %d gates %d keep %.0f/%.0f done %s" % [b.kills, b.gates_broken(), b.keep.hp, b.keep.hp_max, b.done])
+	_check(b.gates_broken() >= 1, "a gate was broken")
+	_check(inside[0], "attackers walked into the castle through a broken gate")
+	_check(b.keep.hp < b.keep.hp_max, "keep took damage")
+	b.queue_free()
+	await get_tree().process_frame
+
+
+func _case_kite() -> void:
+	print("(3) ranged defender steps back from a melee attacker")
+	var plan := make_plan(0, 0)
+	var st := GameData.hero_stats(GameData.hero("raven"), 30, 2, {})
+	plan.defenders = [{"uid": 1, "owner": "d:0", "squad": 0, "lane": 2, "hero": "raven", "level": 30, "promotion": 2, "hp": st.hp * 50.0, "atk": 1.0, "ratio": 1.0}]
+	var st2 := GameData.hero_stats(GameData.hero("grom"), 30, 2, {})
+	plan.attackers = [{"owner": "v:0", "squad": 0, "lane": 2, "ai": true, "heroes": [{"hero": "grom", "level": 30, "promotion": 2, "hp": st2.hp * 50.0, "atk": 1.0}]}]
+	var b = _battle(plan)
+	await get_tree().process_frame
+	var d = b.units(1)[0]
+	var a = b.units(0)[0]
+	a.global_position = d.global_position + Formation.SIDE_DIR[2] * 1.5
+	a.set_home(a.global_position, false)
+	var start: Vector3 = d.global_position
+	var moved := [0.0]
+	await _run(b, 3.0, 0.25, func():
+		moved[0] = maxf(moved[0], Formation.flat_distance(start, d.global_position))
+		return false)
+	_check(moved[0] > 1.5, "ranged defender kited away (%.1f m)" % moved[0])
+	b.queue_free()
+	await get_tree().process_frame
+
+
+func _case_puppet() -> void:
+	print("(4) puppet follows host snapshots")
+	var plan := make_plan(2, 2)
+	var host = _battle(plan, "host")
+	var pup = _battle(plan, "puppet")
+	pup.visible = false
+	await _run(host, 6.0, 0.5, func():
+		pup.apply_snapshot(host.snapshot())
+		return false)
+	await _run(host, 1.0, 0.1, func():
+		pup.apply_snapshot(host.snapshot())
+		return false)
+	var worst := 0.0
+	for uid in host.units_by_uid:
+		var h = host.units_by_uid[uid]
+		var p = pup.units_by_uid[uid]
+		if h.is_alive():
+			worst = maxf(worst, Formation.flat_distance(h.global_position, p.global_position))
+	_check(worst < 3.0, "puppet positions track the host (worst %.2f m)" % worst)
+	_check(pup.units(0).all(func(u): return u.puppet), "puppet units do not think")
+	host.queue_free()
+	pup.queue_free()
+	await get_tree().process_frame
+
+
+func _case_status() -> void:
+	print("(5) hero status effects")
+	var plan := make_plan(1, 0)
+	var b = _battle(plan)
+	await get_tree().process_frame
+	var u = b.units(0)[0]
+	u.set_process(true)
+	var hp0: float = u.hp
+	u.apply_poison(50.0, 1.0)
+	u.apply_slow(50.0, 2.0)
+	u.apply_root(1.0)
+	u.apply_vulnerable(50.0, 2.0)
+	u.apply_weaken(50.0, 2.0)
+	await _run(b, 1.2, 0.3)
+	_check(u.hp < hp0, "poison ticks on a hero")
+	_check(u.has_status("slow") and u.has_status("weaken"), "slow and weaken are active")
+	var p0: Vector3 = u.global_position
+	u.knockback(p0 - Vector3(1, 0, 0), 3.0)
+	await _run(b, 0.4, 0.2)
+	_check(Formation.flat_distance(p0, u.global_position) > 1.5, "knockback pushes a hero")
+	b.queue_free()
+	await get_tree().process_frame

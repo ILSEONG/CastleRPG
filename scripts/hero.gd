@@ -50,6 +50,8 @@ var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
 var hold := false  # 아레나: 이동 명령을 받았다 — 표적은 free_pos에서 aggro 안(성 영웅처럼). false면 거리 제한 없이 가장 가까운 적
 var idle_dir := Vector3.FORWARD  # 아레나 대기 방향(성에서는 면 바깥)
+var allies := "heroes"  # 아군 그룹(회복·오라·부활 대상). 공성전 수비 영웅은 "monsters"(war_hero.gd)
+var foes := "monsters"  # 적 그룹(표적·스킬 피해 대상). 공성전 수비 영웅은 "heroes"
 var _path: Array[Vector3] = []
 var hp: float = 0.0
 var hp_max: float = 0.0  # 레벨·승급·장비·성장 반영(refresh_stats)
@@ -130,7 +132,7 @@ func _place_default() -> void:
 
 
 func _ready() -> void:
-	add_to_group("heroes")
+	add_to_group(allies)
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	_model = UnitModelScript.new()
 	_model.lod = true  # 화면 밖이면 애니메이션 간헐 갱신(화면 안은 매 프레임, 그림자 늘)
@@ -308,7 +310,7 @@ func retire() -> void:
 	state = State.DEAD
 	if GameState.refilled.is_connected(reset):
 		GameState.refilled.disconnect(reset)
-	remove_from_group("heroes")
+	remove_from_group(allies)
 	remove_from_group("crowd")
 	formation.release(index)
 	queue_free()
@@ -358,7 +360,7 @@ func _process(delta: float) -> void:
 		_model.face(tpos - global_position)
 		if Formation.flat_distance(global_position, tpos) <= float(def.range):
 			state = State.ATTACK
-			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null:
+			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null and _blast_ok(_target):
 				_blast_cd = _sk.aoe_blast[0]
 				begin_cast(HeroSkillsScript.cast_anim("aoe_blast", def), _cast_blast.bind(_target))  # 모션의 발동 순간에 터진다
 				return
@@ -405,7 +407,7 @@ func _find_target():
 		if hold:
 			var best = null
 			var best_d := INF
-			for m in get_tree().get_nodes_in_group("monsters"):
+			for m in get_tree().get_nodes_in_group(foes):
 				if not m.is_alive() or Formation.flat_distance(free_pos, m.global_position) > maxf(float(def.aggro), float(def.range)):
 					continue
 				var d := Formation.flat_distance(global_position, m.global_position)
@@ -424,7 +426,7 @@ func _find_target():
 	var best = null
 	var best_d := INF
 	var here := global_position
-	for m in get_tree().get_nodes_in_group("monsters"):
+	for m in get_tree().get_nodes_in_group(foes):
 		var mp: Vector3 = m.global_position
 		if Vector2(mp.x - origin.x, mp.z - origin.z).length() > reach or not m.is_alive():  # 거리 먼저(= flat_distance)
 			continue
@@ -472,7 +474,7 @@ func _tick_skills(delta: float) -> void:
 
 ## 반경 안에 다친(체력이 다 차지 않은) 살아 있는 영웅이 있는가.
 func _anyone_hurt(radius: float) -> bool:
-	for h in get_tree().get_nodes_in_group("heroes"):
+	for h in get_tree().get_nodes_in_group(allies):
 		if h.is_alive() and h.hp < h.hp_max and Formation.flat_distance(global_position, h.global_position) <= radius:
 			return true
 	return false
@@ -481,7 +483,7 @@ func _anyone_hurt(radius: float) -> bool:
 func _heal_aura() -> void:
 	var radius: float = _sk.heal_aura[1]
 	var healed := false
-	for h in get_tree().get_nodes_in_group("heroes"):
+	for h in get_tree().get_nodes_in_group(allies):
 		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= radius \
 				and h.heal(h.hp_max * _sk.heal_aura[2] / 100.0) > 0.0:
 			healed = true
@@ -618,6 +620,11 @@ func _chain(first, d: float, a: float) -> void:
 	Fx.lightning(get_parent(), pts, _color, _tier)
 
 
+## aoe_blast를 지금 표적에 쓸까(공성전 AI가 덮어써 무리가 모였을 때만 쓴다). 기본은 쿨이 차면 곧바로.
+func _blast_ok(_m) -> bool:
+	return true
+
+
 ## aoe_blast 발동 순간(개정 25): 모션을 시작할 때의 표적이 살아 있으면 그 자리, 아니면 지금 표적 자리에 터뜨린다(둘 다 없으면 헛 시전).
 ## 폭발이 죽인 표적은 놓는다(시체에 평타·투사체·연쇄가 나가지 않게).
 func _cast_blast(m) -> void:
@@ -673,7 +680,7 @@ func _cancel_cast() -> void:
 func _blast(center: Vector3) -> void:
 	_blast_cd = _sk.aoe_blast[0]
 	var dmg: float = atk * _aura_mult() * _skx.atk_mult() * _sk.aoe_blast[2] / 100.0 * _skill_mult
-	for m in get_tree().get_nodes_in_group("monsters"):
+	for m in get_tree().get_nodes_in_group(foes):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
 	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade == "SSR" and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
@@ -685,7 +692,7 @@ func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
 	var out := []
 	var ground := not is_on_wall() and castle != null  # 아레나는 영역이 없다
 	var here_inside := ground and Formation.is_inside(castle.half, global_position)
-	for m in get_tree().get_nodes_in_group("monsters"):
+	for m in get_tree().get_nodes_in_group(foes):
 		if m == exclude or not m.is_alive() or Formation.flat_distance(from, m.global_position) > radius:
 			continue
 		if ground and Formation.is_inside(castle.half, m.global_position) != here_inside:
@@ -717,7 +724,7 @@ func _on_screen(cam: Camera3D) -> bool:
 ## atk_aura: 반경 안 다른 영웅들의 오라(해금된 것만) 중 가장 큰 것 하나.
 func _aura_mult() -> float:
 	var best := 0.0
-	for h in get_tree().get_nodes_in_group("heroes"):
+	for h in get_tree().get_nodes_in_group(allies):
 		var hs: Dictionary = h._sk
 		if h != self and h.is_alive() and hs.has("atk_aura") \
 				and Formation.flat_distance(h.global_position, global_position) <= hs.atk_aura[0]:
