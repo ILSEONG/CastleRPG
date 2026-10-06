@@ -43,6 +43,7 @@ const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 const SAVE_INTERVAL := 10.0
 const TUTORIAL_TRAIN_SEC := 5.0  # 튜토리얼 훈련 1마리 시간(사용자 2026-10-06)
 const WAIT_TEXT := "연결 대기 중"
+const ROLLBACK_TEXT := "서버에서 처리되지 않아 되돌렸어요"
 const OFFLINE_MIN_SEC := 60.0  # 오프라인 처치 골드: 이보다 짧게 떠났으면 없음(서버 rules.OFFLINE_MIN_SEC)
 const POUCH_KINDS := ["gold", "res"]  # 방치 주머니(서버 pouches.ts): 골드·자원
 const POUCH_MINUTES := [10, 30, 60, 120, 240, 360]
@@ -61,21 +62,21 @@ const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
 const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
 const PROMOTE_FAIL_TEXT := "승급 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
 ## 승급 못 하는 이유(promote_block, 서버 409 코드 → 같은 문구)
-const PROMOTE_TEXT := {"not_owned": "보유하지 않은 영웅", "max_promotion": "최대 승급", "not_enough_shards": "조각 부족", "waiting": "응답 대기 중"}
+const PROMOTE_TEXT := {"not_owned": "보유하지 않은 영웅", "max_promotion": "최대 승급", "not_enough_shards": "조각 부족", "waiting": ""}
 const FOOD := "food"  # 레벨업 식량 자원 id
 const BUILD_FAIL_TEXT := "건설 결과를 받지 못했습니다 — 건물 상태를 다시 확인합니다"
 const BUILD_POLL_SEC := 2.0  # 온라인: 끝나는 시각이 지난 건설을 서버에 다시 물어보는 간격
 ## 업그레이드 못 하는 이유 코드 → 문구(upgrade_block, 서버 409 코드와 같다. in_progress·waiting은 앱만).
 const BLOCK_TEXT := {
 	"unknown": "알 수 없는 건물", "max_level": "최대 레벨", "keep_cap": "성채 레벨이 부족합니다", "prereq": "선행 조건 미충족",
-	"in_progress": "건설 중", "builder_busy": "다른 건물 건설 중", "not_enough": "자원 부족", "waiting": "응답 대기 중",
+	"in_progress": "건설 중", "builder_busy": "다른 건물 건설 중", "not_enough": "자원 부족", "waiting": "",
 	"unbuilt": "아직 짓지 않은 건물",
 }
 ## 병사(개정 13). 자동 배치: 티어 높은 것부터, 같은 티어는 이 순서(스펙 §6 "보병 → 기병 → 궁병", 표에 없는 병종은 뒤에 표 순서로).
 const AUTO_ORDER := ["infantry", "cavalry", "archer"]
 ## 합성·배치 못 하는 이유 코드 → 문구(merge_block·soldier_deploy_block, 서버 409 코드 not_enough·max_tier와 같다).
 const SOLDIER_TEXT := {
-	"unknown": "알 수 없는 병사", "max_tier": "최대 티어입니다", "not_enough": "병사가 부족합니다", "waiting": "응답 대기 중",
+	"unknown": "알 수 없는 병사", "max_tier": "최대 티어입니다", "not_enough": "병사가 부족합니다", "waiting": "",
 	"bad_key": "알 수 없는 병사", "not_owned": "보유한 병사보다 많습니다", "over_population": "인구를 넘습니다",
 }
 const MERGE_FAIL_TEXT := "합성 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
@@ -83,7 +84,7 @@ const SOLDIER_DEPLOY_FAIL_TEXT := "병사 배치를 저장하지 못했습니다
 ## 훈련 못 하는 이유 코드 → 문구(train_block, 서버 409 코드 training·ready_to_collect·not_enough·not_ready·empty와 같다. 나머지는 앱만).
 const TRAIN_TEXT := {
 	"unknown": "병사 건물이 아닙니다", "bad_count": "훈련 수량을 고르세요", "training": "훈련 중입니다", "ready_to_collect": "훈련 완료 — 먼저 수령하세요",
-	"not_enough": "자원 부족", "not_ready": "아직 훈련 중입니다", "empty": "훈련 중인 병사가 없습니다", "waiting": "응답 대기 중",
+	"not_enough": "자원 부족", "not_ready": "아직 훈련 중입니다", "empty": "훈련 중인 병사가 없습니다", "waiting": "",
 }
 const TRAIN_FAIL_TEXT := "훈련 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
 const GROWTH_FAIL_TEXT := "강화 결과를 받지 못했습니다 — 성장 상태를 다시 확인합니다"
@@ -91,7 +92,7 @@ const CANCEL_TEXT := "훈련을 취소했습니다 — 비용 50% 환불"
 ## 던전 못 하는 이유 코드 → 문구(dungeon_block·finish 거부, 서버 409/400 코드와 같다. waiting은 앱만).
 const DUNGEON_TEXT := {
 	"unknown": "알 수 없는 던전", "locked": "아직 열리지 않은 단계입니다", "bad_party": "출전 영웅을 확인하세요", "bag_full": "보관함이 가득 찼습니다",
-	"no_key": "열쇠가 없습니다", "not_enough_gold": "골드가 부족합니다", "waiting": "응답 대기 중", "implausible": "전투 기록이 맞지 않습니다",
+	"no_key": "열쇠가 없습니다", "not_enough_gold": "골드가 부족합니다", "waiting": "", "implausible": "전투 기록이 맞지 않습니다",
 	"run_expired": "도전 시간이 지났습니다", "run_closed": "끝난 도전입니다", "unknown_run": "끝난 도전입니다",
 	"no_helper": "함께할 도우미 영웅을 고르세요", "helper_used": "오늘 이미 함께한 영웅입니다", "helper_unavailable": "도우미 목록이 바뀌었습니다 — 다시 고르세요",
 }
@@ -99,14 +100,14 @@ const DUNGEON_FAIL_TEXT := "던전 결과를 받지 못했습니다 — 상태�
 ## 장착·판매 못 하는 이유 코드 → 문구(equip_block·sell_block, 서버 코드와 같다).
 const EQUIP_TEXT := {
 	"not_owned": "보유하지 않은 영웅", "bad_slot": "알 수 없는 부위", "unknown_item": "보관함에 없는 장비", "wrong_slot": "부위가 맞지 않습니다",
-	"wrong_weapon": "이 영웅이 쓸 수 없는 무기입니다", "equipped": "장착 중인 장비는 팔 수 없습니다", "bad_request": "팔 장비를 고르세요", "waiting": "응답 대기 중",
+	"wrong_weapon": "이 영웅이 쓸 수 없는 무기입니다", "equipped": "장착 중인 장비는 팔 수 없습니다", "bad_request": "팔 장비를 고르세요", "waiting": "",
 }
 const EQUIP_FAIL_TEXT := "장비 결과를 받지 못했습니다 — 보관함을 다시 확인합니다"
 ## 연구 못 하는 이유 코드 → 문구(research_block, 서버 404/409 코드와 같다. waiting은 앱만, 개정 24).
 const RESEARCH_TEXT := {
 	"unknown_research": "알 수 없는 연구", "research_busy": "다른 연구가 진행 중입니다", "max_level": "최대 레벨", "locked": "잠긴 연구입니다",
 	"not_enough_resources": "자원 부족", "not_enough_gold": "골드 부족", "no_research": "진행 중인 연구가 없습니다",
-	"not_enough_diamonds": "다이아가 부족합니다", "waiting": "응답 대기 중", "lab_unbuilt": "연구소를 먼저 지으세요",
+	"not_enough_diamonds": "다이아가 부족합니다", "waiting": "", "lab_unbuilt": "연구소를 먼저 지으세요",
 }
 const RESEARCH_DONE_TEXT := "연구 완료: %s Lv %d"
 const RESEARCH_CANCEL_TEXT := "연구를 취소했습니다 — 비용 50% 환불"
@@ -204,6 +205,8 @@ var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 �
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
+var _predicts := {}  # 온라인 즉시 반영(수집·판매·건설): 요청 키 → {apply: 서버 상태 위에 그 동작을 다시 하는 Callable, gold: 더한 골드(0.1)}. 응답 전 다른 응답이 와도 apply_server가 다시 얹는다
+var _last_server := {}  # 마지막으로 반영한 서버 응답(거절되면 이것으로 곧바로 되돌린다)
 var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(그동안 다른 응답의 옛 배치로 되돌리지 않는다)
 var _deploys_out := 0
 var _synced := false  # 온라인: 서버 응답을 한 번이라도 반영했다(첫 반영의 레벨 차이는 완료가 아니다)
@@ -1163,7 +1166,7 @@ func _set_gold_level(level: int, pulls: int) -> void:
 ## 지금 업그레이드 못 하는 이유 코드(upgrade_block_for + "waiting": 온라인 응답 대기). 되면 "". now = 보정 시각(time_now) —
 ## 자원 건물은 시작할 때 자동 수집하므로 그만큼(pending)을 보유량에 더해 본다(서버와 같다). 문구는 BLOCK_TEXT[코드].
 func upgrade_block(id: String, now: float) -> String:
-	if _waiting.has("build"):
+	if _waiting.has("build") and not _predicts.has("build"):
 		return "waiting"
 	var have := res.duplicate()
 	var r := res_of(id)
@@ -2412,6 +2415,9 @@ func apply_server(data: Dictionary) -> bool:
 		rates[str(k)] = float(m.rates[k])
 	merchant = {"rates": rates, "next_change": float(m.next_change)}
 	_apply_gacha(p)  # 개정 23: 다이아·모집 상태(changed 전에)
+	_last_server = data
+	for k in _predicts:  # 아직 응답 안 온 즉시 반영(수집·판매·건설)을 새 서버 상태 위에 다시
+		_predicts[k].apply.call()
 	_recalc_gold()
 	changed.emit()
 	if [heroes, deploy, hero_levels, hero_shards, hero_promotions] != roster_before:
@@ -2550,6 +2556,8 @@ func kills_done(stage: int, part: Dictionary) -> void:
 
 func _recalc_gold() -> void:
 	gold_tenths = server_gold_tenths + _kills_tenths(kills_pending) + _kills_tenths(kills_sent)
+	for k in _predicts:
+		gold_tenths += int(_predicts[k].gold)
 
 
 ## 자원별 시세 표: 모든 자원 id가 숫자 배율로 있어야 한다.
@@ -2579,15 +2587,64 @@ func _collect_online(building_id: String) -> void:
 		notice.emit(WAIT_TEXT)
 		return
 	_waiting[building_id] = true
-	net.send("POST", "/v1/collect", {"building": building_id}, _on_collected.bind(building_id), _unwait.bind(building_id))
+	var t0 := time_now()
+	var amount := pending(building_id, t0)
+	if amount > 0:  # 곧바로 보유량에 더해 보인다(응답이 오면 서버 값으로)
+		_predict(building_id, func(): _local_collect(building_id, t0))
+		collected.emit(building_id, res_of(building_id), amount)
+	net.send("POST", "/v1/collect", {"building": building_id}, _on_collected.bind(building_id, amount > 0), _uncollect.bind(building_id))
 
 
-func _on_collected(data: Dictionary, building_id: String) -> void:
+func _on_collected(data: Dictionary, building_id: String, shown := false) -> void:
 	_waiting.erase(building_id)
+	_predicts.erase(building_id)
 	apply_server(data)
 	var amount := int(data.get("amount", 0))
-	if amount > 0:
+	if amount > 0 and not shown:
 		collected.emit(building_id, res_of(building_id), amount)
+
+
+func _uncollect(building_id: String) -> void:
+	_waiting.erase(building_id)
+	if _predicts.has(building_id):
+		_unpredict(building_id)
+		notice.emit(ROLLBACK_TEXT)
+		net.refresh()
+
+
+## 수집 규칙(collect와 같다)을 보유량·마지막 수집 시각에만 — 신호·저장 없이(온라인 즉시 반영이 서버 상태 위에 다시 얹는다).
+func _local_collect(building_id: String, now: float) -> void:
+	var amount := pending(building_id, now)
+	if amount <= 0:
+		return
+	var elapsed := now - float(last_collect[building_id])
+	if elapsed >= GameData.config_num("accum_cap_min") * 60.0:
+		last_collect[building_id] = now
+	else:
+		last_collect[building_id] = float(last_collect[building_id]) + floori(elapsed / 60.0) * 60.0
+	var r := res_of(building_id)
+	res[r] = int(res.get(r, 0)) + amount
+
+
+## 온라인 동작을 응답 전에 곧바로 보이게 한다: apply를 지금 하고, 그 키의 응답(또는 거절)이 올 때까지 다른 서버 응답 위에도 다시 한다.
+## gold = 그 동작이 더하는 골드(0.1 단위 — _recalc_gold가 더한다).
+func _predict(key: String, apply: Callable, gold := 0) -> void:
+	_predicts[key] = {"apply": apply, "gold": gold}
+	apply.call()
+	_recalc_gold()
+	changed.emit()
+
+
+## 서버가 거절했거나 응답을 잃었다: 즉시 반영을 빼고 마지막 서버 상태로 곧바로 되돌린다(새 상태는 요청한 쪽이 다시 받는다).
+func _unpredict(key: String) -> void:
+	if not _predicts.has(key):
+		return
+	_predicts.erase(key)
+	if not _last_server.is_empty():
+		apply_server(_last_server)
+	else:
+		_recalc_gold()
+		changed.emit()
 
 
 func _sell_online(target: String, amount := -1) -> void:
@@ -2601,7 +2658,14 @@ func _sell_online(target: String, amount := -1) -> void:
 	var body := {"res": target}
 	if amount >= 0 and target != "all":
 		body["amount"] = amount
-	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unwait.bind(key))
+	var list := []
+	for r in GameData.resources():
+		if target == "all" or r.id == target:
+			var n: int = int(res.get(r.id, 0)) if amount < 0 or target == "all" else mini(amount, int(res.get(r.id, 0)))
+			if n > 0:
+				list.append({"res": r.id, "amount": n})
+	_predict_sell(key, list)
+	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unsell.bind(key))
 
 
 ## 여러 자원 판매는 사용자 동작이라 한 번만 보낸다(once: 다시 보내지 않는다).
@@ -2612,17 +2676,36 @@ func _sell_many_online(list: Array) -> void:
 		notice.emit(WAIT_TEXT)
 		return
 	_waiting["sell:many"] = true
-	net.send("POST", "/v1/sell", {"items": list}, _on_sold.bind("sell:many"), _unwait.bind("sell:many"), true, true)
+	_predict_sell("sell:many", list)
+	net.send("POST", "/v1/sell", {"items": list}, _on_sold.bind("sell:many"), _unsell.bind("sell:many"), true, true)
+
+
+## 판매를 곧바로 보이게(자원 빼고 지금 시세·상업 연구로 골드 더하기 — 서버와 같은 식). 응답이 오면 서버 값으로.
+func _predict_sell(key: String, list: Array) -> void:
+	if list.is_empty():
+		return
+	var now := time_now()
+	var gold := 0
+	for it in list:
+		gold += sell_gold(it.res, int(it.amount), current_rate(it.res, now)) * 10
+	_predict(key, func():
+		for it in list:
+			res[it.res] = maxi(0, int(res.get(it.res, 0)) - int(it.amount)), gold)
+
+
+func _unsell(key: String) -> void:
+	_waiting.erase(key)
+	if _predicts.has(key):
+		_unpredict(key)
+		notice.emit(ROLLBACK_TEXT)
+		net.refresh()
 
 
 func _on_sold(data: Dictionary, key: String) -> void:
 	_waiting.erase(key)
+	_predicts.erase(key)
 	if apply_server(data) and _num(data.get("gold_gained")) and int(data.gold_gained) > 0:
 		sold.emit(int(data.gold_gained))  # 튜토리얼·반복 퀘스트 "상인과 거래"(오프라인 sell과 같다)
-
-
-func _unwait(key: String) -> void:
-	_waiting.erase(key)
 
 
 ## 온라인 모집: 쌓인 처치를 먼저 보내(서버 골드를 표시 골드에 맞춤) 뒤 /v1/gacha. once — 실패해도 다시 보내지 않는다
@@ -2844,13 +2927,23 @@ func _upgrade_online(id: String) -> bool:
 		notice.emit(WAIT_TEXT)
 		return false
 	_waiting["build"] = true
+	var t0 := time_now()
+	var cost := upgrade_cost(id)
+	var sec := upgrade_sec(id)
+	_predict("build", func():  # 서버 응답을 기다리지 않고 곧바로 짓기 시작한 것으로 보인다(자원 건물은 먼저 수집 — 서버와 같다)
+		if res_of(id) != "":
+			_local_collect(id, t0)
+		for r in cost:
+			res[r] = int(res.get(r, 0)) - int(cost[r])
+		build = {"id": id, "finish": t0 + sec})
+	build_started.emit(id, t0 + sec)
 	net.send("POST", "/v1/building/upgrade", {"building": id}, _on_upgraded, _on_upgrade_failed, true, true)
-	changed.emit()  # UI가 응답 전 버튼을 끈다
 	return true
 
 
 func _on_upgraded(data: Dictionary) -> void:
 	_waiting.erase("build")
+	_predicts.erase("build")
 	apply_server(data)
 	if not build.is_empty():
 		build_started.emit(str(build.id), float(build.finish))
@@ -2859,6 +2952,7 @@ func _on_upgraded(data: Dictionary) -> void:
 ## 거부(409 max_level·keep_cap·prereq·builder_busy·not_enough, 400)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
 func _on_upgrade_failed() -> void:
 	_waiting.erase("build")
+	_unpredict("build")
 	notice.emit(BLOCK_TEXT.get(net.last_error, BUILD_FAIL_TEXT))
 	net.refresh()
 	changed.emit()

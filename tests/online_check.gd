@@ -155,9 +155,9 @@ func _phase1(state_path: String) -> void:
 	_badges.last_pop = {}
 	_picker._tap_object(lp)
 	_picker._tap_object(lp)  # 응답 전 재탭
-	_check(Net.requested.get("/v1/collect", 0) == col0 + 1 and Economy.res["wood"] == 0 and _badges.last_pop.is_empty(),
-		"(d) a second tap before the reply is ignored; nothing changes until the reply", "collect requests=%d wood=%d" % [Net.requested.get("/v1/collect", 0) - col0, Economy.res["wood"]])
-	await _wait_until(func(): return not _badges.last_pop.is_empty(), 10.0)
+	_check(Net.requested.get("/v1/collect", 0) == col0 + 1 and Economy.res["wood"] == 100 and _badges.last_pop.get("amount", 0) == 100,
+		"(d) a second tap before the reply is ignored; the +100 shows at once, before the reply", "collect requests=%d wood=%d" % [Net.requested.get("/v1/collect", 0) - col0, Economy.res["wood"]])
+	await _wait_until(func(): return not Economy._waiting.has("lumber"), 10.0)
 	_check(Economy.res["wood"] == 100 and _badges.last_pop.get("amount", 0) == 100 and _badges.last_pop.get("kind", "") == "wood",
 		"(d) server collect: +100 wood from the reply, pop shows the reply amount", "wood=%d pop=%s" % [Economy.res["wood"], _badges.last_pop])
 
@@ -173,7 +173,8 @@ func _phase1(state_path: String) -> void:
 	_panel.qty_max["wood"].pressed.emit()
 	_panel.sell_selected_button.pressed.emit()
 	_panel.sell_selected_button.pressed.emit()  # 응답 전 재탭
-	await _wait_until(func(): return Economy.res["wood"] == 0, 10.0)
+	_check(Economy.res["wood"] == 0 and Economy.gold_tenths == gold0 + gain, "(e) the sale shows at once, before the reply (wood 0, gold + price)", "wood=%d gold=%d" % [Economy.res["wood"], Economy.gold_tenths])
+	await _wait_until(func(): return Economy._waiting.is_empty(), 10.0)
 	_check(Economy.res["wood"] == 0 and Economy.server_gold_tenths == gold0 + gain and Economy.gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
 		"(e) one sell request: wood 0, server gold + floor(100 x price x server rate)", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()
@@ -881,14 +882,18 @@ func _buildings_online(state_path: String) -> void:
 	var u0: int = Net.requested.get("/v1/building/upgrade", 0)
 	var sent := Economy.upgrade("keep", Economy.time_now())
 	var again := Economy.upgrade("keep", Economy.time_now())  # 응답 전 재탭
-	_check(sent and not again and Economy.upgrade_block("keep", Economy.time_now()) == "waiting" and Net.requested.get("/v1/building/upgrade", 0) == u0 + 1 and Economy.res == res0,
-		"(r) one upgrade request; a second tap before the reply is ignored and nothing changes yet", "requests=%d" % [Net.requested.get("/v1/building/upgrade", 0) - u0])
+	var paid0 := true
+	for r in cost:
+		paid0 = paid0 and Economy.res[r] == int(res0[r]) - int(cost[r])
+	_check(sent and not again and Economy.upgrade_block("keep", Economy.time_now()) == "in_progress" and Net.requested.get("/v1/building/upgrade", 0) == u0 + 1
+		and paid0 and Economy.build.get("id") == "keep" and started.size() == 1,
+		"(r) one upgrade request; a second tap before the reply is ignored; building starts at once (paid, builder busy)", "requests=%d res=%s build=%s" % [Net.requested.get("/v1/building/upgrade", 0) - u0, Economy.res, Economy.build])
 	await _wait_until(func(): return not Economy.build.is_empty() and not Economy._waiting.has("build"), 15.0)
 	var fin := float(Economy.build.get("finish", 0.0))
 	var paid := true
 	for r in cost:
 		paid = paid and Economy.res[r] == int(res0[r]) - int(cost[r])
-	_check(Economy.build.get("id") == "keep" and paid and started == [["keep", fin]] and absf(fin - (Economy.time_now() + 60.0)) < 10.0 and Economy.upgrade_block("barracks", Economy.time_now()) == "keep_cap",
+	_check(Economy.build.get("id") == "keep" and paid and started.size() == 2 and started[1] == ["keep", fin] and absf(fin - (Economy.time_now() + 60.0)) < 10.0 and Economy.upgrade_block("barracks", Economy.time_now()) == "keep_cap",
 		"(r) the server takes 300/300/200 and starts the builder (finish = server time + 60 s), build_started", "build=%s res=%s started=%s" % [Economy.build, Economy.res, started])
 	Economy.finish_build_now()  # POST /v1/test/build_now — 응답(플레이어 읽기)이 게으른 완료를 한다
 	await _wait_until(func(): return Economy.building_level("keep") == 2, 15.0)
@@ -926,7 +931,7 @@ func _buildings_online(state_path: String) -> void:
 	await _wait_until(func(): return Economy.building_level("lumber") == 2, 15.0)
 	# 성문 건설을 걸어 둔 채로 끝낸다(45초)
 	Economy.upgrade("gate", Economy.time_now())
-	await _wait_until(func(): return Economy.build.get("id") == "gate", 15.0)
+	await _wait_until(func(): return Economy.build.get("id") == "gate" and not Economy._waiting.has("build"), 15.0)
 	_check(Economy.building_level("lumber") == 2 and Economy.build.get("id") == "gate" and done.size() == 2, "(u) lumber Lv 2 done; the gate is left building for phase 2",
 		"lumber=%d build=%s done=%s" % [Economy.building_level("lumber"), Economy.build, done])
 	Economy.build_started.disconnect(on_start)
@@ -1097,7 +1102,7 @@ func _sell_many_online_check() -> void:
 		_panel.qty_max[id].pressed.emit()
 	_panel.sell_selected_button.pressed.emit()
 	_panel.sell_selected_button.pressed.emit()  # 재탭(수량은 0이라 보내지 않는다)
-	await _wait_until(func(): return Economy.res["wood"] == 0 and Economy.res["stone"] == 0, 10.0)
+	await _wait_until(func(): return Economy.res["wood"] == 0 and Economy.res["stone"] == 0 and Economy._waiting.is_empty(), 10.0)
 	_check(w > 0 and s > 0 and Economy.server_gold_tenths == gold0 + gain and Net.requested.get("/v1/sell", 0) == sell0 + 1,
 		"(e2) [sell selected] online: one items request sells both boxes at the server rates", "gold=%d expect=%d requests=%d" % [Economy.server_gold_tenths, gold0 + gain, Net.requested.get("/v1/sell", 0) - sell0])
 	_panel.close()

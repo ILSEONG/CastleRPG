@@ -367,6 +367,8 @@ func _update() -> void:
 
 
 func _on_notice(text: String) -> void:
+	if text == "":  # 응답 대기 중 재탭 등 — 띄울 말이 없다
+		return
 	toast.text = text
 	toast.modulate.a = 1.0
 	toast.visible = true
