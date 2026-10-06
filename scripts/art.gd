@@ -746,9 +746,23 @@ static func apply_lowpoly(root: Node) -> void:
 
 
 ## 모든 모델은 여기서 만든다 — 로우폴리 변환이 한 곳에서 적용된다.
+## PackedScene은 경로마다 붙잡아 둔다: 아무도 안 잡으면 마지막 인스턴스가 사라질 때 풀려, 다음 등장 때 glb를 다시 읽고
+## 텍스처를 GPU에 다시 올린다(몬스터 하나 수십 ms — 라운드마다 반복되는 발열·끊김).
+static var _scenes := {}
+static var cache_scenes := true  # 테스트·비교용으로 끌 수 있다
+static var instance_usec := 0  # 지금까지 instance()에 쓴 시간(측정용)
+
+
 static func instance(path: String) -> Node3D:
-	var n := (load(path) as PackedScene).instantiate() as Node3D
+	var t0 := Time.get_ticks_usec()
+	var scene: PackedScene = _scenes.get(path)
+	if scene == null:
+		scene = load(path)
+		if cache_scenes:
+			_scenes[path] = scene
+	var n := scene.instantiate() as Node3D
 	apply_lowpoly(n)
+	instance_usec += Time.get_ticks_usec() - t0
 	return n
 
 
