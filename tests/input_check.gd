@@ -207,6 +207,19 @@ func _run() -> void:
 	_check(wd < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
 		"(j) warrior stands at its wall-top slot 8 s later", "d=%.2f pos=%s" % [wd, warrior.global_position])
 
+	# (j2) 같은 면 성벽 위 반대쪽 토막 탭 → 그쪽 빈 자리로 성벽 위를 곧장 건너간다(계단 없이)
+	var end0 := 1.0 if Formation.perp(0).dot(warrior.global_position) >= 0.0 else -1.0
+	await _tap(_wall_px(0, -end0))
+	var home2: Vector3 = warrior.stand_position()
+	var crossed := Formation.perp(0).dot(home2) * end0 < 0.0
+	_check(warrior.side == 0 and warrior.post == Formation.POST_WALL and crossed and warrior._path.size() == 1,
+		"(j2) tapping the other side of the same wall moves the wall-top hero across, straight along the wall",
+		"side/post/slot=%s home=%s path=%s" % [[warrior.side, warrior.post, warrior.slot], home2, warrior._path])
+	await get_tree().create_timer(8.0).timeout
+	var wd2: float = warrior.global_position.distance_to(home2)
+	_check(wd2 < 0.1 and absf(warrior.global_position.y - Balance.WALL_H) < 0.01,
+		"(j2) warrior stands at the new wall-top slot 8 s later", "d=%.2f pos=%s" % [wd2, warrior.global_position])
+
 	# --- 개정 7: 자원 건물·상인 탭, 거래 창 ---
 	var badges: Node = null
 	var panel: Node = null
@@ -837,11 +850,11 @@ func _gate_px(side: int) -> Vector2:
 	return _camera.unproject_position(Formation.gate_position(half, side) + Vector3(0, Balance.WALL_H / 2.0, 0))
 
 
-## 성문 옆 벽 토막(+perp 쪽) 중앙.
-func _wall_px(side: int) -> Vector2:
+## 성문 옆 벽 토막(end = +1이면 +perp 쪽, -1이면 -perp 쪽) 중앙.
+func _wall_px(side: int, end := 1.0) -> Vector2:
 	var half: float = _main.castle.half
 	var seg_len := half + Balance.WALL_T - Balance.GATE_W / 2.0
-	var p := Formation.gate_position(half, side) + Formation.perp(side) * (Balance.GATE_W + seg_len) / 2.0
+	var p := Formation.gate_position(half, side) + Formation.perp(side) * end * (Balance.GATE_W + seg_len) / 2.0
 	return _camera.unproject_position(p + Vector3(0, Balance.WALL_H / 2.0, 0))
 
 

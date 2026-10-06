@@ -191,8 +191,9 @@ func stand_position() -> Vector3:
 
 
 ## 자리 변경 명령. 목표 자리가 가득 차면 false (현재 자리 유지).
-func move_to(p_side: int, p_post: int) -> bool:
-	var s: int = formation.claim(index, p_side, p_post)
+## near(성문 중앙 기준 옆 거리)를 주면 그 지점에 가장 가까운 빈 슬롯 — 같은 자리 안에서도 옮긴다(성벽 위 좌↔우).
+func move_to(p_side: int, p_post: int, near := NAN) -> bool:
+	var s: int = formation.claim(index, p_side, p_post) if is_nan(near) else formation.claim_near(index, p_side, p_post, near)
 	if s < 0:
 		return false
 	side = p_side

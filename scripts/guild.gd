@@ -67,6 +67,7 @@ signal changed  # 길드 상태(가입·출석·기부·보스·상점·가상 �
 signal buff_changed  # 길드 버프(공격력·체력 %)가 바뀌었다 — 영웅 능력치를 다시 읽는다
 signal notice(text: String)  # 짧은 알림(레벨업·보스 처치)
 signal boss_started(run: Dictionary)  # 보스 전투 시작 {run_id, sec, level, hp, max} — main이 드래곤 전투 장면을 연다
+signal acted(kind: String)  # 미션(Missions)이 세는 행동: guild_attend(출석 성공 — 온라인은 응답이 왔을 때)
 signal boss_done(result: Dictionary)  # 보스 전투 결과 {dmg, grade, coins, gold, killed, level, claim?} 또는 {error}. 온라인은 응답이 왔을 때
 
 var save_path := "user://guild.json"  # ""이면 저장하지 않는다
@@ -394,7 +395,9 @@ func attend(now := -1.0) -> bool:
 	if attend_block() != "":
 		return false
 	if online():
-		_post("attend", {}, func(_d): notice.emit("출석 완료! 골드 +%s · 길드 코인 +%d" % [_commas(ATTEND_REWARD.gold), ATTEND_REWARD.coins]))
+		_post("attend", {}, func(_d):
+			notice.emit("출석 완료! 골드 +%s · 길드 코인 +%d" % [_commas(ATTEND_REWARD.gold), ATTEND_REWARD.coins])
+			acted.emit("guild_attend"))
 		return true
 	me.attended = true
 	me.contrib = int(me.contrib) + ATTEND_EXP
@@ -403,6 +406,7 @@ func attend(now := -1.0) -> bool:
 	_log("%s님이 출석했습니다" % MY_NAME, now)
 	save()
 	changed.emit()
+	acted.emit("guild_attend")
 	return true
 
 
