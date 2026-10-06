@@ -187,8 +187,10 @@ func _build_world() -> void:
 	var card = preload("res://scripts/tutorial_card.gd").new()  # 튜토리얼 미션 카드(새 게임만, 탭 바 위)
 	card.tags = tags
 	add_child(card)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [랭킹][친구][이벤트]
-	side_menu.windows = {"ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
+	var mission_panel = preload("res://scripts/mission_panel.gd").new()  # 미션 시트(일일·주간·반복): 오른쪽 아래 메뉴가 연다
+	add_child(mission_panel)
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [미션][랭킹][친구][이벤트]
+	side_menu.windows = {"mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
 	side_menu.card = card
 	add_child(side_menu)
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "merchant": panel, "recruit": recruit}

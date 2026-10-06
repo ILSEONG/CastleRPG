@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { sign } from 'hono/jwt'
+import * as M from '../src/missions.ts'
 import * as R from '../src/rules.ts'
 import { randomDevice, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
@@ -115,6 +116,8 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       research: { levels: {}, current: null }, // 개정 24
       quest: { tut_state: 'skipped', tut_step: 0, rep_n: 0 }, dia_tickets: 0, unbuilt: [], // 튜토리얼·반복 퀘스트
       attendance: { n: 0, days: 28, can_claim: true }, // 출석 이벤트
+      missions: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: [], w: [], wd: 0, r: {}, // 미션
+        next_day: R.resetAt(R.resetDay(T0, 15) + 1, 15), next_week: R.resetAt(M.weekStart(M.weekOf(R.resetDay(T0, 15)) + 1), 15) },
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })
