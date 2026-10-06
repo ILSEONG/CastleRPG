@@ -119,6 +119,7 @@ signal roster_changed  # 보유 영웅(copies)이나 배치가 바뀌었다
 signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies, shards}]. 실패(온라인)면 빈 배열
 signal gacha_leveled(level: int)  # 골드 모집 레벨이 올랐다(개정 23, 온라인은 서버 응답에서 본 때)
 signal promoted(hero_id: String, promotion: int)  # 승급 성공(온라인은 응답이 왔을 때, 개정 15)
+signal promoted_all(results: Array)  # 일괄 승급 성공 [{hero_id, from, to, shards}](온라인은 응답이 왔을 때)
 signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
 signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
 signal building_done(building_id: String, level: int)  # 건설 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
@@ -811,6 +812,68 @@ func promote(hero_id: String) -> bool:
 ## 승급 응답을 기다리는 중(UI는 버튼을 끈다).
 func promote_waiting() -> bool:
 	return _waiting.has("promote")
+
+
+## 일괄 승급 계획: 보유 영웅마다 지금 조각으로 갈 수 있는 데까지(한 단계씩 [승급]을 누른 것과 같은 비용).
+## [{hero_id, from, to, shards}] — 표 순서. 오를 영웅이 없으면 [].
+func promote_all_plan() -> Array:
+	var out := []
+	for h in GameData.heroes():
+		var id: String = h.id
+		if int(heroes.get(id, 0)) < 1:
+			continue
+		var from := promotion_of(id)
+		var to := from
+		var cost := 0
+		while to < GameData.MAX_PROMOTION and shards_of(id) - cost >= GameData.promote_cost(to):
+			cost += GameData.promote_cost(to)
+			to += 1
+		if to > from:
+			out.append({"hero_id": id, "from": from, "to": to, "shards": cost})
+	return out
+
+
+## 일괄 승급(확인 창에서 [승급]): plan의 영웅을 각자 목표까지. 오프라인은 바로, 온라인은 /v1/hero/promote_all(once,
+## 서버가 다시 계산 — 그새 조각이 줄었으면 되는 만큼만). 성공하면 promoted_all. 했거나 보냈으면 true.
+func promote_all(plan: Array = []) -> bool:
+	if plan.is_empty():
+		plan = promote_all_plan()
+	if plan.is_empty():
+		notice.emit(PROMOTE_TEXT.not_enough_shards)
+		return false
+	if _waiting.has("promote"):
+		notice.emit(PROMOTE_TEXT.waiting)
+		return false
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return false
+		var want := {}
+		for r in plan:
+			want[r.hero_id] = int(r.to)
+		_waiting["promote"] = true
+		net.send("POST", "/v1/hero/promote_all", {"heroes": want}, _on_promoted_all, _on_promote_failed, true, true)
+		changed.emit()
+		return true
+	for r in plan:
+		hero_shards[r.hero_id] = shards_of(r.hero_id) - int(r.shards)
+		hero_promotions[r.hero_id] = int(r.to)
+	changed.emit()
+	roster_changed.emit()
+	save()
+	promoted_all.emit(plan)
+	return true
+
+
+func _on_promoted_all(data: Dictionary) -> void:
+	_waiting.erase("promote")
+	apply_server(data)
+	var done: Array = []
+	if data.get("promoted") is Array:
+		for r in data.promoted:
+			if r is Dictionary and r.get("hero_id") is String:
+				done.append({"hero_id": r.hero_id, "from": int(r.get("from", 0)), "to": int(r.get("to", 0)), "shards": int(r.get("shards", 0))})
+	promoted_all.emit(done)
 
 
 ## 개발용(main의 --heroes= / ?heroes=): 그 영웅들을 보유(없으면 copies 1)하고 그 순서로 배치한다. 저장 파일은 쓰지 않는다

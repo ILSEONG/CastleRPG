@@ -110,3 +110,30 @@ test('모집 중복 → 조각 +1(결과 shards), 새 영웅은 조각 0. 골드
   assert.deepEqual(r.json.player.heroes.tia, { copies: 10, level: 1, shards: 9, promotion: 0 })
   rand.next = []
 })
+
+test('일괄 승급: 목록의 영웅마다 목표까지 조각이 되는 만큼(단계별 비용 합), 못 오르는 영웅·목록 밖은 그대로, 로그 한 줄', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  await setHero(id, 'hans', { shards: 31 }) // 0 → 1(5) → 2(25) = 30, 남는 1
+  await setHero(id, 'ella', { shards: 60, promotion: 4 }) // 4 → 5는 200: 못 오른다
+  await setHero(id, 'dorik', { shards: 100 }) // 목표 1이면 1까지만
+  await setHero(id, 'nina', { shards: 5 }) // 목록 밖
+  const all = (token: string, body: unknown) => S.req('POST', '/v1/hero/promote_all', { token, body })
+  let r = await all(token, { heroes: { hans: 5, ella: 5, dorik: 1, arteon: 3 } })
+  assert.equal(r.status, 200)
+  const by = Object.fromEntries(r.json.promoted.map((x: any) => [x.hero_id, x]))
+  assert.deepEqual(by, { hans: { hero_id: 'hans', from: 0, to: 2, shards: 30 }, dorik: { hero_id: 'dorik', from: 0, to: 1, shards: 5 } })
+  assert.deepEqual(r.json.player.heroes.hans, { copies: 1, level: 1, shards: 1, promotion: 2 })
+  assert.deepEqual([await row(id, 'hans'), await row(id, 'ella'), await row(id, 'dorik'), await row(id, 'nina')], [
+    { copies: 1, level: 1, shards: 1, promotion: 2 }, { copies: 1, level: 1, shards: 60, promotion: 4 },
+    { copies: 1, level: 1, shards: 95, promotion: 1 }, { copies: 1, level: 1, shards: 5, promotion: 0 }])
+  const l = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'promote_all'", [id])
+  assert.equal(l.length, 1)
+  assert.equal(l[0].detail.heroes.length, 2)
+  r = await all(token, { heroes: { hans: 5, ella: 5 } }) // 더 오를 영웅이 없다
+  assert.deepEqual([r.status, r.json.error], [409, 'not_enough_shards'])
+  for (const body of [{}, { heroes: [] }, { heroes: { hans: 0 } }, { heroes: { hans: 6 } }, { heroes: { hans: 'x' } }]) {
+    assert.equal((await all(token, body)).status, 400, JSON.stringify(body))
+  }
+  assert.equal((await S.req('POST', '/v1/hero/promote_all', { body: { heroes: { hans: 1 } } })).status, 401)
+})

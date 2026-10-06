@@ -150,6 +150,7 @@ interface Change {
   heroes?: Record<string, number> // 영웅 → copies 증가(모집). 새 행은 조각 = 증가 − 1, 있던 행은 조각 += 증가(개정 15)
   heroLevels?: Record<string, number> // 영웅 → 레벨 증가
   promote?: { id: string; cost: number } // 승급(개정 15): 조각 −cost, 승급 +1
+  promotes?: Record<string, { steps: number; cost: number }> // 일괄 승급: 영웅 → 조각 −cost, 승급 +steps
   deploy?: (string | null)[] // 새 배치
   build?: { id: string; finish: number } | null // 새 일꾼 상태(개정 12)
   soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
@@ -591,6 +592,10 @@ export function createApp(opts: AppOptions) {
       ctes.push(`hp as (update player_heroes set shards = shards - ${p(ch.promote.cost)}::int, promotion = promotion + 1
         where player_id = (select player_id from s) and hero_id = ${p(ch.promote.id)} returning 1)`)
     }
+    Object.entries(ch.promotes ?? {}).forEach(([id, d], i) => {
+      ctes.push(`hpa${i} as (update player_heroes set shards = shards - ${p(d.cost)}::int, promotion = promotion + ${p(d.steps)}::int
+        where player_id = (select player_id from s) and hero_id = ${p(id)} returning 1)`)
+    })
     Object.entries(ch.res ?? {}).forEach(([res, d], i) => {
       ctes.push(`r${i} as (update player_resources set amount = amount + ${p(bigint(d))}::bigint
         where player_id = (select player_id from s) and res = ${p(res)} returning 1)`)
@@ -734,6 +739,10 @@ export function createApp(opts: AppOptions) {
     if (ch.promote) {
       pl.heroes[ch.promote.id].shards -= ch.promote.cost
       pl.heroes[ch.promote.id].promotion += 1
+    }
+    for (const [k, d] of Object.entries(ch.promotes ?? {})) {
+      pl.heroes[k].shards -= d.cost
+      pl.heroes[k].promotion += d.steps
     }
     if (ch.deploy !== undefined) pl.deploy = ch.deploy
     if (ch.build !== undefined) pl.build = ch.build
@@ -1503,6 +1512,44 @@ export function createApp(opts: AppOptions) {
           log: { kind: 'promote', detail: { hero_id: heroId, from: own.promotion, to, shards: cost, shards_before: own.shards, shards_after: own.shards - cost } },
         },
         extra: { promotion: to },
+      }
+    })
+  })
+
+  // 일괄 승급: body.heroes = {영웅 id: 목표 승급}(확인 창에 보여 준 목록). 영웅마다 목표까지, 조각이 되는 만큼 차례로 올린다
+  // (비용은 단계마다 promoteCost — 한 단계씩 [승급]을 누른 것과 같다). 목록에 없는 영웅은 그대로. 하나도 못 올리면 409 not_enough_shards.
+  // 전부 version 가드 한 문장(한 영웅만 오르고 끊기는 일이 없다). economy_log promote_all 한 줄에 영웅별 from·to·조각.
+  app.post('/v1/hero/promote_all', auth, async (c) => {
+    const b = await body(c)
+    const want = b.heroes
+    if (!want || typeof want !== 'object' || Array.isArray(want) || Object.keys(want).length > 500
+      || !Object.values(want).every((v) => isInt(v, 1, R.MAX_PROMOTION))) {
+      throw new ApiError(400, 'bad_request', `'heroes' must be an object of hero id -> target promotion 1..${R.MAX_PROMOTION}`)
+    }
+    return mutate(c, (p, g) => {
+      const promotes: Record<string, { steps: number; cost: number }> = {}
+      const done: { hero_id: string; from: number; to: number; shards: number }[] = []
+      for (const h of g.heroes) {
+        const target = (want as Record<string, number>)[h.id]
+        const own = Object.hasOwn(p.heroes, h.id) ? p.heroes[h.id] : undefined
+        if (target === undefined || !own || own.copies < 1) continue
+        let to = own.promotion
+        let cost = 0
+        for (;;) {
+          if (to >= target) break
+          const next = R.promoteCost(to, g.config)
+          if (next === null || own.shards - cost < next) break
+          cost += next
+          to += 1
+        }
+        if (to === own.promotion) continue
+        promotes[h.id] = { steps: to - own.promotion, cost }
+        done.push({ hero_id: h.id, from: own.promotion, to, shards: cost })
+      }
+      if (!done.length) throw new ApiError(409, 'not_enough_shards', 'no listed hero can be promoted')
+      return {
+        change: { promotes, log: { kind: 'promote_all', detail: { heroes: done } } },
+        extra: { promoted: done },
       }
     })
   })
