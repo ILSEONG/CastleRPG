@@ -1961,6 +1961,25 @@ func test_promotion() -> void:
 	DirAccess.remove_absolute(ECON_TMP)
 	e.free()
 	e2.free()
+	# 일괄 승급: 보유 영웅마다 지금 조각으로 갈 수 있는 데까지(단계별 비용 합), 오프라인은 곧바로 반영
+	var b = _econ(1000.0)
+	var all := []
+	b.promoted_all.connect(func(r): all.append(r))
+	check(b.promote_all_plan().is_empty(), "bulk promotion: starters without shards have nothing to promote")
+	b.hero_shards["hans"] = 31  # 0 -> 2 (5 + 25), 1 left
+	b.hero_shards["ella"] = 4  # not enough
+	b.heroes["arteon"] = 1
+	b.hero_shards["arteon"] = 999
+	b.hero_promotions["arteon"] = 4  # 4 -> 5 (200), stops at the max
+	var plan: Array = b.promote_all_plan()
+	var by := {}
+	for r in plan:
+		by[r.hero_id] = [r.from, r.to, r.shards]
+	check(by == {"hans": [0, 2, 30], "arteon": [4, 5, 200]}, "bulk plan: each hero as far as its shards go: %s" % [by])
+	check(b.promote_all() and b.promotion_of("hans") == 2 and b.shards_of("hans") == 1 and b.promotion_of("arteon") == 5 and b.shards_of("arteon") == 799
+		and b.promotion_of("ella") == 0 and b.shards_of("ella") == 4 and all.size() == 1 and all[0].size() == 2, "offline bulk promotion applies the plan and signals once")
+	check(b.promote_all_plan().is_empty() and not b.promote_all(), "after a bulk promotion nothing is left to promote")
+	b.free()
 
 
 ## 개정 12 건물: 표(9행·파일 순서), 비용·시간 공식(서버 buildings.test와 같은 값), 단계 표(슬롯·내부), 효과 수치(성 HP·성문 HP·인구·

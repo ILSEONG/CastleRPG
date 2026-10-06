@@ -17,6 +17,8 @@ extends "res://scripts/ui_window.gd"
 ## 개정 18: 큰 카드 양옆에 장비 칸 7개(왼쪽 무기·모자·상의·하의, 오른쪽 신발·견장·장갑 — 아이콘 + 등급 테두리, 빈 칸은 흐린 아이콘).
 ## 칸을 탭하면 그 부위 장비 고르기(bag_panel.open_pick — [장착]·[해제]). 능력치는 장비 포함, 그 아래 줄에 장비 합계("장비 HP +350 · 공격 +35").
 ## 큰 카드 오른쪽 아래 [장비 자동착용]: 부위마다 아무도 안 낀 더 좋은 장비(빨간 점과 같은 규칙)를 한 번에 낀다(Economy.auto_equip). 바꿀 게 없으면 비활성.
+## [일괄 승급](정렬·적용 옆): 승급할 수 있는 보유 영웅 전부를 각자 지금 조각으로 갈 수 있는 데까지(Economy.promote_all_plan).
+## 누르면 확인 창(영웅마다 "이름 ★1 → ★3 · 조각 30", 넘치면 스크롤) → [승급]·[취소]. 오를 영웅이 없거나 응답 대기면 비활성.
 ## 보유 격자 뒤에 미보유 영웅(등급 SSR → SR → R, 같으면 표 순서): 흐린 카드 + "미보유", Lv·전투력 없음. 배치·상세 안 됨(탭하면 알림).
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -54,6 +56,8 @@ const LOCKED_MODULATE := Color(0.5, 0.5, 0.55, 0.8)  # 미보유 카드(흐리�
 const UNOWNED_TEXT := "미보유"
 const UNOWNED_NOTICE := "아직 보유하지 않은 영웅입니다"
 const AUTO_EQUIP_TEXT := "장비 자동착용"
+const PROMOTE_ALL_ROW_H := 42.0  # 일괄 승급 확인 창 한 줄 높이(줄 수만큼 창이 자라고 넘치면 스크롤)
+const PROMOTE_ALL_LIST_MAX_H := 560.0
 const AUTO_EQUIP_PX := Vector2(150, 50)  # [장비 자동착용] 크기(큰 카드 오른쪽 아래)
 
 var bag  # 장비 고르기 창(bag_panel). main이 넣는다
@@ -65,6 +69,11 @@ var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
 var locked_cards := {}  # 영웅 id → 미보유 카드(보유 카드 뒤, unowned_sorted 순서)
 var apply_button: Button
 var sort_button: Button
+var promote_all_button: Button  # [일괄 승급]
+var promote_all_confirm: Control  # 일괄 승급 확인 창(어두운 막 + 크림 창)
+var promote_all_list: VBoxContainer  # 확인 창의 영웅별 줄
+var _promote_all_scroll: ScrollContainer
+var _promote_all_plan: Array = []  # 확인 창을 열 때의 계획
 var work: Array = []  # 편집 중인 배치(슬롯 i → 영웅 id 또는 null)
 var selected_slot := -1
 var sort_mode := "power"
@@ -115,6 +124,7 @@ func _ready() -> void:
 	Economy.items_changed.connect(_refresh)  # 개정 18 장비 칸
 	Economy.leveled.connect(_on_leveled)
 	Economy.promoted.connect(_on_promoted)
+	Economy.promoted_all.connect(_on_promoted_all)
 
 
 ## 시트(ui_window._fit_sheet): 내용이 바뀌어도 크기를 다시 맞추지 않는다.
@@ -140,9 +150,11 @@ func _build_list() -> void:
 	_list_view.add_child(row)
 	sort_button = _button("", UiKit.STEEL, 26)
 	sort_button.pressed.connect(cycle_sort)
+	promote_all_button = _button("일괄 승급", PROMOTE_COLOR, 26)
+	promote_all_button.pressed.connect(ask_promote_all)
 	apply_button = _button("적용")
 	apply_button.pressed.connect(apply)
-	for b in [sort_button, apply_button]:
+	for b in [sort_button, promote_all_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	var scroll := ScrollContainer.new()
@@ -157,6 +169,86 @@ func _build_list() -> void:
 	_hero_grid.add_theme_constant_override("h_separation", 12)
 	_hero_grid.add_theme_constant_override("v_separation", 12)
 	grid_center.add_child(_hero_grid)
+	_build_promote_all_confirm()
+
+
+## 일괄 승급 확인 창: 화면을 덮는 어두운 막(뒤 입력 차단) + 가운데 크림 창 — 제목, 영웅별 줄(스크롤), [승급]·[취소].
+func _build_promote_all_confirm() -> void:
+	promote_all_confirm = ColorRect.new()
+	promote_all_confirm.color = Color(0, 0, 0, 0.45)
+	promote_all_confirm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	promote_all_confirm.mouse_filter = Control.MOUSE_FILTER_STOP
+	promote_all_confirm.visible = false
+	add_child(promote_all_confirm)
+	var box := PanelContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	box.custom_minimum_size = Vector2(600, 0)
+	box.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 14.0, 28))
+	promote_all_confirm.add_child(box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 18)
+	box.add_child(col)
+	col.add_child(_label("일괄 승급", 32))
+	col.add_child(_label("아래 영웅을 승급할까요?", 24, HudScript.INK.lightened(0.2)))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	col.add_child(scroll)
+	_promote_all_scroll = scroll
+	promote_all_list = VBoxContainer.new()
+	promote_all_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	promote_all_list.add_theme_constant_override("separation", 8)
+	scroll.add_child(promote_all_list)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	col.add_child(row)
+	for pair in [["승급", PROMOTE_COLOR, true], ["취소", UiKit.STEEL, false]]:
+		var b := _button(pair[0], pair[1], 28)
+		b.custom_minimum_size = Vector2(200, 72)
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(_on_promote_all_confirm.bind(pair[2]))
+		row.add_child(b)
+
+
+## [일괄 승급]: 계획을 세워 확인 창에 영웅별 별 변화를 보인다(없으면 알림).
+func ask_promote_all() -> void:
+	_promote_all_plan = Economy.promote_all_plan()
+	if _promote_all_plan.is_empty():
+		Economy.notice.emit("승급할 수 있는 영웅이 없습니다")
+		return
+	for c in promote_all_list.get_children():
+		promote_all_list.remove_child(c)
+		c.queue_free()
+	for r in _promote_all_plan:
+		var h := GameData.hero(r.hero_id)
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 12)
+		var name_label := _label("[%s] %s" % [h.grade, h.name], 24, UiKit.GRADE_COLORS[h.grade].darkened(0.15), HORIZONTAL_ALIGNMENT_LEFT)
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(name_label)
+		line.add_child(_label("★%d → ★%d" % [r.from, r.to], 24, PREVIEW_COLOR, HORIZONTAL_ALIGNMENT_RIGHT))
+		var cost := _label("조각 %d" % r.shards, 22, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_RIGHT)
+		cost.custom_minimum_size = Vector2(130, 0)
+		line.add_child(cost)
+		promote_all_list.add_child(line)
+	_promote_all_scroll.custom_minimum_size = Vector2(0, minf(PROMOTE_ALL_ROW_H * _promote_all_plan.size(), PROMOTE_ALL_LIST_MAX_H))
+	promote_all_confirm.visible = true
+
+
+func _on_promote_all_confirm(yes: bool) -> void:
+	promote_all_confirm.visible = false
+	if yes:
+		Economy.promote_all(_promote_all_plan)
+
+
+## 일괄 승급 성공: 알림 "N명 승급 완료"(목록 카드 별은 roster_changed로 바뀐다).
+func _on_promoted_all(results: Array) -> void:
+	if results.is_empty():
+		return
+	promotions_shown += 1
+	Economy.notice.emit("영웅 %d명 승급 완료" % results.size())
 
 
 func _build_detail() -> void:
@@ -417,6 +509,7 @@ func _wrap_label(font_size: int, color: Color) -> Label:
 
 
 func _on_open() -> void:
+	promote_all_confirm.visible = false
 	work = GameState.deploy()
 	selected_slot = -1
 	_show_list(false)
@@ -572,6 +665,7 @@ func _rebuild() -> void:
 		c.queue_redraw()
 	sort_button.text = "정렬: " + SORT_NAMES[sort_mode]
 	apply_button.disabled = work == GameState.deploy()
+	promote_all_button.disabled = Economy.promote_waiting() or Economy.promote_all_plan().is_empty()
 
 
 # --- 상세 ---
