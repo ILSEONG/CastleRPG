@@ -10,6 +10,8 @@ import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 import * as O from './oauth.ts'
 import * as G from './guild.ts'
+import { registerGuildWar } from './war_routes.ts'
+import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
   query: Query
@@ -20,6 +22,7 @@ export interface AppOptions {
   random?: () => number // [0, 1) 난수(모집). 기본은 암호학적 난수(R.cryptoRandom) — 테스트만 주입한다
   oauth?: O.OAuthConfig // 소셜 로그인 제공자 키·공개 주소(없으면 소셜 로그인 꺼짐)
   fetch?: typeof fetch // 제공자 호출(테스트는 가짜)
+  warLive?: WarLive // 공성전 실시간 방(main.ts가 만들어 http 서버에 붙인다). 없으면 방 없이(REST finish만)
 }
 
 const TOKEN_TTL = 30 * 86400
@@ -1995,6 +1998,19 @@ export function createApp(opts: AppOptions) {
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
   }
+
+  // --- 길드전(공성전): war_routes.ts ---
+  async function verifyToken(token: string): Promise<string | null> {
+    try {
+      const p = await verify(token, secret, { alg: 'HS256', exp: false, iat: false, nbf: false })
+      if (typeof p.exp !== 'number' || p.exp <= clock() || typeof p.sub !== 'string' || !UUID_RE.test(p.sub)) return null
+      return p.sub
+    } catch {
+      return null
+    }
+  }
+  registerGuildWar(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, rowOf, needGuild, grant, ApiError,
+    verifyToken }, opts.warLive)
 
   return app
 }

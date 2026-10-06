@@ -50,7 +50,7 @@ var slot: int = 0
 var free_pos := Vector3.ZERO  # post == POST_FREE일 때 서는 곳
 var hold := false  # 아레나: 이동 명령을 받았다 — 표적은 free_pos에서 aggro 안(성 영웅처럼). false면 거리 제한 없이 가장 가까운 적
 var idle_dir := Vector3.FORWARD  # 아레나 대기 방향(성에서는 면 바깥)
-var allies := "heroes"  # 아군 그룹(회복·오라·부활 대상). 공성전 수비 영웅은 "monsters"(war_hero.gd)
+var allies := "heroes"  # 아군 그룹(회복·오라·부활 대상). 공성전 수비 영웅은 "war_def"(war_hero.gd)
 var foes := "monsters"  # 적 그룹(표적·스킬 피해 대상). 공성전 수비 영웅은 "heroes"
 var _path: Array[Vector3] = []
 var hp: float = 0.0

@@ -162,6 +162,11 @@ func _same_region(p: Vector3) -> bool:
 	return war_half <= 0.0 or Formation.is_inside(war_half, global_position) == Formation.is_inside(war_half, p)
 
 
+## 영웅 사거리에 더하는 몸 반지름(hero._reach): 영웅은 0.
+func hit_radius() -> float:
+	return 0.0
+
+
 func is_walking() -> bool:
 	return not _path.is_empty()
 

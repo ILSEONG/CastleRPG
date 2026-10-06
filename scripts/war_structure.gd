@@ -84,6 +84,11 @@ func bar_scale() -> float:
 	return 2.0
 
 
+## 영웅 사거리에 더하는 폭(성문 폭·성채 외벽 — 가운데 한 점이 아니라 면을 친다).
+func hit_radius() -> float:
+	return 1.0
+
+
 func radius() -> float:
 	return 1.5
 
