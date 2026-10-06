@@ -16,12 +16,12 @@ pop_base,6
 pop_per_house,2
 soldier_max_tier,5
 soldier_tier_mult,2
-train_base_min,180
-train_step_min,30
+train_base_min,18
+train_step_min,3
 train_cost_tier_mult,5
 soldier_merge_count,5
-train_batch_base,10
-train_batch_per_level,2
+train_batch_base,1
+train_batch_per_level,0
 train_cost_infantry,food:30|wood:20
 train_cost_archer,food:25|wood:30
 train_cost_cavalry,food:40|stone:20

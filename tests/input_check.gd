@@ -34,6 +34,8 @@ func _ready() -> void:
 	Fever.save_path = ""
 	Fever.reset()
 	GameData._config.fx_shake = "0"  # 테스트에서는 카메라 흔들림을 끈다(개정 17)
+	for kv in [["train_base_min", "180"], ["train_step_min", "30"], ["train_batch_base", "10"], ["train_batch_per_level", "2"]]:
+		GameData._config[kv[0]] = kv[1]  # 훈련 칸 사례는 옛 묶음 훈련 설정으로 본다(실제 설정은 1마리씩 — run_tests test_tutorial)
 	Economy.reset(Time.get_unix_time_from_system())
 	get_window().size = Vector2i(360, 640)
 	_main = preload("res://scenes/main.tscn").instantiate()

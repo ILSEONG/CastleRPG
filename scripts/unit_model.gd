@@ -23,6 +23,7 @@ const SHADOW_ON_AT := 30  # 이만큼으로 줄면 다시 켬(경계에서 깜�
 const HIT_FLASH_SEC := 0.14  # 피격 번쩍임(개정 26)
 const HIT_SQUASH := Vector3(1.12, 0.86, 1.12)  # 피격 순간 찌그러짐(세게 맞으면 이만큼, 약하면 절반)
 const HIT_SQUASH_SEC := 0.16
+const HIT_FLASH_GAP_MS := 260  # 피격 번쩍임 최소 간격(약한 타격, 강한 타격은 절반)
 
 static var _crowd_frame := -1
 static var _crowd_n := 0
@@ -40,6 +41,8 @@ var _acc := 0.0  # 아직 돌리지 않은 애니메이션 시간(lod)
 var _meshes: Array = []  # 그림자를 끄고 켤 메시와 원래 설정 [[MeshInstance3D, cast_shadow], …](crowd_lod)
 var _shadows := true
 var _base_scale := Vector3.ONE
+var _atk_i := 0  # 공격 모션 차례(attacks)
+var _flash_at := -100000  # 마지막 피격 번쩍임(밀리초)
 var _hit_tw: Tween
 var _flash_meshes: Array = []  # 보이는 몸 메시(처음 맞을 때 찾는다)
 
@@ -115,25 +118,31 @@ func play_walk() -> void:
 
 
 ## 공격 때마다 처음부터. 끝나면 대기로 돌아간다. 공격 간격 interval보다 길면 길이 ≤ 간격 × ATTACK_FIT가 되게 빨리 돈다.
+## 스펙에 "attacks"(모션 이름 목록)가 있으면 차례로 돌아가며 쓴다(개정 26 — 데스나이트: 가로 베기·내려치기).
 ## 반환 = 타격(발사) 순간까지 초(길이 × HIT_FRAC ÷ 속도).
 func play_attack(interval: float) -> float:
-	_current = _spec.anims.attack
+	var list: Array = _spec.get("attacks", [_spec.anims.attack])
+	_current = list[_atk_i % list.size()]
+	_atk_i += 1
 	var length := _anim.get_animation(_current).length
 	var speed := maxf(1.0, length / (interval * Art.ATTACK_FIT))
-	_anim.play(_current, 0.1, speed)
+	_anim.play(_current, 0.15, speed)
 	_anim.seek(0.0, true)
-	return length * Art.HIT_FRAC[_current] / speed
+	return length * float(Art.HIT_FRAC.get(_current, 0.5)) / speed
 
 
 ## 스킬 발동 모션(개정 25): anim_name을 처음부터. 발동 순간(길이 × Art.CAST_FRAC)이 Art.CAST_WINDUP초보다 늦으면 그만큼 빨리 돈다.
 ## 끝나면 대기로 돌아간다(공격과 같다). 이 모델에 없는 이름이면 공격 모션으로. 반환 = 발동 순간까지 초.
-func play_cast(anim_name: String) -> float:
+## at_sec > 0이면 발동 순간이 정확히 그 초에 오도록 빠르게·느리게(0.5~3배) 돈다(개정 26 — 보스 범위 예고에 맞춘다).
+## frac > 0이면 발동 순간 비율을 Art.CAST_FRAC 대신 이것으로.
+func play_cast(anim_name: String, at_sec := -1.0, frac := -1.0) -> float:
 	if not _anim.has_animation(anim_name):
 		anim_name = _spec.anims.attack
 	_current = anim_name
-	var at: float = _anim.get_animation(anim_name).length * float(Art.CAST_FRAC.get(anim_name, Art.HIT_FRAC.get(anim_name, 0.5)))
-	var speed := maxf(1.0, at / Art.CAST_WINDUP)
-	_anim.play(anim_name, 0.1, speed)
+	var f: float = frac if frac > 0.0 else float(Art.CAST_FRAC.get(anim_name, Art.HIT_FRAC.get(anim_name, 0.5)))
+	var at: float = _anim.get_animation(anim_name).length * f
+	var speed := maxf(1.0, at / Art.CAST_WINDUP) if at_sec <= 0.0 else clampf(at / at_sec, 0.5, 3.0)
+	_anim.play(anim_name, 0.15, speed)
 	_anim.seek(0.0, true)
 	return at / speed
 
@@ -143,6 +152,10 @@ func play_cast(anim_name: String) -> float:
 func hit_react(strong := false) -> void:
 	if not is_inside_tree():
 		return
+	var now := Time.get_ticks_msec()
+	if now - _flash_at < (HIT_FLASH_GAP_MS if not strong else HIT_FLASH_GAP_MS / 2):  # 여럿이 연달아 치면 깜빡임이 끊이지 않는다 — 간격을 둔다
+		return
+	_flash_at = now
 	if _flash_mat == null:
 		_flash_mat = ShaderMaterial.new()
 		_flash_mat.shader = HitFlashShader
@@ -175,6 +188,17 @@ func _end_flash() -> void:
 		if is_instance_valid(mi):
 			mi.material_overlay = null
 	scale = _base_scale
+
+
+## 이름 있는 모션을 반복 재생(돌진 달리기 등 — 대기·걷기·공격 밖의 것). 없는 이름이면 걷기.
+func play_loop(anim_name: String, speed := 1.0) -> void:
+	if not _anim.has_animation(anim_name):
+		anim_name = _spec.anims.walk
+	if _current == anim_name:
+		return
+	_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
+	_current = anim_name
+	_anim.play(anim_name, 0.12, speed)
 
 
 ## 사망 애니메이션은 반복하지 않으므로 마지막 자세(쓰러짐)로 멈춘다.

@@ -455,16 +455,27 @@ func _tick_skills(delta: float) -> void:
 	if _aura_cd <= 0.0:
 		_aura_cd = AURA_SCAN
 		_aura_ring.visible = _aura_mult() > 1.0
-	if _sk.has("heal_aura"):
+	if _sk.has("heal_aura"):  # 다친 아군이 있을 때만 발동 모션(개정 26) → 발동 순간에 회복. 모션을 못 시작하면 곧 다시
 		_heal_cd -= delta
 		if _heal_cd <= 0.0:
 			_heal_cd = _sk.heal_aura[0]
-			_heal_aura()
+			if _anyone_hurt(_sk.heal_aura[1]) and not begin_cast(HeroSkillsScript.cast_anim("heal_aura", def), _heal_aura):
+				_heal_cd = HeroSkillsScript.CAST_WAIT
 	if _sk.has("gate_repair"):
 		_repair_cd -= delta
 		if _repair_cd <= 0.0:
 			_repair_cd = _sk.gate_repair[0]
-			_gate_repair()
+			if castle != null and holds_post() and GameState.gate_hp[side] > 0.0 and GameState.gate_hp[side] < GameState.gate_hp_max \
+					and not begin_cast(HeroSkillsScript.cast_anim("gate_repair", def), _gate_repair):
+				_repair_cd = HeroSkillsScript.CAST_WAIT
+
+
+## 반경 안에 다친(체력이 다 차지 않은) 살아 있는 영웅이 있는가.
+func _anyone_hurt(radius: float) -> bool:
+	for h in get_tree().get_nodes_in_group("heroes"):
+		if h.is_alive() and h.hp < h.hp_max and Formation.flat_distance(global_position, h.global_position) <= radius:
+			return true
+	return false
 
 
 func _heal_aura() -> void:

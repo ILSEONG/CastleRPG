@@ -2144,6 +2144,7 @@ func test_hit_frac() -> void:
 ## save v7 왕복·v6 → v7(생산 시계 버림·빈 대기열)·깨진 v7, 온라인 응답의 training.
 func test_soldiers() -> void:
 	GameData.load_tables()
+	_legacy_training()
 	var ids: Array = GameData.soldiers().map(func(s): return [s.id, s.building])
 	check(GameData.errors == 0 and ids == [["infantry", "barracks"], ["archer", "archery"], ["cavalry", "stable"]], "soldiers.csv: 3 rows in file order: %s" % [ids])
 	check(GameData.soldier_of_building("stable") == "cavalry" and GameData.soldier_of_building("lab") == "" and GameData.building_def("barracks").name == "보병 막사", "soldier buildings")
@@ -2331,6 +2332,7 @@ func test_soldiers() -> void:
 		check(not GameData.apply_remote(q) and GameData.errors == entry[1] and _tables_hash() == before, "apply_remote rejects soldiers: %s (errors %d)" % [entry[0], GameData.errors])
 	_errors.count = logged
 	GameData.load_tables()
+	_legacy_training()
 	check(GameData.errors == 0 and GameData.soldiers().size() == 3, "default tables restored")
 	# 성채 앞 자리 격자: 11 × 6 = 66칸, 겹침 없음, 범위 안, 상인·수레·건물 부지 밖. 67번째는 자리 없음
 	var units := []
@@ -2378,6 +2380,7 @@ func test_soldiers() -> void:
 
 
 ## 개정 14 §4 수량 판매(오프라인): amount만큼만 팔고 floor(amount × 단가 × 그 자원 배율) 골드, 보유 초과는 보유로 자른다.
+	GameData.load_tables()  # 실제 설정(훈련 1마리씩)으로 되돌린다
 func test_economy_sell_amount() -> void:
 	var now := 3600.0 * 480000.0
 	var e = _econ(now)
@@ -2950,6 +2953,7 @@ func _command_units(half: float) -> Array:
 
 ## 개정 19: 막사 레벨이 훈련 티어·시간을 정하고 비용은 티어마다 ×5, 진행 중 묶음은 시작 티어·시각 고정.
 func test_training_tiers() -> void:
+	_legacy_training()
 	var want := [[1, 1, 180], [2, 1, 150], [6, 1, 30], [7, 2, 180], [12, 2, 30], [13, 3, 180], [19, 4, 180], [25, 5, 180], [30, 5, 30], [31, 5, 30]]
 	var table_ok := true
 	for w in want:
@@ -2978,6 +2982,7 @@ func test_training_tiers() -> void:
 
 
 ## 성장(개정 20 §2) 표·비용·효과: 서버 upgrades.test.ts와 같은 숫자.
+	GameData.load_tables()  # 실제 설정(훈련 1마리씩)으로 되돌린다
 func test_upgrade_tables() -> void:
 	GameData.load_tables()
 	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"], "upgrades.csv loads in file order")
@@ -4196,6 +4201,7 @@ func _worst_overlap(p: PackedVector2Array, radii: Array) -> float:
 ## (생산·건설·판매·처치 골드·훈련 시간·비용·인구)과 성·성문 HP·병종 배율, 저장 v12 왕복·v11 → v12·깨진 v12, 서버 응답(research), 아이콘.
 func test_research_r24() -> void:
 	GameData.load_tables()
+	_legacy_training()
 	var ids: Array = GameData.research_defs().map(func(d): return d.id)
 	check(GameData.errors == 0 and ids.size() == 22 and ids[0] == "wood_tech" and ids[7] == "abundance" and ids[16] == "elite" and ids[21] == "legend_armor",
 		"research.csv: 22 nodes in file order: %s" % [ids])
@@ -4341,6 +4347,7 @@ func test_research_r24() -> void:
 
 ## 오프라인 처치 골드: 방치 스폰(idle_interval초마다 네 면 × spawn_group)을 다 잡았다고 보고 처치 골드 × offline_gold_mult(0.4),
 ## 상한 accum_cap_min분, 60초 미만 없음(서버 rules.offlineReward와 같은 값). 저장의 last_active부터 정산, 두 번 받지 않음, 개요 시그널.
+	GameData.load_tables()  # 실제 설정(훈련 1마리씩)으로 되돌린다
 func test_offline_gold() -> void:
 	GameData.load_tables()
 	var per := GameData.kill_gold_tenths("grunt", 1)
@@ -4575,6 +4582,12 @@ func test_tutorial() -> void:
 		kinds[want] = true
 		check(got == want and (want != "tickets" or int(rw.tickets) == 10), "tutorial: mission %d reward is %s: %s" % [i + 1, want, rw])
 	check(kinds.size() == 4, "tutorial: all four reward kinds appear")
+	check(GameData.train_max(1) == 1 and GameData.train_max(30) == 1 and GameData.soldier_unit_sec(1) == 18 * 60.0 and GameData.soldier_unit_sec(6) == 3 * 60.0
+		and GameData.train_tier(7) == 2, "training is one soldier per order: 18 min at Lv 1 down to 3 min, tiers unchanged")
+	# 튜토리얼 훈련: 1마리씩, 5초
+	t.check()
+	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
+		"tutorial: training is one soldier in 5 s")
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
@@ -4623,9 +4636,42 @@ func test_tutorial() -> void:
 	t.guild = null
 	check(not t.complete() and t.tab_locked("guild") == false, "tutorial: guild tab open at the guild mission")
 	t.state = "done"
-	check(not t.tab_locked("hero") and t.mission().is_empty(), "tutorial done: nothing locked")
+	t.repeats_on = true
+	t.check()
+	# 반복 퀘스트: 처치 → 수집 → 스테이지 → 성장 … 바퀴마다 목표·보상이 커진다
+	var q: Dictionary = t.mission()
+	check(t.repeating() and q.kind == "kill" and int(q.arg) == 100 and int(t.repeat_reward(q).gold) == 3000, "repeat: first quest is kill 100 for 3,000 gold")
+	for i in 100:
+		e.add_kill("grunt", 1)
+	var g0: int = e.gold
+	check(t.complete() and t.claim() and e.gold == g0 + 3000 and t.mission().kind == "collect", "repeat: claim pays and moves on")
+	t.count = 3
+	t.claim()
+	gs.stage = 7
+	t.best_stage = 7
+	t.rep_quest = {}
+	q = t.mission()
+	check(q.kind == "stage" and not t.complete() and int(q.arg) == 8 and q.title == "스테이지 %s 클리어" % GameData.round_label(8), "repeat: stage target = reached + 1 (two more rounds)")
+	gs.stage = 9
+	check(t.complete() and t.claim() and t.mission().kind == "growth_up" and t.progress_text() == "0/3", "repeat: stage cleared; growth counts from now")
+	t.rep_n = TutorialScript.REPEATS.size()
+	t.rep_quest = {}
+	q = t.mission()
+	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
+	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
+	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 18 * 60.0, "tutorial done: normal training time, still one per order")
+	check(not t.tab_locked("hero") and t.repeating(), "tutorial done: nothing locked, repeat quests")
 	t.free()
 	gs.free()
 	e.free()
 	e2.free()
 	e3.free()
+
+
+
+## 옛 훈련 설정(1마리 3:00, 묶음 10 + 2 × (L − 1)) — 훈련 규칙 테스트가 쓴다. 실제 설정은 1마리씩·18분(사용자 2026-10-06).
+func _legacy_training() -> void:
+	GameData._config.train_base_min = "180"
+	GameData._config.train_step_min = "30"
+	GameData._config.train_batch_base = "10"
+	GameData._config.train_batch_per_level = "2"

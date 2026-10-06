@@ -327,6 +327,7 @@ func _refresh_training(type: String) -> void:
 		collect_button.disabled = Economy.training_waiting(id, "collect")
 		return
 	qty.set_range(1, maxi(1, mini(Economy.train_max(id), _affordable(type, tier))))
+	qty.visible = Economy.train_max(id) > 1  # 훈련은 1마리씩(사용자 2026-10-06) — 수량 고르기 없음
 	var n: int = qty.value
 	var lv := Economy.building_level(id)
 	unit_label.text = "T%d %s · 1마리 %s" % [tier, nm, UiKit.clock(Economy.train_time(id, 1))]

@@ -41,6 +41,7 @@ const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 # 11: diamonds, gacha {gold_level, gold_pulls, dia_pity}(개정 23). 10 이하는 다이아 0·골드 모집 Lv 1·누적 0·천장 0
 # 12: research {levels: {노드: 레벨}, current: {id, finish} 또는 null}(개정 24). 11 이하는 연구 없음
 const SAVE_INTERVAL := 10.0
+const TUTORIAL_TRAIN_SEC := 5.0  # 튜토리얼 훈련 1마리 시간(사용자 2026-10-06)
 const WAIT_TEXT := "연결 대기 중"
 const OFFLINE_MIN_SEC := 60.0  # 오프라인 처치 골드: 이보다 짧게 떠났으면 없음(서버 rules.OFFLINE_MIN_SEC)
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
@@ -143,7 +144,8 @@ var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 
 var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않은 건물 id → true. 레벨은 1로 두고 "공터"로 보인다 — 짓기(0 → 1)는 일꾼이
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
-var dia_tickets := 0  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
+var dia_tickets := 0
+var tutorial_training := false  # 튜토리얼 중(Tutorial이 켠다, 오프라인): 훈련은 한 번에 1마리, 1마리 TUTORIAL_TRAIN_SEC초  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
 var hero_levels: Dictionary = {}   # 영웅 id → 레벨(≥ 1, 없으면 1). 개정 11
@@ -1274,11 +1276,15 @@ func train_tier(building_id: String) -> int:
 
 ## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨) ÷ (1 + 훈련 교범 %/100)(개정 24, 서버와 같은 순서).
 func train_time(building_id: String, n: int) -> float:
+	if tutorial_training:
+		return n * TUTORIAL_TRAIN_SEC
 	return n * GameData.soldier_unit_sec(building_level(building_id)) / (1.0 + float(research_bonus().train_speed_pct) / 100.0)
 
 
 ## 그 건물의 묶음 상한(레벨로 는다).
 func train_max(building_id: String) -> int:
+	if tutorial_training:
+		return 1
 	return GameData.train_max(building_level(building_id))
 
 
