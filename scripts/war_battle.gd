@@ -1,7 +1,7 @@
 extends Node3D
 ## 길드전 공성 전투 장면(main이 성 전장을 떼어 두고 붙인다 — 던전과 같은 방식: GuildWar.battle_started → main._enter_dungeon(run, 이 스크립트), [나가기] → main.leave_dungeon).
 ## run = {plan, role, online}(guild_war.gd). online이면 war_net.gd를 붙인다. 오프라인(solo)은 끝·나가기 때 GuildWar.finish로 성 상태를 저장한다.
-## 무대: 넓은 풀밭 + 상대 길드의 성(성벽 4면·성문 4개·모서리 탑·가운데 성채, 성 안 건물은 장식) + 성 밖 숲·산.
+## 무대: 넓은 풀밭 + 상대 길드의 성(성벽 4면·성문 4개·모서리 탑·가운데 성채 — 성 안에는 성채 말고 아무것도 없다) + 성 밖 숲·산.
 ## 수비: 상대 길드원마다 분대(영웅 4명, 미리 고른 수비 영웅) — 길드원을 차례로 네 성문에 나눠(WarRules.lane_of) 성문 앞 두 줄(근접 앞, 원거리 성벽 쪽)에 선다.
 ## 공격: 우리 길드원마다 분대(영웅 4명) — 맡은 면 진영(성벽 바깥면에서 CAMP_D)에서 나온다. 내 분대는 탭으로 고르고 바닥 탭으로 옮긴다(unit_picker),
 ## 나머지(가상 길드원·자리 비운 길드원)는 war_brain이 자동 진격. 쓰러진 공격 영웅은 RESPAWN_SEC초 뒤 진영에서 다시 일어난다. 수비는 다시 안 일어난다.
@@ -183,6 +183,8 @@ func _build_castle(root: Node3D) -> void:
 	for corner in [Vector3(c, 0, c), Vector3(-c, 0, c), Vector3(c, 0, -c), Vector3(-c, 0, -c)]:
 		_mesh(root, tower_mesh, Transform3D(Basis.IDENTITY, corner))
 	for b in Balance.BUILDINGS:
+		if b.id != "keep":
+			continue  # 성 안에는 성채만(사용자 요청 2026-10-06)
 		var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
 		if maxf(absf(center.x), absf(center.z)) + maxf(b.size.x, b.size.y) * Balance.TILE / 2.0 < half - 1.0:
 			_mesh(root, TownKit.building(b.id), Transform3D(Basis.IDENTITY, center))
