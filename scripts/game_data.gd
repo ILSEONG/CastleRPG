@@ -324,12 +324,12 @@ static func tier_value(key: String, level: int) -> float:
 	return v
 
 
-## 영웅 슬롯 수 = 성채 단계 표 keep_slot_tiers(성채 1~4 → 4, 5~9 → 8, 10+ → 12).
+## 영웅 슬롯 수 = 성채 단계 표 keep_slot_tiers(성채 1~8 → 4, 9~21 → 8, 22+ → 12).
 static func hero_slots(keep_level: int) -> int:
 	return int(tier_value("keep_slot_tiers", keep_level))
 
 
-## 성 내부 한 변 타일 수 = 성채 단계 표 keep_interior_tiers(1~4 → 20, 5~9 → 24, 10+ → 28).
+## 성 내부 한 변 타일 수 = 성채 단계 표 keep_interior_tiers(1~8 → 20, 9~21 → 24, 22+ → 28).
 static func interior_tiles(keep_level: int) -> int:
 	return int(tier_value("keep_interior_tiers", keep_level))
 

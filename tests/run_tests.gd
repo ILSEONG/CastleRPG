@@ -206,9 +206,9 @@ func _write(path: String, text: String) -> void:
 
 
 func test_balance_tables() -> void:
-	check(GameData.hero_slots(1) == 4 and GameData.hero_slots(4) == 4, "keep levels 1-4 give 4 heroes")
-	check(GameData.hero_slots(5) == 8 and GameData.hero_slots(9) == 8, "keep levels 5-9 give 8 heroes")
-	check(GameData.hero_slots(10) == 12, "keep level 10 gives 12 heroes")
+	check(GameData.hero_slots(1) == 4 and GameData.hero_slots(8) == 4, "keep levels 1-8 give 4 heroes")
+	check(GameData.hero_slots(9) == 8 and GameData.hero_slots(21) == 8, "keep levels 9-21 give 8 heroes")
+	check(GameData.hero_slots(22) == 12, "keep level 22 gives 12 heroes")
 	check(GameData.hero_slots(99) == 12, "keep level beyond the last tier stays at 12")
 	check(GameData.gate_hp_max(1) == 400.0, "gate hp at level 1")
 	check(GameData.gate_hp_max(2) > GameData.gate_hp_max(1), "gate hp grows with level")
@@ -659,16 +659,16 @@ func test_gamestate_start_stage_refills() -> void:
 func test_gamestate_hero_count() -> void:
 	var gs = GameStateScript.new()
 	check(gs.hero_count() == 4, "4 heroes at keep level 1")
-	gs.keep_level = 5
-	check(gs.hero_count() == 8, "8 heroes at keep level 5 (keep tier)")
+	gs.keep_level = 9
+	check(gs.hero_count() == 8, "8 heroes at keep level 9 (keep tier)")
 	gs.free()
 
 
 func test_layout_tables() -> void:
-	check(GameData.interior_half(1) == 20.0 and GameData.interior_half(4) == 20.0, "interior half is 20m at keep levels 1-4")
-	check(GameData.interior_half(5) > GameData.interior_half(1), "interior grows at keep level 5")
-	check(GameData.interior_half(10) > GameData.interior_half(5), "interior grows at keep level 10")
-	check(GameData.interior_half(99) == GameData.interior_half(10), "interior stays at the last tier")
+	check(GameData.interior_half(1) == 20.0 and GameData.interior_half(8) == 20.0, "interior half is 20m at keep levels 1-8")
+	check(GameData.interior_half(9) > GameData.interior_half(8), "interior grows at keep level 9")
+	check(GameData.interior_half(22) > GameData.interior_half(21), "interior grows at keep level 22")
+	check(GameData.interior_half(99) == GameData.interior_half(22), "interior stays at the last tier")
 	for h in GameData.heroes():
 		for key in ["name", "hp", "atk", "range", "atk_interval", "speed", "aggro", "skills"]:
 			check(h.has(key), "hero %s has %s" % [h.id, key])
@@ -1006,7 +1006,7 @@ func test_buildings_clear_stairs() -> void:
 	var inner := {}  # id -> 경계선을 뺀 부지
 	for id in plots:
 		inner[id] = (plots[id] as Rect2).grow(-0.01)
-	for level in [1, 5, 10]:  # 성채 단계마다(keep_interior_tiers)
+	for level in [1, 9, 22]:  # 성채 단계마다(keep_interior_tiers)
 		var h := GameData.interior_half(level)
 		var spots: Array = []
 		for s in 4:
@@ -1305,7 +1305,7 @@ func test_merchant_spot() -> void:
 		# 사각형 안 |x|, |z|의 범위(축을 걸치지 않음 — 위 검사) → max(|x|,|z|) 범위
 		var ax := [minf(absf(rc.position.x), absf(rc.end.x)), maxf(absf(rc.position.x), absf(rc.end.x))]
 		var az := [minf(absf(rc.position.y), absf(rc.end.y)), maxf(absf(rc.position.y), absf(rc.end.y))]
-		for level in [1, 5, 10]:  # 성채 단계마다
+		for level in [1, 9, 22]:  # 성채 단계마다
 			var lane := GameData.interior_half(level) - Balance.STAIR_W - FormationScript.GATE_PASS_MARGIN
 			var lo: float = maxf(ax[0], az[0])
 			var hi: float = maxf(ax[1], az[1])
@@ -1543,7 +1543,7 @@ func test_deploy_and_promotion() -> void:
 	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 30, 40, 50, 60, 70], "max level = 20 + 10 x promotion (70 at 5)")
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
-	gs.keep_level = 5
+	gs.keep_level = 9
 	check(gs.deploy().size() == 8 and gs.deploy()[4] == null, "deploy length = hero slots")
 	gs.free()
 
@@ -1693,8 +1693,8 @@ func test_roster() -> void:
 	e2.deploy = ["ignis", "ghost", "ignis", "jack", "nina"]  # 모르는 영웅·중복·미보유·슬롯 넘침
 	check(gs.deploy() == ["ignis", null, null, null], "provider: slot count, unknown/duplicate/unowned heroes become null: %s" % [gs.deploy()])
 	check(gs.hero_promotion("ignis") == 2 and gs.hero_promotion("hans") == 0, "provider: promotion from the roster")
-	e2.levels["keep"] = 5  # roster가 있으면 성채 레벨은 roster(Economy) 건물 레벨
-	check(gs.deploy().size() == 8 and gs.deploy()[4] == "nina", "provider: more slots at keep level 5")
+	e2.levels["keep"] = 9  # roster가 있으면 성채 레벨은 roster(Economy) 건물 레벨
+	check(gs.deploy().size() == 8 and gs.deploy()[4] == "nina", "provider: more slots at keep level 9")
 	gs.free()
 	# 개발용 --heroes
 	var d = _econ(now)
@@ -1981,8 +1981,8 @@ func test_buildings() -> void:
 	check(GameData.parse_tiers("1:4|5:8|10:12") == [[1, 4.0], [5, 8.0], [10, 12.0]] and GameData.parse_tiers(" 1 : 20 | 5:24 ") == [[1, 20.0], [5, 24.0]], "tier tables parse")
 	var bad_tiers := ["", "4|8|12", "2:4|5:8", "1:4|5:8|5:9", "1:4|3:8|2:9", "1:x", "1:4|", "1:4|5", "a:1", "1.5:4"]
 	check(bad_tiers.all(func(s): return GameData.parse_tiers(s).is_empty()), "malformed tier tables are rejected")
-	check([1, 4, 5, 9, 10, 30].map(func(l): return GameData.hero_slots(l)) == [4, 4, 8, 8, 12, 12], "hero slots by keep tier: 4/8/12")
-	check([1, 4, 5, 10].map(func(l): return GameData.interior_tiles(l)) == [20, 20, 24, 28] and GameData.interior_half(5) == 24.0, "interior tiles by keep tier: 20/24/28")
+	check([1, 8, 9, 21, 22, 30].map(func(l): return GameData.hero_slots(l)) == [4, 4, 8, 8, 12, 12], "hero slots by keep tier: 4/8/12")
+	check([1, 8, 9, 22].map(func(l): return GameData.interior_tiles(l)) == [20, 20, 24, 28] and GameData.interior_half(9) == 24.0, "interior tiles by keep tier: 20/24/28")
 	# 효과 수치
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
@@ -2080,8 +2080,8 @@ func test_buildings() -> void:
 	gs.apply_levels()
 	check(gs.castle_hp_max == 1400.0 and gs.castle_hp == 1300.0 and gs.gate_hp_max == 800.0 and gs.gate_hp[0] == 800.0 and gs.gate_hp[1] == 0.0,
 		"apply_levels: max HP to the new level, current HP up by the gain, a broken gate stays broken")
-	e.levels.keep = 5
-	check(gs.hero_count() == 8 and gs.deploy().size() == 8, "keep 5: 8 slots")
+	e.levels.keep = 9
+	check(gs.hero_count() == 8 and gs.deploy().size() == 8, "keep 9: 8 slots")
 	gs.free()
 	e.free()
 	e2.free()
@@ -2569,7 +2569,7 @@ func test_keep_tier_lockstep() -> void:
 	var csv := FileAccess.get_file_as_string(GameData.CONFIG_PATH)
 	var cp := "user://t_tiers.csv"
 	for entry in bad:
-		_write(cp, csv.replace("keep_slot_tiers,1:4|5:8|10:12", "keep_slot_tiers," + entry[1]).replace("keep_interior_tiers,1:20|5:24|10:28", "keep_interior_tiers," + entry[2]))
+		_write(cp, csv.replace("keep_slot_tiers,1:4|9:8|22:12", "keep_slot_tiers," + entry[1]).replace("keep_interior_tiers,1:20|9:24|22:28", "keep_interior_tiers," + entry[2]))
 		GameData.load_tables(GameData.MONSTERS_PATH, GameData.STAGES_PATH, GameData.HEROES_PATH, GameData.RESOURCES_PATH, cp)
 		check(GameData.errors == 1, "config.csv keep tiers rejected: %s (errors %d)" % [entry[0], GameData.errors])
 	DirAccess.remove_absolute(cp)
@@ -2590,7 +2590,7 @@ func test_keep_tier_lockstep() -> void:
 	check(GameData.apply_remote(ok) and GameData.hero_slots(30) == 8, "two keep tiers (up to 8 slots) are within the rule")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.hero_slots(10) == 12, "default tables restored after the keep tier test")
+	check(GameData.errors == 0 and GameData.hero_slots(22) == 12, "default tables restored after the keep tier test")
 
 
 ## 개정 15: 병종 몸(SoldierBody — 월드 병사와 병사 피규어가 같이 쓴다)과 병사 크기 0.9. 트리 밖이라 모델 안(GLB)은 만들지 않고 조립만 본다.

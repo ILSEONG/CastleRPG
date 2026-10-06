@@ -137,8 +137,8 @@ test('배치: 저장되고 다시 읽으면 그대로. 길이·보유·중복·�
   assert.equal((await gacha(token, 1)).json.results[0].hero_id, 'ignis')
   r = await deploy(token, ['ignis', 'ella', 'dorik', 'nina'])
   assert.deepEqual(r.json.player.deploy, ['ignis', 'ella', 'dorik', 'nina'])
-  // 성채가 단계를 넘으면 슬롯이 늘고(keep_slot_tiers 1:4|5:8|10:12) 응답 배치는 null로 채운다. 요청 길이도 그 수여야 한다
-  await S.db.query("update player_buildings set level = 5 where player_id = $1 and building = 'keep'", [id])
+  // 성채가 단계를 넘으면 슬롯이 늘고(keep_slot_tiers 1:4|9:8|22:12) 응답 배치는 null로 채운다. 요청 길이도 그 수여야 한다
+  await S.db.query("update player_buildings set level = 9 where player_id = $1 and building = 'keep'", [id])
   r = await S.req('GET', '/v1/player', { token })
   assert.deepEqual(r.json.player.deploy, ['ignis', 'ella', 'dorik', 'nina', null, null, null, null])
   assert.equal((await deploy(token, ['ignis', 'ella', 'dorik', 'nina'])).status, 400)
