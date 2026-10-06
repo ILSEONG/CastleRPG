@@ -391,6 +391,35 @@ test('장착: 무기는 그 영웅 모델의 종류만(409 wrong_weapon), 부위
   assert.deepEqual((await player(other.token)).equipment, {})
 })
 
+test('한 번에 장착(/v1/equip/many): 여러 부위를 한 요청으로, 다른 영웅에서 옮기기, 하나라도 안 되면 아무것도 안 낀다, 멱등', async () => {
+  const { token, id } = await fresh()
+  const [sword, axe, hat, top, shoes] = await addItems(S.db.query, id, [{ slot: 'weapon', weapon_kind: 'sword' }, { slot: 'weapon', weapon_kind: 'axe' },
+    { slot: 'hat' }, { slot: 'top' }, { slot: 'shoes' }])
+  const many = (body: unknown) => S.req('POST', '/v1/equip/many', { token, body })
+  assert.equal((await equip(token, { hero_id: 'ella', slot: 'hat', item_id: hat })).status, 200)
+  const bad: [unknown, number, string][] = [
+    [{ hero_id: 'hans', items: [{ slot: 'weapon', item_id: axe }, { slot: 'top', item_id: top }] }, 409, 'wrong_weapon'],
+    [{ hero_id: 'hans', items: [{ slot: 'top', item_id: shoes }] }, 409, 'wrong_slot'],
+    [{ hero_id: 'hans', items: [{ slot: 'top', item_id: 999999 }] }, 404, 'unknown_item'],
+    [{ hero_id: 'kyle', items: [{ slot: 'top', item_id: top }] }, 404, 'not_owned'],
+    [{ hero_id: 'hans', items: [{ slot: 'cape', item_id: top }] }, 400, 'bad_slot'],
+    [{ hero_id: 'hans', items: [{ slot: 'top', item_id: top }, { slot: 'top', item_id: top }] }, 400, 'bad_request'],
+    [{ hero_id: 'hans', items: [] }, 400, 'bad_request'], [{ hero_id: 'hans' }, 400, 'bad_request'],
+  ]
+  for (const [body, status, code] of bad) {
+    const r = await many(body)
+    assert.deepEqual([r.status, r.json.error], [status, code], JSON.stringify(body))
+  }
+  assert.deepEqual((await player(token)).equipment, { ella: { hat } }) // 거부는 아무것도 안 바꿨다
+  const set = { hero_id: 'hans', items: [{ slot: 'weapon', item_id: sword }, { slot: 'hat', item_id: hat }, { slot: 'top', item_id: top }, { slot: 'shoes', item_id: shoes }] }
+  let r = await many(set)
+  assert.deepEqual([r.status, r.json.player.equipment], [200, { hans: { weapon: sword, hat, top, shoes } }]) // 엘라의 모자는 한스로
+  r = await many(set) // 멱등
+  assert.deepEqual([r.status, r.json.player.equipment], [200, { hans: { weapon: sword, hat, top, shoes } }])
+  const rows = await S.db.query('select count(*)::int as n from player_equipment where player_id = $1', [id])
+  assert.equal(rows[0].n, 4)
+})
+
 test('판매: 값 = round(10 × 배율 × 레벨)의 합, 장착 중이면 409 equipped, 없는·남의·겹친 id는 거부 — 하나라도 틀리면 아무것도 안 판다, 로그', async () => {
   const { token, id } = await fresh()
   const other = await fresh()

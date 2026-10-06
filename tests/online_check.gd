@@ -1372,6 +1372,27 @@ func _dungeons_online(state_path: String) -> void:
 	await _wait_until(func(): return not Economy._waiting.has("sell_items"), 15.0)
 	_check(Economy.items().size() == 4 and Economy.item(spare.id).is_empty() and Economy.server_gold_tenths == gold0 + GameData.item_sell_value(spare) * 10,
 		"(z) selling an item on the server pays its sell value", "gold %d -> %d, value %d" % [gold0, Economy.server_gold_tenths, GameData.item_sell_value(spare)])
+	# 자동착용: 남은 장비를 한 번에 — 곧바로 보이고(응답 전) 요청은 /v1/equip/many 하나
+	var auto_hero := ""
+	for id in GameState.deploy():
+		if id != null and id != "hans" and not Economy.auto_equip_plan(id).is_empty():
+			auto_hero = id
+			break
+	var plan: Dictionary = Economy.auto_equip_plan(auto_hero) if auto_hero != "" else {}
+	var many0: int = Net.requested.get("/v1/equip/many", 0)
+	var one0: int = Net.requested.get("/v1/equip", 0)
+	var n_auto: int = Economy.auto_equip(auto_hero) if auto_hero != "" else 0
+	var shown := true
+	for sl in plan:
+		shown = shown and int(Economy.equipment.get(auto_hero, {}).get(sl, -1)) == int(plan[sl])
+	_check(n_auto == plan.size() and n_auto > 0 and shown and Economy.auto_equip_plan(auto_hero).is_empty(),
+		"(z) auto-equip puts the whole set on at once before the server answers", "hero=%s plan=%s eq=%s" % [auto_hero, plan, Economy.equipment])
+	await _wait_until(func(): return Economy._equip_predicts.is_empty(), 15.0)
+	var kept := true
+	for sl in plan:
+		kept = kept and int(Economy.equipment.get(auto_hero, {}).get(sl, -1)) == int(plan[sl])
+	_check(kept and Net.requested.get("/v1/equip/many", 0) == many0 + 1 and Net.requested.get("/v1/equip", 0) == one0,
+		"(z) auto-equip sends one /v1/equip/many and the server keeps the set", "many=%d one=%d eq=%s" % [Net.requested.get("/v1/equip/many", 0) - many0, Net.requested.get("/v1/equip", 0) - one0, Economy.equipment])
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
 	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)
