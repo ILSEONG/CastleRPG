@@ -116,6 +116,19 @@ func play_attack(interval: float) -> float:
 	return length * Art.HIT_FRAC[_current] / speed
 
 
+## 스킬 발동 모션(개정 25): anim_name을 처음부터. 발동 순간(길이 × Art.CAST_FRAC)이 Art.CAST_WINDUP초보다 늦으면 그만큼 빨리 돈다.
+## 끝나면 대기로 돌아간다(공격과 같다). 이 모델에 없는 이름이면 공격 모션으로. 반환 = 발동 순간까지 초.
+func play_cast(anim_name: String) -> float:
+	if not _anim.has_animation(anim_name):
+		anim_name = _spec.anims.attack
+	_current = anim_name
+	var at: float = _anim.get_animation(anim_name).length * float(Art.CAST_FRAC.get(anim_name, Art.HIT_FRAC.get(anim_name, 0.5)))
+	var speed := maxf(1.0, at / Art.CAST_WINDUP)
+	_anim.play(anim_name, 0.1, speed)
+	_anim.seek(0.0, true)
+	return at / speed
+
+
 ## 사망 애니메이션은 반복하지 않으므로 마지막 자세(쓰러짐)로 멈춘다.
 func play_death() -> void:
 	_play(_spec.anims.death)
@@ -194,6 +207,6 @@ func _play(anim_name: String) -> void:
 
 
 func _on_finished(anim_name: StringName) -> void:
-	if anim_name == _spec.anims.attack and _current == _spec.anims.attack:
+	if anim_name == _current and anim_name != _spec.anims.death and anim_name != _spec.anims.idle and anim_name != _spec.anims.walk:  # 공격·발동 모션
 		_current = ""
 		play_idle()

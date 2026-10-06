@@ -261,7 +261,7 @@ func _skill_cases(heroes: Array) -> void:
 	await _frames(1)
 	var north_out := _half + Balance.WALL_T  # 북쪽 성벽 바깥면까지
 
-	# (k) aoe_blast: 이그니스(북 성벽 위 x=-4)의 첫 폭발이 반경 안 보스 셋을 모두 깎는다(보통 공격은 하나만 친다)
+	# (k) aoe_blast: 이그니스(북 성벽 위 x=-4)의 첫 폭발이 반경 안 보스 셋을 모두 깎는다(보통 공격은 하나만 친다). 발동 모션(개정 25)의 발동 순간에 터진다
 	var ig = _add_hero("ignis", 100)
 	var c := Vector3(-6, 0, -(north_out + 4.0))
 	var bosses := []
@@ -269,13 +269,13 @@ func _skill_cases(heroes: Array) -> void:
 		var m = _spawn("epic_boss", 0, c + off)
 		m.set_process(false)  # 제자리
 		bosses.append(m)
-	await _wait_until(func(): return ig._blast_cd > 0.0, 3.0)
+	await _wait_until(func(): return ig._blast_cd > 0.0 and not ig.is_casting(), 3.0)
 	var hurt := 0
 	for m in bosses:
 		if m.hp < m.hp_max:
 			hurt += 1
 	_check(ig._blast_cd > 0.0 and hurt == 3, "(k) aoe_blast damages every monster in its radius", "blasted=%s hurt=%d" % [ig._blast_cd > 0.0, hurt])
-	# 폭발 피해 = 공격력 × 오라 × c%(이그니스 44 × 220% = 96.8). 표적은 같은 프레임 보통 공격도 맞는다 — 나머지 둘이 정확히 폭발 몫
+	# 폭발 피해 = 공격력 × 오라 × c%(이그니스 44 × 220% = 96.8). 표적은 보통 공격도 맞을 수 있다 — 나머지 둘이 정확히 폭발 몫
 	var blast_d: float = ig.atk * ig._aura_mult() * ig._sk.aoe_blast[2] / 100.0
 	var exact := bosses.filter(func(m): return is_equal_approx(m.hp_max - m.hp, blast_d)).size()
 	_check(is_equal_approx(blast_d, 96.8) and exact >= 2 and bosses.all(func(m): return m.hp_max - m.hp >= blast_d - 0.01),
@@ -488,7 +488,7 @@ func _skill_application(heroes: Array) -> void:
 	_clear_monsters()
 	await _frames(1)
 
-	# (u) 폭발이 표적을 죽이면 같은 프레임에 그 시체를 치지 않는다(공격 횟수·쿨 그대로)
+	# (u) 폭발이 표적을 죽이면 그 시체를 치지 않는다(공격 횟수·쿨 그대로). 폭발은 발동 모션을 시작하고(평타 대신) 모션의 발동 순간에 터진다
 	var ig = _add_hero("ignis", 300)
 	ig.set_process(false)
 	var weak = _still("grunt", _flat(ig.global_position) + Formation.SIDE_DIR[0] * 3.0)
@@ -498,7 +498,12 @@ func _skill_application(heroes: Array) -> void:
 	ig._blast_cd = 0.0
 	ig._atk_cd = 0.0
 	ig._process(0.016)
-	_check(not weak.is_alive() and ig._attacks == 0 and ig._atk_cd <= 0.0 and ig._target == null, "(u) a target killed by the blast is not struck again (no attack, no cooldown)",
+	var cast_started: bool = ig.is_casting()
+	for i in 30:
+		if not ig.is_casting():
+			break
+		ig._process(0.05)
+	_check(cast_started and not weak.is_alive() and ig._attacks == 0 and ig._atk_cd <= 0.0 and ig._target == null, "(u) a target killed by the blast is not struck again (no attack, no cooldown)",
 		"alive=%s attacks=%d cd=%.2f" % [weak.is_alive(), ig._attacks, ig._atk_cd])
 	_remove_hero(ig)
 	_clear_monsters()
@@ -1563,7 +1568,7 @@ func _skill_unlock_cases() -> void:
 		_remove_hero(h)
 	await _wait_until(func(): return Fx.live() == 0, 3.0)
 
-	# (U5) 등급 연출: 같은 발동이 R은 고리·광선 2겹, SR은 입자까지 3겹, SSR은 빛기둥·파동까지 5겹
+	# (U5) 등급 연출: 같은 발동이 R은 고리·빛무리·광선 3겹, SR은 입자까지 4겹, SSR은 빛기둥·파동까지 6겹
 	var layers := []
 	for t in [0, 1, 2]:
 		await _wait_until(func(): return Fx.live() == 0, 3.0)
@@ -1575,8 +1580,45 @@ func _skill_unlock_cases() -> void:
 		layers.append(Fx.live())
 		probe.queue_free()
 	await _frames(1)
-	_check(layers == [2, 3, 5] and Fx.live() == 0, "(U5) skill activation layers grow with grade: R 2, SR 3, SSR 5 effect nodes", str(layers))
+	_check(layers == [3, 4, 6] and Fx.live() == 0, "(U5) skill activation layers grow with grade: R 3, SR 4, SSR 6 effect nodes", str(layers))
 	GameState.refill()
+	await _frames(1)
+
+	# (U6) 발동 모션(개정 25): 발렌의 메테오는 쿨이 차면 먼저 Spellcast_Raise 모션 + 기 모으기를 시작하고(평타·이펙트 없음),
+	#      모션의 발동 순간(≤ Art.CAST_WINDUP초)에 메테오와 이름 띠가 나온다. 시전 중 기절하면 발동하지 않는다.
+	var va = _add_hero("valen", 344, 0)
+	va.set_process(false)
+	var vt = _still("epic_boss", _flat(va.global_position) + Formation.SIDE_DIR[va.side] * 4.0)
+	await _frames(1)
+	va._target = vt
+	va._skx._cd["meteor"] = 0.0
+	va._skx.tick(0.016)
+	var tag_n := func(tag: String) -> int:
+		return get_tree().get_nodes_in_group(Fx.GROUP).filter(func(n): return n.get_meta("fx", "") == tag and not n.is_queued_for_deletion()).size()
+	var casting: bool = va.is_casting()
+	var anim: String = va._model._current
+	var early: int = tag_n.call("meteor")
+	var charged: int = tag_n.call("charge")
+	var waited := 0.0
+	while va.is_casting() and waited < 2.0:
+		va._process(0.05)
+		waited += 0.05
+	_check(casting and anim == "Spellcast_Raise" and early == 0 and charged == 1 and tag_n.call("meteor") == 1 and va._attacks == 0
+		and waited <= Art.CAST_WINDUP + 0.06 and va._skx._cd["meteor"] > 1.0,
+		"(U6) an active skill plays its cast motion first and lands at the release moment", "casting=%s anim=%s early=%d charge=%d meteor=%d waited=%.2f cd=%.1f" % [
+			casting, anim, early, charged, tag_n.call("meteor"), waited, va._skx._cd["meteor"]])
+	await _wait_until(func(): return Fx.live() == 0, 3.0)
+	va._skx._cd["meteor"] = 0.0
+	va._skx.tick(0.016)
+	var cast2: bool = va.is_casting()
+	va.apply_stun(0.2)
+	var cut: bool = not va.is_casting() and tag_n.call("charge") == 0
+	va._stun_t = 0.0
+	for i in 20:
+		va._process(0.05)
+	_check(cast2 and cut and tag_n.call("meteor") == 0, "(U6) a stun during the cast motion cancels the skill", "cast=%s cut=%s meteor=%d" % [cast2, cut, tag_n.call("meteor")])
+	_remove_hero(va)
+	_clear_monsters()
 	await _frames(1)
 
 

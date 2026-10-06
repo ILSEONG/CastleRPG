@@ -37,6 +37,7 @@ const SHOTS := {"Mage": ["bolt", 18.0], "Barbarian": ["axe", 20.0]}
 const ARROW_SPEED := 30.0
 const BANNER_GAP := 1.5  # 같은 영웅의 스킬 이름 띠 최소 간격(초)
 const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
+const CAST_RECOVER := 0.3  # 발동 순간 뒤 이만큼 더 제자리에서 모션을 마저 한다(초) — 곧바로 평타 모션이 덮지 않게
 
 var castle
 var formation
@@ -87,6 +88,9 @@ var _skill_mult := 1.0  # 스킬 피해 배율 = 1 + 연구 비전 연구 %(개�
 var _stun_t := 0.0  # 기절 남은 초
 var _skx  # 스킬 100종 확장(hero_skills.gd) — 새 종류의 발동·타격·처치·방어·오라
 var _stun_fx: Node3D
+var _cast_fn := Callable()  # 발동 모션 중인 스킬(개정 25): 모션의 발동 순간에 부른다. 비었으면 시전 중 아님
+var _cast_left := 0.0  # 발동 순간까지 남은 초
+var _cast_t := 0.0  # 시전 자세 남은 초(발동 순간 + CAST_RECOVER) — 이 동안 평타·추격을 쉬고 제자리에 선다(이동 명령은 예외)
 
 
 ## add_child 전에 호출. 기본 배치: 면 = index % 4, melee는 성문 앞, ranged는 성벽 위(차 있으면 _place_default).
@@ -161,6 +165,7 @@ func reset() -> void:
 	_swing = null
 	_linger = 0.0
 	_attacks = 0
+	_cancel_cast()
 	_heal_cd = _sk.heal_aura[0] if _sk.has("heal_aura") else 0.0
 	_repair_cd = _sk.gate_repair[0] if _sk.has("gate_repair") else 0.0
 	_blast_cd = 0.0
@@ -229,6 +234,7 @@ func take_damage(amount: float, source = null) -> void:
 		return
 	if hp == 0.0:
 		state = State.DEAD
+		_cancel_cast()
 		_model.play_death()
 		_ring.visible = false
 		_foot.visible = false
@@ -269,6 +275,7 @@ func apply_stun(sec: float) -> void:
 		return
 	_stun_t = maxf(_stun_t, sec)
 	_swing = null
+	_cancel_cast()  # 기절은 시전을 끊는다(스킬은 쿨만 돈다)
 	if not is_instance_valid(_stun_fx):
 		_stun_fx = Fx.stun(self, bar_height() + 0.3)
 
@@ -305,6 +312,7 @@ func _process(delta: float) -> void:
 	_atk_cd -= delta
 	_tick_skills(delta)
 	_tick_swing(delta)
+	_tick_cast(delta)
 	if not _path.is_empty():
 		var wp: Vector3 = _path[0]
 		state = State.MOVE
@@ -316,6 +324,10 @@ func _process(delta: float) -> void:
 		global_position = global_position.move_toward(wp, _speed * delta)
 		if global_position.distance_to(wp) <= Crowd.arrive_r(_path, ARRIVE_EPS):
 			_path.pop_front()
+		return
+	if _cast_t > 0.0:  # 시전 자세: 제자리에서 표적을 보며 모션을 마친다(평타·추격·복귀 없음)
+		if _target != null and is_instance_valid(_target) and _target.is_alive():
+			_model.face(_target.global_position - global_position)
 		return
 	_scan_cd -= delta
 	# 표적이 죽거나 사라지면 다음 스캔을 기다리지 않고 이 프레임에 다시 찾는다(기다리는 동안 자리 쪽으로 물러나지 않게).
@@ -333,11 +345,10 @@ func _process(delta: float) -> void:
 		_model.face(tpos - global_position)
 		if Formation.flat_distance(global_position, tpos) <= float(def.range):
 			state = State.ATTACK
-			if _sk.has("aoe_blast") and _blast_cd <= 0.0:
-				_blast(tpos)
-				if not _target.is_alive():
-					_target = null  # 폭발이 죽인 표적은 치지 않는다(공격·쿨을 아끼고, 시체에서 투사체·연쇄가 나가지 않게)
-					return
+			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null:
+				_blast_cd = _sk.aoe_blast[0]
+				begin_cast(HeroSkillsScript.cast_anim("aoe_blast", def), _cast_blast.bind(_target))  # 모션의 발동 순간에 터진다
+				return
 			if _atk_cd <= 0.0:
 				_atk_cd = Skills.interval(_sk, float(def.atk_interval) / _aspd, hp_ratio()) / _skx.speed_mult()
 				_attack(_atk_cd)
@@ -567,6 +578,57 @@ func _chain(first, d: float, a: float) -> void:
 		_on_hit(next, a)
 		cur = next
 	Fx.lightning(get_parent(), pts, _color, _tier)
+
+
+## aoe_blast 발동 순간(개정 25): 모션을 시작할 때의 표적이 살아 있으면 그 자리, 아니면 지금 표적 자리에 터뜨린다(둘 다 없으면 헛 시전).
+## 폭발이 죽인 표적은 놓는다(시체에 평타·투사체·연쇄가 나가지 않게).
+func _cast_blast(m) -> void:
+	if not (m != null and is_instance_valid(m) and m.is_alive()):
+		m = _target
+	if m == null or not is_instance_valid(m) or not m.is_alive():
+		return
+	_blast(m.global_position)
+	if not m.is_alive() and _target == m:
+		_target = null
+
+
+## 발동 모션(개정 25): anim을 재생하고 기 모으기(Fx.charge)를 띄운 뒤, 모션의 발동 순간에 fn을 부른다. 그동안(+CAST_RECOVER) 평타·추격을 쉰다.
+## 이미 시전 중이거나 평타를 휘두르는 중이거나 기절·쓰러짐이면 시작하지 않고 false — 쓰는 쪽이 곧 다시 본다.
+func begin_cast(anim: String, fn: Callable) -> bool:
+	if _cast_fn.is_valid() or _swing != null or state == State.DEAD or is_stunned() or not is_inside_tree():
+		return false
+	var wind: float = _model.play_cast(anim)
+	_cast_fn = fn
+	_cast_left = wind
+	_cast_t = wind + CAST_RECOVER
+	Fx.charge(self, _color, _tier, wind)
+	return true
+
+
+func is_casting() -> bool:
+	return _cast_fn.is_valid()
+
+
+func _tick_cast(delta: float) -> void:
+	_cast_t -= delta
+	if not _cast_fn.is_valid():
+		return
+	_cast_left -= delta
+	if _cast_left <= 0.0:
+		var fn := _cast_fn
+		_cast_fn = Callable()
+		fn.call()
+
+
+## 시전을 거둔다(기절·쓰러짐·리필): 발동하지 않고, 기 모으기 이펙트도 지운다.
+func _cancel_cast() -> void:
+	if not _cast_fn.is_valid() and _cast_t <= 0.0:
+		return
+	_cast_fn = Callable()
+	_cast_t = 0.0
+	for c in get_children():
+		if c.has_meta("fx") and str(c.get_meta("fx")).begins_with("charge"):
+			c.queue_free()
 
 
 ## aoe_blast: 대상 위치 반경 안 모든 몬스터에게 공격력 × c%.

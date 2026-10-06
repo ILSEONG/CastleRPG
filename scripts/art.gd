@@ -297,6 +297,16 @@ const HIT_FRAC := {
 }
 const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 돌려 길이 ≤ 간격 × 이 값
 
+## 스킬 발동 모션(개정 25, HeroSkills.CAST_ANIM이 고른다) → 발동 순간 = 길이 × 이 비율. HIT_FRAC처럼 GLB를 헤드리스로 재생해 손(handslot) 궤적에서
+## 정했다: 들어 올리기 = 손이 가장 높이 오른 순간, 길게 시전 = 두 손을 앞으로 모은 순간, 함성 = 두 팔을 다 든 순간, 돌기 = 무기가 처음 앞을 지나는 순간,
+## 뛰어 내려찍기 = 착지, 막기 = 방패가 다 올라온 순간, 물건 쓰기 = 손이 가장 높은 순간, 찌르기 = 무기를 다 뻗은 순간.
+## 없는 이름은 HIT_FRAC(평타 모션으로 대신할 때).
+const CAST_FRAC := {
+	"Spellcast_Raise": 0.30, "Spellcast_Long": 0.17, "Spellcast_Shoot": 0.30, "Cheer": 0.17, "2H_Melee_Attack_Spin": 0.33,
+	"Jump_Full_Short": 0.68, "Block": 0.25, "Use_Item": 0.42, "1H_Melee_Attack_Stab": 0.35, "2H_Melee_Attack_Stab": 0.35,
+}
+const CAST_WINDUP := 0.45  # 발동 순간까지 이보다 길면 모션을 빨리 돌린다(초) — 기 모으기가 늘어지지 않게
+
 const ARROW_MODEL := PROP_DIR + "arrow.gltf"
 
 ## 병사(개정 13 §7): 병종 id(soldiers.csv) → 무기(gear, 영웅 열과 같은 "a|b"), 역할(공격 애니메이션·투사체), 발밑 원판 색, 말(기병).

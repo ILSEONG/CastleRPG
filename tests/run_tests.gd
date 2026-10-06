@@ -2721,7 +2721,10 @@ func test_fx_r17_meshes() -> void:
 		var m: Mesh = Fx._mesh(kind, Color.RED)
 		check(m != null and m.get_surface_count() == 1, "fx mesh %s builds" % kind)
 	var g := Fx.glow_material()
-	check(g == Fx.glow_material() and g.blend_mode == BaseMaterial3D.BLEND_MODE_ADD and g.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED, "one shared additive material")
+	check(g == Fx.glow_material() and g.shader == Fx.AddShader and Fx.soft_material().shader == Fx.SoftShader, "one shared additive material, one shared soft material")
+	for kind in ["p_spark", "p_mote", "p_ember", "p_flake", "p_smoke", "p_chunk", "flames"]:
+		var pm: Mesh = Fx._mesh(kind)
+		check(pm != null and pm.get_surface_count() == 1, "fx particle/flame mesh %s builds" % kind)
 	var live := Fx.live()
 	var ring := Fx.aura_ring()
 	check(Fx.live() == live and ring.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and ring.material_override == Fx.material(), "aura ring: not counted, no shadow, shared material")

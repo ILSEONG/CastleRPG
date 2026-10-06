@@ -7,6 +7,7 @@ extends RefCounted
 ## 피해 = 공격력 × 오라 × 강화 배율 × %/100 × 연구 스킬 배율(hero._skill_mult). 몬스터 상태는 monster.gd(apply_dot·apply_freeze …),
 ## 소환수는 summon.gd, 이펙트는 Fx(tier = 영웅 등급 연출 단계).
 
+const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
@@ -25,6 +26,24 @@ const HIT := Vector3(0, 0.8, 0)  # hero.HIT_HEIGHT
 const MUZZLE := Vector3(0, 1.3, 0)  # hero.MUZZLE
 const SHOTS := {"Mage": ["bolt", 18.0], "Barbarian": ["axe", 20.0]}  # hero.SHOTS(없으면 화살 30 m/s)
 const FIRST_CD := 0.4
+const CAST_WAIT := 0.1  # 쿨이 찼는데 영웅이 휘두르는·시전하는 중이면 이만큼 뒤에 다시 본다
+## 발동 모션(개정 25): 발동형 → KayKit 모션(모든 영웅 모델에 같은 이름이 있다). 발동 순간은 Art.CAST_FRAC. 없으면 그 영웅의 평타 모션.
+## 하늘에 손을 드는 주문(낙하·광선·소환·회복) = Spellcast_Raise, 바닥 지대·균열 = Spellcast_Long, 앞으로 쏘는 주문 = Spellcast_Shoot,
+## 함성·도발·찬가 = Cheer, 회오리 = 2H 돌기, 지진 = 뛰어 내려찍기, 대지 강타 = 2H 내려치기, 창 = 던지기, 돌진·그림자 = 찌르기, 방패 = 막기·물건 쓰기.
+const CAST_ANIM := {
+	"meteor": "Spellcast_Raise", "comet": "Spellcast_Raise", "starfall": "Spellcast_Raise", "sky_bolt": "Spellcast_Raise",
+	"thunder_storm": "Spellcast_Raise", "holy_smite": "Spellcast_Raise", "solar_flare": "Spellcast_Raise", "sanctuary": "Spellcast_Raise",
+	"mass_heal": "Spellcast_Raise", "resurrection": "Spellcast_Raise", "summon_wolf": "Spellcast_Raise", "summon_skeleton": "Spellcast_Raise",
+	"summon_golem": "Spellcast_Raise", "summon_treant": "Spellcast_Raise", "summon_spirit": "Spellcast_Raise", "summon_phoenix": "Spellcast_Raise",
+	"summon_hawk": "Spellcast_Raise", "summon_turret": "Use_Item",
+	"inferno": "Spellcast_Long", "poison_cloud": "Spellcast_Long", "blizzard": "Spellcast_Long", "tornado": "Spellcast_Long",
+	"void_rift": "Spellcast_Long", "abyss_hand": "Spellcast_Long",
+	"aoe_blast": "Spellcast_Shoot", "frost_nova": "Spellcast_Shoot", "ice_spikes": "Spellcast_Shoot", "lava_burst": "Spellcast_Shoot",
+	"dragon_breath": "Spellcast_Shoot",
+	"war_cry": "Cheer", "taunt": "Cheer", "battle_hymn": "Cheer",
+	"whirlwind": "2H_Melee_Attack_Spin", "earthquake": "Jump_Full_Short", "ground_slam": "2H_Melee_Attack_Chop", "spear_throw": "Throw",
+	"shockwave": "1H_Melee_Attack_Stab", "shadow_strike": "1H_Melee_Attack_Stab", "shield": "Block", "shield_ally": "Use_Item",
+}
 const RETRY := 0.5  # 조건이 안 맞아 못 쓴 발동형은 이만큼 뒤에 다시 본다(매 프레임 찾지 않게)
 const AURA_SCAN := 0.25
 const BURN_PCT := 15.0  # 메테오·용의 숨결이 남기는 화상(초당 공격력 %, 3초)
@@ -119,7 +138,24 @@ func tick(delta: float) -> void:
 	for k in _cd:
 		_cd[k] -= delta
 		if _cd[k] <= 0.0:
-			_cd[k] = float(sk[k][0]) if _cast(k) else RETRY
+			_cd[k] = _begin(k)
+
+
+## 쿨이 찬 발동형 k(개정 25): 조건이 맞으면(_cast 미리 보기) 영웅이 발동 모션을 시작하고, 모션의 발동 순간에 실제로 쓴다 — 그때 조건이
+## 깨졌으면(표적이 죽었다 등) RETRY 뒤 다시. 반환 = 다음에 볼 때까지 초(쿨 / RETRY / 영웅이 바쁘면 CAST_WAIT).
+func _begin(k: String) -> float:
+	if not _cast(k, true):
+		return RETRY
+	if not h.begin_cast(cast_anim(k, h.def), func():
+			if not _cast(k):
+				_cd[k] = minf(_cd[k], RETRY)):
+		return CAST_WAIT
+	return float(sk[k][0])
+
+
+## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).
+static func cast_anim(k: String, hero_def: Dictionary) -> String:
+	return CAST_ANIM.get(k, Art.hero_spec(hero_def).anims.attack)
 
 
 ## 재생(자기 regen + 받는 생명의 오라): 1초마다 한 번에 회복한다(숫자가 매 프레임 뜨지 않게).
@@ -259,13 +295,15 @@ func on_hit(m, d: float, primary: bool, attack_no: int, was: int) -> void:
 		Fx.nova(_world(), m.global_position, h._color, r, h._tier)
 		_announce("echo_strike")
 	if sk.has("double_strike") and m.is_alive() and randf() < float(sk.double_strike[0]) / 100.0:
+		var mref: WeakRef = weakref(m)  # 몬스터 노드를 직접 담지 않는다 — 그새 지워지면 람다가 지워진 노드를 넘기며 오류를 낸다
 		h.get_tree().create_timer(0.12).timeout.connect(func():
-			if is_instance_valid(m) and m.is_alive() and is_instance_valid(h) and h.is_alive():
-				var w := snap(m)
-				m.take_damage(d, DamageNumbers.Kind.HIT)
-				Fx.slash_mark(_world(), m.global_position + HIT, h._color)
-				if not m.is_alive():
-					on_kill(m, w))
+			var mm = mref.get_ref()
+			if mm != null and mm.is_alive() and is_instance_valid(h) and h.is_alive():
+				var w := snap(mm)
+				mm.take_damage(d, DamageNumbers.Kind.HIT)
+				Fx.slash_mark(_world(), mm.global_position + HIT, h._color)
+				if not mm.is_alive():
+					on_kill(mm, w))
 	if sk.has("barrage") and h.role == "ranged" and randf() < float(sk.barrage[0]) / 100.0:
 		_barrage(m, int(sk.barrage[1]))
 
@@ -382,8 +420,8 @@ func add_hymn(pct: float, sec: float) -> void:
 
 # --- 발동형 ---
 
-## 쿨이 찬 발동형 k를 쓴다. 조건이 안 맞으면 false(RETRY 뒤에 다시).
-func _cast(k: String) -> bool:
+## 쿨이 찬 발동형 k를 쓴다. 조건이 안 맞으면 false(RETRY 뒤에 다시). dry = 조건만 보고 쓰지 않는다(발동 모션을 시작해도 되는가).
+func _cast(k: String, dry := false) -> bool:
 	if not h.is_alive() or h.is_stunned() or not h.is_inside_tree():
 		return false
 	var p: Array = sk[k]
@@ -397,6 +435,8 @@ func _cast(k: String) -> bool:
 			var tgt = t if k == "meteor" else _strongest(_reach())
 			if tgt == null:
 				return false
+			if dry:
+				return true
 			var at: Vector3 = _flat(tgt.global_position)
 			var r := float(p[1])
 			var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
@@ -409,16 +449,22 @@ func _cast(k: String) -> bool:
 		"inferno", "poison_cloud", "blizzard", "tornado":
 			if t == null:
 				return false
+			if dry:
+				return true
 			_zone(k, p, _flat(t.global_position))
 		"sanctuary":
 			if _hurt_allies(here, float(p[1])).is_empty():
 				return false
+			if dry:
+				return true
 			_zone(k, p, _flat(here))
 		"earthquake", "ground_slam", "frost_nova", "war_cry", "taunt":
 			var r := float(p[1])
 			var near := _near_monsters(here, r)
 			if near.is_empty():
 				return false
+			if dry:
+				return true
 			match k:
 				"earthquake":
 					Fx.quake(w, here, r, tier)
@@ -450,6 +496,8 @@ func _cast(k: String) -> bool:
 			var r := float(p[1])
 			if _near_monsters(here, r).is_empty():
 				return false
+			if dry:
+				return true
 			for i in 3:
 				_later(0.3 * i, func():
 					if not h.is_alive():
@@ -460,6 +508,8 @@ func _cast(k: String) -> bool:
 		"shockwave", "spear_throw", "ice_spikes", "dragon_breath":
 			if t == null:
 				return false
+			if dry:
+				return true
 			var dir: Vector3 = _flat(t.global_position - here).normalized()
 			if dir == Vector3.ZERO:
 				dir = Vector3.FORWARD
@@ -483,14 +533,18 @@ func _cast(k: String) -> bool:
 			var pool := _near_monsters(here, _reach())
 			if pool.is_empty():
 				return false
+			if dry:
+				return true
 			pool.shuffle()
 			var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
 			for o in pool.slice(0, int(p[1])):
 				if k == "starfall":
 					Fx.star_drop(w, _flat(o.global_position), h._color, tier, 0.35)
+					var oref: WeakRef = weakref(o)
 					_later(0.35, func():
-						if is_instance_valid(o) and o.is_alive():
-							_hit(o, dmg))
+						var oo = oref.get_ref()
+						if oo != null and oo.is_alive():
+							_hit(oo, dmg))
 				else:
 					Fx.lightning(w, [o.global_position + HIT], STORM, tier)
 					_hit(o, dmg)
@@ -499,6 +553,8 @@ func _cast(k: String) -> bool:
 		"thunder_storm", "arrow_rain":
 			if t == null:
 				return false
+			if dry:
+				return true
 			var at: Vector3 = _flat(t.global_position)
 			var r := float(p[1])
 			var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
@@ -518,6 +574,8 @@ func _cast(k: String) -> bool:
 			var tgt = _strongest(_reach())
 			if tgt == null:
 				return false
+			if dry:
+				return true
 			Fx.beam(w, _flat(tgt.global_position), HOLY, tier)
 			var before: float = tgt.hp
 			_hit(tgt, a * float(p[1]) / 100.0 * h._skill_mult)
@@ -530,11 +588,15 @@ func _cast(k: String) -> bool:
 			var tgt = _frailest(maxf(float(h.def.aggro), _reach()) + 2.0)
 			if tgt == null:
 				return false
+			if dry:
+				return true
 			Fx.shadow(w, tgt.global_position + HIT)
 			_hit(tgt, a * float(p[1]) / 100.0 * h._skill_mult)
 		"void_rift", "solar_flare", "abyss_hand", "lava_burst":
 			if t == null:
 				return false
+			if dry:
+				return true
 			var at: Vector3 = _flat(t.global_position)
 			var r := float(p[1])
 			var hits := _near_monsters(at, r)
@@ -567,6 +629,8 @@ func _cast(k: String) -> bool:
 			var hurt := _hurt_allies(here, INF)
 			if hurt.is_empty():
 				return false
+			if dry:
+				return true
 			for o in h.get_tree().get_nodes_in_group("heroes"):
 				if o.is_alive():
 					o.heal(o.hp_max * float(p[1]) / 100.0)
@@ -580,10 +644,14 @@ func _cast(k: String) -> bool:
 					break
 			if dead == null:
 				return false
+			if dry:
+				return true
 			dead.revive(float(p[1]))
 		"battle_hymn":
 			if t == null:
 				return false
+			if dry:
+				return true
 			for o in h.get_tree().get_nodes_in_group("heroes"):
 				if o.is_alive() and o.get("_skx") != null:
 					o._skx.add_hymn(float(p[1]), float(p[2]))
@@ -591,14 +659,20 @@ func _cast(k: String) -> bool:
 			var ally = _weakest_ally(INF)
 			if ally == null or ally.get("_skx") == null:
 				return false
+			if dry:
+				return true
 			ally._skx.add_barrier(ally.hp_max * float(p[1]) / 100.0)
 		"shield":
 			if t == null and h.hp >= h.hp_max:
 				return false
+			if dry:
+				return true
 			add_barrier(h.hp_max * float(p[1]) / 100.0)
 		_:
 			if not SUMMONS.has(k) or t == null:
 				return false
+			if dry:
+				return true
 			_summon(k, a * float(p[1]) / 100.0 * h._skill_mult, float(p[2]))
 	_announce(k)
 	return true
@@ -658,12 +732,14 @@ func _summon(k: String, dmg: float, sec: float) -> void:
 func _barrage(m, n: int) -> void:
 	var shot: Array = SHOTS.get(h.def.model, ["arrow", 30.0])
 	var d: float = _atk() * 0.5 * damage_mult(m, 0, false)
+	var mref: WeakRef = weakref(m)  # 지워진 노드를 람다가 담고 있지 않게
 	for i in n:
 		_later(0.08 * (i + 1), func():
-			if not (is_instance_valid(m) and m.is_alive() and is_instance_valid(h) and h.is_alive()):
+			var mm = mref.get_ref()
+			if not (mm != null and mm.is_alive() and is_instance_valid(h) and h.is_alive()):
 				return
 			var pr = ProjectileScript.new()
-			pr.target = m
+			pr.target = mm
 			pr.kind = shot[0]
 			pr.speed = shot[1]
 			pr.color = h._color
