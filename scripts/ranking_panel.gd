@@ -1,5 +1,5 @@
 extends "res://scripts/ui_window.gd"
-## [랭킹] 시트(온라인 전용, 서버 GET /v1/ranking/:board — server/src/ranking.ts). HUD 오른쪽 트로피 버튼(ranking_button.gd)이 연다.
+## [랭킹] 시트(온라인 전용, 서버 GET /v1/ranking/:board — server/src/ranking.ts). 오른쪽 아래 메뉴(side_menu.gd) [랭킹]이 연다.
 ## 하위 탭 [스테이지][전투력][길드]. 오른쪽 위 [X]나 바깥(배경) 탭으로 닫는다.
 ## 목록 = 상위 50(1~3위 메달), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
 
