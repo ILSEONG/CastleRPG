@@ -98,11 +98,11 @@ func _refresh() -> void:
 		_arrow.queue_redraw()
 		return
 	var done: bool = Tutorial.complete()
-	step_label.text = "튜토리얼 %d/%d" % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
+	step_label.text = ("반복 퀘스트 %d" % (Tutorial.rep_n + 1)) if Tutorial.repeating() else "튜토리얼 %d/%d" % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
 	var prog: String = Tutorial.progress_text()
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
 	desc_label.text = str(m.desc)
-	reward_label.text = "보상: " + Tutorial.reward_text(Tutorial.reward(Tutorial.step))
+	reward_label.text = "보상: " + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
 	desc_label.visible = not _collapsed
 	reward_label.visible = not _collapsed
 	action_button.text = "보상 받기" if done else "바로가기"

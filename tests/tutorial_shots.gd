@@ -65,6 +65,12 @@ func _ready() -> void:
 	Tutorial.changed.emit()
 	await _frames(30)
 	await _snap()  # 9. 다 지은 성
+	Tutorial.state = "done"
+	Tutorial.repeats_on = true
+	Tutorial.check()
+	Tutorial.changed.emit()
+	await _frames(10)
+	await _snap()  # 10. 반복 퀘스트
 	var out := "/tmp/tutorial.png"
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
