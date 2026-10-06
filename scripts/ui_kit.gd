@@ -19,7 +19,7 @@ const CREAM_DIALOG := Color(0.984, 0.969, 0.933, 0.97)  # 거의 불투명(창)
 const AMBER := Color("F9B233")
 const STEEL := Color("8C9AB0")
 const INK := Color(0.16, 0.18, 0.24)
-const OUTLINE := Color(0.16, 0.18, 0.24, 0.9)
+const OUTLINE := Color(0.16, 0.18, 0.24, 0.6)  # 카드·보석·이름표 선(박스 외곽선은 LowpolyBox.edge_color)
 const GRADE_COLORS := Art.GRADE_COLORS  # 스펙 §3.1. 값은 Art 한 곳에만 둔다
 const PRESS_SHIFT := 2.0  # 눌린 버튼 내용이 아래로 내려가는 px
 const BUTTON_PAD_V := 2.0  # 버튼 내용 위·아래 여백. 눌림은 위 + PRESS_SHIFT, 아래 − PRESS_SHIFT(음수는 "기본값"이라 쓰지 않는다)
@@ -57,8 +57,6 @@ static func button_styles(color: Color, chamfer := 12.0) -> Dictionary:
 			b.chamfer = chamfer
 			b.facet = 0.07
 			b.seed = 7  # 같은 버튼의 상태끼리 면 모양이 같다
-			if k == "disabled":
-				b.border_color = Color(OUTLINE, 0.5)
 			var down := PRESS_SHIFT if k == "pressed" else 0.0
 			b.content_margin_top = BUTTON_PAD_V + down
 			b.content_margin_bottom = BUTTON_PAD_V - down
@@ -113,14 +111,12 @@ static func bar(fill_color: Color) -> Dictionary:
 		bg.color = Color(0, 0, 0, 0.14)
 		bg.chamfer = 4.0
 		bg.facet = 0.05
-		bg.border_width = 1.5
-		bg.border_color = Color(OUTLINE, 0.55)
+		bg.border_color = Color(OUTLINE, 0.35)
 		var fill := LowpolyBox.new()
 		fill.color = fill_color
 		fill.chamfer = 4.0
 		fill.facet = 0.08
 		fill.seed = 11
-		fill.border_width = 1.5
 		_cache[key] = {"background": bg, "fill": fill}
 	return _cache[key]
 
@@ -211,13 +207,14 @@ static func checkbox(text: String) -> Button:
 	box.draw.connect(func():
 		var r := Rect2(Vector2.ZERO, box.size)
 		var on := b.button_pressed
-		box.draw_colored_polygon(LowpolyBox.octagon(r, 9.0), AMBER if on else Color(1, 1, 1, 0.9))
+		var fill := AMBER if on else Color(1, 1, 1, 0.9)
+		box.draw_colored_polygon(LowpolyBox.octagon(r, 9.0), fill)
 		var o := LowpolyBox.octagon(r.grow(-1.0), 9.0)
 		o.append(o[0])
-		box.draw_polyline(o, INK, 2.5)
+		box.draw_polyline(o, LowpolyBox.edge_color(fill), 2.0)
 		if on:
 			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), Color.WHITE, 5.0, false)
-			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), INK, 1.5, false))
+			box.draw_polyline(PackedVector2Array([Vector2(10, 21), Vector2(17, 29), Vector2(31, 11)]), LowpolyBox.edge_color(AMBER), 1.5, false))
 	b.add_child(box)
 	b.toggled.connect(func(_on): box.queue_redraw())
 	var l := Label.new()

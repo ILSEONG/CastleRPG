@@ -1,6 +1,6 @@
 extends StyleBox
 ## 로우폴리 박스(스펙 §4): 모서리를 깎은 8각 다각형을 삼각형 면 16개로 채운다.
-## 면마다 위치 해시로 밝기 ±facet, 왼위 면일수록 밝게(왼위 광원). 진한 외곽선 + 윗변 밝은 띠.
+## 면마다 위치 해시로 밝기 ±facet, 왼위 면일수록 밝게(왼위 광원). 박스 색을 어둡게 한 외곽선 + 윗변 밝은 띠.
 ## 같은 (속성, 크기)면 항상 같은 폴리곤(결정적). 크기가 같으면 지오메트리를 재사용한다 → 매 프레임 그려도 가볍다.
 ## StyleBox 스크립트의 _draw(to_canvas_item: RID, rect: Rect2)는 RenderingServer로 해당 canvas item에 직접 그린다
 ## (rect는 그 item의 로컬 좌표). 삼각형은 canvas_item_add_triangle_array 한 번, 외곽선은 add_polyline 한 번.
@@ -19,11 +19,12 @@ const FACES := 16  # 변 8 × 2등분
 	set(v):
 		facet = v
 		_dirty()
-@export var border_color := Color(0.16, 0.18, 0.24, 0.9):
+## 외곽선 색. 비워 두면(알파 0) edge_color(color) — 검은 선 대신 박스 색에 맞춘 진한 선.
+@export var border_color := Color(0, 0, 0, 0):
 	set(v):
 		border_color = v
 		_dirty()
-@export var border_width := 2.0:
+@export var border_width := 1.5:
 	set(v):
 		border_width = v
 		_dirty()
@@ -78,9 +79,15 @@ func _build(s: Vector2) -> void:
 	_line = octagon(r, chamfer)
 	_line.append(_line[0])
 	_line_cols = PackedColorArray()
+	var lc := border_color if border_color.a > 0.0 else edge_color(color)
 	for _i in _line.size():
-		_line_cols.append(border_color)
+		_line_cols.append(lc)
 	_size = s
+
+
+## 박스 색 c에 맞춘 외곽선 색: 같은 색을 어둡게, 반투명 박스도 선은 또렷하게.
+static func edge_color(c: Color) -> Color:
+	return Color(c.darkened(0.45), clampf(c.a + 0.15, 0.35, 0.85))
 
 
 ## 모서리를 깎은 8각형(시계 방향, 윗변 왼쪽 점부터). chamfer는 짧은 변의 절반까지로 제한.
