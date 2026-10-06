@@ -1159,7 +1159,8 @@ export function createApp(opts: AppOptions) {
       const why = lot ? lotBlock(def, p.build, res) : R.upgradeBlock(building, g.buildings, levels, p.build !== null, res)
       if (why) throw new ApiError(409, why, `cannot upgrade '${building}' from level ${lot ? 0 : from}: ${why}`)
       const cost = R.buildCost(def, from)
-      const finish = now + R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100)) // 개정 24: 연구 build_speed_pct
+      const finish = now + (lot ? R.cfgNum(g.config, 'lot_build_sec') // 공터 첫 건설은 lot_build_sec초(사용자 2026-10-06)
+        : R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100))) // 개정 24: 연구 build_speed_pct
       const delta: Record<string, number> = {}
       for (const r of R.BUILD_RES) {
         const d = (collect?.res === r ? collect.amount : 0) - cost[r]

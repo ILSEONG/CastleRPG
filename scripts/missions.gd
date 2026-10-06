@@ -63,7 +63,10 @@ var day := -1  # 지금 리셋 날짜 번호
 var week := -1
 var counts := {"d": {}, "w": {}, "r": {}}  # d·w: 사건 → 오늘·이번 주 센 수, r: 반복 미션 id → 마지막으로 받은 뒤 센 수
 var claimed := {"d": [], "w": [], "wd": 0, "r": {}}  # 오프라인 받은 기록(온라인은 Economy.server_missions)
-var waiting := ""  # 응답을 기다리는 미션 id
+var pending := {}  # 온라인: 보냈고 응답을 기다리는 받기(예측 키 → 미션 id) — 보상·받은 기록은 이미 곧바로 반영했다
+var waiting: String:  # 응답을 기다리는 미션 id(없으면 "")
+	get:
+		return "" if pending.is_empty() else str(pending.values()[0])
 
 var _dirty := false
 var _save_cd := 0.0
@@ -268,22 +271,30 @@ func goto_of(m: Dictionary) -> String:
 	return GOTO.get(str(m.kind), "")
 
 
-## 보상 받기. 온라인은 서버에 보내고(once) 응답이 오면 반영한다. 보냈거나 받았으면 true.
+## 보상 받기. 온라인도 곧바로 보상과 받은 기록을 반영하고(Economy.predict_reward) 서버에 보낸다(once) — 응답이 오면 서버 값으로,
+## 거절되면 되돌리고 알린다. 응답을 기다리지 않으니 여러 개를 연달아 받을 수 있다(서버는 보낸 순서대로 확인한다). 보냈거나 받았으면 true.
 func claim(id: String) -> bool:
 	var m := find(id)
-	if m.is_empty() or not can_claim(m) or waiting != "":
+	if m.is_empty() or not can_claim(m):
 		return false
 	if net != null:
 		if not net.up:
 			econ.notice.emit(WAIT_TEXT)
 			return false
-		waiting = id
 		var body := {"id": id}
 		if m.type == "repeat":
 			body.n = times(id)
 		var need := target(m)
+		var key := "mission:%s:%d" % [id, times(id)]
+		pending[key] = id
+		econ.predict_reward(key, m.reward, _mark_claimed.bind(m))
+		if m.type == "repeat":
+			counts.r[id] = maxi(0, int(counts.r.get(id, 0)) - need)
+			save()
+		econ.granted.emit(m.reward)
+		_reward_notice(m.reward)
 		net.flush_kills()
-		net.send("POST", "/v1/mission/claim", body, _on_claimed.bind(m, need), _on_claim_failed, true, true)
+		net.send("POST", "/v1/mission/claim", body, _on_claimed.bind(key), _on_claim_failed.bind(key, m, need), true, true)
 		changed.emit()
 		return true
 	var need := target(m)
@@ -303,21 +314,47 @@ func claim(id: String) -> bool:
 	return true
 
 
-func _on_claimed(data: Dictionary, m: Dictionary, need: int) -> void:
-	waiting = ""
+## 온라인 받은 기록(Economy.server_missions)에 이 받기를 더한다 — 서버 응답 위에도 응답이 올 때까지 다시 얹힌다(복사해서 바꾼다).
+func _mark_claimed(m: Dictionary) -> void:
+	var s: Dictionary = econ.server_missions.duplicate(true)
+	if int(s.get("day", -1)) != day:
+		s.day = day
+		s.d = []
+	if int(s.get("week", -1)) != week:
+		s.week = week
+		s.w = []
+		s.wd = 0
+	if not s.get("d") is Array:
+		s.d = []
+	if not s.get("w") is Array:
+		s.w = []
+	if not s.get("r") is Dictionary:
+		s.r = {}
+	if m.type == "daily":
+		s.d.append(str(m.id))
+		if m.kind == "daily_count":
+			s.wd = int(s.get("wd", 0)) + 1
+	elif m.type == "weekly":
+		s.w.append(str(m.id))
+	else:
+		s.r[str(m.id)] = int(s.r.get(str(m.id), 0)) + 1
+	econ.server_missions = s
+
+
+func _on_claimed(data: Dictionary, key: String) -> void:
+	pending.erase(key)
+	econ.settle(key)
 	econ.apply_server(data)
-	if m.type == "repeat":
-		counts.r[m.id] = maxi(0, int(counts.r.get(m.id, 0)) - need)
-		save()
-	var r = data.get("reward")
-	if r is Dictionary:
-		econ.granted.emit(r)
-		_reward_notice(r)
 	changed.emit()
 
 
-func _on_claim_failed() -> void:
-	waiting = ""
+## 서버가 거절했거나 응답을 잃었다: 보상·받은 기록을 되돌리고(반복 미션은 센 수도) 알린 뒤 상태를 새로 받는다.
+func _on_claim_failed(key: String, m: Dictionary, need: int) -> void:
+	pending.erase(key)
+	econ.unpredict(key)
+	if m.type == "repeat":
+		counts.r[m.id] = int(counts.r.get(m.id, 0)) + need
+		save()
 	econ.notice.emit(FAIL_TEXT.get(net.last_error, FAIL_DEFAULT))
 	net.refresh()
 	changed.emit()
