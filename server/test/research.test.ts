@@ -259,6 +259,8 @@ test('효과: 훈련 시간(train_speed_pct, 반올림 없음)·비용(train_cos
   const { token, id } = await fresh()
   await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
   await setResearch(id, { drill_manual: 5, logistics: 5 }) // 시간 ÷ 1.15, 비용 × 0.9
+  // 실제 설정은 1마리씩. 반올림 검사는 2마리 묶음으로 하므로 옛 묶음 상한을 쓴다
+  await S.db.query("update game_config set value = '10' where key = 'train_batch_base'")
   let r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 2 } })
   assert.equal(r.status, 200)
   const unit = R.soldierUnitSec(G.config, 1)

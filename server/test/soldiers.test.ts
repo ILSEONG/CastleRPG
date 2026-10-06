@@ -15,6 +15,8 @@ let S: Setup
 const tmp: string[] = []
 before(async () => {
   S = await setup()
+  // 실제 설정은 1마리씩(train_batch_base 1·per_level 0). 이 파일의 묶음 규칙 검사는 옛 묶음 상한(10 + 2(L−1))으로 돌린다
+  await legacyBatch(S)
 })
 after(async () => {
   await S.close()
@@ -27,6 +29,10 @@ after(async () => {
   }
 })
 
+const legacyBatch = async (s: Setup) => {
+  await s.db.query("update game_config set value = '10' where key = 'train_batch_base'")
+  await s.db.query("update game_config set value = '2' where key = 'train_batch_per_level'")
+}
 const H3 = 10800 // 1레벨 한 마리 시간
 const CFG: R.Config = { train_base_min: '180', train_step_min: '30', train_cost_tier_mult: '5', soldier_max_tier: '5' }
 const player = async (token: string) => (await S.req('GET', '/v1/player', { token })).json.player
@@ -160,6 +166,7 @@ test('훈련 원자성: 같은 version을 읽은 시작 2건 — 하나 200, 하
   const T = await setup({ wrapQuery: b.wrap })
   try {
     T.clock.t = T0
+    await legacyBatch(T)
     const { token, id } = await T.login()
     await T.db.query("update player_resources set amount = 1000 where player_id = $1", [id])
     b.arm()
