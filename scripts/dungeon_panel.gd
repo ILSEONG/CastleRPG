@@ -22,6 +22,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
 const FriendPanelScript := preload("res://scripts/friend_panel.gd")
+const TabBarScript := preload("res://scripts/tab_bar.gd")
 
 const TYPES := ["gold", "equip", "ticket"]
 const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
@@ -339,6 +340,15 @@ func _refresh() -> void:
 		var why := Economy.dungeon_block(t, lv, Economy.default_party(t))
 		c.go.disabled = why != ""
 		c.reason.text = Economy.DUNGEON_TEXT.get(why, "") if why != "waiting" else ""
+		var locked := Tutorial.dungeon_locked(t)  # 튜토리얼에서 그 던전 미션에 닿기 전: 자물쇠 + 어느 미션에서 열리는지
+		if locked:
+			c.go.disabled = true
+			c.prev.disabled = true
+			c.next.disabled = true
+			c.reason.text = Tutorial.dungeon_lock_text(t)
+		if locked != bool(c.get("locked", false)):
+			c.locked = locked
+			bands[t].queue_redraw()
 		c.reason.visible = c.reason.text != ""
 	bag_button.text = "보관함 %d / %d" % [Economy.bag.size(), int(GameData.config_num("equip_bag_cap"))]
 
@@ -347,6 +357,9 @@ func _refresh() -> void:
 
 ## [도전]: 그 던전의 편성 화면(저장된 편성이 맞으면 그것, 아니면 기본 편성).
 func open_form(t: String) -> void:
+	if Tutorial.dungeon_locked(t):
+		Economy.notice.emit(Tutorial.dungeon_lock_text(t))
+		return
 	form_type = t
 	var saved: Array = Fever.dungeon_party.get(t, [])
 	party = saved.duplicate() if _party_ok(t, saved) else Economy.default_party(t)
@@ -572,6 +585,10 @@ func _draw_band(c: Control, t: String) -> void:
 	c.draw_polyline(inner, Color(1, 1, 1, 0.35), 1.5, true)
 	oct.append(oct[0])
 	c.draw_polyline(oct, UiKit.OUTLINE, 2.5, true)
+	if Tutorial.dungeon_locked(t):  # 잠긴 던전: 어둡게 덮고 가운데 자물쇠
+		oct.remove_at(oct.size() - 1)
+		c.draw_colored_polygon(oct, Color(0, 0, 0, 0.5))
+		TabBarScript.draw_shapes(c, TabBarScript.LOCK_SHAPES, c.size * 0.5, minf(c.size.y * 0.55, 96.0))
 
 
 ## 평면 그림(스냅샷 전 자리표시): 골드 = 평야(하늘·먼 산·풀 언덕·나무), 장비 = 불타는 성(붉은 하늘·성 실루엣·불꽃).
