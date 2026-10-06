@@ -1,5 +1,5 @@
 extends Node2D
-## 월드 이름표(개정 15 다듬기): 건물 "이름 Lv N"·상인 "상인"·문루 방향 글자(북·동·남·서)를 Label3D 대신 화면 공간에서 한 번에 그린다
+## 월드 이름표(개정 15 다듬기): 건물 "이름 Lv N"·상인 "상인"을 Label3D 대신 화면 공간에서 한 번에 그린다
 ## (hp_bars·badges 방식 — 줌·회전과 무관하게 글자 NAME_SIZE 논리 px). 태그 = 로우폴리 알약(크림 8각 면 분할, 건물은 오른쪽에 짙은 "Lv N" 칸).
 ## 자리: 기준점(anchor — 지붕·머리·문루 위 월드 좌표)의 화면 위치 바로 위. 태그 위에는 badges.gd의 건설 막대·말풍선이 쌓인다 —
 ## 태그와 한 덩어리(stack, 크기는 badges.stack_size)로 놓고, badges는 top(id)(태그 윗변 가운데)에서 그린다.
@@ -84,7 +84,7 @@ func _sync() -> void:
 		if t.id == "merchant":
 			nm = "상인"
 		elif t.id.begins_with("gate:"):
-			nm = Formation.SIDE_NAMES[int(t.id.get_slice(":", 1))]
+			nm = ""  # 문루 방향 글자는 그리지 않는다 — 태그는 크기 0 기준점으로만 남아 성문 건설 막대를 받친다
 		else:
 			nm = GameData.building_def(t.id).get("name", t.id)
 			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else "공터"  # 튜토리얼 공터
@@ -96,6 +96,15 @@ func _sync() -> void:
 
 ## 태그 모양(원점 = 알약 왼위): 크림 8각 면 분할 16삼각형 + Lv 칸 8각 부채꼴 6삼각형, 외곽선 8선분, 글자 기준선 자리.
 static func _shape(t: Dictionary) -> void:
+	if t.name == "" and t.lv == "":  # 글자 없는 태그(문루): 자리 차지·그리기 없이 기준점만
+		t.font = SIDE_SIZE
+		t.size = Vector2.ZERO
+		t.pts = PackedVector2Array()
+		t.cols = PackedColorArray()
+		t.segs = PackedVector2Array()
+		t.name_pos = Vector2.ZERO
+		t.lv_pos = Vector2.ZERO
+		return
 	var side: bool = t.id.begins_with("gate:")
 	t.font = SIDE_SIZE if side else NAME_SIZE
 	var h := SIDE_H if side else TAG_H
@@ -213,7 +222,7 @@ func _draw() -> void:
 	draw_multiline(segs, EDGE, 1.5, true)
 	draw_calls += 2
 	for t in tags:
-		if not rects.has(t.id):
+		if not rects.has(t.id) or t.name == "":
 			continue
 		var o: Vector2 = rects[t.id].position
 		draw_string(FONT, o + t.name_pos, t.name, HORIZONTAL_ALIGNMENT_LEFT, -1, t.font, UiKit.INK)
