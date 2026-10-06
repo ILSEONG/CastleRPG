@@ -5,7 +5,7 @@ Meshy(meshy.ai) Pro 플랜으로 생성 — 유료 플랜 생성물은 생성자
 
 | 파일 | 생성일 | 작업 id | 입력 | 플랜 |
 |---|---|---|---|---|
-| `heroes/arteon.glb` | 2026-10-05 | remesh `01a10cf8-9276-74f1-912f-8bb66a557f86` ← image-to-3d `01a10cde-4a14-7725-8620-5b66613ba5b7`(meshy-7) | text-to-image `01a10cdd-7b92-716a-ad77-4e0db329fe53`(nano-banana-pro, T자세 컨셉) | Pro |
+| `heroes/arteon.glb` | 2026-10-06 | image-to-3d `01a10e9f-d104-73be-98a7-f6cb0f0eec45`(lowpoly) | 아르테온 T자세 컨셉 그림(text-to-image `01a10cdd-7b92-716a-ad77-4e0db329fe53`, nano-banana-pro) | Pro |
 | `heroes/ignis.glb` | 2026-10-05 | image-to-3d `01a10cf8-d142-73b3-9292-cf9f58278f76`(meshy-7) | image-to-image `01a10cf7-8bf2-77fb-a0b8-10d2e6e2c095`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `heroes/sylvana.glb` | 2026-10-05 | image-to-3d `01a10cff-1258-7617-ac2e-4b0b2e797a17`(meshy-7) | image-to-image `01a10cfd-532e-75d0-ae6e-6fde084e2444`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `heroes/grom.glb` | 2026-10-05 | image-to-3d `01a10cff-1609-7515-a650-7b32fc1ecb77`(meshy-7) | image-to-image `01a10cfd-5685-7754-9972-98ed9643cb62`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |

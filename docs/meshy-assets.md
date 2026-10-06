@@ -32,6 +32,15 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    숨긴 뒤 `MeshyBody`를 같은 Skin으로 스켈레톤에 단다. 팔레트는 무기에만, 머리·가슴 부품은 빼고 손 부품만 단다.
    `Art.meshy_bodies = false`면 KayKit 생김새. 검사: tests/run_tests.gd `test_meshy_bodies`.
 
+## 로우폴리 영웅(아르테온 시험 중, 2026-10-06)
+위 파이프라인의 meshy-7·meshy-t2 몸은 삼각형 수는 로우폴리지만 매끈한 면 + 그라데이션 텍스처라 게임에서 매끈한 카툰으로 보인다.
+로우폴리 모드는 큼직한 각진 면과 단색 칠로 나와 컨셉(각진 로우폴리)에 가깝다. 지금은 아르테온만 이렇게 바꿨다.
+1. 3D: `dev/meshy_heroes.py lowpoly <id>` — image-to-3d `model_type: lowpoly`, 텍스처, T자세, 컨셉 그림을 직접 넣는다(30 크레딧,
+   6~7천 삼각형).
+2. 몸 만들기: 위 3단계 `dev/meshy_fit.py`를 그대로 쓰되 출력을 임시 파일로.
+3. 예산 맞추기: `python3 dev/meshy_lowpoly.py assets/models/characters/<model>.glb <임시>.glb assets/models/meshy/heroes/<id>.glb`
+   (`--tris 4500`, numpy·Pillow·scipy·pymeshlab). UV 이음새를 지키며 줄이고(텍스처 그대로), 면마다 정점을 따로 둬 각진 음영.
+
 ## 소환수
 소환수(scripts/summon.gd)는 KayKit 뼈대 없이 부품 ≤ 3개를 코드로 흔든다(몸통 + 팔·날개 등). Meshy 모델도 같은 부품으로 나눠 넣는다.
 1. 컨셉: `dev/meshy_summons.py concept <kind>`(아르테온 컨셉 참조, nano-banana-2 6 크레딧). 따로 움직이는 부위(골렘 팔)는 몸에서

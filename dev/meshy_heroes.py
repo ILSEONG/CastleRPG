@@ -2,10 +2,11 @@
 
   python3 dev/meshy_heroes.py concept <id>...   컨셉(image-to-image, 참조 = dev/meshy/arteon_concept.png) 시작
   python3 dev/meshy_heroes.py model <id>...     끝난 컨셉으로 3D(image-to-3d) 시작 — 컨셉을 눈으로 본 뒤에
+  python3 dev/meshy_heroes.py lowpoly <id>...   컨셉으로 3D 로우폴리 모드(image-to-3d model_type lowpoly, 텍스처) 시작
   python3 dev/meshy_heroes.py poll              상태 갱신, 끝난 것 내려받기(dev/meshy/out/<id>/)
 
 키: 환경 변수 MESHY_API_KEY(없으면 프록시가 넣는다고 가정). 상태는 dev/meshy/out/state.json.
-크레딧(2026-10): 컨셉 nano-banana-2 6, 3D meshy-7 + 텍스처 30(SSR) · meshy-t2 smart-topology + 텍스처 15(SR·R).
+크레딧(2026-10): 컨셉 nano-banana-2 6, 3D meshy-7 + 텍스처 30(SSR) · meshy-t2 smart-topology + 텍스처 15(SR·R) · 로우폴리 + 텍스처 30.
 """
 import base64, csv, json, os, sys, urllib.request
 
@@ -102,10 +103,23 @@ def model(ids):
         print(i, "model", body["ai_model"], t["result"])
 
 
+def lowpoly(ids):
+    """로우폴리 모드는 컨셉 그림을 직접 넣는다(아르테온 = REF, 나머지 = poll이 내려받은 out/<id>/concept.png)."""
+    for i in ids:
+        path = REF if i == "arteon" else os.path.join(OUT, i, "concept.png")
+        img = "data:image/png;base64," + base64.b64encode(open(path, "rb").read()).decode()
+        t = req("POST", "/image-to-3d", {"image_url": img, "model_type": "lowpoly", "pose_mode": "t-pose", "should_texture": True,
+                                         "target_formats": ["glb"]})
+        s = load()
+        s.setdefault(i, {})["lowpoly"] = {"id": t["result"], "status": "PENDING"}
+        save(s)
+        print(i, "lowpoly", t["result"])
+
+
 def poll():
     s = load()
     for i, e in s.items():
-        for kind, path in (("concept", "/image-to-image/"), ("model", "/image-to-3d/")):
+        for kind, path in (("concept", "/image-to-image/"), ("model", "/image-to-3d/"), ("lowpoly", "/image-to-3d/")):
             t = e.get(kind)
             if not t or t.get("saved") or t["status"] in ("FAILED", "CANCELED"):
                 continue
@@ -114,11 +128,13 @@ def poll():
             if r["status"] == "SUCCEEDED":
                 os.makedirs(os.path.join(OUT, i), exist_ok=True)
                 url = r["image_urls"][0] if kind == "concept" else r["model_urls"]["glb"]
-                urllib.request.urlretrieve(url, os.path.join(OUT, i, "concept.png" if kind == "concept" else i + "_meshy.glb"))
+                name = {"concept": "concept.png", "model": i + "_meshy.glb", "lowpoly": i + "_lowpoly.glb"}[kind]
+                urllib.request.urlretrieve(url, os.path.join(OUT, i, name))
                 t["saved"] = True
             print(i, kind, t["status"], r.get("progress"))
     save(s)
 
 
 if __name__ == "__main__":
-    {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "poll": poll}[sys.argv[1]]()
+    {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "lowpoly": lambda: lowpoly(sys.argv[2:]),
+     "poll": poll}[sys.argv[1]]()
