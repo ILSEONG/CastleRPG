@@ -126,7 +126,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'hero_level_stat_melee', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult',
-  'offline_gold_mult', 'tutorial_train_sec', 'quest_repeat_min_sec', 'tutorial_new_players'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
+  'offline_gold_mult', 'tutorial_train_sec', 'lot_build_sec', 'quest_repeat_min_sec', 'tutorial_new_players'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)

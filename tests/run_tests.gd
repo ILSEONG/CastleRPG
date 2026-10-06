@@ -4691,6 +4691,7 @@ func test_tutorial() -> void:
 	check(t.claim() and t.step == 1 and int(e.res.wood) == int(r0.wood), "tutorial: claim grants and advances")
 	# 2. 벌목장 건설 — 일꾼으로 0 → 1
 	check(e.upgrade_block("lumber", now) == "" and e.upgrade("lumber", now), "tutorial: lot construction starts with the reward")
+	check(is_equal_approx(float(e.build.finish), now + 5.0), "tutorial: building a lot takes lot_build_sec (5 s): %s" % [e.build])
 	check(e.requirements("lumber").is_empty() and not t.complete(), "tutorial: lot has no prerequisites; mission waits for the build")
 	e.complete_due(now + 100000.0)
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
