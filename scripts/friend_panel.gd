@@ -1,8 +1,10 @@
 extends "res://scripts/ui_window.gd"
 ## 친구 창(2026-10-06, 모집권 던전 도우미 — 온라인만). 던전 시트의 모집권 던전 카드 [친구]·편성 화면 [친구 관리]가 연다.
-## 위: 내 이름·친구 코드 [복사], 빌려주는 영웅(친구가 모집권 던전에서 데려가는 내 영웅 — 기본은 가장 강한 영웅) [바꾸기] → 내 영웅 줄에서 탭.
-## 친구 코드 입력 + [신청]. 아래 목록(스크롤): 받은 신청 [수락][거절], 친구 n / 상한(영웅·레벨·전투력, 오늘 함께했으면 표시) [삭제],
-## 보낸 신청 [취소], 추천 성주(최근 접속) [신청]. 친구 요청은 Economy.friend_op, 목록은 Economy.friends(응답이 오면 friends_changed로 다시 그린다).
+## 위: 내 이름·친구 코드 [복사], 탭 둘 [친구 목록][친구 추가].
+## 친구 목록: 빌려주는 영웅(친구가 모집권 던전에서 데려가는 내 영웅 — 기본은 가장 강한 영웅) [바꾸기] → 내 영웅 줄에서 탭,
+##   목록(스크롤): 받은 신청 [수락][거절], 친구 n / 상한(영웅·레벨·전투력, 오늘 함께했으면 표시) [삭제], 보낸 신청 [취소].
+## 친구 추가: 친구 코드 입력 + [신청], 추천 성주(최근 접속, 서버가 무작위로 고른다) [새로고침] → 새로 받기, [신청].
+## 친구 요청은 Economy.friend_op, 목록은 Economy.friends(응답이 오면 friends_changed로 다시 그린다).
 ## 오프라인이면 안내 한 줄만.
 
 const HeroCardScript := preload("res://scripts/hero_card.gd")
@@ -22,8 +24,14 @@ var pick_scroll: ScrollContainer
 var pick_row: HBoxContainer
 var code_edit: LineEdit
 var list: VBoxContainer
+var rec_list: VBoxContainer
+var refresh_btn: Button
 var offline_label: Label
+var tab := "list"  # "list"(친구 목록) · "add"(친구 추가)
+var tab_btns := {}
 var _top: VBoxContainer
+var _list_page: VBoxContainer
+var _add_page: VBoxContainer
 
 
 func _ready() -> void:
@@ -46,9 +54,25 @@ func _ready() -> void:
 	copy.custom_minimum_size = Vector2(96, 48)
 	copy.pressed.connect(copy_code)
 	row.add_child(copy)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	_top.add_child(tabs)
+	for t in [["list", "친구 목록"], ["add", "친구 추가"]]:
+		var b := _button(t[1], UiKit.STEEL, 24)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 54)
+		b.pressed.connect(pick_tab.bind(t[0]))
+		tabs.add_child(b)
+		tab_btns[t[0]] = b
+	_list_page = VBoxContainer.new()
+	_list_page.add_theme_constant_override("separation", 8)
+	_top.add_child(_list_page)
+	_add_page = VBoxContainer.new()
+	_add_page.add_theme_constant_override("separation", 8)
+	_top.add_child(_add_page)
 	var lend := HBoxContainer.new()
 	lend.add_theme_constant_override("separation", 10)
-	_top.add_child(lend)
+	_list_page.add_child(lend)
 	hero_card = HeroCardScript.new()
 	hero_card.custom_minimum_size = FACE_SIZE
 	hero_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -67,13 +91,13 @@ func _ready() -> void:
 	pick_scroll.custom_minimum_size = Vector2(0, PICK_SIZE.y + 14)
 	pick_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	pick_scroll.visible = false
-	_top.add_child(pick_scroll)
+	_list_page.add_child(pick_scroll)
 	pick_row = HBoxContainer.new()
 	pick_row.add_theme_constant_override("separation", 6)
 	pick_scroll.add_child(pick_row)
 	var add := HBoxContainer.new()
 	add.add_theme_constant_override("separation", 8)
-	_top.add_child(add)
+	_add_page.add_child(add)
 	code_edit = LineEdit.new()
 	code_edit.placeholder_text = "친구 코드 8자리"
 	code_edit.max_length = 8
@@ -86,22 +110,54 @@ func _ready() -> void:
 	send.custom_minimum_size = Vector2(110, 56)
 	send.pressed.connect(send_code)
 	add.add_child(send)
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, LIST_H)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_top.add_child(scroll)
-	list = VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 8)
-	scroll.add_child(list)
+	var rec_head := HBoxContainer.new()
+	rec_head.add_theme_constant_override("separation", 8)
+	_add_page.add_child(rec_head)
+	var rec_title := _label("추천 성주", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	rec_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rec_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rec_head.add_child(rec_title)
+	refresh_btn = _button("새로고침", UiKit.STEEL, 22)
+	refresh_btn.custom_minimum_size = Vector2(130, 48)
+	refresh_btn.pressed.connect(refresh_recommend)
+	rec_head.add_child(refresh_btn)
+	list = _scroll_list(_list_page, LIST_H)
+	rec_list = _scroll_list(_add_page, LIST_H - 8)  # 두 탭 창 높이를 맞춘다
 	var close_b := _button("닫기", UiKit.STEEL)
 	close_b.pressed.connect(close)
 	content.add_child(close_b)
 	Economy.friends_changed.connect(_refresh)
 
 
+func _scroll_list(parent: Control, h: float) -> VBoxContainer:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, h)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	parent.add_child(scroll)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 8)
+	scroll.add_child(v)
+	return v
+
+
 func _on_open() -> void:
 	pick_scroll.visible = false
+	tab = "list"
+	Economy.friends_load()
+	_refresh()
+
+
+func pick_tab(t: String) -> void:
+	tab = t
+	pick_scroll.visible = false
+	_refresh()
+
+
+## 추천 성주 새로 받기: 친구 목록 전체를 다시 받는다(서버가 추천을 매번 무작위로 고른다).
+func refresh_recommend() -> void:
+	if Economy.net == null or Economy.friends_waiting:
+		return
 	Economy.friends_load()
 	_refresh()
 
@@ -140,19 +196,28 @@ func _refresh() -> void:
 	hero_label.text = ("빌려주는 영웅: %s Lv %d%s\n친구가 모집권 던전에 데려갑니다" % [GameData.hero(h.hero_id).get("name", h.hero_id), int(h.level),
 		"" if f.get("hero_chosen") is String else " (가장 강한 영웅)"]) if h is Dictionary else "빌려줄 영웅이 없습니다"
 	_fill_picks(f)
-	for c in list.get_children():
-		list.remove_child(c)
-		c.queue_free()
+	for k in tab_btns:
+		UiKit.apply_button(tab_btns[k], UiKit.AMBER if k == tab else UiKit.STEEL, 14.0)
+	var n_in: int = f.get("incoming", []).size()
+	tab_btns.list.text = "친구 목록" if n_in == 0 else "친구 목록 (신청 %d)" % n_in
+	_list_page.visible = tab == "list"
+	_add_page.visible = tab == "add"
+	refresh_btn.disabled = Economy.friends_waiting
+	for v in [list, rec_list]:
+		for c in v.get_children():
+			v.remove_child(c)
+			c.queue_free()
 	if f.is_empty():
 		_fit()
 		return
 	var used: Array = f.get("used_today", [])
-	_section("받은 신청", f.get("incoming", []), func(p, row): _add_btn(row, "수락", HudScript.ACCENT, "accept", p.id); _add_btn(row, "거절", UiKit.STEEL, "remove", p.id))
+	_section(list, "받은 신청", f.get("incoming", []), func(p, row): _add_btn(row, "수락", HudScript.ACCENT, "accept", p.id); _add_btn(row, "거절", UiKit.STEEL, "remove", p.id))
 	var fr: Array = f.get("friends", [])
-	_section("친구 %d / %d명" % [fr.size(), int(f.get("cap", 30))], fr, func(p, row): _add_btn(row, "삭제", UiKit.STEEL, "remove", p.id),
-		"아직 친구가 없어요. 친구 코드를 주고받거나 아래 추천 성주에게 신청해 보세요.", used)
-	_section("보낸 신청", f.get("outgoing", []), func(p, row): _add_btn(row, "취소", UiKit.STEEL, "remove", p.id))
-	_section("추천 성주", f.get("recommend", []), func(p, row): _add_btn(row, "신청", HudScript.ACCENT, "request", p.id))
+	_section(list, "친구 %d / %d명" % [fr.size(), int(f.get("cap", 30))], fr, func(p, row): _add_btn(row, "삭제", UiKit.STEEL, "remove", p.id),
+		"아직 친구가 없어요. 친구 코드를 주고받거나 [친구 추가] 탭의 추천 성주에게 신청해 보세요.", used)
+	_section(list, "보낸 신청", f.get("outgoing", []), func(p, row): _add_btn(row, "취소", UiKit.STEEL, "remove", p.id))
+	_section(rec_list, "", f.get("recommend", []), func(p, row): _add_btn(row, "신청", HudScript.ACCENT, "request", p.id),
+		"지금 추천할 성주가 없어요. 잠시 뒤 [새로고침]을 눌러 보세요.")
 	_fit()
 
 
@@ -181,19 +246,20 @@ func _fill_picks(f: Dictionary) -> void:
 		pick_row.add_child(card)
 
 
-## 한 묶음: 머리 줄 + 사람 줄(영웅 얼굴·이름·영웅 정보 + buttons(p, row)이 붙이는 버튼). 비었으면 empty 안내(없으면 묶음째 숨김).
-func _section(title: String, people: Array, buttons: Callable, empty := "", used: Array = []) -> void:
+## 한 묶음(into 목록에): 머리 줄(title이 비면 생략) + 사람 줄(영웅 얼굴·이름·영웅 정보 + buttons(p, row)이 붙이는 버튼). 비었으면 empty 안내(없으면 묶음째 숨김).
+func _section(into: VBoxContainer, title: String, people: Array, buttons: Callable, empty := "", used: Array = []) -> void:
 	if people.is_empty() and empty == "":
 		return
-	list.add_child(_label(title, 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	if title != "":
+		into.add_child(_label(title, 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	if people.is_empty():
 		var e := _label(empty, 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		list.add_child(e)
+		into.add_child(e)
 	for p in people:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		list.add_child(row)
+		into.add_child(row)
 		var h = p.get("hero")
 		var face = HeroCardScript.new()
 		face.custom_minimum_size = FACE_SIZE
