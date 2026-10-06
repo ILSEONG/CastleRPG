@@ -1,6 +1,6 @@
 extends "res://scripts/ui_window.gd"
 ## [랭킹] 시트(온라인 전용, 서버 GET /v1/ranking/:board — server/src/ranking.ts). HUD 오른쪽 트로피 버튼(ranking_button.gd)이 연다.
-## 하위 탭 [스테이지][전투력][던전][길드]. 던전은 [골드 던전][장비 던전]을 한 줄 더 고른다.
+## 하위 탭 [스테이지][전투력][길드].
 ## 목록 = 상위 50(1~3위 메달), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -8,13 +8,10 @@ const GuildPanel := preload("res://scripts/guild_panel.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const SUBTABS := [["stage", "스테이지"], ["power", "전투력"], ["dungeon", "던전"], ["guild", "길드"]]
-const DUNGEONS := [["dungeon_gold", "골드 던전"], ["dungeon_equip", "장비 던전"]]
+const SUBTABS := [["stage", "스테이지"], ["power", "전투력"], ["guild", "길드"]]
 const HEAD := {
 	"stage": "도달한 라운드 순 · 먼저 도달한 사람이 위",
 	"power": "출전 영웅 전투력 합 순",
-	"dungeon_gold": "골드 던전 최고 단계 순",
-	"dungeon_equip": "장비 던전 최고 단계 순",
 	"guild": "길드 레벨 순 · 같으면 누적 경험치 순",
 }
 const MEDALS := [Color(0.98, 0.76, 0.18), Color(0.74, 0.78, 0.84), Color(0.80, 0.52, 0.28)]
@@ -24,11 +21,10 @@ const ROW_BG := Color(1, 1, 1, 0.75)
 const CACHE_SEC := 30.0
 
 var tab := "stage"
-var dungeon := "dungeon_gold"
 var body: VBoxContainer
 var scroll: ScrollContainer
 var me_box: VBoxContainer  # 아래 고정 줄
-var buttons := {}  # 테스트용: "tab:stage", "dungeon:dungeon_gold" …
+var buttons := {}  # 테스트용: "tab:stage" …
 var data := {}  # 보드 → 서버 응답
 var _got := {}  # 보드 → 받은 시각(ms)
 var _loading := {}  # 보드 → 요청 중
@@ -50,19 +46,6 @@ func _ready() -> void:
 		tabs.add_child(b)
 		buttons["tab:" + t[0]] = b
 	content.add_child(tabs)
-	var drow := HBoxContainer.new()
-	drow.add_theme_constant_override("separation", 6)
-	for d in DUNGEONS:
-		var b := _button(d[1], UiKit.STEEL, 20)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(0, 44)
-		b.pressed.connect(func():
-			dungeon = d[0]
-			_show())
-		drow.add_child(b)
-		buttons["dungeon:" + d[0]] = b
-	content.add_child(drow)
-	buttons["dungeon_row"] = drow
 	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -82,7 +65,7 @@ func _fit() -> void:
 
 
 func board() -> String:
-	return dungeon if tab == "dungeon" else tab
+	return tab
 
 
 func _on_open() -> void:
@@ -130,9 +113,6 @@ func _rebuild() -> void:
 	for k in buttons:
 		if k.begins_with("tab:"):
 			UiKit.apply_button(buttons[k], UiKit.AMBER if k == "tab:" + tab else UiKit.STEEL, 14.0)
-		elif k.begins_with("dungeon:"):
-			UiKit.apply_button(buttons[k], UiKit.AMBER if k == "dungeon:" + dungeon else UiKit.STEEL, 14.0)
-	buttons["dungeon_row"].visible = tab == "dungeon"
 	for c in body.get_children():
 		c.queue_free()
 	for c in me_box.get_children():
@@ -160,8 +140,7 @@ func _rebuild() -> void:
 	if me is Dictionary:
 		me_box.add_child(_row(me, b))
 	else:
-		var why := "길드에 가입하면 내 길드 순위가 보여요" if b == "guild" else ("전투력이 0이면 순위에 오르지 않아요" if b == "power" else
-			("던전을 1단계 이상 깨면 순위에 올라요" if b.begins_with("dungeon") else "순위 없음"))
+		var why := "길드에 가입하면 내 길드 순위가 보여요" if b == "guild" else ("전투력이 0이면 순위에 오르지 않아요" if b == "power" else "순위 없음")
 		var card := _card(ROW_BG)
 		card.get_child(0).add_child(_label(why, 22, SUB))
 		me_box.add_child(card)
@@ -218,10 +197,8 @@ static func value_text(b: String, v: int) -> String:
 			return GameData.round_label(v)
 		"power":
 			return UiKit.commas(v)
-		"guild":
-			return "Lv %d" % v
 		_:
-			return "%d단계" % v
+			return "Lv %d" % v
 
 
 ## 순위: 1~3위는 메달(각진 원 + 리본), 그 밖은 숫자.
