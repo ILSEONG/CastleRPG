@@ -43,6 +43,7 @@ const CAST_ANIM := {
 	"war_cry": "Cheer", "taunt": "Cheer", "battle_hymn": "Cheer",
 	"whirlwind": "2H_Melee_Attack_Spin", "earthquake": "Jump_Full_Short", "ground_slam": "2H_Melee_Attack_Chop", "spear_throw": "Throw",
 	"shockwave": "1H_Melee_Attack_Stab", "shadow_strike": "1H_Melee_Attack_Stab", "shield": "Block", "shield_ally": "Use_Item",
+	"arrow_rain": "Spellcast_Raise", "heal_aura": "Spellcast_Raise", "gate_repair": "Use_Item",  # 개정 26: 빠져 있던 셋(화살비·치유의 오라·성문 수리)
 }
 const RETRY := 0.5  # 조건이 안 맞아 못 쓴 발동형은 이만큼 뒤에 다시 본다(매 프레임 찾지 않게)
 const AURA_SCAN := 0.25

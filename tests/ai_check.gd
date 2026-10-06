@@ -2304,22 +2304,26 @@ func _dk_cases() -> void:
 	dk.sweep_cd = 0.001
 	dk.set_process(true)
 	await _frames(2)
+	var teles: int = dk.get_parent().get_children().filter(func(n): return n.get_meta("fx", "") == "telegraph" and not n.is_queued_for_deletion()).size()
+	var warned: bool = dk.is_telegraphing() and teles == 1 and d.heroes.all(func(h): return h.hp == h.hp_max)
+	await _wait_until(func(): return dk.sweeps == 1, 3.0)
 	dk.set_process(false)
 	var lost: Array = d.heroes.map(func(h): return h.hp_max - h.hp)
 	var sweep: float = dk.atk * 1.5
-	_check(dk.sweeps == 1 and is_equal_approx(lost[0], sweep) and is_equal_approx(lost[1], sweep) and lost[2] == 0.0 and lost[3] == 0.0 and is_equal_approx(dk.atk, 60.0),
-		"(DG3) death knight sweep: heroes within 3 m take attack x1.5 (90), farther ones nothing", "sweeps=%d lost=%s" % [dk.sweeps, lost])
+	_check(warned and dk.sweeps == 1 and is_equal_approx(lost[0], sweep) and is_equal_approx(lost[1], sweep) and lost[2] == 0.0 and lost[3] == 0.0 and is_equal_approx(dk.atk, 60.0),
+		"(DG3) death knight sweep: a ground circle warns first (no damage yet); when it fills, heroes within 3 m take attack x1.5 (90), farther ones nothing",
+		"warned=%s sweeps=%d lost=%s" % [warned, dk.sweeps, lost])
 	for h in d.heroes:
 		h.hp = h.hp_max
 	dk.sweep_cd = 100.0
 	dk.charge_cd = 0.001
 	dk.set_process(true)
-	await _wait_until(func(): return dk.charges == 1 and not dk.is_charging(), 3.0)
+	await _wait_until(func(): return dk.charges == 1 and not dk.is_charging(), 4.0)
 	dk.set_process(false)
 	var far = d.heroes[3]
-	_check(dk.charges == 1 and far.is_stunned() and is_equal_approx(far.hp_max - far.hp, dk.atk) and d.heroes.slice(0, 3).all(func(h): return not h.is_stunned())
+	_check(dk.charges == 1 and far.is_stunned() and is_equal_approx(far.hp_max - far.hp, dk.atk) and d.heroes[2].is_stunned() and d.heroes.slice(0, 2).all(func(h): return not h.is_stunned())
 		and Formation.flat_distance(dk.global_position, far.global_position) <= float(dk._stats.range) + 0.01,
-		"(DG3) death knight charge: runs to the farthest hero, hits it and stuns it (others not stunned)",
+		"(DG3) death knight charge: after a lane warning it runs to the farthest hero; heroes on the lane are hit and stunned, others not",
 		"charges=%d stunned=%s lost=%.1f dist=%.2f" % [dk.charges, d.heroes.map(func(h): return h.is_stunned()), far.hp_max - far.hp, Formation.flat_distance(dk.global_position, far.global_position)])
 	var stun0: float = far._stun_t
 	far.set_process(true)
