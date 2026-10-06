@@ -722,8 +722,9 @@ static func stage(n: int) -> Dictionary:
 
 ## 성 방어 적 모습(능력치·골드와 무관 — 표 id는 grunt·epic_boss 그대로): 일반 적은 스테이지 안에서 LOOK_ROUNDS 라운드마다 다음 모습,
 ## 스테이지마다 시작 모습이 하나씩 밀린다(1스테이지 1~5라운드 = 해골 그대로). 보스는 스테이지마다 다음 모습.
-const ENEMY_LOOKS := ["grunt", "goblin", "skeleton_warrior", "bandit", "orc"]
-const BOSS_LOOKS := ["epic_boss", "goblin_king", "death_knight"]
+## 던전 적(고블린·고블린 왕·데스나이트)은 던전 전용이라 쓰지 않는다.
+const ENEMY_LOOKS := ["grunt", "skeleton_warrior", "bandit", "orc"]
+const BOSS_LOOKS := ["epic_boss", "orc_chief", "bandit_chief"]
 const LOOK_ROUNDS := 5
 
 

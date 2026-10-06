@@ -249,7 +249,7 @@ const MONSTER_MODELS := {
 		"weapon": PROP_DIR + "Skeleton_Axe.gltf",
 		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
 	},
-	# 성 방어 적 모습(GameData.enemy_look — 라운드 묶음마다 바뀐다). 능력치·골드는 grunt 그대로, 생김새만 다르다.
+	# 성 방어 적 모습(GameData.enemy_look — 라운드 묶음마다 바뀐다). 능력치·골드는 grunt 그대로, 생김새만 다르다. 던전 적은 쓰지 않는다.
 	"skeleton_warrior": {
 		"scene": CHAR_DIR + "Skeleton_Warrior.glb",
 		"hide": [],
@@ -272,6 +272,22 @@ const MONSTER_MODELS := {
 		"look": "enemy_orc",  # 칸 색(Barbarian: shirt 8·sleeve 9·leather 6·fur 7) — 갈색 가죽·검은 털
 		"palette": {8: Color("5A3A24"), 9: Color("4A3020"), 6: Color("3A2618"), 7: Color("2E2A26")},
 		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	# 성 방어 보스 모습(GameData.boss_look) — 능력치는 epic_boss 그대로.
+	"orc_chief": {
+		"scene": CHAR_DIR + "Barbarian.glb",
+		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],  # 양손 도끼·뿔 투구·망토
+		"tint": {"Barbarian_Head": KING_TINT, "Barbarian_ArmLeft": KING_TINT, "Barbarian_ArmRight": KING_TINT, "Barbarian_Cape": Color(0.45, 0.16, 0.14)},
+		"look": "enemy_orc_chief",
+		"palette": {8: Color("3A2A20"), 9: Color("2E2018"), 6: Color("241810"), 7: Color("1E1A18")},
+		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+	},
+	"bandit_chief": {
+		"scene": CHAR_DIR + "Rogue_Hooded.glb",
+		"hide": ["1H_Crossbow", "2H_Crossbow", "Throwable"],  # 산적 두목: 붉은 두건·검은 옷·금 띠, 쌍단검
+		"look": "enemy_bandit_chief",
+		"palette": {9: Color("8A1E1A"), 8: Color("2B2A30"), 21: Color("3A3438"), 5: Color("C8A040"), 6: Color("C8A040"), 19: Color("241E1C")},
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "Dualwield_Melee_Attack_Chop", "death": "Death_B"},
 	},
 	# 개정 18 던전. tint = 메시 이름 → 곱할 색(UnitModel.dress), parts = [뼈, ArenaKit.part id] — 코드 메시를 그 뼈에 붙인다.
 	# scale = 던전 그림 크기(UnitModel은 쓰지 않는다 — 몬스터 표 scale로 넘긴다). Rogue의 Death_A(0.8초)는 CORPSE_SEC보다 짧아 Death_B.

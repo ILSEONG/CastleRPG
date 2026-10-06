@@ -486,16 +486,18 @@ func test_enemy_looks() -> void:
 	for g in range(1, 26):
 		looks[GameData.enemy_look(g)] = true
 	check(looks.size() == GameData.ENEMY_LOOKS.size(), "every enemy look appears within one stage")
-	check(GameData.enemy_look(1) == "grunt" and GameData.enemy_look(5) == "grunt" and GameData.enemy_look(6) == "goblin", "look changes every 5 rounds, stage 1 starts with skeletons")
-	check(GameData.enemy_look(26) == "goblin", "next stage starts one look further")
-	check(GameData.boss_look(25) == "epic_boss" and GameData.boss_look(50) == "goblin_king" and GameData.boss_look(75) == "death_knight", "boss look changes per stage")
+	check(GameData.enemy_look(1) == "grunt" and GameData.enemy_look(5) == "grunt" and GameData.enemy_look(6) == "skeleton_warrior", "look changes every 5 rounds, stage 1 starts with skeletons")
+	check(GameData.enemy_look(26) == "skeleton_warrior", "next stage starts one look further")
+	check(GameData.boss_look(25) == "epic_boss" and GameData.boss_look(50) == "orc_chief" and GameData.boss_look(75) == "bandit_chief", "boss look changes per stage")
+	for look in GameData.ENEMY_LOOKS + GameData.BOSS_LOOKS:
+		check(not look in ["goblin", "goblin_king", "death_knight"], "dungeon monsters stay in dungeons: " + look)
 	for look in GameData.ENEMY_LOOKS + GameData.BOSS_LOOKS:
 		check(Art.MONSTER_MODELS.has(look), "look has a model: " + look)
 	for e in WaveDirector.build(6, WaveDirector.MODE_STAGE) + WaveDirector.build(6, WaveDirector.MODE_IDLE):
 		check(e.kind in ["grunt", "epic_boss"], "looks keep the monster table ids (stats, gold)")
-		check(e.kind != "grunt" or e.look == "goblin", "round 6 grunts look like goblins")
+		check(e.kind != "grunt" or e.look == "skeleton_warrior", "round 6 grunts look like skeleton warriors")
 	var boss: Array = WaveDirector.build(50, WaveDirector.MODE_STAGE).filter(func(e): return e.kind == "epic_boss")
-	check(boss.size() == 1 and boss[0].look == "goblin_king", "stage 2 boss looks like the goblin king")
+	check(boss.size() == 1 and boss[0].look == "orc_chief", "stage 2 boss looks like the orc chief")
 
 
 func test_wave_idle_cycle() -> void:
