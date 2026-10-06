@@ -87,7 +87,7 @@ func _sync() -> void:
 			nm = Formation.SIDE_NAMES[int(t.id.get_slice(":", 1))]
 		else:
 			nm = GameData.building_def(t.id).get("name", t.id)
-			lv = "Lv %d" % Economy.building_level(t.id)
+			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else "공터"  # 튜토리얼 공터
 		if nm != t.get("name") or lv != t.get("lv"):
 			t.name = nm
 			t.lv = lv

@@ -170,6 +170,9 @@ func _tap_object(screen_pos: Vector2) -> bool:
 		return true
 	if id == "":
 		id = _building_hit(screen_pos)
+	if id != "" and not Economy.is_built(id):  # 튜토리얼 공터: 짓기 창
+		building_panel.open_building(id)
+		return true
 	if id == "tavern" and recruit != null:
 		recruit.open()
 		return true

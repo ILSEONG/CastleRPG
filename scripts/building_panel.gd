@@ -22,6 +22,7 @@ const DIALOG_W := 640
 const GREEN := Color(0.13, 0.58, 0.24)
 const RED := Color(0.78, 0.22, 0.18)
 const UPGRADE_TEXT := "업그레이드"
+const BUILD_TEXT := "건설"  # 튜토리얼 공터
 const TRAIN_ICON_PX := 72.0
 const RESEARCH_TEXT := "연구"
 const CANCEL_TEXT := "취소(50% 환불)"
@@ -149,6 +150,7 @@ func open_building(id: String) -> void:
 
 func _on_open() -> void:
 	_refresh()
+	Tutorial.note("open", 1, building_id)  # 튜토리얼 "성채 살펴보기"
 
 
 ## 연구소 [연구]: 이 창을 닫고 연구 창을 연다.
@@ -179,11 +181,15 @@ func _refresh() -> void:
 	var lv := Economy.building_level(id)
 	var maxed := lv >= int(d.max_level)
 	var building: bool = Economy.is_building(id)
-	title_label.text = "%s Lv %d" % [d.name, lv]
+	var lot := not Economy.is_built(id)  # 튜토리얼 공터: 짓기(0 → 1)
+	title_label.text = "%s · 공터" % d.name if lot else "%s Lv %d" % [d.name, lv]
 	desc_label.text = DESC.get(id, "")
-	research_button.visible = id == GameData.LAB
+	research_button.visible = id == GameData.LAB and not lot
+	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
 	_clear(effects)
-	for row in effect_lines(id, lv):
+	for row in (effect_lines(id, 1) if lot else []):
+		effects.add_child(_label("지으면 %s %s" % [row[0], row[1]], 28, GREEN))
+	for row in ([] if lot else effect_lines(id, lv)):
 		var line := HBoxContainer.new()
 		line.alignment = BoxContainer.ALIGNMENT_CENTER
 		line.add_theme_constant_override("separation", 10)
@@ -212,7 +218,8 @@ func _refresh() -> void:
 	time_label.visible = not maxed and not building
 	_progress_box.visible = building
 	progress.value = Economy.build_progress(now)
-	left_label.text = "Lv %d → %d 건설 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.build_left(now))]
+	left_label.text = ("건설 중 · 남은 시간 %s" % UiKit.duration(Economy.build_left(now))) if lot \
+		else "Lv %d → %d 건설 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.build_left(now))]
 	var why := Economy.upgrade_block(id, now)
 	var reason: String = Economy.BLOCK_TEXT.get(why, "")
 	if why == "builder_busy":  # 무엇을 짓는지·남은 시간도
@@ -220,7 +227,7 @@ func _refresh() -> void:
 	reason_label.text = reason
 	reason_label.visible = reason != "" and why != "in_progress"  # 짓는 중은 진행 막대가 말한다
 	upgrade_button.disabled = why != ""
-	_refresh_training(GameData.soldier_of_building(id))
+	_refresh_training("" if lot else GameData.soldier_of_building(id))
 	_fit()
 
 

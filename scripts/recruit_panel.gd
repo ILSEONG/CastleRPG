@@ -22,6 +22,7 @@ const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
 const GOLD := GameData.GACHA_GOLD
 const DIA := GameData.GACHA_DIA
+const TICKET := GameData.GACHA_TICKET  # 다이아 모집권(튜토리얼 보상): 다이아 탭에서 장당 1회
 const TITLE := "영웅 모집"
 const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
 const DUP_TEXT := "+1 조각"  # 이미 가진 영웅(개정 15)
@@ -45,6 +46,10 @@ var preview_label: Label
 var rates_label: Label
 var dia_label: Label  # 다이아 보유
 var pity_label: Label
+var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
+var ticket_one: Button
+var ticket_ten: Button
+var _ticket_box: VBoxContainer
 var art: TextureRect  # 키 아트(처음 열 때 SceneSnap으로 렌더)
 var shop  # 다이아 상점 창
 
@@ -102,6 +107,22 @@ func _ready() -> void:
 	have.add_child(dia_label)
 	pity_label = _label("", 24, UiKit.GRADE_COLORS.SSR.darkened(0.25))
 	_dia_box.add_child(pity_label)
+	_ticket_box = VBoxContainer.new()  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
+	_ticket_box.add_theme_constant_override("separation", 6)
+	_dia_box.add_child(_ticket_box)
+	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))
+	_ticket_box.add_child(ticket_label)
+	var trow := HBoxContainer.new()
+	trow.add_theme_constant_override("separation", 10)
+	_ticket_box.add_child(trow)
+	ticket_one = _button("모집권 1회", UiKit.GRADE_COLORS.SR, 24)
+	ticket_one.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ticket_one.pressed.connect(func(): _recruit(1, TICKET))
+	trow.add_child(ticket_one)
+	ticket_ten = _button("모집권 10회", UiKit.GRADE_COLORS.SR, 24)
+	ticket_ten.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ticket_ten.pressed.connect(func(): _recruit(10, TICKET))
+	trow.add_child(ticket_ten)
 
 	rates_label = _label("", 26)
 	_pick_view.add_child(rates_label)
@@ -400,6 +421,15 @@ func _refresh() -> void:
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
 	dia_label.text = "보유 %s" % UiKit.commas(Economy.diamonds)
 	pity_label.text = "SSR 확정까지 %d회" % st.pity_left
+	var tk := Economy.dia_tickets
+	var tk_shown := tk > 0 and currency == DIA
+	if _ticket_box.visible != tk_shown:
+		_ticket_box.visible = tk_shown
+		if visible:
+			_fit()
+	ticket_label.text = "다이아 모집권 %d장" % tk
+	ticket_one.disabled = _waiting or tk < 1
+	ticket_ten.disabled = _waiting or tk < 10
 	rates_label.text = rates_text(currency)
 	var unit := "다이아 " if currency == DIA else ""
 	var pad := "      " if currency == DIA else ""  # 버튼 앞 보석 자리
@@ -416,4 +446,6 @@ func _refresh() -> void:
 		again_button.text = "자동 중…"
 	else:
 		again_button.text = "재모집 %s%s" % ["다이아 " if _cur == DIA else "", UiKit.commas(cost)] + (("\n다이아 부족" if _cur == DIA else "\n골드 부족") if short else "")
+		if _cur == TICKET:
+			again_button.text = "재모집 모집권 %d장" % cost + ("\n모집권 부족" if short else "")
 	again_button.disabled = _waiting or short or auto_running()

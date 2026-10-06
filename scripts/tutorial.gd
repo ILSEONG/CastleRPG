@@ -1,0 +1,417 @@
+extends Node
+## 튜토리얼(새 게임, 오프라인). 오토로드 Tutorial. 새 게임은 성 안에 성채(와 성벽·성문)만 있고 나머지 건물은 공터(Economy.unbuilt)다.
+## 미션(MISSIONS)을 순서대로 하나씩 깨며 게임 기능을 하나씩 배운다: 건물 짓기·수집·상인·전투·영웅 레벨업·성장·모집·배치·병사·던전·장비·
+## 연구·성채/성문 레벨업·길드. 미션이 끝나면 미션 카드(tutorial_card.gd)의 [보상 받기]로 보상을 받고 다음 미션으로 넘어간다.
+## 보상 규칙(사용자 2026-10-06): 다음 미션이 자원을 쓰면 그 자원, 골드를 쓰면 골드, 던전 입장이면 던전 입장권(열쇠), 그 외에는 다이아 모집권 10장.
+## 자원·골드는 다음 미션 비용 × REWARD_MARGIN(10 단위 올림). 하단 탭은 그 탭을 소개하는 미션에 닿을 때 열린다(TAB_MISSION).
+## 완료 판정은 상태(지은 건물·레벨·스테이지·보유 영웅…)를 먼저 보고, 상태로 볼 수 없는 것(수집·판매·모집 횟수·건물 창 열기)은 그 미션이
+## 지금 미션이 된 뒤의 사건을 센다. 기존 저장(Economy 저장이 이미 있던 플레이어)·온라인 모드는 튜토리얼을 건너뛴다(state "skipped").
+## 저장: user://tutorial.json {version, state: active | done | skipped, step, claimed, count, best_stage}.
+## 테스트는 .new()로 만들어 econ·gs·guild를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎).
+
+const GameData := preload("res://scripts/game_data.gd")
+
+const SAVE_VERSION := 1
+const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
+const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
+const TRAIN_N := 5  # 보병 훈련 미션 보상이 대는 마릿수
+const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟수
+const KEYS := 2  # 던전 미션 보상 열쇠
+const RESEARCH_ID := "wood_tech"  # 연구 미션 보상이 대는 연구(1단계 아무 연구나 같은 비용)
+const START_BUILT := ["keep", "gate"]  # 새 게임에 지어져 있는 건물(성채 + 성벽·성문)
+const DONE_TEXT := "튜토리얼 완료! 이제 자유롭게 성을 키워 보세요"
+const LOCKED_TEXT := "튜토리얼을 진행하면 열립니다"
+
+## 미션: id, title, desc(카드 설명), kind(완료 판정), arg(판정 인자), goto(바로가기: building:<id> · tab:<id> · merchant · stage · recruit).
+## kind: open(건물 창 열기 arg) · build(arg 짓기) · level(arg = [id, Lv]) · collect · sell · kill(arg = 처치 수, 미션이 된 뒤부터) ·
+## stage(arg = 클리어할 전체 라운드 g — 제목은 "S-r", GameData.round_label) · hero_level · growth ·
+## gacha(arg = 모집 장수) · deploy_new · train(arg = 병사 건물) · dungeon(arg = 종류) · equip · soldier_deploy · research · guild
+const MISSIONS := [
+	{"id": "look_keep", "title": "성채 살펴보기", "desc": "성 한가운데 성채를 눌러 건물 창을 열어 보세요. 성채 레벨이 다른 건물의 최대 레벨을 정합니다.",
+		"kind": "open", "arg": "keep", "goto": "building:keep"},
+	{"id": "build_lumber", "title": "벌목장 건설", "desc": "공터를 눌러 벌목장을 지으세요. 목재를 생산합니다.", "kind": "build", "arg": "lumber",
+		"goto": "building:lumber"},
+	{"id": "build_quarry", "title": "채석장 건설", "desc": "채석장을 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
+	{"id": "build_farm", "title": "농장 건설", "desc": "농장을 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
+	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 막아 냅니다. 30마리를 처치하세요. 처치할 때마다 골드를 얻어요.",
+		"kind": "kill", "arg": 30, "goto": "stage"},
+	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "building:lumber"},
+	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
+	{"id": "stage_1_1", "title": "스테이지 1-1 클리어", "desc": "위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있어요.",
+		"kind": "stage", "arg": 1, "goto": "stage"},
+	{"id": "hero_level", "title": "영웅 레벨업", "desc": "[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.",
+		"kind": "hero_level", "goto": "tab:hero"},
+	{"id": "growth", "title": "성장 강화", "desc": "[성장] 탭에서 골드로 모든 영웅의 공격력·체력을 올리세요.", "kind": "growth", "goto": "tab:growth"},
+	{"id": "build_tavern", "title": "주점 건설", "desc": "주점을 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
+	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
+	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭에서 새로 모집한 영웅을 배치 슬롯에 넣으세요.", "kind": "deploy_new", "goto": "tab:hero"},
+	{"id": "stage_1_3", "title": "스테이지 1-3 클리어", "desc": "새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.", "kind": "stage", "arg": 3,
+		"goto": "stage"},
+	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "보병 막사를 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
+		"goto": "building:barracks"},
+	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 훈련을 시작하세요. 훈련은 시간이 걸리니 다른 미션을 하며 기다려요.", "kind": "train",
+		"arg": "barracks", "goto": "building:barracks"},
+	{"id": "build_houses", "title": "민가 건설", "desc": "민가를 지으세요. 인구가 병사 배치 상한입니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
+	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100, "goto": "stage"},
+	{"id": "dungeon_gold", "title": "골드 던전", "desc": "[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권(열쇠)은 매일 다시 채워집니다.",
+		"kind": "dungeon", "arg": "gold", "goto": "tab:dungeon"},
+	{"id": "dungeon_equip", "title": "장비 던전", "desc": "[던전] 탭에서 장비 던전 1단계를 클리어해 장비를 얻으세요.", "kind": "dungeon", "arg": "equip",
+		"goto": "tab:dungeon"},
+	{"id": "equip", "title": "장비 장착", "desc": "[영웅] 탭에서 영웅을 골라 얻은 장비를 장착하세요.", "kind": "equip", "goto": "tab:hero"},
+	{"id": "soldier_deploy", "title": "병사 배치", "desc": "훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5명은 합성해 상위 티어로 만듭니다.",
+		"kind": "soldier_deploy", "goto": "tab:soldier"},
+	{"id": "stage_1_5", "title": "스테이지 1-5 클리어", "desc": "병사와 함께 1-5까지 클리어하세요. 병사는 전투가 시작되면 성채 앞에 나타납니다.", "kind": "stage",
+		"arg": 5, "goto": "stage"},
+	{"id": "build_lab", "title": "연구소 건설", "desc": "연구소를 지으세요. 기술을 연구해 경제·영웅·병사를 강하게 합니다.", "kind": "build", "arg": "lab",
+		"goto": "building:lab"},
+	{"id": "research", "title": "연구 시작", "desc": "연구소를 눌러 [연구]에서 아무 기술이나 연구를 시작하세요.", "kind": "research", "goto": "building:lab"},
+	{"id": "build_archery", "title": "궁병 훈련소 건설", "desc": "궁병 훈련소를 지으세요. 궁병은 성벽 위에서 싸웁니다.", "kind": "build", "arg": "archery",
+		"goto": "building:archery"},
+	{"id": "build_stable", "title": "기병 마구간 건설", "desc": "기병 마구간을 지으세요. 기병은 빠르게 돌격합니다.", "kind": "build", "arg": "stable",
+		"goto": "building:stable"},
+	{"id": "keep_2", "title": "성채 레벨업", "desc": "성채를 Lv 2로 올리세요. 다른 건물도 그만큼 더 올릴 수 있습니다.", "kind": "level", "arg": ["keep", 2],
+		"goto": "building:keep"},
+	{"id": "gate_2", "title": "성문 강화", "desc": "성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.", "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
+	{"id": "kill_300", "title": "몬스터 300마리 처치", "desc": "몬스터 300마리를 처치하세요. 앱을 꺼 둔 동안에도 방치 처치 골드가 쌓입니다.", "kind": "kill", "arg": 300, "goto": "stage"},
+	{"id": "stage_1_10", "title": "스테이지 1-10 클리어", "desc": "1-10까지 클리어하세요. [연속 진행]을 켜 두면 편해요. 클리어하면 길드가 열립니다.", "kind": "stage",
+		"arg": 10, "goto": "stage"},
+	{"id": "guild", "title": "길드 가입", "desc": "[길드] 탭에서 추천 길드에 가입하거나 길드를 만드세요. 출석·기부로 길드 버프를 올립니다.", "kind": "guild",
+		"goto": "tab:guild"},
+]
+## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
+const TAB_MISSION := {"hero": "hero_level", "growth": "growth", "recruit": "gacha", "dungeon": "dungeon_gold", "soldier": "soldier_deploy",
+	"guild": "guild"}
+
+signal changed  # 미션·완료·보상 상태가 바뀌었다
+signal goto_requested(target: String)  # 카드 [바로가기] — main이 처리한다(건물 창·탭·상인·전투 시작)
+
+var save_path := "user://tutorial.json"  # ""이면 저장하지 않는다
+var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
+var gs = null  # GameState
+var guild = null  # Guild
+var state := "skipped"  # active | done | skipped
+var step := 0  # 지금 미션 번호(0부터)
+var count := 0  # 사건 미션: 지금 미션이 된 뒤 센 수
+var best_stage := 1  # 도달한 최고 스테이지(오프라인 GameState.stage는 저장되지 않는다)
+
+var _check_cd := 0.0
+var _was_complete := false
+var _dirty := false
+
+
+func _ready() -> void:
+	econ = get_node_or_null("/root/Economy")
+	gs = get_node_or_null("/root/GameState")
+	guild = get_node_or_null("/root/Guild")
+	_connect()
+	_start.call_deferred()  # 첫 장면이 붙은 뒤에 본다(체크 장면·개발 실행은 건너뛴다)
+
+
+func _start() -> void:
+	var net = get_node_or_null("/root/Net")
+	var online: bool = net != null and net.is_online()
+	var scene = get_tree().current_scene
+	var main_scene := str(ProjectSettings.get_setting("application/run/main_scene", ""))
+	if not OS.get_cmdline_user_args().is_empty() or scene == null or (main_scene != "" and scene.scene_file_path != main_scene):
+		save_path = ""  # 개발 플래그 실행·테스트 장면: 튜토리얼 없이, 저장도 건드리지 않는다
+		state = "skipped"
+		changed.emit()
+		return
+	if not load_save():
+		# 첫 실행: Economy 저장이 없던 새 게임이면 튜토리얼, 이미 하던 플레이어(저장 있음)·온라인은 건너뛴다
+		begin(econ != null and econ.fresh_game and not online)
+	if online and state == "active":
+		state = "skipped"  # 온라인(서버 권위)에서는 공터·보상이 없다
+	changed.emit()
+	check()
+
+
+func _connect() -> void:
+	if econ != null:
+		econ.collected.connect(func(_b, _r, _a): note("collect"))
+		econ.sold.connect(func(_g): note("sell"))
+		econ.killed.connect(func(_k): note("kill"))
+		econ.gacha_done.connect(func(results): note("gacha", results.size()))
+		econ.building_done.connect(func(_id, _lv): check())  # 나머지 상태 미션은 _process가 1초마다 본다
+	if gs != null:
+		gs.stage_cleared.connect(func(s): note_stage(int(s) + 1))
+	if guild != null:
+		guild.changed.connect(check)
+
+
+func _process(delta: float) -> void:
+	if state != "active":
+		return
+	_check_cd -= delta
+	if _check_cd <= 0.0:
+		_check_cd = 1.0
+		check()
+		if _dirty:
+			save()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
+		save()
+
+
+## 튜토리얼 시작(on) 또는 건너뛰기. 시작하면 성채·성문 밖 건물을 공터로 둔다.
+func begin(on: bool) -> void:
+	state = "active" if on else "skipped"
+	step = 0
+	count = 0
+	if on and econ != null:
+		econ.start_unbuilt(START_BUILT)
+	save()
+	changed.emit()
+
+
+func active() -> bool:
+	return state == "active"
+
+
+func mission() -> Dictionary:
+	return MISSIONS[step] if active() and step < MISSIONS.size() else {}
+
+
+func mission_index(id: String) -> int:
+	for i in MISSIONS.size():
+		if MISSIONS[i].id == id:
+			return i
+	return -1
+
+
+## 지금 미션이 끝났는가(보상 받기 전).
+func complete() -> bool:
+	var m := mission()
+	return not m.is_empty() and _done(m)
+
+
+## 탭이 잠겼는가: 튜토리얼 중이고 그 탭을 소개하는 미션에 아직 닿지 않았다.
+func tab_locked(tab_id: String) -> bool:
+	if not active() or not TAB_MISSION.has(tab_id):
+		return false
+	return step < mission_index(TAB_MISSION[tab_id])
+
+
+## 사건 알림(수집·판매·모집·건물 창 열기). 지금 미션의 종류와 같으면 센다.
+func note(kind: String, n := 1, arg = null) -> void:
+	var m := mission()
+	if m.is_empty() or m.kind != kind or _done(m):
+		return
+	if arg != null and m.get("arg") != arg:
+		return
+	count += n
+	_dirty = true  # 처치는 자주 온다 — 저장은 _process가 몰아서
+	check()
+
+
+func note_stage(s: int) -> void:
+	if s > best_stage:
+		best_stage = s
+		save()
+	check()
+
+
+## 완료가 바뀌었으면 changed.
+func check() -> void:
+	var c := complete()
+	if c != _was_complete:
+		_was_complete = c
+		changed.emit()
+
+
+## 보상 받기: 지금 미션이 끝났으면 보상을 주고 다음 미션으로. 마지막이면 튜토리얼 끝. 받았으면 true.
+func claim() -> bool:
+	if not complete():
+		return false
+	var r := reward(step)
+	if econ != null:
+		econ.grant(r)
+	step += 1
+	count = 0
+	_was_complete = false
+	if step >= MISSIONS.size():
+		state = "done"
+		if econ != null:
+			econ.notice.emit(DONE_TEXT)
+	save()
+	changed.emit()
+	check()
+	return true
+
+
+## 미션 i의 보상: 다음 미션(i+1)이 쓰는 것. 마지막 미션은 그 외(모집권).
+func reward(i: int) -> Dictionary:
+	var need := need_of(i + 1) if i + 1 < MISSIONS.size() else {}
+	if need.has("res"):
+		var out := {}
+		for r in need.res:
+			if int(need.res[r]) > 0:
+				out[r] = _margin(int(need.res[r]))
+		if int(need.get("gold", 0)) > 0:
+			out.gold = _margin(int(need.gold))
+		return out
+	if need.has("gold"):
+		return {"gold": _margin(int(need.gold))}
+	if need.has("keys"):
+		return {"keys_" + str(need.keys): KEYS}
+	return {"tickets": TICKETS}
+
+
+static func _margin(n: int) -> int:
+	return ceili(n * REWARD_MARGIN / 10.0) * 10
+
+
+## 미션 i가 쓰는 것: {res: {자원: 수}, gold} · {gold} · {keys: 던전 종류} · {}(그 외).
+func need_of(i: int) -> Dictionary:
+	var m: Dictionary = MISSIONS[i]
+	match m.kind:
+		"build":
+			return {"res": GameData.build_cost(m.arg, 1)}
+		"level":
+			return {"res": GameData.build_cost(m.arg[0], int(m.arg[1]) - 1)}
+		"train":
+			var c := {}
+			var one := GameData.train_unit_cost(GameData.soldier_of_building(m.arg), 1)
+			for r in one:
+				c[r] = int(one[r]) * TRAIN_N
+			return {"res": c}
+		"research":
+			var rc := GameData.research_cost(RESEARCH_ID, 0)
+			var gold_n := int(rc.get("gold", 0))
+			rc.erase("gold")
+			return {"res": rc, "gold": gold_n}
+		"hero_level":
+			var g := "R"
+			for id in GameData.config_list("starter_heroes"):
+				g = str(GameData.hero(str(id)).get("grade", "R"))
+				break
+			return {"gold": int(GameData.levelup_cost(g, 1, HERO_LEVELS).gold)}
+		"growth":
+			return {"gold": GameData.upgrade_cost("atk", 0)}
+		"dungeon":
+			return {"keys": m.arg}
+	return {}
+
+
+## 보상 글자 "목재 72 · 석재 96 · 식량 48"(카드).
+static func reward_text(r: Dictionary) -> String:
+	var parts := []
+	for res in GameData.resources():
+		if r.has(res.id):
+			parts.append("%s %s" % [res.name, _commas(int(r[res.id]))])
+	if r.has("gold"):
+		parts.append("골드 %s" % _commas(int(r.gold)))
+	if r.has("keys_gold"):
+		parts.append("골드 던전 입장권 %d" % int(r.keys_gold))
+	if r.has("keys_equip"):
+		parts.append("장비 던전 입장권 %d" % int(r.keys_equip))
+	if r.has("tickets"):
+		parts.append("다이아 모집권 %d" % int(r.tickets))
+	return " · ".join(parts)
+
+
+static func _commas(n: int) -> String:
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "," + s.substr(s.length() - 3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
+
+
+## 진행 글자 "12/30"(횟수 미션: 처치·모집), 아니면 "".
+func progress_text() -> String:
+	var m := mission()
+	if m.is_empty() or not m.kind in ["kill", "gacha"]:
+		return ""
+	return "%d/%d" % [mini(count, int(m.arg)), int(m.arg)]
+
+
+## 바로가기 대상 건물 id(카드가 그 건물 위에 화살표를 띄운다). 건물 미션이 아니면 "".
+func target_building() -> String:
+	var m := mission()
+	if m.is_empty() or complete():
+		return ""
+	var g := str(m.get("goto", ""))
+	return g.get_slice(":", 1) if g.begins_with("building:") else ""
+
+
+func goto_current() -> void:
+	var m := mission()
+	if not m.is_empty():
+		goto_requested.emit(str(m.get("goto", "")))
+
+
+func _done(m: Dictionary) -> bool:
+	if econ == null:
+		return false
+	match m.kind:
+		"open", "collect", "sell":
+			return count >= 1
+		"gacha", "kill":
+			return count >= int(m.arg)
+		"build":
+			return econ.is_built(m.arg)
+		"level":
+			return econ.shown_level(m.arg[0]) >= int(m.arg[1])
+		"stage":
+			return maxi(best_stage, int(gs.stage) if gs != null else 1) > int(m.arg) or (int(m.arg) >= 10 and guild != null and guild.unlocked)
+		"hero_level":
+			for id in econ.heroes:
+				if econ.level_of(id) >= 2:
+					return true
+			return false
+		"growth":
+			return econ.upgrades.values().any(func(v): return int(v) > 0)
+		"deploy_new":
+			var starters: Array = GameData.config_list("starter_heroes").map(func(x): return str(x))
+			return econ.deploy.any(func(id): return id is String and int(econ.heroes.get(id, 0)) >= 1 and not id in starters)
+		"train":
+			return econ.training(m.arg).count > 0 or econ.soldier_counts().keys().any(func(k): return str(k).begins_with(GameData.soldier_of_building(m.arg) + ":"))
+		"dungeon":
+			return int(econ.dungeon_state(m.arg).best_level) >= 1
+		"equip":
+			return econ.equipment.values().any(func(e): return e is Dictionary and not e.is_empty())
+		"soldier_deploy":
+			return econ.deployed_total() > 0
+		"research":
+			return not econ.research_current.is_empty() or not econ.research_levels.is_empty()
+		"guild":
+			return guild != null and guild.joined()
+	return false
+
+
+# --- 저장 ---
+
+func save() -> void:
+	_dirty = false
+	if save_path == "":
+		return
+	var f := FileAccess.open(save_path, FileAccess.WRITE)
+	if f == null:
+		push_warning("tutorial save failed: %s" % error_string(FileAccess.get_open_error()))
+		return
+	f.store_string(JSON.stringify({"version": SAVE_VERSION, "state": state, "step": step, "count": count, "best_stage": best_stage}))
+	f.close()
+
+
+## 저장이 있으면 읽고 true. 없거나 깨졌으면 false(첫 실행으로 본다 — 깨진 경우는 건너뛴다).
+func load_save() -> bool:
+	if save_path == "" or not FileAccess.file_exists(save_path):
+		return false
+	var json := JSON.new()
+	if json.parse(FileAccess.get_file_as_string(save_path)) != OK or not json.data is Dictionary:
+		state = "skipped"
+		return true
+	var d: Dictionary = json.data
+	state = str(d.get("state", "skipped"))
+	if not state in ["active", "done", "skipped"]:
+		state = "skipped"
+	step = clampi(int(d.get("step", 0)), 0, MISSIONS.size())
+	count = maxi(0, int(d.get("count", 0)))
+	best_stage = maxi(1, int(d.get("best_stage", 1)))
+	if state == "active" and step >= MISSIONS.size():
+		state = "done"
+	return true

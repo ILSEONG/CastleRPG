@@ -16,6 +16,14 @@ const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], 
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0
+## 튜토리얼 잠금 자물쇠(각진 고리 + 금색 몸통 + 열쇠 구멍)
+const LOCK_SHAPES := [
+	[[Vector2(-0.30, -0.02), Vector2(-0.30, -0.28), Vector2(-0.16, -0.44), Vector2(0.16, -0.44), Vector2(0.30, -0.28), Vector2(0.30, -0.02),
+		Vector2(0.18, -0.02), Vector2(0.18, -0.24), Vector2(0.10, -0.32), Vector2(-0.10, -0.32), Vector2(-0.18, -0.24), Vector2(-0.18, -0.02)],
+		Color(0.62, 0.64, 0.70), true],
+	[[Vector2(-0.40, -0.04), Vector2(0.40, -0.04), Vector2(0.40, 0.44), Vector2(-0.40, 0.44)], Color(0.95, 0.72, 0.22), true],
+	[[Vector2(-0.06, 0.08), Vector2(0.06, 0.08), Vector2(0.06, 0.30), Vector2(-0.06, 0.30)], Color(0.30, 0.22, 0.14), false],
+]
 
 var windows := {}  # 탭 id → 창(ui_window). main이 add_child 전에 넣는다
 var selected := ""  # 열린 창의 탭(없으면 "")
@@ -50,11 +58,15 @@ func _ready() -> void:
 		buttons[id] = b
 	for id in windows:
 		windows[id].visibility_changed.connect(_refresh)
+	Tutorial.changed.connect(_refresh)  # 튜토리얼: 탭은 그 탭을 소개하는 미션에 닿을 때 열린다
 	_refresh()
 
 
 ## 탭 누름: 그 탭의 창이 닫혀 있으면 다른 창(건물 창 등 탭 밖 창 포함)을 모두 닫고 연다. 열려 있으면 모두 닫는다.
 func press(id: String) -> void:
+	if Tutorial.tab_locked(id):
+		Economy.notice.emit(Tutorial.LOCKED_TEXT)
+		return
 	var w = windows.get(id)
 	var open_it: bool = w != null and not w.is_open()
 	for x in get_tree().get_nodes_in_group(UiWindow.GROUP):
@@ -80,11 +92,16 @@ func _refresh() -> void:
 		b.offset_right = -PAD
 		b.offset_top = PAD - (RAISE if on else 0.0)
 		b.offset_bottom = -PAD - (RAISE if on else 0.0)
+		b.modulate = Color(1, 1, 1, 0.45) if Tutorial.tab_locked(id) else Color.WHITE
+		for c in b.get_children():
+			c.queue_redraw()
 
 
 func _draw_face(face: Control, i: int) -> void:
 	var c := Vector2(face.size.x / 2.0, face.size.y * 0.4)
 	draw_shapes(face, tab_shapes(TABS[i][0]), c, ICON_PX)
+	if Tutorial.tab_locked(TABS[i][0]):  # 자물쇠(오른쪽 위)
+		draw_shapes(face, LOCK_SHAPES, Vector2(face.size.x - 22.0, 22.0), 30.0)
 	var y := face.size.y - 12.0
 	face.draw_string_outline(FONT, Vector2(0, y), TABS[i][1], HORIZONTAL_ALIGNMENT_CENTER, face.size.x, 24, 6, Color(UiKit.INK, 0.85))
 	face.draw_string(FONT, Vector2(0, y), TABS[i][1], HORIZONTAL_ALIGNMENT_CENTER, face.size.x, 24, Color.WHITE)

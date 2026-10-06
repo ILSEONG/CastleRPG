@@ -77,6 +77,7 @@ var _sun: DirectionalLight3D
 var _ground_mat: ShaderMaterial
 var _dungeon = null  # 던전 장면(개정 18, 던전 중에만). 그동안 이 노드는 트리 밖
 var _host: Node = null  # 던전 동안 이 노드와 던전 장면의 부모
+var _tutorial_ui := {}  # 튜토리얼 [바로가기]가 여는 것: rig·building(건물 창)·tabs·merchant(상인 창)·recruit(모집 창)
 
 
 func _ready() -> void:
@@ -179,6 +180,12 @@ func _build_world() -> void:
 	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·길드(상인은 NPC 탭)
 	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "guild": guild_panel}
 	add_child(tabs)
+	var card = preload("res://scripts/tutorial_card.gd").new()  # 튜토리얼 미션 카드(새 게임만, 탭 바 위)
+	card.tags = tags
+	add_child(card)
+	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "merchant": panel, "recruit": recruit}
+	if not Tutorial.goto_requested.is_connected(_tutorial_goto):
+		Tutorial.goto_requested.connect(_tutorial_goto)
 	add_child(bag)
 	add_child(OfflinePanelScript.new())  # 방치 보상 개요(앱을 껐다 켜면 — Economy.offline_reported)
 	if not PreloaderScript.done:  # 첫 로딩 화면: 리소스·피규어·배너를 다 준비한 뒤 걷힌다(자리표시가 보였다 바뀌지 않게)
@@ -210,6 +217,35 @@ func _build_world() -> void:
 	elif rebuilds == 0 and not _auto_stage_requested():
 		Economy.claims_open = true
 		Economy.claim_offline(GameState.stage)  # 앱을 켰다: 끈 동안의 방치 처치 골드(× offline_gold_mult) 정산 → 개요 창
+
+
+## 튜토리얼 미션 카드 [바로가기](Tutorial.goto_requested): building:<id>(카메라를 그 건물로 옮기고 건물 창) · tab:<id>(하단 탭) ·
+## merchant(상인 창) · recruit(모집 창 다이아 탭) · stage(방치 중이면 전투 시작).
+func _tutorial_goto(target: String) -> void:
+	if _tutorial_ui.is_empty() or not is_inside_tree():
+		return
+	var kind := target.get_slice(":", 0)
+	var arg := target.get_slice(":", 1)
+	match kind:
+		"building":
+			var b := Balance.building(arg)
+			if not b.is_empty():
+				_tutorial_ui.rig.pan_to(Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE), GATE_PAN_SEC)
+			elif arg == GameData.GATE:
+				_tutorial_ui.rig.pan_to(FormationScript.gate_position(castle.half, 2), GATE_PAN_SEC)
+			_tutorial_ui.building.open_building(arg)
+		"tab":
+			if not _tutorial_ui.tabs.windows[arg].is_open():
+				_tutorial_ui.tabs.press(arg)
+		"merchant":
+			_tutorial_ui.merchant.open()
+		"recruit":
+			_tutorial_ui.recruit.set_currency(GameData.GACHA_DIA)
+			if not _tutorial_ui.recruit.is_open():
+				_tutorial_ui.tabs.press("recruit")
+		"stage":
+			if GameState.mode == GameState.Mode.IDLE:
+				GameState.start_stage()
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.
