@@ -197,11 +197,6 @@ func _begin(k: String) -> float:
 	return float(sk[k][0])
 
 
-## 액티브(쿨타임마다 시전 모션과 함께 발동)인가 — ACTIVE + hero.gd가 직접 쓰는 폭발·치유의 기도·성문 수리. 나머지는 패시브.
-static func is_active(k: String) -> bool:
-	return ACTIVE.has(k) or k in ["aoe_blast", "heal_aura", "gate_repair"]
-
-
 ## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).
 static func cast_anim(k: String, hero_def: Dictionary) -> String:
 	return CAST_ANIM.get(k, Art.hero_spec(hero_def).anims.attack)
