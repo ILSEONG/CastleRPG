@@ -565,9 +565,10 @@ export function dungeonGrowth(config: Config, type: string) {
   return { hp: cfgNum(config, `${type}_dg_hp_growth`), atk: cfgNum(config, `${type}_dg_atk_growth`) }
 }
 
-// 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step).
+// 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
+// (사용자 2026-10-06: 10장, 5단계마다 2장씩 — 1~5단계 10, 6~10단계 12 …). ticket_reward_add가 없으면(시드 전) 1.
 export const ticketReward = (config: Config, level: number) =>
-  cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step')))
+  cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step'))) * (config.ticket_reward_add == null ? 1 : cfgNum(config, 'ticket_reward_add'))
 
 // --- 영웅 전투력 — 앱 GameData.hero_stats·hero_power와 같은 식(모집권 던전 도우미 고르기에만 쓴다) ---
 export const levelMult = (config: Config, level: number, role: string) =>

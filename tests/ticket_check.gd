@@ -34,7 +34,7 @@ func _ready() -> void:
 	var sc: ScrollContainer = panel.find_children("*", "ScrollContainer", true, false)[0]
 	sc.scroll_vertical = 10000  # 모집권 카드(맨 아래)가 보이게
 	await _frames(30)
-	_check(panel.cards.has("ticket") and panel.cards.ticket.reward.text.contains("다이아 모집권 1장"), "ticket card: %s" % panel.cards.ticket.reward.text)
+	_check(panel.cards.has("ticket") and panel.cards.ticket.reward.text.contains("다이아 모집권 10장"), "ticket card: %s" % panel.cards.ticket.reward.text)
 	await _shot("1_cards")
 	panel.open_form("ticket")
 	await _frames(20)
@@ -69,8 +69,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 		if d.phase == d.Phase.RESULT:
 			break
-	_check(d.result.get("win", false) and d.result.rewards == {"tickets": 1} and Economy.dia_tickets == 1
-		and Economy.dungeon_state("ticket").helpers_used == [helper], "win: +1 ticket, helper used: %s" % [d.result])
+	_check(d.result.get("win", false) and d.result.rewards == {"tickets": 10} and Economy.dia_tickets == 10
+		and Economy.dungeon_state("ticket").helpers_used == [helper], "win: +10 tickets, helper used: %s" % [d.result])
 	await _frames(20)
 	await _shot("5_result")
 	print("TICKET ok" if _fails.is_empty() else "TICKET FAIL %s" % [_fails])

@@ -105,10 +105,10 @@ const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_c
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
 	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base",
 	"ticket_key_daily", "ticket_key_cap", "ticket_dg_party", "ticket_dg_min_sec", "ticket_dg_hp_growth", "ticket_dg_atk_growth", "ticket_reward_base",
-	"ticket_reward_step"]
+	"ticket_reward_step", "ticket_reward_add"]
 const DUNGEON_INT_KEYS := ["gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "gold_dg_base", "equip_sell_base",
 	"gold_dg_min_sec", "equip_dg_min_sec", "ticket_key_daily", "ticket_key_cap", "ticket_dg_min_sec"]  # 0 이상 정수
-const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap", "ticket_dg_party", "ticket_reward_base", "ticket_reward_step"]  # 1 이상 정수
+const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap", "ticket_dg_party", "ticket_reward_base", "ticket_reward_step", "ticket_reward_add"]  # 1 이상 정수
 const HELPER_COUNT := 3  # 모집권 던전 도우미 후보 수(서버 rules.HELPER_COUNT)
 const HELPER_FIT := 0.1  # 도우미 전투력이 기준 ±10% 안이면 "적당한 스펙"(서버 rules.HELPER_FIT)
 # --- 연구(개정 24). 서버 rules.ts·seed.ts(연구 블록)와 같은 규칙 ---
@@ -787,9 +787,10 @@ static func dungeon_growth(type: String) -> Dictionary:
 	return {"hp": config_num(type + "_dg_hp_growth"), "atk": config_num(type + "_dg_atk_growth")}
 
 
-## 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step). 서버 rules.ticketReward.
+## 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
+## (10장, 5단계마다 2장씩). 서버 rules.ticketReward.
 static func ticket_reward(level: int) -> int:
-	return int(config_num("ticket_reward_base")) + floori((level - 1) / maxf(1.0, config_num("ticket_reward_step")))
+	return int(config_num("ticket_reward_base")) + floori((level - 1) / maxf(1.0, config_num("ticket_reward_step"))) * int(config_num("ticket_reward_add"))
 
 
 ## FNV-1a 32비트(서버 rules.fnv32와 같다 — 도우미 순서 섞기).

@@ -48,6 +48,8 @@ test('도우미 후보: 3명, 기준(상위 4명 평균) ±10% 안, 승급 = 평
   assert.equal(R.ticketReward({ ticket_reward_base: '1', ticket_reward_step: '10' }, 1), 1)
   assert.equal(R.ticketReward({ ticket_reward_base: '1', ticket_reward_step: '10' }, 10), 1)
   assert.equal(R.ticketReward({ ticket_reward_base: '1', ticket_reward_step: '10' }, 11), 2)
+  const rw = { ticket_reward_base: '10', ticket_reward_step: '5', ticket_reward_add: '2' }
+  assert.deepEqual([1, 5, 6, 10, 11].map((n) => R.ticketReward(rw, n)), [10, 10, 12, 12, 14])
 })
 
 test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면 거부, 편성과 겹치면 거부, 승리 = 열쇠 1 → 모집권, 도우미는 그날 다시 못 쓴다', async () => {
@@ -74,9 +76,9 @@ test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면
   await age(token, s.json.run_id, 25)
   const f = await finish(token, { run_id: s.json.run_id, win: true, elapsed: 21 })
   assert.equal(f.status, 200, JSON.stringify(f.json))
-  assert.deepEqual(f.json.rewards, { tickets: 1 })
+  assert.deepEqual(f.json.rewards, { tickets: 10 })
   const q = await player(token)
-  assert.equal(q.dia_tickets, 1)
+  assert.equal(q.dia_tickets, 10)
   assert.equal(q.dungeons.ticket.keys, 0)
   assert.equal(q.dungeons.ticket.best_level, 1)
   assert.deepEqual(q.dungeons.ticket.helpers_used, [helper])

@@ -3382,8 +3382,8 @@ func test_ticket_dungeon_offline() -> void:
 		e.heroes[id] = 1
 	var st: Dictionary = e.dungeon_state("ticket")
 	var hs: Array = st.helpers
-	check(st.keys == 1 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 1}
-		and e.dungeon_reward("ticket", 11) == {"tickets": 2} and GameData.party_size("ticket") == 4, "ticket dungeon: 1 / 3 keys, 3 helpers, 1 ticket (+1 per 10 levels): %s" % [hs])
+	check(st.keys == 1 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 10}
+		and e.dungeon_reward("ticket", 5) == {"tickets": 10} and e.dungeon_reward("ticket", 6) == {"tickets": 12} and e.dungeon_reward("ticket", 11) == {"tickets": 14} and GameData.party_size("ticket") == 4, "ticket dungeon: 1 / 3 keys, 3 helpers, 10 tickets (+2 per 5 levels): %s" % [hs])
 	var top := []
 	for id in e.heroes:
 		top.append(GameData.hero_power(GameData.hero(id), e.level_of(id), e.promotion_of(id)))
@@ -3405,7 +3405,7 @@ func test_ticket_dungeon_offline() -> void:
 	e.start_dungeon("ticket", 1, party, helper)
 	e.debug_win()
 	var st2: Dictionary = e.dungeon_state("ticket")
-	check(finished[-1].win and finished[-1].rewards == {"tickets": 1} and e.dia_tickets == 1 and st2.keys == 0 and st2.best_level == 1 and st2.helpers_used == [helper]
+	check(finished[-1].win and finished[-1].rewards == {"tickets": 10} and e.dia_tickets == 10 and st2.keys == 0 and st2.best_level == 1 and st2.helpers_used == [helper]
 		and not st2.helpers.any(func(h): return h.hero_id == helper) and e.dungeon_block("ticket", 2, party, helper) == "helper_used",
 		"win: key -1, +1 ticket, that helper is used for today: %s" % [st2])
 	e.clock_offset = 86400.0

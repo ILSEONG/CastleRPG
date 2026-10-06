@@ -97,8 +97,9 @@ ticket_dg_party,4
 ticket_dg_min_sec,20
 ticket_dg_hp_growth,1.15
 ticket_dg_atk_growth,1.12
-ticket_reward_base,1
-ticket_reward_step,10
+ticket_reward_base,10
+ticket_reward_step,5
+ticket_reward_add,2
 rounds_per_stage,25
 stage_speed_step,0.08
 stage_speed_cap,2.0

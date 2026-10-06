@@ -138,10 +138,10 @@ export const CONFIG_DUNGEON_NUM = ['daily_reset_utc_hour', 'gold_key_daily', 'go
   'gold_dg_base', 'gold_dg_mult', 'gold_dg_growth', 'equip_dg_hp_growth', 'equip_dg_atk_growth', 'gold_dg_party', 'equip_dg_party',
   'gold_dg_min_sec', 'equip_dg_min_sec', 'dungeon_time_limit', 'equip_drop_count', 'equip_weapon_p', 'equip_bag_cap', 'equip_sell_base',
   'ticket_key_daily', 'ticket_key_cap', 'ticket_dg_party', 'ticket_dg_min_sec', 'ticket_dg_hp_growth', 'ticket_dg_atk_growth', 'ticket_reward_base',
-  'ticket_reward_step'] // ticket = 모집권 던전(2026-10-06)
+  'ticket_reward_step', 'ticket_reward_add'] // ticket = 모집권 던전(2026-10-06)
 const DUNGEON_INT_KEYS = ['gold_key_daily', 'gold_key_cap', 'equip_key_daily', 'equip_key_cap', 'equip_extra_gold_base', 'gold_dg_base', 'equip_sell_base',
   'gold_dg_min_sec', 'equip_dg_min_sec', 'ticket_key_daily', 'ticket_key_cap', 'ticket_dg_min_sec']
-const DUNGEON_INT1_KEYS = ['gold_dg_party', 'equip_dg_party', 'equip_drop_count', 'equip_bag_cap', 'ticket_dg_party', 'ticket_reward_base', 'ticket_reward_step']
+const DUNGEON_INT1_KEYS = ['gold_dg_party', 'equip_dg_party', 'equip_drop_count', 'equip_bag_cap', 'ticket_dg_party', 'ticket_reward_base', 'ticket_reward_step', 'ticket_reward_add']
 export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 앱 GameData.KEEP_SLOT_STEP
 export const MAX_HERO_SLOTS = 12 // 앱 GameData.MAX_HERO_SLOTS
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
