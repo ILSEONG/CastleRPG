@@ -352,7 +352,7 @@ func incoming(amount: float) -> float:
 	if sk.has("fortify") and h.holds_post():
 		x *= 1.0 - float(sk.fortify[0]) / 100.0
 	if sk.has("stoneskin"):
-		x = maxf(x * 0.2, x - h.hp_max * float(sk.stoneskin[0]) / 100.0)  # 아무리 막아도 20%는 들어온다
+		x *= 1.0 - float(sk.stoneskin[0]) / 100.0  # 2026-10-06: 고정 % 감소(최대 HP %를 빼던 식은 몬스터 공격이 작아 늘 −80%였다)
 	if sk.has("block") and randf() < float(sk.block[0]) / 100.0:
 		x *= 1.0 - float(sk.block[1]) / 100.0
 		Fx.block(h)
@@ -370,7 +370,7 @@ func after_hurt(source) -> void:
 	if sk.has("counter") and source != null and is_instance_valid(source) and source.is_alive() \
 			and randf() < float(sk.counter[0]) / 100.0:
 		var w := snap(source)
-		_hit(source, _atk() * float(sk.counter[1]) / 100.0, w)
+		_hit(source, _atk() * float(sk.counter[1]) / 100.0 * h._skill_mult, w)
 		Fx.slash_mark(_world(), source.global_position + HIT, h._color)
 		_announce("counter")
 	if sk.has("second_wind") and _wind_cd <= 0.0 and h.hp_ratio() < float(sk.second_wind[0]) / 100.0:
@@ -461,7 +461,8 @@ func _cast(k: String, dry := false) -> bool:
 			_zone(k, p, _flat(here))
 		"earthquake", "ground_slam", "frost_nova", "war_cry", "taunt":
 			var r := float(p[1])
-			var near := _near_monsters(here, r)
+			var c: Vector3 = _flat(t.global_position) if k == "frost_nova" and t != null else here  # 서리 폭발은 공격 대상 자리(사거리 8m 마법사)
+			var near := _near_monsters(c, r)
 			if near.is_empty():
 				return false
 			if dry:
@@ -478,9 +479,9 @@ func _cast(k: String, dry := false) -> bool:
 					for o in near:
 						_hit(o, a * float(p[2]) / 100.0 * h._skill_mult)
 						if o.is_alive():
-							o.knockback(here, 2.5)
+							o.knockback(here, 1.0)  # 근접 사거리(1.8m) 안에 남게
 				"frost_nova":
-					Fx.nova(w, here, ICE, r, tier)
+					Fx.nova(w, c, ICE, r, tier)
 					for o in near:
 						_hit(o, a * 0.8 * h._skill_mult)
 						if o.is_alive():
@@ -732,7 +733,7 @@ func _summon(k: String, dmg: float, sec: float) -> void:
 ## 연사: 대상에게 화살 n발을 더(각각 피해 50%) — 맞으면 원래 타격 효과는 없다(숫자만).
 func _barrage(m, n: int) -> void:
 	var shot: Array = SHOTS.get(h.def.model, ["arrow", 30.0])
-	var d: float = _atk() * 0.5 * damage_mult(m, 0, false)
+	var d: float = h.atk * h._aura_mult() * 0.5 * damage_mult(m, 0, false)  # atk_mult는 damage_mult에 이미 있다
 	var mref: WeakRef = weakref(m)  # 지워진 노드를 람다가 담고 있지 않게
 	for i in n:
 		_later(0.08 * (i + 1), func():

@@ -479,7 +479,7 @@ export const WEAPON_OF: Record<string, string> = { Knight: 'sword', Barbarian: '
 export const WEAPON_KINDS = ['sword', 'axe', 'staff', 'crossbow', 'dagger']
 // 부위 → [능력치, 1레벨 값, 레벨당 증가]. 값 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율)
 export const SLOT_STAT: Record<string, [string, number, number]> = {
-  weapon: ['atk', 12, 3], top: ['hp', 80, 20], bottom: ['hp', 80, 20], hat: ['hp', 50, 12], pauldron: ['hp', 50, 12], gloves: ['atk', 5, 1.2], shoes: ['hp', 40, 10],
+  weapon: ['atk', 6, 1.5], top: ['hp', 40, 10], bottom: ['hp', 40, 10], hat: ['hp', 25, 6], pauldron: ['hp', 25, 6], gloves: ['atk', 2.5, 0.6], shoes: ['hp', 20, 5],
 }
 export const SHOES_SPEED_PCT = 3 // 신발 이동속도 +3%(등급 무관)
 export const RUN_TTL_SEC = 1800 // run 만료(30분)

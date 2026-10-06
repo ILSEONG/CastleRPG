@@ -53,7 +53,7 @@ const RULES := {
 	"frenzy": ["nonneg", "int1"], "last_stand": ["pct", "nonneg"], "opportunist": ["nonneg"], "pyromancy": ["nonneg"],
 	"first_strike": ["nonneg"], "focus": ["nonneg", "nonneg"], "sharpshooter": ["nonneg"], "brawler": ["nonneg", "nonneg"],
 	"berserker": ["nonneg", "nonneg"], "regen": ["nonneg"], "revive": ["pct"], "block": ["pct", "pct"], "fortify": ["pct"],
-	"second_wind": ["pct", "nonneg", "pos"], "invincible": ["pct", "pos", "pos"], "stoneskin": ["nonneg"], "counter": ["pct", "nonneg"],
+	"second_wind": ["pct", "nonneg", "pos"], "invincible": ["pct", "pos", "pos"], "stoneskin": ["pct"], "counter": ["pct", "nonneg"],
 	"haste_aura": ["pos", "nonneg"], "guard_aura": ["pos", "pct"], "regen_aura": ["pos", "nonneg"],
 }
 const RULE_TEXT := {"pos": "greater than 0", "nonneg": "0 or more", "pct": "in 0..100", "int1": "an integer of 1 or more", "mult": "100 or more"}
@@ -86,6 +86,8 @@ const NAMES := {
 
 ## 영웅별 이름(개정 17 §2 표의 괄호·§3 예시): 영웅 id → {종류: 이름}. 없으면 NAMES.
 const HERO_NAMES := {"ignis": {"poison": "화상", "aoe_blast": "화염구"}}
+const BURN_POISON := ["ignis"]  # 이 영웅들의 poison은 화상(burn 도트)으로 들어간다 — 화염 숙련 등 화상 연계에 걸린다
+const BOSS_SLAYER_OTHERS := 0.2  # 거인 사냥: 보스가 아닌 적에게는 1/5(2026-10-06 밸런스)
 
 
 ## 스킬 이름(영웅별 이름이 있으면 그것).
@@ -99,13 +101,13 @@ const TEXTS := {
 	"atk_aura": "반경 {a}m 안 다른 영웅의 공격력을 {b}% 올립니다(여럿이면 가장 큰 것 하나).",
 	"dmg_reduce": "받는 피해를 {a}% 줄입니다.",
 	"dodge": "{a}% 확률로 피해를 피합니다.",
-	"thorns": "받은 피해의 {a}%를 공격한 적에게 되돌려 줍니다.",
+	"thorns": "맞으면 받은 피해의 {a}%와 공격력의 {a}% 중 큰 만큼 공격한 적에게 되돌려 줍니다.",
 	"lifesteal": "준 피해의 {a}%만큼 HP를 회복합니다.",
 	"haste": "공격 속도가 {a}% 빨라집니다.",
 	"rage": "잃은 HP 비율만큼 공격 속도가 빨라집니다(최대 {a}%).",
 	"crit": "{a}% 확률로 {bx}배 피해를 줍니다.",
 	"execute": "HP가 {a}% 이하인 적에게 피해를 {b}% 더 줍니다.",
-	"boss_slayer": "보스에게 주는 피해가 {a}% 늘어납니다.",
+	"boss_slayer": "보스에게 주는 피해가 {a}% 늘어납니다(다른 적에게는 그 1/5).",
 	"cleave": "근접 공격 때 대상 주변 {a}m 안 다른 적에게 피해의 {b}%를 줍니다.",
 	"multishot": "사거리 안 가까운 적 {a}마리를 동시에 공격합니다.",
 	"chain": "맞은 적에서 {c}m 안 가장 가까운 다른 적으로 {a}번 튕기며, 튕길 때마다 피해가 {b}%가 됩니다.",
@@ -191,7 +193,7 @@ const TEXTS := {
 	"fortify": "자기 자리를 지키는 동안 받는 피해를 {a}% 줄입니다.",
 	"second_wind": "HP가 {a}% 아래로 떨어지면 최대 HP의 {b}%를 회복합니다({c}초에 한 번).",
 	"invincible": "HP가 {a}% 아래로 떨어지면 {b}초 동안 피해를 받지 않습니다({c}초에 한 번).",
-	"stoneskin": "맞을 때마다 받는 피해를 최대 HP의 {a}%만큼 덜 받습니다.",
+	"stoneskin": "받는 피해가 {a}% 줄어듭니다.",
 	"counter": "맞으면 {a}% 확률로 공격한 적에게 공격력의 {b}% 피해로 반격합니다.",
 	"haste_aura": "반경 {a}m 안 아군 영웅(자신 포함)의 공격 속도가 {b}% 빨라집니다(여럿이면 가장 큰 것 하나).",
 	"guard_aura": "반경 {a}m 안 아군 영웅(자신 포함)이 받는 피해가 {b}% 줄어듭니다(여럿이면 가장 큰 것 하나).",
@@ -247,8 +249,8 @@ static func damage(sk: Dictionary, atk: float, roll: float, target_ratio: float,
 		d *= sk.crit[1] / 100.0
 	if sk.has("execute") and target_ratio <= sk.execute[0] / 100.0:
 		d *= 1.0 + sk.execute[1] / 100.0
-	if boss and sk.has("boss_slayer"):
-		d *= 1.0 + sk.boss_slayer[0] / 100.0
+	if sk.has("boss_slayer"):
+		d *= 1.0 + sk.boss_slayer[0] / 100.0 * (1.0 if boss else BOSS_SLAYER_OTHERS)
 	return d
 
 

@@ -95,8 +95,8 @@ const EQUIP_SLOTS := ["weapon", "hat", "top", "bottom", "shoes", "pauldron", "gl
 const WEAPON_OF := {"Knight": "sword", "Barbarian": "axe", "Mage": "staff", "Rogue_Hooded": "crossbow", "Rogue": "dagger"}  # 영웅 모델 → 무기 종류
 const WEAPON_KINDS := ["sword", "axe", "staff", "crossbow", "dagger"]
 ## 부위 → [능력치, 1레벨 값, 레벨당 증가]. 값 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율)
-const SLOT_STAT := {"weapon": ["atk", 12.0, 3.0], "top": ["hp", 80.0, 20.0], "bottom": ["hp", 80.0, 20.0], "hat": ["hp", 50.0, 12.0],
-	"pauldron": ["hp", 50.0, 12.0], "gloves": ["atk", 5.0, 1.2], "shoes": ["hp", 40.0, 10.0]}
+const SLOT_STAT := {"weapon": ["atk", 6.0, 1.5], "top": ["hp", 40.0, 10.0], "bottom": ["hp", 40.0, 10.0], "hat": ["hp", 25.0, 6.0],
+	"pauldron": ["hp", 25.0, 6.0], "gloves": ["atk", 2.5, 0.6], "shoes": ["hp", 20.0, 5.0]}  # 2026-10-06 밸런스: 절반(장비가 영웅 능력치의 절반 넘게 차지하던 것)
 const SHOES_SPEED_PCT := 3.0  # 신발 이동속도 +3%(등급 무관)
 const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed − 5
@@ -480,7 +480,7 @@ static func default_deploy(slots: int) -> Array:
 
 # --- 영웅 승급(개정 15 §1). 서버 rules.promoteCost와 같은 식 ---
 
-## 승급 배율 = promote_mult^p(곱셈 p번). HP·공격의 기본·레벨업분 모두에 곱한다(승급 5면 1.5^5 ≈ 7.59).
+## 승급 배율 = promote_mult^p(곱셈 p번). HP·공격의 기본·레벨업분 모두에 곱한다(promote_mult 1.3이면 승급 5 ≈ 3.71).
 static func promote_mult(promotion: int) -> float:
 	return _grown(1.0, config_num("promote_mult"), clampi(promotion, 0, MAX_PROMOTION))
 

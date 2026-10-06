@@ -240,8 +240,9 @@ func take_damage(amount: float, source = null) -> void:
 		return
 	hp = maxf(0.0, hp - r.x)
 	DamageNumbers.pop(self, r.x, DamageNumbers.Kind.HURT)
-	if r.y > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
-		source.take_damage(r.y * _skill_mult, DamageNumbers.Kind.SKILL)
+	var back := maxf(r.y, atk * _sk.thorns[0] / 100.0) if _sk.has("thorns") else r.y  # 가시: 받은 피해 %와 공격력 % 중 큰 것
+	if back > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
+		source.take_damage(back * _skill_mult, DamageNumbers.Kind.SKILL)
 	if hp == 0.0 and _skx.try_revive():  # 불굴: 쓰러지는 대신 다시 일어난다
 		return
 	if hp == 0.0:
@@ -590,7 +591,10 @@ func _on_hit(m, a: float) -> void:
 	if _sk.has("slow"):
 		m.apply_slow(_sk.slow[0], _sk.slow[1])
 	if _sk.has("poison"):
-		m.apply_poison(a * _sk.poison[0] / 100.0 * _skill_mult, _sk.poison[1])
+		if Skills.BURN_POISON.has(def.id):
+			m.apply_dot("burn", a * _sk.poison[0] / 100.0 * _skill_mult, _sk.poison[1])
+		else:
+			m.apply_poison(a * _sk.poison[0] / 100.0 * _skill_mult, _sk.poison[1])
 
 
 ## chain: 맞은 대상에서 c m 안 가장 가까운(아직 안 맞은) 몬스터로 a번, 매번 피해 × b/100.
