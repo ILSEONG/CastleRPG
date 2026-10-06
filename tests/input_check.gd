@@ -709,14 +709,15 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 
 
 ## (z) 개정 12-2: 상단 스테이지 버튼(탭으로 진행 → 중지 예약 → 예약 취소)과 방향별 성 내구도(성문 막대 탭 → 카메라가 그 성문으로 0.4초,
-##     줌 유지, 전장으로 새지 않음). 문루 위 방향 글자. 스테이지를 시작하므로 맨 끝에 둔다.
+##     줌 유지, 전장으로 새지 않음). 문루 위 방향 글자는 없다. 스테이지를 시작하므로 맨 끝에 둔다.
 func _top_hud(hud) -> void:
 	var half: float = _main.castle.half
 	var rig = _camera.get_parent()
 	var wt = _child(preload("res://scripts/world_tags.gd"))
-	_check(range(4).map(func(s): return wt.text("gate:%d" % s)) == ["북", "동", "남", "서"]
+	_check(range(4).map(func(s): return wt.text("gate:%d" % s)) == ["", "", "", ""]
+		and range(4).all(func(s): return not wt.rects.has("gate:%d" % s) or wt.rects["gate:%d" % s].size == Vector2.ZERO)
 		and _main.castle.side_anchors.all(func(a): return a.y > Balance.WALL_H + 2.0),
-		"(z) direction letters 북·동·남·서 float above the four gatehouses (screen-space tags)", "")
+		"(z) no direction letters above the gatehouses (anchors stay for gate build bars)", "")
 	print("INPUT INFO: stage button %s, title %s, castle bar %s, gate bars %s (720x1280 logical)" % [hud._button.get_global_rect(), hud._stage_label.get_global_rect(),
 		hud._castle_bar.get_global_rect(), hud._gate_tiles.map(func(t): return t.get_global_rect())])
 	var names: Array = hud._gate_tiles.map(func(t): return t.get_child(0).get_child(1).text)
