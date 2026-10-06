@@ -16,8 +16,8 @@ pop_base,6
 pop_per_house,2
 soldier_max_tier,5
 soldier_tier_mult,2
-train_base_min,18
-train_step_min,3
+train_base_min,180
+train_step_min,30
 train_cost_tier_mult,5
 soldier_merge_count,5
 train_batch_base,1

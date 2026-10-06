@@ -4582,8 +4582,8 @@ func test_tutorial() -> void:
 		kinds[want] = true
 		check(got == want and (want != "tickets" or int(rw.tickets) == 10), "tutorial: mission %d reward is %s: %s" % [i + 1, want, rw])
 	check(kinds.size() == 4, "tutorial: all four reward kinds appear")
-	check(GameData.train_max(1) == 1 and GameData.train_max(30) == 1 and GameData.soldier_unit_sec(1) == 18 * 60.0 and GameData.soldier_unit_sec(6) == 3 * 60.0
-		and GameData.train_tier(7) == 2, "training is one soldier per order: 18 min at Lv 1 down to 3 min, tiers unchanged")
+	check(GameData.train_max(1) == 1 and GameData.train_max(30) == 1 and GameData.soldier_unit_sec(1) == 180 * 60.0 and GameData.soldier_unit_sec(6) == 30 * 60.0
+		and GameData.train_tier(7) == 2, "training is one soldier per order: 3 h at Lv 1 down to 30 min, tiers unchanged")
 	# 튜토리얼 훈련: 1마리씩, 5초
 	t.check()
 	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
@@ -4659,7 +4659,7 @@ func test_tutorial() -> void:
 	q = t.mission()
 	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
 	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
-	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 18 * 60.0, "tutorial done: normal training time, still one per order")
+	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 180 * 60.0, "tutorial done: normal training time, still one per order")
 	check(not t.tab_locked("hero") and t.repeating(), "tutorial done: nothing locked, repeat quests")
 	t.free()
 	gs.free()
