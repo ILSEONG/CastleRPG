@@ -728,6 +728,19 @@ func test_formation_claims() -> void:
 	check(a3_after.side == 0 and a3_after.post == gate and a3_after.slot == 1, "hero 3 kept original assignment at gate slot 1")
 	check(f.claim(9, 0, gate) == -1, "gate still full, cannot add new hero")
 	check(f.assignment(3).slot == 1, "hero 3 still holds gate slot 1")
+	# claim_near: 누른 지점에 가장 가까운 빈 슬롯(자기 슬롯 포함) — 같은 면 성벽 위 좌↔우 이동
+	var g = FormationScript.new()
+	var offs: Array = Balance.WALL_TOP_SLOTS
+	var right: int = offs.find(offs.max())
+	var left: int = offs.find(offs.min())
+	check(g.claim_near(0, 0, wall, 99.0) == right, "claim_near picks the slot nearest the tap (far right)")
+	check(g.claim_near(0, 0, wall, -99.0) == left, "claim_near moves the same hero across the wall to the far left")
+	check(g.assignment(0).slot == left, "claim_near frees the old slot")
+	check(g.claim_near(1, 0, wall, -99.0) != left, "claim_near skips a slot another hero holds")
+	check(g.claim_near(0, 0, wall, -99.0) == left, "claim_near keeps the hero's own slot when it is nearest")
+	for i in range(2, 2 + FormationScript.capacity(wall)):
+		g.claim(i, 0, wall)
+	check(g.claim_near(20, 0, wall, 0.0) == -1 and g.assignment(20).is_empty(), "claim_near on a full wall fails and assigns nothing")
 
 
 func test_formation_positions() -> void:

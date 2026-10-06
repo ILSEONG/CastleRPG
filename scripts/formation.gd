@@ -41,6 +41,25 @@ func claim(hero_id: int, side: int, post: int) -> int:
 	return -1
 
 
+## 누른 지점에 가까운 자리: 면 side·post에서 성문 중앙 기준 옆 거리 offset에 가장 가까운 빈 슬롯(자기 슬롯 포함)을 차지하고 돌려준다.
+## 같은 면 성벽 위 한쪽에 서 있던 영웅이 반대쪽을 누르면 그쪽 빈 자리로 옮긴다. 가장 가까운 게 자기 슬롯이면 그대로. 가득 차면 -1.
+func claim_near(hero_id: int, side: int, post: int, offset: float) -> int:
+	var current: Dictionary = _claims.get(hero_id, {})
+	var taken := {}
+	for id in _claims:
+		var c: Dictionary = _claims[id]
+		if id != hero_id and c.side == side and c.post == post:
+			taken[c.slot] = true
+	var offs: Array = Balance.GATE_FRONT_SLOTS if post == POST_GATE else Balance.WALL_TOP_SLOTS
+	var best := -1
+	for slot in capacity(post):
+		if not taken.has(slot) and (best < 0 or absf(float(offs[slot]) - offset) < absf(float(offs[best]) - offset)):
+			best = slot
+	if best >= 0:
+		_claims[hero_id] = {"side": side, "post": post, "slot": best}
+	return best
+
+
 ## 정확한 슬롯으로 되돌린다(스테이지 시작 자리 복원용). 호출 전에 전원 release해 충돌이 없어야 한다.
 func restore(hero_id: int, side: int, post: int, slot: int) -> void:
 	_claims[hero_id] = {"side": side, "post": post, "slot": slot}
