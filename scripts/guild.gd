@@ -13,8 +13,10 @@ const GameData := preload("res://scripts/game_data.gd")
 
 const SAVE_VERSION := 1
 const UNLOCK_ROUND := 11  # GameState.stage가 이 이상(= 1-10 클리어)이면 열린다. 한 번 열리면 저장한다
-const MAX_MEMBERS := 30  # 나 포함
-const MAX_LEVEL := 30
+const MAX_LEVEL := 6
+const MEMBERS_BASE := 15  # 길드 인원(나 포함) — 최대 레벨(MAX_LEVEL)이 되면 MEMBERS_MAX
+const MEMBERS_MAX := 20
+const MAX_MEMBERS := MEMBERS_MAX
 const BUFF_PER_LEVEL := 1.0  # 길드 레벨당 영웅 공격력·체력 +%
 const CREATE_GOLD := 500000
 const SIM_DAYS_MAX := 7  # 앱을 오래 껐다 켜도 가상 길드원 활동은 최근 이 날수만 센다
@@ -168,6 +170,11 @@ func joined() -> bool:
 ## 레벨 L → L+1에 드는 길드 경험치.
 static func exp_need(level: int) -> int:
 	return roundi(150.0 * pow(float(level), 1.3))
+
+
+## 길드 레벨 → 인원(나 포함): 1~5레벨 15명, 6레벨(최대) 20명. 가상 길드원은 남는 자리만 채운다(실제 유저 우선).
+static func capacity(level: int) -> int:
+	return MEMBERS_MAX if level >= MAX_LEVEL else MEMBERS_BASE
 
 
 static func buff_of(level: int) -> float:
@@ -610,9 +617,9 @@ func recommendations(now := -1.0) -> Array:
 	for i in 5:
 		r.seed = hash([GameData.reset_day(now), recommend_n, i])
 		var s := r.randi()
-		var lv := r.randi_range(2, 14)
+		var lv := clampi(r.randi_range(2, 14), 1, MAX_LEVEL)
 		out.append({"seed": s, "name": _guild_name(r), "emblem": r.randi_range(0, EMBLEMS - 1), "level": lv,
-			"count": r.randi_range(14, MAX_MEMBERS - 2), "notice": NOTICES[r.randi_range(0, NOTICES.size() - 1)], "power": 300 + lv * 120 + r.randi_range(0, 400)})
+			"count": mini(r.randi_range(14, 28), capacity(lv) - 1), "notice": NOTICES[r.randi_range(0, NOTICES.size() - 1)], "power": 300 + lv * 120 + r.randi_range(0, 400)})
 	return out
 
 
@@ -674,7 +681,7 @@ func create_block(name_text: String) -> String:
 	return ""
 
 
-## 직접 창설: 혼자 시작하고, 가입 신청한 가상 길드원이 몇 시간마다 한 명씩 들어온다(최대 MAX_MEMBERS).
+## 직접 창설: 혼자 시작하고, 가입 신청한 가상 길드원이 몇 시간마다 한 명씩 들어온다(길드 인원 capacity까지 — 6레벨이면 더 들어온다).
 func create(name_text: String, emblem: int, now := -1.0) -> bool:
 	if now < 0.0:
 		now = now_t()
@@ -689,7 +696,7 @@ func create(name_text: String, emblem: int, now := -1.0) -> bool:
 	r.seed = hash([name_text, now])
 	var members := []
 	var t := now
-	for i in MAX_MEMBERS - 1:
+	for i in MEMBERS_MAX - 1:
 		t += r.randf_range(0.5, 3.0) * 3600.0 if i > 0 else 600.0
 		members.append(_member(r, i, 1, t))
 	_set_guild(name_text.strip_edges(), clampi(emblem, 0, EMBLEMS - 1), 1, 0, r.randi(), true, "함께 성장할 길드원을 모집합니다!", members, now)
@@ -743,7 +750,7 @@ func members_now(now := -1.0) -> Array:
 		return guild.get("members", [])
 	if now < 0.0:
 		now = now_t()
-	return guild.members.filter(func(m): return float(m.join_t) <= now)
+	return guild.members.slice(0, capacity(int(guild.level)) - 1).filter(func(m): return float(m.join_t) <= now)
 
 
 # --- 가상 길드원 활동 ---
@@ -759,7 +766,7 @@ func tick(now: float, quiet := false) -> void:
 	var events := []
 	for d in range(GameData.reset_day(from), GameData.reset_day(now) + 1):
 		var day0 := GameData.reset_at(d)
-		for i in guild.members.size():
+		for i in mini(guild.members.size(), capacity(int(guild.level)) - 1):  # 자리 밖(아직 못 들어온) 길드원은 활동하지 않는다
 			var m: Dictionary = guild.members[i]
 			var r := RandomNumberGenerator.new()
 			r.seed = hash([int(guild.seed), i, d])

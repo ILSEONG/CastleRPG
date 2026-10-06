@@ -43,6 +43,12 @@ test('guild rules: levels, boss steps and virtual members are deterministic', ()
   const made = G.virtualMembers({ ...g, system: false, created_at: T0, virtual_n: 10 })
   assert.ok(made.every((m, i) => i === 0 || m.join_t > made[i - 1].join_t), 'created guild: virtual members join one by one')
   assert.equal(G.playerName('8f1e0a0e-0000-4000-8000-000000000001'), G.playerName('8f1e0a0e-0000-4000-8000-000000000001'))
+  // 최대 6레벨, 인원 15명(6레벨 20명), 버프 최대 6%
+  assert.equal(G.levelOf(1e12).level, 6)
+  assert.equal(G.buffPct(6), 6)
+  assert.deepEqual([1, 5, 6].map(G.capacity), [15, 15, 20])
+  const vm = G.virtualMembers({ ...g, virtual_n: 18 })
+  assert.equal(G.seated(vm, T0, 15, 3).length, 12, 'virtual members only fill the seats real players leave')
 })
 
 test('guild: locked before round 1-10, then 5 recommendations', async () => {
@@ -57,7 +63,7 @@ test('guild: locked before round 1-10, then 5 recommendations', async () => {
   assert.equal(v.unlocked, true)
   assert.equal(v.guild, null)
   assert.equal(v.recommendations.length, 5)
-  assert.ok(v.recommendations.every((x: any) => x.level >= 1 && x.count >= 12 && x.count < 30 && typeof x.name === 'string'))
+  assert.ok(v.recommendations.every((x: any) => x.level >= 1 && x.level <= 6 && x.count >= 12 && x.count <= x.capacity && x.capacity === G.capacity(x.level) && typeof x.name === 'string'))
 })
 
 test('guild: join, attend, box, donate, leave keeps coins', async () => {
@@ -67,6 +73,7 @@ test('guild: join, attend, box, donate, leave keeps coins', async () => {
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.equal(r.json.guild.guild.id, rec.id)
   assert.ok(r.json.guild.guild.members.length >= 12)
+  assert.ok(r.json.guild.guild.members.length + 1 <= r.json.guild.guild.capacity, 'members + me fit the capacity')
   assert.equal((await post(p.token, 'join', { guild_id: rec.id })).json.error, 'in_guild')
   const gold0 = r.json.player.gold_tenths
   r = await post(p.token, 'attend')
@@ -100,19 +107,25 @@ test('guild: join, attend, box, donate, leave keeps coins', async () => {
   assert.equal(r.json.guild.me.attended, true, 'attendance stays used for the day after leaving')
 })
 
-test('guild: real members see each other and real exp adds to the guild', async () => {
+test('guild: real members see each other, real exp adds to the guild, real players take seats from virtual members', async () => {
   const a = await ready()
+  await setGold(a.id, G.CREATE_GOLD)
+  const gid = (await post(a.token, 'create', { name: '실제길드', emblem: 1 })).json.guild.guild.id
   const b = await ready()
-  const rec = (await guild(a.token)).recommendations[1]
-  await post(a.token, 'join', { guild_id: rec.id })
-  const before = (await guild(a.token)).guild
-  await post(b.token, 'join', { guild_id: rec.id })
+  await post(b.token, 'join', { guild_id: gid })
   await post(b.token, 'attend')
   const v = (await guild(a.token)).guild
-  assert.equal(v.members.length, before.members.length + 1)
   assert.ok(v.members.some((m: any) => m.real && m.att && m.name === G.playerName(b.id)))
-  const total = (x: any) => G.levelOf(0).need * 0 + x.exp + Array.from({ length: x.level - 1 }, (_, i) => G.expNeed(i + 1)).reduce((s, n) => s + n, 0)
-  assert.equal(total(v), total(before) + G.ATTEND_EXP)
+  assert.equal(v.level, 1)
+  assert.equal(v.exp, G.ATTEND_EXP, 'real attendance exp goes to the guild')
+  // 시스템 길드가 가상 길드원으로 꽉 차 있어도 실제 유저가 들어오면 가상 길드원이 자리를 비운다
+  const c = await ready()
+  const rec = (await guild(c.token)).recommendations[1]
+  const before = rec.count
+  await post(c.token, 'join', { guild_id: rec.id })
+  const w = (await guild(c.token)).guild
+  assert.ok(w.members.length + 1 <= w.capacity)
+  assert.equal(w.members.length + 1, Math.min(before + 1, w.capacity))
 })
 
 test('guild: create costs 500,000 gold, names are unique, owner leaving hands over or deletes', async () => {

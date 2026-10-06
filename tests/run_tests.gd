@@ -4450,7 +4450,7 @@ func test_guild() -> void:
 	check(g.recommendations(now) != recs, "guild: refresh shows other guilds")
 	var rec: Dictionary = recs[0]
 	rec.level = 3
-	check(g.join(rec, now) and g.joined() and int(g.guild.level) == 3 and g.buff_pct() == 3.0 and g.members_now(now).size() == int(rec.count) - 1,
+	check(g.join(rec, now) and g.joined() and int(g.guild.level) == 3 and g.buff_pct() == 3.0 and g.members_now(now).size() == mini(int(rec.count), GuildScript.capacity(3)) - 1,
 		"guild: join copies level and members, buff = level %%: %s" % [g.buff_pct()])
 	check(g.join(rec, now) == false, "guild: cannot join twice")
 	# 출석
@@ -4467,6 +4467,12 @@ func test_guild() -> void:
 	check(g.donate("gold", now) and e.gold == 5000 and g.donate_block("gold") == "골드가 부족합니다", "guild: gold donation costs 10,000")
 	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
 		"guild: diamond donation once a day")
+	# 인원·최대 레벨: 1~5레벨 15명, 6레벨 20명(나 포함), 최대 6레벨·버프 6%
+	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(5) == 15 and GuildScript.capacity(6) == 20 and GuildScript.buff_of(99) == 6.0,
+		"guild: 15 members, 20 at max level 6, buff caps at 6%")
+	check(g.members_now(now).size() + 1 <= GuildScript.capacity(int(g.guild.level)), "guild: members + me fit the capacity")
+	g.guild.level = 1
+	g.guild.exp = 0
 	# 레벨업
 	var lv := int(g.guild.level)
 	g._add_exp(GuildScript.exp_need(lv) * 3)

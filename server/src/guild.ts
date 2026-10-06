@@ -3,8 +3,11 @@
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
 import { mulberry32, resetAt, resetDay } from './rules.ts'
 
-export const MAX_MEMBERS = 30 // 실제 + 가상
-export const MAX_LEVEL = 30
+export const MAX_LEVEL = 6
+// 길드 인원(실제 + 가상): 1~5레벨 15명, 6레벨(최대) 20명. 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
+export const MEMBERS_BASE = 15
+export const MEMBERS_MAX = 20
+export const capacity = (level: number) => (level >= MAX_LEVEL ? MEMBERS_MAX : MEMBERS_BASE)
 export const BUFF_PER_LEVEL = 1 // 길드 레벨당 영웅 공격력·체력 %
 export const UNLOCK_STAGE = 11 // 서버 stage(전체 라운드)가 이 이상 = 1-10 클리어
 export const CREATE_GOLD = 500_000
@@ -97,6 +100,11 @@ export function levelOf(total: number) {
     level++
   }
   return { level, exp: level >= MAX_LEVEL ? 0 : left, need: expNeed(level) }
+}
+
+// 자리에 앉은 가상 길드원: 지금까지 들어온 순서대로 (인원 − 실제 길드원 수)명까지.
+export function seated<T extends { join_t: number }>(members: T[], now: number, cap: number, real: number): T[] {
+  return members.filter((m) => m.join_t <= now).sort((a, b) => a.join_t - b.join_t).slice(0, Math.max(0, cap - real))
 }
 
 export const buffPct = (level: number) => BUFF_PER_LEVEL * Math.min(Math.max(level, 0), MAX_LEVEL)

@@ -168,7 +168,7 @@ func _rec_row(rec: Dictionary, i: int) -> Control:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 0)
 	info.add_child(_label(rec.name, 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label("Lv %d · 길드원 %d/%d · 평균 전투력 %s" % [rec.level, rec.count, GuildScript.MAX_MEMBERS, UiKit.commas(rec.power)], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(_label("Lv %d · 길드원 %d/%d · 평균 전투력 %s" % [rec.level, rec.count, int(rec.get("capacity", GuildScript.capacity(int(rec.level)))), UiKit.commas(rec.power)], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	var n := _label(rec.notice, 20, GREEN, HORIZONTAL_ALIGNMENT_LEFT)
 	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	n.clip_text = true
@@ -254,7 +254,7 @@ func _build_joined() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
 	info.add_child(_label(g.name, 32, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label("Lv %d · 길드원 %d/%d" % [g.level, Guild.members_now().size() + 1, GuildScript.MAX_MEMBERS], 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(_label("Lv %d · 길드원 %d/%d" % [g.level, Guild.members_now().size() + 1, int(g.get("capacity", GuildScript.capacity(int(g.level))))], 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	var bar := ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 26)
 	bar.show_percentage = false

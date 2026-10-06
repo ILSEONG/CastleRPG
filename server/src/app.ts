@@ -1609,7 +1609,7 @@ export function createApp(opts: AppOptions) {
   // 추천 길드: 자리가 있는 길드(실제 길드원 < 30 − 가상), 시스템 길드가 RECOMMEND_N보다 적으면 만든다.
   async function recommendations(x: GuildCtx) {
     const open = `select ${GUILD_COLS}, (select count(*)::int from player_guild m where m.guild_id = g.id) as real_n from guilds g`
-    let rows = (await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MAX_MEMBERS} - g.virtual_n
+    let rows = (await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
       order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)]))
     const system = rows.filter((r) => r.owner == null).length
     for (let k = system; k < G.RECOMMEND_N; k++) {
@@ -1618,15 +1618,15 @@ export function createApp(opts: AppOptions) {
       await query(`insert into guilds (name, emblem, notice, owner, seed, created_at, virtual_n) values ($1, $2, $3, null, $4, to_timestamp($5::float8), $6)
         on conflict (name) do nothing`, [sg.name, sg.emblem, sg.notice, seed, sg.created_at, sg.virtual_n])
     }
-    if (system < G.RECOMMEND_N) rows = await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MAX_MEMBERS} - g.virtual_n
+    if (system < G.RECOMMEND_N) rows = await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
       order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)])
-    return rows.slice(0, G.RECOMMEND_N).map((r) => {
-      const g = toGuild(r)
-      const st = guildState(g, x.now, x.hour)
-      const vm = st.vt.members.filter((m) => m.join_t <= x.now)
+    return rows.map((r) => ({ r, g: toGuild(r) })).map(({ r, g }) => ({ r, g, st: guildState(g, x.now, x.hour) }))
+      .filter(({ r, st }) => Number(r.real_n) < G.capacity(st.lv.level)).slice(0, G.RECOMMEND_N).map(({ r, g, st }) => {
+      const cap = G.capacity(st.lv.level)
+      const vm = G.seated(st.vt.members, x.now, cap, Number(r.real_n))
       const powers = vm.map((m) => st.vt.day[m.i].power)
       return {
-        id: g.id, name: g.name, emblem: g.emblem, level: st.lv.level, notice: g.notice, count: vm.length + Number(r.real_n),
+        id: g.id, name: g.name, emblem: g.emblem, level: st.lv.level, notice: g.notice, count: vm.length + Number(r.real_n), capacity: cap,
         power: powers.length ? Math.round(powers.reduce((a, b) => a + b, 0) / powers.length) : 0,
       }
     })
@@ -1652,8 +1652,8 @@ export function createApp(opts: AppOptions) {
       members.push({ name: G.playerName(m.player_id), role: m.player_id === g.owner ? '길드장' : '길드원', power: m.power, contrib: mm.contrib, att: mm.attended,
         dmg: mm.boss_total, last: m.last_active ?? 0, real: true })
     }
-    for (const vm of st.vt.members) {
-      if (vm.join_t > x.now) continue
+    const cap = G.capacity(st.lv.level)
+    for (const vm of G.seated(st.vt.members, x.now, cap, x.members.length)) {
       const d = st.vt.day[vm.i]
       if (d.att) att++
       const role = g.owner != null && vm.role === '길드장' ? '정예' : vm.role
@@ -1666,7 +1666,7 @@ export function createApp(opts: AppOptions) {
     out.guild = {
       id: g.id, name: g.name, emblem: g.emblem, notice: g.notice, mine: g.owner === x.id, level: st.lv.level, exp: st.lv.exp, need: st.lv.need,
       buff: G.buffPct(st.lv.level), boss: { level: st.boss.level, hp: st.boss.hp, max: st.boss.max }, members, attend_count: att, log,
-      capacity: G.MAX_MEMBERS,
+      capacity: cap,
     }
     return out
   }
@@ -1733,8 +1733,8 @@ export function createApp(opts: AppOptions) {
       if (!gr) throw new ApiError(404, 'no_such_guild', 'guild not found')
       const g = toGuild(gr)
       const [{ n }] = await query('select count(*)::int as n from player_guild where guild_id = $1', [gid])
-      if (Number(n) >= G.MAX_MEMBERS - g.virtual_n) throw blocked('full', 'guild is full')
       const st = guildState(g, x.now, x.hour)
+      if (Number(n) >= G.capacity(st.lv.level)) throw blocked('full', 'guild is full')
       return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: st.boss.level }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드에 가입했습니다` } } } }
     })
   })
