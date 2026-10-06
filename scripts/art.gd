@@ -249,6 +249,7 @@ const MONSTER_MODELS := {
 		"hide": [],
 		"weapon": PROP_DIR + "Skeleton_Axe.gltf",
 		"anims": {"idle": "Idle_Combat", "walk": "Walking_D_Skeletons", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
+		"attacks": ["2H_Melee_Attack_Chop", "2H_Melee_Attack_Slice", "1H_Melee_Attack_Jump_Chop"],
 	},
 	# 성 방어 적 모습(GameData.enemy_look — 라운드 묶음마다 바뀐다). 능력치·골드는 grunt 그대로, 생김새만 다르다. 던전 적은 쓰지 않는다.
 	"skeleton_warrior": {
@@ -282,6 +283,7 @@ const MONSTER_MODELS := {
 		"look": "enemy_orc_chief",
 		"palette": {8: Color("3A2A20"), 9: Color("2E2018"), 6: Color("241810"), 7: Color("1E1A18")},
 		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+		"attacks": ["2H_Melee_Attack_Chop", "2H_Melee_Attack_Slice", "2H_Melee_Attack_Stab"],
 	},
 	"bandit_chief": {
 		"scene": CHAR_DIR + "Rogue_Hooded.glb",
@@ -289,6 +291,7 @@ const MONSTER_MODELS := {
 		"look": "enemy_bandit_chief",
 		"palette": {9: Color("8A1E1A"), 8: Color("2B2A30"), 21: Color("3A3438"), 5: Color("C8A040"), 6: Color("C8A040"), 19: Color("241E1C")},
 		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "Dualwield_Melee_Attack_Chop", "death": "Death_B"},
+		"attacks": ["Dualwield_Melee_Attack_Chop", "Dualwield_Melee_Attack_Slice", "Dualwield_Melee_Attack_Stab"],
 	},
 	# 성 방어 전용 Meshy 몸(MESHY_ENEMY_DIR/<id>.glb, dev/meshy_enemies.py) — KayKit 뼈대·애니메이션 위에 입는다. 손 슬롯 무기만 남긴다.
 	"zombie": {
@@ -333,18 +336,20 @@ const MONSTER_MODELS := {
 		"scene": CHAR_DIR + "Barbarian.glb",
 		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],  # 양손 도끼
 		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+		"attacks": ["2H_Melee_Attack_Chop", "2H_Melee_Attack_Slice", "2H_Melee_Attack_Stab"],
 	},
 	"demon_lord": {  # 보스
 		"scene": CHAR_DIR + "Knight.glb",
 		"hide": ["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield", "Spike_Shield", "1H_Sword"],  # 대검
 		"body_scale": 1.15,  # 마른 몸 — 다른 보스와 키를 맞춘다
 		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Slice", "death": "Death_B"},
-		"attacks": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop"],
+		"attacks": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop", "2H_Melee_Attack_Stab"],
 	},
 	"minotaur": {  # 보스
 		"scene": CHAR_DIR + "Barbarian.glb",
 		"hide": ["1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "Mug"],
 		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+		"attacks": ["2H_Melee_Attack_Chop", "2H_Melee_Attack_Slice", "2H_Melee_Attack_Stab"],
 	},
 	# 개정 18 던전. tint = 메시 이름 → 곱할 색(UnitModel.dress), parts = [뼈, ArenaKit.part id] — 코드 메시를 그 뼈에 붙인다.
 	# scale = 던전 그림 크기(UnitModel은 쓰지 않는다 — 몬스터 표 scale로 넘긴다). Rogue의 Death_A(0.8초)는 CORPSE_SEC보다 짧아 Death_B.
@@ -365,6 +370,7 @@ const MONSTER_MODELS := {
 		"parts": [["head", "king_face"], ["head", "crown"], ["handslot.r", "king_club"]],
 		"scale": 1.7,
 		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_B"},
+		"attacks": ["2H_Melee_Attack_Chop", "2H_Melee_Attack_Slice", "1H_Melee_Attack_Slice_Diagonal"],
 	},
 	"death_knight": {
 		"scene": CHAR_DIR + "Skeleton_Warrior.glb",
@@ -376,7 +382,7 @@ const MONSTER_MODELS := {
 		"parts": [["head", "dk_eyes"], ["chest", "dk_cape"], ["handslot.r", "dk_sword"]],
 		"scale": 2.2,
 		"anims": {"idle": "2H_Melee_Idle", "walk": "Walking_A", "attack": "2H_Melee_Attack_Chop", "death": "Death_C_Skeletons"},
-		"attacks": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop"],  # 개정 26: 가로 베기와 내려치기를 번갈아(같은 내려치기만 반복하지 않게)
+		"attacks": ["2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop", "2H_Melee_Attack_Stab", "1H_Melee_Attack_Jump_Chop"],  # 가로 베기·내려치기·찌르기·뛰어 내려찍기(개정 26 둘 → 2026-10-06 넷, 무작위)
 	},
 	# 모집권 던전(2026-10-06): 바위 골렘(Meshy 몸, Barbarian 뼈대 — 빈손 주먹질)과 쓰러질 때 갈라져 나오는 조각(같은 몸, 작게 — "meshy" = 몸 파일 종류).
 	"rock_golem": {
@@ -386,7 +392,7 @@ const MONSTER_MODELS := {
 			"Barbarian_LegLeft": ROCK_TINT, "Barbarian_LegRight": ROCK_TINT},
 		"scale": 2.4,
 		"anims": {"idle": "Unarmed_Idle", "walk": "Walking_A", "attack": "Unarmed_Melee_Attack_Punch_A", "death": "Death_B"},
-		"attacks": ["Unarmed_Melee_Attack_Punch_A", "Unarmed_Melee_Attack_Punch_B"],  # 왼·오른 주먹 번갈아
+		"attacks": ["Unarmed_Melee_Attack_Punch_A", "Unarmed_Melee_Attack_Punch_B", "Unarmed_Melee_Attack_Kick"],  # 왼·오른 주먹·발차기(무작위)
 	},
 	"golemite": {
 		"scene": CHAR_DIR + "Barbarian.glb",
@@ -414,7 +420,31 @@ const HIT_FRAC := {
 	"1H_Melee_Attack_Chop": 0.56, "2H_Melee_Attack_Chop": 0.52, "2H_Melee_Attack_Slice": 0.4, "Dualwield_Melee_Attack_Chop": 0.38, "Throw": 0.54,
 	"1H_Ranged_Shoot": 0.26, "2H_Ranged_Shoot": 0.26, "Spellcast_Shoot": 0.30,
 	"Unarmed_Melee_Attack_Punch_A": 0.33, "Unarmed_Melee_Attack_Punch_B": 0.29, "Unarmed_Melee_Attack_Kick": 0.38,  # 성 적·바위 골렘 맨손(주먹·발 가장 빠른~가장 앞)
+	# 2026-10-06 평타 모션 셋(ATTACK_SETS·보스 "attacks")에 더한 것 — 같은 방법(tests/attack_frac): 베기 = 손 최고 속도 직후, 찌르기 = 다 뻗은 순간,
+	# 뛰어 내려찍기 = 착지, 끊어 쏘기(CLIP_CUTS) = 반동이 시작되는 순간. 스킬 발동(CAST_FRAC)에 같은 이름이 있으면 발동은 그 값 그대로.
+	"1H_Melee_Attack_Slice_Diagonal": 0.40, "1H_Melee_Attack_Slice_Horizontal": 0.26, "1H_Melee_Attack_Stab": 0.42, "2H_Melee_Attack_Stab": 0.44,
+	"Dualwield_Melee_Attack_Slice": 0.50, "Dualwield_Melee_Attack_Stab": 0.44, "1H_Melee_Attack_Jump_Chop": 0.58,
+	"1H_Ranged_Snap": 0.56, "2H_Ranged_Snap": 0.72,
 }
+
+## 영웅 평타 모션 셋(2026-10-06 — 영웅·보스는 3가지 이상, 공격마다 하나를 무작위로, 같은 것을 연달아 쓰지 않는다: UnitModel.play_attack).
+## 열쇠 = _attack_anim이 고른 기본 모션(첫째 = 그것). 단검 하나는 따로(KNIFE_SET). 쇠뇌 셋째는 연사 모션에서 한 발만 잘라 만든다(CLIP_CUTS).
+## 마법사는 지팡이·완드·책 모두 같은 셋(쏘기·한 손 겨누기·앞으로 찌르기 — 손 끝에서 발사).
+const ATTACK_SETS := {
+	"1H_Melee_Attack_Chop": ["1H_Melee_Attack_Chop", "1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Slice_Horizontal"],
+	"2H_Melee_Attack_Chop": ["2H_Melee_Attack_Chop", "2H_Melee_Attack_Slice", "2H_Melee_Attack_Stab"],
+	"Dualwield_Melee_Attack_Chop": ["Dualwield_Melee_Attack_Chop", "Dualwield_Melee_Attack_Slice", "Dualwield_Melee_Attack_Stab"],
+	"Spellcast_Shoot": ["Spellcast_Shoot", "1H_Ranged_Shoot", "1H_Melee_Attack_Stab"],
+	"Throw": ["Throw", "1H_Melee_Attack_Slice_Horizontal", "Dualwield_Melee_Attack_Slice"],  # 위로 던지기·옆으로 던지기·두 손 내리꽂아 던지기
+	"1H_Ranged_Shoot": ["1H_Ranged_Shoot", "2H_Ranged_Shoot", "1H_Ranged_Snap"],
+	"2H_Ranged_Shoot": ["2H_Ranged_Shoot", "1H_Ranged_Shoot", "2H_Ranged_Snap"],
+}
+const KNIFE_SET := ["1H_Melee_Attack_Chop", "1H_Melee_Attack_Slice_Horizontal", "1H_Melee_Attack_Stab"]
+
+## 코드로 만든 모션: 이름 → [원본, 시작 비율, 끝 비율]. 원본(연사 반복)의 한 구간 = 한 발 끊어 쏘기. 모델 장면마다 한 번 만들어
+## 그 장면의 공유 애니메이션 라이브러리에 넣는다(add_cuts).
+const CLIP_CUTS := {"1H_Ranged_Snap": ["1H_Ranged_Shooting", 0.17, 0.42], "2H_Ranged_Snap": ["2H_Ranged_Shooting", 0.10, 0.35]}
+const CUT_FPS := 30.0
 const ATTACK_FIT := 0.9  # 공격 간격이 짧으면 애니메이션을 빨리 돌려 길이 ≤ 간격 × 이 값
 
 ## 스킬 발동 모션(개정 25, HeroSkills.CAST_ANIM이 고른다) → 발동 순간 = 길이 × 이 비율. HIT_FRAC처럼 GLB를 헤드리스로 재생해 손(handslot) 궤적에서
@@ -448,6 +478,7 @@ static func soldier_spec(type: String, model: String) -> Dictionary:
 	var spec := hero_spec({"model": model, "gear": a.gear, "role": a.role})
 	if a.get("horse", false):
 		spec.anims.walk = spec.anims.idle
+	spec.erase("attacks")  # 병사는 평타 하나(모션 셋은 영웅·보스)
 	return spec
 
 ## 영웅 정의(GameData.hero) → UnitModel 스펙: gear만 보이고, 공격 애니메이션은 역할·모델·주무기로 고른다.
@@ -458,7 +489,8 @@ static func hero_spec(h: Dictionary) -> Dictionary:
 	var gear: PackedStringArray = h.gear.split("|")
 	var anims := HERO_ANIMS.duplicate()
 	anims.attack = _attack_anim(h.model, gear, h.role)
-	var spec := {"scene": m.scene, "hide": m.gear.filter(func(g): return not gear.has(g)), "anims": anims}
+	var spec := {"scene": m.scene, "hide": m.gear.filter(func(g): return not gear.has(g)), "anims": anims,
+		"attacks": KNIFE_SET if gear.size() == 1 and gear[0] == "Knife" and h.role != "ranged" else ATTACK_SETS.get(anims.attack, [anims.attack])}
 	var look: Dictionary = HERO_LOOKS.get(h.get("id", ""), {})
 	if not look.is_empty():
 		spec.hide += look.get("hide", [])
@@ -516,6 +548,38 @@ static func put_body(model: Node3D, path: String) -> void:
 	body.transform = skinned.transform
 	body.skin = skinned.skin
 	body.skeleton = NodePath("..")
+
+
+## names 중 CLIP_CUTS 모션이 이 플레이어에 없으면 만들어 넣는다(UnitModel._ready). 라이브러리는 장면 인스턴스끼리 공유라 장면마다 한 번.
+static func add_cuts(ap: AnimationPlayer, names: Array) -> void:
+	for n in names:
+		if not CLIP_CUTS.has(n) or ap.has_animation(n):
+			continue
+		var c: Array = CLIP_CUTS[n]
+		var src := ap.get_animation(c[0])
+		ap.get_animation_library(ap.find_animation_library(src)).add_animation(n, cut_clip(src, c[1], c[2]))
+
+
+## src의 [a, b](길이 비율) 구간을 CUT_FPS로 다시 찍은 새 모션(위치·회전·크기 트랙만, 반복 없음).
+static func cut_clip(src: Animation, a: float, b: float) -> Animation:
+	var t0 := src.length * a
+	var span := src.length * (b - a)
+	var out := Animation.new()
+	out.length = span
+	var steps := maxi(2, ceili(span * CUT_FPS))
+	for i in src.get_track_count():
+		var ty := src.track_get_type(i)
+		if not ty in [Animation.TYPE_POSITION_3D, Animation.TYPE_ROTATION_3D, Animation.TYPE_SCALE_3D]:
+			continue
+		var j := out.add_track(ty)
+		out.track_set_path(j, src.track_get_path(i))
+		for k in steps + 1:
+			var t := span * k / steps
+			match ty:
+				Animation.TYPE_POSITION_3D: out.position_track_insert_key(j, t, src.position_track_interpolate(i, t0 + t))
+				Animation.TYPE_ROTATION_3D: out.rotation_track_insert_key(j, t, src.rotation_track_interpolate(i, t0 + t))
+				Animation.TYPE_SCALE_3D: out.scale_track_insert_key(j, t, src.scale_track_interpolate(i, t0 + t))
+	return out
 
 
 ## 이름 붙은 팔레트(LOOK_SLOTS 이름 → 색) → 칸 번호 → 색.

@@ -1,6 +1,6 @@
 extends "res://scripts/monster.gd"
 ## 바위 골렘(모집권 던전 보스, 2026-10-06 — 클래시 오브 클랜 골렘 느낌의 우리 디자인): 느리고 단단하며 주먹이 무겁다. monster.gd 아레나 모드
-## (일반 공격 — 왼·오른 주먹 번갈아, Art "attacks") + 데스나이트처럼 범위 예고(바닥 원이 빨갛게 차오르는 동안 그 자리에 선다 — 다 차는 순간
+## (일반 공격 — 왼·오른 주먹·발차기 중 무작위, Art "attacks") + 데스나이트처럼 범위 예고(바닥 원이 빨갛게 차오르는 동안 그 자리에 선다 — 다 차는 순간
 ## 원 안 영웅만 맞는다) 패턴 둘:
 ## 내려찍기: SLAM_SEC마다 발밑 반경 SLAM_R 원(TELE_SLAM초) + 두 팔 내려찍기 → 원 안 영웅 모두 공격 × SLAM_MULT, 기절 STUN_SEC, 땅 갈라짐.
 ## 바위 던지기: THROW_SEC마다 가장 먼 영웅 자리에 반경 THROW_R 원(TELE_THROW초, 예고 시작 때 자리) + 던지기 모션 → 바위가 날아가 떨어지며
@@ -44,7 +44,7 @@ func _process(delta: float) -> void:
 	super._process(delta)
 	slam_cd -= delta
 	throw_cd -= delta
-	if not is_alive() or is_stunned() or _swing_left >= 0.0:  # 휘두르는 중이면 다 휘두른 뒤에 패턴
+	if not is_alive() or is_stunned() or _swing_left >= 0.0 or _model.is_busy():  # 휘두르는 중이면 모션이 다 끝난 뒤에 패턴(타격 순간에 끊지 않게)
 		return
 	if slam_cd <= 0.0 and _hero_near(SLAM_R + 1.0):
 		slam()

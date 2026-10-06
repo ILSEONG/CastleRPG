@@ -1,5 +1,5 @@
 extends "res://scripts/monster.gd"
-## 데스나이트(개정 18 §4, 장비 던전 보스): monster.gd 아레나 모드(일반 공격 — 가로 베기·내려치기 번갈아, Art "attacks") + 패턴 둘.
+## 데스나이트(개정 18 §4, 장비 던전 보스): monster.gd 아레나 모드(일반 공격 — 가로 베기·내려치기·찌르기·뛰어 내려찍기 중 무작위, Art "attacks") + 패턴 둘.
 ## 패턴은 범위 예고(개정 26)부터: 바닥에 범위가 먼저 보이고 안이 빨갛게 차오르는 동안(TELE_*) 전용 모션을 하며 그 자리에 선다 —
 ## 다 차는 순간 그 범위 안에 있는 영웅만 맞는다(그 사이 범위 밖으로 옮기면 피한다).
 ## 휩쓸기: SWEEP_SEC마다 발밑 반경 SWEEP_R 원 예고(TELE_SWEEP초) + 대검 돌기 모션 → 원 안 영웅 모두에게 공격 × SWEEP_MULT(붉은 폭발).
@@ -51,7 +51,7 @@ func _process(delta: float) -> void:
 	super._process(delta)
 	sweep_cd -= delta
 	charge_cd -= delta
-	if not is_alive() or is_stunned() or _swing_left >= 0.0:  # 휘두르는 중이면 다 휘두른 뒤에 패턴
+	if not is_alive() or is_stunned() or _swing_left >= 0.0 or _model.is_busy():  # 휘두르는 중이면 모션이 다 끝난 뒤에 패턴(타격 순간에 끊지 않게)
 		return
 	if sweep_cd <= 0.0:
 		sweep()

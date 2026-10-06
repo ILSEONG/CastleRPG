@@ -179,6 +179,8 @@ func _process(delta: float) -> void:
 		return  # 밀려나는 동안은 걷지도 치지도 않는다(휘두르던 공격은 _tick_knock이 끊었다)
 	_atk_cd -= delta
 	_tick_swing(delta)
+	if is_boss and _model.is_busy():  # 보스: 휘두르던 모션은 끝까지(2026-10-06 — 대상이 쓰러지거나 멀어져도 대기·걷기로 끊지 않고 그 자리에서 마저 휘두른다)
+		return
 	_scan_cd -= delta
 	if _taunt_t > 0.0 and _taunt_ok(_taunt_hero):
 		_target_hero = _taunt_hero  # 도발: 탐색 없이 그 영웅

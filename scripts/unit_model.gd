@@ -41,7 +41,7 @@ var _acc := 0.0  # 아직 돌리지 않은 애니메이션 시간(lod)
 var _meshes: Array = []  # 그림자를 끄고 켤 메시와 원래 설정 [[MeshInstance3D, cast_shadow], …](crowd_lod)
 var _shadows := true
 var _base_scale := Vector3.ONE
-var _atk_i := 0  # 공격 모션 차례(attacks)
+var _atk_i := -1  # 지난 공격 모션 번호(attacks — 다음엔 이것만 빼고 고른다)
 var _flash_at := -100000  # 마지막 피격 번쩍임(밀리초)
 var _hit_tw: Tween
 var _flash_meshes: Array = []  # 보이는 몸 메시(처음 맞을 때 찾는다)
@@ -67,6 +67,7 @@ func _ready() -> void:
 	if crowd_lod:
 		for mi in model.find_children("*", "MeshInstance3D", true, false):
 			_meshes.append([mi, mi.cast_shadow])
+	Art.add_cuts(_anim, _spec.get("attacks", []))
 	for anim_name in [_spec.anims.idle, _spec.anims.walk]:
 		_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR  # 공유 리소스라 한 번 바꾸면 전부 적용
 	_anim.animation_finished.connect(_on_finished)
@@ -118,17 +119,34 @@ func play_walk() -> void:
 
 
 ## 공격 때마다 처음부터. 끝나면 대기로 돌아간다. 공격 간격 interval보다 길면 길이 ≤ 간격 × ATTACK_FIT가 되게 빨리 돈다.
-## 스펙에 "attacks"(모션 이름 목록)가 있으면 차례로 돌아가며 쓴다(개정 26 — 데스나이트: 가로 베기·내려치기).
-## 반환 = 타격(발사) 순간까지 초(길이 × HIT_FRAC ÷ 속도).
+## 스펙에 "attacks"(모션 이름 목록 — 영웅 Art.ATTACK_SETS, 보스 MONSTER_MODELS)가 있으면 공격마다 그중 하나를 무작위로, 바로 앞 것은 빼고 고른다
+## (2026-10-06 — 개정 26의 차례 돌기 대신). 반환 = 타격(발사) 순간까지 초(길이 × HIT_FRAC ÷ 속도).
 func play_attack(interval: float) -> float:
 	var list: Array = _spec.get("attacks", [_spec.anims.attack])
-	_current = list[_atk_i % list.size()]
-	_atk_i += 1
+	_atk_i = pick_next(list.size(), _atk_i)
+	_current = list[_atk_i]
 	var length := _anim.get_animation(_current).length
 	var speed := maxf(1.0, length / (interval * Art.ATTACK_FIT))
 	_anim.play(_current, 0.15, speed)
 	_anim.seek(0.0, true)
 	return length * float(Art.HIT_FRAC.get(_current, 0.5)) / speed
+
+
+## n개 중 하나를 무작위로, last(지난 번호, 처음엔 -1)는 빼고.
+static func pick_next(n: int, last: int) -> int:
+	if n <= 1:
+		return 0
+	if last < 0 or last >= n:
+		return randi() % n
+	var i := randi() % (n - 1)
+	return i + 1 if i >= last else i
+
+
+## 공격·발동 모션(반복 없는 것)이 아직 돌고 있는가 — 보스는 이게 끝날 때까지 걷기·대기로 끊지 않는다(monster.gd).
+func is_busy() -> bool:
+	if _current == "" or _current == _spec.anims.death or _anim == null or _anim.current_animation != _current:
+		return false
+	return _anim.get_animation(_current).loop_mode == Animation.LOOP_NONE
 
 
 ## 스킬 발동 모션(개정 25): anim_name을 처음부터. 발동 순간(길이 × Art.CAST_FRAC)이 Art.CAST_WINDUP초보다 늦으면 그만큼 빨리 돈다.

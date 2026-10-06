@@ -1,11 +1,12 @@
 extends Node3D
 ## 길드 보스 드래곤 모델(Meshy, dev/meshy_dragon_fit.py). 사람 모양이 아니라 KayKit 뼈대·자동 리깅을 못 써서, 부품(Body·WingL·WingR·Neck·Tail,
-## 노드 원점 = 관절)을 코드로 움직인다: 대기(숨쉬기·날갯짓·목·꼬리 흔들기), 공격 셋(물기·불 뿜기·날개 바람, 차례로), 피격 번쩍임, 쓰러짐.
+## 노드 원점 = 관절)을 코드로 움직인다: 대기(숨쉬기·날갯짓·목·꼬리 흔들기), 공격 셋(물기·불 뿜기·날개 바람, 무작위), 피격 번쩍임, 쓰러짐.
 ## monster.gd가 쓰는 UnitModel 메서드(play_idle·play_walk·play_attack·hit_react·play_death·face)를 같은 뜻으로 낸다. 정면 +Z.
 ## 공격 연출의 이펙트(불·바람)는 dragon.gd가 타격 순간에 낸다(mouth()·attack_kind()).
 
 const Art := preload("res://scripts/art.gd")
 const HitFlashShader := preload("res://shaders/hit_flash.gdshader")
+const UnitModelScript := preload("res://scripts/unit_model.gd")
 
 const SCENE := "res://assets/models/meshy/enemies/dragon.glb"
 const PARTS := ["Body", "WingL", "WingR", "Neck", "Tail"]
@@ -22,7 +23,7 @@ var _t := 0.0
 var _act := ""  # "" · 공격 이름 · "death"
 var _act_t := 0.0
 var _act_len := 1.0
-var _atk_i := 0
+var _atk_i := -1
 var _flash_at := -100000
 var _flash_meshes: Array = []
 var _hit_tw: Tween
@@ -54,14 +55,19 @@ func play_walk() -> void:
 	play_idle()
 
 
-## 공격 모션(물기·불 뿜기·날개 바람 차례로). 길이 = 간격 × 0.8(최대 1.6초). 반환 = 타격 순간까지 초.
+## 공격 모션(물기·불 뿜기·날개 바람 중 무작위, 바로 앞 것은 빼고 — 2026-10-06). 길이 = 간격 × 0.8(최대 1.6초). 반환 = 타격 순간까지 초.
 func play_attack(interval: float) -> float:
-	attack_kind = ATTACKS[_atk_i % ATTACKS.size()]
-	_atk_i += 1
+	_atk_i = UnitModelScript.pick_next(ATTACKS.size(), _atk_i)
+	attack_kind = ATTACKS[_atk_i]
 	_act = attack_kind
 	_act_t = 0.0
 	_act_len = minf(1.6, interval * 0.8)
 	return _act_len * float(HIT_FRAC[attack_kind])
+
+
+## 공격 모션이 아직 도는가(UnitModel.is_busy와 같은 뜻).
+func is_busy() -> bool:
+	return _act != "" and _act != "death"
 
 
 func play_cast(_anim_name: String, at_sec := -1.0, _frac := -1.0) -> float:
