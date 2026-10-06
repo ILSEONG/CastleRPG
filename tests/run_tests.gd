@@ -4575,6 +4575,10 @@ func test_tutorial() -> void:
 		kinds[want] = true
 		check(got == want and (want != "tickets" or int(rw.tickets) == 10), "tutorial: mission %d reward is %s: %s" % [i + 1, want, rw])
 	check(kinds.size() == 4, "tutorial: all four reward kinds appear")
+	# 튜토리얼 훈련: 1마리씩, 5초
+	t.check()
+	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
+		"tutorial: training is one soldier in 5 s")
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
@@ -4623,6 +4627,8 @@ func test_tutorial() -> void:
 	t.guild = null
 	check(not t.complete() and t.tab_locked("guild") == false, "tutorial: guild tab open at the guild mission")
 	t.state = "done"
+	t.check()
+	check(not e.tutorial_training and e.train_max("barracks") > 1, "tutorial done: normal training batches")
 	check(not t.tab_locked("hero") and t.mission().is_empty(), "tutorial done: nothing locked")
 	t.free()
 	gs.free()

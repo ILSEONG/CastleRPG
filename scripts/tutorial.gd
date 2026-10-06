@@ -14,7 +14,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const SAVE_VERSION := 1
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
-const TRAIN_N := 5  # 보병 훈련 미션 보상이 대는 마릿수
+const TRAIN_N := 1  # 보병 훈련 미션 보상이 대는 마릿수(튜토리얼 훈련은 1마리씩, 5초 — Economy.tutorial_training)
 const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟수
 const KEYS := 2  # 던전 미션 보상 열쇠
 const RESEARCH_ID := "wood_tech"  # 연구 미션 보상이 대는 연구(1단계 아무 연구나 같은 비용)
@@ -49,7 +49,7 @@ const MISSIONS := [
 		"goto": "stage"},
 	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "보병 막사를 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
 		"goto": "building:barracks"},
-	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 훈련을 시작하세요. 훈련은 시간이 걸리니 다른 미션을 하며 기다려요.", "kind": "train",
+	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 튜토리얼에서는 5초면 끝나요.", "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
 	{"id": "build_houses", "title": "민가 건설", "desc": "민가를 지으세요. 인구가 병사 배치 상한입니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
 	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100, "goto": "stage"},
@@ -170,6 +170,12 @@ func active() -> bool:
 	return state == "active"
 
 
+## 튜토리얼 동안 Economy 훈련을 1마리·5초로(끝나거나 건너뛰면 원래대로).
+func _sync_training() -> void:
+	if econ != null:
+		econ.tutorial_training = active()
+
+
 func mission() -> Dictionary:
 	return MISSIONS[step] if active() and step < MISSIONS.size() else {}
 
@@ -215,6 +221,7 @@ func note_stage(s: int) -> void:
 
 ## 완료가 바뀌었으면 changed.
 func check() -> void:
+	_sync_training()
 	var c := complete()
 	if c != _was_complete:
 		_was_complete = c
