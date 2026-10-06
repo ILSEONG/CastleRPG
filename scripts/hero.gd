@@ -354,11 +354,11 @@ func _process(delta: float) -> void:
 			_target = _find_target()
 	# 성벽 위 영웅은 쫓지 않는다: 스캔 사이에 사거리를 벗어난 표적은 놓는다(안 그러면 성벽 높이로 떠서 따라간다).
 	if _target != null and is_instance_valid(_target) and _target.is_alive() \
-			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= float(def.range)):
+			and (not is_on_wall() or Formation.flat_distance(global_position, _target.global_position) <= _reach(_target)):
 		_linger = RETURN_DELAY
 		var tpos: Vector3 = _target.global_position
 		_model.face(tpos - global_position)
-		if Formation.flat_distance(global_position, tpos) <= float(def.range):
+		if Formation.flat_distance(global_position, tpos) <= _reach(_target):
 			state = State.ATTACK
 			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null and _blast_ok(_target):
 				_blast_cd = _sk.aoe_blast[0]
@@ -444,7 +444,12 @@ func _find_target():
 ## m을 휘두르는(쏘려는) 중이고 m이 살아서 사거리 안인가 — 그 사이 스캔이 표적을 바꾸거나 놓지 않는다.
 func _swinging_at(m) -> bool:
 	return m != null and _swing == m and is_instance_valid(m) and m.is_alive() \
-		and Formation.flat_distance(global_position, m.global_position) <= float(def.range)
+		and Formation.flat_distance(global_position, m.global_position) <= _reach(m)
+
+
+## 사거리(중심 거리): def.range + 표적 몸 반지름(큰 보스 — 드래곤 hit_radius, 보통 괴물은 0).
+func _reach(m) -> float:
+	return float(def.range) + float(m.hit_radius())
 
 
 # --- 스킬 ---
@@ -527,7 +532,7 @@ func _release() -> void:
 		return
 	var a := atk * _aura_mult()
 	if role != "ranged":
-		if Formation.flat_distance(global_position, m.global_position) <= float(def.range) + SWING_SLACK:
+		if Formation.flat_distance(global_position, m.global_position) <= _reach(m) + SWING_SLACK:
 			_strike(m, a, true, _attacks)
 		return
 	var targets := [m]

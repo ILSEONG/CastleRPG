@@ -4,24 +4,23 @@ extends "res://scripts/ui_window.gd"
 ## - 미가입: 추천 길드 5개(문장·이름·Lv·인원·공지·[가입]) + [새로고침] + 창설(이름 입력·문장 고르기·[창설 골드 500,000]).
 ## - 가입: 머리(문장·이름·Lv·경험치 막대·길드 코인) + 버프 한 줄 + 하위 탭 [홈][보스][상점][길드원].
 ##   홈 = 공지·출석(출석 인원 막대 + 5/10/15/20명 상자)·기부 3종·활동 기록·[길드 탈퇴](두 번 눌러 확인).
-##   보스 = 로우폴리 보스 그림·길드 누적 HP 막대·남은 도전·[도전] → 전투 연출(BOSS_SHOW_SEC 동안 피해 숫자) → 결과(등급·보상).
+##   보스 = 드래곤(Meshy 모델 미리보기)·길드 누적 HP 막대·남은 도전·[도전] → 실제 전투 장면(guild_boss.gd: 영웅이 20초 동안 드래곤과 싸운다) → 결과(등급·보상).
 ##   상점 = 길드 코인 상품(일일·주간 한도). 길드원 = 오늘 기여도 순(나 포함): 직위·이름·전투력·출석·마지막 활동.
-## 내용은 Guild.changed 때 다시 만든다(스크롤 위치는 지킨다). 전투 연출 중에는 다시 만들지 않고 끝난 뒤 한 번.
+## 내용은 Guild.changed 때 다시 만든다(스크롤 위치는 지킨다).
 
 const GuildScript := preload("res://scripts/guild.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const DragonModelScript := preload("res://scripts/dragon_model.gd")
 
 const SUBTABS := [["home", "홈"], ["boss", "보스"], ["shop", "상점"], ["members", "길드원"]]
 const EMBLEM_COLORS := [Color(0.80, 0.22, 0.20), Color(0.22, 0.42, 0.78), Color(0.24, 0.60, 0.32), Color(0.56, 0.30, 0.70),
 	Color(0.92, 0.62, 0.16), Color(0.18, 0.55, 0.60), Color(0.35, 0.36, 0.42), Color(0.86, 0.40, 0.58)]
-const BOSS_COLORS := [Color(0.55, 0.52, 0.48), Color(0.30, 0.52, 0.34), Color(0.50, 0.70, 0.86), Color(0.78, 0.34, 0.16), Color(0.34, 0.24, 0.46)]
 const GREEN := Color(0.13, 0.50, 0.22)
 const RED := Color(0.80, 0.26, 0.22)
 const COIN_COLOR := Color(0.52, 0.40, 0.78)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
-const BOSS_SHOW_SEC := 3.2
 const LEAVE_CONFIRM_SEC := 3.0
 const GRADE_COLORS := {"S": Color(0.95, 0.62, 0.10), "A": Color(0.80, 0.30, 0.70), "B": Color(0.25, 0.50, 0.85), "C": Color(0.30, 0.62, 0.35), "D": Color(0.5, 0.5, 0.55)}
 
@@ -33,8 +32,6 @@ var emblem_pick := 0
 var buttons := {}  # 테스트·연출용: "attend", "donate:gold", "boss", "buy:dia", "join:0", "create", "leave", "tab:boss", "box:0" …
 
 var _dirty := false
-var _fight := {}  # 전투 연출 {result, t, hits: [{v, t, x}], done}
-var _fight_layer: Control
 var _leave_armed := 0.0
 var _create_name := ""
 var _refetch := 0.0
@@ -55,16 +52,8 @@ func _ready() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 12)
 	scroll.add_child(body)
-	_fight_layer = Control.new()
-	_fight_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_fight_layer.mouse_filter = Control.MOUSE_FILTER_STOP
-	_fight_layer.visible = false
-	_fight_layer.draw.connect(_draw_fight)
-	_fight_layer.gui_input.connect(_on_fight_input)
-	dialog.add_child(_fight_layer)
 	_fit_sheet()
 	Guild.changed.connect(_on_changed)
-	Guild.boss_done.connect(_on_boss_done)
 	Economy.changed.connect(_on_econ_changed)
 
 
@@ -95,10 +84,6 @@ func _on_econ_changed() -> void:
 func _process(delta: float) -> void:
 	if not visible:
 		return
-	if not _fight.is_empty():
-		_fight.t = float(_fight.t) + delta
-		_fight_layer.queue_redraw()
-		return
 	if Guild.online():
 		_refetch -= delta
 		if _refetch <= 0.0:
@@ -111,12 +96,6 @@ func _process(delta: float) -> void:
 	if _dirty:
 		_dirty = false
 		_rebuild()
-
-
-func close() -> void:
-	if not _fight.is_empty():
-		_end_fight()
-	super.close()
 
 
 # --- 다시 만들기 ---
@@ -189,7 +168,7 @@ func _rec_row(rec: Dictionary, i: int) -> Control:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 0)
 	info.add_child(_label(rec.name, 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label("Lv %d · 길드원 %d/%d · 평균 전투력 %s" % [rec.level, rec.count, GuildScript.MAX_MEMBERS, UiKit.commas(rec.power)], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(_label("Lv %d · 길드원 %d/%d · 평균 전투력 %s" % [rec.level, rec.count, int(rec.get("capacity", GuildScript.capacity(int(rec.level)))), UiKit.commas(rec.power)], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	var n := _label(rec.notice, 20, GREEN, HORIZONTAL_ALIGNMENT_LEFT)
 	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	n.clip_text = true
@@ -275,7 +254,7 @@ func _build_joined() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
 	info.add_child(_label(g.name, 32, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label("Lv %d · 길드원 %d/%d" % [g.level, Guild.members_now().size() + 1, GuildScript.MAX_MEMBERS], 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(_label("Lv %d · 길드원 %d/%d" % [g.level, Guild.members_now().size() + 1, int(g.get("capacity", GuildScript.capacity(int(g.level))))], 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	var bar := ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 26)
 	bar.show_percentage = false
@@ -466,10 +445,7 @@ func _build_boss() -> void:
 	var card := _card()
 	var v: VBoxContainer = card.get_child(0)
 	v.add_child(_label("Lv %d  %s" % [lv, GuildScript.boss_name(lv)], 30))
-	var art := Control.new()
-	art.custom_minimum_size = Vector2(0, 230)
-	art.draw.connect(func(): draw_boss(art, Vector2(art.size.x / 2.0, art.size.y * 0.55), 210.0, lv, 0.0))
-	v.add_child(art)
+	v.add_child(dragon_view(Vector2(560, 300)))
 	var hp := ProgressBar.new()
 	hp.custom_minimum_size = Vector2(0, 30)
 	hp.show_percentage = false
@@ -622,101 +598,46 @@ func _build_members() -> void:
 		body.add_child(card)
 
 
-# --- 보스 전투 연출 ---
+# --- 보스 전투 ---
 
+## [도전]: 실제 전투 시작(Guild.start_boss → boss_started → main이 드래곤 전투 장면을 연다). 결과는 그 장면이 띄운다.
 func _start_fight() -> void:
-	var res := Guild.fight_boss()  # 결과는 boss_done(온라인은 응답 때)
-	if res.is_empty():
+	if not Guild.start_boss():
 		Economy.notice.emit(Guild.boss_block())
 
 
-func _on_boss_done(res: Dictionary) -> void:
-	if not visible or res.is_empty() or not res.has("dmg"):
-		return
-	var hits := []
-	var n := 9
-	var r := RandomNumberGenerator.new()
-	r.seed = int(res.dmg)
-	var left := float(res.dmg)
-	for i in n:
-		var v := left if i == n - 1 else roundf(float(res.dmg) / n * r.randf_range(0.6, 1.4))
-		v = minf(v, left)
-		left -= v
-		hits.append({"v": v, "t": 0.25 + i * (BOSS_SHOW_SEC - 0.6) / n, "x": r.randf_range(-0.3, 0.3), "crit": r.randf() < 0.25})
-	_fight = {"result": res, "t": 0.0, "hits": hits}
-	_fight_layer.visible = true
-	_arm_guard()
-
-
-func _on_fight_input(event: InputEvent) -> void:
-	var mb := event as InputEventMouseButton
-	if mb == null or not mb.pressed or _fight.is_empty():
-		return
-	if float(_fight.t) < BOSS_SHOW_SEC:
-		_fight.t = BOSS_SHOW_SEC  # 넘기기
-	elif float(_fight.t) > BOSS_SHOW_SEC + 0.4:
-		_end_fight()
-
-
-func _end_fight() -> void:
-	_fight = {}
-	_fight_layer.visible = false
-	_dirty = true
-
-
-func fight_running() -> bool:
-	return not _fight.is_empty()
-
-
-func _draw_fight() -> void:
-	if _fight.is_empty():
-		return
-	var c := _fight_layer
-	var sz := c.size
-	c.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.08, 0.07, 0.12, 0.97))
-	var t := float(_fight.t)
-	var res: Dictionary = _fight.result
-	var center := Vector2(sz.x / 2.0, sz.y * 0.36)
-	var shake := 0.0
-	var dealt := 0.0
-	for h in _fight.hits:
-		if t >= float(h.t):
-			dealt += float(h.v)
-			shake = maxf(shake, 1.0 - (t - float(h.t)) / 0.18)
-	var off := Vector2(sin(t * 60.0) * 8.0 * shake, 0.0)
-	draw_boss(c, center + off, minf(sz.x * 0.7, 380.0), int(res.level), clampf(shake, 0.0, 1.0))
-	var font := ThemeDB.fallback_font if c.get_theme_default_font() == null else c.get_theme_default_font()
-	c.draw_string_outline(font, Vector2(0, sz.y * 0.08), "Lv %d %s" % [res.level, GuildScript.boss_name(int(res.level))], HORIZONTAL_ALIGNMENT_CENTER, sz.x, 34, 6, HudScript.INK)
-	c.draw_string(font, Vector2(0, sz.y * 0.08), "Lv %d %s" % [res.level, GuildScript.boss_name(int(res.level))], HORIZONTAL_ALIGNMENT_CENTER, sz.x, 34, Color.WHITE)
-	for h in _fight.hits:
-		var age := t - float(h.t)
-		if age < 0.0 or age > 0.9:
-			continue
-		var p := center + Vector2(float(h.x) * sz.x, -60.0 - age * 120.0)
-		var col := Color(1.0, 0.85, 0.2, 1.0 - age / 0.9) if h.crit else Color(1, 1, 1, 1.0 - age / 0.9)
-		var fs := 46 if h.crit else 36
-		var s := UiKit.commas(int(h.v))
-		c.draw_string_outline(font, p - Vector2(200, 0), s, HORIZONTAL_ALIGNMENT_CENTER, 400, fs, 7, Color(0.2, 0.05, 0.05, col.a))
-		c.draw_string(font, p - Vector2(200, 0), s, HORIZONTAL_ALIGNMENT_CENTER, 400, fs, col)
-	var total_y := sz.y * 0.66
-	c.draw_string_outline(font, Vector2(0, total_y), "총 피해 %s" % UiKit.commas(int(dealt)), HORIZONTAL_ALIGNMENT_CENTER, sz.x, 40, 7, HudScript.INK)
-	c.draw_string(font, Vector2(0, total_y), "총 피해 %s" % UiKit.commas(int(dealt)), HORIZONTAL_ALIGNMENT_CENTER, sz.x, 40, Color.WHITE)
-	if t < BOSS_SHOW_SEC:
-		c.draw_string(font, Vector2(0, sz.y - 30), "탭하면 건너뜁니다", HORIZONTAL_ALIGNMENT_CENTER, sz.x, 22, Color(1, 1, 1, 0.6))
-		return
-	var k := clampf((t - BOSS_SHOW_SEC) / 0.25, 0.0, 1.0)
-	var gcol: Color = GRADE_COLORS[res.grade]
-	var gc := Vector2(sz.x / 2.0, sz.y * 0.76)
-	UiKit.draw_gem(c, gc, 46.0 * (1.6 - 0.6 * k), gcol, 8)
-	c.draw_string_outline(font, gc + Vector2(-100, 16), res.grade, HORIZONTAL_ALIGNMENT_CENTER, 200, 48, 8, HudScript.INK)
-	c.draw_string(font, gc + Vector2(-100, 16), res.grade, HORIZONTAL_ALIGNMENT_CENTER, 200, 48, Color.WHITE)
-	var rew := "길드 코인 +%d · 골드 +%s" % [res.coins, UiKit.commas(res.gold)]
-	c.draw_string(font, Vector2(0, sz.y * 0.87), rew, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 28, Color(1, 0.92, 0.6))
-	if int(res.killed) > 0:
-		var kt := "보스 처치! 처치 보상을 받으세요" if res.get("claim", false) else "보스 처치! 코인 +%d · 다이아 +%d" % [
-			GuildScript.BOSS_KILL_REWARD.coins * int(res.killed), GuildScript.BOSS_KILL_REWARD.diamonds * int(res.killed)]
-		c.draw_string(font, Vector2(0, sz.y * 0.91), kt, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 26, Color(0.6, 1.0, 0.7))
-	c.draw_string(font, Vector2(0, sz.y - 30), "탭해서 닫기", HORIZONTAL_ALIGNMENT_CENTER, sz.x, 22, Color(1, 1, 1, 0.7))
+## 보스 탭 드래곤 미리보기: 자기 3D 세계(SubViewport)에 드래곤 모델(대기 동작) + 조명 + 카메라.
+static func dragon_view(px: Vector2) -> SubViewportContainer:
+	var box := SubViewportContainer.new()
+	box.stretch = true
+	box.custom_minimum_size = px
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	vp.transparent_bg = true
+	vp.size = Vector2i(px)
+	box.add_child(vp)
+	var model = DragonModelScript.new()
+	model.size = 1.0
+	model.rotation.y = 0.55
+	vp.add_child(model)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-50, 30, 0)
+	sun.light_energy = 1.1
+	vp.add_child(sun)
+	var env := WorldEnvironment.new()
+	env.environment = Environment.new()
+	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.environment.ambient_light_color = Color(0.75, 0.72, 0.78)
+	env.environment.ambient_light_energy = 0.9
+	vp.add_child(env)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = 1.45
+	cam.position = Vector3(0, 0.62, 3.0)
+	cam.rotation_degrees = Vector3(-8, 0, 0)
+	vp.add_child(cam)
+	return box
 
 
 # --- 그림(각진 로우폴리 평면) ---
@@ -806,51 +727,6 @@ static func draw_chest(ci: CanvasItem, c: Vector2, size: float, opened: bool) ->
 		c + Vector2(-0.12, 0.25) * s]), band)
 	box.append(box[0])
 	ci.draw_polyline(box, Color(IconsScript.OUTLINE, a), 1.5, true)
-
-
-## 길드 보스(단계마다 색·뿔 모양이 바뀌는 각진 거인). hit(0..1)이면 붉게 번쩍.
-static func draw_boss(ci: CanvasItem, c: Vector2, size: float, level: int, hit: float) -> void:
-	var s := size / 2.0
-	var base: Color = BOSS_COLORS[(maxi(level, 1) - 1) % BOSS_COLORS.size()]
-	var col := base.lerp(Color(1.0, 0.3, 0.25), hit * 0.6)
-	var dark := col.darkened(0.3)
-	var light := col.lightened(0.2)
-	# 그림자
-	var sh := PackedVector2Array()
-	for k in 10:
-		var a := k * TAU / 10.0
-		sh.append(c + Vector2(cos(a) * 0.75, sin(a) * 0.12 + 0.86) * s)
-	ci.draw_colored_polygon(sh, Color(0, 0, 0, 0.25))
-	# 다리·팔
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.45, 0.4) * s, c + Vector2(-0.15, 0.4) * s, c + Vector2(-0.2, 0.85) * s, c + Vector2(-0.5, 0.85) * s]), dark)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0.15, 0.4) * s, c + Vector2(0.45, 0.4) * s, c + Vector2(0.5, 0.85) * s, c + Vector2(0.2, 0.85) * s]), dark)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.6, -0.3) * s, c + Vector2(-0.95, 0.1) * s, c + Vector2(-0.9, 0.55) * s, c + Vector2(-0.62, 0.5) * s,
-		c + Vector2(-0.55, 0.1) * s]), dark)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0.6, -0.3) * s, c + Vector2(0.95, 0.1) * s, c + Vector2(0.9, 0.55) * s, c + Vector2(0.62, 0.5) * s,
-		c + Vector2(0.55, 0.1) * s]), dark)
-	# 몸통(왼쪽 밝게)
-	var body := PackedVector2Array([c + Vector2(-0.62, -0.35) * s, c + Vector2(-0.3, -0.62) * s, c + Vector2(0.3, -0.62) * s, c + Vector2(0.62, -0.35) * s,
-		c + Vector2(0.5, 0.45) * s, c + Vector2(-0.5, 0.45) * s])
-	ci.draw_colored_polygon(body, col)
-	ci.draw_colored_polygon(PackedVector2Array([body[0], body[1], c + Vector2(0, -0.62) * s, c + Vector2(0, 0.45) * s, body[5]]), light)
-	# 가슴 판
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.25, -0.1) * s, c + Vector2(0.25, -0.1) * s, c + Vector2(0.18, 0.2) * s, c + Vector2(-0.18, 0.2) * s]),
-		dark.darkened(0.1))
-	# 머리 + 뿔
-	var head := PackedVector2Array([c + Vector2(-0.25, -0.62) * s, c + Vector2(-0.22, -0.88) * s, c + Vector2(0.22, -0.88) * s, c + Vector2(0.25, -0.62) * s])
-	ci.draw_colored_polygon(head, col.darkened(0.1))
-	var horn := Color(0.95, 0.9, 0.78)
-	var hl := 0.25 + 0.05 * ((level - 1) % 3)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.22, -0.82) * s, c + Vector2(-0.22 - hl, -1.0 - hl * 0.4) * s, c + Vector2(-0.12, -0.88) * s]), horn)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0.22, -0.82) * s, c + Vector2(0.22 + hl, -1.0 - hl * 0.4) * s, c + Vector2(0.12, -0.88) * s]), horn)
-	# 눈
-	var eye := Color(1.0, 0.85, 0.2).lerp(Color(1, 1, 1), hit)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-0.16, -0.78) * s, c + Vector2(-0.04, -0.74) * s, c + Vector2(-0.16, -0.7) * s]), eye)
-	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0.16, -0.78) * s, c + Vector2(0.04, -0.74) * s, c + Vector2(0.16, -0.7) * s]), eye)
-	body.append(body[0])
-	ci.draw_polyline(body, IconsScript.OUTLINE, maxf(1.5, size / 120.0), true)
-	head.append(head[0])
-	ci.draw_polyline(head, IconsScript.OUTLINE, maxf(1.5, size / 120.0), true)
 
 
 func _draw_give_icon(ci: Control, give: Dictionary) -> void:

@@ -43,6 +43,12 @@ test('guild rules: levels, boss steps and virtual members are deterministic', ()
   const made = G.virtualMembers({ ...g, system: false, created_at: T0, virtual_n: 10 })
   assert.ok(made.every((m, i) => i === 0 || m.join_t > made[i - 1].join_t), 'created guild: virtual members join one by one')
   assert.equal(G.playerName('8f1e0a0e-0000-4000-8000-000000000001'), G.playerName('8f1e0a0e-0000-4000-8000-000000000001'))
+  // 최대 6레벨, 인원 15명(6레벨 20명), 버프 최대 6%
+  assert.equal(G.levelOf(1e12).level, 6)
+  assert.equal(G.buffPct(6), 6)
+  assert.deepEqual([1, 5, 6].map(G.capacity), [15, 15, 20])
+  const vm = G.virtualMembers({ ...g, virtual_n: 18 })
+  assert.equal(G.seated(vm, T0, 15, 3).length, 12, 'virtual members only fill the seats real players leave')
 })
 
 test('guild: locked before round 1-10, then 5 recommendations', async () => {
@@ -57,7 +63,7 @@ test('guild: locked before round 1-10, then 5 recommendations', async () => {
   assert.equal(v.unlocked, true)
   assert.equal(v.guild, null)
   assert.equal(v.recommendations.length, 5)
-  assert.ok(v.recommendations.every((x: any) => x.level >= 1 && x.count >= 12 && x.count < 30 && typeof x.name === 'string'))
+  assert.ok(v.recommendations.every((x: any) => x.level >= 1 && x.level <= 6 && x.count >= 12 && x.count <= x.capacity && x.capacity === G.capacity(x.level) && typeof x.name === 'string'))
 })
 
 test('guild: join, attend, box, donate, leave keeps coins', async () => {
@@ -67,6 +73,7 @@ test('guild: join, attend, box, donate, leave keeps coins', async () => {
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.equal(r.json.guild.guild.id, rec.id)
   assert.ok(r.json.guild.guild.members.length >= 12)
+  assert.ok(r.json.guild.guild.members.length + 1 <= r.json.guild.guild.capacity, 'members + me fit the capacity')
   assert.equal((await post(p.token, 'join', { guild_id: rec.id })).json.error, 'in_guild')
   const gold0 = r.json.player.gold_tenths
   r = await post(p.token, 'attend')
@@ -100,19 +107,25 @@ test('guild: join, attend, box, donate, leave keeps coins', async () => {
   assert.equal(r.json.guild.me.attended, true, 'attendance stays used for the day after leaving')
 })
 
-test('guild: real members see each other and real exp adds to the guild', async () => {
+test('guild: real members see each other, real exp adds to the guild, real players take seats from virtual members', async () => {
   const a = await ready()
+  await setGold(a.id, G.CREATE_GOLD)
+  const gid = (await post(a.token, 'create', { name: '실제길드', emblem: 1 })).json.guild.guild.id
   const b = await ready()
-  const rec = (await guild(a.token)).recommendations[1]
-  await post(a.token, 'join', { guild_id: rec.id })
-  const before = (await guild(a.token)).guild
-  await post(b.token, 'join', { guild_id: rec.id })
+  await post(b.token, 'join', { guild_id: gid })
   await post(b.token, 'attend')
   const v = (await guild(a.token)).guild
-  assert.equal(v.members.length, before.members.length + 1)
   assert.ok(v.members.some((m: any) => m.real && m.att && m.name === G.playerName(b.id)))
-  const total = (x: any) => G.levelOf(0).need * 0 + x.exp + Array.from({ length: x.level - 1 }, (_, i) => G.expNeed(i + 1)).reduce((s, n) => s + n, 0)
-  assert.equal(total(v), total(before) + G.ATTEND_EXP)
+  assert.equal(v.level, 1)
+  assert.equal(v.exp, G.ATTEND_EXP, 'real attendance exp goes to the guild')
+  // 시스템 길드가 가상 길드원으로 꽉 차 있어도 실제 유저가 들어오면 가상 길드원이 자리를 비운다
+  const c = await ready()
+  const rec = (await guild(c.token)).recommendations[1]
+  const before = rec.count
+  await post(c.token, 'join', { guild_id: rec.id })
+  const w = (await guild(c.token)).guild
+  assert.ok(w.members.length + 1 <= w.capacity)
+  assert.equal(w.members.length + 1, Math.min(before + 1, w.capacity))
 })
 
 test('guild: create costs 500,000 gold, names are unique, owner leaving hands over or deletes', async () => {
@@ -143,20 +156,39 @@ test('guild: create costs 500,000 gold, names are unique, owner leaving hands ov
   S.clock.t -= 86400
 })
 
-test('guild: boss fight, 2 tries a day, grades, kill rewards, daily reset', async () => {
+test('guild: real boss fight — start uses a try, finish takes the damage (capped, not too early), kill rewards, daily reset', async () => {
   const p = await ready()
   const rec = (await guild(p.token)).recommendations[2]
   await post(p.token, 'join', { guild_id: rec.id })
   const v0 = await guild(p.token)
   assert.ok(v0.dps > 0)
-  let r = await post(p.token, 'boss')
+  let r = await post(p.token, 'boss/start')
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  const run = r.json.result
+  assert.equal(run.sec, G.BOSS_FIGHT_SEC)
+  assert.equal(run.level, v0.guild.boss.level)
+  assert.equal(run.hp, v0.guild.boss.hp)
+  assert.equal(r.json.guild.me.boss_tries, 1, 'starting uses a try')
+  assert.equal((await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1000 })).json.error, 'too_early')
+  S.clock.t += G.BOSS_FIGHT_SEC
+  assert.equal((await post(p.token, 'boss/finish', { run_id: 'nope', dmg: 1000 })).json.error, 'no_run')
+  r = await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1234 })
   assert.equal(r.status, 200, JSON.stringify(r.json))
   const res = r.json.result
-  assert.ok(res.dmg > 0 && ['S', 'A', 'B', 'C', 'D'].includes(res.grade))
-  assert.equal(res.grade, G.bossGrade(res.dmg, res.level)[0])
+  assert.equal(res.dmg, 1234)
+  assert.equal(res.grade, G.bossGrade(1234, run.level)[0])
   assert.equal(r.json.guild.coins, res.coins)
-  await post(p.token, 'boss')
-  assert.equal((await post(p.token, 'boss')).json.error, 'no_tries')
+  assert.equal(r.json.guild.me.boss_best, 1234)
+  assert.equal(r.json.guild.me.boss_run, null)
+  assert.equal((await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1 })).json.error, 'no_run', 'a fight finishes once')
+  // 두 번째: 상한(시작 때 초당 피해 × 초 × BOSS_DMG_CAP)을 넘는 피해는 잘린다
+  const run2 = (await post(p.token, 'boss/start')).json.result
+  assert.equal((await post(p.token, 'boss/start')).json.error, 'no_tries')
+  S.clock.t += G.BOSS_FIGHT_SEC
+  r = await post(p.token, 'boss/finish', { run_id: run2.run_id, dmg: 1e11 })
+  assert.ok(Math.abs(r.json.result.dmg - v0.dps * G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP) <= G.BOSS_FIGHT_SEC * G.BOSS_DMG_CAP, 'capped (view dps is rounded)')
+  assert.equal(r.json.result.sent, 1e11)
+  S.clock.t -= 2 * G.BOSS_FIGHT_SEC
   // 보스를 쓰러뜨리면(실제 누적을 크게) 처치 보상이 쌓이고 한 번에 받는다
   await S.db.query('update guilds set boss_damage = boss_damage + $2 where id = $1', [rec.id, G.bossMax(50) * 3])
   const v = await guild(p.token)
@@ -172,6 +204,19 @@ test('guild: boss fight, 2 tries a day, grades, kill rewards, daily reset', asyn
   assert.equal(nx.me.boss_tries, 0)
   assert.equal(nx.me.attended, false)
   S.clock.t -= 86400
+})
+
+test('guild: a boss fight left too long finishes with 0 damage', async () => {
+  const p = await ready()
+  const rec = (await guild(p.token)).recommendations[4]
+  await post(p.token, 'join', { guild_id: rec.id })
+  const run = (await post(p.token, 'boss/start')).json.result
+  S.clock.t += G.BOSS_RUN_TTL + 1
+  const r = await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 500 })
+  assert.equal(r.status, 200)
+  assert.equal(r.json.result.dmg, 0)
+  assert.equal(r.json.result.grade, 'D')
+  S.clock.t -= G.BOSS_RUN_TTL + 1
 })
 
 test('guild: shop spends coins with limits and gives shards of owned heroes', async () => {
