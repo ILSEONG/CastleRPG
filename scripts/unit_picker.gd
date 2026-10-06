@@ -19,6 +19,7 @@ const Formation := preload("res://scripts/formation.gd")
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const GameData := preload("res://scripts/game_data.gd")
+const RouteMarker := preload("res://scripts/route_marker.gd")
 
 const LAYER_GATE := 2
 const LAYER_WALL := 8
@@ -28,7 +29,6 @@ const TAP_MAX_PX := 12.0
 const HERO_TAP_PX := 32.0  # 화면(논리 720px 폭 기준)에서 영웅 중심까지 이 거리 안이면 그 영웅. 줌과 무관
 const HERO_TAP_PRECISE_PX := 12.0  # 영웅 선택 중에는 이만큼 가까워야 성문·성벽보다 영웅이 먼저
 const GROUND_MARGIN := 4.0   # 바닥 명령 지점을 맵 가장자리에서 이만큼 안으로 자른다
-const MARKER_SEC := 0.5
 const LONG_PRESS_MS := 500
 const MAX_TAP_HITS := 4  # 한 탭 레이가 꿰어 보는 건물 판정체 수(_building_hit)
 const TAG_TAP_PAD := 6.0  # 말풍선 탭 여유(논리 px)
@@ -46,6 +46,7 @@ var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
 var _press_yaw := 0.0  # 누른 순간 카메라 요(회전했는지 판정)
 var _press_ms := -1 # 누른 시각(길게 누르기를 아직 안 본 누름). 봤거나 누름이 아니면 -1
+var _routes := {}  # 영웅 → 이동 경로 표시(route_marker.gd). 영웅마다 하나, 새 명령이면 바꾼다
 
 
 func _ready() -> void:
@@ -101,12 +102,14 @@ func _physics_process(_delta: float) -> void:
 		var hit := _pick(screen_pos, LAYER_GATE)
 		if not hit.is_empty():
 			var gside: int = hit.collider.get_meta("side")
-			selected.move_to(gside, Formation.POST_GATE, float(hit.collider.get_meta("at", 0.0)))  # 누른 성문 앞 빈 자리(가까운 순)
+			if selected.move_to(gside, Formation.POST_GATE, float(hit.collider.get_meta("at", 0.0))):  # 누른 성문 앞 빈 자리(가까운 순)
+				_show_route(selected, selected.stand_position())
 			return
 		hit = _pick(screen_pos, LAYER_WALL)
 		if not hit.is_empty():
 			var wside: int = hit.collider.get_meta("side")
-			selected.move_to(wside, Formation.POST_WALL, Formation.perp(wside).dot(hit.position))  # 누른 쪽에 가까운 빈 자리
+			if selected.move_to(wside, Formation.POST_WALL, Formation.perp(wside).dot(hit.position)):  # 누른 쪽에 가까운 빈 자리
+				_show_route(selected, selected.stand_position())
 			return
 	hero = _hero_at(screen_pos, HERO_TAP_PX)
 	if hero != null and hero != selected:
@@ -119,7 +122,7 @@ func _physics_process(_delta: float) -> void:
 		_select(null)
 		return
 	selected.move_to_point(ground)
-	_show_marker(ground)
+	_show_route(selected, ground)
 
 
 func _pick(screen_pos: Vector2, layer_mask: int) -> Dictionary:
@@ -227,18 +230,19 @@ func _ground_point(screen_pos: Vector2):
 	return Vector3(clampf(hit.x, -lim, lim), 0.0, clampf(hit.z, -lim, lim))
 
 
-## 바닥 명령 지점에 노란 링이 커지며 사라진다.
-func _show_marker(p: Vector3) -> void:
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.5
-	torus.outer_radius = 0.7
-	var ring := Art.mesh(torus, Art.HERO_SELECTED)
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	get_parent().add_child(ring)
-	ring.global_position = p + Vector3(0, 0.05, 0)
-	var tw := ring.create_tween()
-	tw.tween_property(ring, "scale", Vector3.ONE * 1.8, MARKER_SEC)
-	tw.tween_callback(ring.queue_free)
+## 이동 명령의 경로와 도착지를 영웅이 도착할 때까지 띄운다(route_marker.gd). 같은 영웅의 이전 표시는 지운다.
+func _show_route(hero, dest: Vector3) -> void:
+	var old = _routes.get(hero)
+	if old != null and is_instance_valid(old):
+		old.queue_free()
+	var m := RouteMarker.new()
+	m.name = "Route"
+	m.setup(hero, dest)
+	get_parent().add_child(m)
+	_routes[hero] = m
+	for h in _routes.keys():  # 사라진 영웅·표시 정리
+		if not is_instance_valid(h) or not is_instance_valid(_routes[h]):
+			_routes.erase(h)
 
 
 ## 탭 위치에서 화면상 가장 가까운 살아 있는 영웅 (radius_px 이내). 없으면 null.
