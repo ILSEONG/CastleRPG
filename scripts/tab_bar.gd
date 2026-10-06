@@ -1,6 +1,6 @@
 extends CanvasLayer
-## 하단 탭 바(스펙 §2.3, 개정 13 §7.1, 개정 18 §1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 5개 —
-## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·던전(던전 시트)·모집(주점 창). 상인은 탭이 없다(성 안 상인 NPC를 탭).
+## 하단 탭 바(스펙 §2.3, 개정 13 §7.1, 개정 18 §1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 6개 —
+## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·던전(던전 시트)·모집(주점 창)·길드(길드 시트). 상인은 탭이 없다(성 안 상인 NPC를 탭).
 ## [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
 ## 탭마다 각진 아이콘 + 글자. 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다
 ## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
@@ -12,7 +12,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const UiWindow := preload("res://scripts/ui_window.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["dungeon", "던전"], ["recruit", "모집"]]
+const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["dungeon", "던전"], ["recruit", "모집"], ["guild", "길드"]]
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0
@@ -106,6 +106,20 @@ static func draw_shapes(ci: CanvasItem, shapes: Array, center: Vector2, size_px:
 ## 던전 = 돌 아치 문 + 해골.
 static func tab_shapes(id: String) -> Array:
 	match id:
+		"guild":  # 깃대에 걸린 각진 길드 깃발(왼쪽 면 밝게) + 금색 별
+			var flag := [Vector2(-0.26, -0.40), Vector2(0.40, -0.40), Vector2(0.40, 0.16), Vector2(0.07, 0.34), Vector2(-0.26, 0.16)]
+			var star := []
+			for k in 10:
+				var r := 0.15 if k % 2 == 0 else 0.065
+				var a := -PI / 2.0 + k * PI / 5.0
+				star.append(Vector2(0.07, -0.08) + Vector2(cos(a), sin(a)) * r)
+			return [
+				[[Vector2(-0.40, -0.46), Vector2(-0.32, -0.46), Vector2(-0.32, 0.46), Vector2(-0.40, 0.46)], Color(0.55, 0.38, 0.22), true],
+				[flag, Color(0.56, 0.30, 0.70), true],
+				[[flag[0], Vector2(0.07, -0.40), Vector2(0.07, 0.34), flag[4]], Color(0.70, 0.46, 0.84), false],
+				[star, Color(0.98, 0.84, 0.36), true],
+				[flag, Color(0, 0, 0, 0), true],
+			]
 		"dungeon":  # 각진 돌 아치(밝은 왼쪽 면) + 어두운 문간 + 해골(눈 둘)
 			var arch := [Vector2(-0.44, 0.44), Vector2(-0.44, -0.12), Vector2(-0.3, -0.36), Vector2(0.0, -0.46), Vector2(0.3, -0.36), Vector2(0.44, -0.12),
 				Vector2(0.44, 0.44)]

@@ -128,6 +128,7 @@ func _init() -> void:
 	test_research_r24()
 	test_offline_gold()
 	test_mesh_merge()
+	test_guild()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -4387,3 +4388,100 @@ func test_mesh_merge() -> void:
 	for m in [plain, a, b]:
 		m.free()
 
+
+
+const GuildScript := preload("res://scripts/guild.gd")
+
+
+## 길드(오프라인 로컬): 잠금, 가입, 출석·상자, 기부(비용·한도), 레벨업·버프, 보스(피해·등급·횟수·처치 넘김), 상점(한도·코인), 가상 길드원, 탈퇴, 저장.
+func test_guild() -> void:
+	GameData.load_tables()
+	var now := GameData.reset_at(20000) + 3600.0  # 그날 01:00 KST
+	var e = _econ(now)
+	var g = GuildScript.new()
+	g.save_path = ""
+	g.econ = e
+	g.fixed_now = now
+	g.rng.seed = 7
+	check(not g.is_unlocked() and g.join_block() != "" and g.buff_pct() == 0.0, "guild: locked before 1-10 is cleared, no buff")
+	g.unlocked = true
+	var recs: Array = g.recommendations(now)
+	check(recs.size() == 5 and recs == g.recommendations(now), "guild: 5 recommendations, same within a day")
+	g.refresh_recommendations()
+	check(g.recommendations(now) != recs, "guild: refresh shows other guilds")
+	var rec: Dictionary = recs[0]
+	rec.level = 3
+	check(g.join(rec, now) and g.joined() and int(g.guild.level) == 3 and g.buff_pct() == 3.0 and g.members_now(now).size() == int(rec.count) - 1,
+		"guild: join copies level and members, buff = level %%: %s" % [g.buff_pct()])
+	check(g.join(rec, now) == false, "guild: cannot join twice")
+	# 출석
+	var gold0: int = e.gold
+	check(g.box_state(0) == "locked" and g.attend(now) and not g.attend(now) and e.gold == gold0 + 3000 and g.coins == 30,
+		"guild: attend once a day (+3,000 gold, +30 coins)")
+	for m in g.guild.members:
+		m.att = true
+	check(g.attend_count() == int(rec.count) and g.box_state(0) == "ready" and g.claim_box(0) and g.box_state(0) == "claimed" and not g.claim_box(0),
+		"guild: attendance box 5 claimable once when 5+ attended")
+	# 기부
+	e.gold = 15000
+	e.diamonds = 60
+	check(g.donate("gold", now) and e.gold == 5000 and g.donate_block("gold") == "골드가 부족합니다", "guild: gold donation costs 10,000")
+	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
+		"guild: diamond donation once a day")
+	# 레벨업
+	var lv := int(g.guild.level)
+	g._add_exp(GuildScript.exp_need(lv) * 3)
+	check(int(g.guild.level) > lv and g.buff_pct() == float(g.guild.level), "guild: exp levels the guild and the buff follows")
+	# 보스
+	check(g.team_dps() > 0.0, "guild: starting deploy has damage: %s" % g.team_dps())
+	g.guild.boss.level = 1
+	g.guild.boss.hp = 10.0
+	var r1: Dictionary = g.fight_boss(now)
+	check(r1.dmg > 0.0 and r1.killed >= 1 and int(g.guild.boss.level) >= 2 and float(g.guild.boss.hp) > 0.0 and float(g.guild.boss.hp) <= GuildScript.boss_max(int(g.guild.boss.level)),
+		"guild: boss kill carries leftover damage to the next level: %s" % [r1])
+	g.fight_boss(now)
+	check(g.boss_block() == "오늘 도전 횟수를 다 썼습니다" and g.fight_boss(now).is_empty(), "guild: 2 boss tries a day")
+	check(GuildScript.boss_grade(GuildScript.boss_max(1) * 0.25, 1)[0] == "S" and GuildScript.boss_grade(GuildScript.boss_max(1) * 0.03, 1)[0] == "C"
+		and GuildScript.boss_grade(1.0, 1)[0] == "D", "guild: damage grade by share of boss max HP")
+	# 상점
+	g.coins = 1000
+	var dia0: int = e.diamonds
+	check(g.buy("dia") != "" and e.diamonds == dia0 + 50 and g.coins == 850 and g.buy("dia") != "" and g.buy_block("dia") == "구매 한도에 도달했습니다",
+		"guild: shop diamonds 50 for 150 coins, 2 a day")
+	var shards0 := 0
+	for id in e.heroes:
+		shards0 += e.shards_of(id)
+	g.buy("shards")
+	var shards1 := 0
+	for id in e.heroes:
+		shards1 += e.shards_of(id)
+	check(shards1 == shards0 + 3, "guild: shard box gives 3 shards of owned heroes")
+	# 다음 날: 한도·출석 초기화, 가상 길드원이 활동한다
+	var exp_before := int(g.guild.exp) + int(g.guild.level) * 100000
+	var next := now + 86400.0 + 18.0 * 3600.0  # 다음 날 19:00
+	g.fixed_now = next
+	g.tick(next, true)
+	check(g.attend_block() == "" and g.donations_left("dia") == 1 and g.shop_left("dia") == 2 and int(g.me.boss_tries) == 0,
+		"guild: daily limits reset at 00:00 KST")
+	check(int(g.guild.exp) + int(g.guild.level) * 100000 > exp_before and g.members_now(next).any(func(m): return m.att),
+		"guild: simulated members attend and donate during the day")
+	# 저장 왕복
+	g.save_path = "user://test_guild.json"
+	g.save()
+	var h = GuildScript.new()
+	h.save_path = "user://test_guild.json"
+	h.econ = e
+	h.fixed_now = next
+	h.load_save()
+	check(h.joined() and h.guild.name == g.guild.name and int(h.guild.level) == int(g.guild.level) and h.coins == g.coins and h.buff_pct() == g.buff_pct()
+		and h.members_now(next).size() == g.members_now(next).size(), "guild: save round-trips guild, coins and members")
+	DirAccess.remove_absolute("user://test_guild.json")
+	# 탈퇴: 코인은 남는다. 창설: 혼자 시작, 길드원은 시간이 지나며 들어온다
+	var c0: int = g.coins
+	check(g.leave() and not g.joined() and g.coins == c0 and g.buff_pct() == 0.0, "guild: leaving keeps coins and drops the buff")
+	e.gold = 40000
+	check(g.create_block("가") != "" and g.create("우리길드", 3, next) and e.gold == 10000 and g.guild.mine and g.members_now(next).is_empty()
+		and g.members_now(next + 86400.0).size() >= 5, "guild: creating costs 30,000 gold, starts alone, members join over time")
+	g.free()
+	h.free()
+	e.free()

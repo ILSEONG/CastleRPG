@@ -155,6 +155,7 @@ func _ready() -> void:
 	Economy.upgrades_changed.connect(refresh_stats)  # 성장·장비·연구는 곧바로(개정 20·24)
 	Economy.items_changed.connect(refresh_stats)
 	Economy.research_changed.connect(refresh_stats)
+	Guild.buff_changed.connect(refresh_stats)  # 길드 레벨 버프
 	reset()
 
 
@@ -688,15 +689,16 @@ func _aura_mult() -> float:
 
 
 ## 최종 능력치를 다시 읽는 한 곳(개정 20): HP·공격 = hero_stats(기본 × 레벨 × 승급 + 장비) × (1 + 성장 %) × (1 + 연구 %, 개정 24),
-## 공격 간격 ÷ (1 + 성장 공격속도), 이동 × (1 + 성장 이동속도 + 신발 %), 스킬 피해 × (1 + 연구 비전 %). 성장·장비·연구가 바뀌면 곧바로 —
+## × (1 + 길드 버프 %), 공격 간격 ÷ (1 + 성장 공격속도), 이동 × (1 + 성장 이동속도 + 신발 %), 스킬 피해 × (1 + 연구 비전 %). 성장·장비·연구·길드가 바뀌면 곧바로 —
 ## HP 비율 유지, 다음 공격부터 새 간격.
 func refresh_stats() -> void:
 	_bonus = Economy.upgrade_bonus()
 	var r: Dictionary = Economy.research_bonus()
 	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
 	var st := GameData.hero_stats(def, _level, _promotion)
-	hp_max = st.hp * (1.0 + _bonus.hp_pct) * (1.0 + r.hero_hp_pct / 100.0)
-	atk = st.atk * (1.0 + _bonus.atk_pct) * (1.0 + r.hero_atk_pct / 100.0)
+	var g: float = 1.0 + Guild.buff_pct() / 100.0
+	hp_max = st.hp * (1.0 + _bonus.hp_pct) * (1.0 + r.hero_hp_pct / 100.0) * g
+	atk = st.atk * (1.0 + _bonus.atk_pct) * (1.0 + r.hero_atk_pct / 100.0) * g
 	_skill_mult = 1.0 + r.skill_pct / 100.0
 	hp = hp_max * ratio
 	_aspd = 1.0 + _bonus.aspd_pct
