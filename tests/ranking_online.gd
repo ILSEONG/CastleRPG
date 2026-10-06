@@ -63,6 +63,8 @@ func _ready() -> void:
 	_check(int(g.get("total", 0)) >= 5, "guild board lists the system guilds", str(g.get("total")))
 	_check(g.get("me") is Dictionary and str(g.me.name) == str(Guild.guild.get("name", "")), "my guild is marked", str(g.get("me")))
 	await _snap()  # 4. 길드
+	_panel.buttons.close.pressed.emit()
+	_check(not _panel.is_open(), "top-right X closes the sheet", "")
 	_sheet()
 	_finish()
 

@@ -1,6 +1,6 @@
 extends "res://scripts/ui_window.gd"
 ## [랭킹] 시트(온라인 전용, 서버 GET /v1/ranking/:board — server/src/ranking.ts). HUD 오른쪽 트로피 버튼(ranking_button.gd)이 연다.
-## 하위 탭 [스테이지][전투력][길드].
+## 하위 탭 [스테이지][전투력][길드]. 오른쪽 위 [X]나 바깥(배경) 탭으로 닫는다.
 ## 목록 = 상위 50(1~3위 메달), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -19,6 +19,7 @@ const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const ME_BG := Color(0.98, 0.80, 0.42, 0.85)
 const ROW_BG := Color(1, 1, 1, 0.75)
 const CACHE_SEC := 30.0
+const CLOSE_PX := 56.0  # 오른쪽 위 닫기 버튼
 
 var tab := "stage"
 var body: VBoxContainer
@@ -35,7 +36,31 @@ func _ready() -> void:
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_title("랭킹"))
+	var head := HBoxContainer.new()  # 제목 가운데 + 오른쪽 위 닫기(X)
+	var pad := Control.new()
+	pad.custom_minimum_size = Vector2(CLOSE_PX, 0)
+	head.add_child(pad)
+	var title := _title("랭킹")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var x := Button.new()
+	x.focus_mode = Control.FOCUS_NONE
+	x.custom_minimum_size = Vector2(CLOSE_PX, CLOSE_PX)
+	x.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiKit.apply_button(x, UiKit.STEEL, 10.0)
+	x.pressed.connect(close)
+	var face := Control.new()
+	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.draw.connect(func():
+		var c := face.size / 2.0
+		var r := CLOSE_PX * 0.2
+		for d in [Vector2(r, r), Vector2(r, -r)]:
+			face.draw_line(c - d, c + d, Color.WHITE, 5.0, true))
+	x.add_child(face)
+	head.add_child(x)
+	buttons["close"] = x
+	content.add_child(head)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 6)
 	for t in SUBTABS:
