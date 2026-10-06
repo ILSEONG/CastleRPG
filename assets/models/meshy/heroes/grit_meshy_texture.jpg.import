@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/grit_meshy_texture.jpg-25104b5df21614e70c1b27
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

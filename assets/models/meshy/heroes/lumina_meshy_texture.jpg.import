@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/lumina_meshy_texture.jpg-98d20315d9dd97f4bd2b
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

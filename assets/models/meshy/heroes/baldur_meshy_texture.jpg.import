@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/baldur_meshy_texture.jpg-9b4cd400efcc4e0742e1
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

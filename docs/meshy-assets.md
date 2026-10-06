@@ -52,4 +52,4 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
 2. 몸: `python3 dev/meshy_fit.py assets/models/characters/<Rogue|Skeleton_Warrior>.glb <meshy>.glb assets/models/meshy/enemies/<kind>.glb`.
 3. 게임: `Art.monster_spec(kind)`가 파일이 있으면 body를 넣고 몸 색(tint)과 머리·가슴 코드 부품을 뺀다(손 부품·KayKit 단검은 그대로).
    성 몬스터(grunt·epic_boss)는 KayKit 해골 그대로. 검사: tests/run_tests.gd `test_meshy_enemies`.
-텍스처 임포트는 손실 압축(compress/mode=1) — APK가 GitHub 파일 한도(100 MiB)에 가깝다.
+텍스처 임포트는 영웅·소환수·적 모두 손실 압축(compress/mode=1, 품질 0.7) — 무손실이면 APK가 GitHub 파일 한도(100 MiB)를 넘는다.

@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/pip_meshy_texture.jpg-b5d07fd01cb2ad1e3875bb9
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
