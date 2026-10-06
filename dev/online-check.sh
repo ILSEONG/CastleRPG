@@ -47,9 +47,13 @@ if ! curl -s "$API/v1/health" | grep -q '"ok":true'; then
   exit 1
 fi
 echo "[online-check] server up on $API"
+# 통합 체크는 건물이 다 지어진 새 플레이어(튜토리얼 끔)와 옛 훈련 묶음 상한(10 + 2(L−1))으로 규칙을 본다
+for kv in tutorial_new_players=0 train_batch_base=10 train_batch_per_level=2; do
+  curl -s -o /dev/null -X POST -H 'content-type: application/json' -d "{\"key\":\"${kv%%=*}\",\"value\":\"${kv#*=}\"}" "$API/v1/test/config"
+done
 
 ok=1
-for phase in 1 2 3 4 5; do
+for phase in 1 2 3 4 5 6; do
   timeout "${ONLINE_TIMEOUT:-300}" "$GODOT" --headless --path . res://tests/online_check.tscn -- \
     --api="$API" --device="$WTMP/device.json" --state="$WTMP/state.json" --phase=$phase > "$TMP/phase$phase.log" 2>&1
   rc=$?

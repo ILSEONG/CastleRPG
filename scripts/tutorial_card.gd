@@ -106,14 +106,15 @@ func _refresh() -> void:
 	desc_label.visible = not _collapsed
 	reward_label.visible = not _collapsed
 	action_button.text = "보상 받기" if done else "바로가기"
-	action_button.disabled = not done and str(m.get("goto", "")) == ""
+	action_button.disabled = (not done and str(m.get("goto", "")) == "") or (done and Tutorial.econ != null and Tutorial.econ.quest_waiting())
 	UiKit.apply_button(action_button, UiKit.AMBER if done else UiKit.STEEL, 12.0)
 	panel.offset_top = panel.offset_bottom  # 높이 0에서 내용만큼 위로 자란다(grow BEGIN) — 접으면 다시 줄어든다
 
 
 func _on_action() -> void:
 	if Tutorial.complete():
-		Tutorial.claim()
+		if Tutorial.claim() and Tutorial.online:
+			_refresh()  # 응답 전 버튼을 끈다(응답이 오면 Tutorial.changed가 다시 그린다)
 	else:
 		Tutorial.goto_current()
 

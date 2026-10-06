@@ -3,7 +3,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseTiers, parseTrainCost, RESEARCH_BRANCHES, RESEARCH_EFFECTS, UPGRADE_UNITS,
+import { BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseNeeds, parseReward, parseTiers, parseTrainCost, QUEST_REWARD_KEYS, QUEST_TYPES,
+  RESEARCH_BRANCHES, RESEARCH_EFFECTS, UPGRADE_UNITS,
   WEAPON_OF } from './rules.ts'
 
 export const DATA_DIR = join(import.meta.dirname, '..', '..', 'data')
@@ -100,6 +101,13 @@ export const TABLES: TableSpec[] = [
     },
   },
   {
+    // 튜토리얼·반복 퀘스트(앱 tutorial.gd의 MISSIONS·REPEATS 보상). type = tutorial | repeat, needs = 서버가 보는 완료 조건(비면 없음),
+    // reward·fixed = "키:수|…"(반복 퀘스트는 reward × (1 + 바퀴) + fixed)
+    name: 'quests', table: 'quest_defs', file: 'quests.csv', ordered: true,
+    cols: { id: 'key', type: 'text', needs: 'opt', reward: 'opt', fixed: 'opt' },
+    sql: { id: 'text', type: 'text', needs: 'text', reward: 'text', fixed: 'text' },
+  },
+  {
     name: 'config', table: 'game_config', file: 'config.csv', ordered: false,
     cols: { key: 'key', value: 'text' },
     sql: { key: 'text', value: 'text' },
@@ -118,7 +126,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'hero_level_stat_melee', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult',
-  'offline_gold_mult'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
+  'offline_gold_mult', 'tutorial_train_sec', 'quest_repeat_min_sec', 'tutorial_new_players'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
@@ -508,6 +516,19 @@ function checkDungeons(t: Tables, errors: string[]) {
 // 연구 표(개정 24, 앱 GameData와 같은 규칙): 알려진 branch·effect만, 숫자 0 이상(tier·max_level ≥ 1, base_sec > 0),
 // 선행(req1·req2)은 표 안의 id이고 그 레벨(req_lv)과 함께 있거나 함께 비며, req_lv는 1..그 노드의 max_level 정수.
 // 설정: 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분 0 이상 정수(숫자 아님·빠짐은 checkTable이 알렸다).
+// 퀘스트 표: type·보상 형식·needs 형식, 튜토리얼 행과 반복 행이 하나 이상(needs의 건물 id는 앱 테스트가 본다)
+function checkQuests(t: Tables, errors: string[]) {
+  const rows = t.quests ?? []
+  const err = (line: unknown, col: string, why: string) => errors.push(`quests.csv line ${line} column '${col}': ${why}`)
+  for (const r of rows) {
+    if (!QUEST_TYPES.includes(String(r.type))) err(r._line, 'type', `must be one of ${QUEST_TYPES.join('/')}: '${r.type}'`)
+    for (const c of ['reward', 'fixed']) if (parseReward(r[c] as string | null) === null) err(r._line, c, `must be 'key:amount|…' with keys ${QUEST_REWARD_KEYS.join('/')}: '${r[c]}'`)
+    const n = parseNeeds(r.needs as string | null)
+    if (n === null) err(r._line, 'needs', `must be empty, build:<building> or level:<building>:<level>: '${r.needs}'`)
+  }
+  for (const ty of QUEST_TYPES) if (t.quests && !rows.some((r) => r.type === ty)) errors.push(`quests.csv line 0 column 'type': no ${ty} quests`)
+}
+
 function checkResearch(t: Tables, errors: string[]) {
   const rows = t.research ?? []
   const err = (line: unknown, col: string, why: string) => errors.push(`research.csv line ${line} column '${col}': ${why}`)
@@ -569,6 +590,7 @@ export async function readTables(dataDir = DATA_DIR): Promise<Tables> {
   checkUpgrades(out, errors)
   checkDungeons(out, errors) // 개정 18
   checkResearch(out, errors) // 개정 24
+  checkQuests(out, errors)
   // 등급마다 영웅이 하나 이상 있어야 모집이 그 등급을 뽑을 수 있다(없으면 /v1/gacha가 500)
   if (out.heroes) {
     for (const g of GRADES) {

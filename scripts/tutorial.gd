@@ -5,7 +5,9 @@ extends Node
 ## 보상 규칙(사용자 2026-10-06): 다음 미션이 자원을 쓰면 그 자원, 골드를 쓰면 골드, 던전 입장이면 던전 입장권(열쇠), 그 외에는 다이아 모집권 10장.
 ## 자원·골드는 다음 미션 비용 × REWARD_MARGIN(10 단위 올림). 하단 탭은 그 탭을 소개하는 미션에 닿을 때 열린다(TAB_MISSION).
 ## 완료 판정은 상태(지은 건물·레벨·스테이지·보유 영웅…)를 먼저 보고, 상태로 볼 수 없는 것(수집·판매·모집 횟수·건물 창 열기)은 그 미션이
-## 지금 미션이 된 뒤의 사건을 센다. 기존 저장(Economy 저장이 이미 있던 플레이어)·온라인 모드는 튜토리얼을 건너뛴다(state "skipped").
+## 지금 미션이 된 뒤의 사건을 센다. 오프라인: 기존 저장(Economy 저장이 이미 있던 플레이어)은 튜토리얼을 건너뛴다(state "skipped").
+## 온라인: 상태·단계·반복 번호·공터·모집권은 서버(/v1/player의 quest·unbuilt·dia_tickets)가 정하고 보상은 POST /v1/quest/claim이 준다
+## (서버 data/quests.csv = 이 파일의 보상 규칙을 옮긴 표 — test_tutorial이 같은지 본다). 사건 수는 여기서 센다.
 ## 저장: user://tutorial.json {version, state: active | done | skipped, step, claimed, count, best_stage}.
 ## 테스트는 .new()로 만들어 econ·gs·guild를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎).
 
@@ -114,10 +116,12 @@ var state := "skipped"  # active | done | skipped
 var step := 0  # 지금 미션 번호(0부터)
 var count := 0  # 사건 미션: 지금 미션이 된 뒤 센 수
 var best_stage := 1  # 도달한 최고 스테이지(오프라인 GameState.stage는 저장되지 않는다)
-var repeats_on := false  # 반복 퀘스트를 낸다(실제 게임·오프라인만 — _start가 켠다. 테스트는 직접)
+var repeats_on := false  # 반복 퀘스트를 낸다(실제 게임 — _start가 켠다. 테스트는 직접)
+var online := false  # 온라인: 튜토리얼 상태·단계·반복 번호는 서버(Economy.server_quest)가 정하고 보상도 서버가 준다. 사건 수만 여기 저장
 var rep_n := 0  # 끝낸 반복 퀘스트 수(다음 퀘스트 = REPEATS[rep_n % 크기], 바퀴 = rep_n / 크기)
 var rep_quest := {}  # 지금 반복 퀘스트(만들 때 목표·기준값을 정해 저장): {kind, arg, base_value, title, desc, goto}
 
+var _server_known := false  # 온라인: 서버 퀘스트 진행을 한 번이라도 받았다
 var _check_cd := 0.0
 var _was_complete := false
 var _dirty := false
@@ -133,7 +137,7 @@ func _ready() -> void:
 
 func _start() -> void:
 	var net = get_node_or_null("/root/Net")
-	var online: bool = net != null and net.is_online()
+	var net_online: bool = net != null and net.is_online()
 	var scene = get_tree().current_scene
 	var main_scene := str(ProjectSettings.get_setting("application/run/main_scene", ""))
 	if not OS.get_cmdline_user_args().is_empty() or scene == null or (main_scene != "" and scene.scene_file_path != main_scene):
@@ -141,12 +145,59 @@ func _start() -> void:
 		state = "skipped"
 		changed.emit()
 		return
+	repeats_on = true
+	if net_online:
+		go_online()
+		return
 	if not load_save():
-		# 첫 실행: Economy 저장이 없던 새 게임이면 튜토리얼, 이미 하던 플레이어(저장 있음)·온라인은 건너뛴다
-		begin(econ != null and econ.fresh_game and not online)
-	if online and state == "active":
-		state = "skipped"  # 온라인(서버 권위)에서는 공터·보상이 없다
-	repeats_on = not online
+		# 첫 실행: Economy 저장이 없던 새 게임이면 튜토리얼, 이미 하던 플레이어(저장 있음)는 건너뛴다
+		begin(econ != null and econ.fresh_game)
+	changed.emit()
+	check()
+
+
+## 온라인 모드로: 사건 수(count·best_stage·rep_quest)만 저장에서 읽고, 상태·단계·반복 번호는 서버가 보낸 값을 따른다(받기 전엔 카드가 숨는다).
+func go_online() -> void:
+	online = true
+	repeats_on = true
+	load_save()
+	state = "skipped"
+	_server_known = false
+	if econ != null:
+		if not econ.quest_synced.is_connected(_sync_server):
+			econ.quest_synced.connect(_sync_server)
+		if not econ.quest_claimed.is_connected(_on_claimed):
+			econ.quest_claimed.connect(_on_claimed)
+		_sync_server()
+	changed.emit()
+
+
+func _on_claimed(_ok: bool) -> void:
+	changed.emit()  # 카드 버튼(응답 대기) 다시 그리기
+
+
+## 서버 퀘스트 진행을 받아 맞춘다. 미션이 바뀌었으면 사건 수를 새로 센다. 튜토리얼이 막 끝났으면 알림.
+func _sync_server() -> void:
+	var q: Dictionary = econ.server_quest if econ != null else {}
+	if q.is_empty():
+		return
+	var was_known := _server_known
+	var before := [state, step, rep_n]
+	state = str(q.tut_state)
+	step = clampi(int(q.tut_step), 0, MISSIONS.size())
+	if state == "active" and step >= MISSIONS.size():
+		state = "done"
+	if int(q.rep_n) != rep_n:
+		rep_n = int(q.rep_n)
+		rep_quest = {}
+	_server_known = true
+	if [state, step, rep_n] != before:
+		if was_known:
+			count = 0
+			_was_complete = false
+			if before[0] == "active" and state == "done":
+				econ.notice.emit(DONE_TEXT)
+		save()
 	changed.emit()
 	check()
 
@@ -205,6 +256,8 @@ func _sync_training() -> void:
 
 
 func mission() -> Dictionary:
+	if online and not _server_known:
+		return {}
 	if active():
 		return MISSIONS[step] if step < MISSIONS.size() else {}
 	if not repeats_on or econ == null:
@@ -320,6 +373,8 @@ func check() -> void:
 func claim() -> bool:
 	if not complete():
 		return false
+	if online:  # 서버가 보상을 주고 진행을 올린다(응답 → Economy.quest_synced → _sync_server)
+		return econ.quest_claim_online({"type": "repeat", "n": rep_n} if repeating() else {"type": "tutorial", "step": step})
 	if repeating():
 		econ.grant(repeat_reward(rep_quest))
 		rep_n += 1

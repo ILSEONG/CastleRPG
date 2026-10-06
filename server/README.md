@@ -128,6 +128,7 @@ npm --prefix server test
 | `POST /v1/research/start {id}` | Bearer | 플레이어 응답(`research.current = {id, finish}`). 모르는 노드는 404 `unknown_research`, 아니면 409 `research_busy` / `max_level` / `locked` / `not_enough_resources` / `not_enough_gold`(이 순서로 검사, 개정 24) |
 | `POST /v1/research/cancel` | Bearer | 플레이어 응답 + `refund: {wood, stone, food, gold}`(그 레벨 비용 × `research_cancel_refund`, 내림). 진행 중이 아니면 409 `no_research` |
 | `POST /v1/research/finish` | Bearer | 플레이어 응답 + `diamonds_spent`(= max(1, ⌈남은 초 / 60⌉ × `research_dia_per_min`)). 진행 중이 아니면 409 `no_research`, 다이아가 모자라면 409 `not_enough_diamonds` |
+| `POST /v1/quest/claim {type: "tutorial", step}` 또는 `{type: "repeat", n}` | Bearer | 플레이어 응답 + `reward`(data/quests.csv). 번호가 지금 진행(`player.quest.tut_step`·`rep_n`)과 다르면 409 `stale`, 튜토리얼이 아니면 `no_tutorial`, 튜토리얼 중 반복이면 `tutorial_running`, 건물 조건(needs)이 안 되면 `not_done`, 반복은 `quest_repeat_min_sec`초 안에 다시 받으면 `too_soon`. 새 플레이어는 `tutorial_new_players`가 1이면 튜토리얼(성채·성문 밖은 공터 `player.unbuilt`)로 시작한다. `POST /v1/gacha`는 `currency: "ticket"`(다이아 모집권 `player.dia_tickets`, 모자라면 409 `not_enough_tickets`)도 받는다 |
 | `POST /v1/test/age {minutes}` | Bearer | 플레이어 응답. `ALLOW_TEST_HOOKS=1`일 때만 있다. minutes는 0..100000 정수. 모든 건물의 `last_collect`(자원 수집)와 훈련 끝나는 시각(`train_finish`), 연구 끝나는 시각(`research_finish`)을 당긴다 |
 
 플레이어 응답은 다음과 같다.
