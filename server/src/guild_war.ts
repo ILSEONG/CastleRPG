@@ -5,7 +5,7 @@
 // 성 상태(성문·성채 체력, 수비 영웅별 남은 체력 비율)는 전쟁 행(guild_wars.castle)에 저장되고 전투 결과로만 줄어든다(mergeCastle — 늘지 않는다).
 // 점수: 수비 영웅 처치 1 · 성문 10 · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
 // 우리 공성 시간이 끝나면 보인다.
-import { mulberry32, powerOf } from './rules.ts'
+import { mulberry32, powerOf, type StatLimit } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
 export const BATTLE_SEC = 600
@@ -70,7 +70,7 @@ export function fitHero(def: HeroDef, target: number, cfg: Cfg) {
   return best
 }
 
-export interface SquadHero { hero: string; level: number; promotion: number; hp: number; atk: number }
+export interface SquadHero { hero: string; level: number; promotion: number; hp: number; atk: number; power?: number } // power = 장비 포함 전투력(2026-10-07~, 수비 등록 때)
 
 // 무작위 영웅 4명(근접 ≥ 1, 원거리 ≥ 1), 길드원 전투력(배치 영웅 합 기준)에 맞춘 레벨.
 export function randomSquad(r: () => number, heroes: HeroDef[], power: number, cfg: Cfg): SquadHero[] {
@@ -186,13 +186,18 @@ export function pickAt(week: number, day: number, hour: number, resetAt: (day: n
 
 export const enemySeed = (guildSeed: number, week: number) => mix(guildSeed, week >>> 0, 77)
 
-// 보내온 영웅 능력치를 믿을 만한 범위로 자른다(기본 × STAT_CAP 이하, 0보다 크게).
-export function capStats(def: HeroDef, level: number, promotion: number, hp: unknown, atk: unknown, cfg: Cfg) {
+// 보내온 영웅 능력치를 믿을 만한 범위로 자른다(0보다 크게). lim(statLimit)이 있으면 상한 = (기본 + 그 영웅 장비) × 내 성장·연구·길드 배율
+// × STAT_SLACK(앱 반올림 몫) — 2026-10-07 전에는 기본 × STAT_CAP(4)이라 키운 계정·좋은 장비는 몰래 잘렸다. lim이 없으면 예전처럼 기본 × STAT_CAP.
+export const STAT_SLACK = 1.01
+export function capStats(def: HeroDef, level: number, promotion: number, hp: unknown, atk: unknown, cfg: Cfg, lim?: StatLimit) {
   const base = heroStats(def, level, promotion, cfg)
+  const eq = lim?.equip[def.id] ?? { hp: 0, atk: 0 }
+  const maxHp = lim ? (base.hp + eq.hp) * lim.hp * STAT_SLACK + 1 : base.hp * STAT_CAP
+  const maxAtk = lim ? (base.atk + eq.atk) * lim.atk * STAT_SLACK + 0.1 : base.atk * STAT_CAP
   const h = Number(hp)
   const a = Number(atk)
   return {
-    hp: Number.isFinite(h) && h > 0 ? Math.min(h, base.hp * STAT_CAP) : base.hp,
-    atk: Number.isFinite(a) && a > 0 ? Math.min(a, base.atk * STAT_CAP) : base.atk,
+    hp: Number.isFinite(h) && h > 0 ? Math.min(h, maxHp) : base.hp,
+    atk: Number.isFinite(a) && a > 0 ? Math.min(a, maxAtk) : base.atk,
   }
 }

@@ -3,7 +3,7 @@
 // 상대 = 그 플레이어가 미리 정한 방어팀(pvp_stats.defense). 모드마다 하루 PLAYS번, 포인트·등급(브론즈~챌린저)이 따로다.
 // 시작에 판 하나를 쓰고 패배로 먼저 적어 둔다(도중에 나가도 패배) — 승리로 끝나면 바로잡는다. 전투는 앱이 돌리고 서버는 결과가 그럴듯한지만 본다.
 // 코인(PVP 코인) 하나를 두 모드가 함께 벌고 PVP 상점에서 쓴다.
-import { mulberry32, powerOf } from './rules.ts'
+import { mulberry32, powerOf, type StatLimit } from './rules.ts'
 import { mix, nickname } from './guild.ts'
 import { capStats, fitHero, heroStats } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
@@ -128,7 +128,8 @@ export function botTeam(seed: number, mode: Mode, base: BaseHero[], points: numb
 }
 
 // 앱이 보낸 영웅 5명(보유·서로 다름) → 서버 레벨·승급 + 자른 능력치. 못 쓰면 null.
-export function teamOf(raw: unknown, owned: Record<string, { level: number; promotion: number }>, defs: HeroDef[], cfg: (k: string) => number): TeamHero[] | null {
+export function teamOf(raw: unknown, owned: Record<string, { level: number; promotion: number }>, defs: HeroDef[], cfg: (k: string) => number,
+  lim?: StatLimit): TeamHero[] | null {
   if (!Array.isArray(raw) || raw.length !== TEAM) return null
   const seen = new Set<string>()
   const out: TeamHero[] = []
@@ -140,7 +141,7 @@ export function teamOf(raw: unknown, owned: Record<string, { level: number; prom
     seen.add(id)
     const lv = Number(own.level ?? 1)
     const pr = Number(own.promotion ?? 0)
-    const s = capStats(def, lv, pr, (h as { hp?: unknown })?.hp, (h as { atk?: unknown })?.atk, cfg)
+    const s = capStats(def, lv, pr, (h as { hp?: unknown })?.hp, (h as { atk?: unknown })?.atk, cfg, lim)
     out.push({ hero: id, level: lv, promotion: pr, hp: Math.round(s.hp), atk: Math.round(s.atk * 10) / 10 })
   }
   return out

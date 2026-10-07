@@ -263,10 +263,15 @@ func is_on_wall() -> bool:
 func take_damage(amount: float, source = null) -> void:
 	if state == State.DEAD or (castle != null and GameState.mode == GameState.Mode.IDLE):
 		return
-	amount = _skx.incoming(amount, source) * (1.0 - _gear_dmg_reduce)  # 받아치기·방벽·금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·보호막, 장비 피해 감소
+	# 회피를 먼저 굴린다(2026-10-07): 피한 공격은 보호막도 깎지 않는다. 같은 굴림을 Skills.incoming에 넘겨 두 번 피하지 않게
+	var roll := randf()
+	if _sk.has("dodge") and roll < _sk.dodge[0] / 100.0:
+		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
+		return
+	amount = _skx.incoming(amount, source, _gear_dmg_reduce)  # 받아치기·방벽·금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·장비 피해 감소·보호막
 	if amount <= 0.0:
 		return
-	var r := Skills.incoming(_sk, amount, randf())
+	var r := Skills.incoming(_sk, amount, roll)
 	if r.x <= 0.0:
 		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
 		return

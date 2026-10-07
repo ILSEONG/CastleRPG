@@ -407,9 +407,9 @@ func on_kill(m, was: int) -> void:
 
 # --- 받는 피해 ---
 
-## 받는 피해 조정(Skills.incoming의 회피·철벽·가시 앞에): 금강불괴 → 광전사·수호의 오라·요새화 → 돌 피부 → 방패 막기 → 보호막.
-## source = 때린 적(받아치기 반격 대상, 없으면 null).
-func incoming(amount: float, source = null) -> float:
+## 받는 피해 조정(Skills.incoming의 철벽·가시 앞에): 금강불괴 → 광전사·수호의 오라·요새화 → 돌 피부 → 방패 막기 → reduce(장비 피해 감소) → 보호막.
+## source = 때린 적(받아치기 반격 대상, 없으면 null). 2026-10-07: 보호막은 모든 감소가 끝난 피해만 흡수한다(전에는 장비 감소 전 피해를 흡수해 빨리 닳았다).
+func incoming(amount: float, source = null, reduce := 0.0) -> float:
 	if _inv_t > 0.0:
 		return 0.0
 	if _parry_t > 0.0:  # 받아치기: 막고 되받아친다
@@ -431,6 +431,7 @@ func incoming(amount: float, source = null) -> float:
 	if sk.has("block") and randf() < float(sk.block[0]) / 100.0:
 		x *= 1.0 - float(sk.block[1]) / 100.0
 		Fx.block(h)
+	x *= 1.0 - reduce
 	if barrier > 0.0:
 		var soak := minf(barrier, x)
 		barrier -= soak

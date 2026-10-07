@@ -84,7 +84,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       if (hs && hs.length) {
         total += hs.reduce((a: number, h: Any) => {
           const def = defs.find((dd) => dd.id === h.hero)
-          return a + (def ? W.heroPower(def, h.level, h.promotion, cfg) : 0)
+          return a + (Number.isFinite(h.power) ? Number(h.power) : def ? W.heroPower(def, h.level, h.promotion, cfg) : 0) // 장비 포함(앱 hero_power와 같다)
         }, 0)
       } else total += m.power
     }
@@ -153,6 +153,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const seen = new Set<string>()
     const defs = defsOf(x.game)
     const cfg = cfgOf(x.game)
+    const lim = R.statLimit(x.pl, x.game, x.st ? G.buffPct(x.st.lv.level) : 0) // 상한 = (기본 + 장비) × 내 성장·연구·길드 배율
     return raw.map((h: Any) => {
       const id = typeof h === 'string' ? h : String(h?.id ?? '')
       const own = x.pl.heroes[id]
@@ -161,8 +162,9 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       seen.add(id)
       const lv = Number(own.level ?? 1)
       const pr = Number(own.promotion ?? 0)
-      const s = W.capStats(def, lv, pr, h?.hp, h?.atk, cfg)
-      return { hero: id, level: lv, promotion: pr, hp: Math.round(s.hp), atk: Math.round(s.atk * 10) / 10 }
+      const s = W.capStats(def, lv, pr, h?.hp, h?.atk, cfg, lim)
+      return { hero: id, level: lv, promotion: pr, hp: Math.round(s.hp), atk: Math.round(s.atk * 10) / 10,
+        power: R.heroPower(def, lv, pr, lim.equip[id] ?? { hp: 0, atk: 0 }, x.game.config) }
     })
   }
 

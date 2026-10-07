@@ -237,10 +237,14 @@ func take_damage(amount: float, source = null) -> void:
 		shown = DamageNumbers.Kind.HURT
 	if _vuln_t > 0.0:
 		amount *= 1.0 + _vuln_pct / 100.0
+	var roll := randf()  # 회피 먼저(hero.gd와 같다): 피한 공격은 보호막도 깎지 않는다
+	if _sk.has("dodge") and roll < _sk.dodge[0] / 100.0:
+		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
+		return
 	amount = _skx.incoming(amount, source)
 	if amount <= 0.0:
 		return
-	var r := Skills.incoming(_sk, amount, randf())
+	var r := Skills.incoming(_sk, amount, roll)
 	if r.x <= 0.0:
 		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
 		return

@@ -275,8 +275,11 @@ export interface HeroDef {
 }
 
 // 영웅 최종 공격 = 기본 × 레벨 배율 × 승급 배율 × (1 + 성장 공격 %) × (1 + 길드 버프 %). 초당 피해 = 공격 × (1 + 성장 공속) / 간격.
+// 2026-10-07: 장비 공격과 연구 영웅 공격 %도 넣는다(앱 hero.refresh_stats와 같은 순서 — (기본 × 레벨 × 승급 + 장비) × 성장 × 연구 × 길드).
+// 전에는 둘 다 빠져 장비가 좋은 플레이어의 실제 피해가 상한에 잘렸다.
 export function teamDps(deploy: string[], heroes: Record<string, { level: number; promotion: number }>, defs: HeroDef[],
-  cfg: (k: string) => number, atkPct: number, aspdPct: number, buff: number): number {
+  cfg: (k: string) => number, atkPct: number, aspdPct: number, buff: number,
+  equip: Record<string, { hp: number; atk: number }> = {}, researchAtkPct = 0): number {
   let out = 0
   for (const id of deploy) {
     const def = defs.find((h) => h.id === id)
@@ -285,7 +288,7 @@ export function teamDps(deploy: string[], heroes: Record<string, { level: number
     const lv = 1 + cfg(def.role === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (h.level - 1)
     let pm = 1
     for (let i = 0; i < Math.min(h.promotion, 5); i++) pm *= cfg('promote_mult')
-    const atk = def.atk * lv * pm * (1 + atkPct) * (1 + buff / 100)
+    const atk = (def.atk * lv * pm + (equip[id]?.atk ?? 0)) * (1 + atkPct) * (1 + researchAtkPct / 100) * (1 + buff / 100)
     out += (atk * (1 + aspdPct)) / Math.max(0.1, def.atk_interval)
   }
   return out

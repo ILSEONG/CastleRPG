@@ -796,6 +796,20 @@ export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item
   return out
 }
 
+// 앱이 보낸 영웅 능력치(PVP 방어팀·길드전 수비)를 믿을 상한의 근거(2026-10-07): 영웅별 장비 {hp, atk} + 내 성장·연구·길드 배율.
+// 앱 GuildWar.hero_entry = (기본 × 레벨 × 승급 + 장비) × (1 + 성장 %) × (1 + 연구 %) × (1 + 길드 %)와 같은 식.
+export interface StatLimit { equip: Record<string, { hp: number; atk: number }>; hp: number; atk: number }
+export function statLimit(pl: { upgrades: Record<string, number>; research: Record<string, number>; items: EquipItem[]; equipment: { hero_id: string; item_id: number }[] },
+  game: { upgrades: UpgradeDef[]; research: ResearchDef[] }, guildBuffPct: number): StatLimit {
+  const up = (id: string) => {
+    const d = game.upgrades.find((u) => u.id === id)
+    return d ? (Math.min(Math.max(pl.upgrades[id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100 : 0
+  }
+  const rb = researchBonus(game.research, pl.research ?? {})
+  const g = 1 + Math.max(0, guildBuffPct) / 100
+  return { equip: heroEquip(pl.items ?? [], pl.equipment ?? []), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }
+}
+
 // 판매 값 = round(equip_sell_base × 등급 배율)(2026-10-07 장비 레벨 없앰).
 export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0))
 

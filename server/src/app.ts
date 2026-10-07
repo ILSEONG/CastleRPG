@@ -2408,9 +2408,11 @@ export function createApp(opts: AppOptions) {
       return d ? Math.min(pl.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
     }
     const buff = st ? G.buffPct(st.lv.level) : 0
+    const equip = R.heroEquip(pl.items, pl.equipment)
     return {
       id, pl, game, now, hour, mine: G.mineToday(pg.mine, now, hour), pg, g, st, members,
-      dps: G.teamDps(deploy, pl.heroes, defs, cfg, up('atk'), up('aspd'), buff), power: G.teamPower(deploy, pl.heroes, defs, cfg, R.heroEquip(pl.items, pl.equipment)),
+      dps: G.teamDps(deploy, pl.heroes, defs, cfg, up('atk'), up('aspd'), buff, equip, R.researchBonus(game.research, pl.research).hero_atk_pct),
+      power: G.teamPower(deploy, pl.heroes, defs, cfg, equip),
     }
   }
 
@@ -2866,7 +2868,7 @@ export function createApp(opts: AppOptions) {
   }
   registerGuildWar(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, rowOf, needGuild, grant, ApiError,
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
-  registerPvp(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
+  registerPvp(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
 

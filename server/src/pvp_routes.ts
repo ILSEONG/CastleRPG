@@ -19,7 +19,7 @@ const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 type Any = any
 
 export function registerPvp(app: Hono<Any>, d: Any) {
-  const { query, auth, clock, loadGame, loadPlayer, commit, view, body, strField, blocked, grant, random, ApiError } = d
+  const { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError } = d
 
   const cfgOf = (game: Any) => (k: string) => R.cfgNum(game.config, k)
   const defsOf = (game: Any): HeroDef[] => game.heroes.map((h: Any) => ({ id: String(h.id), role: String(h.role), hp: Number(h.hp), atk: Number(h.atk),
@@ -118,8 +118,11 @@ export function registerPvp(app: Hono<Any>, d: Any) {
     }
   }
 
-  const teamOrThrow = (x: Any, raw: unknown) => {
-    const t = P.teamOf(raw, x.pl.heroes, defsOf(x.game), cfgOf(x.game))
+  // 보낸 능력치 상한 = (기본 + 장비) × 내 성장·연구·길드 배율(R.statLimit). 길드 버프는 guildCtx에서.
+  const teamOrThrow = async (x: Any, raw: unknown) => {
+    const gx = await guildCtx(x.id, x.pl, x.game, x.now)
+    const lim = R.statLimit(x.pl, x.game, gx.st ? G.buffPct(gx.st.lv.level) : 0)
+    const t = P.teamOf(raw, x.pl.heroes, defsOf(x.game), cfgOf(x.game), lim)
     if (!t) throw blocked('bad_heroes', `heroes must be ${P.TEAM} different heroes you own`)
     return t
   }
@@ -133,7 +136,7 @@ export function registerPvp(app: Hono<Any>, d: Any) {
     const b = await body(c)
     const x = await ctx(c)
     const mode = modeOf(b.mode)
-    const team = teamOrThrow(x, b.heroes)
+    const team = await teamOrThrow(x, b.heroes)
     await rows(x)
     const soldiers = mode === 'total' ? mySoldiers(x) : {}
     await query('update pvp_stats set defense = $3::jsonb, soldiers = $4::jsonb, power = $5 where player_id = $1 and mode = $2',
@@ -146,7 +149,7 @@ export function registerPvp(app: Hono<Any>, d: Any) {
     const mode = modeOf(b.mode)
     for (let i = 0; i < 4; i++) {
       const x = await ctx(c)
-      const team = teamOrThrow(x, b.heroes)
+      const team = await teamOrThrow(x, b.heroes)
       const r = (await rows(x))[mode]
       const used = r.day === x.today ? r.plays : 0
       if (used >= P.PLAYS) throw blocked('no_plays', 'no plays left today')
