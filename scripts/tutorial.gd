@@ -105,7 +105,7 @@ const REPEAT_DESC := {
 
 ## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
 const TAB_MISSION := {"hero": "hero_level", "growth": "growth", "recruit": "gacha", "dungeon": "dungeon_gold", "soldier": "soldier_deploy",
-	"guild": "guild"}
+	"guild": "guild", "exchange": ""}  # "" = 소개 미션 없음 — 가이드가 끝나면 열린다
 ## 던전 → 그 던전을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 [던전] 탭의 그 카드가 열린다).
 const DUNGEON_MISSION := {"gold": "dungeon_gold", "equip": "dungeon_equip", "ticket": "dungeon_ticket"}
 ## 튜토리얼 훈련(1마리·5초)은 이 미션까지만 — 보병 훈련 미션을 넘기면 원래 훈련 시간(사용자 2026-10-06 "훈련 튜토리얼 끝나도 계속 5초인 버그").
@@ -345,6 +345,8 @@ func complete() -> bool:
 func tab_locked(tab_id: String) -> bool:
 	if not active() or not TAB_MISSION.has(tab_id):
 		return false
+	if TAB_MISSION[tab_id] == "":  # 소개 미션이 없는 메뉴(거래소): 가이드를 마치거나 건너뛰면 열린다
+		return true
 	return step < mission_index(TAB_MISSION[tab_id])
 
 
@@ -362,6 +364,8 @@ func dungeon_lock_text(type: String) -> String:
 
 ## 잠긴 탭 문구: "튜토리얼 9번째 미션 「영웅 레벨업」에서 열려요".
 func tab_lock_text(tab_id: String) -> String:
+	if str(TAB_MISSION.get(tab_id, "-")) == "":
+		return "가이드를 마치면 열려요"
 	return _lock_text(mission_index(str(TAB_MISSION.get(tab_id, ""))), "열려요")
 
 

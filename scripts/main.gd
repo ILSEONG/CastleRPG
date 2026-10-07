@@ -201,9 +201,11 @@ func _build_world() -> void:
 	add_child(pouch_panel)
 	var settings_panel = preload("res://scripts/settings_panel.gd").new()  # 설정(배경음악·화면·계정·버전): 오른쪽 아래 메뉴가 연다
 	add_child(settings_panel)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트][길드]
+	var exchange_panel = preload("res://scripts/exchange_panel.gd").new()  # 거래소 시트(온라인): 오른쪽 아래 메뉴가 연다
+	add_child(exchange_panel)
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트][거래소][길드]
 	side_menu.windows = {"settings": settings_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
-		"event": event_panel, "guild": guild_panel}
+		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
 	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 중하단 x1.5 배속 켬/끔(기기 저장, 성 화면에서만)

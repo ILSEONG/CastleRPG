@@ -147,6 +147,7 @@ signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 ap
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
 signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
 signal shop_changed  # 상점 산 기록이 바뀌었다(구매·리셋·서버 값)
+signal market_changed  # 거래소: 내 판매(market.mine)·대금 받을 수(market_sold)가 바뀌었다
 signal pouch_opened(opened: Dictionary)  # 주머니를 열었다 {id, count, gold_tenths, res}(온라인은 응답이 왔을 때)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
@@ -169,6 +170,8 @@ var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로
 var dia_tickets := 0
 var iap := {}  # 결제 상품 기록 {first, n, day, week, d, w, monthly: {id: {until, claimed}}, passes, gp: {free, paid}}(온라인은 서버 player.iap, 오프라인은 저장 "iap")
 var iap_enabled := false  # 실결제 연결됨(서버 player.iap_enabled). 아니면 결제 상품 버튼은 알림만
+var market := {}  # 거래소(서버 market.ts): {rules: {fee_pct, max_active, duration_sec, price_limits}, mine: [판매]} — 마지막 서버 값(+ 곧바로 반영한 것)
+var market_sold := 0  # 거래소: 팔렸고 대금을 아직 안 받은 판매 수(서버 player.market_sold — 메뉴 빨간 점)
 var shop := {}  # 상점 산 기록 {day, week, d: {상품 id: 오늘 산 수}, w: {상품 id: 이번 주 산 수}}(온라인은 서버 player.shop, 오프라인은 저장 "shop")
 var pouches := {}  # 방치 주머니 id("gold_60"·"res_240" …, POUCH_IDS) → 개수(> 0). 저장 "pouches"(없으면 {})
 var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
@@ -2794,6 +2797,14 @@ func apply_server(data: Dictionary) -> bool:
 		iap = p.iap
 		shop_changed.emit()
 	iap_enabled = p.get("iap_enabled") == true
+	var sold_before := market_sold
+	if _num(p.get("market_sold")):
+		market_sold = maxi(0, int(p.market_sold))
+	if data.get("market") is Dictionary and data.market.get("mine") is Array:
+		market = data.market.duplicate(true)
+		market_changed.emit()
+	elif market_sold != sold_before:
+		market_changed.emit()
 	if p.get("pouches") is Dictionary:
 		var pz := _pouch_counts(p.pouches)
 		if pz != pouches:
