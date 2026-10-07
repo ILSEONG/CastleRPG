@@ -6,6 +6,7 @@ extends Node
 
 signal changed  # 메시지 목록·길드 채널 유무가 바뀌었다
 signal notice(text: String)  # 보내기가 거절됐다 등 짧은 알림
+signal reports_changed  # 관리자 신고 목록을 받았다
 
 const MAX_LEN := 100  # 서버 MAX_LEN과 같다
 const GAP_SEC := 2.0  # 서버 GAP_SEC과 같다(도배 제한)
@@ -17,6 +18,9 @@ const REFUSALS := {
 	"too_fast": "조금 천천히 보내 주세요",
 	"no_guild": "길드에 들어가야 길드 채팅을 쓸 수 있어요",
 	"empty": "보낼 내용을 적어 주세요",
+	"too_many": "오늘은 신고를 더 할 수 없어요",
+	"no_message": "이 메시지는 신고할 수 없어요",
+	"own_message": "내 메시지는 신고할 수 없어요",
 }
 
 var messages := {"all": [], "guild": []}  # 채널 → [{id, name, text, at, me, local?}] (오래된 것부터)
@@ -24,6 +28,9 @@ var has_guild := false  # 서버가 길드 채널을 돌려줬다(길드원)
 var guild_name := ""
 var window_open := false  # 채팅 창이 열려 있다(자주 받는다)
 var polls := 0  # 받은 횟수(테스트용)
+var reported := {}  # 신고한 메시지 id → true(이 기기에서, 줄에 "신고함" 표시)
+var reports: Array = []  # 관리자: 서버 신고 목록(GET /v1/chat/reports)
+var reports_state := ""  # "" 안 받음 · "ok" · "failed"
 
 var _cd := 0.0  # 다음 받기까지
 var _polling := false
@@ -189,3 +196,29 @@ static func clean(raw: String) -> String:
 		space = false
 		out += String.chr(c)
 	return out.substr(0, MAX_LEN)
+
+
+## 남의 메시지 신고(POST /v1/chat/report): 바로 "신고함"으로 표시하고 알림, 서버가 거절하면 표시를 되돌리고 그 이유를 알린다.
+## 서버가 신고한 사람·신고당한 사람·그 메시지(원문)·그때 앞뒤 채팅을 남긴다.
+func report(id: int) -> void:
+	if id <= 0 or reported.has(id) or not online():
+		return
+	reported[id] = true
+	changed.emit()
+	notice.emit("신고했어요. 확인 후 조치할게요")
+	Net.send("POST", "/v1/chat/report", {"id": id}, func(_d): pass, func():
+		reported.erase(id)
+		changed.emit()
+		notice.emit(REFUSALS.get(Net.last_error, "신고하지 못했어요")))
+
+
+## 관리자: 신고 목록을 받는다.
+func fetch_reports() -> void:
+	if not online():
+		return
+	Net.send("GET", "/v1/chat/reports", null, func(d):
+		reports = d.get("reports", []) if d.get("reports") is Array else []
+		reports_state = "ok"
+		reports_changed.emit(), func():
+		reports_state = "failed"
+		reports_changed.emit())

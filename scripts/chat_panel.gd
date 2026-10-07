@@ -3,6 +3,8 @@ extends "res://scripts/ui_window.gd"
 ## 줄 = 닉네임 + 내용(내 줄은 노란 바탕). 아래 입력 칸(최대 100자) + [보내기]. 보내면 내 줄이 바로 보이고, 서버가 거절하면 지우고
 ## 입력 칸 위에 짧은 알림을 낸다(버튼 글자는 바뀌지 않는다). 상태·폴링은 오토로드 Chat(chat.gd).
 ## 휴대폰 키보드가 올라오면 창 아래 끝을 키보드 위로 올린다.
+## 신고(2026-10-07): 남의 줄을 누르면 "이 메시지를 신고할까요?" 확인 상자 → [신고]는 바로 "신고함" 표시 + 알림(거절되면 되돌림).
+## 관리자(Economy.admin)는 [신고] 탭에서 신고 목록(신고한 사람 → 신고당한 사람, 메시지 원문, 그때 앞뒤 채팅)을 본다.
 
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
@@ -15,7 +17,12 @@ const NOTICE_SEC := 2.5
 const CLOSE_PX := 56.0
 
 var tab := "all"
-var buttons := {}  # 테스트용: "tab:all" "tab:guild" "send" "close"
+var buttons := {}  # 테스트용: "tab:all" "tab:guild" "tab:reports" "send" "close" "report_ok" "report_cancel"
+var confirm_box: PanelContainer  # 신고 확인 상자
+var confirm_label: Label
+var input_row: HBoxContainer
+var _confirm_id := 0
+var _press_at := Vector2.ZERO
 var input: LineEdit
 var list: VBoxContainer
 var scroll: ScrollContainer
@@ -55,7 +62,7 @@ func _ready() -> void:
 	content.add_child(head)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 6)
-	for t in [["all", "전체"], ["guild", "길드"]]:
+	for t in [["all", "전체"], ["guild", "길드"], ["reports", "신고"]]:
 		var b := _button(t[1], UiKit.STEEL, 24)
 		b.focus_mode = Control.FOCUS_NONE
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -76,6 +83,7 @@ func _ready() -> void:
 	notice_label.modulate.a = 0.0
 	content.add_child(notice_label)
 	var row := HBoxContainer.new()
+	input_row = row
 	row.add_theme_constant_override("separation", 8)
 	input = LineEdit.new()
 	input.max_length = Chat.MAX_LEN
@@ -98,8 +106,76 @@ func _ready() -> void:
 	content.add_child(row)
 	_fit_sheet()
 	_bottom = dialog.offset_bottom
+	_build_confirm()
 	Chat.changed.connect(_on_changed)
 	Chat.notice.connect(show_notice)
+	Chat.reports_changed.connect(func():
+		if visible and tab == "reports":
+			_rebuild())
+
+
+## 신고 확인 상자: 창 가운데, 다른 곳을 누르지 못하게 어두운 막 위에.
+func _build_confirm() -> void:
+	var veil := ColorRect.new()
+	veil.color = Color(0, 0, 0, 0.35)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	veil.visible = false
+	veil.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			_close_confirm())
+	dialog.get_parent().add_child(veil)
+	confirm_box = PanelContainer.new()
+	confirm_box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	confirm_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	confirm_box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	confirm_box.custom_minimum_size = Vector2(520, 0)
+	confirm_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	confirm_box.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 16.0, 22))
+	veil.add_child(confirm_box)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 16)
+	confirm_box.add_child(v)
+	v.add_child(_label("이 메시지를 신고할까요?", 28))
+	confirm_label = _label("", 22, SUB)
+	confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	confirm_label.custom_minimum_size = Vector2(470, 0)
+	v.add_child(confirm_label)
+	v.add_child(_label("신고한 사람·신고당한 사람·그때 채팅 내용이 운영자에게 전달돼요", 18, SUB))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	var no := _button("취소", UiKit.STEEL, 24)
+	var yes := _button("신고", Color(0.86, 0.32, 0.26), 24)
+	for b in [no, yes]:
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(b)
+	no.pressed.connect(_close_confirm)
+	yes.pressed.connect(func():
+		var id := _confirm_id
+		_close_confirm()
+		Chat.report(id))
+	buttons["report_cancel"] = no
+	buttons["report_ok"] = yes
+	v.add_child(h)
+
+
+## 남의 줄을 눌렀다: 확인 상자.
+func ask_report(m: Dictionary) -> void:
+	if m.get("me", false) or int(m.get("id", 0)) <= 0 or Chat.reported.has(int(m.id)):
+		return
+	_confirm_id = int(m.id)
+	confirm_label.text = "%s: %s" % [m.name, m.text]
+	confirm_box.get_parent().visible = true
+
+
+func _close_confirm() -> void:
+	confirm_box.get_parent().visible = false
+	_confirm_id = 0
+
+
+func is_confirm_open() -> bool:
+	return confirm_box.get_parent().visible
 
 
 func _fit() -> void:
@@ -117,6 +193,7 @@ func _on_open() -> void:
 func close() -> void:
 	super.close()
 	Chat.set_window_open(false)
+	_close_confirm()
 	input.release_focus()
 	DisplayServer.virtual_keyboard_hide()
 
@@ -124,6 +201,8 @@ func close() -> void:
 func _pick(t: String) -> void:
 	tab = t
 	_shown = -1
+	if t == "reports":
+		Chat.fetch_reports()
 	_rebuild()
 
 
@@ -155,22 +234,28 @@ func _process(delta: float) -> void:
 
 
 func _on_changed() -> void:
-	if visible:
+	if visible and tab != "reports":  # 신고 목록은 받을 때만 다시 그린다(스크롤 유지)
 		_rebuild()
 
 
 func _rebuild() -> void:
 	buttons["tab:guild"].visible = Chat.has_guild
-	if tab == "guild" and not Chat.has_guild:
+	buttons["tab:reports"].visible = Economy.admin
+	if tab == "guild" and not Chat.has_guild or tab == "reports" and not Economy.admin:
 		tab = "all"
 	for k in buttons:
 		if k.begins_with("tab:"):
 			UiKit.apply_button(buttons[k], UiKit.AMBER if k == "tab:" + tab else UiKit.STEEL, 14.0)
+	input_row.visible = tab != "reports"
+	if tab == "reports":
+		_rebuild_reports()
+		return
 	var xs: Array = Chat.messages[tab]
 	var stamp := xs.size() * 1000003 + (Chat.last_id(tab) % 1000003) + (7 if tab == "guild" else 0)
 	for m in xs:
 		if m.get("local", false):
 			stamp += int(-m.id) * 31
+	stamp += Chat.reported.size() * 7919
 	if stamp == _shown:
 		return
 	_shown = stamp
@@ -200,6 +285,14 @@ func _line(m: Dictionary) -> Control:
 	var mine: bool = m.get("me", false)
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UiKit.panel(ME_BG if mine else ROW_BG, 10.0, 10))
+	if not mine and int(m.get("id", 0)) > 0:  # 남의 줄: 누르면(끌지 않고) 신고 확인
+		p.mouse_filter = Control.MOUSE_FILTER_PASS
+		p.gui_input.connect(func(e):
+			if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+				if e.pressed:
+					_press_at = e.global_position
+				elif e.global_position.distance_to(_press_at) < 16.0:
+					ask_report(m))
 	var l := RichTextLabel.new()
 	l.bbcode_enabled = true
 	l.fit_content = true
@@ -213,8 +306,42 @@ func _line(m: Dictionary) -> Control:
 	l.add_theme_color_override("default_color", HudScript.INK)
 	var nc := ME_NAME_COLOR if mine else NAME_COLOR
 	l.text = "[color=#%s]%s[/color]  %s" % [nc.to_html(false), _esc(str(m.name)), _esc(str(m.text))]
+	if Chat.reported.has(int(m.get("id", 0))):
+		l.text += "  [color=#c0392b](신고함)[/color]"
 	p.add_child(l)
 	return p
+
+
+## 관리자 [신고] 탭: 최근 신고(신고한 사람 → 신고당한 사람, 시각, 메시지 원문, 그때 앞뒤 채팅 — 신고된 줄은 빨갛게).
+func _rebuild_reports() -> void:
+	_shown = -1
+	for c in list.get_children():
+		c.queue_free()
+	if Chat.reports.is_empty():
+		var msg := "신고를 불러오지 못했어요" if Chat.reports_state == "failed" else ("아직 신고가 없어요" if Chat.reports_state == "ok" else "불러오는 중")
+		list.add_child(_label(msg, 24, SUB))
+		return
+	for r in Chat.reports:
+		var p := PanelContainer.new()
+		p.add_theme_stylebox_override("panel", UiKit.panel(ROW_BG, 10.0, 12))
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 4)
+		p.add_child(v)
+		var when := Time.get_datetime_string_from_unix_time(int(float(r.get("at", 0)) + 9 * 3600), true)  # 한국 시각
+		var head := _label("%s → %s  ·  %s  ·  %s" % [r.get("reporter_name", ""), r.get("target_name", ""), "전체" if r.get("channel") == "all" else "길드", when], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(head)
+		var said := str(r.get("raw")) if r.get("raw") != null else str(r.get("text", ""))
+		var main := _label("신고된 메시지: " + said, 22, Color(0.75, 0.18, 0.14), HORIZONTAL_ALIGNMENT_LEFT)
+		main.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(main)
+		for c in r.get("context", []):
+			var t := str(c.get("raw")) if c.get("raw") != null else str(c.get("text", ""))
+			var hit := int(c.get("id", 0)) == int(r.get("message_id", -1))
+			var cl := _label("%s: %s" % [c.get("name", ""), t], 18, Color(0.75, 0.18, 0.14) if hit else HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+			cl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(cl)
+		list.add_child(p)
 
 
 static func _esc(s: String) -> String:
