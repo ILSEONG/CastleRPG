@@ -192,7 +192,7 @@ func flush_kills() -> void:
 func _process(delta: float) -> void:
 	if not ready_once:
 		return
-	_flush_cd -= delta
+	_flush_cd -= delta / maxf(Engine.time_scale, 0.01)  # 실제 초(x1.5 배속과 무관)
 	if _flush_cd <= 0.0:
 		_flush_cd = FLUSH_SEC
 		flush_kills()
@@ -308,7 +308,7 @@ func _next() -> void:
 
 ## 머리 요청을 sec초 뒤 다시 보낸다(그동안 _busy라 다른 요청은 기다린다).
 func _retry_in(sec: float) -> void:
-	get_tree().create_timer(sec).timeout.connect(_send_head)
+	get_tree().create_timer(sec, true, false, true).timeout.connect(_send_head)  # 실제 초
 
 
 func _send_head() -> void:
@@ -445,7 +445,7 @@ func _on_first_player(data: Dictionary) -> void:
 ## 첫 /v1/player가 틀렸거나 버려졌다: 백오프 뒤 다시 받는다(접속 화면에서 멈추지 않게).
 func _retry_first_player() -> void:
 	_first_tries += 1
-	get_tree().create_timer(backoff(_first_tries)).timeout.connect(send.bind("GET", "/v1/player", null, _on_first_player, _retry_first_player))
+	get_tree().create_timer(backoff(_first_tries), true, false, true).timeout.connect(send.bind("GET", "/v1/player", null, _on_first_player, _retry_first_player))
 
 
 ## 로딩 화면에서 창 데이터를 한 번에 받는다(GET /v1/boot — 출석·미션·친구·길드·공성전·PVP·랭킹 셋). 받으면 미션 표·친구·길드·공성전 값을
