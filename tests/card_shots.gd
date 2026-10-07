@@ -38,6 +38,16 @@ func _ready() -> void:
 	tabs.press("hero")
 	await _wait_portraits()
 	_save("hero_list")
+	var hw = tabs.windows.hero
+	hw.show_detail("valen")
+	await _wait(1.0)
+	_save("hero_detail_art")
+	hw.big_card.show_model = true
+	await _wait(1.5)
+	_save("hero_detail_model")
+	hw.big_card.show_model = false
+	hw._show_list()
+	await _frames(5)
 	tabs.press("hero")
 	await _frames(10)
 	tabs.press("dungeon")
