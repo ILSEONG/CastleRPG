@@ -52,7 +52,6 @@ const POUCH_FAIL_TEXT := "주머니를 열지 못했어요 — 보유 수를 다
 const ShopItems := preload("res://scripts/shop_items.gd")
 const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸어요"
 const IapItems := preload("res://scripts/iap_items.gd")
-const IAP_OFF_TEXT := "결제는 Google Play 출시 후 열려요"
 const IAP_FAIL_TEXT := "보상을 받지 못해 되돌렸어요"
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
@@ -1375,7 +1374,7 @@ func iap_buy(id: String) -> bool:
 	if IapItems.find(id).is_empty() or not iap_can_buy(id):
 		return false
 	if not iap_enabled:
-		notice.emit(IAP_OFF_TEXT)
+		notice.emit(preload("res://scripts/release_platform.gd").iap_off_text())
 		return false
 	return false
 

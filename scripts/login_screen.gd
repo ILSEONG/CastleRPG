@@ -4,10 +4,14 @@ extends CanvasLayer
 ## [네이버로 시작하기](#03C75A·N) — 그 아래 [게스트로 시작하기] 글자 버튼, 맨 아래 약관 안내와 버전. 회원가입 없음: 처음 로그인하면 계정이 생긴다.
 ## 소셜 로그인: verifier(무작위 32바이트 hex)의 sha256을 challenge로 POST /v1/auth/oauth/start → 받은 주소를 시스템 브라우저로 열고
 ## (OS.shell_open), POLL_SEC마다 POST /v1/auth/oauth/poll {state, verifier}로 결과를 기다린다(앱으로 돌아오면 곧바로 받는다).
+## 앱인토스 빌드(ReleasePlatform.is_toss())는 버튼이 없다: 열리자마자 토스 게임 로그인(toss_bridge.gd → getUserKeyForGame hash)을 받아
+## Net.set_toss 뒤 logged_in — 사용자에게는 시작 그림만 잠깐 보인다. 못 받으면 이유 한 줄과 [다시 시도].
 ## 성공하면 Net.set_auth(제공자, 세션) 뒤 logged_in. 게스트는 Net.set_auth("guest") 뒤 logged_in. 기다리는 동안은 안내 창
 ## ([브라우저 다시 열기] [취소]), 실패는 버튼 아래 한 줄로 알린다. 기기 id를 함께 보내 그 기기의 게스트 진행을 소셜 계정에 잇는다(서버 규칙).
 
 const UiKit := preload("res://scripts/ui_kit.gd")
+const ReleasePlatform := preload("res://scripts/release_platform.gd")
+const TossBridgeScript := preload("res://scripts/toss_bridge.gd")
 
 signal logged_in
 
@@ -30,12 +34,18 @@ const ERRORS := {
 	"login_failed": "로그인하지 못했습니다. 다시 시도해 주세요",
 	"login_expired": "시간이 지났습니다. 다시 시도해 주세요",
 	"net": "서버에 연결할 수 없습니다",
+	"UNSUPPORTED": "토스 앱을 최신 버전으로 업데이트해 주세요",
+	"INVALID_CATEGORY": "토스 로그인을 쓸 수 없는 미니앱입니다",
+	"NO_BRIDGE": "토스 앱에서 열어 주세요",
+	"ERROR": "토스 로그인 정보를 받지 못했습니다. 다시 시도해 주세요",
 }
 
 var buttons := {}  # 제공자 → Button
 var guest_button: Button
 var message_label: Label
 var wait_panel: Control
+var retry_button: Button  # 앱인토스: 토스 로그인을 다시 받는다(실패했을 때만 보인다)
+var toss: Node  # toss_bridge.gd(앱인토스 빌드만)
 
 var _http: HTTPRequest
 var _provider := ""
@@ -97,6 +107,24 @@ func _ready() -> void:
 	_http.timeout = 10.0
 	_http.request_completed.connect(_on_http)
 	add_child(_http)
+	if ReleasePlatform.is_toss():
+		toss = TossBridgeScript.new()
+		add_child(toss)
+		toss_login()
+
+
+## 앱인토스: 토스 사용자 식별키를 받아 로그인한다(버튼 없이 곧바로). 실패하면 이유와 [다시 시도].
+func toss_login() -> void:
+	retry_button.visible = false
+	_message("")
+	await get_tree().process_frame  # main이 logged_in을 기다리기 시작한 뒤에 알린다(_ready 안에서 바로 끝나도)
+	var key: String = await toss.user_key()
+	if TossBridgeScript.is_hash(key):
+		Net.set_toss(key)
+		logged_in.emit()
+		return
+	_message(ERRORS.get(key, ERRORS.ERROR))
+	retry_button.visible = true
 
 
 func _process(delta: float) -> void:
@@ -211,7 +239,7 @@ func _button_block() -> Control:
 	box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	box.offset_bottom = -110
 	box.add_theme_constant_override("separation", 16)
-	for p in ["google", "kakao", "naver"]:
+	for p in ReleasePlatform.login_providers():
 		var b := _brand_button(p)
 		b.pressed.connect(press_provider.bind(p))
 		buttons[p] = b
@@ -229,7 +257,17 @@ func _button_block() -> Control:
 		var w := guest_button.get_theme_font("font").get_string_size(guest_button.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
 		var y := guest_button.size.y / 2.0 + 15.0
 		guest_button.draw_line(Vector2((guest_button.size.x - w) / 2.0, y), Vector2((guest_button.size.x + w) / 2.0, y), Color(1, 1, 1, 0.75), 2.0))
+	guest_button.visible = not ReleasePlatform.is_toss()  # 앱인토스는 토스 계정만
 	box.add_child(guest_button)
+	retry_button = Button.new()
+	retry_button.text = "다시 시도"
+	retry_button.custom_minimum_size = Vector2(BUTTON_W, BUTTON_H)
+	retry_button.add_theme_font_size_override("font_size", 30)
+	retry_button.focus_mode = Control.FOCUS_NONE
+	UiKit.apply_button(retry_button, Color(0.98, 0.70, 0.20), 14.0)
+	retry_button.pressed.connect(toss_login)
+	retry_button.visible = false
+	box.add_child(retry_button)
 	message_label = _text("", 22, Color(1.0, 0.86, 0.5))
 	message_label.visible = false
 	box.add_child(message_label)

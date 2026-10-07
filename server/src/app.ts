@@ -48,6 +48,7 @@ const MAX_SELL_ITEMS = 1000 // 개정 18: 장비 판매 한 번의 개수
 const RUN_KEEP_SEC = 86400 // 끝난 run은 하루 남긴다(재전송 멱등), 그 뒤 새 start가 지운다
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const TOSS_HASH_RE = /^[A-Za-z0-9+/=_.:-]{8,512}$/ // 앱인토스 getUserKeyForGame hash
 const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge·세션 비밀(32바이트 hex)
 const OAUTH_TTL = 600 // 진행 중 소셜 로그인 유효 시간(초)
 const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
@@ -1065,7 +1066,7 @@ export function createApp(opts: AppOptions) {
   }
 
   // 제공자 계정 → 플레이어: 이은 플레이어 → (없으면) 이을 게스트 계정(소셜 계정이 하나도 없을 때) → (없으면) 새 플레이어.
-  async function resolvePlayer(p: O.Provider, uid: string, link: string | null, now: number): Promise<{ id: string; isNew: boolean }> {
+  async function resolvePlayer(p: O.Provider | 'toss', uid: string, link: string | null, now: number): Promise<{ id: string; isNew: boolean }> {
     const known = async () => (await query('select player_id from player_identities where provider = $1 and provider_uid = $2', [p, uid]))[0]?.player_id
     const k = await known()
     if (k) return { id: String(k), isNew: false }
@@ -1127,6 +1128,34 @@ export function createApp(opts: AppOptions) {
   app.post('/v1/auth/logout', async (c) => {
     const b = await body(c)
     if (typeof b.session === 'string' && HEX64_RE.test(b.session)) await query('delete from player_sessions where hash = $1', [sha256hex(b.session)])
+    return c.json({ ok: true })
+  })
+
+  // --- 앱인토스(토스 미니앱) 게임 로그인 {hash}: 웹 래퍼가 SDK getUserKeyForGame()으로 받은 사용자 식별키(미니앱마다 다른 값).
+  // 앱인토스 게임은 이 값으로만 사용자를 식별한다(서버 검증 API 없음 — 비밀처럼 다룬다). DB에는 sha256만 둔다(로그인 정보 암호화 저장 기준).
+  // 처음이면 계정을 만든다. 세션 없이 실행할 때마다 다시 부른다(토스가 같은 값을 다시 준다).
+  app.post('/v1/auth/toss', async (c) => {
+    const b = await body(c)
+    if (typeof b.hash !== 'string' || !TOSS_HASH_RE.test(b.hash)) throw new ApiError(400, 'bad_hash', 'hash must be 8-512 characters of [A-Za-z0-9+/=_.:-]')
+    const now = clock()
+    const r = await resolvePlayer('toss', sha256hex(`toss:${b.hash}`), null, now)
+    await query('update players set last_seen = to_timestamp($2::float8) where id = $1', [r.id, now])
+    return c.json({ token: await issueToken(r.id, now), player_id: r.id, provider: 'toss', is_new: r.isNew })
+  })
+
+  // 계정 삭제(Google Play 계정 삭제 정책): 플레이어와 딸린 모든 행을 지운다(외래 키가 cascade·set null). 길드장이면 먼저
+  // 가장 오래된 길드원에게 넘기고, 혼자면 길드를 지운다(/v1/guild/leave와 같은 규칙). 되돌릴 수 없다 — 앱이 두 번 눌러 확인한다.
+  app.post('/v1/account/delete', auth, async (c) => {
+    const id = c.get('playerId') as string
+    const b = await body(c)
+    if (b.confirm !== 'delete') throw new ApiError(400, 'confirm_required', 'send {"confirm":"delete"}')
+    const [g] = await query('select g.id from guilds g join player_guild pg on pg.guild_id = g.id where pg.player_id = $1 and g.owner = $1', [id])
+    if (g) {
+      const [next] = await query('select player_id from player_guild where guild_id = $1 and player_id <> $2 order by joined_at, player_id limit 1', [g.id, id])
+      if (next) await query('update guilds set owner = $2 where id = $1', [g.id, next.player_id])
+      else await query('delete from guilds where id = $1', [g.id])
+    }
+    await query('delete from players where id = $1', [id])
     return c.json({ ok: true })
   })
 

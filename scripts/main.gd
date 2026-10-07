@@ -22,6 +22,7 @@ extends Node3D
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
+const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -722,9 +723,7 @@ func _auto_stage_requested() -> bool:
 func _flag_requested(flag: String) -> bool:
 	if OS.get_cmdline_user_args().has("--" + flag):
 		return true
-	if OS.has_feature("web"):
-		return str(JavaScriptBridge.eval("window.location.search")).contains(flag)
-	return false
+	return ReleasePlatform.web_query().contains(flag)  # 웹은 URL(eval 없이), 아니면 ""
 
 
 ## 개발용: 저장 안 함, 마지막 수집 30분 전, 자원 각 500, 골드 30,000(10연차 확인용), 다이아 3,000(개정 23). 영웅을 만들기 전(_build_world 앞부분)에

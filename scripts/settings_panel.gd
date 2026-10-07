@@ -3,6 +3,7 @@ extends "res://scripts/ui_window.gd"
 ## 사운드: 배경음악 켬/끔 + 크기 슬라이더(Music.enabled·volume), 효과음 켬/끔 + 크기 슬라이더(SoundFx.enabled·volume, 2026-10-07).
 ## 화면: 화면 흔들림(Prefs shake — 카메라 흔들림·히트스톱·SSR 줌), 피해 숫자 표시(Prefs damage_numbers).
 ## 계정: 닉네임·친구 코드([복사])·로그인 방식(온라인, 친구 목록 응답 Economy.friends에서). 오프라인이면 "오프라인 모드".
+## 계정 삭제(온라인, Google Play 계정 삭제 정책): 두 번 눌러 확인 → POST /v1/account/delete → 저장한 로그인·기기 id를 지우고 처음부터(Net.forget_account).
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
 
 const Prefs := preload("res://scripts/prefs.gd")
@@ -10,7 +11,8 @@ const Prefs := preload("res://scripts/prefs.gd")
 const TITLE := "설정"
 const WIDTH := 600.0
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
-const LOGIN_NAMES := {"guest": "게스트", "google": "Google", "kakao": "카카오", "naver": "네이버"}
+const LOGIN_NAMES := {"guest": "게스트", "google": "Google", "kakao": "카카오", "naver": "네이버", "toss": "토스"}
+const DELETE_ARM_SEC := 4.0  # [계정 삭제]를 한 번 누른 뒤 확인을 기다리는 시간
 
 var music_check: Button
 var volume_slider: HSlider
@@ -25,6 +27,9 @@ var code_label: Label
 var login_label: Label
 var copy_button: Button
 var version_label: Label
+var delete_button: Button
+var _delete_armed := 0.0
+var _deleting := false
 
 
 func _ready() -> void:
@@ -67,6 +72,10 @@ func _ready() -> void:
 	code_row.add_child(copy_button)
 	content.add_child(code_row)
 	login_label = _info_row("로그인")
+	delete_button = _button("계정 삭제", UiKit.STEEL, 22)
+	delete_button.custom_minimum_size = Vector2(0, 56)
+	delete_button.pressed.connect(press_delete)
+	content.add_child(delete_button)
 
 	content.add_child(_section("정보"))
 	version_label = _info_row("게임 버전")
@@ -109,6 +118,38 @@ func _refresh() -> void:
 	copy_button.visible = code != ""
 	login_label.text = LOGIN_NAMES.get(Net.auth_mode, "-") if online else "-"
 	version_label.text = str(ProjectSettings.get_setting("application/config/version", ""))
+	delete_button.visible = online
+	_style_delete()
+
+
+func _process(delta: float) -> void:
+	if _delete_armed > 0.0:
+		_delete_armed -= delta
+		if _delete_armed <= 0.0:
+			_style_delete()
+
+
+## [계정 삭제]: 첫 번째는 확인을 묻고(빨간 "한 번 더 누르면 계정이 삭제됩니다"), 4초 안에 다시 누르면 서버에서 지운다. 되돌릴 수 없다.
+func press_delete() -> void:
+	if _deleting or not Net.is_online():
+		return
+	if _delete_armed <= 0.0:
+		_delete_armed = DELETE_ARM_SEC
+		_style_delete()
+		return
+	_delete_armed = 0.0
+	_deleting = true
+	Net.send("POST", "/v1/account/delete", {"confirm": "delete"}, func(_d): Net.forget_account(),
+		func():
+			_deleting = false
+			_style_delete()
+			Economy.notice.emit("계정을 삭제하지 못했습니다. 다시 시도해 주세요"))
+
+
+func _style_delete() -> void:
+	var armed := _delete_armed > 0.0
+	delete_button.text = "한 번 더 누르면 계정이 삭제됩니다" if armed else "계정 삭제"
+	UiKit.apply_button(delete_button, Color(0.85, 0.27, 0.22) if armed else UiKit.STEEL, 12.0)
 
 
 func copy_code() -> void:

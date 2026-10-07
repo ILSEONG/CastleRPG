@@ -34,5 +34,5 @@ services:
         sync: false
       - key: OAUTH_NAVER_SECRET
         sync: false
-      # CORS_ORIGINS: 웹 빌드를 올리면 그 출처로 정한다(비우면 *). APK만 쓰는 동안은 없어도 된다.
+      # CORS_ORIGINS: 웹 빌드를 올리면 그 출처로 정한다(비우면 *). 앱인토스: https://<appName>.web.tossmini.com, https://<appName>.private-web.tossmini.com.
       # ALLOW_TEST_HOOKS 는 두지 않는다 — 운영에서 1이면 서버가 시작을 거부한다.

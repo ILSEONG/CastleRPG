@@ -36,6 +36,8 @@ TouchScroll="*res://scripts/touch_scroll.gd"
 
 api_base_url=""
 api_base_url.template="https://castlerpg-api.onrender.com"
+platform="google_play"
+platform.apps_in_toss="apps_in_toss"
 
 [display]
 

@@ -53,7 +53,7 @@ for kv in tutorial_new_players=0 train_batch_base=10 train_batch_per_level=2; do
 done
 
 ok=1
-for phase in 1 2 3 4 5 6; do
+for phase in 1 2 3 4 5 6 7; do
   timeout "${ONLINE_TIMEOUT:-300}" "$GODOT" --headless --path . res://tests/online_check.tscn -- \
     --api="$API" --device="$WTMP/device.json" --state="$WTMP/state.json" --phase=$phase > "$TMP/phase$phase.log" 2>&1
   rc=$?

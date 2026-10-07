@@ -12,6 +12,7 @@ extends Node
 ## 서버 stage가 진실: 클리어가 거부되면(cleared:false) 다음 스테이지 경계(GameState.refill)에서 GameState.stage를 서버 값으로 맞춘다.
 
 const GameData := preload("res://scripts/game_data.gd")
+const ReleasePlatform := preload("res://scripts/release_platform.gd")
 
 const RETRY_MAX_SEC := 15.0
 const TIMEOUT_SEC := 10.0
@@ -34,6 +35,7 @@ var device_id := ""
 var auth_path := "user://auth.json"  # 로그인 방식 {mode: "guest"|"google"|"kakao"|"naver", session}. 테스트는 바꾼다
 var auth_mode := ""  # "" = 아직 고르지 않음(로그인 화면), "guest", 또는 소셜 제공자
 var session := ""  # 소셜 자동 로그인 비밀(64 hex). 게스트면 ""
+var toss_hash := ""  # 앱인토스 빌드: 토스 게임 로그인 사용자 식별키(메모리에만 — 실행마다 토스에서 다시 받는다)
 var token := ""  # 메모리에만
 var up := false  # 지금 서버와 연결됨
 var ready_once := false  # 첫 접속(gamedata + player)을 마쳤다
@@ -44,6 +46,7 @@ var requested := {}  # 경로 → 큐에 넣은 횟수(테스트용)
 var kill_seq_sent := 0  # 마지막으로 큐에 넣은 처치 묶음 번호
 var boot_state := ""  # 로딩 화면 일괄 조회: "" 안 함 · "wait" 받는 중 · "done" 받음 · "failed" 못 받음(창을 열 때 각자 받는다)
 var boot := {}  # 마지막 /v1/boot 응답
+var restart := func(): _restart()  # 계정 삭제 뒤 다시 열기(테스트는 바꾼다)
 var last_error := ""  # 마지막으로 버린 요청의 서버 오류 코드(fail 콜백이 읽는다. 답이 없었으면 "")
 
 var _http: HTTPRequest
@@ -75,7 +78,16 @@ func is_online() -> bool:
 
 ## 로그인 방식을 골랐는가(저장된 소셜 세션 또는 게스트). 아니면 main이 로그인 화면을 띄운다.
 func has_credentials() -> bool:
+	if ReleasePlatform.is_toss():
+		return toss_hash != ""  # 앱인토스는 토스 로그인만(저장한 게스트·소셜 방식은 쓰지 않는다)
 	return session != "" or auth_mode == "guest"
+
+
+## 앱인토스 빌드: 토스에서 받은 사용자 식별키로 로그인한다(파일에 저장하지 않는다).
+func set_toss(hash: String) -> void:
+	auth_mode = "toss"
+	session = ""
+	toss_hash = hash
 
 
 ## 저장한 로그인 방식 읽기(main이 로그인 화면 여부를 정하기 전에). 깨졌으면 비운다.
@@ -110,6 +122,31 @@ func logout() -> void:
 		h.request_completed.connect(func(_r, _c, _hd, _b): h.queue_free())
 		h.request(api_base + "/v1/auth/logout", PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_POST, JSON.stringify({"session": session}))
 	set_auth("", "")
+
+
+## 계정을 지운 뒤(설정 [계정 삭제]): 큐를 멈추고 저장한 로그인 방식과 기기 id(게스트 계정 열쇠)를 지운 뒤 알리고 처음부터 다시 연다
+## — 웹(앱인토스)은 페이지를 다시 불러 새 계정으로, 앱은 종료(다음 실행은 로그인 화면).
+func forget_account() -> void:
+	_halted = true
+	_queue.clear()
+	token = ""
+	toss_hash = ""
+	set_auth("", "")
+	if FileAccess.file_exists(device_path):
+		DirAccess.remove_absolute(device_path)
+	device_id = ""
+	Economy.notice.emit("계정을 삭제했습니다")
+	await get_tree().create_timer(1.5).timeout
+	restart.call()
+
+
+func _restart() -> void:
+	if OS.has_feature("web"):
+		var loc = JavaScriptBridge.get_interface("location")
+		if loc != null:
+			loc.reload()
+			return
+	get_tree().quit()
 
 
 func _save_auth() -> void:
@@ -214,9 +251,9 @@ static func arg_value(name: String) -> String:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with(prefix):
 			return a.substr(prefix.length())
-	if OS.has_feature("web"):
-		var v = JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('%s') || ''" % name)
-		return "" if v == null else str(v)
+	for pair in ReleasePlatform.web_query().trim_prefix("?").split("&", false):  # 웹(eval 없이 — 앱인토스 보안 기준)
+		if pair.get_slice("=", 0) == name:
+			return pair.substr(name.length() + 1).uri_decode()
 	return ""
 
 
@@ -276,6 +313,8 @@ func _item(method: String, path: String, body, done: Callable, fail: Callable, a
 
 
 func _login_item() -> Dictionary:
+	if auth_mode == "toss" and toss_hash != "":
+		return _item("POST", "/v1/auth/toss", {"hash": toss_hash}, _on_login, Callable(), false)
 	if session != "":
 		return _item("POST", "/v1/auth/session", {"session": session}, _on_login, _on_session_dropped, false)
 	return _item("POST", "/v1/auth/guest", {"device_id": device_id}, _on_login, Callable(), false)

@@ -22,6 +22,7 @@ const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const MainScript := preload("res://scripts/main.gd")
+const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const DEAD_API := "http://127.0.0.1:1"  # 아무도 듣지 않는 포트 — 끊김 흉내
 
 class ErrorCounter extends Logger:
@@ -57,7 +58,7 @@ func _ready() -> void:
 	var phase := Net.arg_value("phase")
 	var device := Net.arg_value("device")
 	var state_path := Net.arg_value("state")
-	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5", "6"], "online mode with --api, --device, --state, --phase",
+	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5", "6", "7"], "online mode with --api, --device, --state, --phase",
 		"api=%s device=%s state=%s phase=%s" % [Net.api_base, device, state_path, phase])
 	if _fails == 0:
 		Net.device_path = device  # start() 전에
@@ -77,6 +78,8 @@ func _ready() -> void:
 				await _phase5_lost()
 			"6":
 				await _phase6_quests()
+			"7":
+				await _phase7_toss()
 	if _errors.count > 0:
 		print("ONLINE SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -663,6 +666,39 @@ func _phase5_lost() -> void:
 	_login_screen().press_guest()
 	var built := await _wait_until(func(): return _main.camera != null, 30.0)
 	_check(built and Net.auth_mode == "guest" and Net.logins == 1, "(s3) [게스트로 시작하기] then starts the world as the device guest", "built=%s logins=%d" % [built, Net.logins])
+
+
+## phase 7: 앱인토스 빌드(ReleasePlatform.override). 로그인 화면에 버튼이 없고 곧바로 토스 게임 로그인(디버그: 기기 id로 만든 hash)으로 월드 →
+## 설정 [계정 삭제] 두 번 → 서버에서 계정이 지워지고(같은 hash로 다시 들어오면 새 계정) 저장한 로그인·기기 id도 지워진다.
+func _phase7_toss() -> void:
+	ReleasePlatform.override = ReleasePlatform.APPS_IN_TOSS
+	DirAccess.remove_absolute(Net.auth_path)
+	_main = preload("res://scenes/main.tscn").instantiate()
+	add_child(_main)
+	await _wait_until(func(): return _login_screen() != null, 5.0)
+	var ls = _login_screen()
+	_check(ls != null and ls.buttons.is_empty() and not ls.guest_button.visible, "(t1) the Apps in Toss build shows no login buttons and no guest",
+		"screen=%s buttons=%s" % [ls, ls.buttons.keys() if ls else []])
+	var built := await _wait_until(func(): return _main.camera != null, 30.0)
+	var hash := "dev-" + Net.ensure_device_id()
+	_check(built and Net.auth_mode == "toss" and Net.toss_hash == hash and Net.logins == 1 and Net.requested.get("/v1/auth/toss", 0) == 1,
+		"(t1) it logs in with the Toss game user key straight away and builds the world", "built=%s mode=%s logins=%d" % [built, Net.auth_mode, Net.logins])
+	var first := await _post_json("/v1/auth/toss", {"hash": hash})
+	_check(first.get("is_new") == false, "(t1) the server knows that Toss account", str(first))
+	var restarted := [false]
+	Net.restart = func(): restarted[0] = true
+	var sp = preload("res://scripts/settings_panel.gd").new()
+	add_child(sp)
+	_check(sp.delete_button.visible and sp.login_label.text == "토스", "(t2) settings show the Toss login and [계정 삭제]", sp.login_label.text)
+	sp.press_delete()
+	await _frames(2)
+	_check(Net.requested.get("/v1/account/delete", 0) == 0 and sp.delete_button.text.begins_with("한 번 더"), "(t2) the first press only asks to press again", sp.delete_button.text)
+	sp.press_delete()
+	var gone := await _wait_until(func(): return restarted[0], 15.0)
+	var again := await _post_json("/v1/auth/toss", {"hash": hash})
+	_check(gone and again.get("is_new") == true and again.get("player_id") != first.get("player_id") and not FileAccess.file_exists(Net.device_path),
+		"(t2) the second press deletes the account on the server, clears the device id and restarts", "gone=%s again=%s" % [gone, again])
+	ReleasePlatform.override = ""
 
 
 ## phase 6: 튜토리얼(서버 퀘스트). 새 플레이어 튜토리얼을 켜고 새 기기로 접속 → 서버가 정한 공터·1단계 미션 카드 → 보상 받기(서버가 자원을 준다) →
