@@ -274,7 +274,7 @@ export function mineToday(saved: Partial<Mine> | null, now: number, hour: number
     contrib: same ? Number(s.contrib ?? 0) : 0,
     shop_day: { day: sd.day, bought: { ...sd.bought } },
     shop_week: { week: sw.week, bought: { ...sw.bought } },
-    boss_run: same && s.boss_run ? { ...s.boss_run } : null,
+    boss_run: s.boss_run && (same || now - Number(s.boss_run.t) <= BOSS_RUN_TTL) ? { ...s.boss_run } : null, // 자정을 넘긴 판도 끝낼 수 있게
   }
 }
 

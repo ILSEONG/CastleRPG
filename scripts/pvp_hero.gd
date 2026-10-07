@@ -29,6 +29,10 @@ func set_hp_mult(m: float) -> void:
 	refresh_stats()
 
 
+func dmg_heal_mult() -> float:
+	return hp_mult
+
+
 func refresh_stats() -> void:
 	super.refresh_stats()
 	if hp_mult != 1.0:

@@ -273,3 +273,10 @@ test('war: a freshly created guild (no virtual members yet) gets AI mercenary sq
   assert.equal(r.json.plan.attackers.length, w.enemy.members)
   assert.ok(r.json.plan.attackers.filter((s: any) => s.ai).length >= w.enemy.members - 1)
 })
+
+test('war: defender kills count toward the damage cap (a state with every defender dead right after opening is refused)', () => {
+  const defs = [{ uid: 1, hp: 1000 }, { uid: 2, hp: 500 }] as any
+  const c = { gates: [0, 0, 0, 0], keep: 0, dead: { 1: 0, 2: 0.5 } }
+  assert.equal(W.defenderDamage(defs, c), 1250)
+  assert.equal(W.defenderDamage(defs, { gates: [], keep: 0, dead: {} }), 0)
+})

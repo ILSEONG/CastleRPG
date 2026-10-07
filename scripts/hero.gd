@@ -306,6 +306,11 @@ func revive(pct: float) -> void:
 
 
 ## 회복(최대 HP 상한). 실제로 오른 양.
+## 준 피해에 비례한 회복(흡혈·흡수)의 배율 — PVP는 체력 배율만큼(체력만 늘고 피해는 그대로라 흡혈이 약해지지 않게).
+func dmg_heal_mult() -> float:
+	return 1.0
+
+
 func heal(amount: float) -> float:
 	if state == State.DEAD:
 		return 0.0
@@ -618,9 +623,9 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		Fx.stun_hit(get_parent(), at, _tier)
 		_announce("stun")
 	if _sk.has("lifesteal"):
-		heal(d * _sk.lifesteal[0] / 100.0)
+		heal(d * _sk.lifesteal[0] / 100.0 * dmg_heal_mult())
 	if _gear_lifesteal > 0.0:
-		heal(d * _gear_lifesteal)
+		heal(d * _gear_lifesteal * dmg_heal_mult())
 	if _sk.has("cleave") and role == "melee":
 		Fx.cleave(get_parent(), m.global_position, _color, _sk.cleave[0], _tier)
 		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):

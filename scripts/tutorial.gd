@@ -379,7 +379,8 @@ func _make_repeat(n: int) -> Dictionary:
 	if d.kind == "growth_up":
 		q.base_value = _growth_sum()
 	elif d.kind == "hero_up":
-		q.base_value = _hero_level_sum()
+		q.base_value = _hero_level_sum(true)
+		q.ups = true
 	return q
 
 
@@ -390,10 +391,14 @@ func _growth_sum() -> int:
 	return t
 
 
-func _hero_level_sum() -> int:
+## ups = 레벨업 횟수만(새로 모집한 영웅의 Lv 1은 빼고 — 서버는 레벨업 기록만 센다).
+func _hero_level_sum(ups := false) -> int:
 	var t := 0
 	for id in econ.heroes:
-		t += econ.level_of(id)
+		if not ups:
+			t += econ.level_of(id)
+		elif int(econ.heroes[id]) >= 1:
+			t += econ.level_of(id) - 1
 	return t
 
 
@@ -679,7 +684,7 @@ func _heroes_at(lv: int) -> int:
 
 
 func _delta(m: Dictionary) -> int:
-	return (_growth_sum() if m.kind == "growth_up" else _hero_level_sum()) - int(m.get("base_value", 0))
+	return (_growth_sum() if m.kind == "growth_up" else _hero_level_sum(bool(m.get("ups", false)))) - int(m.get("base_value", 0))
 
 
 ## 바로가기 대상 건물 id(카드가 그 건물 위에 화살표를 띄운다). 건물 미션이 아니면 "".

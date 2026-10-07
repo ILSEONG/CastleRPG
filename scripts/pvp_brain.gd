@@ -167,7 +167,7 @@ func _score(u, f, d: float, focus, cur) -> float:
 	var arch := _arch(u)
 	var victim = f.current_target() if f.has_method("current_target") else null
 	if victim != null and victim != u and victim.get("team") == u.team:
-		if arch == "tank":
+		if arch == "tank" and is_hero(victim):  # 병사를 치는 적까지 다 지키면(총력전) 우선순위가 사라진다
 			s *= TANK_PEEL
 		elif victim.hp_ratio() < WEAK_ALLY or victim.get("role") == "ranged":
 			s *= PEEL_BONUS if u.role == "melee" else (1.0 + (PEEL_BONUS - 1.0) / 2.0)

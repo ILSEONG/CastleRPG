@@ -689,7 +689,7 @@ func _cast(k: String, dry := false) -> bool:
 			var dealt: float = before - (tgt.hp if tgt.is_alive() else 0.0)
 			var ally = _weakest_ally(INF)
 			if ally != null:
-				ally.heal(dealt * float(p[2]) / 100.0)
+				ally.heal(dealt * float(p[2]) / 100.0 * h.dmg_heal_mult())
 				Fx.heal_cross(ally)
 		"shadow_strike":
 			var tgt = _frailest(maxf(float(h.def.aggro), _reach()) + 2.0)
@@ -881,7 +881,7 @@ func _cast(k: String, dry := false) -> bool:
 					var before: float = t.hp
 					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
 					var dealt: float = before - (t.hp if is_instance_valid(t) and t.is_alive() else 0.0)
-					if dealt > 0.0 and h.heal(dealt * float(p[2]) / 100.0) > 0.0:
+					if dealt > 0.0 and h.heal(dealt * float(p[2]) / 100.0 * h.dmg_heal_mult()) > 0.0:
 						Fx.heal_cross(h)
 						Fx.soul(w, at + HIT, h)
 				"cheap_shot":

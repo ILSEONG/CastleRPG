@@ -167,6 +167,11 @@ export function structureDamage(mx: { gates: number[]; keep: number }, c: Castle
   return mx.gates.reduce((s, g, i) => s + Math.max(0, g - c.gates[i]), 0) + Math.max(0, mx.keep - c.keep)
 }
 
+// 수비 영웅에게 들어간 피해 합(쓰러지거나 깎인 비율 × 최대 체력) — 처치 점수도 같은 상한으로 확인한다
+export function defenderDamage(defs: Defender[], c: Castle): number {
+  return defs.reduce((s, d) => s + (1 - Math.max(0, Math.min(1, ratioOf(c, d.uid)))) * Math.max(0, Number(d.hp) || 0), 0)
+}
+
 // 전투 결과 확인(통합 테스트 2026-10-07): 공성이 열린 뒤 sec초 동안 로스터 전부가 낼 수 있는 성 피해 상한 = 초당 공격력 합 × sec × DMG_SLACK
 // (스킬·치명타·버프 몫으로 넉넉히). 앱이 보낸 성 상태가 이보다 많이 깎였으면 받지 않는다.
 export const DMG_SLACK = 10
