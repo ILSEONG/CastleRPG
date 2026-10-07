@@ -9,6 +9,7 @@ extends Node3D
 ## 개정 18 아레나(던전): setup_arena(던전 적 행) — castle 없음. 거리 제한 없이 가장 가까운 영웅을 쫓고, 없으면 제자리. 자리는 쓰는 쪽이 정한다.
 
 const Balance := preload("res://scripts/balance.gd")
+const CameraRig := preload("res://scripts/camera_rig.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
@@ -133,6 +134,10 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 			_iced = false
 			_model.set_process(true)
 		died.emit(self)
+		if is_boss:  # 보스 처치: 결정타 슬로모션(성 대보스·던전 보스)
+			var rig = CameraRig.of(self)
+			if rig != null:
+				rig.slowmo()
 		_model.play_death()
 		get_tree().create_timer(Art.CORPSE_SEC).timeout.connect(queue_free)
 

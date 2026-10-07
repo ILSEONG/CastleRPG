@@ -43,6 +43,15 @@ const IGNORE_SEC := 3.0
 const IGNORE_MULT := 0.15
 const KITE_MAX := 2
 const KITE_WINDOW := 8.0
+## 역할 전술(2026-10-07 전투 재미, heroes.csv archetype):
+##  - 암살자(assassin): 적 원거리·치유사를 노린다(BACKLINE_BONUS), 멀리 있어도 덜 깎고(근접 이동 가중 없음), CHASE_GIVEUP_ASSASSIN초까지 쫓는다.
+##    쉬는 자리도 적 원거리 무리 쪽(옆으로 돌아 들어간다).
+##  - 탱커(tank): 아군을 치는 적이면 누구든 지키고(TANK_PEEL — 약한 아군·원거리만이 아니라), 적 근접 영웅을 먼저 막는다(TANK_MELEE_BONUS).
+const BACKLINE_BONUS := 1.8
+const CHASE_GIVEUP_ASSASSIN := 4.5
+const TANK_PEEL := 2.4
+const TANK_MELEE_BONUS := 1.3
+const FLANK := 3.0  # 암살자 쉬는 자리: 적 원거리 중심에서 옆으로(m)
 
 var battle  # pvp_battle.gd: units(team)
 var _focus := {}  # 팀 → [표적, 정한 시각]
@@ -86,6 +95,11 @@ static func is_healer(f) -> bool:
 	return false
 
 
+static func _arch(u) -> String:
+	var d = u.get("def")
+	return str(d.get("archetype", "")) if d != null else ""
+
+
 static func is_hero(f) -> bool:
 	return f.get("kind") == "hero"
 
@@ -127,7 +141,7 @@ func _skip_target(u, cur):
 		if c[0] != cur:
 			c = [cur, now]
 			_chase[u.uid] = c
-		elif now - float(c[1]) >= CHASE_GIVEUP:
+		elif now - float(c[1]) >= (CHASE_GIVEUP_ASSASSIN if _arch(u) == "assassin" else CHASE_GIVEUP):
 			_ignore[u.uid] = [cur, now + IGNORE_SEC]
 			_chase.erase(u.uid)
 	else:
@@ -150,12 +164,20 @@ func _score(u, f, d: float, focus, cur) -> float:
 		s *= STICKY
 	if is_healer(f):
 		s *= HEALER_BONUS
+	var arch := _arch(u)
 	var victim = f.current_target() if f.has_method("current_target") else null
-	if victim != null and victim != u and victim.get("team") == u.team and (victim.hp_ratio() < WEAK_ALLY or victim.get("role") == "ranged"):
-		s *= PEEL_BONUS if u.role == "melee" else (1.0 + (PEEL_BONUS - 1.0) / 2.0)
+	if victim != null and victim != u and victim.get("team") == u.team:
+		if arch == "tank":
+			s *= TANK_PEEL
+		elif victim.hp_ratio() < WEAK_ALLY or victim.get("role") == "ranged":
+			s *= PEEL_BONUS if u.role == "melee" else (1.0 + (PEEL_BONUS - 1.0) / 2.0)
+	if arch == "assassin" and is_hero(f) and (f.get("role") == "ranged" or is_healer(f)):
+		s *= BACKLINE_BONUS
+	elif arch == "tank" and is_hero(f) and f.get("role") == "melee":
+		s *= TANK_MELEE_BONUS
 	var gap := maxf(0.0, d - float(u.def.range))
 	var travel := gap / maxf(1.0, float(u.def.speed))
-	if u.role == "melee":
+	if u.role == "melee" and arch != "assassin":
 		travel *= 1.6
 	return s / (1.0 + travel * TRAVEL_W)
 
@@ -246,6 +268,10 @@ func think(u) -> void:
 		var dir := (front - enemy_c)
 		dir.y = 0.0
 		want = front + (dir.normalized() if dir.length() > 0.1 else -battle.forward(u.team)) * BACK_D
+	elif _arch(u) == "assassin" and foes.any(func(f): return is_hero(f) and f.get("role") == "ranged"):
+		var back := _center(foes.filter(func(f): return is_hero(f) and f.get("role") == "ranged"))
+		var side: Vector3 = battle.forward(u.team).cross(Vector3.UP).normalized() * (FLANK if u.uid % 2 == 0 else -FLANK)
+		want = back + side
 	else:
 		want = enemy_c
 	want = battle.clamp_field(want)

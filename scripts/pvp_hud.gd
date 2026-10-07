@@ -228,8 +228,9 @@ func show_result(r: Dictionary) -> void:
 	leave_button.visible = false
 
 
-func flash(text: String, sec := 1.8) -> void:
+func flash(text: String, sec := 1.8, color := Color.WHITE) -> void:
 	banner.text = text
+	banner.add_theme_color_override("font_color", color)
 	banner.visible = true
 	_flash_left = sec
 

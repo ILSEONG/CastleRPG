@@ -40,6 +40,13 @@ const SOLDIER_GAP := 1.4
 const TARGET_SEC := {"duel": 40.0, "total": 55.0}
 const TTK_CALIB := {"duel": 1.2, "total": 1.35}
 const HP_MULT_MAX := 30.0
+## 처치 알림·결정타(2026-10-07 전투 재미): 첫 처치 "퍼스트 블러드!", 같은 팀이 STREAK_SEC초 안에 잇달아 쓰러뜨리면 더블·트리플·쿼드라·펜타 킬,
+## 그 밖엔 "○○ 처치"(초록 = 우리가, 빨강 = 우리 영웅이 쓰러짐). 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과.
+const STREAK_SEC := 5.0
+const STREAK_NAMES := ["", "", "더블 킬!", "트리플 킬!", "쿼드라 킬!", "펜타 킬!"]
+const KO_SEC := 0.45
+const GOOD := Color(0.55, 1.0, 0.55)
+const BAD := Color(1.0, 0.5, 0.45)
 const SOLDIER_FRONT := 3.3  # 영웅 앞줄 → 병사 첫 줄
 const SOLDIER_ROW_GAP := 2.25  # 병사 줄 사이(가운데 쪽으로)
 
@@ -61,7 +68,12 @@ var _leaving := false
 var _uid := 0
 var hp_mult := 1.0  # 이 판의 체력 배율(_pick_hp_mult)
 var ttk_est := 0.0  # 배율 전 어림 전투 시간(초, 시뮬 보정용)
-var force_hp_mult := 0.0  # 테스트·시뮬: 0보다 크면 이 배율을 그대로 쓴다
+var force_hp_mult := 0.0
+var rig
+var _kills := 0
+var _streak := [0, -INF, -1]  # [잇단 처치 수, 마지막 처치 시각, 처치한 팀]
+var _ko_left := -1.0  # 마지막 영웅이 쓰러진 뒤 결과까지 남은 게임 초(음수 = 아직)
+var _ko := []  # [win, reason]  # 테스트·시뮬: 0보다 크면 이 배율을 그대로 쓴다
 
 
 func _ready() -> void:
@@ -75,7 +87,7 @@ func _ready() -> void:
 	crowd.arena_r = field_r()
 	add_child(crowd)
 	add_child(PortraitsScript.new())
-	var rig = CameraRigScript.new()
+	rig = CameraRigScript.new()
 	add_child(rig)
 	camera = rig.camera
 	camera.size = CAMERA_SIZE.get(mode, 34.0)
@@ -244,13 +256,21 @@ func _process(delta: float) -> void:
 				phase = Phase.FIGHT
 				_freeze(false)
 		Phase.FIGHT:
+			if _ko_left >= 0.0:  # 결정타 슬로모션 중(시계는 쓰러진 순간에 멈춘다)
+				_ko_left -= delta
+				if _ko_left < 0.0:
+					_end(_ko[0], _ko[1])
+				return
 			clock += delta
 			var a := alive(0)
 			var b := alive(1)
-			if b == 0 and a > 0:
-				_end(true, "ko")
-			elif a == 0:
-				_end(false, "ko")
+			if (b == 0 and a > 0) or a == 0:
+				_ko = [b == 0 and a > 0, "ko"]
+				_ko_left = KO_SEC
+				if rig != null:
+					rig.slowmo()
+				if hud != null:
+					hud.flash("승리!" if _ko[0] else "패배", 1.6, GOOD if _ko[0] else BAD)
 			elif clock >= duration:
 				_end(team_hp(0) > team_hp(1), "time")
 
@@ -281,9 +301,27 @@ func set_auto() -> void:
 		u.commanded = false
 
 
-func _on_fell(_u) -> void:
+func _on_fell(u) -> void:
 	if hud != null:
 		hud.refresh()
+	if phase != Phase.FIGHT or _ko_left >= 0.0 or alive(u.team) == 0:
+		return  # 마지막 처치는 결정타 띠가 맡는다
+	var killer: int = 1 - int(u.team)
+	_kills += 1
+	if _streak[2] == killer and clock - float(_streak[1]) <= STREAK_SEC:
+		_streak[0] += 1
+	else:
+		_streak[0] = 1
+	_streak[1] = clock
+	_streak[2] = killer
+	var name := str(u.def.get("name", ""))
+	var text := "%s 처치" % name if killer == 0 else "%s 쓰러짐" % name
+	if _kills == 1:
+		text = "퍼스트 블러드! " + text
+	elif _streak[0] >= 2:
+		text = STREAK_NAMES[mini(_streak[0], STREAK_NAMES.size() - 1)]
+	if hud != null:
+		hud.flash(text, 1.4, GOOD if killer == 0 else BAD)
 
 
 func _end(win: bool, reason: String) -> void:

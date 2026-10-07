@@ -27,6 +27,8 @@ const KICK_AMP_MAX := 0.5
 const STOP_SCALE := 0.06  # 히트스톱 동안 게임 시간 배율
 const STOP_MAX := 0.08  # 히트스톱 최대 길이(실제 초)
 const STOP_GAP := 0.6  # 히트스톱 최소 간격(실제 초) — 잦으면 끊겨 보인다
+const SLOW_SCALE := 0.3  # 결정타 슬로모션 동안 게임 시간 배율
+const SLOW_SEC := 0.9  # 결정타 슬로모션 길이(실제 초)
 
 var camera: Camera3D
 
@@ -44,6 +46,8 @@ var _punch_at := -INF
 var _shake_amp := 0.0  # 지금 흔들림의 처음 진폭(더 센 타격이 오면 덮는다)
 static var _stop_at := -INF  # 리그가 히트스톱 중에 사라져도 되돌림 타이머가 리그를 건드리지 않게 정적
 static var _stopping := false
+static var _gen := 0  # 멈춤/슬로모션 차례 — 늦게 끝난 이전 타이머가 새 슬로모션을 되돌리지 않게
+static var _slow := false  # 결정타 슬로모션 중
 
 
 func _ready() -> void:
@@ -217,11 +221,39 @@ func kick(at: Vector3, amp: float, stop := 0.0) -> void:
 		_stopping = true
 		var was := Engine.time_scale
 		Engine.time_scale = was * STOP_SCALE
-		get_tree().create_timer(minf(stop, STOP_MAX), true, false, true).timeout.connect(Callable(get_script(), "_unstop").bind(was))
+		_gen += 1
+		get_tree().create_timer(minf(stop, STOP_MAX), true, false, true).timeout.connect(Callable(get_script(), "_unstop").bind(was, _gen))
 
 
-static func _unstop(was: float) -> void:
+## 결정타 슬로모션(2026-10-07 전투 재미): PVP 마지막 처치·보스 처치 순간 게임 시간을 SLOW_SCALE배로 SLOW_SEC 실제 초 + 줌 당김.
+## 히트스톱과 같은 되돌림(_unstop — 배속 버튼 배율로). 결정타의 히트스톱 중이면 그 히트스톱을 이어받는다(되돌릴 배율은 히트스톱 전 배율).
+func slowmo() -> void:
+	if _slow:
+		return
+	var was := Engine.time_scale
+	if _stopping:  # 히트스톱 중 — 지금 배율은 이미 줄어든 값
+		var managed: float = load("res://scripts/speed_button.gd").base
+		was = managed if managed > 0.0 else 1.0
+	_stopping = true
+	_slow = true
+	_stop_at = Time.get_ticks_msec() / 1000.0
+	Engine.time_scale = was * SLOW_SCALE
+	_gen += 1
+	get_tree().create_timer(SLOW_SEC, true, false, true).timeout.connect(Callable(get_script(), "_unstop").bind(was, _gen))
+	punch()
+
+
+## 지금 화면 카메라의 리그(없으면 null) — 장면 어디서든 slowmo를 부를 때.
+static func of(node: Node):
+	var cam := node.get_viewport().get_camera_3d() if node.is_inside_tree() else null
+	return cam.get_parent() if cam != null and cam.get_parent().has_method("slowmo") else null
+
+
+static func _unstop(was: float, gen := -1) -> void:
+	if gen >= 0 and gen != _gen:  # 뒤에 시작한 멈춤/슬로모션이 있다 — 그쪽이 되돌린다
+		return
 	_stopping = false
+	_slow = false
 	var managed: float = load("res://scripts/speed_button.gd").base  # 배속 버튼이 배율을 맡았으면(히트스톱 중 켬/끔·던전 입장) 지금 배율로
 	Engine.time_scale = managed if managed > 0.0 else was
 
