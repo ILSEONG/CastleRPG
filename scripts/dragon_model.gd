@@ -14,6 +14,7 @@ const ATTACKS := ["bite", "breath", "gust"]
 const HIT_FRAC := {"bite": 0.55, "breath": 0.45, "gust": 0.5}  # 모션 중 타격 순간
 const HIT_FLASH_SEC := 0.14
 const HIT_FLASH_GAP_MS := 260
+const TURN_RATE := 5.0  # 몸 돌리기 부드러움(1/초) — 노리는 영웅이 바뀌어도 한 프레임에 홱 돌지 않고 따라 돈다
 
 var size := 5.0  # 키(m) — 부품 GLB는 키 1로 맞춰져 있다. add_child 전에
 var attack_kind := ""  # 지금(마지막) 공격 모션
@@ -29,6 +30,7 @@ var _flash_meshes: Array = []
 var _hit_tw: Tween
 var _flash_mat: ShaderMaterial
 var _base_scale := Vector3.ONE
+var _want_yaw := NAN  # face()가 정한 방향 — _process가 부드럽게 따라 돈다
 
 
 func _ready() -> void:
@@ -87,7 +89,7 @@ func play_death() -> void:
 func face(dir: Vector3) -> void:
 	if Vector2(dir.x, dir.z).length() < 0.001:
 		return
-	rotation.y = atan2(dir.x, dir.z)
+	_want_yaw = atan2(dir.x, dir.z)
 
 
 ## 입(목 부품 앞 끝) 월드 위치.
@@ -100,7 +102,7 @@ func mouth() -> Vector3:
 	return neck.to_global(Vector3(0.0, box.position.y + box.size.y * 0.45, box.end.z))
 
 
-## 피격 번쩍임 + 살짝 찌그러짐(UnitModel.hit_react와 같다 — 덩치가 커서 찌그러짐은 작게).
+## 피격 번쩍임. 찌그러짐은 뺐다(2026-10-07 — 영웅 넷이 쉬지 않고 쳐서 큰 몸이 0.1~0.3초마다 움찔거려 보였다).
 func hit_react(strong := false) -> void:
 	if not is_inside_tree() or _act == "death":
 		return
@@ -115,10 +117,8 @@ func hit_react(strong := false) -> void:
 		_hit_tw.kill()
 	for mi in _flash_meshes:
 		mi.material_overlay = _flash_mat
-	scale = _base_scale * Vector3(1.03, 0.97, 1.03) if strong else _base_scale * Vector3(1.015, 0.985, 1.015)
 	_hit_tw = create_tween()
 	_hit_tw.tween_method(_set_flash, 0.7 if strong else 0.4, 0.0, HIT_FLASH_SEC)
-	_hit_tw.parallel().tween_property(self, "scale", _base_scale, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_hit_tw.tween_callback(_end_flash)
 
 
@@ -135,6 +135,8 @@ func _end_flash() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	if not is_nan(_want_yaw) and _act != "death":
+		rotation.y = lerp_angle(rotation.y, _want_yaw, 1.0 - exp(-TURN_RATE * delta))
 	if _act != "":
 		_act_t += delta
 		if _act != "death" and _act_t >= _act_len:
