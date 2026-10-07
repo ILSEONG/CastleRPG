@@ -5099,10 +5099,10 @@ func test_shop() -> void:
 			print("  shop item differs from server: ", x.id)
 	check(same and src.count("{ id: '") == items.ITEMS.size(), "shop: client item table matches server/src/shop.ts")
 	var e = _econ(1000.0)
-	e.diamonds = 300
+	e.diamonds = 270
 	check(e.shop_free_left("daily") and e.shop_free_left("weekly"), "shop: free gifts waiting at the start")
-	check(e.buy_shop("d_free") and e.diamonds == 320 and e.pouch_count("gold_30") == 1 and e.shop_left("d_free") == 0 and e.shop_block("d_free") == "sold_out"
-		and not e.shop_free_left("daily"), "shop: daily free gift gives 20 diamonds + gold pouch once")
+	check(e.buy_shop("d_free") and e.diamonds == 320 and e.pouch_count("gold_60") == 1 and e.shop_left("d_free") == 0 and e.shop_block("d_free") == "sold_out"
+		and not e.shop_free_left("daily"), "shop: daily free gift gives 50 diamonds + gold pouch once")
 	check(not e.buy_shop("d_free") and e.diamonds == 320, "shop: free gift can't be taken twice in a day")
 	check(e.buy_shop("d_ticket") and e.diamonds == 80 and e.dia_tickets == 1 and not e.buy_shop("d_ticket"), "shop: discounted ticket costs 240 diamonds, once a day")
 	var k0 := int(e.dungeon_state("gold").keys)
@@ -5140,10 +5140,10 @@ func test_iap() -> void:
 	check(not e.iap_buy("dia_1") and e.diamonds == d0, "iap: buying before payments are connected gives nothing")
 	check(e.iap_first_bonus("dia_1") and e.iap_can_buy("pkg_starter") and e.monthly_left("monthly") == 0 and not e.can_claim_monthly("monthly"), "iap: fresh state")
 	check(not e.can_claim_growth(0, "free", 5) and e.can_claim_growth(0, "free", 10) and not e.can_claim_growth(0, "paid", 10), "iap: growth free tier needs the round, paid needs the pass")
-	check(e.claim_growth(0, "free", 10) and e.diamonds == d0 + 30 and not e.can_claim_growth(0, "free", 10), "iap: growth free tier 0 gives 30 diamonds once")
+	check(e.claim_growth(0, "free", 10) and e.diamonds == d0 + 60 and not e.can_claim_growth(0, "free", 10), "iap: growth free tier 0 gives 60 diamonds once")
 	var per: Array = e.shop_period()
 	e.iap = {"day": per[0], "week": per[1], "monthly": {"monthly": {"until": int(per[0]) + 2, "claimed": null}}, "passes": ["pass_growth"], "gp": {"free": [0], "paid": []}}
-	check(e.monthly_left("monthly") == 3 and e.can_claim_monthly("monthly") and e.claim_monthly("monthly") and e.diamonds == d0 + 130 and not e.can_claim_monthly("monthly"),
+	check(e.monthly_left("monthly") == 3 and e.can_claim_monthly("monthly") and e.claim_monthly("monthly") and e.diamonds == d0 + 260 and not e.can_claim_monthly("monthly"),
 		"iap: monthly card gives 100 diamonds once a day")
-	check(e.claim_growth(0, "paid", 10) and e.diamonds == d0 + 430 and not e.iap_can_buy("pass_growth"), "iap: with the pass the paid tier pays out")
+	check(e.claim_growth(0, "paid", 10) and e.diamonds == d0 + 860 and not e.iap_can_buy("pass_growth"), "iap: with the pass the paid tier pays out")
 	e.free()

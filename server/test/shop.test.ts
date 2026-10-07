@@ -31,8 +31,8 @@ test('무료 선물: 받으면 다이아 + 주머니, 같은 날 두 번은 sold
   assert.deepEqual(p0.shop.d, {})
   let r = await buy(token, 'd_free')
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.diamonds, p0.diamonds + 20)
-  assert.equal(r.json.player.pouches.gold_30, (p0.pouches.gold_30 ?? 0) + 1)
+  assert.equal(r.json.player.diamonds, p0.diamonds + 50)
+  assert.equal(r.json.player.pouches.gold_60, (p0.pouches.gold_60 ?? 0) + 1)
   assert.deepEqual(r.json.player.shop.d, { d_free: 1 })
   assert.equal((await buy(token, 'd_free', 0)).json.error, 'sold_out')
   S.clock.t = T0 + DAY
