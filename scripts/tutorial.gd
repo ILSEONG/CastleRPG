@@ -13,7 +13,12 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 
-const SAVE_VERSION := 2  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1
+const SAVE_VERSION := 3  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다
+## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
+const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
+	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
+	"dungeon_ticket", "equip", "soldier_deploy", "stage_1_5", "build_lab", "research", "build_archery", "build_stable", "keep_2", "gate_2",
+	"kill_300", "stage_1_10", "guild"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
 const TRAIN_N := 1  # 보병 훈련 미션 보상이 대는 마릿수(튜토리얼 훈련은 1마리씩, 5초 — Economy.tutorial_training)
@@ -21,13 +26,17 @@ const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟
 const KEYS := 2  # 던전 미션 보상 열쇠
 const RESEARCH_ID := "wood_tech"  # 연구 미션 보상이 대는 연구(1단계 아무 연구나 같은 비용)
 const START_BUILT := ["keep", "gate"]  # 새 게임에 지어져 있는 건물(성채 + 성벽·성문)
-const DONE_TEXT := "튜토리얼 완료! 이제 자유롭게 성을 키워 보세요"
-const LOCKED_TEXT := "튜토리얼을 진행하면 열립니다"
+const DONE_TEXT := "가이드 완료! 이제 자유롭게 성을 키워 보세요"
+const LOCKED_TEXT := "가이드를 진행하면 열립니다"
 
-## 미션: id, title, desc(카드 설명), kind(완료 판정), arg(판정 인자), goto(바로가기: building:<id> · tab:<id> · merchant · stage · recruit).
+## 가이드(사용자 2026-10-07 "튜토리얼말고 가이드라고 명칭을 바꾸고, 신메뉴나 신기능 오픈 텀을 적당히 길게 둬, 그 텀은 영웅 레벨업이나, 능력치 레벨업 등으로
+## 적절하게 매꿔줘"): 새 메뉴·기능을 여는 미션 사이에 성장 미션(영웅 레벨·능력치 레벨·스테이지·건물 레벨, reward가 적힌 행)을 2~3개씩 둔다.
+## 미션: id, title, desc(카드 설명), kind(완료 판정), arg(판정 인자), goto(바로가기: building:<id> · tab:<id> · merchant · stage · recruit · pvp),
+## reward(있으면 그 보상 — 성장 미션. 없으면 보상 규칙: 다음 "규칙 미션"이 쓰는 것).
 ## kind: open(건물 창 열기 arg) · build(arg 짓기) · level(arg = [id, Lv]) · collect · sell · kill(arg = 처치 수, 미션이 된 뒤부터) ·
 ## stage(arg = 클리어할 전체 라운드 g — 제목은 "S-r", GameData.round_label) · hero_level · growth ·
-## gacha(arg = 모집 장수) · deploy_new · train(arg = 병사 건물) · dungeon(arg = 종류) · equip · soldier_deploy · research · guild
+## gacha(arg = 모집 장수) · deploy_new · train(arg = 병사 건물) · dungeon(arg = 종류) · equip · soldier_deploy · research · guild ·
+## hero_lv(arg = [명, Lv] — 그 레벨 이상 영웅 수) · growth_lv(arg = [성장 id, Lv]) · pvp(PVP 한 판, 미션이 된 뒤부터)
 const MISSIONS := [
 	{"id": "look_keep", "title": "성채 살펴보기", "desc": "성 한가운데 성채를 눌러 건물 창을 열어 보세요. 성채 레벨이 다른 건물의 최대 레벨을 정합니다.",
 		"kind": "open", "arg": "keep", "goto": "building:keep"},
@@ -43,44 +52,112 @@ const MISSIONS := [
 		"kind": "stage", "arg": 1, "goto": "stage"},
 	{"id": "hero_level", "title": "영웅 레벨업", "desc": "[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.",
 		"kind": "hero_level", "goto": "tab:hero"},
+	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
+	{"id": "stage_1_2", "title": "스테이지 1-2 클리어", "desc": "전투를 이어 가 1-2까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "growth", "title": "성장 강화", "desc": "[성장] 탭에서 골드로 모든 영웅의 공격력·체력을 올리세요.", "kind": "growth", "goto": "tab:growth"},
+	{"id": "atk_3", "title": "공격력 Lv 3 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 3까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
+	{"id": "hp_3", "title": "체력 Lv 3 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 3까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
+	{"id": "hero_lv4_8", "title": "영웅 4명 Lv 8 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 8 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
 	{"id": "build_tavern", "title": "주점 건설", "desc": "주점을 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
 	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
 	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭에서 새로 모집한 영웅을 배치 슬롯에 넣으세요.", "kind": "deploy_new", "goto": "tab:hero"},
+	{"id": "hero_lv4_10", "title": "영웅 4명 Lv 10 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_3", "title": "스테이지 1-3 클리어", "desc": "새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.", "kind": "stage", "arg": 3,
 		"goto": "stage"},
+	{"id": "atk_5", "title": "공격력 Lv 5 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 5까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
+	{"id": "hp_5", "title": "체력 Lv 5 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 5까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
 	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "보병 막사를 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
 		"goto": "building:barracks"},
-	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 튜토리얼에서는 5초면 끝나요.", "kind": "train",
+	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 가이드에서는 5초면 끝나요.", "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
 	{"id": "build_houses", "title": "민가 건설", "desc": "민가를 지으세요. 인구가 병사 배치 상한입니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
+	{"id": "hero_lv4_12", "title": "영웅 4명 Lv 12 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
+	{"id": "stage_1_4", "title": "스테이지 1-4 클리어", "desc": "전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+		"kind": "stage", "arg": 4, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100, "goto": "stage"},
 	{"id": "dungeon_gold", "title": "골드 던전", "desc": "[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권(열쇠)은 매일 다시 채워집니다.",
 		"kind": "dungeon", "arg": "gold", "goto": "tab:dungeon"},
+	{"id": "atk_8", "title": "공격력 Lv 8 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 8까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 8], "goto": "tab:growth", "reward": {"gold": 4000}},
+	{"id": "hp_8", "title": "체력 Lv 8 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 8까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 8], "goto": "tab:growth", "reward": {"gold": 4000}},
 	{"id": "dungeon_equip", "title": "장비 던전", "desc": "[던전] 탭에서 장비 던전 1단계를 클리어해 장비를 얻으세요.", "kind": "dungeon", "arg": "equip",
 		"goto": "tab:dungeon"},
+	{"id": "hero_lv4_14", "title": "영웅 4명 Lv 14 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 14 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 14], "goto": "tab:hero", "reward": {"gold": 4000}},
+	{"id": "atk_10", "title": "공격력 Lv 10 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 10까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 10], "goto": "tab:growth", "reward": {"gold": 5000}},
 	{"id": "dungeon_ticket", "title": "모집권 던전", "desc": "[던전] 탭에서 모집권 던전 1단계를 클리어하세요. 내 영웅 4명과 친구(없으면 추천) 도우미 1명이 바위 골렘과 싸우고, 다이아 모집권을 얻어요.",
 		"kind": "dungeon", "arg": "ticket", "goto": "tab:dungeon"},
 	{"id": "equip", "title": "장비 장착", "desc": "[영웅] 탭에서 영웅을 골라 얻은 장비를 장착하세요.", "kind": "equip", "goto": "tab:hero"},
+	{"id": "hp_10", "title": "체력 Lv 10 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 10까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 10], "goto": "tab:growth", "reward": {"gold": 5000}},
+	{"id": "hero_lv4_15", "title": "영웅 4명 Lv 15 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 15 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 15], "goto": "tab:hero", "reward": {"gold": 5000}},
 	{"id": "soldier_deploy", "title": "병사 배치", "desc": "훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5명은 합성해 상위 티어로 만듭니다.",
 		"kind": "soldier_deploy", "goto": "tab:soldier"},
 	{"id": "stage_1_5", "title": "스테이지 1-5 클리어", "desc": "병사와 함께 1-5까지 클리어하세요. 병사는 전투가 시작되면 성채 앞에 나타납니다.", "kind": "stage",
 		"arg": 5, "goto": "stage"},
+	{"id": "atk_12", "title": "공격력 Lv 12 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 12까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 12], "goto": "tab:growth", "reward": {"gold": 6000}},
+	{"id": "stage_1_6", "title": "스테이지 1-6 클리어", "desc": "전투를 이어 가 1-6까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+		"kind": "stage", "arg": 6, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "build_lab", "title": "연구소 건설", "desc": "연구소를 지으세요. 기술을 연구해 경제·영웅·병사를 강하게 합니다.", "kind": "build", "arg": "lab",
 		"goto": "building:lab"},
 	{"id": "research", "title": "연구 시작", "desc": "연구소를 눌러 [연구]에서 아무 기술이나 연구를 시작하세요.", "kind": "research", "goto": "building:lab"},
+	{"id": "hp_12", "title": "체력 Lv 12 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 12까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 12], "goto": "tab:growth", "reward": {"gold": 6000}},
+	{"id": "hero_lv4_16", "title": "영웅 4명 Lv 16 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 16 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 16], "goto": "tab:hero", "reward": {"gold": 6000}},
+	{"id": "stage_1_7", "title": "스테이지 1-7 클리어", "desc": "전투를 이어 가 1-7까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+		"kind": "stage", "arg": 7, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "build_archery", "title": "궁병 훈련소 건설", "desc": "궁병 훈련소를 지으세요. 궁병은 성벽 위에서 싸웁니다.", "kind": "build", "arg": "archery",
 		"goto": "building:archery"},
+	{"id": "atk_14", "title": "공격력 Lv 14 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 14까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 14], "goto": "tab:growth", "reward": {"gold": 7000}},
+	{"id": "hp_14", "title": "체력 Lv 14 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 14까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 14], "goto": "tab:growth", "reward": {"gold": 7000}},
 	{"id": "build_stable", "title": "기병 마구간 건설", "desc": "기병 마구간을 지으세요. 기병은 빠르게 돌격합니다.", "kind": "build", "arg": "stable",
 		"goto": "building:stable"},
 	{"id": "keep_2", "title": "성채 레벨업", "desc": "성채를 Lv 2로 올리세요. 다른 건물도 그만큼 더 올릴 수 있습니다.", "kind": "level", "arg": ["keep", 2],
 		"goto": "building:keep"},
+	{"id": "lumber_2", "title": "벌목장 Lv 2", "desc": "벌목장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.",
+		"kind": "level", "arg": ["lumber", 2], "goto": "building:lumber", "reward": {"diamonds": 100}},
+	{"id": "farm_2", "title": "농장 Lv 2", "desc": "농장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.",
+		"kind": "level", "arg": ["farm", 2], "goto": "building:farm", "reward": {"diamonds": 100}},
 	{"id": "gate_2", "title": "성문 강화", "desc": "성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.", "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
 	{"id": "kill_300", "title": "몬스터 300마리 처치", "desc": "몬스터 300마리를 처치하세요. 앱을 꺼 둔 동안에도 방치 처치 골드가 쌓입니다.", "kind": "kill", "arg": 300, "goto": "stage"},
+	{"id": "hero_lv4_18", "title": "영웅 4명 Lv 18 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 18], "goto": "tab:hero", "reward": {"gold": 8000}},
+	{"id": "atk_16", "title": "공격력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 16까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 16], "goto": "tab:growth", "reward": {"gold": 8000}},
 	{"id": "stage_1_10", "title": "스테이지 1-10 클리어", "desc": "1-10까지 클리어하세요. [연속 진행]을 켜 두면 편해요. 클리어하면 길드가 열립니다.", "kind": "stage",
 		"arg": 10, "goto": "stage"},
 	{"id": "guild", "title": "길드 가입", "desc": "오른쪽 아래 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. 출석·기부로 길드 버프를 올립니다.", "kind": "guild",
 		"goto": "tab:guild"},
+	{"id": "hp_16", "title": "체력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 16], "goto": "tab:growth", "reward": {"gold": 9000}},
+	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
+	{"id": "stage_1_12", "title": "스테이지 1-12 클리어", "desc": "전투를 이어 가 1-12까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+		"kind": "stage", "arg": 12, "goto": "stage", "reward": {"diamonds": 100}},
+	{"id": "pvp", "title": "PVP 결투", "desc": "[던전] 탭 위쪽 [PVP]에서 결투나 총력전을 한 판 하세요. 다른 플레이어의 방어팀과 싸워 PVP 코인을 얻고, 코인은 상점에서 씁니다.",
+		"kind": "pvp", "goto": "pvp", "reward": {"tickets": 10}},
+	{"id": "atk_18", "title": "공격력 Lv 18 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 18까지 올리세요.",
+		"kind": "growth_lv", "arg": ["atk", 18], "goto": "tab:growth", "reward": {"gold": 10000}},
+	{"id": "hp_18", "title": "체력 Lv 18 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 18까지 올리세요.",
+		"kind": "growth_lv", "arg": ["hp", 18], "goto": "tab:growth", "reward": {"gold": 10000}},
+	{"id": "stage_1_15", "title": "스테이지 1-15 클리어", "desc": "전투를 이어 가 1-15까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+		"kind": "stage", "arg": 15, "goto": "stage", "reward": {"diamonds": 200}},
 ]
 ## 반복 퀘스트(사용자 2026-10-06 "퀘스트로 할 수 있는 게 끝나면 반복 퀘스트로"): 튜토리얼을 끝냈거나 건너뛴(기존 저장) 플레이어에게 이 순서로 끝없이
 ## 돈다. 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다. kind: kill·collect·sell·gacha·dungeon_win·build_up(사건 수), stage(지금 도달한
@@ -110,6 +187,8 @@ const TAB_MISSION := {"hero": "hero_level", "growth": "growth", "recruit": "gach
 const DUNGEON_MISSION := {"gold": "dungeon_gold", "equip": "dungeon_equip", "ticket": "dungeon_ticket"}
 ## 튜토리얼 훈련(1마리·5초)은 이 미션까지만 — 보병 훈련 미션을 넘기면 원래 훈련 시간(사용자 2026-10-06 "훈련 튜토리얼 끝나도 계속 5초인 버그").
 const TRAIN_MISSION := "train"
+## PVP(던전 창의 [PVP])는 이 미션에 닿을 때 열린다(가이드를 끝내거나 건너뛰면 열림).
+const PVP_MISSION := "pvp"
 
 signal changed  # 미션·완료·보상 상태가 바뀌었다
 signal lock_notice(text: String)  # 잠긴 공터·탭·던전을 눌렀다 — HUD가 화면 중상단 토스트로 띄운다
@@ -119,6 +198,7 @@ var save_path := "user://tutorial.json"  # ""이면 저장하지 않는다
 var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
 var gs = null  # GameState
 var guild = null  # Guild
+var pvp = null  # Pvp(PVP 결과 → pvp 미션)
 var state := "skipped"  # active | done | skipped
 var step := 0  # 지금 미션 번호(0부터)
 var count := 0  # 사건 미션: 지금 미션이 된 뒤 센 수
@@ -138,6 +218,7 @@ func _ready() -> void:
 	econ = get_node_or_null("/root/Economy")
 	gs = get_node_or_null("/root/GameState")
 	guild = get_node_or_null("/root/Guild")
+	pvp = get_node_or_null("/root/Pvp")
 	_connect()
 	_start.call_deferred()  # 첫 장면이 붙은 뒤에 본다(체크 장면·개발 실행은 건너뛴다)
 
@@ -223,6 +304,8 @@ func _connect() -> void:
 		gs.stage_cleared.connect(func(s): note_stage(int(s) + 1))
 	if guild != null:
 		guild.changed.connect(check)
+	if pvp != null:
+		pvp.result_ready.connect(func(_r): note("pvp"))
 
 
 func _process(delta: float) -> void:
@@ -357,6 +440,16 @@ func dungeon_locked(type: String) -> bool:
 	return step < mission_index(DUNGEON_MISSION[type])
 
 
+## PVP가 잠겼는가: 가이드 중이고 PVP 미션에 아직 닿지 않았다.
+func pvp_locked() -> bool:
+	return active() and step < mission_index(PVP_MISSION)
+
+
+## 잠긴 PVP 문구: "가이드 64번째 미션 「PVP 결투」에서 열려요".
+func pvp_lock_text() -> String:
+	return _lock_text(mission_index(PVP_MISSION), "열려요")
+
+
 ## 잠긴 던전 문구: "튜토리얼 20번째 미션 「장비 던전」에서 열려요".
 func dungeon_lock_text(type: String) -> String:
 	return _lock_text(mission_index(str(DUNGEON_MISSION.get(type, ""))), "열려요")
@@ -393,7 +486,7 @@ func build_lock_text(id: String) -> String:
 func _lock_text(i: int, tail: String) -> String:
 	if i < 0:
 		return LOCKED_TEXT
-	return "튜토리얼 %d번째 미션 「%s」에서 %s" % [i + 1, MISSIONS[i].title, tail]
+	return "가이드 %d번째 미션 「%s」에서 %s" % [i + 1, MISSIONS[i].title, tail]
 
 
 ## 사건 알림(수집·판매·모집·건물 창 열기). 지금 미션의 종류와 같으면 센다.
@@ -457,9 +550,15 @@ func claim() -> bool:
 	return true
 
 
-## 미션 i의 보상: 다음 미션(i+1)이 쓰는 것. 마지막 미션은 그 외(모집권).
+## 미션 i의 보상: reward가 적힌 성장 미션은 그것, 아니면 다음 규칙 미션(reward 없는 행)이 쓰는 것. 마지막 규칙 미션은 그 외(모집권).
+## (성장 미션이 사이에 끼어도 원래 미션의 보상은 그대로다.)
 func reward(i: int) -> Dictionary:
-	var need := need_of(i + 1) if i + 1 < MISSIONS.size() else {}
+	if MISSIONS[i].has("reward"):
+		return MISSIONS[i].reward.duplicate()
+	var j := i + 1
+	while j < MISSIONS.size() and MISSIONS[j].has("reward"):
+		j += 1
+	var need := need_of(j) if j < MISSIONS.size() else {}
 	if need.has("res"):
 		var out := {}
 		for r in need.res:
@@ -548,9 +647,22 @@ func progress_text() -> String:
 		return ""
 	if m.kind in ["growth_up", "hero_up"]:
 		return "%d/%d" % [mini(_delta(m), int(m.arg)), int(m.arg)]
+	if m.kind == "hero_lv":
+		return "%d/%d" % [mini(_heroes_at(int(m.arg[1])), int(m.arg[0])), int(m.arg[0])]
+	if m.kind == "growth_lv":
+		return "Lv %d/%d" % [mini(int(econ.upgrades.get(m.arg[0], 0)), int(m.arg[1])), int(m.arg[1])]
 	if not m.kind in ["kill", "gacha", "collect", "dungeon_win", "build_up"] or int(m.get("arg", 1)) <= 1:
 		return ""
 	return "%d/%d" % [mini(count, int(m.arg)), int(m.arg)]
+
+
+## Lv lv 이상인 보유 영웅 수.
+func _heroes_at(lv: int) -> int:
+	var n := 0
+	for id in econ.heroes:
+		if int(econ.heroes[id]) >= 1 and econ.level_of(id) >= lv:
+			n += 1
+	return n
 
 
 func _delta(m: Dictionary) -> int:
@@ -576,8 +688,12 @@ func _done(m: Dictionary) -> bool:
 	if econ == null:
 		return false
 	match m.kind:
-		"open", "sell":
+		"open", "sell", "pvp":
 			return count >= 1
+		"hero_lv":
+			return _heroes_at(int(m.arg[1])) >= int(m.arg[0])
+		"growth_lv":
+			return int(econ.upgrades.get(m.arg[0], 0)) >= int(m.arg[1])
 		"gacha", "kill", "collect", "dungeon_win", "build_up":
 			return count >= int(m.get("arg", 1)) if repeating() or m.kind != "collect" else count >= 1
 		"growth_up", "hero_up":
@@ -587,7 +703,7 @@ func _done(m: Dictionary) -> bool:
 		"level":
 			return econ.shown_level(m.arg[0]) >= int(m.arg[1])
 		"stage":
-			return maxi(best_stage, int(gs.stage) if gs != null else 1) > int(m.arg) or (active() and int(m.arg) >= 10 and guild != null and guild.unlocked)
+			return maxi(best_stage, int(gs.stage) if gs != null else 1) > int(m.arg) or (active() and int(m.arg) == 10 and guild != null and guild.unlocked)
 		"hero_level":
 			for id in econ.heroes:
 				if econ.level_of(id) >= 2:
@@ -615,6 +731,16 @@ func _done(m: Dictionary) -> bool:
 
 # --- 저장 ---
 
+## 버전 2 단계(V2_IDS 번호) → 지금 표의 번호: 하던 미션 그대로(그 앞에 새로 낀 성장 미션은 건너뛴다). 다 끝냈으면 지금 표 크기.
+static func v2_step(old: int) -> int:
+	if old >= V2_IDS.size():
+		return MISSIONS.size()
+	for i in MISSIONS.size():
+		if MISSIONS[i].id == V2_IDS[maxi(0, old)]:
+			return i
+	return 0
+
+
 func save() -> void:
 	_dirty = false
 	if save_path == "":
@@ -641,8 +767,11 @@ func load_save() -> bool:
 	if not state in ["active", "done", "skipped"]:
 		state = "skipped"
 	var old_step := int(d.get("step", 0))
-	if int(d.get("version", 1)) < 2 and old_step > mission_index("dungeon_ticket") - 1:
+	var ver := int(d.get("version", 1))
+	if ver < 2 and old_step > V2_IDS.find("dungeon_ticket") - 1:
 		old_step += 1  # 버전 1은 모집권 던전 미션이 없었다: 장비 던전을 넘긴 진행은 그대로 이어지게
+	if ver < 3:
+		old_step = v2_step(old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))

@@ -19,6 +19,7 @@ import * as IAP from './iap.ts'
 import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
 import { registerMarket } from './market.ts'
+import { registerChat } from './chat.ts'
 import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
@@ -2838,6 +2839,7 @@ export function createApp(opts: AppOptions) {
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
+  registerChat(app, { query, auth, clock, body, ApiError })
 
   return app
 }
