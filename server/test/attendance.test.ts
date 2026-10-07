@@ -59,8 +59,8 @@ test('28일 모두: 열쇠·장비 상자·영웅이 들어가고, 28일차 뒤�
   }
   assert.equal(p.attendance.n, 28)
   assert.ok(p.heroes.luna && p.heroes.arteon)
-  const grades = p.items.map((x: any) => `${x.grade}:${x.level}`).sort()
-  assert.deepEqual(grades, ['SR:10', 'SR:20', 'SSR:10'])
+  const grades = p.items.map((x: any) => `${x.grade}:${x.subs.length}`).sort()
+  assert.deepEqual(grades, ['SR:1', 'SR:1', 'SSR:1']) // 장비 레벨 없음(2026-10-07), SR·SSR 특수 능력치 1줄
   const [log] = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'attendance'", [id])
   assert.equal(log.n, 28)
   S.clock.t = T0 + 28 * DAY

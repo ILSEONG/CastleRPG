@@ -1,5 +1,6 @@
 // 던전·장비(개정 18 §2~§7): 일일 리셋(KST 경계·여러 날 누락·상한), start 검사, finish 멱등·타당성·소모(승리만)·보상(골드 공식,
 // 장비 5개·등급 분포 표본), 장착 검증(무기 종류), 판매, 보관함 상한, 원자성(동시 finish·중간 실패), 012 마이그레이션, 격리, 시드 검증.
+import { isDeepStrictEqual } from 'node:util'
 import assert from 'node:assert/strict'
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -47,11 +48,11 @@ const setGold = (q: Query, id: string, gold: number) => q('update player_state s
 const setDungeon = (q: Query, id: string, type: string, o: { keys?: number; best_level?: number; extra_today?: number }) =>
   q('update player_dungeons set keys = coalesce($3, keys), best_level = coalesce($4, best_level), extra_today = coalesce($5, extra_today) where player_id = $1 and type = $2',
     [id, type, o.keys ?? null, o.best_level ?? null, o.extra_today ?? null])
-async function addItems(q: Query, id: string, items: { slot: string; weapon_kind?: string; grade?: string; level?: number }[]): Promise<number[]> {
+async function addItems(q: Query, id: string, items: { slot: string; weapon_kind?: string; grade?: string; rolls?: Record<string, number> }[]): Promise<number[]> {
   const out: number[] = []
   for (const it of items) {
-    const [r] = await q('insert into player_items (player_id, slot, weapon_kind, grade, level) values ($1, $2, $3, $4, $5) returning id',
-      [id, it.slot, it.weapon_kind ?? null, it.grade ?? 'N', it.level ?? 1])
+    const [r] = await q('insert into player_items (player_id, slot, weapon_kind, grade, rolls) values ($1, $2, $3, $4, $5) returning id',
+      [id, it.slot, it.weapon_kind ?? null, it.grade ?? 'N', JSON.stringify(it.rolls ?? {})])
     out.push(Number(r.id))
   }
   return out
@@ -99,15 +100,19 @@ test('보상·적 능력치·장비 능력치·판매 값: 골드 = round(4000 �
   const dk = R.dungeonEnemies(g.json.dungeons, 'equip', 2, cfg)
   assert.deepEqual(dk.map((e) => [e.kind, e.count, e.scale]), [['death_knight', 1, 2.2]])
   assert.ok(Math.abs(dk[0].hp - 6900) < 1e-9 && Math.abs(dk[0].atk - 67.2) < 1e-9, JSON.stringify(dk[0]))
-  const st = (slot: string, grade: string, level: number) => R.itemStats({ slot, weapon_kind: slot === 'weapon' ? 'sword' : null, grade, level })
-  assert.deepEqual(st('weapon', 'N', 1), { hp: 0, atk: 6, speed_pct: 0 })
-  assert.deepEqual(st('weapon', 'SR', 3), { hp: 0, atk: 20, speed_pct: 0 }) // 9 × 2.2 = 19.8
-  assert.deepEqual(st('gloves', 'R', 1), { hp: 0, atk: 4, speed_pct: 0 }) // 3.75 → 4
-  assert.deepEqual(st('gloves', 'N', 2), { hp: 0, atk: 3, speed_pct: 0 }) // 3.1
-  assert.deepEqual(st('shoes', 'LR', 1), { hp: 130, atk: 0, speed_pct: 3 })
-  assert.deepEqual(st('shoes', 'N', 9), { hp: 60, atk: 0, speed_pct: 3 })
-  assert.deepEqual([st('top', 'UR', 5).hp, st('bottom', 'N', 1).hp, st('hat', 'SSR', 10).hp, st('pauldron', 'R', 2).hp], [368, 40, 253, 47])
-  assert.deepEqual([['N', 1], ['SR', 3], ['LR', 7]].map(([gr, n]) => R.itemSellValue(cfg, { slot: 'hat', weapon_kind: null, grade: gr as string, level: n as number })), [10, 66, 455])
+  // 2026-10-07 장비 레벨 없앰: 값 = round(기준값 × 등급 배율 × 굴림 / 100), 굴림 없으면 100
+  const st = (slot: string, grade: string, rolls?: Record<string, number>) => R.itemStats({ slot, weapon_kind: slot === 'weapon' ? 'sword' : null, grade, rolls })
+  assert.deepEqual(st('weapon', 'N'), { hp: 0, atk: 20, speed_pct: 0 })
+  assert.deepEqual(st('weapon', 'SR', { atk: 115 }), { hp: 0, atk: 51, speed_pct: 0 }) // 50.6
+  assert.deepEqual(st('gloves', 'R', { atk: 85 }), { hp: 0, atk: 10, speed_pct: 0 }) // 10.2
+  assert.deepEqual(st('shoes', 'LR', { hp: 100, speed_pct: 85 }), { hp: 423, atk: 0, speed_pct: 2.55 }) // 422.5 → 423
+  assert.deepEqual(st('shoes', 'N'), { hp: 65, atk: 0, speed_pct: 3 })
+  assert.deepEqual([st('top', 'UR').hp, st('bottom', 'N').hp, st('hat', 'SSR').hp, st('pauldron', 'R').hp], [598, 130, 256, 120])
+  assert.deepEqual([['N'], ['SR'], ['LR']].map(([gr]) => R.itemSellValue(cfg, { slot: 'hat', weapon_kind: null, grade: gr as string })), [100, 220, 650])
+  // 저장 값 검사: 범위 밖·모르는 키·그 부위 아닌 능력치·겹친 특수·줄 수 초과는 버린다
+  assert.deepEqual(R.cleanRolls('hat', 'UR', { hp: 116, atk: 100 }, [{ id: 'aspd', r: 90 }, { id: 'aspd', r: 99 }, { id: 'x', r: 100 }, { id: 'crit_rate', r: 84 }, { id: 'lifesteal', r: 85 }, { id: 'skill_dmg', r: 100 }]),
+    { rolls: {}, subs: [{ id: 'aspd', r: 90 }, { id: 'lifesteal', r: 85 }] })
+  assert.deepEqual(R.cleanRolls('shoes', 'N', { hp: 85, speed_pct: 115 }, [{ id: 'aspd', r: 100 }]), { rolls: { hp: 85, speed_pct: 115 }, subs: [] })
 })
 
 test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·35+, 장비 표본 — 무기 20%, 방어구 6부위 균등, 무기 종류 균등, 등급 = 가중치 비율', async () => {
@@ -115,11 +120,12 @@ test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·
   assert.deepEqual([1, 4, 5, 9, 10, 19, 20, 34, 35, 300].map((n) => R.dropWeights(rows, n).join('/')),
     ['60/30/9/1/0/0', '60/30/9/1/0/0', '40/35/18/6/1/0', '40/35/18/6/1/0', '20/35/28/13/3.5/0.5', '20/35/28/13/3.5/0.5', '8/25/34/22/9/2',
       '8/25/34/22/9/2', '2/13/30/30/18/7', '2/13/30/30/18/7'])
-  // 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급. 앱 GameData.roll_drops 테스트와 같은 난수열 → 같은 결과
-  const seq = [0.1, 0.5, 0.95, 0.9, 0.0, 0.995]
+  // 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급 → 기본 능력치 굴림 → 특수 능력치(종류 → 굴림). 앱 GameData.roll_drops 테스트와 같은 난수열 → 같은 결과
+  const seq = [0.1, 0.5, 0.95, 0.9, 0.0, 0.995, 0.9, 0.0, 0.995, 0.5, 0.4, 0.2]
   let k = 0
   assert.deepEqual(R.rollDrops(rows, 1, 2, 0.2, () => seq[k++ % seq.length]),
-    [{ slot: 'weapon', weapon_kind: 'staff', grade: 'SR', level: 1 }, { slot: 'hat', weapon_kind: null, grade: 'SSR', level: 1 }])
+    [{ slot: 'weapon', weapon_kind: 'staff', grade: 'SR', rolls: { atk: 112 }, subs: [{ id: 'lifesteal', r: 115 }] },
+      { slot: 'hat', weapon_kind: null, grade: 'SSR', rolls: { hp: 100 }, subs: [{ id: 'crit_dmg', r: 91 }] }])
   const n = 120_000
   const items = R.rollDrops(rows, 12, n, 0.2, R.mulberry32(18))
   assert.equal(items.length, n)
@@ -127,7 +133,15 @@ test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·
   assert.ok(Math.abs(share((x) => x.slot === 'weapon') - 0.2) < 0.005, 'weapon share')
   for (const s of R.ARMOR_SLOTS) assert.ok(Math.abs(share((x) => x.slot === s) - 0.8 / 6) < 0.005, `armor ${s}`)
   for (const k of R.WEAPON_KINDS) assert.ok(Math.abs(share((x) => x.weapon_kind === k) - 0.04) < 0.003, `weapon kind ${k}`)
-  assert.ok(items.every((x) => (x.slot === 'weapon') === (x.weapon_kind !== null) && x.level === 12))
+  assert.ok(items.every((x) => (x.slot === 'weapon') === (x.weapon_kind !== null)))
+  // 굴림: 능력치마다 85~115 고르게, 특수 줄 수 = 등급(SR·SSR 1, UR 2, LR 3), 서로 다른 종류 — cleanRolls를 거쳐도 그대로
+  assert.ok(items.every((x) => isDeepStrictEqual(R.cleanRolls(x.slot, x.grade, x.rolls, x.subs), { rolls: x.rolls, subs: x.subs })))
+  assert.ok(items.every((x) => Object.keys(x.rolls!).length === (x.slot === 'shoes' ? 2 : 1) && x.subs!.length === (R.SUB_COUNT[x.grade] ?? 0)))
+  const rs = items.map((x) => Object.values(x.rolls!)[0])
+  assert.deepEqual([Math.min(...rs), Math.max(...rs)], [85, 115])
+  assert.ok(Math.abs(rs.reduce((a, b) => a + b, 0) / rs.length - 100) < 0.2, 'rolls average 100')
+  const subs = items.flatMap((x) => x.subs!)
+  for (const id of R.SUB_STATS) assert.ok(Math.abs(subs.filter((x) => x.id === id).length / subs.length - 1 / 6) < 0.01, `sub ${id}`)
   const w = [20, 35, 28, 13, 3.5, 0.5]
   R.EQUIP_GRADES.forEach((g, i) => assert.ok(Math.abs(share((x) => x.grade === g) - w[i] / 100) < 0.005, `grade ${g}: ${share((x) => x.grade === g)}`))
   const low = R.rollDrops(rows, 1, 20_000, 0.2, R.mulberry32(7))
@@ -137,7 +151,7 @@ test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·
 
 // --- API ---
 
-test('GET /v1/dungeon: 새 플레이어는 그날 지급분(골드 3/10, 장비 1/3), 추가 도전 비용 5000, 다음 리셋 = 다음 00:00 KST, 보관함은 /v1/items', async () => {
+test('GET /v1/dungeon: 새 플레이어는 그날 지급분(골드 3/10, 장비 1/3), 추가 도전 비용 100000, 다음 리셋 = 다음 00:00 KST, 보관함은 /v1/items', async () => {
   const { token } = await fresh()
   const r = await S.req('GET', '/v1/dungeon', { token })
   assert.equal(r.status, 200)
@@ -148,7 +162,7 @@ test('GET /v1/dungeon: 새 플레이어는 그날 지급분(골드 3/10, 장비 
     server_now: T0,
     dungeons: {
       gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: LAST, next_reset: MIDNIGHT },
-      equip: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: 5000, last_reset: LAST, next_reset: MIDNIGHT },
+      equip: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: LAST, next_reset: MIDNIGHT },
     },
   })
   assert.deepEqual((await S.req('GET', '/v1/items', { token })).json, { server_now: T0, items: [] })
@@ -161,10 +175,10 @@ test('일일 리셋(서버 시각): 자정(KST) 전엔 그대로, 자정에 +3, 
   await setDungeon(S.db.query, id, 'equip', { keys: 0, extra_today: 2 })
   S.clock.t = MIDNIGHT - 1
   let d = await dg(token)
-  assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost], [0, 0, 2, 15000])
+  assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost], [0, 0, 2, 300000])
   S.clock.t = MIDNIGHT
   d = await dg(token)
-  assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost, d.gold.next_reset], [3, 1, 0, 5000, MIDNIGHT + DAY])
+  assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost, d.gold.next_reset], [3, 1, 0, 100000, MIDNIGHT + DAY])
   S.clock.t = MIDNIGHT + 4 * DAY + 100 // 5번
   d = await dg(token)
   assert.deepEqual([d.gold.keys, d.equip.keys, d.gold.last_reset], [10, 3, MIDNIGHT + 4 * DAY])
@@ -201,11 +215,11 @@ test('start 검사: 형식 400, 단계 열림 409 locked, 인원·중복·보유
   await setDungeon(S.db.query, id, 'gold', { keys: 0, best_level: 3 })
   assert.deepEqual([(await start(token, { type: 'gold', level: 4, party: GOLD6 })).json.error, (await start(token, { type: 'gold', level: 5, party: GOLD6 })).json.error], ['no_key', 'locked'])
   await setDungeon(S.db.query, id, 'equip', { keys: 0, extra_today: 1 })
-  await setGold(S.db.query, id, 9999)
-  assert.deepEqual((await start(token, { type: 'equip', level: 1, party: EQ4 })).json.error, 'not_enough_gold') // 10000 필요
-  await setGold(S.db.query, id, 10000)
+  await setGold(S.db.query, id, 199999)
+  assert.deepEqual((await start(token, { type: 'equip', level: 1, party: EQ4 })).json.error, 'not_enough_gold') // 200000 필요
+  await setGold(S.db.query, id, 200000)
   let r = await start(token, { type: 'equip', level: 1, party: EQ4 })
-  assert.deepEqual([r.status, r.json.paid_with, r.json.player.gold], [200, 'gold', 10000]) // 시작은 골드를 빼지 않는다
+  assert.deepEqual([r.status, r.json.paid_with, r.json.player.gold], [200, 'gold', 200000]) // 시작은 골드를 빼지 않는다
   await setDungeon(S.db.query, id, 'equip', { keys: 1 })
   await S.db.query("insert into player_items (player_id, slot, grade, level) select $1, 'hat', 'N', 1 from generate_series(1, 296)", [id])
   assert.deepEqual((await start(token, { type: 'equip', level: 1, party: EQ4 })).json.error, 'bag_full') // 296 + 5 > 300
@@ -214,7 +228,7 @@ test('start 검사: 형식 400, 단계 열림 409 locked, 인원·중복·보유
   assert.deepEqual([r.status, r.json.paid_with], [200, 'key']) // 295 + 5 = 300
   assert.equal((await player(token)).items.length, 295)
   const d = await dg(token)
-  assert.deepEqual([d.gold.keys, d.equip.keys, (await player(token)).gold], [0, 1, 10000]) // 거부·시작은 아무것도 소모하지 않았다
+  assert.deepEqual([d.gold.keys, d.equip.keys, (await player(token)).gold], [0, 1, 200000]) // 거부·시작은 아무것도 소모하지 않았다
 })
 
 test('start 응답: run_id·seed·enemies(그 단계 능력치)·started_at·time_limit, run 행 저장(30분 만료), 새 start는 열린 run을 닫는다(409 run_closed)', async () => {
@@ -263,7 +277,7 @@ test('finish 골드 던전 승리: 열쇠 −1·골드 +4000(tenths)·최고 단
 test('finish 패배: 열쇠·골드를 소모하지 않고 run만 닫는다(재전송도 같다), 최고 단계 그대로', async () => {
   const { token, id } = await fresh()
   await setDungeon(S.db.query, id, 'equip', { keys: 0 })
-  await setGold(S.db.query, id, 6000)
+  await setGold(S.db.query, id, 120000)
   for (const [type, party] of [['gold', GOLD6], ['equip', EQ4]] as [string, string[]][]) {
     const s = await start(token, { type, level: 1, party })
     S.clock.t += 5
@@ -273,7 +287,7 @@ test('finish 패배: 열쇠·골드를 소모하지 않고 run만 닫는다(재�
     assert.deepEqual([again.json.win, again.json.rewards, again.json.repeated], [false, {}, true])
   }
   const d = await dg(token)
-  assert.deepEqual([d.gold.keys, d.gold.best_level, d.equip.keys, d.equip.extra_today, (await player(token)).gold, (await player(token)).items], [3, 0, 0, 0, 6000, []])
+  assert.deepEqual([d.gold.keys, d.gold.best_level, d.equip.keys, d.equip.extra_today, (await player(token)).gold, (await player(token)).items], [3, 0, 0, 0, 120000, []])
   assert.equal((await logs(id, 'dungeon_clear')).length, 0)
 })
 
@@ -299,7 +313,7 @@ test('finish 타당성: 최소(골드 15·장비 20초)·제한 시간 120초·�
   assert.deepEqual((await finish(token, { run_id: '00000000-0000-4000-8000-000000000000', win: true, elapsed: 20 })).json.error, 'unknown_run')
 })
 
-test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·레벨 = 단계), 열쇠 −1, 재전송은 같은 5개 — 열쇠 없으면 골드 추가 도전(비용 5000 × (1 + 그날 횟수)), 자정에 0', async () => {
+test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·굴림), 열쇠 −1, 재전송은 같은 5개 — 열쇠 없으면 골드 추가 도전(비용 100000 × (1 + 그날 횟수)), 자정에 0', async () => {
   const { token, id } = await fresh()
   const s = await start(token, { type: 'equip', level: 1, party: EQ4 })
   S.clock.t = T0 + 40
@@ -307,7 +321,8 @@ test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·레
   assert.equal(r.status, 200)
   const items = r.json.rewards.items
   assert.equal(items.length, 5)
-  assert.ok(items.every((x: any) => Number.isInteger(x.id) && R.EQUIP_SLOTS.includes(x.slot) && R.EQUIP_GRADES.includes(x.grade) && x.level === 1
+  assert.ok(items.every((x: any) => Number.isInteger(x.id) && R.EQUIP_SLOTS.includes(x.slot) && R.EQUIP_GRADES.includes(x.grade) && x.level === undefined
+    && isDeepStrictEqual(R.cleanRolls(x.slot, x.grade, x.rolls, x.subs), { rolls: x.rolls, subs: x.subs })
     && (x.slot === 'weapon') === R.WEAPON_KINDS.includes(x.weapon_kind) && (x.slot === 'weapon' || x.weapon_kind === null)), JSON.stringify(items))
   assert.ok(items.every((x: any) => ['N', 'R', 'SR', 'SSR'].includes(x.grade)), 'levels 1-4 never drop UR/LR')
   assert.deepEqual(r.json.player.items, items) // 보관함 = 받은 5개(id 순)
@@ -317,22 +332,22 @@ test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·레
   assert.equal((await S.db.query('select count(*)::int as n from player_items where player_id = $1', [id]))[0].n, 5)
   assert.deepEqual((await logs(id, 'dungeon_clear'))[0].detail.items.length, 5)
   // 열쇠 0: 골드 추가 도전 — 이겼을 때만 골드를 뺀다
-  await setGold(S.db.query, id, 20000)
+  await setGold(S.db.query, id, 400000)
   let x = await start(token, { type: 'equip', level: 2, party: EQ4 })
   assert.deepEqual([x.status, x.json.paid_with], [200, 'gold'])
   S.clock.t += 25
   x = await finish(token, { run_id: x.json.run_id, win: true, elapsed: 25 })
   assert.deepEqual([x.status, x.json.player.gold, x.json.player.dungeons.equip.extra_today, x.json.player.dungeons.equip.extra_cost, x.json.player.items.length, x.json.player.dungeons.equip.best_level],
-    [200, 15000, 1, 10000, 10, 2])
-  assert.deepEqual((await logs(id, 'dungeon_clear'))[1].detail.paid, { gold: 5000 })
+    [200, 300000, 1, 200000, 10, 2])
+  assert.deepEqual((await logs(id, 'dungeon_clear'))[1].detail.paid, { gold: 100000 })
   x = await start(token, { type: 'equip', level: 1, party: EQ4 })
   S.clock.t += 25
   x = await finish(token, { run_id: x.json.run_id, win: true, elapsed: 25 })
-  assert.deepEqual([x.json.player.gold, x.json.player.dungeons.equip.extra_today, x.json.player.dungeons.equip.extra_cost], [5000, 2, 15000])
+  assert.deepEqual([x.json.player.gold, x.json.player.dungeons.equip.extra_today, x.json.player.dungeons.equip.extra_cost], [100000, 2, 300000])
   assert.equal((await start(token, { type: 'equip', level: 1, party: EQ4 })).json.error, 'not_enough_gold')
   S.clock.t = MIDNIGHT
   const d = await dg(token)
-  assert.deepEqual([d.equip.keys, d.equip.extra_today, d.equip.extra_cost], [1, 0, 5000]) // 리셋: 열쇠 +1, 횟수 0
+  assert.deepEqual([d.equip.keys, d.equip.extra_today, d.equip.extra_cost], [1, 0, 100000]) // 리셋: 열쇠 +1, 횟수 0
 })
 
 test('장비 수 = equip_drop_count(설정): 3으로 바꾸면 3개, 보관함 상한 검사도 그 수로', async () => {
@@ -354,8 +369,8 @@ test('장비 수 = equip_drop_count(설정): 3으로 바꾸면 3개, 보관함 �
 test('장착: 무기는 그 영웅 모델의 종류만(409 wrong_weapon), 부위 다르면 409 wrong_slot, 없는·남의 장비 404, 미보유 영웅 404, 다른 영웅에서 옮기기·해제·멱등', async () => {
   const { token, id } = await fresh()
   const other = await fresh()
-  const [sword, axe, staff, hat, hat2, shoes] = await addItems(S.db.query, id, [{ slot: 'weapon', weapon_kind: 'sword', grade: 'SR', level: 3 },
-    { slot: 'weapon', weapon_kind: 'axe' }, { slot: 'weapon', weapon_kind: 'staff' }, { slot: 'hat', grade: 'R', level: 2 }, { slot: 'hat' }, { slot: 'shoes' }])
+  const [sword, axe, staff, hat, hat2, shoes] = await addItems(S.db.query, id, [{ slot: 'weapon', weapon_kind: 'sword', grade: 'SR' },
+    { slot: 'weapon', weapon_kind: 'axe' }, { slot: 'weapon', weapon_kind: 'staff' }, { slot: 'hat', grade: 'R' }, { slot: 'hat' }, { slot: 'shoes' }])
   const [theirs] = await addItems(S.db.query, other.id, [{ slot: 'hat' }])
   let r = await equip(token, { hero_id: 'hans', slot: 'weapon', item_id: sword }) // 한스 = Knight → 검
   assert.deepEqual([r.status, r.json.player.equipment], [200, { hans: { weapon: sword } }])
@@ -420,11 +435,11 @@ test('한 번에 장착(/v1/equip/many): 여러 부위를 한 요청으로, 다�
   assert.equal(rows[0].n, 4)
 })
 
-test('판매: 값 = round(10 × 배율 × 레벨)의 합, 장착 중이면 409 equipped, 없는·남의·겹친 id는 거부 — 하나라도 틀리면 아무것도 안 판다, 로그', async () => {
+test('판매: 값 = round(100 × 배율)의 합, 장착 중이면 409 equipped, 없는·남의·겹친 id는 거부 — 하나라도 틀리면 아무것도 안 판다, 로그', async () => {
   const { token, id } = await fresh()
   const other = await fresh()
-  const [a, b, c, w] = await addItems(S.db.query, id, [{ slot: 'hat', grade: 'SR', level: 3 }, { slot: 'top', grade: 'N', level: 1 }, { slot: 'gloves', grade: 'LR', level: 7 },
-    { slot: 'weapon', weapon_kind: 'sword', grade: 'R', level: 2 }])
+  const [a, b, c, w] = await addItems(S.db.query, id, [{ slot: 'hat', grade: 'SR' }, { slot: 'top', grade: 'N' }, { slot: 'gloves', grade: 'LR' },
+    { slot: 'weapon', weapon_kind: 'sword', grade: 'R' }])
   const [theirs] = await addItems(S.db.query, other.id, [{ slot: 'hat' }])
   await equip(token, { hero_id: 'hans', slot: 'weapon', item_id: w })
   for (const [ids, status, code] of [[[a, w], 409, 'equipped'], [[a, theirs], 404, 'unknown_item'], [[a, 999999], 404, 'unknown_item'], [[a, a], 400, 'bad_request'],
@@ -434,11 +449,11 @@ test('판매: 값 = round(10 × 배율 × 레벨)의 합, 장착 중이면 409 e
   }
   assert.deepEqual([(await player(token)).items.length, (await player(token)).gold], [4, 0]) // 거부는 아무것도 안 바꿨다
   const r = await sell(token, [a, b, c])
-  assert.deepEqual([r.status, r.json.gold_gained, r.json.player.gold_tenths, r.json.player.items.map((x: any) => x.id)], [200, 66 + 10 + 455, 5310, [w]])
+  assert.deepEqual([r.status, r.json.gold_gained, r.json.player.gold_tenths, r.json.player.items.map((x: any) => x.id)], [200, 220 + 100 + 650, 9700, [w]])
   assert.deepEqual((await sell(token, [a])).json.error, 'unknown_item') // 다시 팔 수 없다
-  assert.deepEqual((await logs(id, 'item_sell')).map((l) => [l.detail.gold, l.detail.items.length]), [[531, 3]])
+  assert.deepEqual((await logs(id, 'item_sell')).map((l) => [l.detail.gold, l.detail.items.length]), [[970, 3]])
   await equip(token, { hero_id: 'hans', slot: 'weapon', item_id: null })
-  assert.equal((await sell(token, [w])).json.gold_gained, 30) // 해제하면 판다(10 × 1.5 × 2)
+  assert.equal((await sell(token, [w])).json.gold_gained, 150) // 해제하면 판다(100 × 1.5)
   assert.deepEqual((await player(other.token)).items.map((x: any) => x.id), [theirs])
 })
 

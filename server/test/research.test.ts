@@ -217,7 +217,7 @@ test('효과(서버 권위): 생산(wood_pct + res_pct, 분당 내림)·업그�
   let r = await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })
   assert.equal(r.json.amount, 10 * Math.floor(100 * 118 / 100)) // 118/분 × 10분(연구 없으면 1000)
   r = await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } })
-  assert.equal(r.json.amount, 10 * 51) // floor(50 × 1.03) = 51
+  assert.equal(r.json.amount, 10 * 103) // floor(100 × 1.03) = 103
   // 업그레이드 자동 수집도 같은 규칙(목재 15% → 115/분), 건설 시간 = round(20 / 1.15) = 17
   await setResearch(id, { abundance: 0, construct: 5 })
   await setRes(id, RICH)
