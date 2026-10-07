@@ -208,7 +208,8 @@ func _build_world() -> void:
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
-	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
+	var speed = preload("res://scripts/speed_button.gd").new()
+	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게)  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
 	speed.card = card
 	speed.menu = side_menu
 	add_child(speed)

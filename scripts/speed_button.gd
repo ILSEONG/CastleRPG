@@ -4,6 +4,8 @@ extends CanvasLayer
 ## 모든 컨텐츠(사용자 2026-10-07 "모든 컨텐츠에 1.5배", 길드전은 제외 "길드전은 아니야"): 성 화면(main)과 던전·PVP·길드 보스 장면
 ## (main._enter_dungeon이 하나씩 붙인다)에 같은 버튼이 있고 같은 설정을 쓴다. 서버는 실제 경과와 견주는 검사를 1.5배까지 받아 준다
 ## (rules.MAX_GAME_SPEED). 길드전 장면에는 버튼이 없어 늘 1배.
+## 방치 전투도 제외(사용자 2026-10-07 "방치전투때도 아니야"): 성 화면 버튼(castle = true)은 스테이지를 미는 동안(스테이지·결과·카운트다운)만
+## 빠르게 하고, 대기(방치)로 돌아오면 켜 둔 채로 1배. 버튼은 그대로 보여 미리 켜 둘 수 있다.
 ## 건물·훈련·연구·방치 수입·초기화는 실제 시각(Economy.time_now)이라 배속과 무관.
 ## 자리: 왼쪽 아래, 오른쪽 아래 [메뉴] 토글 버튼과 같은 높이(사용자 2026-10-07 "메뉴 버튼과 같은 높이") — 메뉴가 없으면 화면 높이 CENTER_Y 지점.
 ## 단 하단 영웅 초상화 줄·튜토리얼 카드보다 위(매 프레임 맞춘다). 채팅 줄과 [핫딜] 버튼은 이 버튼을 따라온다.
@@ -24,7 +26,9 @@ const OFF_COLOR := Color(0.30, 0.34, 0.46)  # 오른쪽 아래 메뉴 버튼과 
 ## 히트스톱(camera_rig)이 끝날 때 되돌릴 배율. 0이면 이 버튼이 손대지 않았다(히트스톱은 시작 전 배율로 되돌린다).
 static var base := 0.0
 static var _live := 0  # 트리에 있는 배속 버튼 수(월드를 다시 만들 때 새 버튼이 먼저 들어와도 끄지 않게)
+static var _idle := false  # 성 화면이 대기(방치) 중 — 이때는 1배
 
+var castle := false  # 성 화면 버튼(main): 방치 중엔 1배
 var card  # tutorial_card.gd(있으면 그 위로)
 var strip  # hero_strip.gd(보이면 그 위로)
 var menu  # side_menu.gd(그 [메뉴] 토글과 아래 끝을 맞춘다)
@@ -36,9 +40,9 @@ static func is_on() -> bool:
 	return Prefs.get_bool(PREF_KEY, false)
 
 
-## 지금 배율(버튼이 트리에 있고 켜져 있으면 1.5).
+## 지금 배율(버튼이 트리에 있고 켜져 있고 방치 중이 아니면 1.5).
 static func speed() -> float:
-	return SPEED if _live > 0 and is_on() else 1.0
+	return SPEED if _live > 0 and is_on() and not _idle else 1.0
 
 
 static func _apply() -> void:
@@ -71,11 +75,27 @@ func _ready() -> void:
 
 func _enter_tree() -> void:
 	_live += 1
+	if castle:
+		var gs := get_node_or_null("/root/GameState")
+		if gs != null:
+			_idle = gs.mode == gs.Mode.IDLE
+			if not gs.mode_changed.is_connected(_on_mode):
+				gs.mode_changed.connect(_on_mode)
 	_apply()
 
 
 func _exit_tree() -> void:
 	_live -= 1
+	if castle:
+		_idle = false  # 던전·PVP·드래곤은 방치와 상관없다
+	_apply()
+
+
+func _on_mode(mode: int) -> void:
+	if not is_inside_tree():
+		return
+	var gs := get_node_or_null("/root/GameState")
+	_idle = gs != null and mode == gs.Mode.IDLE
 	_apply()
 
 
