@@ -27,7 +27,8 @@ const PickerScript := preload("res://scripts/unit_picker.gd")
 
 enum Phase { FIGHT, WON, REPORT, LOOT, RESULT }
 
-const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0, "ticket": 28.0}
+const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0, "ticket": 28.0}  # 가장 먼 줌(무리가 퍼지면 여기까지 뺀다)
+const FOLLOW_MIN := {"gold": 22.0, "equip": 22.0, "ticket": 20.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
 const SPLIT_KIND := "golemite"  # 모집권 던전: 이 종류 행은 바위 골렘이 쓰러질 때 그 자리에서 나온다(클래시 오브 클랜 골렘처럼 갈라진다)
 const AUTO_DELAY := 2.0
 const LOOT_SEC := 1.6  # 상자가 다 떨어지고 결과 화면이 뜰 때까지
@@ -109,6 +110,7 @@ func _ready() -> void:
 	add_child(picker)
 	_plan_waves(stage)
 	_spawn_due()  # 처음 무리는 곧바로(즉시 승리 훅도 시체에서 드랍)
+	rig.follow(self, FOLLOW_MIN.get(type, 22.0), CAMERA_SIZE.get(type, 40.0))
 	hud = HudScript.new()
 	hud.dungeon = self
 	add_child(hud)

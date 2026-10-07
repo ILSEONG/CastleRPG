@@ -22,7 +22,8 @@ const Fx := preload("res://scripts/fx.gd")
 
 enum Phase { INTRO, FIGHT, REPORT, RESULT }
 
-const CAMERA_SIZE := 26.0
+const CAMERA_SIZE := 26.0  # 가장 먼 줌
+const FOLLOW_MIN := 18.0  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow — 드래곤 키(frame_h)까지 들어오게 맞춘다)
 const DRAGON_U := -5.0  # 드래곤 자리(평야 spot u — 영웅은 u 9~11.6)
 const INTRO_SEC := 1.2  # 시작 배너("드래곤 출현!") 동안 영웅·드래곤이 움직이지 않는다
 const WAIT_SEC := 20.0  # 결과 응답을 이만큼 못 받으면 [확인]만 띄운다
@@ -95,6 +96,7 @@ func _ready() -> void:
 	dragon.rotation.y = atan2(ArenaKit.DOWN.x, ArenaKit.DOWN.z)  # 영웅 쪽(화면 아래)
 	dragon.level_cleared.connect(_on_level_cleared)
 	add_child(dragon)
+	rig.follow(self, FOLLOW_MIN, CAMERA_SIZE)
 	_build_hud()
 	Guild.boss_done.connect(_on_done)
 	_set_active(false)

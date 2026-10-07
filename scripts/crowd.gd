@@ -7,6 +7,7 @@ extends Node
 ## 같은 층(지상·성벽 위)끼리만 부딪고, 계단을 오르내리거나 땅에서 솟는 중이면 빠진다.
 ## 밀린 자리는 Formation.clamp_push(성 전장 — 성벽·성문을 넘지 않고, 성벽 위는 성벽 길 안에서만, 건물 부지·맵 밖 금지)나
 ## 아레나 반경(arena_r)으로 되돌린다. 사거리는 그대로 중심 거리 — 근접 사거리는 모두 맞닿는 거리(반지름 합)보다 길다(run_tests).
+## ally_pad()(있으면): 둘 다 여유가 있는 쌍(던전·드래곤 영웅끼리)만 그 합만큼 더 떨어진다 — 적과의 맞닿는 거리(근접 사거리)는 그대로.
 ## 붐비면(유닛 ≥ BUSY_AT) BUSY_EVERY 프레임마다 한 번만 푼다 — 한 프레임 걸음(수 cm)만큼 잠깐 겹쳐도 보이지 않는다.
 # ponytail: GDScript 해시(Dictionary) + 가우스-자이델 최대 PASSES번. 유닛 200에 헤드리스 수 ms 안(run_tests가 시간을 찍는다).
 # 400을 넘거나 모바일에서 프레임을 먹으면 칸 버킷을 고정 배열로 바꾸거나 GDExtension으로.
@@ -78,6 +79,7 @@ func _process(_delta: float) -> void:
 	var w := PackedFloat32Array()
 	var lv := PackedInt32Array()
 	var mv := PackedVector2Array()
+	var pd := PackedFloat32Array()
 	var parent := get_parent()
 	for u in get_tree().get_nodes_in_group("crowd"):
 		if u.get_parent() != parent or not u.is_alive() or not u.is_processing():
@@ -93,8 +95,9 @@ func _process(_delta: float) -> void:
 		w.append(1.0 / u.push_mass())  # 1 / INF = 0
 		lv.append(l)
 		mv.append(g2 - _prev.get(u, g2))
+		pd.append(u.ally_pad() if u.has_method("ally_pad") else 0.0)
 	_skip = units.size() >= BUSY_AT and BUSY_EVERY > 1
-	var q := separate(p, r, w, lv, mv)
+	var q := separate(p, r, w, lv, mv, pd)
 	_prev = {}
 	for i in units.size():
 		var u = units[i]
@@ -104,9 +107,11 @@ func _process(_delta: float) -> void:
 	last_usec = Time.get_ticks_usec() - t0
 
 
-## 겹침 해소(순수 — run_tests가 직접 부른다). p·r·w·lv·mv = 바닥 위치(x, z)·반지름·무게 역수(0 = 안 밀림)·층·이번 프레임 제 걸음.
-## 밀린 뒤 위치.
-func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Array, lv: PackedInt32Array, mv: PackedVector2Array) -> PackedVector2Array:
+## 겹침 해소(순수 — run_tests가 직접 부른다). p·r·w·lv·mv = 바닥 위치(x, z)·반지름·무게 역수(0 = 안 밀림)·층·이번 프레임 제 걸음,
+## pd = 여유(비면 0 — 둘 다 > 0인 쌍만 합만큼 더 떨어진다). 밀린 뒤 위치.
+func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Array, lv: PackedInt32Array, mv: PackedVector2Array,
+		pd := PackedFloat32Array()) -> PackedVector2Array:
+	var padded := pd.size() == p.size()
 	var cells := {}
 	for i in p.size():
 		var k := Vector3i(floori(p[i].x / CELL), floori(p[i].y / CELL), lv[i])
@@ -125,7 +130,7 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 				var i: int = a[x]
 				for y in range(x + 1 if o == Vector3i.ZERO else 0, b.size()):
 					var j: int = b[y]
-					var reach := r[i] + r[j] + SLACK
+					var reach := r[i] + r[j] + SLACK + (pd[i] + pd[j] if padded else 0.0)
 					if w[i] + w[j] > 0.0 and p[i].distance_squared_to(p[j]) < reach * reach:
 						pairs.append(i)
 						pairs.append(j)
@@ -142,6 +147,8 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 			var j := pairs[t + 1]
 			var d := q[i] - q[j]
 			var need := r[i] + r[j]
+			if padded and pd[i] > 0.0 and pd[j] > 0.0:
+				need += pd[i] + pd[j]
 			var dd := d.length_squared()
 			if dd >= need * need:
 				continue

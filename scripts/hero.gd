@@ -39,6 +39,7 @@ const ARROW_SPEED := 30.0
 const BANNER_GAP := 1.5  # 같은 영웅의 스킬 이름 띠 최소 간격(초)
 const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
 const CAST_RECOVER := 0.3  # 발동 순간 뒤 이만큼 더 제자리에서 모션을 마저 한다(초) — 곧바로 평타 모션이 덮지 않게
+const ARENA_PAD := 0.2  # 던전·드래곤 아레나: 영웅끼리 몸 둘레 여유(m, ally_pad) — 둘 합 1.3 m 떨어져 선다
 
 var castle
 var formation
@@ -817,6 +818,12 @@ func hp_ratio() -> float:
 ## 겹침 해소(crowd.gd): 몸 반지름, 밀리는 무게(걷는 중이 아니면 — 자리를 지키거나 싸우는 중 — 무겁다).
 func radius() -> float:
 	return Crowd.HUMAN_R * Art.CHARACTER_SCALE
+
+
+## 던전·드래곤 아레나(성 없음): 영웅끼리만 ARENA_PAD씩 더 떨어진다(crowd.gd) — 싸움을 따라 당긴 카메라에서 한 덩어리로 겹쳐 보이지 않게.
+## 적과의 맞닿는 거리는 그대로(근접 사거리 여유가 골렘 상대 0.15 m뿐). 공성·PVP 영웅(space가 있음)은 이미 몸 둘레 여유가 있어 뺀다.
+func ally_pad() -> float:
+	return ARENA_PAD if castle == null and not has_method("space") else 0.0
 
 
 func push_mass() -> float:

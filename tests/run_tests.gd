@@ -142,6 +142,7 @@ func _init() -> void:
 	test_shop()
 	test_iap()
 	test_sfx()
+	test_follow_cam()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -2190,6 +2191,34 @@ func test_rotate_hold_state() -> void:
 	rig.rotate_yaw(100.0)
 	check(is_equal_approx(rig.rotation_degrees.y, -160.0) and rig.position == Vector3.ZERO, "rotate_yaw wraps past 180 (no limit), pivot kept: %s" % rig.rotation_degrees.y)
 	rig.free()
+
+
+## 디자인 보강 2번(2026-10-07): 싸움 따라가기(camera_rig.frame) — 무리(발~HP 바)를 HUD 아래·영웅 띠 위 쓸 수 있는 곳 안에, 줌은 min~max 안.
+func test_follow_cam() -> void:
+	var Rig := preload("res://scripts/camera_rig.gd")
+	var b := Basis.from_euler(Vector3(deg_to_rad(Rig.PITCH_DEG), deg_to_rad(Rig.YAW_DEG), 0.0))
+	var r := b.x
+	var u := b.y
+	var vp := Vector2(720, 1280)
+	check(Rig.frame([], r, u, vp, Vector3.ZERO, 12.0, 40.0).is_empty(), "no units, no frame")
+	var pts := [[Vector3(18, 0, 12), Rig.FOLLOW_TALL], [Vector3(25, 0, 9), Rig.FOLLOW_TALL], [Vector3(21, 0, 16), Rig.FOLLOW_BOSS_TALL]]
+	var t: Array = Rig.frame(pts, r, u, vp, Vector3.ZERO, 12.0, 40.0)
+	check(t.size() == 2 and t[1] > 12.0 and t[1] < 40.0 and t[0].y == 0.0, "a small group: zoom inside min..max, target on the ground (%s)" % [t])
+	var inside := true
+	for q in pts:  # 직교 화면 좌표(px): 가운데 + (점 − 목표)·방향 × 720/줌
+		var k: float = vp.x / t[1]
+		for h in [0.0, q[1]]:
+			var d: Vector3 = q[0] + Vector3(0, h, 0) - t[0]
+			var px := Vector2(vp.x / 2.0 + d.dot(r) * k, vp.y / 2.0 - d.dot(u) * k)
+			inside = inside and px.x > 0.0 and px.x < vp.x and px.y > Rig.FOLLOW_TOP_PX and px.y < vp.y - Rig.FOLLOW_BOTTOM_PX
+	check(inside, "every unit (feet to HP bar) sits between the top HUD and the bottom strip")
+	var far := pts.duplicate(true)
+	far[0][0] = Vector3(-30, 0, 40)
+	check(is_equal_approx(Rig.frame(far, r, u, vp, Vector3.ZERO, 12.0, 40.0)[1], 40.0), "a spread-out group clamps the zoom at max")
+	var tight := [[Vector3(20, 0, 12), Rig.FOLLOW_TALL], [Vector3(20.5, 0, 12), Rig.FOLLOW_TALL]]
+	check(is_equal_approx(Rig.frame(tight, r, u, vp, Vector3.ZERO, 12.0, 40.0)[1], 12.0), "a tight group clamps the zoom at min")
+	tight[1][1] = 30.0
+	check(Rig.frame(tight, r, u, vp, Vector3.ZERO, 12.0, 40.0)[1] > 12.0, "a tall unit (dragon frame_h) widens the frame")
 
 
 ## 개정 12-2 §3 공격 동기화: 쓰는 공격 애니메이션(영웅·몬스터·상인)마다 타격 비율이 있고 0 < frac < 1, 그 애니메이션이 GLB에 있다.
@@ -4354,6 +4383,17 @@ func test_crowd() -> void:
 		PackedVector2Array([Vector2.ZERO, Vector2.ZERO]))
 	c.free()
 	check(q[0].length() <= 10.001, "arena: a push never leaves the arena radius (%.2f)" % q[0].length())
+	# 아레나 영웅 여유(ally_pad, 2026-10-07): 둘 다 여유가 있는 쌍만 더 떨어진다 — 영웅끼리 1.3 m, 영웅과 적은 반지름 합 그대로(근접 사거리)
+	c = CrowdScript.new()
+	c.arena_r = 20.0
+	var zero2 := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
+	q = c.separate(PackedVector2Array([Vector2(1, 1), Vector2(1, 1)]), PackedFloat32Array([0.45, 0.45]), PackedFloat32Array([1.0, 1.0]), PackedInt32Array([0, 0]),
+		zero2, PackedFloat32Array([0.2, 0.2]))
+	check(absf(q[0].distance_to(q[1]) - 1.3) < 0.001, "two padded heroes end 1.3 m apart (%.3f)" % q[0].distance_to(q[1]))
+	q = c.separate(PackedVector2Array([Vector2(1, 1), Vector2(1, 1)]), PackedFloat32Array([0.45, 0.47]), PackedFloat32Array([1.0, 1.0]), PackedInt32Array([0, 0]),
+		zero2, PackedFloat32Array([0.2, 0.0]))
+	check(absf(q[0].distance_to(q[1]) - 0.92) < 0.001, "a padded hero and an enemy keep the plain radius sum (%.3f)" % q[0].distance_to(q[1]))
+	c.free()
 	# 성 전장: 밀림은 성벽·성문을 넘기지 않는다
 	var half := GameData.interior_half(1)
 	var outer := half + Balance.WALL_T

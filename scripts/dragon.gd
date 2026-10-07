@@ -42,6 +42,7 @@ func setup_boss(p_level: int, p_hp: float) -> void:
 
 func _ready() -> void:
 	add_to_group("monsters")
+	set_meta("frame_h", SIZE + 1.0)  # 싸움 따라가기(camera_rig.follow)가 머리까지 화면에 넣는다
 	_model = DragonModelScript.new()
 	_model.size = SIZE
 	add_child(_model)

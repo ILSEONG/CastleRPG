@@ -31,6 +31,18 @@ const STOP_MAX := 0.1  # 히트스톱 최대 길이(실제 초)
 const STOP_GAP := 0.6  # 히트스톱 최소 간격(실제 초) — 잦으면 끊겨 보인다
 const SLOW_SCALE := 0.3  # 결정타 슬로모션 동안 게임 시간 배율
 const SLOW_SEC := 0.9  # 결정타 슬로모션 길이(실제 초)
+# 싸움 따라가기(2026-10-07 디자인 보강 2번, follow): 던전·PVP·길드 드래곤에서 살아 있는 유닛 무리를 화면 가운데에 두고, 무리가 들어오는
+# 가장 가까운 줌(follow_min ~ follow_max)으로 부드럽게 당긴다 — 영웅이 화면에서 더 크게 보인다. 손으로 끌거나 줌하면 잠깐 쉰다.
+const FOLLOW_PAUSE_SEC := 3.0  # 손으로 움직인 뒤 이만큼 따라가기를 쉰다
+const FOLLOW_MOVE_RATE := 2.5  # 위치를 따라가는 빠르기(1/초)
+const FOLLOW_OUT_RATE := 3.0  # 무리가 화면 밖으로 퍼질 때 줌을 빼는 빠르기(1/초)
+const FOLLOW_IN_RATE := 0.8  # 모였을 때 줌을 당기는 빠르기(1/초) — 천천히
+const FOLLOW_MARGIN := 2.5  # 무리 둘레 여유(m)
+const FOLLOW_TALL := 3.0  # 유닛 발에서 HP 바까지 높이(m). 큰 유닛은 메타 "frame_h"로 준다
+const FOLLOW_BOSS_TALL := 4.5
+const FOLLOW_TOP_PX := 170.0  # 화면 위 HUD가 덮는 높이(px, 가로 720 기준) — 무리를 그 아래에 둔다
+const FOLLOW_BOTTOM_PX := 150.0  # 화면 아래 영웅 띠가 덮는 높이
+const FOLLOW_GROUPS := ["crowd", "monsters"]
 
 var camera: Camera3D
 
@@ -53,6 +65,11 @@ static var _stop_at := -INF  # 리그가 히트스톱 중에 사라져도 되돌
 static var _stopping := false
 static var _gen := 0  # 멈춤/슬로모션 차례 — 늦게 끝난 이전 타이머가 새 슬로모션을 되돌리지 않게
 static var _slow := false  # 결정타 슬로모션 중
+var follow_scope: Node  # 이 노드 아래 유닛만 따라간다(null = 따라가지 않음)
+var follow_min := 0.0
+var follow_max := 0.0
+var _follow_hold := -INF  # 이 시각(초)까지 따라가기 쉼
+var _follow_snap := false  # 다음 프레임에 곧바로 맞춘다(처음)
 
 
 func _ready() -> void:
@@ -97,7 +114,8 @@ func yaw_deg() -> float:
 	return rad_to_deg(camera.global_rotation.y)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_follow_step(delta)
 	if _press_pos == Vector2.INF or _dragging or _rotating or _touches.size() >= 2:
 		return
 	if hold_state((Time.get_ticks_msec() - _press_ms) / 1000.0, 0.0) == "hold":
@@ -136,8 +154,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			hold_follow()
 			zoom_by(1.0 / ZOOM_STEP)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			hold_follow()
 			zoom_by(ZOOM_STEP)
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_press_pos = mb.position if mb.pressed else Vector2.INF
@@ -154,6 +174,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not _dragging and mm.position.distance_to(_press_pos) > DRAG_THRESHOLD_PX:
 			_dragging = true
 		if _dragging:
+			hold_follow()
 			pan_pixels(mm.relative)
 
 
@@ -347,4 +368,86 @@ func _pinch(sd: InputEventScreenDrag) -> void:
 	var old_d := prev_pos.distance_to(other_pos)
 	var new_d := sd.position.distance_to(other_pos)
 	if old_d > 1.0 and new_d > 1.0:
+		hold_follow()
 		zoom_by(old_d / new_d)
+
+
+## 싸움 따라가기를 켠다(scope 아래 살아 있는 유닛 무리, 줌 min_size~max_size m). 첫 프레임은 곧바로 맞춘다.
+func follow(scope: Node, min_size: float, max_size: float) -> void:
+	follow_scope = scope
+	follow_min = min_size
+	follow_max = max_size
+	_follow_snap = true
+
+
+## 손으로 끌거나 줌했다 — FOLLOW_PAUSE_SEC 동안 따라가지 않는다.
+func hold_follow() -> void:
+	_follow_hold = Time.get_ticks_msec() / 1000.0 + FOLLOW_PAUSE_SEC
+
+
+## 따라갈 목표 [바닥 점, 줌]. 유닛이 없으면 []. 화면 위 HUD·아래 띠를 뺀 곳 가운데에 무리를 둔다.
+func follow_target() -> Array:
+	if follow_scope == null or not is_instance_valid(follow_scope):
+		return []
+	var pts := []
+	var seen := {}
+	for g in FOLLOW_GROUPS:
+		for n in get_tree().get_nodes_in_group(g):
+			if seen.has(n) or not (n is Node3D) or not follow_scope.is_ancestor_of(n) or not n.is_visible_in_tree():
+				continue
+			seen[n] = true
+			var hp = n.get("hp")
+			if hp != null and float(hp) <= 0.0:
+				continue
+			pts.append([n.global_position, n.get_meta("frame_h", FOLLOW_BOSS_TALL if n.get("is_boss") == true else FOLLOW_TALL)])
+	var at := position
+	at.y = 0.0
+	var out := frame(pts, camera.global_basis.x, camera.global_basis.y, get_viewport().get_visible_rect().size, at, follow_min, follow_max)
+	if not out.is_empty():
+		out[0].y = position.y
+	return out
+
+
+## 순수 계산(run_tests): pts = [[발 위치, 키 m], …], r·u = 화면 오른쪽·위 방향(월드), vp = 화면 크기, at = 지금 리그 바닥 점.
+## 무리(발~HP 바 + 여유)가 HUD 아래·띠 위 쓸 수 있는 곳에 들어오는 가장 가까운 줌(min_size~max_size)과 그 가운데를 보는 바닥 점.
+static func frame(pts: Array, r: Vector3, u: Vector3, vp: Vector2, at: Vector3, min_size: float, max_size: float) -> Array:
+	if pts.is_empty():
+		return []
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for q in pts:
+		var p: Vector3 = q[0]
+		var sx := p.dot(r)
+		var sy := p.dot(u)
+		lo = Vector2(minf(lo.x, sx), minf(lo.y, sy))
+		hi = Vector2(maxf(hi.x, sx), maxf(hi.y, sy + float(q[1]) * u.y))
+	var usable_px := maxf(vp.y - FOLLOW_TOP_PX - FOLLOW_BOTTOM_PX, vp.x)
+	var need := maxf(hi.x - lo.x + FOLLOW_MARGIN * 2.0, (hi.y - lo.y + FOLLOW_MARGIN * 2.0) * vp.x / usable_px)
+	var size := clampf(need, min_size, max_size)
+	var c := (lo + hi) / 2.0
+	var cy := c.y + (FOLLOW_TOP_PX - FOLLOW_BOTTOM_PX) / 2.0 * size / vp.x  # 쓸 수 있는 곳의 가운데 = 화면 가운데보다 아래
+	var uh := Vector3(u.x, 0.0, u.z)
+	var dest := at + r * (c.x - at.dot(r)) + uh / uh.length_squared() * (cy - at.dot(u))
+	var limit := Balance.MAP_HALF - PAN_LIMIT_MARGIN
+	return [Vector3(clampf(dest.x, -limit, limit), 0.0, clampf(dest.z, -limit, limit)), size]
+
+
+func _follow_step(delta: float) -> void:
+	if follow_scope == null or Time.get_ticks_msec() / 1000.0 < _follow_hold or (_pan != null and _pan.is_running()):
+		return
+	var tgt := follow_target()
+	if tgt.is_empty():
+		return
+	var size: float = tgt[1]
+	if _follow_snap:
+		_follow_snap = false
+		position = tgt[0]
+		if not is_punching():
+			camera.size = size
+			_fit_depth()
+		return
+	position = position.lerp(tgt[0], 1.0 - exp(-FOLLOW_MOVE_RATE * delta))
+	if not is_punching():
+		var rate := FOLLOW_OUT_RATE if size > camera.size else FOLLOW_IN_RATE
+		camera.size = lerpf(camera.size, size, 1.0 - exp(-rate * delta))
+		_fit_depth()

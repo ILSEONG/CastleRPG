@@ -28,7 +28,8 @@ enum Phase { INTRO, FIGHT, RESULT }
 
 const INTRO_SEC := 1.6
 const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R, "total": ArenaKit.PLAINS_FIGHT_R - 4.0}
-const CAMERA_SIZE := {"duel": 24.0, "total": 28.0}
+const CAMERA_SIZE := {"duel": 24.0, "total": 28.0}  # 가장 먼 줌
+const FOLLOW_MIN := {"duel": 18.0, "total": 20.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
 const FRONT_D := {"duel": 9.0, "total": 16.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 2배)
 const ROW_GAP := 2.6  # 앞줄 ↔ 뒷줄
 const SIDE_GAP := 2.2  # 줄 안 간격
@@ -118,6 +119,7 @@ func _ready() -> void:
 		picker.arena_r = field_r() - 1.0
 		add_child(picker)
 	_freeze(true)
+	rig.follow(self, FOLLOW_MIN.get(mode, 20.0), CAMERA_SIZE.get(mode, 34.0))
 	hud = HudScript.new()
 	hud.battle = self
 	add_child(hud)
