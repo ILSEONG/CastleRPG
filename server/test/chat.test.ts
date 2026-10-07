@@ -93,3 +93,60 @@ test('chat: each channel keeps only the latest messages', async () => {
   const last = await read(a.token)
   assert.equal(last.all.at(-1).text, `m${KEEP + 4}`)
 })
+
+test('chat filter: bypasses are caught, ordinary words are not', () => {
+  const caught = ['씨1발', 'ㅅ_ㅂ', 'ㅄ', '씌발', '병 신', '개.새.끼', 'tlqkf', 'f u c k', 'Sh1t', '니애미', '엠창']
+  for (const t of caught) assert.ok(mask(t).includes('*'), t)
+  const fine = ['시발점에서 만나요', '다시 발견했다', '맛보다', '십분 뒤', '시바견 귀여워', '등신대', '엄마를 졸라서', '5개년 계획', '불이 꺼져', '보지 마',
+    '수고 ㅅㄱ', '강아지 새끼', '갓바위', '즐거운 시간 보내세요']
+  for (const t of fine) assert.equal(mask(t), t)
+  assert.equal(mask('ㅅㅂ 뭐야'), '** 뭐야')
+})
+
+test('chat report: keeps reporter, target, the message (original text) and the chat around it; admin can list', async () => {
+  const a = await S.login()
+  const b = await S.login()
+  wait()
+  await say(a.token, 'all', '앞 메시지')
+  wait()
+  const bad = (await say(b.token, 'all', '이 씨1발')).json.msg
+  assert.equal(bad.text, '이 ***')
+  wait()
+  await say(a.token, 'all', '뒤 메시지')
+  const rep = async (token: string, id: unknown) => S.req('POST', '/v1/chat/report', { token, body: { id } })
+  assert.equal((await rep(b.token, bad.id)).json.error, 'own_message')
+  assert.equal((await rep(a.token, 999999)).json.error, 'no_message')
+  assert.equal((await rep(a.token, 'x')).status, 400)
+  const r = await rep(a.token, bad.id)
+  assert.deepEqual([r.status, r.json.ok, r.json.already], [200, true, false])
+  assert.equal((await rep(a.token, bad.id)).json.already, true)
+  const [row] = await S.db.query('select reporter::text, reporter_name, target::text, target_name, text, raw, context from chat_reports where message_id = $1', [bad.id])
+  assert.deepEqual([row.reporter, row.reporter_name, row.target, row.target_name, row.text, row.raw], [a.id, G.playerName(a.id), b.id, G.playerName(b.id), '이 ***', '이 씨1발'])
+  const ctx = typeof row.context === 'string' ? JSON.parse(row.context) : row.context
+  const texts = ctx.map((m: any) => m.text)
+  assert.ok(texts.includes('앞 메시지') && texts.includes('이 ***') && texts.includes('뒤 메시지'), JSON.stringify(texts))
+  // 목록은 관리자만
+  assert.equal((await S.req('GET', '/v1/chat/reports', { token: a.token })).status, 403)
+  await S.db.query("insert into player_identities (provider, provider_uid, player_id, email) values ('google', 'chat-admin', $1, 'chat-admin@example.com')", [a.id])
+  await S.db.query("insert into admin_emails (email) values ('chat-admin@example.com') on conflict do nothing")
+  const list = (await S.req('GET', '/v1/chat/reports', { token: a.token })).json.reports
+  assert.equal(list[0].target_name, G.playerName(b.id))
+  assert.equal(list[0].raw, '이 씨1발')
+})
+
+test('chat report: guild messages of another guild cannot be reported; daily cap', async () => {
+  const a = await S.login()
+  const b = await S.login()
+  const [g] = await S.db.query("insert into guilds (name, emblem, seed, created_at, virtual_n) values ('신고길드', 1, 9, now(), 0) returning id::text as id")
+  await S.db.query('insert into player_guild (player_id, guild_id) values ($1, $2)', [b.id, g.id])
+  wait()
+  const gm = (await say(b.token, 'guild', '우리끼리')).json.msg
+  assert.equal((await S.req('POST', '/v1/chat/report', { token: a.token, body: { id: gm.id } })).json.error, 'no_message')
+  const ids: number[] = []
+  for (let i = 0; i < 21; i++) {
+    wait()
+    ids.push((await say(b.token, 'all', `말 ${i}`)).json.msg.id)
+  }
+  for (let i = 0; i < 20; i++) assert.equal((await S.req('POST', '/v1/chat/report', { token: a.token, body: { id: ids[i] } })).status, 200)
+  assert.equal((await S.req('POST', '/v1/chat/report', { token: a.token, body: { id: ids[20] } })).json.error, 'too_many')
+})
