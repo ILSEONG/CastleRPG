@@ -25,20 +25,22 @@ func _ready() -> void:
 	await _frames(20)
 	await _snap()
 	side.set_open(false)
+	GameState.stage = 60  # 성장 패스: 1-10·1-25·2-25(50) 단계까지 깬 상태
 	var tabs = _find("res://scripts/tab_bar.gd")
 	tabs.press("shop")
 	var shop = tabs.windows.shop
 	await _snap()
+	shop._pick("pass")
+	await _snap()
+	shop.buttons["growth:0:free"].pressed.emit()
+	await _frames(4)
+	shop._pick("daily")
 	shop.buttons["buy:d_free"].pressed.emit()
-	shop.buttons["buy:d_ticket"].pressed.emit()
 	await _frames(4)
 	await _snap()
 	shop._pick("weekly")
 	await _snap()
 	shop._pick("diamond")
-	await _snap()
-	tabs.press("shop")
-	side.pick("guild")
 	await _snap()
 	var out := "/tmp/shop.png"
 	for a in OS.get_cmdline_user_args():

@@ -65,15 +65,15 @@ test('다이아 상품: 모자라면 not_enough, 있으면 빼고 열쇠·모집
   assert.equal((await buy(token, 'nope')).status, 404)
 })
 
-test('골드 상품: 골드를 빼고 자원, 주간 상품은 다음 주(월요일)까지 sold_out', async () => {
+test('자원 꾸러미: 다이아를 빼고 자원, 주간 상품은 다음 주(월요일)까지 sold_out', async () => {
   S.clock.t = T0
   const { token } = await S.login()
-  let r = await S.req('POST', '/v1/test/grant_gold', { token, body: { amount: 100000 } })
-  const gold = r.json.player.gold
+  let r = await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 1000 } })
+  const dia = r.json.player.diamonds
   const wood = r.json.player.res.wood
   r = await buy(token, 'w_res')
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.gold, gold - 60000)
+  assert.equal(r.json.player.diamonds, dia - 300)
   assert.equal(r.json.player.res.wood, wood + 10000)
   assert.deepEqual(r.json.player.shop.w, { w_res: 1 })
   assert.equal((await buy(token, 'w_free')).status, 200)

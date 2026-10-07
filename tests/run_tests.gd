@@ -140,6 +140,7 @@ func _init() -> void:
 	test_tutorial_online()
 	test_missions()
 	test_shop()
+	test_iap()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -5100,10 +5101,41 @@ func test_shop() -> void:
 	var k0 := int(e.dungeon_state("gold").keys)
 	check(e.buy_shop("d_key_gold") and e.diamonds == 20 and int(e.dungeon_state("gold").keys) == k0 + 1, "shop: gold dungeon key for 60 diamonds")
 	check(e.shop_block("d_key_gold") == "diamonds" and not e.buy_shop("d_key_gold") and e.diamonds == 20, "shop: short of diamonds blocks and spends nothing")
-	check(e.shop_block("d_res") == "gold", "shop: short of gold blocks the resource bundle")
-	e.gold_tenths = 100000
+	check(e.shop_block("d_res") == "diamonds", "shop: short of diamonds blocks the resource bundle")
+	e.diamonds = 100
 	var w0 := int(e.res.get("wood", 0))
-	check(e.buy_shop("d_res") and e.gold == 2000 and int(e.res.wood) == w0 + 1000 and e.shop_left("d_res") == 4, "shop: resource bundle costs 8,000 gold")
+	check(e.buy_shop("d_res") and e.diamonds == 50 and int(e.res.wood) == w0 + 1000 and e.shop_left("d_res") == 2, "shop: resource bundle costs 50 diamonds")
 	e.shop.day = int(e.shop.day) - 1  # 날이 바뀌었다
-	check(e.shop_left("d_free") == 1 and e.shop_left("d_res") == 5 and e.shop_left("w_free") == 1, "shop: a new day refills daily items")
+	check(e.shop_left("d_free") == 1 and e.shop_left("d_res") == 3 and e.shop_left("w_free") == 1, "shop: a new day refills daily items")
+	e.free()
+
+
+## 결제 상품(iap_items.gd, 서버 iap.ts와 같은 표): 표 비교 + 오프라인 월정액·성장 패스 받기, 결제 연결 전 사기는 알림만.
+func test_iap() -> void:
+	var items := preload("res://scripts/iap_items.gd")
+	var src := FileAccess.get_file_as_string("res://server/src/iap.ts")
+	var same := true
+	for p in items.PRODUCTS:
+		var line := ""
+		for l in src.split("\n"):
+			if l.contains("id: '%s'" % p.id):
+				line = l
+		if not (line.contains("krw: %d," % int(p.krw)) and line.contains("kind: '%s'" % p.kind) and line.contains("diamonds: %d" % int(p.give.get("diamonds", 0)) if p.give.has("diamonds") else true)):
+			same = false
+			print("  iap product differs from server: ", p.id)
+	for t in items.GROWTH:
+		if not src.contains("round: %d," % int(t.round)):
+			same = false
+	check(same and src.count("kind: '") == items.PRODUCTS.size() + 1, "iap: client product table matches server/src/iap.ts")
+	var e = _econ(1000.0)
+	var d0: int = e.diamonds
+	check(not e.iap_buy("dia_1") and e.diamonds == d0, "iap: buying before payments are connected gives nothing")
+	check(e.iap_first_bonus("dia_1") and e.iap_can_buy("pkg_starter") and e.monthly_left("monthly") == 0 and not e.can_claim_monthly("monthly"), "iap: fresh state")
+	check(not e.can_claim_growth(0, "free", 5) and e.can_claim_growth(0, "free", 10) and not e.can_claim_growth(0, "paid", 10), "iap: growth free tier needs the round, paid needs the pass")
+	check(e.claim_growth(0, "free", 10) and e.diamonds == d0 + 30 and not e.can_claim_growth(0, "free", 10), "iap: growth free tier 0 gives 30 diamonds once")
+	var per: Array = e.shop_period()
+	e.iap = {"day": per[0], "week": per[1], "monthly": {"monthly": {"until": int(per[0]) + 2, "claimed": null}}, "passes": ["pass_growth"], "gp": {"free": [0], "paid": []}}
+	check(e.monthly_left("monthly") == 3 and e.can_claim_monthly("monthly") and e.claim_monthly("monthly") and e.diamonds == d0 + 130 and not e.can_claim_monthly("monthly"),
+		"iap: monthly card gives 100 diamonds once a day")
+	check(e.claim_growth(0, "paid", 10) and e.diamonds == d0 + 430 and not e.iap_can_buy("pass_growth"), "iap: with the pass the paid tier pays out")
 	e.free()
