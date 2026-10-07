@@ -201,6 +201,20 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     return c.json({ server_now: x.now, war: await warView(x) })
   })
 
+  // 슈퍼관리자(Player.admin): 공성 시각을 기다리지 않는다 — 아직이면 지금으로 당기고, 이번 주 공성이 끝났거나 성채가 함락됐으면
+  // 그 주 전투를 지우고 새 성으로 다시 연다(그 길드의 이번 주 점수가 처음부터). 진행 중이면 그대로 합류.
+  async function adminOpen(x: Any, gid: string, week: number, w: Any) {
+    const bt = await battleOf(gid, week)
+    const over = w.castle.keep <= 0 || (bt && bt.closed) || x.now >= w.at + W.BATTLE_SEC
+    if (x.now >= w.at && !over) return w
+    if (over) {
+      await query('delete from guild_war_battles where guild_id = $1 and week = $2', [gid, week])
+      await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2', [gid, week, JSON.stringify(W.freshCastle(enemyOf(x, w).defenders))])
+    }
+    await query('update guild_wars set battle_at = to_timestamp($3::float8), battle_by = $4 where guild_id = $1 and week = $2', [gid, week, x.now - 1, G.playerName(x.id)])
+    return warRow(x, week)
+  }
+
   // 이번 주 전투에 들어간다(공성 시각 ~ +BATTLE_SEC): 없으면 연다(가상 길드원 분대 + 나), 진행 중이면 내 분대를 더한다(방에 알린다). 끝났으면 막힌다.
   app.post('/v1/guild/war/enter', auth, async (c) => {
     const b = await body(c)
@@ -209,7 +223,8 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const sq = squadOf(x, b.heroes)
     const day = R.resetDay(x.now, x.hour)
     const week = W.weekOf(day)
-    const w = await warRow(x, week)
+    let w = await warRow(x, week)
+    if (x.pl.admin) w = await adminOpen(x, g.id, week, w)
     if (w.castle.keep <= 0) throw blocked('conquered', 'the enemy keep has already fallen this week')
     if (x.now < w.at) throw blocked('not_yet', "this week's siege has not started yet")
     let bt = await battleOf(g.id, week)
