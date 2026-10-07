@@ -36,7 +36,7 @@ const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 # 7: training {병사 건물: {count, finish}}(개정 16). 6 이하의 자동 생산 시계(last_collect의 병사 건물)는 버리고 대기열은 빈다
 # 8: training {…: {count, tier, finish}}(개정 19). 7 이하의 진행 중 묶음은 tier 1
 # 9: upgrades {성장 항목 id: 레벨}(개정 20). 8 이하는 성장 0(빈 사전)
-# 10: dungeons {종류: {best_level, keys, extra_today, last_reset}}, items [{id, slot, weapon_kind, grade, level}], equipment {영웅: {부위: 장비 id}},
+# 10: dungeons {종류: {best_level, keys, extra_today, last_reset}}, items [{id, slot, weapon_kind, grade, rolls, subs}](2026-10-07 전엔 level — 읽지 않음), equipment {영웅: {부위: 장비 id}},
 # next_item_id(개정 18). 9 이하는 그날 지급분 열쇠·빈 보관함
 # 11: diamonds, gacha {gold_level, gold_pulls, dia_pity}(개정 23). 10 이하는 다이아 0·골드 모집 Lv 1·누적 0·천장 0
 # 12: research {levels: {노드: 레벨}, current: {id, finish} 또는 null}(개정 24). 11 이하는 연구 없음
@@ -186,7 +186,7 @@ var soldier_deployed: Dictionary = {}  # 병사 배치 "병종:티어" → 수(>
 var train_queues: Dictionary = {}  # 병사 건물 id → 훈련 대기열 {count(> 0), tier(시작할 때 티어 — 개정 19), finish(유닉스 초, 보정 시각)}. 빈 건물은 키가 없다(개정 16)
 var upgrades: Dictionary = {}       # 성장 항목 id → 레벨(> 0, 개정 20). 없으면 0
 var dungeons := {}  # 개정 18: 종류 → {best_level, keys, extra_today, last_reset}(마지막으로 반영한 값 — dungeon_state가 일일 리셋을 센다)
-var bag: Array = []  # 보관함 [{id(int), slot, weapon_kind(무기만, 아니면 null), grade, level(int)}](id 순)
+var bag: Array = []  # 보관함 [{id(int), slot, weapon_kind(무기만, 아니면 null), grade, rolls {능력치: %}, subs [{id, r}]}](id 순)
 var equipment := {}  # 영웅 id → {부위: 장비 id}
 var next_item_id := 1  # 오프라인 장비 id
 var diamonds := 0  # 개정 23: 다이아(현금 재화, 온라인은 서버 값)
@@ -2582,7 +2582,7 @@ func item(item_id: int) -> Dictionary:
 	return {}
 
 
-## 장비 능력치 {hp, atk, speed_pct}(GameData.item_stats).
+## 장비 능력치 {hp, atk, speed_pct, 특수 능력치 %…}(GameData.item_stats).
 func item_stats(it: Dictionary) -> Dictionary:
 	return GameData.item_stats(it)
 
@@ -2607,15 +2607,20 @@ func hero_equipment(hero_id: String) -> Dictionary:
 	return out
 
 
-## 영웅 장비 합계 {hp, atk, speed_pct} — 영웅 최종 능력치에 더한다(GameData.hero_stats가 equip_source로 부른다). 이동속도 %는 전투가 쓴다.
+## 영웅 장비 합계 {hp, atk, speed_pct, 특수 능력치 %…} — hp·atk는 영웅 최종 능력치에 더한다(GameData.hero_stats가 equip_source로 부른다).
+## 이동속도·특수 능력치 %는 전투가 쓴다(hero.refresh_stats).
 func equipment_bonus(hero_id: String) -> Dictionary:
 	return GameData.equip_total(hero_equipment(hero_id).values())
 
 
-## 장비 점수(같은 부위끼리 비교용): HP + 공격 × 25 — 전투력 식(HP/10 + 공격×2/간격)에서 공격 1 ≈ HP 25.
+## 장비 점수(같은 부위끼리 비교용): HP + 공격 × 25 — 전투력 식(HP/10 + 공격×2/간격)에서 공격 1 ≈ HP 25 — + 특수 능력치 % × SUB_SCORE(HP 환산).
+const SUB_SCORE := {"lifesteal": 30.0, "crit_rate": 30.0, "crit_dmg": 10.0, "aspd": 30.0, "dmg_reduce": 30.0, "skill_dmg": 15.0}
 static func item_score(it: Dictionary) -> float:
 	var st := GameData.item_stats(it)
-	return float(st.hp) + float(st.atk) * 25.0
+	var out := float(st.hp) + float(st.atk) * 25.0
+	for k in SUB_SCORE:
+		out += float(st[k]) * SUB_SCORE[k]
+	return out
 
 
 ## 그 영웅 그 부위에 지금보다 좋은(빈 칸이면 아무거나) 낄 수 있는 장비가 보관함에 있나 — 아무도 안 낀 장비만(영웅 장비 칸 빨간 점).
@@ -3655,20 +3660,44 @@ func _on_auto_equip_failed(hero_id: String) -> void:
 	net.refresh()
 
 
-## 서버·저장 장비 목록 → [{id(int), slot, weapon_kind, grade, level(int)}](id 순). 모르는 부위·등급·무기 종류, 겹친 id는 버린다.
+## 서버·저장 장비 목록 → [{id(int), slot, weapon_kind, grade, rolls, subs}](id 순). 모르는 부위·등급·무기 종류, 겹친 id는 버린다.
+## 2026-10-07 장비 레벨 없앰: level은 읽지 않는다. rolls·subs는 _clean_rolls(틀린 값은 버림 — 기준값·특수 없음).
 func _item_list(src: Array) -> Array:
 	var out := []
 	var seen := {}
 	for x in src:
-		if not (x is Dictionary and _num(x.get("id")) and x.get("slot") in GameData.EQUIP_SLOTS and x.get("grade") in GameData.EQUIP_GRADES and _num(x.get("level"))):
+		if not (x is Dictionary and _num(x.get("id")) and x.get("slot") in GameData.EQUIP_SLOTS and x.get("grade") in GameData.EQUIP_GRADES):
 			continue
 		var kind = x.get("weapon_kind")
 		if (x.slot == "weapon") != (kind is String and kind in GameData.WEAPON_KINDS) or seen.has(int(x.id)):
 			continue
 		seen[int(x.id)] = true
-		out.append({"id": int(x.id), "slot": x.slot, "weapon_kind": kind if x.slot == "weapon" else null, "grade": x.grade, "level": maxi(1, int(x.level))})
+		var it := {"id": int(x.id), "slot": x.slot, "weapon_kind": kind if x.slot == "weapon" else null, "grade": x.grade}
+		it.merge(_clean_rolls(x.slot, x.grade, x.get("rolls"), x.get("subs")))
+		out.append(it)
 	out.sort_custom(func(a, b): return a.id < b.id)
 	return out
+
+
+## 굴림 검사(서버 rules.cleanRolls와 같다): rolls = 그 부위 능력치만 85~115 정수, subs = 그 등급 줄 수 이하의 서로 다른 종류.
+static func _clean_rolls(slot: String, grade: String, rolls, subs) -> Dictionary:
+	var ok := func(r) -> bool: return (r is int or r is float) and r == floorf(r) and r >= GameData.ROLL_MIN and r <= GameData.ROLL_MAX
+	var keys := [GameData.SLOT_STAT[slot][0]] + (["speed_pct"] if slot == "shoes" else [])
+	var out_rolls := {}
+	if rolls is Dictionary:
+		for k in keys:
+			if ok.call(rolls.get(k)):
+				out_rolls[k] = int(rolls[k])
+	var out_subs := []
+	var seen := {}
+	if subs is Array:
+		for x in subs:
+			if out_subs.size() >= int(GameData.SUB_COUNT.get(grade, 0)):
+				break
+			if x is Dictionary and x.get("id") in GameData.SUB_STATS and ok.call(x.get("r")) and not seen.has(x.id):
+				seen[x.id] = true
+				out_subs.append({"id": x.id, "r": int(x.r)})
+	return {"rolls": out_rolls, "subs": out_subs}
 
 
 ## 서버·저장 장착 {영웅: {부위: id}} → 표에 있는 영웅, 보관함에 있고 부위가 맞는 장비(무기는 그 모델의 종류)만. 장비 하나는 한 곳에만.

@@ -318,6 +318,7 @@ func _build_detail() -> void:
 		stats.add_child(nx)
 		stat_nexts.append(nx)
 	equip_label = _label("", 21, EQUIP_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
+	equip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 특수 능력치까지 붙으면 두 줄
 	_detail_view.add_child(equip_label)
 	promote_preview = _label("", 22, PREVIEW_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
 	promote_preview.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -847,7 +848,11 @@ func _refresh_equip(id: String, h: Dictionary) -> void:
 	if b.atk > 0:
 		parts.append("공격 +%s" % UiKit.commas(b.atk))
 	if b.speed_pct > 0.0:
-		parts.append("이동 +%d%%" % roundi(b.speed_pct))
+		parts.append("이동 +%s%%" % BagPanel.pct_text(b.speed_pct))
+	for k in GameData.SUB_STATS:
+		if b[k] > 0.0:
+			var v: float = minf(b[k], GameData.DMG_REDUCE_CAP) if k == "dmg_reduce" else b[k]
+			parts.append("%s +%s%%" % [GameData.SUB_NAMES[k], BagPanel.pct_text(v)])
 	equip_label.text = "장비 " + " · ".join(parts) if not parts.is_empty() else ""
 	equip_label.visible = not parts.is_empty()
 	auto_equip_button.disabled = Economy.equip_waiting() or Economy.auto_equip_plan(id).is_empty()

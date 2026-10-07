@@ -95,10 +95,21 @@ const ARMOR_SLOTS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves"]  # 
 const EQUIP_SLOTS := ["weapon", "hat", "top", "bottom", "shoes", "pauldron", "gloves"]
 const WEAPON_OF := {"Knight": "sword", "Barbarian": "axe", "Mage": "staff", "Rogue_Hooded": "crossbow", "Rogue": "dagger"}  # 영웅 모델 → 무기 종류
 const WEAPON_KINDS := ["sword", "axe", "staff", "crossbow", "dagger"]
-## 부위 → [능력치, 1레벨 값, 레벨당 증가]. 값 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율)
-const SLOT_STAT := {"weapon": ["atk", 6.0, 1.5], "top": ["hp", 40.0, 10.0], "bottom": ["hp", 40.0, 10.0], "hat": ["hp", 25.0, 6.0],
-	"pauldron": ["hp", 25.0, 6.0], "gloves": ["atk", 2.5, 0.6], "shoes": ["hp", 20.0, 5.0]}  # 2026-10-06 밸런스: 절반(장비가 영웅 능력치의 절반 넘게 차지하던 것)
-const SHOES_SPEED_PCT := 3.0  # 신발 이동속도 +3%(등급 무관)
+## 부위 → [능력치, 기준값]. 2026-10-07 장비 레벨 없앰: 기준값 = 예전 Lv 10 값(반올림). 실제 값 = round(기준값 × 등급 배율 × 굴림 % / 100). 서버 rules.ts와 같다.
+const SLOT_STAT := {"weapon": ["atk", 20.0], "top": ["hp", 130.0], "bottom": ["hp", 130.0], "hat": ["hp", 80.0],
+	"pauldron": ["hp", 80.0], "gloves": ["atk", 8.0], "shoes": ["hp", 65.0]}
+const SHOES_SPEED_PCT := 3.0  # 신발 이동속도 기준 +3%(등급 무관, 굴림은 적용)
+## 능력치마다 따로 굴리는 배율(정수 %): 85~115. 장비 rolls {hp|atk|speed_pct: %}, 없는 키 = 100(기준값).
+const ROLL_MIN := 85
+const ROLL_MAX := 115
+## 특수 능력치(SR 이상): 줄 수 SR·SSR 1, UR 2, LR 3(서로 다른 종류). 값(%) = 등급 기준값 × 굴림 % / 100. 서버 rules.ts SUB_*와 같다.
+const SUB_STATS := ["lifesteal", "crit_rate", "crit_dmg", "aspd", "dmg_reduce", "skill_dmg"]
+const SUB_COUNT := {"SR": 1, "SSR": 1, "UR": 2, "LR": 3}
+const SUB_BASE := {"lifesteal": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0}, "crit_rate": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0},
+	"crit_dmg": {"SR": 6.0, "SSR": 9.0, "UR": 13.0, "LR": 18.0}, "aspd": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0},
+	"dmg_reduce": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0}, "skill_dmg": {"SR": 4.0, "SSR": 6.0, "UR": 9.0, "LR": 12.0}}
+const SUB_NAMES := {"lifesteal": "흡혈", "crit_rate": "치명타 확률", "crit_dmg": "치명타 피해", "aspd": "공격 속도", "dmg_reduce": "받는 피해 감소", "skill_dmg": "스킬 피해"}
+const DMG_REDUCE_CAP := 40.0  # 장비 받는 피해 감소 합계 상한(%)
 const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed − 5
 const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
@@ -910,8 +921,8 @@ static func drop_weights(level: int) -> Dictionary:
 	return out
 
 
-## 장비 count개 [{slot, weapon_kind(무기만, 아니면 null), grade, level}]. 장마다 부위(무기 equip_weapon_p, 아니면 방어구 6부위 균등) → 무기면 종류 균등
-## → 등급(가중치). rand = [0, 1) 난수 Callable. 서버 rules.rollDrops와 같은 순서(같은 난수열이면 같은 결과).
+## 장비 count개 [{slot, weapon_kind(무기만, 아니면 null), grade, rolls, subs}]. 장마다 부위(무기 equip_weapon_p, 아니면 방어구 6부위 균등) → 무기면 종류 균등
+## → 등급(가중치) → roll_item. level은 등급 가중치에만 쓴다. rand = [0, 1) 난수 Callable. 서버 rules.rollDrops와 같은 순서(같은 난수열이면 같은 결과).
 static func roll_drops(level: int, count: int, rand: Callable) -> Array:
 	var w := drop_weights(level)
 	var total := 0.0
@@ -932,36 +943,62 @@ static func roll_drops(level: int, count: int, rand: Callable) -> Array:
 			pick -= w[g]
 			if pick < 0.0:
 				break
-		out.append({"slot": slot, "weapon_kind": kind, "grade": grade, "level": level})
+		out.append(roll_item(slot, kind, grade, rand))
 	return out
 
 
-## 장비 능력치 {hp, atk, speed_pct}: 부위 능력치 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율), 신발은 이동속도 +3%(등급 무관).
-static func item_stats(item: Dictionary) -> Dictionary:
+## 부위·등급이 정해진 장비 하나의 굴림: 기본 능력치(신발은 이어서 이동속도) → 특수 능력치 SUB_COUNT줄(남은 종류에서 균등 → 굴림). 서버 rules.rollItem.
+static func roll_item(slot: String, kind, grade: String, rand: Callable) -> Dictionary:
+	var span := ROLL_MAX - ROLL_MIN
+	var roll := func() -> int: return ROLL_MIN + mini(floori(rand.call() * (span + 1)), span)
+	var rolls := {SLOT_STAT[slot][0]: roll.call()}
+	if slot == "shoes":
+		rolls["speed_pct"] = roll.call()
+	var pool: Array = SUB_STATS.duplicate()
+	var subs := []
+	for k in int(SUB_COUNT.get(grade, 0)):
+		var id: String = pool.pop_at(mini(floori(rand.call() * pool.size()), pool.size() - 1))
+		subs.append({"id": id, "r": roll.call()})
+	return {"slot": slot, "weapon_kind": kind, "grade": grade, "rolls": rolls, "subs": subs}
+
+
+static func _roll_of(item: Dictionary, k: String) -> float:
+	var r = item.get("rolls", {}).get(k) if item.get("rolls") is Dictionary else null
+	return float(r) if (r is int or r is float) else 100.0
+
+
+## 장비 능력치 {hp, atk, speed_pct, 특수 능력치 %…}: 기본 = round(기준값 × 등급 배율 × 굴림 / 100), 신발 이동속도 = 3 × 굴림 / 100(소수 둘째),
+## 특수 = 등급 기준값 × 굴림 / 100(소수 첫째). base = true면 굴림 무시(기준값 — 빨강·초록 비교용).
+static func item_stats(item: Dictionary, base := false) -> Dictionary:
 	var out := {"hp": 0, "atk": 0, "speed_pct": 0.0}
+	for k in SUB_STATS:
+		out[k] = 0.0
 	var s = SLOT_STAT.get(item.get("slot", ""))
 	if s == null:
 		return out
-	out[s[0]] = roundi((s[1] + s[2] * (int(item.get("level", 1)) - 1)) * float(EQUIP_GRADE_MULT.get(item.get("grade", ""), 0.0)))
+	var g: String = str(item.get("grade", ""))
+	out[s[0]] = roundi(s[1] * float(EQUIP_GRADE_MULT.get(g, 0.0)) * (100.0 if base else _roll_of(item, s[0])) / 100.0)
 	if item.slot == "shoes":
-		out.speed_pct = SHOES_SPEED_PCT
+		out.speed_pct = roundf(SHOES_SPEED_PCT * (100.0 if base else _roll_of(item, "speed_pct"))) / 100.0
+	for sub in item.get("subs", []):
+		if sub is Dictionary and SUB_BASE.has(sub.get("id")):
+			out[sub.id] += roundf(float(SUB_BASE[sub.id].get(g, 0.0)) * (100.0 if base else float(sub.get("r", 100))) / 10.0) / 10.0
 	return out
 
 
-## 장비들의 합계 {hp, atk, speed_pct}(영웅 최종 능력치에 더한다 — hero_stats).
+## 장비들의 합계 {hp, atk, speed_pct, 특수 능력치 %…}(hp·atk는 영웅 최종 능력치에 더한다 — hero_stats, 나머지는 전투 — hero.refresh_stats).
 static func equip_total(items: Array) -> Dictionary:
-	var out := {"hp": 0, "atk": 0, "speed_pct": 0.0}
+	var out := item_stats({})
 	for it in items:
 		var s := item_stats(it)
-		out.hp += s.hp
-		out.atk += s.atk
-		out.speed_pct += s.speed_pct
+		for k in s:
+			out[k] += s[k]
 	return out
 
 
-## 판매 값 = round(equip_sell_base × 등급 배율 × 레벨).
+## 판매 값 = round(equip_sell_base × 등급 배율)(2026-10-07 장비 레벨 없앰).
 static func item_sell_value(item: Dictionary) -> int:
-	return roundi(config_num("equip_sell_base") * float(EQUIP_GRADE_MULT.get(item.get("grade", ""), 0.0)) * int(item.get("level", 1)))
+	return roundi(config_num("equip_sell_base") * float(EQUIP_GRADE_MULT.get(item.get("grade", ""), 0.0)))
 
 
 ## 영웅 모델의 무기 종류(없으면 ""). 무기는 이 종류만 낀다.

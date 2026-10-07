@@ -29,7 +29,7 @@ export interface Entry {
 export const PLAYERS_SQL = `select s.player_id::text as id, s.stage, extract(epoch from s.last_stage_clear)::float8 as t, s.deploy,
   coalesce((select level from player_buildings b where b.player_id = s.player_id and b.building = $1), 1) as keep,
   coalesce((select json_object_agg(hero_id, json_build_object('level', level, 'promotion', promotion)) from player_heroes h where h.player_id = s.player_id), '{}'::json) as heroes,
-  coalesce((select json_agg(json_build_object('hero_id', e.hero_id, 'item_id', i.id, 'id', i.id, 'slot', i.slot, 'grade', i.grade, 'level', i.level))
+  coalesce((select json_agg(json_build_object('hero_id', e.hero_id, 'item_id', i.id, 'id', i.id, 'slot', i.slot, 'grade', i.grade, 'rolls', i.rolls))
     from player_equipment e join player_items i on i.id = e.item_id where e.player_id = s.player_id), '[]'::json) as equip,
   g.name as guild
   from player_state s left join player_guild pg on pg.player_id = s.player_id left join guilds g on g.id = pg.guild_id`

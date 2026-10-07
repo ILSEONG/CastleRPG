@@ -486,11 +486,21 @@ export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves
 export const EQUIP_SLOTS = ['weapon', ...ARMOR_SLOTS]
 export const WEAPON_OF: Record<string, string> = { Knight: 'sword', Barbarian: 'axe', Mage: 'staff', Rogue_Hooded: 'crossbow', Rogue: 'dagger' } // 영웅 모델 → 무기 종류
 export const WEAPON_KINDS = ['sword', 'axe', 'staff', 'crossbow', 'dagger']
-// 부위 → [능력치, 1레벨 값, 레벨당 증가]. 값 = round((1레벨 + 레벨당 × (n − 1)) × 등급 배율)
-export const SLOT_STAT: Record<string, [string, number, number]> = {
-  weapon: ['atk', 6, 1.5], top: ['hp', 40, 10], bottom: ['hp', 40, 10], hat: ['hp', 25, 6], pauldron: ['hp', 25, 6], gloves: ['atk', 2.5, 0.6], shoes: ['hp', 20, 5],
+// 부위 → [능력치, 기준값]. 2026-10-07 장비 레벨 없앰: 기준값 = 예전 Lv 10 값(반올림). 실제 값 = round(기준값 × 등급 배율 × 굴림 % / 100)
+export const SLOT_STAT: Record<string, [string, number]> = {
+  weapon: ['atk', 20], top: ['hp', 130], bottom: ['hp', 130], hat: ['hp', 80], pauldron: ['hp', 80], gloves: ['atk', 8], shoes: ['hp', 65],
 }
-export const SHOES_SPEED_PCT = 3 // 신발 이동속도 +3%(등급 무관)
+export const SHOES_SPEED_PCT = 3 // 신발 이동속도 기준 +3%(등급 무관, 굴림은 적용)
+// 능력치마다 따로 굴리는 배율(정수 %): 85~115. 저장은 rolls {hp|atk|speed_pct: %}, 없으면 100(기준값)
+export const ROLL_MIN = 85
+export const ROLL_MAX = 115
+// 특수 능력치(SR 이상): 줄 수 SR·SSR 1, UR 2, LR 3(서로 다른 종류). 값 = 등급 기준값 × 굴림 % / 100(%, 소수 한 자리)
+export const SUB_STATS = ['lifesteal', 'crit_rate', 'crit_dmg', 'aspd', 'dmg_reduce', 'skill_dmg']
+export const SUB_COUNT: Record<string, number> = { SR: 1, SSR: 1, UR: 2, LR: 3 }
+export const SUB_BASE: Record<string, Record<string, number>> = {
+  lifesteal: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, crit_rate: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, crit_dmg: { SR: 6, SSR: 9, UR: 13, LR: 18 },
+  aspd: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, dmg_reduce: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, skill_dmg: { SR: 4, SSR: 6, UR: 9, LR: 12 },
+}
 export const RUN_TTL_SEC = 1800 // run 만료(30분)
 export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed − 5
 export const MAX_DUNGEON_LEVEL = 300 // 보상 골드 tenths가 bigint를 넘지 않게(4000 × 1.1^299 × 10 < 2^63)
@@ -528,12 +538,18 @@ export interface DungeonDef {
   scale: number
 }
 
+export interface EquipSub {
+  id: string
+  r: number
+}
+
 export interface EquipItem {
   id?: number
   slot: string
   weapon_kind: string | null
   grade: string
-  level: number
+  rolls?: Record<string, number> // 능력치 → 굴림 %(85~115). 없는 키는 100
+  subs?: EquipSub[] // 특수 능력치(SR 이상)
 }
 
 // 리셋 날짜 번호: 하루가 daily_reset_utc_hour시(UTC)에 시작한다(15 = 00:00 KST).
@@ -696,7 +712,8 @@ export function dropWeights(rows: Record<string, unknown>[], level: number): num
   return EQUIP_GRADES.map((g) => Number(row?.[g] ?? 0))
 }
 
-// 장비 count개(서버는 암호학적 난수). 장마다: 부위(무기 equip_weapon_p, 아니면 방어구 6부위 균등) → 무기면 종류 균등 → 등급(가중치).
+// 장비 count개(서버는 암호학적 난수). 장마다: 부위(무기 equip_weapon_p, 아니면 방어구 6부위 균등) → 무기면 종류 균등 → 등급(가중치)
+// → 기본 능력치 굴림(부위 능력치, 신발은 이어서 이동속도) → 특수 능력치(SUB_COUNT줄, 남은 종류에서 균등 → 굴림). level은 등급 가중치에만 쓴다.
 export function rollDrops(rows: Record<string, unknown>[], level: number, count: number, weaponP: number, rand: () => number): EquipItem[] {
   const w = dropWeights(rows, level)
   const total = w.reduce((s, x) => s + x, 0)
@@ -714,19 +731,54 @@ export function rollDrops(rows: Record<string, unknown>[], level: number, count:
       pick -= w[g]
       if (pick < 0) break
     }
-    out.push({ slot, weapon_kind, grade, level })
+    out.push(rollItem(slot, weapon_kind, grade, rand))
   }
   return out
 }
 
-// 장비 능력치 {hp, atk, speed_pct}.
+// 부위·등급이 정해진 장비 하나의 굴림(rollDrops 뒤 절반, 앱 GameData.roll_item과 같은 순서).
+export function rollItem(slot: string, weapon_kind: string | null, grade: string, rand: () => number): EquipItem {
+  const roll = () => ROLL_MIN + Math.min(Math.floor(rand() * (ROLL_MAX - ROLL_MIN + 1)), ROLL_MAX - ROLL_MIN)
+  const rolls: Record<string, number> = {}
+  rolls[SLOT_STAT[slot][0]] = roll()
+  if (slot === 'shoes') rolls.speed_pct = roll()
+  const pool = [...SUB_STATS]
+  const subs: EquipSub[] = []
+  for (let k = 0; k < (SUB_COUNT[grade] ?? 0); k++) {
+    const id = pool.splice(Math.min(Math.floor(rand() * pool.length), pool.length - 1), 1)[0]
+    subs.push({ id, r: roll() })
+  }
+  return { slot, weapon_kind, grade, rolls, subs }
+}
+
+const rollOf = (item: EquipItem, k: string) => {
+  const r = Number(item.rolls?.[k])
+  return Number.isFinite(r) ? r : 100
+}
+
+// 장비 능력치 {hp, atk, speed_pct}(기본 능력치만 — 특수 능력치는 전투가 쓰고 전투력엔 넣지 않는다).
 export function itemStats(item: EquipItem) {
   const out = { hp: 0, atk: 0, speed_pct: 0 }
   const s = SLOT_STAT[item.slot]
   if (!s) return out
-  out[s[0] as 'hp' | 'atk'] = roundHalfAway((s[1] + s[2] * (item.level - 1)) * (EQUIP_GRADE_MULT[item.grade] ?? 0))
-  if (item.slot === 'shoes') out.speed_pct = SHOES_SPEED_PCT
+  out[s[0] as 'hp' | 'atk'] = roundHalfAway((s[1] * (EQUIP_GRADE_MULT[item.grade] ?? 0) * rollOf(item, s[0])) / 100)
+  if (item.slot === 'shoes') out.speed_pct = Math.round(SHOES_SPEED_PCT * rollOf(item, 'speed_pct')) / 100
   return out
+}
+
+// 굴림·특수 능력치 검사(저장된 값이 틀리면 버린다): rolls는 그 부위 능력치만 85~115 정수, subs는 그 등급 줄 수 이하의 서로 다른 종류.
+export function cleanRolls(slot: string, grade: string, rolls: unknown, subs: unknown): { rolls: Record<string, number>; subs: EquipSub[] } {
+  const ok = (r: unknown) => Number.isInteger(r) && (r as number) >= ROLL_MIN && (r as number) <= ROLL_MAX
+  const keys = SLOT_STAT[slot] ? [SLOT_STAT[slot][0], ...(slot === 'shoes' ? ['speed_pct'] : [])] : []
+  const src = (rolls && typeof rolls === 'object' ? rolls : {}) as Record<string, unknown>
+  const outRolls: Record<string, number> = {}
+  for (const k of keys) if (ok(src[k])) outRolls[k] = src[k] as number
+  const outSubs: EquipSub[] = []
+  for (const x of Array.isArray(subs) ? subs : []) {
+    if (outSubs.length >= (SUB_COUNT[grade] ?? 0)) break
+    if (x && SUB_STATS.includes(x.id) && ok(x.r) && !outSubs.some((y) => y.id === x.id)) outSubs.push({ id: x.id, r: x.r })
+  }
+  return { rolls: outRolls, subs: outSubs }
 }
 
 // 영웅 id → 장착 장비 합계 {hp, atk}(전투력용 — 앱 Economy.equipment_bonus와 같다). equipment = [{hero_id, item_id}].
@@ -744,8 +796,8 @@ export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item
   return out
 }
 
-// 판매 값 = round(equip_sell_base × 등급 배율 × 레벨).
-export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0) * item.level)
+// 판매 값 = round(equip_sell_base × 등급 배율)(2026-10-07 장비 레벨 없앰).
+export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0))
 
 // --- 연구 테크트리 (개정 24) — 앱 GameData.research_*와 같은 식 ---
 

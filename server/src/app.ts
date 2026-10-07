@@ -223,7 +223,7 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s
     from player_heroes where player_id = s.player_id), '{}'::json) as heroes,
   coalesce((select json_object_agg(type, json_build_object('best_level', best_level, 'keys', keys, 'extra_today', extra_today,
       'last_reset', extract(epoch from last_reset)::float8, 'helpers_used', helpers_used)) from player_dungeons where player_id = s.player_id), '{}'::json) as dungeons,
-  coalesce((select json_agg(json_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind, 'grade', grade, 'level', level) order by id)
+  coalesce((select json_agg(json_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind, 'grade', grade, 'rolls', rolls, 'subs', subs) order by id)
     from player_items where player_id = s.player_id), '[]'::json) as items,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
     from player_equipment where player_id = s.player_id), '[]'::json) as equipment,
@@ -410,7 +410,7 @@ export function createApp(opts: AppOptions) {
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
         soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)), upgrades: counts(json(r.upgrades)),
         dungeons,
-        items: (json(r.items) as any[]).map((x) => ({ id: Number(x.id), slot: String(x.slot), weapon_kind: x.weapon_kind ?? null, grade: String(x.grade), level: Number(x.level) })),
+        items: (json(r.items) as any[]).map((x) => ({ id: Number(x.id), slot: String(x.slot), weapon_kind: x.weapon_kind ?? null, grade: String(x.grade), ...R.cleanRolls(String(x.slot), String(x.grade), x.rolls, x.subs) })),
         equipment: (json(r.equipment) as any[]).map((x) => ({ hero_id: String(x.hero_id), slot: String(x.slot), item_id: Number(x.item_id) })),
         diamonds: Number(r.diamonds),
         dia_tickets: Number(r.dia_tickets ?? 0),
@@ -708,17 +708,17 @@ export function createApp(opts: AppOptions) {
         from s returning 1)`)
     }
     if (ch.items?.length) {
-      ctes.push(`it as (insert into player_items (player_id, slot, weapon_kind, grade, level, created_at)
-        select s.player_id, x.slot, x.weapon_kind, x.grade, x.level, to_timestamp(${p(now)}::float8)
-        from s, jsonb_to_recordset(${p(JSON.stringify(ch.items))}::jsonb) as x(slot text, weapon_kind text, grade text, level integer)
-        returning id, slot, weapon_kind, grade, level)`)
+      ctes.push(`it as (insert into player_items (player_id, slot, weapon_kind, grade, rolls, subs, created_at)
+        select s.player_id, x.slot, x.weapon_kind, x.grade, coalesce(x.rolls, '{}'::jsonb), coalesce(x.subs, '[]'::jsonb), to_timestamp(${p(now)}::float8)
+        from s, jsonb_to_recordset(${p(JSON.stringify(ch.items))}::jsonb) as x(slot text, weapon_kind text, grade text, rolls jsonb, subs jsonb)
+        returning id, slot, weapon_kind, grade, rolls, subs)`)
     }
     if (ch.runClose) {
       // 결과 = {win, rewards}. 장비를 넣었으면 rewards.items에 새 id와 함께 남긴다(재전송이 같은 결과를 받는다)
       const res = `${p(JSON.stringify(ch.runClose.result))}::jsonb`
       const value = ch.items?.length
         ? `jsonb_set(${res}, '{rewards,items}', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind,
-            'grade', grade, 'level', level) order by id), '[]'::jsonb) from it))`
+            'grade', grade, 'rolls', rolls, 'subs', subs) order by id), '[]'::jsonb) from it))`
         : res
       ctes.push(`rc as (update dungeon_runs set closed = true, result = ${value}
         where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = ${sid} and not closed returning result)`)
@@ -1348,7 +1348,7 @@ export function createApp(opts: AppOptions) {
       if (reward.hero && g.heroes.some((h) => h.id === reward.hero)) change.heroes = { [reward.hero]: 1 }
       if (reward.equip) {
         const rows = [{ min_level: 0, [reward.equip.grade]: 1 }]
-        change.items = R.rollDrops(rows, reward.equip.level, 1, R.cfgNum(g.config, 'equip_weapon_p'), random)
+        change.items = R.rollDrops(rows, 1, 1, R.cfgNum(g.config, 'equip_weapon_p'), random)
       }
       const keyType = R.DUNGEON_TYPES.find((k) => ((reward as any)[`keys_${k}`] ?? 0) > 0)
       if (keyType) {
@@ -2129,7 +2129,7 @@ export function createApp(opts: AppOptions) {
   })
 
   // 장비 판매(스펙 §5): {item_ids: [...]}(1..1000개, 겹치면 400). 남의·없는 장비 404 unknown_item, 장착 중이면 409 equipped(하나라도 그러면
-  // 아무것도 안 판다). 값 = round(equip_sell_base × 등급 배율 × 레벨)의 합. 장비 삭제·골드·economy_log item_sell은 version 가드 한 문장.
+  // 아무것도 안 판다). 값 = round(equip_sell_base × 등급 배율)의 합. 장비 삭제·골드·economy_log item_sell은 version 가드 한 문장.
   app.post('/v1/items/sell', auth, async (c) => {
     const ids = (await body(c)).item_ids
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_SELL_ITEMS || ids.some((x) => !isInt(x, 1, Number.MAX_SAFE_INTEGER)) || new Set(ids).size !== ids.length) {
