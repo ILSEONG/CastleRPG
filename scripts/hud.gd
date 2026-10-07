@@ -1,7 +1,8 @@
 extends CanvasLayer
 ## HUD. GameState·Economy·Net 시그널만 구독. 게임 오브젝트 직접 참조 없음(성문 막대 탭은 gate_tapped로 알리고 main이 카메라를 옮긴다).
 ## 상단 스테이지 패널(개정 12-2): 첫 줄 왼쪽 제목 "S-r"과 작게 "스테이지 S · 라운드 r/25"(개정 22 §1, _title_box), 오른쪽 진행 버튼.
-## 그 아래 성 막대("성" + 숫자)와 성문 막대 4개(2×2: 나침반 삼각형 + 북·동·남·서 + 숫자, 피해 때 테두리 번쩍임, 부서지면 회색 "파괴").
+## 제목 아래(같은 첫 줄 왼쪽)에 성 막대("성" + 숫자), 그 아래 한 줄에 성문 막대 4개(나침반 삼각형 + 북·동·남·서 + 숫자, 피해 때 테두리 번쩍임,
+## 부서지면 회색 "파괴") — 디자인 보강 7번(2026-10-07): 예전 성 줄 + 성문 2×2(패널 ~194 px)를 접어 패널이 ~130 px.
 ## 하단에는 탭 바만 있다(끊김 띠·알림은 그 위).
 
 const INK := Color(0.16, 0.18, 0.24)
@@ -34,7 +35,7 @@ const CHIP_ICON := 26
 const CHIP_FONT := 18  # "9,999,999"가 칩 하나에 잘리지 않는 크기(입력 체크가 잰다 — 20이면 99px > 칸 92px)
 const STAGE_BUTTON := Vector2(150, 64)  # 상단 스테이지 버튼(개정 12-2 §1)
 const BAND_BOTTOM := -(TAB_BAR_H + 12)  # 끊김 띠는 탭 바 위 12px에서 위로 자란다
-const BAR_H := 24
+const BAR_H := 20
 const LOCK_TOAST_Y := 0.3  # 튜토리얼 잠금 토스트: 화면 높이의 이 지점(가운데 중상단, 상단 스테이지 패널 아래)
 const CASTLE_COLOR := Color(0.95, 0.75, 0.2)
 const GATE_COLOR := Color(0.55, 0.6, 0.7)
@@ -99,11 +100,15 @@ func _ready() -> void:
 	var head := HBoxContainer.new()  # 첫 줄: 왼쪽 스테이지 글자(+ 방치 무적 표시), 오른쪽 진행 버튼
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(head)
+	var title_col := VBoxContainer.new()  # 제목 줄 + 그 아래 성 막대(디자인 보강 7번)
+	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_col.add_theme_constant_override("separation", 0)
+	head.add_child(title_col)
 	_title_box = HBoxContainer.new()
-	_title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_title_box.add_theme_constant_override("separation", 8)
-	head.add_child(_title_box)
+	title_col.add_child(_title_box)
 	head.add_theme_constant_override("separation", 8)
 	_fever = FeverButtonScript.new()  # [진행] 바로 왼쪽(개정 14 §3)
 	head.add_child(_fever)
@@ -131,20 +136,18 @@ func _ready() -> void:
 	_auto = UiKit.checkbox("연속 진행")
 	_auto.toggled.connect(_on_auto_toggled)
 	head.add_child(_auto)
-	var castle_row := HBoxContainer.new()
+	var castle_row := HBoxContainer.new()  # 제목 아래: "성" + 성 막대
 	castle_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	castle_row.add_theme_constant_override("separation", 6)
-	top.add_child(castle_row)
+	title_col.add_child(castle_row)
 	var castle_name := _side_name("성")
-	castle_name.custom_minimum_size.x = 52  # 성문 줄의 나침반 + 글자 폭에 맞춘다
 	castle_row.add_child(castle_name)
 	_castle_bar = _hp_bar(CASTLE, CASTLE_COLOR)
 	castle_row.add_child(_castle_bar)
-	var gates := GridContainer.new()
-	gates.columns = 2
+	var gates := GridContainer.new()  # 성문 4개 한 줄
+	gates.columns = 4
 	gates.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gates.add_theme_constant_override("h_separation", 12)
-	gates.add_theme_constant_override("v_separation", 6)
+	gates.add_theme_constant_override("h_separation", 8)
 	top.add_child(gates)
 	for side in 4:
 		var tile := _gate_tile(side)
@@ -239,7 +242,7 @@ func _hp_bar(key: int, color: Color) -> ProgressBar:
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	num.add_theme_font_size_override("font_size", 15)
+	num.add_theme_font_size_override("font_size", 14)
 	num.add_theme_color_override("font_color", Color.WHITE)
 	num.add_theme_color_override("font_outline_color", Color(INK, 0.9))
 	num.add_theme_constant_override("outline_size", 5)
@@ -268,10 +271,10 @@ func _gate_tile(side: int) -> Button:
 	var row := HBoxContainer.new()
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 6)
+	row.add_theme_constant_override("separation", 4)
 	tile.add_child(row)
 	var arrow := Control.new()
-	arrow.custom_minimum_size = Vector2(22, 22)
+	arrow.custom_minimum_size = Vector2(18, 18)
 	arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	arrow.draw.connect(func(): _draw_compass(arrow, compass_dir(side, _camera_yaw())))
@@ -287,7 +290,7 @@ func _side_name(text: String) -> Label:
 	l.text = text
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", 22)
+	l.add_theme_font_size_override("font_size", 19)
 	l.add_theme_color_override("font_color", INK)
 	return l
 
@@ -352,6 +355,7 @@ func _set_hp(key: int, hp: float, hp_max: float) -> void:
 	e.last = hp
 	var broken := key != CASTLE and hp <= 0.0
 	e.num.text = "파괴" if broken else "%s / %s" % [UiKit.commas(ceili(hp)), UiKit.commas(roundi(hp_max))]
+	e.num.add_theme_font_size_override("font_size", 14 if e.num.text.length() <= 13 else 12)  # 성문 칸이 좁다(한 줄 4개) — 만 단위 숫자는 작게
 	b.add_theme_stylebox_override("background", UiKit.bar(BROKEN_GREY).fill if broken else UiKit.bar(e.color).background)
 
 

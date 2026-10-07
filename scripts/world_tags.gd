@@ -17,14 +17,15 @@ const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const NAME_SIZE := 20  # 건물·상인 이름(논리 px, 720 폭 기준)
 const SIDE_SIZE := 18  # 문루 방향 글자
-const LV_SIZE := 15
-const TAG_H := 28.0
+const LV_SIZE := 14
+const TAG_H := 25.0  # 디자인 보강 7번: 28 → 25(알약을 납작하게 — 성을 덜 가린다)
 const SIDE_H := 26.0
-const PAD_X := 9.0
-const LV_PAD := 5.0  # Lv 칸 안 글자 좌우 여백
+const PAD_X := 7.0
+const LV_PAD := 4.0  # Lv 칸 안 글자 좌우 여백
 const LV_INSET := 3.0  # Lv 칸이 알약 테두리에서 들어간 양
-const CHAMFER := 7.0
+const CHAMFER := 6.0
 const GAP := 3.0  # 덩어리 사이 최소 간격(px)
+const EDGE_PAD := 4.0  # 화면 좌우 끝과 덩어리 사이 최소 여백(px)
 const MOVED_PX := 8.0  # 이보다 많이 밀린 덩어리는 "밀렸다"(테스트용 — 지시선은 없다)
 const NAMES_HIDE_SIZE := 95.0  # 카메라 가로 폭(m)이 이보다 넓으면(많이 축소) 이름표를 그리지 않는다(기본 66, 최대 150)
 const MAX_TAGS := 16  # 한 프레임에 그리는 태그 상한(지금 건물 10 + 상인 + 문루 4 = 15)
@@ -110,7 +111,7 @@ static func _shape(t: Dictionary) -> void:
 	var h := SIDE_H if side else TAG_H
 	var name_w := FONT.get_string_size(t.name, HORIZONTAL_ALIGNMENT_LEFT, -1, t.font).x
 	var lv_w := FONT.get_string_size(t.lv, HORIZONTAL_ALIGNMENT_LEFT, -1, LV_SIZE).x + LV_PAD * 2.0 if t.lv != "" else 0.0
-	var w := PAD_X + name_w + (6.0 + lv_w + LV_INSET if t.lv != "" else PAD_X)
+	var w := PAD_X + name_w + (5.0 + lv_w + LV_INSET if t.lv != "" else PAD_X)
 	t.size = Vector2(ceilf(maxf(w, h)), h)
 	var pts := PackedVector2Array()
 	var cols := PackedColorArray()
@@ -162,7 +163,7 @@ func layout(force := false) -> void:
 		var h: float = tsz.y + extra.y
 		want.append(Rect2(p.x - w / 2.0, p.y - h, w, h))
 		shown.append([t, p])
-	var placed := place(want)
+	var placed := place(_inside(want, shown.map(func(e): return e[1].x)))
 	for i in shown.size():
 		var t: Dictionary = shown[i][0]
 		var s: Rect2 = placed[i]
@@ -170,6 +171,19 @@ func layout(force := false) -> void:
 		stacks[t.id] = s
 		var tsz: Vector2 = Vector2.ZERO if names_hidden else t.size
 		rects[t.id] = Rect2(Vector2(s.get_center().x - tsz.x / 2.0, s.end.y - tsz.y), tsz)
+
+
+## 기준점이 화면 안인 덩어리가 화면 좌우 끝에 잘리면 EDGE_PAD만큼 안으로 민다(디자인 보강 7번 — "궁병 훈련소"가 오른쪽에서 잘렸다).
+## 기준점이 화면 밖인 덩어리는 그대로 두어 자연스럽게 밀려 나간다. desired는 밀기 전 자리 그대로다.
+func _inside(want: Array, xs: Array) -> Array:
+	var vw := get_viewport_rect().size.x
+	var out := []
+	for i in want.size():
+		var r: Rect2 = want[i]
+		if xs[i] >= 0.0 and xs[i] <= vw and r.size.x < vw - EDGE_PAD * 2.0:
+			r.position.x = clampf(r.position.x, EDGE_PAD, vw - EDGE_PAD - r.size.x)
+		out.append(r)
+	return out
 
 
 ## 욕심쟁이 겹침 피하기(순수 함수). want[i] = 덩어리 i가 가고 싶은 화면 상자(아랫변 = 기준점). 아랫변이 화면 아래인 것부터 놓고,
