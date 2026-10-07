@@ -15,7 +15,7 @@ extends "res://scripts/ui_window.gd"
 ## 중 하나를 탭해 고른다(카드 밑에 친구 이름). 도우미와 같은 영웅은 편성에 못 넣는다. 줄 머리 [친구 관리].
 ## 카드가 셋이라 목록은 스크롤된다.
 ## PVP(사용자 2026-10-07): 시트 맨 위 탭 [던전][PVP]. PVP 탭 = pvp_view.gd(모드 카드 둘 → 결투·총력전 메인 페이지, 팀 고르기, 상점 창).
-## 튜토리얼 중(끝내거나 건너뛰기 전)엔 PVP 탭이 잠겨 있고 누르면 화면 중상단 토스트(다른 잠금과 같은 모양).
+## 가이드 PVP 미션 전엔 PVP 탭이 잠겨 있고 누르면 화면 중상단 토스트(다른 잠금과 같은 모양).
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
@@ -38,7 +38,6 @@ const CARD_SIZE := Vector2(150, 184)
 const GRID_COLUMNS := 4
 const RED := Color(0.78, 0.22, 0.18)
 const KEY_GOLD := Color(0.95, 0.72, 0.2)
-const PVP_LOCK_TEXT := "튜토리얼을 모두 마치면 PVP가 열려요"
 
 var bag  # 보관함 창(bag_panel). main이 넣는다
 var cards := {}  # 종류 → {keys, info, reward, level, prev, next, go, reason}(장비는 + gold, cost)
@@ -108,10 +107,10 @@ func _build_tabs() -> void:
 		section_buttons[t[0]] = b
 
 
-## 탭 바꾸기. PVP는 튜토리얼을 마치거나 건너뛴 뒤에만(잠겨 있으면 토스트).
+## 탭 바꾸기. PVP는 가이드 PVP 미션에 닿거나 가이드를 마치거나 건너뛴 뒤에만(잠겨 있으면 토스트).
 func set_section(s: String) -> void:
 	if s == "pvp" and pvp_locked():
-		Tutorial.lock_notice.emit(PVP_LOCK_TEXT)
+		Tutorial.lock_notice.emit(Tutorial.pvp_lock_text())
 		return
 	section = s
 	if s == "pvp":
@@ -120,7 +119,7 @@ func set_section(s: String) -> void:
 
 
 func pvp_locked() -> bool:
-	return Tutorial.active()
+	return Tutorial.pvp_locked()
 
 
 func _style_tabs() -> void:

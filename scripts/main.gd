@@ -201,9 +201,11 @@ func _build_world() -> void:
 	add_child(pouch_panel)
 	var settings_panel = preload("res://scripts/settings_panel.gd").new()  # 설정(배경음악·화면·계정·버전): 오른쪽 아래 메뉴가 연다
 	add_child(settings_panel)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트][길드]
+	var exchange_panel = preload("res://scripts/exchange_panel.gd").new()  # 거래소 시트(온라인): 오른쪽 아래 메뉴가 연다
+	add_child(exchange_panel)
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트][거래소][길드]
 	side_menu.windows = {"settings": settings_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
-		"event": event_panel, "guild": guild_panel}
+		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
 	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 중하단 x1.5 배속 켬/끔(기기 저장, 성 화면에서만)
@@ -219,6 +221,12 @@ func _build_world() -> void:
 	_strip.heroes_fn = strip_heroes
 	add_child(_strip)
 	speed.strip = _strip
+	var chat_panel = preload("res://scripts/chat_panel.gd").new()  # 채팅 창(전체·길드, 온라인)
+	add_child(chat_panel)
+	var chat_bar = preload("res://scripts/chat_bar.gd").new()  # 성 화면 채팅 줄: 배속 버튼 오른쪽, 최근 메시지 한 줄 → 채팅 창
+	chat_bar.speed = speed
+	chat_bar.panel = chat_panel
+	add_child(chat_bar)
 	_battle_hide = [tabs, side_menu, tags, badges]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):
@@ -261,7 +269,7 @@ func _build_world() -> void:
 
 
 ## 튜토리얼 미션 카드 [바로가기](Tutorial.goto_requested): building:<id>(카메라를 그 건물로 옮기고 건물 창) · tab:<id>(하단 탭) ·
-## merchant(상인 창) · recruit(모집 창 다이아 탭) · stage(방치 중이면 전투 시작).
+## merchant(상인 창) · recruit(모집 창 다이아 탭) · stage(방치 중이면 전투 시작) · pvp(던전 창 [PVP]).
 func _tutorial_goto(target: String) -> void:
 	if _tutorial_ui.is_empty() or not is_inside_tree():
 		return
@@ -292,6 +300,12 @@ func _tutorial_goto(target: String) -> void:
 				_tutorial_ui.tabs.press("recruit")
 		"stage":
 			_hud.request_stage()  # FEVER 중이면 끊을지 묻는다
+		"pvp":  # 던전 창의 [PVP]
+			var dg = _tutorial_ui.tabs.windows.get("dungeon")
+			if dg != null:
+				if not dg.is_open():
+					_tutorial_ui.tabs.press("dungeon")
+				dg.set_section("pvp")
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.

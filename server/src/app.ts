@@ -18,6 +18,8 @@ import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
 import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
+import { registerMarket } from './market.ts'
+import { registerChat } from './chat.ts'
 import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
@@ -128,6 +130,7 @@ interface Player {
   pouches: Record<string, number> // 방치 주머니 id → 개수(pouches.ts)
   shop: unknown // 상점 산 기록(저장된 그대로 — 쓰는 쪽이 SH.normalize)
   iap: unknown // 결제 상품 기록·월정액·패스(저장된 그대로 — 쓰는 쪽이 IAP.normalize)
+  market_sold: number // 거래소: 팔렸고 아직 대금을 안 받은 판매 수(메뉴 빨간 점)
 }
 
 interface Train {
@@ -185,6 +188,11 @@ interface Change {
   shop?: SH.ShopState // 상점 산 기록 전체
   iap?: IAP.IapState // 결제 상품 기록 전체
   pvpBuy?: { price: number; shop: unknown } // PVP 상점: 코인 −price(모자라면 전체가 안 바뀐다), 구매 수 새 값
+  // 거래소(market.ts, 마이그레이션 033)
+  marketList?: { item_id: number; item: unknown; currency: string; price: number; proceeds: number; expires: number } // 올리기(장비가 내 것이고 판매 중이 아닐 때만)
+  marketCancel?: number // 내리기: 판매 중인 내 판매 id(이미 팔렸으면 전체가 안 바뀐다)
+  marketCollect?: number[] // 대금 받기: 팔린 내 판매 id들(골드·다이아는 goldTenths·diamonds로 — 하나라도 이미 받았으면 전체가 안 바뀐다)
+  marketBuy?: { id: number; currency: string; price: number } // 사기: 판매를 먼저 잡고(한 사람만), 값(goldTenths·diamonds 음수)이 모자라면 전체를 되돌린다
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -224,7 +232,9 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s
   coalesce((select json_object_agg(type, json_build_object('best_level', best_level, 'keys', keys, 'extra_today', extra_today,
       'last_reset', extract(epoch from last_reset)::float8, 'helpers_used', helpers_used)) from player_dungeons where player_id = s.player_id), '{}'::json) as dungeons,
   coalesce((select json_agg(json_build_object('id', id, 'slot', slot, 'weapon_kind', weapon_kind, 'grade', grade, 'rolls', rolls, 'subs', subs) order by id)
-    from player_items where player_id = s.player_id), '[]'::json) as items,
+    from player_items where player_id = s.player_id and not exists (select 1 from market_listings m where m.item_id = player_items.id
+      and m.status = 'active' and m.expires_at > to_timestamp($2::float8))), '[]'::json) as items,
+  (select count(*) from market_listings where seller_id = s.player_id and status = 'sold')::int as market_sold,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
     from player_equipment where player_id = s.player_id), '[]'::json) as equipment,
   coalesce((select json_agg(json_build_object('id', f.id, 'hero', f.friend_hero, 'heroes', coalesce((select json_object_agg(hero_id,
@@ -368,7 +378,7 @@ export function createApp(opts: AppOptions) {
     let ensured = false
     let ensuredDungeons = false
     for (let i = 0; i < MAX_ATTEMPTS + 3; i++) { // 행 채우기(자원·건물, 던전)·건설 완료·연구 완료가 한 번씩 다시 읽게 한다
-      const [r] = await query(PLAYER_SQL, [id])
+      const [r] = await query(PLAYER_SQL, [id, now])
       if (!r) throw new ApiError(401, 'unknown_player', 'player not found; log in again')
       const res: Record<string, number> = {}
       for (const [k, v] of Object.entries(json(r.res) as Record<string, unknown>)) res[k] = Number(v)
@@ -426,6 +436,7 @@ export function createApp(opts: AppOptions) {
         pouches: P.normalize(r.pouches == null ? {} : json(r.pouches)),
         shop: r.shop == null ? {} : json(r.shop),
         iap: r.iap == null ? {} : json(r.iap),
+        market_sold: Number(r.market_sold ?? 0),
       }
       if (p.build && p.build.finish <= now) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
@@ -499,6 +510,7 @@ export function createApp(opts: AppOptions) {
         shop: SH.normalize(p.shop, today(game, now)), // 상점: 오늘·이번 주 산 수
         iap: IAP.normalize(p.iap, today(game, now)), // 결제 상품: 첫 구매·한도·월정액·패스
         iap_enabled: false, // 실결제 연결 전(Google Play 등록 전)
+        market_sold: p.market_sold, // 거래소: 대금 받을 판매 수
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -583,7 +595,9 @@ export function createApp(opts: AppOptions) {
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = (ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : '')
       + (ch.pvpBuy ? ` and exists (select 1 from pvp_wallet where player_id = $1 and coins >= ${p(ch.pvpBuy.price)}::int)` : '')
+      + marketGuard(ch, now, p)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
+    if (ch.marketBuy) ctes.unshift(marketBuyCte(ch.marketBuy, now, p)) // 판매를 먼저 잡는다(s가 mb를 기다린다)
     if (ch.soldiers && Object.keys(ch.soldiers).length) {
       // "병종:티어" → 증감. from s: version 가드가 실패하면 보유도 안 바뀐다. 더하기는 upsert, 빼기는 검사한 기존 행의 update
       // (insert의 후보 행이 음수면 충돌 처리 전에 count ≥ 0 제약에 걸린다)
@@ -646,13 +660,79 @@ export function createApp(opts: AppOptions) {
         where player_id = (select player_id from s) returning 1)`)
     }
     dungeonCtes(ch, now, ctes, p)
+    marketCtes(ch, now, ctes, p)
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
     }
     const runResult = ch.runClose ? ', (select result from rc) as run_result' : ''
-    const [r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult} from s`, params)
+    // 거래소 사기: 판매는 잡았는데 내 쪽(version·값)이 안 바뀌었으면 0으로 나눠 문장 전체를 되돌린다(판매는 그대로 남는다) — null(다시 시도)
+    const buyCheck = ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) then 1 else 0 end) as mb_ok' : ''
+    let r: Row
+    try {
+      ;[r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult}${buyCheck} from s`, params)
+    } catch (e) {
+      if (ch.marketBuy && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
+      throw e
+    }
     return Number(r.n) === 1 ? r : null
+  }
+
+  // 거래소 s 가드: 올리기 = 장비가 내 것이고 판매 중이 아님, 내리기 = 그 판매가 아직 판매 중, 받기 = 그 판매가 전부 팔림(아직 안 받음),
+  // 사기 = 값이 있다(mb는 marketBuyCte — 잡은 판매가 없으면 s도 없다).
+  function marketGuard(ch: Change, now: number, p: (v: unknown) => string): string {
+    let g = ''
+    if (ch.marketList) {
+      const item = `${p(ch.marketList.item_id)}::bigint`
+      g += ` and exists (select 1 from player_items where id = ${item} and player_id = $1)`
+        + ` and not exists (select 1 from market_listings where item_id = ${item} and status = 'active')`
+    }
+    if (ch.marketCancel !== undefined) g += ` and exists (select 1 from market_listings where id = ${p(ch.marketCancel)}::bigint and seller_id = $1 and status = 'active' and expires_at > to_timestamp(${p(now)}::float8))`
+    if (ch.marketCollect?.length) {
+      const ids = `${p(JSON.stringify(ch.marketCollect))}::jsonb`
+      g += ` and (select count(*) from market_listings where seller_id = $1 and status = 'sold' and id in (select x::bigint from jsonb_array_elements_text(${ids}) as x))
+        = jsonb_array_length(${ids})`
+    }
+    if (ch.marketBuy) {
+      const b = ch.marketBuy
+      g += ' and exists (select 1 from mb)'
+      g += b.currency === 'gold' ? ` and gold_tenths >= ${p(bigint(b.price * 10))}::bigint` : ` and diamonds >= ${p(bigint(b.price))}::bigint`
+    }
+    return g
+  }
+
+  // 사기: 판매 중이고 기한 전이고 내 것이 아니고 값이 그대로인 판매 하나를 잡아 팔림으로(같은 판매를 동시에 사면 한 사람만 잡는다).
+  function marketBuyCte(b: NonNullable<Change['marketBuy']>, now: number, p: (v: unknown) => string): string {
+    return `mb as (update market_listings set status = 'sold', buyer_id = $1, sold_at = to_timestamp(${p(now)}::float8)
+      where id = ${p(b.id)}::bigint and status = 'active' and expires_at > to_timestamp(${p(now)}::float8) and seller_id <> $1
+        and currency = ${p(b.currency)}::text and price = ${p(bigint(b.price))}::bigint returning item_id, seller_id)`
+  }
+
+  // 거래소 CTE(전부 from s — 가드가 실패하면 아무것도 안 바뀐다).
+  function marketCtes(ch: Change, now: number, ctes: string[], p: (v: unknown) => string) {
+    const sid = '(select player_id from s)'
+    if (ch.marketList) {
+      const m = ch.marketList
+      const item = `${p(m.item_id)}::bigint`
+      ctes.push(`mle as (delete from player_equipment where player_id = ${sid} and item_id = ${item} returning 1)`)
+      ctes.push(`ml as (insert into market_listings (seller_id, item_id, item, currency, price, proceeds, created_at, expires_at)
+        select player_id, ${item}, ${p(JSON.stringify(m.item))}::jsonb, ${p(m.currency)}::text, ${p(bigint(m.price))}::bigint, ${p(bigint(m.proceeds))}::bigint,
+          to_timestamp(${p(now)}::float8), to_timestamp(${p(m.expires)}::float8) from s returning id)`)
+    }
+    if (ch.marketCancel !== undefined) {
+      ctes.push(`mc as (update market_listings set status = 'cancelled' where id = ${p(ch.marketCancel)}::bigint and seller_id = ${sid}
+        and status = 'active' returning 1)`)
+    }
+    if (ch.marketCollect?.length) {
+      ctes.push(`mco as (update market_listings set status = 'collected' where seller_id = ${sid} and status = 'sold'
+        and id in (select x::bigint from jsonb_array_elements_text(${p(JSON.stringify(ch.marketCollect))}::jsonb) as x) returning 1)`)
+    }
+    if (ch.marketBuy) {
+      // 장비 행을 구매자에게 옮긴다(판매자 쪽 장착 행이 혹시 있으면 지운다)
+      ctes.push(`mbe as (delete from player_equipment where item_id = (select item_id from mb) and exists (select 1 from s) returning 1)`)
+      ctes.push(`mbi as (update player_items set player_id = ${sid} where id = (select item_id from mb) and player_id = (select seller_id from mb)
+        and exists (select 1 from s) returning 1)`)
+    }
   }
 
   function guildCtes(gc: GuildChange, now: number, ctes: string[], p: (v: unknown) => string) {
@@ -2775,6 +2855,8 @@ export function createApp(opts: AppOptions) {
   registerGuildWar(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, rowOf, needGuild, grant, ApiError,
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
+  registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
+  registerChat(app, { query, auth, clock, body, ApiError })
 
   return app
 }

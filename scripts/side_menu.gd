@@ -2,6 +2,7 @@ extends CanvasLayer
 ## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [설정][가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
 ## [설정]은 설정 창(settings_panel.gd: 배경음악 켬/끔·음량, 화면, 계정, 버전)을 연다 — 예전 [음악] 켬/끔 버튼 자리.
 ## 자리: 오른쪽 아래, 탭 바 위. 튜토리얼 미션 카드가 보이면 카드 위로 올라간다(겹치지 않게, 매 프레임 맞춘다).
+## [거래소](2026-10-07, exchange_panel.gd)는 [길드] 바로 위 — 가이드를 마치면 열리고(그 전엔 흐리게 + 자물쇠), 받을 판매 대금이 있으면 빨간 점.
 ## [길드](2026-10-07, 하단 탭에서 옮김)는 맨 아래(토글 바로 위). 튜토리얼 길드 미션 전에는 흐리게 + 자물쇠, 누르면 잠금 토스트(하단 탭과 같은 규칙).
 ## 길드 미션 중이면 [길드]와 [메뉴]에 빨간 점(어디를 누를지).
 ## main.gd가 만들고 windows = {settings, bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
@@ -13,7 +14,9 @@ const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["settings", "설정"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["guild", "길드"]]
+const ITEMS := [["settings", "설정"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["exchange", "거래소"],
+	["guild", "길드"]]
+const LOCKABLE := ["exchange", "guild"]  # 가이드 잠금(Tutorial.tab_locked)이 있는 항목
 const SIZE := Vector2(84, 84)
 const SIDE := 16.0
 const GAP := 10.0
@@ -31,7 +34,7 @@ var is_open := false
 var _col: VBoxContainer
 var _dots := {}  # 빨간 점을 그린 버튼 id → true
 var _t := 0.0  # 펼침 정도 0..1
-var _guild_locked := false
+var _locked := {}  # 잠겨 흐리게 그린 항목 id → true
 
 
 func _ready() -> void:
@@ -67,6 +70,8 @@ func dots() -> Dictionary:
 		d.mission = true
 	if guild_mission():
 		d.guild = true
+	if Economy.market_sold > 0 and not Tutorial.tab_locked("exchange"):  # 거래소: 팔린 장비 대금
+		d.exchange = true
 	if not d.is_empty():
 		d.toggle = true
 	return d
@@ -89,7 +94,7 @@ func set_open(on: bool) -> void:
 
 ## 항목 고르기(버튼·튜토리얼 [바로가기]).
 func pick(id: String) -> void:
-	if Tutorial.tab_locked(id):  # 길드: 튜토리얼 길드 미션 전(하단 탭과 같은 잠금 토스트)
+	if Tutorial.tab_locked(id):  # 길드·거래소: 가이드에서 열리기 전(하단 탭과 같은 잠금 토스트)
 		Tutorial.lock_notice.emit(Tutorial.tab_lock_text(id))
 		return
 	set_open(false)
@@ -100,12 +105,16 @@ func pick(id: String) -> void:
 
 func _process(delta: float) -> void:
 	var d := dots()
-	var locked := Tutorial.tab_locked("guild")
-	if locked != _guild_locked and buttons.has("guild"):  # 튜토리얼 잠금: 상자·그림을 흐리게(자물쇠는 _draw_face)
-		_guild_locked = locked
-		buttons.guild.self_modulate = Color(1, 1, 1, 0.45) if locked else Color.WHITE
-		buttons.guild.get_child(0).self_modulate = Color(1, 1, 1, 0.6) if locked else Color.WHITE
-		buttons.guild.get_child(0).queue_redraw()
+	for id in LOCKABLE:
+		var locked := Tutorial.tab_locked(id)
+		if locked != _locked.has(id) and buttons.has(id):  # 가이드 잠금: 상자·그림을 흐리게(자물쇠는 _draw_face)
+			if locked:
+				_locked[id] = true
+			else:
+				_locked.erase(id)
+			buttons[id].self_modulate = Color(1, 1, 1, 0.45) if locked else Color.WHITE
+			buttons[id].get_child(0).self_modulate = Color(1, 1, 1, 0.6) if locked else Color.WHITE
+			buttons[id].get_child(0).queue_redraw()
 	if d != _dots:  # 받을 보상(출석·미션)이 있으면 그 버튼과 [메뉴]에 빨간 점
 		_dots = d
 		toggle.get_child(0).queue_redraw()
@@ -156,6 +165,10 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 		"guild":
 			TabBarScript.draw_shapes(c, TabBarScript.tab_shapes("guild"), ctr, 44.0)
 			if Tutorial.tab_locked("guild"):
+				TabBarScript.draw_shapes(c, TabBarScript.LOCK_SHAPES, Vector2(SIZE.x - 18, 18), 26.0)
+		"exchange":
+			draw_scales(c, ctr, 44.0)
+			if Tutorial.tab_locked("exchange"):
 				TabBarScript.draw_shapes(c, TabBarScript.LOCK_SHAPES, Vector2(SIZE.x - 18, 18), 26.0)
 		"settings":
 			draw_gear(c, ctr, 44.0)
@@ -273,3 +286,28 @@ static func draw_scroll(ci: CanvasItem, ctr: Vector2, s: float) -> void:
 	for y in [-6.0, 5.0]:
 		ci.draw_polyline(PackedVector2Array([p.call(-9, y), p.call(-6, y + 3), p.call(-1, y - 3)]), green, 2.5 * u, true)
 		ci.draw_line(p.call(2, y), p.call(9, y), roll.darkened(0.2), 2.0 * u, true)
+
+
+## 저울(거래소): 기둥 + 가로대 + 양쪽 접시(왼쪽 금화, 오른쪽 보석).
+static func draw_scales(ci: CanvasItem, ctr: Vector2, s: float) -> void:
+	var u := s / 44.0
+	var p := func(x: float, y: float) -> Vector2: return ctr + Vector2(x, y) * u
+	var wood := Color(0.80, 0.62, 0.38)
+	var metal := Color(0.86, 0.89, 0.95)
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-2, -14), p.call(2, -14), p.call(3, 14), p.call(-3, 14)]), wood)
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-10, 14), p.call(10, 14), p.call(12, 19), p.call(-12, 19)]), wood.darkened(0.15))
+	ci.draw_line(p.call(-17, -12), p.call(17, -12), metal, 3.0 * u, true)
+	ci.draw_circle(p.call(0, -15), 3.0 * u, GOLD)
+	for side in [-1.0, 1.0]:
+		var x: float = 14.0 * side
+		ci.draw_line(p.call(x, -12), p.call(x - 6, 2), metal, 1.5 * u, true)
+		ci.draw_line(p.call(x, -12), p.call(x + 6, 2), metal, 1.5 * u, true)
+		var pan := PackedVector2Array([p.call(x - 9, 2), p.call(x + 9, 2), p.call(x + 5, 7), p.call(x - 5, 7)])
+		ci.draw_colored_polygon(pan, metal.darkened(0.1))
+		var rim := pan.duplicate()
+		rim.append(rim[0])
+		ci.draw_polyline(rim, LowpolyBox.edge_color(metal), 1.2 * u, true)
+	ci.draw_circle(p.call(-14, -1), 4.0 * u, GOLD)
+	ci.draw_arc(p.call(-14, -1), 4.0 * u, 0, TAU, 12, LowpolyBox.edge_color(GOLD), 1.2 * u, true)
+	var gem := PackedVector2Array([p.call(14, -6), p.call(18, -2), p.call(14, 2), p.call(10, -2)])
+	ci.draw_colored_polygon(gem, Color(0.40, 0.75, 0.98))
