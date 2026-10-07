@@ -237,7 +237,7 @@ func test_game_tables() -> void:
 	var res := GameData.resources()
 	check(res.size() == 3 and res[0].id == "wood" and res[1].id == "stone" and res[2].id == "food", "resources keep file order")
 	var st := GameData.resource("stone")
-	check(st.name == "석재" and st.building == "quarry" and st.per_min == 50.0 and st.price == 2.0, "stone row = old RESOURCES")
+	check(st.name == "석재" and st.building == "quarry" and st.per_min == 100.0 and st.price == 2.0, "stone row = old RESOURCES")
 	check(GameData.resource("wood").building == "lumber" and GameData.resource("food").per_min == 100.0 and GameData.resource("food").building == "farm", "wood/food rows")
 	check(GameData.resource_of_building("farm") == "food" and GameData.resource_of_building("keep") == "", "resource_of_building")
 	var nums := {"castle_hp": 1000.0, "gate_hp_per_level": 400.0, "max_live_monsters": 120.0, "countdown_sec": 3.0, "result_sec": 2.0,
@@ -1155,10 +1155,10 @@ func _econ(now: float):
 
 
 func test_economy_pending() -> void:
-	check(EconomyScript.rate_per_min("wood", 1) == 100 and EconomyScript.rate_per_min("stone", 3) == 150, "rate = per_min x level")
+	check(EconomyScript.rate_per_min("wood", 1) == 100 and EconomyScript.rate_per_min("stone", 3) == 300, "rate = per_min x level")
 	check(EconomyScript.pending_amount("wood", 1, 59.9) == 0, "pending: under a minute is 0")
 	check(EconomyScript.pending_amount("wood", 1, 119.9) == 100, "pending floors minutes")
-	check(EconomyScript.pending_amount("stone", 2, 600.0) == 1000, "pending scales with level")
+	check(EconomyScript.pending_amount("stone", 2, 600.0) == 2000, "pending scales with level")
 	check(EconomyScript.pending_amount("wood", 1, 720 * 60.0) == 72000 and EconomyScript.pending_amount("wood", 1, 99999999.0) == 72000, "pending capped at 720 min")
 	check(EconomyScript.pending_amount("wood", 1, -500.0) == 0, "pending: negative elapsed is 0")
 	check(EconomyScript.res_of("lumber") == "wood" and EconomyScript.res_of("quarry") == "stone" and EconomyScript.res_of("farm") == "food" and EconomyScript.res_of("keep") == "", "res_of maps resource buildings only")
@@ -1171,7 +1171,7 @@ func test_economy_collect() -> void:
 	check(is_equal_approx(e.last_collect.lumber, 1000.0 - 30.0), "collect keeps the leftover 30 s: %s" % e.last_collect.lumber)
 	check(e.collect("lumber", 1000.0) == 0 and is_equal_approx(e.last_collect.lumber, 970.0) and e.res.wood == 200, "collect with nothing pending changes nothing")
 	e.last_collect.quarry = 1000.0 - 800 * 60.0  # 상한 초과
-	check(e.collect("quarry", 1000.0) == 720 * 50 and e.last_collect.quarry == 1000.0, "collect at the cap snaps last_collect to now")
+	check(e.collect("quarry", 1000.0) == 720 * 100 and e.last_collect.quarry == 1000.0, "collect at the cap snaps last_collect to now")
 	e.last_collect.farm = 5000.0  # 시계를 되돌림
 	check(e.collect("farm", 1000.0) == 0 and e.last_collect.farm == 1000.0, "collect with negative elapsed gives 0 and restarts from now")
 	e.last_collect.farm = 1000.0 - 4 * 60.0
@@ -4449,13 +4449,13 @@ func test_research_r24() -> void:
 	check(e.research_dia_cost(e.time_now()) == 0 and e.finish_research_now() and e.diamonds == 3 and e.research_level("wood_tech") == 3 and done[-1] == ["wood_tech", 3],
 		"5 min or less left: instant finish is free")
 	# 서버 권위 효과의 오프라인 반영(서버 research.test와 같은 식)
-	# 석재로 본다: 목재·식량(100/분)은 정수 %면 늘 딱 떨어져 내림을 못 본다
+	# 세 자원 모두 100/분이라 정수 %면 늘 딱 떨어진다 — 내림은 rate_per_min에 13.5%를 직접 넣어 본다
 	e.research_levels = {"stone_tech": 2, "abundance": 1}  # 석재 +13%
 	e.levels.quarry = 3
 	e.levels.lumber = 3  # 아래 건설 시간 검사(벌목장 Lv 3)
 	e.last_collect.quarry = t
-	check(EconomyScript.rate_per_min("stone", 3, 13.0) == 169 and e.pending("quarry", t + 600.0) == 1690 and EconomyScript.rate_per_min("stone", 3) == 150,
-		"production: floor(50 x 3 x 1.13) = floor(169.5) = 169 / min (10 min = 1690); no research = 150")
+	check(EconomyScript.rate_per_min("stone", 3, 13.5) == 340 and EconomyScript.rate_per_min("stone", 3, 13.0) == 339 and e.pending("quarry", t + 600.0) == 3390 and EconomyScript.rate_per_min("stone", 3) == 300,
+		"production: floor(100 x 3 x 1.135) = floor(340.5) = 340; research +13% = 339 / min (10 min = 3390); no research = 300")
 	e.research_levels = {"construct": 5}
 	check(e.upgrade_sec("keep") == 52 and e.upgrade_sec("lumber") == 39, "build time = round(60 / 1.15) = 52 s (lumber Lv 3: 45 / 1.15 = 39)")
 	e.research_levels = {"commerce": 3}
