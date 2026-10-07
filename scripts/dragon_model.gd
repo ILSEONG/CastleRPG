@@ -90,10 +90,13 @@ func play_death() -> void:
 	_act_len = 1.4
 
 
+## dir = 월드 방향. 모델은 dragon.gd 아래에 있고 그 몸통은 길드 보스 판에서 화면 아래로 45° 돌아 있어, 부모 기준 각으로 바꿔 돈다
+## (2026-10-07: 월드 각을 그대로 써서 머리가 늘 노린 영웅보다 45° 옆을 봤다).
 func face(dir: Vector3) -> void:
 	if Vector2(dir.x, dir.z).length() < 0.001:
 		return
-	_want_yaw = atan2(dir.x, dir.z)
+	var p := get_parent() as Node3D
+	_want_yaw = atan2(dir.x, dir.z) - (p.global_rotation.y if p != null else 0.0)
 
 
 ## 입(목 부품 앞 끝) 월드 위치.
