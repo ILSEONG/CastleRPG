@@ -5340,6 +5340,16 @@ func test_shop() -> void:
 	e.shop.day = int(e.shop.day) - 1  # 날이 바뀌었다
 	check(e.shop_left("d_free") == 1 and e.shop_left("d_res") == 3 and e.shop_left("w_free") == 1, "shop: a new day refills daily items")
 	e.free()
+	# 디자인 보강 6번: 상점 그림은 Meshy로 그린 18장(shop_art.gd) — 상품·패키지·핫딜·다이아 충전이 모두 그린 그림을 찾는다
+	var art := preload("res://scripts/shop_art.gd")
+	var panel := preload("res://scripts/shop_panel.gd")
+	var missing: Array = art.NAMES.filter(func(n): return art.texture(n) == null or art.texture(n).get_width() != 128)
+	var wanted: Array = items.ITEMS.map(func(x): return str(x.icon)) + panel.PACK_ICONS.values() + [panel.HOT_ICON]
+	for i in 6:
+		wanted.append("dia_%d" % (i + 1))
+	check(missing.is_empty() and art.NAMES.size() == 18 and wanted.all(func(n): return art.texture(n) != null) and art.texture("nope") == null
+		and art.key_name({"keys_equip": 2}) == "key_equip" and art.key_name({"tickets": 1}) == "",
+		"shop art: 18 painted 128 px icons load; every shop item, package, hot deal and diamond pack has one (missing=%s)" % [missing])
 
 
 ## 결제 상품(iap_items.gd, 서버 iap.ts와 같은 표): 표 비교 + 오프라인 월정액·성장 패스 받기, 결제 연결 전 사기는 알림만.

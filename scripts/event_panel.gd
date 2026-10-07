@@ -11,6 +11,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const GuildPanel := preload("res://scripts/guild_panel.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const PouchPanel := preload("res://scripts/pouch_panel.gd")
+const ShopArt := preload("res://scripts/shop_art.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const TITLE := "28일 출석 이벤트"
@@ -311,7 +312,7 @@ func _draw_cell(c: Control, i: int, r: Dictionary, n: int) -> void:
 		c.draw_polyline(PackedVector2Array([m + Vector2(-18, 0), m + Vector2(-5, 13), m + Vector2(20, -14)]), DONE_INK, 7.0, true)
 
 
-## 보상 그림: 영웅 피규어 > 장비 상자 > 골드·다이아·자원 > 열쇠 > 모집권.
+## 보상 그림: 영웅 피규어 > 장비 상자 > 골드·다이아·자원 > 열쇠 > 모집권. 장비 상자·자원 더미·열쇠·모집권·주머니는 상점과 같은 그린 그림(ShopArt).
 static func _draw_reward_icon(c: Control, r: Dictionary, ctr: Vector2, s: float) -> void:
 	if r.has("hero"):
 		var grade := str(GameData.hero(str(r.hero)).get("grade", "SR"))
@@ -322,7 +323,8 @@ static func _draw_reward_icon(c: Control, r: Dictionary, ctr: Vector2, s: float)
 		c.draw_texture_rect(tex, Rect2(ctr - size / 2.0 + Vector2(0, -6), size), false)
 		return
 	if r.get("equip") is Dictionary:
-		GuildPanel.draw_chest(c, ctr + Vector2(0, 2), s, false)
+		if not ShopArt.draw(c, "chest_equip", ctr + Vector2(0, 2), s):
+			GuildPanel.draw_chest(c, ctr + Vector2(0, 2), s, false)
 		var col: Color = UiKit.GRADE_COLORS.get(str(r.equip.get("grade", "SR")), UiKit.GRADE_COLORS.SR)
 		UiKit.draw_gem(c, ctr + Vector2(s * 0.42, -s * 0.36), s * 0.2, col, 6)
 		return
@@ -330,14 +332,18 @@ static func _draw_reward_icon(c: Control, r: Dictionary, ctr: Vector2, s: float)
 		IconsScript.draw_icon(c, "gold", ctr, s)
 	elif r.has("diamonds"):
 		IconsScript.draw_icon(c, "diamond", ctr, s)
+	elif r.has("wood") and ShopArt.draw(c, "res_pile", ctr, s):  # 그린 그림(상점과 같은 그림, 없으면 아래 벡터)
+		pass
 	elif r.has("wood"):
 		IconsScript.draw_icon(c, "wood", ctr + Vector2(-s * 0.3, s * 0.12), s * 0.6)
 		IconsScript.draw_icon(c, "stone", ctr + Vector2(s * 0.3, s * 0.12), s * 0.6)
 		IconsScript.draw_icon(c, "food", ctr + Vector2(0, -s * 0.22), s * 0.6)
-	elif r.has("keys_gold") or r.has("keys_equip") or r.has("keys_ticket"):
-		draw_key(c, ctr, s, r)
+	elif ShopArt.key_name(r) != "":
+		if not ShopArt.draw(c, ShopArt.key_name(r), ctr, s):
+			draw_key(c, ctr, s, r)
 	elif r.has("tickets"):
-		draw_ticket(c, ctr, s)
+		if not ShopArt.draw(c, "tickets" if int(r.tickets) >= 10 else "ticket", ctr, s):
+			draw_ticket(c, ctr, s)
 	else:
 		var pz := Economy.pouches_in(r)
 		if not pz.is_empty():

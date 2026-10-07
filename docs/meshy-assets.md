@@ -74,3 +74,12 @@ UR↑ 빛살·반짝이, LR 도는 빛살·깜빡이는 반짝이·무지개 테
 2. 자르기: `python3 -I dev/meshy/item_icons.py <부위> <그림.png> …` — 흰 배경(가장자리와 이어진 것 + 외곽선에 갇힌 틈)을 지우고 칸별로 잘라 저장.
 3. 임포트: 새 그림의 .import를 compress/mode=1, lossy_quality=0.85, mipmaps/generate=true로. 검사: tests/run_tests.gd `test_item_icons`,
    한눈에 보기 `tests/item_icon_sheet.tscn`.
+
+## 상점 아이콘(2026-10-07, 디자인 보강 6번)
+18개 그림 `assets/ui/shop/<이름>.png`(128 px, 투명 배경, 장비 아이콘과 같은 임포트): 다이아 더미 dia_1~dia_6(1개 → 금 보물 상자),
+gift·gift_big·crown·ticket·tickets(묶음)·chest_equip, key_gold·key_equip·key_ticket, pouch_gold·pouch_res·res_pile.
+`scripts/shop_art.gd`(ShopArt.draw)가 그림이 있으면 그것을, 없으면 false → 예전 벡터 그림. 쓰는 곳: 상점 카드(shop_items.gd icon)·패키지(shop_panel PACK_ICONS)·
+핫딜(dia_5)·다이아 충전(dia_N)·PVP 상점(다이아·모집권·장비 상자)·가방 주머니·출석 보상 칸. 오른쪽 아래 메뉴 [가방] 버튼은 다른 메뉴 아이콘과 맞춰 벡터 그대로.
+1. 그림: `meshy_text_to_image`(nano-banana-pro, 4:3, 9 크레딧) 3장, 장 마다 3×2 칸 6개. 원본·프롬프트는 프로젝트 파일 design/shop/.
+2. 자르기: `python3 -I dev/meshy/shop_icons.py <그림 폴더>`(item_icons.py의 cut을 쓴다).
+3. 검사: tests/run_tests.gd `test_shop`(18장 로드·모든 상품에 그림), 화면 `tests/shop_shots.tscn -- --more`(PVP·가방·출석까지).

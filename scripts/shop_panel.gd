@@ -9,6 +9,7 @@ extends "res://scripts/ui_window.gd"
 ## 받을 것(무료 선물·월정액 오늘 보상·성장 패스)이 있는 탭에 빨간 점. 모집 창의 "다이아가 부족합니다 → [이동]"은 [다이아] 탭으로 연다(open_tab).
 ## [PVP] 탭(2026-10-07, PVP 스레드): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
 ## PVP 화면의 [상점]도 이 탭으로 연다(pvp_view.open_shop).
+## 그림(디자인 보강 6번): 상품·패키지·다이아 충전·PVP 상품 그림은 Meshy로 그린 아이콘(shop_art.gd), 파일이 없으면 예전 벡터 그림.
 const PVP_NOTE := "PVP 코인은 결투·총력전에서 얻어요 (승리 %d · 패배 %d)"
 
 const IconsScript := preload("res://scripts/icons.gd")
@@ -21,6 +22,7 @@ const DungeonPanel := preload("res://scripts/dungeon_panel.gd")
 const SideMenu := preload("res://scripts/side_menu.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
 const PvpView := preload("res://scripts/pvp_view.gd")
+const ShopArt := preload("res://scripts/shop_art.gd")
 
 const GROUP_SHOP := "shop_panel"
 const TABS := [["package", "패키지"], ["pass", "패스"], ["daily", "일일"], ["weekly", "주간"], ["pvp", "PVP"], ["diamond", "다이아"]]
@@ -31,6 +33,9 @@ const NOTE_TEXT := "결제 기능은 출시 전에 연결됩니다"
 const SOLD_TEXT := "매진"
 const FREE_TEXT := "무료"
 const SHORT_TEXT := {"diamonds": "다이아가 부족합니다", "gold": "골드가 부족합니다"}
+const PACK_ICONS := {"monthly": "dia_2", "monthly_plus": "crown", "pkg_starter": "gift_big", "pkg_daily": "dia_3", "pkg_weekly": "dia_4",
+	"pkg_growth": "dia_6"}  # 패키지 카드 그림(ShopArt 이름). 핫딜은 dia_5(금 상자)
+const HOT_ICON := "dia_5"
 const PILE := [Vector2(0, 0), Vector2(-26, 14), Vector2(26, 14), Vector2(0, 26), Vector2(-14, -18), Vector2(14, -18)]  # 보석 더미 자리(가운데 기준)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const CARD_BG := Color(1, 1, 1, 0.78)
@@ -390,9 +395,11 @@ func _pvp_card(x: Dictionary) -> Control:
 	return card
 
 
-## PVP 상품 그림: 골드·다이아는 자원 아이콘, 모집권 = 다이아 + 표, 장비 상자 = 나무 상자, 조각 = 보라(SSR은 금색) 보석 조각.
+## PVP 상품 그림: 골드는 자원 아이콘, 다이아·모집권·장비 상자는 그린 그림(ShopArt, 없으면 벡터), 조각 = 보라(SSR은 금색) 보석 조각.
 static func draw_pvp_item(c: CanvasItem, id: String, ctr: Vector2, s: float) -> void:
 	var o := ctr - Vector2(s, s) / 2.0
+	if ShopArt.draw(c, {"dia": "dia_2", "ticket": "ticket", "equip": "chest_equip"}.get(id, ""), ctr, s):
+		return
 	match id:
 		"gold":
 			IconsScript.draw_icon(c, "gold", ctr, s)
@@ -427,8 +434,9 @@ func _pack_card(p: Dictionary, i: int) -> Control:
 	pile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pile.draw.connect(func():
 		var c := pile.size / 2.0
-		for j in range(gems - 1, -1, -1):  # 뒤에서 앞으로(가운데 보석이 맨 앞)
-			IconsScript.draw_icon(pile, "diamond", c + PILE[j], 44.0 - j * 2.0)
+		if not ShopArt.draw(pile, "dia_%d" % gems, c, 80.0):  # 그린 다이아 더미(1개 → 금 상자)
+			for j in range(gems - 1, -1, -1):  # 뒤에서 앞으로(가운데 보석이 맨 앞)
+				IconsScript.draw_icon(pile, "diamond", c + PILE[j], 44.0 - j * 2.0)
 		if first:  # 첫 구매 2배 띠(왼쪽 위)
 			_ribbon(pile, "첫 구매 2배"))
 	box.add_child(pile)
@@ -498,7 +506,7 @@ func _build_packages() -> void:
 	var h := Economy.active_hot()
 	if not h.is_empty():  # 떠 있는 핫딜(1시간 한정)이 맨 위
 		var hp := IapItems.find(str(h.id))
-		var card := _wide("diamond", "핫딜 · " + str(hp.name), [[Missions.reward_text(hp.give), GIVE], ["가치 %d배" % int(hp.get("value", 1)), RED]],
+		var card := _wide(HOT_ICON, "핫딜 · " + str(hp.name), [[Missions.reward_text(hp.give), GIVE], ["가치 %d배" % int(hp.get("value", 1)), RED]],
 			[_krw_button(hp.id, int(hp.krw))], HOT_BG)
 		hot_label = _label("", 20, RED, HORIZONTAL_ALIGNMENT_LEFT)
 		var v: VBoxContainer = card.get_child(0).get_child(1)
@@ -521,14 +529,14 @@ func _build_packages() -> void:
 				side.append(_label("오늘 받음", 20, SUB))
 		if Economy.iap_can_buy(p.id):
 			side.append(_krw_button(p.id, int(p.krw), ("연장 ₩" if left > 0 else "₩") + UiKit.commas(int(p.krw))))
-		body.add_child(_wide("gift" if p.id == "monthly" else "crown", p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
+		body.add_child(_wide(str(PACK_ICONS.get(p.id, "crown")), p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
 	for p in IapItems.of_kind("package"):
 		var ok := Economy.iap_can_buy(p.id)
 		if p.period == "once" and not ok:
 			continue  # 평생 1회 상품은 산 뒤 숨긴다
 		var limit: String = {"once": "계정당 1회", "daily": "매일 1회", "weekly": "매주 1회"}.get(p.period, "")
 		var side := [_krw_button(p.id, int(p.krw))] if ok else [_label(SOLD_TEXT, 22, SUB)]
-		body.add_child(_wide("ticket" if p.give.has("tickets") else "diamond", p.name, [[Missions.reward_text(p.give), GIVE], [limit, SUB]], side,
+		body.add_child(_wide(str(PACK_ICONS.get(p.id, "ticket" if p.give.has("tickets") else "diamond")), p.name, [[Missions.reward_text(p.give), GIVE], [limit, SUB]], side,
 			CARD_BG if ok else SOLD_BG))
 	note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
 	body.add_child(note)
@@ -586,8 +594,16 @@ func _growth_cell(i: int, track: String, reward: Dictionary, owned: bool) -> Con
 	return v
 
 
-## 상품 그림: gift(선물 상자)·ticket(모집권)·pouch_gold·pouch_res(주머니)·key(던전 입장권)·res_pile(자원 더미).
+## 상품 그림: 그린 그림(ShopArt — dia_1~6·gift·gift_big·crown·ticket·tickets·chest_equip·key_*·pouch_*·res_pile)이 있으면 그것,
+## 없으면 벡터: gift(선물 상자)·ticket(모집권)·pouch_gold·pouch_res(주머니)·key(던전 입장권)·crown·res_pile(자원 더미)·자원 아이콘.
 static func draw_item_icon(ci: Control, icon: String, ctr: Vector2, s: float) -> void:
+	if ShopArt.draw(ci, icon, ctr, s):
+		return
+	if icon.begins_with("key_"):
+		icon = "key"
+	elif icon.begins_with("dia_"):
+		icon = "diamond"
+	icon = {"gift_big": "gift", "tickets": "ticket", "chest_equip": "gift"}.get(icon, icon)
 	match icon:
 		"gift":
 			SideMenu.draw_gift(ci, ctr, s)

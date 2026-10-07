@@ -5,6 +5,7 @@ extends "res://scripts/ui_window.gd"
 
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const ShopArt := preload("res://scripts/shop_art.gd")
 
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const ROW_BG := Color(1, 1, 1, 0.75)
@@ -174,8 +175,11 @@ func _row(id: String) -> Control:
 	return card
 
 
-## 주머니 그림(로우폴리 자루): 각진 몸통 + 묶은 목 + 위로 벌어진 주둥이, 앞에 골드 동전(골드) 또는 목재(자원). 테두리는 자루 색의 진한 색.
-static func draw_pouch(ci: CanvasItem, ctr: Vector2, s: float, kind: String) -> void:
+## 주머니 그림: 그린 그림(ShopArt pouch_gold·pouch_res — 상점과 같은 그림)이 있으면 그것(painted = false면 늘 벡터 — 오른쪽 아래 메뉴 [가방] 버튼).
+## 벡터(로우폴리 자루): 각진 몸통 + 묶은 목 + 위로 벌어진 주둥이, 앞에 골드 동전(골드) 또는 목재(자원). 테두리는 자루 색의 진한 색.
+static func draw_pouch(ci: CanvasItem, ctr: Vector2, s: float, kind: String, painted := true) -> void:
+	if painted and ShopArt.draw(ci, "pouch_gold" if kind == "gold" else "pouch_res", ctr, s * 0.9):
+		return
 	var col := GOLD_SACK if kind == "gold" else RES_SACK
 	var edge := LowpolyBox.edge_color(col)
 	var w := maxf(1.0, s / 28.0)

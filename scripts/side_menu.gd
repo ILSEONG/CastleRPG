@@ -161,7 +161,7 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 		"mission":
 			draw_scroll(c, ctr, 44.0)
 		"bag":
-			PouchPanel.draw_pouch(c, ctr, 46.0, "gold")
+			PouchPanel.draw_pouch(c, ctr, 46.0, "gold", false)  # 메뉴 버튼은 벡터 아이콘끼리 맞춘다
 		"guild":
 			TabBarScript.draw_shapes(c, TabBarScript.tab_shapes("guild"), ctr, 44.0)
 			if Tutorial.tab_locked("guild"):
