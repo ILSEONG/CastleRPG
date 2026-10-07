@@ -231,3 +231,24 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
     S.clock.t = T0
   }
 })
+
+test('war: super admin opens the siege any time, and a finished week opens again with a fresh castle', async () => {
+  S.clock.t = T0
+  const a = await member()
+  const mate = await member(a.gid)
+  await S.db.query("insert into admin_emails (email) values ('war-admin@example.com') on conflict do nothing")
+  await S.db.query("insert into player_identities (provider, provider_uid, player_id, email) values ('google', 'war-admin', $1, 'war-admin@example.com')", [a.id])
+  assert.ok(S.clock.t < defaultAt(S.clock.t))
+  assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: mate.token, body: { heroes: squad() } })).json.error, 'not_yet') // 보통 길드원은 그대로
+  const r = await S.req('POST', '/v1/guild/war/enter', { token: a.token, body: { heroes: squad() } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.ok(r.json.plan.attackers.some((s: any) => s.ai)) // 실제 사람이 없는 자리는 AI 분대
+  const id1 = r.json.plan.battle_id
+  const fin = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: id1, state: { keep: 0 } } })
+  assert.equal(fin.json.war.battle.state, 'done')
+  assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: mate.token, body: { heroes: squad() } })).json.error, 'conquered')
+  const again = await S.req('POST', '/v1/guild/war/enter', { token: a.token, body: { heroes: squad() } })
+  assert.equal(again.status, 200, JSON.stringify(again.json))
+  assert.notEqual(again.json.plan.battle_id, id1)
+  assert.equal(again.json.plan.keep.hp, again.json.plan.keep.max) // 새 성
+})

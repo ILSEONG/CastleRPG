@@ -130,6 +130,8 @@ func enter_block(ids: Array) -> String:
 		return "길드전 정보를 불러오는 중입니다"
 	if ids.size() != WarRules.SQUAD:
 		return "출전 영웅 %d명을 고르세요" % WarRules.SQUAD
+	if online() and econ.get("admin") == true:  # 슈퍼관리자: 공성 시각을 기다리지 않고, 끝났으면 서버가 새 성으로 다시 연다
+		return ""
 	if int(war.get("castle", {}).get("keep", {}).get("hp", 1)) <= 0:
 		return "이번 주 상대 성채를 이미 함락했습니다"
 	match str(war.get("battle", {}).get("state", "")):

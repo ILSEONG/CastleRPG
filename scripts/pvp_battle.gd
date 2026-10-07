@@ -29,11 +29,13 @@ enum Phase { INTRO, FIGHT, RESULT }
 const INTRO_SEC := 1.6
 const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R, "total": ArenaKit.PLAINS_FIGHT_R - 4.0}
 const CAMERA_SIZE := {"duel": 24.0, "total": 28.0}
-const FRONT_D := {"duel": 4.5, "total": 8.0}  # 가운데에서 영웅 앞줄까지(m)
+const FRONT_D := {"duel": 9.0, "total": 16.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 2배)
 const ROW_GAP := 2.6  # 앞줄 ↔ 뒷줄
 const SIDE_GAP := 2.2  # 줄 안 간격
 const SOLDIER_ROW := 7  # 병사 한 줄
 const SOLDIER_GAP := 1.4
+const SOLDIER_FRONT := 3.3  # 영웅 앞줄 → 병사 첫 줄
+const SOLDIER_ROW_GAP := 2.25  # 병사 줄 사이(가운데 쪽으로)
 
 var run := {}
 var main
@@ -177,7 +179,7 @@ func _spawn_soldiers(t: int, soldiers: Dictionary) -> void:
 		var row := i / SOLDIER_ROW
 		var in_row := mini(SOLDIER_ROW, list.size() - row * SOLDIER_ROW)
 		var k := i % SOLDIER_ROW
-		var p: Vector3 = back * maxf(1.5, front_d - 2.2 - row * 1.5) + ArenaKit.RIGHT * (k - (in_row - 1) / 2.0) * SOLDIER_GAP
+		var p: Vector3 = back * maxf(1.5, front_d - SOLDIER_FRONT - row * SOLDIER_ROW_GAP) + ArenaKit.RIGHT * (k - (in_row - 1) / 2.0) * SOLDIER_GAP
 		var s = SoldierScript.new()
 		_uid += 1
 		s.setup(list[i][0], list[i][1], t, _uid)

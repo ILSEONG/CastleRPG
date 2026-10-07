@@ -122,6 +122,8 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 			head = "이번 주 공성 %s · %s 뒤 %d분 동안 열립니다" % [GuildWar.at_text(at), UiKit.duration(maxf(0.0, at - GuildWar.now_t())),
 				roundi(WarRules.BATTLE_SEC / 60.0)]
 	v.add_child(p._label(head, 22, MainHud.INK))
+	if state != "live" and GuildWar.online() and Economy.admin:  # 슈퍼관리자: 시각을 기다리지 않고 바로(끝났으면 새 성으로 다시)
+		v.add_child(p._label("관리자: [공성 시작]으로 지금 바로 열 수 있어요", 18, SUB))
 	var who := ("%s님이 정한 시각" % str(sch.by)) if sch.get("set", false) and str(sch.get("by", "")) != "" else "길드원이 정하지 않으면 토요일 21:00"
 	v.add_child(p._label(who, 18, SUB))
 	if sch.get("can_change", false):
