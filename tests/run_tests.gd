@@ -3355,6 +3355,21 @@ const EQ4 := ["hans", "ella", "dorik", "nina"]  # Knight·Rogue_Hooded·Barbaria
 
 
 ## 고정 난수열 Callable(서버 rules.rollDrops와 같은 호출 순서 확인용).
+const ItemTextT := preload("res://scripts/item_text.gd")
+
+
+## 장비 합계 {hp, atk, speed_pct, 특수…}에서 기본 셋만.
+func _pick3(b: Dictionary) -> Array:
+	return [b.hp, b.atk, b.speed_pct]
+
+
+func _unique_count(a: Array) -> int:
+	var d := {}
+	for x in a:
+		d[x] = true
+	return d.size()
+
+
 func _seq(values: Array) -> Callable:
 	var i := [0]
 	return func():
@@ -3378,10 +3393,11 @@ func test_dungeon_tables() -> void:
 	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
 		and GameData.drop_weights(5).UR == 1.0 and GameData.drop_weights(19).LR == 0.5 and GameData.drop_weights(20).SR == 34.0 and GameData.drop_weights(34).LR == 2.0
 		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0, "grade table bands 1-4, 5-9, 10-19, 20-34, 35+")
-	# 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급. 서버 테스트와 같은 난수열 → 같은 결과
-	var fixed := GameData.roll_drops(1, 2, _seq([0.1, 0.5, 0.95, 0.9, 0.0, 0.995]))
-	check(fixed == [{"slot": "weapon", "weapon_kind": "staff", "grade": "SR", "level": 1}, {"slot": "hat", "weapon_kind": null, "grade": "SSR", "level": 1}],
-		"roll_drops draws slot -> kind/armor -> grade in the server order: %s" % [fixed])
+	# 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급 → 기본 굴림 → 특수(종류 → 굴림). 서버 테스트와 같은 난수열 → 같은 결과
+	var fixed := GameData.roll_drops(1, 2, _seq([0.1, 0.5, 0.95, 0.9, 0.0, 0.995, 0.9, 0.0, 0.995, 0.5, 0.4, 0.2]))
+	check(fixed == [{"slot": "weapon", "weapon_kind": "staff", "grade": "SR", "rolls": {"atk": 112}, "subs": [{"id": "lifesteal", "r": 115}]},
+		{"slot": "hat", "weapon_kind": null, "grade": "SSR", "rolls": {"hp": 100}, "subs": [{"id": "crit_dmg", "r": 91}]}],
+		"roll_drops draws slot -> kind/armor -> grade -> rolls -> special stats in the server order: %s" % [fixed])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 18
 	var many := GameData.roll_drops(12, 60000, rng.randf)
@@ -3393,14 +3409,36 @@ func test_dungeon_tables() -> void:
 		grades_ok = grades_ok and absf(share.call(func(x): return x.grade == gname) - w[i] / 100.0) < 0.007
 	check(many.size() == 60000 and absf(share.call(func(x): return x.slot == "weapon") - 0.2) < 0.007 and absf(share.call(func(x): return x.slot == "gloves") - 0.8 / 6.0) < 0.007
 		and grades_ok and many.all(func(x): return (x.slot == "weapon") == (x.weapon_kind != null)), "drop sample: weapons 20%, armor slots even, grades follow the weights")
-	var st := func(slot: String, grade: String, n: int) -> Dictionary: return GameData.item_stats({"slot": slot, "weapon_kind": "sword" if slot == "weapon" else null, "grade": grade, "level": n})
-	check(st.call("weapon", "N", 1) == {"hp": 0, "atk": 6, "speed_pct": 0.0} and st.call("weapon", "SR", 3).atk == 20 and st.call("gloves", "R", 1).atk == 4
-		and st.call("gloves", "N", 2).atk == 3 and st.call("shoes", "LR", 1) == {"hp": 130, "atk": 0, "speed_pct": 3.0} and st.call("top", "UR", 5).hp == 368
-		and st.call("bottom", "N", 1).hp == 40 and st.call("hat", "SSR", 10).hp == 253 and st.call("pauldron", "R", 2).hp == 47, "item stats = round((base + per level x (n-1)) x grade mult), shoes +3% speed")
-	check(GameData.item_sell_value({"grade": "SR", "level": 3}) == 66 and GameData.item_sell_value({"grade": "N", "level": 1}) == 10
-		and GameData.item_sell_value({"grade": "LR", "level": 7}) == 455, "sell value = round(10 x mult x level)")
-	check(GameData.equip_total([{"slot": "weapon", "weapon_kind": "sword", "grade": "SR", "level": 3}, {"slot": "shoes", "grade": "LR", "level": 1, "weapon_kind": null},
-		{"slot": "gloves", "grade": "R", "level": 1, "weapon_kind": null}]) == {"hp": 130, "atk": 24, "speed_pct": 3.0}, "equip_total sums the items")
+	var rolls_ok := true
+	for x in many:
+		var ids: Array = x.subs.map(func(y): return y.id)
+		rolls_ok = rolls_ok and x.rolls.size() == (2 if x.slot == "shoes" else 1) and x.rolls.values().all(func(r): return r >= 85 and r <= 115) \
+			and x.subs.size() == int(GameData.SUB_COUNT.get(x.grade, 0)) and ids.size() == _unique_count(ids)
+	check(rolls_ok and many.any(func(x): return x.rolls.values()[0] == 85) and many.any(func(x): return x.rolls.values()[0] == 115),
+		"each stat rolls 85..115 on its own; SR/SSR 1, UR 2, LR 3 different special stats")
+	# 2026-10-07 장비 레벨 없앰: 값 = round(기준값 x 등급 배율 x 굴림 / 100), 굴림 없으면 100
+	var st := func(slot: String, grade: String, rolls := {}) -> Dictionary: return GameData.item_stats({"slot": slot, "weapon_kind": "sword" if slot == "weapon" else null, "grade": grade, "rolls": rolls})
+	check(st.call("weapon", "N").atk == 20 and st.call("weapon", "SR", {"atk": 115}).atk == 51 and st.call("gloves", "R", {"atk": 85}).atk == 10
+		and st.call("shoes", "LR", {"hp": 100, "speed_pct": 85}).hp == 423 and is_equal_approx(st.call("shoes", "LR", {"speed_pct": 85}).speed_pct, 2.55)
+		and st.call("shoes", "N").speed_pct == 3.0 and st.call("top", "UR").hp == 598 and st.call("bottom", "N").hp == 130 and st.call("hat", "SSR").hp == 256
+		and st.call("pauldron", "R").hp == 120, "item stats = round(base x grade mult x roll / 100), shoes speed 3% x roll")
+	var lr := {"slot": "hat", "grade": "LR", "rolls": {"hp": 90}, "subs": [{"id": "lifesteal", "r": 110}, {"id": "crit_dmg", "r": 85}, {"id": "dmg_reduce", "r": 100}]}
+	var ls := GameData.item_stats(lr)
+	var lb := GameData.item_stats(lr, true)
+	check(ls.hp == 468 and lb.hp == 520 and is_equal_approx(ls.lifesteal, 6.6) and is_equal_approx(ls.crit_dmg, 15.3) and ls.dmg_reduce == 6.0 and lb.lifesteal == 6.0
+		and lb.crit_dmg == 18.0 and ls.aspd == 0.0, "special stats = grade base x roll / 100; base=true ignores the rolls: %s" % [ls])
+	check(ItemTextT.stat_parts(lr) == [["HP +468", ItemTextT.DOWN_COLOR]] and ItemTextT.sub_parts(lr) == [["흡혈 +6.6%", ItemTextT.UP_COLOR], ["치명타 피해 +15.3%", ItemTextT.DOWN_COLOR],
+		["받는 피해 감소 +6%", ItemTextT.INK]], "stat colours: below base red, above green, equal plain: %s %s" % [ItemTextT.stat_parts(lr), ItemTextT.sub_parts(lr)])
+	check(GameData.item_sell_value({"grade": "SR"}) == 220 and GameData.item_sell_value({"grade": "N"}) == 100 and GameData.item_sell_value({"grade": "LR"}) == 650,
+		"sell value = round(100 x grade mult)")
+	var tot := GameData.equip_total([{"slot": "weapon", "weapon_kind": "sword", "grade": "SR", "rolls": {"atk": 100}}, {"slot": "shoes", "grade": "LR", "weapon_kind": null},
+		{"slot": "gloves", "grade": "R", "weapon_kind": null}, lr])
+	check(tot.hp == 423 + 468 and tot.atk == 44 + 12 and tot.speed_pct == 3.0 and is_equal_approx(tot.lifesteal, 6.6), "equip_total sums the items: %s" % [tot])
+	# 저장·서버 값 검사(서버 rules.cleanRolls와 같다)
+	check(EconomyScript._clean_rolls("hat", "UR", {"hp": 116, "atk": 100}, [{"id": "aspd", "r": 90}, {"id": "aspd", "r": 99}, {"id": "x", "r": 100}, {"id": "crit_rate", "r": 84},
+		{"id": "lifesteal", "r": 85}, {"id": "skill_dmg", "r": 100}]) == {"rolls": {}, "subs": [{"id": "aspd", "r": 90}, {"id": "lifesteal", "r": 85}]}
+		and EconomyScript._clean_rolls("shoes", "N", {"hp": 85.0, "speed_pct": 115}, [{"id": "aspd", "r": 100}]) == {"rolls": {"hp": 85, "speed_pct": 115}, "subs": []},
+		"stored rolls are checked: out of range, wrong stat, duplicate or extra special stats are dropped")
 	check(GameData.weapon_of("Knight") == "sword" and GameData.weapon_of("Barbarian") == "axe" and GameData.weapon_of("Mage") == "staff" and GameData.weapon_of("Rogue_Hooded") == "crossbow"
 		and GameData.weapon_of("Rogue") == "dagger" and GameData.heroes().all(func(h): return GameData.weapon_of(h.model) != ""), "every hero model has its own weapon kind")
 	# 일일 리셋: 15:00 UTC 경계, 놓친 날 × 지급을 상한까지
@@ -3412,9 +3450,9 @@ func test_dungeon_tables() -> void:
 		and GameData.apply_reset("gold", {"best_level": 0, "keys": 12, "extra_today": 0, "last_reset": DG_LAST}, DG_MID + 9 * 86400.0).keys == 12
 		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
 		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
-	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 5000
-		and GameData.extra_cost(2) == 15000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
-		"fresh dungeon = today's keys; extra run cost 5000 x (1 + runs today); party 6 / 4")
+	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 100000
+		and GameData.extra_cost(2) == 300000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
+		"fresh dungeon = today's keys; extra run cost 100000 x (1 + runs today); party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
 	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
@@ -3481,7 +3519,7 @@ func test_dungeons_offline() -> void:
 		e.heroes[id] = 1
 	var gs: Dictionary = e.dungeon_state("gold")
 	var es: Dictionary = e.dungeon_state("equip")
-	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 1 and es.key_cap == 3 and es.extra_cost == 5000
+	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 1 and es.key_cap == 3 and es.extra_cost == 100000
 		and absf(gs.next_reset - GameData.next_reset(t0)) < 1.0 and gs.reset_in > 0.0 and gs.reset_in <= 86400.0, "new game: gold 3 / 10, equip 1 / 3, next reset at 00:00 KST")
 	check(e.dungeon_reward("gold", 2) == {"gold": 4400} and e.dungeon_reward("equip", 10).count == 5 and e.dungeon_reward("equip", 10).weights.LR == 0.5
 		and e.dungeon_enemies("gold", 1).size() == 3, "reward preview and enemy list")
@@ -3510,17 +3548,17 @@ func test_dungeons_offline() -> void:
 	# 장비 던전: 즉시 승리 훅 → 장비 5개
 	check(e.start_dungeon("equip", 1, EQ4) and e.debug_win() and finished[-1].win and finished[-1].rewards.items.size() == 5 and e.bag.size() == 5
 		and e.bag.map(func(x): return x.id) == [1, 2, 3, 4, 5] and e.next_item_id == 6 and e.dungeon_state("equip").keys == 0 and e.dungeon_state("equip").best_level == 1
-		and e.bag.all(func(x): return x.level == 1 and x.grade in GameData.EQUIP_GRADES and (x.slot == "weapon") == (x.weapon_kind != null)),
+		and e.bag.all(func(x): return not x.has("level") and x.rolls.size() >= 1 and x.grade in GameData.EQUIP_GRADES and (x.slot == "weapon") == (x.weapon_kind != null)),
 		"equip win (debug_win hook): exactly 5 items with ids 1..5, key -1: %s" % [e.bag])
-	check(e.dungeon_block("equip", 1, EQ4) == "not_enough_gold", "no key and 4000 gold < 5000: no extra run")
-	e.gold = 16000
-	check(e.dungeon_block("equip", 2, EQ4) == "" and e.start_dungeon("equip", 2, EQ4) and started[-1].paid_with == "gold" and e.gold == 16000, "an extra run with gold starts without paying yet")
+	check(e.dungeon_block("equip", 1, EQ4) == "not_enough_gold", "no key and 4000 gold < 100000: no extra run")
+	e.gold = 316000
+	check(e.dungeon_block("equip", 2, EQ4) == "" and e.start_dungeon("equip", 2, EQ4) and started[-1].paid_with == "gold" and e.gold == 316000, "an extra run with gold starts without paying yet")
 	e.debug_win()
 	var es2: Dictionary = e.dungeon_state("equip")
-	check(e.gold == 11000 and es2.extra_today == 1 and es2.extra_cost == 10000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays 5000 gold; the next one costs 10000")
+	check(e.gold == 216000 and es2.extra_today == 1 and es2.extra_cost == 200000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays 100000 gold; the next one costs 200000")
 	e.start_dungeon("equip", 1, EQ4)
 	e.finish_dungeon(e.current_run.run_id, false, 25.0)
-	check(e.gold == 11000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
+	check(e.gold == 216000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
 	for i in 286:  # 10 + 286 = 296, + 5 > 300
 		e.bag.append({"id": e.next_item_id + i, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1})
 	e.next_item_id += 286
@@ -3541,9 +3579,9 @@ func test_equipment_offline() -> void:
 	var roster := [0]
 	e.notice.connect(func(t): notes.append(t))
 	e.roster_changed.connect(func(): roster[0] += 1)
-	e.bag = [{"id": 1, "slot": "weapon", "weapon_kind": "sword", "grade": "SR", "level": 3}, {"id": 2, "slot": "weapon", "weapon_kind": "axe", "grade": "N", "level": 1},
-		{"id": 3, "slot": "hat", "weapon_kind": null, "grade": "R", "level": 2}, {"id": 4, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1},
-		{"id": 5, "slot": "shoes", "weapon_kind": null, "grade": "LR", "level": 1}]
+	e.bag = [{"id": 1, "slot": "weapon", "weapon_kind": "sword", "grade": "SR", "rolls": {}, "subs": []}, {"id": 2, "slot": "weapon", "weapon_kind": "axe", "grade": "N", "rolls": {}, "subs": []},
+		{"id": 3, "slot": "hat", "weapon_kind": null, "grade": "R", "rolls": {}, "subs": []}, {"id": 4, "slot": "hat", "weapon_kind": null, "grade": "N", "rolls": {}, "subs": []},
+		{"id": 5, "slot": "shoes", "weapon_kind": null, "grade": "LR", "rolls": {}, "subs": []}]
 	e.next_item_id = 6
 	check(e.equip_block("hans", "weapon", 2) == "wrong_weapon" and e.equip_block("nina", "weapon", 1) == "wrong_weapon" and e.equip_block("dorik", "weapon", 2) == ""
 		and e.equip_block("hans", "weapon", 1) == "" and e.equip_block("hans", "hat", 5) == "wrong_slot" and e.equip_block("hans", "weapon", 3) == "wrong_slot"
@@ -3551,22 +3589,22 @@ func test_equipment_offline() -> void:
 		"equip_block: a weapon only fits its model's kind (Knight sword, Barbarian axe); slot, item and hero checks")
 	check(not e.equip("hans", "weapon", 2) and notes[-1] == EconomyScript.EQUIP_TEXT.wrong_weapon and e.equipment.is_empty(), "a refused equip only shows the reason")
 	var r0: int = roster[0]
-	check(e.equip("hans", "weapon", 1) and e.equipment == {"hans": {"weapon": 1}} and e.equipment_bonus("hans") == {"hp": 0, "atk": 20, "speed_pct": 0.0} and roster[0] == r0 + 1
-		and e.item_owner(1) == "hans" and e.hero_equipment("hans").weapon.weapon_kind == "sword", "equip: the sword on hans gives atk +20 and fires roster_changed")
+	check(e.equip("hans", "weapon", 1) and e.equipment == {"hans": {"weapon": 1}} and _pick3(e.equipment_bonus("hans")) == [0, 44, 0.0] and roster[0] == r0 + 1
+		and e.item_owner(1) == "hans" and e.hero_equipment("hans").weapon.weapon_kind == "sword", "equip: the SR sword on hans gives atk +44 (20 x 2.2) and fires roster_changed")
 	e.equip("hans", "hat", 3)
 	e.equip("ella", "hat", 3)  # 옮긴다
 	check(e.equipment == {"hans": {"weapon": 1}, "ella": {"hat": 3}} and e.item_owner(3) == "ella", "equipping an item another hero wears moves it: %s" % [e.equipment])
 	check(e.unequip("ella", "hat") and e.equipment == {"hans": {"weapon": 1}} and not e.unequip("ella", "hat"), "unequip empties the slot; an empty slot cannot be unequipped")
 	e.equip("hans", "shoes", 5)
-	check(e.equipment_bonus("hans") == {"hp": 130, "atk": 20, "speed_pct": 3.0}, "shoes add HP and +3% speed")
+	check(_pick3(e.equipment_bonus("hans")) == [423, 44, 3.0], "shoes add HP and +3% speed: %s" % [e.equipment_bonus("hans")])
 	GameData.equip_source = e  # 오토로드 Economy처럼
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
 	GameData.equip_source = null
-	check(st == {"hp": 526.0, "atk": 43.0} and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0}, "with Economy as the equipment source, hero_stats adds hans's gear: %s" % [st])
+	check(st == {"hp": 819.0, "atk": 67.0} and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0}, "with Economy as the equipment source, hero_stats adds hans's gear: %s" % [st])
 	check(e.sell_block([1]) == "equipped" and e.sell_block([]) == "bad_request" and e.sell_block([3, 3]) == "bad_request" and e.sell_block([3, 99]) == "unknown_item"
 		and e.sell_items([1, 3]) == 0 and notes[-1] == EconomyScript.EQUIP_TEXT.equipped and e.bag.size() == 5, "sell_block: equipped / empty / duplicate / unknown; a refused sale sells nothing")
-	check(e.sell_items([3, 4]) == 40 and e.gold_tenths == 400 and e.bag.map(func(x): return x.id) == [1, 2, 5], "sell: round(10 x 1.5 x 2) + 10 = 40 gold, the items leave the bag")
+	check(e.sell_items([3, 4]) == 250 and e.gold_tenths == 2500 and e.bag.map(func(x): return x.id) == [1, 2, 5], "sell: round(100 x 1.5) + 100 = 250 gold, the items leave the bag")
 	e.free()
 
 
@@ -3577,7 +3615,8 @@ func test_dungeon_save_and_server() -> void:
 	var e = _econ(t0)
 	e.dungeons.gold = {"best_level": 7, "keys": 4, "extra_today": 0, "last_reset": GameData.reset_at(GameData.reset_day(t0))}
 	e.dungeons.equip = {"best_level": 3, "keys": 0, "extra_today": 2, "last_reset": GameData.reset_at(GameData.reset_day(t0))}
-	e.bag = [{"id": 4, "slot": "weapon", "weapon_kind": "sword", "grade": "UR", "level": 6}, {"id": 9, "slot": "gloves", "weapon_kind": null, "grade": "N", "level": 2}]
+	e.bag = [{"id": 4, "slot": "weapon", "weapon_kind": "sword", "grade": "UR", "rolls": {"atk": 110}, "subs": [{"id": "aspd", "r": 95}, {"id": "crit_rate", "r": 105}]},
+		{"id": 9, "slot": "gloves", "weapon_kind": null, "grade": "N", "rolls": {"atk": 85}, "subs": []}]
 	e.equipment = {"hans": {"weapon": 4}}
 	e.next_item_id = 10
 	e.save_path = tmp
@@ -3587,7 +3626,7 @@ func test_dungeon_save_and_server() -> void:
 	e8.load_save(t0)
 	var raw = JSON.parse_string(FileAccess.get_file_as_string(tmp))
 	check(int(raw.version) == EconomyScript.SAVE_VERSION and EconomyScript.SAVE_VERSION >= 10 and e8.dungeons == e.dungeons and e8.bag == e.bag and e8.equipment == e.equipment and e8.next_item_id == 10
-		and e8.bag[0].id is int and e8.dungeon_state("equip").extra_today == 2 and e8.equipment_bonus("hans").atk == roundi(13.5 * 4.6),
+		and e8.bag[0].id is int and e8.dungeon_state("equip").extra_today == 2 and e8.equipment_bonus("hans").atk == roundi(20 * 4.6 * 1.1),
 		"save v10 round-trips dungeons, the bag, equipment and next_item_id: %s %s" % [e8.dungeons, e8.bag])
 	var v9: Dictionary = raw.duplicate(true)
 	v9.version = 9
@@ -3627,7 +3666,7 @@ func test_dungeon_save_and_server() -> void:
 	e.items_changed.connect(func(): sig[1] += 1)
 	e.roster_changed.connect(func(): sig[2] += 1)
 	check(e.apply_server(reply) and e.dungeons.gold == {"best_level": 5, "keys": 2, "extra_today": 0, "last_reset": DG_LAST} and e.bag.map(func(x): return x.id) == [30, 31]
-		and e.equipment == {"dorik": {"weapon": 31}} and e.equipment_bonus("dorik").atk == roundi(10.5 * 3.2) and sig[0] >= 1 and sig[1] >= 1 and sig[2] >= 1,
+		and e.equipment == {"dorik": {"weapon": 31}} and e.equipment_bonus("dorik").atk == roundi(20 * 3.2) and sig[0] >= 1 and sig[1] >= 1 and sig[2] >= 1,
 		"apply_server takes dungeons, the bag (id order) and equipment, and fires dungeons_changed / items_changed / roster_changed")
 	var gold_keys: int = e.dungeon_state("gold").keys
 	check(gold_keys == GameData.apply_reset("gold", e.dungeons.gold, e.time_now()).keys and gold_keys >= 2, "online dungeon_state counts the daily reset from the server's last_reset")
@@ -4705,7 +4744,7 @@ func test_guild() -> void:
 	check(shards1 == shards0 + 3, "guild: shard box gives 3 shards of owned heroes")
 	var bag0: int = e.bag.size()
 	var got_equip := g.buy("equip")
-	check(got_equip != "" and e.bag.size() == bag0 + 1 and int(e.bag.back().level) >= 1 and g.coins == 1000 - 300 - 200 - 50 and not GuildScript.SHOP.any(func(it): return it.id == "food"),
+	check(got_equip != "" and e.bag.size() == bag0 + 1 and e.bag.back().rolls.size() >= 1 and not e.bag.back().has("level") and g.coins == 1000 - 300 - 200 - 50 and not GuildScript.SHOP.any(func(it): return it.id == "food"),
 		"guild: equipment box (instead of food) adds one item: %s" % got_equip)
 	# 다음 날: 한도·출석 초기화, 가상 길드원이 활동한다
 	var exp_before := int(g.guild.exp) + int(g.guild.level) * 100000

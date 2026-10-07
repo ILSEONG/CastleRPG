@@ -242,7 +242,8 @@ test('guild: shop spends coins with limits and gives shards of owned heroes', as
   r = await post(p.token, 'buy', { id: 'equip' })
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.equal(r.json.player.items.length, items0 + 1)
-  assert.equal(r.json.player.items.at(-1).level, 1)
+  assert.equal(r.json.player.items.at(-1).level, undefined) // 장비 레벨 없음(2026-10-07), 굴림만
+  assert.equal(Object.keys(r.json.player.items.at(-1).rolls).length > 0, true)
   assert.equal(r.json.guild.coins, 450)
   assert.equal((await post(p.token, 'buy', { id: 'nope' })).status, 400)
 })

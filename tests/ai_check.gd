@@ -2272,9 +2272,9 @@ func _dungeon_cases() -> void:
 
 ## DG3·DG4: 장비 던전(한스·엘라·도릭·니나 — ★0이라 스킬 1만, 받는 피해를 바꾸는 스킬 없음). 영웅은 처리를 끄고 자리를 놓는다.
 func _dk_cases() -> void:
-	Economy.bag.append({"id": 9001, "slot": "top", "weapon_kind": null, "grade": "SR", "level": 5})
-	Economy.bag.append({"id": 9002, "slot": "weapon", "weapon_kind": "sword", "grade": "R", "level": 3})
-	Economy.bag.append({"id": 9003, "slot": "shoes", "weapon_kind": null, "grade": "N", "level": 1})
+	Economy.bag.append({"id": 9001, "slot": "top", "weapon_kind": null, "grade": "SR", "rolls": {"hp": 110}, "subs": [{"id": "dmg_reduce", "r": 100}]})
+	Economy.bag.append({"id": 9002, "slot": "weapon", "weapon_kind": "sword", "grade": "SSR", "rolls": {"atk": 90}, "subs": [{"id": "crit_rate", "r": 100}]})
+	Economy.bag.append({"id": 9003, "slot": "shoes", "weapon_kind": null, "grade": "N", "rolls": {}, "subs": []})
 	var eq_ok: bool = Economy.equip("hans", "top", 9001) and Economy.equip("hans", "weapon", 9002) and Economy.equip("hans", "shoes", 9003)
 	var d = await _enter_dungeon("equip", ["hans", "ella", "dorik", "nina"])
 	await _frames(2)
@@ -2286,6 +2286,14 @@ func _dk_cases() -> void:
 	var shoes := GameData.item_stats(Economy.item(9003))
 	_check(eq_ok and is_equal_approx(hans.hp_max, bare.hp + top.hp + shoes.hp) and is_equal_approx(hans.atk, bare.atk + sword.atk) and top.hp > 0 and sword.atk > 0,
 		"(DG4) equipment adds to the arena hero: HP = base + top + shoes, attack = base + sword", "hp=%.1f want %.1f atk=%.1f want %.1f" % [hans.hp_max, bare.hp + top.hp + shoes.hp, hans.atk, bare.atk + sword.atk])
+	# 장비 특수 능력치(2026-10-07): SR 상의 받는 피해 감소 2%, SSR 검 치명타 확률 3% — 전투 영웅에 들어간다
+	var crit0: float = float(Economy.upgrade_bonus().get("crit_rate", 0.0))
+	_check(is_equal_approx(hans._gear_dmg_reduce, 0.02) and is_equal_approx(float(hans._bonus.crit_rate), crit0 + 0.03) and hans._gear_lifesteal == 0.0,
+		"(DG4) special stats reach the arena hero (damage reduction 2%, crit +3%)", "dr=%.3f crit=%.3f" % [hans._gear_dmg_reduce, float(hans._bonus.crit_rate)])
+	for it in Economy.bag:  # 아래 피해 검사(평타 = 공격력, 휩쓸기 = 90)가 굴림에 흔들리지 않게 특수 능력치를 뺀다
+		if int(it.id) in [9001, 9002]:
+			it.subs = []
+	hans.refresh_stats()
 	# 신발 이동속도 +3%: 성장 이동속도와 같은 한 곳(hero.refresh_stats)에서 — 아레나 영웅도 걷는 거리 × (1 + 성장 + 0.03)
 	var want_walk: float = float(hans.def.speed) * (1.0 + Economy.upgrade_bonus().mspd_pct + shoes.speed_pct / 100.0) * 0.1
 	var walked := _walk(hans, 0.1)
