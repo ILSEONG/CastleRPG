@@ -195,12 +195,13 @@ func _process(delta: float) -> void:
 	_update_compass()
 	if GameState.mode == GameState.Mode.COUNTDOWN:
 		_center.text = str(ceili(GameState.countdown_left()))
+	var real := delta / maxf(Engine.time_scale, 0.01)  # 알림은 실제 초(x1.5 배속·히트스톱과 무관)
 	if _toast_left > 0.0:
-		_toast_left -= delta
+		_toast_left -= real
 		_toast.modulate.a = clampf(_toast_left / 0.4, 0.0, 1.0)  # 마지막 0.4초에 사라진다
 		_toast.visible = _toast_left > 0.0
 	if _lock_left > 0.0:
-		_lock_left -= delta
+		_lock_left -= real
 		lock_toast.modulate.a = clampf(_lock_left / 0.4, 0.0, 1.0)
 		lock_toast.visible = _lock_left > 0.0
 	for e in _hp.values():

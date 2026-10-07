@@ -2761,14 +2761,14 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	var shop = recruit.shop
 	var sr: Rect2 = shop.dialog.get_global_rect()
-	_check(shop.is_open() and not recruit.is_open() and shop.tab == "diamond" and shop.buy_buttons.size() == 4 and shop.buy_buttons.all(func(b): return b.disabled and b.text == "준비 중")
+	_check(shop.is_open() and not recruit.is_open() and shop.tab == "diamond" and shop.buy_buttons.size() == 6 and shop.buy_buttons.all(func(b): return not b.disabled and b.text.begins_with("₩"))
 		and shop.note.text == "결제 기능은 출시 전에 연결됩니다" and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
-		"(r23) [이동] closes the recruit window and opens the shop on its 다이아 tab: 4 products, [준비 중] off, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
+		"(r23) [이동] closes the recruit window and opens the shop on its 다이아 tab: 6 packs with ₩ prices, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
 	await _unguarded(shop)
 	var d0: int = Economy.diamonds
 	await _tap(shop.buy_buttons[0].get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.diamonds == d0 and shop.is_open(), "(r23) tapping a disabled [구매] does nothing", "")
+	_check(Economy.diamonds == d0 and shop.is_open(), "(r23) tapping a ₩ pack before payments are connected changes nothing (notice only)", "")
 	shop.close()
 	Economy.diamonds = 9999999
 	Economy.gold = 9999999

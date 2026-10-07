@@ -15,6 +15,7 @@ import * as A from './attendance.ts'
 import * as M from './missions.ts'
 import * as P from './pouches.ts'
 import * as SH from './shop.ts'
+import * as IAP from './iap.ts'
 import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
 import type { WarLive } from './war_live.ts'
@@ -126,6 +127,7 @@ interface Player {
   missions: unknown // 미션 상태(저장된 그대로 — 쓰는 쪽이 M.normalize)
   pouches: Record<string, number> // 방치 주머니 id → 개수(pouches.ts)
   shop: unknown // 상점 산 기록(저장된 그대로 — 쓰는 쪽이 SH.normalize)
+  iap: unknown // 결제 상품 기록·월정액·패스(저장된 그대로 — 쓰는 쪽이 IAP.normalize)
 }
 
 interface Train {
@@ -181,6 +183,7 @@ interface Change {
   missions?: M.MissionState // 미션 상태 전체
   pouches?: Record<string, number> // 방치 주머니 보유 전체(새 값)
   shop?: SH.ShopState // 상점 산 기록 전체
+  iap?: IAP.IapState // 결제 상품 기록 전체
   pvpBuy?: { price: number; shop: unknown } // PVP 상점: 코인 −price(모자라면 전체가 안 바뀐다), 구매 수 새 값
 }
 
@@ -202,7 +205,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
+const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -422,6 +425,7 @@ export function createApp(opts: AppOptions) {
         missions: r.missions == null ? {} : json(r.missions),
         pouches: P.normalize(r.pouches == null ? {} : json(r.pouches)),
         shop: r.shop == null ? {} : json(r.shop),
+        iap: r.iap == null ? {} : json(r.iap),
       }
       if (p.build && p.build.finish <= now) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
@@ -493,6 +497,8 @@ export function createApp(opts: AppOptions) {
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
         pouches: p.pouches, // 방치 주머니 id → 개수
         shop: SH.normalize(p.shop, today(game, now)), // 상점: 오늘·이번 주 산 수
+        iap: IAP.normalize(p.iap, today(game, now)), // 결제 상품: 첫 구매·한도·월정액·패스
+        iap_enabled: false, // 실결제 연결 전(Google Play 등록 전)
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -572,6 +578,7 @@ export function createApp(opts: AppOptions) {
     if (ch.missions) sets.push(`missions = ${p(JSON.stringify(ch.missions))}::jsonb`)
     if (ch.pouches) sets.push(`pouches = ${p(JSON.stringify(ch.pouches))}::jsonb`)
     if (ch.shop) sets.push(`shop = ${p(JSON.stringify(ch.shop))}::jsonb`)
+    if (ch.iap) sets.push(`iap = ${p(JSON.stringify(ch.iap))}::jsonb`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = (ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : '')
@@ -785,6 +792,7 @@ export function createApp(opts: AppOptions) {
     if (ch.missions) pl.missions = ch.missions
     if (ch.pouches) pl.pouches = ch.pouches
     if (ch.shop) pl.shop = ch.shop
+    if (ch.iap) pl.iap = ch.iap
     for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
     pl.version += 1
   }
@@ -1501,6 +1509,88 @@ export function createApp(opts: AppOptions) {
       const pz = P.fromReward(give)
       if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
       return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
+    })
+  })
+
+  // --- 결제 상품(iap.ts): 다이아 충전·월정액·패키지·성장 패스 ---
+
+  // 보상(보상 키 — 출석·미션과 같은 규칙)을 change에 더한다. 던전 열쇠는 한 종류만(Change.dungeon).
+  function addReward(p: Player, g: Game, now: number, reward: Record<string, number>, change: Change) {
+    const res = Object.fromEntries(R.BUILD_RES.filter((r) => (reward[r] ?? 0) > 0).map((r) => [r, reward[r] + (change.res?.[r] ?? 0)]))
+    if (Object.keys(res).length) change.res = { ...change.res, ...res }
+    if (reward.gold) change.goldTenths = (change.goldTenths ?? 0) + reward.gold * 10
+    if (reward.diamonds) change.diamonds = (change.diamonds ?? 0) + reward.diamonds
+    if (reward.tickets) change.diaTickets = (change.diaTickets ?? 0) + reward.tickets
+    const keyType = R.DUNGEON_TYPES.find((t) => (reward[`keys_${t}`] ?? 0) > 0)
+    if (keyType) {
+      const ds = dungeonState(p, g, keyType, now)
+      change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + reward[`keys_${keyType}`] } }
+    }
+    const pz = P.fromReward(reward)
+    if (Object.keys(pz).length) change.pouches = P.add(change.pouches ?? p.pouches, pz)
+    return Boolean(keyType)
+  }
+
+  // 상품 사기. body = {product, provider, order_id, token?}. provider 'google'은 Google Play 결제 연결 전이라 503 payments_unavailable,
+  // 'test'는 통합 테스트(allowTestHooks)만. 같은 주문 번호는 한 번만(409 duplicate_order). 한도를 넘으면 409 limit.
+  // 받기(충전 첫 구매 2배)·상품 기록·economy_log iap를 version 가드 한 문장으로.
+  app.post('/v1/iap/purchase', auth, async (c) => {
+    const b = await body(c)
+    const pid = strField(b, 'product')
+    const pr = IAP.product(pid)
+    if (!pr) throw new ApiError(404, 'unknown_product', `unknown product '${pid}'`)
+    const provider = strField(b, 'provider')
+    if (provider !== 'test' || !opts.allowTestHooks) throw new ApiError(503, 'payments_unavailable', 'payments are not connected yet')
+    const orderId = `${provider}:${strField(b, 'order_id')}`
+    const id = c.get('playerId') as string
+    const [row] = await query('insert into iap_orders (order_id, player_id, product, provider) values ($1, $2, $3, $4) on conflict do nothing returning order_id',
+      [orderId, id, pr.id, provider])
+    if (!row) throw new ApiError(409, 'duplicate_order', 'this order was already used')
+    try {
+      return await mutate(c, (p, g, now) => {
+        const st = IAP.normalize(p.iap, today(g, now))
+        if (!IAP.canBuy(st, pr)) throw new ApiError(409, 'limit', `'${pr.id}' can't be bought now`)
+        const { give, state } = IAP.purchase(st, pr)
+        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderId, give } } }
+        const reload = addReward(p, g, now, give, change)
+        return { change, extra: { bought: { product: pr.id, give } }, reload }
+      })
+    } catch (e) {
+      await query('delete from iap_orders where order_id = $1', [orderId])
+      throw e
+    }
+  })
+
+  // 월정액 오늘 보상. body = {product}. 기간이 아니면 409 inactive, 오늘 받았으면 409 claimed.
+  app.post('/v1/iap/monthly/claim', auth, async (c) => {
+    const pid = strField(await body(c), 'product')
+    const pr = IAP.product(pid)
+    if (pr?.kind !== 'monthly') throw new ApiError(404, 'unknown_product', `unknown monthly card '${pid}'`)
+    return mutate(c, (p, g, now) => {
+      const st = IAP.normalize(p.iap, today(g, now))
+      if (IAP.monthlyLeft(st, pr.id) <= 0) throw new ApiError(409, 'inactive', 'this monthly card is not active')
+      if (!IAP.canClaimMonthly(st, pr.id)) throw new ApiError(409, 'claimed', 'already claimed today')
+      const state = { ...st, monthly: { ...st.monthly, [pr.id]: { ...st.monthly[pr.id], claimed: st.day } } }
+      const change: Change = { iap: state, log: { kind: 'monthly', detail: { product: pr.id, day: st.day, reward: pr.daily } } }
+      const reload = addReward(p, g, now, pr.daily ?? {}, change)
+      return { change, extra: { reward: pr.daily }, reload }
+    })
+  })
+
+  // 성장 패스 보상. body = {tier, track: 'free'|'paid'}. 그 라운드를 아직 못 깼거나(유료는 패스 없음) 받았으면 409 not_ready.
+  app.post('/v1/iap/growth/claim', auth, async (c) => {
+    const b = await body(c)
+    const tier = intField(b, 'tier', 0, IAP.GROWTH.length - 1)
+    const track = strField(b, 'track')
+    if (track !== 'free' && track !== 'paid') throw new ApiError(400, 'bad_request', "'track' must be free or paid")
+    return mutate(c, (p, g, now) => {
+      const st = IAP.normalize(p.iap, today(g, now))
+      if (!IAP.canClaimGrowth(st, tier, track, p.stage - 1)) throw new ApiError(409, 'not_ready', 'this growth pass reward is not ready')
+      const reward = IAP.GROWTH[tier][track]
+      const state = { ...st, gp: { ...st.gp, [track]: [...st.gp[track], tier].sort((a, z) => a - z) } }
+      const change: Change = { iap: state, log: { kind: 'growth_pass', detail: { tier, track, reward } } }
+      const reload = addReward(p, g, now, reward, change)
+      return { change, extra: { reward }, reload }
     })
   })
 

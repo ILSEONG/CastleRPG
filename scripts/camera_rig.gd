@@ -222,7 +222,8 @@ func kick(at: Vector3, amp: float, stop := 0.0) -> void:
 
 static func _unstop(was: float) -> void:
 	_stopping = false
-	Engine.time_scale = was
+	var managed: float = load("res://scripts/speed_button.gd").base  # 배속 버튼이 배율을 맡았으면(히트스톱 중 켬/끔·던전 입장) 지금 배율로
+	Engine.time_scale = managed if managed > 0.0 else was
 
 
 func is_shaking() -> bool:

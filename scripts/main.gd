@@ -206,11 +206,15 @@ func _build_world() -> void:
 		"event": event_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
+	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 중하단 x1.5 배속 켬/끔(기기 저장, 성 화면에서만)
+	speed.card = card
+	add_child(speed)
 	_hud = hud
 	_strip = preload("res://scripts/hero_strip.gd").new()
 	_strip.picker = picker
 	_strip.heroes_fn = strip_heroes
 	add_child(_strip)
+	speed.strip = _strip
 	_battle_hide = [tabs, side_menu, tags, badges]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):

@@ -1,10 +1,13 @@
 extends "res://scripts/ui_window.gd"
-## [상점] 시트(하단 탭 [상점], 2026-10-07 — 방치형 게임 상점처럼): 위에 보유 다이아·골드, 하위 탭 [일일][주간][다이아].
-## 일일·주간 = 상품 카드 2열(그림·이름·내용·남은 횟수 + 가격 버튼). 누르면 곧바로 값이 빠지고 받은 것이 들어온다(Economy.buy_shop —
-## 서버 확인은 뒤에서, 거절되면 되돌리고 알린다). 버튼은 기다리는 글자로 바뀌지 않는다. 다 산 상품은 "매진", 무료 선물이 남았으면 탭에 빨간 점.
-## 다이아 = 충전 상품 4개(크기별 보석 더미·다이아 수·가격) — 결제 기능이 없어 [준비 중](눌리지 않는다)과 안내 문구.
-## 모집 창의 "다이아가 부족합니다 → [이동]"은 이 시트를 [다이아] 탭으로 연다(open_tab).
-## [PVP] 탭(2026-10-07): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
+## [상점] 시트(하단 탭 [상점], 2026-10-07 — 방치형 게임 정석 BM, BM 총괄 Claude): 위에 보유 다이아·골드, 하위 탭(TABS — 다른 창이 탭을 더할 수 있다)
+## [패키지][패스][일일][주간][PVP][다이아].
+## - 패키지 = 월정액 2종(사면 즉시 다이아 + 30일 매일 [오늘 받기]) + 신규 스타터·일일·주간 특가·성장 지원 패키지(실결제, 기간 한도).
+## - 패스 = 성장 패스: 라운드를 깰 때마다 무료 보상(누구나) + 유료 보상(패스 구매자), 단계마다 [받기].
+## - 일일·주간 = 다이아로 사는 한정 상품 카드 2열 + 무료 선물(Economy.buy_shop — 누르는 즉시, 서버 확인은 뒤에서, 거절되면 되돌림).
+## - 다이아 = 충전 6단계(첫 구매 2배 띠, 이후 보너스).
+## 실결제 버튼(₩ 가격)은 Google Play 연결 전이라 누르면 알림만(Economy.iap_buy). 버튼은 기다리는 글자로 바뀌지 않는다.
+## 받을 것(무료 선물·월정액 오늘 보상·성장 패스)이 있는 탭에 빨간 점. 모집 창의 "다이아가 부족합니다 → [이동]"은 [다이아] 탭으로 연다(open_tab).
+## [PVP] 탭(2026-10-07, PVP 스레드): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
 ## PVP 화면의 [상점]도 이 탭으로 연다(pvp_view.open_shop).
 const PVP_NOTE := "PVP 코인은 결투·총력전에서 얻어요 (승리 %d · 패배 %d)"
 
@@ -12,6 +15,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const ShopItems := preload("res://scripts/shop_items.gd")
+const IapItems := preload("res://scripts/iap_items.gd")
 const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const DungeonPanel := preload("res://scripts/dungeon_panel.gd")
 const SideMenu := preload("res://scripts/side_menu.gd")
@@ -19,10 +23,10 @@ const PvpRules := preload("res://scripts/pvp_rules.gd")
 const PvpView := preload("res://scripts/pvp_view.gd")
 
 const GROUP_SHOP := "shop_panel"
-const TABS := [["daily", "일일"], ["weekly", "주간"], ["pvp", "PVP"], ["diamond", "다이아"]]
-const HEAD := {"daily": "매일 00:00에 초기화", "weekly": "매주 월요일 00:00에 초기화", "diamond": "다이아 충전", "pvp": "PVP 코인 상점 · 일일 상품은 매일, 주간 상품은 월요일 00:00에 초기화"}
-const PACKS := [{"diamonds": 300, "price": 1200}, {"diamonds": 1000, "price": 3900}, {"diamonds": 3000, "price": 11000}, {"diamonds": 6500, "price": 22000}]
-const SOON_TEXT := "준비 중"
+const TABS := [["package", "패키지"], ["pass", "패스"], ["daily", "일일"], ["weekly", "주간"], ["pvp", "PVP"], ["diamond", "다이아"]]
+const HEAD := {"package": "월정액·특가 패키지", "pass": "라운드를 깰 때마다 보상 · 패스를 사면 유료 보상도", "daily": "매일 00:00에 초기화",
+	"weekly": "매주 월요일 00:00에 초기화", "diamond": "단계마다 첫 구매는 다이아 2배",
+	"pvp": "PVP 코인 상점 · 일일 상품은 매일, 주간 상품은 월요일 00:00에 초기화"}
 const NOTE_TEXT := "결제 기능은 출시 전에 연결됩니다"
 const SOLD_TEXT := "매진"
 const FREE_TEXT := "무료"
@@ -37,12 +41,12 @@ const RED := Color(0.88, 0.22, 0.2)
 const CLOSE_PX := 56.0
 const CARD_W := 316.0
 
-var tab := "daily"
+var tab := "package"
 var body: VBoxContainer
 var head_label: Label
 var wallet_label: Label
-var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "pack:0" …, "close"
-var buy_buttons: Array = []  # 다이아 탭 [준비 중] 버튼들
+var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "monthly:<id>", "growth:<단계>:<free|paid>", "close"
+var buy_buttons: Array = []  # 다이아 탭 충전 버튼들
 var note: Label
 
 var _sig := ""
@@ -94,7 +98,7 @@ func _ready() -> void:
 		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var tid: String = t[0]
 		dot.draw.connect(func():
-			if Economy.shop_free_left(tid):
+			if tab_dot(tid):
 				var p := Vector2(dot.size.x - 12, 12)
 				dot.draw_circle(p, 9.0, RED)
 				dot.draw_arc(p, 9.0, 0, TAU, 16, RED.darkened(0.3), 1.5, true))
@@ -116,6 +120,18 @@ func _ready() -> void:
 	Economy.changed.connect(_on_changed)
 	Economy.shop_changed.connect(_on_changed)
 	Pvp.changed.connect(_on_changed)
+
+
+## 그 탭에 받을 것이 있다(빨간 점).
+static func tab_dot(t: String) -> bool:
+	if t == "daily" or t == "weekly":
+		return Economy.shop_free_left(t)
+	return Economy.iap_claim_left(cleared()).has(t)
+
+
+## 깬 마지막 라운드(성장 패스).
+static func cleared() -> int:
+	return maxi(GameState.stage, Economy.server_stage) - 1
 
 
 func _fit() -> void:
@@ -163,8 +179,8 @@ func _process(delta: float) -> void:
 
 
 func _head() -> void:
-	if tab == "diamond" or tab == "pvp":
-		head_label.text = HEAD[tab]
+	if not tab in ["daily", "weekly"]:
+		head_label.text = HEAD.get(tab, "")
 		return
 	var per := Economy.shop_period()
 	var hour := GameData.config_num("daily_reset_utc_hour") * 3600.0
@@ -181,7 +197,7 @@ func _wallet() -> void:
 
 ## 보이는 카드의 상태(남은 횟수·살 수 있는지) — 같으면 카드를 다시 만들지 않는다(누르는 도중 버튼이 바뀌지 않게).
 func _signature() -> String:
-	var parts := [tab]
+	var parts := [tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0]
 	if tab == "pvp":
 		parts.append(str(Pvp.coins()))
 		for x in PvpRules.SHOP:
@@ -199,7 +215,7 @@ func _rebuild() -> void:
 			UiKit.apply_button(buttons[k], UiKit.AMBER if k == "tab:" + tab else UiKit.STEEL, 14.0)
 			buttons[k].get_child(0).queue_redraw()
 	for k in buttons.keys():
-		if k.begins_with("buy:") or k.begins_with("pack:"):
+		if not k.begins_with("tab:") and k != "close":
 			buttons.erase(k)
 	buy_buttons = []
 	note = null
@@ -208,15 +224,23 @@ func _rebuild() -> void:
 		c.queue_free()
 	_head()
 	_wallet()
+	match tab:
+		"package":
+			_build_packages()
+			return
+		"pass":
+			_build_pass()
+			return
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	body.add_child(grid)
 	if tab == "diamond":
-		for i in PACKS.size():
-			grid.add_child(_pack_card(PACKS[i], i))
-		note = _label(NOTE_TEXT, 22, Color(HudScript.INK, 0.75))
+		var packs := IapItems.of_kind("diamond")
+		for i in packs.size():
+			grid.add_child(_pack_card(packs[i], i))
+		note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
 		body.add_child(note)
 		return
 	if tab == "pvp":
@@ -380,30 +404,167 @@ static func draw_pvp_item(c: CanvasItem, id: String, ctr: Vector2, s: float) -> 
 
 
 func _pack_card(p: Dictionary, i: int) -> Control:
-	var gems := i + 2  # 상품이 클수록 보석이 많다(2..5개)
+	var gems := mini(i + 1, PILE.size())  # 상품이 클수록 보석이 많다(1..6개)
+	var first := Economy.iap_first_bonus(p.id)
+	var base := int(p.give.diamonds)
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(CARD_W, 0)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM, 12.0, 12))
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
+	box.add_theme_constant_override("separation", 4)
 	card.add_child(box)
 	var pile := Control.new()
-	pile.custom_minimum_size = Vector2(0, 96)
+	pile.custom_minimum_size = Vector2(0, 92)
 	pile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pile.draw.connect(func():
 		var c := pile.size / 2.0
 		for j in range(gems - 1, -1, -1):  # 뒤에서 앞으로(가운데 보석이 맨 앞)
-			IconsScript.draw_icon(pile, "diamond", c + PILE[j], 44.0 - j * 2.0))
+			IconsScript.draw_icon(pile, "diamond", c + PILE[j], 44.0 - j * 2.0)
+		if first:  # 첫 구매 2배 띠(왼쪽 위)
+			_ribbon(pile, "첫 구매 2배"))
 	box.add_child(pile)
-	box.add_child(_label("다이아 %s" % UiKit.commas(p.diamonds), 30))
-	box.add_child(_label("%s원" % UiKit.commas(p.price), 24, Color(HudScript.INK, 0.8)))
-	var buy := _button(SOON_TEXT, HudScript.ACCENT, 24)
-	buy.disabled = true
+	box.add_child(_label("다이아 %s" % UiKit.commas(base), 30))
+	var extra := base if first else int(p.get("bonus", 0))
+	box.add_child(_label(("+%s 보너스" % UiKit.commas(extra)) if extra > 0 else " ", 20, RED if first else GIVE))
+	var buy := _krw_button(p.id, int(p.krw))
 	box.add_child(buy)
 	buy_buttons.append(buy)
-	buttons["pack:%d" % i] = buy
 	return card
+
+
+## 실결제 가격 버튼(₩). 누르면 Economy.iap_buy(연결 전이면 알림).
+func _krw_button(id: String, krw: int, text := "") -> Button:
+	var b := _button(text if text != "" else "₩" + UiKit.commas(krw), HudScript.ACCENT, 24)
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(0, 56)
+	b.pressed.connect(func(): Economy.iap_buy(id))
+	buttons["iap:" + id] = b
+	return b
+
+
+func _ribbon(c: Control, text: String) -> void:
+	var font := c.get_theme_default_font()
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x + 18.0
+	var pts := PackedVector2Array([Vector2(0, 4), Vector2(w, 4), Vector2(w - 8, 17), Vector2(w, 30), Vector2(0, 30)])
+	c.draw_colored_polygon(pts, RED)
+	pts.append(pts[0])
+	c.draw_polyline(pts, RED.darkened(0.3), 1.5, true)
+	c.draw_string(font, Vector2(6, 24), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
+
+
+## 가로 카드(그림 · 이름/내용/상태 · 오른쪽 버튼들).
+func _wide(icon: String, title: String, lines: Array, side: Array, bg := CARD_BG) -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UiKit.panel(bg, 12.0, 10))
+	var r := HBoxContainer.new()
+	r.add_theme_constant_override("separation", 10)
+	card.add_child(r)
+	var pic := Control.new()
+	pic.custom_minimum_size = Vector2(84, 84)
+	pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pic.draw.connect(func(): draw_item_icon(pic, icon, pic.size / 2.0, 66.0))
+	r.add_child(pic)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 2)
+	r.add_child(v)
+	v.add_child(_label(title, 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	for ln in lines:
+		var l := _label(str(ln[0]), 18, ln[1], HORIZONTAL_ALIGNMENT_LEFT)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(150, 0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 6)
+	r.add_child(col)
+	for c in side:
+		col.add_child(c)
+	return card
+
+
+func _build_packages() -> void:
+	for p in IapItems.of_kind("monthly"):
+		var left := Economy.monthly_left(p.id)
+		var lines := [["구매 즉시 " + Missions.reward_text(p.give), GIVE], ["%d일간 매일 %s" % [int(p.days), Missions.reward_text(p.daily)], GIVE]]
+		lines.append(["남은 기간 %d일" % left if left > 0 else "총 %s 이상의 가치" % _value_text(p), SUB])
+		var side := []
+		if left > 0:
+			if Economy.can_claim_monthly(p.id):
+				var c := _button("오늘 받기", UiKit.AMBER, 22)
+				c.focus_mode = Control.FOCUS_NONE
+				c.pressed.connect(func(): Economy.claim_monthly(p.id))
+				buttons["monthly:" + p.id] = c
+				side.append(c)
+			else:
+				side.append(_label("오늘 받음", 20, SUB))
+		if Economy.iap_can_buy(p.id):
+			side.append(_krw_button(p.id, int(p.krw), ("연장 ₩" if left > 0 else "₩") + UiKit.commas(int(p.krw))))
+		body.add_child(_wide("gift" if p.id == "monthly" else "crown", p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
+	for p in IapItems.of_kind("package"):
+		var ok := Economy.iap_can_buy(p.id)
+		if p.period == "once" and not ok:
+			continue  # 평생 1회 상품은 산 뒤 숨긴다
+		var limit: String = {"once": "계정당 1회", "daily": "매일 1회", "weekly": "매주 1회"}.get(p.period, "")
+		var side := [_krw_button(p.id, int(p.krw))] if ok else [_label(SOLD_TEXT, 22, SUB)]
+		body.add_child(_wide("ticket" if p.give.has("tickets") else "diamond", p.name, [[Missions.reward_text(p.give), GIVE], [limit, SUB]], side,
+			CARD_BG if ok else SOLD_BG))
+	note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
+	body.add_child(note)
+
+
+## 대략의 다이아 가치(모집권 1장 = 다이아 모집 1회 비용).
+func _value_text(p: Dictionary) -> String:
+	var per_ticket := int(GameData.config_num("gacha_dia_cost_1"))
+	var dia := int(p.give.get("diamonds", 0))
+	var d: Dictionary = p.get("daily", {})
+	dia += int(p.days) * (int(d.get("diamonds", 0)) + int(d.get("tickets", 0)) * per_ticket)
+	return "다이아 %s" % UiKit.commas(dia)
+
+
+func _build_pass() -> void:
+	var owned := Economy.has_pass("pass_growth")
+	var p := IapItems.find("pass_growth")
+	var side := [_label("구매함", 22, GIVE)] if owned else [_krw_button(p.id, int(p.krw))]
+	body.add_child(_wide("crown", "성장 패스", [["라운드를 깰 때마다 무료 보상, 패스가 있으면 유료 보상도 받아요", SUB],
+		["산 뒤에는 지난 단계 유료 보상도 받을 수 있어요", SUB]], side, FREE_BG if owned else CARD_BG))
+	var c := cleared()
+	for i in IapItems.GROWTH.size():
+		var t: Dictionary = IapItems.GROWTH[i]
+		var card := PanelContainer.new()
+		var reached := c >= int(t.round)
+		card.add_theme_stylebox_override("panel", UiKit.panel(CARD_BG if reached else SOLD_BG, 10.0, 8))
+		var r := HBoxContainer.new()
+		r.add_theme_constant_override("separation", 8)
+		card.add_child(r)
+		var lab := _label(GameData.round_label(int(t.round)), 26, HudScript.INK if reached else SUB)
+		lab.custom_minimum_size = Vector2(96, 0)
+		r.add_child(lab)
+		for track in ["free", "paid"]:
+			r.add_child(_growth_cell(i, track, t[track], owned))
+		body.add_child(card)
+
+
+func _growth_cell(i: int, track: String, reward: Dictionary, owned: bool) -> Control:
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 2)
+	v.add_child(_label(("무료 · " if track == "free" else "패스 · ") + Missions.reward_text(reward), 17, GIVE if track == "free" else Color(0.55, 0.30, 0.70)))
+	var done: bool = Economy.iap_view().gp[track].has(i) or Economy.iap_view().gp[track].has(float(i))
+	if done:
+		v.add_child(_label("받음", 20, SUB))
+	elif Economy.can_claim_growth(i, track, cleared()):
+		var b := _button("받기", UiKit.AMBER, 20)
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(0, 44)
+		b.pressed.connect(func(): Economy.claim_growth(i, track, cleared()))
+		buttons["growth:%d:%s" % [i, track]] = b
+		v.add_child(b)
+	else:
+		v.add_child(_label("패스 필요" if track == "paid" and not owned else "잠김", 18, SUB))
+	return v
 
 
 ## 상품 그림: gift(선물 상자)·ticket(모집권)·pouch_gold·pouch_res(주머니)·key(던전 입장권)·res_pile(자원 더미).
@@ -417,6 +578,17 @@ static func draw_item_icon(ci: Control, icon: String, ctr: Vector2, s: float) ->
 			PouchPanel.draw_pouch(ci, ctr, s, "res")
 		"key":
 			_draw_key_at(ci, ctr, s)
+		"crown":  # 왕관(월정액·패스)
+			var u := s / 70.0
+			var pts := PackedVector2Array([ctr + Vector2(-28, 16) * u, ctr + Vector2(-30, -14) * u, ctr + Vector2(-14, 0) * u, ctr + Vector2(0, -22) * u,
+				ctr + Vector2(14, 0) * u, ctr + Vector2(30, -14) * u, ctr + Vector2(28, 16) * u])
+			ci.draw_colored_polygon(pts, Color(0.98, 0.78, 0.22))
+			ci.draw_colored_polygon(PackedVector2Array([ctr + Vector2(-28, 16) * u, ctr + Vector2(28, 16) * u, ctr + Vector2(28, 24) * u, ctr + Vector2(-28, 24) * u]),
+				Color(0.86, 0.60, 0.14))
+			pts.append(pts[0])
+			ci.draw_polyline(pts, Color(0.70, 0.48, 0.10), 2.0 * u, true)
+			for g in [[Vector2(0, 4), Color(0.86, 0.22, 0.24)], [Vector2(-16, 8), Color(0.30, 0.60, 0.92)], [Vector2(16, 8), Color(0.30, 0.60, 0.92)]]:
+				ci.draw_circle(ctr + g[0] * u, 4.5 * u, g[1])
 		"res_pile":
 			IconsScript.draw_icon(ci, "wood", ctr + Vector2(-s * 0.28, s * 0.1), s * 0.55)
 			IconsScript.draw_icon(ci, "stone", ctr + Vector2(s * 0.28, s * 0.1), s * 0.55)

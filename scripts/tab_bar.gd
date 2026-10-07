@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## 하단 탭 바(스펙 §2.3, 개정 13 §7.1, 개정 18 §1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 6개 —
 ## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·던전(던전 시트)·모집(주점 창)·상점(상점 시트, 2026-10-07 — 길드는 오른쪽 아래 메뉴로 옮겼다).
-## 상인은 탭이 없다(성 안 상인 NPC를 탭). [상점]은 받을 무료 선물이 있으면 오른쪽 위에 빨간 점.
+## 상인은 탭이 없다(성 안 상인 NPC를 탭). [상점]은 받을 것(무료 선물·월정액 오늘 보상·성장 패스)이 있으면 오른쪽 위에 빨간 점.
 ## [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
 ## 탭마다 각진 아이콘 + 글자. 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다
 ## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
@@ -114,7 +114,8 @@ func _draw_face(face: Control, i: int) -> void:
 
 
 func _process(_delta: float) -> void:
-	var d := Economy.shop_free_left("daily") or Economy.shop_free_left("weekly")
+	var d: bool = Economy.shop_free_left("daily") or Economy.shop_free_left("weekly") \
+		or not Economy.iap_claim_left(maxi(GameState.stage, Economy.server_stage) - 1).is_empty()
 	if d != _shop_dot and buttons.has("shop"):
 		_shop_dot = d
 		buttons.shop.get_child(0).queue_redraw()

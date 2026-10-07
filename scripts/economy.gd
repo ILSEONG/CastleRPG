@@ -51,6 +51,9 @@ const POUCH_PREFIX := "pouch_"  # 보상 표 키: pouch_<id>
 const POUCH_FAIL_TEXT := "주머니를 열지 못했어요 — 보유 수를 다시 확인합니다"
 const ShopItems := preload("res://scripts/shop_items.gd")
 const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸어요"
+const IapItems := preload("res://scripts/iap_items.gd")
+const IAP_OFF_TEXT := "결제는 Google Play 출시 후 열려요"
+const IAP_FAIL_TEXT := "보상을 받지 못해 되돌렸어요"
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
@@ -164,6 +167,8 @@ var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
 var dia_tickets := 0
+var iap := {}  # 결제 상품 기록 {first, n, day, week, d, w, monthly: {id: {until, claimed}}, passes, gp: {free, paid}}(온라인은 서버 player.iap, 오프라인은 저장 "iap")
+var iap_enabled := false  # 실결제 연결됨(서버 player.iap_enabled). 아니면 결제 상품 버튼은 알림만
 var shop := {}  # 상점 산 기록 {day, week, d: {상품 id: 오늘 산 수}, w: {상품 id: 이번 주 산 수}}(온라인은 서버 player.shop, 오프라인은 저장 "shop")
 var pouches := {}  # 방치 주머니 id("gold_60"·"res_240" …, POUCH_IDS) → 개수(> 0). 저장 "pouches"(없으면 {})
 var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
@@ -380,6 +385,7 @@ func reset(now: float) -> void:
 	dia_tickets = 0
 	pouches = {}
 	shop = {}
+	iap = {}
 	unbuilt = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
@@ -1212,6 +1218,161 @@ func buy_shop(id: String) -> bool:
 	grant(r)  # 저장·changed·열쇠까지
 	shop_changed.emit()
 	return true
+
+
+# --- 결제 상품(서버 iap.ts, 표 iap_items.gd): 다이아 충전·월정액·패키지·성장 패스. 사는 것은 실결제(Google Play 연결 전 — 알림만),
+# 월정액 매일 보상·성장 패스 보상 받기는 지금도 된다(누르는 즉시 반영, 서버 확인은 뒤에서, 거절되면 되돌림) ---
+
+## 이번 기간(오늘·이번 주) 기준으로 맞춘 기록 — 날·주가 바뀌었으면 그 기간 기록은 빈 것으로 본다.
+func iap_view() -> Dictionary:
+	var per := shop_period()
+	var s := iap.duplicate(true)
+	for k in ["n", "d", "w", "monthly"]:
+		if not s.get(k) is Dictionary:
+			s[k] = {}
+	for k in ["first", "passes"]:
+		if not s.get(k) is Array:
+			s[k] = []
+	if not s.get("gp") is Dictionary:
+		s.gp = {}
+	for k in ["free", "paid"]:
+		if not s.gp.get(k) is Array:
+			s.gp[k] = []
+	if int(s.get("day", -1)) != int(per[0]):
+		s.d = {}
+	if int(s.get("week", -1)) != int(per[1]):
+		s.w = {}
+	s.day = per[0]
+	s.week = per[1]
+	return s
+
+
+## 지금 더 살 수 있는가(패키지 한도·패스 중복·월정액 최대 기간).
+func iap_can_buy(id: String) -> bool:
+	var p := IapItems.find(id)
+	if p.is_empty():
+		return false
+	var s := iap_view()
+	match str(p.kind):
+		"pass":
+			return not s.passes.has(id)
+		"monthly":
+			return monthly_left(id) + int(p.days) <= IapItems.MONTHLY_MAX_DAYS
+		"package":
+			var had := int(s.d.get(id, 0)) if p.period == "daily" else (int(s.w.get(id, 0)) if p.period == "weekly" else int(s.n.get(id, 0)))
+			return had < int(p.get("limit", 1))
+	return true
+
+
+## 충전 상품 첫 구매(기본 다이아 2배)가 남았다.
+func iap_first_bonus(id: String) -> bool:
+	return not iap_view().first.has(id)
+
+
+func has_pass(id: String) -> bool:
+	return iap_view().passes.has(id)
+
+
+## 월정액 남은 날 수(오늘 포함), 없으면 0.
+func monthly_left(id: String) -> int:
+	var s := iap_view()
+	var m = s.monthly.get(id)
+	if not m is Dictionary or not _num(m.get("until")):
+		return 0
+	return maxi(0, int(m.until) - int(s.day) + 1)
+
+
+func can_claim_monthly(id: String) -> bool:
+	var s := iap_view()
+	var m = s.monthly.get(id)
+	return monthly_left(id) > 0 and m is Dictionary and not (_num(m.get("claimed")) and int(m.claimed) == int(s.day))
+
+
+## 성장 패스 단계 받을 수 있는가(cleared = 깬 마지막 라운드).
+func can_claim_growth(tier: int, track: String, cleared: int) -> bool:
+	if tier < 0 or tier >= IapItems.GROWTH.size():
+		return false
+	var s := iap_view()
+	if cleared < int(IapItems.GROWTH[tier].round) or s.gp[track].has(tier) or s.gp[track].has(float(tier)):
+		return false
+	return track == "free" or s.passes.has("pass_growth")
+
+
+## 받을 것이 있다(상점 탭·하단 [상점] 빨간 점): 월정액 오늘 보상 또는 성장 패스.
+func iap_claim_left(cleared: int) -> Dictionary:
+	var out := {}
+	for p in IapItems.of_kind("monthly"):
+		if can_claim_monthly(p.id):
+			out.package = true
+	for i in IapItems.GROWTH.size():
+		if can_claim_growth(i, "free", cleared) or can_claim_growth(i, "paid", cleared):
+			out.pass = true
+	return out
+
+
+## 결제 상품 사기: 실결제(Google Play) 연결 전이라 알리기만 한다. 연결되면 여기서 결제 창을 열고 영수증을 /v1/iap/purchase로 보낸다.
+func iap_buy(id: String) -> bool:
+	if IapItems.find(id).is_empty() or not iap_can_buy(id):
+		return false
+	if not iap_enabled:
+		notice.emit(IAP_OFF_TEXT)
+		return false
+	return false
+
+
+func claim_monthly(id: String) -> bool:
+	var p := IapItems.find(id)
+	if p.is_empty() or not can_claim_monthly(id):
+		return false
+	var mark := func():
+		var s := iap_view()
+		s.monthly[id] = s.monthly[id].duplicate()
+		s.monthly[id].claimed = s.day
+		iap = s
+	return _iap_claim("monthly:%s:%d" % [id, int(iap_view().day)], p.daily, mark, "/v1/iap/monthly/claim", {"product": id})
+
+
+func claim_growth(tier: int, track: String, cleared: int) -> bool:
+	if not can_claim_growth(tier, track, cleared):
+		return false
+	var mark := func():
+		var s := iap_view()
+		s.gp[track] = s.gp[track] + [tier]
+		iap = s
+	return _iap_claim("growth:%d:%s" % [tier, track], IapItems.GROWTH[tier][track], mark, "/v1/iap/growth/claim", {"tier": tier, "track": track})
+
+
+## 보상 받기 공통: 온라인은 곧바로 반영(predict_reward + 기록 표시) 후 서버에 보낸다, 오프라인은 곧바로 받고 저장.
+func _iap_claim(key: String, reward: Dictionary, mark: Callable, path: String, body: Dictionary) -> bool:
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return false
+		predict_reward(key, reward, mark)
+		var keys := {}
+		for type in GameData.DUNGEON_TYPES:
+			if int(reward.get("keys_" + type, 0)) > 0:
+				keys[type] = int(reward["keys_" + type])
+		if not keys.is_empty():
+			_key_predicts[key] = keys
+			_add_keys(keys)
+		shop_changed.emit()
+		dungeons_changed.emit()
+		net.send("POST", path, body, _on_shop_bought.bind(key), _on_iap_failed.bind(key), true, true)
+		return true
+	mark.call()
+	grant(reward)
+	shop_changed.emit()
+	return true
+
+
+func _on_iap_failed(key: String) -> void:
+	_key_predicts.erase(key)
+	unpredict(key)
+	notice.emit(IAP_FAIL_TEXT)
+	net.refresh()
+	shop_changed.emit()
+	dungeons_changed.emit()
 
 
 func _add_keys(keys: Dictionary) -> void:
@@ -2629,6 +2790,10 @@ func apply_server(data: Dictionary) -> bool:
 	if p.get("shop") is Dictionary and p.shop != shop:
 		shop = p.shop
 		shop_changed.emit()
+	if p.get("iap") is Dictionary and p.iap != iap:
+		iap = p.iap
+		shop_changed.emit()
+	iap_enabled = p.get("iap_enabled") == true
 	if p.get("pouches") is Dictionary:
 		var pz := _pouch_counts(p.pouches)
 		if pz != pouches:
@@ -3546,7 +3711,7 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
-		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches, "shop": shop, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -3713,6 +3878,7 @@ func _apply(data) -> bool:
 	dia_tickets = maxi(0, int(data.get("dia_tickets", 0))) if _num(data.get("dia_tickets", 0)) else 0  # 튜토리얼(없으면 0)
 	pouches = _pouch_counts(data.get("pouches")) if data.get("pouches") is Dictionary else {}  # 방치 주머니(없으면 {})
 	shop = data.get("shop") if data.get("shop") is Dictionary else {}  # 상점 산 기록(없으면 {})
+	iap = data.get("iap") if data.get("iap") is Dictionary else {}  # 결제 상품 기록(없으면 {})
 	unbuilt = {}
 	var ub = data.get("unbuilt", [])  # 튜토리얼 공터(없으면 모두 지어짐 — 옛 저장은 건물 그대로)
 	if ub is Array:
