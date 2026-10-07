@@ -1,10 +1,10 @@
 extends CanvasLayer
-## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [음악][가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
-## [음악]은 창 대신 배경음악을 켜고 끈다(Music.toggle — 메뉴는 펼친 채로, 끄면 "음악 끔"과 빗금).
+## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [설정][가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
+## [설정]은 설정 창(settings_panel.gd: 배경음악 켬/끔·음량, 화면, 계정, 버전)을 연다 — 예전 [음악] 켬/끔 버튼 자리.
 ## 자리: 오른쪽 아래, 탭 바 위. 튜토리얼 미션 카드가 보이면 카드 위로 올라간다(겹치지 않게, 매 프레임 맞춘다).
 ## [길드](2026-10-07, 하단 탭에서 옮김)는 맨 아래(토글 바로 위). 튜토리얼 길드 미션 전에는 흐리게 + 자물쇠, 누르면 잠금 토스트(하단 탭과 같은 규칙).
 ## 길드 미션 중이면 [길드]와 [메뉴]에 빨간 점(어디를 누를지).
-## main.gd가 만들고 windows = {bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
+## main.gd가 만들고 windows = {settings, bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -13,7 +13,7 @@ const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["music", "음악"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["guild", "길드"]]
+const ITEMS := [["settings", "설정"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["guild", "길드"]]
 const SIZE := Vector2(84, 84)
 const SIDE := 16.0
 const GAP := 10.0
@@ -89,10 +89,6 @@ func set_open(on: bool) -> void:
 
 ## 항목 고르기(버튼·튜토리얼 [바로가기]).
 func pick(id: String) -> void:
-	if id == "music":
-		Music.toggle()
-		buttons[id].get_child(0).queue_redraw()
-		return
 	if Tutorial.tab_locked(id):  # 길드: 튜토리얼 길드 미션 전(하단 탭과 같은 잠금 토스트)
 		Tutorial.lock_notice.emit(Tutorial.tab_lock_text(id))
 		return
@@ -161,10 +157,8 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 			TabBarScript.draw_shapes(c, TabBarScript.tab_shapes("guild"), ctr, 44.0)
 			if Tutorial.tab_locked("guild"):
 				TabBarScript.draw_shapes(c, TabBarScript.LOCK_SHAPES, Vector2(SIZE.x - 18, 18), 26.0)
-		"music":
-			draw_note(c, ctr, 44.0, Music.enabled)
-			if not Music.enabled:
-				text = "음악 끔"
+		"settings":
+			draw_gear(c, ctr, 44.0)
 		_:
 			draw_chevron(c, ctr, 30.0, is_open)
 			text = "닫기" if is_open else "메뉴"
@@ -177,19 +171,27 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 	c.draw_string(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, Color.WHITE)
 
 
-## 이어진 8분음표 두 개(각진 머리 + 기둥 + 들보). off면 흐리게 + 빨간 빗금.
-static func draw_note(ci: CanvasItem, ctr: Vector2, s: float, on: bool) -> void:
+## 각진 톱니바퀴(톱니 8개 + 가운데 구멍).
+static func draw_gear(ci: CanvasItem, ctr: Vector2, s: float) -> void:
 	var u := s / 44.0
-	var p := func(x: float, y: float) -> Vector2: return ctr + Vector2(x, y) * u
-	var col := Color.WHITE if on else Color(1, 1, 1, 0.45)
-	for hx: float in [-9.0, 11.0]:
-		var hy := 12.0 if hx < 0 else 9.0
-		ci.draw_colored_polygon(PackedVector2Array([p.call(hx - 7, hy + 1), p.call(hx - 2, hy - 4), p.call(hx + 4, hy - 3),
-			p.call(hx + 4, hy + 2), p.call(hx - 1, hy + 6), p.call(hx - 7, hy + 5)]), col)
-		ci.draw_line(p.call(hx + 3, hy - 1), p.call(hx + 3, hy - 22), col, 3.0 * u, true)
-	ci.draw_colored_polygon(PackedVector2Array([p.call(-7.5, -10), p.call(15.5, -13), p.call(15.5, -7), p.call(-7.5, -4)]), col)
-	if not on:
-		ci.draw_line(p.call(-17, 17), p.call(17, -17), Color(0.92, 0.3, 0.26), 5.0 * u, true)
+	var col := Color(0.86, 0.89, 0.95)
+	var pts := PackedVector2Array()
+	for k in 8:
+		var a := k * TAU / 8.0
+		for d: float in [-0.30, -0.17, 0.17, 0.30]:  # 톱니 하나 = 바깥 두 점 + 안쪽 두 점
+			var r := (13.0 if absf(d) > 0.2 else 18.0) * u
+			pts.append(ctr + Vector2(cos(a + d), sin(a + d)) * r)
+	ci.draw_colored_polygon(pts, col)
+	var rim := pts.duplicate()
+	rim.append(rim[0])
+	ci.draw_polyline(rim, LowpolyBox.edge_color(col), 1.5 * u, true)
+	var hole := PackedVector2Array()
+	for k in 6:
+		var a := k * TAU / 6.0
+		hole.append(ctr + Vector2(cos(a), sin(a)) * 6.0 * u)
+	ci.draw_colored_polygon(hole, BASE)
+	hole.append(hole[0])
+	ci.draw_polyline(hole, LowpolyBox.edge_color(col), 1.5 * u, true)
 
 
 ## 위(펼치기)·아래(접기) 꺾쇠 두 겹.

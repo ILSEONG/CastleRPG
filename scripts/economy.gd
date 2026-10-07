@@ -212,6 +212,8 @@ var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>"
 var _key_predicts := {}  # 온라인 상점 입장권 즉시 반영: 요청 키 → {던전 종류: 열쇠 수}(응답 전 다른 서버 응답의 열쇠 위에 다시 얹는다)
 var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
 var _predicts := {}  # 온라인 즉시 반영(수집·판매·건설): 요청 키 → {apply: 서버 상태 위에 그 동작을 다시 하는 Callable, gold: 더한 골드(0.1)}. 응답 전 다른 응답이 와도 apply_server가 다시 얹는다
+var _hold := 0  # 곧바로 반영하고 보낸 동작(_instant) 중 응답 안 온 수 — 그동안 다른 응답은 상태에 덮지 않는다(그 상태엔 이 동작이 없다)
+var _hold_gold := 0  # 그 동작들이 바꾼 골드(0.1) — 미룬 응답의 서버 골드에 더해 보인다
 var _last_server := {}  # 마지막으로 반영한 서버 응답(거절되면 이것으로 곧바로 되돌린다)
 var _pending_deploy = null  # 온라인: 보냈고 답을 기다리는 배치(그동안 다른 응답의 옛 배치로 되돌리지 않는다)
 var _deploys_out := 0
@@ -687,7 +689,8 @@ func level_up(hero_id: String, count := 1) -> bool:
 		notice.emit(why)
 		return false
 	if net != null:
-		return _levelup_online(hero_id, count)
+		var why_fail := func(): return {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}.get(net.last_error, LEVELUP_FAIL_TEXT)
+		return _instant(level_up.bind(hero_id, count), "/v1/hero/levelup", {"hero_id": hero_id, "count": count}, why_fail)
 	var cost := GameData.levelup_cost(GameData.hero(hero_id).grade, level_of(hero_id), count)
 	gold_tenths -= int(cost.gold) * 10
 	hero_levels[hero_id] = level_of(hero_id) + count
@@ -760,7 +763,8 @@ func growth_up(id: String, count := 1) -> bool:
 			notice.emit(why)
 		return false
 	if net != null:
-		return _growth_online(id, count)
+		var why_fail := func(): return {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}.get(net.last_error, GROWTH_FAIL_TEXT)
+		return _instant(growth_up.bind(id, count), "/v1/upgrade", {"id": id, "count": count}, why_fail)
 	gold_tenths -= upgrade_total_cost(id, count) * 10
 	upgrades[id] = upgrade_level(id) + count
 	changed.emit()
@@ -809,7 +813,7 @@ func promote(hero_id: String) -> bool:
 		notice.emit(PROMOTE_TEXT.get(why, PROMOTE_FAIL_TEXT))
 		return false
 	if net != null:
-		return _promote_online(hero_id)
+		return _instant(promote.bind(hero_id), "/v1/hero/promote", {"hero_id": hero_id}, func(): return PROMOTE_TEXT.get(net.last_error, PROMOTE_FAIL_TEXT))
 	hero_shards[hero_id] = shards_of(hero_id) - promote_cost(hero_id)
 	hero_promotions[hero_id] = promotion_of(hero_id) + 1
 	changed.emit()
@@ -861,10 +865,7 @@ func promote_all(plan: Array = []) -> bool:
 		var want := {}
 		for r in plan:
 			want[r.hero_id] = int(r.to)
-		_waiting["promote"] = true
-		net.send("POST", "/v1/hero/promote_all", {"heroes": want}, _on_promoted_all, _on_promote_failed, true, true)
-		changed.emit()
-		return true
+		return _instant(promote_all.bind(plan), "/v1/hero/promote_all", {"heroes": want}, func(): return PROMOTE_TEXT.get(net.last_error, PROMOTE_FAIL_TEXT))
 	for r in plan:
 		hero_shards[r.hero_id] = shards_of(r.hero_id) - int(r.shards)
 		hero_promotions[r.hero_id] = int(r.to)
@@ -1098,11 +1099,7 @@ func open_pouch(id: String, count: int, stage_n: int) -> bool:
 	if count <= 0 or pouch_count(id) < count or pouch_waiting() or pouch_empty(id, stage_n):
 		return false
 	if net != null:
-		_waiting["pouch"] = true
-		net.flush_kills()
-		net.send("POST", "/v1/pouch/open", {"id": id, "count": count}, _on_pouch, _on_pouch_failed, true, true)
-		pouches_changed.emit()
-		return true
+		return _instant(open_pouch.bind(id, count, stage_n), "/v1/pouch/open", {"id": id, "count": count}, func(): return POUCH_FAIL_TEXT)
 	var one := pouch_value(id, stage_n)
 	var got := {"id": id, "count": count, "gold_tenths": int(one.gold_tenths) * count, "res": {}}
 	for r in one.res:
@@ -1117,22 +1114,6 @@ func open_pouch(id: String, count: int, stage_n: int) -> bool:
 	save()
 	pouch_opened.emit(got)
 	return true
-
-
-func _on_pouch(data: Dictionary) -> void:
-	_waiting.erase("pouch")
-	apply_server(data)
-	pouches_changed.emit()
-	var o = data.get("opened")
-	if o is Dictionary:
-		pouch_opened.emit(o)
-
-
-func _on_pouch_failed() -> void:
-	_waiting.erase("pouch")
-	notice.emit(POUCH_FAIL_TEXT)
-	net.refresh()
-	pouches_changed.emit()
 
 
 # --- 상점(서버 shop.ts, 상품 표 shop_items.gd): 일일·주간 한정 상품을 다이아·골드로 산다. 온라인도 누르는 즉시 값을 빼고 받은 것을 더한다
@@ -1643,7 +1624,7 @@ func merge_soldiers(type: String, tier: int) -> bool:
 		notice.emit(SOLDIER_TEXT.get(why, MERGE_FAIL_TEXT))
 		return false
 	if net != null:
-		return _merge_online(type, tier)
+		return _instant(merge_soldiers.bind(type, tier), "/v1/soldiers/merge", {"type": type, "tier": tier}, func(): return SOLDIER_TEXT.get(net.last_error, MERGE_FAIL_TEXT))
 	var k := soldier_key(type, tier)
 	var up := soldier_key(type, tier + 1)
 	soldiers[k] = int(soldiers[k]) - int(GameData.config_num("soldier_merge_count"))
@@ -1780,7 +1761,7 @@ func start_training(building_id: String, n: int) -> bool:
 		notice.emit(TRAIN_TEXT.get(why, TRAIN_FAIL_TEXT))
 		return false
 	if net != null:
-		return _train_online("train", building_id, {"building": building_id, "count": n}, true)
+		return _instant(start_training.bind(building_id, n), "/v1/soldiers/train", {"building": building_id, "count": n}, _train_fail_text.bind(false))
 	var cost := train_cost_now(GameData.soldier_of_building(building_id), n, train_tier(building_id))
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
@@ -1799,7 +1780,7 @@ func collect_training(building_id: String) -> bool:
 	if not q.ready or _waiting.has("collect:" + building_id):
 		return false
 	if net != null:
-		return _train_online("collect", building_id, {"building": building_id}, false)
+		return _instant(collect_training.bind(building_id), "/v1/soldiers/collect", {"building": building_id}, _train_fail_text.bind(true), false)
 	var type := GameData.soldier_of_building(building_id)
 	var k := soldier_key(type, q.tier)
 	soldiers[k] = int(soldiers.get(k, 0)) + q.count
@@ -1817,7 +1798,7 @@ func cancel_training(building_id: String) -> bool:
 	if q.count == 0 or q.ready or _waiting.has("cancel:" + building_id):
 		return false
 	if net != null:
-		return _train_online("cancel", building_id, {"building": building_id}, true)
+		return _instant(cancel_training.bind(building_id), "/v1/soldiers/cancel", {"building": building_id}, _train_fail_text.bind(false))
 	var cost := train_cost_now(GameData.soldier_of_building(building_id), q.count, q.tier)
 	for r in cost:
 		res[r] = int(res.get(r, 0)) + int(cost[r]) / 2
@@ -1827,6 +1808,13 @@ func cancel_training(building_id: String) -> bool:
 	training_changed.emit()
 	notice.emit(CANCEL_TEXT)
 	return true
+
+
+## 훈련 요청이 거절됐을 때 알림. 수령의 409 empty는 앞선 같은 수령이 이미 반영된 것(응답 유실 뒤 재전송)이라 알리지 않는다.
+func _train_fail_text(collect: bool) -> String:
+	if collect and net.last_error == "empty":
+		return ""
+	return TRAIN_TEXT.get(net.last_error, TRAIN_FAIL_TEXT)
 
 
 ## 응답 대기 중(op = "train"·"collect"·"cancel") — 건물 창이 버튼을 끈다.
@@ -1919,7 +1907,7 @@ func start_research(id: String) -> bool:
 			notice.emit(RESEARCH_TEXT.get(why, RESEARCH_FAIL_TEXT))
 		return false
 	if net != null:
-		return _research_online("start", {"id": id})
+		return _instant(start_research.bind(id), "/v1/research/start", {"id": id}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
 	var cost := research_cost(id)
 	for r in GameData.BUILD_RES:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
@@ -1937,7 +1925,7 @@ func cancel_research() -> bool:
 	if research_current.is_empty() or _waiting.has("research"):
 		return false
 	if net != null:
-		return _research_online("cancel", {})
+		return _instant(cancel_research, "/v1/research/cancel", {}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
 	var refund := GameData.research_refund(research_cost(str(research_current.id)))
 	for r in refund:
 		if r == "gold":
@@ -1963,7 +1951,7 @@ func finish_research_now() -> bool:
 	if net != null:
 		if research_dia_cost(time_now()) == 0:
 			return _free_research_online()
-		return _research_online("finish", {})
+		return _instant(finish_research_now, "/v1/research/finish", {}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
 	diamonds -= research_dia_cost(time_now())
 	_research_complete()
 	return true
@@ -2512,7 +2500,7 @@ func equip(hero_id: String, slot: String, item_id: int) -> bool:
 		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
 		return false
 	if net != null:
-		return _equip_online(hero_id, slot, item_id)
+		return _instant(equip.bind(hero_id, slot, item_id), "/v1/equip", {"hero_id": hero_id, "slot": slot, "item_id": item_id}, func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT), false)
 	for h in equipment:
 		for s in equipment[h].keys():
 			if int(equipment[h][s]) == item_id:
@@ -2529,7 +2517,7 @@ func unequip(hero_id: String, slot: String) -> bool:
 	if not equipment.get(hero_id, {}).has(slot) or _waiting.has("equip"):
 		return false
 	if net != null:
-		return _equip_online(hero_id, slot, null)
+		return _instant(unequip.bind(hero_id, slot), "/v1/equip", {"hero_id": hero_id, "slot": slot, "item_id": null}, func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT), false)
 	equipment[hero_id].erase(slot)
 	if equipment[hero_id].is_empty():
 		equipment.erase(hero_id)
@@ -2567,13 +2555,11 @@ func sell_items(ids: Array) -> int:
 		return 0
 	var int_ids: Array = ids.map(func(x): return int(x))
 	if net != null:
-		if not net.up:
-			notice.emit(WAIT_TEXT)
-			return 0
-		_waiting["sell_items"] = true
-		net.send("POST", "/v1/items/sell", {"item_ids": int_ids}, _on_items_sold, _on_items_sell_failed, true, true)
-		items_changed.emit()
-		return 0
+		var got := [0]
+		_instant(func():
+			got[0] = sell_items(int_ids)
+			return got[0] > 0 or not int_ids.is_empty(), "/v1/items/sell", {"item_ids": int_ids}, func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT))
+		return got[0]
 	var g := 0
 	for id in int_ids:
 		g += GameData.item_sell_value(item(id))
@@ -2620,6 +2606,14 @@ func apply_server(data: Dictionary) -> bool:
 			and (p.get("research") == null or p.research is Dictionary)):  # 개정 24
 		push_error("bad player response: %s" % str(data))
 		return false
+	if _hold > 0:  # 곧바로 반영한 동작의 응답 전: 골드·처치 번호만 맞추고 나머지는 그 응답(또는 거절) 때 한꺼번에
+		_last_server = data
+		server_gold_tenths = int(p.gold_tenths)
+		if _num(p.get("kill_seq")):
+			kill_seq = int(p.kill_seq)
+		_recalc_gold()
+		changed.emit()
+		return true
 	var unbuilt_before := unbuilt.duplicate()
 	unbuilt = {}  # 튜토리얼 공터(서버 player.unbuilt — 아직 짓지 않은 건물, 레벨은 1 그대로)
 	if p.get("unbuilt") is Array:
@@ -2856,7 +2850,7 @@ func kills_done(stage: int, part: Dictionary) -> void:
 
 
 func _recalc_gold() -> void:
-	gold_tenths = server_gold_tenths + _kills_tenths(kills_pending) + _kills_tenths(kills_sent)
+	gold_tenths = server_gold_tenths + _kills_tenths(kills_pending) + _kills_tenths(kills_sent) + _hold_gold
 	for k in _predicts:
 		gold_tenths += int(_predicts[k].gold)
 
@@ -2934,6 +2928,51 @@ func _predict(key: String, apply: Callable, gold := 0) -> void:
 	apply.call()
 	_recalc_gold()
 	changed.emit()
+
+
+## 온라인 동작을 응답을 기다리지 않고 곧바로 반영한다: local(오프라인과 같은 규칙의 그 동작 — net을 잠깐 비워 오프라인 길로 부른다)을
+## 지금 하고 서버에 보낸다. 응답이 올 때까지 다른 응답은 상태를 덮지 않고(골드만), 응답이 오면 서버 상태로 맞춘다. 거절되면 마지막 서버 상태로
+## 되돌리고 fail_text()를 알린다(""이면 알리지 않는다). local이 false면(막힘) 보내지 않는다. 보냈으면 true.
+func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true) -> bool:
+	if not net.up:
+		notice.emit(WAIT_TEXT)
+		return false
+	var n = net
+	net = null
+	var g0 := gold_tenths
+	var ok = local.call()
+	net = n
+	if not ok:
+		_recalc_gold()
+		return false
+	var dg := gold_tenths - g0
+	_hold += 1
+	_hold_gold += dg
+	_recalc_gold()
+	changed.emit()
+	net.flush_kills()  # 골드 비용은 서버 골드로 판정한다 — 쌓인 처치를 먼저
+	net.send("POST", path, body, _on_instant.bind(dg), _on_instant_failed.bind(dg, fail_text), true, once)
+	return true
+
+
+func _on_instant(data: Dictionary, dg: int) -> void:
+	_hold = maxi(0, _hold - 1)
+	_hold_gold -= dg
+	apply_server(data)
+
+
+func _on_instant_failed(dg: int, fail_text: Callable) -> void:
+	_hold = maxi(0, _hold - 1)
+	_hold_gold -= dg
+	var t: String = fail_text.call()
+	if t != "":
+		notice.emit(t)
+	if _hold == 0 and not _last_server.is_empty():
+		apply_server(_last_server)  # 되돌린다(마지막 서버 상태)
+	else:
+		_recalc_gold()
+		changed.emit()
+	net.refresh()
 
 
 ## 다른 스크립트(미션 등)용: 보상(자원·골드·다이아·모집권·주머니 — 열쇠는 응답 때)을 응답 전에 곧바로 보이게 한다. extra는 함께 다시 할 일
@@ -3353,17 +3392,6 @@ func _on_dungeon_finish_failed(run_id: String) -> void:
 	dungeon_finished.emit({"run_id": run_id, "win": false, "rewards": {}, "error": code if code != "" else "failed"})
 
 
-## 온라인 장착·해제: 멱등이라 Net 기본 재시도. 답이 올 때까지 equip_block = "waiting".
-func _equip_online(hero_id: String, slot: String, item_id) -> bool:
-	if not net.up:
-		notice.emit(WAIT_TEXT)
-		return false
-	_waiting["equip"] = true
-	net.send("POST", "/v1/equip", {"hero_id": hero_id, "slot": slot, "item_id": item_id}, _on_equipped, _on_equip_failed)
-	items_changed.emit()
-	return true
-
-
 ## 응답 안 온 자동착용을 지금 equipment 위에 다시 얹는다(서버와 같이: 다른 영웅이 끼고 있으면 옮긴다). 신호 없음.
 func _apply_equip_predicts() -> void:
 	for hid in _equip_predicts:
@@ -3405,33 +3433,6 @@ func _on_auto_equip_failed(hero_id: String) -> void:
 	_equip_signals(before)
 	notice.emit(EQUIP_TEXT.get(net.last_error, ROLLBACK_TEXT))
 	net.refresh()
-
-
-func _on_equipped(data: Dictionary) -> void:
-	_waiting.erase("equip")
-	apply_server(data)
-	items_changed.emit()
-
-
-## 거부(409 wrong_slot·wrong_weapon, 404, 400)나 응답 유실: 알림 + 상태를 새로 받는다.
-func _on_equip_failed() -> void:
-	_waiting.erase("equip")
-	notice.emit(EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT))
-	net.refresh()
-	items_changed.emit()
-
-
-func _on_items_sold(data: Dictionary) -> void:
-	_waiting.erase("sell_items")
-	apply_server(data)
-	items_changed.emit()
-
-
-func _on_items_sell_failed() -> void:
-	_waiting.erase("sell_items")
-	notice.emit(EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT))
-	net.refresh()
-	items_changed.emit()
 
 
 ## 서버·저장 장비 목록 → [{id(int), slot, weapon_kind, grade, level(int)}](id 순). 모르는 부위·등급·무기 종류, 겹친 id는 버린다.

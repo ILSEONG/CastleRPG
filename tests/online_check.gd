@@ -334,15 +334,14 @@ func _promote_online() -> void:
 	_hero_panel.show_detail(id)
 	_check(_hero_panel._promo.line.text == "조각 30 / 5" and not _hero_panel.promote_button.disabled, "(w) [승급] shows 조각 30 / 5 and is on", _hero_panel._promo.line.text)
 	_hero_panel.promote_button.pressed.emit()
-	_hero_panel.promote_button.pressed.emit()  # 응답 전 재탭
-	_check(_hero_panel.promote_button.disabled and Economy.promote_waiting() and Economy.promotion_of(id) == 0, "(w) while waiting for the reply [승급] is off and nothing changes yet", "")
-	var done := await _wait_until(func(): return Economy.promotion_of(id) == 1 and not Economy.promote_waiting(), 15.0)
+	_check(Economy.promotion_of(id) == 1 and Economy.shards_of(id) == 25 and Net.requested.get("/v1/hero/promote", 0) == p0 + 1, "(w) [승급] applies at once (★1, shards 25) while the reply is on its way", "promotion=%d" % Economy.promotion_of(id))
+	var done := await _wait_until(func(): return Economy.promotion_of(id) == 1 and Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
 	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 1 and Economy.shards_of(id) == 25 and _hero_panel.promotions_shown == 1
 		and _hero_panel.big_card.stars == 1 and _hero_panel.level_label.text == "Lv 12 / 30" and _hero_panel._promo.line.text == "조각 25 / 25",
 		"(w) one /v1/hero/promote: shards 30 -> 25, ★1, max level 30, with the effect",
 		"requests=%d shards=%d promotion=%d label=%s" % [Net.requested.get("/v1/hero/promote", 0) - p0, Economy.shards_of(id), Economy.promotion_of(id), _hero_panel.level_label.text])
 	_hero_panel.promote_button.pressed.emit()
-	done = await _wait_until(func(): return Economy.promotion_of(id) == 2 and not Economy.promote_waiting(), 15.0)
+	done = await _wait_until(func(): return Economy.promotion_of(id) == 2 and Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
 	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 2 and Economy.shards_of(id) == 0 and _hero_panel.promote_button.disabled
 		and _hero_panel.promote_reason.text == "조각 부족" and _hero_panel.level_label.text == "Lv 12 / 40",
 		"(w) again: 25 shards -> ★2 (Lv 12 / 40); [승급] off with 조각 부족", "shards=%d reason=%s" % [Economy.shards_of(id), _hero_panel.promote_reason.text])
@@ -354,7 +353,7 @@ func _promote_online() -> void:
 	var w0 := _warned("not resending")
 	Net.api_base = DEAD_API
 	var sent := Economy.promote(id)
-	var dropped := await _wait_until(func(): return not Net.up and not Economy.promote_waiting(), 20.0)
+	var dropped := await _wait_until(func(): return not Net.up and Economy._hold == 0 and not Economy.promote_waiting(), 20.0)
 	_check(sent and dropped and notices.has(Economy.PROMOTE_FAIL_TEXT) and _warned("not resending") == w0 + 1,
 		"(x) a promotion that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent, dropped, notices])
 	Net.api_base = live
@@ -366,7 +365,7 @@ func _promote_online() -> void:
 		"requests=%d promotion=%d shards=%d" % [Net.requested.get("/v1/hero/promote", 0) - p0, Economy.promotion_of(id), Economy.shards_of(id)])
 	await _request("POST", "/v1/test/shards", {"hero_id": id, "shards": 10})
 	Economy._promote_online(id)  # 화면이 막는 요청을 직접 보낸다 — 서버가 409 not_enough_shards
-	await _wait_until(func(): return not Economy.promote_waiting(), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	_check(notices.has("조각 부족") and Economy.promotion_of(id) == 2 and Economy.shards_of(id) == 10 and Net.requested.get("/v1/hero/promote", 0) == p0 + 4 and Net.up,
 		"(y) a refused promotion (409 not_enough_shards) shows a notice and refreshes the state", "notices=%s promotion=%d" % [notices, Economy.promotion_of(id)])
@@ -394,9 +393,8 @@ func _levelup_online() -> void:
 	_hero_panel.open()
 	_hero_panel.show_detail(id)
 	_hero_panel.level_button.pressed.emit()
-	_hero_panel.level_button.pressed.emit()  # 응답 전 재탭
-	_check(_hero_panel.level_button.disabled and Economy.level_of(id) == 1 and Economy.levelup_waiting(), "(n) while waiting for the reply [레벨업] is off and nothing changes yet", "")
-	var done := await _wait_until(func(): return Economy.level_of(id) == 2 and not Economy.levelup_waiting(), 15.0)
+	_check(Economy.level_of(id) == 2 and _hero_panel.celebrations == 1 and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1, "(n) [레벨업] levels up at once, before the reply (one request)", "")
+	var done := await _wait_until(func(): return Economy.level_of(id) == 2 and Economy._hold == 0, 15.0)
 	_check(done and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1 and Economy.server_gold_tenths == gold0 - int(c1.gold) * 10 and Economy.res["food"] == food0
 		and _hero_panel.celebrations == 1 and _hero_panel.level_label.text == "Lv 2 / 20",
 		"(n) one /v1/hero/levelup: server gold -30 (300 tenths), food unchanged, Lv 2 with the success effect",
@@ -406,7 +404,7 @@ func _levelup_online() -> void:
 	var gold1: int = Economy.server_gold_tenths
 	var food1: int = Economy.res["food"]
 	_hero_panel.ten_button.pressed.emit()
-	done = await _wait_until(func(): return Economy.level_of(id) == 2 + n and not Economy.levelup_waiting(), 15.0)
+	done = await _wait_until(func(): return Economy.level_of(id) == 2 + n and Economy._hold == 0, 15.0)
 	_check(done and n == 10 and Net.requested.get("/v1/hero/levelup", 0) == l0 + 2 and Economy.server_gold_tenths == gold1 - int(cn.gold) * 10 and Economy.res["food"] == food1,
 		"(n) [×10] sends one request for the affordable count (10) and the server takes the summed cost",
 		"n=%d level=%d gold=%d->%d" % [n, Economy.level_of(id), gold1, Economy.server_gold_tenths])
@@ -420,7 +418,7 @@ func _levelup_online() -> void:
 	var w0 := _warned("not resending")
 	Net.api_base = DEAD_API
 	var sent := Economy.level_up(id, 1)
-	var dropped := await _wait_until(func(): return not Net.up and not Economy.levelup_waiting(), 20.0)
+	var dropped := await _wait_until(func(): return not Net.up and Economy._hold == 0, 20.0)
 	_check(sent and dropped and notices.has(Economy.LEVELUP_FAIL_TEXT) and _warned("not resending") == w0 + 1,
 		"(o) a level-up that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [sent, dropped, notices])
 	Net.api_base = live
@@ -431,7 +429,7 @@ func _levelup_online() -> void:
 		"(o) after reconnecting the state is refreshed and the level-up is not resent",
 		"requests=%d level=%d gold=%d" % [Net.requested.get("/v1/hero/levelup", 0) - l0, Economy.level_of(id), Economy.server_gold_tenths])
 	Economy._levelup_online(id, 50)  # 화면이 막는 요청을 직접 보낸다 — 서버가 409 max_level
-	await _wait_until(func(): return not Economy.levelup_waiting(), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy.levelup_waiting(), 15.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	_check(notices.has("최대 레벨입니다") and Economy.level_of(id) == lv and Net.requested.get("/v1/hero/levelup", 0) == l0 + 4 and Net.up,
 		"(q) a refused level-up (409 max_level) shows a notice and refreshes the state", "notices=%s level=%d" % [notices, Economy.level_of(id)])
@@ -980,12 +978,11 @@ func _soldiers_online(state_path: String) -> void:
 	var res0: Dictionary = Economy.res.duplicate()
 	var t0: int = Net.requested.get("/v1/soldiers/train", 0)
 	var sent := Economy.start_training("barracks", 6)
-	var again := Economy.start_training("barracks", 6)  # 응답 전 재탭
-	_check(sent and not again and Economy.train_block("barracks", 6) == "waiting" and Net.requested.get("/v1/soldiers/train", 0) == t0 + 1 and Economy.res == res0,
-		"(v) one training request; a second tap before the reply is ignored and nothing changes yet", "requests=%d" % [Net.requested.get("/v1/soldiers/train", 0) - t0])
-	await _wait_until(func(): return Economy.training("barracks").count == 6 and not Economy.training_waiting("barracks", "train"), 15.0)
+	_check(sent and Economy.training("barracks").count == 6 and Net.requested.get("/v1/soldiers/train", 0) == t0 + 1 and Economy.res.food == res0.food - 180,
+		"(v) one training request; the queue and cost show at once", "requests=%d" % [Net.requested.get("/v1/soldiers/train", 0) - t0])
+	await _wait_until(func(): return Economy.training("barracks").count == 6 and Economy._hold == 0 and not Economy.training_waiting("barracks", "train"), 15.0)
 	Economy.start_training("archery", 5)
-	await _wait_until(func(): return Economy.training("archery").count == 5, 15.0)
+	await _wait_until(func(): return Economy.training("archery").count == 5 and Economy._hold == 0, 15.0)
 	var q := Economy.training("barracks")
 	_check(q.count == 6 and not q.ready and absf(q.finish - (Economy.time_now() + 6 * 10800.0)) < 30.0 and Economy.res.food == res0.food - 180 - 125
 		and Economy.res.wood == res0.wood - 120 - 150 and Economy.soldier_counts() == c0,
@@ -1000,22 +997,22 @@ func _soldiers_online(state_path: String) -> void:
 	await _wait_until(func(): return Economy.training("barracks").ready and Economy.training("archery").ready, 15.0)
 	var c0_inf := int(c0.get("infantry:1", 0))
 	var collected := Economy.collect_training("barracks") and Economy.collect_training("archery")
-	await _wait_until(func(): return Economy.train_queues.is_empty() and not Economy.training_waiting("archery", "collect"), 15.0)
+	await _wait_until(func(): return Economy.train_queues.is_empty() and Economy._hold == 0 and not Economy.training_waiting("archery", "collect"), 15.0)
 	_check(collected and int(Economy.soldiers.get("infantry:1", 0)) == c0_inf + 6 and int(Economy.soldiers.get("archer:1", 0)) == int(c0.get("archer:1", 0)) + 5
 		and notices.has("보병 +6") and notices.has("궁병 +5"), "(v) pulled forward and collected: 보병 +6, 궁병 +5 from the server, notices '보병 +6'",
 		"soldiers=%s notices=%s" % [Economy.soldiers, notices])
 	var n0 := notices.size()
 	Economy._train_online("collect", "barracks", {"building": "barracks"}, false)  # 응답을 잃은 수령의 재전송 흉내 — 409 empty
-	await _wait_until(func(): return not Economy.training_waiting("barracks", "collect"), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy.training_waiting("barracks", "collect"), 15.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	_check(int(Economy.soldiers.get("infantry:1", 0)) == c0_inf + 6 and notices.size() == n0, "(v) a repeated collect (409 empty) adds nothing and shows no notice", "notices=%s" % [notices.slice(n0)])
 	# 취소: 기병 2마리(식량 80·석재 40) → 절반 환불
 	var res1: Dictionary = Economy.res.duplicate()
 	Economy.start_training("stable", 2)
-	await _wait_until(func(): return Economy.training("stable").count == 2, 15.0)
+	await _wait_until(func(): return Economy.training("stable").count == 2 and Economy._hold == 0, 15.0)
 	var c1: int = Net.requested.get("/v1/soldiers/cancel", 0)
 	var canceled := Economy.cancel_training("stable")
-	await _wait_until(func(): return Economy.training("stable").count == 0 and not Economy.training_waiting("stable", "cancel"), 15.0)
+	await _wait_until(func(): return Economy.training("stable").count == 0 and Economy._hold == 0 and not Economy.training_waiting("stable", "cancel"), 15.0)
 	_check(canceled and Net.requested.get("/v1/soldiers/cancel", 0) == c1 + 1 and Economy.res.food == res1.food - 40 and Economy.res.stone == res1.stone - 20
 		and notices.has(Economy.CANCEL_TEXT), "(v) [취소] on the server refunds half (2 cavalry: 80 / 40 -> back 40 / 20) and empties the queue", "res=%s -> %s" % [res1, Economy.res])
 	# 재전송 금지(시작)
@@ -1024,7 +1021,7 @@ func _soldiers_online(state_path: String) -> void:
 	var t1: int = Net.requested.get("/v1/soldiers/train", 0)
 	Net.api_base = DEAD_API
 	var sent2 := Economy.start_training("archery", 1)
-	var dropped := await _wait_until(func(): return not Net.up and not Economy.training_waiting("archery", "train"), 20.0)
+	var dropped := await _wait_until(func(): return not Net.up and Economy._hold == 0 and not Economy.training_waiting("archery", "train"), 20.0)
 	_check(sent2 and dropped and notices.has(Economy.TRAIN_FAIL_TEXT) and _warned("not resending") == w0 + 1,
 		"(v) a training start that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s" % [sent2, dropped])
 	Net.api_base = live
@@ -1038,10 +1035,9 @@ func _soldiers_online(state_path: String) -> void:
 	var inf1 := int(Economy.soldiers.get("infantry:1", 0))
 	var inf2 := int(Economy.soldiers.get("infantry:2", 0))
 	var msent := Economy.merge_soldiers("infantry", 1)
-	var magain := Economy.merge_soldiers("infantry", 1)
-	_check(msent and not magain and Economy.merge_block("infantry", 1) == "waiting" and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 1,
-		"(v) one merge request; a second tap before the reply is ignored", "requests=%d" % [Net.requested.get("/v1/soldiers/merge", 0) - m0])
-	await _wait_until(func(): return not Economy._waiting.has("merge"), 15.0)
+	_check(msent and int(Economy.soldiers.get("infantry:2", 0)) == inf2 + 1 and Net.requested.get("/v1/soldiers/merge", 0) == m0 + 1,
+		"(v) one merge request; the merged soldier shows at once", "requests=%d" % [Net.requested.get("/v1/soldiers/merge", 0) - m0])
+	await _wait_until(func(): return Economy._hold == 0 and not Economy._waiting.has("merge"), 15.0)
 	_check(int(Economy.soldiers.get("infantry:1", 0)) == inf1 - 5 and int(Economy.soldiers.get("infantry:2", 0)) == inf2 + 1,
 		"(v) the server merges 5 tier-1 infantry into 1 tier-2", "infantry:1 %d -> %d, infantry:2 %d -> %d" % [inf1, Economy.soldiers.get("infantry:1", 0), inf2, Economy.soldiers.get("infantry:2", 0)])
 	# 재전송 금지(합성)
@@ -1049,7 +1045,7 @@ func _soldiers_online(state_path: String) -> void:
 	var arc1 := int(Economy.soldiers.get("archer:1", 0))
 	Net.api_base = DEAD_API
 	var msent2 := Economy.merge_soldiers("archer", 1)
-	dropped = await _wait_until(func(): return not Net.up and not Economy._waiting.has("merge"), 20.0)
+	dropped = await _wait_until(func(): return not Net.up and Economy._hold == 0 and not Economy._waiting.has("merge"), 20.0)
 	_check(msent2 and dropped and notices.has(Economy.MERGE_FAIL_TEXT) and _warned("not resending") == w0 + 1,
 		"(v) a merge that cannot reach the server is dropped with a notice, not queued again", "sent=%s dropped=%s notices=%s" % [msent2, dropped, notices])
 	Net.api_base = live
@@ -1060,7 +1056,7 @@ func _soldiers_online(state_path: String) -> void:
 		"(v) after reconnecting the merge is not resent (the archers are unchanged)", "requests=%d archers %d -> %s" % [Net.requested.get("/v1/soldiers/merge", 0) - m0, arc1, Economy.soldiers.get("archer:1")])
 	# 서버 거부: 최대 티어 — 화면이 막는 요청을 직접 보낸다
 	Economy._merge_online("cavalry", 5)
-	await _wait_until(func(): return not Economy._waiting.has("merge"), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy._waiting.has("merge"), 15.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
 	_check(notices.has(Economy.SOLDIER_TEXT.max_tier) and Net.up, "(v) a refused merge (409 max_tier) shows the reason", "notices=%s" % [notices])
 	# 배치: 서버 저장(방치 모드라 월드에는 안 선다 — 개정 21). 인구(6)를 넘는 배치는 400
@@ -1080,7 +1076,7 @@ func _soldiers_online(state_path: String) -> void:
 	await _tier_online()
 	# phase 2가 볼 대기열: 기병 1마리(3시간)
 	Economy.start_training("stable", 1)
-	await _wait_until(func(): return Economy.training("stable").count == 1 and not Economy.training_waiting("stable", "train"), 15.0)
+	await _wait_until(func(): return Economy.training("stable").count == 1 and Economy._hold == 0 and not Economy.training_waiting("stable", "train"), 15.0)
 	Economy.notice.disconnect(on_notice)
 	var f := FileAccess.open(state_path + ".soldiers", FileAccess.WRITE)
 	f.store_string(JSON.stringify({"soldiers": Economy.soldiers, "deploy": Economy.soldier_deployed, "training": Economy.train_queues}))
@@ -1139,7 +1135,7 @@ func _tier_online() -> void:
 	var res0: Dictionary = Economy.res.duplicate()
 	var inf2 := int(Economy.soldiers.get("infantry:2", 0))
 	var started := Economy.start_training("barracks", 2)
-	await _wait_until(func(): return Economy.training("barracks").count == 2 and not Economy.training_waiting("barracks", "train"), 15.0)
+	await _wait_until(func(): return Economy.training("barracks").count == 2 and Economy._hold == 0 and not Economy.training_waiting("barracks", "train"), 15.0)
 	var q := Economy.training("barracks")
 	_check(started and Economy.building_level("barracks") == 7 and q.tier == 2 and absf(q.finish - Economy.time_now() - 2 * 10800.0) < 30.0
 		and Economy.res.food == res0.food - 300 and Economy.res.wood == res0.wood - 200,
@@ -1147,7 +1143,7 @@ func _tier_online() -> void:
 	Economy.finish_training_now("barracks")
 	await _wait_until(func(): return Economy.training("barracks").ready, 15.0)
 	var collected := Economy.collect_training("barracks")
-	await _wait_until(func(): return not Economy.train_queues.has("barracks") and not Economy.training_waiting("barracks", "collect"), 15.0)
+	await _wait_until(func(): return not Economy.train_queues.has("barracks") and Economy._hold == 0 and not Economy.training_waiting("barracks", "collect"), 15.0)
 	_check(collected and int(Economy.soldiers.get("infantry:2", 0)) == inf2 + 2, "(t) collecting adds the batch's tier: infantry:2 +2", "soldiers=%s" % [Economy.soldiers])
 	await _request("POST", "/v1/test/barracks_level", {"level": 1})
 
@@ -1169,10 +1165,9 @@ func _growth_online(state_path: String) -> void:
 	_check(Economy.upgrades.is_empty() and Economy.gold_tenths == gold0 and Economy.gold >= cost3 + 1000, "(z) precondition: no upgrades, gold from the server covers atk x3 and one more",
 		"upgrades=%s gold=%d cost=%d" % [Economy.upgrades, Economy.gold, cost3])
 	var sent := Economy.growth_up("atk", 3)
-	var again := Economy.growth_up("atk", 1)  # 응답 전 재탭
-	_check(sent and not again and Economy.upgrades_waiting() and Economy.upgrade_level("atk") == 0 and Net.requested.get("/v1/upgrade", 0) == u0 + 1,
-		"(z) one /v1/upgrade request; a second tap before the reply is ignored and nothing changes yet", "requests=%d" % [Net.requested.get("/v1/upgrade", 0) - u0])
-	var done := await _wait_until(func(): return Economy.upgrade_level("atk") == 3 and not Economy.upgrades_waiting(), 15.0)
+	_check(sent and Economy.upgrade_level("atk") == 3 and Net.requested.get("/v1/upgrade", 0) == u0 + 1,
+		"(z) one /v1/upgrade request; atk Lv 3 shows at once", "requests=%d" % [Net.requested.get("/v1/upgrade", 0) - u0])
+	var done := await _wait_until(func(): return Economy.upgrade_level("atk") == 3 and Economy._hold == 0 and not Economy.upgrades_waiting(), 15.0)
 	_check(done and Net.requested.get("/v1/upgrade", 0) == u0 + 1 and Economy.server_gold_tenths == gold0 - cost3 * 10 and Economy.upgrades == {"atk": 3} \
 		and is_equal_approx(Economy.upgrade_bonus().atk_pct, 0.015), "(z) the server took the summed gold (x 10 tenths) and set atk Lv 3 (+1.5%)",
 		"requests=%d gold=%d->%d upgrades=%s" % [Net.requested.get("/v1/upgrade", 0) - u0, gold0, Economy.server_gold_tenths, Economy.upgrades])
@@ -1186,11 +1181,11 @@ func _growth_online(state_path: String) -> void:
 	var gold1: int = Economy.server_gold_tenths
 	var cc := Economy.upgrade_total_cost("crit_dmg", 1)
 	Economy.growth_up("crit_dmg", 1)
-	await _wait_until(func(): return Economy.upgrade_level("crit_dmg") == 1 and not Economy.upgrades_waiting(), 15.0)
+	await _wait_until(func(): return Economy.upgrade_level("crit_dmg") == 1 and Economy._hold == 0 and not Economy.upgrades_waiting(), 15.0)
 	_check(Economy.upgrades == {"atk": 3, "crit_dmg": 1} and Economy.server_gold_tenths == gold1 - cc * 10 and Net.requested.get("/v1/upgrade", 0) == u0 + 2,
 		"(z) a second upgrade (crit_dmg Lv 1) is charged on its own cost", "gold=%d upgrades=%s" % [Economy.server_gold_tenths, Economy.upgrades])
 	Economy._growth_online("mspd", 100)  # 화면이 막는 요청을 직접 보낸다 — 서버가 409 max_level
-	await _wait_until(func(): return not Economy.upgrades_waiting(), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy.upgrades_waiting(), 15.0)
 	_check(notices.has("최대 레벨입니다") and Economy.upgrades == {"atk": 3, "crit_dmg": 1} and Economy.server_gold_tenths == gold1 - cc * 10 and Net.up,
 		"(z) the server refuses 409 max_level: a notice, nothing charged", "notices=%s gold=%d" % [notices, Economy.server_gold_tenths])
 	Economy.notice.disconnect(on_notice)
@@ -1215,25 +1210,24 @@ func _research_online() -> void:
 	_check(Economy.research_levels.is_empty() and Economy.research_current.is_empty() and Economy.research_block("wood_tech") == "" and res0.wood >= 400,
 		"(RS) precondition: no research yet, wood tech affordable", "levels=%s current=%s res=%s" % [Economy.research_levels, Economy.research_current, res0])
 	var sent := Economy.start_research("wood_tech")
-	var again := Economy.start_research("wood_tech")  # 응답 전 재탭
-	_check(sent and not again and Economy.research_waiting() and Net.requested.get("/v1/research/start", 0) == r0 + 1,
-		"(RS) one /v1/research/start; a second tap before the reply sends nothing", "requests=%d" % [Net.requested.get("/v1/research/start", 0) - r0])
-	var started := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "wood_tech" and not Economy.research_waiting(), 15.0)
+	_check(sent and str(Economy.research_current.get("id", "")) == "wood_tech" and Net.requested.get("/v1/research/start", 0) == r0 + 1,
+		"(RS) one /v1/research/start; the research shows at once", "requests=%d" % [Net.requested.get("/v1/research/start", 0) - r0])
+	var started := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "wood_tech" and Economy._hold == 0 and not Economy.research_waiting(), 15.0)
 	_check(started and Economy.res.wood == res0.wood - 120 and Economy.res.stone == res0.stone - 80 and Economy.res.food == res0.food - 100
 		and absf(Economy.research_left(Economy.time_now()) - 60.0) < 5.0, "(RS) the server started wood tech: cost 120/80/100 taken, about 60 s left",
 		"current=%s res=%s left=%.1f" % [Economy.research_current, Economy.res, Economy.research_left(Economy.time_now())])
 	Economy._research_online("start", {"id": "stone_tech"})  # 화면이 막는 두 번째 시작을 직접 보낸다 — 서버가 409 research_busy
-	await _wait_until(func(): return not Economy.research_waiting(), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy.research_waiting(), 15.0)
 	_check(notices.has(Economy.RESEARCH_TEXT.research_busy) and str(Economy.research_current.get("id", "")) == "wood_tech" and Economy.res.stone == res0.stone - 80,
 		"(RS) one research at a time on the server too: 409 research_busy, a notice, nothing charged", "notices=%s" % [notices])
 	var dia_cost := Economy.research_dia_cost(Economy.time_now())  # 남은 약 60초 — 5분 이하는 무료 즉시 완료(사용자 2026-10-06)
 	var dia0: int = Economy.diamonds
 	var fin := Economy.finish_research_now()
-	var finished := await _wait_until(func(): return Economy.research_level("wood_tech") == 1 and not Economy.research_waiting(), 15.0)
+	var finished := await _wait_until(func(): return Economy.research_level("wood_tech") == 1 and Economy._hold == 0 and not Economy.research_waiting(), 15.0)
 	_check(dia_cost == 0 and fin and finished and Economy.research_current.is_empty() and Economy.diamonds == dia0 and notices.has("연구 완료: 벌목술 Lv 1"),
 		"(RS) instant finish on the server: Lv 1, free with 5 min or less left, notice '연구 완료: 벌목술 Lv 1'", "cost=%d dia %d -> %d levels=%s" % [dia_cost, dia0, Economy.diamonds, Economy.research_levels])
 	Economy.start_research("stone_tech")
-	await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "stone_tech" and not Economy.research_waiting(), 15.0)
+	await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "stone_tech" and Economy._hold == 0 and not Economy.research_waiting(), 15.0)
 	await _request("POST", "/v1/test/age", {"minutes": 2})  # 끝나는 시각을 2분 당긴다 — 이 응답을 만드는 읽기가 서버 완료
 	_check(Economy.research_level("stone_tech") == 1 and Economy.research_current.is_empty() and notices.has("연구 완료: 채석술 Lv 1"),
 		"(RS) once the finish time passes the server completes the research by itself (lazy), the app sees Lv 1", "levels=%s current=%s" % [Economy.research_levels, Economy.research_current])
@@ -1251,7 +1245,7 @@ func _research_online() -> void:
 ## phase 1 끝: 농경술을 진행 중으로 두고 연구 상태를 --state.research에 쓴다(phase 2가 재접속 복원을 본다).
 func _research_leave_running(state_path: String) -> void:
 	Economy.start_research("food_tech")
-	var ok := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "food_tech" and not Economy.research_waiting(), 15.0)
+	var ok := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "food_tech" and Economy._hold == 0 and not Economy.research_waiting(), 15.0)
 	_check(ok, "(RS) food tech left running for phase 2", "current=%s" % [Economy.research_current])
 	var f := FileAccess.open(state_path + ".research", FileAccess.WRITE)
 	f.store_string(JSON.stringify({"levels": Economy.research_levels, "current": Economy.research_current}))
@@ -1345,7 +1339,7 @@ func _dungeons_online(state_path: String) -> void:
 	var ok: bool = not pick.is_empty() and Economy.equip_block(pick.hero, pick.item.slot, pick.item.id) == ""
 	if ok:
 		Economy.equip(pick.hero, pick.item.slot, pick.item.id)
-		await _wait_until(func(): return not Economy._waiting.has("equip"), 15.0)
+		await _wait_until(func(): return Economy._hold == 0 and not Economy._waiting.has("equip"), 15.0)
 		await _frames(3)
 	var node = _hero_node(pick.get("hero", ""))
 	var def := GameData.hero(pick.get("hero", "nina"))
@@ -1369,7 +1363,7 @@ func _dungeons_online(state_path: String) -> void:
 			break
 	var gold0: int = Economy.server_gold_tenths
 	Economy.sell_items([spare.id])
-	await _wait_until(func(): return not Economy._waiting.has("sell_items"), 15.0)
+	await _wait_until(func(): return Economy._hold == 0 and not Economy._waiting.has("sell_items"), 15.0)
 	_check(Economy.items().size() == 4 and Economy.item(spare.id).is_empty() and Economy.server_gold_tenths == gold0 + GameData.item_sell_value(spare) * 10,
 		"(z) selling an item on the server pays its sell value", "gold %d -> %d, value %d" % [gold0, Economy.server_gold_tenths, GameData.item_sell_value(spare)])
 	# 자동착용: 남은 장비를 한 번에 — 곧바로 보이고(응답 전) 요청은 /v1/equip/many 하나

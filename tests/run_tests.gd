@@ -3160,31 +3160,32 @@ func test_growth_economy() -> void:
 	e3.free()
 	DirAccess.remove_absolute(ECON_TMP)
 	e.free()
-	# 온라인: 보내고 응답을 기다린다. 재전송 없음(once), 대기 중 재탭은 무시
+	# 온라인: 곧바로 올리고(오프라인 규칙) 한 번 보낸다(once). 응답은 서버 값으로 맞추고, 거절되면 되돌린다
 	var o = _econ(1.8e9)
 	var n := GrowthNet.new()
 	o.net = n
 	o.gold = 100000
+	o.server_gold_tenths = 1000000
 	var notes2: Array = []
 	o.notice.connect(func(t): notes2.append(t))
-	check(o.growth_up("hp", 2) and o.upgrades_waiting() and o.upgrade_level("hp") == 0 and o.gold == 100000, "online: nothing changes until the reply")
+	var cost2: int = o.upgrade_total_cost("hp", 2)
+	check(o.growth_up("hp", 2) and not o.upgrades_waiting() and o.upgrade_level("hp") == 2 and o.gold == 100000 - cost2, "online: level and gold change at once, before the reply")
 	check(n.sent.size() == 1 and n.sent[0].path == "/v1/upgrade" and n.sent[0].body == {"id": "hp", "count": 2} and n.sent[0].once, "online: one request to /v1/upgrade, sent once (never resent)")
-	check(not o.growth_up("hp", 1) and n.sent.size() == 1 and notes2.is_empty(), "a tap while waiting is ignored without a notice")
-	var reply := {"player": {"gold_tenths": 1000000 - 20 * 1000, "stage": 1, "res": {}, "buildings": {}, "upgrades": {"hp": 2, "ghost": 4}},
+	var reply := {"player": {"gold_tenths": 1000000 - cost2 * 10, "stage": 1, "res": {}, "buildings": {}, "upgrades": {"hp": 2, "ghost": 4}},
 		"merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
 	var sig2 := [0]
 	o.upgrades_changed.connect(func(): sig2[0] += 1)
 	n.sent[0].done.call(reply)
-	check(not o.upgrades_waiting() and o.upgrade_level("hp") == 2 and o.upgrades == {"hp": 2} and sig2[0] == 1, "reply sets the levels (unknown ids dropped) and signals once")
-	check(o.apply_server(reply) and sig2[0] == 1, "the same levels again do not signal")
-	check(o.growth_up("hp", 1) and n.sent.size() == 2, "after the reply a new upgrade can go")
+	check(o.upgrade_level("hp") == 2 and o.upgrades == {"hp": 2} and o.gold == 100000 - cost2 and sig2[0] == 0, "the reply confirms it (unknown ids dropped); nothing jumps, no extra signal")
+	check(o.apply_server(reply) and sig2[0] == 0, "the same levels again do not signal")
+	check(o.growth_up("hp", 1) and n.sent.size() == 2 and o.upgrade_level("hp") == 3, "the next upgrade goes at once too")
 	n.last_error = "not_enough_gold"
 	n.sent[1].fail.call()
-	check(not o.upgrades_waiting() and notes2 == [EconomyScript.NO_GOLD_TEXT] and n.refreshed == 1, "a rejected upgrade notifies and refreshes the state")
+	check(o.upgrade_level("hp") == 2 and o.gold == 100000 - cost2 and notes2 == [EconomyScript.NO_GOLD_TEXT] and n.refreshed == 1, "a rejected upgrade rolls back, notifies and refreshes the state")
 	n.last_error = ""
-	check(o.growth_up("hp", 1), "can retry after failure")
+	check(o.growth_up("hp", 1) and o.upgrade_level("hp") == 3, "can retry after failure")
 	n.sent[2].fail.call()
-	check(notes2.size() == 2 and notes2[1] == EconomyScript.GROWTH_FAIL_TEXT and n.refreshed == 2, "a lost reply notifies with the generic text and refreshes")
+	check(notes2.size() == 2 and notes2[1] == EconomyScript.GROWTH_FAIL_TEXT and n.refreshed == 2 and o.upgrade_level("hp") == 2, "a lost reply rolls back with the generic text and refreshes")
 	o.net = null
 	o.free()
 

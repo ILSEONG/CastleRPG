@@ -455,7 +455,7 @@ func _build_boss() -> void:
 	b.pressed.connect(_start_fight)
 	v.add_child(b)
 	buttons["boss"] = b
-	if why != "" and tries > 0:
+	if why != "" and tries > 0 and not Guild.busy:  # 응답을 기다리는 잠깐은 이유를 띄우지 않는다
 		v.add_child(_label(why, 20, RED))
 	body.add_child(card)
 	# 등급표

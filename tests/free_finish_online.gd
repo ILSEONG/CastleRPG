@@ -79,14 +79,14 @@ func _ready() -> void:
 	# 3) 연구: 벌목술 Lv 1(60초) — 다이아 0으로 바로
 	var dia := Economy.diamonds
 	_check(Economy.start_research("wood_tech"), "research started", "")
-	_check(await _wait_until(func(): return not Economy.research_waiting() and not Economy.research_current.is_empty(), 10.0), "research running", "")
+	_check(await _wait_until(func(): return Economy._hold == 0 and not Economy.research_waiting() and not Economy.research_current.is_empty(), 10.0), "research running", "")
 	panel.research.open()
 	await _frames(10)
 	_check(Economy.research_dia_cost(Economy.time_now()) == 0 and panel.research.dia_button.text == "무료 즉시 완료", "research shows 무료 즉시 완료", panel.research.dia_button.text)
 	await _snap()
 	panel.research.dia_button.pressed.emit()
 	_check(Economy.research_level("wood_tech") == 1 and Economy.research_current.is_empty(), "research is done the moment the button is pressed", "")
-	_check(await _wait_until(func(): return not Economy.research_waiting(), 10.0), "server answered the free research finish", "")
+	_check(await _wait_until(func(): return Economy._hold == 0 and not Economy.research_waiting(), 10.0), "server answered the free research finish", "")
 	_check(Economy.research_level("wood_tech") == 1 and Economy.diamonds == dia and not _notes.has(EconomyScript.ROLLBACK_TEXT), "server agrees, no diamonds spent", str([Economy.diamonds, dia, _notes]))
 	await _frames(10)
 	await _snap()
