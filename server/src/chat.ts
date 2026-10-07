@@ -41,27 +41,29 @@ export function registerChat(app: Hono<Any>, d: Any) {
 
   const out = (r: Any, me: string) => ({ id: Number(r.id), name: String(r.name), text: String(r.text), at: Number(r.at), me: String(r.player_id) === me })
 
-  async function since(channel: string, after: number, me: string) {
-    const rows = after > 0
-      ? await query(`select id, player_id::text, name, text, extract(epoch from at)::float8 as at from chat_messages
-          where channel = $1 and id > $2 order by id limit ${PAGE}`, [channel, after])
-      : (await query(`select id, player_id::text, name, text, extract(epoch from at)::float8 as at from chat_messages
-          where channel = $1 order by id desc limit ${PAGE}`, [channel])).reverse()
-    return rows.map((r: Any) => out(r, me))
-  }
-
   const afterOf = (v: string | undefined) => {
     const n = Number(v ?? 0)
     return Number.isSafeInteger(n) && n > 0 ? n : 0
   }
 
+  // 가장 잦은 요청(채팅 창이 열리면 3초, 닫혀도 20초마다) — 길드 찾기와 두 채널 읽기를 쿼리 하나로(Neon HTTP는 쿼리마다 왕복).
+  // 채널마다 after > 0이면 그 뒤 PAGE개(오래된 순), 0이면 최근 PAGE개(오래된 순으로 돌려준다).
+  const pageOf = (ch: string, p: string) => `coalesce((select json_agg(m order by m.id) from (select id, player_id::text as player_id, name, text,
+      extract(epoch from at)::float8 as at from chat_messages where channel = ${ch} and id > ${p}
+      order by case when ${p} > 0 then id else -id end limit ${PAGE}) m), '[]'::json)`
+  const POLL_SQL = `with g as (select g.id::text as id, g.name from player_guild pg join guilds g on g.id = pg.guild_id where pg.player_id = $1)
+    select (select id from g) as gid, (select name from g) as gname, ${pageOf("'all'", '$2::bigint')} as all_rows,
+      case when exists (select 1 from g) then ${pageOf("'g:' || (select id from g)", '$3::bigint')} end as guild_rows`
+  const rowsOf = (v: Any) => (typeof v === 'string' ? JSON.parse(v) : v) as Any[]
+
   app.get('/v1/chat', auth, async (c: Any) => {
     const id = c.get('playerId') as string
-    const g = await myGuild(id)
+    const [r] = await query(POLL_SQL, [id, afterOf(c.req.query('all')), afterOf(c.req.query('guild'))])
+    const g = r.gid == null ? null : { id: String(r.gid), name: String(r.gname) }
     return c.json({
       server_now: clock(),
-      all: await since('all', afterOf(c.req.query('all')), id),
-      guild: g ? await since('g:' + g.id, afterOf(c.req.query('guild')), id) : null,
+      all: rowsOf(r.all_rows).map((m) => out(m, id)),
+      guild: g ? rowsOf(r.guild_rows).map((m) => out(m, id)) : null,
       guild_name: g ? g.name : '',
     })
   })

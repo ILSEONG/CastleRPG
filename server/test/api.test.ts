@@ -575,3 +575,18 @@ test('여러 자원 판매: items 한 번에 원자적, 하나라도 초과면 �
   assert.equal(r.json.player.gold_tenths, gold * 10)
   assert.equal((await logs(id, 'sell')).length, 1)
 })
+
+test('기획 표 캐시(gameCacheSec): 그동안 같은 표를 쓰고, /v1/test/config가 비운다', async () => {
+  const app = S.makeApp({ gameCacheSec: 3600 })
+  const cfg = async () => (await (await app.request('/v1/gamedata')).json()).config
+  const [{ value: before }] = await S.db.query("select value from game_config where key = 'kill_rate_cap'")
+  assert.equal((await cfg()).kill_rate_cap, before)
+  await S.db.query("update game_config set value = '12345' where key = 'kill_rate_cap'")
+  try {
+    assert.equal((await cfg()).kill_rate_cap, before) // 캐시 — 아직 옛 값
+    await app.request('/v1/test/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: 'kill_rate_cap', value: '777' }) })
+    assert.equal((await cfg()).kill_rate_cap, '777') // 훅이 캐시를 비웠다
+  } finally {
+    await S.db.query('update game_config set value = $1 where key = $2', [before, 'kill_rate_cap'])
+  }
+})

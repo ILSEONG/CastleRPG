@@ -16,7 +16,7 @@ try {
   process.exit(1)
 }
 for (const w of cfg.warnings) console.warn(`[server] WARNING: ${w}`)
-const { databaseUrl, pgliteDir, hostname, port } = cfg
+const { databaseUrl, pgliteDir, hostname, port, gameCacheSec } = cfg
 
 const db = await openDb({ databaseUrl, pgliteDir })
 if (!databaseUrl) {
@@ -37,7 +37,7 @@ const envOauth: OAuthConfig = {
 const oauth = cfg.allowTestHooks && enabledProviders(envOauth).length === 0 ? undefined : envOauth
 console.log(`[server] social login: ${oauth ? enabledProviders(oauth).join(', ') || 'off' : 'test providers (ALLOW_TEST_HOOKS)'}${oauth?.redirectBase ? ` (callbacks under ${oauth.redirectBase})` : ''}`)
 const warLive = new WarLive() // 공성전 실시간 방(WebSocket /v1/guild/war/live)
-const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive })
+const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, gameCacheSec })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)

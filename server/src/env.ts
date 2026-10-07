@@ -40,8 +40,12 @@ export function readEnv(env: Record<string, string | undefined>) {
   const keepAliveMin = Number(env.KEEP_ALIVE_MIN?.trim() || 0)
   if (!Number.isFinite(keepAliveMin) || keepAliveMin < 0) throw new Error('KEEP_ALIVE_MIN must be a non-negative number of minutes')
   if (keepAliveMin > 0 && !publicUrl) throw new Error('KEEP_ALIVE_MIN needs PUBLIC_URL (the address to ping)')
+  // 기획 표 재사용 초(app.ts loadGame). 운영 기본 30 — 시드 뒤 길어야 그만큼 늦게 반영된다. 개발 모드는 0(테스트 훅이 표를 바꾼다)
+  const gameCacheSec = Number(env.GAME_CACHE_SEC?.trim() || (databaseUrl ? 30 : 0))
+  if (!Number.isFinite(gameCacheSec) || gameCacheSec < 0) throw new Error('GAME_CACHE_SEC must be a non-negative number of seconds')
   return {
     databaseUrl,
+    gameCacheSec,
     secret,
     allowTestHooks,
     oauth,

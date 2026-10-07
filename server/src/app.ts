@@ -33,6 +33,7 @@ export interface AppOptions {
   oauth?: O.OAuthConfig // 소셜 로그인 제공자 키·공개 주소(없으면 소셜 로그인 꺼짐)
   fetch?: typeof fetch // 제공자 호출(테스트는 가짜)
   warLive?: WarLive // 공성전 실시간 방(main.ts가 만들어 http 서버에 붙인다). 없으면 방 없이(REST finish만)
+  gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
 }
 
 const TOKEN_TTL = 30 * 86400
@@ -295,6 +296,13 @@ const COMPLETE_SQL = `with w as (select $3 = any(unbuilt) as lot, build_finish f
   select count(*)::int as n from s`
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
+function deepFreeze<T>(v: T): T {
+  if (v && typeof v === 'object' && !Object.isFrozen(v)) {
+    Object.freeze(v)
+    for (const x of Object.values(v)) deepFreeze(x)
+  }
+  return v
+}
 // 건물 레벨(행이 없으면 1)
 const level = (p: Player, building: string) => p.buildings[building]?.level ?? 1
 // 개정 24: 연구 효과 합계(서버 권위 효과: 생산·건설 시간·판매·처치 골드·훈련·인구)와 인구(민가 + 연구 pop_add)
@@ -355,7 +363,22 @@ export function createApp(opts: AppOptions) {
 
   // --- 읽기 ---
 
-  async function loadGame(): Promise<Game> {
+  // 기획 표는 시드할 때만 바뀐다 — 운영은 gameCacheSec 동안 한 번 읽은 것을 모든 요청이 같이 쓴다(동접 부하: 요청마다 ~30 KB를
+  // Neon에서 받아 JSON 두 번 파싱하던 것이 CPU의 큰 몫이었다). 같이 쓰므로 얼려 둔다 — 핸들러가 고치면 바로 오류가 난다.
+  const gameCacheMs = Math.max(0, opts.gameCacheSec ?? 0) * 1000
+  let gameMemo: { at: number; p: Promise<Game> } | null = null
+  function loadGame(): Promise<Game> {
+    if (!gameCacheMs) return readGame()
+    const t = Date.now()
+    if (!gameMemo || t - gameMemo.at >= gameCacheMs) {
+      const memo = { at: t, p: readGame().then(deepFreeze) }
+      memo.p.catch(() => { if (gameMemo === memo) gameMemo = null }) // 실패는 재사용하지 않는다
+      gameMemo = memo
+    }
+    return gameMemo.p
+  }
+
+  async function readGame(): Promise<Game> {
     const [r] = await query(GAME_SQL)
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
@@ -2907,6 +2930,7 @@ export function createApp(opts: AppOptions) {
       const key = strField(b, 'key')
       const value = strField(b, 'value')
       await query('insert into game_config (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [key, value])
+      gameMemo = null
       return c.json({ ok: true })
     })
 
