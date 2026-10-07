@@ -588,10 +588,23 @@ func _on_notice(text: String) -> void:
 
 
 func _refresh_chips() -> void:
-	_chips["gold"].text = commas(Economy.gold)
-	_chips["diamond"].text = commas(Economy.diamonds)
+	_chips["gold"].text = chip_text(Economy.gold)
+	_chips["diamond"].text = chip_text(Economy.diamonds)
 	for id in Economy.res:
-		_chips[id].text = commas(Economy.res[id])
+		_chips[id].text = chip_text(Economy.res[id])
+
+
+## 상단 칩 글자: 7자리까지 그대로("9,999,999"), 넘으면 만·억 단위(칩 칸에 들어가게 — 통합 테스트 2026-10-07: 5천만이 "0,000,480"으로 잘렸다).
+## 12,345,678 → "1,234만", 123,456,789 → "1.23억", 12,345,678,901 → "123.4억", 1조 이상 → "1.2조".
+static func chip_text(n: int) -> String:
+	if absi(n) < 10_000_000:
+		return commas(n)
+	if absi(n) < 100_000_000:
+		return commas(n / 10_000) + "만"
+	if absi(n) < 1_000_000_000_000:
+		var e := n / 100_000_000.0
+		return ("%.2f억" if absf(e) < 10.0 else "%.1f억" if absf(e) < 1000.0 else "%.0f억") % (floorf(e * 100.0) / 100.0)
+	return "%.1f조" % (floorf(n / 100_000_000_000.0) / 10.0)
 
 
 ## 1234567 → "1,234,567"

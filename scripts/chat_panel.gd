@@ -146,7 +146,7 @@ func _process(delta: float) -> void:
 		_notice_left -= delta / maxf(Engine.time_scale, 0.01)
 		notice_label.modulate.a = clampf(_notice_left / 0.5, 0.0, 1.0)
 	# 휴대폰 키보드: 화면 픽셀 → 뷰포트 단위로 바꿔 창 아래 끝을 그 위로
-	var kb := float(DisplayServer.virtual_keyboard_get_height())
+	var kb := float(DisplayServer.virtual_keyboard_get_height()) if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD) else 0.0  # 키보드 없는 기기는 매 프레임 경고
 	var win := float(DisplayServer.window_get_size().y)
 	var lift := 0.0
 	if kb > 0.0 and win > 0.0:

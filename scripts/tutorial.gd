@@ -46,7 +46,7 @@ const MISSIONS := [
 	{"id": "build_farm", "title": "농장 건설", "desc": "농장을 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
 	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 막아 냅니다. 30마리를 처치하세요. 처치할 때마다 골드를 얻어요.",
 		"kind": "kill", "arg": 30, "goto": "stage"},
-	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "building:lumber"},
+	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
 	{"id": "stage_1_1", "title": "스테이지 1-1 클리어", "desc": "위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있어요.",
 		"kind": "stage", "arg": 1, "goto": "stage"},
@@ -54,7 +54,7 @@ const MISSIONS := [
 		"kind": "hero_level", "goto": "tab:hero"},
 	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
 		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
-	{"id": "stage_1_2", "title": "스테이지 1-2 클리어", "desc": "전투를 이어 가 1-2까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+	{"id": "stage_1_2", "title": "스테이지 1-2 클리어", "desc": "전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.",
 		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "growth", "title": "성장 강화", "desc": "[성장] 탭에서 골드로 모든 영웅의 공격력·체력을 올리세요.", "kind": "growth", "goto": "tab:growth"},
 	{"id": "atk_3", "title": "공격력 Lv 3 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 3까지 올리세요.",
@@ -65,7 +65,7 @@ const MISSIONS := [
 		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
 	{"id": "build_tavern", "title": "주점 건설", "desc": "주점을 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
 	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
-	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭에서 새로 모집한 영웅을 배치 슬롯에 넣으세요.", "kind": "deploy_new", "goto": "tab:hero"},
+	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭 위쪽 배치 슬롯 하나를 누른 뒤, 새로 모집한 영웅을 골라 [적용]을 누르세요.", "kind": "deploy_new", "goto": "tab:hero"},
 	{"id": "hero_lv4_10", "title": "영웅 4명 Lv 10 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
 		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_3", "title": "스테이지 1-3 클리어", "desc": "새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.", "kind": "stage", "arg": 3,
@@ -165,7 +165,7 @@ const MISSIONS := [
 ## 목표 = base + step × c, 보상 = reward × (1 + c)(fixed는 늘지 않음).
 const REPEATS := [
 	{"kind": "kill", "base": 100, "step": 50, "title": "몬스터 %d마리 처치", "goto": "stage", "reward": {"gold": 3000}},
-	{"kind": "collect", "base": 3, "step": 1, "title": "자원 %d번 수집", "goto": "building:lumber", "reward": {"gold": 2000}},
+	{"kind": "collect", "base": 3, "step": 1, "title": "자원 %d번 수집", "goto": "look:lumber", "reward": {"gold": 2000}},
 	{"kind": "stage", "title": "스테이지 %s 클리어", "goto": "stage", "fixed": {"diamonds": 20}},
 	{"kind": "growth_up", "base": 3, "step": 1, "title": "성장 강화 %d회", "goto": "tab:growth", "reward": {"gold": 5000}},
 	{"kind": "sell", "base": 1, "step": 0, "title": "상인에게 자원 팔기", "goto": "merchant", "reward": {"gold": 2000}},
@@ -687,14 +687,22 @@ func target_building() -> String:
 	var m := mission()
 	if m.is_empty() or complete():
 		return ""
-	var g := str(m.get("goto", ""))
-	return g.get_slice(":", 1) if g.begins_with("building:") else ""
+	var g := goto_of(m)
+	return g.get_slice(":", 1) if g.begins_with("building:") or g.begins_with("look:") else ""
 
 
 func goto_current() -> void:
 	var m := mission()
 	if not m.is_empty():
-		goto_requested.emit(str(m.get("goto", "")))
+		goto_requested.emit(goto_of(m))
+
+
+## 미션의 [바로가기] 대상. 병사 배치: 아직 받은 병사가 없으면 [병사] 창 대신 막사(훈련이 끝난 병사를 받는 곳 — 통합 테스트 2026-10-07).
+func goto_of(m: Dictionary) -> String:
+	var g := str(m.get("goto", ""))
+	if m.get("kind", "") == "soldier_deploy" and econ != null and econ.soldier_counts().is_empty():
+		return "building:barracks"
+	return g
 
 
 func _done(m: Dictionary) -> bool:

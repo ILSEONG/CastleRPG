@@ -270,7 +270,7 @@ func _build_world() -> void:
 		Economy.claim_offline(GameState.stage)  # 앱을 켰다: 끈 동안의 방치 처치 골드(× offline_gold_mult) 정산 → 개요 창
 
 
-## 튜토리얼 미션 카드 [바로가기](Tutorial.goto_requested): building:<id>(카메라를 그 건물로 옮기고 건물 창) · tab:<id>(하단 탭) ·
+## 튜토리얼 미션 카드 [바로가기](Tutorial.goto_requested): building:<id>(카메라를 그 건물로 옮기고 건물 창) · look:<id>(카메라만) · tab:<id>(하단 탭) ·
 ## merchant(상인 창) · recruit(모집 창 다이아 탭) · stage(방치 중이면 전투 시작) · pvp(던전 창 [PVP]).
 func _tutorial_goto(target: String) -> void:
 	if _tutorial_ui.is_empty() or not is_inside_tree():
@@ -285,6 +285,10 @@ func _tutorial_goto(target: String) -> void:
 			elif arg == GameData.GATE:
 				_tutorial_ui.rig.pan_to(FormationScript.gate_position(castle.half, 2), GATE_PAN_SEC)
 			_tutorial_ui.building.open_building(arg)
+		"look":  # 건물로 카메라만(창 없이 — 자원 수집은 건물을 직접 누른다)
+			var lb := Balance.building(arg)
+			if not lb.is_empty():
+				_tutorial_ui.rig.pan_to(Vector3((lb.cell.x + lb.size.x / 2.0) * Balance.TILE, 0, (lb.cell.y + lb.size.y / 2.0) * Balance.TILE), GATE_PAN_SEC)
 		"tab":  # 하단 탭, 없으면 오른쪽 아래 메뉴 항목(길드)
 			if _tutorial_ui.tabs.windows.has(arg):
 				if not _tutorial_ui.tabs.windows[arg].is_open():

@@ -43,7 +43,7 @@ const DEFS := [
 	{"id": "r_dungeon", "type": "repeat", "kind": "dungeon_win", "title": "던전 %d번 클리어", "target": 5, "step": 3, "reward": {"diamonds": 30}},
 ]
 ## 사건 → [바로가기] 대상(Tutorial.goto_requested 형식 — main이 처리한다). 없으면 버튼 없음.
-const GOTO := {"kill": "stage", "stage": "stage", "collect": "building:lumber", "sell": "merchant", "hero_level": "tab:hero", "growth": "tab:growth",
+const GOTO := {"kill": "stage", "stage": "stage", "collect": "look:lumber", "sell": "merchant", "hero_level": "tab:hero", "growth": "tab:growth",
 	"gacha": "tab:recruit", "dungeon_win": "tab:dungeon", "guild_attend": "tab:guild", "guild_boss": "tab:guild", "build_up": "building:keep",
 	"research": "building:lab", "train": "building:barracks"}
 const FAIL_TEXT := {"claimed": "이미 받은 보상입니다", "not_done": "아직 완료하지 않았습니다", "too_soon": "잠시 뒤 다시 받아 주세요",

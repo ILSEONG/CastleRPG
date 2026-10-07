@@ -235,10 +235,18 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     if (!bt) {
       const roster: Any[] = []
       const cfg = cfgOf(x.game)
-      for (const m of ourMembers(x).filter((mm) => !mm.real)) {
+      const ms = ourMembers(x)
+      for (const m of ms.filter((mm) => !mm.real)) {
         const r = mulberry32(G.mix(Number(g.seed), week, day >>> 0, m.vi ?? 0))
         const pw = m.power * (W.VIRTUAL_POWER_RANGE[0] + r() * (W.VIRTUAL_POWER_RANGE[1] - W.VIRTUAL_POWER_RANGE[0]))
         roster.push({ owner: m.key, name: m.name, squad: roster.length, lane: roster.length % 4, ai: true, heroes: W.randomSquad(r, defsOf(x.game), pw, cfg) })
+      }
+      // 빈자리(상대 길드원 수 − 우리 실제·가상 길드원)는 AI 용병 분대 — 갓 만든 길드도 같은 수로 싸운다(통합 테스트 2026-10-07, 슈퍼관리자 규칙 "사람이 없으면 AI")
+      const avg = ms.reduce((a, m) => a + m.power, 0) / Math.max(1, ms.length)
+      for (let i = 0; i < w.members - ms.length; i++) {
+        const r = mulberry32(G.mix(Number(g.seed), week, day >>> 0, 1000 + i))
+        const pw = avg * (W.VIRTUAL_POWER_RANGE[0] + r() * (W.VIRTUAL_POWER_RANGE[1] - W.VIRTUAL_POWER_RANGE[0]))
+        roster.push({ owner: `m:${i}`, name: `용병 ${i + 1}`, squad: roster.length, lane: roster.length % 4, ai: true, heroes: W.randomSquad(r, defsOf(x.game), pw, cfg) })
       }
       added = { owner: x.id, name: G.playerName(x.id), squad: roster.length, lane: roster.length % 4, ai: false, heroes: sq }
       roster.push(added)

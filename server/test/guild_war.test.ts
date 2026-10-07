@@ -258,3 +258,18 @@ test('war: super admin opens the siege any time, and a finished week opens again
   assert.notEqual(again.json.plan.battle_id, id1)
   assert.equal(again.json.plan.keep.hp, again.json.plan.keep.max) // 새 성
 })
+
+test('war: a freshly created guild (no virtual members yet) gets AI mercenary squads up to the enemy member count', async () => {
+  S.clock.t = T0
+  const p = await S.login()
+  await setStage(p.id, 30)
+  await S.db.query('update player_state set gold_tenths = 10000000 where player_id = $1', [p.id])
+  const made = await S.req('POST', '/v1/guild/create', { token: p.token, body: { name: '새길드', emblem: 0 } })
+  assert.equal(made.status, 200, JSON.stringify(made.json))
+  await S.req('POST', '/v1/test/war_now', { token: p.token })
+  const r = await S.req('POST', '/v1/guild/war/enter', { token: p.token, body: { heroes: squad() } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  const w = await war(p.token)
+  assert.equal(r.json.plan.attackers.length, w.enemy.members)
+  assert.ok(r.json.plan.attackers.filter((s: any) => s.ai).length >= w.enemy.members - 1)
+})

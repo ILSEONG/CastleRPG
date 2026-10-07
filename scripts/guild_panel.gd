@@ -517,7 +517,9 @@ func _build_shop() -> void:
 		var desc := "보유 영웅 중 무작위 조각 %d개" % give.shards if give.has("shards") else ("보유 SSR 영웅 무작위 조각 1개" if give.has("ssr_shards") else _give_text(give))
 		if give.has("equip"):
 			desc = "장비 1개, 장비 던전 최고 단계(%d단계)의 등급 확률, 부위·능력치 무작위" % maxi(1, int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
-		v.add_child(_label(desc, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+		var dl := _label(desc, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 긴 설명(장비 상자)이 창을 화면보다 넓히지 않게 줄바꿈
+		v.add_child(dl)
 		v.add_child(_label("%s %d/%d" % ["오늘" if it.period == "day" else "이번 주", Guild.shop_left(it.id), it.limit], 19, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
 		r.add_child(v)
 		var b := _button("", UiKit.AMBER, 22)
