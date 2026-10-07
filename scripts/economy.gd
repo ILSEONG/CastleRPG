@@ -146,6 +146,7 @@ signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받�
 signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
 signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
+signal hot_offered(hot: Dictionary)  # 핫딜이 새로 떴다 {id, until, bought}(온라인은 서버 응답, 오프라인은 곧바로)
 signal shop_changed  # 상점 산 기록이 바뀌었다(구매·리셋·서버 값)
 signal pouch_opened(opened: Dictionary)  # 주머니를 열었다 {id, count, gold_tenths, res}(온라인은 응답이 왔을 때)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
@@ -1238,6 +1239,11 @@ func iap_view() -> Dictionary:
 	for k in ["free", "paid"]:
 		if not s.gp.get(k) is Array:
 			s.gp[k] = []
+	if not s.get("hot") is Dictionary:
+		s.hot = {}
+	if not s.get("hcool") is Dictionary:
+		s.hcool = {}
+	s.hs = int(s.get("hs", 0)) if _num(s.get("hs")) else 0
 	if int(s.get("day", -1)) != int(per[0]):
 		s.d = {}
 	if int(s.get("week", -1)) != int(per[1]):
@@ -1258,6 +1264,8 @@ func iap_can_buy(id: String) -> bool:
 			return not s.passes.has(id)
 		"monthly":
 			return monthly_left(id) + int(p.days) <= IapItems.MONTHLY_MAX_DAYS
+		"hot":
+			return str(active_hot().get("id", "")) == id
 		"package":
 			var had := int(s.d.get(id, 0)) if p.period == "daily" else (int(s.w.get(id, 0)) if p.period == "weekly" else int(s.n.get(id, 0)))
 			return had < int(p.get("limit", 1))
@@ -1308,6 +1316,53 @@ func iap_claim_left(cleared: int) -> Dictionary:
 		if can_claim_growth(i, "free", cleared) or can_claim_growth(i, "paid", cleared):
 			out.pass = true
 	return out
+
+
+## 지금 떠 있는 핫딜 {id, until, bought}(안 샀고 시간 안). 없으면 {}.
+func active_hot() -> Dictionary:
+	var h: Dictionary = iap_view().hot
+	if h.is_empty() or h.get("bought", false) or not _num(h.get("until")) or float(h.until) <= time_now() or IapItems.find(str(h.get("id", ""))).is_empty():
+		return {}
+	return h
+
+
+## 핫딜 계기(보스 격파 "boss"·다이아 부족 "dia"·패배 "defeat"): 조건이 되면 1시간 특가를 띄운다(hot_offered).
+## cleared = 깬 마지막 라운드(보스 단계 = cleared / HOT_ROUNDS). 앱이 먼저 걸러(이미 떠 있음·쉬는 시간·같은 보스 단계) 요청을 아끼고,
+## 온라인은 서버가 정한다(늘 200, 안 뜨면 hot = null).
+func hot_offer(trigger: String, cleared: int) -> void:
+	if not IapItems.HOT.has(trigger) or not active_hot().is_empty():
+		return
+	var s := iap_view()
+	var now := time_now()
+	var stage := cleared / IapItems.HOT_ROUNDS
+	if trigger == "boss" and stage <= int(s.hs):
+		return
+	var last = s.hcool.get(trigger)
+	var resting: bool = _num(last) and now - float(last) < float(IapItems.HOT[trigger].cool)
+	if resting and trigger != "boss":
+		return
+	if net != null:
+		if net.up:
+			net.send("POST", "/v1/iap/hot", {"trigger": trigger}, _on_hot_offer, Callable(), true, true)
+		return
+	if resting:
+		s.hs = stage
+	else:
+		s.hot = {"id": IapItems.HOT[trigger].product, "until": now + IapItems.HOT_SEC, "bought": false}
+		s.hcool[trigger] = now
+		if trigger == "boss":
+			s.hs = stage
+	iap = s
+	shop_changed.emit()
+	if not resting:
+		hot_offered.emit(s.hot)
+
+
+func _on_hot_offer(data: Dictionary) -> void:
+	apply_server(data)
+	shop_changed.emit()
+	if data.get("hot") is Dictionary:
+		hot_offered.emit(data.hot)
 
 
 ## 결제 상품 사기: 실결제(Google Play) 연결 전이라 알리기만 한다. 연결되면 여기서 결제 창을 열고 영수증을 /v1/iap/purchase로 보낸다.

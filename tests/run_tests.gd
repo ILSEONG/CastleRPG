@@ -5146,4 +5146,19 @@ func test_iap() -> void:
 	check(e.monthly_left("monthly") == 3 and e.can_claim_monthly("monthly") and e.claim_monthly("monthly") and e.diamonds == d0 + 260 and not e.can_claim_monthly("monthly"),
 		"iap: monthly card gives 100 diamonds once a day")
 	check(e.claim_growth(0, "paid", 10) and e.diamonds == d0 + 860 and not e.iap_can_buy("pass_growth"), "iap: with the pass the paid tier pays out")
+	# 핫딜(오프라인): 계기에 1시간, 하나만, 뜬 것만 살 수 있다, 보스는 새 25라운드 단계마다
+	var got := []
+	e.hot_offered.connect(func(h): got.append(h.id))
+	check(not e.iap_can_buy("hot_dia") and e.active_hot().is_empty(), "hot: nothing to buy before a deal shows")
+	e.hot_offer("boss", 24)
+	e.hot_offer("dia", 24)
+	check(got == ["hot_dia"] and e.iap_can_buy("hot_dia") and not e.iap_can_buy("hot_boss") and is_equal_approx(float(e.active_hot().until), e.time_now() + 3600.0),
+		"hot: short of diamonds shows the 1-hour diamond deal (boss needs round 25)")
+	e.hot_offer("defeat", 24)
+	check(got == ["hot_dia"], "hot: one deal at a time")
+	e.iap.hot.until = e.time_now() - 1.0
+	check(e.active_hot().is_empty() and not e.iap_can_buy("hot_dia"), "hot: an expired deal can't be bought")
+	e.hot_offer("dia", 24)
+	e.hot_offer("boss", 25)
+	check(got == ["hot_dia", "hot_boss"] and int(e.iap_view().hs) == 1, "hot: diamond deal rests 24 h, boss stage 1 shows its deal")
 	e.free()

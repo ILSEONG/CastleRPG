@@ -107,3 +107,36 @@ test('성장 패스: 라운드를 깨야 무료, 유료는 패스를 산 뒤(지
   r = await claim(1, 'paid')
   assert.equal(r.json.player.dia_tickets >= 2, true)
 })
+
+test('핫딜: 보스 단계·다이아 부족·패배 때 1시간, 한 번에 하나, 뜬 것만 한 번 산다', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  const offer = (trigger: string) => S.req('POST', '/v1/iap/hot', { token, body: { trigger } })
+  assert.equal((await buy(token, 'hot_dia')).json.error, 'limit') // 안 뜬 핫딜은 못 산다
+  assert.equal((await offer('boss')).json.reason, 'not_ready') // 25라운드 전
+  let r = await offer('dia')
+  assert.equal(r.status, 200)
+  assert.equal(r.json.hot.id, 'hot_dia')
+  assert.equal(r.json.hot.until, T0 + IAP.HOT_SEC)
+  assert.equal((await offer('defeat')).json.reason, 'active') // 하나만
+  r = await buy(token, 'hot_dia')
+  assert.equal(r.status, 200)
+  assert.equal(r.json.player.iap.hot.bought, true)
+  assert.equal((await buy(token, 'hot_dia')).json.error, 'limit')
+  assert.equal((await offer('dia')).json.reason, 'cooldown') // 24시간 쉰다
+  r = await offer('defeat')
+  assert.equal(r.json.hot.id, 'hot_defeat')
+  S.clock.t = T0 + IAP.HOT_SEC + 1 // 시간이 지나면 못 산다
+  assert.equal((await buy(token, 'hot_defeat')).json.error, 'limit')
+  await S.req('POST', '/v1/test/stage', { token, body: { stage: 26 } })
+  r = await offer('boss')
+  assert.equal(r.json.hot.id, 'hot_boss')
+  assert.equal(r.json.player.iap.hs, 1)
+  S.clock.t = T0 + 2 * IAP.HOT_SEC + 2
+  assert.equal((await offer('boss')).json.reason, 'not_ready') // 같은 단계는 한 번
+  await S.req('POST', '/v1/test/stage', { token, body: { stage: 51 } })
+  r = await offer('boss') // 6시간 쉬는 중: 단계만 넘기고 핫딜은 없음
+  assert.equal(r.status, 200)
+  assert.equal(r.json.hot, null)
+  assert.equal(r.json.player.iap.hs, 2)
+})

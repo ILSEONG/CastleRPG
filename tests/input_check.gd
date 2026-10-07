@@ -2756,6 +2756,12 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	_check(recruit.shop_ask.visible and Economy.diamonds == 299 and not recruit.is_showing_results(), "(r23) short of diamonds: tapping [1회] asks to go to the shop, spends nothing", "")
 	Economy.dia_tickets = tk0
+	var hot = recruit.hot
+	_check(hot != null and hot.is_open() and str(Economy.active_hot().get("id", "")) == "hot_dia" and hot.buy_button.text == "₩5,900",
+		"(r23) short of diamonds also pops the 1-hour 다이아 긴급 지원 hot deal over the ask (₩5,900)", "hot=%s" % [Economy.active_hot()])
+	if hot != null:
+		hot.close()
+		await _frames(2)
 	var go: Button = recruit.shop_ask.find_children("*", "Button", true, false)[0]
 	await _tap(go.get_global_rect().get_center())
 	await _frames(2)

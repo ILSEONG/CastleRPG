@@ -50,6 +50,7 @@ var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 키 아트(처음 열 때 SceneSnap으로 렌더)
 var shop  # 상점 시트(shop_panel.gd, main이 넣는다) — [이동]이 [다이아] 탭으로 연다
+var hot  # 핫딜(hot_deal.gd, main이 넣는다) — 다이아가 부족하면 다이아 긴급 지원 핫딜 계기
 
 var _art_box: Control
 var _btn_gems: Array = []  # [1회]·[10회] 앞 보석(다이아 탭만)
@@ -312,6 +313,8 @@ func _pull(count: int, base := "") -> void:
 	var cur := pull_currency(count, base)
 	if cur == DIA and Economy.diamonds < Economy.gacha_cost(DIA, count):
 		shop_ask.visible = true
+		if hot != null:
+			hot.short_of_diamonds()
 		return
 	_recruit(count, cur)
 

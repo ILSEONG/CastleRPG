@@ -48,6 +48,8 @@ var wallet_label: Label
 var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "monthly:<id>", "growth:<단계>:<free|paid>", "close"
 var buy_buttons: Array = []  # 다이아 탭 충전 버튼들
 var note: Label
+var hot_label: Label  # [패키지] 탭 맨 위 핫딜 카드의 남은 시간(1초마다)
+const HOT_BG := Color(1.0, 0.82, 0.74, 0.95)
 
 var _sig := ""
 var _tick := 0.0
@@ -178,7 +180,13 @@ func _process(delta: float) -> void:
 			_rebuild()
 
 
+func _hot_time() -> void:
+	if hot_label != null and is_instance_valid(hot_label):
+		hot_label.text = "남은 시간 " + UiKit.duration(maxf(0.0, float(Economy.active_hot().get("until", 0.0)) - Economy.time_now()))
+
+
 func _head() -> void:
+	_hot_time()
 	if not tab in ["daily", "weekly"]:
 		head_label.text = HEAD.get(tab, "")
 		return
@@ -197,7 +205,7 @@ func _wallet() -> void:
 
 ## 보이는 카드의 상태(남은 횟수·살 수 있는지) — 같으면 카드를 다시 만들지 않는다(누르는 도중 버튼이 바뀌지 않게).
 func _signature() -> String:
-	var parts := [tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0]
+	var parts := [tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0, str(Economy.active_hot().get("id", ""))]
 	if tab == "pvp":
 		parts.append(str(Pvp.coins()))
 		for x in PvpRules.SHOP:
@@ -486,6 +494,17 @@ func _wide(icon: String, title: String, lines: Array, side: Array, bg := CARD_BG
 
 
 func _build_packages() -> void:
+	hot_label = null
+	var h := Economy.active_hot()
+	if not h.is_empty():  # 떠 있는 핫딜(1시간 한정)이 맨 위
+		var hp := IapItems.find(str(h.id))
+		var card := _wide("diamond", "핫딜 · " + str(hp.name), [[Missions.reward_text(hp.give), GIVE], ["가치 %d배" % int(hp.get("value", 1)), RED]],
+			[_krw_button(hp.id, int(hp.krw))], HOT_BG)
+		hot_label = _label("", 20, RED, HORIZONTAL_ALIGNMENT_LEFT)
+		var v: VBoxContainer = card.get_child(0).get_child(1)
+		v.add_child(hot_label)
+		body.add_child(card)
+		_hot_time()
 	for p in IapItems.of_kind("monthly"):
 		var left := Economy.monthly_left(p.id)
 		var lines := [["구매 즉시 " + Missions.reward_text(p.give), GIVE], ["%d일간 매일 %s" % [int(p.days), Missions.reward_text(p.daily)], GIVE]]

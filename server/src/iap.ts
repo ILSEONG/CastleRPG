@@ -2,16 +2,18 @@
 // - 다이아 충전 6단계: 단계마다 첫 구매는 기본 다이아 2배(보너스 대신), 이후는 기본 + 보너스.
 // - 월정액 2종(30일): 사면 즉시 다이아, 기간 동안 매일 한 번 [받기]. 남은 기간에 다시 사면 30일이 이어 붙는다(최대 180일).
 // - 패키지: 신규 스타터(평생 1회), 일일(하루 1회)·주간(주 1회) 한정 패키지.
+// - 핫딜: 보스 격파(25라운드마다)·다이아 부족·패배 때 1시간 한정 특가가 뜬다(한 번에 하나, 계기마다 쉬는 시간). 뜬 핫딜만 그 시간 안에 한 번 살 수 있다.
 // - 성장 패스: 라운드 달성 단계마다 무료 보상(누구나) + 유료 보상(패스 구매자). 산 뒤에는 지난 단계 유료 보상도 받는다.
 // 결제 확인(provider): 'google' = Google Play 영수증(앱 등록·상품 등록 전이라 지금은 iap_enabled 설정이 0이면 503 payments_unavailable),
 // 'test' = 통합 테스트(allowTestHooks)만. 같은 주문 번호는 한 번만(iap_orders 기본 키).
 // 기록: player_state.iap {first: [첫 구매 보너스를 쓴 충전 id], n: {상품 id: 평생 산 수}, day, week, d: {id: 오늘}, w: {id: 이번 주},
-// monthly: {종류: {until: 마지막 날(리셋 날짜), claimed: 마지막으로 받은 날}}, passes: [산 패스], gp: {free: [단계], paid: [단계]}}.
+// monthly: {종류: {until: 마지막 날(리셋 날짜), claimed: 마지막으로 받은 날}}, passes: [산 패스], gp: {free: [단계], paid: [단계]},
+// hot: {id, until: 끝나는 시각(유닉스 초), bought} | null, hcool: {계기: 마지막으로 뜬 시각}, hs: 핫딜을 띄운 마지막 보스 단계(깬 라운드 / 25)}.
 // 앱 scripts/iap_items.gd가 같은 표를 쓴다(단위 테스트가 비교한다).
 import { weekOf } from './missions.ts'
 
 export type Reward = Record<string, number>
-export type Kind = 'diamond' | 'monthly' | 'package' | 'pass'
+export type Kind = 'diamond' | 'monthly' | 'package' | 'pass' | 'hot'
 export type Period = 'once' | 'daily' | 'weekly' | 'none'
 
 export interface Product {
@@ -25,6 +27,7 @@ export interface Product {
   limit?: number // 그 기간 한도
   days?: number // 월정액 기간
   daily?: Reward // 월정액 매일 보상
+  value?: number // 핫딜: 가격 대비 가치 배수(화면 표시 "가치 N배")
 }
 
 export const PRODUCTS: Product[] = [
@@ -43,6 +46,10 @@ export const PRODUCTS: Product[] = [
   { id: 'pkg_daily', kind: 'package', name: '일일 특가 패키지', krw: 1200, period: 'daily', limit: 1, give: { diamonds: 300, tickets: 4, keys_gold: 2 } },
   { id: 'pkg_weekly', kind: 'package', name: '주간 특가 패키지', krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 1600, tickets: 25, keys_equip: 3 } },
   { id: 'pkg_growth', kind: 'package', name: '성장 지원 패키지', krw: 33000, period: 'once', limit: 1, give: { diamonds: 12000, tickets: 60, pouch_gold_360: 5, pouch_res_360: 5 } },
+  // 핫딜(1시간 한정, 뜬 것만)
+  { id: 'hot_boss', kind: 'hot', name: '보스 격파 기념 특가', krw: 3300, value: 10, give: { diamonds: 2000, tickets: 10, pouch_gold_360: 2 } },
+  { id: 'hot_dia', kind: 'hot', name: '다이아 긴급 지원', krw: 5900, value: 8, give: { diamonds: 5000, tickets: 5 } },
+  { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 10, give: { diamonds: 1500, tickets: 10, pouch_gold_360: 3, pouch_res_360: 3 } },
   // 패스
   { id: 'pass_growth', kind: 'pass', name: '성장 패스', krw: 9900, give: {} },
 ]
@@ -65,6 +72,15 @@ export const GROWTH: { round: number; free: Reward; paid: Reward }[] = [
 
 export const MONTHLY_MAX_DAYS = 180
 
+// 핫딜: 계기 → 상품, 뜬 뒤 살 수 있는 시간, 계기마다 다시 뜨기까지 쉬는 시간(초). 보스는 25라운드(1스테이지)마다 한 번.
+export const HOT_SEC = 3600
+export const HOT: Record<string, { product: string; cool: number }> = {
+  boss: { product: 'hot_boss', cool: 6 * 3600 },
+  dia: { product: 'hot_dia', cool: 24 * 3600 },
+  defeat: { product: 'hot_defeat', cool: 12 * 3600 },
+}
+export const HOT_ROUNDS = 25
+
 export const product = (id: string) => PRODUCTS.find((p) => p.id === id)
 
 export interface IapState {
@@ -77,6 +93,9 @@ export interface IapState {
   monthly: Record<string, { until: number; claimed: number | null }>
   passes: string[]
   gp: { free: number[]; paid: number[] }
+  hot: { id: string; until: number; bought: boolean } | null
+  hcool: Record<string, number>
+  hs: number
 }
 
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
@@ -107,11 +126,38 @@ export function normalize(raw: unknown, day: number): IapState {
     monthly,
     passes: Array.isArray(s.passes) ? s.passes.filter((x): x is string => typeof x === 'string' && product(x)?.kind === 'pass') : [],
     gp: { free: idxs(gp.free, GROWTH.length), paid: idxs(gp.paid, GROWTH.length) },
+    hot: hotOf(s.hot),
+    hcool: Object.fromEntries(Object.entries(obj(s.hcool)).filter(([k, v]) => HOT[k] && typeof v === 'number' && Number.isFinite(v))) as Record<string, number>,
+    hs: Number.isInteger(s.hs) && (s.hs as number) >= 0 ? (s.hs as number) : 0,
   }
 }
 
-// 지금 더 살 수 있는가(패키지 한도·패스 중복). 월정액·충전은 언제나(월정액은 최대 기간까지).
-export function canBuy(s: IapState, p: Product): boolean {
+function hotOf(x: unknown): IapState['hot'] {
+  const h = obj(x)
+  return typeof h.id === 'string' && product(h.id)?.kind === 'hot' && typeof h.until === 'number' ? { id: h.id, until: h.until, bought: h.bought === true } : null
+}
+
+// 지금 떠 있는 핫딜(안 샀고 시간 안). 없으면 null.
+export const activeHot = (s: IapState, now: number) => (s.hot && !s.hot.bought && s.hot.until > now ? s.hot : null)
+
+// 핫딜 띄우기: 이미 떠 있으면 'active', 쉬는 시간이면 'cooldown', 보스는 새 단계를 깨지 않았으면 'not_ready'. 되면 새 상태.
+export function offerHot(s: IapState, trigger: string, now: number, cleared: number): IapState | 'active' | 'cooldown' | 'not_ready' | 'unknown' {
+  const h = HOT[trigger]
+  if (!h) return 'unknown'
+  if (activeHot(s, now)) return 'active'
+  const stage = Math.floor(cleared / HOT_ROUNDS)
+  if (trigger === 'boss' && stage <= s.hs) return 'not_ready'
+  const last = s.hcool[trigger]
+  if (last != null && now - last < h.cool) {
+    if (trigger === 'boss') return { ...s, hs: stage } // 쉬는 동안 깬 단계는 넘긴다
+    return 'cooldown'
+  }
+  return { ...s, hot: { id: h.product, until: now + HOT_SEC, bought: false }, hcool: { ...s.hcool, [trigger]: now }, hs: trigger === 'boss' ? stage : s.hs }
+}
+
+// 지금 더 살 수 있는가(패키지 한도·패스 중복·핫딜은 떠 있는 것만). 월정액·충전은 언제나(월정액은 최대 기간까지).
+export function canBuy(s: IapState, p: Product, now = 0): boolean {
+  if (p.kind === 'hot') return activeHot(s, now)?.id === p.id
   if (p.kind === 'pass') return !s.passes.includes(p.id)
   if (p.kind === 'monthly') return monthlyLeft(s, p.id) + (p.days ?? 0) <= MONTHLY_MAX_DAYS
   if (p.kind !== 'package') return true
@@ -146,6 +192,7 @@ export function purchase(s: IapState, p: Product): { give: Reward; state: IapSta
     st.monthly[p.id] = { until: s.day + left + (p.days ?? 30) - 1, claimed: left > 0 && old ? old.claimed : null }
   }
   if (p.kind === 'pass') st.passes.push(p.id)
+  if (p.kind === 'hot' && s.hot) st.hot = { ...s.hot, bought: true }
   return { give, state: st }
 }
 

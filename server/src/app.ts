@@ -1549,7 +1549,7 @@ export function createApp(opts: AppOptions) {
     try {
       return await mutate(c, (p, g, now) => {
         const st = IAP.normalize(p.iap, today(g, now))
-        if (!IAP.canBuy(st, pr)) throw new ApiError(409, 'limit', `'${pr.id}' can't be bought now`)
+        if (!IAP.canBuy(st, pr, now)) throw new ApiError(409, 'limit', `'${pr.id}' can't be bought now`)
         const { give, state } = IAP.purchase(st, pr)
         const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderId, give } } }
         const reload = addReward(p, g, now, give, change)
@@ -1559,6 +1559,23 @@ export function createApp(opts: AppOptions) {
       await query('delete from iap_orders where order_id = $1', [orderId])
       throw e
     }
+  })
+
+  // 핫딜 띄우기. body = {trigger: 'boss'|'dia'|'defeat'}. 보스는 서버가 깬 라운드로 확인, 나머지는 쉬는 시간만.
+  // 늘 200: 새로 뜨면 hot = {id, until, bought}, 아니면 hot = null + reason(active 이미 떠 있음·cooldown 쉬는 중·not_ready 새 보스 단계 아님).
+  // 앱이 계기마다 그냥 보내도 되게 409로 거절하지 않는다(409는 앱이 상태를 다시 받는다). 보스는 쉬는 동안 깬 단계를 넘긴다.
+  app.post('/v1/iap/hot', auth, async (c) => {
+    const trigger = strField(await body(c), 'trigger')
+    if (!IAP.HOT[trigger]) throw new ApiError(400, 'bad_request', `unknown trigger '${trigger}'`)
+    return mutate(c, (p, g, now) => {
+      const st = IAP.normalize(p.iap, today(g, now))
+      const r = IAP.offerHot(st, trigger, now, p.stage - 1)
+      if (typeof r === 'string') return { extra: { hot: null, reason: r } }
+      const change: Change = { iap: r }
+      const fresh = r.hot !== st.hot
+      if (fresh) change.log = { kind: 'hot_deal', detail: { trigger, product: r.hot?.id, until: r.hot?.until } }
+      return { change, extra: { hot: fresh ? r.hot : null, reason: fresh ? null : 'cooldown' } }
+    })
   })
 
   // 월정액 오늘 보상. body = {product}. 기간이 아니면 409 inactive, 오늘 받았으면 409 claimed.

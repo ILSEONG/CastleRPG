@@ -1,7 +1,7 @@
 extends RefCounted
 ## 결제 상품 표(서버 server/src/iap.ts PRODUCTS·GROWTH와 같은 값 — 한쪽을 바꾸면 다른 쪽도, 단위 테스트 test_iap가 비교한다).
 ## kind: diamond(충전: 첫 구매는 기본 다이아 2배, 이후 기본 + bonus)·monthly(월정액 days일, 사면 give + 매일 daily)·package(period 기간 한도 limit)·
-## pass(성장 패스: GROWTH 유료 보상). krw = 원화 가격. 실결제는 Google Play 연결 전이라 아직 살 수 없다(Economy.iap_buy가 알린다).
+## pass(성장 패스: GROWTH 유료 보상)·hot(핫딜: 계기에 1시간 뜬 것만 한 번, value = 가치 배수 표시). krw = 원화 가격. 실결제는 Google Play 연결 전이라 아직 살 수 없다(Economy.iap_buy가 알린다).
 
 const PRODUCTS := [
 	{ "id": "dia_1", "kind": "diamond", "name": "다이아 300", "krw": 1200, "give": { "diamonds": 300 }, "bonus": 30 },
@@ -16,6 +16,9 @@ const PRODUCTS := [
 	{ "id": "pkg_daily", "kind": "package", "name": "일일 특가 패키지", "krw": 1200, "period": "daily", "limit": 1, "give": { "diamonds": 300, "tickets": 4, "keys_gold": 2 } },
 	{ "id": "pkg_weekly", "kind": "package", "name": "주간 특가 패키지", "krw": 5900, "period": "weekly", "limit": 1, "give": { "diamonds": 1600, "tickets": 25, "keys_equip": 3 } },
 	{ "id": "pkg_growth", "kind": "package", "name": "성장 지원 패키지", "krw": 33000, "period": "once", "limit": 1, "give": { "diamonds": 12000, "tickets": 60, "pouch_gold_360": 5, "pouch_res_360": 5 } },
+	{ "id": "hot_boss", "kind": "hot", "name": "보스 격파 기념 특가", "krw": 3300, "value": 10, "give": { "diamonds": 2000, "tickets": 10, "pouch_gold_360": 2 } },
+	{ "id": "hot_dia", "kind": "hot", "name": "다이아 긴급 지원", "krw": 5900, "value": 8, "give": { "diamonds": 5000, "tickets": 5 } },
+	{ "id": "hot_defeat", "kind": "hot", "name": "패배 극복 특가", "krw": 4900, "value": 10, "give": { "diamonds": 1500, "tickets": 10, "pouch_gold_360": 3, "pouch_res_360": 3 } },
 	{ "id": "pass_growth", "kind": "pass", "name": "성장 패스", "krw": 9900, "give": {} },
 ]
 
@@ -36,6 +39,15 @@ const GROWTH := [
 ]
 
 const MONTHLY_MAX_DAYS := 180
+
+## 핫딜(hot): 계기 → 상품, 뜬 뒤 살 수 있는 시간, 계기마다 다시 뜨기까지 쉬는 시간(초). 보스는 HOT_ROUNDS(1스테이지)마다 한 번. 서버 iap.ts HOT과 같다.
+const HOT_SEC := 3600
+const HOT := {
+	"boss": { "product": "hot_boss", "cool": 6 * 3600 },
+	"dia": { "product": "hot_dia", "cool": 24 * 3600 },
+	"defeat": { "product": "hot_defeat", "cool": 12 * 3600 },
+}
+const HOT_ROUNDS := 25
 
 
 static func find(id: String) -> Dictionary:

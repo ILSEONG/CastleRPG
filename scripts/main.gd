@@ -209,6 +209,10 @@ func _build_world() -> void:
 	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 중하단 x1.5 배속 켬/끔(기기 저장, 성 화면에서만)
 	speed.card = card
 	add_child(speed)
+	var hot = preload("res://scripts/hot_deal.gd").new()  # 핫딜: 보스 격파·다이아 부족·패배 때 1시간 특가 창 + 왼쪽 [핫딜] 버튼(배속 버튼 위)
+	hot.speed = speed
+	add_child(hot)
+	recruit.hot = hot
 	_hud = hud
 	_strip = preload("res://scripts/hero_strip.gd").new()
 	_strip.picker = picker
