@@ -214,14 +214,14 @@ func _update_info() -> void:
 	_redraw_cells()
 
 
-## 보상 풀어 쓰기: "골드 10,000", "SR 장비 상자(Lv 10) + 다이아 모집권 5장" …
+## 보상 풀어 쓰기: "골드 10,000", "SR 장비 상자 + 다이아 모집권 5장" …
 static func reward_text(r: Dictionary) -> String:
 	var parts: Array = []
 	if r.has("hero"):
 		var h := GameData.hero(str(r.hero))
 		parts.append("%s 영웅 %s(%s)" % [h.get("grade", ""), h.get("name", str(r.hero)), h.get("title", "")] if not h.is_empty() else "영웅 " + str(r.hero))
 	if r.get("equip") is Dictionary:
-		parts.append("%s 장비 상자(Lv %d, 부위 무작위)" % [r.equip.get("grade", ""), int(r.equip.get("level", 1))])
+		parts.append("%s 장비 상자(부위·능력치 무작위)" % r.equip.get("grade", ""))
 	if r.has("gold"):
 		parts.append("골드 " + UiKit.commas(int(r.gold)))
 	if r.has("diamonds"):

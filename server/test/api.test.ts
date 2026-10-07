@@ -107,7 +107,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       upgrades: {}, // 개정 20
       dungeons: { // 개정 18: 그날 지급분, 리셋 = 15:00 UTC(00:00 KST) — T0는 23:13:20 KST
         gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 },
-        equip: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: 5000, last_reset: 1789916400, next_reset: 1790002800 },
+        equip: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: 1789916400, next_reset: 1790002800 },
         ticket: { keys: 1, key_cap: 3, key_daily: 1, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800,
           helpers, helpers_used: [] }, // 모집권 던전
       },
