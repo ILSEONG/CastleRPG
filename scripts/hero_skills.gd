@@ -203,10 +203,23 @@ func _begin(k: String) -> float:
 
 ## 발동 순간에 표적이 그새 쓰러졌으면(다른 영웅이 끝냈다) 새 표적을 잡는다 — 안 그러면 모션만 하고 불발한다
 ## (전투 시뮬 2026-10-07: 성 스테이지 성벽 원거리 스킬의 90% 이상이 이렇게 불발했다).
+## 표적이 살아 있어도 모션 중에 사거리 밖으로 걸어 나갔으면(PVP 상대 영웅) 사거리 안의 다른 적에게 쓴다 — 성 밖 아레나만(성은 성벽 너머를 고르지 않게).
+## (전투 시뮬 2026-10-07: 결투 근접 스킬 — 흡혈 베기·분쇄 일격·찢기 — 의 20~50%가 이렇게 불발했다.)
 func _retarget() -> void:
 	var t = h._target
 	if t == null or not is_instance_valid(t) or not t.is_alive():
 		h._target = h._find_target()
+	if h.castle != null or _combat_target() != null:
+		return
+	var best = null
+	var best_d := INF
+	for m in _near_monsters(h.global_position, float(h.def.range) + 0.5):
+		var d: float = Formation.flat_distance(h.global_position, m.global_position)
+		if d <= h._reach(m) + 0.5 and d < best_d:
+			best_d = d
+			best = m
+	if best != null:
+		h._target = best
 
 
 ## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).

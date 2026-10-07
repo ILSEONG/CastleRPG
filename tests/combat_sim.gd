@@ -259,7 +259,7 @@ func _track_heroes(list: Array, _foes: String) -> void:
 			"level": h._level, "promo": h._promotion, "hp_max": h.hp_max, "atk": h.atk,
 			"idle": 0.0, "move": 0.0, "attack": 0.0, "cast": 0.0, "stun": 0.0, "alive": 0.0,
 			"idle_foe_in_reach": 0.0, "idle_foe_anywhere": 0.0, "no_target_foe_in_aggro": 0.0, "stuck": 0.0, "dist": 0.0,
-			"swings": 0, "whiffs": 0, "cut": 0, "retarget": 0, "died": -1.0,
+			"min_foe_d": 999.0, "post": int(h.post), "slot": int(h.slot), "side": int(h.side), "swings": 0, "whiffs": 0, "cut": 0, "retarget": 0, "died": -1.0,
 			"skills": skills, "_pos": h.global_position, "_win": [], "_swing": null, "_target": null, "_attacks": h._attacks}
 
 
@@ -354,6 +354,7 @@ func _process(_delta: float) -> void:
 				nearest = minf(nearest, Formation.flat_distance(p, f.global_position) - (float(f.hit_radius()) if f.has_method("hit_radius") else 0.0))
 			if nearest <= reach:
 				r.idle_foe_in_reach += DT
+			r.min_foe_d = minf(r.min_foe_d, nearest)
 			if nearest <= aggro and h._target == null:
 				r.no_target_foe_in_aggro += DT
 		# 걷는데 제자리
