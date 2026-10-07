@@ -22,7 +22,7 @@ export const DONATIONS: Record<string, { name: string; gold: number; diamonds: n
   royal: { name: '왕실 기부', gold: 0, diamonds: 200, exp: 250, coins: 250, daily: 1 },
 }
 export const BOSS_TRIES = 2
-export const BOSS_FIGHT_SEC = 20
+export const BOSS_FIGHT_SEC = 40 // 2026-10-07 사용자: 20 → 40초
 // 드래곤(2026-10-06 개편): 길드원마다 하루 BOSS_TRIES번 따로 친다. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 같은 판 안에서 다음 레벨로 오른다.
 // 한 판 점수 = 그 판에서 드래곤에 준 피해. 내 점수 = 오늘 두 판의 합, 길드 점수 = 길드원 점수의 합(오늘). Lv n 최대 HP = BASE × GROWTH^(n−1).
 export const BOSS_HP_BASE = 1000

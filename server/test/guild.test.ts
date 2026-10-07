@@ -176,7 +176,7 @@ test('guild: real boss fight — every fight starts at Lv 1, finish takes the da
   const score0 = v0.guild.boss.score
   assert.equal(r.json.guild.me.boss_tries, 1, 'starting uses a try')
   assert.equal((await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1000 })).json.error, 'too_early')
-  S.clock.t += 12 // x1.5 배속: 20 게임 초 = 실제 13.3초(− 여유 2)
+  S.clock.t += Math.ceil(G.BOSS_FIGHT_SEC / 1.5 - G.BOSS_SLACK_SEC) // x1.5 배속: 40 게임 초 = 실제 26.7초(− 여유 2)
   assert.equal((await post(p.token, 'boss/finish', { run_id: 'nope', dmg: 1000 })).json.error, 'no_run')
   r = await post(p.token, 'boss/finish', { run_id: run.run_id, dmg: 1234 })
   assert.equal(r.status, 200, JSON.stringify(r.json))
