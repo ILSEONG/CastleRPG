@@ -215,6 +215,12 @@ func _build_world() -> void:
 	_strip.heroes_fn = strip_heroes
 	add_child(_strip)
 	speed.strip = _strip
+	var chat_panel = preload("res://scripts/chat_panel.gd").new()  # 채팅 창(전체·길드, 온라인)
+	add_child(chat_panel)
+	var chat_bar = preload("res://scripts/chat_bar.gd").new()  # 성 화면 채팅 줄: 배속 버튼 오른쪽, 최근 메시지 한 줄 → 채팅 창
+	chat_bar.speed = speed
+	chat_bar.panel = chat_panel
+	add_child(chat_bar)
 	_battle_hide = [tabs, side_menu, tags, badges]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):

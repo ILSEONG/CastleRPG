@@ -28,6 +28,7 @@ Pvp="*res://scripts/pvp.gd"
 Tutorial="*res://scripts/tutorial.gd"
 Missions="*res://scripts/missions.gd"
 Music="*res://scripts/music.gd"
+Chat="*res://scripts/chat.gd"
 
 [castle]
 
