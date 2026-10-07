@@ -90,6 +90,8 @@ func refresh_stats() -> void:
 		_skill_mult = 1.0
 		_aspd = 1.0
 		_speed = float(def.speed)
+		_gear_lifesteal = 0.0
+		_gear_dmg_reduce = 0.0
 		var b: Dictionary = Economy.upgrade_bonus().duplicate()
 		for k in b:
 			b[k] = 0.0

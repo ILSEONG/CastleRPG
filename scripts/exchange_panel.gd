@@ -561,7 +561,7 @@ func _item_row(it: Dictionary, sub: String, expires: float, price: String, actio
 	info.add_theme_constant_override("separation", 0)
 	info.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info.add_child(_label(BagPanel.item_name(it), 24, Art.ITEM_GRADE_COLORS[it.grade].darkened(0.35), HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label(BagPanel.stat_text(it), 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(BagPanel.stat_box(it, 20))  # 보관함과 같은 능력치 칸(기준보다 높으면 초록, 낮으면 빨강, 특수 능력치 줄)
 	if sub != "" or expires > 0.0:
 		var s := _label(sub + (left_text(expires) if expires > 0.0 else ""), 18, GOOD if sub.begins_with("판매 완료") else SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		if expires > 0.0:

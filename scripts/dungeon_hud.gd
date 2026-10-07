@@ -288,7 +288,11 @@ func show_result() -> void:
 		tile.set_item(BagPanel.item_kind(it), it.grade)
 		cell.add_child(tile)
 		cell.add_child(_label("%s %s" % [it.grade, BagPanel.ITEM_NAMES.get(BagPanel.item_kind(it), "")], 18, MainHud.INK))
-		cell.add_child(_label("Lv %d" % int(it.level), 16, MainHud.INK.lightened(0.3)))
+		var main: Array = BagPanel.stat_parts(it)
+		if not main.is_empty():
+			cell.add_child(_label(main[0][0], 16, main[0][1]))
+		if not it.get("subs", []).is_empty():
+			cell.add_child(_label("특수 %d줄" % it.subs.size(), 16, MainHud.INK.lightened(0.3)))
 		reward_box.add_child(cell)
 		reward_tiles.append(tile)
 	reward_box.visible = win  # 패배면 보상 줄 없이(사용자 요청: "보상 없음 · 열쇠는 그대로" 삭제)

@@ -89,6 +89,8 @@ var helper_tag := "도우미"  # HUD 얼굴 위 꼬리표(친구 영웅이면 "�
 var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
 var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
 var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)
+var _gear_lifesteal := 0.0  # 장비 특수 능력치(2026-10-07): 평타 피해의 흡혈 비율
+var _gear_dmg_reduce := 0.0  # 장비 특수 능력치: 받는 피해 감소 비율(상한 GameData.DMG_REDUCE_CAP)
 var _skill_mult := 1.0  # 스킬 피해 배율 = 1 + 연구 비전 연구 %(개정 24) — 따로 들어가는 스킬 피해(가르기·연쇄·폭발·독·가시)에 곱한다
 var _stun_t := 0.0  # 기절 남은 초
 var _skx  # 스킬 100종 확장(hero_skills.gd) — 새 종류의 발동·타격·처치·방어·오라
@@ -261,7 +263,7 @@ func is_on_wall() -> bool:
 func take_damage(amount: float, source = null) -> void:
 	if state == State.DEAD or (castle != null and GameState.mode == GameState.Mode.IDLE):
 		return
-	amount = _skx.incoming(amount, source)  # 받아치기·방벽·금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·보호막
+	amount = _skx.incoming(amount, source) * (1.0 - _gear_dmg_reduce)  # 받아치기·방벽·금강불괴·광전사·수호의 오라·요새화·돌 피부·방패 막기·보호막, 장비 피해 감소
 	if amount <= 0.0:
 		return
 	var r := Skills.incoming(_sk, amount, randf())
@@ -612,6 +614,8 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		_announce("stun")
 	if _sk.has("lifesteal"):
 		heal(d * _sk.lifesteal[0] / 100.0)
+	if _gear_lifesteal > 0.0:
+		heal(d * _gear_lifesteal)
 	if _sk.has("cleave") and role == "melee":
 		Fx.cleave(get_parent(), m.global_position, _color, _sk.cleave[0], _tier)
 		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):
@@ -766,21 +770,27 @@ func _aura_mult() -> float:
 
 
 ## 최종 능력치를 다시 읽는 한 곳(개정 20): HP·공격 = hero_stats(기본 × 레벨 × 승급 + 장비) × (1 + 성장 %) × (1 + 연구 %, 개정 24),
-## × (1 + 길드 버프 %), 공격 간격 ÷ (1 + 성장 공격속도), 이동 × (1 + 성장 이동속도 + 신발 %), 스킬 피해 × (1 + 연구 비전 %). 성장·장비·연구·길드가 바뀌면 곧바로 —
+## × (1 + 길드 버프 %), 공격 간격 ÷ (1 + 성장 공격속도 + 장비 공격 속도), 이동 × (1 + 성장 이동속도 + 신발 %), 스킬 피해 × (1 + 연구 비전 % + 장비 스킬 피해 %),
+## 치명타 = 성장 + 장비, 장비 흡혈·받는 피해 감소. 성장·장비·연구·길드가 바뀌면 곧바로 —
 ## HP 비율 유지, 다음 공격부터 새 간격.
 func refresh_stats() -> void:
-	_bonus = Economy.upgrade_bonus()
+	_bonus = Economy.upgrade_bonus().duplicate()
 	var r: Dictionary = Economy.research_bonus()
 	var ratio := hp_ratio() if hp_max > 0.0 else 1.0
 	var st := GameData.hero_stats(def, _level, _promotion, {} if helper else null)
+	var gear: Dictionary = GameData.equip_total([]) if helper else Economy.equipment_bonus(str(def.get("id", "")))
 	var g: float = 1.0 + Guild.buff_pct() / 100.0
 	hp_max = st.hp * (1.0 + _bonus.hp_pct) * (1.0 + r.hero_hp_pct / 100.0) * g
 	atk = st.atk * (1.0 + _bonus.atk_pct) * (1.0 + r.hero_atk_pct / 100.0) * g
-	_skill_mult = 1.0 + r.skill_pct / 100.0
+	_skill_mult = 1.0 + r.skill_pct / 100.0 + gear.skill_dmg / 100.0
 	hp = hp_max * ratio
-	_aspd = 1.0 + _bonus.aspd_pct
-	var shoes: float = 0.0 if helper else Economy.equipment_bonus(str(def.get("id", ""))).get("speed_pct", 0.0)
-	_speed = float(def.speed) * (1.0 + _bonus.mspd_pct + shoes / 100.0)
+	# 장비 특수 능력치(2026-10-07): 치명타 확률·피해는 성장 값에 더하고(crit_roll_params), 공격 속도는 성장 공격속도에 더한다
+	_bonus.crit_rate = float(_bonus.get("crit_rate", 0.0)) + gear.crit_rate / 100.0
+	_bonus.crit_dmg = float(_bonus.get("crit_dmg", 0.0)) + gear.crit_dmg / 100.0
+	_gear_lifesteal = gear.lifesteal / 100.0
+	_gear_dmg_reduce = minf(gear.dmg_reduce, GameData.DMG_REDUCE_CAP) / 100.0
+	_aspd = 1.0 + _bonus.aspd_pct + gear.aspd / 100.0
+	_speed = float(def.speed) * (1.0 + _bonus.mspd_pct + gear.speed_pct / 100.0)
 
 
 func hp_ratio() -> float:
