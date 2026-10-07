@@ -141,6 +141,7 @@ func _init() -> void:
 	test_missions()
 	test_shop()
 	test_iap()
+	test_sfx()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -5243,3 +5244,23 @@ func test_iap() -> void:
 	e.hot_offer("boss", 25)
 	check(got == ["hot_dia", "hot_boss"] and int(e.iap_view().hs) == 1, "hot: diamond deal rests 24 h, boss stage 1 shows its deal")
 	e.free()
+
+
+## 효과음(2026-10-07): SOUNDS의 소리마다 변형 파일이 다 있고, 스킬·피해·투사체 표가 있는 소리만 가리키며, 발동형 스킬은 모두 소리가 있다.
+func test_sfx() -> void:
+	const Sfx := preload("res://scripts/sfx.gd")
+	for id in Sfx.SOUNDS:
+		var cfg: Array = Sfx.SOUNDS[id]
+		check(cfg.size() == 5 and int(cfg[0]) >= 1, "sfx %s config" % id)
+		for n in int(cfg[0]):
+			check(ResourceLoader.exists("%s%s_%d.ogg" % [Sfx.DIR, id, n]), "sfx file %s_%d exists" % [id, n])
+	for k in Sfx.SKILL:
+		check(Sfx.SOUNDS.has(Sfx.SKILL[k]), "skill %s sound %s is defined" % [k, Sfx.SKILL[k]])
+	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE + HeroSkillsScript.PROCS:
+		check(Sfx.SKILL.has(k), "skill %s has a sound" % k)
+	for id in Sfx.DAMAGE + Sfx.SHOT.values():
+		check(id == "" or Sfx.SOUNDS.has(id), "sound %s is defined" % id)
+	check(Sfx.DAMAGE.size() == DamageNumbersScript.Kind.size(), "one damage sound slot per DamageNumbers.Kind")
+	Sfx.play("click")  # 오토로드 없이(-s)는 아무 일도 없다
+	Sfx.at("hit", Vector3.ZERO)
+

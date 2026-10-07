@@ -12,6 +12,7 @@ const Formation := preload("res://scripts/formation.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
+const Sfx := preload("res://scripts/sfx.gd")
 
 ## 발동형(쿨 a초). 처음엔 쿨의 FIRST_CD배만 기다린다(교전이 시작되면 곧 쓴다).
 const BULWARK_TAUNT_R := 4.0  # 방벽 도발 반경(m)
@@ -195,7 +196,9 @@ func _begin(k: String) -> float:
 		return RETRY
 	if not h.begin_cast(cast_anim(k, h.def), func():
 			_retarget()
-			if not _cast(k):
+			if _cast(k):
+				Sfx.skill(k, h)
+			else:
 				_cd[k] = minf(_cd[k], RETRY)):
 		return CAST_WAIT
 	return float(sk[k][0])
@@ -394,6 +397,7 @@ func _proc(k: String, m) -> void:
 			_line_shot(k, m, float(p[1]), _atk() * float(p[2]) / 100.0 * h._skill_mult)
 		_:
 			_spot(k, _flat(m.global_position), float(p[1]), float(p[2]), _atk())
+	Sfx.skill(k, m)
 	_announce(k)
 
 
@@ -689,7 +693,7 @@ func _cast(k: String, dry := false) -> bool:
 			var dealt: float = before - (tgt.hp if tgt.is_alive() else 0.0)
 			var ally = _weakest_ally(INF)
 			if ally != null:
-				ally.heal(dealt * float(p[2]) / 100.0)
+				ally.heal(dealt * float(p[2]) / 100.0 * h.dmg_heal_mult())
 				Fx.heal_cross(ally)
 		"shadow_strike":
 			var tgt = _frailest(maxf(float(h.def.aggro), _reach()) + 2.0)
@@ -881,7 +885,7 @@ func _cast(k: String, dry := false) -> bool:
 					var before: float = t.hp
 					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
 					var dealt: float = before - (t.hp if is_instance_valid(t) and t.is_alive() else 0.0)
-					if dealt > 0.0 and h.heal(dealt * float(p[2]) / 100.0) > 0.0:
+					if dealt > 0.0 and h.heal(dealt * float(p[2]) / 100.0 * h.dmg_heal_mult()) > 0.0:
 						Fx.heal_cross(h)
 						Fx.soul(w, at + HIT, h)
 				"cheap_shot":

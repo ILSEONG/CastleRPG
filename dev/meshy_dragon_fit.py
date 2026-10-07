@@ -4,7 +4,8 @@ Usage: python3 dev/meshy_dragon_fit.py dev/meshy/out/enemies/dragon/dragon_meshy
 Needs numpy and Pillow (dev/meshy_summon_fit.py와 같은 GLB 쓰기).
 
 Meshy 드래곤은 사람 모양이 아니라 자동 리깅(KayKit 뼈대)을 못 쓴다. 대신 움직일 부위를 잘라 부품마다 노드(원점 = 관절)로 둔다:
-Body(몸통·다리), WingL(-X)·WingR(+X)(날개 뿌리 관절), Neck(목·머리, 목 밑 관절), Tail(꼬리, 엉덩이 관절).
+Body(몸통·뒷다리), WingL(-X)·WingR(+X)(날개 뿌리 관절), Neck(목·머리, 목 밑 관절), Tail(꼬리, 엉덩이 관절),
+ArmL(-X)·ArmR(+X)(앞다리, 어깨 관절 — 발 들고 할퀴기, 2026-10-07).
 정면은 Meshy 그대로 +Z(Godot 모델 정면, unit_model.face와 같다). 바닥 y = 0, 몸통 가운데가 원점.
 """
 import io, json, sys
@@ -16,7 +17,8 @@ from meshy_fit import load_meshy  # noqa: E402
 from meshy_summon_fit import write  # noqa: E402
 
 HEIGHT = 1.0  # 정규화 키(m) — 게임 크기는 dragon_model.gd SCALE
-NAMES = ["Body", "WingL", "WingR", "Neck", "Tail"]
+NAMES = ["Body", "WingL", "WingR", "Neck", "Tail", "ArmL", "ArmR"]
+ARM_TOP = 0.36  # 앞다리 위 끝(어깨) 높이 — 정규화 키 1 기준
 
 
 def split(P, tri):
@@ -36,7 +38,11 @@ def split(P, tri):
     tail = (part == 0) & (C[:, 2] < zb + 0.32 * (zf - zb)) & (C[:, 1] < 0.6 * h)
     tail |= (part == 0) & (np.abs(C[:, 0]) > 0.3 * span) & (C[:, 1] < 0.42 * h)  # 옆으로 감아 앞으로 온 꼬리 끝
     part[tail] = 4
-    piv = np.zeros((5, 3))
+    # 앞다리: 몸통 앞쪽(가슴 아래 틈 z > 0.03)·가운데 가슴 밖(|x| > 0.07)·어깨 아래
+    arm = (part == 0) & (C[:, 2] > 0.03) & (np.abs(C[:, 0]) > 0.07) & (C[:, 1] < ARM_TOP)
+    part[arm & (C[:, 0] < 0)] = 5
+    part[arm & (C[:, 0] > 0)] = 6
+    piv = np.zeros((7, 3))
     for k, sx in ((1, -1), (2, 1)):
         root = (part == k)
         rx = np.abs(C[root, 0])
@@ -47,11 +53,15 @@ def split(P, tri):
     piv[3] = [0.0, nk[:, 1].min() + 0.05 * h, np.percentile(nk[:, 2], 15)]
     tl = C[(part == 4) & (np.abs(C[:, 0]) < 0.3 * span)]
     piv[4] = [0.0, np.percentile(tl[:, 1], 70), tl[:, 2].max()]
+    for k in (5, 6):
+        a = C[part == k]
+        top = a[a[:, 1] > ARM_TOP - 0.08]
+        piv[k] = [top[:, 0].mean(), ARM_TOP, top[:, 2].mean()]
     return part, piv
 
 
 def preview(P, tri, part, piv, out):
-    cols = [(150, 150, 160), (220, 60, 60), (60, 90, 220), (60, 180, 80), (220, 170, 40)]
+    cols = [(150, 150, 160), (220, 60, 60), (60, 90, 220), (60, 180, 80), (220, 170, 40), (200, 80, 200), (60, 200, 200)]
     W = 360
     img = Image.new("RGB", (W * 3, W), (240, 240, 240))
     d = ImageDraw.Draw(img)
@@ -61,7 +71,7 @@ def preview(P, tri, part, piv, out):
     for vi, (ax, ay, az, sg) in enumerate([(0, 1, 2, 1), (2, 1, 0, -1), (0, 2, 1, 1)]):
         for t in np.argsort(C[:, az] * sg):
             d.polygon([(vi * W + 10 + (P[v, ax] - lo[ax]) * s, W - 10 - (P[v, ay] - lo[ay]) * s) for v in tri[t]], fill=cols[part[t]])
-        for k in range(1, 5):
+        for k in range(1, len(NAMES)):
             x, y = vi * W + 10 + (piv[k, ax] - lo[ax]) * s, W - 10 - (piv[k, ay] - lo[ay]) * s
             d.ellipse([x - 4, y - 4, x + 4, y + 4], fill=(0, 0, 0))
     img.save(out)
@@ -76,14 +86,14 @@ def main():
     P = (P - [(lo[0] + hi[0]) / 2, lo[1], 0.0]) * s
     tri = idx.reshape(-1, 3)
     part, piv = split(P, tri)
-    body = P[tri[part == 0].reshape(-1)]
+    body = P[tri[(part == 0) | (part >= 5)].reshape(-1)]  # 몸통 + 앞다리(앞다리를 나누기 전과 같은 원점)
     shift = np.array([0.0, 0.0, body[:, 2].mean()])
     P = P - shift
     piv[1:] -= shift
     if "--preview" in sys.argv:
         preview(P, tri, part, piv, sys.argv[sys.argv.index("--preview") + 1])
     parts = []
-    for k in range(5):
+    for k in range(len(NAMES)):
         t = tri[part == k]
         used, local = np.unique(t.reshape(-1), return_inverse=True)
         parts.append((NAMES[k], piv[k], P[used], nrm[used], uv[used], local.astype(np.uint32)))
@@ -93,7 +103,7 @@ def main():
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=90)
     write(parts, buf.getvalue(), out)
-    print(json.dumps({"tris": int(len(tri)), "parts": dict(zip(NAMES, [int((part == k).sum()) for k in range(5)])),
+    print(json.dumps({"tris": int(len(tri)), "parts": dict(zip(NAMES, [int((part == k).sum()) for k in range(len(NAMES))])),
                       "size": [round(v, 3) for v in (P.max(0) - P.min(0))], "pivots": piv.round(3).tolist()}))
 
 

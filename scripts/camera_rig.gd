@@ -257,7 +257,8 @@ func slowmo() -> void:
 	Engine.time_scale = was * SLOW_SCALE
 	_gen += 1
 	get_tree().create_timer(SLOW_SEC, true, false, true).timeout.connect(Callable(get_script(), "_unstop").bind(was, _gen))
-	punch()
+	if GameData.fx_shake():
+		punch()
 
 
 ## 지금 화면 카메라의 리그(없으면 null) — 장면 어디서든 slowmo를 부를 때.

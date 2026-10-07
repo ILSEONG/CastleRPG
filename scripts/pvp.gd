@@ -235,8 +235,14 @@ func start(mode: String, ids: Array) -> bool:
 				battle.gain = int(b.get("gain", gain))
 				battle.loss = int(b.get("loss", loss))
 				battle_confirmed.emit(battle.id)
-				if battle.pending != null:
-					_send_finish(battle.pending), func():
+				if battle.pending != null:  # 시작 확인보다 결과가 먼저 났다: 서버 시계는 지금부터라 너무 이른 승리로 거절되지 않게 기다렸다 보낸다
+					var w: bool = battle.pending
+					var bid := str(battle.id)
+					var wait := (PvpRules.MIN_WIN_SEC / 1.5 + 0.6) if w else 0.0
+					if wait <= 0.0:
+						_send_finish(w)
+					else:
+						(Engine.get_main_loop() as SceneTree).create_timer(wait, true, false, true).timeout.connect(func(): _send_finish(w, bid)), func():
 			var t: String = ERROR_TEXT.get(econ.net.last_error, "전투를 시작하지 못했습니다")
 			view = before
 			battle = {}
@@ -275,8 +281,8 @@ func finish(win: bool, elapsed: float) -> Dictionary:
 	return res
 
 
-func _send_finish(win: bool) -> void:
-	econ.net.send("POST", "/v1/pvp/finish", {"battle_id": battle.id, "win": win}, func(d):
+func _send_finish(win: bool, bid: String = "") -> void:
+	econ.net.send("POST", "/v1/pvp/finish", {"battle_id": bid if bid != "" else str(battle.id), "win": win}, func(d):
 		_take(d)
 		var r = d.get("result")
 		if r is Dictionary:
