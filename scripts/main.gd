@@ -208,7 +208,8 @@ func _build_world() -> void:
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
-	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 성 화면에서만)
+	var speed = preload("res://scripts/speed_button.gd").new()
+	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게)  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
 	speed.card = card
 	speed.menu = side_menu
 	add_child(speed)
@@ -370,6 +371,8 @@ func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scrip
 		return
 	_dungeon = d
 	Music.override = music
+	if scene_script.resource_path != "res://scripts/war_battle.gd":  # 길드전은 늘 1배(사용자 2026-10-07 "길드전은 아니야")
+		d.add_child(preload("res://scripts/speed_button.gd").new())  # 던전·PVP·길드 보스에도 같은 x1.5 버튼(성 화면과 같은 설정)
 	_host.add_child(d)
 
 
