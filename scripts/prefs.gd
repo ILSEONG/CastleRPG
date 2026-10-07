@@ -5,9 +5,18 @@ extends RefCounted
 
 
 static func get_bool(key: String, default := true) -> bool:
-	return bool(Music.prefs.get(key, default))
+	var m := _music()
+	return bool(m.prefs.get(key, default)) if m != null else default
 
 
 static func set_value(key: String, value) -> void:
-	Music.prefs[key] = value
-	Music.save_settings()
+	var m := _music()
+	if m != null:
+		m.prefs[key] = value
+		m.save_settings()
+
+
+## 오토로드 Music(이름으로 찾는다 — 오토로드 없이 도는 -s 단위 테스트에서도 컴파일되게). 없으면 null = 기본값.
+static func _music() -> Node:
+	var tree := Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null("Music") if tree != null else null
