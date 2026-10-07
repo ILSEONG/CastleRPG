@@ -89,7 +89,7 @@ func _process(_delta: float) -> void:
 		var g2 := Vector2(g.x, g.z)
 		units.append(u)
 		p.append(g2)
-		r.append(u.radius())
+		r.append(u.space() if u.has_method("space") else u.radius())  # space: 몸 + 여유(공성 영웅)
 		w.append(1.0 / u.push_mass())  # 1 / INF = 0
 		lv.append(l)
 		mv.append(g2 - _prev.get(u, g2))

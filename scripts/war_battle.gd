@@ -38,7 +38,8 @@ signal command_sent(uid, pos)  # 꼭두각시 기기: 내 영웅 이동 명령(w
 signal score_changed
 
 const SNAP_SEC := 0.1
-const ROW_GAP := 1.7  # 수비 줄 안 영웅 간격(m)
+const ROW_GAP := 2.0  # 수비 줄 안 영웅 간격(m)
+const ROW_STEP := 2.0  # 수비 줄과 줄 사이(m) — 원거리 줄이 늘어도 근접 줄과 겹치지 않게 근접 줄을 그만큼 바깥으로
 const MELEE_D := 4.2  # 성벽 바깥면에서 근접 수비 줄까지
 const RANGED_D := 1.6  # 원거리 수비 줄
 const ROW_MAX := 9  # 한 줄 최대(넘으면 바깥으로 한 줄 더)
@@ -291,7 +292,8 @@ func _place_defenders() -> void:
 		for u in _def:
 			if u.lane == side:
 				(melee if u.role == "melee" else ranged).append(u)
-		_line_up(side, melee, MELEE_D, 1.0)
+		var ranged_rows := ceili(ranged.size() / float(ROW_MAX))
+		_line_up(side, melee, maxf(MELEE_D, RANGED_D + ranged_rows * ROW_STEP + 0.6), 1.0)
 		_line_up(side, ranged, RANGED_D, 1.0)
 
 
@@ -302,7 +304,7 @@ func _line_up(side: int, list: Array, depth: float, dir_sign: float) -> void:
 		var in_row := mini(ROW_MAX, list.size() - row * ROW_MAX)
 		var k := i % ROW_MAX
 		var off := (k - (in_row - 1) / 2.0) * ROW_GAP
-		var p: Vector3 = Formation.SIDE_DIR[side] * (outer + depth + row * 1.6 * dir_sign) + Formation.perp(side) * off
+		var p: Vector3 = Formation.SIDE_DIR[side] * (outer + depth + row * ROW_STEP * dir_sign) + Formation.perp(side) * off
 		var u = list[i]
 		u.post_pos = p
 		u.set_home(p, false)
@@ -351,20 +353,20 @@ func camp_spot(lane: int, i: int) -> Vector3:
 	var dir: Vector3 = Formation.SIDE_DIR[lane]
 	var k := i % 12
 	var row := i / 12
-	return dir * (half + Balance.WALL_T + WarRules.CAMP_D + row * 1.8) + Formation.perp(lane) * ((k - 5.5) * 1.6)
+	return dir * (half + Balance.WALL_T + WarRules.CAMP_D + row * 2.2) + Formation.perp(lane) * ((k - 5.5) * 2.0)
 
 
 ## 성문 앞 d m, 자리 번호 spot마다 옆으로 퍼진 지점(자동 진격 목표).
 func lane_spot(lane: int, d: float, spot: int) -> Vector3:
 	var k := spot % 10
 	var row := spot / 10
-	return Formation.SIDE_DIR[lane] * (half + Balance.WALL_T + d + row * 1.5) + Formation.perp(lane) * ((k - 4.5) * 1.3)
+	return Formation.SIDE_DIR[lane] * (half + Balance.WALL_T + d + row * 1.8) + Formation.perp(lane) * ((k - 4.5) * 1.6)
 
 
 func keep_spot(lane: int, spot: int) -> Vector3:
 	var k := spot % 6
 	var row := spot / 6
-	return Formation.keep_target(lane) + Formation.SIDE_DIR[lane] * (0.4 + row * 1.2) + Formation.perp(lane) * ((k - 2.5) * 1.2)
+	return Formation.keep_target(lane) + Formation.SIDE_DIR[lane] * (0.4 + row * 1.4) + Formation.perp(lane) * ((k - 2.5) * 1.4)
 
 
 func gate(side: int):
@@ -640,7 +642,7 @@ func clamp_deploy(p: Vector3) -> Vector3:
 func deploy_unit(u, p: Vector3) -> void:
 	if not deploying or u.team != 0 or not u.is_alive():
 		return
-	p = clamp_deploy(p)
+	p = free_deploy_spot(u, clamp_deploy(p))
 	u.global_position = p
 	u.post_pos = p
 	u.free_pos = p
@@ -649,6 +651,29 @@ func deploy_unit(u, p: Vector3) -> void:
 	if role == "puppet" and u.mine:
 		u.puppet_hold(p)
 		command_sent.emit(u.uid, [snappedf(p.x, 0.01), snappedf(p.z, 0.01)])
+
+
+## 배치 자리 p에 다른 공격 영웅이 DEPLOY_SPACE 안에 있으면 p 둘레(고리마다 넓게)에서 가장 가까운 빈자리 — 같은 곳을 눌러도 겹치지 않는다.
+func free_deploy_spot(u, p: Vector3) -> Vector3:
+	var others := []
+	for o in _att:
+		if o != u and o.is_alive():
+			others.append(o.global_position)
+	var free := func(q: Vector3) -> bool:
+		for o in others:
+			if Formation.flat_distance(o, q) < WarRules.DEPLOY_SPACE:
+				return false
+		return true
+	if free.call(p):
+		return p
+	for ring in range(1, 6):
+		var n := 6 * ring
+		for k in n:
+			var a := TAU * k / n
+			var q := clamp_deploy(p + Vector3(cos(a), 0.0, sin(a)) * WarRules.DEPLOY_SPACE * ring)
+			if free.call(q):
+				return q
+	return p
 
 
 func _set_lane(u, lane: int) -> void:

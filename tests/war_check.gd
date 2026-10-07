@@ -168,7 +168,11 @@ func _case_fight() -> void:
 	print("(1) AI 4 squads vs AI 4 squads")
 	var b = _battle(make_plan(4, 4))
 	var shared := [0]
+	var gaps := []
 	var check := func():
+		var alive: Array = (b.units(0) + b.units(1)).filter(func(x): return x.is_alive() and x.is_processing())
+		if alive.size() >= 2:
+			gaps.append(_min_gap(alive))
 		var by := {}
 		for u in b.units(1):
 			var t = u.current_target()
@@ -184,6 +188,9 @@ func _case_fight() -> void:
 	_check(b.kills > 0, "attackers killed some defenders")
 	_check(b.units(0).any(func(u): return u.hp < u.hp_max or not u.is_alive()), "defenders hurt attackers")
 	_check(shared[0] > 0, "defenders focus fire within a squad (seen %d times)" % shared[0])
+	gaps.sort()
+	var med: float = gaps[gaps.size() / 2] if gaps.size() > 0 else 0.0
+	_check(gaps.size() > 20 and med >= 1.1, "heroes keep personal space while fighting (closest pair, median of %d looks %.2f m)" % [gaps.size(), med])
 	b.queue_free()
 	await get_tree().process_frame
 
@@ -279,7 +286,7 @@ func _case_status() -> void:
 
 func _case_deploy() -> void:
 	print("(7) deploy phase before the siege")
-	var plan := make_plan(2, 2)
+	var plan := make_plan(2, 20)
 	plan.deploy_left = 300.0
 	plan.can_start = true
 	var b = _battle(plan)
@@ -287,6 +294,7 @@ func _case_deploy() -> void:
 	pup.visible = false
 	await get_tree().process_frame
 	_check(b.deploying, "battle starts in the deploy phase")
+	_check(_min_gap(b.units(1)) >= 1.9, "80 defenders stand apart at their posts (closest %.2f m)" % _min_gap(b.units(1)))
 	var lim: float = b.half + Balance.WALL_T
 	_check(b.units(0).all(func(u): return maxf(absf(u.global_position.x), absf(u.global_position.z)) > lim), "attackers spawn outside the walls")
 	_check(pup.units(0).all(func(u): return Formation.flat_distance(u._p_pos, Vector3.ZERO) > lim), "puppet attackers do not start at the castle centre")
@@ -295,6 +303,10 @@ func _case_deploy() -> void:
 	b.deploy_unit(u, Formation.SIDE_DIR[want_lane] * 1.0)  # 성 한가운데를 눌러도
 	_check(maxf(absf(u.global_position.x), absf(u.global_position.z)) >= lim + WarRules.DEPLOY_GAP - 0.01, "deploy point is pushed outside the wall gap")
 	_check(int(u.lane) == want_lane, "deploying on another side changes the attacked gate")
+	var u2 = b.units(0)[1]
+	b.deploy_unit(u2, u.global_position)  # 같은 곳을 눌러도
+	_check(Formation.flat_distance(u.global_position, u2.global_position) >= WarRules.DEPLOY_SPACE - 0.01, "two heroes deployed on one spot stand apart (%.2f m)" % Formation.flat_distance(u.global_position, u2.global_position))
+	_check(_min_gap(b.units(0)) >= 1.5, "camp and deploy spots do not overlap (closest %.2f m)" % _min_gap(b.units(0)))
 	var hp_def: Array = b.units(1).map(func(d): return d.hp)
 	await _run(b, 5.0, 0.5)
 	_check(is_equal_approx(b.clock, 0.0), "clock does not run while deploying")
@@ -315,3 +327,12 @@ func _case_deploy() -> void:
 	_check(not b2.deploying, "deploy deadline starts the fight by itself")
 	b2.queue_free()
 	await get_tree().process_frame
+
+
+static func _min_gap(us: Array) -> float:
+	var best := INF
+	for i in us.size():
+		for j in range(i + 1, us.size()):
+			if absf(us[i].global_position.y - us[j].global_position.y) < 0.3:
+				best = minf(best, Formation.flat_distance(us[i].global_position, us[j].global_position))
+	return best

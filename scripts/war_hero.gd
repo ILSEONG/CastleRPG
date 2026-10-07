@@ -35,6 +35,7 @@ var falls := 0  # 이 전투에서 쓰러진 횟수(공격 영웅 목숨, WarRul
 var _corpse_t := 0.0  # 쓰러진 뒤 이만큼 지나면 모델을 감추고 애니메이션을 멈춘다(성능)
 
 const CORPSE_SEC := 1.8
+const WarRulesH := preload("res://scripts/war_rules.gd")
 
 var _base_atk := 0.0
 var _base_speed := 0.0
@@ -534,3 +535,8 @@ func _puppet_tick(delta: float) -> void:
 	global_position = global_position.lerp(_p_pos, minf(1.0, delta * PUPPET_LERP))
 	if _p_face.length() > 0.1:
 		_model.face(_p_face)
+
+
+## 바닥 차지 반지름(crowd.gd): 몸 + 여유 — 공성 영웅은 서로 조금 떨어져 서서 겹쳐 보이지 않는다(사거리·피격 판정은 radius 그대로).
+func space() -> float:
+	return radius() + WarRulesH.SPACE_PAD

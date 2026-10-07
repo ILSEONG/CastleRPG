@@ -7,6 +7,8 @@ extends RefCounted
 const BATTLE_SEC := 600.0
 const DEPLOY_SEC := 300.0  # 배치 단계(2026-10-07 사용자): 공성 시각부터 공격팀이 성 밖에 자리를 잡는다. 길드장(또는 슈퍼관리자)이 [전투 시작]을 누르거나
                            # 이만큼 지나면 저절로 시작한다(서버 guild_war.ts DEPLOY_SEC와 같다). 배치 시간은 전투 시간(BATTLE_SEC)에 안 들어간다
+const SPACE_PAD := 0.2  # 공성 영웅 몸 둘레 여유(m): 서로 이만큼 더 떨어져 서서 한 덩어리로 겹쳐 보이지 않게(근접 사거리 1.8 > 둘 합 1.3)
+const DEPLOY_SPACE := 1.8  # 배치 자리끼리 최소 간격(m) — 같은 곳을 눌러도 옆 빈자리로
 const DEPLOY_GAP := 14.0  # 배치는 성벽 바깥면에서 이 거리 밖에만(수비 영웅 줄·추격 거리 밖)
 const RESPAWN_SEC := 30.0  # 공격 영웅이 쓰러지면 진영에서 다시 일어나기까지(수비 영웅은 그 주 동안 다시 안 일어난다)
 const ATTACK_LIVES := 2  # 공격 영웅 목숨(전투 하나에서 쓰러져도 ATTACK_LIVES - 1번 다시 일어난다). 모두 다 쓰면 전투가 일찍 끝난다
