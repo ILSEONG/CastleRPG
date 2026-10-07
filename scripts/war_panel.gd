@@ -238,8 +238,7 @@ static func _tile(p, id: String, picked: Array) -> Control:
 	face.draw.connect(func():
 		var r := Rect2(Vector2.ZERO, face.size)
 		var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
-		face.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-		face.draw_texture_rect(PortraitsScript.portrait("hero:" + id), r, false))
+		PortraitsScript.draw_face(face, id, oct, r))  # 등급 색 바탕 + 흉상(디자인 보강 5번)
 	b.add_child(face)
 	var n = p._label(str(def.get("name", id)), 19, MainHud.INK)
 	n.mouse_filter = Control.MOUSE_FILTER_IGNORE

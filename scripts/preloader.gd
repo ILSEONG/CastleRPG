@@ -103,6 +103,8 @@ func begin() -> void:
 	for p in _paths:
 		if ResourceLoader.load_threaded_request(p) == OK:
 			_loading.append(p)
+	for h in GameData.heroes():  # 흉상 먼저(목록·모집 카드·전투 초상화가 쓴다), 전신은 상세 카드·이벤트
+		_portraits.append("bust:" + str(h.id))
 	for h in GameData.heroes():
 		_portraits.append("hero:" + str(h.id))
 	for s in GameData.soldiers():

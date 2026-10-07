@@ -2,7 +2,8 @@ extends Node
 ## 영웅 피규어(개정 14 §2): 숨긴 SubViewport 하나(정사각 SIZE px, 투명 배경)에서 모델(gear 포함, 대기 자세 첫 프레임,
 ## 살짝 왼쪽 위 3/4 시점, main과 같은 조명·로우폴리 재질)을 키마다 한 번 렌더링해 ImageTexture로 캐시한다.
 ## 키 = "hero:<영웅 id>" 또는 "soldier:<병종>"(개정 15: 보병 = 기사 + 칼·방패, 궁병 = 두건 도적 + 쇠뇌, 기병 = 로우폴리 말 + 기사 —
-## 월드 병사와 같은 SoldierBody.build로 만든다).
+## 월드 병사와 같은 SoldierBody.build로 만든다). "bust:<영웅 id>"(디자인 보강 5번) = 같은 모델의 흉상: 머리 뼈(목) 높이에 맞춰
+## 가슴께~머리 위만 조금 더 정면에서 찍어 얼굴이 늘 같은 자리(FACE_Y)에 크게 온다 — 목록·모집 카드와 전투 초상화(draw_face)가 쓴다.
 ## portrait(key)는 바로 돌려준다: 캐시가 있으면 그것, 없으면 자리표시(등급 색 실루엣)를 주고 렌더를 큐에 넣는다 → 끝나면
 ## portrait_ready(key)(Node에 이미 ready 시그널이 있어 이 이름이다). 큐는 한 프레임에 하나: 모델을 띄우고 대기 자세를 곧바로 적용
 ## (AnimationPlayer.advance(0) — 안 하면 이 프레임은 T자 기본 자세) + UPDATE_ONCE → 그 프레임 RenderingServer.frame_post_draw에서
@@ -29,6 +30,10 @@ const SUN_ROT := Vector3(-50, -110, 0)  # main처럼 해가 화면 왼쪽 위에
 const TURN_DEG_PER_PX := 0.6
 const LIVE_ANIM_SPEED := 0.6  # 미리보기 대기 애니메이션 속도 배율
 const PLACEHOLDER_PX := 64
+const BUST_LO := 0.68  # 흉상(디자인 보강 5번): 머리 뼈(목) 높이의 이 배(가슴께)부터
+const BUST_HI := 1.62  # 이 배(머리 위 — 높은 모자는 잘린다)까지. 머리가 늘 그림 세로 ~0.43에 온다(FACE_Y)
+const BUST_ROT := Vector3(-10, -20, 0)  # 흉상은 조금 더 정면에서
+const FACE_Y := 0.43  # 흉상 그림에서 얼굴 가운데가 오는 세로 비율(카드가 이 높이를 가운데 두고 자른다)
 const NEUTRAL := Color("8C9AB0")  # 등급 없는 키(병사) 자리표시
 
 signal portrait_ready(key: String)
@@ -101,6 +106,20 @@ static func portrait(key: String) -> Texture2D:
 	return placeholder(key)
 
 
+## 8각(또는 아무 볼록 다각형) 얼굴 칸에 흉상(디자인 보강 5번 — 전투 초상화 줄·길드전 수비 칸): 위가 밝은 등급 색 바탕 위에
+## 흉상을 칸 모양 안에만 그린다(UV로 — 정사각 그림의 어깨가 깎인 모서리 밖으로 나오지 않게). r = 그림을 펼칠 정사각 칸.
+static func draw_face(c: CanvasItem, hero_id: String, poly: PackedVector2Array, r: Rect2) -> void:
+	var gc: Color = Art.GRADE_COLORS.get(GameData.hero(hero_id).get("grade", ""), NEUTRAL)
+	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for p in poly:
+		var v := (p - r.position) / r.size
+		cols.append(gc.lightened(0.55).lerp(gc.lightened(0.12), clampf(v.y, 0.0, 1.0)))
+		uvs.append(v)
+	c.draw_polygon(poly, cols)
+	c.draw_polygon(poly, PackedColorArray([Color.WHITE]), uvs, portrait("bust:" + hero_id))
+
+
 static func has_portrait(key: String) -> bool:
 	return _cache.has(key)
 
@@ -117,9 +136,11 @@ static func spec_of(key: String) -> Dictionary:
 ## 자리표시: 등급 색(병사는 NEUTRAL) 반투명 실루엣. 색마다 하나를 공유한다.
 static func placeholder(key: String) -> Texture2D:
 	var c: Color = Art.GRADE_COLORS.get(_hero_of(key).get("grade", ""), NEUTRAL)
-	if not _placeholders.has(c):
-		_placeholders[c] = ImageTexture.create_from_image(silhouette(c))
-	return _placeholders[c]
+	var bust := key.begins_with("bust:")
+	var k := [c, bust]
+	if not _placeholders.has(k):
+		_placeholders[k] = ImageTexture.create_from_image(bust_silhouette(c) if bust else silhouette(c))
+	return _placeholders[k]
 
 
 ## 각진 머리(8각) + 몸통(6각) 실루엣. 발이 피규어와 같은 높이(feet_y)에 서서 받침과 맞는다.
@@ -141,13 +162,33 @@ static func silhouette(c: Color) -> Image:
 	return img
 
 
+## 흉상 자리표시: 큰 각진 머리 + 아래 끝까지 닿는 어깨(흉상 그림처럼 아래가 잘린다).
+static func bust_silhouette(c: Color) -> Image:
+	var n := PLACEHOLDER_PX
+	var img := Image.create_empty(n, n, false, Image.FORMAT_RGBA8)
+	var head := PackedVector2Array()
+	for i in 8:
+		head.append(Vector2(0.5, 0.4) + Vector2.from_angle(TAU * i / 8.0 + PI / 8.0) * 0.26)
+	var body := PackedVector2Array([Vector2(0.3, 0.7), Vector2(0.7, 0.7), Vector2(0.86, 0.86), Vector2(0.9, 1.0), Vector2(0.1, 1.0), Vector2(0.14, 0.86)])
+	var fill := Color(c, 0.55)
+	for y in n:
+		for x in n:
+			var p := Vector2(x + 0.5, y + 0.5) / n
+			if Geometry2D.is_point_in_polygon(p, head) or Geometry2D.is_point_in_polygon(p, body):
+				img.set_pixel(x, y, fill)
+	return img
+
+
 ## 모델 원점(발)이 그림 세로 몇 비율에 오는지: 직교 투영이라 0.5 + 바라보는 점 높이 × cos(피치) / 세로 폭.
 static func feet_y() -> float:
 	return 0.5 + LOOK_AT.y * cos(deg_to_rad(-CAM_ROT.x)) / VIEW_SIZE
 
 
 static func _hero_of(key: String) -> Dictionary:
-	return GameData.hero(key.trim_prefix("hero:")) if key.begins_with("hero:") else {}
+	for p in ["hero:", "bust:"]:
+		if key.begins_with(p):
+			return GameData.hero(key.trim_prefix(p))
+	return {}
 
 
 ## "soldier:<병종>" → 병종 행(앱이 그릴 수 있는 병종만). 아니면 {}.
@@ -244,3 +285,40 @@ func _show(key: String) -> void:
 	var ap := m.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	ap.advance(0.0)  # 대기 첫 프레임을 지금 적용
 	ap.speed_scale = LIVE_ANIM_SPEED  # 미리보기는 천천히(스냅샷은 첫 프레임이라 상관없다)
+	_frame(key, m)
+
+
+## 카메라: 전신(hero:·soldier:)은 고정 틀, 흉상(bust:)은 그 모델 키에 맞춰 가슴께~머리 위를 채운다(키 2.2~3.0m라 모델마다 다르다).
+func _frame(key: String, m: Node3D) -> void:
+	var bust := key.begins_with("bust:")
+	_cam.rotation_degrees = BUST_ROT if bust else CAM_ROT
+	if not bust:
+		_cam.size = VIEW_SIZE
+		_cam.position = LOOK_AT + _cam.basis.z * 10.0
+		return
+	var neck := neck_height(m)
+	var lo := neck * BUST_LO
+	var hi := neck * BUST_HI
+	_cam.size = (hi - lo) * cos(deg_to_rad(-BUST_ROT.x))
+	_cam.position = Vector3(0.0, (lo + hi) / 2.0, 0.0) + _cam.basis.z * 10.0
+
+
+## 머리 뼈(목) 높이(m). 뼈가 없으면 모델 키의 0.6.
+static func neck_height(m: Node3D) -> float:
+	var sk := m.find_children("*", "Skeleton3D", true, false)
+	if not sk.is_empty():
+		var s3 := sk[0] as Skeleton3D
+		var bi := s3.find_bone("head")
+		if bi >= 0:
+			return (s3.global_transform * s3.get_bone_global_pose(bi).origin).y
+	return model_top(m) * 0.6
+
+
+## 모델 맨 위 높이(m, 보이는 메시의 경계 상자 — 대기 자세가 아니라 기본 자세 기준).
+static func model_top(m: Node3D) -> float:
+	var top := 0.0
+	for mi in m.find_children("*", "MeshInstance3D", true, false):
+		if mi.is_visible_in_tree() and mi.mesh != null:
+			var box: AABB = mi.global_transform * mi.get_aabb()
+			top = maxf(top, box.end.y)
+	return top if top > 0.5 else 2.4

@@ -2595,27 +2595,39 @@ func test_portraits() -> void:
 	p.free()
 	check(P.portrait("hero:hans") == tex, "the cache is static: it outlives the node (world rebuild)")
 	P._cache.erase("hero:hans")
-	# 카드: 피규어 칸은 등급 보석 아래·이름 위(목록·슬롯·상세·모집 크기), 고유 색은 발밑 받침
+	# 카드(디자인 보강 5번): 목록·슬롯·모집 카드는 카드 폭 전부의 초상화 창(위 테두리 아래 ~ 이름 위)에 흉상, 창 아래 띠가 고유 색
 	for s in [Vector2(200, 240), Vector2(140, 150), Vector2(190, 240), Vector2(118, 160)]:
 		var c = HeroCardScript.new()
 		c.size = s
 		var fr: Rect2 = c.figure_rect()
 		var name_top: float = s.y * 0.6 - c._name_size() * 0.7
-		check(fr.size.x > 50.0 and fr.position.y >= UiKit.card_gem_center(Rect2(Vector2.ZERO, s)).y + 8.0 and fr.end.y < name_top and Rect2(Vector2.ZERO, s).encloses(fr),
-			"card %s: figure %s sits between the grade gem and the name" % [s, fr])
+		check(fr == c.portrait_rect() and fr.size.y > 45.0 and fr.size.x >= s.x - 2.0 * HeroCardScript.WIN_INSET - 0.5 and fr.end.y + HeroCardScript.BAND_H < name_top
+			and Rect2(Vector2.ZERO, s).encloses(fr), "card %s: portrait window %s spans the card under the frame and stops above the name" % [s, fr])
 		c.free()
 	var card = HeroCardScript.new()
 	card.size = Vector2(200, 240)
 	card.hero_id = "dorik"
 	var dorik := GameData.hero("dorik")
 	card._ensure_geo(dorik)
-	var fr: Rect2 = card.figure_rect()
-	var feet := Vector2(fr.get_center().x, fr.position.y + fr.size.y * P.feet_y())
-	check(card._base.size() == 2 * HeroCardScript.BASE_SIDES * 3 and card._base_cols.size() == card._base.size() and card._base_lines.size() == 2
-		and card._base_cols.has(Color(dorik.color).darkened(0.35)) and card._base[HeroCardScript.BASE_SIDES * 3].is_equal_approx(feet),
-		"the unique color is a two-tone pedestal centered under the figure's feet")
-	check(card.figure_texture() == P.portrait("hero:dorik") and card.figure_texture() == P.placeholder("hero:dorik"), "the card draws the placeholder until the figure is rendered")
+	var wr: Rect2 = card.portrait_rect()
+	check(card._base.is_empty() and not card._win.is_empty() and card._win_cols.has(Color(dorik.color).darkened(0.2)) and card._win_cols.has(Color(dorik.color).lightened(0.15))
+		and card._win_cols.has(Color(UiKit.GRADE_COLORS[dorik.grade]).lightened(0.3)) and card._win_edge[0] == card._win_edge[card._win_edge.size() - 1]
+		and is_equal_approx(card._win_edge[3].y, wr.end.y + HeroCardScript.BAND_H), "list card: grade-coloured window, a two-tone band in the hero's unique colour under it, no pedestal")
+	check(card.figure_texture() == P.portrait("bust:dorik") and card.figure_texture() == P.placeholder("bust:dorik") and P.placeholder("bust:dorik") != P.placeholder("hero:dorik"),
+		"the list card draws the bust (placeholder bust until rendered)")
+	var reg: Rect2 = HeroCardScript.bust_region(Vector2(256, 256), wr.size)
+	check(is_equal_approx(reg.size.x / reg.size.y, wr.size.x / wr.size.y) and reg.position.x == 0.0 and reg.position.y > 0.0 and reg.end.y <= 256.0
+		and absf((P.FACE_Y + 0.05) * 256.0 - (reg.position.y + reg.size.y * HeroCardScript.FACE_AT)) < 0.5, "a wide window crops the bust's top and bottom with the face at FACE_AT: %s" % reg)
+	var tall: Rect2 = HeroCardScript.bust_region(Vector2(256, 256), Vector2(50, 100))
+	check(tall.size.y == 256.0 and is_equal_approx(tall.size.x, 128.0) and is_equal_approx(tall.get_center().x, 128.0), "a tall window crops the sides: %s" % tall)
+	card.live = true
+	card._ensure_geo(dorik)
+	var lr: Rect2 = card.figure_rect()
+	var feet := Vector2(lr.get_center().x, lr.position.y + lr.size.y * P.feet_y())
+	check(card._win.is_empty() and card._base.size() == 2 * HeroCardScript.BASE_SIDES * 3 and card._base_cols.has(Color(dorik.color).darkened(0.35))
+		and card._base[HeroCardScript.BASE_SIDES * 3].is_equal_approx(feet), "the live big card keeps the full figure on a pedestal in the unique colour")
 	card.free()
+	check(GameData.heroes().all(func(h): return P.spec_of("bust:" + h.id) == P.spec_of("hero:" + h.id)) and P.spec_of("bust:nobody").is_empty(), "bust keys render the same hero model as figure keys")
 
 
 ## 개정 15: 성채 단계 표 둘은 함께 움직인다(사용자 규칙: 성이 넓어질 때마다 영웅 슬롯 +4, 최대 12). CSV(load_tables)와 원격 표(apply_remote)

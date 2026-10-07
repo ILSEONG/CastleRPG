@@ -1864,8 +1864,8 @@ func _figures(heroes_win) -> void:
 	heroes_win.step(-1)
 	heroes_win._show_list(false)
 	var slot = heroes_win.slot_cards[0]
-	_check(p.live_key == "" and slot.figure_texture() == P.portrait("hero:" + slot.hero_id) and slot.figure_rect().size.x > 50.0,
-		"(x2) back to the list the live preview stops; slot cards draw the figure", "live=%s" % p.live_key)
+	_check(p.live_key == "" and slot.figure_texture() == P.portrait("bust:" + slot.hero_id) and slot.figure_rect().size.x > 50.0,
+		"(x2) back to the list the live preview stops; slot cards draw the bust", "live=%s" % p.live_key)
 	heroes_win.show_detail("hans")
 	_check(p.live_key == "hero:hans", "(x2) reopening the detail resumes the live preview", "live=%s" % p.live_key)
 	_check(p._vp.size == Vector2i(P.LIVE_SIZE, P.LIVE_SIZE), "(x2) the live preview renders at LIVE_SIZE (the big card draws the figure large)", "size=%s" % p._vp.size)

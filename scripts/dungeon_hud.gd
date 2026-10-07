@@ -179,12 +179,11 @@ func pick(h) -> void:
 	p._select(null if p.selected == h else h)
 
 
-## 피규어 칸: 등급 색 8각 바탕 + 피규어(렌더 전엔 자리표시). 선택된 영웅은 금색 테두리.
+## 얼굴 칸: 등급 색 8각 바탕 + 흉상(렌더 전엔 자리표시). 선택된 영웅은 금색 테두리.
 func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
-	c.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-	c.draw_texture_rect(PortraitsScript.portrait("hero:" + def.id), r, false)
+	PortraitsScript.draw_face(c, def.id, oct, r)  # 등급 색 바탕 + 흉상(디자인 보강 5번)
 	oct.append(oct[0])
 	var on: bool = h != null and dungeon != null and dungeon.picker != null and dungeon.picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)

@@ -11,6 +11,9 @@ extends Button
 ## 개정 15: shards ≥ 0이면 맨 아래 조각 막대 "조각 3 / 5"(shard_need 0 = 최대 승급 "MAX"), can_promote면 오른위 ▲ 아래 금색 ⬆.
 ## live(상세 큰 카드)는 피규어가 카드 대부분을 채우고(figure_rect) 이름·칭호는 그리지 않는다(상세 글자가 보여 준다), 별은 아래에 크게.
 ## promote_fx(): 승급 성공 연출 — 피규어 주위로 금색 로우폴리 빛 조각이 퍼지고, 새 별 하나가 날아와 제자리에 박힌다(PROMOTE_FX_SEC).
+## 디자인 보강 5번(2026-10-07): 목록·슬롯·모집 카드(live 아님)는 전신 피규어 대신 얼굴이 크게 보이는 흉상(Portraits "bust:")을
+## 등급 색 초상화 창(portrait_rect — 위가 밝은 등급 색 그러데이션 + 깎은 면, SR은 빛살, SSR은 도는 금빛 빛살)에 꽉 채워 그리고,
+## 창 아래 띠가 영웅 고유 색이다(받침 원판은 live 큰 카드만).
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -35,6 +38,12 @@ const LIVE_STAR_R := 15.0
 const PROMOTE_FX_SEC := 0.9
 const STAR_FLY_SEC := 0.55  # 별이 날아오는 시간(그 뒤 박히는 반짝임)
 const PROMOTE_SHARDS := 22
+const WIN_INSET := 8.0  # 초상화 창: 카드 테두리 안쪽 여백
+const WIN_TOP := 9.0
+const WIN_CHAMFER := 7.0  # 창 위 모서리만 깎는다(흉상 아래는 곧게 잘린다)
+const BAND_H := 5.0  # 창 아래 고유 색 띠
+const FACE_AT := 0.45  # 창 세로에서 얼굴 가운데가 올 비율
+const RAYS := 10  # SR·SSR 창 빛살 수
 
 signal tapped(card)
 signal long_pressed(card)
@@ -80,6 +89,9 @@ var _shine_cols := PackedColorArray()  # 매 프레임 알파만 바꾼다
 var _base := PackedVector2Array()  # 피규어 아래: 고유 색 받침 원판(옆면 + 윗면)
 var _base_cols := PackedColorArray()
 var _base_lines: Array = []  # 받침 외곽선(윗면 둘레, 옆면 아래 둘레)
+var _win := PackedVector2Array()  # 초상화 창(live 아님): 등급 색 바탕 + 깎은 면 + 아래 고유 색 띠
+var _win_cols := PackedColorArray()
+var _win_edge := PackedVector2Array()  # 창 테두리(닫힘)
 var _top := PackedVector2Array()  # 피규어 위: 등급 보석·별
 var _top_cols := PackedColorArray()
 var _lines: Array = []  # [[닫힌 선, 두께]] 보석·별 외곽선
@@ -194,10 +206,19 @@ func _draw() -> void:
 		if not _shine.is_empty():  # SSR: 금색 면이 차례로 밝아진다
 			_tick_shine(UiKit.GRADE_COLORS[h.grade])
 			RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _shine, _shine_cols)
-		RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _base, _base_cols)
-		for l in _base_lines:
-			draw_polyline(l, UiKit.OUTLINE, 1.2, true)
-		draw_texture_rect(figure_texture(), figure_rect(), false)
+		if live:  # 큰 카드: 받침 원판 위 실시간 전신
+			RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _base, _base_cols)
+			for l in _base_lines:
+				draw_polyline(l, UiKit.OUTLINE, 1.2, true)
+			draw_texture_rect(figure_texture(), figure_rect(), false)
+		else:  # 목록·슬롯·모집: 등급 색 창에 흉상
+			RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _win, _win_cols)
+			if h.grade == "SSR" or h.grade == "SR":
+				_draw_rays(UiKit.GRADE_COLORS[h.grade], h.grade == "SSR")
+			var tex := figure_texture()
+			var wr := portrait_rect()
+			draw_texture_rect_region(tex, wr, bust_region(tex.get_size(), wr.size))
+			draw_polyline(_win_edge, Color(UiKit.GRADE_COLORS[h.grade]).darkened(0.35), 1.5, true)
 		RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _top, _top_cols)
 		for l in _lines:
 			draw_polyline(l[0], UiKit.OUTLINE, l[1], true)
@@ -224,14 +245,33 @@ func _name_size() -> int:
 	return clampi(roundi(size.x * 0.17), 14, 24)
 
 
-## 피규어 칸(정사각, 가운데): 등급 보석 아래부터 이름 글자 위까지. live(상세 큰 카드)는 보석 아래 ~ 별 줄 위를 거의 다 채운다.
+## 피규어 칸: live(상세 큰 카드)는 보석 아래 ~ 별 줄 위를 거의 다 채우는 정사각, 아니면 초상화 창(portrait_rect).
 func figure_rect() -> Rect2:
 	if live:
 		var h := size.y - FIGURE_TOP - LIVE_BAND
 		var s := maxf(minf(size.x - 24.0, h), 0.0)
 		return Rect2(size.x / 2.0 - s / 2.0, FIGURE_TOP + (h - s) / 2.0, s, s)
-	var side := maxf(size.y * 0.6 - _name_size() * 0.85 - FIGURE_TOP, 0.0)
-	return Rect2(size.x / 2.0 - side / 2.0, FIGURE_TOP, side, side)
+	return portrait_rect()
+
+
+## 초상화 창(live 아님): 카드 테두리 안쪽 폭 전부, 위 테두리 아래부터 이름 글자 위(고유 색 띠 자리를 뺀다)까지.
+func portrait_rect() -> Rect2:
+	var bottom := size.y * 0.6 - _name_size() * 0.95 - 3.0 - BAND_H
+	return Rect2(WIN_INSET, WIN_TOP, maxf(size.x - WIN_INSET * 2.0, 0.0), maxf(bottom - WIN_TOP, 0.0))
+
+
+## 흉상 그림에서 창에 넣을 부분: 창을 꽉 채우고(창이 넓으면 위아래를, 좁으면 양옆을 자른다) 얼굴(Portraits.FACE_Y 조금 아래)이
+## 창 세로 FACE_AT에 오게 — 영웅마다 머리 높이가 같게 렌더돼 있어 모두 같은 자리에 얼굴이 온다.
+static func bust_region(tex: Vector2, win: Vector2) -> Rect2:
+	if tex.x <= 0.0 or win.x <= 0.0 or win.y <= 0.0:
+		return Rect2(Vector2.ZERO, tex)
+	var aspect := win.x / win.y
+	var h := tex.x / aspect
+	if h <= tex.y:
+		var face := tex.y * (PortraitsScript.FACE_Y + 0.05)
+		return Rect2(0.0, clampf(face - h * FACE_AT, 0.0, tex.y - h), tex.x, h)
+	var w := tex.y * aspect
+	return Rect2((tex.x - w) / 2.0, 0.0, w, tex.y)
 
 
 ## 조각 막대 칸(맨 아래). 막대가 없으면 빈 Rect2.
@@ -266,10 +306,66 @@ func star_center(i: int) -> Vector2:
 	return Vector2(c.x - gap * (stars - 1) / 2.0 + gap * i, c.y)
 
 
-## 그릴 피규어: live면 실시간 미리보기, 아니면 캐시(렌더 전엔 자리표시 실루엣).
+## 그릴 피규어: live면 실시간 미리보기(전신), 아니면 흉상 캐시(렌더 전엔 자리표시 실루엣).
 func figure_texture() -> Texture2D:
 	var p = PortraitsScript.current
-	return p.live_texture(_key()) if live and p != null else PortraitsScript.portrait(_key())
+	if live:
+		return p.live_texture(_key()) if p != null else PortraitsScript.portrait(_key())
+	return PortraitsScript.portrait("bust:" + hero_id)
+
+
+## 창 빛살: 흉상 머리 뒤(창 위 40%)에서 창 테두리까지 번갈아 밝은 부채꼴. SSR은 천천히 돌고(매 프레임 그린다) 진하다.
+func _draw_rays(gc: Color, spin: bool) -> void:
+	var wr := portrait_rect()
+	if wr.size.x <= 0.0:
+		return
+	var c := Vector2(wr.get_center().x, wr.position.y + wr.size.y * 0.4)
+	var a0 := _t * 0.35 if spin else 0.0
+	var col := Color(gc.lightened(0.75), 0.42 if spin else 0.26)
+	var reach := wr.size.length()
+	var tris := PackedVector2Array()  # 삼각형 배열(다각형 삼각분할 없이 — 모서리에 걸친 부채꼴도 깨지지 않게)
+	for i in RAYS:
+		var a := a0 + TAU * i / RAYS
+		var p1 := _to_edge(wr, c, Vector2.from_angle(a), reach)
+		var p2 := _to_edge(wr, c, Vector2.from_angle(a + TAU / RAYS * 0.45), reach)
+		var corner := _corner_between(wr, p1, p2)
+		if corner != Vector2.INF:
+			tris.append_array([c, p1, corner, c, corner, p2])
+		else:
+			tris.append_array([c, p1, p2])
+	var cols := PackedColorArray()
+	cols.resize(tris.size())
+	cols.fill(col)
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), tris, cols)
+
+
+## c에서 dir로 나가 창 사각형 테두리에 닿는 점.
+static func _to_edge(r: Rect2, c: Vector2, dir: Vector2, reach: float) -> Vector2:
+	var t := reach
+	if dir.x > 0.0001:
+		t = minf(t, (r.end.x - c.x) / dir.x)
+	elif dir.x < -0.0001:
+		t = minf(t, (r.position.x - c.x) / dir.x)
+	if dir.y > 0.0001:
+		t = minf(t, (r.end.y - c.y) / dir.y)
+	elif dir.y < -0.0001:
+		t = minf(t, (r.position.y - c.y) / dir.y)
+	return c + dir * t
+
+
+## 테두리 위 두 점이 다른 변에 있으면 그 사이 모서리(부채꼴이 모서리를 감싸게), 같은 변이면 INF.
+static func _corner_between(r: Rect2, a: Vector2, b: Vector2) -> Vector2:
+	var ex := func(p: Vector2) -> float: return r.position.x if absf(p.x - r.position.x) < 0.5 else (r.end.x if absf(p.x - r.end.x) < 0.5 else NAN)
+	var ey := func(p: Vector2) -> float: return r.position.y if absf(p.y - r.position.y) < 0.5 else (r.end.y if absf(p.y - r.end.y) < 0.5 else NAN)
+	var ax: float = ex.call(a)
+	var ay: float = ey.call(a)
+	var bx: float = ex.call(b)
+	var by: float = ey.call(b)
+	if not is_nan(ax) and not is_nan(by):
+		return Vector2(ax, by)
+	if not is_nan(ay) and not is_nan(bx):
+		return Vector2(bx, ay)
+	return Vector2.INF
 
 
 ## 목록 카드 정보: 왼위 "Lv N"·그 아래 "배치" 배지, 오른위 초록 ▲, 별 위 "전투력 N".
@@ -408,7 +504,16 @@ func _ensure_geo(h: Dictionary) -> void:
 	_top_cols = PackedColorArray()
 	_lines = []
 	_add_gem(UiKit.card_gem_center(r), UiKit.CARD_GEM_R, gc)
-	_add_base(Color(h.color))
+	_base = PackedVector2Array()
+	_base_cols = PackedColorArray()
+	_base_lines = []
+	_win = PackedVector2Array()
+	_win_cols = PackedColorArray()
+	_win_edge = PackedVector2Array()
+	if live:
+		_add_base(Color(h.color))
+	else:
+		_add_window(gc, Color(h.color))
 	if badge == "" and stars > 0:
 		_add_stars()
 
@@ -418,6 +523,48 @@ func _add_gem(center: Vector2, r: float, color: Color) -> void:
 	_top.append_array(g[0])
 	_top_cols.append_array(g[1])
 	_lines.append([g[2], UiKit.gem_outline_width(r)])
+
+
+## 초상화 창: 위 모서리를 깎은 사각 — 등급 색 깎은 면(LowpolyBox.faces) 위에 위가 밝고 아래가 짙은 그러데이션, 아래에 고유 색 띠
+## (위 반 밝게, 아래 반 짙게). 테두리는 등급 색의 어두운 톤(_draw).
+func _add_window(gc: Color, unique: Color) -> void:
+	var wr := portrait_rect()
+	if wr.size.x <= 0.0 or wr.size.y <= 0.0:
+		return
+	var k := WIN_CHAMFER
+	var shape := PackedVector2Array([wr.position + Vector2(k, 0), Vector2(wr.end.x - k, wr.position.y), Vector2(wr.end.x, wr.position.y + k),
+		wr.end, Vector2(wr.position.x, wr.end.y), wr.position + Vector2(0, k)])
+	for i in range(1, shape.size() - 1):  # 바탕(등급 색 중간 톤)
+		for p in [shape[0], shape[i], shape[i + 1]]:
+			_win.append(p)
+			_win_cols.append(gc.lightened(0.3))
+	for f in LowpolyBox.faces(wr, k, gc.lightened(0.3), 0.07, hash(gc) & 0xffff):  # 깎은 면
+		for p in f[0]:
+			_win.append(p)
+			_win_cols.append(f[1])
+	var top_glow := Color(1, 1, 1, 0.42)  # 위 밝게 → 아래 짙게
+	var bottom_dark := Color(gc.darkened(0.45), 0.4)
+	var mid_y := wr.position.y + wr.size.y * 0.55
+	for q in [[wr.position.y, mid_y, top_glow, Color(1, 1, 1, 0.0)], [mid_y, wr.end.y, Color(gc.darkened(0.45), 0.0), bottom_dark]]:
+		var y0: float = q[0]
+		var y1: float = q[1]
+		var quad := [Vector2(wr.position.x, y0), Vector2(wr.end.x, y0), Vector2(wr.end.x, y1), Vector2(wr.position.x, y1)]
+		var cols := [q[2], q[2], q[3], q[3]]
+		for t in [[0, 1, 2], [0, 2, 3]]:
+			for j in t:
+				_win.append(quad[j])
+				_win_cols.append(cols[j])
+	var band := Rect2(wr.position.x, wr.end.y, wr.size.x, BAND_H)  # 고유 색 띠
+	for half in [[band.position.y, band.position.y + BAND_H * 0.5, unique.lightened(0.15)], [band.position.y + BAND_H * 0.5, band.end.y, unique.darkened(0.2)]]:
+		var a: float = half[0]
+		var b: float = half[1]
+		for p in [Vector2(band.position.x, a), Vector2(band.end.x, a), Vector2(band.end.x, b), Vector2(band.position.x, a), Vector2(band.end.x, b), Vector2(band.position.x, b)]:
+			_win.append(p)
+			_win_cols.append(half[2])
+	_win_edge = shape.duplicate()
+	_win_edge[3] = band.end
+	_win_edge[4] = Vector2(band.position.x, band.end.y)
+	_win_edge.append(shape[0])
 
 
 ## 받침 원판(고유 색): 피규어 발밑(Portraits.feet_y)의 납작한 BASE_SIDES각 타원 — 어두운 옆면(아래로 두께만큼) 위에 면 분할 윗면

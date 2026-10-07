@@ -170,8 +170,7 @@ func _pick(h) -> void:
 func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := LowpolyBox.octagon(r.grow(-2.0), r.size.x * 0.2)
-	c.draw_colored_polygon(oct, UiKit.GRADE_COLORS.get(def.grade, UiKit.STEEL).lightened(0.3))
-	c.draw_texture_rect(PortraitsScript.portrait("hero:" + def.id), r, false)
+	PortraitsScript.draw_face(c, def.id, oct, r)  # 등급 색 바탕 + 흉상(디자인 보강 5번)
 	oct.append(oct[0])
 	var on: bool = h != null and battle != null and battle.picker != null and battle.picker.selected == h
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
