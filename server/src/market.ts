@@ -34,7 +34,7 @@ const ROW_COLS = `l.id, l.currency, l.price, l.proceeds, l.status, l.seller_id::
   extract(epoch from l.sold_at)::float8 as sold_at`
 
 export function registerMarket(app: Hono<Any>, d: Any) {
-  const { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError } = d
+  const { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks } = d
   const MAX_ATTEMPTS = 5
 
   const toListing = (r: Any) => ({
@@ -151,6 +151,22 @@ export function registerMarket(app: Hono<Any>, d: Any) {
       }
     })
   })
+
+  if (testHooks) {
+    // 통합 테스트용: 등급마다 장비 하나(부위 무작위, 굴림 rollItem)를 보관함에 넣는다 {grades: ['SR', ...]}.
+    app.post('/v1/test/grant_items', auth, async (c: Any) => {
+      const grades = (await body(c)).grades
+      if (!Array.isArray(grades) || !grades.length || grades.length > 50 || !grades.every((g) => R.EQUIP_GRADES.includes(g))) {
+        throw new ApiError(400, 'bad_request', "'grades' must be 1..50 equipment grades")
+      }
+      const slots = ['weapon', ...R.ARMOR_SLOTS]
+      const items = grades.map((g: string) => {
+        const slot = slots[Math.floor(random() * slots.length)]
+        return R.rollItem(slot, slot === 'weapon' ? R.WEAPON_KINDS[Math.floor(random() * R.WEAPON_KINDS.length)] : null, g, random)
+      })
+      return run(c, async () => ({ change: { items } }))
+    })
+  }
 
   app.post('/v1/market/buy', auth, async (c: Any) => {
     const b = await body(c)

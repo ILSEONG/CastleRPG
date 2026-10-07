@@ -204,11 +204,11 @@ static func active_count() -> int:
 	return n
 
 
-## 올릴 수 있는 장비: 보관함에서 장착하지 않은 것(등급 → 레벨 순).
+## 올릴 수 있는 장비: 보관함에서 장착하지 않은 것(높은 등급 → 최신 순).
 static func sellable_items() -> Array:
 	var out := Economy.items().filter(func(it): return Economy.item_owner(int(it.id)) == "")
 	var rank := func(it): return GameData.EQUIP_GRADES.find(it.grade)
-	out.sort_custom(func(a, b): return [-rank.call(a), -int(a.level), -int(a.id)] < [-rank.call(b), -int(b.level), -int(b.id)])
+	out.sort_custom(func(a, b): return [-rank.call(a), -int(a.id)] < [-rank.call(b), -int(b.id)])
 	return out
 
 
@@ -367,7 +367,7 @@ func _rebuild() -> void:
 		footer.remove_child(c)
 		c.queue_free()
 	for k in buttons.keys():
-		if not (k.begins_with("tab:") or k == "close"):
+		if not (k.begins_with("tab:") or k == "close" or k == "confirm"):
 			buttons.erase(k)
 	for t in TABS:
 		var b: Button = buttons["tab:" + t[0]]
