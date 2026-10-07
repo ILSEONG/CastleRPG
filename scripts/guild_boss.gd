@@ -262,7 +262,7 @@ func _show_result() -> void:
 		_result_box.add_child(_label("총 피해 %s · 길드 창에서 다시 확인하세요" % UiKit.commas(int(dragon.dealt)), 24, MainHud.INK, true))
 	else:
 		var grade := str(result.grade)
-		var head := _label(grade, 96, GuildPanel.GRADE_COLORS.get(grade, GOLD))
+		var head := _label(grade, 96, GuildPanel.grade_color(grade))
 		head.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
 		head.add_theme_constant_override("outline_size", 10)
 		_result_box.add_child(head)

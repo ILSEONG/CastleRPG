@@ -24,7 +24,12 @@ const RED := Color(0.80, 0.26, 0.22)
 const COIN_COLOR := Color(0.52, 0.40, 0.78)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const LEAVE_CONFIRM_SEC := 3.0
-const GRADE_COLORS := {"S": Color(0.95, 0.62, 0.10), "A": Color(0.80, 0.30, 0.70), "B": Color(0.25, 0.50, 0.85), "C": Color(0.30, 0.62, 0.35), "D": Color(0.5, 0.5, 0.55)}
+const GRADE_COLORS := {"SSS": Color(0.92, 0.22, 0.25), "SS": Color(0.98, 0.45, 0.10), "S": Color(0.95, 0.62, 0.10), "A": Color(0.80, 0.30, 0.70), "B": Color(0.25, 0.50, 0.85)}
+
+
+## 판 등급 색: + · −를 뗀 글자(SSS·SS·S·A·B)로.
+static func grade_color(g: String) -> Color:
+	return GRADE_COLORS.get(g.trim_suffix("+").trim_suffix("-"), Color(0.5, 0.5, 0.55))
 
 var tab := "home"
 var body: VBoxContainer  # 다시 만드는 내용
@@ -464,8 +469,8 @@ func _build_boss() -> void:
 	gv.add_child(_label("판 등급 보상(도달한 드래곤 레벨)", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for gr in GuildScript.BOSS_GRADES:
 		var r := HBoxContainer.new()
-		var gl := _label(gr[0], 26, GRADE_COLORS[gr[0]])
-		gl.custom_minimum_size = Vector2(40, 0)
+		var gl := _label(gr[0], 26, grade_color(gr[0]))
+		gl.custom_minimum_size = Vector2(72, 0)
 		r.add_child(gl)
 		var cond := _label(("Lv %d 이상" % int(gr[1])) if int(gr[1]) > 1 else "참여", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		cond.size_flags_horizontal = Control.SIZE_EXPAND_FILL

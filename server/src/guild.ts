@@ -34,9 +34,24 @@ export const BOSS_NAMES = ['드래곤']
 export const BOSS_DMG_CAP = 3
 export const BOSS_SLACK_SEC = 2
 export const BOSS_RUN_TTL = 600
-// 판 등급: [등급, 도달한 드래곤 레벨 이상, 코인, 골드]
-export const BOSS_GRADES: [string, number, number, number][] = [['S', 15, 120, 30000], ['A', 10, 90, 20000], ['B', 6, 60, 12000],
-  ['C', 3, 40, 8000], ['D', 1, 25, 5000]]
+// 2026-10-07 사용자: B-~SSS+ 15단계, 기준 빡세게(40초 전투), SSS는 진짜 도전. [등급, 도달한 드래곤 레벨 이상, 코인, 골드] — 앱 Guild.BOSS_GRADES와 같다
+export const BOSS_GRADES: [string, number, number, number][] = [
+  ['SSS+', 45, 300, 80000],
+  ['SSS', 41, 250, 65000],
+  ['SSS-', 37, 215, 50000],
+  ['SS+', 34, 190, 40000],
+  ['SS', 31, 165, 35000],
+  ['SS-', 28, 145, 30000],
+  ['S+', 25, 125, 26000],
+  ['S', 22, 110, 22000],
+  ['S-', 19, 95, 19000],
+  ['A+', 16, 80, 16000],
+  ['A', 13, 65, 13000],
+  ['A-', 10, 55, 11000],
+  ['B+', 7, 45, 9000],
+  ['B', 4, 35, 7000],
+  ['B-', 1, 25, 5000],
+]
 export const SHOP: { id: string; give: Record<string, number>; price: number; limit: number; period: 'day' | 'week' }[] = [
   { id: 'dia', give: { diamonds: 50 }, price: 150, limit: 2, period: 'day' },
   { id: 'gold', give: { gold: 30000 }, price: 60, limit: 3, period: 'day' },

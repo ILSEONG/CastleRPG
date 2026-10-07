@@ -4734,8 +4734,8 @@ func test_guild() -> void:
 		for i in range(1, lv):
 			n += GuildScript.boss_max(i)
 		return n
-	check(GuildScript.boss_grade(reach.call(15))[0] == "S" and GuildScript.boss_grade(reach.call(15) - 1.0)[0] == "A" and GuildScript.boss_grade(reach.call(3))[0] == "C"
-		and GuildScript.boss_grade(1.0)[0] == "D", "guild: fight grade by the dragon level reached")
+	check(GuildScript.boss_grade(reach.call(45))[0] == "SSS+" and GuildScript.boss_grade(reach.call(45) - 1.0)[0] == "SSS" and GuildScript.boss_grade(reach.call(22))[0] == "S"
+		and GuildScript.boss_grade(reach.call(4))[0] == "B" and GuildScript.boss_grade(1.0)[0] == "B-", "guild: fight grade by the dragon level reached (B-~SSS+)")
 	# 상점
 	g.coins = 1000
 	var dia0: int = e.diamonds
