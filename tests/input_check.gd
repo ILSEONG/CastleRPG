@@ -459,8 +459,8 @@ func _recruit_and_heroes(rig) -> void:
 		"tabs=%s xs=%s ws=%s selected=%s" % [tabs.buttons.keys(), xs, ws, tabs.selected])
 	var title: Rect2 = hud._stage_label.get_global_rect()
 	_check(is_equal_approx(bar_rect.end.y, 1280.0) and is_equal_approx(bar_rect.size.y, hud.TAB_BAR_H) and big.end.y < 300.0 and big.position.x > title.end.x
-		and big.end.x < 600.0 and absf(big.get_center().y - title.get_center().y) < 8.0 and absf(big.size.y - 64.0) < 1.0,
-		"(t) the tab bar is the bottom 104 px; the stage button sits at the top, right of the stage title on the same row (64 px tall)",
+		and big.end.x < 600.0 and big.position.y <= title.get_center().y and title.get_center().y <= big.end.y and absf(big.size.y - 64.0) < 1.0,
+		"(t) the tab bar is the bottom 104 px; the stage button sits at the top, right of the stage title on the same row (64 px tall, beside the title and castle bar)",
 		"bar=%s button=%s title=%s" % [bar_rect, big, title])
 	var cam_pos: Vector3 = rig.position
 	var dp: Vector2 = recruit.dialog.get_global_rect().position + Vector2(300, 20)

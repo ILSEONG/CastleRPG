@@ -2,7 +2,7 @@ extends CanvasLayer
 ## HUD. GameState·Economy·Net 시그널만 구독. 게임 오브젝트 직접 참조 없음(성문 막대 탭은 gate_tapped로 알리고 main이 카메라를 옮긴다).
 ## 상단 스테이지 패널(개정 12-2): 첫 줄 왼쪽 제목 "S-r"과 작게 "스테이지 S · 라운드 r/25"(개정 22 §1, _title_box), 오른쪽 진행 버튼.
 ## 제목 아래(같은 첫 줄 왼쪽)에 성 막대("성" + 숫자), 그 아래 한 줄에 성문 막대 4개(나침반 삼각형 + 북·동·남·서 + 숫자, 피해 때 테두리 번쩍임,
-## 부서지면 회색 "파괴") — 디자인 보강 7번(2026-10-07): 예전 성 줄 + 성문 2×2(패널 ~194 px)를 접어 패널이 ~130 px.
+## 부서지면 회색 "파괴") — 디자인 보강 7번(2026-10-07): 예전 성 줄 + 성문 2×2(패널 ~194 px)를 접어 패널이 ~118 px.
 ## 하단에는 탭 바만 있다(끊김 띠·알림은 그 위).
 
 const INK := Color(0.16, 0.18, 0.24)
@@ -128,6 +128,7 @@ func _ready() -> void:
 	_title_box.add_child(_round_label)
 	_button = Button.new()
 	_button.custom_minimum_size = STAGE_BUTTON
+	_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER  # 첫 줄이 제목 + 성 막대로 높아져도 64 px
 	_button.focus_mode = Control.FOCUS_NONE
 	_button.add_theme_font_size_override("font_size", 28)
 	_button.pressed.connect(_on_button)
