@@ -191,6 +191,8 @@ func tick(delta: float) -> void:
 func _begin(k: String) -> float:
 	if not _cast(k, true):
 		return RETRY
+	if h.has_method("cast_ok") and not h.cast_ok(k):  # PVP 영웅: 머리(pvp_brain)가 좋은 때를 고른다
+		return RETRY
 	if not h.begin_cast(cast_anim(k, h.def), func():
 			if not _cast(k):
 				_cd[k] = minf(_cd[k], RETRY)):

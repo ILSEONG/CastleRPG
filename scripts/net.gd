@@ -448,7 +448,7 @@ func _retry_first_player() -> void:
 	get_tree().create_timer(backoff(_first_tries)).timeout.connect(send.bind("GET", "/v1/player", null, _on_first_player, _retry_first_player))
 
 
-## 로딩 화면에서 창 데이터를 한 번에 받는다(GET /v1/boot — 출석·미션·친구·길드·공성전·랭킹 셋). 받으면 미션 표·친구·길드·공성전 값을
+## 로딩 화면에서 창 데이터를 한 번에 받는다(GET /v1/boot — 출석·미션·친구·길드·공성전·PVP·랭킹 셋). 받으면 미션 표·친구·길드·공성전 값을
 ## 넣고 booted(창이 받아 둔다). 서버가 모르거나(옛 서버 404) 실패하면 "failed" — 창은 열 때 지금처럼 각자 받는다. 로딩을 막지 않는다.
 func fetch_boot() -> void:
 	if not up or boot_state == "wait":
@@ -474,6 +474,9 @@ func _on_boot(data: Dictionary) -> void:
 	if data.get("guild_war") is Dictionary:
 		GuildWar._take(data.guild_war)
 		GuildWar._fetched_at = Time.get_ticks_msec() / 1000.0
+	if data.get("pvp") is Dictionary:
+		Pvp._take(data.pvp)
+		Pvp._fetched_at = Time.get_ticks_msec() / 1000.0
 	boot_state = "done"
 	booted.emit(data)
 

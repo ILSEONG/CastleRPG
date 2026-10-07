@@ -15,6 +15,7 @@ import * as A from './attendance.ts'
 import * as M from './missions.ts'
 import * as P from './pouches.ts'
 import { registerGuildWar } from './war_routes.ts'
+import { registerPvp } from './pvp_routes.ts'
 import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
@@ -177,6 +178,7 @@ interface Change {
   attend?: { n: number; day: number } // 출석 이벤트 진행
   missions?: M.MissionState // 미션 상태 전체
   pouches?: Record<string, number> // 방치 주머니 보유 전체(새 값)
+  pvpBuy?: { price: number; shop: unknown } // PVP 상점: 코인 −price(모자라면 전체가 안 바뀐다), 구매 수 새 값
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -566,7 +568,8 @@ export function createApp(opts: AppOptions) {
     if (ch.pouches) sets.push(`pouches = ${p(JSON.stringify(ch.pouches))}::jsonb`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
-    const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
+    const guard = (ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : '')
+      + (ch.pvpBuy ? ` and exists (select 1 from pvp_wallet where player_id = $1 and coins >= ${p(ch.pvpBuy.price)}::int)` : '')
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
     if (ch.soldiers && Object.keys(ch.soldiers).length) {
       // "병종:티어" → 증감. from s: version 가드가 실패하면 보유도 안 바뀐다. 더하기는 upsert, 빼기는 검사한 기존 행의 update
@@ -625,6 +628,10 @@ export function createApp(opts: AppOptions) {
         where player_id = (select player_id from s) and hero_id = ${p(id)} returning 1)`)
     })
     if (ch.guild) guildCtes(ch.guild, now, ctes, p)
+    if (ch.pvpBuy) {
+      ctes.push(`pw as (update pvp_wallet set coins = coins - ${p(ch.pvpBuy.price)}::int, shop = ${p(JSON.stringify(ch.pvpBuy.shop))}::jsonb
+        where player_id = (select player_id from s) returning 1)`)
+    }
     dungeonCtes(ch, now, ctes, p)
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
@@ -2455,7 +2462,7 @@ export function createApp(opts: AppOptions) {
   // 로딩 화면이 한 번에 받는 창 데이터(출석·미션·친구·길드·공성전·랭킹 셋). 같은 인증으로 각 GET을 안에서 불러 그 응답 그대로 담는다 —
   // 창이 열릴 때 따로 받던 값과 같다. 하나가 실패하면 그 칸만 null(앱은 그 창을 열 때 다시 받는다).
   const BOOT_PARTS: Record<string, string> = {
-    attendance: '/v1/attendance', missions: '/v1/missions', friends: '/v1/friends', guild: '/v1/guild', guild_war: '/v1/guild/war',
+    attendance: '/v1/attendance', missions: '/v1/missions', friends: '/v1/friends', guild: '/v1/guild', guild_war: '/v1/guild/war', pvp: '/v1/pvp',
     ...Object.fromEntries(Rk.BOARDS.map((b) => [`ranking_${b}`, `/v1/ranking/${b}`])),
   }
   app.get('/v1/boot', auth, async (c) => {
@@ -2611,6 +2618,7 @@ export function createApp(opts: AppOptions) {
   }
   registerGuildWar(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, rowOf, needGuild, grant, ApiError,
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
+  registerPvp(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
 
   return app
 }
