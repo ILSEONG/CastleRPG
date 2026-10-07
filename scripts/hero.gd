@@ -704,6 +704,7 @@ func _tick_cast(delta: float) -> void:
 	if _cast_left <= 0.0:
 		var fn := _cast_fn
 		_cast_fn = Callable()
+		Fx.release(self, _color, _tier)  # 발동 순간 빛 터짐(2026-10-07)
 		fn.call()
 
 

@@ -20,6 +20,7 @@ const Crowd := preload("res://scripts/crowd.gd")
 const FxStatus := preload("res://scripts/fx_status.gd")
 
 const SCAN_INTERVAL := 0.2
+const BOSS_HIT := Color(1.0, 0.35, 0.15)  # 보스 일격 타격 섬광 색(2026-10-07)
 const SWING_SLACK := 0.6  # 타격 순간 대상(영웅·성문·성 지점)이 사거리 + 이만큼 안이면 맞는다(밖이면 헛스윙)
 const AT_HERO := -2  # _swing_side: 영웅을 친다(-1 = 성, 0..3 = 성문 면)
 const DOT_TAGS := ["burn", "bleed", "curse"]  # apply_dot 태그(인덱스 = _dot_dps·_dot_t 칸)
@@ -122,7 +123,9 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 	hp = maxf(0.0, hp - amount)
 	DamageNumbers.pop(self, amount, kind)
 	if kind != DamageNumbers.Kind.POISON and hp > 0.0:  # 피격 번쩍임·찌그러짐(개정 26, 지속 피해 틱은 빼고)
-		_model.hit_react(kind == DamageNumbers.Kind.SKILL or kind == DamageNumbers.Kind.CRIT)
+		var strong := kind == DamageNumbers.Kind.SKILL or kind == DamageNumbers.Kind.CRIT
+		if _model.hit_react(strong) and strong and Fx.live() < Fx.MAX_LIVE / 2:  # 스킬·치명타: 맞은 몸에 작은 타격 불꽃(2026-10-07, 이펙트가 붐비면 생략)
+			Fx.spark(get_parent(), global_position + Vector3(0, bar_height() * 0.55, 0), Color(1.0, 0.92, 0.7), 0.5)
 	if hp == 0.0:
 		_dead = true
 		remove_from_group("monsters")  # 즉시 표적 대상에서 빠진다
@@ -286,6 +289,14 @@ func _release() -> void:
 	if _swing_side == AT_HERO:
 		if is_instance_valid(h) and h.is_alive() and not h.is_on_wall() and Formation.flat_distance(global_position, h.global_position) <= reach:
 			h.take_damage(hit_damage(), self)
+			if is_boss:  # 보스 일격(2026-10-07): 맞은 자리에 붉은 타격 섬광·작은 흔들림
+				Fx.impact(get_parent(), Vector3(h.global_position.x, 0.0, h.global_position.z), BOSS_HIT, 0.9, 0)
+	elif is_boss and Formation.flat_distance(global_position, _swing_at) <= reach:
+		Fx.impact(get_parent(), Vector3(_swing_at.x, 0.0, _swing_at.z), BOSS_HIT, 1.0, 0)
+		if _swing_side < 0:
+			GameState.damage_castle(hit_damage())
+		else:
+			GameState.damage_gate(_swing_side, hit_damage())
 	elif Formation.flat_distance(global_position, _swing_at) <= reach:
 		if _swing_side < 0:
 			GameState.damage_castle(hit_damage())
