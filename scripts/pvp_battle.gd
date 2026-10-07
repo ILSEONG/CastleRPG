@@ -1,7 +1,7 @@
 extends Node3D
 ## PVP 전투 장면(Pvp.battle_started → main._enter_dungeon(run, 이 스크립트), 나가기 → main.leave_dungeon). 던전·길드전과 같은 자리에 붙는다.
 ## run = {mode, opponent {name, points, tier, heroes [{hero, level, promotion, hp, atk}], soldiers {"병종:티어": 수}}, me [영웅 id], my_soldiers, time, gain, loss}.
-## 무대: 결투 = 사원 앞뜰, 총력전 = 넓은 평야(ArenaKit). 내 팀은 화면 아래(카메라 쪽), 상대는 위. 영웅은 근접 앞줄·원거리 뒷줄, 총력전 병사는 영웅 앞에 줄지어 선다.
+## 무대: 결투 = 사원 앞뜰, 총력전 = 결투장(ArenaKit.colosseum — 양옆 벽·관중석, 양 끝 팀 성문). 내 팀은 화면 아래(카메라 쪽), 상대는 위. 영웅은 근접 앞줄·원거리 뒷줄, 총력전 병사는 영웅 앞에 줄지어 선다.
 ## 유닛: 영웅 = pvp_hero.gd(내 영웅은 내 능력치, 상대는 방어팀을 정할 때의 능력치), 병사 = pvp_soldier.gd. 머리 = pvp_brain.gd(상대 AI·자동 전투).
 ## 결투: 내 영웅을 탭해 고르고 바닥을 탭해 옮긴다(unit_picker) — [자동]이면 다시 머리가 싸운다. 총력전: 조종 없음(양쪽 다 AI).
 ## 시작 INTRO_SEC초 동안 "전투 시작" 띠(유닛 정지) → 싸움. 끝: 한쪽 영웅이 모두 쓰러지거나(병사는 승패에 안 센다) 제한 시간 — 시간이 다 되면
@@ -27,7 +27,8 @@ signal ended(result)
 enum Phase { INTRO, FIGHT, RESULT }
 
 const INTRO_SEC := 1.6
-const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R, "total": ArenaKit.PLAINS_FIGHT_R - 4.0}
+const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R, "total": ArenaKit.ARENA_END - 0.6}  # 총력전 22 m(결투장 끝벽 안)
+const FIELD_SIDE := {"duel": INF, "total": ArenaKit.ARENA_SIDE}  # 화면 가로(spot v)로 이만큼 안(결투장 양옆 벽)
 const CAMERA_SIZE := {"duel": 24.0, "total": 28.0}  # 가장 먼 줌
 const FOLLOW_MIN := {"duel": 18.0, "total": 20.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
 const FRONT_D := {"duel": 9.0, "total": 16.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 2배)
@@ -77,11 +78,12 @@ func _ready() -> void:
 	mode = str(run.get("mode", "duel"))
 	duration = float(run.get("time", PvpRules.BATTLE_SEC.get(mode, 90.0)))
 	brain = BrainScript.new(self)
-	var stage: Dictionary = ArenaKit.temple() if mode == "duel" else ArenaKit.plains()
+	var stage: Dictionary = ArenaKit.temple() if mode == "duel" else ArenaKit.colosseum()
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = CrowdScript.new()
 	crowd.arena_r = field_r()
+	crowd.arena_side = FIELD_SIDE.get(mode, INF)
 	add_child(crowd)
 	add_child(PortraitsScript.new())
 	rig = CameraRigScript.new()
@@ -117,6 +119,7 @@ func _ready() -> void:
 		picker = PickerScript.new()
 		picker.camera = camera
 		picker.arena_r = field_r() - 1.0
+		picker.arena_side = FIELD_SIDE.get(mode, INF) - 0.4
 		add_child(picker)
 	_freeze(true)
 	rig.follow(self, FOLLOW_MIN.get(mode, 20.0), CAMERA_SIZE.get(mode, 34.0))
@@ -164,7 +167,7 @@ func forward(t: int) -> Vector3:
 
 
 func clamp_field(p: Vector3) -> Vector3:
-	var v := Vector2(p.x, p.z).limit_length(field_r() - 1.0)
+	var v := CrowdScript.keep_side(Vector2(p.x, p.z).limit_length(field_r() - 1.0), FIELD_SIDE.get(mode, INF) - 0.4)
 	return Vector3(v.x, 0.0, v.y)
 
 

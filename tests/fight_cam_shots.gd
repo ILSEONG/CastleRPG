@@ -2,13 +2,14 @@ extends Node
 ## 싸움 따라가기 카메라 전/후(개발용, 2026-10-07 디자인 보강 2번): 골드·장비·모집권 던전, PVP 결투·총력전, 길드 드래곤을 시작해 SEC초 뒤
 ## 따라가기(camera_rig.follow)를 켠 화면과, 따라가기를 끄고 예전 고정 줌·가운데로 되돌린 화면을 찍어 위(전)·아래(후)로 붙인다.
 ## 아레나 영웅끼리 가장 가까운 거리(ally_pad 확인)도 찍는다. 화면이 필요하다. 저장 파일은 건드리지 않는다.
-## 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/fight_cam_shots.tscn -- --out=/tmp/fight_cam.png [--sec=6]
+## 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/fight_cam_shots.tscn -- --out=/tmp/fight_cam.png [--sec=6] [--modes=total,dragon]
 
 const GameData := preload("res://scripts/game_data.gd")
 const MODES := ["gold", "equip", "ticket", "duel", "total", "dragon"]
-const THUMB := Vector2i(360, 640)
+var _thumb := Vector2i(360, 640)  # --full이면 720×1280
 
 var _main
+var _modes: Array = MODES
 var _before: Array = []
 var _after: Array = []
 
@@ -27,13 +28,17 @@ func _ready() -> void:
 		Economy.heroes[str(h.id)] = 1
 	Economy.soldiers = {"infantry:2": 8, "archer:1": 10, "cavalry:3": 6}
 	var sec := float(Net.arg_value("sec")) if Net.arg_value("sec") != "" else 6.0
+	if Net.arg_value("full") != "":
+		_thumb = Vector2i(720, 1280)
+	if Net.arg_value("modes") != "":
+		_modes = Array(Net.arg_value("modes").split(","))
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(90)
 	Pvp.fetch()
 	Guild.unlocked = true
 	Guild.join(Guild.recommendations()[0])
-	for m in MODES:
+	for m in _modes:
 		await _start(m)
 		var scene = _main._dungeon
 		if scene == null:
@@ -55,10 +60,10 @@ func _ready() -> void:
 		_main.leave_dungeon()
 		Pvp.battle = {}  # 중간에 나온 PVP 판(다음 모드를 시작할 수 있게)
 		await _frames(20)
-	var sheet := Image.create(THUMB.x * MODES.size(), THUMB.y * 2, false, Image.FORMAT_RGB8)
-	for i in MODES.size():
-		sheet.blit_rect(_before[i], Rect2i(Vector2i.ZERO, THUMB), Vector2i(i * THUMB.x, 0))
-		sheet.blit_rect(_after[i], Rect2i(Vector2i.ZERO, THUMB), Vector2i(i * THUMB.x, THUMB.y))
+	var sheet := Image.create(_thumb.x * _modes.size(), _thumb.y * 2, false, Image.FORMAT_RGB8)
+	for i in _modes.size():
+		sheet.blit_rect(_before[i], Rect2i(Vector2i.ZERO, _thumb), Vector2i(i * _thumb.x, 0))
+		sheet.blit_rect(_after[i], Rect2i(Vector2i.ZERO, _thumb), Vector2i(i * _thumb.x, _thumb.y))
 	var out := Net.arg_value("out") if Net.arg_value("out") != "" else "/tmp/fight_cam.png"
 	sheet.save_png(out)
 	print("saved ", out)
@@ -114,7 +119,7 @@ func _closest(scene) -> float:
 func _shot() -> Image:
 	var img := get_viewport().get_texture().get_image()
 	img.convert(Image.FORMAT_RGB8)
-	img.resize(THUMB.x, THUMB.y, Image.INTERPOLATE_LANCZOS)
+	img.resize(_thumb.x, _thumb.y, Image.INTERPOLATE_LANCZOS)
 	return img
 
 

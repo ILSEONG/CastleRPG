@@ -3274,16 +3274,21 @@ func test_item_icons() -> void:
 ## 드랍 상자(등급마다 메시 하나, 작음, 바닥에 놓임)·빛기둥(높이 PILLAR_H) 그림자 없음.
 func test_arena_kit() -> void:
 	const ArenaKit := preload("res://scripts/arena_kit.gd")
-	for kind in ["plains", "castle"]:
-		var st: Dictionary = ArenaKit.plains() if kind == "plains" else ArenaKit.castle()
-		var want: Array = [6, 15] if kind == "plains" else [4, 0]
+	for kind in ["plains", "castle", "lair", "colosseum"]:
+		var st: Dictionary = {"plains": ArenaKit.plains, "castle": ArenaKit.castle, "lair": ArenaKit.lair, "colosseum": ArenaKit.colosseum}[kind].call()
+		var want: Array = {"plains": [6, 15], "castle": [4, 0], "lair": [6, 0], "colosseum": [6, 6]}[kind]
 		check(st.heroes.size() == want[0] and st.enemies.size() == want[1] and st.boss is Vector3, "%s: %d hero spots, %d goblin spots + boss" % [kind, want[0], want[1]])
 		var spots: Array = st.heroes + st.enemies + [st.boss]
 		for i in spots.size():
 			var p: Vector3 = spots[i]
 			var hall: Vector3 = Basis(Vector3.UP, ArenaKit.HALL_YAW).inverse() * p
-			var inside := p.length() < ArenaKit.PLAINS_FIGHT_R if kind == "plains" else maxf(absf(hall.x), absf(hall.z)) < ArenaKit.HALL_HALF - 1.0
-			check(inside and p.y == 0.0, "%s spot %d on the floor inside the fight area: %s" % [kind, i, p])
+			var inside: bool
+			match kind:
+				"plains": inside = p.length() < ArenaKit.PLAINS_FIGHT_R
+				"castle": inside = maxf(absf(hall.x), absf(hall.z)) < ArenaKit.HALL_HALF - 1.0
+				"lair": inside = p.length() < ArenaKit.LAIR_FIGHT_R and absf(hall.x) <= ArenaKit.LAIR_SIDE
+				_: inside = p.length() < 22.0 and absf(hall.x) <= ArenaKit.ARENA_SIDE  # PVP 총력전 FIELD_R
+			check(inside and p.y == 0.0 and is_equal_approx(hall.x, p.dot(ArenaKit.RIGHT)), "%s spot %d on the floor inside the fight area: %s" % [kind, i, p])
 			for j in range(i + 1, spots.size()):
 				check(p.distance_to(spots[j]) > 1.0, "%s spots %d and %d apart" % [kind, i, j])
 		var lowest_enemy: float = (st.enemies + [st.boss]).map(func(p): return p.dot(ArenaKit.DOWN)).max()
@@ -3299,13 +3304,32 @@ func test_arena_kit() -> void:
 		var effects := 0
 		for gi in st.root.find_children("*", "GeometryInstance3D", true, false):
 			var m: Material = gi.material_override
-			if gi is CPUParticles3D or (m is ShaderMaterial and (m.shader == ArenaKit.GlowShader or m.shader == ArenaKit.SmokeShader)):
+			if gi is CPUParticles3D or (m is ShaderMaterial and m.shader in [ArenaKit.GlowShader, ArenaKit.SmokeShader, ArenaKit.LavaShader]):
 				effects += 1
 				check(gi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s effect %s casts no shadow" % [kind, gi.name])
-		if kind == "castle":
-			check(effects == 3 and st.root.find_children("*", "CPUParticles3D", true, false).size() == 1, "castle: one flame MultiMesh, one smoke MultiMesh, one ember emitter")
-		else:
-			check(st.root.find_children("*", "MultiMeshInstance3D", true, false).size() >= 10, "plains: hills, trees, rocks, mountains as MultiMesh")
+		var draws: int = st.root.find_children("*", "GeometryInstance3D", true, false).size()
+		match kind:
+			"castle":
+				check(effects == 3 and st.root.find_children("*", "CPUParticles3D", true, false).size() == 1, "castle: one flame MultiMesh, one smoke MultiMesh, one ember emitter")
+			"plains":
+				check(st.root.find_children("*", "MultiMeshInstance3D", true, false).size() >= 10, "plains: hills, trees, rocks, mountains as MultiMesh")
+			"lair":
+				check(effects == 4 and draws <= 7, "lair: floor lava + lava fall + smoke + embers effects, %d draws <= 7" % draws)
+			"colosseum":
+				var fans: Array = st.root.find_children("Fans", "MeshInstance3D", true, false)
+				check(fans.size() == 1 and fans[0].material_override.shader == ArenaKit.CheerShader and fans[0].cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					and draws <= 8, "colosseum: one cheering crowd mesh without shadow, %d draws <= 8" % draws)
+		if kind in ["lair", "colosseum"]:  # 싸움 자리(원 + 양옆 폭) 안엔 0.5 m 넘는 것이 없다 — 유닛이 바위·벽·뼈를 뚫고 지나가지 않게
+			var r: float = ArenaKit.LAIR_FIGHT_R if kind == "lair" else 22.0
+			var side: float = (ArenaKit.LAIR_SIDE if kind == "lair" else ArenaKit.ARENA_SIDE) + 0.45
+			var tall := 0
+			for mi in st.root.find_children("*", "MeshInstance3D", true, false):
+				if not mi.mesh is ArrayMesh or mi.get_parent() == st.root:
+					continue
+				for v in mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:  # 메시 로컬 = 무대 좌표(x = spot v, z = spot u)
+					if v.y > 0.5 and absf(v.x) < side and Vector2(v.x, v.z).length() < r + 0.45:
+						tall += 1
+			check(tall == 0, "%s: nothing taller than 0.5 m inside the fight area (%d vertices)" % [kind, tall])
 		st.root.free()
 	for g in Art.ITEM_GRADE_COLORS:
 		var c: MeshInstance3D = ArenaKit.drop_chest(g)
@@ -4394,6 +4418,17 @@ func test_crowd() -> void:
 		zero2, PackedFloat32Array([0.2, 0.0]))
 	check(absf(q[0].distance_to(q[1]) - 0.92) < 0.001, "a padded hero and an enemy keep the plain radius sum (%.3f)" % q[0].distance_to(q[1]))
 	c.free()
+	# 양옆이 막힌 무대(arena_side, 2026-10-07 드래곤 둥지·총력전 결투장): 화면 가로(spot v)로만 자르고 세로는 그대로, 밀어도 벽 밖으로 안 나간다
+	var side := Vector2(0.70710678, -0.70710678)  # ArenaKit.RIGHT의 바닥 xz
+	var down := Vector2(0.70710678, 0.70710678)
+	var kept := CrowdScript.keep_side(side * 9.0 + down * 5.0, 7.0)
+	check(kept.is_equal_approx(side * 7.0 + down * 5.0) and CrowdScript.keep_side(side * -3.0 + down * 2.0, 7.0).is_equal_approx(side * -3.0 + down * 2.0),
+		"keep_side clamps only the screen-horizontal part: %s" % [kept])
+	c = CrowdScript.new()
+	c.arena_side = 2.0
+	q = c.separate(PackedVector2Array([side * 1.9, side * 1.7]), PackedFloat32Array([0.45, 0.45]), PackedFloat32Array([1.0, 1.0]), PackedInt32Array([0, 0]), zero2)
+	c.free()
+	check(q[0].dot(side) <= 2.001 and q[0].distance_to(q[1]) > 0.85, "arena side: a push never crosses the side wall (v %.2f), the pair still separates (%.2f)" % [q[0].dot(side), q[0].distance_to(q[1])])
 	# 성 전장: 밀림은 성벽·성문을 넘기지 않는다
 	var half := GameData.interior_half(1)
 	var outer := half + Balance.WALL_T

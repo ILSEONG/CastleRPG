@@ -21,6 +21,7 @@ const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const RouteMarker := preload("res://scripts/route_marker.gd")
+const Crowd := preload("res://scripts/crowd.gd")
 
 const LAYER_GATE := 2
 const LAYER_WALL := 8
@@ -43,6 +44,7 @@ var recruit  # 주점 모집 창(recruit_panel.gd)
 var building_panel  # 건물 창(building_panel.gd)
 var research  # 연구 창(research_panel.gd, 개정 24) — 연구소 말풍선 탭
 var arena_r := 0.0  # > 0이면 던전: 영웅 선택·바닥 이동만, 바닥 지점은 이 반경 안
+var arena_side := INF  # 아레나: 바닥 지점은 화면 가로(spot v)로 이만큼 안(양옆이 막힌 무대)
 
 var _press_pos: Vector2 = Vector2.INF
 var _pending: Vector2 = Vector2.INF
@@ -250,7 +252,7 @@ func _ground_point(screen_pos: Vector2):
 	if hit == null:
 		return null
 	if arena_r > 0.0:
-		var flat := Vector2(hit.x, hit.z).limit_length(arena_r)
+		var flat := Crowd.keep_side(Vector2(hit.x, hit.z).limit_length(arena_r), arena_side)
 		return Vector3(flat.x, 0.0, flat.y)
 	var lim := Balance.MAP_HALF - GROUND_MARGIN
 	return Vector3(clampf(hit.x, -lim, lim), 0.0, clampf(hit.z, -lim, lim))

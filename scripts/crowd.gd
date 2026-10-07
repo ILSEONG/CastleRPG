@@ -6,7 +6,7 @@ extends Node
 ## push_mass() = INF(돌진하는 데스나이트)면 밀리지 않고 남만 민다(둘 다 그러면 그냥 겹친다). 처리가 꺼진 유닛(멈춘 장면·테스트)은 빠진다.
 ## 같은 층(지상·성벽 위)끼리만 부딪고, 계단을 오르내리거나 땅에서 솟는 중이면 빠진다.
 ## 밀린 자리는 Formation.clamp_push(성 전장 — 성벽·성문을 넘지 않고, 성벽 위는 성벽 길 안에서만, 건물 부지·맵 밖 금지)나
-## 아레나 반경(arena_r)으로 되돌린다. 사거리는 그대로 중심 거리 — 근접 사거리는 모두 맞닿는 거리(반지름 합)보다 길다(run_tests).
+## 아레나 반경(arena_r)·화면 가로 폭(arena_side — 양옆이 막힌 무대: 드래곤 둥지·총력전 결투장)으로 되돌린다. 사거리는 그대로 중심 거리 — 근접 사거리는 모두 맞닿는 거리(반지름 합)보다 길다(run_tests).
 ## ally_pad()(있으면): 둘 다 여유가 있는 쌍(던전·드래곤 영웅끼리)만 그 합만큼 더 떨어진다 — 적과의 맞닿는 거리(근접 사거리)는 그대로.
 ## 붐비면(유닛 ≥ BUSY_AT) BUSY_EVERY 프레임마다 한 번만 푼다 — 한 프레임 걸음(수 cm)만큼 잠깐 겹쳐도 보이지 않는다.
 # ponytail: GDScript 해시(Dictionary) + 가우스-자이델 최대 PASSES번. 유닛 200에 헤드리스 수 ms 안(run_tests가 시간을 찍는다).
@@ -28,10 +28,12 @@ const PASS_R := 0.5  # 경로 중간 점·순찰 점은 이만큼 안이면 지�
 const LEVEL_EPS := 0.3
 const BUSY_AT := 80
 const BUSY_EVERY := 2
+const SIDE := Vector2(0.70710678, -0.70710678)  # 화면 오른쪽(ArenaKit.RIGHT의 바닥 xz) — arena_side 기준
 const NEIGHBORS := [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(-1, 1, 0), Vector3i(0, 1, 0), Vector3i(1, 1, 0)]  # 자기 칸 + 반쪽 이웃(쌍을 한 번씩)
 
 var half := -1.0  # 성 내부 절반(성 전장). 음수 = 아레나
 var arena_r := INF  # 아레나: 중심에서 이 반경 밖으로 밀지 않는다
+var arena_side := INF  # 아레나: 화면 가로(ArenaKit spot v)로 이만큼 밖으로 밀지 않는다(양옆 벽·용암)
 var enabled := true  # 테스트가 끈다(겹침 검사가 무는지 확인)
 var last_usec := 0  # 지난 해소에 걸린 시간(µs)
 
@@ -181,10 +183,16 @@ static func _slide(n: Vector2, m: Vector2) -> Vector2:
 	return t if t.dot(m) >= 0.0 else -t
 
 
+## 바닥 점 p(x, z)를 화면 가로(spot v) |v| ≤ side 안으로(세로는 그대로). 아레나 무대 양옆 벽(crowd·picker·PVP 이동이 함께 쓴다).
+static func keep_side(p: Vector2, side: float) -> Vector2:
+	var v := p.dot(SIDE)
+	return p if absf(v) <= side else p - SIDE * (v - signf(v) * side)
+
+
 ## 밀린 자리 to를 유닛 i가 있던 자리 안으로 되돌린다.
 func _keep(i: int, to: Vector2) -> Vector2:
 	if half < 0.0:
-		return to.limit_length(maxf(arena_r, _from[i].length()))
+		return keep_side(to.limit_length(maxf(arena_r, _from[i].length())), maxf(arena_side, absf(_from[i].dot(SIDE))))
 	var y := Balance.WALL_H if _lv[i] == 1 else 0.0
 	var v := Formation.clamp_push(half, Vector3(_from[i].x, y, _from[i].y), Vector3(to.x, y, to.y))
 	return Vector2(v.x, v.z)

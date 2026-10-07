@@ -1,7 +1,7 @@
 extends Node3D
 ## 길드 보스 실제 전투 장면: 배치 영웅이 run.sec초(40초) 동안 드래곤(dragon.gd)과 싸운다. main이 던전처럼 성 월드를 떼어 두고 붙인다
 ## (Guild.boss_started → main._enter_dungeon(run, 이 스크립트)) — [확인]으로 main.leave_dungeon.
-## 무대는 골드 던전과 같은 평야(ArenaKit.plains — 붉은 드래곤이 잘 보인다), 영웅·스킬·피해 숫자도 던전과 같다(hero.gd 아레나). 드래곤은 매 판 Lv 1로 나오고,
+## 무대는 용암 협곡 둥지(ArenaKit.lair — 양옆 용암 강·절벽, 드래곤 뒤 보물 더미), 영웅·스킬·피해 숫자는 던전과 같다(hero.gd 아레나). 드래곤은 매 판 Lv 1로 나오고,
 ## 0이 되면 그 레벨 처치(배너) 뒤 같은 판에서 다음 레벨 HP로 찬다(공격력도 오른다). 시간이 다 되면 드래곤이 받은 피해 합(dragon.dealt = 판 점수)을
 ## Guild.finish_boss로 내고 결과(boss_done: 등급·코인·골드·도달 레벨)를 띄운다. 온라인은 서버가 피해를 받아 등급·보상을 정한다(상한은 서버 guild.ts BOSS_DMG_CAP).
 
@@ -24,7 +24,6 @@ enum Phase { INTRO, FIGHT, REPORT, RESULT }
 
 const CAMERA_SIZE := 26.0  # 가장 먼 줌
 const FOLLOW_MIN := 18.0  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow — 드래곤 키(frame_h)까지 들어오게 맞춘다)
-const DRAGON_U := -5.0  # 드래곤 자리(평야 spot u — 영웅은 u 9~11.6)
 const INTRO_SEC := 1.2  # 시작 배너("드래곤 출현!") 동안 영웅·드래곤이 움직이지 않는다
 const WAIT_SEC := 20.0  # 결과 응답을 이만큼 못 받으면 [확인]만 띄운다
 const GOLD := Color("C8901A")
@@ -56,11 +55,12 @@ var _result_box: VBoxContainer
 
 
 func _ready() -> void:
-	var stage: Dictionary = ArenaKit.plains()
+	var stage: Dictionary = ArenaKit.lair()
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = preload("res://scripts/crowd.gd").new()
-	crowd.arena_r = ArenaKit.PLAINS_FIGHT_R
+	crowd.arena_r = ArenaKit.LAIR_FIGHT_R
+	crowd.arena_side = ArenaKit.LAIR_SIDE
 	add_child(crowd)
 	add_child(PortraitsScript.new())
 	var rig = CameraRigScript.new()
@@ -88,11 +88,12 @@ func _ready() -> void:
 		heroes.append(h)
 	var picker = PickerScript.new()  # 영웅 탭 선택 → 바닥 탭 이동(던전과 같은 조작)
 	picker.camera = camera
-	picker.arena_r = ArenaKit.PLAINS_FIGHT_R - 1.0
+	picker.arena_r = ArenaKit.LAIR_FIGHT_R - 1.0
+	picker.arena_side = ArenaKit.LAIR_SIDE - 0.4
 	add_child(picker)
 	dragon = DragonScript.new()
 	dragon.setup_boss(int(run.get("level", 1)), float(run.get("hp", GuildScript.boss_max(int(run.get("level", 1))))))
-	dragon.position = ArenaKit.spot(DRAGON_U, 0.0)
+	dragon.position = stage.boss  # 보물 더미 앞(영웅은 화면 아래 u 9~11.6)
 	dragon.rotation.y = atan2(ArenaKit.DOWN.x, ArenaKit.DOWN.z)  # 영웅 쪽(화면 아래)
 	dragon.level_cleared.connect(_on_level_cleared)
 	add_child(dragon)
