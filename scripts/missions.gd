@@ -240,9 +240,36 @@ func progress(m: Dictionary) -> int:
 			return n
 		"daily_bonus":
 			return int(rec.wd)
+	var sc = _server_counts()
+	if sc != null:  # 온라인: 서버가 센 진행(보상 받기도 이것으로 판정한다) + 아직 안 보낸 처치
+		var unsent := _unsent_kills() if m.kind == "kill" else 0
+		if m.type == "repeat":
+			return int(sc.get("r", {}).get(m.id, 0)) + unsent
+		return int(sc.get("d" if m.type == "daily" else "w", {}).get(m.kind, 0)) + unsent
 	if m.type == "repeat":
 		return int(counts.r.get(m.id, 0))
 	return int(counts["d" if m.type == "daily" else "w"].get(m.kind, 0))
+
+
+## 온라인 서버 진행 {d, w, r}(그날·그 주 것일 때만), 없으면 null.
+func _server_counts():
+	if net == null or econ == null:
+		return null
+	var s: Dictionary = econ.server_missions
+	var c = s.get("c")
+	if not c is Dictionary or int(s.get("day", -1)) != day:
+		return null
+	return c
+
+
+## 아직 서버에 보내지 않은(또는 응답 전) 처치 수.
+func _unsent_kills() -> int:
+	var n := 0
+	for part in [econ.kills_pending, econ.kills_sent]:
+		for st in part:
+			for k in part[st]:
+				n += int(part[st][k])
+	return n
 
 
 func is_claimed(m: Dictionary) -> bool:
@@ -337,7 +364,11 @@ func _mark_claimed(m: Dictionary) -> void:
 	elif m.type == "weekly":
 		s.w.append(str(m.id))
 	else:
-		s.r[str(m.id)] = int(s.r.get(str(m.id), 0)) + 1
+		var done := int(s.r.get(str(m.id), 0))
+		s.r[str(m.id)] = done + 1
+		if s.get("c") is Dictionary and s.c.get("r") is Dictionary:  # 서버 진행에서도 이번 목표만큼 쓴다(응답 전 다시 받을 수 있어 보이지 않게)
+			var need := int(m.target) + int(m.get("step", 0)) * done
+			s.c.r[str(m.id)] = maxi(0, int(s.c.r.get(str(m.id), 0)) - need)
 	econ.server_missions = s
 
 

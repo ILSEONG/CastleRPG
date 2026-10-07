@@ -88,6 +88,19 @@ func _ready() -> void:
 		get_tree().quit(0)
 
 
+## 자원 res의 건물 Lv 1 분당 생산(서버 표 — 자원 x10 뒤 100).
+func _per_min(res: String) -> int:
+	return int(GameData.resource(res).get("per_min", 0))
+
+
+## 병종 type n마리 훈련 비용(서버 표).
+func _train_cost(type: String, n: int, tier := 1) -> Dictionary:
+	var c := GameData.train_unit_cost(type, tier)
+	for r in c:
+		c[r] = int(c[r]) * n
+	return c
+
+
 func _phase1(state_path: String) -> void:
 	DirAccess.remove_absolute(Net.device_path)  # 새 기기
 	GameState.stage = 9  # 접속하면 서버 값으로 바뀌어야 한다
@@ -146,7 +159,8 @@ func _phase1(state_path: String) -> void:
 	var now := Economy.time_now()
 	var ids: Array = _badges.badge_ids(now)
 	ids.sort()
-	_check(ids == ["farm", "lumber", "quarry"] and Economy.pending("lumber", now) == 100, "(d) badges and pending use server last_collect and the server clock",
+	var w10 := _per_min("wood") * 10  # 벌목장 Lv 1 10분(data/resources.csv — 자원 x10 뒤 1,000)
+	_check(ids == ["farm", "lumber", "quarry"] and Economy.pending("lumber", now) == w10, "(d) badges and pending use server last_collect and the server clock",
 		"ids=%s pending=%d" % [ids, Economy.pending("lumber", now)])
 	var lp := _building_px("lumber")
 	var hit: Dictionary = _picker._pick(lp, PickerScript.LAYER_TAP)
@@ -155,17 +169,17 @@ func _phase1(state_path: String) -> void:
 	_badges.last_pop = {}
 	_picker._tap_object(lp)
 	_picker._tap_object(lp)  # 응답 전 재탭
-	_check(Net.requested.get("/v1/collect", 0) == col0 + 1 and Economy.res["wood"] == 100 and _badges.last_pop.get("amount", 0) == 100,
+	_check(Net.requested.get("/v1/collect", 0) == col0 + 1 and Economy.res["wood"] == w10 and _badges.last_pop.get("amount", 0) == w10,
 		"(d) a second tap before the reply is ignored; the +100 shows at once, before the reply", "collect requests=%d wood=%d" % [Net.requested.get("/v1/collect", 0) - col0, Economy.res["wood"]])
 	await _wait_until(func(): return not Economy._waiting.has("lumber"), 10.0)
-	_check(Economy.res["wood"] == 100 and _badges.last_pop.get("amount", 0) == 100 and _badges.last_pop.get("kind", "") == "wood",
+	_check(Economy.res["wood"] == w10 and _badges.last_pop.get("amount", 0) == w10 and _badges.last_pop.get("kind", "") == "wood",
 		"(d) server collect: +100 wood from the reply, pop shows the reply amount", "wood=%d pop=%s" % [Economy.res["wood"], _badges.last_pop])
 
 	# (e) 판매: 서버 시세로, 창과 상인 이름표도 서버 시세
 	var rate := float(Economy.merchant.rates.wood)
 	_check(Economy.merchant.rates.size() == 3 and Economy.merchant.rates.has("stone") and Economy.merchant.rates.has("food"), "(e) server merchant has rates for wood, stone and food", "rates=%s" % [Economy.merchant.rates])
 	var gold0: int = Economy.server_gold_tenths
-	var gain := Economy.sell_value("wood", 100, rate) * 10  # 판매 골드는 정수 → tenths는 × 10
+	var gain := Economy.sell_value("wood", w10, rate) * 10  # 판매 골드는 정수 → tenths는 × 10
 	_panel.open()
 	_check(_panel.rate_labels["wood"].text == "×%.1f" % rate and _panel.rate_labels["food"].text == "×%.1f" % float(Economy.merchant.rates.food), "(e) trade window rows show the server rate of each resource", "wood=%s food=%s" % [_panel.rate_labels["wood"].text, _panel.rate_labels["food"].text])
 	var sell0: int = Net.requested.get("/v1/sell", 0)
@@ -232,7 +246,7 @@ func _phase1(state_path: String) -> void:
 	_badges.last_pop = {}
 	_picker._tap_object(lp)
 	await _wait_until(func(): return not _badges.last_pop.is_empty(), 10.0)
-	_check(Economy.res["wood"] == 100, "(g) after reconnecting the same tap collects", "wood=%d" % Economy.res["wood"])
+	_check(Economy.res["wood"] == _per_min("wood") * 10, "(g) after reconnecting the same tap collects", "wood=%d" % Economy.res["wood"])
 
 	# (h) 스테이지 클리어: 쌓인 처치를 곧바로 보내고 /v1/stage/clear로 저장
 	Net._flush_cd = Net.FLUSH_SEC  # 10초 보고가 끼어들지 않게
@@ -925,7 +939,7 @@ func _buildings_online(state_path: String) -> void:
 	var lc := Economy.upgrade_cost("lumber")
 	Economy.upgrade("lumber", Economy.time_now())
 	await _wait_until(func(): return Economy.build.get("id") == "lumber", 15.0)
-	_check(Economy.res["wood"] == wood0 + 100 - int(lc.wood), "(u) a resource building upgrade collects first on the server (+100 wood) and then pays", "wood=%d -> %d" % [wood0, Economy.res["wood"]])
+	_check(Economy.res["wood"] == wood0 + _per_min("wood") * 10 - int(lc.wood), "(u) a resource building upgrade collects first on the server (+100 wood) and then pays", "wood=%d -> %d" % [wood0, Economy.res["wood"]])
 	Economy.finish_build_now()
 	await _wait_until(func(): return Economy.building_level("lumber") == 2, 15.0)
 	# 성문 건설을 걸어 둔 채로 끝낸다(45초)
@@ -977,16 +991,19 @@ func _soldiers_online(state_path: String) -> void:
 	var c0 := Economy.soldier_counts()
 	var res0: Dictionary = Economy.res.duplicate()
 	var t0: int = Net.requested.get("/v1/soldiers/train", 0)
+	var inf6 := _train_cost("infantry", 6)
+	var arc5 := _train_cost("archer", 5)
+	var unit := GameData.soldier_unit_sec(Economy.building_level("barracks"))
 	var sent := Economy.start_training("barracks", 6)
-	_check(sent and Economy.training("barracks").count == 6 and Net.requested.get("/v1/soldiers/train", 0) == t0 + 1 and Economy.res.food == res0.food - 180,
+	_check(sent and Economy.training("barracks").count == 6 and Net.requested.get("/v1/soldiers/train", 0) == t0 + 1 and Economy.res.food == res0.food - int(inf6.food),
 		"(v) one training request; the queue and cost show at once", "requests=%d" % [Net.requested.get("/v1/soldiers/train", 0) - t0])
 	await _wait_until(func(): return Economy.training("barracks").count == 6 and Economy._hold == 0 and not Economy.training_waiting("barracks", "train"), 15.0)
 	Economy.start_training("archery", 5)
 	await _wait_until(func(): return Economy.training("archery").count == 5 and Economy._hold == 0, 15.0)
 	var q := Economy.training("barracks")
-	_check(q.count == 6 and not q.ready and absf(q.finish - (Economy.time_now() + 6 * 10800.0)) < 30.0 and Economy.res.food == res0.food - 180 - 125
-		and Economy.res.wood == res0.wood - 120 - 150 and Economy.soldier_counts() == c0,
-		"(v) the server takes the cost at once (6 infantry 180 food / 120 wood, 5 archers 125 / 150) and queues them (finish = server time + n x 3 h)",
+	_check(q.count == 6 and not q.ready and absf(q.finish - (Economy.time_now() + 6 * unit)) < 30.0 and Economy.res.food == res0.food - int(inf6.food) - int(arc5.food)
+		and Economy.res.wood == res0.wood - int(inf6.wood) - int(arc5.wood) and Economy.soldier_counts() == c0,
+		"(v) the server takes the cost at once (6 infantry, 5 archers at the data cost) and queues them (finish = server time + n x unit time)",
 		"q=%s res=%s -> %s" % [q, res0, Economy.res])
 	await _request("POST", "/v1/test/age", {"minutes": 60})
 	var r0 := _warned("server rejected")
@@ -1008,13 +1025,15 @@ func _soldiers_online(state_path: String) -> void:
 	_check(int(Economy.soldiers.get("infantry:1", 0)) == c0_inf + 6 and notices.size() == n0, "(v) a repeated collect (409 empty) adds nothing and shows no notice", "notices=%s" % [notices.slice(n0)])
 	# 취소: 기병 2마리(식량 80·석재 40) → 절반 환불
 	var res1: Dictionary = Economy.res.duplicate()
+	var cav2 := _train_cost("cavalry", 2)
 	Economy.start_training("stable", 2)
 	await _wait_until(func(): return Economy.training("stable").count == 2 and Economy._hold == 0, 15.0)
 	var c1: int = Net.requested.get("/v1/soldiers/cancel", 0)
 	var canceled := Economy.cancel_training("stable")
 	await _wait_until(func(): return Economy.training("stable").count == 0 and Economy._hold == 0 and not Economy.training_waiting("stable", "cancel"), 15.0)
-	_check(canceled and Net.requested.get("/v1/soldiers/cancel", 0) == c1 + 1 and Economy.res.food == res1.food - 40 and Economy.res.stone == res1.stone - 20
-		and notices.has(Economy.CANCEL_TEXT), "(v) [취소] on the server refunds half (2 cavalry: 80 / 40 -> back 40 / 20) and empties the queue", "res=%s -> %s" % [res1, Economy.res])
+	_check(canceled and Net.requested.get("/v1/soldiers/cancel", 0) == c1 + 1 and Economy.res.food == res1.food - (int(cav2.food) - int(cav2.food) / 2)
+		and Economy.res.stone == res1.stone - (int(cav2.stone) - int(cav2.stone) / 2)
+		and notices.has(Economy.CANCEL_TEXT), "(v) [취소] on the server refunds half (2 cavalry) and empties the queue", "res=%s -> %s" % [res1, Economy.res])
 	# 재전송 금지(시작)
 	var live := Net.api_base
 	var w0 := _warned("not resending")
@@ -1137,9 +1156,10 @@ func _tier_online() -> void:
 	var started := Economy.start_training("barracks", 2)
 	await _wait_until(func(): return Economy.training("barracks").count == 2 and Economy._hold == 0 and not Economy.training_waiting("barracks", "train"), 15.0)
 	var q := Economy.training("barracks")
-	_check(started and Economy.building_level("barracks") == 7 and q.tier == 2 and absf(q.finish - Economy.time_now() - 2 * 10800.0) < 30.0
-		and Economy.res.food == res0.food - 300 and Economy.res.wood == res0.wood - 200,
-		"(t) a Lv 7 barracks trains T2 on the server: queue tier 2, 3:00 each, cost x5 (300 food / 200 wood)", "q=%s res=%s -> %s" % [q, res0, Economy.res])
+	var t2 := _train_cost("infantry", 2, 2)
+	_check(started and Economy.building_level("barracks") == 7 and q.tier == 2 and absf(q.finish - Economy.time_now() - 2 * GameData.soldier_unit_sec(7)) < 30.0
+		and Economy.res.food == res0.food - int(t2.food) and Economy.res.wood == res0.wood - int(t2.wood),
+		"(t) a Lv 7 barracks trains T2 on the server: queue tier 2, cost x train_cost_tier_mult", "q=%s res=%s -> %s" % [q, res0, Economy.res])
 	Economy.finish_training_now("barracks")
 	await _wait_until(func(): return Economy.training("barracks").ready, 15.0)
 	var collected := Economy.collect_training("barracks")
@@ -1209,16 +1229,17 @@ func _research_online() -> void:
 	var r0: int = Net.requested.get("/v1/research/start", 0)
 	_check(Economy.research_levels.is_empty() and Economy.research_current.is_empty() and Economy.research_block("wood_tech") == "" and res0.wood >= 400,
 		"(RS) precondition: no research yet, wood tech affordable", "levels=%s current=%s res=%s" % [Economy.research_levels, Economy.research_current, res0])
+	var rc := GameData.research_cost("wood_tech", 0)
 	var sent := Economy.start_research("wood_tech")
 	_check(sent and str(Economy.research_current.get("id", "")) == "wood_tech" and Net.requested.get("/v1/research/start", 0) == r0 + 1,
 		"(RS) one /v1/research/start; the research shows at once", "requests=%d" % [Net.requested.get("/v1/research/start", 0) - r0])
 	var started := await _wait_until(func(): return str(Economy.research_current.get("id", "")) == "wood_tech" and Economy._hold == 0 and not Economy.research_waiting(), 15.0)
-	_check(started and Economy.res.wood == res0.wood - 120 and Economy.res.stone == res0.stone - 80 and Economy.res.food == res0.food - 100
-		and absf(Economy.research_left(Economy.time_now()) - 60.0) < 5.0, "(RS) the server started wood tech: cost 120/80/100 taken, about 60 s left",
+	_check(started and Economy.res.wood == res0.wood - int(rc.wood) and Economy.res.stone == res0.stone - int(rc.stone) and Economy.res.food == res0.food - int(rc.food)
+		and absf(Economy.research_left(Economy.time_now()) - 60.0) < 5.0, "(RS) the server started wood tech: data cost taken, about 60 s left",
 		"current=%s res=%s left=%.1f" % [Economy.research_current, Economy.res, Economy.research_left(Economy.time_now())])
 	Economy._research_online("start", {"id": "stone_tech"})  # 화면이 막는 두 번째 시작을 직접 보낸다 — 서버가 409 research_busy
 	await _wait_until(func(): return Economy._hold == 0 and not Economy.research_waiting(), 15.0)
-	_check(notices.has(Economy.RESEARCH_TEXT.research_busy) and str(Economy.research_current.get("id", "")) == "wood_tech" and Economy.res.stone == res0.stone - 80,
+	_check(notices.has(Economy.RESEARCH_TEXT.research_busy) and str(Economy.research_current.get("id", "")) == "wood_tech" and Economy.res.stone == res0.stone - int(rc.stone),
 		"(RS) one research at a time on the server too: 409 research_busy, a notice, nothing charged", "notices=%s" % [notices])
 	var dia_cost := Economy.research_dia_cost(Economy.time_now())  # 남은 약 60초 — 5분 이하는 무료 즉시 완료(사용자 2026-10-06)
 	var dia0: int = Economy.diamonds
@@ -1237,7 +1258,7 @@ func _research_online() -> void:
 	var lv: int = Economy.building_level("lumber")
 	var want := Economy.pending("lumber", Economy.time_now())
 	var got: Dictionary = await _request("POST", "/v1/collect", {"building": "lumber"})
-	_check(int(got.get("amount", -1)) == want and want == 30 * (10 * lv * 105 / 100) and want > 30 * 10 * lv, "(RS) the server collect applies wood tech +5%: the same amount the app predicts",
+	_check(int(got.get("amount", -1)) == want and want == 30 * (_per_min("wood") * lv * 105 / 100) and want > 30 * _per_min("wood") * lv, "(RS) the server collect applies wood tech +5%: the same amount the app predicts",
 		"amount=%s want=%d lumber Lv %d" % [got.get("amount"), want, lv])
 	Economy.notice.disconnect(on_notice)
 

@@ -269,7 +269,8 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
 
   // 성 상태 합치기(실시간 방의 ckpt·end, 또는 REST finish). 그 전투의 로스터에 있는 사람만. final이면 전투를 닫는다.
   async function saveState(battleId: string, pid: string, state: Any, final: boolean) {
-    const [b] = await query(`select guild_id::text, week, roster, closed from guild_war_battles where id = $1`, [battleId])
+    const [b] = await query(`select guild_id::text, week, roster, closed, extract(epoch from started_at)::float8 as started_at,
+      extract(epoch from ends_at)::float8 as ends_at from guild_war_battles where id = $1`, [battleId])
     if (!b || Boolean(b.closed)) return false
     if (!(json(b.roster) as Any[]).some((s) => s.owner === pid)) return false
     const now = clock()
@@ -280,6 +281,9 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const w = await warRow(x, Number(b.week))
     const enemy = enemyOf(x, w)
     const merged = W.mergeCastle(w.castle, state && typeof state === 'object' ? state : {}, enemy.defenders)
+    // 열린 뒤 지난 시간으로 낼 수 있는 피해보다 많이 깎였으면 받지 않는다(앱이 보낸 성 상태를 그대로 믿지 않는다)
+    const sec = Math.min(now, Number(b.ends_at)) - Number(b.started_at)
+    if (W.structureDamage(W.castleMax(enemy.defenders), merged) > W.damageCap(json(b.roster) as Any[], defsOf(game), sec)) return false
     await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2', [x.g.id, Number(b.week), JSON.stringify(merged)])
     if (final || merged.keep <= 0) await query('update guild_war_battles set closed = true where id = $1', [battleId])
     return true

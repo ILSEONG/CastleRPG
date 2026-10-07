@@ -37,7 +37,7 @@ func _ready() -> void:
 	_panel = _menu.windows.mission
 	_check(await _wait_until(func(): return not Economy.server_missions.is_empty(), 10.0), "server mission record arrives with the player", "")
 	_check(not _menu.dots().has("mission"), "no mission dot at the start", str(_menu.dots()))
-	Missions.note("kill", 1000)
+	await _events({"kill": 1000})  # 진행은 서버가 센 수(통합 테스트 2026-10-07) — 테스트 훅으로 채운다
 	await _frames(4)
 	_check(_menu.dots().has("mission") and _menu.dots().has("toggle"), "red dot on 미션 and 메뉴 when a mission is done", str(_menu.dots()))
 	_menu.toggle.pressed.emit()
@@ -70,7 +70,7 @@ func _ready() -> void:
 	_check(Missions.times("r_kill") == 1 and Missions.target(rk) == 1500 and Missions.progress(rk) == 0, "repeat target grows to 1500",
 		"%d %d %d" % [Missions.times("r_kill"), Missions.target(rk), Missions.progress(rk)])
 	# 연달아 받기: 응답을 기다리지 않고 두 번(1500 → 2000), 서버는 보낸 순서대로 확인한다
-	Missions.note("kill", 3500)
+	await _events({"kill": 3500})
 	var d0 := Economy.diamonds
 	var g1 := Economy.gold
 	_check(Missions.claim("r_kill") and Missions.claim("r_kill") and Missions.times("r_kill") == 3 and Economy.gold >= g1 + 10000,
@@ -81,8 +81,7 @@ func _ready() -> void:
 	await _frames(20)
 	await _snap()  # 5. 반복
 	# 실제 탭(누름 → 처치가 계속 들어오는 0.6초 → 뗌): 누르는 동안 창이 버튼을 다시 만들면 탭이 사라진다(2026-10-06 버그)
-	Missions.note("hero_level", 20)
-	Missions.note("growth", 20)
+	await _events({"hero_level": 20, "growth": 20})
 	await _frames(30)
 	_check(_panel.buttons.has("claim:r_hero") and _panel.buttons.has("claim:r_growth"), "two repeat missions ready", str(_panel.buttons.keys()))
 	for id in ["r_hero", "r_growth"]:
@@ -123,6 +122,11 @@ func _check(ok: bool, what: String, detail: String) -> void:
 	print(("PASS " if ok else "FAIL ") + what + ("" if ok else "  " + detail))
 	if not ok:
 		_fails += 1
+
+
+func _events(ev: Dictionary) -> void:
+	await _request("/v1/test/events", {"events": ev})
+	Missions.changed.emit()
 
 
 func _request(path: String, body) -> void:

@@ -13,6 +13,7 @@ import * as G from './guild.ts'
 import * as Rk from './ranking.ts'
 import * as A from './attendance.ts'
 import * as M from './missions.ts'
+import * as Q from './quests.ts'
 import * as P from './pouches.ts'
 import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
@@ -181,6 +182,7 @@ interface Change {
   quest?: { tut_state?: string; tut_step?: number; rep_n?: number; last_claim?: number } // 퀘스트 진행
   researchUp?: string // 연구 노드 레벨 +1(개정 24)
   log?: { kind: string; detail: unknown }
+  events?: Record<string, number> // 미션·퀘스트 사건 수(M.EVENTS) — mutate·guildMutate가 미션 상태 c에 더한다(log에서 못 읽는 것만 직접)
   shards?: Record<string, number> // 영웅 → 조각 증가(길드 상점)
   guild?: GuildChange // 길드(player_guild 행·길드 누적·기록)
   attend?: { n: number; day: number } // 출석 이벤트 진행
@@ -283,7 +285,7 @@ const ENSURE_ROWS_SQL = `with p as (select $1::uuid as id),
 // 게으른 완료(개정 12 §2.4): 다 지은 건물 레벨 +1(성채·성문이면 player_state 레벨도 — 하위 호환), 일꾼 비우기,
 // economy_log build_done을 version 가드 한 문장으로. 다른 요청이 먼저 바꿨으면 0행 — 다시 읽는다.
 const COMPLETE_SQL = `with w as (select $3 = any(unbuilt) as lot, build_finish from player_state where player_id = $1 and version = $2),
-  s as (update player_state set version = version + 1, build_id = null, build_finish = null, unbuilt = array_remove(unbuilt, $3),
+  s as (update player_state set version = version + 1, build_id = null, build_finish = null, unbuilt = array_remove(unbuilt, $3), missions = $8::jsonb,
     keep_level = keep_level + (case when build_id = $5 then 1 else 0 end), gate_level = gate_level + (case when build_id = $6 then 1 else 0 end)
     where player_id = $1 and version = $2 and build_id = $3 returning player_id),
   b as (update player_buildings set level = level + (case when (select lot from w) then 0 else 1 end),
@@ -445,7 +447,8 @@ export function createApp(opts: AppOptions) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
         const from = lot ? 0 : level(p, p.build.id)
         await query(COMPLETE_SQL, [id, p.version, p.build.id, now, R.KEEP, R.GATE,
-          JSON.stringify({ building: p.build.id, from, to: from + 1, finish: p.build.finish })])
+          JSON.stringify({ building: p.build.id, from, to: from + 1, finish: p.build.finish }),
+          JSON.stringify(M.addEvents(p.missions, { build_up: 1 }, R.resetDay(now, R.cfgNum(game.config, 'daily_reset_utc_hour'))))])
         continue // 이겼든 졌든(다른 요청이 먼저 완료했으면 build_id가 비어 있다) 다시 읽는다
       }
       if (p.research_cur && p.research_cur.finish <= now) {
@@ -892,7 +895,8 @@ export function createApp(opts: AppOptions) {
       const now = clock()
       const game = await loadGame()
       let pl = await loadPlayer(id, game, now)
-      const { change, extra, reload, after } = plan(pl, game, now, pre ? await pre(id) : undefined)
+      const { change: planned, extra, reload, after } = plan(pl, game, now, pre ? await pre(id) : undefined)
+      const change = planned && withEvents(planned, pl, game, now)
       let more = {}
       if (change) {
         const r = await commit(id, pl.version, change, now)
@@ -1364,11 +1368,13 @@ export function createApp(opts: AppOptions) {
     const type = b.type
     if (type !== 'tutorial' && type !== 'repeat') throw new ApiError(400, 'bad_request', "'type' must be tutorial or repeat")
     const num = intField(b, type === 'tutorial' ? 'step' : 'n', 0, MAX_INT4)
-    return mutate(c, (p, g, now) => {
+    return mutate(c, (p, g, now, facts: { guild: boolean; pvp: boolean; starters: string[] }) => {
       const q = p.quest
       let reward: Record<string, number>
       let quest: NonNullable<Change['quest']>
       let id: string
+      const m = M.normalize(p.missions, today(g, now))
+      let missions: M.MissionState | undefined
       if (type === 'tutorial') {
         const rows = g.quests.filter((d) => d.type === 'tutorial')
         if (q.tut_state !== 'active' || !rows.length) throw new ApiError(409, 'no_tutorial', 'the tutorial is not running')
@@ -1378,20 +1384,32 @@ export function createApp(opts: AppOptions) {
         if (need && (p.unbuilt.includes(need.building) || level(p, need.building) < need.level)) {
           throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         }
+        const owned = Object.entries(p.heroes).filter(([, h]) => h.copies > 0)
+        const done = Q.tutorialDone(def.id, {
+          stage: p.stage, heroLevels: owned.map(([, h]) => h.level), heroIds: owned.map(([h]) => h), starters: facts.starters, deploy: p.deploy,
+          upgrades: p.upgrades, trainingOrSoldiers: Object.values(p.buildings).some((b) => b.train) || Object.values(p.soldiers).some((n) => n > 0),
+          dungeonBest: Object.fromEntries(Object.entries(p.dungeons).map(([k, d]) => [k, d.best_level])), equipped: p.equipment.length,
+          soldierDeployed: Object.values(p.soldier_deploy).reduce((a, n) => a + (Number(n) || 0), 0),
+          research: p.research_cur !== null || Object.keys(p.research).length > 0, guild: facts.guild, pvp: facts.pvp, admin: p.admin, c: m.c,
+        })
+        if (!done) throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         reward = R.parseReward(def.reward) ?? {}
         id = def.id
         quest = { tut_step: num + 1, ...(num + 1 >= rows.length ? { tut_state: 'done' } : {}) }
+        if (num + 1 >= rows.length) missions = { ...m, c: { ...m.c, qs: Q.snapshot(m.c, p.stage) } } // 첫 반복 퀘스트는 가이드를 끝낸 때부터 센다
       } else {
         if (q.tut_state === 'active') throw new ApiError(409, 'tutorial_running', 'finish the tutorial first')
         const rq = R.repeatQuest(g.quests, num)
         if (!rq) throw new ApiError(409, 'no_quests', 'no repeat quests')
         if (num !== q.rep_n) throw new ApiError(409, 'stale', `repeat quest is ${q.rep_n}`)
         if (q.last_claim !== null && now - q.last_claim < R.cfgNum(g.config, 'quest_repeat_min_sec')) throw new ApiError(409, 'too_soon', 'claimed too soon')
+        if (!Q.repeatDone(rq.def.id, rq.cycle, p.stage, m.c)) throw new ApiError(409, 'not_done', `repeat quest '${rq.def.id}' is not done`)
         reward = R.repeatReward(rq.def, rq.cycle)
         id = rq.def.id
         quest = { rep_n: num + 1, last_claim: now }
+        missions = { ...m, c: { ...m.c, qs: Q.snapshot(m.c, p.stage) } }
       }
-      const change: Change = { quest, log: { kind: 'quest', detail: { type, num, id, reward } } }
+      const change: Change = { quest, ...(missions ? { missions } : {}), log: { kind: 'quest', detail: { type, num, id, reward } } }
       const res = Object.fromEntries(R.BUILD_RES.filter((r) => (reward[r] ?? 0) > 0).map((r) => [r, reward[r]]))
       if (Object.keys(res).length) change.res = res
       if (reward.gold) change.goldTenths = reward.gold * 10
@@ -1403,12 +1421,42 @@ export function createApp(opts: AppOptions) {
         change.dungeon = { type: keyType, state: { ...st, keys: st.keys + reward[`keys_${keyType}`] } }
       }
       return { change, extra: { reward }, reload: Boolean(keyType) }
+    }, async (pid) => {
+      const [r] = await query(`select exists (select 1 from player_guild where player_id = $1 and guild_id is not null) as guild,
+        exists (select 1 from pvp_battles where player_id = $1) as pvp`, [pid])
+      return { guild: r?.guild === true, pvp: r?.pvp === true, starters: await starters() }
     })
   })
 
   // --- 28일 출석 이벤트(attendance.ts) ---
 
   const today = (g: Game, now: number) => R.resetDay(now, R.cfgNum(g.config, 'daily_reset_utc_hour'))
+
+  // 변경이 일으킨 사건(미션·퀘스트 진행, 통합 테스트 2026-10-07) — 기록(log)에서 읽고, 길드처럼 log가 없는 것은 change.events. 미션 상태에 더한다.
+  function eventsOf(ch: Change): Record<string, number> {
+    const ev: Record<string, number> = { ...ch.events }
+    const d = (ch.log?.detail ?? {}) as Record<string, any>
+    const add = (k: string, n: number) => { if (n > 0) ev[k] = (ev[k] ?? 0) + n }
+    switch (ch.log?.kind) {
+      case 'collect': add('collect', 1); break
+      case 'sell': add('sell', 1); break
+      case 'kills': add('kill', Object.values((d.kept ?? {}) as Record<string, number>).reduce((a, b) => a + Number(b || 0), 0)); break
+      case 'stage_clear': add('stage', 1); break
+      case 'levelup': add('hero_level', Number(d.count) || 0); break
+      case 'upgrade': add('growth', Number(d.count) || 0); break
+      case 'gacha': add('gacha', Number(d.count) || 0); break
+      case 'dungeon_clear': add('dungeon_win', 1); break
+      case 'research': if (d.action === 'start') add('research', 1); break
+      case 'train_start': add('train', 1); break
+    }
+    return ev
+  }
+  function withEvents(ch: Change, p: Player, g: Game, now: number): Change {
+    const ev = eventsOf(ch)
+    const { events: _drop, ...rest } = ch
+    if (!Object.keys(ev).length) return rest
+    return { ...rest, missions: M.addEvents(rest.missions ?? p.missions, ev, today(g, now)) }
+  }
 
   // 보상 표와 내 진행: {n(받은 날 수), days, can_claim, next_reset, rewards[1..28일차]}.
   app.get('/v1/attendance', auth, async (c) => {
@@ -1460,7 +1508,7 @@ export function createApp(opts: AppOptions) {
   function missionView(p: Player, g: Game, now: number) {
     const h = R.cfgNum(g.config, 'daily_reset_utc_hour')
     const m = M.normalize(p.missions, today(g, now))
-    return { day: m.day, week: m.week, d: m.d, w: m.w, wd: m.wd, r: m.r, next_day: R.resetAt(m.day + 1, h), next_week: R.resetAt(M.weekStart(m.week + 1), h) }
+    return { day: m.day, week: m.week, d: m.d, w: m.w, wd: m.wd, r: m.r, c: M.progressView(m), next_day: R.resetAt(m.day + 1, h), next_week: R.resetAt(M.weekStart(m.week + 1), h) }
   }
 
   // 미션 표와 내 진행: {server_now, defs, missions}.
@@ -1487,15 +1535,20 @@ export function createApp(opts: AppOptions) {
       if (d.type === 'daily') {
         if (m.d.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed today')
         if (d.kind === 'daily_count' && M.dailyCount(m) < d.target) throw new ApiError(409, 'not_done', `claim ${d.target} daily missions first`)
+        if (d.kind !== 'daily_count' && M.progress(d, m) < d.target) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
         m.d = [...m.d, d.id]
         if (d.kind === 'daily_count') m.wd += 1
       } else if (d.type === 'weekly') {
         if (m.w.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed this week')
         if (d.kind === 'daily_bonus' && m.wd < d.target) throw new ApiError(409, 'not_done', `claim the daily bonus on ${d.target} days first`)
+        if (d.kind !== 'daily_bonus' && M.progress(d, m) < d.target) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
         m.w = [...m.w, d.id]
       } else {
         const done = m.r[d.id] ?? 0
         if (n !== done) throw new ApiError(409, 'stale', `mission '${d.id}' has been claimed ${done} times`)
+        const need = M.targetOf(d, done)
+        if (M.progress(d, m) < need) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
+        m.c = { ...m.c, rb: { ...m.c.rb, [d.id]: (m.c.rb[d.id] ?? 0) + need } }
         m.r = { ...m.r, [d.id]: done + 1 }
         m.rt = now
       }
@@ -2491,7 +2544,8 @@ export function createApp(opts: AppOptions) {
       const game = await loadGame()
       let pl = await loadPlayer(id, game, now)
       let x = await guildCtx(id, pl, game, now)
-      const { change, result } = await plan(x)
+      const { change: planned, result } = await plan(x)
+      const change = planned && withEvents(planned, pl, game, now)
       if (change) {
         if (!(await commit(id, pl.version, change, now))) continue
         pl = await loadPlayer(id, game, now)
@@ -2586,7 +2640,7 @@ export function createApp(opts: AppOptions) {
     return {
       change: {
         guild: {
-          row: rowOf(x, { guild_id: null, joined_at: null, mine: { ...x.mine, contrib: 0, boxes: [] } }),
+          row: rowOf(x, { guild_id: null, joined_at: null, mine: { ...x.mine, contrib: 0 } }), // 출석·받은 상자는 그날 그대로(나갔다 들어와 다시 받지 않게)
           log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 길드를 떠났습니다` }, leave: { guild_id: g.id, owner: g.owner === x.id },
         },
       },
@@ -2603,6 +2657,7 @@ export function createApp(opts: AppOptions) {
       row: rowOf(x, { coins: coins.n, mine: { ...x.mine, attended: true, contrib: x.mine.contrib + G.ATTEND_EXP } }),
       add: { guild_id: g.id, exp: G.ATTEND_EXP, dmg: 0 }, log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 출석했습니다` },
     }
+    ch.events = { guild_attend: 1 }
     return { change: ch }
   }))
 
@@ -2672,6 +2727,7 @@ export function createApp(opts: AppOptions) {
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
         log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 드래곤 Lv ${reached}까지 · ${dmg.toLocaleString('en-US')}점` } }
+      ch.events = { guild_boss: 1 }
       return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
     })
   })
@@ -2839,6 +2895,13 @@ export function createApp(opts: AppOptions) {
 
     // 통합 테스트용(개정 12): 진행 중 건설의 끝나는 시각을 지금으로 — 이어지는 플레이어 읽기(이 응답 포함)가 게으른 완료를 한다.
     // 통합 체크용: 설정 값 하나를 바꾼다(dev/online-check.sh가 새 플레이어 튜토리얼을 끄고 옛 훈련 묶음 상한을 쓴다)
+    // 미션·퀘스트 사건 수를 더한다(테스트·통합 체크): {events: {사건: 수}}
+    app.post('/v1/test/events', auth, async (c) => {
+      const ev = (await body(c)).events
+      if (!ev || typeof ev !== 'object' || Array.isArray(ev)) throw new ApiError(400, 'bad_request', "'events' must be an object")
+      const events = Object.fromEntries(Object.entries(ev as Record<string, unknown>).filter(([, n]) => isInt(n, 1, 1_000_000_000)) as [string, number][])
+      return mutate(c, () => ({ change: { events } }))
+    })
     app.post('/v1/test/config', async (c) => {
       const b = await body(c)
       const key = strField(b, 'key')

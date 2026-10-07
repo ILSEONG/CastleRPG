@@ -162,6 +162,23 @@ export function mergeCastle(c: Castle, r: { gates?: unknown; keep?: unknown; def
   return out
 }
 
+// 성문·성채에 들어간 피해 합(최대 체력 − 지금)
+export function structureDamage(mx: { gates: number[]; keep: number }, c: Castle): number {
+  return mx.gates.reduce((s, g, i) => s + Math.max(0, g - c.gates[i]), 0) + Math.max(0, mx.keep - c.keep)
+}
+
+// 전투 결과 확인(통합 테스트 2026-10-07): 공성이 열린 뒤 sec초 동안 로스터 전부가 낼 수 있는 성 피해 상한 = 초당 공격력 합 × sec × DMG_SLACK
+// (스킬·치명타·버프 몫으로 넉넉히). 앱이 보낸 성 상태가 이보다 많이 깎였으면 받지 않는다.
+export const DMG_SLACK = 10
+export function damageCap(roster: { heroes?: SquadHero[] }[], defs: HeroDef[], sec: number): number {
+  let dps = 0
+  for (const s of roster) for (const h of s.heroes ?? []) {
+    const d = defs.find((x) => x.id === h.hero)
+    if (d) dps += Number(h.atk) / Math.max(0.1, Number(d.atk_interval))
+  }
+  return Math.max(0, sec) * dps * DMG_SLACK
+}
+
 // 상대(가상)가 그 주 한 번의 공성으로 우리 성을 친 점수. ratio = 상대 힘 ÷ 우리 수비 힘.
 export function enemyPoints(seed: number, week: number, ratio: number, cap: number): number {
   const r = mulberry32(mix(seed, week >>> 0, 900))

@@ -60,7 +60,25 @@ export interface MissionState {
   wd: number
   r: Record<string, number>
   rt: number | null
+  c: Counters
 }
+
+// 서버가 센 사건 수(통합 테스트 2026-10-07: 보상 받기가 앱의 진행 주장을 믿지 않게). 미션 상태 jsonb의 c에 둔다(마이그레이션 없음).
+// d·w: 오늘·이번 주 사건 수(cd·cw가 그 날·주), t: 이 기능이 생긴 뒤 누적, rb: 반복 미션 id → 지금까지 받으며 쓴 누적 사건 수,
+// qs: 마지막 반복 퀘스트(가이드 카드)를 받을 때의 t와 stage(null = 아직 안 받음 — 이 기능이 생긴 뒤 누적을 진행으로 본다).
+export interface Counters {
+  cd: number
+  d: Record<string, number>
+  cw: number
+  w: Record<string, number>
+  t: Record<string, number>
+  rb: Record<string, number>
+  qs: Record<string, number> | null
+}
+
+// 서버가 세는 사건(앱 missions.gd·tutorial.gd가 세는 것과 같은 이름)
+export const EVENTS = ['kill', 'collect', 'sell', 'stage', 'hero_level', 'growth', 'gacha', 'dungeon_win', 'guild_attend', 'guild_boss', 'build_up',
+  'research', 'train'] as const
 
 // 주 번호: 월요일에 시작한다(리셋 날짜 0 = 1970-01-02 금요일 KST).
 export const weekOf = (day: number) => Math.floor((day + 4) / 7)
@@ -71,6 +89,14 @@ export const def = (id: string) => DEFS.find((d) => d.id === id)
 
 // 반복 미션 목표(받은 횟수 n번째)
 export const targetOf = (d: MissionDef, n: number) => d.target + (d.step ?? 0) * n
+
+const nums = (v: unknown): Record<string, number> => {
+  const out: Record<string, number> = {}
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) if (Number.isInteger(x) && (x as number) > 0) out[k] = x as number
+  }
+  return out
+}
 
 const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
 
@@ -91,7 +117,48 @@ export function normalize(raw: unknown, day: number): MissionState {
     wd: sameWeek && Number.isInteger(m.wd) ? (m.wd as number) : 0,
     r,
     rt: typeof m.rt === 'number' ? m.rt : null,
+    c: counters(m.c, day),
   }
+}
+
+// 저장된 사건 수 → 오늘 기준(날·주가 바뀌었으면 그 수를 비운다)
+function counters(raw: unknown, day: number): Counters {
+  const c = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
+  const week = weekOf(day)
+  return {
+    cd: day,
+    d: Number(c.cd) === day ? nums(c.d) : {},
+    cw: week,
+    w: Number(c.cw) === week ? nums(c.w) : {},
+    t: nums(c.t),
+    rb: nums(c.rb),
+    qs: c.qs && typeof c.qs === 'object' && !Array.isArray(c.qs) ? nums(c.qs) : null,
+  }
+}
+
+// 사건을 더한 미션 상태(받은 기록은 그대로)
+export function addEvents(raw: unknown, events: Record<string, number>, day: number): MissionState {
+  const m = normalize(raw, day)
+  const add = (o: Record<string, number>) => {
+    const out = { ...o }
+    for (const [k, n] of Object.entries(events)) if (n > 0) out[k] = (out[k] ?? 0) + n
+    return out
+  }
+  return { ...m, c: { ...m.c, d: add(m.c.d), w: add(m.c.w), t: add(m.c.t) } }
+}
+
+// 미션 진행(서버가 센 수): 일일 = 오늘, 주간 = 이번 주, 반복 = 마지막으로 받은 뒤
+export function progress(d: MissionDef, m: MissionState): number {
+  if (d.type === 'daily') return m.c.d[d.kind] ?? 0
+  if (d.type === 'weekly') return m.c.w[d.kind] ?? 0
+  return Math.max(0, (m.c.t[d.kind] ?? 0) - (m.c.rb[d.id] ?? 0))
+}
+
+// 앱에 보내는 진행 {d: 사건 → 오늘, w: 사건 → 이번 주, r: 반복 미션 id → 받은 뒤}
+export function progressView(m: MissionState) {
+  const r: Record<string, number> = {}
+  for (const d of DEFS) if (d.type === 'repeat') r[d.id] = progress(d, m)
+  return { d: m.c.d, w: m.c.w, r }
 }
 
 // 오늘 받은 일일 미션 수(보너스 제외)

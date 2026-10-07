@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { MIGRATIONS_DIR, migrate, openDb } from '../src/db.ts'
+import * as M from '../src/missions.ts'
 import * as R from '../src/rules.ts'
 import { readTables, seed } from '../src/seed.ts'
 import { setup, T0 } from './helpers.ts'
@@ -21,6 +22,9 @@ after(async () => {
 
 const player = async (token: string) => (await S.req('GET', '/v1/player', { token })).json.player
 const claim = (token: string, body: unknown) => S.req('POST', '/v1/quest/claim', { token, body })
+// 서버가 세는 사건 수를 채운다(진행 확인 — 통합 테스트 2026-10-07)
+const pump = (token: string, n = 1_000_000) => S.req('POST', '/v1/test/events', { token, body: { events: Object.fromEntries(M.EVENTS.map((k) => [k, n])) } })
+const setStage = (token: string, stage: number) => S.req('POST', '/v1/test/stage', { token, body: { stage } })
 const setRes = (id: string, r: Record<string, number>) => Promise.all(Object.entries(r).map(([res, n]) =>
   S.db.query('update player_resources set amount = $3 where player_id = $1 and res = $2', [id, res, n])))
 const tutorialRows = async () => (await readTables()).quests.filter((r) => r.type === 'tutorial')
@@ -106,14 +110,21 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   const k = rows.findIndex((x) => x.reward === 'keys_gold:2')
   await S.db.query('update player_state set tut_step = $2, unbuilt = $3 where player_id = $1', [id, k, []])
   const keys = (await player(token)).dungeons.gold.keys
+  assert.equal((await claim(token, { type: 'tutorial', step: k })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
+  await pump(token, 100)
   r = await claim(token, { type: 'tutorial', step: k })
   assert.equal(r.json.player.dungeons.gold.keys, keys + 2)
   // 모집권 보상
-  const t = rows.findIndex((x, i) => i > k && x.reward === 'tickets:10' && !x.needs)
+  const t = rows.findIndex((x) => x.id === 'kill_300')
+  assert.equal(rows[t].reward, 'tickets:10')
+  await pump(token, 200)
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
   assert.equal((await claim(token, { type: 'tutorial', step: t })).json.player.dia_tickets, 10)
   // 마지막
   await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, rows.length - 1])
+  assert.equal(rows[rows.length - 1].id, 'stage_1_15')
+  assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 1 })).json.error, 'not_done') // 1-15를 아직 안 깼다
+  await setStage(token, 16)
   r = await claim(token, { type: 'tutorial', step: rows.length - 1 })
   assert.equal(r.status, 200)
   assert.equal(r.json.player.quest.tut_state, 'done')
@@ -128,6 +139,8 @@ test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_
   assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'tutorial_running')
   await S.db.query("update player_state set tut_state = 'skipped' where player_id = $1", [id])
   const gold0 = (await player(token)).gold
+  assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
+  await pump(token)
   let r = await claim(token, { type: 'repeat', n: 0 })
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.reward, { gold: 3000 })
@@ -136,16 +149,22 @@ test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_
   assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'stale')
   assert.equal((await claim(token, { type: 'repeat', n: 1 })).json.error, 'too_soon')
   S.clock.t = T0 + 30
+  assert.equal((await claim(token, { type: 'repeat', n: 1 })).json.error, 'not_done') // 받은 뒤부터 다시 센다
+  await pump(token)
   assert.deepEqual((await claim(token, { type: 'repeat', n: 1 })).json.reward, { gold: 2000 })
   S.clock.t = T0 + 60
+  assert.equal((await claim(token, { type: 'repeat', n: 2 })).json.error, 'not_done') // 받을 때 라운드 + 2
+  await setStage(token, 3)
   r = await claim(token, { type: 'repeat', n: 2 })
   assert.deepEqual([r.json.reward, r.json.player.diamonds], [{ diamonds: 20 }, 20])
   // 두 번째 바퀴: reward × 2, fixed 그대로
   await S.db.query('update player_state set rep_n = 9 where player_id = $1', [id])
   S.clock.t = T0 + 90
+  await pump(token)
   assert.deepEqual((await claim(token, { type: 'repeat', n: 9 })).json.reward, { gold: 6000 })
   await S.db.query('update player_state set rep_n = 15 where player_id = $1', [id])
   S.clock.t = T0 + 120
+  await pump(token)
   assert.deepEqual((await claim(token, { type: 'repeat', n: 15 })).json.reward, { tickets: 1 })
   assert.equal((await claim(token, { type: 'nope', n: 0 })).status, 400)
 })

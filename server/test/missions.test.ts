@@ -15,7 +15,13 @@ after(async () => {
   await S.close()
 })
 
-const claim = (token: string, body: unknown) => S.req('POST', '/v1/mission/claim', { token, body })
+// 서버가 센 사건 수(진행)를 넉넉히 채우고 받는다 — 진행 확인은 '진행이 모자라면 409 not_done' 테스트가 본다
+const pump = (token: string) => S.req('POST', '/v1/test/events', { token, body: { events: Object.fromEntries(M.EVENTS.map((k) => [k, 1_000_000])) } })
+const claimRaw = (token: string, body: unknown) => S.req('POST', '/v1/mission/claim', { token, body })
+const claim = async (token: string, body: unknown) => {
+  await pump(token)
+  return claimRaw(token, body)
+}
 const H = 15 // daily_reset_utc_hour
 // T0가 속한 주의 월요일 리셋 + 1시간(그 주 안에서 날짜를 옮겨 다닌다)
 const monday = R.resetAt(M.weekStart(M.weekOf(R.resetDay(T0, H))), H) + 3600
@@ -108,6 +114,19 @@ test('반복 미션: n = 받은 횟수(409 stale), 다른 반복 미션도 곧�
   const p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.deepEqual(p.missions.r, { r_kill: 2, r_stage: 1 })
   assert.equal(M.targetOf(M.def('r_kill')!, 2), 2000)
+})
+
+test('진행이 모자라면 409 not_done: 서버가 센 사건 수(처치는 /v1/kills가 남긴 수)로 판정, 반복 미션은 받은 만큼 쓴다', async () => {
+  S.clock.t = monday
+  const { token } = await S.login()
+  for (const id of ['d_kill', 'd_dungeon', 'd_guild', 'w_boss', 'w_kill']) assert.equal((await claimRaw(token, { id })).json.error, 'not_done', id)
+  assert.equal((await claimRaw(token, { id: 'r_dungeon', n: 0 })).json.error, 'not_done')
+  await S.req('POST', '/v1/test/events', { token, body: { events: { dungeon_win: 7 } } })
+  const p = (await claimRaw(token, { id: 'r_dungeon', n: 0 })).json.player // 목표 5 → 남은 2
+  assert.equal(p.missions.c.r.r_dungeon, 2)
+  assert.equal((await claimRaw(token, { id: 'r_dungeon', n: 1 })).json.error, 'not_done') // 다음 목표 8
+  assert.equal((await claimRaw(token, { id: 'd_dungeon' })).status, 200) // 오늘 7번 ≥ 2
+  assert.equal(p.missions.c.d.dungeon_win, 7)
 })
 
 test('모르는 미션 404, 로그인 없이 401', async () => {

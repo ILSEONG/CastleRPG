@@ -244,6 +244,12 @@ test('war: super admin opens the siege any time, and a finished week opens again
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.ok(r.json.plan.attackers.some((s: any) => s.ai)) // 실제 사람이 없는 자리는 AI 분대
   const id1 = r.json.plan.battle_id
+  // 열리자마자 성채를 0으로 보내면 받지 않는다(그 시간에 낼 수 있는 피해보다 많다)
+  S.clock.t += 1
+  const early = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: id1, state: { keep: 0 } } })
+  assert.notEqual(early.json.war.battle.state, 'done')
+  assert.equal(early.json.war.castle.keep.hp, early.json.war.castle.keep.max)
+  S.clock.t += 400
   const fin = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: id1, state: { keep: 0 } } })
   assert.equal(fin.json.war.battle.state, 'done')
   assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: mate.token, body: { heroes: squad() } })).json.error, 'conquered')

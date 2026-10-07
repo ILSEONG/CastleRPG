@@ -61,6 +61,7 @@ test('출석 3일차 자원 주머니(30분) → 목재·석재·식량 건물 3
 test('미션 보상의 주머니: 일일 처치 미션 → 골드 주머니(10분)', async () => {
   S.clock.t = T0
   const { token } = await S.login()
+  await S.req('POST', '/v1/test/events', { token, body: { events: { kill: 300 } } })
   const r = await S.req('POST', '/v1/mission/claim', { token, body: { id: 'd_kill' } })
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.player.pouches, { gold_10: 1 })
