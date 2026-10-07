@@ -30,7 +30,7 @@ test('동시 수집 2건은 한 번만 수집된다', async () => {
   try {
     S.clock.t = T0
     const { token, id } = await S.login()
-    S.clock.t = T0 + 600 // 10분 → 100
+    S.clock.t = T0 + 600 // 10분 → 1000
     b.arm()
     const [r1, r2] = await Promise.all([
       S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }),
@@ -38,9 +38,9 @@ test('동시 수집 2건은 한 번만 수집된다', async () => {
     ])
     assert.equal(b.arrived(), 2, 'both requests read before either wrote')
     assert.deepEqual([r1.status, r2.status], [200, 200])
-    assert.deepEqual([r1.json.amount, r2.json.amount].sort((x, y) => x - y), [0, 100])
+    assert.deepEqual([r1.json.amount, r2.json.amount].sort((x, y) => x - y), [0, 1000])
     const p = await S.req('GET', '/v1/player', { token })
-    assert.equal(p.json.player.res.wood, 100)
+    assert.equal(p.json.player.res.wood, 1000)
     assert.equal(p.json.player.buildings.lumber.last_collect, T0 + 600)
     const n = await S.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'collect'", [id])
     assert.equal(n[0].n, 1)

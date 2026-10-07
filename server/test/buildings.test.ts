@@ -52,17 +52,17 @@ async function setLevels(id: string, levels: Record<string, number>) {
 }
 const RICH = { wood: 1_000_000, stone: 1_000_000, food: 1_000_000 }
 
-test('비용·시간 공식: L → L+1 비용 = round(값 × 1.35^(L−1)), 시간 = round(base_sec × 1.5^(L−1)) — 스펙 예시(성채 10 → 11 ≈ 4,470 · 38분, 20레벨 ≈ 2,217배)', async () => {
+test('비용·시간 공식: L → L+1 비용 = round(값 × 1.35^(L−1)), 시간 = round(base_sec × 1.5^(L−1)) — 스펙 예시(성채 10 → 11 ≈ 44,680 · 38분, 20레벨 ≈ 2,217배)', async () => {
   const keep = await def('keep')
   const lumber = await def('lumber')
   const gate = await def('gate')
-  assert.deepEqual([R.buildCost(lumber, 1), R.buildSec(lumber, 1)], [{ wood: 60, stone: 80, food: 40 }, 20]) // 스펙 예: 벌목장 1 → 2
-  assert.deepEqual([R.buildCost(keep, 2), R.buildSec(keep, 2)], [{ wood: 405, stone: 405, food: 270 }, 90])
-  assert.deepEqual([R.buildCost(keep, 10), R.buildSec(keep, 10)], [{ wood: 4468, stone: 4468, food: 2979 }, 2307]) // 약 4,470 · 2,980 · 38분
-  assert.deepEqual([R.buildCost(gate, 2), R.buildSec(gate, 2)], [{ wood: 203, stone: 338, food: 0 }, 68]) // 337.5·67.5는 0에서 먼 쪽으로
+  assert.deepEqual([R.buildCost(lumber, 1), R.buildSec(lumber, 1)], [{ wood: 600, stone: 800, food: 400 }, 20]) // 스펙 예: 벌목장 1 → 2
+  assert.deepEqual([R.buildCost(keep, 2), R.buildSec(keep, 2)], [{ wood: 4050, stone: 4050, food: 2700 }, 90])
+  assert.deepEqual([R.buildCost(keep, 10), R.buildSec(keep, 10)], [{ wood: 44681, stone: 44681, food: 29787 }, 2307]) // 약 44,680 · 29,790 · 38분
+  assert.deepEqual([R.buildCost(gate, 2), R.buildSec(gate, 2)], [{ wood: 2025, stone: 3375, food: 0 }, 68]) // 67.5는 0에서 먼 쪽으로
   assert.equal(R.buildSec(lumber, 20), 44337) // 20 × 1.5^19 ≈ 2,217배 ≈ 12시간
-  assert.deepEqual(R.buildCost(keep, 29), { wood: 1338033, stone: 1338033, food: 892022 })
-  assert.equal(R.grown(300, 1.35, 9), 300 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35)
+  assert.deepEqual(R.buildCost(keep, 29), { wood: 13380328, stone: 13380328, food: 8920219 })
+  assert.equal(R.grown(3000, 1.35, 9), 3000 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35 * 1.35)
 })
 
 test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 마지막 단계 값 — 슬롯 4/8/12, 민가 인구, 주점 확률', () => {
@@ -92,8 +92,8 @@ test('검사 순서(rules.upgradeBlock): 존재 → 최대 레벨 → 성채 상
   assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 3 }), true, none), 'builder_busy')
   assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 3 }), false, none), 'not_enough')
   assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 3 }), false, R.buildCost(d.find((x) => x.id === 'tavern') as R.BuildingDef, 3)), '')
-  assert.equal(R.upgradeBlock('keep', d, lv({}), false, { wood: 300, stone: 300, food: 199 }), 'not_enough')
-  assert.equal(R.upgradeBlock('keep', d, lv({}), false, { wood: 300, stone: 300, food: 200 }), '') // 성채 1 → 2: 성문·막사 ≥ 1
+  assert.equal(R.upgradeBlock('keep', d, lv({}), false, { wood: 3000, stone: 3000, food: 1999 }), 'not_enough')
+  assert.equal(R.upgradeBlock('keep', d, lv({}), false, { wood: 3000, stone: 3000, food: 2000 }), '') // 성채 1 → 2: 성문·막사 ≥ 1
 })
 
 test('새 플레이어: 모든 건물 레벨 1·일꾼 없음. 업그레이드 → 자원 차감·일꾼(서버 시각 + 시간)·로그, 중복은 409 builder_busy, 응답 build', async () => {
@@ -107,16 +107,16 @@ test('새 플레이어: 모든 건물 레벨 1·일꾼 없음. 업그레이드 �
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough'])
   r = await upgrade(token, 'lumber')
   assert.deepEqual([r.status, r.json.error], [409, 'keep_cap'])
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   S.clock.t = T0 + 5
   r = await upgrade(token, 'keep')
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.build, { id: 'keep', finish: T0 + 65 })
-  assert.deepEqual([r.json.player.build, r.json.player.res, r.json.player.buildings.keep], [{ id: 'keep', finish: T0 + 65 }, { wood: 700, stone: 700, food: 800 }, { level: 1 }])
+  assert.deepEqual([r.json.player.build, r.json.player.res, r.json.player.buildings.keep], [{ id: 'keep', finish: T0 + 65 }, { wood: 7000, stone: 7000, food: 8000 }, { level: 1 }])
   const busy = await upgrade(token, 'keep')
   assert.deepEqual([busy.status, busy.json.error], [409, 'builder_busy'])
   assert.equal((await upgrade(token, 'gate')).json.error, 'keep_cap') // 상한이 일꾼보다 먼저(검사 순서)
-  assert.deepEqual((await logs(id, 'build_start')).map((l) => l.detail), [{ building: 'keep', from: 1, to: 2, cost: { wood: 300, stone: 300, food: 200 }, finish: T0 + 65, collect: null }])
+  assert.deepEqual((await logs(id, 'build_start')).map((l) => l.detail), [{ building: 'keep', from: 1, to: 2, cost: { wood: 3000, stone: 3000, food: 2000 }, finish: T0 + 65, collect: null }])
   for (const bad of ['mine', '__proto__', 'constructor', 'wood']) {
     r = await upgrade(token, bad)
     assert.deepEqual([r.status, r.json.error], [400, 'unknown_building'], bad)
@@ -124,7 +124,7 @@ test('새 플레이어: 모든 건물 레벨 1·일꾼 없음. 업그레이드 �
   for (const body of [{}, { building: '' }, { building: 5 }]) assert.equal((await S.req('POST', '/v1/building/upgrade', { token, body })).status, 400)
   assert.equal((await S.req('POST', '/v1/building/upgrade', { body: { building: 'keep' } })).status, 401)
   p = await player(token)
-  assert.deepEqual([p.res, p.build], [{ wood: 700, stone: 700, food: 800 }, { id: 'keep', finish: T0 + 65 }]) // 거부는 아무것도 안 바꿨다
+  assert.deepEqual([p.res, p.build], [{ wood: 7000, stone: 7000, food: 8000 }, { id: 'keep', finish: T0 + 65 }]) // 거부는 아무것도 안 바꿨다
 })
 
 test('게으른 완료(시계 주입): 끝나는 시각 전에는 그대로, 지나면 다음 요청(어느 것이든)이 레벨 +1·일꾼 비움·build_done 로그 한 번, 성채면 keep_level도', async () => {
@@ -155,18 +155,18 @@ test('자원 건물 업그레이드: 먼저 자동 수집(남은 초 유지)하�
   S.clock.t = T0
   const { token, id } = await S.login()
   await setLevels(id, { keep: 2 })
-  await setRes(id, { wood: 40, stone: 80, food: 40 }) // 목재 20 모자람 — 2분 30초 쌓인 20으로 채운다
+  await setRes(id, { wood: 400, stone: 800, food: 400 }) // 목재 200 모자람 — 2분 30초 쌓인 200으로 채운다
   S.clock.t = T0 + 150
   const r = await upgrade(token, 'lumber')
   assert.equal(r.status, 200)
   assert.deepEqual([r.json.player.res, r.json.player.buildings.lumber], [{ wood: 0, stone: 0, food: 0 }, { level: 1, last_collect: T0 + 120 }])
   const [l] = await logs(id, 'build_start')
-  assert.deepEqual(l.detail.collect, { res: 'wood', amount: 20, from: T0, to: T0 + 120 })
+  assert.deepEqual(l.detail.collect, { res: 'wood', amount: 200, from: T0, to: T0 + 120 })
   S.clock.t = T0 + 150 + 20 // 완료(20초)
   const p = await player(token)
   assert.deepEqual([p.buildings.lumber.level, p.build], [2, null])
-  S.clock.t = T0 + 120 + 600 // 지난 수집에서 10분: 새 레벨 2 → 200
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 200)
+  S.clock.t = T0 + 120 + 600 // 지난 수집에서 10분: 새 레벨 2 → 2000
+  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 2000)
   // 자동 수집으로도 모자라면 409이고 수집도 안 된다
   await setLevels(id, { keep: 3 })
   await setRes(id, { wood: 0, stone: 0, food: 0 })
@@ -255,7 +255,7 @@ test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.
   await setLevels(id, { houses: 4 })
   assert.equal((await player(token)).population, 12) // 6 + 2 × 3
   await S.req('POST', '/v1/test/age', { token, body: { minutes: 1000 } })
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 720 * 10) // 민가 4여도 720분
+  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 720 * 100) // 민가 4여도 720분
   // 민가 업그레이드(실제 경로) → 완료 → 인구 +2
   await setRes(id, RICH)
   await setLevels(id, { keep: 5 })
@@ -330,13 +330,13 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
   const bld = readFileSync(join(DATA_DIR, 'buildings.csv'), 'utf8')
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const cases: [string, string, RegExp][] = [
-    ['buildings.csv', bld.replace('tavern,주점,30,180,100,150,40,barracks,', 'tavern,주점,30,180,100,150,40,mine,'), /buildings\.csv line 5 column 'req1': unknown building 'mine'/],
-    ['buildings.csv', bld.replace('lab,연구소,30,150,200,80,', 'lab,연구소,30,-150,200,80,'), /buildings\.csv line 6 column 'wood': must be 0 or more: -150/],
-    ['buildings.csv', bld.replace('lab,연구소,30,150,200,80,', 'lab,연구소,30,150.5,200,80,'), /column 'wood': not an integer: '150\.5'/],
-    ['buildings.csv', bld.replace('houses,민가,30,160,80,120,30', 'houses,민가,30,160,80,120,0'), /line 7 column 'base_sec': must be greater than 0: 0/],
+    ['buildings.csv', bld.replace('tavern,주점,30,1800,1000,1500,40,barracks,', 'tavern,주점,30,1800,1000,1500,40,mine,'), /buildings\.csv line 5 column 'req1': unknown building 'mine'/],
+    ['buildings.csv', bld.replace('lab,연구소,30,1500,2000,800,', 'lab,연구소,30,-1500,2000,800,'), /buildings\.csv line 6 column 'wood': must be 0 or more: -1500/],
+    ['buildings.csv', bld.replace('lab,연구소,30,1500,2000,800,', 'lab,연구소,30,1500.5,2000,800,'), /column 'wood': not an integer: '1500\.5'/],
+    ['buildings.csv', bld.replace('houses,민가,30,1600,800,1200,30', 'houses,민가,30,1600,800,1200,0'), /line 7 column 'base_sec': must be greater than 0: 0/],
     ['buildings.csv', bld.replace('farm,농장,30,', 'farm,농장,0,'), /line 10 column 'max_level': must be at least 1: 0/],
-    ['buildings.csv', bld.replace(/^gate,.*\n/m, '').replace('keep,성채,30,300,300,200,60,gate,barracks', 'keep,성채,30,300,300,200,60,,barracks'), /missing required building 'gate'/],
-    ['buildings.csv', bld.replace(/^quarry,.*\n/m, '').replace('gate,성문,30,150,250,0,45,quarry,', 'gate,성문,30,150,250,0,45,,'), /resources\.csv line 3 column 'building': building 'quarry' is not in buildings\.csv/],
+    ['buildings.csv', bld.replace(/^gate,.*\n/m, '').replace('keep,성채,30,3000,3000,2000,60,gate,barracks', 'keep,성채,30,3000,3000,2000,60,,barracks'), /missing required building 'gate'/],
+    ['buildings.csv', bld.replace(/^quarry,.*\n/m, '').replace('gate,성문,30,1500,2500,0,45,quarry,', 'gate,성문,30,1500,2500,0,45,,'), /resources\.csv line 3 column 'building': building 'quarry' is not in buildings\.csv/],
     ['config.csv', cfg.replace('keep_slot_tiers,1:4|9:8|22:12', 'keep_slot_tiers,4|8|12'), /config\.csv line 5 column 'value': not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,2:20'), /not a tier table/],

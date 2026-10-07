@@ -27,7 +27,7 @@ export const REWARDS: AttendReward[] = [
   // 1주차
   { gold: 10000, pouch_gold_30: 1 },
   { tickets: 5 },
-  { ...RES(500), pouch_res_30: 1 },
+  { ...RES(5000), pouch_res_30: 1 },
   { diamonds: 100 },
   { keys_equip: 2 },
   { gold: 30000, pouch_gold_60: 1 },
@@ -37,7 +37,7 @@ export const REWARDS: AttendReward[] = [
   { tickets: 5 },
   { keys_gold: 3 },
   { diamonds: 150 },
-  { ...RES(1000), pouch_res_60: 1 },
+  { ...RES(10000), pouch_res_60: 1 },
   { keys_ticket: 2 },
   { hero: 'luna', tickets: 10 },
   // 3주차
@@ -45,7 +45,7 @@ export const REWARDS: AttendReward[] = [
   { tickets: 5 },
   { keys_equip: 2 },
   { diamonds: 200 },
-  { ...RES(1500), pouch_res_120: 1 },
+  { ...RES(15000), pouch_res_120: 1 },
   { gold: 50000, pouch_gold_240: 1 },
   { equip: { grade: 'SSR' } },
   // 4주차

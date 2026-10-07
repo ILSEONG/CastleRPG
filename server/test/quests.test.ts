@@ -41,13 +41,13 @@ test('공터: 수집·훈련·연구는 409, 짓기는 선행·성채 상한 없
   assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.error, 'unbuilt')
   assert.equal((await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 1 } })).json.error, 'unbuilt')
   assert.equal((await S.req('POST', '/v1/research/start', { token, body: { id: 'wood_tech' } })).json.error, 'lab_unbuilt')
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   const g = (await S.req('GET', '/v1/gamedata')).json
   const def = g.buildings.find((b: any) => b.id === 'stable') // 선행(막사·궁병)이 있어도 공터는 그냥 짓는다
   const r = await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'stable' } })
   assert.equal(r.status, 200)
   const cost = R.buildCost(def, 1)
-  assert.deepEqual(r.json.player.res, { wood: 1000 - cost.wood, stone: 1000 - cost.stone, food: 1000 - cost.food })
+  assert.deepEqual(r.json.player.res, { wood: 10000 - cost.wood, stone: 10000 - cost.stone, food: 10000 - cost.food })
   assert.equal(r.json.build.finish, T0 + 5) // 공터 첫 건설 = lot_build_sec(5)초
   assert.equal((await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'lumber' } })).json.error, 'builder_busy')
   const done = (await S.req('POST', '/v1/test/build_now', { token })).json.player
@@ -66,7 +66,7 @@ test('튜토리얼 훈련: 1마리씩(2마리는 400), 1마리 tutorial_train_se
   S.clock.t = T0
   const { token, id } = await S.login()
   await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'barracks') where player_id = $1", [id])
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   assert.equal((await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 2 } })).status, 400)
   const r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 1 } })
   assert.equal(r.status, 200)
@@ -78,7 +78,7 @@ test('튜토리얼 훈련 미션을 넘기면(튜토리얼은 진행 중) 원래
   const { token, id } = await S.login()
   const k = (await tutorialRows()).findIndex((x) => x.id === 'train')
   await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'barracks'), tut_step = $2 where player_id = $1", [id, k + 1])
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   const r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 1 } })
   assert.equal(r.status, 200)
   assert.equal((await player(token)).quest.tut_state, 'active')
