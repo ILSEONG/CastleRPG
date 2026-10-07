@@ -208,8 +208,9 @@ func _build_world() -> void:
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
-	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 중하단 x1.5 배속 켬/끔(기기 저장, 성 화면에서만)
+	var speed = preload("res://scripts/speed_button.gd").new()  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 성 화면에서만)
 	speed.card = card
+	speed.menu = side_menu
 	add_child(speed)
 	var hot = preload("res://scripts/hot_deal.gd").new()  # 핫딜: 보스 격파·다이아 부족·패배 때 1시간 특가 창 + 왼쪽 [핫딜] 버튼(배속 버튼 위)
 	hot.speed = speed

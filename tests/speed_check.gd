@@ -55,7 +55,7 @@ func _run() -> void:
 	var vh := get_viewport().get_visible_rect().size.y
 	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "off by default, game at 1x", str(Engine.time_scale))
 	var r := b.get_global_rect()
-	_check(r.position.x <= 20.0 and r.get_center().y > vh * 0.5 and r.end.y < vh - 104.0, "left, lower-middle, above the tab bar", str(r))
+	_check(r.position.x <= 20.0 and r.get_center().y > vh * 0.5 and r.end.y < vh - 104.0, "left, lower half, above the tab bar", str(r))
 	var menu = _find("res://scripts/side_menu.gd")
 	_check(menu == null or not r.intersects(menu.toggle.get_global_rect()), "does not overlap the bottom-right menu", "")
 	var card = _find("res://scripts/tutorial_card.gd")
@@ -64,6 +64,30 @@ func _run() -> void:
 	print("card visible=", card.panel.visible if card != null else null, " ", Tutorial.active(), " ", Tutorial.mission().get("title", ""))
 	_check(card != null and card.panel.visible and r.end.y <= card.panel.global_position.y, "sits above the tutorial card",
 		"%s vs %s" % [r, card.panel.get_global_rect() if card != null else null])
+	var tr: Rect2 = menu.toggle.get_global_rect()
+	_check(absf(r.end.y - tr.end.y) < 1.0, "same height as the bottom-right [메뉴] button (with the card)", "%s vs %s" % [r, tr])
+	var chat = _find("res://scripts/chat_bar.gd")
+	if chat != null:
+		var cr: Rect2 = chat.button.get_global_rect()
+		_check(absf(cr.end.y - tr.end.y) < 1.0 and cr.end.x <= tr.position.x, "chat line on the same line, left of [메뉴]", "%s vs %s" % [cr, tr])
+	var hot = _find("res://scripts/hot_deal.gd")
+	if hot != null and hot.hud_button != null:
+		_check(not hot.hud_button.get_global_rect().intersects(r), "hot-deal button stays above, no overlap", str(hot.hud_button.get_global_rect()))
+	Tutorial.state = "done"
+	await _frames(5)
+	r = b.get_global_rect()
+	tr = menu.toggle.get_global_rect()
+	_check(absf(r.end.y - tr.end.y) < 1.0, "same height as [메뉴] (no card)", "%s vs %s" % [r, tr])
+	var shot := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--out="):
+			shot = a.substr(6)
+	if shot != "":
+		await _frames(8)
+		get_viewport().get_texture().get_image().save_png(shot.get_basename() + "_nocard.png")
+	Tutorial.state = "active"
+	await _frames(5)
+	r = b.get_global_rect()
 	var out := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):

@@ -3,7 +3,8 @@ extends CanvasLayer
 ## 켬/끔은 기기에만 남긴다(Prefs "speed_x15", 기본 끔 — 서버·DB에 보내지 않는다).
 ## 성 화면이 트리에 있을 때만 빨라진다: 던전·PVP·길드 보스·길드전은 main이 성 월드를 트리에서 떼므로 이 버튼도 빠지고 1배로 돌아온다
 ## (그 모드들은 서버가 전투 시간·실제 경과를 따져 보기 때문). 건물·훈련·연구·방치 수입·초기화는 실제 시각(Economy.time_now)이라 배속과 무관.
-## 자리: 화면 높이 CENTER_Y 지점(왼쪽), 단 탭 바·하단 영웅 초상화 줄·튜토리얼 카드보다 위(매 프레임 맞춘다).
+## 자리: 왼쪽 아래, 오른쪽 아래 [메뉴] 토글 버튼과 같은 높이(사용자 2026-10-07 "메뉴 버튼과 같은 높이") — 메뉴가 없으면 화면 높이 CENTER_Y 지점.
+## 단 하단 영웅 초상화 줄·튜토리얼 카드보다 위(매 프레임 맞춘다). 채팅 줄과 [핫딜] 버튼은 이 버튼을 따라온다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const Prefs := preload("res://scripts/prefs.gd")
@@ -24,6 +25,7 @@ static var _live := 0  # 트리에 있는 배속 버튼 수(월드를 다시 만
 
 var card  # tutorial_card.gd(있으면 그 위로)
 var strip  # hero_strip.gd(보이면 그 위로)
+var menu  # side_menu.gd(그 [메뉴] 토글과 아래 끝을 맞춘다)
 var button: Button
 var _face: Control
 
@@ -99,6 +101,8 @@ func _process(_delta: float) -> void:
 func _place() -> void:
 	var vh := get_viewport().get_visible_rect().size.y
 	var bottom := vh * CENTER_Y + SIZE.y / 2.0  # 버튼 아래 끝(위에서 잰 y)
+	if menu != null and is_instance_valid(menu) and menu.toggle != null and menu.toggle.size.y > 0.0:
+		bottom = menu.toggle.global_position.y + menu.toggle.size.y  # [메뉴] 토글과 같은 높이
 	var limit := vh - float(HudScript.TAB_BAR_H) - ABOVE
 	if strip != null and strip.visible and strip.row != null and strip.row.size.y > 0.0:
 		limit = minf(limit, strip.row.global_position.y - ABOVE)
@@ -117,7 +121,7 @@ func _draw_face() -> void:
 	var w := 13.0
 	var h := 9.0
 	for k in 2:
-		var x := SIZE.x / 2.0 - w + k * w
+		var x := SIZE.x / 2.0 - w * 0.5 + k * w  # 두 삼각형(가로 2w)의 가운데 = 버튼 가운데
 		var tri := PackedVector2Array([Vector2(x - w * 0.5, cy - h), Vector2(x + w * 0.5, cy), Vector2(x - w * 0.5, cy + h)])
 		var rim := tri.duplicate()
 		rim.append(rim[0])
