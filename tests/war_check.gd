@@ -3,12 +3,14 @@ extends Node
 ## 사례: (1) AI 공격 4분대 vs AI 수비 4분대 — 처치가 나고 스크립트 오류 없음, 분대 집중 공격이 보인다.
 ## (2) 약한 수비 — 공격이 성문을 부수고 성 안으로 들어가 성채를 친다. (3) 원거리 수비는 근접 적이 붙으면 물러난다.
 ## (4) 꼭두각시 장면이 방장 스냅샷을 따른다. (5) 영웅 상태 효과(독·둔화·속박·취약·약화·넉백·도발)가 영웅에게도 걸린다.
+## (7) 배치 단계: 공격은 성 밖 진영에서 나오고, 배치는 성벽 밖으로 밀리고 면이 바뀌며, 시작 전엔 싸우지 않는다.
 ## (6) 오프라인 GuildWar: 상대 길드·성·공성 시각(기본·고르기)·전투 열기·결과 저장(줄기만)·한 주 한 번·성채 3% 점수·다음 주 보상.
 
 const GameData := preload("res://scripts/game_data.gd")
 const Formation := preload("res://scripts/formation.gd")
 const WarRules := preload("res://scripts/war_rules.gd")
 const BattleScript := preload("res://scripts/war_battle.gd")
+const Balance := preload("res://scripts/balance.gd")
 
 class ErrorCounter extends Logger:
 	var count := 0
@@ -37,6 +39,7 @@ func _ready() -> void:
 	await _case_kite()
 	await _case_puppet()
 	await _case_status()
+	await _case_deploy()
 	await _case_offline_war()
 	_check(_errors.count == 0, "no script errors (%d, first: %s)" % [_errors.count, _errors.first])
 	print("WAR CHECK %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
@@ -271,4 +274,44 @@ func _case_status() -> void:
 	await _run(b, 0.4, 0.2)
 	_check(Formation.flat_distance(p0, u.global_position) > 1.5, "knockback pushes a hero")
 	b.queue_free()
+	await get_tree().process_frame
+
+
+func _case_deploy() -> void:
+	print("(7) deploy phase before the siege")
+	var plan := make_plan(2, 2)
+	plan.deploy_left = 300.0
+	plan.can_start = true
+	var b = _battle(plan)
+	var pup = _battle(plan, "puppet")
+	pup.visible = false
+	await get_tree().process_frame
+	_check(b.deploying, "battle starts in the deploy phase")
+	var lim: float = b.half + Balance.WALL_T
+	_check(b.units(0).all(func(u): return maxf(absf(u.global_position.x), absf(u.global_position.z)) > lim), "attackers spawn outside the walls")
+	_check(pup.units(0).all(func(u): return Formation.flat_distance(u._p_pos, Vector3.ZERO) > lim), "puppet attackers do not start at the castle centre")
+	var u = b.units(0)[0]
+	var want_lane := (int(u.lane) + 1) % 4
+	b.deploy_unit(u, Formation.SIDE_DIR[want_lane] * 1.0)  # 성 한가운데를 눌러도
+	_check(maxf(absf(u.global_position.x), absf(u.global_position.z)) >= lim + WarRules.DEPLOY_GAP - 0.01, "deploy point is pushed outside the wall gap")
+	_check(int(u.lane) == want_lane, "deploying on another side changes the attacked gate")
+	var hp_def: Array = b.units(1).map(func(d): return d.hp)
+	await _run(b, 5.0, 0.5)
+	_check(is_equal_approx(b.clock, 0.0), "clock does not run while deploying")
+	_check(b.units(1).map(func(d): return d.hp) == hp_def, "no fighting while deploying")
+	_check(b.deploy_left < 300.0 and b.deploy_left > 290.0, "deploy countdown ticks (%.1f)" % b.deploy_left)
+	b.request_start()
+	_check(not b.deploying, "[전투 시작] begins the fight")
+	await _run(b, 2.0, 0.5)
+	_check(b.clock > 1.0, "clock runs after start")
+	pup.apply_snapshot(b.snapshot())
+	_check(not pup.deploying, "puppet leaves the deploy phase from the host snapshot")
+	b.queue_free()
+	pup.queue_free()
+	await get_tree().process_frame
+	var b2 = _battle(plan)
+	b2.deploy_left = 0.5
+	await _run(b2, 1.5, 0.5)
+	_check(not b2.deploying, "deploy deadline starts the fight by itself")
+	b2.queue_free()
 	await get_tree().process_frame

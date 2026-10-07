@@ -3,7 +3,8 @@
 //  GET  /v1/guild/war           → {server_now, war}
 //  POST /v1/guild/war/defense   {heroes: [{id, hp, atk}] × 4}  내 수비 영웅(보유 영웅, 능력치는 capStats로 자른다)
 //  POST /v1/guild/war/schedule  {day: 0~6, hour: 0~23}         이번 주 공성 시각을 정한다(길드원 누구나, 그 시각이 오기 전까지)
-//  POST /v1/guild/war/enter     {heroes: [{id, hp, atk}] × 4}  이번 주 공성 전투에 들어간다(공성 시각 ~ +BATTLE_SEC 사이, 없으면 연다) → {war, plan}
+//  POST /v1/guild/war/enter     {heroes: [{id, hp, atk}] × 4}  이번 주 공성 전투에 들어간다(공성 시각부터 배치 + 전투가 끝날 때까지, 없으면 연다) → {war, plan}
+//  POST /v1/guild/war/start     {battle_id}                    배치 끝 → 전투 시작(길드장·슈퍼관리자, 길드장이 없는 길드면 실제 길드원 누구나). 방에 {t:"start"}
 //  POST /v1/guild/war/finish    {battle_id, state}             방이 없을 때(실시간 연결 실패) 방장 기기가 결과를 직접 보낸다
 //  POST /v1/guild/war/claim                                    지난 주 결과 보상(승리·패배)
 // 응답의 war = warView: 이번 주 상대·점수·성 상태·오늘 전투·내 수비 영웅·길드원 수비 힘·받을 보상.
@@ -66,6 +67,12 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     return b ? { id: String(b.id), started_at: Number(b.started_at), ends_at: Number(b.ends_at), roster: json(b.roster) as Any[], closed: Boolean(b.closed) } : null
   }
 
+  // 이번 주 공성이 끝나는 시각: 전투 행이 있으면 그 ends_at(배치 뒤 시작 + BATTLE_SEC), 없으면 배치를 다 쓴 경우.
+  const windowEnd = (w: Any, b: Any) => (b ? b.ends_at : w.at + W.DEPLOY_SEC + W.BATTLE_SEC)
+
+  // [전투 시작]을 누를 수 있나: 슈퍼관리자, 길드장, 길드장이 없는 길드(시스템 길드)면 실제 길드원 누구나.
+  const canStart = (x: Any) => Boolean(x.pl.admin) || !x.g?.owner || x.g.owner === x.id
+
   async function defenseOf(ids: string[]) {
     if (!ids.length) return new Map<string, Any[]>()
     const rows = await query('select player_id::text, heroes from war_defense where player_id = any($1::uuid[])', [ids])
@@ -100,9 +107,9 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const mx = W.castleMax(enemy.defenders)
     const ours = await ourDefense(x)
     const ratio = enemy.power / Math.max(1, ours.total)
-    const ends = w.at + W.BATTLE_SEC
-    const enemyPts = x.now >= ends ? W.enemyPoints(w.seed, week, ratio, W.castleCap(ours.members.length)) : 0 // 상대 공성은 우리 공성 시간이 끝나면 보인다
     const b = await battleOf(g.id, week)
+    const ends = windowEnd(w, b)
+    const enemyPts = x.now >= ends ? W.enemyPoints(w.seed, week, ratio, W.castleCap(ours.members.length)) : 0 // 상대 공성은 우리 공성 시간이 끝나면 보인다
     const state = b?.closed || x.now >= ends ? 'done' : x.now < w.at ? 'waiting' : 'live'
     const mine = ours.defense.get(x.id) ?? []
     const out: Record<string, unknown> = {
@@ -113,7 +120,8 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       castle: { gates: w.castle.gates.map((hp, i) => ({ hp, max: mx.gates[i] })), keep: { hp: w.castle.keep, max: mx.keep },
         kills: W.killsIn(w.castle), defenders: enemy.defenders.length },
       battle: b ? { id: b.id, state, started_at: b.started_at, ends_at: b.ends_at, joined: b.roster.filter((s: Any) => !s.ai).length,
-        me_in: b.roster.some((s: Any) => s.owner === x.id) } : { state, started_at: w.at, ends_at: ends },
+        me_in: b.roster.some((s: Any) => s.owner === x.id), deploying: x.now < b.started_at, can_start: canStart(x) }
+        : { state, started_at: w.at + W.DEPLOY_SEC, ends_at: ends, deploying: state === 'live', can_start: canStart(x) },
       defense: mine.map((h: Any) => h.hero),
       members: ours.members.map((m) => ({ name: m.name, power: m.power, real: m.real, mine: m.key === x.id,
         defense: (ours.defense.get(m.key) ?? []).map((h: Any) => h.hero) })),
@@ -207,7 +215,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
   // 그 주 전투를 지우고 새 성으로 다시 연다(그 길드의 이번 주 점수가 처음부터). 진행 중이면 그대로 합류.
   async function adminOpen(x: Any, gid: string, week: number, w: Any) {
     const bt = await battleOf(gid, week)
-    const over = w.castle.keep <= 0 || (bt && bt.closed) || x.now >= w.at + W.BATTLE_SEC
+    const over = w.castle.keep <= 0 || (bt && bt.closed) || x.now >= windowEnd(w, bt)
     if (x.now >= w.at && !over) return w
     if (over) {
       await query('delete from guild_war_battles where guild_id = $1 and week = $2', [gid, week])
@@ -217,7 +225,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     return warRow(x, week)
   }
 
-  // 이번 주 전투에 들어간다(공성 시각 ~ +BATTLE_SEC): 없으면 연다(가상 길드원 분대 + 나), 진행 중이면 내 분대를 더한다(방에 알린다). 끝났으면 막힌다.
+  // 이번 주 전투에 들어간다(공성 시각 ~ 전투 끝 — 처음 DEPLOY_SEC초까지는 배치): 없으면 연다(가상 길드원 분대 + 나), 진행 중이면 내 분대를 더한다(방에 알린다). 끝났으면 막힌다.
   app.post('/v1/guild/war/enter', auth, async (c) => {
     const b = await body(c)
     const x = await ctx(c)
@@ -230,7 +238,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     if (w.castle.keep <= 0) throw blocked('conquered', 'the enemy keep has already fallen this week')
     if (x.now < w.at) throw blocked('not_yet', "this week's siege has not started yet")
     let bt = await battleOf(g.id, week)
-    if ((bt && bt.closed) || x.now >= w.at + W.BATTLE_SEC) throw blocked('battle_done', "this week's siege is over")
+    if ((bt && bt.closed) || x.now >= windowEnd(w, bt)) throw blocked('battle_done', "this week's siege is over")
     let added: Any = null
     if (!bt) {
       const roster: Any[] = []
@@ -251,7 +259,8 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       added = { owner: x.id, name: G.playerName(x.id), squad: roster.length, lane: roster.length % 4, ai: false, heroes: sq }
       roster.push(added)
       await query(`insert into guild_war_battles (guild_id, week, day, started_at, ends_at, roster) values ($1, $2, $3, to_timestamp($4::float8),
-        to_timestamp($5::float8), $6::jsonb) on conflict (guild_id, day) do nothing`, [g.id, week, R.resetDay(w.at, x.hour), w.at, w.at + W.BATTLE_SEC, JSON.stringify(roster)])
+        to_timestamp($5::float8), $6::jsonb) on conflict (guild_id, day) do nothing`, [g.id, week, R.resetDay(w.at, x.hour), w.at + W.DEPLOY_SEC,
+        w.at + W.DEPLOY_SEC + W.BATTLE_SEC, JSON.stringify(roster)])  // 배치 마감에 저절로 시작(누가 [전투 시작]을 누르면 그때로 당긴다)
       bt = await battleOf(g.id, week)
       if (!bt || !bt.roster.some((s: Any) => s.owner === x.id)) added = null  // 겨뤄서 다른 사람이 먼저 열었다
     }
@@ -268,6 +277,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const mx = W.castleMax(enemy.defenders)
     const plan = {
       battle_id: bt.id, my_id: x.id, enemy_name: enemy.name, duration: W.BATTLE_SEC, clock: Math.max(0, x.now - bt.started_at),
+      deploy_left: Math.max(0, bt.started_at - x.now), can_start: canStart(x),
       gates: w.castle.gates.map((hp, i) => ({ hp, max: mx.gates[i] })), keep: { hp: w.castle.keep, max: mx.keep },
       defenders: enemy.defenders.map((dd) => ({ ...dd, ratio: W.ratioOf(w.castle, dd.uid) })).filter((dd) => dd.ratio > 0),
       attackers: bt.roster, live: live ? LIVE_PATH : '',
@@ -282,6 +292,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     if (!b || Boolean(b.closed)) return false
     if (!(json(b.roster) as Any[]).some((s) => s.owner === pid)) return false
     const now = clock()
+    if (now < Number(b.started_at)) return false // 배치 중: 아직 싸우지 않았다
     const game = await loadGame()
     const pl = await loadPlayer(pid, game, now)
     const x = await guildCtx(pid, pl, game, now)
@@ -296,6 +307,20 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     if (final || merged.keep <= 0) await query('update guild_war_battles set closed = true where id = $1', [battleId])
     return true
   }
+
+  // 배치 끝 → 전투 시작: 전투 행의 started_at·ends_at을 지금으로 당기고 방에 알린다. 이미 시작했으면 그대로(같은 응답).
+  app.post('/v1/guild/war/start', auth, async (c) => {
+    const b = await body(c)
+    const battleId = strField(b, 'battle_id')
+    const x = await ctx(c)
+    const { g } = needGuild(x)
+    if (!canStart(x)) throw blocked('not_leader', 'only the guild master can start the siege')
+    const [r] = await query(`update guild_war_battles set started_at = to_timestamp($3::float8), ends_at = to_timestamp($4::float8)
+      where id = $1 and guild_id = $2 and not closed and started_at > to_timestamp($3::float8) returning 1`, [battleId, g.id, x.now, x.now + W.BATTLE_SEC])
+    if (r && live) live.broadcast(battleId, { t: 'start', by: G.playerName(x.id) })
+    if (r) await query('insert into guild_log (guild_id, at, text) values ($1, to_timestamp($2::float8), $3)', [g.id, x.now, `${G.playerName(x.id)}님이 공성 전투를 시작했습니다`])
+    return c.json({ server_now: x.now, war: await warView(x), started: Boolean(r) })
+  })
 
   app.post('/v1/guild/war/finish', auth, async (c) => {
     const b = await body(c)

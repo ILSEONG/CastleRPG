@@ -9,6 +9,10 @@ import { mulberry32, powerOf, type StatLimit } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
 export const BATTLE_SEC = 600
+// 배치 단계(2026-10-07 사용자: 공격팀이 먼저 성 밖 어디서 칠지 자리를 잡고, 길드장(또는 슈퍼관리자)이 [전투 시작]을 누른다).
+// 공성 시각부터 배치가 열리고, 아무도 안 누르면 DEPLOY_SEC초 뒤 저절로 시작한다. 전투 행: started_at = 전투 시작(처음엔 배치 마감),
+// ends_at = started_at + BATTLE_SEC — [전투 시작]이 둘을 지금으로 당긴다. 그래서 배치 시간은 피해 상한 시간(started_at부터)에 안 들어간다.
+export const DEPLOY_SEC = 300
 export const RESPAWN_SEC = 30
 export const SQUAD = 4
 export const PTS_KILL = 1
@@ -198,7 +202,7 @@ export function battleAt(week: number, saved: number | null, resetAt: (day: numb
 export function pickAt(week: number, day: number, hour: number, resetAt: (day: number) => number): number | null {
   if (!Number.isInteger(day) || !Number.isInteger(hour) || day < 0 || day > 6 || hour < 0 || hour > 23) return null
   const at = resetAt(weekStart(week) + day) + hour * 3600
-  return at + BATTLE_SEC <= resetAt(weekStart(week + 1)) ? at : null
+  return at + DEPLOY_SEC + BATTLE_SEC <= resetAt(weekStart(week + 1)) ? at : null
 }
 
 export const enemySeed = (guildSeed: number, week: number) => mix(guildSeed, week >>> 0, 77)

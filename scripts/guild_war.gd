@@ -22,7 +22,7 @@ const MIN_POWER := 250
 const WAIT_TEXT := "응답 대기 중"
 const ERROR_TEXT := {"battle_done": "이번 주 공성전은 끝났습니다", "conquered": "이번 주 상대 성채를 이미 함락했습니다",
 	"not_yet": "아직 공성 시각이 아닙니다", "schedule_locked": "공성 시각이 이미 지났습니다", "schedule_past": "지금보다 뒤의 시각을 고르세요",
-	"bad_heroes": "보유한 영웅 4명을 고르세요", "no_guild": "길드에 가입하세요", "nothing": "받을 보상이 없습니다", "not_host": "다른 길드원이 전투를 진행 중입니다"}
+	"bad_heroes": "보유한 영웅 4명을 고르세요", "no_guild": "길드에 가입하세요", "nothing": "받을 보상이 없습니다", "not_host": "다른 길드원이 전투를 진행 중입니다", "not_leader": "길드장만 전투를 시작할 수 있습니다"}
 
 signal changed
 signal battle_started(run: Dictionary)  # {plan, role, online} — main이 공성 전투 장면(war_battle.gd)을 연다
@@ -242,6 +242,18 @@ func finish(result: Dictionary, final := true) -> void:
 		econ.net.send("POST", "/v1/guild/war/finish", {"battle_id": result.get("battle_id", ""), "state": result}, func(d): _take(d), Callable(), true, true)
 		return
 	local_save_state(result, final, now_t())
+
+
+## 배치 끝 → [전투 시작](길드장·슈퍼관리자). 온라인만(서버가 시작 시각을 당기고 방에 start를 알린다). done(ok)
+func start_battle(battle_id: String, done: Callable) -> void:
+	if not online() or not econ.net.up:
+		done.call(false)
+		return
+	econ.net.send("POST", "/v1/guild/war/start", {"battle_id": battle_id}, func(d):
+		_take(d)
+		done.call(true), func():
+		_notice(ERROR_TEXT.get(econ.net.last_error, "전투를 시작하지 못했습니다"))
+		done.call(false), true, true)
 
 
 func claim() -> void:
@@ -527,7 +539,8 @@ func local_enter(entries: Array, now: float) -> Dictionary:
 	if (b is Dictionary and b.closed) or now >= at + WarRules.BATTLE_SEC:
 		_notice(ERROR_TEXT.battle_done)
 		return {}
-	if not (b is Dictionary):
+	var fresh := not (b is Dictionary)
+	if fresh:
 		b = {"id": "local-%d" % week, "started_at": at, "closed": false}
 		local.battles[str(week)] = b
 		save()
@@ -558,7 +571,9 @@ func local_enter(entries: Array, now: float) -> Dictionary:
 	for i in 4:
 		gates.append({"hp": c.gates[i], "max": mx.gates[i]})
 	fetch()
+	# 오프라인(개발용): 처음 열 때만 배치 단계, 다시 들어오면 바로 전투
 	return {"battle_id": b.id, "my_id": "me", "enemy_name": enemy.name, "duration": WarRules.BATTLE_SEC, "clock": maxf(0.0, now - float(b.started_at)),
+		"deploy_left": WarRules.DEPLOY_SEC if fresh else 0.0, "can_start": true,
 		"gates": gates, "keep": {"hp": c.keep, "max": mx.keep}, "defenders": defs, "attackers": roster, "live": ""}
 
 

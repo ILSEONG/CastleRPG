@@ -75,6 +75,7 @@ func setup_war(p_uid: int, p_def: Dictionary, p_team: int, level: int, promotion
 
 func _ready() -> void:
 	super._ready()
+	_p_pos = global_position
 	_model.crowd_lod = true  # 영웅 160명: 붐비면 애니메이션 간헐 갱신·그림자 끔(몬스터와 같다)
 	if team == 1:
 		add_to_group("monsters")  # 공격 영웅의 표적(적 그룹) · 빨간 HP 바
@@ -219,6 +220,9 @@ func set_home(p: Vector3, go := true) -> void:
 
 ## 플레이어 이동 명령(unit_picker): 자동 진격을 멈추고 그 자리를 지킨다.
 func move_to_point(p: Vector3) -> void:
+	if battle != null and battle.deploying:
+		battle.deploy_unit(self, p)  # 배치 중: 걸어가지 않고 그 자리에 선다
+		return
 	commanded = true
 	set_home(p)
 
@@ -476,6 +480,12 @@ func status_fx(k: String):
 # --- 온라인 꼭두각시 ---
 
 ## 방장이 보낸 한 줄: [x, z, 방향(라디안), 체력 비율, 상태, 휘두른 횟수].
+## 꼭두각시: 방장 스냅샷이 오기 전·배치 중 내가 옮긴 자리에 그대로 선다(스냅샷 전 기본값 (0,0,0) = 성 한가운데로 끌려가지 않게).
+func puppet_hold(p: Vector3) -> void:
+	_p_pos = p
+	global_position = p
+
+
 func puppet_apply(row: Array) -> void:
 	_p_pos = Vector3(float(row[0]), 0.0, float(row[1]))
 	_p_face = Vector3(sin(float(row[2])), 0.0, cos(float(row[2])))

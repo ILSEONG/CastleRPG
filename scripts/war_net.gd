@@ -3,7 +3,7 @@ extends Node
 ## - 방장(먼저 들어온 사람): 이 기기가 전투를 판단하고 battle.SNAP_SEC마다 상태 한 장(snap)을, CKPT_SEC마다 성 상태(ckpt)를 보낸다.
 ##   다른 길드원의 이동 명령(cmd)을 받아 그 영웅에 준다. 전투가 끝나면 end(최종 성 상태 — 서버가 저장하고 모두에게 end).
 ## - 참가자: 방장 상태를 따라 그리고(꼭두각시), 내 영웅 이동 명령을 방장에게 보낸다. 방장이 나가면 이어받는다(host).
-## - 새 길드원이 들어오면 서버가 roster(그 분대)를 보낸다 — 모두 분대를 더한다.
+## - 새 길드원이 들어오면 서버가 roster(그 분대)를 보낸다 — 모두 분대를 더한다. 길드장이 [전투 시작]을 누르면 서버가 start를 보낸다(배치 끝).
 ## 연결이 안 되거나 끊기면 이 기기가 혼자 이어서 판단하고, 끝나면 REST(/v1/guild/war/finish)로 결과를 보낸다.
 
 const CKPT_SEC := 10.0
@@ -89,6 +89,8 @@ func _on_message(raw: String) -> void:
 			if m.get("snap") is Dictionary:
 				battle.apply_snapshot(m.snap)
 			battle.set_role("host")
+		"start":  # 서버: [전투 시작]이 눌렸다(배치 끝)
+			battle.begin_fight()
 		"roster":
 			if m.get("squad") is Dictionary:
 				battle.add_squad(m.squad)

@@ -131,6 +131,25 @@ test('war: view, defense heroes, members pick the weekly time, enter opens the b
   // 다시 들어와도 분대는 하나
   const r3 = await S.req('POST', '/v1/guild/war/enter', { token: a.token, body: { heroes: squad() } })
   assert.equal(r3.json.plan.attackers.filter((s: any) => s.owner === a.id).length, 1)
+  // 배치 단계: 공성 시각부터 DEPLOY_SEC초까지는 배치 — 그동안 깎은 성은 받지 않는다. [전투 시작]이 지금으로 당긴다
+  assert.equal(plan.deploy_left, W.DEPLOY_SEC - 5)
+  assert.equal(plan.clock, 0)
+  assert.equal(plan.can_start, true, 'a guild with no real master: any member can start')
+  assert.equal(r.json.war.battle.deploying, true)
+  S.clock.t += 30
+  const dep = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: plan.battle_id, state: { defenders: { [plan.defenders[0].uid]: 0 } } } })
+  assert.equal(dep.json.war.castle.kills, 0, 'no damage counts while deploying')
+  assert.notEqual(dep.json.war.battle.state, 'done')
+  const st = await S.req('POST', '/v1/guild/war/start', { token: a.token, body: { battle_id: plan.battle_id } })
+  assert.equal(st.status, 200, JSON.stringify(st.json))
+  assert.equal(st.json.started, true)
+  assert.equal(st.json.war.battle.deploying, false)
+  assert.equal(st.json.war.battle.ends_at, S.clock.t + W.BATTLE_SEC)
+  assert.equal((await S.req('POST', '/v1/guild/war/start', { token: b.token, body: { battle_id: plan.battle_id } })).json.started, false, 'already started')
+  const startedAt = S.clock.t
+  const r4 = await S.req('POST', '/v1/guild/war/enter', { token: b.token, body: { heroes: squad() } })
+  assert.equal(r4.json.plan.deploy_left, 0)
+  S.clock.t += 60
   // 끝: 성 상태를 보내면 점수가 오르고 전투가 닫힌다
   const d1 = plan.defenders[0]
   const fin = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: plan.battle_id,
@@ -142,7 +161,7 @@ test('war: view, defense heroes, members pick the weekly time, enter opens the b
   assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 6, hour: 23 } })).json.error, 'schedule_locked')
   // 우리 공성 시간이 끝나면 상대 점수가 보인다
   assert.equal(fin.json.war.enemy_points, 0)
-  S.clock.t = at + W.BATTLE_SEC + 1
+  S.clock.t = startedAt + W.BATTLE_SEC + 1
   const after = await war(a.token)
   assert.equal(after.enemy_days.length, 1)
   assert.equal(after.enemy_points, after.enemy_days[0])
@@ -186,6 +205,7 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
     const pb = (await req('POST', '/v1/guild/war/enter', b.token, { heroes: squad() })).json.plan
     assert.equal(pa.battle_id, pb.battle_id)
     assert.equal(pa.live, '/v1/guild/war/live')
+    assert.ok(pa.deploy_left > 0)
     const open = (token: string) => new Promise<{ ws: WebSocket; msgs: any[] }>((res, rej) => {
       const ws = new WebSocket(`ws://127.0.0.1:${port}${pa.live}?battle=${pa.battle_id}&token=${token}`)
       const msgs: any[] = []
@@ -218,6 +238,10 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
     A.ws.close()
     await until(() => B.msgs.some((m) => m.t === 'host'))
     assert.deepEqual(B.msgs.find((m) => m.t === 'host').snap, { c: 1.5 })
+    // [전투 시작] → 방에 start
+    assert.equal((await req('POST', '/v1/guild/war/start', b.token, { battle_id: pb.battle_id })).json.started, true)
+    await until(() => B.msgs.some((m) => m.t === 'start'))
+    S.clock.t += 120
     const d1 = pb.defenders[0]
     B.ws.send(JSON.stringify({ t: 'end', state: { defenders: { [d1.uid]: 0 }, gates: [pb.gates[0].hp, 0, pb.gates[2].hp, pb.gates[3].hp], keep: pb.keep.hp } }))
     await until(() => B.msgs.some((m) => m.t === 'end'))
@@ -244,6 +268,8 @@ test('war: super admin opens the siege any time, and a finished week opens again
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.ok(r.json.plan.attackers.some((s: any) => s.ai)) // 실제 사람이 없는 자리는 AI 분대
   const id1 = r.json.plan.battle_id
+  assert.equal(r.json.plan.can_start, true)
+  assert.equal((await S.req('POST', '/v1/guild/war/start', { token: a.token, body: { battle_id: id1 } })).json.started, true) // 관리자도 배치 단계를 거쳐 [전투 시작]
   // 열리자마자 성채를 0으로 보내면 받지 않는다(그 시간에 낼 수 있는 피해보다 많다)
   S.clock.t += 1
   const early = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: id1, state: { keep: 0 } } })
@@ -272,4 +298,10 @@ test('war: a freshly created guild (no virtual members yet) gets AI mercenary sq
   const w = await war(p.token)
   assert.equal(r.json.plan.attackers.length, w.enemy.members)
   assert.ok(r.json.plan.attackers.filter((s: any) => s.ai).length >= w.enemy.members - 1)
+  assert.equal(r.json.plan.can_start, true, 'the guild master can start')
+  // 길드장이 있는 길드: 다른 길드원은 [전투 시작]을 못 누른다(마감에 저절로 시작)
+  const mate = await member(made.json.guild.guild.id)
+  const e2 = await S.req('POST', '/v1/guild/war/enter', { token: mate.token, body: { heroes: squad() } })
+  assert.equal(e2.json.plan.can_start, false)
+  assert.equal((await S.req('POST', '/v1/guild/war/start', { token: mate.token, body: { battle_id: r.json.plan.battle_id } })).json.error, 'not_leader')
 })

@@ -113,7 +113,11 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 	match state:
 		"live":
 			var left := maxf(0.0, float(b.get("ends_at", 0.0)) - GuildWar.now_t())
-			head = "공성전 진행 중 · 남은 시간 %s" % UiKit.clock(left)
+			var to_fight := float(b.get("started_at", 0.0)) - GuildWar.now_t()
+			if b.get("deploying", false) and to_fight > 0.0:
+				head = "배치 중 · 길드장이 시작하거나 %s 뒤 전투 시작" % UiKit.clock(to_fight)
+			else:
+				head = "공성전 진행 중 · 남은 시간 %s" % UiKit.clock(left)
 			if b.has("joined"):
 				head += " · 참가 %d명" % int(b.joined)
 		"done":
@@ -276,7 +280,8 @@ static func _rules_card(p) -> void:
 	var v: VBoxContainer = c.get_child(0)
 	v.add_child(p._label("공성전 규칙", 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for t in ["길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.",
-			"공성전은 한 주에 한 번, 길드원이 정한 시각에 %d분 동안 열립니다. 아무도 정하지 않으면 토요일 21:00입니다." % roundi(WarRules.BATTLE_SEC / 60.0),
+			"공성전은 한 주에 한 번, 길드원이 정한 시각에 열립니다. 아무도 정하지 않으면 토요일 21:00입니다.",
+			"먼저 배치 단계: 성 밖 어디서 칠지 영웅 자리를 잡고, 길드장이 [전투 시작]을 누르면 %d분 동안 싸웁니다. 아무도 안 누르면 %d분 뒤 저절로 시작합니다." % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
 			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.",
 			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점 · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, roundi(WarRules.KEEP_STEP * 100.0)],
 			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(목숨 %d개). 모두 목숨을 다 쓰면 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],

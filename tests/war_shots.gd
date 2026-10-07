@@ -40,12 +40,22 @@ func _ready() -> void:
 	panel.buttons["war_mode:defense"].pressed.emit()
 	await _snap("2_defense")
 	panel.buttons["war_mode:attack"].pressed.emit()
+	GuildWar.fixed_now = float(GuildWar.war.battle.started_at) + 1.0  # 공성 시각으로
+	GuildWar.fetch()
+	panel._rebuild()
 	await _frames(4)
 	panel.buttons["war_act"].pressed.emit()
 	await _frames(60)
 	var battle = _battle()
 	print("battle: ", battle)
-	await _snap("3_battle_start")
+	await _snap("3_battle_deploy")
+	print("[shots] deploying %s left %.0f" % [battle.deploying, battle.deploy_left])
+	var mine: Array = battle.units(0).filter(func(u): return u.mine)
+	for i in mine.size():  # 내 분대를 왼쪽 면 앞으로 옮겨 본다
+		battle.deploy_unit(mine[i], Vector3(-(battle.half + 20.0), 0.0, -3.0 + 2.0 * i))
+	await _snap("3b_battle_deployed")
+	battle.request_start()
+	await _snap("3c_battle_start")
 	Engine.time_scale = 4.0
 	await _wait(25.0)
 	Engine.time_scale = 1.0

@@ -31,6 +31,9 @@ var result_layer: Control
 var result_title: Label
 var result_body: Label
 var status_text := ""  # war_net이 쓴다(연결 상태)
+var deploy_panel: PanelContainer  # 배치 단계 안내 + [전투 시작]
+var deploy_label: Label
+var start_button: Button
 
 var _flash_left := 0.0
 
@@ -51,6 +54,7 @@ func _ready() -> void:
 	banner.add_theme_constant_override("outline_size", 12)
 	banner.visible = false
 	root.add_child(banner)
+	_build_deploy(root)
 	_build_result(root)
 	battle.score_changed.connect(_update)
 	_update()
@@ -173,6 +177,38 @@ func _draw_face(c: Control, def: Dictionary, h = null) -> void:
 	c.draw_polyline(oct, SELECT_GOLD if on else UiKit.OUTLINE, 5.0 if on else 2.0, true)
 
 
+## 배치 단계: 위 패널 아래에 안내(남은 시간) + [전투 시작](누를 수 있는 사람만) 또는 "길드장이 시작합니다".
+func _build_deploy(root: Control) -> void:
+	deploy_panel = PanelContainer.new()
+	deploy_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	deploy_panel.offset_left = 16
+	deploy_panel.offset_right = -16
+	deploy_panel.offset_top = 236
+	deploy_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	deploy_panel.add_theme_stylebox_override("panel", UiKit.panel(Color(1.0, 0.96, 0.84, 0.92), 14.0, 14))
+	root.add_child(deploy_panel)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", 8)
+	deploy_panel.add_child(box)
+	var head := _label("배치 단계", 30, WIN_GOLD)
+	head.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
+	head.add_theme_constant_override("outline_size", 6)
+	box.add_child(head)
+	var how := _label("내 영웅을 누르고 성 밖 바닥(붉은 선 바깥)을 눌러 자리를 잡으세요.\n자리 잡은 쪽 성문을 공격합니다.", 21, MainHud.INK)
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(how)
+	deploy_label = _label("", 22, MainHud.INK.lightened(0.15))
+	box.add_child(deploy_label)
+	start_button = _button("전투 시작", MainHud.ACCENT)
+	start_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	start_button.custom_minimum_size = Vector2(260, 64)
+	start_button.pressed.connect(func(): battle.request_start())
+	start_button.visible = battle.can_start
+	box.add_child(start_button)
+	deploy_panel.visible = battle.deploying
+
+
 func _build_result(root: Control) -> void:
 	result_layer = ColorRect.new()
 	result_layer.color = Color(0, 0, 0, 0.45)
@@ -225,6 +261,13 @@ func _process(delta: float) -> void:
 		if _flash_left <= 0.0:
 			banner.visible = false
 	time_label.text = UiKit.clock(battle.time_left())
+	deploy_panel.visible = battle.deploying and not battle.done
+	auto_button.visible = not battle.deploying
+	if battle.deploying:
+		var t := UiKit.clock(battle.deploy_left)
+		deploy_label.text = ("모두 자리를 잡았으면 [전투 시작]을 누르세요 · %s 뒤 자동 시작" % t) if battle.can_start \
+			else ("길드장이 [전투 시작]을 누르면 시작합니다 · %s 뒤 자동 시작" % t)
+		start_button.disabled = battle.start_sent
 	for i in 4:
 		gate_bars[i].value = battle.gates[i].hp_ratio() * 100.0
 	keep_bar.value = battle.keep.hp_ratio() * 100.0

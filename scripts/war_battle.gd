@@ -9,6 +9,9 @@ extends Node3D
 ## 성문·성채 체력·처치 수·점수 — guild_war.gd가 서버(또는 오프라인 저장)에 넘긴다.
 ## 온라인 동시 전투(war_net.gd): role "host"면 이 기기가 판단하고 SNAP_SEC마다 snapshot()을 보낸다. "puppet"이면 영웅이 따라 그리기만 하고
 ## (war_hero.puppet) 내 영웅 이동 명령은 방장에게 보낸다(command_sent). 방장이 나가면 다음 사람이 이어받는다(become_host).
+## 배치 단계(2026-10-07 사용자): 전투 전에 공격 영웅은 진영에 선 채 멈춰 있고, 내 영웅을 고르고 성 밖 바닥(성벽에서 DEPLOY_GAP 밖)을 누르면 그 자리로 옮긴다
+## (deploy_unit — 그 면이 그 영웅이 칠 면이 된다). 수비·AI 분대는 제자리. [전투 시작](길드장·슈퍼관리자, 오프라인은 누구나)을 누르거나
+## deploy_left가 0이 되면 begin_fight — 그때부터 시계·전투가 돈다. 온라인은 서버가 시작을 정하고 방에 start를 알린다(war_net).
 
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
@@ -61,6 +64,11 @@ var picker
 var hud
 var crowd
 var units_by_uid := {}
+var deploying := false  # 배치 단계(전투 전)
+var deploy_left := 0.0  # 저절로 시작까지 남은 초
+var can_start := true  # [전투 시작]을 누를 수 있나(서버 plan.can_start)
+var start_sent := false
+var _deploy_marks: Node3D
 
 var _att: Array = []
 var _def: Array = []
@@ -78,6 +86,9 @@ func _ready() -> void:
 	half = GameData.interior_half(WarRules.KEEP_LEVEL)
 	duration = float(plan.get("duration", WarRules.BATTLE_SEC))
 	clock = float(plan.get("clock", 0.0))
+	deploy_left = float(plan.get("deploy_left", 0.0))
+	deploying = deploy_left > 0.0
+	can_start = plan.get("can_start", true) == true
 	brain = BrainScript.new(self)
 	_build_stage()
 	crowd = CrowdScript.new()
@@ -107,6 +118,7 @@ func _ready() -> void:
 	picker.arena_r = Balance.MAP_HALF * 0.5
 	add_child(picker)
 	_focus_camera(rig)
+	_build_deploy_marks()
 	hud = HudScript.new()
 	hud.battle = self
 	add_child(hud)
@@ -263,6 +275,7 @@ func _spawn_defender(d: Dictionary) -> void:
 	var offs := Formation.gate_offsets(half)  # 같은 면 수비는 성문마다 나눠 선다
 	u.free_pos = Formation.gate_outer(half, u.lane, offs[u.uid % offs.size()]) + Formation.SIDE_DIR[u.lane] * MELEE_D
 	u.hold = true
+	u.position = u.free_pos
 	add_child(u)
 	u.hp = u.hp_max * clampf(float(d.get("ratio", 1.0)), 0.0, 1.0)
 	u.fell.connect(_on_unit_fell)
@@ -293,7 +306,7 @@ func _line_up(side: int, list: Array, depth: float, dir_sign: float) -> void:
 		var u = list[i]
 		u.post_pos = p
 		u.set_home(p, false)
-		u.global_position = p
+		u.puppet_hold(p)  # 자리 + 꼭두각시 목표(스냅샷 전에도 제자리)
 
 
 ## 공격 분대(길드원 한 명): {owner, name, squad, lane, ai, heroes: [{hero, level, promotion, hp?, atk?}]}. uid = 1000 + squad × 4 + i.
@@ -324,7 +337,10 @@ func add_squad(s: Dictionary) -> void:
 		u.free_pos = u.post_pos
 		u.hold = true
 		u.puppet = role == "puppet"
+		u.position = u.post_pos  # 진영에서 바로 선다(성 한가운데서 생겨 걸어 나오지 않게)
 		add_child(u)
+		if deploying and not u.puppet:
+			u.set_process(false)
 		u.fell.connect(_on_unit_fell)
 		_att.append(u)
 		units_by_uid[uid] = u
@@ -388,6 +404,13 @@ func set_auto() -> void:
 
 func _process(delta: float) -> void:
 	if done:
+		return
+	if deploying:
+		deploy_left = maxf(0.0, deploy_left - delta)
+		if role == "host":
+			_snap_cd -= delta
+		if deploy_left <= 0.0 and role != "puppet":
+			begin_fight()  # 배치 마감: 저절로 시작(꼭두각시는 방장 스냅샷·서버 start를 따른다)
 		return
 	if role == "puppet":
 		clock += delta  # 표시용(방장 스냅샷이 맞춘다)
@@ -522,7 +545,7 @@ func set_role(r: String) -> void:
 	for u in _att + _def:
 		u.puppet = role == "puppet"
 		if not u.puppet:
-			u.set_process(not done)
+			u.set_process(not done and not deploying)
 	if hud != null:
 		hud.refresh_role()
 
@@ -535,7 +558,13 @@ func snapshot() -> Dictionary:
 	var gs := []
 	for g in gates:
 		gs.append(roundf(g.hp))
-	return {"c": snappedf(clock, 0.01), "u": rows, "g": gs, "k": roundf(keep.hp), "n": kills}
+	var out := {"c": snappedf(clock, 0.01), "u": rows, "g": gs, "k": roundf(keep.hp), "n": kills, "d": snappedf(deploy_left, 0.1) if deploying else 0.0}
+	if deploying:  # 배치로 바뀐 공격 면(방장이 바뀌어도 이어지게)
+		var lanes := {}
+		for u in _att:
+			lanes[str(u.uid)] = u.lane
+		out.l = lanes
+	return out
 
 
 func snapshot_due() -> bool:
@@ -550,6 +579,17 @@ func apply_snapshot(s: Dictionary) -> void:
 	if role != "puppet" or done:
 		return
 	clock = float(s.get("c", clock))
+	var lanes = s.get("l")
+	if lanes is Dictionary:
+		for k in lanes:
+			var a = units_by_uid.get(int(k))
+			if a != null:
+				_set_lane(a, int(lanes[k]))
+	if deploying:
+		if float(s.get("d", 0.0)) <= 0.0:
+			begin_fight()
+		else:
+			deploy_left = float(s.d)
 	var rows: Dictionary = s.get("u", {})
 	for k in rows:
 		var u = units_by_uid.get(int(k))
@@ -577,6 +617,97 @@ func apply_command(owner: String, uid: int, pos) -> void:
 
 
 var _sent_home := {}
+
+
+# --- 배치 ---
+
+## 배치 가능 지점: 성벽 바깥면에서 DEPLOY_GAP 밖, 바닥 반경(picker.arena_r) 안. 안쪽이면 가까운 면 쪽 바깥으로 밀어낸다.
+func clamp_deploy(p: Vector3) -> Vector3:
+	var lim := half + Balance.WALL_T + WarRules.DEPLOY_GAP
+	p.y = 0.0
+	if maxf(absf(p.x), absf(p.z)) < lim:
+		if absf(p.x) >= absf(p.z):
+			p.x = lim if p.x >= 0.0 else -lim
+		else:
+			p.z = lim if p.z >= 0.0 else -lim
+	var r := Balance.MAP_HALF * 0.5
+	var flat := Vector2(p.x, p.z).limit_length(r)
+	return Vector3(flat.x, 0.0, flat.y)
+
+
+## 배치 중 이동(내 영웅 바닥 탭, 또는 방장이 받은 길드원 명령): 그 자리에 바로 세우고, 가장 가까운 면을 그 영웅이 칠 면으로 삼는다.
+## 꼭두각시 기기면 방장에게도 보낸다(방장이 같은 자리에 세우고 스냅샷이 맞춘다).
+func deploy_unit(u, p: Vector3) -> void:
+	if not deploying or u.team != 0 or not u.is_alive():
+		return
+	p = clamp_deploy(p)
+	u.global_position = p
+	u.post_pos = p
+	u.free_pos = p
+	u.set_home(p, false)
+	_set_lane(u, BrainScript._side_of(p))
+	if role == "puppet" and u.mine:
+		u.puppet_hold(p)
+		command_sent.emit(u.uid, [snappedf(p.x, 0.01), snappedf(p.z, 0.01)])
+
+
+func _set_lane(u, lane: int) -> void:
+	u.lane = lane
+	u.idle_dir = -Formation.SIDE_DIR[lane]
+
+
+## [전투 시작]: 오프라인은 바로, 온라인은 서버에 보낸다(서버가 방에 start를 알리면 war_net이 begin_fight).
+func request_start() -> void:
+	if not deploying or not can_start or start_sent:
+		return
+	if not run.get("online", false):
+		begin_fight()
+		return
+	start_sent = true
+	GuildWar.start_battle(str(plan.get("battle_id", "")), func(ok: bool):
+		start_sent = false
+		if ok:
+			begin_fight())
+
+
+## 배치 끝 → 전투 시작: 시계·영웅 판단이 돈다. 공격 영웅의 진영(부활 자리)은 배치한 면.
+func begin_fight() -> void:
+	if not deploying:
+		return
+	deploying = false
+	deploy_left = 0.0
+	if _deploy_marks != null:
+		_deploy_marks.visible = false
+	for u in _att + _def:
+		if not u.puppet:
+			u.set_process(not done)
+	if hud != null:
+		hud.flash("전투 시작!")
+		hud.refresh_role()
+
+
+## 배치 불가 경계(성벽 바깥면에서 DEPLOY_GAP): 바닥에 붉은 띠 네 줄. 배치 중에만 보인다.
+func _build_deploy_marks() -> void:
+	_deploy_marks = Node3D.new()
+	_deploy_marks.name = "DeployMarks"
+	add_child(_deploy_marks)
+	var lim := half + Balance.WALL_T + WarRules.DEPLOY_GAP
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.9, 0.25, 0.2, 0.55)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	for side in 4:
+		var m := BoxMesh.new()
+		m.size = Vector3(lim * 2.0 + 0.6, 0.06, 0.6)
+		m.material = mat
+		var mi := MeshInstance3D.new()
+		mi.mesh = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var dir: Vector3 = Formation.SIDE_DIR[side]
+		mi.position = dir * lim + Vector3(0, 0.04, 0)
+		mi.rotation.y = atan2(dir.x, dir.z)
+		_deploy_marks.add_child(mi)
+	_deploy_marks.visible = deploying
 
 ## 꼭두각시 기기에서 내 영웅에 이동 명령을 주면(unit_picker → move_to_point) 방장에게 보낸다.
 func _relay_my_commands() -> void:
