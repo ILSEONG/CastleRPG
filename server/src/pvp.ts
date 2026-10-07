@@ -3,7 +3,7 @@
 // 상대 = 그 플레이어가 미리 정한 방어팀(pvp_stats.defense). 모드마다 하루 PLAYS번, 포인트·등급(브론즈~챌린저)이 따로다.
 // 시작에 판 하나를 쓰고 패배로 먼저 적어 둔다(도중에 나가도 패배) — 승리로 끝나면 바로잡는다. 전투는 앱이 돌리고 서버는 결과가 그럴듯한지만 본다.
 // 코인(PVP 코인) 하나를 두 모드가 함께 벌고 PVP 상점에서 쓴다.
-import { mulberry32, powerOf } from './rules.ts'
+import { MAX_GAME_SPEED, mulberry32, powerOf } from './rules.ts'
 import { mix, nickname } from './guild.ts'
 import { capStats, fitHero, heroStats } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
@@ -13,7 +13,7 @@ export type Mode = (typeof MODES)[number]
 export const TEAM = 5 // 한 팀 영웅 수
 export const PLAYS = 5 // 모드마다 하루 판 수
 export const BATTLE_SEC: Record<Mode, number> = { duel: 90, total: 120 } // 제한 시간(끝나면 남은 체력 비율이 큰 쪽이 이긴다 — 같으면 방어)
-export const MIN_WIN_SEC = 8 // 시작 뒤 이보다 빨리 온 승리는 받지 않는다
+export const MIN_WIN_SEC = 8 // 시작 뒤 이 게임 초(x1.5 배속이면 실제 MIN_WIN_SEC ÷ 1.5초)보다 빨리 온 승리는 받지 않는다
 export const LATE_SEC = 900 // 시작 뒤 이만큼 지나 온 결과는 받지 않는다(패배 그대로)
 export const SOLDIER_CAP = 20 // 총력전 한 쪽 병사 수 상한(높은 티어부터)
 export const WIN_BASE = 25 // 승리 포인트 = WIN_BASE + (상대 − 나) ÷ WIN_DIFF_DIV (± WIN_DIFF_CAP)
@@ -148,7 +148,7 @@ export function teamOf(raw: unknown, owned: Record<string, { level: number; prom
 
 // 결과가 그럴듯한가: 승리는 MIN_WIN_SEC 뒤에만, LATE_SEC가 지난 결과는 버린다(패배 그대로).
 export function acceptWin(win: boolean, elapsed: number): boolean {
-  return win && elapsed >= MIN_WIN_SEC && elapsed <= LATE_SEC
+  return win && elapsed >= MIN_WIN_SEC / MAX_GAME_SPEED && elapsed <= LATE_SEC
 }
 
 export interface Shop { day: number; week: number; bought: Record<string, number> }

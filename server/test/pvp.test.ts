@@ -39,6 +39,7 @@ test('pvp rules: tiers, win gain, loss floor, soldier pick', () => {
   assert.deepEqual(P.pickSoldiers({ 'infantry:1': 30, 'archer:3': 5, 'cavalry:2': 8 }), { 'archer:3': 5, 'cavalry:2': 8, 'infantry:1': 7 })
   assert.ok(!P.acceptWin(true, 3))
   assert.ok(P.acceptWin(true, 30))
+  assert.ok(P.acceptWin(true, 6)) // x1.5 배속: 8 게임 초 = 실제 5.3초
   assert.ok(!P.acceptWin(true, 5000))
 })
 

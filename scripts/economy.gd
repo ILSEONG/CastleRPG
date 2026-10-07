@@ -2470,7 +2470,7 @@ func start_dungeon(type: String, level: int, party: Array, helper := "") -> bool
 
 
 ## 결과(스펙 §6.3). run_id = dungeon_started가 준 값, elapsed = 전투 시간(초). 오프라인: 서버와 같은 규칙(만료 → 패배면 닫기 → 타당성(최소 시간·
-## 제한 시간·실제 경과 ≥ elapsed − 5) → 열쇠(장비는 없으면 골드) → 보관함 → 보상)으로 곧바로 반영·저장하고 dungeon_finished. 같은 run_id를
+## 제한 시간·실제 경과 ≥ elapsed ÷ 1.5(x1.5 배속) − 5) → 열쇠(장비는 없으면 골드) → 보관함 → 보상)으로 곧바로 반영·저장하고 dungeon_finished. 같은 run_id를
 ## 다시 보내면 같은 결과(repeated). 온라인: /v1/dungeon/finish(멱등이라 Net 기본 재시도) — 응답에 dungeon_finished. 거부·버림이면
 ## {run_id, win: false, rewards: {}, error: 코드} + 알림. 처리했거나 보냈으면 true.
 func finish_dungeon(run_id: String, win: bool, elapsed: float) -> bool:
@@ -2508,7 +2508,7 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 	var type: String = run.type
 	var res := {"run_id": run_id, "win": false, "rewards": {}, "repeated": false}
 	if win:
-		if elapsed < GameData.min_clear_sec(type) or elapsed > GameData.config_num("dungeon_time_limit") or real < elapsed - GameData.RUN_SLACK_SEC:
+		if elapsed < GameData.min_clear_sec(type) or elapsed > GameData.config_num("dungeon_time_limit") or real < elapsed / GameData.MAX_GAME_SPEED - GameData.RUN_SLACK_SEC:
 			fail.error = "implausible"  # run은 열린 채
 			return fail
 		var st := _dungeon_now(type, now)

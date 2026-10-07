@@ -1,6 +1,6 @@
 extends Node
 ## x1.5 배속 버튼 체크(2026-10-07): 실제 main 씬에서 왼쪽 중하단 버튼을 눌러 바로 1.5배가 되는지, 기기 설정 파일(임시)에만 남는지,
-## 다른 UI(탭 바·오른쪽 아래 메뉴·전투 초상화 줄·튜토리얼 카드)와 겹치지 않는지, 던전에 들어가면 1배·나오면 다시 1.5배인지,
+## 다른 UI(탭 바·오른쪽 아래 메뉴·전투 초상화 줄·튜토리얼 카드)와 겹치지 않는지, 방치 전투는 켜 둬도 1배·스테이지는 1.5배인지, 던전에도 버튼이 있고 1.5배인지, 길드전은 버튼 없이 1배인지,
 ## 히트스톱이 끝나도 지금 배율로 돌아오는지, 실제 시각(Economy.time_now)은 배속과 무관한지 본다. 기기 설정 파일은 건드리지 않는다.
 ## 실행: godot --headless --path . res://tests/speed_check.tscn
 ## 화면 한 장(전투 중, 켬): xvfb-run -a godot --path . --resolution 720x1280 res://tests/speed_check.tscn -- --out=/tmp/speed.png
@@ -97,7 +97,7 @@ func _run() -> void:
 		get_viewport().get_texture().get_image().save_png(out.get_basename() + "_idle.png")
 
 	b.pressed.emit()
-	_check(SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.5), "tap turns x1.5 on instantly", str(Engine.time_scale))
+	_check(SpeedButton.is_on() and GameState.mode == GameState.Mode.IDLE and is_equal_approx(Engine.time_scale, 1.0), "tap turns it on; idle (방치) combat stays 1x", str(Engine.time_scale))
 	_check(bool(_file().get("speed_x15", false)), "saved on the device (settings file)", str(_file()))
 	_check(b.text == "", "no waiting label on the button", b.text)
 
@@ -129,13 +129,50 @@ func _run() -> void:
 		get_viewport().get_texture().get_image().save_png(out)
 		print("saved ", out)
 
-	# 던전은 1배, 나오면 다시 1.5배
+	# 모든 컨텐츠(2026-10-07): 던전에도 같은 버튼이 있고 1.5배, 나와도 1.5배
 	_main._dev_dungeon("gold")
 	await _frames(10)
-	_check(_main._dungeon != null and is_equal_approx(Engine.time_scale, 1.0), "dungeon runs at 1x", str(Engine.time_scale))
+	var dsp = _child_with(_main._dungeon, "res://scripts/speed_button.gd")
+	_check(_main._dungeon != null and dsp != null and dsp.button.visible, "dungeon has the x1.5 button", "")
+	_check(is_equal_approx(Engine.time_scale, 1.5), "dungeon runs at x1.5", str(Engine.time_scale))
+	if dsp != null:
+		dsp.button.pressed.emit()
+		_check(is_equal_approx(Engine.time_scale, 1.0) and not SpeedButton.is_on(), "dungeon button turns it off", str(Engine.time_scale))
+		dsp.button.pressed.emit()
+		_check(is_equal_approx(Engine.time_scale, 1.5), "and on again", str(Engine.time_scale))
 	_main.leave_dungeon()
 	await _frames(3)
-	_check(is_equal_approx(Engine.time_scale, 1.5), "back on the castle screen: x1.5 again", str(Engine.time_scale))
+	_check(is_equal_approx(Engine.time_scale, _castle_want()), "back on the castle screen: x1.5 in a stage, 1x idle", "%s mode %d" % [Engine.time_scale, GameState.mode])
+
+	# 길드전은 제외(사용자 2026-10-07 "길드전은 아니야"): 켜 둬도 버튼 없이 1배, 나오면 다시 1.5배
+	Guild.save_path = ""
+	GuildWar.save_path = ""
+	Guild.unlocked = true
+	Guild.join(Guild.recommendations()[1])
+	var now := Economy.time_now()
+	GuildWar.fixed_now = GuildWar.battle_at(GuildWar.week_of(preload("res://scripts/game_data.gd").reset_day(now)), -1.0) + 10.0
+	GuildWar.fetch()
+	await _frames(2)
+	GuildWar.enter(GuildWar.default_squad())
+	await _frames(20)
+	var war = _main._dungeon
+	_check(war != null and war.get_script().resource_path == "res://scripts/war_battle.gd", "guild war battle started", str(war))
+	if war != null and war.get_script().resource_path == "res://scripts/war_battle.gd":
+		_check(_child_with(war, "res://scripts/speed_button.gd") == null and is_equal_approx(Engine.time_scale, 1.0), "guild war: no button, runs at 1x", str(Engine.time_scale))
+		if out != "":
+			await _frames(30)
+			get_viewport().get_texture().get_image().save_png(out.get_basename() + "_war.png")
+		_main.leave_dungeon()
+		await _frames(3)
+		_check(is_equal_approx(Engine.time_scale, _castle_want()), "after guild war: castle speed again", "%s mode %d" % [Engine.time_scale, GameState.mode])
+
+	# 방치 ↔ 스테이지: 대기로 돌아오면 1배, 스테이지를 시작하면 다시 1.5배
+	GameState._set_mode(GameState.Mode.IDLE)
+	_check(is_equal_approx(Engine.time_scale, 1.0), "back to idle: 1x with the toggle still on", str(Engine.time_scale))
+	GameState.start_stage()
+	await _frames(3)
+	_check(GameState.mode != GameState.Mode.IDLE and is_equal_approx(Engine.time_scale, 1.5), "stage starts: x1.5", "%s mode %d" % [Engine.time_scale, GameState.mode])
+	GuildWar.fixed_now = -1.0
 
 	b.pressed.emit()
 	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "tap again turns it off", str(Engine.time_scale))
@@ -147,6 +184,19 @@ func _file() -> Dictionary:
 	if FileAccess.file_exists(TMP) and json.parse(FileAccess.get_file_as_string(TMP)) == OK and json.data is Dictionary:
 		return json.data
 	return {}
+
+
+func _castle_want() -> float:
+	return 1.0 if GameState.mode == GameState.Mode.IDLE else 1.5
+
+
+func _child_with(n: Node, path: String) -> Node:
+	if n == null:
+		return null
+	for c in n.get_children():
+		if c.get_script() != null and c.get_script().resource_path == path:
+			return c
+	return null
 
 
 func _find(path: String) -> Node:

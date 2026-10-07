@@ -2090,7 +2090,7 @@ export function createApp(opts: AppOptions) {
 
   // 결과(스펙 §6.3): {run_id, win, elapsed}. 없는 run(남의 run 포함) 404 unknown_run. 닫힌 run은 저장한 결과를 그대로 돌려준다(멱등,
   // repeated: true) — 다른 start가 닫은 run(결과 없음)은 409 run_closed. 30분이 지났으면 409 run_expired.
-  // 패배: run만 닫는다. 승리: 타당성(elapsed ≥ 최소(골드 15·장비 20초), ≤ 제한 시간, 실제 경과 ≥ elapsed − 5 — 아니면 409 implausible, run은
+  // 패배: run만 닫는다. 승리: 타당성(elapsed ≥ 최소(골드 15·장비 20초), ≤ 제한 시간, 실제 경과 ≥ elapsed ÷ 1.5(x1.5 배속) − 5 — 아니면 409 implausible, run은
   // 열린 채) → 열쇠(없으면 장비는 골드 추가 도전 비용, 409 no_key·not_enough_gold) → 보관함(409 bag_full). 열쇠·골드 차감, 보상(골드 tenths 또는
   // 장비 equip_drop_count개 — 암호학적 난수), 최고 단계, run 닫기(결과 저장), economy_log dungeon_clear는 version 가드 + 열린 run 가드 한 문장.
   app.post('/v1/dungeon/finish', auth, async (c) => {
@@ -2117,7 +2117,7 @@ export function createApp(opts: AppOptions) {
       const type = run.type
       const min = R.minClearSecOf(g.config, type)
       const limit = R.cfgNum(g.config, 'dungeon_time_limit')
-      if (elapsed < min || elapsed > limit || real < elapsed - R.RUN_SLACK_SEC) {
+      if (elapsed < min || elapsed > limit || real < elapsed / R.MAX_GAME_SPEED - R.RUN_SLACK_SEC) {
         throw new ApiError(409, 'implausible', `a win needs ${min}..${limit} s of battle and as much real time (elapsed ${elapsed}, real ${real.toFixed(1)})`)
       }
       const st = dungeonState(p, g, type, now)
@@ -2660,7 +2660,7 @@ export function createApp(opts: AppOptions) {
       const run = x.mine.boss_run
       if (!run || run.id !== runId) throw blocked('no_run', 'no such boss fight')
       const age = x.now - run.t
-      if (age < G.BOSS_FIGHT_SEC - G.BOSS_SLACK_SEC) throw blocked('too_early', `the fight lasts ${G.BOSS_FIGHT_SEC} s (${age.toFixed(1)} s so far)`)
+      if (age < G.BOSS_FIGHT_SEC / R.MAX_GAME_SPEED - G.BOSS_SLACK_SEC) throw blocked('too_early', `the fight lasts ${G.BOSS_FIGHT_SEC} s (${age.toFixed(1)} s so far)`)
       const dmg = age > G.BOSS_RUN_TTL ? 0 : Math.min(sent, run.cap)
       const reached = G.bossOf(dmg).level
       const grade = G.bossGrade(dmg)
