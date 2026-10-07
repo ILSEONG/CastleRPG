@@ -231,6 +231,7 @@ func _build_world() -> void:
 	Economy.dungeon_started.connect(_on_dungeon_started)
 	Guild.boss_started.connect(_on_guild_boss_started)
 	GuildWar.battle_started.connect(_on_guild_war_started)
+	Pvp.battle_started.connect(_on_pvp_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	_set_battle_ui(GameState.mode != GameState.Mode.IDLE)
 	if OS.is_debug_build() and rebuilds == 0:
@@ -322,6 +323,12 @@ func _on_guild_boss_started(run: Dictionary) -> void:
 func _on_guild_war_started(run: Dictionary) -> void:
 	if not run.is_empty():
 		_enter_dungeon.call_deferred(run, preload("res://scripts/war_battle.gd"), "guild_war")
+
+
+## PVP 전투(Pvp.battle_started — 결투·총력전): 같은 자리에 PVP 전투 장면(pvp_battle.gd)을 붙인다.
+func _on_pvp_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run, preload("res://scripts/pvp_battle.gd"), "guild_war")
 
 
 ## music = 그 장면의 배경음악 테마(Music.override — 나가면 성 월드 곡으로 돌아간다).

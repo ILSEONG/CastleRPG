@@ -1,12 +1,15 @@
 extends "res://scripts/ui_window.gd"
 ## [상점] 시트(하단 탭 [상점], 2026-10-07 — 방치형 게임 정석 BM, BM 총괄 Claude): 위에 보유 다이아·골드, 하위 탭(TABS — 다른 창이 탭을 더할 수 있다)
-## [패키지][패스][일일][주간][다이아].
+## [패키지][패스][일일][주간][PVP][다이아].
 ## - 패키지 = 월정액 2종(사면 즉시 다이아 + 30일 매일 [오늘 받기]) + 신규 스타터·일일·주간 특가·성장 지원 패키지(실결제, 기간 한도).
 ## - 패스 = 성장 패스: 라운드를 깰 때마다 무료 보상(누구나) + 유료 보상(패스 구매자), 단계마다 [받기].
 ## - 일일·주간 = 다이아로 사는 한정 상품 카드 2열 + 무료 선물(Economy.buy_shop — 누르는 즉시, 서버 확인은 뒤에서, 거절되면 되돌림).
 ## - 다이아 = 충전 6단계(첫 구매 2배 띠, 이후 보너스).
 ## 실결제 버튼(₩ 가격)은 Google Play 연결 전이라 누르면 알림만(Economy.iap_buy). 버튼은 기다리는 글자로 바뀌지 않는다.
 ## 받을 것(무료 선물·월정액 오늘 보상·성장 패스)이 있는 탭에 빨간 점. 모집 창의 "다이아가 부족합니다 → [이동]"은 [다이아] 탭으로 연다(open_tab).
+## [PVP] 탭(2026-10-07, PVP 스레드): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
+## PVP 화면의 [상점]도 이 탭으로 연다(pvp_view.open_shop).
+const PVP_NOTE := "PVP 코인은 결투·총력전에서 얻어요 (승리 %d · 패배 %d)"
 
 const IconsScript := preload("res://scripts/icons.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -16,11 +19,14 @@ const IapItems := preload("res://scripts/iap_items.gd")
 const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const DungeonPanel := preload("res://scripts/dungeon_panel.gd")
 const SideMenu := preload("res://scripts/side_menu.gd")
+const PvpRules := preload("res://scripts/pvp_rules.gd")
+const PvpView := preload("res://scripts/pvp_view.gd")
 
 const GROUP_SHOP := "shop_panel"
-const TABS := [["package", "패키지"], ["pass", "패스"], ["daily", "일일"], ["weekly", "주간"], ["diamond", "다이아"]]
+const TABS := [["package", "패키지"], ["pass", "패스"], ["daily", "일일"], ["weekly", "주간"], ["pvp", "PVP"], ["diamond", "다이아"]]
 const HEAD := {"package": "월정액·특가 패키지", "pass": "라운드를 깰 때마다 보상 · 패스를 사면 유료 보상도", "daily": "매일 00:00에 초기화",
-	"weekly": "매주 월요일 00:00에 초기화", "diamond": "단계마다 첫 구매는 다이아 2배"}
+	"weekly": "매주 월요일 00:00에 초기화", "diamond": "단계마다 첫 구매는 다이아 2배",
+	"pvp": "PVP 코인 상점 · 일일 상품은 매일, 주간 상품은 월요일 00:00에 초기화"}
 const NOTE_TEXT := "결제 기능은 출시 전에 연결됩니다"
 const SOLD_TEXT := "매진"
 const FREE_TEXT := "무료"
@@ -113,6 +119,7 @@ func _ready() -> void:
 	_fit_sheet()
 	Economy.changed.connect(_on_changed)
 	Economy.shop_changed.connect(_on_changed)
+	Pvp.changed.connect(_on_changed)
 
 
 ## 그 탭에 받을 것이 있다(빨간 점).
@@ -138,6 +145,8 @@ func _on_open() -> void:
 ## 그 탭으로 연다(모집 창 "다이아가 부족합니다" [이동] → "diamond").
 func open_tab(t: String) -> void:
 	tab = t
+	if t == "pvp":
+		Pvp.fetch_if_stale()
 	if is_open():
 		_rebuild()
 	else:
@@ -146,6 +155,8 @@ func open_tab(t: String) -> void:
 
 func _pick(t: String) -> void:
 	tab = t
+	if t == "pvp":
+		Pvp.fetch_if_stale()
 	_rebuild()
 
 
@@ -178,12 +189,20 @@ func _head() -> void:
 
 
 func _wallet() -> void:
+	if tab == "pvp":
+		wallet_label.text = "보유  PVP 코인 %s" % UiKit.commas(Pvp.coins())
+		return
 	wallet_label.text = "보유  다이아 %s  ·  골드 %s" % [UiKit.commas(Economy.diamonds), UiKit.commas(Economy.gold)]
 
 
 ## 보이는 카드의 상태(남은 횟수·살 수 있는지) — 같으면 카드를 다시 만들지 않는다(누르는 도중 버튼이 바뀌지 않게).
 func _signature() -> String:
 	var parts := [tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0]
+	if tab == "pvp":
+		parts.append(str(Pvp.coins()))
+		for x in PvpRules.SHOP:
+			parts.append("%s:%d:%s" % [x.id, int(Pvp.shop_item(x.id).get("bought", 0)), Pvp.buy_block(x.id)])
+		return "|".join(parts)
 	for x in ShopItems.of_tab(tab):
 		parts.append("%s:%d:%s" % [x.id, Economy.shop_left(x.id), Economy.shop_block(x.id)])
 	return "|".join(parts)
@@ -222,6 +241,12 @@ func _rebuild() -> void:
 		for i in packs.size():
 			grid.add_child(_pack_card(packs[i], i))
 		note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
+		body.add_child(note)
+		return
+	if tab == "pvp":
+		for x in PvpRules.SHOP:
+			grid.add_child(_pvp_card(x))
+		note = _label(PVP_NOTE % [PvpRules.COINS_WIN, PvpRules.COINS_LOSS], 22, Color(HudScript.INK, 0.75))
 		body.add_child(note)
 		return
 	var rows := ShopItems.of_tab(tab)
@@ -302,6 +327,80 @@ func _buy(id: String) -> void:
 	var x := ShopItems.find(id)
 	if Economy.buy_shop(id):
 		Economy.notice.emit("구매: " + Missions.reward_text(x.give))
+
+
+## PVP 상품 카드(_card와 같은 모양, 가격 = PVP 코인).
+func _pvp_card(x: Dictionary) -> Control:
+	var id: String = x.id
+	var left := maxi(0, int(x.limit) - int(Pvp.shop_item(id).get("bought", 0)))
+	var sold := left <= 0
+	var block := Pvp.buy_block(id)
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(CARD_W, 0)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.add_theme_stylebox_override("panel", UiKit.panel(SOLD_BG if sold else CARD_BG, 12.0, 10))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	card.add_child(v)
+	var name := _label(PvpRules.SHOP_NAMES.get(id, id), 24, HudScript.INK if not sold else SUB)
+	name.clip_text = true
+	v.add_child(name)
+	var pic := Control.new()
+	pic.custom_minimum_size = Vector2(0, 84)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pic.modulate = Color(1, 1, 1, 0.5) if sold else Color.WHITE
+	pic.draw.connect(func(): draw_pvp_item(pic, id, pic.size / 2.0, 70.0))
+	v.add_child(pic)
+	v.add_child(_label("%s %d/%d" % ["오늘" if x.period == "day" else "이번 주", left, int(x.limit)], 18, SUB))
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(0, 58)
+	UiKit.apply_button(b, UiKit.STEEL if sold or block != "" else HudScript.ACCENT, 12.0)
+	b.disabled = sold
+	var price := int(x.price)
+	var face := Control.new()
+	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.draw.connect(func():
+		var font := face.get_theme_default_font()
+		var text := SOLD_TEXT if sold else UiKit.commas(price)
+		var fs := 26
+		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var icon_w := 0.0 if sold else 34.0
+		var x0 := (face.size.x - tw - icon_w) / 2.0
+		if icon_w > 0.0:
+			PvpView.draw_coin_at(face, Vector2(x0 + 14.0, face.size.y / 2.0), 28.0)
+		var base := Vector2(x0 + icon_w, face.size.y / 2.0 + fs * 0.36)
+		face.draw_string_outline(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color(UiKit.INK, 0.85))
+		face.draw_string(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.62, 0.58) if not sold and Pvp.coins() < price else Color.WHITE))
+	b.add_child(face)
+	b.pressed.connect(func():
+		if Pvp.buy(id) == "":
+			Economy.notice.emit("구매: " + str(PvpRules.SHOP_NAMES.get(id, id))))
+	v.add_child(b)
+	buttons["buy:pvp_" + id] = b
+	return card
+
+
+## PVP 상품 그림: 골드·다이아는 자원 아이콘, 모집권 = 다이아 + 표, 장비 상자 = 나무 상자, 조각 = 보라(SSR은 금색) 보석 조각.
+static func draw_pvp_item(c: CanvasItem, id: String, ctr: Vector2, s: float) -> void:
+	var o := ctr - Vector2(s, s) / 2.0
+	match id:
+		"gold":
+			IconsScript.draw_icon(c, "gold", ctr, s)
+		"dia":
+			IconsScript.draw_icon(c, "diamond", ctr, s)
+		"ticket":
+			draw_item_icon(c, "ticket", ctr, s)
+		"equip":
+			c.draw_rect(Rect2(o + Vector2(s * 0.1, s * 0.3), Vector2(s * 0.8, s * 0.58)), Color("9B6B3E"))
+			c.draw_rect(Rect2(o + Vector2(s * 0.1, s * 0.3), Vector2(s * 0.8, s * 0.18)), Color("B98250"))
+			c.draw_rect(Rect2(o + Vector2(s * 0.44, s * 0.4), Vector2(s * 0.12, s * 0.16)), Color("E2B23A"))
+			c.draw_rect(Rect2(o + Vector2(s * 0.1, s * 0.3), Vector2(s * 0.8, s * 0.58)), Color("5E3F22"), false, 2.0)
+		_:
+			var col := Color("E2B23A") if id == "ssr" else Color("A86BE0")
+			for k in 3:
+				UiKit.draw_gem(c, o + Vector2(s * (0.3 + 0.2 * k), s * (0.6 - 0.12 * (k % 2))), s * 0.17, col, 5)
 
 
 func _pack_card(p: Dictionary, i: int) -> Control:

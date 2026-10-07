@@ -1,4 +1,4 @@
-// 결제 상품(iap.ts): 충전 첫 구매 2배, 패키지 한도, 월정액 매일 받기·연장, 성장 패스 무료·유료, 같은 주문 번호 한 번, 결제 연결 전 503. 마이그레이션 029.
+// 결제 상품(iap.ts): 충전 첫 구매 2배, 패키지 한도, 월정액 매일 받기·연장, 성장 패스 무료·유료, 같은 주문 번호 한 번, 결제 연결 전 503. 마이그레이션 030.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as IAP from '../src/iap.ts'

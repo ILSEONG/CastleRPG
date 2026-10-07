@@ -14,6 +14,8 @@ extends "res://scripts/ui_window.gd"
 ## (Economy.helper_candidates — 오늘 아직 함께하지 않은 친구들의 빌려주는 영웅, 그런 친구가 없으면 시스템이 고른 전투력이 비슷한 영웅 3명)
 ## 중 하나를 탭해 고른다(카드 밑에 친구 이름). 도우미와 같은 영웅은 편성에 못 넣는다. 줄 머리 [친구 관리].
 ## 카드가 셋이라 목록은 스크롤된다.
+## PVP(사용자 2026-10-07): 시트 맨 위 탭 [던전][PVP]. PVP 탭 = pvp_view.gd(모드 카드 둘 → 결투·총력전 메인 페이지, 팀 고르기, 상점 창).
+## 튜토리얼 중(끝내거나 건너뛰기 전)엔 PVP 탭이 잠겨 있고 누르면 화면 중상단 토스트(다른 잠금과 같은 모양).
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
@@ -23,6 +25,7 @@ const SceneSnap := preload("res://scripts/scene_snap.gd")
 const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
 const FriendPanelScript := preload("res://scripts/friend_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
+const PvpViewScript := preload("res://scripts/pvp_view.gd")
 
 const TYPES := ["gold", "equip", "ticket"]
 const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
@@ -35,6 +38,7 @@ const CARD_SIZE := Vector2(150, 184)
 const GRID_COLUMNS := 4
 const RED := Color(0.78, 0.22, 0.18)
 const KEY_GOLD := Color(0.95, 0.72, 0.2)
+const PVP_LOCK_TEXT := "튜토리얼을 모두 마치면 PVP가 열려요"
 
 var bag  # 보관함 창(bag_panel). main이 넣는다
 var cards := {}  # 종류 → {keys, info, reward, level, prev, next, go, reason}(장비는 + gold, cost)
@@ -56,6 +60,12 @@ var helper_box: VBoxContainer
 var helper_title: Label
 var friend_panel  # 친구 창(이 시트가 만든다)
 var _helper_row: HBoxContainer
+var section := "dungeon"  # 맨 위 탭: "dungeon" | "pvp"
+var pvp  # PVP 탭 내용(pvp_view.gd)
+var section_buttons := {}
+
+var _tabs_row: HBoxContainer
+var _dungeon_box: VBoxContainer
 
 var _list_view: VBoxContainer
 var _form_view: VBoxContainer
@@ -68,8 +78,12 @@ func _ready() -> void:
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)  # 시트가 화면을 채운다
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_build_tabs()
 	_build_list()
 	_build_form()
+	pvp = PvpViewScript.new()
+	pvp.visible = false
+	content.add_child(pvp)
 	_fit_sheet()
 	friend_panel = FriendPanelScript.new()
 	add_child(friend_panel)
@@ -80,12 +94,46 @@ func _ready() -> void:
 	Economy.dungeon_started.connect(_on_dungeon_started)
 
 
+## 맨 위 탭 [던전][PVP](고른 탭은 호박색).
+func _build_tabs() -> void:
+	_tabs_row = HBoxContainer.new()
+	_tabs_row.add_theme_constant_override("separation", 6)
+	content.add_child(_tabs_row)
+	for t in [["dungeon", "던전"], ["pvp", "PVP"]]:
+		var b := _button(t[1], UiKit.STEEL, 28)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 60)
+		b.pressed.connect(set_section.bind(t[0]))
+		_tabs_row.add_child(b)
+		section_buttons[t[0]] = b
+
+
+## 탭 바꾸기. PVP는 튜토리얼을 마치거나 건너뛴 뒤에만(잠겨 있으면 토스트).
+func set_section(s: String) -> void:
+	if s == "pvp" and pvp_locked():
+		Tutorial.lock_notice.emit(PVP_LOCK_TEXT)
+		return
+	section = s
+	if s == "pvp":
+		pvp.show_home()
+	_show_list(false)
+
+
+func pvp_locked() -> bool:
+	return Tutorial.active()
+
+
+func _style_tabs() -> void:
+	for k in section_buttons:
+		var on: bool = k == section
+		UiKit.apply_button(section_buttons[k], UiKit.AMBER if on else (UiKit.STEEL.darkened(0.25) if k == "pvp" and pvp_locked() else UiKit.STEEL), 14.0)
+
+
 func _build_list() -> void:
 	_list_view = VBoxContainer.new()
 	_list_view.add_theme_constant_override("separation", 12)
 	_list_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_list_view)
-	_list_view.add_child(_title("던전"))
 	var scroll := ScrollContainer.new()  # 카드 셋 — 화면보다 길면 스크롤
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -287,8 +335,13 @@ func step_level(t: String, d: int) -> void:
 
 func _show_list(guard := true) -> void:
 	form_type = ""
+	if section == "pvp" and pvp_locked():
+		section = "dungeon"
 	_form_view.visible = false
-	_list_view.visible = true
+	_list_view.visible = section == "dungeon"
+	pvp.visible = section == "pvp"
+	_tabs_row.visible = true
+	_style_tabs()
 	_refresh()
 	if guard:
 		_arm_guard()
@@ -369,6 +422,7 @@ func open_form(t: String) -> void:
 		if not hs.is_empty():
 			pick_helper(hs[0].key, false)
 	_list_view.visible = false
+	_tabs_row.visible = false
 	_form_view.visible = true
 	_refresh_form()
 	_arm_guard()
