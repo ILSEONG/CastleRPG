@@ -40,10 +40,7 @@ const SOLDIER_GAP := 1.4
 const TARGET_SEC := {"duel": 40.0, "total": 55.0}
 const TTK_CALIB := {"duel": 1.2, "total": 1.35}
 const HP_MULT_MAX := 30.0
-## 처치 알림·결정타(2026-10-07 전투 재미): 첫 처치 "퍼스트 블러드!", 같은 팀이 STREAK_SEC초 안에 잇달아 쓰러뜨리면 더블·트리플·쿼드라·펜타 킬,
-## 그 밖엔 "○○ 처치"(초록 = 우리가, 빨강 = 우리 영웅이 쓰러짐). 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과.
-const STREAK_SEC := 5.0
-const STREAK_NAMES := ["", "", "더블 킬!", "트리플 킬!", "쿼드라 킬!", "펜타 킬!"]
+## 처치 알림·결정타(2026-10-07 전투 재미): 첫 처치 "퍼스트 블러드!", 그 밖엔 "○○ 처치"(연속 처치 알림은 없음 — 사용자 2026-10-07 "더블~펜타 킬은 하지마")(초록 = 우리가, 빨강 = 우리 영웅이 쓰러짐). 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과.
 const KO_SEC := 0.45
 const GOOD := Color(0.55, 1.0, 0.55)
 const BAD := Color(1.0, 0.5, 0.45)
@@ -71,7 +68,6 @@ var ttk_est := 0.0  # 배율 전 어림 전투 시간(초, 시뮬 보정용)
 var force_hp_mult := 0.0
 var rig
 var _kills := 0
-var _streak := [0, -INF, -1]  # [잇단 처치 수, 마지막 처치 시각, 처치한 팀]
 var _ko_left := -1.0  # 마지막 영웅이 쓰러진 뒤 결과까지 남은 게임 초(음수 = 아직)
 var _ko := []  # [win, reason]  # 테스트·시뮬: 0보다 크면 이 배율을 그대로 쓴다
 
@@ -308,18 +304,10 @@ func _on_fell(u) -> void:
 		return  # 마지막 처치는 결정타 띠가 맡는다
 	var killer: int = 1 - int(u.team)
 	_kills += 1
-	if _streak[2] == killer and clock - float(_streak[1]) <= STREAK_SEC:
-		_streak[0] += 1
-	else:
-		_streak[0] = 1
-	_streak[1] = clock
-	_streak[2] = killer
 	var name := str(u.def.get("name", ""))
 	var text := "%s 처치" % name if killer == 0 else "%s 쓰러짐" % name
 	if _kills == 1:
 		text = "퍼스트 블러드! " + text
-	elif _streak[0] >= 2:
-		text = STREAK_NAMES[mini(_streak[0], STREAK_NAMES.size() - 1)]
 	if hud != null:
 		hud.flash(text, 1.4, GOOD if killer == 0 else BAD)
 
