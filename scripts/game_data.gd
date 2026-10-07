@@ -81,7 +81,7 @@ const UPGRADE_NUM_COLS := ["per_level", "max_level", "cost_base", "cost_growth"]
 const UPGRADE_UNITS := ["pct", "pp"]
 const UPGRADE_KEYS := {"atk": "atk_pct", "hp": "hp_pct", "aspd": "aspd_pct", "mspd": "mspd_pct", "crit_rate": "crit_rate", "crit_dmg": "crit_dmg"}  # 항목 id → upgrade_bonus 키
 const BASE_CRIT_MULT := 1.5  # 모든 아군 공격의 기본 치명타 배율(개정 20 §3)
-const LEVELUP_GOLD_GROWTH := 1.12  # L → L+1 골드 = round(등급 값 × 1.12^(L−1)). 서버 rules.LEVELUP_GOLD_GROWTH
+const LEVELUP_GOLD_GROWTH := 1.16  # L → L+1 골드 = round(등급 값 × 1.16^(L−1)) (2026-10-07 1.12 → 1.16: 초반은 비슷, 후반 골드 소비 상향). 서버 rules.LEVELUP_GOLD_GROWTH
 # --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
 const DUNGEONS_PATH := "res://data/dungeons.csv"
 const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
@@ -1054,9 +1054,9 @@ static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
 	return out
 
 
-## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 그날 추가 도전 횟수).
+## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × 2^(그날 추가 도전 횟수)(2026-10-07: 10만·20만·40만·80만…, 예전엔 10만씩 늘었다).
 static func extra_cost(extra_today: int) -> int:
-	return int(config_num("equip_extra_gold_base")) * (1 + extra_today)
+	return int(config_num("equip_extra_gold_base")) * int(pow(2, mini(extra_today, 40)))
 
 
 ## 출전 인원(골드 6, 장비 4).

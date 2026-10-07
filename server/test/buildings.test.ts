@@ -244,7 +244,7 @@ test('원자성: 끝난 건설을 두 요청이 동시에 읽어도 완료는 �
 test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.1%p/레벨), 민가 레벨이 인구(player.population)를 늘린다. 축적 상한은 민가와 무관(720분)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await S.db.query('update player_state set gold_tenths = 100000 where player_id = $1', [id])
+  await S.db.query('update player_state set gold_tenths = 200000 where player_id = $1', [id])
   rand.next = [0.0055, 0] // 주점 1: SSR 0.5% 밖 → SR(풀 첫째 bron)
   assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => x.grade), ['SR'])
   await setLevels(id, { tavern: 2 }) // SSR 0.6%

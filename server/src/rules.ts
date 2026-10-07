@@ -422,7 +422,7 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
 
 // --- 영웅 레벨업 (개정 11 §2.1) — 앱 GameData.max_level·levelup_total과 같은 식 ---
 
-export const LEVELUP_GOLD_GROWTH = 1.12
+export const LEVELUP_GOLD_GROWTH = 1.16 // 2026-10-07 1.12 → 1.16(초반은 비슷, 후반 골드 소비 상향). 앱 GameData와 같다
 
 // 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 export function heroMaxLevel(promotion: number, config: Config): number {
@@ -588,8 +588,8 @@ export function applyReset(type: string, d: DungeonState, now: number, config: C
   return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h), ...(d.helpers_used ? { helpers_used: [] } : {}) }
 }
 
-// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 그날 추가 도전 횟수).
-export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * (1 + extraToday)
+// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × 2^(그날 추가 도전 횟수)(2026-10-07: 10만·20만·40만·80만…).
+export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * 2 ** Math.min(Math.max(extraToday, 0), 40)
 export const partySize = (config: Config, type: string) => cfgNum(config, `${type}_dg_party`)
 export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `${type}_dg_min_sec`)
 

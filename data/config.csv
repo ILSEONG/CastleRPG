@@ -40,8 +40,8 @@ research_time_growth,1.35
 lab_research_speed_per_level,0.02
 research_cancel_refund,0.5
 research_dia_per_min,1
-gacha_gold_cost_base,3000
-gacha_gold_cost_growth,1.15
+gacha_gold_cost_base,10000
+gacha_gold_cost_growth,1.25
 gacha_gold_level_max,10
 gacha_gold_level_pulls,30
 gacha_gold_ssr_base,0.005

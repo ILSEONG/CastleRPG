@@ -100,7 +100,7 @@ test('동시 모집 2건(골드는 1회분): 둘 다 같은 version을 읽어도
   try {
     S.clock.t = T0
     const { token, id } = await S.login()
-    await S.db.query('update player_state set gold_tenths = 30000 where player_id = $1', [id])
+    await S.db.query('update player_state set gold_tenths = 100000 where player_id = $1', [id])
     b.arm()
     const [r1, r2] = await Promise.all([
       S.req('POST', '/v1/gacha', { token, body: { count: 1 } }),

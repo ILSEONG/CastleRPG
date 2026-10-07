@@ -85,7 +85,7 @@ test('일일 리셋 규칙: 15:00 UTC(00:00 KST) 경계, 놓친 날 × 지급을
   assert.equal(R.nextReset(MIDNIGHT, CFG), MIDNIGHT + DAY)
   assert.deepEqual(R.freshDungeon('gold', T0, CFG), { best_level: 0, keys: 3, extra_today: 0, last_reset: LAST })
   assert.equal(R.extraCost({ equip_extra_gold_base: '5000' }, 0), 5000)
-  assert.equal(R.extraCost({ equip_extra_gold_base: '5000' }, 2), 15000)
+  assert.equal(R.extraCost({ equip_extra_gold_base: '5000' }, 2), 20000)
 })
 
 test('보상·적 능력치·장비 능력치·판매 값: 골드 = round(4000 × 1.1^(n−1)), 적 = 기본 × 성장^(n−1), 장비 = round((기본 + 레벨당 × (n−1)) × 등급 배율)', async () => {
@@ -175,7 +175,7 @@ test('일일 리셋(서버 시각): 자정(KST) 전엔 그대로, 자정에 +3, 
   await setDungeon(S.db.query, id, 'equip', { keys: 0, extra_today: 2 })
   S.clock.t = MIDNIGHT - 1
   let d = await dg(token)
-  assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost], [0, 0, 2, 300000])
+  assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost], [0, 0, 2, 400000])
   S.clock.t = MIDNIGHT
   d = await dg(token)
   assert.deepEqual([d.gold.keys, d.equip.keys, d.equip.extra_today, d.equip.extra_cost, d.gold.next_reset], [3, 1, 0, 100000, MIDNIGHT + DAY])
@@ -313,7 +313,7 @@ test('finish 타당성: 최소(골드 15·장비 20초)·제한 시간 120초·�
   assert.deepEqual((await finish(token, { run_id: '00000000-0000-4000-8000-000000000000', win: true, elapsed: 20 })).json.error, 'unknown_run')
 })
 
-test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·굴림), 열쇠 −1, 재전송은 같은 5개 — 열쇠 없으면 골드 추가 도전(비용 100000 × (1 + 그날 횟수)), 자정에 0', async () => {
+test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·굴림), 열쇠 −1, 재전송은 같은 5개 — 열쇠 없으면 골드 추가 도전(비용 100000 × 2^(그날 횟수)), 자정에 0', async () => {
   const { token, id } = await fresh()
   const s = await start(token, { type: 'equip', level: 1, party: EQ4 })
   S.clock.t = T0 + 40
@@ -343,7 +343,7 @@ test('finish 장비 던전 승리: 장비 정확히 5개(id·등급·부위·굴
   x = await start(token, { type: 'equip', level: 1, party: EQ4 })
   S.clock.t += 25
   x = await finish(token, { run_id: x.json.run_id, win: true, elapsed: 25 })
-  assert.deepEqual([x.json.player.gold, x.json.player.dungeons.equip.extra_today, x.json.player.dungeons.equip.extra_cost], [100000, 2, 300000])
+  assert.deepEqual([x.json.player.gold, x.json.player.dungeons.equip.extra_today, x.json.player.dungeons.equip.extra_cost], [100000, 2, 400000])
   assert.equal((await start(token, { type: 'equip', level: 1, party: EQ4 })).json.error, 'not_enough_gold')
   S.clock.t = MIDNIGHT
   const d = await dg(token)

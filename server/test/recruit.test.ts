@@ -29,10 +29,10 @@ const setState = (id: string, sql: string, v: number) => S.db.query(`update play
 const share = (out: { grade: string }[], g: string) => out.filter((x) => x.grade === g).length / out.length
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
 
-test('골드 비용·확률 공식: 1회 = 3000 × 1.15^(L−1)을 50 단위로(L1 3,000 · L2 3,450 · L5 5,250 · L10 10,550), 10회 = × 10(할인 없음), SSR 0.5% + 0.1%p·SR 5% + 0.5%p(L10 1.4% · 9.5%), 주점 보너스는 더한다', () => {
-  assert.deepEqual([1, 2, 5, 10].map((l) => R.gachaCost(CFG, 'gold', 1, l)), [3000, 3450, 5250, 10550])
-  assert.deepEqual([1, 10].map((l) => R.gachaCost(CFG, 'gold', 10, l)), [30000, 105500])
-  assert.equal(R.gachaCost(CFG, 'gold', 1, 11), 10550) // 최대 레벨 넘는 값은 최대로
+test('골드 비용·확률 공식: 1회 = 10000 × 1.25^(L−1)을 50 단위로(L1 10,000 · L2 12,500 · L5 24,400 · L10 74,500), 10회 = × 10(할인 없음), SSR 0.5% + 0.1%p·SR 5% + 0.5%p(L10 1.4% · 9.5%), 주점 보너스는 더한다', () => {
+  assert.deepEqual([1, 2, 5, 10].map((l) => R.gachaCost(CFG, 'gold', 1, l)), [10000, 12500, 24400, 74500])
+  assert.deepEqual([1, 10].map((l) => R.gachaCost(CFG, 'gold', 10, l)), [100000, 745000])
+  assert.equal(R.gachaCost(CFG, 'gold', 1, 11), 74500) // 최대 레벨 넘는 값은 최대로
   const l4 = R.gachaRates(CFG, 'gold', 4, 1)
   const l10 = R.gachaRates(CFG, 'gold', 10, 1)
   assert.ok(near(l4.ssr, 0.008) && near(l4.sr, 0.065) && near(l10.ssr, 0.014) && near(l10.sr, 0.095), JSON.stringify([l4, l10]))
@@ -84,22 +84,22 @@ test('천장(결정적 난수): SSR 없이 49장이면 50번째가 SSR, 카운�
   assert.equal(pity.n, 1)
 })
 
-test('API 골드: 누적 25에서 10연차(30,000 = 1회 × 10, SR 보장 없음 — 전부 R이면 R 10장) → Lv 2·누적 5, 다음 1회는 3,450. 응답 gacha {gold_level, gold_pulls, gold_next, dia_pity}, 로그 currency·level·pity', async () => {
+test('API 골드: 누적 25에서 10연차(100,000 = 1회 × 10, SR 보장 없음 — 전부 R이면 R 10장) → Lv 2·누적 5, 다음 1회는 12,500. 응답 gacha {gold_level, gold_pulls, gold_next, dia_pity}, 로그 currency·level·pity', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setState(id, 'gold_tenths', 1_000_000)
+  await setState(id, 'gold_tenths', 2_000_000)
   await setState(id, 'gacha_gold_pulls', 25)
   rand.next = Array(30).fill(0.99)
   let r = await gacha(token, { count: 10 })
   assert.equal(r.status, 200)
-  assert.deepEqual([r.json.player.gold, r.json.player.gacha], [100_000 - 30_000, { gold_level: 2, gold_pulls: 5, gold_next: 60, dia_pity: 0 }])
+  assert.deepEqual([r.json.player.gold, r.json.player.gacha], [200_000 - 100_000, { gold_level: 2, gold_pulls: 5, gold_next: 60, dia_pity: 0 }])
   assert.equal(r.json.results.map((x: any) => x.grade).join(''), 'RRRRRRRRRR') // 골드 10연차는 SR 이상 보장이 없다
   rand.next = [0.99, 0]
   r = await gacha(token, { count: 1, currency: 'gold' })
-  assert.deepEqual([r.json.player.gold, r.json.player.gacha.gold_pulls], [70_000 - 3_450, 6])
+  assert.deepEqual([r.json.player.gold, r.json.player.gacha.gold_pulls], [100_000 - 12_500, 6])
   const l = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'gacha' order by id", [id])
   assert.deepEqual(l.map((x) => [x.detail.currency, x.detail.level, x.detail.cost, x.detail.after]),
-    [['gold', 1, 30000, { gold_level: 2, gold_pulls: 5 }], ['gold', 2, 3450, { gold_level: 2, gold_pulls: 6 }]])
+    [['gold', 1, 100000, { gold_level: 2, gold_pulls: 5 }], ['gold', 2, 12500, { gold_level: 2, gold_pulls: 6 }]])
   // 다시 읽어도 그대로(서버 저장)
   assert.deepEqual((await S.req('GET', '/v1/player', { token })).json.player.gacha, { gold_level: 2, gold_pulls: 6, gold_next: 60, dia_pity: 0 })
   rand.next = []
@@ -136,10 +136,10 @@ test('API 다이아: 훅으로 3,000 → 1회 300(천장 +1), 천장 49에서 R�
   rand.next = []
 })
 
-test('하위 호환: currency가 없거나 null이면 골드 모집(Lv 1 비용 3,000, 누적 +1)', async () => {
+test('하위 호환: currency가 없거나 null이면 골드 모집(Lv 1 비용 10,000, 누적 +1)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setState(id, 'gold_tenths', 60_000)
+  await setState(id, 'gold_tenths', 200_000)
   assert.deepEqual((await gacha(token, { count: 1 })).json.player.gacha.gold_pulls, 1)
   const r = await gacha(token, { count: 1, currency: null })
   assert.deepEqual([r.status, r.json.player.gold_tenths, r.json.player.gacha.gold_pulls, r.json.player.diamonds], [200, 0, 2, 0])

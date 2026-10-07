@@ -97,12 +97,12 @@ test('최대 레벨은 승급 기준: 승급 0은 20(넘으면 409 max_level), �
 test('모집 중복 → 조각 +1(결과 shards), 새 영웅은 조각 0. 골드 10연차 같은 영웅 10장 = 새 1장 + 조각 9', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await S.db.query('update player_state set gold_tenths = 30000 where player_id = $1', [id])
+  await S.db.query('update player_state set gold_tenths = 100000 where player_id = $1', [id])
   rand.next = [0.5, 0] // R 풀 첫째 = hans(보유)
   let r = await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })
   assert.deepEqual(r.json.results, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }])
   assert.deepEqual(r.json.player.heroes.hans, { copies: 2, level: 1, shards: 1, promotion: 0 })
-  await S.db.query('update player_state set gold_tenths = 300000 where player_id = $1', [id])
+  await S.db.query('update player_state set gold_tenths = 1000000 where player_id = $1', [id])
   rand.next = Array(30).fill(0.99) // 전부 R 풀 마지막 = tia(새로) — 골드 10연차는 SR 보장이 없다
   r = await S.req('POST', '/v1/gacha', { token, body: { count: 10 } })
   assert.deepEqual(r.json.results.map((x: any) => [x.hero_id, x.new, x.copies, x.shards]), Array.from({ length: 10 }, (_, i) => ['tia', i === 0, i + 1, i]))

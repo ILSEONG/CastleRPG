@@ -2,22 +2,22 @@ id,branch,tier,name,effect,per_level,max_level,lab_req,req1,req1_lv,req2,req2_lv
 wood_tech,economy,1,벌목술,wood_pct,5,10,1,,,,,1200,800,1000,0,60
 stone_tech,economy,1,채석술,stone_pct,5,10,1,,,,,1200,800,1000,0,60
 food_tech,economy,1,농경술,food_pct,5,10,1,,,,,1200,800,1000,0,60
-construct,economy,2,건축학,build_speed_pct,3,10,3,wood_tech,3,stone_tech,3,4000,3000,3500,500,300
-commerce,economy,2,상업,sell_pct,3,10,3,food_tech,3,,,4000,3000,3500,500,300
-plunder,economy,3,전리품 수집,kill_gold_pct,5,10,6,commerce,5,,,9000,7000,8000,2000,900
-method,economy,3,연구 방법론,research_speed_pct,3,10,6,construct,5,,,9000,7000,8000,2000,900
-abundance,economy,4,풍요,res_pct,3,10,12,plunder,5,method,5,20000,16000,18000,6000,1800
+construct,economy,2,건축학,build_speed_pct,3,10,3,wood_tech,3,stone_tech,3,4000,3000,3500,5000,300
+commerce,economy,2,상업,sell_pct,3,10,3,food_tech,3,,,4000,3000,3500,5000,300
+plunder,economy,3,전리품 수집,kill_gold_pct,5,10,6,commerce,5,,,9000,7000,8000,20000,900
+method,economy,3,연구 방법론,research_speed_pct,3,10,6,construct,5,,,9000,7000,8000,20000,900
+abundance,economy,4,풍요,res_pct,3,10,12,plunder,5,method,5,20000,16000,18000,60000,1800
 inf_drill,military,1,보병 훈련,inf_pct,3,10,1,,,,,1200,800,1000,0,60
 arc_drill,military,1,궁병 훈련,arc_pct,3,10,1,,,,,1200,800,1000,0,60
 cav_drill,military,1,기병 훈련,cav_pct,3,10,1,,,,,1200,800,1000,0,60
-wall_fort,military,2,성벽 보강,castle_hp_pct,5,10,3,inf_drill,3,,,4000,3000,3500,500,300
-gate_fort,military,2,성문 보강,gate_hp_pct,5,10,3,arc_drill,3,,,4000,3000,3500,500,300
-drill_manual,military,3,훈련 교범,train_speed_pct,3,10,6,inf_drill,5,cav_drill,5,9000,7000,8000,2000,900
-logistics,military,3,보급술,train_cost_pct,2,10,6,arc_drill,5,,,9000,7000,8000,2000,900
-barracks_ext,military,4,병영 확장,pop_add,1,5,10,drill_manual,5,logistics,5,20000,16000,18000,6000,1800
-elite,military,5,정예 전술,soldier_pct,3,10,15,barracks_ext,3,wall_fort,5,40000,30000,35000,15000,3600
+wall_fort,military,2,성벽 보강,castle_hp_pct,5,10,3,inf_drill,3,,,4000,3000,3500,5000,300
+gate_fort,military,2,성문 보강,gate_hp_pct,5,10,3,arc_drill,3,,,4000,3000,3500,5000,300
+drill_manual,military,3,훈련 교범,train_speed_pct,3,10,6,inf_drill,5,cav_drill,5,9000,7000,8000,20000,900
+logistics,military,3,보급술,train_cost_pct,2,10,6,arc_drill,5,,,9000,7000,8000,20000,900
+barracks_ext,military,4,병영 확장,pop_add,1,5,10,drill_manual,5,logistics,5,20000,16000,18000,60000,1800
+elite,military,5,정예 전술,soldier_pct,3,10,15,barracks_ext,3,wall_fort,5,40000,30000,35000,150000,3600
 hero_weapon,hero,1,무기 연마,hero_atk_pct,3,10,1,,,,,1200,800,1000,0,60
 hero_armor,hero,1,갑옷 단련,hero_hp_pct,3,10,1,,,,,1200,800,1000,0,60
-arcana,hero,2,비전 연구,skill_pct,4,10,5,hero_weapon,5,hero_armor,5,9000,7000,8000,2000,900
-legend_weapon,hero,3,전설의 무기,hero_atk_pct,4,10,15,arcana,5,,,40000,30000,35000,15000,3600
-legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,15000,3600
+arcana,hero,2,비전 연구,skill_pct,4,10,5,hero_weapon,5,hero_armor,5,9000,7000,8000,20000,900
+legend_weapon,hero,3,전설의 무기,hero_atk_pct,4,10,15,arcana,5,,,40000,30000,35000,150000,3600
+legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,150000,3600

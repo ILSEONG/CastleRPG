@@ -55,8 +55,8 @@ test('공식: 비용 = round(값 × 1.3^n), 시간 = round(base_sec × 1.35^n / 
   assert.deepEqual([0, 1, 2, 3].map((n) => R.researchCost(c, def('wood_tech'), n)), [
     { wood: 1200, stone: 800, food: 1000, gold: 0 }, { wood: 1560, stone: 1040, food: 1300, gold: 0 },
     { wood: 2028, stone: 1352, food: 1690, gold: 0 }, { wood: 2636, stone: 1758, food: 2197, gold: 0 }])
-  assert.deepEqual(R.researchCost(c, def('construct'), 1), { wood: 5200, stone: 3900, food: 4550, gold: 650 })
-  assert.deepEqual(R.researchCost(c, def('elite'), 9), { wood: 424180, stone: 318135, food: 371157, gold: 159067 })
+  assert.deepEqual(R.researchCost(c, def('construct'), 1), { wood: 5200, stone: 3900, food: 4550, gold: 6500 })
+  assert.deepEqual(R.researchCost(c, def('elite'), 9), { wood: 424180, stone: 318135, food: 371157, gold: 1590675 })
   // 스펙 예: 벌목술 1레벨 60초, 10레벨 약 15분, 정예 전술 10레벨 약 15시간(보너스 없이)
   assert.deepEqual([0, 1, 2, 9].map((n) => R.researchSec(c, def('wood_tech'), n, 0)), [60, 81, 109, 894])
   assert.equal(R.researchSec(c, def('elite'), 9, 0), 53617)
@@ -113,7 +113,7 @@ test('시작 → 자동 완료: 비용 전부 차감, 진행 {id, finish}, 끝�
 test('연구 속도: 연구소 레벨과 연구 방법론(research_speed_pct)이 시간을 줄인다. 골드는 정수 골드 × 10 tenths를 뺀다', async () => {
   const { token, id } = await fresh()
   await setRes(id, RICH)
-  await setGold(id, 500 * 10 + 7)
+  await setGold(id, 5000 * 10 + 7)
   await setLevel(id, 'lab', 11)
   await setResearch(id, { wood_tech: 3, stone_tech: 3, method: 5 })
   const r = await start(token, 'construct')
@@ -138,7 +138,7 @@ test('검사 순서: 400(id 형식) → 404 unknown_research → 409 research_bu
   r = await start(token, 'construct')
   assert.deepEqual([r.status, r.json.error], [409, 'locked'])
   await setResearch(id, { stone_tech: 3 })
-  r = await start(token, 'construct') // 이제 열림 — 골드 500 부족
+  r = await start(token, 'construct') // 이제 열림 — 골드 5000 부족
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_gold'])
   await setRes(id, { wood: 3999 })
   r = await start(token, 'construct') // 자원과 골드가 둘 다 모자라면 자원이 먼저
@@ -172,14 +172,14 @@ test('취소: 진행 중이 아니면 409 no_research. 그 레벨 비용의 50%(
   // 골드 환불은 정수 골드 × 10 tenths
   await setLevel(id, 'lab', 3)
   await setResearch(id, { wood_tech: 3, stone_tech: 3, construct: 1 })
-  await setGold(id, 650 * 10 + 3)
-  assert.equal((await start(token, 'construct')).status, 200) // 1 → 2: 5200·3900·4550·650
+  await setGold(id, 6500 * 10 + 3)
+  assert.equal((await start(token, 'construct')).status, 200) // 1 → 2: 5200·3900·4550·6500
   r = await S.req('POST', '/v1/research/cancel', { token })
-  assert.deepEqual([r.json.refund, r.json.player.gold_tenths], [{ wood: 2600, stone: 1950, food: 2275, gold: 325 }, 3 + 3250])
+  assert.deepEqual([r.json.refund, r.json.player.gold_tenths], [{ wood: 2600, stone: 1950, food: 2275, gold: 3250 }, 3 + 32500])
   const l = await logs(id)
   assert.deepEqual(l.filter((x: any) => x.action === 'cancel'), [
     { action: 'cancel', id: 'wood_tech', level: 3, refund: { wood: 1014, stone: 676, food: 845, gold: 0 } },
-    { action: 'cancel', id: 'construct', level: 2, refund: { wood: 2600, stone: 1950, food: 2275, gold: 325 } },
+    { action: 'cancel', id: 'construct', level: 2, refund: { wood: 2600, stone: 1950, food: 2275, gold: 3250 } },
   ])
   assert.equal((await S.req('POST', '/v1/research/cancel', { token })).json.error, 'no_research')
 })
@@ -189,7 +189,7 @@ test('다이아 즉시 완료: 비용 = max(1, ceil(남은 초 / 60) × 1), 모�
   let r = await S.req('POST', '/v1/research/finish', { token })
   assert.deepEqual([r.status, r.json.error], [409, 'no_research'])
   await setRes(id, RICH)
-  await setGold(id, 500 * 10)
+  await setGold(id, 5000 * 10)
   await setLevel(id, 'lab', 3)
   await setResearch(id, { wood_tech: 3, stone_tech: 3 })
   assert.equal((await start(token, 'construct')).status, 200) // 288초
@@ -314,7 +314,7 @@ test('gamedata: research 22행(파일 순서, CSV 열 이름 키, 빈 선행은 
   assert.deepEqual(g.research.map((d: any) => d.id), csv)
   assert.deepEqual(g.research[3], {
     id: 'construct', branch: 'economy', tier: 2, name: '건축학', effect: 'build_speed_pct', per_level: 3, max_level: 10, lab_req: 3,
-    req1: 'wood_tech', req1_lv: 3, req2: 'stone_tech', req2_lv: 3, wood: 4000, stone: 3000, food: 3500, gold: 500, base_sec: 300,
+    req1: 'wood_tech', req1_lv: 3, req2: 'stone_tech', req2_lv: 3, wood: 4000, stone: 3000, food: 3500, gold: 5000, base_sec: 300,
   })
   assert.deepEqual([g.research[0].req1, g.research[0].req1_lv, g.research[4].req2, g.research[4].req2_lv], [null, null, null, null])
   assert.deepEqual(['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min'].map((k) => g.config[k]),
@@ -359,14 +359,14 @@ test('시드 검증: research.csv(branch·effect, 숫자 범위, 선행은 표 �
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const W = 'wood_tech,economy,1,벌목술,wood_pct,5,10,1,,,,,1200,800,1000,0,60'
   const C = 'construct,economy,2,건축학,build_speed_pct,3,10,3,wood_tech,3,stone_tech,3,'
-  const L = 'legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,15000,3600'
+  const L = 'legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,150000,3600'
   const cases: [string, string, RegExp][] = [
     ['research.csv', rs.replace(W, W.replace('economy', 'navy')), /research\.csv line 2 column 'branch': must be one of economy\/military\/hero: 'navy'/],
     ['research.csv', rs.replace(W, W.replace('wood_pct', 'lumber_pct')), /research\.csv line 2 column 'effect': unknown effect 'lumber_pct'/],
     ['research.csv', rs.replace(W, W.replace(/,60$/, ',0')), /line 2 column 'base_sec': must be greater than 0: 0/],
     ['research.csv', rs.replace(L, L.replace(',4,10,15,', ',4,0,15,')), /line 23 column 'max_level': must be at least 1: 0/],
     ['research.csv', rs.replace(L, L.replace('hero,3,', 'hero,0,')), /line 23 column 'tier': must be at least 1: 0/],
-    ['research.csv', rs.replace(L, L.replace(',15000,', ',-1,')), /line 23 column 'gold': must be 0 or more: -1/],
+    ['research.csv', rs.replace(L, L.replace(',150000,', ',-1,')), /line 23 column 'gold': must be 0 or more: -1/],
     ['research.csv', rs.replace(L, L.replace(',4,10,', ',x,10,')), /line 23 column 'per_level': not a number: 'x'/],
     ['research.csv', rs.replace(C, C.replace('wood_tech,3', 'wood_tek,3')), /line 5 column 'req1': unknown research 'wood_tek'/],
     ['research.csv', rs.replace(C, C.replace('wood_tech,3', 'wood_tech,11')), /line 5 column 'req1_lv': must be an integer in 1\.\.10 \(max level of 'wood_tech'\): 11/],

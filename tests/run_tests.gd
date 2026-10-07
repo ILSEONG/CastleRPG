@@ -1615,15 +1615,15 @@ func test_gacha_offline() -> void:
 	var gold_ten: Array = EconomyScript.roll_gacha(10, all_r)
 	check(gold_ten.size() == 10 and gold_ten.all(func(x): return x == {"id": "tia", "grade": "R"}), "a gold 10-pull has no SR guarantee (all R stays all R): %s" % [gold_ten])
 	check(EconomyScript.roll_gacha(1, all_r) == [{"id": "tia", "grade": "R"}], "a single pull has no guarantee")
-	check(GameData.gacha_cost("gold", 1, 1) == 3000 and GameData.gacha_cost("gold", 10, 1) == 30000, "gold Lv 1 costs 3000 / 30000 (10-pull = 1-pull x 10, no discount)")
+	check(GameData.gacha_cost("gold", 1, 1) == 10000 and GameData.gacha_cost("gold", 10, 1) == 100000, "gold Lv 1 costs 10000 / 100000 (10-pull = 1-pull x 10, no discount)")
 	var e = _econ(1000.0)
 	e.rng.seed = 7
 	var got := []
 	var notices := []
 	e.gacha_done.connect(func(r): got.append(r))
 	e.notice.connect(func(t): notices.append(t))
-	e.gold_tenths = 330005
-	check(e.gacha(10) and e.gold_tenths == 30005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 30000 gold (300000 tenths) and returns 10 cards")
+	e.gold_tenths = 1100005
+	check(e.gacha(10) and e.gold_tenths == 100005 and got.size() == 1 and got[0].size() == 10, "10-pull costs 100000 gold (1000000 tenths) and returns 10 cards")
 	var seen := _econ_starters()
 	var consistent := true
 	for r in got[0]:
@@ -1633,7 +1633,7 @@ func test_gacha_offline() -> void:
 	check(consistent and seen == e.heroes, "results: new only on the first copy, copies count up per card, heroes updated: %s" % [got[0]])
 	check(e.heroes.keys().all(func(id): return e.shards_of(id) == int(e.heroes[id]) - 1) and e.hero_promotions.is_empty(),
 		"rev 15: a repeat pull adds a shard (new heroes start at 0); recruiting never promotes: %s" % [e.hero_shards])
-	check(e.gacha(1) and e.gold_tenths == 5 and got.size() == 2, "1 pull costs 3000 (30000 tenths), the 0.5 fraction stays")
+	check(e.gacha(1) and e.gold_tenths == 5 and got.size() == 2, "1 pull costs 10000 (100000 tenths), the 0.5 fraction stays")
 	check(not e.gacha(1) and e.gold_tenths == 5 and got.size() == 2 and notices == [EconomyScript.NO_GOLD_TEXT], "not enough gold: nothing happens, one notice")
 	e.gold = 99999
 	check(not e.gacha(3) and e.gold == 99999, "only 1 or 10 pulls")
@@ -1641,8 +1641,8 @@ func test_gacha_offline() -> void:
 	var b = _econ(0.0)
 	a.rng.seed = 99
 	b.rng.seed = 99
-	a.gold = 30000
-	b.gold = 30000
+	a.gold = 100000
+	b.gold = 100000
 	a.gacha(10)
 	b.gacha(10)
 	check(a.heroes == b.heroes and a.heroes != _econ_starters(), "same seed, same pulls")
@@ -1837,9 +1837,9 @@ func test_hero_levels() -> void:
 		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.169115 / 10.0 + 23.0 * 2.169115 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 126,
 		"power = round((HP / 10 + atk x 2 / interval) x grade): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
-	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 34, 38, 42, 47, 83, 231, 258] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 67, 75, 166, 461] \
-		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 134, 151, 333, 923, 266690], "gold cost table = round(base x 1.12^(L-1)), same as the server")
-	check(GameData.levelup_cost("R", 1, 5) == {"gold": 191} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 7614}, "cost is gold only (no food), count sums the levels")
+	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 35, 40, 47, 54, 114, 434, 503] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 70, 81, 228, 868] \
+		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 139, 161, 456, 1736, 2899509], "gold cost table = round(base x 1.16^(L-1)), same as the server")
+	check(GameData.levelup_cost("R", 1, 5) == {"gold": 206} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 11830}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)
 	var got := []
@@ -1847,10 +1847,10 @@ func test_hero_levels() -> void:
 	e.gold_tenths = 2005
 	e.res.food = 200
 	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 300 tenths and no food")
-	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 565 and e.res.food == 200, "three levels at once take the summed cost")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 485 and e.res.food == 200, "three levels at once take the summed cost")
 	var notes := []
 	e.notice.connect(func(t): notes.append(t))
-	e.gold_tenths = 469  # 46.9골드 < 47
+	e.gold_tenths = 539  # 53.9골드 < 54
 	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
 	e.gold_tenths = 100000
 	e.res.food = 0
@@ -3577,8 +3577,8 @@ func test_dungeon_tables() -> void:
 		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
 		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
 	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 100000
-		and GameData.extra_cost(2) == 300000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
-		"fresh dungeon = today's keys; extra run cost 100000 x (1 + runs today); party 6 / 4")
+		and GameData.extra_cost(2) == 400000 and GameData.extra_cost(3) == 800000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
+		"fresh dungeon = today's keys; extra run cost 100000 x 2^(runs today); party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
 	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
@@ -3893,8 +3893,8 @@ func test_recruit_r23() -> void:
 	const RecruitArt := preload("res://scripts/recruit_art.gd")
 	GameData.load_tables()
 	# 공식(서버 rules와 같은 값)
-	check([1, 2, 5, 10].map(func(l): return GameData.gacha_cost("gold", 1, l)) == [3000, 3450, 5250, 10550], "rev 23: gold 1-pull 3000 / 3450 / 5250 / 10550 at Lv 1 / 2 / 5 / 10")
-	check(GameData.gacha_cost("gold", 10, 10) == 105500 and GameData.gacha_cost("gold", 1, 99) == 10550 and GameData.gacha_cost("diamond", 1, 7) == 300
+	check([1, 2, 5, 10].map(func(l): return GameData.gacha_cost("gold", 1, l)) == [10000, 12500, 24400, 74500], "rev 23: gold 1-pull 10000 / 12500 / 24400 / 74500 at Lv 1 / 2 / 5 / 10")
+	check(GameData.gacha_cost("gold", 10, 10) == 745000 and GameData.gacha_cost("gold", 1, 99) == 74500 and GameData.gacha_cost("diamond", 1, 7) == 300
 		and GameData.gacha_cost("diamond", 10, 7) == 2700, "rev 23: gold 10-pull = 1-pull x 10 (no discount), levels clamp to the max, diamonds ignore the level")
 	var l4 := GameData.gacha_rates("gold", 4, 1)
 	var l10 := GameData.gacha_rates("gold", 10, 1)
@@ -3932,10 +3932,10 @@ func test_recruit_r23() -> void:
 	e.notice.connect(func(t): notes.append(t))
 	e.gacha_leveled.connect(func(l): ups.append(l))
 	e.gacha_done.connect(func(r): got.append(r))
-	e.gold = 90000
+	e.gold = 300000
 	check(e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 20 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: two 10-pulls are 20/30 at Lv 1")
 	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 60, "dia_pity": 0, "pity_left": 50}
-		and ups == [2] and notes == ["골드 모집 Lv 2! SSR 0.6%"] and e.gacha_cost("gold", 1) == 3450,
+		and ups == [2] and notes == ["골드 모집 Lv 2! SSR 0.6%"] and e.gacha_cost("gold", 1) == 12500,
 		"rev 23: the 30th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
 	# 오프라인 다이아
 	notes.clear()
@@ -4577,9 +4577,9 @@ func test_research_r24() -> void:
 		and w.req1 == "" and w.req1_lv == 0.0 and w.req2 == "", "construct needs wood/stone tech Lv 3 and lab 3; empty prerequisites are \"\" / 0")
 	# 비용: round(값 × 1.3^n), n = 지금 레벨(0부터). 시간: round(base × 1.35^n ÷ (1 + 속도))
 	check(GameData.research_cost("wood_tech", 0) == {"wood": 1200, "stone": 800, "food": 1000, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 1560, "stone": 1040, "food": 1300, "gold": 0}
-		and GameData.research_cost("construct", 2) == {"wood": 6760, "stone": 5070, "food": 5915, "gold": 845} and GameData.research_cost("construct", 3) == {"wood": 8788, "stone": 6591, "food": 7690, "gold": 1099}
+		and GameData.research_cost("construct", 2) == {"wood": 6760, "stone": 5070, "food": 5915, "gold": 8450} and GameData.research_cost("construct", 3) == {"wood": 8788, "stone": 6591, "food": 7690, "gold": 10985}
 		and GameData.research_cost("nope", 0).is_empty(),
-		"research cost = round(value x 1.3^n) (construct Lv 4: 7689.5 and 1098.5 round away from zero): %s" % [GameData.research_cost("construct", 3)])
+		"research cost = round(value x 1.3^n) (construct Lv 4: 7689.5 rounds away from zero): %s" % [GameData.research_cost("construct", 3)])
 	check(GameData.research_sec("wood_tech", 0, 0.0) == 60 and GameData.research_sec("wood_tech", 9, 0.0) == 894 and GameData.research_sec("elite", 9, 0.0) == 53617
 		and GameData.research_sec("wood_tech", 0, 0.5) == 40 and GameData.research_sec("wood_tech", 1, 0.58) == 51 and GameData.research_sec("nope", 0, 0.0) == 0,
 		"research time = round(base x 1.35^n / (1 + speed)): wood Lv 10 about 15 min, elite Lv 10 about 15 h, lab 30 (+58%%) 81 s -> 51 s: %s" % [[GameData.research_sec("wood_tech", 9, 0.0), GameData.research_sec("elite", 9, 0.0), GameData.research_sec("wood_tech", 1, 0.58)]])
@@ -4594,8 +4594,8 @@ func test_research_r24() -> void:
 	check(GameData.research_block("nope", {}, 30, rich) == "unknown_research" and GameData.research_block("wood_tech", {"wood_tech": 10}, 30, rich) == "max_level"
 		and GameData.research_block("construct", both, 2, rich) == "locked" and GameData.research_block("construct", {"wood_tech": 3, "stone_tech": 2}, 3, rich) == "locked"
 		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3499, "gold": 9999}) == "not_enough_resources"
-		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 499}) == "not_enough_gold"
-		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 500}) == "",
+		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 4999}) == "not_enough_gold"
+		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 5000}) == "",
 		"research_block order: unknown, max, locked (lab, prerequisite), resources, gold")
 	check([0.0, 0.5, 60.0, 60.5, 3600.0].map(func(s): return GameData.research_dia_cost(s)) == [1, 1, 1, 2, 60] and GameData.research_refund({"wood": 156, "stone": 105, "food": 0, "gold": 845}) == {"wood": 78, "stone": 52, "gold": 422},
 		"instant finish = max(1, ceil(left / 60)) diamonds; cancel refund = floor(cost x 0.5), zero dropped")
