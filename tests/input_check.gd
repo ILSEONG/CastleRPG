@@ -242,16 +242,16 @@ func _run() -> void:
 	ids.sort()
 	_check(ids == ["farm", "lumber"], "(k) badges only on resource buildings with >= 5 min pending", "ids=%s" % [ids])
 
-	# (l) 영웅 없이 벌목장 탭 → 목재 +100, "+N" 뜸, 선택 없음 유지. 곧바로 또 탭하면 0이라 pop 없이 건물 창(개정 12 §2.5)
+	# (l) 영웅 없이 벌목장 탭 → 목재 +1000, "+N" 뜸, 선택 없음 유지. 곧바로 또 탭하면 0이라 pop 없이 건물 창(개정 12 §2.5)
 	var lp := _building_px("lumber")
 	_check(_picker._pick(lp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(lp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "lumber",
 		"(l) precondition: lumber tap point hits the lumber tap body", "px=%s" % lp)
 	await _tap(lp)
-	_check(Economy.res["wood"] == 100 and badges.last_pop.get("amount", 0) == 100 and badges.last_pop.get("kind", "") == "wood" and _picker.selected == null,
-		"(l) lumber tap collects 100 wood and pops +100", "wood=%d pop=%s" % [Economy.res["wood"], badges.last_pop])
+	_check(Economy.res["wood"] == 1000 and badges.last_pop.get("amount", 0) == 1000 and badges.last_pop.get("kind", "") == "wood" and _picker.selected == null,
+		"(l) lumber tap collects 1000 wood and pops +1000", "wood=%d pop=%s" % [Economy.res["wood"], badges.last_pop])
 	badges.last_pop = {}
 	await _tap(lp)
-	_check(Economy.res["wood"] == 100 and badges.last_pop.is_empty() and bwin.is_open() and bwin.building_id == "lumber" and _picker.selected == null,
+	_check(Economy.res["wood"] == 1000 and badges.last_pop.is_empty() and bwin.is_open() and bwin.building_id == "lumber" and _picker.selected == null,
 		"(l) a second tap with nothing to collect shows no pop and opens the lumber building window", "wood=%d pop=%s open=%s id=%s" % [Economy.res["wood"], badges.last_pop, bwin.is_open(), bwin.building_id])
 	bwin.close()
 
@@ -260,7 +260,7 @@ func _run() -> void:
 	_picker._select(warrior)
 	Economy.last_collect["lumber"] = Time.get_unix_time_from_system() - 600.0
 	await _tap(lp)
-	_check(_picker.selected == null and Economy.res["wood"] == 200 and [warrior.side, warrior.post, warrior.free_pos] == hero_pre,
+	_check(_picker.selected == null and Economy.res["wood"] == 2000 and [warrior.side, warrior.post, warrior.free_pos] == hero_pre,
 		"(m) lumber tap with a hero selected collects and clears the selection without a move", "selected=%s wood=%d" % [_name(_picker.selected), Economy.res["wood"]])
 
 	# (n) 성채 탭(개정 12 §2.5): 영웅 선택 중이어도 건물 창(선택 해제, 위치 그대로, 이동 명령 없음) / 없어도 건물 창(선택 없음 유지)
@@ -299,14 +299,14 @@ func _run() -> void:
 	Economy.changed.emit()
 	await _frames(2)
 	var rate: float = Economy.current_rate("wood", Time.get_unix_time_from_system())
-	var expect := Economy.sell_value("wood", 200, rate)
+	var expect := Economy.sell_value("wood", 2000, rate)
 	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("다음 시세까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
 	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [선택 판매]로 전량
 	await _tap(panel.qty_max["wood"].get_global_rect().get_center())
 	await _tap(panel.sell_selected_button.get_global_rect().get_center())
 	_check(Economy.res["wood"] == 0 and Economy.gold_tenths == 105 + expect * 10 and Economy.gold == 10 + expect and Economy.res["stone"] == 7 and panel.is_open(),
-		"(p) [sell] on wood zeroes wood and adds floor(200 x price x wood's own rate) whole gold (x10 tenths, 0.5 kept); others stay", "wood=%d tenths=%d expect=%d" % [Economy.res["wood"], Economy.gold_tenths, 105 + expect * 10])
+		"(p) [sell] on wood zeroes wood and adds floor(2000 x price x wood's own rate) whole gold (x10 tenths, 0.5 kept); others stay", "wood=%d tenths=%d expect=%d" % [Economy.res["wood"], Economy.gold_tenths, 105 + expect * 10])
 	_check(panel.sell_buttons["wood"].disabled and not panel.sell_buttons["stone"].disabled, "(p) sell button is disabled at 0 holdings only", "")
 	await _qty_sell_checks(panel)
 	await _multi_sell_checks(panel)
@@ -1088,7 +1088,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	_picker._select(null)
 	var now := Time.get_unix_time_from_system()
 	Economy.res = {"wood": 0, "stone": 0, "food": 0}
-	Economy.last_collect["lumber"] = now - 600.0  # 쌓인 목재 100 — 짧은 탭이면 수집
+	Economy.last_collect["lumber"] = now - 600.0  # 쌓인 목재 1000 — 짧은 탭이면 수집
 	Economy.changed.emit()
 	badges.last_pop = {}
 	var lp := _building_px("lumber")
@@ -1115,7 +1115,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	_check(not bwin.is_open() and rig.position == cam0, "(B) [닫기] closes it; afterwards a mouse move without a press does not pan the camera",
 		"open=%s cam %s -> %s" % [bwin.is_open(), cam0, rig.position])
 	await _tap(lp)
-	_check(Economy.res.wood == 100 and not bwin.is_open() and badges.last_pop.get("amount", 0) == 100, "(B) a short tap on the same mill still collects (+100)", "wood=%d" % Economy.res.wood)
+	_check(Economy.res.wood == 1000 and not bwin.is_open() and badges.last_pop.get("amount", 0) == 1000, "(B) a short tap on the same mill still collects (+1000)", "wood=%d" % Economy.res.wood)
 	# 누른 채 12 px 넘게 끌고 0.6초: 카메라 이동이지 건물 창이 아니다
 	Economy.last_collect["lumber"] = now - 600.0
 	var cam1: Vector3 = rig.position
@@ -1126,7 +1126,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	await _frames(2)
 	_mouse_button(lp + Vector2(24, 0), false)
 	await _frames(2)
-	_check(not bwin.is_open() and rig.position != cam1 and Economy.res.wood == 100, "(B) press, drag past 12 px and hold 0.6 s pans the camera and opens nothing",
+	_check(not bwin.is_open() and rig.position != cam1 and Economy.res.wood == 1000, "(B) press, drag past 12 px and hold 0.6 s pans the camera and opens nothing",
 		"open=%s cam %s -> %s wood=%d" % [bwin.is_open(), cam1, rig.position, Economy.res.wood])
 	rig.position = cam1
 	await _frames(1)
@@ -1137,7 +1137,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	await _frames(2)
 	await _touch(1, lp + Vector2(0, 150), false)
 	await _touch(0, lp, false)
-	_check(not bwin.is_open() and Economy.res.wood == 100, "(B) a held press with a second finger down (pinch) opens nothing and collects nothing",
+	_check(not bwin.is_open() and Economy.res.wood == 1000, "(B) a held press with a second finger down (pinch) opens nothing and collects nothing",
 		"open=%s wood=%d" % [bwin.is_open(), Economy.res.wood])
 	# 주점·성문 길게 누르기 → 건물 창(주점 탭은 모집 창, 성문 탭은 영웅 명령이 먼저)
 	held = await _long_press(_building_px("tavern"), bwin)
@@ -1156,14 +1156,14 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	print("INPUT INFO: lumber window (keep cap) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
 	var eff: HBoxContainer = bwin.effects.get_child(0)
 	var req: Label = bwin.reqs.get_child(0)
-	_check(bwin.is_open() and bwin.title_label.text == "벌목장 Lv 1" and bwin.desc_label.text != "" and eff.get_child(0).text == "생산 10/분" and eff.get_child(1).text == "→ 20/분"
+	_check(bwin.is_open() and bwin.title_label.text == "벌목장 Lv 1" and bwin.desc_label.text != "" and eff.get_child(0).text == "생산 100/분" and eff.get_child(1).text == "→ 200/분"
 		and req.text == "✗ 성채 Lv 2 필요" and req.get_theme_color("font_color") == bwin.RED and bwin.upgrade_button.disabled
 		and bwin.reason_label.text == Economy.BLOCK_TEXT.keep_cap and bwin.reason_label.visible,
-		"(B) lumber window at keep Lv 1: title, 생산 10/분 → 20/분, red '✗ 성채 Lv 2 필요', [업그레이드] off with the keep-cap reason",
+		"(B) lumber window at keep Lv 1: title, 생산 100/분 → 200/분, red '✗ 성채 Lv 2 필요', [업그레이드] off with the keep-cap reason",
 		"title=%s eff=%s req=%s reason=%s" % [bwin.title_label.text, [eff.get_child(0).text, eff.get_child(1).text], req.text, bwin.reason_label.text])
-	_check(bwin.cost_labels.wood.text == "60" and bwin.cost_labels.wood.get_theme_color("font_color") == HudScript.INK and bwin.cost_labels.stone.text == "80"
+	_check(bwin.cost_labels.wood.text == "600" and bwin.cost_labels.wood.get_theme_color("font_color") == HudScript.INK and bwin.cost_labels.stone.text == "800"
 		and bwin.cost_labels.stone.get_theme_color("font_color") == bwin.RED and bwin.time_label.text == "건설 시간 00:20" and not bwin._progress_box.visible,
-		"(B) cost 60/80/40 with icons (stone short = red, wood 100 ok), 건설 시간 00:20",
+		"(B) cost 600/800/400 with icons (stone short = red, wood 1000 ok), 건설 시간 00:20",
 		"wood=%s stone=%s time=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.time_label.text])
 	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 1) == [["1마리", "3:00:00", "2:30:00"]]
 		and bwin.effect_lines("stable", 3) == [["1마리", "2:00:00", "1:30:00"]] and bwin.effect_lines("barracks", 6) == [["1마리", "30:00", "T2 3:00:00"]] and bwin.effect_lines("lab", 2)[0] == ["연구 속도", "+2%", "+4%"]
@@ -1172,8 +1172,8 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
 	bwin.close()
 
-	# 성채 [업그레이드]: 자원 300/300/200 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간
-	Economy.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	# 성채 [업그레이드]: 자원 3000/3000/2000 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간
+	Economy.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	Economy.changed.emit()
 	await _tap(_building_px("keep"))
 	var rows: Array = bwin.reqs.get_children().map(func(l): return l.text)
@@ -1192,9 +1192,9 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	var keep_box: AABB = scenery.sites.keep[0]
 	var sc: MeshInstance3D = scenery._scaffolds[0] if scenery._scaffolds.size() == 1 else null
 	var sbox := AABB(sc.position + sc.mesh.get_aabb().position, sc.mesh.get_aabb().size) if sc != null else AABB()
-	_check(Economy.res == {"wood": 700, "stone": 700, "food": 800} and Economy.is_building("keep") and bwin.upgrade_button.disabled and bwin._progress_box.visible
+	_check(Economy.res == {"wood": 7000, "stone": 7000, "food": 8000} and Economy.is_building("keep") and bwin.upgrade_button.disabled and bwin._progress_box.visible
 		and not bwin._cost_row.visible and bwin.left_label.text.begins_with("Lv 1 → 2 건설 중"),
-		"(B) [업그레이드] takes 300/300/200, the builder works on the keep; the window swaps cost for a progress bar", "res=%s build=%s" % [Economy.res, Economy.build])
+		"(B) [업그레이드] takes 3000/3000/2000, the builder works on the keep; the window swaps cost for a progress bar", "res=%s build=%s" % [Economy.res, Economy.build])
 	_check(scenery.scaffold_id == "keep" and sc != null and sbox.encloses(keep_box) and sbox.size.x > keep_box.size.x and badges.build_anchors().size() == 1
 		and badges.build_anchors()[0].y > keep_box.end.y, "(B) a scaffold rings the keep's AABB and the progress bar anchor sits above its roof", "scaffold=%s keep=%s" % [sbox, keep_box])
 	var t0: String = bwin.left_label.text
@@ -1221,7 +1221,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	_check(bwin.building_id == "lumber" and not bwin.upgrade_button.disabled and bwin.reqs.get_child(0).text == "✓ 성채 Lv 2 필요", "(B) at keep Lv 2 the lumber upgrade is on", bwin.reason_label.text)
 	await _guard_wait()
 	await _tap(bwin.upgrade_button.get_global_rect().get_center())
-	_check(Economy.is_building("lumber") and Economy.res.wood == 640 and Economy.res.stone == 620, "(B) the lumber upgrade pays 60/80/40", "res=%s" % [Economy.res])
+	_check(Economy.is_building("lumber") and Economy.res.wood == 6400 and Economy.res.stone == 6200, "(B) the lumber upgrade pays 600/800/400", "res=%s" % [Economy.res])
 	bwin.close()
 	Economy.last_collect["quarry"] = Time.get_unix_time_from_system()  # 쌓인 석재 없음 — 탭이 건물 창
 	await _tap(_building_px("quarry"))
@@ -1345,7 +1345,7 @@ func _soldiers_ui(tabs, hud) -> void:
 	Economy.soldiers = {}
 	Economy.soldier_deployed = {}
 	Economy.soldiers_changed.emit()
-	Economy.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	Economy.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	Economy.changed.emit()
 	var bp := _roof_px("barracks")
 	_check(_picker._pick(bp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(bp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "barracks"
@@ -1361,29 +1361,29 @@ func _soldiers_ui(tabs, hud) -> void:
 		and bwin._train_type == "infantry:1" and bwin._unit_icon.is_visible_in_tree() and not "merge_rows" in bwin,
 		"(S) a long press on the barracks opens its window: 1마리 3:00:00 → 2:30:00 and the empty training section (infantry figure, 'T1 보병 · 1마리 3:00:00'); no merge section",
 		"held=%s title=%s unit=%s" % [held, bwin.title_label.text, bwin.unit_label.text])
-	_check(q.value == 1 and q.min_value == 1 and q.max_value == 10 and bwin.train_cost_labels.food.text == "30" and bwin.train_cost_labels.wood.text == "20"
+	_check(q.value == 1 and q.min_value == 1 and q.max_value == 10 and bwin.train_cost_labels.food.text == "300" and bwin.train_cost_labels.wood.text == "200"
 		and not bwin.train_cost_labels.stone.visible and bwin.train_time_label.text == "훈련 시간 3:00:00" and not bwin.train_button.disabled and not bwin.train_reason.visible,
-		"(S) the quantity starts at 1 of 1..10 (batch cap): cost 30 food / 20 wood, 훈련 시간 3:00:00, [훈련] on",
+		"(S) the quantity starts at 1 of 1..10 (batch cap): cost 300 food / 200 wood, 훈련 시간 3:00:00, [훈련] on",
 		"qty=%d..%d=%d food=%s wood=%s time=%s" % [q.min_value, q.max_value, q.value, bwin.train_cost_labels.food.text, bwin.train_cost_labels.wood.text, bwin.train_time_label.text])
 	await _guard_wait()
 	await _tap(_center(q.plus))
 	await _tap(_center(q.plus))
-	_check(q.value == 3 and q.edit.text == "3" and bwin.train_cost_labels.food.text == "90" and bwin.train_time_label.text == "훈련 시간 9:00:00",
-		"(S) [+] twice: 3 — cost and time follow (90 food, 9:00:00)", "qty=%d food=%s time=%s" % [q.value, bwin.train_cost_labels.food.text, bwin.train_time_label.text])
+	_check(q.value == 3 and q.edit.text == "3" and bwin.train_cost_labels.food.text == "900" and bwin.train_time_label.text == "훈련 시간 9:00:00",
+		"(S) [+] twice: 3 — cost and time follow (900 food, 9:00:00)", "qty=%d food=%s time=%s" % [q.value, bwin.train_cost_labels.food.text, bwin.train_time_label.text])
 	await _tap(_center(q.max_button))
 	_check(q.value == 10, "(S) [최대] picks the batch cap (10)", "qty=%d" % q.value)
 	q.edit.text = "8"
 	q.edit.text_changed.emit("8")
 	await _frames(1)
-	_check(q.value == 8 and bwin.train_cost_labels.food.text == "240" and bwin.train_cost_labels.wood.text == "160" and bwin.train_time_label.text == "훈련 시간 24:00:00",
-		"(S) typing 8: cost 240 food / 160 wood, 훈련 시간 24:00:00", "qty=%d food=%s" % [q.value, bwin.train_cost_labels.food.text])
+	_check(q.value == 8 and bwin.train_cost_labels.food.text == "2,400" and bwin.train_cost_labels.wood.text == "1,600" and bwin.train_time_label.text == "훈련 시간 24:00:00",
+		"(S) typing 8: cost 2,400 food / 1,600 wood, 훈련 시간 24:00:00", "qty=%d food=%s" % [q.value, bwin.train_cost_labels.food.text])
 	await _tap(_center(bwin.train_button))
 	await _frames(1)
 	var tq := Economy.training("barracks")
-	_check(Economy.res == {"wood": 840, "stone": 1000, "food": 760} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
+	_check(Economy.res == {"wood": 8400, "stone": 10000, "food": 7600} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
 		and (bwin.run_label.text == "T1 보병 ×8 · 남은 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
 		and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUILD_LIFT_PX,
-		"(S) [훈련]: resources go down at once (food 240 / wood 160), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
+		"(S) [훈련]: resources go down at once (food 2,400 / wood 1,600), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
 		"res=%s q=%s run=%s" % [Economy.res, tq, bwin.run_label.text])
 	var errors0: int = _errors.count
 	await _frames(2)  # 월드 막대·이름표 배치가 그려진다
@@ -1403,14 +1403,14 @@ func _soldiers_ui(tabs, hud) -> void:
 	q.set_value(3)
 	await _tap(_center(bwin.train_button))
 	await _frames(1)
-	_check(Economy.res == {"wood": 780, "stone": 1000, "food": 670} and bwin.run_box.visible and bwin.cancel_button.text == "취소(50% 환불)",
-		"(S) a 3-soldier batch (food 90 / wood 60) runs with [취소(50% 환불)]", "res=%s" % [Economy.res])
+	_check(Economy.res == {"wood": 7800, "stone": 10000, "food": 6700} and bwin.run_box.visible and bwin.cancel_button.text == "취소(50% 환불)",
+		"(S) a 3-soldier batch (food 900 / wood 600) runs with [취소(50% 환불)]", "res=%s" % [Economy.res])
 	await _tap(_center(bwin.cancel_button))
 	await _frames(1)
-	_check(Economy.res == {"wood": 810, "stone": 1000, "food": 715} and Economy.training("barracks").count == 0 and bwin.empty_box.visible and hud._toast.text == Economy.CANCEL_TEXT
-		and Economy.soldiers == {"infantry:1": 8}, "(S) [취소] refunds half (45 food / 30 wood) and empties the queue",
+	_check(Economy.res == {"wood": 8100, "stone": 10000, "food": 7150} and Economy.training("barracks").count == 0 and bwin.empty_box.visible and hud._toast.text == Economy.CANCEL_TEXT
+		and Economy.soldiers == {"infantry:1": 8}, "(S) [취소] refunds half (450 food / 300 wood) and empties the queue",
 		"res=%s toast=%s" % [Economy.res, hud._toast.text])
-	Economy.res = {"wood": 1000, "stone": 0, "food": 1000}
+	Economy.res = {"wood": 10000, "stone": 0, "food": 10000}
 	Economy.changed.emit()
 	bwin.close()
 	bwin.open_building("stable")
@@ -1529,7 +1529,7 @@ func _research_ui(tabs, hud) -> void:
 		and bwin.research_button.visible and bwin.research_button.text == "연구" and eff.get_child(0).text == "연구 속도 +0%" and eff.get_child(1).text == "→ +2%",
 		"(RS) lab building window: new description, effect '연구 속도 +0% → +2%', a big [연구] button",
 		"open=%s id=%s desc=%s button=%s eff=%s" % [bwin.is_open(), bwin.building_id, bwin.desc_label.text, bwin.research_button.visible, eff.get_child(0).text])
-	Economy.res = {"wood": 5000, "stone": 5000, "food": 5000}
+	Economy.res = {"wood": 50000, "stone": 50000, "food": 50000}
 	Economy.gold_tenths = 50000 * 10
 	Economy.changed.emit()
 	await _unguarded(bwin)
@@ -1555,7 +1555,7 @@ func _research_ui(tabs, hud) -> void:
 	await _tap(_center(rw.cards.wood_tech.button))
 	await _frames(1)
 	_check(rw.is_detail_open() and rw.detail_id == "wood_tech" and rw.detail_name.text == "벌목술 Lv 0/10" and rw.detail_effect.text == "목재 생산  현재 +0% → 다음 +5%"
-		and rw.detail_reqs.get_child(0).text == "✓ 연구소 Lv 1 필요" and rw.detail_cost.wood.text == "5,000/120" and not rw.detail_cost.gold.visible
+		and rw.detail_reqs.get_child(0).text == "✓ 연구소 Lv 1 필요" and rw.detail_cost.wood.text == "50,000/1,200" and not rw.detail_cost.gold.visible
 		and rw.detail_time.text == "연구 시간 01:00" and not rw.start_button.disabled and rw.start_button.visible and not rw.detail_run.visible,
 		"(RS) card tap opens the detail: name, effect 현재 +0% → 다음 +5%, ✓ lab Lv 1, cost 보유/필요, time 01:00, [연구] on",
 		"open=%s name=%s effect=%s cost=%s time=%s" % [rw.is_detail_open(), rw.detail_name.text, rw.detail_effect.text, rw.detail_cost.wood.text, rw.detail_time.text])
@@ -1564,9 +1564,9 @@ func _research_ui(tabs, hud) -> void:
 	await _unguarded(rw)
 	await _tap(_center(rw.start_button))
 	await _frames(1)
-	_check(Economy.research_current.get("id", "") == "wood_tech" and Economy.res == {"wood": 4880, "stone": 4920, "food": 4900} and rw.detail_run.visible and not rw.start_button.visible
+	_check(Economy.research_current.get("id", "") == "wood_tech" and Economy.res == {"wood": 48800, "stone": 49200, "food": 49000} and rw.detail_run.visible and not rw.start_button.visible
 		and rw.cur_row.visible and rw.cur_name.text == "벌목술 Lv 1" and not rw.idle_label.visible and rw.card_state("wood_tech") == "running" and rw.dia_button.text.ends_with("1 즉시 완료"),
-		"(RS) [연구]: resources -120/80/100, the research runs (bar + [다이아 1 즉시 완료] + [취소] in the detail and on top)",
+		"(RS) [연구]: resources -1200/800/1000, the research runs (bar + [다이아 1 즉시 완료] + [취소] in the detail and on top)",
 		"current=%s res=%s top=%s" % [Economy.research_current, Economy.res, rw.cur_name.text])
 	rw.close_detail()
 	await _tap(_center(rw.cards.stone_tech.button))
@@ -1599,8 +1599,8 @@ func _research_ui(tabs, hud) -> void:
 	rw.close_detail()
 	await _tap(_center(rw.cancel_button))
 	await _frames(1)
-	_check(Economy.research_current.is_empty() and Economy.res.wood == res1.wood + 60 and Economy.res.stone == res1.stone + 40 and Economy.res.food == res1.food + 50
-		and hud._toast.text == Economy.RESEARCH_CANCEL_TEXT, "(RS) [취소]: 50% of 120/80/100 comes back", "res %s -> %s" % [res1, Economy.res])
+	_check(Economy.research_current.is_empty() and Economy.res.wood == res1.wood + 600 and Economy.res.stone == res1.stone + 400 and Economy.res.food == res1.food + 500
+		and hud._toast.text == Economy.RESEARCH_CANCEL_TEXT, "(RS) [취소]: 50% of 1200/800/1000 comes back", "res %s -> %s" % [res1, Economy.res])
 	# 잠긴 노드
 	await _tap(_center(rw.cards.construct.button))
 	await _frames(1)
@@ -2428,9 +2428,9 @@ func _barracks_t2_window() -> void:
 	Economy.levels.barracks = 7
 	Economy.changed.emit()
 	await _frames(1)
-	_check(bwin.unit_label.text == "T2 보병 · 1마리 3:00:00" and bwin._train_type == "infantry:2" and bwin.train_cost_labels.food.text == "150" and bwin.train_cost_labels.wood.text == "100"
+	_check(bwin.unit_label.text == "T2 보병 · 1마리 3:00:00" and bwin._train_type == "infantry:2" and bwin.train_cost_labels.food.text == "1,500" and bwin.train_cost_labels.wood.text == "1,000"
 		and bwin.train_time_label.text == "훈련 시간 3:00:00" and bwin.next_label.text == "1마리 3:00:00 → 2:30:00" and not bwin.train_button.disabled,
-		"(S) Lv 7 barracks: T2 보병 1마리 3:00:00, cost x5 (150 food / 100 wood), preview '1마리 3:00:00 → 2:30:00'",
+		"(S) Lv 7 barracks: T2 보병 1마리 3:00:00, cost x5 (1,500 food / 1,000 wood), preview '1마리 3:00:00 → 2:30:00'",
 		"unit=%s food=%s wood=%s next=%s" % [bwin.unit_label.text, bwin.train_cost_labels.food.text, bwin.train_cost_labels.wood.text, bwin.next_label.text])
 	Economy.levels.barracks = 1
 	Economy.changed.emit()
