@@ -49,6 +49,8 @@ const POUCH_KINDS := ["gold", "res"]  # 방치 주머니(서버 pouches.ts): 골
 const POUCH_MINUTES := [10, 30, 60, 120, 240, 360]
 const POUCH_PREFIX := "pouch_"  # 보상 표 키: pouch_<id>
 const POUCH_FAIL_TEXT := "주머니를 열지 못했어요 — 보유 수를 다시 확인합니다"
+const ShopItems := preload("res://scripts/shop_items.gd")
+const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸어요"
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
@@ -141,6 +143,7 @@ signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받�
 signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
 signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
+signal shop_changed  # 상점 산 기록이 바뀌었다(구매·리셋·서버 값)
 signal pouch_opened(opened: Dictionary)  # 주머니를 열었다 {id, count, gold_tenths, res}(온라인은 응답이 왔을 때)
 signal offline_reported(report: Dictionary)  # 오프라인 정산 {away_sec, kills, gold_tenths} — 떠나 있던 시간이 OFFLINE_MIN_SEC 이상일 때만
 
@@ -161,6 +164,7 @@ var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
 var dia_tickets := 0
+var shop := {}  # 상점 산 기록 {day, week, d: {상품 id: 오늘 산 수}, w: {상품 id: 이번 주 산 수}}(온라인은 서버 player.shop, 오프라인은 저장 "shop")
 var pouches := {}  # 방치 주머니 id("gold_60"·"res_240" …, POUCH_IDS) → 개수(> 0). 저장 "pouches"(없으면 {})
 var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
 var server_missions: Dictionary = {}  # 온라인: 미션 받은 기록 {day, week, d, w, wd, r, next_day, next_week}(apply_server가 채운다 — Missions가 읽는다)
@@ -205,6 +209,7 @@ var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 �
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
+var _key_predicts := {}  # 온라인 상점 입장권 즉시 반영: 요청 키 → {던전 종류: 열쇠 수}(응답 전 다른 서버 응답의 열쇠 위에 다시 얹는다)
 var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
 var _predicts := {}  # 온라인 즉시 반영(수집·판매·건설): 요청 키 → {apply: 서버 상태 위에 그 동작을 다시 하는 Callable, gold: 더한 골드(0.1)}. 응답 전 다른 응답이 와도 apply_server가 다시 얹는다
 var _last_server := {}  # 마지막으로 반영한 서버 응답(거절되면 이것으로 곧바로 되돌린다)
@@ -372,6 +377,7 @@ func reset(now: float) -> void:
 	diamonds = 0
 	dia_tickets = 0
 	pouches = {}
+	shop = {}
 	unbuilt = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
@@ -1127,6 +1133,128 @@ func _on_pouch_failed() -> void:
 	notice.emit(POUCH_FAIL_TEXT)
 	net.refresh()
 	pouches_changed.emit()
+
+
+# --- 상점(서버 shop.ts, 상품 표 shop_items.gd): 일일·주간 한정 상품을 다이아·골드로 산다. 온라인도 누르는 즉시 값을 빼고 받은 것을 더한다
+# (predict_reward — 응답이 오면 서버 값, 거절되면 되돌리고 알린다). 버튼은 기다리는 글자로 바뀌지 않는다 ---
+
+## 지금 리셋 기간 [오늘 리셋 날짜, 이번 주(월요일 시작, 서버 missions.ts weekOf)].
+func shop_period() -> Array:
+	var d := GameData.reset_day(time_now())
+	return [d, floori((d + 4) / 7.0)]
+
+
+## 이번 기간(오늘·이번 주)에 그 상품을 산 수. 기록의 날·주가 지났으면 0.
+func shop_bought(id: String) -> int:
+	var x := ShopItems.find(id)
+	if x.is_empty():
+		return 0
+	var per := shop_period()
+	var daily: bool = x.tab == "daily"
+	if int(shop.get("day" if daily else "week", -1)) != int(per[0 if daily else 1]):
+		return 0
+	var m = shop.get("d" if daily else "w")
+	return int(m.get(id, 0)) if m is Dictionary and _num(m.get(id, 0)) else 0
+
+
+func shop_left(id: String) -> int:
+	var x := ShopItems.find(id)
+	return 0 if x.is_empty() else maxi(0, int(x.limit) - shop_bought(id))
+
+
+## 그 탭(일일·주간)에 아직 받지 않은 무료 선물이 있다(상점 탭·하단 [상점] 빨간 점).
+func shop_free_left(tab: String) -> bool:
+	for x in ShopItems.of_tab(tab):
+		if x.currency == "free" and shop_left(x.id) > 0:
+			return true
+	return false
+
+
+## 살 수 없는 까닭: "sold_out"(이번 기간 한도), "diamonds"·"gold"(모자람), 살 수 있으면 "".
+func shop_block(id: String) -> String:
+	var x := ShopItems.find(id)
+	if x.is_empty() or shop_left(id) <= 0:
+		return "sold_out"
+	if x.currency == "diamonds" and diamonds < int(x.price):
+		return "diamonds"
+	if x.currency == "gold" and gold < int(x.price):
+		return "gold"
+	return ""
+
+
+## 산 기록에 한 번 더한다(날·주가 바뀌었으면 그 기록을 비우고).
+func _shop_mark(x: Dictionary) -> void:
+	var per := shop_period()
+	var s := shop.duplicate(true)
+	if int(s.get("day", -1)) != int(per[0]) or not s.get("d") is Dictionary:
+		s.d = {}
+	if int(s.get("week", -1)) != int(per[1]) or not s.get("w") is Dictionary:
+		s.w = {}
+	s.day = per[0]
+	s.week = per[1]
+	var k := "d" if x.tab == "daily" else "w"
+	s[k][x.id] = int(s[k].get(x.id, 0)) + 1
+	shop = s
+
+
+## 상품 하나를 산다(값 빼기 + 받기). 온라인은 곧바로 반영하고 POST /v1/shop/buy {id, n}(n = 이미 산 수 — 재전송이 두 번 사지 않는다).
+func buy_shop(id: String) -> bool:
+	if shop_block(id) != "":
+		return false
+	var x := ShopItems.find(id)
+	var give: Dictionary = x.give
+	var r := give.duplicate()  # 받는 것 − 값(다이아·골드)
+	if x.currency == "diamonds":
+		r.diamonds = int(r.get("diamonds", 0)) - int(x.price)
+	elif x.currency == "gold":
+		r.gold = int(r.get("gold", 0)) - int(x.price)
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return false
+		var n := shop_bought(id)
+		var key := "shop:%s:%d" % [id, n]
+		predict_reward(key, r, _shop_mark.bind(x))
+		var keys := {}
+		for type in GameData.DUNGEON_TYPES:
+			if int(give.get("keys_" + type, 0)) > 0:
+				keys[type] = int(give["keys_" + type])
+		if not keys.is_empty():  # 던전 입장권도 곧바로(서버 응답의 열쇠 위에 응답이 올 때까지 다시 얹는다 — _apply_server18)
+			_key_predicts[key] = keys
+			_add_keys(keys)
+		shop_changed.emit()
+		dungeons_changed.emit()
+		net.flush_kills()
+		net.send("POST", "/v1/shop/buy", {"id": id, "n": n}, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
+		return true
+	_shop_mark(x)
+	grant(r)  # 저장·changed·열쇠까지
+	shop_changed.emit()
+	return true
+
+
+func _add_keys(keys: Dictionary) -> void:
+	for type in keys:
+		var st := _dungeon_now(type, time_now()).duplicate()
+		st.keys = int(st.keys) + int(keys[type])
+		dungeons[type] = st
+
+
+func _on_shop_bought(data: Dictionary, key: String) -> void:
+	_key_predicts.erase(key)
+	settle(key)
+	apply_server(data)
+	shop_changed.emit()
+	dungeons_changed.emit()
+
+
+func _on_shop_failed(key: String) -> void:
+	_key_predicts.erase(key)
+	unpredict(key)
+	notice.emit(SHOP_FAIL_TEXT)
+	net.refresh()
+	shop_changed.emit()
+	dungeons_changed.emit()
 
 
 ## 인구 = 민가 레벨로(GameData.population) + 연구 병영 확장(pop_add, 개정 24). 병사 배치 상한.
@@ -2504,6 +2632,9 @@ func apply_server(data: Dictionary) -> bool:
 		attendance = p.attendance
 	if p.get("missions") is Dictionary:
 		server_missions = p.missions
+	if p.get("shop") is Dictionary and p.shop != shop:
+		shop = p.shop
+		shop_changed.emit()
 	if p.get("pouches") is Dictionary:
 		var pz := _pouch_counts(p.pouches)
 		if pz != pouches:
@@ -3380,6 +3511,8 @@ func _apply_server18(p: Dictionary) -> void:
 	var before := [dungeons.duplicate(true), bag.duplicate(true), equipment.duplicate(true)]
 	if p.get("dungeons") is Dictionary:
 		dungeons = _dungeon_dict(p.dungeons, dungeons)
+		for k in _key_predicts:  # 응답 전인 상점 입장권 구매
+			_add_keys(_key_predicts[k])
 	if p.get("items") is Array:
 		bag = _item_list(p.items)
 	if p.get("equipment") is Dictionary:
@@ -3412,7 +3545,7 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
-		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches, "shop": shop, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -3578,6 +3711,7 @@ func _apply(data) -> bool:
 	research_current = v12[1]
 	dia_tickets = maxi(0, int(data.get("dia_tickets", 0))) if _num(data.get("dia_tickets", 0)) else 0  # 튜토리얼(없으면 0)
 	pouches = _pouch_counts(data.get("pouches")) if data.get("pouches") is Dictionary else {}  # 방치 주머니(없으면 {})
+	shop = data.get("shop") if data.get("shop") is Dictionary else {}  # 상점 산 기록(없으면 {})
 	unbuilt = {}
 	var ub = data.get("unbuilt", [])  # 튜토리얼 공터(없으면 모두 지어짐 — 옛 저장은 건물 그대로)
 	if ub is Array:

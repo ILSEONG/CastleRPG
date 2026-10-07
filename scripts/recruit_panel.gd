@@ -18,7 +18,6 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
-const DiamondShopScript := preload("res://scripts/diamond_shop.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
@@ -50,7 +49,7 @@ var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 키 아트(처음 열 때 SceneSnap으로 렌더)
-var shop  # 다이아 상점 창
+var shop  # 상점 시트(shop_panel.gd, main이 넣는다) — [이동]이 [다이아] 탭으로 연다
 
 var _art_box: Control
 var _btn_gems: Array = []  # [1회]·[10회] 앞 보석(다이아 탭만)
@@ -160,8 +159,6 @@ func _ready() -> void:
 	auto_box.toggled.connect(_on_auto_toggled)
 	_result_view.add_child(auto_box)
 	_build_shop_ask()
-	shop = DiamondShopScript.new()
-	add_child(shop)
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.gacha_done.connect(_on_gacha_done)
 	set_currency(GOLD)
@@ -201,8 +198,9 @@ func _build_shop_ask() -> void:
 
 func _on_shop_ask(go: bool) -> void:
 	shop_ask.visible = false
-	if go:
-		shop.open()
+	if go and shop != null:
+		close()  # 모집 창을 닫고 상점 시트(하단 탭 [상점])의 [다이아] 탭
+		shop.open_tab("diamond")
 
 
 ## 키 아트 자리: 창 내용 폭 × RecruitArt.VIEW.y에 정지 그림(채워 덮고 넘치는 쪽은 잘라 낸다). 위에 가장자리 비네트와 외곽선 제목.
@@ -421,8 +419,6 @@ func close() -> void:
 	_halted = true
 	if shop_ask != null:
 		shop_ask.visible = false
-	if shop != null:
-		shop.close()
 	super.close()
 
 

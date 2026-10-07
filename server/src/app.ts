@@ -14,6 +14,7 @@ import * as Rk from './ranking.ts'
 import * as A from './attendance.ts'
 import * as M from './missions.ts'
 import * as P from './pouches.ts'
+import * as SH from './shop.ts'
 import { registerGuildWar } from './war_routes.ts'
 import type { WarLive } from './war_live.ts'
 
@@ -123,6 +124,7 @@ interface Player {
   attend: { n: number; day: number | null } // 출석 이벤트: 받은 날 수·마지막으로 받은 리셋 날짜
   missions: unknown // 미션 상태(저장된 그대로 — 쓰는 쪽이 M.normalize)
   pouches: Record<string, number> // 방치 주머니 id → 개수(pouches.ts)
+  shop: unknown // 상점 산 기록(저장된 그대로 — 쓰는 쪽이 SH.normalize)
 }
 
 interface Train {
@@ -177,6 +179,7 @@ interface Change {
   attend?: { n: number; day: number } // 출석 이벤트 진행
   missions?: M.MissionState // 미션 상태 전체
   pouches?: Record<string, number> // 방치 주머니 보유 전체(새 값)
+  shop?: SH.ShopState // 상점 산 기록 전체
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -197,7 +200,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
+const PLAYER_SQL = `select s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -416,6 +419,7 @@ export function createApp(opts: AppOptions) {
         attend: { n: Number(r.attend_n ?? 0), day: r.attend_day == null ? null : Number(r.attend_day) },
         missions: r.missions == null ? {} : json(r.missions),
         pouches: P.normalize(r.pouches == null ? {} : json(r.pouches)),
+        shop: r.shop == null ? {} : json(r.shop),
       }
       if (p.build && p.build.finish <= now) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
@@ -486,6 +490,7 @@ export function createApp(opts: AppOptions) {
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
         pouches: p.pouches, // 방치 주머니 id → 개수
+        shop: SH.normalize(p.shop, today(game, now)), // 상점: 오늘·이번 주 산 수
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -564,6 +569,7 @@ export function createApp(opts: AppOptions) {
     if (ch.attend) sets.push(`attend_n = ${p(ch.attend.n)}::int, attend_day = ${p(ch.attend.day)}::int`)
     if (ch.missions) sets.push(`missions = ${p(JSON.stringify(ch.missions))}::jsonb`)
     if (ch.pouches) sets.push(`pouches = ${p(JSON.stringify(ch.pouches))}::jsonb`)
+    if (ch.shop) sets.push(`shop = ${p(JSON.stringify(ch.shop))}::jsonb`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
     // 개정 18: run을 닫는 변경은 그 run이 아직 열려 있을 때만 전체가 적용된다(version 가드와 함께 — 보상이 두 번 들어가지 않는다)
     const guard = ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : ''
@@ -771,6 +777,7 @@ export function createApp(opts: AppOptions) {
     if (ch.attend) pl.attend = ch.attend
     if (ch.missions) pl.missions = ch.missions
     if (ch.pouches) pl.pouches = ch.pouches
+    if (ch.shop) pl.shop = ch.shop
     for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
     pl.version += 1
   }
@@ -1445,6 +1452,48 @@ export function createApp(opts: AppOptions) {
       if (opened.gold_tenths > 0) change.goldTenths = opened.gold_tenths
       if (Object.keys(res).length) change.res = res
       return { change, extra: { opened } }
+    })
+  })
+
+  // --- 상점(shop.ts): 일일·주간 한정 상품, 다이아·골드로 산다(실결제 없음) ---
+
+  // 상품 하나 사기. body = {id, n}: n = 이번 기간(오늘·이번 주)에 이미 산 수와 같아야 한다(아니면 409 stale — 재전송이 두 번 사지 않는다).
+  // 한도를 다 샀으면 409 sold_out, 다이아·골드가 모자라면 409 not_enough. 값 빼기·받기·산 기록·economy_log shop을 version 가드 한 문장으로.
+  app.post('/v1/shop/buy', auth, async (c) => {
+    const b = await body(c)
+    const sid = strField(b, 'id')
+    const x = SH.item(sid)
+    if (!x) throw new ApiError(404, 'unknown_item', `unknown shop item '${sid}'`)
+    const n = intField(b, 'n', 0, MAX_INT4)
+    return mutate(c, (p, g, now) => {
+      const st = SH.normalize(p.shop, today(g, now))
+      const had = SH.bought(st, x)
+      if (had >= x.limit) throw new ApiError(409, 'sold_out', `'${x.id}' is sold out for this period`)
+      if (n !== had) throw new ApiError(409, 'stale', `'${x.id}' has been bought ${had} times`)
+      const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give } } }
+      const give = x.give as Record<string, number>
+      let gold = (give.gold ?? 0) * 10
+      let dia = give.diamonds ?? 0
+      if (x.currency === 'diamonds') {
+        if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
+        dia -= x.price
+      } else if (x.currency === 'gold') {
+        if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
+        gold -= x.price * 10
+      }
+      if (gold) change.goldTenths = gold
+      if (dia) change.diamonds = dia
+      const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
+      if (Object.keys(res).length) change.res = res
+      if (give.tickets) change.diaTickets = give.tickets
+      const keyType = R.DUNGEON_TYPES.find((t) => (give[`keys_${t}`] ?? 0) > 0)
+      if (keyType) {
+        const ds = dungeonState(p, g, keyType, now)
+        change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + give[`keys_${keyType}`] } }
+      }
+      const pz = P.fromReward(give)
+      if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+      return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
     })
   })
 

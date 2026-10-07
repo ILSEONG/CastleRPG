@@ -32,7 +32,7 @@ func _ready() -> void:
 	await _wait_until(func(): return Net.ready_once and _main.camera != null, 30.0)
 	await _frames(240)
 	for c in _main.get_children():
-		if c.get_script() != null and c.get_script().resource_path == "res://scripts/tab_bar.gd":
+		if c.get_script() != null and c.get_script().resource_path == "res://scripts/side_menu.gd":  # 길드는 오른쪽 아래 메뉴
 			_tabs = c
 	_panel = _tabs.windows.guild
 
@@ -143,7 +143,7 @@ func _ready() -> void:
 
 func _open_guild() -> void:
 	if not _panel.is_open():
-		_tabs.press("guild")
+		_tabs.pick("guild")
 
 
 func _battle():

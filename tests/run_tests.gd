@@ -139,6 +139,7 @@ func _init() -> void:
 	test_tutorial()
 	test_tutorial_online()
 	test_missions()
+	test_shop()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -5070,4 +5071,38 @@ func test_missions() -> void:
 		seen[d.id] = true
 	check(seen.size() == MissionsScript.DEFS.size(), "missions: ids are unique")
 	m.free()
+	e.free()
+
+
+## 상점(shop_items.gd, 서버 shop.ts와 같은 표): 오프라인 구매 — 무료 선물·다이아·골드, 기간 한도, 모자람.
+func test_shop() -> void:
+	var items := preload("res://scripts/shop_items.gd")
+	var src := FileAccess.get_file_as_string("res://server/src/shop.ts")
+	var same := true
+	for x in items.ITEMS:
+		var line := ""
+		for l in src.split("\n"):
+			if l.contains("id: '%s'" % x.id):
+				line = l
+		if not (line.contains("price: %d," % int(x.price)) and line.contains("limit: %d," % int(x.limit)) and line.contains("currency: '%s'" % x.currency)
+				and line.contains("tab: '%s'" % x.tab)):
+			same = false
+			print("  shop item differs from server: ", x.id)
+	check(same and src.count("{ id: '") == items.ITEMS.size(), "shop: client item table matches server/src/shop.ts")
+	var e = _econ(1000.0)
+	e.diamonds = 300
+	check(e.shop_free_left("daily") and e.shop_free_left("weekly"), "shop: free gifts waiting at the start")
+	check(e.buy_shop("d_free") and e.diamonds == 320 and e.pouch_count("gold_30") == 1 and e.shop_left("d_free") == 0 and e.shop_block("d_free") == "sold_out"
+		and not e.shop_free_left("daily"), "shop: daily free gift gives 20 diamonds + gold pouch once")
+	check(not e.buy_shop("d_free") and e.diamonds == 320, "shop: free gift can't be taken twice in a day")
+	check(e.buy_shop("d_ticket") and e.diamonds == 80 and e.dia_tickets == 1 and not e.buy_shop("d_ticket"), "shop: discounted ticket costs 240 diamonds, once a day")
+	var k0 := int(e.dungeon_state("gold").keys)
+	check(e.buy_shop("d_key_gold") and e.diamonds == 20 and int(e.dungeon_state("gold").keys) == k0 + 1, "shop: gold dungeon key for 60 diamonds")
+	check(e.shop_block("d_key_gold") == "diamonds" and not e.buy_shop("d_key_gold") and e.diamonds == 20, "shop: short of diamonds blocks and spends nothing")
+	check(e.shop_block("d_res") == "gold", "shop: short of gold blocks the resource bundle")
+	e.gold_tenths = 100000
+	var w0 := int(e.res.get("wood", 0))
+	check(e.buy_shop("d_res") and e.gold == 2000 and int(e.res.wood) == w0 + 1000 and e.shop_left("d_res") == 4, "shop: resource bundle costs 8,000 gold")
+	e.shop.day = int(e.shop.day) - 1  # 날이 바뀌었다
+	check(e.shop_left("d_free") == 1 and e.shop_left("d_res") == 5 and e.shop_left("w_free") == 1, "shop: a new day refills daily items")
 	e.free()

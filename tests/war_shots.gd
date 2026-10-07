@@ -31,9 +31,9 @@ func _ready() -> void:
 	var rec: Dictionary = Guild.recommendations()[1]
 	rec.level = 6
 	Guild.join(rec)
-	var tabs = _find("res://scripts/tab_bar.gd")
+	var tabs = _find("res://scripts/side_menu.gd")  # 길드는 오른쪽 아래 메뉴
 	var panel = tabs.windows.guild
-	tabs.press("guild")
+	tabs.pick("guild")
 	panel.tab = "war"
 	panel._rebuild()
 	await _snap("1_panel")
@@ -58,7 +58,7 @@ func _ready() -> void:
 	print("[shots] clock %.0f kills %d gates %d keep %.0f" % [battle.clock, battle.kills, battle.gates_broken(), battle.keep.hp])
 	battle.leave()
 	await _frames(30)
-	tabs.press("guild")
+	tabs.pick("guild")
 	panel.tab = "war"
 	panel._rebuild()
 	await _snap("6_panel_after")

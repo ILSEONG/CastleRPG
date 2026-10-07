@@ -2,15 +2,18 @@ extends CanvasLayer
 ## 오른쪽 아래 메뉴(2026-10-06): 토글 버튼 하나, 누르면 위로 [음악][가방][미션][랭킹][친구][이벤트] 버튼이 펼쳐진다(다시 누르거나 항목을 고르면 접힌다).
 ## [음악]은 창 대신 배경음악을 켜고 끈다(Music.toggle — 메뉴는 펼친 채로, 끄면 "음악 끔"과 빗금).
 ## 자리: 오른쪽 아래, 탭 바 위. 튜토리얼 미션 카드가 보이면 카드 위로 올라간다(겹치지 않게, 매 프레임 맞춘다).
-## main.gd가 만들고 windows = {bag(방치 주머니), mission, ranking, friend, event}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
+## [길드](2026-10-07, 하단 탭에서 옮김)는 맨 아래(토글 바로 위). 튜토리얼 길드 미션 전에는 흐리게 + 자물쇠, 누르면 잠금 토스트(하단 탭과 같은 규칙).
+## 길드 미션 중이면 [길드]와 [메뉴]에 빨간 점(어디를 누를지).
+## main.gd가 만들고 windows = {bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const PouchPanel := preload("res://scripts/pouch_panel.gd")
+const TabBarScript := preload("res://scripts/tab_bar.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["music", "음악"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"]]
+const ITEMS := [["music", "음악"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["guild", "길드"]]
 const SIZE := Vector2(84, 84)
 const SIDE := 16.0
 const GAP := 10.0
@@ -28,6 +31,7 @@ var is_open := false
 var _col: VBoxContainer
 var _dots := {}  # 빨간 점을 그린 버튼 id → true
 var _t := 0.0  # 펼침 정도 0..1
+var _guild_locked := false
 
 
 func _ready() -> void:
@@ -40,7 +44,7 @@ func _ready() -> void:
 	add_child(_col)
 	for it in ITEMS:
 		var b := _make_button(it[0], it[1])
-		b.pressed.connect(func(): _pick(it[0]))
+		b.pressed.connect(func(): pick(it[0]))
 		buttons[it[0]] = b
 		_col.add_child(b)
 	toggle = _make_button("toggle", "메뉴")
@@ -61,9 +65,17 @@ func dots() -> Dictionary:
 		d.event = true
 	if Missions.ready_count() > 0:
 		d.mission = true
+	if guild_mission():
+		d.guild = true
 	if not d.is_empty():
 		d.toggle = true
 	return d
+
+
+## 튜토리얼 지금 미션이 길드 가입이다(아직 완료 전) — [길드]·[메뉴]에 빨간 점.
+func guild_mission() -> bool:
+	var m: Dictionary = Tutorial.mission()
+	return Tutorial.active() and not m.is_empty() and str(m.get("goto", "")) == "tab:guild" and not Tutorial.complete()
 
 
 func set_open(on: bool) -> void:
@@ -75,10 +87,14 @@ func set_open(on: bool) -> void:
 	toggle.get_child(0).queue_redraw()
 
 
-func _pick(id: String) -> void:
+## 항목 고르기(버튼·튜토리얼 [바로가기]).
+func pick(id: String) -> void:
 	if id == "music":
 		Music.toggle()
 		buttons[id].get_child(0).queue_redraw()
+		return
+	if Tutorial.tab_locked(id):  # 길드: 튜토리얼 길드 미션 전(하단 탭과 같은 잠금 토스트)
+		Tutorial.lock_notice.emit(Tutorial.tab_lock_text(id))
 		return
 	set_open(false)
 	var w = windows.get(id)
@@ -88,6 +104,12 @@ func _pick(id: String) -> void:
 
 func _process(delta: float) -> void:
 	var d := dots()
+	var locked := Tutorial.tab_locked("guild")
+	if locked != _guild_locked and buttons.has("guild"):  # 튜토리얼 잠금: 상자·그림을 흐리게(자물쇠는 _draw_face)
+		_guild_locked = locked
+		buttons.guild.self_modulate = Color(1, 1, 1, 0.45) if locked else Color.WHITE
+		buttons.guild.get_child(0).self_modulate = Color(1, 1, 1, 0.6) if locked else Color.WHITE
+		buttons.guild.get_child(0).queue_redraw()
 	if d != _dots:  # 받을 보상(출석·미션)이 있으면 그 버튼과 [메뉴]에 빨간 점
 		_dots = d
 		toggle.get_child(0).queue_redraw()
@@ -135,6 +157,10 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 			draw_scroll(c, ctr, 44.0)
 		"bag":
 			PouchPanel.draw_pouch(c, ctr, 46.0, "gold")
+		"guild":
+			TabBarScript.draw_shapes(c, TabBarScript.tab_shapes("guild"), ctr, 44.0)
+			if Tutorial.tab_locked("guild"):
+				TabBarScript.draw_shapes(c, TabBarScript.LOCK_SHAPES, Vector2(SIZE.x - 18, 18), 26.0)
 		"music":
 			draw_note(c, ctr, 44.0, Music.enabled)
 			if not Music.enabled:

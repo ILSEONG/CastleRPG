@@ -259,7 +259,7 @@ func _show_result() -> void:
 		c.queue_free()
 	if result.has("error") or not result.has("grade"):
 		_result_box.add_child(_label("결과를 받지 못했습니다", 40, GuildPanel.RED))
-		_result_box.add_child(_label("총 피해 %s · 길드 탭에서 다시 확인하세요" % UiKit.commas(int(dragon.dealt)), 24, MainHud.INK, true))
+		_result_box.add_child(_label("총 피해 %s · 길드 창에서 다시 확인하세요" % UiKit.commas(int(dragon.dealt)), 24, MainHud.INK, true))
 	else:
 		var grade := str(result.grade)
 		var head := _label(grade, 96, GuildPanel.GRADE_COLORS.get(grade, GOLD))

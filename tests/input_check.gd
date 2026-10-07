@@ -448,12 +448,12 @@ func _recruit_and_heroes(rig) -> void:
 	var dungeon_win: Node = tabs.windows.dungeon
 	var bar_rect: Rect2 = tabs._bar.get_global_rect()
 	var big: Rect2 = hud._button.get_global_rect()
-	var tab_ids := ["growth", "hero", "soldier", "dungeon", "recruit", "guild"]
+	var tab_ids := ["growth", "hero", "soldier", "dungeon", "recruit", "shop"]
 	var xs: Array = tab_ids.map(func(id): return tabs.buttons[id].get_global_rect().get_center().x)
 	var ws: Array = tab_ids.map(func(id): return tabs.buttons[id].get_global_rect().size.x)
 	var sorted_xs := xs.duplicate()
 	sorted_xs.sort()
-	_check(tabs.buttons.keys() == tab_ids and preload("res://scripts/tab_bar.gd").TABS.map(func(t): return t[1]) == ["성장", "영웅", "병사", "던전", "모집", "길드"] and xs == sorted_xs
+	_check(tabs.buttons.keys() == tab_ids and preload("res://scripts/tab_bar.gd").TABS.map(func(t): return t[1]) == ["성장", "영웅", "병사", "던전", "모집", "상점"] and xs == sorted_xs
 		and ws.all(func(w): return absf(w - ws[0]) < 1.0) and tabs.selected == "recruit" and tabs.buttons.recruit.offset_top < tabs.buttons.hero.offset_top,
 		"(t) the tab bar is [성장][영웅][병사][던전][모집][길드] left to right, equal widths (no 상인); the tavern-opened recruit window selects [모집] (raised)",
 		"tabs=%s xs=%s ws=%s selected=%s" % [tabs.buttons.keys(), xs, ws, tabs.selected])
@@ -2761,16 +2761,15 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	var shop = recruit.shop
 	var sr: Rect2 = shop.dialog.get_global_rect()
-	_check(shop.is_open() and shop.layer > recruit.layer and shop.buy_buttons.size() == 4 and shop.buy_buttons.all(func(b): return b.disabled and b.text == "준비 중")
+	_check(shop.is_open() and not recruit.is_open() and shop.tab == "diamond" and shop.buy_buttons.size() == 4 and shop.buy_buttons.all(func(b): return b.disabled and b.text == "준비 중")
 		and shop.note.text == "결제 기능은 출시 전에 연결됩니다" and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
-		"(r23) [이동] opens the diamond shop over the recruit window: 4 products, [구매] off reading 준비 중, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
+		"(r23) [이동] closes the recruit window and opens the shop on its 다이아 tab: 4 products, [준비 중] off, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
 	await _unguarded(shop)
 	var d0: int = Economy.diamonds
 	await _tap(shop.buy_buttons[0].get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.diamonds == d0 and shop.is_open(), "(r23) tapping a disabled [구매] does nothing", "")
-	recruit.close()
-	_check(not shop.is_open() and not recruit.is_open(), "(r23) closing the recruit window closes the shop too", "")
+	shop.close()
 	Economy.diamonds = 9999999
 	Economy.gold = 9999999
 	Economy.changed.emit()
