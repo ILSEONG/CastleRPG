@@ -95,7 +95,7 @@ func _refresh() -> void:
 		_arrow.queue_redraw()
 		return
 	var done: bool = Tutorial.complete()
-	step_label.text = ("반복 퀘스트 %d" % (Tutorial.rep_n + 1)) if Tutorial.repeating() else "튜토리얼 %d/%d" % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
+	step_label.text = ("반복 퀘스트 %d" % (Tutorial.rep_n + 1)) if Tutorial.repeating() else "가이드 %d/%d" % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
 	var prog: String = Tutorial.progress_text()
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
 	desc_label.text = str(m.desc)
