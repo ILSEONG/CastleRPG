@@ -5342,9 +5342,8 @@ func test_shop() -> void:
 	e.free()
 	# 디자인 보강 6번: 상점 그림은 Meshy로 그린 18장(shop_art.gd) — 상품·패키지·핫딜·다이아 충전이 모두 그린 그림을 찾는다
 	var art := preload("res://scripts/shop_art.gd")
-	var panel := preload("res://scripts/shop_panel.gd")
 	var missing: Array = art.NAMES.filter(func(n): return art.texture(n) == null or art.texture(n).get_width() != 128)
-	var wanted: Array = items.ITEMS.map(func(x): return str(x.icon)) + panel.PACK_ICONS.values() + [panel.HOT_ICON]
+	var wanted: Array = items.ITEMS.map(func(x): return str(x.icon)) + art.PACK_ICONS.values() + [art.HOT_ICON]
 	for i in 6:
 		wanted.append("dia_%d" % (i + 1))
 	check(missing.is_empty() and art.NAMES.size() == 18 and wanted.all(func(n): return art.texture(n) != null) and art.texture("nope") == null

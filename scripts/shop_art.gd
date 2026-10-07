@@ -7,6 +7,9 @@ extends RefCounted
 const DIR := "res://assets/ui/shop/"
 const NAMES := ["dia_1", "dia_2", "dia_3", "dia_4", "dia_5", "dia_6", "gift", "gift_big", "crown", "ticket", "tickets", "chest_equip",
 	"key_gold", "key_equip", "key_ticket", "pouch_gold", "pouch_res", "res_pile"]
+const PACK_ICONS := {"monthly": "dia_2", "monthly_plus": "crown", "pkg_starter": "gift_big", "pkg_daily": "dia_3", "pkg_weekly": "dia_4",
+	"pkg_growth": "dia_6"}  # 상점 [패키지] 카드 그림(iap_items id → 그림 이름)
+const HOT_ICON := "dia_5"  # 핫딜 카드(금 보물 상자)
 const FILL := 1.12  # 벡터 아이콘 크기 s 대비 그림 한 변(물체는 그 92%라 벡터 그림과 비슷한 크기)
 
 static var _tex := {}

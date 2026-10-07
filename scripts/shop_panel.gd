@@ -33,9 +33,6 @@ const NOTE_TEXT := "결제 기능은 출시 전에 연결됩니다"
 const SOLD_TEXT := "매진"
 const FREE_TEXT := "무료"
 const SHORT_TEXT := {"diamonds": "다이아가 부족합니다", "gold": "골드가 부족합니다"}
-const PACK_ICONS := {"monthly": "dia_2", "monthly_plus": "crown", "pkg_starter": "gift_big", "pkg_daily": "dia_3", "pkg_weekly": "dia_4",
-	"pkg_growth": "dia_6"}  # 패키지 카드 그림(ShopArt 이름). 핫딜은 dia_5(금 상자)
-const HOT_ICON := "dia_5"
 const PILE := [Vector2(0, 0), Vector2(-26, 14), Vector2(26, 14), Vector2(0, 26), Vector2(-14, -18), Vector2(14, -18)]  # 보석 더미 자리(가운데 기준)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const CARD_BG := Color(1, 1, 1, 0.78)
@@ -506,7 +503,7 @@ func _build_packages() -> void:
 	var h := Economy.active_hot()
 	if not h.is_empty():  # 떠 있는 핫딜(1시간 한정)이 맨 위
 		var hp := IapItems.find(str(h.id))
-		var card := _wide(HOT_ICON, "핫딜 · " + str(hp.name), [[Missions.reward_text(hp.give), GIVE], ["가치 %d배" % int(hp.get("value", 1)), RED]],
+		var card := _wide(ShopArt.HOT_ICON, "핫딜 · " + str(hp.name), [[Missions.reward_text(hp.give), GIVE], ["가치 %d배" % int(hp.get("value", 1)), RED]],
 			[_krw_button(hp.id, int(hp.krw))], HOT_BG)
 		hot_label = _label("", 20, RED, HORIZONTAL_ALIGNMENT_LEFT)
 		var v: VBoxContainer = card.get_child(0).get_child(1)
@@ -529,14 +526,14 @@ func _build_packages() -> void:
 				side.append(_label("오늘 받음", 20, SUB))
 		if Economy.iap_can_buy(p.id):
 			side.append(_krw_button(p.id, int(p.krw), ("연장 ₩" if left > 0 else "₩") + UiKit.commas(int(p.krw))))
-		body.add_child(_wide(str(PACK_ICONS.get(p.id, "crown")), p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
+		body.add_child(_wide(str(ShopArt.PACK_ICONS.get(p.id, "crown")), p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
 	for p in IapItems.of_kind("package"):
 		var ok := Economy.iap_can_buy(p.id)
 		if p.period == "once" and not ok:
 			continue  # 평생 1회 상품은 산 뒤 숨긴다
 		var limit: String = {"once": "계정당 1회", "daily": "매일 1회", "weekly": "매주 1회"}.get(p.period, "")
 		var side := [_krw_button(p.id, int(p.krw))] if ok else [_label(SOLD_TEXT, 22, SUB)]
-		body.add_child(_wide(str(PACK_ICONS.get(p.id, "ticket" if p.give.has("tickets") else "diamond")), p.name, [[Missions.reward_text(p.give), GIVE], [limit, SUB]], side,
+		body.add_child(_wide(str(ShopArt.PACK_ICONS.get(p.id, "ticket" if p.give.has("tickets") else "diamond")), p.name, [[Missions.reward_text(p.give), GIVE], [limit, SUB]], side,
 			CARD_BG if ok else SOLD_BG))
 	note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
 	body.add_child(note)
