@@ -11,7 +11,6 @@ extends Node3D
 ## (war_hero.puppet) 내 영웅 이동 명령은 방장에게 보낸다(command_sent). 방장이 나가면 다음 사람이 이어받는다(become_host).
 
 const GameData := preload("res://scripts/game_data.gd")
-const SpeedButton := preload("res://scripts/speed_button.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const Balance := preload("res://scripts/balance.gd")
@@ -66,7 +65,6 @@ var units_by_uid := {}
 var _att: Array = []
 var _def: Array = []
 var _respawn: Array = []  # [유닛, 남은 초]
-var _real_us := 0  # 지난 프레임 실제 시각(공성 시계는 실제 초)
 var _doors: Array = []
 var _snap_cd := 0.0
 var _leaving := false
@@ -391,14 +389,11 @@ func set_auto() -> void:
 func _process(delta: float) -> void:
 	if done:
 		return
-	var now_us := Time.get_ticks_usec()
-	var real := clampf((now_us - _real_us) / 1e6, 0.0, 1.0) if _real_us > 0 else delta / maxf(Engine.time_scale, 0.01)  # 공성 10분은 실제 시간(x1.5 배속은 전투만 빠르게)
-	_real_us = now_us
 	if role == "puppet":
-		clock += real  # 표시용(방장 스냅샷이 맞춘다)
+		clock += delta  # 표시용(방장 스냅샷이 맞춘다)
 		_relay_my_commands()
 		return
-	clock += real
+	clock += delta
 	for r in _respawn.duplicate():
 		r[1] -= delta
 		if r[1] <= 0.0:
@@ -409,7 +404,7 @@ func _process(delta: float) -> void:
 				u.commanded = false
 				u.set_home(u.post_pos, false)
 	if role == "host":
-		_snap_cd -= real
+		_snap_cd -= delta
 	if clock >= duration or not keep.is_alive() or (_respawn.is_empty() and not _att.any(func(u): return u.is_alive())):
 		_finish()  # 시간 끝·성채 함락·공격 영웅이 모두 목숨을 다 썼다
 
@@ -524,8 +519,6 @@ func end_from_host() -> void:
 ## 역할 바꾸기: 꼭두각시 → 방장(이전 방장이 나감)이면 지금 상태에서 이어서 판단한다.
 func set_role(r: String) -> void:
 	role = r
-	if role != "puppet":
-		SpeedButton.follow(0.0)  # 방장(또는 혼자): 내 x1.5 켬/끔대로
 	for u in _att + _def:
 		u.puppet = role == "puppet"
 		if not u.puppet:
@@ -542,7 +535,7 @@ func snapshot() -> Dictionary:
 	var gs := []
 	for g in gates:
 		gs.append(roundf(g.hp))
-	return {"c": snappedf(clock, 0.01), "u": rows, "g": gs, "k": roundf(keep.hp), "n": kills, "x": SpeedButton.own_speed()}
+	return {"c": snappedf(clock, 0.01), "u": rows, "g": gs, "k": roundf(keep.hp), "n": kills}
 
 
 func snapshot_due() -> bool:
@@ -556,7 +549,6 @@ func snapshot_due() -> bool:
 func apply_snapshot(s: Dictionary) -> void:
 	if role != "puppet" or done:
 		return
-	SpeedButton.follow(float(s.get("x", 1.0)))  # 방 속도 = 방장 x1.5 켬/끔
 	clock = float(s.get("c", clock))
 	var rows: Dictionary = s.get("u", {})
 	for k in rows:

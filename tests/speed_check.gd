@@ -1,6 +1,6 @@
 extends Node
 ## x1.5 배속 버튼 체크(2026-10-07): 실제 main 씬에서 왼쪽 중하단 버튼을 눌러 바로 1.5배가 되는지, 기기 설정 파일(임시)에만 남는지,
-## 다른 UI(탭 바·오른쪽 아래 메뉴·전투 초상화 줄·튜토리얼 카드)와 겹치지 않는지, 던전·길드전에도 버튼이 있고 1.5배인지(길드전 시계는 실제 초, 꼭두각시는 방장 배율),
+## 다른 UI(탭 바·오른쪽 아래 메뉴·전투 초상화 줄·튜토리얼 카드)와 겹치지 않는지, 던전에도 버튼이 있고 1.5배인지, 길드전은 버튼 없이 1배인지,
 ## 히트스톱이 끝나도 지금 배율로 돌아오는지, 실제 시각(Economy.time_now)은 배속과 무관한지 본다. 기기 설정 파일은 건드리지 않는다.
 ## 실행: godot --headless --path . res://tests/speed_check.tscn
 ## 화면 한 장(전투 중, 켬): xvfb-run -a godot --path . --resolution 720x1280 res://tests/speed_check.tscn -- --out=/tmp/speed.png
@@ -144,7 +144,7 @@ func _run() -> void:
 	await _frames(3)
 	_check(is_equal_approx(Engine.time_scale, 1.5), "back on the castle screen: x1.5 again", str(Engine.time_scale))
 
-	# 길드전: 혼자·방장은 내 설정, 공성 시계는 실제 초, 꼭두각시는 방장 배율(스냅샷 x)을 따른다
+	# 길드전은 제외(사용자 2026-10-07 "길드전은 아니야"): 켜 둬도 버튼 없이 1배, 나오면 다시 1.5배
 	Guild.save_path = ""
 	GuildWar.save_path = ""
 	Guild.unlocked = true
@@ -158,25 +158,13 @@ func _run() -> void:
 	var war = _main._dungeon
 	_check(war != null and war.get_script().resource_path == "res://scripts/war_battle.gd", "guild war battle started", str(war))
 	if war != null and war.get_script().resource_path == "res://scripts/war_battle.gd":
-		_check(_child_with(war, "res://scripts/speed_button.gd") != null and is_equal_approx(Engine.time_scale, 1.5), "guild war has the button, runs at x1.5", str(Engine.time_scale))
-		var c0: float = war.clock
-		await get_tree().create_timer(1.0, true, false, true).timeout
-		_check(absf(war.clock - c0 - 1.0) < 0.25, "siege clock counts real seconds at x1.5", "%.2f" % (war.clock - c0))
-		_check(is_equal_approx(float(war.snapshot().get("x", 0)), 1.5), "host snapshot carries its speed", str(war.snapshot().get("x")))
+		_check(_child_with(war, "res://scripts/speed_button.gd") == null and is_equal_approx(Engine.time_scale, 1.0), "guild war: no button, runs at 1x", str(Engine.time_scale))
 		if out != "":
 			await _frames(30)
 			get_viewport().get_texture().get_image().save_png(out.get_basename() + "_war.png")
-		war.set_role("puppet")
-		var snap: Dictionary = war.snapshot()
-		snap.x = 1.0
-		war.apply_snapshot(snap)
-		_check(is_equal_approx(Engine.time_scale, 1.0), "puppet follows a 1x host", str(Engine.time_scale))
-		snap.x = 1.5
-		war.apply_snapshot(snap)
-		_check(is_equal_approx(Engine.time_scale, 1.5), "puppet follows a x1.5 host", str(Engine.time_scale))
-		war.set_role("solo")
 		_main.leave_dungeon()
 		await _frames(3)
+		_check(is_equal_approx(Engine.time_scale, 1.5), "after guild war: x1.5 again", str(Engine.time_scale))
 	GuildWar.fixed_now = -1.0
 
 	b.pressed.emit()
