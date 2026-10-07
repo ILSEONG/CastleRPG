@@ -18,6 +18,7 @@ const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const Crowd := preload("res://scripts/crowd.gd")
 const FxStatus := preload("res://scripts/fx_status.gd")
+const Sfx := preload("res://scripts/sfx.gd")
 
 const SCAN_INTERVAL := 0.2
 const SWING_SLACK := 0.6  # 타격 순간 대상(영웅·성문·성 지점)이 사거리 + 이만큼 안이면 맞는다(밖이면 헛스윙)
@@ -108,6 +109,8 @@ func _ready() -> void:
 	if castle != null:
 		global_position = castle.spawn_position(side)
 		GameState.refilled.connect(_vanish)
+	if is_boss:
+		Sfx.play("boss_roar")  # 보스 등장(성 라운드 25·던전 보스·드래곤)
 
 
 func is_alive() -> bool:
@@ -134,6 +137,7 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 			_iced = false
 			_model.set_process(true)
 		died.emit(self)
+		Sfx.at("death", self)
 		if is_boss:  # 보스 처치: 결정타 슬로모션(성 대보스·던전 보스)
 			var rig = CameraRig.of(self)
 			if rig != null:

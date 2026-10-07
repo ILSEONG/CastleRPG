@@ -27,6 +27,7 @@ const STYLE := {
 }
 const CACHE_MAX := 512
 const Prefs := preload("res://scripts/prefs.gd")  # 설정 [피해 숫자 표시]를 끄면 숫자를 띄우지 않는다(스킬 이름 띠는 그대로)
+const Sfx := preload("res://scripts/sfx.gd")  # 타격 소리(숫자를 꺼도 난다)
 
 static var current  # 월드에 있는 하나(없으면 null)
 
@@ -50,6 +51,8 @@ func _exit_tree() -> void:
 
 ## 피해·회복 하나를 알린다. amount는 반올림해 0이면 생략(회피 제외).
 static func pop(target, amount: float, kind: int) -> void:
+	if current != null and is_instance_valid(target):
+		Sfx.damage(target, kind)
 	if current != null and Prefs.get_bool("damage_numbers") and is_instance_valid(target):
 		current.add(target, amount, kind)
 
