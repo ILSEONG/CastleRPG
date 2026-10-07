@@ -38,7 +38,7 @@ const DONATIONS := {
 const DONATION_ORDER := ["gold", "dia", "royal"]
 
 const BOSS_TRIES := 2
-const BOSS_FIGHT_SEC := 20.0  # 실제 전투 시간(초) — 이 동안 배치 영웅이 드래곤에 준 피해가 내 피해
+const BOSS_FIGHT_SEC := 40.0  # 2026-10-07 20 → 40초. 실제 전투 시간(초) — 이 동안 배치 영웅이 드래곤에 준 피해가 내 피해
 const BOSS_DMG_CAP := 3.0  # 받는 피해 상한 = 시작 때 배치 영웅 초당 피해 합 × 전투 초 × 이것(서버 guild.ts와 같다, 조작 방지)
 const BOSS_HP_BASE := 1000.0  # 드래곤 Lv n 최대 HP = BASE × GROWTH^(n−1) — 매 판 Lv 1부터(서버 guild.ts와 같다)
 const BOSS_HP_GROWTH := 1.22

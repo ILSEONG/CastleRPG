@@ -1,5 +1,5 @@
 extends Node3D
-## 길드 보스 실제 전투 장면: 배치 영웅이 run.sec초(20초) 동안 드래곤(dragon.gd)과 싸운다. main이 던전처럼 성 월드를 떼어 두고 붙인다
+## 길드 보스 실제 전투 장면: 배치 영웅이 run.sec초(40초) 동안 드래곤(dragon.gd)과 싸운다. main이 던전처럼 성 월드를 떼어 두고 붙인다
 ## (Guild.boss_started → main._enter_dungeon(run, 이 스크립트)) — [확인]으로 main.leave_dungeon.
 ## 무대는 골드 던전과 같은 평야(ArenaKit.plains — 붉은 드래곤이 잘 보인다), 영웅·스킬·피해 숫자도 던전과 같다(hero.gd 아레나). 드래곤은 매 판 Lv 1로 나오고,
 ## 0이 되면 그 레벨 처치(배너) 뒤 같은 판에서 다음 레벨 HP로 찬다(공격력도 오른다). 시간이 다 되면 드래곤이 받은 피해 합(dragon.dealt = 판 점수)을
