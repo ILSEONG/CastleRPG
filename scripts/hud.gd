@@ -599,12 +599,25 @@ func _refresh_chips() -> void:
 static func chip_text(n: int) -> String:
 	if absi(n) < 10_000_000:
 		return commas(n)
-	if absi(n) < 100_000_000:
-		return commas(n / 10_000) + "만"
-	if absi(n) < 1_000_000_000_000:
-		var e := n / 100_000_000.0
-		return ("%.2f억" if absf(e) < 10.0 else "%.1f억" if absf(e) < 1000.0 else "%.0f억") % (floorf(e * 100.0) / 100.0)
-	return "%.1f조" % (floorf(n / 100_000_000_000.0) / 10.0)
+	var sign := "-" if n < 0 else ""
+	var a := absi(n)
+	if a < 100_000_000:
+		return sign + commas(a / 10_000) + "만"
+	if a < 1_000_000_000_000:
+		return sign + _short(a, 100_000_000) + "억"
+	return sign + _short(a / 10_000, 100_000_000) + "조"
+
+
+## a ÷ unit을 버림으로 유효 3자리 남짓까지(1.23 · 12.3 · 123 · 1234) 적고 끝의 0·소수점은 뗀다.
+static func _short(a: int, unit: int) -> String:
+	var whole := a / unit
+	var dec := 2 if whole < 10 else 1 if whole < 1000 else 0
+	var t := str(whole)
+	if dec > 0:
+		var p := 100 if dec == 2 else 10
+		var frac := (a % unit) * p / unit
+		t += ("." + str(frac).pad_zeros(dec)).rstrip("0").trim_suffix(".")
+	return t
 
 
 ## 1234567 → "1,234,567"

@@ -264,10 +264,11 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       bt = await battleOf(g.id, week)
       if (!bt || !bt.roster.some((s: Any) => s.owner === x.id)) added = null  // 겨뤄서 다른 사람이 먼저 열었다
     }
-    if (bt && !bt.roster.some((s: Any) => s.owner === x.id)) {
+    // 분대 번호 = 지금 로스터 길이: 여럿이 동시에 들어와도 번호가 겹치지 않게 읽은 길이 그대로일 때만 붙이고, 아니면 다시 읽는다
+    for (let i = 0; i < 6 && bt && !bt.roster.some((s: Any) => s.owner === x.id); i++) {
       added = { owner: x.id, name: G.playerName(x.id), squad: bt.roster.length, lane: bt.roster.length % 4, ai: false, heroes: sq }
-      await query(`update guild_war_battles set roster = roster || $2::jsonb where id = $1 and not (roster @> $3::jsonb)`,
-        [bt.id, JSON.stringify([added]), JSON.stringify([{ owner: x.id }])])
+      await query(`update guild_war_battles set roster = roster || $2::jsonb where id = $1 and not (roster @> $3::jsonb) and jsonb_array_length(roster) = $4`,
+        [bt.id, JSON.stringify([added]), JSON.stringify([{ owner: x.id }]), bt.roster.length])
       bt = await battleOf(g.id, week)
       added = bt?.roster.find((s: Any) => s.owner === x.id) ?? null
       if (added && live) live.broadcast(bt!.id, { t: 'roster', squad: added })
@@ -297,15 +298,24 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const pl = await loadPlayer(pid, game, now)
     const x = await guildCtx(pid, pl, game, now)
     if (!x.g || x.g.id !== String(b.guild_id)) return false
-    const w = await warRow(x, Number(b.week))
-    const enemy = enemyOf(x, w)
-    const merged = W.mergeCastle(w.castle, state && typeof state === 'object' ? state : {}, enemy.defenders)
-    // 열린 뒤 지난 시간으로 낼 수 있는 피해보다 많이 깎였으면 받지 않는다(앱이 보낸 성 상태를 그대로 믿지 않는다)
     const sec = Math.min(now, Number(b.ends_at)) - Number(b.started_at)
-    if (W.structureDamage(W.castleMax(enemy.defenders), merged) > W.damageCap(json(b.roster) as Any[], defsOf(game), sec)) return false
-    await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2', [x.g.id, Number(b.week), JSON.stringify(merged)])
-    if (final || merged.keep <= 0) await query('update guild_war_battles set closed = true where id = $1', [battleId])
-    return true
+    const cap = W.damageCap(json(b.roster) as Any[], defsOf(game), sec)
+    for (let i = 0; i < 4; i++) {
+      const w = await warRow(x, Number(b.week))
+      const enemy = enemyOf(x, w)
+      const merged = W.mergeCastle(w.castle, state && typeof state === 'object' ? state : {}, enemy.defenders)
+      // 열린 뒤 지난 시간으로 낼 수 있는 피해보다 많이 깎였으면 받지 않는다(앱이 보낸 성 상태를 그대로 믿지 않는다 — 성문·성채와 수비 영웅 처치 모두)
+      if (W.structureDamage(W.castleMax(enemy.defenders), merged) + W.defenderDamage(enemy.defenders, merged) > cap) {
+        return false
+      }
+      // 읽은 성 상태 그대로일 때만 쓴다(실시간 방 ckpt와 다른 길드원의 finish가 겹쳐도 서로 덮어쓰지 않게 — 겹치면 다시 읽어 합친다)
+      const ok = await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2 and castle = $4::jsonb returning 1',
+        [x.g.id, Number(b.week), JSON.stringify(merged), JSON.stringify(w.castle)])
+      if (!ok.length) continue
+      if (final || merged.keep <= 0) await query('update guild_war_battles set closed = true where id = $1', [battleId])
+      return true
+    }
+    return false
   }
 
   // 배치 끝 → 전투 시작: 전투 행의 started_at·ends_at을 지금으로 당기고 방에 알린다. 이미 시작했으면 그대로(같은 응답).

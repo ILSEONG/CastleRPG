@@ -142,7 +142,7 @@ func _process(delta: float) -> void:
 			if clock >= fight_sec():
 				_report()
 		Phase.REPORT:
-			_wait += delta
+			_wait += delta / maxf(Engine.time_scale, 0.01)  # 실제 초(x1.5 배속과 무관)
 			if _wait > WAIT_SEC:
 				_on_done({"error": "timeout"})
 	_update_hud()

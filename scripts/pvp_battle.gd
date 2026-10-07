@@ -348,7 +348,10 @@ func _on_refused(text: String) -> void:
 ## [나가기]: 싸우는 중이면 포기(패배)로 끝내고 나간다.
 func forfeit() -> void:
 	if phase != Phase.RESULT:
-		_end(false, "forfeit")
+		if _ko_left >= 0.0:  # 결정타 슬로모션·승리/패배 배너 중: 이미 난 결과로 끝낸다(승리를 포기로 바꾸지 않는다)
+			_end(_ko[0], _ko[1])
+		else:
+			_end(false, "forfeit")
 	leave()
 
 

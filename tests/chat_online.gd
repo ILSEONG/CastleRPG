@@ -75,6 +75,21 @@ func _ready() -> void:
 	_check(_panel.input.text == "또 보내기" and _panel.notice_label.text != "", "too fast: notice, input kept", _panel.notice_label.text)
 	await _snap()  # 2. 전체 채널
 
+	# 신고: 남의 줄 → 확인 상자 → [신고] → 바로 "신고함", 서버가 받는다
+	var theirs: Dictionary = Chat.messages.all.filter(func(m): return not m.me)[-1]
+	_panel.ask_report(theirs)
+	_check(_panel.is_confirm_open(), "tapping another player's line asks to report", "")
+	await _snap()  # 3. 신고 확인
+	_panel.buttons.report_ok.pressed.emit()
+	_check(not _panel.is_confirm_open() and Chat.reported.has(int(theirs.id)), "report marks the line at once", "")
+	var before := int(Net.requested.get("/v1/chat/report", 0))
+	_check(before >= 1, "report sent to the server", str(Net.requested))
+	await get_tree().create_timer(1.5, true, false, true).timeout
+	_check(Chat.reported.has(int(theirs.id)), "server accepted the report (mark stays)", "")
+	var own: Dictionary = Chat.messages.all.filter(func(m): return m.me)[-1]
+	_panel.ask_report(own)
+	_check(not _panel.is_confirm_open(), "my own line cannot be reported", "")
+
 	# 길드에 들면 [길드] 탭
 	await _request("/v1/test/stage", {"stage": 37})
 	Guild.fetch()
@@ -91,13 +106,30 @@ func _ready() -> void:
 	_panel.send()
 	_check(await _wait_until(func(): return not Chat.messages.guild.is_empty() and int(Chat.messages.guild[-1].id) > 0, 10.0), "guild message confirmed", str(Chat.messages.guild))
 	await _frames(10)
-	await _snap()  # 3. 길드 채널
+	await _snap()  # 4. 길드 채널
 	_panel.buttons.close.pressed.emit()
 	_check(not _panel.is_open() and not Chat.window_open, "X closes the window", "")
 	await _frames(6)
 	_check(Chat.latest().get("ch", "") == "guild", "bar shows the newest line (guild)", str(Chat.latest()))
-	await _snap()  # 4. 닫은 뒤 채팅 줄
+	await _snap()  # 5. 닫은 뒤 채팅 줄
 	_layout_checks()
+	# 관리자 [신고] 탭(화면용: 로컬 서버엔 관리자가 없어 목록을 직접 넣는다)
+	Economy.admin = true
+	_bar.button.pressed.emit()
+	await _frames(4)
+	_check(_panel.buttons["tab:reports"].visible, "admin sees the 신고 tab", "")
+	_panel._pick("reports")
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	Chat.reports = [{"id": 1, "reporter_name": "조용한궁수", "target_name": "흉포한늑대7", "channel": "all", "at": Time.get_unix_time_from_system(), "message_id": 12,
+		"text": "야 *** 진짜", "raw": "야 씨1발 진짜", "context": [{"id": 11, "name": "조용한궁수", "text": "안녕하세요", "raw": null},
+		{"id": 12, "name": "흉포한늑대7", "text": "야 *** 진짜", "raw": "야 씨1발 진짜"}, {"id": 13, "name": "조용한궁수", "text": "말 좀 곱게 해요", "raw": null}]}]
+	Chat.reports_state = "ok"
+	Chat.reports_changed.emit()
+	await _frames(10)
+	_check(not _panel.input_row.visible, "reports tab hides the input", "")
+	await _snap()  # 6. 관리자 신고 목록
+	_panel.close()
+	Economy.admin = false
 	_sheet()
 	_finish()
 

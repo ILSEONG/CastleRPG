@@ -115,6 +115,14 @@ export function sellValue(amount: number, price: number, rate: number): number {
 
 // --- 스테이지·처치 (개정 8) ---
 
+// 처치 골드 배율은 지수 곡선(2026-10-07 사용자): (1 + 0.2 × (n − 1)) × 1.01^(n − 1). 표(stages.csv gold_mult)가 이 값이고, 표를 넘으면 같은 곡선으로
+// 잇는다(마지막 행 기준 비율), 상한 GOLD_MULT_MAX. 앱 GameData.gold_mult_beyond와 같다.
+export const GOLD_LINEAR = 0.2
+export const GOLD_GROWTH = 1.01
+export const GOLD_MULT_MAX = 1e8
+export const goldMultBeyond = (n: number, lastMult: number, rows: number) => rows <= 1 ? lastMult :
+  Math.min(lastMult * ((1 + GOLD_LINEAR * (n - 1)) / (1 + GOLD_LINEAR * (rows - 1))) * GOLD_GROWTH ** (n - rows), GOLD_MULT_MAX)
+
 // n번째 스테이지(1부터). 표 끝을 넘으면 마지막 EXTEND_ROWS행의 평균 기울기로 직선 연장(정수 열 ≥ 1, 방치 간격 ≥ 0.5).
 export function stageRow(n: number, rows: StageRow[]): StageRow {
   if (rows.length === 0) throw new Error('stages table is empty')
@@ -131,6 +139,7 @@ export function stageRow(n: number, rows: StageRow[]): StageRow {
     out[col] = INT_COLS.includes(col) ? Math.max(1, roundHalfAway(v)) : v
   }
   out.idle_interval = Math.max(out.idle_interval, MIN_IDLE_INTERVAL)
+  out.gold_mult = goldMultBeyond(n, last.gold_mult, rows.length)
   return out
 }
 

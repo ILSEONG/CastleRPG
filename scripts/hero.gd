@@ -22,6 +22,7 @@ const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Crowd := preload("res://scripts/crowd.gd")
 const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
+const Sfx := preload("res://scripts/sfx.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
 
@@ -306,6 +307,11 @@ func revive(pct: float) -> void:
 
 
 ## 회복(최대 HP 상한). 실제로 오른 양.
+## 준 피해에 비례한 회복(흡혈·흡수)의 배율 — PVP는 체력 배율만큼(체력만 늘고 피해는 그대로라 흡혈이 약해지지 않게).
+func dmg_heal_mult() -> float:
+	return 1.0
+
+
 func heal(amount: float) -> float:
 	if state == State.DEAD:
 		return 0.0
@@ -530,6 +536,7 @@ func _heal_aura() -> void:
 			Fx.heal_cross(h)
 	if healed:
 		Fx.heal_ring(get_parent(), global_position, radius, _tier)
+		Sfx.skill("heal_aura", self)
 		_announce("heal_aura")
 
 
@@ -539,6 +546,7 @@ func _gate_repair() -> void:
 		return
 	if GameState.repair_gate(side, GameState.gate_hp_max * _sk.gate_repair[1] / 100.0) > 0.0:
 		Fx.repair(get_parent(), Formation.gate_position(castle.half, side, Formation.nearest_gate_at(castle.half, side, global_position)), _tier)
+		Sfx.skill("gate_repair", self)
 		_announce("gate_repair")
 
 
@@ -567,6 +575,7 @@ func _release() -> void:
 		return
 	var a := atk * _aura_mult()
 	if role != "ranged":
+		Sfx.at("swing", self)
 		if Formation.flat_distance(global_position, m.global_position) <= _reach(m) + SWING_SLACK:
 			_strike(m, a, true, _attacks)
 		return
@@ -574,6 +583,7 @@ func _release() -> void:
 	if _sk.has("multishot"):
 		targets.append_array(_nearest_others(m, global_position, float(def.range), int(_sk.multishot[0]) - 1))
 	var shot: Array = SHOTS.get(def.model, ["arrow", ARROW_SPEED])
+	Sfx.shot(shot[0], self)
 	for i in targets.size():
 		var p = ProjectileScript.new()
 		p.target = targets[i]
@@ -618,9 +628,9 @@ func _strike(m, a: float, primary: bool, attack_no: int) -> void:
 		Fx.stun_hit(get_parent(), at, _tier)
 		_announce("stun")
 	if _sk.has("lifesteal"):
-		heal(d * _sk.lifesteal[0] / 100.0)
+		heal(d * _sk.lifesteal[0] / 100.0 * dmg_heal_mult())
 	if _gear_lifesteal > 0.0:
-		heal(d * _gear_lifesteal)
+		heal(d * _gear_lifesteal * dmg_heal_mult())
 	if _sk.has("cleave") and role == "melee":
 		Fx.cleave(get_parent(), m.global_position, _color, _sk.cleave[0], _tier)
 		for o in _nearest_others(m, m.global_position, _sk.cleave[0], 1000):
@@ -675,6 +685,7 @@ func _cast_blast(m) -> void:
 	if m == null or not is_instance_valid(m) or not m.is_alive():
 		return
 	_blast(m.global_position)
+	Sfx.skill("aoe_blast", self)
 	if not m.is_alive() and _target == m:
 		_target = null
 

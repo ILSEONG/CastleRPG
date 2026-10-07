@@ -760,7 +760,20 @@ static func stage(n: int) -> Dictionary:
 		var v: float = last[col] + slope * k
 		out[col] = maxi(1, roundi(v)) if col in INT_COLS else v
 	out.idle_interval = maxf(out.idle_interval, MIN_IDLE_INTERVAL)
+	out.gold_mult = gold_mult_beyond(n, float(last.gold_mult), _stages.size())
 	return out
+
+
+## 처치 골드 배율은 지수 곡선(2026-10-07 사용자): (1 + 0.2 × (n − 1)) × 1.01^(n − 1) — 초반은 예전 직선과 거의 같고 뒤로 갈수록 가팔라진다.
+## 표(stages.csv gold_mult)가 이 값이고, 표를 넘으면 같은 곡선으로 잇는다(마지막 행 기준 비율). 상한 GOLD_MULT_MAX(정수 안전 범위). 서버 rules.goldMultBeyond.
+const GOLD_LINEAR := 0.2
+const GOLD_GROWTH := 1.01
+const GOLD_MULT_MAX := 1e8
+static func gold_mult_beyond(n: int, last_mult: float, rows: int) -> float:
+	if rows <= 1:  # 1행 표는 기울기 0(다른 열과 같게)
+		return last_mult
+	var lin := (1.0 + GOLD_LINEAR * (n - 1)) / (1.0 + GOLD_LINEAR * (rows - 1))
+	return minf(last_mult * lin * pow(GOLD_GROWTH, n - rows), GOLD_MULT_MAX)
 
 
 ## 성 방어 적 모습(능력치·골드와 무관 — 표 id는 grunt·epic_boss 그대로): 일반 적은 스테이지 안에서 LOOK_ROUNDS 라운드마다 다음 모습,

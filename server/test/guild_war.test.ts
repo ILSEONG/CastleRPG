@@ -305,3 +305,10 @@ test('war: a freshly created guild (no virtual members yet) gets AI mercenary sq
   assert.equal(e2.json.plan.can_start, false)
   assert.equal((await S.req('POST', '/v1/guild/war/start', { token: mate.token, body: { battle_id: r.json.plan.battle_id } })).json.error, 'not_leader')
 })
+
+test('war: defender kills count toward the damage cap (a state with every defender dead right after opening is refused)', () => {
+  const defs = [{ uid: 1, hp: 1000 }, { uid: 2, hp: 500 }] as any
+  const c = { gates: [0, 0, 0, 0], keep: 0, dead: { 1: 0, 2: 0.5 } }
+  assert.equal(W.defenderDamage(defs, c), 1250)
+  assert.equal(W.defenderDamage(defs, { gates: [], keep: 0, dead: {} }), 0)
+})
