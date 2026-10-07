@@ -116,28 +116,38 @@ func can_claim() -> bool:
 	return bool(data.get("can_claim", false)) and not claiming
 
 
-## 오늘 칸 받기(서버가 날짜·순서를 다시 본다).
+## 오늘 칸 받기: 응답을 기다리지 않고 곧바로 받은 것으로 보이고(골드·자원·다이아·모집권·주머니도 — 열쇠·장비·영웅은 응답 때)
+## 서버에 보낸다(서버가 날짜·순서를 다시 본다). 거절되면 되돌리고 알린다.
 func claim() -> void:
 	if not can_claim() or not Net.up:
 		return
-	claiming = true
 	var day := claimed_n() + 1
-	Net.send("POST", "/v1/attendance/claim", {"day": day}, _on_claimed.bind(day), _on_claim_failed, true, true)
-	_rebuild()
-
-
-func _on_claimed(d: Dictionary, day: int) -> void:
-	claiming = false
-	Economy.apply_server(d)
+	var rewards: Array = data.get("rewards", [])
+	var reward = rewards[day - 1] if day - 1 < rewards.size() else {}
+	var key := "attendance:%d" % day
+	claiming = true  # 응답 전(화면은 이미 받은 것으로 보인다)
+	Economy.predict_reward(key, reward if reward is Dictionary else {})
 	data.n = day
 	data.can_claim = false
 	selected = day - 1
 	Economy.notice.emit("%d일차 출석 보상을 받았어요!" % day)
+	Net.send("POST", "/v1/attendance/claim", {"day": day}, _on_claimed.bind(key), _on_claim_failed.bind(key, day), true, true)
 	_rebuild()
 
 
-func _on_claim_failed() -> void:
+func _on_claimed(d: Dictionary, key: String) -> void:
 	claiming = false
+	Economy.settle(key)
+	Economy.apply_server(d)
+	_rebuild()
+
+
+func _on_claim_failed(key: String, day: int) -> void:
+	claiming = false
+	Economy.unpredict(key)
+	if claimed_n() == day:
+		data.n = day - 1
+		data.can_claim = true
 	Economy.notice.emit(FAIL_TEXT.get(Net.last_error, "보상을 받지 못했어요. 잠시 뒤 다시 시도해 주세요"))
 	Net.refresh()
 	fetch()
@@ -174,9 +184,7 @@ func _rebuild() -> void:
 		grid.add_child(b)
 		cells.append(b)
 	progress.text = "출석 %d / %d일 · 하루 한 번, 날짜가 이어지지 않아도 돼요" % [n, rewards.size()]
-	if claiming:
-		claim_button.text = "받는 중…"
-	elif n >= rewards.size():
+	if n >= rewards.size():
 		claim_button.text = "모두 받았어요"
 	elif can_claim():
 		claim_button.text = "%d일차 보상 받기" % (n + 1)

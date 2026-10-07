@@ -156,7 +156,7 @@ func _row(id: String) -> Control:
 	vl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(vl)
 	var wait := Economy.pouch_waiting()
-	var one := _button("…" if wait else "열기", UiKit.AMBER, 22)
+	var one := _button("열기", UiKit.AMBER, 22)
 	one.custom_minimum_size = Vector2(100, 56)
 	one.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	one.disabled = wait or empty
