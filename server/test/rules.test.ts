@@ -92,7 +92,7 @@ test('stageRow: 표 안은 그대로, 31행부터 마지막 12행 평균 기울�
   const s31 = R.stageRow(31, STAGES)
   assert.equal(s31.stage, 31)
   assert.ok(Math.abs(s31.hp_mult - 4.0) < 1e-9)
-  assert.ok(Math.abs(s31.gold_mult - 7.0) < 1e-9)
+  assert.ok(Math.abs(s31.gold_mult - 9.07 * (7 / 6.8) * 1.01) < 1e-9) // 골드는 지수 곡선으로 잇는다
   assert.equal(s31.wave_size, 68)
   assert.equal(s31.waves, 13) // 13 + 1/3
   assert.equal(R.stageRow(32, STAGES).waves, 14) // 13 + 2/3
@@ -114,12 +114,12 @@ test('stageRow: 정수 열 ≥ 1, 방치 간격 ≥ 0.5, 1행 표는 기울기 0
 
 test('killGoldTenths: max(1, round(gold × gold_mult × 10))', () => {
   assert.equal(R.killGoldTenths(2, STAGES[0]), 20)
-  assert.equal(R.killGoldTenths(2, STAGES[1]), 24) // 2.4골드
-  assert.equal(R.killGoldTenths(2, STAGES[2]), 28) // 2.8골드
-  assert.equal(R.killGoldTenths(50, STAGES[2]), 700)
+  assert.equal(R.killGoldTenths(2, STAGES[1]), 24) // 2.42골드
+  assert.equal(R.killGoldTenths(2, STAGES[2]), 29) // 2.86골드
+  assert.equal(R.killGoldTenths(50, STAGES[2]), 715)
   assert.equal(R.killGoldTenths(5, { ...STAGES[0], gold_mult: 1.5 }), 75) // 7.5골드 (Godot roundi와 같게)
   assert.equal(R.killGoldTenths(0, STAGES[0]), 1)
-  assert.equal(R.killGoldTenths(2, R.stageRow(40, STAGES)), 176) // gold_mult 8.8
+  assert.equal(R.killGoldTenths(2, R.stageRow(40, STAGES)), 259) // gold_mult 9.07 × 8.8/6.8 × 1.01^10 ≈ 12.97
 })
 
 test('killBucket: 상한 = ceil(인정 초 × rate), 인정 초는 최대 burst, 쓴 만큼만 보고 시각이 앞으로', () => {

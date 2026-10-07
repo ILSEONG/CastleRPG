@@ -253,14 +253,14 @@ test('처치 골드: Σ count × kill_gold(id, stage), stage는 player.stage로 
   await S.req('POST', '/v1/stage/clear', { token, body: { stage: 2 } }) // 이제 stage 3
   S.clock.t += 1000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 2, stage: 3, kills: { grunt: 10, epic_boss: 1 } } })
-  assert.equal(r.json.gold_gained_tenths, 10 * 140 + 3500) // gold_mult 1.4: 14 → 140, 350 → 3500
+  assert.equal(r.json.gold_gained_tenths, 10 * 143 + 3575) // gold_mult 1.43: 14.3 → 143, 357.5 → 3575
   S.clock.t += 1000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 3, stage: 99, kills: { grunt: 10 } } }) // 3으로 자름
-  assert.equal(r.json.gold_gained_tenths, 1400)
+  assert.equal(r.json.gold_gained_tenths, 1430)
   S.clock.t += 1000
-  r = await S.req('POST', '/v1/kills', { token, body: { seq: 4, stage: 2, kills: { grunt: 5 } } }) // 12 → 120 each
-  assert.equal(r.json.gold_gained_tenths, 600)
-  assert.equal(r.json.player.gold_tenths, 3500 + 4900 + 1400 + 600)
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 4, stage: 2, kills: { grunt: 5 } } }) // 12.1 → 121 each
+  assert.equal(r.json.gold_gained_tenths, 605)
+  assert.equal(r.json.player.gold_tenths, 3500 + 5005 + 1430 + 605)
 
   const before = r.json.player.gold_tenths
   for (const body of [
@@ -283,8 +283,8 @@ test('처치 골드: Σ count × kill_gold(id, stage), stage는 player.stage로 
   S.clock.t += 1000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 5, stage: 1_000_000, kills: { grunt: 10_000 } } })
   assert.equal(r.status, 200)
-  assert.equal(r.json.gold_gained_tenths, 300 * 140)
-  assert.equal(r.json.player.gold_tenths, before + 42000)
+  assert.equal(r.json.gold_gained_tenths, 300 * 143)
+  assert.equal(r.json.player.gold_tenths, before + 42900)
   const ks = await logs(id, 'kills')
   assert.equal(ks.length, 5)
   assert.deepEqual(ks[2].detail.kept, { grunt: 10 })
@@ -420,7 +420,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 24, atk: 4, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 10 })
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
-  assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.2, waves: 3, wave_size: 10, idle_interval: 8 })
+  assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.21, waves: 3, wave_size: 10, idle_interval: 8 })
   assert.equal(g.heroes.length, 36)
   assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
   assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['dodge', null]) // 개정 17: R은 스킬 2개
