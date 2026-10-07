@@ -4790,7 +4790,13 @@ func test_tutorial() -> void:
 	var kinds := {}
 	for i in TutorialScript.MISSIONS.size():
 		var rw: Dictionary = t.reward(i)
-		var nxt: Dictionary = TutorialScript.MISSIONS[i + 1] if i + 1 < TutorialScript.MISSIONS.size() else {}
+		if TutorialScript.MISSIONS[i].has("reward"):  # 가이드 성장 미션: 적힌 보상
+			check(rw == TutorialScript.MISSIONS[i].reward, "guide: filler mission %d pays its own reward: %s" % [i + 1, rw])
+			continue
+		var j := i + 1  # 다음 규칙 미션(성장 미션은 건너뛴다)
+		while j < TutorialScript.MISSIONS.size() and TutorialScript.MISSIONS[j].has("reward"):
+			j += 1
+		var nxt: Dictionary = TutorialScript.MISSIONS[j] if j < TutorialScript.MISSIONS.size() else {}
 		var want := "tickets"
 		if nxt.get("kind", "") in ["build", "level", "train", "research"]:
 			want = "res"
@@ -4823,7 +4829,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "튜토리얼 21번째 미션 「모집권 던전」에서 열려요" and t.reward(t.mission_index("dungeon_ticket") - 1) == {"keys_ticket": 2},
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열려요" and t.reward(t.mission_index("dungeon_equip")) == {"keys_ticket": 2},
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -4842,9 +4848,41 @@ func test_tutorial() -> void:
 		blocks.append(before and not at and not t.build_locked(m.arg))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요"
-		and t.tab_lock_text("hero") == "튜토리얼 9번째 미션 「영웅 레벨업」에서 열려요",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 16번째 미션 「주점 건설」에서 건설할 수 있어요"
+		and t.tab_lock_text("hero") == "가이드 9번째 미션 「영웅 레벨업」에서 열려요",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
+	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
+	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
+		"soldier_deploy", "build_lab", "build_archery", "build_stable", "guild", "pvp"]
+	var gaps := []
+	for k in range(2, intro.size()):
+		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
+	check(TutorialScript.MISSIONS.size() == 67 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	t.step = t.mission_index("hero_lv4_5")
+	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
+	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
+	for id in e.heroes.keys().slice(0, 4):
+		e.hero_levels[id] = 5
+	check(e.heroes.size() >= 4 and t.complete(), "guide: 4 heroes at Lv 5 complete the hero level mission")
+	e.hero_levels = hero_lv_was
+	t.step = t.mission_index("atk_3")
+	e.upgrades["atk"] = 2
+	check(not t.complete() and t.progress_text() == "Lv 2/3", "guide: stat level mission shows Lv 2/3")
+	e.upgrades["atk"] = 3
+	check(t.complete() and t.reward(t.step) == {"gold": 2000}, "guide: stat Lv 3 completes; filler pays its own gold")
+	e.upgrades["atk"] = 0
+	t.step = t.mission_index("pvp") - 1
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열려요", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	t.step += 1
+	t.count = 0
+	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
+	t.note("pvp")
+	check(t.complete(), "guide: one PVP battle completes the PVP mission")
+	t.step = t.mission_index("stage_1_12")
+	t.count = 0
+	check(not t.complete(), "guide: 1-12 is not cleared by the guild unlock")
+	check(TutorialScript.v2_step(0) == 0 and TutorialScript.v2_step(9) == t.mission_index("growth") and TutorialScript.v2_step(20) == t.mission_index("dungeon_ticket")
+		and TutorialScript.v2_step(33) == TutorialScript.MISSIONS.size(), "guide: old v2 steps map to the same mission id")
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0

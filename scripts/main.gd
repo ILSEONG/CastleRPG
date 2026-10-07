@@ -257,7 +257,7 @@ func _build_world() -> void:
 
 
 ## 튜토리얼 미션 카드 [바로가기](Tutorial.goto_requested): building:<id>(카메라를 그 건물로 옮기고 건물 창) · tab:<id>(하단 탭) ·
-## merchant(상인 창) · recruit(모집 창 다이아 탭) · stage(방치 중이면 전투 시작).
+## merchant(상인 창) · recruit(모집 창 다이아 탭) · stage(방치 중이면 전투 시작) · pvp(던전 창 [PVP]).
 func _tutorial_goto(target: String) -> void:
 	if _tutorial_ui.is_empty() or not is_inside_tree():
 		return
@@ -288,6 +288,12 @@ func _tutorial_goto(target: String) -> void:
 				_tutorial_ui.tabs.press("recruit")
 		"stage":
 			_hud.request_stage()  # FEVER 중이면 끊을지 묻는다
+		"pvp":  # 던전 창의 [PVP]
+			var dg = _tutorial_ui.tabs.windows.get("dungeon")
+			if dg != null:
+				if not dg.is_open():
+					_tutorial_ui.tabs.press("dungeon")
+				dg.set_section("pvp")
 
 
 ## 개발용 `-- --dungeon=gold|equip`(웹 `?dungeon=`, 디버그·오프라인): 저장 안 함, 출전 인원만큼 영웅을 채워(표 순서) 곧바로 1단계 던전.
