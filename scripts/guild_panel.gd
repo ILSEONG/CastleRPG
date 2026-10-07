@@ -42,6 +42,7 @@ var _dirty := false
 var _leave_armed := 0.0
 var _create_name := ""
 var _refetch := 0.0
+var _dragon_box: SubViewportContainer  # 보스 탭 드래곤 미리보기 — 다시 만들기(골드가 오를 때마다 등) 사이에도 같은 것을 써서 대기 동작이 처음으로 튀지 않는다
 
 const REFETCH_SEC := 30.0  # 온라인: 창이 열려 있는 동안 이 간격으로 길드 값을 다시 받는다
 
@@ -62,6 +63,11 @@ func _ready() -> void:
 	_fit_sheet()
 	Guild.changed.connect(_on_changed)
 	Economy.changed.connect(_on_econ_changed)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and is_instance_valid(_dragon_box) and _dragon_box.get_parent() == null:
+		_dragon_box.free()
 
 
 func _fit() -> void:
@@ -113,6 +119,8 @@ func _rebuild() -> void:
 		_create_name = name_edit.text
 	buttons.clear()
 	name_edit = null
+	if is_instance_valid(_dragon_box) and _dragon_box.get_parent() != null:
+		_dragon_box.get_parent().remove_child(_dragon_box)
 	for c in body.get_children():
 		body.remove_child(c)
 		c.queue_free()
@@ -439,7 +447,9 @@ func _build_boss() -> void:
 	var card := _card()
 	var v: VBoxContainer = card.get_child(0)
 	v.add_child(_label(GuildScript.boss_name(1), 30))
-	v.add_child(dragon_view(Vector2(560, 300)))
+	if not is_instance_valid(_dragon_box):
+		_dragon_box = dragon_view(Vector2(560, 300))
+	v.add_child(_dragon_box)
 	var desc := _label("하루 %d번 도전. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수예요." % GuildScript.BOSS_TRIES, 18, SUB)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(desc)
