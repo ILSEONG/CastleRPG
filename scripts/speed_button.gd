@@ -1,8 +1,10 @@
 extends CanvasLayer
 ## x1.5 배속 버튼(사용자 2026-10-07): 성 화면(방치·스테이지 진행) 왼쪽 중하단. 누르면 바로 켬/끔 — 켜면 게임 시간(Engine.time_scale)이 1.5배.
 ## 켬/끔은 기기에만 남긴다(Prefs "speed_x15", 기본 끔 — 서버·DB에 보내지 않는다).
-## 성 화면이 트리에 있을 때만 빨라진다: 던전·PVP·길드 보스·길드전은 main이 성 월드를 트리에서 떼므로 이 버튼도 빠지고 1배로 돌아온다
-## (그 모드들은 서버가 전투 시간·실제 경과를 따져 보기 때문). 건물·훈련·연구·방치 수입·초기화는 실제 시각(Economy.time_now)이라 배속과 무관.
+## 모든 컨텐츠(사용자 2026-10-07 "모든 컨텐츠에 1.5배"): 성 화면(main)과 던전·PVP·길드 보스·길드전 장면(main._enter_dungeon이 하나씩 붙인다)에
+## 같은 버튼이 있고 같은 설정을 쓴다. 서버는 실제 경과와 견주는 검사를 1.5배까지 받아 준다(rules.MAX_GAME_SPEED).
+## 길드전은 한 방을 방장이 판단하므로 방 속도 = 방장 설정(스냅샷 "x" → follow). 공성 10분 창은 실제 시간.
+## 건물·훈련·연구·방치 수입·초기화는 실제 시각(Economy.time_now)이라 배속과 무관.
 ## 자리: 왼쪽 아래, 오른쪽 아래 [메뉴] 토글 버튼과 같은 높이(사용자 2026-10-07 "메뉴 버튼과 같은 높이") — 메뉴가 없으면 화면 높이 CENTER_Y 지점.
 ## 단 하단 영웅 초상화 줄·튜토리얼 카드보다 위(매 프레임 맞춘다). 채팅 줄과 [핫딜] 버튼은 이 버튼을 따라온다.
 
@@ -22,6 +24,7 @@ const OFF_COLOR := Color(0.30, 0.34, 0.46)  # 오른쪽 아래 메뉴 버튼과 
 ## 히트스톱(camera_rig)이 끝날 때 되돌릴 배율. 0이면 이 버튼이 손대지 않았다(히트스톱은 시작 전 배율로 되돌린다).
 static var base := 0.0
 static var _live := 0  # 트리에 있는 배속 버튼 수(월드를 다시 만들 때 새 버튼이 먼저 들어와도 끄지 않게)
+static var _follow := 0.0  # 길드전 꼭두각시: 방장 배율(0이면 내 설정)
 
 var card  # tutorial_card.gd(있으면 그 위로)
 var strip  # hero_strip.gd(보이면 그 위로)
@@ -34,15 +37,31 @@ static func is_on() -> bool:
 	return Prefs.get_bool(PREF_KEY, false)
 
 
-## 지금 성 화면 배율(버튼이 트리에 있고 켜져 있으면 1.5).
+## 지금 배율(버튼이 트리에 있고 켜져 있으면 1.5, 길드전 꼭두각시는 방장 배율).
 static func speed() -> float:
-	return SPEED if _live > 0 and is_on() else 1.0
+	if _live <= 0:
+		return 1.0
+	return _follow if _follow > 0.0 else own_speed()
+
+
+## 내 설정 배율(길드전 방장이 스냅샷에 실어 보낸다).
+static func own_speed() -> float:
+	return SPEED if is_on() else 1.0
+
+
+## 길드전 꼭두각시: 방장 배율을 따른다(1 ~ SPEED). 0이면 내 설정으로.
+static func follow(x: float) -> void:
+	var f := clampf(x, 1.0, SPEED) if x > 0.0 else 0.0
+	if f != _follow:
+		_follow = f
+		_apply()
 
 
 static func _apply() -> void:
-	if _live > 0 and is_on():
-		base = SPEED
-		Engine.time_scale = SPEED
+	var s := speed()
+	if _live > 0 and s > 1.0:
+		base = s
+		Engine.time_scale = s
 	elif base > 0.0:  # 켰다가 껐거나 성 화면을 떠났다 — 손댄 적이 있을 때만 1배로(테스트가 정한 배율은 건드리지 않는다)
 		base = 1.0
 		Engine.time_scale = 1.0
@@ -73,6 +92,7 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	_live -= 1
+	_follow = 0.0  # 길드전을 떠나면 다시 내 설정
 	_apply()
 
 

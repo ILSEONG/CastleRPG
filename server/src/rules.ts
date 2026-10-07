@@ -502,7 +502,10 @@ export const SUB_BASE: Record<string, Record<string, number>> = {
   aspd: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, dmg_reduce: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, skill_dmg: { SR: 4, SSR: 6, UR: 9, LR: 12 },
 }
 export const RUN_TTL_SEC = 1800 // run 만료(30분)
-export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed − 5
+export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
+// 앱 x1.5 배속 버튼(2026-10-07): 전투 시간(게임 초)은 실제 초의 이 배수까지 빨리 갈 수 있다. 전투 길이·제한 시간은 게임 초 그대로,
+// 실제 경과와 견주는 검사(던전 finish·PVP 최소 승리·드래곤 too_early)만 이 배수로 나눈다. 앱 speed_button.gd SPEED와 같다.
+export const MAX_GAME_SPEED = 1.5
 export const MAX_DUNGEON_LEVEL = 300 // 보상 골드 tenths가 bigint를 넘지 않게(4000 × 1.1^299 × 10 < 2^63)
 
 export interface DungeonState {

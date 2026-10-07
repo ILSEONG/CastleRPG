@@ -291,15 +291,15 @@ test('finish 패배: 열쇠·골드를 소모하지 않고 run만 닫는다(재�
   assert.equal((await logs(id, 'dungeon_clear')).length, 0)
 })
 
-test('finish 타당성: 최소(골드 15·장비 20초)·제한 시간 120초·실제 경과 ≥ elapsed − 5, 아니면 409 implausible(run은 열린 채), 30분 지나면 409 run_expired', async () => {
+test('finish 타당성: 최소(골드 15·장비 20초)·제한 시간 120초·실제 경과 ≥ elapsed ÷ 1.5(x1.5 배속) − 5, 아니면 409 implausible(run은 열린 채), 30분 지나면 409 run_expired', async () => {
   const { token } = await fresh()
   const s = await start(token, { type: 'gold', level: 1, party: GOLD6 })
   S.clock.t = T0 + 20
-  for (const [elapsed, why] of [[14.9, 'below the minimum'], [30, 'more than real time + 5'], [121, 'above the time limit']] as [number, string][]) {
+  for (const [elapsed, why] of [[14.9, 'below the minimum'], [40, 'more than 1.5x real time + 5'], [121, 'above the time limit']] as [number, string][]) {
     const r = await finish(token, { run_id: s.json.run_id, win: true, elapsed })
     assert.deepEqual([r.status, r.json.error], [409, 'implausible'], why)
   }
-  const ok = await finish(token, { run_id: s.json.run_id, win: true, elapsed: 25 }) // 실제 20 ≥ 25 − 5
+  const ok = await finish(token, { run_id: s.json.run_id, win: true, elapsed: 37 }) // x1.5 배속: 실제 20 ≥ 37 ÷ 1.5 − 5
   assert.deepEqual([ok.status, ok.json.rewards], [200, { gold_tenths: 40000 }])
   const e = await start(token, { type: 'equip', level: 1, party: EQ4 })
   S.clock.t += 19.5
