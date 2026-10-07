@@ -114,7 +114,7 @@ func _ready() -> void:
 		add_squad(s)
 	picker = PickerScript.new()
 	picker.camera = camera
-	picker.arena_r = Balance.MAP_HALF * 0.5
+	picker.arena_r = deploy_r()
 	add_child(picker)
 	_focus_camera(rig)
 	_build_deploy_marks()
@@ -369,7 +369,7 @@ func add_squad(s: Dictionary) -> void:
 		u.war_half = half
 		u.battle = self
 		u.idle_dir = -Formation.SIDE_DIR[lane]
-		u.post_pos = camp_spot(lane, squad * WarRules.SQUAD + i)
+		u.post_pos = camp_spot(lane, camp_index(squad, i))
 		u.free_pos = u.post_pos
 		u.hold = true
 		u.puppet = role == "puppet"
@@ -381,6 +381,17 @@ func add_squad(s: Dictionary) -> void:
 		_att.append(u)
 		units_by_uid[uid] = u
 	score_changed.emit()
+
+
+## 진영 자리 번호: 같은 면 분대끼리 앞에서부터(분대 s는 면 s % 4 — 면마다 s / 4번째). 예전엔 분대 번호 전체로 줄을 쌓아
+## 20분대면 뒷줄이 배치 가능 반경(deploy_r) 밖까지 밀려나 그 자리를 다시 누를 수 없었다(2026-10-07 사용자).
+func camp_index(squad: int, i: int) -> int:
+	return (squad / 4) * WarRules.SQUAD + i
+
+
+## 배치·바닥 탭 반경: 진영 맨 뒷줄보다 8 m 더(진영 뒤에도 놓을 수 있게).
+func deploy_r() -> float:
+	return half + Balance.WALL_T + WarRules.CAMP_D + 2.2 * 2.0 + 8.0
 
 
 func camp_spot(lane: int, i: int) -> Vector3:
@@ -459,7 +470,7 @@ func _process(delta: float) -> void:
 			_respawn.erase(r)
 			var u = r[0]
 			if is_instance_valid(u):
-				u.respawn(camp_spot(u.lane, u.squad * WarRules.SQUAD + u.uid % WarRules.SQUAD))
+				u.respawn(camp_spot(u.lane, camp_index(u.squad, u.uid % WarRules.SQUAD)))
 				u.commanded = false
 				u.set_home(u.post_pos, false)
 	if role == "host":
@@ -666,7 +677,7 @@ func clamp_deploy(p: Vector3) -> Vector3:
 			p.x = lim if p.x >= 0.0 else -lim
 		else:
 			p.z = lim if p.z >= 0.0 else -lim
-	var r := Balance.MAP_HALF * 0.5
+	var r := deploy_r()
 	var flat := Vector2(p.x, p.z).limit_length(r)
 	return Vector3(flat.x, 0.0, flat.y)
 

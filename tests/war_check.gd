@@ -326,6 +326,25 @@ func _case_deploy() -> void:
 	b.queue_free()
 	pup.queue_free()
 	await get_tree().process_frame
+	# 20분대: 진영 뒷줄도 배치 반경 안, 뒷줄 뒤를 눌러도 그 자리에 선다(예전엔 반경 밖으로 밀려 못 놓았다)
+	var big := make_plan(20, 1)
+	big.deploy_left = 300.0
+	var b3 = _battle(big)
+	await get_tree().process_frame
+	var far := 0.0
+	var back = null
+	for x in b3.units(0):
+		var r := Vector2(x.global_position.x, x.global_position.z).length()
+		if r > far:
+			far = r
+			back = x
+	_check(far < b3.deploy_r() - 4.0, "camp back row sits inside the deploy area (%.1f < %.1f m)" % [far, b3.deploy_r()])
+	var mover = b3.units(0)[0]
+	var want: Vector3 = back.global_position + Formation.SIDE_DIR[int(back.lane)] * 2.5
+	b3.deploy_unit(mover, want)
+	_check(Formation.flat_distance(mover.global_position, want) < 0.3, "a hero can be placed behind the camp back row (%.2f m off)" % Formation.flat_distance(mover.global_position, want))
+	b3.queue_free()
+	await get_tree().process_frame
 	var b2 = _battle(plan)
 	b2.deploy_left = 0.5
 	await _run(b2, 1.5, 0.5)
