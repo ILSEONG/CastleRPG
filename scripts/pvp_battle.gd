@@ -34,6 +34,12 @@ const ROW_GAP := 2.6  # 앞줄 ↔ 뒷줄
 const SIDE_GAP := 2.2  # 줄 안 간격
 const SOLDIER_ROW := 7  # 병사 한 줄
 const SOLDIER_GAP := 1.4
+## 전투 시간 배율(사용자 2026-10-07 "PVP가 너무 빨리 끝나 — 영웅이 세지면 더 빨라질 텐데 배율을"): 시작할 때 양 팀 영웅의 체력 합 ÷ 상대 초당 피해 합으로
+## 전투가 몇 초 걸릴지 어림하고(TTK_CALIB = 실제 ÷ 어림, 전투 시뮬로 맞춤), 그 시간이 TARGET_SEC가 되도록 모든 유닛(영웅·병사) 체력에 같은 배율을 곱한다.
+## 영웅이 강해져 피해가 체력보다 빨리 늘어도 배율이 따라 커져 판 길이가 비슷하다. 1보다 작게는 안 한다.
+const TARGET_SEC := {"duel": 40.0, "total": 55.0}
+const TTK_CALIB := {"duel": 1.2, "total": 1.35}
+const HP_MULT_MAX := 30.0
 const SOLDIER_FRONT := 3.3  # 영웅 앞줄 → 병사 첫 줄
 const SOLDIER_ROW_GAP := 2.25  # 병사 줄 사이(가운데 쪽으로)
 
@@ -53,6 +59,9 @@ var _soldiers := [[], []]
 var _intro := INTRO_SEC
 var _leaving := false
 var _uid := 0
+var hp_mult := 1.0  # 이 판의 체력 배율(_pick_hp_mult)
+var ttk_est := 0.0  # 배율 전 어림 전투 시간(초, 시뮬 보정용)
+var force_hp_mult := 0.0  # 테스트·시뮬: 0보다 크면 이 배율을 그대로 쓴다
 
 
 func _ready() -> void:
@@ -88,6 +97,13 @@ func _ready() -> void:
 	if mode == "total":
 		_spawn_soldiers(0, run.get("my_soldiers", {}))
 		_spawn_soldiers(1, opp.get("soldiers", {}))
+	hp_mult = _pick_hp_mult()
+	for t in 2:
+		for u in _heroes[t]:
+			u.set_hp_mult(hp_mult)
+		for so in _soldiers[t]:
+			so.hp_max *= hp_mult
+			so.hp *= hp_mult
 	if mode == "duel":
 		picker = PickerScript.new()
 		picker.camera = camera
@@ -101,6 +117,31 @@ func _ready() -> void:
 	Pvp.battle_refused.connect(_on_refused)
 	Pvp.result_ready.connect(_on_result_ready)
 	print("[pvp] %s mine %d+%d vs %s %d+%d" % [mode, _heroes[0].size(), _soldiers[0].size(), str(opp.get("name", "")), _heroes[1].size(), _soldiers[1].size()])
+
+
+## 배율 = 목표 시간 ÷ (어림 시간 × TTK_CALIB). 어림 시간 = 양 팀이 상대를 다 쓰러뜨리는 데 걸리는 시간 중 짧은 것
+## (체력 합 ÷ 초당 피해 합; 초당 피해 = 공격력 × 공격 속도 ÷ 공격 간격 × 치명타 기대값).
+func _pick_hp_mult() -> float:
+	var hp := [0.0, 0.0]
+	var dps := [0.0, 0.0]
+	for t in 2:
+		for u in _heroes[t]:
+			hp[t] += float(u.hp_max)
+			dps[t] += hero_dps(u)
+	if dps[0] <= 0.0 or dps[1] <= 0.0:
+		return 1.0
+	ttk_est = minf(hp[1] / dps[0], hp[0] / dps[1])
+	if force_hp_mult > 0.0:
+		return force_hp_mult
+	var m: float = float(TARGET_SEC.get(mode, 40.0)) / maxf(0.1, ttk_est * float(TTK_CALIB.get(mode, 1.0)))
+	return clampf(m, 1.0, HP_MULT_MAX)
+
+
+static func hero_dps(u) -> float:
+	var sk: Dictionary = u._sk
+	var has_crit := sk.has("crit")
+	var cp := GameData.crit_roll_params(sk.crit[0] / 100.0 if has_crit else 0.0, sk.crit[1] / 100.0 if has_crit else 0.0, u._bonus)
+	return float(u.atk) * float(u._aspd) / maxf(0.2, float(u.def.atk_interval)) * (1.0 + float(cp.rate) * (float(cp.mult) - 1.0))
 
 
 func field_r() -> float:

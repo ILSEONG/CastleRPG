@@ -206,15 +206,18 @@ func _pvp_run(mode: String, i: int) -> Dictionary:
 	var ta: String = TEMPLATES[i % TEMPLATES.size()]
 	var tb: String = TEMPLATES[(i * 3 + 1) % TEMPLATES.size()]
 	var mine := _pick_team(5, ta)
-	_set_levels(mine, 40, 60)
+	var lo := int(_arg("lvlo", "40"))
+	var hi := int(_arg("lvhi", "60"))
+	_set_levels(mine, lo, hi)
 	var opp := []
 	for id in _pick_team(5, tb):
-		opp.append({"hero": id, "level": rng.randi_range(40, 60), "promotion": rng.randi_range(0, GameData.MAX_PROMOTION)})
+		opp.append({"hero": id, "level": rng.randi_range(lo, hi), "promotion": rng.randi_range(0, GameData.MAX_PROMOTION)})
 	var soldiers := {"infantry:2": 8, "archer:1": 6, "cavalry:3": 6}
 	var run := {"mode": mode, "me": mine, "my_soldiers": soldiers, "time": 90.0 if mode == "duel" else 120.0,
 		"opponent": {"name": "sim", "heroes": opp, "soldiers": soldiers}, "gain": 10, "loss": 10}
 	var b = PvpBattleScript.new()
 	b.run = run
+	b.force_hp_mult = float(_arg("hpmult", "0"))
 	add_child(b)
 	while b.phase == PvpBattleScript.Phase.INTRO:
 		await get_tree().process_frame
@@ -229,6 +232,8 @@ func _pvp_run(mode: String, i: int) -> Dictionary:
 	row.template = ta + "_vs_" + tb
 	row.result = "win" if b.alive(1) == 0 else ("loss" if b.alive(0) == 0 else "time")
 	row.clock = b.clock
+	row.hp_mult = b.hp_mult
+	row.ttk_est = b.ttk_est
 	row.alive = [b.alive(0), b.alive(1)]
 	row.team_hp = [b.team_hp(0), b.team_hp(1)]
 	b.queue_free()

@@ -35,18 +35,30 @@ const SELF_AOE := ["earthquake", "ground_slam", "whirlwind", "war_cry", "wide_sw
 const DEFENSIVE := ["shield", "bulwark", "parry", "lunar_veil", "blood_rage"]
 const CONTROL := ["deep_freeze", "frost_chain", "snare", "shield_bash", "hex", "cheap_shot", "taunt"]
 const SUPPORT := ["mass_heal", "sanctuary", "shield_ally"]
+## 뺑뺑이 막기(사용자 2026-10-07 "근접은 원거리를 쫓아다니고 원거리는 근접 피해 도망치며 뺑뺑이"):
+## 근접은 같은 표적을 CHASE_GIVEUP초 동안 쫓기만 하고 못 치면 그 표적을 IGNORE_SEC초 동안 거의 안 고른다(IGNORE_MULT) — 가까운 적부터 친다.
+## 원거리는 나를 노리고 붙은 근접 적만 피하고(남을 치는 근접은 무시), 쏘던 화살은 마저 쏘고, KITE_WINDOW초에 KITE_MAX번까지만 물러난다 — 그 뒤엔 서서 쏜다.
+const CHASE_GIVEUP := 2.5
+const IGNORE_SEC := 3.0
+const IGNORE_MULT := 0.15
+const KITE_MAX := 2
+const KITE_WINDOW := 8.0
 
 var battle  # pvp_battle.gd: units(team)
 var _focus := {}  # 팀 → [표적, 정한 시각]
 var _held := {}  # 영웅 id·스킬 → 처음 미룬 시각
+var _chase := {}  # 근접 영웅 uid → [쫓는 표적, 쫓기 시작한 시각]
+var _ignore := {}  # 근접 영웅 uid → [포기한 표적, 다시 볼 시각]
+var _kites := {}  # 원거리 영웅 uid → 물러난 시각들
 
 
 func _init(p_battle) -> void:
 	battle = p_battle
 
 
+## 전투 시계(게임 초) — 배속·일시 정지와 같이 간다.
 func _now() -> float:
-	return Time.get_ticks_msec() / 1000.0
+	return float(battle.clock) if battle != null and battle.get("clock") != null else Time.get_ticks_msec() / 1000.0
 
 
 func _alive_foes(u) -> Array:
@@ -89,6 +101,7 @@ func pick_target(u):
 		reach = maxf(float(u.def.aggro), rng)
 	var focus = _team_focus(u, foes)
 	var cur = u.current_target()
+	var skip = _skip_target(u, cur)
 	var best = null
 	var best_s := -INF
 	for f in foes:
@@ -96,10 +109,33 @@ func pick_target(u):
 		if Formation.flat_distance(origin, f.global_position) > reach and d > rng + 0.5:
 			continue
 		var s := _score(u, f, d, focus, cur)
+		if f == skip:
+			s *= IGNORE_MULT
 		if s > best_s:
 			best_s = s
 			best = f
 	return best
+
+
+## 근접: 지금 표적을 CHASE_GIVEUP초 넘게 사거리 밖에서 쫓기만 했으면 포기 표적으로 둔다. 포기 표적(IGNORE_SEC초 동안)을 돌려준다.
+func _skip_target(u, cur):
+	if u.role != "melee":
+		return null
+	var now := _now()
+	if cur != null and Formation.flat_distance(u.global_position, cur.global_position) > u._reach(cur) + 0.5:
+		var c: Array = _chase.get(u.uid, [null, now])
+		if c[0] != cur:
+			c = [cur, now]
+			_chase[u.uid] = c
+		elif now - float(c[1]) >= CHASE_GIVEUP:
+			_ignore[u.uid] = [cur, now + IGNORE_SEC]
+			_chase.erase(u.uid)
+	else:
+		_chase.erase(u.uid)
+	var ig: Array = _ignore.get(u.uid, [null, -INF])
+	if ig[0] != null and now < float(ig[1]) and is_instance_valid(ig[0]):
+		return ig[0]
+	return null
 
 
 func _score(u, f, d: float, focus, cur) -> float:
@@ -218,13 +254,18 @@ func think(u) -> void:
 
 
 func _kite(u) -> bool:
-	if u.role != "ranged" or u.kite_cd > 0.0 or u.is_walking() or u.commanded:
+	if u.role != "ranged" or u.kite_cd > 0.0 or u.is_walking() or u.commanded or u._swing != null:
+		return false
+	var now := _now()
+	var kites: Array = _kites.get(u.uid, []).filter(func(t): return now - float(t) < KITE_WINDOW)
+	_kites[u.uid] = kites
+	if kites.size() >= KITE_MAX:
 		return false
 	var here: Vector3 = u.global_position
 	var away := Vector3.ZERO
 	var close := 0
 	for f in _alive_foes(u):
-		if f.get("role") != "melee":
+		if f.get("role") != "melee" or not f.has_method("current_target") or f.current_target() != u:
 			continue
 		var v: Vector3 = here - f.global_position
 		v.y = 0.0
@@ -234,6 +275,7 @@ func _kite(u) -> bool:
 	if close == 0:
 		return false
 	u.kite_cd = KITE_CD
+	kites.append(now)
 	var melee := _alive_allies(u).filter(func(a): return a.role == "melee" and a != u)
 	if not melee.is_empty():  # 우리 근접 쪽으로 물러나 그 뒤에 숨는다
 		var to_front: Vector3 = _center(melee) - here
