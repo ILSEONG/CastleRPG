@@ -3600,7 +3600,7 @@ func test_equipment_offline() -> void:
 	check(e.equipment == {"hans": {"weapon": 1}, "ella": {"hat": 3}} and e.item_owner(3) == "ella", "equipping an item another hero wears moves it: %s" % [e.equipment])
 	check(e.unequip("ella", "hat") and e.equipment == {"hans": {"weapon": 1}} and not e.unequip("ella", "hat"), "unequip empties the slot; an empty slot cannot be unequipped")
 	e.equip("hans", "shoes", 5)
-	check(_pick3(e.equipment_bonus("hans")) == [423, 44, 3.0], "shoes add HP and +3% speed: %s" % [e.equipment_bonus("hans")])
+	check(_pick3(e.equipment_bonus("hans")) == [423, 44, 3.0], "shoes add HP and +3%% speed: %s" % [e.equipment_bonus("hans")])
 	GameData.equip_source = e  # 오토로드 Economy처럼
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
