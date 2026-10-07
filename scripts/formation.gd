@@ -52,7 +52,7 @@ func claim_near(hero_id: int, side: int, post: int, offset: float) -> int:
 		var c: Dictionary = _claims[id]
 		if id != hero_id and c.side == side and c.post == post:
 			taken[c.slot] = true
-	var offs: Array = gate_front_offsets(castle_half) if post == POST_GATE else Balance.WALL_TOP_SLOTS
+	var offs: Array = gate_front_offsets(castle_half) if post == POST_GATE else wall_top_offsets(castle_half)
 	var best := -1
 	for slot in offs.size():
 		if not taken.has(slot) and (best < 0 or absf(float(offs[slot]) - offset) < absf(float(offs[best]) - offset)):
@@ -125,6 +125,21 @@ static func gate_front_offsets(half: float) -> Array:
 	return out
 
 
+## 성벽 위 영웅 자리의 옆 위치(슬롯 순). 성문 1개 성은 WALL_TOP_SLOTS 그대로(±4·±8). 성문 2·3개 성은 성문 옆 4 m —
+## 먼저 서로 다른 성문을 하나씩, 성 가운데 쪽부터(계단도 가운데 쪽 것을 써서 모서리 건물 부지를 지나지 않는다):
+## 2개(±half/2) = 성문0 안쪽·성문1 안쪽·성문0 바깥·성문1 바깥, 3개(0·±2half/3) = 가운데 −4·오른쪽 안쪽·왼쪽 안쪽·가운데 +4.
+## 전투 시뮬 2026-10-07: 예전처럼 가운데 ±4에 서면 성문(±half/2)에서 10 m 이상이라 사거리 8 m 원거리 영웅이 한 발도 못 쐈다.
+static func wall_top_offsets(half: float) -> Array:
+	var n := gates_per_side(half)
+	if n <= 1:
+		return Balance.WALL_TOP_SLOTS.duplicate()
+	var d := absf(float(Balance.WALL_TOP_SLOTS[0]))
+	var g := gate_offsets(half, n)
+	if n == 2:
+		return [g[0] + d, g[1] - d, g[0] - d, g[1] + d]
+	return [g[1] - d, g[2] - d, g[0] + d, g[1] + d]
+
+
 static func perp(side: int) -> Vector3:
 	var dir := SIDE_DIR[side]
 	return Vector3(-dir.z, 0, dir.x)
@@ -144,7 +159,7 @@ static func slot_position(half: float, side: int, post: int, slot: int) -> Vecto
 	var dir := SIDE_DIR[side]
 	if post == POST_GATE:
 		return dir * (half + Balance.WALL_T + Balance.GATE_FRONT_OFFSET) + perp(side) * float(gate_front_offsets(half)[slot])
-	return dir * (half + Balance.WALL_T / 2.0) + perp(side) * float(Balance.WALL_TOP_SLOTS[slot]) \
+	return dir * (half + Balance.WALL_T / 2.0) + perp(side) * float(wall_top_offsets(half)[slot]) \
 		+ Vector3(0, Balance.WALL_H, 0)
 
 
@@ -445,16 +460,17 @@ const PATROL_OUT := 7.0  # 기병 순찰 고리 반지름 = half + WALL_T + 이�
 
 
 ## 성벽 위 병사 자리 좌우 거리 [+2.5, -2.5, +6, -6, …] — 모서리 탑(중심선 끝 − 탑 반 − 0.5 m) 앞까지.
-## 가운데가 아닌 성문 위(성문 중앙 ± 성문 반폭 + 계단 틈 + 0.5 m)는 비운다(가운데 성문 위는 첫 자리 2.5 m가 이미 비운다).
+## 가운데가 아닌 성문 위(성문 중앙 ± 성문 반폭 + 계단 틈 + 0.5 m)는 비운다(가운데 성문 위는 첫 자리 2.5 m가 이미 비운다). 영웅 자리(wall_top_offsets) 1 m 안도 비운다.
 static func soldier_wall_offsets(half: float) -> Array:
 	var limit := half + Balance.WALL_T / 2.0 - Balance.TOWER_SIZE / 2.0 - 0.5
 	var clear := Balance.GATE_W / 2.0 + Balance.STAIR_GAP + 0.5
 	var gates_at := gate_offsets(half).filter(func(a): return absf(a) > 0.01)
+	var heroes_at := wall_top_offsets(half)
 	var out := []
 	var d: float = SOLDIER_WALL_OFFSETS[0]
 	var i := 0
 	while d <= limit:
-		if not gates_at.any(func(a): return absf(absf(a) - d) < clear):
+		if not gates_at.any(func(a): return absf(absf(a) - d) < clear) and not heroes_at.any(func(a): return absf(absf(a) - d) < 1.0):
 			out.append_array([d, -d])
 		i += 1
 		d = SOLDIER_WALL_OFFSETS[i] if i < SOLDIER_WALL_OFFSETS.size() else d + SOLDIER_WALL_STEP

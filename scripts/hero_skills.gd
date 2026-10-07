@@ -194,10 +194,19 @@ func _begin(k: String) -> float:
 	if h.has_method("cast_ok") and not h.cast_ok(k):  # PVP 영웅: 머리(pvp_brain)가 좋은 때를 고른다
 		return RETRY
 	if not h.begin_cast(cast_anim(k, h.def), func():
+			_retarget()
 			if not _cast(k):
 				_cd[k] = minf(_cd[k], RETRY)):
 		return CAST_WAIT
 	return float(sk[k][0])
+
+
+## 발동 순간에 표적이 그새 쓰러졌으면(다른 영웅이 끝냈다) 새 표적을 잡는다 — 안 그러면 모션만 하고 불발한다
+## (전투 시뮬 2026-10-07: 성 스테이지 성벽 원거리 스킬의 90% 이상이 이렇게 불발했다).
+func _retarget() -> void:
+	var t = h._target
+	if t == null or not is_instance_valid(t) or not t.is_alive():
+		h._target = h._find_target()
 
 
 ## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).
