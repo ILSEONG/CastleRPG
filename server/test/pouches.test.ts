@@ -53,8 +53,8 @@ test('출석 3일차 자원 주머니(30분) → 목재·석재·식량 건물 3
   const p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.deepEqual(p.pouches, { gold_30: 1, res_30: 1 })
   const r = await open(token, 'res_30')
-  assert.deepEqual(r.json.opened.res, { wood: 300, stone: 150, food: 300 })
-  assert.equal(r.json.player.res.wood, p.res.wood + 300)
+  assert.deepEqual(r.json.opened.res, { wood: 3000, stone: 1500, food: 3000 })
+  assert.equal(r.json.player.res.wood, p.res.wood + 3000)
   assert.equal((await open(token, 'gold_30', 2)).json.error, 'not_enough')
 })
 

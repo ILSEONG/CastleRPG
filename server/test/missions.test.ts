@@ -53,7 +53,7 @@ test('일일 미션: 보상 반영, 하루 한 번(409 claimed), 다음 날 다�
   assert.deepEqual(r.json.player.missions.d, ['d_kill'])
   assert.equal((await claim(token, { id: 'd_kill' })).json.error, 'claimed')
   const res = await claim(token, { id: 'd_collect' })
-  assert.equal(res.json.player.res.wood, before.res.wood + 300)
+  assert.equal(res.json.player.res.wood, before.res.wood + 3000)
   S.clock.t = monday + 86400
   const next = await claim(token, { id: 'd_kill' })
   assert.equal(next.status, 200)

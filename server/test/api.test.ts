@@ -138,8 +138,8 @@ test('수집 규칙(서버 시계): 분 내림·남은 초 유지·상한·0이�
   S.clock.t = T0 + 150 // 2분 30초
   r = await collect('lumber')
   assert.equal(r.status, 200)
-  assert.equal(r.json.amount, 20)
-  assert.equal(r.json.player.res.wood, 20)
+  assert.equal(r.json.amount, 200)
+  assert.equal(r.json.player.res.wood, 200)
   assert.equal(r.json.player.buildings.lumber.last_collect, T0 + 120) // 30초는 남긴다
   assert.equal(r.json.server_now, T0 + 150)
 
@@ -150,12 +150,12 @@ test('수집 규칙(서버 시계): 분 내림·남은 초 유지·상한·0이�
 
   S.clock.t = T0 + 120 + 720 * 60 + 1000 // 상한 넘김
   r = await collect('quarry')
-  assert.equal(r.json.amount, 720 * 5)
-  assert.equal(r.json.player.res.stone, 3600)
+  assert.equal(r.json.amount, 720 * 50)
+  assert.equal(r.json.player.res.stone, 36000)
   assert.equal(r.json.player.buildings.quarry.last_collect, S.clock.t)
   r = await collect('lumber')
-  assert.equal(r.json.amount, 7200)
-  assert.equal(r.json.player.res.wood, 7220)
+  assert.equal(r.json.amount, 72000)
+  assert.equal(r.json.player.res.wood, 72200)
 
   const back = S.clock.t - 3000 // 시계가 마지막 수집보다 뒤로: 0, 지금부터 다시
   S.clock.t = back
@@ -163,7 +163,7 @@ test('수집 규칙(서버 시계): 분 내림·남은 초 유지·상한·0이�
   assert.equal(r.json.amount, 0)
   assert.equal(r.json.player.buildings.lumber.last_collect, back)
   S.clock.t = back + 60
-  assert.equal((await collect('lumber')).json.amount, 10)
+  assert.equal((await collect('lumber')).json.amount, 100)
 
   for (const b of ['keep', 'barracks', 'wood']) {
     const bad = await collect(b)
@@ -172,8 +172,8 @@ test('수집 규칙(서버 시계): 분 내림·남은 초 유지·상한·0이�
   }
   assert.equal((await S.req('POST', '/v1/collect', { token, body: {} })).status, 400)
   const p = await S.req('GET', '/v1/player', { token })
-  assert.deepEqual(p.json.player.res, { wood: 7230, stone: 3600, food: 0 })
-  assert.equal((await logs(id, 'collect')).length, 5) // 20, 3600, 7200, 시계 되돌림, 10
+  assert.deepEqual(p.json.player.res, { wood: 72300, stone: 36000, food: 0 })
+  assert.equal((await logs(id, 'collect')).length, 5) // 200, 36000, 72000, 시계 되돌림, 100
 })
 
 test('판매: 자원별 시세로 그 자원 전부 / all, 골드 증가, 0개면 0, 모르는 자원 400', async () => {
@@ -186,22 +186,22 @@ test('판매: 자원별 시세로 그 자원 전부 / all, 골드 증가, 0개�
   const rates = R.merchantRates(R.hourIndex(t), cfg)
   const { token, id } = await S.login()
   await S.req('POST', '/v1/test/age', { token, body: { minutes: 7 } })
-  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // 70
-  await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } }) // 35
-  await S.req('POST', '/v1/collect', { token, body: { building: 'farm' } }) // 70
+  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // 700
+  await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } }) // 350
+  await S.req('POST', '/v1/collect', { token, body: { building: 'farm' } }) // 700
 
   let r = await S.req('POST', '/v1/sell', { token, body: { res: 'stone' } })
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.rates, rates)
-  assert.equal(r.json.gold_gained, Math.floor(35 * 2 * rates.stone + 1e-9))
+  assert.equal(r.json.gold_gained, Math.floor(350 * 2 * rates.stone + 1e-9))
   assert.equal(r.json.player.res.stone, 0)
   assert.equal(r.json.player.gold, r.json.gold_gained)
   assert.equal(r.json.player.gold_tenths, r.json.gold_gained * 10)
   const g1 = r.json.player.gold
 
   r = await S.req('POST', '/v1/sell', { token, body: { res: 'all' } })
-  const each = R.sellValue(70, 1, rates.wood) + R.sellValue(70, 1, rates.food) // 자원마다 자기 배율
-  assert.notEqual(R.sellValue(70, 1, rates.wood), R.sellValue(70, 1, rates.food))
+  const each = R.sellValue(700, 1, rates.wood) + R.sellValue(700, 1, rates.food) // 자원마다 자기 배율
+  assert.notEqual(R.sellValue(700, 1, rates.wood), R.sellValue(700, 1, rates.food))
   assert.equal(r.json.gold_gained, each)
   assert.deepEqual(r.json.player.res, { wood: 0, stone: 0, food: 0 })
   assert.equal(r.json.player.gold, g1 + each)
@@ -219,14 +219,14 @@ test('수량 판매: 부분 판매, 보유 초과 409, 정수 아님 400, 전량
   S.clock.t = T0
   const { token } = await S.login()
   await S.req('POST', '/v1/test/age', { token, body: { minutes: 7 } })
-  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // wood 70
+  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // wood 700
   const sell = (body: object) => S.req('POST', '/v1/sell', { token, body })
-  let r = await sell({ res: 'wood', amount: 30 })
+  let r = await sell({ res: 'wood', amount: 300 })
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.res.wood, 40)
-  assert.equal(r.json.gold_gained, R.sellValue(30, 1, r.json.rates.wood))
+  assert.equal(r.json.player.res.wood, 400)
+  assert.equal(r.json.gold_gained, R.sellValue(300, 1, r.json.rates.wood))
   assert.equal(r.json.player.gold_tenths, r.json.gold_gained * 10)
-  r = await sell({ res: 'wood', amount: 41 })
+  r = await sell({ res: 'wood', amount: 401 })
   assert.equal(r.status, 409)
   assert.equal(r.json.error, 'not_enough')
   for (const amount of [1.5, 0, -3, '5', null]) assert.equal((await sell({ res: 'wood', amount })).status, 400)
@@ -428,7 +428,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
     desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다',
   })
   assert.deepEqual(g.resources.map((x: any) => x.id), ['wood', 'stone', 'food']) // 파일 순서
-  assert.deepEqual(g.resources[1], { id: 'stone', name: '석재', building: 'quarry', per_min: 5, price: 2 })
+  assert.deepEqual(g.resources[1], { id: 'stone', name: '석재', building: 'quarry', per_min: 50, price: 2 })
   assert.equal(g.config.keep_slot_tiers, '1:4|9:8|22:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
@@ -437,11 +437,11 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
     ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0],
     ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0]]) // 개정 18: 파일 순서
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })
-  assert.equal(g.config.train_cost_cavalry, 'food:40|stone:20')
+  assert.equal(g.config.train_cost_cavalry, 'food:400|stone:200')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })
-  assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 150, stone: 250, food: 0, base_sec: 45, req1: 'quarry', req2: null })
+  assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 1500, stone: 2500, food: 0, base_sec: 45, req1: 'quarry', req2: null })
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
   assert.equal(g.config.hero_roster, undefined)
   assert.equal(g.config.kill_burst_sec, '60')
@@ -469,7 +469,7 @@ test('test/age: ALLOW_TEST_HOOKS면 last_collect를 minutes분 앞당김, 없으
   assert.equal(r.status, 200)
   assert.equal(r.json.player.buildings.lumber.last_collect, T0 - 600)
   assert.equal(r.json.player.buildings.farm.last_collect, T0 - 600)
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 100)
+  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })).json.amount, 1000)
   for (const minutes of ['x', -1, 1.5, 100_001, 1e300]) {
     assert.equal((await S.req('POST', '/v1/test/age', { token, body: { minutes } })).status, 400, String(minutes))
   }
@@ -492,7 +492,7 @@ test('플레이어 격리: A의 토큰으로 B의 상태를 바꿀 수 없다', 
   // body에 B의 id를 넣어도 무시된다 — 플레이어는 토큰의 sub로만 정해진다
   await S.req('POST', '/v1/test/age', { token: A.token, body: { minutes: 30, player_id: B.id } })
   const ca = await S.req('POST', '/v1/collect', { token: A.token, body: { building: 'lumber', player_id: B.id } })
-  assert.equal(ca.json.amount, 400)
+  assert.equal(ca.json.amount, 4000)
   await S.req('POST', '/v1/kills', { token: A.token, body: { seq: 1, stage: 1, kills: { grunt: 5 }, player_id: B.id } })
   await S.req('POST', '/v1/stage/clear', { token: A.token, body: { stage: 1, player_id: B.id } })
   await S.req('POST', '/v1/sell', { token: A.token, body: { res: 'all', player_id: B.id } })
@@ -549,25 +549,25 @@ test('여러 자원 판매: items 한 번에 원자적, 하나라도 초과면 �
   S.clock.t = T0
   const { token, id } = await S.login()
   await S.req('POST', '/v1/test/age', { token, body: { minutes: 7 } })
-  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // wood 70
-  await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } }) // stone 35
+  await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } }) // wood 700
+  await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } }) // stone 350
   const sell = (items: unknown) => S.req('POST', '/v1/sell', { token, body: { items } })
-  let r = await sell([{ res: 'wood', amount: 71 }, { res: 'stone', amount: 5 }])
+  let r = await sell([{ res: 'wood', amount: 701 }, { res: 'stone', amount: 50 }])
   assert.equal(r.status, 409)
   assert.equal(r.json.error, 'not_enough')
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.equal(p.res.wood, 70)
-  assert.equal(p.res.stone, 35)
+  assert.equal(p.res.wood, 700)
+  assert.equal(p.res.stone, 350)
   assert.equal(p.gold_tenths, 0)
   for (const bad of [[], [{ res: 'wood', amount: 1 }, { res: 'wood', amount: 2 }], [{ res: 'wood', amount: 0 }], 'x', [1]]) {
     assert.equal((await sell(bad)).status, 400)
   }
-  r = await sell([{ res: 'wood', amount: 30 }, { res: 'stone', amount: 5 }])
+  r = await sell([{ res: 'wood', amount: 300 }, { res: 'stone', amount: 50 }])
   assert.equal(r.status, 200)
-  const gold = R.sellValue(30, 1, r.json.rates.wood) + R.sellValue(5, 2, r.json.rates.stone)
+  const gold = R.sellValue(300, 1, r.json.rates.wood) + R.sellValue(50, 2, r.json.rates.stone)
   assert.equal(r.json.gold_gained, gold)
-  assert.equal(r.json.player.res.wood, 40)
-  assert.equal(r.json.player.res.stone, 30)
+  assert.equal(r.json.player.res.wood, 400)
+  assert.equal(r.json.player.res.stone, 300)
   assert.equal(r.json.player.gold_tenths, gold * 10)
   assert.equal((await logs(id, 'sell')).length, 1)
 })

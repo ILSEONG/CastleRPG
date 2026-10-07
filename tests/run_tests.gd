@@ -236,8 +236,8 @@ func test_game_tables() -> void:
 	var res := GameData.resources()
 	check(res.size() == 3 and res[0].id == "wood" and res[1].id == "stone" and res[2].id == "food", "resources keep file order")
 	var st := GameData.resource("stone")
-	check(st.name == "석재" and st.building == "quarry" and st.per_min == 5.0 and st.price == 2.0, "stone row = old RESOURCES")
-	check(GameData.resource("wood").building == "lumber" and GameData.resource("food").per_min == 10.0 and GameData.resource("food").building == "farm", "wood/food rows")
+	check(st.name == "석재" and st.building == "quarry" and st.per_min == 50.0 and st.price == 2.0, "stone row = old RESOURCES")
+	check(GameData.resource("wood").building == "lumber" and GameData.resource("food").per_min == 100.0 and GameData.resource("food").building == "farm", "wood/food rows")
 	check(GameData.resource_of_building("farm") == "food" and GameData.resource_of_building("keep") == "", "resource_of_building")
 	var nums := {"castle_hp": 1000.0, "gate_hp_per_level": 400.0, "max_live_monsters": 120.0, "countdown_sec": 3.0, "result_sec": 2.0,
 		"wave_gap_sec": 8.0, "spawn_spacing_sec": 1.0, "spawn_group": 3.0, "accum_cap_min": 720.0, "badge_min": 5.0, "merchant_jackpot_p": 0.05,
@@ -1154,11 +1154,11 @@ func _econ(now: float):
 
 
 func test_economy_pending() -> void:
-	check(EconomyScript.rate_per_min("wood", 1) == 10 and EconomyScript.rate_per_min("stone", 3) == 15, "rate = per_min x level")
+	check(EconomyScript.rate_per_min("wood", 1) == 100 and EconomyScript.rate_per_min("stone", 3) == 150, "rate = per_min x level")
 	check(EconomyScript.pending_amount("wood", 1, 59.9) == 0, "pending: under a minute is 0")
-	check(EconomyScript.pending_amount("wood", 1, 119.9) == 10, "pending floors minutes")
-	check(EconomyScript.pending_amount("stone", 2, 600.0) == 100, "pending scales with level")
-	check(EconomyScript.pending_amount("wood", 1, 720 * 60.0) == 7200 and EconomyScript.pending_amount("wood", 1, 99999999.0) == 7200, "pending capped at 720 min")
+	check(EconomyScript.pending_amount("wood", 1, 119.9) == 100, "pending floors minutes")
+	check(EconomyScript.pending_amount("stone", 2, 600.0) == 1000, "pending scales with level")
+	check(EconomyScript.pending_amount("wood", 1, 720 * 60.0) == 72000 and EconomyScript.pending_amount("wood", 1, 99999999.0) == 72000, "pending capped at 720 min")
 	check(EconomyScript.pending_amount("wood", 1, -500.0) == 0, "pending: negative elapsed is 0")
 	check(EconomyScript.res_of("lumber") == "wood" and EconomyScript.res_of("quarry") == "stone" and EconomyScript.res_of("farm") == "food" and EconomyScript.res_of("keep") == "", "res_of maps resource buildings only")
 
@@ -1166,11 +1166,11 @@ func test_economy_pending() -> void:
 func test_economy_collect() -> void:
 	var e = _econ(1000.0)
 	e.last_collect.lumber = 1000.0 - 150.0  # 2분 30초
-	check(e.collect("lumber", 1000.0) == 20 and e.res.wood == 20, "collect adds 2 min of wood")
+	check(e.collect("lumber", 1000.0) == 200 and e.res.wood == 200, "collect adds 2 min of wood")
 	check(is_equal_approx(e.last_collect.lumber, 1000.0 - 30.0), "collect keeps the leftover 30 s: %s" % e.last_collect.lumber)
-	check(e.collect("lumber", 1000.0) == 0 and is_equal_approx(e.last_collect.lumber, 970.0) and e.res.wood == 20, "collect with nothing pending changes nothing")
+	check(e.collect("lumber", 1000.0) == 0 and is_equal_approx(e.last_collect.lumber, 970.0) and e.res.wood == 200, "collect with nothing pending changes nothing")
 	e.last_collect.quarry = 1000.0 - 800 * 60.0  # 상한 초과
-	check(e.collect("quarry", 1000.0) == 720 * 5 and e.last_collect.quarry == 1000.0, "collect at the cap snaps last_collect to now")
+	check(e.collect("quarry", 1000.0) == 720 * 50 and e.last_collect.quarry == 1000.0, "collect at the cap snaps last_collect to now")
 	e.last_collect.farm = 5000.0  # 시계를 되돌림
 	check(e.collect("farm", 1000.0) == 0 and e.last_collect.farm == 1000.0, "collect with negative elapsed gives 0 and restarts from now")
 	e.last_collect.farm = 1000.0 - 4 * 60.0
@@ -1997,13 +1997,14 @@ func test_buildings() -> void:
 	var ids: Array = GameData.buildings().map(func(b): return b.id)
 	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable"], "buildings.csv: 11 rows in file order: %s" % [ids])
 	var gate := GameData.building_def("gate")
-	check(gate.name == "성문" and gate.max_level == 30.0 and gate.stone == 250.0 and gate.base_sec == 45.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
+	check(gate.name == "성문" and gate.max_level == 30.0 and gate.stone == 2500.0 and gate.base_sec == 45.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
 	# 비용 = round(값 × 1.35^(L−1)), 시간 = round(base_sec × 1.5^(L−1)) — 서버와 같은 표
-	check(GameData.build_cost("lumber", 1) == {"wood": 60, "stone": 80, "food": 40} and GameData.build_sec("lumber", 1) == 20, "lumber 1 -> 2: 60/80/40, 20 s")
-	check(GameData.build_cost("keep", 2) == {"wood": 405, "stone": 405, "food": 270} and GameData.build_sec("keep", 2) == 90, "keep 2 -> 3")
-	check(GameData.build_cost("keep", 10) == {"wood": 4468, "stone": 4468, "food": 2979} and GameData.build_sec("keep", 10) == 2307, "keep 10 -> 11: about 4,470 / 2,980, about 38 min")
-	check(GameData.build_cost("gate", 2) == {"wood": 203, "stone": 338, "food": 0} and GameData.build_sec("gate", 2) == 68, "gate 2 -> 3: 337.5 and 67.5 round away from zero")
-	check(GameData.build_sec("lumber", 20) == 44337 and GameData.build_cost("keep", 29) == {"wood": 1338033, "stone": 1338033, "food": 892022}, "level 20 is about 2,217x the base time; level 29 costs")
+	check(GameData.build_cost("lumber", 1) == {"wood": 600, "stone": 800, "food": 400} and GameData.build_sec("lumber", 1) == 20, "lumber 1 -> 2: 600/800/400, 20 s")
+	check(GameData.build_cost("keep", 2) == {"wood": 4050, "stone": 4050, "food": 2700} and GameData.build_sec("keep", 2) == 90, "keep 2 -> 3")
+	check(GameData.build_cost("keep", 10) == {"wood": 44681, "stone": 44681, "food": 29787} and GameData.build_sec("keep", 10) == 2307, "keep 10 -> 11: about 44,680 / 29,790, about 38 min")
+	check(GameData.build_cost("gate", 2) == {"wood": 2025, "stone": 3375, "food": 0} and GameData.build_sec("gate", 2) == 68 and GameData.build_cost("keep", 3) == {"wood": 5468, "stone": 5468, "food": 3645},
+		"gate 2 -> 3: 67.5 s rounds away from zero; keep 3 -> 4: 3000 x 1.35^2 = 5467.5 rounds away from zero")
+	check(GameData.build_sec("lumber", 20) == 44337 and GameData.build_cost("keep", 29) == {"wood": 13380328, "stone": 13380328, "food": 8920219}, "level 20 is about 2,217x the base time; level 29 costs")
 	check(GameData.build_cost("mine", 1).is_empty() and GameData.build_sec("mine", 1) == 0, "unknown building: no cost, no time")
 	# 단계 표
 	check(GameData.parse_tiers("1:4|5:8|10:12") == [[1, 4.0], [5, 8.0], [10, 12.0]] and GameData.parse_tiers(" 1 : 20 | 5:24 ") == [[1, 20.0], [5, 24.0]], "tier tables parse")
@@ -2037,7 +2038,7 @@ func test_buildings() -> void:
 	check(EconomyScript.upgrade_block_for("tavern", _lv({"keep": 5, "tavern": 3, "barracks": 2}), "lab", none) == "prereq", "tavern 4 needs barracks >= 3")
 	check(EconomyScript.upgrade_block_for("tavern", tav, "lab", none) == "builder_busy" and EconomyScript.upgrade_block_for("tavern", tav, "tavern", none) == "in_progress", "one builder: busy elsewhere / this one")
 	check(EconomyScript.upgrade_block_for("tavern", tav, "", none) == "not_enough" and EconomyScript.upgrade_block_for("tavern", tav, "", GameData.build_cost("tavern", 3)) == "", "resources last; the exact cost is enough")
-	check(EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 300, "stone": 300, "food": 199}) == "not_enough" and EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 300, "stone": 300, "food": 200}) == "", "keep 1 -> 2 needs gate/barracks >= 1 and 300/300/200")
+	check(EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 3000, "stone": 3000, "food": 1999}) == "not_enough" and EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 3000, "stone": 3000, "food": 2000}) == "", "keep 1 -> 2 needs gate/barracks >= 1 and 3000/3000/2000")
 	check(["unknown", "max_level", "keep_cap", "prereq", "in_progress", "builder_busy", "not_enough", "waiting"].all(func(c): return EconomyScript.BLOCK_TEXT.has(c)), "every reason code has a text")
 	# 오프라인 업그레이드
 	var now := 1.8e9
@@ -2048,13 +2049,13 @@ func test_buildings() -> void:
 	e.build_started.connect(func(id, f): started.append([id, f]))
 	e.building_done.connect(func(id, l): done.append([id, l]))
 	e.notice.connect(func(tx): notes.append(tx))
-	check(e.levels.size() == 11 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 300, "stone": 300, "food": 200} and e.upgrade_sec("keep") == 60,
+	check(e.levels.size() == 11 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 3000, "stone": 3000, "food": 2000} and e.upgrade_sec("keep") == 60,
 		"new game: 11 buildings at level 1, builder idle, population 6")
 	check(e.requirements("keep") == [{"id": "gate", "need": 1, "have": 1, "ok": true}, {"id": "barracks", "need": 1, "have": 1, "ok": true}]
 		and e.requirements("lumber") == [{"id": "keep", "need": 2, "have": 1, "ok": false}], "requirements: keep cap first, then req1/req2 at target - 1: %s" % [e.requirements("lumber")])
 	check(not e.upgrade("lumber", now) and notes == [EconomyScript.BLOCK_TEXT.keep_cap] and e.upgrade_block("keep", now) == "not_enough", "blocked upgrades only show the reason")
-	e.res = {"wood": 1000, "stone": 1000, "food": 1000}
-	check(e.upgrade("keep", now) and e.res == {"wood": 700, "stone": 700, "food": 800} and e.build == {"id": "keep", "finish": now + 60.0} and started == [["keep", now + 60.0]],
+	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
+	check(e.upgrade("keep", now) and e.res == {"wood": 7000, "stone": 7000, "food": 8000} and e.build == {"id": "keep", "finish": now + 60.0} and started == [["keep", now + 60.0]],
 		"offline upgrade takes the cost at once and starts the builder: %s %s" % [e.res, e.build])
 	check(e.upgrade_block("keep", now) == "in_progress" and is_equal_approx(e.build_left(now + 15.0), 45.0) and is_equal_approx(e.build_progress(now + 15.0), 0.25) and e.is_building("keep"),
 		"builder busy: left 45 s, progress 25%")
@@ -2066,8 +2067,8 @@ func test_buildings() -> void:
 	check(e.upgrade("barracks", t) and e.upgrade_block("houses", t) == "builder_busy" and not e.upgrade("houses", t) and notes[-1] == EconomyScript.BLOCK_TEXT.builder_busy, "one builder: a second building waits")
 	e.finish_build_now()
 	check(e.building_level("barracks") == 2 and e.build.is_empty() and done[-1] == ["barracks", 2], "finish_build_now completes the build (test hook)")
-	# 자원 건물: 시작할 때 자동 수집(남은 초 유지) — 쌓인 20으로 모자란 목재를 채운다
-	e.res = {"wood": 40, "stone": 80, "food": 40}
+	# 자원 건물: 시작할 때 자동 수집(남은 초 유지) — 쌓인 200으로 모자란 목재를 채운다
+	e.res = {"wood": 400, "stone": 800, "food": 400}
 	e.last_collect.lumber = t - 150.0
 	check(e.upgrade_block("lumber", t) == "" and e.upgrade("lumber", t) and e.res == {"wood": 0, "stone": 0, "food": 0} and is_equal_approx(e.last_collect.lumber, t - 30.0),
 		"a resource building collects first and the collected wood pays: %s" % [e.res])
@@ -2144,7 +2145,7 @@ func test_buildings() -> void:
 	check(GameData.apply_remote(p) and GameData.build_cost("gate", 1).stone == 300, "a valid remote buildings table replaces the built-in one")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.build_cost("gate", 1).stone == 250, "default tables restored")
+	check(GameData.errors == 0 and GameData.build_cost("gate", 1).stone == 2500, "default tables restored")
 
 
 ## 모든 건물 레벨 1에 o를 덮은 사전.
@@ -2227,8 +2228,8 @@ func test_soldiers() -> void:
 	check(GameData.soldier_unit_sec(1) == 10800.0 and GameData.soldier_unit_sec(2) == 9000.0 and GameData.soldier_unit_sec(6) == 1800.0 and GameData.soldier_unit_sec(7) == 10800.0,
 		"unit time = 180 - 30 x step min (rev 19): Lv 1 3:00, Lv 2 2:30, Lv 6 0:30, Lv 7 back to 3:00 (next tier)")
 	check(GameData.train_max(1) == 10 and GameData.train_max(5) == 18 and GameData.train_max(30) == 68, "batch cap = 10 + 2 x (L - 1)")
-	check(EconomyScript.train_cost("infantry", 8) == {"food": 240, "wood": 160} and EconomyScript.train_cost("archer", 3) == {"food": 75, "wood": 90}
-		and EconomyScript.train_cost("cavalry", 1) == {"food": 40, "stone": 20} and EconomyScript.train_cost("knight", 1).is_empty(), "train cost = unit cost x n (food:30|wood:20 ...)")
+	check(EconomyScript.train_cost("infantry", 8) == {"food": 2400, "wood": 1600} and EconomyScript.train_cost("archer", 3) == {"food": 750, "wood": 900}
+		and EconomyScript.train_cost("cavalry", 1) == {"food": 400, "stone": 200} and EconomyScript.train_cost("knight", 1).is_empty(), "train cost = unit cost x n (food:300|wood:200 ...)")
 	check(GameData.parse_train_cost(" food : 40 | stone:20 ") == {"food": 40, "stone": 20} and GameData.parse_train_cost("0") == {}
 		and ["", "food", "food:-1", "food:+1", "food:1.5", "gold:5", "food:1|food:2", "food:1|", "food:x"].all(func(x): return GameData.parse_train_cost(x) == null),
 		"parse_train_cost: 'res:amount|...' with wood/stone/food and non-negative integers, '0' is free (same as the server)")
@@ -2250,11 +2251,11 @@ func test_soldiers() -> void:
 	check(e.train_block("lab", 1) == "unknown" and e.train_block("barracks", 0) == "bad_count" and e.train_block("barracks", 11) == "bad_count"
 		and e.train_block("barracks", 1) == "not_enough" and not e.start_training("barracks", 1) and notes[-1] == EconomyScript.TRAIN_TEXT.not_enough and e.train_queues.is_empty(),
 		"train_block: not a soldier building / count outside 1..10 / not enough resources; a refused start only shows the reason")
-	e.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	var t0: float = e.time_now()
-	check(e.start_training("barracks", 8) and e.res == {"wood": 840, "stone": 1000, "food": 760} and e.training("barracks").count == 8
+	check(e.start_training("barracks", 8) and e.res == {"wood": 8400, "stone": 10000, "food": 7600} and e.training("barracks").count == 8
 		and absf(e.training("barracks").finish - (t0 + 8 * 10800.0)) < 2.0 and not e.training("barracks").ready and changes[0] == 1,
-		"start: 8 infantry take food 240 / wood 160 at once, finish = now + 8 x 3 h, training_changed")
+		"start: 8 infantry take food 2400 / wood 1600 at once, finish = now + 8 x 3 h, training_changed")
 	check(e.train_block("barracks", 1) == "training" and not e.start_training("barracks", 1) and notes[-1] == EconomyScript.TRAIN_TEXT.training
 		and not e.collect_training("barracks") and e.soldiers.is_empty(), "one batch per building: a second start is 'training'; nothing to collect yet")
 	check(e.train_time("barracks", 8) == 8 * 10800.0 and e.train_max("barracks") == 10 and e.train_progress("barracks") < 0.01, "train_time = n x unit, train_max by level, progress starts at 0")
@@ -2265,9 +2266,12 @@ func test_soldiers() -> void:
 	check(e.training("barracks").ready and e.train_block("barracks", 1) == "ready_to_collect" and e.soldiers.is_empty(), "done: ready to collect, no soldiers until collected, a new start is 'ready_to_collect'")
 	check(e.collect_training("barracks") and e.soldiers == {"infantry:1": 8} and e.train_queues.is_empty() and notes[-1] == "보병 +8" and not e.collect_training("barracks"),
 		"collect: tier-1 +8, the queue empties, notice '보병 +8'; collecting again does nothing")
-	check(e.start_training("archery", 3) and e.res == {"wood": 750, "stone": 1000, "food": 685} and e.cancel_training("archery")
-		and e.res == {"wood": 795, "stone": 1000, "food": 722} and e.train_queues.is_empty() and notes[-1] == EconomyScript.CANCEL_TEXT,
-		"cancel: 3 archers (food 75 / wood 90) refund half rounded down (37 / 45) and empty the queue")
+	# 보급술 Lv 1(-2%)로 비용을 홀수로 만든다 — 10배 비용(750/900)은 절반이 딱 떨어져 내림을 못 본다
+	e.research_levels = {"logistics": 1}
+	check(e.start_training("archery", 3) and e.res == {"wood": 7518, "stone": 10000, "food": 6865} and e.cancel_training("archery")
+		and e.res == {"wood": 7959, "stone": 10000, "food": 7232} and e.train_queues.is_empty() and notes[-1] == EconomyScript.CANCEL_TEXT,
+		"cancel: 3 archers with logistics Lv 1 (food 735 / wood 882) refund half rounded down (367 / 441) and empty the queue")
+	e.research_levels = {}
 	check(e.start_training("stable", 1) and not e.cancel_training("lab") and not e.cancel_training("barracks"), "cancel needs a running batch")
 	e.finish_training_now("stable")
 	check(not e.cancel_training("stable") and e.training("stable").ready, "a finished batch cannot be cancelled (collect it)")
@@ -3030,14 +3034,14 @@ func test_training_tiers() -> void:
 	for w in want:
 		table_ok = table_ok and GameData.train_tier(w[0]) == w[1] and GameData.soldier_unit_sec(w[0]) == w[2] * 60.0
 	check(table_ok, "tier/time table: Lv 1,2,6,7,12,13,19,25,30,31 -> T1 3:00, T1 2:30, T1 0:30, T2 3:00, T2 0:30, T3 3:00, T4, T5 3:00, T5 0:30, T5 0:30")
-	check(EconomyScript.train_cost("infantry", 2) == {"food": 60, "wood": 40} and EconomyScript.train_cost("infantry", 2, 2) == {"food": 300, "wood": 200}
-		and EconomyScript.train_cost("infantry", 1, 3) == {"food": 750, "wood": 500}, "cost x 5^(tier-1): T2 x5, T3 x25")
+	check(EconomyScript.train_cost("infantry", 2) == {"food": 600, "wood": 400} and EconomyScript.train_cost("infantry", 2, 2) == {"food": 3000, "wood": 2000}
+		and EconomyScript.train_cost("infantry", 1, 3) == {"food": 7500, "wood": 5000}, "cost x 5^(tier-1): T2 x5, T3 x25")
 	var now := 1.8e9
 	var e = _econ(now)
 	e.res = {"wood": 100000, "stone": 100000, "food": 100000}
 	e.levels.barracks = 7
 	var t0: float = e.time_now()
-	check(e.train_tier("barracks") == 2 and e.start_training("barracks", 2) and e.res.food == 100000 - 300 and e.res.wood == 100000 - 200
+	check(e.train_tier("barracks") == 2 and e.start_training("barracks", 2) and e.res.food == 100000 - 3000 and e.res.wood == 100000 - 2000
 		and e.training("barracks").tier == 2 and absf(e.training("barracks").finish - (t0 + 2 * 10800.0)) < 2.0, "Lv 7 barracks trains T2: 3:00 each, cost x5")
 	var fin: float = e.training("barracks").finish
 	e.levels.barracks = 13  # 진행 중 레벨업: 묶음은 T2·끝나는 시각 그대로
@@ -3048,7 +3052,7 @@ func test_training_tiers() -> void:
 	e.start_training("barracks", 2)
 	e.levels.barracks = 13
 	var before: Dictionary = e.res.duplicate()
-	check(e.cancel_training("barracks") and e.res.food == before.food + 150 and e.res.wood == before.wood + 100, "cancel refunds half of the batch tier's cost")
+	check(e.cancel_training("barracks") and e.res.food == before.food + 1500 and e.res.wood == before.wood + 1000, "cancel refunds half of the batch tier's cost")
 	e.free()
 
 
@@ -4388,9 +4392,10 @@ func test_research_r24() -> void:
 	check(c.branch == "economy" and c.tier == 2.0 and c.req1 == "wood_tech" and c.req1_lv == 3.0 and c.req2 == "stone_tech" and c.req2_lv == 3.0 and c.lab_req == 3.0
 		and w.req1 == "" and w.req1_lv == 0.0 and w.req2 == "", "construct needs wood/stone tech Lv 3 and lab 3; empty prerequisites are \"\" / 0")
 	# 비용: round(값 × 1.3^n), n = 지금 레벨(0부터). 시간: round(base × 1.35^n ÷ (1 + 속도))
-	check(GameData.research_cost("wood_tech", 0) == {"wood": 120, "stone": 80, "food": 100, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 156, "stone": 104, "food": 130, "gold": 0}
-		and GameData.research_cost("construct", 2) == {"wood": 676, "stone": 507, "food": 592, "gold": 845} and GameData.research_cost("nope", 0).is_empty(),
-		"research cost = round(value x 1.3^n) (591.5 rounds away from zero): %s" % [GameData.research_cost("construct", 2)])
+	check(GameData.research_cost("wood_tech", 0) == {"wood": 1200, "stone": 800, "food": 1000, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 1560, "stone": 1040, "food": 1300, "gold": 0}
+		and GameData.research_cost("construct", 2) == {"wood": 6760, "stone": 5070, "food": 5915, "gold": 845} and GameData.research_cost("construct", 3) == {"wood": 8788, "stone": 6591, "food": 7690, "gold": 1099}
+		and GameData.research_cost("nope", 0).is_empty(),
+		"research cost = round(value x 1.3^n) (construct Lv 4: 7689.5 and 1098.5 round away from zero): %s" % [GameData.research_cost("construct", 3)])
 	check(GameData.research_sec("wood_tech", 0, 0.0) == 60 and GameData.research_sec("wood_tech", 9, 0.0) == 894 and GameData.research_sec("elite", 9, 0.0) == 53617
 		and GameData.research_sec("wood_tech", 0, 0.5) == 40 and GameData.research_sec("wood_tech", 1, 0.58) == 51 and GameData.research_sec("nope", 0, 0.0) == 0,
 		"research time = round(base x 1.35^n / (1 + speed)): wood Lv 10 about 15 min, elite Lv 10 about 15 h, lab 30 (+58%%) 81 s -> 51 s: %s" % [[GameData.research_sec("wood_tech", 9, 0.0), GameData.research_sec("elite", 9, 0.0), GameData.research_sec("wood_tech", 1, 0.58)]])
@@ -4400,13 +4405,13 @@ func test_research_r24() -> void:
 	check(b.size() == GameData.RESEARCH_EFFECTS.size() and b.hero_atk_pct == 17.0 and b.wood_pct == 50.0 and b.stone_pct == 0.0 and b.pop_add == 0.0,
 		"bonus: same effect adds up (3 x 3 + 2 x 4 = 17), levels clamp to 0..max, unknown nodes ignored: %s" % [b])
 	# 잠금·이유 코드: unknown → max_level → locked(연구소·선행) → not_enough_resources → not_enough_gold
-	var rich := {"wood": 9999, "stone": 9999, "food": 9999, "gold": 9999}
+	var rich := {"wood": 99999, "stone": 99999, "food": 99999, "gold": 9999}
 	var both := {"wood_tech": 3, "stone_tech": 3}
 	check(GameData.research_block("nope", {}, 30, rich) == "unknown_research" and GameData.research_block("wood_tech", {"wood_tech": 10}, 30, rich) == "max_level"
 		and GameData.research_block("construct", both, 2, rich) == "locked" and GameData.research_block("construct", {"wood_tech": 3, "stone_tech": 2}, 3, rich) == "locked"
-		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 400, "stone": 300, "food": 349, "gold": 9999}) == "not_enough_resources"
-		and GameData.research_block("construct", both, 3, {"wood": 400, "stone": 300, "food": 350, "gold": 499}) == "not_enough_gold"
-		and GameData.research_block("construct", both, 3, {"wood": 400, "stone": 300, "food": 350, "gold": 500}) == "",
+		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3499, "gold": 9999}) == "not_enough_resources"
+		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 499}) == "not_enough_gold"
+		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 500}) == "",
 		"research_block order: unknown, max, locked (lab, prerequisite), resources, gold")
 	check([0.0, 0.5, 60.0, 60.5, 3600.0].map(func(s): return GameData.research_dia_cost(s)) == [1, 1, 1, 2, 60] and GameData.research_refund({"wood": 156, "stone": 105, "food": 0, "gold": 845}) == {"wood": 78, "stone": 52, "gold": 422},
 		"instant finish = max(1, ceil(left / 60)) diamonds; cancel refund = floor(cost x 0.5), zero dropped")
@@ -4417,20 +4422,20 @@ func test_research_r24() -> void:
 	var done := []
 	e.notice.connect(func(s): notes.append(s))
 	e.research_done.connect(func(id, lv): done.append([id, lv]))
-	e.res = {"wood": 1000, "stone": 1000, "food": 1000}
+	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	e.gold = 3000
 	check(e.research_available() and e.research_block("construct") == "locked" and e.research_block("wood_tech") == "", "a fresh save can research tier 1, tier 2 is locked")
-	check(e.start_research("wood_tech") and e.res == {"wood": 880, "stone": 920, "food": 900} and e.gold == 3000 and e.research_current.id == "wood_tech"
+	check(e.start_research("wood_tech") and e.res == {"wood": 8800, "stone": 9200, "food": 9000} and e.gold == 3000 and e.research_current.id == "wood_tech"
 		and absf(e.research_left(e.time_now()) - 60.0) < 1.0 and not e.research_available(), "start: the cost leaves at once, 60 s on the clock, no bubble while busy")
 	check(not e.start_research("stone_tech") and e.research_block("stone_tech") == "research_busy" and notes[-1] == EconomyScript.RESEARCH_TEXT.research_busy
-		and e.res.wood == 880 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
+		and e.res.wood == 8800 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
 	e.complete_due(e.time_now() + 30.0)
 	check(e.research_level("wood_tech") == 0 and not e.research_current.is_empty(), "not done before the finish time")
 	e.complete_due(e.time_now() + 61.0)
 	check(e.research_level("wood_tech") == 1 and e.research_current.is_empty() and done == [["wood_tech", 1]] and notes[-1] == "연구 완료: 벌목술 Lv 1",
 		"lazy completion: level +1, research_done, notice '연구 완료: 벌목술 Lv 1'")
-	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 820, "stone": 880, "food": 850} and e.research_current.is_empty()
-		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (120/80/100 -> 60/40/50 back)")
+	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 8200, "stone": 8800, "food": 8500} and e.research_current.is_empty()
+		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (1200/800/1000 -> 600/400/500 back)")
 	e.start_research("wood_tech")  # Lv 1 → 2: 81 s — 5분 이하라 무료(사용자 2026-10-06). 다이아 비용을 보려고 400초로 늘린다 → 다이아 7
 	check(e.research_dia_cost(e.time_now()) == 0, "81 s left is within the free finish window: 0 diamonds")
 	e.research_current.finish = e.time_now() + 400.0
@@ -4443,11 +4448,13 @@ func test_research_r24() -> void:
 	check(e.research_dia_cost(e.time_now()) == 0 and e.finish_research_now() and e.diamonds == 3 and e.research_level("wood_tech") == 3 and done[-1] == ["wood_tech", 3],
 		"5 min or less left: instant finish is free")
 	# 서버 권위 효과의 오프라인 반영(서버 research.test와 같은 식)
-	e.research_levels = {"wood_tech": 2, "abundance": 1}  # 목재 +13%
-	e.levels.lumber = 3
-	e.last_collect.lumber = t
-	check(EconomyScript.rate_per_min("wood", 3, 13.0) == 33 and e.pending("lumber", t + 600.0) == 330 and EconomyScript.rate_per_min("wood", 3) == 30,
-		"production: floor(10 x 3 x 1.13) = 33 / min (10 min = 330); no research = 30")
+	# 석재로 본다: 목재·식량(100/분)은 정수 %면 늘 딱 떨어져 내림을 못 본다
+	e.research_levels = {"stone_tech": 2, "abundance": 1}  # 석재 +13%
+	e.levels.quarry = 3
+	e.levels.lumber = 3  # 아래 건설 시간 검사(벌목장 Lv 3)
+	e.last_collect.quarry = t
+	check(EconomyScript.rate_per_min("stone", 3, 13.0) == 169 and e.pending("quarry", t + 600.0) == 1690 and EconomyScript.rate_per_min("stone", 3) == 150,
+		"production: floor(50 x 3 x 1.13) = floor(169.5) = 169 / min (10 min = 1690); no research = 150")
 	e.research_levels = {"construct": 5}
 	check(e.upgrade_sec("keep") == 52 and e.upgrade_sec("lumber") == 39, "build time = round(60 / 1.15) = 52 s (lumber Lv 3: 45 / 1.15 = 39)")
 	e.research_levels = {"commerce": 3}
@@ -4458,8 +4465,8 @@ func test_research_r24() -> void:
 	e.add_kill("grunt", 1)
 	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3300, "kill gold = floor(tenths x 1.10): grunt 100 -> 110")
 	e.research_levels = {"drill_manual": 5, "logistics": 5}
-	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 81, "wood": 54}
-		and EconomyScript.train_cost("infantry", 3) == {"food": 90, "wood": 60}, "training: time / 1.15, cost x 0.90 rounded (90/60 -> 81/54)")
+	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 810, "wood": 540}
+		and EconomyScript.train_cost("infantry", 3) == {"food": 900, "wood": 600}, "training: time / 1.15, cost x 0.90 rounded (900/600 -> 810/540)")
 	e.research_levels = {"barracks_ext": 2}
 	check(e.population() == 8, "population 6 + 2 (barracks extension Lv 2)")
 	var gs = GameStateScript.new()
@@ -4777,7 +4784,7 @@ func test_tutorial() -> void:
 	check(e.requirements("lumber").is_empty() and not t.complete(), "tutorial: lot has no prerequisites; mission waits for the build")
 	e.complete_due(now + 100000.0)
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
-	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 20, "tutorial: production counts from the build finish")
+	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 200, "tutorial: production counts from the build finish")
 	# 보상 규칙
 	var kinds := {}
 	for i in TutorialScript.MISSIONS.size():

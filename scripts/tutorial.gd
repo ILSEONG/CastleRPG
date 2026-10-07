@@ -95,7 +95,7 @@ const REPEATS := [
 	{"kind": "hero_up", "base": 5, "step": 2, "title": "영웅 레벨업 %d회", "goto": "tab:hero", "reward": {"gold": 5000}},
 	{"kind": "gacha", "base": 10, "step": 0, "title": "영웅 %d회 모집", "goto": "tab:recruit", "fixed": {"tickets": 1}},
 	{"kind": "dungeon_win", "base": 1, "step": 0, "title": "던전 %d번 클리어", "goto": "tab:dungeon", "fixed": {"keys_gold": 1}},
-	{"kind": "build_up", "base": 1, "step": 0, "title": "건물 %d번 레벨업", "goto": "building:keep", "reward": {"wood": 300, "stone": 300, "food": 300}},
+	{"kind": "build_up", "base": 1, "step": 0, "title": "건물 %d번 레벨업", "goto": "building:keep", "reward": {"wood": 3000, "stone": 3000, "food": 3000}},
 ]
 const REPEAT_DESC := {
 	"kill": "몬스터를 처치하세요. 방치 중 처치도 셉니다.", "collect": "생산 건물을 눌러 자원을 수집하세요.", "stage": "전투를 이어 가 목표 라운드를 클리어하세요.",

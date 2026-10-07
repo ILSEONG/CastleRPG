@@ -53,10 +53,10 @@ async function fresh(t = T0) {
 test('공식: 비용 = round(값 × 1.3^n), 시간 = round(base_sec × 1.35^n / (1 + 연구 속도)), 속도 = research_speed_pct/100 + 0.02 × (연구소 − 1)', () => {
   const c = G.config
   assert.deepEqual([0, 1, 2, 3].map((n) => R.researchCost(c, def('wood_tech'), n)), [
-    { wood: 120, stone: 80, food: 100, gold: 0 }, { wood: 156, stone: 104, food: 130, gold: 0 },
-    { wood: 203, stone: 135, food: 169, gold: 0 }, { wood: 264, stone: 176, food: 220, gold: 0 }])
-  assert.deepEqual(R.researchCost(c, def('construct'), 1), { wood: 520, stone: 390, food: 455, gold: 650 })
-  assert.deepEqual(R.researchCost(c, def('elite'), 9), { wood: 42418, stone: 31813, food: 37116, gold: 159067 })
+    { wood: 1200, stone: 800, food: 1000, gold: 0 }, { wood: 1560, stone: 1040, food: 1300, gold: 0 },
+    { wood: 2028, stone: 1352, food: 1690, gold: 0 }, { wood: 2636, stone: 1758, food: 2197, gold: 0 }])
+  assert.deepEqual(R.researchCost(c, def('construct'), 1), { wood: 5200, stone: 3900, food: 4550, gold: 650 })
+  assert.deepEqual(R.researchCost(c, def('elite'), 9), { wood: 424180, stone: 318135, food: 371157, gold: 159067 })
   // 스펙 예: 벌목술 1레벨 60초, 10레벨 약 15분, 정예 전술 10레벨 약 15시간(보너스 없이)
   assert.deepEqual([0, 1, 2, 9].map((n) => R.researchSec(c, def('wood_tech'), n, 0)), [60, 81, 109, 894])
   assert.equal(R.researchSec(c, def('elite'), 9, 0), 53617)
@@ -76,34 +76,34 @@ test('효과 합계: 모든 키(없으면 0), 같은 effect끼리 더하고, 레
   assert.equal(b.pop_add, 5) // barracks_ext 최대 5
   assert.equal(b.wood_pct, 0)
   assert.equal(Object.values(b).reduce((s, v) => s + v, 0), 17 + 5)
-  assert.deepEqual(R.researchRefund(G.config, { wood: 203, stone: 135, food: 169, gold: 651 }), { wood: 101, stone: 67, food: 84, gold: 325 })
+  assert.deepEqual(R.researchRefund(G.config, { wood: 2028, stone: 1352, food: 1690, gold: 651 }), { wood: 1014, stone: 676, food: 845, gold: 325 })
   assert.deepEqual([0.5, 1, 60, 60.5, 61, 3600].map((left) => R.researchDiaCost(G.config, T0 + left, T0)), [1, 1, 1, 2, 2, 60])
   assert.equal(R.researchDiaCost(G.config, T0, T0), 1) // 최소 1
   // 생산 %·훈련 할인: pct 0이면 예전 값 그대로
-  assert.equal(R.pendingAmount(10, 2, 600, 720), 200)
-  assert.equal(R.pendingAmount(10, 1, 600, 720, 15), 110) // floor(10 × 1.15) = 11/분
+  assert.equal(R.pendingAmount(100, 2, 600, 720), 2000)
+  assert.equal(R.pendingAmount(100, 1, 600, 720, 15), 1150) // floor(100 × 1.15) = 115/분
   assert.equal(R.researchProdPct({ ...b, wood_pct: 15, res_pct: 3 }, 'wood'), 18)
-  assert.deepEqual(R.trainCost(G.config, 'infantry', 2, 1, 10), { food: 54, wood: 36 })
-  assert.deepEqual(R.trainCost(G.config, 'infantry', 1, 1, 2), { food: 29, wood: 20 }) // 29.4 → 29, 19.6 → 20
+  assert.deepEqual(R.trainCost(G.config, 'infantry', 2, 1, 10), { food: 540, wood: 360 })
+  assert.deepEqual(R.trainCost(G.config, 'infantry', 1, 1, 0.2), { food: 299, wood: 200 }) // 299.4 → 299, 199.6 → 200
   assert.deepEqual(R.trainCost(G.config, 'infantry', 1, 1, 100), {}) // 0인 자원은 뺀다
 })
 
 test('시작 → 자동 완료: 비용 전부 차감, 진행 {id, finish}, 끝나는 시각이 지나면 다음 읽기가 레벨 +1(로그 start·done). 다음 레벨은 1.3배·1.35배', async () => {
   const { token, id } = await fresh()
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   let r = await start(token, 'wood_tech')
   assert.equal(r.status, 200)
-  assert.deepEqual([r.json.player.res, r.json.player.research], [{ wood: 880, stone: 920, food: 900 }, { levels: {}, current: { id: 'wood_tech', finish: T0 + 60 } }])
+  assert.deepEqual([r.json.player.res, r.json.player.research], [{ wood: 8800, stone: 9200, food: 9000 }, { levels: {}, current: { id: 'wood_tech', finish: T0 + 60 } }])
   S.clock.t = T0 + 59.9
   assert.deepEqual((await player(token)).research.current, { id: 'wood_tech', finish: T0 + 60 })
   S.clock.t = T0 + 60
   assert.deepEqual((await player(token)).research, { levels: { wood_tech: 1 }, current: null })
   r = await start(token, 'wood_tech')
-  assert.deepEqual([r.status, r.json.player.res, r.json.player.research.current], [200, { wood: 724, stone: 816, food: 770 }, { id: 'wood_tech', finish: T0 + 60 + 81 }])
+  assert.deepEqual([r.status, r.json.player.res, r.json.player.research.current], [200, { wood: 7240, stone: 8160, food: 7700 }, { id: 'wood_tech', finish: T0 + 60 + 81 }])
   assert.deepEqual(await logs(id), [
-    { action: 'start', id: 'wood_tech', level: 1, cost: { wood: 120, stone: 80, food: 100, gold: 0 }, sec: 60, finish: T0 + 60 },
+    { action: 'start', id: 'wood_tech', level: 1, cost: { wood: 1200, stone: 800, food: 1000, gold: 0 }, sec: 60, finish: T0 + 60 },
     { action: 'done', id: 'wood_tech', level: 1, finish: T0 + 60 },
-    { action: 'start', id: 'wood_tech', level: 2, cost: { wood: 156, stone: 104, food: 130, gold: 0 }, sec: 81, finish: T0 + 141 },
+    { action: 'start', id: 'wood_tech', level: 2, cost: { wood: 1560, stone: 1040, food: 1300, gold: 0 }, sec: 81, finish: T0 + 141 },
   ])
   // 테스트 훅 age가 연구 끝나는 시각도 당긴다(앱 통합 테스트용) — 같은 응답이 완료를 반영
   r = await S.req('POST', '/v1/test/age', { token, body: { minutes: 2 } })
@@ -140,11 +140,11 @@ test('검사 순서: 400(id 형식) → 404 unknown_research → 409 research_bu
   await setResearch(id, { stone_tech: 3 })
   r = await start(token, 'construct') // 이제 열림 — 골드 500 부족
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_gold'])
-  await setRes(id, { wood: 399 })
+  await setRes(id, { wood: 3999 })
   r = await start(token, 'construct') // 자원과 골드가 둘 다 모자라면 자원이 먼저
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_resources'])
   let p = await player(token)
-  assert.deepEqual([p.res.wood, p.gold_tenths, p.research.current], [399, 0, null]) // 아무것도 안 바뀐다
+  assert.deepEqual([p.res.wood, p.gold_tenths, p.research.current], [3999, 0, null]) // 아무것도 안 바뀐다
   await setResearch(id, { wood_tech: 10 })
   r = await start(token, 'wood_tech')
   assert.deepEqual([r.status, r.json.error], [409, 'max_level'])
@@ -163,23 +163,23 @@ test('검사 순서: 400(id 형식) → 404 unknown_research → 409 research_bu
 test('취소: 진행 중이 아니면 409 no_research. 그 레벨 비용의 50%(자원·골드마다 내림)를 돌려주고 비운다', async () => {
   const { token, id } = await fresh()
   assert.deepEqual([(await S.req('POST', '/v1/research/cancel', { token })).status, (await S.req('POST', '/v1/research/cancel', { token })).json.error], [409, 'no_research'])
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   await setResearch(id, { wood_tech: 2 })
-  assert.equal((await start(token, 'wood_tech')).status, 200) // 2 → 3: 203·135·169
+  assert.equal((await start(token, 'wood_tech')).status, 200) // 2 → 3: 2028·1352·1690
   let r = await S.req('POST', '/v1/research/cancel', { token, body: {} })
-  assert.deepEqual([r.status, r.json.refund, r.json.player.res, r.json.player.research], [200, { wood: 101, stone: 67, food: 84, gold: 0 },
-    { wood: 1000 - 203 + 101, stone: 1000 - 135 + 67, food: 1000 - 169 + 84 }, { levels: { wood_tech: 2 }, current: null }])
+  assert.deepEqual([r.status, r.json.refund, r.json.player.res, r.json.player.research], [200, { wood: 1014, stone: 676, food: 845, gold: 0 },
+    { wood: 10000 - 2028 + 1014, stone: 10000 - 1352 + 676, food: 10000 - 1690 + 845 }, { levels: { wood_tech: 2 }, current: null }])
   // 골드 환불은 정수 골드 × 10 tenths
   await setLevel(id, 'lab', 3)
   await setResearch(id, { wood_tech: 3, stone_tech: 3, construct: 1 })
   await setGold(id, 650 * 10 + 3)
-  assert.equal((await start(token, 'construct')).status, 200) // 1 → 2: 520·390·455·650
+  assert.equal((await start(token, 'construct')).status, 200) // 1 → 2: 5200·3900·4550·650
   r = await S.req('POST', '/v1/research/cancel', { token })
-  assert.deepEqual([r.json.refund, r.json.player.gold_tenths], [{ wood: 260, stone: 195, food: 227, gold: 325 }, 3 + 3250])
+  assert.deepEqual([r.json.refund, r.json.player.gold_tenths], [{ wood: 2600, stone: 1950, food: 2275, gold: 325 }, 3 + 3250])
   const l = await logs(id)
   assert.deepEqual(l.filter((x: any) => x.action === 'cancel'), [
-    { action: 'cancel', id: 'wood_tech', level: 3, refund: { wood: 101, stone: 67, food: 84, gold: 0 } },
-    { action: 'cancel', id: 'construct', level: 2, refund: { wood: 260, stone: 195, food: 227, gold: 325 } },
+    { action: 'cancel', id: 'wood_tech', level: 3, refund: { wood: 1014, stone: 676, food: 845, gold: 0 } },
+    { action: 'cancel', id: 'construct', level: 2, refund: { wood: 2600, stone: 1950, food: 2275, gold: 325 } },
   ])
   assert.equal((await S.req('POST', '/v1/research/cancel', { token })).json.error, 'no_research')
 })
@@ -215,10 +215,10 @@ test('효과(서버 권위): 생산(wood_pct + res_pct, 분당 내림)·업그�
   await setResearch(id, { wood_tech: 3, abundance: 1 }) // 목재 15 + 3 = 18%, 석재 3%
   S.clock.t = T0 + 600
   let r = await S.req('POST', '/v1/collect', { token, body: { building: 'lumber' } })
-  assert.equal(r.json.amount, 10 * Math.floor(10 * 118 / 100)) // 11/분 × 10분(연구 없으면 100)
+  assert.equal(r.json.amount, 10 * Math.floor(100 * 118 / 100)) // 118/분 × 10분(연구 없으면 1000)
   r = await S.req('POST', '/v1/collect', { token, body: { building: 'quarry' } })
-  assert.equal(r.json.amount, 10 * 5) // floor(5 × 1.03) = 5
-  // 업그레이드 자동 수집도 같은 규칙(목재 15% → 11/분), 건설 시간 = round(20 / 1.15) = 17
+  assert.equal(r.json.amount, 10 * 51) // floor(50 × 1.03) = 51
+  // 업그레이드 자동 수집도 같은 규칙(목재 15% → 115/분), 건설 시간 = round(20 / 1.15) = 17
   await setResearch(id, { abundance: 0, construct: 5 })
   await setRes(id, RICH)
   for (const b of ['keep', 'gate', 'barracks']) await setLevel(id, b, 2) // 성채 상한·성채 선행
@@ -226,7 +226,7 @@ test('효과(서버 권위): 생산(wood_pct + res_pct, 분당 내림)·업그�
   S.clock.t = T0 + 1200
   r = await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'lumber' } })
   assert.equal(r.status, 200)
-  assert.deepEqual([r.json.build, r.json.player.res.wood], [{ id: 'lumber', finish: T0 + 1200 + 17 }, 1_000_000 + 10 * 11 - 60])
+  assert.deepEqual([r.json.build, r.json.player.res.wood], [{ id: 'lumber', finish: T0 + 1200 + 17 }, 1_000_000 + 10 * 115 - 600])
   S.clock.t = T0 + 1217
   await setResearch(id, { construct: 10 })
   r = await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'keep' } })
@@ -259,19 +259,19 @@ test('효과: 판매(sell_pct, 자원마다 내림 — 단일·all·items), 처�
 
 test('효과: 훈련 시간(train_speed_pct, 반올림 없음)·비용(train_cost_pct, 반올림)·취소 환불(할인된 비용의 절반), 인구(pop_add)', async () => {
   const { token, id } = await fresh()
-  await setRes(id, { wood: 1000, stone: 1000, food: 1000 })
+  await setRes(id, { wood: 10000, stone: 10000, food: 10000 })
   await setResearch(id, { drill_manual: 5, logistics: 5 }) // 시간 ÷ 1.15, 비용 × 0.9
   // 실제 설정은 1마리씩. 반올림 검사는 2마리 묶음으로 하므로 옛 묶음 상한을 쓴다
   await S.db.query("update game_config set value = '10' where key = 'train_batch_base'")
   let r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 2 } })
   assert.equal(r.status, 200)
   const unit = R.soldierUnitSec(G.config, 1)
-  assert.deepEqual([r.json.training.finish, r.json.player.res], [T0 + 2 * unit / (1 + 15 / 100), { wood: 1000 - 36, stone: 1000, food: 1000 - 54 }])
-  assert.deepEqual((await logs(id, 'train_start'))[0].cost, { food: 54, wood: 36 })
+  assert.deepEqual([r.json.training.finish, r.json.player.res], [T0 + 2 * unit / (1 + 15 / 100), { wood: 10000 - 360, stone: 10000, food: 10000 - 540 }])
+  assert.deepEqual((await logs(id, 'train_start'))[0].cost, { food: 540, wood: 360 })
   r = await S.req('POST', '/v1/soldiers/cancel', { token, body: { building: 'barracks' } })
-  assert.deepEqual([r.json.refund, r.json.player.res], [{ food: 27, wood: 18 }, { wood: 1000 - 36 + 18, stone: 1000, food: 1000 - 54 + 27 }])
+  assert.deepEqual([r.json.refund, r.json.player.res], [{ food: 270, wood: 180 }, { wood: 10000 - 360 + 180, stone: 10000, food: 10000 - 540 + 270 }])
   // 자원이 할인된 비용만큼만 있어도 된다
-  await setRes(id, { wood: 36, food: 54 })
+  await setRes(id, { wood: 360, food: 540 })
   assert.equal((await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 2 } })).status, 200)
   // 인구 = 6 + pop_add(병영 확장 3)
   await S.db.query("insert into player_soldiers (player_id, type, tier, count) values ($1, 'infantry', 1, 20)", [id])
@@ -289,7 +289,7 @@ test('원자성: 같은 순간 두 연구 시작이 겹치면 하나만 반영(v
   try {
     T.clock.t = T0
     const { token, id } = await T.login()
-    await T.db.query("update player_resources set amount = 1000 where player_id = $1", [id])
+    await T.db.query("update player_resources set amount = 10000 where player_id = $1", [id])
     b.arm()
     const [r1, r2] = await Promise.all([
       T.req('POST', '/v1/research/start', { token, body: { id: 'wood_tech' } }),
@@ -299,7 +299,7 @@ test('원자성: 같은 순간 두 연구 시작이 겹치면 하나만 반영(v
     assert.deepEqual([r1.status, r2.status].sort(), [200, 409])
     assert.equal([r1, r2].find((r) => r.status === 409)?.json.error, 'research_busy')
     const p = (await T.req('GET', '/v1/player', { token })).json.player
-    assert.deepEqual(p.res, { wood: 880, stone: 920, food: 900 })
+    assert.deepEqual(p.res, { wood: 8800, stone: 9200, food: 9000 })
     const n = await T.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'research'", [id])
     assert.equal(n[0].n, 1)
   } finally {
@@ -314,7 +314,7 @@ test('gamedata: research 22행(파일 순서, CSV 열 이름 키, 빈 선행은 
   assert.deepEqual(g.research.map((d: any) => d.id), csv)
   assert.deepEqual(g.research[3], {
     id: 'construct', branch: 'economy', tier: 2, name: '건축학', effect: 'build_speed_pct', per_level: 3, max_level: 10, lab_req: 3,
-    req1: 'wood_tech', req1_lv: 3, req2: 'stone_tech', req2_lv: 3, wood: 400, stone: 300, food: 350, gold: 500, base_sec: 300,
+    req1: 'wood_tech', req1_lv: 3, req2: 'stone_tech', req2_lv: 3, wood: 4000, stone: 3000, food: 3500, gold: 500, base_sec: 300,
   })
   assert.deepEqual([g.research[0].req1, g.research[0].req1_lv, g.research[4].req2, g.research[4].req2_lv], [null, null, null, null])
   assert.deepEqual(['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min'].map((k) => g.config[k]),
@@ -357,9 +357,9 @@ test('시드 검증: research.csv(branch·effect, 숫자 범위, 선행은 표 �
   for (const t of TABLES) cpSync(join(DATA_DIR, t.file), join(dir, t.file))
   const rs = readFileSync(join(DATA_DIR, 'research.csv'), 'utf8')
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
-  const W = 'wood_tech,economy,1,벌목술,wood_pct,5,10,1,,,,,120,80,100,0,60'
+  const W = 'wood_tech,economy,1,벌목술,wood_pct,5,10,1,,,,,1200,800,1000,0,60'
   const C = 'construct,economy,2,건축학,build_speed_pct,3,10,3,wood_tech,3,stone_tech,3,'
-  const L = 'legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,4000,3000,3500,15000,3600'
+  const L = 'legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,15000,3600'
   const cases: [string, string, RegExp][] = [
     ['research.csv', rs.replace(W, W.replace('economy', 'navy')), /research\.csv line 2 column 'branch': must be one of economy\/military\/hero: 'navy'/],
     ['research.csv', rs.replace(W, W.replace('wood_pct', 'lumber_pct')), /research\.csv line 2 column 'effect': unknown effect 'lumber_pct'/],
