@@ -16,9 +16,9 @@ func _ready() -> void:
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(90)
-	var tabs = _find("res://scripts/tab_bar.gd")
+	var tabs = _find("res://scripts/side_menu.gd")  # 길드는 오른쪽 아래 메뉴
 	var panel = tabs.windows.guild
-	tabs.press("guild")
+	tabs.pick("guild")
 	await _snap()
 	Guild.unlocked = true
 	Economy.gold = 60000

@@ -222,7 +222,8 @@ func show_result(r: Dictionary) -> void:
 	var pts := Pvp.points(battle.mode)
 	var tier: Dictionary = PvpRules.tier_of(pts)
 	var d := int(r.get("delta", 0))
-	result_body.text = "%s포인트 %s%d → %d (%s)\nPVP 코인 +%d" % [why, "+" if d >= 0 else "", d, pts, tier.name, int(r.get("coins", 0))]
+	var line := "포인트 %s%d → %d (%s)" % ["+" if d > 0 else "", d, pts, tier.name] if d != 0 else "포인트 %d (%s)" % [pts, tier.name]
+	result_body.text = "%s%s\nPVP 코인 +%d" % [why, line, int(r.get("coins", 0))]
 	result_layer.visible = true
 	leave_button.visible = false
 

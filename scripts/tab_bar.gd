@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## 하단 탭 바(스펙 §2.3, 개정 13 §7.1, 개정 18 §1): 화면 맨 아래 로우폴리 바 1줄(HudScript.TAB_BAR_H)에 같은 폭 탭 6개 —
-## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·던전(던전 시트)·모집(주점 창)·길드(길드 시트). 상인은 탭이 없다(성 안 상인 NPC를 탭).
+## 성장(성장 시트, 개정 20)·영웅(영웅 목록)·병사(병사 시트)·던전(던전 시트)·모집(주점 창)·상점(상점 시트, 2026-10-07 — 길드는 오른쪽 아래 메뉴로 옮겼다).
+## 상인은 탭이 없다(성 안 상인 NPC를 탭). [상점]은 받을 무료 선물이 있으면 오른쪽 위에 빨간 점.
 ## [성] 탭은 없다 — 전장은 모든 창이 닫힌 기본 상태(선택 없음).
 ## 탭마다 각진 아이콘 + 글자. 선택된 탭은 호박색 면에 위로 RAISE px 올라오고, 나머지는 강철색이다. 선택은 열린 창을 따른다
 ## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
@@ -12,7 +13,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const UiWindow := preload("res://scripts/ui_window.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["dungeon", "던전"], ["recruit", "모집"], ["guild", "길드"]]
+const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["dungeon", "던전"], ["recruit", "모집"], ["shop", "상점"]]
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0
@@ -30,6 +31,7 @@ var selected := ""  # 열린 창의 탭(없으면 "")
 var buttons := {}  # 탭 id → Button
 
 var _bar: Control
+var _shop_dot := false
 
 
 func _ready() -> void:
@@ -102,9 +104,20 @@ func _draw_face(face: Control, i: int) -> void:
 	draw_shapes(face, tab_shapes(TABS[i][0]), c, ICON_PX)
 	if Tutorial.tab_locked(TABS[i][0]):  # 자물쇠(오른쪽 위)
 		draw_shapes(face, LOCK_SHAPES, Vector2(face.size.x - 22.0, 22.0), 30.0)
+	elif TABS[i][0] == "shop" and _shop_dot:  # 무료 선물
+		var dp := Vector2(face.size.x - 16.0, 16.0)
+		face.draw_circle(dp, 9.0, Color(0.88, 0.22, 0.2))
+		face.draw_arc(dp, 9.0, 0, TAU, 16, Color(0.88, 0.22, 0.2).darkened(0.3), 1.5, true)
 	var y := face.size.y - 12.0
 	face.draw_string_outline(FONT, Vector2(0, y), TABS[i][1], HORIZONTAL_ALIGNMENT_CENTER, face.size.x, 24, 6, Color(UiKit.INK, 0.85))
 	face.draw_string(FONT, Vector2(0, y), TABS[i][1], HORIZONTAL_ALIGNMENT_CENTER, face.size.x, 24, Color.WHITE)
+
+
+func _process(_delta: float) -> void:
+	var d := Economy.shop_free_left("daily") or Economy.shop_free_left("weekly")
+	if d != _shop_dot and buttons.has("shop"):
+		_shop_dot = d
+		buttons.shop.get_child(0).queue_redraw()
 
 
 ## IconsScript와 같은 형식([단위 좌표 점들, 색, 외곽선 여부])의 도형을 center 중심 size_px 크기로 그린다.
@@ -123,6 +136,20 @@ static func draw_shapes(ci: CanvasItem, shapes: Array, center: Vector2, size_px:
 ## 던전 = 돌 아치 문 + 해골.
 static func tab_shapes(id: String) -> Array:
 	match id:
+		"shop":  # 상점 가판대: 빨강·크림 줄무늬 차양(아래 물결) + 나무 가판대(어두운 창) + 앞 판대 + 금화
+			var out := []
+			for k in 4:
+				var x0 := -0.48 + k * 0.24
+				out.append([[Vector2(x0 + 0.04, -0.44), Vector2(x0 + 0.28, -0.44), Vector2(x0 + 0.24, -0.14), Vector2(x0 + 0.12, -0.08), Vector2(x0, -0.14)],
+					Color(0.86, 0.26, 0.24) if k % 2 == 0 else Color(0.98, 0.92, 0.80), true])
+			return [
+				[[Vector2(-0.40, -0.14), Vector2(0.40, -0.14), Vector2(0.40, 0.44), Vector2(-0.40, 0.44)], Color(0.62, 0.42, 0.24), true],
+				[[Vector2(-0.40, -0.14), Vector2(0.0, -0.14), Vector2(0.0, 0.44), Vector2(-0.40, 0.44)], Color(0.72, 0.52, 0.32), false],
+				[[Vector2(-0.28, -0.04), Vector2(0.28, -0.04), Vector2(0.28, 0.16), Vector2(-0.28, 0.16)], Color(0.24, 0.17, 0.14), true],
+				[[Vector2(-0.46, 0.16), Vector2(0.46, 0.16), Vector2(0.46, 0.28), Vector2(-0.46, 0.28)], Color(0.80, 0.60, 0.36), true],
+			] + out + [
+				[IconsScript._ngon(8, 0.15, PI / 8.0).map(func(p): return p + Vector2(0.22, 0.32)), Color(0.95, 0.76, 0.20), true],
+			]
 		"guild":  # 깃대에 걸린 각진 길드 깃발(왼쪽 면 밝게) + 금색 별
 			var flag := [Vector2(-0.26, -0.40), Vector2(0.40, -0.40), Vector2(0.40, 0.16), Vector2(0.07, 0.34), Vector2(-0.26, 0.16)]
 			var star := []

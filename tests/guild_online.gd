@@ -31,12 +31,12 @@ func _ready() -> void:
 	_check(await _wait_until(func(): return Net.ready_once and _main.camera != null, 30.0), "world built after connecting", "")
 	await _frames(10)
 	for c in _main.get_children():
-		if c.get_script() != null and c.get_script().resource_path == "res://scripts/tab_bar.gd":
+		if c.get_script() != null and c.get_script().resource_path == "res://scripts/side_menu.gd":  # 길드는 오른쪽 아래 메뉴
 			_tabs = c
 	_panel = _tabs.windows.guild
 	Guild.boss_done.connect(func(r): _boss = r)
 
-	_tabs.press("guild")
+	_tabs.pick("guild")
 	_check(await _wait_until(func(): return not Guild.remote.is_empty(), 10.0) and not Guild.is_unlocked(), "new player: guild is locked", str(Guild.remote))
 	await _snap()
 

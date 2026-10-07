@@ -1,4 +1,4 @@
-// PVP 엔드포인트(마이그레이션 028, 규칙 pvp.ts). createApp 안에서 registerPvp로 붙인다.
+// PVP 엔드포인트(마이그레이션 029, 규칙 pvp.ts). createApp 안에서 registerPvp로 붙인다.
 //  GET  /v1/pvp                               → {server_now, pvp}
 //  POST /v1/pvp/defense {mode, heroes × 5}    방어팀(보유 영웅 5, 능력치는 capStats로 자른다). 총력전은 지금 보유 병사에서 병사도 고른다
 //  POST /v1/pvp/start   {mode, heroes × 5}    판 하나를 쓰고 미리 정해 둔 상대(next)와 싸움을 연다 — 패배로 먼저 적는다 → {pvp, battle}

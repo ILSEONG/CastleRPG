@@ -119,6 +119,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       missions: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: [], w: [], wd: 0, r: {}, // 미션
         next_day: R.resetAt(R.resetDay(T0, 15) + 1, 15), next_week: R.resetAt(M.weekStart(M.weekOf(R.resetDay(T0, 15)) + 1), 15) },
       pouches: {}, // 방치 주머니
+      shop: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {} }, // 상점
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })

@@ -84,7 +84,6 @@ func _ready() -> void:
 	pvp = PvpViewScript.new()
 	pvp.visible = false
 	content.add_child(pvp)
-	pvp.attach_shop(self)
 	_fit_sheet()
 	friend_panel = FriendPanelScript.new()
 	add_child(friend_panel)

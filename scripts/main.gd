@@ -41,6 +41,7 @@ const MerchantPanelScript := preload("res://scripts/merchant_panel.gd")
 const RecruitPanelScript := preload("res://scripts/recruit_panel.gd")
 const HeroPanelScript := preload("res://scripts/hero_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
+const UiWindowScript := preload("res://scripts/ui_window.gd")
 const BuildingPanelScript := preload("res://scripts/building_panel.gd")
 const SoldierPanelScript := preload("res://scripts/soldier_panel.gd")
 const GrowthPanelScript := preload("res://scripts/growth_panel.gd")
@@ -185,8 +186,11 @@ func _build_world() -> void:
 	add_child(ranking_panel)
 	var event_panel = preload("res://scripts/event_panel.gd").new()  # 이벤트(준비 중)
 	add_child(event_panel)
-	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·길드(상인은 NPC 탭)
-	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "guild": guild_panel}
+	var shop_panel = preload("res://scripts/shop_panel.gd").new()  # 상점 시트(일일·주간·다이아)
+	add_child(shop_panel)
+	recruit.shop = shop_panel  # 모집 창 "다이아가 부족합니다" [이동] → 상점 [다이아] 탭
+	var tabs = TabBarScript.new()  # 하단 탭 바(개정 18 §1): 성장·영웅·병사·던전·모집·상점(상인은 NPC 탭, 길드는 오른쪽 아래 메뉴)
+	tabs.windows = {"growth": growth_panel, "hero": hero_panel, "soldier": soldier_panel, "dungeon": dungeon_panel, "recruit": recruit, "shop": shop_panel}
 	add_child(tabs)
 	var card = preload("res://scripts/tutorial_card.gd").new()  # 튜토리얼 미션 카드(새 게임만, 탭 바 위)
 	card.tags = tags
@@ -197,8 +201,9 @@ func _build_world() -> void:
 	add_child(pouch_panel)
 	var settings_panel = preload("res://scripts/settings_panel.gd").new()  # 설정(배경음악·화면·계정·버전): 오른쪽 아래 메뉴가 연다
 	add_child(settings_panel)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트]
-	side_menu.windows = {"settings": settings_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel, "event": event_panel}
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트][길드]
+	side_menu.windows = {"settings": settings_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
+		"event": event_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
 	_hud = hud
@@ -207,7 +212,7 @@ func _build_world() -> void:
 	_strip.heroes_fn = strip_heroes
 	add_child(_strip)
 	_battle_hide = [tabs, side_menu, tags, badges]
-	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "merchant": panel, "recruit": recruit}
+	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):
 		Tutorial.goto_requested.connect(_tutorial_goto)
 	add_child(bag)
@@ -262,9 +267,15 @@ func _tutorial_goto(target: String) -> void:
 			elif arg == GameData.GATE:
 				_tutorial_ui.rig.pan_to(FormationScript.gate_position(castle.half, 2), GATE_PAN_SEC)
 			_tutorial_ui.building.open_building(arg)
-		"tab":
-			if not _tutorial_ui.tabs.windows[arg].is_open():
-				_tutorial_ui.tabs.press(arg)
+		"tab":  # 하단 탭, 없으면 오른쪽 아래 메뉴 항목(길드)
+			if _tutorial_ui.tabs.windows.has(arg):
+				if not _tutorial_ui.tabs.windows[arg].is_open():
+					_tutorial_ui.tabs.press(arg)
+			elif _tutorial_ui.side_menu.windows.has(arg):
+				for x in get_tree().get_nodes_in_group(UiWindowScript.GROUP):
+					if x.is_open():
+						x.close()
+				_tutorial_ui.side_menu.pick(arg)
 		"merchant":
 			_tutorial_ui.merchant.open()
 		"recruit":

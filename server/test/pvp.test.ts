@@ -1,4 +1,4 @@
-// PVP(마이그레이션 028, pvp.ts·pvp_routes.ts): 등급·포인트 규칙, 다음 상대(봇·실제 방어팀), 하루 5판, 시작 = 패배로 먼저 적기,
+// PVP(마이그레이션 029, pvp.ts·pvp_routes.ts): 등급·포인트 규칙, 다음 상대(봇·실제 방어팀), 하루 5판, 시작 = 패배로 먼저 적기,
 // 승리 결과 바로잡기·재전송, 너무 이른 승리 거절, 방어팀, 상점(코인·한도·보상).
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'

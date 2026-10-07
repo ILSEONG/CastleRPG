@@ -107,8 +107,20 @@ func _run() -> void:
 	Pvp.local.coins = 1000
 	Pvp.fetch()
 	var gold := Economy.gold
-	_check(Pvp.buy("gold") == "", "buy gold allowed")
+	if panel != null:
+		panel.open()
+		panel.set_section("pvp")
+		await _frames(2)
+		panel.pvp.open_shop()
+		await _frames(3)
+	var shop = get_tree().get_first_node_in_group("shop_panel")
+	_check(shop != null and shop.is_open() and shop.tab == "pvp", "PVP [상점] opens the shop sheet on the PVP tab")
+	_check(panel == null or not panel.is_open(), "dungeon sheet closed when going to the shop")
+	_check(shop != null and shop.buttons.has("buy:pvp_gold"), "PVP tab shows PVP items")
+	if shop != null and shop.buttons.has("buy:pvp_gold"):
+		shop.buttons["buy:pvp_gold"].pressed.emit()
 	await _frames(2)
+	_check(shop != null and shop.wallet_label.text.contains("940"), "shop wallet shows PVP coins (%s)" % (shop.wallet_label.text if shop else ""))
 	_check(Pvp.coins() == 1000 - 60, "coins deducted 60")
 	_check(Economy.gold > gold, "gold granted")
 	for i in 2:

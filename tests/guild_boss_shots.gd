@@ -23,8 +23,8 @@ func _ready() -> void:
 		Economy.hero_promotions[id] = promo
 	Guild.unlocked = true
 	Guild.join(Guild.recommendations()[0])
-	var tabs = _find("res://scripts/tab_bar.gd")
-	tabs.press("guild")
+	var tabs = _find("res://scripts/side_menu.gd")  # 길드는 오른쪽 아래 메뉴
+	tabs.pick("guild")
 	var panel = tabs.windows.guild
 	panel.tab = "boss"
 	panel._rebuild()

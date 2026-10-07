@@ -11,14 +11,12 @@ const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
-const ShopScript := preload("res://scripts/pvp_shop.gd")
 
 const RED := Color(0.78, 0.22, 0.18)
 const MINI := Vector2(108, 136)
 const SLOT := Vector2(108, 136)
 const GRID_CARD := Vector2(150, 184)
 
-var shop  # pvp_shop.gd 창(이 화면이 만든다 — 부모 창에 붙인다)
 var page := ""  # "" = 홈, 아니면 모드
 var picking := ""  # "" | "team" | "defense"
 var team := {}  # 모드 → 출전 영웅 id(이번 실행 동안 기억)
@@ -54,10 +52,17 @@ func _ready() -> void:
 			refresh())
 
 
-## 부모 창이 연 뒤 붙인다(창 레이어 위에 상점 창).
-func attach_shop(parent: Node) -> void:
-	shop = ShopScript.new()
-	parent.add_child(shop)
+## [상점]: 던전 시트를 닫고 상점 시트(하단 탭 [상점])를 [PVP] 탭으로 연다(모집 창 → [다이아] 탭과 같은 방식).
+func open_shop() -> void:
+	var shop = get_tree().get_first_node_in_group("shop_panel")
+	if shop == null:
+		return
+	var w = get_parent()
+	while w != null and not w.has_method("open_form"):
+		w = w.get_parent()
+	if w != null:
+		w.close()
+	shop.open_tab("pvp")
 
 
 func show_home() -> void:
@@ -104,7 +109,7 @@ func _coin_row(keep: Callable) -> Control:
 	keep.call(l)
 	var b := _button("상점", UiKit.AMBER, 24)
 	b.custom_minimum_size = Vector2(120, 52)
-	b.pressed.connect(func(): shop.open())
+	b.pressed.connect(open_shop)
 	row.add_child(b)
 	buttons["shop"] = b
 	return row
@@ -175,7 +180,7 @@ func _build_page() -> void:
 	head.add_child(_p.title)
 	var sb := _button("상점", UiKit.AMBER, 22)
 	sb.custom_minimum_size = Vector2(120, 52)
-	sb.pressed.connect(func(): shop.open())
+	sb.pressed.connect(open_shop)
 	head.add_child(sb)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -548,8 +553,11 @@ static func draw_badge(c: Control, tier_id: String) -> void:
 
 ## PVP 코인: 은청색 동전 + 엇갈린 칼 둘.
 static func draw_coin(c: Control) -> void:
-	var s := minf(c.size.x, c.size.y)
-	var o := c.size / 2.0
+	draw_coin_at(c, c.size / 2.0, minf(c.size.x, c.size.y))
+
+
+## PVP 코인(가운데 o, 지름 s).
+static func draw_coin_at(c: CanvasItem, o: Vector2, s: float) -> void:
 	var base := Color("7FA7D9")
 	c.draw_circle(o, s * 0.48, base.darkened(0.45))
 	c.draw_circle(o, s * 0.42, base)
