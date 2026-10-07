@@ -170,14 +170,14 @@ func test_game_data() -> void:
 		var r := GameData.stage(s)
 		check(is_equal_approx(r.hp_mult, 1.0 + 0.10 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.10 * (s - 1)), "hp/atk mult at stage %d" % s)
 		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 8.0, "waves/size/idle at stage %d" % s)
-		check(is_equal_approx(r.gold_mult, 1.0 + 0.2 * (s - 1)), "gold_mult at stage %d" % s)
+		check(absf(r.gold_mult - (1.0 + 0.2 * (s - 1)) * pow(1.01, s - 1)) < 0.006, "gold_mult at stage %d follows (1 + 0.2(s-1)) x 1.01^(s-1)" % s)
 	var r31 := GameData.stage(31)  # 직선 연장
 	var r30 := GameData.stage(30)
 	var r29 := GameData.stage(29)
 	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.10 * 39), "stage beyond table extrapolates hp_mult")
 	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 14, "extrapolated int columns follow the 12-row slope and round (waves 33 = 14, same as the old 3 + floor(s/3))")
-	check(GameData.kill_gold_tenths("grunt", 1) == 100 and GameData.kill_gold_tenths("grunt", 2) == 120 and GameData.kill_gold_tenths("grunt", 3) == 140, "kill_gold_tenths = gold x gold_mult in tenths (grunt 10: 10 x 1.2 = 12 -> 120, 10 x 1.4 = 14 -> 140)")
-	check(GameData.kill_gold_tenths("epic_boss", 2) == 3000 and GameData.kill_gold_tenths("grunt", 31) == 700, "kill_gold_tenths boss (250 x 1.2) and extrapolated stage")
+	check(GameData.kill_gold_tenths("grunt", 1) == 100 and GameData.kill_gold_tenths("grunt", 2) == 121 and GameData.kill_gold_tenths("grunt", 3) == 143, "kill_gold_tenths = gold x gold_mult in tenths (grunt 10: 10 x 1.21 -> 121, 10 x 1.43 -> 143)")
+	check(GameData.kill_gold_tenths("epic_boss", 2) == 3025 and GameData.kill_gold_tenths("grunt", 31) == 943, "kill_gold_tenths boss (250 x 1.21) and extrapolated stage (9.07 x 7/6.8 x 1.01)")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
 	var mp := "user://t_monsters.csv"
 	var sp := "user://t_stages.csv"
@@ -1450,15 +1450,15 @@ func test_gold_tenths() -> void:
 	check(e.gold_tenths == 70, "setting whole gold writes x10 tenths")
 	e.gold_tenths = 5
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 125 and e.gold == 12, "an offline kill adds 12 gold at stage 2 on top of 0.5 and shows 12")
+	check(e.gold_tenths == 126 and e.gold == 12, "an offline kill adds 12.1 gold at stage 2 on top of 0.5 and shows 12")
 	e.add_kill("grunt", 2)
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 365 and e.gold == 36, "tenths accumulate across kills (0.5 + 36 shows 36)")
+	check(e.gold_tenths == 368 and e.gold == 36, "tenths accumulate across kills (0.5 + 36.3 shows 36)")
 	e.save()
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var saved = JSON.parse_string(f.get_as_text())
 	f.close()
-	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 365 and not saved.has("gold"), "save writes the current version with gold_tenths")
+	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 368 and not saved.has("gold"), "save writes the current version with gold_tenths")
 	var v1 := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 	v1.store_string(JSON.stringify({"version": 1, "gold": 41, "res": {"wood": 3, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}))
 	v1.close()
@@ -4503,7 +4503,7 @@ func test_research_r24() -> void:
 	e.research_levels = {"plunder": 2}
 	var g0: int = e.gold_tenths
 	e.add_kill("grunt", 1)
-	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3300, "kill gold = floor(tenths x 1.10): grunt 100 -> 110")
+	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3327, "kill gold = floor(tenths x 1.10): grunt 100 -> 110, boss 3025 -> 3327")
 	e.research_levels = {"drill_manual": 5, "logistics": 5}
 	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 810, "wood": 540}
 		and EconomyScript.train_cost("infantry", 3) == {"food": 900, "wood": 600}, "training: time / 1.15, cost x 0.90 rounded (900/600 -> 810/540)")
