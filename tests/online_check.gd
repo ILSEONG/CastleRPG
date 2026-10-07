@@ -1299,7 +1299,7 @@ func _dungeons_online(state_path: String) -> void:
 	Economy.dungeon_finished.connect(on_finish)
 	var es: Dictionary = Economy.dungeon_state("equip")
 	var gs: Dictionary = Economy.dungeon_state("gold")
-	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 1 and es.key_cap == 3 and es.best_level == 0 and es.extra_cost == 5000
+	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 1 and es.key_cap == 3 and es.best_level == 0 and es.extra_cost == 100000
 		and absf(es.next_reset - GameData.next_reset(Economy.time_now())) < 1.0 and Economy.items().is_empty(),
 		"(z) server dungeon state: gold 3 / 10, equip 1 / 3, next reset at 00:00 KST, empty bag", "gold=%s equip=%s" % [gs, es])
 	var party: Array = Economy.default_party("equip")
@@ -1328,7 +1328,7 @@ func _dungeons_online(state_path: String) -> void:
 	await _wait_until(func(): return finished.size() == 3, 20.0)
 	var got: Array = finished[2].rewards.get("items", []) if finished.size() == 3 else []
 	_check(finished.size() == 3 and finished[2].win and got.size() == 5 and Economy.items() == got and Economy.dungeon_state("equip").keys == 0
-		and Economy.dungeon_state("equip").best_level == 1 and got.all(func(x): return x.id is int and x.level == 1),
+		and Economy.dungeon_state("equip").best_level == 1 and got.all(func(x): return x.id is int and not x.has("level") and x.rolls.size() >= 1),
 		"(z) debug_win on the server: key -1, best level 1, exactly 5 items with server ids land in the bag", "rewards=%s bag=%d" % [got, Economy.items().size()])
 	Economy.finish_dungeon(run_id, true, 20.0)  # 같은 run 재전송
 	await _wait_until(func(): return finished.size() == 4, 15.0)
@@ -1433,7 +1433,7 @@ func _dungeons_restored(state_path: String) -> void:
 	for i in mini(Economy.items().size(), saved.items.size()):
 		var a: Dictionary = Economy.items()[i]
 		var b: Dictionary = saved.items[i]
-		same_items = same_items and a.id == int(b.id) and a.slot == b.slot and a.grade == b.grade and a.level == int(b.level) and a.weapon_kind == b.weapon_kind
+		same_items = same_items and a.id == int(b.id) and a.slot == b.slot and a.grade == b.grade and GameData.item_stats(a) == GameData.item_stats(b) and a.subs.size() == b.subs.size() and a.weapon_kind == b.weapon_kind
 	var same_eq: bool = Economy.equipment.size() == saved.equipment.size()
 	for h in saved.equipment:
 		for s in saved.equipment[h]:

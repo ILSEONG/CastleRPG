@@ -613,8 +613,8 @@ func _grant(give: Dictionary) -> String:
 
 ## 장비 한 줄 설명: "SR 무기 Lv 3"
 static func item_text(it: Dictionary) -> String:
-	var slot_names := {"weapon": "무기", "helmet": "투구", "armor": "갑옷", "gloves": "장갑", "shoes": "신발", "belt": "허리띠", "ring": "반지"}
-	return "%s %s Lv %d 획득" % [str(it.get("grade", "")), slot_names.get(str(it.get("slot", "")), "장비"), int(it.get("level", 1))]
+	var slot_names := {"weapon": "무기", "hat": "모자", "top": "상의", "bottom": "하의", "shoes": "신발", "pauldron": "견장", "gloves": "장갑"}
+	return "%s %s 획득" % [str(it.get("grade", "")), slot_names.get(str(it.get("slot", "")), "장비")]
 
 
 func _pay(gold_n: int, dia_n: int) -> void:
