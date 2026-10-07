@@ -257,6 +257,11 @@ func _replan() -> void:
 
 
 ## 실제 높이로 판정한다 — 오르내리는 중에는 지상 취급.
+## 자리로 돌아가려면 경로(성문·계단)가 필요한가 — 아레나 영웅은 곧장(공성 영웅 war_hero가 덮어쓴다).
+func needs_route() -> bool:
+	return false
+
+
 func is_on_wall() -> bool:
 	return global_position.y > Balance.WALL_H / 2.0
 
@@ -427,7 +432,7 @@ func _process(delta: float) -> void:
 				_model.play_idle()  # 공격 모션은 끝날 때 스스로 대기로 돌아간다
 			state = State.IDLE
 			return
-		if not is_on_wall() and (castle == null or Formation.route(castle.half, global_position, home).size() == 1):
+		if not is_on_wall() and ((castle == null and not needs_route()) or (castle != null and Formation.route(castle.half, global_position, home).size() == 1)):
 			# 추격 뒤 복귀: 곧장 갈 수 있으면(같은 영역, 성 모서리를 가로지르지 않음) 곧장(도중에 새 표적을 만나면 다시 교전)
 			state = State.MOVE
 			_model.face(home - global_position)

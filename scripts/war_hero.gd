@@ -20,6 +20,7 @@ var uid := 0  # 전투 안 고유 번호(온라인 동기화)
 var owner_id := ""  # 조종하는 길드원(플레이어 id, 가상 길드원은 "v:<n>", 수비는 "d:<n>")
 var squad := 0  # 같은 길드원의 4명 = 한 분대(집중 공격 대상 공유)
 var lane := 0  # 맡은 면(성문 0..3)
+var post_slot := 0  # 수비: 면 안 자리 순번(성채·지원 자리 고를 때)
 var post_pos := Vector3.ZERO  # 수비: 지키는 자리 / 공격: 진영 자리
 var war_half := 0.0
 var battle  # war_battle.gd(brain·목표 위치)
@@ -120,7 +121,7 @@ func _process(delta: float) -> void:
 		_tick_knock(delta)
 		return
 	_speed = _base_speed * (1.0 - _slow_pct / 100.0) if _slow_t > 0.0 else _base_speed
-	atk = _base_atk * (1.0 - _weak_pct / 100.0) if _weak_t > 0.0 else _base_atk
+	atk = (_base_atk * (1.0 - _weak_pct / 100.0) if _weak_t > 0.0 else _base_atk) * gate_top_mult()
 	if _taunt_t > 0.0 and is_instance_valid(_taunt_by) and _taunt_by.is_alive() and _same_region(_taunt_by.global_position):
 		_target = _taunt_by
 	think_cd -= delta
@@ -167,7 +168,17 @@ func _blast_ok(m) -> bool:
 	return battle == null or battle.brain.blast_ok(self, m)
 
 
-## 성 안팎을 오가면 성문 경로(공성 성은 성벽 위가 없다 — 지상만).
+## 성문 위 원거리 수비 영웅 피해 배율(WarRules.GATE_TOP_MULT): 성벽 위, 성문 가운데에서 GATE_TOP_R 안. 그 밖은 1.
+func gate_top_mult() -> float:
+	if team != 1 or role != "ranged" or war_half <= 0.0 or not is_on_wall():
+		return 1.0
+	var s := Formation.side_of(global_position)
+	if absf(Formation.perp(s).dot(global_position) - Formation.nearest_gate_at(war_half, s, global_position)) > WarRulesH.GATE_TOP_R:
+		return 1.0
+	return WarRulesH.GATE_TOP_MULT
+
+
+## 성 안팎·성벽 위아래를 오가면 성문·계단 경로(Formation.route).
 func _replan() -> void:
 	if not is_inside_tree():
 		return
@@ -180,11 +191,20 @@ func _replan() -> void:
 
 ## 지금 걸어가는 경로가 없고 자리가 성벽 너머면 성문으로 돌아간다(hero는 아레나에서 곧장 걷는다).
 func needs_route() -> bool:
-	return war_half > 0.0 and _path.is_empty() and Formation.is_inside(war_half, global_position) != Formation.is_inside(war_half, stand_position())
+	if war_half <= 0.0 or not _path.is_empty():
+		return false
+	var home := stand_position()
+	return Formation.is_inside(war_half, global_position) != Formation.is_inside(war_half, home) \
+		or (global_position.y > Balance.WALL_H / 2.0) != (home.y > Balance.WALL_H / 2.0)
 
 
+## 닿을 수 있는 자리: 성벽 위 영웅은 어디든(사거리 안), 성벽 위 표적은 원거리만, 지상끼리는 같은 영역(성 안/밖).
 func _same_region(p: Vector3) -> bool:
-	return war_half <= 0.0 or Formation.is_inside(war_half, global_position) == Formation.is_inside(war_half, p)
+	if war_half <= 0.0 or is_on_wall():
+		return true
+	if p.y > Balance.WALL_H / 2.0:
+		return role == "ranged"
+	return Formation.is_inside(war_half, global_position) == Formation.is_inside(war_half, p)
 
 
 ## 영웅 사거리에 더하는 몸 반지름(hero._reach): 영웅은 0.
@@ -213,7 +233,7 @@ func step_to(p: Vector3) -> void:
 ## 지키는(머무는) 자리를 바꾼다(자동 진격·수비 재배치). 지금 걷는 중이 아니면 곧장 간다.
 func set_home(p: Vector3, go := true) -> void:
 	post = Formation.POST_FREE
-	free_pos = Vector3(p.x, 0.0, p.z)
+	free_pos = Vector3(p.x, Balance.WALL_H if p.y > Balance.WALL_H / 2.0 else 0.0, p.z)  # 성벽 위 자리는 높이 그대로
 	hold = true
 	if go:
 		_replan()
@@ -488,7 +508,7 @@ func puppet_hold(p: Vector3) -> void:
 
 
 func puppet_apply(row: Array) -> void:
-	_p_pos = Vector3(float(row[0]), 0.0, float(row[1]))
+	_p_pos = Vector3(float(row[0]), float(row[6]) if row.size() > 6 else 0.0, float(row[1]))  # [6] = 높이(성벽 위)
 	_p_face = Vector3(sin(float(row[2])), 0.0, cos(float(row[2])))
 	var new_hp := float(row[3]) * hp_max
 	if new_hp < hp - 0.5:
@@ -526,7 +546,7 @@ func puppet_apply(row: Array) -> void:
 
 func puppet_row() -> Array:
 	return [snappedf(global_position.x, 0.01), snappedf(global_position.z, 0.01), snappedf(_model.rotation.y, 0.01),
-		snappedf(hp_ratio(), 0.001), state, _attacks]
+		snappedf(hp_ratio(), 0.001), state, _attacks, snappedf(global_position.y, 0.01)]
 
 
 func _puppet_tick(delta: float) -> void:

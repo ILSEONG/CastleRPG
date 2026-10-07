@@ -4,6 +4,7 @@ extends Node
 ## (2) 약한 수비 — 공격이 성문을 부수고 성 안으로 들어가 성채를 친다. (3) 원거리 수비는 근접 적이 붙으면 물러난다.
 ## (4) 꼭두각시 장면이 방장 스냅샷을 따른다. (5) 영웅 상태 효과(독·둔화·속박·취약·약화·넉백·도발)가 영웅에게도 걸린다.
 ## (7) 배치 단계: 공격은 성 밖 진영에서 나오고, 배치는 성벽 밖으로 밀리고 면이 바뀌며, 시작 전엔 싸우지 않는다.
+## (8) 수비: 성 안에서 시작(원거리는 성문 위 성벽, 1.2배), 성문이 뚫리면 지원, 성채 근처에 적이 오면 성채로.
 ## (6) 오프라인 GuildWar: 상대 길드·성·공성 시각(기본·고르기)·전투 열기·결과 저장(줄기만)·한 주 한 번·성채 3% 점수·다음 주 보상.
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -40,6 +41,7 @@ func _ready() -> void:
 	await _case_puppet()
 	await _case_status()
 	await _case_deploy()
+	await _case_defense()
 	await _case_offline_war()
 	_check(_errors.count == 0, "no script errors (%d, first: %s)" % [_errors.count, _errors.first])
 	print("WAR CHECK %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
@@ -223,8 +225,11 @@ func _case_kite() -> void:
 	await get_tree().process_frame
 	var d = b.units(1)[0]
 	var a = b.units(0)[0]
+	var ground: Vector3 = b.breach_spot(2, 12)  # 성벽 위가 아니라 성 안 바닥에 세운다(성벽 위 원거리는 물러나지 않는다)
+	b._post(d, ground, 0)
 	a.global_position = d.global_position + Formation.SIDE_DIR[2] * 1.5
-	a.set_home(a.global_position, false)
+	a.set_home(a.global_position)  # 첫 판단에서 잡힌 진격 경로도 지운다
+	a.commanded = true  # 그 자리에서 싸운다(자동 진격으로 성문 밖으로 나가지 않게)
 	var start: Vector3 = d.global_position
 	var moved := [0.0]
 	await _run(b, 3.0, 0.25, func():
@@ -336,3 +341,45 @@ static func _min_gap(us: Array) -> float:
 			if absf(us[i].global_position.y - us[j].global_position.y) < 0.3:
 				best = minf(best, Formation.flat_distance(us[i].global_position, us[j].global_position))
 	return best
+
+
+func _case_defense() -> void:
+	print("(8) defenders hold the castle: archers on the gates, help a broken gate, guard the keep")
+	var plan := make_plan(4, 20)
+	plan.deploy_left = 300.0  # 배치 중: 아무도 움직이지 않는다(자리만 본다)
+	var b = _battle(plan)
+	await get_tree().process_frame
+	var defs: Array = b.units(1)
+	_check(defs.all(func(d): return Formation.is_inside(b.half, d.global_position)), "all defenders start inside the castle")
+	var archers: Array = defs.filter(func(d): return d.role == "ranged")
+	var melee: Array = defs.filter(func(d): return d.role == "melee")
+	_check(archers.size() > 0 and archers.all(func(d): return d.is_on_wall()), "ranged defenders stand on the walls (%d)" % archers.size())
+	_check(melee.size() > 0 and melee.all(func(d): return not d.is_on_wall()), "melee defenders stand inside behind the gates (%d)" % melee.size())
+	_check(_min_gap(archers) >= 1.9 and _min_gap(melee) >= 1.9, "defenders do not overlap (wall %.2f m, ground %.2f m)" % [_min_gap(archers), _min_gap(melee)])
+	var ar = archers[0]
+	_check(is_equal_approx(ar.gate_top_mult(), WarRules.GATE_TOP_MULT), "archer on a gate deals x%.1f" % ar.gate_top_mult())
+	_check(melee[0].gate_top_mult() == 1.0, "melee inside gets no gate bonus")
+	b.begin_fight()
+	await get_tree().process_frame
+	_check(is_equal_approx(ar.atk, ar._base_atk * WarRules.GATE_TOP_MULT), "archer attack includes the gate bonus (%.0f / %.0f)" % [ar.atk, ar._base_atk])
+	# 성문 0이 뚫리고 공격이 그 안에 들어왔다: 조용한 면(1) 근접 일부가 성문 0 안쪽으로 지원
+	for a in b.units(0):
+		a.set_process(false)
+		a.global_position = Formation.SIDE_DIR[0] * (b.half - 5.0)
+	b.gates[0].take_damage(b.gates[0].hp + 1.0)
+	b.brain._survey_t = -INF
+	for d in b.units(1):
+		b.brain.think(d)
+	var lane1: Array = melee.filter(func(d): return d.lane == 1)
+	var helping := lane1.filter(func(d): return Formation.side_of(d.free_pos) == 0 and Formation.flat_distance(d.free_pos, Vector3.ZERO) > Formation.keep_target(0).length() + 4.0)
+	_check(helping.size() > 0, "quiet side sends melee to the broken gate (%d of %d)" % [helping.size(), lane1.size()])
+	# 공격이 성채 앞까지: 근접이 성채를 지키러 모인다
+	for a in b.units(0):
+		a.global_position = Formation.keep_target(0) + Formation.SIDE_DIR[0] * 2.0
+	b.brain._survey_t = -INF
+	for d in b.units(1):
+		b.brain.think(d)
+	var guards := melee.filter(func(d): return Formation.flat_distance(d.free_pos, Vector3.ZERO) < Formation.keep_target(0).length() + 6.0)
+	_check(guards.size() >= melee.size() / 2, "defenders fall back to guard the keep (%d of %d)" % [guards.size(), melee.size()])
+	b.queue_free()
+	await get_tree().process_frame

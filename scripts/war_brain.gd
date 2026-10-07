@@ -5,8 +5,9 @@ extends RefCounted
 ##  × 분대 집중(같은 길드원 4명이 한 표적을 함께 — FOCUS_BONUS) × 지키기(약한 아군을 치고 있는 적 — 근접은 PEEL_BONUS, 원거리 절반)
 ##  × 치유사(회복·부활 스킬 — HEALER_BONUS) × 지금 표적 유지(STICKY — 표적을 이리저리 바꾸지 않게) ÷ (1 + 닿는 데 걸리는 초 × TRAVEL_W).
 ## 근접은 다가가야 하므로 거리가 크게 깎이고, 원거리는 사거리 안이면 거리 무관. 성문·성채는 영웅이 하나도 없을 때만.
-## 수비: 자기 자리에서 LEASH m 안만 쫓는다(성문을 비우지 않는다). 공격 영웅이 성 안에 들어오면 내 성문이 뚫렸거나 내 면이 조용한 수비가 성채 앞을 막고,
-## 내 면에 적이 없으면 공격이 수비보다 많은 옆 면을 도우러 간다(적이 다시 오면 제자리로).
+## 수비(2026-10-07 사용자 — 궁극 목적은 성채): 원거리는 성문 위 성벽에서 사거리 안만 쏘고(쫓지 않는다), 근접은 성문 안쪽에서 LEASH m 안만 쫓는다.
+## 성문이 뚫리면 그 성문 근접은 안쪽을 막고, 조용한 면 근접은 반은 뚫린 성문으로 지원·반은 성채 앞으로. 공격 영웅이 성채 가까이(KEEP_ALERT) 오면
+## 그 면이 바쁘지 않은 근접과 쏠 적이 없는 성벽 원거리가 성채 앞으로 모인다(적이 물러나면 제자리로).
 ## 원거리 영웅은 근접 적이 KITE_R 안에 붙으면 KITE_STEP m 물러난다(KITE_CD초에 한 번, 묶임·기절 중엔 못 한다).
 ## 공격(자동): 맡은 면의 성문 앞 수비 영웅을 치러 가고 → 다 쓰러지면 성문 → 부서지면 성 안 성채. 플레이어가 이동 명령을 주면(commanded) 그 자리를 지킨다.
 
@@ -46,6 +47,7 @@ func _reachable(u, structures: bool) -> Array:
 	var half: float = battle.half
 	var here: Vector3 = u.global_position
 	var inside := Formation.is_inside(half, here)
+	var on_wall: bool = u.is_on_wall()
 	for f in u.get_tree().get_nodes_in_group(u.foes):
 		if not f.is_alive():
 			continue
@@ -53,6 +55,10 @@ func _reachable(u, structures: bool) -> Array:
 		if st != structures:
 			continue
 		var p: Vector3 = f.global_position
+		if not st and (on_wall or p.y > Balance.WALL_H / 2.0):
+			if on_wall or u.role == "ranged":  # 성벽 위 영웅은 어디든 쏘고, 성벽 위 표적은 원거리만 닿는다
+				out.append(f)
+			continue
 		if not st and Formation.is_inside(half, p) != inside:
 			continue
 		if not inside and not st and Formation.crosses_castle(half, here, p):
@@ -82,7 +88,9 @@ func pick_target(u):
 	var cands := _reachable(u, false)
 	var origin: Vector3 = u.stand_position()
 	var reach: float
-	if u.team == 1:
+	if u.is_on_wall():
+		reach = float(u.def.range)  # 성벽 위: 쫓지 않는다(사거리 안만)
+	elif u.team == 1:
 		reach = LEASH
 	else:
 		reach = maxf(float(u.def.aggro), float(u.def.range)) + (4.0 if not u.commanded else 0.0)
@@ -188,7 +196,7 @@ func think(u) -> void:
 
 
 func _kite(u) -> bool:
-	if u.role != "ranged" or u.kite_cd > 0.0 or u.is_walking() or u.commanded:
+	if u.role != "ranged" or u.kite_cd > 0.0 or u.is_walking() or u.commanded or u.is_on_wall():
 		return false
 	var here: Vector3 = u.global_position
 	var away := Vector3.ZERO
@@ -228,24 +236,33 @@ func _kite(u) -> bool:
 func _defend(u) -> void:
 	_survey()
 	var s: int = u.lane
-	var spot: int = u.squad * 4 + int(u.uid) % 4
+	var spot: int = u.post_slot
 	var want: Vector3 = u.post_pos
-	var busy_here: bool = _press[s] > 0
-	if _inside > 0 and (not battle.gate(s).is_alive() or not busy_here):
-		want = battle.keep_spot(s, spot)  # 성 안에 들어왔다: 내 면이 조용하면(또는 내 성문이 뚫렸으면) 성채 앞을 막는다
+	var archer: bool = u.post_pos.y > Balance.WALL_H / 2.0
+	var own_open: bool = not battle.gate(s).is_alive()
+	var busy_here: bool = _press[s] > 0 or (own_open and _inside_at[s] > 0)
+	if archer:
+		# 성벽 원거리: 성채가 위협받는데 성벽에서 쏠 적이 없으면 내려가 성채 앞에서 쏜다
+		if _keep_threat > 0 and u.current_target() == null and not busy_here:
+			want = battle.keep_guard_spot(s, 10 + spot)
+	elif _keep_threat > 0 and not (busy_here and not own_open):
+		want = battle.keep_guard_spot(s, spot)  # 성채가 먼저(내 성문 앞에서 막고 있는 중이 아니면)
+	elif own_open:
+		want = u.post_pos  # 내 성문 안쪽을 막는다(자리 = 성문 안쪽)
 	elif not busy_here:
-		var k := _help_lane(s)
+		var k := _breach()
 		if k >= 0:
-			want = battle.lane_spot(k, 4.2 if u.role == "melee" else 1.6, 40 + spot)  # 조용한 면 수비는 밀리는 옆 면을 돕는다
-	if Formation.flat_distance(u.free_pos, want) > 1.0:
+			# 조용한 면 근접: 반은 뚫린 성문 안쪽으로 지원, 반은 성채 앞에서 기다린다
+			want = battle.breach_spot(k, 10 + spot) if int(u.uid) % 2 == 0 else battle.keep_guard_spot(k, 15 + spot)
+	if Formation.flat_distance(u.free_pos, want) > 1.0 or absf(u.free_pos.y - want.y) > 1.0:
 		u.set_home(want, u.current_target() == null)
 
 
-## 성 둘레 형세(0.5초마다 한 번): 면마다 성 밖 공격 영웅 수(_press)·성 밖 수비 영웅 수(_guard), 성 안 공격 영웅 수(_inside).
+## 성 둘레 형세(0.5초마다 한 번): 면마다 성 밖 공격 영웅 수(_press), 면마다 성 안 공격 영웅 수(_inside_at), 성채 근처 공격 영웅 수(_keep_threat).
 var _survey_t := -INF
 var _press := [0, 0, 0, 0]
-var _guard := [0, 0, 0, 0]
-var _inside := 0
+var _inside_at := [0, 0, 0, 0]
+var _keep_threat := 0
 
 
 func _survey() -> void:
@@ -254,30 +271,27 @@ func _survey() -> void:
 		return
 	_survey_t = now
 	_press = [0, 0, 0, 0]
-	_guard = [0, 0, 0, 0]
-	_inside = 0
+	_inside_at = [0, 0, 0, 0]
 	for a in battle.units(0):
 		if not a.is_alive():
 			continue
 		if Formation.is_inside(battle.half, a.global_position):
-			_inside += 1
+			_inside_at[_side_of(a.global_position)] += 1
 		elif _near_wall(a.global_position):
 			_press[_side_of(a.global_position)] += 1
-	for d in battle.units(1):
-		if d.is_alive() and not Formation.is_inside(battle.half, d.global_position):
-			_guard[_side_of(d.global_position)] += 1
+	_keep_threat = battle.keep_threat()
 
 
-## 지원 갈 면: 성문이 살아 있고 공격이 수비보다 많은 면 중 가장 밀리는 곳(맞은편은 멀어서 덜 친다). 없으면 -1.
-func _help_lane(s: int) -> int:
+## 지원 갈 뚫린 성문: 성문이 부서진 면 중 공격 영웅이 가장 많이 몰린 곳(안 + 밖). 없으면 -1.
+func _breach() -> int:
 	var best := -1
-	var best_need := 0.0
+	var best_n := -1
 	for k in 4:
-		if k == s or not battle.gate(k).is_alive():
+		if battle.gate(k).is_alive():
 			continue
-		var need := float(_press[k] - _guard[k]) * (0.5 if k == (s + 2) % 4 else 1.0)
-		if need > best_need:
-			best_need = need
+		var n: int = _press[k] + _inside_at[k]
+		if n > best_n:
+			best_n = n
 			best = k
 	return best
 

@@ -38,11 +38,9 @@ signal command_sent(uid, pos)  # 꼭두각시 기기: 내 영웅 이동 명령(w
 signal score_changed
 
 const SNAP_SEC := 0.1
-const ROW_GAP := 2.0  # 수비 줄 안 영웅 간격(m)
-const ROW_STEP := 2.0  # 수비 줄과 줄 사이(m) — 원거리 줄이 늘어도 근접 줄과 겹치지 않게 근접 줄을 그만큼 바깥으로
-const MELEE_D := 4.2  # 성벽 바깥면에서 근접 수비 줄까지
-const RANGED_D := 1.6  # 원거리 수비 줄
-const ROW_MAX := 9  # 한 줄 최대(넘으면 바깥으로 한 줄 더)
+const WALL_POSTS := [-1.0, 1.0, -4.5, 4.5, -6.5, 6.5, -8.5, 8.5, -10.5, 10.5]  # 원거리 수비 성벽 위 자리: 성문 가운데에서 옆 거리(성문 위 ±1부터, 문루 기둥 ±2.6 밖은 2 m씩)
+const BREACH_COLS := 5  # 근접 수비 성문 안쪽 자리: 성문마다 한 줄 5명(2 m 간격), 넘치면 안쪽으로 한 줄 더
+const BREACH_GAP := 2.0
 const CAMERA_SIZE := 46.0
 
 var run := {}  # {plan, role, online} — main이 넣는다
@@ -183,6 +181,7 @@ func _build_castle(root: Node3D) -> void:
 	var c := half + Balance.WALL_T / 2.0
 	var gate_mesh := TownKit.gatehouse()
 	var doors_mesh := TownKit.gate_doors()
+	var stairs_mesh := TownKit.stairs()
 	var offs := Formation.gate_offsets(half)  # 28칸 = 면마다 성문 2개(내구도는 면마다 하나 — 같은 면 문짝은 함께 열린다)
 	var walls := {}
 	for side in 4:
@@ -194,6 +193,11 @@ func _build_castle(root: Node3D) -> void:
 			var center := Formation.gate_position(half, side, at)
 			_mesh(root, gate_mesh, Transform3D(facing, center))
 			doors.append(_mesh(root, doors_mesh, Transform3D(facing, center)))
+			for e in [-1.0, 1.0]:  # 성문 좌우 계단(수비가 성벽 위로 오르내린다 — castle.gd와 같다)
+				var bottom := Formation.stair_bottom(half, side, e, at)
+				var up := Formation.stair_top(half, side, e, at) - bottom
+				var x := Vector3(up.x, 0, up.z).normalized()
+				_mesh(root, stairs_mesh, Transform3D(Basis(x, Vector3.UP, x.cross(Vector3.UP)), bottom))
 			edges.append_array([at - Balance.GATE_W / 2.0, at + Balance.GATE_W / 2.0])
 		edges.append(c)
 		_doors.append(doors)
@@ -273,8 +277,7 @@ func _spawn_defender(d: Dictionary) -> void:
 	u.war_half = half
 	u.battle = self
 	u.idle_dir = Formation.SIDE_DIR[u.lane]
-	var offs := Formation.gate_offsets(half)  # 같은 면 수비는 성문마다 나눠 선다
-	u.free_pos = Formation.gate_outer(half, u.lane, offs[u.uid % offs.size()]) + Formation.SIDE_DIR[u.lane] * MELEE_D
+	u.free_pos = breach_spot(u.lane, 0)  # 자리는 _place_defenders가 정한다(성 안·성벽 위)
 	u.hold = true
 	u.position = u.free_pos
 	add_child(u)
@@ -284,31 +287,62 @@ func _spawn_defender(d: Dictionary) -> void:
 	units_by_uid[u.uid] = u
 
 
-## 면마다 근접 앞 줄·원거리 뒤 줄로 나눠 세운다(분대 순서대로, 줄이 차면 바깥으로).
+## 수비는 성 안에서 시작한다(2026-10-07 사용자): 원거리는 성문 위 성벽(WALL_POSTS — 성문마다 번갈아), 근접은 성문 안쪽(breach_spot).
+## 성벽 자리가 모자라면 남는 원거리는 근접 뒤 성 안에.
 func _place_defenders() -> void:
+	var wall_n: int = Formation.gates_per_side(half) * WALL_POSTS.size()
 	for side in 4:
 		var melee := []
 		var ranged := []
 		for u in _def:
 			if u.lane == side:
 				(melee if u.role == "melee" else ranged).append(u)
-		var ranged_rows := ceili(ranged.size() / float(ROW_MAX))
-		_line_up(side, melee, maxf(MELEE_D, RANGED_D + ranged_rows * ROW_STEP + 0.6), 1.0)
-		_line_up(side, ranged, RANGED_D, 1.0)
+		for i in melee.size():
+			_post(melee[i], breach_spot(side, i), i)
+		for i in ranged.size():
+			_post(ranged[i], wall_post(side, i) if i < wall_n else breach_spot(side, melee.size() + i - wall_n), i)
 
 
-func _line_up(side: int, list: Array, depth: float, dir_sign: float) -> void:
-	var outer := half + Balance.WALL_T
-	for i in list.size():
-		var row := i / ROW_MAX
-		var in_row := mini(ROW_MAX, list.size() - row * ROW_MAX)
-		var k := i % ROW_MAX
-		var off := (k - (in_row - 1) / 2.0) * ROW_GAP
-		var p: Vector3 = Formation.SIDE_DIR[side] * (outer + depth + row * ROW_STEP * dir_sign) + Formation.perp(side) * off
-		var u = list[i]
-		u.post_pos = p
-		u.set_home(p, false)
-		u.puppet_hold(p)  # 자리 + 꼭두각시 목표(스냅샷 전에도 제자리)
+func _post(u, p: Vector3, i: int) -> void:
+	u.post_slot = i
+	u.post_pos = p
+	u.set_home(p, false)
+	u.puppet_hold(p)  # 자리 + 꼭두각시 목표(스냅샷 전에도 제자리)
+
+
+## 면 side 성벽 위 k번째 원거리 자리(성문마다 번갈아 — k % 성문 수 = 성문, k / 성문 수 = WALL_POSTS 순번).
+func wall_post(side: int, k: int) -> Vector3:
+	var offs := Formation.gate_offsets(half)
+	var at: float = offs[k % offs.size()] + float(WALL_POSTS[mini(k / offs.size(), WALL_POSTS.size() - 1)])
+	return Formation.gate_position(half, side, at) + Vector3(0, Balance.WALL_H, 0)
+
+
+## 면 side 성문 안쪽 spot번째 자리(성문마다 번갈아): 계단 띠 안쪽에서 성 가운데 쪽으로 줄을 쌓는다. 뚫린 성문 지원도 여기.
+func breach_spot(side: int, spot: int) -> Vector3:
+	var offs := Formation.gate_offsets(half)
+	var at: float = offs[spot % offs.size()]
+	var j := spot / offs.size()
+	var col := j % BREACH_COLS
+	var row := j / BREACH_COLS
+	var depth := half - Balance.STAIR_W - 2.0 - row * BREACH_GAP
+	return Formation.SIDE_DIR[side] * depth + Formation.perp(side) * (at + (col - (BREACH_COLS - 1) / 2.0) * BREACH_GAP)
+
+
+## 성채 지키기 자리(수비): 성채 외벽 앞 공격 자리(keep_spot)보다 한 걸음 바깥, 2 m 간격 5명씩.
+func keep_guard_spot(side: int, spot: int) -> Vector3:
+	var k := spot % 5
+	var row := spot / 5
+	return Formation.keep_target(side) + Formation.SIDE_DIR[side] * (1.8 + row * 2.0) + Formation.perp(side) * ((k - 2) * 2.0)
+
+
+## 성채 외벽에서 KEEP_ALERT 안의 성 안 공격 영웅 수(면별로 셀 필요 없다).
+func keep_threat() -> int:
+	var lim := Formation.keep_target(0).length() + WarRules.KEEP_ALERT
+	var n := 0
+	for a in _att:
+		if a.is_alive() and maxf(absf(a.global_position.x), absf(a.global_position.z)) < lim:
+			n += 1
+	return n
 
 
 ## 공격 분대(길드원 한 명): {owner, name, squad, lane, ai, heroes: [{hero, level, promotion, hp?, atk?}]}. uid = 1000 + squad × 4 + i.
