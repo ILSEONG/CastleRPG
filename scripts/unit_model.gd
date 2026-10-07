@@ -165,13 +165,13 @@ func play_cast(anim_name: String, at_sec := -1.0, frac := -1.0) -> float:
 
 
 ## 피격 반응(개정 26 — 타격감): 몸이 HIT_FLASH_SEC초 하얗게 번쩍이고(덧그림 재질, 끝나면 뗀다) 잠깐 찌그러졌다 돌아온다.
-## strong(스킬·치명타)이면 더 밝고 크게. 연달아 맞으면 처음부터 다시.
-func hit_react(strong := false) -> void:
+## strong(스킬·치명타)이면 더 밝고 크게. 연달아 맞으면 처음부터 다시. 번쩍였으면 true(간격 안이라 건너뛰면 false).
+func hit_react(strong := false) -> bool:
 	if not is_inside_tree():
-		return
+		return false
 	var now := Time.get_ticks_msec()
 	if now - _flash_at < (HIT_FLASH_GAP_MS if not strong else HIT_FLASH_GAP_MS / 2):  # 여럿이 연달아 치면 깜빡임이 끊이지 않는다 — 간격을 둔다
-		return
+		return false
 	_flash_at = now
 	if _flash_mat == null:
 		_flash_mat = ShaderMaterial.new()
@@ -192,6 +192,7 @@ func hit_react(strong := false) -> void:
 	_hit_tw.tween_method(_set_flash, peak, 0.0, HIT_FLASH_SEC)
 	_hit_tw.parallel().tween_property(self, "scale", _base_scale, HIT_SQUASH_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_hit_tw.tween_callback(_end_flash)
+	return true
 
 
 func _set_flash(v: float) -> void:

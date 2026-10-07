@@ -117,7 +117,7 @@ func _tick_tele(delta: float) -> void:
 ## 원이 다 찬 순간: 원 안 살아 있는 영웅 모두 공격 × 1.5.
 func _sweep_hit() -> void:
 	sweeps += 1
-	Fx.blast(get_parent(), global_position, SWEEP_COLOR, SWEEP_R, false, 1, 1)
+	Fx.blast(get_parent(), global_position, SWEEP_COLOR, SWEEP_R, false, 2, 2)
 	for h in get_tree().get_nodes_in_group("heroes"):
 		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= SWEEP_R:
 			h.take_damage(hit_damage() * SWEEP_MULT, self)
@@ -148,7 +148,8 @@ func _tick_charge(delta: float) -> void:
 			h.apply_stun(STUN_SEC)
 	_atk_cd = float(_stats.atk_interval)
 	_model.play_attack(float(_stats.atk_interval))
-	Fx.quake(get_parent(), _charge_end, 1.6, 0)
+	Fx.quake(get_parent(), _charge_end, 1.8, 1)
+	Fx.impact(get_parent(), _charge_end, SWEEP_COLOR, 1.2, 1)
 
 
 func is_charging() -> bool:

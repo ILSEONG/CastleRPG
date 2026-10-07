@@ -15,7 +15,7 @@ const AddShader := preload("res://shaders/fx_add.gdshader")
 const SoftShader := preload("res://shaders/fx_soft.gdshader")
 const HaloShader := preload("res://shaders/fx_halo.gdshader")
 
-const MAX_LIVE := 64  # 동시에 살아 있는 이펙트·투사체 모양 상한(넘으면 그 이펙트는 건너뛴다)
+const MAX_LIVE := 80  # 동시에 살아 있는 이펙트·투사체 모양 상한(넘으면 그 이펙트는 건너뛴다)
 const GROUP := "fx"
 const ARROW_PITCH_FIX := PI / 2.0  # 화살 모델은 길이 축 Y, 촉이 -Y → X축 +90°로 촉을 -Z(look_at 정면)에 맞춘다
 const HEAL_GREEN := Color(0.40, 0.85, 0.45)
@@ -34,12 +34,14 @@ const SHARDS_MAX := 12
 const STUN_SCALE := 1.7  # 개정 17: 기절 별을 크게
 const SHAKE_SEC := 0.15
 const SHAKE_AMP := 0.25
-const KICK_AMP := [0.1, 0.22, 0.38]  # impact power → 흔들림(m)
-const KICK_STOP := [0.0, 0.045, 0.07]  # impact power → 히트스톱(실제 초)
+const KICK_AMP := [0.16, 0.34, 0.58]  # impact power → 흔들림(m) — 2026-10-07 전체 강화
+const KICK_STOP := [0.0, 0.06, 0.09]  # impact power → 히트스톱(실제 초)
+const FLASH_A := [0.0, 0.16, 0.28]  # impact power → 화면 섬광 세기(camera_rig.flash)
+const BURST_MULT := 1.4  # 입자 수 배율(2026-10-07 전체 강화)
 const SKY_H := 9.0  # 번개가 떨어지기 시작하는 높이(땅에서 m)
 const BOLT_HIT_Y := 0.8  # 번개 맞은 지점(hero HIT_HEIGHT)에서 땅까지
 const TIER := {"R": 0, "SR": 1, "SSR": 2}  # 등급 → 연출 단계
-const TIER_SCALE := [1.0, 1.3, 1.65]  # 단계 → 스킬 이펙트 크기 배율
+const TIER_SCALE := [1.2, 1.5, 1.85]  # 단계 → 스킬 이펙트 크기 배율
 
 static var _meshes := {}
 static var _live := 0  # 지금 살아 있는 이펙트·투사체 수
@@ -69,7 +71,7 @@ static func material() -> ShaderMaterial:
 ## 가산 색 재질(섬광·번개 바깥 빛·발동 고리·입자). 하나를 공유한다 — 노드마다 fade(인스턴스 값)로 따로 사라진다(_fade).
 static func glow_material() -> ShaderMaterial:
 	if _glow == null:
-		_glow = _fx_mat(AddShader, 1.15)
+		_glow = _fx_mat(AddShader, 1.35)
 	return _glow
 
 
@@ -172,9 +174,9 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 	if mi != null:
 		mi.scale = Vector3.ONE * 0.3
 		var tw := mi.create_tween()
-		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.6, 0.2).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.78, 0.2).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		tw.parallel().tween_property(mi, "rotation", Vector3(0.6, 1.2, 0.3), 0.4)
-		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.7, 0.18)
+		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.9, 0.18)
 		tw.tween_callback(mi.queue_free)
 		_fade(mi, 0.3, 0.1)
 	var ring := _spawn(parent, _mesh("shock", color.lightened(0.3)), pos + Vector3(0, 0.05, 0), "shock", glow_material())
@@ -188,10 +190,10 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 	if flash != null:
 		flash.scale = Vector3.ONE * radius * 0.3
 		var tf := flash.create_tween()
-		tf.tween_property(flash, "scale", Vector3.ONE * radius * 0.55, 0.12)
+		tf.tween_property(flash, "scale", Vector3.ONE * radius * 0.8, 0.12)
 		tf.tween_callback(flash.queue_free)
 		_fade(flash, 0.1, 0.02)
-	halo(parent, pos + Vector3(0, 0.8, 0), hot, radius * 2.6, 0.45, 1.2, "blast_glow")
+	halo(parent, pos + Vector3(0, 0.8, 0), hot, radius * 3.3, 0.5, 1.25, "blast_glow")
 	var n := randi_range(SHARDS_MIN, SHARDS_MAX)
 	for i in n:
 		var s := _spawn(parent, _mesh("shard", color), pos + Vector3(0, 0.5, 0), "shard")
@@ -205,7 +207,7 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 		var ts := s.create_tween()
 		ts.tween_method(func(t: float): _arc(s, from, to, h, spin, t), 0.0, 1.0, randf_range(0.45, 0.6))
 		ts.tween_callback(s.queue_free)
-	var sp := _burst(parent, pos + Vector3(0, 0.6, 0), hot, "spark", 14 + 6 * tier, 0.45, "blast_sparks")
+	var sp := _burst(parent, pos + Vector3(0, 0.6, 0), hot, "spark", 18 + 8 * tier, 0.5, "blast_sparks")
 	if sp != null:
 		sp.initial_velocity_min = radius * 2.0
 		sp.initial_velocity_max = radius * 3.6
@@ -467,35 +469,69 @@ static func shake_camera(node: Node) -> void:
 ## 바닥 집중선(바깥으로 튀며 옅어진다) + 빠른 하얀 불똥. 그리고 kick(흔들림·히트스톱, 화면 안이고 흔들림 설정이 켜졌을 때만).
 ## ground = 바닥 지점, 섬광은 그 h m 위. size ≈ 반경(m). power: 0 = 가벼운 타격(흔들림 작게, 히트스톱 없음), 1 = 큰 스킬, 2 = 아주 큰 스킬(가장 세게), 음수 = 그림만(흔들지 않는다).
 static func impact(parent: Node, ground: Vector3, color: Color, size: float, power := 1, h := 0.7) -> void:
+	size *= 1.4  # 2026-10-07: 전체 강화
 	var pos := ground + Vector3(0, h, 0)
 	var hot := Color(1, 1, 1).lerp(color, 0.35)
-	var mi := _spawn(parent, _mesh("impact", hot), pos, "impact", glow_material())
-	if mi != null:
+	for layer in 2:  # 바깥 = 고유 색 큰 가시, 안 = 하얀 작은 가시(겹쳐 심이 타오른다)
+		var mi := _spawn(parent, _mesh("impact", color.lightened(0.15) if layer == 0 else hot), pos, "impact", glow_material())
+		if mi == null:
+			break
 		_face_camera(mi)
 		mi.rotate_object_local(Vector3.BACK, randf() * TAU)
-		mi.scale = Vector3.ONE * size * 0.5
+		var k := 1.0 if layer == 0 else 0.6
+		mi.scale = Vector3.ONE * size * 0.5 * k
 		var tw := mi.create_tween()
-		tw.tween_property(mi, "scale", Vector3.ONE * size * 1.35, 0.05).set_ease(Tween.EASE_OUT)
-		tw.tween_property(mi, "scale", Vector3(size * 1.6, size * 0.15, size * 1.6), 0.12).set_ease(Tween.EASE_IN)
+		tw.tween_property(mi, "scale", Vector3.ONE * size * 1.45 * k, 0.06).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tw.tween_interval(0.04)
+		tw.tween_property(mi, "scale", Vector3(size * 1.7 * k, size * 0.12, size * 1.7 * k), 0.12).set_ease(Tween.EASE_IN)
 		tw.tween_callback(mi.queue_free)
-		_fade(mi, 0.1, 0.06)
-	halo(parent, pos, hot, size * 2.4, 0.2, 1.5, "impact_glow")
+		_fade(mi, 0.12, 0.08)
+	halo(parent, pos, hot, size * 2.8, 0.24, 1.6, "impact_glow")
 	var ln := _spawn(parent, _mesh("speed", color), ground + Vector3(0, 0.08, 0), "impact_lines", glow_material())
 	if ln != null:
 		ln.rotation.y = randf() * TAU
 		ln.scale = Vector3(size * 0.6, 1.0, size * 0.6)
 		var tl := ln.create_tween()
-		tl.tween_property(ln, "scale", Vector3(size * 2.0, 1.0, size * 2.0), 0.25).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		tl.tween_property(ln, "scale", Vector3(size * 2.4, 1.0, size * 2.4), 0.28).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		tl.tween_callback(ln.queue_free)
-		_fade(ln, 0.18, 0.07)
-	var sp := _burst(parent, pos, hot, "spark", 8 + 4 * power, 0.28, "impact_sparks")
+		_fade(ln, 0.2, 0.08)
+	if power >= 1:  # 바닥 충격 고리(빠르게 번진다) + 그을음 자국(잠깐 남는다)
+		_wave(parent, ground, hot, size * 2.2, 0.3, 0.0, "impact_ring")
+		scorch(parent, ground, minf(size * (0.9 + 0.3 * power), 2.6))  # 큰 광역기도 그을음은 발밑 정도로
+	var sp := _burst(parent, pos, hot, "spark", 10 + 6 * maxi(power, 0), 0.32, "impact_sparks")
 	if sp != null:
-		sp.initial_velocity_min = 5.0 + size * 2.0
-		sp.initial_velocity_max = 9.0 + size * 3.0
-		sp.scale_amount_min = 1.0
-		sp.scale_amount_max = 1.6
+		sp.initial_velocity_min = 6.0 + size * 2.5
+		sp.initial_velocity_max = 11.0 + size * 3.5
+		sp.scale_amount_min = 1.2
+		sp.scale_amount_max = 2.0
 	if power >= 0:
-		kick(parent, ground, KICK_AMP[mini(power, 2)], KICK_STOP[mini(power, 2)])
+		var pw := mini(power, 2)
+		kick(parent, ground, KICK_AMP[pw], KICK_STOP[pw])
+		if FLASH_A[pw] > 0.0:
+			screen_flash(parent, ground, color.lerp(Color(1, 0.95, 0.85), 0.5), FLASH_A[pw])
+
+
+## 그을음 자국(2026-10-07): 큰 타격 자리에 어두운 불규칙 자국이 1.4초 남았다가 옅어진다(반투명, 바닥에 붙는다).
+static func scorch(parent: Node, ground: Vector3, radius: float) -> void:
+	var mi := _spawn(parent, _mesh("scorch", Color(0.08, 0.06, 0.05, 0.5)), ground + Vector3(0, 0.03, 0), "scorch", soft_material())
+	if mi == null:
+		return
+	mi.rotation.y = randf() * TAU
+	mi.scale = Vector3(radius * 0.6, 1.0, radius * 0.6)
+	var tw := mi.create_tween()
+	tw.tween_property(mi, "scale", Vector3(radius, 1.0, radius), 0.12).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.4)
+	tw.tween_callback(mi.queue_free)
+	_fade(mi, 0.5, 1.0)
+
+
+## 화면 섬광(camera_rig.flash): at이 화면 안이고 흔들림 설정이 켜졌을 때만.
+static func screen_flash(node: Node, at: Vector3, color: Color, strength: float) -> void:
+	if node == null or not node.is_inside_tree():
+		return
+	var cam := node.get_viewport().get_camera_3d()
+	if cam != null and cam.get_parent().has_method("flash"):
+		cam.get_parent().flash(at, color, strength)
 
 
 ## 화면 흔들림 amp m + 히트스톱 stop초(camera_rig.kick — at이 화면 안이고 흔들림 설정이 켜졌을 때만). 리그가 없으면 아무 일도 없다.
@@ -1099,11 +1135,18 @@ static func charge(hero: Node3D, color: Color, tier: int, sec: float) -> void:
 		return
 	var sc: float = TIER_SCALE[tier]
 	var at := hero.global_position + Vector3(0, 1.3, 0)
-	var g := halo(hero, at, color.lightened(0.25), 0.4, 0.0, 1.0, "charge")
+	var g := halo(hero, at, color.lightened(0.25), 0.5, 0.0, 1.0, "charge")
 	if g != null:
 		var tw := g.create_tween()
-		tw.tween_property(g, "scale", Vector3.ONE * 1.6 * sc, sec).set_ease(Tween.EASE_IN)
+		tw.tween_property(g, "scale", Vector3.ONE * 2.4 * sc, sec).set_ease(Tween.EASE_IN)
 		tw.tween_callback(g.queue_free)
+	var rune := _spawn(hero, _mesh("tele_ring", Color(color.lightened(0.3), 0.9)), hero.global_position + Vector3(0, 0.05, 0), "charge_rune", glow_material())
+	if rune != null:  # 발밑 마법진(2026-10-07): 돌며 커지고 밝아진다
+		rune.scale = Vector3.ONE * 0.6 * sc
+		var tr2 := rune.create_tween().set_parallel()
+		tr2.tween_property(rune, "scale", Vector3.ONE * 1.7 * sc, sec).set_ease(Tween.EASE_OUT)
+		tr2.tween_property(rune, "rotation:y", TAU * 0.6, sec)
+		tr2.chain().tween_callback(rune.queue_free)
 	if sec < 0.2:
 		return
 	var p := _burst(hero, at, color.lightened(0.1), "spark", 10 + 5 * tier, sec, "charge_in")
@@ -1124,6 +1167,20 @@ static func charge(hero: Node3D, color: Color, tier: int, sec: float) -> void:
 		var tr := ring.create_tween()
 		tr.tween_property(ring, "scale", Vector3.ONE * 0.6, sec).set_ease(Tween.EASE_IN)
 		tr.tween_callback(ring.queue_free)
+
+
+## 발동 순간(2026-10-07): 영웅 가슴에서 하얀 빛이 터지고(빛무리 + 가시 섬광), 발밑 파동이 번지고, 빛 조각이 사방으로 튄다.
+## tier 2는 위로 빛기둥이 한 번 솟는다. 흔들림·히트스톱은 없다(타격 순간이 따로 준다).
+static func release(hero: Node3D, color: Color, tier: int) -> void:
+	if hero == null or not hero.is_inside_tree():
+		return
+	var sc: float = TIER_SCALE[tier]
+	var parent := hero.get_parent()
+	var at := hero.global_position + Vector3(0, 1.2, 0)
+	impact(parent, hero.global_position, color, 0.45 * sc, -1, 1.2)
+	_wave(parent, hero.global_position, color.lightened(0.3), 1.8 * sc, 0.3, 0.0, "release_wave")
+	if tier >= 2:
+		_surge(parent, _mesh("pillar", color), hero.global_position, "release_pillar", 0.6, 5.0, 0.4, glow_material())
 
 
 ## 2026-10-06 새 액티브: from → to로 날아가는 메시(kind, 가산 빛) + 빛 띠. spin = 날아가며 도는 각(라디안), back = 갔다 돌아온다(회전 도끼).
@@ -1286,7 +1343,7 @@ static func _burst(parent: Node, pos: Vector3, color: Color, kind: String, amoun
 	var p := CPUParticles3D.new()
 	p.one_shot = true
 	p.explosiveness = 1.0
-	p.amount = maxi(1, amount)
+	p.amount = maxi(1, roundi(amount * BURST_MULT))
 	p.lifetime = life
 	p.lifetime_randomness = 0.35
 	p.local_coords = false
@@ -1463,6 +1520,13 @@ static func _build(kind: String, color: Color) -> ArrayMesh:
 			for i in 8:
 				k.face([Vector3.ZERO, Vector3(cos(TAU * i / 8.0), sin(TAU * i / 8.0), 0) * 0.16, Vector3(cos(TAU * (i + 1) / 8.0), sin(TAU * (i + 1) / 8.0), 0) * 0.16],
 					Vector3.BACK, color.lightened(0.6))
+		"scorch":  # 그을음 자국: 들쭉날쭉한 12각 원판(XZ, 반지름 ~1) + 가운데 더 진한 원
+			for i in 12:
+				var r0 := rng.randf_range(0.7, 1.05)
+				var r1 := rng.randf_range(0.7, 1.05)
+				k.face([Vector3.ZERO, Vector3(cos(TAU * i / 12.0), 0, sin(TAU * i / 12.0)) * r0, Vector3(cos(TAU * (i + 1) / 12.0), 0, sin(TAU * (i + 1) / 12.0)) * r1], Vector3.UP, color)
+			for i in 8:
+				k.face([Vector3(0, 0.005, 0), Vector3(cos(TAU * i / 8.0), 0.005, sin(TAU * i / 8.0)) * 0.45, Vector3(cos(TAU * (i + 1) / 8.0), 0.005, sin(TAU * (i + 1) / 8.0)) * 0.45], Vector3.UP, Color(color, minf(color.a + 0.2, 1.0)))
 		"tele_disc":  # 범위 예고 원판(개정 26): 32각 채운 원(XZ, 반지름 1)
 			for i in 32:
 				k.face([Vector3.ZERO, Vector3(cos(TAU * i / 32.0), 0, sin(TAU * i / 32.0)), Vector3(cos(TAU * (i + 1) / 32.0), 0, sin(TAU * (i + 1) / 32.0))], Vector3.UP, color)

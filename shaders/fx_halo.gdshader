@@ -18,6 +18,6 @@ void fragment() {
 	float d = clamp(length(UV - 0.5) * 2.0, 0.0, 1.0);
 	float a = (1.0 - d) * (1.0 - d);
 	a += 0.6 * pow(max(1.0 - d * 2.2, 0.0), 2.0);  // 작은 밝은 심
-	ALBEDO = tint.rgb * a * fade * 0.7;
+	ALBEDO = tint.rgb * a * fade * 0.9;
 	ALPHA = 1.0;
 }

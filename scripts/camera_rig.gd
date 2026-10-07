@@ -23,9 +23,11 @@ const PUNCH_IN_SEC := 0.12
 const PUNCH_OUT_SEC := 0.45
 const PUNCH_GAP := 2.0  # 당김 최소 간격(초) — 잦으면 어지럽다
 const KICK_SEC := 0.22  # 스킬 타격 흔들림(개정 26) 길이
-const KICK_AMP_MAX := 0.5
+const KICK_AMP_MAX := 0.7
+const FLASH_GAP := 0.35  # 화면 섬광 최소 간격(초)
+const FLASH_SEC := 0.2
 const STOP_SCALE := 0.06  # 히트스톱 동안 게임 시간 배율
-const STOP_MAX := 0.08  # 히트스톱 최대 길이(실제 초)
+const STOP_MAX := 0.1  # 히트스톱 최대 길이(실제 초)
 const STOP_GAP := 0.6  # 히트스톱 최소 간격(실제 초) — 잦으면 끊겨 보인다
 const SLOW_SCALE := 0.3  # 결정타 슬로모션 동안 게임 시간 배율
 const SLOW_SEC := 0.9  # 결정타 슬로모션 길이(실제 초)
@@ -43,6 +45,9 @@ var _shake: Tween  # 흔드는 중(개정 17)
 var _punch: Tween  # 당김 중
 var _punch_base := 0.0  # 당기기 전 줌(손으로 줌하면 이 값 기준으로 바뀐다)
 var _punch_at := -INF
+var _flash_rect: ColorRect
+var _flash_tw: Tween
+var _flash_at := -INF
 var _shake_amp := 0.0  # 지금 흔들림의 처음 진폭(더 센 타격이 오면 덮는다)
 static var _stop_at := -INF  # 리그가 히트스톱 중에 사라져도 되돌림 타이머가 리그를 건드리지 않게 정적
 static var _stopping := false
@@ -66,6 +71,18 @@ func _ready() -> void:
 	_indicator.visible = false
 	_indicator.draw.connect(_draw_indicator)
 	layer.add_child(_indicator)
+	var flash_layer := CanvasLayer.new()  # 화면 섬광(2026-10-07): 3D 위, HUD 아래
+	flash_layer.layer = 0
+	add_child(flash_layer)
+	_flash_rect = ColorRect.new()
+	_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash_rect.color = Color(1, 1, 1, 0)
+	_flash_rect.visible = false
+	var add := CanvasItemMaterial.new()
+	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_flash_rect.material = add
+	flash_layer.add_child(_flash_rect)
 
 
 ## 누른 시간·움직인 거리 → "tap"(아직 미정) / "hold"(회전 대기) / "pan"(이미 드래그).
@@ -257,6 +274,24 @@ static func _unstop(was: float, gen := -1) -> void:
 	_slow = false
 	var managed: float = load("res://scripts/speed_button.gd").base  # 배속 버튼이 배율을 맡았으면(히트스톱 중 켬/끔·던전 입장) 지금 배율로
 	Engine.time_scale = managed if managed > 0.0 else was
+
+
+## 큰 타격 순간 화면 전체가 color로 잠깐(FLASH_SEC) 밝아진다(더하기 섞기, 세기 strength 0~1). at이 화면 안이고 흔들림 설정이 켜졌을 때만,
+## FLASH_GAP초에 한 번(겹치면 더 센 쪽).
+func flash(at: Vector3, color: Color, strength: float) -> void:
+	if _flash_rect == null or not GameData.fx_shake() or not camera.is_position_in_frustum(at):
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _flash_at < FLASH_GAP and strength <= _flash_rect.color.a:
+		return
+	_flash_at = now
+	if _flash_tw != null:
+		_flash_tw.kill()
+	_flash_rect.visible = true
+	_flash_rect.color = Color(color, strength)
+	_flash_tw = create_tween().set_ignore_time_scale(true)
+	_flash_tw.tween_property(_flash_rect, "color:a", 0.0, FLASH_SEC).set_ease(Tween.EASE_OUT)
+	_flash_tw.tween_callback(func(): _flash_rect.visible = false)
 
 
 func is_shaking() -> bool:
