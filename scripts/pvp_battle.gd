@@ -29,7 +29,7 @@ enum Phase { INTRO, FIGHT, RESULT }
 const INTRO_SEC := 1.6
 const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R, "total": ArenaKit.PLAINS_FIGHT_R - 4.0}
 const CAMERA_SIZE := {"duel": 24.0, "total": 28.0}
-const FRONT_D := {"duel": 6.75, "total": 12.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 1.5배)
+const FRONT_D := {"duel": 9.0, "total": 16.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 2배)
 const ROW_GAP := 2.6  # 앞줄 ↔ 뒷줄
 const SIDE_GAP := 2.2  # 줄 안 간격
 const SOLDIER_ROW := 7  # 병사 한 줄
