@@ -3221,6 +3221,23 @@ func test_item_icons() -> void:
 	check(sr.size() == n and sr == IconsScript.border_colors("SR", n, 5.0) and sr[0] == Art.ITEM_GRADE_COLORS.SR, "SR border = grade colour, still")
 	var lr0 := IconsScript.border_colors("LR", n, 0.0)
 	check(lr0 != IconsScript.border_colors("LR", n, 0.5) and lr0[0].is_equal_approx(lr0[n - 1]), "LR border flows over time and wraps seamlessly")
+	# 그린 그림(2026-10-07): 부위 11종 × 등급 6단계가 모두 있고, 128 px 정사각, 네 귀퉁이는 투명(배경을 지웠다), 등급마다 다른 그림
+	check(IconsScript.ITEM_GRADE_RANK.keys() == Art.ITEM_GRADE_COLORS.keys(), "tile decoration rank covers every grade in order")
+	for kind in IconsScript.ITEM_KINDS:
+		var sigs := {}
+		for g in Art.ITEM_GRADE_COLORS:
+			var tex := IconsScript.item_texture(kind, g)
+			check(tex != null and tex.get_size() == Vector2(128, 128), "painted icon %s_%s exists at 128 px" % [kind, g])
+			if tex == null:
+				continue
+			var img := tex.get_image()
+			if img.is_compressed():
+				img.decompress()
+			check(img.get_pixel(1, 1).a < 0.05 and img.get_pixel(126, 126).a < 0.05 and (img.get_pixel(64, 64).a > 0.0 or img.get_pixel(64, 40).a > 0.0),
+				"painted icon %s_%s: transparent corners, something in the middle" % [kind, g])
+			sigs[str(img.get_pixel(64, 64)) + str(img.get_pixel(40, 80)) + str(img.get_pixel(80, 40))] = true
+		check(sigs.size() >= 5, "painted icons for %s differ by grade" % kind)
+	check(IconsScript.item_texture("hat", "XX") == null, "unknown grade → no texture (vector fallback)")
 
 
 ## 던전 무대: 평야 = 영웅 6·고블린 15·왕, 성 내부 = 영웅 4·데스나이트. 자리는 바닥에, 전투 자리 안(평야 반경 / 홀 안)에, 서로 1 m 넘게 떨어지고,

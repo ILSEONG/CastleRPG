@@ -1,5 +1,5 @@
 extends Control
-## 장비 칸(개정 18 §8): Icons.draw_item — 등급 색 바탕·테두리 + 부위(무기는 종류) 아이콘. grade ""면 빈 칸(흐린 회색 아이콘).
+## 장비 칸(개정 18 §8): Icons.draw_item — 등급 색 바탕·테두리 + 부위(무기는 종류)·등급별 그린 그림. grade ""면 빈 칸(흐린 회색 아이콘).
 ## LR은 테두리가 흐른다(보일 때 매 프레임 다시 그린다). 입력은 받지 않는다(버튼 안에 넣어 쓴다). 보관함·영웅 장비 칸·던전 결과가 쓴다.
 
 const IconsScript := preload("res://scripts/icons.gd")
@@ -10,6 +10,7 @@ var grade := ""
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # 128 px 그림을 72 px 칸에 줄여 그린다
 
 
 func set_item(p_kind: String, p_grade: String) -> void:

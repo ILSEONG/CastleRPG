@@ -59,3 +59,18 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    (좀비·리자드맨·늑대인간·임프·쥐인간·버섯·서리 트롤 · 보스 오우거 군주·악마 군주·미노타우로스)도 같은 방식(Rogue·Barbarian·Knight 뼈대).
    던전 적은 던전 전용 — 성 순환에 넣지 않는다. 검사: tests/run_tests.gd `test_meshy_enemies`, `test_enemy_looks`.
 텍스처 임포트는 영웅·소환수·적 모두 손실 압축(compress/mode=1, 품질 0.7) — 무손실이면 APK가 GitHub 파일 한도(100 MiB)를 넘는다.
+
+## 장비 아이콘(2026-10-07)
+부위 11종(Icons.ITEM_KINDS) × 등급 6단계 = 66개 그림 `assets/ui/items/<부위>_<등급>.png`(128 px, 투명 배경, 손실 압축 0.85 + 밉맵).
+`Icons.draw_item`이 그림이 있으면 그것을, 없으면 예전 벡터 그림을 그린다. 칸 장식(바탕 그러데이션, SR↑ 빛 번짐, SSR↑ 금 징,
+UR↑ 빛살·반짝이, LR 도는 빛살·깜빡이는 반짝이·무지개 테두리)은 코드가 그린다.
+1. 그림: 부위마다 `meshy_text_to_image`(nano-banana-pro, 4:3, 9 크레딧) 한 장에 6등급을 3×2로 그린다. 프롬프트 틀:
+   "Game icon sheet: 6 fantasy <복수> in a 3x2 grid, same <단수> rising in rarity, top row then bottom row: 1 plain worn iron,
+   2 clean steel with green …, 3 polished steel with blue enamel and blue gem, 4 dark steel with gold filigree and purple gem,
+   5 ornate gold with orange flame engravings and amber gem, 6 radiant white-gold with rainbow crystal and small wings. <방향>.
+   Stylized chunky cartoon 3D render, bold dark outline, cel shading. Flat white background, no shadows, no glow, no text, wide gaps."
+   방향: 무기는 대각선(손잡이 왼쪽 아래), 신발은 옆모습(앞코 오른쪽), 장갑은 오른손 손등(손가락 위), 석궁은 위에서 본 모습.
+   원본 11장·프롬프트는 프로젝트 파일 design/equipment/.
+2. 자르기: `python3 -I dev/meshy/item_icons.py <부위> <그림.png> …` — 흰 배경(가장자리와 이어진 것 + 외곽선에 갇힌 틈)을 지우고 칸별로 잘라 저장.
+3. 임포트: 새 그림의 .import를 compress/mode=1, lossy_quality=0.85, mipmaps/generate=true로. 검사: tests/run_tests.gd `test_item_icons`,
+   한눈에 보기 `tests/item_icon_sheet.tscn`.

@@ -10,6 +10,11 @@ const RESEARCH_KINDS := ["hammer", "scales", "coin_bag", "flask", "res_pile", "w
 const OUTLINE := Color(0.16, 0.11, 0.07)
 const ITEM_ICON_FRAC := 0.74  # 장비 칸 한 변 중 아이콘 크기
 const TILE_CHAMFER := 0.22  # 장비 칸 모서리 깎기(반 변 대비)
+const ITEM_GRADE_RANK := {"N": 0, "R": 1, "SR": 2, "SSR": 3, "UR": 4, "LR": 5}  # 칸 장식 단계
+const ITEM_TEX_DIR := "res://assets/ui/items/"
+const ITEM_TEX_FRAC := 0.86  # 장비 칸 한 변 중 그린 그림(128 px 정사각, 물체는 그 92%) 크기
+
+static var _item_tex := {}  # "<kind>_<grade>" → Texture2D 또는 null
 # 장비 팔레트
 const STEEL := Color(0.66, 0.70, 0.77)
 const STEEL_LIGHT := Color(0.86, 0.89, 0.93)
@@ -38,12 +43,17 @@ func _draw() -> void:
 
 
 ## ci(_draw 안의 CanvasItem)에 center 중심, 한 변 size 픽셀 안에 kind 아이콘을 그린다.
-static func draw_icon(ci: CanvasItem, kind_name: String, center: Vector2, size_px: float) -> void:
+## silhouette(알파 > 0)를 주면 불투명한 도형만 그 한 색으로 칠한다(외곽선 없음) — 장비 칸 아이콘 그림자(겹쳐도 얼룩지지 않게 불투명 색을 준다).
+static func draw_icon(ci: CanvasItem, kind_name: String, center: Vector2, size_px: float, silhouette := Color(0, 0, 0, 0)) -> void:
 	var line_w := maxf(1.0, size_px / 32.0)
 	for shape in shapes(kind_name):
 		var pts := PackedVector2Array()
 		for p in shape[0]:
 			pts.append(center + p * size_px)
+		if silhouette.a > 0.0:
+			if shape[1].a >= 1.0:
+				ci.draw_colored_polygon(pts, silhouette)
+			continue
 		ci.draw_colored_polygon(pts, shape[1])
 		if shape[2]:
 			pts.append(pts[0])
@@ -404,24 +414,90 @@ static func _growth_shapes(kind_name: String) -> Array:
 	return []
 
 
-## 장비 칸 하나(개정 18 §8): 등급 색 배경 면(모서리 깎은 사각, 왼쪽 위 절반 밝게) + 등급 색 테두리 + kind 아이콘.
-## LR 테두리는 무지개 금이 t(초)에 따라 흐른다 — 쓰는 쪽이 매 프레임 queue_redraw. t < 0이면 지금 시각.
+## 장비 칸 하나(개정 18 §8, 2026-10-07 디자인 보강): 등급이 오를수록 칸이 화려해진다.
+## 모든 등급: 가운데 밝고 가장자리 어두운 등급 색 바탕 + 어두운 바깥선·등급 색 테두리·안쪽 밝은 선 + 아이콘 그림자.
+## SR↑ 아이콘 뒤 빛 번짐, SSR↑ 네 귀퉁이 금 징, UR↑ 뒤에서 퍼지는 빛살 + 반짝이 둘, LR 빛살이 돌고 반짝이 셋이 깜빡인다
+## (LR 테두리는 무지개 금이 흐른다 — 쓰는 쪽이 매 프레임 queue_redraw). t < 0이면 지금 시각.
 static func draw_item(ci: CanvasItem, kind_name: String, grade: String, center: Vector2, size_px: float, t := -1.0) -> void:
 	if t < 0.0:
 		t = Time.get_ticks_msec() / 1000.0
 	var base: Color = Art.ITEM_GRADE_COLORS.get(grade, Art.ITEM_GRADE_COLORS.N)
+	var rank: int = ITEM_GRADE_RANK.get(grade, 0)
 	var pts := PackedVector2Array()
 	for p in item_tile():
 		pts.append(center + p * size_px)
-	ci.draw_colored_polygon(pts, base.darkened(0.6))
-	ci.draw_colored_polygon(PackedVector2Array([pts[6], pts[7], pts[0], pts[1], pts[2]]), base.darkened(0.48))
 	var ring := PackedVector2Array()
-	for i in 8:  # 테두리: 변마다 4등분(LR 무지개가 부드럽게 흐르게)
+	for i in 8:  # 둘레를 변마다 4등분(바탕 그러데이션·LR 무지개가 부드럽게)
 		for j in 4:
 			ring.append(pts[i].lerp(pts[(i + 1) % 8], j / 4.0))
-	ring.append(pts[0])
-	ci.draw_polyline_colors(ring, border_colors(grade, ring.size(), t), maxf(2.0, size_px / 14.0))
-	draw_icon(ci, kind_name, center, size_px * ITEM_ICON_FRAC)
+	# 바탕: 가운데 → 가장자리로 어두워진다(등급이 높을수록 가운데가 밝다)
+	var mid := base.darkened(0.5 - 0.035 * rank)
+	var edge := base.darkened(0.74)
+	for i in ring.size():
+		ci.draw_polygon(PackedVector2Array([center, ring[i], ring[(i + 1) % ring.size()]]), PackedColorArray([mid, edge, edge]))
+	ci.draw_colored_polygon(PackedVector2Array([pts[6], pts[7], pts[0], pts[1], pts[2]]), Color(1, 1, 1, 0.06))
+	if rank >= 4:  # 빛살(UR 고정, LR 천천히 돈다)
+		var rays := 12
+		var spin := t * 0.4 if rank >= 5 else 0.0
+		var ray_c := Color(base.lightened(0.6), 0.40 if rank >= 5 else 0.34)
+		for i in rays:
+			var a := spin + TAU * i / rays
+			var w := TAU / rays * 0.22
+			ci.draw_polygon(PackedVector2Array([center, center + Vector2.from_angle(a - w) * size_px * 0.46,
+				center + Vector2.from_angle(a + w) * size_px * 0.46]), PackedColorArray([ray_c, Color(ray_c, 0.0), Color(ray_c, 0.0)]))
+	if rank >= 2:  # 아이콘 뒤 빛 번짐(가운데 진하고 바깥으로 사라진다)
+		var glow := Color(base.lightened(0.5), 0.22 + 0.04 * rank)
+		var clear := Color(glow, 0.0)
+		var n := 24
+		for i in n:
+			ci.draw_polygon(PackedVector2Array([center, center + Vector2.from_angle(TAU * i / n) * size_px * 0.42,
+				center + Vector2.from_angle(TAU * (i + 1) / n) * size_px * 0.42]), PackedColorArray([glow, clear, clear]))
+	# 테두리: 어두운 바깥선 → 등급 색(LR 무지개) → 안쪽 밝은 선
+	var bw := maxf(2.0, size_px / 14.0)
+	var closed := ring.duplicate()
+	closed.append(ring[0])
+	ci.draw_polyline(closed, base.darkened(0.55), bw + maxf(2.0, size_px / 24.0))
+	ci.draw_polyline_colors(closed, border_colors(grade, closed.size(), t), bw)
+	var inner := PackedVector2Array()
+	for p in closed:
+		inner.append(center + (p - center) * (1.0 - (bw * 0.5 + maxf(1.0, size_px / 72.0)) / (size_px * 0.48)))
+	ci.draw_polyline(inner, Color(base.lightened(0.6), 0.55), maxf(1.0, size_px / 72.0))
+	if rank >= 3:  # 네 귀퉁이(깎은 모서리 가운데) 금 징, LR은 보석
+		for i in [1, 3, 5, 7]:
+			var at := pts[i].lerp(pts[(i + 1) % 8], 0.5).lerp(center, 0.02)
+			var stud: Array = _ngon(4, size_px * 0.055, 0.0).map(func(q): return at + q)
+			ci.draw_colored_polygon(PackedVector2Array(stud), GEM if rank >= 5 else GOLD)
+			ci.draw_colored_polygon(PackedVector2Array([stud[2], stud[3], at]), Color(1, 1, 1, 0.55))
+			stud.append(stud[0])
+			ci.draw_polyline(PackedVector2Array(stud), OUTLINE, maxf(1.0, size_px / 72.0))
+	var tex := item_texture(kind_name, grade)
+	if tex != null:  # 그린 그림(등급마다 다르다) + 그림자
+		var s := size_px * ITEM_TEX_FRAC
+		var r := Rect2(center - Vector2(s, s) / 2.0, Vector2(s, s))
+		ci.draw_texture_rect(tex, Rect2(r.position + Vector2(0.025, 0.035) * size_px, r.size), false, Color(0, 0, 0, 0.45))
+		ci.draw_texture_rect(tex, r, false)
+	else:
+		draw_icon(ci, kind_name, center + Vector2(0.025, 0.035) * size_px, size_px * ITEM_ICON_FRAC, base.darkened(0.84))
+		draw_icon(ci, kind_name, center, size_px * ITEM_ICON_FRAC)
+	if rank >= 4:  # 반짝이(LR은 깜빡인다)
+		var spots := [Vector2(0.27, -0.27), Vector2(-0.30, 0.22), Vector2(0.30, 0.30)]
+		for i in (3 if rank >= 5 else 2):
+			var k := 1.0 if rank < 5 else 0.35 + 0.65 * maxf(0.0, sin(t * 2.6 + i * 2.1))
+			var r := size_px * 0.075 * k
+			if r < 0.8:
+				continue
+			var c2: Vector2 = center + spots[i] * size_px
+			ci.draw_colored_polygon(PackedVector2Array(_star(c2, r, r * 0.28, 4)), Color(1, 1, 0.92, 0.95))
+			ci.draw_circle(c2, r * 0.45, Color(1, 1, 1, 0.5))
+
+
+## 부위·등급별 그린 장비 그림(assets/ui/items/<kind>_<grade>.png, 128 px, dev/meshy/item_icons.py가 만든다). 없으면 null(벡터 그림을 쓴다).
+static func item_texture(kind_name: String, grade: String) -> Texture2D:
+	var key := kind_name + "_" + grade
+	if not _item_tex.has(key):
+		var path := ITEM_TEX_DIR + key + ".png"
+		_item_tex[key] = load(path) if ResourceLoader.exists(path) else null
+	return _item_tex[key]
 
 
 ## 장비 칸 외곽(단위 좌표, 한 변 0.96): 모서리 깎은 8각, 위 왼쪽부터 시계 방향.
