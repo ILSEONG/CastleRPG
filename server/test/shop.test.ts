@@ -74,7 +74,7 @@ test('자원 꾸러미: 다이아를 빼고 자원, 주간 상품은 다음 주(
   r = await buy(token, 'w_res')
   assert.equal(r.status, 200)
   assert.equal(r.json.player.diamonds, dia - 300)
-  assert.equal(r.json.player.res.wood, wood + 10000)
+  assert.equal(r.json.player.res.wood, wood + 100000)
   assert.deepEqual(r.json.player.shop.w, { w_res: 1 })
   assert.equal((await buy(token, 'w_free')).status, 200)
   assert.equal((await buy(token, 'w_free', 0)).json.error, 'sold_out')

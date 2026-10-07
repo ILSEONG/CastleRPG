@@ -26,13 +26,13 @@ export const ITEMS: ShopItem[] = [
   { id: 'd_key_gold', tab: 'daily', name: '골드 던전 입장권', currency: 'diamonds', price: 60, limit: 3, give: { keys_gold: 1 } },
   { id: 'd_key_equip', tab: 'daily', name: '장비 던전 입장권', currency: 'diamonds', price: 100, limit: 2, give: { keys_equip: 1 } },
   { id: 'd_key_ticket', tab: 'daily', name: '모집권 던전 입장권', currency: 'diamonds', price: 150, limit: 1, give: { keys_ticket: 1 } },
-  { id: 'd_res', tab: 'daily', name: '자원 꾸러미', currency: 'diamonds', price: 50, limit: 3, give: { wood: 1000, stone: 1000, food: 1000 } },
+  { id: 'd_res', tab: 'daily', name: '자원 꾸러미', currency: 'diamonds', price: 50, limit: 3, give: { wood: 10000, stone: 10000, food: 10000 } },
   // 주간
   { id: 'w_free', tab: 'weekly', name: '주간 무료 선물', currency: 'free', price: 0, limit: 1, give: { diamonds: 50, tickets: 1 } },
   { id: 'w_tickets', tab: 'weekly', name: '모집권 10장 묶음', currency: 'diamonds', price: 2400, limit: 1, give: { tickets: 10 } },
   { id: 'w_pouch_gold', tab: 'weekly', name: '골드 주머니(6시간)', currency: 'diamonds', price: 200, limit: 2, give: { pouch_gold_360: 1 } },
   { id: 'w_pouch_res', tab: 'weekly', name: '자원 주머니(6시간)', currency: 'diamonds', price: 200, limit: 2, give: { pouch_res_360: 1 } },
-  { id: 'w_res', tab: 'weekly', name: '큰 자원 꾸러미', currency: 'diamonds', price: 300, limit: 2, give: { wood: 10000, stone: 10000, food: 10000 } },
+  { id: 'w_res', tab: 'weekly', name: '큰 자원 꾸러미', currency: 'diamonds', price: 300, limit: 2, give: { wood: 100000, stone: 100000, food: 100000 } },
 ]
 
 export const item = (id: string) => ITEMS.find((x) => x.id === id)

@@ -5104,7 +5104,7 @@ func test_shop() -> void:
 	check(e.shop_block("d_res") == "diamonds", "shop: short of diamonds blocks the resource bundle")
 	e.diamonds = 100
 	var w0 := int(e.res.get("wood", 0))
-	check(e.buy_shop("d_res") and e.diamonds == 50 and int(e.res.wood) == w0 + 1000 and e.shop_left("d_res") == 2, "shop: resource bundle costs 50 diamonds")
+	check(e.buy_shop("d_res") and e.diamonds == 50 and int(e.res.wood) == w0 + 10000 and e.shop_left("d_res") == 2, "shop: resource bundle costs 50 diamonds")
 	e.shop.day = int(e.shop.day) - 1  # 날이 바뀌었다
 	check(e.shop_left("d_free") == 1 and e.shop_left("d_res") == 3 and e.shop_left("w_free") == 1, "shop: a new day refills daily items")
 	e.free()
