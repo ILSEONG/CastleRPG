@@ -1,6 +1,6 @@
 extends RefCounted
 ## 기기 설정(2026-10-06): 앱 로컬 user://settings.json 한 파일(Music.settings_path). 설정 창(settings_panel.gd)이 바꾸고 재시작해도 남는다.
-## 여기 키: shake(화면 흔들림·히트스톱·SSR 줌, 기본 켬) · damage_numbers(떠오르는 피해 숫자, 기본 켬).
+## 여기 키: shake(화면 흔들림·히트스톱·SSR 줌, 기본 켬) · damage_numbers(떠오르는 피해 숫자, 기본 켬) · sfx(효과음, 기본 켬) · sfx_volume(효과음 크기 0..1, 기본 1).
 ## 파일은 오토로드 Music이 읽고 쓴다(배경음악 music·music_volume과 같은 파일) — 이 스크립트는 그 앞의 얇은 창구.
 
 
@@ -20,3 +20,8 @@ static func set_value(key: String, value) -> void:
 static func _music() -> Node:
 	var tree := Engine.get_main_loop() as SceneTree
 	return tree.root.get_node_or_null("Music") if tree != null else null
+
+
+static func get_float(key: String, default := 1.0) -> float:
+	var m := _music()
+	return float(m.prefs.get(key, default)) if m != null else default

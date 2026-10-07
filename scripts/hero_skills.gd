@@ -12,6 +12,7 @@ const Formation := preload("res://scripts/formation.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
+const Sfx := preload("res://scripts/sfx.gd")
 
 ## 발동형(쿨 a초). 처음엔 쿨의 FIRST_CD배만 기다린다(교전이 시작되면 곧 쓴다).
 const BULWARK_TAUNT_R := 4.0  # 방벽 도발 반경(m)
@@ -195,7 +196,9 @@ func _begin(k: String) -> float:
 		return RETRY
 	if not h.begin_cast(cast_anim(k, h.def), func():
 			_retarget()
-			if not _cast(k):
+			if _cast(k):
+				Sfx.skill(k, h)
+			else:
 				_cd[k] = minf(_cd[k], RETRY)):
 		return CAST_WAIT
 	return float(sk[k][0])
@@ -394,6 +397,7 @@ func _proc(k: String, m) -> void:
 			_line_shot(k, m, float(p[1]), _atk() * float(p[2]) / 100.0 * h._skill_mult)
 		_:
 			_spot(k, _flat(m.global_position), float(p[1]), float(p[2]), _atk())
+	Sfx.skill(k, m)
 	_announce(k)
 
 

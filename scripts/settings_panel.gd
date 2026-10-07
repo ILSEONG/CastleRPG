@@ -1,6 +1,6 @@
 extends "res://scripts/ui_window.gd"
 ## 설정 창(2026-10-06, 오른쪽 아래 메뉴 [설정] — 예전 [음악] 켬/끔 버튼 자리). 바꾸면 바로 적용되고 기기에 저장된다(서버 요청 없음).
-## 사운드: 배경음악 켬/끔 + 크기 슬라이더(Music.enabled·volume). 효과음은 게임에 아직 없어 칸을 두지 않는다.
+## 사운드: 배경음악 켬/끔 + 크기 슬라이더(Music.enabled·volume), 효과음 켬/끔 + 크기 슬라이더(SoundFx.enabled·volume, 2026-10-07).
 ## 화면: 화면 흔들림(Prefs shake — 카메라 흔들림·히트스톱·SSR 줌), 피해 숫자 표시(Prefs damage_numbers).
 ## 계정: 닉네임·친구 코드([복사])·로그인 방식(온라인, 친구 목록 응답 Economy.friends에서). 오프라인이면 "오프라인 모드".
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
@@ -15,6 +15,9 @@ const LOGIN_NAMES := {"guest": "게스트", "google": "Google", "kakao": "카카
 var music_check: Button
 var volume_slider: HSlider
 var volume_label: Label
+var sfx_check: Button
+var sfx_slider: HSlider
+var sfx_label: Label
 var shake_check: Button
 var numbers_check: Button
 var name_label: Label
@@ -30,26 +33,21 @@ func _ready() -> void:
 
 	content.add_child(_section("사운드"))
 	music_check = _toggle_row("배경음악", func(on: bool): Music.set_enabled(on))
-	var vol := HBoxContainer.new()
-	vol.add_theme_constant_override("separation", 12)
-	vol.add_child(_row_label("음량"))
-	volume_slider = HSlider.new()
-	volume_slider.min_value = 0
-	volume_slider.max_value = 100
-	volume_slider.step = 1
-	volume_slider.custom_minimum_size = Vector2(0, 48)
-	volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	volume_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	volume_slider.focus_mode = Control.FOCUS_NONE
+	volume_slider = _slider_row("배경음악 음량")
+	volume_label = volume_slider.get_parent().get_child(2)
 	volume_slider.value_changed.connect(func(v: float):
 		Music.set_volume(v / 100.0, false)  # 끄는 동안 바로 들린다
 		volume_label.text = "%d%%" % int(v))
 	volume_slider.drag_ended.connect(func(_changed): Music.save_settings())
-	vol.add_child(volume_slider)
-	volume_label = _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
-	volume_label.custom_minimum_size = Vector2(76, 0)
-	vol.add_child(volume_label)
-	content.add_child(vol)
+	sfx_check = _toggle_row("효과음", func(on: bool): SoundFx.set_enabled(on))
+	sfx_slider = _slider_row("효과음 음량")
+	sfx_label = sfx_slider.get_parent().get_child(2)
+	sfx_slider.value_changed.connect(func(v: float):
+		SoundFx.set_volume(v / 100.0, false)
+		sfx_label.text = "%d%%" % int(v))
+	sfx_slider.drag_ended.connect(func(_changed):
+		SoundFx.set_volume(sfx_slider.value / 100.0)
+		SoundFx.emit_sound("click"))  # 손을 떼면 저장하고 크기를 들려 준다
 
 	content.add_child(_section("화면"))
 	shake_check = _toggle_row("화면 흔들림", func(on: bool): Prefs.set_value("shake", on))
@@ -88,19 +86,22 @@ func _on_open() -> void:
 
 ## 지금 값으로 다시 보인다(토글 신호는 막고).
 func _refresh() -> void:
-	for c in [music_check, shake_check, numbers_check, volume_slider]:
+	for c in [music_check, shake_check, numbers_check, volume_slider, sfx_check, sfx_slider]:
 		c.set_block_signals(true)
 	music_check.button_pressed = Music.enabled
+	sfx_check.button_pressed = SoundFx.enabled
+	sfx_slider.value = roundf(SoundFx.volume * 100.0)
 	shake_check.button_pressed = Prefs.get_bool("shake")
 	numbers_check.button_pressed = Prefs.get_bool("damage_numbers")
 	volume_slider.value = roundf(Music.volume * 100.0)
-	for c in [music_check, shake_check, numbers_check, volume_slider]:
+	for c in [music_check, shake_check, numbers_check, volume_slider, sfx_check, sfx_slider]:
 		c.set_block_signals(false)
 		if c is Button:
 			for k in c.get_children():
 				if k is Control:
 					k.queue_redraw()
 	volume_label.text = "%d%%" % int(volume_slider.value)
+	sfx_label.text = "%d%%" % int(sfx_slider.value)
 	var online := Net.is_online()
 	var code := str(Economy.friends.get("code", ""))
 	name_label.text = str(Economy.friends.get("name", "…")) if online else "오프라인 모드"
@@ -115,6 +116,27 @@ func copy_code() -> void:
 	if code != "":
 		DisplayServer.clipboard_set(code)
 		Economy.notice.emit("친구 코드를 복사했습니다")
+
+
+## [이름 | 슬라이더 0..100 | "n%"] 한 줄. 반환 = 슬라이더(줄의 1번 자식, 글자 = 2번 자식).
+func _slider_row(text: String) -> HSlider:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.add_child(_row_label(text))
+	var s := HSlider.new()
+	s.min_value = 0
+	s.max_value = 100
+	s.step = 1
+	s.custom_minimum_size = Vector2(0, 48)
+	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	s.focus_mode = Control.FOCUS_NONE
+	row.add_child(s)
+	var l := _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
+	l.custom_minimum_size = Vector2(76, 0)
+	row.add_child(l)
+	content.add_child(row)
+	return s
 
 
 func _section(text: String) -> Label:
