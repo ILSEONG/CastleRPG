@@ -4810,6 +4810,10 @@ func test_tutorial() -> void:
 	check(e.upgrade_block("lumber", now) == "not_enough", "tutorial: building a lot costs the Lv 1 price")
 	# 1. 성채 살펴보기 — 사건(건물 창)
 	check(not t.complete() and t.tab_locked("hero") and t.tab_locked("guild") and not t.tab_locked("merchant"), "tutorial: tabs locked at the start")
+	e.admin = true  # 슈퍼관리자(서버 player.admin): 가이드 중에도 잠금이 없다
+	check(not t.tab_locked("hero") and not t.tab_locked("exchange") and not t.pvp_locked() and not t.dungeon_locked("ticket") and not t.build_locked("lumber"),
+		"admin: every guide lock is open")
+	e.admin = false
 	t.note("open", 1, "lumber")
 	check(not t.complete(), "tutorial: opening another building does not count")
 	t.note("open", 1, "keep")

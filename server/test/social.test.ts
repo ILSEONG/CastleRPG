@@ -23,7 +23,7 @@ function fakeProviders() {
       return code.startsWith('uid:') ? json({ access_token: `at-${code.slice(4)}`, token_type: 'bearer' }) : json({ error: 'invalid_grant' }, 400)
     }
     const id = String(init.headers?.Authorization ?? '').replace('Bearer at-', '')
-    if (url.includes('googleapis')) return json({ sub: id })
+    if (url.includes('googleapis')) return json({ sub: id, email: `${id.toLowerCase()}@Example.com`, email_verified: !id.startsWith('unverified') })
     if (url.includes('kakao')) return json({ id: Number(id) })
     if (url.includes('naver')) return json({ resultcode: '00', response: { id } })
     return json({}, 404)
@@ -65,7 +65,7 @@ test('providers·start 검증: 켜진 제공자만, 모르는 제공자 400, 꺼
     const g = await begin(S, 'google')
     assert.equal(g.url.origin + g.url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth')
     assert.deepEqual(Object.fromEntries(g.url.searchParams), { response_type: 'code', client_id: 'g-id',
-      redirect_uri: 'https://api.example.com/v1/auth/google/callback', state: g.state, scope: 'openid', prompt: 'select_account' })
+      redirect_uri: 'https://api.example.com/v1/auth/google/callback', state: g.state, scope: 'openid email', prompt: 'select_account' })
     const k = await begin(S, 'kakao')
     assert.equal(k.url.origin + k.url.pathname, 'https://kauth.kakao.com/oauth/authorize')
     assert.equal(k.url.searchParams.get('client_id'), 'k-rest')
@@ -170,6 +170,29 @@ test('자동 로그인 세션: 같은 플레이어 토큰, 로그아웃하면 40
     const gone = await S.req('POST', '/v1/auth/session', { body: { session: r.json.session } })
     assert.deepEqual([gone.status, gone.json.error], [401, 'bad_session'])
     assert.equal((await S.req('POST', '/v1/auth/session', { body: { session: 'nope' } })).json.error, 'bad_session')
+  } finally {
+    await S.close()
+  }
+})
+
+test('슈퍼관리자: Google 확인 이메일이 admin_emails에 있으면 player.admin, 길드 잠금 해제 — 확인 안 된 이메일·다른 제공자는 아니다', async () => {
+  const P = fakeProviders()
+  const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })
+  try {
+    await S.db.query("insert into admin_emails (email) values ('boss@example.com'), ('unverified-boss@example.com')")
+    const login = async (provider: string, uid: string) => {
+      const a = await begin(S, provider)
+      await callback(S, provider, { code: `uid:${uid}`, state: a.state })
+      return (await S.req('POST', '/v1/auth/oauth/poll', { body: { state: a.state, verifier: a.verifier } })).json.token as string
+    }
+    const player = async (token: string) => (await S.req('GET', '/v1/player', { token })).json.player
+    const boss = await login('google', 'BOSS')
+    assert.equal((await player(boss)).admin, true)
+    assert.equal((await S.req('GET', '/v1/guild', { token: boss })).json.guild.unlocked, true) // 라운드 1-10 전인데 길드가 열린다
+    assert.equal((await player(await login('google', 'unverified-BOSS'))).admin, false)
+    assert.equal((await player(await login('google', 'someone'))).admin, false)
+    assert.equal((await player(await login('naver', 'boss'))).admin, false)
+    assert.equal((await player((await S.login()).token)).admin, false)
   } finally {
     await S.close()
   }

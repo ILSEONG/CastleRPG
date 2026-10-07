@@ -171,6 +171,7 @@ var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로
 var dia_tickets := 0
 var iap := {}  # 결제 상품 기록 {first, n, day, week, d, w, monthly: {id: {until, claimed}}, passes, gp: {free, paid}}(온라인은 서버 player.iap, 오프라인은 저장 "iap")
 var iap_enabled := false  # 실결제 연결됨(서버 player.iap_enabled). 아니면 결제 상품 버튼은 알림만
+var admin := false  # 슈퍼관리자(서버 player.admin — 이은 Google 계정의 확인된 이메일로 서버가 정한다). 기능 잠금(가이드 메뉴·던전·PVP·공터·길드)이 모두 열린다
 var market := {}  # 거래소(서버 market.ts): {rules: {fee_pct, max_active, duration_sec, price_limits}, mine: [판매]} — 마지막 서버 값(+ 곧바로 반영한 것)
 var market_sold := 0  # 거래소: 팔렸고 대금을 아직 안 받은 판매 수(서버 player.market_sold — 메뉴 빨간 점)
 var shop := {}  # 상점 산 기록 {day, week, d: {상품 id: 오늘 산 수}, w: {상품 id: 이번 주 산 수}}(온라인은 서버 player.shop, 오프라인은 저장 "shop")
@@ -390,6 +391,7 @@ func reset(now: float) -> void:
 	pouches = {}
 	shop = {}
 	iap = {}
+	admin = false
 	unbuilt = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
@@ -2857,6 +2859,11 @@ func apply_server(data: Dictionary) -> bool:
 		iap = p.iap
 		shop_changed.emit()
 	iap_enabled = p.get("iap_enabled") == true
+	if admin != (p.get("admin") == true):
+		admin = p.get("admin") == true
+		var tut := get_node_or_null("/root/Tutorial")
+		if tut != null:
+			tut.changed.emit()  # 잠금 표시(탭·메뉴·던전) 다시 그리기
 	var sold_before := market_sold
 	if _num(p.get("market_sold")):
 		market_sold = maxi(0, int(p.market_sold))

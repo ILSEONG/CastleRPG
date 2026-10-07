@@ -1,6 +1,6 @@
 // 소셜 로그인(Google·카카오·네이버) — OAuth 2.0 인가 코드 흐름. 앱은 시스템 브라우저로 /v1/auth/oauth/start가 준 url을 열고,
 // 제공자가 서버 콜백(/v1/auth/:provider/callback)으로 돌려보내면 서버가 code를 토큰으로 바꿔 제공자 사용자 id만 읽는다
-// (이메일·이름은 받지 않는다). 앱은 그동안 /v1/auth/oauth/poll로 결과를 기다린다. 제공자 호출은 주입한 fetch로(테스트는 가짜).
+// (이름은 받지 않는다. Google만 확인된 이메일을 읽는다 — 슈퍼관리자 판별용, admin_emails 표와 맞춘다). 앱은 그동안 /v1/auth/oauth/poll로 결과를 기다린다. 제공자 호출은 주입한 fetch로(테스트는 가짜).
 
 export const PROVIDERS = ['google', 'kakao', 'naver'] as const
 export type Provider = (typeof PROVIDERS)[number]
@@ -21,6 +21,7 @@ interface Endpoints {
   userinfo: string
   scope: string
   uid: (j: any) => unknown // 사용자 정보 응답 → 제공자 안 고유 id
+  email?: (j: any) => unknown // 확인된 이메일(없거나 확인 안 됐으면 undefined)
 }
 
 const ENDPOINTS: Record<Provider, Endpoints> = {
@@ -28,8 +29,9 @@ const ENDPOINTS: Record<Provider, Endpoints> = {
     authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
     token: 'https://oauth2.googleapis.com/token',
     userinfo: 'https://openidconnect.googleapis.com/v1/userinfo',
-    scope: 'openid',
+    scope: 'openid email',
     uid: (j) => j?.sub,
+    email: (j) => (j?.email_verified === true || j?.email_verified === 'true' ? j?.email : undefined),
   },
   kakao: {
     authorize: 'https://kauth.kakao.com/oauth/authorize',
@@ -72,8 +74,8 @@ export function authorizeUrl(cfg: OAuthConfig, p: Provider, state: string): stri
   return u.toString()
 }
 
-// code → 액세스 토큰 → 제공자 사용자 id(문자열). 실패하면 Error(메시지는 로그용 — 비밀은 넣지 않는다).
-export async function fetchUid(cfg: OAuthConfig, p: Provider, code: string, state: string, fetchFn: typeof fetch): Promise<string> {
+// code → 액세스 토큰 → 제공자 사용자 id(문자열)와 확인된 이메일(Google만, 소문자 — 없으면 null). 실패하면 Error(메시지는 로그용 — 비밀은 넣지 않는다).
+export async function fetchUid(cfg: OAuthConfig, p: Provider, code: string, state: string, fetchFn: typeof fetch): Promise<{ uid: string; email: string | null }> {
   const e = ENDPOINTS[p]
   const keys = cfg.providers[p]!
   const form = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri(cfg, p), client_id: keys.clientId })
@@ -87,7 +89,8 @@ export async function fetchUid(cfg: OAuthConfig, p: Provider, code: string, stat
   const uj: any = await ur.json().catch(() => null)
   const uid = e.uid(uj)
   if (!ur.ok || (typeof uid !== 'string' && typeof uid !== 'number') || String(uid) === '') throw new Error(`${p} userinfo failed: ${ur.status}`)
-  return String(uid)
+  const email = e.email?.(uj)
+  return { uid: String(uid), email: typeof email === 'string' && email.includes('@') ? email.trim().toLowerCase() : null }
 }
 
 // 콜백 결과 페이지(브라우저에 보인다). 앱으로 돌아가라는 안내만.

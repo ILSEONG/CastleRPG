@@ -426,6 +426,8 @@ func complete() -> bool:
 
 ## 탭이 잠겼는가: 튜토리얼 중이고 그 탭을 소개하는 미션에 아직 닿지 않았다.
 func tab_locked(tab_id: String) -> bool:
+	if _admin():
+		return false
 	if not active() or not TAB_MISSION.has(tab_id):
 		return false
 	if TAB_MISSION[tab_id] == "":  # 소개 미션이 없는 메뉴(거래소): 가이드를 마치거나 건너뛰면 열린다
@@ -435,6 +437,8 @@ func tab_locked(tab_id: String) -> bool:
 
 ## 던전이 잠겼는가: 튜토리얼 중이고 그 던전을 소개하는 미션에 아직 닿지 않았다.
 func dungeon_locked(type: String) -> bool:
+	if _admin():
+		return false
 	if not active() or not DUNGEON_MISSION.has(type):
 		return false
 	return step < mission_index(DUNGEON_MISSION[type])
@@ -442,6 +446,8 @@ func dungeon_locked(type: String) -> bool:
 
 ## PVP가 잠겼는가: 가이드 중이고 PVP 미션에 아직 닿지 않았다.
 func pvp_locked() -> bool:
+	if _admin():
+		return false
 	return active() and step < mission_index(PVP_MISSION)
 
 
@@ -464,6 +470,8 @@ func tab_lock_text(tab_id: String) -> String:
 
 ## 공터를 그 건설 미션 전에 지으려 하는가(사용자 2026-10-06: 건물 첫 건축은 튜토리얼 미션에서만). 이미 지은 건물·튜토리얼 밖은 false.
 func build_locked(id: String) -> bool:
+	if _admin():
+		return false
 	if not active() or econ == null or not econ.unbuilt.has(id):
 		return false
 	var i := build_mission_index(id)
@@ -481,6 +489,11 @@ func build_mission_index(id: String) -> int:
 ## 잠긴 공터 문구: "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요".
 func build_lock_text(id: String) -> String:
 	return _lock_text(build_mission_index(id), "건설할 수 있어요")
+
+
+## 슈퍼관리자(Economy.admin, 서버가 정한다): 기능 잠금이 모두 열린다.
+func _admin() -> bool:
+	return econ != null and econ.get("admin") == true
 
 
 func _lock_text(i: int, tail: String) -> String:

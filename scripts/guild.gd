@@ -148,6 +148,8 @@ func online() -> bool:
 
 
 func is_unlocked() -> bool:
+	if econ != null and econ.get("admin") == true:  # 슈퍼관리자: 라운드 1-10 전에도 열린다(서버도 허락)
+		return true
 	if online():
 		return remote.get("unlocked", false) == true or (gs != null and int(gs.stage) >= UNLOCK_ROUND)
 	return unlocked or (gs != null and int(gs.stage) >= UNLOCK_ROUND)

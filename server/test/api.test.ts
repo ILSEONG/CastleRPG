@@ -123,6 +123,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       iap: { first: [], n: {}, day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {}, monthly: {}, passes: [], gp: { free: [], paid: [] }, hot: null, hcool: {}, hs: 0 },
       iap_enabled: false, // 결제 상품
       market_sold: 0, // 거래소
+      admin: false, // 슈퍼관리자(Google 확인 이메일 ∈ admin_emails)
     },
     merchant: { rates: R.merchantRates(R.hourIndex(T0), cfg), next_change: (Math.floor(T0 / 3600) + 1) * 3600 },
   })

@@ -131,6 +131,7 @@ interface Player {
   shop: unknown // 상점 산 기록(저장된 그대로 — 쓰는 쪽이 SH.normalize)
   iap: unknown // 결제 상품 기록·월정액·패스(저장된 그대로 — 쓰는 쪽이 IAP.normalize)
   market_sold: number // 거래소: 팔렸고 아직 대금을 안 받은 판매 수(메뉴 빨간 점)
+  admin: boolean // 슈퍼관리자: 이은 Google 계정의 확인된 이메일이 admin_emails에 있다(앱이 주장하는 값은 쓰지 않는다)
 }
 
 interface Train {
@@ -235,6 +236,7 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s
     from player_items where player_id = s.player_id and not exists (select 1 from market_listings m where m.item_id = player_items.id
       and m.status = 'active' and m.expires_at > to_timestamp($2::float8))), '[]'::json) as items,
   (select count(*) from market_listings where seller_id = s.player_id and status = 'sold')::int as market_sold,
+  exists (select 1 from player_identities i join admin_emails a on a.email = i.email where i.player_id = s.player_id and i.provider = 'google') as admin,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
     from player_equipment where player_id = s.player_id), '[]'::json) as equipment,
   coalesce((select json_agg(json_build_object('id', f.id, 'hero', f.friend_hero, 'heroes', coalesce((select json_object_agg(hero_id,
@@ -437,6 +439,7 @@ export function createApp(opts: AppOptions) {
         shop: r.shop == null ? {} : json(r.shop),
         iap: r.iap == null ? {} : json(r.iap),
         market_sold: Number(r.market_sold ?? 0),
+        admin: r.admin === true,
       }
       if (p.build && p.build.finish <= now) {
         const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
@@ -511,6 +514,7 @@ export function createApp(opts: AppOptions) {
         iap: IAP.normalize(p.iap, today(game, now)), // 결제 상품: 첫 구매·한도·월정액·패스
         iap_enabled: false, // 실결제 연결 전(Google Play 등록 전)
         market_sold: p.market_sold, // 거래소: 대금 받을 판매 수
+        admin: p.admin, // 슈퍼관리자: 앱은 기능 잠금을 모두 연다
       },
       merchant: { rates: R.merchantRates(R.hourIndex(now), game.config, game.resources.map((x) => x.id)), next_change: R.nextChange(now) },
     }
@@ -1015,16 +1019,23 @@ export function createApp(opts: AppOptions) {
     }
     if (c.req.query('error') || !code || !O.enabledProviders(oauth).includes(p)) return fail('denied', 200) // 사용자가 취소·거부
     let uid: string
+    let email: string | null
     try {
-      uid = await O.fetchUid(oauth, p, code, state, fetchFn)
+      ;({ uid, email } = await O.fetchUid(oauth, p, code, state, fetchFn))
     } catch (e) {
       console.warn(`[server] oauth: ${(e as Error).message}`)
       return fail('provider_error', 502)
     }
     const r = await resolvePlayer(p, uid, row.link_player ?? null, now)
+    await saveEmail(p, uid, email)
     await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew])
     return page(true, 200)
   })
+
+  // 로그인할 때마다 Google 확인 이메일을 계정에 적는다(슈퍼관리자 판별 — admin_emails, 마이그레이션 036).
+  async function saveEmail(p: O.Provider, uid: string, email: string | null) {
+    if (email) await query('update player_identities set email = $3 where provider = $1 and provider_uid = $2 and email is distinct from $3', [p, uid, email])
+  }
 
   // 제공자 계정 → 플레이어: 이은 플레이어 → (없으면) 이을 게스트 계정(소셜 계정이 하나도 없을 때) → (없으면) 새 플레이어.
   async function resolvePlayer(p: O.Provider, uid: string, link: string | null, now: number): Promise<{ id: string; isNew: boolean }> {
@@ -2431,11 +2442,11 @@ export function createApp(opts: AppOptions) {
 
   async function guildView(x: GuildCtx) {
     const out: Record<string, unknown> = {
-      unlocked: x.pl.stage >= G.UNLOCK_STAGE, coins: x.pg.coins, me: x.mine, dps: Math.round(x.dps), power: x.power,
+      unlocked: x.pl.stage >= G.UNLOCK_STAGE || x.pl.admin, coins: x.pg.coins, me: x.mine, dps: Math.round(x.dps), power: x.power,
       next_reset: R.nextReset(x.now, x.game.config), guild: null, boss_pending: 0,
     }
     if (!x.g || !x.st) {
-      if (x.pl.stage >= G.UNLOCK_STAGE) out.recommendations = await recommendations(x)
+      if (x.pl.stage >= G.UNLOCK_STAGE || x.pl.admin) out.recommendations = await recommendations(x)
       return out
     }
     const g = x.g
@@ -2531,7 +2542,7 @@ export function createApp(opts: AppOptions) {
     const gid = strField(await body(c), 'guild_id')
     if (!UUID_RE.test(gid)) throw new ApiError(400, 'bad_request', "'guild_id' must be a uuid")
     return guildMutate(c, async (x) => {
-      if (x.pl.stage < G.UNLOCK_STAGE) throw blocked('locked', 'clear round 1-10 first')
+      if (x.pl.stage < G.UNLOCK_STAGE && !x.pl.admin) throw blocked('locked', 'clear round 1-10 first')
       if (x.g) throw blocked('in_guild', 'already in a guild')
       const [gr] = await query(`select ${GUILD_COLS} from guilds where id = $1`, [gid])
       if (!gr) throw new ApiError(404, 'no_such_guild', 'guild not found')
@@ -2549,7 +2560,7 @@ export function createApp(opts: AppOptions) {
     const emblem = intField(b, 'emblem', 0, G.EMBLEMS - 1)
     if ([...name].length < 2 || [...name].length > 8) throw new ApiError(400, 'bad_name', 'name must be 2-8 characters')
     return guildMutate(c, async (x) => {
-      if (x.pl.stage < G.UNLOCK_STAGE) throw blocked('locked', 'clear round 1-10 first')
+      if (x.pl.stage < G.UNLOCK_STAGE && !x.pl.admin) throw blocked('locked', 'clear round 1-10 first')
       if (x.g) throw blocked('in_guild', 'already in a guild')
       if (x.pl.gold_tenths < G.CREATE_GOLD * 10) throw blocked('not_enough_gold', `creating a guild costs ${G.CREATE_GOLD} gold`)
       const [taken] = await query('select 1 from guilds where name = $1', [name])
@@ -2749,6 +2760,7 @@ export function createApp(opts: AppOptions) {
         return c.json({ ok: true })
       }
       const r = await resolvePlayer(row.provider, strField(b, 'provider_uid'), row.link_player ?? null, clock())
+      if (row.provider === 'google' && typeof b.email === 'string') await saveEmail('google', strField(b, 'provider_uid'), b.email.trim().toLowerCase())
       await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1', [b.state, r.id, r.isNew])
       return c.json({ ok: true, player_id: r.id, is_new: r.isNew })
     })
