@@ -184,7 +184,7 @@ func _replan() -> void:
 		return
 	_target = null
 	if war_half > 0.0:
-		_path = Formation.route(war_half, global_position, stand_position())
+		_path = around_keep(global_position, Formation.route(war_half, global_position, stand_position()))
 	else:
 		_path = [stand_position()]
 
@@ -195,7 +195,8 @@ func needs_route() -> bool:
 		return false
 	var home := stand_position()
 	return Formation.is_inside(war_half, global_position) != Formation.is_inside(war_half, home) \
-		or (global_position.y > Balance.WALL_H / 2.0) != (home.y > Balance.WALL_H / 2.0)
+		or (global_position.y > Balance.WALL_H / 2.0) != (home.y > Balance.WALL_H / 2.0) \
+		or crosses_keep(global_position, home)  # 성채를 가로지르면 모서리로 돌아간다
 
 
 ## 닿을 수 있는 자리: 성벽 위 영웅은 어디든(사거리 안), 성벽 위 표적은 원거리만, 지상끼리는 같은 영역(성 안/밖).
@@ -223,7 +224,7 @@ func current_target():
 ## 다른 위치로 잠깐 물러난다(자리는 그대로 — 위협이 지나면 돌아온다).
 func step_to(p: Vector3) -> void:
 	if war_half > 0.0:
-		_path = Formation.route(war_half, global_position, Vector3(p.x, 0.0, p.z))
+		_path = around_keep(global_position, Formation.route(war_half, global_position, Vector3(p.x, 0.0, p.z)))
 	else:
 		_path = [Vector3(p.x, 0.0, p.z)]
 	_swing = null
@@ -450,7 +451,7 @@ func apply_weaken(pct: float, sec: float) -> void:
 
 
 func knockback(from: Vector3, dist: float) -> void:
-	if state == State.DEAD or dist <= 0.0:
+	if state == State.DEAD or dist <= 0.0 or is_on_wall():  # 성벽 위는 밀리지 않는다(성벽 길 밖 허공으로 밀려 떠 있지 않게)
 		return
 	var d := Vector3(global_position.x - from.x, 0.0, global_position.z - from.z)
 	if d.length() < 0.001:
@@ -560,3 +561,62 @@ func _puppet_tick(delta: float) -> void:
 ## 바닥 차지 반지름(crowd.gd): 몸 + 여유 — 공성 영웅은 서로 조금 떨어져 서서 겹쳐 보이지 않는다(사거리·피격 판정은 radius 그대로).
 func space() -> float:
 	return radius() + WarRulesH.SPACE_PAD
+
+
+# --- 성채 돌아가기: 성 안 경로는 곧은 선이라 성채 건물을 뚫고 지나갔다(맞은편 성문 지원·성채 앞 자리) ---
+
+## 지상 선분 a→b가 성채 외벽(± 성채 절반 + 1 m)을 지나는가.
+static func crosses_keep(a: Vector3, b: Vector3) -> bool:
+	if a.y > Balance.WALL_H / 2.0 or b.y > Balance.WALL_H / 2.0:
+		return false
+	return _seg_hits_square(a, b, Formation._keep_half + 1.0)
+
+
+static func _seg_hits_square(a: Vector3, b: Vector3, r: float) -> bool:
+	var o := Vector2(a.x, a.z)
+	var d := Vector2(b.x - a.x, b.z - a.z)
+	var t0 := 0.0
+	var t1 := 1.0
+	for axis in 2:
+		if absf(d[axis]) < 1e-6:
+			if absf(o[axis]) >= r:
+				return false
+			continue
+		var ta := (-r - o[axis]) / d[axis]
+		var tb := (r - o[axis]) / d[axis]
+		t0 = maxf(t0, minf(ta, tb))
+		t1 = minf(t1, maxf(ta, tb))
+		if t0 >= t1:
+			return false
+	return true
+
+
+## 경로의 지상 구간이 성채를 지나면 성채 모서리(± 절반 + 2 m)를 하나나 둘 끼운다(짧은 쪽).
+static func around_keep(from: Vector3, path: Array[Vector3]) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var prev := from
+	var c := Formation._keep_half + 2.0
+	var corners := [Vector3(c, 0, c), Vector3(-c, 0, c), Vector3(-c, 0, -c), Vector3(c, 0, -c)]
+	for p in path:
+		if crosses_keep(prev, p):
+			var best: Array = []
+			var best_len := INF
+			for i in 4:
+				var one: Vector3 = corners[i]
+				if not crosses_keep(prev, one) and not crosses_keep(one, p):
+					var l := prev.distance_to(one) + one.distance_to(p)
+					if l < best_len:
+						best_len = l
+						best = [one]
+				for j in [(i + 1) % 4, (i + 3) % 4]:
+					var two: Vector3 = corners[j]
+					if not crosses_keep(prev, one) and not crosses_keep(one, two) and not crosses_keep(two, p):
+						var l2 := prev.distance_to(one) + one.distance_to(two) + two.distance_to(p)
+						if l2 < best_len:
+							best_len = l2
+							best = [one, two]
+			for q in best:
+				out.append(q)
+		out.append(p)
+		prev = p
+	return out

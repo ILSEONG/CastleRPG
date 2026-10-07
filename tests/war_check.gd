@@ -42,6 +42,7 @@ func _ready() -> void:
 	await _case_status()
 	await _case_deploy()
 	await _case_defense()
+	await _case_engage()
 	await _case_offline_war()
 	_check(_errors.count == 0, "no script errors (%d, first: %s)" % [_errors.count, _errors.first])
 	print("WAR CHECK %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
@@ -380,6 +381,20 @@ func _case_defense() -> void:
 	_check(melee[0].gate_top_mult() == 1.0, "melee inside gets no gate bonus")
 	b.begin_fight()
 	await get_tree().process_frame
+	var ar_pos: Vector3 = ar.global_position
+	ar.knockback(ar_pos + Formation.SIDE_DIR[int(ar.lane)] * 2.0, 4.0)
+	await get_tree().create_timer(0.4, true, false, true).timeout
+	_check(ar.is_on_wall() and Formation.flat_distance(ar.global_position, ar_pos) < 0.5, "knockback does not push an archer off the wall")
+	var north: Vector3 = b.breach_spot(0, 0)
+	var south: Vector3 = b.keep_guard_spot(2, 0)
+	var path = ar.around_keep(north, Formation.route(b.half, north, south))
+	var through := false
+	var prev := north
+	for q in path:
+		if ar.crosses_keep(prev, q):
+			through = true
+		prev = q
+	_check(not through and path.size() > 1, "a defender crossing the castle walks around the keep (%d points)" % path.size())
 	_check(is_equal_approx(ar.atk, ar._base_atk * WarRules.GATE_TOP_MULT), "archer attack includes the gate bonus (%.0f / %.0f)" % [ar.atk, ar._base_atk])
 	# 성문 0이 뚫리고 공격이 그 안에 들어왔다: 조용한 면(1) 근접 일부가 성문 0 안쪽으로 지원
 	for a in b.units(0):
@@ -400,5 +415,27 @@ func _case_defense() -> void:
 		b.brain.think(d)
 	var guards := melee.filter(func(d): return Formation.flat_distance(d.free_pos, Vector3.ZERO) < Formation.keep_target(0).length() + 6.0)
 	_check(guards.size() >= melee.size() / 2, "defenders fall back to guard the keep (%d of %d)" % [guards.size(), melee.size()])
+	b.queue_free()
+	await get_tree().process_frame
+
+
+func _case_engage() -> void:
+	print("(9) auto attackers inside fight defenders they meet on the way to the keep")
+	var plan := make_plan(1, 1)
+	plan.defenders = plan.defenders.filter(func(d): return GameData.hero(str(d.hero)).role == "melee")
+	var b = _battle(plan)
+	await get_tree().process_frame
+	b.gates[0].take_damage(b.gates[0].hp + 1.0)
+	var d = b.units(1)[0]
+	d.set_process(false)  # 제자리에 서 있는 표적(맞기만 한다)
+	var hp0: float = d.hp
+	var a = b.units(0)[0]
+	a.lane = 0
+	a.global_position = Formation.gate_outer(b.half, 0, Formation.gate_offsets(b.half)[0])
+	a.set_home(b.keep_spot(0, 0))
+	var side: int = int(d.lane)
+	d.global_position = Formation.SIDE_DIR[0] * (b.half - 6.0) + Formation.perp(0) * float(Formation.gate_offsets(b.half)[0])
+	await _run(b, 8.0, 0.25, func(): return d.hp < hp0)
+	_check(d.hp < hp0, "the attacker stopped to hit a defender in its way (lane %d)" % side)
 	b.queue_free()
 	await get_tree().process_frame

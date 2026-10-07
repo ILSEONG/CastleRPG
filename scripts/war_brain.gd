@@ -87,6 +87,8 @@ static func is_healer(f) -> bool:
 func pick_target(u):
 	var cands := _reachable(u, false)
 	var origin: Vector3 = u.stand_position()
+	if u.team == 0 and not u.commanded and Formation.is_inside(battle.half, u.global_position):
+		origin = u.global_position  # 성 안 자동 공격: 성채로 가는 길에 만난 수비와 싸운다
 	var reach: float
 	if u.is_on_wall():
 		reach = float(u.def.range)  # 성벽 위: 쫓지 않는다(사거리 안만)
@@ -191,6 +193,7 @@ func think(u) -> void:
 		_defend(u)
 	elif not u.commanded:
 		_advance(u)
+		_engage(u)
 	if u.needs_route() and u.current_target() == null:
 		u._replan()
 
@@ -309,6 +312,17 @@ static func _side_of(p: Vector3) -> int:
 			best_d = d
 			best = k
 	return best
+
+
+## 성 안을 걷는 자동 공격 영웅: aggro 안에 닿는 수비 영웅이 있으면 걸음을 멈추고 싸운다(지나쳐 성채로 가지 않는다).
+func _engage(u) -> void:
+	if not u.is_walking() or not Formation.is_inside(battle.half, u.global_position):
+		return
+	var r := maxf(float(u.def.aggro), float(u.def.range))
+	for f in _reachable(u, false):
+		if Formation.flat_distance(u.global_position, f.global_position) <= r:
+			u._path.clear()
+			return
 
 
 ## 공격 자동 진격: 맡은 면 성문에 수비가 남았으면 그 앞(STAGE_D)에, 없으면 성문 앞, 성문이 부서졌으면 성채.
