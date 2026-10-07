@@ -4,6 +4,7 @@ extends RefCounted
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const Skills := preload("res://scripts/skills.gd")
+const Prefs := preload("res://scripts/prefs.gd")
 const MONSTERS_PATH := "res://data/monsters.csv"
 const STAGES_PATH := "res://data/stages.csv"
 const HEROES_PATH := "res://data/heroes.csv"
@@ -529,10 +530,10 @@ static func active_skills(def: Dictionary, promotion: int) -> Dictionary:
 	return out
 
 
-## 카메라 흔들림 설정 fx_shake(없으면 켬, "0"이면 끔).
+## 카메라 흔들림 설정 fx_shake(없으면 켬, "0"이면 끔). 기기 설정 [화면 흔들림](Prefs shake)을 끄면 그것도 끔.
 static func fx_shake() -> bool:
 	_ensure()
-	return String(_config.get("fx_shake", "1")).strip_edges() != "0"
+	return String(_config.get("fx_shake", "1")).strip_edges() != "0" and Prefs.get_bool("shake")
 
 
 # --- 영웅 레벨(개정 11 §2.1). 서버 rules.heroMaxLevel·levelupCost와 같은 식 ---

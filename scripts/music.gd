@@ -5,7 +5,8 @@ extends Node
 ##   override(main.gd가 던전·길드 보스·길드전 장면을 붙일 때 넣고 뗄 때 비운다)가 있으면 그것,
 ##   첫 로딩이 끝나기 전(로그인·로딩 화면)이면 "title",
 ##   아니면 성 월드: 방치 = FEVER 중 "fever", 아니면 "idle" / 스테이지·카운트다운·결과 = 보스 라운드(라운드 25) "boss", 아니면 "stage".
-## 켬/끔: enabled(앱 로컬 user://settings.json의 music, 기본 켬) — 오른쪽 아래 메뉴 [음악](side_menu.gd).
+## 켬/끔: enabled(앱 로컬 user://settings.json의 music, 기본 켬), 크기: volume(같은 파일 music_volume 0..1, 기본 1)
+## — 오른쪽 아래 메뉴 [설정] 창(settings_panel.gd)에서 바꾼다. 같은 파일의 다른 기기 설정(화면 흔들림 등)은 prefs에 담아 함께 쓴다(prefs.gd).
 ## 히트스톱(Engine.time_scale)에 흔들리지 않게 페이드는 실제 시간으로 잰다.
 
 const PreloaderScript := preload("res://scripts/preloader.gd")
@@ -30,9 +31,11 @@ const CHECK_SEC := 0.25
 const SILENT_DB := -60.0
 
 var enabled := true
+var volume := 1.0  # 0..1(설정 창 슬라이더). 버스 크기 = VOLUME_DB + linear_to_db(volume)
 var override := ""  # 던전·길드 장면 테마(main.gd). 비면 성 월드·타이틀에서 고른다
 var theme := ""  # 지금 테마(꺼져 있어도 고른 값)
 var settings_path := "user://settings.json"  # ""이면 저장하지 않는다(테스트)
+var prefs := {}  # 파일의 나머지 키(prefs.gd가 읽고 쓴다)
 
 var _players: Array[AudioStreamPlayer] = []
 var _cur := -1  # 지금 곡을 트는 플레이어(0·1), 없으면 −1
@@ -47,7 +50,6 @@ func _ready() -> void:
 		AudioServer.add_bus()
 		AudioServer.set_bus_name(AudioServer.bus_count - 1, BUS)
 		AudioServer.set_bus_send(AudioServer.bus_count - 1, "Master")
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index(BUS), VOLUME_DB)
 	for i in 2:
 		var p := AudioStreamPlayer.new()
 		p.bus = BUS
@@ -55,6 +57,7 @@ func _ready() -> void:
 		add_child(p)
 		_players.append(p)
 	load_settings()
+	_apply_volume()
 
 
 func _process(delta: float) -> void:
@@ -114,6 +117,22 @@ func toggle() -> void:
 	set_enabled(not enabled)
 
 
+## 크기(0..1)를 바로 바꾼다. save = false면 저장하지 않는다(슬라이더를 끄는 동안 — 손을 떼면 저장).
+func set_volume(v: float, save := true) -> void:
+	volume = clampf(v, 0.0, 1.0)
+	_apply_volume()
+	if save:
+		save_settings()
+
+
+func _apply_volume() -> void:
+	var bus := AudioServer.get_bus_index(BUS)
+	if bus < 0:
+		return
+	AudioServer.set_bus_volume_db(bus, VOLUME_DB + linear_to_db(maxf(volume, 0.001)))
+	AudioServer.set_bus_mute(bus, volume <= 0.0)
+
+
 ## 지금 곡을 줄이고(멈추고) t 곡을 처음부터 키운다. t = ""이면 끄기만.
 func _switch(t: String) -> void:
 	var old := _cur
@@ -167,18 +186,19 @@ func load_settings() -> void:
 		return
 	var json := JSON.new()
 	if json.parse(FileAccess.get_file_as_string(settings_path)) == OK and json.data is Dictionary:
+		prefs = json.data.duplicate()
+		prefs.erase("music")
+		prefs.erase("music_volume")
 		enabled = bool(json.data.get("music", true))
+		volume = clampf(float(json.data.get("music_volume", 1.0)), 0.0, 1.0)
 
 
 func save_settings() -> void:
 	if settings_path == "":
 		return
-	var data := {}  # 이 파일의 다른 키는 그대로 둔다
-	if FileAccess.file_exists(settings_path):
-		var json := JSON.new()
-		if json.parse(FileAccess.get_file_as_string(settings_path)) == OK and json.data is Dictionary:
-			data = json.data
+	var data := prefs.duplicate()
 	data["music"] = enabled
+	data["music_volume"] = volume
 	var f := FileAccess.open(settings_path, FileAccess.WRITE)
 	if f != null:
 		f.store_string(JSON.stringify(data))

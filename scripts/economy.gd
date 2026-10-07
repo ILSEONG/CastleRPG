@@ -2955,12 +2955,21 @@ func _gacha_online(count: int, currency: String) -> bool:
 		return false
 	_waiting["gacha"] = true
 	net.flush_kills()
+	# 응답을 기다리지 않고 곧바로 재화를 뺀다(버튼은 그대로, "…" 없음 — 사용자 2026-10-06). 영웅은 응답 때, 거절되면 되돌린다
+	var cost := gacha_cost(currency, count)
+	var gold := currency == GameData.GACHA_GOLD
+	_predict("gacha", func():
+		if currency == GameData.GACHA_TICKET:
+			dia_tickets -= cost
+		elif currency == GameData.GACHA_DIA:
+			diamonds -= cost, -cost * 10 if gold else 0)
 	net.send("POST", "/v1/gacha", {"count": count, "currency": currency}, _on_gacha, _on_gacha_failed, true, true)
 	return true
 
 
 func _on_gacha(data: Dictionary) -> void:
 	_waiting.erase("gacha")
+	_predicts.erase("gacha")
 	apply_server(data)
 	var results := []
 	if data.get("results") is Array:
@@ -2973,6 +2982,7 @@ func _on_gacha(data: Dictionary) -> void:
 
 func _on_gacha_failed() -> void:
 	_waiting.erase("gacha")
+	_unpredict("gacha")
 	notice.emit({"not_enough_gold": NO_GOLD_TEXT, "not_enough_diamonds": NO_DIA_TEXT, "not_enough_tickets": NO_TICKET_TEXT}.get(net.last_error, GACHA_FAIL_TEXT))
 	gacha_done.emit([])
 

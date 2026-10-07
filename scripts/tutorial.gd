@@ -112,6 +112,7 @@ const DUNGEON_MISSION := {"gold": "dungeon_gold", "equip": "dungeon_equip", "tic
 const TRAIN_MISSION := "train"
 
 signal changed  # 미션·완료·보상 상태가 바뀌었다
+signal lock_notice(text: String)  # 잠긴 공터·탭·던전을 눌렀다 — HUD가 화면 중상단 토스트로 띄운다
 signal goto_requested(target: String)  # 카드 [바로가기] — main이 처리한다(건물 창·탭·상인·전투 시작)
 
 var save_path := "user://tutorial.json"  # ""이면 저장하지 않는다
@@ -354,10 +355,41 @@ func dungeon_locked(type: String) -> bool:
 	return step < mission_index(DUNGEON_MISSION[type])
 
 
-## 잠긴 던전 카드 문구: "튜토리얼 「장비 던전」 미션에서 열립니다".
+## 잠긴 던전 문구: "튜토리얼 20번째 미션 「장비 던전」에서 열려요".
 func dungeon_lock_text(type: String) -> String:
-	var i := mission_index(str(DUNGEON_MISSION.get(type, "")))
-	return "튜토리얼 「%s」 미션에서 열립니다" % MISSIONS[i].title if i >= 0 else LOCKED_TEXT
+	return _lock_text(mission_index(str(DUNGEON_MISSION.get(type, ""))), "열려요")
+
+
+## 잠긴 탭 문구: "튜토리얼 9번째 미션 「영웅 레벨업」에서 열려요".
+func tab_lock_text(tab_id: String) -> String:
+	return _lock_text(mission_index(str(TAB_MISSION.get(tab_id, ""))), "열려요")
+
+
+## 공터를 그 건설 미션 전에 지으려 하는가(사용자 2026-10-06: 건물 첫 건축은 튜토리얼 미션에서만). 이미 지은 건물·튜토리얼 밖은 false.
+func build_locked(id: String) -> bool:
+	if not active() or econ == null or not econ.unbuilt.has(id):
+		return false
+	var i := build_mission_index(id)
+	return i >= 0 and step < i
+
+
+## 그 건물을 짓는 미션(kind build, arg id) 번호(0부터). 없으면 -1.
+func build_mission_index(id: String) -> int:
+	for i in MISSIONS.size():
+		if MISSIONS[i].kind == "build" and MISSIONS[i].get("arg") == id:
+			return i
+	return -1
+
+
+## 잠긴 공터 문구: "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요".
+func build_lock_text(id: String) -> String:
+	return _lock_text(build_mission_index(id), "건설할 수 있어요")
+
+
+func _lock_text(i: int, tail: String) -> String:
+	if i < 0:
+		return LOCKED_TEXT
+	return "튜토리얼 %d번째 미션 「%s」에서 %s" % [i + 1, MISSIONS[i].title, tail]
 
 
 ## 사건 알림(수집·판매·모집·건물 창 열기). 지금 미션의 종류와 같으면 센다.

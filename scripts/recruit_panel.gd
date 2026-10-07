@@ -2,8 +2,10 @@ extends "res://scripts/ui_window.gd"
 ## 영웅 모집 창(스펙 §5, 개정 23: 골드·다이아 모집, 주점 탭으로 연다): 위 가운데 키 아트(이그니스가 화염구를 쏘는 순간 — 움직이지 않는
 ## 정지 그림 + 가장자리 비네트 + 외곽선 제목 "영웅 모집"), 그 아래 탭 [골드 모집] [다이아 모집].
 ## 골드 탭: 레벨 배지 "골드 모집 Lv n", 진행 막대 + "다음 레벨까지 a/b", 다음 레벨 확률·비용 미리보기, 확률 한 줄, [1회 3,000] [10회 30,000](10회 = 1회 × 10, 보장 없음).
-## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, 천장 "SSR 확정까지 n회", [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장], [다이아 상점].
-## 재화가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
+## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, 천장 "SSR 확정까지 n회", [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장].
+## 다이아 모집권이 그 장수만큼 있으면 그 버튼은 모집권 버튼([1회 모집권 1장] [10회 모집권 10장 · SR 이상 1장])으로 바뀌고 모집권을 쓴다(버튼마다 따로).
+## 다이아 버튼은 다이아가 모자라도 눌린다: 누르면 "다이아가 부족합니다 — 상점으로 이동할까요?" 창, [이동]이면 다이아 상점을 연다(사용자 요청 2026-10-06).
+## 골드가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
 ## 새 영웅은 "NEW", 중복은 "+1 조각"과 그 영웅의 조각 막대(개정 15), SSR은 반짝임) + [재모집]·[확인]·자동 모집(개정 17) — 마지막에 뽑은 재화로 되풀이한다.
 ## 자동 모집은 골드만(현금 재화 자동 소모 방지): 다이아로 뽑은 결과 화면에는 자동 체크가 없다.
 ## 모집은 Economy.gacha(count, currency), 결과는 Economy.gacha_done — 온라인 응답이 창을 닫은 뒤에 와도 다시 열어 보여 준다(결과를 놓치지 않게).
@@ -32,9 +34,8 @@ var gold_tab: Button
 var dia_tab: Button
 var one_button: Button
 var ten_button: Button
-var shop_button: Button
 var confirm_button: Button
-var again_button: Button  # [재모집 N] — 자동 중엔 "자동 중…"
+var again_button: Button  # [재모집 N] — 자동 중엔 "자동 모집 중"
 var auto_box: Button  # 자동 모집 체크박스(Fever.auto_recruit에 저장). 골드 결과에서만 보인다
 var auto_delay := AUTO_DELAY  # 테스트가 줄인다
 var cards: Array = []  # 지금 보이는 결과 카드
@@ -47,9 +48,7 @@ var rates_label: Label
 var dia_label: Label  # 다이아 보유
 var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
-var ticket_one: Button
-var ticket_ten: Button
-var _ticket_box: VBoxContainer
+var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 키 아트(처음 열 때 SceneSnap으로 렌더)
 var shop  # 다이아 상점 창
 
@@ -107,31 +106,17 @@ func _ready() -> void:
 	have.add_child(dia_label)
 	pity_label = _label("", 24, UiKit.GRADE_COLORS.SSR.darkened(0.25))
 	_dia_box.add_child(pity_label)
-	_ticket_box = VBoxContainer.new()  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
-	_ticket_box.add_theme_constant_override("separation", 6)
-	_dia_box.add_child(_ticket_box)
-	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))
-	_ticket_box.add_child(ticket_label)
-	var trow := HBoxContainer.new()
-	trow.add_theme_constant_override("separation", 10)
-	_ticket_box.add_child(trow)
-	ticket_one = _button("모집권 1회", UiKit.GRADE_COLORS.SR, 24)
-	ticket_one.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ticket_one.pressed.connect(func(): _recruit(1, TICKET))
-	trow.add_child(ticket_one)
-	ticket_ten = _button("모집권 10회", UiKit.GRADE_COLORS.SR, 24)
-	ticket_ten.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ticket_ten.pressed.connect(func(): _recruit(10, TICKET))
-	trow.add_child(ticket_ten)
+	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
+	_dia_box.add_child(ticket_label)
 
 	rates_label = _label("", 26)
 	_pick_view.add_child(rates_label)
 	one_button = _button("")
-	one_button.pressed.connect(_recruit.bind(1))
+	one_button.pressed.connect(_pull.bind(1))
 	_pick_view.add_child(one_button)
 	ten_button = _button("", HudScript.ACCENT, 26)
 	ten_button.custom_minimum_size = Vector2(0, 72)
-	ten_button.pressed.connect(_recruit.bind(10))
+	ten_button.pressed.connect(_pull.bind(10))
 	_pick_view.add_child(ten_button)
 	for b in [one_button, ten_button]:
 		var icon := _gem(30)  # 다이아 탭에서만 보이는 버튼 앞 보석(세로 가운데)
@@ -143,9 +128,6 @@ func _ready() -> void:
 		icon.offset_bottom = 15
 		b.add_child(icon)
 		_btn_gems.append(icon)
-	shop_button = _button("다이아 상점", UiKit.GRADE_COLORS.SR, 26)
-	shop_button.pressed.connect(func(): shop.open())
-	_pick_view.add_child(shop_button)
 	var close_button := _button("닫기", UiKit.STEEL)
 	close_button.pressed.connect(close)
 	_pick_view.add_child(close_button)
@@ -177,11 +159,50 @@ func _ready() -> void:
 	auto_box.set_pressed_no_signal(Fever.auto_recruit)
 	auto_box.toggled.connect(_on_auto_toggled)
 	_result_view.add_child(auto_box)
+	_build_shop_ask()
 	shop = DiamondShopScript.new()
 	add_child(shop)
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.gacha_done.connect(_on_gacha_done)
 	set_currency(GOLD)
+
+
+## "다이아가 부족합니다 — 상점으로 이동할까요?" [이동] [취소]. 모집 창 위 어두운 막(뒤 탭을 막는다).
+func _build_shop_ask() -> void:
+	shop_ask = ColorRect.new()
+	shop_ask.color = Color(0, 0, 0, 0.45)
+	shop_ask.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop_ask.mouse_filter = Control.MOUSE_FILTER_STOP
+	shop_ask.visible = false
+	add_child(shop_ask)
+	var box := PanelContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	box.custom_minimum_size = Vector2(560, 0)
+	box.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 14.0, 28))
+	shop_ask.add_child(box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 18)
+	box.add_child(col)
+	col.add_child(_label("다이아가 부족합니다", 32))
+	col.add_child(_label("다이아 상점으로 이동할까요?", 24, HudScript.INK.lightened(0.2)))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	col.add_child(row)
+	for pair in [["이동", UiKit.GRADE_COLORS.SR, true], ["취소", UiKit.STEEL, false]]:
+		var b := _button(pair[0], pair[1], 28)
+		b.custom_minimum_size = Vector2(200, 72)
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(_on_shop_ask.bind(pair[2]))
+		row.add_child(b)
+
+
+func _on_shop_ask(go: bool) -> void:
+	shop_ask.visible = false
+	if go:
+		shop.open()
 
 
 ## 키 아트 자리: 창 내용 폭 × RecruitArt.VIEW.y에 정지 그림(채워 덮고 넘치는 쪽은 잘라 낸다). 위에 가장자리 비네트와 외곽선 제목.
@@ -247,9 +268,6 @@ func set_currency(id: String) -> void:
 	UiKit.apply_button(dia_tab, UiKit.AMBER if id == DIA else UiKit.STEEL, 14.0)
 	_gold_box.visible = id == GOLD
 	_dia_box.visible = id == DIA
-	shop_button.visible = id == DIA
-	for g in _btn_gems:
-		g.visible = id == DIA
 	if visible:
 		_fit()
 	_refresh()
@@ -279,6 +297,25 @@ static func _rates_line(rates: Dictionary) -> String:
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
 	return "SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0), Skills.num_text((1.0 - ssr - sr) * 100.0)]
+
+
+## 이 장수를 무엇으로 뽑나: 골드 탭은 골드. 다이아(모집권 포함)는 모집권이 count장 이상이면 모집권, 아니면 다이아.
+func pull_currency(count: int, base := "") -> String:
+	var b := currency if base == "" else base
+	if b == GOLD:
+		return GOLD
+	return TICKET if Economy.dia_tickets >= count else DIA
+
+
+## [1회]·[10회]·다이아 [재모집]: 모집권이 있으면 모집권, 다이아가 모자라면 상점 이동 확인 창.
+func _pull(count: int, base := "") -> void:
+	if _waiting:
+		return
+	var cur := pull_currency(count, base)
+	if cur == DIA and Economy.diamonds < Economy.gacha_cost(DIA, count):
+		shop_ask.visible = true
+		return
+	_recruit(count, cur)
 
 
 func _recruit(count: int, cur := "") -> void:
@@ -361,7 +398,7 @@ func auto_running() -> bool:
 
 func _again() -> void:
 	if not _waiting and not again_button.disabled:
-		_recruit(_count, _cur)
+		_pull(_count, _cur)
 
 
 ## [확인]: 자동이 돌고 있었다면 멈추고(체크도 푼다) 결과 화면을 닫는다.
@@ -382,6 +419,8 @@ func _on_auto_toggled(on: bool) -> void:
 
 func close() -> void:
 	_halted = true
+	if shop_ask != null:
+		shop_ask.visible = false
 	if shop != null:
 		shop.close()
 	super.close()
@@ -423,29 +462,35 @@ func _refresh() -> void:
 	pity_label.text = "SSR 확정까지 %d회" % st.pity_left
 	var tk := Economy.dia_tickets
 	var tk_shown := tk > 0 and currency == DIA
-	if _ticket_box.visible != tk_shown:
-		_ticket_box.visible = tk_shown
+	if ticket_label.visible != tk_shown:
+		ticket_label.visible = tk_shown
 		if visible:
 			_fit()
 	ticket_label.text = "다이아 모집권 %d장" % tk
-	ticket_one.disabled = _waiting or tk < 1
-	ticket_ten.disabled = _waiting or tk < 10
 	rates_label.text = rates_text(currency)
-	var unit := "다이아 " if currency == DIA else ""
-	var pad := "      " if currency == DIA else ""  # 버튼 앞 보석 자리
-	one_button.text = "%s1회 %s%s" % [pad, unit, UiKit.commas(Economy.gacha_cost(currency, 1))]
-	ten_button.text = "%s10회 %s%s" % [pad, unit, UiKit.commas(Economy.gacha_cost(currency, 10))]
-	if currency == DIA:  # SR 이상 보장은 다이아 10연차만
-		ten_button.text += " · SR 이상 %d장" % int(GameData.config_num("gacha_10_min_sr"))
-	var have := Economy.wallet(currency)
-	one_button.disabled = _waiting or have < Economy.gacha_cost(currency, 1)
-	ten_button.disabled = _waiting or have < Economy.gacha_cost(currency, 10)
-	var cost := Economy.gacha_cost(_cur, _count)
-	var short := Economy.wallet(_cur) < cost
+	for i in 2:
+		var b: Button = [one_button, ten_button][i]
+		var n: int = [1, 10][i]
+		var cur := pull_currency(n)
+		var unit: String = {DIA: "다이아 ", TICKET: "모집권 "}.get(cur, "")
+		var pad := "      " if cur == DIA else ""  # 버튼 앞 보석 자리(다이아일 때만)
+		var cost := Economy.gacha_cost(cur, n)
+		b.text = "%s%d회 %s%s" % [pad, n, unit, (("%d장" % cost) if cur == TICKET else UiKit.commas(cost))]
+		if n == 10 and cur != GOLD:  # SR 이상 보장은 다이아(모집권 포함) 10연차만
+			b.text += " · SR 이상 %d장" % int(GameData.config_num("gacha_10_min_sr"))
+		_btn_gems[i].visible = cur == DIA
+		if b.get_meta("cur", GOLD) != cur:  # 모집권 버튼은 SR 색
+			b.set_meta("cur", cur)
+			UiKit.apply_button(b, UiKit.GRADE_COLORS.SR if cur == TICKET else HudScript.ACCENT, 14.0)
+		# 골드는 모자라면 끈다. 다이아는 눌러서 상점 이동 창을 띄운다
+		b.disabled = cur == GOLD and Economy.wallet(GOLD) < cost  # 응답을 기다리는 동안에도 모양은 그대로(재탭은 _pull이 무시)
+	var again_cur := pull_currency(_count, _cur)
+	var cost := Economy.gacha_cost(again_cur, _count)
+	var short := Economy.wallet(again_cur) < cost
 	if auto_running() and not short:
-		again_button.text = "자동 중…"
+		again_button.text = "자동 모집 중"
+	elif again_cur == TICKET:
+		again_button.text = "재모집 모집권 %d장" % cost
 	else:
-		again_button.text = "재모집 %s%s" % ["다이아 " if _cur == DIA else "", UiKit.commas(cost)] + (("\n다이아 부족" if _cur == DIA else "\n골드 부족") if short else "")
-		if _cur == TICKET:
-			again_button.text = "재모집 모집권 %d장" % cost + ("\n모집권 부족" if short else "")
-	again_button.disabled = _waiting or short or auto_running()
+		again_button.text = "재모집 %s%s" % ["다이아 " if again_cur == DIA else "", UiKit.commas(cost)] + (("\n다이아 부족" if again_cur == DIA else "\n골드 부족") if short else "")
+	again_button.disabled = (short and again_cur == GOLD) or auto_running()
