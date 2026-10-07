@@ -5120,13 +5120,14 @@ func test_iap() -> void:
 		for l in src.split("\n"):
 			if l.contains("id: '%s'" % p.id):
 				line = l
-		if not (line.contains("krw: %d," % int(p.krw)) and line.contains("kind: '%s'" % p.kind) and line.contains("diamonds: %d" % int(p.give.get("diamonds", 0)) if p.give.has("diamonds") else true)):
+		var dia_ok: bool = not p.give.has("diamonds") or line.contains("diamonds: %d" % int(p.give.diamonds))
+		if not (line.contains("krw: %d," % int(p.krw)) and line.contains("kind: '%s'" % p.kind) and dia_ok):
 			same = false
 			print("  iap product differs from server: ", p.id)
 	for t in items.GROWTH:
 		if not src.contains("round: %d," % int(t.round)):
 			same = false
-	check(same and src.count("kind: '") == items.PRODUCTS.size() + 1, "iap: client product table matches server/src/iap.ts")
+	check(same and src.count("kind: '") == items.PRODUCTS.size(), "iap: client product table matches server/src/iap.ts")
 	var e = _econ(1000.0)
 	var d0: int = e.diamonds
 	check(not e.iap_buy("dia_1") and e.diamonds == d0, "iap: buying before payments are connected gives nothing")
