@@ -3,7 +3,7 @@ extends "res://scripts/ui_window.gd"
 ## 정지 그림 + 가장자리 비네트 + 외곽선 제목 "영웅 모집"), 그 아래 탭 [골드 모집] [다이아 모집].
 ## 골드 탭: 레벨 배지 "골드 모집 Lv n", 진행 막대 + "다음 레벨까지 a/b", 다음 레벨 확률·비용 미리보기, 확률 한 줄, [1회 3,000] [10회 30,000](10회 = 1회 × 10, 보장 없음).
 ## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, 천장 "SSR 확정까지 n회", [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장].
-## 다이아 모집권이 그 장수만큼 있으면 그 버튼은 모집권 버튼([1회 모집권 1장] [10회 모집권 10장 · …])으로 바뀌고 모집권을 쓴다(버튼마다 따로).
+## 다이아 모집권이 그 장수만큼 있으면 그 버튼은 모집권 버튼([1회 모집권 1장] [10회 모집권 10장 · SR 이상 1장])으로 바뀌고 모집권을 쓴다(버튼마다 따로).
 ## 다이아 버튼은 다이아가 모자라도 눌린다: 누르면 "다이아가 부족합니다 — 상점으로 이동할까요?" 창, [이동]이면 다이아 상점을 연다(사용자 요청 2026-10-06).
 ## 골드가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
 ## 새 영웅은 "NEW", 중복은 "+1 조각"과 그 영웅의 조각 막대(개정 15), SSR은 반짝임) + [재모집]·[확인]·자동 모집(개정 17) — 마지막에 뽑은 재화로 되풀이한다.
@@ -35,7 +35,7 @@ var dia_tab: Button
 var one_button: Button
 var ten_button: Button
 var confirm_button: Button
-var again_button: Button  # [재모집 N] — 자동 중엔 "자동 중…"
+var again_button: Button  # [재모집 N] — 자동 중엔 "자동 모집 중"
 var auto_box: Button  # 자동 모집 체크박스(Fever.auto_recruit에 저장). 골드 결과에서만 보인다
 var auto_delay := AUTO_DELAY  # 테스트가 줄인다
 var cards: Array = []  # 지금 보이는 결과 카드
@@ -483,14 +483,14 @@ func _refresh() -> void:
 			b.set_meta("cur", cur)
 			UiKit.apply_button(b, UiKit.GRADE_COLORS.SR if cur == TICKET else HudScript.ACCENT, 14.0)
 		# 골드는 모자라면 끈다. 다이아는 눌러서 상점 이동 창을 띄운다
-		b.disabled = _waiting or (cur == GOLD and Economy.wallet(GOLD) < cost)
+		b.disabled = cur == GOLD and Economy.wallet(GOLD) < cost  # 응답을 기다리는 동안에도 모양은 그대로(재탭은 _pull이 무시)
 	var again_cur := pull_currency(_count, _cur)
 	var cost := Economy.gacha_cost(again_cur, _count)
 	var short := Economy.wallet(again_cur) < cost
 	if auto_running() and not short:
-		again_button.text = "자동 중…"
+		again_button.text = "자동 모집 중"
 	elif again_cur == TICKET:
 		again_button.text = "재모집 모집권 %d장" % cost
 	else:
 		again_button.text = "재모집 %s%s" % ["다이아 " if again_cur == DIA else "", UiKit.commas(cost)] + (("\n다이아 부족" if again_cur == DIA else "\n골드 부족") if short else "")
-	again_button.disabled = _waiting or (short and again_cur == GOLD) or auto_running()
+	again_button.disabled = (short and again_cur == GOLD) or auto_running()

@@ -65,7 +65,7 @@ func _ready() -> void:
 ## 탭 누름: 그 탭의 창이 닫혀 있으면 다른 창(건물 창 등 탭 밖 창 포함)을 모두 닫고 연다. 열려 있으면 모두 닫는다.
 func press(id: String) -> void:
 	if Tutorial.tab_locked(id):
-		Economy.notice.emit(Tutorial.LOCKED_TEXT)
+		Tutorial.lock_notice.emit(Tutorial.tab_lock_text(id))
 		return
 	var w = windows.get(id)
 	var open_it: bool = w != null and not w.is_open()

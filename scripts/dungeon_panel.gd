@@ -358,7 +358,7 @@ func _refresh() -> void:
 ## [도전]: 그 던전의 편성 화면(저장된 편성이 맞으면 그것, 아니면 기본 편성).
 func open_form(t: String) -> void:
 	if Tutorial.dungeon_locked(t):
-		Economy.notice.emit(Tutorial.dungeon_lock_text(t))
+		Tutorial.lock_notice.emit(Tutorial.dungeon_lock_text(t))
 		return
 	form_type = t
 	var saved: Array = Fever.dungeon_party.get(t, [])

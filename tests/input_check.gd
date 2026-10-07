@@ -2345,7 +2345,7 @@ func _recruit_repeat(recruit) -> void:
 	recruit.auto_box.button_pressed = true
 	recruit._recruit(10)
 	await _frames(2)
-	_check(recruit.auto_running() and recruit.again_button.text == "자동 중…", "(rr) while auto runs [재모집] reads 자동 중…", "text=%s" % recruit.again_button.text)
+	_check(recruit.auto_running() and recruit.again_button.text == "자동 모집 중", "(rr) while auto runs [재모집] reads 자동 모집 중", "text=%s" % recruit.again_button.text)
 	recruit.confirm_button.pressed.emit()
 	recruit.auto_delay = 0.05
 	var g0: int = Economy.gold

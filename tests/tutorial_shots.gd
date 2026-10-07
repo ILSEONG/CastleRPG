@@ -1,6 +1,6 @@
 extends Node
 ## 튜토리얼 스냅샷(개발용): 실제 main 씬에서 새 게임 튜토리얼을 진행하며 화면을 찍어 한 장으로 붙인다 —
-## 시작(성채만 + 공터 + 미션 카드 + 잠긴 탭) → 공터 건설 창 → 건설 중 → 보상 받기 → 모집권 모집 → 건물을 다 지은 성.
+## 시작(성채만 + 공터 + 미션 카드 + 잠긴 탭) → 잠긴 공터·탭 토스트 → 공터 건설 창 → 건설 중 → 보상 받기 → 모집권 모집 → 건물을 다 지은 성.
 ## 화면이 필요하다(헤드리스 불가). 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/tutorial_shots.tscn -- --out=/tmp/tutorial.png
 ## 저장 파일은 건드리지 않는다(Economy·Fever·Guild·Tutorial save_path = "").
 
@@ -21,6 +21,13 @@ func _ready() -> void:
 	await _frames(90)
 	await _snap()  # 1. 시작
 	var bp = _find("res://scripts/building_panel.gd")
+	bp.open_building("tavern")  # 잠긴 공터: 창 대신 중상단 토스트
+	await _snap()  # 2. 공터 잠금 토스트
+	print("lot locked: panel open=", bp.is_open())
+	await _frames(120)
+	_find_deep(_main, "res://scripts/tab_bar.gd").press("hero")  # 잠긴 탭
+	await _snap()  # 3. 탭 잠금 토스트
+	await _frames(120)
 	Tutorial.goto_current()  # 성채 창 → 미션 1 완료
 	await _frames(30)
 	bp.close()
@@ -77,7 +84,7 @@ func _ready() -> void:
 			out = a.substr(6)
 	var w: int = _shots[0].get_width() / 2
 	var h: int = _shots[0].get_height() / 2
-	var cols := 5
+	var cols := 6
 	var sheet := Image.create(w * cols, h * 2, false, Image.FORMAT_RGB8)
 	for i in _shots.size():
 		var img: Image = _shots[i]
@@ -103,4 +110,14 @@ func _find(path: String) -> Node:
 	for n in _main.get_children():
 		if n.get_script() != null and n.get_script().resource_path == path:
 			return n
+	return null
+
+
+func _find_deep(n: Node, path: String) -> Node:
+	if n.get_script() != null and n.get_script().resource_path == path:
+		return n
+	for c in n.get_children():
+		var f := _find_deep(c, path)
+		if f != null:
+			return f
 	return null

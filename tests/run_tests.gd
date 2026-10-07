@@ -4813,8 +4813,28 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "튜토리얼 「모집권 던전」 미션에서 열립니다" and t.reward(t.mission_index("dungeon_ticket") - 1) == {"keys_ticket": 2},
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "튜토리얼 21번째 미션 「모집권 던전」에서 열려요" and t.reward(t.mission_index("dungeon_ticket") - 1) == {"keys_ticket": 2},
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
+	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
+	var lots_was: Dictionary = e.unbuilt.duplicate()
+	var blocks := []
+	for m in TutorialScript.MISSIONS:
+		if m.kind != "build":
+			continue
+		var mi: int = t.mission_index(m.id)
+		e.unbuilt = {m.arg: true}
+		t.step = mi - 1
+		var before: bool = t.build_locked(m.arg)
+		t.step = mi
+		var at: bool = t.build_locked(m.arg)
+		e.unbuilt = {}
+		t.step = mi - 1
+		blocks.append(before and not at and not t.build_locked(m.arg))
+	e.unbuilt = lots_was
+	t.step = step_was
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요"
+		and t.tab_lock_text("hero") == "튜토리얼 9번째 미션 「영웅 레벨업」에서 열려요",
+		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0

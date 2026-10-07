@@ -34,6 +34,7 @@ const CHIP_FONT := 18  # "9,999,999"가 칩 하나에 잘리지 않는 크기(�
 const STAGE_BUTTON := Vector2(150, 64)  # 상단 스테이지 버튼(개정 12-2 §1)
 const BAND_BOTTOM := -(TAB_BAR_H + 12)  # 끊김 띠는 탭 바 위 12px에서 위로 자란다
 const BAR_H := 24
+const LOCK_TOAST_Y := 0.3  # 튜토리얼 잠금 토스트: 화면 높이의 이 지점(가운데 중상단, 상단 스테이지 패널 아래)
 const CASTLE_COLOR := Color(0.95, 0.75, 0.2)
 const GATE_COLOR := Color(0.55, 0.6, 0.7)
 const BROKEN_GREY := Color(0.40, 0.40, 0.43)
@@ -65,6 +66,9 @@ var _link_label: Label
 var _storage_label: Label
 var _toast: Label  # 짧은 알림("연결 대기 중")
 var _toast_left := 0.0
+var lock_toast: PanelContainer  # 튜토리얼 잠금 알림(화면 가운데 중상단): 잠긴 공터·하단 탭·던전을 눌렀을 때 몇 번째 미션에서 열리는지
+var lock_toast_label: Label
+var _lock_left := 0.0
 var fever_confirm: Control  # FEVER 중 [진행] → "FEVER를 끝내고 시작할까요?" [예]·[아니오]
 var fever_yes: Button
 var fever_no: Button
@@ -195,6 +199,10 @@ func _process(delta: float) -> void:
 		_toast_left -= delta
 		_toast.modulate.a = clampf(_toast_left / 0.4, 0.0, 1.0)  # 마지막 0.4초에 사라진다
 		_toast.visible = _toast_left > 0.0
+	if _lock_left > 0.0:
+		_lock_left -= delta
+		lock_toast.modulate.a = clampf(_lock_left / 0.4, 0.0, 1.0)
+		lock_toast.visible = _lock_left > 0.0
 	for e in _hp.values():
 		if e.left > 0.0:
 			e.left -= delta
@@ -520,6 +528,37 @@ func _build_link_ui() -> void:
 	_toast.visible = false
 	top.add_child(_toast)
 	Economy.notice.connect(_on_notice)
+	lock_toast = PanelContainer.new()
+	lock_toast.anchor_left = 0.5
+	lock_toast.anchor_right = 0.5
+	lock_toast.anchor_top = LOCK_TOAST_Y
+	lock_toast.anchor_bottom = LOCK_TOAST_Y
+	lock_toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	lock_toast.grow_vertical = Control.GROW_DIRECTION_BOTH
+	lock_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lock_toast.add_theme_stylebox_override("panel", UiKit.panel(Color(INK, 0.88), 14.0, 16, 0.05))
+	lock_toast_label = Label.new()
+	lock_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lock_toast_label.add_theme_font_size_override("font_size", 26)  # 가장 긴 문구(「…」에서 건설할 수 있어요)가 720 안에
+	lock_toast_label.add_theme_color_override("font_color", Color.WHITE)
+	lock_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lock_toast.add_child(lock_toast_label)
+	lock_toast.visible = false
+	top.add_child(lock_toast)
+	Tutorial.lock_notice.connect(show_lock_toast)
+
+
+## 튜토리얼 잠금 토스트(가운데 중상단). 글 폭에 맞춘 상자를 그 지점 가운데에 둔다.
+func show_lock_toast(text: String) -> void:
+	lock_toast_label.text = text
+	var sz := lock_toast.get_combined_minimum_size()
+	lock_toast.offset_left = -sz.x / 2.0
+	lock_toast.offset_right = sz.x / 2.0
+	lock_toast.offset_top = -sz.y / 2.0
+	lock_toast.offset_bottom = sz.y / 2.0
+	lock_toast.modulate.a = 1.0
+	lock_toast.visible = true
+	_lock_left = TOAST_SEC
 
 
 func _band_label(text: String, font_size: int) -> Label:

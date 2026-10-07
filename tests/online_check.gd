@@ -456,7 +456,8 @@ func _heroes_online() -> int:
 	_recruit.open()
 	_recruit.one_button.pressed.emit()
 	_recruit.one_button.pressed.emit()  # 응답 전 재탭
-	_check(_recruit.one_button.disabled and Economy.gold_tenths == gold0, "(k) while waiting for the reply the buttons are off and nothing changes yet", "")
+	_check(not _recruit.one_button.disabled and not _recruit.one_button.text.contains("…") and Economy.gold_tenths == gold0 - 30000 and Net.requested.get("/v1/gacha", 0) == g0 + 1,
+		"(k) before the reply the gold is already spent, the button looks the same (no …) and a second tap sends nothing", "gold=%d text=%s" % [Economy.gold_tenths, _recruit.one_button.text])
 	var shown := await _wait_until(func(): return _recruit.is_showing_results(), 15.0)
 	var got: String = _recruit.cards[0].hero_id if shown and _recruit.cards.size() == 1 else ""
 	_check(shown and Net.requested.get("/v1/gacha", 0) == g0 + 1 and Economy.server_gold_tenths == gold0 - 30000 and Economy.gold_tenths == gold0 - 30000
