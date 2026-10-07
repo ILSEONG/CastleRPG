@@ -26,6 +26,7 @@ const UiKit := preload("res://scripts/ui_kit.gd")
 const Formation := preload("res://scripts/formation.gd")
 const CameraRig := preload("res://scripts/camera_rig.gd")
 const FeverButtonScript := preload("res://scripts/fever_button.gd")
+const ResultBanner := preload("res://scripts/result_banner.gd")
 const TAB_BAR_H := 104  # 하단 탭 바 높이(tab_bar.gd, 개정 11 §2.3)
 const CHIP_SIDE := 12  # 상단 재화 칩 줄 좌우 여백(개정 23: 칩 5개가 720에 들어가게 16 → 12)
 const CHIP_GAP := 6
@@ -54,6 +55,7 @@ var _compass_yaw := CameraRig.YAW_DEG
 var _gate_tiles: Array = [] # side -> 성문 막대 줄(탭하면 gate_tapped)
 var _hp := {}  # CASTLE·면 → {bar, num, flash: 테두리 번쩍임 Control, left: 남은 번쩍임 초, last: 지난 HP}
 var _center: Label
+var result_banner  # result_banner.gd — 라운드 클리어·패배 리본(결과 동안만, 디자인 보강 4번)
 var hint: Label  # 카운트다운 안내(테스트가 읽는다)
 var _tip_n := -1
 var _button: Button
@@ -160,6 +162,18 @@ func _ready() -> void:
 	_center.add_theme_color_override("font_outline_color", Color(INK, 0.85))
 	_center.add_theme_constant_override("outline_size", 18)
 	root.add_child(_center)
+	result_banner = ResultBanner.new()
+	result_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	result_banner.offset_left = -360.0
+	result_banner.offset_right = 360.0
+	result_banner.offset_top = -70.0
+	result_banner.offset_bottom = 50.0
+	result_banner.band_h = 72.0
+	result_banner.band_w = 380.0
+	result_banner.font_size = 50
+	result_banner.backdrop = true
+	result_banner.visible = false
+	root.add_child(result_banner)
 	hint = Label.new()  # 카운트다운 안내: 큰 숫자 아래 작은 글씨(상황 한 줄 + 팁 한 줄)
 	hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	hint.offset_left = -330.0
@@ -341,12 +355,16 @@ func _set_hp(key: int, hp: float, hp_max: float) -> void:
 	b.add_theme_stylebox_override("background", UiKit.bar(BROKEN_GREY).fill if broken else UiKit.bar(e.color).background)
 
 
+## 라운드 클리어: 금빛 리본(보스 라운드면 뒤로 빛살). 패배: 회청색 리본.
 func _on_cleared(stage: int) -> void:
-	_center.text = "%s 클리어" % GameData.round_label(stage)
+	_center.text = ""
+	result_banner.rays = GameData.round_in_stage(stage) == GameData.rounds_per_stage()
+	result_banner.play("%s 클리어" % GameData.round_label(stage), "win")
 
 
 func _on_failed(_stage: int) -> void:
-	_center.text = "패배"
+	_center.text = ""
+	result_banner.play("패배", "lose")
 
 
 func _on_mode_changed(mode: int) -> void:
@@ -355,6 +373,8 @@ func _on_mode_changed(mode: int) -> void:
 	_round_label.text = "스테이지 %d · 라운드 %d/%d" % [GameData.round_stage(g), GameData.round_in_stage(g), GameData.rounds_per_stage()]
 	if mode == GameState.Mode.IDLE or mode == GameState.Mode.STAGE:
 		_center.text = ""
+	if mode != GameState.Mode.RESULT:
+		result_banner.visible = false
 	hint.visible = mode == GameState.Mode.COUNTDOWN
 	if hint.visible:
 		_tip_n += 1

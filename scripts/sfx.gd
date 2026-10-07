@@ -8,6 +8,7 @@ extends Node
 ##   Sfx.damage(target, kind)  피해 숫자 하나(DamageNumbers.pop — 숫자 표시를 꺼도 소리는 난다)
 ## 버튼은 스스로 붙는다: 트리에 들어오는 모든 BaseButton의 pressed → "click"(토글 버튼은 "tab"). 메타 "sfx_off"가 있으면 빼고,
 ## 메타 "sfx"(소리 id)가 있으면 그 소리. 보상·성장·승패는 오토로드 신호(Economy·GameState·Guild·Pvp·Tutorial)에 붙는다.
+## 모집 카드 소리는 카드가 뒤집히는 순간 card_reveal.gd가 낸다.
 ## 같은 소리는 SOUNDS의 간격 안에 다시 내지 않고(평타·처치가 수십 번 겹치지 않게), 목소리 VOICES개를 돌려 쓴다 —
 ## 다 차면 우선 소리(화면·보상)는 가장 오래된 목소리를 끊고, 전투 소리는 그냥 건너뛴다. 시간은 실제 초(히트스톱·슬로모션에 안 흔들림).
 ## 켬/끔·크기: 설정 창 [효과음]·[효과음 음량] — 기기 설정 sfx(기본 켬)·sfx_volume(0..1, 기본 1), 버스 "Sfx".
@@ -19,7 +20,6 @@ const BUS := "Sfx"
 const VOICES := 16
 const VOLUME_DB := -3.0
 const SCREEN_MARGIN := 80.0  # 화면 밖 이만큼(px)까지는 들린다
-const GACHA_REVEAL_SEC := 0.35  # 모집: 카드 소리 뒤 등급 소리까지
 ## id → [변형 수, 크기 dB, 음높이 흔들림(±), 최소 간격(초), 우선]
 const SOUNDS := {
 	"click": [2, -9.0, 0.04, 0.03, true],
@@ -307,7 +307,6 @@ func _connect_game() -> void:
 		eco.granted.connect(func(_r): emit_sound("reward"))
 		eco.quest_claimed.connect(func(ok): _sound_if(ok, "reward"))
 		eco.offline_reported.connect(func(_r): emit_sound("reward"))
-		eco.gacha_done.connect(_on_gacha)
 		eco.dungeon_finished.connect(func(r): _sound_if(r.has("win"), "victory" if r.get("win", false) else "defeat"))
 	var gs := root.get_node_or_null("GameState")
 	if gs != null:
@@ -328,19 +327,3 @@ func _connect_game() -> void:
 func _sound_if(cond: bool, id: String) -> void:
 	if cond:
 		emit_sound(id)
-
-
-## 모집 결과: 카드 소리, 잠깐 뒤 가장 높은 등급 소리(SSR > SR).
-func _on_gacha(results: Array) -> void:
-	if results.is_empty():
-		return
-	emit_sound("card")
-	var best := ""
-	for r in results:
-		if r.get("grade", "") == "SSR":
-			best = "gacha_ssr"
-			break
-		if r.get("grade", "") == "SR":
-			best = "gacha_sr"
-	if best != "":
-		get_tree().create_timer(GACHA_REVEAL_SEC, true, false, true).timeout.connect(emit_sound.bind(best))

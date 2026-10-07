@@ -9,13 +9,12 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
+const ResultBanner := preload("res://scripts/result_banner.gd")
 
 const FACE_PX := 92.0
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const HP_RED := Color(0.86, 0.3, 0.24)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
-const WIN_GOLD := Color("C8901A")
-const LOSE_GRAY := Color(0.42, 0.45, 0.52)
 const ARM_SEC := 2.5
 
 var battle  # pvp_battle.gd
@@ -28,7 +27,7 @@ var leave_button: Button
 var strip: Array = []  # [{hero, face, bar, cell}]
 var banner: Label
 var result_layer: Control
-var result_title: Label
+var result_title  # result_banner.gd — 리본 위 "승리!"·"패배"(.text)
 var result_body: Label
 
 var _flash_left := 0.0
@@ -197,9 +196,8 @@ func _build_result(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
 	panel.add_child(box)
-	result_title = _label("", 60, WIN_GOLD)
-	result_title.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
-	result_title.add_theme_constant_override("outline_size", 8)
+	result_title = ResultBanner.new()
+	result_title.overhang = 40.0  # 창 윗변에 걸친다
 	box.add_child(result_title)
 	result_body = _label("", 28, MainHud.INK)
 	box.add_child(result_body)
@@ -211,8 +209,7 @@ func _build_result(root: Control) -> void:
 
 func show_result(r: Dictionary) -> void:
 	var win: bool = r.get("win", false)
-	result_title.text = "승리!" if win else "패배"
-	result_title.add_theme_color_override("font_color", WIN_GOLD if win else LOSE_GRAY)
+	result_title.play("승리!" if win else "패배", "win" if win else "lose")
 	var why := ""
 	match str(r.get("reason", "")):
 		"time":

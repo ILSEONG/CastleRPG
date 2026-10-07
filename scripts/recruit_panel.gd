@@ -18,6 +18,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
+const CardReveal := preload("res://scripts/card_reveal.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
@@ -29,6 +30,9 @@ const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
 const DUP_TEXT := "+1 조각"  # 이미 가진 영웅(개정 15)
 const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
 const SSR_TEXT := "SSR 등장 — 자동 모집을 멈췄습니다"
+const REVEAL_ONE := 0.45  # 1회: 뒷면을 보여 준 뒤 뒤집기까지(SR·SSR 예고 빛이 다 번진다)
+const REVEAL_FIRST := 0.3  # 10회: 첫 카드
+const REVEAL_STEP := 0.1  # 10회: 카드 사이
 var gold_tab: Button
 var dia_tab: Button
 var one_button: Button
@@ -37,7 +41,7 @@ var confirm_button: Button
 var again_button: Button  # [재모집 N] — 자동 중엔 "자동 모집 중"
 var auto_box: Button  # 자동 모집 체크박스(Fever.auto_recruit에 저장). 골드 결과에서만 보인다
 var auto_delay := AUTO_DELAY  # 테스트가 줄인다
-var cards: Array = []  # 지금 보이는 결과 카드
+var cards: Array = []  # 지금 보이는 결과 카드(hero_card — 저마다 뒤집기 연출 card_reveal 안에 있다)
 var currency := GOLD  # 고른 탭
 var level_label: Label
 var progress_bar: ProgressBar
@@ -65,6 +69,7 @@ var _cur := GOLD  # 마지막 모집 재화
 var _halted := false  # 재화 부족·SSR·실패·창 닫힘으로 자동이 멈춤(체크는 그대로, 다음에 직접 모집하면 다시 돈다)
 var _auto_left := 0.0  # 다음 자동 모집까지 남은 초
 var _late: Array = []  # 다른 창이 열려 있어 못 보여 준 결과(다음에 열 때)
+var _reveals: Array = []  # 결과 카드마다 뒤집기 연출(card_reveal.gd, 그리드의 자식)
 
 
 func _ready() -> void:
@@ -349,16 +354,19 @@ func _on_gacha_done(results: Array) -> void:
 	_show_results(results)
 
 
-## 결과 카드 1장 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다.
+## 결과 카드 1장 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다. 카드는 뒷면으로 떴다가 차례로 뒤집힌다(디자인 보강 4번 —
+## 1회는 REVEAL_ONE초 뒤, 10회는 왼쪽 위부터 REVEAL_STEP초 간격). 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고, 자동 모집 중엔 기다리지 않는다.
 func _show_results(results: Array) -> void:
-	for c in cards:
-		_grid.remove_child(c)
-		c.queue_free()
+	for h in _reveals:
+		_grid.remove_child(h)
+		h.queue_free()
+	_reveals.clear()
 	cards.clear()
 	_grid.columns = mini(5, results.size())
-	for r in results:
+	var fast := auto_running()
+	for i in results.size():
+		var r: Dictionary = results[i]
 		var card = HeroCardScript.new()
-		card.custom_minimum_size = CARD_SIZE
 		card.hero_id = r.hero_id
 		card.stars = Economy.promotion_of(r.hero_id)
 		if r.new:
@@ -368,7 +376,13 @@ func _show_results(results: Array) -> void:
 			card.badge_color = HeroCardScript.BAR_FILL.darkened(0.2)
 			card.shards = int(r.get("shards", 0))
 			card.shard_need = Economy.promote_cost(r.hero_id)
-		_grid.add_child(card)
+		var holder = CardReveal.new()
+		holder.custom_minimum_size = CARD_SIZE
+		var wait := 0.0 if fast else (REVEAL_ONE if results.size() == 1 else REVEAL_FIRST + REVEAL_STEP * i)
+		holder.setup(card, String(r.grade), wait)
+		holder.skip_requested.connect(reveal_all)
+		_grid.add_child(holder)
+		_reveals.append(holder)
 		cards.append(card)
 	var stop := auto_running() and results.any(func(r): return r.grade == "SSR")
 	if stop:  # 안전: 자동 중 SSR이 나오면 멈추고 그 카드를 강조(반짝임은 카드가 이미 낸다)
@@ -383,6 +397,12 @@ func _show_results(results: Array) -> void:
 	_fit()
 	_arm_guard()
 	_refresh()
+
+
+## 남은 결과 카드를 지금 다 뒤집는다(뒷면 카드를 누르면).
+func reveal_all() -> void:
+	for h in _reveals:
+		h.reveal_now()
 
 
 func _show_pick() -> void:

@@ -112,6 +112,7 @@ func _init() -> void:
 	test_growth_economy()
 	test_item_icons()
 	test_arena_kit()
+	test_card_reveal_and_banner()
 	test_dungeon_monsters()
 	test_spawn_groups()
 	test_idle_four_sides_at_once()
@@ -3272,6 +3273,44 @@ func test_item_icons() -> void:
 ## 던전 무대: 평야 = 영웅 6·고블린 15·왕, 성 내부 = 영웅 4·데스나이트. 자리는 바닥에, 전투 자리 안(평야 반경 / 홀 안)에, 서로 1 m 넘게 떨어지고,
 ## 영웅은 모든 적보다 화면 아래. 조명 설정 키·점광원 ≤ 3(그림자 없음). 이펙트(불꽃·연기·불씨·빛기둥)는 그림자 없음, 평야 반복물은 MultiMesh.
 ## 드랍 상자(등급마다 메시 하나, 작음, 바닥에 놓임)·빛기둥(높이 PILLAR_H) 그림자 없음.
+## 모집 카드 뒤집기(card_reveal)·승패 리본(result_banner) — 디자인 보강 4번.
+func test_card_reveal_and_banner() -> void:
+	const CardReveal := preload("res://scripts/card_reveal.gd")
+	const ResultBanner := preload("res://scripts/result_banner.gd")
+	var h = CardReveal.new()
+	var c := Control.new()
+	var got := [0]
+	h.revealed.connect(func(_x): got[0] += 1)
+	h.setup(c, "SR", 0.5)
+	check(h.card == c and c.get_parent() == h and not c.visible and not h.is_revealed() and not h.shown, "reveal: the card starts face down (hidden) until its delay")
+	h._t = 0.5 + CardReveal.FLIP_SEC * 0.25
+	h._apply()
+	check(not c.visible and got[0] == 0, "reveal: still the back while it folds")
+	h._t = 0.5 + CardReveal.FLIP_SEC * 0.75
+	h._apply()
+	check(c.visible and h.shown and got[0] == 1 and c.scale.x < 1.0 and c.modulate.r > 1.0, "reveal: the front unfolds (narrow, flashing) and says so once")
+	h._t = 0.5 + CardReveal.FLIP_SEC * 2.0
+	h._apply()
+	check(h.is_revealed() and got[0] == 1 and is_equal_approx(c.scale.x, 1.0) and is_equal_approx(c.modulate.r, 1.0), "reveal: then settles at full size, no flash, no second signal")
+	h.free()
+	var h2 = CardReveal.new()
+	var c2 := Control.new()
+	h2.setup(c2, "R", 3.0)
+	h2.reveal_now()
+	check(h2.is_revealed() and c2.visible and h2.shown, "reveal: reveal_now() skips the wait (tap to skip)")
+	h2.free()
+	var b = ResultBanner.new()
+	check(b.mouse_filter == Control.MOUSE_FILTER_IGNORE and not b.is_playing(), "banner: ignores taps, idle until played")
+	b.play("승리!", "win")
+	check(b.text == "승리!" and b.tone == "win" and b.is_playing() and b.visible and b.band_color() == ResultBanner.WIN, "banner: play() sets text and tone and restarts the entrance")
+	var h0: float = b.custom_minimum_size.y
+	b.overhang = 40.0
+	check(is_equal_approx(b.custom_minimum_size.y, h0 - 40.0) and b.ribbon_center().y < b.band_h * 0.5, "banner: overhang lifts the ribbon over the window's top edge and shortens its row")
+	b.play("패배", "lose")
+	check(b.band_color() == ResultBanner.LOSE, "banner: lose is the slate ribbon")
+	b.free()
+
+
 func test_arena_kit() -> void:
 	const ArenaKit := preload("res://scripts/arena_kit.gd")
 	for kind in ["plains", "castle", "lair", "colosseum"]:

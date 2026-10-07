@@ -18,6 +18,7 @@ const GuildScript := preload("res://scripts/guild.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const GuildPanel := preload("res://scripts/guild_panel.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
+const ResultBanner := preload("res://scripts/result_banner.gd")
 const Fx := preload("res://scripts/fx.gd")
 
 enum Phase { INTRO, FIGHT, REPORT, RESULT }
@@ -264,6 +265,10 @@ func _show_result() -> void:
 		_result_box.add_child(_label("결과를 받지 못했습니다", 40, GuildPanel.RED))
 		_result_box.add_child(_label("총 피해 %s · 길드 창에서 다시 확인하세요" % UiKit.commas(int(dragon.dealt)), 24, MainHud.INK, true))
 	else:
+		var banner = ResultBanner.new()  # 창 윗변에 걸친 금빛 리본(디자인 보강 4번)
+		banner.overhang = 40.0
+		_result_box.add_child(banner)
+		banner.play("도전 완료", "win")
 		var grade := str(result.grade)
 		var head := _label(grade, 96, GuildPanel.grade_color(grade))
 		head.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))

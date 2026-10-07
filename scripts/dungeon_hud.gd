@@ -14,6 +14,7 @@ const BagPanel := preload("res://scripts/bag_panel.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const ResultBanner := preload("res://scripts/result_banner.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
@@ -23,7 +24,6 @@ const FACE_PX := 96.0
 const TILE_PX := 96.0
 const TOAST_SEC := 1.6
 const WIN_GOLD := Color("C8901A")
-const LOSS_RED := Color(0.78, 0.22, 0.18)
 const BOSS_RED := Color(0.86, 0.24, 0.2)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
@@ -38,7 +38,7 @@ var banner: Label
 var toast: Label
 var strip: Array = []  # [{hero, face, bar}]
 var result_layer: Control  # 결과 화면(어두운 배경 + 패널)
-var result_title: Label
+var result_title  # result_banner.gd — 리본 위 "승리!"·"패배"·실패 문구(.text)
 var result_sub: Label
 var reward_box: HBoxContainer
 var reward_tiles: Array = []  # 장비 칸(테스트용)
@@ -207,9 +207,7 @@ func _build_result(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
 	panel.add_child(box)
-	result_title = _label("", 56, WIN_GOLD)
-	result_title.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
-	result_title.add_theme_constant_override("outline_size", 8)
+	result_title = ResultBanner.new()
 	box.add_child(result_title)
 	result_sub = _label("", 26, MainHud.INK)
 	box.add_child(result_sub)
@@ -249,12 +247,11 @@ func show_result() -> void:
 	var res: Dictionary = dungeon.result
 	var win: bool = res.get("win", false)
 	var err := str(res.get("error", ""))
-	result_title.text = "승리!" if win else ("패배" if err == "" else Economy.DUNGEON_TEXT.get(err, Economy.DUNGEON_FAIL_TEXT))
-	result_title.add_theme_color_override("font_color", WIN_GOLD if win else LOSS_RED)
-	result_title.add_theme_font_size_override("font_size", 56 if err == "" else 32)
+	result_title.play("승리!" if win else ("패배" if err == "" else Economy.DUNGEON_TEXT.get(err, Economy.DUNGEON_FAIL_TEXT)), "win" if win else ("lose" if err == "" else "info"))
 	result_sub.text = "%s %d단계" % [NAMES.get(dungeon.run.type, ""), int(dungeon.run.level)]
-	# 패배면 던전·단계를 맨 위에, 그 밑에 패배 문구(사용자 요청). 승리면 제목 밑.
+	# 패배면 던전·단계를 맨 위에, 그 밑에 패배 문구(사용자 요청). 승리면 제목 밑 — 승리 리본은 창 윗변에 걸친다(디자인 보강 4번).
 	result_sub.get_parent().move_child(result_sub, 1 if win else 0)
+	result_title.overhang = 40.0 if win else 0.0
 	result_sub.add_theme_font_size_override("font_size", 26 if win else 34)
 	for c in reward_box.get_children():
 		reward_box.remove_child(c)
