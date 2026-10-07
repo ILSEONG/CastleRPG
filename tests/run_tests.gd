@@ -3577,8 +3577,8 @@ func test_dungeon_tables() -> void:
 		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
 		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
 	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 100000
-		and GameData.extra_cost(2) == 400000 and GameData.extra_cost(3) == 800000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
-		"fresh dungeon = today's keys; extra run cost 100000 x 2^(runs today); party 6 / 4")
+		and GameData.extra_cost(2) == 500000 and GameData.extra_cost(3) == 700000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
+		"fresh dungeon = today's keys; extra run cost 100000 x (1 + 2 x runs today); party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
 	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
@@ -3677,14 +3677,14 @@ func test_dungeons_offline() -> void:
 		and e.bag.all(func(x): return not x.has("level") and x.rolls.size() >= 1 and x.grade in GameData.EQUIP_GRADES and (x.slot == "weapon") == (x.weapon_kind != null)),
 		"equip win (debug_win hook): exactly 5 items with ids 1..5, key -1: %s" % [e.bag])
 	check(e.dungeon_block("equip", 1, EQ4) == "not_enough_gold", "no key and 4000 gold < 100000: no extra run")
-	e.gold = 316000
-	check(e.dungeon_block("equip", 2, EQ4) == "" and e.start_dungeon("equip", 2, EQ4) and started[-1].paid_with == "gold" and e.gold == 316000, "an extra run with gold starts without paying yet")
+	e.gold = 416000
+	check(e.dungeon_block("equip", 2, EQ4) == "" and e.start_dungeon("equip", 2, EQ4) and started[-1].paid_with == "gold" and e.gold == 416000, "an extra run with gold starts without paying yet")
 	e.debug_win()
 	var es2: Dictionary = e.dungeon_state("equip")
-	check(e.gold == 216000 and es2.extra_today == 1 and es2.extra_cost == 200000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays 100000 gold; the next one costs 200000")
+	check(e.gold == 316000 and es2.extra_today == 1 and es2.extra_cost == 300000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays 100000 gold; the next one costs 300000")
 	e.start_dungeon("equip", 1, EQ4)
 	e.finish_dungeon(e.current_run.run_id, false, 25.0)
-	check(e.gold == 216000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
+	check(e.gold == 316000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
 	for i in 286:  # 10 + 286 = 296, + 5 > 300
 		e.bag.append({"id": e.next_item_id + i, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1})
 	e.next_item_id += 286

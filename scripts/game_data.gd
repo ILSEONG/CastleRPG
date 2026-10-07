@@ -1054,9 +1054,9 @@ static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
 	return out
 
 
-## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × 2^(그날 추가 도전 횟수)(2026-10-07: 10만·20만·40만·80만…, 예전엔 10만씩 늘었다).
+## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…, 예전엔 10만·20만·30만…).
 static func extra_cost(extra_today: int) -> int:
-	return int(config_num("equip_extra_gold_base")) * int(pow(2, mini(extra_today, 40)))
+	return int(config_num("equip_extra_gold_base")) * (1 + 2 * maxi(extra_today, 0))
 
 
 ## 출전 인원(골드 6, 장비 4).

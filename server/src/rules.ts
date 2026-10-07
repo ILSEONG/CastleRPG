@@ -588,8 +588,8 @@ export function applyReset(type: string, d: DungeonState, now: number, config: C
   return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h), ...(d.helpers_used ? { helpers_used: [] } : {}) }
 }
 
-// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × 2^(그날 추가 도전 횟수)(2026-10-07: 10만·20만·40만·80만…).
-export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * 2 ** Math.min(Math.max(extraToday, 0), 40)
+// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…).
+export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * (1 + 2 * Math.max(extraToday, 0))
 export const partySize = (config: Config, type: string) => cfgNum(config, `${type}_dg_party`)
 export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `${type}_dg_min_sec`)
 
