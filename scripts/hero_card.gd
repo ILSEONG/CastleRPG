@@ -51,6 +51,7 @@ const RAYS := 10  # SR·SSR 창 빛살 수
 const ART_INSET := 6.0  # 일러스트: 카드 테두리 안쪽 여백
 const ART_CHAMFER := 8.0
 const ART_SHADE := 0.42  # 일러스트 아래 어둡게 덮기 시작하는 높이(카드 세로 비율)
+const SMALL_W := 120.0  # 이보다 좁은 일러스트 카드는 칭호 줄을 빼고 이름만(편성 줄 같은 작은 칸)
 const CHIP_SIZE := Vector2(76, 34)  # live 큰 카드 [3D]/[그림] 칩
 
 signal tapped(card)
@@ -229,8 +230,8 @@ func _draw() -> void:
 		if not _shine.is_empty():  # SSR: 금색 면이 차례로 밝아진다
 			_tick_shine(UiKit.GRADE_COLORS[h.grade])
 			RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _shine, _shine_cols)
-		var art := art_texture()
-		if art != null:  # 일러스트: 카드 안을 꽉 채우고 아래를 어둡게(흰 글자 자리)
+		var art := art_style()
+		if art:  # 일러스트: 카드 안을 꽉 채우고 아래를 어둡게(흰 글자 자리)
 			_draw_art(h)
 		elif live:  # 큰 카드: 받침 원판 위 실시간 전신
 			RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _base, _base_cols)
@@ -250,9 +251,9 @@ func _draw() -> void:
 			draw_polyline(l[0], UiKit.OUTLINE, l[1], true)
 		var name_size := _name_size()
 		if not live:  # 큰 카드는 상세 글자가 이름·칭호를 보여 준다
-			if art != null and hide_title:
+			if art and (hide_title or size.x < SMALL_W):
 				_text(h.name, size.y * 0.6 + name_size * 0.95, name_size, Color.WHITE, true, UiKit.INK)
-			elif art != null:
+			elif art:
 				_text(h.name, size.y * 0.6, name_size, Color.WHITE, true, UiKit.INK)
 				_text(h.title, size.y * 0.6 + name_size * 0.95, maxi(11, name_size - 7), Color("F2E6C8"), true, Color(UiKit.INK, 0.8))
 			else:
@@ -347,6 +348,14 @@ func art_texture() -> Texture2D:
 	return HeroArt.texture(hero_id)
 
 
+## 일러스트 모양으로 그릴지: 그림이 있거나, 아직 그림이 없는 영웅(작은 카드)도 다른 카드와 어울리게 같은 틀(어두운 등급 색 바탕 +
+## 꽉 찬 흉상 + 흰 글자)으로 — 크림색 창 하나만 튀지 않게(2026-10-08 "일러스트 구진거 더 찾아봐"). HeroArt가 꺼져 있으면 예전 창.
+func art_style() -> bool:
+	if hero_id == "" or not HeroArt.enabled:
+		return false
+	return art_texture() != null or not live
+
+
 ## 일러스트 칸: 카드 테두리 안쪽 전부.
 func art_rect() -> Rect2:
 	return Rect2(Vector2.ZERO, size).grow(-ART_INSET)
@@ -364,7 +373,8 @@ func _draw_art(h: Dictionary) -> void:
 	if ar.size.x <= 0.0 or ar.size.y <= 0.0:
 		return
 	var poly := LowpolyBox.octagon(ar, ART_CHAMFER)
-	HeroArt.draw_in(self, hero_id, poly, ar, 0.36 if live else HeroArt.FACE_AT)
+	if not HeroArt.draw_in(self, hero_id, poly, ar, 0.36 if live else HeroArt.FACE_AT):
+		_draw_bust_as_art(h, poly, ar)
 	var y0 := ar.position.y + ar.size.y * (0.72 if live else ART_SHADE)
 	var dark := Color(0.06, 0.05, 0.1, 0.0)
 	var deep := Color(0.06, 0.05, 0.1, 0.88)
@@ -385,6 +395,30 @@ func _draw_art(h: Dictionary) -> void:
 	var edge := poly.duplicate()
 	edge.append(poly[0])
 	draw_polyline(edge, Color(UiKit.GRADE_COLORS[h.grade]).darkened(0.35), 2.0, true)
+
+
+## 그림이 아직 없는 영웅: 어두운 등급 색 바탕(위가 조금 밝게) + 흉상을 칸 가득(얼굴이 그림 카드와 비슷한 높이에).
+func _draw_bust_as_art(h: Dictionary, poly: PackedVector2Array, ar: Rect2) -> void:
+	var gc := Color(UiKit.GRADE_COLORS[h.grade])
+	var tex := figure_texture()
+	var win := Vector2(ar.size.x, ar.size.y * 0.8)  # 흉상은 위쪽 80%에 — 아래 끝은 글자 자리 어두운 띠 안에 묻힌다
+	var reg := bust_region(tex.get_size(), win)
+	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for p in poly:
+		var k := (p - ar.position) / ar.size
+		cols.append(gc.darkened(0.45).lerp(Color(0.06, 0.05, 0.1), clampf(k.y, 0.0, 1.0)))
+		var w := Vector2(k.x, k.y * ar.size.y / win.y)
+		uvs.append((reg.position + w * reg.size) / tex.get_size())
+	draw_polygon(poly, cols)
+	var bust := PackedVector2Array()
+	var buv := PackedVector2Array()
+	for i in poly.size():  # 흉상 그림 밖(uv y > 1)은 그리지 않게 칸 위쪽만
+		bust.append(Vector2(poly[i].x, minf(poly[i].y, ar.position.y + win.y)))
+		var k := (bust[i] - ar.position) / ar.size
+		var w := Vector2(k.x, k.y * ar.size.y / win.y)
+		buv.append((reg.position + w * reg.size) / tex.get_size())
+	draw_colored_polygon(bust, Color.WHITE, buv, tex)
 
 
 ## [3D]/[그림] 칩: 어두운 반투명 8각 + 흰 글자.
@@ -482,7 +516,7 @@ func _draw_list_info() -> void:
 		arrow.append(arrow[0])
 		draw_polyline(arrow, UiKit.OUTLINE, 1.5, true)
 	if power > 0:
-		if art_texture() != null:
+		if art_style():
 			_text("전투력 %s" % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, Color.WHITE, true, UiKit.INK)
 		else:
 			_text("전투력 %s" % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, UiKit.INK.lightened(0.15))
@@ -576,7 +610,7 @@ func _text(text: String, y: float, font_size: int, color: Color, outline := fals
 
 ## (크기, 영웅, 별, badge·막대·live·날아오는 별)이 바뀌었을 때만 지오메트리를 다시 만든다.
 func _ensure_geo(h: Dictionary) -> void:
-	var key := [size, hero_id, stars, badge != "", shards >= 0, live, _flying, art_texture() != null]
+	var key := [size, hero_id, stars, badge != "", shards >= 0, live, _flying, art_style()]
 	if key == _geo_key:
 		return
 	_geo_key = key
@@ -604,7 +638,7 @@ func _ensure_geo(h: Dictionary) -> void:
 	_win = PackedVector2Array()
 	_win_cols = PackedColorArray()
 	_win_edge = PackedVector2Array()
-	if art_texture() != null:
+	if art_style():
 		pass  # 일러스트가 창·받침 자리를 채운다
 	elif live:
 		_add_base(Color(h.color))
