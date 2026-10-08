@@ -38,6 +38,7 @@ func _ready() -> void:
 		GameData._config[kv[0]] = kv[1]  # 훈련 칸 사례는 옛 묶음 훈련 설정으로 본다(실제 설정은 1마리씩 — run_tests test_tutorial)
 	Economy.reset(Time.get_unix_time_from_system())
 	get_window().size = Vector2i(360, 640)
+	preload("res://scripts/hero_art.gd").warm()  # 게임은 로딩 화면이 미리 불러 둔다 — 영웅 창을 처음 열 때 멈칫하지 않게
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(5)

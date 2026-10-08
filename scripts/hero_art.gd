@@ -1,7 +1,6 @@
 extends RefCounted
 ## 영웅 일러스트(2026-10-07, 사용자 요청): assets/ui/heroes/<id>.jpg — 사용자가 ChatGPT로 만든 그림(영웅 모델 컨셉 + 화풍 참조,
 ## 지시문 묶음은 프로젝트 파일 design/illustrations/chatgpt_pack)을 dev/hero_art/ingest.py로 640 px 정사각으로 잘라 손실 압축으로 넣는다.
-## 미라·발렌은 시험으로 만든 Meshy 그림(사용자 그림이 오면 바꾼다).
 ## 그림이 있으면 HeroCard가 3D 흉상 대신 카드 안을 이 그림으로 꽉 채우고(목록·배치 슬롯·모집·던전·PVP·친구 고르기),
 ## 상세 큰 카드는 일러스트를 먼저 보여 주고 [3D] 칩으로 실시간 모델과 바꾼다. 전투 중 얼굴 칸(Portraits.draw_face)은 3D 흉상 그대로다.
 ## FOCUS = 그림에서 얼굴 가운데(0~1). 자를 때 얼굴이 창 가운데 위쪽(face_at)에 오게 맞춘다.
@@ -18,8 +17,31 @@ const FOCUS := {
 	"baldur": Vector2(0.56, 0.25),
 	"lumina": Vector2(0.53, 0.20),
 	"harald": Vector2(0.55, 0.21),
-	"mira": Vector2(0.47, 0.26),
-	"valen": Vector2(0.50, 0.29),
+	"nev": Vector2(0.54, 0.21),
+	"bron": Vector2(0.44, 0.24),
+	"mira": Vector2(0.54, 0.18),
+	"torvin": Vector2(0.54, 0.21),
+	"rian": Vector2(0.55, 0.16),
+	"echo": Vector2(0.59, 0.17),
+	"gork": Vector2(0.61, 0.15),
+	"felix": Vector2(0.55, 0.16),
+	"hans": Vector2(0.66, 0.17),
+	"ella": Vector2(0.49, 0.16),
+	"dorik": Vector2(0.59, 0.19),
+	"nina": Vector2(0.58, 0.21),
+	"jack": Vector2(0.48, 0.21),
+	"valen": Vector2(0.48, 0.15),
+	"frieda": Vector2(0.55, 0.16),
+	"morgana": Vector2(0.48, 0.16),
+	"gaia": Vector2(0.58, 0.20),
+	"dante": Vector2(0.48, 0.22),
+	"kaz": Vector2(0.54, 0.16),
+	"luna": Vector2(0.46, 0.18),
+	"orin": Vector2(0.44, 0.22),
+	"selene": Vector2(0.54, 0.16),
+	"pip": Vector2(0.48, 0.19),
+	"grit": Vector2(0.48, 0.25),
+	"tia": Vector2(0.58, 0.21),
 }
 
 static var enabled := true  # false면 그림이 있어도 예전 흉상(테스트·비교용)
@@ -34,6 +56,12 @@ static func texture(id: String) -> Texture2D:
 		var path := DIR + id + ".jpg"
 		_cache[id] = load(path) as Texture2D if ResourceLoader.exists(path) else null
 	return _cache[id]
+
+
+## 그림을 전부 미리 불러 둔다(게임은 로딩 화면 Preloader가 assets 아래를 미리 불러 같은 일을 한다 — 로딩 화면 없이 도는 테스트용).
+static func warm() -> void:
+	for id in FOCUS:
+		texture(id)
 
 
 static func has_art(id: String) -> bool:
