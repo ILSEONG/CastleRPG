@@ -1836,6 +1836,9 @@ func _fever_ui(hud) -> void:
 func _figures(heroes_win) -> void:
 	var P = preload("res://scripts/portraits.gd")
 	var p = P.current
+	var art = preload("res://scripts/hero_art.gd")
+	art.enabled = false  # 이 절은 3D 피규어(일러스트 없는 카드)를 본다 — 일러스트는 끝에서 따로
+	heroes_win.big_card.hero_id = heroes_win.big_card.hero_id  # 다시 걸기(_sync_live)
 	var mine: Array = _main.get_children().filter(func(c): return c.get_script() == P)
 	_check(mine.size() == 1 and p == mine[0] and not p.can_render and p.queue.is_empty(), "(x2) main has one Portraits node; headless renders nothing (placeholders only)", "")
 	var feet: Vector2 = p._cam.unproject_position(Vector3.ZERO) / Vector2(p._vp.size)  # 미리보기 중이면 LIVE_SIZE(개정 15), 아니면 SIZE
@@ -1871,7 +1874,20 @@ func _figures(heroes_win) -> void:
 	_check(p._vp.size == Vector2i(P.LIVE_SIZE, P.LIVE_SIZE), "(x2) the live preview renders at LIVE_SIZE (the big card draws the figure large)", "size=%s" % p._vp.size)
 	heroes_win.close()
 	_check(p.live_key == "" and p._vp.size == Vector2i(P.SIZE, P.SIZE), "(x2) closing the window stops the live preview (snapshots back at SIZE)", "live=%s size=%s" % [p.live_key, p._vp.size])
+	art.enabled = true
 	heroes_win.open()
+	heroes_win.show_detail("arteon")  # 일러스트(2026-10-07): 그림이 먼저, 미리보기는 쉬고 [3D] 칩을 누르면 실시간 모델
+	await _unguarded(heroes_win)
+	await _frames(2)
+	var big = heroes_win.big_card
+	_check(art.has_art("arteon") and big.art_texture() != null and p.live_key == "", "(x2) the detail card shows the illustration first; no live preview", "live=%s" % p.live_key)
+	var chip: Rect2 = big.model_chip_rect()
+	_mouse_button(big.get_global_transform() * chip.get_center(), true)
+	_mouse_button(big.get_global_transform() * chip.get_center(), false)
+	await _frames(2)
+	_check(big.show_model and big.art_texture() == null and p.live_key == "hero:arteon", "(x2) tapping [3D] switches the big card to the live model", "live=%s" % p.live_key)
+	big.show_model = false
+	_check(p.live_key == "", "(x2) [그림] goes back to the illustration and stops the preview", "live=%s" % p.live_key)
 	heroes_win.show_detail("hans")
 	await _guard_wait()
 

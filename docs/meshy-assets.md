@@ -83,3 +83,8 @@ gift·gift_big·crown·ticket·tickets(묶음)·chest_equip, key_gold·key_equip
 1. 그림: `meshy_text_to_image`(nano-banana-pro, 4:3, 9 크레딧) 3장, 장 마다 3×2 칸 6개. 원본·프롬프트는 프로젝트 파일 design/shop/.
 2. 자르기: `python3 -I dev/meshy/shop_icons.py <그림 폴더>`(item_icons.py의 cut을 쓴다).
 3. 검사: tests/run_tests.gd `test_shop`(18장 로드·모든 상품에 그림), 화면 `tests/shop_shots.tscn -- --more`(PVP·가방·출석까지).
+
+## 영웅 일러스트(2026-10-07, Meshy 아님)
+영웅 카드·상세·모집 그림 `assets/ui/heroes/<id>.jpg`(640 px, 손실 압축 0.85 + 밉맵)는 사용자가 ChatGPT로 만든다(크레딧 쓰지 않기로 함).
+지시문·참고 그림 묶음은 프로젝트 파일 `design/illustrations/chatgpt_pack`. 받은 그림은 `python3 -I dev/hero_art/ingest.py <id> <그림> …`로 넣고
+얼굴 위치를 `scripts/hero_art.gd` FOCUS에 적는다(검사: tests/run_tests.gd `test_hero_art`). 그림이 없는 영웅은 예전 3D 흉상.

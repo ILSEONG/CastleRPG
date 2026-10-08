@@ -18,6 +18,7 @@ const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
+const HeroArt := preload("res://scripts/hero_art.gd")
 const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const MeshMergeScript := preload("res://scripts/mesh_merge.gd")
@@ -99,6 +100,7 @@ func _init() -> void:
 	test_rotate_hold_state()
 	test_fever()
 	test_portraits()
+	test_hero_art()
 	test_keep_tier_lockstep()
 	test_soldier_figures()
 	test_soldier_posts()
@@ -2547,6 +2549,34 @@ func test_fever() -> void:
 
 
 ## 개정 14 §2 영웅 피규어: 캐시 API(헤드리스라 렌더 없음 — 자리표시·큐·저장·알림·미리보기 상태만), 카드의 피규어 자리와 받침.
+## 영웅 일러스트(2026-10-07): 그림 파일마다 얼굴 위치(FOCUS)가 있고, 자르기는 창 비율대로 얼굴을 위쪽에 둔다. 그림이 있는 카드는
+## 창·받침 대신 그림을 쓰고, 큰 카드는 [3D](show_model)일 때만 그림을 내린다.
+func test_hero_art() -> void:
+	var files := Array(DirAccess.get_files_at(HeroArt.DIR)).filter(func(f): return f.ends_with(".jpg")).map(func(f): return f.get_basename())
+	check(not files.is_empty() and files.all(func(id): return HeroArt.FOCUS.has(id) and not GameData.hero(id).is_empty())
+		and HeroArt.FOCUS.keys().all(func(id): return files.has(id)), "every illustration is a hero's and has a face position (and vice versa): %s" % [files])
+	var reg := HeroArt.region(Vector2(640, 640), Vector2(200, 100), Vector2(0.5, 0.4))
+	check(is_equal_approx(reg.size.x / reg.size.y, 2.0) and reg.size.x == 640.0 and is_equal_approx(reg.position.y + reg.size.y * HeroArt.FACE_AT, 256.0),
+		"a wide window keeps the full width with the face at FACE_AT: %s" % reg)
+	var tall := HeroArt.region(Vector2(640, 640), Vector2(100, 200), Vector2(0.9, 0.1))
+	check(tall.size.y == 640.0 and tall.end.x == 640.0 and tall.position.y == 0.0, "a tall window slides inside the picture: %s" % tall)
+	var id: String = files[0]
+	var card = HeroCardScript.new()
+	card.size = Vector2(200, 240)
+	card.hero_id = id
+	card._ensure_geo(GameData.hero(id))
+	check(card.art_texture() == HeroArt.texture(id) and card.art_texture() != null and card._win.is_empty() and card._base.is_empty(),
+		"a hero with an illustration fills the card with it (no bust window)")
+	card.live = true
+	check(card.art_texture() != null, "the big card shows the illustration first")
+	card.show_model = true
+	check(card.art_texture() == null, "[3D] switches the big card to the model")
+	card.free()
+	HeroArt.enabled = false
+	check(HeroArt.texture(id) == null, "HeroArt.enabled = false falls back to the busts")
+	HeroArt.enabled = true
+
+
 func test_portraits() -> void:
 	var P = PortraitsScript
 	check(P.current == null, "no Portraits node outside a world")
@@ -2595,6 +2625,7 @@ func test_portraits() -> void:
 	p.free()
 	check(P.portrait("hero:hans") == tex, "the cache is static: it outlives the node (world rebuild)")
 	P._cache.erase("hero:hans")
+	HeroArt.enabled = false  # 아래는 일러스트 없는 카드(흉상) — 일러스트 카드는 test_hero_art
 	# 카드(디자인 보강 5번): 목록·슬롯·모집 카드는 카드 폭 전부의 초상화 창(위 테두리 아래 ~ 이름 위)에 흉상, 창 아래 띠가 고유 색
 	for s in [Vector2(200, 240), Vector2(140, 150), Vector2(190, 240), Vector2(118, 160)]:
 		var c = HeroCardScript.new()
@@ -2628,6 +2659,7 @@ func test_portraits() -> void:
 		and card._base[HeroCardScript.BASE_SIDES * 3].is_equal_approx(feet), "the live big card keeps the full figure on a pedestal in the unique colour")
 	card.free()
 	check(GameData.heroes().all(func(h): return P.spec_of("bust:" + h.id) == P.spec_of("hero:" + h.id)) and P.spec_of("bust:nobody").is_empty(), "bust keys render the same hero model as figure keys")
+	HeroArt.enabled = true
 
 
 ## 개정 15: 성채 단계 표 둘은 함께 움직인다(사용자 규칙: 성이 넓어질 때마다 영웅 슬롯 +4, 최대 12). CSV(load_tables)와 원격 표(apply_remote)
