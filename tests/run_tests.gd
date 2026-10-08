@@ -2572,9 +2572,16 @@ func test_hero_art() -> void:
 	card.show_model = true
 	check(card.art_texture() == null, "[3D] switches the big card to the model")
 	card.free()
+	var banner = preload("res://scripts/recruit_banner.gd").new()
+	banner.size = Vector2(632, 300)
+	var mid: PackedVector2Array = banner.panel(1)
+	check(banner.has_art() and banner.panel(0)[0] == Vector2.ZERO and banner.panel(2)[2] == Vector2(632, 300)
+		and banner.panel(0)[1] == mid[0] and banner.panel(1)[2] == banner.panel(2)[3] and mid[0].x - mid[3].x == banner.SLANT,
+		"recruit banner: three slanted panels share their edges and cover the box, every SSR picture is there")
 	HeroArt.enabled = false
-	check(HeroArt.texture(id) == null, "HeroArt.enabled = false falls back to the busts")
+	check(HeroArt.texture(id) == null and not banner.has_art(), "HeroArt.enabled = false falls back to the busts (and the recruit 3D key art)")
 	HeroArt.enabled = true
+	banner.free()
 
 
 func test_portraits() -> void:

@@ -18,6 +18,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
+const RecruitBanner := preload("res://scripts/recruit_banner.gd")
 const CardReveal := preload("res://scripts/card_reveal.gd")
 
 const DIALOG_W := 680
@@ -52,7 +53,8 @@ var dia_label: Label  # 다이아 보유
 var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
-var art: TextureRect  # 키 아트(처음 열 때 SceneSnap으로 렌더)
+var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
+var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
 var shop  # 상점 시트(shop_panel.gd, main이 넣는다) — [이동]이 [다이아] 탭으로 연다
 var hot  # 핫딜(hot_deal.gd, main이 넣는다) — 다이아가 부족하면 다이아 긴급 지원 핫딜 계기
 
@@ -220,6 +222,9 @@ func _build_art() -> Control:
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_art_box.add_child(art)
+	banner = RecruitBanner.new()
+	banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_art_box.add_child(banner)
 	var g := Gradient.new()  # 가운데 투명 → 가장자리 어둡게
 	g.set_color(0, Color(0, 0, 0, 0))
 	g.set_color(1, Color(0.04, 0.02, 0.06, 0.78))
@@ -280,6 +285,8 @@ func set_currency(id: String) -> void:
 func _on_open() -> void:
 	# 보통은 로딩 화면(preloader)이 미리 렌더해 캐시에 있다. 없으면 요청 — 그동안·헤드리스는 자리표시 그러데이션, 끝나면 _process가 바꿔 끼운다
 	art.texture = SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
+	banner.visible = banner.has_art()
+	art.visible = not banner.visible
 	if _late.is_empty():
 		_show_pick()
 		return
@@ -368,6 +375,7 @@ func _show_results(results: Array) -> void:
 		var r: Dictionary = results[i]
 		var card = HeroCardScript.new()
 		card.hero_id = r.hero_id
+		card.hide_title = true  # 작은 결과 카드: 칭호는 빼고 그림을 더 보인다
 		card.stars = Economy.promotion_of(r.hero_id)
 		if r.new:
 			card.badge = "NEW"

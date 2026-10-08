@@ -2703,6 +2703,10 @@ func _recruit23_ui(recruit) -> void:
 	_check(recruit.art.texture != null and absf(art.size.x - 632.0) < 2.0 and absf(art.size.y - 300.0) < 2.0 and art.position.y - dlg.position.y < 40.0
 		and absf(art.get_center().x - 360.0) < 2.0 and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
 		"(r23) the key art (632 x 300, placeholder headless) sits at the top centre; the gold tab window fits 720x1280", "art=%s dialog=%s" % [art, dlg])
+	_check(recruit.banner.visible and not recruit.art.visible and recruit.banner.get_global_rect() == art
+		and recruit.banner.has_art(),
+		"(r23) the banner shows the SSR illustrations (kyle | arteon | seraphine) instead of the old 3D key art",
+		"banner=%s %s art visible=%s" % [recruit.banner.visible, recruit.banner.get_global_rect(), recruit.art.visible])
 	var still: Array = [recruit.art.scale, recruit.art.get_global_rect()]
 	await _frames(30)
 	var titles: Array = recruit._art_box.get_children().filter(func(c): return c is Label).map(func(c): return c.text)

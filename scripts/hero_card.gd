@@ -66,6 +66,7 @@ var live := false:  # 상세 큰 카드: 같은 SubViewport 실시간 미리보�
 	set(v):
 		live = v
 		_sync_live()
+var hide_title := false  # 일러스트 카드에서 칭호 줄을 빼고 이름을 그 자리로 내린다(모집 결과처럼 작은 카드)
 var badge := ""  # 아래 줄 글자("NEW"). 비면 별
 var stars := 0
 var corner := ""  # 왼위 작은 글자(슬롯 번호)
@@ -249,7 +250,9 @@ func _draw() -> void:
 			draw_polyline(l[0], UiKit.OUTLINE, l[1], true)
 		var name_size := _name_size()
 		if not live:  # 큰 카드는 상세 글자가 이름·칭호를 보여 준다
-			if art != null:
+			if art != null and hide_title:
+				_text(h.name, size.y * 0.6 + name_size * 0.95, name_size, Color.WHITE, true, UiKit.INK)
+			elif art != null:
 				_text(h.name, size.y * 0.6, name_size, Color.WHITE, true, UiKit.INK)
 				_text(h.title, size.y * 0.6 + name_size * 0.95, maxi(11, name_size - 7), Color("F2E6C8"), true, Color(UiKit.INK, 0.8))
 			else:
