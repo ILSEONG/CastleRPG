@@ -77,6 +77,16 @@ func _ready() -> void:
 	GameState.start_stage()
 	await _wait(2.5)
 	_save("stage_strip")
+	var ev = _find("res://scripts/event_panel.gd")
+	if ev != null:
+		ev.open()
+		var rw := []
+		for d in 28:  # 서버 응답 대신: 7·14·21·28일차 영웅
+			rw.append({"hero": ["mira", "valen", "kyle", "arteon"][d / 7]} if d % 7 == 6 else {"gold": 1000 * (d + 1)})
+		ev._on_data({"n": 3, "can_claim": true, "rewards": rw})
+		await _wait(1.0)
+		_save("event")
+		ev.close()
 	print("saved to ", _dir)
 	get_tree().quit()
 

@@ -7,6 +7,7 @@ extends "res://scripts/ui_window.gd"
 
 const IconsScript := preload("res://scripts/icons.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
+const HeroArt := preload("res://scripts/hero_art.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const GuildPanel := preload("res://scripts/guild_panel.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -317,6 +318,12 @@ static func _draw_reward_icon(c: Control, r: Dictionary, ctr: Vector2, s: float)
 	if r.has("hero"):
 		var grade := str(GameData.hero(str(r.hero)).get("grade", "SR"))
 		var col: Color = UiKit.GRADE_COLORS.get(grade, UiKit.GRADE_COLORS.SR)
+		var fr := Rect2(ctr - Vector2.ONE * s * 0.62 + Vector2(0, -4), Vector2.ONE * s * 1.24)
+		var oct := LowpolyBox.octagon(fr, s * 0.3)
+		if HeroArt.draw_in(c, str(r.hero), oct, fr, PortraitsScript.FACE_ART_AT, 1.6):  # 일러스트: 등급 색 테를 두른 8각 얼굴
+			oct.append(oct[0])
+			c.draw_polyline(oct, col.darkened(0.2), 3.0, true)
+			return
 		var tex := PortraitsScript.portrait("hero:" + str(r.hero))
 		UiKit.draw_gem(c, ctr + Vector2(0, 2), s * 0.62, col.lightened(0.25), 8)
 		var size := Vector2(s * 1.35, s * 1.35)

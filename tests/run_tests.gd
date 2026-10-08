@@ -2560,6 +2560,9 @@ func test_hero_art() -> void:
 		"a wide window keeps the full width with the face at FACE_AT: %s" % reg)
 	var tall := HeroArt.region(Vector2(640, 640), Vector2(100, 200), Vector2(0.9, 0.1))
 	check(tall.size.y == 640.0 and tall.end.x == 640.0 and tall.position.y == 0.0, "a tall window slides inside the picture: %s" % tall)
+	var zoomed := HeroArt.region(Vector2(640, 640), Vector2(100, 100), Vector2(0.5, 0.3), 0.42, 2.0)
+	check(zoomed.size == Vector2(320, 320) and is_equal_approx(zoomed.position.x, 160.0) and is_equal_approx(zoomed.position.y, 192.0 - 320.0 * 0.42),
+		"zoom 2 crops half the picture around the face (battle face slots): %s" % zoomed)
 	var id: String = files[0]
 	var card = HeroCardScript.new()
 	card.size = Vector2(200, 240)

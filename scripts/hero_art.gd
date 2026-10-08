@@ -2,7 +2,8 @@ extends RefCounted
 ## 영웅 일러스트(2026-10-07, 사용자 요청): assets/ui/heroes/<id>.jpg — 사용자가 ChatGPT로 만든 그림(영웅 모델 컨셉 + 화풍 참조,
 ## 지시문 묶음은 프로젝트 파일 design/illustrations/chatgpt_pack)을 dev/hero_art/ingest.py로 640 px 정사각으로 잘라 손실 압축으로 넣는다.
 ## 그림이 있으면 HeroCard가 3D 흉상 대신 카드 안을 이 그림으로 꽉 채우고(목록·배치 슬롯·모집·던전·PVP·친구 고르기),
-## 상세 큰 카드는 일러스트를 먼저 보여 주고 [3D] 칩으로 실시간 모델과 바꾼다. 전투 중 얼굴 칸(Portraits.draw_face)은 3D 흉상 그대로다.
+## 상세 큰 카드는 일러스트를 먼저 보여 주고 [3D] 칩으로 실시간 모델과 바꾼다. 전투 초상화 줄·길드전 수비 칸(Portraits.draw_face)과
+## 이벤트 보상 칸도 얼굴 쪽으로 당겨 자른 그림(2026-10-08 "일러스트 구진거 더 찾아봐"). 그림이 없는 영웅은 3D 흉상.
 ## FOCUS = 그림에서 얼굴 가운데(0~1). 자를 때 얼굴이 창 가운데 위쪽(face_at)에 오게 맞춘다.
 
 const DIR := "res://assets/ui/heroes/"
@@ -73,13 +74,15 @@ static func focus(id: String) -> Vector2:
 
 
 ## 그림(tex 크기)에서 창(win 크기)을 꽉 채울 부분: 비율을 창에 맞추고, 얼굴(focus)이 가로 가운데·세로 face_at에 오게 옮긴 뒤 그림 안으로 민다.
-static func region(tex: Vector2, win: Vector2, face: Vector2, face_at := FACE_AT) -> Rect2:
+## zoom > 1이면 그만큼 얼굴 쪽으로 당겨 좁게 자른다(전투 초상화 같은 작은 얼굴 칸).
+static func region(tex: Vector2, win: Vector2, face: Vector2, face_at := FACE_AT, zoom := 1.0) -> Rect2:
 	if tex.x <= 0.0 or tex.y <= 0.0 or win.x <= 0.0 or win.y <= 0.0:
 		return Rect2(Vector2.ZERO, tex)
 	var aspect := win.x / win.y
 	var sz := Vector2(tex.x, tex.x / aspect)
 	if sz.y > tex.y:
 		sz = Vector2(tex.y * aspect, tex.y)
+	sz /= maxf(zoom, 1.0)
 	var pos := Vector2(face.x * tex.x - sz.x * 0.5, face.y * tex.y - sz.y * face_at)
 	pos.x = clampf(pos.x, 0.0, tex.x - sz.x)
 	pos.y = clampf(pos.y, 0.0, tex.y - sz.y)
@@ -87,12 +90,12 @@ static func region(tex: Vector2, win: Vector2, face: Vector2, face_at := FACE_AT
 
 
 ## 다각형 poly(창 r 안)를 그림으로 채운다 — UV는 region을 창 r에 맞춘 좌표라 모서리 깎인 모양대로 잘린다.
-static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rect2, face_at := FACE_AT) -> bool:
+static func draw_in(ci: CanvasItem, id: String, poly: PackedVector2Array, r: Rect2, face_at := FACE_AT, zoom := 1.0) -> bool:
 	var tex := texture(id)
 	if tex == null or r.size.x <= 0.0 or r.size.y <= 0.0:
 		return false
 	var ts := tex.get_size()
-	var reg := region(ts, r.size, focus(id), face_at)
+	var reg := region(ts, r.size, focus(id), face_at, zoom)
 	var uvs := PackedVector2Array()
 	for p in poly:
 		var k := (p - r.position) / r.size

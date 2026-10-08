@@ -20,6 +20,9 @@ const Art := preload("res://scripts/art.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const SoldierBody := preload("res://scripts/soldier_body.gd")
+const HeroArt := preload("res://scripts/hero_art.gd")
+const FACE_ART_ZOOM := 1.9  # 얼굴 칸 일러스트: 그림 폭의 약 절반만 — 얼굴이 칸을 채운다
+const FACE_ART_AT := 0.42
 
 const SIZE := 256
 const LIVE_SIZE := 512  # 실시간 미리보기 해상도 — 상세 큰 카드가 피규어를 400px 안팎으로 그린다(개정 15). 스냅샷은 SIZE
@@ -117,6 +120,8 @@ static func draw_face(c: CanvasItem, hero_id: String, poly: PackedVector2Array, 
 		cols.append(gc.lightened(0.55).lerp(gc.lightened(0.12), clampf(v.y, 0.0, 1.0)))
 		uvs.append(v)
 	c.draw_polygon(poly, cols)
+	if HeroArt.draw_in(c, hero_id, poly, r, FACE_ART_AT, FACE_ART_ZOOM):  # 일러스트가 있으면 얼굴 쪽으로 당긴 그림
+		return
 	c.draw_polygon(poly, PackedColorArray([Color.WHITE]), uvs, portrait("bust:" + hero_id))
 
 
