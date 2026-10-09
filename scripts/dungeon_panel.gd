@@ -3,7 +3,7 @@ extends "res://scripts/ui_window.gd"
 ## - 골드 던전: 평야 그림 띠, 열쇠 n / 10, "다음 지급 hh:mm:ss · 최고 n단계", 그 단계 보상 골드, ◀ n단계 ▶, [도전]
 ## - 장비 던전: 불타는 성 띠, 열쇠 n / 3, 그 밑 "열쇠가 없으면 골드로 도전 (동전) 현재 골드 / 추가 도전 비용"(모자라면 현재 골드가 빨강),
 ##   그 단계 등급 확률 요약, ◀ n단계 ▶, [도전]
-## 그림 띠: 던전 3D 장면 스냅샷(dungeon_snaps + scene_snap — 시트를 처음 열 때 한 장씩 렌더, 캐시)을 깎은 모서리 틀에 넣는다(움직이지 않는다).
+## 그림 띠: 사용자 일러스트(dungeon_art.gd, 2026-10-09)가 있으면 그것, 없으면 던전 3D 장면 스냅샷(dungeon_snaps + scene_snap — 시트를 처음 열 때 한 장씩 렌더, 캐시)을 깎은 모서리 틀에 넣는다(움직이지 않는다).
 ## 스냅샷이 오기 전·헤드리스는 평면 그림(_draw_flat_band).
 ## 단계는 1 ~ 최고 + 1(처음엔 최고 + 1). [도전]이 안 되면(Economy.dungeon_block — 기본 편성으로) 비활성 + 빨간 이유.
 ## 아래 [보관함 n / 상한] → bag_panel.open_bag.
@@ -23,6 +23,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
+const DungeonArt := preload("res://scripts/dungeon_art.gd")
 const FriendPanelScript := preload("res://scripts/friend_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const PvpViewScript := preload("res://scripts/pvp_view.gd")
@@ -296,8 +297,9 @@ func _build_form() -> void:
 func _on_open() -> void:
 	_show_list(false)
 	# ponytail: 키가 종류뿐 — 띠의 영웅은 처음 연 때의 편성 앞 셋, 실행 중 편성이 바뀌어도 그대로. 따라가야 하면 키에 id를 넣는다.
-	for t in TYPES:  # 처음 열 때 띠 스냅샷 요청(이미 있거나 대기 중이면 아무 일 없음, 헤드리스는 자리표시만)
-		SceneSnap.snap(SNAP_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
+	for t in TYPES:  # 처음 열 때 띠 스냅샷 요청(이미 있거나 대기 중이면 아무 일 없음, 헤드리스는 자리표시만) — 그림(DungeonArt)이 있으면 안 찍는다
+		if not DungeonArt.has_art(t):
+				SceneSnap.snap(SNAP_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
 	if not SceneSnap.node().snap_ready.is_connected(_on_snap_ready):
 		SceneSnap.node().snap_ready.connect(_on_snap_ready)
 
@@ -609,12 +611,14 @@ static func draw_key(c: Control) -> void:
 		c.draw_rect(Rect2(o + Vector2(s * x - s * 0.05, s * 0.05), Vector2(s * 0.08, s * 0.14)), KEY_GOLD)
 
 
-## 카드 그림 띠: 깎은 모서리(8각) 틀 안에 스냅샷(가운데를 잘라 고정) — 없으면 평면 그림 + 모서리를 카드 색으로 덮는다.
+## 카드 그림 띠: 깎은 모서리(8각) 틀 안에 일러스트(DungeonArt) 또는 스냅샷(가운데를 잘라 고정) — 없으면 평면 그림 + 모서리를 카드 색으로 덮는다.
 ## 위쪽 옅은 그림자 그러데이션, 안쪽 흰 빛 선, 진한 외곽선.
 func _draw_band(c: Control, t: String) -> void:
 	var r := Rect2(Vector2.ZERO, c.size)
 	var oct := UiKit.LowpolyBox.octagon(r, BAND_CHAMFER)
-	var tex := SceneSnap.cached(SNAP_KEY % t)
+	var tex := DungeonArt.texture(t)
+	if tex == null:
+		tex = SceneSnap.cached(SNAP_KEY % t)
 	if tex != null:
 		var k := (c.size.x / c.size.y) / (float(tex.get_width()) / tex.get_height())  # 띠 비율 ÷ 그림 비율 — 늘이지 않고 잘라 채운다
 		var uv := Vector2(1.0, 1.0 / k) if k > 1.0 else Vector2(k, 1.0)

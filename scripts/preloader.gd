@@ -16,6 +16,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
 const DungeonSnaps := preload("res://scripts/dungeon_snaps.gd")
+const DungeonArt := preload("res://scripts/dungeon_art.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
 const Art := preload("res://scripts/art.gd")
 const Fx := preload("res://scripts/fx.gd")
@@ -111,7 +112,7 @@ func begin() -> void:
 		_portraits.append("soldier:" + str(s.id))
 	for k in _portraits:
 		PortraitsScript.portrait(k)  # 렌더를 줄 세운다(한 프레임에 하나)
-	for t in DUNGEON_TYPES:
+	for t in DUNGEON_TYPES.filter(func(t): return not DungeonArt.has_art(t)):  # 그림이 있는 던전은 스냅샷을 안 찍는다
 		_snaps.append(DUNGEON_KEY % t)
 		SceneSnap.snap(DUNGEON_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
 	_snaps.append(RecruitArt.KEY)
@@ -153,7 +154,7 @@ func _process(delta: float) -> void:
 		_retry = 1.0
 		for k in _portraits:
 			PortraitsScript.portrait(k)
-		for t in DUNGEON_TYPES:
+		for t in DUNGEON_TYPES.filter(func(t): return not DungeonArt.has_art(t)):
 			SceneSnap.snap(DUNGEON_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
 		SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
 	if _loading.is_empty() and not _warm_started:
