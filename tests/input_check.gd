@@ -1346,7 +1346,7 @@ func _soldiers_ui(tabs, hud) -> void:
 	Economy.soldiers = {}
 	Economy.soldier_deployed = {}
 	Economy.soldiers_changed.emit()
-	Economy.res = {"wood": 10000, "stone": 10000, "food": 10000}
+	Economy.res = {"wood": 50000, "stone": 10000, "food": 50000}
 	Economy.changed.emit()
 	var bp := _roof_px("barracks")
 	_check(_picker._pick(bp, PickerScript.LAYER_TAP).get("collider") != null and _picker._pick(bp, PickerScript.LAYER_TAP).collider.get_meta("building", "") == "barracks"
@@ -1362,29 +1362,29 @@ func _soldiers_ui(tabs, hud) -> void:
 		and bwin._train_type == "infantry:1" and bwin._unit_icon.is_visible_in_tree() and not "merge_rows" in bwin,
 		"(S) a long press on the barracks opens its window: 1마리 3:00:00 → 2:30:00 and the empty training section (infantry figure, 'T1 보병 · 1마리 3:00:00'); no merge section",
 		"held=%s title=%s unit=%s" % [held, bwin.title_label.text, bwin.unit_label.text])
-	_check(q.value == 1 and q.min_value == 1 and q.max_value == 10 and bwin.train_cost_labels.food.text == "300" and bwin.train_cost_labels.wood.text == "200"
+	_check(q.value == 1 and q.min_value == 1 and q.max_value == 10 and bwin.train_cost_labels.food.text == "1,500" and bwin.train_cost_labels.wood.text == "1,000"
 		and not bwin.train_cost_labels.stone.visible and bwin.train_time_label.text == "훈련 시간 3:00:00" and not bwin.train_button.disabled and not bwin.train_reason.visible,
-		"(S) the quantity starts at 1 of 1..10 (batch cap): cost 300 food / 200 wood, 훈련 시간 3:00:00, [훈련] on",
+		"(S) the quantity starts at 1 of 1..10 (batch cap): cost 1,500 food / 1,000 wood, 훈련 시간 3:00:00, [훈련] on",
 		"qty=%d..%d=%d food=%s wood=%s time=%s" % [q.min_value, q.max_value, q.value, bwin.train_cost_labels.food.text, bwin.train_cost_labels.wood.text, bwin.train_time_label.text])
 	await _guard_wait()
 	await _tap(_center(q.plus))
 	await _tap(_center(q.plus))
-	_check(q.value == 3 and q.edit.text == "3" and bwin.train_cost_labels.food.text == "900" and bwin.train_time_label.text == "훈련 시간 9:00:00",
-		"(S) [+] twice: 3 — cost and time follow (900 food, 9:00:00)", "qty=%d food=%s time=%s" % [q.value, bwin.train_cost_labels.food.text, bwin.train_time_label.text])
+	_check(q.value == 3 and q.edit.text == "3" and bwin.train_cost_labels.food.text == "4,500" and bwin.train_time_label.text == "훈련 시간 9:00:00",
+		"(S) [+] twice: 3 — cost and time follow (4,500 food, 9:00:00)", "qty=%d food=%s time=%s" % [q.value, bwin.train_cost_labels.food.text, bwin.train_time_label.text])
 	await _tap(_center(q.max_button))
 	_check(q.value == 10, "(S) [최대] picks the batch cap (10)", "qty=%d" % q.value)
 	q.edit.text = "8"
 	q.edit.text_changed.emit("8")
 	await _frames(1)
-	_check(q.value == 8 and bwin.train_cost_labels.food.text == "2,400" and bwin.train_cost_labels.wood.text == "1,600" and bwin.train_time_label.text == "훈련 시간 24:00:00",
-		"(S) typing 8: cost 2,400 food / 1,600 wood, 훈련 시간 24:00:00", "qty=%d food=%s" % [q.value, bwin.train_cost_labels.food.text])
+	_check(q.value == 8 and bwin.train_cost_labels.food.text == "12,000" and bwin.train_cost_labels.wood.text == "8,000" and bwin.train_time_label.text == "훈련 시간 24:00:00",
+		"(S) typing 8: cost 12,000 food / 8,000 wood, 훈련 시간 24:00:00", "qty=%d food=%s" % [q.value, bwin.train_cost_labels.food.text])
 	await _tap(_center(bwin.train_button))
 	await _frames(1)
 	var tq := Economy.training("barracks")
-	_check(Economy.res == {"wood": 8400, "stone": 10000, "food": 7600} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
+	_check(Economy.res == {"wood": 42000, "stone": 10000, "food": 38000} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
 		and (bwin.run_label.text == "T1 보병 ×8 · 남은 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
 		and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUILD_LIFT_PX,
-		"(S) [훈련]: resources go down at once (food 2,400 / wood 1,600), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
+		"(S) [훈련]: resources go down at once (food 12,000 / wood 8,000), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
 		"res=%s q=%s run=%s" % [Economy.res, tq, bwin.run_label.text])
 	var errors0: int = _errors.count
 	await _frames(2)  # 월드 막대·이름표 배치가 그려진다
@@ -1404,12 +1404,12 @@ func _soldiers_ui(tabs, hud) -> void:
 	q.set_value(3)
 	await _tap(_center(bwin.train_button))
 	await _frames(1)
-	_check(Economy.res == {"wood": 7800, "stone": 10000, "food": 6700} and bwin.run_box.visible and bwin.cancel_button.text == "취소(50% 환불)",
-		"(S) a 3-soldier batch (food 900 / wood 600) runs with [취소(50% 환불)]", "res=%s" % [Economy.res])
+	_check(Economy.res == {"wood": 39000, "stone": 10000, "food": 33500} and bwin.run_box.visible and bwin.cancel_button.text == "취소(50% 환불)",
+		"(S) a 3-soldier batch (food 4,500 / wood 3,000) runs with [취소(50% 환불)]", "res=%s" % [Economy.res])
 	await _tap(_center(bwin.cancel_button))
 	await _frames(1)
-	_check(Economy.res == {"wood": 8100, "stone": 10000, "food": 7150} and Economy.training("barracks").count == 0 and bwin.empty_box.visible and hud._toast.text == Economy.CANCEL_TEXT
-		and Economy.soldiers == {"infantry:1": 8}, "(S) [취소] refunds half (450 food / 300 wood) and empties the queue",
+	_check(Economy.res == {"wood": 40500, "stone": 10000, "food": 35750} and Economy.training("barracks").count == 0 and bwin.empty_box.visible and hud._toast.text == Economy.CANCEL_TEXT
+		and Economy.soldiers == {"infantry:1": 8}, "(S) [취소] refunds half (2,250 food / 1,500 wood) and empties the queue",
 		"res=%s toast=%s" % [Economy.res, hud._toast.text])
 	Economy.res = {"wood": 10000, "stone": 0, "food": 10000}
 	Economy.changed.emit()
@@ -2445,9 +2445,9 @@ func _barracks_t2_window() -> void:
 	Economy.levels.barracks = 7
 	Economy.changed.emit()
 	await _frames(1)
-	_check(bwin.unit_label.text == "T2 보병 · 1마리 3:00:00" and bwin._train_type == "infantry:2" and bwin.train_cost_labels.food.text == "1,500" and bwin.train_cost_labels.wood.text == "1,000"
+	_check(bwin.unit_label.text == "T2 보병 · 1마리 3:00:00" and bwin._train_type == "infantry:2" and bwin.train_cost_labels.food.text == "7,500" and bwin.train_cost_labels.wood.text == "5,000"
 		and bwin.train_time_label.text == "훈련 시간 3:00:00" and bwin.next_label.text == "1마리 3:00:00 → 2:30:00" and not bwin.train_button.disabled,
-		"(S) Lv 7 barracks: T2 보병 1마리 3:00:00, cost x5 (1,500 food / 1,000 wood), preview '1마리 3:00:00 → 2:30:00'",
+		"(S) Lv 7 barracks: T2 보병 1마리 3:00:00, cost x5 (7,500 food / 5,000 wood), preview '1마리 3:00:00 → 2:30:00'",
 		"unit=%s food=%s wood=%s next=%s" % [bwin.unit_label.text, bwin.train_cost_labels.food.text, bwin.train_cost_labels.wood.text, bwin.next_label.text])
 	Economy.levels.barracks = 1
 	Economy.changed.emit()

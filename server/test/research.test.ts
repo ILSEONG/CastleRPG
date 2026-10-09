@@ -83,8 +83,8 @@ test('효과 합계: 모든 키(없으면 0), 같은 effect끼리 더하고, 레
   assert.equal(R.pendingAmount(100, 2, 600, 720), 2000)
   assert.equal(R.pendingAmount(100, 1, 600, 720, 15), 1150) // floor(100 × 1.15) = 115/분
   assert.equal(R.researchProdPct({ ...b, wood_pct: 15, res_pct: 3 }, 'wood'), 18)
-  assert.deepEqual(R.trainCost(G.config, 'infantry', 2, 1, 10), { food: 540, wood: 360 })
-  assert.deepEqual(R.trainCost(G.config, 'infantry', 1, 1, 0.2), { food: 299, wood: 200 }) // 299.4 → 299, 199.6 → 200
+  assert.deepEqual(R.trainCost(G.config, 'infantry', 2, 1, 10), { food: 2700, wood: 1800 })
+  assert.deepEqual(R.trainCost(G.config, 'infantry', 1, 1, 0.04), { food: 1499, wood: 1000 }) // 1499.4 → 1499, 999.6 → 1000
   assert.deepEqual(R.trainCost(G.config, 'infantry', 1, 1, 100), {}) // 0인 자원은 뺀다
 })
 
@@ -266,12 +266,12 @@ test('효과: 훈련 시간(train_speed_pct, 반올림 없음)·비용(train_cos
   let r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 2 } })
   assert.equal(r.status, 200)
   const unit = R.soldierUnitSec(G.config, 1)
-  assert.deepEqual([r.json.training.finish, r.json.player.res], [T0 + 2 * unit / (1 + 15 / 100), { wood: 10000 - 360, stone: 10000, food: 10000 - 540 }])
-  assert.deepEqual((await logs(id, 'train_start'))[0].cost, { food: 540, wood: 360 })
+  assert.deepEqual([r.json.training.finish, r.json.player.res], [T0 + 2 * unit / (1 + 15 / 100), { wood: 10000 - 1800, stone: 10000, food: 10000 - 2700 }])
+  assert.deepEqual((await logs(id, 'train_start'))[0].cost, { food: 2700, wood: 1800 })
   r = await S.req('POST', '/v1/soldiers/cancel', { token, body: { building: 'barracks' } })
-  assert.deepEqual([r.json.refund, r.json.player.res], [{ food: 270, wood: 180 }, { wood: 10000 - 360 + 180, stone: 10000, food: 10000 - 540 + 270 }])
+  assert.deepEqual([r.json.refund, r.json.player.res], [{ food: 1350, wood: 900 }, { wood: 10000 - 1800 + 900, stone: 10000, food: 10000 - 2700 + 1350 }])
   // 자원이 할인된 비용만큼만 있어도 된다
-  await setRes(id, { wood: 360, food: 540 })
+  await setRes(id, { wood: 1800, food: 2700 })
   assert.equal((await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 2 } })).status, 200)
   // 인구 = 6 + pop_add(병영 확장 3)
   await S.db.query("insert into player_soldiers (player_id, type, tier, count) values ($1, 'infantry', 1, 20)", [id])

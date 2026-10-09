@@ -441,7 +441,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
     ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0],
     ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0]]) // 개정 18: 파일 순서
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })
-  assert.equal(g.config.train_cost_cavalry, 'food:400|stone:200')
+  assert.equal(g.config.train_cost_cavalry, 'food:2000|stone:1000')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })

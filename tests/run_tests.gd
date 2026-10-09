@@ -2262,8 +2262,8 @@ func test_soldiers() -> void:
 	check(GameData.soldier_unit_sec(1) == 10800.0 and GameData.soldier_unit_sec(2) == 9000.0 and GameData.soldier_unit_sec(6) == 1800.0 and GameData.soldier_unit_sec(7) == 10800.0,
 		"unit time = 180 - 30 x step min (rev 19): Lv 1 3:00, Lv 2 2:30, Lv 6 0:30, Lv 7 back to 3:00 (next tier)")
 	check(GameData.train_max(1) == 10 and GameData.train_max(5) == 18 and GameData.train_max(30) == 68, "batch cap = 10 + 2 x (L - 1)")
-	check(EconomyScript.train_cost("infantry", 8) == {"food": 2400, "wood": 1600} and EconomyScript.train_cost("archer", 3) == {"food": 750, "wood": 900}
-		and EconomyScript.train_cost("cavalry", 1) == {"food": 400, "stone": 200} and EconomyScript.train_cost("knight", 1).is_empty(), "train cost = unit cost x n (food:300|wood:200 ...)")
+	check(EconomyScript.train_cost("infantry", 8) == {"food": 12000, "wood": 8000} and EconomyScript.train_cost("archer", 3) == {"food": 3750, "wood": 4500}
+		and EconomyScript.train_cost("cavalry", 1) == {"food": 2000, "stone": 1000} and EconomyScript.train_cost("knight", 1).is_empty(), "train cost = unit cost x n (food:1500|wood:1000 ...)")
 	check(GameData.parse_train_cost(" food : 40 | stone:20 ") == {"food": 40, "stone": 20} and GameData.parse_train_cost("0") == {}
 		and ["", "food", "food:-1", "food:+1", "food:1.5", "gold:5", "food:1|food:2", "food:1|", "food:x"].all(func(x): return GameData.parse_train_cost(x) == null),
 		"parse_train_cost: 'res:amount|...' with wood/stone/food and non-negative integers, '0' is free (same as the server)")
@@ -2285,11 +2285,11 @@ func test_soldiers() -> void:
 	check(e.train_block("lab", 1) == "unknown" and e.train_block("barracks", 0) == "bad_count" and e.train_block("barracks", 11) == "bad_count"
 		and e.train_block("barracks", 1) == "not_enough" and not e.start_training("barracks", 1) and notes[-1] == EconomyScript.TRAIN_TEXT.not_enough and e.train_queues.is_empty(),
 		"train_block: not a soldier building / count outside 1..10 / not enough resources; a refused start only shows the reason")
-	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
+	e.res = {"wood": 50000, "stone": 50000, "food": 50000}
 	var t0: float = e.time_now()
-	check(e.start_training("barracks", 8) and e.res == {"wood": 8400, "stone": 10000, "food": 7600} and e.training("barracks").count == 8
+	check(e.start_training("barracks", 8) and e.res == {"wood": 42000, "stone": 50000, "food": 38000} and e.training("barracks").count == 8
 		and absf(e.training("barracks").finish - (t0 + 8 * 10800.0)) < 2.0 and not e.training("barracks").ready and changes[0] == 1,
-		"start: 8 infantry take food 2400 / wood 1600 at once, finish = now + 8 x 3 h, training_changed")
+		"start: 8 infantry take food 12000 / wood 8000 at once, finish = now + 8 x 3 h, training_changed")
 	check(e.train_block("barracks", 1) == "training" and not e.start_training("barracks", 1) and notes[-1] == EconomyScript.TRAIN_TEXT.training
 		and not e.collect_training("barracks") and e.soldiers.is_empty(), "one batch per building: a second start is 'training'; nothing to collect yet")
 	check(e.train_time("barracks", 8) == 8 * 10800.0 and e.train_max("barracks") == 10 and e.train_progress("barracks") < 0.01, "train_time = n x unit, train_max by level, progress starts at 0")
@@ -2300,11 +2300,11 @@ func test_soldiers() -> void:
 	check(e.training("barracks").ready and e.train_block("barracks", 1) == "ready_to_collect" and e.soldiers.is_empty(), "done: ready to collect, no soldiers until collected, a new start is 'ready_to_collect'")
 	check(e.collect_training("barracks") and e.soldiers == {"infantry:1": 8} and e.train_queues.is_empty() and notes[-1] == "보병 +8" and not e.collect_training("barracks"),
 		"collect: tier-1 +8, the queue empties, notice '보병 +8'; collecting again does nothing")
-	# 보급술 Lv 1(-2%)로 비용을 홀수로 만든다 — 10배 비용(750/900)은 절반이 딱 떨어져 내림을 못 본다
+	# 보급술 Lv 1(-2%)로 비용을 홀수로 만든다 — 보통 비용(3750/4500)은 절반이 딱 떨어져 내림을 못 본다
 	e.research_levels = {"logistics": 1}
-	check(e.start_training("archery", 3) and e.res == {"wood": 7518, "stone": 10000, "food": 6865} and e.cancel_training("archery")
-		and e.res == {"wood": 7959, "stone": 10000, "food": 7232} and e.train_queues.is_empty() and notes[-1] == EconomyScript.CANCEL_TEXT,
-		"cancel: 3 archers with logistics Lv 1 (food 735 / wood 882) refund half rounded down (367 / 441) and empty the queue")
+	check(e.start_training("archery", 3) and e.res == {"wood": 37590, "stone": 50000, "food": 34325} and e.cancel_training("archery")
+		and e.res == {"wood": 39795, "stone": 50000, "food": 36162} and e.train_queues.is_empty() and notes[-1] == EconomyScript.CANCEL_TEXT,
+		"cancel: 3 archers with logistics Lv 1 (food 3675 / wood 4410) refund half rounded down (1837 / 2205) and empty the queue")
 	e.research_levels = {}
 	check(e.start_training("stable", 1) and not e.cancel_training("lab") and not e.cancel_training("barracks"), "cancel needs a running batch")
 	e.finish_training_now("stable")
@@ -3120,14 +3120,14 @@ func test_training_tiers() -> void:
 	for w in want:
 		table_ok = table_ok and GameData.train_tier(w[0]) == w[1] and GameData.soldier_unit_sec(w[0]) == w[2] * 60.0
 	check(table_ok, "tier/time table: Lv 1,2,6,7,12,13,19,25,30,31 -> T1 3:00, T1 2:30, T1 0:30, T2 3:00, T2 0:30, T3 3:00, T4, T5 3:00, T5 0:30, T5 0:30")
-	check(EconomyScript.train_cost("infantry", 2) == {"food": 600, "wood": 400} and EconomyScript.train_cost("infantry", 2, 2) == {"food": 3000, "wood": 2000}
-		and EconomyScript.train_cost("infantry", 1, 3) == {"food": 7500, "wood": 5000}, "cost x 5^(tier-1): T2 x5, T3 x25")
+	check(EconomyScript.train_cost("infantry", 2) == {"food": 3000, "wood": 2000} and EconomyScript.train_cost("infantry", 2, 2) == {"food": 15000, "wood": 10000}
+		and EconomyScript.train_cost("infantry", 1, 3) == {"food": 37500, "wood": 25000}, "cost x 5^(tier-1): T2 x5, T3 x25")
 	var now := 1.8e9
 	var e = _econ(now)
 	e.res = {"wood": 100000, "stone": 100000, "food": 100000}
 	e.levels.barracks = 7
 	var t0: float = e.time_now()
-	check(e.train_tier("barracks") == 2 and e.start_training("barracks", 2) and e.res.food == 100000 - 3000 and e.res.wood == 100000 - 2000
+	check(e.train_tier("barracks") == 2 and e.start_training("barracks", 2) and e.res.food == 100000 - 15000 and e.res.wood == 100000 - 10000
 		and e.training("barracks").tier == 2 and absf(e.training("barracks").finish - (t0 + 2 * 10800.0)) < 2.0, "Lv 7 barracks trains T2: 3:00 each, cost x5")
 	var fin: float = e.training("barracks").finish
 	e.levels.barracks = 13  # 진행 중 레벨업: 묶음은 T2·끝나는 시각 그대로
@@ -3138,7 +3138,7 @@ func test_training_tiers() -> void:
 	e.start_training("barracks", 2)
 	e.levels.barracks = 13
 	var before: Dictionary = e.res.duplicate()
-	check(e.cancel_training("barracks") and e.res.food == before.food + 1500 and e.res.wood == before.wood + 1000, "cancel refunds half of the batch tier's cost")
+	check(e.cancel_training("barracks") and e.res.food == before.food + 7500 and e.res.wood == before.wood + 5000, "cancel refunds half of the batch tier's cost")
 	e.free()
 
 
@@ -4691,8 +4691,8 @@ func test_research_r24() -> void:
 	e.add_kill("grunt", 1)
 	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3327, "kill gold = floor(tenths x 1.10): grunt 100 -> 110, boss 3025 -> 3327")
 	e.research_levels = {"drill_manual": 5, "logistics": 5}
-	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 810, "wood": 540}
-		and EconomyScript.train_cost("infantry", 3) == {"food": 900, "wood": 600}, "training: time / 1.15, cost x 0.90 rounded (900/600 -> 810/540)")
+	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 4050, "wood": 2700}
+		and EconomyScript.train_cost("infantry", 3) == {"food": 4500, "wood": 3000}, "training: time / 1.15, cost x 0.90 rounded (4500/3000 -> 4050/2700)")
 	e.research_levels = {"barracks_ext": 2}
 	check(e.population() == 8, "population 6 + 2 (barracks extension Lv 2)")
 	var gs = GameStateScript.new()

@@ -22,9 +22,9 @@ train_cost_tier_mult,5
 soldier_merge_count,5
 train_batch_base,1
 train_batch_per_level,0
-train_cost_infantry,food:300|wood:200
-train_cost_archer,food:250|wood:300
-train_cost_cavalry,food:400|stone:200
+train_cost_infantry,food:1500|wood:1000
+train_cost_archer,food:1250|wood:1500
+train_cost_cavalry,food:2000|stone:1000
 badge_min,5
 merchant_jackpot_p,0.05
 merchant_jackpot_rate,2
