@@ -21,3 +21,219 @@ hero_armor,hero,1,갑옷 단련,hero_hp_pct,3,10,1,,,,,1200,800,1000,0,60
 arcana,hero,2,비전 연구,skill_pct,4,10,5,hero_weapon,5,hero_armor,5,9000,7000,8000,20000,900
 legend_weapon,hero,3,전설의 무기,hero_atk_pct,4,10,15,arcana,5,,,40000,30000,35000,150000,3600
 legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,150000,3600
+eco5a,economy,5,고급 벌목 I,wood_pct,2,10,15,abundance,5,,,41200,30900,36050,162000,3600
+eco5b,economy,5,건축 공학 I,build_speed_pct,1,10,15,abundance,5,,,41200,30900,36050,162000,3600
+eco6a,economy,6,고급 채석 I,stone_pct,2,10,16,eco5a,5,eco5b,3,42436,31827,37132,175000,3600
+eco6b,economy,6,현상금 사냥 I,kill_gold_pct,2,10,16,eco5b,5,eco5a,3,42436,31827,37132,175000,3600
+eco7a,economy,7,고급 농경 I,food_pct,2,10,16,eco6a,5,eco6b,3,43709,32782,38245,189000,3600
+eco7b,economy,7,학술원 I,research_speed_pct,1,10,16,eco6b,5,eco6a,3,43709,32782,38245,189000,3600
+eco8a,economy,8,자원 순환 I,res_pct,1,10,17,eco7a,5,eco7b,3,45020,33765,39393,204000,3600
+eco8b,economy,8,무역로 I,sell_pct,1,10,17,eco7b,5,eco7a,3,45020,33765,39393,204000,3600
+eco9a,economy,9,고급 벌목 II,wood_pct,2,10,17,eco8a,5,eco8b,3,46371,34778,40575,220000,3600
+eco9b,economy,9,건축 공학 II,build_speed_pct,1,10,17,eco8b,5,eco8a,3,46371,34778,40575,220000,3600
+eco10a,economy,10,고급 채석 II,stone_pct,2,10,17,eco9a,5,eco9b,3,47762,35822,41792,238000,3600
+eco10b,economy,10,현상금 사냥 II,kill_gold_pct,2,10,17,eco9b,5,eco9a,3,47762,35822,41792,238000,3600
+eco11a,economy,11,고급 농경 II,food_pct,2,10,18,eco10a,5,eco10b,3,49195,36896,43046,257000,3600
+eco11b,economy,11,학술원 II,research_speed_pct,1,10,18,eco10b,5,eco10a,3,49195,36896,43046,257000,3600
+eco12a,economy,12,자원 순환 II,res_pct,1,10,18,eco11a,5,eco11b,3,50671,38003,44337,278000,3600
+eco12b,economy,12,무역로 II,sell_pct,1,10,18,eco11b,5,eco11a,3,50671,38003,44337,278000,3600
+eco13a,economy,13,고급 벌목 III,wood_pct,2,10,19,eco12a,5,eco12b,3,52191,39143,45667,300000,3600
+eco13b,economy,13,건축 공학 III,build_speed_pct,1,10,19,eco12b,5,eco12a,3,52191,39143,45667,300000,3600
+eco14a,economy,14,고급 채석 III,stone_pct,2,10,19,eco13a,5,eco13b,3,53757,40317,47037,324000,3600
+eco14b,economy,14,현상금 사냥 III,kill_gold_pct,2,10,19,eco13b,5,eco13a,3,53757,40317,47037,324000,3600
+eco15a,economy,15,고급 농경 III,food_pct,2,10,20,eco14a,5,eco14b,3,55369,41527,48448,350000,3600
+eco15b,economy,15,학술원 III,research_speed_pct,1,10,20,eco14b,5,eco14a,3,55369,41527,48448,350000,3600
+eco16a,economy,16,자원 순환 III,res_pct,1,10,20,eco15a,5,eco15b,3,57030,42773,49902,378000,3600
+eco16b,economy,16,무역로 III,sell_pct,1,10,20,eco15b,5,eco15a,3,57030,42773,49902,378000,3600
+eco17a,economy,17,대삼림 개척 I,wood_pct,2,10,20,eco16a,5,eco16b,3,58741,44056,51399,408000,3600
+eco17b,economy,17,거장의 설계 I,build_speed_pct,1,10,20,eco16b,5,eco16a,3,58741,44056,51399,408000,3600
+eco18a,economy,18,심층 광맥 I,stone_pct,2,10,21,eco17a,5,eco17b,3,60504,45378,52941,441000,3600
+eco18b,economy,18,보물 감정 I,kill_gold_pct,2,10,21,eco17b,5,eco17a,3,60504,45378,52941,441000,3600
+eco19a,economy,19,대평원 개간 I,food_pct,2,10,21,eco18a,5,eco18b,3,62319,46739,54529,476000,3600
+eco19b,economy,19,대도서관 I,research_speed_pct,1,10,21,eco18b,5,eco18a,3,62319,46739,54529,476000,3600
+eco20a,economy,20,왕국 경제 I,res_pct,1,10,22,eco19a,5,eco19b,3,64188,48141,56165,514000,3600
+eco20b,economy,20,상단 연합 I,sell_pct,1,10,22,eco19b,5,eco19a,3,64188,48141,56165,514000,3600
+eco21a,economy,21,대삼림 개척 II,wood_pct,2,10,22,eco20a,5,eco20b,3,66114,49585,57850,555000,3600
+eco21b,economy,21,거장의 설계 II,build_speed_pct,1,10,22,eco20b,5,eco20a,3,66114,49585,57850,555000,3600
+eco22a,economy,22,심층 광맥 II,stone_pct,2,10,23,eco21a,5,eco21b,3,68097,51073,59585,599000,3600
+eco22b,economy,22,보물 감정 II,kill_gold_pct,2,10,23,eco21b,5,eco21a,3,68097,51073,59585,599000,3600
+eco23a,economy,23,대평원 개간 II,food_pct,2,10,23,eco22a,5,eco22b,3,70140,52605,61373,647000,3600
+eco23b,economy,23,대도서관 II,research_speed_pct,1,10,23,eco22b,5,eco22a,3,70140,52605,61373,647000,3600
+eco24a,economy,24,왕국 경제 II,res_pct,1,10,23,eco23a,5,eco23b,3,72244,54183,63214,699000,3600
+eco24b,economy,24,상단 연합 II,sell_pct,1,10,23,eco23b,5,eco23a,3,72244,54183,63214,699000,3600
+eco25a,economy,25,대삼림 개척 III,wood_pct,2,10,24,eco24a,5,eco24b,3,74412,55809,65110,755000,3600
+eco25b,economy,25,거장의 설계 III,build_speed_pct,1,10,24,eco24b,5,eco24a,3,74412,55809,65110,755000,3600
+eco26a,economy,26,심층 광맥 III,stone_pct,2,10,24,eco25a,5,eco25b,3,76644,57483,67064,815000,3600
+eco26b,economy,26,보물 감정 III,kill_gold_pct,2,10,24,eco25b,5,eco25a,3,76644,57483,67064,815000,3600
+eco27a,economy,27,대평원 개간 III,food_pct,2,10,25,eco26a,5,eco26b,3,78943,59208,69076,881000,3600
+eco27b,economy,27,대도서관 III,research_speed_pct,1,10,25,eco26b,5,eco26a,3,78943,59208,69076,881000,3600
+eco28a,economy,28,왕국 경제 III,res_pct,1,10,25,eco27a,5,eco27b,3,81312,60984,71148,951000,3600
+eco28b,economy,28,상단 연합 III,sell_pct,1,10,25,eco27b,5,eco27a,3,81312,60984,71148,951000,3600
+eco29a,economy,29,세계수의 은총 I,wood_pct,2,10,25,eco28a,5,eco28b,3,83751,62813,73282,1027000,3600
+eco29b,economy,29,천공의 건축 I,build_speed_pct,1,10,25,eco28b,5,eco28a,3,83751,62813,73282,1027000,3600
+eco30a,economy,30,거인의 채석 I,stone_pct,2,10,26,eco29a,5,eco29b,3,86264,64698,75481,1109000,3600
+eco30b,economy,30,용의 보물 I,kill_gold_pct,2,10,26,eco29b,5,eco29a,3,86264,64698,75481,1109000,3600
+eco31a,economy,31,풍년의 축복 I,food_pct,2,10,26,eco30a,5,eco30b,3,88852,66639,77745,1198000,3600
+eco31b,economy,31,현자의 탑 I,research_speed_pct,1,10,26,eco30b,5,eco30a,3,88852,66639,77745,1198000,3600
+eco32a,economy,32,황금 시대 I,res_pct,1,10,27,eco31a,5,eco31b,3,91517,68638,80077,1294000,3600
+eco32b,economy,32,대상인의 길 I,sell_pct,1,10,27,eco31b,5,eco31a,3,91517,68638,80077,1294000,3600
+eco33a,economy,33,세계수의 은총 II,wood_pct,2,10,27,eco32a,5,eco32b,3,94263,70697,82480,1398000,3600
+eco33b,economy,33,천공의 건축 II,build_speed_pct,1,10,27,eco32b,5,eco32a,3,94263,70697,82480,1398000,3600
+eco34a,economy,34,거인의 채석 II,stone_pct,2,10,27,eco33a,5,eco33b,3,97090,72818,84954,1509000,3600
+eco34b,economy,34,용의 보물 II,kill_gold_pct,2,10,27,eco33b,5,eco33a,3,97090,72818,84954,1509000,3600
+eco35a,economy,35,풍년의 축복 II,food_pct,2,10,28,eco34a,5,eco34b,3,100003,75002,87503,1630000,3600
+eco35b,economy,35,현자의 탑 II,research_speed_pct,1,10,28,eco34b,5,eco34a,3,100003,75002,87503,1630000,3600
+eco36a,economy,36,황금 시대 II,res_pct,1,10,28,eco35a,5,eco35b,3,103003,77252,90128,1761000,3600
+eco36b,economy,36,대상인의 길 II,sell_pct,1,10,28,eco35b,5,eco35a,3,103003,77252,90128,1761000,3600
+eco37a,economy,37,세계수의 은총 III,wood_pct,2,10,29,eco36a,5,eco36b,3,106093,79570,92832,1901000,3600
+eco37b,economy,37,천공의 건축 III,build_speed_pct,1,10,29,eco36b,5,eco36a,3,106093,79570,92832,1901000,3600
+eco38a,economy,38,거인의 채석 III,stone_pct,2,10,29,eco37a,5,eco37b,3,109276,81957,95617,2054000,3600
+eco38b,economy,38,용의 보물 III,kill_gold_pct,2,10,29,eco37b,5,eco37a,3,109276,81957,95617,2054000,3600
+eco39a,economy,39,풍년의 축복 III,food_pct,2,10,30,eco38a,5,eco38b,3,112554,84416,98485,2218000,3600
+eco39b,economy,39,현자의 탑 III,research_speed_pct,1,10,30,eco38b,5,eco38a,3,112554,84416,98485,2218000,3600
+eco40a,economy,40,황금 시대 III,res_pct,1,10,30,eco39a,5,eco39b,3,115931,86948,101440,2395000,3600
+eco40b,economy,40,대상인의 길 III,sell_pct,1,10,30,eco39b,5,eco39a,3,115931,86948,101440,2395000,3600
+mil6a,military,6,방패벽 전술 I,inf_pct,2,10,15,elite,5,,,41200,30900,36050,162000,3600
+mil6b,military,6,석벽 강화 I,castle_hp_pct,2,10,15,elite,5,,,41200,30900,36050,162000,3600
+mil7a,military,7,장궁 개량 I,arc_pct,2,10,16,mil6a,5,mil6b,3,42436,31827,37132,175000,3600
+mil7b,military,7,철문 보강 I,gate_hp_pct,2,10,16,mil6b,5,mil6a,3,42436,31827,37132,175000,3600
+mil8a,military,8,군마 육성 I,cav_pct,2,10,16,mil7a,5,mil7b,3,43709,32782,38245,189000,3600
+mil8b,military,8,신병 교육 I,train_speed_pct,1,10,16,mil7b,5,mil7a,3,43709,32782,38245,189000,3600
+mil9a,military,9,전군 훈련 I,soldier_pct,1,10,16,mil8a,5,mil8b,3,45020,33765,39393,204000,3600
+mil9b,military,9,석벽 강화 II,castle_hp_pct,2,10,16,mil8b,5,mil8a,3,45020,33765,39393,204000,3600
+mil10a,military,10,방패벽 전술 II,inf_pct,2,10,17,mil9a,5,mil9b,3,46371,34778,40575,220000,3600
+mil10b,military,10,철문 보강 II,gate_hp_pct,2,10,17,mil9b,5,mil9a,3,46371,34778,40575,220000,3600
+mil11a,military,11,장궁 개량 II,arc_pct,2,10,17,mil10a,5,mil10b,3,47762,35822,41792,238000,3600
+mil11b,military,11,신병 교육 II,train_speed_pct,1,10,17,mil10b,5,mil10a,3,47762,35822,41792,238000,3600
+mil12a,military,12,군마 육성 II,cav_pct,2,10,17,mil11a,5,mil11b,3,49195,36896,43046,257000,3600
+mil12b,military,12,석벽 강화 III,castle_hp_pct,2,10,17,mil11b,5,mil11a,3,49195,36896,43046,257000,3600
+mil13a,military,13,전군 훈련 II,soldier_pct,1,10,18,mil12a,5,mil12b,3,50671,38003,44337,278000,3600
+mil13b,military,13,철문 보강 III,gate_hp_pct,2,10,18,mil12b,5,mil12a,3,50671,38003,44337,278000,3600
+mil14a,military,14,방패벽 전술 III,inf_pct,2,10,18,mil13a,5,mil13b,3,52191,39143,45667,300000,3600
+mil14b,military,14,신병 교육 III,train_speed_pct,1,10,18,mil13b,5,mil13a,3,52191,39143,45667,300000,3600
+mil15a,military,15,장궁 개량 III,arc_pct,2,10,18,mil14a,5,mil14b,3,53757,40317,47037,324000,3600
+mil15b,military,15,석벽 강화 IV,castle_hp_pct,2,10,18,mil14b,5,mil14a,3,53757,40317,47037,324000,3600
+mil16a,military,16,군마 육성 III,cav_pct,2,10,19,mil15a,5,mil15b,3,55369,41527,48448,350000,3600
+mil16b,military,16,철문 보강 IV,gate_hp_pct,2,10,19,mil15b,5,mil15a,3,55369,41527,48448,350000,3600
+mil17a,military,17,전군 훈련 III,soldier_pct,1,10,19,mil16a,5,mil16b,3,57030,42773,49902,378000,3600
+mil17b,military,17,신병 교육 IV,train_speed_pct,1,10,19,mil16b,5,mil16a,3,57030,42773,49902,378000,3600
+mil18a,military,18,방패벽 전술 IV,inf_pct,2,10,19,mil17a,5,mil17b,3,58741,44056,51399,408000,3600
+mil18b,military,18,석벽 강화 V,castle_hp_pct,2,10,19,mil17b,5,mil17a,3,58741,44056,51399,408000,3600
+mil19a,military,19,장궁 개량 IV,arc_pct,2,10,20,mil18a,5,mil18b,3,60504,45378,52941,441000,3600
+mil19b,military,19,철문 보강 V,gate_hp_pct,2,10,20,mil18b,5,mil18a,3,60504,45378,52941,441000,3600
+mil20a,military,20,군마 육성 IV,cav_pct,2,10,20,mil19a,5,mil19b,3,62319,46739,54529,476000,3600
+mil20b,military,20,신병 교육 V,train_speed_pct,1,10,20,mil19b,5,mil19a,3,62319,46739,54529,476000,3600
+mil21a,military,21,전군 훈련 IV,soldier_pct,1,10,20,mil20a,5,mil20b,3,64188,48141,56165,514000,3600
+mil21b,military,21,요새화 I,castle_hp_pct,2,10,20,mil20b,5,mil20a,3,64188,48141,56165,514000,3600
+mil22a,military,22,철벽 보병 I,inf_pct,2,10,21,mil21a,5,mil21b,3,66114,49585,57850,555000,3600
+mil22b,military,22,수호 결계 I,gate_hp_pct,2,10,21,mil21b,5,mil21a,3,66114,49585,57850,555000,3600
+mil23a,military,23,명사수 훈련 I,arc_pct,2,10,21,mil22a,5,mil22b,3,68097,51073,59585,599000,3600
+mil23b,military,23,속성 훈련 I,train_speed_pct,1,10,21,mil22b,5,mil22a,3,68097,51073,59585,599000,3600
+mil24a,military,24,돌격 전술 I,cav_pct,2,10,21,mil23a,5,mil23b,3,70140,52605,61373,647000,3600
+mil24b,military,24,요새화 II,castle_hp_pct,2,10,21,mil23b,5,mil23a,3,70140,52605,61373,647000,3600
+mil25a,military,25,왕국 정예 I,soldier_pct,1,10,22,mil24a,5,mil24b,3,72244,54183,63214,699000,3600
+mil25b,military,25,수호 결계 II,gate_hp_pct,2,10,22,mil24b,5,mil24a,3,72244,54183,63214,699000,3600
+mil26a,military,26,철벽 보병 II,inf_pct,2,10,22,mil25a,5,mil25b,3,74412,55809,65110,755000,3600
+mil26b,military,26,속성 훈련 II,train_speed_pct,1,10,22,mil25b,5,mil25a,3,74412,55809,65110,755000,3600
+mil27a,military,27,명사수 훈련 II,arc_pct,2,10,22,mil26a,5,mil26b,3,76644,57483,67064,815000,3600
+mil27b,military,27,요새화 III,castle_hp_pct,2,10,22,mil26b,5,mil26a,3,76644,57483,67064,815000,3600
+mil28a,military,28,돌격 전술 II,cav_pct,2,10,23,mil27a,5,mil27b,3,78943,59208,69076,881000,3600
+mil28b,military,28,수호 결계 III,gate_hp_pct,2,10,23,mil27b,5,mil27a,3,78943,59208,69076,881000,3600
+mil29a,military,29,왕국 정예 II,soldier_pct,1,10,23,mil28a,5,mil28b,3,81312,60984,71148,951000,3600
+mil29b,military,29,속성 훈련 III,train_speed_pct,1,10,23,mil28b,5,mil28a,3,81312,60984,71148,951000,3600
+mil30a,military,30,철벽 보병 III,inf_pct,2,10,23,mil29a,5,mil29b,3,83751,62813,73282,1027000,3600
+mil30b,military,30,요새화 IV,castle_hp_pct,2,10,23,mil29b,5,mil29a,3,83751,62813,73282,1027000,3600
+mil31a,military,31,명사수 훈련 III,arc_pct,2,10,24,mil30a,5,mil30b,3,86264,64698,75481,1109000,3600
+mil31b,military,31,수호 결계 IV,gate_hp_pct,2,10,24,mil30b,5,mil30a,3,86264,64698,75481,1109000,3600
+mil32a,military,32,돌격 전술 III,cav_pct,2,10,24,mil31a,5,mil31b,3,88852,66639,77745,1198000,3600
+mil32b,military,32,속성 훈련 IV,train_speed_pct,1,10,24,mil31b,5,mil31a,3,88852,66639,77745,1198000,3600
+mil33a,military,33,왕국 정예 III,soldier_pct,1,10,24,mil32a,5,mil32b,3,91517,68638,80077,1294000,3600
+mil33b,military,33,요새화 V,castle_hp_pct,2,10,24,mil32b,5,mil32a,3,91517,68638,80077,1294000,3600
+mil34a,military,34,철벽 보병 IV,inf_pct,2,10,25,mil33a,5,mil33b,3,94263,70697,82480,1398000,3600
+mil34b,military,34,수호 결계 V,gate_hp_pct,2,10,25,mil33b,5,mil33a,3,94263,70697,82480,1398000,3600
+mil35a,military,35,명사수 훈련 IV,arc_pct,2,10,25,mil34a,5,mil34b,3,97090,72818,84954,1509000,3600
+mil35b,military,35,속성 훈련 V,train_speed_pct,1,10,25,mil34b,5,mil34a,3,97090,72818,84954,1509000,3600
+mil36a,military,36,돌격 전술 IV,cav_pct,2,10,25,mil35a,5,mil35b,3,100003,75002,87503,1630000,3600
+mil36b,military,36,난공불락 I,castle_hp_pct,2,10,25,mil35b,5,mil35a,3,100003,75002,87503,1630000,3600
+mil37a,military,37,왕국 정예 IV,soldier_pct,1,10,26,mil36a,5,mil36b,3,103003,77252,90128,1761000,3600
+mil37b,military,37,천년 성문 I,gate_hp_pct,2,10,26,mil36b,5,mil36a,3,103003,77252,90128,1761000,3600
+mil38a,military,38,불멸 군단 I,inf_pct,2,10,26,mil37a,5,mil37b,3,106093,79570,92832,1901000,3600
+mil38b,military,38,전쟁 학교 I,train_speed_pct,1,10,26,mil37b,5,mil37a,3,106093,79570,92832,1901000,3600
+mil39a,military,39,바람의 화살 I,arc_pct,2,10,26,mil38a,5,mil38b,3,109276,81957,95617,2054000,3600
+mil39b,military,39,난공불락 II,castle_hp_pct,2,10,26,mil38b,5,mil38a,3,109276,81957,95617,2054000,3600
+mil40a,military,40,천마 기병대 I,cav_pct,2,10,27,mil39a,5,mil39b,3,112554,84416,98485,2218000,3600
+mil40b,military,40,천년 성문 II,gate_hp_pct,2,10,27,mil39b,5,mil39a,3,112554,84416,98485,2218000,3600
+mil41a,military,41,전설의 군단 I,soldier_pct,1,10,27,mil40a,5,mil40b,3,115931,86948,101440,2395000,3600
+mil41b,military,41,전쟁 학교 II,train_speed_pct,1,10,27,mil40b,5,mil40a,3,115931,86948,101440,2395000,3600
+mil42a,military,42,불멸 군단 II,inf_pct,2,10,27,mil41a,5,mil41b,3,119409,89557,104483,2587000,3600
+mil42b,military,42,난공불락 III,castle_hp_pct,2,10,27,mil41b,5,mil41a,3,119409,89557,104483,2587000,3600
+mil43a,military,43,바람의 화살 II,arc_pct,2,10,28,mil42a,5,mil42b,3,122991,92244,107617,2794000,3600
+mil43b,military,43,천년 성문 III,gate_hp_pct,2,10,28,mil42b,5,mil42a,3,122991,92244,107617,2794000,3600
+mil44a,military,44,천마 기병대 II,cav_pct,2,10,28,mil43a,5,mil43b,3,126681,95011,110846,3017000,3600
+mil44b,military,44,전쟁 학교 III,train_speed_pct,1,10,28,mil43b,5,mil43a,3,126681,95011,110846,3017000,3600
+mil45a,military,45,전설의 군단 II,soldier_pct,1,10,28,mil44a,5,mil44b,3,130482,97861,114171,3259000,3600
+mil45b,military,45,난공불락 IV,castle_hp_pct,2,10,28,mil44b,5,mil44a,3,130482,97861,114171,3259000,3600
+mil46a,military,46,불멸 군단 III,inf_pct,2,10,29,mil45a,5,mil45b,3,134396,100797,117596,3519000,3600
+mil46b,military,46,천년 성문 IV,gate_hp_pct,2,10,29,mil45b,5,mil45a,3,134396,100797,117596,3519000,3600
+mil47a,military,47,바람의 화살 III,arc_pct,2,10,29,mil46a,5,mil46b,3,138428,103821,121124,3801000,3600
+mil47b,military,47,전쟁 학교 IV,train_speed_pct,1,10,29,mil46b,5,mil46a,3,138428,103821,121124,3801000,3600
+mil48a,military,48,천마 기병대 III,cav_pct,2,10,29,mil47a,5,mil47b,3,142581,106936,124758,4105000,3600
+mil48b,military,48,난공불락 V,castle_hp_pct,2,10,29,mil47b,5,mil47a,3,142581,106936,124758,4105000,3600
+mil49a,military,49,전설의 군단 III,soldier_pct,1,10,30,mil48a,5,mil48b,3,146858,110144,128501,4433000,3600
+mil49b,military,49,천년 성문 V,gate_hp_pct,2,10,30,mil48b,5,mil48a,3,146858,110144,128501,4433000,3600
+mil50a,military,50,불멸 군단 IV,inf_pct,2,10,30,mil49a,5,mil49b,3,151264,113448,132356,4788000,3600
+mil50b,military,50,전쟁 학교 V,train_speed_pct,1,10,30,mil49b,5,mil49a,3,151264,113448,132356,4788000,3600
+her4a,hero,4,무기 극의 I,hero_atk_pct,1,10,16,legend_weapon,5,legend_armor,3,41200,30900,36050,162000,3600
+her4b,hero,4,강철 육체 I,hero_hp_pct,1,10,16,legend_armor,5,legend_weapon,3,41200,30900,36050,162000,3600
+her5a,hero,5,무기 극의 II,hero_atk_pct,1,10,16,her4a,5,her4b,3,42436,31827,37132,175000,3600
+her5b,hero,5,강철 육체 II,hero_hp_pct,1,10,16,her4b,5,her4a,3,42436,31827,37132,175000,3600
+her6a,hero,6,무기 극의 III,hero_atk_pct,1,10,17,her5a,5,her5b,3,43709,32782,38245,189000,3600
+her6b,hero,6,강철 육체 III,hero_hp_pct,1,10,17,her5b,5,her5a,3,43709,32782,38245,189000,3600
+her7a,hero,7,비전 심화 I,skill_pct,1,10,17,her6a,5,her6b,3,45020,33765,39393,204000,3600
+her7b,hero,7,강철 육체 IV,hero_hp_pct,1,10,17,her6b,5,her6a,3,45020,33765,39393,204000,3600
+her8a,hero,8,무기 극의 IV,hero_atk_pct,1,10,18,her7a,5,her7b,3,46371,34778,40575,220000,3600
+her8b,hero,8,강철 육체 V,hero_hp_pct,1,10,18,her7b,5,her7a,3,46371,34778,40575,220000,3600
+her9a,hero,9,무기 극의 V,hero_atk_pct,1,10,18,her8a,5,her8b,3,47762,35822,41792,238000,3600
+her9b,hero,9,강철 육체 VI,hero_hp_pct,1,10,18,her8b,5,her8a,3,47762,35822,41792,238000,3600
+her10a,hero,10,무기 극의 VI,hero_atk_pct,1,10,19,her9a,5,her9b,3,49195,36896,43046,257000,3600
+her10b,hero,10,강철 육체 VII,hero_hp_pct,1,10,19,her9b,5,her9a,3,49195,36896,43046,257000,3600
+her11a,hero,11,비전 심화 II,skill_pct,1,10,19,her10a,5,her10b,3,50671,38003,44337,278000,3600
+her11b,hero,11,강철 육체 VIII,hero_hp_pct,1,10,19,her10b,5,her10a,3,50671,38003,44337,278000,3600
+her12a,hero,12,무기 극의 VII,hero_atk_pct,1,10,20,her11a,5,her11b,3,52191,39143,45667,300000,3600
+her12b,hero,12,강철 육체 IX,hero_hp_pct,1,10,20,her11b,5,her11a,3,52191,39143,45667,300000,3600
+her13a,hero,13,파괴의 기술 I,hero_atk_pct,1,10,21,her12a,5,her12b,3,53757,40317,47037,324000,3600
+her13b,hero,13,불사의 맹세 I,hero_hp_pct,1,10,21,her12b,5,her12a,3,53757,40317,47037,324000,3600
+her14a,hero,14,파괴의 기술 II,hero_atk_pct,1,10,21,her13a,5,her13b,3,55369,41527,48448,350000,3600
+her14b,hero,14,불사의 맹세 II,hero_hp_pct,1,10,21,her13b,5,her13a,3,55369,41527,48448,350000,3600
+her15a,hero,15,마도의 정수 I,skill_pct,1,10,22,her14a,5,her14b,3,57030,42773,49902,378000,3600
+her15b,hero,15,불사의 맹세 III,hero_hp_pct,1,10,22,her14b,5,her14a,3,57030,42773,49902,378000,3600
+her16a,hero,16,파괴의 기술 III,hero_atk_pct,1,10,22,her15a,5,her15b,3,58741,44056,51399,408000,3600
+her16b,hero,16,불사의 맹세 IV,hero_hp_pct,1,10,22,her15b,5,her15a,3,58741,44056,51399,408000,3600
+her17a,hero,17,파괴의 기술 IV,hero_atk_pct,1,10,23,her16a,5,her16b,3,60504,45378,52941,441000,3600
+her17b,hero,17,불사의 맹세 V,hero_hp_pct,1,10,23,her16b,5,her16a,3,60504,45378,52941,441000,3600
+her18a,hero,18,파괴의 기술 V,hero_atk_pct,1,10,23,her17a,5,her17b,3,62319,46739,54529,476000,3600
+her18b,hero,18,불사의 맹세 VI,hero_hp_pct,1,10,23,her17b,5,her17a,3,62319,46739,54529,476000,3600
+her19a,hero,19,마도의 정수 II,skill_pct,1,10,24,her18a,5,her18b,3,64188,48141,56165,514000,3600
+her19b,hero,19,불사의 맹세 VII,hero_hp_pct,1,10,24,her18b,5,her18a,3,64188,48141,56165,514000,3600
+her20a,hero,20,파괴의 기술 VI,hero_atk_pct,1,10,24,her19a,5,her19b,3,66114,49585,57850,555000,3600
+her20b,hero,20,불사의 맹세 VIII,hero_hp_pct,1,10,24,her19b,5,her19a,3,66114,49585,57850,555000,3600
+her21a,hero,21,파괴의 기술 VII,hero_atk_pct,1,10,25,her20a,5,her20b,3,68097,51073,59585,599000,3600
+her21b,hero,21,불사의 맹세 IX,hero_hp_pct,1,10,25,her20b,5,her20a,3,68097,51073,59585,599000,3600
+her22a,hero,22,신살의 검 I,hero_atk_pct,1,10,26,her21a,5,her21b,3,70140,52605,61373,647000,3600
+her22b,hero,22,신의 가호 I,hero_hp_pct,1,10,26,her21b,5,her21a,3,70140,52605,61373,647000,3600
+her23a,hero,23,원초의 마법 I,skill_pct,1,10,26,her22a,5,her22b,3,72244,54183,63214,699000,3600
+her23b,hero,23,신의 가호 II,hero_hp_pct,1,10,26,her22b,5,her22a,3,72244,54183,63214,699000,3600
+her24a,hero,24,신살의 검 II,hero_atk_pct,1,10,27,her23a,5,her23b,3,74412,55809,65110,755000,3600
+her24b,hero,24,신의 가호 III,hero_hp_pct,1,10,27,her23b,5,her23a,3,74412,55809,65110,755000,3600
+her25a,hero,25,신살의 검 III,hero_atk_pct,1,10,27,her24a,5,her24b,3,76644,57483,67064,815000,3600
+her25b,hero,25,신의 가호 IV,hero_hp_pct,1,10,27,her24b,5,her24a,3,76644,57483,67064,815000,3600
+her26a,hero,26,신살의 검 IV,hero_atk_pct,1,10,28,her25a,5,her25b,3,78943,59208,69076,881000,3600
+her26b,hero,26,신의 가호 V,hero_hp_pct,1,10,28,her25b,5,her25a,3,78943,59208,69076,881000,3600
+her27a,hero,27,원초의 마법 II,skill_pct,1,10,28,her26a,5,her26b,3,81312,60984,71148,951000,3600
+her27b,hero,27,신의 가호 VI,hero_hp_pct,1,10,28,her26b,5,her26a,3,81312,60984,71148,951000,3600
+her28a,hero,28,신살의 검 V,hero_atk_pct,1,10,29,her27a,5,her27b,3,83751,62813,73282,1027000,3600
+her28b,hero,28,신의 가호 VII,hero_hp_pct,1,10,29,her27b,5,her27a,3,83751,62813,73282,1027000,3600
+her29a,hero,29,신살의 검 VI,hero_atk_pct,1,10,29,her28a,5,her28b,3,86264,64698,75481,1109000,3600
+her29b,hero,29,신의 가호 VIII,hero_hp_pct,1,10,29,her28b,5,her28a,3,86264,64698,75481,1109000,3600
+her30a,hero,30,신살의 검 VII,hero_atk_pct,1,10,30,her29a,5,her29b,3,88852,66639,77745,1198000,3600
+her30b,hero,30,신의 가호 IX,hero_hp_pct,1,10,30,her29b,5,her29a,3,88852,66639,77745,1198000,3600

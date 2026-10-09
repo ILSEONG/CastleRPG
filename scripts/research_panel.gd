@@ -26,8 +26,9 @@ const ICONS := {"wood_tech": "wood", "stone_tech": "stone", "food_tech": "food",
 const EFFECT_ICONS := {"wood_pct": "wood", "stone_pct": "stone", "food_pct": "food", "res_pct": "res_pile", "build_speed_pct": "hammer",
 	"research_speed_pct": "flask", "sell_pct": "scales", "kill_gold_pct": "coin_bag", "castle_hp_pct": "wall", "gate_hp_pct": "gate",
 	"train_speed_pct": "book", "train_cost_pct": "cart", "pop_add": "tent", "soldier_pct": "elite", "hero_atk_pct": "sword", "hero_hp_pct": "top",
-	"skill_pct": "orb"}
-const SOLDIER_EFFECTS := {"inf_pct": "infantry", "arc_pct": "archer", "cav_pct": "cavalry"}  # 이 효과의 노드는 실제 병사 초상
+	"skill_pct": "orb", "inf_pct": "axe", "arc_pct": "crossbow", "cav_pct": "haste"}
+const SOLDIER_EFFECTS := {"inf_pct": "infantry", "arc_pct": "archer", "cav_pct": "cavalry"}  # 이 효과의 1단 노드는 실제 병사 초상
+const SOLDIER_NODES := ["inf_drill", "arc_drill", "cav_drill"]  # 3D 초상은 이 셋만(깊은 단 병종 노드는 그림 — 3D 초상이 수십 개면 무겁다)
 const EFFECT_NAMES := {"wood_pct": "목재 생산", "stone_pct": "석재 생산", "food_pct": "식량 생산", "res_pct": "모든 자원 생산",
 	"build_speed_pct": "건설 속도", "research_speed_pct": "연구 속도", "sell_pct": "판매 금액", "kill_gold_pct": "처치 골드",
 	"inf_pct": "보병 공격·체력", "arc_pct": "궁병 공격·체력", "cav_pct": "기병 공격·체력", "soldier_pct": "모든 병사 공격·체력",
@@ -658,6 +659,8 @@ static func icon_kind(id: String) -> String:
 
 ## 보병·궁병·기병 훈련 노드면 그 병종 id, 아니면 "".
 static func soldier_of_node(id: String) -> String:
+	if not id in SOLDIER_NODES:
+		return ""
 	return SOLDIER_EFFECTS.get(str(GameData.research_def(id).get("effect", "")), "")
 
 

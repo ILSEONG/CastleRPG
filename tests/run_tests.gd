@@ -434,7 +434,7 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"research prereq level above max": q.research[3].req1_lv = 11
 		"research prereq without level": q.research[3].req1_lv = null
 		"research base_sec 0": q.research[0].base_sec = 0
-		"research max level 0": q.research[21].max_level = 0  # 불굴의 의지(아무도 선행으로 쓰지 않는다)
+		"research max level 0": q.research[q.research.size() - 1].max_level = 0  # 마지막 노드(아무도 선행으로 쓰지 않는다)
 		"research table missing": q.erase("research")
 		"duplicate research id": q.research[1].id = "wood_tech"
 		"research refund above 1": q.config.research_cancel_refund = "1.5"
@@ -4611,8 +4611,8 @@ func test_research_r24() -> void:
 	GameData.load_tables()
 	_legacy_training()
 	var ids: Array = GameData.research_defs().map(func(d): return d.id)
-	check(GameData.errors == 0 and ids.size() == 22 and ids[0] == "wood_tech" and ids[7] == "abundance" and ids[16] == "elite" and ids[21] == "legend_armor",
-		"research.csv: 22 nodes in file order: %s" % [ids])
+	check(GameData.errors == 0 and ids.size() == 238 and ids[0] == "wood_tech" and ids[7] == "abundance" and ids[16] == "elite" and ids[21] == "legend_armor" and ids[22] == "eco5a" and ids[237] == "her30b",
+		"research.csv: 22 base nodes + 216 deep-tier nodes in file order: %s" % [ids.slice(0, 24)])
 	var c := GameData.research_def("construct")
 	var w := GameData.research_def("wood_tech")
 	check(c.branch == "economy" and c.tier == 2.0 and c.req1 == "wood_tech" and c.req1_lv == 3.0 and c.req2 == "stone_tech" and c.req2_lv == 3.0 and c.lab_req == 3.0

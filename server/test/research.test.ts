@@ -307,10 +307,10 @@ test('원자성: 같은 순간 두 연구 시작이 겹치면 하나만 반영(v
   }
 })
 
-test('gamedata: research 22행(파일 순서, CSV 열 이름 키, 빈 선행은 null), 연구 설정, lab_atk_per_level 없음. 응답 levels는 표에 있는 노드만', async () => {
+test('gamedata: research 238행(파일 순서, CSV 열 이름 키, 빈 선행은 null), 연구 설정, lab_atk_per_level 없음. 응답 levels는 표에 있는 노드만', async () => {
   const g = (await S.req('GET', '/v1/gamedata')).json
   const csv = readFileSync(join(DATA_DIR, 'research.csv'), 'utf8').trim().split('\n').slice(1).map((l) => l.split(',')[0])
-  assert.equal(g.research.length, 22)
+  assert.equal(g.research.length, 238)
   assert.deepEqual(g.research.map((d: any) => d.id), csv)
   assert.deepEqual(g.research[3], {
     id: 'construct', branch: 'economy', tier: 2, name: '건축학', effect: 'build_speed_pct', per_level: 3, max_level: 10, lab_req: 3,
@@ -359,22 +359,22 @@ test('시드 검증: research.csv(branch·effect, 숫자 범위, 선행은 표 �
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const W = 'wood_tech,economy,1,벌목술,wood_pct,5,10,1,,,,,1200,800,1000,0,60'
   const C = 'construct,economy,2,건축학,build_speed_pct,3,10,3,wood_tech,3,stone_tech,3,'
-  const L = 'legend_armor,hero,3,불굴의 의지,hero_hp_pct,4,10,15,arcana,5,,,40000,30000,35000,150000,3600'
+  const L = 'her30b,hero,30,신의 가호 IX,hero_hp_pct,1,10,30,her29b,5,her29a,3,88852,66639,77745,1198000,3600' // 마지막 줄(아무도 선행으로 쓰지 않는다)
   const cases: [string, string, RegExp][] = [
     ['research.csv', rs.replace(W, W.replace('economy', 'navy')), /research\.csv line 2 column 'branch': must be one of economy\/military\/hero: 'navy'/],
     ['research.csv', rs.replace(W, W.replace('wood_pct', 'lumber_pct')), /research\.csv line 2 column 'effect': unknown effect 'lumber_pct'/],
     ['research.csv', rs.replace(W, W.replace(/,60$/, ',0')), /line 2 column 'base_sec': must be greater than 0: 0/],
-    ['research.csv', rs.replace(L, L.replace(',4,10,15,', ',4,0,15,')), /line 23 column 'max_level': must be at least 1: 0/],
-    ['research.csv', rs.replace(L, L.replace('hero,3,', 'hero,0,')), /line 23 column 'tier': must be at least 1: 0/],
-    ['research.csv', rs.replace(L, L.replace(',150000,', ',-1,')), /line 23 column 'gold': must be 0 or more: -1/],
-    ['research.csv', rs.replace(L, L.replace(',4,10,', ',x,10,')), /line 23 column 'per_level': not a number: 'x'/],
+    ['research.csv', rs.replace(L, L.replace(',1,10,30,', ',1,0,30,')), /line 239 column 'max_level': must be at least 1: 0/],
+    ['research.csv', rs.replace(L, L.replace('hero,30,', 'hero,0,')), /line 239 column 'tier': must be at least 1: 0/],
+    ['research.csv', rs.replace(L, L.replace(',1198000,', ',-1,')), /line 239 column 'gold': must be 0 or more: -1/],
+    ['research.csv', rs.replace(L, L.replace(',1,10,', ',x,10,')), /line 239 column 'per_level': not a number: 'x'/],
     ['research.csv', rs.replace(C, C.replace('wood_tech,3', 'wood_tek,3')), /line 5 column 'req1': unknown research 'wood_tek'/],
     ['research.csv', rs.replace(C, C.replace('wood_tech,3', 'wood_tech,11')), /line 5 column 'req1_lv': must be an integer in 1\.\.10 \(max level of 'wood_tech'\): 11/],
     ['research.csv', rs.replace(C, C.replace('stone_tech,3', 'stone_tech,2.5')), /line 5 column 'req2_lv': must be an integer in 1\.\.10/],
     ['research.csv', rs.replace(C, C.replace('stone_tech,3', 'stone_tech,0')), /line 5 column 'req2_lv': must be an integer in 1\.\.10/],
     ['research.csv', rs.replace(C, C.replace('wood_tech,3', 'wood_tech,')), /line 5 column 'req1_lv': req1 and req1_lv must be both set or both empty/],
     ['research.csv', rs.replace(C, C.replace('wood_tech,3', ',3')), /line 5 column 'req1': req1 and req1_lv must be both set or both empty/],
-    ['research.csv', rs.replace(L, L.replace('legend_armor', 'arcana')), /duplicate key 'arcana'/],
+    ['research.csv', rs.replace(L, L.replace('her30b', 'her30a')), /duplicate key 'her30a'/],
     ['config.csv', cfg.replace('research_cost_growth,1.3', 'research_cost_growth,0.9'), /config\.csv line \d+ column 'value': research_cost_growth must be 1 or more: '0\.9'/],
     ['config.csv', cfg.replace('research_time_growth,1.35', 'research_time_growth,0.5'), /research_time_growth must be 1 or more/],
     ['config.csv', cfg.replace('lab_research_speed_per_level,0.02', 'lab_research_speed_per_level,-0.01'), /lab_research_speed_per_level must be 0 or more/],
@@ -395,5 +395,5 @@ test('시드 검증: research.csv(branch·effect, 숫자 범위, 선행은 표 �
     writeFileSync(join(dir, file), file === 'research.csv' ? rs : cfg)
   }
   const t = await readTables(dir) // 원래대로면 통과
-  assert.equal(t.research.length, 22)
+  assert.equal(t.research.length, 238)
 })
