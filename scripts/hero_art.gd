@@ -31,7 +31,7 @@ const FOCUS := {
 	"dorik": Vector2(0.56, 0.17),
 	"nina": Vector2(0.48, 0.22),
 	"jack": Vector2(0.56, 0.28),
-	"valen": Vector2(0.48, 0.15),
+	"valen": Vector2(0.52, 0.26),
 	"frieda": Vector2(0.52, 0.19),
 	"morgana": Vector2(0.54, 0.23),
 	"thorgar": Vector2(0.52, 0.23),
