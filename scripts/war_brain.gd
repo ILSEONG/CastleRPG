@@ -59,10 +59,12 @@ func _reachable(u, structures: bool) -> Array:
 			if on_wall or u.role == "ranged":  # 성벽 위 영웅은 어디든 쏘고, 성벽 위 표적은 원거리만 닿는다
 				out.append(f)
 			continue
-		if not st and Formation.is_inside(half, p) != inside:
+		if Formation.is_inside(half, p) != inside:
+			continue  # 성문(치는 자리는 성 밖)은 성 밖에서만, 성채는 성 안에서만(공성 시뮬 2026-10-11: 성 안 공격 영웅이 옆 면 성문을 안에서 치러 닫힌 성문 통로로 들어갔다)
+		if not inside and Formation.crosses_castle(half, here, p):
 			continue
-		if not inside and not st and Formation.crosses_castle(half, here, p):
-			continue
+		if not u.sees(here, p):
+			continue  # 성벽·닫힌 성문 너머(성 안 통로 모서리 등)
 		out.append(f)
 	return out
 
@@ -223,14 +225,14 @@ func _kite(u) -> bool:
 	var inside := Formation.is_inside(battle.half, here)
 	var dir := away.normalized()
 	var to := here + dir * KITE_STEP
-	if Formation.is_inside(battle.half, to) != inside:
+	if Formation.is_inside(battle.half, to) != inside or Formation.in_wall_body(battle.half, to) or u.crosses_keep(here, to):
 		# 성벽에 등을 대고 있으면 성벽을 따라 옆으로 비킨다(위협에서 먼 쪽)
 		var t := Formation.perp(Formation.side_of(here))
 		var side_sign := 1.0 if t.dot(dir) >= 0.0 else -1.0
 		if absf(t.dot(dir)) < 0.05:
 			side_sign = 1.0 if (int(u.uid) % 2) == 0 else -1.0
 		to = here + t * side_sign * KITE_STEP
-		if Formation.is_inside(battle.half, to) != inside:
+		if Formation.is_inside(battle.half, to) != inside or Formation.in_wall_body(battle.half, to) or u.crosses_keep(here, to):
 			return false
 	u.step_to(to)
 	return true

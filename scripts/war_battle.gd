@@ -401,17 +401,26 @@ func camp_spot(lane: int, i: int) -> Vector3:
 	return dir * (half + Balance.WALL_T + WarRules.CAMP_D + row * 2.2) + Formation.perp(lane) * ((k - 5.5) * 2.0)
 
 
-## 성문 앞 d m, 자리 번호 spot마다 옆으로 퍼진 지점(자동 진격 목표).
+## 성문 앞 d m, 자리 번호 spot마다 옆으로 퍼진 지점(자동 진격 목표). 면의 성문들(28칸 = 2개)에 번갈아 — 성문마다 한 줄 6자리.
+## (공성 시뮬 2026-10-11: 예전엔 면 가운데(두 성문 사이 성벽 앞)에 10명씩 줄을 세워, 성문에서 7 m 넘게 떨어진 근접이 30초 넘게 놀았다.)
 func lane_spot(lane: int, d: float, spot: int) -> Vector3:
-	var k := spot % 10
-	var row := spot / 10
-	return Formation.SIDE_DIR[lane] * (half + Balance.WALL_T + d + row * 1.8) + Formation.perp(lane) * ((k - 4.5) * 1.6)
+	var offs := Formation.gate_offsets(half)
+	var at: float = offs[spot % offs.size()]
+	var i := spot / offs.size()
+	var k := i % 6
+	var row := i / 6
+	return Formation.SIDE_DIR[lane] * (half + Balance.WALL_T + d + row * 1.8) + Formation.perp(lane) * (at + (k - 2.5) * 1.6)
 
 
+## 성채 앞 자리: 맡은 면부터 두 줄(12자리)씩 차면 옆 면 → 반대 옆 면 → 맞은편 면(성채는 면마다 치는 자리가 있다).
+## (공성 시뮬 2026-10-11: 예전엔 한 면에 6명씩 13줄까지 늘어서 뒷줄이 성채를 못 쳤다.)
 func keep_spot(lane: int, spot: int) -> Vector3:
-	var k := spot % 6
-	var row := spot / 6
-	return Formation.keep_target(lane) + Formation.SIDE_DIR[lane] * (0.4 + row * 1.4) + Formation.perp(lane) * ((k - 2.5) * 1.4)
+	const PER := 12
+	var face: int = (lane + [0, 1, 3, 2][(spot / PER) % 4]) % 4
+	var i := spot % PER + (spot / (PER * 4)) * PER
+	var k := i % 6
+	var row := i / 6
+	return Formation.keep_target(face) + Formation.SIDE_DIR[face] * (0.4 + row * 1.4) + Formation.perp(face) * ((k - 2.5) * 1.4)
 
 
 func gate(side: int):
@@ -514,6 +523,14 @@ func _on_keep_broken(_k) -> void:
 	if hud != null:
 		hud.flash("성채 함락!")
 	score_changed.emit()
+
+
+## 면마다 성문이 부서졌나(성문 통로가 트였나 — 시야·공격 경로). 성벽은 부서지지 않는다.
+func open_sides() -> Array:
+	var out := [false, false, false, false]
+	for i in mini(4, gates.size()):
+		out[i] = not gates[i].is_alive()
+	return out
 
 
 func gates_broken() -> int:

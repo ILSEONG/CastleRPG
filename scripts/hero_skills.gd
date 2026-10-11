@@ -212,8 +212,8 @@ func _retarget() -> void:
 	var t = h._target
 	if t == null or not is_instance_valid(t) or not t.is_alive():
 		h._target = h._find_target()
-	if h.castle != null or _combat_target() != null:
-		return
+	if h.castle != null or _combat_target() != null or h.has_method("_same_region"):
+		return  # 공성전 영웅은 머리(war_brain)가 고른 표적만 — 근접이 성벽 위 궁수를 치지 않게
 	var best = null
 	var best_d := INF
 	for m in _near_monsters(h.global_position, float(h.def.range) + 0.5):
@@ -1268,7 +1268,7 @@ func _near_monsters(at: Vector3, r: float, exclude = null) -> Array:
 		if m != exclude and m.is_alive():
 			var mp: Vector3 = m.global_position
 			var d := Vector2(mp.x - at.x, mp.z - at.z).length()
-			if d <= r or d <= r + m.hit_radius():  # 큰 보스(드래곤)는 몸 바깥이 범위에 닿으면
+			if (d <= r or d <= r + m.hit_radius()) and h.sees(at, mp):  # 큰 보스(드래곤)는 몸 바깥이 범위에 닿으면. 성벽 너머는 빼고
 				out.append(m)
 	return out
 
@@ -1281,7 +1281,7 @@ func _line_monsters(from: Vector3, dir: Vector3, length: float, width: float, ex
 			continue
 		var v := _flat(m.global_position - from)
 		var along := v.dot(dir)
-		if along >= 0.0 and along <= length and (v - dir * along).length() <= width / 2.0 + m.radius() * 0.5:
+		if along >= 0.0 and along <= length and (v - dir * along).length() <= width / 2.0 + m.radius() * 0.5 and h.sees(from, m.global_position):
 			out.append(m)
 	return out
 
@@ -1293,7 +1293,7 @@ func _cone_monsters(from: Vector3, dir: Vector3, length: float, half: float) -> 
 		if not m.is_alive():
 			continue
 		var v := _flat(m.global_position - from)
-		if v.length() <= length and (v.length() < 0.5 or v.normalized().angle_to(dir) <= half):
+		if v.length() <= length and (v.length() < 0.5 or v.normalized().angle_to(dir) <= half) and h.sees(from, m.global_position):
 			out.append(m)
 	return out
 

@@ -364,6 +364,8 @@ func _walk_path(delta: float) -> void:
 	_step_to(wp, delta)
 	if global_position.distance_to(wp) <= Crowd.arrive_r(_path, ARRIVE_EPS):
 		_path.pop_front()
+		if wp.y == 0.0 or is_equal_approx(wp.y, Balance.WALL_H):
+			global_position.y = wp.y  # 계단 끝을 지나가는 반경에서 넘겨도 바닥·성벽 높이에 딛는다
 
 
 ## 목적지가 바뀌었다: 경로를 다시 계산한다(등장 중이면 등장이 끝날 때 계산한다).

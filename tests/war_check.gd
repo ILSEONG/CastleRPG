@@ -43,6 +43,7 @@ func _ready() -> void:
 	await _case_deploy()
 	await _case_defense()
 	await _case_engage()
+	await _case_walls()
 	await _case_offline_war()
 	_check(_errors.count == 0, "no script errors (%d, first: %s)" % [_errors.count, _errors.first])
 	print("WAR CHECK %s (%d failed)" % ["OK" if _fails == 0 else "FAILED", _fails])
@@ -437,5 +438,93 @@ func _case_engage() -> void:
 	d.global_position = Formation.SIDE_DIR[0] * (b.half - 6.0) + Formation.perp(0) * float(Formation.gate_offsets(b.half)[0])
 	await _run(b, 8.0, 0.25, func(): return d.hp < hp0)
 	_check(d.hp < hp0, "the attacker stopped to hit a defender in its way (lane %d)" % side)
+	b.queue_free()
+	await get_tree().process_frame
+
+
+func _case_walls() -> void:
+	print("(10) walls cannot be broken or passed: no attacks, splash or steps through a wall or a closed gate")
+	var half := 28.0
+	var g0: float = Formation.gate_offsets(half)[0]
+	var out_p := Formation.SIDE_DIR[0] * (half + Balance.WALL_T + 1.0)
+	var in_p := Formation.SIDE_DIR[0] * (half - 1.0)
+	var closed := [false, false, false, false]
+	var open0 := [true, false, false, false]
+	_check(Formation.wall_blocks(half, out_p, in_p, open0), "a wall blocks a line from outside to inside")
+	var out_g := out_p + Formation.perp(0) * g0
+	var in_g := in_p + Formation.perp(0) * g0
+	_check(Formation.wall_blocks(half, out_g, in_g, closed), "a closed gate blocks the line")
+	_check(not Formation.wall_blocks(half, out_g, in_g, open0), "a broken gate lets the line through")
+	_check(not Formation.wall_blocks(half, out_p, out_p + Formation.perp(0) * 6.0, closed), "a line along the outside of the wall is clear")
+	_check(Formation.wall_blocks(half, out_p, Formation.SIDE_DIR[1] * (half + 3.0), closed), "a line cutting a castle corner is blocked")
+	_check(Formation.in_wall_body(half, Formation.SIDE_DIR[0] * (half + 1.0)) and not Formation.in_wall_body(half, Formation.SIDE_DIR[0] * (half + 1.0) + Formation.perp(0) * g0),
+		"the wall body is solid but the gate passage is not")
+	var plan := make_plan(4, 2)
+	var b = _battle(plan)
+	await get_tree().process_frame
+	b.begin_fight()
+	var kinds := {}
+	for n in get_tree().get_nodes_in_group("war_structures"):
+		kinds[str(n.kind)] = true
+	_check(kinds.keys().all(func(k): return k == "gate" or k == "keep"), "there is no wall structure to break (only %s)" % str(kinds.keys()))
+	var defs: Array = b.units(1)
+	var atts: Array = b.units(0)
+	# 수비 둘: 성벽 바로 안(성문 사이)과 닫힌 성문 바로 안. 움직이지 않고 맞기만 한다
+	var d_wall = defs[0]
+	var d_gate = defs[1]
+	for d in [d_wall, d_gate]:
+		d.set_process(false)
+		d.hp_max *= 100.0
+		d.hp = d.hp_max
+	d_wall.global_position = Formation.SIDE_DIR[0] * (half - 0.6)
+	d_gate.global_position = Formation.SIDE_DIR[0] * (half - 0.6) + Formation.perp(0) * g0
+	for i in range(2, defs.size()):
+		defs[i].die()
+	var hp_w: float = d_wall.hp
+	var hp_g: float = d_gate.hp
+	# 공격 16: 반은 성벽에 붙어(성문 사이), 반은 닫힌 성문 앞에서 성문을 친다
+	for i in atts.size():
+		var a = atts[i]
+		var lat: float = (g0 if i % 2 == 1 else 0.0) + float(i / 2 % 4 - 1.5) * 1.2
+		var p := Formation.SIDE_DIR[0] * (half + Balance.WALL_T + 0.6 + float(i / 8)) + Formation.perp(0) * lat
+		a.global_position = p
+		a.commanded = true
+		a.set_home(p)
+	var gate_hit := [false]
+	var g = b.gate(0)
+	var gate_hp0: float = g.hp
+	await _run(b, 10.0, 0.5, func():
+		gate_hit[0] = g.hp < gate_hp0
+		return false)
+	_check(gate_hit[0], "attackers at the gate hit the gate")
+	_check(is_equal_approx(d_wall.hp, hp_w), "a defender behind the wall takes no damage (%.0f lost)" % (hp_w - d_wall.hp))
+	_check(is_equal_approx(d_gate.hp, hp_g), "a defender behind a closed gate takes no splash (%.0f lost)" % (hp_g - d_gate.hp))
+	var inside_any := false
+	for a in atts:
+		if a.is_alive() and (Formation.is_inside(half, a.global_position) or Formation.in_wall_body(half, a.global_position)):
+			inside_any = true
+	_check(not inside_any, "no attacker stepped into the wall or the castle while the gate held")
+	# 닫힌 성 안으로 이동 명령: 성문 앞에서 멈춘다. 맞은편으로 명령: 성 둘레를 돈다(성 안을 지나지 않는다)
+	var a0 = atts[0]
+	a0.set_process(true)
+	a0.global_position = Formation.SIDE_DIR[0] * (half + 8.0)
+	a0.move_to_point(Vector3(0, 0, 0) + Formation.SIDE_DIR[0] * 6.0)
+	_check(not Formation.is_inside(half, a0.stand_position()), "an order into the closed castle stops at the gate (%.1f m from centre)" % a0.stand_position().length())
+	a0.move_to_point(Formation.SIDE_DIR[2] * (half + 8.0))
+	var through := false
+	for q in a0._path:
+		if Formation.is_inside(half, q):
+			through = true
+	_check(not through and a0._path.size() > 1, "an order to the far side walks around the castle (%d points)" % a0._path.size())
+	b.gates[0].take_damage(b.gates[0].hp + 1.0)
+	await get_tree().process_frame
+	_check(not Formation.wall_blocks(half, out_g, in_g, b.open_sides()), "after the gate breaks its passage is open")
+	a0.global_position = Formation.SIDE_DIR[2] * (half + 8.0)
+	a0.move_to_point(Formation.SIDE_DIR[0] * 6.0)
+	var via := -1
+	for q in a0._path:
+		if Formation.flat_distance(q, Formation.gate_outer(half, 0, Formation.nearest_gate_at(half, 0, q))) < 0.5:
+			via = 0
+	_check(via == 0 and Formation.is_inside(half, a0.stand_position()), "an order inside from the far side goes in through the broken gate")
 	b.queue_free()
 	await get_tree().process_frame

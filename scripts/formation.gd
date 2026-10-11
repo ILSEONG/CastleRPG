@@ -348,6 +348,73 @@ static func crosses_castle(half: float, a: Vector3, b: Vector3) -> bool:
 	return true
 
 
+## 지상 점 p가 성벽 몸(안쪽 면 ~ 바깥면 띠)에 있나 — 성문 통로(성문 폭 안)는 뺀다. 걸음·밀림이 성벽 속으로 들어가지 않게.
+static func in_wall_body(half: float, p: Vector3) -> bool:
+	if p.y > Balance.WALL_H / 2.0:
+		return false
+	var m := maxf(absf(p.x), absf(p.z))
+	if m <= half or m >= half + Balance.WALL_T:
+		return false
+	var s := side_of(p)
+	return absf(perp(s).dot(p) - nearest_gate_at(half, s, p)) > Balance.GATE_W / 2.0
+
+
+## 지상 선분 a→b가 성벽을 지나는가(성벽 너머로는 공격·광역·연쇄가 닿지 않는다 — 사용자 2026-10-11). 성벽은 부서지지 않는다.
+## 성문 통로는 open[면]이 참(그 면 성문이 부서짐)일 때만 트여 있다 — 닫힌 성문도 막는다. slack m보다 짧게 스치는 구간은 무시. 성벽 위 점이 끼면 쓰는 쪽이 따로 본다.
+static func wall_blocks(half: float, a: Vector3, b: Vector3, open: Array = [], slack := 0.0) -> bool:
+	var outer := _slab(a, b, half + Balance.WALL_T)
+	if outer.x > outer.y:
+		return false
+	var inner := _slab(a, b, half)
+	var parts: Array[Vector2] = []
+	if inner.x > inner.y:
+		parts.append(outer)
+	else:
+		if inner.x > outer.x:
+			parts.append(Vector2(outer.x, inner.x))
+		if inner.y < outer.y:
+			parts.append(Vector2(inner.y, outer.y))
+	for seg in parts:  # slack: 성문 기둥 모서리를 몇 cm 스치는 건 막지 않는다(통로 안 적과 맞붙은 자리)
+		var p0 := a.lerp(b, seg.x)
+		var p1 := a.lerp(b, seg.y)
+		var clip := (seg.y - seg.x) * flat_distance(a, b)
+		var s := side_of((p0 + p1) / 2.0)
+		if s < open.size() and open[s]:
+			# 트인 성문 통로 안 몫을 뺀 나머지(성문 기둥을 지나는 길이)
+			var t := perp(s)
+			var at := nearest_gate_at(half, s, (p0 + p1) / 2.0)
+			var l0 := t.dot(p0) - at
+			var l1 := t.dot(p1) - at
+			var w := Balance.GATE_W / 2.0
+			var frac := 1.0 if absf(l0) <= w and absf(l1) <= w else 0.0
+			if absf(l1 - l0) > 1e-6:
+				var u0 := clampf((-w - l0) / (l1 - l0), 0.0, 1.0)
+				var u1 := clampf((w - l0) / (l1 - l0), 0.0, 1.0)
+				frac = absf(u1 - u0)
+			clip *= 1.0 - frac
+		if clip > slack and clip > 1e-4:
+			return true
+	return false
+
+
+## 수평 선분 a→b가 정사각형 ±r 안에 있는 구간 [t0, t1](0..1). 안 지나면 x > y.
+static func _slab(a: Vector3, b: Vector3, r: float) -> Vector2:
+	var o := Vector2(a.x, a.z)
+	var d := Vector2(b.x - a.x, b.z - a.z)
+	var t0 := 0.0
+	var t1 := 1.0
+	for axis in 2:
+		if absf(d[axis]) < 1e-6:
+			if absf(o[axis]) > r:
+				return Vector2(1.0, 0.0)
+			continue
+		var ta := (-r - o[axis]) / d[axis]
+		var tb := (r - o[axis]) / d[axis]
+		t0 = maxf(t0, minf(ta, tb))
+		t1 = minf(t1, maxf(ta, tb))
+	return Vector2(t0, t1)
+
+
 ## 겹침 해소(crowd.gd)의 밀림 from → to를 from의 자리 안으로 되돌린다 — 밀림은 성벽·성문을 넘기지 않는다(드나드는 건 제 걸음으로만).
 ## 성벽 위: 그 면 성벽 길 안에서만(중심선 ± WALK_HALF — 둘이 나란히 비켜 지나갈 폭, 모서리 탑 앞까지, 높이 그대로. 계단 윗단처럼 길 밖이면 깊이도 그대로).
 ## 성 밖: 바깥면 밖·맵 안(성문이 닫혔든 부서졌든 밀려 들어가지 않는다).

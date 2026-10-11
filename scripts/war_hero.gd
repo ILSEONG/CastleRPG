@@ -36,6 +36,7 @@ var falls := 0  # 이 전투에서 쓰러진 횟수(공격 영웅 목숨, WarRul
 var _corpse_t := 0.0  # 쓰러진 뒤 이만큼 지나면 모델을 감추고 애니메이션을 멈춘다(성능)
 
 const CORPSE_SEC := 1.8
+const JAMB_SLACK := 0.3  # 시야: 성문 기둥 모서리를 이만큼 안 스치는 건 트였다고 본다
 const WarRulesH := preload("res://scripts/war_rules.gd")
 
 var _base_atk := 0.0
@@ -133,8 +134,34 @@ func _process(delta: float) -> void:
 	super._process(delta)
 	if _root_t > 0.0:
 		global_position = Vector3(before.x, global_position.y, before.z)
+	if war_half > 0.0:
+		_unstick()
 	if state == State.DEAD:
 		_send_fell()
+
+
+## 안전망: 어떤 까닭으로든(겹침 밀림·경계 위 오차) 성채 몸통이나 성벽 몸 속에 있으면 가장 가까운 면 밖으로 꺼낸다.
+func _unstick() -> void:
+	var p := global_position
+	if p.y > Balance.WALL_H / 2.0:
+		return
+	if _in_keep(p):
+		var kh := Formation._keep_half + 0.02
+		if absf(p.x) >= absf(p.z):
+			p.x = signf(p.x if p.x != 0.0 else 1.0) * kh
+		else:
+			p.z = signf(p.z) * kh
+		global_position = p
+	elif team == 0 and maxf(absf(p.x), absf(p.z)) > war_half + Balance.WALL_T / 2.0 - 0.3 and maxf(absf(p.x), absf(p.z)) < war_half + Balance.WALL_T - 0.05 \
+			and not Formation.in_wall_body(war_half, p) and not _open_sides()[Formation.side_of(p)]:
+		# 공격 영웅이 닫힌 성문 통로의 문짝 너머에 있다(안에서 걸어 들어감): 문짝 안쪽으로 되돌린다
+		var s0 := Formation.side_of(p)
+		global_position = p + Formation.SIDE_DIR[s0] * (war_half + Balance.WALL_T / 2.0 - 0.3 - Formation.SIDE_DIR[s0].dot(p))
+	elif Formation.in_wall_body(war_half, p):
+		var s := Formation.side_of(p)
+		var depth := Formation.SIDE_DIR[s].dot(p)
+		var to := war_half - 0.02 if depth < war_half + Balance.WALL_T / 2.0 else war_half + Balance.WALL_T + 0.02  # 가까운 면
+		global_position = p + Formation.SIDE_DIR[s] * (to - depth)
 
 
 func _tick_corpse(delta: float) -> void:
@@ -183,20 +210,151 @@ func _replan() -> void:
 	if not is_inside_tree():
 		return
 	_target = null
-	if war_half > 0.0:
-		_path = around_keep(global_position, Formation.route(war_half, global_position, stand_position()))
-	else:
-		_path = [stand_position()]
+	_path = _route(stand_position())
 
 
 ## 지금 걸어가는 경로가 없고 자리가 성벽 너머면 성문으로 돌아간다(hero는 아레나에서 곧장 걷는다).
 func needs_route() -> bool:
 	if war_half <= 0.0 or not _path.is_empty():
 		return false
-	var home := stand_position()
-	return Formation.is_inside(war_half, global_position) != Formation.is_inside(war_half, home) \
-		or (global_position.y > Balance.WALL_H / 2.0) != (home.y > Balance.WALL_H / 2.0) \
-		or crosses_keep(global_position, home)  # 성채를 가로지르면 모서리로 돌아간다
+	return _route(stand_position()).size() > 1  # 성 안팎·성벽 위아래·성(모서리)·성채를 가로지르면 돌아간다
+
+
+## 지금 위치 → to 경로(도착점 포함). 수비: 성문·계단(Formation.route, 제 성문은 닫혀도 지난다) + 성채 돌기.
+## 공격: 닫힌 성문은 못 지난다 — 성 밖끼리는 성 둘레를 돌고(ring_route), 성 안팎은 부서진 성문 중 가장 가까운 것으로만.
+## 들어갈 성문이 없으면 그 면 성문 앞까지만 간다(성벽은 뚫리지 않는다 — 사용자 2026-10-11).
+func _route(to: Vector3) -> Array[Vector3]:
+	var from := global_position
+	if war_half <= 0.0:
+		return _route_raw(from, to)
+	var head: Array[Vector3] = []
+	if from.y > 0.05 and from.y < Balance.WALL_H - 0.05:
+		# 계단 중간(오르내리다 새 자리를 받음): 계단 끝(가까운 높이)까지 마저 딛고 거기서 — 허공을 비스듬히 걸어 내려가지 않게
+		var s := Formation.side_of(from)
+		var st := Formation._stair_of(war_half, s, from)
+		var end_pt := Formation.stair_bottom(war_half, s, st[0], st[1]) if from.y < Balance.WALL_H / 2.0 else Formation.stair_top(war_half, s, st[0], st[1])
+		head.append(end_pt)
+		from = end_pt
+	head.append_array(_unclip(from, _route_raw(from, to)))
+	return head
+
+
+func _route_raw(from: Vector3, to: Vector3) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if war_half <= 0.0:
+		out.append(to)
+		return out
+	var from_in := Formation.is_inside(war_half, from)
+	var to_in := Formation.is_inside(war_half, to)
+	if team == 1 or (from_in and to_in):
+		return around_keep(from, Formation.route(war_half, from, to))
+	if not from_in and not to_in:
+		return Formation.ring_route(war_half, from, to)
+	var outside_pt := to if from_in else from
+	var inside_pt := from if from_in else to
+	var best := -1
+	var best_d := INF
+	var open := _open_sides()
+	for s in 4:
+		if not open[s]:
+			continue
+		var at := Formation.nearest_gate_at(war_half, s, inside_pt)
+		var go := Formation.gate_outer(war_half, s, at)
+		var d := Formation.path_length(outside_pt, Formation.ring_route(war_half, outside_pt, go)) \
+			+ Formation.flat_distance(Formation.gate_inner(war_half, s, at), inside_pt)
+		if d < best_d:
+			best_d = d
+			best = s
+	if best < 0:
+		if from_in:
+			return around_keep(from, Formation.route(war_half, from, to))  # 안에 있는데 열린 성문이 없다(없을 일) — 예전대로
+		var s0 := Formation.side_of(to)
+		return Formation.ring_route(war_half, from, Formation.gate_outer(war_half, s0, Formation.nearest_gate_at(war_half, s0, to)))
+	var at_b := Formation.nearest_gate_at(war_half, best, inside_pt)
+	var g_out := Formation.gate_outer(war_half, best, at_b)
+	var g_in := Formation.gate_inner(war_half, best, at_b)
+	if from_in:
+		out = around_keep(from, Formation.route(war_half, from, g_in))
+		out.append(g_out)
+		out.append_array(Formation.ring_route(war_half, g_out, to))
+	else:
+		out = Formation.ring_route(war_half, from, g_out)
+		out.append(g_in)
+		out.append_array(around_keep(g_in, Formation.route(war_half, g_in, to)))
+	return out
+
+
+## 경로 다듬기: 성문 통로(성벽 띠) 안의 점과 잇는 구간이 성문 기둥(성벽 몸)을 스치면 통로 가운데 줄 → 성문 안쪽/바깥 지점을 거친다.
+func _unclip(from: Vector3, path: Array[Vector3]) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var prev := from
+	for p in path:
+		if prev.y < Balance.WALL_H / 2.0 and p.y < Balance.WALL_H / 2.0 and Formation.wall_blocks(war_half, prev, p, [true, true, true, true]):
+			if _in_band(prev):
+				out.append_array(_passage_exit(prev, p))
+			elif _in_band(p):
+				var ex := _passage_exit(p, prev)
+				ex.reverse()
+				out.append_array(ex)
+		out.append(p)
+		prev = p
+	return out
+
+
+func _in_band(p: Vector3) -> bool:
+	var m := maxf(absf(p.x), absf(p.z))
+	return m > war_half and m < war_half + Balance.WALL_T
+
+
+## 통로 안 점 a에서 b 쪽으로 나가는 두 점: 통로 가운데 줄(a 깊이) → b가 성 안이면 성문 안쪽, 밖이면 바깥 지점.
+func _passage_exit(a: Vector3, b: Vector3) -> Array[Vector3]:
+	var s := Formation.side_of(a)
+	var at := Formation.nearest_gate_at(war_half, s, a)
+	var mid := Formation.SIDE_DIR[s] * Formation.SIDE_DIR[s].dot(a) + Formation.perp(s) * at
+	var out: Array[Vector3] = [mid]
+	out.append(Formation.gate_inner(war_half, s, at) if Formation.SIDE_DIR[s].dot(b) < Formation.SIDE_DIR[s].dot(a) else Formation.gate_outer(war_half, s, at))
+	return out
+
+
+## 면마다 성문이 부서졌나(성문 통로가 트였나). 전장이 없으면(테스트) 모두 닫힘.
+func _open_sides() -> Array:
+	return battle.open_sides() if battle != null else [false, false, false, false]
+
+
+## 공성전 시야: 성벽 위 영웅이 쏘면 트였고, 성벽 위를 맞히는 건 원거리만, 지상끼리는 성벽·닫힌 성문이 막는다.
+func sees(a: Vector3, b: Vector3) -> bool:
+	if war_half <= 0.0 or a.y > Balance.WALL_H / 2.0:
+		return true
+	if b.y > Balance.WALL_H / 2.0:
+		return role == "ranged"  # 성벽 위는 원거리만 닿는다(근접 평타·베기 광역도 못 올라간다)
+	return not Formation.wall_blocks(war_half, a, b, _open_sides(), JAMB_SLACK)
+
+
+## 추격 걸음: 성 안팎을 넘지 않고, 성벽 몸·성채 속으로 들어가지 않는다.
+func _can_step(next: Vector3) -> bool:
+	if war_half <= 0.0:
+		return true
+	var here := global_position
+	if Formation.is_inside(war_half, next) != Formation.is_inside(war_half, here):
+		return false
+	if Formation.in_wall_body(war_half, next) and not Formation.in_wall_body(war_half, here):
+		return false
+	return not (_in_keep(next) and not _in_keep(here))
+
+
+## 추격이 성채·성문 기둥에 막혔다: 표적 쪽으로 돌아가는 길(성채 모서리·통로 가운데)이 있으면 그 길로.
+func _detour(tpos: Vector3) -> bool:
+	if war_half <= 0.0 or is_on_wall():
+		return false
+	var p := _route(Vector3(tpos.x, 0.0, tpos.z))
+	if p.size() < 2:
+		return false
+	_path = p
+	return true
+
+
+static func _in_keep(p: Vector3) -> bool:
+	return p.y < Balance.WALL_H / 2.0 and maxf(absf(p.x), absf(p.z)) < Formation._keep_half
 
 
 ## 닿을 수 있는 자리: 성벽 위 영웅은 어디든(사거리 안), 성벽 위 표적은 원거리만, 지상끼리는 같은 영역(성 안/밖).
@@ -223,10 +381,7 @@ func current_target():
 
 ## 다른 위치로 잠깐 물러난다(자리는 그대로 — 위협이 지나면 돌아온다).
 func step_to(p: Vector3) -> void:
-	if war_half > 0.0:
-		_path = around_keep(global_position, Formation.route(war_half, global_position, Vector3(p.x, 0.0, p.z)))
-	else:
-		_path = [Vector3(p.x, 0.0, p.z)]
+	_path = _route(Vector3(p.x, 0.0, p.z))
 	_swing = null
 	_target = null
 
@@ -246,7 +401,24 @@ func move_to_point(p: Vector3) -> void:
 		battle.deploy_unit(self, p)  # 배치 중: 걸어가지 않고 그 자리에 선다
 		return
 	commanded = true
-	set_home(p)
+	set_home(_command_point(p))
+
+
+## 공격 이동 명령 자리: 성채 위면 성채 앞으로, 성벽 몸 속이면 성 밖으로, 들어갈(부서진) 성문이 없는데 성 안이면 그 면 성문 앞으로.
+func _command_point(p: Vector3) -> Vector3:
+	if team != 0 or war_half <= 0.0 or p.y > Balance.WALL_H / 2.0:
+		return p
+	var kh := Formation._keep_half + 1.0
+	if maxf(absf(p.x), absf(p.z)) < kh:  # 성채 위를 눌렀으면 그 면 성채 앞
+		var f := Formation.side_of(p)
+		p = Formation.SIDE_DIR[f] * kh + Formation.perp(f) * clampf(Formation.perp(f).dot(p), -kh, kh)
+	var s := Formation.side_of(p)
+	var outside := Formation.SIDE_DIR[s] * (war_half + Balance.WALL_T + Formation.GATE_PASS_MARGIN) + Formation.perp(s) * Formation.perp(s).dot(p)
+	if Formation.in_wall_body(war_half, p):
+		return outside
+	if Formation.is_inside(war_half, p) and not Formation.is_inside(war_half, global_position) and not _open_sides().has(true):
+		return Formation.gate_outer(war_half, s, Formation.nearest_gate_at(war_half, s, p))
+	return p
 
 
 # --- 받는 피해·상태(monster.gd와 같은 규칙) ---
@@ -465,8 +637,11 @@ func _tick_knock(delta: float) -> void:
 	var dt := minf(delta, _knock_t)
 	_knock_t -= delta
 	var step := _knock_v * dt
-	if war_half <= 0.0 or Formation.is_inside(war_half, global_position + step) == Formation.is_inside(war_half, global_position):
-		global_position += step
+	var to := global_position + step
+	if war_half <= 0.0 or (Formation.is_inside(war_half, to) == Formation.is_inside(war_half, global_position) \
+			and (not Formation.in_wall_body(war_half, to) or Formation.in_wall_body(war_half, global_position)) \
+			and not (_in_keep(to) and not _in_keep(global_position))):
+		global_position = to
 	else:
 		_knock_t = 0.0  # 성벽에 막힌다
 
@@ -569,7 +744,10 @@ func space() -> float:
 static func crosses_keep(a: Vector3, b: Vector3) -> bool:
 	if a.y > Balance.WALL_H / 2.0 or b.y > Balance.WALL_H / 2.0:
 		return false
-	return _seg_hits_square(a, b, Formation._keep_half + 1.0)
+	var r := Formation._keep_half + 1.0
+	if maxf(absf(a.x), absf(a.z)) < r or maxf(absf(b.x), absf(b.z)) < r:
+		r = Formation._keep_half - 0.05  # 성채 바로 옆(여유 1 m 안)에서 나가거나 들어오는 구간은 성채 몸통만 본다(안 그러면 돌 모서리를 못 찾아 곧장 뚫고 간다)
+	return _seg_hits_square(a, b, r)
 
 
 static func _seg_hits_square(a: Vector3, b: Vector3, r: float) -> bool:

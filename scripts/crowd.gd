@@ -25,6 +25,7 @@ const SLACK := 0.3  # 이웃 쌍: 반지름 합 + 이만큼 안(해소 중 밀�
 const PASSES := 5  # 최대 — 겹침이 DONE 밑으로 풀리면 일찍 멈춘다(드문드문하면 1~2번)
 const DONE := 0.01  # m
 const PASS_R := 0.5  # 경로 중간 점·순찰 점은 이만큼 안이면 지나간 것(arrive_r)
+const STEP_R := 0.7  # 계단 끝 중간 점(arrive_r) — 몸 둘(겹침 여유 포함 1.3 m)이 같은 점을 노려도 둘 다 닿는다
 const LEVEL_EPS := 0.3
 const BUSY_AT := 80
 const BUSY_EVERY := 2
@@ -53,9 +54,12 @@ static func mass(r: float, braced: bool) -> float:
 
 
 ## 경로 점 도착 거리: 다음 점과 같은 높이로 이어지는 중간 점은 PASS_R 안이면 지나간 것으로 친다 — 그 점에 다른 유닛이 서 있어도
-## (성문 통과 지점 바로 앞 성문 영웅 등) 막히지 않는다. 마지막 점(자리)·계단 끝(높이가 바뀌는 점)은 eps 그대로.
+## (성문 통과 지점 바로 앞 성문 영웅 등) 막히지 않는다. 마지막 점(자리)은 eps 그대로.
+## 계단 끝(높이가 바뀌는 중간 점)은 STEP_R — 둘이 같은 계단 끝으로 가면 겹침 해소에 서로 밀려 eps 안에 못 들어 서로 기다리며 멈췄다(공성 시뮬 2026-10-11).
 static func arrive_r(path: Array, eps: float) -> float:
-	return PASS_R if path.size() > 1 and is_equal_approx(path[0].y, path[1].y) else eps
+	if path.size() <= 1:
+		return eps
+	return PASS_R if is_equal_approx(path[0].y, path[1].y) else maxf(eps, STEP_R)
 
 
 ## 층: 0 = 지상, 1 = 성벽 위, -1 = 그 사이(계단·솟는 중 — 부딪지 않음).
@@ -174,13 +178,17 @@ func separate(p: PackedVector2Array, r: PackedFloat32Array, w: PackedFloat32Arra
 	return q
 
 
-## 상대 쪽으로 걸어 들어갔으면(제 걸음 m이 밀리는 방향 n의 반대) 밀린 만큼 옆으로도 미끄러진다 — 이미 비껴가던 쪽, 정면이면 n의 왼쪽.
-## 마주 걷는 둘이나 길목에 선 유닛 뒤의 유닛이 정면으로 막혀 멈추지 않고 돌아간다.
+## 상대 쪽으로 걸어 들어갔으면(제 걸음 m이 밀리는 방향 n의 반대) 밀린 만큼 옆으로도 미끄러진다 — 이미 뚜렷이 비껴가던 쪽,
+## 거의 정면이면 제 걸음의 왼쪽(마주 걷는 둘은 서로 반대쪽으로 비킨다). 마주 걷는 둘이나 길목에 선 유닛 뒤의 유닛이 막혀 멈추지 않고 돌아간다.
+## (공성 시뮬 2026-10-11: 예전엔 "비껴가던 쪽"만 봐서, 같은 쪽으로 조금씩 비스듬히 마주 걷던 둘이 같은 쪽으로 미끄러져 서로 막힌 채 10분을 섰다.)
 static func _slide(n: Vector2, m: Vector2) -> Vector2:
 	if m.dot(n) >= 0.0:
 		return Vector2.ZERO
 	var t := n.orthogonal()
-	return t if t.dot(m) >= 0.0 else -t
+	var side := t.dot(m)
+	if absf(side) > 0.3 * m.length():
+		return t if side > 0.0 else -t
+	return t if t.dot(Vector2(-m.y, m.x)) >= 0.0 else -t
 
 
 ## 바닥 점 p(x, z)를 화면 가로(spot v) |v| ≤ side 안으로(세로는 그대로). 아레나 무대 양옆 벽(crowd·picker·PVP 이동이 함께 쓴다).

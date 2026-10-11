@@ -258,6 +258,38 @@ func _replan() -> void:
 
 ## 실제 높이로 판정한다 — 오르내리는 중에는 지상 취급.
 ## 자리로 돌아가려면 경로(성문·계단)가 필요한가 — 아레나 영웅은 곧장(공성 영웅 war_hero가 덮어쓴다).
+## 추격 한 걸음 next를 디딜 수 있나: 성 모드는 성 안팎이 바뀌지 않고 성벽 몸(성문 통로 밖)으로 들어가지 않을 때. 아레나는 언제나.
+func _can_step(next: Vector3) -> bool:
+	if castle == null:
+		return true
+	return Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position) \
+		and (Formation.in_wall_body(castle.half, global_position) or not Formation.in_wall_body(castle.half, next))
+
+
+## 곧장 쫓다 막혔을 때 돌아가는 길을 짤 수 있으면 짠다(공성전). 기본은 없음 — 표적을 놓는다.
+func _detour(_tpos: Vector3) -> bool:
+	return false
+
+
+## 막힌 걸음은 한 축으로 미끄러진다(성벽 면·성문 기둥을 따라 — 표적이 성문 통로에 있어도 비스듬히 막혀 서 있지 않게). 다 막히면 제자리.
+func _slide(next: Vector3) -> Vector3:
+	if _can_step(next):
+		return next
+	var here := global_position
+	var sx := Vector3(next.x, next.y, here.z)
+	if absf(next.x - here.x) > 0.0001 and _can_step(sx):
+		return sx
+	var sz := Vector3(here.x, next.y, next.z)
+	if absf(next.z - here.z) > 0.0001 and _can_step(sz):
+		return sz
+	return here
+
+
+## a에서 b가 트여 있나(공격·광역·연쇄가 닿나). 기본은 언제나 — 공성전(war_hero)은 성벽이 막는다.
+func sees(_a: Vector3, _b: Vector3) -> bool:
+	return true
+
+
 func needs_route() -> bool:
 	return false
 
@@ -386,6 +418,8 @@ func _process(delta: float) -> void:
 		global_position = global_position.move_toward(wp, _speed * delta)
 		if global_position.distance_to(wp) <= Crowd.arrive_r(_path, ARRIVE_EPS):
 			_path.pop_front()
+			if wp.y == 0.0 or is_equal_approx(wp.y, Balance.WALL_H):
+				global_position.y = wp.y  # 계단 끝을 일찍 지나쳐도(지나가는 반경) 바닥·성벽 높이에 딛는다 — 다음 구간 내내 떠서 걷지 않게
 		return
 	if _cast_t > 0.0:  # 시전 자세: 제자리에서 표적을 보며 모션을 마친다(평타·추격·복귀 없음)
 		if _target != null and is_instance_valid(_target) and _target.is_alive():
@@ -405,7 +439,7 @@ func _process(delta: float) -> void:
 		_linger = RETURN_DELAY
 		var tpos: Vector3 = _target.global_position
 		_model.face(tpos - global_position)
-		if Formation.flat_distance(global_position, tpos) <= _reach(_target):
+		if Formation.flat_distance(global_position, tpos) <= _reach(_target) and sees(global_position, tpos):  # 성벽 너머면 트인 데까지 다가간다
 			state = State.ATTACK
 			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null and _blast_ok(_target):
 				_blast_cd = _sk.aoe_blast[0]
@@ -416,12 +450,14 @@ func _process(delta: float) -> void:
 				_attack(_atk_cd)
 			return
 		# 추격: 지상 영웅만 여기 온다(위 조건). 성 안팎 경계(성벽·모서리)를 넘는 걸음은 딛지 않고 표적을 놓는다(아래에서 자리로).
-		var next := global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), _speed * delta)
-		if castle == null or Formation.is_inside(castle.half, next) == Formation.is_inside(castle.half, global_position):
+		var next := _slide(global_position.move_toward(Vector3(tpos.x, global_position.y, tpos.z), _speed * delta))
+		if Formation.flat_distance(next, global_position) > _speed * delta * 0.3:
 			state = State.MOVE
 			_model.play_walk()
 			global_position = next
 			return
+		if _detour(tpos):
+			return  # 막혔으면(성채·성문 기둥) 돌아가는 길로 — 다 걸은 뒤 다시 표적을 찾는다
 	_target = null
 	_linger -= delta
 	var home := stand_position()
@@ -582,9 +618,11 @@ func _release() -> void:
 	var a := atk * _aura_mult()
 	if role != "ranged":
 		Sfx.at("swing", self)
-		if Formation.flat_distance(global_position, m.global_position) <= _reach(m) + SWING_SLACK:
+		if Formation.flat_distance(global_position, m.global_position) <= _reach(m) + SWING_SLACK and sees(global_position, m.global_position):
 			_strike(m, a, true, _attacks)
 		return
+	if not sees(global_position, m.global_position):
+		return  # 성벽 너머(공성전)는 쏘지 않는다
 	var targets := [m]
 	if _sk.has("multishot"):
 		targets.append_array(_nearest_others(m, global_position, float(def.range), int(_sk.multishot[0]) - 1))
@@ -741,7 +779,7 @@ func _blast(center: Vector3) -> void:
 	_blast_cd = _sk.aoe_blast[0]
 	var dmg: float = atk * _aura_mult() * _skx.atk_mult() * _sk.aoe_blast[2] / 100.0 * _skill_mult
 	for m in get_tree().get_nodes_in_group(foes):
-		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1]:
+		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1] and sees(center, m.global_position):
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
 	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade == "SSR" and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
 	_announce("aoe_blast")
@@ -756,6 +794,8 @@ func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
 		if m == exclude or not m.is_alive() or Formation.flat_distance(from, m.global_position) > radius:
 			continue
 		if ground and Formation.is_inside(castle.half, m.global_position) != here_inside:
+			continue
+		if not sees(from, m.global_position):
 			continue
 		out.append(m)
 	out.sort_custom(func(p, q): return Formation.flat_distance(from, p.global_position) < Formation.flat_distance(from, q.global_position))

@@ -112,6 +112,8 @@ func setup(p_owner, p_kind: String, p_dmg: float, sec: float, p_color: Color) ->
 	life = sec
 	color = p_color
 	castle = p_owner.get("castle") if is_instance_valid(p_owner) else null
+	if castle == null and is_instance_valid(p_owner) and float(p_owner.get("war_half") if p_owner.get("war_half") != null else 0.0) > 0.0:
+		castle = {"half": float(p_owner.war_half)}  # 공성전 성: 성 모드와 같은 영역 규칙(성벽 위 주인이면 성벽 밖 땅에서, 성벽 너머로는 안 간다)
 	if is_instance_valid(p_owner) and p_owner.get("foes") != null:
 		foes = p_owner.foes  # 공성전 수비 영웅의 소환수는 영웅을 친다
 	var s: Array = STATS[kind]
@@ -149,7 +151,7 @@ func _ready() -> void:
 		_pivot.add_child(mi)
 		_parts.append(mi)
 	_pivot.visible = false  # 첫 프레임에 자리를 잡은 뒤 보인다(_settle)
-	if castle != null:
+	if castle is Object:
 		GameState.refilled.connect(_on_refilled)
 
 
@@ -243,6 +245,8 @@ func _find_target():
 				continue
 			if not inside and not _flies and Formation.crosses_castle(castle.half, here, mp):
 				continue
+		if is_instance_valid(owner_hero) and owner_hero.has_method("sees") and not _on_wall and not owner_hero.sees(here, mp):
+			continue  # 공성전: 성벽 너머는 안 친다
 		best_d = d
 		best = m
 	return best
@@ -267,7 +271,8 @@ func _fight(delta: float) -> void:
 	if _speed <= 0.0:
 		return
 	var next := global_position + to / d * minf(_speed * delta, d - _reach(_target) * 0.85)
-	if castle != null and not _flies and Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position):
+	if castle != null and not _flies and (Formation.is_inside(castle.half, next) != Formation.is_inside(castle.half, global_position) \
+			or (Formation.in_wall_body(castle.half, next) and not Formation.in_wall_body(castle.half, global_position))):
 		_target = null  # 성벽을 넘는 걸음은 딛지 않는다
 		return
 	global_position = next
