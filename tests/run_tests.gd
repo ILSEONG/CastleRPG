@@ -146,6 +146,7 @@ func _init() -> void:
 	test_iap()
 	test_sfx()
 	test_follow_cam()
+	test_portrait_focus()
 	if _errors.count > 0:
 		printerr("SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -2223,6 +2224,24 @@ func test_follow_cam() -> void:
 	tight[1][1] = 30.0
 	check(Rig.frame(tight, r, u, vp, Vector3.ZERO, 12.0, 40.0)[1] > 12.0, "a tall unit (dragon frame_h) widens the frame")
 
+
+
+## 초상화 누름 → 화면이 그 영웅으로(사용자 2026-10-11): camera_rig.focus_point는 영웅 하나로 frame()을 줌 그대로(min = max = 지금 줌) 부른다.
+## 그 점을 보면 영웅이 HUD 아래·띠 위 가운데에 오고 줌은 바뀌지 않는다.
+func test_portrait_focus() -> void:
+	var Rig := preload("res://scripts/camera_rig.gd")
+	var b := Basis.from_euler(Vector3(deg_to_rad(Rig.PITCH_DEG), deg_to_rad(Rig.YAW_DEG), 0.0))
+	var r := b.x
+	var u := b.y
+	var vp := Vector2(720, 1280)
+	var mid := Vector2(vp.x / 2.0, (Rig.FOLLOW_TOP_PX + vp.y - Rig.FOLLOW_BOTTOM_PX) / 2.0)
+	for size in [18.0, 30.0]:
+		for hp in [Vector3(14, 0, -9), Vector3(-25, 0, 31)]:
+			var t: Array = Rig.frame([[hp, Rig.FOLLOW_TALL]], r, u, vp, Vector3(3, 0, 4), size, size)
+			var k: float = vp.x / t[1]
+			var d: Vector3 = hp + Vector3(0, Rig.FOLLOW_TALL / 2.0, 0) - t[0]
+			var px := Vector2(vp.x / 2.0 + d.dot(r) * k, vp.y / 2.0 - d.dot(u) * k)
+			check(is_equal_approx(t[1], size) and px.distance_to(mid) < 2.0, "portrait focus centres the hero at zoom %s (%s vs %s)" % [size, px, mid])
 
 ## 개정 12-2 §3 공격 동기화: 쓰는 공격 애니메이션(영웅·몬스터·상인)마다 타격 비율이 있고 0 < frac < 1, 그 애니메이션이 GLB에 있다.
 func test_hit_frac() -> void:

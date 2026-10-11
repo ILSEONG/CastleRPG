@@ -43,6 +43,8 @@ const FOLLOW_BOSS_TALL := 4.5
 const FOLLOW_TOP_PX := 170.0  # 화면 위 HUD가 덮는 높이(px, 가로 720 기준) — 무리를 그 아래에 둔다
 const FOLLOW_BOTTOM_PX := 150.0  # 화면 아래 영웅 띠가 덮는 높이
 const FOLLOW_GROUPS := ["crowd", "monsters"]
+const FOCUS_SEC := 3.0  # 초상화를 누르면 이만큼 그 영웅을 따라간다(사용자 2026-10-11)
+const FOCUS_RATE := 6.0  # 그 영웅에게 가는 빠르기(1/초)
 
 var camera: Camera3D
 
@@ -70,6 +72,8 @@ var follow_min := 0.0
 var follow_max := 0.0
 var _follow_hold := -INF  # 이 시각(초)까지 따라가기 쉼
 var _follow_snap := false  # 다음 프레임에 곧바로 맞춘다(처음)
+var _focus: Node3D  # 초상화로 고른 영웅(따라가기 대신 이 영웅을 화면 가운데에)
+var _focus_until := -INF
 
 
 func _ready() -> void:
@@ -115,7 +119,8 @@ func yaw_deg() -> float:
 
 
 func _process(delta: float) -> void:
-	_follow_step(delta)
+	if not _focus_step(delta):
+		_follow_step(delta)
 	if _press_pos == Vector2.INF or _dragging or _rotating or _touches.size() >= 2:
 		return
 	if hold_state((Time.get_ticks_msec() - _press_ms) / 1000.0, 0.0) == "hold":
@@ -199,6 +204,7 @@ func rotate_yaw(deg: float) -> void:
 
 ## 화면 가운데가 바닥 지점 target(높이 무시)을 보도록 sec초 동안 부드럽게 옮긴다(개정 12-2 §2). 줌은 그대로, 팬 한계 안.
 func pan_to(target: Vector3, sec: float) -> void:
+	_focus = null
 	if _pan != null:
 		_pan.kill()
 	var limit := Balance.MAP_HALF - PAN_LIMIT_MARGIN
@@ -382,7 +388,54 @@ func follow(scope: Node, min_size: float, max_size: float) -> void:
 
 ## 손으로 끌거나 줌했다 — FOLLOW_PAUSE_SEC 동안 따라가지 않는다.
 func hold_follow() -> void:
+	_focus = null  # 손이 이긴다
 	_follow_hold = Time.get_ticks_msec() / 1000.0 + FOLLOW_PAUSE_SEC
+
+
+## 초상화 누름(사용자 2026-10-11 "초상화 클릭하면 해당 영웅으로 화면이동"): 줌은 그대로, 화면(HUD 아래·띠 위)이 그 영웅을 가운데에 두도록
+## 부드럽게 옮기고 FOCUS_SEC 동안 그 영웅을 따라간다. 그다음은 평소대로(싸움 따라가기가 있으면 다시 무리로). 손으로 끌거나 줌하면 곧바로 멈춘다.
+func focus_on(n: Node3D) -> void:
+	if n == null or not is_instance_valid(n):
+		return
+	if _pan != null:
+		_pan.kill()
+	_focus = n
+	_focus_until = Time.get_ticks_msec() / 1000.0 + FOCUS_SEC
+
+
+## node가 있는 화면의 리그로 h에 화면을 옮긴다(초상화 띠들이 함께 쓴다). 쓰러졌거나 안 보이는(배치 안 된) 영웅은 무시.
+static func focus_hero(node: Node, h) -> void:
+	if node == null or not node.is_inside_tree() or h == null or not is_instance_valid(h) or not (h is Node3D):
+		return
+	if h.has_method("is_alive") and not h.is_alive():
+		return
+	if not h.is_inside_tree() or not h.is_visible_in_tree():
+		return
+	var cam := node.get_viewport().get_camera_3d()
+	var rig = cam.get_parent() if cam != null else null
+	if rig != null and rig.has_method("focus_on"):
+		rig.focus_on(h)
+
+
+## 초상화로 고른 영웅을 보는 바닥 점(지금 줌 그대로). 순수 계산은 frame()과 같다.
+func focus_point(n: Node3D) -> Vector3:
+	var at := position
+	at.y = 0.0
+	var out := frame([[n.global_position, n.get_meta("frame_h", FOLLOW_TALL)]], camera.global_basis.x, camera.global_basis.y, get_viewport().get_visible_rect().size, at, camera.size, camera.size)
+	var p: Vector3 = out[0]
+	p.y = position.y
+	return p
+
+
+func _focus_step(delta: float) -> bool:
+	if _focus == null:
+		return false
+	var hp = _focus.get("hp") if is_instance_valid(_focus) else null
+	if not is_instance_valid(_focus) or not _focus.is_inside_tree() or Time.get_ticks_msec() / 1000.0 > _focus_until or (hp != null and float(hp) <= 0.0):
+		_focus = null
+		return false
+	position = position.lerp(focus_point(_focus), 1.0 - exp(-FOCUS_RATE * delta))
+	return true
 
 
 ## 따라갈 목표 [바닥 점, 줌]. 유닛이 없으면 []. 화면 위 HUD·아래 띠를 뺀 곳 가운데에 무리를 둔다.

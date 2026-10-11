@@ -164,6 +164,7 @@ func _build_strip(root: Control) -> void:
 func _pick(h) -> void:
 	if h.is_alive() and battle.picker != null:
 		battle.picker._select(h)
+	HeroStrip.CameraRig.focus_hero(self, h)  # 화면을 그 영웅으로(사용자 2026-10-11)
 
 
 ## 선택된 영웅은 금색 테두리.
