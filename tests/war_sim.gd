@@ -54,6 +54,7 @@ func _scenario(sd: int) -> Dictionary:
 		d.hero = id
 		d.hp = st.hp * mult
 		d.atk = st.atk * mult
+	var guild_lv := 1 + sd % 20  # 성 주인 길드 레벨(성문 체력 = 레벨 × GATE_HP_PER_LEVEL)
 	var lane_mode := _rng.randi_range(0, 2)  # 0 = 고르게, 1 = 한 면 몰빵, 2 = 무작위
 	var focus := _rng.randi_range(0, 3)
 	for s in plan.attackers:
@@ -67,19 +68,19 @@ func _scenario(sd: int) -> Dictionary:
 			s.lane = focus
 		elif lane_mode == 2:
 			s.lane = _rng.randi_range(0, 3)
-	# 성문·성채 체력은 바뀐 수비 영웅 기준으로 다시(서버 castleMax와 같은 식)
+	# 성문은 길드 레벨, 성채는 바뀐 수비 영웅 기준으로 다시(서버 castleMax와 같은 식)
 	var hp_lane := [0.0, 0.0, 0.0, 0.0]
 	var hp_all := 0.0
 	for d in plan.defenders:
 		hp_lane[int(d.lane)] += float(d.hp)
 		hp_all += float(d.hp)
 	for s in 4:
-		var g := WarRules.gate_hp_max(hp_lane[s])
+		var g := WarRules.gate_hp_max(guild_lv)
 		plan.gates[s] = {"hp": g, "max": g}
 	var k := WarRules.keep_hp_max(hp_all)
 	plan.keep = {"hp": k, "max": k}
 	plan.deploy_left = 3.0
-	return {"plan": plan, "att_n": att_n, "def_n": def_n, "att_lv": att_lv, "def_lv": def_lv, "mult": snappedf(mult, 0.01),
+	return {"plan": plan, "att_n": att_n, "def_n": def_n, "att_lv": att_lv, "def_lv": def_lv, "mult": snappedf(mult, 0.01), "guild_lv": guild_lv,
 		"lane_mode": ["even", "one_side", "random"][lane_mode], "orders": _rng.randf() < 0.4, "deploy_moves": _rng.randf() < 0.5}
 
 

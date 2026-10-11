@@ -1,7 +1,7 @@
 extends RefCounted
 ## 길드 창 [길드전] 하위 탭 내용(guild_panel.gd가 build(창)을 부른다 — 창의 _card·_label·_button을 쓴다). 값은 GuildWar.war.
 ## 위에서부터: 이번 주 상대(문장·이름·전투력)와 점수(우리 : 상대), 상대 성(성문 4개·성채 체력 막대, 수비 영웅 처치 수),
-## 이번 주 공성전(공성 시각 — 길드원이 요일·시를 고른다, 상태·남은 시간) + [공격 분대][수비 분대] 고르기 + 영웅 격자(보유 영웅, 전투력 순, 4명) + [공성 시작/전투 합류] 또는 [수비 영웅 저장],
+## 이번 주 공성전(공성 시각 — 길드장이 요일·시를 고른다, 상태·남은 시간) + [공격 분대][수비 분대] 고르기 + 영웅 격자(보유 영웅, 전투력 순, 4명) + [공성 시작/전투 합류] 또는 [수비 영웅 저장],
 ## 지난 주 보상([보상 받기]), 규칙 한 장.
 
 const WarRules := preload("res://scripts/war_rules.gd")
@@ -128,10 +128,13 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 	v.add_child(p._label(head, 22, MainHud.INK))
 	if state != "live" and GuildWar.online() and Economy.admin:  # 슈퍼관리자: 시각을 기다리지 않고 바로(끝났으면 새 성으로 다시)
 		v.add_child(p._label("관리자: [공성 시작]으로 지금 바로 열 수 있어요", 18, SUB))
-	var who := ("%s님이 정한 시각" % str(sch.by)) if sch.get("set", false) and str(sch.get("by", "")) != "" else "길드원이 정하지 않으면 토요일 21:00"
+	var who := ("%s님이 정한 시각" % str(sch.by)) if sch.get("set", false) and str(sch.get("by", "")) != "" \
+		else ("길드장이 없는 길드는 토요일 21:00" if sch.get("fixed", false) else "길드장이 정하지 않으면 토요일 21:00")
 	v.add_child(p._label(who, 18, SUB))
 	if sch.get("can_change", false):
 		_schedule_picker(p, v, at)
+	elif state == "waiting" and not sch.get("fixed", false):
+		v.add_child(p._label("공성 요일과 시각은 길드장이 정합니다", 18, SUB))
 	var modes := HBoxContainer.new()
 	modes.add_theme_constant_override("separation", 8)
 	for m in [["attack", "공격 분대"], ["defense", "수비 분대"]]:
@@ -279,7 +282,8 @@ static func _rules_card(p) -> void:
 	var v: VBoxContainer = c.get_child(0)
 	v.add_child(p._label("공성전 규칙", 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for t in ["길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.",
-			"공성전은 한 주에 한 번, 길드원이 정한 시각에 열립니다. 아무도 정하지 않으면 토요일 21:00입니다.",
+			"공성전은 한 주에 한 번, 길드장이 정한 요일·시각에 열립니다. 정하지 않으면 토요일 21:00입니다.",
+			"성문 체력은 성 주인 길드 레벨 × %s입니다(상대 길드는 우리 길드와 같은 레벨)." % UiKit.commas(roundi(WarRules.GATE_HP_PER_LEVEL)),
 			"먼저 배치 단계: 성 밖 어디서 칠지 영웅 자리를 잡고, 길드장이 [전투 시작]을 누르면 %d분 동안 싸웁니다. 아무도 안 누르면 %d분 뒤 저절로 시작합니다." % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
 			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.",
 			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점 · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, roundi(WarRules.KEEP_STEP * 100.0)],

@@ -1,6 +1,6 @@
 extends RefCounted
 ## 길드전(공성전) 수치·규칙 한 곳(오토로드 의존 없음). 서버 server/src/guild_war.ts와 같은 값·식이다.
-## 바꾸려면 여기와 서버 둘 다: 한 주 한 상대(월요일 리셋에 새 상대), 공성 전투는 한 주에 1번(2026-10-06 사용자) — 시각은 길드원이 정하고
+## 바꾸려면 여기와 서버 둘 다: 한 주 한 상대(월요일 리셋에 새 상대), 공성 전투는 한 주에 1번(2026-10-06 사용자) — 시각은 길드장이 정하고
 ## (안 정하면 토요일 21:00) 그때부터 BATTLE_SEC초 · 그 사이 누구나 합류. 점수 = 수비 영웅 처치 1 · 성문 10 · 성채 최대 체력 3%마다 1(사용자), 주간 보상(승리·패배).
 ## 길드원 = 15명(길드 6레벨부터 20명 — 길드 쪽 규칙). 길드원 한 명 = 영웅 4명(공격 분대 / 수비 분대).
 
@@ -22,7 +22,8 @@ const DEFAULT_HOUR := 21
 const DAY_NAMES := ["월", "화", "수", "목", "금", "토", "일"]
 const REWARD_WIN := {"coins": 300, "diamonds": 100}
 const REWARD_LOSE := {"coins": 100, "diamonds": 30}
-const GATE_HP_SHARE := 3.0  # 성문 체력 = 그 면 수비 영웅 최대 체력 합 × 이만큼(수비가 셀수록 성문도 단단하다)
+const GATE_HP_PER_LEVEL := 10000.0  # 2026-10-11 사용자: 성문 체력 = 성 주인 길드 레벨 × 이만큼(서버 GATE_HP_PER_LEVEL과 같다)
+const GATE_HP_SHARE := 3.0  # 2026-10-11 전에 연 주(레벨을 안 남긴 주)만: 성문 체력 = 그 면 수비 영웅 최대 체력 합 × 이만큼
 const KEEP_HP_SHARE := 6.0  # 성채 체력 = 수비 영웅 전체 최대 체력 합 × 이만큼
 const MIN_GATE_HP := 3000.0
 const MIN_KEEP_HP := 8000.0
@@ -36,7 +37,13 @@ const CAMP_D := 24.0  # 공격 진영: 성벽 바깥면에서 이 거리
 const SIDE_NAMES := ["북문", "동문", "남문", "서문"]
 
 
-static func gate_hp_max(lane_hp_sum: float) -> float:
+## 성문 최대 체력 = 성 주인 길드 레벨 × GATE_HP_PER_LEVEL(네 성문 같다).
+static func gate_hp_max(guild_level: int) -> float:
+	return GATE_HP_PER_LEVEL * maxi(1, guild_level)
+
+
+## 예전 식(2026-10-11 전에 연 주): 그 면 수비 체력 합 × GATE_HP_SHARE.
+static func gate_hp_lane(lane_hp_sum: float) -> float:
 	return maxf(MIN_GATE_HP, roundf(lane_hp_sum * GATE_HP_SHARE))
 
 

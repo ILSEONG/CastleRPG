@@ -23,7 +23,8 @@ export const DEFAULT_DAY = 5 // 길드원이 시각을 안 정하면: 토요일(
 export const DEFAULT_HOUR = 21 // 21:00(리셋 시각 기준 — KST)
 export const REWARD_WIN = { coins: 300, diamonds: 100 }
 export const REWARD_LOSE = { coins: 100, diamonds: 30 }
-export const GATE_HP_SHARE = 3.0
+export const GATE_HP_SHARE = 3.0 // 2026-10-11 전에 만든 주(guild_wars.level 없음)만 쓴다: 성문 = 그 면 수비 체력 합 × 이것
+export const GATE_HP_PER_LEVEL = 10000 // 2026-10-11 사용자: 성문 체력 = 성 주인 길드 레벨 × 이것(앱 WarRules.GATE_HP_PER_LEVEL과 같다)
 export const KEEP_HP_SHARE = 6.0
 export const MIN_GATE_HP = 3000
 export const MIN_KEEP_HP = 8000
@@ -117,18 +118,23 @@ export function enemyGuild(seed: number, n: number, avg: number, heroes: HeroDef
 
 export interface Castle { gates: number[]; keep: number; dead: Record<string, number> } // dead: uid → 남은 체력 비율(< 1인 것만, 0 = 쓰러짐)
 
-export function castleMax(defs: Defender[]) {
+export const gateHpMax = (level: number) => GATE_HP_PER_LEVEL * Math.max(1, Math.floor(level))
+
+// level = 성 주인(수비) 길드 레벨. 가상 상대 길드는 그 주를 연 우리 길드 레벨을 쓴다(인원도 우리 정원을 따른다).
+// level이 없으면(2026-10-11 전에 연 주) 예전 식: 그 면 수비 체력 합 × GATE_HP_SHARE.
+export function castleMax(defs: Defender[], level?: number | null) {
   const lane = [0, 0, 0, 0]
   let all = 0
   for (const d of defs) {
     lane[d.lane] += d.hp
     all += d.hp
   }
-  return { gates: lane.map((h) => Math.max(MIN_GATE_HP, Math.round(h * GATE_HP_SHARE))), keep: Math.max(MIN_KEEP_HP, Math.round(all * KEEP_HP_SHARE)) }
+  const gates = level != null && level > 0 ? lane.map(() => gateHpMax(level)) : lane.map((h) => Math.max(MIN_GATE_HP, Math.round(h * GATE_HP_SHARE)))
+  return { gates, keep: Math.max(MIN_KEEP_HP, Math.round(all * KEEP_HP_SHARE)) }
 }
 
-export function freshCastle(defs: Defender[]): Castle {
-  const mx = castleMax(defs)
+export function freshCastle(defs: Defender[], level?: number | null): Castle {
+  const mx = castleMax(defs, level)
   return { gates: [...mx.gates], keep: mx.keep, dead: {} }
 }
 

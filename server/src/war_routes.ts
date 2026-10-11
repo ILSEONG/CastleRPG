@@ -2,7 +2,7 @@
 // 길드 쪽 읽기(guildCtx)·쓰기(commit — 다이아·길드 코인)를 그대로 쓴다.
 //  GET  /v1/guild/war           → {server_now, war}
 //  POST /v1/guild/war/defense   {heroes: [{id, hp, atk}] × 4}  내 수비 영웅(보유 영웅, 능력치는 capStats로 자른다)
-//  POST /v1/guild/war/schedule  {day: 0~6, hour: 0~23}         이번 주 공성 시각을 정한다(길드원 누구나, 그 시각이 오기 전까지)
+//  POST /v1/guild/war/schedule  {day: 0~6, hour: 0~23}         이번 주 공성 시각을 정한다(길드장만, 그 시각이 오기 전까지)
 //  POST /v1/guild/war/enter     {heroes: [{id, hp, atk}] × 4}  이번 주 공성 전투에 들어간다(공성 시각부터 배치 + 전투가 끝날 때까지, 없으면 연다) → {war, plan}
 //  POST /v1/guild/war/start     {battle_id}                    배치 끝 → 전투 시작(길드장·슈퍼관리자, 길드장이 없는 길드면 실제 길드원 누구나). 방에 {t:"start"}
 //  POST /v1/guild/war/finish    {battle_id, state}             방이 없을 때(실시간 연결 실패) 방장 기기가 결과를 직접 보낸다
@@ -41,20 +41,21 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
 
   // 이번 주 전쟁 행(없으면 만든다 — 상대 힘은 지금 우리 길드원 평균으로 그 주 내내 고정).
   async function warRow(x: Any, week: number) {
-    const [r] = await query(`select enemy_seed, power, members, castle, extract(epoch from battle_at)::float8 as battle_at, battle_by
+    const [r] = await query(`select enemy_seed, power, members, level, castle, extract(epoch from battle_at)::float8 as battle_at, battle_by
       from guild_wars where guild_id = $1 and week = $2`, [x.g.id, week])
     if (r) {
-      return { seed: Number(r.enemy_seed), power: Number(r.power), members: Number(r.members), castle: json(r.castle) as W.Castle,
+      return { seed: Number(r.enemy_seed), power: Number(r.power), members: Number(r.members), level: r.level == null ? null : Number(r.level), castle: json(r.castle) as W.Castle,
         at: W.battleAt(week, r.battle_at == null ? null : Number(r.battle_at), (d) => R.resetAt(d, x.hour)), by: r.battle_by == null ? '' : String(r.battle_by),
         set: r.battle_at != null }
     }
     const ms = ourMembers(x)
     const avg = Math.round(ms.reduce((a, m) => a + m.power, 0) / Math.max(1, ms.length))
     const seed = W.enemySeed(Number(x.g.seed), week)
-    const n = G.capacity(x.st.lv.level)
+    const lv = Number(x.st.lv.level)
+    const n = G.capacity(lv)
     const enemy = W.enemyGuild(seed, n, avg, defsOf(x.game), cfgOf(x.game))
-    await query(`insert into guild_wars (guild_id, week, enemy_seed, power, members, castle) values ($1, $2, $3, $4, $5, $6::jsonb)
-      on conflict (guild_id, week) do nothing`, [x.g.id, week, seed, avg, n, JSON.stringify(W.freshCastle(enemy.defenders))])
+    await query(`insert into guild_wars (guild_id, week, enemy_seed, power, members, level, castle) values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      on conflict (guild_id, week) do nothing`, [x.g.id, week, seed, avg, n, lv, JSON.stringify(W.freshCastle(enemy.defenders, lv))])
     return warRow(x, week)
   }
 
@@ -72,6 +73,8 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
 
   // [전투 시작]을 누를 수 있나: 슈퍼관리자, 길드장, 길드장이 없는 길드(시스템 길드)면 실제 길드원 누구나.
   const canStart = (x: Any) => Boolean(x.pl.admin) || !x.g?.owner || x.g.owner === x.id
+  // 공성 시각을 정할 수 있나(2026-10-11 사용자: 길드장이 요일·시각을 정한다): 슈퍼관리자와 길드장만. 길드장이 없는 시스템 길드는 토요일 21:00 그대로.
+  const canSchedule = (x: Any) => Boolean(x.pl.admin) || (Boolean(x.g?.owner) && x.g.owner === x.id)
 
   async function defenseOf(ids: string[]) {
     if (!ids.length) return new Map<string, Any[]>()
@@ -104,7 +107,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const week = W.weekOf(day)
     const w = await warRow(x, week)
     const enemy = enemyOf(x, w)
-    const mx = W.castleMax(enemy.defenders)
+    const mx = W.castleMax(enemy.defenders, w.level)
     const ours = await ourDefense(x)
     const ratio = enemy.power / Math.max(1, ours.total)
     const b = await battleOf(g.id, week)
@@ -116,7 +119,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       week, day: W.dayInWeek(day), week_ends: R.resetAt(W.weekStart(week + 1), x.hour),
       enemy: { name: enemy.name, emblem: enemy.emblem, power: enemy.power, members: enemy.members.length },
       points: W.castlePoints(w.castle, mx.keep), enemy_points: enemyPts, enemy_days: x.now >= ends ? [enemyPts] : [],
-      schedule: { at: w.at, ends_at: ends, by: w.by, set: w.set, can_change: x.now < w.at },
+      schedule: { at: w.at, ends_at: ends, by: w.by, set: w.set, can_change: x.now < w.at && canSchedule(x), leader: canSchedule(x), fixed: !g.owner },
       castle: { gates: w.castle.gates.map((hp, i) => ({ hp, max: mx.gates[i] })), keep: { hp: w.castle.keep, max: mx.keep },
         kills: W.killsIn(w.castle), defenders: enemy.defenders.length },
       battle: b ? { id: b.id, state, started_at: b.started_at, ends_at: b.ends_at, joined: b.roster.filter((s: Any) => !s.ai).length,
@@ -140,7 +143,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const w = await warRow(x, last)
     const ours = await ourDefense(x)
     const enemy = enemyOf(x, w)
-    const pts = W.castlePoints(w.castle, W.castleMax(enemy.defenders).keep)
+    const pts = W.castlePoints(w.castle, W.castleMax(enemy.defenders, w.level).keep)
     const ep = W.enemyPoints(w.seed, last, enemy.power / Math.max(1, ours.total), W.castleCap(ours.members.length))
     const win = pts > ep
     return { week: last, win, points: pts, enemy_points: ep, reward: win ? W.REWARD_WIN : W.REWARD_LOSE }
@@ -191,11 +194,12 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     return c.json({ server_now: x.now, war: await warView(x) })
   })
 
-  // 이번 주 공성 시각을 정한다: 길드원 누구나, 지금 정해진 시각이 오기 전까지. 새 시각은 지금보다 뒤여야 한다.
+  // 이번 주 공성 시각을 정한다: 길드장(과 슈퍼관리자)만, 지금 정해진 시각이 오기 전까지. 새 시각은 지금보다 뒤여야 한다.
   app.post('/v1/guild/war/schedule', auth, async (c) => {
     const b = await body(c)
     const x = await ctx(c)
     const { g } = needGuild(x)
+    if (!canSchedule(x)) throw blocked('not_leader', g.owner ? 'only the guild master can set the siege time' : 'a system guild sieges on Saturday 21:00')
     const week = W.weekOf(R.resetDay(x.now, x.hour))
     const w = await warRow(x, week)
     if (x.now >= w.at) throw blocked('schedule_locked', "this week's siege time has already come")
@@ -219,7 +223,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     if (x.now >= w.at && !over) return w
     if (over) {
       await query('delete from guild_war_battles where guild_id = $1 and week = $2', [gid, week])
-      await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2', [gid, week, JSON.stringify(W.freshCastle(enemyOf(x, w).defenders))])
+      await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2', [gid, week, JSON.stringify(W.freshCastle(enemyOf(x, w).defenders, w.level))])
     }
     await query('update guild_wars set battle_at = to_timestamp($3::float8), battle_by = $4 where guild_id = $1 and week = $2', [gid, week, x.now - 1, G.playerName(x.id)])
     return warRow(x, week)
@@ -275,7 +279,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     }
     if (!bt) throw new ApiError(409, 'conflict', 'try again')
     const enemy = enemyOf(x, w)
-    const mx = W.castleMax(enemy.defenders)
+    const mx = W.castleMax(enemy.defenders, w.level)
     const plan = {
       battle_id: bt.id, my_id: x.id, enemy_name: enemy.name, duration: W.BATTLE_SEC, clock: Math.max(0, x.now - bt.started_at),
       deploy_left: Math.max(0, bt.started_at - x.now), can_start: canStart(x),
@@ -305,7 +309,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       const enemy = enemyOf(x, w)
       const merged = W.mergeCastle(w.castle, state && typeof state === 'object' ? state : {}, enemy.defenders)
       // 열린 뒤 지난 시간으로 낼 수 있는 피해보다 많이 깎였으면 받지 않는다(앱이 보낸 성 상태를 그대로 믿지 않는다 — 성문·성채와 수비 영웅 처치 모두)
-      if (W.structureDamage(W.castleMax(enemy.defenders), merged) + W.defenderDamage(enemy.defenders, merged) > cap) {
+      if (W.structureDamage(W.castleMax(enemy.defenders, w.level), merged) + W.defenderDamage(enemy.defenders, merged) > cap) {
         return false
       }
       // 읽은 성 상태 그대로일 때만 쓴다(실시간 방 ckpt와 다른 길드원의 finish가 겹쳐도 서로 덮어쓰지 않게 — 겹치면 다시 읽어 합친다)

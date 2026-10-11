@@ -23,6 +23,7 @@ class ErrorCounter extends Logger:
 				first = "%s %s:%d %s" % [_fn, _file, _line, why if why != "" else _code]
 
 const ATT := ["arteon", "ignis", "sylvana", "grom", "baldur", "lumina", "kyle", "nev", "bron", "mira", "torvin", "echo", "felix", "ella", "dorik", "nina"]
+const GATE_LEVEL := 5  # make_plan 성 주인 길드 레벨(성문 50,000)
 const DEF := ["thorgar", "valen", "raven", "harald", "seraphine", "gaia", "dante", "kaz", "luna", "orin", "selene", "grit", "hans", "tia", "pip", "jack"]
 
 var _fails := 0
@@ -66,6 +67,9 @@ func _case_offline_war() -> void:
 	GuildWar.fetch()
 	var w: Dictionary = GuildWar.war
 	_check(w.enemy.members == 20 and w.castle.defenders == 80, "level-6 guild meets a 20-member enemy with 80 defenders (%d, %d)" % [w.enemy.members, w.castle.defenders])
+	var gmax: Array = w.castle.gates.map(func(g): return float(g.max))
+	_check(gmax == [60000.0, 60000.0, 60000.0, 60000.0] and w.castle.gates.all(func(g): return float(g.hp) == float(g.max)),
+		"gate HP = guild level 6 x 10,000 on all four gates: %s" % [gmax])
 	var e1: Dictionary = GuildWar.enemy_of()
 	_check(GuildWar.enemy_guild(int(GuildWar.local.seed), 20, float(GuildWar.local.power)).hash() == e1.hash(), "enemy is deterministic")
 	var ids: Array = GuildWar.default_squad()
@@ -73,7 +77,7 @@ func _case_offline_war() -> void:
 	var def_at := GuildWar.battle_at(int(w.week), -1.0)
 	_check(w.battle.state == "waiting" and w.points == 0 and is_equal_approx(float(w.schedule.at), def_at) and GuildWar.at_text(def_at) == "토요일 21:00"
 		and GuildWar.enter_block(ids) != "", "weekly siege waits for its time (default saturday 21:00: %s)" % GuildWar.at_text(float(w.schedule.at)))
-	_check(GuildWar.schedule_block(0, 0) != "" and GuildWar.set_schedule(1, 20), "members pick a later time this week (tuesday 20:00)")
+	_check(GuildWar.schedule_block(0, 0) != "" and GuildWar.set_schedule(1, 20), "the leader picks a later time this week (tuesday 20:00)")
 	w = GuildWar.war
 	var at := float(w.schedule.at)
 	_check(GuildWar.at_text(at) == "화요일 20:00" and w.schedule.set and w.battle.state == "waiting", "the picked time shows: %s" % GuildWar.at_text(at))
@@ -136,7 +140,7 @@ static func make_plan(att_n: int, def_n: int, def_mult := 1.0, att_level := 30, 
 			hp_all += st.hp * def_mult
 	var gates := []
 	for s in 4:
-		var g := WarRules.gate_hp_max(hp_lane[s])
+		var g := WarRules.gate_hp_max(GATE_LEVEL)
 		gates.append({"hp": g, "max": g})
 	var k := WarRules.keep_hp_max(hp_all)
 	var atts := []

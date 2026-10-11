@@ -85,23 +85,18 @@ test('war rules: monday weeks, deterministic enemy, castle only goes down', () =
   assert.equal(W.pickAt(wk, 0, 24, resetAt), null)
 })
 
-test('war: view, defense heroes, members pick the weekly time, enter opens the battle with AI squads, a second member joins', async () => {
+test('war: view, defense heroes, a system guild keeps Saturday 21:00, enter opens the battle with AI squads, a second member joins', async () => {
   const a = await member()
   let w = await war(a.token)
   assert.equal(w.battle.state, 'waiting')
   assert.equal(w.schedule.at, defaultAt(S.clock.t), 'default: saturday 21:00')
   assert.equal(w.schedule.set, false)
   assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: a.token, body: { heroes: squad() } })).json.error, 'not_yet')
-  // 시각 정하기: 지금보다 뒤, 이번 주 안
-  const nowDay = W.dayInWeek(Math.floor((S.clock.t - HOUR * 3600) / 86400))
-  let s = await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: nowDay, hour: 0 } })
-  assert.equal(s.json.error, 'schedule_past')
-  s = await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 6, hour: 20 } })
-  assert.equal(s.status, 200, JSON.stringify(s.json))
-  assert.equal(s.json.war.schedule.set, true)
-  const at = s.json.war.schedule.at
-  assert.equal(at, W.pickAt(W.weekOf(Math.floor((S.clock.t - HOUR * 3600) / 86400)), 6, 20, resetAt))
-  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 9, hour: 0 } })).status, 400)
+  // 길드장이 없는 시스템 길드: 공성 시각은 토요일 21:00 그대로(길드원은 못 바꾼다)
+  assert.equal(w.schedule.can_change, false)
+  assert.equal(w.schedule.fixed, true)
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 6, hour: 20 } })).json.error, 'not_leader')
+  const at = w.schedule.at
   S.clock.t = at + 5
   assert.equal(w.castle.gates.length, 4)
   assert.ok(w.enemy.members >= 15 && w.castle.defenders === w.enemy.members * 4)
@@ -158,7 +153,6 @@ test('war: view, defense heroes, members pick the weekly time, enter opens the b
   assert.equal(fin.json.war.points, W.PTS_KILL + W.PTS_GATE)
   assert.equal(fin.json.war.battle.state, 'done')
   assert.equal((await S.req('POST', '/v1/guild/war/enter', { token: b.token, body: { heroes: squad() } })).json.error, 'battle_done', 'one battle a week')
-  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: a.token, body: { day: 6, hour: 23 } })).json.error, 'schedule_locked')
   // 우리 공성 시간이 끝나면 상대 점수가 보인다
   assert.equal(fin.json.war.enemy_points, 0)
   S.clock.t = startedAt + W.BATTLE_SEC + 1
@@ -304,6 +298,44 @@ test('war: a freshly created guild (no virtual members yet) gets AI mercenary sq
   const e2 = await S.req('POST', '/v1/guild/war/enter', { token: mate.token, body: { heroes: squad() } })
   assert.equal(e2.json.plan.can_start, false)
   assert.equal((await S.req('POST', '/v1/guild/war/start', { token: mate.token, body: { battle_id: r.json.plan.battle_id } })).json.error, 'not_leader')
+})
+
+test('war: only the guild master picks the weekly time; gates scale with the guild level', async () => {
+  S.clock.t = T0
+  const p = await S.login()
+  await setStage(p.id, 30)
+  await S.db.query('update player_state set gold_tenths = 10000000 where player_id = $1', [p.id])
+  const made = await S.req('POST', '/v1/guild/create', { token: p.token, body: { name: '시각길드', emblem: 1 } })
+  assert.equal(made.status, 200, JSON.stringify(made.json))
+  const mate = await member(made.json.guild.guild.id)
+  let w = await war(p.token)
+  assert.equal(w.schedule.can_change, true)
+  assert.equal(w.schedule.fixed, false)
+  assert.equal((await war(mate.token)).schedule.can_change, false, 'a member sees the time but cannot change it')
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: mate.token, body: { day: 6, hour: 20 } })).json.error, 'not_leader')
+  const nowDay = W.dayInWeek(Math.floor((S.clock.t - HOUR * 3600) / 86400))
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: p.token, body: { day: nowDay, hour: 0 } })).json.error, 'schedule_past')
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: p.token, body: { day: 9, hour: 0 } })).status, 400)
+  const s = await S.req('POST', '/v1/guild/war/schedule', { token: p.token, body: { day: 6, hour: 20 } })
+  assert.equal(s.status, 200, JSON.stringify(s.json))
+  assert.equal(s.json.war.schedule.set, true)
+  assert.equal(s.json.war.schedule.at, W.pickAt(W.weekOf(Math.floor((S.clock.t - HOUR * 3600) / 86400)), 6, 20, resetAt))
+  assert.equal((await war(mate.token)).schedule.at, s.json.war.schedule.at, 'members see the master\'s time')
+  // 성문 체력 = 길드 레벨(새 길드 1) × GATE_HP_PER_LEVEL, 네 성문 모두 같다
+  w = s.json.war
+  assert.deepEqual(w.castle.gates.map((g: any) => g.max), [1, 1, 1, 1].map(() => W.GATE_HP_PER_LEVEL))
+  assert.deepEqual(w.castle.gates.map((g: any) => g.hp), w.castle.gates.map((g: any) => g.max))
+  S.clock.t = s.json.war.schedule.at + 5
+  assert.equal((await S.req('POST', '/v1/guild/war/schedule', { token: p.token, body: { day: 6, hour: 23 } })).json.error, 'schedule_locked')
+  S.clock.t = T0
+})
+
+test('war: gate max = guild level x GATE_HP_PER_LEVEL; weeks opened before the change keep the lane formula', () => {
+  const defs = [{ uid: 1, hp: 2000, lane: 0 }, { uid: 2, hp: 500, lane: 1 }] as any
+  assert.deepEqual(W.castleMax(defs, 7).gates, [70000, 70000, 70000, 70000])
+  assert.deepEqual(W.castleMax(defs, 1).gates, [10000, 10000, 10000, 10000])
+  assert.deepEqual(W.castleMax(defs, null).gates, [6000, W.MIN_GATE_HP, W.MIN_GATE_HP, W.MIN_GATE_HP])
+  assert.equal(W.castleMax(defs, 7).keep, W.castleMax(defs, null).keep, 'keep unchanged')
 })
 
 test('war: defender kills count toward the damage cap (a state with every defender dead right after opening is refused)', () => {
