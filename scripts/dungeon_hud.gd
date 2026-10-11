@@ -177,6 +177,7 @@ func pick(h) -> void:
 	if p == null or not is_instance_valid(h) or not h.is_alive():
 		return
 	p._select(null if p.selected == h else h)
+	HeroStrip.CameraRig.focus_hero(self, h)  # 화면을 그 영웅으로(사용자 2026-10-11)
 
 
 ## 얼굴 칸: 등급 색 8각 바탕 + 흉상(렌더 전엔 자리표시). 선택된 영웅은 금색 테두리.

@@ -8,6 +8,7 @@ const UiKit := preload("res://scripts/ui_kit.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const SkillIcons := preload("res://scripts/skill_icons.gd")
+const CameraRig := preload("res://scripts/camera_rig.gd")
 
 const FACE_MAX := 84.0
 const GAP := 18.0  # 영웅 칸 사이(쿨 칸이 어느 영웅 것인지 갈리게 넉넉히)
@@ -93,11 +94,12 @@ func _rebuild(hs: Array, ids: Array) -> void:
 		cells.append({"hero": h, "face": face, "bar": bar, "cell": cell})
 
 
-## 초상화 누름: 산 영웅이면 선택(이미 선택돼 있으면 해제). 쓰러진 영웅은 무시.
+## 초상화 누름: 산 영웅이면 선택(이미 선택돼 있으면 해제) + 화면을 그 영웅으로(사용자 2026-10-11). 쓰러진 영웅은 무시.
 func pick(h) -> void:
 	if picker == null or not is_instance_valid(h) or not h.is_alive():
 		return
 	picker._select(null if picker.selected == h else h)
+	CameraRig.focus_hero(self, h)
 
 
 func _draw_face(c: Control, h) -> void:
