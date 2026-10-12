@@ -454,7 +454,7 @@ func _levelup_online() -> void:
 	_hero_panel.close()
 
 
-## (k) 서버 모집 1회: 판매로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 3000 tenths↓, 영웅 +1, 결과 카드.
+## (k) 서버 모집 1회: 판매 + 테스트 골드로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 1회 비용(Lv 1)↓, 영웅 +1, 결과 카드.
 ## (l) 모집은 다시 보내지 않는다: 서버가 사라진 채 모집 → 버리고 알림, 다시 연결되면 /v1/player로 상태를 받는다(두 번째 모집 요청 없음).
 ## (m) 배치: 영웅 창 [적용] → /v1/deploy → 서버 배치, 방치 모드라 곧바로 영웅이 바뀐다. phase 2가 재접속 복원을 본다.
 ## 모집 전 copies 합(새 플레이어 = 시작 영웅 수)을 돌려준다 — phase 2는 그 합 + 1(뽑은 한 장, 새 영웅이든 중복이든)을 본다.
@@ -462,26 +462,28 @@ func _heroes_online() -> int:
 	await _request("POST", "/v1/test/age", {"minutes": 720})
 	await _request("POST", "/v1/collect", {"building": "lumber"})
 	await _request("POST", "/v1/sell", {"res": "all"})
+	var cost: int = GameData.gacha_cost(GameData.GACHA_GOLD, 1, 1)  # 골드 모집 Lv 1 한 번(2026-10-07부터 10,000)
+	await _request("POST", "/v1/test/grant_gold", {"amount": cost})
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
 	var gold0: int = Economy.server_gold_tenths
-	_check(Economy.gold >= 3000 and Economy.gold_tenths == gold0, "(k) precondition: at least 3000 server gold from selling (gold recruit Lv 1)", "gold=%d" % Economy.gold)
+	_check(Economy.gold >= cost and Economy.gold_tenths == gold0, "(k) precondition: at least one gold recruit (Lv 1) of server gold", "gold=%d cost=%d" % [Economy.gold, cost])
 	var copies0 := _copies()
 	_check(copies0 == GameData.config_list("starter_heroes").size(), "(k) precondition: a new player owns the starters once each", "copies=%d heroes=%s" % [copies0, Economy.heroes])
 	var g0: int = Net.requested.get("/v1/gacha", 0)
 	_recruit.open()
 	_recruit.one_button.pressed.emit()
 	_recruit.one_button.pressed.emit()  # 응답 전 재탭
-	_check(not _recruit.one_button.disabled and not _recruit.one_button.text.contains("…") and Economy.gold_tenths == gold0 - 30000 and Net.requested.get("/v1/gacha", 0) == g0 + 1,
+	_check(not _recruit.one_button.disabled and not _recruit.one_button.text.contains("…") and Economy.gold_tenths == gold0 - cost * 10 and Net.requested.get("/v1/gacha", 0) == g0 + 1,
 		"(k) before the reply the gold is already spent, the button looks the same (no …) and a second tap sends nothing", "gold=%d text=%s" % [Economy.gold_tenths, _recruit.one_button.text])
 	var shown := await _wait_until(func(): return _recruit.is_showing_results(), 15.0)
 	var got: String = _recruit.cards[0].hero_id if shown and _recruit.cards.size() == 1 else ""
-	_check(shown and Net.requested.get("/v1/gacha", 0) == g0 + 1 and Economy.server_gold_tenths == gold0 - 30000 and Economy.gold_tenths == gold0 - 30000
+	_check(shown and Net.requested.get("/v1/gacha", 0) == g0 + 1 and Economy.server_gold_tenths == gold0 - cost * 10 and Economy.gold_tenths == gold0 - cost * 10
 		and _copies() == copies0 + 1 and got != "" and int(Economy.heroes.get(got, 0)) >= 1,
-		"(k) one /v1/gacha: server gold -3000 (30000 tenths), one more hero, one result card",
+		"(k) one /v1/gacha: server gold -1 recruit cost, one more hero, one result card",
 		"requests=%d gold=%d->%d copies=%d->%d card=%s" % [Net.requested.get("/v1/gacha", 0) - g0, gold0, Economy.server_gold_tenths, copies0, _copies(), got])
 	_recruit.close()
 
-	await _request("POST", "/v1/test/grant_gold", {"amount": 3000})  # 개정 23: 1회 3,000 — 판매 골드가 모자라도 (l)이 요청까지 간다
+	await _request("POST", "/v1/test/grant_gold", {"amount": cost})  # 1회 비용 — 판매 골드가 모자라도 (l)이 요청까지 간다
 	var live := Net.api_base
 	var notices := []
 	var on_notice := func(t): notices.append(t)
@@ -1573,13 +1575,14 @@ func _pulls(n: int, count: int, currency: String) -> Array:
 	return out
 
 
-## (r23) 서버 골드 모집 레벨업: grant_gold로 골드 → 10연차 3번(요청 3번) = 30회 → 서버 Lv 2(넘김은 서버 규칙 그대로), 골드 −90,000(10회 = 1회 × 10), 알림·시그널.
+## (r23) 서버 골드 모집 레벨업: grant_gold로 골드 → 10연차 3번(요청 3번) = 30회 → 서버 Lv 2(넘김은 서버 규칙 그대로), 골드 −(Lv 1 10회 비용 × 3), 알림·시그널.
 ## 다이아: grant_diamonds 16,000 → 1회 + 10연차 5번 = 51회(−13,800). 결과 순서로 센 천장 = 서버 dia_pity, 50회 안에 SSR이 한 장 이상(천장).
 ## 재접속: 앱의 다이아·모집 상태를 비우고 토큰을 틀리게 해 다시 로그인 → /v1/player가 서버 값을 그대로 돌려준다(상단 다이아 칩도).
 ## phase 2 맨 끝에 돈다 — 모집이 영웅·조각을 늘려 phase 1·2의 영웅 복원 검사(서버 모집 한 장)를 흔들지 않게.
 func _recruit23_online() -> void:
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
-	await _request("POST", "/v1/test/grant_gold", {"amount": 90000})
+	var spend: int = GameData.gacha_cost(GameData.GACHA_GOLD, 10, 1) * 3  # Lv 1 10회 × 3(2026-10-07부터 1회 10,000)
+	await _request("POST", "/v1/test/grant_gold", {"amount": spend})
 	var gold0: int = Economy.server_gold_tenths
 	var st0: Dictionary = Economy.gacha_state()
 	var want: Dictionary = GameData.gacha_level_up(st0.gold_level, st0.gold_pulls, 30)
@@ -1595,10 +1598,10 @@ func _recruit23_online() -> void:
 	Economy.gacha_leveled.disconnect(on_up)
 	var r := await _request("GET", "/v1/player")
 	var server: Dictionary = r.get("player", {}).get("gacha", {})
-	_check(st0.gold_level == 1 and gold_cards.size() == 30 and Net.requested.get("/v1/gacha", 0) == g0 + 3 and Economy.server_gold_tenths == gold0 - 900000
+	_check(st0.gold_level == 1 and gold_cards.size() == 30 and Net.requested.get("/v1/gacha", 0) == g0 + 3 and Economy.server_gold_tenths == gold0 - spend * 10
 		and want.level == 2 and server.get("gold_level") == 2 and int(server.get("gold_pulls", -1)) == want.pulls and Economy.gacha_state().gold_level == 2
 		and Economy.gacha_gold_pulls == want.pulls and ups == [2] and notes.any(func(t): return t.begins_with("골드 모집 Lv 2!")),
-		"(r23) server gold recruit: three 10-pulls (30 cards, -90,000 gold) level the server up to Lv 2 with the carry-over; notice and signal",
+		"(r23) server gold recruit: three 10-pulls (30 cards, -3 Lv 1 ten-pull costs) level the server up to Lv 2 with the carry-over; notice and signal",
 		"cards=%d gold %d -> %d server=%s app=%s ups=%s notes=%s" % [gold_cards.size(), gold0, Economy.server_gold_tenths, server, Economy.gacha_state(), ups, notes])
 	await _request("POST", "/v1/test/grant_diamonds", {"amount": 16000})
 	var dia0: int = Economy.diamonds

@@ -144,6 +144,7 @@ func _init() -> void:
 	test_missions()
 	test_shop()
 	test_iap()
+	test_gacha_odds()
 	test_sfx()
 	test_follow_cam()
 	test_portrait_focus()
@@ -5477,3 +5478,22 @@ func test_sfx() -> void:
 	Sfx.play("click")  # 오토로드 없이(-s)는 아무 일도 없다
 	Sfx.at("hit", Vector3.ZERO)
 
+
+
+## 모집 확률 안내(gacha_odds.gd): 영웅별 확률 = 등급 확률 / 그 등급 영웅 수(서버 rollGacha와 같은 식), 합 = 1, 확률 값은 그대로.
+func test_gacha_odds() -> void:
+	var Odds := preload("res://scripts/gacha_odds.gd")
+	for cur in [GameData.GACHA_DIA, GameData.GACHA_GOLD]:
+		for tav in [1, 5]:
+			var rates := GameData.gacha_rates(cur, 3, tav)
+			var odds: Array = Odds.hero_odds(rates)
+			var sum := 0.0
+			var ok := odds.size() == GameData.heroes().size()
+			for o in odds:
+				sum += float(o.p)
+				var n := GameData.heroes().filter(func(h): return h.grade == o.grade).size()
+				var gp: float = rates.ssr if o.grade == "SSR" else (rates.sr if o.grade == "SR" else 1.0 - rates.ssr - rates.sr)
+				ok = ok and is_equal_approx(float(o.p), gp / n)
+			check(ok and is_equal_approx(sum, 1.0), "gacha odds: every hero listed, each = grade rate / grade size, sum 1 (%s, tavern %d)" % [cur, tav])
+	var dia: Array = Odds.hero_odds(GameData.gacha_rates(GameData.GACHA_DIA, 1, 1))
+	check(Odds.pct(float(dia[0].p)) == "0.5000%" and dia[0].grade == "SSR", "gacha odds: a diamond SSR hero shows 0.5000%% (8%% / 16)")
