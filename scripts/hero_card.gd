@@ -29,6 +29,7 @@ const LONG_PRESS_MS := 500
 const SHIMMER_SPEED := 4.0
 const STAR_COLOR := Color("F2B233")
 const HIGHLIGHT := Color("F9B233")
+const CHECK_COLOR := Color("34B556")  # 고른 카드(checked): 초록 — SSR 금색 테두리·호박색 highlight와 헷갈리지 않게
 const UP_COLOR := Color(0.2, 0.72, 0.3)  # 레벨업 가능 ▲
 const BURST_SEC := 0.5
 const BURST_SHARDS := 14
@@ -72,6 +73,7 @@ var badge := ""  # 아래 줄 글자("NEW"). 비면 별
 var stars := 0
 var corner := ""  # 왼위 작은 글자(슬롯 번호)
 var highlight := false  # 고른 슬롯·카드: 호박색 테두리
+var checked := false  # 고른 카드(던전 도우미·출전 편성, 빌려줄 영웅): 초록 굵은 테두리 + 오른위 체크 배지(_draw_check_band·_badge)
 var empty_text := "빈 칸"
 var level := 0  # > 0이면 "Lv N"
 var power := 0  # > 0이면 "전투력 N"
@@ -246,6 +248,8 @@ func _draw() -> void:
 			var wr := portrait_rect()
 			draw_texture_rect_region(tex, wr, bust_region(tex.get_size(), wr.size))
 			draw_polyline(_win_edge, Color(UiKit.GRADE_COLORS[h.grade]).darkened(0.35), 1.5, true)
+		if checked:  # 초록 띠는 등급 보석·별 아래에(등급이 계속 보이게)
+			_draw_check_band()
 		RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _top, _top_cols)
 		for l in _lines:
 			draw_polyline(l[0], UiKit.OUTLINE, l[1], true)
@@ -274,6 +278,10 @@ func _draw() -> void:
 		draw_string(FONT, Vector2(9, 22), corner, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.INK)
 	if highlight:
 		_outline(r.grow(1.0), HIGHLIGHT, 5.0)
+	if checked:
+		if h.is_empty():
+			_draw_check_band()
+		_draw_check_badge()
 
 
 func _name_size() -> int:
@@ -593,6 +601,48 @@ func _draw_burst() -> void:
 		var col := (HIGHLIGHT if i % 2 == 0 else Color.WHITE)
 		col.a = 1.0 - t
 		draw_colored_polygon(PackedVector2Array([p + dir * r, p + dir.orthogonal() * r * 0.5, p - dir.orthogonal() * r * 0.5]), col)
+
+
+## 고른 카드 표시(2026-10-12 사용자 "입장권 던전에서 친구 유닛을 선택할때 체크해서 가시성 좋게"): 카드 테두리 안쪽에 초록 띠
+## (바깥에 진한 선 — 스크롤 칸이 잘라도 보이게 rect 안에 그린다. 등급 보석·별은 그 위) + 오른위 둥근 초록 배지(그림자·진한 외곽선)에
+## 흰 체크(다각형, 진한 외곽선).
+func _draw_check_band() -> void:
+	var r := Rect2(Vector2.ZERO, size)
+	var edge := LowpolyBox.edge_color(CHECK_COLOR)
+	_outline(r.grow(-3.5), CHECK_COLOR, 7.0)
+	_outline(r.grow(-0.75), edge, 1.5)
+	_outline(r.grow(-7.0), Color(edge, 0.7), 1.0)
+
+
+func _draw_check_badge() -> void:
+	var edge := LowpolyBox.edge_color(CHECK_COLOR)
+	var br := check_badge_rect()
+	var c := br.get_center()
+	var rad := br.size.x * 0.5
+	draw_colored_polygon(_ngon(c + Vector2(0, 2.5), rad, 12), Color(0, 0, 0, 0.28))
+	var disc := _ngon(c, rad, 12)
+	draw_colored_polygon(disc, CHECK_COLOR)
+	draw_colored_polygon(_ngon(c + Vector2(0, -rad * 0.08), rad * 0.82, 12), CHECK_COLOR.lightened(0.12))
+	disc.append(disc[0])
+	draw_polyline(disc, edge, 2.0, true)
+	var mark := PackedVector2Array([c + Vector2(-0.48, 0.0) * rad, c + Vector2(-0.12, 0.36) * rad, c + Vector2(0.5, -0.34) * rad])
+	for poly in Geometry2D.offset_polyline(mark, rad * 0.15, Geometry2D.JOIN_MITER, Geometry2D.END_SQUARE):
+		draw_colored_polygon(poly, Color.WHITE)
+		poly.append(poly[0])
+		draw_polyline(poly, edge, 1.2, true)
+
+
+## 체크 배지 자리(오른위, 카드 폭에 맞춘 크기 — 위 가운데 등급 보석·왼위 "Lv N"과 겹치지 않는다).
+func check_badge_rect() -> Rect2:
+	var d := clampf(size.x * 0.28, 26.0, 40.0)
+	return Rect2(size.x - d - 7.0, 7.0, d, d)
+
+
+static func _ngon(c: Vector2, rad: float, n: int) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in n:
+		pts.append(c + Vector2.from_angle(TAU * i / n - PI / 2.0) * rad)
+	return pts
 
 
 func _outline(r: Rect2, color: Color, width: float) -> void:

@@ -1,4 +1,4 @@
-// 영웅 레벨업(개정 11 §2.1·§2.2): 비용 표(1.16^(L−1) 반올림, 골드만 — 개정 12), count 합계, 최대 레벨(승급 반영 — 개정 15), 404·409·400, 응답 형식, 로그.
+// 영웅 레벨업(개정 11 §2.1·§2.2): 비용 표(1.16^(L−1) × 1.0007^((L−1)²) 반올림, 골드만 — 개정 12), count 합계, 최대 레벨(승급 반영 — 개정 15), 404·409·400, 응답 형식, 로그.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as R from '../src/rules.ts'
@@ -26,32 +26,32 @@ const setHero = (id: string, hero: string, promotion: number, level: number) =>
 const levelup = (token: string, body: unknown) => S.req('POST', '/v1/hero/levelup', { token, body })
 const logs = async (id: string) => S.db.query("select detail from economy_log where player_id = $1 and kind = 'levelup' order by id", [id])
 
-test('비용 표: 골드 = round(등급 값 × 1.16^(L−1)), 식량 없음. count는 합계. 최대 레벨 = 20 + 10 × 승급(승급 5에서 70)', () => {
+test('비용 표: 골드 = round(등급 값 × 1.16^(L−1) × 1.0007^((L−1)²)), 식량 없음. count는 합계. 최대 레벨 = 20 + 10 × 승급(승급 5에서 70)', () => {
   const one = (g: string, l: number) => R.levelupCost(g, l, 1, CFG)
-  assert.deepEqual([1, 2, 3, 4, 5, 10, 19, 20].map((l) => one('R', l).gold), [30, 35, 40, 47, 54, 114, 434, 503])
-  assert.deepEqual([1, 2, 3, 10, 19].map((l) => one('SR', l).gold), [60, 70, 81, 228, 868])
-  assert.deepEqual([1, 2, 3, 10, 19, 69].map((l) => one('SSR', l).gold), [120, 139, 161, 456, 1736, 2899509])
-  assert.deepEqual(R.levelupCost('R', 1, 5, CFG), { gold: 30 + 35 + 40 + 47 + 54 })
-  assert.deepEqual(R.levelupCost('SSR', 1, 19, CFG), { gold: 11830 })
+  assert.deepEqual([1, 2, 3, 4, 5, 10, 19, 20].map((l) => one('R', l).gold), [30, 35, 40, 47, 55, 121, 544, 648])
+  assert.deepEqual([1, 2, 3, 10, 19].map((l) => one('SR', l).gold), [60, 70, 81, 241, 1089])
+  assert.deepEqual([1, 2, 3, 10, 19, 69].map((l) => one('SSR', l).gold), [120, 139, 162, 483, 2177, 73715212])
+  assert.deepEqual(R.levelupCost('R', 1, 5, CFG), { gold: 30 + 35 + 40 + 47 + 55 })
+  assert.deepEqual(R.levelupCost('SSR', 1, 19, CFG), { gold: 13535 })
   assert.deepEqual([0, 1, 2, 5].map((p) => R.heroMaxLevel(p, CFG)), [20, 30, 40, 70])
 })
 
 test('레벨업 1회·3회: 골드(tenths × 10)만 정확히 빼고(식량은 그대로) 레벨이 오른다. 응답 = 플레이어 응답 + level, heroes {copies, level, shards, promotion}, 로그', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setState(id, 2005, 200) // 200.5골드, 식량 200(안 줄어야 한다)
+  await setState(id, 5005, 200) // 500.5골드, 식량 200(안 줄어야 한다)
   let r = await levelup(token, { hero_id: 'hans', count: 1 })
   assert.equal(r.status, 200)
   assert.equal(r.json.level, 2)
-  assert.deepEqual([r.json.player.gold_tenths, r.json.player.res.food, r.json.player.heroes.hans], [2005 - 300, 200, { copies: 1, level: 2, shards: 0, promotion: 0 }])
+  assert.deepEqual([r.json.player.gold_tenths, r.json.player.res.food, r.json.player.heroes.hans], [5005 - 600, 200, { copies: 1, level: 2, shards: 0, promotion: 0 }])
   assert.deepEqual(r.json.player.heroes.ella, { copies: 1, level: 1, shards: 0, promotion: 0 })
-  r = await levelup(token, { hero_id: 'hans', count: 3 }) // 2→5: 35 + 40 + 47 골드
-  assert.deepEqual([r.status, r.json.level, r.json.player.gold_tenths, r.json.player.res.food], [200, 5, 1705 - 1220, 200])
+  r = await levelup(token, { hero_id: 'hans', count: 3 }) // 2→5: 70 + 81 + 94 골드(실제 config: R 60)
+  assert.deepEqual([r.status, r.json.level, r.json.player.gold_tenths, r.json.player.res.food], [200, 5, 4405 - 2450, 200])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.heroes.hans, p.gold_tenths, p.res.food], [{ copies: 1, level: 5, shards: 0, promotion: 0 }, 485, 200])
+  assert.deepEqual([p.heroes.hans, p.gold_tenths, p.res.food], [{ copies: 1, level: 5, shards: 0, promotion: 0 }, 1955, 200])
   const l = await logs(id)
   assert.equal(l.length, 2)
-  assert.deepEqual(l[1].detail, { hero_id: 'hans', from: 2, to: 5, count: 3, gold: 122, gold_tenths: -1220 })
+  assert.deepEqual(l[1].detail, { hero_id: 'hans', from: 2, to: 5, count: 3, gold: 245, gold_tenths: -2450 })
 })
 
 test('최대 레벨: 승급 0은 20까지(넘으면 409 max_level), 승급이 오르면 상한도 오른다(승급 1 → 30)', async () => {
@@ -75,19 +75,19 @@ test('식량이 0이어도 골드만 있으면 레벨업된다(개정 12)', asyn
   const { token, id } = await S.login()
   await setState(id, 1000, 0)
   const r = await levelup(token, { hero_id: 'hans', count: 1 })
-  assert.deepEqual([r.status, r.json.level, r.json.player.gold_tenths, r.json.player.res.food ?? 0], [200, 2, 700, 0])
+  assert.deepEqual([r.status, r.json.level, r.json.player.gold_tenths, r.json.player.res.food ?? 0], [200, 2, 400, 0])
 })
 
 test('골드가 모자라면 409 not_enough_gold이고(식량이 아무리 많아도) 아무것도 안 바뀐다. 보유하지 않은 영웅은 404, 형이 틀리면 400', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setState(id, 299, 1000) // 29.9골드 < 30
+  await setState(id, 599, 1000) // 59.9골드 < 60
   let r = await levelup(token, { hero_id: 'hans', count: 1 })
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_gold'])
-  await setState(id, 300 + 339, 0) // 3회분 골드가 없다(30 + 35 + 40 = 105 > 63.9)
+  await setState(id, 2109, 0) // 3회분 골드가 없다(60 + 70 + 81 = 211 > 210.9)
   assert.deepEqual((await levelup(token, { hero_id: 'hans', count: 3 })).json.error, 'not_enough_gold')
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.gold_tenths, p.res.food, p.heroes.hans], [639, 0, { copies: 1, level: 1, shards: 0, promotion: 0 }])
+  assert.deepEqual([p.gold_tenths, p.res.food, p.heroes.hans], [2109, 0, { copies: 1, level: 1, shards: 0, promotion: 0 }])
   assert.equal((await logs(id)).length, 0)
   for (const hero of ['arteon', 'ghost', '__proto__', 'constructor']) {
     r = await levelup(token, { hero_id: hero, count: 1 })

@@ -23,6 +23,7 @@ const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × �
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
 const TRAIN_N := 1  # 보병 훈련 미션 보상이 대는 마릿수(튜토리얼 훈련은 1마리씩, 5초 — Economy.tutorial_training)
 const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟수
+const HERO_LEVEL_GOLD := 206  # 그 보상의 기준 골드 = 2026-10-12 이전 R Lv 1→6 비용(그 뒤 레벨업 비용을 올려도 가이드 보상은 그대로 — 사용자 결정, 1-1 처치 골드로 모자란 만큼을 채운다)
 const KEYS := 2  # 던전 미션 보상 열쇠
 const RESEARCH_ID := "wood_tech"  # 연구 미션 보상이 대는 연구(1단계 아무 연구나 같은 비용)
 const START_BUILT := ["keep", "gate"]  # 새 게임에 지어져 있는 건물(성채 + 성벽·성문)
@@ -620,7 +621,7 @@ func need_of(i: int) -> Dictionary:
 			for id in GameData.config_list("starter_heroes"):
 				g = str(GameData.hero(str(id)).get("grade", "R"))
 				break
-			return {"gold": int(GameData.levelup_cost(g, 1, HERO_LEVELS).gold)}
+			return {"gold": HERO_LEVEL_GOLD}
 		"growth":
 			return {"gold": GameData.upgrade_cost("atk", 0)}
 		"dungeon":

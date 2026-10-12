@@ -65,9 +65,9 @@ skill3_unlock_star,5
 fx_shake,1
 hero_level_stat,0.042
 hero_level_stat_melee,0.0315
-levelup_gold_R,30
-levelup_gold_SR,60
-levelup_gold_SSR,120
+levelup_gold_R,60
+levelup_gold_SR,120
+levelup_gold_SSR,240
 fever_kills,2000
 fever_sec,180
 fever_spawn_mult,3

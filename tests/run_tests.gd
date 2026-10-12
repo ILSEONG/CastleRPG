@@ -1843,20 +1843,20 @@ func test_hero_levels() -> void:
 		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.169115 / 10.0 + 23.0 * 2.169115 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 126,
 		"power = round((HP / 10 + atk x 2 / interval) x grade): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
-	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [30, 35, 40, 47, 54, 114, 434, 503] and gold.call("SR", [1, 2, 3, 10, 19]) == [60, 70, 81, 228, 868] \
-		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [120, 139, 161, 456, 1736, 2899509], "gold cost table = round(base x 1.16^(L-1)), same as the server")
-	check(GameData.levelup_cost("R", 1, 5) == {"gold": 206} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 11830}, "cost is gold only (no food), count sums the levels")
+	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 70, 81, 94, 110, 241, 1089, 1296] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 139, 162, 483, 2177] \
+		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 279, 324, 966, 4354, 147430424], "gold cost table = round(base x 1.16^(L-1) x 1.0007^((L-1)^2)), same as the server")
+	check(GameData.levelup_cost("R", 1, 5) == {"gold": 415} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 27076}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)
 	var got := []
 	e.leveled.connect(func(id, l): got.append([id, l]))
-	e.gold_tenths = 2005
+	e.gold_tenths = 5005
 	e.res.food = 200
-	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 1705 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 300 tenths and no food")
-	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 485 and e.res.food == 200, "three levels at once take the summed cost")
+	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 4405 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 600 tenths and no food")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 1955 and e.res.food == 200, "three levels at once take the summed cost")
 	var notes := []
 	e.notice.connect(func(t): notes.append(t))
-	e.gold_tenths = 539  # 53.9골드 < 54
+	e.gold_tenths = 1099  # 109.9골드 < 110
 	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
 	e.gold_tenths = 100000
 	e.res.food = 0
@@ -2295,6 +2295,11 @@ func test_soldiers() -> void:
 	var owned := {"archer:1": 4, "infantry:1": 3, "cavalry:2": 1, "archer:2": 2, "cavalry:1": 5, "knight:1": 9}
 	check(EconomyScript.auto_deploy_for(owned, 6) == {"cavalry:2": 1, "archer:2": 2, "infantry:1": 3} and EconomyScript.auto_deploy_for(owned, 9) == {"cavalry:2": 1, "archer:2": 2, "infantry:1": 3, "cavalry:1": 3},
 		"auto deploy: higher tier first, the same tier infantry -> cavalry -> archer, up to the population: %s" % [EconomyScript.auto_deploy_for(owned, 9)])
+	var rg := {"r1": true, "r2": true, "r3": true}
+	check(EconomyScript.auto_hero_deploy_for(["m1", "r1", "m2", "r2", "m3", "r3", "m4", "x"], rg, 8) == ["m2", "m3", "m1", "m4", "r2", "r3", "r1", "x"]
+		and EconomyScript.auto_hero_deploy_for(["r1", "r2", "m1", "r3", "m2"], rg, 4) == ["r1", "r2", "m1", "r3"]
+		and EconomyScript.auto_hero_deploy_for(["m1", "r1", "m2"], rg, 8) == ["m2", "r1", "m1", null, null, null, null, null],
+		"hero auto deploy: top n by power, first lap melee (gate) / second lap ranged (wall), strongest to the south gate first, other kind when short")
 	check(EconomyScript.trim_deploy({"infantry:1": 5, "archer:1": 2, "cavalry:2": 1}, {"infantry:1": 3, "archer:1": 2}) == {"infantry:1": 3, "archer:1": 2}, "trim_deploy cuts the deploy to what is owned")
 	# 훈련(개정 16, 오프라인)
 	var now := 1.8e9
