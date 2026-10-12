@@ -72,7 +72,7 @@ func _ready() -> void:
 	_panel.claim_button.pressed.emit()
 	_check(await _wait_until(func(): return not _panel.claiming, 10.0), "day 28 answered", "")
 	_check(Economy.heroes.has("arteon"), "day 28 gives Arteon", str(Economy.heroes.keys()))
-	_check(_panel.claim_button.text == "모두 받았어요", "all done", _panel.claim_button.text)
+	_check(_panel.claim_button.text == "모두 받았습니다", "all done", _panel.claim_button.text)
 	await _frames(10)
 	await _snap()  # 6. 끝
 	_sheet()

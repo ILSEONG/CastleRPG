@@ -3,7 +3,7 @@ extends "res://scripts/ui_window.gd"
 ## 정산 수수료 10%: 산 사람은 올린 값을 내고, 판 사람은 90%(내림)를 받는다. 판매는 48시간(지나면 장비가 보관함으로 돌아온다), 동시에 10개까지.
 ## 탭 [구매][판매 등록][내 판매]:
 ## - 구매: 통화(골드·다이아)·부위·등급·정렬(낮은 가격·높은 가격·최신) 순환 버튼 + 남의 판매 줄(장비 칸·이름·능력치 = 보관함과 같은 글자,
-##   판매자·남은 시간, 값, [구매]). [구매] → 확인 창 → 서버가 정한다(버튼은 그대로, 결과가 오면 알림 — 이미 팔렸으면 "이미 팔린 장비예요").
+##   판매자·남은 시간, 값, [구매]). [구매] → 확인 창 → 서버가 정한다(버튼은 그대로, 결과가 오면 알림 — 이미 팔렸으면 "이미 팔린 장비입니다").
 ## - 판매 등록: 장착하지 않은 보관함 장비 줄을 눌러 고르고, 아래에서 통화·값을 정해 [등록](누르는 즉시 보관함에서 빠지고 내 판매에 들어간다 —
 ##   서버가 거절하면 되돌리고 알림). 받는 금액(수수료 뺀 값)을 바로 보여 준다.
 ## - 내 판매: 판매 중(남은 시간, [내리기] — 즉시 보관함으로) · 판매 완료(받을 금액). 위에 [대금 받기](즉시 반영). 받을 대금이 있으면 탭·메뉴에 빨간 점.
@@ -21,14 +21,14 @@ const FEE_PCT := 10  # 서버 market.ts FEE_PCT와 같다
 const MAX_ACTIVE := 10
 const PRICE_LIMITS := {"gold": [100, 1000000000], "diamonds": [10, 100000]}
 const FAIL_TEXT := {
-	"sold_out": "이미 팔린 장비예요", "own_listing": "내 판매는 살 수 없어요", "price_changed": "값이 바뀌었어요 — 목록을 새로 받았어요",
-	"bag_full": "보관함이 가득 찼어요", "not_enough_gold": "골드가 부족해요", "not_enough_diamonds": "다이아가 부족해요",
-	"too_many_listings": "판매는 동시에 10개까지예요", "equipped": "장착 중인 장비는 올릴 수 없어요",
-	"unknown_item": "보관함에 없는 장비예요", "bad_price": "값을 다시 정해 주세요", "already_sold": "이미 팔렸어요 — 대금을 받으세요",
-	"not_active": "이미 끝난 판매예요", "nothing_to_collect": "받을 대금이 없어요",
+	"sold_out": "이미 팔린 장비입니다", "own_listing": "내 판매는 살 수 없습니다", "price_changed": "값이 바뀌었습니다 — 목록을 새로 받았습니다",
+	"bag_full": "보관함이 가득 찼습니다", "not_enough_gold": "골드가 부족합니다", "not_enough_diamonds": "다이아가 부족합니다",
+	"too_many_listings": "판매는 동시에 10개까지입니다", "equipped": "장착 중인 장비는 올릴 수 없습니다",
+	"unknown_item": "보관함에 없는 장비입니다", "bad_price": "값을 다시 정해 주세요", "already_sold": "이미 팔렸습니다 — 대금을 받으세요",
+	"not_active": "이미 끝난 판매입니다", "nothing_to_collect": "받을 대금이 없습니다",
 }
-const FAIL_DEFAULT := "거래소 응답을 받지 못했어요 — 다시 확인할게요"
-const OFFLINE_TEXT := "거래소는 온라인에서 이용할 수 있어요"
+const FAIL_DEFAULT := "거래소 응답을 받지 못했습니다 — 다시 확인하겠습니다"
+const OFFLINE_TEXT := "거래소는 온라인에서 이용할 수 있습니다"
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const GOOD := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
@@ -331,7 +331,7 @@ func buy(listing: Dictionary) -> void:
 	Economy.net.send("POST", "/v1/market/buy", {"id": lid, "currency": cur, "price": price}, func(d: Dictionary):
 		Economy.apply_server(d)
 		var it := Economy._item_list([listing.get("item", {})])
-		Economy.notice.emit("구매 완료: %s — 보관함에 넣었어요" % (BagPanel.item_name(it[0]) if not it.is_empty() else "장비"))
+		Economy.notice.emit("구매 완료: %s — 보관함에 넣었습니다" % (BagPanel.item_name(it[0]) if not it.is_empty() else "장비"))
 		listings = listings.filter(func(l): return int(l.id) != lid)
 		_rebuild()
 		if visible and tab == "buy":
@@ -397,7 +397,7 @@ func _rebuild() -> void:
 
 
 func _build_buy() -> void:
-	head_label.text = "다른 성주가 올린 장비 · 사면 바로 보관함에 들어가요"
+	head_label.text = "다른 성주가 올린 장비 · 사면 바로 보관함에 들어갑니다"
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	var cb := _small("통화: " + CUR_NAMES[currency], func():
@@ -420,7 +420,7 @@ func _build_buy() -> void:
 	buttons["cur"] = cb
 	body.add_child(row)
 	if listings.is_empty():
-		body.add_child(_label("올라온 장비가 없어요", 24, SUB))
+		body.add_child(_label("올라온 장비가 없습니다", 24, SUB))
 		return
 	for l in listings:
 		var items := Economy._item_list([l.get("item", {})])
@@ -441,7 +441,7 @@ func _build_sell() -> void:
 	head_label.text = "판매 중 %d / %d · 판매 기간 48시간 · 정산 수수료 %d%%" % [n, MAX_ACTIVE, FEE_PCT]
 	var items := sellable_items()
 	if items.is_empty():
-		body.add_child(_label("올릴 수 있는 장비가 없어요 (장착 중인 장비는 올릴 수 없어요)", 22, SUB))
+		body.add_child(_label("올릴 수 있는 장비가 없습니다 (장착 중인 장비는 올릴 수 없습니다)", 22, SUB))
 	if picked != 0 and Economy.item(picked).is_empty():
 		picked = 0
 	for it in items:
@@ -518,7 +518,7 @@ func price_value() -> int:
 func _build_mine() -> void:
 	var mine: Array = Economy.market.get("mine", [])
 	var sum := collect_sum()
-	head_label.text = "판매 중 %d / %d · 팔리면 값의 %d%%를 받아요" % [active_count(), MAX_ACTIVE, 100 - FEE_PCT]
+	head_label.text = "판매 중 %d / %d · 팔리면 값의 %d%%를 받습니다" % [active_count(), MAX_ACTIVE, 100 - FEE_PCT]
 	if sum.gold > 0 or sum.diamonds > 0:
 		var parts := []
 		if sum.gold > 0:
@@ -550,7 +550,7 @@ func _build_mine() -> void:
 		body.add_child(_item_row(items[0], tail, -1.0 if sold else float(l.expires_at), price_text(str(l.currency), int(l.price)), action,
 			Color(0.86, 0.95, 0.86, 0.9) if sold else ROW_BG))
 	if shown == 0:
-		body.add_child(_label("판매 중인 장비가 없어요 — [판매 등록]에서 올려 보세요", 22, SUB))
+		body.add_child(_label("판매 중인 장비가 없습니다 — [판매 등록]에서 올려 보세요", 22, SUB))
 
 
 ## 장비 줄: 칸 + 이름(등급 색)·능력치 + 보조 글자(남은 시간) + 값 + 버튼.
@@ -640,5 +640,5 @@ func ask_buy(listing: Dictionary) -> void:
 	if items.is_empty():
 		return
 	_confirm_listing = listing
-	_confirm_label.text = "%s\n%s\n\n%s에 살까요?" % [BagPanel.item_name(items[0]), BagPanel.stat_text(items[0]), price_text(str(listing.currency), int(listing.price))]
+	_confirm_label.text = "%s\n%s\n\n%s에 구매하시겠습니까?" % [BagPanel.item_name(items[0]), BagPanel.stat_text(items[0]), price_text(str(listing.currency), int(listing.price))]
 	confirm.visible = true

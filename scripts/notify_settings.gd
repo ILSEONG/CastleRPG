@@ -51,4 +51,4 @@ func refresh() -> void:
 			if k is Control:
 				k.queue_redraw()
 	var blocked: bool = notify.plugin != null and not notify.plugin.has_permission()
-	section.text = "알림 (휴대폰 설정에서 꺼져 있어요)" if master_on and blocked else "알림"
+	section.text = "알림 (휴대폰 설정에서 꺼져 있습니다)" if master_on and blocked else "알림"

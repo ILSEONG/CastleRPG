@@ -10,7 +10,7 @@ extends "res://scripts/ui_window.gd"
 ## [PVP] 탭(2026-10-07, PVP 스레드): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
 ## PVP 화면의 [상점]도 이 탭으로 연다(pvp_view.open_shop).
 ## 그림(디자인 보강 6번): 상품·패키지·다이아 충전·PVP 상품 그림은 Meshy로 그린 아이콘(shop_art.gd), 파일이 없으면 예전 벡터 그림.
-const PVP_NOTE := "PVP 코인은 결투·총력전에서 얻어요 (승리 %d · 패배 %d)"
+const PVP_NOTE := "PVP 코인은 결투·총력전에서 얻습니다 (승리 %d · 패배 %d)"
 
 const IconsScript := preload("res://scripts/icons.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -552,8 +552,8 @@ func _build_pass() -> void:
 	var owned := Economy.has_pass("pass_growth")
 	var p := IapItems.find("pass_growth")
 	var side := [_label("구매함", 22, GIVE)] if owned else [_krw_button(p.id, int(p.krw))]
-	body.add_child(_wide("crown", "성장 패스", [["라운드를 깰 때마다 무료 보상, 패스가 있으면 유료 보상도 받아요", SUB],
-		["산 뒤에는 지난 단계 유료 보상도 받을 수 있어요", SUB]], side, FREE_BG if owned else CARD_BG))
+	body.add_child(_wide("crown", "성장 패스", [["라운드를 깰 때마다 무료 보상, 패스가 있으면 유료 보상도 받습니다", SUB],
+		["산 뒤에는 지난 단계 유료 보상도 받을 수 있습니다", SUB]], side, FREE_BG if owned else CARD_BG))
 	var c := cleared()
 	for i in IapItems.GROWTH.size():
 		var t: Dictionary = IapItems.GROWTH[i]

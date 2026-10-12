@@ -116,27 +116,27 @@ static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 		var b: Dictionary = state.get("build", {})
 		if not b.is_empty():
 			var name := str(GameData.building_def(str(b.id)).get("name", "건물"))
-			out.append(_n(ID_BUILD, float(b.finish), "건설 완료", "%s 공사가 끝났어요. 다음 공사를 시작해 보세요!" % name))
+			out.append(_n(ID_BUILD, float(b.finish), "건설 완료", "%s 공사가 끝났습니다. 다음 공사를 시작해 보세요!" % name))
 		var r: Dictionary = state.get("research", {})
 		if not r.is_empty():
 			var rname := str(GameData.research_def(str(r.id)).get("name", ""))
-			out.append(_n(ID_RESEARCH, float(r.finish), "연구 완료", ("%s 연구가 끝났어요." % rname) if rname != "" else "연구가 끝났어요."))
+			out.append(_n(ID_RESEARCH, float(r.finish), "연구 완료", ("%s 연구가 끝났습니다." % rname) if rname != "" else "연구가 끝났습니다."))
 		var t: Dictionary = state.get("train", {})
 		var ids := t.keys()
 		ids.sort()
 		for i in ids.size():
 			var q: Dictionary = t[ids[i]]
 			var sname := str(GameData.soldier(GameData.soldier_of_building(str(ids[i]))).get("name", "병사"))
-			out.append(_n(ID_TRAIN + i, float(q.finish), "훈련 완료", "%s %d명 훈련이 끝났어요. 병사를 데려가세요!" % [sname, int(q.get("count", 0))]))
+			out.append(_n(ID_TRAIN + i, float(q.finish), "훈련 완료", "%s %d마리 훈련이 끝났습니다. 병사를 데려가세요!" % [sname, int(q.get("count", 0))]))
 	if opts.get("notify_idle", true) and float(state.get("cap_min", 0.0)) > 0.0:
 		var hours := roundi(float(state.cap_min) / 60.0)
 		out.append(_n(ID_IDLE, now + float(state.cap_min) * 60.0, "방치 보상 가득",
-			"%d시간 동안 쌓인 방치 골드와 자원이 가득 찼어요. 더 쌓이지 않으니 받으러 오세요!" % hours))
+			"%d시간 동안 쌓인 방치 골드와 자원이 가득 찼습니다. 더 쌓이지 않으니 받으러 오세요!" % hours))
 	if opts.get("notify_daily", true):
 		var noon := kst_day_start(now) + DAILY_HOUR * 3600.0
 		if not (state.get("attend_open", false) and noon > now + 1800.0):
 			noon = kst_day_start(GameData.next_reset(now)) + DAILY_HOUR * 3600.0
-		out.append(_n(ID_DAILY, noon, "오늘의 출석 보상", "출석 보상과 새 일일 미션이 기다리고 있어요."))
+		out.append(_n(ID_DAILY, noon, "오늘의 출석 보상", "출석 보상과 새 일일 미션이 기다리고 있습니다."))
 	var keep := []
 	for n in out:
 		if float(n.at) < now + MIN_DELAY:
@@ -147,7 +147,7 @@ static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 	var war_at := float(state.get("war_at", -1.0))
 	# 공성전: 길드장이 정한 시각의 WAR_LEAD_SEC 전(사용자 10-12). 길드장이 고른 시각이라 야간에도 미루지 않는다.
 	if opts.get("notify_war", true) and war_at - WAR_LEAD_SEC >= now + MIN_DELAY:
-		keep.append(_n(ID_WAR, war_at - WAR_LEAD_SEC, "공성전 10분 전", "10분 뒤 길드 공성전이 시작돼요. 길드원과 함께 성을 공격할 준비를 하세요!"))
+		keep.append(_n(ID_WAR, war_at - WAR_LEAD_SEC, "공성전 10분 전", "10분 뒤 길드 공성전이 시작됩니다. 길드원과 함께 성을 공격할 준비를 하세요!"))
 	return keep
 
 

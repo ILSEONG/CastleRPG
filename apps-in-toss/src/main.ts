@@ -130,5 +130,5 @@ async function start() {
 
 start().catch((e) => {
   console.error(e)
-  loading.innerHTML = '<p style="margin-bottom:20vh;color:#fff;font:18px system-ui">게임을 불러오지 못했어요. 다시 열어 주세요.</p>'
+  loading.innerHTML = '<p style="margin-bottom:20vh;color:#fff;font:18px system-ui">게임을 불러오지 못했습니다. 다시 열어 주세요.</p>'
 })

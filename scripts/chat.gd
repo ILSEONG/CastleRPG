@@ -16,11 +16,11 @@ const IDLE_POLL_SEC := 20.0
 const CHANNELS := ["all", "guild"]
 const REFUSALS := {
 	"too_fast": "조금 천천히 보내 주세요",
-	"no_guild": "길드에 들어가야 길드 채팅을 쓸 수 있어요",
+	"no_guild": "길드에 들어가야 길드 채팅을 쓸 수 있습니다",
 	"empty": "보낼 내용을 적어 주세요",
-	"too_many": "오늘은 신고를 더 할 수 없어요",
-	"no_message": "이 메시지는 신고할 수 없어요",
-	"own_message": "내 메시지는 신고할 수 없어요",
+	"too_many": "오늘은 신고를 더 할 수 없습니다",
+	"no_message": "이 메시지는 신고할 수 없습니다",
+	"own_message": "내 메시지는 신고할 수 없습니다",
 }
 
 var messages := {"all": [], "guild": []}  # 채널 → [{id, name, text, at, me, local?}] (오래된 것부터)
@@ -149,7 +149,7 @@ func send(ch: String, raw: String) -> bool:
 	if text == "":
 		return false
 	if not online():
-		notice.emit("온라인에서만 채팅할 수 있어요")
+		notice.emit("온라인에서만 채팅할 수 있습니다")
 		return false
 	if ch == "guild" and not has_guild:
 		notice.emit(REFUSALS.no_guild)
@@ -179,7 +179,7 @@ func _on_sent(ch: String, lid: int, d: Dictionary) -> void:
 func _on_refused(ch: String, lid: int) -> void:
 	messages[ch] = messages[ch].filter(func(m): return int(m.id) != lid)
 	changed.emit()
-	notice.emit(REFUSALS.get(Net.last_error, "메시지를 보내지 못했어요"))
+	notice.emit(REFUSALS.get(Net.last_error, "메시지를 보내지 못했습니다"))
 
 
 ## 서버 clean과 같다: 줄바꿈·제어 문자 → 공백, 공백 하나로, 앞뒤 공백 지움, MAX_LEN 글자까지.
@@ -205,11 +205,11 @@ func report(id: int) -> void:
 		return
 	reported[id] = true
 	changed.emit()
-	notice.emit("신고했어요. 확인 후 조치할게요")
+	notice.emit("신고했습니다. 확인 후 조치하겠습니다")
 	Net.send("POST", "/v1/chat/report", {"id": id}, func(_d): pass, func():
 		reported.erase(id)
 		changed.emit()
-		notice.emit(REFUSALS.get(Net.last_error, "신고하지 못했어요")))
+		notice.emit(REFUSALS.get(Net.last_error, "신고하지 못했습니다")))
 
 
 ## 관리자: 신고 목록을 받는다.
