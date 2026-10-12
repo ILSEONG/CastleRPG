@@ -1,4 +1,4 @@
-// 실결제 확인(payments.ts + /v1/iap/purchase google·toss), 약관 페이지(legal.ts), 게스트 계정 연동(/v1/auth/link/*). 마이그레이션 039.
+// 실결제 확인(payments.ts + /v1/iap/purchase google·toss), 약관 페이지(legal.ts), 게스트 계정 연동(/v1/auth/link/*). 마이그레이션 040.
 import assert from 'node:assert/strict'
 import { createHash, generateKeyPairSync, randomBytes, createVerify } from 'node:crypto'
 import { test } from 'node:test'
