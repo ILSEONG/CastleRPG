@@ -145,3 +145,21 @@ test('표: id 유일, 보상 키는 퀘스트 보상 키, 목표 ≥ 1, 반복 �
   const others = M.DEFS.filter((d) => d.type === 'daily' && d.kind !== 'daily_count').length
   assert.ok(M.def('d_all')!.target <= others)
 })
+
+test('반복 미션 다이아·모집권 모집: 골드 모집은 세지 않는다(사용자 2026-10-12)', async () => {
+  S.clock.t = monday
+  const { token } = await S.login()
+  const count = async () => (await S.req('GET', '/v1/player', { token })).json.player.missions.c
+  await S.req('POST', '/v1/test/grant_gold', { token, body: { amount: 1_000_000 } })
+  await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 10_000 } })
+  assert.equal((await S.req('POST', '/v1/gacha', { token, body: { count: 10, currency: 'gold' } })).status, 200)
+  let c = await count()
+  assert.equal(c.d.gacha, 10) // 일일·주간 "영웅 모집"은 골드도 센다
+  assert.equal(c.d.gacha_dia ?? 0, 0)
+  assert.equal(c.r.r_gacha_dia, 0)
+  assert.equal((await S.req('POST', '/v1/gacha', { token, body: { count: 10, currency: 'diamond' } })).status, 200)
+  c = await count()
+  assert.equal(c.d.gacha, 20)
+  assert.equal(c.r.r_gacha_dia, 10)
+  assert.equal(M.def('r_gacha_dia')?.kind, 'gacha_dia')
+})

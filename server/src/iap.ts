@@ -52,6 +52,9 @@ export const PRODUCTS: Product[] = [
   { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 10, give: { diamonds: 1500, tickets: 10, pouch_gold_360: 3, pouch_res_360: 3 } },
   // 패스
   { id: 'pass_growth', kind: 'pass', name: '성장 패스', krw: 9900, give: {} },
+  // 광고 제거(영구, 사용자 2026-10-12 ₩5,500): 계정에 남는다(passes). 지금 게임에는 광고가 없어 구매 보너스 다이아를 함께 준다 —
+  // 보상형 광고가 생기면 광고 제거 계정은 광고 없이 그 보상을 바로 받는다(view.ad_free).
+  { id: 'no_ads', kind: 'pass', name: '광고 제거', krw: 5500, give: { diamonds: 300 } },
 ]
 
 // 성장 패스 단계: 라운드(GameData.round_label — 25라운드 = 1스테이지)를 깨면 받는다. free = 누구나, paid = 패스 구매자.
@@ -200,6 +203,9 @@ export function purchase(s: IapState, p: Product): { give: Reward; state: IapSta
 export const canClaimMonthly = (s: IapState, id: string) => monthlyLeft(s, id) > 0 && s.monthly[id].claimed !== s.day
 
 // 성장 패스 단계 받을 수 있는가: 그 라운드를 깼고(cleared = 깬 마지막 라운드), 아직 안 받았고, 유료는 패스가 있다.
+// 광고 제거를 샀다(보상형 광고를 보지 않고 바로 받는다).
+export const adFree = (s: IapState) => s.passes.includes('no_ads')
+
 export function canClaimGrowth(s: IapState, tier: number, track: 'free' | 'paid', cleared: number): boolean {
   const t = GROWTH[tier]
   if (!t || cleared < t.round || s.gp[track].includes(tier)) return false

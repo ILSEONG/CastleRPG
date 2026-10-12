@@ -56,7 +56,7 @@ func _rebuild() -> void:
 	_sig = sig
 	_clear_body()
 	if LiveOps.notices.is_empty():
-		body.add_child(_wrap("등록된 공지사항이 없어요" if Net.is_online() else "공지사항은 온라인에서만 볼 수 있어요", 26, SUB, HORIZONTAL_ALIGNMENT_CENTER))
+		body.add_child(_wrap("등록된 공지사항이 없습니다" if Net.is_online() else "공지사항은 온라인에서만 볼 수 있습니다", 26, SUB, HORIZONTAL_ALIGNMENT_CENTER))
 		return
 	var now := Economy.time_now()
 	for n in LiveOps.notices:

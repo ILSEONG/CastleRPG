@@ -6,4 +6,4 @@ const TERMS_URL := "https://castlerpg-api.onrender.com/legal/terms"  # 이용약
 const PRIVACY_URL := "https://castlerpg-api.onrender.com/legal/privacy"  # 개인정보처리방침
 const DELETION_URL := "https://castlerpg-api.onrender.com/legal/account-deletion"  # 계정 삭제 안내(Play Console "계정 삭제 요청 웹 주소"용 — 앱에서는 쓰지 않는다)
 const SUPPORT_EMAIL := ""  # 고객 문의 메일 주소
-const NOT_READY := "준비 중이에요. 곧 열립니다"
+const NOT_READY := "준비 중입니다. 곧 열립니다"

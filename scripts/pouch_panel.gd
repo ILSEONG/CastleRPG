@@ -12,9 +12,9 @@ const ROW_BG := Color(1, 1, 1, 0.75)
 const VALUE := Color(0.13, 0.50, 0.24)
 const CLOSE_PX := 56.0
 const ICON_PX := 72.0
-const EMPTY_TEXT := "주머니가 없어요\n출석 이벤트와 미션 보상으로 받을 수 있어요"
-const EMPTY_VALUE_TEXT := "자원 건물을 지은 뒤에 열 수 있어요"
-const HEAD_TEXT := "열면 지금 방치 수입 기준으로 적힌 시간만큼 받아요"
+const EMPTY_TEXT := "주머니가 없습니다\n출석 이벤트와 미션 보상으로 받을 수 있습니다"
+const EMPTY_VALUE_TEXT := "자원 건물을 지은 뒤에 열 수 있습니다"
+const HEAD_TEXT := "열면 지금 방치 수입 기준으로 적힌 시간만큼 받습니다"
 const GOLD_SACK := Color(0.80, 0.58, 0.26)
 const RES_SACK := Color(0.52, 0.62, 0.36)
 
@@ -103,7 +103,7 @@ func _on_opened(o: Dictionary) -> void:
 	Economy.notice.emit("%s%s: %s" % [name, (" %d개" % n) if n > 1 else "", value_text(int(o.get("gold_tenths", 0)), o.get("res", {}))])
 
 
-## "골드 +12,345" 또는 "목재 +300 · 석재 +150 · 식량 +300"(받을 것이 없으면 "받을 것이 없어요").
+## "골드 +12,345" 또는 "목재 +300 · 석재 +150 · 식량 +300"(받을 것이 없으면 "받을 것이 없습니다").
 static func value_text(gold_tenths: int, res: Dictionary) -> String:
 	var parts: Array = []
 	if gold_tenths > 0:
@@ -111,7 +111,7 @@ static func value_text(gold_tenths: int, res: Dictionary) -> String:
 	for k in [["wood", "목재"], ["stone", "석재"], ["food", "식량"]]:
 		if int(res.get(k[0], 0)) > 0:
 			parts.append("%s +%s" % [k[1], UiKit.commas(int(res[k[0]]))])
-	return " · ".join(parts) if not parts.is_empty() else "받을 것이 없어요"
+	return " · ".join(parts) if not parts.is_empty() else "받을 것이 없습니다"
 
 
 func _rebuild() -> void:

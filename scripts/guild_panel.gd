@@ -125,9 +125,9 @@ func _rebuild() -> void:
 		body.remove_child(c)
 		c.queue_free()
 	if Guild.online() and Guild.remote.is_empty():
-		_center_note("길드 정보를 불러오는 중입니다", "서버에 연결되면 바로 보여요")
+		_center_note("길드 정보를 불러오는 중입니다", "서버에 연결되면 바로 보입니다")
 	elif not Guild.is_unlocked():
-		_center_note("1-10 라운드를 클리어하면 길드가 열립니다", "길드에 가입하면 출석·기부 보상, 길드 버프, 길드 보스가 열려요")
+		_center_note("1-10 라운드를 클리어하면 길드가 열립니다", "길드에 가입하면 출석·기부 보상, 길드 버프, 길드 보스가 열립니다")
 	elif not Guild.joined():
 		_build_join()
 	else:
@@ -154,7 +154,7 @@ func _center_note(head: String, sub: String) -> void:
 # --- 미가입 ---
 
 func _build_join() -> void:
-	var intro := _label("길드에 가입하면 매일 출석·기부 보상과 영웅 능력치 버프, 길드 보스에 도전할 수 있어요.", 22, SUB)
+	var intro := _label("길드에 가입하면 매일 출석·기부 보상과 영웅 능력치 버프, 길드 보스에 도전할 수 있습니다.", 22, SUB)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(intro)
 	body.add_child(_coin_line())
@@ -205,7 +205,7 @@ func _create_card() -> Control:
 	var card := _card()
 	var v: VBoxContainer = card.get_child(0)
 	v.add_child(_label("길드 창설", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	var s := _label("직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어와요.", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	var s := _label("직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어옵니다.", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(s)
 	name_edit = LineEdit.new()
@@ -433,7 +433,7 @@ func _build_home() -> void:
 		if _leave_armed > 0.0:
 			_leave_armed = 0.0
 			Guild.leave()
-			Economy.notice.emit("길드를 탈퇴했습니다. 길드 코인은 그대로 남아요")
+			Economy.notice.emit("길드를 탈퇴했습니다. 길드 코인은 그대로 남습니다")
 		else:
 			_leave_armed = LEAVE_CONFIRM_SEC
 			_rebuild())
@@ -450,7 +450,7 @@ func _build_boss() -> void:
 	if not is_instance_valid(_dragon_box):
 		_dragon_box = dragon_view(Vector2(560, 300))
 	v.add_child(_dragon_box)
-	var desc := _label("하루 %d번 도전할 수 있어요. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수예요." % GuildScript.BOSS_TRIES, 18, SUB)
+	var desc := _label("하루 %d번 도전할 수 있습니다. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수입니다." % GuildScript.BOSS_TRIES, 18, SUB)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(desc)
 	var sc := HBoxContainer.new()
@@ -500,7 +500,7 @@ func _build_boss() -> void:
 		list.append([GuildScript.MY_NAME, float(Guild.me.boss_total), true])
 	list.sort_custom(func(a, b2): return a[1] > b2[1])
 	if list.is_empty():
-		rv.add_child(_label("아직 아무도 도전하지 않았어요", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+		rv.add_child(_label("아직 아무도 도전하지 않았습니다", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	for i in mini(list.size(), 10):
 		var r := HBoxContainer.new()
 		var c := HudScript.ACCENT.darkened(0.2) if list[i][2] else HudScript.INK

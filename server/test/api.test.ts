@@ -123,6 +123,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       shop: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {} }, // 상점
       iap: { first: [], n: {}, day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {}, monthly: {}, passes: [], gp: { free: [], paid: [] }, hot: null, hcool: {}, hs: 0 },
       iap_enabled: false, // 결제 상품
+      ad_free: false,
       iap_providers: [], iap_skus: { toss: {} }, account_tag: Pay.accountTag(id), // 실결제(결제 키 없음 → 닫힘)
       market_sold: 0, // 거래소
       admin: false, // 슈퍼관리자(Google 확인 이메일 ∈ admin_emails)
@@ -394,7 +395,7 @@ test('스테이지 클리어 최소 간격: waves × wave_size / kill_rate_cap�
   S.clock.t = T0 + 4.9
   r = await clear(1)
   assert.deepEqual([r.json.player.stage, r.json.cleared], [2, true])
-  S.clock.t += 5.9 // stage 2: 3 × 10 / 5 = 6초
+  S.clock.t += 4.7 // stage 2: 3 × 8 / 5 = 4.8초(라운드마다 72마리 고정)
   assert.equal((await clear(2)).json.cleared, false)
   S.clock.t += 0.2
   assert.equal((await clear(2)).json.player.stage, 3)
@@ -422,7 +423,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 24, atk: 4, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 10 })
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
-  assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.21, waves: 3, wave_size: 10, idle_interval: 8 })
+  assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.21, waves: 3, wave_size: 8, idle_interval: 8 })
   assert.equal(g.heroes.length, 36)
   assert.deepEqual([g.heroes[0].id, g.heroes[21].id], ['arteon', 'jack']) // 파일 순서
   assert.deepEqual([g.heroes[21].skill2, g.heroes[21].skill3], ['dodge', null]) // 개정 17: R은 스킬 2개

@@ -43,23 +43,23 @@ const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 const SAVE_INTERVAL := 10.0
 const TUTORIAL_TRAIN_SEC := 5.0  # 튜토리얼 훈련 1마리 시간(사용자 2026-10-06)
 const WAIT_TEXT := "연결 대기 중"
-const ROLLBACK_TEXT := "서버에서 처리되지 않아 되돌렸어요"
+const ROLLBACK_TEXT := "서버에서 처리되지 않아 되돌렸습니다"
 const OFFLINE_MIN_SEC := 60.0  # 오프라인 처치 골드: 이보다 짧게 떠났으면 없음(서버 rules.OFFLINE_MIN_SEC)
 const POUCH_KINDS := ["gold", "res"]  # 방치 주머니(서버 pouches.ts): 골드·자원
 const POUCH_MINUTES := [10, 30, 60, 120, 240, 360]
 const POUCH_PREFIX := "pouch_"  # 보상 표 키: pouch_<id>
-const POUCH_FAIL_TEXT := "주머니를 열지 못했어요 — 보유 수를 다시 확인합니다"
+const POUCH_FAIL_TEXT := "주머니를 열지 못했습니다 — 보유 수를 다시 확인합니다"
 const ShopItems := preload("res://scripts/shop_items.gd")
-const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸어요"
+const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸습니다"
 const IapItems := preload("res://scripts/iap_items.gd")
-const IAP_FAIL_TEXT := "보상을 받지 못해 되돌렸어요"
+const IAP_FAIL_TEXT := "보상을 받지 못해 되돌렸습니다"
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
 const NO_GOLD_TEXT := "골드가 부족합니다"
 const NO_DIA_TEXT := "다이아가 부족합니다"
 const NO_TICKET_TEXT := "다이아 모집권이 부족합니다"
-const QUEST_FAIL_TEXT := {"too_soon": "잠시 뒤에 다시 받아 주세요", "not_done": "아직 미션을 끝내지 않았어요", "stale": "이미 받은 보상이에요"}
-const QUEST_FAIL_DEFAULT := "보상을 받지 못했어요. 잠시 뒤에 다시 시도해 주세요"
+const QUEST_FAIL_TEXT := {"too_soon": "잠시 뒤에 다시 받아 주세요", "not_done": "아직 미션을 끝내지 않았습니다", "stale": "이미 받은 보상입니다"}
+const QUEST_FAIL_DEFAULT := "보상을 받지 못했습니다. 잠시 뒤에 다시 시도해 주세요"
 const GACHA_LEVEL_TEXT := "골드 모집 Lv %d! SSR %s%%"  # 레벨업 알림(개정 23)
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
@@ -220,6 +220,7 @@ var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 �
 
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
+var _gacha_cur := ""  # 응답 대기 중인 온라인 모집의 재화(미션 gacha_dia)
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
 var _key_predicts := {}  # 온라인 상점 입장권 즉시 반영: 요청 키 → {던전 종류: 열쇠 수}(응답 전 다른 서버 응답의 열쇠 위에 다시 얹는다)
 var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
@@ -650,6 +651,8 @@ func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
 	roster_changed.emit()
 	save()
 	gacha_done.emit(results)
+	if dia:  # 반복 미션 "다이아·모집권으로 모집"(골드 모집은 세지 않는다)
+		acted.emit("gacha_dia", results.size())
 	return true
 
 
@@ -1282,6 +1285,11 @@ func iap_can_buy(id: String) -> bool:
 ## 충전 상품 첫 구매(기본 다이아 2배)가 남았다.
 func iap_first_bonus(id: String) -> bool:
 	return not iap_view().first.has(id)
+
+
+## 광고 제거를 샀다(영구, 서버 iap.passes). 보상형 광고가 생기면 이 계정은 광고 없이 그 보상을 바로 받는다.
+func ad_free() -> bool:
+	return has_pass("no_ads")
 
 
 func has_pass(id: String) -> bool:
@@ -3343,6 +3351,7 @@ func _gacha_online(count: int, currency: String) -> bool:
 		notice.emit(WAIT_TEXT)
 		return false
 	_waiting["gacha"] = true
+	_gacha_cur = currency
 	net.flush_kills()
 	# 응답을 기다리지 않고 곧바로 재화를 뺀다(버튼은 그대로, "…" 없음 — 사용자 2026-10-06). 영웅은 응답 때, 거절되면 되돌린다
 	var cost := gacha_cost(currency, count)
@@ -3367,6 +3376,8 @@ func _on_gacha(data: Dictionary) -> void:
 				results.append({"hero_id": r.hero_id, "grade": GameData.hero(r.hero_id).grade, "new": r.get("new") == true,
 					"copies": int(r.copies) if _num(r.get("copies")) else 1, "shards": int(r.shards) if _num(r.get("shards")) else 0})
 	gacha_done.emit(results)
+	if _gacha_cur != GameData.GACHA_GOLD and results.size() > 0:  # 반복 미션 "다이아·모집권으로 모집"
+		acted.emit("gacha_dia", results.size())
 
 
 func _on_gacha_failed() -> void:

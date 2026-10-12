@@ -39,12 +39,12 @@ const DEFS := [
 	{"id": "r_sell", "type": "repeat", "kind": "sell", "title": "상인과 %d번 거래", "target": 10, "step": 5, "reward": {"gold": 5000}},
 	{"id": "r_hero", "type": "repeat", "kind": "hero_level", "title": "영웅 레벨업 %d회", "target": 20, "step": 10, "reward": {"gold": 5000}},
 	{"id": "r_growth", "type": "repeat", "kind": "growth", "title": "성장 강화 %d회", "target": 20, "step": 10, "reward": {"gold": 5000}},
-	{"id": "r_gacha", "type": "repeat", "kind": "gacha", "title": "영웅 %d회 모집", "target": 30, "step": 10, "reward": {"tickets": 1}},
+	{"id": "r_gacha_dia", "type": "repeat", "kind": "gacha_dia", "title": "다이아·모집권으로 영웅 %d회 모집", "target": 30, "step": 10, "reward": {"tickets": 1}},
 	{"id": "r_dungeon", "type": "repeat", "kind": "dungeon_win", "title": "던전 %d번 클리어", "target": 5, "step": 3, "reward": {"diamonds": 30}},
 ]
 ## 사건 → [바로가기] 대상(Tutorial.goto_requested 형식 — main이 처리한다). 없으면 버튼 없음.
 const GOTO := {"kill": "stage", "stage": "stage", "collect": "look:lumber", "sell": "merchant", "hero_level": "tab:hero", "growth": "tab:growth",
-	"gacha": "tab:recruit", "dungeon_win": "tab:dungeon", "guild_attend": "tab:guild", "guild_boss": "tab:guild", "build_up": "building:keep",
+	"gacha": "tab:recruit", "gacha_dia": "tab:recruit", "dungeon_win": "tab:dungeon", "guild_attend": "tab:guild", "guild_boss": "tab:guild", "build_up": "building:keep",
 	"research": "building:lab", "train": "building:barracks"}
 const FAIL_TEXT := {"claimed": "이미 받은 보상입니다", "not_done": "아직 완료하지 않았습니다", "too_soon": "잠시 뒤 다시 받아 주세요",
 	"stale": "진행 상황을 새로 받았습니다. 다시 눌러 주세요"}

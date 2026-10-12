@@ -191,7 +191,7 @@ func _build_promote_all_confirm() -> void:
 	col.add_theme_constant_override("separation", 18)
 	box.add_child(col)
 	col.add_child(_label("일괄 승급", 32))
-	col.add_child(_label("아래 영웅을 승급할까요?", 24, HudScript.INK.lightened(0.2)))
+	col.add_child(_label("아래 영웅을 승급하시겠습니까?", 24, HudScript.INK.lightened(0.2)))
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
