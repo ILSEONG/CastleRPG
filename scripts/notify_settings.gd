@@ -7,7 +7,7 @@ const ROWS := [
 	["notify_timer", "건설·훈련·연구 완료"],
 	["notify_idle", "방치 보상 가득"],
 	["notify_daily", "출석 알림"],
-	["notify_war", "공성전 시작"],
+	["notify_war", "공성전 10분 전"],
 	["notify_night", "야간 알림 (22시~8시)"],
 ]
 
@@ -51,4 +51,4 @@ func refresh() -> void:
 			if k is Control:
 				k.queue_redraw()
 	var blocked: bool = notify.plugin != null and not notify.plugin.has_permission()
-	section.text = "알림 (휴대폰 설정에서 꺼져 있어요)" if master_on and blocked else "알림"
+	section.text = "알림 (휴대폰 설정에서 꺼져 있습니다)" if master_on and blocked else "알림"

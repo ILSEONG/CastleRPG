@@ -20,6 +20,7 @@ const SceneSnap := preload("res://scripts/scene_snap.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
 const RecruitBanner := preload("res://scripts/recruit_banner.gd")
 const CardReveal := preload("res://scripts/card_reveal.gd")
+const GachaOdds := preload("res://scripts/gacha_odds.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
@@ -52,6 +53,8 @@ var rates_label: Label
 var dia_label: Label  # 다이아 보유
 var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
+var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
+var odds: Control  # 확률 안내 창
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
@@ -116,8 +119,17 @@ func _ready() -> void:
 	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
 	_dia_box.add_child(ticket_label)
 
+	var rates_row := HBoxContainer.new()
+	rates_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	rates_row.add_theme_constant_override("separation", 12)
+	_pick_view.add_child(rates_row)
 	rates_label = _label("", 26)
-	_pick_view.add_child(rates_label)
+	rates_row.add_child(rates_label)
+	odds_button = _button("확률 정보", UiKit.STEEL, 20)
+	odds_button.focus_mode = Control.FOCUS_NONE
+	odds_button.custom_minimum_size = Vector2(130, 44)
+	odds_button.pressed.connect(func(): odds.show_for(currency, Economy.gacha_state().gold_level, Economy.building_level(GameData.TAVERN)))
+	rates_row.add_child(odds_button)
 	one_button = _button("")
 	one_button.pressed.connect(_pull.bind(1))
 	_pick_view.add_child(one_button)
@@ -167,6 +179,8 @@ func _ready() -> void:
 	auto_box.toggled.connect(_on_auto_toggled)
 	_result_view.add_child(auto_box)
 	_build_shop_ask()
+	odds = GachaOdds.new()
+	add_child(odds)
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.gacha_done.connect(_on_gacha_done)
 	set_currency(GOLD)
@@ -191,7 +205,7 @@ func _build_shop_ask() -> void:
 	col.add_theme_constant_override("separation", 18)
 	box.add_child(col)
 	col.add_child(_label("다이아가 부족합니다", 32))
-	col.add_child(_label("다이아 상점으로 이동할까요?", 24, HudScript.INK.lightened(0.2)))
+	col.add_child(_label("다이아 상점으로 이동하시겠습니까?", 24, HudScript.INK.lightened(0.2)))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 24)

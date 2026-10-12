@@ -20,8 +20,8 @@ signal block_changed  # 점검·업데이트 안내가 생기거나 걷혔다
 const SEEN_KEY := "notice_seen"
 const KEY_NAMES := {"gold": "골드 던전 열쇠", "equip": "장비 던전 열쇠", "ticket": "모집권 던전 열쇠"}
 const MAIL_POLL_SEC := 300.0  # 창을 안 열어도 이만큼마다 우편을 다시 본다(관리자가 보낸 보상 빨간 점)
-const COUPON_TEXT := {"unknown_coupon": "없는 쿠폰 번호예요", "coupon_used": "이미 사용한 쿠폰이에요", "coupon_expired": "기간이 지난 쿠폰이에요",
-	"coupon_used_up": "선착순 수량이 모두 소진된 쿠폰이에요", "coupon_not_started": "아직 사용할 수 없는 쿠폰이에요"}
+const COUPON_TEXT := {"unknown_coupon": "없는 쿠폰 번호입니다", "coupon_used": "이미 사용한 쿠폰입니다", "coupon_expired": "기간이 지난 쿠폰입니다",
+	"coupon_used_up": "선착순 수량이 모두 소진된 쿠폰입니다", "coupon_not_started": "아직 사용할 수 없는 쿠폰입니다"}
 
 var notices: Array = []  # [{id, title, body, kind, pinned, at}]
 var mails: Array = []  # [{id, title, body, reward, at, expires}] — 받는 중인 것은 빠져 있다
@@ -119,7 +119,7 @@ func mail_count() -> int:
 ## 우편 받기(ids가 비면 전부). 곧바로 목록에서 빼고 보상을 보인다. 보냈으면 true.
 func claim(ids: Array = []) -> bool:
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 받을 수 있어요")
+		Economy.notice.emit("서버에 연결된 뒤 받을 수 있습니다")
 		return false
 	var take := mails.filter(func(m): return ids.is_empty() or ids.has(int(m.id)))
 	if take.is_empty():
@@ -131,7 +131,7 @@ func claim(ids: Array = []) -> bool:
 	mails = mails.filter(func(m): return not send_ids.has(int(m.id)))
 	Economy.predict_reward(key, sum_rewards(take))
 	var text := reward_text(sum_rewards(take))
-	Economy.notice.emit(("우편을 받았어요" if take.size() == 1 else "우편 %d개를 받았어요" % take.size()) + ("" if text == "" else ": " + text))
+	Economy.notice.emit(("우편을 받았습니다" if take.size() == 1 else "우편 %d개를 받았습니다" % take.size()) + ("" if text == "" else ": " + text))
 	changed.emit()
 	Net.send("POST", "/v1/mail/claim", {"ids": send_ids}, _on_claimed.bind(key), _on_claim_failed.bind(key), true, true)
 	return true
@@ -143,7 +143,7 @@ func _on_claimed(d: Dictionary, key: String) -> void:
 	Economy.apply_server(d)
 	var r = d.get("reward")
 	if r is Dictionary and r.get("items") is Array and not r.items.is_empty():
-		Economy.notice.emit("장비 %d개가 보관함에 들어갔어요" % r.items.size())
+		Economy.notice.emit("장비 %d개가 보관함에 들어갔습니다" % r.items.size())
 	changed.emit()
 
 
@@ -152,11 +152,11 @@ func _on_claim_failed(key: String) -> void:
 	claiming.erase(key)
 	Economy.unpredict(key)
 	if Net.last_error == "claimed":
-		Economy.notice.emit("이미 받았거나 기간이 지난 우편이에요")
+		Economy.notice.emit("이미 받았거나 기간이 지난 우편입니다")
 	else:
 		mails = back + mails  # 되돌린다
 		mails.sort_custom(func(a, b): return float(a.get("at", 0)) > float(b.get("at", 0)))
-		Economy.notice.emit("우편을 받지 못했어요. 잠시 뒤 다시 시도해 주세요")
+		Economy.notice.emit("우편을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요")
 	Net.refresh()
 	fetch_mail()
 	changed.emit()
@@ -169,7 +169,7 @@ func redeem(code: String, done: Callable) -> bool:
 		done.call(false, "쿠폰 번호를 확인해 주세요")
 		return false
 	if not Net.up or redeeming:
-		done.call(false, "서버에 연결된 뒤 사용할 수 있어요")
+		done.call(false, "서버에 연결된 뒤 사용할 수 있습니다")
 		return false
 	redeeming = true
 	Net.send("POST", "/v1/coupon", {"code": c}, func(d: Dictionary):
@@ -177,10 +177,10 @@ func redeem(code: String, done: Callable) -> bool:
 		Economy.apply_server(d)
 		var r = d.get("reward")
 		var text := reward_text(r) if r is Dictionary else ""
-		done.call(true, "쿠폰 보상을 받았어요" + ("" if text == "" else ": " + text)),
+		done.call(true, "쿠폰 보상을 받았습니다" + ("" if text == "" else ": " + text)),
 		func():
 			redeeming = false
-			done.call(false, COUPON_TEXT.get(Net.last_error, "쿠폰을 사용하지 못했어요. 잠시 뒤 다시 시도해 주세요")),
+			done.call(false, COUPON_TEXT.get(Net.last_error, "쿠폰을 사용하지 못했습니다. 잠시 뒤 다시 시도해 주세요")),
 		true, true)
 	return true
 
@@ -247,7 +247,7 @@ static func reward_text(r: Dictionary) -> String:
 func on_blocked(code: int, data: Dictionary) -> void:
 	var b := {}
 	if code == 426:
-		b = {"kind": "update", "text": "새 버전이 나왔어요. 업데이트 후 이용해 주세요.", "min_version": str(data.get("min_version", "")),
+		b = {"kind": "update", "text": "새 버전이 나왔습니다. 업데이트 후 이용해 주세요.", "min_version": str(data.get("min_version", "")),
 			"store_url": str(data.get("store_url", ""))}
 	else:
 		var until = data.get("until")

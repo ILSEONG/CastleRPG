@@ -7,13 +7,13 @@ extends CanvasLayer
 
 const INK := Color(0.16, 0.18, 0.24)
 const TIPS := [
-	"영웅을 탭한 뒤 성문·성벽을 탭하면 위치를 옮길 수 있어요",
+	"영웅을 탭한 뒤 성문·성벽을 탭하면 위치를 옮길 수 있습니다",
 	"궁병은 성벽 위, 보병은 성문 앞을 지킵니다",
 	"FEVER가 가득 차면 버튼을 눌러 보세요",
 	"같은 영웅 조각을 모아 승급하면 스킬이 열립니다",
 	"막사 레벨을 올리면 훈련이 빨라집니다",
-	"성문이 부서지면 몬스터가 성채를 직접 공격해요",
-	"성장 탭에서 골드로 공격력·체력을 올릴 수 있어요",
+	"성문이 부서지면 몬스터가 성채를 직접 공격합니다",
+	"성장 탭에서 골드로 공격력·체력을 올릴 수 있습니다",
 	"연구소에서 기술을 연구하면 영웅·병사·경제가 강해집니다",
 	"남는 재료는 상인에게 팔아 골드로 바꾸세요",
 	"스테이지가 끝나면 영웅이 시작 자리로 돌아옵니다",
@@ -438,7 +438,7 @@ func _build_fever_confirm() -> void:
 	col.add_theme_constant_override("separation", 24)
 	box.add_child(col)
 	var msg := Label.new()
-	msg.text = "FEVER 중입니다.\nFEVER를 끝내고 스테이지를 시작할까요?"
+	msg.text = "FEVER 중입니다.\nFEVER를 끝내고 스테이지를 시작하시겠습니까?"
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.add_theme_font_size_override("font_size", 28)
 	msg.add_theme_color_override("font_color", INK)

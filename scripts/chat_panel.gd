@@ -3,7 +3,7 @@ extends "res://scripts/ui_window.gd"
 ## 줄 = 닉네임 + 내용(내 줄은 노란 바탕). 아래 입력 칸(최대 100자) + [보내기]. 보내면 내 줄이 바로 보이고, 서버가 거절하면 지우고
 ## 입력 칸 위에 짧은 알림을 낸다(버튼 글자는 바뀌지 않는다). 상태·폴링은 오토로드 Chat(chat.gd).
 ## 휴대폰 키보드가 올라오면 창 아래 끝을 키보드 위로 올린다.
-## 신고(2026-10-07): 남의 줄을 누르면 "이 메시지를 신고할까요?" 확인 상자 → [신고]는 바로 "신고함" 표시 + 알림(거절되면 되돌림).
+## 신고(2026-10-07): 남의 줄을 누르면 "이 메시지를 신고하시겠습니까?" 확인 상자 → [신고]는 바로 "신고함" 표시 + 알림(거절되면 되돌림).
 ## 관리자(Economy.admin)는 [신고] 탭에서 신고 목록(신고한 사람 → 신고당한 사람, 메시지 원문, 그때 앞뒤 채팅)을 본다.
 
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
@@ -136,12 +136,12 @@ func _build_confirm() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 16)
 	confirm_box.add_child(v)
-	v.add_child(_label("이 메시지를 신고할까요?", 28))
+	v.add_child(_label("이 메시지를 신고하시겠습니까?", 28))
 	confirm_label = _label("", 22, SUB)
 	confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	confirm_label.custom_minimum_size = Vector2(470, 0)
 	v.add_child(confirm_label)
-	v.add_child(_label("신고한 사람, 신고된 사람, 당시 채팅 내용이 운영자에게 전달돼요", 18, SUB))
+	v.add_child(_label("신고한 사람, 신고된 사람, 당시 채팅 내용이 운영자에게 전달됩니다", 18, SUB))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
 	var no := _button("취소", UiKit.STEEL, 24)
@@ -262,10 +262,10 @@ func _rebuild() -> void:
 	for c in list.get_children():
 		c.queue_free()
 	if not Net.is_online():
-		list.add_child(_label("채팅은 서버에 접속했을 때 쓸 수 있어요", 24, SUB))
+		list.add_child(_label("채팅은 서버에 접속했을 때 쓸 수 있습니다", 24, SUB))
 		return
 	if xs.is_empty():
-		var empty := "아직 메시지가 없어요. 첫 인사를 남겨 보세요!" if tab == "all" else "길드원에게 첫 인사를 남겨 보세요!"
+		var empty := "아직 메시지가 없습니다. 첫 인사를 남겨 보세요!" if tab == "all" else "길드원에게 첫 인사를 남겨 보세요!"
 		list.add_child(_label(empty, 24, SUB))
 	if tab == "guild" and Chat.guild_name != "":
 		list.add_child(_label("길드 " + Chat.guild_name, 20, SUB))
@@ -318,7 +318,7 @@ func _rebuild_reports() -> void:
 	for c in list.get_children():
 		c.queue_free()
 	if Chat.reports.is_empty():
-		var msg := "신고를 불러오지 못했어요" if Chat.reports_state == "failed" else ("아직 신고가 없어요" if Chat.reports_state == "ok" else "불러오는 중")
+		var msg := "신고를 불러오지 못했습니다" if Chat.reports_state == "failed" else ("아직 신고가 없습니다" if Chat.reports_state == "ok" else "불러오는 중")
 		list.add_child(_label(msg, 24, SUB))
 		return
 	for r in Chat.reports:

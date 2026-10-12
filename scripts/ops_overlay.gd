@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## 점검·강제 업데이트 안내(2026-10-12, LiveOps가 만든다). 화면 전체를 덮어 뒤 화면 입력을 모두 막는다(로딩·로그인 화면 위에도).
 ## 점검: "서버 점검 중" + 관리자가 적은 안내 + 끝나는 예정 시각. 서버가 다시 답하면 LiveOps.on_ok가 걷는다(Net이 계속 다시 묻는다).
-## 업데이트: "업데이트가 필요해요" + [업데이트] — 스토어 주소(관리자가 정한 것, 없으면 Google Play 앱 페이지)를 연다. 웹(앱인토스)은 새로 고침.
+## 업데이트: "업데이트가 필요합니다" + [업데이트] — 스토어 주소(관리자가 정한 것, 없으면 Google Play 앱 페이지)를 연다. 웹(앱인토스)은 새로 고침.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -71,15 +71,15 @@ func _refresh() -> void:
 	if not visible:
 		return
 	var update := str(b.get("kind", "")) == "update"
-	title_label.text = "업데이트가 필요해요" if update else "서버 점검 중"
+	title_label.text = "업데이트가 필요합니다" if update else "서버 점검 중"
 	if update:
-		text_label.text = "새 버전이 나왔어요.\n업데이트한 뒤 이어서 플레이해 주세요."
+		text_label.text = "새 버전이 나왔습니다.\n업데이트한 뒤 이어서 플레이해 주세요."
 		time_label.text = "지금 버전 %s · 필요한 버전 %s 이상" % [LiveOps.app_version(), str(b.get("min_version", ""))]
 	else:
 		var t := str(b.get("text", ""))
-		text_label.text = t if t != "" else "더 좋은 게임을 위해 점검하고 있어요.\n잠시 뒤 다시 접속해 주세요."
+		text_label.text = t if t != "" else "더 좋은 게임을 위해 점검하고 있습니다.\n잠시 뒤 다시 접속해 주세요."
 		var until := float(b.get("until", 0.0))
-		time_label.text = ("점검 종료 예정 %s\n" % clock_text(until) if until > 0.0 else "") + "점검이 끝나면 자동으로 이어져요"
+		time_label.text = ("점검 종료 예정 %s\n" % clock_text(until) if until > 0.0 else "") + "점검이 끝나면 자동으로 이어집니다"
 	update_button.visible = update
 	panel.offset_left = 0
 	panel.offset_right = 0
