@@ -2406,13 +2406,54 @@ func dungeon_enemies(type: String, level: int) -> Array:
 
 ## 기본 편성: 보유 영웅 전투력(장비 포함) 상위 파티 인원만큼(같으면 표 순서).
 func default_party(type: String) -> Array:
+	return _heroes_by_power().slice(0, GameData.party_size(type))
+
+
+## 보유 영웅 id, 전투력(장비 포함) 높은 순(같으면 표 순서).
+func _heroes_by_power() -> Array:
 	var ids := heroes.keys().filter(func(id): return int(heroes[id]) >= 1 and not GameData.hero(id).is_empty())
 	var power := {}
 	for id in ids:
 		power[id] = GameData.hero_power(GameData.hero(id), level_of(id), promotion_of(id), equipment_bonus(id))
 	var order: Array = GameData.heroes().map(func(h): return h.id)
 	ids.sort_custom(func(a, b): return power[a] > power[b] or (power[a] == power[b] and order.find(a) < order.find(b)))
-	return ids.slice(0, GameData.party_size(type))
+	return ids
+
+
+## 영웅 자동 배치(적용하지 않는다 — 영웅 탭이 보여 주고 [적용]이 set_deploy): 슬롯 n칸에 전투력 상위 n명.
+func auto_hero_deploy(n: int) -> Array:
+	var ranked := _heroes_by_power()
+	var ranged := {}
+	for id in ranked:
+		ranged[id] = GameData.hero(id).role == "ranged"
+	return auto_hero_deploy_for(ranked, ranged, n)
+
+
+## 자동 배치 면 순서: 남문(면 2 — 라운드 보스가 나오는 쪽)부터, 그다음 북·동·서.
+const AUTO_HERO_SIDES := [2, 0, 1, 3]
+
+## 영웅 자동 배치(순수 함수). ranked = 전투력 높은 순 id, ranged = id → 원거리인가, n = 슬롯 수. 슬롯 i → 영웅 id 또는 null.
+## 슬롯 i의 영웅은 면 i % 4에 서고 근접은 성문 앞·원거리는 성벽 위(hero._place_default)라, 상위 n명을 고른 뒤
+## 첫 바퀴(슬롯 0~3)는 근접(성문을 막는 영웅), 둘째 바퀴는 원거리(성벽 위 사수), 셋째 바퀴는 다시 근접을 먼저 — 모자라면 다른 쪽.
+## 바퀴 안에서는 AUTO_HERO_SIDES 순으로 센 영웅부터 놓아 면마다 앞줄·뒷줄이 고르게 선다.
+static func auto_hero_deploy_for(ranked: Array, ranged: Dictionary, n: int) -> Array:
+	var top := ranked.slice(0, n)
+	var melee := top.filter(func(id): return not ranged.get(id, false))
+	var back := top.filter(func(id): return ranged.get(id, false))
+	var out := []
+	out.resize(n)
+	for r in ceili(n / 4.0):
+		var first: Array = back if r % 2 == 1 else melee
+		var second: Array = melee if r % 2 == 1 else back
+		for side in AUTO_HERO_SIDES:
+			var i: int = r * 4 + side
+			if i >= n:
+				continue
+			if not first.is_empty():
+				out[i] = first.pop_front()
+			elif not second.is_empty():
+				out[i] = second.pop_front()
+	return out
 
 
 ## 도전 못 하는 이유 코드(문구 DUNGEON_TEXT, 서버와 같은 순서). 되면 "".
