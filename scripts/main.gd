@@ -23,6 +23,7 @@ const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
+const GraphicsScript := preload("res://scripts/graphics.gd")
 const CastleScript := preload("res://scripts/castle.gd")
 const BuildingsScript := preload("res://scripts/buildings.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
@@ -86,6 +87,7 @@ var _tutorial_ui := {}  # 튜토리얼 [바로가기]가 여는 것: rig·buildi
 
 
 func _ready() -> void:
+	add_child(GraphicsScript.new())  # 그래픽 품질·프레임·절전 모드(설정 창 [화면])
 	_hook_3d_scaling()
 	GameState.roster = Economy  # 영웅 보유·배치·건물 레벨 공급자
 	if OS.is_debug_build() and not Net.is_online() and Net.arg_value("arena") != "":
@@ -402,13 +404,17 @@ func leave_dungeon() -> void:
 func _hook_3d_scaling() -> void:
 	var root := get_tree().root
 	root.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-	root.scaling_3d_scale = scale_3d_for(root.size.x)
-	Art.toon_view_height(root.size.y * root.scaling_3d_scale)  # 카툰 외곽선 두께(3D 픽셀)
+	apply_render_scale()
 	if not _scaling_hooked:
 		_scaling_hooked = true
-		root.size_changed.connect(func():
-			root.scaling_3d_scale = scale_3d_for(root.size.x)
-			Art.toon_view_height(root.size.y * root.scaling_3d_scale))
+		root.size_changed.connect(apply_render_scale)
+
+
+## 3D 배율 = 화면 폭 기준 배율 × 설정 그래픽 품질 배율(Graphics.render_factor). 카툰 외곽선 두께도 다시 맞춘다.
+func apply_render_scale() -> void:
+	var root := get_tree().root
+	root.scaling_3d_scale = scale_3d_for(root.size.x) * GraphicsScript.render_factor()
+	Art.toon_view_height(root.size.y * root.scaling_3d_scale)  # 카툰 외곽선 두께(3D 픽셀)
 
 
 ## 창 가로 픽셀 → 3D 배율(RENDER_3D_MIN..1).

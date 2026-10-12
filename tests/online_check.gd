@@ -646,8 +646,17 @@ func _phase4_session(state_path: String) -> void:
 		"(s2) a saved session logs in automatically without the login screen", "mode=%s logins=%d" % [Net.auth_mode, Net.logins])
 	_check(GameState.stage == int(saved.stage) and Economy.server_gold_tenths >= int(saved.gold_tenths), "(s2) same account as the Kakao login",
 		"stage=%d gold=%d" % [GameState.stage, Economy.server_gold_tenths])
-	Net.logout()
-	await get_tree().create_timer(1.0).timeout
+	var restarted := [false]  # 설정 창 [로그아웃 · 계정 전환](2026-10-12): 두 번 눌러 로그아웃 → 다시 연다
+	Net.restart = func(): restarted[0] = true
+	var sp = preload("res://scripts/settings_panel.gd").new()
+	add_child(sp)
+	sp._refresh()
+	_check(sp.logout_button.visible, "(s2) settings show [로그아웃 · 계정 전환]", "")
+	sp.press_logout()
+	_check(Net.has_credentials() and sp.logout_button.text.begins_with("한 번 더"), "(s2) the first logout press only asks to press again", sp.logout_button.text)
+	sp.press_logout()
+	await _wait_until(func(): return restarted[0], 10.0)
+	_check(restarted[0], "(s2) the second press logs out and restarts", "")
 	var auth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Net.auth_path))
 	var again := await _post_json("/v1/auth/session", {"session": old})
 	_check(not Net.has_credentials() and auth.mode == "" and auth.session == "" and again.get("error") == "bad_session",
@@ -692,6 +701,7 @@ func _phase7_toss() -> void:
 	var sp = preload("res://scripts/settings_panel.gd").new()
 	add_child(sp)
 	_check(sp.delete_button.visible and sp.login_label.text == "토스", "(t2) settings show the Toss login and [계정 삭제]", sp.login_label.text)
+	_check(not sp.logout_button.visible, "(t2) no logout in the Apps in Toss build (no login screen)", "")
 	sp.press_delete()
 	await _frames(2)
 	_check(Net.requested.get("/v1/account/delete", 0) == 0 and sp.delete_button.text.begins_with("한 번 더"), "(t2) the first press only asks to press again", sp.delete_button.text)

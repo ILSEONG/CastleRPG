@@ -12,3 +12,8 @@ server/.env.*
 !server/.env.example
 .superpowers/
 dev/meshy/out/
+android/build/
+android_plugins/*/build/
+android_plugins/*/.gradle/
+android_plugins/*/local.properties
+android/.build_version

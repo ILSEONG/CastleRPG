@@ -9,6 +9,7 @@ const Prefs := preload("res://scripts/prefs.gd")
 const SpawnerScript := preload("res://scripts/spawner.gd")
 const PreloaderScript := preload("res://scripts/preloader.gd")
 const TMP := "user://settings_check.json"
+const GraphicsScript := preload("res://scripts/graphics.gd")
 
 var _fails := 0
 var _main
@@ -103,6 +104,57 @@ func _run() -> void:
 	_check(int(w.volume_slider.value) == 70 and not w.shake_check.button_pressed and not w.numbers_check.button_pressed, "reopened window shows saved values", "")
 	w.shake_check.button_pressed = true
 	w.numbers_check.button_pressed = true
+
+	# 그래픽 품질·프레임·절전 모드(2026-10-12)
+	var g = GraphicsScript.current
+	_check(g != null, "graphics node exists", "")
+	var root := get_tree().root
+	var sun: DirectionalLight3D = null
+	for n in root.find_children("*", "DirectionalLight3D", true, false):
+		if n.shadow_enabled:
+			sun = n
+	_check(GraphicsScript.quality() == "high" and sun != null and Engine.max_fps == 60, "defaults: high quality, shadows on, 60 fps", str(Engine.max_fps))
+	var full := root.scaling_3d_scale
+	w.quality_buttons["low"].pressed.emit()
+	_check(GraphicsScript.quality() == "low" and _file().get("gfx_quality") == "low", "quality low saved", str(_file()))
+	_check(sun != null and not sun.shadow_enabled, "low turns off the sun shadow", "")
+	_check(absf(root.scaling_3d_scale - full * 0.65) < 0.01, "low lowers the 3D resolution", "%.2f vs %.2f" % [root.scaling_3d_scale, full])
+	var late := DirectionalLight3D.new()
+	late.shadow_enabled = true
+	add_child(late)
+	await _frames(2)
+	_check(not late.shadow_enabled, "a light added later (dungeon) also has no shadow", "")
+	w.quality_buttons["high"].pressed.emit()
+	_check(sun.shadow_enabled and late.shadow_enabled and absf(root.scaling_3d_scale - full) < 0.01, "high restores shadows and resolution", "")
+	late.queue_free()
+	w.fps_buttons[30].pressed.emit()
+	_check(Engine.max_fps == 30 and int(_file().get("gfx_fps", 0)) == 30, "30 fps applies and saves", str(Engine.max_fps))
+	w.fps_buttons[60].pressed.emit()
+	_check(Engine.max_fps == 60, "back to 60 fps", "")
+	w.saver_check.button_pressed = true
+	_check(GraphicsScript.saver_enabled() and _file().get("power_saver") == true, "power saver saves", "")
+	await get_tree().create_timer(0.5).timeout  # 창을 다시 연 직후 누름 보호(OPEN_GUARD_MS)가 끝나게
+	g._idle = GraphicsScript.SAVER_SEC
+	await _frames(2)
+	_check(g.saver_on and Engine.max_fps == GraphicsScript.SAVER_FPS and g._cover.visible, "idle 1 min: dims and drops fps", str(Engine.max_fps))
+	var tap := InputEventMouseButton.new()
+	tap.button_index = MOUSE_BUTTON_LEFT
+	tap.pressed = true
+	tap.position = Vector2(360, 640)
+	get_viewport().push_input(tap)
+	await _frames(3)
+	_check(not g.saver_on and Engine.max_fps == 60 and not g._cover.visible, "a tap wakes it", str(Engine.max_fps))
+	var up := tap.duplicate()
+	up.pressed = false
+	get_viewport().push_input(up)
+	w.saver_check.button_pressed = false
+	await _frames(2)
+
+	# 로그아웃·약관·문의(2026-10-12): 오프라인이면 로그아웃은 숨김, 주소가 비면 준비 중
+	_check(not w.logout_button.visible, "offline: no logout", "")
+	_check(w.terms_button.visible and w.privacy_button.visible and w.inquiry_button.visible, "terms, privacy, inquiry buttons shown", "")
+	var url: String = w.inquiry_url()
+	_check(url.begins_with("mailto:") and url.contains("subject=") and url.contains("body="), "inquiry mail link carries subject and player info", url.left(80))
 	var out := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
@@ -110,6 +162,10 @@ func _run() -> void:
 	if out != "":
 		await _frames(8)
 		get_viewport().get_texture().get_image().save_png(out)
+		var sc: ScrollContainer = w.body.get_parent().get_parent()
+		sc.scroll_vertical = 100000
+		await _frames(8)
+		get_viewport().get_texture().get_image().save_png(out.replace(".png", "_bottom.png"))
 		print("saved ", out)
 
 
