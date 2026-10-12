@@ -293,9 +293,9 @@ func _style_links(online: bool) -> void:
 	if account_link.message != "":
 		link_label.text = account_link.message
 	elif Net.auth_mode == "guest":
-		link_label.text = "게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없어요. 연결해 두면 진행이 그대로 남아요"
+		link_label.text = "게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없습니다. 연결해 두면 진행이 그대로 남습니다"
 	else:
-		link_label.text = "다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있어요"
+		link_label.text = "다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있습니다"
 
 
 ## 웹 주소를 브라우저로 연다. 비어 있으면 준비 중 알림.

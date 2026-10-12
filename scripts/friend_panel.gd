@@ -214,10 +214,10 @@ func _refresh() -> void:
 	_section(list, "받은 신청", f.get("incoming", []), func(p, row): _add_btn(row, "수락", HudScript.ACCENT, "accept", p.id); _add_btn(row, "거절", UiKit.STEEL, "remove", p.id))
 	var fr: Array = f.get("friends", [])
 	_section(list, "친구 %d / %d명" % [fr.size(), int(f.get("cap", 30))], fr, func(p, row): _add_btn(row, "삭제", UiKit.STEEL, "remove", p.id),
-		"아직 친구가 없어요. 친구 코드를 주고받거나 [친구 추가] 탭의 추천 성주에게 신청해 보세요.", used)
+		"아직 친구가 없습니다. 친구 코드를 주고받거나 [친구 추가] 탭의 추천 성주에게 신청해 보세요.", used)
 	_section(list, "보낸 신청", f.get("outgoing", []), func(p, row): _add_btn(row, "취소", UiKit.STEEL, "remove", p.id))
 	_section(rec_list, "", f.get("recommend", []), func(p, row): _add_btn(row, "신청", HudScript.ACCENT, "request", p.id),
-		"지금 추천할 성주가 없어요. 잠시 뒤 [새로고침]을 눌러 보세요.")
+		"지금 추천할 성주가 없습니다. 잠시 뒤 [새로고침]을 눌러 보세요.")
 	_fit()
 
 
@@ -275,7 +275,7 @@ func _section(into: VBoxContainer, title: String, people: Array, buttons: Callab
 		var sub := "%s Lv %d · 전투력 %d" % [GameData.hero(h.hero_id).get("name", h.hero_id), int(h.level), int(h.power)] if h is Dictionary else "영웅 없음"
 		info.add_child(_label(sub, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 		if used.has(p.id):
-			info.add_child(_label("오늘 함께했어요 · 내일 다시", 18, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
+			info.add_child(_label("오늘 함께했습니다 · 내일 다시", 18, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
 		buttons.call(p, row)
 
 

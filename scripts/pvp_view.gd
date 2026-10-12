@@ -89,7 +89,7 @@ func _build_home() -> void:
 	_home.add_child(_coin_row(func(l): _coin_label = l))
 	for m in PvpRules.MODES:
 		_home.add_child(_mode_card(m))
-	var note := _label("모드마다 하루 %d번 · 이기면 포인트와 PVP 코인, 지면 포인트가 조금 줄어요" % PvpRules.PLAYS, 20, HudScript.INK.lightened(0.3))
+	var note := _label("모드마다 하루 %d번 · 이기면 포인트와 PVP 코인, 지면 포인트가 조금 줄어듭니다" % PvpRules.PLAYS, 20, HudScript.INK.lightened(0.3))
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_home.add_child(note)
 
@@ -486,7 +486,7 @@ func refresh() -> void:
 		_p.opp_name.text = "상대 · %s" % str(o.get("name", ""))
 		var info := "%s %s점 · 전투력 %s" % [ot.name, UiKit.commas(int(o.get("points", 0))), UiKit.commas(int(o.get("power", 0)))]
 		if page == "total":
-			info += " · 병사 %d명" % PvpRules.soldier_count(o.get("soldiers", {}))
+			info += " · 병사 %d마리" % PvpRules.soldier_count(o.get("soldiers", {}))
 		_p.opp_info.text = info
 		_fill_row(_p.opp_row, o.get("heroes", []))
 	var tm: Array = team.get(page, [])
@@ -495,14 +495,14 @@ func refresh() -> void:
 	_fill_row(_p.team_row, tm)
 	var soldiers := Pvp.my_soldiers()
 	_p.team_info.text = "전투력 %s%s" % [UiKit.commas(Pvp.team_power(tm)),
-		(" · 병사 %d명 (보유 병사 중 높은 티어 %d명까지)" % [PvpRules.soldier_count(soldiers), PvpRules.SOLDIER_CAP]) if page == "total" else ""]
+		(" · 병사 %d마리 (보유 병사 중 높은 티어 %d마리까지)" % [PvpRules.soldier_count(soldiers), PvpRules.SOLDIER_CAP]) if page == "total" else ""]
 	var d := Pvp.defense(page)
 	_fill_row(_p.def_row, d)
 	if d.is_empty():
-		_p.def_info.text = "아직 방어팀이 없어요 — 처음 출전한 팀이 방어팀이 됩니다"
+		_p.def_info.text = "아직 방어팀이 없습니다 — 처음 출전한 팀이 방어팀이 됩니다"
 	else:
-		_p.def_info.text = "다른 성주가 이 팀과 싸워요 (AI가 대신 조종)%s" % \
-			(" · 방어 병사 %d명" % PvpRules.soldier_count(mv.get("soldiers", {})) if page == "total" else "")
+		_p.def_info.text = "다른 성주가 이 팀과 싸웁니다 (AI가 대신 조종)%s" % \
+			(" · 방어 병사 %d마리" % PvpRules.soldier_count(mv.get("soldiers", {})) if page == "total" else "")
 	var why := Pvp.start_block(page, tm)
 	_p.start.disabled = why != ""
 	_p.start.text = "전투 시작 (%d/%d)" % [Pvp.plays_left(page), PvpRules.PLAYS]

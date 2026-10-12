@@ -564,7 +564,7 @@ func _refresh_helpers() -> void:
 	if not keys.has(helper_id):
 		helper_id = ""
 	var friends := hs.any(func(h): return h.has("friend"))
-	helper_title.text = "함께할 친구 영웅 (친구마다 하루 한 번)" if friends else "추천 도우미 (함께할 친구가 없어 비슷한 전투력으로 골랐어요)"
+	helper_title.text = "함께할 친구 영웅 (친구마다 하루 한 번)" if friends else "추천 도우미 (함께할 친구가 없어 비슷한 전투력으로 골랐습니다)"
 	helper_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if keys != helper_cards.keys():
 		for c in _helper_row.get_children():

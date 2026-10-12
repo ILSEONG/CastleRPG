@@ -5078,7 +5078,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열려요" and t.reward(t.mission_index("dungeon_equip")) == {"keys_ticket": 2},
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")) == {"keys_ticket": 2},
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5097,8 +5097,8 @@ func test_tutorial() -> void:
 		blocks.append(before and not at and not t.build_locked(m.arg))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 16번째 미션 「주점 건설」에서 건설할 수 있어요"
-		and t.tab_lock_text("hero") == "가이드 9번째 미션 「영웅 레벨업」에서 열려요",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 16번째 미션 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 9번째 미션 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
 	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
@@ -5121,7 +5121,7 @@ func test_tutorial() -> void:
 	check(t.complete() and t.reward(t.step) == {"gold": 2000}, "guide: stat Lv 3 completes; filler pays its own gold")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열려요", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")

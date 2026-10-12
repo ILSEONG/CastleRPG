@@ -13,7 +13,7 @@ const REWARD := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
 const CLOSE_PX := 56.0
 const HEAD := {"daily": "매일 00:00에 초기화", "weekly": "매주 월요일 00:00에 초기화",
-	"repeat": "받을 때마다 목표가 커지고 계속 받을 수 있어요"}
+	"repeat": "받을 때마다 목표가 커지고 계속 받을 수 있습니다"}
 
 var tab := "daily"
 var body: VBoxContainer

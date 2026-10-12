@@ -58,7 +58,7 @@ func fetch() -> void:
 	if Net.up:
 		Net.send("GET", "/v1/admin/ops", null, func(d: Dictionary):
 			ops = d
-			_rebuild(), func(): Economy.notice.emit("운영 정보를 받지 못했어요(관리자만 쓸 수 있어요)"))
+			_rebuild(), func(): Economy.notice.emit("운영 정보를 받지 못했습니다(관리자만 쓸 수 있습니다)"))
 
 
 func _process(delta: float) -> void:
@@ -114,7 +114,7 @@ func _build_status() -> void:
 	var m: Dictionary = st.get("maintenance", {})
 	var on := bool(m.get("on", false))
 	var v := _card(Color(1.0, 0.90, 0.88, 0.95) if on else Color(1, 1, 1, 0.85))
-	v.add_child(_label("점검 모드: " + ("켜짐 — 관리자 말고는 접속이 막혀 있어요" if on else "꺼짐"), 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(_label("점검 모드: " + ("켜짐 — 관리자 말고는 접속이 막혀 있습니다" if on else "꺼짐"), 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	f.mt_text = line_edit("안내 문구(비우면 기본 문구)", 300)
 	f.mt_text.text = str(m.get("text", ""))
 	v.add_child(f.mt_text)
@@ -126,7 +126,7 @@ func _build_status() -> void:
 	b.pressed.connect(func():
 		if on:
 			_save_status({"maintenance": false})
-		elif _confirm("mt_on", b, "한 번 더 누르면 점검을 시작해요"):
+		elif _confirm("mt_on", b, "한 번 더 누르면 점검을 시작합니다"):
 			_save_status(_maint_body(true)))
 	v.add_child(b)
 	buttons["maintenance"] = b
@@ -137,7 +137,7 @@ func _build_status() -> void:
 
 	var w := _card()
 	w.add_child(_label("강제 업데이트", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	w.add_child(_wrap("이 버전보다 낮은 앱은 접속하면 업데이트 안내만 보여요. 지금 이 앱 버전: %s" % LiveOps.app_version(), 22, SUB))
+	w.add_child(_wrap("이 버전보다 낮은 앱은 접속하면 업데이트 안내만 보입니다. 지금 이 앱 버전: %s" % LiveOps.app_version(), 22, SUB))
 	f.min_version = line_edit("최소 버전(예: 0.2.2, 비우면 끔)", 20)
 	f.min_version.text = str(st.get("min_version", ""))
 	w.add_child(f.min_version)
@@ -161,7 +161,7 @@ func _maint_body(on: bool) -> Dictionary:
 
 
 func _save_status(d: Dictionary) -> void:
-	_post("/v1/admin/status", d, "저장했어요")
+	_post("/v1/admin/status", d, "저장했습니다")
 
 
 # --- 공지 ---
@@ -195,7 +195,7 @@ func _build_notice() -> void:
 		if editing_notice:
 			d.id = editing_notice
 		editing_notice = 0
-		_post("/v1/admin/notice", d, "공지를 저장했어요", func(): LiveOps.fetch_notices()))
+		_post("/v1/admin/notice", d, "공지를 저장했습니다", func(): LiveOps.fetch_notices()))
 	v.add_child(b)
 	buttons["notice_save"] = b
 	for n in ops.get("notices", []):
@@ -215,7 +215,7 @@ func _build_notice() -> void:
 		var nn: Dictionary = n
 		h.pressed.connect(func():
 			_post("/v1/admin/notice", {"id": id, "title": str(nn.title), "body": str(nn.get("body", "")), "kind": str(nn.get("kind", "notice")),
-				"pinned": bool(nn.get("pinned", false)), "hidden": not bool(nn.get("hidden", false))}, "바꿨어요", func(): LiveOps.fetch_notices()))
+				"pinned": bool(nn.get("pinned", false)), "hidden": not bool(nn.get("hidden", false))}, "바꿨습니다", func(): LiveOps.fetch_notices()))
 		r.add_child(h)
 		c.add_child(r)
 
@@ -260,7 +260,7 @@ func _build_mail() -> void:
 			var id := int(m.id)
 			d.pressed.connect(func():
 				if _confirm("mail_del:%d" % id, d, "확인"):
-					_post("/v1/admin/mail/delete", {"id": id}, "우편을 회수했어요(아직 안 받은 사람만)"))
+					_post("/v1/admin/mail/delete", {"id": id}, "우편을 회수했습니다(아직 안 받은 사람만)"))
 			r.add_child(d)
 		c.add_child(r)
 
@@ -272,9 +272,9 @@ func send_mail() -> void:
 	var days: String = f.m_days.text.strip_edges()
 	if days.is_valid_int():
 		d.expires_days = int(days)
-	if to.to_lower() == "all" and not _confirm("mail_send", f.m_send, "한 번 더 누르면 모두에게 보내요"):
+	if to.to_lower() == "all" and not _confirm("mail_send", f.m_send, "한 번 더 누르면 모두에게 보냅니다"):
 		return
-	_post("/v1/admin/mail", d, "우편을 보냈어요")
+	_post("/v1/admin/mail", d, "우편을 보냈습니다")
 
 
 # --- 쿠폰 ---
@@ -303,10 +303,10 @@ func _build_coupon() -> void:
 		var days: String = f.c_days.text.strip_edges()
 		if days.is_valid_int() and int(days) > 0:
 			d.expires_at = Economy.time_now() + int(days) * 86400
-		_post("/v1/admin/coupon", d, "쿠폰을 만들었어요"))
+		_post("/v1/admin/coupon", d, "쿠폰을 만들었습니다"))
 	v.add_child(b)
 	buttons["coupon_make"] = b
-	v.add_child(_wrap("한 계정은 한 쿠폰을 한 번만 쓸 수 있어요. 플레이어는 설정 → [쿠폰 입력]에서 써요.", 20, SUB))
+	v.add_child(_wrap("한 계정은 한 쿠폰을 한 번만 쓸 수 있습니다. 플레이어는 설정 → [쿠폰 입력]에서 씁니다.", 20, SUB))
 	for cp in ops.get("coupons", []):
 		var c := _card(Color(0.92, 0.92, 0.92, 0.85) if cp.get("disabled", false) else Color(1, 1, 1, 0.85))
 		var r := HBoxContainer.new()
@@ -320,7 +320,7 @@ func _build_coupon() -> void:
 		t.custom_minimum_size = Vector2(84, 48)
 		var code := str(cp.code)
 		var off := not bool(cp.get("disabled", false))
-		t.pressed.connect(func(): _post("/v1/admin/coupon/disable", {"code": code, "disabled": off}, "바꿨어요"))
+		t.pressed.connect(func(): _post("/v1/admin/coupon/disable", {"code": code, "disabled": off}, "바꿨습니다"))
 		r.add_child(t)
 		c.add_child(r)
 
@@ -393,7 +393,7 @@ func _post(path: String, d: Dictionary, ok_text: String, after := Callable()) ->
 		if after.is_valid():
 			after.call()
 		fetch(),
-		func(): Economy.notice.emit("실패했어요: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음")))
+		func(): Economy.notice.emit("실패했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음")))
 
 
 func _text_edit(placeholder: String) -> TextEdit:

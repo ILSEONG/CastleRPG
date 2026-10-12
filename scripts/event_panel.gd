@@ -27,7 +27,7 @@ const DONE_INK := Color(0.30, 0.62, 0.32)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const TICKET := Color(0.61, 0.42, 0.84)  # 다이아 모집권(SR 보라)
 const KEY_NAMES := {"gold": "골드 던전 열쇠", "equip": "장비 던전 열쇠", "ticket": "모집권 던전 열쇠"}
-const FAIL_TEXT := {"claimed": "오늘은 이미 받았어요", "finished": "모든 출석 보상을 받았어요", "stale": "출석 정보가 바뀌었어요. 다시 열어 주세요"}
+const FAIL_TEXT := {"claimed": "오늘은 이미 받았습니다", "finished": "모든 출석 보상을 받았습니다", "stale": "출석 정보가 바뀌었습니다. 다시 열어 주세요"}
 
 var data := {}  # 서버 응답 {n, days, can_claim, next_reset, rewards}
 var loading := false
@@ -132,7 +132,7 @@ func claim() -> void:
 	data.n = day
 	data.can_claim = false
 	selected = day - 1
-	Economy.notice.emit("%d일차 출석 보상을 받았어요!" % day)
+	Economy.notice.emit("%d일차 출석 보상을 받았습니다!" % day)
 	Net.send("POST", "/v1/attendance/claim", {"day": day}, _on_claimed.bind(key), _on_claim_failed.bind(key, day), true, true)
 	_rebuild()
 
@@ -150,7 +150,7 @@ func _on_claim_failed(key: String, day: int) -> void:
 	if claimed_n() == day:
 		data.n = day - 1
 		data.can_claim = true
-	Economy.notice.emit(FAIL_TEXT.get(Net.last_error, "보상을 받지 못했어요. 잠시 뒤 다시 시도해 주세요"))
+	Economy.notice.emit(FAIL_TEXT.get(Net.last_error, "보상을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요"))
 	Net.refresh()
 	fetch()
 	_rebuild()
@@ -163,7 +163,7 @@ func _rebuild() -> void:
 	var rewards: Array = data.get("rewards", [])
 	if rewards.is_empty():
 		progress.text = ""
-		info.text = "온라인에서만 참여할 수 있어요" if not Net.is_online() else ("출석 정보를 불러오는 중…" if loading or not failed else "연결이 끊겨 불러오지 못했어요")
+		info.text = "온라인에서만 참여할 수 있습니다" if not Net.is_online() else ("출석 정보를 불러오는 중…" if loading or not failed else "연결이 끊겨 불러오지 못했습니다")
 		claim_button.disabled = true
 		claim_button.text = "오늘의 보상 받기"
 		_fit()
@@ -185,9 +185,9 @@ func _rebuild() -> void:
 			_update_info())
 		grid.add_child(b)
 		cells.append(b)
-	progress.text = "출석 %d / %d일 · 하루 한 번, 날짜가 이어지지 않아도 돼요" % [n, rewards.size()]
+	progress.text = "출석 %d / %d일 · 하루 한 번, 날짜가 이어지지 않아도 됩니다" % [n, rewards.size()]
 	if n >= rewards.size():
-		claim_button.text = "모두 받았어요"
+		claim_button.text = "모두 받았습니다"
 	elif can_claim():
 		claim_button.text = "%d일차 보상 받기" % (n + 1)
 	else:

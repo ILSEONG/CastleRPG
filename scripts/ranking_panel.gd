@@ -158,7 +158,7 @@ func _rebuild() -> void:
 	if d.is_empty():
 		var msg := "불러오는 중…"
 		if not Net.is_online():
-			msg = "랭킹은 서버에 접속했을 때 볼 수 있어요"
+			msg = "랭킹은 서버에 접속했을 때 볼 수 있습니다"
 		elif _failed.get(b, false):
 			msg = "랭킹을 불러오지 못했습니다\n잠시 뒤 다시 열어 주세요"
 		body.add_child(_spacer(40))
@@ -175,7 +175,7 @@ func _rebuild() -> void:
 	if me is Dictionary:
 		me_box.add_child(_row(me, b))
 	else:
-		var why := "길드에 가입하면 내 길드 순위가 보여요" if b == "guild" else ("전투력이 0이면 순위에 오르지 않아요" if b == "power" else "순위 없음")
+		var why := "길드에 가입하면 내 길드 순위가 보입니다" if b == "guild" else ("전투력이 0이면 순위에 오르지 않습니다" if b == "power" else "순위 없음")
 		var card := _card(ROW_BG)
 		card.get_child(0).add_child(_label(why, 22, SUB))
 		me_box.add_child(card)

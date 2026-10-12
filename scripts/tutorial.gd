@@ -44,15 +44,15 @@ const MISSIONS := [
 		"goto": "building:lumber"},
 	{"id": "build_quarry", "title": "채석장 건설", "desc": "채석장을 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
 	{"id": "build_farm", "title": "농장 건설", "desc": "농장을 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
-	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 막아 냅니다. 30마리를 처치하세요. 처치할 때마다 골드를 얻어요.",
+	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 막아 냅니다. 30마리를 처치하세요. 처치할 때마다 골드를 얻습니다.",
 		"kind": "kill", "arg": 30, "goto": "stage"},
 	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
-	{"id": "stage_1_1", "title": "스테이지 1-1 클리어", "desc": "위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있어요.",
+	{"id": "stage_1_1", "title": "스테이지 1-1 클리어", "desc": "위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있습니다.",
 		"kind": "stage", "arg": 1, "goto": "stage"},
 	{"id": "hero_level", "title": "영웅 레벨업", "desc": "[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.",
 		"kind": "hero_level", "goto": "tab:hero"},
-	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
 	{"id": "stage_1_2", "title": "스테이지 1-2 클리어", "desc": "전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.",
 		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
@@ -61,12 +61,12 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["atk", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
 	{"id": "hp_3", "title": "체력 Lv 3 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 3까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
-	{"id": "hero_lv4_8", "title": "영웅 4명 Lv 8 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 8 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_8", "title": "영웅 4명 Lv 8 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 8 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
 	{"id": "build_tavern", "title": "주점 건설", "desc": "주점을 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
 	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
 	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭 위쪽 배치 슬롯 하나를 누른 뒤, 새로 모집한 영웅을 골라 [적용]을 누르세요.", "kind": "deploy_new", "goto": "tab:hero"},
-	{"id": "hero_lv4_10", "title": "영웅 4명 Lv 10 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_10", "title": "영웅 4명 Lv 10 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_3", "title": "스테이지 1-3 클리어", "desc": "새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.", "kind": "stage", "arg": 3,
 		"goto": "stage"},
@@ -76,10 +76,10 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["hp", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
 	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "보병 막사를 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
 		"goto": "building:barracks"},
-	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1명 훈련을 시작하세요. 가이드에서는 5초면 끝나요.", "kind": "train",
+	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 가이드에서는 5초면 끝납니다.", "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
 	{"id": "build_houses", "title": "민가 건설", "desc": "민가를 지으세요. 인구만큼 병사를 배치할 수 있습니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
-	{"id": "hero_lv4_12", "title": "영웅 4명 Lv 12 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_12", "title": "영웅 4명 Lv 12 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_4", "title": "스테이지 1-4 클리어", "desc": "전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 4, "goto": "stage", "reward": {"diamonds": 100}},
@@ -92,18 +92,18 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["hp", 8], "goto": "tab:growth", "reward": {"gold": 4000}},
 	{"id": "dungeon_equip", "title": "장비 던전", "desc": "[던전] 탭에서 장비 던전 1단계를 클리어해 장비를 얻으세요.", "kind": "dungeon", "arg": "equip",
 		"goto": "tab:dungeon"},
-	{"id": "hero_lv4_14", "title": "영웅 4명 Lv 14 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 14 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_14", "title": "영웅 4명 Lv 14 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 14 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 14], "goto": "tab:hero", "reward": {"gold": 4000}},
 	{"id": "atk_10", "title": "공격력 Lv 10 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 10까지 올리세요.",
 		"kind": "growth_lv", "arg": ["atk", 10], "goto": "tab:growth", "reward": {"gold": 5000}},
-	{"id": "dungeon_ticket", "title": "모집권 던전", "desc": "[던전] 탭에서 모집권 던전 1단계를 클리어하세요. 내 영웅 4명과 친구(없으면 추천) 도우미 1명이 바위 골렘과 싸우고, 다이아 모집권을 얻어요.",
+	{"id": "dungeon_ticket", "title": "모집권 던전", "desc": "[던전] 탭에서 모집권 던전 1단계를 클리어하세요. 내 영웅 4명과 친구(없으면 추천) 도우미 1명이 바위 골렘과 싸우고, 다이아 모집권을 얻습니다.",
 		"kind": "dungeon", "arg": "ticket", "goto": "tab:dungeon"},
 	{"id": "equip", "title": "장비 장착", "desc": "[영웅] 탭에서 영웅을 골라 얻은 장비를 장착하세요.", "kind": "equip", "goto": "tab:hero"},
 	{"id": "hp_10", "title": "체력 Lv 10 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 10까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 10], "goto": "tab:growth", "reward": {"gold": 5000}},
-	{"id": "hero_lv4_15", "title": "영웅 4명 Lv 15 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 15 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_15", "title": "영웅 4명 Lv 15 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 15 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 15], "goto": "tab:hero", "reward": {"gold": 5000}},
-	{"id": "soldier_deploy", "title": "병사 배치", "desc": "훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5명을 합성하면 상위 티어가 됩니다.",
+	{"id": "soldier_deploy", "title": "병사 배치", "desc": "훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5마리를 합성하면 상위 티어가 됩니다.",
 		"kind": "soldier_deploy", "goto": "tab:soldier"},
 	{"id": "stage_1_5", "title": "스테이지 1-5 클리어", "desc": "병사와 함께 1-5까지 클리어하세요. 병사는 전투가 시작되면 성채 앞에 나타납니다.", "kind": "stage",
 		"arg": 5, "goto": "stage"},
@@ -116,7 +116,7 @@ const MISSIONS := [
 	{"id": "research", "title": "연구 시작", "desc": "연구소를 눌러 [연구]에서 아무 기술이나 연구를 시작하세요.", "kind": "research", "goto": "building:lab"},
 	{"id": "hp_12", "title": "체력 Lv 12 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 12까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 12], "goto": "tab:growth", "reward": {"gold": 6000}},
-	{"id": "hero_lv4_16", "title": "영웅 4명 Lv 16 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 16 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_16", "title": "영웅 4명 Lv 16 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 16 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 16], "goto": "tab:hero", "reward": {"gold": 6000}},
 	{"id": "stage_1_7", "title": "스테이지 1-7 클리어", "desc": "전투를 이어 가 1-7까지 클리어하세요. 막히면 모집권으로 영웅을 모집해 더 강한 영웅을 배치하고, 조각이 모이면 [영웅] 탭에서 승급하세요.",
 		"kind": "stage", "arg": 7, "goto": "stage", "reward": {"diamonds": 100}},
@@ -136,7 +136,7 @@ const MISSIONS := [
 		"kind": "level", "arg": ["farm", 2], "goto": "building:farm", "reward": {"diamonds": 100}},
 	{"id": "gate_2", "title": "성문 강화", "desc": "성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.", "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
 	{"id": "kill_300", "title": "몬스터 300마리 처치", "desc": "몬스터 300마리를 처치하세요. 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.", "kind": "kill", "arg": 300, "goto": "stage"},
-	{"id": "hero_lv4_18", "title": "영웅 4명 Lv 18 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_18", "title": "영웅 4명 Lv 18 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 18], "goto": "tab:hero", "reward": {"gold": 8000}},
 	{"id": "atk_16", "title": "공격력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 16까지 올리세요.",
 		"kind": "growth_lv", "arg": ["atk", 16], "goto": "tab:growth", "reward": {"gold": 8000}},
@@ -146,7 +146,7 @@ const MISSIONS := [
 		"goto": "tab:guild"},
 	{"id": "hp_16", "title": "체력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 16], "goto": "tab:growth", "reward": {"gold": 9000}},
-	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓여요.",
+	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
 	{"id": "stage_1_12", "title": "스테이지 1-12 클리어", "desc": "전투를 이어 가 1-12까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 12, "goto": "stage", "reward": {"diamonds": 100}},
@@ -458,19 +458,19 @@ func pvp_locked() -> bool:
 
 ## 잠긴 PVP 문구: "가이드 64번째 미션 「PVP 결투」에서 열려요".
 func pvp_lock_text() -> String:
-	return _lock_text(mission_index(PVP_MISSION), "열려요")
+	return _lock_text(mission_index(PVP_MISSION), "열립니다")
 
 
 ## 잠긴 던전 문구: "튜토리얼 20번째 미션 「장비 던전」에서 열려요".
 func dungeon_lock_text(type: String) -> String:
-	return _lock_text(mission_index(str(DUNGEON_MISSION.get(type, ""))), "열려요")
+	return _lock_text(mission_index(str(DUNGEON_MISSION.get(type, ""))), "열립니다")
 
 
 ## 잠긴 탭 문구: "튜토리얼 9번째 미션 「영웅 레벨업」에서 열려요".
 func tab_lock_text(tab_id: String) -> String:
 	if str(TAB_MISSION.get(tab_id, "-")) == "":
-		return "가이드를 마치면 열려요"
-	return _lock_text(mission_index(str(TAB_MISSION.get(tab_id, ""))), "열려요")
+		return "가이드를 마치면 열립니다"
+	return _lock_text(mission_index(str(TAB_MISSION.get(tab_id, ""))), "열립니다")
 
 
 ## 공터를 그 건설 미션 전에 지으려 하는가(사용자 2026-10-06: 건물 첫 건축은 튜토리얼 미션에서만). 이미 지은 건물·튜토리얼 밖은 false.
@@ -493,7 +493,7 @@ func build_mission_index(id: String) -> int:
 
 ## 잠긴 공터 문구: "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요".
 func build_lock_text(id: String) -> String:
-	return _lock_text(build_mission_index(id), "건설할 수 있어요")
+	return _lock_text(build_mission_index(id), "건설할 수 있습니다")
 
 
 ## 슈퍼관리자(Economy.admin, 서버가 정한다): 기능 잠금이 모두 열린다.

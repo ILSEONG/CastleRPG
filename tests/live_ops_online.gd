@@ -118,11 +118,11 @@ func _ready() -> void:
 	coupon.input.text = _code
 	coupon.use()
 	await _wait_until(func(): return not LiveOps.redeeming, 10.0)
-	_check(coupon.result_label.text == "이미 사용한 쿠폰이에요", "second use refused", coupon.result_label.text)
+	_check(coupon.result_label.text == "이미 사용한 쿠폰입니다", "second use refused", coupon.result_label.text)
 	coupon.input.text = "NOPE1234"
 	coupon.use()
 	await _wait_until(func(): return not LiveOps.redeeming, 10.0)
-	_check(coupon.result_label.text == "없는 쿠폰 번호예요", "unknown code refused", coupon.result_label.text)
+	_check(coupon.result_label.text == "없는 쿠폰 번호입니다", "unknown code refused", coupon.result_label.text)
 	await _snap("06_coupon_bad")
 	coupon.close()
 

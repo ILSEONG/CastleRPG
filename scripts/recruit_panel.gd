@@ -205,7 +205,7 @@ func _build_shop_ask() -> void:
 	col.add_theme_constant_override("separation", 18)
 	box.add_child(col)
 	col.add_child(_label("다이아가 부족합니다", 32))
-	col.add_child(_label("다이아 상점으로 이동할까요?", 24, HudScript.INK.lightened(0.2)))
+	col.add_child(_label("다이아 상점으로 이동하시겠습니까?", 24, HudScript.INK.lightened(0.2)))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 24)
