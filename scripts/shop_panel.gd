@@ -34,6 +34,7 @@ const SOLD_TEXT := "매진"
 const FREE_TEXT := "무료"
 const SHORT_TEXT := {"diamonds": "다이아가 부족합니다", "gold": "골드가 부족합니다"}
 const PILE := [Vector2(0, 0), Vector2(-26, 14), Vector2(26, 14), Vector2(0, 26), Vector2(-14, -18), Vector2(14, -18)]  # 보석 더미 자리(가운데 기준)
+const PASS_COL := Color(0.55, 0.30, 0.70)  # 성장 패스 유료 칸 글자
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const CARD_BG := Color(1, 1, 1, 0.78)
 const FREE_BG := Color(0.99, 0.90, 0.62, 0.92)
@@ -559,6 +560,7 @@ func _build_pass() -> void:
 	body.add_child(_wide("crown", "성장 패스", [["라운드를 깰 때마다 무료 보상, 패스가 있으면 유료 보상도 받습니다", SUB],
 		["산 뒤에는 지난 단계 유료 보상도 받을 수 있습니다", SUB]], side, FREE_BG if owned else CARD_BG))
 	var c := cleared()
+	body.add_child(_pass_head())
 	for i in IapItems.GROWTH.size():
 		var t: Dictionary = IapItems.GROWTH[i]
 		var card := PanelContainer.new()
@@ -575,11 +577,28 @@ func _build_pass() -> void:
 		body.add_child(card)
 
 
+## 성장 패스 표 머리줄(사용자 2026-10-12): 단계 칸 · [무료] · [패스] — 칸마다 "무료 ·"/"패스 ·"를 붙이지 않는다. 열 너비는 아래 줄과 같다.
+func _pass_head() -> Control:
+	var head := PanelContainer.new()
+	head.add_theme_stylebox_override("panel", UiKit.panel(Color(0.30, 0.34, 0.46, 0.92), 10.0, 8))
+	var r := HBoxContainer.new()
+	r.add_theme_constant_override("separation", 8)
+	head.add_child(r)
+	var lab := _label("단계", 22, Color.WHITE)
+	lab.custom_minimum_size = Vector2(96, 0)
+	r.add_child(lab)
+	for pair in [["무료", Color(0.62, 0.92, 0.62)], ["패스", Color(0.86, 0.70, 1.0)]]:
+		var l := _label(pair[0], 24, pair[1])
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		r.add_child(l)
+	return head
+
+
 func _growth_cell(i: int, track: String, reward: Dictionary, owned: bool) -> Control:
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_theme_constant_override("separation", 2)
-	v.add_child(_label(("무료 · " if track == "free" else "패스 · ") + Missions.reward_text(reward), 17, GIVE if track == "free" else Color(0.55, 0.30, 0.70)))
+	v.add_child(_label(Missions.reward_text(reward), 17, GIVE if track == "free" else PASS_COL))
 	var done: bool = Economy.iap_view().gp[track].has(i) or Economy.iap_view().gp[track].has(float(i))
 	if done:
 		v.add_child(_label("받음", 20, SUB))

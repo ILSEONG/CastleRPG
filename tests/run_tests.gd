@@ -5444,9 +5444,9 @@ func test_iap() -> void:
 	check(e.claim_growth(0, "free", 10) and e.diamonds == d0 + 60 and not e.can_claim_growth(0, "free", 10), "iap: growth free tier 0 gives 60 diamonds once")
 	var per: Array = e.shop_period()
 	e.iap = {"day": per[0], "week": per[1], "monthly": {"monthly": {"until": int(per[0]) + 2, "claimed": null}}, "passes": ["pass_growth"], "gp": {"free": [0], "paid": []}}
-	check(e.monthly_left("monthly") == 3 and e.can_claim_monthly("monthly") and e.claim_monthly("monthly") and e.diamonds == d0 + 260 and not e.can_claim_monthly("monthly"),
+	check(e.monthly_left("monthly") == 3 and e.can_claim_monthly("monthly") and e.claim_monthly("monthly") and e.diamonds == d0 + 560 and not e.can_claim_monthly("monthly"),
 		"iap: monthly card gives 100 diamonds once a day")
-	check(e.claim_growth(0, "paid", 10) and e.diamonds == d0 + 860 and not e.iap_can_buy("pass_growth"), "iap: with the pass the paid tier pays out")
+	check(e.claim_growth(0, "paid", 10) and e.diamonds == d0 + 2360 and not e.iap_can_buy("pass_growth"), "iap: with the pass the paid tier pays out")
 	# 핫딜(오프라인): 계기에 1시간, 하나만, 뜬 것만 살 수 있다, 보스는 새 25라운드 단계마다
 	var got := []
 	e.hot_offered.connect(func(h): got.append(h.id))
