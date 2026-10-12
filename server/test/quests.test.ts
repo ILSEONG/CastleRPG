@@ -116,7 +116,7 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal(r.json.player.dungeons.gold.keys, keys + 2)
   // 모집권 보상
   const t = rows.findIndex((x) => x.id === 'kill_300')
-  assert.equal(rows[t].reward, 'tickets:10')
+  assert.ok(rows[t].reward.split('|').includes('tickets:10')) // 가이드 2026-10-12: 다음 미션 골드도 함께
   await pump(token, 200)
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
   assert.equal((await claim(token, { type: 'tutorial', step: t })).json.player.dia_tickets, 10)

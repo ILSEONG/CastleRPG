@@ -5043,7 +5043,25 @@ func test_tutorial() -> void:
 	# 보상 규칙
 	var kinds := {}
 	for i in TutorialScript.MISSIONS.size():
-		var rw: Dictionary = t.reward(i)
+		var rw: Dictionary = t.base_reward(i)
+		# 보상 = 바로 다음 미션 비용 × 1.2(자원·골드), 나머지(모집권·다이아·입장권)는 원래 보상 그대로
+		var paid: Dictionary = t.reward(i)
+		var nd: Dictionary = t.need_of(i + 1) if i + 1 < TutorialScript.MISSIONS.size() else {}
+		var want_pay := {}
+		for r in nd.get("res", {}):
+			if int(nd.res[r]) > 0:
+				want_pay[r] = TutorialScript._margin(int(nd.res[r]))
+		if int(nd.get("gold", 0)) > 0:
+			want_pay.gold = TutorialScript._margin(int(nd.gold))
+		var got_pay := {}
+		var rest_ok := true
+		for k in paid:
+			if k in TutorialScript.PAY_KEYS:
+				got_pay[k] = paid[k]
+			elif paid[k] != rw.get(k):
+				rest_ok = false
+		check(rest_ok and (got_pay == want_pay if not want_pay.is_empty() else paid == rw),
+			"guide: mission %d pays the next mission's cost x1.2 (%s), other rewards kept: %s" % [i + 1, want_pay, paid])
 		if TutorialScript.MISSIONS[i].has("reward"):  # 가이드 성장 미션: 적힌 보상
 			check(rw == TutorialScript.MISSIONS[i].reward, "guide: filler mission %d pays its own reward: %s" % [i + 1, rw])
 			continue
@@ -5083,7 +5101,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")) == {"keys_ticket": 2},
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5123,7 +5141,8 @@ func test_tutorial() -> void:
 	e.upgrades["atk"] = 2
 	check(not t.complete() and t.progress_text() == "Lv 2/3", "guide: stat level mission shows Lv 2/3")
 	e.upgrades["atk"] = 3
-	check(t.complete() and t.reward(t.step) == {"gold": 2000}, "guide: stat Lv 3 completes; filler pays its own gold")
+	check(t.complete() and t.reward(t.step) == {"gold": TutorialScript._margin(int(t.need_of(t.step + 1).gold))} and int(t.need_of(t.step + 1).gold) == 3153,
+		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
 	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())

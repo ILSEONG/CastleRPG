@@ -20,6 +20,7 @@ const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kil
 	"dungeon_ticket", "equip", "soldier_deploy", "stage_1_5", "build_lab", "research", "build_archery", "build_stable", "keep_2", "gate_2",
 	"kill_300", "stage_1_10", "guild"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
+const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
 const TRAIN_N := 1  # 보병 훈련 미션 보상이 대는 마릿수(튜토리얼 훈련은 1마리씩, 5초 — Economy.tutorial_training)
 const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟수
@@ -568,9 +569,28 @@ func claim() -> bool:
 	return true
 
 
-## 미션 i의 보상: reward가 적힌 성장 미션은 그것, 아니면 다음 규칙 미션(reward 없는 행)이 쓰는 것. 마지막 규칙 미션은 그 외(모집권).
-## (성장 미션이 사이에 끼어도 원래 미션의 보상은 그대로다.)
+## 미션 i의 보상(사용자 2026-10-12 "가이드 보상이 다음 가이드에 필요한 자원을 줄 수 있게"): 바로 다음 미션(i+1)이 자원·골드를 쓰면
+## 그 비용 × REWARD_MARGIN을 자원·골드 보상으로 준다(원래 보상의 자원·골드는 빼고, 모집권·다이아·던전 입장권은 그대로 둔다).
+## 바로 다음 미션이 자원·골드를 쓰지 않으면 원래 보상 그대로(base_reward).
 func reward(i: int) -> Dictionary:
+	var base := base_reward(i)
+	var need := need_of(i + 1) if i + 1 < MISSIONS.size() else {}
+	var pay := {}
+	for r in need.get("res", {}):
+		if int(need.res[r]) > 0:
+			pay[r] = _margin(int(need.res[r]))
+	if int(need.get("gold", 0)) > 0:
+		pay.gold = _margin(int(need.gold))
+	if pay.is_empty():
+		return base
+	for k in base:
+		if not k in PAY_KEYS:
+			pay[k] = base[k]
+	return pay
+
+
+## 원래 보상(2026-10-07): reward가 적힌 성장 미션은 그것, 아니면 다음 규칙 미션(reward 없는 행)이 쓰는 것. 마지막 규칙 미션은 그 외(모집권).
+func base_reward(i: int) -> Dictionary:
 	if MISSIONS[i].has("reward"):
 		return MISSIONS[i].reward.duplicate()
 	var j := i + 1
@@ -625,7 +645,28 @@ func need_of(i: int) -> Dictionary:
 			return {"gold": GameData.upgrade_cost("atk", 0)}
 		"dungeon":
 			return {"keys": m.arg}
+		"growth_lv":  # 같은 능력치의 앞 가이드 목표(없으면 0)부터 이 레벨까지
+			var from := 0
+			for k in i:
+				if MISSIONS[k].kind == "growth_lv" and MISSIONS[k].arg[0] == m.arg[0]:
+					from = int(MISSIONS[k].arg[1])
+			return {"gold": _upgrade_gold(str(m.arg[0]), from, int(m.arg[1]))}
+		"hero_lv":  # n명을 앞 가이드 목표 레벨(없으면 1)부터 이 레벨까지. 모집 미션 전엔 R(시작 영웅), 뒤엔 SR로 셈
+			var lv0 := 1
+			for k in i:
+				if MISSIONS[k].kind == "hero_lv":
+					lv0 = int(MISSIONS[k].arg[1])
+			var grade := "R" if i < mission_index("gacha") else "SR"
+			return {"gold": int(m.arg[0]) * int(GameData.levelup_cost(grade, lv0, int(m.arg[1]) - lv0).gold)}
 	return {}
+
+
+## 성장 id를 from → to 레벨로 올리는 골드 합.
+static func _upgrade_gold(id: String, from: int, to: int) -> int:
+	var t := 0
+	for l in range(from, to):
+		t += GameData.upgrade_cost(id, l)
+	return t
 
 
 ## 보상 글자 "목재 72 · 석재 96 · 식량 48"(카드).
