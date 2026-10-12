@@ -2778,7 +2778,7 @@ export function createApp(opts: AppOptions) {
       grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
-        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 드래곤 Lv ${reached}까지 · ${dmg.toLocaleString('en-US')}점` } }
+        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 드래곤 Lv ${reached} 도달 · ${dmg.toLocaleString('en-US')}점` } }
       ch.events = { guild_boss: 1 }
       return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
     })

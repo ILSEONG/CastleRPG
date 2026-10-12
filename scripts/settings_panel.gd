@@ -219,7 +219,7 @@ func press_logout() -> void:
 		return
 	_logout_armed = 0.0
 	Net.logout()
-	Economy.notice.emit("로그아웃했습니다. 다시 열면 로그인 화면이 나옵니다")
+	Economy.notice.emit("로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다")
 	await get_tree().create_timer(1.5).timeout
 	Net.restart.call()
 

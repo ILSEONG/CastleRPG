@@ -284,7 +284,7 @@ static func _rules_card(p) -> void:
 	for t in ["길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.",
 			"공성전은 한 주에 한 번, 길드장이 정한 요일·시각에 열립니다. 정하지 않으면 토요일 21:00입니다.",
 			"성문 체력은 성 주인 길드 레벨 × %s입니다(상대 길드는 우리 길드와 같은 레벨)." % UiKit.commas(roundi(WarRules.GATE_HP_PER_LEVEL)),
-			"먼저 배치 단계: 성 밖 어디서 칠지 영웅 자리를 잡고, 길드장이 [전투 시작]을 누르면 %d분 동안 싸웁니다. 아무도 안 누르면 %d분 뒤 저절로 시작합니다." % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
+			"먼저 배치 단계에서 성 밖 어디를 공격할지 영웅 자리를 잡습니다. 길드장이 [전투 시작]을 누르면 %d분 동안 싸우고, 아무도 누르지 않으면 %d분 뒤 저절로 시작합니다." % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
 			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.",
 			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점 · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, roundi(WarRules.KEEP_STEP * 100.0)],
 			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(목숨 %d개). 모두 목숨을 다 쓰면 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],

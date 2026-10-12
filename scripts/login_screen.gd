@@ -32,7 +32,7 @@ const ERRORS := {
 	"provider_unavailable": "아직 준비 중인 로그인입니다",
 	"login_denied": "로그인이 취소되었습니다",
 	"login_failed": "로그인하지 못했습니다. 다시 시도해 주세요",
-	"login_expired": "시간이 지났습니다. 다시 시도해 주세요",
+	"login_expired": "로그인 시간이 초과되었습니다. 다시 시도해 주세요",
 	"net": "서버에 연결할 수 없습니다",
 	"UNSUPPORTED": "토스 앱을 최신 버전으로 업데이트해 주세요",
 	"INVALID_CATEGORY": "토스 로그인을 쓸 수 없는 미니앱입니다",

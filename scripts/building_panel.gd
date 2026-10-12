@@ -36,7 +36,7 @@ const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"stable": "기병을 훈련합니다.",
 	"tavern": "영웅을 모집합니다.",
 	"lab": "기술을 연구합니다. 레벨이 오르면 상위 연구가 열리고 연구 속도가 빨라집니다.",
-	"houses": "주민이 사는 집. 인구가 병사 배치 상한입니다.",
+	"houses": "주민이 사는 집. 인구만큼 병사를 배치할 수 있습니다.",
 	"lumber": "목재를 생산합니다.",
 	"quarry": "석재를 생산합니다.",
 	"farm": "식량을 생산합니다.",
@@ -344,7 +344,7 @@ func _refresh_training(type: String) -> void:
 	qty.visible = Economy.train_max(id) > 1  # 훈련은 1마리씩(사용자 2026-10-06) — 수량 고르기 없음
 	var n: int = qty.value
 	var lv := Economy.building_level(id)
-	unit_label.text = "T%d %s · 1마리 %s" % [tier, nm, UiKit.clock(Economy.train_time(id, 1))]
+	unit_label.text = "T%d %s · 1명 %s" % [tier, nm, UiKit.clock(Economy.train_time(id, 1))]
 	next_label.text = train_preview(id, lv)
 	next_label.visible = next_label.text != ""
 	var cost := Economy.train_cost_now(type, n, tier)
@@ -369,7 +369,7 @@ static func train_preview(id: String, lv: int) -> String:
 	if GameData.train_tier(lv + 1) > GameData.train_tier(lv):
 		return "Lv %d → T%d 해금" % [lv + 1, GameData.train_tier(lv + 1)]
 	var k := 1.0 + float(Economy.research_bonus().train_speed_pct) / 100.0  # 개정 24 훈련 교범
-	return "1마리 %s → %s" % [UiKit.clock(GameData.soldier_unit_sec(lv) / k), UiKit.clock(GameData.soldier_unit_sec(lv + 1) / k)]
+	return "1명 %s → %s" % [UiKit.clock(GameData.soldier_unit_sec(lv) / k), UiKit.clock(GameData.soldier_unit_sec(lv + 1) / k)]
 
 
 ## 지금 자원으로 훈련할 수 있는 수(무료면 아주 큰 수).
@@ -396,7 +396,7 @@ static func effect_lines(id: String, lv: int) -> Array:
 		var k := 1.0 + float(rb.train_speed_pct) / 100.0
 		var tn := GameData.train_tier(n)
 		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n) / k)
-		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
+		return [["1명", UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
 	match id:
 		"keep":
 			var hp := 1.0 + float(rb.castle_hp_pct) / 100.0
