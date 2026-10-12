@@ -7,7 +7,7 @@ extends "res://scripts/ui_window.gd"
 ## 스냅샷이 오기 전·헤드리스는 평면 그림(_draw_flat_band).
 ## 단계는 1 ~ 최고 + 1(처음엔 최고 + 1). [도전]이 안 되면(Economy.dungeon_block — 기본 편성으로) 비활성 + 빨간 이유.
 ## 아래 [보관함 n / 상한] → bag_panel.open_bag.
-## [도전] → 출전 편성(같은 시트): 슬롯 6(골드)·4(장비) + 보유 영웅 피규어 격자(전투력 순, 출전 중은 호박색 테두리). 영웅 카드 탭 = 넣기·빼기,
+## [도전] → 출전 편성(같은 시트): 슬롯 6(골드)·4(장비) + 보유 영웅 피규어 격자(전투력 순, 출전 중은 체크 — 초록 테두리 + 체크 배지). 영웅 카드 탭 = 넣기·빼기,
 ## 슬롯 탭 = 빼기. [자동 편성](Economy.default_party), [출전](편성을 Fever.dungeon_party에 저장 → Economy.start_dungeon), [뒤로].
 ## 처음 편성 = 저장된 편성(보유·인원이 맞으면), 아니면 기본 편성. 도전이 시작되면(dungeon_started) 카드 화면으로 돌아간다 — 장면은 main이 바꾼다.
 ## 모집권 던전(2026-10-06): 카드 = 초원 위 사원 띠, 열쇠 n / 3, 보상 다이아 모집권 n장, [친구](friend_panel). 편성 = 내 영웅 4 + 도우미 줄
@@ -38,6 +38,7 @@ const SLOT_SIZE := Vector2(98, 124)
 const CARD_SIZE := Vector2(150, 184)
 const GRID_COLUMNS := 4
 const RED := Color(0.78, 0.22, 0.18)
+const PICKED := Color(0.13, 0.52, 0.24)  # 고른 도우미 밑 이름(체크 배지 초록을 글자용으로 진하게)
 const KEY_GOLD := Color(0.95, 0.72, 0.2)
 
 var bag  # 보관함 창(bag_panel). main이 넣는다
@@ -56,6 +57,7 @@ var auto_button: Button
 var go_button: Button
 var helper_id := ""  # 모집권 던전: 고른 도우미 key(친구 "f:<id>", 시스템 후보 = 영웅 id, 없으면 "")
 var helper_cards := {}  # 도우미 후보 key → 카드
+var helper_names := {}  # 도우미 후보 key → 카드 밑 이름(고르면 초록)
 var helper_box: VBoxContainer
 var helper_title: Label
 var friend_panel  # 친구 창(이 시트가 만든다)
@@ -540,7 +542,7 @@ func _refresh_form() -> void:
 		c.stars = Economy.promotion_of(id)
 		c.level = Economy.level_of(id)
 		c.power = GameData.hero_power(GameData.hero(id), c.level, c.stars)
-		c.highlight = party.has(id)
+		c.checked = party.has(id)
 		c.queue_redraw()
 	_refresh_helpers()
 	var lv := level_of(form_type)
@@ -553,7 +555,8 @@ func _refresh_form() -> void:
 	auto_button.disabled = party == Economy.default_party(form_type)
 
 
-## 도우미 줄(모집권 던전만): 후보 카드(레벨·승급·전투력, 밑에 친구 이름 또는 "추천"), 고른 카드는 호박색 테두리. 고른 후보가
+## 도우미 줄(모집권 던전만): 후보 카드(레벨·승급·전투력, 밑에 친구 이름 또는 "추천"), 고른 카드는 체크(HeroCard.checked — 초록 테두리 +
+## 체크 배지)이고 밑 이름도 초록. 왼위는 "Lv N"만(예전 "친구"/"도우미" 글자는 Lv와 겹쳐 뺐다 — 밑 이름이 알려 준다). 고른 후보가
 ## 목록에서 빠지면(온라인 새 목록) 고름을 푼다. 머리 글: 친구 영웅이면 "친구 영웅 (친구마다 하루 한 번)", 아니면 시스템 추천 안내.
 func _refresh_helpers() -> void:
 	helper_box.visible = form_type == "ticket"
@@ -571,6 +574,7 @@ func _refresh_helpers() -> void:
 			_helper_row.remove_child(c)
 			c.queue_free()
 		helper_cards.clear()
+		helper_names.clear()
 		for h in hs:
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 2)
@@ -586,14 +590,15 @@ func _refresh_helpers() -> void:
 			nm.clip_text = true
 			col.add_child(nm)
 			helper_cards[key] = card
+			helper_names[key] = nm
 	for h in hs:
 		var c = helper_cards[h.key]
 		c.level = int(h.level)
 		c.stars = int(h.promotion)
 		c.power = int(h.power)
-		c.corner = "친구" if h.has("friend") else "도우미"
-		c.highlight = h.key == helper_id
+		c.checked = h.key == helper_id
 		c.queue_redraw()
+		helper_names[h.key].add_theme_color_override("font_color", PICKED if c.checked else HudScript.INK)
 
 
 # --- 그림 ---

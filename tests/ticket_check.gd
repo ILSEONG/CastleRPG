@@ -43,6 +43,9 @@ func _ready() -> void:
 		"form: 4 heroes + helper %s of %s" % [panel.helper_id, hs])
 	panel.pick_helper(hs[1].hero_id)
 	await _frames(10)
+	var checked: Array = panel.helper_cards.keys().filter(func(k): return panel.helper_cards[k].checked)
+	_check(checked == [hs[1].key] and panel.hero_cards.keys().all(func(id): return panel.hero_cards[id].checked == panel.party.has(id)),
+		"picked helper + party heroes are checked: %s" % [checked])
 	await _shot("2_form")
 	var helper: String = panel.helper_id
 	panel.deploy()

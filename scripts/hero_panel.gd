@@ -17,6 +17,7 @@ extends "res://scripts/ui_window.gd"
 ## 개정 18: 큰 카드 양옆에 장비 칸 7개(왼쪽 무기·모자·상의·하의, 오른쪽 신발·견장·장갑 — 아이콘 + 등급 테두리, 빈 칸은 흐린 아이콘).
 ## 칸을 탭하면 그 부위 장비 고르기(bag_panel.open_pick — [장착]·[해제]). 능력치는 장비 포함, 그 아래 줄에 장비 합계("장비 HP +350 · 공격 +35").
 ## 큰 카드 오른쪽 아래 [장비 자동착용]: 부위마다 아무도 안 낀 더 좋은 장비(빨간 점과 같은 규칙)를 한 번에 낀다(Economy.auto_equip). 바꿀 게 없으면 비활성.
+## [자동 배치](정렬·일괄 승급 옆): 전투력 상위 영웅을 슬롯에 채운다 — 근접은 성문 앞, 원거리는 성벽 위, 센 영웅부터 남문. [적용]으로 확정.
 ## [일괄 승급](정렬·적용 옆): 승급할 수 있는 보유 영웅 전부를 각자 지금 조각으로 갈 수 있는 데까지(Economy.promote_all_plan).
 ## 누르면 확인 창(영웅마다 "이름 ★1 → ★3 · 조각 30", 넘치면 스크롤) → [승급]·[취소]. 오를 영웅이 없거나 응답 대기면 비활성.
 ## 보유 격자 뒤에 미보유 영웅(등급 SSR → SR → R, 같으면 표 순서): 흐린 카드 + "미보유", Lv·전투력 없음. 배치·상세 안 됨(탭하면 알림).
@@ -68,6 +69,7 @@ var slot_cards: Array = []
 var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
 var locked_cards := {}  # 영웅 id → 미보유 카드(보유 카드 뒤, unowned_sorted 순서)
 var apply_button: Button
+var auto_button: Button  # [자동 배치](Economy.auto_hero_deploy — 편집만, 적용은 [적용]). 편집이 이미 자동 배치와 같으면 비활성
 var sort_button: Button
 var promote_all_button: Button  # [일괄 승급]
 var promote_all_confirm: Control  # 일괄 승급 확인 창(어두운 막 + 크림 창)
@@ -152,9 +154,11 @@ func _build_list() -> void:
 	sort_button.pressed.connect(cycle_sort)
 	promote_all_button = _button("일괄 승급", PROMOTE_COLOR, 26)
 	promote_all_button.pressed.connect(ask_promote_all)
+	auto_button = _button("자동 배치", UiKit.STEEL, 26)
+	auto_button.pressed.connect(auto_deploy)
 	apply_button = _button("적용")
 	apply_button.pressed.connect(apply)
-	for b in [sort_button, promote_all_button, apply_button]:
+	for b in [sort_button, promote_all_button, auto_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	var scroll := ScrollContainer.new()
@@ -581,6 +585,13 @@ func tap_hero(id: String) -> void:
 	_rebuild()
 
 
+## [자동 배치]: 전투력 상위 영웅으로 슬롯을 채운다(근접은 성문 앞, 원거리는 성벽 위 — Economy.auto_hero_deploy_for). [적용]으로 확정.
+func auto_deploy() -> void:
+	work = Economy.auto_hero_deploy(work.size())
+	selected_slot = -1
+	_rebuild()
+
+
 func apply() -> void:
 	Economy.set_deploy(work)
 	if GameState.deploy() == work:
@@ -666,6 +677,7 @@ func _rebuild() -> void:
 		c.queue_redraw()
 	sort_button.text = "정렬: " + SORT_NAMES[sort_mode]
 	apply_button.disabled = work == GameState.deploy()
+	auto_button.disabled = work == Economy.auto_hero_deploy(work.size())
 	promote_all_button.disabled = Economy.promote_waiting() or Economy.promote_all_plan().is_empty()
 
 
