@@ -1,9 +1,8 @@
 extends StyleBox
 ## 두루마리 창 박스(2026-10-12 사용자 "게임 내 팝업창을 두루마리 느낌으로"): 위아래로 말린 종이 축 + 그 사이 펼친 양피지.
 ## 모양(rect 안에 다 그린다 — 창이 화면 가장자리에 붙어도 잘리지 않게):
-##  - 종이: 축보다 조금 좁게(축이 양옆으로 OVERHANG만큼 삐져나온다), 위 축 가운데 ~ 아래 축 가운데. 옆 가장자리는 살짝 울퉁불퉁,
-##    로우폴리 면(왼위 광원 + 위치 해시)에 가장자리로 갈수록 그을린 갈색. 안쪽에 가는 장식 테두리. 외곽선은 종이 색을 어둡게
-##    (UI 박스 외곽선 규칙 — LowpolyBox.edge_color).
+##  - 종이: 축보다 조금 좁게(축이 양옆으로 OVERHANG만큼 삐져나온다), 위 축 가운데 ~ 아래 축 가운데. 한 가지 색(얼룩 없음),
+##    옆 가장자리만 살짝 울퉁불퉁. 안쪽에 가는 장식 테두리. 외곽선은 종이 색을 어둡게(UI 박스 외곽선 규칙 — LowpolyBox.edge_color).
 ##  - 축(위·아래): 말린 종이 원통 — 가로 띠 5줄(위 밝게 ~ 아래 어둡게), 양끝에 말린 단면(겹친 8각형), 그 바깥에 금빛 고리 + 나무 손잡이.
 ##    위 축 아래·아래 축 위에 옅은 그림자.
 ## 내용 여백은 축·손잡이·테두리를 피한다(set_roll이 정한다). 같은 크기면 지오메트리를 재사용한다(LowpolyBox와 같다).
@@ -11,13 +10,12 @@ extends StyleBox
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 
 const PAPER := Color("F3E2BC")  # 양피지
-const BURN := Color("C49A5E")  # 가장자리 그을린 색
 const ROLL := Color("E4C68E")  # 말린 종이(종이보다 진하게)
 const WOOD := Color("7B4B2A")  # 축 손잡이
 const GOLD := Color("D8A646")  # 손잡이 고리
 const TRIM := Color(0.55, 0.38, 0.18, 0.45)  # 안쪽 장식 테두리
 const SHADOW := Color(0.35, 0.22, 0.1, 0.2)
-const CELL := 72.0  # 종이 면 한 칸(px)
+const CELL := 72.0  # 종이 옆 가장자리 울퉁불퉁 한 칸(px)
 const WAVE := 1.6  # 종이 옆 가장자리 울퉁불퉁 폭(px)
 const OVERHANG := 6.0  # 축이 종이보다 양옆으로 나온 길이
 const TRIM_IN := 7.0  # 장식 테두리가 종이 가장자리에서 들어온 거리
@@ -82,47 +80,23 @@ func _build(s: Vector2) -> void:
 	_size = s
 
 
-## 펼친 종이: 칸 격자(안쪽 점은 살짝 흔들고, 옆 가장자리 점은 WAVE만큼 울퉁불퉁) → 칸마다 삼각형 둘.
+## 펼친 종이: 한 가지 색(얼룩 없이 — 2026-10-12 사용자 "얼룩 없애고"). 옆 가장자리만 WAVE만큼 살짝 울퉁불퉁 → 줄마다 사각형(삼각형 둘).
 func _paper(r: Rect2) -> void:
-	var cols := maxi(2, roundi(r.size.x / CELL))
 	var rows := maxi(2, roundi(r.size.y / CELL))
-	var grid := []
+	var left := PackedVector2Array()
+	var right := PackedVector2Array()
 	for j in rows + 1:
-		var line := []
-		for i in cols + 1:
-			var p := r.position + Vector2(r.size.x * i / cols, r.size.y * j / rows)
-			var edge_x := i == 0 or i == cols
-			var edge_y := j == 0 or j == rows
-			if edge_x and not edge_y:
-				p.x += (LowpolyBox.hash01(seed + i, j) - 0.5) * 2.0 * WAVE
-			elif not edge_x and not edge_y:
-				p += Vector2(LowpolyBox.hash01(seed, i * 31 + j) - 0.5, LowpolyBox.hash01(seed + 7, i * 17 + j) - 0.5) * CELL * 0.35
-			line.append(p)
-		grid.append(line)
-	var ctr := r.get_center()
-	var face := 0
+		var y := r.position.y + r.size.y * j / rows
+		var edge_y := j == 0 or j == rows
+		left.append(Vector2(r.position.x + (0.0 if edge_y else (LowpolyBox.hash01(seed, j) - 0.5) * 2.0 * WAVE), y))
+		right.append(Vector2(r.end.x + (0.0 if edge_y else (LowpolyBox.hash01(seed + 1, j) - 0.5) * 2.0 * WAVE), y))
 	for j in rows:
-		for i in cols:
-			var a: Vector2 = grid[j][i]
-			var b: Vector2 = grid[j][i + 1]
-			var c: Vector2 = grid[j + 1][i + 1]
-			var d: Vector2 = grid[j + 1][i]
-			var tris := [[a, b, c], [a, c, d]] if (i + j) % 2 == 0 else [[a, b, d], [b, c, d]]
-			for t in tris:
-				var tri := PackedVector2Array(t)
-				var col := LowpolyBox.shade(PAPER, tri, r, 0.035, seed, face)
-				var g := (tri[0] + tri[1] + tri[2]) / 3.0
-				# 가장자리까지 거리(px) — 큰 시트도 가장자리 띠만 그을린다
-				var edge := minf(minf(g.x - r.position.x, r.end.x - g.x), minf(g.y - r.position.y, r.end.y - g.y))
-				col = col.lerp(BURN, 0.45 * (1.0 - smoothstep(0.0, 70.0, edge)))
-				_add_tri(tri, col)
-				face += 1
-	var outline := PackedVector2Array()
-	for j in rows + 1:
-		outline.append(grid[j][cols])
+		_add_tri(PackedVector2Array([left[j], right[j], right[j + 1]]), PAPER)
+		_add_tri(PackedVector2Array([left[j], right[j + 1], left[j + 1]]), PAPER)
+	var outline := PackedVector2Array(right)
 	for j in range(rows, -1, -1):
-		outline.append(grid[j][0])
-	outline.append(grid[0][cols])
+		outline.append(left[j])
+	outline.append(right[0])
 	_lines.append([outline, LowpolyBox.edge_color(PAPER), 1.5])
 
 
