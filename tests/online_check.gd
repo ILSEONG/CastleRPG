@@ -1650,11 +1650,11 @@ func _pulls(n: int, count: int, currency: String) -> Array:
 ## phase 2 맨 끝에 돈다 — 모집이 영웅·조각을 늘려 phase 1·2의 영웅 복원 검사(서버 모집 한 장)를 흔들지 않게.
 func _recruit23_online() -> void:
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
-	var cost: int = Economy.gacha_cost("gold", 10) * 3  # 골드 소비처 상향 뒤 10회 = 1회 1만 × 10
+	var cost: int = Economy.gacha_cost("gold", 10) * 4  # 골드 소비처 상향 뒤 10회 = 1회 1만 × 10, Lv 2까지 40회
 	await _request("POST", "/v1/test/grant_gold", {"amount": cost})
 	var gold0: int = Economy.server_gold_tenths
 	var st0: Dictionary = Economy.gacha_state()
-	var want: Dictionary = GameData.gacha_level_up(st0.gold_level, st0.gold_pulls, 30)
+	var want: Dictionary = GameData.gacha_level_up(st0.gold_level, st0.gold_pulls, 40)
 	var notes := []
 	var ups := []
 	var on_note := func(t): notes.append(t)
@@ -1662,15 +1662,15 @@ func _recruit23_online() -> void:
 	Economy.notice.connect(on_note)
 	Economy.gacha_leveled.connect(on_up)
 	var g0: int = Net.requested.get("/v1/gacha", 0)
-	var gold_cards := await _pulls(3, 10, "gold")
+	var gold_cards := await _pulls(4, 10, "gold")
 	Economy.notice.disconnect(on_note)
 	Economy.gacha_leveled.disconnect(on_up)
 	var r := await _request("GET", "/v1/player")
 	var server: Dictionary = r.get("player", {}).get("gacha", {})
-	_check(st0.gold_level == 1 and gold_cards.size() == 30 and Net.requested.get("/v1/gacha", 0) == g0 + 3 and Economy.server_gold_tenths == gold0 - cost * 10
+	_check(st0.gold_level == 1 and gold_cards.size() == 40 and Net.requested.get("/v1/gacha", 0) == g0 + 4 and Economy.server_gold_tenths == gold0 - cost * 10
 		and want.level == 2 and server.get("gold_level") == 2 and int(server.get("gold_pulls", -1)) == want.pulls and Economy.gacha_state().gold_level == 2
 		and Economy.gacha_gold_pulls == want.pulls and ups == [2] and notes.any(func(t): return t.begins_with("골드 모집 Lv 2!")),
-		"(r23) server gold recruit: three 10-pulls (30 cards, 3 x the 10-pull gold cost) level the server up to Lv 2 with the carry-over; notice and signal",
+		"(r23) server gold recruit: four 10-pulls (40 cards, 4 x the 10-pull gold cost) level the server up to Lv 2 with the carry-over; notice and signal",
 		"cards=%d gold %d -> %d server=%s app=%s ups=%s notes=%s" % [gold_cards.size(), gold0, Economy.server_gold_tenths, server, Economy.gacha_state(), ups, notes])
 	await _request("POST", "/v1/test/grant_diamonds", {"amount": 16000})
 	var dia0: int = Economy.diamonds

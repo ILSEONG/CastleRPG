@@ -36,6 +36,8 @@ test('골드 비용·확률 공식: 1회 = 10000 × 1.25^(L−1)을 50 단위로
   const l4 = R.gachaRates(CFG, 'gold', 4, 1)
   const l10 = R.gachaRates(CFG, 'gold', 10, 1)
   assert.ok(near(l4.ssr, 0.008) && near(l4.sr, 0.065) && near(l10.ssr, 0.014) && near(l10.sr, 0.095), JSON.stringify([l4, l10]))
+  for (const l of [1, 2]) assert.equal(R.gachaRates(CFG, 'gold', l, 11).ssr, 0) // SSR은 골드 Lv 3부터(주점 보너스도 없음)
+  assert.ok(near(R.gachaRates(CFG, 'gold', 3, 1).ssr, 0.007))
   const t3 = R.gachaRates(CFG, 'gold', 10, 3) // 주점 3: + 0.2%p · 0.6%p
   assert.ok(near(t3.ssr, 0.016) && near(t3.sr, 0.101), JSON.stringify(t3))
   assert.deepEqual([R.gachaCost(CFG, 'diamond', 1, 7), R.gachaCost(CFG, 'diamond', 10, 7)], [300, 2700]) // 다이아는 레벨 없음
@@ -43,14 +45,14 @@ test('골드 비용·확률 공식: 1회 = 10000 × 1.25^(L−1)을 50 단위로
   assert.ok(near(d.ssr, 0.082) && near(d.sr, 0.306), JSON.stringify(d))
 })
 
-test('골드 레벨업: 그 레벨 누적 ≥ 30 × L이면 L+1, 남은 횟수는 넘기고 한 번에 여러 레벨, 최대 10(누적 0)', () => {
-  assert.deepEqual([1, 2, 9, 10].map((l) => R.goldNext(CFG, l)), [30, 60, 270, null])
-  assert.deepEqual(R.goldLevelUp(CFG, 1, 29, 1), { level: 2, pulls: 0 })
-  assert.deepEqual(R.goldLevelUp(CFG, 1, 28, 1), { level: 1, pulls: 29 })
-  assert.deepEqual(R.goldLevelUp(CFG, 1, 25, 10), { level: 2, pulls: 5 }) // 넘김
-  assert.deepEqual(R.goldLevelUp(CFG, 1, 0, 90), { level: 3, pulls: 0 }) // 30 + 60
-  assert.deepEqual(R.goldLevelUp(CFG, 1, 0, 1000), { level: 8, pulls: 160 }) // 30 + … + 210 = 840, 남은 160 < 240
-  assert.deepEqual(R.goldLevelUp(CFG, 9, 265, 10), { level: 10, pulls: 0 })
+test('골드 레벨업: 그 레벨 누적 ≥ 40 × L²이면 L+1, 남은 횟수는 넘기고 한 번에 여러 레벨, 최대 10(누적 0)', () => {
+  assert.deepEqual([1, 2, 3, 9, 10].map((l) => R.goldNext(CFG, l)), [40, 160, 360, 3240, null])
+  assert.deepEqual(R.goldLevelUp(CFG, 1, 39, 1), { level: 2, pulls: 0 })
+  assert.deepEqual(R.goldLevelUp(CFG, 1, 38, 1), { level: 1, pulls: 39 })
+  assert.deepEqual(R.goldLevelUp(CFG, 1, 35, 10), { level: 2, pulls: 5 }) // 넘김
+  assert.deepEqual(R.goldLevelUp(CFG, 1, 0, 200), { level: 3, pulls: 0 }) // 40 + 160
+  assert.deepEqual(R.goldLevelUp(CFG, 1, 0, 5000), { level: 7, pulls: 1360 }) // 40 + … + 1440 = 3640, 남은 1360 < 1960
+  assert.deepEqual(R.goldLevelUp(CFG, 9, 3235, 10), { level: 10, pulls: 0 })
   assert.deepEqual(R.goldLevelUp(CFG, 10, 0, 10), { level: 10, pulls: 0 })
 })
 
@@ -66,7 +68,7 @@ test('확률 표본(10만 장, 암호학적 난수): 골드 Lv 10은 SSR 1.4% ·
     assert.ok(dr.ssr > g.ssr && dr.sr > g.sr, `tavern ${t}: ${JSON.stringify([dr, g])}`)
   }
   const l1 = R.rollGacha(n, HEROES, CFG, R.cryptoRandom) // 기본 = 골드 Lv 1
-  assert.ok(Math.abs(share(l1, 'SSR') - 0.005) <= 0.0015 && Math.abs(share(l1, 'SR') - 0.05) <= 0.0045, `gold L1 ${share(l1, 'SSR')} ${share(l1, 'SR')}`)
+  assert.ok(share(l1, 'SSR') === 0 && Math.abs(share(l1, 'SR') - 0.05) <= 0.0045, `gold L1 ${share(l1, 'SSR')} ${share(l1, 'SR')}`)
 })
 
 test('천장(결정적 난수): SSR 없이 49장이면 50번째가 SSR, 카운터는 SSR에서 0. 10연차 중간에도, 자연 SSR도 카운터를 0으로', () => {
@@ -84,15 +86,15 @@ test('천장(결정적 난수): SSR 없이 49장이면 50번째가 SSR, 카운�
   assert.equal(pity.n, 1)
 })
 
-test('API 골드: 누적 25에서 10연차(100,000 = 1회 × 10, SR 보장 없음 — 전부 R이면 R 10장) → Lv 2·누적 5, 다음 1회는 12,500. 응답 gacha {gold_level, gold_pulls, gold_next, dia_pity}, 로그 currency·level·pity', async () => {
+test('API 골드: 누적 35에서 10연차(100,000 = 1회 × 10, SR 보장 없음 — 전부 R이면 R 10장) → Lv 2·누적 5, 다음 1회는 12,500. 응답 gacha {gold_level, gold_pulls, gold_next, dia_pity}, 로그 currency·level·pity', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await setState(id, 'gold_tenths', 2_000_000)
-  await setState(id, 'gacha_gold_pulls', 25)
+  await setState(id, 'gacha_gold_pulls', 35)
   rand.next = Array(30).fill(0.99)
   let r = await gacha(token, { count: 10 })
   assert.equal(r.status, 200)
-  assert.deepEqual([r.json.player.gold, r.json.player.gacha], [200_000 - 100_000, { gold_level: 2, gold_pulls: 5, gold_next: 60, dia_pity: 0 }])
+  assert.deepEqual([r.json.player.gold, r.json.player.gacha], [200_000 - 100_000, { gold_level: 2, gold_pulls: 5, gold_next: 160, dia_pity: 0 }])
   assert.equal(r.json.results.map((x: any) => x.grade).join(''), 'RRRRRRRRRR') // 골드 10연차는 SR 이상 보장이 없다
   rand.next = [0.99, 0]
   r = await gacha(token, { count: 1, currency: 'gold' })
@@ -101,7 +103,7 @@ test('API 골드: 누적 25에서 10연차(100,000 = 1회 × 10, SR 보장 없�
   assert.deepEqual(l.map((x) => [x.detail.currency, x.detail.level, x.detail.cost, x.detail.after]),
     [['gold', 1, 100000, { gold_level: 2, gold_pulls: 5 }], ['gold', 2, 12500, { gold_level: 2, gold_pulls: 6 }]])
   // 다시 읽어도 그대로(서버 저장)
-  assert.deepEqual((await S.req('GET', '/v1/player', { token })).json.player.gacha, { gold_level: 2, gold_pulls: 6, gold_next: 60, dia_pity: 0 })
+  assert.deepEqual((await S.req('GET', '/v1/player', { token })).json.player.gacha, { gold_level: 2, gold_pulls: 6, gold_next: 160, dia_pity: 0 })
   rand.next = []
 })
 

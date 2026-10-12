@@ -324,6 +324,7 @@ export const GACHA_GOLD = 'gold'
 export const GACHA_DIA = 'diamond'
 export const GACHA_TICKET = 'ticket' // 다이아 모집권(튜토리얼 보상): 다이아 모집 1회 = 1장
 export const GACHA_CURRENCIES = [GACHA_GOLD, GACHA_DIA]
+export const GOLD_SSR_FROM = 3 // 골드 모집은 이 레벨부터 SSR이 나온다(아래는 주점 보너스 포함 0, 사용자 2026-10-12)
 export const GOLD_COST_STEP = 50 // 골드 1회 비용 반올림 단위(스펙 예시 3,450·5,250·10,550과 맞는 값)
 
 // 골드 모집 레벨을 1..gacha_gold_level_max로(설정 최대가 줄어도 확률이 검사한 범위를 넘지 않게)
@@ -340,18 +341,20 @@ export function gachaCost(config: Config, currency: string, count: number, level
 }
 
 // 모집 확률 {ssr, sr}(R은 나머지). 골드 = base + step × (L − 1), 다이아 = 고정. 둘 다 주점 보너스(tavern_*_per_level × (주점 − 1))를 더한다.
+// 골드 모집 레벨이 GOLD_SSR_FROM보다 낮으면 SSR 0(주점 보너스도 없음).
 export function gachaRates(config: Config, currency: string, level: number, tavernLevel: number) {
   const t = Math.max(tavernLevel, 1) - 1
   const k = goldLevel(config, level) - 1
   const dia = currency === GACHA_DIA
   const ssr = dia ? cfgNum(config, 'gacha_dia_ssr') : cfgNum(config, 'gacha_gold_ssr_base') + cfgNum(config, 'gacha_gold_ssr_step') * k
   const sr = dia ? cfgNum(config, 'gacha_dia_sr') : cfgNum(config, 'gacha_gold_sr_base') + cfgNum(config, 'gacha_gold_sr_step') * k
-  return { ssr: ssr + cfgNum(config, 'tavern_ssr_per_level') * t, sr: sr + cfgNum(config, 'tavern_sr_per_level') * t }
+  const noSsr = !dia && goldLevel(config, level) < GOLD_SSR_FROM
+  return { ssr: noSsr ? 0 : ssr + cfgNum(config, 'tavern_ssr_per_level') * t, sr: sr + cfgNum(config, 'tavern_sr_per_level') * t }
 }
 
-// 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L. 최대 레벨이면 null.
+// 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L²(낮은 레벨은 조금, 높은 레벨은 크게 — 사용자 2026-10-12). 최대 레벨이면 null.
 export const goldNext = (config: Config, level: number) =>
-  level >= cfgNum(config, 'gacha_gold_level_max') ? null : cfgNum(config, 'gacha_gold_level_pulls') * level
+  level >= cfgNum(config, 'gacha_gold_level_max') ? null : cfgNum(config, 'gacha_gold_level_pulls') * level * level
 
 // 골드 모집 add회 누적 → 레벨업(한 번에 여러 레벨, 남은 횟수는 넘긴다). 최대 레벨이면 누적 0.
 export function goldLevelUp(config: Config, level: number, pulls: number, add: number) {

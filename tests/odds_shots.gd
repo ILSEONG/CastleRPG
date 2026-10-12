@@ -32,6 +32,8 @@ func _ready() -> void:
 	await _snap()
 	rec.odds.visible = false
 	rec.set_currency(rec.GOLD)
+	await _frames(4)
+	await _snap()
 	rec.odds_button.pressed.emit()
 	await _frames(6)
 	var sc: ScrollContainer = rec.odds.list.get_parent()
@@ -44,12 +46,12 @@ func _ready() -> void:
 			out = a.substr(6)
 	var w: int = _shots[0].get_width() / 2
 	var h: int = _shots[0].get_height() / 2
-	var sheet := Image.create(w * 3, h, false, Image.FORMAT_RGB8)
+	var sheet := Image.create(w * mini(_shots.size(), 4), h, false, Image.FORMAT_RGB8)
 	for i in _shots.size():
 		var img: Image = _shots[i]
 		img.convert(Image.FORMAT_RGB8)
 		img.resize(w, h, Image.INTERPOLATE_LANCZOS)
-		sheet.blit_rect(img, Rect2i(0, 0, w, h), Vector2i((i % 3) * w, (i / 3) * h))
+		sheet.blit_rect(img, Rect2i(0, 0, w, h), Vector2i(i * w, 0))
 	sheet.save_png(out)
 	print("saved ", out, " shots=", _shots.size())
 	get_tree().quit()
