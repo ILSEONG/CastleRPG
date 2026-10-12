@@ -175,13 +175,13 @@ func test_game_data() -> void:
 	for s in range(1, 31):  # 1~30행은 직선 공식(개정 10: HP·공격력 10%, 골드 20%)
 		var r := GameData.stage(s)
 		check(is_equal_approx(r.hp_mult, 1.0 + 0.10 * (s - 1)) and is_equal_approx(r.atk_mult, 1.0 + 0.10 * (s - 1)), "hp/atk mult at stage %d" % s)
-		check(int(r.waves) == 3 + floori(s / 3.0) and int(r.wave_size) == 6 + 2 * s and r.idle_interval == 8.0, "waves/size/idle at stage %d" % s)
+		check(int(r.waves) == 3 and int(r.wave_size) == 8 and r.idle_interval == 8.0, "waves 3 / size 8 (72 per round, 2026-10-12) / idle at stage %d" % s)
 		check(absf(r.gold_mult - (1.0 + 0.2 * (s - 1)) * pow(1.01, s - 1)) < 0.006, "gold_mult at stage %d follows (1 + 0.2(s-1)) x 1.01^(s-1)" % s)
 	var r31 := GameData.stage(31)  # 직선 연장
 	var r30 := GameData.stage(30)
 	var r29 := GameData.stage(29)
 	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.10 * 39), "stage beyond table extrapolates hp_mult")
-	check(int(GameData.stage(40).wave_size) == 86 and int(GameData.stage(33).waves) == 14, "extrapolated int columns follow the 12-row slope and round (waves 33 = 14, same as the old 3 + floor(s/3))")
+	check(int(GameData.stage(40).wave_size) == 8 and int(GameData.stage(200).waves) == 3, "extrapolated waves/size stay 3 x 8 (flat table)")
 	check(GameData.kill_gold_tenths("grunt", 1) == 100 and GameData.kill_gold_tenths("grunt", 2) == 121 and GameData.kill_gold_tenths("grunt", 3) == 143, "kill_gold_tenths = gold x gold_mult in tenths (grunt 10: 10 x 1.21 -> 121, 10 x 1.43 -> 143)")
 	check(GameData.kill_gold_tenths("epic_boss", 2) == 3025 and GameData.kill_gold_tenths("grunt", 31) == 943, "kill_gold_tenths boss (250 x 1.21) and extrapolated stage (9.07 x 7/6.8 x 1.01)")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
@@ -454,22 +454,24 @@ func test_apply_remote() -> void:
 	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 36, "default tables restored after apply_remote tests")
 
 
-## 개정 22 §2: 에픽 보스는 라운드 25(스테이지 마지막)에만, 끝에 하나 — HP × boss_round_mult. 라운드 1~24는 졸개만.
+## 2026-10-12: 라운드마다 졸개 72마리 뒤 남쪽 성문 보스 하나, 라운드 25(스테이지 마지막)는 네 성문에 하나씩 — HP × boss_round_mult.
 func test_wave_stage_ends_with_boss() -> void:
 	var ev := WaveDirector.build(25, WaveDirector.MODE_STAGE)
 	check(ev.size() > 1, "stage schedule has events")
-	check(ev[-1].kind == "epic_boss" and ev[-1].hp_mult == 1.5, "round 1-25 ends with epic_boss (hp x boss_round_mult 1.5)")
+	var last4 := ev.slice(-4)
+	check(last4.all(func(e): return e.kind == "epic_boss" and e.hp_mult == 1.5) and last4.map(func(e): return e.side) == [0, 1, 2, 3],
+		"round 1-25 ends with one epic_boss at every gate (hp x boss_round_mult 1.5)")
 	for i in range(1, ev.size()):
 		check(ev[i].time >= ev[i - 1].time, "events sorted at %d" % i)
-	var bosses := ev.filter(func(e): return e.kind == "epic_boss").size()
-	check(bosses == 1, "exactly one boss")
+	check(ev.filter(func(e): return e.kind == "epic_boss").size() == 4, "round 25: four bosses")
 	for e in ev:
 		check(e.side >= 0 and e.side <= 3, "side in range")
-	var boss_rounds := []
-	for g in range(1, 52):
-		if WaveDirector.build(g, WaveDirector.MODE_STAGE).any(func(e): return e.kind == "epic_boss"):
-			boss_rounds.append(GameData.round_label(g))
-	check(boss_rounds == ["1-25", "2-25"], "g 1..51: a boss only on round 25 of each stage %s" % [boss_rounds])
+	for g in [1, 7, 24, 26, 49, 51]:  # 2026-10-12: 다른 라운드는 끝에 남쪽 성문 보스 하나(HP 배율 없음)
+		var e2 := WaveDirector.build(g, WaveDirector.MODE_STAGE)
+		var b2 := e2.filter(func(e): return e.kind == "epic_boss")
+		check(b2.size() == 1 and e2[-1] == b2[0] and b2[0].side == 2 and b2[0].get("hp_mult", 1.0) == 1.0,
+			"round %s ends with one boss at the south gate" % GameData.round_label(g))
+		check(e2.filter(func(e): return e.kind == "grunt").size() == 72, "round %s: 72 grunts" % GameData.round_label(g))
 
 
 ## 개정 22 §1 §3: 전체 라운드 g ↔ 스테이지 S·라운드 r("S-r"), 적 이동속도 배율 min(2.0, 1 + 0.08 × (S − 1)).
@@ -512,7 +514,7 @@ func test_enemy_looks() -> void:
 		check(e.kind in ["grunt", "epic_boss"], "looks keep the monster table ids (stats, gold)")
 		check(e.kind != "grunt" or e.look == "zombie", "round 6 grunts look like zombies")
 	var boss: Array = WaveDirector.build(50, WaveDirector.MODE_STAGE).filter(func(e): return e.kind == "epic_boss")
-	check(boss.size() == 1 and boss[0].look == "ogre_warlord", "stage 2 boss looks like the ogre warlord")
+	check(boss.size() == 4 and boss.all(func(e): return e.look == "ogre_warlord"), "stage 2 bosses look like the ogre warlord")
 
 
 func test_wave_idle_cycle() -> void:
@@ -3511,9 +3513,9 @@ func test_spawn_groups() -> void:
 		var size := int(st.wave_size)
 		var ev := WaveDirector.build(stage, WaveDirector.MODE_STAGE)
 		var grunts := ev.filter(func(e): return e.kind == "grunt")
-		var boss := 1 if stage == 25 else 0  # 개정 22: 보스는 라운드 25에만
-		check(grunts.size() == 3 * int(st.waves) * size and ev.filter(func(e): return e.kind == "epic_boss").size() == boss and (boss == 0 or ev[-1].kind == "epic_boss"),
-			"stage %d: 3 x waves x wave_size grunts, a boss last only on round 25" % stage)
+		var boss := 4 if stage == 25 else 1  # 2026-10-12: 라운드마다 끝에 보스, 라운드 25는 네 성문에 하나씩
+		check(grunts.size() == 3 * int(st.waves) * size and ev.filter(func(e): return e.kind == "epic_boss").size() == boss and ev[-1].kind == "epic_boss",
+			"stage %d: 3 x waves x wave_size grunts, then the boss(es) last" % stage)
 		var groups := {}  # 시각 → 그 시각 몬스터들
 		for e in grunts:
 			groups[e.time] = groups.get(e.time, []) + [e]
