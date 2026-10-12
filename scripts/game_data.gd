@@ -81,7 +81,8 @@ const UPGRADE_NUM_COLS := ["per_level", "max_level", "cost_base", "cost_growth"]
 const UPGRADE_UNITS := ["pct", "pp"]
 const UPGRADE_KEYS := {"atk": "atk_pct", "hp": "hp_pct", "aspd": "aspd_pct", "mspd": "mspd_pct", "crit_rate": "crit_rate", "crit_dmg": "crit_dmg"}  # 항목 id → upgrade_bonus 키
 const BASE_CRIT_MULT := 1.5  # 모든 아군 공격의 기본 치명타 배율(개정 20 §3)
-const LEVELUP_GOLD_GROWTH := 1.16  # L → L+1 골드 = round(등급 값 × 1.16^(L−1)) (2026-10-07 1.12 → 1.16: 초반은 비슷, 후반 골드 소비 상향). 서버 rules.LEVELUP_GOLD_GROWTH
+const LEVELUP_GOLD_GROWTH := 1.16  # L → L+1 골드 = round(등급 값 × 1.16^(L−1) × 1.0007^((L−1)²)) (2026-10-07 1.12 → 1.16). 서버 rules.LEVELUP_GOLD_GROWTH
+const LEVELUP_GOLD_CURVE := 1.0007  # 2026-10-12: 고레벨일수록 한 레벨 상승폭이 커지게(Lv 30 ×1.2·Lv 50 ×1.25·Lv 69 ×1.29씩). 서버 rules.LEVELUP_GOLD_CURVE
 # --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
 const DUNGEONS_PATH := "res://data/dungeons.csv"
 const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
@@ -560,12 +561,12 @@ static func max_level(promotion: int) -> int:
 	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_promotion")) * promotion
 
 
-## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.12^(L−1)). 식량 없음(개정 12).
+## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)). 식량 없음(개정 12).
 static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	var g := config_num("levelup_gold_" + grade)
 	var gold := 0
 	for l in range(level, level + count):
-		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1))
+		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1) * pow(LEVELUP_GOLD_CURVE, (l - 1) * (l - 1)))
 	return {"gold": gold}
 
 
