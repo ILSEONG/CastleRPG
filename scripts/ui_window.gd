@@ -1,5 +1,5 @@
 extends CanvasLayer
-## 창 공통(스펙 §5, 상인 거래 창 방식): 어두운 반투명 배경(모든 입력을 먹는다, 탭하면 닫힘) + 가운데 로우폴리 패널.
+## 창 공통(스펙 §5, 상인 거래 창 방식): 어두운 반투명 배경(모든 입력을 먹는다, 탭하면 닫힘) + 가운데 두루마리 패널(UiKit.scroll).
 ## 열려 있는 동안 뒤 화면(카메라·탭·HUD)은 입력을 못 받는다 — GUI가 먼저 소비해 _unhandled_input에 안 닿는다.
 ## 연 직후 OPEN_GUARD_MS 동안은 누름을 전부 버린다(_input) — 연타(더블 탭)의 두 번째 누름이 창을 닫거나, 그 자리의 버튼·카드
 ## ([10회 모집] 등)를 누르지 않게. 내용이 크게 바뀔 때(모집 결과)도 _arm_guard로 다시 건다.
@@ -13,11 +13,15 @@ const OPEN_GUARD_MS := 400  # 연 직후 이 시간 동안 이 창의 누름(버
 const GROUP := "ui_windows"
 const SHEET_TOP := 76  # 시트 위 끝: 상단 칩 줄(16..64) 아래
 const SHEET_SIDE := 8
+const UNROLL_SEC := 0.22  # 열 때 두루마리가 펼쳐지는 시간(누름 보호 OPEN_GUARD_MS 안에 끝난다)
+const UNROLL_FROM := 0.08  # 펼치기 시작할 때 세로 크기 비율
 
 var dialog: PanelContainer
 var content: VBoxContainer
 
 var _opened_ms := 0
+var _unroll_tween: Tween
+var _sheet := false  # 하단 탭 시트(_fit_sheet) — 탭을 오갈 때 바로 보이게 펼침을 안 한다
 
 
 func _build_window(width: float, separation := 14) -> void:
@@ -37,7 +41,7 @@ func _build_window(width: float, separation := 14) -> void:
 	dialog.grow_vertical = Control.GROW_DIRECTION_BOTH
 	dialog.custom_minimum_size = Vector2(width, 0)
 	dialog.mouse_filter = Control.MOUSE_FILTER_STOP  # 패널 안 탭은 배경으로 새지 않는다
-	dialog.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 18.0, 24))
+	dialog.add_theme_stylebox_override("panel", UiKit.scroll())  # 두루마리 창(2026-10-12)
 	back.add_child(dialog)
 	content = VBoxContainer.new()
 	content.add_theme_constant_override("separation", separation)
@@ -54,6 +58,7 @@ func _fit() -> void:
 
 ## 시트(하단 탭 창): 상단 칩 줄 아래부터 탭 바 위까지 채운다(크기 고정 — 내용이 바뀌어도 다시 맞추지 않는다).
 func _fit_sheet() -> void:
+	_sheet = true
 	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dialog.offset_left = SHEET_SIDE
 	dialog.offset_right = -SHEET_SIDE
@@ -65,6 +70,20 @@ func open() -> void:
 	visible = true
 	_arm_guard()
 	_on_open()
+	_unroll()
+
+
+## 두루마리 펼침: 패널을 가운데 기준으로 세로로 말아 둔 상태에서 펼친다. 보호 시간 안에 끝나 누를 수 있을 땐 제자리·제 크기다.
+## 시트는 펼치지 않는다(탭 전환은 바로).
+func _unroll() -> void:
+	if _sheet:
+		return
+	if _unroll_tween != null:
+		_unroll_tween.kill()
+	dialog.pivot_offset_ratio = Vector2(0.5, 0.5)
+	dialog.scale = Vector2(1.0, UNROLL_FROM)
+	_unroll_tween = create_tween()
+	_unroll_tween.tween_property(dialog, "scale", Vector2.ONE, UNROLL_SEC).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 ## 지금부터 OPEN_GUARD_MS 동안 누름을 버린다.

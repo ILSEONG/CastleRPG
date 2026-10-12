@@ -11,6 +11,7 @@ extends RefCounted
 ## canvas_item_add_triangle_array 한 번으로 그린다.
 
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
+const ScrollBox := preload("res://scripts/scroll_box.gd")
 const Art := preload("res://scripts/art.gd")
 
 const CREAM := Color("FBF7EE")
@@ -39,6 +40,19 @@ static func panel(color: Color, chamfer := 10.0, margin := 12, facet := 0.06) ->
 		b.facet = facet
 		b.seed = hash(color) & 0xffff
 		b.set_content_margin_all(margin)
+		_cache[key] = b
+	return _cache[key]
+
+
+## 두루마리 창 박스(양피지 + 위아래 말린 축, 2026-10-12). compact = 작은 확인 창(축이 얇고 여백이 좁다).
+static func scroll(compact := false) -> StyleBox:
+	var key := ["s", compact]
+	if not _cache.has(key):
+		var b := ScrollBox.new()
+		if compact:
+			b.set_roll(22.0, 14.0, 12.0, 10.0)
+		else:
+			b.set_roll(28.0, 18.0, 14.0, 12.0)
 		_cache[key] = b
 	return _cache[key]
 

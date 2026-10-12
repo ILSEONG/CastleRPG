@@ -432,7 +432,7 @@ func _build_fever_confirm() -> void:
 	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	box.custom_minimum_size = Vector2(560, 0)
-	box.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 14.0, 28))
+	box.add_theme_stylebox_override("panel", UiKit.scroll())
 	fever_confirm.add_child(box)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 24)

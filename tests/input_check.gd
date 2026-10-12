@@ -2700,7 +2700,7 @@ func _recruit23_ui(recruit) -> void:
 	var art: Rect2 = recruit._art_box.get_global_rect()
 	var dlg: Rect2 = recruit.dialog.get_global_rect()
 	print("INPUT INFO: recruit window %s, key art %s (720x1280 logical)" % [dlg, art])
-	_check(recruit.art.texture != null and absf(art.size.x - 632.0) < 2.0 and absf(art.size.y - 300.0) < 2.0 and art.position.y - dlg.position.y < 40.0
+	_check(recruit.art.texture != null and absf(art.size.x - 632.0) < 2.0 and absf(art.size.y - 300.0) < 2.0 and art.position.y - dlg.position.y < 48.0  # 두루마리 위 축(28) + 여백 아래
 		and absf(art.get_center().x - 360.0) < 2.0 and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
 		"(r23) the key art (632 x 300, placeholder headless) sits at the top centre; the gold tab window fits 720x1280", "art=%s dialog=%s" % [art, dlg])
 	_check(recruit.banner.visible and not recruit.art.visible and recruit.banner.get_global_rect() == art

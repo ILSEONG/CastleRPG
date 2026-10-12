@@ -236,7 +236,7 @@ func _build_hud() -> void:
 	rp.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	rp.grow_vertical = Control.GROW_DIRECTION_BOTH
 	rp.custom_minimum_size = Vector2(620, 0)
-	rp.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 18.0, 24))
+	rp.add_theme_stylebox_override("panel", UiKit.scroll())
 	_result_layer.add_child(rp)
 	_result_box = VBoxContainer.new()
 	_result_box.add_theme_constant_override("separation", 14)
