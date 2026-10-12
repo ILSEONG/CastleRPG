@@ -360,7 +360,7 @@ func finish_boss(run_id: String, dmg: float, now := -1.0) -> void:
 	me.boss_total = float(me.boss_total) + dmg
 	me.contrib = int(me.contrib) + 10
 	_grant({"coins": int(g[2]), "gold": int(g[3])})
-	_log("%s님이 %s Lv %d까지 · %s점" % [MY_NAME, boss_name(lv), lv, _commas(int(dmg))], now)
+	_log("%s님이 %s Lv %d 도달 · %s점" % [MY_NAME, boss_name(lv), lv, _commas(int(dmg))], now)
 	save()
 	changed.emit()
 	boss_done.emit({"dmg": dmg, "grade": g[0], "coins": int(g[2]), "gold": int(g[3]), "level": lv, "killed": lv - 1, "total": float(me.boss_total)})

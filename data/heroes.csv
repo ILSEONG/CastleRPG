@@ -14,11 +14,11 @@ mira,미라,독화살 사냥꾼,SR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#6B8
 torvin,토르빈,전투 사제,SR,melee,support,Knight,1H_Sword|Badge_Shield,#D4AC0D,504,19,1.8,0.8,6,8,shield,10,25,,regen_aura,6,1,,battle_hymn,15,20,5,찬가와 보호막으로 동료를 지키며 싸우는 사제
 rian,리안,쌍검사,SR,melee,assassin,Rogue,Knife|Knife_Offhand,#48C9B0,403,43,1.8,0.64,7,9,blade_flurry,7,4,80,frenzy,8,5,,parry,10,2,100,두 자루 검으로 눈보다 빠르게 베고 받아친다
 echo,에코,견습 화염술사,SR,ranged,caster,Mage,1H_Wand,#F39C12,277,31,8,1.2,6,12,fire_bolt,6,150,20,pyromancy,30,,,firespread,9,3,80,아직 서툴지만 불꽃만큼은 진짜인 마법사
-gork,고르크,도끼 투척꾼,SR,ranged,bruiser,Barbarian,1H_Axe|1H_Axe_Offhand,#935116,370,28,6,1.0,6,10,axe_volley,8,4,100,ricochet,2,60,,boomerang,8,6,120,양손 도끼를 던져 튕겨 내고 몰려든 적 사이에서 더 거세진다
+gork,고르크,도끼 투척꾼,SR,ranged,bruiser,Barbarian,1H_Axe|1H_Axe_Offhand,#935116,370,28,6,1.0,6,10,axe_volley,8,4,100,ricochet,2,60,,boomerang,8,6,120,양손 도끼를 던져 이리저리 튕기고 적이 몰려들수록 더 거세진다
 felix,펠릭스,기사단 창병,SR,melee,bruiser,Knight,2H_Sword,#2E86C1,554,32,1.8,0.8,6,8,spear_throw,8,6,150,stun,4,0.8,,spear_sweep,9,3,150,창을 던져 꿰뚫고 묵직한 일격으로 적을 멈춰 세운다
 hans,한스,민병대 검사,R,melee,bruiser,Knight,1H_Sword,#95A5A6,396,23,1.8,0.8,6,8,drain_slash,8,150,50,dmg_reduce,10,,,,,,,마을을 지키려 칼을 든 성실한 민병
 ella,엘라,마을 궁수,R,ranged,marksman,Rogue_Hooded,2H_Crossbow,#82E0AA,220,20,11,1.0,6,12,volley,7,4,60,focus,5,30,,,,,,연달아 화살을 쏘며 한 표적을 끝까지 노리는 사냥꾼의 딸
-dorik,도릭,나무꾼 전사,R,melee,bruiser,Barbarian,1H_Axe,#A04000,396,23,1.8,0.8,6,8,wide_swing,6,2.5,120,rage,40,,,,,,,나무 베던 솜씨로 두셋을 함께 벤다
+dorik,도릭,나무꾼 전사,R,melee,bruiser,Barbarian,1H_Axe,#A04000,396,23,1.8,0.8,6,8,wide_swing,6,2.5,120,rage,40,,,,,,,나무를 베던 솜씨로 적 두셋을 한꺼번에 벤다
 nina,니나,견습 치유사,R,ranged,support,Mage,2H_Staff,#A9DFBF,220,12,9,1.0,6,12,shield_ally,10,15,,haste_aura,6,15,,,,,,서툴지만 동료에게 보호막과 바람의 축복을 건넨다
 jack,잭,떠돌이 도적,R,melee,assassin,Rogue,Knife,#616A6B,288,30,1.8,0.64,7,9,cheap_shot,8,150,1,dodge,20,,,,,,,날렵하게 몸을 피하며 흔들린 적의 빈틈을 노린다
 valen,발렌,불꽃 군주,SSR,ranged,caster,Mage,2H_Staff,#FF6A1A,396,44,8,1.2,6,12,meteor,9,3,250,scorch,10,3,40,summon_phoenix,18,60,10,하늘에서 운석을 떨어뜨리고 불사조를 부르는 불꽃의 군주

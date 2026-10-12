@@ -81,7 +81,7 @@ const AUTO_ORDER := ["infantry", "cavalry", "archer"]
 ## 합성·배치 못 하는 이유 코드 → 문구(merge_block·soldier_deploy_block, 서버 409 코드 not_enough·max_tier와 같다).
 const SOLDIER_TEXT := {
 	"unknown": "알 수 없는 병사", "max_tier": "최대 티어입니다", "not_enough": "병사가 부족합니다", "waiting": "",
-	"bad_key": "알 수 없는 병사", "not_owned": "보유한 병사보다 많습니다", "over_population": "인구를 넘습니다",
+	"bad_key": "알 수 없는 병사", "not_owned": "보유한 병사보다 많습니다", "over_population": "인구 한도를 넘습니다",
 }
 const MERGE_FAIL_TEXT := "합성 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
 const SOLDIER_DEPLOY_FAIL_TEXT := "병사 배치를 저장하지 못했습니다"
@@ -4044,7 +4044,7 @@ static func _num(v) -> bool:
 
 const FRIEND_TEXT := {
 	"unknown_player": "그 친구 코드를 가진 성주가 없습니다", "self": "내 친구 코드입니다", "already_friends": "이미 친구입니다",
-	"already_requested": "이미 친구 신청을 보냈습니다", "friend_full": "친구와 보낸 신청이 가득 찼습니다", "their_full": "상대의 친구 목록이 가득 찼습니다",
+	"already_requested": "이미 친구 신청을 보냈습니다", "friend_full": "친구 목록과 보낸 신청이 가득 찼습니다", "their_full": "상대의 친구 목록이 가득 찼습니다",
 	"no_request": "친구 신청이 없어졌습니다", "not_friend": "이미 친구가 아닙니다", "not_owned": "가지고 있지 않은 영웅입니다",
 	"bad_request": "친구 코드는 8자리입니다",
 }

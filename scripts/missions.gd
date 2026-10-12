@@ -47,7 +47,7 @@ const GOTO := {"kill": "stage", "stage": "stage", "collect": "look:lumber", "sel
 	"gacha": "tab:recruit", "dungeon_win": "tab:dungeon", "guild_attend": "tab:guild", "guild_boss": "tab:guild", "build_up": "building:keep",
 	"research": "building:lab", "train": "building:barracks"}
 const FAIL_TEXT := {"claimed": "이미 받은 보상입니다", "not_done": "아직 완료하지 않았습니다", "too_soon": "잠시 뒤 다시 받아 주세요",
-	"stale": "진행을 새로 받았습니다. 다시 눌러 주세요"}
+	"stale": "진행 상황을 새로 받았습니다. 다시 눌러 주세요"}
 const FAIL_DEFAULT := "보상을 받지 못했습니다"
 const WAIT_TEXT := "연결 대기 중"
 
