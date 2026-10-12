@@ -51,7 +51,6 @@ const ResearchPanelScript := preload("res://scripts/research_panel.gd")
 const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
 const LoginScreenScript := preload("res://scripts/login_screen.gd")
 const PreloaderScript := preload("res://scripts/preloader.gd")
-var _notice_panel = null  # 공지사항 창(새 공지면 성 화면이 뜬 뒤 한 번 연다 — _maybe_show_notice)
 var _loading = null  # 로딩 화면(온라인: 서버 연결부터, 첫 월드에서 begin()으로 이어서 불러온다)
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
@@ -217,7 +216,6 @@ func _build_world() -> void:
 	add_child(admin_panel)
 	settings_panel.coupon = coupon_panel
 	settings_panel.admin_panel = admin_panel
-	_notice_panel = notice_panel
 	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][공지][우편][가방][미션][랭킹][친구][이벤트][거래소][길드]
 	side_menu.windows = {"settings": settings_panel, "notice": notice_panel, "mail": mail_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
