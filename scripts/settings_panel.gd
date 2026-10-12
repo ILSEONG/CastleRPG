@@ -2,11 +2,13 @@ extends "res://scripts/ui_window.gd"
 ## 설정 창(2026-10-06, 오른쪽 아래 메뉴 [설정] — 예전 [음악] 켬/끔 버튼 자리). 바꾸면 바로 적용되고 기기에 저장된다(서버 요청 없음).
 ## 사운드: 배경음악 켬/끔 + 크기 슬라이더(Music.enabled·volume), 효과음 켬/끔 + 크기 슬라이더(SoundFx.enabled·volume, 2026-10-07).
 ## 화면: 화면 흔들림(Prefs shake — 카메라 흔들림·히트스톱·SSR 줌), 피해 숫자 표시(Prefs damage_numbers).
+## 알림(안드로이드만, 2026-10-12): 푸시 알림 전체·종류별·야간 켬/끔 — notify_settings.gd, 예약은 Notify(notify.gd).
 ## 계정: 닉네임·친구 코드([복사])·로그인 방식(온라인, 친구 목록 응답 Economy.friends에서). 오프라인이면 "오프라인 모드".
 ## 계정 삭제(온라인, Google Play 계정 삭제 정책): 두 번 눌러 확인 → POST /v1/account/delete → 저장한 로그인·기기 id를 지우고 처음부터(Net.forget_account).
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
 
 const Prefs := preload("res://scripts/prefs.gd")
+const NotifySettings := preload("res://scripts/notify_settings.gd")
 
 const TITLE := "설정"
 const WIDTH := 600.0
@@ -30,6 +32,7 @@ var version_label: Label
 var delete_button: Button
 var _delete_armed := 0.0
 var _deleting := false
+var notify_rows: RefCounted  # [알림] 칸(notify_settings.gd), 알림을 못 띄우는 빌드면 null
 
 
 func _ready() -> void:
@@ -57,6 +60,7 @@ func _ready() -> void:
 	content.add_child(_section("화면"))
 	shake_check = _toggle_row("화면 흔들림", func(on: bool): Prefs.set_value("shake", on))
 	numbers_check = _toggle_row("피해 숫자 표시", func(on: bool): Prefs.set_value("damage_numbers", on))
+	notify_rows = NotifySettings.add_to(self)  # 푸시 알림 켬/끔(안드로이드만)
 
 	content.add_child(_section("계정"))
 	name_label = _info_row("닉네임")
@@ -91,6 +95,8 @@ func _on_open() -> void:
 	if Net.is_online() and str(Economy.friends.get("code", "")) == "":
 		Economy.friends_load()  # 로딩 때 못 받았으면 지금(받는 동안은 "…")
 	_refresh()
+	if notify_rows != null:
+		notify_rows.refresh()
 
 
 ## 지금 값으로 다시 보인다(토글 신호는 막고).

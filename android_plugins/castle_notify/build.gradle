@@ -1,0 +1,21 @@
+plugins {
+    id 'com.android.library' version '8.6.1'
+}
+
+android {
+    namespace 'com.ilesong.castlerpg.notify'
+    compileSdk 36
+    defaultConfig {
+        minSdk 24
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 게임 APK에는 Godot 템플릿이 이미 들어 있다 — 컴파일에만 쓴다. godot-lib의 classes.jar(내보내기 템플릿 android_source.zip에서
+    // dev/build-notify-plugin.sh가 꺼낸다 — Maven Central은 자주 429로 막힌다).
+    compileOnly files(project.property('godotLibJar'))
+}

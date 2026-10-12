@@ -1,0 +1,15 @@
+// 푸시 알림(로컬 예약 알림) 안드로이드 플러그인 — dev/build-notify-plugin.sh가 AAR을 만들어 addons/castle_notify/bin/에 둔다.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'castle_notify'
