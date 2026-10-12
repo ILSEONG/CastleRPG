@@ -18,6 +18,7 @@ const RETRY_MAX_SEC := 15.0
 const TIMEOUT_SEC := 10.0
 const FLUSH_SEC := 10.0  # 처치 골드 보고 간격
 const AUTH_MAX := 3  # 연속 401(다시 로그인해도 또 401) 허용 횟수. 넘으면 끊김 상태로 RETRY_MAX_SEC마다 다시 로그인
+const BLOCK_RETRY_SEC := 20.0  # 점검·업데이트 안내 중 같은 요청을 다시 묻는 간격
 const SERVER_TRIES := 4  # 접속 뒤 5xx·408·429는 한 요청을 이만큼 다시 보내고 버린다
 const DEVICE_RE := "^[A-Za-z0-9-]{16,128}$"
 const SESSION_RE := "^[0-9a-f]{64}$"
@@ -359,6 +360,7 @@ func _send_head() -> void:
 		body = JSON.stringify(it.body)
 	if it.auth:
 		headers.append("Authorization: Bearer " + token)
+	headers.append("X-App-Version: " + LiveOps.app_version())  # 서버 최소 버전보다 낮으면 426 update_required(LiveOps)
 	var method := HTTPClient.METHOD_POST if it.method == "POST" else HTTPClient.METHOD_GET
 	if _http.request(api_base + it.path, headers, method, body) != OK:
 		_on_completed(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
@@ -375,9 +377,14 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, raw: Pac
 	# 첫 접속 전, 그리고 처치·스테이지 클리어(seq·stage로 서버가 중복을 막는다 — 다시 보내도 안전, 버리면 진행을 잃는다)는
 	# 5xx도 버리지 않고 계속 다시 보낸다
 	var keep_trying: bool = not ready_once or it.path in DURABLE_PATHS
+	if result == HTTPRequest.RESULT_SUCCESS and is_blocked_reply(code, data):
+		_on_blocked(it, code, data)
+		return
 	var step := classify(result, code, data, it.auth, _auth_retries, 0 if keep_trying else it.tries, it.conflicted)
 	if step != "net":
 		_fails = 0
+	if step == "ok":
+		LiveOps.on_ok()
 	if it.get("once", false) and step in ["net", "retry", "refresh"]:
 		_drop_once(it, step, code, data)
 		return
@@ -425,6 +432,26 @@ func _on_completed(result: int, code: int, _headers: PackedStringArray, raw: Pac
 			_fails += 1
 			_go_down()
 			_retry_in(backoff(_fails))
+
+
+## 서버 점검(503 maintenance)·업데이트 필요(426 update_required) 답인가(서버 live_ops.ts 관문 — 그 요청은 처리하지 않았다).
+static func is_blocked_reply(code: int, data) -> bool:
+	return data is Dictionary and ((code == 503 and data.get("error") == "maintenance") or (code == 426 and data.get("error") == "update_required"))
+
+
+## 점검·업데이트: 화면 전체 안내(LiveOps → ops_overlay)를 띄우고 같은 요청을 BLOCK_RETRY_SEC마다 다시 묻는다(서버가 처리하지 않았으니
+## 다시 보내도 안전). 사용자가 누른 once 요청(모집 등)은 끝난 뒤 뒤늦게 반영되지 않게 버리고 fail(되돌리기).
+func _on_blocked(it: Dictionary, code: int, data: Dictionary) -> void:
+	_fails = 0
+	LiveOps.on_blocked(code, data)
+	if it.get("once", false):
+		_queue.pop_front()
+		last_error = str(data.get("error", ""))
+		if it.fail.is_valid():
+			it.fail.call()
+		_next()
+		return
+	_retry_in(BLOCK_RETRY_SEC)
 
 
 ## once 요청이 다시 보내야 할 결과(연결 실패·시간 초과·5xx·409)를 받았다: 버리고 fail, 상태를 새로 받는 /v1/player를 머리에 둔다.

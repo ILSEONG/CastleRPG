@@ -1166,10 +1166,10 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.cost_labels.stone.get_theme_color("font_color") == bwin.RED and bwin.time_label.text == "건설 시간 00:20" and not bwin._progress_box.visible,
 		"(B) cost 600/800/400 with icons (stone short = red, wood 1000 ok), 건설 시간 00:20",
 		"wood=%s stone=%s time=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.time_label.text])
-	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 1) == [["1마리", "3:00:00", "2:30:00"]]
-		and bwin.effect_lines("stable", 3) == [["1마리", "2:00:00", "1:30:00"]] and bwin.effect_lines("barracks", 6) == [["1마리", "30:00", "T2 3:00:00"]] and bwin.effect_lines("lab", 2)[0] == ["연구 속도", "+2%", "+4%"]
+	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 1) == [["1명", "3:00:00", "2:30:00"]]
+		and bwin.effect_lines("stable", 3) == [["1명", "2:00:00", "1:30:00"]] and bwin.effect_lines("barracks", 6) == [["1명", "30:00", "T2 3:00:00"]] and bwin.effect_lines("lab", 2)[0] == ["연구 속도", "+2%", "+4%"]
 		and UiKit.duration(3900) == "1시간 5분" and UiKit.duration(59.2) == "01:00",
-		"(B) effect sentences: 인구 6 → 8, soldier buildings 1마리 3:00:00 → 2:30:00 (Lv 6 30:00 → T2 3:00:00), lab research speed +2% → +4%; times mm:ss / h시간 m분",
+		"(B) effect sentences: 인구 6 → 8, soldier buildings 1명 3:00:00 → 2:30:00 (Lv 6 30:00 → T2 3:00:00), lab research speed +2% → +4%; times mm:ss / h시간 m분",
 		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
 	bwin.close()
 
@@ -1357,10 +1357,10 @@ func _soldiers_ui(tabs, hud) -> void:
 	var q = bwin.qty
 	print("INPUT INFO: barracks window dialog %s, qty [+] %s, [최대] %s, [훈련] %s (720x1280 logical)" % [bwin.dialog.get_global_rect(), q.plus.get_global_rect(),
 		q.max_button.get_global_rect(), bwin.train_button.get_global_rect()])
-	_check(held == "barracks" and bwin.title_label.text == "보병 막사 Lv 1" and eff.get_child(0).text == "1마리 3:00:00" and eff.get_child(1).text == "→ 2:30:00"
-		and bwin.train_box.visible and bwin.empty_box.visible and not bwin.run_box.visible and not bwin.done_box.visible and bwin.unit_label.text == "T1 보병 · 1마리 3:00:00"
+	_check(held == "barracks" and bwin.title_label.text == "보병 막사 Lv 1" and eff.get_child(0).text == "1명 3:00:00" and eff.get_child(1).text == "→ 2:30:00"
+		and bwin.train_box.visible and bwin.empty_box.visible and not bwin.run_box.visible and not bwin.done_box.visible and bwin.unit_label.text == "T1 보병 · 1명 3:00:00"
 		and bwin._train_type == "infantry:1" and bwin._unit_icon.is_visible_in_tree() and not "merge_rows" in bwin,
-		"(S) a long press on the barracks opens its window: 1마리 3:00:00 → 2:30:00 and the empty training section (infantry figure, 'T1 보병 · 1마리 3:00:00'); no merge section",
+		"(S) a long press on the barracks opens its window: 1명 3:00:00 → 2:30:00 and the empty training section (infantry figure, 'T1 보병 · 1명 3:00:00'); no merge section",
 		"held=%s title=%s unit=%s" % [held, bwin.title_label.text, bwin.unit_label.text])
 	_check(q.value == 1 and q.min_value == 1 and q.max_value == 10 and bwin.train_cost_labels.food.text == "1,500" and bwin.train_cost_labels.wood.text == "1,000"
 		and not bwin.train_cost_labels.stone.visible and bwin.train_time_label.text == "훈련 시간 3:00:00" and not bwin.train_button.disabled and not bwin.train_reason.visible,
@@ -1416,7 +1416,7 @@ func _soldiers_ui(tabs, hud) -> void:
 	bwin.close()
 	bwin.open_building("stable")
 	await _frames(1)
-	_check(bwin.title_label.text == "기병 마구간 Lv 1" and bwin._train_type == "cavalry:1" and bwin.unit_label.text == "T1 기병 · 1마리 3:00:00" and bwin.train_button.disabled
+	_check(bwin.title_label.text == "기병 마구간 Lv 1" and bwin._train_type == "cavalry:1" and bwin.unit_label.text == "T1 기병 · 1명 3:00:00" and bwin.train_button.disabled
 		and bwin.train_reason.text == Economy.TRAIN_TEXT.not_enough and bwin.train_cost_labels.stone.get_theme_color("font_color") == bwin.RED,
 		"(S) the stable window trains cavalry; no stone -> cost in red, [훈련] off with '자원 부족'", "type=%s why=%s" % [bwin._train_type, bwin.train_reason.text])
 	await _barracks_t2_window()
@@ -2440,14 +2440,14 @@ func _barracks_t2_window() -> void:
 	bwin.close()
 	bwin.open_building("barracks")
 	await _frames(1)
-	_check(bwin.unit_label.text == "T1 보병 · 1마리 30:00" and bwin.next_label.visible and bwin.next_label.text == "Lv 7 → T2 해금" and bwin._train_type == "infantry:1",
+	_check(bwin.unit_label.text == "T1 보병 · 1명 30:00" and bwin.next_label.visible and bwin.next_label.text == "Lv 7 → T2 해금" and bwin._train_type == "infantry:1",
 		"(S) Lv 6 barracks: T1 30:00 and the preview 'Lv 7 → T2 해금'", "unit=%s next=%s" % [bwin.unit_label.text, bwin.next_label.text])
 	Economy.levels.barracks = 7
 	Economy.changed.emit()
 	await _frames(1)
-	_check(bwin.unit_label.text == "T2 보병 · 1마리 3:00:00" and bwin._train_type == "infantry:2" and bwin.train_cost_labels.food.text == "7,500" and bwin.train_cost_labels.wood.text == "5,000"
-		and bwin.train_time_label.text == "훈련 시간 3:00:00" and bwin.next_label.text == "1마리 3:00:00 → 2:30:00" and not bwin.train_button.disabled,
-		"(S) Lv 7 barracks: T2 보병 1마리 3:00:00, cost x5 (7,500 food / 5,000 wood), preview '1마리 3:00:00 → 2:30:00'",
+	_check(bwin.unit_label.text == "T2 보병 · 1명 3:00:00" and bwin._train_type == "infantry:2" and bwin.train_cost_labels.food.text == "7,500" and bwin.train_cost_labels.wood.text == "5,000"
+		and bwin.train_time_label.text == "훈련 시간 3:00:00" and bwin.next_label.text == "1명 3:00:00 → 2:30:00" and not bwin.train_button.disabled,
+		"(S) Lv 7 barracks: T2 보병 1명 3:00:00, cost x5 (7,500 food / 5,000 wood), preview '1명 3:00:00 → 2:30:00'",
 		"unit=%s food=%s wood=%s next=%s" % [bwin.unit_label.text, bwin.train_cost_labels.food.text, bwin.train_cost_labels.wood.text, bwin.next_label.text])
 	Economy.levels.barracks = 1
 	Economy.changed.emit()

@@ -276,7 +276,7 @@ func _show_result() -> void:
 		_result_box.add_child(head)
 		_result_box.add_child(_label("드래곤 Lv %d 도달 · 점수 %s" % [int(result.get("level", 1)), UiKit.commas(int(result.dmg))], 32, MainHud.INK))
 		if float(result.get("sent", result.dmg)) > float(result.dmg) + 0.5:
-			_result_box.add_child(_label("(이번 도전 인정 한도까지)", 20, GuildPanel.SUB))
+			_result_box.add_child(_label("(한 판에 인정되는 점수 한도까지만 반영)", 20, GuildPanel.SUB))
 		_result_box.add_child(_label("길드 코인 +%d · 골드 +%s" % [int(result.coins), UiKit.commas(int(result.gold))], 28, GOLD.darkened(0.15)))
 		if result.has("total"):
 			_result_box.add_child(_label("오늘 내 점수 %s · 길드 점수에 더해집니다" % UiKit.commas(int(result.total)), 24, GuildPanel.GREEN, true))

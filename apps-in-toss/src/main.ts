@@ -1,12 +1,23 @@
 // 앱인토스(토스 미니앱) 래퍼: Godot 웹 빌드(public/game/)를 띄우고, 게임이 쓸 토스 SDK 기능을 window.castleToss로 내준다.
 // - getUserKey(cb): 게임 로그인 사용자 식별키(getUserKeyForGame hash). cb(hash) 또는 cb('UNSUPPORTED' | 'INVALID_CATEGORY' | 'ERROR').
 //   게임(scripts/toss_bridge.gd)이 이 값으로 서버 /v1/auth/toss에 로그인한다.
+// - 인앱 결제(2026-10-12, 토스 인앱 결제 IAP — 게임은 scripts/store_pay.gd):
+//   buy(sku, onGrant, onDone): 주문서를 연다. 결제가 끝나면 onGrant(orderId) — 게임이 서버(/v1/iap/purchase)에 확인·지급을 받고
+//   granted(orderId, ok)로 답하면 그 값이 SDK processProductGrant의 결과(true = 지급 완료)가 된다. 끝나면 onDone('success', orderId) 또는
+//   onDone('error', 코드)('UNSUPPORTED' = 토스 앱이 오래됨).
+//   pendingOrders(cb): 결제는 됐는데 지급이 안 끝난 주문 cb(JSON [{orderId, sku}]) — 게임이 다시 서버에 보내고 completeGrant(orderId).
 // - 안드로이드 뒤로 가기: 종료 확인 창(출시 가이드: 종료할 때 확인 모달) → closeView().
-import { closeView, getUserKeyForGame, graniteEvent } from '@apps-in-toss/web-framework'
+import { closeView, getUserKeyForGame, graniteEvent, IAP } from '@apps-in-toss/web-framework'
 
 declare global {
   interface Window {
-    castleToss: { getUserKey: (cb: (result: string) => void) => void }
+    castleToss: {
+      getUserKey: (cb: (result: string) => void) => void
+      buy: (sku: string, onGrant: (orderId: string) => void, onDone: (kind: string, detail: string) => void) => void
+      granted: (orderId: string, ok: boolean) => void
+      pendingOrders: (cb: (json: string) => void) => void
+      completeGrant: (orderId: string) => void
+    }
     Engine: any
   }
 }
@@ -22,7 +33,57 @@ window.castleToss = {
       })
       .catch(() => cb('ERROR'))
   },
+
+  buy(sku, onGrant, onDone) {
+    if (!IAP.createOneTimePurchaseOrder.isSupported()) {
+      onDone('error', 'UNSUPPORTED') // 토스 앱 5.219.0 미만
+      return
+    }
+    let cleanup: (() => void) | null = null
+    const end = (kind: string, detail: string) => {
+      try { cleanup?.() } catch { /* 이미 끝남 */ }
+      cleanup = null
+      onDone(kind, detail)
+    }
+    try {
+      cleanup = IAP.createOneTimePurchaseOrder({
+        options: {
+          sku,
+          // 결제가 끝나면 토스가 부른다: 게임이 서버 지급 결과를 granted()로 알려 줄 때까지 기다린다(아니면 토스가 주문을 대기로 남긴다)
+          processProductGrant: ({ orderId }) => new Promise<boolean>((resolve) => {
+            grants.set(orderId, resolve)
+            onGrant(orderId)
+          }),
+        },
+        onEvent: (e) => end('success', e?.data?.orderId ?? ''),
+        onError: (err: any) => end('error', String(err?.code ?? err?.message ?? err ?? 'ERROR')),
+      })
+    } catch (err: any) {
+      end('error', String(err?.message ?? 'ERROR'))
+    }
+  },
+
+  granted(orderId, ok) {
+    const r = grants.get(orderId)
+    grants.delete(orderId)
+    r?.(ok === true)
+  },
+
+  pendingOrders(cb) {
+    if (!IAP.getPendingOrders.isSupported()) {
+      cb('[]')
+      return
+    }
+    IAP.getPendingOrders()
+      .then((r: any) => cb(JSON.stringify((r?.orders ?? []).map((o: any) => ({ orderId: String(o.orderId), sku: String(o.sku ?? o.productId ?? '') })))))
+      .catch(() => cb('[]'))
+  },
+
+  completeGrant(orderId) {
+    if (IAP.completeProductGrant.isSupported()) IAP.completeProductGrant({ params: { orderId } }).catch(() => {})
+  },
 }
+const grants = new Map<string, (ok: boolean) => void>() // 주문 번호 → processProductGrant 결과 알리기
 
 // --- 종료 확인 ---
 const exitBox = document.getElementById('exit') as HTMLDivElement

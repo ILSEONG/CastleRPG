@@ -205,7 +205,7 @@ func _create_card() -> Control:
 	var card := _card()
 	var v: VBoxContainer = card.get_child(0)
 	v.add_child(_label("길드 창설", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	var s := _label("직접 길드를 만들면 길드장이 됩니다. 가입 신청한 길드원이 시간이 지나며 들어와요.", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	var s := _label("직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어와요.", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(s)
 	name_edit = LineEdit.new()
@@ -240,7 +240,7 @@ func _create_card() -> Control:
 		if Guild.create(n, emblem_pick):
 			_create_name = ""
 			tab = "home"
-			Economy.notice.emit("길드 「%s」를 창설했습니다!" % n.strip_edges())
+			Economy.notice.emit("「%s」 길드를 창설했습니다!" % n.strip_edges())
 		else:
 			Economy.notice.emit(Guild.create_block(n)))
 	v.add_child(c)
@@ -450,7 +450,7 @@ func _build_boss() -> void:
 	if not is_instance_valid(_dragon_box):
 		_dragon_box = dragon_view(Vector2(560, 300))
 	v.add_child(_dragon_box)
-	var desc := _label("하루 %d번 도전. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수예요." % GuildScript.BOSS_TRIES, 18, SUB)
+	var desc := _label("하루 %d번 도전할 수 있어요. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수예요." % GuildScript.BOSS_TRIES, 18, SUB)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(desc)
 	var sc := HBoxContainer.new()
@@ -476,7 +476,7 @@ func _build_boss() -> void:
 	# 등급표
 	var gc := _card()
 	var gv: VBoxContainer = gc.get_child(0)
-	gv.add_child(_label("판 등급 보상(도달한 드래곤 레벨)", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	gv.add_child(_label("도달 레벨별 보상", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for gr in GuildScript.BOSS_GRADES:
 		var r := HBoxContainer.new()
 		var gl := _label(gr[0], 26, grade_color(gr[0]))
@@ -531,7 +531,7 @@ func _build_shop() -> void:
 		v.add_child(_label(it.name, 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 		var desc := "보유 영웅 중 무작위 조각 %d개" % give.shards if give.has("shards") else ("보유 SSR 영웅 무작위 조각 1개" if give.has("ssr_shards") else _give_text(give))
 		if give.has("equip"):
-			desc = "장비 1개, 장비 던전 최고 단계(%d단계)의 등급 확률, 부위·능력치 무작위" % maxi(1, int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
+			desc = "장비 1개 (장비 던전 최고 %d단계 등급 확률, 부위·능력치 무작위)" % maxi(1, int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
 		var dl := _label(desc, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 긴 설명(장비 상자)이 창을 화면보다 넓히지 않게 줄바꿈
 		v.add_child(dl)

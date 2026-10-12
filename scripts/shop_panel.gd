@@ -5,7 +5,7 @@ extends "res://scripts/ui_window.gd"
 ## - 패스 = 성장 패스: 라운드를 깰 때마다 무료 보상(누구나) + 유료 보상(패스 구매자), 단계마다 [받기].
 ## - 일일·주간 = 다이아로 사는 한정 상품 카드 2열 + 무료 선물(Economy.buy_shop — 누르는 즉시, 서버 확인은 뒤에서, 거절되면 되돌림).
 ## - 다이아 = 충전 6단계(첫 구매 2배 띠, 이후 보너스).
-## 실결제 버튼(₩ 가격)은 Google Play 연결 전이라 누르면 알림만(Economy.iap_buy). 버튼은 기다리는 글자로 바뀌지 않는다.
+## 실결제 버튼(₩ 가격)은 Economy.iap_buy → 결제 창(StorePay; 서버에 결제 키가 없으면 알림만). 버튼은 기다리는 글자로 바뀌지 않는다.
 ## 받을 것(무료 선물·월정액 오늘 보상·성장 패스)이 있는 탭에 빨간 점. 모집 창의 "다이아가 부족합니다 → [이동]"은 [다이아] 탭으로 연다(open_tab).
 ## [PVP] 탭(2026-10-07, PVP 스레드): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
 ## PVP 화면의 [상점]도 이 탭으로 연다(pvp_view.open_shop).
@@ -446,7 +446,7 @@ func _pack_card(p: Dictionary, i: int) -> Control:
 	return card
 
 
-## 실결제 가격 버튼(₩). 누르면 Economy.iap_buy(연결 전이면 알림).
+## 실결제 가격 버튼(₩). 누르면 Economy.iap_buy(결제 창, 안 열렸으면 알림).
 func _krw_button(id: String, krw: int, text := "") -> Button:
 	var b := _button(text if text != "" else "₩" + UiKit.commas(krw), HudScript.ACCENT, 24)
 	b.focus_mode = Control.FOCUS_NONE

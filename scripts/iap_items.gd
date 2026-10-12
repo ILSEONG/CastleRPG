@@ -1,7 +1,7 @@
 extends RefCounted
 ## 결제 상품 표(서버 server/src/iap.ts PRODUCTS·GROWTH와 같은 값 — 한쪽을 바꾸면 다른 쪽도, 단위 테스트 test_iap가 비교한다).
 ## kind: diamond(충전: 첫 구매는 기본 다이아 2배, 이후 기본 + bonus)·monthly(월정액 days일, 사면 give + 매일 daily)·package(period 기간 한도 limit)·
-## pass(성장 패스: GROWTH 유료 보상)·hot(핫딜: 계기에 1시간 뜬 것만 한 번, value = 가치 배수 표시). krw = 원화 가격. 실결제는 Google Play 연결 전이라 아직 살 수 없다(Economy.iap_buy가 알린다).
+## pass(성장 패스: GROWTH 유료 보상)·hot(핫딜: 계기에 1시간 뜬 것만 한 번, value = 가치 배수 표시). krw = 원화 가격. 실결제는 Economy.iap_buy → StorePay(Google Play·토스, 서버 키가 없으면 알림만).
 
 const PRODUCTS := [
 	{ "id": "dia_1", "kind": "diamond", "name": "다이아 300", "krw": 1200, "give": { "diamonds": 300 }, "bonus": 30 },

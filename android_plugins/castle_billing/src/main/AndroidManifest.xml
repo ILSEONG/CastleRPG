@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 결제 라이브러리 매니페스트도 이 권한을 넣지만 명시해 둔다. -->
+    <uses-permission android:name="com.android.vending.BILLING" />
+    <application>
+        <!-- Godot 플러그인 v2 등록: Engine.get_singleton("CastleBilling") -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.CastleBilling"
+            android:value="com.ilesong.castlerpg.billing.CastleBilling" />
+    </application>
+</manifest>

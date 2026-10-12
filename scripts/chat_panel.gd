@@ -141,7 +141,7 @@ func _build_confirm() -> void:
 	confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	confirm_label.custom_minimum_size = Vector2(470, 0)
 	v.add_child(confirm_label)
-	v.add_child(_label("신고한 사람·신고당한 사람·그때 채팅 내용이 운영자에게 전달돼요", 18, SUB))
+	v.add_child(_label("신고한 사람, 신고된 사람, 당시 채팅 내용이 운영자에게 전달돼요", 18, SUB))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
 	var no := _button("취소", UiKit.STEEL, 24)

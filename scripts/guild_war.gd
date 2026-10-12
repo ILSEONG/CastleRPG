@@ -21,7 +21,7 @@ const VIRTUAL_POWER_RANGE := [0.8, 1.05]
 const MIN_POWER := 250
 const WAIT_TEXT := "응답 대기 중"
 const ERROR_TEXT := {"battle_done": "이번 주 공성전은 끝났습니다", "conquered": "이번 주 상대 성채를 이미 함락했습니다",
-	"not_yet": "아직 공성 시각이 아닙니다", "schedule_locked": "공성 시각이 이미 지났습니다", "schedule_past": "지금보다 뒤의 시각을 고르세요",
+	"not_yet": "아직 공성 시각이 아닙니다", "schedule_locked": "공성 시각이 이미 지났습니다", "schedule_past": "지금 이후의 시각을 고르세요",
 	"bad_heroes": "보유한 영웅 4명을 고르세요", "no_guild": "길드에 가입하세요", "nothing": "받을 보상이 없습니다", "not_host": "다른 길드원이 전투를 진행 중입니다", "not_leader": "길드장만 전투를 시작할 수 있습니다"}
 
 signal changed
