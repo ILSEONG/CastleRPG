@@ -46,7 +46,7 @@ export const DEFS: MissionDef[] = [
   { id: 'r_sell', type: 'repeat', kind: 'sell', title: '상인과 %d번 거래', target: 10, step: 5, reward: { gold: 5000 } },
   { id: 'r_hero', type: 'repeat', kind: 'hero_level', title: '영웅 레벨업 %d회', target: 20, step: 10, reward: { gold: 5000 } },
   { id: 'r_growth', type: 'repeat', kind: 'growth', title: '성장 강화 %d회', target: 20, step: 10, reward: { gold: 5000 } },
-  { id: 'r_gacha', type: 'repeat', kind: 'gacha', title: '영웅 %d회 모집', target: 30, step: 10, reward: { tickets: 1 } },
+  { id: 'r_gacha_dia', type: 'repeat', kind: 'gacha_dia', title: '다이아·모집권으로 영웅 %d회 모집', target: 30, step: 10, reward: { tickets: 1 } },
   { id: 'r_dungeon', type: 'repeat', kind: 'dungeon_win', title: '던전 %d번 클리어', target: 5, step: 3, reward: { diamonds: 30 } },
 ]
 
@@ -77,7 +77,7 @@ export interface Counters {
 }
 
 // 서버가 세는 사건(앱 missions.gd·tutorial.gd가 세는 것과 같은 이름)
-export const EVENTS = ['kill', 'collect', 'sell', 'stage', 'hero_level', 'growth', 'gacha', 'dungeon_win', 'guild_attend', 'guild_boss', 'build_up',
+export const EVENTS = ['kill', 'collect', 'sell', 'stage', 'hero_level', 'growth', 'gacha', 'gacha_dia', 'dungeon_win', 'guild_attend', 'guild_boss', 'build_up',
   'research', 'train'] as const
 
 // 주 번호: 월요일에 시작한다(리셋 날짜 0 = 1970-01-02 금요일 KST).

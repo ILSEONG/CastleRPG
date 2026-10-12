@@ -220,6 +220,7 @@ var kills_sent := {}     # 스테이지 → {몬스터 id → 수}: 보냈고 �
 
 var _dirty := false   # 처치 골드처럼 즉시 저장하지 않은 변경
 var _save_cd := SAVE_INTERVAL
+var _gacha_cur := ""  # 응답 대기 중인 온라인 모집의 재화(미션 gacha_dia)
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
 var _key_predicts := {}  # 온라인 상점 입장권 즉시 반영: 요청 키 → {던전 종류: 열쇠 수}(응답 전 다른 서버 응답의 열쇠 위에 다시 얹는다)
 var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
@@ -650,6 +651,8 @@ func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
 	roster_changed.emit()
 	save()
 	gacha_done.emit(results)
+	if dia:  # 반복 미션 "다이아·모집권으로 모집"(골드 모집은 세지 않는다)
+		acted.emit("gacha_dia", results.size())
 	return true
 
 
@@ -1282,6 +1285,11 @@ func iap_can_buy(id: String) -> bool:
 ## 충전 상품 첫 구매(기본 다이아 2배)가 남았다.
 func iap_first_bonus(id: String) -> bool:
 	return not iap_view().first.has(id)
+
+
+## 광고 제거를 샀다(영구, 서버 iap.passes). 보상형 광고가 생기면 이 계정은 광고 없이 그 보상을 바로 받는다.
+func ad_free() -> bool:
+	return has_pass("no_ads")
 
 
 func has_pass(id: String) -> bool:
@@ -3343,6 +3351,7 @@ func _gacha_online(count: int, currency: String) -> bool:
 		notice.emit(WAIT_TEXT)
 		return false
 	_waiting["gacha"] = true
+	_gacha_cur = currency
 	net.flush_kills()
 	# 응답을 기다리지 않고 곧바로 재화를 뺀다(버튼은 그대로, "…" 없음 — 사용자 2026-10-06). 영웅은 응답 때, 거절되면 되돌린다
 	var cost := gacha_cost(currency, count)
@@ -3367,6 +3376,8 @@ func _on_gacha(data: Dictionary) -> void:
 				results.append({"hero_id": r.hero_id, "grade": GameData.hero(r.hero_id).grade, "new": r.get("new") == true,
 					"copies": int(r.copies) if _num(r.get("copies")) else 1, "shards": int(r.shards) if _num(r.get("shards")) else 0})
 	gacha_done.emit(results)
+	if _gacha_cur != GameData.GACHA_GOLD and results.size() > 0:  # 반복 미션 "다이아·모집권으로 모집"
+		acted.emit("gacha_dia", results.size())
 
 
 func _on_gacha_failed() -> void:

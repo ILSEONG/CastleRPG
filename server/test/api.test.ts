@@ -123,6 +123,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       shop: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {} }, // 상점
       iap: { first: [], n: {}, day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {}, monthly: {}, passes: [], gp: { free: [], paid: [] }, hot: null, hcool: {}, hs: 0 },
       iap_enabled: false, // 결제 상품
+      ad_free: false,
       iap_providers: [], iap_skus: { toss: {} }, account_tag: Pay.accountTag(id), // 실결제(결제 키 없음 → 닫힘)
       market_sold: 0, // 거래소
       admin: false, // 슈퍼관리자(Google 확인 이메일 ∈ admin_emails)

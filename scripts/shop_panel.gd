@@ -527,6 +527,10 @@ func _build_packages() -> void:
 		if Economy.iap_can_buy(p.id):
 			side.append(_krw_button(p.id, int(p.krw), ("연장 ₩" if left > 0 else "₩") + UiKit.commas(int(p.krw))))
 		body.add_child(_wide(str(ShopArt.PACK_ICONS.get(p.id, "crown")), p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
+	var na := IapItems.find("no_ads")  # 광고 제거(영구) — 산 뒤에는 "구매함"
+	var na_side := [_label("구매함", 22, GIVE)] if Economy.ad_free() else [_krw_button(na.id, int(na.krw))]
+	body.add_child(_wide("crown", na.name + " (영구)", [["광고 없이 플레이 · 보상형 광고 보상은 보지 않고 바로", GIVE], ["구매 보너스 " + Missions.reward_text(na.give) + " · 계정당 1회", SUB]],
+		na_side, FREE_BG if Economy.ad_free() else CARD_BG))
 	for p in IapItems.of_kind("package"):
 		var ok := Economy.iap_can_buy(p.id)
 		if p.period == "once" and not ok:

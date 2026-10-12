@@ -597,6 +597,7 @@ export function createApp(opts: AppOptions) {
         shop: SH.normalize(p.shop, today(game, now)), // 상점: 오늘·이번 주 산 수
         iap: IAP.normalize(p.iap, today(game, now)), // 결제 상품: 첫 구매·한도·월정액·패스
         iap_enabled: payProviders.length > 0, // 실결제가 하나라도 열렸다(키가 설정된 제공자)
+        ad_free: IAP.adFree(IAP.normalize(p.iap, today(game, now))), // 광고 제거 구매(보상형 광고가 생기면 보지 않고 바로 받는다)
         iap_providers: payProviders, // 열린 결제 제공자: 'google'(APK)·'toss'(앱인토스). 앱은 자기 플랫폼 것이 있을 때만 결제 창을 연다
         iap_skus: { toss: pay.tossSkus ?? {} }, // 상품 id → 제공자 sku(다를 때만)
         account_tag: Pay.accountTag(p.id), // Google 결제에 실어 보내는 내 계정 표시(영수증이 이 계정 것인지 서버가 맞춘다)
@@ -1626,7 +1627,10 @@ export function createApp(opts: AppOptions) {
       case 'stage_clear': add('stage', 1); break
       case 'levelup': add('hero_level', Number(d.count) || 0); break
       case 'upgrade': add('growth', Number(d.count) || 0); break
-      case 'gacha': add('gacha', Number(d.count) || 0); break
+      case 'gacha': // gacha_dia = 다이아·모집권 모집만(반복 미션 — 골드 모집은 세지 않는다, 사용자 2026-10-12)
+        add('gacha', Number(d.count) || 0)
+        if (d.currency !== R.GACHA_GOLD) add('gacha_dia', Number(d.count) || 0)
+        break
       case 'dungeon_clear': add('dungeon_win', 1); break
       case 'research': if (d.action === 'start') add('research', 1); break
       case 'train_start': add('train', 1); break
