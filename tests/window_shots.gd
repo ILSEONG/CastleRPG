@@ -44,8 +44,10 @@ func _ready() -> void:
 	w = _win("recruit_panel.gd")
 	w.open()
 	await _shot("recruit", w)
-	for s in ["hero_panel.gd", "growth_panel.gd", "shop_panel.gd", "mission_panel.gd"]:
+	for s in ["coupon_panel.gd", "hero_panel.gd", "growth_panel.gd", "shop_panel.gd", "mission_panel.gd", "notice_panel.gd", "mail_panel.gd"]:
 		w = _win(s)
+		if w == null:
+			continue
 		w.open()
 		await _shot(s.get_basename().replace("_panel", ""), w)
 	print("saved to ", _dir)

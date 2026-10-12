@@ -30,7 +30,7 @@ func _ready() -> void:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	panel.custom_minimum_size = Vector2(560, 0)
-	panel.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 18.0, 28))
+	panel.add_theme_stylebox_override("panel", UiKit.scroll())  # 두루마리 창
 	back.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
