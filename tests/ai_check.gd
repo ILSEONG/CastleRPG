@@ -649,12 +649,14 @@ func _damage_numbers() -> void:
 	var kinds: Array = dn._list.map(func(e): return e.kind)
 	_check(kinds == [K.HIT] and dn._list[0].text == str(roundi(h.atk)), "(dn) a plain attack makes one white damage number", "kinds=%s text=%s atk=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-", h.atk])
 	dn._list.clear()
+	dn._tags.clear()
 	hc._target = m
 	await _attack_now(hc)
 	kinds = dn._list.map(func(e): return e.kind)
-	_check(kinds == [K.CRIT, K.BANNER] and dn._list[0].text == "%d!" % roundi(hc.atk * 2.0) and DamageNumbersScript.STYLE[K.CRIT][0] == Color(1.0, 0.62, 0.15)
-		and dn._list[1].text == "치명타!",
-		"(dn) a 100% crit hero makes an orange crit number with '!' and the 치명타! banner (r17)", "kinds=%s text=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-"])
+	_check(kinds == [K.CRIT] and dn._list[0].text == "%d!" % roundi(hc.atk * 2.0) and DamageNumbersScript.STYLE[K.CRIT][0] == Color(1.0, 0.62, 0.15)
+		and dn._tags.size() == 1 and dn._tags[0].text == "" and dn._tags[0].skill == "crit",
+		"(dn) a 100% crit hero makes an orange crit number with '!' and the crit passive shows its skill icon without a name (r17, 2026-10-12)",
+		"kinds=%s text=%s tags=%s" % [kinds, dn._list[0].text if not dn._list.is_empty() else "-", dn._tags.map(func(e): return [e.skill, e.text])])
 	dn._list.clear()
 	h.take_damage(10.0, m)
 	hd.take_damage(10.0, m)
@@ -1522,29 +1524,30 @@ func _skill_unlock_cases() -> void:
 	_clear_monsters()
 	await _frames(1)
 
-	# (U3) 이그니스(SSR ★0) 폭발: 20면체·충격파 고리·섬광·파편 8~12, 이름 띠 "화염구!"(고유 색)·발밑 맥동, 흔들림 끔. 1.5초 안 두 번째는 띠 없음
+	# (U3) 이그니스(SSR ★0) 폭발: 20면체·충격파 고리·섬광·파편 8~12, 이름 띠 "화염구"(고유 색, 2026-10-12부터 "!" 없음)·발밑 맥동, 흔들림 끔. 1.5초 안 두 번째는 띠 없음
 	await _wait_until(func(): return Fx.live() == 0, 3.0)
 	var ig = _add_hero("ignis", 343, 0)
 	ig.set_process(false)
 	var mb = _still("epic_boss", _flat(ig.global_position) + Formation.SIDE_DIR[3] * 3.0)
 	await _frames(1)
 	dn._list.clear()
+	dn._tags.clear()
 	ig._blast(mb.global_position)
 	var tags := {}
 	for n in get_tree().get_nodes_in_group(Fx.GROUP):
 		var t: String = n.get_meta("fx", "")
 		tags[t] = tags.get(t, 0) + 1
-	var banners: Array = dn._list.filter(func(e): return e.kind == K.BANNER)
+	var banners: Array = dn._tags.filter(func(e): return e.text != "")
 	_check(tags.get("blast", 0) == 1 and tags.get("shock", 0) == 1 and tags.get("flash", 0) == 1 and tags.get("shard", 0) >= Fx.SHARDS_MIN
 		and tags.get("shard", 0) <= Fx.SHARDS_MAX and Fx.live() <= Fx.MAX_LIVE, "(U3) aoe_blast makes an icosahedron, a shockwave ring, a flash and 8-12 shards", str(tags))
-	_check(banners.size() == 1 and banners[0].text == "화염구!" and banners[0].bg == Color(ig.def.color) and tags.get("pulse", 0) == 1,
+	_check(banners.size() == 1 and banners[0].text == "화염구" and banners[0].bg == Color(ig.def.color) and tags.get("pulse", 0) == 1,
 		"(U3) the blast shows ignis's name banner in her color and pulses her foot ring", "banners=%s tags=%s" % [banners.map(func(e): return e.text), tags])
 	_check(tags.get("burst", 0) == 1 and tags.get("wave", 0) >= 1 and tags.get("pillar", 0) >= 1 and tags.get("rays", 0) == 1 and tags.get("motes", 0) >= 1,
 		"(U3) SSR tier: the blast adds a ground flare, a second shockwave, a light pillar and embers; the activation raises light rays", str(tags))
 	var rig = get_viewport().get_camera_3d().get_parent()
 	_check(rig.has_method("is_shaking") and not rig.is_shaking() and not GameData.fx_shake(), "(U3) with fx_shake off (tests) the SSR blast does not shake the camera", "")
 	ig._blast(mb.global_position)
-	_check(dn._list.filter(func(e): return e.kind == K.BANNER).size() == 1, "(U3) a second blast within 1.5 s shows no second banner", "")
+	_check(dn._tags.filter(func(e): return e.text != "").size() == 1, "(U3) a second blast within 1.5 s shows no second banner", "")
 	await _wait_until(func(): return Fx.live() == 0, 3.0)
 	for i in Fx.MAX_LIVE - 5:
 		Fx.heal_ring(_main, Vector3(0, 0, -5.0), 2.0)

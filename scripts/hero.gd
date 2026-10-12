@@ -36,7 +36,8 @@ const MUZZLE := Vector3(0, 1.3, 0)  # 투사체가 나가는 높이
 ## 모델 → 투사체 [모양, 속도 m/s](개정 12-2 §3). 없으면 화살.
 const SHOTS := {"Mage": ["bolt", 18.0], "Barbarian": ["axe", 20.0]}
 const ARROW_SPEED := 30.0
-const BANNER_GAP := 1.5  # 같은 영웅의 스킬 이름 띠 최소 간격(초)
+const BANNER_GAP := 1.5  # 같은 영웅의 스킬 이름 띠(또는 확률 패시브 그림) 최소 간격(초)
+const NAMED_PASSIVES := ["revive", "invincible", "second_wind"]  # 한 판에 한 번쯤 터지는 패시브 — 확률 패시브와 달리 이름 띠
 const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
 const CAST_RECOVER := 0.3  # 발동 순간 뒤 이만큼 더 제자리에서 모션을 마저 한다(초) — 곧바로 평타 모션이 덮지 않게
 const ARENA_PAD := 0.2  # 던전·드래곤 아레나: 영웅끼리 몸 둘레 여유(m, ally_pad) — 둘 합 1.3 m 떨어져 선다
@@ -74,6 +75,7 @@ var _tier := 0  # 연출 단계(Fx.tier_of 등급): 높을수록 스킬 이펙�
 var _aura_ring: MeshInstance3D  # atk_aura를 받는 중 표시
 var _aura_cd := 0.0
 var _banner_at := -INF  # 마지막 이름 띠 시각(초)
+var _proc_at := -INF  # 마지막 확률 패시브 그림 시각(초)
 var _target
 var _atk_cd := 0.0
 var _scan_cd := 0.0
@@ -802,18 +804,41 @@ func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
 	return out.slice(0, n)
 
 
-## 스킬 발동 표시(개정 17 §3): 머리 위 이름 띠(고유 색, 0.8초) + 발밑 링 맥동. 같은 영웅은 BANNER_GAP초에 한 번.
+## 스킬 발동 표시(개정 17 §3, 2026-10-12 개편): 머리 위 표시 + 발밑 링 맥동. 액티브·한 판 한 번 패시브(NAMED_PASSIVES)는 이름 띠,
+## 확률 패시브는 이름 없이 스킬 그림만 — 둘은 따로 BANNER_GAP초에 한 번(확률 패시브가 액티브 이름을 가리지 않게).
+## 우리 편 SSR의 궁극기(해금된 가장 높은 칸의 액티브)는 화면 컷인도 띄운다. 상대 팀(team 1)은 작은 띠.
 func _announce(kind: String) -> void:
-	var now := Time.get_ticks_msec() / 1000.0
-	if now - _banner_at < BANNER_GAP or not is_inside_tree():
+	if not is_inside_tree():
 		return
-	_banner_at = now
-	DamageNumbers.banner(self, Skills.name_of(kind, def.id) + "!", _color)
+	var now := Time.get_ticks_msec() / 1000.0
+	var named := HeroSkillsScript.is_active(kind) or kind in NAMED_PASSIVES
+	if named:
+		if now - _banner_at < BANNER_GAP:
+			return
+		_banner_at = now
+	else:
+		if now - _proc_at < BANNER_GAP:
+			return
+		_proc_at = now
+	var enemy: bool = get("team") == 1
+	var label := Skills.name_of(kind, def.id)
+	DamageNumbers.banner(self, kind, label if named else "", _color, enemy)
+	if named and not enemy and def.get("grade", "") == "SSR" and kind == _ult_kind():
+		DamageNumbers.cutin(str(def.id), label, str(def.get("name", "")), _color, kind)
 	Fx.pulse(self, _foot, _color, _tier)
 	if _tier >= 2 and GameData.fx_shake():  # SSR 발동: 화면이 잠깐 당겨진다(아트 방향 §4, 흔들림 설정을 따른다)
 		var cam := get_viewport().get_camera_3d()
 		if cam != null and cam.get_parent().has_method("punch") and _on_screen(cam):
 			cam.get_parent().punch()
+
+
+## 궁극기 = 해금된 칸 중 가장 높은 칸의 액티브(SSR ★0이면 첫 스킬, ★5면 셋째 스킬). 없으면 "".
+func _ult_kind() -> String:
+	var kinds: Array = def.get("skills", {}).keys()
+	for i in range(kinds.size() - 1, -1, -1):
+		if _sk.has(kinds[i]) and HeroSkillsScript.is_active(kinds[i]):
+			return kinds[i]
+	return ""
 
 
 ## 화면 안에 보이는가(머리 높이 지점이 뷰포트 안).

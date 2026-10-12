@@ -49,6 +49,11 @@ const KIND := {
 	"summon_wolf": ["paw", SUMMON], "summon_skeleton": ["skull", SUMMON], "summon_golem": ["stone", SUMMON],
 	"summon_treant": ["tree", NATURE], "summon_spirit": ["orb", SUMMON], "summon_phoenix": ["bird", FIRE],
 	"summon_hawk": ["bird", WIND], "summon_turret": ["crossbow", SUMMON],
+	# 패시브(2026-10-12 스킬 이름 띠 개편: 확률 패시브는 이름 대신 이 그림만 머리 위에)
+	"crit": ["sword", BLOOD], "stun": ["star", HOLY], "execute": ["skull", BLOOD], "freeze_hit": ["snowflake", ICE],
+	"shock_hit": ["bolt", STORM], "heavy_blow": ["hammer", EARTH], "echo_strike": ["wave", STEEL], "frost_shatter": ["ice_spike", ICE],
+	"counter": ["sword", GUARD], "second_wind": ["heart", HEAL], "invincible": ["shield", HOLY], "revive": ["heart", HOLY],
+	"scorch": ["flame", FIRE], "gale": ["swirl", WIND], "solar_spark": ["sun", HOLY], "frost_spike": ["ice_spike", ICE], "magma": ["fireball", LAVA],
 }
 
 
