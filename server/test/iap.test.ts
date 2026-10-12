@@ -43,13 +43,13 @@ test('다이아 충전: 첫 구매 2배, 두 번째는 기본 + 보너스, 같�
   const d0 = (await S.req('GET', '/v1/player', { token })).json.player.diamonds
   let r = await buy(token, 'dia_2', 'test', 'same')
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.diamonds, d0 + 3000)
+  assert.equal(r.json.player.diamonds, d0 + 9000)
   const again = await buy(token, 'dia_2', 'test', 'same') // 같은 계정이 다시 보내면(결제 직후 꺼졌다 복구) 지급 없이 already
   assert.equal(again.status, 200)
   assert.equal(again.json.already, true)
   assert.equal((await buy((await S.login()).token, 'dia_2', 'test', 'same')).json.error, 'duplicate_order') // 남의 주문 번호
   r = await buy(token, 'dia_2')
-  assert.equal(r.json.player.diamonds, d0 + 3000 + 1800)
+  assert.equal(r.json.player.diamonds, d0 + 9000 + 5400)
   assert.deepEqual(r.json.player.iap.first, ['dia_2'])
   const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'iap'", [id])
   assert.equal(logs.length, 2)
@@ -60,11 +60,11 @@ test('패키지: 스타터 평생 1번, 일일 패키지는 다음 날 다시', 
   const { token } = await S.login()
   let r = await buy(token, 'pkg_starter')
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.pouches.gold_120, 3)
+  assert.equal(r.json.player.pouches.gold_120, 5)
   assert.equal((await buy(token, 'pkg_starter')).json.error, 'limit')
   const keys = r.json.player.dungeons.gold.keys
   r = await buy(token, 'pkg_daily')
-  assert.equal(r.json.player.dungeons.gold.keys, keys + 2)
+  assert.equal(r.json.player.dungeons.gold.keys, keys + 3)
   assert.equal((await buy(token, 'pkg_daily')).json.error, 'limit')
   S.clock.t = T0 + DAY
   assert.equal((await buy(token, 'pkg_daily')).status, 200)
@@ -78,7 +78,7 @@ test('월정액: 즉시 300 + 하루 한 번 100, 30일 뒤 끝, 남은 기간�
   let r = await buy(token, 'monthly')
   const d = r.json.player.diamonds
   r = await claim()
-  assert.equal(r.json.player.diamonds, d + 200)
+  assert.equal(r.json.player.diamonds, d + 500)
   assert.equal((await claim()).json.error, 'claimed')
   S.clock.t = T0 + 29 * DAY
   assert.equal((await claim()).status, 200)
@@ -106,7 +106,7 @@ test('성장 패스: 라운드를 깨야 무료, 유료는 패스를 산 뒤(지
   assert.equal((await buy(token, 'pass_growth')).json.error, 'limit')
   const d = (await S.req('GET', '/v1/player', { token })).json.player.diamonds
   r = await claim(0, 'paid')
-  assert.equal(r.json.player.diamonds, d + 600)
+  assert.equal(r.json.player.diamonds, d + 1800)
   r = await claim(1, 'paid')
   assert.equal(r.json.player.dia_tickets >= 2, true)
 })
@@ -152,6 +152,6 @@ test('광고 제거: 한 번만, 사면 보너스 다이아 300 + ad_free', asyn
   const r = await buy(token, 'no_ads')
   assert.equal(r.status, 200)
   assert.equal(r.json.player.ad_free, true)
-  assert.equal(r.json.player.diamonds, p0.diamonds + 300)
+  assert.equal(r.json.player.diamonds, p0.diamonds + 1000)
   assert.equal((await buy(token, 'no_ads')).json.error, 'limit')
 })
