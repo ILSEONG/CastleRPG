@@ -144,7 +144,7 @@ test('핫딜: 보스 단계·다이아 부족·패배 때 1시간, 한 번에 �
   assert.equal(r.json.player.iap.hs, 2)
 })
 
-test('광고 제거: 한 번만, 사면 보너스 다이아 300 + ad_free', async () => {
+test('광고 제거: 한 번만, 사면 ad_free(구매 보너스 없음)', async () => {
   S.clock.t = T0
   const { token } = await S.login()
   const p0 = (await S.req('GET', '/v1/player', { token })).json.player
@@ -152,6 +152,6 @@ test('광고 제거: 한 번만, 사면 보너스 다이아 300 + ad_free', asyn
   const r = await buy(token, 'no_ads')
   assert.equal(r.status, 200)
   assert.equal(r.json.player.ad_free, true)
-  assert.equal(r.json.player.diamonds, p0.diamonds + 1000)
+  assert.equal(r.json.player.diamonds, p0.diamonds)
   assert.equal((await buy(token, 'no_ads')).json.error, 'limit')
 })

@@ -35,6 +35,18 @@ func _ready() -> void:
 	await _snap()
 	shop.buttons["growth:0:free"].pressed.emit()
 	await _frames(4)
+	shop._pick("ad")
+	await _snap()
+	shop.buttons["buy:a_dia"].pressed.emit()  # 광고 화면(시험)
+	await _frames(30)
+	await _snap()
+	shop.ad_player.visible = false
+	Economy.iap = {"passes": ["no_ads"]}  # 광고 제거 구매자: [바로 받기]
+	Economy.shop_changed.emit()
+	await _frames(4)
+	await _snap()
+	Economy.iap = {}
+	Economy.shop_changed.emit()
 	shop._pick("daily")
 	shop.buttons["buy:d_free"].pressed.emit()
 	await _frames(4)

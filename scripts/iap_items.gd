@@ -20,7 +20,7 @@ const PRODUCTS := [
 	{ "id": "hot_dia", "kind": "hot", "name": "다이아 긴급 지원", "krw": 5900, "value": 8, "give": { "diamonds": 12000, "tickets": 15 } },
 	{ "id": "hot_defeat", "kind": "hot", "name": "패배 극복 특가", "krw": 4900, "value": 10, "give": { "diamonds": 4000, "tickets": 20, "pouch_gold_360": 5, "pouch_res_360": 5 } },
 	{ "id": "pass_growth", "kind": "pass", "name": "성장 패스", "krw": 9900, "give": {} },
-	{ "id": "no_ads", "kind": "pass", "name": "광고 제거", "krw": 5500, "give": { "diamonds": 1000 } },
+	{ "id": "no_ads", "kind": "pass", "name": "광고 제거", "krw": 5500, "give": {} },
 ]
 
 ## 성장 패스 단계: round(깬 라운드)에 닿으면 free(누구나)·paid(패스 구매자).

@@ -53,8 +53,8 @@ export const PRODUCTS: Product[] = [
   // 패스
   { id: 'pass_growth', kind: 'pass', name: '성장 패스', krw: 9900, give: {} },
   // 광고 제거(영구, 사용자 2026-10-12 ₩5,500): 계정에 남는다(passes). 지금 게임에는 광고가 없어 구매 보너스 다이아를 함께 준다 —
-  // 보상형 광고가 생기면 광고 제거 계정은 광고 없이 그 보상을 바로 받는다(view.ad_free).
-  { id: 'no_ads', kind: 'pass', name: '광고 제거', krw: 5500, give: { diamonds: 1000 } },
+  // 광고 제거: 상점 [광고] 상품을 광고 없이 바로 받는다(view.ad_free). 구매 보너스는 없다(사용자 2026-10-12 "광고제거 사면 이득보는걸 지우고").
+  { id: 'no_ads', kind: 'pass', name: '광고 제거', krw: 5500, give: {} },
 ]
 
 // 성장 패스 단계: 라운드(GameData.round_label — 25라운드 = 1스테이지)를 깨면 받는다. free = 누구나, paid = 패스 구매자.

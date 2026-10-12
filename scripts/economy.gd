@@ -1148,7 +1148,7 @@ func shop_bought(id: String) -> int:
 	if x.is_empty():
 		return 0
 	var per := shop_period()
-	var daily: bool = x.tab == "daily"
+	var daily: bool = x.tab != "weekly"  # 광고 상품도 매일
 	if int(shop.get("day" if daily else "week", -1)) != int(per[0 if daily else 1]):
 		return 0
 	var m = shop.get("d" if daily else "w")
@@ -1190,16 +1190,19 @@ func _shop_mark(x: Dictionary) -> void:
 		s.w = {}
 	s.day = per[0]
 	s.week = per[1]
-	var k := "d" if x.tab == "daily" else "w"
+	var k := "w" if x.tab == "weekly" else "d"
 	s[k][x.id] = int(s[k].get(x.id, 0)) + 1
 	shop = s
 
 
 ## 상품 하나를 산다(값 빼기 + 받기). 온라인은 곧바로 반영하고 POST /v1/shop/buy {id, n}(n = 이미 산 수 — 재전송이 두 번 사지 않는다).
-func buy_shop(id: String) -> bool:
+## ad = 보상형 광고를 끝까지 봤다(광고 상품 — 광고 제거 구매자는 보지 않아도 된다, ad_free).
+func buy_shop(id: String, ad := false) -> bool:
 	if shop_block(id) != "":
 		return false
 	var x := ShopItems.find(id)
+	if x.currency == "ad" and not ad and not ad_free():
+		return false
 	var give: Dictionary = x.give
 	var r := give.duplicate()  # 받는 것 − 값(다이아·골드)
 	if x.currency == "diamonds":
@@ -1223,7 +1226,7 @@ func buy_shop(id: String) -> bool:
 		shop_changed.emit()
 		dungeons_changed.emit()
 		net.flush_kills()
-		net.send("POST", "/v1/shop/buy", {"id": id, "n": n}, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
+		net.send("POST", "/v1/shop/buy", {"id": id, "n": n, "ad": ad}, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
 		return true
 	_shop_mark(x)
 	grant(r)  # 저장·changed·열쇠까지

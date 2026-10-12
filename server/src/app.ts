@@ -1841,7 +1841,7 @@ export function createApp(opts: AppOptions) {
   // --- 상점(shop.ts): 일일·주간 한정 상품, 다이아·골드로 산다(실결제 없음) ---
 
   // 상품 하나 사기. body = {id, n}: n = 이번 기간(오늘·이번 주)에 이미 산 수와 같아야 한다(아니면 409 stale — 재전송이 두 번 사지 않는다).
-  // 한도를 다 샀으면 409 sold_out, 다이아·골드가 모자라면 409 not_enough. 값 빼기·받기·산 기록·economy_log shop을 version 가드 한 문장으로.
+  // 한도를 다 샀으면 409 sold_out, 다이아·골드가 모자라면 409 not_enough, 광고 상품은 광고 제거가 아니면 body.ad = true(아니면 409 ad_required). 값 빼기·받기·산 기록·economy_log shop을 version 가드 한 문장으로.
   app.post('/v1/shop/buy', auth, async (c) => {
     const b = await body(c)
     const sid = strField(b, 'id')
@@ -1853,7 +1853,9 @@ export function createApp(opts: AppOptions) {
       const had = SH.bought(st, x)
       if (had >= x.limit) throw new ApiError(409, 'sold_out', `'${x.id}' is sold out for this period`)
       if (n !== had) throw new ApiError(409, 'stale', `'${x.id}' has been bought ${had} times`)
-      const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give } } }
+      const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
+      if (x.currency === 'ad' && !free && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
+      const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(x.currency === 'ad' ? { ad: !free } : {}) } } }
       const give = x.give as Record<string, number>
       let gold = (give.gold ?? 0) * 10
       let dia = give.diamonds ?? 0

@@ -5406,6 +5406,14 @@ func test_shop() -> void:
 	check(e.buy_shop("d_res") and e.diamonds == 50 and int(e.res.wood) == w0 + 10000 and e.shop_left("d_res") == 2, "shop: resource bundle costs 50 diamonds")
 	e.shop.day = int(e.shop.day) - 1  # 날이 바뀌었다
 	check(e.shop_left("d_free") == 1 and e.shop_left("d_res") == 3 and e.shop_left("w_free") == 1, "shop: a new day refills daily items")
+	e.diamonds = 0
+	check(not e.buy_shop("a_dia") and e.diamonds == 0, "ad shop: no reward without a watched ad")
+	check(e.buy_shop("a_dia", true) and e.diamonds == 100 and e.shop_left("a_dia") == 4 and e.shop_left("d_free") == 1, "ad shop: watched ad gives 100 diamonds, 5 a day")
+	var t0 := int(e.dia_tickets)
+	e.iap = {"passes": ["no_ads"]}
+	check(e.ad_free() and e.buy_shop("a_ticket") and e.dia_tickets == t0 + 1, "ad shop: ad-removal owners claim without an ad")
+	e.shop.day = int(e.shop.day) - 1
+	check(e.shop_left("a_dia") == 5, "ad shop: a new day refills ad items")
 	e.free()
 	# 디자인 보강 6번: 상점 그림은 Meshy로 그린 18장(shop_art.gd) — 상품·패키지·핫딜·다이아 충전이 모두 그린 그림을 찾는다
 	var art := preload("res://scripts/shop_art.gd")

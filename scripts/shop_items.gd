@@ -1,6 +1,6 @@
 extends RefCounted
 ## 상점 상품 표(서버 server/src/shop.ts ITEMS와 같은 값 — 한쪽을 바꾸면 다른 쪽도). 일일·주간 한정 상품을 다이아·골드로 산다(실결제 없음).
-## currency: "free"(무료 선물)·"diamonds"·"gold". limit = 리셋 기간(일일: 매일 리셋 시각, 주간: 월요일)마다 살 수 있는 횟수.
+## currency: "free"(무료 선물)·"diamonds"·"gold"·"ad"(보상형 광고를 보면 받는다 — 광고 제거 구매자는 바로, 매일 리셋, 기록은 일일과 같은 d). limit = 리셋 기간(일일: 매일 리셋 시각, 주간: 월요일)마다 살 수 있는 횟수.
 ## give = 보상 키(출석·미션 보상과 같은 규칙: gold·diamonds·tickets·wood·stone·food·keys_<던전>·pouch_<id>).
 ## icon = 상점 카드 그림(shop_panel.gd draw_item_icon — shop_art.gd의 그린 그림 이름, 없으면 벡터 그림).
 
@@ -13,6 +13,13 @@ const ITEMS := [
 	{"id": "d_key_equip", "tab": "daily", "name": "장비 던전 입장권", "currency": "diamonds", "price": 100, "limit": 2, "give": {"keys_equip": 1}, "icon": "key_equip"},
 	{"id": "d_key_ticket", "tab": "daily", "name": "모집권 던전 입장권", "currency": "diamonds", "price": 150, "limit": 1, "give": {"keys_ticket": 1}, "icon": "key_ticket"},
 	{"id": "d_res", "tab": "daily", "name": "자원 꾸러미", "currency": "diamonds", "price": 50, "limit": 3, "give": {"wood": 10000, "stone": 10000, "food": 10000}, "icon": "res_pile"},
+	{"id": "a_dia", "tab": "ad", "name": "광고 다이아", "currency": "ad", "price": 0, "limit": 5, "give": {"diamonds": 100}, "icon": "dia_1"},
+	{"id": "a_ticket", "tab": "ad", "name": "광고 모집권", "currency": "ad", "price": 0, "limit": 2, "give": {"tickets": 1}, "icon": "ticket"},
+	{"id": "a_key_gold", "tab": "ad", "name": "골드 던전 입장권", "currency": "ad", "price": 0, "limit": 2, "give": {"keys_gold": 1}, "icon": "key_gold"},
+	{"id": "a_key_equip", "tab": "ad", "name": "장비 던전 입장권", "currency": "ad", "price": 0, "limit": 1, "give": {"keys_equip": 1}, "icon": "key_equip"},
+	{"id": "a_key_ticket", "tab": "ad", "name": "모집권 던전 입장권", "currency": "ad", "price": 0, "limit": 1, "give": {"keys_ticket": 1}, "icon": "key_ticket"},
+	{"id": "a_pouch_gold", "tab": "ad", "name": "골드 주머니(1시간)", "currency": "ad", "price": 0, "limit": 3, "give": {"pouch_gold_60": 1}, "icon": "pouch_gold"},
+	{"id": "a_pouch_res", "tab": "ad", "name": "자원 주머니(1시간)", "currency": "ad", "price": 0, "limit": 3, "give": {"pouch_res_60": 1}, "icon": "pouch_res"},
 	{"id": "w_free", "tab": "weekly", "name": "주간 무료 선물", "currency": "free", "price": 0, "limit": 1, "give": {"diamonds": 150, "tickets": 2}, "icon": "gift_big"},
 	{"id": "w_tickets", "tab": "weekly", "name": "모집권 10장 묶음", "currency": "diamonds", "price": 2400, "limit": 1, "give": {"tickets": 10}, "icon": "tickets"},
 	{"id": "w_pouch_gold", "tab": "weekly", "name": "골드 주머니(6시간)", "currency": "diamonds", "price": 200, "limit": 2, "give": {"pouch_gold_360": 1}, "icon": "pouch_gold"},

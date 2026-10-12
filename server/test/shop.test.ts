@@ -20,7 +20,8 @@ test('shop.ts: 상품 id는 겹치지 않고 한도·가격이 맞다', () => {
   assert.equal(new Set(SH.ITEMS.map((x) => x.id)).size, SH.ITEMS.length)
   for (const x of SH.ITEMS) {
     assert.ok(x.limit >= 1)
-    assert.equal(x.currency === 'free', x.price === 0)
+    assert.equal(x.currency === 'free' || x.currency === 'ad', x.price === 0)
+    assert.equal(x.currency === 'ad', x.tab === 'ad')
   }
 })
 
@@ -80,4 +81,30 @@ test('자원 꾸러미: 다이아를 빼고 자원, 주간 상품은 다음 주(
   assert.equal((await buy(token, 'w_free', 0)).json.error, 'sold_out')
   S.clock.t = T0 + 7 * DAY
   assert.equal((await buy(token, 'w_free', 0)).status, 200)
+})
+
+test('광고 상품: 광고를 봐야(ad: true, 아니면 409 ad_required) 받고, 매일 한도, 광고 제거 구매자는 광고 없이 바로', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  const p0 = (await S.req('GET', '/v1/player', { token })).json.player
+  assert.equal((await buy(token, 'a_dia')).json.error, 'ad_required')
+  const ad = (n: number) => S.req('POST', '/v1/shop/buy', { token, body: { id: 'a_dia', n, ad: true } })
+  for (let n = 0; n < 5; n++) assert.equal((await ad(n)).status, 200)
+  assert.equal((await ad(5)).json.error, 'sold_out')
+  let p = (await S.req('GET', '/v1/player', { token })).json.player
+  assert.equal(p.diamonds, p0.diamonds + 500)
+  assert.deepEqual(p.shop.d, { a_dia: 5 })
+  const k = await S.req('POST', '/v1/shop/buy', { token, body: { id: 'a_key_gold', n: 0, ad: true } })
+  assert.equal(k.status, 200)
+  assert.equal((await S.req('POST', '/v1/iap/purchase', { token, body: { product: 'no_ads', provider: 'test', order_id: 'ad1' } })).status, 200)
+  const r = await buy(token, 'a_ticket') // 광고 없이
+  assert.equal(r.status, 200)
+  assert.equal(r.json.player.dia_tickets, p0.dia_tickets + 1)
+  S.clock.t = T0 + DAY
+  p = (await S.req('GET', '/v1/player', { token })).json.player
+  assert.deepEqual(p.shop.d, {})
+  assert.equal((await buy(token, 'a_dia')).status, 200)
+  const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'shop' order by id", [id])
+  assert.equal(logs.at(-1).detail.ad, false)
+  assert.equal(logs[0].detail.ad, true)
 })

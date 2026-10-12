@@ -7,6 +7,8 @@ extends "res://scripts/ui_window.gd"
 ## - 다이아 = 충전 6단계(첫 구매 2배 띠, 이후 보너스).
 ## 실결제 버튼(₩ 가격)은 Economy.iap_buy → 결제 창(StorePay; 서버에 결제 키가 없으면 알림만). 버튼은 기다리는 글자로 바뀌지 않는다.
 ## 받을 것(무료 선물·월정액 오늘 보상·성장 패스)이 있는 탭에 빨간 점. 모집 창의 "다이아가 부족합니다 → [이동]"은 [다이아] 탭으로 연다(open_tab).
+## [광고] 탭(2026-10-12, 사용자 "광고보면 다이아주고, 던전 입장권 주고, 이런 광고 상점"): 보상형 광고를 보면 받는 상품(ShopItems tab "ad", 매일 리셋).
+## 광고 제거(no_ads) 구매자는 [바로 받기] — 광고 없이 곧바로. 아니면 [광고 보기] → ad_player.gd를 끝까지 보면 받는다.
 ## [PVP] 탭(2026-10-07, PVP 스레드): PVP 코인 상품(PvpRules.SHOP — 서버 pvp.ts SHOP과 같다). 사기는 Pvp.buy(코인·구매 수 곧바로, 거절되면 되돌리고 알림).
 ## PVP 화면의 [상점]도 이 탭으로 연다(pvp_view.open_shop).
 ## 그림(디자인 보강 6번): 상품·패키지·다이아 충전·PVP 상품 그림은 Meshy로 그린 아이콘(shop_art.gd), 파일이 없으면 예전 벡터 그림.
@@ -23,15 +25,18 @@ const SideMenu := preload("res://scripts/side_menu.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
 const PvpView := preload("res://scripts/pvp_view.gd")
 const ShopArt := preload("res://scripts/shop_art.gd")
+const AdPlayer := preload("res://scripts/ad_player.gd")
 
 const GROUP_SHOP := "shop_panel"
-const TABS := [["package", "패키지"], ["pass", "패스"], ["daily", "일일"], ["weekly", "주간"], ["pvp", "PVP"], ["diamond", "다이아"]]
-const HEAD := {"package": "월정액·특가 패키지", "pass": "라운드를 깰 때마다 보상 · 패스를 사면 유료 보상도", "daily": "매일 00:00에 초기화",
+const TABS := [["package", "패키지"], ["pass", "패스"], ["ad", "광고"], ["daily", "일일"], ["weekly", "주간"], ["pvp", "PVP"], ["diamond", "다이아"]]
+const HEAD := {"package": "월정액·특가 패키지", "pass": "라운드를 깰 때마다 보상 · 패스를 사면 유료 보상도", "daily": "매일 00:00에 초기화", "ad": "광고를 보면 무료 · 매일 00:00에 초기화",
 	"weekly": "매주 월요일 00:00에 초기화", "diamond": "단계마다 첫 구매는 다이아 2배",
 	"pvp": "PVP 코인 상점 · 일일 상품은 매일, 주간 상품은 월요일 00:00에 초기화"}
 const NOTE_TEXT := "결제 기능은 출시 전에 연결됩니다"
 const SOLD_TEXT := "매진"
 const FREE_TEXT := "무료"
+const AD_TEXT := "광고 보기"
+const AD_FREE_TEXT := "바로 받기"  # 광고 제거 구매자
 const SHORT_TEXT := {"diamonds": "다이아가 부족합니다", "gold": "골드가 부족합니다"}
 const PILE := [Vector2(0, 0), Vector2(-26, 14), Vector2(26, 14), Vector2(0, 26), Vector2(-14, -18), Vector2(14, -18)]  # 보석 더미 자리(가운데 기준)
 const PASS_COL := Color(0.55, 0.30, 0.70)  # 성장 패스 유료 칸 글자
@@ -51,6 +56,7 @@ var wallet_label: Label
 var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "monthly:<id>", "growth:<단계>:<free|paid>", "close"
 var buy_buttons: Array = []  # 다이아 탭 충전 버튼들
 var note: Label
+var ad_player: Control  # 보상형 광고 화면(ad_player.gd)
 var hot_label: Label  # [패키지] 탭 맨 위 핫딜 카드의 남은 시간(1초마다)
 const HOT_BG := Color(1.0, 0.82, 0.74, 0.95)
 
@@ -122,6 +128,8 @@ func _ready() -> void:
 	body.add_theme_constant_override("separation", 10)
 	scroll.add_child(body)
 	_fit_sheet()
+	ad_player = AdPlayer.new()
+	add_child(ad_player)
 	Economy.changed.connect(_on_changed)
 	Economy.shop_changed.connect(_on_changed)
 	Pvp.changed.connect(_on_changed)
@@ -131,6 +139,8 @@ func _ready() -> void:
 static func tab_dot(t: String) -> bool:
 	if t == "daily" or t == "weekly":
 		return Economy.shop_free_left(t)
+	if t == "ad":
+		return ShopItems.of_tab("ad").any(func(x): return Economy.shop_left(x.id) > 0)
 	return Economy.iap_claim_left(cleared()).has(t)
 
 
@@ -190,12 +200,12 @@ func _hot_time() -> void:
 
 func _head() -> void:
 	_hot_time()
-	if not tab in ["daily", "weekly"]:
+	if not tab in ["daily", "weekly", "ad"]:
 		head_label.text = HEAD.get(tab, "")
 		return
 	var per := Economy.shop_period()
 	var hour := GameData.config_num("daily_reset_utc_hour") * 3600.0
-	var at: float = (int(per[0]) + 1) * 86400.0 + hour if tab == "daily" else ((int(per[1]) + 1) * 7 - 4) * 86400.0 + hour
+	var at: float = (int(per[0]) + 1) * 86400.0 + hour if tab != "weekly" else ((int(per[1]) + 1) * 7 - 4) * 86400.0 + hour
 	head_label.text = "%s · 남은 시간 %s" % [HEAD[tab], UiKit.duration(maxf(0.0, at - Economy.time_now()))]
 
 
@@ -272,7 +282,7 @@ func _rebuild() -> void:
 func _card(x: Dictionary) -> Control:
 	var left := Economy.shop_left(x.id)
 	var sold := left <= 0
-	var free: bool = x.currency == "free"
+	var free: bool = x.currency == "free" or x.currency == "ad"
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(CARD_W, 0)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -294,7 +304,7 @@ func _card(x: Dictionary) -> Control:
 	give.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	give.custom_minimum_size = Vector2(CARD_W - 24, 0)
 	v.add_child(give)
-	v.add_child(_label("%s %d/%d" % ["오늘" if x.tab == "daily" else "이번 주", left, int(x.limit)], 18, SUB))
+	v.add_child(_label("%s %d/%d" % ["이번 주" if x.tab == "weekly" else "오늘", left, int(x.limit)], 18, SUB))
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(0, 58)
@@ -317,10 +327,10 @@ func _card(x: Dictionary) -> Control:
 
 func _draw_price(c: Control, cur: String, price: int, sold: bool) -> void:
 	var font := c.get_theme_default_font()
-	var text := SOLD_TEXT if sold else (FREE_TEXT if cur == "free" else UiKit.commas(price))
+	var text := SOLD_TEXT if sold else (FREE_TEXT if cur == "free" else ((AD_FREE_TEXT if Economy.ad_free() else AD_TEXT) if cur == "ad" else UiKit.commas(price)))
 	var fs := 26
 	var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var icon_w := 0.0 if sold or cur == "free" else 34.0
+	var icon_w := 0.0 if sold or cur == "free" or cur == "ad" else 34.0
 	var x0 := (c.size.x - tw - icon_w) / 2.0
 	if icon_w > 0.0:
 		IconsScript.draw_icon(c, "diamond" if cur == "diamonds" else "gold", Vector2(x0 + 14.0, c.size.y / 2.0), 28.0)
@@ -336,8 +346,13 @@ func _buy(id: String) -> void:
 		Economy.notice.emit(SHORT_TEXT[block])
 		return
 	var x := ShopItems.find(id)
+	if x.get("currency") == "ad" and not Economy.ad_free():
+		ad_player.play(func():
+			if Economy.buy_shop(id, true):
+				Economy.notice.emit("받음: " + Missions.reward_text(x.give)))
+		return
 	if Economy.buy_shop(id):
-		Economy.notice.emit("구매: " + Missions.reward_text(x.give))
+		Economy.notice.emit(("받음: " if x.get("currency") == "ad" else "구매: ") + Missions.reward_text(x.give))
 
 
 ## PVP 상품 카드(_card와 같은 모양, 가격 = PVP 코인).
@@ -530,7 +545,7 @@ func _build_packages() -> void:
 		body.add_child(_wide(str(ShopArt.PACK_ICONS.get(p.id, "crown")), p.name, lines, side, FREE_BG if left > 0 else CARD_BG))
 	var na := IapItems.find("no_ads")  # 광고 제거(영구) — 산 뒤에는 "구매함"
 	var na_side := [_label("구매함", 22, GIVE)] if Economy.ad_free() else [_krw_button(na.id, int(na.krw))]
-	body.add_child(_wide("crown", na.name + " (영구)", [["광고 없이 플레이 · 보상형 광고 보상은 보지 않고 바로", GIVE], ["구매 보너스 " + Missions.reward_text(na.give) + " · 계정당 1회", SUB]],
+	body.add_child(_wide("crown", na.name + " (영구)", [["[광고] 상점 보상을 광고 없이 바로 받습니다", GIVE], ["계정당 1회", SUB]],
 		na_side, FREE_BG if Economy.ad_free() else CARD_BG))
 	for p in IapItems.of_kind("package"):
 		var ok := Economy.iap_can_buy(p.id)
