@@ -22,7 +22,7 @@ static func add_to(panel: Node) -> RefCounted:
 		return null
 	var s := new()
 	s.section = panel._section("알림")
-	panel.content.add_child(s.section)
+	panel.body.add_child(s.section)
 	for r in ROWS:
 		var key: String = r[0]
 		s.toggles[key] = panel._toggle_row(r[1], func(on: bool):

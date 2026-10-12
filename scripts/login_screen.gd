@@ -12,6 +12,7 @@ extends CanvasLayer
 const UiKit := preload("res://scripts/ui_kit.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const TossBridgeScript := preload("res://scripts/toss_bridge.gd")
+const Links := preload("res://scripts/support_links.gd")
 
 signal logged_in
 
@@ -19,7 +20,6 @@ const SPLASH := preload("res://assets/ui/splash.png")
 const POLL_SEC := 2.0
 const BUTTON_W := 560.0
 const BUTTON_H := 88.0
-const TERMS := "로그인하면 이용약관 및 개인정보처리방침에 동의하게 됩니다."
 const SHADE := Color(0.36, 0.17, 0.04)  # 아래 그라데이션(주황 하늘의 어두운 쪽)
 ## 제공자 → [버튼 글자, 바탕, 글자색, 테두리(없으면 투명)] — 각 사 로그인 버튼 지침의 색
 const BRANDS := {
@@ -88,11 +88,27 @@ func _ready() -> void:
 	shade.anchor_bottom = 1.0
 	root.add_child(shade)
 	root.add_child(_button_block())
-	var terms := _text(TERMS, 18, Color(1, 1, 1, 0.8))
+	var terms := HBoxContainer.new()  # "로그인하면 [이용약관] 및 [개인정보처리방침]에 동의하게 됩니다." — 밑줄 글자는 누르면 브라우저로 연다
+	terms.alignment = BoxContainer.ALIGNMENT_CENTER
+	terms.add_theme_constant_override("separation", 0)
 	terms.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	terms.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	terms.offset_top = -64
+	terms.offset_top = -66
 	terms.offset_bottom = -36
+	for part in [["로그인하면 ", ""], ["이용약관", Links.TERMS_URL], [" 및 ", ""], ["개인정보처리방침", Links.PRIVACY_URL], ["에 동의하게 됩니다.", ""]]:
+		if part[0] == "이용약관" or part[0] == "개인정보처리방침":
+			var link := LinkButton.new()
+			link.text = part[0]
+			link.underline = LinkButton.UNDERLINE_MODE_ALWAYS
+			link.focus_mode = Control.FOCUS_NONE
+			link.add_theme_font_size_override("font_size", 18)
+			for k in ["font_color", "font_hover_color", "font_pressed_color"]:
+				link.add_theme_color_override(k, Color(1, 1, 1, 0.95))
+			var url: String = part[1]
+			link.pressed.connect(func(): open_link(url))
+			terms.add_child(link)
+		else:
+			terms.add_child(_text(part[0], 18, Color(1, 1, 1, 0.8)))
 	root.add_child(terms)
 	var version := _text("v" + str(ProjectSettings.get_setting("application/config/version", "")), 16, Color(1, 1, 1, 0.6))
 	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -375,6 +391,14 @@ func _wait_block() -> Control:
 	row.add_child(stop)
 	box.add_child(row)
 	return back
+
+
+## 약관 링크: 주소가 아직 비어 있으면 아래 안내 줄에 "준비 중".
+func open_link(url: String) -> void:
+	if url == "":
+		_message(Links.NOT_READY)
+		return
+	OS.shell_open(url)
 
 
 func _text(text: String, font_size: int, color: Color) -> Label:
