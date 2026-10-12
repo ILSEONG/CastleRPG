@@ -36,7 +36,7 @@ export function barrier() {
   return { wrap, arm: () => (armed = true), arrived: () => arrived }
 }
 
-export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number; oauth?: AppOptions['oauth']; fetch?: typeof fetch; tutorial?: boolean } = {}): Promise<Setup> {
+export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks?: boolean; secret?: string; random?: () => number; oauth?: AppOptions['oauth']; fetch?: typeof fetch; tutorial?: boolean; payments?: AppOptions['payments']; legal?: AppOptions['legal'] } = {}): Promise<Setup> {
   const db = await openDb({})
   await migrate(db)
   await seed(db)
@@ -51,6 +51,8 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
     random: o.random,
     oauth: o.oauth,
     fetch: o.fetch,
+    payments: o.payments,
+    legal: o.legal,
     ...extra,
   })
   const app = makeApp()

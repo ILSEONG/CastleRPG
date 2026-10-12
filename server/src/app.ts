@@ -17,6 +17,8 @@ import * as Q from './quests.ts'
 import * as P from './pouches.ts'
 import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
+import * as Pay from './payments.ts'
+import * as L from './legal.ts'
 import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
 import { registerMarket } from './market.ts'
@@ -35,6 +37,8 @@ export interface AppOptions {
   oauth?: O.OAuthConfig // 소셜 로그인 제공자 키·공개 주소(없으면 소셜 로그인 꺼짐)
   fetch?: typeof fetch // 제공자 호출(테스트는 가짜)
   warLive?: WarLive // 공성전 실시간 방(main.ts가 만들어 http 서버에 붙인다). 없으면 방 없이(REST finish만)
+  payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
+  legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
   gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
 }
 
@@ -52,6 +56,7 @@ const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TOSS_HASH_RE = /^[A-Za-z0-9+/=_.:-]{8,512}$/ // 앱인토스 getUserKeyForGame hash
 const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge·세션 비밀(32바이트 hex)
+const LINK_ERRORS: Record<string, string> = { already_linked: '이미 다른 게임 계정에 연결된 계정입니다', provider_taken: '이 게임 계정에는 이미 같은 종류의 계정이 연결되어 있습니다' }
 const OAUTH_TTL = 600 // 진행 중 소셜 로그인 유효 시간(초)
 const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
 
@@ -346,6 +351,8 @@ export function createApp(opts: AppOptions) {
   const secret = opts.jwtSecret
   const random = opts.random ?? R.cryptoRandom
   const app = new Hono()
+  const pay: Pay.Payments = opts.payments ?? {}
+  const payProviders = (['google', 'toss'] as const).filter((k) => pay[k])
 
   app.use('*', cors({
     origin: opts.corsOrigins?.length ? opts.corsOrigins : '*',
@@ -589,7 +596,10 @@ export function createApp(opts: AppOptions) {
         pouches: p.pouches, // 방치 주머니 id → 개수
         shop: SH.normalize(p.shop, today(game, now)), // 상점: 오늘·이번 주 산 수
         iap: IAP.normalize(p.iap, today(game, now)), // 결제 상품: 첫 구매·한도·월정액·패스
-        iap_enabled: false, // 실결제 연결 전(Google Play 등록 전)
+        iap_enabled: payProviders.length > 0, // 실결제가 하나라도 열렸다(키가 설정된 제공자)
+        iap_providers: payProviders, // 열린 결제 제공자: 'google'(APK)·'toss'(앱인토스). 앱은 자기 플랫폼 것이 있을 때만 결제 창을 연다
+        iap_skus: { toss: pay.tossSkus ?? {} }, // 상품 id → 제공자 sku(다를 때만)
+        account_tag: Pay.accountTag(p.id), // Google 결제에 실어 보내는 내 계정 표시(영수증이 이 계정 것인지 서버가 맞춘다)
         market_sold: p.market_sold, // 거래소: 대금 받을 판매 수
         admin: p.admin, // 슈퍼관리자: 앱은 기능 잠금을 모두 연다
       },
@@ -1043,6 +1053,12 @@ export function createApp(opts: AppOptions) {
 
   app.get('/v1/health', (c) => c.json({ ok: true, server_now: clock() }))
 
+  // 이용약관·개인정보처리방침·계정 삭제 안내(Google Play·앱인토스에 등록하는 공개 주소, legal.ts)
+  const legal: L.LegalInfo = opts.legal ?? { operator: '', email: '' }
+  app.get('/legal/terms', (c) => c.html(L.termsPage(legal)))
+  app.get('/legal/privacy', (c) => c.html(L.privacyPage(legal)))
+  app.get('/legal/account-deletion', (c) => c.html(L.deletionPage(legal)))
+
   // 시작 영웅(새 플레이어). 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(영웅 0명이 되지 않게)
   async function starters(): Promise<string[]> {
     const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
@@ -1101,7 +1117,7 @@ export function createApp(opts: AppOptions) {
     const page = (ok: boolean, status: number) => c.html(O.resultPage(ok), status as any)
     if (!O.isProvider(p) || !HEX64_RE.test(state)) return page(false, 400)
     const now = clock()
-    const [row] = await query(`select provider, link_player, extract(epoch from created_at)::float8 as created_at, player_id, error
+    const [row] = await query(`select provider, link_player, link_only, extract(epoch from created_at)::float8 as created_at, player_id, error
       from oauth_logins where state = $1`, [state])
     if (!row || row.provider !== p || row.player_id || row.error || now - Number(row.created_at) > OAUTH_TTL) return page(false, 400)
     const fail = async (error: string, status: number) => {
@@ -1117,10 +1133,60 @@ export function createApp(opts: AppOptions) {
       console.warn(`[server] oauth: ${(e as Error).message}`)
       return fail('provider_error', 502)
     }
-    const r = await resolvePlayer(p, uid, row.link_player ?? null, now)
+    const err = await finishLogin(state, row, p, uid, email, now)
+    if (err) {
+      await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, err])
+      return c.html(O.resultPage(false, LINK_ERRORS[err]), 200)
+    }
+    return page(true, 200)
+  })
+
+  // 제공자 확인을 마친 로그인을 끝낸다: 보통 로그인은 그 소셜 계정의 플레이어(없으면 기기 게스트를 잇거나 새로), 연동(link_only)은 요청한
+  // 계정에만 잇는다 — 이미 다른 게임 계정에 이어진 소셜 계정이면 'already_linked', 이 계정에 같은 제공자의 다른 소셜 계정이 있으면
+  // 'provider_taken'(진행을 옮기거나 바꾸지 않는다). 오류 코드 또는 null.
+  async function finishLogin(state: string, row: Row, p: O.Provider, uid: string, email: string | null, now: number): Promise<string | null> {
+    let r: { id: string; isNew: boolean }
+    if (row.link_only) {
+      const me = String(row.link_player)
+      const [known] = await query('select player_id from player_identities where provider = $1 and provider_uid = $2', [p, uid])
+      if (known && String(known.player_id) !== me) return 'already_linked'
+      if (!known) {
+        const made = await query(`insert into player_identities (provider, provider_uid, player_id, created_at) values ($1, $2, $3::uuid, to_timestamp($4::float8))
+          on conflict do nothing returning player_id`, [p, uid, me, now])
+        if (!made.length) return 'provider_taken'
+      }
+      r = { id: me, isNew: false }
+    } else {
+      r = await resolvePlayer(p, uid, row.link_player ?? null, now)
+    }
     await saveEmail(p, uid, email)
     await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew])
-    return page(true, 200)
+    return null
+  }
+
+  // 계정 연동 시작(설정 [계정 연동], 로그인한 상태) {provider, challenge}: 지금 계정에 그 소셜 계정을 잇는 진행 행을 만든다. 뒤는 로그인과 같다
+  // (브라우저 → 콜백 → /v1/auth/oauth/poll — 성공하면 그 소셜 로그인의 자동 로그인 세션을 준다. 실패 409 already_linked·provider_taken).
+  app.post('/v1/auth/link/start', auth, async (c) => {
+    const b = await body(c)
+    const provider = b.provider
+    if (!O.isProvider(provider)) throw new ApiError(400, 'unknown_provider', `provider must be one of ${O.PROVIDERS.join(', ')}`)
+    if (!O.enabledProviders(oauth).includes(provider)) throw new ApiError(503, 'provider_unavailable', `${provider} login is not configured on this server`)
+    if (typeof b.challenge !== 'string' || !HEX64_RE.test(b.challenge)) throw new ApiError(400, 'bad_challenge', 'challenge must be 64 lowercase hex characters')
+    const me = c.get('playerId') as string
+    if ((await query('select 1 from player_identities where player_id = $1 and provider = $2', [me, provider])).length) {
+      throw new ApiError(409, 'provider_taken', `this account is already linked to ${provider}`)
+    }
+    const now = clock()
+    const state = randomBytes(32).toString('hex')
+    await query('insert into oauth_logins (state, provider, challenge, link_player, link_only, created_at) values ($1, $2, $3, $4, true, to_timestamp($5::float8))',
+      [state, provider, b.challenge, me, now])
+    return c.json({ url: O.authorizeUrl(oauth, provider, state), state, expires_in: OAUTH_TTL })
+  })
+
+  // 지금 계정에 이어진 소셜 계정들(설정 화면 표시용)
+  app.get('/v1/auth/links', auth, async (c) => {
+    const rows = await query('select provider from player_identities where player_id = $1 order by created_at', [c.get('playerId') as string])
+    return c.json({ links: rows.map((r) => String(r.provider)) })
   })
 
   // 로그인할 때마다 Google 확인 이메일을 계정에 적는다(슈퍼관리자 판별 — admin_emails, 마이그레이션 036).
@@ -1158,6 +1224,7 @@ export function createApp(opts: AppOptions) {
     if (sha256hex(b.verifier) !== row.challenge) throw new ApiError(403, 'bad_verifier', 'verifier does not match')
     if (row.error) {
       await query('delete from oauth_logins where state = $1', [b.state])
+      if (LINK_ERRORS[row.error]) throw new ApiError(409, row.error, LINK_ERRORS[row.error])
       throw new ApiError(401, row.error === 'denied' ? 'login_denied' : 'login_failed', 'login was cancelled or failed')
     }
     if (!row.player_id) {
@@ -1828,34 +1895,75 @@ export function createApp(opts: AppOptions) {
     return Boolean(keyType)
   }
 
-  // 상품 사기. body = {product, provider, order_id, token?}. provider 'google'은 Google Play 결제 연결 전이라 503 payments_unavailable,
-  // 'test'는 통합 테스트(allowTestHooks)만. 같은 주문 번호는 한 번만(409 duplicate_order). 한도를 넘으면 409 limit.
-  // 받기(충전 첫 구매 2배)·상품 기록·economy_log iap를 version 가드 한 문장으로.
+  // 상품 사기(실결제 확인 뒤 지급). body = {product, provider: 'google'|'toss'|'test', token}
+  //  - google: token = Google Play 구매 토큰. toss: token = 토스 주문 번호(orderId). test: 통합 테스트(allowTestHooks)만, token = 임의 주문 번호.
+  // 제공자에게 결제를 확인하고(payments.ts) 상품이 맞으면 지급: 받기(충전 첫 구매 2배)·상품 기록·economy_log iap를 version 가드 한 문장으로.
+  // 같은 주문은 한 번만 지급 — 이미 이 계정에 지급한 주문이면 200 {already: true}(앱이 결제 직후 꺼졌다 다시 보낸 복구, Google은 consume을 다시
+  // 해 본다), 다른 계정 주문이면 409 duplicate_order. 결제 미완료 202 {pending: true}. 확인 실패 402 payment_invalid. 제공자가 꺼져 있으면
+  // 503 payments_unavailable, 확인 서버 오류 502 payment_check_failed(앱이 다음 실행에 다시 보낸다). 한도를 넘으면 409 limit(지급 안 함 —
+  // Google은 consume하지 않아 자동 환불된다).
   app.post('/v1/iap/purchase', auth, async (c) => {
     const b = await body(c)
     const pid = strField(b, 'product')
     const pr = IAP.product(pid)
     if (!pr) throw new ApiError(404, 'unknown_product', `unknown product '${pid}'`)
     const provider = strField(b, 'provider')
-    if (provider !== 'test' || !opts.allowTestHooks) throw new ApiError(503, 'payments_unavailable', 'payments are not connected yet')
-    const orderId = `${provider}:${strField(b, 'order_id')}`
+    const token = typeof b.token === 'string' ? b.token : typeof b.order_id === 'string' ? b.order_id : ''
+    if (!token || token.length > 2048) throw new ApiError(400, 'bad_request', "'token' must be the purchase token or order id")
     const id = c.get('playerId') as string
-    const [row] = await query('insert into iap_orders (order_id, player_id, product, provider) values ($1, $2, $3, $4) on conflict do nothing returning order_id',
-      [orderId, id, pr.id, provider])
-    if (!row) throw new ApiError(409, 'duplicate_order', 'this order was already used')
+    let orderKey: string
+    let verifier: Pay.Verifier | undefined
+    if (provider === 'test' && opts.allowTestHooks) {
+      orderKey = `test:${token}`
+    } else if (provider === 'google' || provider === 'toss') {
+      verifier = pay[provider]
+      if (!verifier) throw new ApiError(503, 'payments_unavailable', `${provider} payments are not connected yet`)
+      let v: Pay.Verified
+      try {
+        v = await verifier.verify({ product: provider === 'toss' ? (pay.tossSkus?.[pr.id] ?? pr.id) : pr.id, token, account: Pay.accountTag(id) })
+      } catch (e) {
+        console.warn(`[server] iap verify: ${(e as Error).message}`)
+        throw new ApiError(502, 'payment_check_failed', 'could not check the payment now; try again later')
+      }
+      if (v.pending) return c.json({ pending: true }, 202)
+      const paid = provider === 'toss' ? Object.entries(pay.tossSkus ?? {}).find(([, sku]) => sku === v.product)?.[0] ?? v.product : v.product
+      if (!v.ok || paid !== pr.id) {
+        console.warn(`[server] iap rejected: ${provider} ${pr.id} ${v.reason ?? `product ${paid}`}`)
+        throw new ApiError(402, 'payment_invalid', 'this payment could not be verified')
+      }
+      orderKey = `${provider}:${v.orderId}`
+    } else {
+      throw new ApiError(503, 'payments_unavailable', 'payments are not connected yet')
+    }
+    const finish = async () => {
+      try { await verifier?.finish?.({ product: pr.id, token }) } catch (e) { console.warn(`[server] iap finish: ${(e as Error).message}`) }
+    }
+    const [row] = await query('insert into iap_orders (order_id, player_id, product, provider, krw) values ($1, $2, $3, $4, $5) on conflict do nothing returning order_id',
+      [orderKey, id, pr.id, provider, pr.krw])
+    if (!row) {
+      const [old] = await query('select player_id from iap_orders where order_id = $1', [orderKey])
+      if (old && String(old.player_id) === id) {
+        await finish()
+        return c.json({ already: true, product: pr.id })
+      }
+      throw new ApiError(409, 'duplicate_order', 'this order was already used')
+    }
+    let res: Response
     try {
-      return await mutate(c, (p, g, now) => {
+      res = await mutate(c, (p, g, now) => {
         const st = IAP.normalize(p.iap, today(g, now))
         if (!IAP.canBuy(st, pr, now)) throw new ApiError(409, 'limit', `'${pr.id}' can't be bought now`)
         const { give, state } = IAP.purchase(st, pr)
-        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderId, give } } }
+        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderKey, give } } }
         const reload = addReward(p, g, now, give, change)
         return { change, extra: { bought: { product: pr.id, give } }, reload }
       })
     } catch (e) {
-      await query('delete from iap_orders where order_id = $1', [orderId])
+      await query('delete from iap_orders where order_id = $1', [orderKey])
       throw e
     }
+    await finish()
+    return res
   })
 
   // 핫딜 띄우기. body = {trigger: 'boss'|'dia'|'defeat'}. 보스는 서버가 깬 라운드로 확인, 나머지는 쉬는 시간만.
@@ -2975,16 +3083,20 @@ export function createApp(opts: AppOptions) {
     // 통합 테스트용(소셜 로그인): 제공자 없이 진행 중 로그인을 끝낸다 {state, provider_uid} 또는 {state, error: "denied"} — 콜백과 같은 처리.
     app.post('/v1/test/oauth_complete', async (c) => {
       const b = await body(c)
-      const [row] = await query('select provider, link_player from oauth_logins where state = $1 and player_id is null and error is null', [String(b.state ?? '')])
+      const [row] = await query('select provider, link_player, link_only from oauth_logins where state = $1 and player_id is null and error is null', [String(b.state ?? '')])
       if (!row) throw new ApiError(404, 'unknown_login', 'no pending login with that state')
       if (b.error !== undefined) {
         await query('update oauth_logins set error = $2 where state = $1', [b.state, String(b.error)])
         return c.json({ ok: true })
       }
-      const r = await resolvePlayer(row.provider, strField(b, 'provider_uid'), row.link_player ?? null, clock())
-      if (row.provider === 'google' && typeof b.email === 'string') await saveEmail('google', strField(b, 'provider_uid'), b.email.trim().toLowerCase())
-      await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1', [b.state, r.id, r.isNew])
-      return c.json({ ok: true, player_id: r.id, is_new: r.isNew })
+      const email = row.provider === 'google' && typeof b.email === 'string' ? b.email.trim().toLowerCase() : null
+      const err = await finishLogin(String(b.state), row, row.provider, strField(b, 'provider_uid'), email, clock())
+      if (err) {
+        await query('update oauth_logins set error = $2 where state = $1', [b.state, err])
+        return c.json({ ok: false, error: err })
+      }
+      const [done] = await query('select player_id, is_new from oauth_logins where state = $1', [b.state])
+      return c.json({ ok: true, player_id: done.player_id, is_new: done.is_new === true })
     })
 
     // 통합 테스트용: 그 플레이어 건물의 last_collect(자원 건물 수집)와 훈련 끝나는 시각(개정 16), 연구 끝나는 시각(개정 24)을 minutes분 앞당긴다.

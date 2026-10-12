@@ -170,6 +170,9 @@ var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로
 var dia_tickets := 0
 var iap := {}  # 결제 상품 기록 {first, n, day, week, d, w, monthly: {id: {until, claimed}}, passes, gp: {free, paid}}(온라인은 서버 player.iap, 오프라인은 저장 "iap")
 var iap_enabled := false  # 실결제 연결됨(서버 player.iap_enabled). 아니면 결제 상품 버튼은 알림만
+var iap_providers: Array = []  # 서버가 켠 결제 제공자 'google'·'toss'(player.iap_providers) — 이 빌드 것이 있어야 결제 창(StorePay)
+var iap_skus := {}  # 상품 id → 제공자 sku {toss: {...}}(다를 때만)
+var account_tag := ""  # Google 결제에 실어 보내는 내 계정 표시(player.account_tag)
 var admin := false  # 슈퍼관리자(서버 player.admin — 이은 Google 계정의 확인된 이메일로 서버가 정한다). 기능 잠금(가이드 메뉴·던전·PVP·공터·길드)이 모두 열린다
 var market := {}  # 거래소(서버 market.ts): {rules: {fee_pct, max_active, duration_sec, price_limits}, mine: [판매]} — 마지막 서버 값(+ 곧바로 반영한 것)
 var market_sold := 0  # 거래소: 팔렸고 대금을 아직 안 받은 판매 수(서버 player.market_sold — 메뉴 빨간 점)
@@ -1369,14 +1372,20 @@ func _on_hot_offer(data: Dictionary) -> void:
 		hot_offered.emit(data.hot)
 
 
-## 결제 상품 사기: 실결제(Google Play) 연결 전이라 알리기만 한다. 연결되면 여기서 결제 창을 열고 영수증을 /v1/iap/purchase로 보낸다.
+## 결제 상품 사기: 실결제 창(StorePay — Google Play 또는 토스)을 연다. 영수증은 서버 /v1/iap/purchase가 확인하고 지급한다.
+## 결제가 안 열렸으면(서버 결제 키 없음·오프라인) 알리기만 한다.
 func iap_buy(id: String) -> bool:
 	if IapItems.find(id).is_empty() or not iap_can_buy(id):
 		return false
-	if not iap_enabled:
+	var sp := _store_pay()
+	if net == null or sp == null:
 		notice.emit(preload("res://scripts/release_platform.gd").iap_off_text())
 		return false
-	return false
+	return sp.buy(id)
+
+
+func _store_pay() -> Node:
+	return get_node_or_null("/root/StorePay") if is_inside_tree() else null  # 단위 테스트의 Economy는 트리 밖
 
 
 func claim_monthly(id: String) -> bool:
@@ -2858,6 +2867,13 @@ func apply_server(data: Dictionary) -> bool:
 		iap = p.iap
 		shop_changed.emit()
 	iap_enabled = p.get("iap_enabled") == true
+	iap_providers = p.iap_providers if p.get("iap_providers") is Array else []
+	iap_skus = p.iap_skus if p.get("iap_skus") is Dictionary else {}
+	account_tag = str(p.get("account_tag", ""))
+	if iap_enabled:
+		var sp := _store_pay()
+		if sp != null:
+			sp.restore_once()  # 지급 못 받은 결제 되찾기(한 번)
 	if admin != (p.get("admin") == true):
 		admin = p.get("admin") == true
 		var tut := get_node_or_null("/root/Tutorial")

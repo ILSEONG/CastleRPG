@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { sign } from 'hono/jwt'
 import * as M from '../src/missions.ts'
+import * as Pay from '../src/payments.ts'
 import * as R from '../src/rules.ts'
 import { randomDevice, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
@@ -80,7 +81,7 @@ test('JWT: 없음·위조·다른 비밀·만료·이상한 sub는 401', async (
 
 test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,keep_level,gate_level,buildings,heroes,deploy}, merchant{rates{wood,stone,food},next_change}', async () => {
   S.clock.t = T0 + 0.25
-  const { token } = await S.login()
+  const { token, id } = await S.login()
   const r = await S.req('GET', '/v1/player', { token })
   assert.equal(r.status, 200)
   const cfg = await CONFIG()
@@ -122,6 +123,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       shop: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {} }, // 상점
       iap: { first: [], n: {}, day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {}, monthly: {}, passes: [], gp: { free: [], paid: [] }, hot: null, hcool: {}, hs: 0 },
       iap_enabled: false, // 결제 상품
+      iap_providers: [], iap_skus: { toss: {} }, account_tag: Pay.accountTag(id), // 실결제(결제 키 없음 → 닫힘)
       market_sold: 0, // 거래소
       admin: false, // 슈퍼관리자(Google 확인 이메일 ∈ admin_emails)
     },

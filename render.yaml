@@ -34,5 +34,16 @@ services:
         sync: false
       - key: OAUTH_NAVER_SECRET
         sync: false
+      - key: LEGAL_OPERATOR        # 약관·개인정보처리방침에 적힐 운영자 이름(개인 이름 또는 상호) — /legal/terms·/legal/privacy
+        sync: false
+      - key: LEGAL_EMAIL           # 문의·개인정보 보호책임자 이메일(공개됨)
+        sync: false
+      - key: GOOGLE_PLAY_SERVICE_ACCOUNT   # Google Play 결제 확인용 서비스 계정 JSON 키(원문 또는 base64). 넣으면 APK 결제가 열린다
+        sync: false
+      - key: TOSS_MTLS_CERT        # 앱인토스 콘솔에서 받은 mTLS 인증서(PEM, 원문 또는 base64). KEY와 함께 넣으면 토스 결제가 열린다
+        sync: false
+      - key: TOSS_MTLS_KEY
+        sync: false
+      # GOOGLE_PLAY_PACKAGE(기본 com.ilesong.castlerpg), TOSS_SKUS({"상품 id":"토스 sku"}, 콘솔 sku가 상품 id와 다를 때만)
       # CORS_ORIGINS: 웹 빌드를 올리면 그 출처로 정한다(비우면 *). 앱인토스: https://<appName>.web.tossmini.com, https://<appName>.private-web.tossmini.com.
       # ALLOW_TEST_HOOKS 는 두지 않는다 — 운영에서 1이면 서버가 시작을 거부한다.
