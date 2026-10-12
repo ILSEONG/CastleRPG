@@ -21,6 +21,8 @@ import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
 import { registerMarket } from './market.ts'
 import { registerChat } from './chat.ts'
+import * as LO from './live_ops.ts'
+import { registerLiveOps } from './live_ops.ts'
 import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
@@ -171,6 +173,7 @@ interface Change {
   upgrades?: Record<string, number> // 업그레이드 id → 레벨 증가(개정 20)
   // 개정 18 던전·장비
   dungeon?: { type: string; state: R.DungeonState } // 그 던전 행을 이 값으로(일일 리셋을 반영한 값)
+  dungeonMore?: { type: string; state: R.DungeonState }[] // 다른 던전 행들(우편·쿠폰 보상이 열쇠 여러 종류를 한 번에 줄 때)
   runOpen?: { run_id: string; type: string; level: number; party: string[]; seed: number; helper?: R.Helper | null } // 새 run(그 플레이어의 열린 run은 닫는다)
   runClose?: { run_id: string; result: { win: boolean; rewards: Record<string, unknown> } } // run 닫기 — 아직 열려 있을 때만 전체가 적용된다
   items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
@@ -198,6 +201,9 @@ interface Change {
   marketCancel?: number // 내리기: 판매 중인 내 판매 id(이미 팔렸으면 전체가 안 바뀐다)
   marketCollect?: number[] // 대금 받기: 팔린 내 판매 id들(골드·다이아는 goldTenths·diamonds로 — 하나라도 이미 받았으면 전체가 안 바뀐다)
   marketBuy?: { id: number; currency: string; price: number } // 사기: 판매를 먼저 잡고(한 사람만), 값(goldTenths·diamonds 음수)이 모자라면 전체를 되돌린다
+  // 운영 도구(live_ops.ts, 마이그레이션 039)
+  mailClaim?: number[] // 받은 우편 id들(하나라도 이미 받았으면 전체가 안 바뀐다)
+  coupon?: { code: string; max_uses: number | null } // 쓴 쿠폰(이 계정이 이미 썼으면 전체가 안 바뀐다, 전체 상한에 걸리면 되돌린다)
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -344,7 +350,7 @@ export function createApp(opts: AppOptions) {
   app.use('*', cors({
     origin: opts.corsOrigins?.length ? opts.corsOrigins : '*',
     allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Authorization', 'Content-Type', 'If-None-Match'],
+    allowHeaders: ['Authorization', 'Content-Type', 'If-None-Match', 'X-App-Version'],
     exposeHeaders: ['ETag'],
     maxAge: 600,
   }))
@@ -361,6 +367,50 @@ export function createApp(opts: AppOptions) {
     return c.json({ error: 'internal', message: 'internal server error' }, 500)
   })
   app.notFound((c) => c.json({ error: 'not_found', message: `no such endpoint: ${c.req.method} ${c.req.path}` }, 404))
+
+  // --- 운영 도구(live_ops.ts): 서버 상태(점검·최소 버전)는 모든 요청이 보므로 잠깐 들고 있는다(운영 10초, 테스트 0 = 매번 읽기).
+  // 관리자가 바꾸면 이 서버의 사본은 바로 바뀐다. 표가 아직 없으면(마이그레이션 039 전) 기본값 — 점검 아님.
+  const opsCacheMs = Math.min(10, Math.max(0, opts.gameCacheSec ?? 0)) * 1000
+  let opsMemo: { at: number; v: LO.OpsStatus } | null = null
+  async function opsStatus(): Promise<LO.OpsStatus> {
+    if (opsMemo && opsCacheMs && Date.now() - opsMemo.at < opsCacheMs) return opsMemo.v
+    let rows: Row[] = []
+    try {
+      rows = await query('select key, value from ops_config')
+    } catch {
+      rows = []
+    }
+    const kv = Object.fromEntries(rows.map((r) => [String(r.key), String(r.value)]))
+    const until = Number(kv.maintenance_until)
+    const v: LO.OpsStatus = { maintenance: kv.maintenance === '1', maintenance_text: kv.maintenance_text ?? '',
+      maintenance_until: kv.maintenance_until && Number.isFinite(until) ? until : null, min_version: kv.min_version ?? '', store_url: kv.store_url ?? '' }
+    opsMemo = { at: Date.now(), v }
+    return v
+  }
+  async function setOpsStatus(v: LO.OpsStatus) {
+    const kv: Record<string, string> = { maintenance: v.maintenance ? '1' : '0', maintenance_text: v.maintenance_text,
+      maintenance_until: v.maintenance_until === null ? '' : String(v.maintenance_until), min_version: v.min_version, store_url: v.store_url }
+    await query(`insert into ops_config (key, value) select x.key, x.value from jsonb_each_text($1::jsonb) as x
+      on conflict (key) do update set value = excluded.value`, [JSON.stringify(kv)])
+    opsMemo = { at: Date.now(), v }
+  }
+  // 토큰의 플레이어 id(틀렸거나 없으면 null) — 점검 중 관리자 통과용
+  async function tokenPlayer(c: Context): Promise<string | null> {
+    const m = /^Bearer\s+(\S+)$/i.exec(c.req.header('authorization') ?? '')
+    if (!m) return null
+    try {
+      const payload = await verify(m[1], secret, { alg: 'HS256', exp: false, iat: false, nbf: false })
+      return typeof payload.sub === 'string' && UUID_RE.test(payload.sub) && typeof payload.exp === 'number' && payload.exp > clock() ? payload.sub : null
+    } catch {
+      return null
+    }
+  }
+  async function isAdmin(id: string): Promise<boolean> {
+    const [a] = await query(`select exists (select 1 from player_identities i join admin_emails a on a.email = i.email
+      where i.player_id = $1 and i.provider = 'google') as admin`, [id])
+    return a?.admin === true
+  }
+  app.use('/v1/*', LO.opsGate({ status: opsStatus, tokenPlayer, isAdmin }))
 
   // --- 읽기 ---
 
@@ -627,6 +677,8 @@ export function createApp(opts: AppOptions) {
     const guard = (ch.runClose ? ` and exists (select 1 from dungeon_runs where run_id = ${p(ch.runClose.run_id)}::uuid and player_id = $1 and not closed)` : '')
       + (ch.pvpBuy ? ` and exists (select 1 from pvp_wallet where player_id = $1 and coins >= ${p(ch.pvpBuy.price)}::int)` : '')
       + marketGuard(ch, now, p)
+      + (ch.mailClaim?.length ? ` and not exists (select 1 from mail_claims where player_id = $1 and mail_id = any(${p(ch.mailClaim)}::bigint[]))` : '')
+      + (ch.coupon ? ` and not exists (select 1 from coupon_uses where player_id = $1 and code = ${p(ch.coupon.code)}::text)` : '')
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
     if (ch.marketBuy) ctes.unshift(marketBuyCte(ch.marketBuy, now, p)) // 판매를 먼저 잡는다(s가 mb를 기다린다)
     if (ch.soldiers && Object.keys(ch.soldiers).length) {
@@ -692,18 +744,29 @@ export function createApp(opts: AppOptions) {
     }
     dungeonCtes(ch, now, ctes, p)
     marketCtes(ch, now, ctes, p)
+    if (ch.mailClaim?.length) {
+      ctes.push(`mcl as (insert into mail_claims (mail_id, player_id, at) select x, s.player_id, to_timestamp(${p(now)}::float8)
+        from s, unnest(${p(ch.mailClaim)}::bigint[]) as x returning 1)`)
+    }
+    if (ch.coupon) {
+      const code = `${p(ch.coupon.code)}::text`
+      ctes.push(`cu as (update coupons set uses = uses + 1 where code = ${code} and (max_uses is null or uses < max_uses) and exists (select 1 from s) returning 1)`)
+      ctes.push(`cuu as (insert into coupon_uses (code, player_id, at) select ${code}, player_id, to_timestamp(${p(now)}::float8) from s returning 1)`)
+    }
     if (ch.log) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
     }
     const runResult = ch.runClose ? ', (select result from rc) as run_result' : ''
     // 거래소 사기: 판매는 잡았는데 내 쪽(version·값)이 안 바뀌었으면 0으로 나눠 문장 전체를 되돌린다(판매는 그대로 남는다) — null(다시 시도)
-    const buyCheck = ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) then 1 else 0 end) as mb_ok' : ''
+    const buyCheck = (ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) then 1 else 0 end) as mb_ok' : '')
+      // 쿠폰 전체 상한: 다른 사람이 마지막 한 장을 먼저 썼으면(cu가 비었는데 내 쪽은 바뀜) 문장 전체를 되돌린다 — null(다시 계산하면 coupon_used_up)
+      + (ch.coupon ? ', 1 / (case when (select count(*) from cu) = (select count(*) from s) then 1 else 0 end) as cu_ok' : '')
     let r: Row
     try {
       ;[r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult}${buyCheck} from s`, params)
     } catch (e) {
-      if (ch.marketBuy && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
+      if ((ch.marketBuy || ch.coupon) && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
       throw e
     }
     return Number(r.n) === 1 ? r : null
@@ -799,14 +862,14 @@ export function createApp(opts: AppOptions) {
   // 개정 18 던전·장비 변경의 CTE들(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
   function dungeonCtes(ch: Change, now: number, ctes: string[], p: (v: unknown) => string) {
     const sid = '(select player_id from s)'
-    if (ch.dungeon) {
-      const d = ch.dungeon.state
-      ctes.push(`dg as (insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset, helpers_used)
-        select player_id, ${p(ch.dungeon.type)}, ${p(d.best_level)}::int, ${p(d.keys)}::int, ${p(d.extra_today)}::int, to_timestamp(${p(d.last_reset)}::float8),
+    ;[...(ch.dungeon ? [ch.dungeon] : []), ...(ch.dungeonMore ?? [])].forEach((dn, i) => {
+      const d = dn.state
+      ctes.push(`dg${i || ''} as (insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset, helpers_used)
+        select player_id, ${p(dn.type)}, ${p(d.best_level)}::int, ${p(d.keys)}::int, ${p(d.extra_today)}::int, to_timestamp(${p(d.last_reset)}::float8),
           ${p(JSON.stringify(d.helpers_used ?? []))}::jsonb from s
         on conflict (player_id, type) do update set best_level = excluded.best_level, keys = excluded.keys, extra_today = excluded.extra_today,
           last_reset = excluded.last_reset, helpers_used = excluded.helpers_used returning 1)`)
-    }
+    })
     if (ch.runOpen) {
       // 한 번에 run 하나: 열린 run은 결과 없이 닫고(그 run의 finish는 409 run_closed), 하루 지난 run은 지운다
       const r = ch.runOpen
@@ -1508,6 +1571,44 @@ export function createApp(opts: AppOptions) {
     const { events: _drop, ...rest } = ch
     if (!Object.keys(ev).length) return rest
     return { ...rest, missions: M.addEvents(rest.missions ?? p.missions, ev, today(g, now)) }
+  }
+
+  // 우편·쿠폰 보상(live_ops.ts Reward) 여러 개 → 한 번의 변경. got = 실제로 받은 것(장비는 굴린 결과까지 — 응답·기록용).
+  // 열쇠는 던전 종류마다 행 하나(dungeon + dungeonMore). 없는 영웅 id는 건너뛴다(관리자가 넣을 때 이미 검사했다).
+  function rewardChange(p: Player, g: Game, now: number, rewards: LO.Reward[]): { change: Change; got: Record<string, unknown> } {
+    const sum: Record<string, number> = {}
+    const heroes: Record<string, number> = {}
+    const items: R.EquipItem[] = []
+    for (const rw of rewards) {
+      for (const [k, v] of Object.entries(rw)) if (typeof v === 'number' && k !== 'hero_n') sum[k] = (sum[k] ?? 0) + v
+      if (rw.hero && g.heroes.some((h) => h.id === rw.hero)) heroes[rw.hero] = (heroes[rw.hero] ?? 0) + (rw.hero_n ?? 1)
+      if (rw.equip && R.EQUIP_GRADES.includes(rw.equip.grade)) {
+        const rows = [{ min_level: 0, [rw.equip.grade]: 1 }]
+        items.push(...R.rollDrops(rows, 1, rw.equip.n, R.cfgNum(g.config, 'equip_weapon_p'), random))
+      }
+    }
+    const change: Change = {}
+    const res = Object.fromEntries(R.BUILD_RES.filter((r) => (sum[r] ?? 0) > 0).map((r) => [r, sum[r]]))
+    if (Object.keys(res).length) change.res = res
+    if (sum.gold) change.goldTenths = sum.gold * 10
+    if (sum.diamonds) change.diamonds = sum.diamonds
+    if (sum.tickets) change.diaTickets = sum.tickets
+    if (Object.keys(heroes).length) change.heroes = heroes
+    if (items.length) change.items = items
+    const keys = R.DUNGEON_TYPES.filter((t) => (sum[`keys_${t}`] ?? 0) > 0).map((t) => {
+      const st = dungeonState(p, g, t, now)
+      return { type: t, state: { ...st, keys: st.keys + sum[`keys_${t}`] } }
+    })
+    if (keys.length) {
+      change.dungeon = keys[0]
+      if (keys.length > 1) change.dungeonMore = keys.slice(1)
+    }
+    const pz = P.fromReward(sum)
+    if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+    const got: Record<string, unknown> = { ...sum }
+    if (Object.keys(heroes).length) got.heroes = heroes
+    if (items.length) got.items = items
+    return { change, got }
   }
 
   // 보상 표와 내 진행: {n(받은 날 수), days, can_claim, next_reset, rewards[1..28일차]}.
@@ -2820,6 +2921,7 @@ export function createApp(opts: AppOptions) {
   // 창이 열릴 때 따로 받던 값과 같다. 하나가 실패하면 그 칸만 null(앱은 그 창을 열 때 다시 받는다).
   const BOOT_PARTS: Record<string, string> = {
     attendance: '/v1/attendance', missions: '/v1/missions', friends: '/v1/friends', guild: '/v1/guild', guild_war: '/v1/guild/war', pvp: '/v1/pvp',
+    notices: '/v1/notices', mail: '/v1/mail',
     ...Object.fromEntries(Rk.BOARDS.map((b) => [`ranking_${b}`, `/v1/ranking/${b}`])),
   }
   app.get('/v1/boot', auth, async (c) => {
@@ -2858,6 +2960,16 @@ export function createApp(opts: AppOptions) {
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(운영 도구): 이 플레이어를 슈퍼관리자로 만든다(가짜 Google 연결 + admin_emails) — 앱 관리자 창을 시험한다.
+    app.post('/v1/test/admin', auth, async (c) => {
+      const id = c.get('playerId') as string
+      const email = `test-admin-${id}@example.com`
+      await query(`insert into player_identities (provider, provider_uid, player_id, email) values ('google', $2, $1, $2)
+        on conflict (player_id, provider) do update set email = excluded.email`, [id, email])
+      await query('insert into admin_emails (email) values ($1) on conflict do nothing', [email])
+      return c.json({ ok: true })
     })
 
     // 통합 테스트용(소셜 로그인): 제공자 없이 진행 중 로그인을 끝낸다 {state, provider_uid} 또는 {state, error: "denied"} — 콜백과 같은 처리.
@@ -2987,6 +3099,7 @@ export function createApp(opts: AppOptions) {
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
+  registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
 
   return app
 }

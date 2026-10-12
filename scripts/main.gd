@@ -50,6 +50,7 @@ const ResearchPanelScript := preload("res://scripts/research_panel.gd")
 const OfflinePanelScript := preload("res://scripts/offline_panel.gd")
 const LoginScreenScript := preload("res://scripts/login_screen.gd")
 const PreloaderScript := preload("res://scripts/preloader.gd")
+var _notice_panel = null  # 공지사항 창(새 공지면 성 화면이 뜬 뒤 한 번 연다 — _maybe_show_notice)
 var _loading = null  # 로딩 화면(온라인: 서버 연결부터, 첫 월드에서 begin()으로 이어서 불러온다)
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
@@ -204,8 +205,19 @@ func _build_world() -> void:
 	add_child(settings_panel)
 	var exchange_panel = preload("res://scripts/exchange_panel.gd").new()  # 거래소 시트(온라인): 오른쪽 아래 메뉴가 연다
 	add_child(exchange_panel)
-	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][가방][미션][랭킹][친구][이벤트][거래소][길드]
-	side_menu.windows = {"settings": settings_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
+	var notice_panel = preload("res://scripts/notice_panel.gd").new()  # 공지사항(온라인 운영 도구 LiveOps): 오른쪽 아래 메뉴, 새 공지면 성 화면에서 한 번 뜬다
+	add_child(notice_panel)
+	var mail_panel = preload("res://scripts/mail_panel.gd").new()  # 우편함(운영자가 보낸 보상): 오른쪽 아래 메뉴
+	add_child(mail_panel)
+	var coupon_panel = preload("res://scripts/coupon_panel.gd").new()  # 쿠폰 입력: 설정 창이 연다
+	add_child(coupon_panel)
+	var admin_panel = preload("res://scripts/admin_panel.gd").new()  # 운영 관리(슈퍼관리자만): 설정 창이 연다
+	add_child(admin_panel)
+	settings_panel.coupon = coupon_panel
+	settings_panel.admin_panel = admin_panel
+	_notice_panel = notice_panel
+	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][공지][우편][가방][미션][랭킹][친구][이벤트][거래소][길드]
+	side_menu.windows = {"settings": settings_panel, "notice": notice_panel, "mail": mail_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)

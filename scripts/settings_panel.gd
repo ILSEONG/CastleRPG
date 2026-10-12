@@ -5,6 +5,7 @@ extends "res://scripts/ui_window.gd"
 ## 계정: 닉네임·친구 코드([복사])·로그인 방식(온라인, 친구 목록 응답 Economy.friends에서). 오프라인이면 "오프라인 모드".
 ## 계정 삭제(온라인, Google Play 계정 삭제 정책): 두 번 눌러 확인 → POST /v1/account/delete → 저장한 로그인·기기 id를 지우고 처음부터(Net.forget_account).
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
+## 로그인 줄 [쿠폰 입력](온라인) → 쿠폰 창(coupon_panel.gd), 버전 줄 [운영 관리](슈퍼관리자만) → 관리자 창(admin_panel.gd: 공지·점검·업데이트·우편·쿠폰).
 
 const Prefs := preload("res://scripts/prefs.gd")
 
@@ -28,6 +29,10 @@ var login_label: Label
 var copy_button: Button
 var version_label: Label
 var delete_button: Button
+var coupon_button: Button
+var admin_button: Button
+var coupon  # 쿠폰 입력 창(coupon_panel.gd) — main이 넣는다
+var admin_panel  # 운영 관리 창(admin_panel.gd, 슈퍼관리자만) — main이 넣는다
 var _delete_armed := 0.0
 var _deleting := false
 
@@ -72,6 +77,13 @@ func _ready() -> void:
 	code_row.add_child(copy_button)
 	content.add_child(code_row)
 	login_label = _info_row("로그인")
+	coupon_button = _button("쿠폰 입력", UiKit.STEEL, 22)  # 쿠폰(2026-10-12, LiveOps): 로그인 줄 오른쪽(창 높이를 늘리지 않게)
+	coupon_button.custom_minimum_size = Vector2(150, 48)
+	coupon_button.pressed.connect(func():
+		if coupon != null:
+			close()
+			coupon.open())
+	login_label.get_parent().add_child(coupon_button)
 	delete_button = _button("계정 삭제", UiKit.STEEL, 22)
 	delete_button.custom_minimum_size = Vector2(0, 56)
 	delete_button.pressed.connect(press_delete)
@@ -79,6 +91,13 @@ func _ready() -> void:
 
 	content.add_child(_section("정보"))
 	version_label = _info_row("게임 버전")
+	admin_button = _button("운영 관리", UiKit.AMBER, 22)  # 공지·점검·우편·쿠폰 만들기(슈퍼관리자만 보인다) — 버전 줄 오른쪽
+	admin_button.custom_minimum_size = Vector2(150, 48)
+	admin_button.pressed.connect(func():
+		if admin_panel != null:
+			close()
+			admin_panel.open())
+	version_label.get_parent().add_child(admin_button)
 
 	var close_button := _button("닫기", UiKit.STEEL)
 	close_button.pressed.connect(close)
@@ -119,6 +138,8 @@ func _refresh() -> void:
 	login_label.text = LOGIN_NAMES.get(Net.auth_mode, "-") if online else "-"
 	version_label.text = str(ProjectSettings.get_setting("application/config/version", ""))
 	delete_button.visible = online
+	coupon_button.visible = online
+	admin_button.visible = online and Economy.admin
 	_style_delete()
 
 
