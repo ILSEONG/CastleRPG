@@ -131,7 +131,7 @@ func _build_confirm() -> void:
 	confirm_box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	confirm_box.custom_minimum_size = Vector2(520, 0)
 	confirm_box.mouse_filter = Control.MOUSE_FILTER_STOP
-	confirm_box.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 16.0, 22))
+	confirm_box.add_theme_stylebox_override("panel", UiKit.scroll(true))
 	veil.add_child(confirm_box)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 16)

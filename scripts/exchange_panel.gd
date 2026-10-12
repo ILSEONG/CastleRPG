@@ -605,7 +605,7 @@ func _small(text: String, f: Callable) -> Button:
 
 func _build_confirm() -> void:
 	confirm = PanelContainer.new()
-	confirm.add_theme_stylebox_override("panel", UiKit.panel(UiKit.CREAM_DIALOG, 16.0, 22))
+	confirm.add_theme_stylebox_override("panel", UiKit.scroll(true))
 	confirm.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	confirm.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	confirm.grow_vertical = Control.GROW_DIRECTION_BOTH
