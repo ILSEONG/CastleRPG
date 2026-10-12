@@ -397,7 +397,7 @@ func _rebuild() -> void:
 
 
 func _build_buy() -> void:
-	head_label.text = "다른 모험가가 올린 장비 · 값을 내면 바로 보관함으로"
+	head_label.text = "다른 성주가 올린 장비 · 사면 바로 보관함에 들어가요"
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	var cb := _small("통화: " + CUR_NAMES[currency], func():

@@ -1,0 +1,37 @@
+// Godot 안드로이드 빌드 템플릿(4.7.2)과 같은 AGP·SDK 버전에 맞춘다.
+plugins {
+    id 'com.android.library' version '8.6.1'
+}
+
+// addons/castle_billing/export_plugin.gd 의 BILLING_DEP 와 같은 버전으로 유지할 것.
+ext.billingVersion = '8.3.0'
+ext.godotVersion = '4.7.2.stable'
+
+android {
+    namespace 'com.ilesong.castlerpg.billing'
+    compileSdk 36
+    buildToolsVersion '36.1.0'
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 36
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    // Godot 엔진 쪽은 앱(빌드 템플릿)에 이미 들어 있으므로 컴파일에만 쓴다.
+    compileOnly "org.godotengine:godot:$godotVersion"
+    // 결제 라이브러리는 AAR에 넣지 않고 export_plugin.gd 가 원격 의존성으로 선언한다.
+    compileOnly "com.android.billingclient:billing:$billingVersion"
+}

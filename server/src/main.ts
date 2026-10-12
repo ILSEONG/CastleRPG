@@ -7,6 +7,7 @@ import { enabledProviders } from './oauth.ts'
 import type { OAuthConfig } from './oauth.ts'
 import { planningEmpty, seed } from './seed.ts'
 import { WarLive } from './war_live.ts'
+import { readPayments } from './payments.ts'
 
 let cfg: ReturnType<typeof readEnv>
 try {
@@ -37,7 +38,17 @@ const envOauth: OAuthConfig = {
 const oauth = cfg.allowTestHooks && enabledProviders(envOauth).length === 0 ? undefined : envOauth
 console.log(`[server] social login: ${oauth ? enabledProviders(oauth).join(', ') || 'off' : 'test providers (ALLOW_TEST_HOOKS)'}${oauth?.redirectBase ? ` (callbacks under ${oauth.redirectBase})` : ''}`)
 const warLive = new WarLive() // 공성전 실시간 방(WebSocket /v1/guild/war/live)
-const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, gameCacheSec })
+// 실결제 확인(payments.ts): GOOGLE_PLAY_SERVICE_ACCOUNT(+GOOGLE_PLAY_PACKAGE)·TOSS_MTLS_CERT/KEY(+TOSS_SKUS). 설정된 것만 결제가 열린다
+let payments: ReturnType<typeof readPayments>
+try {
+  payments = readPayments(process.env)
+} catch (e) {
+  console.error(`[server] payments: ${(e as Error).message} - refusing to start`)
+  process.exit(1)
+}
+console.log(`[server] payments: ${['google', 'toss'].filter((k) => (payments as any)[k]).join(', ') || 'off'}`)
+const legal = { operator: process.env.LEGAL_OPERATOR?.trim() ?? '', email: process.env.LEGAL_EMAIL?.trim() ?? '' } // 약관·개인정보처리방침 운영자·연락처
+const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, gameCacheSec, payments, legal })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)

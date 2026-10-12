@@ -58,12 +58,12 @@ func _ready() -> void:
 	var phase := Net.arg_value("phase")
 	var device := Net.arg_value("device")
 	var state_path := Net.arg_value("state")
-	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5", "6", "7"], "online mode with --api, --device, --state, --phase",
+	_check(Net.is_online() and device != "" and state_path != "" and phase in ["1", "2", "3", "4", "5", "6", "7", "8"], "online mode with --api, --device, --state, --phase",
 		"api=%s device=%s state=%s phase=%s" % [Net.api_base, device, state_path, phase])
 	if _fails == 0:
 		Net.device_path = device  # start() 전에
 		Net.auth_path = device.get_base_dir().path_join("auth.json")
-		if phase in ["1", "2", "6"]:
+		if phase in ["1", "2", "6", "8"]:
 			Net.set_auth("guest")  # 로그인 화면 없이 게스트(이전 동작)
 		match phase:
 			"1":
@@ -80,6 +80,8 @@ func _ready() -> void:
 				await _phase6_quests()
 			"7":
 				await _phase7_toss()
+			"8":
+				await _phase8_link()
 	if _errors.count > 0:
 		print("ONLINE SCRIPT ERRORS %d" % _errors.count)
 	_fails += _errors.count
@@ -454,7 +456,7 @@ func _levelup_online() -> void:
 	_hero_panel.close()
 
 
-## (k) 서버 모집 1회: 판매 + 테스트 골드로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 1회 비용(Lv 1)↓, 영웅 +1, 결과 카드.
+## (k) 서버 모집 1회: 판매로 골드를 모아 주점 창에서 [1회 모집] → 요청 한 번, 서버 골드 3000 tenths↓, 영웅 +1, 결과 카드.
 ## (l) 모집은 다시 보내지 않는다: 서버가 사라진 채 모집 → 버리고 알림, 다시 연결되면 /v1/player로 상태를 받는다(두 번째 모집 요청 없음).
 ## (m) 배치: 영웅 창 [적용] → /v1/deploy → 서버 배치, 방치 모드라 곧바로 영웅이 바뀐다. phase 2가 재접속 복원을 본다.
 ## 모집 전 copies 합(새 플레이어 = 시작 영웅 수)을 돌려준다 — phase 2는 그 합 + 1(뽑은 한 장, 새 영웅이든 중복이든)을 본다.
@@ -462,28 +464,27 @@ func _heroes_online() -> int:
 	await _request("POST", "/v1/test/age", {"minutes": 720})
 	await _request("POST", "/v1/collect", {"building": "lumber"})
 	await _request("POST", "/v1/sell", {"res": "all"})
-	var cost: int = GameData.gacha_cost(GameData.GACHA_GOLD, 1, 1)  # 골드 모집 Lv 1 한 번(2026-10-07부터 10,000)
-	await _request("POST", "/v1/test/grant_gold", {"amount": cost})
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
 	var gold0: int = Economy.server_gold_tenths
-	_check(Economy.gold >= cost and Economy.gold_tenths == gold0, "(k) precondition: at least one gold recruit (Lv 1) of server gold", "gold=%d cost=%d" % [Economy.gold, cost])
+	_check(Economy.gold >= Economy.gacha_cost("gold", 1) and Economy.gold_tenths == gold0, "(k) precondition: enough server gold from selling (gold recruit Lv 1)", "gold=%d" % Economy.gold)
 	var copies0 := _copies()
 	_check(copies0 == GameData.config_list("starter_heroes").size(), "(k) precondition: a new player owns the starters once each", "copies=%d heroes=%s" % [copies0, Economy.heroes])
 	var g0: int = Net.requested.get("/v1/gacha", 0)
+	var cost: int = Economy.gacha_cost("gold", 1) * 10  # tenths(골드 소비처 상향 뒤 1회 1만)
 	_recruit.open()
 	_recruit.one_button.pressed.emit()
 	_recruit.one_button.pressed.emit()  # 응답 전 재탭
-	_check(not _recruit.one_button.disabled and not _recruit.one_button.text.contains("…") and Economy.gold_tenths == gold0 - cost * 10 and Net.requested.get("/v1/gacha", 0) == g0 + 1,
+	_check(not _recruit.one_button.disabled and not _recruit.one_button.text.contains("…") and Economy.gold_tenths == gold0 - cost and Net.requested.get("/v1/gacha", 0) == g0 + 1,
 		"(k) before the reply the gold is already spent, the button looks the same (no …) and a second tap sends nothing", "gold=%d text=%s" % [Economy.gold_tenths, _recruit.one_button.text])
 	var shown := await _wait_until(func(): return _recruit.is_showing_results(), 15.0)
 	var got: String = _recruit.cards[0].hero_id if shown and _recruit.cards.size() == 1 else ""
-	_check(shown and Net.requested.get("/v1/gacha", 0) == g0 + 1 and Economy.server_gold_tenths == gold0 - cost * 10 and Economy.gold_tenths == gold0 - cost * 10
+	_check(shown and Net.requested.get("/v1/gacha", 0) == g0 + 1 and Economy.server_gold_tenths == gold0 - cost and Economy.gold_tenths == gold0 - cost
 		and _copies() == copies0 + 1 and got != "" and int(Economy.heroes.get(got, 0)) >= 1,
-		"(k) one /v1/gacha: server gold -1 recruit cost, one more hero, one result card",
+		"(k) one /v1/gacha: server gold minus the recruit cost, one more hero, one result card",
 		"requests=%d gold=%d->%d copies=%d->%d card=%s" % [Net.requested.get("/v1/gacha", 0) - g0, gold0, Economy.server_gold_tenths, copies0, _copies(), got])
 	_recruit.close()
 
-	await _request("POST", "/v1/test/grant_gold", {"amount": cost})  # 1회 비용 — 판매 골드가 모자라도 (l)이 요청까지 간다
+	await _request("POST", "/v1/test/grant_gold", {"amount": 3000})  # 개정 23: 1회 3,000 — 판매 골드가 모자라도 (l)이 요청까지 간다
 	var live := Net.api_base
 	var notices := []
 	var on_notice := func(t): notices.append(t)
@@ -711,6 +712,64 @@ func _phase7_toss() -> void:
 	_check(gone and again.get("is_new") == true and again.get("player_id") != first.get("player_id") and not FileAccess.file_exists(Net.device_path),
 		"(t2) the second press deletes the account on the server, clears the device id and restarts", "gone=%s again=%s" % [gone, again])
 	ReleasePlatform.override = ""
+
+
+const DONE_PAY := "결제가 완료되어 지급했어요"
+
+
+## phase 8: 계정 연결(2026-10-12). 새 기기 게스트 → 설정 [Google]로 연결 → 같은 계정·진행 그대로, 이제 Google 자동 로그인.
+## 이미 다른 계정 것인 카카오(phase 3의 kakao-user-1)는 연결하지 않고 알린다.
+func _phase8_link() -> void:
+	DirAccess.remove_absolute(Net.device_path)  # 새 기기 = 새 게스트
+	if not await _start_world():
+		return
+	var me := await _post_json("/v1/auth/guest", {"device_id": Net.ensure_device_id()})
+	var gold0 := Economy.server_gold_tenths
+	var sp = preload("res://scripts/settings_panel.gd").new()
+	add_child(sp)
+	sp._on_open()
+	await _wait_until(func(): return Net.requested.get("/v1/auth/links", 0) > 0, 5.0)
+	await _frames(10)
+	_check(sp.link_row.visible and sp.link_buttons.keys() == ["google", "kakao", "naver"] and not sp.link_buttons.google.disabled and sp.link_label.text.begins_with("게스트"),
+		"(l1) a guest sees [Google] [카카오] [네이버] to link and the guest warning", sp.link_label.text)
+	var opened := []
+	sp.account_link.opener = func(u): opened.append(u)
+	sp.link_buttons.google.pressed.emit()
+	await _wait_until(func(): return sp.account_link._state != "", 10.0)
+	_check(opened.size() == 1 and opened[0].contains("accounts.google.com") and sp.account_link.pending == "google" and sp.link_label.text.contains("브라우저"),
+		"(l1) pressing [Google] opens the Google login in the browser and says so", "opened=%s msg=%s" % [opened, sp.link_label.text])
+	var done := await _post_json("/v1/test/oauth_complete", {"state": sp.account_link._state, "provider_uid": "google-link-1"})
+	var linked := await _wait_until(func(): return Net.auth_mode == "google", 10.0)
+	var auth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Net.auth_path))
+	_check(done.get("ok") == true and str(done.get("player_id")) == str(me.get("player_id")) and linked and auth.mode == "google" and str(auth.session).length() == 64,
+		"(l1) the link finishes on the same account and the app now keeps a Google session", "done=%s auth=%s" % [done, auth])
+	_check(sp.link_buttons.google.disabled and sp.link_buttons.google.text.ends_with("✓") and sp.login_label.text == "Google" and Economy.server_gold_tenths >= gold0,
+		"(l1) [Google ✓] is shown, login shows Google, progress kept", "text=%s login=%s" % [sp.link_buttons.google.text, sp.login_label.text])
+	var again := await _post_json("/v1/auth/session", {"session": auth.session})
+	_check(str(again.get("player_id")) == str(done.get("player_id")), "(l1) the Google session logs in to the same player", str(again))
+	sp.link_buttons.kakao.pressed.emit()  # phase 3이 다른 계정에 붙인 카카오
+	await _wait_until(func(): return sp.account_link._state != "", 10.0)
+	var taken := await _post_json("/v1/test/oauth_complete", {"state": sp.account_link._state, "provider_uid": "kakao-user-1"})
+	var told := await _wait_until(func(): return sp.account_link.pending == "", 10.0)
+	_check(taken.get("error") == "already_linked" and told and sp.link_label.text.contains("다른 게임 계정") and Net.auth_mode == "google" and not sp.link_buttons.kakao.disabled,
+		"(l2) a Kakao login already used by another account is not linked; the player is told and stays on this account", "taken=%s msg=%s" % [taken, sp.link_label.text])
+	# 실결제(StorePay): 테스트 결제 창 → /v1/iap/purchase(provider test) → 서버가 지급. 같은 주문을 다시 보내도 두 번 지급하지 않는다
+	var notes := []
+	Economy.notice.connect(func(t): notes.append(t))
+	StorePay.fake_store = func(_id): return "order-online-check-1"
+	var dia0 := Economy.diamonds
+	var opened_pay := Economy.iap_buy("dia_1")
+	var paid := await _wait_until(func(): return Economy.diamonds >= dia0 + 300, 10.0)
+	_check(opened_pay and paid and DONE_PAY in notes and Economy.iap_view().first.has("dia_1"),
+		"(p1) buying 다이아 300 sends the receipt; the server grants it and the shop marks the first-purchase bonus used", "dia=%d->%d notes=%s" % [dia0, Economy.diamonds, notes])
+	var dia1 := Economy.diamonds
+	StorePay._send("dia_1", "test", "order-online-check-1", true)
+	await _wait_until(func(): return StorePay._sent.is_empty(), 10.0)
+	await _frames(10)
+	_check(Economy.diamonds == dia1 and notes.count(DONE_PAY) == 1, "(p1) the same order sent again (restore) grants nothing more and stays quiet", "dia=%d->%d" % [dia1, Economy.diamonds])
+	StorePay.fake_store = Callable()
+	_check(not Economy.iap_buy("dia_2") and notes.back() == preload("res://scripts/release_platform.gd").iap_off_text(),
+		"(p2) with no payment keys on the server the buttons only say payments open after release", str(notes.back()))
 
 
 ## phase 6: 튜토리얼(서버 퀘스트). 새 플레이어 튜토리얼을 켜고 새 기기로 접속 → 서버가 정한 공터·1단계 미션 카드 → 보상 받기(서버가 자원을 준다) →
@@ -1585,14 +1644,14 @@ func _pulls(n: int, count: int, currency: String) -> Array:
 	return out
 
 
-## (r23) 서버 골드 모집 레벨업: grant_gold로 골드 → 10연차 3번(요청 3번) = 30회 → 서버 Lv 2(넘김은 서버 규칙 그대로), 골드 −(Lv 1 10회 비용 × 3), 알림·시그널.
+## (r23) 서버 골드 모집 레벨업: grant_gold로 골드 → 10연차 3번(요청 3번) = 30회 → 서버 Lv 2(넘김은 서버 규칙 그대로), 골드 −10연차 비용 × 3, 알림·시그널.
 ## 다이아: grant_diamonds 16,000 → 1회 + 10연차 5번 = 51회(−13,800). 결과 순서로 센 천장 = 서버 dia_pity, 50회 안에 SSR이 한 장 이상(천장).
 ## 재접속: 앱의 다이아·모집 상태를 비우고 토큰을 틀리게 해 다시 로그인 → /v1/player가 서버 값을 그대로 돌려준다(상단 다이아 칩도).
 ## phase 2 맨 끝에 돈다 — 모집이 영웅·조각을 늘려 phase 1·2의 영웅 복원 검사(서버 모집 한 장)를 흔들지 않게.
 func _recruit23_online() -> void:
 	await _wait_until(func(): return Economy.kills_pending.is_empty() and Economy.kills_sent.is_empty(), 10.0)
-	var spend: int = GameData.gacha_cost(GameData.GACHA_GOLD, 10, 1) * 3  # Lv 1 10회 × 3(2026-10-07부터 1회 10,000)
-	await _request("POST", "/v1/test/grant_gold", {"amount": spend})
+	var cost: int = Economy.gacha_cost("gold", 10) * 3  # 골드 소비처 상향 뒤 10회 = 1회 1만 × 10
+	await _request("POST", "/v1/test/grant_gold", {"amount": cost})
 	var gold0: int = Economy.server_gold_tenths
 	var st0: Dictionary = Economy.gacha_state()
 	var want: Dictionary = GameData.gacha_level_up(st0.gold_level, st0.gold_pulls, 30)
@@ -1608,10 +1667,10 @@ func _recruit23_online() -> void:
 	Economy.gacha_leveled.disconnect(on_up)
 	var r := await _request("GET", "/v1/player")
 	var server: Dictionary = r.get("player", {}).get("gacha", {})
-	_check(st0.gold_level == 1 and gold_cards.size() == 30 and Net.requested.get("/v1/gacha", 0) == g0 + 3 and Economy.server_gold_tenths == gold0 - spend * 10
+	_check(st0.gold_level == 1 and gold_cards.size() == 30 and Net.requested.get("/v1/gacha", 0) == g0 + 3 and Economy.server_gold_tenths == gold0 - cost * 10
 		and want.level == 2 and server.get("gold_level") == 2 and int(server.get("gold_pulls", -1)) == want.pulls and Economy.gacha_state().gold_level == 2
 		and Economy.gacha_gold_pulls == want.pulls and ups == [2] and notes.any(func(t): return t.begins_with("골드 모집 Lv 2!")),
-		"(r23) server gold recruit: three 10-pulls (30 cards, -3 Lv 1 ten-pull costs) level the server up to Lv 2 with the carry-over; notice and signal",
+		"(r23) server gold recruit: three 10-pulls (30 cards, 3 x the 10-pull gold cost) level the server up to Lv 2 with the carry-over; notice and signal",
 		"cards=%d gold %d -> %d server=%s app=%s ups=%s notes=%s" % [gold_cards.size(), gold0, Economy.server_gold_tenths, server, Economy.gacha_state(), ups, notes])
 	await _request("POST", "/v1/test/grant_diamonds", {"amount": 16000})
 	var dia0: int = Economy.diamonds

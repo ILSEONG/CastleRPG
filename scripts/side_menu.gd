@@ -5,7 +5,8 @@ extends CanvasLayer
 ## [거래소](2026-10-07, exchange_panel.gd)는 [길드] 바로 위 — 가이드를 마치면 열리고(그 전엔 흐리게 + 자물쇠), 받을 판매 대금이 있으면 빨간 점.
 ## [길드](2026-10-07, 하단 탭에서 옮김)는 맨 아래(토글 바로 위). 튜토리얼 길드 미션 전에는 흐리게 + 자물쇠, 누르면 잠금 토스트(하단 탭과 같은 규칙).
 ## 길드 미션 중이면 [길드]와 [메뉴]에 빨간 점(어디를 누를지).
-## main.gd가 만들고 windows = {settings, bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
+## [공지]·[우편](2026-10-12, 온라인 운영 도구 LiveOps): 공지사항 창·우편함 창. 안 본 공지·받을 우편이 있으면 빨간 점.
+## main.gd가 만들고 windows = {settings, notice, mail, bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -14,7 +15,7 @@ const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["settings", "설정"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["exchange", "거래소"],
+const ITEMS := [["settings", "설정"], ["notice", "공지"], ["mail", "우편"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["exchange", "거래소"],
 	["guild", "길드"]]
 const LOCKABLE := ["exchange", "guild"]  # 가이드 잠금(Tutorial.tab_locked)이 있는 항목
 const SIZE := Vector2(84, 84)
@@ -24,6 +25,7 @@ const ABOVE := 12.0  # 탭 바·미션 카드 위 여백
 const BASE := Color(0.30, 0.34, 0.46)
 const GOLD := Color(0.98, 0.76, 0.18)
 const OPEN_SEC := 0.14
+const TOP_LIMIT := 206.0  # 펼친 줄이 이보다 위로 올라가면(상단 스테이지 카드와 겹침) 위쪽 항목을 왼쪽 둘째 줄로 옮긴다
 
 var windows := {}  # 항목 id → 창(open()/is_open())
 var card  # tutorial_card.gd(있으면 그 위로 올린다)
@@ -32,6 +34,8 @@ var buttons := {}  # 항목 id → Button(테스트용)
 var is_open := false
 
 var _col: VBoxContainer
+var _col2: VBoxContainer  # 넘친 위쪽 항목(왼쪽 둘째 줄, 아래를 [메뉴] 바로 위 항목에 맞춘다)
+var _split := 0  # _col2로 옮긴 항목 수(ITEMS 앞에서부터)
 var _dots := {}  # 빨간 점을 그린 버튼 id → true
 var _t := 0.0  # 펼침 정도 0..1
 var _locked := {}  # 잠겨 흐리게 그린 항목 id → true
@@ -45,6 +49,12 @@ func _ready() -> void:
 	_col.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_col.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	add_child(_col)
+	_col2 = VBoxContainer.new()
+	_col2.add_theme_constant_override("separation", int(GAP))
+	_col2.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_col2.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_col2.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	add_child(_col2)
 	for it in ITEMS:
 		var b := _make_button(it[0], it[1])
 		b.pressed.connect(func(): pick(it[0]))
@@ -68,6 +78,10 @@ func dots() -> Dictionary:
 		d.event = true
 	if Missions.ready_count() > 0:
 		d.mission = true
+	if LiveOps.mail_count() > 0:
+		d.mail = true
+	if LiveOps.has_unseen():
+		d.notice = true
 	if guild_mission():
 		d.guild = true
 	if Economy.market_sold > 0 and not Tutorial.tab_locked("exchange"):  # 거래소: 팔린 장비 대금
@@ -124,16 +138,41 @@ func _process(delta: float) -> void:
 	if card != null and card.panel != null and card.panel.visible:
 		var vh := get_viewport().get_visible_rect().size.y
 		bottom = maxf(bottom, vh - card.panel.global_position.y + ABOVE)
+	var vh2 := get_viewport().get_visible_rect().size.y
+	var fits := maxi(2, int((vh2 - bottom - TOP_LIMIT + GAP) / (SIZE.y + GAP)))
+	var split := clampi(ITEMS.size() + 1 - fits, 0, ITEMS.size() - 1)
+	if split != _split:
+		_set_split(split)
 	_col.offset_right = -SIDE
 	_col.offset_left = -SIDE - SIZE.x
 	_col.offset_bottom = -bottom
 	_col.offset_top = -bottom - _col.get_combined_minimum_size().y
+	var b2 := bottom + SIZE.y + GAP
+	_col2.offset_right = -SIDE - SIZE.x - GAP
+	_col2.offset_left = -SIDE - 2.0 * SIZE.x - GAP
+	_col2.offset_bottom = -b2
+	_col2.offset_top = -b2 - _col2.get_combined_minimum_size().y
 	if is_open and _t < 1.0:  # 펼칠 때 아래에서 살짝 올라오며 나타난다
 		_t = minf(1.0, _t + delta / OPEN_SEC)
 		for i in ITEMS.size():
 			var b: Button = buttons[ITEMS[i][0]]
 			b.modulate.a = _t
 			b.get_child(0).position.y = (1.0 - _t) * 18.0 * (ITEMS.size() - i)
+
+
+## 위쪽 n개 항목을 왼쪽 둘째 줄로(나머지와 [메뉴]는 오른쪽 줄). 순서는 ITEMS 그대로.
+func _set_split(n: int) -> void:
+	_split = n
+	for i in ITEMS.size():
+		var b: Button = buttons[ITEMS[i][0]]
+		var want: VBoxContainer = _col2 if i < n else _col
+		if b.get_parent() != want:
+			b.get_parent().remove_child(b)
+			want.add_child(b)
+	for i in ITEMS.size():  # 순서 맞추기(오른쪽 줄 맨 아래는 [메뉴])
+		var b: Button = buttons[ITEMS[i][0]]
+		b.get_parent().move_child(b, i if i < n else i - n)
+	_col.move_child(toggle, _col.get_child_count() - 1)
 
 
 func _make_button(id: String, text: String) -> Button:
@@ -172,6 +211,10 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 				TabBarScript.draw_shapes(c, TabBarScript.LOCK_SHAPES, Vector2(SIZE.x - 18, 18), 26.0)
 		"settings":
 			draw_gear(c, ctr, 44.0)
+		"notice":
+			draw_megaphone(c, ctr, 44.0)
+		"mail":
+			draw_envelope(c, ctr, 44.0)
 		_:
 			draw_chevron(c, ctr, 30.0, is_open)
 			text = "닫기" if is_open else "메뉴"
@@ -182,6 +225,41 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 	var y := SIZE.y - 10.0
 	c.draw_string_outline(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, 5, Color(UiKit.INK, 0.85))
 	c.draw_string(FONT, Vector2(0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, Color.WHITE)
+
+
+## 확성기(공지): 나팔 + 손잡이 + 소리 줄 두 개.
+static func draw_megaphone(ci: CanvasItem, ctr: Vector2, s: float) -> void:
+	var u := s / 44.0
+	var p := func(x: float, y: float) -> Vector2: return ctr + Vector2(x, y) * u
+	var red := Color(0.90, 0.36, 0.30)
+	var cream := Color(0.98, 0.93, 0.82)
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-6, 4), p.call(-2, 4), p.call(0, 13), p.call(-4, 13)]), Color(0.45, 0.47, 0.55))
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-15, -5), p.call(-8, -5), p.call(-8, 5), p.call(-15, 5)]), cream)
+	var horn := PackedVector2Array([p.call(-8, -5), p.call(8, -15), p.call(8, 15), p.call(-8, 5)])
+	ci.draw_colored_polygon(horn, red)
+	ci.draw_colored_polygon(PackedVector2Array([p.call(0, -10), p.call(8, -15), p.call(8, 15), p.call(0, 10)]), red.darkened(0.12))
+	var rim := horn.duplicate()
+	rim.append(rim[0])
+	ci.draw_polyline(rim, LowpolyBox.edge_color(red), 1.5 * u, true)
+	for k in [[-8.0, 12.0], [0.0, 15.0], [8.0, 12.0]]:
+		ci.draw_line(p.call(11, k[0] * 0.9), p.call(k[1] + 4.0, k[0] * 1.4), Color.WHITE, 2.5 * u, true)
+
+
+## 편지 봉투(우편): 봉투 + 접힌 뚜껑 + 금색 봉인.
+static func draw_envelope(ci: CanvasItem, ctr: Vector2, s: float) -> void:
+	var u := s / 44.0
+	var p := func(x: float, y: float) -> Vector2: return ctr + Vector2(x, y) * u
+	var paper := Color(0.97, 0.94, 0.86)
+	var env := PackedVector2Array([p.call(-17, -11), p.call(17, -11), p.call(17, 12), p.call(-17, 12)])
+	ci.draw_colored_polygon(env, paper)
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-17, 12), p.call(0, -1), p.call(17, 12)]), paper.darkened(0.08))
+	ci.draw_colored_polygon(PackedVector2Array([p.call(-17, -11), p.call(17, -11), p.call(0, 3)]), paper.darkened(0.15))
+	var rim := env.duplicate()
+	rim.append(rim[0])
+	ci.draw_polyline(rim, LowpolyBox.edge_color(paper), 1.5 * u, true)
+	ci.draw_polyline(PackedVector2Array([p.call(-17, -11), p.call(0, 3), p.call(17, -11)]), LowpolyBox.edge_color(paper), 1.5 * u, true)
+	ci.draw_circle(p.call(0, 2), 4.5 * u, GOLD)
+	ci.draw_arc(p.call(0, 2), 4.5 * u, 0, TAU, 12, LowpolyBox.edge_color(GOLD), 1.2 * u, true)
 
 
 ## 각진 톱니바퀴(톱니 8개 + 가운데 구멍).

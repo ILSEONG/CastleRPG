@@ -7,15 +7,20 @@ extends "res://scripts/ui_window.gd"
 ## 계정 삭제(온라인, Google Play 계정 삭제 정책): 두 번 눌러 확인 → POST /v1/account/delete → 저장한 로그인·기기 id를 지우고 처음부터(Net.forget_account).
 ## 화면(2026-10-12): 그래픽 품질 높음/보통/낮음·프레임 60/30·절전 모드(graphics.gd — 바로 적용).
 ## 계정(2026-10-12): [로그아웃·계정 전환](앱인토스 빌드 제외, 두 번 눌러 확인) → 서버 세션을 지우고 다시 열면 로그인 화면(Net.logout + Net.restart).
+## 계정 연결(2026-10-12, Google Play 빌드·온라인): [Google]·[카카오]·[네이버] — 지금 계정(게스트 포함)에 그 로그인을 붙인다(account_link.gd).
+##   연결된 것은 "✓", 결과·안내는 그 아래 한 줄.
 ## 정보·지원: 게임 버전, [이용약관]·[개인정보처리방침](브라우저로 연다), [문의하기](메일 앱 — 받는 주소·플레이어 정보가 채워진다).
 ##   주소는 support_links.gd 상수(출시 작업이 채운다). 비어 있으면 "준비 중" 알림.
 ## 줄이 많아 가운데는 세로 스크롤(body), 제목과 [닫기]는 고정.
+## 정보: 게임 버전(프로젝트 설정 application/config/version).
+## 로그인 줄 [쿠폰 입력](온라인) → 쿠폰 창(coupon_panel.gd), 버전 줄 [운영 관리](슈퍼관리자만) → 관리자 창(admin_panel.gd: 공지·점검·업데이트·우편·쿠폰).
 
 const Prefs := preload("res://scripts/prefs.gd")
 const GraphicsScript := preload("res://scripts/graphics.gd")
 const Links := preload("res://scripts/support_links.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const NotifySettings := preload("res://scripts/notify_settings.gd")
+const AccountLinkScript := preload("res://scripts/account_link.gd")
 
 const TITLE := "설정"
 const WIDTH := 600.0
@@ -38,6 +43,10 @@ var login_label: Label
 var copy_button: Button
 var version_label: Label
 var delete_button: Button
+var coupon_button: Button
+var admin_button: Button
+var coupon  # 쿠폰 입력 창(coupon_panel.gd) — main이 넣는다
+var admin_panel  # 운영 관리 창(admin_panel.gd, 슈퍼관리자만) — main이 넣는다
 var _delete_armed := 0.0
 var _deleting := false
 var body: VBoxContainer  # 스크롤 안 줄들
@@ -50,6 +59,10 @@ var terms_button: Button
 var privacy_button: Button
 var inquiry_button: Button
 var notify_rows: RefCounted  # [알림] 칸(notify_settings.gd), 알림을 못 띄우는 빌드면 null
+var account_link: Node  # account_link.gd
+var link_row: HBoxContainer
+var link_buttons := {}  # provider → Button
+var link_label: Label
 
 
 func _ready() -> void:
@@ -112,10 +125,34 @@ func _ready() -> void:
 	code_row.add_child(copy_button)
 	body.add_child(code_row)
 	login_label = _info_row("로그인")
+	account_link = AccountLinkScript.new()
+	add_child(account_link)
+	account_link.changed.connect(_refresh)
+	link_row = HBoxContainer.new()
+	link_row.add_theme_constant_override("separation", 8)
+	link_row.add_child(_row_label("계정 연결"))
+	for provider in AccountLinkScript.PROVIDERS:
+		var b := _button(AccountLinkScript.NAMES[provider], UiKit.STEEL, 22)
+		b.custom_minimum_size = Vector2(0, 52)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(func(): account_link.start(provider))
+		link_buttons[provider] = b
+		link_row.add_child(b)
+	body.add_child(link_row)
+	link_label = _label("", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	link_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(link_label)
 	logout_button = _button("로그아웃 · 계정 전환", UiKit.STEEL, 22)
 	logout_button.custom_minimum_size = Vector2(0, 56)
 	logout_button.pressed.connect(press_logout)
 	body.add_child(logout_button)
+	coupon_button = _button("쿠폰 입력", UiKit.STEEL, 22)  # 쿠폰(2026-10-12, LiveOps): 로그인 줄 오른쪽(창 높이를 늘리지 않게)
+	coupon_button.custom_minimum_size = Vector2(150, 48)
+	coupon_button.pressed.connect(func():
+		if coupon != null:
+			close()
+			coupon.open())
+	login_label.get_parent().add_child(coupon_button)
 	delete_button = _button("계정 삭제", UiKit.STEEL, 22)
 	delete_button.custom_minimum_size = Vector2(0, 56)
 	delete_button.pressed.connect(press_delete)
@@ -138,6 +175,13 @@ func _ready() -> void:
 	inquiry_button.custom_minimum_size = Vector2(0, 56)
 	inquiry_button.pressed.connect(open_inquiry)
 	body.add_child(inquiry_button)
+	admin_button = _button("운영 관리", UiKit.AMBER, 22)  # 공지·점검·우편·쿠폰 만들기(슈퍼관리자만 보인다) — 버전 줄 오른쪽
+	admin_button.custom_minimum_size = Vector2(150, 48)
+	admin_button.pressed.connect(func():
+		if admin_panel != null:
+			close()
+			admin_panel.open())
+	version_label.get_parent().add_child(admin_button)
 
 	var close_button := _button("닫기", UiKit.STEEL)
 	close_button.pressed.connect(close)
@@ -149,6 +193,8 @@ func _ready() -> void:
 func _on_open() -> void:
 	if Net.is_online() and str(Economy.friends.get("code", "")) == "":
 		Economy.friends_load()  # 로딩 때 못 받았으면 지금(받는 동안은 "…")
+	if Net.is_online() and not ReleasePlatform.is_toss():
+		account_link.load_links()
 	_refresh()
 	if notify_rows != null:
 		notify_rows.refresh()
@@ -182,8 +228,11 @@ func _refresh() -> void:
 	version_label.text = str(ProjectSettings.get_setting("application/config/version", ""))
 	delete_button.visible = online
 	logout_button.visible = online and not ReleasePlatform.is_toss()  # 앱인토스는 로그인 화면이 없다(토스 계정으로 바로 시작)
+	coupon_button.visible = online
+	admin_button.visible = online and Economy.admin
 	_style_delete()
 	_style_logout()
+	_style_links(online)
 	_style_choices(quality_buttons, GraphicsScript.quality())
 	_style_choices(fps_buttons, GraphicsScript.fps())
 
@@ -219,7 +268,7 @@ func press_logout() -> void:
 		return
 	_logout_armed = 0.0
 	Net.logout()
-	Economy.notice.emit("로그아웃했습니다. 다시 열면 로그인 화면이 나옵니다")
+	Economy.notice.emit("로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다")
 	await get_tree().create_timer(1.5).timeout
 	Net.restart.call()
 
@@ -228,6 +277,25 @@ func _style_logout() -> void:
 	var armed := _logout_armed > 0.0
 	logout_button.text = "한 번 더 누르면 로그아웃합니다" if armed else "로그아웃 · 계정 전환"
 	UiKit.apply_button(logout_button, UiKit.AMBER if armed else UiKit.STEEL, 12.0)
+
+
+## 계정 연결 줄: 연결된 로그인은 "✓"(누를 수 없음). 게스트면 연결을 권하는 안내.
+func _style_links(online: bool) -> void:
+	var show := online and not ReleasePlatform.is_toss()
+	link_row.visible = show
+	link_label.visible = show
+	for provider in link_buttons:
+		var b: Button = link_buttons[provider]
+		var linked: bool = account_link.is_linked(provider)
+		b.text = AccountLinkScript.NAMES[provider] + (" ✓" if linked else "")
+		b.disabled = linked
+		UiKit.apply_button(b, UiKit.AMBER if account_link.pending == provider else UiKit.STEEL, 12.0)
+	if account_link.message != "":
+		link_label.text = account_link.message
+	elif Net.auth_mode == "guest":
+		link_label.text = "게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없어요. 연결해 두면 진행이 그대로 남아요"
+	else:
+		link_label.text = "다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있어요"
 
 
 ## 웹 주소를 브라우저로 연다. 비어 있으면 준비 중 알림.

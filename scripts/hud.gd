@@ -12,7 +12,7 @@ const TIPS := [
 	"FEVER가 가득 차면 버튼을 눌러 보세요",
 	"같은 영웅 조각을 모아 승급하면 스킬이 열립니다",
 	"막사 레벨을 올리면 훈련이 빨라집니다",
-	"성문이 부서지면 괴물이 성채를 직접 공격해요",
+	"성문이 부서지면 몬스터가 성채를 직접 공격해요",
 	"성장 탭에서 골드로 공격력·체력을 올릴 수 있어요",
 	"연구소에서 기술을 연구하면 영웅·병사·경제가 강해집니다",
 	"남는 재료는 상인에게 팔아 골드로 바꾸세요",
@@ -449,7 +449,7 @@ func _build_fever_confirm() -> void:
 	col.add_child(row)
 	fever_yes = Button.new()
 	fever_no = Button.new()
-	for pair in [[fever_yes, "예", UiKit.AMBER, true], [fever_no, "아니오", UiKit.STEEL, false]]:
+	for pair in [[fever_yes, "예", UiKit.AMBER, true], [fever_no, "아니요", UiKit.STEEL, false]]:
 		var b: Button = pair[0]
 		b.text = pair[1]
 		b.custom_minimum_size = Vector2(180, 72)

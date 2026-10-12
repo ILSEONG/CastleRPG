@@ -32,6 +32,8 @@ SoundFx="*res://scripts/sfx.gd"
 Chat="*res://scripts/chat.gd"
 TouchScroll="*res://scripts/touch_scroll.gd"
 Notify="*res://scripts/notify.gd"
+LiveOps="*res://scripts/live_ops.gd"
+StorePay="*res://scripts/store_pay.gd"
 
 [castle]
 
@@ -50,7 +52,7 @@ window/handheld/orientation=1
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/castle_notify/plugin.cfg")
+enabled=PackedStringArray("res://addons/castle_notify/plugin.cfg", "res://addons/castle_billing/plugin.cfg")
 
 [gui]
 

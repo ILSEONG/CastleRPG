@@ -501,7 +501,7 @@ func refresh() -> void:
 	if d.is_empty():
 		_p.def_info.text = "아직 방어팀이 없어요 — 처음 출전한 팀이 방어팀이 됩니다"
 	else:
-		_p.def_info.text = "다른 성주가 이 팀과 싸워요 (상대 AI가 조종)%s" % \
+		_p.def_info.text = "다른 성주가 이 팀과 싸워요 (AI가 대신 조종)%s" % \
 			(" · 방어 병사 %d명" % PvpRules.soldier_count(mv.get("soldiers", {})) if page == "total" else "")
 	var why := Pvp.start_block(page, tm)
 	_p.start.disabled = why != ""
