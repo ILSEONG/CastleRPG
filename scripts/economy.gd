@@ -61,6 +61,7 @@ const NO_TICKET_TEXT := "다이아 모집권이 부족합니다"
 const QUEST_FAIL_TEXT := {"too_soon": "잠시 뒤에 다시 받아 주세요", "not_done": "아직 미션을 끝내지 않았습니다", "stale": "이미 받은 보상입니다"}
 const QUEST_FAIL_DEFAULT := "보상을 받지 못했습니다. 잠시 뒤에 다시 시도해 주세요"
 const GACHA_LEVEL_TEXT := "골드 모집 Lv %d! SSR %s%%"  # 레벨업 알림(개정 23)
+const GACHA_LEVEL_NO_SSR_TEXT := "골드 모집 Lv %d! SR %s%% · SSR은 Lv %d부터"  # SSR이 아직 없는 레벨(2026-10-12)
 const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
 const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
 const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
@@ -1510,7 +1511,11 @@ func _set_gold_level(level: int, pulls: int) -> void:
 	gacha_gold_pulls = maxi(0, pulls)
 	if gacha_gold_level > before:
 		gacha_leveled.emit(gacha_gold_level)
-		notice.emit(GACHA_LEVEL_TEXT % [gacha_gold_level, Skills.num_text(gacha_rates().ssr * 100.0)])
+		var rr := gacha_rates()
+		if rr.ssr > 0.0:
+			notice.emit(GACHA_LEVEL_TEXT % [gacha_gold_level, Skills.num_text(rr.ssr * 100.0)])
+		else:
+			notice.emit(GACHA_LEVEL_NO_SSR_TEXT % [gacha_gold_level, Skills.num_text(rr.sr * 100.0), GameData.GOLD_SSR_FROM])
 
 
 ## 지금 업그레이드 못 하는 이유 코드(upgrade_block_for + "waiting": 온라인 응답 대기). 되면 "". now = 보정 시각(time_now) —

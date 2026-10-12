@@ -1607,7 +1607,7 @@ func test_gacha_offline() -> void:
 	var c := {"SSR": 0, "SR": 0, "R": 0}
 	for x in out:
 		c[x.grade] += 1
-	check(out.size() == n and absf(c.SSR / float(n) - 0.005) <= 0.0015 and absf(c.SR / float(n) - 0.05) <= 0.0045, "gold Lv 1 rates SSR 0.5%% +- 0.15%%, SR 5%% +- 0.45%% (~6.5 sigma): %s" % [c])
+	check(out.size() == n and c.SSR == 0 and absf(c.SR / float(n) - 0.05) <= 0.0045, "gold Lv 1 rates SSR 0 (from Lv 3), SR 5%% +- 0.45%% (~6.5 sigma): %s" % [c])
 	check(out.slice(0, 200).all(func(x): return GameData.hero(x.id).grade == x.grade), "each pull is a hero of its grade")
 	var dia := GameData.gacha_rates("diamond", 1, 1)
 	var all_ten := true
@@ -2027,16 +2027,17 @@ func test_buildings() -> void:
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
 	check(is_equal_approx(GameData.research_speed({}, 1), 0.0) and is_equal_approx(GameData.research_speed({}, 30), 0.58), "lab: research speed +2% per level above 1 (Lv 30 = +58%)")
-	var r1 := GameData.gacha_rates("gold", 1, 1)
-	var r11 := GameData.gacha_rates("gold", 1, 11)
-	check(is_equal_approx(r1.ssr, 0.005) and is_equal_approx(r1.sr, 0.05) and is_equal_approx(r11.ssr, 0.015) and is_equal_approx(r11.sr, 0.08), "tavern: SSR +0.1%p, SR +0.3%p per level")
+	var r1 := GameData.gacha_rates("gold", 3, 1)
+	var r11 := GameData.gacha_rates("gold", 3, 11)
+	check(is_equal_approx(r1.ssr, 0.007) and is_equal_approx(r1.sr, 0.06) and is_equal_approx(r11.ssr, 0.017) and is_equal_approx(r11.sr, 0.09)
+		and GameData.gacha_rates("gold", 2, 11).ssr == 0.0, "tavern: SSR +0.1%p, SR +0.3%p per level (gold SSR only from Lv 3)")
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
 	check(st == {"hp": 396.0, "atk": 23.0} and not GameData.CONFIG_NUM_KEYS.has("lab_atk_per_level") and not GameData.BUILDING_NUM_KEYS.has("lab_atk_per_level")
 		and GameData.config_num("lab_atk_per_level") == 0.0 and GameData.hero_power(hans, 1, 0) == roundi(396.0 / 10.0 + 23.0 * 2.0 / 0.8),
 		"rev 24: the lab no longer raises hero attack (no lab_atk_per_level); stats and power ignore building levels: %s" % [st])
-	var rig := func(): return 0.0055  # 등급 굴림 0.0055: 주점 1(SSR 0.5%)은 SR, 주점 2(0.6%)는 SSR
-	check(EconomyScript.roll_gacha(1, rig)[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 1, 2))[0].grade == "SSR", "offline recruiting uses the tavern odds")
+	var rig := func(): return 0.0075  # 등급 굴림 0.0075(골드 Lv 3): 주점 1(SSR 0.7%)은 SR, 주점 2(0.8%)는 SSR
+	check(EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 3, 1))[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 3, 2))[0].grade == "SSR", "offline recruiting uses the tavern odds")
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
 	var none := {"wood": 0, "stone": 0, "food": 0}
 	var rich := {"wood": 1000000, "stone": 1000000, "food": 1000000}
@@ -3976,10 +3977,10 @@ func test_recruit_r23() -> void:
 	check(is_equal_approx(dia.ssr, 0.08) and is_equal_approx(dia.sr, 0.3) and dia.ssr > l10.ssr and dia.sr > l10.sr and is_equal_approx(GameData.gacha_rates("diamond", 1, 3).ssr, 0.082),
 		"rev 23: diamond rates 8% / 30% beat gold max level; the tavern bonus applies too")
 	# 레벨업
-	check([1, 2, 9, 10].map(func(l): return GameData.gacha_gold_next(l)) == [30, 60, 270, 0], "rev 23: next level at 30 x L, none at max")
-	check(GameData.gacha_level_up(1, 29, 1) == {"level": 2, "pulls": 0} and GameData.gacha_level_up(1, 28, 1) == {"level": 1, "pulls": 29}
-		and GameData.gacha_level_up(1, 25, 10) == {"level": 2, "pulls": 5} and GameData.gacha_level_up(1, 0, 1000) == {"level": 8, "pulls": 160}
-		and GameData.gacha_level_up(9, 265, 10) == {"level": 10, "pulls": 0} and GameData.gacha_level_up(10, 0, 10) == {"level": 10, "pulls": 0},
+	check([1, 2, 9, 10].map(func(l): return GameData.gacha_gold_next(l)) == [40, 160, 3240, 0], "rev 23: next level at 40 x L^2, none at max")
+	check(GameData.gacha_level_up(1, 39, 1) == {"level": 2, "pulls": 0} and GameData.gacha_level_up(1, 38, 1) == {"level": 1, "pulls": 39}
+		and GameData.gacha_level_up(1, 35, 10) == {"level": 2, "pulls": 5} and GameData.gacha_level_up(1, 0, 5000) == {"level": 7, "pulls": 1360}
+		and GameData.gacha_level_up(9, 3235, 10) == {"level": 10, "pulls": 0} and GameData.gacha_level_up(10, 0, 10) == {"level": 10, "pulls": 0},
 		"rev 23: level-up accumulates, carries over, climbs several levels at once and stops at 10")
 	# 천장
 	var all_r := func(): return 0.99
@@ -4004,14 +4005,14 @@ func test_recruit_r23() -> void:
 	e.notice.connect(func(t): notes.append(t))
 	e.gacha_leveled.connect(func(l): ups.append(l))
 	e.gacha_done.connect(func(r): got.append(r))
-	e.gold = 300000
-	check(e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 20 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: two 10-pulls are 20/30 at Lv 1")
-	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 60, "dia_pity": 0, "pity_left": 50}
-		and ups == [2] and notes == ["골드 모집 Lv 2! SSR 0.6%"] and e.gacha_cost("gold", 1) == 12500,
-		"rev 23: the 30th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
+	e.gold = 400000
+	check(e.gacha(10) and e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 30 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: three 10-pulls are 30/40 at Lv 1")
+	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160, "dia_pity": 0, "pity_left": 50}
+		and ups == [2] and notes == ["골드 모집 Lv 2! SR 5.5% · SSR은 Lv 3부터"] and e.gacha_cost("gold", 1) == 12500,
+		"rev 23: the 40th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
 	# 오프라인 다이아
 	notes.clear()
-	check(not e.gacha(1, "diamond") and notes == [EconomyScript.NO_DIA_TEXT] and got.size() == 3, "rev 23: no diamonds: a notice only")
+	check(not e.gacha(1, "diamond") and notes == [EconomyScript.NO_DIA_TEXT] and got.size() == 4, "rev 23: no diamonds: a notice only")
 	e.diamonds = 3000
 	check(e.gacha(10, "diamond") and e.diamonds == 300 and e.gacha_state().gold_pulls == 0 and e.gacha_state().gold_level == 2 and e.gold == 0,
 		"rev 23: a diamond 10-pull takes 2700 diamonds and leaves gold and the gold level alone")

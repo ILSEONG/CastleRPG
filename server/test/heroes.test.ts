@@ -49,15 +49,15 @@ test('모집 1회: floor(gold) ≥ 10000(골드 Lv 1)이면 tenths 100000 차감
   assert.deepEqual(r.json.results, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }])
   assert.deepEqual([r.json.player.gold_tenths, r.json.player.gold, r.json.player.heroes.hans.copies], [5, 0, 2])
   await setGold(id, 100000)
-  rand.next = [0.004, 0] // SSR(< 0.005), SSR 풀 첫째 = arteon(새로)
+  rand.next = [0.004, 0] // 골드 Lv 1은 SSR 없음(Lv 3부터) → SR(< 0.05), SR 풀 첫째 = bron(새로)
   r = await gacha(token, 1)
-  assert.deepEqual(r.json.results, [{ hero_id: 'arteon', grade: 'SSR', new: true, copies: 1, shards: 0 }])
-  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.arteon.copies], [0, 1])
-  rand.next = [0.054, 0.99] // SR 경계(0.005 ≤ r < 0.055), SR 풀 마지막 = selene
+  assert.deepEqual(r.json.results, [{ hero_id: 'bron', grade: 'SR', new: true, copies: 1, shards: 0 }])
+  assert.deepEqual([r.json.player.gold_tenths, r.json.player.heroes.bron.copies], [0, 1])
+  rand.next = [0.049, 0.99] // SR 경계(r < 0.05), SR 풀 마지막 = selene
   await setGold(id, 100000)
   assert.deepEqual((await gacha(token, 1)).json.results, [{ hero_id: 'selene', grade: 'SR', new: true, copies: 1, shards: 0 }])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual(copiesOf(p.heroes), { hans: 2, ella: 1, dorik: 1, nina: 1, arteon: 1, selene: 1 })
+  assert.deepEqual(copiesOf(p.heroes), { hans: 2, ella: 1, dorik: 1, nina: 1, bron: 1, selene: 1 })
   const l = await logs(id, 'gacha')
   assert.equal(l.length, 3)
   assert.deepEqual([l[0].detail.count, l[0].detail.cost, l[0].detail.gold_tenths, l[0].detail.results], [1, 10000, -100000, [{ hero_id: 'hans', grade: 'R', new: false, copies: 2, shards: 1 }]])
@@ -91,17 +91,17 @@ test('골드 10연차: 100000(tenths 1000000 = 1회 × 10) 차감, 10장, SR 이
   rand.next = []
 })
 
-test('확률(10만 회 표본, 암호학적 난수, 골드 Lv 1): SSR 0.5% ± 0.15%, SR 5% ± 0.45%(약 6.5σ), 등급 안 균등. 다이아 10연차 표본은 모두 SR 이상 1장 이상, 골드 10연차는 보장 없음', async () => {
+test('확률(10만 회 표본, 암호학적 난수, 골드 Lv 1): SSR 0(Lv 3부터), SR 5% ± 0.45%(약 6.5σ), 등급 안 균등. 다이아 10연차 표본은 모두 SR 이상 1장 이상, 골드 10연차는 보장 없음', async () => {
   const cfg = Object.fromEntries((await S.db.query('select key, value from game_config')).map((x) => [x.key, x.value]))
   const heroes = await S.db.query('select id, grade from heroes')
   const n = 100_000
   const out = R.rollGacha(n, heroes as { id: string; grade: string }[], cfg, R.cryptoRandom)
   const count = (g: string) => out.filter((x) => x.grade === g).length / n
-  assert.ok(Math.abs(count('SSR') - 0.005) <= 0.0015, `SSR ${count('SSR')}`)
+  assert.equal(count('SSR'), 0, `SSR ${count('SSR')}`)
   assert.ok(Math.abs(count('SR') - 0.05) <= 0.0045, `SR ${count('SR')}`)
   const rs = heroes.filter((h) => h.grade === 'R').map((h) => h.id)
   for (const id of rs) {
-    const share = out.filter((x) => x.id === id).length / n / 0.945 // R = 1 − 0.005 − 0.05
+    const share = out.filter((x) => x.id === id).length / n / 0.95 // R = 1 − 0.05
     assert.ok(Math.abs(share - 1 / rs.length) <= 0.01, `R ${id} share ${share}`)
   }
   const dia = R.gachaRates(cfg, 'diamond', 1, 1)
@@ -132,8 +132,9 @@ test('배치: 저장되고 다시 읽으면 그대로. 길이·보유·중복·�
   assert.deepEqual((await S.req('GET', '/v1/player', { token })).json.player.deploy, ['nina', null, 'hans', null])
   r = await deploy(token, [null, null, null, null])
   assert.deepEqual(r.json.player.deploy, [null, null, null, null])
-  await setGold(id, 100000)
-  rand.next = [0.004, 0.1] // SSR(< 0.005) 풀 둘째 = ignis
+  await S.db.query('update player_state set gacha_gold_level = 3 where player_id = $1', [id]) // 골드 SSR은 Lv 3부터(0.7%, 1회 15,650)
+  await setGold(id, 156500)
+  rand.next = [0.004, 0.1] // SSR(< 0.007) 풀 둘째 = ignis
   assert.equal((await gacha(token, 1)).json.results[0].hero_id, 'ignis')
   r = await deploy(token, ['ignis', 'ella', 'dorik', 'nina'])
   assert.deepEqual(r.json.player.deploy, ['ignis', 'ella', 'dorik', 'nina'])

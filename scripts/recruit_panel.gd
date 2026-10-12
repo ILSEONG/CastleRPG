@@ -321,6 +321,8 @@ static func rates_text(cur := GOLD) -> String:
 static func _rates_line(rates: Dictionary) -> String:
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
+	if ssr <= 0.0:  # 골드 모집 Lv 1~2(SSR은 GameData.GOLD_SSR_FROM부터)
+		return "SSR Lv %d부터 · SR %s%% · R %s%%" % [GameData.GOLD_SSR_FROM, Skills.num_text(sr * 100.0), Skills.num_text((1.0 - sr) * 100.0)]
 	return "SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0), Skills.num_text((1.0 - ssr - sr) * 100.0)]
 
 

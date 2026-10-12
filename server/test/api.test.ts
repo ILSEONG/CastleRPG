@@ -113,7 +113,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
           helpers, helpers_used: [] }, // 모집권 던전
       },
       items: [], equipment: {},
-      diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 30, dia_pity: 0 }, // 개정 23
+      diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 40, dia_pity: 0 }, // 개정 23
       research: { levels: {}, current: null }, // 개정 24
       quest: { tut_state: 'skipped', tut_step: 0, rep_n: 0 }, dia_tickets: 0, unbuilt: [], // 튜토리얼·반복 퀘스트
       attendance: { n: 0, days: 28, can_claim: true }, // 출석 이벤트

@@ -35,6 +35,7 @@ const GACHA_KEYS := ["gacha_gold_cost_base", "gacha_gold_cost_growth", "gacha_go
 	"gacha_gold_ssr_base", "gacha_gold_ssr_step", "gacha_gold_sr_base", "gacha_gold_sr_step",
 	"gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_dia_ssr", "gacha_dia_sr", "gacha_dia_pity"]
 const GACHA_GOLD := "gold"
+const GOLD_SSR_FROM := 3  # 골드 모집은 이 레벨부터 SSR(아래는 주점 보너스 포함 0 — 서버 rules.GOLD_SSR_FROM, 사용자 2026-10-12)
 const GACHA_DIA := "diamond"
 const GACHA_TICKET := "ticket"  # 다이아 모집권(튜토리얼 보상, 오프라인): 다이아 모집 1회 = 1장
 const GOLD_COST_STEP := 50  # 골드 1회 비용 반올림 단위(서버 rules.GOLD_COST_STEP)
@@ -472,7 +473,8 @@ static func gacha_rates(currency: String, gold_level: int, tavern_level: int) ->
 	var dia := currency == GACHA_DIA
 	var ssr := config_num("gacha_dia_ssr") if dia else config_num("gacha_gold_ssr_base") + config_num("gacha_gold_ssr_step") * k
 	var sr := config_num("gacha_dia_sr") if dia else config_num("gacha_gold_sr_base") + config_num("gacha_gold_sr_step") * k
-	return {"ssr": ssr + config_num("tavern_ssr_per_level") * t, "sr": sr + config_num("tavern_sr_per_level") * t}
+	var no_ssr := not dia and _gold_level(gold_level) < GOLD_SSR_FROM
+	return {"ssr": 0.0 if no_ssr else ssr + config_num("tavern_ssr_per_level") * t, "sr": sr + config_num("tavern_sr_per_level") * t}
 
 
 ## 모집 비용(정수 골드 또는 다이아). 골드 1회 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림, 10회 = × 10(할인 없음).
@@ -483,9 +485,9 @@ static func gacha_cost(currency: String, count: int, gold_level: int) -> int:
 	return one * count
 
 
-## 골드 모집 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L. 최대 레벨이면 0.
+## 골드 모집 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L²(서버 rules.goldNext). 최대 레벨이면 0.
 static func gacha_gold_next(level: int) -> int:
-	return 0 if level >= int(config_num("gacha_gold_level_max")) else int(config_num("gacha_gold_level_pulls")) * level
+	return 0 if level >= int(config_num("gacha_gold_level_max")) else int(config_num("gacha_gold_level_pulls")) * level * level
 
 
 ## 골드 모집 add회 누적 → {level, pulls}. 한 번에 여러 레벨, 남은 횟수는 넘긴다. 최대 레벨이면 누적 0(서버 rules.goldLevelUp).

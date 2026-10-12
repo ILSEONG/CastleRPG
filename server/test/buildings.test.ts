@@ -75,9 +75,10 @@ test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 �
   assert.deepEqual([0, 1, 5, 10].map((l) => R.tierValue(CFG, 'keep_interior_tiers', l)), [20, 20, 24, 28])
   assert.throws(() => R.heroSlots({ keep_slot_tiers: '4|8|12' }, 1), /tier table/)
   assert.deepEqual([0, 1, 2, 3, 30].map((l) => R.population(CFG, l)), [6, 6, 8, 10, 64]) // 인구 = 6 + 2 × (민가 − 1)
-  const r11 = R.gachaRates(CFG, 'gold', 1, 11)
-  assert.deepEqual(R.gachaRates(CFG, 'gold', 1, 1), { ssr: 0.005, sr: 0.05 })
-  assert.ok(Math.abs(r11.ssr - 0.015) < 1e-12 && Math.abs(r11.sr - 0.08) < 1e-12, JSON.stringify(r11))
+  const r11 = R.gachaRates(CFG, 'gold', 3, 11) // 골드 SSR은 Lv 3부터
+  const r1 = R.gachaRates(CFG, 'gold', 3, 1)
+  assert.ok(Math.abs(r1.ssr - 0.007) < 1e-12 && Math.abs(r1.sr - 0.06) < 1e-12, JSON.stringify(r1))
+  assert.ok(Math.abs(r11.ssr - 0.017) < 1e-12 && Math.abs(r11.sr - 0.09) < 1e-12, JSON.stringify(r11))
 })
 
 test('검사 순서(rules.upgradeBlock): 존재 → 최대 레벨 → 성채 상한(성채 제외) → 선행(req ≥ T−1) → 일꾼 → 자원', async () => {
@@ -244,11 +245,11 @@ test('원자성: 끝난 건설을 두 요청이 동시에 읽어도 완료는 �
 test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.1%p/레벨), 민가 레벨이 인구(player.population)를 늘린다. 축적 상한은 민가와 무관(720분)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await S.db.query('update player_state set gold_tenths = 200000 where player_id = $1', [id])
-  rand.next = [0.0055, 0] // 주점 1: SSR 0.5% 밖 → SR(풀 첫째 bron)
+  await S.db.query('update player_state set gold_tenths = 400000, gacha_gold_level = 3 where player_id = $1', [id]) // 골드 SSR은 Lv 3부터(0.7%)
+  rand.next = [0.0075, 0] // 주점 1: SSR 0.7% 밖 → SR(풀 첫째 bron)
   assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => x.grade), ['SR'])
-  await setLevels(id, { tavern: 2 }) // SSR 0.6%
-  rand.next = [0.0055, 0]
+  await setLevels(id, { tavern: 2 }) // SSR 0.8%
+  rand.next = [0.0075, 0]
   assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => [x.grade, x.hero_id]), [['SSR', 'arteon']])
   rand.next = []
   assert.equal((await player(token)).population, 6) // 민가 1

@@ -89,7 +89,7 @@ func show_for(currency: String, gold_level: int, tavern: int) -> void:
 		_line("%d회째 모집은 SSR 확정(SSR이 나오면 다시 1부터 셉니다)" % int(GameData.config_num("gacha_dia_pity")), 20, SUB)
 		_line("10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다)" % int(GameData.config_num("gacha_10_min_sr")), 20, SUB)
 	else:
-		_line("골드 모집은 보장이 없고, 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다", 20, SUB)
+		_line("골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다" % GameData.GOLD_SSR_FROM, 20, SUB)
 	_line("등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림", 18, SUB)
 	var grade := ""
 	for o in hero_odds(rates):
@@ -102,7 +102,9 @@ func show_for(currency: String, gold_level: int, tavern: int) -> void:
 		_line("골드 모집 레벨별 등급 확률", 24, UiKit.INK)
 		for lv in range(1, int(GameData.config_num("gacha_gold_level_max")) + 1):
 			var r := GameData.gacha_rates(GameData.GACHA_GOLD, lv, tavern)
-			_line("Lv %d: SSR %s · SR %s · R %s" % [lv, pct(r.ssr), pct(r.sr), pct(1.0 - r.ssr - r.sr)], 20, UiKit.INK if lv == gold_level else SUB)
+			var need := GameData.gacha_gold_next(lv)
+			var up := " · 레벨업 %s회" % UiKit.commas(need) if need > 0 else ""
+			_line("Lv %d: SSR %s · SR %s · R %s%s" % [lv, pct(r.ssr), pct(r.sr), pct(1.0 - r.ssr - r.sr), up], 18, UiKit.INK if lv == gold_level else SUB)
 	visible = true
 
 
