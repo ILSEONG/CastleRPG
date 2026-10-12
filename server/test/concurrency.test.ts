@@ -156,7 +156,7 @@ test('동시 레벨업 2건(골드·식량은 1회분): 둘 다 같은 version�
   try {
     S.clock.t = T0
     const { token, id } = await S.login()
-    await S.db.query('update player_state set gold_tenths = 300 where player_id = $1', [id])
+    await S.db.query('update player_state set gold_tenths = 600 where player_id = $1', [id])
     b.arm()
     const [r1, r2] = await Promise.all([
       S.req('POST', '/v1/hero/levelup', { token, body: { hero_id: 'hans', count: 1 } }),
