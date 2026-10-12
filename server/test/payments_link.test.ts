@@ -40,7 +40,7 @@ test('Google 결제: 확인되면 지급 + consume, 다시 보내면 already(+ c
     assert.equal(p0.account_tag, Pay.accountTag(id))
     const r = await buy(S, token, 'dia_1', 'google', 'ok:dia_1:1')
     assert.equal(r.status, 200, JSON.stringify(r.json))
-    assert.equal(r.json.player.diamonds, p0.diamonds + 1800) // dia_1 첫 구매 900×2
+    assert.equal(r.json.player.diamonds, p0.diamonds + 3300) // dia_1 첫 구매 1,650×2
     assert.deepEqual(g.finished, ['ok:dia_1:1'])
     const again = await buy(S, token, 'dia_1', 'google', 'ok:dia_1:1')
     assert.equal(again.json.already, true)
@@ -55,7 +55,7 @@ test('Google 결제: 확인되면 지급 + consume, 다시 보내면 already(+ c
     assert.equal((await buy(S, other.token, 'dia_1', 'google', `acct:${Pay.accountTag(id)}`)).json.error, 'payment_invalid') // 남의 계정 결제
     assert.equal((await buy(S, other.token, 'dia_1', 'google', 'ok:dia_1:1')).json.error, 'duplicate_order')
     const p = (await S.req('GET', '/v1/player', { token })).json.player
-    assert.equal(p.diamonds, p0.diamonds + 1800 + 990) // dia_1: 첫 구매 900×2, 다음은 900 + 90
+    assert.equal(p.diamonds, p0.diamonds + 3300 + 1800) // dia_1: 첫 구매 1,650×2, 다음은 1,650 + 150
   } finally {
     await S.close()
   }
@@ -90,7 +90,7 @@ test('토스 결제: sku가 상품 id와 다르면 TOSS_SKUS로 맞춘다, 뷰�
     assert.deepEqual(p0.iap_skus, { toss: { dia_1: 'castle_dia_1' } })
     const r = await buy(S, token, 'dia_1', 'toss', 'ok:castle_dia_1:1')
     assert.equal(r.status, 200, JSON.stringify(r.json))
-    assert.equal(r.json.player.diamonds, p0.diamonds + 1800) // dia_1 첫 구매 900×2
+    assert.equal(r.json.player.diamonds, p0.diamonds + 3300) // dia_1 첫 구매 1,650×2
     assert.equal((await buy(S, token, 'dia_2', 'toss', 'ok:castle_dia_1:2')).json.error, 'payment_invalid')
   } finally {
     await S.close()

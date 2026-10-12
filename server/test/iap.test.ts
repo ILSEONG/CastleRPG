@@ -43,13 +43,13 @@ test('다이아 충전: 첫 구매 2배, 두 번째는 기본 + 보너스, 같�
   const d0 = (await S.req('GET', '/v1/player', { token })).json.player.diamonds
   let r = await buy(token, 'dia_2', 'test', 'same')
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.diamonds, d0 + 9000)
+  assert.equal(r.json.player.diamonds, d0 + 16000)
   const again = await buy(token, 'dia_2', 'test', 'same') // 같은 계정이 다시 보내면(결제 직후 꺼졌다 복구) 지급 없이 already
   assert.equal(again.status, 200)
   assert.equal(again.json.already, true)
   assert.equal((await buy((await S.login()).token, 'dia_2', 'test', 'same')).json.error, 'duplicate_order') // 남의 주문 번호
   r = await buy(token, 'dia_2')
-  assert.equal(r.json.player.diamonds, d0 + 9000 + 5400)
+  assert.equal(r.json.player.diamonds, d0 + 16000 + 9650)
   assert.deepEqual(r.json.player.iap.first, ['dia_2'])
   const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'iap'", [id])
   assert.equal(logs.length, 2)

@@ -32,12 +32,12 @@ export interface Product {
 
 export const PRODUCTS: Product[] = [
   // 다이아 충전
-  { id: 'dia_1', kind: 'diamond', name: '다이아 900', krw: 1200, give: { diamonds: 900 }, bonus: 90 },
-  { id: 'dia_2', kind: 'diamond', name: '다이아 4,500', krw: 5900, give: { diamonds: 4500 }, bonus: 900 },
-  { id: 'dia_3', kind: 'diamond', name: '다이아 9,300', krw: 12000, give: { diamonds: 9300 }, bonus: 2400 },
-  { id: 'dia_4', kind: 'diamond', name: '다이아 25,800', krw: 33000, give: { diamonds: 25800 }, bonus: 7800 },
-  { id: 'dia_5', kind: 'diamond', name: '다이아 46,500', krw: 59000, give: { diamonds: 46500 }, bonus: 16500 },
-  { id: 'dia_6', kind: 'diamond', name: '다이아 78,000', krw: 99000, give: { diamonds: 78000 }, bonus: 33000 },
+  { id: 'dia_1', kind: 'diamond', name: '다이아 1,650', krw: 1200, give: { diamonds: 1650 }, bonus: 150 },
+  { id: 'dia_2', kind: 'diamond', name: '다이아 8,000', krw: 5900, give: { diamonds: 8000 }, bonus: 1650 },
+  { id: 'dia_3', kind: 'diamond', name: '다이아 16,500', krw: 12000, give: { diamonds: 16500 }, bonus: 4400 },
+  { id: 'dia_4', kind: 'diamond', name: '다이아 46,500', krw: 33000, give: { diamonds: 46500 }, bonus: 15000 },
+  { id: 'dia_5', kind: 'diamond', name: '다이아 87,000', krw: 59000, give: { diamonds: 87000 }, bonus: 31000 },
+  { id: 'dia_6', kind: 'diamond', name: '다이아 156,000', krw: 99000, give: { diamonds: 156000 }, bonus: 66000 },
   // 월정액
   { id: 'monthly', kind: 'monthly', name: '성주의 월정액', krw: 4900, give: { diamonds: 1500 }, days: 30, daily: { diamonds: 500 } },
   { id: 'monthly_plus', kind: 'monthly', name: '왕의 월정액', krw: 14900, give: { diamonds: 5000 }, days: 30, daily: { diamonds: 800, tickets: 3, pouch_gold_240: 1 } },
@@ -47,9 +47,9 @@ export const PRODUCTS: Product[] = [
   { id: 'pkg_weekly', kind: 'package', name: '주간 특가 패키지', krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 4000, tickets: 50, keys_equip: 5 } },
   { id: 'pkg_growth', kind: 'package', name: '성장 지원 패키지', krw: 33000, period: 'once', limit: 1, give: { diamonds: 30000, tickets: 150, pouch_gold_360: 10, pouch_res_360: 10 } },
   // 핫딜(1시간 한정, 뜬 것만)
-  { id: 'hot_boss', kind: 'hot', name: '보스 격파 기념 특가', krw: 3300, value: 10, give: { diamonds: 5000, tickets: 20, pouch_gold_360: 3 } },
-  { id: 'hot_dia', kind: 'hot', name: '다이아 긴급 지원', krw: 5900, value: 8, give: { diamonds: 12000, tickets: 15 } },
-  { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 10, give: { diamonds: 4000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5 } },
+  { id: 'hot_boss', kind: 'hot', name: '보스 격파 기념 특가', krw: 3300, value: 5, give: { diamonds: 18000, tickets: 20, pouch_gold_360: 3 } },
+  { id: 'hot_dia', kind: 'hot', name: '다이아 긴급 지원', krw: 5900, value: 5, give: { diamonds: 40000, tickets: 15 } },
+  { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 5, give: { diamonds: 30000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5 } },
   // 패스
   { id: 'pass_growth', kind: 'pass', name: '성장 패스', krw: 9900, give: {} },
   // 광고 제거(영구, 사용자 2026-10-12 ₩5,500): 계정에 남는다(passes). 지금 게임에는 광고가 없어 구매 보너스 다이아를 함께 준다 —
