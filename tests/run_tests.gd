@@ -2294,6 +2294,11 @@ func test_soldiers() -> void:
 	var owned := {"archer:1": 4, "infantry:1": 3, "cavalry:2": 1, "archer:2": 2, "cavalry:1": 5, "knight:1": 9}
 	check(EconomyScript.auto_deploy_for(owned, 6) == {"cavalry:2": 1, "archer:2": 2, "infantry:1": 3} and EconomyScript.auto_deploy_for(owned, 9) == {"cavalry:2": 1, "archer:2": 2, "infantry:1": 3, "cavalry:1": 3},
 		"auto deploy: higher tier first, the same tier infantry -> cavalry -> archer, up to the population: %s" % [EconomyScript.auto_deploy_for(owned, 9)])
+	var rg := {"r1": true, "r2": true, "r3": true}
+	check(EconomyScript.auto_hero_deploy_for(["m1", "r1", "m2", "r2", "m3", "r3", "m4", "x"], rg, 8) == ["m2", "m3", "m1", "m4", "r2", "r3", "r1", "x"]
+		and EconomyScript.auto_hero_deploy_for(["r1", "r2", "m1", "r3", "m2"], rg, 4) == ["r1", "r2", "m1", "r3"]
+		and EconomyScript.auto_hero_deploy_for(["m1", "r1", "m2"], rg, 8) == ["m2", "r1", "m1", null, null, null, null, null],
+		"hero auto deploy: top n by power, first lap melee (gate) / second lap ranged (wall), strongest to the south gate first, other kind when short")
 	check(EconomyScript.trim_deploy({"infantry:1": 5, "archer:1": 2, "cavalry:2": 1}, {"infantry:1": 3, "archer:1": 2}) == {"infantry:1": 3, "archer:1": 2}, "trim_deploy cuts the deploy to what is owned")
 	# 훈련(개정 16, 오프라인)
 	var now := 1.8e9

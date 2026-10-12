@@ -221,7 +221,7 @@ func _refresh() -> void:
 	_fit()
 
 
-## 빌려줄 영웅 고르기 줄: [자동](가장 강한 영웅) + 내 영웅 카드(고른 것은 호박색 테두리).
+## 빌려줄 영웅 고르기 줄: [자동](가장 강한 영웅) + 내 영웅 카드(고른 것은 체크 — 초록 테두리 + 체크 배지).
 func _fill_picks(f: Dictionary) -> void:
 	for c in pick_row.get_children():
 		pick_row.remove_child(c)
@@ -241,7 +241,7 @@ func _fill_picks(f: Dictionary) -> void:
 		card.hero_id = id
 		card.level = Economy.level_of(id)
 		card.stars = Economy.promotion_of(id)
-		card.highlight = f.get("hero_chosen") == id
+		card.checked = f.get("hero_chosen") == id
 		card.tapped.connect(func(_c): Economy.friend_op("hero", {"hero_id": id}))
 		pick_row.add_child(card)
 
