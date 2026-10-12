@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Android 13+: 알림을 띄우려면 사용자 허용이 필요하다(게임이 처음 켜질 때 묻는다). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 폰을 다시 켜면 예약해 둔 알림을 다시 건다(재부팅하면 AlarmManager 예약이 사라진다). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+        <meta-data
+            android:name="org.godotengine.plugin.v2.CastleNotify"
+            android:value="com.ilesong.castlerpg.notify.CastleNotify" />
+
+        <receiver
+            android:name="com.ilesong.castlerpg.notify.NotifyReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name="com.ilesong.castlerpg.notify.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

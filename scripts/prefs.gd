@@ -25,3 +25,8 @@ static func _music() -> Node:
 static func get_float(key: String, default := 1.0) -> float:
 	var m := _music()
 	return float(m.prefs.get(key, default)) if m != null else default
+
+
+static func get_str(key: String, default := "") -> String:
+	var m := _music()
+	return str(m.prefs.get(key, default)) if m != null else default

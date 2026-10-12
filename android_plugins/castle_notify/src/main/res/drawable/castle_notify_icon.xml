@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 상태 표시줄 알림 아이콘: 흰 성 실루엣(안드로이드가 단색으로 칠한다). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,21V9h2v2h2V9h2v2h2V5h-1V3h4v2h-1v6h2V9h2v2h2V9h2v12h-7v-4a2,2 0,0 0,-4 0v4z" />
+</vector>

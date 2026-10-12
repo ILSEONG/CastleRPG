@@ -4,6 +4,9 @@
 # 서명 키는 지금까지 쓰던 debug.keystore 그대로(같은 키라 이전 APK 위에 업데이트 설치된다) — 환경 변수로 넘긴다.
 # OS.is_debug_build() 개발 플래그(--heroes, --api 등)는 출시 빌드에서 꺼진다. 디버그가 필요하면 BUILD=debug.
 # 서버 주소(castle/api_base_url)가 비어 있으면 오프라인 저장으로 돈다. arm64(폰) + x86_64(에뮬레이터).
+# Gradle 빌드(2026-10-12, 푸시 알림 플러그인 addons/castle_notify AAR을 넣으려고): android/build(템플릿 소스, 저장소에 넣지 않는다)가
+# 없으면 내보내기 템플릿에서 설치한다(--install-android-build-template). 필요: Android SDK(ANDROID_HOME, platform 36·build-tools 36.1.0 —
+# 없으면 Gradle이 받는다), JDK 17+(JAVA_HOME). 첫 빌드는 Gradle·의존성을 받느라 몇 분 걸린다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GODOT=${GODOT:-./tools/Godot_v4.7.2-stable_win64_console.exe}
@@ -11,11 +14,13 @@ KEYSTORE=${KEYSTORE:-$HOME/.local/share/godot/keystores/debug.keystore}
 mkdir -p export/android
 touch export/.gdignore   # 빌드 산출물을 Godot가 리소스로 임포트하지 않게
 "$GODOT" --headless --quiet --path . --import
+INSTALL=()
+[ -d android/build ] || INSTALL=(--install-android-build-template)
 if [ "${BUILD:-release}" = "debug" ]; then
-	"$GODOT" --headless --quiet --path . --export-debug "Android" export/android/CastleRPG.apk
+	"$GODOT" --headless --quiet --path . "${INSTALL[@]}" --export-debug "Android" export/android/CastleRPG.apk
 else
 	GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$KEYSTORE" GODOT_ANDROID_KEYSTORE_RELEASE_USER=androiddebugkey \
 		GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=android \
-		"$GODOT" --headless --quiet --path . --export-release "Android" export/android/CastleRPG.apk
+		"$GODOT" --headless --quiet --path . "${INSTALL[@]}" --export-release "Android" export/android/CastleRPG.apk
 fi
 ls -la export/android/CastleRPG.apk
