@@ -93,10 +93,9 @@ test('stageRow: 표 안은 그대로, 31행부터 마지막 12행 평균 기울�
   assert.equal(s31.stage, 31)
   assert.ok(Math.abs(s31.hp_mult - 4.0) < 1e-9)
   assert.ok(Math.abs(s31.gold_mult - 9.07 * (7 / 6.8) * 1.01) < 1e-9) // 골드는 지수 곡선으로 잇는다
-  assert.equal(s31.wave_size, 68)
-  assert.equal(s31.waves, 13) // 13 + 1/3
-  assert.equal(R.stageRow(32, STAGES).waves, 14) // 13 + 2/3
-  assert.equal(R.stageRow(33, STAGES).waves, 14)
+  assert.equal(s31.wave_size, 8) // 라운드마다 72마리 고정(2026-10-12): 표가 평평해 연장도 3 × 8
+  assert.equal(s31.waves, 3)
+  assert.equal(R.stageRow(200, STAGES).waves, 3)
   assert.equal(s31.idle_interval, 8)
 })
 
@@ -147,8 +146,8 @@ test('killBucket: 상한 = ceil(인정 초 × rate), 인정 초는 최대 burst,
 
 test('minClearSec: 웨이브 수 × 웨이브 크기 / kill_rate_cap', () => {
   assert.equal(R.minClearSec(STAGES[0], 5), 4.8) // 3 × 8 / 5
-  assert.equal(R.minClearSec(STAGES[1], 5), 6) // 3 × 10 / 5
-  assert.equal(R.minClearSec(R.stageRow(31, STAGES), 5), (13 * 68) / 5) // 연장 규칙
+  assert.equal(R.minClearSec(STAGES[1], 5), 4.8) // 3 × 8 / 5
+  assert.equal(R.minClearSec(R.stageRow(31, STAGES), 5), 4.8) // 연장 규칙
 })
 
 test('clampKills: 넘치면 비싼 몬스터부터 버림', () => {
