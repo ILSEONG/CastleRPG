@@ -64,11 +64,12 @@ var _leaving := false
 
 func _ready() -> void:
 	var type := str(run.type)
-	var stage: Dictionary = ArenaKit.plains() if type == "gold" else (ArenaKit.temple() if type == "ticket" else ArenaKit.castle())
+	var stage: Dictionary = ArenaKit.gold_mine() if type == "gold" else (ArenaKit.temple() if type == "ticket" else ArenaKit.castle())
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = preload("res://scripts/crowd.gd").new()  # 유닛 겹침 해소(전투 자리 밖으로 밀지 않는다)
 	crowd.arena_r = arena_r(type)
+	crowd.arena_side = arena_side(type)
 	add_child(crowd)
 	add_child(PortraitsScript.new())  # 아래 영웅 띠 피규어(성 월드의 것은 트리 밖)
 	var rig = CameraRigScript.new()
@@ -107,6 +108,7 @@ func _ready() -> void:
 	picker = PickerScript.new()  # 영웅 탭 선택 → 바닥 탭 이동(성 전장과 같은 조작)
 	picker.camera = camera
 	picker.arena_r = arena_r(type) - 1.0
+	picker.arena_side = arena_side(type) - 0.4
 	add_child(picker)
 	_plan_waves(stage)
 	_spawn_due()  # 처음 무리는 곧바로(즉시 승리 훅도 시체에서 드랍)
@@ -171,9 +173,14 @@ func _on_enemy_died(m) -> void:
 		Fx.quake(self, Vector3(at.x, 0.0, at.z), 2.2, 0)
 
 
-## 전투 자리 반경(겹침 해소·이동 선택): 평야는 PLAINS_FIGHT_R, 사원은 TEMPLE_FIGHT_R, 성은 홀 반 변.
+## 전투 자리 반경(겹침 해소·이동 선택): 광산(골드)은 PLAINS_FIGHT_R, 사원은 TEMPLE_FIGHT_R, 성은 홀 반 변.
 static func arena_r(type: String) -> float:
 	return ArenaKit.PLAINS_FIGHT_R if type == "gold" else (ArenaKit.TEMPLE_FIGHT_R if type == "ticket" else ArenaKit.HALL_HALF)
+
+
+## 화면 가로 폭(양옆이 막힌 무대): 골드 던전 광산 협곡만 MINE_SIDE, 나머지는 막히지 않음.
+static func arena_side(type: String) -> float:
+	return ArenaKit.MINE_SIDE if type == "gold" else INF
 
 
 func time_limit() -> float:

@@ -3389,9 +3389,9 @@ func test_card_reveal_and_banner() -> void:
 
 func test_arena_kit() -> void:
 	const ArenaKit := preload("res://scripts/arena_kit.gd")
-	for kind in ["plains", "castle", "lair", "colosseum"]:
-		var st: Dictionary = {"plains": ArenaKit.plains, "castle": ArenaKit.castle, "lair": ArenaKit.lair, "colosseum": ArenaKit.colosseum}[kind].call()
-		var want: Array = {"plains": [6, 15], "castle": [4, 0], "lair": [6, 0], "colosseum": [6, 6]}[kind]
+	for kind in ["plains", "mine", "castle", "lair", "colosseum"]:
+		var st: Dictionary = {"plains": ArenaKit.plains, "mine": ArenaKit.gold_mine, "castle": ArenaKit.castle, "lair": ArenaKit.lair, "colosseum": ArenaKit.colosseum}[kind].call()
+		var want: Array = {"plains": [6, 15], "mine": [6, 15], "castle": [4, 0], "lair": [6, 0], "colosseum": [6, 6]}[kind]
 		check(st.heroes.size() == want[0] and st.enemies.size() == want[1] and st.boss is Vector3, "%s: %d hero spots, %d goblin spots + boss" % [kind, want[0], want[1]])
 		var spots: Array = st.heroes + st.enemies + [st.boss]
 		for i in spots.size():
@@ -3400,6 +3400,7 @@ func test_arena_kit() -> void:
 			var inside: bool
 			match kind:
 				"plains": inside = p.length() < ArenaKit.PLAINS_FIGHT_R
+				"mine": inside = p.length() < ArenaKit.PLAINS_FIGHT_R and absf(hall.x) <= ArenaKit.MINE_SIDE
 				"castle": inside = maxf(absf(hall.x), absf(hall.z)) < ArenaKit.HALL_HALF - 1.0
 				"lair": inside = p.length() < ArenaKit.LAIR_FIGHT_R and absf(hall.x) <= ArenaKit.LAIR_SIDE
 				_: inside = p.length() < 22.0 and absf(hall.x) <= ArenaKit.ARENA_SIDE  # PVP 총력전 FIELD_R
@@ -3428,15 +3429,17 @@ func test_arena_kit() -> void:
 				check(effects == 3 and st.root.find_children("*", "CPUParticles3D", true, false).size() == 1, "castle: one flame MultiMesh, one smoke MultiMesh, one ember emitter")
 			"plains":
 				check(st.root.find_children("*", "MultiMeshInstance3D", true, false).size() >= 10, "plains: hills, trees, rocks, mountains as MultiMesh")
+			"mine":
+				check(effects == 2 and draws <= 5, "mine: lantern flames + gold glints effects, %d draws <= 5" % draws)
 			"lair":
 				check(effects == 4 and draws <= 7, "lair: floor lava + lava fall + smoke + embers effects, %d draws <= 7" % draws)
 			"colosseum":
 				var fans: Array = st.root.find_children("Fans", "MeshInstance3D", true, false)
 				check(fans.size() == 1 and fans[0].material_override.shader == ArenaKit.CheerShader and fans[0].cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 					and draws <= 8, "colosseum: one cheering crowd mesh without shadow, %d draws <= 8" % draws)
-		if kind in ["lair", "colosseum"]:  # 싸움 자리(원 + 양옆 폭) 안엔 0.5 m 넘는 것이 없다 — 유닛이 바위·벽·뼈를 뚫고 지나가지 않게
-			var r: float = ArenaKit.LAIR_FIGHT_R if kind == "lair" else 22.0
-			var side: float = (ArenaKit.LAIR_SIDE if kind == "lair" else ArenaKit.ARENA_SIDE) + 0.45
+		if kind in ["mine", "lair", "colosseum"]:  # 싸움 자리(원 + 양옆 폭) 안엔 0.5 m 넘는 것이 없다 — 유닛이 바위·벽·뼈를 뚫고 지나가지 않게
+			var r: float = {"mine": ArenaKit.PLAINS_FIGHT_R, "lair": ArenaKit.LAIR_FIGHT_R}.get(kind, 22.0)
+			var side: float = {"mine": ArenaKit.MINE_SIDE, "lair": ArenaKit.LAIR_SIDE}.get(kind, ArenaKit.ARENA_SIDE) + 0.45
 			var tall := 0
 			for mi in st.root.find_children("*", "MeshInstance3D", true, false):
 				if not mi.mesh is ArrayMesh or mi.get_parent() == st.root:

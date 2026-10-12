@@ -104,6 +104,27 @@ const TEAM_RED := Color(0.80, 0.20, 0.16)
 const FAN_SHIRTS := [Color(0.80, 0.72, 0.52), Color(0.45, 0.32, 0.22), Color(0.35, 0.55, 0.30), Color(0.55, 0.35, 0.60), Color(0.85, 0.85, 0.80)]
 const SKINS := [Color(0.96, 0.80, 0.66), Color(0.86, 0.66, 0.50), Color(0.62, 0.44, 0.32)]
 
+# 골드 던전 황금 광산 협곡(gold_mine — 광산 좌표 = HALL_YAW: x = spot v, z = spot u)
+const MINE_SIDE := 8.8  # 유닛 중심이 화면 가로(spot v)로 이만큼 안 — 양옆은 협곡 벽(고블린 자리 |v| ≤ 8.5)
+const MINE_WALL := 10.2  # 벽 밑(금 결정·절벽) 안쪽(|v|)
+const MINE_BACK := 29.0  # 뒤 절벽·갱도 입구(spot u = −이것)
+const MINE_FRONT := 50.0  # 선로가 끝나는 앞(spot u)
+const MINE_RIM_H := 9.5  # 위 테두리 땅 높이
+const MINE_TRACKS := [-4.0, 5.0]  # 광차 선로 가운데(spot v)
+const MINE_SEED := 41
+const DIRT := Color(0.53, 0.44, 0.33)
+const DIRT_DARK := Color(0.44, 0.36, 0.27)
+const GOLD_DUST := Color(0.64, 0.53, 0.30)
+const ORE := Color(1.0, 0.80, 0.26)  # 금 결정·알갱이(일부러 밝게)
+const ORE_VEIN := Color(0.78, 0.58, 0.20)  # 싸움터를 향한 절벽 아래 금맥 빛
+const CLIFF_LOW := Color(0.36, 0.29, 0.24)
+const CLIFF_MID := Color(0.48, 0.40, 0.32)
+const CLIFF_TOP := Color(0.58, 0.51, 0.40)
+const TIMBER := Color(0.46, 0.31, 0.18)
+const SLEEPER := Color(0.36, 0.25, 0.16)
+const RAIL := Color(0.44, 0.44, 0.47)
+const MINE_DARK := Color(0.05, 0.04, 0.03)
+
 static var _meshes := {}  # 부품·불꽃·연기·상자·빛기둥 메시(id마다 하나)
 static var _mats := {}
 
@@ -217,6 +238,351 @@ static func _scatter(root: Node3D, variants: Array, count: int, r_min: float, r_
 			by[v].append(Transform3D(b, Vector3(p.x, 0, p.y)))
 	for v in by:
 		root.add_child(_multimesh(variants[v], by[v], Art.lowpoly_vc_material(), true))
+
+
+# --- 골드 던전: 황금 광산 협곡(2026-10-12 — 예전 평야는 싸움 따라가기 카메라에 빈 풀밭만 보였다) ---
+
+## 광산 좌표(사원·둥지와 같은 HALL_YAW: x = 화면 가로 spot v, z = 화면 세로 spot u). 둥지처럼 양옆이 막힌 좁은 협곡이라 따라가기 카메라
+## (가로 22~44 m)에 늘 벽이 걸린다: 황토 흙바닥(판 셰이더, 격자선 없이 면 명암), 바닥에 금가루 얼룩·자갈·금 알갱이·널빤지, 화면 세로로 달리는
+## 광차 선로 둘(낮은 레일·침목), 양옆 금맥이 박힌 황토 절벽(밑동에 금 결정 덩이) + 나무 갱도 버팀목과 걸린 등불, 벽 밑 금 더미·나무 상자·통·자루·곡괭이,
+## 화면 위(왕 고블린 뒤) 나무 틀 갱도 입구 둘(선로가 들어간다)과 금을 실은 광차, 위 테두리의 나무 권양탑, 벽을 따라 반짝이는 금빛.
+## 돌·나무·금은 메시 하나(그림자 없음 — 절벽 그림자가 싸움터를 덮지 않게), 등불은 불꽃 MultiMesh 하나, 반짝임 하나.
+## 유닛은 PLAINS_FIGHT_R 원 안 + 화면 가로 MINE_SIDE 안(crowd.arena_side). 영웅·고블린·왕 자리는 평야와 같다.
+static func gold_mine() -> Dictionary:
+	var root := Node3D.new()
+	root.name = "GoldMine"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(600, 600)
+	var mat := ShaderMaterial.new()
+	mat.shader = GroundShader
+	mat.set_shader_parameter("tile_size", 2.5)
+	mat.set_shader_parameter("interior_half", 0.0)
+	mat.set_shader_parameter("grass_a", DIRT)
+	mat.set_shader_parameter("grass_b", DIRT.darkened(0.04))
+	mat.set_shader_parameter("line_color", Color(0, 0, 0, 0.0))
+	mat.set_shader_parameter("facet_variation", 0.08)
+	var ground := MeshInstance3D.new()
+	ground.mesh = plane
+	ground.material_override = mat
+	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(ground)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = MINE_SEED
+	var site := Node3D.new()
+	site.rotation.y = HALL_YAW
+	root.add_child(site)
+	var k = MeshKit.new()
+	var lamps := []  # 등불 불꽃 자리(광산 좌표)
+	_mine_floor(k, rng)
+	for x in MINE_TRACKS:
+		_track(k, x, -MINE_BACK - 2.0, MINE_FRONT)
+	for s in [-1.0, 1.0]:
+		_mine_wall(k, lamps, s, rng)
+	_mine_back(k, lamps, rng)
+	_mine_front(k, rng)
+	var stone := MeshInstance3D.new()
+	stone.mesh = k.commit()
+	stone.material_override = Art.lowpoly_vc_material()
+	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	site.add_child(stone)
+	var flames := []
+	for p in lamps:
+		flames.append(Transform3D(Basis().scaled(Vector3.ONE * 0.3), p))
+	site.add_child(_multimesh(flame_mesh(), flames, _glow(1.0, 0.0, 0.9), false))
+	site.add_child(_glints())
+	var heroes := []
+	for i in 6:
+		heroes.append(spot(9.0 + (i / 3) * 2.6, (i % 3 - 1) * 2.8))
+	var enemies := []
+	for c in [Vector2(-12, -7), Vector2(-13, 6), Vector2(-18, -1)]:
+		for o in [Vector2.ZERO, Vector2(1.5, 0), Vector2(-1.5, 0), Vector2(0, 1.5), Vector2(0, -1.5)]:
+			enemies.append(spot(c.x + o.x, c.y + o.y))
+	var hw := Basis(Vector3.UP, HALL_YAW)
+	return {"root": root, "heroes": heroes, "enemies": enemies, "boss": spot(-22.0, 0.0), "light": {
+		"background": Color(0.80, 0.72, 0.58), "ambient": Color(0.80, 0.77, 0.72), "ambient_energy": 0.85,
+		"sun_color": Color(1.0, 0.94, 0.80), "sun_energy": 1.08, "sun_rot": Vector3(-55, -40, 0), "shadows": true,
+		"omni": [[hw * Vector3(MINE_TRACKS[0], 3.0, -MINE_BACK + 2.5), Color(1.0, 0.72, 0.30), 1.4, 11.0],
+			[hw * Vector3(-MINE_WALL + 1.5, 2.6, 4.0), Color(1.0, 0.72, 0.30), 0.9, 9.0],
+			[hw * Vector3(MINE_WALL - 1.5, 2.6, -6.0), Color(1.0, 0.72, 0.30), 0.9, 9.0]]}}
+
+
+## 바닥: 짙은 흙·금가루 얼룩(납작), 자갈, 금 알갱이(벽 쪽과 선로 둘레에 많이), 흩어진 널빤지. 싸움 자리 안은 0.5 m 아래.
+static func _mine_floor(k, rng: RandomNumberGenerator) -> void:
+	for i in 16:
+		_blot(k, Vector3(rng.randf_range(-8.5, 8.5), 0.004, rng.randf_range(-30.0, 34.0)), rng.randf_range(1.2, 2.8), 9, DIRT_DARK, rng)
+	for i in 9:
+		_blot(k, Vector3(rng.randf_range(-8.0, 8.0), 0.007, rng.randf_range(-28.0, 32.0)), rng.randf_range(0.5, 1.2), 8, GOLD_DUST, rng)
+	for i in 90:  # 자갈
+		var p := Vector3(rng.randf_range(-MINE_WALL, MINE_WALL), 0, rng.randf_range(-MINE_BACK, MINE_FRONT))
+		k.rock(p, rng.randf_range(0.08, 0.22), CLIFF_LOW if rng.randf() < 0.6 else DIRT_DARK, rng, 0.6, 0.0)
+	for i in 70:  # 금 알갱이: 절반은 벽 밑
+		var x := rng.randf_range(-8.5, 8.5)
+		if i % 2 == 0:
+			x = (MINE_WALL - rng.randf_range(0.3, 2.2)) * (1.0 if rng.randf() < 0.5 else -1.0)
+		k.rock(Vector3(x, 0, rng.randf_range(-MINE_BACK, MINE_FRONT)), rng.randf_range(0.07, 0.17), ORE, rng, 0.7, 0.0)
+	for i in 7:  # 널빤지
+		var c := Vector3(rng.randf_range(-7.5, 7.5), 0.03, rng.randf_range(-24.0, 30.0))
+		k.xform = Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), c)
+		k.box(Vector3.ZERO, Vector3(0.32, 0.06, rng.randf_range(1.4, 2.2)), TIMBER.darkened(rng.randf_range(0.0, 0.15)))
+		k.xform = Transform3D.IDENTITY
+
+
+## 광차 선로(x, z0 → z1): 침목(0.8 m 간격) + 쇠 레일 둘. 높이 0.12 m.
+static func _track(k, x: float, z0: float, z1: float) -> void:
+	var z := z0
+	while z < z1:
+		k.box(Vector3(x, 0, z), Vector3(1.5, 0.06, 0.26), SLEEPER)
+		z += 0.8
+	for r in [-0.5, 0.5]:
+		k.box(Vector3(x + r, 0.06, (z0 + z1) / 2.0), Vector3(0.09, 0.06, z1 - z0), RAIL)
+
+
+## 옆 협곡 벽(s = −1 왼쪽, 1 오른쪽): 두 줄 황토 절벽(밑 면은 금맥 빛), 밑동 금 결정 덩이, 7 m마다 갱도 버팀목(기둥 + 벽에 박힌 들보 + 걸린 등불),
+## 벽 밑 금 더미·상자·통·자루·기댄 곡괭이(전부 |x| > MINE_SIDE + 0.45), 위 테두리 권양탑(왼쪽)·판잣집(오른쪽).
+static func _mine_wall(k, lamps: Array, s: float, rng: RandomNumberGenerator) -> void:
+	var pal := [CLIFF_LOW, CLIFF_MID, CLIFF_TOP, ORE_VEIN]
+	for row in 2:
+		var z := -MINE_BACK - 4.0 + rng.randf_range(0.0, 2.0)
+		while z < MINE_FRONT:
+			var r := rng.randf_range(2.2, 3.2) + row * 0.9
+			var x := s * (MINE_WALL + 0.4 + r * 0.6 + row * 4.2 + rng.randf_range(0.0, 1.0))
+			_crag(k, Vector3(x, 0, z), r, rng.randf_range(4.5, 8.0) + row * 5.0, rng, Vector3(-s, 0, 0), pal)
+			z += rng.randf_range(2.4, 3.4) + row * 0.8
+	var z := -MINE_BACK + 3.0
+	while z < MINE_FRONT:  # 금 결정 덩이: 벽 밑에서 안쪽 위로 비스듬히
+		_ore_cluster(k, Vector3(s * (MINE_WALL + 0.3), 0, z + rng.randf_range(-1.0, 1.0)), Vector3(-s, 0, 0), rng)
+		z += rng.randf_range(4.0, 6.5)
+	z = -MINE_BACK + 6.0 + (3.5 if s > 0.0 else 0.0)
+	while z < MINE_FRONT - 2.0:  # 버팀목
+		var post := Vector3(s * (MINE_SIDE + 0.75), 0, z)
+		k.box(post, Vector3(0.36, 3.6, 0.36), TIMBER)
+		k.box(post + Vector3(s * 0.9, 3.4, 0), Vector3(2.2, 0.34, 0.4), TIMBER.darkened(0.1))
+		k.box(post + Vector3(0, 0, 0.0), Vector3(0.5, 0.25, 0.5), TIMBER.darkened(0.25))
+		var hook := post + Vector3(-s * 0.05, 3.2, 0.32)
+		k.box(hook + Vector3(0, -0.35, 0), Vector3(0.04, 0.35, 0.04), RAIL)
+		_lantern(k, hook + Vector3(0, -0.85, 0))
+		lamps.append(hook + Vector3(0, -0.72, 0))
+		z += 7.0
+	for i in 7:  # 벽 밑 소품
+		var pz := rng.randf_range(-MINE_BACK + 4.0, MINE_FRONT - 4.0)
+		var px := s * (MINE_SIDE + rng.randf_range(1.2, 1.7))
+		match i % 4:
+			0: _gold_pile(k, Vector3(px + s * 0.3, 0, pz), rng.randf_range(0.9, 1.3), rng)
+			1:
+				_crate(k, Vector3(px, 0, pz), rng.randf_range(-0.3, 0.3))
+				if rng.randf() < 0.6:
+					_crate(k, Vector3(px + s * 0.1, 0.9, pz + 0.1), rng.randf_range(-0.4, 0.4))
+			2:
+				_barrel(k, Vector3(px, 0, pz))
+				_sack(k, Vector3(px - s * 0.1, 0, pz + 0.9), rng)
+			_: _pickaxe(k, Vector3(s * (MINE_SIDE + 1.6), 0, pz), s)
+	k.box(Vector3(s * (MINE_WALL + 20.0), 0, (MINE_FRONT - MINE_BACK) / 2.0), Vector3(24.0, MINE_RIM_H, MINE_FRONT + MINE_BACK + 40.0), CLIFF_TOP)  # 위 테두리 땅
+	var rim := s * (MINE_WALL + 11.0)
+	if s < 0.0:
+		_headframe(k, lamps, Vector3(rim, MINE_RIM_H, -14.0))
+	else:
+		_shack(k, Vector3(rim, MINE_RIM_H, -4.0))
+		_gold_pile(k, Vector3(rim - 1.0, MINE_RIM_H, 4.0), 1.6, rng)
+
+
+## 뒤(화면 위, 왕 고블린 너머): 가로지르는 절벽, 선로 끝 나무 틀 갱도 입구 둘(검은 안, 등불), 왼쪽 갱도 앞 금을 실은 광차, 입구 옆 금 더미·상자.
+static func _mine_back(k, lamps: Array, rng: RandomNumberGenerator) -> void:
+	var pal := [CLIFF_LOW, CLIFF_MID, CLIFF_TOP, ORE_VEIN]
+	k.box(Vector3(0, 0, -MINE_BACK - 19.0), Vector3(80.0, MINE_RIM_H, 30.0), CLIFF_TOP)  # 위 테두리 땅
+	var x := -MINE_WALL - 2.0
+	while x < MINE_WALL + 2.0:
+		if MINE_TRACKS.all(func(t): return absf(x - t) > 2.4):
+			_crag(k, Vector3(x, 0, -MINE_BACK - 1.0 - rng.randf_range(0.5, 2.5)), rng.randf_range(2.2, 3.2), rng.randf_range(7.5, 11.0), rng, Vector3.BACK, pal)
+		x += rng.randf_range(2.2, 3.0)
+	for i in MINE_TRACKS.size():
+		var tx: float = MINE_TRACKS[i]
+		var w := 1.6 if i == 0 else 1.3
+		var h := 3.4 if i == 0 else 2.8
+		var zf := -MINE_BACK - 0.6
+		k.box(Vector3(tx, 0, zf - 1.8), Vector3(2.0 * w + 1.6, h + 3.6, 3.0), CLIFF_MID)  # 입구 위 바위 덩이
+		k.face([Vector3(tx - w, 0.02, zf - 0.25), Vector3(tx + w, 0.02, zf - 0.25), Vector3(tx + w, h, zf - 0.25), Vector3(tx - w, h, zf - 0.25)], Vector3.BACK, MINE_DARK)
+		for sx in [-1.0, 1.0]:
+			k.box(Vector3(tx + sx * (w + 0.2), 0, zf), Vector3(0.42, h, 0.42), TIMBER)
+		k.box(Vector3(tx, h, zf), Vector3(2.0 * w + 1.0, 0.45, 0.5), TIMBER.darkened(0.08))
+		k.box(Vector3(tx, h + 0.45, zf), Vector3(1.4, 0.5, 0.08), TIMBER.lightened(0.1))  # 간판
+		k.prism_n(Vector3(tx, h + 0.55, zf + 0.06), 6, 0.16, 0.16, 0.04, GOLD)
+		for sx in [-1.0, 1.0]:
+			var hook := Vector3(tx + sx * (w + 0.2), h - 0.3, zf + 0.3)
+			_lantern(k, hook + Vector3(0, -0.5, 0))
+			lamps.append(hook + Vector3(0, -0.37, 0))
+	_cart(k, Vector3(MINE_TRACKS[0], 0.12, -MINE_BACK + 1.2), rng)
+	_gold_pile(k, Vector3(MINE_TRACKS[0] - 4.0, 0, -MINE_BACK + 0.4), 1.4, rng)
+	_gold_pile(k, Vector3(MINE_TRACKS[1] + 3.2, 0, -MINE_BACK + 0.6), 1.1, rng)
+	_crate(k, Vector3(MINE_TRACKS[1] - 2.6, 0, -MINE_BACK + 0.2), 0.2)
+	_crate(k, Vector3(MINE_TRACKS[1] - 2.5, 0.9, -MINE_BACK + 0.25), -0.15)
+	_barrel(k, Vector3(MINE_TRACKS[0] + 2.4, 0, -MINE_BACK + 0.3))
+
+
+## 앞(화면 아래, 영웅 너머): 선로 위 빈 광차와 금 광차, 선로 끝 막이.
+static func _mine_front(k, rng: RandomNumberGenerator) -> void:
+	_cart(k, Vector3(MINE_TRACKS[1], 0.12, MINE_FRONT - 22.0), rng)
+	for x in MINE_TRACKS:
+		k.box(Vector3(x, 0, MINE_FRONT - 0.2), Vector3(1.6, 0.4, 0.3), TIMBER.darkened(0.2))
+
+
+## 금 결정 덩이(벽 밑 c, dir = 안쪽): 비스듬한 뾰족 결정 4~6(밝은 금 + 짙은 면) + 밑 바위.
+static func _ore_cluster(k, c: Vector3, dir: Vector3, rng: RandomNumberGenerator) -> void:
+	k.rock(c + Vector3(0, 0.1, 0), 0.7, CLIFF_LOW, rng, 0.55, 0.0)
+	for i in rng.randi_range(4, 6):
+		var base := c + Vector3(rng.randf_range(-0.3, 0.3), rng.randf_range(0.1, 0.4), rng.randf_range(-0.6, 0.6))
+		var tip := base + (dir * rng.randf_range(0.2, 0.7) + Vector3(0, 1, 0) + Vector3(0, 0, rng.randf_range(-0.4, 0.4))).normalized() * rng.randf_range(0.6, 1.4)
+		if absf(tip.x) < MINE_SIDE + 0.5:  # 싸움 자리 위로 넘지 않게
+			tip.x = signf(tip.x) * (MINE_SIDE + 0.5)
+		_spike(k, base, tip, rng.randf_range(0.14, 0.24), 1.0, 5, ORE if rng.randf() < 0.65 else ORE.darkened(0.2))
+
+
+## 금 더미(c, 크기 s): 금화 언덕 + 큰 알갱이 몇 개 + 둘레 금화.
+static func _gold_pile(k, c: Vector3, s: float, rng: RandomNumberGenerator) -> void:
+	k.rock(c + Vector3(0, -0.3 * s, 0), 1.0 * s, HOARD, rng, 0.6, c.y)
+	for i in 4:
+		var a := rng.randf_range(0.0, TAU)
+		k.rock(c + Vector3(cos(a) * 0.5 * s, 0.25 * s, sin(a) * 0.5 * s), rng.randf_range(0.15, 0.25) * s, ORE, rng, 0.8, c.y)
+	for i in 10:
+		var a := rng.randf_range(0.0, TAU)
+		var d := rng.randf_range(1.0, 1.7) * s
+		k.xform = Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)), c + Vector3(cos(a) * d, 0.0, sin(a) * d))
+		k.prism_n(Vector3.ZERO, 6, 0.15, 0.15, 0.04, COIN)
+	k.xform = Transform3D.IDENTITY
+
+
+## 광차(바퀴 밑 c, 선로 = z 방향): 쇠테 두른 나무 통 + 바퀴 넷 + 위로 솟은 금.
+static func _cart(k, c: Vector3, rng: RandomNumberGenerator) -> void:
+	for sx in [-0.55, 0.55]:
+		for sz in [-0.55, 0.55]:
+			k.xform = Transform3D(Basis(Vector3.BACK, PI / 2.0), c + Vector3(sx, 0.22, sz))
+			k.prism_n(Vector3(0, -0.06, 0), 8, 0.22, 0.22, 0.12, IRON)
+	k.xform = Transform3D.IDENTITY
+	k.prism_n(c + Vector3(0, 0.3, 0), 4, 0.85, 1.0, 0.75, TIMBER.darkened(0.1), PI / 4.0)
+	k.prism_n(c + Vector3(0, 0.95, 0), 4, 1.0, 1.02, 0.1, RAIL, PI / 4.0)
+	k.rock(c + Vector3(0, 0.95, 0), 0.62, ORE, rng, 0.7, c.y + 0.95)
+	for i in 3:
+		k.rock(c + Vector3(rng.randf_range(-0.3, 0.3), 1.2, rng.randf_range(-0.3, 0.3)), 0.2, ORE.lightened(0.05), rng, 0.8)
+
+
+## 등불(밑 p): 쇠 받침 + 노란 유리 + 지붕. 불꽃은 따로(MultiMesh).
+static func _lantern(k, p: Vector3) -> void:
+	k.box(p, Vector3(0.26, 0.04, 0.26), IRON)
+	k.prism_n(p + Vector3(0, 0.04, 0), 4, 0.1, 0.1, 0.3, Color(1.0, 0.82, 0.40), PI / 4.0)
+	k.prism_n(p + Vector3(0, 0.34, 0), 4, 0.18, 0.02, 0.14, IRON, PI / 4.0)
+
+
+static func _crate(k, c: Vector3, yaw: float) -> void:
+	k.xform = Transform3D(Basis(Vector3.UP, yaw), c)
+	k.box(Vector3.ZERO, Vector3(0.9, 0.86, 0.9), TIMBER.lightened(0.05))
+	for sx in [-0.4, 0.4]:
+		k.box(Vector3(sx, 0, 0), Vector3(0.12, 0.88, 0.92), TIMBER.darkened(0.15))
+	k.box(Vector3(0, 0.86, 0), Vector3(0.7, 0.04, 0.7), ORE)  # 뚜껑 틈 금빛
+	k.xform = Transform3D.IDENTITY
+
+
+static func _barrel(k, c: Vector3) -> void:
+	k.prism_n(c, 8, 0.36, 0.42, 0.45, TIMBER, PI / 8.0)
+	k.prism_n(c + Vector3(0, 0.45, 0), 8, 0.42, 0.36, 0.45, TIMBER, PI / 8.0)
+	for y in [0.12, 0.78]:
+		k.prism_n(c + Vector3(0, y, 0), 8, 0.4, 0.4, 0.06, IRON, PI / 8.0)
+	k.prism_n(c + Vector3(0, 0.9, 0), 8, 0.3, 0.3, 0.04, ORE, PI / 8.0)
+
+
+static func _sack(k, c: Vector3, rng: RandomNumberGenerator) -> void:
+	k.rock(c + Vector3(0, 0.3, 0), 0.38, Color(0.66, 0.56, 0.40), rng, 0.85, c.y)
+	k.prism_n(c + Vector3(0, 0.55, 0), 5, 0.1, 0.16, 0.18, Color(0.58, 0.48, 0.34))
+	k.rock(c + Vector3(0.25, 0.08, 0.3), 0.12, ORE, rng, 0.7, c.y)
+
+
+## 벽에 기댄 곡괭이(밑 c, s = 벽 쪽).
+static func _pickaxe(k, c: Vector3, s: float) -> void:
+	var top := c + Vector3(s * 0.55, 1.35, 0)
+	_bar(k, c, top, 0.05, 0.05, TIMBER.lightened(0.08))
+	var b := Vector3(0, 0, 1)
+	_bar(k, top - b * 0.5 + Vector3(0, -0.1, 0), top + Vector3(0, 0.05, 0), 0.06, 0.07, RAIL)
+	_bar(k, top + Vector3(0, 0.05, 0), top + b * 0.5 + Vector3(0, -0.1, 0), 0.07, 0.02, RAIL)
+
+
+## 권양탑(위 테두리 밑 c): 기둥 넷 + 가로대 + 위 도르래 바퀴 + 등불.
+static func _headframe(k, lamps: Array, c: Vector3) -> void:
+	for sx in [-1.2, 1.2]:
+		for sz in [-1.2, 1.2]:
+			_bar(k, c + Vector3(sx, 0, sz), c + Vector3(sx * 0.45, 6.0, sz * 0.45), 0.16, 0.13, TIMBER)
+	for y in [2.0, 4.0]:
+		var w := lerpf(1.2, 0.45, y / 6.0)
+		k.box(c + Vector3(0, y, -w), Vector3(2.0 * w + 0.3, 0.2, 0.2), TIMBER.darkened(0.12))
+		k.box(c + Vector3(0, y, w), Vector3(2.0 * w + 0.3, 0.2, 0.2), TIMBER.darkened(0.12))
+	k.box(c + Vector3(0, 6.0, 0), Vector3(1.4, 0.25, 1.4), TIMBER.darkened(0.2))
+	k.xform = Transform3D(Basis(Vector3.RIGHT, PI / 2.0), c + Vector3(0, 7.0, -0.08))
+	k.prism_n(Vector3.ZERO, 10, 0.9, 0.9, 0.16, RAIL)
+	k.prism_n(Vector3(0, -0.02, 0), 10, 0.25, 0.25, 0.2, IRON)
+	k.xform = Transform3D.IDENTITY
+	k.box(c + Vector3(0, 0, 0), Vector3(3.0, 0.3, 3.0), TIMBER.darkened(0.25))
+	_lantern(k, c + Vector3(1.0, 6.25, 1.0))
+	lamps.append(c + Vector3(1.0, 6.38, 1.0))
+
+
+## 판잣집(위 테두리 밑 c): 판자 벽 + 박공지붕 + 문.
+static func _shack(k, c: Vector3) -> void:
+	k.box(c, Vector3(3.2, 2.2, 2.6), TIMBER.lightened(0.04))
+	k.gable(c + Vector3(0, 2.2, 0), Vector3(3.2, 0, 2.6), 1.1, Color(0.46, 0.24, 0.16))
+	k.box(c + Vector3(-0.6, 0, 1.31), Vector3(0.8, 1.5, 0.04), TIMBER.darkened(0.3))
+
+
+## 벽을 따라 반짝이는 금빛(더하기, 그림자 없음).
+static func _glints() -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.amount = 46
+	p.lifetime = 1.6
+	p.preprocess = 2.0
+	p.position = Vector3(0, 0.8, 0)
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_POINTS
+	var pts := PackedVector3Array()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = MINE_SEED + 1
+	for i in 120:
+		var s := 1.0 if i % 2 == 0 else -1.0
+		pts.append(Vector3(s * rng.randf_range(MINE_SIDE + 0.8, MINE_WALL + 1.5), rng.randf_range(-0.6, 2.2), rng.randf_range(-MINE_BACK, MINE_FRONT - 10.0)))
+	p.emission_points = pts
+	p.direction = Vector3.UP
+	p.spread = 0.0
+	p.gravity = Vector3.ZERO
+	p.initial_velocity_min = 0.0
+	p.initial_velocity_max = 0.15
+	var size := Curve.new()
+	size.add_point(Vector2(0.0, 0.0))
+	size.add_point(Vector2(0.5, 1.0))
+	size.add_point(Vector2(1.0, 0.0))
+	p.scale_amount_curve = size
+	p.color = Color(1.0, 0.88, 0.45)
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.3, 0.3)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = _star_texture()
+	quad.material = m
+	p.mesh = quad
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
+## 네 갈래 반짝 별(32 px, 코드로 그림 — 공유).
+static func _star_texture() -> ImageTexture:
+	if not _mats.has("star_tex"):
+		var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+		for y in 32:
+			for x in 32:
+				var d := Vector2(x - 15.5, y - 15.5) / 15.5
+				var a := clampf(1.0 - absf(d.x) * 6.0, 0.0, 1.0) * clampf(1.0 - absf(d.y), 0.0, 1.0)
+				a = maxf(a, clampf(1.0 - absf(d.y) * 6.0, 0.0, 1.0) * clampf(1.0 - absf(d.x), 0.0, 1.0))
+				a = maxf(a, clampf(1.0 - d.length() * 2.5, 0.0, 1.0))
+				img.set_pixel(x, y, Color(1, 1, 1, a))
+		_mats.star_tex = ImageTexture.create_from_image(img)
+	return _mats.star_tex
 
 
 # --- 모집권 던전: 숲속 옛 사원 앞뜰 ---
@@ -828,7 +1194,7 @@ static func _lair_back(k, lava, fall, rng: RandomNumberGenerator) -> void:
 
 
 ## 들쭉날쭉한 현무암 기둥: 흔든 5~7각 고리 셋 + 꼭짓점(위로 좁아짐). toward = 빛(용암·싸움터)을 향한 쪽 — 그쪽 아래 면은 붉게 달아오른다.
-static func _crag(k, base: Vector3, r: float, h: float, rng: RandomNumberGenerator, toward: Vector3) -> void:
+static func _crag(k, base: Vector3, r: float, h: float, rng: RandomNumberGenerator, toward: Vector3, pal := [BASALT_DARK, BASALT, ASH, EMBER_ROCK]) -> void:
 	var n := rng.randi_range(5, 7)
 	var rings := []
 	for ring in [[0.0, 1.0], [0.42, 0.74], [0.8, 0.42]]:
@@ -852,11 +1218,11 @@ static func _crag(k, base: Vector3, r: float, h: float, rng: RandomNumberGenerat
 	for t in tris:
 		var c: Vector3 = (t[0] + t[1] + t[2]) / 3.0
 		var f := c.y / h
-		var col := BASALT_DARK if f < 0.3 else (BASALT if f < 0.75 else ASH)
+		var col: Color = pal[0] if f < 0.3 else (pal[1] if f < 0.75 else pal[2])
 		var out := Vector3(c.x - base.x, 0, c.z - base.z).normalized()
 		var lit := out.dot(toward)
 		if lit > 0.1 and c.y < 3.5:
-			col = col.lerp(EMBER_ROCK, 0.75 * lit * (1.0 - c.y / 3.5))
+			col = col.lerp(pal[3], 0.75 * lit * (1.0 - c.y / 3.5))
 		k.face(t, c - below, col.darkened(rng.randf_range(0.0, 0.1)))
 
 
