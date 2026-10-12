@@ -7,7 +7,7 @@ const ROWS := [
 	["notify_timer", "건설·훈련·연구 완료"],
 	["notify_idle", "방치 보상 가득"],
 	["notify_daily", "출석 알림"],
-	["notify_war", "공성전 시작"],
+	["notify_war", "공성전 10분 전"],
 	["notify_night", "야간 알림 (22시~8시)"],
 ]
 

@@ -4,8 +4,8 @@ extends Node
 ## 웹(앱인토스)·PC에는 플러그인이 없어 아무것도 안 한다(supported() = false — 설정 창도 알림 칸을 숨긴다).
 ##
 ## 알림: 건설·훈련·연구 완료(그 시각), 방치 보상 가득(떠난 뒤 accum_cap_min분), 출석(오늘 아직 안 받았으면 오늘 12시, 아니면 다음 날 12시),
-## 공성전 시작(길드 공성 시각). 켬/끔은 Prefs(설정 창 [알림]): notify(전체) · notify_timer · notify_idle · notify_daily · notify_war, 기본 켬.
-## 야간(한국 시각 22시~8시)에 울릴 알림은 8시로 미룬다 — notify_night(야간 알림 받기, 기본 끔)를 켜면 그대로. 공성전은 미루면 늦으니 버린다.
+## 공성전(길드장이 정한 공성 시각 10분 전). 켬/끔은 Prefs(설정 창 [알림]): notify(전체) · notify_timer · notify_idle · notify_daily · notify_war, 기본 켬.
+## 야간(한국 시각 22시~8시)에 울릴 알림은 8시로 미룬다 — notify_night(야간 알림 받기, 기본 끔)를 켜면 그대로. 공성전은 길드장이 정한 시각이라 야간에도 그대로.
 
 const Prefs := preload("res://scripts/prefs.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -22,6 +22,7 @@ const ID_RESEARCH := 2
 const ID_IDLE := 3
 const ID_DAILY := 4
 const ID_WAR := 5
+const WAR_LEAD_SEC := 600.0  # 공성전 알림은 시작 10분 전
 const ID_TRAIN := 10  # + 병사 건물 순번
 
 signal resumed  # 게임으로 돌아왔다(설정 창이 기기 알림 허용을 다시 본다)
@@ -144,8 +145,9 @@ static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 			n.at = after_quiet(float(n.at))
 		keep.append(n)
 	var war_at := float(state.get("war_at", -1.0))
-	if opts.get("notify_war", true) and war_at >= now + MIN_DELAY and (opts.get("notify_night", false) or not is_quiet(war_at)):
-		keep.append(_n(ID_WAR, war_at, "공성전 시작", "길드 공성전이 열렸어요. 길드원과 함께 성을 공격하세요!"))
+	# 공성전: 길드장이 정한 시각의 WAR_LEAD_SEC 전(사용자 10-12). 길드장이 고른 시각이라 야간에도 미루지 않는다.
+	if opts.get("notify_war", true) and war_at - WAR_LEAD_SEC >= now + MIN_DELAY:
+		keep.append(_n(ID_WAR, war_at - WAR_LEAD_SEC, "공성전 10분 전", "10분 뒤 길드 공성전이 시작돼요. 길드원과 함께 성을 공격할 준비를 하세요!"))
 	return keep
 
 

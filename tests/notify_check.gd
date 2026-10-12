@@ -90,7 +90,7 @@ func _plan_checks() -> void:
 	_check(bodies.contains("보병 30명") and bodies.contains("궁병 5명"), "training says soldier + count: " + bodies)
 	_check(is_equal_approx(p.get(NotifyScript.ID_IDLE, {}).get("at", 0.0), kst(8.0, 1)), "idle full at 22:00 → next 08:00 (night)")
 	_check(is_equal_approx(p.get(NotifyScript.ID_DAILY, {}).get("at", 0.0), kst(12.0)), "attendance open → today 12:00")
-	_check(is_equal_approx(p.get(NotifyScript.ID_WAR, {}).get("at", 0.0), kst(21.0)), "war at schedule")
+	_check(is_equal_approx(p.get(NotifyScript.ID_WAR, {}).get("at", 0.0), kst(21.0) - 600.0), "war 10 min before schedule")
 
 	# 출석을 이미 받았으면 내일 12시
 	state.attend_open = false
@@ -107,7 +107,7 @@ func _plan_checks() -> void:
 	_check(is_equal_approx(p[NotifyScript.ID_BUILD].at, kst(21.5)), "21:30 not quiet")
 	_check(is_equal_approx(p[NotifyScript.ID_RESEARCH].at, kst(8.0, 1)), "23:00 → next 08:00")
 	_check(is_equal_approx(p[NotifyScript.ID_IDLE].at, kst(9.0, 1)), "idle 09:00 kept")
-	_check(not p.has(NotifyScript.ID_WAR), "war in quiet hours dropped")
+	_check(is_equal_approx(p[NotifyScript.ID_WAR].at, kst(23.5) - 600.0), "war in quiet hours still 10 min before")
 	_check(not p.has(NotifyScript.ID_TRAIN), "no queue → no training notice")
 	# 새벽 3시 → 8시
 	_check(is_equal_approx(NotifyScript.after_quiet(kst(3.0, 1)), kst(8.0, 1)), "03:00 → 08:00 same day")
@@ -126,7 +126,7 @@ func _plan_checks() -> void:
 	o = _all_on()
 	o.notify_idle = false
 	o.notify_daily = false
-	_check(by_id(NotifyScript.plan(state, now, o)).keys().size() == 2, "idle + daily off → build + research only")
+	_check(by_id(NotifyScript.plan(state, now, o)).keys().size() == 3, "idle + daily off → build + research + war only")
 	o = _all_on()
 	o.notify = false
 	_check(NotifyScript.plan(state, now, o).is_empty(), "master off → nothing")
