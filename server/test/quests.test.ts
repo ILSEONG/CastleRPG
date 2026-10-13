@@ -79,6 +79,12 @@ test('튜토리얼 훈련: 1마리씩(2마리는 400), 1마리 tutorial_train_se
   const r = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 1 } })
   assert.equal(r.status, 200)
   assert.equal(r.json.training.finish, T0 + 5)
+  // 첫 1마리만 5초: 받은 뒤(아직 훈련 미션이어도) 다음 훈련은 원래 시간(사용자 2026-10-13 "계속 5초로 뽑는 버그")
+  S.clock.t = T0 + 6
+  assert.equal((await S.req('POST', '/v1/soldiers/collect', { token, body: { building: 'barracks' } })).status, 200)
+  const r2 = await S.req('POST', '/v1/soldiers/train', { token, body: { building: 'barracks', count: 1 } })
+  assert.equal(r2.status, 200)
+  assert.equal(r2.json.training.finish, T0 + 6 + 180 * 60)
 })
 
 test('튜토리얼 훈련 미션을 넘기면(튜토리얼은 진행 중) 원래 훈련 시간', async () => {

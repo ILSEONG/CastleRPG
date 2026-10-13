@@ -2402,9 +2402,11 @@ export function createApp(opts: AppOptions) {
       const s = soldierAt(g, building)
       if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
       const lv = level(p, building)
-      // 튜토리얼 보병 훈련 미션(quests id 'train')까지만 1마리씩, tutorial_train_sec초 — 넘기면 원래 시간(앱 Tutorial._sync_training과 같다)
+      // 튜토리얼 보병 훈련 미션(quests id 'train')까지, 첫 1마리만(병사도 훈련 중인 것도 없을 때) tutorial_train_sec초 — 그 뒤는 원래 시간
+      // (앱 Economy.tutorial_train_now와 같다. 사용자 2026-10-13 "보병 튜토리얼하고 계속 5초로 뽑는 버그")
       const trainStep = g.quests.filter((d) => d.type === 'tutorial').findIndex((d) => d.id === 'train')
-      const tut = p.quest.tut_state === 'active' && p.quest.tut_step <= trainStep
+      const first = !Object.values(p.buildings).some((x) => x.train) && !Object.values(p.soldiers).some((n) => n > 0)
+      const tut = p.quest.tut_state === 'active' && p.quest.tut_step <= trainStep && first
       const max = tut ? 1 : R.trainMax(g.config, lv)
       if (count > max) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${max}`)
       const q = p.buildings[building].train
