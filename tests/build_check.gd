@@ -65,8 +65,8 @@ func _run() -> void:
 	await _shot("_before")
 
 	btn.button.pressed.emit()
-	await _frames(3)
-	_check(list.is_open() and list.tray.scale.x < 0.9, "tray starts unfolding to the right", str(list.tray.scale))
+	await _frames(1)
+	_check(list.is_open() and list.tray.scale.x < 0.5, "tray starts unfolding to the right", str(list.tray.scale))
 	await get_tree().create_timer(0.7).timeout
 	var tray: Rect2 = list.tray.get_global_rect()
 	_check(list.is_open() and is_equal_approx(list.tray.scale.x, 1.0) and tray.position.x >= br.end.x and absf(tray.end.y - br.end.y) < 1.0, "tray unfolds from [건설] to the right", "%s vs %s" % [tray, br])
@@ -145,6 +145,41 @@ func _run() -> void:
 	await _frames(3)
 	pl.cancel()
 	_check(not pl.is_active() and scenery.lots.houses.mi.visible and Economy.layout.houses == dest, "cancel keeps the building where it was", "")
+	await _copies(list, pl, btn)
+
+
+## 새 건물·n번째 채(2026-10-13): 성채 Lv 5면 벌목장 2는 지을 수 있고 금광(4)도 열림, 대장간(8)·벌목장 3(10)은 잠김.
+func _copies(list, pl, btn) -> void:
+	Economy.levels["keep"] = 5
+	Economy.build = {}
+	Economy.changed.emit()
+	list.open()
+	await get_tree().create_timer(1.0).timeout
+	_check(list.rows.has("lumber#2") and list.rows.has("forge") and list.rows.has("goldmine"), "copies and new buildings have cards", str(list.rows.keys()))
+	_check(list.rows["lumber#2"].why == "" and list.rows.goldmine.why == "", "unlocked copy / new type can be built", list.rows["lumber#2"].why)
+	_check(list.rows.forge.why.contains("성채 Lv 8") and list.rows["lumber#3"].why.contains("성채 Lv"), "locked cards say the keep level", list.rows.forge.why)
+	_check(list.rows.forge.card.modulate.a < 0.9 and list.rows["lumber#2"].card.modulate.a > 0.99, "locked cards stay dimmed after the unfold", "%s %s" % [list.rows.forge.card.modulate, list.rows["lumber#2"].card.modulate])
+	var order: Array = []
+	for c in list._list.get_children():
+		order.append(c)
+	_check(order.find(list.rows["lumber#2"].card) < order.find(list.rows.forge.card) and order.find(list.rows.goldmine.card) < order.find(list.rows.houses.card), "buildable first, built next, locked last", "")
+	await _shot("_tray_copies")
+	_check(list.rows["lumber#2"].tag.visible and list.rows.goldmine.tag.visible and not list.rows.forge.tag.visible and not list.rows.houses.tag.visible, "NEW tag only on newly opened lots you can build", "")
+	list._scroll.ensure_control_visible(list.rows["lumber#2"].card)
+	await _frames(5)
+	await _shot("_tray_new")
+	list._scroll.ensure_control_visible(list.rows.watchtower.card)
+	await _frames(5)
+	await _shot("_tray_types")
+	list._scroll.scroll_horizontal = 100000
+	await _frames(5)
+	await _shot("_tray_locked")
+	list.rows["lumber#2"].card.pressed.emit()
+	await get_tree().create_timer(0.6).timeout
+	_check(pl.is_active() and pl.building_id == "lumber#2" and pl.ok, "[건설] on lumber #2 starts placing it (green)", str(pl.cell))
+	pl.confirm_button.pressed.emit()
+	await _frames(5)
+	_check(Economy.layout.has("lumber#2") and str(Economy.build.get("id", "")) == "lumber#2", "lumber #2 placed by its own key", str(Economy.layout))
 
 
 func _drag(from: Vector2, to: Vector2) -> void:
