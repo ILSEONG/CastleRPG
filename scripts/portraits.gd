@@ -38,6 +38,10 @@ const BUST_HI := 1.62  # 이 배(머리 위 — 높은 모자는 잘린다)까�
 const BUST_ROT := Vector3(-10, -20, 0)  # 흉상은 조금 더 정면에서
 const FACE_Y := 0.43  # 흉상 그림에서 얼굴 가운데가 오는 세로 비율(카드가 이 높이를 가운데 두고 자른다)
 const NEUTRAL := Color("8C9AB0")  # 등급 없는 키(병사) 자리표시
+const CUTIN_PX := 384  # 컷인(cutin:) 그림 크기 — 화면 컷인에 180px 안팎으로 그린다(720 화면 기준 2배 여유)
+const CUTIN_ROT := Vector3(4, -34, 0)  # 컷인: 살짝 아래에서 올려다본 3/4 시점(영웅다운 각)
+const CUTIN_LO := 0.5  # 컷인 틀: 머리 뼈(목) 높이의 이 배(배꼽께)부터
+const CUTIN_HI := 1.84  # 이 배(머리 위 — 치켜든 손·무기까지)까지
 
 signal portrait_ready(key: String)
 
@@ -141,7 +145,7 @@ static func spec_of(key: String) -> Dictionary:
 ## 자리표시: 등급 색(병사는 NEUTRAL) 반투명 실루엣. 색마다 하나를 공유한다.
 static func placeholder(key: String) -> Texture2D:
 	var c: Color = Art.GRADE_COLORS.get(_hero_of(key).get("grade", ""), NEUTRAL)
-	var bust := key.begins_with("bust:")
+	var bust := key.begins_with("bust:") or key.begins_with("cutin:")
 	var k := [c, bust]
 	if not _placeholders.has(k):
 		_placeholders[k] = ImageTexture.create_from_image(bust_silhouette(c) if bust else silhouette(c))
@@ -193,7 +197,14 @@ static func _hero_of(key: String) -> Dictionary:
 	for p in ["hero:", "bust:"]:
 		if key.begins_with(p):
 			return GameData.hero(key.trim_prefix(p))
+	if key.begins_with("cutin:"):
+		return GameData.hero(key.trim_prefix("cutin:").get_slice(":", 0))
 	return {}
+
+
+## 컷인 그림 키(우리 편 SSR 궁극기 컷인 — DamageNumbers.cutin): 그 스킬 발동 모션(anim)의 발동 순간 자세.
+static func cutin_key(hero_id: String, anim: String) -> String:
+	return "cutin:%s:%s" % [hero_id, anim]
 
 
 ## "soldier:<병종>" → 병종 행(앱이 그릴 수 있는 병종만). 아니면 {}.
@@ -249,6 +260,7 @@ func _process(_delta: float) -> void:
 	if live_key != "" or _pending != "" or queue.is_empty():
 		return
 	_pending = queue.pop_front()
+	_vp.size = Vector2i(CUTIN_PX, CUTIN_PX) if _pending.begins_with("cutin:") else Vector2i(SIZE, SIZE)
 	_show(_pending)
 	_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 
@@ -290,11 +302,23 @@ func _show(key: String) -> void:
 	var ap := m.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	ap.advance(0.0)  # 대기 첫 프레임을 지금 적용
 	ap.speed_scale = LIVE_ANIM_SPEED  # 미리보기는 천천히(스냅샷은 첫 프레임이라 상관없다)
+	if key.begins_with("cutin:"):  # 컷인: 그 발동 모션의 발동 순간(손을 뻗거나 휘두른 끝)에 멈춘 자세
+		var anim := key.get_slice(":", 2)
+		if ap.has_animation(anim):
+			ap.play(anim, 0.0)
+			ap.seek(ap.get_animation(anim).length * float(Art.CAST_FRAC.get(anim, Art.HIT_FRAC.get(anim, 0.5))), true)
+			ap.speed_scale = 0.0
 	_frame(key, m)
 
 
 ## 카메라: 전신(hero:·soldier:)은 고정 틀, 흉상(bust:)은 그 모델 키에 맞춰 가슴께~머리 위를 채운다(키 2.2~3.0m라 모델마다 다르다).
 func _frame(key: String, m: Node3D) -> void:
+	if key.begins_with("cutin:"):  # 컷인: 허리께~치켜든 손 위, 올려다본 3/4
+		var nk := neck_height(m)
+		_cam.rotation_degrees = CUTIN_ROT
+		_cam.size = nk * (CUTIN_HI - CUTIN_LO)
+		_cam.position = Vector3(0.0, nk * (CUTIN_LO + CUTIN_HI) / 2.0, 0.0) + _cam.basis.z * 10.0
+		return
 	var bust := key.begins_with("bust:")
 	_cam.rotation_degrees = BUST_ROT if bust else CAM_ROT
 	if not bust:

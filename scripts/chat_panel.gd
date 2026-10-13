@@ -1,8 +1,9 @@
 extends "res://scripts/ui_window.gd"
-## 채팅 창(2026-10-13 개편, 사용자: "제우스: 오만의 신처럼"): 국산 MMORPG식 — 화면 왼쪽을 덮는 어두운 반투명 창이 왼쪽에서 밀려 나오고,
+## 채팅 창(2026-10-13 개편, 사용자: "제우스: 오만의 신처럼" → "두루마리 컨셉은 유지, 제우스의 UX만"): 국산 MMORPG식 배치 —
+## 화면 왼쪽을 덮는 두루마리(UiKit.scroll) 창이 왼쪽에서 밀려 나오고,
 ## 오른쪽은 게임 화면이 비친다(누르면 닫힘). 창 왼쪽에 세로 채널 탭 [전체][길드][시스템](+관리자 [신고]), 오른쪽에 채널 이름·닫기(◀),
 ## 줄 목록, 아래 입력 줄(보낼 채널 칩 · 입력 칸 · [전송]).
-## [전체] 탭은 전체·길드·시스템 줄을 시각순으로 모아 보여 주고(줄마다 [전체]·[길드]·[시스템] 머리표 색), 보낼 채널은 칩을 눌러 전체 ↔ 길드로 바꾼다.
+## [전체] 탭은 전체·길드·시스템 줄을 시각순으로 모아 보여 주고(줄마다 시:분(한국 시각) + [전체]·[길드]·[시스템] 머리표 색), 보낼 채널은 칩을 눌러 전체 ↔ 길드로 바꾼다.
 ## [길드] 탭은 길드만(길드원일 때만 보인다), [시스템] 탭은 안내·거절·신고 알림(이 기기에서만, 입력 줄 없음).
 ## 보내면 내 줄이 바로 보이고(대기 표시 없음), 서버가 거절하면 지우고 [시스템] 줄 + 입력 줄 위 붉은 알림. 버튼 글자는 바뀌지 않는다.
 ## 남의 줄을 누르면(끌지 않고) 신고 확인 상자(두루마리) → [신고]는 바로 "(신고함)" 표시(거절되면 되돌림).
@@ -11,18 +12,17 @@ extends "res://scripts/ui_window.gd"
 
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const BG := Color(0.07, 0.08, 0.12, 0.93)  # 창(외곽선은 LowpolyBox가 이 색의 짙은 색으로)
-const RAIL_BG := Color(0.11, 0.12, 0.17, 1.0)  # 세로 탭 줄
-const TAB_OFF := Color(0.20, 0.22, 0.30)
-const TAB_ON := Color(0.78, 0.60, 0.26)  # 금색(고른 탭)
-const FIELD_BG := Color(0.14, 0.15, 0.21, 1.0)
-const SUB := Color(0.72, 0.75, 0.82, 0.8)
-const TEXT := Color(0.95, 0.95, 0.97)
-const NAME_COLOR := Color(0.62, 0.80, 1.0)
-const ME_COLOR := Color(1.0, 0.78, 0.36)
-const REPORTED := Color(1.0, 0.45, 0.40)
+const RAIL_BG := Color(0.89, 0.80, 0.62, 1.0)  # 세로 탭 줄(양피지보다 진하게)
+const TAB_OFF := Color(0.62, 0.47, 0.30)  # 가죽 갈색
+const TAB_ON := UiKit.AMBER  # 고른 탭
+const FIELD_BG := Color(0.99, 0.96, 0.89, 1.0)
+const SUB := Color(0.16, 0.18, 0.24, 0.58)  # 흐린 먹색(시각·안내)
+const TEXT := Color(0.16, 0.18, 0.24)  # 먹색(HudScript.INK)
+const NAME_COLOR := Color(0.14, 0.33, 0.60)
+const ME_COLOR := Color(0.70, 0.40, 0.04)
+const REPORTED := Color(0.78, 0.20, 0.16)
 const CH_NAMES := {"all": "전체", "guild": "길드", "system": "시스템"}
-const CH_COLORS := {"all": Color(0.93, 0.88, 0.76), "guild": Color(0.50, 0.88, 0.52), "system": Color(1.0, 0.82, 0.30)}
+const CH_COLORS := {"all": Color(0.45, 0.32, 0.18), "guild": Color(0.16, 0.48, 0.22), "system": Color(0.74, 0.40, 0.02)}
 const TABS := [["all", "전체"], ["guild", "길드"], ["system", "시스템"], ["reports", "신고"]]
 const TAB_TITLES := {"all": "전체 채팅", "guild": "길드 채팅", "system": "시스템 알림", "reports": "신고 목록"}
 const WIDTH_FRAC := 0.86  # 화면 너비 중 창 너비
@@ -55,7 +55,7 @@ func _ready() -> void:
 	_build_window(0, 0)
 	_sheet = true  # 두루마리 펼침 대신 왼쪽에서 밀려 나온다(_on_open)
 	dialog.get_parent().color = Color(0, 0, 0, 0.22)  # 오른쪽 게임 화면이 비친다
-	dialog.add_theme_stylebox_override("panel", UiKit.panel(BG, 12.0, 0, 0.02))
+	dialog.add_theme_stylebox_override("panel", UiKit.scroll())
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -67,8 +67,9 @@ func _ready() -> void:
 	main.add_theme_constant_override("separation", 8)
 	var pad := MarginContainer.new()
 	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for side in ["left", "right", "top", "bottom"]:
-		pad.add_theme_constant_override("margin_" + side, 12)
+	pad.add_theme_constant_override("margin_left", 12)
+	for side in ["right", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 0)
 	pad.add_child(main)
 	body.add_child(pad)
 	main.add_child(_build_head())
@@ -396,9 +397,9 @@ func _line(m: Dictionary) -> Control:
 	l.add_theme_font_override("normal_font", FONT)
 	l.add_theme_font_size_override("normal_font_size", LINE_FONT)
 	l.add_theme_color_override("default_color", TEXT)
-	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
-	l.add_theme_constant_override("outline_size", 3)
-	var tag := "[color=#%s][lb]%s][/color] " % [CH_COLORS.get(ch, TEXT).to_html(false), CH_NAMES.get(ch, "")]
+	var hm := clock(float(m.get("at", 0)))
+	var tag := ("[font_size=%d][color=#%s]%s[/color][/font_size] " % [LINE_FONT - 4, SUB.to_html(true), hm] if hm != "" else "")
+	tag += "[color=#%s][lb]%s][/color] " % [CH_COLORS.get(ch, TEXT).to_html(false), CH_NAMES.get(ch, "")]
 	if ch == "system":
 		l.text = tag + "[color=#%s]%s[/color]" % [CH_COLORS.system.to_html(false), _esc(str(m.text))]
 	else:
@@ -440,6 +441,14 @@ func _rebuild_reports() -> void:
 			cl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			v.add_child(cl)
 		list.add_child(p)
+
+
+## 시:분(한국 시각, "09:05"). at이 0(안내 줄)이면 "".
+static func clock(at: float) -> String:
+	if at <= 0.0:
+		return ""
+	var d := Time.get_datetime_dict_from_unix_time(int(at) + 9 * 3600)
+	return "%02d:%02d" % [d.hour, d.minute]
 
 
 static func _esc(s: String) -> String:

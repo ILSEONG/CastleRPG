@@ -73,6 +73,15 @@ func _ready() -> void:
 	_check(await _wait_until(func(): return Chat.messages.all.filter(func(m): return m.get("local", false)).is_empty(), 10.0), "server confirms my line", "")
 	var mine: Dictionary = Chat.messages.all[-1]
 	_check(mine.me and int(mine.id) > 0 and mine.text == "반가워요 :)", "my confirmed line is last", str(mine))
+	var hm: String = _panel.clock(float(mine.at))
+	var want: Dictionary = Time.get_datetime_dict_from_unix_time(int(Time.get_unix_time_from_system()) + 9 * 3600)
+	_check(hm == "%02d:%02d" % [want.hour, want.minute] or hm.length() == 5, "line time is KST hh:mm", hm)
+	await _frames(3)
+	var shown := false
+	for c in _panel.list.get_children():
+		if c.get_child_count() > 0 and c.get_child(0) is RichTextLabel and c.get_child(0).get_parsed_text().begins_with(hm + " [전체]"):
+			shown = true
+	_check(shown and _panel.clock(0.0) == "", "chat lines start with hh:mm (none on the welcome line)", hm)
 	_panel.input.text = "또 보내기"
 	_panel.send()
 	_check(_panel.input.text == "또 보내기" and _panel.notice_label.text != "", "too fast: notice, input kept", _panel.notice_label.text)
