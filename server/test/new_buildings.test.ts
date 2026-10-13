@@ -55,6 +55,7 @@ test('n번째 채·새 건물: 처음엔 공터, 성채 레벨 전엔 keep_cap, 
   p = await player(token)
   assert.ok(!p.unbuilt.includes('goldmine'))
   assert.equal(p.buildings.goldmine.level, 1)
+  assert.deepEqual(p.layout.goldmine, [-8, 2]) // 다시 읽어도 자리가 남는다(예전엔 기본 자리 건물만 남겨 사라졌다)
   // 성채 5: 벌목장 2번째 채 — 자기 레벨·자원 수집 시계, 1번째와 따로 올린다
   await levels(token, { keep: 5 })
   assert.equal((await build(token, 'lumber#2', [-8, -2 - 3 - 3])).status, 409) // 다른 건물과 겹침(마구간 -8,-8)
@@ -63,6 +64,9 @@ test('n번째 채·새 건물: 처음엔 공터, 성채 레벨 전엔 keep_cap, 
   await done(token)
   p = await player(token)
   assert.deepEqual([p.unbuilt.includes('lumber#2'), p.buildings['lumber#2'].level, p.buildings.lumber.level], [false, 1, 1])
+  assert.deepEqual(p.layout['lumber#2'], [5, 5])
+  assert.deepEqual(p.layout.goldmine, [-8, 2])
+  assert.equal((await build(token, 'lumber#3', [-8, 2])).status === 200, false) // 금광 자리 — 서버가 아직 금광 자리를 안다
   // 지은 n번째 채는 옮길 수 있고, 업그레이드는 성채 상한
   assert.equal((await S.req('POST', '/v1/building/move', { token, body: { building: 'lumber#2', cell: [5, -5] } })).status, 409) // 주점 자리
   const up = await build(token, 'lumber#2')
@@ -112,4 +116,17 @@ test('길드 회관: 길드에 들어 있으면 건설 시간이 도움 수만�
   await S.db.query('insert into player_guild (player_id, guild_id) values ($1, $2) on conflict (player_id) do update set guild_id = $2', [id, g.id])
   r = await build(token, 'keep')
   assert.equal(r.json.build.finish, S.clock.t + R.afterHelps(56220, 2, CFG)) // 회관 Lv 1: 도움 2번
+})
+
+test('기존 게스트가 다시 로그인해도 새 건물은 공터(공짜 Lv 1로 생기지 않는다)', async () => {
+  S.clock.t = T0
+  const dev = 'test-old-guest-new-buildings'
+  const { token, id } = await S.login(dev)
+  // 새 건물이 생기기 전 계정처럼: 새 건물 행과 공터 표시를 지운다
+  await S.db.query("delete from player_buildings where player_id = $1 and building in ('warehouse','goldmine','forge','guild_hall','watchtower')", [id])
+  await S.db.query("update player_state set unbuilt = array(select x from unnest(unbuilt) as x where x not in ('warehouse','goldmine','forge','guild_hall','watchtower')) where player_id = $1", [id])
+  const again = await S.login(dev) // 게스트는 앱을 켤 때마다 다시 로그인한다
+  const p = await player(again.token)
+  for (const k of ['warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower']) assert.ok(p.unbuilt.includes(k), k)
+  assert.ok(token)
 })

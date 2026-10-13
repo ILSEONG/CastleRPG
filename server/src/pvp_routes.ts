@@ -21,7 +21,7 @@ type Any = any
 export function registerPvp(app: Hono<Any>, d: Any) {
   const { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError } = d
 
-  const cfgOf = (game: Any) => (k: string) => R.cfgNum(game.config, k)
+  const cfgOf = (game: Any) => Object.assign((k: string) => R.cfgNum(game.config, k), { config: game.config })
   const defsOf = (game: Any): HeroDef[] => game.heroes.map((h: Any) => ({ id: String(h.id), role: String(h.role), hp: Number(h.hp), atk: Number(h.atk),
     atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
   const modeOf = (v: unknown): P.Mode => {

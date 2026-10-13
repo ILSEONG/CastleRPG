@@ -294,8 +294,8 @@ const ENSURE_SQL = `with p as (
   h as (insert into player_heroes (player_id, hero_id) select s.player_id, x from s, jsonb_array_elements_text($3::jsonb) as x
     on conflict do nothing),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
-  b as (insert into player_buildings (player_id, building, last_collect) select p.id, x.id, to_timestamp($2::float8)
-    from p, (select building as id from resources union select id from building_defs) as x on conflict do nothing)
+  b as (insert into player_buildings (player_id, building, last_collect) select s.player_id, x.id, to_timestamp($2::float8)
+    from s, (select building as id from resources union select id from building_defs) as x on conflict do nothing)
   select id from p`
 
 // 빠진 행(나중에 추가된 자원·건물)을 채운다. 건물은 레벨 1, 성채·성문은 player_state의 레벨(개정 12).
@@ -333,7 +333,9 @@ function layoutOf(v: unknown): Record<string, [number, number]> {
   if (v && typeof v === 'object' && !Array.isArray(v)) {
     for (const [id, c] of Object.entries(v as Record<string, unknown>)) {
       const cell = R.cellOf(c)
-      if (cell && id in R.DEFAULT_CELLS) out[id] = cell
+      // 기본 자리 건물 + [건설]로 놓는 새 건물·자원 건물 n번째 채(2026-10-13 — 예전엔 기본 자리 건물만 남겨 새 건물 자리가 다음 읽기에서 사라졌다)
+      const ty = R.typeOf(id), n = R.copyIndex(id)
+      if (cell && (ty in R.DEFAULT_CELLS || R.NEW_TYPES.includes(ty)) && Number.isInteger(n) && n >= 1 && n <= 9) out[id] = cell
     }
   }
   return out

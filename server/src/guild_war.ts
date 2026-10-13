@@ -5,7 +5,7 @@
 // 성 상태(성문·성채 체력, 수비 영웅별 남은 체력 비율)는 전쟁 행(guild_wars.castle)에 저장되고 전투 결과로만 줄어든다(mergeCastle — 늘지 않는다).
 // 점수: 수비 영웅 처치 1 · 성문 10 · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
 // 우리 공성 시간이 끝나면 보인다.
-import { mulberry32, powerOf, type StatLimit } from './rules.ts'
+import { heroMaxLevel, mulberry32, powerOf, type Config, type StatLimit } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
 export const BATTLE_SEC = 600
@@ -42,7 +42,7 @@ export const weekStart = (week: number) => week * 7 - 4
 export const dayInWeek = (day: number) => day - weekStart(weekOf(day)) // 0 = 월요일
 
 export interface HeroDef { id: string; role: string; hp: number; atk: number; atk_interval: number; grade: string }
-type Cfg = (k: string) => number
+type Cfg = ((k: string) => number) & { config?: Config } // config가 있으면 승급별 최대 레벨 목록(hero_max_levels)을 쓴다
 
 // 앱 GameData.hero_stats(장비 없이): 기본 × 레벨 배율(근접은 따로) × 승급 배율^승급.
 export function heroStats(def: HeroDef, level: number, promotion: number, cfg: Cfg) {
@@ -57,7 +57,9 @@ export const heroPower = (def: HeroDef, level: number, promotion: number, cfg: C
 
 }
 
-export const maxLevel = (promotion: number, cfg: Cfg) => cfg('hero_max_level_base') + cfg('hero_max_level_per_promotion') * promotion
+// 앱 GameData.max_level과 같다(2026-10-13 hero_max_levels 20·50·80·120·160·200 — 예전엔 기본 + 승급당 값이라 ★3에서 앱 120 · 서버 110으로 달랐다)
+export const maxLevel = (promotion: number, cfg: Cfg) =>
+  cfg.config ? heroMaxLevel(promotion, cfg.config) : cfg('hero_max_level_base') + cfg('hero_max_level_per_promotion') * promotion
 
 // 목표 전투력에 가장 가까운 (레벨, 승급). 같으면 낮은 승급.
 export function fitHero(def: HeroDef, target: number, cfg: Cfg) {

@@ -129,8 +129,16 @@ func finish() -> void:
 		return
 	if pause:
 		get_tree().paused = _was_paused
+		pause = false
 	finished.emit(id)
 	queue_free()
+
+
+## finish 없이 사라져도(장면 전환 등) 멈춘 게임을 되돌린다.
+func _exit_tree() -> void:
+	if pause and is_inside_tree():
+		get_tree().paused = _was_paused
+		pause = false
 
 
 func _place_bubble() -> void:

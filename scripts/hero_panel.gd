@@ -800,7 +800,7 @@ func _refresh_detail() -> void:
 	title_label.text = "%s %s" % [h.title, h.name]
 	title_label.add_theme_color_override("font_color", UiKit.GRADE_COLORS[h.grade].lightened(0.15))
 	grade_label.text = "%s · %s" % [h.grade, "근접" if h.role == "melee" else "원거리"]
-	level_label.text = "Lv %d / %d" % [lv, mx]
+	level_label.text = "Lv %d / %d" % [mini(lv, mx), mx]
 	level_bar.max_value = mx
 	level_bar.value = lv
 	var now := GameData.hero_stats(h, lv, pr)  # 기본 × 레벨 × 승급 + 장비(개정 24: 연구소 보너스 없음)

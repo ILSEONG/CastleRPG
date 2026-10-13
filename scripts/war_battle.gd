@@ -825,7 +825,7 @@ func leave() -> void:
 	if _leaving:
 		return
 	_leaving = true
-	if not done and not run.get("online", false) and main != null:
+	if not done and not run.get("online", false) and not plan.get("practice", false) and main != null:  # 공성전 체험은 실제 길드전 성에 남기지 않는다
 		GuildWar.finish(state_now(), false)  # 오프라인: 지금까지 깎은 성은 남고, 오늘 전투 시간 안에는 다시 들어올 수 있다
 	if main != null:
 		main.leave_dungeon.call_deferred()

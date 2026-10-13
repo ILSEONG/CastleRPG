@@ -48,6 +48,8 @@ export function tutorialDone(id: string, f: QuestFacts): boolean {
     case 'research': return f.research
     case 'guild': return f.guild
     case 'pvp': return f.pvp
+    case 'guild_attend': return f.guild && t(f, 'guild_attend') >= 1 // 2026-10-13 가이드 80: 출석은 서버가 센다(기부는 앱만)
+    case 'guild_boss': return f.guild && t(f, 'guild_boss') >= 1
   }
   return true
 }
