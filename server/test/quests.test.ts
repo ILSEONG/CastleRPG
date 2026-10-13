@@ -13,7 +13,7 @@ import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 // 2026-10-13: 성채 레벨로 여는 새 건물 5종과 자원 건물 2~4번째 채는 늘 공터로 시작한다(정렬)
-const LOTS = ['forge', 'goldmine', 'guild_hall', 'warehouse', 'watchtower',
+const LOTS = ['dispatch', 'forge', 'goldmine', 'guild_hall', 'warehouse', 'watchtower',
   ...['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => `${b}#${n}`))].sort()
 
 let S: Setup

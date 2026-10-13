@@ -1007,8 +1007,8 @@ func test_new_buildings() -> void:
 	check(GameData.type_of("lumber#3") == "lumber" and GameData.copy_index("lumber#3") == 3 and GameData.copy_index("keep") == 1, "key = type#n")
 	check([1, 4, 5, 10, 15, 30].map(func(k): return GameData.copies_at(k)) == [1, 1, 2, 3, 4, 4] and GameData.max_copies() == 4, "copies by keep level (res_copy_tiers)")
 	check([GameData.unlock_keep("lumber#2"), GameData.unlock_keep("farm#4"), GameData.unlock_keep("warehouse"), GameData.unlock_keep("goldmine"), GameData.unlock_keep("forge"),
-		GameData.unlock_keep("guild_hall"), GameData.unlock_keep("watchtower"), GameData.unlock_keep("lumber")] == [5, 15, 3, 4, 8, 10, 12, 0], "unlock keep levels")
-	check(GameData.building_keys().has("quarry#4") and not GameData.building_keys().has("quarry#5") and GameData.lot_keys().size() == 5 + 3 * 3, "keys: types + copies 2..4")
+		GameData.unlock_keep("guild_hall"), GameData.unlock_keep("watchtower"), GameData.unlock_keep("lumber"), GameData.unlock_keep("dispatch")] == [5, 15, 3, 4, 8, 10, 12, 0, 6], "unlock keep levels")
+	check(GameData.building_keys().has("quarry#4") and not GameData.building_keys().has("quarry#5") and GameData.lot_keys().size() == 6 + 3 * 3, "keys: types + copies 2..4")
 	check(GameData.building_name("farm#2") == "농장 2" and GameData.building_def("farm#2").id == "farm" and GameData.resource_of_building("farm#2") == "food", "copies use the type's row")
 	check(Balance.building("lumber#2").name == "벌목장 2" and not Balance.building("lumber#2").has("cell") and Balance.building("lumber#2").size == Vector2i(3, 3)
 		and Balance.entries().size() == GameData.building_keys().size() - 1, "Balance entries include copies (no default cell; the gate is not a plot)")
@@ -2128,7 +2128,7 @@ func test_buildings() -> void:
 	GameData.load_tables()
 	var ids: Array = GameData.buildings().map(func(b): return b.id)
 	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable",
-		"warehouse", "goldmine", "forge", "guild_hall", "watchtower"], "buildings.csv: 16 rows in file order: %s" % [ids])
+		"warehouse", "goldmine", "forge", "guild_hall", "watchtower", "dispatch"], "buildings.csv: 17 rows in file order: %s" % [ids])
 	var gate := GameData.building_def("gate")
 	check(gate.name == "성문" and gate.max_level == 30.0 and gate.wood == 412.0 and gate.stone == 0.0 and gate.food == 338.0 and gate.base_sec == 2.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
 	# 2026-10-13 라오킹 곡선: L → L+1 비용·시간 = 레벨 목록(lv_*)의 L번째 값 — 서버와 같은 표

@@ -40,7 +40,7 @@ test('n번째 채·새 건물: 처음엔 공터, 성채 레벨 전엔 keep_cap, 
   S.clock.t = T0
   const { token } = await S.login()
   let p = await player(token)
-  for (const k of ['lumber#2', 'farm#4', 'warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower']) assert.ok(p.unbuilt.includes(k), k)
+  for (const k of ['lumber#2', 'farm#4', 'warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower', 'dispatch']) assert.ok(p.unbuilt.includes(k), k)
   await levels(token, { keep: 4 })
   assert.equal((await build(token, 'lumber#2', [-8, 2])).json.error, 'keep_cap') // 2번째 채는 성채 5
   assert.equal((await build(token, 'forge', [-8, 2])).json.error, 'keep_cap') // 대장간은 성채 8

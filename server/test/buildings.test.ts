@@ -14,7 +14,7 @@ import { barrier, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 // 2026-10-13: 아직 못 지은 건물(새 건물 5종 + 자원 건물 2~4번째 채)도 레벨 1 행(공터)으로 온다
-const LOTS = Object.fromEntries(['warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower',
+const LOTS = Object.fromEntries(['warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower', 'dispatch',
   ...['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => `${b}#${n}`))].map((k) => [k, 1]))
 
 let S: Setup

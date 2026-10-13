@@ -149,6 +149,7 @@ static func building(id: String) -> ArrayMesh:
 		"forge": _forge(k)
 		"guild_hall": _guild_hall(k)
 		"watchtower": _watchtower(k)
+		"dispatch": _dispatch(k)
 		_: push_error("unknown building %s" % id)
 	return k.commit()
 
@@ -583,6 +584,44 @@ static func _watchtower(k) -> void:
 
 
 ## 나무 상자(가운데 진한 띠). 바닥 중심 p, 한 변 s.
+## 파견소: 돌 기단 위 통나무 오두막(초록 박공지붕, 앞 문·창), 앞마당 왼쪽 큰 의뢰 게시판(종이 여러 장 — 희귀도 색 핀),
+## 오른쪽 갈림길 이정표(화살 판 셋), 앞 상자·자루, 지붕 끝 작은 깃발.
+static func _dispatch(k) -> void:
+	var c := Vector3(0.35, 0, -0.75)
+	k.box(c, Vector3(3.4, 0.2, 2.6), STONE_DARK)
+	k.box(c + Vector3(0, 0.2, 0), Vector3(3.0, 1.9, 2.2), WOOD)
+	for dx in [-1.5, 1.5]:  # 통나무 모서리
+		for dz in [-1.1, 1.1]:
+			k.box(c + Vector3(dx, 0.2, dz), Vector3(0.26, 1.9, 0.26), LOG_END)
+	k.box(c + Vector3(0, 0.2, 1.11), Vector3(0.75, 1.25, 0.06), WOOD_DARK)  # 문
+	for dx in [-0.95, 0.95]:
+		k.box(c + Vector3(dx, 1.0, 1.11), Vector3(0.5, 0.45, 0.06), WINDOW)
+	k.gable(c + Vector3(0, 2.1, 0), Vector3(3.5, 0, 2.7), 1.2, ROOF_GREEN, 0.3)
+	k.box(c + Vector3(1.55, 3.3, 0), Vector3(0.07, 1.0, 0.07), WOOD_DARK)  # 깃대
+	k.box(c + Vector3(1.85, 3.95, 0), Vector3(0.55, 0.35, 0.04), FLAG)
+	# 의뢰 게시판(앞 왼쪽, +Z를 봄): 다리 둘 + 판 + 작은 지붕 + 종이(희귀도 핀 N 회색·R 파랑·SR 보라·SSR 금)
+	var b := Vector3(-1.45, 0, 1.45)
+	for dx in [-0.75, 0.75]:
+		k.box(b + Vector3(dx, 0, 0), Vector3(0.14, 1.85, 0.14), WOOD_DARK)
+	k.box(b + Vector3(0, 0.75, 0), Vector3(1.7, 1.0, 0.1), WOOD)
+	k.gable(b + Vector3(0, 1.85, 0), Vector3(1.9, 0, 0.45), 0.3, ROOF_GREEN, 0.06)
+	var pins := [METAL, ROOF_BLUE, ROOF_PURPLE, GOLD]
+	for i in 4:
+		var px := -0.55 + i * 0.37
+		var py := 0.9 + (0.25 if i % 2 == 0 else 0.0)
+		k.box(b + Vector3(px, py, 0.06), Vector3(0.3, 0.36, 0.02), PLASTER)
+		k.box(b + Vector3(px, py + 0.3, 0.08), Vector3(0.07, 0.07, 0.03), pins[i])
+	# 이정표(앞 오른쪽): 기둥 + 화살 판 셋(방향 다르게)
+	var g := Vector3(1.7, 0, 1.55)
+	k.box(g, Vector3(0.14, 2.0, 0.14), WOOD_DARK)
+	for i in 3:
+		k.xform = Transform3D(Basis(Vector3.UP, [0.4, -0.9, 2.2][i]), g + Vector3(0, 1.3 + i * 0.25, 0))
+		k.box(Vector3(0.35, 0, 0), Vector3(0.7, 0.16, 0.05), LOG_END)
+		k.xform = Transform3D.IDENTITY
+	_crate(k, Vector3(-0.05, 0, 1.5), 0.5)
+	k.box(Vector3(0.55, 0, 1.75), Vector3(0.45, 0.4, 0.35), SACK)
+
+
 static func _crate(k, p: Vector3, s: float) -> void:
 	k.box(p, Vector3(s, s, s), WOOD)
 	k.box(p + Vector3(0, s * 0.42, 0), Vector3(s + 0.03, s * 0.16, s + 0.03), WOOD_DARK)
