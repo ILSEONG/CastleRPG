@@ -22,6 +22,7 @@ const CHARGE_ANIM := "Taunt"  # 포효하며 예고가 차오른다
 const RUN_ANIM := "Running_A"
 const STUN_SEC := 1.0
 const SWEEP_COLOR := Color(0.85, 0.12, 0.08)
+const EMBER := Color(1.0, 0.6, 0.32)  # 돌진 연출(붉은 예고 위에서도 보이는 밝은 불씨색)
 
 var sweep_cd := SWEEP_SEC
 var charge_cd := CHARGE_SEC
@@ -35,6 +36,7 @@ var _charge_from := Vector3.ZERO
 var _charge_end := Vector3.ZERO  # 돌진이 멈추는 곳(예고 끝)
 var _charging := false
 var _charge_hit := {}  # 이번 돌진에 맞은 영웅 id
+var _trail_t := 0.0  # 돌진 자국 간격
 
 
 func _process(delta: float) -> void:
@@ -111,7 +113,10 @@ func _tick_tele(delta: float) -> void:
 		charges += 1
 		_charging = true
 		_charge_hit.clear()
+		_trail_t = 0.0
 		_model.play_loop(RUN_ANIM, 1.4)
+		Fx.dust(get_parent(), _charge_from)  # 박차고 나가는 흙먼지 + 불빛
+		Fx.halo(get_parent(), _charge_from + Vector3(0, 0.8, 0), EMBER, 2.4, 0.35)
 
 
 ## 원이 다 찬 순간: 원 안 살아 있는 영웅 모두 공격 × 1.5.
@@ -130,6 +135,11 @@ func _tick_charge(delta: float) -> void:
 	_model.face(_charge_end - flat)
 	var next := flat.move_toward(_charge_end, step)
 	global_position = Vector3(next.x, global_position.y, next.z)
+	_trail_t -= delta
+	if _trail_t <= 0.0:  # 지나간 길에 흙먼지 + 불씨 자국
+		_trail_t = 0.07
+		Fx.dust(get_parent(), next)
+		Fx.halo(get_parent(), next + Vector3(0, 0.9, 0), EMBER, 1.6, 0.3, 1.2, "dk_trail")
 	for h in get_tree().get_nodes_in_group("heroes"):
 		if not h.is_alive() or _charge_hit.has(h.get_instance_id()):
 			continue
@@ -137,7 +147,9 @@ func _tick_charge(delta: float) -> void:
 			_charge_hit[h.get_instance_id()] = true
 			h.take_damage(hit_damage(), self)
 			h.apply_stun(STUN_SEC)
-			Fx.impact(get_parent(), Vector3(h.global_position.x, 0.0, h.global_position.z), SWEEP_COLOR, 0.8, 1)
+			Fx.spark(get_parent(), h.global_position + Vector3(0, 0.9, 0), EMBER, 0.9)
+			Fx.halo(get_parent(), h.global_position + Vector3(0, 0.9, 0), EMBER, 2.0, 0.3)
+			Fx.kick(get_parent(), h.global_position, 0.2, 0.04)
 	if next.distance_to(_charge_end) > 0.01:
 		return
 	_charging = false
@@ -149,7 +161,9 @@ func _tick_charge(delta: float) -> void:
 	_atk_cd = float(_stats.atk_interval)
 	_model.play_attack(float(_stats.atk_interval))
 	Fx.quake(get_parent(), _charge_end, 1.8, 1)
-	Fx.impact(get_parent(), _charge_end, SWEEP_COLOR, 1.2, 1)
+	Fx.spark(get_parent(), _charge_end + Vector3(0, 0.8, 0), EMBER, 1.3)
+	Fx.halo(get_parent(), _charge_end + Vector3(0, 0.6, 0), EMBER, 3.2, 0.4)
+	Fx.dust(get_parent(), _charge_end)
 
 
 func is_charging() -> bool:

@@ -1156,9 +1156,9 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	await _tap(lp)
 	print("INPUT INFO: lumber window (keep cap) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
 	var eff: HBoxContainer = bwin.effects.get_child(0)
-	var req: Label = bwin.reqs.get_child(0)
+	var req: Button = bwin.reqs.get_child(0)
 	_check(bwin.is_open() and bwin.title_label.text == "벌목장 Lv 1" and bwin.desc_label.text != "" and eff.get_child(0).text == "생산 100/분" and eff.get_child(1).text == "→ 200/분"
-		and req.text == "✗ 성채 Lv 2 필요" and req.get_theme_color("font_color") == bwin.RED and bwin.upgrade_button.disabled
+		and req.text == "✗ 성채 Lv 2 필요  ›" and req.get_theme_color("font_color") == bwin.RED and bwin.upgrade_button.disabled
 		and bwin.reason_label.text == Economy.BLOCK_TEXT.keep_cap and bwin.reason_label.visible,
 		"(B) lumber window at keep Lv 1: title, 생산 100/분 → 200/분, red '✗ 성채 Lv 2 필요', [업그레이드] off with the keep-cap reason",
 		"title=%s eff=%s req=%s reason=%s" % [bwin.title_label.text, [eff.get_child(0).text, eff.get_child(1).text], req.text, bwin.reason_label.text])
@@ -1173,6 +1173,11 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and UiKit.duration(3900) == "1시간 5분" and UiKit.duration(59.2) == "01:00",
 		"(B) effect sentences: 인구 6 → 8, soldier buildings 1마리 3:00:00 → 2:30:00 (Lv 6 30:00 → T2 3:00:00), lab research speed +2% → +4%; times mm:ss / h시간 m분",
 		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
+	# 못 채운 선행 조건 줄을 누르면 그 건물 창(사용자 2026-10-13): 벌목장 창 → ✗ 성채 → 성채 창
+	await _guard_wait()
+	await _tap(_center(req))
+	await _frames(2)
+	_check(bwin.is_open() and bwin.building_id == "keep", "(B) tapping the red '✗ 성채 Lv 2 필요' line jumps to the keep window", "open=%s id=%s" % [bwin.is_open(), bwin.building_id])
 	bwin.close()
 
 	# 성채 [업그레이드]: 자원 375/0/375 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간

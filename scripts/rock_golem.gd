@@ -126,8 +126,8 @@ func _launch_rock() -> void:
 		return
 	var rock := MeshInstance3D.new()
 	var m := SphereMesh.new()
-	m.radius = 0.55
-	m.height = 1.0
+	m.radius = 0.85
+	m.height = 1.4
 	m.radial_segments = 6
 	m.rings = 3
 	rock.mesh = m
@@ -137,6 +137,10 @@ func _launch_rock() -> void:
 	get_parent().add_child(rock)
 	var from := global_position + Vector3(0, 2.6 * float(_stats.scale) / 2.4, 0)
 	rock.global_position = from
+	var trail := Fx._stream(rock, from, Fx.DUST.lightened(0.1), "smoke", 24.0, 0.5, THROW_FLY, "rock_trail")  # 날아가며 흩날리는 흙먼지
+	if trail != null:
+		trail.gravity = Vector3.ZERO
+		trail.local_coords = false
 	var to := _throw_at
 	var tw := rock.create_tween()
 	tw.tween_method(func(t: float): rock.global_position = from.lerp(to, t) + Vector3.UP * 6.0 * t * (1.0 - t); rock.rotation.x = t * TAU, 0.0, 1.0, THROW_FLY)
@@ -146,7 +150,8 @@ func _launch_rock() -> void:
 func _throw_hit() -> void:
 	throws += 1
 	Fx.impact(get_parent(), _throw_at, DUST_COLOR, THROW_R * 0.7, 1)
-	Fx.quake(get_parent(), _throw_at, THROW_R, 0)
+	Fx.quake(get_parent(), _throw_at, THROW_R, 1)
+	Fx.dust(get_parent(), _throw_at)
 	for h in get_tree().get_nodes_in_group("heroes"):
 		if h.is_alive() and Formation.flat_distance(_throw_at, h.global_position) <= THROW_R:
 			h.take_damage(hit_damage() * THROW_MULT, self)
