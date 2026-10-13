@@ -18,6 +18,7 @@ const BOUNCE_PX := 8.0
 const BOUNCE_HZ := 1.6
 
 var tags  # world_tags.gd(건물 이름표 덩어리 자리). main이 넣는다
+var build_button  # build_button.gd — 자리를 안 잡은 공터 미션이면 화살표가 이 버튼을 가리킨다(자유 건설)
 var panel: PanelContainer
 var step_label: Label
 var title_label: Label
@@ -146,8 +147,14 @@ func _draw_arrow() -> void:
 		return
 	if id == "gate":
 		id = "gate:2"  # 남쪽(카메라 쪽) 문루 이름표
-	tags.layout()
-	var s = tags.stacks.get(id)
+	var s = null
+	if id != "gate:2" and not Economy.is_placed(id):  # 자리를 안 잡은 공터(자유 건설): [건물] 버튼을 가리킨다
+		if build_button == null or not build_button.visible:
+			return
+		s = Rect2(build_button.button.position, build_button.button.size)
+	else:
+		tags.layout()
+		s = tags.stacks.get(id)
 	if s == null:
 		return
 	var tip := Vector2(s.get_center().x, s.position.y - 6.0 - absf(sin(_t * PI * BOUNCE_HZ)) * BOUNCE_PX)

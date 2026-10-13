@@ -63,6 +63,7 @@ func _init() -> void:
 	test_route()
 	test_stairs_and_wall_routes()
 	test_buildings_clear_stairs()
+	test_free_placement()
 	test_is_inside()
 	test_mesh_kit()
 	test_castle_parts()
@@ -995,6 +996,89 @@ func _leg_samples(a: Vector3, b: Vector3) -> Array:
 	for k in range(n + 1):
 		out.append(a.lerp(b, float(k) / maxf(n, 1)))
 	return out
+
+
+## 자유 건설(2026-10-13): 기본 배치는 자리 규칙을 지키고, 규칙은 길·광장·성벽 여유·겹침을 막는다. 성 단계마다 규칙을 지키는 모든 칸은
+## 영웅 자리·성문 사이 모든 지상 경로, 계단 발판, 병사 자리, 상인에서 떨어져 있다(어디에 지어도 전투 길을 막지 않는다).
+func test_free_placement() -> void:
+	var F = FormationScript
+	var defaults := {}
+	for b in Balance.BUILDINGS:
+		defaults[b.id] = b.cell
+	for b in Balance.BUILDINGS:
+		if b.id == "keep":
+			check(Balance.placement_block("keep", b.cell, 10, defaults) == "fixed", "keep cannot be placed")
+		else:
+			check(Balance.placement_block(b.id, b.cell, 10, defaults) == "", "default %s spot passes the rules" % b.id)
+	check(Balance.placement_block("lumber", Vector2i(-1, 5), 10, defaults) == "road", "north-south road blocked")
+	check(Balance.placement_block("lumber", Vector2i(5, -1), 10, defaults) == "road", "east-west road blocked")
+	check(Balance.placement_block("lumber", Vector2i(1, 3), 10, defaults) == "square", "soldier square blocked")
+	check(Balance.placement_block("lumber", Vector2i(-4, 2), 10, {}) == "square", "merchant spot blocked")
+	check(Balance.placement_block("lumber", Vector2i(6, 5), 10, defaults) == "out", "2-tile wall margin kept")
+	check(Balance.placement_block("lumber", Vector2i(5, 5), 10, defaults) == "", "free corner spot ok")
+	check(Balance.placement_block("lumber", Vector2i(4, 1), 10, defaults) == "overlap", "overlapping the quarry is blocked")
+	check(Balance.placement_block("lumber", Vector2i(9, 9), 14, defaults) == "", "a bigger castle opens new spots")
+	var cart_c: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
+	var cart_box := TownKitScript.merchant_cart().get_aabb()
+	var keep_out := [Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS),
+		Rect2(cart_c.x + cart_box.position.x, cart_c.z + cart_box.position.z, cart_box.size.x, cart_box.size.z)]
+	var soldiers := []
+	var grid: Vector2i = F.soldier_grid()
+	for c in grid.x:
+		for r in grid.y:
+			soldiers.append(Vector2(Balance.SOLDIER_X.x + c * Balance.SOLDIER_GAP, Balance.SOLDIER_Z.x + r * Balance.SOLDIER_GAP))
+	for level in [1, 9, 22]:
+		var h := GameData.interior_half(level)
+		var ht := GameData.interior_tiles(level) / 2
+		var spots: Array = []
+		for side in 4:
+			for at in F.gate_offsets(h):
+				spots.append(F.gate_inner(h, side, at))
+			for post in [F.POST_GATE, F.POST_WALL]:
+				for slot in F.capacity(post, F.gates_per_side(h)):
+					spots.append(F.slot_position(h, side, post, slot))
+		var samples: Array = []  # 모든 경로의 지상 구간 표본 점
+		for from in spots:
+			for to in spots:
+				if from == to:
+					continue
+				var pts: Array = [from] + F.route(h, from, to)
+				for i in range(1, pts.size()):
+					var a: Vector3 = pts[i - 1]
+					var b: Vector3 = pts[i]
+					if absf(a.y) < 0.01 and absf(b.y) < 0.01:
+						for q in _leg_samples(a, b):
+							samples.append(Vector2(q.x, q.z))
+		var bad := []
+		var valid := 0
+		for x in range(-ht, ht):
+			for y in range(-ht, ht):
+				var cell := Vector2i(x, y)
+				if Balance.placement_block("lumber", cell, ht, {"keep": Vector2i(-2, -2)}) != "":
+					continue
+				valid += 1
+				var plot := Rect2(Vector2(cell) * Balance.TILE, Vector2(3, 3) * Balance.TILE)
+				var inner := plot.grow(-0.01)
+				for q in samples:
+					if inner.has_point(q):
+						bad.append("route %s" % cell)
+						break
+				for s2 in 4:
+					for at in F.gate_offsets(h):
+						for e in [-1.0, 1.0]:
+							var p1: Vector3 = F.stair_bottom(h, s2, e, at)
+							var p2: Vector3 = F.stair_approach(h, s2, e, at)
+							if plot.has_point(Vector2(p1.x, p1.z)) or plot.has_point(Vector2(p2.x, p2.z)):
+								bad.append("stair %s" % cell)
+				for p in soldiers:
+					if plot.grow(0.45).has_point(p):
+						bad.append("soldier %s" % cell)
+						break
+				for rc in keep_out:
+					if plot.intersects(rc):
+						bad.append("merchant %s" % cell)
+		check(valid > 20, "level %d: many free spots (%d)" % [level, valid])
+		check(bad.is_empty(), "level %d: no allowed spot touches a route, stair, soldier spot or the merchant: %s" % [level, bad.slice(0, 3)])
 
 
 ## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 모든 자리 사이 경로(면을 넘나드는 것 포함)의 지상 구간은 부지·계단 발판을 지나지 않는다.
