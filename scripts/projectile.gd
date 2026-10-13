@@ -14,12 +14,13 @@ var kind := "arrow"
 var color := Color.WHITE
 var tail := false  # multishot: 고유 색 꼬리(개정 17)
 var on_hit: Callable
+var big := false  # 스킬 투사체: 크게 + 빛 꼬리(Fx.dress_projectile, 2026-10-13)
 
 var _look: Node3D
 
 
 func _ready() -> void:
-	_look = Fx.dress_projectile(self, kind, color, tail)
+	_look = Fx.dress_projectile(self, kind, color, tail, big)
 
 
 func _process(delta: float) -> void:
