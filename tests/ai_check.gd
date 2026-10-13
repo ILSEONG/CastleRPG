@@ -1776,7 +1776,7 @@ func _group_spawn() -> void:
 	await _frames(1)
 
 
-## 개정 22 §2 §3: 스테이지 모드 스포너는 라운드 1-1·1-24(g = 1·24)에 보스를 내지 않고 1-25에만 HP × boss_round_mult 보스를 낸다
+## 개정 22 §2 §3 + 2026-10-12: 스테이지 모드 스포너는 라운드 1-1·1-24(g = 1·24) 끝에 남쪽 성문 보스 하나(HP 배율 없음), 1-25에는 네 성문에 HP × boss_round_mult 보스 하나씩을 낸다
 ## (24·25행은 잠시 웨이브 1 × 2로 줄인다 — 수천 마리를 만들지 않게). 스테이지 2(g = 26) 적은 스테이지 1보다 1.08배 빨리 걷는다
 ## (같은 자리에서 진로로 1초 — 졸개·보스).
 func _round_cases() -> void:
@@ -1809,8 +1809,12 @@ func _round_cases() -> void:
 		await _frames(1)
 	GameData._stages = rows
 	var boss_hp: float = GameData.monster("epic_boss").hp * GameData.stage(25).hp_mult * GameData.config_num("boss_round_mult")
-	_check(bosses[1].is_empty() and bosses[24].is_empty() and bosses[25].size() == 1 and is_equal_approx(bosses[25][0], boss_hp) and grunts[1] == 72 and grunts[25] == 6,
-		"(round) rounds 1-1 and 1-24 spawn no boss; round 1-25 spawns one boss with hp x boss_round_mult", "bosses=%s grunts=%s want hp %.0f" % [bosses, grunts, boss_hp])
+	var hp1: float = GameData.monster("epic_boss").hp * GameData.stage(1).hp_mult
+	var hp24: float = GameData.monster("epic_boss").hp * GameData.stage(24).hp_mult
+	_check(bosses[1].size() == 1 and is_equal_approx(bosses[1][0], hp1) and bosses[24].size() == 1 and is_equal_approx(bosses[24][0], hp24)
+		and bosses[25].size() == 4 and bosses[25].all(func(h): return is_equal_approx(h, boss_hp)) and grunts[1] == 72 and grunts[25] == 6,
+		"(round) rounds 1-1 and 1-24 end with one plain boss; round 1-25 spawns a boss at each of the 4 gates with hp x boss_round_mult",
+		"bosses=%s grunts=%s want hp %.0f / %.0f / %.0f" % [bosses, grunts, hp1, hp24, boss_hp])
 	var moved := {}
 	for g in [1, 26]:
 		for kind in ["grunt", "epic_boss"]:
