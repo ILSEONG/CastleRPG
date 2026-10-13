@@ -136,7 +136,8 @@ const RESEARCH_EFFECTS := ["wood_pct", "stone_pct", "food_pct", "res_pct", "buil
 	"inf_pct", "arc_pct", "cav_pct", "soldier_pct", "castle_hp_pct", "gate_hp_pct", "train_speed_pct", "train_cost_pct", "pop_add",
 	"hero_atk_pct", "hero_hp_pct", "skill_pct"]  # 단위 %(pop_add만 명)
 const SOLDIER_RESEARCH := {"infantry": "inf_pct", "archer": "arc_pct", "cavalry": "cav_pct"}  # 병종 → 그 병종 연구 효과
-const RESEARCH_NUM_KEYS := ["research_cost_growth", "research_time_growth", "lab_research_speed_per_level", "research_cancel_refund", "research_dia_per_min"]
+const RESEARCH_NUM_KEYS := ["research_cost_growth", "research_time_growth", "lab_research_speed_per_level", "research_cancel_refund", "research_dia_per_min",
+	"research_lab_per_level", "research_lab_cap"]
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
 static var _monsters := {}
@@ -666,7 +667,7 @@ static func research_bonus(levels: Dictionary) -> Dictionary:
 
 
 ## 연구 못 하는 이유 코드(순수, 서버 rules.researchBlock과 같은 순서·코드 — 진행 중(research_busy)은 쓰는 쪽이 먼저 본다). 되면 "".
-##   unknown_research → max_level → locked(연구소 Lv < lab_req, 선행 노드 Lv < 요구) → not_enough_resources(목재·석재·식량) → not_enough_gold.
+##   unknown_research → max_level → locked(연구소 Lv < lab_req·다음 레벨 연구소 요구, 선행 노드 Lv < 요구) → not_enough_resources(목재·석재·식량) → not_enough_gold.
 ## have = {wood, stone, food, gold(정수 골드)}.
 static func research_block(id: String, levels: Dictionary, lab_level: int, have: Dictionary) -> String:
 	var d := research_def(id)
@@ -675,13 +676,19 @@ static func research_block(id: String, levels: Dictionary, lab_level: int, have:
 	var lv := int(levels.get(id, 0))
 	if lv >= int(d.max_level):
 		return "max_level"
-	if not research_unlocked(d, levels, lab_level):
+	if not research_unlocked(d, levels, lab_level) or lab_level < research_lab_need(d, lv):
 		return "locked"
 	var cost := research_cost(id, lv)
 	for r in BUILD_RES:
 		if int(have.get(r, 0)) < int(cost[r]):
 			return "not_enough_resources"
 	return "not_enough_gold" if int(have.get("gold", 0)) < int(cost.gold) else ""
+
+
+## 레벨 lv → lv+1에 필요한 연구소 Lv = min(research_lab_cap, lab_req + lv × research_lab_per_level)(라오킹식: 레벨마다 아카데미 Lv이 더 필요, 2026-10-13).
+## 서버 rules.researchLabNeed와 같다.
+static func research_lab_need(d: Dictionary, lv: int) -> int:
+	return mini(int(config_num("research_lab_cap")), int(d.lab_req) + lv * int(config_num("research_lab_per_level")))
 
 
 ## 잠금이 풀렸나: 연구소 Lv ≥ lab_req, 선행 노드 Lv ≥ 요구(빈 칸은 조건 없음).
@@ -1512,7 +1519,8 @@ static func _check_research(t: Dictionary) -> void:
 			elif not (d[rq[1]] >= 1.0 and d[rq[1]] == floorf(d[rq[1]]) and d[rq[1]] <= p.max_level):
 				_err("research", d._line, rq[1], "must be an integer in 1..%d (max level of %s): %s" % [int(p.max_level), p.id, d[rq[1]]])
 	var want := {"research_cost_growth": "1 or more", "research_time_growth": "1 or more", "lab_research_speed_per_level": "0 or more",
-		"research_cancel_refund": "in 0..1", "research_dia_per_min": "a non-negative integer"}
+		"research_cancel_refund": "in 0..1", "research_dia_per_min": "a non-negative integer", "research_lab_per_level": "a non-negative integer",
+		"research_lab_cap": "a non-negative integer"}
 	for k in RESEARCH_NUM_KEYS:
 		var s := String(t.config.get(k, ""))
 		var f := s.to_float()

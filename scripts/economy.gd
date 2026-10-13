@@ -2135,7 +2135,8 @@ func research_requirements(id: String) -> Array:
 	if d.is_empty():
 		return []
 	var lab := building_level(GameData.LAB)
-	var out := [{"kind": "lab", "id": GameData.LAB, "need": int(d.lab_req), "have": lab, "ok": lab >= int(d.lab_req)}]
+	var need := GameData.research_lab_need(d, research_level(id)) if research_level(id) < int(d.max_level) else int(d.lab_req)  # 다음 레벨 기준(라오킹식)
+	var out := [{"kind": "lab", "id": GameData.LAB, "need": need, "have": lab, "ok": lab >= need}]
 	for rq in GameData.RESEARCH_REQS:
 		if d[rq[0]] != "":
 			var lv := research_level(d[rq[0]])

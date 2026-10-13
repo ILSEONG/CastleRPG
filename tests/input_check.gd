@@ -640,8 +640,8 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _tap(heroes_win.level_button.get_global_rect().get_center())  # 아직 보호 시간
 	_check(Economy.level_of("arteon") == 1, "(x) a press on [레벨업] right after the detail opens is ignored", "")
 	await _guard_wait()
-	_check(not heroes_win.level_button.disabled and heroes_win._one.gold.text == "120" and not heroes_win._one.has("food") and heroes_win.reason_label.text == "",
-		"(x) [레벨업] shows its gold cost inside (120, no food)", "gold=%s" % heroes_win._one.gold.text)
+	_check(not heroes_win.level_button.disabled and heroes_win._one.gold.text == "240" and not heroes_win._one.has("food") and heroes_win.reason_label.text == "",
+		"(x) [레벨업] shows its gold cost inside (240, no food)", "gold=%s" % heroes_win._one.gold.text)
 	var pre := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	pre.sort_custom(func(a, b): return a.index < b.index)
 	await _tap(heroes_win.level_button.get_global_rect().get_center())
@@ -651,7 +651,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 30"
 		and heroes_win.stat_values[0].text == "1,255" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
-		"(x) [레벨업] takes 120 gold (1200 tenths) and no food, Lv 2, light burst, changed stats flash green",
+		"(x) [레벨업] takes 240 gold (2400 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
 	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 936.0 * 1.0315 * 1.3)
 		and is_equal_approx(live[1].atk, 32.0 * 1.0315 * 1.3) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
@@ -1566,8 +1566,8 @@ func _research_ui(tabs, hud) -> void:
 	await _tap(_center(rw.start_button))
 	await _frames(1)
 	_check(Economy.research_current.get("id", "") == "wood_tech" and Economy.res == {"wood": 48800, "stone": 49200, "food": 49000} and rw.detail_run.visible and not rw.start_button.visible
-		and rw.cur_row.visible and rw.cur_name.text == "벌목술 Lv 1" and not rw.idle_label.visible and rw.card_state("wood_tech") == "running" and rw.dia_button.text.ends_with("1 즉시 완료"),
-		"(RS) [연구]: resources -1200/800/1000, the research runs (bar + [다이아 1 즉시 완료] + [취소] in the detail and on top)",
+		and rw.cur_row.visible and rw.cur_name.text == "벌목술 Lv 1" and not rw.idle_label.visible and rw.card_state("wood_tech") == "running" and rw.dia_button.text == "무료 즉시 완료",
+		"(RS) [연구]: resources -1200/800/1000, the research runs (bar + [무료 즉시 완료] (5 min or less) + [취소] in the detail and on top)",
 		"current=%s res=%s top=%s" % [Economy.research_current, Economy.res, rw.cur_name.text])
 	rw.close_detail()
 	await _tap(_center(rw.cards.stone_tech.button))
@@ -1581,15 +1581,15 @@ func _research_ui(tabs, hud) -> void:
 	_check(Economy.research_current.id == "wood_tech" and Economy.res == res0, "(RS) tapping the disabled [연구] does nothing", "current=%s" % [Economy.research_current])
 	rw.close_detail()
 	# 다이아 즉시 완료(위 막대)
-	_check(rw.dia_button.disabled, "(RS) with no diamonds the instant finish is off", "")
+	_check(not rw.dia_button.disabled, "(RS) with 5 min or less left the instant finish is free, so it is on even with no diamonds", "")
 	Economy.diamonds = 5
 	Economy.changed.emit()
 	await _frames(1)
 	await _tap(_center(rw.dia_button))
 	await _frames(2)
-	_check(Economy.research_level("wood_tech") == 1 and Economy.research_current.is_empty() and Economy.diamonds == 4 and rw.cards.wood_tech.lv.text == "Lv 1/10"
+	_check(Economy.research_level("wood_tech") == 1 and Economy.research_current.is_empty() and Economy.diamonds == 5 and rw.cards.wood_tech.lv.text == "Lv 1/10"
 		and rw.idle_label.visible and hud._toast.visible and hud._toast.text == "연구 완료: 벌목술 Lv 1",
-		"(RS) [다이아 1 즉시 완료]: wood tech Lv 1 at once, diamonds 5 -> 4, toast '연구 완료: 벌목술 Lv 1'",
+		"(RS) [무료 즉시 완료]: wood tech Lv 1 at once, diamonds stay 5, toast '연구 완료: 벌목술 Lv 1'",
 		"lv=%d dia=%d toast=%s" % [Economy.research_level("wood_tech"), Economy.diamonds, hud._toast.text])
 	# 취소 → 50% 환불
 	await _tap(_center(rw.cards.stone_tech.button))
