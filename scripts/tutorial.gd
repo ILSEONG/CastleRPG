@@ -65,8 +65,8 @@ const MISSIONS := [
 		"goto": "building:lumber"},
 	{"id": "build_quarry", "title": "채석장 건설", "desc": "[건설] 버튼을 눌러 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
 	{"id": "build_farm", "title": "농장 건설", "desc": "[건설] 버튼을 눌러 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
-	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 막아 냅니다. 30마리를 처치하세요. 처치할 때마다 골드를 얻습니다.",
-		"kind": "kill", "arg": 30, "goto": "stage"},
+	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.",
+		"kind": "kill", "arg": 30},  # 대기 중에도 몬스터가 온다 — [진행]은 1-1 미션에서 처음 가르친다(사용자 2026-10-13 "가이드 5에서 갑자기 진행")
 	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
 	{"id": "attend", "title": "출석 보상 받기", "desc": "오른쪽 아래 [메뉴] → [이벤트]에서 오늘의 출석 보상을 받으세요. 매일 한 번, 28일 동안 보상이 쌓입니다.",
@@ -935,6 +935,19 @@ func goto_current() -> void:
 			gw.practice_enter()
 		return
 	goto_requested.emit(goto_of(m))
+
+
+## 카드 버튼 글자: 하는 일과 맞춘다. 전투 미션(goto stage)은 HUD [▶ 진행]과 같은 일을 하므로 "▶ 진행"(사용자 2026-10-13 "진행버튼이 바로가기야?").
+func action_label(m: Dictionary) -> String:
+	return "▶ 진행" if goto_of(m) == "stage" else "바로가기"
+
+
+## 카드 버튼을 보일까(보상 받기 전): 갈 곳이 없거나(기다리는 미션), 전투 미션인데 이미 전투 중이면 숨긴다.
+func action_shown(m: Dictionary) -> bool:
+	var g := goto_of(m)
+	if g == "":
+		return false
+	return not (g == "stage" and gs != null and gs.mode != gs.Mode.IDLE)
 
 
 ## 미션의 [바로가기] 대상. 병사 배치: 아직 받은 병사가 없으면 [병사] 창 대신 막사(훈련이 끝난 병사를 받는 곳 — 통합 테스트 2026-10-07).

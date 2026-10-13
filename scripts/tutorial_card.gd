@@ -86,6 +86,7 @@ func _ready() -> void:
 	action_button.pressed.connect(_on_action)
 	row.add_child(action_button)
 	Tutorial.changed.connect(_refresh)
+	GameState.mode_changed.connect(func(_m): _refresh())  # 전투 미션 버튼(▶ 진행)은 전투 중엔 숨긴다
 	_refresh()
 
 
@@ -110,8 +111,9 @@ func _refresh() -> void:
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
 	desc_label.text = Tutorial.mission_desc(m)
 	reward_label.text = "보상: " + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
-	action_button.text = "보상 받기" if done else "바로가기"
-	action_button.disabled = (not done and str(m.get("goto", "")) == "") or (done and Tutorial.econ != null and Tutorial.econ.quest_waiting())
+	action_button.text = "보상 받기" if done else Tutorial.action_label(m)
+	action_button.visible = done or Tutorial.action_shown(m)
+	action_button.disabled = done and Tutorial.econ != null and Tutorial.econ.quest_waiting()
 	UiKit.apply_button(action_button, UiKit.AMBER if done else UiKit.STEEL, 12.0)
 	panel.offset_top = panel.offset_bottom  # 높이 0에서 내용만큼 위로 자란다(grow BEGIN)
 

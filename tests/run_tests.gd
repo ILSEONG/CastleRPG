@@ -5351,6 +5351,11 @@ func test_tutorial() -> void:
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
+	check(t.point_keys(t.mission()).is_empty() and not t.action_shown(t.mission()),
+		"guide: the first kill mission just waits (idle kills count) — no [진행] arrow, no card button before 1-1 teaches it")
+	var s11: Dictionary = TutorialScript.MISSIONS[t.mission_index("stage_1_1")]
+	check(t.action_label(s11) == "▶ 진행" and t.point_keys(s11) == ["hud:go"] and t.action_label(TutorialScript.MISSIONS[t.mission_index("build_lumber")]) == "바로가기",
+		"guide: battle missions label the card button ▶ 진행 like the HUD button it points at")
 	for i in 29:
 		e.add_kill("grunt", 1)
 	check(not t.complete() and t.progress_text() == "29/30", "tutorial: kill mission counts kills")
