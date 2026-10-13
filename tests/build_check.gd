@@ -87,6 +87,11 @@ func _run() -> void:
 	_check(not list.visible and pl.is_active() and pl.building_id == "lumber" and not pl.moving, "[건설] starts placing the lumber mill", "")
 	_check(pl.ok and Economy.place_block("lumber", pl.cell) == "" and pl._ghost.visible, "starts on a free spot (green)", str(pl.cell))
 	_check(pl._plate_mat.albedo_color == pl.OK_COLOR and not pl.confirm_button.disabled, "green plate, [건설] enabled", "")
+	_check(pl._floor.visible and pl._floor.mesh != null and pl._floor.mesh.get_surface_count() == 1, "floor tiles show where you can build", "")
+	var half := Economy.interior_half_tiles()
+	var others: Dictionary = Economy.placed_cells("lumber")
+	_check(Balance.rect_block(Rect2i(0, 5, 1, 1), half, others) == "road" and Balance.rect_block(Rect2i(5, 5, 1, 1), half, others) == ""
+		and Balance.rect_block(Rect2i(half - 1, 5, 1, 1), half, others) == "out", "tile rules: road red, free floor green, wall lane red", "")
 	await _frames(20)
 	await _shot("_ok")
 
@@ -108,6 +113,7 @@ func _run() -> void:
 	_check(pl.cell == target and pl.ok, "tapping an empty spot moves the ghost there (green)", str(pl.cell))
 	pl.confirm_button.pressed.emit()
 	await _frames(5)
+	_check(not pl._floor.visible, "floor tiles hide after building", "")
 	_check(not pl.is_active() and Economy.layout.get("lumber") == target and str(Economy.build.get("id", "")) == "lumber", "[건설] places it and starts building", "%s %s" % [Economy.layout, Economy.build])
 	_check(scenery.lots.lumber.mi.visible and scenery.lots.lumber.lot == true and scenery.lots.lumber.cell == target, "construction lot shows at the chosen spot", "")
 	Economy.build.finish = Economy.time_now() - 1.0

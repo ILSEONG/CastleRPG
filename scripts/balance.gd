@@ -115,7 +115,11 @@ static func placement_block(id: String, cell: Vector2i, half_tiles: int, others:
 	var b := building(id)
 	if b.is_empty() or FIXED.has(id):
 		return "fixed"
-	var r := Rect2i(cell, b.size)
+	return rect_block(Rect2i(cell, b.size), half_tiles, others, id)
+
+
+## 타일 묶음 r을 쓸 수 없는 이유("" = 된다). 자리 고르기 바닥 칸 표시(placement.gd)는 1×1로 묻는다. skip = 겹침에서 뺄 건물.
+static func rect_block(r: Rect2i, half_tiles: int, others: Dictionary, skip := "") -> String:
 	var m := half_tiles - WALL_MARGIN_TILES
 	if not Rect2i(-m, -m, 2 * m, 2 * m).encloses(r):
 		return "out"
@@ -125,7 +129,7 @@ static func placement_block(id: String, cell: Vector2i, half_tiles: int, others:
 		if r.intersects(k):
 			return "square"
 	for oid in others:
-		if oid != id and r.intersects(Rect2i(others[oid], building(oid).get("size", Vector2i.ONE))):
+		if oid != skip and r.intersects(Rect2i(others[oid], building(oid).get("size", Vector2i.ONE))):
 			return "overlap"
 	return ""
 
