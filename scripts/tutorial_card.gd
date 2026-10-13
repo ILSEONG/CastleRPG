@@ -38,12 +38,7 @@ func _ready() -> void:
 	_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_arrow.draw.connect(_draw_arrow)
 	add_child(_arrow)
-	_pointer = Control.new()
-	_pointer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pointer.z_index = 100  # 같은 층의 다른 UI 위
-	_pointer.draw.connect(_draw_pointer)
-	add_child(_pointer)
+	_make_pointer()
 	panel = PanelContainer.new()
 	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	panel.offset_left = SIDE
@@ -167,7 +162,18 @@ func _draw_arrow() -> void:
 
 
 ## 가리킬 버튼의 CanvasLayer로 화살표 Control을 옮긴다(창이 덮으면 같이 가려지게).
+func _make_pointer() -> void:
+	_pointer = Control.new()
+	_pointer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pointer.z_index = 100  # 같은 층의 다른 UI 위
+	_pointer.draw.connect(_draw_pointer)
+	add_child(_pointer)
+
+
 func _place_pointer() -> void:
+	if not is_instance_valid(_pointer):  # 옮겨 간 층(길드 창 등)이 닫히며 같이 지워졌다 — 새로 만든다(지워진 화살표를 만지면 출시 빌드가 튕긴다, 2026-10-13)
+		_make_pointer()
 	var target: Control = Tutorial.point_target() if panel.visible else null
 	var home: Node = self
 	if target != null:
