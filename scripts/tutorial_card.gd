@@ -108,7 +108,7 @@ func _refresh() -> void:
 	step_label.text = ("반복 퀘스트 %d" % (Tutorial.rep_n + 1)) if Tutorial.repeating() else "가이드 %d/%d" % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
 	var prog: String = Tutorial.progress_text()
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
-	desc_label.text = str(m.desc)
+	desc_label.text = Tutorial.mission_desc(m)
 	reward_label.text = "보상: " + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
 	action_button.text = "보상 받기" if done else "바로가기"
 	action_button.disabled = (not done and str(m.get("goto", "")) == "") or (done and Tutorial.econ != null and Tutorial.econ.quest_waiting())

@@ -268,6 +268,7 @@ var rep_quest := {}  # 지금 반복 퀘스트(만들 때 목표·기준값을 �
 var _server_known := false  # 온라인: 서버 퀘스트 진행을 한 번이라도 받았다
 var _check_cd := 0.0
 var _was_complete := false
+var _was_no_guild := false
 var _dirty := false
 
 
@@ -538,8 +539,26 @@ func register_ui(key: String, node: Control, show := Callable()) -> void:
 	ui_targets[key] = {"node": node, "show": show}
 
 
+## 길드가 있어야 하는 미션(길드 출석·기부·보스): 길드가 없으면(안 들었거나 나갔다) 먼저 가입·만들기로 안내한다.
+const NEEDS_GUILD := ["guild_attend", "guild_boss"]
+const NO_GUILD_POINT := ["@guild_panel:buttons.join:0", "@guild_panel:buttons.create", "menu:guild", "menu"]
+
+
+func _needs_guild_now(m: Dictionary) -> bool:
+	return str(m.get("kind", "")) in NEEDS_GUILD and guild != null and not guild.joined()
+
+
+## 가이드 카드에 보일 미션 설명: 길드가 필요한 미션인데 길드가 없으면 가입 안내를 앞에 붙인다.
+func mission_desc(m: Dictionary) -> String:
+	if _needs_guild_now(m):
+		return "지금 길드에 속해 있지 않습니다. 먼저 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. " + str(m.desc)
+	return str(m.get("desc", ""))
+
+
 ## 지금 미션이 가리킬 UI 키 목록: point가 있으면 그것, 없으면 goto(tab:X → 그 탭, menu:X → 그 메뉴 항목·[메뉴], stage → [진행]).
 func point_keys(m: Dictionary) -> Array:
+	if _needs_guild_now(m):
+		return NO_GUILD_POINT
 	if m.has("point"):
 		return m.point
 	var g := str(m.get("goto", ""))
@@ -698,8 +717,10 @@ func note_stage(s: int) -> void:
 func check() -> void:
 	_sync_training()
 	var c := complete()
-	if c != _was_complete:
+	var ng := _needs_guild_now(mission())  # 길드에 들거나 나가면 카드 설명·화살표가 바뀐다
+	if c != _was_complete or ng != _was_no_guild:
 		_was_complete = c
+		_was_no_guild = ng
 		changed.emit()
 
 

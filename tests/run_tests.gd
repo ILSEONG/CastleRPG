@@ -5314,6 +5314,20 @@ func test_tutorial() -> void:
 	check(not t.tab_locked("exchange") and not t.complete(), "guide: the exchange opens at its mission")
 	t.note("open", 1, "exchange")
 	check(t.complete(), "guide: opening the exchange completes it")
+	# 길드가 없으면(안 들었거나 나갔다) 길드 출석·보스 미션은 가입·만들기를 먼저 가리키고, 들면 원래대로
+	var keep_guild = t.guild
+	var ng_guild = GuildScript.new()
+	t.guild = ng_guild
+	for id in ["guild_attend", "guild_boss"]:
+		t.step = t.mission_index(id)
+		t.count = 0
+		check(not t.complete() and t.point_keys(t.mission()) == TutorialScript.NO_GUILD_POINT and t.mission_desc(t.mission()).begins_with("지금 길드에 속해 있지 않습니다"),
+			"guide: %s without a guild points to join/create first" % id)
+		ng_guild.guild = {"id": "g1", "name": "테스트", "level": 1}
+		check(t.point_keys(t.mission()) == t.mission().point and t.mission_desc(t.mission()) == str(t.mission().desc), "guide: %s with a guild points to its own buttons" % id)
+		ng_guild.guild = {}
+	t.guild = keep_guild
+	ng_guild.free()
 	for tid in GuideToursScript.TOURS:
 		check(GuideToursScript.TOURS[tid].steps.size() > 0 and GuideToursScript.TOURS[tid].has("when"), "guide tour %s has steps" % tid)
 	for mid in GuideToursScript.MISSION_TOURS:
