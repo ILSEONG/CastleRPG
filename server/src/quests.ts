@@ -27,7 +27,7 @@ const t = (f: QuestFacts, k: string) => f.c.t[k] ?? 0
 // 가이드 미션 id → 서버가 본 완료 여부. 모르는 id(건물 미션 등 needs로 보는 것)는 true.
 export function tutorialDone(id: string, f: QuestFacts): boolean {
   let m: RegExpExecArray | null
-  if ((m = /^kill_(\d+)$/.exec(id))) return t(f, 'kill') >= Number(m[1])
+  if ((m = /^kill_(\d+)(?:_\d+)?$/.exec(id))) return t(f, 'kill') >= Number(m[1]) // kill_<수>[_<순번>] — 같은 수가 두 번이면 kill_100_2(2026-10-13)
   if ((m = /^stage_(\d+)_(\d+)$/.exec(id))) {
     const round = (Number(m[1]) - 1) * 25 + Number(m[2])
     return f.stage > round || f.admin
