@@ -27,6 +27,7 @@ const RED := Color(0.78, 0.22, 0.18)
 const BUILD_TEXT := "건설"
 const MOVE_TEXT := "이동"
 const VIEW_TEXT := "보기"
+const LOCK_TEXT := "잠김"
 const CAM_ROT := Vector3(-30, 45, 0)  # 성 화면 카메라와 비슷한 3/4 시점
 
 var placement  # placement.gd — main이 넣는다
@@ -118,7 +119,15 @@ func _add_card(id: String) -> void:
 	action.add_child(action_label)
 	box.add_child(action)
 	Tutorial.register_ui("build:" + id, card, is_open)  # 가이드 화살표: 펼친 목록의 그 건물 카드
-	rows[id] = {"card": card, "button": card, "status": status, "costs": costs, "action": action, "action_label": action_label, "reason": reason, "why": ""}
+	var tag := _label("NEW", 14, Color.WHITE)  # 성채 레벨로 새로 열린 건물·n번째 채(지을 수 있을 때만)
+	tag.add_theme_stylebox_override("normal", UiKit.panel(RED, 6.0, 0))
+	tag.add_theme_color_override("font_outline_color", Color(UiKit.INK, 0.5))
+	tag.add_theme_constant_override("outline_size", 3)
+	tag.position = Vector2(6, 6)
+	tag.custom_minimum_size = Vector2(44, 20)
+	tag.visible = false
+	card.add_child(tag)
+	rows[id] = {"card": card, "button": card, "tag": tag, "preview": box.get_child(0), "status": status, "costs": costs, "action": action, "action_label": action_label, "reason": reason, "why": ""}
 
 
 ## 건물 3D 생김새: 카드마다 작은 SubViewport(게임 월드와 따로, 투명 배경)에 TownKit 메시를 성 화면 시점으로 한 번 그린다.
@@ -213,8 +222,8 @@ func open() -> void:
 		c.modulate.a = 0.0
 		c.scale = Vector2(0.6, 0.6)
 		c.pivot_offset = CARD / 2.0
-		var at := OPEN_SEC * 0.35 + i * CARD_STAGGER
-		_tween.parallel().tween_property(c, "modulate:a", 1.0, CARD_POP).set_delay(at)
+		var at := OPEN_SEC * 0.35 + mini(i, 6) * CARD_STAGGER  # 카드가 많아도(사본·새 건물) 화면에 보이는 몇 장만 차례로, 나머지는 같이
+		_tween.parallel().tween_property(c, "modulate:a", float(c.get_meta("alpha", 1.0)), CARD_POP).set_delay(at)
 		_tween.parallel().tween_property(c, "scale", Vector2.ONE, CARD_POP).set_delay(at).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		i += 1
 
@@ -262,6 +271,7 @@ func _process(_delta: float) -> void:
 
 func _refresh() -> void:
 	var now := Economy.time_now()
+	var order := []
 	for id in rows:
 		var r: Dictionary = rows[id]
 		var why := ""
@@ -304,13 +314,37 @@ func _refresh() -> void:
 					why += " (%s)" % GameData.building_name(str(Economy.build.id))
 				elif block == "keep_cap":  # 성채 레벨로 여는 새 건물·n번째 채
 					why = "성채 Lv %d 필요" % GameData.unlock_keep(id)
+		var locked := not Economy.is_built(id) and not Economy.is_placed(id) and Economy.upgrade_block(id, now) == "keep_cap"
 		r.why = why
 		r.reason.text = why
 		r.reason.visible = why != ""
-		r.costs.visible = why == "" or not Economy.is_placed(id)
-		r.action.add_theme_stylebox_override("panel", UiKit.panel(color.darkened(0.25) if why != "" else color, 8.0, 2))
-		r.card.modulate = Color(1, 1, 1, 0.62) if why != "" else Color.WHITE
+		r.costs.visible = not locked and (why == "" or not Economy.is_placed(id))
+		if locked:  # 성채 레벨이 모자란 건물·n번째 채: 잿빛 모습 + 잠김, 비용 대신 필요한 성채 레벨
+			r.action_label.text = LOCK_TEXT
+			color = Color(0.55, 0.53, 0.50)
+			r.status.text = "미건설"
+		r.preview.modulate = Color(0.45, 0.45, 0.48) if locked else Color.WHITE
+		r.tag.visible = why == "" and not Economy.is_built(id) and not Economy.is_placed(id) and GameData.unlock_keep(id) > 1
+		r.action.add_theme_stylebox_override("panel", UiKit.panel(color.darkened(0.25) if why != "" and not locked else color, 8.0, 2))
+		var alpha := 0.62 if why != "" and not locked else (0.8 if locked else 1.0)
+		r.card.set_meta("alpha", alpha)
+		r.card.modulate = Color(1, 1, 1, alpha)
 		r.card.self_modulate = Color.WHITE
+		order.append([_rank(id, why, locked), order.size(), id])
+	order.sort()
+	for k in order.size():
+		_list.move_child(rows[order[k][2]].card, k)
+
+
+## 카드 순서: 지금 지을 수 있는 것 → 짓는 중·공터 → 지은 것([이동]) → 자원·일꾼 때문에 못 짓는 것 → 성채 레벨로 잠긴 것(열리는 레벨 순).
+func _rank(id: String, why: String, locked: bool) -> int:
+	if locked:
+		return 400 + GameData.unlock_keep(id)
+	if Economy.is_built(id):
+		return 200
+	if Economy.is_placed(id):
+		return 100
+	return 0 if why == "" else 300
 
 
 ## 카드: 지은 건물 → 옮기기, 짓는 중인 공터 → 건물 창, 미건설 → 짓기(못 지으면 이유 알림만).
