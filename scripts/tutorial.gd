@@ -50,10 +50,10 @@ const LOCKED_TEXT := "가이드를 진행하면 열립니다"
 const MISSIONS := [
 	{"id": "look_keep", "title": "성채 살펴보기", "desc": "성 한가운데 성채를 눌러 건물 창을 열어 보세요. 성채 레벨이 다른 건물의 최대 레벨을 정합니다.",
 		"kind": "open", "arg": "keep", "goto": "building:keep"},
-	{"id": "build_lumber", "title": "벌목장 건설", "desc": "왼쪽 아래 [건물] 버튼을 눌러 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.", "kind": "build", "arg": "lumber",
+	{"id": "build_lumber", "title": "벌목장 건설", "desc": "왼쪽 아래 [건설] 버튼을 눌러 펼쳐진 목록에서 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.", "kind": "build", "arg": "lumber",
 		"goto": "building:lumber"},
-	{"id": "build_quarry", "title": "채석장 건설", "desc": "[건물] 버튼에서 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
-	{"id": "build_farm", "title": "농장 건설", "desc": "[건물] 버튼에서 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
+	{"id": "build_quarry", "title": "채석장 건설", "desc": "[건설] 버튼을 눌러 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
+	{"id": "build_farm", "title": "농장 건설", "desc": "[건설] 버튼을 눌러 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
 	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 막아 냅니다. 30마리를 처치하세요. 처치할 때마다 골드를 얻습니다.",
 		"kind": "kill", "arg": 30, "goto": "stage"},
 	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
@@ -83,7 +83,7 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["hp", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
 	{"id": "hero_lv4_8", "title": "영웅 4명 Lv 8 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 8 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
-	{"id": "build_tavern", "title": "주점 건설", "desc": "[건물] 버튼에서 주점을 골라 원하는 자리에 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
+	{"id": "build_tavern", "title": "주점 건설", "desc": "[건설] 버튼을 눌러 주점을 골라 원하는 자리에 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
 	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
 	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭 위쪽 배치 슬롯 하나를 누른 뒤, 새로 모집한 영웅을 골라 [적용]을 누르세요.", "kind": "deploy_new", "goto": "tab:hero"},
 	{"id": "auto_deploy", "title": "자동 배치 써 보기", "desc": "[영웅] 탭의 [자동 배치]를 누른 뒤 [적용]을 누르세요. 전투력이 높은 영웅부터 알맞은 자리에 채워 줍니다.",
@@ -98,11 +98,11 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["atk", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
 	{"id": "hp_5", "title": "체력 Lv 5 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 5까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
-	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "[건물] 버튼에서 보병 막사를 골라 원하는 자리에 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
+	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "[건설] 버튼을 눌러 보병 막사를 골라 원하는 자리에 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
 		"goto": "building:barracks"},
 	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 가이드에서는 5초면 끝납니다.", "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
-	{"id": "build_houses", "title": "민가 건설", "desc": "[건물] 버튼에서 민가를 골라 원하는 자리에 지으세요. 인구만큼 병사를 배치할 수 있습니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
+	{"id": "build_houses", "title": "민가 건설", "desc": "[건설] 버튼을 눌러 민가를 골라 원하는 자리에 지으세요. 인구만큼 병사를 배치할 수 있습니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
 	{"id": "hero_lv4_12", "title": "영웅 4명 Lv 12 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_4", "title": "스테이지 1-4 클리어", "desc": "전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
@@ -135,7 +135,7 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["atk", 12], "goto": "tab:growth", "reward": {"gold": 6000}},
 	{"id": "stage_1_6", "title": "스테이지 1-6 클리어", "desc": "전투를 이어 가 1-6까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 6, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "build_lab", "title": "연구소 건설", "desc": "[건물] 버튼에서 연구소를 골라 원하는 자리에 지으세요. 기술을 연구해 경제·영웅·병사를 강하게 합니다.", "kind": "build", "arg": "lab",
+	{"id": "build_lab", "title": "연구소 건설", "desc": "[건설] 버튼을 눌러 연구소를 골라 원하는 자리에 지으세요. 기술을 연구해 경제·영웅·병사를 강하게 합니다.", "kind": "build", "arg": "lab",
 		"goto": "building:lab"},
 	{"id": "research", "title": "연구 시작", "desc": "연구소를 눌러 [연구]에서 아무 기술이나 연구를 시작하세요.", "kind": "research", "goto": "building:lab"},
 	{"id": "hp_12", "title": "체력 Lv 12 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 12까지 올리세요.",
@@ -144,13 +144,13 @@ const MISSIONS := [
 		"kind": "hero_lv", "arg": [4, 16], "goto": "tab:hero", "reward": {"gold": 6000}},
 	{"id": "stage_1_7", "title": "스테이지 1-7 클리어", "desc": "전투를 이어 가 1-7까지 클리어하세요. 막히면 모집권으로 영웅을 모집해 더 강한 영웅을 배치하고, 조각이 모이면 [영웅] 탭에서 승급하세요.",
 		"kind": "stage", "arg": 7, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "build_archery", "title": "궁병 훈련소 건설", "desc": "[건물] 버튼에서 궁병 훈련소를 골라 원하는 자리에 지으세요. 궁병은 성벽 위에서 싸웁니다.", "kind": "build", "arg": "archery",
+	{"id": "build_archery", "title": "궁병 훈련소 건설", "desc": "[건설] 버튼을 눌러 궁병 훈련소를 골라 원하는 자리에 지으세요. 궁병은 성벽 위에서 싸웁니다.", "kind": "build", "arg": "archery",
 		"goto": "building:archery"},
 	{"id": "atk_14", "title": "공격력 Lv 14 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 14까지 올리세요.",
 		"kind": "growth_lv", "arg": ["atk", 14], "goto": "tab:growth", "reward": {"gold": 7000}},
 	{"id": "hp_14", "title": "체력 Lv 14 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 14까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 14], "goto": "tab:growth", "reward": {"gold": 7000}},
-	{"id": "build_stable", "title": "기병 마구간 건설", "desc": "[건물] 버튼에서 기병 마구간을 골라 원하는 자리에 지으세요. 기병은 빠르게 돌격합니다.", "kind": "build", "arg": "stable",
+	{"id": "build_stable", "title": "기병 마구간 건설", "desc": "[건설] 버튼을 눌러 기병 마구간을 골라 원하는 자리에 지으세요. 기병은 빠르게 돌격합니다.", "kind": "build", "arg": "stable",
 		"goto": "building:stable"},
 	{"id": "keep_2", "title": "성채 레벨업", "desc": "성채를 Lv 2로 올리세요. 다른 건물도 그만큼 더 올릴 수 있습니다.", "kind": "level", "arg": ["keep", 2],
 		"goto": "building:keep"},
@@ -469,6 +469,8 @@ func point_keys(m: Dictionary) -> Array:
 		return ["menu:" + t, "menu"] if t in MENU_ITEMS else [g]
 	if g == "stage":
 		return ["hud:go"]
+	if g.begins_with("building:") and econ != null and not econ.is_placed(g.get_slice(":", 1)):
+		return ["build:" + g.get_slice(":", 1), "build_button"]  # 자리를 안 잡은 공터: [건설] → 펼친 목록의 그 건물 카드
 	if g == "recruit":
 		return ["tab:recruit"]
 	if g == "pvp":
