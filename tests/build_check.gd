@@ -1,5 +1,5 @@
 extends Node
-## 자유 건설 체크(사용자 2026-10-13): 실제 main 씬에서 [건물] 버튼(배속 버튼 아래, [메뉴] 높이) → 건물 목록 → 자리 고르기 → 짓기·옮기기.
+## 자유 건설 체크(사용자 2026-10-13): 실제 main 씬에서 [건설] 버튼(배속 버튼 아래, [메뉴] 높이) → 건물 목록 → 자리 고르기 → 짓기·옮기기.
 ## 자리를 안 잡은 공터는 성 안에 안 보이고, 고른 자리에 짓고, 끌어서 옮기면 2 m 격자에 붙고, 길 위면 빨강(버튼 꺼짐)·빈 곳이면 초록,
 ## 다 지으면 그 자리에 건물·이름표·탭 판정체가 있고 길 막기(Balance.plots)도 따라오는지, 지은 건물 옮기기도 되는지 본다.
 ## 실행: godot --headless --path . res://tests/build_check.tscn
@@ -57,19 +57,30 @@ func _run() -> void:
 	var br: Rect2 = btn.button.get_global_rect()
 	var tr: Rect2 = menu.toggle.get_global_rect()
 	var sr: Rect2 = speed.button.get_global_rect()
-	_check(absf(br.end.y - tr.end.y) < 1.0 and br.position.x <= 20.0, "[건물] bottom-left at the [메뉴] height", "%s vs %s" % [br, tr])
-	_check(sr.end.y <= br.position.y and not sr.intersects(br), "x1.5 sits right above [건물]", "%s vs %s" % [sr, br])
+	_check(absf(br.end.y - tr.end.y) < 1.0 and br.position.x <= 20.0, "[건설] bottom-left at the [메뉴] height", "%s vs %s" % [br, tr])
+	_check(sr.end.y <= br.position.y and not sr.intersects(br), "x1.5 sits right above [건설]", "%s vs %s" % [sr, br])
 	_check(scenery.hidden.has("lumber") and not scenery.lots.lumber.mi.visible and scenery.lots.lumber.body == null, "unplaced lot is not shown in the castle", "")
 	_check(not scenery.hidden.has("houses") and scenery.lots.houses.mi.visible, "built buildings stay at their default spot", "")
 	_check(btn._dot, "red dot: something can be built", "")
 	await _shot("_before")
 
 	btn.button.pressed.emit()
-	await _frames(30)
-	_check(list.visible and list.rows.lumber.button.text == "건설" and not list.rows.lumber.button.disabled, "list opens; lumber can be built", "")
-	_check(list.rows.houses.button.text == "이동", "built building offers [이동]", list.rows.houses.button.text)
+	await _frames(3)
+	_check(list.is_open() and list.tray.scale.x < 0.9, "tray starts unfolding to the right", str(list.tray.scale))
+	await get_tree().create_timer(0.7).timeout
+	var tray: Rect2 = list.tray.get_global_rect()
+	_check(list.is_open() and is_equal_approx(list.tray.scale.x, 1.0) and tray.position.x >= br.end.x and absf(tray.end.y - br.end.y) < 1.0, "tray unfolds from [건설] to the right", "%s vs %s" % [tray, br])
+	_check(list.rows.lumber.action_label.text == "건설" and list.rows.lumber.why == "", "lumber can be built", list.rows.lumber.action_label.text)
+	_check(list.rows.houses.action_label.text == "이동", "built building offers [이동]", list.rows.houses.action_label.text)
 	_check(not list.rows.has("keep"), "keep is not in the list", "")
+	var chat = _find("res://scripts/chat_bar.gd")
+	_check(chat == null or not chat.visible, "mini chat hidden while the tray is open", "")
 	await _shot("_list")
+	btn.button.pressed.emit()
+	await get_tree().create_timer(0.4).timeout
+	_check(not list.visible and (chat == null or chat.visible), "pressing [건설] again folds it; chat back", "")
+	btn.button.pressed.emit()
+	await get_tree().create_timer(0.5).timeout
 
 	list.rows.lumber.button.pressed.emit()
 	await get_tree().create_timer(0.6).timeout
@@ -112,7 +123,7 @@ func _run() -> void:
 
 	# 옮기기: 민가를 (2, -8)로(보병 막사 기본 자리 — 아직 안 지었다)
 	list.open()
-	await _frames(30)
+	await get_tree().create_timer(0.5).timeout
 	list.rows.houses.button.pressed.emit()
 	await get_tree().create_timer(0.6).timeout  # 카메라가 그 건물로 옮겨 간 뒤
 	_check(pl.is_active() and pl.moving and pl.cell == Economy.building_cell("houses") and not pl.ok, "[이동] starts at the current spot ([여기로 이동] off)", "")

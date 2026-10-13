@@ -173,6 +173,7 @@ func _build_world() -> void:
 	var research_panel = ResearchPanelScript.new()  # 연구 창(개정 24): 연구소 건물 창 [연구]·플라스크 말풍선
 	add_child(research_panel)
 	building_panel.research = research_panel
+	building_panel.goto_building.connect(func(bid): _tutorial_goto("building:" + bid))  # 선행 조건 줄 → 그 건물(사용자 2026-10-13)
 	picker.research = research_panel
 	var soldier_panel = SoldierPanelScript.new()
 	add_child(soldier_panel)
@@ -227,16 +228,17 @@ func _build_world() -> void:
 	placement.picker = picker
 	placement.scenery = scenery
 	add_child(placement)
-	var build_list = preload("res://scripts/build_list_panel.gd").new()  # 건물 목록 창: [건설]·[이동] → 자리 고르기
+	var build_list = preload("res://scripts/build_list_panel.gd").new()  # [건설] 옆으로 펼쳐지는 건물 목록(3D 미리보기): [건설]·[이동] → 자리 고르기
 	build_list.placement = placement
 	build_list.building_panel = building_panel
 	add_child(build_list)
-	var build_btn = preload("res://scripts/build_button.gd").new()  # 왼쪽 아래 [건물](배속 버튼 아래 — [메뉴]와 같은 높이, 배속 버튼은 그 위)
+	var build_btn = preload("res://scripts/build_button.gd").new()  # 왼쪽 아래 [건설](배속 버튼 아래 — [메뉴]와 같은 높이, 배속 버튼은 그 위)
 	build_btn.card = card
 	build_btn.menu = side_menu
 	build_btn.panel = build_list
 	add_child(build_btn)
-	card.build_button = build_btn  # 가이드 건설 미션 화살표: 자리를 안 잡은 공터면 [건물] 버튼을 가리킨다
+	build_list.anchor = build_btn  # 버튼 오른쪽에서 펼쳐진다
+	card.build_button = build_btn  # 가이드 건설 미션 화살표: 자리를 안 잡은 공터면 [건설] 버튼을 가리킨다
 	var speed = preload("res://scripts/speed_button.gd").new()
 	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게, 방치 중엔 숨김)  # 왼쪽 아래([메뉴]와 같은 높이) 배속 x1 → x1.5 → x2(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
 	speed.card = card
@@ -256,10 +258,11 @@ func _build_world() -> void:
 	build_btn.strip = _strip
 	var chat_panel = preload("res://scripts/chat_panel.gd").new()  # 채팅 창(전체·길드, 온라인)
 	add_child(chat_panel)
-	var chat_bar = preload("res://scripts/chat_bar.gd").new()  # 성 화면 채팅 줄: [건물] 버튼 오른쪽, 최근 메시지 한 줄 → 채팅 창
-	chat_bar.speed = build_btn  # [메뉴]와 같은 줄([건물] 버튼 오른쪽)
+	var chat_bar = preload("res://scripts/chat_bar.gd").new()  # 성 화면 채팅 줄: [건설] 버튼 오른쪽, 최근 메시지 한 줄 → 채팅 창
+	chat_bar.speed = build_btn  # [메뉴]와 같은 줄([건설] 버튼 오른쪽)
 	chat_bar.panel = chat_panel
 	add_child(chat_bar)
+	build_list.hide_while_open = [chat_bar]  # 펼친 동안 채팅 줄은 숨긴다
 	move_child(chat_bar, card.get_index())  # 같은 층(1)에서 가이드 카드·화살표보다 아래에 그린다(화살표가 채팅에 가리지 않게)
 	_battle_hide = [tabs, side_menu, tags, badges, build_btn]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit, "placement": placement}
