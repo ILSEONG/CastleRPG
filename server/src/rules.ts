@@ -221,7 +221,8 @@ export const GOLDMINE = 'goldmine' // 골드 생산
 export const FORGE = 'forge' // 장비 던전 추가 드롭
 export const GUILD_HALL = 'guild_hall' // 건설·연구 시작 때 길드 도움
 export const WATCHTOWER = 'watchtower' // 전투에서 화살(앱)
-export const NEW_TYPES = [WAREHOUSE, GOLDMINE, FORGE, GUILD_HALL, WATCHTOWER] // 기본 자리 없음 — [건설]로 놓는다
+export const DISPATCH = 'dispatch' // 파견소(2026-10-13): 의뢰 수·효과는 의뢰 기능이 levels.dispatch로 읽는다
+export const NEW_TYPES = [WAREHOUSE, GOLDMINE, FORGE, GUILD_HALL, WATCHTOWER, DISPATCH] // 기본 자리 없음 — [건설]로 놓는다
 export const COPY_TIERS = 'res_copy_tiers' // 성채 레벨 → 자원 건물 종류마다 지을 수 있는 채 수 "1:1|5:2|…"
 const copyTiers = (config: Config) => parseTiers(config[COPY_TIERS] ?? '') ?? [[1, 1]]
 export const copiesAt = (config: Config, keepLevel: number) => {

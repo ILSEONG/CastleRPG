@@ -40,6 +40,7 @@ const BUILDINGS := [
 	{"id": "forge", "name": "대장간", "size": Vector2i(3, 3)},
 	{"id": "guild_hall", "name": "길드 회관", "size": Vector2i(3, 3)},
 	{"id": "watchtower", "name": "망루", "size": Vector2i(3, 3)},
+	{"id": "dispatch", "name": "파견소", "size": Vector2i(3, 3)},  # 의뢰(파견) — 의뢰 기능은 따로
 ]
 
 ## 상인 자리 (개정 7). 막사·벌목장·채석장 사이 빈 터(십자 도로 밖). 수레는 상인 +X 쪽.

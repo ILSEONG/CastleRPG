@@ -75,6 +75,7 @@ test('황금 고블린: 방치 골드 15분, 4분 30초 안에 또 받으면 too
 async function withOffice(level: number) {
   const { token, id } = await S.login()
   await S.db.query("insert into player_buildings (player_id, building, level) values ($1, 'dispatch', $2) on conflict (player_id, building) do update set level = $2", [id, level])
+  await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'dispatch') where player_id = $1", [id])
   return { token, id }
 }
 

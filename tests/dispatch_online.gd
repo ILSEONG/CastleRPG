@@ -70,6 +70,7 @@ func _ready() -> void:
 	await _snap("0_no_building")
 	_panel.close()
 	await _request("/v1/test/dispatch", {"level": 5})
+	await _request("/v1/test/levels", {"levels": {"keep": 6}})
 	for h in ["bron", "mira", "torvin", "rian", "echo", "gork", "felix", "hans", "ella", "dorik", "nina", "jack", "arteon", "ignis", "sylvana", "lumina"]:
 		await _request("/v1/test/grant_hero", {"hero_id": h})
 	await _request("/v1/test/levels", {"levels": {}})
@@ -86,6 +87,14 @@ func _ready() -> void:
 	_check(target > 0, "some request can be filled by owned heroes", str(_panel.list()))
 	if target < 0:
 		return _finish()
+	var bp = _panel.get_parent().get_children().filter(func(c): return c.get_script() != null and c.get_script().resource_path == "res://scripts/building_panel.gd")[0]
+	_panel.close()
+	bp.open_building("dispatch")
+	await _frames(10)
+	_check(bp.dispatch_button.visible, "building window shows [의뢰 보기]", "")
+	await _snap("1b_building")
+	bp.dispatch_button.pressed.emit()
+	_check(await _loaded() and _panel.is_open(), "[의뢰 보기] opens the dispatch window", "")
 	_panel.buttons["send:%d" % target].pressed.emit()
 	await _frames(6)
 	_check(_panel.picking == target and _panel.buttons.has("go"), "picker opens", "")

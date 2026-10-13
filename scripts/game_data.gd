@@ -302,6 +302,7 @@ const WAREHOUSE := "warehouse"
 const FORGE := "forge"
 const GUILD_HALL := "guild_hall"
 const WATCHTOWER := "watchtower"
+const DISPATCH := "dispatch"  # 파견소: 의뢰 기능이 레벨을 읽는다
 
 
 ## 키의 종류("lumber#2" → "lumber").

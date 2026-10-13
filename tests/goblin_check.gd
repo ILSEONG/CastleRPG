@@ -118,7 +118,7 @@ func _movie() -> void:
 	_caption.add_theme_constant_override("outline_size", 10)
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_caption.position = Vector2(20, 180)
+	_caption.position = Vector2(20, 220)
 	_caption.size = Vector2(680, 120)
 	var layer := CanvasLayer.new()
 	layer.layer = 10
@@ -130,6 +130,8 @@ func _movie() -> void:
 	g.hp_max = g.hp
 	g.global_position = _ring(2, 14.0)
 	_follow(g)
+	if _rig != null:
+		_rig.zoom_by(0.5)
 	await _wait(5.0)
 	_say("무작위로 돌아다니다 영웅 쪽으로 가까이 오면…")
 	var t := 0.0

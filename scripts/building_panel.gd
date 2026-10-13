@@ -29,7 +29,6 @@ const BUILD_TEXT := "건설"  # 튜토리얼 공터
 const TRAIN_ICON_PX := 72.0
 const RESEARCH_TEXT := "연구"
 const DISPATCH_TEXT := "의뢰 보기"
-const DISPATCH := "dispatch"  # 파견소 건물 종류
 const CANCEL_TEXT := "취소(50% 환불)"
 const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
 const SPEEDUP_TEXT := "가속"  # 2026-10-13: 가속 아이템 목록을 펼친다
@@ -235,7 +234,7 @@ func _refresh() -> void:
 	title_label.text = "%s · 공터" % GameData.building_name(id) if lot else "%s Lv %d" % [GameData.building_name(id), lv]
 	desc_label.text = DESC.get(GameData.type_of(id), "")
 	research_button.visible = id == GameData.LAB and not lot
-	dispatch_button.visible = GameData.type_of(id) == DISPATCH and not lot
+	dispatch_button.visible = GameData.type_of(id) == GameData.DISPATCH and not lot
 	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
 	_clear(effects)
 	for row in (effect_lines(id, 1) if lot else []):

@@ -45,7 +45,7 @@ var _t := 0.0
 
 
 func _ready() -> void:
-	for id in GameData.building_keys().filter(func(k): return EconomyScript.yield_of(k) != "") + GameData.soldiers().map(func(x): return x.building) + [GameData.LAB]:
+	for id in GameData.building_keys().filter(func(k): return EconomyScript.yield_of(k) != "") + GameData.soldiers().map(func(x): return x.building) + [GameData.LAB, GameData.DISPATCH]:
 		_anchors[id] = TownKit.building(id).get_aabb().end.y  # 자원 건물(n번째 채 포함)·금광(2026-10-13)·병사 건물·연구소
 
 
@@ -78,11 +78,18 @@ func research_bubble() -> bool:
 	return Economy.research_available()
 
 
+## 파견소 금화 자루 말풍선(2026-10-13): 지은 파견소에 끝나고 아직 안 받은 의뢰가 있다.
+func dispatch_bubble(now: float) -> bool:
+	return Economy.built_level(GameData.DISPATCH) > 0 and Economy.dispatch_finishes.any(func(t): return float(t) <= now)
+
+
 ## 지금 말풍선이 뜬 건물 id들(자원·훈련 완료·연구 플라스크) — 말풍선 탭 판정(unit_picker)용. stack_size의 말풍선 조건과 같다.
 func bubble_ids(now: float) -> Array:
 	var out: Array = badge_ids(now) + training_ids().ready
 	if research_bubble():
 		out.append(GameData.LAB)
+	if dispatch_bubble(now):
+		out.append(GameData.DISPATCH)
 	return out
 
 
@@ -139,6 +146,12 @@ func _draw() -> void:
 			var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(GameData.LAB) else 0.0))
 			if view.has_point(tip):
 				_draw_bubble(tip, "flask")
+	if dispatch_bubble(now):
+		var at = _base(GameData.DISPATCH, anchor(GameData.DISPATCH))
+		if at != null:
+			var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(GameData.DISPATCH) else 0.0))
+			if view.has_point(tip):
+				_draw_bubble(tip, "coin_bag")
 	for p in _pops:
 		var at := camera.unproject_position(p.pos) + Vector2(0, -POP_RISE_PX * p.age / POP_SEC)
 		_draw_pop(at, p)
@@ -186,7 +199,7 @@ func stack_size(tag_id: String, now: float) -> Vector2:
 	var q := Economy.training(id)
 	if q.count > 0 and not q.ready:
 		out = Vector2(BUILD_W, out.y + BUILD_LIFT_PX)
-	if (Economy.yield_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()):
+	if (Economy.yield_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()) or (id == GameData.DISPATCH and dispatch_bubble(now)):
 		out = Vector2(maxf(out.x, BUBBLE_R * 2.0 + 4.0), out.y + BUBBLE_BLOCK)
 	return out
 

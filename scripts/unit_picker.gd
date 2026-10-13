@@ -43,6 +43,7 @@ var panel   # 상인 거래 창(merchant_panel.gd)
 var recruit  # 주점 모집 창(recruit_panel.gd)
 var building_panel  # 건물 창(building_panel.gd)
 var research  # 연구 창(research_panel.gd, 개정 24) — 연구소 말풍선 탭
+var dispatch  # 파견소 창(dispatch_panel.gd, 2026-10-13) — 파견소 말풍선 탭
 var arena_r := 0.0  # > 0이면 던전: 영웅 선택·바닥 이동만, 바닥 지점은 이 반경 안
 var arena_side := INF  # 아레나: 바닥 지점은 화면 가로(spot v)로 이만큼 안(양옆이 막힌 무대)
 
@@ -220,6 +221,9 @@ func _tap_object(screen_pos: Vector2) -> bool:
 		return true
 	if id == GameData.LAB and research != null and badges.research_bubble():
 		research.open()  # 개정 24: 플라스크 말풍선이 떠 있으면 곧바로 연구 창
+		return true
+	if id == GameData.DISPATCH and dispatch != null and badges.dispatch_bubble(Economy.time_now()):
+		dispatch.open()  # 2026-10-13: 금화 자루 말풍선이 떠 있으면 곧바로 파견소 창
 		return true
 	if id == "" and not _pick(screen_pos, LAYER_GATE).is_empty():
 		id = GameData.GATE

@@ -9,7 +9,7 @@ import { randomDevice, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 // 2026-10-13: 새 플레이어가 아직 못 지은 건물(새 건물 5종 + 자원 건물 2~4번째 채) — 공터 목록(정렬)
-const LOTS = ['forge', 'goldmine', 'guild_hall', 'warehouse', 'watchtower',
+const LOTS = ['dispatch', 'forge', 'goldmine', 'guild_hall', 'warehouse', 'watchtower',
   ...['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => `${b}#${n}`))].sort()
 
 let S: Setup
@@ -104,7 +104,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         barracks: { level: 1 }, archery: { level: 1 }, stable: { level: 1 }, // 개정 16: 자동 생산 시계 없음
         // 2026-10-13: 아직 안 지은 자원 건물 n번째 채(공터, 수집 시계 있음)와 새 건물(공터). 금광도 수집 시계
         ...Object.fromEntries(['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => [`${b}#${n}`, { level: 1, last_collect: T0 + 0.25 }]))),
-        warehouse: { level: 1 }, goldmine: { level: 1, last_collect: T0 + 0.25 }, forge: { level: 1 }, guild_hall: { level: 1 }, watchtower: { level: 1 },
+        warehouse: { level: 1 }, goldmine: { level: 1, last_collect: T0 + 0.25 }, forge: { level: 1 }, guild_hall: { level: 1 }, watchtower: { level: 1 }, dispatch: { level: 1 },
       },
       build: null,
       build2: null, builder2_until: null, speedups: {}, // 2026-10-13 두 번째 일꾼·가속 아이템
@@ -455,7 +455,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })
   assert.equal(g.config.train_cost_cavalry, 'food:2000|stone:1000')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable',
-    'warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower']) // 파일 순서
+    'warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower', 'dispatch']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })
   assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 412, stone: 0, food: 338, base_sec: 2, req1: 'quarry', req2: null,

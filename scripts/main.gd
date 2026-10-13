@@ -182,6 +182,7 @@ func _build_world() -> void:
 	var dispatch_panel = preload("res://scripts/dispatch_panel.gd").new()  # 파견소 창(2026-10-13): 파견소 건물 창 [의뢰 보기]
 	add_child(dispatch_panel)
 	building_panel.dispatch = dispatch_panel
+	picker.dispatch = dispatch_panel
 	building_panel.goto_building.connect(func(bid): _tutorial_goto("building:" + bid))  # 선행 조건 줄 → 그 건물(사용자 2026-10-13)
 	picker.research = research_panel
 	var soldier_panel = SoldierPanelScript.new()

@@ -3579,6 +3579,7 @@ export function createApp(opts: AppOptions) {
       const b = await body(c)
       const id = c.get('playerId') as string
       if (isInt(b.level, 1, 30)) await query("insert into player_buildings (player_id, building, level) values ($1, 'dispatch', $2) on conflict (player_id, building) do update set level = $2", [id, b.level])
+      if (isInt(b.level, 1, 30)) await query("update player_state set unbuilt = array_remove(unbuilt, 'dispatch') where player_id = $1", [id])
       if (b.done === true) {
         const r = await query('select dispatch from player_state where player_id = $1', [id])
         const st = json(r[0]?.dispatch ?? {}) as any
