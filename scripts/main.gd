@@ -238,7 +238,7 @@ func _build_world() -> void:
 	add_child(build_btn)
 	card.build_button = build_btn  # 가이드 건설 미션 화살표: 자리를 안 잡은 공터면 [건물] 버튼을 가리킨다
 	var speed = preload("res://scripts/speed_button.gd").new()
-	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게)  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
+	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게, 방치 중엔 숨김)  # 왼쪽 아래([메뉴]와 같은 높이) 배속 x1 → x1.5 → x2(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
 	speed.card = card
 	speed.menu = side_menu
 	speed.below = build_btn
@@ -410,7 +410,7 @@ func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scrip
 	_dungeon = d
 	Music.override = music
 	if scene_script.resource_path != "res://scripts/war_battle.gd":  # 길드전은 늘 1배(사용자 2026-10-07 "길드전은 아니야")
-		d.add_child(preload("res://scripts/speed_button.gd").new())  # 던전·PVP·길드 보스에도 같은 x1.5 버튼(성 화면과 같은 설정)
+		d.add_child(preload("res://scripts/speed_button.gd").new())  # 던전·PVP·길드 보스에도 같은 배속 버튼(x1 → x1.5 → x2, 성 화면과 같은 설정)
 	_host.add_child(d)
 
 
