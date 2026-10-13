@@ -68,6 +68,10 @@ test('war rules: monday weeks, deterministic enemy, castle only goes down', () =
   const mx = W.castleMax(e1.defenders)
   assert.equal(W.castlePoints(c2, mx.keep), 1 * W.PTS_KILL + 1 * W.PTS_GATE)
   // 점수: 처치 1 · 성문 10 · 성채 최대 체력 3%마다 1
+  // 성문 점수는 2개까지(2026-10-13 사용자): 네 성문을 다 부숴도 20점
+  assert.equal(W.castlePoints({ gates: [0, 0, 0, 0], keep: mx.keep, dead: {} }, mx.keep), 2 * W.PTS_GATE)
+  assert.equal(W.castlePoints({ gates: [0, 0, 1, 1], keep: mx.keep, dead: {} }, mx.keep), 2 * W.PTS_GATE)
+  assert.equal(W.castleCap(15), 15 * 4 * W.PTS_KILL + 2 * W.PTS_GATE + W.KEEP_MAX_PTS)
   assert.equal(W.PTS_GATE, 10)
   assert.equal(W.keepPoints(mx.keep, mx.keep), 0)
   assert.equal(W.keepPoints(mx.keep * 0.97, mx.keep), 1)

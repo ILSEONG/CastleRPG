@@ -3,7 +3,7 @@
 // 공성 전투: 한 주에 1번(2026-10-06 사용자). 시각은 길드원이 정한다(guild_wars.battle_at — 아무도 안 정하면 토요일 21:00). 그 시각부터 BATTLE_SEC초 동안
 // 열리고 그 사이 누구나 합류한다(실시간 방: war_live.ts). 가상 길드원 공격 분대는 AI.
 // 성 상태(성문·성채 체력, 수비 영웅별 남은 체력 비율)는 전쟁 행(guild_wars.castle)에 저장되고 전투 결과로만 줄어든다(mergeCastle — 늘지 않는다).
-// 점수: 수비 영웅 처치 1 · 성문 10 · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
+// 점수: 수비 영웅 처치 1 · 성문 10(2개까지) · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
 // 우리 공성 시간이 끝나면 보인다.
 import { heroMaxLevel, mulberry32, powerOf, type Config, type StatLimit } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
@@ -17,6 +17,7 @@ export const RESPAWN_SEC = 30
 export const SQUAD = 4
 export const PTS_KILL = 1
 export const PTS_GATE = 10
+export const MAX_GATES_SCORED = 2 // 2026-10-13 사용자: 성문 점수는 2개까지(먼저 부순 2개). 앱 WarRules.MAX_GATES_SCORED와 같다
 export const KEEP_STEP = 0.03 // 성채 최대 체력의 이만큼을 깎을 때마다 1점
 export const KEEP_MAX_PTS = Math.floor(1 / KEEP_STEP + 1e-9)
 export const DEFAULT_DAY = 5 // 길드원이 시각을 안 정하면: 토요일(주 안 5번째 날, 0 = 월요일)
@@ -148,7 +149,7 @@ export const gatesDown = (c: Castle) => c.gates.filter((g) => g <= 0).length
 export const keepPoints = (keep: number, max: number) => (max > 0 ? Math.min(KEEP_MAX_PTS, Math.floor((1 - Math.max(0, keep) / max) / KEEP_STEP + 1e-9)) : 0)
 
 // 성 점수(전쟁 전체 누적 = 지금 성 상태로 센다). keepMax = castleMax(...).keep.
-export const castlePoints = (c: Castle, keepMax: number) => killsIn(c) * PTS_KILL + gatesDown(c) * PTS_GATE + keepPoints(c.keep, keepMax)
+export const castlePoints = (c: Castle, keepMax: number) => killsIn(c) * PTS_KILL + Math.min(MAX_GATES_SCORED, gatesDown(c)) * PTS_GATE + keepPoints(c.keep, keepMax)
 
 // 전투 결과(방장 기기가 보낸 성 상태)를 합친다: 줄어든 값만 받는다(체력이 늘거나 부활하지 않는다). 모르는 uid·범위 밖 값은 버린다.
 export function mergeCastle(c: Castle, r: { gates?: unknown; keep?: unknown; defenders?: unknown }, defs: Defender[]): Castle {
@@ -203,8 +204,8 @@ export function enemyPoints(seed: number, week: number, ratio: number, cap: numb
   return Math.max(0, Math.min(v, cap))
 }
 
-// 우리 성 만점(상대 점수 상한): 우리 길드원 수 × 4 처치 + 성문 4 + 성채.
-export const castleCap = (members: number) => members * SQUAD * PTS_KILL + 4 * PTS_GATE + KEEP_MAX_PTS
+// 우리 성 만점(상대 점수 상한): 우리 길드원 수 × 4 처치 + 성문 2개(점수 상한) + 성채.
+export const castleCap = (members: number) => members * SQUAD * PTS_KILL + MAX_GATES_SCORED * PTS_GATE + KEEP_MAX_PTS
 
 // 그 주 공성 시각: 길드원이 정한 값(saved), 없으면 토요일 21:00. resetAt = (날, 리셋 시) → 그날 리셋 시각.
 export function battleAt(week: number, saved: number | null, resetAt: (day: number) => number): number {

@@ -2,7 +2,7 @@ extends Node
 ## 길드전(공성전) 상태. 오토로드 GuildWar. 규칙·수치는 war_rules.gd(서버 server/src/guild_war.ts와 같다).
 ## 한 주(월요일 리셋)에 상대 길드 하나. 상대 성 = 상대 길드원마다 미리 고른 수비 영웅 4명이 네 성문에 나뉘어 지킨다(수비 AI, war_brain.gd).
 ## 공성 전투는 한 주에 1번: 길드장이 정한 시각(안 정하면 토요일 21:00)부터 BATTLE_SEC초 동안 열리고 그 사이 누구나 합류한다. 길드원마다 영웅 4명을
-## 직접 조종하고 가상 길드원 분대는 AI가 진격한다. 점수 = 처치 1 · 성문 10 · 성채 최대 체력 3%마다 1.
+## 직접 조종하고 가상 길드원 분대는 AI가 진격한다. 점수 = 처치 1 · 성문 10(2개까지) · 성채 최대 체력 3%마다 1.
 ## 주가 끝나면 상대 점수(가상 상대가 한 번 우리 성을 친 결과 — 우리 공성 시간이 끝나면 보인다)와 비교해 승리·패배 보상을 받는다.
 ##
 ## 온라인(econ.net != null, 내보낸 APK): 서버 /v1/guild/war*가 진실이다(war = 응답의 war). 전투는 enter → plan → battle_started →
@@ -470,7 +470,7 @@ static func merge_castle(c: Dictionary, r: Dictionary, defs: Array) -> Dictionar
 
 
 static func castle_cap(members: int) -> int:
-	return members * WarRules.SQUAD * WarRules.PTS_KILL + 4 * WarRules.PTS_GATE + WarRules.KEEP_MAX_PTS
+	return members * WarRules.SQUAD * WarRules.PTS_KILL + WarRules.MAX_GATES_SCORED * WarRules.PTS_GATE + WarRules.KEEP_MAX_PTS
 
 
 ## 가상 상대가 그 주 한 번의 공성으로 우리 성을 친 점수.
