@@ -1,6 +1,6 @@
 extends CanvasLayer
-## 성 화면 미니 채팅(2026-10-13, 사용자: 제우스: 오만의 신 같은 채팅 UI): 국산 MMORPG식 — 왼쪽 아래 반투명 어두운 상자에 최근 LINES줄
-## "[전체] 닉네임: 내용"(채널 머리표 색: 전체 흰 금색·길드 초록·시스템 노랑, 내 이름 금색). 누르면 채팅 창(chat_panel.gd)이 왼쪽에서 열린다.
+## 성 화면 미니 채팅(2026-10-13, 사용자: 제우스: 오만의 신 같은 채팅 UX, 두루마리 컨셉 유지): 국산 MMORPG식 — 왼쪽 아래 반투명 양피지 상자에
+## 최근 LINES줄 "시:분 [전체] 닉네임: 내용"(먹색 글씨, 채널 머리표 색: 전체 갈색·길드 초록·시스템 주황, 내 이름 금갈색). 누르면 채팅 창(chat_panel.gd)이 왼쪽에서 열린다.
 ## 자리: x1.5 배속 버튼 오른쪽, 아래 끝은 그 버튼(= [메뉴])과 맞추고 위로 자란다. 배속 버튼이 탭 바·초상화 줄·가이드 카드 위로
 ## 올라가면 같이 올라간다(매 프레임 맞춘다). 오른쪽 끝은 [메뉴] 버튼보다 왼쪽에서 멈춘다. 오프라인이면 숨는다.
 
@@ -14,12 +14,15 @@ const HEIGHT := LINES * LINE_H + PAD * 2.0
 const FONT_SIZE := 19
 const GAP := 12.0  # 배속 버튼과 사이
 const RIGHT := 128.0  # 화면 오른쪽 끝에서 이만큼 비운다([메뉴] 버튼 자리)
-const BG := Color(0.07, 0.08, 0.12, 0.58)
+const BG := Color(0.953, 0.886, 0.737, 0.86)  # 양피지(ScrollBox.PAPER) 반투명
 const CH_NAMES := {"all": "전체", "guild": "길드", "system": "시스템"}
-const CH_COLORS := {"all": Color(0.93, 0.88, 0.76), "guild": Color(0.50, 0.88, 0.52), "system": Color(1.0, 0.82, 0.30)}
-const NAME_COLOR := Color(0.62, 0.80, 1.0)
-const ME_COLOR := Color(1.0, 0.78, 0.36)
-const TEXT_COLOR := Color(0.96, 0.96, 0.98)
+const ChatPanel := preload("res://scripts/chat_panel.gd")
+const CH_COLORS := ChatPanel.CH_COLORS
+const NAME_COLOR := ChatPanel.NAME_COLOR
+const ME_COLOR := ChatPanel.ME_COLOR
+const TEXT_COLOR := ChatPanel.TEXT
+const TIME_COLOR := ChatPanel.SUB
+const TIME_SIZE := 16
 
 var speed  # speed_button.gd(그 오른쪽, 아래 끝 맞춤)
 var panel  # chat_panel.gd
@@ -34,7 +37,7 @@ func _ready() -> void:
 	var box := UiKit.panel(BG, 10.0, 8, 0.03)
 	for s in ["normal", "hover", "focus"]:
 		button.add_theme_stylebox_override(s, box)
-	button.add_theme_stylebox_override("pressed", UiKit.panel(Color(BG, 0.75), 10.0, 8, 0.03))
+	button.add_theme_stylebox_override("pressed", UiKit.panel(BG.darkened(0.12), 10.0, 8, 0.03))
 	button.pressed.connect(_open)
 	_face = Control.new()
 	_face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -76,22 +79,27 @@ func _draw_face() -> void:
 	var sz := _face.size
 	# 왼쪽 위 작은 말풍선
 	var c := Vector2(20, PAD + LINE_H / 2.0)
-	_face.draw_circle(c, 10.0, Color(1, 1, 1, 0.85))
-	_face.draw_colored_polygon(PackedVector2Array([c + Vector2(-6, 6), c + Vector2(-10, 13), c + Vector2(1, 9)]), Color(1, 1, 1, 0.85))
+	var ic := Color(0.48, 0.34, 0.18)  # 말풍선(갈색)
+	_face.draw_circle(c, 10.0, ic)
+	_face.draw_colored_polygon(PackedVector2Array([c + Vector2(-6, 6), c + Vector2(-10, 13), c + Vector2(1, 9)]), ic)
 	for k in 3:
 		_face.draw_circle(c + Vector2(-4.5 + k * 4.5, 0), 1.6, Color(BG, 1.0))
 	var x0 := 38.0
 	var lines: Array = Chat.recent(LINES)
 	if lines.is_empty():
-		_face.draw_string(FONT, Vector2(x0, PAD + LINE_H - 8), "채팅", HORIZONTAL_ALIGNMENT_LEFT, sz.x - x0 - 8, FONT_SIZE, Color(1, 1, 1, 0.8))
+		_face.draw_string(FONT, Vector2(x0, PAD + LINE_H - 8), "채팅", HORIZONTAL_ALIGNMENT_LEFT, sz.x - x0 - 8, FONT_SIZE, TIME_COLOR)
 		return
 	var row0 := LINES - lines.size()  # 줄이 모자라면 아래부터 채운다
 	for k in lines.size():
 		_draw_line(lines[k], x0, PAD + (row0 + k + 1) * LINE_H - 8.0, sz.x - 8.0)
 
 
-## 한 줄: [채널] 이름: 내용(넘치면 …). 시스템 줄은 이름 없이 노란 글씨.
+## 한 줄: 시:분 [채널] 이름: 내용(넘치면 …). 시스템 줄은 이름 없이 주황 글씨, 안내 줄은 시각 없이.
 func _draw_line(m: Dictionary, x: float, y: float, right: float) -> void:
+	var hm := ChatPanel.clock(float(m.get("at", 0)))
+	if hm != "":
+		_face.draw_string(FONT, Vector2(x, y), hm, HORIZONTAL_ALIGNMENT_LEFT, -1, TIME_SIZE, TIME_COLOR)
+		x += FONT.get_string_size(hm, HORIZONTAL_ALIGNMENT_LEFT, -1, TIME_SIZE).x + 6.0
 	var ch: String = m.get("ch", "all")
 	var tag := "[%s]" % CH_NAMES.get(ch, "")
 	var tc: Color = CH_COLORS.get(ch, Color.WHITE)
@@ -109,7 +117,6 @@ func _draw_line(m: Dictionary, x: float, y: float, right: float) -> void:
 func _outlined(t: String, x: float, y: float, col: Color) -> void:
 	if t == "":
 		return
-	_face.draw_string_outline(FONT, Vector2(x, y), t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 4, Color(0, 0, 0, 0.55))
 	_face.draw_string(FONT, Vector2(x, y), t, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, col)
 
 

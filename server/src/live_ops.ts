@@ -26,6 +26,7 @@
 // hero(영웅 id) + hero_n(장 수, 기본 1)·equip {grade, n}(그 등급 장비 n개, 부위 무작위). 출석 보상과 같은 키(attendance.ts)에 개수를 더한 것.
 import type { Context, Hono, Next } from 'hono'
 import * as P from './pouches.ts'
+import * as S from './speedups.ts'
 
 export const NUMERIC = ['gold', 'diamonds', 'tickets', 'wood', 'stone', 'food', 'keys_gold', 'keys_equip', 'keys_ticket'] as const
 export const MAX_AMOUNT: Record<string, number> = { gold: 1e12, diamonds: 1e7, tickets: 10000, wood: 1e12, stone: 1e12, food: 1e12,
@@ -59,6 +60,7 @@ export interface Reward {
   hero_n?: number
   equip?: { grade: string; n: number }
   [pouch: `pouch_${string}`]: number
+  [speedup: `speedup_${string}`]: number
 }
 
 export interface OpsStatus {
@@ -89,6 +91,10 @@ export function normalizeReward(raw: unknown, heroIds: Set<string>): { reward: R
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     if ((NUMERIC as readonly string[]).includes(k)) {
       if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > MAX_AMOUNT[k]) return { error: `'${k}' must be an integer in 0..${MAX_AMOUNT[k]}` }
+      if (v) out[k] = v
+    } else if (k.startsWith(S.REWARD_PREFIX)) {
+      if (!S.IDS.includes(k.slice(S.REWARD_PREFIX.length))) return { error: `unknown speed-up '${k}'` }
+      if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > MAX_POUCH_N) return { error: `'${k}' must be an integer in 0..${MAX_POUCH_N}` }
       if (v) out[k] = v
     } else if (k.startsWith(P.REWARD_PREFIX)) {
       if (!P.IDS.includes(k.slice(P.REWARD_PREFIX.length))) return { error: `unknown pouch '${k}'` }

@@ -22,6 +22,7 @@ const ID_RESEARCH := 2
 const ID_IDLE := 3
 const ID_DAILY := 4
 const ID_WAR := 5
+const ID_BUILD2 := 6  # 두 번째 일꾼(2026-10-13)
 const WAR_LEAD_SEC := 600.0  # 공성전 알림은 시작 10분 전
 const ID_TRAIN := 10  # + 병사 건물 순번
 
@@ -96,7 +97,7 @@ static func options() -> Dictionary:
 
 ## 오토로드 상태 → plan의 state(모두 보정 시각).
 func gather(econ: Node) -> Dictionary:
-	var s := {"ready": not econ.levels.is_empty(), "build": econ.build.duplicate(), "research": econ.research_current.duplicate(),
+	var s := {"ready": not econ.levels.is_empty(), "build": econ.build.duplicate(), "build2": econ.build2.duplicate(), "research": econ.research_current.duplicate(),
 		"train": econ.train_queues.duplicate(true), "cap_min": GameData.config_num("accum_cap_min"),
 		"attend_open": bool(econ.attendance.get("can_claim", false)), "war_at": -1.0}
 	var guild := get_node_or_null("/root/Guild")
@@ -107,7 +108,7 @@ func gather(econ: Node) -> Dictionary:
 
 
 ## 예약할 알림 [{id, at(유닉스 초, 보정 시각), title, body}] — 순수 함수(tests/notify_check).
-## state: {ready, build {id, finish}, research {id, finish}, train {건물 id: {count, finish}}, cap_min, attend_open, war_at}.
+## state: {ready, build {id, finish}, build2(두 번째 일꾼, 없어도 된다), research {id, finish}, train {건물 id: {count, finish}}, cap_min, attend_open, war_at}.
 static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 	var out := []
 	if not opts.get("notify", true) or not state.get("ready", false):
@@ -117,6 +118,10 @@ static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 		if not b.is_empty():
 			var name := str(GameData.building_def(str(b.id)).get("name", "건물"))
 			out.append(_n(ID_BUILD, float(b.finish), "건설 완료", "%s 공사가 끝났습니다. 다음 공사를 시작해 보세요!" % name))
+		var b2: Dictionary = state.get("build2", {})
+		if not b2.is_empty():
+			var name2 := str(GameData.building_def(str(b2.id)).get("name", "건물"))
+			out.append(_n(ID_BUILD2, float(b2.finish), "건설 완료", "%s 공사가 끝났습니다. 다음 공사를 시작해 보세요!" % name2))
 		var r: Dictionary = state.get("research", {})
 		if not r.is_empty():
 			var rname := str(GameData.research_def(str(r.id)).get("name", ""))

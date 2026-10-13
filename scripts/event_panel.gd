@@ -244,6 +244,7 @@ static func reward_text(r: Dictionary) -> String:
 	for id in Economy.pouch_ids():
 		if pz.has(id):
 			parts.append(Economy.pouch_name(id) + ("" if int(pz[id]) == 1 else " %d개" % int(pz[id])))
+	parts.append_array(Economy.speedup_reward_parts(r))  # 2026-10-13 가속 아이템·일꾼 고용권
 	return " + ".join(parts)
 
 

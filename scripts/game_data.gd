@@ -53,6 +53,8 @@ const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항�
 const BUILDING_STR_COLS := ["id", "name"]
 const BUILDING_NUM_COLS := ["max_level", "wood", "stone", "food", "base_sec"]
 const BUILDING_REQ_COLS := ["req1", "req2"]  # 선행 건물 id. 빈 칸(서버는 null) = 없음
+## 2026-10-13 라오킹 곡선: 레벨별 L → L+1 값 "v1|v2|…"(max_level − 1개, 없거나 비면 1→2 값 × 성장 식). 행에는 숫자 배열(비면 [])로 둔다.
+const BUILDING_LV_COLS := ["lv_sec", "lv_wood", "lv_stone", "lv_food"]
 const BUILD_RES := ["wood", "stone", "food"]  # 건물 비용 열 = 자원 id
 const BUILD_COST_GROWTH := 1.35  # L → L+1 비용 = round(값 × 1.35^(L−1))
 const BUILD_TIME_GROWTH := 1.5   # L → L+1 시간 = round(base_sec × 1.5^(L−1))
@@ -169,7 +171,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 		"stages": _read(stages_path, ["stage"] + STAGE_COLS),
 		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1] + HERO_SKILL_COLS[2]),
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
-		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS),
+		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS, BUILDING_LV_COLS),
 		"soldiers": _read(soldiers_path, SOLDIER_STR_COLS + SOLDIER_NUM_COLS),
 		"upgrades": _read(upgrades_path, UPGRADE_STR_COLS + UPGRADE_NUM_COLS),
 		"dungeons": _read(dungeons_path, DUNGEON_STR_COLS + DUNGEON_NUM_COLS),  # 개정 18
@@ -276,7 +278,7 @@ static func gate_hp_max(level: int) -> float:
 
 # --- 건물(개정 12 §2.2·§2.3). 서버 rules.ts(buildCost·buildSec·parseTiers·tierValue…)와 같은 식 ---
 
-## 건물 표(파일 순서). 행 = {id, name, max_level, wood, stone, food, base_sec, req1, req2}(숫자는 float, 선행 없으면 "").
+## 건물 표(파일 순서). 행 = {id, name, max_level, wood, stone, food, base_sec, req1, req2, lv_sec·lv_wood·lv_stone·lv_food(숫자 배열, 없으면 [])}(숫자는 float, 선행 없으면 "").
 static func buildings() -> Array:
 	_ensure()
 	return _buildings
@@ -289,21 +291,26 @@ static func building_def(id: String) -> Dictionary:
 	return {}
 
 
-## L → L+1 비용 {wood, stone, food}(정수) = round(값 × 1.35^(L−1)). 모르는 건물이면 {}.
+## L → L+1 비용 {wood, stone, food}(정수) = 레벨 목록 lv_<자원>의 L번째 값(2026-10-13 라오킹 곡선, 목록 너머는 마지막 값).
+## 목록이 없으면 round(값 × 1.35^(L−1)). 모르는 건물이면 {}. 서버 rules.buildCost와 같다.
 static func build_cost(id: String, level: int) -> Dictionary:
 	var d := building_def(id)
 	if d.is_empty():
 		return {}
 	var out := {}
 	for r in BUILD_RES:
-		out[r] = roundi(_grown(float(d[r]), BUILD_COST_GROWTH, level - 1))
+		var xs: Array = d.get("lv_" + r, [])
+		out[r] = roundi(xs[clampi(level, 1, xs.size()) - 1]) if not xs.is_empty() else roundi(_grown(float(d[r]), BUILD_COST_GROWTH, level - 1))
 	return out
 
 
-## L → L+1 시간(초, 정수) = round(base_sec × 1.5^(L−1)). 모르는 건물이면 0.
+## L → L+1 시간(초, 정수) = 레벨 목록 lv_sec의 L번째 값. 목록이 없으면 round(base_sec × 1.5^(L−1)). 모르는 건물이면 0.
 static func build_sec(id: String, level: int) -> int:
 	var d := building_def(id)
-	return roundi(_grown(float(d.base_sec), BUILD_TIME_GROWTH, level - 1)) if not d.is_empty() else 0
+	if d.is_empty():
+		return 0
+	var xs: Array = d.get("lv_sec", [])
+	return roundi(xs[clampi(level, 1, xs.size()) - 1]) if not xs.is_empty() else roundi(_grown(float(d.base_sec), BUILD_TIME_GROWTH, level - 1))
 
 
 ## base × growth^n을 곱셈 n번으로 — 서버(JS)와 같은 IEEE 곱셈 순서라 pow 구현 차이로 반올림이 갈리지 않는다.
@@ -1235,6 +1242,24 @@ static func _build(raw: Dictionary) -> Dictionary:
 			else:
 				_err(src._src, src._line, c, "not a building id: '%s'" % str(v))
 				ok = false
+		for c in BUILDING_LV_COLS:  # 레벨 목록: 비면 [], 숫자가 아니면 오류(개수·범위는 _check_buildings)
+			var v = src.get(c)
+			row[c] = []
+			if v is Array:  # 이미 읽은 표(숫자 배열)를 다시 넣을 때
+				if not v.all(func(x): return x is float or x is int):
+					_err(src._src, src._line, c, "must be numbers joined by '|': '%s'" % str(v))
+					ok = false
+				else:
+					row[c] = v.map(func(x): return float(x))
+				continue
+			if _blank(v):
+				continue
+			for part in str(v).split("|"):
+				if not part.strip_edges().is_valid_float():
+					_err(src._src, src._line, c, "must be numbers joined by '|': '%s'" % str(v))
+					ok = false
+					break
+				row[c].append(part.strip_edges().to_float())
 		if not ok:
 			continue
 		if ids.has(row.id):
@@ -1389,6 +1414,16 @@ static func _check_buildings(t: Dictionary) -> void:
 				_err("buildings", b._line, r, "must be a non-negative integer: %s" % b[r])
 		if not b.base_sec > 0.0:
 			_err("buildings", b._line, "base_sec", "must be greater than 0: %s" % b.base_sec)
+		for c in BUILDING_LV_COLS:  # 2026-10-13: 있으면 max_level − 1개, 시간 > 0, 비용 0 이상 정수(서버 seed와 같다)
+			var xs: Array = b.get(c, [])
+			if xs.is_empty() or not b.max_level >= 1.0:
+				continue
+			if xs.size() != int(b.max_level) - 1:
+				_err("buildings", b._line, c, "must have %d values (one per level up), got %d" % [int(b.max_level) - 1, xs.size()])
+			elif c == "lv_sec" and not xs.all(func(v): return v > 0.0):
+				_err("buildings", b._line, c, "every value must be greater than 0")
+			elif c != "lv_sec" and not xs.all(func(v): return v >= 0.0 and v == floorf(v)):
+				_err("buildings", b._line, c, "every value must be a non-negative integer")
 		for c in BUILDING_REQ_COLS:
 			if b[c] != "" and not ids.has(b[c]):
 				_err("buildings", b._line, c, "unknown building '%s'" % b[c])
@@ -1687,7 +1722,8 @@ static func _config_map(rows: Array) -> Dictionary:
 
 
 ## 헤더 이름으로 열을 찾아 [{열: 원시 문자열, _line: 줄, _src: 경로}] 반환. 변환·검사는 _convert가 한다.
-static func _read(path: String, cols: Array) -> Array:
+## opt: 없어도 되는 열(없으면 "").
+static func _read(path: String, cols: Array, opt: Array = []) -> Array:
 	var rows: Array = []
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
@@ -1709,9 +1745,11 @@ static func _read(path: String, cols: Array) -> Array:
 					_err(path, i + 1, c, "missing column")
 			if idx.values().has(-1):
 				return rows
+			for c in opt:
+				idx[c] = header.find(c)
 			continue
 		var row := {"_line": i + 1, "_src": path}
-		for c in cols:
-			row[c] = cells[idx[c]].strip_edges() if idx[c] < cells.size() else ""
+		for c in cols + opt:
+			row[c] = cells[idx[c]].strip_edges() if idx[c] >= 0 and idx[c] < cells.size() else ""
 		rows.append(row)
 	return rows

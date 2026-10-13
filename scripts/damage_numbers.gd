@@ -5,7 +5,10 @@ extends Node2D
 ##  - 이름 띠(banner, 액티브·한 판 한 번 패시브): 머리 위 깎인 모서리 상자(영웅 색, 어두운 테두리) + 스킬 그림 + 흰 이름, 1.2초.
 ##    상대 팀(team 1)은 작게 + 어두운 바탕·붉은 테두리. 띠끼리 겹치면 위로 밀고, 화면 밖으로 나가지 않게 안으로 들인다.
 ##  - 확률 패시브(text = ""): 이름 없이 스킬 그림 동그라미만 0.8초.
-##  - 컷인(cutin, 우리 편 SSR 궁극기): 화면 왼쪽 가운데로 영웅 일러스트 + 스킬 이름 띠가 미끄러져 들어왔다 나간다. 한 번에 하나, CUTIN_GAP초 간격.
+##  - 컷인(cutin, 우리 편 SSR 궁극기): 화면 왼쪽 가운데로 스킬 이름 띠가 미끄러져 들어왔다 나간다. 한 번에 하나, CUTIN_GAP초 간격.
+##    2026-10-13(스킬 이펙트 점검 "실사풍 일러스트가 로우폴리 화면과 결이 다르다" → 사용자 "전부 개선시켜"): 일러스트 대신 게임 속 그 영웅의
+##    로우폴리 모델이 궁극기 발동 자세로(Portraits "cutin:") 금빛 빛살 창 앞에서 띠 위로 뚫고 나온다. 띠·창은 로우폴리 면(면마다 밝기 조금씩),
+##    속도선 대신 뾰족한 조각, 외곽선은 같은 색을 어둡게.
 
 enum Kind { HIT, CRIT, SKILL, POISON, HURT, DODGE, HEAL, BANNER }  # BANNER = 스킬 표시(_tags)
 
@@ -40,9 +43,18 @@ const CUTIN_LIFE := 1.3  # 컷인 전체 시간(초)
 const CUTIN_IN := 0.16  # 들어오는 시간
 const CUTIN_OUT := 0.2  # 나가는 시간
 const CUTIN_GAP := 5.0  # 컷인 사이 최소 간격(실제 초)
-const CUTIN_Y := 0.2  # 띠 윗변 = 화면 높이 × 이 값(위 정보 패널 아래, 화면 가운데 싸움은 가리지 않게)
-const CUTIN_H := 112.0  # 띠 높이
-const CUTIN_ART := Vector2(200, 150)  # 일러스트 창(띠 위로 삐져나온다)
+const CUTIN_Y := 0.205  # 띠 윗변 = 화면 높이 × 이 값(위 정보 패널 아래, 화면 가운데 싸움은 가리지 않게)
+const CUTIN_H := 128.0  # 띠 높이
+const CUTIN_FIG := 182.0  # 영웅 모델 그림(정사각) 크기 — 아래 끝이 띠 아랫변에 맞고 위로 띠를 54px 뚫고 나온다(위 정보 패널 아래까지만)
+const CUTIN_PANEL := 232.0  # 모델 뒤 금빛 창(띠 왼쪽 부분) 폭
+const CUTIN_RAYS := 12  # 금빛 창 빛살 수(천천히 돈다)
+const CUTIN_SSR := Color(0.93, 0.66, 0.18)  # 금빛 창: SSR 등급 금색 계열(SSR 카드 창과 같은 결)
+const CUTIN_NIGHT := Color(0.25, 0.22, 0.42)  # 금·흰 옷 영웅(모델이 금빛 창에 묻힌다 — _bright_fig) 뒤 창: 짙은 남보라 + 금빛 빛살
+const GOLD_NEAR := 0.3  # 모델 색이 금빛 창 색(바탕·빛살)과 이 거리(RGB) 안이면 "묻히는 칸"
+const GOLD_NEAR_MAX := 0.45  # 묻히는 칸이 모델의 이 비율을 넘으면 짙은 창
+const CUTIN_CELL := 84.0  # 띠 로우폴리 면 한 칸 폭(px)
+const FIG_FADE_TOP := 0.16  # 모델 그림 위 이 비율은 위로 갈수록 투명(치켜든 무기 끝이 틀에서 잘려 보이지 않게)
+const FIG_FADE_SIDE := 0.07  # 양옆 이 비율도
 const CUTIN_SLANT := 40.0  # 기울어진 오른쪽 변의 가로 폭
 const CUTIN_GOLD := Color(0.96, 0.78, 0.32)
 const OUTLINE := Color(0.10, 0.08, 0.12)
@@ -58,7 +70,7 @@ const Prefs := preload("res://scripts/prefs.gd")  # 설정 [피해 숫자 표시
 const Sfx := preload("res://scripts/sfx.gd")  # 타격 소리(숫자를 꺼도 난다)
 const SkillIcons := preload("res://scripts/skill_icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
-const HeroArt := preload("res://scripts/hero_art.gd")
+const PortraitsScript := preload("res://scripts/portraits.gd")
 
 static var current  # 월드에 있는 하나(없으면 null)
 
@@ -68,8 +80,9 @@ var tag_rects: Array = []  # 지난 프레임에 그린 스킬 표시 자리(Rec
 
 var _list: Array = []   # 살아 있는 숫자 {pos: 월드, text, kind, age, dx}. 나이순
 var _tags: Array = []   # 스킬 표시 {pos: 월드, text(""면 그림만), skill, kind = BANNER, age, life, bg = 영웅 색, enemy, lift}. 나이순
-var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, age}(없으면 비어 있다)
+var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, art(Portraits 키), age}(없으면 비어 있다)
 var _cut_ms := -1000000  # 마지막 컷인 시작(ms)
+var _fig_tone := {}     # 컷인 모델 그림 키 → 짙은 창을 쓰는가(_bright_fig, 한 번 재서 둔다)
 var _glyphs := {}       # 그림 이름 → SkillIcons.shapes(매 프레임 새로 만들지 않게)
 var _dt := 0.0
 var _poison := {}       # 대상 id → {target, sum, age, pos}
@@ -105,14 +118,15 @@ static func banner(target, skill: String, text: String, color: Color, enemy := f
 
 
 ## 우리 편 SSR 궁극기 컷인. 이미 하나가 떠 있거나 CUTIN_GAP초가 안 지났으면 건너뛴다(쌓아 두지 않는다).
-static func cutin(hero_id: String, text: String, sub: String, color: Color, skill: String) -> void:
+## art = 모델 자세 그림 키(Portraits.cutin_key — 영웅이 전투에 들어올 때 미리 렌더를 걸어 둔다). 아직 없으면 큰 스킬 그림으로 대신한다.
+static func cutin(hero_id: String, text: String, sub: String, color: Color, skill: String, art := "") -> void:
 	if current == null:
 		return
 	var now := Time.get_ticks_msec()
 	if not current._cut.is_empty() or now - current._cut_ms < int(CUTIN_GAP * 1000.0):
 		return
 	current._cut_ms = now
-	current._cut = {"hero": hero_id, "text": text, "sub": sub, "bg": color, "skill": skill, "age": 0.0}
+	current._cut = {"hero": hero_id, "text": text, "sub": sub, "bg": color, "skill": skill, "art": art, "age": 0.0}
 
 
 ## 띠 바탕색: 영웅 색이 밝으면(노랑·연두 …) 흰 글자가 읽히게 어둡게 누른다.
@@ -325,52 +339,147 @@ func _badge(at: Vector2, r: float, skill: String, alpha: float) -> void:
 			draw_polyline(pts, Color(SkillIcons.OUTLINE, alpha), line_w)
 
 
-## 컷인: 왼쪽에서 기울어진 띠가 미끄러져 들어와 일러스트(띠 위로 삐져나옴) + 영웅 이름 + 스킬 그림·이름을 보이고 왼쪽으로 빠진다.
+## 컷인: 왼쪽에서 기울어진 띠가 미끄러져 들어와(모델은 조금 늦게 — 겹친 깊이) 금빛 빛살 창 앞 영웅 모델(띠 위로 뚫고 나옴) + 영웅 이름 +
+## 스킬 그림·이름을 보이고 왼쪽으로 빠진다. 그리는 순서: 띠 면 → 조각 → 금빛 창 면·빛살 → 위 금 테·띠 외곽선 → 모델 → 아래 금 테(모델 허리
+## 잘린 자리를 덮는다) → 글자.
 func _draw_cutin() -> void:
 	var vs := get_viewport_rect().size
 	var age: float = _cut.age
 	var x := 0.0
 	var alpha := 1.0
+	var fig_dx := age * 10.0  # 모델은 수명 동안 천천히 앞으로
 	if age < CUTIN_IN:
-		x = -vs.x * (1.0 - ease(age / CUTIN_IN, 0.35))
+		var k := ease(age / CUTIN_IN, 0.35)
+		x = -vs.x * (1.0 - k)
+		fig_dx -= 70.0 * (1.0 - k)
 	elif age > CUTIN_LIFE - CUTIN_OUT:
 		var k := (age - (CUTIN_LIFE - CUTIN_OUT)) / CUTIN_OUT
 		x = -vs.x * ease(k, 2.4)
 		alpha = 1.0 - k
 	var y0 := roundf(vs.y * CUTIN_Y)
-	var bw := minf(vs.x * 0.88, 640.0)
+	var y1 := y0 + CUTIN_H
+	var bw := minf(vs.x * 0.9, 660.0)
 	var band := band_color(_cut.bg)
 	var edge := LowpolyBox.edge_color(band)
-	var poly := PackedVector2Array([Vector2(x, y0), Vector2(x + bw, y0), Vector2(x + bw - CUTIN_SLANT, y0 + CUTIN_H), Vector2(x, y0 + CUTIN_H)])
-	draw_colored_polygon(poly, Color(band, 0.92 * alpha))
-	for i in 3:  # 속도선: 띠 안을 오른쪽 → 왼쪽으로 빠르게
-		var sx := x + bw - fmod(age * 1500.0 + i * 230.0, bw)
-		var sy := y0 + CUTIN_H * (0.25 + 0.25 * i)
-		draw_colored_polygon(PackedVector2Array([Vector2(sx, sy), Vector2(sx + 70.0, sy), Vector2(sx + 66.0, sy + 3.0), Vector2(sx - 4.0, sy + 3.0)]), Color(1, 1, 1, 0.22 * alpha))
-	draw_colored_polygon(PackedVector2Array([Vector2(x, y0), Vector2(x + bw, y0), Vector2(x + bw - 1.6, y0 + 4.0), Vector2(x, y0 + 4.0)]), Color(CUTIN_GOLD, alpha))
+	var poly := PackedVector2Array([Vector2(x, y0), Vector2(x + bw, y0), Vector2(x + bw - CUTIN_SLANT, y1), Vector2(x, y1)])
+	_facets(poly, band, 0.08, 7, alpha * 0.96)
+	for i in 4:  # 조각: 가늘고 뾰족한 삼각형이 띠 안을 오른쪽 → 왼쪽으로 빠르게
+		var sx := x + bw - fmod(age * 1400.0 + i * 190.0, bw)
+		var sy := y0 + CUTIN_H * (0.24 + 0.18 * i)
+		var ln := 54.0 + 26.0 * (i % 2)
+		draw_colored_polygon(PackedVector2Array([Vector2(sx, sy), Vector2(sx + ln, sy - 3.0), Vector2(sx + ln, sy + 3.0)]), Color(band.lightened(0.55), 0.4 * alpha))
+	# 금빛 창(모델 뒤): 로우폴리 면 + 머리께에서 도는 빛살(창 모양으로 잘라)
+	var pw := CUTIN_PANEL
+	var panel := PackedVector2Array([Vector2(x, y0), Vector2(x + pw, y0), Vector2(x + pw - CUTIN_SLANT, y1), Vector2(x, y1)])
+	var key: String = _cut.get("art", "")
+	var has_fig := key != "" and PortraitsScript.has_portrait(key)
+	var pc := CUTIN_NIGHT if has_fig and _bright_fig(key) else CUTIN_SSR
+	_facets(panel, pc, 0.12, 11, alpha)
+	var c := Vector2(x + fig_dx + pw * 0.42, y0 + CUTIN_H * 0.3)
+	var reach := pw * 1.5
+	for i in CUTIN_RAYS:
+		var a := age * 0.9 + TAU * i / CUTIN_RAYS
+		var ray := PackedVector2Array([c, c + Vector2.from_angle(a) * reach, c + Vector2.from_angle(a + TAU / CUTIN_RAYS * 0.45) * reach])
+		for part in Geometry2D.intersect_polygons(ray, panel):
+			draw_colored_polygon(part, Color(CUTIN_SSR.lightened(0.6), 0.45 * alpha))
+	draw_line(panel[1], panel[2], Color(LowpolyBox.edge_color(pc), alpha), 2.5, true)  # 창과 띠 사이 기울어진 경계
+	_trim(Vector2(x, y0 - 1.0), Vector2(x + bw + 1.6, y0 - 1.0), 5.0, alpha)
 	poly.append(poly[0])
 	draw_polyline(poly, Color(edge, alpha), 2.0, true)
-	# 일러스트 창: 띠 위로 삐져나온 기울어진 창, 금 테
-	var art := Rect2(x, y0 + CUTIN_H - CUTIN_ART.y, CUTIN_ART.x, CUTIN_ART.y)
-	var win := PackedVector2Array([art.position, Vector2(art.end.x, art.position.y), Vector2(art.end.x - CUTIN_SLANT, art.end.y), Vector2(art.position.x, art.end.y)])
-	if not HeroArt.draw_in(self, _cut.hero, win, art, 0.32, 1.25):
-		draw_colored_polygon(win, Color(band.darkened(0.3), alpha))
-		_badge(art.get_center(), 48.0, _cut.skill, alpha)
-	elif alpha < 1.0:
-		draw_colored_polygon(win, Color(band, 1.0 - alpha))  # 빠질 때 그림도 흐려지게
-	win.append(win[0])
-	draw_polyline(win, Color(CUTIN_GOLD, alpha), 3.0, true)
+	# 영웅 모델(궁극기 발동 자세): 창 가운데, 아래 끝 = 띠 아랫변, 위로 띠를 뚫고 나온다
+	if has_fig:
+		var fr := Rect2(x + fig_dx + (pw - CUTIN_SLANT * 0.5 - CUTIN_FIG) * 0.5, y1 - CUTIN_FIG, CUTIN_FIG, CUTIN_FIG)
+		var tex := PortraitsScript.portrait(key)
+		_draw_figure(tex, Rect2(fr.position + Vector2(7, 5), fr.size), Color(edge, 0.4 * alpha))  # 그림자(띠 색을 어둡게) — 띠에서 떠 보이게
+		_draw_figure(tex, fr, Color(1, 1, 1, alpha))
+	else:
+		_badge(Vector2(x + pw * 0.44, y0 + CUTIN_H * 0.5), 44.0, _cut.skill, alpha)
+	_trim(Vector2(x, y1 - 4.0), Vector2(x + bw - CUTIN_SLANT, y1 - 4.0), 5.0, alpha)
 	# 글자: 영웅 이름(작게) + 스킬 그림 + 스킬 이름(크게)
 	var font: Font = FONT
-	var tx := x + CUTIN_ART.x - CUTIN_SLANT * 0.5 + 14.0
+	var tx := x + pw - CUTIN_SLANT * 0.5 + 16.0
 	var room := x + bw - CUTIN_SLANT - 16.0 - tx
-	draw_string_outline(font, Vector2(tx, y0 + 34.0), _cut.sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, 5, Color(edge, alpha))
-	draw_string(font, Vector2(tx, y0 + 34.0), _cut.sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.85 * alpha))
+	draw_string_outline(font, Vector2(tx, y0 + 40.0), _cut.sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, 5, Color(edge, alpha))
+	draw_string(font, Vector2(tx, y0 + 40.0), _cut.sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.88 * alpha))
 	var size := 40
 	while size > 24 and font.get_string_size(_cut.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > room - 52.0:
 		size -= 2
-	_badge(Vector2(tx + 20.0, y0 + 76.0), 20.0, _cut.skill, alpha)
-	var base := Vector2(tx + 50.0, y0 + 76.0 + (font.get_ascent(size) - font.get_descent(size)) / 2.0)
+	_badge(Vector2(tx + 20.0, y0 + 86.0), 20.0, _cut.skill, alpha)
+	var base := Vector2(tx + 50.0, y0 + 86.0 + (font.get_ascent(size) - font.get_descent(size)) / 2.0)
 	draw_string_outline(font, base, _cut.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 8, Color(edge, alpha))
 	draw_string(font, base, _cut.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(1, 1, 1, alpha))
-	draws += 10
+	draws += 14
+
+
+## 모델이 금빛 창에 묻히는가(금·흰 옷 — 아르테온·루미나·프리다): 그림을 40×40 칸으로 훑어(위 흐려지는 부분 빼고) 보이는 칸 중 창 바탕·빛살
+## 색과 가까운 칸이 GOLD_NEAR_MAX를 넘으면 true. 키마다 한 번.
+func _bright_fig(key: String) -> bool:
+	if _fig_tone.has(key):
+		return _fig_tone[key]
+	var img := PortraitsScript.portrait(key).get_image()
+	var near := 0
+	var seen := 0
+	if img != null and not img.is_empty():
+		var light := CUTIN_SSR.lightened(0.6)
+		for j in 40:
+			for i in 40:
+				var p := img.get_pixel(int((i + 0.5) / 40.0 * img.get_width()), int((FIG_FADE_TOP + (j + 0.5) / 40.0 * (1.0 - FIG_FADE_TOP)) * img.get_height()))
+				if p.a < 0.5:
+					continue
+				seen += 1
+				var v := Vector3(p.r, p.g, p.b)
+				if minf(v.distance_to(Vector3(CUTIN_SSR.r, CUTIN_SSR.g, CUTIN_SSR.b)), v.distance_to(Vector3(light.r, light.g, light.b))) < GOLD_NEAR:
+					near += 1
+	_fig_tone[key] = seen > 0 and float(near) / seen > GOLD_NEAR_MAX
+	return _fig_tone[key]
+
+
+## 모델 그림을 r에: 위 FIG_FADE_TOP·양옆 FIG_FADE_SIDE는 바깥으로 갈수록 투명하게(치켜든 무기 끝이 그림 틀에서 딱 잘려 보이지 않게).
+## 4×3 꼭짓점 격자 삼각형 한 번(점 색 알파 × tint). 아래 끝은 금 테가 덮으니 그대로.
+func _draw_figure(tex: Texture2D, r: Rect2, tint: Color) -> void:
+	var xs := [0.0, FIG_FADE_SIDE, 1.0 - FIG_FADE_SIDE, 1.0]
+	var ys := [0.0, FIG_FADE_TOP, 1.0]
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
+	for j in 2:
+		for i in 3:
+			var quad := [Vector2(xs[i], ys[j]), Vector2(xs[i + 1], ys[j]), Vector2(xs[i + 1], ys[j + 1]), Vector2(xs[i], ys[j + 1])]
+			for k in [0, 1, 2, 0, 2, 3]:
+				var uv: Vector2 = quad[k]
+				var a := (0.0 if uv.x == 0.0 or uv.x == 1.0 else 1.0) * (0.0 if uv.y == 0.0 else 1.0)
+				pts.append(r.position + uv * r.size)
+				uvs.append(uv)
+				cols.append(Color(tint, tint.a * a))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), pts, cols, uvs, PackedInt32Array(), PackedFloat32Array(), tex.get_rid())
+
+
+## 사각형(4점: 왼위·오른위·오른아래·왼아래) 띠를 로우폴리 면으로: 위·아래 변에 CUTIN_CELL 간격 점(가운데 점은 조금 흔들고 아래는 반 칸
+## 엇갈림)을 찍어 삼각형 띠로 잇고, 면마다 LowpolyBox.shade(왼위 밝게 + 해시).
+func _facets(q: PackedVector2Array, base: Color, amt: float, seed: int, alpha: float) -> void:
+	var n := maxi(2, roundi(q[0].distance_to(q[1]) / CUTIN_CELL))
+	var top := PackedVector2Array()
+	var bot := PackedVector2Array()
+	for i in n + 1:
+		var t := float(i) / n
+		var tb := clampf((i - 0.5) / n, 0.0, 1.0) if i < n else 1.0
+		var j := 0.0 if i == 0 or i == n else (LowpolyBox.hash01(seed, i) - 0.5) * 0.5 / n
+		top.append(q[0].lerp(q[1], t + j))
+		bot.append(q[3].lerp(q[2], tb))
+	var r := Rect2(q[0], Vector2.ZERO).expand(q[1]).expand(q[2]).expand(q[3])
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for i in n:
+		for tri in [PackedVector2Array([top[i], top[i + 1], bot[i]]), PackedVector2Array([top[i + 1], bot[i + 1], bot[i]])]:
+			var col := LowpolyBox.shade(base, tri, r, amt, seed, pts.size())
+			for p in tri:
+				pts.append(p)
+				cols.append(Color(col, alpha))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), pts, cols)
+
+
+## 금 테(가로 띠 a → b, 두께 h): 위 반 밝게·아래 반 어둡게 + 진한 금 외곽선.
+func _trim(a: Vector2, b: Vector2, h: float, alpha: float) -> void:
+	draw_colored_polygon(PackedVector2Array([a, b, b + Vector2(-h * 0.2, h * 0.5), a + Vector2(0, h * 0.5)]), Color(CUTIN_GOLD.lightened(0.15), alpha))
+	draw_colored_polygon(PackedVector2Array([a + Vector2(0, h * 0.5), b + Vector2(-h * 0.2, h * 0.5), b + Vector2(-h * 0.4, h), a + Vector2(0, h)]), Color(CUTIN_GOLD.darkened(0.12), alpha))
+	draw_polyline(PackedVector2Array([a, b, b + Vector2(-h * 0.4, h), a + Vector2(0, h), a]), Color(LowpolyBox.edge_color(CUTIN_GOLD), alpha), 1.2, true)

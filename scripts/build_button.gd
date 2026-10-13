@@ -1,7 +1,7 @@
 extends CanvasLayer
-## [건물] 버튼(사용자 2026-10-13 "1.5배속 밑에 건물 버튼을 하나 둬서, 건물을 선택하고 내가 원하는 공간에다 건물을 짓는 형태"):
+## [건설] 버튼(처음엔 [건물], 사용자 02:20Z "버튼명을 건물대신 건설이라고해")(사용자 2026-10-13 "1.5배속 밑에 건물 버튼을 하나 둬서, 건물을 선택하고 내가 원하는 공간에다 건물을 짓는 형태"):
 ## 성 화면 왼쪽 아래, 배속 버튼 자리(오른쪽 아래 [메뉴] 토글과 아래 끝을 맞춘다 — 하단 탭·초상화 줄·가이드 카드보다 위). 배속 버튼은 이 버튼 위로 올라간다.
-## 이 버튼은 배속 버튼이 숨거나 바뀌어도 제자리다. 누르면 건물 목록 창(build_list_panel.gd). 지을 수 있는 공터가 있으면 오른쪽 위 빨간 점.
+## 이 버튼은 배속 버튼이 숨거나 바뀌어도 제자리다. 누르면 오른쪽으로 펼쳐지는 건물 목록(build_list_panel.gd, 다시 누르면 접힘). 지을 수 있는 공터가 있으면 오른쪽 위 빨간 점.
 ## 스테이지를 미는 동안은 main이 숨긴다(_battle_hide).
 
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -37,7 +37,7 @@ func _ready() -> void:
 	_face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_face.draw.connect(_draw_face)
 	button.add_child(_face)
-	button.pressed.connect(func(): if panel != null: panel.open())
+	button.pressed.connect(func(): if panel != null: panel.toggle())
 	add_child(button)
 	Economy.changed.connect(_refresh_dot)
 	_refresh_dot()
@@ -87,8 +87,8 @@ func _draw_face() -> void:
 		_face.draw_polyline(rim, ink, 4.0, true)
 		_face.draw_colored_polygon(poly, col)
 	_face.draw_rect(Rect2(cx - 4, 36, 8, 11), COLOR.darkened(0.2))
-	_face.draw_string_outline(FONT, Vector2(0, 74), "건물", HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, 5, ink)
-	_face.draw_string(FONT, Vector2(0, 74), "건물", HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, col)
+	_face.draw_string_outline(FONT, Vector2(0, 74), "건설", HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, 5, ink)
+	_face.draw_string(FONT, Vector2(0, 74), "건설", HORIZONTAL_ALIGNMENT_CENTER, SIZE.x, 20, col)
 	if _dot:
 		_face.draw_circle(Vector2(SIZE.x - 8, 8), DOT_R + 2.0, Color.WHITE)
 		_face.draw_circle(Vector2(SIZE.x - 8, 8), DOT_R, Color(0.88, 0.22, 0.2))

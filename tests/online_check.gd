@@ -785,11 +785,11 @@ func _phase6_quests() -> void:
 		and Economy.tutorial_training, "(q) a new online player starts the tutorial from the server: card on mission 1, empty lots",
 		"quest=%s unbuilt=%s mission=%s" % [Economy.server_quest, Economy.unbuilt.keys(), Tutorial.mission()])
 	Tutorial.note("open", 1, "keep")
-	var wood0 := int(Economy.res.get("wood", 0))
+	var food0 := int(Economy.res.get("food", 0))
 	_check(Tutorial.complete() and Tutorial.claim(), "(q) mission 1 done; claim sent to the server", "complete=%s" % Tutorial.complete())
 	var got := await _wait_until(func(): return Tutorial.step == 1, 10.0)
-	_check(got and int(Economy.res.wood) == wood0 + int(Tutorial.reward(0).wood) and Tutorial.count == 0 and Tutorial.mission().id == "build_lumber",
-		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d wood=%d->%d" % [Tutorial.step, wood0, int(Economy.res.wood)])
+	_check(got and int(Economy.res.get("food", 0)) == food0 + int(Tutorial.reward(0).food) and Tutorial.count == 0 and Tutorial.mission().id == "build_lumber",
+		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d food=%d->%d" % [Tutorial.step, food0, int(Economy.res.get("food", 0))])
 	var t0 := Economy.time_now()
 	_check(Economy.upgrade_block("lumber", t0) == "" and Economy.upgrade("lumber", t0), "(q) the lumber lot can be built with the reward", Economy.upgrade_block("lumber", t0))
 	var started := await _wait_until(func(): return Economy.is_building("lumber"), 10.0)
@@ -1013,8 +1013,8 @@ func _buildings_online(state_path: String) -> void:
 	var paid := true
 	for r in cost:
 		paid = paid and Economy.res[r] == int(res0[r]) - int(cost[r])
-	_check(Economy.build.get("id") == "keep" and paid and started.size() == 2 and started[1] == ["keep", fin] and absf(fin - (Economy.time_now() + 60.0)) < 10.0 and Economy.upgrade_block("barracks", Economy.time_now()) == "keep_cap",
-		"(r) the server takes 300/300/200 and starts the builder (finish = server time + 60 s), build_started", "build=%s res=%s started=%s" % [Economy.build, Economy.res, started])
+	_check(Economy.build.get("id") == "keep" and paid and started.size() == 2 and started[1] == ["keep", fin] and absf(fin - (Economy.time_now() + GameData.build_sec("keep", 1))) < 10.0 and Economy.upgrade_block("barracks", Economy.time_now()) == "keep_cap",
+		"(r) the server takes the keep cost and starts the builder (finish = server time + build_sec), build_started", "build=%s res=%s started=%s" % [Economy.build, Economy.res, started])
 	Economy.finish_build_now()  # POST /v1/test/build_now — 응답(플레이어 읽기)이 게으른 완료를 한다
 	await _wait_until(func(): return Economy.building_level("keep") == 2, 15.0)
 	await _frames(2)

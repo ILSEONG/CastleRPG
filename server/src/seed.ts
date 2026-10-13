@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
-import { BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseNeeds, parseReward, parseTiers, parseTrainCost, QUEST_REWARD_KEYS, QUEST_TYPES,
+import { BUILD_LV_COLS, BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseLevelList, parseNeeds, parseReward, parseTiers, parseTrainCost, QUEST_REWARD_KEYS, QUEST_TYPES,
   RESEARCH_BRANCHES, RESEARCH_EFFECTS, UPGRADE_UNITS,
   WEAPON_OF } from './rules.ts'
 
@@ -72,8 +72,11 @@ export const TABLES: TableSpec[] = [
   {
     // 개정 12: 건물 표(스펙 §2.2). req1·req2는 비면 null(선행 없음)
     name: 'buildings', table: 'building_defs', file: 'buildings.csv', ordered: true,
-    cols: { id: 'key', name: 'text', max_level: 'int', wood: 'int', stone: 'int', food: 'int', base_sec: 'num', req1: 'opt', req2: 'opt' },
-    sql: { id: 'text', name: 'text', max_level: 'integer', wood: 'integer', stone: 'integer', food: 'integer', base_sec: 'real', req1: 'text', req2: 'text' },
+    // 2026-10-13: lv_sec·lv_wood·lv_stone·lv_food = 레벨별 L → L+1 값 "v1|v2|…"(라오킹 곡선, 비면 1→2 값 × 성장 식)
+    cols: { id: 'key', name: 'text', max_level: 'int', wood: 'int', stone: 'int', food: 'int', base_sec: 'num', req1: 'opt', req2: 'opt',
+      lv_sec: 'opt', lv_wood: 'opt', lv_stone: 'opt', lv_food: 'opt' },
+    sql: { id: 'text', name: 'text', max_level: 'integer', wood: 'integer', stone: 'integer', food: 'integer', base_sec: 'real', req1: 'text', req2: 'text',
+      lv_sec: 'text', lv_wood: 'text', lv_stone: 'text', lv_food: 'text' },
   },
   {
     // 개정 13: 병종 표(1티어 기준). building = 그 병종을 만드는 건물
@@ -373,6 +376,18 @@ function checkBuildings(t: Tables, errors: string[]) {
     for (const r of BUILD_RES) if (!(Number(b[r]) >= 0)) err(b._line, r, `must be 0 or more: ${b[r]}`)
     if (!(Number(b.base_sec) > 0)) err(b._line, 'base_sec', `must be greater than 0: ${b.base_sec}`)
     for (const c of ['req1', 'req2']) if (b[c] !== null && !ids.has(String(b[c]))) err(b._line, c, `unknown building '${b[c]}'`)
+    // 레벨 목록: 있으면 max_level − 1개, 비용은 0 이상 정수, 시간은 0보다 크다
+    for (const c of BUILD_LV_COLS) {
+      if (b[c] === null || b[c] === undefined || String(b[c]).trim() === '') continue
+      const xs = parseLevelList(b[c])
+      const n = Number(b.max_level) - 1
+      if (!(n >= 1)) continue // max_level 오류가 따로 나온다
+      if (!xs) err(b._line, c, `must be numbers joined by '|': ${b[c]}`)
+      else if (xs.length !== n) err(b._line, c, `must have ${n} values (one per level up), got ${xs.length}`)
+      else if (c === 'lv_sec' ? xs.some((v) => !(v > 0)) : xs.some((v) => !(Number.isInteger(v) && v >= 0))) {
+        err(b._line, c, c === 'lv_sec' ? 'every value must be greater than 0' : 'every value must be a non-negative integer')
+      }
+    }
   }
   if (t.buildings) for (const id of [KEEP, GATE]) if (!ids.has(id)) err(0, 'id', `missing required building '${id}'`)
   if (t.buildings && t.resources) {
