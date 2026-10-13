@@ -4649,10 +4649,10 @@ func test_research_r24() -> void:
 	check(c.branch == "economy" and c.tier == 2.0 and c.req1 == "wood_tech" and c.req1_lv == 3.0 and c.req2 == "stone_tech" and c.req2_lv == 3.0 and c.lab_req == 3.0
 		and w.req1 == "" and w.req1_lv == 0.0 and w.req2 == "", "construct needs wood/stone tech Lv 3 and lab 3; empty prerequisites are \"\" / 0")
 	# 비용: round(값 × 1.4^n), n = 지금 레벨(0부터). 시간: round(base × 1.4^n ÷ (1 + 속도)) (2026-10-13 라오킹식)
-	check(GameData.research_cost("wood_tech", 0) == {"wood": 1200, "stone": 800, "food": 1000, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 1680, "stone": 1120, "food": 1400, "gold": 0}
-		and GameData.research_cost("construct", 2) == {"wood": 7840, "stone": 5880, "food": 6860, "gold": 9800} and GameData.research_cost("construct", 3) == {"wood": 10976, "stone": 8232, "food": 9604, "gold": 13720}
+	check(GameData.research_cost("wood_tech", 0) == {"wood": 210, "stone": 160, "food": 190, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 294, "stone": 224, "food": 266, "gold": 0}
+		and GameData.research_cost("construct", 2) == {"wood": 5194, "stone": 3900, "food": 4547, "gold": 24892} and GameData.research_cost("construct", 3) == {"wood": 7272, "stone": 5461, "food": 6366, "gold": 34849}
 		and GameData.research_cost("nope", 0).is_empty(),
-		"research cost = round(value x 1.4^n) (construct Lv 4: 10975.999… rounds to 10976): %s" % [GameData.research_cost("construct", 3)])
+		"research cost = round(value x 1.4^n) (construct Lv 4: 2650 x 2.744 = 7271.6 -> 7272): %s" % [GameData.research_cost("construct", 3)])
 	check(GameData.research_sec("wood_tech", 0, 0.0) == 60 and GameData.research_sec("wood_tech", 9, 0.0) == 1240 and GameData.research_sec("elite", 9, 0.0) == 223139
 		and GameData.research_sec("wood_tech", 0, 0.5) == 40 and GameData.research_sec("wood_tech", 1, 0.58) == 53 and GameData.research_sec("nope", 0, 0.0) == 0,
 		"research time = round(base x 1.4^n / (1 + speed)): wood Lv 10 about 21 min, elite Lv 10 about 2.6 days, lab 30 (+58%%) 84 s -> 53 s: %s" % [[GameData.research_sec("wood_tech", 9, 0.0), GameData.research_sec("elite", 9, 0.0), GameData.research_sec("wood_tech", 1, 0.58)]])
@@ -4662,13 +4662,13 @@ func test_research_r24() -> void:
 	check(b.size() == GameData.RESEARCH_EFFECTS.size() and b.hero_atk_pct == 17.0 and b.wood_pct == 50.0 and b.stone_pct == 0.0 and b.pop_add == 0.0,
 		"bonus: same effect adds up (3 x 3 + 2 x 4 = 17), levels clamp to 0..max, unknown nodes ignored: %s" % [b])
 	# 잠금·이유 코드: unknown → max_level → locked(연구소·선행) → not_enough_resources → not_enough_gold
-	var rich := {"wood": 99999, "stone": 99999, "food": 99999, "gold": 9999}
+	var rich := {"wood": 99999, "stone": 99999, "food": 99999, "gold": 99999}
 	var both := {"wood_tech": 3, "stone_tech": 3}
 	check(GameData.research_block("nope", {}, 30, rich) == "unknown_research" and GameData.research_block("wood_tech", {"wood_tech": 10}, 30, rich) == "max_level"
 		and GameData.research_block("construct", both, 2, rich) == "locked" and GameData.research_block("construct", {"wood_tech": 3, "stone_tech": 2}, 3, rich) == "locked"
-		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3499, "gold": 9999}) == "not_enough_resources"
-		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 4999}) == "not_enough_gold"
-		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 5000}) == "",
+		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 2650, "stone": 1990, "food": 2319, "gold": 99999}) == "not_enough_resources"
+		and GameData.research_block("construct", both, 3, {"wood": 2650, "stone": 1990, "food": 2320, "gold": 12699}) == "not_enough_gold"
+		and GameData.research_block("construct", both, 3, {"wood": 2650, "stone": 1990, "food": 2320, "gold": 12700}) == "",
 		"research_block order: unknown, max, locked (lab, prerequisite), resources, gold")
 	check(GameData.research_lab_need(GameData.research_def("wood_tech"), 0) == 1 and GameData.research_lab_need(GameData.research_def("wood_tech"), 3) == 4
 		and GameData.research_lab_need(GameData.research_def("her30b"), 9) == 30 and GameData.research_block("wood_tech", {"wood_tech": 3}, 3, rich) == "locked"
@@ -4686,17 +4686,17 @@ func test_research_r24() -> void:
 	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	e.gold = 3000
 	check(e.research_available() and e.research_block("construct") == "locked" and e.research_block("wood_tech") == "", "a fresh save can research tier 1, tier 2 is locked")
-	check(e.start_research("wood_tech") and e.res == {"wood": 8800, "stone": 9200, "food": 9000} and e.gold == 3000 and e.research_current.id == "wood_tech"
+	check(e.start_research("wood_tech") and e.res == {"wood": 9790, "stone": 9840, "food": 9810} and e.gold == 3000 and e.research_current.id == "wood_tech"
 		and absf(e.research_left(e.time_now()) - 60.0) < 1.0 and not e.research_available(), "start: the cost leaves at once, 60 s on the clock, no bubble while busy")
 	check(not e.start_research("stone_tech") and e.research_block("stone_tech") == "research_busy" and notes[-1] == EconomyScript.RESEARCH_TEXT.research_busy
-		and e.res.wood == 8800 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
+		and e.res.wood == 9790 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
 	e.complete_due(e.time_now() + 30.0)
 	check(e.research_level("wood_tech") == 0 and not e.research_current.is_empty(), "not done before the finish time")
 	e.complete_due(e.time_now() + 61.0)
 	check(e.research_level("wood_tech") == 1 and e.research_current.is_empty() and done == [["wood_tech", 1]] and notes[-1] == "연구 완료: 벌목술 Lv 1",
 		"lazy completion: level +1, research_done, notice '연구 완료: 벌목술 Lv 1'")
-	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 8200, "stone": 8800, "food": 8500} and e.research_current.is_empty()
-		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (1200/800/1000 -> 600/400/500 back)")
+	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 9685, "stone": 9760, "food": 9715} and e.research_current.is_empty()
+		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (210/160/190 -> 105/80/95 back)")
 	e.levels[GameData.LAB] = 5  # 라오킹식: Lv n → n+1은 연구소 Lv lab_req + n이 필요하다(2026-10-13)
 	e.start_research("wood_tech")  # Lv 1 → 2: 84 s — 5분 이하라 무료(사용자 2026-10-06). 다이아 비용을 보려고 400초로 늘린다 → 다이아 7
 	check(e.research_dia_cost(e.time_now()) == 0, "84 s left is within the free finish window: 0 diamonds")
