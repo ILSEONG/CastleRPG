@@ -77,7 +77,7 @@ func _build_top(root: Control) -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
-	title_label = _label("공성전 · %s" % str(battle.plan.get("enemy_name", "상대 길드")), 30, MainHud.INK)
+	title_label = _label(("공성전 체험 · %s" if battle.plan.get("practice", false) else "공성전 · %s") % str(battle.plan.get("enemy_name", "상대 길드")), 30, MainHud.INK)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(title_label)

@@ -12,10 +12,13 @@ extends Node
 ## 테스트는 .new()로 만들어 econ·gs·guild를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎).
 
 const GameData := preload("res://scripts/game_data.gd")
+const GuideTour := preload("res://scripts/guide_tour.gd")
+const GuideTours := preload("res://scripts/guide_tours.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 4  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+const SAVE_VERSION := 5  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
+## 5: 길드 출석·기부, 길드 보스, 공성전 체험, 거래소 둘러보기 미션(2026-10-13 오후)이 끼었다
 ## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
@@ -28,6 +31,14 @@ const V3_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kil
 	"atk_10", "dungeon_ticket", "equip", "hp_10", "hero_lv4_15", "soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12",
 	"hero_lv4_16", "stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_300", "hero_lv4_18",
 	"atk_16", "stage_1_10", "guild", "hp_16", "hero_lv4_20", "stage_1_12", "pvp", "atk_18", "hp_18", "stage_1_15"]
+## 버전 4의 미션 순서(76개). 버전 4 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations의 guide_steps_v5가 같은 일을 한다).
+const V4_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "attend", "pouch", "stage_1_1", "auto_on",
+	"speed_on", "hero_level", "hero_lv4_5", "mission_claim", "stage_1_2", "growth", "atk_3", "hp_3", "hero_lv4_8", "build_tavern", "gacha", "deploy_new",
+	"auto_deploy", "hero_lv4_10", "shop_free", "stage_1_3", "atk_5", "hp_5", "build_barracks", "train", "build_houses", "hero_lv4_12", "stage_1_4",
+	"kill_100", "dungeon_gold", "atk_8", "hp_8", "dungeon_equip", "hero_lv4_14", "atk_10", "dungeon_ticket", "equip", "hp_10", "hero_lv4_15",
+	"soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12", "hero_lv4_16", "stage_1_7", "build_archery", "atk_14",
+	"hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_300", "hero_lv4_18", "atk_16", "stage_1_10", "guild", "hp_16",
+	"hero_lv4_20", "promote", "stage_1_12", "pvp", "fever", "atk_18", "hp_18", "stage_1_15"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
@@ -168,14 +179,21 @@ const MISSIONS := [
 		"arg": 10, "goto": "stage"},
 	{"id": "guild", "title": "길드 가입", "desc": "오른쪽 아래 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. 출석·기부로 길드 버프를 올립니다.", "kind": "guild",
 		"goto": "tab:guild"},
+	{"id": "guild_attend", "title": "길드 출석·기부", "desc": "[메뉴] → [길드]에서 [출석]을 누르고 기부를 한 번 하세요. 출석과 기부는 매일 할 수 있고, 길드 레벨이 오르면 모든 영웅의 공격력·체력이 오릅니다.",
+		"kind": "guild_attend", "goto": "tab:guild", "point": ["@guild_panel:buttons.attend", "@guild_panel:buttons.donate:gold", "@guild_panel:buttons.tab:home", "menu:guild", "menu"],
+		"reward": {"diamonds": 50}},
 	{"id": "hp_16", "title": "체력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 16], "goto": "tab:growth", "reward": {"gold": 9000}},
 	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 다음 미션에서 승급으로 더 올리는 법을 배웁니다.",
 		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
 	{"id": "promote", "title": "영웅 승급하기", "desc": "영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",
 		"kind": "promote", "goto": "tab:hero", "point": ["hero:promote", "hero:promote_all", "tab:hero"], "reward": {"diamonds": 50}},
+	{"id": "guild_boss", "title": "길드 보스 도전", "desc": "[메뉴] → [길드]의 [보스] 탭에서 드래곤에게 한 번 도전하세요. 하루 2번 도전할 수 있고, 준 피해에 따라 등급과 길드 코인을 받습니다.",
+		"kind": "guild_boss", "goto": "tab:guild", "point": ["@guild_panel:buttons.boss", "@guild_panel:buttons.tab:boss", "menu:guild", "menu"], "reward": {"diamonds": 50}},
 	{"id": "stage_1_12", "title": "스테이지 1-12 클리어", "desc": "전투를 이어 가 1-12까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 12, "goto": "stage", "reward": {"diamonds": 100}},
+	{"id": "siege_try", "title": "공성전 체험", "desc": "길드끼리 성을 공격하는 공성전을 연습 상대와 한 번 해 보세요. 기록과 점수는 남지 않고, 가이드가 중간중간 멈추며 화면을 설명합니다. [바로가기]를 누르면 시작합니다.",
+		"kind": "siege_try", "goto": "siege_practice", "reward": {"diamonds": 50}},
 	{"id": "pvp", "title": "PVP 결투", "desc": "[던전] 탭 위쪽 [PVP]에서 결투나 총력전을 한 판 하세요. 다른 플레이어의 방어팀과 싸워 PVP 코인을 얻고, 코인은 상점에서 씁니다.",
 		"kind": "pvp", "goto": "pvp", "reward": {"tickets": 10}},
 	{"id": "fever", "title": "FEVER 쓰기", "desc": "몬스터를 처치하면 [진행] 왼쪽 FEVER 게이지가 찹니다. 가득 차면 FEVER 버튼을 눌러 잠시 몬스터를 몰아서 잡으세요(대기 중에만).",
@@ -186,6 +204,8 @@ const MISSIONS := [
 		"kind": "growth_lv", "arg": ["hp", 18], "goto": "tab:growth", "reward": {"gold": 10000}},
 	{"id": "stage_1_15", "title": "스테이지 1-15 클리어", "desc": "전투를 이어 가 1-15까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 15, "goto": "stage", "reward": {"diamonds": 200}},
+	{"id": "exchange_look", "title": "거래소 둘러보기", "desc": "[메뉴] → [거래소]를 열어 보세요. 다른 성주가 올린 장비를 골드·다이아로 사고, 내 장비를 올려 팔 수 있습니다.",
+		"kind": "open", "arg": "exchange", "goto": "tab:exchange", "reward": {"diamonds": 50}},
 ]
 ## 반복 퀘스트(사용자 2026-10-06 "퀘스트로 할 수 있는 게 끝나면 반복 퀘스트로"): 튜토리얼을 끝냈거나 건너뛴(기존 저장) 플레이어에게 이 순서로 끝없이
 ## 돈다. 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다. kind: kill·collect·sell·gacha·dungeon_win·build_up(사건 수), stage(지금 도달한
@@ -210,7 +230,7 @@ const REPEAT_DESC := {
 
 ## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
 const TAB_MISSION := {"hero": "hero_level", "growth": "growth", "recruit": "gacha", "dungeon": "dungeon_gold", "soldier": "soldier_deploy",
-	"guild": "guild", "exchange": ""}  # "" = 소개 미션 없음 — 가이드가 끝나면 열린다
+	"guild": "guild", "exchange": "exchange_look"}  # "" = 소개 미션 없음 — 가이드가 끝나면 열린다
 ## 던전 → 그 던전을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 [던전] 탭의 그 카드가 열린다).
 const DUNGEON_MISSION := {"gold": "dungeon_gold", "equip": "dungeon_equip", "ticket": "dungeon_ticket"}
 ## 튜토리얼 훈련(1마리·5초)은 이 미션까지만 — 보병 훈련 미션을 넘기면 원래 훈련 시간(사용자 2026-10-06 "훈련 튜토리얼 끝나도 계속 5초인 버그").
@@ -231,6 +251,10 @@ var fever = null  # Fever(연속 진행 체크·FEVER — auto_on·fever 미션)
 ## 가이드가 가리킬 UI(사용자 2026-10-13 "그런거 하나하나 가이드로"): 키 → {node: Control, show: Callable(없으면 늘)}. 각 화면이 register_ui로 넣는다.
 ## 미션의 point(키 목록, 앞에서부터 보이는 첫 것) — 없으면 goto에서 만든다(point_keys). tutorial_card가 그 위에 화살표를 그린다.
 var ui_targets := {}
+var tours_seen := {}  # 본 포커스 설명 id → true(guide_tours.gd — 다시 안 띄운다, 이 기기에만 저장)
+var tour_node: Node = null  # 지금 떠 있는 포커스 설명(guide_tour.gd)
+var tours_on := false  # 실제 게임(_start)만 켠다 — 테스트 장면·개발 실행은 설명이 입력을 막지 않게 끈다
+var _tour_cd := 0.0
 const MENU_ITEMS := ["settings", "bag", "mission", "ranking", "friend", "event", "guild", "exchange", "mail"]  # 오른쪽 아래 메뉴 항목(하단 탭이 아님)
 var state := "skipped"  # active | done | skipped
 var step := 0  # 지금 미션 번호(0부터)
@@ -268,6 +292,7 @@ func _start() -> void:
 		changed.emit()
 		return
 	repeats_on = true
+	tours_on = true
 	if net_online:
 		go_online()
 		return
@@ -344,17 +369,71 @@ func _connect() -> void:
 		econ.pouch_opened.connect(func(_o): note("pouch"))
 		econ.promoted.connect(func(_h, _p): note("promote"))
 		econ.promoted_all.connect(func(_r): note("promote"))
+	if guild != null:
+		guild.boss_done.connect(func(r): if not r.has("error"): note("guild_boss"))
 
 
 func _process(delta: float) -> void:
 	if mission().is_empty():
 		return
+	_tour_cd -= delta
+	if _tour_cd <= 0.0:
+		_tour_cd = 0.25
+		_check_tours()
 	_check_cd -= delta
 	if _check_cd <= 0.0:
 		_check_cd = 1.0
 		check()
 		if _dirty:
 			save()
+
+
+## 지금 미션의 포커스 설명 중 아직 안 본 것이 띄울 때가 되었으면 띄운다(표 순서로 먼저 된 것 하나씩).
+func _check_tours() -> void:
+	if not tours_on or not active() or repeating() or is_instance_valid(tour_node) or not is_inside_tree():
+		return
+	for tid in GuideTours.MISSION_TOURS.get(str(mission().get("id", "")), []):
+		if tours_seen.has(tid):
+			continue
+		var t: Dictionary = GuideTours.TOURS[tid]
+		if tour_ready(str(t.when)):
+			start_tour(tid)
+			return
+
+
+## 포커스 설명 tid를 띄운다(본 것으로 적는다).
+func start_tour(tid: String) -> Node:
+	var t: Dictionary = GuideTours.TOURS[tid]
+	tours_seen[tid] = true
+	_dirty = true
+	var o = GuideTour.new()
+	o.id = tid
+	o.steps = t.steps
+	o.pause = t.get("pause", false) == true
+	tour_node = o
+	get_tree().root.add_child(o)
+	return o
+
+
+## 설명을 띄울 때인가: 그곳이 보이거나, "war?…"면 공성전 체험 전장 상태.
+func tour_ready(when: String) -> bool:
+	if when.begins_with("war?"):
+		var b = GuideTour.find_script_node(get_tree().root, "res://scripts/war_battle.gd")
+		if b == null or not b.plan.get("practice", false) or b.hud == null:
+			return false
+		var c := when.substr(4)
+		if c == "deploying":
+			return b.deploying
+		if c.begins_with("fight:"):
+			return not b.deploying and b.clock >= float(c.get_slice(":", 1))
+		if c == "gate_broken":
+			return b.gates_broken_now() > 0 and not b.done
+		if c == "my_dead":
+			return not b.done and b.my_units().any(func(u): return is_instance_valid(u) and not u.is_alive())
+		if c == "done":
+			return b.done
+		return false
+	return GuideTour.resolve(when, get_tree()) != null
 
 
 func _notification(what: int) -> void:
@@ -484,6 +563,11 @@ func point_target() -> Control:
 	if m.is_empty() or complete() or not active():
 		return null
 	for k in point_keys(m):
+		if str(k).begins_with("@"):  # "@<스크립트>:<경로>" — 그 화면의 변수(guide_tour.gd resolve 형식)
+			var n = GuideTour.resolve_node(str(k).substr(1), get_tree())
+			if n != null:
+				return n
+			continue
 		var t = ui_targets.get(k)
 		if t == null or not is_instance_valid(t.node) or not t.node.is_visible_in_tree():
 			continue
@@ -822,8 +906,14 @@ func target_building() -> String:
 
 func goto_current() -> void:
 	var m := mission()
-	if not m.is_empty():
-		goto_requested.emit(goto_of(m))
+	if m.is_empty():
+		return
+	if goto_of(m) == "siege_practice":  # 공성전 체험: 연습 공성 장면을 바로 연다
+		var gw := get_node_or_null("/root/GuildWar")
+		if gw != null:
+			gw.practice_enter()
+		return
+	goto_requested.emit(goto_of(m))
 
 
 ## 미션의 [바로가기] 대상. 병사 배치: 아직 받은 병사가 없으면 [병사] 창 대신 막사(훈련이 끝난 병사를 받는 곳 — 통합 테스트 2026-10-07).
@@ -854,6 +944,12 @@ func _done(m: Dictionary) -> bool:
 			return not econ.shop_free_left("daily")
 		"fever":
 			return count >= 1 or (fever != null and fever.active())
+		"guild_attend":  # 오늘 길드 출석과 기부를 했다
+			return guild != null and guild.joined() and guild.me.get("attended", false) == true and not Dictionary(guild.me.get("donations", {})).is_empty()
+		"guild_boss":  # 길드 보스에 도전했다(오늘 도전 횟수를 썼다)
+			return count >= 1 or (guild != null and int(guild.me.get("boss_tries", 0)) > 0)
+		"siege_try":  # 공성전 체험을 끝냈다
+			return count >= 1
 		"promote":  # 승급했다(이미 승급한 영웅이 있어도 통과)
 			return count >= 1 or econ.hero_promotions.values().any(func(v): return int(v) > 0)
 		"hero_lv":
@@ -921,7 +1017,7 @@ func save() -> void:
 		push_warning("tutorial save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "state": state, "step": step, "count": count, "best_stage": best_stage, "rep_n": rep_n,
-		"rep_quest": rep_quest}))
+		"rep_quest": rep_quest, "tours_seen": tours_seen.keys()}))
 	f.close()
 
 
@@ -945,6 +1041,8 @@ func load_save() -> bool:
 		old_step = v2_step(old_step)
 	elif ver < 4:
 		old_step = map_step(V3_IDS, old_step)
+	elif ver < 5:
+		old_step = map_step(V4_IDS, old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))
@@ -955,6 +1053,11 @@ func load_save() -> bool:
 		rep_quest.arg = int(rep_quest.arg)
 		rep_quest.cycle = int(rep_quest.get("cycle", 0))
 		rep_quest.base_value = int(rep_quest.get("base_value", 0))
+	tours_seen = {}
+	var ts = d.get("tours_seen", [])
+	if ts is Array:
+		for x in ts:
+			tours_seen[str(x)] = true
 	if state == "active" and step >= MISSIONS.size():
 		state = "done"
 	return true

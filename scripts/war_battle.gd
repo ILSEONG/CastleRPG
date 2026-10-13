@@ -129,6 +129,11 @@ func _ready() -> void:
 		if net != null and str(plan.get("live", "")) != "":
 			n.url = NetScript.live_url(net.api_base, str(plan.live), str(plan.get("battle_id", "")), net.token)
 		add_child(n)
+	elif plan.get("practice", false):  # 가이드 공성전 체험: 저장·점수 없이 끝나면 가이드에 알린다
+		finished.connect(func(_r):
+			var tut := get_node_or_null("/root/Tutorial")
+			if tut != null:
+				tut.note("siege_try"))
 	elif main != null:
 		finished.connect(func(r): GuildWar.finish(r))
 	print("[war] role %s defenders %d attackers %d half %.1f" % [role, _def.size(), _att.size(), half])

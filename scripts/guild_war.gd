@@ -13,6 +13,7 @@ extends Node
 const GameData := preload("res://scripts/game_data.gd")
 const WarRules := preload("res://scripts/war_rules.gd")
 
+const PRACTICE_SEC := 240.0  # 가이드 공성전 체험 전투 시간(실전 WarRules.BATTLE_SEC보다 짧게)
 const SAVE_VERSION := 1
 const ENEMY_DAY_BASE := 45.0
 const ENEMY_DAY_SPREAD := 0.25
@@ -235,6 +236,37 @@ func enter(ids: Array) -> bool:
 	var plan := local_enter(entries, now_t())
 	if plan.is_empty():
 		return false
+	battle_started.emit.call_deferred({"plan": plan, "role": "solo", "online": false})
+	return true
+
+
+## 가이드 「공성전 체험」(2026-10-13): 기록·점수·보상 없는 연습 공성(온라인이어도 이 기기에서만). 상대는 약한 가상 길드 4명(성문 = 길드 Lv 1),
+## 우리 편은 나 + AI 길드원 3명. 배치 단계는 [전투 시작]을 누를 때까지(가이드가 멈춰 가며 설명한다). 반환 plan(local_enter와 같은 모양 + practice).
+func practice_enter() -> bool:
+	var ids := default_squad()
+	if ids.is_empty():
+		_notice("배치할 영웅이 없습니다")
+		return false
+	var power := 0.0
+	for id in ids:
+		power += float(hero_power(id))
+	var r := _rng([int(now_t()) / 3600, 91])
+	var enemy := enemy_guild(r.randi(), 4, power * 0.5)
+	var mx := castle_max(enemy.defenders, 1)
+	var roster := []
+	for i in 3:
+		roster.append({"owner": "v:%d" % i, "name": "길드원 %d" % (i + 1), "squad": i, "lane": i % 4, "ai": true, "heroes": random_squad(r, power)})
+	var mine := []
+	for id in ids:
+		var e := hero_entry(id)
+		mine.append({"hero": id, "level": econ.level_of(id), "promotion": econ.promotion_of(id), "hp": e.hp, "atk": e.atk})
+	roster.append({"owner": "me", "name": "나", "squad": 3, "lane": 2, "ai": false, "heroes": mine})
+	var gates := []
+	for i in 4:
+		gates.append({"hp": mx.gates[i], "max": mx.gates[i]})
+	var plan := {"battle_id": "practice", "practice": true, "my_id": "me", "enemy_name": enemy.name, "duration": PRACTICE_SEC, "clock": 0.0,
+		"deploy_left": WarRules.DEPLOY_SEC, "can_start": true, "gates": gates, "keep": {"hp": mx.keep, "max": mx.keep}, "defenders": enemy.defenders,
+		"attackers": roster, "live": ""}
 	battle_started.emit.call_deferred({"plan": plan, "role": "solo", "online": false})
 	return true
 

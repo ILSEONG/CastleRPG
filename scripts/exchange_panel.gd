@@ -140,6 +140,7 @@ func _fit() -> void:
 func _on_open() -> void:
 	confirm.visible = false
 	refresh()
+	Tutorial.note("open", 1, "exchange")  # 가이드 「거래소 둘러보기」
 
 
 func _process(delta: float) -> void:

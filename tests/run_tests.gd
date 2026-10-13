@@ -16,6 +16,7 @@ const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
 const SkillIconsScript := preload("res://scripts/skill_icons.gd")
 const LowpolyBoxScript := preload("res://scripts/lowpoly_box.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
+const GuideToursScript := preload("res://scripts/guide_tours.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const HeroArt := preload("res://scripts/hero_art.gd")
@@ -5267,7 +5268,7 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 76 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 80 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5283,7 +5284,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 75번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5297,6 +5298,26 @@ func test_tutorial() -> void:
 	check(TutorialScript.map_step(TutorialScript.V3_IDS, 0) == 0 and TutorialScript.map_step(TutorialScript.V3_IDS, 7) == t.mission_index("stage_1_1")
 		and TutorialScript.map_step(TutorialScript.V3_IDS, 34) == t.mission_index("dungeon_ticket")
 		and TutorialScript.map_step(TutorialScript.V3_IDS, 67) == TutorialScript.MISSIONS.size(), "guide: old v3 steps map to the same mission id")
+	check(TutorialScript.map_step(TutorialScript.V4_IDS, 66) == t.mission_index("guild") and TutorialScript.map_step(TutorialScript.V4_IDS, 67) == t.mission_index("hp_16")
+		and TutorialScript.map_step(TutorialScript.V4_IDS, 75) == t.mission_index("stage_1_15")
+		and TutorialScript.map_step(TutorialScript.V4_IDS, 76) == TutorialScript.MISSIONS.size(), "guide: old v4 steps map to the same mission id")
+	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
+	t.step = t.mission_index("siege_try")
+	t.count = 0
+	check(not t.complete() and t.goto_of(t.mission()) == "siege_practice", "guide: siege trial waits for the practice battle")
+	t.note("siege_try")
+	check(t.complete(), "guide: finishing the practice siege completes it")
+	t.step = t.mission_index("exchange_look") - 1
+	check(t.tab_locked("exchange"), "guide: the exchange stays locked before its mission")
+	t.step += 1
+	t.count = 0
+	check(not t.tab_locked("exchange") and not t.complete(), "guide: the exchange opens at its mission")
+	t.note("open", 1, "exchange")
+	check(t.complete(), "guide: opening the exchange completes it")
+	for tid in GuideToursScript.TOURS:
+		check(GuideToursScript.TOURS[tid].steps.size() > 0 and GuideToursScript.TOURS[tid].has("when"), "guide tour %s has steps" % tid)
+	for mid in GuideToursScript.MISSION_TOURS:
+		check(t.mission_index(mid) >= 0 and GuideToursScript.MISSION_TOURS[mid].all(func(x): return GuideToursScript.TOURS.has(x)), "guide tours of %s exist" % mid)
 	# 기능 가이드: 연속 진행·배속·미션 받기·주머니는 그 행동으로 끝난다
 	var fv = t.fever
 	var fake_fever := {"auto_next": false}
@@ -5307,7 +5328,7 @@ func test_tutorial() -> void:
 	fake_fever.auto_next = true
 	check(t.complete(), "guide: checking [연속 진행] completes its mission")
 	t.fever = fv
-	for id in ["mission_claim", "pouch", "auto_deploy", "promote"]:
+	for id in ["mission_claim", "pouch", "auto_deploy", "promote", "guild_boss"]:
 		t.step = t.mission_index(id)
 		t.count = 0
 		var before: bool = t.complete()
@@ -5359,6 +5380,7 @@ func test_tutorial() -> void:
 	# 끝까지
 	t.step = TutorialScript.MISSIONS.size() - 1
 	t.guild = null
+	t.count = 0
 	check(not t.complete() and t.tab_locked("guild") == false, "tutorial: guild tab open at the guild mission")
 	t.state = "done"
 	t.repeats_on = true
