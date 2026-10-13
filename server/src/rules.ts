@@ -948,12 +948,16 @@ export function researchBlock(def: ResearchDef, levels: Record<string, number>, 
   const n = levels[def.id] ?? 0
   if (n >= def.max_level) return 'max_level'
   const reqs: [string | null, number | null][] = [[def.req1, def.req1_lv], [def.req2, def.req2_lv]]
-  if (labLevel < def.lab_req || reqs.some(([id, lv]) => id && (levels[id] ?? 0) < Number(lv))) return 'locked'
+  if (labLevel < def.lab_req || labLevel < researchLabNeed(config, def, n) || reqs.some(([id, lv]) => id && (levels[id] ?? 0) < Number(lv))) return 'locked'
   const cost = researchCost(config, def, n)
   if (BUILD_RES.some((r) => (have[r] ?? 0) < cost[r])) return 'not_enough_resources'
   if ((have.gold ?? 0) < cost.gold) return 'not_enough_gold'
   return ''
 }
+
+// n → n+1에 필요한 연구소 Lv = min(research_lab_cap, lab_req + n × research_lab_per_level)(라오킹식, 2026-10-13). 앱 GameData.research_lab_need와 같다.
+export const researchLabNeed = (config: Config, def: ResearchDef, n: number) =>
+  Math.min(cfgNum(config, 'research_lab_cap'), Number(def.lab_req) + n * cfgNum(config, 'research_lab_per_level'))
 
 // 취소 환불 = 그 레벨 비용 × research_cancel_refund(자원·골드마다 내림).
 export const researchRefund = (config: Config, cost: Record<string, number>) =>

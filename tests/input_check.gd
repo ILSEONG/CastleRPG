@@ -1560,7 +1560,7 @@ func _research_ui(tabs, hud) -> void:
 	await _tap(_center(rw.cards.wood_tech.button))
 	await _frames(1)
 	_check(rw.is_detail_open() and rw.detail_id == "wood_tech" and rw.detail_name.text == "벌목술 Lv 0/10" and rw.detail_effect.text == "목재 생산  현재 +0% → 다음 +5%"
-		and rw.detail_reqs.get_child(0).text == "✓ 연구소 Lv 1 필요" and rw.detail_cost.wood.text == "50,000/1,200" and not rw.detail_cost.gold.visible
+		and rw.detail_reqs.get_child(0).text == "✓ 연구소 Lv 1 필요" and rw.detail_cost.wood.text == "50,000/210" and not rw.detail_cost.gold.visible
 		and rw.detail_time.text == "연구 시간 01:00" and not rw.start_button.disabled and rw.start_button.visible and not rw.detail_run.visible,
 		"(RS) card tap opens the detail: name, effect 현재 +0% → 다음 +5%, ✓ lab Lv 1, cost 보유/필요, time 01:00, [연구] on",
 		"open=%s name=%s effect=%s cost=%s time=%s" % [rw.is_detail_open(), rw.detail_name.text, rw.detail_effect.text, rw.detail_cost.wood.text, rw.detail_time.text])
@@ -1569,9 +1569,9 @@ func _research_ui(tabs, hud) -> void:
 	await _unguarded(rw)
 	await _tap(_center(rw.start_button))
 	await _frames(1)
-	_check(Economy.research_current.get("id", "") == "wood_tech" and Economy.res == {"wood": 48800, "stone": 49200, "food": 49000} and rw.detail_run.visible and not rw.start_button.visible
-		and rw.cur_row.visible and rw.cur_name.text == "벌목술 Lv 1" and not rw.idle_label.visible and rw.card_state("wood_tech") == "running" and rw.dia_button.text.ends_with("1 즉시 완료"),
-		"(RS) [연구]: resources -1200/800/1000, the research runs (bar + [다이아 1 즉시 완료] + [취소] in the detail and on top)",
+	_check(Economy.research_current.get("id", "") == "wood_tech" and Economy.res == {"wood": 49790, "stone": 49840, "food": 49810} and rw.detail_run.visible and not rw.start_button.visible
+		and rw.cur_row.visible and rw.cur_name.text == "벌목술 Lv 1" and not rw.idle_label.visible and rw.card_state("wood_tech") == "running" and rw.dia_button.text == "무료 즉시 완료",
+		"(RS) [연구]: resources -210/160/190, the research runs (bar + [무료 즉시 완료] (5 min or less) + [취소] in the detail and on top)",
 		"current=%s res=%s top=%s" % [Economy.research_current, Economy.res, rw.cur_name.text])
 	rw.close_detail()
 	await _tap(_center(rw.cards.stone_tech.button))
@@ -1585,15 +1585,15 @@ func _research_ui(tabs, hud) -> void:
 	_check(Economy.research_current.id == "wood_tech" and Economy.res == res0, "(RS) tapping the disabled [연구] does nothing", "current=%s" % [Economy.research_current])
 	rw.close_detail()
 	# 다이아 즉시 완료(위 막대)
-	_check(rw.dia_button.disabled, "(RS) with no diamonds the instant finish is off", "")
+	_check(not rw.dia_button.disabled, "(RS) with 5 min or less left the instant finish is free, so it is on even with no diamonds", "")
 	Economy.diamonds = 5
 	Economy.changed.emit()
 	await _frames(1)
 	await _tap(_center(rw.dia_button))
 	await _frames(2)
-	_check(Economy.research_level("wood_tech") == 1 and Economy.research_current.is_empty() and Economy.diamonds == 4 and rw.cards.wood_tech.lv.text == "Lv 1/10"
+	_check(Economy.research_level("wood_tech") == 1 and Economy.research_current.is_empty() and Economy.diamonds == 5 and rw.cards.wood_tech.lv.text == "Lv 1/10"
 		and rw.idle_label.visible and hud._toast.visible and hud._toast.text == "연구 완료: 벌목술 Lv 1",
-		"(RS) [다이아 1 즉시 완료]: wood tech Lv 1 at once, diamonds 5 -> 4, toast '연구 완료: 벌목술 Lv 1'",
+		"(RS) [무료 즉시 완료]: wood tech Lv 1 at once, diamonds stay 5, toast '연구 완료: 벌목술 Lv 1'",
 		"lv=%d dia=%d toast=%s" % [Economy.research_level("wood_tech"), Economy.diamonds, hud._toast.text])
 	# 취소 → 50% 환불
 	await _tap(_center(rw.cards.stone_tech.button))
@@ -1604,8 +1604,8 @@ func _research_ui(tabs, hud) -> void:
 	rw.close_detail()
 	await _tap(_center(rw.cancel_button))
 	await _frames(1)
-	_check(Economy.research_current.is_empty() and Economy.res.wood == res1.wood + 600 and Economy.res.stone == res1.stone + 400 and Economy.res.food == res1.food + 500
-		and hud._toast.text == Economy.RESEARCH_CANCEL_TEXT, "(RS) [취소]: 50% of 1200/800/1000 comes back", "res %s -> %s" % [res1, Economy.res])
+	_check(Economy.research_current.is_empty() and Economy.res.wood == res1.wood + 105 and Economy.res.stone == res1.stone + 80 and Economy.res.food == res1.food + 95
+		and hud._toast.text == Economy.RESEARCH_CANCEL_TEXT, "(RS) [취소]: 50% of 210/160/190 comes back", "res %s -> %s" % [res1, Economy.res])
 	# 잠긴 노드
 	await _tap(_center(rw.cards.construct.button))
 	await _frames(1)
