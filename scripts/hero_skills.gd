@@ -199,7 +199,7 @@ func _begin(k: String) -> float:
 			if _cast(k):
 				Sfx.skill(k, h)
 			else:
-				_cd[k] = minf(_cd[k], RETRY)):
+				_cd[k] = minf(_cd[k], RETRY), k):
 		return CAST_WAIT
 	return float(sk[k][0])
 
@@ -226,6 +226,21 @@ func _retarget() -> void:
 
 
 ## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).
+## 발동 순간 연출 종류(Fx.release, 2026-10-13): 공격·강화·회복·소환·수리가 서로 달라 보이게.
+const BUFF_SKILLS := ["war_cry", "taunt", "battle_hymn", "shield", "shield_ally", "blood_rage", "bulwark", "parry"]
+const HEAL_SKILLS := ["heal_aura", "mass_heal", "resurrection", "sanctuary", "howl"]
+static func cast_style(k: String) -> String:
+	if k in BUFF_SKILLS:
+		return "buff"
+	if k in HEAL_SKILLS:
+		return "heal"
+	if k == "gate_repair":
+		return "repair"
+	if SUMMONS.has(k):
+		return "summon"
+	return "attack"
+
+
 static func cast_anim(k: String, hero_def: Dictionary) -> String:
 	return CAST_ANIM.get(k, Art.hero_spec(hero_def).anims.attack)
 
@@ -526,6 +541,7 @@ func add_hymn(pct: float, sec: float) -> void:
 	hymn_pct = maxf(hymn_pct, pct)
 	_hymn_t = maxf(_hymn_t, sec)
 	Fx.buff(h, Color(1.0, 0.4, 0.25))
+	Fx.aura(h, Color(1.0, 0.55, 0.25), sec, "hymn")
 
 
 # --- 발동형 ---
@@ -597,12 +613,14 @@ func _cast(k: String, dry := false) -> bool:
 							o.apply_freeze(float(p[2]))
 				"war_cry":
 					Fx.nova(w, here, Color(1.0, 0.3, 0.2), r, tier)
+					Fx.aura(h, Color(1.0, 0.3, 0.2), 1.2, "rage")
 					for o in near:
 						o.apply_weaken(float(p[2]), 4.0)
 				"taunt":
 					Fx.nova(w, here, Color(1.0, 0.55, 0.1), r, tier)
 					for o in near:
 						o.taunt(h, float(p[2]))
+						Fx.taunt_mark(o, _mark_h(o))
 		"whirlwind":
 			var r := float(p[1])
 			if _near_monsters(here, r).is_empty():
@@ -632,7 +650,10 @@ func _cast(k: String, dry := false) -> bool:
 				Fx.breath(w, here + Vector3(0, 0.9, 0), dir, length, FIRE, tier)
 			else:
 				hits = _line_monsters(here, dir, length, 1.6 if k == "shockwave" else (1.0 if k == "spear_throw" else 1.4))
-				Fx.line(w, here, here + dir * length, h._color if k != "ice_spikes" else ICE, k, tier)
+				if k == "shockwave":
+					Fx.shock_run(w, here, here + dir * length, h._color, tier)
+				else:
+					Fx.line(w, here, here + dir * length, h._color if k != "ice_spikes" else ICE, k, tier)
 			for o in hits:
 				_hit(o, dmg)
 				if o.is_alive():
@@ -701,7 +722,7 @@ func _cast(k: String, dry := false) -> bool:
 				return false
 			if dry:
 				return true
-			Fx.shadow(w, tgt.global_position + HIT)
+			Fx.shadow(w, tgt.global_position + HIT, here + HIT)
 			_hit(tgt, a * float(p[1]) / 100.0 * h._skill_mult)
 		"void_rift", "solar_flare", "abyss_hand", "lava_burst":
 			if t == null:
@@ -794,15 +815,15 @@ func _cast(k: String, dry := false) -> bool:
 			for o in pool.slice(0, int(p[1])):
 				match k:
 					"ignite":
-						Fx.streak(w, here + MUZZLE, o.global_position + HIT, FIRE)
-						Fx.blast(w, _flat(o.global_position), FIRE, 0.9, false, 0)
+						Fx.pierce(w, here + MUZZLE, o.global_position + HIT, FIRE, 0)
+						Fx.blast(w, _flat(o.global_position), FIRE, 1.4, false, mini(tier, 1))
 						o.apply_dot("burn", a * float(p[2]) / 100.0 * h._skill_mult, 3.0)
 					"deep_freeze":
 						Fx.nova(w, _flat(o.global_position), ICE, 1.1, tier)
 						Fx.line(w, _flat(o.global_position) - Vector3(0.5, 0, 0), _flat(o.global_position) + Vector3(0.5, 0, 0), ICE, "ice_spikes", 0)
 						o.apply_freeze(float(p[2]))
 					"axe_volley":
-						_shoot(o, "axe", 20.0, a * float(p[2]) / 100.0 * h._skill_mult, 0.07 * i, _axe_land)
+						_shoot(o, "axe", 20.0, a * float(p[2]) / 100.0 * h._skill_mult, 0.07 * i, _axe_land, Color(0, 0, 0, 0), false, true)
 				i += 1
 		"piercing_shot", "boomerang":
 			if t == null:
@@ -821,6 +842,7 @@ func _cast(k: String, dry := false) -> bool:
 					Fx.nova(w, here, BLOOD, 2.0, tier)
 					Fx.buff(h, BLOOD)
 					Fx.golden_tint(h, BLOOD, float(p[1]))
+					Fx.aura(h, BLOOD, float(p[1]), "rage")
 				"bulwark":
 					_end_wall()
 					_wall_t = float(p[1])
@@ -828,9 +850,11 @@ func _cast(k: String, dry := false) -> bool:
 					Fx.nova(w, here, STEEL, BULWARK_TAUNT_R, tier)
 					for o in _near_monsters(here, BULWARK_TAUNT_R):  # 2026-10-06 밸런스: 방벽 동안 주변 적이 발두르를 노린다(탱커 역할)
 						o.taunt(h, float(p[1]))
+						Fx.taunt_mark(o, _mark_h(o))
 				"parry":
 					_parry_t = float(p[1])
 					Fx.golden_tint(h, STEEL, float(p[1]))
+					Fx.aura(h, STEEL, float(p[1]), "parry")
 					Fx.block(h)
 		"frost_chain":
 			if t == null:
@@ -853,7 +877,7 @@ func _cast(k: String, dry := false) -> bool:
 			var pts := [here + MUZZLE]
 			for o in hit:
 				pts.append(o.global_position + HIT)
-			Fx.lightning(w, pts, ICE, tier)
+			Fx.ice_chain(w, pts, ICE, tier)
 			for o in hit:
 				_hit(o, dmg)
 				if is_instance_valid(o) and o.is_alive():
@@ -866,8 +890,9 @@ func _cast(k: String, dry := false) -> bool:
 			var at: Vector3 = t.global_position
 			match k:
 				"rend":
-					Fx.slash_mark(w, at + HIT + Vector3(0.15, 0.1, 0), BLOOD)
-					_later(0.08, func(): Fx.slash_mark(w, at + HIT - Vector3(0.15, 0.1, 0), BLOOD))
+					Fx.slash_mark(w, at + HIT + Vector3(0.15, 0.1, 0), BLOOD, 1.4)
+					_later(0.08, func(): Fx.slash_mark(w, at + HIT - Vector3(0.15, 0.1, 0), BLOOD, 1.4))
+					_later(0.08, func(): Fx.spark(w, at + HIT, BLOOD.lightened(0.3), 0.7))
 					Fx.impact(w, _flat(at), BLOOD, 0.8, 1, 0.8)
 					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
 					if is_instance_valid(t) and t.is_alive():
@@ -880,8 +905,9 @@ func _cast(k: String, dry := false) -> bool:
 					if is_instance_valid(t) and t.is_alive():
 						t.knockback(here, float(p[2]))
 				"drain_slash":
-					Fx.slash_mark(w, at + HIT, BLOOD)
-					Fx.impact(w, _flat(at), BLOOD, 0.7, 0, 0.8)
+					Fx.slash_mark(w, at + HIT, BLOOD, 1.5)
+					Fx.impact(w, _flat(at), BLOOD, 0.9, 1, 0.8)
+					Fx.drain(w, at + HIT, h, BLOOD)
 					var before: float = t.hp
 					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
 					var dealt: float = before - (t.hp if is_instance_valid(t) and t.is_alive() else 0.0)
@@ -889,7 +915,8 @@ func _cast(k: String, dry := false) -> bool:
 						Fx.heal_cross(h)
 						Fx.soul(w, at + HIT, h)
 				"cheap_shot":
-					Fx.slash_mark(w, at + HIT, h._color)
+					Fx.slash_mark(w, at + HIT, h._color, 1.3)
+					Fx.impact(w, _flat(at), h._color, 0.7, 1, 0.9)
 					Fx.stun_hit(w, at + HIT, tier)
 					_hit(t, a * float(p[1]) / 100.0 * h._skill_mult)
 					if is_instance_valid(t) and t.is_alive():
@@ -903,7 +930,8 @@ func _cast(k: String, dry := false) -> bool:
 							if tt == null or not tt.is_alive():
 								return
 							var off := Vector3(randf_range(-0.3, 0.3), randf_range(-0.2, 0.3), randf_range(-0.3, 0.3))
-							Fx.slash_mark(_world(), tt.global_position + HIT + off, h._color)
+							Fx.slash_mark(_world(), tt.global_position + HIT + off, h._color, 1.25)
+							Fx.spark(_world(), tt.global_position + HIT + off, h._color.lightened(0.4), 0.45)
 							_hit(tt, dmg))
 		"sunder", "shield_bash", "wide_swing", "howl":  # 자기 주변 반경 b
 			var r := float(p[1])
@@ -971,10 +999,10 @@ func _cast(k: String, dry := false) -> bool:
 			var dmg: float = a * float(p[1]) / 100.0 * h._skill_mult
 			var burn: float = a * float(p[2]) / 100.0 * h._skill_mult
 			var after := func(m):
-				Fx.blast(_world(), _flat(m.global_position), FIRE, 1.2, false, 0)
+				Fx.blast(_world(), _flat(m.global_position), FIRE, 1.8, false, mini(h._tier, 1))
 				if m.is_alive():
 					m.apply_dot("burn", burn, 3.0)
-			_shoot(t, "bolt", 18.0, dmg, 0.0, after, FIRE)
+			_shoot(t, "bolt", 18.0, dmg, 0.0, after, FIRE, false, true)
 		"volley":
 			if t == null:
 				return false
@@ -982,7 +1010,7 @@ func _cast(k: String, dry := false) -> bool:
 				return true
 			var shot: Array = SHOTS.get(h.def.model, ["arrow", 30.0])
 			for i in int(p[1]):
-				_shoot(t, shot[0], shot[1], a * float(p[2]) / 100.0 * h._skill_mult, 0.1 * i, Callable(), h._color, true)
+				_shoot(t, shot[0], shot[1], a * float(p[2]) / 100.0 * h._skill_mult, 0.1 * i, _volley_hit, h._color, true, true)
 		_:
 			if not SUMMONS.has(k) or t == null:
 				return false
@@ -995,11 +1023,24 @@ func _cast(k: String, dry := false) -> bool:
 
 ## 도끼 세례가 꽂힌 자리.
 func _axe_land(m) -> void:
-	Fx.impact(_world(), _flat(m.global_position), h._color, 0.6, 0, 0.7)
+	var w := _world()
+	Fx.impact(w, _flat(m.global_position), h._color, 0.9, 1, 0.7)
+	Fx.spark(w, m.global_position + HIT, h._color.lightened(0.4), 0.7)
+	Fx.dust(w, _flat(m.global_position))
+
+
+## 일제 사격 한 발이 맞은 자리.
+func _volley_hit(m) -> void:
+	Fx.spark(_world(), m.global_position + HIT, h._color.lightened(0.4), 0.55)
+
+
+## 도발 표시를 띄울 높이(체력바 바로 위).
+func _mark_h(o) -> float:
+	return (o.bar_height() + 0.35) if o.has_method("bar_height") else 2.2
 
 
 ## 투사체 하나(delay초 뒤, 대상을 따라간다): 맞으면 dmg 스킬 피해 → after(맞은 적).
-func _shoot(target, kind: String, speed: float, dmg: float, delay: float, after := Callable(), color := Color(0, 0, 0, 0), tail := false) -> void:
+func _shoot(target, kind: String, speed: float, dmg: float, delay: float, after := Callable(), color := Color(0, 0, 0, 0), tail := false, big := false) -> void:
 	var tref: WeakRef = weakref(target)
 	var col: Color = h._color if color.a == 0.0 else color
 	_later(delay, func():
@@ -1012,6 +1053,7 @@ func _shoot(target, kind: String, speed: float, dmg: float, delay: float, after 
 		pr.speed = speed
 		pr.color = col
 		pr.tail = tail
+		pr.big = big
 		pr.on_hit = func(m):
 			if is_instance_valid(m) and m.is_alive():
 				_hit(m, dmg)
@@ -1032,7 +1074,7 @@ func _line_shot(k: String, t, length: float, dmg: float) -> void:
 	var hits := _line_monsters(here, dir, length, 1.4 if k != "piercing_shot" else 1.2)
 	match k:
 		"piercing_shot":
-			Fx.fly(w, "dart", h._color, here + MUZZLE, end + MUZZLE, 0.18)
+			Fx.pierce(w, here + MUZZLE, end + MUZZLE, h._color, h._tier)
 			for o in hits:
 				Fx.spark(w, o.global_position + HIT, h._color.lightened(0.3), 0.6)
 		"boomerang":
@@ -1057,7 +1099,7 @@ func _spot(k: String, at: Vector3, r: float, c: float, a: float) -> void:
 	var m: float = h._skill_mult
 	match k:
 		"snare":
-			Fx.hands(w, at, r, Color(0.55, 0.42, 0.25))
+			Fx.vines(w, at, r, Color(0.35, 0.55, 0.2), c)
 			Fx.dust(w, at)
 			for o in hits:
 				_hit(o, a * 0.5 * m)
@@ -1082,13 +1124,13 @@ func _spot(k: String, at: Vector3, r: float, c: float, a: float) -> void:
 			for o in hits:
 				o.apply_dot("curse", a * c / 100.0 * m, 4.0)
 		"solar_spark":
-			Fx.flare_burst(w, at, HOLY, r, tier)
+			Fx.proc_burst(w, at, HOLY, r, "sun")
 			for o in hits:
 				_hit(o, a * c / 100.0 * m)
 				if o.is_alive():
 					o.apply_weaken(30.0, 3.0)
 		"magma":
-			Fx.blast(w, at, FIRE, r, false, tier)
+			Fx.proc_burst(w, at, FIRE, r, "magma")
 			for o in hits:
 				_hit(o, a * c / 100.0 * m)
 				if o.is_alive():
@@ -1100,7 +1142,7 @@ func _zone(k: String, p: Array, center: Vector3) -> void:
 	var r := float(p[1])
 	var a := _atk()
 	var sec: float = {"inferno": 3.0, "poison_cloud": 4.0, "blizzard": 2.0, "tornado": 3.0, "sanctuary": 3.0}[k]
-	var col: Color = {"inferno": FIRE, "poison_cloud": POISON, "blizzard": ICE, "tornado": Color(0.85, 0.95, 0.9), "sanctuary": HOLY}[k]
+	var col: Color = {"inferno": FIRE, "poison_cloud": POISON, "blizzard": ICE, "tornado": Color(0.55, 0.88, 0.78), "sanctuary": HOLY}[k]
 	Fx.zone(_world(), center, col, r, sec, k, h._tier)
 	var gap := 1.0 if k == "sanctuary" else 0.5
 	var ticks := int(round(sec / gap))
@@ -1143,6 +1185,7 @@ func _summon(k: String, dmg: float, sec: float) -> void:
 		_world().add_child(s)
 		var ang: float = TAU * (float(i) / spec[1]) + randf() * 0.5
 		s.global_position = _flat(h.global_position) + Vector3(cos(ang), 0, sin(ang)) * 1.2
+		Fx.summon_in(_world(), s.global_position, h._color, h._tier)
 
 
 ## 연사: 대상에게 화살 n발을 더(각각 피해 50%) — 맞으면 원래 타격 효과는 없다(숫자만).

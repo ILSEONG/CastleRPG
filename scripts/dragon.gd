@@ -184,8 +184,8 @@ func _release() -> void:
 				ring.scale_amount_max = 3.2
 			for x in _alive_heroes():
 				var p: Vector3 = x.global_position
-				Fx.streak(parent, g + Vector3(0, 1.2, 0) + (p - g).normalized() * REACH_R, p + Vector3(0, 0.9, 0), Color(0.95, 0.93, 0.85))
-				Fx.impact(parent, Vector3(p.x, 0.0, p.z), Color(0.9, 0.85, 0.7), 1.0, -1)
+				Fx.wind(parent, g + Vector3(0, 1.2, 0) + (p - g).normalized() * REACH_R, p + Vector3(0, 0.9, 0), Color(0.92, 0.97, 1.0))
+				Fx.impact(parent, Vector3(p.x, 0.0, p.z), Color(0.8, 0.9, 1.0), 1.2, 1)
 				Fx.dust(parent, p)
 				_hurt(x, GUST_MULT)
 		_:
@@ -213,6 +213,16 @@ func _claw_fx(parent: Node, at: Vector3) -> void:
 		tw.tween_property(mi, "scale", Vector3(4.5, 0.05, 4.5), 0.12)
 		tw.tween_callback(mi.queue_free)
 		Fx._fade(mi, 0.14, 0.24)
+		var core := Fx._spawn(parent, Fx._mesh("slice", Color(1.0, 0.75, 0.3)), mi.global_position + Vector3(0, 0, 0.05), "claw_core", Fx.glow_material())
+		if core != null:  # 가산 심: 발톱 자국이 불빛처럼 빛난다
+			Fx._face_camera(core)
+			core.scale = Vector3(0.8, 0.5, 0.8)
+			var tc := core.create_tween()
+			tc.tween_interval(0.03 * i)
+			tc.tween_property(core, "scale", Vector3(3.6, 2.6, 3.6), 0.07).set_ease(Tween.EASE_OUT)
+			tc.tween_property(core, "scale", Vector3(3.9, 0.04, 3.9), 0.2)
+			tc.tween_callback(core.queue_free)
+			Fx._fade(core, 0.18, 0.08)
 	Fx.slash(parent, ground + Vector3(0, 1.2, 0), 2)
 	Fx.quake(parent, ground, 2.0, 1)
 	Fx.impact(parent, ground, FIRE, 1.6, 1)

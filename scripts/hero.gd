@@ -102,6 +102,7 @@ var _skx  # 스킬 100종 확장(hero_skills.gd) — 새 종류의 발동·타�
 var _stun_fx: Node3D
 var _cast_fn := Callable()  # 발동 모션 중인 스킬(개정 25): 모션의 발동 순간에 부른다. 비었으면 시전 중 아님
 var _cast_left := 0.0  # 발동 순간까지 남은 초
+var _cast_style := "attack"  # 발동 순간 연출 종류(hero_skills.cast_style, 2026-10-13)
 var _cast_t := 0.0  # 시전 자세 남은 초(발동 순간 + CAST_RECOVER) — 이 동안 평타·추격을 쉬고 제자리에 선다(이동 명령은 예외)
 
 
@@ -448,7 +449,7 @@ func _process(delta: float) -> void:
 			state = State.ATTACK
 			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null and _blast_ok(_target):
 				_blast_cd = _sk.aoe_blast[0]
-				begin_cast(HeroSkillsScript.cast_anim("aoe_blast", def), _cast_blast.bind(_target))  # 모션의 발동 순간에 터진다
+				begin_cast(HeroSkillsScript.cast_anim("aoe_blast", def), _cast_blast.bind(_target), "aoe_blast")  # 모션의 발동 순간에 터진다
 				return
 			if _atk_cd <= 0.0:
 				_atk_cd = Skills.interval(_sk, float(def.atk_interval) / _aspd, hp_ratio()) / _skx.speed_mult()
@@ -554,14 +555,14 @@ func _tick_skills(delta: float) -> void:
 		_heal_cd -= delta
 		if _heal_cd <= 0.0:
 			_heal_cd = _sk.heal_aura[0]
-			if _anyone_hurt(_sk.heal_aura[1]) and not begin_cast(HeroSkillsScript.cast_anim("heal_aura", def), _heal_aura):
+			if _anyone_hurt(_sk.heal_aura[1]) and not begin_cast(HeroSkillsScript.cast_anim("heal_aura", def), _heal_aura, "heal_aura"):
 				_heal_cd = HeroSkillsScript.CAST_WAIT
 	if _sk.has("gate_repair"):
 		_repair_cd -= delta
 		if _repair_cd <= 0.0:
 			_repair_cd = _sk.gate_repair[0]
 			if castle != null and holds_post() and GameState.gate_hp[side] > 0.0 and GameState.gate_hp[side] < GameState.gate_hp_max \
-					and not begin_cast(HeroSkillsScript.cast_anim("gate_repair", def), _gate_repair):
+					and not begin_cast(HeroSkillsScript.cast_anim("gate_repair", def), _gate_repair, "gate_repair"):
 				_repair_cd = HeroSkillsScript.CAST_WAIT
 
 
@@ -741,11 +742,12 @@ func _cast_blast(m) -> void:
 
 ## 발동 모션(개정 25): anim을 재생하고 기 모으기(Fx.charge)를 띄운 뒤, 모션의 발동 순간에 fn을 부른다. 그동안(+CAST_RECOVER) 평타·추격을 쉰다.
 ## 이미 시전 중이거나 평타를 휘두르는 중이거나 기절·쓰러짐이면 시작하지 않고 false — 쓰는 쪽이 곧 다시 본다.
-func begin_cast(anim: String, fn: Callable) -> bool:
+func begin_cast(anim: String, fn: Callable, kind := "") -> bool:
 	if _cast_fn.is_valid() or _swing != null or state == State.DEAD or is_stunned() or not is_inside_tree():
 		return false
 	var wind: float = _model.play_cast(anim)
 	_cast_fn = fn
+	_cast_style = HeroSkillsScript.cast_style(kind)
 	_cast_left = wind
 	_cast_t = wind + CAST_RECOVER
 	Fx.charge(self, _color, _tier, wind)
@@ -764,7 +766,7 @@ func _tick_cast(delta: float) -> void:
 	if _cast_left <= 0.0:
 		var fn := _cast_fn
 		_cast_fn = Callable()
-		Fx.release(self, _color, _tier)  # 발동 순간 빛 터짐(2026-10-07)
+		Fx.release(self, _color, _tier, _cast_style)  # 발동 순간 빛 터짐(2026-10-07, 2026-10-13 스킬 종류별)
 		fn.call()
 
 
@@ -826,9 +828,10 @@ func _announce(kind: String) -> void:
 	var enemy: bool = get("team") == 1
 	var label := Skills.name_of(kind, def.id)
 	DamageNumbers.banner(self, kind, label if named else "", _color, enemy)
-	if named and not enemy and def.get("grade", "") == "SSR" and kind == _ult_kind():
+	var ult: bool = named and not enemy and def.get("grade", "") == "SSR" and kind == _ult_kind()
+	if ult:
 		DamageNumbers.cutin(str(def.id), label, str(def.get("name", "")), _color, kind, _cutin_art(kind))
-	Fx.pulse(self, _foot, _color, _tier)
+	Fx.pulse(self, _foot, _color, _tier, named, ult)
 	if _tier >= 2 and GameData.fx_shake():  # SSR 발동: 화면이 잠깐 당겨진다(아트 방향 §4, 흔들림 설정을 따른다)
 		var cam := get_viewport().get_camera_3d()
 		if cam != null and cam.get_parent().has_method("punch") and _on_screen(cam):
