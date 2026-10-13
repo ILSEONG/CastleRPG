@@ -66,7 +66,7 @@ const MISSIONS := [
 	{"id": "build_quarry", "title": "채석장 건설", "desc": "[건설] 버튼을 눌러 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
 	{"id": "build_farm", "title": "농장 건설", "desc": "[건설] 버튼을 눌러 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
 	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.",
-		"kind": "kill", "arg": 30},  # 대기 중에도 몬스터가 온다 — [진행]은 1-1 미션에서 처음 가르친다(사용자 2026-10-13 "가이드 5에서 갑자기 진행")
+		"kind": "kill", "arg": 30},  # 처치 미션은 모두 goto 없음: 대기 중에도 몬스터가 와서 끝난다 — 바로가기·화살표가 [진행]을 가리키지 않는다(사용자 2026-10-13 "몬스터 몇마리 처리 가이드 왜 바로가기가 저기로")
 	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
 	{"id": "attend", "title": "출석 보상 받기", "desc": "오른쪽 아래 [메뉴] → [이벤트]에서 오늘의 출석 보상을 받으세요. 매일 한 번, 28일 동안 보상이 쌓입니다.",
@@ -118,7 +118,7 @@ const MISSIONS := [
 		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_4", "title": "스테이지 1-4 클리어", "desc": "전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 4, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100, "goto": "stage"},
+	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100},
 	{"id": "dungeon_gold", "title": "골드 던전", "desc": "[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권(열쇠)은 매일 다시 채워집니다.",
 		"kind": "dungeon", "arg": "gold", "goto": "tab:dungeon"},
 	{"id": "atk_8", "title": "공격력 Lv 8 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 8까지 올리세요.",
@@ -170,7 +170,7 @@ const MISSIONS := [
 	{"id": "farm_2", "title": "농장 Lv 2", "desc": "농장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.",
 		"kind": "level", "arg": ["farm", 2], "goto": "building:farm", "reward": {"diamonds": 100}},
 	{"id": "gate_2", "title": "성문 강화", "desc": "성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.", "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
-	{"id": "kill_100_2", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.", "kind": "kill", "arg": 100, "goto": "stage"},  # 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로") — 자리는 그대로
+	{"id": "kill_100_2", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. 대기 중에도, 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.", "kind": "kill", "arg": 100},  # 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로") — 자리는 그대로
 	{"id": "hero_lv4_18", "title": "영웅 4명 Lv 18 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 18], "goto": "tab:hero", "reward": {"gold": 8000}},
 	{"id": "atk_16", "title": "공격력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 16까지 올리세요.",
@@ -212,7 +212,7 @@ const MISSIONS := [
 ## 라운드 + 2를 클리어), growth_up·hero_up(퀘스트를 받은 뒤 오른 성장 레벨·영웅 레벨 합). 보상은 적게: 한 바퀴에 다이아 20 + 모집권 1.
 ## 목표 = base + step × c, 보상 = reward × (1 + c)(fixed는 늘지 않음).
 const REPEATS := [
-	{"kind": "kill", "base": 100, "step": 50, "title": "몬스터 %d마리 처치", "goto": "stage", "reward": {"gold": 3000}},
+	{"kind": "kill", "base": 100, "step": 50, "title": "몬스터 %d마리 처치", "goto": "", "reward": {"gold": 3000}},  # 처치 미션은 기다리기만(바로가기·화살표 없음, 사용자 2026-10-13)
 	{"kind": "collect", "base": 3, "step": 1, "title": "자원 %d번 수집", "goto": "look:lumber", "reward": {"gold": 2000}},
 	{"kind": "stage", "title": "스테이지 %s 클리어", "goto": "stage", "fixed": {"diamonds": 20}},
 	{"kind": "growth_up", "base": 3, "step": 1, "title": "성장 강화 %d회", "goto": "tab:growth", "reward": {"gold": 5000}},
