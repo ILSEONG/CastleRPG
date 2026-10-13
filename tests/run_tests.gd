@@ -617,7 +617,7 @@ func test_fever_auto_next_persists() -> void:
 	check(not b.auto_next and b.gauge == 7, "unchecked state and fever gauge persist together")
 	DirAccess.remove_absolute(path)
 	b.load_save()
-	check(b.auto_next, "missing file defaults to checked")
+	check(not b.auto_next, "missing file defaults to unchecked (the guide teaches [연속 진행])")
 	a.free()
 	b.free()
 
@@ -5107,7 +5107,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 42번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5126,8 +5126,8 @@ func test_tutorial() -> void:
 		blocks.append(before and not at and not t.build_locked(m.arg))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 16번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 9번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 21번째 미션 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 13번째 미션 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
 	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
@@ -5135,7 +5135,7 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 67 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 76 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5151,7 +5151,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5162,6 +5162,25 @@ func test_tutorial() -> void:
 	check(not t.complete(), "guide: 1-12 is not cleared by the guild unlock")
 	check(TutorialScript.v2_step(0) == 0 and TutorialScript.v2_step(9) == t.mission_index("growth") and TutorialScript.v2_step(20) == t.mission_index("dungeon_ticket")
 		and TutorialScript.v2_step(33) == TutorialScript.MISSIONS.size(), "guide: old v2 steps map to the same mission id")
+	check(TutorialScript.map_step(TutorialScript.V3_IDS, 0) == 0 and TutorialScript.map_step(TutorialScript.V3_IDS, 7) == t.mission_index("stage_1_1")
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 34) == t.mission_index("dungeon_ticket")
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 67) == TutorialScript.MISSIONS.size(), "guide: old v3 steps map to the same mission id")
+	# 기능 가이드: 연속 진행·배속·미션 받기·주머니는 그 행동으로 끝난다
+	var fv = t.fever
+	var fake_fever := {"auto_next": false}
+	t.fever = fake_fever
+	t.step = t.mission_index("auto_on")
+	t.count = 0
+	check(not t.complete() and t.point_keys(t.mission()) == ["hud:auto"], "guide: continue mission waits for the [연속 진행] check")
+	fake_fever.auto_next = true
+	check(t.complete(), "guide: checking [연속 진행] completes its mission")
+	t.fever = fv
+	for id in ["mission_claim", "pouch", "auto_deploy", "promote"]:
+		t.step = t.mission_index(id)
+		t.count = 0
+		var before: bool = t.complete()
+		t.note(id)
+		check(t.complete(), "guide: %s completes on its action (before %s)" % [id, before])
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0

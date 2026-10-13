@@ -164,6 +164,7 @@ func _row(id: String) -> Control:
 	one.pressed.connect(open_one.bind(id))
 	r.add_child(one)
 	buttons["open:" + id] = one
+	Tutorial.register_ui("bag:open", one, func(): return not one.disabled)  # 가이드 「주머니 열기」 화살표
 	if Economy.pouch_count(id) > 1:
 		var all := _button("모두", UiKit.STEEL, 22)
 		all.custom_minimum_size = Vector2(90, 56)

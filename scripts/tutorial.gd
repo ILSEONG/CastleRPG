@@ -12,13 +12,22 @@ extends Node
 ## 테스트는 .new()로 만들어 econ·gs·guild를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎).
 
 const GameData := preload("res://scripts/game_data.gd")
+const Prefs := preload("res://scripts/prefs.gd")  # x1.5 배속 켬(speed_button.gd PREF_KEY — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 3  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다
+const SAVE_VERSION := 4  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
 ## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
 	"dungeon_ticket", "equip", "soldier_deploy", "stage_1_5", "build_lab", "research", "build_archery", "build_stable", "keep_2", "gate_2",
 	"kill_300", "stage_1_10", "guild"]
+## 버전 3의 미션 순서(67개). 버전 3 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations의 guide_steps_v4가 같은 일을 한다).
+const V3_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "hero_lv4_5",
+	"stage_1_2", "growth", "atk_3", "hp_3", "hero_lv4_8", "build_tavern", "gacha", "deploy_new", "hero_lv4_10", "stage_1_3", "atk_5", "hp_5",
+	"build_barracks", "train", "build_houses", "hero_lv4_12", "stage_1_4", "kill_100", "dungeon_gold", "atk_8", "hp_8", "dungeon_equip", "hero_lv4_14",
+	"atk_10", "dungeon_ticket", "equip", "hp_10", "hero_lv4_15", "soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12",
+	"hero_lv4_16", "stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_300", "hero_lv4_18",
+	"atk_16", "stage_1_10", "guild", "hp_16", "hero_lv4_20", "stage_1_12", "pvp", "atk_18", "hp_18", "stage_1_15"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
@@ -49,12 +58,22 @@ const MISSIONS := [
 		"kind": "kill", "arg": 30, "goto": "stage"},
 	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
+	{"id": "attend", "title": "출석 보상 받기", "desc": "오른쪽 아래 [메뉴] → [이벤트]에서 오늘의 출석 보상을 받으세요. 매일 한 번, 28일 동안 보상이 쌓입니다.",
+		"kind": "attend", "goto": "tab:event", "point": ["event:claim", "menu:event", "menu"], "reward": {"diamonds": 50}},
+	{"id": "pouch", "title": "주머니 열기", "desc": "출석 보상으로 받은 골드 주머니를 [메뉴] → [가방]에서 여세요. 주머니는 그 시간만큼의 방치 수입을 바로 줍니다.",
+		"kind": "pouch", "goto": "tab:bag", "point": ["bag:open", "menu:bag", "menu"], "reward": {"diamonds": 50}},
 	{"id": "stage_1_1", "title": "스테이지 1-1 클리어", "desc": "위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있습니다.",
 		"kind": "stage", "arg": 1, "goto": "stage"},
+	{"id": "auto_on", "title": "연속 진행 켜기", "desc": "위쪽 [▶ 진행] 옆 [연속 진행]을 체크하세요. 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어서 도전합니다.",
+		"kind": "auto_on", "goto": "", "point": ["hud:auto"], "reward": {"diamonds": 50}},
+	{"id": "speed_on", "title": "x1.5 배속 켜기", "desc": "왼쪽 [x1.5] 버튼을 눌러 켜세요. 스테이지 전투가 1.5배 빨라집니다. 건설·훈련 시간은 그대로이고, 다시 누르면 꺼집니다.",
+		"kind": "speed_on", "goto": "", "point": ["hud:speed"], "reward": {"diamonds": 50}},
 	{"id": "hero_level", "title": "영웅 레벨업", "desc": "[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.",
 		"kind": "hero_level", "goto": "tab:hero"},
 	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
+	{"id": "mission_claim", "title": "일일 미션 보상 받기", "desc": "[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 「영웅 레벨업 5회」는 방금 끝났습니다. 미션은 매일 새로 열립니다.",
+		"kind": "mission_claim", "goto": "tab:mission", "point": ["menu:mission", "menu"], "reward": {"diamonds": 50}},
 	{"id": "stage_1_2", "title": "스테이지 1-2 클리어", "desc": "전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.",
 		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "growth", "title": "성장 강화", "desc": "[성장] 탭에서 골드로 모든 영웅의 공격력·체력을 올리세요.", "kind": "growth", "goto": "tab:growth"},
@@ -67,8 +86,12 @@ const MISSIONS := [
 	{"id": "build_tavern", "title": "주점 건설", "desc": "주점을 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
 	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
 	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭 위쪽 배치 슬롯 하나를 누른 뒤, 새로 모집한 영웅을 골라 [적용]을 누르세요.", "kind": "deploy_new", "goto": "tab:hero"},
+	{"id": "auto_deploy", "title": "자동 배치 써 보기", "desc": "[영웅] 탭의 [자동 배치]를 누른 뒤 [적용]을 누르세요. 전투력이 높은 영웅부터 알맞은 자리에 채워 줍니다.",
+		"kind": "auto_deploy", "goto": "tab:hero", "point": ["hero:apply", "hero:auto_deploy", "tab:hero"], "reward": {"diamonds": 50}},
 	{"id": "hero_lv4_10", "title": "영웅 4명 Lv 10 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
+	{"id": "shop_free", "title": "상점 무료 선물 받기", "desc": "아래 [상점] 탭의 [일일]에서 「무료」 선물을 받으세요. 매일 00:00에 다시 받을 수 있습니다.",
+		"kind": "shop_free", "goto": "tab:shop", "point": ["tab:shop"], "reward": {"diamonds": 50}},
 	{"id": "stage_1_3", "title": "스테이지 1-3 클리어", "desc": "새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.", "kind": "stage", "arg": 3,
 		"goto": "stage"},
 	{"id": "atk_5", "title": "공격력 Lv 5 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 5까지 올리세요.",
@@ -147,12 +170,16 @@ const MISSIONS := [
 		"goto": "tab:guild"},
 	{"id": "hp_16", "title": "체력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 16], "goto": "tab:growth", "reward": {"gold": 9000}},
-	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. Lv 20이 처음 최대 레벨이고, 다음 미션에서 승급으로 더 올리는 법을 배웁니다.",
 		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
+	{"id": "promote", "title": "영웅 승급하기", "desc": "영웅은 Lv 20이 최대 레벨입니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 10 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",
+		"kind": "promote", "goto": "tab:hero", "point": ["hero:promote", "hero:promote_all", "tab:hero"], "reward": {"diamonds": 50}},
 	{"id": "stage_1_12", "title": "스테이지 1-12 클리어", "desc": "전투를 이어 가 1-12까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 12, "goto": "stage", "reward": {"diamonds": 100}},
 	{"id": "pvp", "title": "PVP 결투", "desc": "[던전] 탭 위쪽 [PVP]에서 결투나 총력전을 한 판 하세요. 다른 플레이어의 방어팀과 싸워 PVP 코인을 얻고, 코인은 상점에서 씁니다.",
 		"kind": "pvp", "goto": "pvp", "reward": {"tickets": 10}},
+	{"id": "fever", "title": "FEVER 쓰기", "desc": "몬스터를 처치하면 [진행] 왼쪽 FEVER 게이지가 찹니다. 가득 차면 FEVER 버튼을 눌러 잠시 몬스터를 몰아서 잡으세요(대기 중에만).",
+		"kind": "fever", "goto": "", "point": ["hud:fever"], "reward": {"diamonds": 50}},
 	{"id": "atk_18", "title": "공격력 Lv 18 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 18까지 올리세요.",
 		"kind": "growth_lv", "arg": ["atk", 18], "goto": "tab:growth", "reward": {"gold": 10000}},
 	{"id": "hp_18", "title": "체력 Lv 18 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 18까지 올리세요.",
@@ -200,6 +227,11 @@ var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
 var gs = null  # GameState
 var guild = null  # Guild
 var pvp = null  # Pvp(PVP 결과 → pvp 미션)
+var fever = null  # Fever(연속 진행 체크·FEVER — auto_on·fever 미션)
+## 가이드가 가리킬 UI(사용자 2026-10-13 "그런거 하나하나 가이드로"): 키 → {node: Control, show: Callable(없으면 늘)}. 각 화면이 register_ui로 넣는다.
+## 미션의 point(키 목록, 앞에서부터 보이는 첫 것) — 없으면 goto에서 만든다(point_keys). tutorial_card가 그 위에 화살표를 그린다.
+var ui_targets := {}
+const MENU_ITEMS := ["settings", "bag", "mission", "ranking", "friend", "event", "guild", "exchange", "mail"]  # 오른쪽 아래 메뉴 항목(하단 탭이 아님)
 var state := "skipped"  # active | done | skipped
 var step := 0  # 지금 미션 번호(0부터)
 var count := 0  # 사건 미션: 지금 미션이 된 뒤 센 수
@@ -220,6 +252,7 @@ func _ready() -> void:
 	gs = get_node_or_null("/root/GameState")
 	guild = get_node_or_null("/root/Guild")
 	pvp = get_node_or_null("/root/Pvp")
+	fever = get_node_or_null("/root/Fever")
 	_connect()
 	_start.call_deferred()  # 첫 장면이 붙은 뒤에 본다(체크 장면·개발 실행은 건너뛴다)
 
@@ -307,6 +340,10 @@ func _connect() -> void:
 		guild.changed.connect(check)
 	if pvp != null:
 		pvp.result_ready.connect(func(_r): note("pvp"))
+	if econ != null:
+		econ.pouch_opened.connect(func(_o): note("pouch"))
+		econ.promoted.connect(func(_h, _p): note("promote"))
+		econ.promoted_all.connect(func(_r): note("promote"))
 
 
 func _process(delta: float) -> void:
@@ -415,6 +452,43 @@ func repeat_reward(q: Dictionary) -> Dictionary:
 	for k in d.get("fixed", {}):
 		out[k] = int(d.fixed[k])
 	return out
+
+
+## 화면이 가이드 화살표 대상 UI를 넣는다. show(있으면)가 false면 그 대상은 건너뛴다(예: 그 탭 창이 이미 열림).
+func register_ui(key: String, node: Control, show := Callable()) -> void:
+	ui_targets[key] = {"node": node, "show": show}
+
+
+## 지금 미션이 가리킬 UI 키 목록: point가 있으면 그것, 없으면 goto(tab:X → 그 탭, menu:X → 그 메뉴 항목·[메뉴], stage → [진행]).
+func point_keys(m: Dictionary) -> Array:
+	if m.has("point"):
+		return m.point
+	var g := str(m.get("goto", ""))
+	if g.begins_with("tab:"):
+		var t := g.get_slice(":", 1)
+		return ["menu:" + t, "menu"] if t in MENU_ITEMS else [g]
+	if g == "stage":
+		return ["hud:go"]
+	if g == "recruit":
+		return ["tab:recruit"]
+	if g == "pvp":
+		return ["dungeon:pvp", "tab:dungeon"]
+	return []
+
+
+## 화살표를 그릴 UI(보이는 첫 대상). 끝난 미션·없으면 null.
+func point_target() -> Control:
+	var m := mission()
+	if m.is_empty() or complete() or not active():
+		return null
+	for k in point_keys(m):
+		var t = ui_targets.get(k)
+		if t == null or not is_instance_valid(t.node) or not t.node.is_visible_in_tree():
+			continue
+		if t.show.is_valid() and not t.show.call():
+			continue
+		return t.node
+	return null
 
 
 func mission_index(id: String) -> int:
@@ -755,8 +829,24 @@ func _done(m: Dictionary) -> bool:
 	if econ == null:
 		return false
 	match m.kind:
-		"open", "sell", "pvp":
+		"open", "sell", "pvp", "mission_claim":
 			return count >= 1
+		"auto_deploy":  # [자동 배치] 뒤 [적용], 또는 이미 자동 배치와 같은 배치
+			return count >= 1 or (econ.deploy.size() > 0 and econ.deploy == econ.auto_hero_deploy(econ.deploy.size()))
+		"pouch":  # 주머니를 열었다(이미 다 열어 남은 주머니가 없어도 통과)
+			return count >= 1 or econ.pouches.is_empty()
+		"auto_on":  # 연속 진행 체크(Fever.auto_next — HUD가 GameState.auto_continue와 함께 바꾼다)
+			return fever != null and fever.auto_next
+		"speed_on":
+			return Prefs.get_bool("speed_x15", false)
+		"attend":  # 출석 1일차 이상 받았다(온라인 Economy.attendance). 출석 정보가 없으면(오프라인) 통과
+			return int(econ.attendance.get("n", 0)) >= 1 or (not online and econ.attendance.is_empty())
+		"shop_free":  # 오늘 일일 무료 선물을 받았다
+			return not econ.shop_free_left("daily")
+		"fever":
+			return count >= 1 or (fever != null and fever.active())
+		"promote":  # 승급했다(이미 승급한 영웅이 있어도 통과)
+			return count >= 1 or econ.hero_promotions.values().any(func(v): return int(v) > 0)
 		"hero_lv":
 			return _heroes_at(int(m.arg[1])) >= int(m.arg[0])
 		"growth_lv":
@@ -800,10 +890,15 @@ func _done(m: Dictionary) -> bool:
 
 ## 버전 2 단계(V2_IDS 번호) → 지금 표의 번호: 하던 미션 그대로(그 앞에 새로 낀 성장 미션은 건너뛴다). 다 끝냈으면 지금 표 크기.
 static func v2_step(old: int) -> int:
-	if old >= V2_IDS.size():
+	return map_step(V2_IDS, old)
+
+
+## 옛 표(ids)의 단계 → 지금 표의 번호(같은 미션 id). 다 끝냈으면 지금 표 크기.
+static func map_step(ids: Array, old: int) -> int:
+	if old >= ids.size():
 		return MISSIONS.size()
 	for i in MISSIONS.size():
-		if MISSIONS[i].id == V2_IDS[maxi(0, old)]:
+		if MISSIONS[i].id == ids[maxi(0, old)]:
 			return i
 	return 0
 
@@ -839,6 +934,8 @@ func load_save() -> bool:
 		old_step += 1  # 버전 1은 모집권 던전 미션이 없었다: 장비 던전을 넘긴 진행은 그대로 이어지게
 	if ver < 3:
 		old_step = v2_step(old_step)
+	elif ver < 4:
+		old_step = map_step(V3_IDS, old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))

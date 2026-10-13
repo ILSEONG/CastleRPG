@@ -69,6 +69,9 @@ func _ready() -> void:
 	button.add_child(_face)
 	button.pressed.connect(toggle)
 	add_child(button)
+	var tut := get_node_or_null("/root/Tutorial") if castle else null  # tutorial.gd가 이 스크립트를 preload한다(자동 로드 이름을 직접 쓰지 않는다)
+	if tut != null:
+		tut.register_ui("hud:speed", button)  # 가이드 화살표
 	_refresh()
 	_place()
 

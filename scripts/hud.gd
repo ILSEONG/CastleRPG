@@ -137,6 +137,9 @@ func _ready() -> void:
 	_auto = UiKit.checkbox("연속 진행")
 	_auto.toggled.connect(_on_auto_toggled)
 	head.add_child(_auto)
+	Tutorial.register_ui("hud:auto", _auto)  # 가이드 화살표
+	Tutorial.register_ui("hud:fever", _fever, func(): return not Fever.active())
+	Tutorial.register_ui("hud:go", _button, func(): return GameState.mode == GameState.Mode.IDLE)
 	var castle_row := HBoxContainer.new()  # 제목 아래: "성" + 성 막대
 	castle_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	castle_row.add_theme_constant_override("separation", 6)
