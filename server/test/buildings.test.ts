@@ -62,10 +62,10 @@ test('비용·시간: 레벨 목록(lv_*, 2026-10-13 라오킹 곡선)의 L번�
   const gate = await def('gate')
   assert.deepEqual([R.buildCost(lumber, 1), R.buildSec(lumber, 1)], [{ wood: 0, stone: 315, food: 435 }, 20]) // 벌목장 1 → 2
   assert.deepEqual([R.buildCost(keep, 1), R.buildSec(keep, 1)], [{ wood: 375, stone: 0, food: 375 }, 2]) // 라오킹 시청 1 → 2 = 2초
-  assert.deepEqual([R.buildCost(keep, 10), R.buildSec(keep, 10)], [{ wood: 291000, stone: 120000, food: 291000 }, 56220]) // 15시간 37분
+  assert.deepEqual([R.buildCost(keep, 10), R.buildSec(keep, 10)], [{ wood: 874000, stone: 359000, food: 874000 }, 56220]) // 15시간 37분(성채 10: 자원 건물 3채 수입)
   assert.deepEqual([R.buildCost(gate, 2), R.buildSec(gate, 2)], [{ wood: 810, stone: 0, food: 690 }, 39])
   assert.equal(R.buildSec(lumber, 20), 54600)
-  assert.deepEqual([R.buildCost(keep, 29), R.buildSec(keep, 29)], [{ wood: 140000000, stone: 61500000, food: 140000000 }, 9444000]) // 109일 7시간
+  assert.deepEqual([R.buildCost(keep, 29), R.buildSec(keep, 29)], [{ wood: 562000000, stone: 246000000, food: 562000000 }, 9444000]) // 109일 7시간
   assert.equal(R.buildSec(keep, 40), 9444000) // 목록 너머는 마지막 값
   // 목록이 없는 행(시드 전 표·테스트 표): 1→2 값 × 1.35^(L−1)·1.5^(L−1)
   const old = { ...keep, wood: 3000, stone: 3000, food: 2000, base_sec: 60, lv_sec: null, lv_wood: null, lv_stone: null, lv_food: null }

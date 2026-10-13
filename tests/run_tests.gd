@@ -2133,10 +2133,10 @@ func test_buildings() -> void:
 	# 2026-10-13 라오킹 곡선: L → L+1 비용·시간 = 레벨 목록(lv_*)의 L번째 값 — 서버와 같은 표
 	check(GameData.build_cost("lumber", 1) == {"wood": 0, "stone": 315, "food": 435} and GameData.build_sec("lumber", 1) == 20, "lumber 1 -> 2: 0/315/435, 20 s")
 	check(GameData.build_cost("keep", 2) == {"wood": 750, "stone": 0, "food": 750} and GameData.build_sec("keep", 2) == 106, "keep 2 -> 3")
-	check(GameData.build_cost("keep", 10) == {"wood": 291000, "stone": 120000, "food": 291000} and GameData.build_sec("keep", 10) == 56220, "keep 10 -> 11: 291k/120k/291k, about 15.6 h")
+	check(GameData.build_cost("keep", 10) == {"wood": 874000, "stone": 359000, "food": 874000} and GameData.build_sec("keep", 10) == 56220, "keep 10 -> 11: 874k/359k/874k (3 copies of income), about 15.6 h")
 	check(GameData.build_cost("gate", 2) == {"wood": 810, "stone": 0, "food": 690} and GameData.build_sec("gate", 2) == 39 and GameData.build_cost("keep", 3) == {"wood": 1180, "stone": 0, "food": 1180},
 		"gate 2 -> 3, keep 3 -> 4 from the level lists")
-	check(GameData.build_sec("lumber", 20) == 54600 and GameData.build_cost("keep", 29) == {"wood": 140000000, "stone": 61500000, "food": 140000000}, "lumber 20 -> 21 time; keep 29 -> 30 costs")
+	check(GameData.build_sec("lumber", 20) == 54600 and GameData.build_cost("keep", 29) == {"wood": 562000000, "stone": 246000000, "food": 562000000}, "lumber 20 -> 21 time; keep 29 -> 30 costs")
 	check(GameData.build_cost("mine", 1).is_empty() and GameData.build_sec("mine", 1) == 0, "unknown building: no cost, no time")
 	# 단계 표
 	check(GameData.parse_tiers("1:4|5:8|10:12") == [[1, 4.0], [5, 8.0], [10, 12.0]] and GameData.parse_tiers(" 1 : 20 | 5:24 ") == [[1, 20.0], [5, 24.0]], "tier tables parse")
