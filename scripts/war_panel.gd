@@ -286,7 +286,7 @@ static func _rules_card(p) -> void:
 			"성문 체력은 성 주인 길드 레벨 × %s입니다(상대 길드는 우리 길드와 같은 레벨)." % UiKit.commas(roundi(WarRules.GATE_HP_PER_LEVEL)),
 			"먼저 배치 단계에서 성 밖 어디를 공격할지 영웅 자리를 잡습니다. 길드장이 [전투 시작]을 누르면 %d분 동안 싸우고, 아무도 누르지 않으면 %d분 뒤 저절로 시작합니다." % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
 			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.",
-			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점 · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, roundi(WarRules.KEEP_STEP * 100.0)],
+			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점(%d개까지) · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, WarRules.MAX_GATES_SCORED, roundi(WarRules.KEEP_STEP * 100.0)],
 			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(목숨 %d개). 모두 목숨을 다 쓰면 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],
 			"수비 영웅은 성벽 앞에서 싸워 체력 ×%s · 공격력 ×%s 수성 보너스를 받습니다." % [str(WarRules.DEF_HP_MULT), str(WarRules.DEF_ATK_MULT)],
 			"주간 보상: 승리 길드 코인 %d · 다이아 %d / 패배 길드 코인 %d · 다이아 %d" % [WarRules.REWARD_WIN.coins, WarRules.REWARD_WIN.diamonds,

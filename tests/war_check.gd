@@ -94,6 +94,8 @@ func _case_offline_war() -> void:
 	GuildWar.local_save_state(r, false, t0 + 60)
 	w = GuildWar.war
 	_check(w.points == WarRules.PTS_KILL + WarRules.PTS_GATE and w.castle.gates[1].hp == plan.gates[1].hp, "points from the castle state; gates never heal (%d)" % w.points)
+	_check(WarRules.points(0, 4, 0) == 2 * WarRules.PTS_GATE and WarRules.points(0, 3, 0) == WarRules.points(0, 2, 0) and WarRules.points(0, 1, 0) == WarRules.PTS_GATE,
+		"gate points count at most 2 gates (4 gates down = %d)" % WarRules.points(0, 4, 0))
 	_check(w.battle.state == "live" and w.enemy_points == 0, "leaving early keeps the battle open; enemy score hidden until our siege ends")
 	var again := GuildWar.local_enter(ids.map(func(id): return GuildWar.hero_entry(id)), t0 + 120)
 	_check(again.battle_id == plan.battle_id and not again.defenders.any(func(dd): return dd.uid == d1.uid) and absf(again.clock - 125.0) < 1.0, "re-entering resumes the same battle without the fallen defender")

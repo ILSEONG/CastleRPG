@@ -1,7 +1,7 @@
 extends RefCounted
 ## 길드전(공성전) 수치·규칙 한 곳(오토로드 의존 없음). 서버 server/src/guild_war.ts와 같은 값·식이다.
 ## 바꾸려면 여기와 서버 둘 다: 한 주 한 상대(월요일 리셋에 새 상대), 공성 전투는 한 주에 1번(2026-10-06 사용자) — 시각은 길드장이 정하고
-## (안 정하면 토요일 21:00) 그때부터 BATTLE_SEC초 · 그 사이 누구나 합류. 점수 = 수비 영웅 처치 1 · 성문 10 · 성채 최대 체력 3%마다 1(사용자), 주간 보상(승리·패배).
+## (안 정하면 토요일 21:00) 그때부터 BATTLE_SEC초 · 그 사이 누구나 합류. 점수 = 수비 영웅 처치 1 · 성문 10(2개까지) · 성채 최대 체력 3%마다 1(사용자), 주간 보상(승리·패배).
 ## 길드원 = 15명(길드 6레벨부터 20명 — 길드 쪽 규칙). 길드원 한 명 = 영웅 4명(공격 분대 / 수비 분대).
 
 const BATTLE_SEC := 600.0
@@ -15,6 +15,7 @@ const ATTACK_LIVES := 2  # 공격 영웅 목숨(전투 하나에서 쓰러져도
 const SQUAD := 4  # 길드원 한 명이 내는 영웅 수
 const PTS_KILL := 1
 const PTS_GATE := 10
+const MAX_GATES_SCORED := 2  # 2026-10-13 사용자: 성문 점수는 2개까지(먼저 부순 2개). 서버 MAX_GATES_SCORED와 같다
 const KEEP_STEP := 0.03  # 성채 최대 체력의 이만큼을 깎을 때마다 1점
 const KEEP_MAX_PTS := 33  # floor(1 / KEEP_STEP)
 const DEFAULT_DAY := 5  # 길드원이 공성 시각을 안 정하면: 토요일(주 안 5번째 날, 0 = 월요일)
@@ -60,7 +61,7 @@ static func keep_points(hp: float, mx: float) -> int:
 
 ## 점수: 처치·성문 수 + 성채 점수(keep_pts).
 static func points(kills: int, gates: int, keep_pts: int) -> int:
-	return kills * PTS_KILL + gates * PTS_GATE + keep_pts
+	return kills * PTS_KILL + mini(gates, MAX_GATES_SCORED) * PTS_GATE + keep_pts
 
 
 ## 수비 분대(길드원 i번째)가 지키는 면: 길드원을 차례로 네 면에 나눈다.
