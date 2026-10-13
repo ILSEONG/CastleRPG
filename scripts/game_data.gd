@@ -114,7 +114,7 @@ const SUB_NAMES := {"lifesteal": "흡혈", "crit_rate": "치명타 확률", "cri
 const DMG_REDUCE_CAP := 40.0  # 장비 받는 피해 감소 합계 상한(%)
 const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
-const MAX_GAME_SPEED := 1.5  # x1.5 배속 버튼(speed_button.gd SPEED, 서버 rules.MAX_GAME_SPEED)
+const MAX_GAME_SPEED := 2.0  # 배속 버튼 최고 배율(speed_button.gd LEVELS 끝, 서버 rules.MAX_GAME_SPEED)
 const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
 const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base",
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
