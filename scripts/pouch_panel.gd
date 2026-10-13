@@ -2,6 +2,7 @@ extends "res://scripts/ui_window.gd"
 ## [가방] 시트(오른쪽 아래 메뉴 side_menu.gd [가방]이 연다): 방치 주머니(골드·자원 × 10분·30분·1시간·2시간·4시간·6시간).
 ## 줄 = 주머니 그림 + 이름 + "보유 n개" + 지금 열면 받는 값(여는 순간의 방치 수입 × 시간 — Economy.pouch_value), 오른쪽 [열기](1개)·[모두].
 ## 보유한 주머니만, 골드 먼저·짧은 시간 먼저. 주머니는 출석·미션 보상으로 받는다(서버 pouches.ts).
+## 아래에 가속 아이템(2026-10-13): 보유 개수만 보이고(건설·연구 창의 [가속]에서 쓴다), 일꾼 고용권만 여기서 [사용].
 
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -12,7 +13,9 @@ const ROW_BG := Color(1, 1, 1, 0.75)
 const VALUE := Color(0.13, 0.50, 0.24)
 const CLOSE_PX := 56.0
 const ICON_PX := 72.0
-const EMPTY_TEXT := "주머니가 없습니다\n출석 이벤트와 미션 보상으로 받을 수 있습니다"
+const EMPTY_TEXT := "가방이 비었습니다\n출석 이벤트와 미션 보상으로 받을 수 있습니다"
+const SPEEDUP_HEAD := "가속 아이템"
+const SPEEDUP_HINT := "건설·연구 중인 창의 [가속]에서 씁니다"
 const EMPTY_VALUE_TEXT := "자원 건물을 지은 뒤에 열 수 있습니다"
 const HEAD_TEXT := "열면 지금 방치 수입 기준으로 적힌 시간만큼 받습니다"
 const GOLD_SACK := Color(0.80, 0.58, 0.26)
@@ -20,6 +23,7 @@ const RES_SACK := Color(0.52, 0.62, 0.36)
 
 var body: VBoxContainer
 var empty_label: Label
+var head_label: Label  # 주머니 안내(주머니가 있을 때만)
 var buttons := {}  # 테스트용: "open:<id>", "all:<id>", "close"
 
 var _dirty := true
@@ -54,7 +58,8 @@ func _ready() -> void:
 	head.add_child(x)
 	buttons["close"] = x
 	content.add_child(head)
-	content.add_child(_label(HEAD_TEXT, 20, SUB))
+	head_label = _label(HEAD_TEXT, 20, SUB)
+	content.add_child(head_label)
 	empty_label = _label(EMPTY_TEXT, 24, SUB)
 	content.add_child(empty_label)
 	var scroll := ScrollContainer.new()
@@ -67,6 +72,7 @@ func _ready() -> void:
 	scroll.add_child(body)
 	_fit_sheet()
 	Economy.pouches_changed.connect(func(): _dirty = true)
+	Economy.speedups_changed.connect(func(): _dirty = true)
 	Economy.changed.connect(func(): _dirty = true)  # 스테이지·건물 레벨이 오르면 여는 값도 바뀐다
 	Economy.pouch_opened.connect(_on_opened)
 
@@ -122,9 +128,41 @@ func _rebuild() -> void:
 	for c in body.get_children():
 		c.queue_free()
 	var ids := owned()
-	empty_label.visible = ids.is_empty()
+	var sp := owned_speedups()
+	empty_label.visible = ids.is_empty() and sp.is_empty()
+	head_label.visible = not ids.is_empty()
 	for id in ids:
 		body.add_child(_row(id))
+	if not sp.is_empty():
+		body.add_child(_label(SPEEDUP_HEAD, 24, HudScript.INK))
+		body.add_child(_label(SPEEDUP_HINT, 18, SUB))
+		for id in sp:
+			body.add_child(_speedup_row(id))
+
+
+## 보유한 가속 아이템 id(Economy.speedup_ids 순서: 건설 → 연구 → 범용 → 고용권, 짧은 것부터).
+static func owned_speedups() -> Array:
+	return Economy.speedup_ids().filter(func(id): return Economy.speedup_count(id) > 0)
+
+
+func _speedup_row(id: String) -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UiKit.panel(ROW_BG, 12.0, 10))
+	var r := HBoxContainer.new()
+	r.add_theme_constant_override("separation", 10)
+	card.add_child(r)
+	var t := _label(Economy.speedup_name(id), 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r.add_child(t)
+	r.add_child(_label("보유 %d개" % Economy.speedup_count(id), 20, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
+	if str(Economy.speedup_parse(id).get("kind", "")) == "builder":
+		var use := _button("사용", UiKit.AMBER, 22)
+		use.custom_minimum_size = Vector2(100, 56)
+		use.disabled = Economy.speedup_waiting()
+		use.pressed.connect(func(): Economy.use_speedup(id, 1))
+		r.add_child(use)
+		buttons["use:" + id] = use
+	return card
 
 
 func _row(id: String) -> Control:
@@ -164,6 +202,7 @@ func _row(id: String) -> Control:
 	one.pressed.connect(open_one.bind(id))
 	r.add_child(one)
 	buttons["open:" + id] = one
+	Tutorial.register_ui("bag:open", one, func(): return not one.disabled)  # 가이드 「주머니 열기」 화살표
 	if Economy.pouch_count(id) > 1:
 		var all := _button("모두", UiKit.STEEL, 22)
 		all.custom_minimum_size = Vector2(90, 56)

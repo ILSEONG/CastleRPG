@@ -104,12 +104,13 @@ func _draw() -> void:
 	var view := get_viewport_rect().grow(BUBBLE_R * 2.0)
 	var bob := sin(_t * TAU * BOB_HZ) * BOB_PX
 	var now := Economy.time_now()
-	var bid := str(Economy.build.get("id", ""))
-	var bars := build_anchors()
-	for i in bars.size():
-		var at = _base(bid if bid != GameData.GATE else "gate:%d" % i, bars[i])
-		if at != null and view.has_point(at):
-			_draw_build_bar(at + Vector2(0, -BUILD_AT_PX if tags != null else 0.0), Economy.build_progress(now), UiKit.duration(Economy.build_left(now)))
+	for job in Economy.build_jobs():  # 2026-10-13: 일꾼마다(두 번째 일꾼까지)
+		var bid := str(job.id)
+		var bars := build_anchors(bid)
+		for i in bars.size():
+			var at = _base(bid if bid != GameData.GATE else "gate:%d" % i, bars[i])
+			if at != null and view.has_point(at):
+				_draw_build_bar(at + Vector2(0, -BUILD_AT_PX if tags != null else 0.0), Economy.build_progress(now, bid), UiKit.duration(Economy.build_left(now, bid)))
 	for id in badge_ids(now):
 		var at = _base(id, anchor(id))
 		if at == null:
@@ -189,11 +190,16 @@ func stack_size(tag_id: String, now: float) -> Vector2:
 	return out
 
 
-## 지금 짓는 건물의 진행 막대 자리(월드, 지붕 위 ANCHOR_UP). 쉬면 [].
-func build_anchors() -> Array:
+## 짓는 건물의 진행 막대 자리(월드, 지붕 위 ANCHOR_UP). id = 그 건물(""이면 짓고 있는 모든 건물). 쉬면 [].
+func build_anchors(id := "") -> Array:
 	if scenery == null:
 		return []
-	return scenery.sites.get(str(Economy.build.get("id", "")), []).map(
+	if id == "":
+		var all := []
+		for job in Economy.build_jobs():
+			all.append_array(build_anchors(str(job.id)))
+		return all
+	return scenery.sites.get(id, []).map(
 		func(box: AABB): return Vector3(box.get_center().x, box.end.y + ANCHOR_UP, box.get_center().z))
 
 

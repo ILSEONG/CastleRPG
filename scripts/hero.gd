@@ -22,6 +22,7 @@ const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Crowd := preload("res://scripts/crowd.gd")
 const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
+const PortraitsScript := preload("res://scripts/portraits.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
@@ -168,6 +169,8 @@ func _ready() -> void:
 	Economy.items_changed.connect(refresh_stats)
 	Economy.research_changed.connect(refresh_stats)
 	Guild.buff_changed.connect(refresh_stats)  # 길드 레벨 버프
+	if def.get("grade", "") == "SSR" and get("team") != 1 and _ult_kind() != "":  # 궁극기 컷인 모델 그림을 미리 렌더(첫 컷인부터 보이게)
+		PortraitsScript.portrait(_cutin_art(_ult_kind()))
 	reset()
 
 
@@ -827,12 +830,17 @@ func _announce(kind: String) -> void:
 	DamageNumbers.banner(self, kind, label if named else "", _color, enemy)
 	var ult: bool = named and not enemy and def.get("grade", "") == "SSR" and kind == _ult_kind()
 	if ult:
-		DamageNumbers.cutin(str(def.id), label, str(def.get("name", "")), _color, kind)
+		DamageNumbers.cutin(str(def.id), label, str(def.get("name", "")), _color, kind, _cutin_art(kind))
 	Fx.pulse(self, _foot, _color, _tier, named, ult)
 	if _tier >= 2 and GameData.fx_shake():  # SSR 발동: 화면이 잠깐 당겨진다(아트 방향 §4, 흔들림 설정을 따른다)
 		var cam := get_viewport().get_camera_3d()
 		if cam != null and cam.get_parent().has_method("punch") and _on_screen(cam):
 			cam.get_parent().punch()
+
+
+## 컷인 모델 그림 키(Portraits): 그 스킬 발동 모션의 발동 순간 자세.
+func _cutin_art(kind: String) -> String:
+	return PortraitsScript.cutin_key(str(def.id), HeroSkillsScript.cast_anim(kind, def))
 
 
 ## 궁극기 = 해금된 칸 중 가장 높은 칸의 액티브(SSR ★0이면 첫 스킬, ★5면 셋째 스킬). 없으면 "".

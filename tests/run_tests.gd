@@ -618,7 +618,7 @@ func test_fever_auto_next_persists() -> void:
 	check(not b.auto_next and b.gauge == 7, "unchecked state and fever gauge persist together")
 	DirAccess.remove_absolute(path)
 	b.load_save()
-	check(b.auto_next, "missing file defaults to checked")
+	check(not b.auto_next, "missing file defaults to unchecked (the guide teaches [연속 진행])")
 	a.free()
 	b.free()
 
@@ -1643,7 +1643,10 @@ func test_deploy_and_promotion() -> void:
 		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.3^p (p 5 = x3.71), capped at 5")
 	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
 		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
-	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 30, 40, 50, 60, 70], "max level = 20 + 10 x promotion (70 at 5)")
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 56, 92, 128, 164, 200], "max level = 20 + 36 x promotion (200 at 5, 2026-10-13)")
+	check(GameData.levelup_cost("SSR", 69).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68)) and GameData.levelup_cost("SSR", 70).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * 1.04)
+		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * pow(1.04, 130)) and GameData.levelup_cost("SSR", 1, 199).gold < 10 ** 12,
+		"level-up gold: the curve up to Lv 69 -> 70, then x1.04 per level (Lv 199 -> 200 about 242억, SSR 1 -> 200 under 1조): %s" % [GameData.levelup_cost("SSR", 1, 199)])
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 9
@@ -2025,14 +2028,14 @@ func test_promotion() -> void:
 	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
 		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
 	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
-	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 30
-		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 30 (Lv 20 can level again)")
+	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 56
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 56 (Lv 20 can level again)")
 	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
 	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
 	for i in 4:
 		e.promote("arteon")
-	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 70,
-		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 70)")
+	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 200,
+		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 200)")
 	e.hero_shards["arteon"] = 999
 	notes.clear()
 	check(e.promote_block("arteon") == "max_promotion" and not e.promote("arteon") and notes == ["최대 승급"] and e.shards_of("arteon") == 999 and e.promotion_of("arteon") == 5,
@@ -2091,14 +2094,14 @@ func test_buildings() -> void:
 	var ids: Array = GameData.buildings().map(func(b): return b.id)
 	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable"], "buildings.csv: 11 rows in file order: %s" % [ids])
 	var gate := GameData.building_def("gate")
-	check(gate.name == "성문" and gate.max_level == 30.0 and gate.stone == 2500.0 and gate.base_sec == 45.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
-	# 비용 = round(값 × 1.35^(L−1)), 시간 = round(base_sec × 1.5^(L−1)) — 서버와 같은 표
-	check(GameData.build_cost("lumber", 1) == {"wood": 600, "stone": 800, "food": 400} and GameData.build_sec("lumber", 1) == 20, "lumber 1 -> 2: 600/800/400, 20 s")
-	check(GameData.build_cost("keep", 2) == {"wood": 4050, "stone": 4050, "food": 2700} and GameData.build_sec("keep", 2) == 90, "keep 2 -> 3")
-	check(GameData.build_cost("keep", 10) == {"wood": 44681, "stone": 44681, "food": 29787} and GameData.build_sec("keep", 10) == 2307, "keep 10 -> 11: about 44,680 / 29,790, about 38 min")
-	check(GameData.build_cost("gate", 2) == {"wood": 2025, "stone": 3375, "food": 0} and GameData.build_sec("gate", 2) == 68 and GameData.build_cost("keep", 3) == {"wood": 5468, "stone": 5468, "food": 3645},
-		"gate 2 -> 3: 67.5 s rounds away from zero; keep 3 -> 4: 3000 x 1.35^2 = 5467.5 rounds away from zero")
-	check(GameData.build_sec("lumber", 20) == 44337 and GameData.build_cost("keep", 29) == {"wood": 13380328, "stone": 13380328, "food": 8920219}, "level 20 is about 2,217x the base time; level 29 costs")
+	check(gate.name == "성문" and gate.max_level == 30.0 and gate.wood == 412.0 and gate.stone == 0.0 and gate.food == 338.0 and gate.base_sec == 2.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
+	# 2026-10-13 라오킹 곡선: L → L+1 비용·시간 = 레벨 목록(lv_*)의 L번째 값 — 서버와 같은 표
+	check(GameData.build_cost("lumber", 1) == {"wood": 0, "stone": 315, "food": 435} and GameData.build_sec("lumber", 1) == 20, "lumber 1 -> 2: 0/315/435, 20 s")
+	check(GameData.build_cost("keep", 2) == {"wood": 750, "stone": 0, "food": 750} and GameData.build_sec("keep", 2) == 106, "keep 2 -> 3")
+	check(GameData.build_cost("keep", 10) == {"wood": 291000, "stone": 120000, "food": 291000} and GameData.build_sec("keep", 10) == 56220, "keep 10 -> 11: 291k/120k/291k, about 15.6 h")
+	check(GameData.build_cost("gate", 2) == {"wood": 810, "stone": 0, "food": 690} and GameData.build_sec("gate", 2) == 39 and GameData.build_cost("keep", 3) == {"wood": 1180, "stone": 0, "food": 1180},
+		"gate 2 -> 3, keep 3 -> 4 from the level lists")
+	check(GameData.build_sec("lumber", 20) == 54600 and GameData.build_cost("keep", 29) == {"wood": 140000000, "stone": 61500000, "food": 140000000}, "lumber 20 -> 21 time; keep 29 -> 30 costs")
 	check(GameData.build_cost("mine", 1).is_empty() and GameData.build_sec("mine", 1) == 0, "unknown building: no cost, no time")
 	# 단계 표
 	check(GameData.parse_tiers("1:4|5:8|10:12") == [[1, 4.0], [5, 8.0], [10, 12.0]] and GameData.parse_tiers(" 1 : 20 | 5:24 ") == [[1, 20.0], [5, 24.0]], "tier tables parse")
@@ -2133,7 +2136,7 @@ func test_buildings() -> void:
 	check(EconomyScript.upgrade_block_for("tavern", _lv({"keep": 5, "tavern": 3, "barracks": 2}), "lab", none) == "prereq", "tavern 4 needs barracks >= 3")
 	check(EconomyScript.upgrade_block_for("tavern", tav, "lab", none) == "builder_busy" and EconomyScript.upgrade_block_for("tavern", tav, "tavern", none) == "in_progress", "one builder: busy elsewhere / this one")
 	check(EconomyScript.upgrade_block_for("tavern", tav, "", none) == "not_enough" and EconomyScript.upgrade_block_for("tavern", tav, "", GameData.build_cost("tavern", 3)) == "", "resources last; the exact cost is enough")
-	check(EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 3000, "stone": 3000, "food": 1999}) == "not_enough" and EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 3000, "stone": 3000, "food": 2000}) == "", "keep 1 -> 2 needs gate/barracks >= 1 and 3000/3000/2000")
+	check(EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 375, "stone": 0, "food": 374}) == "not_enough" and EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 375, "stone": 0, "food": 375}) == "", "keep 1 -> 2 needs gate/barracks >= 1 and 375/0/375")
 	check(["unknown", "max_level", "keep_cap", "prereq", "in_progress", "builder_busy", "not_enough", "waiting"].all(func(c): return EconomyScript.BLOCK_TEXT.has(c)), "every reason code has a text")
 	# 오프라인 업그레이드
 	var now := 1.8e9
@@ -2144,29 +2147,29 @@ func test_buildings() -> void:
 	e.build_started.connect(func(id, f): started.append([id, f]))
 	e.building_done.connect(func(id, l): done.append([id, l]))
 	e.notice.connect(func(tx): notes.append(tx))
-	check(e.levels.size() == 11 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 3000, "stone": 3000, "food": 2000} and e.upgrade_sec("keep") == 60,
+	check(e.levels.size() == 11 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 375, "stone": 0, "food": 375} and e.upgrade_sec("keep") == 2,
 		"new game: 11 buildings at level 1, builder idle, population 6")
 	check(e.requirements("keep") == [{"id": "gate", "need": 1, "have": 1, "ok": true}, {"id": "barracks", "need": 1, "have": 1, "ok": true}]
 		and e.requirements("lumber") == [{"id": "keep", "need": 2, "have": 1, "ok": false}], "requirements: keep cap first, then req1/req2 at target - 1: %s" % [e.requirements("lumber")])
 	check(not e.upgrade("lumber", now) and notes == [EconomyScript.BLOCK_TEXT.keep_cap] and e.upgrade_block("keep", now) == "not_enough", "blocked upgrades only show the reason")
 	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
-	check(e.upgrade("keep", now) and e.res == {"wood": 7000, "stone": 7000, "food": 8000} and e.build == {"id": "keep", "finish": now + 60.0} and started == [["keep", now + 60.0]],
+	check(e.upgrade("keep", now) and e.res == {"wood": 9625, "stone": 10000, "food": 9625} and e.build == {"id": "keep", "finish": now + 2.0} and started == [["keep", now + 2.0]],
 		"offline upgrade takes the cost at once and starts the builder: %s %s" % [e.res, e.build])
-	check(e.upgrade_block("keep", now) == "in_progress" and is_equal_approx(e.build_left(now + 15.0), 45.0) and is_equal_approx(e.build_progress(now + 15.0), 0.25) and e.is_building("keep"),
-		"builder busy: left 45 s, progress 25%")
-	e.complete_due(now + 59.9)
+	check(e.upgrade_block("keep", now) == "in_progress" and is_equal_approx(e.build_left(now + 0.5), 1.5) and is_equal_approx(e.build_progress(now + 0.5), 0.25) and e.is_building("keep"),
+		"builder busy: left 1.5 s, progress 25%")
+	e.complete_due(now + 1.9)
 	check(e.building_level("keep") == 1 and done.is_empty(), "not done before the finish time")
-	e.complete_due(now + 60.0)
-	check(e.building_level("keep") == 2 and e.build.is_empty() and done == [["keep", 2]] and e.build_left(now + 60.0) == 0.0, "lazy completion: level +1, builder free, building_done")
+	e.complete_due(now + 2.0)
+	check(e.building_level("keep") == 2 and e.build.is_empty() and done == [["keep", 2]] and e.build_left(now + 2.0) == 0.0, "lazy completion: level +1, builder free, building_done")
 	var t := now + 100.0
 	check(e.upgrade("barracks", t) and e.upgrade_block("houses", t) == "builder_busy" and not e.upgrade("houses", t) and notes[-1] == EconomyScript.BLOCK_TEXT.builder_busy, "one builder: a second building waits")
 	e.finish_build_now()
 	check(e.building_level("barracks") == 2 and e.build.is_empty() and done[-1] == ["barracks", 2], "finish_build_now completes the build (test hook)")
-	# 자원 건물: 시작할 때 자동 수집(남은 초 유지) — 쌓인 200으로 모자란 목재를 채운다
-	e.res = {"wood": 400, "stone": 800, "food": 400}
+	# 자원 건물: 시작할 때 자동 수집(남은 초 유지) — 쌓인 목재 200이 들어오고 비용(석재·식량)을 낸다
+	e.res = {"wood": 0, "stone": 315, "food": 435}
 	e.last_collect.lumber = t - 150.0
-	check(e.upgrade_block("lumber", t) == "" and e.upgrade("lumber", t) and e.res == {"wood": 0, "stone": 0, "food": 0} and is_equal_approx(e.last_collect.lumber, t - 30.0),
-		"a resource building collects first and the collected wood pays: %s" % [e.res])
+	check(e.upgrade_block("lumber", t) == "" and e.upgrade("lumber", t) and e.res == {"wood": 200, "stone": 0, "food": 0} and is_equal_approx(e.last_collect.lumber, t - 30.0),
+		"a resource building collects first, then pays: %s" % [e.res])
 	# 저장 v4 왕복, 꺼진 동안 끝난 건설은 불러올 때 완료
 	e.save_path = ECON_TMP
 	e.save()
@@ -2236,11 +2239,12 @@ func test_buildings() -> void:
 		_corrupt_buildings(q, entry[0])
 		check(not GameData.apply_remote(q) and GameData.errors == entry[1] and _tables_hash() == before, "apply_remote rejects: %s (errors %d)" % [entry[0], GameData.errors])
 	var p := _payload()
-	p.buildings[1].stone = 300
+	p.buildings[1].lv_stone = p.buildings[1].lv_stone.duplicate()
+	p.buildings[1].lv_stone[0] = 300.0
 	check(GameData.apply_remote(p) and GameData.build_cost("gate", 1).stone == 300, "a valid remote buildings table replaces the built-in one")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.build_cost("gate", 1).stone == 2500, "default tables restored")
+	check(GameData.errors == 0 and GameData.build_cost("gate", 1).stone == 0, "default tables restored")
 
 
 ## 모든 건물 레벨 1에 o를 덮은 사전.
@@ -4757,7 +4761,7 @@ func test_research_r24() -> void:
 	check([0.0, 0.5, 60.0, 60.5, 3600.0].map(func(s): return GameData.research_dia_cost(s)) == [1, 1, 1, 2, 60] and GameData.research_refund({"wood": 156, "stone": 105, "food": 0, "gold": 845}) == {"wood": 78, "stone": 52, "gold": 422},
 		"instant finish = max(1, ceil(left / 60)) diamonds; cancel refund = floor(cost x 0.5), zero dropped")
 	# 오프라인: 시작(비용 즉시) → 한 번에 하나 → 게으른 완료(알림) → 취소 환불 → 다이아 즉시 완료
-	var t := Time.get_unix_time_from_system()
+	var t := floorf(Time.get_unix_time_from_system())  # 정수 초: 저장 JSON이 소수 자리를 줄여도 왕복이 같다
 	var e = _econ(t)
 	var notes := []
 	var done := []
@@ -4797,7 +4801,10 @@ func test_research_r24() -> void:
 	check(EconomyScript.rate_per_min("stone", 3, 13.5) == 340 and EconomyScript.rate_per_min("stone", 3, 13.0) == 339 and e.pending("quarry", t + 600.0) == 3390 and EconomyScript.rate_per_min("stone", 3) == 300,
 		"production: floor(100 x 3 x 1.135) = floor(340.5) = 340; research +13% = 339 / min (10 min = 3390); no research = 300")
 	e.research_levels = {"construct": 5}
-	check(e.upgrade_sec("keep") == 52 and e.upgrade_sec("lumber") == 39, "build time = round(60 / 1.15) = 52 s (lumber Lv 3: 45 / 1.15 = 39)")
+	var keep_lv: int = e.levels.keep
+	e.levels.keep = 10
+	check(e.upgrade_sec("keep") == 48887 and e.upgrade_sec("lumber") == 95, "build time = round(56220 / 1.15) = 48887 s (lumber Lv 3: 109 / 1.15 = 95)")
+	e.levels.keep = keep_lv
 	e.research_levels = {"commerce": 3}
 	check(e.sell_gold("wood", 100, 1.0) == 109 and EconomyScript.sell_value("stone", 7, 1.3, 9.0) == 19 and EconomyScript.sell_value("wood", 100, 1.0) == 100,
 		"sell = floor(base x 1.09) (stone 7 x 2 x 1.3 = 18 -> 19)")
@@ -5120,9 +5127,10 @@ func test_tutorial() -> void:
 	t.note("open", 1, "keep")
 	var r0: Dictionary = t.reward(0)
 	var c1 := GameData.build_cost("lumber", 1)
-	check(t.complete() and int(r0.wood) == ceili(int(c1.wood) * 1.2 / 10.0) * 10 and int(r0.stone) >= int(c1.stone),
+	check(t.complete() and int(r0.food) == ceili(int(c1.food) * 1.2 / 10.0) * 10 and int(r0.stone) >= int(c1.stone),
 		"tutorial: mission 1 pays the next mission's resources + margin: %s" % [r0])
-	check(t.claim() and t.step == 1 and int(e.res.wood) == int(r0.wood), "tutorial: claim grants and advances")
+	var food0 := int(e.res.get("food", 0))
+	check(t.claim() and t.step == 1 and int(e.res.food) == food0 + int(r0.food), "tutorial: claim grants and advances")
 	# 2. 벌목장 건설 — 일꾼으로 0 → 1
 	check(e.upgrade_block("lumber", now) == "" and e.upgrade("lumber", now), "tutorial: lot construction starts with the reward")
 	check(is_equal_approx(float(e.build.finish), now + 5.0), "tutorial: building a lot takes lot_build_sec (5 s): %s" % [e.build])
@@ -5191,7 +5199,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 42번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5210,8 +5218,8 @@ func test_tutorial() -> void:
 		blocks.append(before and not at and not t.build_locked(m.arg))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 16번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 9번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 21번째 미션 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 13번째 미션 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
 	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
@@ -5219,7 +5227,7 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 67 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 76 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5235,7 +5243,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5246,6 +5254,25 @@ func test_tutorial() -> void:
 	check(not t.complete(), "guide: 1-12 is not cleared by the guild unlock")
 	check(TutorialScript.v2_step(0) == 0 and TutorialScript.v2_step(9) == t.mission_index("growth") and TutorialScript.v2_step(20) == t.mission_index("dungeon_ticket")
 		and TutorialScript.v2_step(33) == TutorialScript.MISSIONS.size(), "guide: old v2 steps map to the same mission id")
+	check(TutorialScript.map_step(TutorialScript.V3_IDS, 0) == 0 and TutorialScript.map_step(TutorialScript.V3_IDS, 7) == t.mission_index("stage_1_1")
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 34) == t.mission_index("dungeon_ticket")
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 67) == TutorialScript.MISSIONS.size(), "guide: old v3 steps map to the same mission id")
+	# 기능 가이드: 연속 진행·배속·미션 받기·주머니는 그 행동으로 끝난다
+	var fv = t.fever
+	var fake_fever := {"auto_next": false}
+	t.fever = fake_fever
+	t.step = t.mission_index("auto_on")
+	t.count = 0
+	check(not t.complete() and t.point_keys(t.mission()) == ["hud:auto"], "guide: continue mission waits for the [연속 진행] check")
+	fake_fever.auto_next = true
+	check(t.complete(), "guide: checking [연속 진행] completes its mission")
+	t.fever = fv
+	for id in ["mission_claim", "pouch", "auto_deploy", "promote"]:
+		t.step = t.mission_index(id)
+		t.count = 0
+		var before: bool = t.complete()
+		t.note(id)
+		check(t.complete(), "guide: %s completes on its action (before %s)" % [id, before])
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0

@@ -230,6 +230,27 @@ export interface BuildingDef {
   base_sec: number
   req1: string | null
   req2: string | null
+  // 2026-10-13 라오킹 곡선: 레벨별 L → L+1 값 "v1|v2|…"(max_level − 1개). 비면 위의 1→2 값 × 성장 식(BUILD_*_GROWTH)
+  lv_sec?: string | null
+  lv_wood?: string | null
+  lv_stone?: string | null
+  lv_food?: string | null
+}
+
+export const BUILD_LV_COLS = ['lv_sec', 'lv_wood', 'lv_stone', 'lv_food'] as const
+
+// 레벨 목록 "v1|v2|…" → 숫자 배열(비거나 틀리면 null — 검증은 seed.checkBuildings·앱 GameData가 한다)
+export function parseLevelList(text: unknown): number[] | null {
+  if (typeof text !== 'string' || text.trim() === '') return null
+  const out = text.split('|').map((x) => Number(x.trim()))
+  return out.every((v) => Number.isFinite(v)) ? out : null
+}
+
+// 레벨 목록의 L → L+1 값(L은 1부터, 목록을 넘으면 마지막 값). 목록이 없으면 null.
+function levelValue(text: unknown, level: number): number | null {
+  const xs = parseLevelList(text)
+  if (!xs || xs.length === 0) return null
+  return xs[Math.min(Math.max(level, 1), xs.length) - 1]
 }
 
 // base × growth^n을 곱셈 n번으로 — 앱(GDScript)과 같은 IEEE 곱셈 순서라 pow 구현 차이로 반올림이 갈리지 않는다.
@@ -239,15 +260,19 @@ export function grown(base: number, growth: number, n: number): number {
   return v
 }
 
-// L → L+1 비용 {wood, stone, food} = round(값 × 1.35^(L−1)).
+// L → L+1 비용 {wood, stone, food} = 레벨 목록 lv_<자원>의 L번째 값(2026-10-13 라오킹 곡선). 목록이 없으면 round(값 × 1.35^(L−1)).
 export function buildCost(def: BuildingDef, level: number): Record<string, number> {
   const out: Record<string, number> = {}
-  for (const r of BUILD_RES) out[r] = roundHalfAway(grown(Number(def[r as 'wood']), BUILD_COST_GROWTH, level - 1))
+  for (const r of BUILD_RES) {
+    const v = levelValue(def[`lv_${r}` as 'lv_wood'], level)
+    out[r] = roundHalfAway(v ?? grown(Number(def[r as 'wood']), BUILD_COST_GROWTH, level - 1))
+  }
   return out
 }
 
-// L → L+1 시간(초) = round(base_sec × 1.5^(L−1)).
-export const buildSec = (def: BuildingDef, level: number) => roundHalfAway(grown(Number(def.base_sec), BUILD_TIME_GROWTH, level - 1))
+// L → L+1 시간(초) = 레벨 목록 lv_sec의 L번째 값. 목록이 없으면 round(base_sec × 1.5^(L−1)).
+export const buildSec = (def: BuildingDef, level: number) =>
+  roundHalfAway(levelValue(def.lv_sec, level) ?? grown(Number(def.base_sec), BUILD_TIME_GROWTH, level - 1))
 
 // 단계 표 "레벨:값|…" → [[레벨, 값], …]. 레벨은 1부터 오름차순 정수, 값은 숫자. 틀리면 null.
 export function parseTiers(text: string): [number, number][] | null {
@@ -459,6 +484,8 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
 
 export const LEVELUP_GOLD_GROWTH = 1.16 // 2026-10-07 1.12 → 1.16. 앱 GameData와 같다
 export const LEVELUP_GOLD_CURVE = 1.0007 // 2026-10-12: × 1.0007^((L−1)²) — 고레벨일수록 상승폭이 커진다. 앱 GameData와 같다
+export const LEVELUP_GOLD_TAIL_FROM = 69 // 2026-10-13 최대 Lv 200: Lv 69 → 70부터는 한 레벨마다 × 1.04씩만. 앱 GameData와 같다
+export const LEVELUP_GOLD_TAIL = 1.04
 
 // 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 export function heroMaxLevel(promotion: number, config: Config): number {
@@ -477,12 +504,13 @@ export function promoteCost(promotion: number, config: Config): number | null {
   return v
 }
 
-// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)), 개정 12: 골드만.
+// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)), Lv 69부터는 Lv 69 값 × 1.04^(L − 69), 개정 12: 골드만.
 export function levelupCost(grade: string, level: number, count: number, config: Config) {
   const g = cfgNum(config, `levelup_gold_${grade}`)
   let gold = 0
   for (let l = level; l < level + count; l++) {
-    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** (l - 1) * LEVELUP_GOLD_CURVE ** ((l - 1) * (l - 1)))
+    const k = Math.min(l, LEVELUP_GOLD_TAIL_FROM) - 1
+    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** k * LEVELUP_GOLD_CURVE ** (k * k) * LEVELUP_GOLD_TAIL ** Math.max(0, l - LEVELUP_GOLD_TAIL_FROM))
   }
   return { gold }
 }

@@ -31,6 +31,7 @@ var polls := 0  # 받은 횟수(테스트용)
 var reported := {}  # 신고한 메시지 id → true(이 기기에서, 줄에 "신고함" 표시)
 var reports: Array = []  # 관리자: 서버 신고 목록(GET /v1/chat/reports)
 var reports_state := ""  # "" 안 받음 · "ok" · "failed"
+var system: Array = []  # [시스템] 줄(이 기기에서만): 채팅 안내·거절·신고 알림 {id, name, text, at, sys}
 
 var _cd := 0.0  # 다음 받기까지
 var _polling := false
@@ -38,8 +39,47 @@ var _last_send_ms := -100000
 var _local_seq := 0
 
 
+const SYSTEM_KEEP := 30
+const WELCOME := "채팅 예절을 지켜 주세요. 욕설은 자동으로 가려지며, 다른 성주의 메시지를 누르면 신고할 수 있습니다."
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	notice.connect(add_system)
+	add_system(WELCOME)
+	system[-1].at = 0.0  # 안내는 언제나 맨 위(가장 오래된 줄)
+
+
+## [시스템] 줄을 더한다(알림 notice도 여기로 온다).
+func add_system(text: String) -> void:
+	_local_seq += 1
+	system.append({"id": -_local_seq, "name": "", "text": text, "at": _now(), "sys": true})
+	system = system.slice(-SYSTEM_KEEP)
+	changed.emit()
+
+
+func _now() -> float:
+	return Time.get_unix_time_from_system() + Economy.clock_offset
+
+
+## 탭에 보일 줄(오래된 것부터, 각 줄에 ch = "all"·"guild"·"system"): all = 전체+길드+시스템을 시각순으로 합친 것.
+func view(tab: String) -> Array:
+	var out: Array = []
+	var chans: Array = ["all", "guild", "system"] if tab == "all" else [tab]
+	for ch in chans:
+		var src: Array = system if ch == "system" else (messages[ch] if ch == "all" or has_guild else [])
+		for m in src:
+			var r: Dictionary = m.duplicate()
+			r["ch"] = ch
+			out.append(r)
+	if chans.size() > 1:
+		out.sort_custom(func(a, b): return float(a.at) < float(b.at) if float(a.at) != float(b.at) else int(a.id) < int(b.id))
+	return out.slice(-KEEP)
+
+
+## 최근 n줄(성 화면 미니 채팅).
+func recent(n: int) -> Array:
+	return view("all").slice(-n)
 
 
 func online() -> bool:
@@ -161,7 +201,7 @@ func send(ch: String, raw: String) -> bool:
 	_local_seq += 1
 	var lid := -_local_seq
 	var me_name := str(Economy.friends.get("name", "나"))
-	messages[ch].append({"id": lid, "name": me_name, "text": text, "at": Time.get_unix_time_from_system(), "me": true, "local": true})
+	messages[ch].append({"id": lid, "name": me_name, "text": text, "at": _now(), "me": true, "local": true})
 	changed.emit()
 	Net.send("POST", "/v1/chat", {"channel": ch, "text": text}, func(d): _on_sent(ch, lid, d), func(): _on_refused(ch, lid))
 	return true

@@ -100,12 +100,14 @@ static func commas(n: int) -> String:
 	return ("-" if n < 0 else "") + s
 
 
-## 걸리는·남은 시간(초, 올림): 1시간 미만 "mm:ss", 이상 "h시간 m분"(개정 12 §2.5 — 건물 창·건설 막대).
+## 걸리는·남은 시간(초, 올림): 1시간 미만 "mm:ss", 하루 미만 "h시간 m분", 이상 "d일 h시간"(개정 12 §2.5 — 건물 창·건설 막대, 2026-10-13 일 단위).
 static func duration(sec: float) -> String:
 	var s := maxi(0, ceili(sec))
 	if s < 3600:
 		return "%02d:%02d" % [s / 60, s % 60]
-	return "%d시간 %d분" % [s / 3600, s % 3600 / 60]
+	if s < 86400:
+		return "%d시간 %d분" % [s / 3600, s % 3600 / 60]
+	return "%d일 %d시간" % [s / 86400, s % 86400 / 3600]
 
 
 ## 병사 생산 시간(초, 올림): 1시간 이상 "h:mm:ss", 미만 "mm:ss"(개정 13 §6 "다음 2:41:10"). 0.001초 빼고 올린다 —

@@ -63,6 +63,10 @@ func _ready() -> void:
 	toggle = _make_button("toggle", "메뉴")
 	toggle.pressed.connect(func(): set_open(not is_open))
 	_col.add_child(toggle)
+	Tutorial.register_ui("menu", toggle, func(): return not is_open)  # 가이드 화살표: 접혀 있으면 [메뉴], 펼치면 그 항목
+	for id in buttons:
+		var b: Button = buttons[id]
+		Tutorial.register_ui("menu:" + id, b, func(): return is_open and _t > 0.9 and not (windows.has(id) and windows[id].is_open()))
 	set_open(false)
 
 
