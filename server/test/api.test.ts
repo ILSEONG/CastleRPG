@@ -100,6 +100,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         barracks: { level: 1 }, archery: { level: 1 }, stable: { level: 1 }, // 개정 16: 자동 생산 시계 없음
       },
       build: null,
+      build2: null, builder2_until: null, speedups: {}, // 2026-10-13 두 번째 일꾼·가속 아이템
       population: 6, // 민가 1: pop_base
       heroes: Object.fromEntries(['hans', 'ella', 'dorik', 'nina'].map((h) => [h, { copies: 1, level: 1, shards: 0, promotion: 0 }])), // 개정 15: 조각·승급
       deploy: ['hans', 'ella', 'dorik', 'nina'],
@@ -448,7 +449,8 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })
-  assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 1500, stone: 2500, food: 0, base_sec: 45, req1: 'quarry', req2: null })
+  assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 412, stone: 0, food: 338, base_sec: 2, req1: 'quarry', req2: null,
+    lv_sec: '2|39|261|860|1870|3240|5760|10080|17820|31560|49920|58020|67380|78540|90600|105600|123600|141000|165600|192600|223200|258600|300600|351000|430200|555000|749400|1193400|3051600', lv_wood: '412|810|1210|2310|5590|7960|16300|31500|61300|118000|201000|255000|320000|401000|495000|613000|759000|928000|1130000|1370000|1680000|2060000|2500000|3050000|3890000|5220000|7320000|12100000|32000000', lv_stone: '0|0|0|0|1300|9530|20300|42000|86200|175000|312000|398000|500000|628000|778000|971000|1220000|1470000|1810000|2220000|2720000|3300000|4000000|4860000|6200000|8320000|11700000|19300000|51000000', lv_food: '338|690|1040|1990|4800|6810|13800|27300|53000|102000|174000|218000|276000|345000|426000|528000|651000|774000|990000|1220000|1460000|1750000|2140000|2620000|3350000|4500000|6310000|10400000|27600000' }) // 2026-10-13 라오킹 곡선
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
   assert.equal(g.config.hero_roster, undefined)
   assert.equal(g.config.kill_burst_sec, '60')

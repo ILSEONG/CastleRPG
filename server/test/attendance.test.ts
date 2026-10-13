@@ -24,7 +24,7 @@ test('표·진행 조회: 28칸, 새 플레이어는 0일 + 받을 수 있음, /
   assert.equal(r.n, 0)
   assert.equal(r.can_claim, true)
   assert.ok(r.next_reset > T0 && r.next_reset <= T0 + DAY)
-  assert.deepEqual(r.rewards[27], { hero: 'arteon' })
+  assert.deepEqual(r.rewards[27], { hero: 'arteon', speedup_builder_10080: 1 })
   const p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.deepEqual(p.attendance, { n: 0, days: 28, can_claim: true })
 })

@@ -17,6 +17,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const Skills := preload("res://scripts/skills.gd")
 const SoldierPanel := preload("res://scripts/soldier_panel.gd")
 const QtyBox := preload("res://scripts/qty_box.gd")
+const SpeedupList := preload("res://scripts/speedup_list.gd")
 
 const DIALOG_W := 640
 const GREEN := Color(0.13, 0.58, 0.24)
@@ -27,6 +28,7 @@ const TRAIN_ICON_PX := 72.0
 const RESEARCH_TEXT := "연구"
 const CANCEL_TEXT := "취소(50% 환불)"
 const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
+const SPEEDUP_TEXT := "가속"  # 2026-10-13: 가속 아이템 목록을 펼친다
 const TIERED_KEEP := ["영웅 슬롯", "성 넓이", "면마다 성문"]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
 const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"keep": "성의 중심. 다른 건물의 최대 레벨을 정합니다.",
@@ -56,6 +58,9 @@ var left_label: Label
 var reason_label: Label
 var upgrade_button: Button
 var free_build_button: Button  # 건설 중 · 남은 5분 이하: [무료 즉시 완료]
+var speedup_button: Button  # 건설 중: [가속] → 가속 아이템 목록(speedup_list.gd)
+var speedups: VBoxContainer  # 가속 아이템 목록(펼쳤을 때만 보인다)
+var builder_label: Label  # 두 번째 일꾼 고용 중이면 남은 기한
 var free_train_button: Button  # 훈련 중 · 남은 5분 이하: [무료 즉시 완료]
 # 훈련 칸(병사 건물일 때만 보인다, 개정 16)
 var train_box: VBoxContainer
@@ -131,8 +136,18 @@ func _ready() -> void:
 	left_label = _label("", 26)
 	_progress_box.add_child(left_label)
 	free_build_button = _button(FREE_TEXT, GREEN)  # 남은 5분 이하면 무료 즉시 완료(사용자 2026-10-06)
-	free_build_button.pressed.connect(func(): Economy.free_finish_build())
+	free_build_button.pressed.connect(func(): Economy.free_finish_build(building_id))
 	_progress_box.add_child(free_build_button)
+	speedup_button = _button(SPEEDUP_TEXT, UiKit.AMBER)
+	speedup_button.pressed.connect(func():
+		speedups.visible = not speedups.visible
+		_refresh())
+	_progress_box.add_child(speedup_button)
+	speedups = SpeedupList.new()
+	speedups.visible = false
+	_progress_box.add_child(speedups)
+	builder_label = _label("", 22, HudScript.INK.lightened(0.3))
+	content.add_child(builder_label)
 	reason_label = _label("", 24, RED)
 	content.add_child(reason_label)
 	upgrade_button = _button(UPGRADE_TEXT)
@@ -144,6 +159,7 @@ func _ready() -> void:
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.training_changed.connect(func(): if visible: _refresh())
 	Economy.research_changed.connect(func(): if visible: _refresh())  # 개정 24: 연구 효과(생산·인구·HP·훈련)
+	Economy.speedups_changed.connect(func(): if visible: _refresh())
 
 
 ## id 건물 창을 연다(건물 표에 없는 id면 열지 않는다).
@@ -154,6 +170,7 @@ func open_building(id: String) -> void:
 		Tutorial.lock_notice.emit(Tutorial.build_lock_text(id))
 		return
 	building_id = id
+	speedups.visible = false
 	open()
 
 
@@ -179,7 +196,7 @@ func _process(_delta: float) -> void:
 
 ## 매초 갱신 기준: 시계 초(이유·쌓이는 자원·훈련 남은 시간)와 건설 남은 초(끝나는 시각의 소수점에 맞춰 바뀐다) — 둘 중 하나가 바뀌면 다시 그린다.
 func _tick_key(now: float) -> Vector2i:
-	return Vector2i(floori(now), ceili(Economy.build_left(now)))
+	return Vector2i(floori(now), ceili(Economy.build_left(now, building_id)))
 
 
 func _refresh() -> void:
@@ -226,14 +243,23 @@ func _refresh() -> void:
 	time_label.text = "건설 시간 " + UiKit.duration(Economy.upgrade_sec(id))
 	time_label.visible = not maxed and not building
 	_progress_box.visible = building
-	free_build_button.visible = building and Economy.can_free_build(now)
-	progress.value = Economy.build_progress(now)
-	left_label.text = ("건설 중 · 남은 시간 %s" % UiKit.duration(Economy.build_left(now))) if lot \
-		else "Lv %d → %d 건설 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.build_left(now))]
+	free_build_button.visible = building and Economy.can_free_build(now, id)
+	speedup_button.visible = building and not free_build_button.visible
+	speedup_button.text = SPEEDUP_TEXT + (" ▲" if speedups.visible else " ▼")
+	speedups.visible = speedups.visible and speedup_button.visible
+	if speedups.visible:
+		speedups.target = "build"
+		speedups.building = id
+		speedups.refresh()
+	progress.value = Economy.build_progress(now, id)
+	left_label.text = ("건설 중 · 남은 시간 %s" % UiKit.duration(Economy.build_left(now, id))) if lot \
+		else "Lv %d → %d 건설 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.build_left(now, id))]
 	var why := Economy.upgrade_block(id, now)
 	var reason: String = Economy.BLOCK_TEXT.get(why, "")
-	if why == "builder_busy":  # 무엇을 짓는지·남은 시간도
-		reason += " (%s %s)" % [GameData.building_def(str(Economy.build.id)).name, UiKit.duration(Economy.build_left(now))]
+	if why == "builder_busy":  # 무엇을 짓는지·남은 시간도(일꾼마다)
+		reason += " (%s)" % ", ".join(Economy.build_jobs().map(func(j): return "%s %s" % [GameData.building_def(str(j.id)).name, UiKit.duration(Economy.build_left(now, str(j.id)))]))
+	builder_label.text = ("두 번째 일꾼 남은 기간 %s" % UiKit.duration(Economy.builder2_until - now)) if Economy.builder2_active(now) else ""
+	builder_label.visible = builder_label.text != ""
 	reason_label.text = reason
 	reason_label.visible = reason != "" and why != "in_progress"  # 짓는 중은 진행 막대가 말한다
 	upgrade_button.disabled = why != ""

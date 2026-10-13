@@ -226,11 +226,11 @@ test('효과(서버 권위): 생산(wood_pct + res_pct, 분당 내림)·업그�
   S.clock.t = T0 + 1200
   r = await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'lumber' } })
   assert.equal(r.status, 200)
-  assert.deepEqual([r.json.build, r.json.player.res.wood], [{ id: 'lumber', finish: T0 + 1200 + 17 }, 1_000_000 + 10 * 115 - 600])
+  assert.deepEqual([r.json.build, r.json.player.res.wood], [{ id: 'lumber', finish: T0 + 1200 + 17 }, 1_000_000 + 10 * 115]) // 제재소는 목재를 쓰지 않는다(라오킹 곡선, 2026-10-13)
   S.clock.t = T0 + 1217
   await setResearch(id, { construct: 10 })
   r = await S.req('POST', '/v1/building/upgrade', { token, body: { building: 'keep' } })
-  assert.deepEqual(r.json.build, { id: 'keep', finish: T0 + 1217 + 69 }) // round(90 / 1.3)
+  assert.deepEqual(r.json.build, { id: 'keep', finish: T0 + 1217 + 82 }) // round(106 / 1.3)
 })
 
 test('효과: 판매(sell_pct, 자원마다 내림 — 단일·all·items), 처치 골드(kill_gold_pct, 처치 1회 tenths에서 내림)', async () => {

@@ -15,6 +15,7 @@ import * as A from './attendance.ts'
 import * as M from './missions.ts'
 import * as Q from './quests.ts'
 import * as P from './pouches.ts'
+import * as S from './speedups.ts'
 import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
 import * as Pay from './payments.ts'
@@ -121,6 +122,9 @@ interface Player {
   heroes: Record<string, Hero> // 영웅 id → 보유 수·레벨·조각·승급(개정 15)
   deploy: unknown[] // 저장된 그대로(응답에서 슬롯 수·보유로 맞춘다)
   build: { id: string; finish: number } | null // 일꾼(개정 12): 짓는 건물과 끝나는 시각(유닉스 초), 쉬면 null
+  build2: { id: string; finish: number } | null // 두 번째 일꾼(2026-10-13): 같은 모양. 고용 기한이 지나도 짓던 건물은 끝까지 짓는다
+  builder2_until: number | null // 두 번째 일꾼 고용 기한(유닉스 초), 없으면 null
+  speedups: Record<string, number> // 가속 아이템·일꾼 고용권 id → 개수(speedups.ts)
   soldiers: Record<string, number> // 개정 13: "병종:티어" → 보유 수(0 초과만)
   soldier_deploy: Record<string, number> // "병종:티어" → 배치 수(저장된 그대로 — 응답에서 보유로 자른다)
   upgrades: Record<string, number> // 개정 20: 업그레이드 id → 레벨(0 초과만)
@@ -173,6 +177,9 @@ interface Change {
   promotes?: Record<string, { steps: number; cost: number }> // 일괄 승급: 영웅 → 조각 −cost, 승급 +steps
   deploy?: (string | null)[] // 새 배치
   build?: { id: string; finish: number } | null // 새 일꾼 상태(개정 12)
+  build2?: { id: string; finish: number } | null // 새 두 번째 일꾼 상태(2026-10-13)
+  builder2Until?: number // 새 두 번째 일꾼 고용 기한
+  speedups?: Record<string, number> // 가속 아이템 보유 전체(새 값)
   soldiers?: Record<string, number> // "병종:티어" → 보유 증감(개정 13)
   soldierDeploy?: Record<string, number> // 새 병사 배치
   train?: Record<string, Train | null> // 병사 건물 → 새 훈련 대기열(null = 비움, 개정 16)
@@ -232,12 +239,14 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
 }).join(',\n  ')
 
 const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt, s.layout,
-  s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
+  s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.build2_id, s.speedups, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   coalesce((select json_object_agg(id, level) from player_research where player_id = s.player_id and level > 0), '{}'::json) as research,
   s.research_id, extract(epoch from s.research_finish)::float8 as research_finish,
   extract(epoch from s.build_finish)::float8 as build_finish,
+  extract(epoch from s.build2_finish)::float8 as build2_finish,
+  extract(epoch from s.builder2_until)::float8 as builder2_until,
   extract(epoch from s.last_kill_report)::float8 as last_kill_report,
   extract(epoch from s.last_stage_clear)::float8 as last_stage_clear,
   extract(epoch from s.last_active)::float8 as last_active,
@@ -299,15 +308,19 @@ const ENSURE_ROWS_SQL = `with p as (select $1::uuid as id),
 
 // 게으른 완료(개정 12 §2.4): 다 지은 건물 레벨 +1(성채·성문이면 player_state 레벨도 — 하위 호환), 일꾼 비우기,
 // economy_log build_done을 version 가드 한 문장으로. 다른 요청이 먼저 바꿨으면 0행 — 다시 읽는다.
-const COMPLETE_SQL = `with w as (select $3 = any(unbuilt) as lot, build_finish from player_state where player_id = $1 and version = $2),
-  s as (update player_state set version = version + 1, build_id = null, build_finish = null, unbuilt = array_remove(unbuilt, $3), missions = $8::jsonb,
-    keep_level = keep_level + (case when build_id = $5 then 1 else 0 end), gate_level = gate_level + (case when build_id = $6 then 1 else 0 end)
-    where player_id = $1 and version = $2 and build_id = $3 returning player_id),
+const completeSql = (slot: 1 | 2) => {
+  const id = slot === 1 ? 'build_id' : 'build2_id'
+  const fin = slot === 1 ? 'build_finish' : 'build2_finish'
+  return `with w as (select $3 = any(unbuilt) as lot, ${fin} as build_finish from player_state where player_id = $1 and version = $2),
+  s as (update player_state set version = version + 1, ${id} = null, ${fin} = null, unbuilt = array_remove(unbuilt, $3), missions = $8::jsonb,
+    keep_level = keep_level + (case when ${id} = $5 then 1 else 0 end), gate_level = gate_level + (case when ${id} = $6 then 1 else 0 end)
+    where player_id = $1 and version = $2 and ${id} = $3 returning player_id),
   b as (update player_buildings set level = level + (case when (select lot from w) then 0 else 1 end),
     last_collect = case when (select lot from w) then (select build_finish from w) else last_collect end
     where player_id = (select player_id from s) and building = $3 returning 1),
   l as (insert into economy_log (player_id, kind, detail, at) select player_id, 'build_done', $7::jsonb, to_timestamp($4::float8) from s returning 1)
   select count(*)::int as n from s`
+}
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 // 저장된 자리 {id: [x, y]} → 아는 건물·올바른 칸만.
@@ -330,6 +343,11 @@ function deepFreeze<T>(v: T): T {
 }
 // 건물 레벨(행이 없으면 1)
 const level = (p: Player, building: string) => p.buildings[building]?.level ?? 1
+// 쉬는 일꾼(2026-10-13): 1 = 1번 일꾼, 2 = 두 번째 일꾼(고용 기한 안), 0 = 없음
+const freeBuilder = (p: Player, now: number): 0 | 1 | 2 => (!p.build ? 1 : !p.build2 && S.builder2Active(p.builder2_until, now) ? 2 : 0)
+// 그 건물을 짓는 일꾼(building = null이면 1번 일꾼, 쉬면 2번). 없으면 0.
+const builderOf = (p: Player, building: string | null): 0 | 1 | 2 =>
+  building === null ? (p.build ? 1 : p.build2 ? 2 : 0) : p.build?.id === building ? 1 : p.build2?.id === building ? 2 : 0
 // 자유 건설: 성 내부 한 변 타일 수의 절반(성채 레벨 단계 표), 성 안에 서 있는 건물(지었거나 자리 잡은 공터) → 칸(except 빼고)
 const interiorHalf = (p: Player, g: Game) => Math.floor(R.tierValue(g.config, 'keep_interior_tiers', level(p, R.KEEP)) / 2)
 function placedCells(p: Player, except: string): Record<string, [number, number]> {
@@ -354,9 +372,10 @@ function counts(v: unknown): Record<string, number> {
   return out
 }
 
-// 튜토리얼 공터 짓기를 못 하는 이유(앱 Economy.upgrade_block의 공터 분기와 같다): 일꾼이 바쁘면 in_progress·builder_busy, Lv 1 비용이 모자라면 not_enough.
-function lotBlock(def: R.BuildingDef, build: Player['build'], res: Record<string, number>): string {
-  if (build) return build.id === def.id ? 'in_progress' : 'builder_busy'
+// 튜토리얼 공터 짓기를 못 하는 이유(앱 Economy.upgrade_block의 공터 분기와 같다): 쉬는 일꾼이 없으면 builder_busy, Lv 1 비용이 모자라면 not_enough.
+// (짓는 중인 건물이면 in_progress — 부르는 쪽이 먼저 본다)
+function lotBlock(def: R.BuildingDef, busy: boolean, res: Record<string, number>): string {
+  if (busy) return 'builder_busy'
   const cost = R.buildCost(def, 1)
   return R.BUILD_RES.some((r) => (res[r] ?? 0) < cost[r]) ? 'not_enough' : ''
 }
@@ -526,6 +545,9 @@ export function createApp(opts: AppOptions) {
         last_active: r.last_active == null ? null : Number(r.last_active),
         kill_seq: Number(r.kill_seq), res, buildings, heroes, deploy: Array.isArray(deploy) ? deploy : [],
         build: typeof r.build_id === 'string' ? { id: r.build_id, finish: Number(r.build_finish) } : null,
+        build2: typeof r.build2_id === 'string' ? { id: r.build2_id, finish: Number(r.build2_finish) } : null,
+        builder2_until: r.builder2_until == null ? null : Number(r.builder2_until),
+        speedups: S.normalize(r.speedups == null ? {} : json(r.speedups)),
         soldiers: counts(json(r.soldiers)), soldier_deploy: counts(json(r.soldier_deploy)), upgrades: counts(json(r.upgrades)),
         dungeons,
         items: (json(r.items) as any[]).map((x) => ({ id: Number(x.id), slot: String(x.slot), weapon_kind: x.weapon_kind ?? null, grade: String(x.grade), ...R.cleanRolls(String(x.slot), String(x.grade), x.rolls, x.subs) })),
@@ -548,11 +570,12 @@ export function createApp(opts: AppOptions) {
         market_sold: Number(r.market_sold ?? 0),
         admin: r.admin === true,
       }
-      if (p.build && p.build.finish <= now) {
-        const lot = p.unbuilt.includes(p.build.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
-        const from = lot ? 0 : level(p, p.build.id)
-        await query(COMPLETE_SQL, [id, p.version, p.build.id, now, R.KEEP, R.GATE,
-          JSON.stringify({ building: p.build.id, from, to: from + 1, finish: p.build.finish }),
+      const done = p.build && p.build.finish <= now ? { b: p.build, slot: 1 as const } : p.build2 && p.build2.finish <= now ? { b: p.build2, slot: 2 as const } : null
+      if (done) {
+        const lot = p.unbuilt.includes(done.b.id) // 튜토리얼 공터 짓기: Lv 1이 되고(레벨 그대로) 생산은 다 지은 시각부터
+        const from = lot ? 0 : level(p, done.b.id)
+        await query(completeSql(done.slot), [id, p.version, done.b.id, now, R.KEEP, R.GATE,
+          JSON.stringify({ building: done.b.id, from, to: from + 1, finish: done.b.finish, ...(done.slot === 2 ? { builder: 2 } : {}) }),
           JSON.stringify(M.addEvents(p.missions, { build_up: 1 }, R.resetDay(now, R.cfgNum(game.config, 'daily_reset_utc_hour'))))])
         continue // 이겼든 졌든(다른 요청이 먼저 완료했으면 build_id가 비어 있다) 다시 읽는다
       }
@@ -607,7 +630,9 @@ export function createApp(opts: AppOptions) {
       server_now: now,
       player: {
         gold_tenths: p.gold_tenths, gold: Math.floor(p.gold_tenths / 10), res, stage: p.stage, keep_level: p.keep_level, gate_level: p.gate_level,
-        kill_seq: p.kill_seq, buildings, build: p.build, population: population(p, game), heroes, deploy,
+        kill_seq: p.kill_seq, buildings, build: p.build,
+        build2: p.build2, builder2_until: p.builder2_until, speedups: p.speedups, // 2026-10-13 두 번째 일꾼·가속 아이템
+        population: population(p, game), heroes, deploy,
         soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
         dungeons: dungeonsView(p, game, now), items: p.items, equipment,
         diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
@@ -693,6 +718,9 @@ export function createApp(opts: AppOptions) {
     if (ch.killSeq !== undefined) sets.push(`kill_seq = ${p(ch.killSeq)}::int`)
     if (ch.deploy !== undefined) sets.push(`deploy = ${p(JSON.stringify(ch.deploy))}::jsonb`)
     if (ch.build !== undefined) sets.push(`build_id = ${p(ch.build?.id ?? null)}::text, build_finish = to_timestamp(${p(ch.build?.finish ?? null)}::float8)`)
+    if (ch.build2 !== undefined) sets.push(`build2_id = ${p(ch.build2?.id ?? null)}::text, build2_finish = to_timestamp(${p(ch.build2?.finish ?? null)}::float8)`)
+    if (ch.builder2Until !== undefined) sets.push(`builder2_until = to_timestamp(${p(ch.builder2Until)}::float8)`)
+    if (ch.speedups) sets.push(`speedups = ${p(JSON.stringify(ch.speedups))}::jsonb`)
     if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
     if (ch.diamonds) sets.push(`diamonds = diamonds + ${p(bigint(ch.diamonds))}::bigint`)
     if (ch.diaTickets) sets.push(`dia_tickets = dia_tickets + ${p(ch.diaTickets)}::int`)
@@ -987,6 +1015,9 @@ export function createApp(opts: AppOptions) {
     }
     if (ch.deploy !== undefined) pl.deploy = ch.deploy
     if (ch.build !== undefined) pl.build = ch.build
+    if (ch.build2 !== undefined) pl.build2 = ch.build2
+    if (ch.builder2Until !== undefined) pl.builder2_until = ch.builder2Until
+    if (ch.speedups) pl.speedups = ch.speedups
     for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
     if (ch.soldierDeploy !== undefined) pl.soldier_deploy = ch.soldierDeploy
     for (const [k, d] of Object.entries(ch.upgrades ?? {})) pl.upgrades[k] = (pl.upgrades[k] ?? 0) + d
@@ -1504,7 +1535,10 @@ export function createApp(opts: AppOptions) {
       }
       const levels: Record<string, number> = {}
       for (const d of g.buildings) levels[d.id] = p.unbuilt.includes(d.id) ? 0 : level(p, d.id)
-      const why = lot ? lotBlock(def, p.build, res) : R.upgradeBlock(building, g.buildings, levels, p.build !== null, res)
+      // 2026-10-13 두 번째 일꾼: 쉬는 일꾼(1번 먼저, 2번은 고용 기한 안)에게 맡긴다. 이 건물을 이미 짓고 있으면 in_progress.
+      const slot = freeBuilder(p, now)
+      const why = p.build?.id === building || p.build2?.id === building ? 'in_progress'
+        : lot ? lotBlock(def, slot === 0, res) : R.upgradeBlock(building, g.buildings, levels, slot === 0, res)
       if (why) throw new ApiError(409, why, `cannot upgrade '${building}' from level ${lot ? 0 : from}: ${why}`)
       const cost = R.buildCost(def, from)
       const finish = now + (lot ? R.cfgNum(g.config, 'lot_build_sec') // 공터 첫 건설은 lot_build_sec초(사용자 2026-10-06)
@@ -1514,12 +1548,13 @@ export function createApp(opts: AppOptions) {
         const d = (collect?.res === r ? collect.amount : 0) - cost[r]
         if (d !== 0) delta[r] = d
       }
+      const job = { id: building, finish }
       return {
         change: {
-          res: delta, buildings: collect ? { [building]: collect.to } : {}, build: { id: building, finish }, ...(layout ? { layout } : {}),
-          log: { kind: 'build_start', detail: { building, from: lot ? 0 : from, to: lot ? 1 : from + 1, cost, finish, collect } },
+          res: delta, buildings: collect ? { [building]: collect.to } : {}, ...(slot === 2 ? { build2: job } : { build: job }), ...(layout ? { layout } : {}),
+          log: { kind: 'build_start', detail: { building, from: lot ? 0 : from, to: lot ? 1 : from + 1, cost, finish, collect, ...(slot === 2 ? { builder: 2 } : {}) } },
         },
-        extra: { build: { id: building, finish } },
+        extra: { build: job, builder: slot },
       }
     })
   })
@@ -1541,13 +1576,57 @@ export function createApp(opts: AppOptions) {
 
   // 무료 즉시 완료(사용자 2026-10-06): 남은 건설 시간이 free_finish_sec초 이하면 끝나는 시각을 지금으로 당긴다 — 완료(레벨 +1·build_done 로그)는
   // 게으른 완료가 다시 읽을 때 한다. 짓는 중이 아니면 409 no_build, 아직 길면 409 too_long. 이미 끝났으면 그대로(멱등).
+  // 2026-10-13: body.building(생략 가능) = 끝낼 건물. 생략하면 1번 일꾼(없으면 2번)의 건물.
   app.post('/v1/building/finish', auth, async (c) => {
+    const want = (await body(c)).building
     return mutate(c, (p, g, now) => {
-      const b = p.build
+      const slot = builderOf(p, typeof want === 'string' ? want : null)
+      const b = slot === 1 ? p.build : slot === 2 ? p.build2 : null
       if (!b) throw new ApiError(409, 'no_build', 'nothing is being built')
       if (!R.freeFinishOk(g.config, b.finish, now)) throw new ApiError(409, 'too_long', `'${b.id}' finishes at ${b.finish}; free finish needs ${R.freeFinishSec(g.config)} s or less`)
       if (b.finish <= now) return {}
-      return { change: { build: { id: b.id, finish: now }, log: { kind: 'build_free', detail: { building: b.id, finish: b.finish, left: b.finish - now } } }, reload: true }
+      const job = { id: b.id, finish: now }
+      return { change: { ...(slot === 2 ? { build2: job } : { build: job }), log: { kind: 'build_free', detail: { building: b.id, finish: b.finish, left: b.finish - now } } }, reload: true }
+    })
+  })
+
+  // --- 가속 아이템·일꾼 고용권(speedups.ts, 2026-10-13) ---
+
+  // 가속 아이템 쓰기. body = {id, count(기본 1), target: 'build' | 'research', building?(건설: 어느 건물 — 생략하면 1번 일꾼, 없으면 2번)}.
+  // 일꾼 고용권(builder_<분>)은 target 없이: 두 번째 일꾼 기한 = max(지금, 기한) + 분 × count.
+  // 가속은 그 타이머의 끝나는 시각을 분 × 60 × count만큼 당긴다(지금보다 앞으로는 안 간다 — 넘친 시간은 사라진다). 완료(레벨 +1·연구 +1)는
+  // 게으른 완료가 다시 읽을 때. 아이템 −count·타이머·economy_log speedup을 version 가드 한 문장으로.
+  // 오류: 404 unknown_speedup, 400 bad_request(count·target), 409 not_enough(보유 부족)·wrong_target(이 타이머에 못 씀)·no_build·no_research(쓸 타이머 없음).
+  app.post('/v1/speedup/use', auth, async (c) => {
+    const b = await body(c)
+    const id = strField(b, 'id')
+    const sp = S.parse(id)
+    if (!sp) throw new ApiError(404, 'unknown_speedup', `unknown speed-up '${id}'`)
+    const count = b.count ?? 1
+    if (!Number.isInteger(count) || count < 1 || count > S.MAX_USE) throw new ApiError(400, 'bad_request', `'count' must be an integer in 1..${S.MAX_USE}`)
+    const target = sp.kind === 'builder' ? null : b.target
+    if (target !== null && !S.TARGETS.includes(target)) throw new ApiError(400, 'bad_request', "'target' must be 'build' or 'research'")
+    return mutate(c, (p, g, now) => {
+      if ((p.speedups[id] ?? 0) < count) throw new ApiError(409, 'not_enough', `you have ${p.speedups[id] ?? 0} '${id}'`)
+      const speedups = S.add(p.speedups, { [id]: -count })
+      const sec = sp.min * 60 * count
+      if (sp.kind === 'builder') {
+        const until = Math.max(now, p.builder2_until ?? 0) + sec
+        return { change: { speedups, builder2Until: until, log: { kind: 'speedup', detail: { id, count, builder2_until: until } } }, extra: { builder2_until: until } }
+      }
+      if (!S.fits(sp.kind, target)) throw new ApiError(409, 'wrong_target', `'${id}' cannot be used on ${target}`)
+      if (target === 'research') {
+        const cur = p.research_cur
+        if (!cur || cur.finish <= now) throw new ApiError(409, 'no_research', 'nothing is being researched')
+        const finish = Math.max(now, cur.finish - sec)
+        return { change: { speedups, research: { id: cur.id, finish }, log: { kind: 'speedup', detail: { id, count, target, research: cur.id, from: cur.finish, to: finish } } }, reload: true }
+      }
+      const want = typeof b.building === 'string' ? b.building : null
+      const slot = builderOf(p, want)
+      const job = slot === 1 ? p.build : slot === 2 ? p.build2 : null
+      if (!job || job.finish <= now) throw new ApiError(409, 'no_build', 'nothing is being built')
+      const next = { id: job.id, finish: Math.max(now, job.finish - sec) }
+      return { change: { speedups, ...(slot === 2 ? { build2: next } : { build: next }), log: { kind: 'speedup', detail: { id, count, target, building: job.id, from: job.finish, to: next.finish } } }, reload: true }
     })
   })
 
@@ -1729,6 +1808,8 @@ export function createApp(opts: AppOptions) {
     }
     const pz = P.fromReward(sum)
     if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+    const sz = S.fromReward(sum)
+    if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
     const got: Record<string, unknown> = { ...sum }
     if (Object.keys(heroes).length) got.heroes = heroes
     if (items.length) got.items = items
@@ -1773,6 +1854,8 @@ export function createApp(opts: AppOptions) {
       }
       const pz = P.fromReward(reward)
       if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+      const sz = S.fromReward(reward)
+      if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
       const got = { ...reward, ...(change.items ? { items: change.items } : {}) }
       change.log = { kind: 'attendance', detail: { day, reward: got } }
       return { change, extra: { day, reward: got }, reload: Boolean(keyType || change.items) }
@@ -1843,6 +1926,8 @@ export function createApp(opts: AppOptions) {
       }
       const pz = P.fromReward(reward)
       if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+      const sz = S.fromReward(reward)
+      if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
       return { change, extra: { id: d.id, reward }, reload: Boolean(keyType) }
     })
   })
@@ -1931,6 +2016,8 @@ export function createApp(opts: AppOptions) {
       }
       const pz = P.fromReward(give)
       if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+      const sz = S.fromReward(give)
+      if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
       return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
     })
   })
@@ -1951,6 +2038,8 @@ export function createApp(opts: AppOptions) {
     }
     const pz = P.fromReward(reward)
     if (Object.keys(pz).length) change.pouches = P.add(change.pouches ?? p.pouches, pz)
+    const sz = S.fromReward(reward)
+    if (Object.keys(sz).length) change.speedups = S.add(change.speedups ?? p.speedups, sz)
     return Boolean(keyType)
   }
 
@@ -3246,9 +3335,38 @@ export function createApp(opts: AppOptions) {
       return c.json({ ok: true })
     })
 
+    // 통합 테스트용(2026-10-13): 건물 레벨({id: 레벨}, 성채·성문은 요약 열도)과 자원(res {wood, stone, food})을 바로 정한다.
+    app.post('/v1/test/levels', auth, async (c) => {
+      const b = await body(c)
+      const id = c.get('playerId') as string
+      const levels = (b.levels && typeof b.levels === 'object' ? b.levels : {}) as Record<string, unknown>
+      for (const [bid, lv] of Object.entries(levels)) {
+        if (!Number.isInteger(lv) || (lv as number) < 1 || (lv as number) > 30) continue
+        await query('update player_buildings set level = $3 where player_id = $1 and building = $2', [id, bid, lv])
+        if (bid === 'keep') await query('update player_state set keep_level = $2 where player_id = $1', [id, lv])
+        if (bid === 'gate') await query('update player_state set gate_level = $2 where player_id = $1', [id, lv])
+      }
+      const res = (b.res && typeof b.res === 'object' ? b.res : {}) as Record<string, unknown>
+      for (const [r, n] of Object.entries(res)) if (Number.isInteger(n) && (n as number) >= 0) await query('update player_resources set amount = $3 where player_id = $1 and res = $2', [id, r, n])
+      await query('update player_state set version = version + 1 where player_id = $1', [id])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 테스트용(2026-10-13): 가속 아이템 보유를 {id: 개수}로 바꾼다(표에 없는 id·0 이하는 버린다).
+    app.post('/v1/test/speedups', auth, async (c) => {
+      const b = await body(c)
+      const id = c.get('playerId') as string
+      await query('update player_state set version = version + 1, speedups = $2::jsonb where player_id = $1', [id, JSON.stringify(S.normalize(b.items))])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
     app.post('/v1/test/build_now', auth, async (c) => {
       const id = c.get('playerId') as string
       await query('update player_state set version = version + 1, build_finish = to_timestamp($2::float8) where player_id = $1 and build_id is not null', [id, clock()])
+      await query('update player_state set version = version + 1, build2_finish = to_timestamp($2::float8) where player_id = $1 and build2_id is not null', [id, clock()])
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))

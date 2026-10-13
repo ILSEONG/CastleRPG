@@ -1162,10 +1162,12 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.reason_label.text == Economy.BLOCK_TEXT.keep_cap and bwin.reason_label.visible,
 		"(B) lumber window at keep Lv 1: title, 생산 100/분 → 200/분, red '✗ 성채 Lv 2 필요', [업그레이드] off with the keep-cap reason",
 		"title=%s eff=%s req=%s reason=%s" % [bwin.title_label.text, [eff.get_child(0).text, eff.get_child(1).text], req.text, bwin.reason_label.text])
-	_check(bwin.cost_labels.wood.text == "600" and bwin.cost_labels.wood.get_theme_color("font_color") == HudScript.INK and bwin.cost_labels.stone.text == "800"
-		and bwin.cost_labels.stone.get_theme_color("font_color") == bwin.RED and bwin.time_label.text == "건설 시간 00:20" and not bwin._progress_box.visible,
-		"(B) cost 600/800/400 with icons (stone short = red, wood 1000 ok), 건설 시간 00:20",
-		"wood=%s stone=%s time=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.time_label.text])
+	var short_col := func(k: String) -> Color: return bwin.RED if int(Economy.res.get(k, 0)) < int(GameData.build_cost("lumber", 1)[k]) else HudScript.INK
+	_check(bwin.cost_labels.wood.text == "0" and bwin.cost_labels.stone.text == "315" and bwin.cost_labels.food.text == "435"
+		and bwin.cost_labels.stone.get_theme_color("font_color") == short_col.call("stone") and bwin.cost_labels.food.get_theme_color("font_color") == short_col.call("food")
+		and bwin.time_label.text == "건설 시간 00:20" and not bwin._progress_box.visible,
+		"(B) cost 0/315/435 with icons (short = red), 건설 시간 00:20 (2026-10-13 RoK curve)",
+		"wood=%s stone=%s food=%s time=%s res=%s" % [bwin.cost_labels.wood.text, bwin.cost_labels.stone.text, bwin.cost_labels.food.text, bwin.time_label.text, Economy.res])
 	_check(bwin.effect_lines("houses", 1) == [["인구", "6", "8"]] and bwin.effect_lines("barracks", 1) == [["1마리", "3:00:00", "2:30:00"]]
 		and bwin.effect_lines("stable", 3) == [["1마리", "2:00:00", "1:30:00"]] and bwin.effect_lines("barracks", 6) == [["1마리", "30:00", "T2 3:00:00"]] and bwin.effect_lines("lab", 2)[0] == ["연구 속도", "+2%", "+4%"]
 		and UiKit.duration(3900) == "1시간 5분" and UiKit.duration(59.2) == "01:00",
@@ -1173,16 +1175,16 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
 	bwin.close()
 
-	# 성채 [업그레이드]: 자원 3000/3000/2000 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간
+	# 성채 [업그레이드]: 자원 375/0/375 감소, 일꾼 = 성채, 비계(기둥 4 + 가로대, AABB 둘레), 머리 위 막대, 창은 진행 막대 + 매초 남은 시간
 	Economy.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	Economy.changed.emit()
 	await _tap(_building_px("keep"))
 	var rows: Array = bwin.reqs.get_children().map(func(l): return l.text)
 	print("INPUT INFO: keep window (Lv 1, can upgrade) dialog %s, [업그레이드] %s" % [bwin.dialog.get_global_rect(), bwin.upgrade_button.get_global_rect()])
 	_check(bwin.building_id == "keep" and rows == ["✓ 성문 Lv 1 필요", "✓ 보병 막사 Lv 1 필요"] and bwin.reqs.get_child(0).get_theme_color("font_color") == bwin.GREEN
-		and not bwin.upgrade_button.disabled and not bwin.reason_label.visible and bwin.time_label.text == "건설 시간 01:00"
+		and not bwin.upgrade_button.disabled and not bwin.reason_label.visible and bwin.time_label.text == "건설 시간 00:02"
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child_count() == 2,
-		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 01:00", "reqs=%s" % [rows])
+		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 00:02", "reqs=%s time=%s" % [rows, bwin.time_label.text])
 	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
 	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면마다 성문", "1개", "2개"]]
 		and names.call(9) == ["건물 최대", "성 HP"] and names.call(21).size() == 5 and names.call(30) == ["건물 최대", "성 HP"],
@@ -1193,11 +1195,13 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	var keep_box: AABB = scenery.sites.keep[0]
 	var sc: MeshInstance3D = scenery._scaffolds[0] if scenery._scaffolds.size() == 1 else null
 	var sbox := AABB(sc.position + sc.mesh.get_aabb().position, sc.mesh.get_aabb().size) if sc != null else AABB()
-	_check(Economy.res == {"wood": 7000, "stone": 7000, "food": 8000} and Economy.is_building("keep") and bwin.upgrade_button.disabled and bwin._progress_box.visible
+	_check(Economy.res == {"wood": 9625, "stone": 10000, "food": 9625} and Economy.is_building("keep") and bwin.upgrade_button.disabled and bwin._progress_box.visible
 		and not bwin._cost_row.visible and bwin.left_label.text.begins_with("Lv 1 → 2 건설 중"),
-		"(B) [업그레이드] takes 3000/3000/2000, the builder works on the keep; the window swaps cost for a progress bar", "res=%s build=%s" % [Economy.res, Economy.build])
+		"(B) [업그레이드] takes 375/0/375, the builder works on the keep; the window swaps cost for a progress bar", "res=%s build=%s" % [Economy.res, Economy.build])
 	_check(scenery.scaffold_id == "keep" and sc != null and sbox.encloses(keep_box) and sbox.size.x > keep_box.size.x and badges.build_anchors().size() == 1
 		and badges.build_anchors()[0].y > keep_box.end.y, "(B) a scaffold rings the keep's AABB and the progress bar anchor sits above its roof", "scaffold=%s keep=%s" % [sbox, keep_box])
+	Economy.build.finish = Economy.time_now() + 1.5  # 성채 1 → 2는 2초 — 남은 1.5초에서 1.1초 뒤를 본다
+	await get_tree().create_timer(0.05).timeout
 	var t0: String = bwin.left_label.text
 	var p0: float = bwin.progress.value
 	await get_tree().create_timer(1.1).timeout
@@ -1222,7 +1226,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	_check(bwin.building_id == "lumber" and not bwin.upgrade_button.disabled and bwin.reqs.get_child(0).text == "✓ 성채 Lv 2 필요", "(B) at keep Lv 2 the lumber upgrade is on", bwin.reason_label.text)
 	await _guard_wait()
 	await _tap(bwin.upgrade_button.get_global_rect().get_center())
-	_check(Economy.is_building("lumber") and Economy.res.wood == 6400 and Economy.res.stone == 6200, "(B) the lumber upgrade pays 600/800/400", "res=%s" % [Economy.res])
+	_check(Economy.is_building("lumber") and Economy.res.stone == 9685 and Economy.res.food == 9190, "(B) the lumber upgrade pays 0/315/435", "res=%s" % [Economy.res])
 	bwin.close()
 	Economy.last_collect["quarry"] = Time.get_unix_time_from_system()  # 쌓인 석재 없음 — 탭이 건물 창
 	await _tap(_building_px("quarry"))
