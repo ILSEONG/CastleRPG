@@ -38,21 +38,19 @@ var scenery  # 건물(buildings.gd) — 건설 막대 자리(sites). main이 넣
 var tags  # world_tags.gd — 이름표 자리(top). main이 넣는다(없으면 지붕 위 월드 좌표)
 var last_pop := {}  # 마지막 pop 인자(테스트·디버그용): {pos, kind, amount}
 
-var _anchors := {}  # 자원·병사 건물 id → 말풍선 기준 월드 좌표(지붕 위)
+var _anchors := {}  # 자원·병사 건물 id → 지붕 높이(m). 자리는 Balance.center_of(자유 건설로 옮겨도 따라간다)
 var _pops: Array = []  # {pos, kind, amount, age}
 var _t := 0.0
 
 
 func _ready() -> void:
 	for id in GameData.resources().map(func(r): return r.building) + GameData.soldiers().map(func(x): return x.building) + [GameData.LAB]:
-		var b := Balance.building(id)
-		var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
-		_anchors[b.id] = center + Vector3(0, TownKit.building(b.id).get_aabb().end.y, 0)
+		_anchors[id] = TownKit.building(id).get_aabb().end.y
 
 
 ## 건물 id의 지붕 위 월드 좌표("+N" 시작 지점·말풍선 기준).
 func anchor(building_id: String) -> Vector3:
-	return _anchors[building_id] + Vector3(0, ANCHOR_UP, 0)
+	return Balance.center_of(building_id) + Vector3(0, float(_anchors[building_id]) + ANCHOR_UP, 0)
 
 
 ## 지금 자원 말풍선을 띄울 건물 id들.

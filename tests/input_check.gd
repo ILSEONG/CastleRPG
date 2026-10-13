@@ -844,11 +844,11 @@ func _top_hud(hud) -> void:
 	var cr: Rect2 = hud._auto.get_global_rect()
 	_check(cr.position.x >= hud._button.get_global_rect().end.x and cr.size.x >= 56.0 and cr.size.y >= 56.0 and cr.end.x <= 720.0 and hud._fever.get_global_rect().end.x <= hud._button.get_global_rect().position.x,
 		"(z) header row: fever, 진행, then the 연속 진행 checkbox, all inside 720 px, tap target >= 56", "auto=%s button=%s" % [cr, hud._button.get_global_rect()])
-	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) the checkbox starts checked", "")
+	_check(not GameState.auto_continue and not hud._auto.button_pressed, "(z) the checkbox starts unchecked (the guide teaches it)", "")
 	await _tap(cr.get_center())
-	_check(not GameState.auto_continue and not hud._auto.button_pressed, "(z) tapping the checkbox unchecks it", "")
+	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) tapping the checkbox checks it", "")
 	await _tap(cr.get_center())
-	_check(GameState.auto_continue and hud._auto.button_pressed, "(z) and checks it again", "")
+	_check(not GameState.auto_continue and not hud._auto.button_pressed, "(z) and unchecks it again", "")
 
 
 ## 하단 탭 바 탭 id의 가운데(화면 좌표).

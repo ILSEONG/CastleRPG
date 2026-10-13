@@ -13,7 +13,7 @@ export type Mode = (typeof MODES)[number]
 export const TEAM = 5 // 한 팀 영웅 수
 export const PLAYS = 5 // 모드마다 하루 판 수
 export const BATTLE_SEC: Record<Mode, number> = { duel: 90, total: 120 } // 제한 시간(끝나면 남은 체력 비율이 큰 쪽이 이긴다 — 같으면 방어)
-export const MIN_WIN_SEC = 8 // 시작 뒤 이 게임 초(x1.5 배속이면 실제 MIN_WIN_SEC ÷ 1.5초)보다 빨리 온 승리는 받지 않는다
+export const MIN_WIN_SEC = 8 // 시작 뒤 이 게임 초(배속이면 실제 MIN_WIN_SEC ÷ MAX_GAME_SPEED초)보다 빨리 온 승리는 받지 않는다
 export const LATE_SEC = 900 // 시작 뒤 이만큼 지나 온 결과는 받지 않는다(패배 그대로)
 export const SOLDIER_CAP = 20 // 총력전 한 쪽 병사 수 상한(높은 티어부터)
 export const WIN_BASE = 25 // 승리 포인트 = WIN_BASE + (상대 − 나) ÷ WIN_DIFF_DIV (± WIN_DIFF_CAP)

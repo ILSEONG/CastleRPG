@@ -183,6 +183,38 @@ export const BUILD_RES = ['wood', 'stone', 'food'] // 건물 비용 열 = 자원
 export const BUILD_COST_GROWTH = 1.35
 export const BUILD_TIME_GROWTH = 1.5
 export const KEEP = 'keep' // 다른 건물의 상한·영웅 슬롯·성 HP
+
+// --- 자유 건설(사용자 2026-10-13) — 앱 Balance.placement_block과 같은 규칙 ---
+// 부지 = [x, y] 타일(왼쪽 위 모서리, 성 가운데가 타일 경계 0). 성채는 가운데 고정, 나머지는 3×3. 기본 자리 = 앱 Balance.BUILDINGS.
+export const PLOT_SIZE: Record<string, [number, number]> = { keep: [4, 4] }
+export const DEFAULT_CELLS: Record<string, [number, number]> = {
+  keep: [-2, -2], barracks: [2, -8], archery: [5, -8], stable: [-8, -8], tavern: [5, -5], lab: [-5, -8],
+  houses: [-8, -5], lumber: [2, 5], quarry: [5, 2], farm: [-5, 5],
+}
+export const WALL_MARGIN_TILES = 2
+export const KEEP_OUT: [number, number, number, number][] = [[-1, 2, 5, 3], [-4, 2, 3, 2]] // 병사 광장, 상인·수레 (x, y, w, h)
+const plotSize = (id: string): [number, number] => PLOT_SIZE[id] ?? [3, 3]
+const overlap = (a: number[], b: number[]) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+
+// id 건물을 cell에 둘 수 없는 이유('' = 된다): fixed·out·road·square·overlap. halfTiles = 성 내부 한 변 타일 수 / 2, others = 다른 건물 → 칸.
+export function placementBlock(id: string, cell: [number, number], halfTiles: number, others: Record<string, [number, number]>): string {
+  if (!(id in DEFAULT_CELLS) || id === KEEP) return 'fixed'
+  const [w, h] = plotSize(id)
+  const r = [cell[0], cell[1], w, h]
+  const m = halfTiles - WALL_MARGIN_TILES
+  if (r[0] < -m || r[1] < -m || r[0] + w > m || r[1] + h > m) return 'out'
+  if (overlap(r, [-1, -halfTiles, 2, 2 * halfTiles]) || overlap(r, [-halfTiles, -1, 2 * halfTiles, 2])) return 'road'
+  if (KEEP_OUT.some((k) => overlap(r, k))) return 'square'
+  for (const [oid, c] of Object.entries(others)) {
+    if (oid !== id && overlap(r, [c[0], c[1], ...plotSize(oid)])) return 'overlap'
+  }
+  return ''
+}
+
+// 저장된 자리 값 → [x, y] 정수 또는 null.
+export function cellOf(v: unknown): [number, number] | null {
+  return Array.isArray(v) && v.length === 2 && v.every((x) => Number.isInteger(x) && Math.abs(x as number) <= 100) ? [v[0], v[1]] as [number, number] : null
+}
 export const GATE = 'gate' // 성문 HP
 export const HOUSES = 'houses' // 인구(병사 배치 상한, 개정 13)
 export const TAVERN = 'tavern' // 모집 확률
@@ -519,9 +551,9 @@ export const SUB_BASE: Record<string, Record<string, number>> = {
 }
 export const RUN_TTL_SEC = 1800 // run 만료(30분)
 export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
-// 앱 x1.5 배속 버튼(2026-10-07): 전투 시간(게임 초)은 실제 초의 이 배수까지 빨리 갈 수 있다. 전투 길이·제한 시간은 게임 초 그대로,
-// 실제 경과와 견주는 검사(던전 finish·PVP 최소 승리·드래곤 too_early)만 이 배수로 나눈다. 앱 speed_button.gd SPEED와 같다.
-export const MAX_GAME_SPEED = 1.5
+// 앱 배속 버튼(2026-10-07 x1.5, 2026-10-13 x2까지): 전투 시간(게임 초)은 실제 초의 이 배수까지 빨리 갈 수 있다. 전투 길이·제한 시간은 게임 초 그대로,
+// 실제 경과와 견주는 검사(던전 finish·PVP 최소 승리·드래곤 too_early)만 이 배수로 나눈다. 앱 speed_button.gd 최고 배율과 같다.
+export const MAX_GAME_SPEED = 2
 export const MAX_DUNGEON_LEVEL = 300 // 보상 골드 tenths가 bigint를 넘지 않게(4000 × 1.1^299 × 10 < 2^63)
 
 export interface DungeonState {

@@ -47,6 +47,70 @@ const SOLDIER_Z := Vector2(4.6, 9.4)
 const SOLDIER_GAP := 0.9
 
 
+## 자유 건설(사용자 2026-10-13 "건물을 선택하고 내가 원하는 공간에다 건물을 짓는"): 성채(가운데 고정)를 뺀 건물은 성 안 격자 어디에나 짓는다.
+## 위 BUILDINGS의 cell은 기본 자리(옛 저장·이미 지은 건물). 지금 자리는 Economy.layout이 정하고 Economy가 active에 맞춘다.
+## 자리 규칙(placement_block — 서버 rules.placementBlock과 같다): 성 내부 벽 쪽 2타일(계단 띠 + 성문 안쪽 통로) 밖, 십자 도로(-1·0줄) 밖,
+## 성채 앞 병사 광장·상인 자리(KEEP_OUT) 밖, 다른 건물과 겹치지 않음. 영웅·병사·괴물 길은 이 칸들 위로만 다닌다(테스트).
+const WALL_MARGIN_TILES := 2
+const KEEP_OUT := [Rect2i(-1, 2, 5, 3), Rect2i(-4, 2, 3, 2)]  # 병사 광장(SOLDIER_X·Z + 발밑 0.45 m), 상인·수레 — 타일
+const FIXED := ["keep"]  # 옮기거나 새로 놓지 않는 건물
+const PLACE_TEXT := {  # placement_block 이유 → 안내 문구
+	"out": "성벽에 너무 가깝습니다",
+	"road": "길 위에는 지을 수 없습니다",
+	"square": "광장에는 지을 수 없습니다",
+	"overlap": "다른 건물과 겹칩니다",
+	"fixed": "옮길 수 없는 건물입니다",
+}
+
+static var active := {}  # 건물 id → 지금 칸(지어졌거나 자리를 잡은 건물만). Economy가 맞춘다. 비었고 active_set이 false면 기본 배치
+static var active_set := false
+
+
+## 건물 id의 지금 부지 칸(왼쪽 위 모서리 타일). 자리를 잡지 않았으면 기본 칸.
+static func cell_of(id: String) -> Vector2i:
+	if active.has(id):
+		return active[id]
+	return building(id).get("cell", Vector2i.ZERO)
+
+
+## 건물 id 부지 가운데(월드, y = 0).
+static func center_of(id: String) -> Vector3:
+	var b := building(id)
+	var c := cell_of(id)
+	return Vector3((c.x + b.size.x / 2.0) * TILE, 0, (c.y + b.size.y / 2.0) * TILE)
+
+
+## 지금 성 안에 있는 건물 부지 [{id, cell, size}] — 길 막기(formation.clamp_push)·말풍선 자리. Economy가 맞추기 전(테스트)은 기본 배치 전부.
+static func plots() -> Array:
+	var out := []
+	for b in BUILDINGS:
+		if not active_set:
+			out.append({"id": b.id, "cell": b.cell, "size": b.size})
+		elif active.has(b.id):
+			out.append({"id": b.id, "cell": active[b.id], "size": b.size})
+	return out
+
+
+## id 건물을 cell에 둘 수 없는 이유("" = 된다). half_tiles = 성 내부 한 변 타일 수의 절반, others = 다른 건물 id → 칸(자기 자신은 무시).
+static func placement_block(id: String, cell: Vector2i, half_tiles: int, others: Dictionary) -> String:
+	var b := building(id)
+	if b.is_empty() or FIXED.has(id):
+		return "fixed"
+	var r := Rect2i(cell, b.size)
+	var m := half_tiles - WALL_MARGIN_TILES
+	if not Rect2i(-m, -m, 2 * m, 2 * m).encloses(r):
+		return "out"
+	if r.intersects(Rect2i(-1, -half_tiles, 2, 2 * half_tiles)) or r.intersects(Rect2i(-half_tiles, -1, 2 * half_tiles, 2)):
+		return "road"
+	for k in KEEP_OUT:
+		if r.intersects(k):
+			return "square"
+	for oid in others:
+		if oid != id and r.intersects(Rect2i(others[oid], building(oid).get("size", Vector2i.ONE))):
+			return "overlap"
+	return ""
+
+
 static func building(id: String) -> Dictionary:
 	for b in BUILDINGS:
 		if b.id == id:

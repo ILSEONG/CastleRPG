@@ -1,0 +1,74 @@
+-- 가이드 기능 단계(2026-10-13): 연속 진행·배속·출석·주머니·미션 받기·자동 배치·상점 무료 선물·승급·FEVER를 처음 쓸 때 가르치는 미션 9개가 끼어
+-- 미션이 67개 → 76개가 됐다. 진행 중인 플레이어의 단계(tut_step = 옛 표 번호)를 같은 미션 id의 새 번호로 옮긴다(하던 미션 그대로).
+-- 다 끝낸(67 이상) 플레이어는 새 표 크기로. 앱 Tutorial.map_step(V3_IDS)과 같은 표.
+update player_state set tut_step = case tut_step
+    when 0 then 0
+    when 1 then 1
+    when 2 then 2
+    when 3 then 3
+    when 4 then 4
+    when 5 then 5
+    when 6 then 6
+    when 7 then 9
+    when 8 then 12
+    when 9 then 13
+    when 10 then 15
+    when 11 then 16
+    when 12 then 17
+    when 13 then 18
+    when 14 then 19
+    when 15 then 20
+    when 16 then 21
+    when 17 then 22
+    when 18 then 24
+    when 19 then 26
+    when 20 then 27
+    when 21 then 28
+    when 22 then 29
+    when 23 then 30
+    when 24 then 31
+    when 25 then 32
+    when 26 then 33
+    when 27 then 34
+    when 28 then 35
+    when 29 then 36
+    when 30 then 37
+    when 31 then 38
+    when 32 then 39
+    when 33 then 40
+    when 34 then 41
+    when 35 then 42
+    when 36 then 43
+    when 37 then 44
+    when 38 then 45
+    when 39 then 46
+    when 40 then 47
+    when 41 then 48
+    when 42 then 49
+    when 43 then 50
+    when 44 then 51
+    when 45 then 52
+    when 46 then 53
+    when 47 then 54
+    when 48 then 55
+    when 49 then 56
+    when 50 then 57
+    when 51 then 58
+    when 52 then 59
+    when 53 then 60
+    when 54 then 61
+    when 55 then 62
+    when 56 then 63
+    when 57 then 64
+    when 58 then 65
+    when 59 then 66
+    when 60 then 67
+    when 61 then 68
+    when 62 then 70
+    when 63 then 71
+    when 64 then 73
+    when 65 then 74
+    when 66 then 75
+    else 76
+  end
+  where tut_step > 0;

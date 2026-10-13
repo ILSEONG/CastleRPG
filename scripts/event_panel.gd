@@ -68,6 +68,7 @@ func _ready() -> void:
 	claim_button = _button("오늘의 보상 받기")
 	claim_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	claim_button.pressed.connect(claim)
+	Tutorial.register_ui("event:claim", claim_button, can_claim)  # 가이드 「출석 보상 받기」 화살표
 	row.add_child(claim_button)
 	content.add_child(row)
 	if PortraitsScript.current != null:

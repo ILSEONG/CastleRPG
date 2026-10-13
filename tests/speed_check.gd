@@ -1,6 +1,6 @@
 extends Node
 ## x1.5 배속 버튼 체크(2026-10-07): 실제 main 씬에서 왼쪽 중하단 버튼을 눌러 바로 1.5배가 되는지, 기기 설정 파일(임시)에만 남는지,
-## 다른 UI(탭 바·오른쪽 아래 메뉴·전투 초상화 줄·튜토리얼 카드)와 겹치지 않는지, 방치 전투는 켜 둬도 1배·스테이지는 1.5배인지, 던전에도 버튼이 있고 1.5배인지, 길드전은 버튼 없이 1배인지,
+## 다른 UI(탭 바·오른쪽 아래 메뉴·전투 초상화 줄·튜토리얼 카드)와 겹치지 않는지, 방치 전투는 버튼을 숨기고 1배·스테이지는 고른 배율인지, 누를 때마다 x1 → x1.5 → x2 → x1인지, 던전에도 버튼이 있고 1.5배인지, 길드전은 버튼 없이 1배인지,
 ## 히트스톱이 끝나도 지금 배율로 돌아오는지, 실제 시각(Economy.time_now)은 배속과 무관한지 본다. 기기 설정 파일은 건드리지 않는다.
 ## 실행: godot --headless --path . res://tests/speed_check.tscn
 ## 화면 한 장(전투 중, 켬): xvfb-run -a godot --path . --resolution 720x1280 res://tests/speed_check.tscn -- --out=/tmp/speed.png
@@ -54,6 +54,10 @@ func _run() -> void:
 	var b: Button = sp.button
 	var vh := get_viewport().get_visible_rect().size.y
 	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "off by default, game at 1x", str(Engine.time_scale))
+	_check(not b.visible, "idle (방치): button hidden", "")
+	Music.prefs = {"speed_x15": true}  # 2026-10-07판 켬 → x1.5로 읽는다
+	_check(is_equal_approx(SpeedButton.level(), 1.5), "old x1.5 setting reads as x1.5", str(SpeedButton.level()))
+	Music.prefs = {}
 	var r := b.get_global_rect()
 	_check(r.position.x <= 20.0 and r.get_center().y > vh * 0.5 and r.end.y < vh - 104.0, "left, lower half, above the tab bar", str(r))
 	var menu = _find("res://scripts/side_menu.gd")
@@ -65,7 +69,9 @@ func _run() -> void:
 	_check(card != null and card.panel.visible and r.end.y <= card.panel.global_position.y, "sits above the tutorial card",
 		"%s vs %s" % [r, card.panel.get_global_rect() if card != null else null])
 	var tr: Rect2 = menu.toggle.get_global_rect()
-	_check(absf(r.end.y - tr.end.y) < 1.0, "same height as the bottom-right [메뉴] button (with the card)", "%s vs %s" % [r, tr])
+	var bb: Rect2 = _find("res://scripts/build_button.gd").button.get_global_rect()  # [건물] 버튼(2026-10-13): [메뉴] 높이, 배속 버튼은 그 위
+	_check(absf(bb.end.y - tr.end.y) < 1.0 and r.end.y <= bb.position.y and absf(r.position.x - bb.position.x) < 1.0,
+		"[건물] at the [메뉴] height, x1.5 right above it (with the card)", "%s / %s vs %s" % [r, bb, tr])
 	var chat = _find("res://scripts/chat_bar.gd")
 	if chat != null:
 		var cr: Rect2 = chat.button.get_global_rect()
@@ -77,7 +83,8 @@ func _run() -> void:
 	await _frames(5)
 	r = b.get_global_rect()
 	tr = menu.toggle.get_global_rect()
-	_check(absf(r.end.y - tr.end.y) < 1.0, "same height as [메뉴] (no card)", "%s vs %s" % [r, tr])
+	bb = _find("res://scripts/build_button.gd").button.get_global_rect()
+	_check(absf(bb.end.y - tr.end.y) < 1.0 and r.end.y <= bb.position.y, "[건물] at the [메뉴] height, x1.5 above it (no card)", "%s / %s vs %s" % [r, bb, tr])
 	var shot := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
@@ -96,10 +103,25 @@ func _run() -> void:
 		await _frames(8)
 		get_viewport().get_texture().get_image().save_png(out.get_basename() + "_idle.png")
 
+	GameState.start_stage()
+	await _frames(3)
+	_check(b.visible and is_equal_approx(Engine.time_scale, 1.0), "stage: button shows, still 1x until tapped", str(Engine.time_scale))
 	b.pressed.emit()
-	_check(SpeedButton.is_on() and GameState.mode == GameState.Mode.IDLE and is_equal_approx(Engine.time_scale, 1.0), "tap turns it on; idle (방치) combat stays 1x", str(Engine.time_scale))
-	_check(bool(_file().get("speed_x15", false)), "saved on the device (settings file)", str(_file()))
+	_check(is_equal_approx(SpeedButton.level(), 1.5) and is_equal_approx(Engine.time_scale, 1.5), "tap: x1.5", str(Engine.time_scale))
+	_check(is_equal_approx(float(_file().get("speed_level", 0)), 1.5), "saved on the device (settings file)", str(_file()))
+	b.pressed.emit()
+	_check(is_equal_approx(SpeedButton.level(), 2.0) and is_equal_approx(Engine.time_scale, 2.0), "tap again: x2", str(Engine.time_scale))
+	if out != "":
+		await _frames(20)
+		get_viewport().get_texture().get_image().save_png(out.get_basename() + "_x2.png")
+	b.pressed.emit()
+	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "tap again: back to x1", str(Engine.time_scale))
+	b.pressed.emit()
+	_check(is_equal_approx(Engine.time_scale, 1.5), "and x1.5 again", str(Engine.time_scale))
 	_check(b.text == "", "no waiting label on the button", b.text)
+	GameState._set_mode(GameState.Mode.IDLE)
+	await _frames(2)
+	_check(not b.visible and is_equal_approx(Engine.time_scale, 1.0), "back to idle: hidden, 1x", str(Engine.time_scale))
 
 	# 실제 시각은 배속과 무관: 0.5 실제 초 동안 Economy.time_now()도 약 0.5초
 	var t0 := Economy.time_now()
@@ -133,13 +155,15 @@ func _run() -> void:
 	_main._dev_dungeon("gold")
 	await _frames(10)
 	var dsp = _child_with(_main._dungeon, "res://scripts/speed_button.gd")
-	_check(_main._dungeon != null and dsp != null and dsp.button.visible, "dungeon has the x1.5 button", "")
+	_check(_main._dungeon != null and dsp != null and dsp.button.visible, "dungeon has the speed button", "")
 	_check(is_equal_approx(Engine.time_scale, 1.5), "dungeon runs at x1.5", str(Engine.time_scale))
 	if dsp != null:
 		dsp.button.pressed.emit()
-		_check(is_equal_approx(Engine.time_scale, 1.0) and not SpeedButton.is_on(), "dungeon button turns it off", str(Engine.time_scale))
+		_check(is_equal_approx(Engine.time_scale, 2.0), "dungeon button: x2", str(Engine.time_scale))
 		dsp.button.pressed.emit()
-		_check(is_equal_approx(Engine.time_scale, 1.5), "and on again", str(Engine.time_scale))
+		_check(is_equal_approx(Engine.time_scale, 1.0) and not SpeedButton.is_on(), "then x1", str(Engine.time_scale))
+		dsp.button.pressed.emit()
+		_check(is_equal_approx(Engine.time_scale, 1.5), "then x1.5", str(Engine.time_scale))
 	_main.leave_dungeon()
 	await _frames(3)
 	_check(is_equal_approx(Engine.time_scale, _castle_want()), "back on the castle screen: x1.5 in a stage, 1x idle", "%s mode %d" % [Engine.time_scale, GameState.mode])
@@ -168,15 +192,17 @@ func _run() -> void:
 
 	# 방치 ↔ 스테이지: 대기로 돌아오면 1배, 스테이지를 시작하면 다시 1.5배
 	GameState._set_mode(GameState.Mode.IDLE)
-	_check(is_equal_approx(Engine.time_scale, 1.0), "back to idle: 1x with the toggle still on", str(Engine.time_scale))
+	await _frames(2)
+	_check(is_equal_approx(Engine.time_scale, 1.0) and not b.visible, "back to idle: 1x and hidden with x1.5 still set", str(Engine.time_scale))
 	GameState.start_stage()
 	await _frames(3)
-	_check(GameState.mode != GameState.Mode.IDLE and is_equal_approx(Engine.time_scale, 1.5), "stage starts: x1.5", "%s mode %d" % [Engine.time_scale, GameState.mode])
+	_check(GameState.mode != GameState.Mode.IDLE and is_equal_approx(Engine.time_scale, 1.5) and b.visible, "stage starts: x1.5, button back", "%s mode %d" % [Engine.time_scale, GameState.mode])
 	GuildWar.fixed_now = -1.0
 
 	b.pressed.emit()
-	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "tap again turns it off", str(Engine.time_scale))
-	_check(not bool(_file().get("speed_x15", true)), "off saved on the device", str(_file()))
+	b.pressed.emit()
+	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "x2 then x1 (off)", str(Engine.time_scale))
+	_check(is_equal_approx(float(_file().get("speed_level", 0)), 1.0), "x1 saved on the device", str(_file()))
 
 
 func _file() -> Dictionary:

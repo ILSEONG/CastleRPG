@@ -135,6 +135,7 @@ interface Player {
   friends: { id: string; hero: string | null; heroes: Record<string, { level: number; promotion: number }> }[] // 친구(수락된 것만, id 순) — 대표 영웅·보유 영웅
   quest: { tut_state: string; tut_step: number; rep_n: number; last_claim: number | null } // 튜토리얼·반복 퀘스트 진행
   unbuilt: string[] // 튜토리얼 공터(아직 짓지 않은 건물 — 레벨 행은 1)
+  layout: Record<string, [number, number]> // 자유 건설(2026-10-13): 건물 → 고른 부지 칸. 없으면 기본 자리(R.DEFAULT_CELLS)
   attend: { n: number; day: number | null } // 출석 이벤트: 받은 날 수·마지막으로 받은 리셋 날짜
   missions: unknown // 미션 상태(저장된 그대로 — 쓰는 쪽이 M.normalize)
   pouches: Record<string, number> // 방치 주머니 id → 개수(pouches.ts)
@@ -192,6 +193,7 @@ interface Change {
   quest?: { tut_state?: string; tut_step?: number; rep_n?: number; last_claim?: number } // 퀘스트 진행
   researchUp?: string // 연구 노드 레벨 +1(개정 24)
   log?: { kind: string; detail: unknown }
+  layout?: Record<string, [number, number]> // 건물 자리 전체(새 값, 자유 건설)
   events?: Record<string, number> // 미션·퀘스트 사건 수(M.EVENTS) — mutate·guildMutate가 미션 상태 c에 더한다(log에서 못 읽는 것만 직접)
   shards?: Record<string, number> // 영웅 → 조각 증가(길드 상점)
   guild?: GuildChange // 길드(player_guild 행·길드 누적·기록)
@@ -229,7 +231,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt,
+const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt, s.layout,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -308,6 +310,17 @@ const COMPLETE_SQL = `with w as (select $3 = any(unbuilt) as lot, build_finish f
   select count(*)::int as n from s`
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
+// 저장된 자리 {id: [x, y]} → 아는 건물·올바른 칸만.
+function layoutOf(v: unknown): Record<string, [number, number]> {
+  const out: Record<string, [number, number]> = {}
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    for (const [id, c] of Object.entries(v as Record<string, unknown>)) {
+      const cell = R.cellOf(c)
+      if (cell && id in R.DEFAULT_CELLS) out[id] = cell
+    }
+  }
+  return out
+}
 function deepFreeze<T>(v: T): T {
   if (v && typeof v === 'object' && !Object.isFrozen(v)) {
     Object.freeze(v)
@@ -317,6 +330,16 @@ function deepFreeze<T>(v: T): T {
 }
 // 건물 레벨(행이 없으면 1)
 const level = (p: Player, building: string) => p.buildings[building]?.level ?? 1
+// 자유 건설: 성 내부 한 변 타일 수의 절반(성채 레벨 단계 표), 성 안에 서 있는 건물(지었거나 자리 잡은 공터) → 칸(except 빼고)
+const interiorHalf = (p: Player, g: Game) => Math.floor(R.tierValue(g.config, 'keep_interior_tiers', level(p, R.KEEP)) / 2)
+function placedCells(p: Player, except: string): Record<string, [number, number]> {
+  const out: Record<string, [number, number]> = {}
+  for (const id of Object.keys(R.DEFAULT_CELLS)) {
+    if (id === except || (p.unbuilt.includes(id) && !p.layout[id])) continue
+    out[id] = p.layout[id] ?? R.DEFAULT_CELLS[id]
+  }
+  return out
+}
 // 개정 24: 연구 효과 합계(서버 권위 효과: 생산·건설 시간·판매·처치 골드·훈련·인구)와 인구(민가 + 연구 pop_add)
 const bonus = (p: Player, g: Game) => R.researchBonus(g.research, p.research)
 const population = (p: Player, g: Game) => R.population(g.config, level(p, R.HOUSES)) + Math.floor(bonus(p, g).pop_add)
@@ -516,6 +539,7 @@ export function createApp(opts: AppOptions) {
         quest: { tut_state: String(r.tut_state ?? 'skipped'), tut_step: Number(r.tut_step ?? 0), rep_n: Number(r.rep_n ?? 0),
           last_claim: r.last_quest_claim == null ? null : Number(r.last_quest_claim) },
         unbuilt: Array.isArray(r.unbuilt) ? r.unbuilt.map(String) : [],
+        layout: layoutOf(r.layout == null ? {} : json(r.layout)),
         attend: { n: Number(r.attend_n ?? 0), day: r.attend_day == null ? null : Number(r.attend_day) },
         missions: r.missions == null ? {} : json(r.missions),
         pouches: P.normalize(r.pouches == null ? {} : json(r.pouches)),
@@ -590,6 +614,7 @@ export function createApp(opts: AppOptions) {
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
         quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n }, // 튜토리얼·반복 퀘스트 진행
+        layout: p.layout, // 자유 건설: 건물 → [x, y](고른 것만)
         dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => game.buildings.some((d) => d.id === b) || game.resources.some((r) => r.building === b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
@@ -680,6 +705,7 @@ export function createApp(opts: AppOptions) {
     if (ch.quest?.last_claim !== undefined) sets.push(`last_quest_claim = to_timestamp(${p(ch.quest.last_claim)}::float8)`)
     if (ch.attend) sets.push(`attend_n = ${p(ch.attend.n)}::int, attend_day = ${p(ch.attend.day)}::int`)
     if (ch.missions) sets.push(`missions = ${p(JSON.stringify(ch.missions))}::jsonb`)
+    if (ch.layout) sets.push(`layout = ${p(JSON.stringify(ch.layout))}::jsonb`)
     if (ch.pouches) sets.push(`pouches = ${p(JSON.stringify(ch.pouches))}::jsonb`)
     if (ch.shop) sets.push(`shop = ${p(JSON.stringify(ch.shop))}::jsonb`)
     if (ch.iap) sets.push(`iap = ${p(JSON.stringify(ch.iap))}::jsonb`)
@@ -975,6 +1001,7 @@ export function createApp(opts: AppOptions) {
     pl.dia_tickets += ch.diaTickets ?? 0
     if (ch.attend) pl.attend = ch.attend
     if (ch.missions) pl.missions = ch.missions
+    if (ch.layout) pl.layout = ch.layout
     if (ch.pouches) pl.pouches = ch.pouches
     if (ch.shop) pl.shop = ch.shop
     if (ch.iap) pl.iap = ch.iap
@@ -1445,12 +1472,23 @@ export function createApp(opts: AppOptions) {
   // 건물 업그레이드(개정 12 §2.4): 검사 순서 존재(400 unknown_building) → 최대 레벨 → 성채 상한 → 선행 → 일꾼 → 자원
   // (409, 코드 = rules.upgradeBlock). 자원 건물이면 먼저 자동 수집(수집 규칙 그대로, 남은 초 유지)하고 그 양까지 비용에 쓴다 —
   // 레벨이 바뀌는 경계를 깨끗하게. 수집·차감·일꾼(build_id·build_finish = 서버 시각 + 시간)·로그는 version 가드 한 문장.
+  // 자유 건설(2026-10-13): 공터면 cell [x, y]로 자리를 고른다(없으면 고른 자리·기본 자리) — 자리 규칙(R.placementBlock)에 걸리면 409 그 이유.
   app.post('/v1/building/upgrade', auth, async (c) => {
-    const building = strField(await body(c), 'building')
+    const b0 = await body(c)
+    const building = strField(b0, 'building')
+    const wantCell = b0.cell === undefined ? null : R.cellOf(b0.cell)
+    if (b0.cell !== undefined && !wantCell) throw new ApiError(400, 'bad_cell', 'cell must be [x, y] integers')
     return mutate(c, (p, g, now) => {
       const def = g.buildings.find((d) => d.id === building)
       if (!def) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
       const lot = p.unbuilt.includes(building) // 튜토리얼 공터 짓기(0 → 1): 일꾼과 Lv 1 비용·시간만 본다(선행·성채 상한 없음, 자동 수집 없음)
+      let layout: Record<string, [number, number]> | undefined
+      if (lot && building in R.DEFAULT_CELLS) {
+        const cell = wantCell ?? p.layout[building] ?? R.DEFAULT_CELLS[building]
+        const where = R.placementBlock(building, cell, interiorHalf(p, g), placedCells(p, building))
+        if (where) throw new ApiError(409, where, `cannot build '${building}' at ${cell}: ${where}`)
+        if (wantCell) layout = { ...p.layout, [building]: cell }
+      }
       const from = level(p, building)
       const res: Record<string, number> = { ...p.res }
       const rdef = g.resources.find((r) => r.building === building)
@@ -1478,11 +1516,26 @@ export function createApp(opts: AppOptions) {
       }
       return {
         change: {
-          res: delta, buildings: collect ? { [building]: collect.to } : {}, build: { id: building, finish },
+          res: delta, buildings: collect ? { [building]: collect.to } : {}, build: { id: building, finish }, ...(layout ? { layout } : {}),
           log: { kind: 'build_start', detail: { building, from: lot ? 0 : from, to: lot ? 1 : from + 1, cost, finish, collect } },
         },
         extra: { build: { id: building, finish } },
       }
+    })
+  })
+
+  // 자유 건설(2026-10-13): 지은 건물을 cell [x, y]로 옮긴다(무료, 짓는 중이어도 된다). 성채·공터는 409 fixed·unbuilt, 자리 규칙은 409 그 이유.
+  app.post('/v1/building/move', auth, async (c) => {
+    const b0 = await body(c)
+    const building = strField(b0, 'building')
+    const cell = R.cellOf(b0.cell)
+    if (!cell) throw new ApiError(400, 'bad_cell', 'cell must be [x, y] integers')
+    return mutate(c, (p, g) => {
+      if (!(building in R.DEFAULT_CELLS)) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
+      if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
+      const where = R.placementBlock(building, cell, interiorHalf(p, g), placedCells(p, building))
+      if (where) throw new ApiError(409, where, `cannot move '${building}' to ${cell}: ${where}`)
+      return { change: { layout: { ...p.layout, [building]: cell }, log: { kind: 'build_move', detail: { building, from: p.layout[building] ?? R.DEFAULT_CELLS[building], to: cell } } } }
     })
   })
 
@@ -2410,7 +2463,7 @@ export function createApp(opts: AppOptions) {
 
   // 결과(스펙 §6.3): {run_id, win, elapsed}. 없는 run(남의 run 포함) 404 unknown_run. 닫힌 run은 저장한 결과를 그대로 돌려준다(멱등,
   // repeated: true) — 다른 start가 닫은 run(결과 없음)은 409 run_closed. 30분이 지났으면 409 run_expired.
-  // 패배: run만 닫는다. 승리: 타당성(elapsed ≥ 최소(골드 15·장비 20초), ≤ 제한 시간, 실제 경과 ≥ elapsed ÷ 1.5(x1.5 배속) − 5 — 아니면 409 implausible, run은
+  // 패배: run만 닫는다. 승리: 타당성(elapsed ≥ 최소(골드 15·장비 20초), ≤ 제한 시간, 실제 경과 ≥ elapsed ÷ 2(x2 배속까지) − 5 — 아니면 409 implausible, run은
   // 열린 채) → 열쇠(없으면 장비는 골드 추가 도전 비용, 409 no_key·not_enough_gold) → 보관함(409 bag_full). 열쇠·골드 차감, 보상(골드 tenths 또는
   // 장비 equip_drop_count개 — 암호학적 난수), 최고 단계, run 닫기(결과 저장), economy_log dungeon_clear는 version 가드 + 열린 run 가드 한 문장.
   app.post('/v1/dungeon/finish', auth, async (c) => {

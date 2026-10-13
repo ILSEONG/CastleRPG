@@ -12,6 +12,7 @@ var _bar
 var _panel
 var _speed
 var _menu
+var _build
 var _shots: Array = []
 var _fails := 0
 var _resp_done := false
@@ -41,6 +42,8 @@ func _ready() -> void:
 			_speed = c
 		elif p == "res://scripts/side_menu.gd":
 			_menu = c
+		elif p == "res://scripts/build_button.gd":
+			_build = c
 	_check(_bar != null and _speed != null and _menu != null, "chat bar, speed button and menu exist", "")
 	if _fails > 0:
 		return _finish()
@@ -66,7 +69,7 @@ func _ready() -> void:
 	_panel.send()
 	var local: Array = Chat.messages.all.filter(func(m): return m.get("local", false))
 	_check(local.size() == 1 and _panel.input.text == "", "my line shows at once, input cleared", str(Chat.messages.all))
-	_check(_panel.buttons.send.text == "보내기", "send button label never changes", _panel.buttons.send.text)
+	_check(_panel.buttons.send.text == "전송", "send button label never changes", _panel.buttons.send.text)
 	_check(await _wait_until(func(): return Chat.messages.all.filter(func(m): return m.get("local", false)).is_empty(), 10.0), "server confirms my line", "")
 	var mine: Dictionary = Chat.messages.all[-1]
 	_check(mine.me and int(mine.id) > 0 and mine.text == "반가워요 :)", "my confirmed line is last", str(mine))
@@ -100,6 +103,10 @@ func _ready() -> void:
 	_check(await _wait_until(func(): return Chat.has_guild, 10.0), "chat sees my guild", "")
 	await _frames(4)
 	_check(_panel.buttons["tab:guild"].visible, "길드 tab appears", "")
+	_panel.buttons.channel.pressed.emit()
+	_check(_panel.target_channel() == "guild" and _panel.buttons.channel.text == "길드", "전체 tab: channel chip switches to 길드", _panel.buttons.channel.text)
+	_panel.buttons.channel.pressed.emit()
+	_check(_panel.target_channel() == "all", "chip back to 전체", "")
 	_panel._pick("guild")
 	await get_tree().create_timer(2.2, true, false, true).timeout
 	_panel.input.text = "길드원 여러분 오늘 드래곤 잡아요"
@@ -113,6 +120,12 @@ func _ready() -> void:
 	_check(Chat.latest().get("ch", "") == "guild", "bar shows the newest line (guild)", str(Chat.latest()))
 	await _snap()  # 5. 닫은 뒤 채팅 줄
 	_layout_checks()
+	# 스테이지 중(배속 버튼이 보이고 아래 영웅 초상화 줄)
+	GameState.start_stage()
+	await get_tree().create_timer(1.5, true, false, true).timeout
+	await _frames(10)
+	_layout_checks()
+	await _snap()  # 6. 스테이지 중
 	# 관리자 [신고] 탭(화면용: 로컬 서버엔 관리자가 없어 목록을 직접 넣는다)
 	Economy.admin = true
 	_bar.button.pressed.emit()
@@ -127,7 +140,7 @@ func _ready() -> void:
 	Chat.reports_changed.emit()
 	await _frames(10)
 	_check(not _panel.input_row.visible, "reports tab hides the input", "")
-	await _snap()  # 6. 관리자 신고 목록
+	await _snap()  # 7. 관리자 신고 목록
 	_panel.close()
 	Economy.admin = false
 	_sheet()
@@ -140,6 +153,13 @@ func _layout_checks() -> void:
 	_check(not r.intersects(_speed.button.get_global_rect()), "bar clear of the x1.5 button", str(r))
 	_check(not r.intersects(_menu.toggle.get_global_rect()), "bar clear of the menu button", str(_menu.toggle.get_global_rect()))
 	_check(r.end.y <= vh - 104, "bar above the tab bar", str(r))
+	if _build != null and _build.button.visible:
+		_check(not r.intersects(_build.button.get_global_rect()), "bar clear of the [건물] button", str(_build.button.get_global_rect()))
+	if _speed.button.visible:
+		_check(not r.intersects(_speed.button.get_global_rect()), "bar clear of the visible x1.5 button", str(_speed.button.get_global_rect()))
+	var strip = _speed.strip
+	if strip != null and strip.visible and strip.row != null:
+		_check(not r.intersects(strip.row.get_global_rect()), "bar clear of the hero portrait row", str(strip.row.get_global_rect()))
 	var card = _speed.card
 	if card != null and card.panel != null and card.panel.visible:
 		_check(not r.intersects(card.panel.get_global_rect()), "bar clear of the tutorial card", str(card.panel.get_global_rect()))
