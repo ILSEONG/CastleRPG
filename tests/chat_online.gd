@@ -66,7 +66,7 @@ func _ready() -> void:
 	_panel.send()
 	var local: Array = Chat.messages.all.filter(func(m): return m.get("local", false))
 	_check(local.size() == 1 and _panel.input.text == "", "my line shows at once, input cleared", str(Chat.messages.all))
-	_check(_panel.buttons.send.text == "보내기", "send button label never changes", _panel.buttons.send.text)
+	_check(_panel.buttons.send.text == "전송", "send button label never changes", _panel.buttons.send.text)
 	_check(await _wait_until(func(): return Chat.messages.all.filter(func(m): return m.get("local", false)).is_empty(), 10.0), "server confirms my line", "")
 	var mine: Dictionary = Chat.messages.all[-1]
 	_check(mine.me and int(mine.id) > 0 and mine.text == "반가워요 :)", "my confirmed line is last", str(mine))
@@ -100,6 +100,10 @@ func _ready() -> void:
 	_check(await _wait_until(func(): return Chat.has_guild, 10.0), "chat sees my guild", "")
 	await _frames(4)
 	_check(_panel.buttons["tab:guild"].visible, "길드 tab appears", "")
+	_panel.buttons.channel.pressed.emit()
+	_check(_panel.target_channel() == "guild" and _panel.buttons.channel.text == "길드", "전체 tab: channel chip switches to 길드", _panel.buttons.channel.text)
+	_panel.buttons.channel.pressed.emit()
+	_check(_panel.target_channel() == "all", "chip back to 전체", "")
 	_panel._pick("guild")
 	await get_tree().create_timer(2.2, true, false, true).timeout
 	_panel.input.text = "길드원 여러분 오늘 드래곤 잡아요"
