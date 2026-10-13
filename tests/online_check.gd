@@ -339,7 +339,7 @@ func _phase1(state_path: String) -> void:
 	f.close()
 
 
-## (w) 개정 15 서버 승급: test/shards로 한스 조각 30 → 상세 [승급] → /v1/hero/promote 한 번(응답 전 재탭 무시), 조각 −5·★1·최대 레벨 30·연출,
+## (w) 개정 15 서버 승급: test/shards로 한스 조각 30 → 상세 [승급] → /v1/hero/promote 한 번(응답 전 재탭 무시), 조각 −5·★1·최대 레벨 50·연출,
 ##     한 번 더 → 조각 −25·★2. (x) 승급은 다시 보내지 않는다: 서버가 사라진 채 → 버리고 알림, 다시 연결되면 상태만 받는다.
 ## (y) 서버가 거부(409 not_enough_shards)하면 알림 + 상태 새로 받기. phase 2가 재접속 승급·조각 복원과 그 능력치로 선 영웅을 본다.
 func _promote_online() -> void:
@@ -356,14 +356,14 @@ func _promote_online() -> void:
 	_check(Economy.promotion_of(id) == 1 and Economy.shards_of(id) == 25 and Net.requested.get("/v1/hero/promote", 0) == p0 + 1, "(w) [승급] applies at once (★1, shards 25) while the reply is on its way", "promotion=%d" % Economy.promotion_of(id))
 	var done := await _wait_until(func(): return Economy.promotion_of(id) == 1 and Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
 	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 1 and Economy.shards_of(id) == 25 and _hero_panel.promotions_shown == 1
-		and _hero_panel.big_card.stars == 1 and _hero_panel.level_label.text == "Lv 12 / 30" and _hero_panel._promo.line.text == "조각 25 / 25",
-		"(w) one /v1/hero/promote: shards 30 -> 25, ★1, max level 30, with the effect",
+		and _hero_panel.big_card.stars == 1 and _hero_panel.level_label.text == "Lv 12 / 50" and _hero_panel._promo.line.text == "조각 25 / 25",
+		"(w) one /v1/hero/promote: shards 30 -> 25, ★1, max level 50, with the effect",
 		"requests=%d shards=%d promotion=%d label=%s" % [Net.requested.get("/v1/hero/promote", 0) - p0, Economy.shards_of(id), Economy.promotion_of(id), _hero_panel.level_label.text])
 	_hero_panel.promote_button.pressed.emit()
 	done = await _wait_until(func(): return Economy.promotion_of(id) == 2 and Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
 	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 2 and Economy.shards_of(id) == 0 and _hero_panel.promote_button.disabled
-		and _hero_panel.promote_reason.text == "조각 부족" and _hero_panel.level_label.text == "Lv 12 / 40",
-		"(w) again: 25 shards -> ★2 (Lv 12 / 40); [승급] off with 조각 부족", "shards=%d reason=%s" % [Economy.shards_of(id), _hero_panel.promote_reason.text])
+		and _hero_panel.promote_reason.text == "조각 부족" and _hero_panel.level_label.text == "Lv 12 / 80",
+		"(w) again: 25 shards -> ★2 (Lv 12 / 80); [승급] off with 조각 부족", "shards=%d reason=%s" % [Economy.shards_of(id), _hero_panel.promote_reason.text])
 	var live := Net.api_base
 	var notices := []
 	var on_notice := func(t): notices.append(t)
