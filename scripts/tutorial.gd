@@ -23,13 +23,13 @@ const SAVE_VERSION := 5  # 2: 장비 던전 뒤에 모집권 던전 미션(dunge
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
 	"dungeon_ticket", "equip", "soldier_deploy", "stage_1_5", "build_lab", "research", "build_archery", "build_stable", "keep_2", "gate_2",
-	"kill_300", "stage_1_10", "guild"]
+	"kill_100_2", "stage_1_10", "guild"]
 ## 버전 3의 미션 순서(67개). 버전 3 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations의 guide_steps_v4가 같은 일을 한다).
 const V3_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "hero_lv4_5",
 	"stage_1_2", "growth", "atk_3", "hp_3", "hero_lv4_8", "build_tavern", "gacha", "deploy_new", "hero_lv4_10", "stage_1_3", "atk_5", "hp_5",
 	"build_barracks", "train", "build_houses", "hero_lv4_12", "stage_1_4", "kill_100", "dungeon_gold", "atk_8", "hp_8", "dungeon_equip", "hero_lv4_14",
 	"atk_10", "dungeon_ticket", "equip", "hp_10", "hero_lv4_15", "soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12",
-	"hero_lv4_16", "stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_300", "hero_lv4_18",
+	"hero_lv4_16", "stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18",
 	"atk_16", "stage_1_10", "guild", "hp_16", "hero_lv4_20", "stage_1_12", "pvp", "atk_18", "hp_18", "stage_1_15"]
 ## 버전 4의 미션 순서(76개). 버전 4 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations의 guide_steps_v5가 같은 일을 한다).
 const V4_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "attend", "pouch", "stage_1_1", "auto_on",
@@ -37,7 +37,7 @@ const V4_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kil
 	"auto_deploy", "hero_lv4_10", "shop_free", "stage_1_3", "atk_5", "hp_5", "build_barracks", "train", "build_houses", "hero_lv4_12", "stage_1_4",
 	"kill_100", "dungeon_gold", "atk_8", "hp_8", "dungeon_equip", "hero_lv4_14", "atk_10", "dungeon_ticket", "equip", "hp_10", "hero_lv4_15",
 	"soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12", "hero_lv4_16", "stage_1_7", "build_archery", "atk_14",
-	"hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_300", "hero_lv4_18", "atk_16", "stage_1_10", "guild", "hp_16",
+	"hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18", "atk_16", "stage_1_10", "guild", "hp_16",
 	"hero_lv4_20", "promote", "stage_1_12", "pvp", "fever", "atk_18", "hp_18", "stage_1_15"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
@@ -170,7 +170,7 @@ const MISSIONS := [
 	{"id": "farm_2", "title": "농장 Lv 2", "desc": "농장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.",
 		"kind": "level", "arg": ["farm", 2], "goto": "building:farm", "reward": {"diamonds": 100}},
 	{"id": "gate_2", "title": "성문 강화", "desc": "성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.", "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
-	{"id": "kill_300", "title": "몬스터 300마리 처치", "desc": "몬스터 300마리를 처치하세요. 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.", "kind": "kill", "arg": 300, "goto": "stage"},
+	{"id": "kill_100_2", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.", "kind": "kill", "arg": 100, "goto": "stage"},  # 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로") — 자리는 그대로
 	{"id": "hero_lv4_18", "title": "영웅 4명 Lv 18 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
 		"kind": "hero_lv", "arg": [4, 18], "goto": "tab:hero", "reward": {"gold": 8000}},
 	{"id": "atk_16", "title": "공격력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 16까지 올리세요.",

@@ -5225,6 +5225,9 @@ func test_tutorial() -> void:
 	t.check()
 	check(e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 5.0 and t.reward(t.mission_index("train") - 1).has("food"),
 		"tutorial: training is one soldier in 5 s")
+	e.soldiers["infantry:1"] = 1
+	check(e.tutorial_training and e.train_time("barracks", 1) == 180 * 60.0, "tutorial: only the first soldier is 5 s — with a soldier already, normal time even on the training mission")
+	e.soldiers.erase("infantry:1")
 	var step_was: int = t.step
 	t.step = t.mission_index("train") + 1
 	t.check()

@@ -2303,16 +2303,30 @@ func train_tier(building_id: String) -> int:
 	return GameData.train_tier(building_level(building_id))
 
 
+## 가이드 훈련(1마리·TUTORIAL_TRAIN_SEC초)을 지금 쓰나: 가이드가 보병 훈련 미션까지이고, 아직 병사도 훈련 중인 것도 없다(첫 1마리만 —
+## 사용자 2026-10-13 "보병 튜토리얼하고 계속 5초로 뽑는 버그". 서버 /v1/soldiers/train과 같다).
+func tutorial_train_now() -> bool:
+	if not tutorial_training:
+		return false
+	for k in soldiers:
+		if int(soldiers[k]) > 0:
+			return false
+	for b in train_queues:
+		if int(train_queues[b].get("count", 0)) > 0:
+			return false
+	return true
+
+
 ## 그 건물에서 n마리 훈련 시간(초) = n × 1마리 시간(건물 레벨) ÷ (1 + 훈련 교범 %/100)(개정 24, 서버와 같은 순서).
 func train_time(building_id: String, n: int) -> float:
-	if tutorial_training:
+	if tutorial_train_now():
 		return n * TUTORIAL_TRAIN_SEC
 	return n * GameData.soldier_unit_sec(building_level(building_id)) / (1.0 + float(research_bonus().train_speed_pct) / 100.0)
 
 
 ## 그 건물의 묶음 상한(레벨로 는다).
 func train_max(building_id: String) -> int:
-	if tutorial_training:
+	if tutorial_train_now():
 		return 1
 	return GameData.train_max(building_level(building_id))
 
