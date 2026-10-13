@@ -69,6 +69,7 @@ var slot_cards: Array = []
 var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
 var locked_cards := {}  # 영웅 id → 미보유 카드(보유 카드 뒤, unowned_sorted 순서)
 var apply_button: Button
+var _auto_used := false  # [자동 배치]를 누른 뒤 아직 [적용] 전(가이드 미션)
 var auto_button: Button  # [자동 배치](Economy.auto_hero_deploy — 편집만, 적용은 [적용]). 편집이 이미 자동 배치와 같으면 비활성
 var sort_button: Button
 var promote_all_button: Button  # [일괄 승급]
@@ -158,6 +159,8 @@ func _build_list() -> void:
 	auto_button.pressed.connect(auto_deploy)
 	apply_button = _button("적용")
 	apply_button.pressed.connect(apply)
+	Tutorial.register_ui("hero:auto_deploy", auto_button, func(): return not auto_button.disabled)  # 가이드 화살표
+	Tutorial.register_ui("hero:apply", apply_button, func(): return not apply_button.disabled)
 	for b in [sort_button, promote_all_button, auto_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
@@ -376,6 +379,8 @@ func _build_detail() -> void:
 	promote_reason = _label("", 20, REASON_COLOR)
 	for l in [reason_label, _label("", 20), promote_reason]:
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 최대 레벨·조각 부족 안내가 길면 줄을 바꾼다
+		l.custom_minimum_size.x = 1
 		why_row.add_child(l)
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 12)
@@ -429,6 +434,9 @@ func _build_equip_slots() -> void:
 	auto_equip_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	auto_equip_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	auto_equip_button.pressed.connect(auto_equip)
+	Tutorial.register_ui("hero:auto_equip", auto_equip_button, func(): return not auto_equip_button.disabled)
+	Tutorial.register_ui("hero:promote", promote_button, func(): return not promote_button.disabled)
+	Tutorial.register_ui("hero:promote_all", promote_all_button, func(): return not promote_all_button.disabled)
 	big_card.add_child(auto_equip_button)
 	auto_equip_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 10)
 
@@ -588,12 +596,16 @@ func tap_hero(id: String) -> void:
 ## [자동 배치]: 전투력 상위 영웅으로 슬롯을 채운다(근접은 성문 앞, 원거리는 성벽 위 — Economy.auto_hero_deploy_for). [적용]으로 확정.
 func auto_deploy() -> void:
 	work = Economy.auto_hero_deploy(work.size())
+	_auto_used = true
 	selected_slot = -1
 	_rebuild()
 
 
 func apply() -> void:
 	Economy.set_deploy(work)
+	if _auto_used:
+		_auto_used = false
+		Tutorial.note("auto_deploy")  # 가이드 「자동 배치 써 보기」
 	if GameState.deploy() == work:
 		var later := "" if GameState.mode == GameState.Mode.IDLE else " — 다음 스테이지부터"
 		Economy.notice.emit("배치를 적용했습니다" + later)
@@ -831,6 +843,10 @@ func _refresh_detail() -> void:
 	_promo.line.text = "조각 %d / %d" % [Economy.shards_of(id), need] if need > 0 else "조각 %d · MAX" % Economy.shards_of(id)
 	promote_button.disabled = pwhy != ""
 	promote_reason.text = Economy.PROMOTE_TEXT.get(pwhy, "") if pwhy != "waiting" else ""
+	if why == "최대 레벨" and need > 0:  # 최대 레벨에 닿았다: 올리는 법(승급)을 바로 알려 준다
+		reason_label.text = "최대 레벨 — [승급]하면 Lv %d까지" % GameData.max_level(pr + 1)
+		if pwhy == "not_enough_shards":
+			promote_reason.text = "조각 부족 — 모집에서 이 영웅이 다시 나오면 조각이 쌓입니다"
 	if need > 0:
 		promote_preview.text = "승급하면 HP·공격 → ×%s · 최대 레벨 %d → %d" % [Skills.num_text(GameData.config_num("promote_mult")), mx, GameData.max_level(pr + 1)]
 		var next := sk_rows.filter(func(r): return r.locked)

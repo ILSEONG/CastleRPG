@@ -343,6 +343,9 @@ func claim(id: String) -> bool:
 
 ## 온라인 받은 기록(Economy.server_missions)에 이 받기를 더한다 — 서버 응답 위에도 응답이 올 때까지 다시 얹힌다(복사해서 바꾼다).
 func _mark_claimed(m: Dictionary) -> void:
+	var tut = get_node_or_null("/root/Tutorial") if is_inside_tree() else null
+	if tut != null:
+		tut.note("mission_claim")  # 가이드 「일일 미션 보상 받기」
 	var s: Dictionary = econ.server_missions.duplicate(true)
 	if int(s.get("day", -1)) != day:
 		s.day = day

@@ -27,6 +27,7 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
+const Balance := preload("res://scripts/balance.gd")
 
 const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 옮긴다. 3: heroes {id: {copies, level}}(2 이하는 level 1)
 # 4: levels = 모든 건물, build = {id, finish} 또는 null(개정 12). 3 이하는 건물 레벨 1(성채·성문은 GameState 값인데 오프라인
@@ -83,6 +84,8 @@ const BLOCK_TEXT := {
 	"unknown": "알 수 없는 건물", "max_level": "최대 레벨", "keep_cap": "성채 레벨이 부족합니다", "prereq": "선행 조건 미충족",
 	"in_progress": "건설 중", "builder_busy": "다른 건물 건설 중", "not_enough": "자원 부족", "waiting": "",
 	"unbuilt": "아직 짓지 않은 건물",
+	"out": "성벽에 너무 가깝습니다", "road": "길 위에는 지을 수 없습니다", "square": "광장에는 지을 수 없습니다",  # 자유 건설 자리(Balance.PLACE_TEXT)
+	"overlap": "다른 건물과 겹칩니다", "fixed": "옮길 수 없는 건물입니다", "bad_cell": "지을 수 없는 자리입니다",
 }
 ## 병사(개정 13). 자동 배치: 티어 높은 것부터, 같은 티어는 이 순서(스펙 §6 "보병 → 기병 → 궁병", 표에 없는 병종은 뒤에 표 순서로).
 const AUTO_ORDER := ["infantry", "cavalry", "archer"]
@@ -175,6 +178,8 @@ var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 
 var server_quest: Dictionary = {}  # 온라인: 서버 퀘스트 진행 {tut_state, tut_step, rep_n}(apply_server가 채운다, 오프라인은 비어 있다)
 var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않은 건물 id → true. 레벨은 1로 두고 "공터"로 보인다 — 짓기(0 → 1)는 일꾼이
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
+var layout: Dictionary = {}       # 자유 건설(사용자 2026-10-13): 건물 id → 부지 칸 Vector2i(플레이어가 고른 자리). 없으면 기본 자리(Balance.BUILDINGS).
+                                   # 공터(unbuilt)는 자리를 잡아야(layout에 있어야) 성 안에 보인다. 저장 "layout" {id: [x, y]}, 서버 player.layout
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
 var dia_tickets := 0
 var iap := {}  # 결제 상품 기록 {first, n, day, week, d, w, monthly: {id: {until, claimed}}, passes, gp: {free, paid}}(온라인은 서버 player.iap, 오프라인은 저장 "iap")
@@ -360,6 +365,7 @@ static func _pick(pools: Dictionary, grade: String, rand: Callable) -> Dictionar
 
 func _ready() -> void:
 	GameData.equip_source = self  # 개정 18: 영웅 최종 능력치에 장비 합계(GameData.hero_stats)
+	changed.connect(_sync_layout)  # 자유 건설: 건물 자리 → Balance.active
 	load_save(Time.get_unix_time_from_system())
 
 
@@ -411,6 +417,7 @@ func reset(now: float) -> void:
 	iap = {}
 	admin = false
 	unbuilt = {}
+	layout = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
 	gacha_dia_pity = 0
@@ -989,6 +996,107 @@ func building_level(id: String) -> int:
 ## 튜토리얼: 지은 건물인가(공터가 아니다).
 func is_built(id: String) -> bool:
 	return not unbuilt.has(id)
+
+
+# --- 자유 건설(사용자 2026-10-13 "건물을 선택하고 내가 원하는 공간에다 건물을 짓는 형태") ---
+# [건물] 버튼(build_button.gd) → 건물 목록 → 자리 고르기(placement.gd) → build_at(공터 짓기 0 → 1) 또는 move_building(이미 지은 건물 옮기기, 무료).
+# 자리 규칙은 Balance.placement_block(서버 rules.placementBlock과 같다).
+
+## 성 안에 서 있는 건물인가(지었거나, 짓기 시작해 자리를 잡은 공터).
+func is_placed(id: String) -> bool:
+	return is_built(id) or layout.has(id)
+
+
+## 건물 부지 칸(왼쪽 위 타일). 고른 자리가 없으면 기본 자리.
+func building_cell(id: String) -> Vector2i:
+	return layout.get(id, Balance.building(id).get("cell", Vector2i.ZERO))
+
+
+## 성 안에 서 있는 건물 id → 칸(except는 뺀다).
+func placed_cells(except := "") -> Dictionary:
+	var out := {}
+	for b in Balance.BUILDINGS:
+		if b.id != except and is_placed(b.id):
+			out[b.id] = building_cell(b.id)
+	return out
+
+
+## 성 내부 한 변 타일 수의 절반(성채 레벨의 단계 표).
+func interior_half_tiles() -> int:
+	return GameData.interior_tiles(building_level(GameData.KEEP)) / 2
+
+
+## id를 cell에 둘 수 없는 이유("" = 된다 — Balance.PLACE_TEXT).
+func place_block(id: String, cell: Vector2i) -> String:
+	return Balance.placement_block(id, cell, interior_half_tiles(), placed_cells(id))
+
+
+## near에서 가장 가까운(칸 거리) 놓을 수 있는 칸. 없으면 null.
+func free_cell(id: String, near: Vector2i):
+	var m := interior_half_tiles()
+	var best = null
+	var best_d := INF
+	for x in range(-m, m):
+		for y in range(-m, m):
+			var c := Vector2i(x, y)
+			var d := Vector2(c - near).length_squared()
+			if d < best_d and place_block(id, c) == "":
+				best = c
+				best_d = d
+	return best
+
+
+## 공터 id를 cell에 짓기 시작한다(자리 + 0 → 1 건설, 비용·시간은 공터 규칙 그대로). 온라인은 /v1/building/upgrade {building, cell}.
+func build_at(id: String, cell: Vector2i, now: float) -> bool:
+	if not unbuilt.has(id):
+		return false
+	var why := place_block(id, cell)
+	if why != "":
+		notice.emit(Balance.PLACE_TEXT.get(why, BUILD_FAIL_TEXT))
+		return false
+	return upgrade(id, now, cell)
+
+
+## 지은 건물 id를 cell로 옮긴다(무료, 짓는 중이어도 된다). 온라인은 /v1/building/move — 바로 옮겨 보이고 거절되면 되돌린다.
+func move_building(id: String, cell: Vector2i) -> bool:
+	if not is_built(id) or building_cell(id) == cell:
+		return false
+	var why := place_block(id, cell)
+	if why != "":
+		notice.emit(Balance.PLACE_TEXT.get(why, BUILD_FAIL_TEXT))
+		return false
+	if net != null:
+		return _instant(func():
+			layout[id] = cell
+			return true, "/v1/building/move", {"building": id, "cell": [cell.x, cell.y]}, func(): return Balance.PLACE_TEXT.get(net.last_error, ROLLBACK_TEXT))
+	layout[id] = cell
+	changed.emit()
+	save()
+	return true
+
+
+## Balance.active(길 막기·말풍선 자리)를 지금 건물 자리에 맞춘다(changed마다).
+func _sync_layout() -> void:
+	Balance.active = placed_cells()
+	Balance.active_set = true
+
+
+## 저장·서버의 자리 {id: [x, y]} → layout(표에 없는 건물·틀린 값은 버린다).
+static func _layout_of(v) -> Dictionary:
+	var out := {}
+	if v is Dictionary:
+		for id in v:
+			var c = v[id]
+			if id is String and not Balance.building(id).is_empty() and c is Array and c.size() == 2 and _num(c[0]) and _num(c[1]):
+				out[id] = Vector2i(int(c[0]), int(c[1]))
+	return out
+
+
+func _layout_save() -> Dictionary:
+	var out := {}
+	for id in layout:
+		out[id] = [layout[id].x, layout[id].y]
+	return out
 
 
 ## 보이는 레벨: 공터면 0, 아니면 building_level. 선행 조건·이름표·건물 창이 쓴다.
@@ -1773,7 +1881,7 @@ func build_progress(now: float, id := "") -> float:
 ## 업그레이드 시작(스펙 §2.4·§2.5). 안 되면 알림(BLOCK_TEXT)만. 오프라인: 자원 건물이면 먼저 자동 수집(수집 규칙 그대로, 남은 초 유지)
 ## → 비용 즉시 차감 → 일꾼 {id, finish = now + 시간} → 저장 → build_started. 온라인: /v1/building/upgrade(once — 다시 보내면 두 번
 ## 지어질 수 있어 재전송하지 않는다. 실패하면 알림 + 상태 새로 받기. 응답에 build_started). 시작했거나 보냈으면 true.
-func upgrade(id: String, now: float) -> bool:
+func upgrade(id: String, now: float, cell: Variant = null) -> bool:
 	if _waiting.has("build"):
 		return false  # 응답 전 재탭
 	complete_due(now)
@@ -1782,7 +1890,9 @@ func upgrade(id: String, now: float) -> bool:
 		notice.emit(BLOCK_TEXT.get(why, BUILD_FAIL_TEXT))
 		return false
 	if net != null:
-		return _upgrade_online(id)
+		return _upgrade_online(id, cell)
+	if cell is Vector2i:  # 자유 건설: 공터를 고른 자리에
+		layout[id] = cell
 	if res_of(id) != "":
 		collect(id, now)
 	var cost := upgrade_cost(id)
@@ -3106,6 +3216,7 @@ func apply_server(data: Dictionary) -> bool:
 		for x in p.unbuilt:
 			if x is String and not GameData.building_def(x).is_empty():
 				unbuilt[x] = true
+	layout = _layout_of(p.get("layout"))  # 자유 건설 자리(서버 player.layout)
 	if _num(p.get("dia_tickets")):
 		dia_tickets = maxi(0, int(p.dia_tickets))
 	if p.get("attendance") is Dictionary:
@@ -3828,7 +3939,7 @@ func _soldier_deploy_answered() -> void:
 
 
 ## 온라인 업그레이드: once로 보낸다(모집·레벨업과 같은 이유로 다시 보내지 않는다). 자원은 서버가 뺀다(처치 골드와 무관).
-func _upgrade_online(id: String) -> bool:
+func _upgrade_online(id: String, cell: Variant = null) -> bool:
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
@@ -3841,12 +3952,17 @@ func _upgrade_online(id: String) -> bool:
 			_local_collect(id, t0)
 		for r in cost:
 			res[r] = int(res.get(r, 0)) - int(cost[r])
+		if cell is Vector2i:
+			layout[id] = cell
 		if free_builder(t0) == 2:
 			build2 = {"id": id, "finish": t0 + sec}
 		elif free_builder(t0) == 1:
 			build = {"id": id, "finish": t0 + sec})
 	build_started.emit(id, t0 + sec)
-	net.send("POST", "/v1/building/upgrade", {"building": id}, _on_upgraded, _on_upgrade_failed, true, true)
+	var body := {"building": id}
+	if cell is Vector2i:
+		body["cell"] = [cell.x, cell.y]  # 자유 건설: 공터를 고른 자리에(서버도 같은 규칙으로 확인)
+	net.send("POST", "/v1/building/upgrade", body, _on_upgraded, _on_upgrade_failed, true, true)
 	return true
 
 
@@ -4104,7 +4220,7 @@ func save() -> void:
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
 		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches,
-		"build2": null if build2.is_empty() else build2, "builder2_until": builder2_until, "speedups": speedups, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"build2": null if build2.is_empty() else build2, "builder2_until": builder2_until, "speedups": speedups, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "layout": _layout_save(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -4282,6 +4398,7 @@ func _apply(data) -> bool:
 		for x in ub:
 			if x is String and not GameData.building_def(x).is_empty():
 				unbuilt[x] = true
+	layout = _layout_of(data.get("layout"))  # 자유 건설 자리(없으면 모두 기본 자리)
 	return true
 
 

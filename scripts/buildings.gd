@@ -1,6 +1,6 @@
 extends Node3D
 ## 성 안 건물(코드로 만든 로우폴리 메시, 기능 없음 — 서브프로젝트 2)과 성 밖 자연물·테두리 산 장식.
-## 건물은 TownKit 레시피를 부지 중심에 그대로 놓는다(레시피가 부지 안에 맞춰져 있다 — 테스트).
+## 건물은 TownKit 레시피를 부지 중심에 그대로 놓는다(레시피가 부지 안에 맞춰져 있다 — 테스트). 부지 자리는 자유 건설(Economy.building_cell, 2026-10-13).
 ## 자연물·산은 시드 고정 변형 몇 개를 시드 고정 난수로 흩고, 변형마다 MultiMesh 하나로 그린다.
 ## 건물 레벨업(개정 12 §2.5): 짓는 중인 건물에 로우폴리 비계(기둥 4 + 가로대, 건물 AABB 둘레 — 성문은 문루 넷), 완료되면 비계를 걷고
 ## 빛 조각(Fx.repair)과 알림 "벌목장 Lv 4 완료". 이름표 "벌목장 Lv 3"·"상인"은 world_tags.gd(화면 공간, 개정 15)가 tag_anchors·merchant_anchor에
@@ -33,7 +33,8 @@ var tag_anchors := {}  # 건물 id → 이름표("이름 Lv N") 기준점: 지�
 var sites := {}  # 건물 id → [AABB(월드), …] — 비계·진행 막대 자리. 성문은 문루 넷
 var scaffold_id := ""  # 지금 비계를 두른 건물 id(없으면 "", 두 일꾼이면 "a,b")
 var _built_now := {}  # 방금 공터에서 다 지은 건물 id(building_done 알림 문구)
-var lots := {}  # 튜토리얼: 건물 id → 부지 {mi(메시), body(탭 판정체), center, size, lot(지금 공터로 보이는가)}
+var lots := {}  # 건물 id → 부지 {mi(메시), body(탭 판정체), center, size, full, lot(지금 공터로 보이는가), cell(지금 칸, 숨김이면 null)}
+var hidden := {}  # 자리를 안 잡은 공터 id → true(성 안에 안 보인다 — 이름표도 없다)
 var _scaffolds: Array = []
 ## 자연물·산 MultiMesh마다 {mm, recipe(TownKit 레시피), idx(레시피 안 변형 번호), state(만들기 전 rng 상태), base(기본 메시)}.
 ## seasons.gd(개정 22)가 같은 rng 상태 + 계절 팔레트로 다시 만든 메시를 갈아 끼운다.
@@ -54,38 +55,56 @@ func _ready() -> void:
 
 
 func _place_building(b: Dictionary) -> void:
-	var center := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
 	var mi := MeshInstance3D.new()
 	mi.material_override = Art.lowpoly_vc_material()
-	mi.position = center
 	add_child(mi)
-	var full: Mesh = TownKit.building(b.id)
-	sites[b.id] = [AABB(center + full.get_aabb().position, full.get_aabb().size)]  # 공터여도 비계는 다 지은 건물 크기로
-	lots[b.id] = {"mi": mi, "body": null, "center": center, "size": b.size, "full": full, "lot": null}
-	_show_lot(b.id, not Economy.is_built(b.id))
+	lots[b.id] = {"mi": mi, "body": null, "center": Vector3.ZERO, "size": b.size, "full": TownKit.building(b.id), "lot": null, "cell": null}
+	_show_lot(b.id)
 
 
-## 튜토리얼: 건물을 공터(lot) 또는 다 지은 모습으로 보인다. 탭 판정체·이름표 자리도 그 높이로 다시 만든다.
-func _show_lot(id: String, lot: bool) -> void:
+## 건물 하나를 Economy에 맞춘다: 자리(자유 건설 — Economy.building_cell)와 모습 셋 중 하나 — 자리를 안 잡은 공터는 숨김(목록의 [건물]에서 짓는다),
+## 짓는 중인 공터는 흙 바닥 + 말뚝, 다 지은 건물. 탭 판정체·이름표 자리·비계 자리도 그 자리·높이로 다시 만든다.
+func _show_lot(id: String) -> void:
 	var L: Dictionary = lots[id]
-	if L.lot == lot:
+	var placed: bool = Economy.is_placed(id)
+	var lot: bool = not Economy.is_built(id)
+	var cell = Economy.building_cell(id) if placed else null
+	if L.lot == lot and L.cell == cell:
 		return
 	if L.lot == true and not lot:
 		_built_now[id] = true  # 공터 → 다 지음(완료 알림 "건설 완료")
+	var moved: bool = L.cell != cell
 	L.lot = lot
+	L.cell = cell
 	var mi: MeshInstance3D = L.mi
-	mi.mesh = lot_mesh(L.size) if lot else L.full
 	if L.body != null:
 		L.body.queue_free()
+		L.body = null
+	mi.visible = placed
+	if not placed:
+		hidden[id] = true
+		tag_anchors[id] = Vector3.ZERO
+		sites[id] = []
+		return
+	hidden.erase(id)
+	var center := Balance.center_of(id)
+	L.center = center
+	mi.position = center
+	var full: Mesh = L.full
+	mi.mesh = lot_mesh(L.size) if lot else full
+	sites[id] = [AABB(center + full.get_aabb().position, full.get_aabb().size)]  # 공터여도 비계는 다 지은 건물 크기로
 	var h := maxf(mi.mesh.get_aabb().end.y, LOT_TAP_H)
-	L.body = _add_tap_body(L.center, Vector3(L.size.x * Balance.TILE, h, L.size.y * Balance.TILE))
+	L.body = _add_tap_body(center, Vector3(L.size.x * Balance.TILE, h, L.size.y * Balance.TILE))
 	L.body.set_meta("building", id)
-	tag_anchors[id] = L.center + Vector3(0, mi.mesh.get_aabb().end.y + TAG_UP, 0)
+	tag_anchors[id] = center + Vector3(0, mi.mesh.get_aabb().end.y + TAG_UP, 0)
+	if moved and scaffold_id == id:
+		scaffold_id = ""  # 짓는 중에 옮겼다 — 비계를 새 자리에
+		_sync_build()
 
 
 func _sync_lots() -> void:
 	for id in lots:
-		_show_lot(id, not Economy.is_built(id))
+		_show_lot(id)
 
 
 ## 공터(튜토리얼): 흙 바닥 + 네 모서리 말뚝과 줄 + 앞쪽 작은 팻말. size = 부지 칸 수.

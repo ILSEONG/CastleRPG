@@ -63,6 +63,7 @@ func _init() -> void:
 	test_route()
 	test_stairs_and_wall_routes()
 	test_buildings_clear_stairs()
+	test_free_placement()
 	test_is_inside()
 	test_mesh_kit()
 	test_castle_parts()
@@ -617,7 +618,7 @@ func test_fever_auto_next_persists() -> void:
 	check(not b.auto_next and b.gauge == 7, "unchecked state and fever gauge persist together")
 	DirAccess.remove_absolute(path)
 	b.load_save()
-	check(b.auto_next, "missing file defaults to checked")
+	check(not b.auto_next, "missing file defaults to unchecked (the guide teaches [연속 진행])")
 	a.free()
 	b.free()
 
@@ -995,6 +996,89 @@ func _leg_samples(a: Vector3, b: Vector3) -> Array:
 	for k in range(n + 1):
 		out.append(a.lerp(b, float(k) / maxf(n, 1)))
 	return out
+
+
+## 자유 건설(2026-10-13): 기본 배치는 자리 규칙을 지키고, 규칙은 길·광장·성벽 여유·겹침을 막는다. 성 단계마다 규칙을 지키는 모든 칸은
+## 영웅 자리·성문 사이 모든 지상 경로, 계단 발판, 병사 자리, 상인에서 떨어져 있다(어디에 지어도 전투 길을 막지 않는다).
+func test_free_placement() -> void:
+	var F = FormationScript
+	var defaults := {}
+	for b in Balance.BUILDINGS:
+		defaults[b.id] = b.cell
+	for b in Balance.BUILDINGS:
+		if b.id == "keep":
+			check(Balance.placement_block("keep", b.cell, 10, defaults) == "fixed", "keep cannot be placed")
+		else:
+			check(Balance.placement_block(b.id, b.cell, 10, defaults) == "", "default %s spot passes the rules" % b.id)
+	check(Balance.placement_block("lumber", Vector2i(-1, 5), 10, defaults) == "road", "north-south road blocked")
+	check(Balance.placement_block("lumber", Vector2i(5, -1), 10, defaults) == "road", "east-west road blocked")
+	check(Balance.placement_block("lumber", Vector2i(1, 3), 10, defaults) == "square", "soldier square blocked")
+	check(Balance.placement_block("lumber", Vector2i(-4, 2), 10, {}) == "square", "merchant spot blocked")
+	check(Balance.placement_block("lumber", Vector2i(6, 5), 10, defaults) == "out", "2-tile wall margin kept")
+	check(Balance.placement_block("lumber", Vector2i(5, 5), 10, defaults) == "", "free corner spot ok")
+	check(Balance.placement_block("lumber", Vector2i(4, 1), 10, defaults) == "overlap", "overlapping the quarry is blocked")
+	check(Balance.placement_block("lumber", Vector2i(9, 9), 14, defaults) == "", "a bigger castle opens new spots")
+	var cart_c: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
+	var cart_box := TownKitScript.merchant_cart().get_aabb()
+	var keep_out := [Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS),
+		Rect2(cart_c.x + cart_box.position.x, cart_c.z + cart_box.position.z, cart_box.size.x, cart_box.size.z)]
+	var soldiers := []
+	var grid: Vector2i = F.soldier_grid()
+	for c in grid.x:
+		for r in grid.y:
+			soldiers.append(Vector2(Balance.SOLDIER_X.x + c * Balance.SOLDIER_GAP, Balance.SOLDIER_Z.x + r * Balance.SOLDIER_GAP))
+	for level in [1, 9, 22]:
+		var h := GameData.interior_half(level)
+		var ht := GameData.interior_tiles(level) / 2
+		var spots: Array = []
+		for side in 4:
+			for at in F.gate_offsets(h):
+				spots.append(F.gate_inner(h, side, at))
+			for post in [F.POST_GATE, F.POST_WALL]:
+				for slot in F.capacity(post, F.gates_per_side(h)):
+					spots.append(F.slot_position(h, side, post, slot))
+		var samples: Array = []  # 모든 경로의 지상 구간 표본 점
+		for from in spots:
+			for to in spots:
+				if from == to:
+					continue
+				var pts: Array = [from] + F.route(h, from, to)
+				for i in range(1, pts.size()):
+					var a: Vector3 = pts[i - 1]
+					var b: Vector3 = pts[i]
+					if absf(a.y) < 0.01 and absf(b.y) < 0.01:
+						for q in _leg_samples(a, b):
+							samples.append(Vector2(q.x, q.z))
+		var bad := []
+		var valid := 0
+		for x in range(-ht, ht):
+			for y in range(-ht, ht):
+				var cell := Vector2i(x, y)
+				if Balance.placement_block("lumber", cell, ht, {"keep": Vector2i(-2, -2)}) != "":
+					continue
+				valid += 1
+				var plot := Rect2(Vector2(cell) * Balance.TILE, Vector2(3, 3) * Balance.TILE)
+				var inner := plot.grow(-0.01)
+				for q in samples:
+					if inner.has_point(q):
+						bad.append("route %s" % cell)
+						break
+				for s2 in 4:
+					for at in F.gate_offsets(h):
+						for e in [-1.0, 1.0]:
+							var p1: Vector3 = F.stair_bottom(h, s2, e, at)
+							var p2: Vector3 = F.stair_approach(h, s2, e, at)
+							if plot.has_point(Vector2(p1.x, p1.z)) or plot.has_point(Vector2(p2.x, p2.z)):
+								bad.append("stair %s" % cell)
+				for p in soldiers:
+					if plot.grow(0.45).has_point(p):
+						bad.append("soldier %s" % cell)
+						break
+				for rc in keep_out:
+					if plot.intersects(rc):
+						bad.append("merchant %s" % cell)
+		check(valid > 20, "level %d: many free spots (%d)" % [level, valid])
+		check(bad.is_empty(), "level %d: no allowed spot touches a route, stair, soldier spot or the merchant: %s" % [level, bad.slice(0, 3)])
 
 
 ## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 모든 자리 사이 경로(면을 넘나드는 것 포함)의 지상 구간은 부지·계단 발판을 지나지 않는다.
@@ -1559,7 +1643,10 @@ func test_deploy_and_promotion() -> void:
 		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.3^p (p 5 = x3.71), capped at 5")
 	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
 		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
-	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 30, 40, 50, 60, 70], "max level = 20 + 10 x promotion (70 at 5)")
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 56, 92, 128, 164, 200], "max level = 20 + 36 x promotion (200 at 5, 2026-10-13)")
+	check(GameData.levelup_cost("SSR", 69).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68)) and GameData.levelup_cost("SSR", 70).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * 1.04)
+		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * pow(1.04, 130)) and GameData.levelup_cost("SSR", 1, 199).gold < 10 ** 12,
+		"level-up gold: the curve up to Lv 69 -> 70, then x1.04 per level (Lv 199 -> 200 about 242억, SSR 1 -> 200 under 1조): %s" % [GameData.levelup_cost("SSR", 1, 199)])
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 9
@@ -1941,14 +2028,14 @@ func test_promotion() -> void:
 	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
 		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
 	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
-	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 30
-		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 30 (Lv 20 can level again)")
+	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 56
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 56 (Lv 20 can level again)")
 	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
 	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
 	for i in 4:
 		e.promote("arteon")
-	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 70,
-		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 70)")
+	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 200,
+		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 200)")
 	e.hero_shards["arteon"] = 999
 	notes.clear()
 	check(e.promote_block("arteon") == "max_promotion" and not e.promote("arteon") and notes == ["최대 승급"] and e.shards_of("arteon") == 999 and e.promotion_of("arteon") == 5,
@@ -5112,7 +5199,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 35번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 42번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5131,8 +5218,8 @@ func test_tutorial() -> void:
 		blocks.append(before and not at and not t.build_locked(m.arg))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 16번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 9번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 21번째 미션 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 13번째 미션 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
 	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
@@ -5140,7 +5227,7 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 67 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 76 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5156,7 +5243,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 64번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5167,6 +5254,25 @@ func test_tutorial() -> void:
 	check(not t.complete(), "guide: 1-12 is not cleared by the guild unlock")
 	check(TutorialScript.v2_step(0) == 0 and TutorialScript.v2_step(9) == t.mission_index("growth") and TutorialScript.v2_step(20) == t.mission_index("dungeon_ticket")
 		and TutorialScript.v2_step(33) == TutorialScript.MISSIONS.size(), "guide: old v2 steps map to the same mission id")
+	check(TutorialScript.map_step(TutorialScript.V3_IDS, 0) == 0 and TutorialScript.map_step(TutorialScript.V3_IDS, 7) == t.mission_index("stage_1_1")
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 34) == t.mission_index("dungeon_ticket")
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 67) == TutorialScript.MISSIONS.size(), "guide: old v3 steps map to the same mission id")
+	# 기능 가이드: 연속 진행·배속·미션 받기·주머니는 그 행동으로 끝난다
+	var fv = t.fever
+	var fake_fever := {"auto_next": false}
+	t.fever = fake_fever
+	t.step = t.mission_index("auto_on")
+	t.count = 0
+	check(not t.complete() and t.point_keys(t.mission()) == ["hud:auto"], "guide: continue mission waits for the [연속 진행] check")
+	fake_fever.auto_next = true
+	check(t.complete(), "guide: checking [연속 진행] completes its mission")
+	t.fever = fv
+	for id in ["mission_claim", "pouch", "auto_deploy", "promote"]:
+		t.step = t.mission_index(id)
+		t.count = 0
+		var before: bool = t.complete()
+		t.note(id)
+		check(t.complete(), "guide: %s completes on its action (before %s)" % [id, before])
 	# 처치·스테이지
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
 	t.count = 0
