@@ -28,6 +28,8 @@ const UPGRADE_TEXT := "업그레이드"
 const BUILD_TEXT := "건설"  # 튜토리얼 공터
 const TRAIN_ICON_PX := 72.0
 const RESEARCH_TEXT := "연구"
+const DISPATCH_TEXT := "의뢰 보기"
+const DISPATCH := "dispatch"  # 파견소 건물 종류
 const CANCEL_TEXT := "취소(50% 환불)"
 const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
 const SPEEDUP_TEXT := "가속"  # 2026-10-13: 가속 아이템 목록을 펼친다
@@ -49,13 +51,16 @@ const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"forge": "장비 던전에서 장비가 하나 더 나올 확률을 줍니다.",
 	"guild_hall": "길드에 가입하면 길드원 도움으로 건설·연구 시간이 줄어듭니다.",
 	"watchtower": "전투 중 성 밖 몬스터에게 화살을 쏩니다.",
+	"dispatch": "영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수와 높은 희귀도 확률이 오르고 파견 시간이 줄어듭니다.",
 }
 
 var building_id := ""
 var research  # 연구 창(research_panel.gd, 개정 24). main이 넣는다
+var dispatch  # 파견소 창(dispatch_panel.gd, 2026-10-13). main이 넣는다
 var title_label: Label
 var desc_label: Label
 var research_button: Button  # 연구소만: [연구] → 연구 창
+var dispatch_button: Button  # 파견소만: [의뢰 보기] → 파견소 창
 var effects: VBoxContainer  # 효과 줄: HBox[지금(검정), → 다음(초록)]
 var reqs: VBoxContainer  # 선행 조건 줄 Label
 var cost_labels := {}  # 자원 id → 비용 숫자 Label(아이콘과 한 칸)
@@ -108,6 +113,10 @@ func _ready() -> void:
 	research_button.custom_minimum_size = Vector2(0, 84)
 	research_button.pressed.connect(open_research)
 	content.add_child(research_button)
+	dispatch_button = _button(DISPATCH_TEXT, UiKit.GRADE_COLORS.SR, 32)
+	dispatch_button.custom_minimum_size = Vector2(0, 84)
+	dispatch_button.pressed.connect(open_dispatch)
+	content.add_child(dispatch_button)
 	_build_train_box()
 	effects = VBoxContainer.new()
 	content.add_child(effects)
@@ -186,6 +195,14 @@ func _on_open() -> void:
 	Tutorial.note("open", 1, building_id)  # 튜토리얼 "성채 살펴보기"
 
 
+## 파견소 [의뢰 보기]: 이 창을 닫고 파견소 창을 연다.
+func open_dispatch() -> void:
+	if dispatch == null:
+		return
+	close()
+	dispatch.open()
+
+
 ## 연구소 [연구]: 이 창을 닫고 연구 창을 연다.
 func open_research() -> void:
 	if research == null:
@@ -218,6 +235,7 @@ func _refresh() -> void:
 	title_label.text = "%s · 공터" % GameData.building_name(id) if lot else "%s Lv %d" % [GameData.building_name(id), lv]
 	desc_label.text = DESC.get(GameData.type_of(id), "")
 	research_button.visible = id == GameData.LAB and not lot
+	dispatch_button.visible = GameData.type_of(id) == DISPATCH and not lot
 	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
 	_clear(effects)
 	for row in (effect_lines(id, 1) if lot else []):
@@ -461,6 +479,11 @@ static func effect_lines(id: String, lv: int) -> Array:
 		"houses":
 			var add := int(rb.pop_add)
 			return [["인구", str(GameData.population(lv) + add), str(GameData.population(n) + add)]]
+		"dispatch":
+			var DP := preload("res://scripts/dispatch_panel.gd")
+			return [["하루 의뢰", "%d개" % DP.slots(lv), "%d개" % DP.slots(n)],
+				["SR·SSR 확률", "%s%% · %s%%" % [DP._pct(DP.odds(lv)[2]), DP._pct(DP.odds(lv)[3])], "%s%% · %s%%" % [DP._pct(DP.odds(n)[2]), DP._pct(DP.odds(n)[3])]],
+				["파견 시간", "%d%%" % roundi(DP.time_mult(lv) * 100.0), "%d%%" % roundi(DP.time_mult(n) * 100.0)]]
 		"tavern":
 			var a := GameData.gacha_rates(GameData.GACHA_GOLD, 1, lv)  # 골드 Lv 1 기준(주점 보너스만 보인다)
 			var b := GameData.gacha_rates(GameData.GACHA_GOLD, 1, n)

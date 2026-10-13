@@ -156,6 +156,9 @@ func _build_world() -> void:
 	var spawner = SpawnerScript.new()
 	spawner.castle = castle
 	add_child(spawner)
+	var goblins = preload("res://scripts/goblin_director.gd").new()  # 황금 고블린: 5~10분마다 성 밖을 돌아다닌다(사용자 2026-10-13)
+	goblins.castle = castle
+	add_child(goblins)
 	var watchtower = preload("res://scripts/watchtower.gd").new()  # 망루: 지었으면 성 전투에서 화살(2026-10-13)
 	watchtower.castle = castle
 	add_child(watchtower)
@@ -176,6 +179,9 @@ func _build_world() -> void:
 	var research_panel = ResearchPanelScript.new()  # 연구 창(개정 24): 연구소 건물 창 [연구]·플라스크 말풍선
 	add_child(research_panel)
 	building_panel.research = research_panel
+	var dispatch_panel = preload("res://scripts/dispatch_panel.gd").new()  # 파견소 창(2026-10-13): 파견소 건물 창 [의뢰 보기]
+	add_child(dispatch_panel)
+	building_panel.dispatch = dispatch_panel
 	building_panel.goto_building.connect(func(bid): _tutorial_goto("building:" + bid))  # 선행 조건 줄 → 그 건물(사용자 2026-10-13)
 	picker.research = research_panel
 	var soldier_panel = SoldierPanelScript.new()

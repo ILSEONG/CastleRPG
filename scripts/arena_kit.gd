@@ -48,6 +48,8 @@ const BANNER := Color(0.50, 0.10, 0.09)
 const GOBLIN_SKIN := Color(0.53, 0.66, 0.25)  # Rogue 살색 × Art.GOBLIN_TINT
 const KING_SKIN := Color(0.45, 0.48, 0.19)  # Rogue 살색 × Art.KING_TINT
 const GOLD := Color(0.85, 0.62, 0.16)
+const SACK_GOLD := Color(0.98, 0.76, 0.18)  # 황금 보따리 천
+const SACK_COIN := Color(1.0, 0.88, 0.35)
 const DK_STEEL := Color(0.30, 0.29, 0.34)
 const DK_RED := Color(0.85, 0.12, 0.08)
 
@@ -1721,6 +1723,7 @@ static func part(id: String) -> Node3D:
 			"king_club": _club(k)
 			"dk_cape": _cape(k)
 			"dk_sword": _greatsword(k)
+			"gold_sack": _gold_sack(k)
 			_: push_error("unknown part %s" % id)
 		_meshes[id] = k.commit()
 	var mi := MeshInstance3D.new()
@@ -1756,6 +1759,22 @@ static func _crown(k) -> void:
 		var a := TAU * i / 8.0
 		k.cone(Vector3(cos(a) * 0.4, 0.98, sin(a) * 0.4), 4, 0.08, 0.22, GOLD)
 	k.box(Vector3(0, 0.82, 0.44), Vector3(0.12, 0.12, 0.05), DK_RED)
+
+
+## 황금 보따리(황금 고블린, 손 슬롯 공간): 손잡이 쪽(원점)에 묶은 목 + 빨간 끈, 그 위로 불룩한 금빛 자루(20면체 둘), 자루 위로 삐져나온 금화 몇 닢.
+## 크기 ≈ 지름 1.4 — 고블린 몸통보다 크다(멀리서도 보이게).
+static func _gold_sack(k) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var z := 1.6  # 전투 화면에서 멀리서도 보이게 크게
+	k.prism_n(Vector3(0, -0.05, 0) * z, 6, 0.07 * z, 0.1 * z, 0.22 * z, SACK_GOLD.darkened(0.25))
+	k.prism_n(Vector3(0, 0.08, 0) * z, 6, 0.11 * z, 0.11 * z, 0.07 * z, DK_RED)
+	k.rock(Vector3(0, 0.5, 0.02) * z, 0.42 * z, SACK_GOLD, rng, 0.95)
+	k.rock(Vector3(0.05, 0.36, -0.05) * z, 0.34 * z, SACK_GOLD.darkened(0.12), rng, 0.85)
+	for i in 4:
+		var a := TAU * i / 4.0 + 0.4
+		k.prism_n(Vector3(cos(a) * 0.16, 0.86 + 0.03 * (i % 2), sin(a) * 0.16) * z, 8, 0.11 * z, 0.11 * z, 0.035 * z, SACK_COIN, a)
+	k.box(Vector3(0, 0.55, 0.42) * z, Vector3(0.2, 0.2, 0.05) * z, DK_RED)  # 앞 천 조각(땜질)
 
 
 ## 왕 몽둥이(손 슬롯 공간, +Y 끝): 굵어지는 나무 자루 + 각진 큰 머리(세로로 긴 20면체) + 쇠 가시 6개. 길이 ≈ 1.45.

@@ -155,6 +155,7 @@ signal friends_changed  # 친구 목록(friends)이 새로 왔거나 친구 요�
 signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받았다 — Tutorial이 맞춘다
 signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
+signal dispatch_changed  # 파견소 진행 중 의뢰(끝나는 시각)가 바뀌었다
 signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
 signal speedups_changed  # 가속 아이템·일꾼 고용권 보유나 두 번째 일꾼 기한이 바뀌었다
 signal hot_offered(hot: Dictionary)  # 핫딜이 새로 떴다 {id, until, bought}(온라인은 서버 응답, 오프라인은 곧바로)
@@ -191,6 +192,7 @@ var admin := false  # 슈퍼관리자(서버 player.admin — 이은 Google 계�
 var market := {}  # 거래소(서버 market.ts): {rules: {fee_pct, max_active, duration_sec, price_limits}, mine: [판매]} — 마지막 서버 값(+ 곧바로 반영한 것)
 var market_sold := 0  # 거래소: 팔렸고 대금을 아직 안 받은 판매 수(서버 player.market_sold — 메뉴 빨간 점)
 var shop := {}  # 상점 산 기록 {day, week, d: {상품 id: 오늘 산 수}, w: {상품 id: 이번 주 산 수}}(온라인은 서버 player.shop, 오프라인은 저장 "shop")
+var dispatch_finishes: Array = []  # 파견소 진행 중 의뢰의 끝나는 시각(서버 player.dispatch, 유닉스 초)
 var pouches := {}  # 방치 주머니 id("gold_60"·"res_240" …, POUCH_IDS) → 개수(> 0). 저장 "pouches"(없으면 {})
 var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, can_claim}(apply_server가 채운다 — 메뉴 빨간 점)
 var server_missions: Dictionary = {}  # 온라인: 미션 받은 기록 {day, week, d, w, wd, r, next_day, next_week}(apply_server가 채운다 — Missions가 읽는다)
@@ -1421,6 +1423,41 @@ func open_pouch(id: String, count: int, stage_n: int) -> bool:
 	save()
 	pouch_opened.emit(got)
 	return true
+
+
+# --- 황금 고블린(서버 goblin.ts): 성 전투 지도에 5~10분마다 나와 돌아다니다 영웅이 잡으면 보따리(방치 골드 GOBLIN_GOLD_MIN분 + 덤) ---
+
+const GOBLIN_GOLD_MIN := 15  # 서버 GB.GOLD_MIN
+signal goblin_claimed(got: Dictionary)  # {gold_tenths, reward(덤: 가속·다이아), n} — 응답이 왔을 때(오프라인은 곧바로)
+
+
+## 지금 방치 골드 GOBLIN_GOLD_MIN분(tenths) — 방치 주머니 골드와 같은 식(10분 주머니 × 1.5).
+func goblin_gold_tenths(stage_n: int) -> int:
+	return int(pouch_value("gold_10", stage_n).gold_tenths) * GOBLIN_GOLD_MIN / 10
+
+
+## 황금 고블린을 잡았다. 온라인은 골드를 곧바로 더해 보이고(predict) POST /v1/goblin/claim(once) — 응답의 서버 값·덤으로 맞춘다.
+## 서버가 거절하면(too_soon — 너무 빨리 또 잡음) 되돌린다. 오프라인은 골드만 곧바로 더한다.
+func claim_goblin(stage_n: int) -> void:
+	var gold := goblin_gold_tenths(stage_n)
+	if net == null:
+		gold_tenths += gold
+		changed.emit()
+		save()
+		goblin_claimed.emit({"gold_tenths": gold, "reward": {}, "n": 0})
+		return
+	if not net.up:
+		return
+	var key := "goblin:%d" % Time.get_ticks_msec()
+	_predict(key, func(): pass, gold)
+	net.send("POST", "/v1/goblin/claim", {}, func(d: Dictionary):
+		settle(key)
+		apply_server(d)
+		if d.get("goblin") is Dictionary:
+			goblin_claimed.emit(d.goblin)
+	, func():
+		_unpredict(key)
+	, true, true)
 
 
 # --- 상점(서버 shop.ts, 상품 표 shop_items.gd): 일일·주간 한정 상품을 다이아·골드로 산다. 온라인도 누르는 즉시 값을 빼고 받은 것을 더한다
@@ -3301,6 +3338,11 @@ func apply_server(data: Dictionary) -> bool:
 		market_changed.emit()
 	elif market_sold != sold_before:
 		market_changed.emit()
+	if p.get("dispatch") is Array:  # 파견소: 진행 중 의뢰의 끝나는 시각(건물 말풍선·메뉴 빨간 점)
+		var df: Array = p.dispatch.filter(func(x): return _num(x)).map(func(x): return float(x))
+		if df != dispatch_finishes:
+			dispatch_finishes = df
+			dispatch_changed.emit()
 	if p.get("pouches") is Dictionary:
 		var pz := _pouch_counts(p.pouches)
 		if pz != pouches:

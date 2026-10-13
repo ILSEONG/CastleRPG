@@ -362,6 +362,17 @@ const MONSTER_MODELS := {
 		"scale": 0.8,
 		"anims": {"idle": "Idle", "walk": "Running_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
 	},
+	# 황금 고블린(사용자 2026-10-13): 고블린 몸(Meshy goblin) + 왼손 황금 보따리(손 부품이라 Meshy 몸에서도 남는다). 단검은 숨긴다.
+	"gold_goblin": {
+		"scene": CHAR_DIR + "Rogue.glb",
+		"meshy": "goblin",
+		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Throwable", "Rogue_Cape", "Knife"],
+		"tint": {"Rogue_Head": GOBLIN_TINT, "Rogue_ArmLeft": GOBLIN_TINT, "Rogue_ArmRight": GOBLIN_TINT, "Rogue_LegLeft": GOBLIN_TINT,
+			"Rogue_LegRight": GOBLIN_TINT},
+		"parts": [["head", "goblin_face"], ["handslot.l", "gold_sack"]],
+		"scale": 0.8,
+		"anims": {"idle": "Idle", "walk": "Running_A", "attack": "1H_Melee_Attack_Chop", "death": "Death_B"},
+	},
 	"goblin_king": {
 		"scene": CHAR_DIR + "Rogue.glb",
 		"hide": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"],

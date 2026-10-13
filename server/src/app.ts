@@ -15,6 +15,8 @@ import * as A from './attendance.ts'
 import * as M from './missions.ts'
 import * as Q from './quests.ts'
 import * as P from './pouches.ts'
+import * as D from './dispatch.ts'
+import * as GB from './goblin.ts'
 import * as S from './speedups.ts'
 import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
@@ -143,6 +145,8 @@ interface Player {
   attend: { n: number; day: number | null } // 출석 이벤트: 받은 날 수·마지막으로 받은 리셋 날짜
   missions: unknown // 미션 상태(저장된 그대로 — 쓰는 쪽이 M.normalize)
   pouches: Record<string, number> // 방치 주머니 id → 개수(pouches.ts)
+  goblin: unknown // 황금 고블린 보상 기록(저장된 그대로 — 쓰는 쪽이 GB.normalize)
+  dispatch: unknown // 파견소 의뢰(저장된 그대로 — 쓰는 쪽이 D.normalize)
   shop: unknown // 상점 산 기록(저장된 그대로 — 쓰는 쪽이 SH.normalize)
   iap: unknown // 결제 상품 기록·월정액·패스(저장된 그대로 — 쓰는 쪽이 IAP.normalize)
   market_sold: number // 거래소: 팔렸고 아직 대금을 안 받은 판매 수(메뉴 빨간 점)
@@ -207,6 +211,8 @@ interface Change {
   attend?: { n: number; day: number } // 출석 이벤트 진행
   missions?: M.MissionState // 미션 상태 전체
   pouches?: Record<string, number> // 방치 주머니 보유 전체(새 값)
+  goblin?: GB.State // 황금 고블린 기록 전체
+  dispatch?: D.State // 파견소 의뢰 전체
   shop?: SH.ShopState // 상점 산 기록 전체
   iap?: IAP.IapState // 결제 상품 기록 전체
   pvpBuy?: { price: number; shop: unknown } // PVP 상점: 코인 −price(모자라면 전체가 안 바뀐다), 구매 수 새 값
@@ -238,7 +244,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt, s.layout,
+const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt, s.layout,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.build2_id, s.speedups, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -586,6 +592,8 @@ export function createApp(opts: AppOptions) {
         attend: { n: Number(r.attend_n ?? 0), day: r.attend_day == null ? null : Number(r.attend_day) },
         missions: r.missions == null ? {} : json(r.missions),
         pouches: P.normalize(r.pouches == null ? {} : json(r.pouches)),
+        goblin: r.goblin == null ? {} : json(r.goblin),
+        dispatch: r.dispatch == null ? {} : json(r.dispatch),
         shop: r.shop == null ? {} : json(r.shop),
         iap: r.iap == null ? {} : json(r.iap),
         market_sold: Number(r.market_sold ?? 0),
@@ -664,6 +672,7 @@ export function createApp(opts: AppOptions) {
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
         pouches: p.pouches, // 방치 주머니 id → 개수
+        dispatch: dispatchBrief(p), // 파견소: 진행 중 의뢰의 끝나는 시각(건물 위 말풍선·빨간 점)
         shop: SH.normalize(p.shop, today(game, now)), // 상점: 오늘·이번 주 산 수
         iap: IAP.normalize(p.iap, today(game, now)), // 결제 상품: 첫 구매·한도·월정액·패스
         iap_enabled: payProviders.length > 0, // 실결제가 하나라도 열렸다(키가 설정된 제공자)
@@ -755,6 +764,8 @@ export function createApp(opts: AppOptions) {
     if (ch.missions) sets.push(`missions = ${p(JSON.stringify(ch.missions))}::jsonb`)
     if (ch.layout) sets.push(`layout = ${p(JSON.stringify(ch.layout))}::jsonb`)
     if (ch.pouches) sets.push(`pouches = ${p(JSON.stringify(ch.pouches))}::jsonb`)
+    if (ch.goblin) sets.push(`goblin = ${p(JSON.stringify(ch.goblin))}::jsonb`)
+    if (ch.dispatch) sets.push(`dispatch = ${p(JSON.stringify(ch.dispatch))}::jsonb`)
     if (ch.shop) sets.push(`shop = ${p(JSON.stringify(ch.shop))}::jsonb`)
     if (ch.iap) sets.push(`iap = ${p(JSON.stringify(ch.iap))}::jsonb`)
     if (ch.research !== undefined) sets.push(`research_id = ${p(ch.research?.id ?? null)}::text, research_finish = to_timestamp(${p(ch.research?.finish ?? null)}::float8)`)
@@ -1054,6 +1065,8 @@ export function createApp(opts: AppOptions) {
     if (ch.missions) pl.missions = ch.missions
     if (ch.layout) pl.layout = ch.layout
     if (ch.pouches) pl.pouches = ch.pouches
+    if (ch.goblin) pl.goblin = ch.goblin
+    if (ch.dispatch) pl.dispatch = ch.dispatch
     if (ch.shop) pl.shop = ch.shop
     if (ch.iap) pl.iap = ch.iap
     for (const [k, d] of Object.entries(ch.shards ?? {})) if (pl.heroes[k]) pl.heroes[k].shards += d
@@ -2019,6 +2032,153 @@ export function createApp(opts: AppOptions) {
       if (opened.gold_tenths > 0) change.goldTenths = opened.gold_tenths
       if (Object.keys(res).length) change.res = res
       return { change, extra: { opened } }
+    })
+  })
+
+  // --- 황금 고블린(goblin.ts) ---
+
+  // 지금의 방치 골드 min분(tenths) — 방치 주머니 골드와 같은 식(오프라인 처치 골드: 스테이지·kill_gold_pct·offline_gold_mult).
+  function idleGoldTenths(p: Player, g: Game, min: number): number {
+    const grunt = g.monsters.find((m) => m.id === R.OFFLINE_KIND)
+    const row = R.stageRow(p.stage, g.stages)
+    const per = grunt ? Math.floor(R.killGoldTenths(Number(grunt.gold), row) * (100 + bonus(p, g).kill_gold_pct) / 100) : 0
+    return R.offlineReward(min * 60, min, Number(row.idle_interval), R.cfgNum(g.config, 'spawn_group'), per, R.cfgNum(g.config, 'offline_gold_mult')).tenths
+  }
+
+  // 황금 고블린을 잡았다(앱이 보낸다). 앞 보상에서 GB.MIN_GAP_SEC초가 안 지났으면 409 too_soon.
+  // 골드(방치 GB.GOLD_MIN분) + 그날 처음 GB.BONUS_DAILY마리는 덤(가속·다이아 확률). 응답 goblin = {gold_tenths, reward(덤), n(오늘 잡은 수)}.
+  app.post('/v1/goblin/claim', auth, async (c) => {
+    return mutate(c, (p, g, now) => {
+      const st = GB.normalize(p.goblin, today(g, now))
+      if (st.at !== null && now - st.at < GB.MIN_GAP_SEC) throw new ApiError(409, 'too_soon', `next golden goblin in ${Math.ceil(GB.MIN_GAP_SEC - (now - st.at))}s`)
+      const goldTenths = idleGoldTenths(p, g, GB.GOLD_MIN)
+      const extra = GB.bonus(st.n, random)
+      const n = st.n + 1
+      const change: Change = { goblin: { at: now, day: st.day, n }, log: { kind: 'goblin', detail: { stage: p.stage, gold_tenths: goldTenths, reward: extra, n } } }
+      if (goldTenths > 0) change.goldTenths = goldTenths
+      addReward(p, g, now, extra, change)
+      return { change, extra: { goblin: { gold_tenths: goldTenths, reward: extra, n } } }
+    })
+  })
+
+  // --- 파견소(dispatch.ts) ---
+
+  // 응답 player.dispatch: 진행 중 의뢰의 끝나는 시각(저장된 그대로 — 무작위로 새 의뢰를 뽑지 않는다).
+  function dispatchBrief(p: Player): number[] {
+    const list = (p.dispatch as any)?.list
+    return Array.isArray(list) ? list.filter((j: any) => Array.isArray(j?.heroes) && Number.isFinite(j?.finish)).map((j: any) => Number(j.finish)) : []
+  }
+
+  // 오늘 기준 의뢰 상태(파견소 레벨로 오늘 몫을 채운다). 파견소를 짓지 않았으면 409 no_building.
+  function dispatchState(p: Player, g: Game, now: number): { st: D.State; level: number; changed: boolean } {
+    const level = builtLevel(p, D.KEY)
+    if (level <= 0) throw new ApiError(409, 'no_building', 'build the dispatch office first')
+    const { state, changed } = D.normalize(p.dispatch, today(g, now), level, random)
+    return { st: state, level, changed }
+  }
+
+  const dispatchExtra = (st: D.State, level: number, g: Game, now: number) => ({
+    dispatch: { list: st.list, level, slots: D.slots(level), got: st.got, odds: D.odds(level), time_mult: D.timeMult(level),
+      free_refresh: !st.free, refresh_dia: D.REFRESH_DIA, paid_left: Math.max(0, D.PAID_REFRESH_MAX - st.paid),
+      next_reset: R.nextReset(now, g.config) },
+  })
+
+  // 의뢰 목록. 오늘 몫을 새로 뽑았으면 저장한다(같은 날 다시 열어도 같은 의뢰).
+  app.get('/v1/dispatch', auth, async (c) => mutate(c, (p, g, now) => {
+    const { st, level, changed } = dispatchState(p, g, now)
+    return { change: changed ? { dispatch: st } : undefined, extra: dispatchExtra(st, level, g, now) }
+  }))
+
+  // 보내기. body = {jobs: [{id, heroes: [영웅 id]}]} — 여러 의뢰를 한 번에(모두 보내기). 의뢰가 없거나 이미 보냈으면 409 stale,
+  // 인원이 다르거나 조건(등급·유형)에 안 맞거나 없는 영웅이면 409 bad_heroes, 다른 의뢰에 가 있는 영웅이면 409 busy.
+  app.post('/v1/dispatch/start', auth, async (c) => {
+    const b = await body(c)
+    const jobs = b.jobs
+    if (!Array.isArray(jobs) || jobs.length < 1 || jobs.length > D.MAX_LIST) throw new ApiError(400, 'bad_request', "'jobs' must be a non-empty array")
+    const want = jobs.map((j: any) => {
+      if (!j || !isInt(j.id, 1, MAX_INT4) || !Array.isArray(j.heroes) || !j.heroes.every((h: unknown) => typeof h === 'string')) throw new ApiError(400, 'bad_request', "each job needs 'id' and 'heroes'")
+      return { id: j.id as number, heroes: j.heroes as string[] }
+    })
+    return mutate(c, (p, g, now) => {
+      const { st, level } = dispatchState(p, g, now)
+      const defs = new Map(g.heroes.map((h) => [String(h.id), h]))
+      const used = D.busy(st)
+      const list = [...st.list]
+      for (const w of want) {
+        const i = list.findIndex((j) => j.id === w.id)
+        if (i < 0 || list[i].heroes !== null) throw new ApiError(409, 'stale', `request ${w.id} is not open`)
+        const job = list[i]
+        if (w.heroes.length !== job.size || new Set(w.heroes).size !== w.heroes.length) throw new ApiError(409, 'bad_heroes', `request ${w.id} needs ${job.size} different heroes`)
+        for (const h of w.heroes) {
+          const def = defs.get(h)
+          if (!def || (p.heroes[h]?.copies ?? 0) < 1 || !D.eligible(job, def)) throw new ApiError(409, 'bad_heroes', `hero '${h}' cannot go on request ${w.id}`)
+          if (used.has(h)) throw new ApiError(409, 'busy', `hero '${h}' is already dispatched`)
+          used.add(h)
+        }
+        list[i] = { ...job, heroes: [...w.heroes], finish: now + D.durationSec(job.rarity, level) }
+      }
+      const next = { ...st, list }
+      return { change: { dispatch: next, log: { kind: 'dispatch_start', detail: { jobs: want } } }, extra: dispatchExtra(next, level, g, now) }
+    })
+  })
+
+  // 보상 받기. body = {ids: [의뢰 id]} — 끝난 것만(아니면 409 not_done, 없거나 시작 전이면 409 stale). 보상을 더하고 목록에서 뺀다.
+  app.post('/v1/dispatch/claim', auth, async (c) => {
+    const b = await body(c)
+    if (!Array.isArray(b.ids) || b.ids.length < 1 || b.ids.length > D.MAX_LIST || !b.ids.every((x) => isInt(x, 1, MAX_INT4))) throw new ApiError(400, 'bad_request', "'ids' must be request ids")
+    const ids = [...new Set(b.ids as number[])]
+    return mutate(c, (p, g, now) => {
+      const { st, level } = dispatchState(p, g, now)
+      const change: Change = {}
+      const got: Record<string, number> = {}
+      for (const id of ids) {
+        const job = st.list.find((j) => j.id === id)
+        if (!job || job.heroes === null) throw new ApiError(409, 'stale', `request ${id} is not dispatched`)
+        if ((job.finish ?? Infinity) > now) throw new ApiError(409, 'not_done', `request ${id} is not done`)
+        for (const [k, v] of Object.entries(job.reward)) got[k] = (got[k] ?? 0) + v
+      }
+      const reload = addReward(p, g, now, got, change)
+      const next = { ...st, list: st.list.filter((j) => !ids.includes(j.id)) }
+      change.dispatch = next
+      change.log = { kind: 'dispatch_claim', detail: { ids, reward: got } }
+      return { change, reload, extra: { ...dispatchExtra(next, level, g, now), claimed: { ids, reward: got } } }
+    })
+  })
+
+  // 새로고침: 시작하지 않은 의뢰를 모두 다시 뽑는다. body = {paid: bool} — 오늘 무료를 아직 안 썼으면 false, 썼으면 true(다이아 D.REFRESH_DIA).
+  // 앱이 본 것과 다르면 409 stale(재전송이 두 번 빼지 않는다), 다이아가 모자라면 409 not_enough, 오늘 다 썼으면 409 limit, 바꿀 의뢰가 없으면 409 nothing.
+  app.post('/v1/dispatch/refresh', auth, async (c) => {
+    const b = await body(c)
+    const paid = b.paid === true
+    const n = intField(b, 'n', 0, MAX_INT4) // 오늘 다이아 새로고침 수(앱이 본 값)
+    return mutate(c, (p, g, now) => {
+      const { st, level } = dispatchState(p, g, now)
+      if (paid !== st.free || n !== st.paid) throw new ApiError(409, 'stale', 'refresh state changed')
+      if (!st.list.some((j) => j.heroes === null)) throw new ApiError(409, 'nothing', 'no open requests to refresh')
+      if (paid && st.paid >= D.PAID_REFRESH_MAX) throw new ApiError(409, 'limit', 'no more refreshes today')
+      if (paid && p.diamonds < D.REFRESH_DIA) throw new ApiError(409, 'not_enough', `need ${D.REFRESH_DIA} diamonds`)
+      const next = { ...D.reroll(st, level, random), ...(paid ? { paid: st.paid + 1 } : { free: true }) }
+      const change: Change = { dispatch: next, log: { kind: 'dispatch_refresh', detail: { paid, n } } }
+      if (paid) change.diamonds = -D.REFRESH_DIA
+      return { change, extra: dispatchExtra(next, level, g, now) }
+    })
+  })
+
+  // 즉시 완료: 남은 분당 다이아 1(올림). body = {id, cost}(앱이 본 값 — 서버 값보다 작으면 409 stale: 시간이 지나 값이 내려간 것은 받는다).
+  app.post('/v1/dispatch/finish', auth, async (c) => {
+    const b = await body(c)
+    const id = intField(b, 'id', 1, MAX_INT4)
+    const seen = intField(b, 'cost', 0, MAX_INT4)
+    return mutate(c, (p, g, now) => {
+      const { st, level } = dispatchState(p, g, now)
+      const job = st.list.find((j) => j.id === id)
+      if (!job || job.heroes === null || job.finish === null) throw new ApiError(409, 'stale', `request ${id} is not dispatched`)
+      const cost = Math.max(0, Math.ceil((job.finish - now) / 60))
+      if (cost === 0) throw new ApiError(409, 'done', `request ${id} is already done`)
+      if (cost > seen) throw new ApiError(409, 'stale', `finishing costs ${cost} diamonds`)
+      if (p.diamonds < cost) throw new ApiError(409, 'not_enough', `need ${cost} diamonds`)
+      const next = { ...st, list: st.list.map((j) => (j.id === id ? { ...j, finish: now } : j)) }
+      return { change: { dispatch: next, diamonds: -cost, log: { kind: 'dispatch_finish', detail: { id, cost } } }, extra: dispatchExtra(next, level, g, now) }
     })
   })
 
@@ -3410,6 +3570,22 @@ export function createApp(opts: AppOptions) {
       const b = await body(c)
       const id = c.get('playerId') as string
       await query('update player_state set version = version + 1, speedups = $2::jsonb where player_id = $1', [id, JSON.stringify(S.normalize(b.items))])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+    // 통합 테스트용(2026-10-13): 파견소 레벨(level — 행이 없으면 만든다), done이면 진행 중 의뢰를 지금 끝난 것으로.
+    app.post('/v1/test/dispatch', auth, async (c) => {
+      const b = await body(c)
+      const id = c.get('playerId') as string
+      if (isInt(b.level, 1, 30)) await query("insert into player_buildings (player_id, building, level) values ($1, 'dispatch', $2) on conflict (player_id, building) do update set level = $2", [id, b.level])
+      if (b.done === true) {
+        const r = await query('select dispatch from player_state where player_id = $1', [id])
+        const st = json(r[0]?.dispatch ?? {}) as any
+        if (Array.isArray(st?.list)) for (const j of st.list) if (Array.isArray(j.heroes)) j.finish = clock()
+        await query('update player_state set dispatch = $2::jsonb where player_id = $1', [id, JSON.stringify(st)])
+      }
+      await query('update player_state set version = version + 1 where player_id = $1', [id])
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))
