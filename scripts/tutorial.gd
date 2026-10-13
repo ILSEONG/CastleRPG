@@ -12,7 +12,7 @@ extends Node
 ## 테스트는 .new()로 만들어 econ·gs·guild를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎).
 
 const GameData := preload("res://scripts/game_data.gd")
-const Prefs := preload("res://scripts/prefs.gd")  # x1.5 배속 켬(speed_button.gd PREF_KEY — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
+const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
 const SAVE_VERSION := 4  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
@@ -66,8 +66,8 @@ const MISSIONS := [
 		"kind": "stage", "arg": 1, "goto": "stage"},
 	{"id": "auto_on", "title": "연속 진행 켜기", "desc": "위쪽 [▶ 진행] 옆 [연속 진행]을 체크하세요. 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어서 도전합니다.",
 		"kind": "auto_on", "goto": "", "point": ["hud:auto"], "reward": {"diamonds": 50}},
-	{"id": "speed_on", "title": "x1.5 배속 켜기", "desc": "왼쪽 [x1.5] 버튼을 눌러 켜세요. 스테이지 전투가 1.5배 빨라집니다. 건설·훈련 시간은 그대로이고, 다시 누르면 꺼집니다.",
-		"kind": "speed_on", "goto": "", "point": ["hud:speed"], "reward": {"diamonds": 50}},
+	{"id": "speed_on", "title": "전투 배속 켜기", "desc": "스테이지를 진행하는 동안 왼쪽 배속 버튼(x1.5 OFF)을 누르세요. 누를 때마다 x1.5 → x2 → 끔으로 바뀌고 스테이지 전투가 빨라집니다. 대기 중에는 버튼이 숨고, 건설·훈련 시간은 그대로입니다.",
+		"kind": "speed_on", "goto": "", "point": ["hud:speed", "hud:go"], "reward": {"diamonds": 50}},
 	{"id": "hero_level", "title": "영웅 레벨업", "desc": "[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.",
 		"kind": "hero_level", "goto": "tab:hero"},
 	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
@@ -170,9 +170,9 @@ const MISSIONS := [
 		"goto": "tab:guild"},
 	{"id": "hp_16", "title": "체력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.",
 		"kind": "growth_lv", "arg": ["hp", 16], "goto": "tab:growth", "reward": {"gold": 9000}},
-	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. Lv 20이 처음 최대 레벨이고, 다음 미션에서 승급으로 더 올리는 법을 배웁니다.",
+	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 다음 미션에서 승급으로 더 올리는 법을 배웁니다.",
 		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
-	{"id": "promote", "title": "영웅 승급하기", "desc": "영웅은 Lv 20이 최대 레벨입니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 10 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",
+	{"id": "promote", "title": "영웅 승급하기", "desc": "영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",
 		"kind": "promote", "goto": "tab:hero", "point": ["hero:promote", "hero:promote_all", "tab:hero"], "reward": {"diamonds": 50}},
 	{"id": "stage_1_12", "title": "스테이지 1-12 클리어", "desc": "전투를 이어 가 1-12까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
 		"kind": "stage", "arg": 12, "goto": "stage", "reward": {"diamonds": 100}},
@@ -489,6 +489,13 @@ func point_target() -> Control:
 			continue
 		return t.node
 	return null
+
+
+## 배속을 켰다(speed_button.gd level() > 1: "speed_level" 1.5·2, 예전 "speed_x15" 켬).
+static func _speed_on() -> bool:
+	var m := Prefs._music()
+	var v = m.prefs.get("speed_level", null) if m != null else null
+	return Prefs.get_bool("speed_x15", false) if v == null else float(v) > 1.0
 
 
 func mission_index(id: String) -> int:
@@ -838,7 +845,7 @@ func _done(m: Dictionary) -> bool:
 		"auto_on":  # 연속 진행 체크(Fever.auto_next — HUD가 GameState.auto_continue와 함께 바꾼다)
 			return fever != null and fever.auto_next
 		"speed_on":
-			return Prefs.get_bool("speed_x15", false)
+			return _speed_on()
 		"attend":  # 출석 1일차 이상 받았다(온라인 Economy.attendance). 출석 정보가 없으면(오프라인) 통과
 			return int(econ.attendance.get("n", 0)) >= 1 or (not online and econ.attendance.is_empty())
 		"shop_free":  # 오늘 일일 무료 선물을 받았다
