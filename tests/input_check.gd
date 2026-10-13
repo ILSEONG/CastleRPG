@@ -1175,6 +1175,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"%s %s" % [bwin.effect_lines("barracks", 1), bwin.effect_lines("stable", 3)])
 	# 못 채운 선행 조건 줄을 누르면 그 건물 창(사용자 2026-10-13): 벌목장 창 → ✗ 성채 → 성채 창
 	await _guard_wait()
+	req = bwin.reqs.get_child(0)  # 창이 매초 줄을 다시 만든다 — 지금 줄을 다시 잡는다
 	await _tap(_center(req))
 	await _frames(2)
 	_check(bwin.is_open() and bwin.building_id == "keep", "(B) tapping the red '✗ 성채 Lv 2 필요' line jumps to the keep window", "open=%s id=%s" % [bwin.is_open(), bwin.building_id])
@@ -2142,7 +2143,7 @@ func _world_tags() -> void:
 	Economy.changed.emit()
 	await _frames(2)
 	_check(_main.find_children("*", "Label3D", true, false).is_empty() and wt.tags.size() == Balance.entries().size() + 1 + 4 and wt.text("merchant") == "상인"
-		and wt.text("houses") == "민가 Lv 1" and WT.NAME_SIZE == 20 and wt.rects.size() == wt.tags.size() - scenery.hidden.size(),
+		and wt.text("houses") == "민가 Lv 1" and WT.NAME_SIZE == 20 and wt.rects.size() == wt.tags.size() - wt.scenery.hidden.size(),
 		"(T) one screen-space tag layer: 10 buildings + merchant + 4 gate letters (no Label3D), 20 px names, all on screen at the default camera",
 		"tags=%d rects=%d" % [wt.tags.size(), wt.rects.size()])
 	var strings := 0

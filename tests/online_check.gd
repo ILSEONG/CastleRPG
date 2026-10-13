@@ -997,8 +997,9 @@ func _buildings_online(state_path: String) -> void:
 	var cost := Economy.upgrade_cost("keep")
 	var p0 := await _request("GET", "/v1/player")
 	_check(Economy.building_level("keep") == 1 and Economy.build.is_empty() and Economy.upgrade_block("keep", Economy.time_now()) == "" and Economy.population() == 6
-		and p0.get("player", {}).get("population") == 6 and p0.get("player", {}).get("buildings", {}).size() == 11,
-		"(r) precondition: all 11 buildings from the server at Lv 1, builder idle, population 6", "keep=%d build=%s" % [Economy.building_level("keep"), Economy.build])
+		and p0.get("player", {}).get("population") == 6 and p0.get("player", {}).get("buildings", {}).size() == GameData.building_keys().size()
+		and GameData.lot_keys().all(func(k): return Economy.unbuilt.has(k)),
+		"(r) precondition: every building key from the server at Lv 1 (new buildings and 2nd+ copies as lots), builder idle, population 6", "keep=%d build=%s" % [Economy.building_level("keep"), Economy.build])
 	var u0: int = Net.requested.get("/v1/building/upgrade", 0)
 	var sent := Economy.upgrade("keep", Economy.time_now())
 	var again := Economy.upgrade("keep", Economy.time_now())  # 응답 전 재탭
