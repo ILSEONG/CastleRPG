@@ -69,7 +69,9 @@ func _run() -> void:
 	_check(card != null and card.panel.visible and r.end.y <= card.panel.global_position.y, "sits above the tutorial card",
 		"%s vs %s" % [r, card.panel.get_global_rect() if card != null else null])
 	var tr: Rect2 = menu.toggle.get_global_rect()
-	_check(absf(r.end.y - tr.end.y) < 1.0, "same height as the bottom-right [메뉴] button (with the card)", "%s vs %s" % [r, tr])
+	var bb: Rect2 = _find("res://scripts/build_button.gd").button.get_global_rect()  # [건물] 버튼(2026-10-13): [메뉴] 높이, 배속 버튼은 그 위
+	_check(absf(bb.end.y - tr.end.y) < 1.0 and r.end.y <= bb.position.y and absf(r.position.x - bb.position.x) < 1.0,
+		"[건물] at the [메뉴] height, x1.5 right above it (with the card)", "%s / %s vs %s" % [r, bb, tr])
 	var chat = _find("res://scripts/chat_bar.gd")
 	if chat != null:
 		var cr: Rect2 = chat.button.get_global_rect()
@@ -81,7 +83,8 @@ func _run() -> void:
 	await _frames(5)
 	r = b.get_global_rect()
 	tr = menu.toggle.get_global_rect()
-	_check(absf(r.end.y - tr.end.y) < 1.0, "same height as [메뉴] (no card)", "%s vs %s" % [r, tr])
+	bb = _find("res://scripts/build_button.gd").button.get_global_rect()
+	_check(absf(bb.end.y - tr.end.y) < 1.0 and r.end.y <= bb.position.y, "[건물] at the [메뉴] height, x1.5 above it (no card)", "%s / %s vs %s" % [r, bb, tr])
 	var shot := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):

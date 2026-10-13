@@ -37,6 +37,7 @@ var castle := false  # 성 화면 버튼(main): 방치 중엔 1배
 var card  # tutorial_card.gd(있으면 그 위로)
 var strip  # hero_strip.gd(보이면 그 위로)
 var menu  # side_menu.gd(그 [메뉴] 토글과 아래 끝을 맞춘다)
+var below  # build_button.gd(성 화면 [건물] 버튼 — 보이면 그 위로, 2026-10-13)
 var button: Button
 var _face: Control
 
@@ -172,6 +173,8 @@ func _place() -> void:
 	if card != null and card.panel != null and card.panel.visible:
 		limit = minf(limit, card.panel.global_position.y - ABOVE)
 	bottom = minf(bottom, limit)
+	if below != null and is_instance_valid(below) and below.visible and below.button != null:
+		bottom = minf(bottom, below.button.position.y - ABOVE)  # [건물] 버튼 위
 	button.position = Vector2(SIDE, bottom - SIZE.y)
 
 

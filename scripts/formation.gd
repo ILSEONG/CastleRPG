@@ -446,7 +446,7 @@ static func clamp_push(half: float, from: Vector3, to: Vector3) -> Vector3:
 		return p - SIDE_DIR[s] * maxf(0.0, SIDE_DIR[s].dot(p) - (outer - 0.01))
 	var lim := half - 0.01
 	var out := Vector3(clampf(to.x, -lim, lim), to.y, clampf(to.z, -lim, lim))
-	for b in Balance.BUILDINGS:
+	for b in Balance.plots():  # 지금 성 안 건물(자유 건설 — 자리는 Economy.layout)
 		var lo := Vector2(b.cell) * Balance.TILE
 		var hi := lo + Vector2(b.size) * Balance.TILE
 		if out.x > lo.x and out.x < hi.x and out.z > lo.y and out.z < hi.y \
