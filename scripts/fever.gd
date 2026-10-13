@@ -7,7 +7,7 @@ const SAVE_EVERY := 5.0
 
 var gauge := 0
 var left := 0.0  # 남은 FEVER 초(0이면 꺼짐)
-var auto_next := true  # 연속 진행 체크(HUD). 같은 파일에 저장
+var auto_next := false  # 연속 진행 체크(HUD). 같은 파일에 저장. 새 성주는 꺼진 채 시작하고 가이드가 켜게 한다
 var auto_recruit := false  # 자동 모집 체크(모집 창). 같은 파일에 저장
 var dungeon_auto := ""  # 개정 18 던전 결과 자동: "" · "next"(다음 단계 자동 도전) · "repeat"(현재 단계 자동 반복). 같은 파일에 저장
 var dungeon_party := {}  # 개정 18 던전별 출전 편성 종류 → [영웅 id]. 같은 파일에 저장
@@ -112,7 +112,7 @@ func save() -> void:
 ## 없거나 깨진 파일은 0으로 시작한다.
 func load_save() -> void:
 	reset()
-	auto_next = true
+	auto_next = false  # 새 성주: 꺼짐(가이드 "연속 진행 켜기"). 예전 저장(키 없음)은 켜진 채 둔다
 	auto_recruit = false
 	dungeon_auto = ""
 	dungeon_party = {}

@@ -58,6 +58,7 @@ func _ready() -> void:
 		b.add_child(face)
 		_bar.add_child(b)
 		buttons[id] = b
+		Tutorial.register_ui("tab:" + id, b, func(): return not (windows.has(id) and windows[id].is_open()))  # 가이드 화살표(그 창이 열렸으면 창 안을 가리킨다)
 	for id in windows:
 		windows[id].visibility_changed.connect(_refresh)
 	Tutorial.changed.connect(_refresh)  # 튜토리얼: 탭은 그 탭을 소개하는 미션에 닿을 때 열린다

@@ -260,6 +260,7 @@ func _build_world() -> void:
 	chat_bar.speed = build_btn  # [메뉴]와 같은 줄([건물] 버튼 오른쪽)
 	chat_bar.panel = chat_panel
 	add_child(chat_bar)
+	move_child(chat_bar, card.get_index())  # 같은 층(1)에서 가이드 카드·화살표보다 아래에 그린다(화살표가 채팅에 가리지 않게)
 	_battle_hide = [tabs, side_menu, tags, badges, build_btn]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit, "placement": placement}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):
