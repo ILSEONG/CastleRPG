@@ -89,7 +89,7 @@ func _sync() -> void:
 		elif scenery.hidden.has(t.id):
 			nm = ""  # 자리를 안 잡은 공터(자유 건설): 이름표 없음
 		else:
-			nm = GameData.building_def(t.id).get("name", t.id)
+			nm = GameData.building_name(t.id)
 			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else "공터"  # 튜토리얼 공터
 		if scenery.tag_anchors.has(t.id):
 			t.anchor = scenery.tag_anchors[t.id]  # 자유 건설로 옮기면 따라간다

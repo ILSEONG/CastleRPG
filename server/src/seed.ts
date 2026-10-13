@@ -74,9 +74,9 @@ export const TABLES: TableSpec[] = [
     name: 'buildings', table: 'building_defs', file: 'buildings.csv', ordered: true,
     // 2026-10-13: lv_sec·lv_wood·lv_stone·lv_food = 레벨별 L → L+1 값 "v1|v2|…"(라오킹 곡선, 비면 1→2 값 × 성장 식)
     cols: { id: 'key', name: 'text', max_level: 'int', wood: 'int', stone: 'int', food: 'int', base_sec: 'num', req1: 'opt', req2: 'opt',
-      lv_sec: 'opt', lv_wood: 'opt', lv_stone: 'opt', lv_food: 'opt' },
+      lv_sec: 'opt', lv_wood: 'opt', lv_stone: 'opt', lv_food: 'opt', unlock_keep: 'optnum' },
     sql: { id: 'text', name: 'text', max_level: 'integer', wood: 'integer', stone: 'integer', food: 'integer', base_sec: 'real', req1: 'text', req2: 'text',
-      lv_sec: 'text', lv_wood: 'text', lv_stone: 'text', lv_food: 'text' },
+      lv_sec: 'text', lv_wood: 'text', lv_stone: 'text', lv_food: 'text', unlock_keep: 'integer' },
   },
   {
     // 개정 13: 병종 표(1티어 기준). building = 그 병종을 만드는 건물
@@ -133,7 +133,11 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
 export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
-export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'tavern_ssr_per_level', 'tavern_sr_per_level']
+export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'tavern_ssr_per_level', 'tavern_sr_per_level',
+  // 2026-10-13 새 건물(창고·금광·대장간·길드 회관·망루) 효과 — 0 이상
+  'warehouse_cap_min_per_level', 'goldmine_gold_base', 'goldmine_gold_exp', 'forge_extra_drop_pct_per_level', 'guild_hall_helps_base',
+  'guild_hall_helps_per_level', 'guild_help_pct', 'guild_help_min_sec', 'watchtower_grunt_pct_base', 'watchtower_grunt_pct_per_level',
+  'watchtower_interval_sec', 'watchtower_range_m']
 // 개정 24 연구 설정(checkResearch가 범위를 본다): 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분 0 이상 정수
 export const CONFIG_RESEARCH_NUM = ['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min']
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
@@ -143,7 +147,7 @@ export const CONFIG_SOLDIER_NUM = ['soldier_max_tier', 'soldier_tier_mult', 'tra
   'train_batch_base', 'train_batch_per_level']
 const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batch_base', 'train_base_min', 'train_step_min', 'train_cost_tier_mult']
 const SOLDIER_INT0_KEYS = ['train_batch_per_level']
-export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers']
+export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers', 'res_copy_tiers'] // res_copy_tiers = 성채 레벨:자원 건물 수(2026-10-13)
 // 개정 18 던전·장비 설정(checkDungeons가 범위를 본다). 정수 키는 0 이상 정수(INT1은 1 이상), 확률은 0..1, 성장·배율·제한 시간은 0보다 크다
 export const CONFIG_DUNGEON_NUM = ['daily_reset_utc_hour', 'gold_key_daily', 'gold_key_cap', 'equip_key_daily', 'equip_key_cap', 'equip_extra_gold_base',
   'gold_dg_base', 'gold_dg_mult', 'gold_dg_growth', 'equip_dg_hp_growth', 'equip_dg_atk_growth', 'gold_dg_party', 'equip_dg_party',
@@ -372,6 +376,9 @@ function checkBuildings(t: Tables, errors: string[]) {
     for (const r of BUILD_RES) if (!(Number(b[r]) >= 0)) err(b._line, r, `must be 0 or more: ${b[r]}`)
     if (!(Number(b.base_sec) > 0)) err(b._line, 'base_sec', `must be greater than 0: ${b.base_sec}`)
     for (const c of ['req1', 'req2']) if (b[c] !== null && !ids.has(String(b[c]))) err(b._line, c, `unknown building '${b[c]}'`)
+    if (String(b.id).includes('#')) err(b._line, 'id', `must not contain '#' (copy separator): ${b.id}`)
+    const uk = b.unlock_keep
+    if (uk !== null && uk !== undefined && !(Number.isInteger(Number(uk)) && Number(uk) >= 0)) err(b._line, 'unlock_keep', `must be a non-negative integer: ${uk}`)
     // 레벨 목록: 있으면 max_level − 1개, 비용은 0 이상 정수, 시간은 0보다 크다
     for (const c of BUILD_LV_COLS) {
       if (b[c] === null || b[c] === undefined || String(b[c]).trim() === '') continue

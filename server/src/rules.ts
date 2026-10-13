@@ -193,12 +193,62 @@ export const DEFAULT_CELLS: Record<string, [number, number]> = {
 }
 export const WALL_MARGIN_TILES = 2
 export const KEEP_OUT: [number, number, number, number][] = [[-1, 2, 5, 3], [-4, 2, 3, 2]] // 병사 광장, 상인·수레 (x, y, w, h)
-const plotSize = (id: string): [number, number] => PLOT_SIZE[id] ?? [3, 3]
+const plotSize = (id: string): [number, number] => PLOT_SIZE[typeOf(id)] ?? [3, 3]
+
+// --- 새 건물·자원 건물 여러 채(사용자 2026-10-13) ---
+// 효과 수치(config): 창고 = 쌓이는 상한 + warehouse_cap_min_per_level분 × 레벨, 금광 = 분당 골드 floor(goldmine_gold_base × 레벨^goldmine_gold_exp),
+// 대장간 = 장비 던전 한 번에 추가 드롭 확률 forge_extra_drop_pct_per_level% × 레벨, 길드 회관 = 건설·연구 시작 때 도움 (base + per_level × (레벨 − 1))회,
+// 한 번에 max(guild_help_min_sec초, 남은 시간 × guild_help_pct%)씩(길드에 들어 있을 때만). 짓지 않았으면(레벨 0) 효과 없음.
+export const accumCapMin = (config: Config, warehouseLevel: number) =>
+  cfgNum(config, 'accum_cap_min') + (config.warehouse_cap_min_per_level === undefined ? 0 : cfgNum(config, 'warehouse_cap_min_per_level') * Math.max(0, warehouseLevel))
+export const goldminePerMin = (config: Config, level: number) =>
+  level <= 0 ? 0 : Math.floor(cfgNum(config, 'goldmine_gold_base') * Math.pow(level, cfgNum(config, 'goldmine_gold_exp')))
+export const forgeExtraP = (config: Config, level: number) => Math.min(1, Math.max(0, level) * cfgNum(config, 'forge_extra_drop_pct_per_level') / 100)
+export const guildHelps = (config: Config, level: number) =>
+  level <= 0 ? 0 : Math.floor(cfgNum(config, 'guild_hall_helps_base') + cfgNum(config, 'guild_hall_helps_per_level') * (level - 1))
+// 도움 n회를 받은 뒤 남은 초(한 번에 max(최소 초, 남은 × pct%) — 0 아래로는 안 간다)
+export function afterHelps(sec: number, helps: number, config: Config): number {
+  let left = sec
+  for (let i = 0; i < helps && left > 0; i++) left -= Math.max(cfgNum(config, 'guild_help_min_sec'), left * cfgNum(config, 'guild_help_pct') / 100)
+  return Math.max(0, Math.round(left))
+}
+// 건물 키 = 종류 또는 "종류#n"(n ≥ 2 — 자원 건물의 n번째 채). 정의·부지 크기·효과는 종류로 찾는다. 레벨·자리·일꾼은 키마다.
+export const SEP = '#'
+export const typeOf = (key: string) => key.split(SEP)[0]
+export const copyIndex = (key: string) => (key.includes(SEP) ? Number(key.split(SEP)[1]) : 1)
+export const WAREHOUSE = 'warehouse' // 자원 쌓이는 상한 시간 +
+export const GOLDMINE = 'goldmine' // 골드 생산
+export const FORGE = 'forge' // 장비 던전 추가 드롭
+export const GUILD_HALL = 'guild_hall' // 건설·연구 시작 때 길드 도움
+export const WATCHTOWER = 'watchtower' // 전투에서 화살(앱)
+export const NEW_TYPES = [WAREHOUSE, GOLDMINE, FORGE, GUILD_HALL, WATCHTOWER] // 기본 자리 없음 — [건설]로 놓는다
+export const COPY_TIERS = 'res_copy_tiers' // 성채 레벨 → 자원 건물 종류마다 지을 수 있는 채 수 "1:1|5:2|…"
+const copyTiers = (config: Config) => parseTiers(config[COPY_TIERS] ?? '') ?? [[1, 1]]
+export const copiesAt = (config: Config, keepLevel: number) => {
+  let v = 1
+  for (const [l, n] of copyTiers(config)) if (keepLevel >= l) v = n
+  return v
+}
+export const maxCopies = (config: Config) => Math.max(1, ...copyTiers(config).map((t) => t[1]))
+// n번째 채를 지을 수 있는 성채 레벨(1번째 = 0 — 조건 없음)
+export function copyUnlockKeep(config: Config, n: number): number {
+  if (n <= 1) return 0
+  for (const [l, c] of copyTiers(config)) if (c >= n) return l
+  return Infinity
+}
+// 모든 건물 키: 정의 순서 + 자원 건물의 2..maxCopies번째 채
+export function buildingKeys(defs: BuildingDef[], resBuildings: string[], config: Config): string[] {
+  const out = defs.map((d) => d.id)
+  for (const b of resBuildings) for (let n = 2; n <= maxCopies(config); n++) out.push(`${b}${SEP}${n}`)
+  return out
+}
+// 처음 지을(0 → 1) 때 필요한 성채 레벨: 새 건물은 정의 unlock_keep, n번째 채는 copyUnlockKeep. 0 = 조건 없음
+export const unlockKeep = (def: BuildingDef, key: string, config: Config) => Math.max(def.unlock_keep ?? 0, copyUnlockKeep(config, copyIndex(key)))
 const overlap = (a: number[], b: number[]) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
 
 // id 건물을 cell에 둘 수 없는 이유('' = 된다): fixed·out·road·square·overlap. halfTiles = 성 내부 한 변 타일 수 / 2, others = 다른 건물 → 칸.
 export function placementBlock(id: string, cell: [number, number], halfTiles: number, others: Record<string, [number, number]>): string {
-  if (!(id in DEFAULT_CELLS) || id === KEEP) return 'fixed'
+  if (!(typeOf(id) in DEFAULT_CELLS || NEW_TYPES.includes(typeOf(id))) || id === KEEP) return 'fixed'
   const [w, h] = plotSize(id)
   const r = [cell[0], cell[1], w, h]
   const m = halfTiles - WALL_MARGIN_TILES
@@ -235,6 +285,7 @@ export interface BuildingDef {
   lv_wood?: string | null
   lv_stone?: string | null
   lv_food?: string | null
+  unlock_keep?: number | null // 새 건물(2026-10-13): 처음 지을 때 필요한 성채 레벨(0·없음 = 조건 없음)
 }
 
 export const BUILD_LV_COLS = ['lv_sec', 'lv_wood', 'lv_stone', 'lv_food'] as const
@@ -429,7 +480,7 @@ export function goldLevelUp(config: Config, level: number, pulls: number, add: n
 // 존재(unknown) → 최대 레벨(max_level) → 성채 상한(keep_cap, 성채 제외) → 선행(prereq: req ≥ T−1) → 일꾼(builder_busy) → 자원(not_enough).
 // levels: 건물 → 레벨(없으면 1), res: 쓸 수 있는 자원(자원 건물이면 자동 수집분을 더해서 넘긴다).
 export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<string, number>, builderBusy: boolean, res: Record<string, number>): string {
-  const def = defs.find((d) => d.id === id)
+  const def = defs.find((d) => d.id === typeOf(id))
   if (!def) return 'unknown'
   const lv = (b: string) => (Object.hasOwn(levels, b) ? levels[b] : 1)
   const to = lv(id) + 1

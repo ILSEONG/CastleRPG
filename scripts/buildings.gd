@@ -42,7 +42,7 @@ var season_slots: Array = []
 
 
 func _ready() -> void:
-	for b in Balance.BUILDINGS:
+	for b in Balance.entries():  # 새 건물·자원 건물 n번째 채 포함(자리를 안 잡은 공터는 숨김)
 		_place_building(b)
 	_add_gate_sites()
 	_place_merchant()
@@ -306,7 +306,7 @@ func _on_building_done(id: String, level: int) -> void:
 		for sx in [-0.5, 0.5]:
 			for sz in [-0.5, 0.5]:
 				Fx.repair(self, top + Vector3(box.size.x * sx, -box.size.y * 0.4, box.size.z * sz))
-	Economy.notice.emit(BUILT_TEXT % GameData.building_def(id).name if was_lot else DONE_TEXT % [GameData.building_def(id).name, level])
+	Economy.notice.emit(BUILT_TEXT % GameData.building_name(id) if was_lot else DONE_TEXT % [GameData.building_name(id), level])
 
 
 ## 로우폴리 비계: 크기 size(건물 AABB) 둘레에 각진 나무 기둥 4개 + 세 단 가로대. 바닥 가운데가 원점.

@@ -64,6 +64,7 @@ func _init() -> void:
 	test_stairs_and_wall_routes()
 	test_buildings_clear_stairs()
 	test_free_placement()
+	test_new_buildings()
 	test_is_inside()
 	test_mesh_kit()
 	test_castle_parts()
@@ -698,7 +699,7 @@ func test_building_layout() -> void:
 	var road_ew := Rect2i(-half_tiles, -1, 2 * half_tiles, 2)
 	var placed: Array = []
 	var ids := {}
-	for b in Balance.BUILDINGS:
+	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 		var r := Rect2i(b.cell, b.size)
 		check(allowed.encloses(r), "%s inside level-1 interior with 2-tile wall margin (stair strip + inner lane)" % b.id)
 		if b.id != "keep":
@@ -1000,12 +1001,45 @@ func _leg_samples(a: Vector3, b: Vector3) -> Array:
 
 ## 자유 건설(2026-10-13): 기본 배치는 자리 규칙을 지키고, 규칙은 길·광장·성벽 여유·겹침을 막는다. 성 단계마다 규칙을 지키는 모든 칸은
 ## 영웅 자리·성문 사이 모든 지상 경로, 계단 발판, 병사 자리, 상인에서 떨어져 있다(어디에 지어도 전투 길을 막지 않는다).
+## 2026-10-13 새 건물(창고·금광·대장간·길드 회관·망루)과 자원 건물 n번째 채: 키, 성채 레벨 해금, 공터 규칙, 금광·창고(서버 rules와 같은 식).
+func test_new_buildings() -> void:
+	check(GameData.type_of("lumber#3") == "lumber" and GameData.copy_index("lumber#3") == 3 and GameData.copy_index("keep") == 1, "key = type#n")
+	check([1, 4, 5, 10, 15, 30].map(func(k): return GameData.copies_at(k)) == [1, 1, 2, 3, 4, 4] and GameData.max_copies() == 4, "copies by keep level (res_copy_tiers)")
+	check([GameData.unlock_keep("lumber#2"), GameData.unlock_keep("farm#4"), GameData.unlock_keep("warehouse"), GameData.unlock_keep("goldmine"), GameData.unlock_keep("forge"),
+		GameData.unlock_keep("guild_hall"), GameData.unlock_keep("watchtower"), GameData.unlock_keep("lumber")] == [5, 15, 3, 4, 8, 10, 12, 0], "unlock keep levels")
+	check(GameData.building_keys().has("quarry#4") and not GameData.building_keys().has("quarry#5") and GameData.lot_keys().size() == 5 + 3 * 3, "keys: types + copies 2..4")
+	check(GameData.building_name("farm#2") == "농장 2" and GameData.building_def("farm#2").id == "farm" and GameData.resource_of_building("farm#2") == "food", "copies use the type's row")
+	check(Balance.building("lumber#2").name == "벌목장 2" and not Balance.building("lumber#2").has("cell") and Balance.building("lumber#2").size == Vector2i(3, 3)
+		and Balance.entries().size() == GameData.building_keys().size() - 1, "Balance entries include copies (no default cell; the gate is not a plot)")
+	check(GameData.goldmine_per_min(1) == 20 and GameData.goldmine_per_min(30) == 3286 and GameData.accum_cap_min(2) == 840.0 and GameData.guild_helps(10) == 11, "goldmine / warehouse / guild hall numbers")
+	var now := 1.8e9
+	var e = _econ(now)
+	check(e.unbuilt.has("lumber#2") and e.unbuilt.has("goldmine") and not e.unbuilt.has("lumber") and e.last_collect.has("lumber#2") and e.last_collect.has("goldmine"), "new game: copies and new buildings are lots")
+	e.res = {"wood": 10000000, "stone": 10000000, "food": 10000000}
+	check(e.upgrade_block("goldmine", now) == "keep_cap" and e.requirements("goldmine") == [{"id": "keep", "need": 4, "have": 1, "ok": false}], "lot before its keep level: keep_cap + keep requirement")
+	e.levels.keep = 4
+	check(e.upgrade_block("goldmine", now) == "" and e.upgrade_sec("goldmine") == GameData.build_sec("goldmine", 1), "lot at its keep level: buildable, Lv 1 time (not the tutorial lot time)")
+	check(e.build_at("goldmine", Vector2i(-8, 2), now) and e.layout.goldmine == Vector2i(-8, 2), "build the goldmine on a chosen spot")
+	e.complete_due(now + 1e6)
+	check(e.is_built("goldmine") and e.building_level("goldmine") == 1, "goldmine built at Lv 1")
+	var t0: float = e.last_collect.goldmine
+	check(e.pending("goldmine", t0 + 600.0) == 200 and e.pending("goldmine", t0 + 1e7) == 20 * 720, "goldmine pending: 20/min, capped at 720 min")
+	var g0: int = e.gold_tenths
+	check(e.collect("goldmine", t0 + 600.0) == 200 and e.gold_tenths - g0 == 2000, "collect the goldmine adds gold")
+	e.unbuilt.erase("warehouse")
+	e.levels.warehouse = 2
+	check(e.cap_min() == 840.0 and e.pending("lumber", float(e.last_collect.lumber) + 1e7) == 840 * 100, "a Lv 2 warehouse raises the cap by 120 min")
+	check(e.pouch_value("res_60", 1).res.wood == 6000, "pouch: one lumber")
+	e.unbuilt.erase("lumber#2")
+	check(e.pouch_value("res_60", 1).res.wood == 12000, "pouch sums every built copy")
+
+
 func test_free_placement() -> void:
 	var F = FormationScript
 	var defaults := {}
-	for b in Balance.BUILDINGS:
+	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 		defaults[b.id] = b.cell
-	for b in Balance.BUILDINGS:
+	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):
 		if b.id == "keep":
 			check(Balance.placement_block("keep", b.cell, 10, defaults) == "fixed", "keep cannot be placed")
 		else:
@@ -1087,7 +1121,7 @@ func test_buildings_clear_stairs() -> void:
 	var half := GameData.interior_half(1)
 	var lo := Balance.GATE_W / 2.0 + Balance.STAIR_GAP
 	var plots := {}  # id -> Rect2 (x, z)
-	for b in Balance.BUILDINGS:
+	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 		plots[b.id] = Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE)
 	for s in 4:
 		var dir: Vector3 = F.SIDE_DIR[s]
@@ -1396,7 +1430,7 @@ func test_merchant_spot() -> void:
 	]
 	check(not rects[0].intersects(rects[1]), "merchant and cart do not overlap")
 	for rc in rects:
-		for b in Balance.BUILDINGS:
+		for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 			var plot := Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE)
 			check(not rc.intersects(plot), "merchant spot %s clear of %s plot" % [rc, b.id])
 		var off_x: bool = rc.position.x >= 2.0 or rc.end.x <= -2.0
@@ -2092,7 +2126,8 @@ func test_promotion() -> void:
 func test_buildings() -> void:
 	GameData.load_tables()
 	var ids: Array = GameData.buildings().map(func(b): return b.id)
-	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable"], "buildings.csv: 11 rows in file order: %s" % [ids])
+	check(GameData.errors == 0 and ids == ["keep", "gate", "barracks", "tavern", "lab", "houses", "lumber", "quarry", "farm", "archery", "stable",
+		"warehouse", "goldmine", "forge", "guild_hall", "watchtower"], "buildings.csv: 16 rows in file order: %s" % [ids])
 	var gate := GameData.building_def("gate")
 	check(gate.name == "성문" and gate.max_level == 30.0 and gate.wood == 412.0 and gate.stone == 0.0 and gate.food == 338.0 and gate.base_sec == 2.0 and gate.req1 == "quarry" and gate.req2 == "", "gate row (empty req is \"\")")
 	# 2026-10-13 라오킹 곡선: L → L+1 비용·시간 = 레벨 목록(lv_*)의 L번째 값 — 서버와 같은 표
@@ -2147,8 +2182,8 @@ func test_buildings() -> void:
 	e.build_started.connect(func(id, f): started.append([id, f]))
 	e.building_done.connect(func(id, l): done.append([id, l]))
 	e.notice.connect(func(tx): notes.append(tx))
-	check(e.levels.size() == 11 and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 375, "stone": 0, "food": 375} and e.upgrade_sec("keep") == 2,
-		"new game: 11 buildings at level 1, builder idle, population 6")
+	check(e.levels.size() == GameData.building_keys().size() and e.unbuilt.keys().size() == GameData.lot_keys().size() and e.building_level("keep") == 1 and e.build.is_empty() and e.population() == 6 and e.upgrade_cost("keep") == {"wood": 375, "stone": 0, "food": 375} and e.upgrade_sec("keep") == 2,
+		"new game: every building key at level 1 (new ones and 2nd+ copies as lots), builder idle, population 6")
 	check(e.requirements("keep") == [{"id": "gate", "need": 1, "have": 1, "ok": true}, {"id": "barracks", "need": 1, "have": 1, "ok": true}]
 		and e.requirements("lumber") == [{"id": "keep", "need": 2, "have": 1, "ok": false}], "requirements: keep cap first, then req1/req2 at target - 1: %s" % [e.requirements("lumber")])
 	check(not e.upgrade("lumber", now) and notes == [EconomyScript.BLOCK_TEXT.keep_cap] and e.upgrade_block("keep", now) == "not_enough", "blocked upgrades only show the reason")
@@ -2174,7 +2209,7 @@ func test_buildings() -> void:
 	e.save_path = ECON_TMP
 	e.save()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.levels.size() == 11 and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save writes every building level and the builder")
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.levels.size() == GameData.building_keys().size() and raw.levels.keep == 2.0 and raw.build.id == "lumber", "save writes every building level and the builder")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(t + 1.0)
@@ -2250,8 +2285,8 @@ func test_buildings() -> void:
 ## 모든 건물 레벨 1에 o를 덮은 사전.
 func _lv(o: Dictionary) -> Dictionary:
 	var out := {}
-	for b in GameData.buildings():
-		out[b.id] = 1
+	for k in GameData.building_keys():  # 새 건물·자원 건물 n번째 채 포함
+		out[k] = 1
 	out.merge(o, true)
 	return out
 
@@ -2580,7 +2615,7 @@ func test_soldiers() -> void:
 		Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS),
 		Rect2(cart_c.x + cart_box.position.x, cart_c.z + cart_box.position.z, cart_box.size.x, cart_box.size.z),
 	]
-	for b in Balance.BUILDINGS:
+	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 		keep_out.append(Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE))
 	var hits := []
 	for p in spots:
@@ -2861,7 +2896,7 @@ func test_soldier_figures() -> void:
 	var hb: AABB = TownKitScript.horse().get_aabb()
 	var s := Art.SOLDIER_SCALE
 	var blocks := []
-	for b in Balance.BUILDINGS:
+	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 		var c := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
 		var box: AABB = TownKitScript.building(b.id).get_aabb()
 		blocks.append([b.id, Rect2(c.x + box.position.x, c.z + box.position.z, box.size.x, box.size.z)])
@@ -3088,7 +3123,7 @@ func test_soldier_posts() -> void:
 		ring_ok = ring_ok and path[-1] == b
 	check(ring_ok, "ring_route never enters the castle (200 random pairs around the ring)")
 	var plots := []
-	for bd in Balance.BUILDINGS:
+	for bd in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
 		plots.append(Rect2(Vector2(bd.cell) * Balance.TILE, Vector2(bd.size) * Balance.TILE))
 	var entry_ok := true
 	var units := []

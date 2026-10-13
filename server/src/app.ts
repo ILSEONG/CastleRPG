@@ -288,7 +288,8 @@ const ENSURE_SQL = `with p as (
   s as (insert into player_state (player_id, last_kill_report, last_stage_clear, deploy, tut_state, unbuilt)
     select id, to_timestamp($2::float8), to_timestamp($2::float8), $3::jsonb, case when t.tut then 'active' else 'skipped' end,
       case when t.tut then array(select x.id from (select building as id from resources union select id from building_defs) as x
-        where x.id not in ('${R.KEEP}', '${R.GATE}') order by x.id) else '{}'::text[] end
+        where x.id not in ('${R.KEEP}', '${R.GATE}') order by x.id)
+        else array(select id from building_defs where coalesce(unlock_keep, 0) > 0 order by id) end
     from p, t on conflict do nothing returning player_id),
   h as (insert into player_heroes (player_id, hero_id) select s.player_id, x from s, jsonb_array_elements_text($3::jsonb) as x
     on conflict do nothing),
@@ -298,12 +299,15 @@ const ENSURE_SQL = `with p as (
   select id from p`
 
 // 빠진 행(나중에 추가된 자원·건물)을 채운다. 건물은 레벨 1, 성채·성문은 player_state의 레벨(개정 12).
+// $5 = 모든 건물 키(자원 건물의 2번째 채부터 포함, 2026-10-13), $6 = 새로 채우면 공터(unbuilt)로 둘 키(새 건물·n번째 채) — 처음 지어야 한다.
 const ENSURE_ROWS_SQL = `with p as (select $1::uuid as id),
   r as (insert into player_resources (player_id, res) select p.id, resources.id from p, resources on conflict do nothing),
   b as (insert into player_buildings (player_id, building, level, last_collect)
-    select s.player_id, x.id, case x.id when $3 then s.keep_level when $4 then s.gate_level else 1 end, to_timestamp($2::float8)
-    from player_state s, (select building as id from resources union select id from building_defs) as x
-    where s.player_id = $1 on conflict do nothing)
+    select s.player_id, x, case x when $3 then s.keep_level when $4 then s.gate_level else 1 end, to_timestamp($2::float8)
+    from player_state s, unnest($5::text[]) as x
+    where s.player_id = $1 on conflict do nothing returning building),
+  u as (update player_state set unbuilt = array(select distinct y from unnest(unbuilt || array(select building from b where building = any($6::text[]))) as y order by y)
+    where player_id = $1 and exists (select 1 from b where building = any($6::text[])))
   select 1`
 
 // 게으른 완료(개정 12 §2.4): 다 지은 건물 레벨 +1(성채·성문이면 player_state 레벨도 — 하위 호환), 일꾼 비우기,
@@ -352,12 +356,20 @@ const builderOf = (p: Player, building: string | null): 0 | 1 | 2 =>
 const interiorHalf = (p: Player, g: Game) => Math.floor(R.tierValue(g.config, 'keep_interior_tiers', level(p, R.KEEP)) / 2)
 function placedCells(p: Player, except: string): Record<string, [number, number]> {
   const out: Record<string, [number, number]> = {}
-  for (const id of Object.keys(R.DEFAULT_CELLS)) {
+  for (const id of new Set([...Object.keys(R.DEFAULT_CELLS), ...Object.keys(p.layout)])) {
     if (id === except || (p.unbuilt.includes(id) && !p.layout[id])) continue
-    out[id] = p.layout[id] ?? R.DEFAULT_CELLS[id]
+    const c = p.layout[id] ?? R.DEFAULT_CELLS[id]
+    if (c) out[id] = c
   }
   return out
 }
+// 건물 키(2026-10-13 여러 채): 모든 키, 키의 정의(종류), 키가 만드는 자원 정의(자원 건물이 아니면 undefined)
+const keysOf = (g: Game) => R.buildingKeys(g.buildings, g.resources.map((r) => r.building), g.config)
+const defOf = (g: Game, key: string) => g.buildings.find((d) => d.id === R.typeOf(key))
+const resOfKey = (g: Game, key: string) => g.resources.find((r) => r.building === R.typeOf(key))
+// 새 건물 레벨(지었으면 그 레벨, 공터·없음이면 0)
+const builtLevel = (p: Player, key: string) => (p.unbuilt.includes(key) || !p.buildings[key] ? 0 : p.buildings[key].level)
+const capMin = (p: Player, g: Game) => R.accumCapMin(g.config, builtLevel(p, R.WAREHOUSE))
 // 개정 24: 연구 효과 합계(서버 권위 효과: 생산·건설 시간·판매·처치 골드·훈련·인구)와 인구(민가 + 연구 pop_add)
 const bonus = (p: Player, g: Game) => R.researchBonus(g.research, p.research)
 const population = (p: Player, g: Game) => R.population(g.config, level(p, R.HOUSES)) + Math.floor(bonus(p, g).pop_add)
@@ -374,7 +386,9 @@ function counts(v: unknown): Record<string, number> {
 
 // 튜토리얼 공터 짓기를 못 하는 이유(앱 Economy.upgrade_block의 공터 분기와 같다): 쉬는 일꾼이 없으면 builder_busy, Lv 1 비용이 모자라면 not_enough.
 // (짓는 중인 건물이면 in_progress — 부르는 쪽이 먼저 본다)
-function lotBlock(def: R.BuildingDef, busy: boolean, res: Record<string, number>): string {
+// 새 건물·n번째 채(2026-10-13)는 성채가 R.unlockKeep 레벨 이상이어야 한다(keep_cap).
+function lotBlock(def: R.BuildingDef, busy: boolean, res: Record<string, number>, need = 0, keepLevel = Infinity): string {
+  if (keepLevel < need) return 'keep_cap'
   if (busy) return 'builder_busy'
   const cost = R.buildCost(def, 1)
   return R.BUILD_RES.some((r) => (res[r] ?? 0) < cost[r]) ? 'not_enough' : ''
@@ -389,6 +403,9 @@ function soldierAt(game: Game, building: string): R.SoldierDef {
 
 export function createApp(opts: AppOptions) {
   const query = opts.query
+  // 길드에 들어 있나(길드 회관 도움, 2026-10-13)
+  const guildMember = async (playerId: string) =>
+    (await query('select 1 from player_guild where player_id = $1 and guild_id is not null', [playerId])).length > 0
   const clock = opts.now ?? (() => Date.now() / 1000)
   const secret = opts.jwtSecret
   const random = opts.random ?? R.cryptoRandom
@@ -514,11 +531,13 @@ export function createApp(opts: AppOptions) {
         const train = Number(v.train_count) > 0 ? { count: Number(v.train_count), tier: Number(v.train_tier ?? 1), finish: Number(v.train_finish) } : null
         buildings[k] = { level: Number(v.level), last_collect: Number(v.last_collect), train }
       }
-      const missing = game.resources.some((x) => !(x.id in res) || !(x.building in buildings)) || game.buildings.some((b) => !(b.id in buildings))
+      const keys = keysOf(game)
+      const missing = game.resources.some((x) => !(x.id in res)) || keys.some((k) => !(k in buildings))
       if (missing) {
         if (ensured) throw new ApiError(500, 'internal', 'player rows missing')
         ensured = true
-        await query(ENSURE_ROWS_SQL, [id, now, R.KEEP, R.GATE]) // 나중에 추가된 자원·건물 — 행을 채우고 다시 읽는다
+        const lots = keys.filter((k) => R.copyIndex(k) > 1 || (defOf(game, k)?.unlock_keep ?? 0) > 0)
+        await query(ENSURE_ROWS_SQL, [id, now, R.KEEP, R.GATE, keys, lots]) // 나중에 추가된 자원·건물·n번째 채 — 행을 채우고 다시 읽는다
         continue
       }
       // 개정 18: 던전 행이 없으면(새 플레이어·012 이전 플레이어) 그날 지급분으로 채우고 다시 읽는다
@@ -599,12 +618,11 @@ export function createApp(opts: AppOptions) {
   function view(p: Player, game: Game, now: number) {
     const res: Record<string, number> = {}
     const buildings: Record<string, { level: number; last_collect?: number }> = {}
-    for (const d of game.buildings) buildings[d.id] = { level: level(p, d.id) }
-    for (const r of game.resources) {
-      res[r.id] = p.res[r.id] ?? 0
-      const b = p.buildings[r.building]
-      buildings[r.building] = { level: b?.level ?? 1, last_collect: b?.last_collect ?? now }
+    for (const k of keysOf(game)) {
+      const b = p.buildings[k]
+      buildings[k] = resOfKey(game, k) || R.typeOf(k) === R.GOLDMINE ? { level: b?.level ?? 1, last_collect: b?.last_collect ?? now } : { level: level(p, k) }
     }
+    for (const r of game.resources) res[r.id] = p.res[r.id] ?? 0
     const upgrades: Record<string, number> = {}
     for (const u of game.upgrades) if ((p.upgrades[u.id] ?? 0) > 0) upgrades[u.id] = p.upgrades[u.id]
     const training: Record<string, Train | null> = {}
@@ -640,7 +658,7 @@ export function createApp(opts: AppOptions) {
         research: { levels, current: p.research_cur },
         quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n }, // 튜토리얼·반복 퀘스트 진행
         layout: p.layout, // 자유 건설: 건물 → [x, y](고른 것만)
-        dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => game.buildings.some((d) => d.id === b) || game.resources.some((r) => r.building === b)),
+        dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => keysOf(game).includes(b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
         pouches: p.pouches, // 방치 주머니 id → 개수
@@ -1369,17 +1387,29 @@ export function createApp(opts: AppOptions) {
   app.post('/v1/collect', auth, async (c) => {
     const building = strField(await body(c), 'building')
     return mutate(c, (p, g, now) => {
-      const r = g.resources.find((x) => x.building === building)
-      if (!r) throw new ApiError(400, 'not_resource_building', `'${building}' is not a resource building`)
+      const r = keysOf(g).includes(building) ? resOfKey(g, building) : undefined
+      const gold = R.typeOf(building) === R.GOLDMINE && keysOf(g).includes(building)
+      if (!r && !gold) throw new ApiError(400, 'not_resource_building', `'${building}' is not a resource building`)
       if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
       const b = p.buildings[building]
-      const st = R.collectStep(b.last_collect, now, r.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'), R.researchProdPct(bonus(p, g), r.id))
+      if (gold) { // 금광(2026-10-13): 쌓인 골드 — 자원 수집과 같은 규칙(분 내림·남은 초 유지·창고 상한)
+        const gs = R.collectStep(b.last_collect, now, R.goldminePerMin(g.config, b.level), 1, capMin(p, g))
+        if (!gs.changed) return { extra: { amount: 0 } }
+        return {
+          change: {
+            goldTenths: gs.amount * 10, buildings: { [building]: gs.lastCollect },
+            log: { kind: 'collect', detail: { building, res: 'gold', amount: gs.amount, level: b.level, from: b.last_collect, to: gs.lastCollect } },
+          },
+          extra: { amount: gs.amount },
+        }
+      }
+      const st = R.collectStep(b.last_collect, now, r!.per_min, b.level, capMin(p, g), R.researchProdPct(bonus(p, g), r!.id))
       if (!st.changed) return { extra: { amount: 0 } }
       return {
         change: {
-          res: st.amount ? { [r.id]: st.amount } : {},
+          res: st.amount ? { [r!.id]: st.amount } : {},
           buildings: { [building]: st.lastCollect },
-          log: { kind: 'collect', detail: { building, res: r.id, amount: st.amount, level: b.level, from: b.last_collect, to: st.lastCollect } },
+          log: { kind: 'collect', detail: { building, res: r!.id, amount: st.amount, level: b.level, from: b.last_collect, to: st.lastCollect } },
         },
         extra: { amount: st.amount },
       }
@@ -1509,40 +1539,53 @@ export function createApp(opts: AppOptions) {
     const building = strField(b0, 'building')
     const wantCell = b0.cell === undefined ? null : R.cellOf(b0.cell)
     if (b0.cell !== undefined && !wantCell) throw new ApiError(400, 'bad_cell', 'cell must be [x, y] integers')
+    const inGuild = await guildMember(c.get('playerId') as string) // 길드 회관 도움(2026-10-13)은 길드에 들어 있을 때만
     return mutate(c, (p, g, now) => {
-      const def = g.buildings.find((d) => d.id === building)
-      if (!def) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
-      const lot = p.unbuilt.includes(building) // 튜토리얼 공터 짓기(0 → 1): 일꾼과 Lv 1 비용·시간만 본다(선행·성채 상한 없음, 자동 수집 없음)
+      const def = defOf(g, building)
+      if (!def || !keysOf(g).includes(building)) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
+      const lot = p.unbuilt.includes(building) // 공터 짓기(0 → 1): 일꾼과 Lv 1 비용·시간만 본다(선행·성채 상한 없음, 자동 수집 없음). 새 건물·n번째 채는 성채 레벨 조건
+      const need = R.unlockKeep(def, building, g.config)
+      if (lot && level(p, R.KEEP) < need) throw new ApiError(409, 'keep_cap', `'${building}' needs keep level ${need}`) // 자리보다 먼저
       let layout: Record<string, [number, number]> | undefined
-      if (lot && building in R.DEFAULT_CELLS) {
+      if (lot && (building in R.DEFAULT_CELLS || wantCell || p.layout[building])) {
         const cell = wantCell ?? p.layout[building] ?? R.DEFAULT_CELLS[building]
         const where = R.placementBlock(building, cell, interiorHalf(p, g), placedCells(p, building))
         if (where) throw new ApiError(409, where, `cannot build '${building}' at ${cell}: ${where}`)
         if (wantCell) layout = { ...p.layout, [building]: cell }
-      }
+      } else if (lot) throw new ApiError(409, 'no_cell', `choose where to build '${building}' first`) // 기본 자리가 없는 새 건물·n번째 채
       const from = level(p, building)
       const res: Record<string, number> = { ...p.res }
-      const rdef = g.resources.find((r) => r.building === building)
+      const rdef = resOfKey(g, building)
       const rb = bonus(p, g)
       let collect: { res: string; amount: number; from: number; to: number } | null = null
+      let goldCollect = 0
       if (rdef && !lot) {
         const b = p.buildings[building]
-        const st = R.collectStep(b.last_collect, now, rdef.per_min, b.level, R.cfgNum(g.config, 'accum_cap_min'), R.researchProdPct(rb, rdef.id))
+        const st = R.collectStep(b.last_collect, now, rdef.per_min, b.level, capMin(p, g), R.researchProdPct(rb, rdef.id))
         if (st.changed) {
           collect = { res: rdef.id, amount: st.amount, from: b.last_collect, to: st.lastCollect }
           res[rdef.id] = (res[rdef.id] ?? 0) + st.amount
         }
+      } else if (R.typeOf(building) === R.GOLDMINE && !lot) { // 금광도 레벨이 바뀌기 전에 쌓인 골드를 먼저 받는다
+        const b = p.buildings[building]
+        const st = R.collectStep(b.last_collect, now, R.goldminePerMin(g.config, b.level), 1, capMin(p, g))
+        if (st.changed) {
+          collect = { res: 'gold', amount: st.amount, from: b.last_collect, to: st.lastCollect }
+          goldCollect = st.amount
+        }
       }
       const levels: Record<string, number> = {}
-      for (const d of g.buildings) levels[d.id] = p.unbuilt.includes(d.id) ? 0 : level(p, d.id)
+      for (const k of keysOf(g)) levels[k] = p.unbuilt.includes(k) ? 0 : level(p, k)
       // 2026-10-13 두 번째 일꾼: 쉬는 일꾼(1번 먼저, 2번은 고용 기한 안)에게 맡긴다. 이 건물을 이미 짓고 있으면 in_progress.
       const slot = freeBuilder(p, now)
       const why = p.build?.id === building || p.build2?.id === building ? 'in_progress'
-        : lot ? lotBlock(def, slot === 0, res) : R.upgradeBlock(building, g.buildings, levels, slot === 0, res)
+        : lot ? lotBlock(def, slot === 0, res, need, level(p, R.KEEP)) : R.upgradeBlock(building, g.buildings, levels, slot === 0, res)
       if (why) throw new ApiError(409, why, `cannot upgrade '${building}' from level ${lot ? 0 : from}: ${why}`)
       const cost = R.buildCost(def, from)
-      const finish = now + (lot ? R.cfgNum(g.config, 'lot_build_sec') // 공터 첫 건설은 lot_build_sec초(사용자 2026-10-06)
-        : R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100))) // 개정 24: 연구 build_speed_pct
+      const baseSec = lot && need === 0 ? R.cfgNum(g.config, 'lot_build_sec') // 튜토리얼 공터 첫 건설은 lot_build_sec초(사용자 2026-10-06)
+        : R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100)) // 개정 24: 연구 build_speed_pct
+      const helps = inGuild ? R.guildHelps(g.config, builtLevel(p, R.GUILD_HALL)) : 0 // 길드 회관: 길드원 도움(2026-10-13)
+      const finish = now + (helps > 0 ? R.afterHelps(baseSec, helps, g.config) : baseSec)
       const delta: Record<string, number> = {}
       for (const r of R.BUILD_RES) {
         const d = (collect?.res === r ? collect.amount : 0) - cost[r]
@@ -1551,7 +1594,7 @@ export function createApp(opts: AppOptions) {
       const job = { id: building, finish }
       return {
         change: {
-          res: delta, buildings: collect ? { [building]: collect.to } : {}, ...(slot === 2 ? { build2: job } : { build: job }), ...(layout ? { layout } : {}),
+          res: delta, buildings: collect ? { [building]: collect.to } : {}, ...(goldCollect ? { goldTenths: goldCollect * 10 } : {}), ...(slot === 2 ? { build2: job } : { build: job }), ...(layout ? { layout } : {}),
           log: { kind: 'build_start', detail: { building, from: lot ? 0 : from, to: lot ? 1 : from + 1, cost, finish, collect, ...(slot === 2 ? { builder: 2 } : {}) } },
         },
         extra: { build: job, builder: slot },
@@ -1566,11 +1609,11 @@ export function createApp(opts: AppOptions) {
     const cell = R.cellOf(b0.cell)
     if (!cell) throw new ApiError(400, 'bad_cell', 'cell must be [x, y] integers')
     return mutate(c, (p, g) => {
-      if (!(building in R.DEFAULT_CELLS)) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
+      if (!keysOf(g).includes(building)) throw new ApiError(400, 'unknown_building', `unknown building '${building}'`)
       if (p.unbuilt.includes(building)) throw new ApiError(409, 'unbuilt', `'${building}' is not built yet`)
       const where = R.placementBlock(building, cell, interiorHalf(p, g), placedCells(p, building))
       if (where) throw new ApiError(409, where, `cannot move '${building}' to ${cell}: ${where}`)
-      return { change: { layout: { ...p.layout, [building]: cell }, log: { kind: 'build_move', detail: { building, from: p.layout[building] ?? R.DEFAULT_CELLS[building], to: cell } } } }
+      return { change: { layout: { ...p.layout, [building]: cell }, log: { kind: 'build_move', detail: { building, from: p.layout[building] ?? R.DEFAULT_CELLS[building] ?? null, to: cell } } } }
     })
   })
 
@@ -1946,11 +1989,12 @@ export function createApp(opts: AppOptions) {
       const r = R.offlineReward(pz.min * 60, pz.min, Number(row.idle_interval), R.cfgNum(g.config, 'spawn_group'), per, R.cfgNum(g.config, 'offline_gold_mult'))
       return { goldTenths: r.tenths, res }
     }
-    for (const r of g.resources) {
-      const b = p.buildings[r.building]
-      if (!b || p.unbuilt.includes(r.building)) continue
+    for (const k of keysOf(g)) { // 2026-10-13: 같은 종류 여러 채의 수입을 더한다
+      const r = resOfKey(g, k)
+      const b = p.buildings[k]
+      if (!r || !b || p.unbuilt.includes(k)) continue
       const n = R.pendingAmount(r.per_min, b.level, pz.min * 60, pz.min, R.researchProdPct(bonus(p, g), r.id))
-      if (n > 0) res[r.id] = n
+      if (n > 0) res[r.id] = (res[r.id] ?? 0) + n
     }
     return { goldTenths: 0, res }
   }
@@ -2426,6 +2470,7 @@ export function createApp(opts: AppOptions) {
   // economy_log research start는 version 가드 한 문장 — 같은 순간 두 번 보내도 하나는 409 research_busy다.
   app.post('/v1/research/start', auth, async (c) => {
     const id = strField(await body(c), 'id')
+    const inGuild = await guildMember(c.get('playerId') as string) // 길드 회관 도움(2026-10-13)
     return mutate(c, (p, g, now) => {
       const def = g.research.find((d) => d.id === id)
       if (!def) throw new ApiError(404, 'unknown_research', `research '${id}' does not exist`)
@@ -2436,7 +2481,8 @@ export function createApp(opts: AppOptions) {
       const why = R.researchBlock(def, p.research, lab, { ...p.res, gold: Math.floor(p.gold_tenths / 10) }, g.config)
       if (why) throw new ApiError(409, why, `cannot research '${id}' from level ${from}: ${why}`)
       const cost = R.researchCost(g.config, def, from)
-      const sec = R.researchSec(g.config, def, from, R.researchSpeed(g.config, bonus(p, g), lab))
+      const helps = inGuild ? R.guildHelps(g.config, builtLevel(p, R.GUILD_HALL)) : 0 // 길드 회관: 길드원 도움(2026-10-13)
+      const sec = R.afterHelps(R.researchSec(g.config, def, from, R.researchSpeed(g.config, bonus(p, g), lab)), helps, g.config)
       const finish = now + sec
       const res = Object.fromEntries(R.BUILD_RES.filter((r) => cost[r] > 0).map((r) => [r, -cost[r]]))
       return {
@@ -2487,7 +2533,7 @@ export function createApp(opts: AppOptions) {
 
   // --- 던전·장비 (개정 18 §6·§7) ---
 
-  const bagFull = (p: Player, g: Game) => p.items.length + R.cfgNum(g.config, 'equip_drop_count') > R.cfgNum(g.config, 'equip_bag_cap')
+  const bagFull = (p: Player, g: Game) => p.items.length + R.cfgNum(g.config, 'equip_drop_count') + (builtLevel(p, R.FORGE) > 0 ? 1 : 0) > R.cfgNum(g.config, 'equip_bag_cap')
 
   app.get('/v1/dungeon', auth, async (c) => {
     const now = clock()
@@ -2604,7 +2650,8 @@ export function createApp(opts: AppOptions) {
         if (run.helper) next.helpers_used = [...(st.helpers_used ?? []), run.helper.key ?? run.helper.hero_id] // 클리어에 쓴 도우미(친구)는 오늘 다시 못 쓴다
       } else {
         if (bagFull(p, g)) throw new ApiError(409, 'bag_full', 'the item bag is full')
-        items = R.rollDrops(g.equip_drop, run.level, R.cfgNum(g.config, 'equip_drop_count'), R.cfgNum(g.config, 'equip_weapon_p'), random)
+        const extra = builtLevel(p, R.FORGE) > 0 && random() < R.forgeExtraP(g.config, builtLevel(p, R.FORGE)) ? 1 : 0 // 대장간: 한 개 더(2026-10-13)
+        items = R.rollDrops(g.equip_drop, run.level, R.cfgNum(g.config, 'equip_drop_count') + extra, R.cfgNum(g.config, 'equip_weapon_p'), random)
       }
       return {
         change: {

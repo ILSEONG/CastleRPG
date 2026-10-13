@@ -212,7 +212,7 @@ func _tap_object(screen_pos: Vector2) -> bool:
 	if id == "tavern" and recruit != null:
 		recruit.open()
 		return true
-	if id != "" and Economy.res_of(id) != "" and Economy.pending(id, Economy.time_now()) > 0:
+	if id != "" and Economy.yield_of(id) != "" and Economy.pending(id, Economy.time_now()) > 0:
 		Economy.collect(id, Economy.time_now())  # "+N"은 collected 시그널로(온라인은 응답이 왔을 때)
 		return true
 	if id != "" and Economy.training(id).ready:

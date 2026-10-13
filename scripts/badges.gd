@@ -14,6 +14,7 @@ const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
 const IconsScript := preload("res://scripts/icons.gd")
+const EconomyScript := preload("res://scripts/economy.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const FONT :=preload("res://assets/fonts/Pretendard-SemiBold.otf")
@@ -44,8 +45,8 @@ var _t := 0.0
 
 
 func _ready() -> void:
-	for id in GameData.resources().map(func(r): return r.building) + GameData.soldiers().map(func(x): return x.building) + [GameData.LAB]:
-		_anchors[id] = TownKit.building(id).get_aabb().end.y
+	for id in GameData.building_keys().filter(func(k): return EconomyScript.yield_of(k) != "") + GameData.soldiers().map(func(x): return x.building) + [GameData.LAB]:
+		_anchors[id] = TownKit.building(id).get_aabb().end.y  # 자원 건물(n번째 채 포함)·금광(2026-10-13)·병사 건물·연구소
 
 
 ## 건물 id의 지붕 위 월드 좌표("+N" 시작 지점·말풍선 기준).
@@ -57,7 +58,7 @@ func anchor(building_id: String) -> Vector3:
 func badge_ids(now: float) -> Array:
 	var out := []
 	for id in _anchors:
-		if Economy.res_of(id) != "" and Economy.show_badge(id, now):
+		if Economy.yield_of(id) != "" and Economy.show_badge(id, now):
 			out.append(id)
 	return out
 
@@ -117,7 +118,7 @@ func _draw() -> void:
 			continue
 		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
 		if view.has_point(tip):
-			_draw_bubble(tip, Economy.res_of(id))
+			_draw_bubble(tip, Economy.yield_of(id))
 	var tr := training_ids()
 	for id in tr.bars:
 		var at = _base(id, anchor(id))
@@ -185,7 +186,7 @@ func stack_size(tag_id: String, now: float) -> Vector2:
 	var q := Economy.training(id)
 	if q.count > 0 and not q.ready:
 		out = Vector2(BUILD_W, out.y + BUILD_LIFT_PX)
-	if (Economy.res_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()):
+	if (Economy.yield_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()):
 		out = Vector2(maxf(out.x, BUBBLE_R * 2.0 + 4.0), out.y + BUBBLE_BLOCK)
 	return out
 

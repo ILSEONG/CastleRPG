@@ -109,3 +109,16 @@ lot_build_sec,5
 free_finish_sec,300
 quest_repeat_min_sec,30
 tutorial_new_players,1
+res_copy_tiers,1:1|5:2|10:3|15:4
+warehouse_cap_min_per_level,60
+goldmine_gold_base,20
+goldmine_gold_exp,1.5
+forge_extra_drop_pct_per_level,2
+guild_hall_helps_base,2
+guild_hall_helps_per_level,1
+guild_help_pct,1
+guild_help_min_sec,60
+watchtower_grunt_pct_base,10
+watchtower_grunt_pct_per_level,1
+watchtower_interval_sec,2
+watchtower_range_m,60

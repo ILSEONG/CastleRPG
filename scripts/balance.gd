@@ -34,6 +34,12 @@ const BUILDINGS := [
 	{"id": "lumber", "name": "벌목장", "cell": Vector2i(2, 5), "size": Vector2i(3, 3)},
 	{"id": "quarry", "name": "채석장", "cell": Vector2i(5, 2), "size": Vector2i(3, 3)},
 	{"id": "farm", "name": "농장", "cell": Vector2i(-5, 5), "size": Vector2i(3, 3)},
+	# 2026-10-13 성채 레벨로 여는 새 건물: 기본 자리 없음(처음 지을 때 [건설]로 자리를 고른다 — 서버 DEFAULT_CELLS에도 없다)
+	{"id": "warehouse", "name": "창고", "size": Vector2i(3, 3)},
+	{"id": "goldmine", "name": "금광", "size": Vector2i(3, 3)},
+	{"id": "forge", "name": "대장간", "size": Vector2i(3, 3)},
+	{"id": "guild_hall", "name": "길드 회관", "size": Vector2i(3, 3)},
+	{"id": "watchtower", "name": "망루", "size": Vector2i(3, 3)},
 ]
 
 ## 상인 자리 (개정 7). 막사·벌목장·채석장 사이 빈 터(십자 도로 밖). 수레는 상인 +X 쪽.
@@ -80,14 +86,27 @@ static func center_of(id: String) -> Vector3:
 	return Vector3((c.x + b.size.x / 2.0) * TILE, 0, (c.y + b.size.y / 2.0) * TILE)
 
 
-## 지금 성 안에 있는 건물 부지 [{id, cell, size}] — 길 막기(formation.clamp_push)·말풍선 자리. Economy가 맞추기 전(테스트)은 기본 배치 전부.
+## 지금 성 안에 있는 건물 부지 [{id, cell, size}] — 길 막기(formation.clamp_push)·말풍선 자리. Economy가 맞추기 전(테스트)은 기본 자리가 있는 건물 전부.
 static func plots() -> Array:
 	var out := []
-	for b in BUILDINGS:
-		if not active_set:
-			out.append({"id": b.id, "cell": b.cell, "size": b.size})
-		elif active.has(b.id):
+	if not active_set:
+		for b in BUILDINGS:
+			if b.has("cell"):
+				out.append({"id": b.id, "cell": b.cell, "size": b.size})
+		return out
+	for b in entries():
+		if active.has(b.id):
 			out.append({"id": b.id, "cell": active[b.id], "size": b.size})
+	return out
+
+
+## 모든 건물 항목(BUILDINGS + 자원 건물 2번째 채부터 "lumber#2" …, GameData.building_keys 순서) — 성 안에 세울 수 있는 것 전부.
+static func entries() -> Array:
+	var out := []
+	for k in load("res://scripts/game_data.gd").building_keys():  # game_data.gd가 이 파일을 preload한다 — 순환을 피해 실행 때 읽는다
+		var b := building(k)
+		if not b.is_empty():
+			out.append(b)
 	return out
 
 
@@ -111,8 +130,16 @@ static func placement_block(id: String, cell: Vector2i, half_tiles: int, others:
 	return ""
 
 
+## 건물 항목. 키 "종류#n"(n번째 채)은 그 종류 항목의 복사본(id = 키, 이름 "벌목장 2", 기본 자리 없음).
 static func building(id: String) -> Dictionary:
+	var t := id.get_slice("#", 0)
 	for b in BUILDINGS:
-		if b.id == id:
-			return b
+		if b.id == t:
+			if t == id:
+				return b
+			var c: Dictionary = b.duplicate()
+			c.erase("cell")
+			c.id = id
+			c.name = "%s %s" % [b.name, id.get_slice("#", 1)]
+			return c
 	return {}

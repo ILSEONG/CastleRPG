@@ -44,6 +44,11 @@ const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"lumber": "목재를 생산합니다.",
 	"quarry": "석재를 생산합니다.",
 	"farm": "식량을 생산합니다.",
+	"warehouse": "자원과 금광이 쌓이는 최대 시간을 늘립니다.",
+	"goldmine": "골드를 생산합니다. 눌러서 받으세요.",
+	"forge": "장비 던전에서 장비가 하나 더 나올 확률을 줍니다.",
+	"guild_hall": "길드에 가입하면 길드원 도움으로 건설·연구 시간이 줄어듭니다.",
+	"watchtower": "전투 중 성 밖 몬스터에게 화살을 쏩니다.",
 }
 
 var building_id := ""
@@ -210,8 +215,8 @@ func _refresh() -> void:
 	var maxed := lv >= int(d.max_level)
 	var building: bool = Economy.is_building(id)
 	var lot := not Economy.is_built(id)  # 튜토리얼 공터: 짓기(0 → 1)
-	title_label.text = "%s · 공터" % d.name if lot else "%s Lv %d" % [d.name, lv]
-	desc_label.text = DESC.get(id, "")
+	title_label.text = "%s · 공터" % GameData.building_name(id) if lot else "%s Lv %d" % [GameData.building_name(id), lv]
+	desc_label.text = DESC.get(GameData.type_of(id), "")
 	research_button.visible = id == GameData.LAB and not lot
 	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
 	_clear(effects)
@@ -228,7 +233,7 @@ func _refresh() -> void:
 	_clear(reqs)
 	var rq := Economy.requirements(id)
 	for r in rq:
-		var bname: String = GameData.building_def(r.id).name
+		var bname: String = GameData.building_name(r.id)
 		var text := "%s %s Lv %d 필요" % ["✓" if r.ok else "✗", bname, int(r.need)]
 		reqs.add_child(_label(text, 26, GREEN) if r.ok else _req_link(text + "  ›", str(r.id)))
 	_reqs_title.visible = not rq.is_empty()
@@ -260,7 +265,7 @@ func _refresh() -> void:
 	var why := Economy.upgrade_block(id, now)
 	var reason: String = Economy.BLOCK_TEXT.get(why, "")
 	if why == "builder_busy":  # 무엇을 짓는지·남은 시간도(일꾼마다)
-		reason += " (%s)" % ", ".join(Economy.build_jobs().map(func(j): return "%s %s" % [GameData.building_def(str(j.id)).name, UiKit.duration(Economy.build_left(now, str(j.id)))]))
+		reason += " (%s)" % ", ".join(Economy.build_jobs().map(func(j): return "%s %s" % [GameData.building_name(str(j.id)), UiKit.duration(Economy.build_left(now, str(j.id)))]))
 	builder_label.text = ("두 번째 일꾼 남은 기간 %s" % UiKit.duration(Economy.builder2_until - now)) if Economy.builder2_active(now) else ""
 	builder_label.visible = builder_label.text != ""
 	reason_label.text = reason
@@ -426,7 +431,19 @@ static func effect_lines(id: String, lv: int) -> Array:
 		var tn := GameData.train_tier(n)
 		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n) / k)
 		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
-	match id:
+	match GameData.type_of(id):
+		"warehouse":  # 2026-10-13 새 건물
+			return [["쌓이는 시간", UiKit.duration(GameData.accum_cap_min(lv) * 60.0), UiKit.duration(GameData.accum_cap_min(n) * 60.0)]]
+		"goldmine":
+			return [["골드 생산", "%s/분" % UiKit.commas(GameData.goldmine_per_min(lv)), "%s/분" % UiKit.commas(GameData.goldmine_per_min(n))]]
+		"forge":
+			return [["장비 추가 확률", _pct(GameData.forge_extra_p(lv)), _pct(GameData.forge_extra_p(n))]]
+		"guild_hall":
+			return [["길드 도움", "%d회" % GameData.guild_helps(lv), "%d회" % GameData.guild_helps(n)]]
+		"watchtower":
+			var p0 := GameData.config_num("watchtower_grunt_pct_base")
+			var p1 := GameData.config_num("watchtower_grunt_pct_per_level")
+			return [["화살 피해", "졸개 HP %s%%" % Skills.num_text(p0 + p1 * lv), "졸개 HP %s%%" % Skills.num_text(p0 + p1 * n)]]
 		"keep":
 			var hp := 1.0 + float(rb.castle_hp_pct) / 100.0
 			var rows := [["건물 최대", "Lv %d" % lv, "Lv %d" % n],

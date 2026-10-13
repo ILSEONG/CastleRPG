@@ -8,6 +8,10 @@ import * as R from '../src/rules.ts'
 import { randomDevice, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
+// 2026-10-13: 새 플레이어가 아직 못 지은 건물(새 건물 5종 + 자원 건물 2~4번째 채) — 공터 목록(정렬)
+const LOTS = ['forge', 'goldmine', 'guild_hall', 'warehouse', 'watchtower',
+  ...['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => `${b}#${n}`))].sort()
+
 let S: Setup
 before(async () => {
   S = await setup()
@@ -98,6 +102,9 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         quarry: { level: 1, last_collect: T0 + 0.25 },
         farm: { level: 1, last_collect: T0 + 0.25 },
         barracks: { level: 1 }, archery: { level: 1 }, stable: { level: 1 }, // 개정 16: 자동 생산 시계 없음
+        // 2026-10-13: 아직 안 지은 자원 건물 n번째 채(공터, 수집 시계 있음)와 새 건물(공터). 금광도 수집 시계
+        ...Object.fromEntries(['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => [`${b}#${n}`, { level: 1, last_collect: T0 + 0.25 }]))),
+        warehouse: { level: 1 }, goldmine: { level: 1, last_collect: T0 + 0.25 }, forge: { level: 1 }, guild_hall: { level: 1 }, watchtower: { level: 1 },
       },
       build: null,
       build2: null, builder2_until: null, speedups: {}, // 2026-10-13 두 번째 일꾼·가속 아이템
@@ -116,7 +123,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       items: [], equipment: {},
       diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 40, dia_pity: 0 }, // 개정 23
       research: { levels: {}, current: null }, // 개정 24
-      quest: { tut_state: 'skipped', tut_step: 0, rep_n: 0 }, dia_tickets: 0, unbuilt: [], layout: {}, // 튜토리얼·반복 퀘스트
+      quest: { tut_state: 'skipped', tut_step: 0, rep_n: 0 }, dia_tickets: 0, unbuilt: LOTS, layout: {}, // 튜토리얼·반복 퀘스트
       attendance: { n: 0, days: 28, can_claim: true }, // 출석 이벤트
       missions: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: [], w: [], wd: 0, r: {}, c: M.progressView(M.normalize({}, R.resetDay(T0, 15))), // 미션
         next_day: R.resetAt(R.resetDay(T0, 15) + 1, 15), next_week: R.resetAt(M.weekStart(M.weekOf(R.resetDay(T0, 15)) + 1), 15) },
@@ -440,17 +447,18 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|9:8|22:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 110) // 무료 즉시 완료 +1(free_finish_sec). 공터 첫 건설 +1(lot_build_sec). 모집권 던전 +9(ticket_*). 퀘스트 +3(tutorial_train_sec·quest_repeat_min_sec·tutorial_new_players). 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
+  assert.equal(Object.keys(g.config).length, 123) // 2026-10-13 새 건물 +13(res_copy_tiers·창고·금광·대장간·길드 회관·망루). 무료 즉시 완료 +1(free_finish_sec). 공터 첫 건설 +1(lot_build_sec). 모집권 던전 +9(ticket_*). 퀘스트 +3(tutorial_train_sec·quest_repeat_min_sec·tutorial_new_players). 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
   assert.deepEqual(g.dungeons.map((d: any) => [d.id, d.type, d.kind, d.count, d.delay]), [['gold_goblin_a', 'gold', 'goblin', 10, 0], ['gold_goblin_b', 'gold', 'goblin', 5, 5],
     ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0],
     ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0]]) // 개정 18: 파일 순서
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5 })
   assert.equal(g.config.train_cost_cavalry, 'food:2000|stone:1000')
-  assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable']) // 파일 순서
+  assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable',
+    'warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower']) // 파일 순서
   assert.deepEqual(g.soldiers.map((s: any) => [s.id, s.building]), [['infantry', 'barracks'], ['archer', 'archery'], ['cavalry', 'stable']]) // 개정 13
   assert.deepEqual(g.soldiers[1], { id: 'archer', name: '궁병', building: 'archery', hp: 180, atk: 18, range: 8, atk_interval: 1.2, speed: 4, aggro: 10, model: 'Rogue_Hooded' })
   assert.deepEqual(g.buildings[1], { id: 'gate', name: '성문', max_level: 30, wood: 412, stone: 0, food: 338, base_sec: 2, req1: 'quarry', req2: null,
-    lv_sec: '2|39|261|860|1870|3240|5760|10080|17820|31560|49920|58020|67380|78540|90600|105600|123600|141000|165600|192600|223200|258600|300600|351000|430200|555000|749400|1193400|3051600', lv_wood: '412|810|1210|2310|5590|7960|16300|31500|61300|118000|201000|255000|320000|401000|495000|613000|759000|928000|1130000|1370000|1680000|2060000|2500000|3050000|3890000|5220000|7320000|12100000|32000000', lv_stone: '0|0|0|0|1300|9530|20300|42000|86200|175000|312000|398000|500000|628000|778000|971000|1220000|1470000|1810000|2220000|2720000|3300000|4000000|4860000|6200000|8320000|11700000|19300000|51000000', lv_food: '338|690|1040|1990|4800|6810|13800|27300|53000|102000|174000|218000|276000|345000|426000|528000|651000|774000|990000|1220000|1460000|1750000|2140000|2620000|3350000|4500000|6310000|10400000|27600000' }) // 2026-10-13 라오킹 곡선
+    lv_sec: '2|39|261|860|1870|3240|5760|10080|17820|31560|49920|58020|67380|78540|90600|105600|123600|141000|165600|192600|223200|258600|300600|351000|430200|555000|749400|1193400|3051600', lv_wood: '412|810|1210|2310|5590|7960|16300|31500|61300|118000|201000|255000|320000|401000|495000|613000|759000|928000|1130000|1370000|1680000|2060000|2500000|3050000|3890000|5220000|7320000|12100000|32000000', lv_stone: '0|0|0|0|1300|9530|20300|42000|86200|175000|312000|398000|500000|628000|778000|971000|1220000|1470000|1810000|2220000|2720000|3300000|4000000|4860000|6200000|8320000|11700000|19300000|51000000', lv_food: '338|690|1040|1990|4800|6810|13800|27300|53000|102000|174000|218000|276000|345000|426000|528000|651000|774000|990000|1220000|1460000|1750000|2140000|2620000|3350000|4500000|6310000|10400000|27600000', unlock_keep: null }) // 2026-10-13 라오킹 곡선
   assert.equal(g.config.starter_heroes, 'hans|ella|dorik|nina')
   assert.equal(g.config.hero_roster, undefined)
   assert.equal(g.config.kill_burst_sec, '60')

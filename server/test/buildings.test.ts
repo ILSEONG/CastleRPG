@@ -13,6 +13,10 @@ import { CsvError, DATA_DIR, readTables, seed, TABLES } from '../src/seed.ts'
 import { barrier, setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
+// 2026-10-13: 아직 못 지은 건물(새 건물 5종 + 자원 건물 2~4번째 채)도 레벨 1 행(공터)으로 온다
+const LOTS = Object.fromEntries(['warehouse', 'goldmine', 'forge', 'guild_hall', 'watchtower',
+  ...['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => `${b}#${n}`))].map((k) => [k, 1]))
+
 let S: Setup
 const rand = { next: [] as number[] } // 모집 난수(비면 암호학적 난수)
 const tmp: string[] = []
@@ -109,7 +113,7 @@ test('새 플레이어: 모든 건물 레벨 1·일꾼 없음. 업그레이드 �
   const { token, id } = await S.login()
   let p = await player(token)
   assert.deepEqual(Object.fromEntries(Object.entries(p.buildings).map(([k, v]: [string, any]) => [k, v.level])),
-    { keep: 1, gate: 1, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 1, quarry: 1, farm: 1, archery: 1, stable: 1 })
+    { keep: 1, gate: 1, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 1, quarry: 1, farm: 1, archery: 1, stable: 1, ...LOTS })
   assert.equal(p.build, null)
   let r = await upgrade(token, 'keep')
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough'])
@@ -327,7 +331,7 @@ test('마이그레이션 007: 006까지 적용된 DB의 기존 플레이어는 �
     const { token } = await call('POST', '/v1/auth/guest', undefined, { device_id: dev })
     const pl = (await call('GET', '/v1/player', token)).player
     assert.deepEqual(Object.fromEntries(Object.entries(pl.buildings).map(([k, v]: [string, any]) => [k, v.level])),
-      { keep: 3, gate: 2, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 2, quarry: 1, farm: 1, archery: 1, stable: 1 })
+      { keep: 3, gate: 2, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 2, quarry: 1, farm: 1, archery: 1, stable: 1, ...LOTS })
     assert.deepEqual([pl.buildings.lumber.last_collect, pl.buildings.keep.last_collect, pl.keep_level, pl.build], [T0 - 100, undefined, 3, null])
     assert.equal(pl.deploy.length, 4) // 성채 3: 첫 단계
   } finally {
@@ -354,6 +358,10 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
     ['buildings.csv', bld.replace(/^(houses,민가,30,375,0,375,20,,,)\d+\|/m, '$10|'), /line 7 column 'lv_sec': every value must be greater than 0/],
     ['buildings.csv', bld.replace(/^(houses,민가,30,375,0,375,20,,,[^,]*,)\d+\|/m, '$1x|'), /line 7 column 'lv_wood': must be numbers joined by '\|'/],
     ['buildings.csv', bld.replace(/^(houses,민가,30,375,0,375,20,,,[^,]*,)\d+\|/m, '$11.5|'), /line 7 column 'lv_wood': every value must be a non-negative integer/],
+    // 2026-10-13 새 건물: unlock_keep은 0 이상 정수, id에 '#' 없음, 자원 건물 수 표(res_copy_tiers)
+    ['buildings.csv', bld.replace(/^(forge,.*,)8$/m, '$1-1'), /column 'unlock_keep': must be a non-negative integer: -1/],
+    ['buildings.csv', bld.replace(/^forge,/m, 'forge#2,'), /must not contain '#'/],
+    ['config.csv', cfg.replace('res_copy_tiers,1:1|5:2|10:3|15:4', 'res_copy_tiers,2|3'), /not a tier table/],
     ['config.csv', cfg.replace('keep_slot_tiers,1:4|9:8|22:12', 'keep_slot_tiers,4|8|12'), /config\.csv line 5 column 'value': not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,2:20'), /not a tier table/],

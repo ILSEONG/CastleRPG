@@ -27,6 +27,13 @@ const SNOW := Color(0.70, 0.72, 0.76)
 const CROP := Color(0.69, 0.60, 0.28)
 const SOIL := Color(0.45, 0.34, 0.24)
 const FLAG := Color(0.72, 0.24, 0.22)
+const GOLD := Color(0.69, 0.53, 0.12)        # 금광 금(ArenaKit.GOLD 0.85/0.62/0.16을 윗면 한도 0.69로 낮춤)
+const COALS := Color(0.95, 0.42, 0.10)       # 대장간 숯불(ArenaKit.COALS와 같다, 일부러 밝게)
+const IRON := Color(0.30, 0.30, 0.34)        # 모루·쇠테
+const SOOT := Color(0.16, 0.14, 0.13)        # 갱도 입구 어둠
+const SACK := Color(0.62, 0.54, 0.38)
+const GUILD := Color(0.16, 0.50, 0.52)       # 길드 깃발(청록)
+const SLATE := Color(0.32, 0.35, 0.44)       # 길드 회관 지붕
 
 const MERLON_H := 0.6
 const MERLON_T := 0.4
@@ -123,9 +130,10 @@ static func _merlons(k, length: float, y: float) -> void:
 # --- 건물 8종 (부지 중심 로컬, 바닥 y=0, 문·간판은 카메라가 보는 +Z/+X 쪽) ---
 
 ## 건물 메시 하나(그리기 호출 하나). 부지 = size×TILE − BUILDING_GAP 안(3×3 → ±2.7, 성채 4×4 → ±3.7).
+## id의 "#" 뒤(같은 종류 사본 키, 예: "lumber#2")는 떼고 종류로 고른다.
 static func building(id: String) -> ArrayMesh:
 	var k = MeshKit.new()
-	match id:
+	match id.get_slice("#", 0):
 		"keep": _keep(k)
 		"barracks": _barracks(k)
 		"tavern": _tavern(k)
@@ -136,6 +144,11 @@ static func building(id: String) -> ArrayMesh:
 		"farm": _farm(k)
 		"archery": _archery(k)
 		"stable": _stable(k)
+		"warehouse": _warehouse(k)
+		"goldmine": _goldmine(k)
+		"forge": _forge(k)
+		"guild_hall": _guild_hall(k)
+		"watchtower": _watchtower(k)
 		_: push_error("unknown building %s" % id)
 	return k.commit()
 
@@ -346,6 +359,239 @@ static func _stable(k) -> void:
 	k.box(Vector3(1.75, 0.5, 1.6), Vector3(0.7, 0.45, 0.5), CROP.darkened(0.08))
 	k.box(Vector3(-0.6, 0, 1.3), Vector3(1.2, 0.35, 0.4), WOOD_DARK)  # 여물통 + 물
 	k.box(Vector3(-0.6, 0.3, 1.3), Vector3(1.0, 0.06, 0.28), ROOF_BLUE)
+
+
+## 창고: 돌 기단 + 목조 몸체(돌 모서리 기둥) + 파란 박공지붕(용마루 Z, 박공이 앞을 봄), 큰 쌍여닫이 문(띠·빗장),
+## 다락 문 + 도르래 들보에 매달린 자루, 앞마당 상자 더미·자루·통.
+static func _warehouse(k) -> void:
+	var c := Vector3(-0.4, 0, -0.5)
+	k.box(c, Vector3(4.2, 0.3, 3.6), STONE_DARK)
+	_house(k, c + Vector3(0, 0.3, 0), Vector3(3.4, 2.5, 4.0), 1.6, WOOD, ROOF_BLUE, PI / 2.0)
+	for p in [Vector3(-1.85, 0, -1.55), Vector3(1.85, 0, -1.55), Vector3(-1.85, 0, 1.55), Vector3(1.85, 0, 1.55)]:
+		k.box(c + p + Vector3(0, 0.3, 0), Vector3(0.36, 2.5, 0.36), STONE)
+	var fz := c.z + 1.7  # 앞벽
+	k.box(Vector3(c.x, 0.3, fz), Vector3(2.5, 2.25, 0.1), STONE_DARK)  # 문틀
+	for s in [-1.0, 1.0]:
+		var x: float = c.x + s * 0.55
+		k.box(Vector3(x, 0.3, fz + 0.04), Vector3(1.0, 2.0, 0.12), WOOD_DARK)
+		for y in [0.55, 1.85]:
+			k.box(Vector3(x, y, fz + 0.08), Vector3(1.0, 0.14, 0.1), WOOD)
+		k.xform = Transform3D(Basis(Vector3.BACK, s * 0.88), Vector3(x, 1.27, fz + 0.1))  # 빗댄 사선 띠
+		k.box(Vector3(0, -0.75, 0), Vector3(0.13, 1.5, 0.06), WOOD)
+		k.xform = Transform3D.IDENTITY
+	k.box(Vector3(c.x, 1.2, fz + 0.14), Vector3(0.9, 0.12, 0.08), IRON)  # 빗장
+	var gz := fz + 0.26  # 박공 삼각형 면
+	k.box(Vector3(c.x, 3.05, gz), Vector3(0.7, 0.75, 0.08), WINDOW)  # 다락 문
+	k.box(Vector3(c.x, 4.0, gz - 0.3), Vector3(0.16, 0.16, 1.0), WOOD_DARK)  # 도르래 들보
+	k.box(Vector3(c.x, 2.95, gz + 0.55), Vector3(0.04, 1.05, 0.04), WOOD_DARK)
+	k.prism_n(Vector3(c.x, 2.45, gz + 0.55), 6, 0.2, 0.26, 0.5, SACK)
+	# 앞마당 오른쪽: 상자 더미
+	for p in [Vector3(1.05, 0, 1.75), Vector3(1.85, 0, 1.75), Vector3(1.45, 0.75, 1.75), Vector3(2.15, 0, 0.75), Vector3(2.2, 0, -0.15)]:
+		_crate(k, p, 0.72)
+	_crate(k, Vector3(2.2, 0.72, 0.3), 0.55)
+	# 왼쪽: 통 둘 + 자루 더미
+	for p in [Vector3(-2.15, 0, 1.6), Vector3(-1.45, 0, 2.15)]:
+		_barrel(k, p)
+	for p in [Vector3(-2.2, 0, 2.35), Vector3(0.45, 0, 2.3), Vector3(0.0, 0, 2.4)]:
+		k.prism_n(p, 6, 0.28, 0.2, 0.5, SACK)
+
+
+## 금광: 바위 언덕(금맥 반짝이) + 돌로 짠 갱도 입구(나무 기둥·들보, 안은 어둠), 레일(침목) 위 광차(금덩이 수북),
+## 옆에 금광석 무더기 + 곡괭이, 등불 기둥.
+static func _goldmine(k) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var m := Vector3(-0.2, 0, -0.85)
+	k.rock(m + Vector3(0, 0.6, 0), 1.8, ROCK, rng, 1.4, 0.0)
+	k.rock(m + Vector3(-1.4, 0.3, 0.9), 0.95, ROCK, rng, 0.9, 0.0)
+	k.rock(m + Vector3(1.5, 0.3, 0.45), 1.0, ROCK, rng, 0.9, 0.0)
+	for p in [Vector3(-1.0, 2.1, 0.65), Vector3(0.9, 2.25, 0.75), Vector3(-0.2, 2.95, 0.25), Vector3(1.75, 0.9, 1.0), Vector3(0.6, 2.7, -0.55), Vector3(-1.45, 0.75, 1.55)]:
+		k.rock(m + p, 0.3, GOLD, rng, 0.9)
+	var ex := m.x
+	k.box(Vector3(ex, 0, 0.75), Vector3(2.0, 2.0, 1.3), STONE_DARK)  # 갱도 입구 덩어리(앞면 z 1.4)
+	k.box(Vector3(ex, 0, 1.4), Vector3(1.3, 1.75, 0.06), SOOT)
+	for s in [-1.0, 1.0]:
+		k.box(Vector3(ex + s * 0.75, 0, 1.5), Vector3(0.24, 1.9, 0.24), WOOD)
+	k.box(Vector3(ex, 1.9, 1.5), Vector3(2.0, 0.3, 0.32), WOOD)
+	k.box(Vector3(ex, 2.05, 0.9), Vector3(2.3, 0.14, 1.65), WOOD_DARK)  # 차양 판자(입구 덩어리 윗면을 덮는다)
+	# 레일: 침목 + 쇠 레일 둘(입구 → 앞)
+	for i in 4:
+		k.box(Vector3(ex, 0, 1.6 + i * 0.32), Vector3(0.95, 0.07, 0.16), WOOD_DARK)
+	for s in [-1.0, 1.0]:
+		k.box(Vector3(ex + s * 0.3, 0.07, 2.05), Vector3(0.06, 0.07, 1.3), METAL)
+	# 광차: 쇠테 두른 나무 상자 + 바퀴 4 + 금덩이
+	var cz := 2.15
+	for s in [-1.0, 1.0]:
+		for dz in [-0.28, 0.28]:
+			k.xform = Transform3D(Basis(Vector3.BACK, -PI / 2.0), Vector3(ex + s * 0.3 - s * 0.05, 0.27, cz + dz))
+			k.prism_n(Vector3.ZERO, 8, 0.13, 0.13, 0.1, IRON, PI / 8.0)
+	k.xform = Transform3D.IDENTITY
+	k.prism_n(Vector3(ex, 0.25, cz), 4, 0.5, 0.62, 0.5, WOOD_DARK, PI / 4.0)
+	k.prism_n(Vector3(ex, 0.68, cz), 4, 0.6, 0.63, 0.09, IRON, PI / 4.0)
+	for p in [Vector3(-0.15, 0.7, -0.1), Vector3(0.15, 0.72, 0.12), Vector3(0.0, 0.85, 0.0), Vector3(-0.12, 0.7, 0.2), Vector3(0.14, 0.7, -0.18)]:
+		k.rock(Vector3(ex, 0, cz) + p, 0.18, GOLD, rng, 0.9)
+	# 금광석 무더기(오른쪽 앞) + 곡괭이
+	var h := Vector3(1.55, 0, 1.75)
+	k.rock(h + Vector3(0, 0.15, 0), 0.6, ROCK, rng, 0.7, 0.0)
+	for p in [Vector3(-0.15, 0.45, 0.1), Vector3(0.2, 0.35, 0.2), Vector3(0.0, 0.5, -0.15)]:
+		k.rock(h + p, 0.2, GOLD, rng, 0.9)
+	var lean := Basis(Vector3.BACK, 0.45)
+	k.xform = Transform3D(lean, h + Vector3(0.75, 0.03, 0.35))
+	k.box(Vector3.ZERO, Vector3(0.07, 1.0, 0.07), WOOD)
+	k.box(Vector3(0, 0.92, 0), Vector3(0.7, 0.09, 0.09), METAL)
+	k.xform = Transform3D.IDENTITY
+	# 등불 기둥(입구 왼쪽)
+	k.box(Vector3(ex - 1.35, 0, 1.75), Vector3(0.12, 1.7, 0.12), WOOD_DARK)
+	k.box(Vector3(ex - 1.35, 1.45, 1.75), Vector3(0.24, 0.3, 0.24), COALS)
+
+
+## 대장간: 돌 바닥 위 기둥 넷 + 빨간 박공지붕(옆이 트인 작업장), 뒤쪽 돌 화덕(벌건 숯 + 불 아가리) + 지붕을 뚫는 굴뚝,
+## 앞마당 그루터기 위 모루, 담금질 통(물), 오른쪽 무기 걸이(칼 셋 + 방패).
+static func _forge(k) -> void:
+	var c := Vector3(-0.55, 0, -0.75)
+	k.box(c, Vector3(3.8, 0.15, 3.0), STONE_DARK)
+	for p in [Vector3(-1.6, 0, -1.25), Vector3(1.6, 0, -1.25), Vector3(-1.6, 0, 1.25), Vector3(1.6, 0, 1.25)]:
+		k.box(c + p, Vector3(0.26, 2.5, 0.26), WOOD)
+	k.box(c + Vector3(0, 0.15, -1.3), Vector3(3.3, 1.1, 0.25), STONE)  # 뒷벽(낮은 돌담)
+	k.gable(c + Vector3(0, 2.5, 0), Vector3(3.5, 0, 2.7), 1.15, ROOF_RED, 0.3)
+	var f := c + Vector3(-0.8, 0, -0.55)  # 화덕
+	k.box(f, Vector3(1.5, 1.0, 1.3), STONE)
+	k.box(f + Vector3(0, 1.0, 0), Vector3(1.6, 0.12, 1.4), STONE_DARK)
+	k.box(f + Vector3(0, 1.12, 0.1), Vector3(1.0, 0.1, 0.8), COALS)
+	k.box(f + Vector3(0, 0.25, 0.62), Vector3(0.7, 0.45, 0.1), COALS)  # 불 아가리
+	k.box(f + Vector3(0, 1.75, -0.35), Vector3(0.9, 0.7, 0.6), STONE_DARK)  # 연기 후드
+	k.box(f + Vector3(0, 2.45, -0.35), Vector3(0.6, 2.6, 0.6), STONE_DARK)  # 굴뚝(지붕 위로)
+	k.box(f + Vector3(0, 5.05, -0.35), Vector3(0.75, 0.2, 0.75), STONE)
+	# 모루: 그루터기 + 몸통 + 뿔(앞 +X)
+	var a := Vector3(0.75, 0, 1.25)
+	k.prism_n(a, 6, 0.36, 0.33, 0.55, WOOD)
+	k.box(a + Vector3(0, 0.55, 0), Vector3(0.32, 0.22, 0.3), IRON)
+	k.box(a + Vector3(0, 0.77, 0), Vector3(0.62, 0.2, 0.32), IRON)
+	k.xform = Transform3D(Basis(Vector3.BACK, -PI / 2.0), a + Vector3(0.31, 0.87, 0))
+	k.cone(Vector3.ZERO, 4, 0.11, 0.3, IRON, PI / 4.0)
+	k.xform = Transform3D.IDENTITY
+	k.box(a + Vector3(-0.1, 0.97, 0.02), Vector3(0.08, 0.06, 0.4), WOOD_DARK)  # 망치 자루
+	k.box(a + Vector3(-0.1, 0.97, 0.22), Vector3(0.16, 0.14, 0.12), METAL)
+	# 담금질 통
+	var q := Vector3(-0.4, 0, 1.75)
+	k.prism_n(q, 6, 0.4, 0.42, 0.6, WOOD_DARK)
+	k.prism_n(q + Vector3(0, 0.6, 0), 6, 0.33, 0.33, 0.01, ROOF_BLUE)
+	# 무기 걸이(오른쪽, +X를 봄): 기둥 둘 + 가로대 둘, 칼 셋(날·자루·코등이), 둥근 방패
+	var r := Vector3(2.15, 0, -0.35)
+	for dz in [-1.0, 1.0]:
+		k.box(r + Vector3(0, 0, dz), Vector3(0.14, 1.45, 0.14), WOOD)
+	for y in [0.35, 1.25]:
+		k.box(r + Vector3(0, y, 0), Vector3(0.12, 0.1, 2.15), WOOD)
+	for dz in [-0.6, -0.15, 0.3]:
+		k.box(r + Vector3(0.12, 0.2, dz), Vector3(0.04, 1.1, 0.12), METAL)
+		k.box(r + Vector3(0.12, 1.3, dz), Vector3(0.05, 0.08, 0.32), IRON)
+		k.box(r + Vector3(0.12, 1.38, dz), Vector3(0.06, 0.28, 0.06), WOOD_DARK)
+	_disc(k, r + Vector3(0.22, 0.85, 0.78), PI / 2.0, 0.34, ROOF_BLUE)
+	_disc(k, r + Vector3(0.27, 0.85, 0.78), PI / 2.0, 0.1, METAL)
+
+
+## 길드 회관: 넓은 돌 기단 + 석조 본관(앞 기둥 넷) + 높은 회색 박공지붕 + 용마루 위 작은 종탑(청록 지붕),
+## 앞쪽 박공 현관(큰 문, 문 위 금테 청록 문장 방패), 계단, 앞마당 깃대 둘(청록 깃발 + 금 띠).
+static func _guild_hall(k) -> void:
+	var c := Vector3(0, 0, -0.85)
+	k.box(c, Vector3(5.1, 0.4, 3.4), STONE_DARK)
+	_house(k, c + Vector3(0, 0.4, 0), Vector3(4.6, 2.6, 2.9), 2.0, STONE, SLATE)
+	for x in [-1.75, -0.95, 0.95, 1.75]:  # 앞벽 기둥
+		k.box(Vector3(x, 0.4, c.z + 1.5), Vector3(0.28, 2.6, 0.2), PLASTER)
+	for x in [-1.35, 1.35]:
+		k.box(Vector3(x, 1.4, c.z + 1.47), Vector3(0.4, 0.9, 0.1), WINDOW)
+	for z in [-0.5, 0.5]:
+		k.box(Vector3(2.32, 1.4, c.z + z), Vector3(0.1, 0.9, 0.4), WINDOW)
+	# 종탑
+	var t := c + Vector3(-1.0, 4.4, 0)
+	k.box(t + Vector3(0, -0.6, 0), Vector3(0.9, 1.5, 0.9), PLASTER)
+	k.box(t + Vector3(0, 0.1, 0.46), Vector3(0.4, 0.55, 0.04), WINDOW)
+	k.box(t + Vector3(0.46, 0.1, 0), Vector3(0.04, 0.55, 0.4), WINDOW)
+	k.pyramid(t + Vector3(0, 0.9, 0), 1.25, 1.1, GUILD)
+	# 현관: 앞으로 튀어나온 작은 박공(용마루 Z)
+	var p := Vector3(0, 0.4, c.z + 1.65)
+	_house(k, p, Vector3(1.2, 2.9, 1.5), 1.0, PLASTER, SLATE, PI / 2.0)
+	k.box(p + Vector3(0, 0, 0.6), Vector3(0.95, 1.9, 0.12), WOOD_DARK)
+	k.box(p + Vector3(0, 1.9, 0.6), Vector3(1.15, 0.15, 0.14), STONE_DARK)
+	k.box(Vector3(0, 0, p.z + 0.95), Vector3(1.6, 0.25, 0.45), STONE_DARK)  # 계단
+	# 문장: 금 테두리 + 청록 방패 + 금 띠
+	var e := p + Vector3(0, 2.3, 0.62)
+	k.box(e + Vector3(0, -0.05, 0), Vector3(0.7, 0.75, 0.06), GOLD)
+	k.box(e, Vector3(0.56, 0.62, 0.1), GUILD)
+	k.box(e + Vector3(0, 0.22, 0.02), Vector3(0.1, 0.36, 0.1), GOLD)
+	k.box(e + Vector3(0, 0.32, 0.02), Vector3(0.36, 0.1, 0.1), GOLD)
+	# 깃대 둘: 기둥 + 가로대 + 늘어진 깃발(아래 금 띠) + 꼭대기 금 구슬
+	for x in [-1.9, 1.9]:
+		var b := Vector3(x, 0, 1.95)
+		k.box(b, Vector3(0.14, 3.9, 0.14), WOOD_DARK)
+		k.box(b + Vector3(0, 3.55, 0), Vector3(0.85, 0.08, 0.08), WOOD_DARK)
+		k.box(b + Vector3(0, 2.05, 0.06), Vector3(0.72, 1.5, 0.05), GUILD)
+		k.box(b + Vector3(0, 2.15, 0.08), Vector3(0.72, 0.12, 0.05), GOLD)
+		k.box(b + Vector3(0, 2.9, 0.09), Vector3(0.22, 0.22, 0.05), GOLD)
+		k.prism_n(b + Vector3(0, 3.9, 0), 6, 0.12, 0.12, 0.18, GOLD)
+	# 벽에 걸린 청록 휘장 둘(현관 양옆)
+	for x in [-0.95, 0.95]:
+		k.box(Vector3(x, 1.2, c.z + 1.62), Vector3(0.45, 1.6, 0.05), GUILD)
+
+
+## 망루: 위로 좁아지는 4각 돌 기단(문·화살 구멍) + 나무 다리 넷(X자 버팀) + 넓은 사격 발판(난간, 앞 사다리 자리 비움)
+## + 모서리 기둥 넷 위 빨간 4각 지붕 + 깃발, 앞(+Z) 사다리가 땅에서 발판까지.
+const WATCH_DECK := 6.3  # 망루 발판 윗면 높이(전투 화살 출발점 참고)
+
+
+static func _watchtower(k) -> void:
+	k.prism_n(Vector3.ZERO, 4, 1.95, 1.6, 3.0, STONE, PI / 4.0)
+	k.prism_n(Vector3(0, 3.0, 0), 4, 1.7, 1.7, 0.25, STONE_DARK, PI / 4.0)
+	k.box(Vector3(0.55, 0, 1.33), Vector3(0.7, 1.4, 0.12), WOOD_DARK)  # 문(사다리 옆)
+	k.box(Vector3(1.24, 1.8, 0), Vector3(0.12, 0.6, 0.18), WINDOW)
+	k.box(Vector3(-0.5, 1.8, 1.24), Vector3(0.18, 0.6, 0.12), WINDOW)
+	var y0 := 3.25
+	var y1 := WATCH_DECK - 0.25
+	for p in [Vector3(-0.95, 0, -0.95), Vector3(0.95, 0, -0.95), Vector3(-0.95, 0, 0.95), Vector3(0.95, 0, 0.95)]:
+		k.box(p + Vector3(0, y0, 0), Vector3(0.28, y1 - y0, 0.28), WOOD)
+	var span := sqrt(1.9 * 1.9 + (y1 - y0) * (y1 - y0))
+	var tilt := atan2(1.9, y1 - y0)
+	for yaw in [0.0, PI / 2.0, PI, 3.0 * PI / 2.0]:  # 네 면 X자 버팀
+		for s in [-1.0, 1.0]:
+			k.xform = Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, s * tilt), Basis(Vector3.UP, yaw) * Vector3(0, (y0 + y1) / 2.0, 0.97) + Vector3(0, 0, 0))
+			k.box(Vector3(0, -span / 2.0, 0), Vector3(0.12, span, 0.08), WOOD_DARK)
+	k.xform = Transform3D.IDENTITY
+	k.box(Vector3(0, y1, 0), Vector3(3.3, 0.25, 3.3), WOOD_DARK)  # 발판
+	k.box(Vector3(0, y1 - 0.18, 0), Vector3(2.4, 0.18, 2.4), WOOD)
+	var d := WATCH_DECK
+	for yaw in [0.0, PI / 2.0, PI, 3.0 * PI / 2.0]:  # 난간: 앞(+Z)은 사다리 자리를 비운다
+		k.xform = Transform3D(Basis(Vector3.UP, yaw), Vector3(0, d, 0))
+		if yaw == 0.0:
+			k.box(Vector3(-1.05, 0, 1.58), Vector3(1.1, 0.75, 0.12), WOOD)
+			k.box(Vector3(0.8, 0, 1.58), Vector3(1.6, 0.75, 0.12), WOOD)
+		else:
+			k.box(Vector3(0, 0, 1.58), Vector3(3.3, 0.75, 0.12), WOOD)
+		k.box(Vector3(0, 0.75, 1.58), Vector3(3.36, 0.1, 0.2), WOOD_DARK)
+	k.xform = Transform3D.IDENTITY
+	for p in [Vector3(-1.5, 0, -1.5), Vector3(1.5, 0, -1.5), Vector3(-1.5, 0, 1.5), Vector3(1.5, 0, 1.5)]:
+		k.box(p + Vector3(0, d, 0), Vector3(0.18, 1.85, 0.18), WOOD)
+	k.pyramid(Vector3(0, d + 1.85, 0), 3.8, 1.5, ROOF_RED)
+	k.box(Vector3(0, d + 3.3, 0), Vector3(0.1, 1.2, 0.1), WOOD)
+	k.box(Vector3(0.4, d + 4.05, 0), Vector3(0.7, 0.4, 0.05), FLAG)
+	# 사다리: 앞(+Z) 바깥, 땅 → 발판 위
+	var lz := 1.82
+	for x in [-0.22 - 0.25, 0.22 - 0.25]:
+		k.box(Vector3(x, 0, lz), Vector3(0.08, d + 0.8, 0.08), WOOD)
+	var n := int(d / 0.4)
+	for i in n:
+		k.box(Vector3(-0.25, 0.3 + i * 0.4, lz), Vector3(0.48, 0.06, 0.06), WOOD_DARK)
+
+
+## 나무 상자(가운데 진한 띠). 바닥 중심 p, 한 변 s.
+static func _crate(k, p: Vector3, s: float) -> void:
+	k.box(p, Vector3(s, s, s), WOOD)
+	k.box(p + Vector3(0, s * 0.42, 0), Vector3(s + 0.03, s * 0.16, s + 0.03), WOOD_DARK)
+
+
+## 6각 통(위 테 진하게). 바닥 중심 p.
+static func _barrel(k, p: Vector3) -> void:
+	k.prism_n(p, 6, 0.38, 0.38, 0.75, WOOD)
+	k.prism_n(p + Vector3(0, 0.5, 0), 6, 0.41, 0.41, 0.1, WOOD_DARK)
 
 
 ## 말(개정 13 기병, 원점 = 발 사이 바닥, 머리 +Z): 몸통·목·머리·다리 넷·꼬리, 갈색(갈기·꼬리는 진하게). 기병 등 높이 = HORSE_BACK.

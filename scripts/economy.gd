@@ -267,10 +267,12 @@ static func rate_per_min(res_id: String, level: int, pct := 0.0) -> int:
 
 
 ## 쌓인 양 = floor(min(경과, 상한)/60) × 분당. 경과가 음수면 0.
-static func pending_amount(res_id: String, level: int, elapsed_sec: float, pct := 0.0) -> int:
+## cap_min = 쌓이는 상한(분, 음수면 accum_cap_min — 창고는 Economy.cap_min()).
+static func pending_amount(res_id: String, level: int, elapsed_sec: float, pct := 0.0, cap_min := -1.0) -> int:
 	if elapsed_sec <= 0.0:
 		return 0
-	return floori(minf(elapsed_sec, GameData.config_num("accum_cap_min") * 60.0) / 60.0) * rate_per_min(res_id, level, pct)
+	var cap := GameData.config_num("accum_cap_min") if cap_min < 0.0 else cap_min
+	return floori(minf(elapsed_sec, cap * 60.0) / 60.0) * rate_per_min(res_id, level, pct)
 
 
 static func hour_index(unix: float) -> int:
@@ -311,6 +313,23 @@ static func sell_value(res_id: String, amount: int, rate: float, pct := 0.0) -> 
 ## 자원 건물이 아니면 "".
 static func res_of(building_id: String) -> String:
 	return GameData.resource_of_building(building_id)
+
+
+## 눌러서 받는 것: 자원 건물이면 그 자원, 금광이면 "gold"(2026-10-13), 아니면 "".
+static func yield_of(building_id: String) -> String:
+	if GameData.type_of(building_id) == GameData.GOLDMINE:
+		return "gold"
+	return GameData.resource_of_building(building_id)
+
+
+## 지은 건물 key의 레벨(공터·없으면 0).
+func built_level(key: String) -> int:
+	return 0 if unbuilt.has(key) or not levels.has(key) else building_level(key)
+
+
+## 자원·금광이 쌓이는 상한(분) — 창고 레벨만큼 늘어난다(서버 capMin).
+func cap_min() -> float:
+	return GameData.accum_cap_min(built_level(GameData.WAREHOUSE))
 
 
 ## 모집 비용(골드는 정수 골드 — 가능 조건 gold(= floor(tenths / 10)) ≥ 비용, 차감은 비용 × 10. 다이아는 다이아). 골드는 지금 모집 레벨 값.
@@ -393,8 +412,10 @@ func reset(now: float) -> void:
 	res = {}
 	last_collect = {}
 	levels = {}
-	for b in GameData.buildings():
-		levels[b.id] = 1
+	for k in GameData.building_keys():  # 2026-10-13: 새 건물·n번째 채는 공터로 시작(성채 레벨로 연다)
+		levels[k] = 1
+		if yield_of(k) != "":
+			last_collect[k] = now
 	build = {}
 	build2 = {}
 	builder2_until = 0.0
@@ -417,6 +438,8 @@ func reset(now: float) -> void:
 	iap = {}
 	admin = false
 	unbuilt = {}
+	for k in GameData.lot_keys():  # 2026-10-13: 새 건물·n번째 채는 공터로 시작(성채 레벨로 연다)
+		unbuilt[k] = true
 	layout = {}
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
@@ -456,10 +479,13 @@ func reset(now: float) -> void:
 
 
 func pending(building_id: String, now: float) -> int:
-	var id := res_of(building_id)
-	if id == "" or unbuilt.has(building_id):
+	var id := yield_of(building_id)
+	if id == "" or unbuilt.has(building_id) or not last_collect.has(building_id):
 		return 0
-	return pending_amount(id, levels[building_id], now - float(last_collect[building_id]), res_pct(id))
+	var elapsed := now - float(last_collect[building_id])
+	if id == "gold":  # 금광: floor(min(경과, 상한)/60) × 분당 골드(서버 collectStep과 같다)
+		return 0 if elapsed <= 0.0 else floori(minf(elapsed, cap_min() * 60.0) / 60.0) * GameData.goldmine_per_min(building_level(building_id))
+	return pending_amount(id, levels[building_id], elapsed, res_pct(id), cap_min())
 
 
 ## 그 자원의 생산 연구 %(개정 24) = <자원>_pct + res_pct.
@@ -530,20 +556,23 @@ func collect(building_id: String, now: float) -> int:
 	if net != null:
 		_collect_online(building_id)
 		return 0
-	if res_of(building_id) != "" and now < float(last_collect[building_id]):  # 시계를 되돌림: 지금부터 다시 쌓는다
+	if yield_of(building_id) != "" and last_collect.has(building_id) and now < float(last_collect[building_id]):  # 시계를 되돌림: 지금부터 다시 쌓는다
 		last_collect[building_id] = now
 		save()
 		return 0
 	var amount := pending(building_id, now)
 	if amount == 0:
 		return 0
-	var id := res_of(building_id)
+	var id := yield_of(building_id)
 	var elapsed := now - float(last_collect[building_id])
-	if elapsed >= GameData.config_num("accum_cap_min") * 60.0:
+	if elapsed >= cap_min() * 60.0:
 		last_collect[building_id] = now
 	else:
 		last_collect[building_id] = float(last_collect[building_id]) + floori(elapsed / 60.0) * 60.0
-	res[id] += amount
+	if id == "gold":
+		add_gold_tenths(amount * 10)
+	else:
+		res[id] += amount
 	changed.emit()
 	collected.emit(building_id, id, amount)
 	save()
@@ -1015,9 +1044,9 @@ func building_cell(id: String) -> Vector2i:
 ## 성 안에 서 있는 건물 id → 칸(except는 뺀다).
 func placed_cells(except := "") -> Dictionary:
 	var out := {}
-	for b in Balance.BUILDINGS:
-		if b.id != except and is_placed(b.id):
-			out[b.id] = building_cell(b.id)
+	for k in GameData.building_keys():
+		if k != except and is_placed(k):
+			out[k] = building_cell(k)
 	return out
 
 
@@ -1117,9 +1146,9 @@ func _effective_levels() -> Dictionary:
 ## 튜토리얼 새 게임: keep_ids 밖의 건물을 모두 공터로 둔다(성채·성문만 지어진 채 시작). 오프라인 전용.
 func start_unbuilt(keep_ids: Array) -> void:
 	unbuilt = {}
-	for b in GameData.buildings():
-		if not b.id in keep_ids:
-			unbuilt[b.id] = true
+	for k in GameData.building_keys():  # n번째 채(2026-10-13)도 공터
+		if not k in keep_ids:
+			unbuilt[k] = true
 	changed.emit()
 	save()
 
@@ -1352,13 +1381,13 @@ func pouch_value(id: String, stage_n: int) -> Dictionary:
 	if pz.kind == "gold":
 		out.gold_tenths = int(offline_reward(sec, stage_n, kill_tenths(OFFLINE_KIND, stage_n)).tenths)
 		return out
-	for r in GameData.resources():
-		var b: String = r.building
-		if unbuilt.has(b):
+	for b in GameData.building_keys():  # 2026-10-13: 같은 종류 여러 채의 수입을 더한다(서버 pouchValue)
+		var rid := res_of(b)
+		if rid == "" or unbuilt.has(b) or not levels.has(b):
 			continue
-		var n := pending_amount(r.id, int(levels.get(b, 1)), sec, res_pct(r.id))
+		var n := pending_amount(rid, int(levels.get(b, 1)), sec, res_pct(rid), pz.min)
 		if n > 0:
-			out.res[r.id] = n
+			out.res[rid] = int(out.res.get(rid, 0)) + n
 	return out
 
 
@@ -1790,7 +1819,9 @@ func upgrade_block(id: String, now: float) -> String:
 	if is_building(id):
 		return "in_progress"
 	var busy := "" if free_builder(now) != 0 else str(build.get("id", ""))  # 쉬는 일꾼이 없으면 다른 건물을 짓는 중(builder_busy)
-	if unbuilt.has(id):  # 공터 짓기(0 → 1): 일꾼과 L1 비용만 본다
+	if unbuilt.has(id):  # 공터 짓기(0 → 1): 성채 레벨(새 건물·n번째 채), 일꾼과 L1 비용만 본다
+		if building_level(GameData.KEEP) < GameData.unlock_keep(id):
+			return "keep_cap"
 		if busy != "":
 			return "builder_busy"
 		var c := GameData.build_cost(id, 1)
@@ -1836,8 +1867,8 @@ func upgrade_sec(id: String) -> int:
 
 ## L → L+1 건설 시간에 연구 build_speed_pct를 넣은 값(서버 /v1/building/upgrade와 같은 식).
 func _build_sec(id: String, level: int) -> int:
-	if unbuilt.has(id):
-		return roundi(GameData.config_num("lot_build_sec"))  # 공터 첫 건설(0 → 1)은 lot_build_sec초(사용자 2026-10-06)
+	if unbuilt.has(id) and GameData.unlock_keep(id) == 0:
+		return roundi(GameData.config_num("lot_build_sec"))  # 튜토리얼 공터 첫 건설(0 → 1)은 lot_build_sec초(사용자 2026-10-06). 새 건물·n번째 채는 Lv 1 시간
 	return roundi(GameData.build_sec(id, level) / (1.0 + float(research_bonus().build_speed_pct) / 100.0))
 
 
@@ -1847,8 +1878,9 @@ func requirements(id: String) -> Array:
 	var d := GameData.building_def(id)
 	if d.is_empty() or building_level(id) >= int(d.max_level):
 		return []
-	if unbuilt.has(id):
-		return []  # 공터 짓기는 선행 조건이 없다
+	if unbuilt.has(id):  # 공터 짓기는 선행 조건이 없다 — 성채 레벨로 여는 건물만 성채 Lv
+		var need := GameData.unlock_keep(id)
+		return [] if need <= 0 else [{"id": GameData.KEEP, "need": need, "have": building_level(GameData.KEEP), "ok": building_level(GameData.KEEP) >= need}]
 	var to := building_level(id) + 1
 	var out := []
 	if id != GameData.KEEP:
@@ -1893,7 +1925,7 @@ func upgrade(id: String, now: float, cell: Variant = null) -> bool:
 		return _upgrade_online(id, cell)
 	if cell is Vector2i:  # 자유 건설: 공터를 고른 자리에
 		layout[id] = cell
-	if res_of(id) != "":
+	if yield_of(id) != "":
 		collect(id, now)
 	var cost := upgrade_cost(id)
 	for r in cost:
@@ -3216,6 +3248,10 @@ func apply_server(data: Dictionary) -> bool:
 		for x in p.unbuilt:
 			if x is String and not GameData.building_def(x).is_empty():
 				unbuilt[x] = true
+	if p.get("buildings") is Dictionary and not p.buildings.is_empty():  # 행이 없는 새 건물·n번째 채(옛 서버)는 공터로 본다
+		for k in GameData.lot_keys():
+			if not p.buildings.has(k):
+				unbuilt[k] = true
 	layout = _layout_of(p.get("layout"))  # 자유 건설 자리(서버 player.layout)
 	if _num(p.get("dia_tickets")):
 		dia_tickets = maxi(0, int(p.dia_tickets))
@@ -3305,17 +3341,14 @@ func apply_server(data: Dictionary) -> bool:
 	var r := {}
 	var lc := {}
 	var lv := {}
-	for row in GameData.buildings():  # 개정 12: 모든 건물 {level}(자원 건물은 아래에서 last_collect와 함께)
-		var v = p.buildings.get(row.id)
-		lv[row.id] = maxi(1, int(v.level)) if v is Dictionary and _num(v.get("level")) else 1
+	for k in GameData.building_keys():  # 개정 12: 모든 건물 {level} — 2026-10-13 키(새 건물·"lumber#2"), 자원 건물·금광은 last_collect도
+		var v = p.buildings.get(k)
+		lv[k] = maxi(1, int(v.level)) if v is Dictionary and _num(v.get("level")) else 1
+		if yield_of(k) != "":
+			lc[k] = float(v.last_collect) if v is Dictionary and _num(v.get("last_collect")) else time_now()
 	for row in GameData.resources():
 		var id: String = row.id
-		var bid: String = row.building
-		var b = p.buildings.get(bid)
-		var ok: bool = b is Dictionary and _num(b.get("last_collect")) and _num(b.get("level"))
 		r[id] = int(p.res.get(id, 0)) if _num(p.res.get(id)) else 0
-		lc[bid] = float(b.last_collect) if ok else time_now()
-		lv[bid] = int(b.level) if ok else 1
 	res = r
 	last_collect = lc
 	var levels_before := levels
@@ -3505,7 +3538,7 @@ func _kills_tenths(kills: Dictionary) -> int:
 
 
 func _collect_online(building_id: String) -> void:
-	if res_of(building_id) == "" or _waiting.has(building_id):
+	if yield_of(building_id) == "" or _waiting.has(building_id):
 		return  # 응답 전 같은 건물 재탭은 무시
 	if not net.up:
 		notice.emit(WAIT_TEXT)
@@ -3514,8 +3547,8 @@ func _collect_online(building_id: String) -> void:
 	var t0 := time_now()
 	var amount := pending(building_id, t0)
 	if amount > 0:  # 곧바로 보유량에 더해 보인다(응답이 오면 서버 값으로)
-		_predict(building_id, func(): _local_collect(building_id, t0))
-		collected.emit(building_id, res_of(building_id), amount)
+		_predict(building_id, func(): _local_collect(building_id, t0), amount * 10 if yield_of(building_id) == "gold" else 0)
+		collected.emit(building_id, yield_of(building_id), amount)
 	net.send("POST", "/v1/collect", {"building": building_id}, _on_collected.bind(building_id, amount > 0), _uncollect.bind(building_id))
 
 
@@ -3525,7 +3558,7 @@ func _on_collected(data: Dictionary, building_id: String, shown := false) -> voi
 	apply_server(data)
 	var amount := int(data.get("amount", 0))
 	if amount > 0 and not shown:
-		collected.emit(building_id, res_of(building_id), amount)
+		collected.emit(building_id, yield_of(building_id), amount)
 
 
 func _uncollect(building_id: String) -> void:
@@ -3542,12 +3575,13 @@ func _local_collect(building_id: String, now: float) -> void:
 	if amount <= 0:
 		return
 	var elapsed := now - float(last_collect[building_id])
-	if elapsed >= GameData.config_num("accum_cap_min") * 60.0:
+	if elapsed >= cap_min() * 60.0:
 		last_collect[building_id] = now
 	else:
 		last_collect[building_id] = float(last_collect[building_id]) + floori(elapsed / 60.0) * 60.0
-	var r := res_of(building_id)
-	res[r] = int(res.get(r, 0)) + amount
+	var r := yield_of(building_id)
+	if r != "gold":  # 금광 골드는 _predict의 gold로 더해 보인다
+		res[r] = int(res.get(r, 0)) + amount
 
 
 ## 온라인 동작을 응답 전에 곧바로 보이게 한다: apply를 지금 하고, 그 키의 응답(또는 거절)이 올 때까지 다른 서버 응답 위에도 다시 한다.
@@ -4287,12 +4321,18 @@ func _apply(data) -> bool:
 		lc[b] = float(ls[b])
 		lv[b] = maxi(1, int(vs[b]))
 	# 건물(개정 12, v4): 자원 건물이 아닌 건물 레벨은 있으면 숫자여야 하고, 없으면(v3 이하·새 건물) 1. 일꾼은 null 또는 {표에 있는 id, finish}
-	for row in GameData.buildings():
-		var v = data.levels.get(row.id)
+	var new_lots := []  # 2026-10-13: 저장에 없던 새 건물·n번째 채는 공터로
+	for k in GameData.building_keys():
+		var v = data.levels.get(k)
 		if v != null and not _num(v):
 			return false
-		if not lv.has(row.id):
-			lv[row.id] = maxi(1, int(v)) if v != null else 1
+		if not lv.has(k):
+			lv[k] = maxi(1, int(v)) if v != null else 1
+		if v == null and GameData.unlock_keep(k) > 0:
+			new_lots.append(k)
+		if yield_of(k) != "" and not lc.has(k):
+			var t = data.last_collect.get(k)
+			lc[k] = float(t) if _num(t) else Time.get_unix_time_from_system()
 	var bd = data.get("build")
 	var bld := {}
 	if bd != null:
@@ -4398,6 +4438,8 @@ func _apply(data) -> bool:
 		for x in ub:
 			if x is String and not GameData.building_def(x).is_empty():
 				unbuilt[x] = true
+	for k in new_lots:
+		unbuilt[k] = true
 	layout = _layout_of(data.get("layout"))  # 자유 건설 자리(없으면 모두 기본 자리)
 	return true
 

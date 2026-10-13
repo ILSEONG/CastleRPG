@@ -156,6 +156,9 @@ func _build_world() -> void:
 	var spawner = SpawnerScript.new()
 	spawner.castle = castle
 	add_child(spawner)
+	var watchtower = preload("res://scripts/watchtower.gd").new()  # 망루: 지었으면 성 전투에서 화살(2026-10-13)
+	watchtower.castle = castle
+	add_child(watchtower)
 	var hud = HudScript.new()
 	add_child(hud)
 	hud.gate_tapped.connect(func(side): rig.pan_to(FormationScript.gate_position(castle.half, side), GATE_PAN_SEC))  # 성문 막대 탭(개정 12-2 §2)

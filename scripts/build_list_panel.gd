@@ -66,7 +66,7 @@ func _ready() -> void:
 	_list = HBoxContainer.new()
 	_list.add_theme_constant_override("separation", 10)
 	_scroll.add_child(_list)
-	for b in Balance.BUILDINGS:
+	for b in Balance.entries():  # 새 건물·자원 건물 n번째 채(2026-10-13)도 카드 하나씩
 		if not Balance.FIXED.has(b.id):
 			_add_card(b.id)
 	Economy.changed.connect(func(): if visible: _refresh())
@@ -92,7 +92,7 @@ func _add_card(id: String) -> void:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(box)
 	box.add_child(_preview(id))
-	box.add_child(_label(GameData.building_def(id).name, 22, HudScript.INK))
+	box.add_child(_label(GameData.building_name(id), 22, HudScript.INK))
 	var status := _label("", 16, HudScript.INK.lightened(0.3))
 	box.add_child(status)
 	var costs := GridContainer.new()
@@ -297,7 +297,9 @@ func _refresh() -> void:
 				var block := Economy.upgrade_block(id, now)
 				why = Economy.BLOCK_TEXT.get(block, "")
 				if block == "builder_busy":
-					why += " (%s)" % GameData.building_def(str(Economy.build.id)).name
+					why += " (%s)" % GameData.building_name(str(Economy.build.id))
+				elif block == "keep_cap":  # 성채 레벨로 여는 새 건물·n번째 채
+					why = "성채 Lv %d 필요" % GameData.unlock_keep(id)
 		r.why = why
 		r.reason.text = why
 		r.reason.visible = why != ""

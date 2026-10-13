@@ -995,8 +995,7 @@ func _drag(index: int, pos: Vector2, rel: Vector2) -> void:
 
 ## 건물 부지 중심 약간 위(탭 판정체 안)의 화면 좌표.
 func _building_px(id: String) -> Vector2:
-	var b := Balance.building(id)
-	return _camera.unproject_position(Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 1.0, (b.cell.y + b.size.y / 2.0) * Balance.TILE))
+	return _camera.unproject_position(Balance.center_of(id) + Vector3(0, 1.0, 0))  # 지금 자리(자유 건설)
 
 
 ## px 근처(HERO_TAP_PX)에 영웅이 있는지 — 영웅 판정이 건물 탭을 가로채지 않는지 사전 확인용.
@@ -1095,8 +1094,9 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	var lp := _building_px("lumber")
 	var wt = _child(preload("res://scripts/world_tags.gd"))
 	_check(Economy.levels.values().all(func(l): return l == 1) and Economy.build.is_empty() and wt.text("lumber") == "벌목장 Lv 1"
-		and wt.text("keep") == "성채 Lv 1" and scenery.tag_anchors.size() == Balance.BUILDINGS.size()
-		and Balance.BUILDINGS.all(func(b): return wt.text(b.id) == "%s Lv 1" % b.name), "(B) every building's name tag reads '이름 Lv N'",
+		and wt.text("keep") == "성채 Lv 1" and scenery.tag_anchors.size() == Balance.entries().size()
+		and Balance.BUILDINGS.filter(func(b): return b.has("cell")).all(func(b): return wt.text(b.id) == "%s Lv 1" % b.name)
+		and scenery.hidden.size() == GameData.lot_keys().size(), "(B) every building's name tag reads '이름 Lv N'",
 		"lumber=%s keep=%s" % [wt.text("lumber"), wt.text("keep")])
 
 	# 길게 누르기(0.5초): 누른 채 건물 창이 열리고, 뗀 뒤에도 수집하지 않는다. 창을 닫은 뒤 누르지 않은 마우스 움직임은 카메라를 못 옮긴다
@@ -2141,8 +2141,8 @@ func _world_tags() -> void:
 		Economy.last_collect[b] = now  # 말풍선 없이 시작
 	Economy.changed.emit()
 	await _frames(2)
-	_check(_main.find_children("*", "Label3D", true, false).is_empty() and wt.tags.size() == Balance.BUILDINGS.size() + 1 + 4 and wt.text("merchant") == "상인"
-		and wt.text("houses") == "민가 Lv 1" and WT.NAME_SIZE == 20 and wt.rects.size() == wt.tags.size(),
+	_check(_main.find_children("*", "Label3D", true, false).is_empty() and wt.tags.size() == Balance.entries().size() + 1 + 4 and wt.text("merchant") == "상인"
+		and wt.text("houses") == "민가 Lv 1" and WT.NAME_SIZE == 20 and wt.rects.size() == wt.tags.size() - scenery.hidden.size(),
 		"(T) one screen-space tag layer: 10 buildings + merchant + 4 gate letters (no Label3D), 20 px names, all on screen at the default camera",
 		"tags=%d rects=%d" % [wt.tags.size(), wt.rects.size()])
 	var strings := 0

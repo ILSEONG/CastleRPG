@@ -170,7 +170,7 @@ static func load_tables(monsters_path := MONSTERS_PATH, stages_path := STAGES_PA
 		"stages": _read(stages_path, ["stage"] + STAGE_COLS),
 		"heroes": _read(heroes_path, HERO_STR_COLS + HERO_COLS + HERO_SKILL_COLS[0] + HERO_SKILL_COLS[1] + HERO_SKILL_COLS[2]),
 		"resources": _read(resources_path, ["id", "name", "building"] + RESOURCE_NUM_COLS),
-		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS, BUILDING_LV_COLS),
+		"buildings": _read(buildings_path, BUILDING_STR_COLS + BUILDING_NUM_COLS + BUILDING_REQ_COLS, BUILDING_LV_COLS + ["unlock_keep"]),
 		"soldiers": _read(soldiers_path, SOLDIER_STR_COLS + SOLDIER_NUM_COLS),
 		"upgrades": _read(upgrades_path, UPGRADE_STR_COLS + UPGRADE_NUM_COLS),
 		"dungeons": _read(dungeons_path, DUNGEON_STR_COLS + DUNGEON_NUM_COLS),  # 개정 18
@@ -253,8 +253,9 @@ static func resource(id: String) -> Dictionary:
 
 ## 자원 건물이면 그 자원 id, 아니면 "".
 static func resource_of_building(building_id: String) -> String:
+	var t := type_of(building_id)
 	for r in resources():
-		if r.building == building_id:
+		if r.building == t:
 			return r.id
 	return ""
 
@@ -283,11 +284,107 @@ static func buildings() -> Array:
 	return _buildings
 
 
+## 건물 정의 — 키 "종류#n"(자원 건물 n번째 채, 2026-10-13)은 그 종류의 정의.
 static func building_def(id: String) -> Dictionary:
+	var t := type_of(id)
 	for b in buildings():
-		if b.id == id:
+		if b.id == t:
 			return b
 	return {}
+
+
+# --- 건물 키(2026-10-13 새 건물·자원 건물 여러 채). 서버 rules.typeOf·copiesAt·buildingKeys·unlockKeep과 같다 ---
+const COPY_SEP := "#"
+const GOLDMINE := "goldmine"
+const WAREHOUSE := "warehouse"
+const FORGE := "forge"
+const GUILD_HALL := "guild_hall"
+const WATCHTOWER := "watchtower"
+
+
+## 키의 종류("lumber#2" → "lumber").
+static func type_of(key: String) -> String:
+	return key.get_slice(COPY_SEP, 0)
+
+
+## 몇 번째 채인가(종류 그대로면 1).
+static func copy_index(key: String) -> int:
+	return key.get_slice(COPY_SEP, 1).to_int() if COPY_SEP in key else 1
+
+
+## 성채 레벨에서 지을 수 있는 자원 건물(종류마다) 수 — config res_copy_tiers(없으면 1).
+static func copies_at(keep_level: int) -> int:
+	return maxi(1, int(tier_value("res_copy_tiers", keep_level)))
+
+
+## 자원 건물 한 종류의 최대 채 수.
+static func max_copies() -> int:
+	_ensure()
+	var out := 1
+	for t in parse_tiers(String(_config.get("res_copy_tiers", ""))):
+		out = maxi(out, int(t[1]))
+	return out
+
+
+## n번째 채를 지을 수 있는 성채 레벨(없으면 0 — 너무 큰 n).
+static func copy_unlock_keep(n: int) -> int:
+	_ensure()
+	for t in parse_tiers(String(_config.get("res_copy_tiers", ""))):
+		if int(t[1]) >= n:
+			return int(t[0])
+	return 0
+
+
+## 그 건물을 처음 지을 수 있는 성채 레벨: n번째 채면 res_copy_tiers, 아니면 건물 표 unlock_keep(0 = 처음부터).
+static func unlock_keep(key: String) -> int:
+	var n := copy_index(key)
+	if n >= 2:
+		return copy_unlock_keep(n)
+	return int(building_def(key).get("unlock_keep", 0))
+
+
+## 모든 건물 키(파일 순서, 그 뒤에 자원 건물 2번째 채부터).
+static func building_keys() -> Array:
+	var out := []
+	for b in buildings():
+		out.append(b.id)
+	var m := max_copies()
+	for r in resources():
+		for n in range(2, m + 1):
+			out.append("%s%s%d" % [r.building, COPY_SEP, n])
+	return out
+
+
+## 처음엔 공터인 건물 키(성채 레벨로 여는 새 건물과 n번째 채).
+static func lot_keys() -> Array:
+	return building_keys().filter(func(k): return unlock_keep(k) > 0)
+
+
+## 건물 이름(키 — n번째 채면 "벌목장 2").
+static func building_name(key: String) -> String:
+	var n := copy_index(key)
+	var nm := String(building_def(key).get("name", key))
+	return nm if n < 2 else "%s %d" % [nm, n]
+
+
+## 금광 분당 골드 = floor(goldmine_gold_base × L^goldmine_gold_exp)(서버 rules.goldminePerMin).
+static func goldmine_per_min(level: int) -> int:
+	return 0 if level <= 0 else floori(config_num("goldmine_gold_base") * pow(level, config_num("goldmine_gold_exp")))
+
+
+## 쌓이는 상한(분) = accum_cap_min + warehouse_cap_min_per_level × 창고 레벨(서버 rules.accumCapMin).
+static func accum_cap_min(warehouse_level: int) -> float:
+	return config_num("accum_cap_min") + config_num("warehouse_cap_min_per_level") * maxi(0, warehouse_level)
+
+
+## 길드 회관 도움 횟수(서버 rules.guildHelps).
+static func guild_helps(level: int) -> int:
+	return 0 if level <= 0 else floori(config_num("guild_hall_helps_base") + config_num("guild_hall_helps_per_level") * (level - 1))
+
+
+## 대장간 장비 던전 추가 드롭 확률(0..1).
+static func forge_extra_p(level: int) -> float:
+	return clampf(maxi(0, level) * config_num("forge_extra_drop_pct_per_level") / 100.0, 0.0, 1.0)
 
 
 ## L → L+1 비용 {wood, stone, food}(정수) = 레벨 목록 lv_<자원>의 L번째 값(2026-10-13 라오킹 곡선, 목록 너머는 마지막 값).
@@ -1257,6 +1354,17 @@ static func _build(raw: Dictionary) -> Dictionary:
 					ok = false
 					break
 				row[c].append(part.strip_edges().to_float())
+		var uk = src.get("unlock_keep")  # 2026-10-13 새 건물: 처음 지을 수 있는 성채 레벨(비면 0)
+		row.unlock_keep = 0
+		if not _blank(uk):
+			if (uk is float or uk is int) or (uk is String and uk.strip_edges().is_valid_int()):
+				row.unlock_keep = maxi(0, int(uk) if not uk is String else uk.strip_edges().to_int())
+			else:
+				_err(src._src, src._line, "unlock_keep", "must be a non-negative integer: '%s'" % str(uk))
+				ok = false
+		if "#" in String(row.id):
+			_err(src._src, src._line, "id", "must not contain '#' (copy separator): '%s'" % row.id)
+			ok = false
 		if not ok:
 			continue
 		if ids.has(row.id):

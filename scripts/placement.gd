@@ -159,8 +159,7 @@ func start(id: String) -> bool:
 	if moving and scenery != null and scenery.lots.has(id):
 		scenery.lots[id].mi.visible = false
 	_set_picker(false)
-	var d := GameData.building_def(id)
-	title_label.text = "%s %s" % [d.name, "옮기기" if moving else "건설"]
+	title_label.text = "%s %s" % [GameData.building_name(id), "옮기기" if moving else "건설"]
 	confirm_button.text = "여기로 이동" if moving else "건설"
 	_fill_cost()
 	_layer.visible = true

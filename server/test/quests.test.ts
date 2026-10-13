@@ -12,6 +12,10 @@ import { readTables, seed } from '../src/seed.ts'
 import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
+// 2026-10-13: 성채 레벨로 여는 새 건물 5종과 자원 건물 2~4번째 채는 늘 공터로 시작한다(정렬)
+const LOTS = ['forge', 'goldmine', 'guild_hall', 'warehouse', 'watchtower',
+  ...['lumber', 'quarry', 'farm'].flatMap((b) => [2, 3, 4].map((n) => `${b}#${n}`))].sort()
+
 let S: Setup
 before(async () => {
   S = await setup({ tutorial: true })
@@ -35,7 +39,7 @@ test('새 플레이어: 튜토리얼 active, 성채·성문 밖 건물은 공터
   const p = await player(token)
   assert.deepEqual(p.quest, { tut_state: 'active', tut_step: 0, rep_n: 0 })
   assert.equal(p.dia_tickets, 0)
-  assert.deepEqual(p.unbuilt, ['archery', 'barracks', 'farm', 'houses', 'lab', 'lumber', 'quarry', 'stable', 'tavern'])
+  assert.deepEqual(p.unbuilt, ['archery', 'barracks', 'farm', 'houses', 'lab', 'lumber', 'quarry', 'stable', 'tavern', ...LOTS].sort())
   assert.equal(p.buildings.lumber.level, 1)
 })
 
@@ -186,7 +190,7 @@ test('튜토리얼을 끈 설정(tutorial_new_players 0): 새 플레이어는 sk
   try {
     const { token } = await S.login()
     const p = await player(token)
-    assert.deepEqual([p.quest.tut_state, p.unbuilt], ['skipped', []])
+    assert.deepEqual([p.quest.tut_state, p.unbuilt], ['skipped', LOTS]) // 성채 레벨로 여는 건물·n번째 채만 공터
   } finally {
     await S.db.query("update game_config set value = '1' where key = 'tutorial_new_players'")
   }
