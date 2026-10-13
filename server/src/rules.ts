@@ -427,6 +427,8 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
 
 export const LEVELUP_GOLD_GROWTH = 1.16 // 2026-10-07 1.12 → 1.16. 앱 GameData와 같다
 export const LEVELUP_GOLD_CURVE = 1.0007 // 2026-10-12: × 1.0007^((L−1)²) — 고레벨일수록 상승폭이 커진다. 앱 GameData와 같다
+export const LEVELUP_GOLD_TAIL_FROM = 69 // 2026-10-13 최대 Lv 200: Lv 69 → 70부터는 한 레벨마다 × 1.04씩만. 앱 GameData와 같다
+export const LEVELUP_GOLD_TAIL = 1.04
 
 // 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 export function heroMaxLevel(promotion: number, config: Config): number {
@@ -445,12 +447,13 @@ export function promoteCost(promotion: number, config: Config): number | null {
   return v
 }
 
-// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)), 개정 12: 골드만.
+// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)), Lv 69부터는 Lv 69 값 × 1.04^(L − 69), 개정 12: 골드만.
 export function levelupCost(grade: string, level: number, count: number, config: Config) {
   const g = cfgNum(config, `levelup_gold_${grade}`)
   let gold = 0
   for (let l = level; l < level + count; l++) {
-    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** (l - 1) * LEVELUP_GOLD_CURVE ** ((l - 1) * (l - 1)))
+    const k = Math.min(l, LEVELUP_GOLD_TAIL_FROM) - 1
+    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** k * LEVELUP_GOLD_CURVE ** (k * k) * LEVELUP_GOLD_TAIL ** Math.max(0, l - LEVELUP_GOLD_TAIL_FROM))
   }
   return { gold }
 }

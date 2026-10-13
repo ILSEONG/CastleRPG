@@ -1559,7 +1559,10 @@ func test_deploy_and_promotion() -> void:
 		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.3^p (p 5 = x3.71), capped at 5")
 	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
 		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
-	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 30, 40, 50, 60, 70], "max level = 20 + 10 x promotion (70 at 5)")
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 56, 92, 128, 164, 200], "max level = 20 + 36 x promotion (200 at 5, 2026-10-13)")
+	check(GameData.levelup_cost("SSR", 69).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68)) and GameData.levelup_cost("SSR", 70).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * 1.04)
+		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * pow(1.04, 130)) and GameData.levelup_cost("SSR", 1, 199).gold < 10 ** 12,
+		"level-up gold: the curve up to Lv 69 -> 70, then x1.04 per level (Lv 199 -> 200 about 242억, SSR 1 -> 200 under 1조): %s" % [GameData.levelup_cost("SSR", 1, 199)])
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 9
@@ -1941,14 +1944,14 @@ func test_promotion() -> void:
 	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
 		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
 	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
-	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 30
-		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 30 (Lv 20 can level again)")
+	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 56
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 56 (Lv 20 can level again)")
 	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
 	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
 	for i in 4:
 		e.promote("arteon")
-	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 70,
-		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 70)")
+	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 200,
+		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 200)")
 	e.hero_shards["arteon"] = 999
 	notes.clear()
 	check(e.promote_block("arteon") == "max_promotion" and not e.promote("arteon") and notes == ["최대 승급"] and e.shards_of("arteon") == 999 and e.promotion_of("arteon") == 5,
