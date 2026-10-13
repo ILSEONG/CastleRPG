@@ -130,12 +130,13 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult',
   'offline_gold_mult', 'tutorial_train_sec', 'lot_build_sec', 'quest_repeat_min_sec', 'tutorial_new_players'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
-export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
+export const CONFIG_LIST = ['starter_heroes', 'promote_shards', 'hero_max_levels']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
 export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'tavern_ssr_per_level', 'tavern_sr_per_level']
 // 개정 24 연구 설정(checkResearch가 범위를 본다): 비용·시간 성장 ≥ 1, 연구소 속도 ≥ 0, 취소 환불 0..1, 다이아/분 0 이상 정수
-export const CONFIG_RESEARCH_NUM = ['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min']
+export const CONFIG_RESEARCH_NUM = ['research_cost_growth', 'research_time_growth', 'lab_research_speed_per_level', 'research_cancel_refund', 'research_dia_per_min',
+  'research_lab_per_level', 'research_lab_cap']
 const POP_KEYS = ['pop_base', 'pop_per_house'] // 인구는 정수
 // 개정 13 병사 설정(checkSoldiers가 범위를 본다): 최대 티어·합성 수·묶음 기본은 1 이상 정수, 묶음 레벨 증가분은 0 이상 정수, 나머지는 0보다 크다.
 // 개정 16 훈련: 병종마다 1마리 비용 train_cost_<병종>("자원:수|…", rules.parseTrainCost)도 필수다
@@ -304,6 +305,10 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   for (const k of ['hero_level_stat', 'hero_level_stat_melee']) {
     const stat = num(k)
     if (stat !== null && !(stat >= 0)) err(k, `must be 0 or more: '${raw(k)}'`)
+  }
+  const caps = raw('hero_max_levels').split('|').map((x) => x.trim())
+  if (byKey.has('hero_max_levels') && !(caps.length === MAX_PROMOTION + 1 && caps.every((x, i) => /^\d+$/.test(x) && Number(x) >= 1 && (i === 0 || Number(x) >= Number(caps[i - 1]))))) {
+    err('hero_max_levels', `must be ${MAX_PROMOTION + 1} ascending integers of at least 1 separated by '|': '${raw('hero_max_levels')}'`)
   }
   const mult = num('promote_mult')
   if (mult !== null && !(mult >= 1)) err('promote_mult', `must be 1 or more: '${raw('promote_mult')}'`)
@@ -578,6 +583,8 @@ function checkResearch(t: Tables, errors: string[]) {
     ['lab_research_speed_per_level', (v) => v >= 0, '0 or more'],
     ['research_cancel_refund', (v) => v >= 0 && v <= 1, 'in 0..1'],
     ['research_dia_per_min', (v) => Number.isInteger(v) && v >= 0, 'a non-negative integer'],
+    ['research_lab_per_level', (v) => Number.isInteger(v) && v >= 0, 'a non-negative integer'],
+    ['research_lab_cap', (v) => Number.isInteger(v) && v >= 0, 'a non-negative integer'],
   ]
   for (const [k, ok, why] of rules) {
     const r = byKey.get(k)

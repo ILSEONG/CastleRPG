@@ -482,13 +482,15 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
 
 // --- 영웅 레벨업 (개정 11 §2.1) — 앱 GameData.max_level·levelup_total과 같은 식 ---
 
-export const LEVELUP_GOLD_GROWTH = 1.16 // 2026-10-07 1.12 → 1.16. 앱 GameData와 같다
-export const LEVELUP_GOLD_CURVE = 1.0007 // 2026-10-12: × 1.0007^((L−1)²) — 고레벨일수록 상승폭이 커진다. 앱 GameData와 같다
-export const LEVELUP_GOLD_TAIL_FROM = 69 // 2026-10-13 최대 Lv 200: Lv 69 → 70부터는 한 레벨마다 × 1.04씩만. 앱 GameData와 같다
-export const LEVELUP_GOLD_TAIL = 1.04
+// L → L+1 골드 = round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))) (2026-10-13 최대 Lv 200, 골드 수급량 기준). 앱 GameData와 같다
+export const LEVELUP_GOLD_GROWTH = 1.037
+export const LEVELUP_GOLD_BOOST = 8.2
+export const LEVELUP_GOLD_TAU = 45
 
-// 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
+// 최대 레벨 = hero_max_levels의 승급번째(20|50|80|120|160|200, 2026-10-13). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 export function heroMaxLevel(promotion: number, config: Config): number {
+  const list = String(config.hero_max_levels ?? '').split('|').map(Number)
+  if (list.length === MAX_PROMOTION + 1 && list.every((v) => Number.isInteger(v) && v >= 1)) return list[Math.max(0, Math.min(promotion, MAX_PROMOTION))]
   return cfgNum(config, 'hero_max_level_base') + cfgNum(config, 'hero_max_level_per_promotion') * promotion
 }
 
@@ -504,13 +506,12 @@ export function promoteCost(promotion: number, config: Config): number | null {
   return v
 }
 
-// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)), Lv 69부터는 Lv 69 값 × 1.04^(L − 69), 개정 12: 골드만.
+// level에서 count번 올리는 비용 합계. L → L+1: 골드(정수) = round(levelup_gold_<등급> × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))), 개정 12: 골드만.
 export function levelupCost(grade: string, level: number, count: number, config: Config) {
   const g = cfgNum(config, `levelup_gold_${grade}`)
   let gold = 0
   for (let l = level; l < level + count; l++) {
-    const k = Math.min(l, LEVELUP_GOLD_TAIL_FROM) - 1
-    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** k * LEVELUP_GOLD_CURVE ** (k * k) * LEVELUP_GOLD_TAIL ** Math.max(0, l - LEVELUP_GOLD_TAIL_FROM))
+    gold += roundHalfAway(g * LEVELUP_GOLD_GROWTH ** (l - 1) * Math.exp(LEVELUP_GOLD_BOOST * (1 - Math.exp(-(l - 1) / LEVELUP_GOLD_TAU))))
   }
   return { gold }
 }
@@ -947,12 +948,16 @@ export function researchBlock(def: ResearchDef, levels: Record<string, number>, 
   const n = levels[def.id] ?? 0
   if (n >= def.max_level) return 'max_level'
   const reqs: [string | null, number | null][] = [[def.req1, def.req1_lv], [def.req2, def.req2_lv]]
-  if (labLevel < def.lab_req || reqs.some(([id, lv]) => id && (levels[id] ?? 0) < Number(lv))) return 'locked'
+  if (labLevel < def.lab_req || labLevel < researchLabNeed(config, def, n) || reqs.some(([id, lv]) => id && (levels[id] ?? 0) < Number(lv))) return 'locked'
   const cost = researchCost(config, def, n)
   if (BUILD_RES.some((r) => (have[r] ?? 0) < cost[r])) return 'not_enough_resources'
   if ((have.gold ?? 0) < cost.gold) return 'not_enough_gold'
   return ''
 }
+
+// n → n+1에 필요한 연구소 Lv = min(research_lab_cap, lab_req + n × research_lab_per_level)(라오킹식, 2026-10-13). 앱 GameData.research_lab_need와 같다.
+export const researchLabNeed = (config: Config, def: ResearchDef, n: number) =>
+  Math.min(cfgNum(config, 'research_lab_cap'), Number(def.lab_req) + n * cfgNum(config, 'research_lab_per_level'))
 
 // 취소 환불 = 그 레벨 비용 × research_cancel_refund(자원·골드마다 내림).
 export const researchRefund = (config: Config, cost: Record<string, number>) =>

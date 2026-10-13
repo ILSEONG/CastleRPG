@@ -1643,10 +1643,10 @@ func test_deploy_and_promotion() -> void:
 		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.3^p (p 5 = x3.71), capped at 5")
 	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
 		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
-	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 56, 92, 128, 164, 200], "max level = 20 + 36 x promotion (200 at 5, 2026-10-13)")
-	check(GameData.levelup_cost("SSR", 69).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68)) and GameData.levelup_cost("SSR", 70).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * 1.04)
-		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * pow(1.04, 130)) and GameData.levelup_cost("SSR", 1, 199).gold < 10 ** 12,
-		"level-up gold: the curve up to Lv 69 -> 70, then x1.04 per level (Lv 199 -> 200 about 242억, SSR 1 -> 200 under 1조): %s" % [GameData.levelup_cost("SSR", 1, 199)])
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 50, 80, 120, 160, 200], "max level = hero_max_levels by promotion: 20 / 50 / 80 / 120 / 160 / 200 (2026-10-13)")
+	check(GameData.levelup_cost("SSR", 1).gold == 240 and GameData.levelup_cost("SSR", 20).gold == 8064 and GameData.levelup_cost("SSR", 50).gold == 328031
+		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.037, 198) * exp(8.2 * (1.0 - exp(-198.0 / 45.0)))) and absi(GameData.levelup_cost("SSR", 1, 199).gold - 26_400_000_000) < 200_000_000,
+		"level-up gold = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))): SSR Lv 20 8,064, Lv 50 32.8만, 1 -> 200 about 264억: %s" % [GameData.levelup_cost("SSR", 1, 199)])
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 9
@@ -1930,9 +1930,9 @@ func test_hero_levels() -> void:
 		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.169115 / 10.0 + 23.0 * 2.169115 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 126,
 		"power = round((HP / 10 + atk x 2 / interval) x grade): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
-	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 70, 81, 94, 110, 241, 1089, 1296] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 139, 162, 483, 2177] \
-		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 279, 324, 966, 4354, 147430424], "gold cost table = round(base x 1.16^(L-1) x 1.0007^((L-1)^2)), same as the server")
-	check(GameData.levelup_cost("R", 1, 5) == {"gold": 415} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 27076}, "cost is gold only (no food), count sums the levels")
+	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 75, 92, 114, 139, 368, 1723, 2016] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 149, 184, 736, 3446] \
+		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 298, 369, 1471, 6891, 1692572], "gold cost table = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))), same as the server")
+	check(GameData.levelup_cost("R", 1, 5) == {"gold": 480} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 42122}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)
 	var got := []
@@ -1940,10 +1940,10 @@ func test_hero_levels() -> void:
 	e.gold_tenths = 5005
 	e.res.food = 200
 	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 4405 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 600 tenths and no food")
-	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 1955 and e.res.food == 200, "three levels at once take the summed cost")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 1595 and e.res.food == 200, "three levels at once take the summed cost")
 	var notes := []
 	e.notice.connect(func(t): notes.append(t))
-	e.gold_tenths = 1099  # 109.9골드 < 110
+	e.gold_tenths = 1389  # 138.9골드 < 139
 	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
 	e.gold_tenths = 100000
 	e.res.food = 0
@@ -2028,8 +2028,8 @@ func test_promotion() -> void:
 	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
 		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
 	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
-	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 56
-		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 56 (Lv 20 can level again)")
+	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 50
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 50 (Lv 20 can level again)")
 	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
 	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
 	for i in 4:
@@ -4736,28 +4736,32 @@ func test_research_r24() -> void:
 	var w := GameData.research_def("wood_tech")
 	check(c.branch == "economy" and c.tier == 2.0 and c.req1 == "wood_tech" and c.req1_lv == 3.0 and c.req2 == "stone_tech" and c.req2_lv == 3.0 and c.lab_req == 3.0
 		and w.req1 == "" and w.req1_lv == 0.0 and w.req2 == "", "construct needs wood/stone tech Lv 3 and lab 3; empty prerequisites are \"\" / 0")
-	# 비용: round(값 × 1.3^n), n = 지금 레벨(0부터). 시간: round(base × 1.35^n ÷ (1 + 속도))
-	check(GameData.research_cost("wood_tech", 0) == {"wood": 1200, "stone": 800, "food": 1000, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 1560, "stone": 1040, "food": 1300, "gold": 0}
-		and GameData.research_cost("construct", 2) == {"wood": 6760, "stone": 5070, "food": 5915, "gold": 8450} and GameData.research_cost("construct", 3) == {"wood": 8788, "stone": 6591, "food": 7690, "gold": 10985}
+	# 비용: round(값 × 1.4^n), n = 지금 레벨(0부터). 시간: round(base × 1.4^n ÷ (1 + 속도)) (2026-10-13 라오킹식)
+	check(GameData.research_cost("wood_tech", 0) == {"wood": 210, "stone": 160, "food": 190, "gold": 0} and GameData.research_cost("wood_tech", 1) == {"wood": 294, "stone": 224, "food": 266, "gold": 0}
+		and GameData.research_cost("construct", 2) == {"wood": 5194, "stone": 3900, "food": 4547, "gold": 24892} and GameData.research_cost("construct", 3) == {"wood": 7272, "stone": 5461, "food": 6366, "gold": 34849}
 		and GameData.research_cost("nope", 0).is_empty(),
-		"research cost = round(value x 1.3^n) (construct Lv 4: 7689.5 rounds away from zero): %s" % [GameData.research_cost("construct", 3)])
-	check(GameData.research_sec("wood_tech", 0, 0.0) == 60 and GameData.research_sec("wood_tech", 9, 0.0) == 894 and GameData.research_sec("elite", 9, 0.0) == 53617
-		and GameData.research_sec("wood_tech", 0, 0.5) == 40 and GameData.research_sec("wood_tech", 1, 0.58) == 51 and GameData.research_sec("nope", 0, 0.0) == 0,
-		"research time = round(base x 1.35^n / (1 + speed)): wood Lv 10 about 15 min, elite Lv 10 about 15 h, lab 30 (+58%%) 81 s -> 51 s: %s" % [[GameData.research_sec("wood_tech", 9, 0.0), GameData.research_sec("elite", 9, 0.0), GameData.research_sec("wood_tech", 1, 0.58)]])
+		"research cost = round(value x 1.4^n) (construct Lv 4: 2650 x 2.744 = 7271.6 -> 7272): %s" % [GameData.research_cost("construct", 3)])
+	check(GameData.research_sec("wood_tech", 0, 0.0) == 60 and GameData.research_sec("wood_tech", 9, 0.0) == 1240 and GameData.research_sec("elite", 9, 0.0) == 223139
+		and GameData.research_sec("wood_tech", 0, 0.5) == 40 and GameData.research_sec("wood_tech", 1, 0.58) == 53 and GameData.research_sec("nope", 0, 0.0) == 0,
+		"research time = round(base x 1.4^n / (1 + speed)): wood Lv 10 about 21 min, elite Lv 10 about 2.6 days, lab 30 (+58%%) 84 s -> 53 s: %s" % [[GameData.research_sec("wood_tech", 9, 0.0), GameData.research_sec("elite", 9, 0.0), GameData.research_sec("wood_tech", 1, 0.58)]])
 	check(is_equal_approx(GameData.research_speed({"research_speed_pct": 30.0}, 11), 0.5) and GameData.research_speed({}, 0) == 0.0,
 		"research speed = method % / 100 + 0.02 x (lab - 1)")
 	var b := GameData.research_bonus({"hero_weapon": 3, "legend_weapon": 2, "wood_tech": 12, "nope": 5, "stone_tech": -2})
 	check(b.size() == GameData.RESEARCH_EFFECTS.size() and b.hero_atk_pct == 17.0 and b.wood_pct == 50.0 and b.stone_pct == 0.0 and b.pop_add == 0.0,
 		"bonus: same effect adds up (3 x 3 + 2 x 4 = 17), levels clamp to 0..max, unknown nodes ignored: %s" % [b])
 	# 잠금·이유 코드: unknown → max_level → locked(연구소·선행) → not_enough_resources → not_enough_gold
-	var rich := {"wood": 99999, "stone": 99999, "food": 99999, "gold": 9999}
+	var rich := {"wood": 99999, "stone": 99999, "food": 99999, "gold": 99999}
 	var both := {"wood_tech": 3, "stone_tech": 3}
 	check(GameData.research_block("nope", {}, 30, rich) == "unknown_research" and GameData.research_block("wood_tech", {"wood_tech": 10}, 30, rich) == "max_level"
 		and GameData.research_block("construct", both, 2, rich) == "locked" and GameData.research_block("construct", {"wood_tech": 3, "stone_tech": 2}, 3, rich) == "locked"
-		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3499, "gold": 9999}) == "not_enough_resources"
-		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 4999}) == "not_enough_gold"
-		and GameData.research_block("construct", both, 3, {"wood": 4000, "stone": 3000, "food": 3500, "gold": 5000}) == "",
+		and GameData.research_block("construct", both, 3, rich) == "" and GameData.research_block("construct", both, 3, {"wood": 2650, "stone": 1990, "food": 2319, "gold": 99999}) == "not_enough_resources"
+		and GameData.research_block("construct", both, 3, {"wood": 2650, "stone": 1990, "food": 2320, "gold": 12699}) == "not_enough_gold"
+		and GameData.research_block("construct", both, 3, {"wood": 2650, "stone": 1990, "food": 2320, "gold": 12700}) == "",
 		"research_block order: unknown, max, locked (lab, prerequisite), resources, gold")
+	check(GameData.research_lab_need(GameData.research_def("wood_tech"), 0) == 1 and GameData.research_lab_need(GameData.research_def("wood_tech"), 3) == 4
+		and GameData.research_lab_need(GameData.research_def("her30b"), 9) == 30 and GameData.research_block("wood_tech", {"wood_tech": 3}, 3, rich) == "locked"
+		and GameData.research_block("wood_tech", {"wood_tech": 3}, 4, rich) == "",
+		"RoK-style lab gating: Lv n -> n+1 needs lab min(30, lab_req + n) (wood tech Lv 3 -> 4 needs lab 4)")
 	check([0.0, 0.5, 60.0, 60.5, 3600.0].map(func(s): return GameData.research_dia_cost(s)) == [1, 1, 1, 2, 60] and GameData.research_refund({"wood": 156, "stone": 105, "food": 0, "gold": 845}) == {"wood": 78, "stone": 52, "gold": 422},
 		"instant finish = max(1, ceil(left / 60)) diamonds; cancel refund = floor(cost x 0.5), zero dropped")
 	# 오프라인: 시작(비용 즉시) → 한 번에 하나 → 게으른 완료(알림) → 취소 환불 → 다이아 즉시 완료
@@ -4770,26 +4774,27 @@ func test_research_r24() -> void:
 	e.res = {"wood": 10000, "stone": 10000, "food": 10000}
 	e.gold = 3000
 	check(e.research_available() and e.research_block("construct") == "locked" and e.research_block("wood_tech") == "", "a fresh save can research tier 1, tier 2 is locked")
-	check(e.start_research("wood_tech") and e.res == {"wood": 8800, "stone": 9200, "food": 9000} and e.gold == 3000 and e.research_current.id == "wood_tech"
+	check(e.start_research("wood_tech") and e.res == {"wood": 9790, "stone": 9840, "food": 9810} and e.gold == 3000 and e.research_current.id == "wood_tech"
 		and absf(e.research_left(e.time_now()) - 60.0) < 1.0 and not e.research_available(), "start: the cost leaves at once, 60 s on the clock, no bubble while busy")
 	check(not e.start_research("stone_tech") and e.research_block("stone_tech") == "research_busy" and notes[-1] == EconomyScript.RESEARCH_TEXT.research_busy
-		and e.res.wood == 8800 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
+		and e.res.wood == 9790 and e.research_current.id == "wood_tech", "only one research at a time: a second start is refused and costs nothing")
 	e.complete_due(e.time_now() + 30.0)
 	check(e.research_level("wood_tech") == 0 and not e.research_current.is_empty(), "not done before the finish time")
 	e.complete_due(e.time_now() + 61.0)
 	check(e.research_level("wood_tech") == 1 and e.research_current.is_empty() and done == [["wood_tech", 1]] and notes[-1] == "연구 완료: 벌목술 Lv 1",
 		"lazy completion: level +1, research_done, notice '연구 완료: 벌목술 Lv 1'")
-	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 8200, "stone": 8800, "food": 8500} and e.research_current.is_empty()
-		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (1200/800/1000 -> 600/400/500 back)")
-	e.start_research("wood_tech")  # Lv 1 → 2: 81 s — 5분 이하라 무료(사용자 2026-10-06). 다이아 비용을 보려고 400초로 늘린다 → 다이아 7
-	check(e.research_dia_cost(e.time_now()) == 0, "81 s left is within the free finish window: 0 diamonds")
+	check(e.start_research("stone_tech") and e.cancel_research() and e.res == {"wood": 9685, "stone": 9760, "food": 9715} and e.research_current.is_empty()
+		and notes[-1] == EconomyScript.RESEARCH_CANCEL_TEXT and not e.cancel_research(), "cancel refunds floor(50%) of that level's cost (210/160/190 -> 105/80/95 back)")
+	e.levels[GameData.LAB] = 5  # 라오킹식: Lv n → n+1은 연구소 Lv lab_req + n이 필요하다(2026-10-13)
+	e.start_research("wood_tech")  # Lv 1 → 2: 84 s — 5분 이하라 무료(사용자 2026-10-06). 다이아 비용을 보려고 400초로 늘린다 → 다이아 7
+	check(e.research_dia_cost(e.time_now()) == 0, "84 s left is within the free finish window: 0 diamonds")
 	e.research_current.finish = e.time_now() + 400.0
 	check(e.research_dia_cost(e.time_now()) == 7 and not e.finish_research_now() and notes[-1] == EconomyScript.NO_DIA_TEXT and e.research_level("wood_tech") == 1,
 		"instant finish needs ceil(400 / 60) = 7 diamonds; with none it is refused")
 	e.diamonds = 10
 	check(e.finish_research_now() and e.diamonds == 3 and e.research_level("wood_tech") == 2 and e.research_current.is_empty() and done[-1] == ["wood_tech", 2],
 		"instant finish spends 7 diamonds and completes at once")
-	e.start_research("wood_tech")  # Lv 2 → 3: 109 s → 무료
+	e.start_research("wood_tech")  # Lv 2 → 3: 118 s → 무료
 	check(e.research_dia_cost(e.time_now()) == 0 and e.finish_research_now() and e.diamonds == 3 and e.research_level("wood_tech") == 3 and done[-1] == ["wood_tech", 3],
 		"5 min or less left: instant finish is free")
 	# 서버 권위 효과의 오프라인 반영(서버 research.test와 같은 식)
