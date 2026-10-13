@@ -173,6 +173,7 @@ func _build_world() -> void:
 	var research_panel = ResearchPanelScript.new()  # 연구 창(개정 24): 연구소 건물 창 [연구]·플라스크 말풍선
 	add_child(research_panel)
 	building_panel.research = research_panel
+	building_panel.goto_building.connect(func(bid): _tutorial_goto("building:" + bid))  # 선행 조건 줄 → 그 건물(사용자 2026-10-13)
 	picker.research = research_panel
 	var soldier_panel = SoldierPanelScript.new()
 	add_child(soldier_panel)
