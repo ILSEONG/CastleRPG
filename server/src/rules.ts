@@ -198,6 +198,27 @@ export interface BuildingDef {
   base_sec: number
   req1: string | null
   req2: string | null
+  // 2026-10-13 라오킹 곡선: 레벨별 L → L+1 값 "v1|v2|…"(max_level − 1개). 비면 위의 1→2 값 × 성장 식(BUILD_*_GROWTH)
+  lv_sec?: string | null
+  lv_wood?: string | null
+  lv_stone?: string | null
+  lv_food?: string | null
+}
+
+export const BUILD_LV_COLS = ['lv_sec', 'lv_wood', 'lv_stone', 'lv_food'] as const
+
+// 레벨 목록 "v1|v2|…" → 숫자 배열(비거나 틀리면 null — 검증은 seed.checkBuildings·앱 GameData가 한다)
+export function parseLevelList(text: unknown): number[] | null {
+  if (typeof text !== 'string' || text.trim() === '') return null
+  const out = text.split('|').map((x) => Number(x.trim()))
+  return out.every((v) => Number.isFinite(v)) ? out : null
+}
+
+// 레벨 목록의 L → L+1 값(L은 1부터, 목록을 넘으면 마지막 값). 목록이 없으면 null.
+function levelValue(text: unknown, level: number): number | null {
+  const xs = parseLevelList(text)
+  if (!xs || xs.length === 0) return null
+  return xs[Math.min(Math.max(level, 1), xs.length) - 1]
 }
 
 // base × growth^n을 곱셈 n번으로 — 앱(GDScript)과 같은 IEEE 곱셈 순서라 pow 구현 차이로 반올림이 갈리지 않는다.
@@ -207,15 +228,19 @@ export function grown(base: number, growth: number, n: number): number {
   return v
 }
 
-// L → L+1 비용 {wood, stone, food} = round(값 × 1.35^(L−1)).
+// L → L+1 비용 {wood, stone, food} = 레벨 목록 lv_<자원>의 L번째 값(2026-10-13 라오킹 곡선). 목록이 없으면 round(값 × 1.35^(L−1)).
 export function buildCost(def: BuildingDef, level: number): Record<string, number> {
   const out: Record<string, number> = {}
-  for (const r of BUILD_RES) out[r] = roundHalfAway(grown(Number(def[r as 'wood']), BUILD_COST_GROWTH, level - 1))
+  for (const r of BUILD_RES) {
+    const v = levelValue(def[`lv_${r}` as 'lv_wood'], level)
+    out[r] = roundHalfAway(v ?? grown(Number(def[r as 'wood']), BUILD_COST_GROWTH, level - 1))
+  }
   return out
 }
 
-// L → L+1 시간(초) = round(base_sec × 1.5^(L−1)).
-export const buildSec = (def: BuildingDef, level: number) => roundHalfAway(grown(Number(def.base_sec), BUILD_TIME_GROWTH, level - 1))
+// L → L+1 시간(초) = 레벨 목록 lv_sec의 L번째 값. 목록이 없으면 round(base_sec × 1.5^(L−1)).
+export const buildSec = (def: BuildingDef, level: number) =>
+  roundHalfAway(levelValue(def.lv_sec, level) ?? grown(Number(def.base_sec), BUILD_TIME_GROWTH, level - 1))
 
 // 단계 표 "레벨:값|…" → [[레벨, 값], …]. 레벨은 1부터 오름차순 정수, 값은 숫자. 틀리면 null.
 export function parseTiers(text: string): [number, number][] | null {

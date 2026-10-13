@@ -31,7 +31,7 @@ var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_ch
 var merchant_anchor: Vector3  # 상인 이름표 "상인" 기준점(머리 위) — 시세·남은 시간은 상인을 눌러 여는 거래 창에서 본다
 var tag_anchors := {}  # 건물 id → 이름표("이름 Lv N") 기준점: 지붕 가운데 위 TAG_UP
 var sites := {}  # 건물 id → [AABB(월드), …] — 비계·진행 막대 자리. 성문은 문루 넷
-var scaffold_id := ""  # 지금 비계를 두른 건물 id(없으면 "")
+var scaffold_id := ""  # 지금 비계를 두른 건물 id(없으면 "", 두 일꾼이면 "a,b")
 var _built_now := {}  # 방금 공터에서 다 지은 건물 id(building_done 알림 문구)
 var lots := {}  # 튜토리얼: 건물 id → 부지 {mi(메시), body(탭 판정체), center, size, lot(지금 공터로 보이는가)}
 var _scaffolds: Array = []
@@ -252,16 +252,21 @@ func _add_gate_sites() -> void:
 
 ## 비계를 Economy 일꾼에 맞춘다. 짓는 건물이 바뀔 때만 다시 만든다(이름표 "이름 Lv N"은 world_tags가 Economy.changed마다).
 func _sync_build() -> void:
-	var id := str(Economy.build.get("id", ""))
-	if not sites.has(id):
-		id = ""
+	var ids := []  # 2026-10-13: 일꾼마다(두 번째 일꾼까지)
+	for job in Economy.build_jobs():
+		if sites.has(str(job.id)):
+			ids.append(str(job.id))
+	var id := ",".join(ids)
 	if id == scaffold_id:
 		return
 	for s in _scaffolds:
 		s.queue_free()
 	_scaffolds.clear()
 	scaffold_id = id
-	for box in sites.get(id, []):
+	var boxes := []
+	for b in ids:
+		boxes.append_array(sites.get(b, []))
+	for box in boxes:
 		var mi := MeshInstance3D.new()
 		mi.mesh = scaffold_mesh(box.size)
 		mi.material_override = Art.lowpoly_vc_material()

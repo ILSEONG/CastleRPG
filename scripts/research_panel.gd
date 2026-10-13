@@ -16,6 +16,7 @@ const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const SoldierPanel := preload("res://scripts/soldier_panel.gd")
 const Skills := preload("res://scripts/skills.gd")
+const SpeedupList := preload("res://scripts/speedup_list.gd")
 
 const BRANCH_NAMES := {"economy": "경제", "military": "군사", "hero": "영웅"}
 const BRANCH_TINT := {"economy": Color(0.98, 0.88, 0.62), "military": Color(0.95, 0.76, 0.72), "hero": Color(0.76, 0.84, 0.98)}  # 아이콘 바탕
@@ -69,6 +70,8 @@ var cur_bar: ProgressBar
 var cur_left: Label
 var dia_button: Button
 var cancel_button: Button
+var speedup_button: Button  # [가속] → 가속 아이템 목록(2026-10-13)
+var speedups: VBoxContainer  # speedup_list.gd(펼쳤을 때만)
 var idle_label: Label
 var tree: VBoxContainer  # 단 줄들(연결선은 여기 뒤에 그린다)
 var close_button: Button
@@ -133,6 +136,7 @@ func _ready() -> void:
 	_build_detail()
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.research_changed.connect(func(): if visible: _refresh())
+	Economy.speedups_changed.connect(func(): if visible: _refresh())
 	set_branch(branch)
 
 
@@ -172,6 +176,16 @@ func _build_current() -> void:
 	cancel_button.custom_minimum_size = Vector2(196, 44)
 	cancel_button.pressed.connect(func(): Economy.cancel_research())
 	btns.add_child(cancel_button)
+	speedup_button = _button("가속 ▼", UiKit.AMBER, 22)  # 2026-10-13: 연구 가속·범용 가속 아이템 목록
+	speedup_button.custom_minimum_size = Vector2(196, 44)
+	speedup_button.pressed.connect(func():
+		speedups.visible = not speedups.visible
+		_refresh())
+	btns.add_child(speedup_button)
+	speedups = SpeedupList.new()
+	speedups.target = "research"
+	speedups.visible = false
+	cur_row.add_sibling(speedups)
 	idle_label = _label(IDLE_TEXT, 22, HudScript.INK.lightened(0.25))
 	idle_label.custom_minimum_size = Vector2(0, 48)
 	idle_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -531,6 +545,7 @@ func _refresh_current(now: float) -> void:
 	var cur := str(Economy.research_current.get("id", ""))
 	cur_row.visible = cur != ""
 	idle_label.visible = cur == ""
+	speedups.visible = speedups.visible and cur != ""
 	if cur == "":
 		return
 	if cur != _cur_icon_id:
@@ -543,6 +558,9 @@ func _refresh_current(now: float) -> void:
 	_set_dia(dia_button, dia)
 	dia_button.disabled = Economy.diamonds < dia or Economy.research_waiting()
 	cancel_button.disabled = Economy.research_waiting()
+	speedup_button.text = "가속 ▲" if speedups.visible else "가속 ▼"
+	if speedups.visible:
+		speedups.refresh()
 
 
 func _refresh_card(id: String, now: float) -> void:

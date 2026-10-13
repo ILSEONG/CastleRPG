@@ -49,6 +49,13 @@ const POUCH_KINDS := ["gold", "res"]  # 방치 주머니(서버 pouches.ts): 골
 const POUCH_MINUTES := [10, 30, 60, 120, 240, 360]
 const POUCH_PREFIX := "pouch_"  # 보상 표 키: pouch_<id>
 const POUCH_FAIL_TEXT := "주머니를 열지 못했습니다 — 보유 수를 다시 확인합니다"
+## 가속 아이템·일꾼 고용권(서버 speedups.ts, 2026-10-13 라오킹식 건설): build_<분>(건설)·research_<분>(연구)·any_<분>(범용)·builder_<분>(두 번째 일꾼)
+const SPEEDUP_KINDS := ["build", "research", "any"]
+const SPEEDUP_MINUTES := [5, 15, 60, 180, 480, 1440]
+const BUILDER_MINUTES := [1440, 2880, 10080, 43200]
+const SPEEDUP_PREFIX := "speedup_"  # 보상 표 키: speedup_<id>
+const SPEEDUP_KIND_NAMES := {"build": "건설 가속", "research": "연구 가속", "any": "범용 가속", "builder": "일꾼 고용권"}
+const SPEEDUP_FAIL_TEXT := "가속을 쓰지 못했습니다 — 보유 수를 다시 확인합니다"
 const ShopItems := preload("res://scripts/shop_items.gd")
 const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸습니다"
 const IapItems := preload("res://scripts/iap_items.gd")
@@ -146,6 +153,7 @@ signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받�
 signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
 signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
+signal speedups_changed  # 가속 아이템·일꾼 고용권 보유나 두 번째 일꾼 기한이 바뀌었다
 signal hot_offered(hot: Dictionary)  # 핫딜이 새로 떴다 {id, until, bought}(온라인은 서버 응답, 오프라인은 곧바로)
 signal shop_changed  # 상점 산 기록이 바뀌었다(구매·리셋·서버 값)
 signal market_changed  # 거래소: 내 판매(market.mine)·대금 받을 수(market_sold)가 바뀌었다
@@ -183,6 +191,9 @@ var attendance: Dictionary = {}  # 온라인: 출석 이벤트 요약 {n, days, 
 var server_missions: Dictionary = {}  # 온라인: 미션 받은 기록 {day, week, d, w, wd, r, next_day, next_week}(apply_server가 채운다 — Missions가 읽는다)
 var tutorial_training := false  # 튜토리얼 중(Tutorial이 켠다, 오프라인): 훈련은 한 번에 1마리, 1마리 TUTORIAL_TRAIN_SEC초  # 튜토리얼 보상 다이아 모집권: 1장 = 다이아 모집 1회(확률·천장 그대로). 저장 "dia_tickets"(없으면 0)
 var build: Dictionary = {}         # 일꾼(개정 12): {id, finish(유닉스 초, 보정 시각)}, 쉬면 {}
+var build2: Dictionary = {}        # 두 번째 일꾼(2026-10-13): 같은 모양. 고용 기한이 지나도 짓던 건물은 끝까지 짓는다
+var builder2_until := 0.0          # 두 번째 일꾼 고용 기한(유닉스 초, 0 = 없음)
+var speedups := {}                 # 가속 아이템·일꾼 고용권 id → 개수(> 0). 저장 "speedups"(없으면 {})
 var heroes: Dictionary = {}        # 영웅 id → copies(≥ 1, 모은 수 — 능력치와 무관)
 var hero_levels: Dictionary = {}   # 영웅 id → 레벨(≥ 1, 없으면 1). 개정 11
 var hero_shards: Dictionary = {}   # 영웅 id → 조각(≥ 0, 없으면 0). 개정 15
@@ -379,6 +390,9 @@ func reset(now: float) -> void:
 	for b in GameData.buildings():
 		levels[b.id] = 1
 	build = {}
+	build2 = {}
+	builder2_until = 0.0
+	speedups = {}
 	_build_poll_at = 0.0
 	for r in GameData.resources():
 		var id: String = r.id
@@ -1015,6 +1029,11 @@ func grant(reward: Dictionary) -> void:
 		pouches[id] = int(pouches.get(id, 0)) + int(pz[id])
 	if not pz.is_empty():
 		pouches_changed.emit()
+	var sz := speedups_in(reward)
+	for id in sz:
+		speedups[id] = int(speedups.get(id, 0)) + int(sz[id])
+	if not sz.is_empty():
+		speedups_changed.emit()
 	var keys := false
 	for type in GameData.DUNGEON_TYPES:
 		var n := int(reward.get("keys_" + type, 0))
@@ -1028,6 +1047,139 @@ func grant(reward: Dictionary) -> void:
 		dungeons_changed.emit()
 	save()
 	granted.emit(reward)
+
+
+# --- 가속 아이템·일꾼 고용권(서버 speedups.ts, 2026-10-13): 보상으로 받아 두었다가 건설·연구 타이머에 쓴다 ---
+
+static func speedup_ids() -> Array:
+	var out := []
+	for k in SPEEDUP_KINDS:
+		for m in SPEEDUP_MINUTES:
+			out.append("%s_%d" % [k, m])
+	for m in BUILDER_MINUTES:
+		out.append("builder_%d" % m)
+	return out
+
+
+## "build_60" → {kind: "build", min: 60}. 모르는 id면 {}.
+static func speedup_parse(id: String) -> Dictionary:
+	if not speedup_ids().has(id):
+		return {}
+	var i := id.rfind("_")
+	return {"kind": id.substr(0, i), "min": int(id.substr(i + 1))}
+
+
+## 분 → "5분"·"1시간"·"1일"·"7일"
+static func minutes_text(m: int) -> String:
+	if m >= 1440 and m % 1440 == 0:
+		return "%d일" % (m / 1440)
+	if m >= 60 and m % 60 == 0:
+		return "%d시간" % (m / 60)
+	return "%d분" % m
+
+
+## "건설 가속 1시간"·"일꾼 고용권 2일"
+static func speedup_name(id: String) -> String:
+	var sp := speedup_parse(id)
+	return id if sp.is_empty() else "%s %s" % [SPEEDUP_KIND_NAMES[sp.kind], minutes_text(int(sp.min))]
+
+
+## 그 아이템을 그 타이머(build | research)에 쓸 수 있나(범용은 둘 다)
+static func speedup_fits(id: String, target: String) -> bool:
+	var sp := speedup_parse(id)
+	return not sp.is_empty() and (sp.kind == "any" or sp.kind == target)
+
+
+## 보상 → 가속 아이템 {id: 개수}(speedup_<id> 키만).
+static func speedups_in(reward: Dictionary) -> Dictionary:
+	var out := {}
+	for k in reward:
+		var key := str(k)
+		if key.begins_with(SPEEDUP_PREFIX) and speedup_ids().has(key.substr(SPEEDUP_PREFIX.length())) and _num(reward[k]) and int(reward[k]) > 0:
+			var id := key.substr(SPEEDUP_PREFIX.length())
+			out[id] = int(out.get(id, 0)) + int(reward[k])
+	return out
+
+
+## 보상 글 조각(보상 풀어 쓰기가 붙인다): ["건설 가속 1시간 2개", …]
+static func speedup_reward_parts(reward: Dictionary) -> Array:
+	var sz := speedups_in(reward)
+	var out := []
+	for id in speedup_ids():
+		if sz.has(id):
+			out.append(speedup_name(id) + ("" if int(sz[id]) == 1 else " %d개" % int(sz[id])))
+	return out
+
+
+static func _speedup_counts(src) -> Dictionary:
+	var out := {}
+	if src is Dictionary:
+		for k in src:
+			if speedup_ids().has(str(k)) and _num(src[k]) and int(src[k]) > 0:
+				out[str(k)] = int(src[k])
+	return out
+
+
+func speedup_count(id: String) -> int:
+	return int(speedups.get(id, 0))
+
+
+## 그 타이머에 쓸 수 있는 보유 아이템 id(짧은 것부터, 같은 시간이면 전용 → 범용).
+func speedups_for(target: String) -> Array:
+	var out := []
+	for m in SPEEDUP_MINUTES:
+		for k in [target, "any"]:
+			var id := "%s_%d" % [k, m]
+			if speedup_count(id) > 0:
+				out.append(id)
+	return out
+
+
+func builder2_active(now: float) -> bool:
+	return builder2_until > now
+
+
+func speedup_waiting() -> bool:
+	return _waiting.has("speedup")
+
+
+## 가속 아이템 count개를 쓴다. target = "build"(building = 그 건물, ""이면 1번 일꾼) | "research". 일꾼 고용권은 target 없이 두 번째 일꾼 기한을
+## 늘린다. 타이머는 분 × count만큼 당겨지고(지금보다 앞으로는 안 감) 끝났으면 완료한다. 온라인은 곧바로 반영하고 POST /v1/speedup/use. 했으면 true.
+func use_speedup(id: String, count: int, target := "", building := "") -> bool:
+	var sp := speedup_parse(id)
+	if sp.is_empty() or count <= 0 or speedup_count(id) < count or speedup_waiting():
+		return false
+	var now := time_now()
+	var sec: float = float(sp.min) * 60.0 * count
+	if sp.kind != "builder":
+		if not speedup_fits(id, target):
+			return false
+		if target == "research" and (research_current.is_empty() or float(research_current.finish) <= now):
+			return false
+		if target == "build" and (build_job(building).is_empty() or float(build_job(building).finish) <= now):
+			return false
+	if net != null:
+		var body := {"id": id, "count": count}
+		if sp.kind != "builder":
+			body.target = target
+			if target == "build" and building != "":
+				body.building = building
+		return _instant(use_speedup.bind(id, count, target, building), "/v1/speedup/use", body, func(): return SPEEDUP_FAIL_TEXT)
+	speedups[id] = speedup_count(id) - count
+	if speedups[id] <= 0:
+		speedups.erase(id)
+	if sp.kind == "builder":
+		builder2_until = maxf(now, builder2_until) + sec
+	elif target == "research":
+		research_current.finish = maxf(now, float(research_current.finish) - sec)
+	else:
+		var job := build_job(building)
+		job.finish = maxf(now, float(job.finish) - sec)
+	speedups_changed.emit()
+	changed.emit()
+	complete_due(now)
+	save()
+	return true
 
 
 # --- 방치 주머니(서버 pouches.ts): 출석·미션 보상으로 받아 두었다가 연다. 값 = 여는 순간의 방치 수입 × 주머니 시간 ---
@@ -1527,15 +1679,39 @@ func upgrade_block(id: String, now: float) -> String:
 	var r := res_of(id)
 	if r != "":
 		have[r] = int(have.get(r, 0)) + pending(id, now)
+	if is_building(id):
+		return "in_progress"
+	var busy := "" if free_builder(now) != 0 else str(build.get("id", ""))  # 쉬는 일꾼이 없으면 다른 건물을 짓는 중(builder_busy)
 	if unbuilt.has(id):  # 공터 짓기(0 → 1): 일꾼과 L1 비용만 본다
-		if build.get("id", "") != "":
-			return "in_progress" if build.id == id else "builder_busy"
+		if busy != "":
+			return "builder_busy"
 		var c := GameData.build_cost(id, 1)
 		for k in c:
 			if int(have.get(k, 0)) < int(c[k]):
 				return "not_enough"
 		return ""
-	return upgrade_block_for(id, _effective_levels(), str(build.get("id", "")), have)
+	return upgrade_block_for(id, _effective_levels(), busy, have)
+
+
+## 쉬는 일꾼(2026-10-13): 1 = 1번 일꾼, 2 = 두 번째 일꾼(고용 기한 안), 0 = 없음(서버 freeBuilder와 같다).
+func free_builder(now: float) -> int:
+	if build.is_empty():
+		return 1
+	return 2 if build2.is_empty() and builder2_active(now) else 0
+
+
+## 그 건물을 짓는 일꾼의 작업 {id, finish}(id = ""이면 1번 일꾼, 쉬면 2번). 없으면 {}. 돌려준 사전을 고치면 일꾼 상태가 바뀐다.
+func build_job(id := "") -> Dictionary:
+	if id == "":
+		return build if not build.is_empty() else build2
+	if str(build.get("id", "")) == id:
+		return build
+	return build2 if str(build2.get("id", "")) == id else {}
+
+
+## 짓고 있는 작업들(1번, 2번 순)
+func build_jobs() -> Array:
+	return [build, build2].filter(func(j): return not j.is_empty())
 
 
 ## 다음 레벨 비용 {wood, stone, food}(최대 레벨이면 {}).
@@ -1576,20 +1752,22 @@ func requirements(id: String) -> Array:
 
 
 func is_building(id: String) -> bool:
-	return str(build.get("id", "")) == id
+	return not build_job(id).is_empty()
 
 
-## 건설 남은 초(쉬면 0).
-func build_left(now: float) -> float:
-	return maxf(0.0, float(build.finish) - now) if not build.is_empty() else 0.0
+## 건설 남은 초(쉬면 0). id = 그 건물(""이면 1번 일꾼, 쉬면 2번).
+func build_left(now: float, id := "") -> float:
+	var job := build_job(id)
+	return maxf(0.0, float(job.finish) - now) if not job.is_empty() else 0.0
 
 
 ## 건설 진행 0..1(쉬면 0). 전체 시간 = 지금 레벨의 건설 시간.
-func build_progress(now: float) -> float:
-	if build.is_empty():
+func build_progress(now: float, id := "") -> float:
+	var job := build_job(id)
+	if job.is_empty():
 		return 0.0
-	var total := float(_build_sec(str(build.id), building_level(str(build.id))))
-	return clampf(1.0 - build_left(now) / total, 0.0, 1.0) if total > 0.0 else 1.0
+	var total := float(_build_sec(str(job.id), building_level(str(job.id))))
+	return clampf(1.0 - build_left(now, str(job.id)) / total, 0.0, 1.0) if total > 0.0 else 1.0
 
 
 ## 업그레이드 시작(스펙 §2.4·§2.5). 안 되면 알림(BLOCK_TEXT)만. 오프라인: 자원 건물이면 먼저 자동 수집(수집 규칙 그대로, 남은 초 유지)
@@ -1610,10 +1788,14 @@ func upgrade(id: String, now: float) -> bool:
 	var cost := upgrade_cost(id)
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
-	build = {"id": id, "finish": now + upgrade_sec(id)}
+	var job := {"id": id, "finish": now + upgrade_sec(id)}
+	if free_builder(now) == 2:
+		build2 = job
+	else:
+		build = job
 	changed.emit()
 	save()
-	build_started.emit(id, float(build.finish))
+	build_started.emit(id, float(job.finish))
 	return true
 
 
@@ -1621,24 +1803,33 @@ func upgrade(id: String, now: float) -> bool:
 ## BUILD_POLL_SEC마다 한 번 /v1/player로 새 상태를 받는다(레벨이 오르면 apply_server가 building_done). 매 프레임 불러도 가볍다.
 func complete_due(now: float) -> void:
 	_complete_research_due(now)
-	if build.is_empty() or now < float(build.finish):
+	var job := {}
+	for j in build_jobs():
+		if now >= float(j.finish):
+			job = j
+			break
+	if job.is_empty():
 		return
 	if net != null:
 		if net.up and now >= _build_poll_at:
 			_build_poll_at = now + BUILD_POLL_SEC
 			net.refresh()
 		return
-	var id := str(build.id)
+	var id := str(job.id)
 	if unbuilt.has(id):  # 튜토리얼 공터 짓기: Lv 1이 된다. 생산은 다 지은 시각부터 쌓인다
 		unbuilt.erase(id)
 		if last_collect.has(id):
-			last_collect[id] = float(build.finish)
+			last_collect[id] = float(job.finish)
 	else:
 		levels[id] = building_level(id) + 1
-	build = {}
+	if job == build and str(build.get("id", "")) == id:
+		build = {}
+	else:
+		build2 = {}
 	changed.emit()
 	save()
 	building_done.emit(id, levels[id])
+	complete_due(now)  # 두 일꾼이 함께 끝났으면 다른 쪽도
 
 
 # --- 무료 즉시 완료(사용자 2026-10-06): 남은 시간이 free_finish_sec초(기본 300) 이하인 건설·훈련·연구는 공짜로 바로 끝낸다 ---
@@ -1656,40 +1847,44 @@ static func free_finish_ok(left: float) -> bool:
 	return left > 0.0 and left <= free_finish_sec()
 
 
-## 진행 중 건설을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]).
-func can_free_build(now: float) -> bool:
-	return not build.is_empty() and free_finish_ok(build_left(now)) and not _waiting.has("build")
+## 진행 중 건설을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]). id = 그 건물(""이면 1번 일꾼, 쉬면 2번).
+func can_free_build(now: float, id := "") -> bool:
+	return not build_job(id).is_empty() and free_finish_ok(build_left(now, id)) and not _waiting.has("build")
 
 
-## 건설 무료 즉시 완료. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은 곧바로 완료로 보이고 /v1/building/finish(once). 했거나 보냈으면 true.
-func free_finish_build() -> bool:
+## 건설 무료 즉시 완료. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은 곧바로 완료로 보이고 /v1/building/finish {building}(once). 했거나 보냈으면 true.
+func free_finish_build(id := "") -> bool:
 	var now := time_now()
-	if not can_free_build(now):
+	if not can_free_build(now, id):
 		return false
+	var job := build_job(id)
 	if net == null:
-		build.finish = now
+		job.finish = now
 		complete_due(now)
 		return true
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
-	var id := str(build.id)
+	var bid := str(job.id)
 	_waiting["build"] = true
-	_predict("build", _local_build_done.bind(id))
-	building_done.emit(id, building_level(id))
-	net.send("POST", "/v1/building/finish", {}, _on_build_freed, _on_build_free_failed, true, true)
+	_predict("build", _local_build_done.bind(bid))
+	building_done.emit(bid, building_level(bid))
+	net.send("POST", "/v1/building/finish", {"building": bid}, _on_build_freed, _on_build_free_failed, true, true)
 	return true
 
 
-## 즉시 반영: 지금 상태에서 id를 짓는 중이면 다 지은 것으로(공터는 Lv 1, 아니면 레벨 +1, 일꾼 비움).
+## 즉시 반영: 지금 상태에서 id를 짓는 중이면 다 지은 것으로(공터는 Lv 1, 아니면 레벨 +1, 그 일꾼 비움).
 func _local_build_done(id: String) -> void:
-	if str(build.get("id", "")) != id:
+	if not is_building(id):
 		return
 	if unbuilt.has(id):
 		unbuilt.erase(id)
 	else:
 		levels[id] = building_level(id) + 1
-	build = {}
+	if str(build.get("id", "")) == id:
+		build = {}
+	else:
+		build2 = {}
 
 
 func _on_build_freed(data: Dictionary) -> void:
@@ -3016,6 +3211,14 @@ func apply_server(data: Dictionary) -> bool:
 	levels = lv
 	var bd = p.get("build")  # 일꾼: {id, finish} 또는 null
 	build = {"id": bd.id, "finish": float(bd.finish)} if bd is Dictionary and bd.get("id") is String and _num(bd.get("finish")) else {}
+	var bd2 = p.get("build2")  # 두 번째 일꾼(2026-10-13, 옛 서버면 없다)
+	build2 = {"id": bd2.id, "finish": float(bd2.finish)} if bd2 is Dictionary and bd2.get("id") is String and _num(bd2.get("finish")) else {}
+	var b2u = p.get("builder2_until")
+	var sz := _speedup_counts(p.get("speedups"))
+	if sz != speedups or (float(b2u) if _num(b2u) else 0.0) != builder2_until:
+		speedups = sz
+		builder2_until = float(b2u) if _num(b2u) else 0.0
+		speedups_changed.emit()
 	server_gold_tenths = int(p.gold_tenths)
 	server_stage = int(p.stage)
 	if _num(p.get("kill_seq")):
@@ -3294,7 +3497,12 @@ func _on_instant_failed(dg: int, fail_text: Callable) -> void:
 ## (받은 기록 표시 등). 그 요청의 응답이 오면 settle(key) 뒤 apply_server, 거절되면 unpredict(key).
 func predict_reward(key: String, reward: Dictionary, extra := Callable()) -> void:
 	var pz := pouches_in(reward)
+	var sz := speedups_in(reward)
 	_predict(key, func():
+		if not sz.is_empty():
+			speedups = speedups.duplicate()
+			for id in sz:
+				speedups[id] = int(speedups.get(id, 0)) + int(sz[id])
 		for r in GameData.BUILD_RES:
 			if reward.has(r):
 				res[r] = int(res.get(r, 0)) + int(reward[r])
@@ -3308,6 +3516,8 @@ func predict_reward(key: String, reward: Dictionary, extra := Callable()) -> voi
 			extra.call(), int(reward.get("gold", 0)) * 10)
 	if not pz.is_empty():
 		pouches_changed.emit()
+	if not sz.is_empty():
+		speedups_changed.emit()
 
 
 func settle(key: String) -> void:
@@ -3631,7 +3841,10 @@ func _upgrade_online(id: String) -> bool:
 			_local_collect(id, t0)
 		for r in cost:
 			res[r] = int(res.get(r, 0)) - int(cost[r])
-		build = {"id": id, "finish": t0 + sec})
+		if free_builder(t0) == 2:
+			build2 = {"id": id, "finish": t0 + sec}
+		elif free_builder(t0) == 1:
+			build = {"id": id, "finish": t0 + sec})
 	build_started.emit(id, t0 + sec)
 	net.send("POST", "/v1/building/upgrade", {"building": id}, _on_upgraded, _on_upgrade_failed, true, true)
 	return true
@@ -3641,8 +3854,10 @@ func _on_upgraded(data: Dictionary) -> void:
 	_waiting.erase("build")
 	_predicts.erase("build")
 	apply_server(data)
-	if not build.is_empty():
-		build_started.emit(str(build.id), float(build.finish))
+	var job = data.get("build")
+	if job is Dictionary and is_building(str(job.get("id", ""))):
+		var mine := build_job(str(job.id))
+		build_started.emit(str(mine.id), float(mine.finish))
 
 
 ## 거부(409 max_level·keep_cap·prereq·builder_busy·not_enough, 400)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
@@ -3888,7 +4103,8 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
-		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches,
+		"build2": null if build2.is_empty() else build2, "builder2_until": builder2_until, "speedups": speedups, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -4054,6 +4270,10 @@ func _apply(data) -> bool:
 	research_current = v12[1]
 	dia_tickets = maxi(0, int(data.get("dia_tickets", 0))) if _num(data.get("dia_tickets", 0)) else 0  # 튜토리얼(없으면 0)
 	pouches = _pouch_counts(data.get("pouches")) if data.get("pouches") is Dictionary else {}  # 방치 주머니(없으면 {})
+	speedups = _speedup_counts(data.get("speedups"))  # 2026-10-13 가속 아이템(없으면 {})
+	builder2_until = float(data.get("builder2_until")) if _num(data.get("builder2_until")) else 0.0
+	var bd2 = data.get("build2")
+	build2 = {"id": bd2.id, "finish": float(bd2.finish)} if bd2 is Dictionary and bd2.get("id") is String and not GameData.building_def(bd2.id).is_empty() and _num(bd2.get("finish")) else {}
 	shop = data.get("shop") if data.get("shop") is Dictionary else {}  # 상점 산 기록(없으면 {})
 	iap = data.get("iap") if data.get("iap") is Dictionary else {}  # 결제 상품 기록(없으면 {})
 	unbuilt = {}
