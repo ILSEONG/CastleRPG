@@ -6,9 +6,9 @@ extends Node2D
 ##    상대 팀(team 1)은 작게 + 어두운 바탕·붉은 테두리. 띠끼리 겹치면 위로 밀고, 화면 밖으로 나가지 않게 안으로 들인다.
 ##  - 확률 패시브(text = ""): 이름 없이 스킬 그림 동그라미만 0.8초.
 ##  - 컷인(cutin, 우리 편 SSR 궁극기): 화면 왼쪽 가운데로 스킬 이름 띠가 미끄러져 들어왔다 나간다. 한 번에 하나, CUTIN_GAP초 간격.
-##    2026-10-13(스킬 이펙트 점검 "실사풍 일러스트가 로우폴리 화면과 결이 다르다" → 사용자 "전부 개선시켜"): 일러스트 대신 게임 속 그 영웅의
-##    로우폴리 모델이 궁극기 발동 자세로(Portraits "cutin:") 금빛 빛살 창 앞에서 띠 위로 뚫고 나온다. 띠·창은 로우폴리 면(면마다 밝기 조금씩),
-##    속도선 대신 뾰족한 조각, 외곽선은 같은 색을 어둡게.
+##    2026-10-13 개편: 띠·창은 로우폴리 면(면마다 밝기 조금씩), 속도선 대신 뾰족한 조각, 위아래 금 테, 외곽선은 같은 색을 어둡게.
+##    왼쪽은 띠 위로 솟은 금빛 창(도는 빛살 — 금·흰 빛 영웅은 짙은 남보라)이고 그 안에 영웅 일러스트(HeroArt)가 들어간다 — 빛살은 일러스트를
+##    두른 테두리로 보인다. 같은 날 잠깐 게임 속 모델 자세로 바꿨다가 사용자 "멋없는걸로 하지말고 일러스트를 써"로 일러스트로 돌아왔다.
 
 enum Kind { HIT, CRIT, SKILL, POISON, HURT, DODGE, HEAL, BANNER }  # BANNER = 스킬 표시(_tags)
 
@@ -45,16 +45,14 @@ const CUTIN_OUT := 0.2  # 나가는 시간
 const CUTIN_GAP := 5.0  # 컷인 사이 최소 간격(실제 초)
 const CUTIN_Y := 0.205  # 띠 윗변 = 화면 높이 × 이 값(위 정보 패널 아래, 화면 가운데 싸움은 가리지 않게)
 const CUTIN_H := 128.0  # 띠 높이
-const CUTIN_FIG := 182.0  # 영웅 모델 그림(정사각) 크기 — 아래 끝이 띠 아랫변에 맞고 위로 띠를 54px 뚫고 나온다(위 정보 패널 아래까지만)
-const CUTIN_PANEL := 232.0  # 모델 뒤 금빛 창(띠 왼쪽 부분) 폭
+const CUTIN_POP := 54.0  # 금빛 창이 띠 위로 솟는 높이(위 정보 패널 아래까지만)
+const CUTIN_PANEL := 236.0  # 금빛 창(띠 왼쪽 부분) 윗변 폭
+const CUTIN_FRAME := 9.0  # 일러스트 둘레 금빛 창 테두리 두께(빛살이 보이는 곳)
 const CUTIN_RAYS := 12  # 금빛 창 빛살 수(천천히 돈다)
 const CUTIN_SSR := Color(0.93, 0.66, 0.18)  # 금빛 창: SSR 등급 금색 계열(SSR 카드 창과 같은 결)
-const CUTIN_NIGHT := Color(0.25, 0.22, 0.42)  # 금·흰 옷 영웅(모델이 금빛 창에 묻힌다 — _bright_fig) 뒤 창: 짙은 남보라 + 금빛 빛살
-const GOLD_NEAR := 0.3  # 모델 색이 금빛 창 색(바탕·빛살)과 이 거리(RGB) 안이면 "묻히는 칸"
-const GOLD_NEAR_MAX := 0.45  # 묻히는 칸이 모델의 이 비율을 넘으면 짙은 창
+const CUTIN_NIGHT := Color(0.25, 0.22, 0.42)  # 금·흰 빛 영웅(일러스트가 금빛 창에 묻힌다 — pale_hero) 창: 짙은 남보라 + 금빛 빛살
+const CUTIN_ZOOM := [1.16, 1.06]  # 일러스트 확대: 들어올 때 → 끝날 때(천천히 물러나며 움직임)
 const CUTIN_CELL := 84.0  # 띠 로우폴리 면 한 칸 폭(px)
-const FIG_FADE_TOP := 0.16  # 모델 그림 위 이 비율은 위로 갈수록 투명(치켜든 무기 끝이 틀에서 잘려 보이지 않게)
-const FIG_FADE_SIDE := 0.07  # 양옆 이 비율도
 const CUTIN_SLANT := 40.0  # 기울어진 오른쪽 변의 가로 폭
 const CUTIN_GOLD := Color(0.96, 0.78, 0.32)
 const OUTLINE := Color(0.10, 0.08, 0.12)
@@ -70,7 +68,7 @@ const Prefs := preload("res://scripts/prefs.gd")  # 설정 [피해 숫자 표시
 const Sfx := preload("res://scripts/sfx.gd")  # 타격 소리(숫자를 꺼도 난다)
 const SkillIcons := preload("res://scripts/skill_icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
-const PortraitsScript := preload("res://scripts/portraits.gd")
+const HeroArt := preload("res://scripts/hero_art.gd")
 
 static var current  # 월드에 있는 하나(없으면 null)
 
@@ -80,9 +78,8 @@ var tag_rects: Array = []  # 지난 프레임에 그린 스킬 표시 자리(Rec
 
 var _list: Array = []   # 살아 있는 숫자 {pos: 월드, text, kind, age, dx}. 나이순
 var _tags: Array = []   # 스킬 표시 {pos: 월드, text(""면 그림만), skill, kind = BANNER, age, life, bg = 영웅 색, enemy, lift}. 나이순
-var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, art(Portraits 키), age}(없으면 비어 있다)
+var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, age}(없으면 비어 있다)
 var _cut_ms := -1000000  # 마지막 컷인 시작(ms)
-var _fig_tone := {}     # 컷인 모델 그림 키 → 짙은 창을 쓰는가(_bright_fig, 한 번 재서 둔다)
 var _glyphs := {}       # 그림 이름 → SkillIcons.shapes(매 프레임 새로 만들지 않게)
 var _dt := 0.0
 var _poison := {}       # 대상 id → {target, sum, age, pos}
@@ -118,15 +115,14 @@ static func banner(target, skill: String, text: String, color: Color, enemy := f
 
 
 ## 우리 편 SSR 궁극기 컷인. 이미 하나가 떠 있거나 CUTIN_GAP초가 안 지났으면 건너뛴다(쌓아 두지 않는다).
-## art = 모델 자세 그림 키(Portraits.cutin_key — 영웅이 전투에 들어올 때 미리 렌더를 걸어 둔다). 아직 없으면 큰 스킬 그림으로 대신한다.
-static func cutin(hero_id: String, text: String, sub: String, color: Color, skill: String, art := "") -> void:
+static func cutin(hero_id: String, text: String, sub: String, color: Color, skill: String) -> void:
 	if current == null:
 		return
 	var now := Time.get_ticks_msec()
 	if not current._cut.is_empty() or now - current._cut_ms < int(CUTIN_GAP * 1000.0):
 		return
 	current._cut_ms = now
-	current._cut = {"hero": hero_id, "text": text, "sub": sub, "bg": color, "skill": skill, "art": art, "age": 0.0}
+	current._cut = {"hero": hero_id, "text": text, "sub": sub, "bg": color, "skill": skill, "age": 0.0}
 
 
 ## 띠 바탕색: 영웅 색이 밝으면(노랑·연두 …) 흰 글자가 읽히게 어둡게 누른다.
@@ -339,19 +335,15 @@ func _badge(at: Vector2, r: float, skill: String, alpha: float) -> void:
 			draw_polyline(pts, Color(SkillIcons.OUTLINE, alpha), line_w)
 
 
-## 컷인: 왼쪽에서 기울어진 띠가 미끄러져 들어와(모델은 조금 늦게 — 겹친 깊이) 금빛 빛살 창 앞 영웅 모델(띠 위로 뚫고 나옴) + 영웅 이름 +
-## 스킬 그림·이름을 보이고 왼쪽으로 빠진다. 그리는 순서: 띠 면 → 조각 → 금빛 창 면·빛살 → 위 금 테·띠 외곽선 → 모델 → 아래 금 테(모델 허리
-## 잘린 자리를 덮는다) → 글자.
+## 컷인: 왼쪽에서 기울어진 띠가 미끄러져 들어와 띠 위로 솟은 금빛 창 속 영웅 일러스트 + 영웅 이름 + 스킬 그림·이름을 보이고 왼쪽으로 빠진다.
+## 그리는 순서: 띠 면 → 조각 → 금빛 창 면·빛살 → 위 금 테·외곽선 → 일러스트(창 안쪽, 깎은 오른위 모서리) → 아래 금 테 → 글자.
 func _draw_cutin() -> void:
 	var vs := get_viewport_rect().size
 	var age: float = _cut.age
 	var x := 0.0
 	var alpha := 1.0
-	var fig_dx := age * 10.0  # 모델은 수명 동안 천천히 앞으로
 	if age < CUTIN_IN:
-		var k := ease(age / CUTIN_IN, 0.35)
-		x = -vs.x * (1.0 - k)
-		fig_dx -= 70.0 * (1.0 - k)
+		x = -vs.x * (1.0 - ease(age / CUTIN_IN, 0.35))
 	elif age > CUTIN_LIFE - CUTIN_OUT:
 		var k := (age - (CUTIN_LIFE - CUTIN_OUT)) / CUTIN_OUT
 		x = -vs.x * ease(k, 2.4)
@@ -368,32 +360,45 @@ func _draw_cutin() -> void:
 		var sy := y0 + CUTIN_H * (0.24 + 0.18 * i)
 		var ln := 54.0 + 26.0 * (i % 2)
 		draw_colored_polygon(PackedVector2Array([Vector2(sx, sy), Vector2(sx + ln, sy - 3.0), Vector2(sx + ln, sy + 3.0)]), Color(band.lightened(0.55), 0.4 * alpha))
-	# 금빛 창(모델 뒤): 로우폴리 면 + 머리께에서 도는 빛살(창 모양으로 잘라)
+	# 금빛 창: 띠 위로 CUTIN_POP 솟고, 오른쪽 변은 띠와 같은 기울기. 로우폴리 면 + 도는 빛살(창 모양으로 잘라)
+	var top := y0 - CUTIN_POP
+	var slope := CUTIN_SLANT / CUTIN_H  # 아래로 1px 갈 때 왼쪽으로
 	var pw := CUTIN_PANEL
-	var panel := PackedVector2Array([Vector2(x, y0), Vector2(x + pw, y0), Vector2(x + pw - CUTIN_SLANT, y1), Vector2(x, y1)])
-	var key: String = _cut.get("art", "")
-	var has_fig := key != "" and PortraitsScript.has_portrait(key)
-	var pc := CUTIN_NIGHT if has_fig and _bright_fig(key) else CUTIN_SSR
+	var panel := PackedVector2Array([Vector2(x, top), Vector2(x + pw, top), Vector2(x + pw - slope * (y1 - top), y1), Vector2(x, y1)])
+	var pc := CUTIN_NIGHT if pale_hero(_cut.bg) else CUTIN_SSR
 	_facets(panel, pc, 0.12, 11, alpha)
-	var c := Vector2(x + fig_dx + pw * 0.42, y0 + CUTIN_H * 0.3)
+	var c := Vector2(x + pw * 0.45, (top + y1) * 0.5)
 	var reach := pw * 1.5
 	for i in CUTIN_RAYS:
 		var a := age * 0.9 + TAU * i / CUTIN_RAYS
 		var ray := PackedVector2Array([c, c + Vector2.from_angle(a) * reach, c + Vector2.from_angle(a + TAU / CUTIN_RAYS * 0.45) * reach])
 		for part in Geometry2D.intersect_polygons(ray, panel):
-			draw_colored_polygon(part, Color(CUTIN_SSR.lightened(0.6), 0.45 * alpha))
-	draw_line(panel[1], panel[2], Color(LowpolyBox.edge_color(pc), alpha), 2.5, true)  # 창과 띠 사이 기울어진 경계
+			draw_colored_polygon(part, Color(CUTIN_SSR.lightened(0.6), 0.5 * alpha))
 	_trim(Vector2(x, y0 - 1.0), Vector2(x + bw + 1.6, y0 - 1.0), 5.0, alpha)
 	poly.append(poly[0])
 	draw_polyline(poly, Color(edge, alpha), 2.0, true)
-	# 영웅 모델(궁극기 발동 자세): 창 가운데, 아래 끝 = 띠 아랫변, 위로 띠를 뚫고 나온다
-	if has_fig:
-		var fr := Rect2(x + fig_dx + (pw - CUTIN_SLANT * 0.5 - CUTIN_FIG) * 0.5, y1 - CUTIN_FIG, CUTIN_FIG, CUTIN_FIG)
-		var tex := PortraitsScript.portrait(key)
-		_draw_figure(tex, Rect2(fr.position + Vector2(7, 5), fr.size), Color(edge, 0.4 * alpha))  # 그림자(띠 색을 어둡게) — 띠에서 떠 보이게
-		_draw_figure(tex, fr, Color(1, 1, 1, alpha))
+	_trim(Vector2(x, top - 1.0), Vector2(x + pw + 1.6, top - 1.0), 5.0, alpha)
+	var pe := PackedVector2Array([panel[0], panel[1], panel[2]])
+	draw_polyline(pe, Color(LowpolyBox.edge_color(pc), alpha), 2.5, true)
+	# 일러스트: 창 안쪽(위·오른쪽·아래 CUTIN_FRAME, 왼쪽은 화면 끝), 오른위 모서리 깎음. 들어올 때 조금 당겨 있다가 천천히 물러난다
+	var f := CUTIN_FRAME
+	var wt := top + f + 5.0  # 위 금 테 아래
+	var wb := y1 - f - 2.0
+	var xr := func(y: float) -> float: return x + pw - slope * (y - top) - f * 1.15  # 그 높이의 창 오른쪽 안쪽 변
+	var ch := 12.0
+	var win := PackedVector2Array([Vector2(x - 2.0, wt), Vector2(xr.call(wt) - ch, wt), Vector2(xr.call(wt + ch), wt + ch),
+		Vector2(xr.call(wb), wb), Vector2(x - 2.0, wb)])
+	var wr := Rect2(x - 2.0, wt, xr.call(wt) + 2.0 - x, wb - wt)
+	var zoom: float = lerpf(CUTIN_ZOOM[0], CUTIN_ZOOM[1], clampf(age / CUTIN_LIFE, 0.0, 1.0))
+	if HeroArt.draw_in(self, _cut.hero, win, wr, 0.34, zoom):
+		if alpha < 1.0:
+			draw_colored_polygon(win, Color(band, 1.0 - alpha))  # 빠질 때 그림도 흐려지게
 	else:
-		_badge(Vector2(x + pw * 0.44, y0 + CUTIN_H * 0.5), 44.0, _cut.skill, alpha)
+		draw_colored_polygon(win, Color(band.darkened(0.3), alpha))
+		_badge(wr.get_center(), 44.0, _cut.skill, alpha)
+	var wl := win.duplicate()
+	wl.remove_at(0)
+	draw_polyline(wl, Color(LowpolyBox.edge_color(pc), alpha), 2.0, true)  # 창 안쪽 선(왼쪽 화면 끝 빼고)
 	_trim(Vector2(x, y1 - 4.0), Vector2(x + bw - CUTIN_SLANT, y1 - 4.0), 5.0, alpha)
 	# 글자: 영웅 이름(작게) + 스킬 그림 + 스킬 이름(크게)
 	var font: Font = FONT
@@ -411,47 +416,11 @@ func _draw_cutin() -> void:
 	draws += 14
 
 
-## 모델이 금빛 창에 묻히는가(금·흰 옷 — 아르테온·루미나·프리다): 그림을 40×40 칸으로 훑어(위 흐려지는 부분 빼고) 보이는 칸 중 창 바탕·빛살
-## 색과 가까운 칸이 GOLD_NEAR_MAX를 넘으면 true. 키마다 한 번.
-func _bright_fig(key: String) -> bool:
-	if _fig_tone.has(key):
-		return _fig_tone[key]
-	var img := PortraitsScript.portrait(key).get_image()
-	var near := 0
-	var seen := 0
-	if img != null and not img.is_empty():
-		var light := CUTIN_SSR.lightened(0.6)
-		for j in 40:
-			for i in 40:
-				var p := img.get_pixel(int((i + 0.5) / 40.0 * img.get_width()), int((FIG_FADE_TOP + (j + 0.5) / 40.0 * (1.0 - FIG_FADE_TOP)) * img.get_height()))
-				if p.a < 0.5:
-					continue
-				seen += 1
-				var v := Vector3(p.r, p.g, p.b)
-				if minf(v.distance_to(Vector3(CUTIN_SSR.r, CUTIN_SSR.g, CUTIN_SSR.b)), v.distance_to(Vector3(light.r, light.g, light.b))) < GOLD_NEAR:
-					near += 1
-	_fig_tone[key] = seen > 0 and float(near) / seen > GOLD_NEAR_MAX
-	return _fig_tone[key]
-
-
-## 모델 그림을 r에: 위 FIG_FADE_TOP·양옆 FIG_FADE_SIDE는 바깥으로 갈수록 투명하게(치켜든 무기 끝이 그림 틀에서 딱 잘려 보이지 않게).
-## 4×3 꼭짓점 격자 삼각형 한 번(점 색 알파 × tint). 아래 끝은 금 테가 덮으니 그대로.
-func _draw_figure(tex: Texture2D, r: Rect2, tint: Color) -> void:
-	var xs := [0.0, FIG_FADE_SIDE, 1.0 - FIG_FADE_SIDE, 1.0]
-	var ys := [0.0, FIG_FADE_TOP, 1.0]
-	var pts := PackedVector2Array()
-	var cols := PackedColorArray()
-	var uvs := PackedVector2Array()
-	for j in 2:
-		for i in 3:
-			var quad := [Vector2(xs[i], ys[j]), Vector2(xs[i + 1], ys[j]), Vector2(xs[i + 1], ys[j + 1]), Vector2(xs[i], ys[j + 1])]
-			for k in [0, 1, 2, 0, 2, 3]:
-				var uv: Vector2 = quad[k]
-				var a := (0.0 if uv.x == 0.0 or uv.x == 1.0 else 1.0) * (0.0 if uv.y == 0.0 else 1.0)
-				pts.append(r.position + uv * r.size)
-				uvs.append(uv)
-				cols.append(Color(tint, tint.a * a))
-	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), pts, cols, uvs, PackedInt32Array(), PackedFloat32Array(), tex.get_rid())
+## 금빛 창에 일러스트가 묻히는 영웅인가(아르테온·루미나 같은 금빛, 프리다 같은 아주 밝은 색): 영웅 색의 밝기(HSL) ≥ 0.8이거나,
+## ≥ 0.65이면서 노랑~금 색상(30~70°). 그러면 창을 짙은 남보라로.
+static func pale_hero(c: Color) -> bool:
+	var l := (maxf(c.r, maxf(c.g, c.b)) + minf(c.r, minf(c.g, c.b))) * 0.5
+	return l >= 0.8 or (l >= 0.65 and c.h >= 30.0 / 360.0 and c.h <= 70.0 / 360.0)
 
 
 ## 사각형(4점: 왼위·오른위·오른아래·왼아래) 띠를 로우폴리 면으로: 위·아래 변에 CUTIN_CELL 간격 점(가운데 점은 조금 흔들고 아래는 반 칸
