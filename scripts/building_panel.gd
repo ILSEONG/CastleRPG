@@ -20,6 +20,8 @@ const QtyBox := preload("res://scripts/qty_box.gd")
 const SpeedupList := preload("res://scripts/speedup_list.gd")
 
 const DIALOG_W := 640
+signal goto_building(id: String)  # 못 채운 선행 조건 줄을 눌렀다: 창을 닫고 그 건물로(main이 카메라를 옮기고 그 건물 창을 연다, 사용자 2026-10-13)
+
 const GREEN := Color(0.13, 0.58, 0.24)
 const RED := Color(0.78, 0.22, 0.18)
 const UPGRADE_TEXT := "업그레이드"
@@ -227,7 +229,8 @@ func _refresh() -> void:
 	var rq := Economy.requirements(id)
 	for r in rq:
 		var bname: String = GameData.building_def(r.id).name
-		reqs.add_child(_label("%s %s Lv %d 필요" % ["✓" if r.ok else "✗", bname, int(r.need)], 26, GREEN if r.ok else RED))
+		var text := "%s %s Lv %d 필요" % ["✓" if r.ok else "✗", bname, int(r.need)]
+		reqs.add_child(_label(text, 26, GREEN) if r.ok else _req_link(text + "  ›", str(r.id)))
 	_reqs_title.visible = not rq.is_empty()
 	var cost := Economy.upgrade_cost(id)
 	var res_id := Economy.res_of(id)
@@ -457,3 +460,19 @@ func _clear(box: Container) -> void:
 	for c in box.get_children():
 		box.remove_child(c)
 		c.queue_free()
+
+
+## 못 채운 선행 조건 줄: 빨간 글자 버튼 — 누르면 창을 닫고 그 건물로 간다(goto_building).
+func _req_link(text: String, bid: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", 26)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, RED)
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.pressed.connect(func():
+		close()
+		goto_building.emit(bid))
+	return b

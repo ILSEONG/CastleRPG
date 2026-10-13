@@ -1576,7 +1576,7 @@ func _skill_unlock_cases() -> void:
 		_remove_hero(h)
 	await _wait_until(func(): return Fx.live() == 0, 3.0)
 
-	# (U5) 등급 연출: 같은 발동이 R은 고리·빛무리·광선 3겹, SR은 입자까지 4겹, SSR은 빛기둥·파동까지 6겹
+	# (U5) 등급 연출: 같은 발동이 R은 고리·빛무리·광선 3겹, SR은 입자까지 4겹, SSR 궁극기는 빛기둥까지 5겹(2026-10-13: 기둥은 궁극기만, 파동은 뺐다)
 	var layers := []
 	for t in [0, 1, 2]:
 		await _wait_until(func(): return Fx.live() == 0, 3.0)
@@ -1584,11 +1584,11 @@ func _skill_unlock_cases() -> void:
 		_main.add_child(probe)
 		var foot := Fx.foot_ring(Color.WHITE, Color.RED)
 		probe.add_child(foot)
-		Fx.pulse(probe, foot, Color.RED, t)
+		Fx.pulse(probe, foot, Color.RED, t, true, t == 2)
 		layers.append(Fx.live())
 		probe.queue_free()
 	await _frames(1)
-	_check(layers == [3, 4, 6] and Fx.live() == 0, "(U5) skill activation layers grow with grade: R 3, SR 4, SSR 6 effect nodes", str(layers))
+	_check(layers == [3, 4, 5] and Fx.live() == 0, "(U5) skill activation layers grow with grade: R 3, SR 4, SSR ult 5 effect nodes", str(layers))
 	GameState.refill()
 	await _frames(1)
 
