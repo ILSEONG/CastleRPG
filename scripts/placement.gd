@@ -14,6 +14,8 @@ const IconsScript := preload("res://scripts/icons.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const OK_COLOR := Color(0.25, 0.85, 0.35, 0.55)
+const FLOOR_OK := Color(0.3, 0.9, 0.4, 0.28)  # 바닥 칸: 지을 수 있는 칸
+const FLOOR_BAD := Color(0.9, 0.3, 0.25, 0.22)  # 성벽 옆 통로·십자 길·광장(영웅·병사·괴물이 다니는 곳 — 화면엔 그냥 돌바닥이라 칸으로 보여 준다)
 const BAD_COLOR := Color(0.95, 0.25, 0.2, 0.55)
 const GREEN := Color(0.13, 0.58, 0.24)
 const RED := Color(0.78, 0.22, 0.18)
@@ -21,7 +23,7 @@ const GHOST_ALPHA := 0.72
 const TAP_PX := 14.0  # 이보다 덜 움직이고 떼면 탭(그 자리로 옮긴다)
 const GRAB_PAD := 1.0  # 부지보다 이만큼(m) 넓게 잡아도 건물을 끈다
 const PAN_SEC := 0.35
-const HINT := "건물을 끌거나 원하는 곳을 누르세요"
+const HINT := "초록 칸 안으로 건물을 끌거나 그곳을 누르세요"
 const OK_TEXT := "여기에 지을 수 있습니다"
 const NO_SPACE_TEXT := "성 안에 빈 자리가 없습니다"
 
@@ -46,6 +48,7 @@ var _layer: CanvasLayer
 var _ghost: MeshInstance3D
 var _plate: MeshInstance3D
 var _plate_mat: StandardMaterial3D
+var _floor: MeshInstance3D  # 고르는 동안 성 안 바닥 칸(초록 = 지을 수 있음, 빨강 = 길·통로·광장)
 var _press := Vector2.INF  # 누른 화면 위치(건물 밖에서 눌렀을 때만 — 탭 판정)
 var _grab := false  # 건물을 잡고 끄는 중
 var _grab_off := Vector3.ZERO  # 잡은 점 → 부지 가운데
@@ -69,6 +72,16 @@ func _ready() -> void:
 	_plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_plate.visible = false
 	add_child(_plate)
+	_floor = MeshInstance3D.new()
+	var fm := StandardMaterial3D.new()
+	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fm.vertex_color_use_as_albedo = true
+	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_floor.material_override = fm
+	_floor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_floor.visible = false
+	add_child(_floor)
 	_build_bar()
 	GameState.mode_changed.connect(func(m): if m != GameState.Mode.IDLE: cancel())
 
@@ -156,6 +169,8 @@ func start(id: String) -> bool:
 	_plate.mesh = pm
 	_ghost.visible = true
 	_plate.visible = true
+	_floor.mesh = _floor_mesh(id)
+	_floor.visible = true
 	if moving and scenery != null and scenery.lots.has(id):
 		scenery.lots[id].mi.visible = false
 	_set_picker(false)
@@ -167,6 +182,28 @@ func start(id: String) -> bool:
 	if rig != null:
 		rig.pan_to(Balance.center_of(id) if moving else _center(), PAN_SEC)
 	return true
+
+
+## 성 안 바닥 칸 표시: 타일마다 Balance.rect_block(1×1) — 빈 칸은 초록, 길·통로·광장은 빨강, 다른 건물 밑은 비운다(건물이 보인다).
+## 건물은 초록 칸 안에 부지(3×3)가 다 들어가야 놓인다.
+func _floor_mesh(id: String) -> ArrayMesh:
+	var half := Economy.interior_half_tiles()
+	var others: Dictionary = Economy.placed_cells(id)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var pad := 0.08
+	var t := Balance.TILE
+	for x in range(-half, half):
+		for y in range(-half, half):
+			var why := Balance.rect_block(Rect2i(x, y, 1, 1), half, others)
+			if why == "overlap":
+				continue
+			st.set_color(FLOOR_OK if why == "" else FLOOR_BAD)
+			var a := Vector3(x * t + pad, 0.03, y * t + pad)
+			var b := Vector3((x + 1) * t - pad, 0.03, (y + 1) * t - pad)
+			for v in [a, Vector3(b.x, 0.03, a.z), b, a, b, Vector3(a.x, 0.03, b.z)]:
+				st.add_vertex(v)
+	return st.commit()
 
 
 func cancel() -> void:
@@ -192,6 +229,7 @@ func _end() -> void:
 	_press = Vector2.INF
 	_ghost.visible = false
 	_plate.visible = false
+	_floor.visible = false
 	_layer.visible = false
 	_set_picker(true)
 
