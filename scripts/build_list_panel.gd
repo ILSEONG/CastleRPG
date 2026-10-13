@@ -117,6 +117,7 @@ func _add_card(id: String) -> void:
 	action_label.add_theme_constant_override("outline_size", 4)
 	action.add_child(action_label)
 	box.add_child(action)
+	Tutorial.register_ui("build:" + id, card, is_open)  # 가이드 화살표: 펼친 목록의 그 건물 카드
 	rows[id] = {"card": card, "button": card, "status": status, "costs": costs, "action": action, "action_label": action_label, "reason": reason, "why": ""}
 
 
@@ -202,6 +203,9 @@ func open() -> void:
 	await get_tree().process_frame
 	if my != _opening or not visible:
 		return
+	var target: String = Tutorial.target_building()  # 가이드 건설 미션: 그 건물 카드가 보이게 민다(화살표가 그 카드를 가리킨다)
+	if rows.has(target):
+		_scroll.ensure_control_visible(rows[target].card)
 	_tween = create_tween()
 	_tween.tween_property(tray, "scale", Vector2.ONE, OPEN_SEC).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	var i := 0

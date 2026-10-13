@@ -39,6 +39,7 @@ func _ready() -> void:
 	button.add_child(_face)
 	button.pressed.connect(func(): if panel != null: panel.toggle())
 	add_child(button)
+	Tutorial.register_ui("build_button", button, func(): return panel == null or not panel.is_open())  # 가이드 화살표(목록이 펼쳐지면 그 카드를 가리킨다)
 	Economy.changed.connect(_refresh_dot)
 	_refresh_dot()
 	_place()
