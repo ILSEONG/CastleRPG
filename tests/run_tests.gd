@@ -5329,6 +5329,12 @@ func test_tutorial() -> void:
 		ng_guild.guild = {"id": "g1", "name": "테스트", "level": 1}
 		check(t.point_keys(t.mission()) == t.mission().point and t.mission_desc(t.mission()) == str(t.mission().desc), "guide: %s with a guild points to its own buttons" % id)
 		ng_guild.guild = {}
+	ng_guild.guild = {"id": "g1", "name": "테스트", "level": 1}
+	ng_guild.me["attended"] = true
+	t.step = t.mission_index("guild_attend")
+	check(t.point_keys(t.mission()) == TutorialScript.ATTENDED_POINT, "guide: after attending, the guild attend mission points at the donate button, not [출석 완료]")
+	ng_guild.guild = {}
+	ng_guild.me.erase("attended")
 	t.guild = keep_guild
 	ng_guild.free()
 	for tid in GuideToursScript.TOURS:

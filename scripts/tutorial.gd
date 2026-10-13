@@ -542,6 +542,7 @@ func register_ui(key: String, node: Control, show := Callable()) -> void:
 ## 길드가 있어야 하는 미션(길드 출석·기부·보스): 길드가 없으면(안 들었거나 나갔다) 먼저 가입·만들기로 안내한다.
 const NEEDS_GUILD := ["guild_attend", "guild_boss"]
 const NO_GUILD_POINT := ["@guild_panel:buttons.join:0", "@guild_panel:buttons.create", "menu:guild", "menu"]
+const ATTENDED_POINT := ["@guild_panel:buttons.donate:gold", "@guild_panel:buttons.tab:home", "menu:guild", "menu"]
 
 
 func _needs_guild_now(m: Dictionary) -> bool:
@@ -559,6 +560,8 @@ func mission_desc(m: Dictionary) -> String:
 func point_keys(m: Dictionary) -> Array:
 	if _needs_guild_now(m):
 		return NO_GUILD_POINT
+	if str(m.get("kind", "")) == "guild_attend" and guild != null and guild.me.get("attended", false) == true:
+		return ATTENDED_POINT  # 출석은 했다: [출석 완료] 대신 기부 버튼
 	if m.has("point"):
 		return m.point
 	var g := str(m.get("goto", ""))

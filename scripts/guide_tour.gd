@@ -202,7 +202,9 @@ static func resolve(at: String, tree: SceneTree):
 ## "<스크립트>:<경로>"가 가리키는 보이는 Control(가이드 카드 화살표용). 없으면 null.
 static func resolve_node(at: String, tree: SceneTree):
 	var obj = _walk(at, tree)
-	return obj if obj is Control and is_instance_valid(obj) and obj.is_visible_in_tree() else null
+	if not (obj is Control) or not is_instance_valid(obj) or not obj.is_visible_in_tree() or obj.is_queued_for_deletion():
+		return null
+	return obj if obj.size.x >= 2.0 and obj.size.y >= 2.0 else null  # 막 만들어 아직 자리를 안 잡은 버튼은 건너뛴다(화살표가 튀지 않게)
 
 
 static func _walk(at: String, tree: SceneTree):
@@ -232,7 +234,7 @@ static func _rect_of(v):
 	for c in list:
 		if c is Dictionary:
 			c = c.get("button", c.get("card", c.get("cell", c.get("box"))))
-		if not (c is Control) or not is_instance_valid(c) or not c.is_visible_in_tree():
+		if not (c is Control) or not is_instance_valid(c) or not c.is_visible_in_tree() or c.is_queued_for_deletion():
 			continue
 		var xf: Transform2D = c.get_global_transform_with_canvas()
 		var r := Rect2(xf.origin, c.size * xf.get_scale())

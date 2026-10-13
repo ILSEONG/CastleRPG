@@ -39,6 +39,7 @@ var emblem_pick := 0
 var buttons := {}  # 테스트·연출용: "attend", "donate:gold", "boss", "buy:dia", "join:0", "create", "leave", "tab:boss", "box:0" …
 
 var _dirty := false
+var _econ_key := ""  # 마지막으로 만들 때의 _econ_state()
 var _leave_armed := 0.0
 var _create_name := ""
 var _refetch := 0.0
@@ -90,8 +91,23 @@ func _on_changed() -> void:
 
 
 func _on_econ_changed() -> void:
-	if visible and tab != "members":  # 골드·다이아로 버튼 활성이 바뀐다
+	if visible and tab != "members" and _econ_state() != _econ_key:  # 골드·다이아로 버튼 활성이 바뀔 때만(처치 골드마다 다시 만들면 가이드 화살표·설명이 흔들린다, 2026-10-13)
 		_dirty = true
+
+
+## 창이 Economy에서 읽는 것(버튼 활성·문구) 한 줄 — 바뀌었을 때만 다시 만든다.
+func _econ_state() -> String:
+	var k: Array = []
+	if not Guild.joined():
+		k.append(Guild.create_block(name_edit.text if name_edit != null and is_instance_valid(name_edit) else _create_name))
+	else:
+		for kind in GuildScript.DONATION_ORDER:
+			k.append(Guild.donate_block(kind))
+		k.append(Guild.boss_block())
+		for it in GuildScript.SHOP:
+			k.append(Guild.buy_block(it.id))
+		k.append(int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
+	return str(k)
 
 
 func _process(delta: float) -> void:
@@ -133,6 +149,7 @@ func _rebuild() -> void:
 	else:
 		_build_joined()
 	scroll.set_deferred("scroll_vertical", keep)
+	_econ_key = _econ_state()
 
 
 func _center_note(head: String, sub: String) -> void:
