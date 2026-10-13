@@ -221,10 +221,27 @@ func _build_world() -> void:
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
 	side_menu.card = card
 	add_child(side_menu)
+	var placement = preload("res://scripts/placement.gd").new()  # 자유 건설 자리 고르기(사용자 2026-10-13): 반투명 건물 + 초록/빨강 부지 + 아래 막대
+	placement.camera = camera
+	placement.rig = rig
+	placement.picker = picker
+	placement.scenery = scenery
+	add_child(placement)
+	var build_list = preload("res://scripts/build_list_panel.gd").new()  # 건물 목록 창: [건설]·[이동] → 자리 고르기
+	build_list.placement = placement
+	build_list.building_panel = building_panel
+	add_child(build_list)
+	var build_btn = preload("res://scripts/build_button.gd").new()  # 왼쪽 아래 [건물](배속 버튼 아래 — [메뉴]와 같은 높이, 배속 버튼은 그 위)
+	build_btn.card = card
+	build_btn.menu = side_menu
+	build_btn.panel = build_list
+	add_child(build_btn)
+	card.build_button = build_btn  # 가이드 건설 미션 화살표: 자리를 안 잡은 공터면 [건물] 버튼을 가리킨다
 	var speed = preload("res://scripts/speed_button.gd").new()
 	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게)  # 왼쪽 아래([메뉴]와 같은 높이) x1.5 배속 켬/끔(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
 	speed.card = card
 	speed.menu = side_menu
+	speed.below = build_btn
 	add_child(speed)
 	var hot = preload("res://scripts/hot_deal.gd").new()  # 핫딜: 보스 격파·다이아 부족·패배 때 1시간 특가 창 + 왼쪽 [핫딜] 버튼(배속 버튼 위)
 	hot.speed = speed
@@ -236,14 +253,15 @@ func _build_world() -> void:
 	_strip.heroes_fn = strip_heroes
 	add_child(_strip)
 	speed.strip = _strip
+	build_btn.strip = _strip
 	var chat_panel = preload("res://scripts/chat_panel.gd").new()  # 채팅 창(전체·길드, 온라인)
 	add_child(chat_panel)
-	var chat_bar = preload("res://scripts/chat_bar.gd").new()  # 성 화면 채팅 줄: 배속 버튼 오른쪽, 최근 메시지 한 줄 → 채팅 창
-	chat_bar.speed = speed
+	var chat_bar = preload("res://scripts/chat_bar.gd").new()  # 성 화면 채팅 줄: [건물] 버튼 오른쪽, 최근 메시지 한 줄 → 채팅 창
+	chat_bar.speed = build_btn  # [메뉴]와 같은 줄([건물] 버튼 오른쪽)
 	chat_bar.panel = chat_panel
 	add_child(chat_bar)
-	_battle_hide = [tabs, side_menu, tags, badges]
-	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit}
+	_battle_hide = [tabs, side_menu, tags, badges, build_btn]
+	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit, "placement": placement}
 	if not Tutorial.goto_requested.is_connected(_tutorial_goto):
 		Tutorial.goto_requested.connect(_tutorial_goto)
 	add_child(bag)
@@ -293,15 +311,18 @@ func _tutorial_goto(target: String) -> void:
 	match kind:
 		"building":
 			var b := Balance.building(arg)
+			if not b.is_empty() and not Economy.is_placed(arg) and not Tutorial.build_locked(arg):
+				_tutorial_ui.placement.start(arg)  # 자리를 안 잡은 공터(자유 건설): 바로 자리 고르기
+				return
 			if not b.is_empty():
-				_tutorial_ui.rig.pan_to(Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE), GATE_PAN_SEC)
+				_tutorial_ui.rig.pan_to(Balance.center_of(arg), GATE_PAN_SEC)
 			elif arg == GameData.GATE:
 				_tutorial_ui.rig.pan_to(FormationScript.gate_position(castle.half, 2), GATE_PAN_SEC)
 			_tutorial_ui.building.open_building(arg)
 		"look":  # 건물로 카메라만(창 없이 — 자원 수집은 건물을 직접 누른다)
 			var lb := Balance.building(arg)
 			if not lb.is_empty():
-				_tutorial_ui.rig.pan_to(Vector3((lb.cell.x + lb.size.x / 2.0) * Balance.TILE, 0, (lb.cell.y + lb.size.y / 2.0) * Balance.TILE), GATE_PAN_SEC)
+				_tutorial_ui.rig.pan_to(Balance.center_of(arg), GATE_PAN_SEC)
 		"tab":  # 하단 탭, 없으면 오른쪽 아래 메뉴 항목(길드)
 			if _tutorial_ui.tabs.windows.has(arg):
 				if not _tutorial_ui.tabs.windows[arg].is_open():

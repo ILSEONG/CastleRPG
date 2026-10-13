@@ -86,9 +86,13 @@ func _sync() -> void:
 			nm = "상인"
 		elif t.id.begins_with("gate:"):
 			nm = ""  # 문루 방향 글자는 그리지 않는다 — 태그는 크기 0 기준점으로만 남아 성문 건설 막대를 받친다
+		elif scenery.hidden.has(t.id):
+			nm = ""  # 자리를 안 잡은 공터(자유 건설): 이름표 없음
 		else:
 			nm = GameData.building_def(t.id).get("name", t.id)
 			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else "공터"  # 튜토리얼 공터
+		if scenery.tag_anchors.has(t.id):
+			t.anchor = scenery.tag_anchors[t.id]  # 자유 건설로 옮기면 따라간다
 		if nm != t.get("name") or lv != t.get("lv"):
 			t.name = nm
 			t.lv = lv
@@ -154,6 +158,8 @@ func layout(force := false) -> void:
 	for t in tags:
 		if shown.size() >= MAX_TAGS:
 			break
+		if scenery != null and scenery.hidden.has(t.id):
+			continue  # 자리를 안 잡은 공터(자유 건설)
 		var p := camera.unproject_position(t.anchor)
 		if not view.has_point(p):
 			continue
