@@ -148,10 +148,8 @@ func _draw_arrow() -> void:
 	if id == "gate":
 		id = "gate:2"  # 남쪽(카메라 쪽) 문루 이름표
 	var s = null
-	if id != "gate:2" and not Economy.is_placed(id):  # 자리를 안 잡은 공터(자유 건설): [건물] 버튼을 가리킨다
-		if build_button == null or not build_button.visible:
-			return
-		s = Rect2(build_button.button.position, build_button.button.size)
+	if id != "gate:2" and not Economy.is_placed(id):  # 자리를 안 잡은 공터(자유 건설): [건설] 버튼·목록 카드는 _draw_pointer가 가리킨다
+		return
 	else:
 		tags.layout()
 		s = tags.stacks.get(id)

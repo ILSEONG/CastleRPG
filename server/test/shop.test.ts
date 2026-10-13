@@ -108,3 +108,16 @@ test('광고 상품: 광고를 봐야(ad: true, 아니면 409 ad_required) 받�
   assert.equal(logs.at(-1).detail.ad, false)
   assert.equal(logs[0].detail.ad, true)
 })
+
+test('가속 아이템 상품(2026-10-13): 다이아로 사면 가속 아이템·일꾼 고용권이 가방(speedups)에', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 2000 } })
+  const p0 = (await S.req('GET', '/v1/player', { token })).json.player
+  assert.equal((await buy(token, 'd_sp_build')).status, 200)
+  const r = await buy(token, 'w_builder')
+  assert.equal(r.status, 200)
+  assert.equal(r.json.player.diamonds, p0.diamonds - 40 - 1000)
+  assert.equal(r.json.player.speedups.build_60, (p0.speedups.build_60 ?? 0) + 1)
+  assert.equal(r.json.player.speedups.builder_10080, (p0.speedups.builder_10080 ?? 0) + 1)
+})

@@ -39,38 +39,37 @@ export const PRODUCTS: Product[] = [
   { id: 'dia_5', kind: 'diamond', name: '다이아 87,000', krw: 59000, give: { diamonds: 87000 }, bonus: 31000 },
   { id: 'dia_6', kind: 'diamond', name: '다이아 156,000', krw: 99000, give: { diamonds: 156000 }, bonus: 66000 },
   // 월정액
-  { id: 'monthly', kind: 'monthly', name: '성주의 월정액', krw: 4900, give: { diamonds: 1500 }, days: 30, daily: { diamonds: 500 } },
-  { id: 'monthly_plus', kind: 'monthly', name: '왕의 월정액', krw: 14900, give: { diamonds: 5000 }, days: 30, daily: { diamonds: 800, tickets: 3, pouch_gold_240: 1 } },
+  { id: 'monthly', kind: 'monthly', name: '성주의 월정액', krw: 4900, give: { diamonds: 1500 }, days: 30, daily: { diamonds: 500, speedup_build_60: 1, speedup_research_60: 1 } },
+  { id: 'monthly_plus', kind: 'monthly', name: '왕의 월정액', krw: 14900, give: { diamonds: 5000, speedup_builder_43200: 1 }, days: 30, daily: { diamonds: 800, tickets: 3, pouch_gold_240: 1, speedup_any_180: 1 } },
   // 패키지
-  { id: 'pkg_starter', kind: 'package', name: '신규 성주 패키지', krw: 1200, period: 'once', limit: 1, give: { diamonds: 1500, tickets: 30, pouch_gold_120: 5, pouch_res_120: 5 } },
-  { id: 'pkg_daily', kind: 'package', name: '일일 특가 패키지', krw: 1200, period: 'daily', limit: 1, give: { diamonds: 600, tickets: 8, keys_gold: 3 } },
-  { id: 'pkg_weekly', kind: 'package', name: '주간 특가 패키지', krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 4000, tickets: 50, keys_equip: 5 } },
-  { id: 'pkg_growth', kind: 'package', name: '성장 지원 패키지', krw: 33000, period: 'once', limit: 1, give: { diamonds: 30000, tickets: 150, pouch_gold_360: 10, pouch_res_360: 10 } },
+  { id: 'pkg_starter', kind: 'package', name: '신규 성주 패키지', krw: 1200, period: 'once', limit: 1, give: { diamonds: 1500, tickets: 30, pouch_gold_120: 5, pouch_res_120: 5, speedup_builder_10080: 1, speedup_build_60: 5 } },
+  { id: 'pkg_daily', kind: 'package', name: '일일 특가 패키지', krw: 1200, period: 'daily', limit: 1, give: { diamonds: 600, tickets: 8, keys_gold: 3, speedup_any_60: 3 } },
+  { id: 'pkg_weekly', kind: 'package', name: '주간 특가 패키지', krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 4000, tickets: 50, keys_equip: 5, speedup_any_480: 3, speedup_builder_10080: 1 } },
+  { id: 'pkg_growth', kind: 'package', name: '성장 지원 패키지', krw: 33000, period: 'once', limit: 1, give: { diamonds: 30000, tickets: 150, pouch_gold_360: 10, pouch_res_360: 10, speedup_builder_43200: 1, speedup_build_1440: 5, speedup_research_1440: 5 } },
   // 핫딜(1시간 한정, 뜬 것만)
-  { id: 'hot_boss', kind: 'hot', name: '보스 격파 기념 특가', krw: 3300, value: 5, give: { diamonds: 18000, tickets: 20, pouch_gold_360: 3 } },
+  { id: 'hot_boss', kind: 'hot', name: '보스 격파 기념 특가', krw: 3300, value: 5, give: { diamonds: 18000, tickets: 20, pouch_gold_360: 3, speedup_build_480: 3 } },
   { id: 'hot_dia', kind: 'hot', name: '다이아 긴급 지원', krw: 5900, value: 5, give: { diamonds: 40000, tickets: 15 } },
-  { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 5, give: { diamonds: 30000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5 } },
+  { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 5, give: { diamonds: 30000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5, speedup_any_480: 3 } },
   // 패스
   { id: 'pass_growth', kind: 'pass', name: '성장 패스', krw: 9900, give: {} },
-  // 광고 제거(영구, 사용자 2026-10-12 ₩5,500): 계정에 남는다(passes). 지금 게임에는 광고가 없어 구매 보너스 다이아를 함께 준다 —
   // 광고 제거: 상점 [광고] 상품을 광고 없이 바로 받는다(view.ad_free). 구매 보너스는 없다(사용자 2026-10-12 "광고제거 사면 이득보는걸 지우고").
   { id: 'no_ads', kind: 'pass', name: '광고 제거', krw: 5500, give: {} },
 ]
 
 // 성장 패스 단계: 라운드(GameData.round_label — 25라운드 = 1스테이지)를 깨면 받는다. free = 누구나, paid = 패스 구매자.
 export const GROWTH: { round: number; free: Reward; paid: Reward }[] = [
-  { round: 10, free: { diamonds: 60 }, paid: { diamonds: 1800 } },
-  { round: 25, free: { tickets: 2 }, paid: { diamonds: 1800, tickets: 12 } },
-  { round: 50, free: { diamonds: 100 }, paid: { diamonds: 2400 } },
-  { round: 75, free: { tickets: 2 }, paid: { diamonds: 2400, tickets: 18 } },
-  { round: 100, free: { diamonds: 100 }, paid: { diamonds: 3000 } },
-  { round: 150, free: { tickets: 2 }, paid: { diamonds: 3000, tickets: 18 } },
-  { round: 200, free: { diamonds: 160 }, paid: { diamonds: 3600 } },
-  { round: 250, free: { tickets: 4 }, paid: { diamonds: 3600, tickets: 30 } },
-  { round: 300, free: { diamonds: 200 }, paid: { diamonds: 4800 } },
-  { round: 375, free: { tickets: 4 }, paid: { diamonds: 4800, tickets: 30 } },
-  { round: 450, free: { diamonds: 200 }, paid: { diamonds: 6000 } },
-  { round: 550, free: { tickets: 6 }, paid: { diamonds: 6000, tickets: 60 } },
+  { round: 10, free: { diamonds: 60 }, paid: { diamonds: 1800, speedup_any_180: 2 } },
+  { round: 25, free: { tickets: 2 }, paid: { diamonds: 1800, tickets: 12, speedup_any_180: 2 } },
+  { round: 50, free: { diamonds: 100 }, paid: { diamonds: 2400, speedup_any_180: 2 } },
+  { round: 75, free: { tickets: 2 }, paid: { diamonds: 2400, tickets: 18, speedup_any_180: 2 } },
+  { round: 100, free: { diamonds: 100 }, paid: { diamonds: 3000, speedup_any_180: 2, speedup_builder_10080: 1 } },
+  { round: 150, free: { tickets: 2 }, paid: { diamonds: 3000, tickets: 18, speedup_any_180: 2 } },
+  { round: 200, free: { diamonds: 160 }, paid: { diamonds: 3600, speedup_any_180: 2 } },
+  { round: 250, free: { tickets: 4 }, paid: { diamonds: 3600, tickets: 30, speedup_any_180: 2 } },
+  { round: 300, free: { diamonds: 200 }, paid: { diamonds: 4800, speedup_any_180: 2, speedup_builder_10080: 1 } },
+  { round: 375, free: { tickets: 4 }, paid: { diamonds: 4800, tickets: 30, speedup_any_180: 2 } },
+  { round: 450, free: { diamonds: 200 }, paid: { diamonds: 6000, speedup_any_180: 2 } },
+  { round: 550, free: { tickets: 6 }, paid: { diamonds: 6000, tickets: 60, speedup_any_180: 2 } },
 ]
 
 export const MONTHLY_MAX_DAYS = 180

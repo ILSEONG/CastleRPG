@@ -70,6 +70,7 @@ test('연구: 5분 이하 남으면 /v1/research/finish가 0 다이아로 끝낸
   const { token, id } = await fresh()
   await S.db.query('update player_state set gold_tenths = 100000000, diamonds = 0 where player_id = $1', [id])
   await S.db.query("insert into player_research (player_id, id, level) values ($1, 'wood_tech', 9)", [id])
+  await S.db.query("update player_buildings set level = 10 where player_id = $1 and building = 'lab'", [id]) // 9 → 10은 연구소 ≥ 1 + 9(라오킹식)
   let r = await S.req('POST', '/v1/research/start', { token, body: { id: 'wood_tech' } })
   assert.equal(r.status, 200)
   const finish = r.json.player.research.current.finish

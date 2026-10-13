@@ -47,7 +47,7 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "hero_level_stat_melee", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
 	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group",
 	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult", "offline_gold_mult"] + GACHA_KEYS
-const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards"]
+const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards", "hero_max_levels"]
 const MAX_PROMOTION := 5  # 영웅 승급 최대(개정 15). promote_shards 항목 수 = 이 값. 서버 rules.MAX_PROMOTION
 # --- 건물(개정 12). 서버 rules.ts·seed.ts와 같은 규칙 ---
 const BUILDING_STR_COLS := ["id", "name"]
@@ -84,10 +84,11 @@ const UPGRADE_NUM_COLS := ["per_level", "max_level", "cost_base", "cost_growth"]
 const UPGRADE_UNITS := ["pct", "pp"]
 const UPGRADE_KEYS := {"atk": "atk_pct", "hp": "hp_pct", "aspd": "aspd_pct", "mspd": "mspd_pct", "crit_rate": "crit_rate", "crit_dmg": "crit_dmg"}  # 항목 id → upgrade_bonus 키
 const BASE_CRIT_MULT := 1.5  # 모든 아군 공격의 기본 치명타 배율(개정 20 §3)
-const LEVELUP_GOLD_GROWTH := 1.16  # L → L+1 골드 = round(등급 값 × 1.16^(L−1) × 1.0007^((L−1)²)) (2026-10-07 1.12 → 1.16). 서버 rules.LEVELUP_GOLD_GROWTH
-const LEVELUP_GOLD_CURVE := 1.0007  # 2026-10-12: 고레벨일수록 한 레벨 상승폭이 커지게(Lv 30 ×1.2·Lv 50 ×1.25·Lv 69 ×1.29씩). 서버 rules.LEVELUP_GOLD_CURVE
-const LEVELUP_GOLD_TAIL_FROM := 69  # 2026-10-13 최대 Lv 200: Lv 69 → 70 비용부터는 한 레벨마다 ×1.04씩만 오른다(위 곡선을 그대로 두면 Lv 200이 10^24 골드). 서버 rules와 같다
-const LEVELUP_GOLD_TAIL := 1.04
+# L → L+1 골드 = round(등급 값 × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))) (2026-10-13 최대 Lv 200, 골드 수급량 기준으로 다시 짬).
+# 한 레벨 상승률이 Lv 1 ×1.24 → Lv 50 ×1.10 → Lv 100 ×1.06 → Lv 199 ×1.04로 줄어 진도별 하루 골드 수입을 따라간다. 서버 rules와 같다
+const LEVELUP_GOLD_GROWTH := 1.037
+const LEVELUP_GOLD_BOOST := 8.2
+const LEVELUP_GOLD_TAU := 45.0
 # --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
 const DUNGEONS_PATH := "res://data/dungeons.csv"
 const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
@@ -140,7 +141,8 @@ const RESEARCH_EFFECTS := ["wood_pct", "stone_pct", "food_pct", "res_pct", "buil
 	"inf_pct", "arc_pct", "cav_pct", "soldier_pct", "castle_hp_pct", "gate_hp_pct", "train_speed_pct", "train_cost_pct", "pop_add",
 	"hero_atk_pct", "hero_hp_pct", "skill_pct"]  # 단위 %(pop_add만 명)
 const SOLDIER_RESEARCH := {"infantry": "inf_pct", "archer": "arc_pct", "cavalry": "cav_pct"}  # 병종 → 그 병종 연구 효과
-const RESEARCH_NUM_KEYS := ["research_cost_growth", "research_time_growth", "lab_research_speed_per_level", "research_cancel_refund", "research_dia_per_min"]
+const RESEARCH_NUM_KEYS := ["research_cost_growth", "research_time_growth", "lab_research_speed_per_level", "research_cancel_refund", "research_dia_per_min",
+	"research_lab_per_level", "research_lab_cap"]
 
 static var errors := 0  # 마지막 읽기·교체의 표 오류 수 (테스트용)
 static var _monsters := {}
@@ -664,18 +666,20 @@ static func level_mult(level: int, role := "") -> float:
 	return 1.0 + config_num("hero_level_stat_melee" if role == "melee" else "hero_level_stat") * (level - 1)
 
 
-## 최대 레벨 = hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
+## 최대 레벨 = hero_max_levels의 승급번째(20|50|80|120|160|200, 2026-10-13). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 static func max_level(promotion: int) -> int:
+	var list := config_list("hero_max_levels")
+	if list.size() == MAX_PROMOTION + 1:
+		return int(list[clampi(promotion, 0, MAX_PROMOTION)])
 	return int(config_num("hero_max_level_base")) + int(config_num("hero_max_level_per_promotion")) * promotion
 
 
-## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.16^(L−1) × 1.0007^((L−1)²)), Lv 69부터는 Lv 69 값 × 1.04^(L − 69). 식량 없음(개정 12).
+## level에서 count번 올리는 비용 합계 {gold(정수 골드)}. L → L+1: 골드 = round(levelup_gold_<등급> × 1.037^(L−1) × e^(8.2 × (1 − e^(−(L−1)/45)))). 식량 없음(개정 12).
 static func levelup_cost(grade: String, level: int, count := 1) -> Dictionary:
 	var g := config_num("levelup_gold_" + grade)
 	var gold := 0
 	for l in range(level, level + count):
-		var k := mini(l, LEVELUP_GOLD_TAIL_FROM) - 1
-		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, k) * pow(LEVELUP_GOLD_CURVE, k * k) * pow(LEVELUP_GOLD_TAIL, maxi(0, l - LEVELUP_GOLD_TAIL_FROM)))
+		gold += roundi(g * pow(LEVELUP_GOLD_GROWTH, l - 1) * exp(LEVELUP_GOLD_BOOST * (1.0 - exp(-(l - 1) / LEVELUP_GOLD_TAU))))
 	return {"gold": gold}
 
 
@@ -773,7 +777,7 @@ static func research_bonus(levels: Dictionary) -> Dictionary:
 
 
 ## 연구 못 하는 이유 코드(순수, 서버 rules.researchBlock과 같은 순서·코드 — 진행 중(research_busy)은 쓰는 쪽이 먼저 본다). 되면 "".
-##   unknown_research → max_level → locked(연구소 Lv < lab_req, 선행 노드 Lv < 요구) → not_enough_resources(목재·석재·식량) → not_enough_gold.
+##   unknown_research → max_level → locked(연구소 Lv < lab_req·다음 레벨 연구소 요구, 선행 노드 Lv < 요구) → not_enough_resources(목재·석재·식량) → not_enough_gold.
 ## have = {wood, stone, food, gold(정수 골드)}.
 static func research_block(id: String, levels: Dictionary, lab_level: int, have: Dictionary) -> String:
 	var d := research_def(id)
@@ -782,13 +786,19 @@ static func research_block(id: String, levels: Dictionary, lab_level: int, have:
 	var lv := int(levels.get(id, 0))
 	if lv >= int(d.max_level):
 		return "max_level"
-	if not research_unlocked(d, levels, lab_level):
+	if not research_unlocked(d, levels, lab_level) or lab_level < research_lab_need(d, lv):
 		return "locked"
 	var cost := research_cost(id, lv)
 	for r in BUILD_RES:
 		if int(have.get(r, 0)) < int(cost[r]):
 			return "not_enough_resources"
 	return "not_enough_gold" if int(have.get("gold", 0)) < int(cost.gold) else ""
+
+
+## 레벨 lv → lv+1에 필요한 연구소 Lv = min(research_lab_cap, lab_req + lv × research_lab_per_level)(라오킹식: 레벨마다 아카데미 Lv이 더 필요, 2026-10-13).
+## 서버 rules.researchLabNeed와 같다.
+static func research_lab_need(d: Dictionary, lv: int) -> int:
+	return mini(int(config_num("research_lab_cap")), int(d.lab_req) + lv * int(config_num("research_lab_per_level")))
 
 
 ## 잠금이 풀렸나: 연구소 Lv ≥ lab_req, 선행 노드 Lv ≥ 요구(빈 칸은 조건 없음).
@@ -1658,7 +1668,8 @@ static func _check_research(t: Dictionary) -> void:
 			elif not (d[rq[1]] >= 1.0 and d[rq[1]] == floorf(d[rq[1]]) and d[rq[1]] <= p.max_level):
 				_err("research", d._line, rq[1], "must be an integer in 1..%d (max level of %s): %s" % [int(p.max_level), p.id, d[rq[1]]])
 	var want := {"research_cost_growth": "1 or more", "research_time_growth": "1 or more", "lab_research_speed_per_level": "0 or more",
-		"research_cancel_refund": "in 0..1", "research_dia_per_min": "a non-negative integer"}
+		"research_cancel_refund": "in 0..1", "research_dia_per_min": "a non-negative integer", "research_lab_per_level": "a non-negative integer",
+		"research_lab_cap": "a non-negative integer"}
 	for k in RESEARCH_NUM_KEYS:
 		var s := String(t.config.get(k, ""))
 		var f := s.to_float()
@@ -1745,6 +1756,12 @@ static func _check_gacha(cfg: Dictionary) -> void:
 	var parts := Array(shards.split("|")).map(func(x): return x.strip_edges())
 	if not _split_list(shards).is_empty() and not (parts.size() == MAX_PROMOTION and parts.all(func(x): return x.is_valid_int() and not x.begins_with("+") and x.to_int() >= 1)):
 		_err("config", 0, "promote_shards", "must be %d integers of at least 1 separated by '|': '%s'" % [MAX_PROMOTION, shards])
+	var caps := Array(String(cfg.get("hero_max_levels", "")).split("|")).map(func(x): return x.strip_edges())
+	var caps_ok: bool = caps.size() == MAX_PROMOTION + 1 and caps.all(func(x): return x.is_valid_int() and not x.begins_with("+") and x.to_int() >= 1)
+	for i in range(1, caps.size()):
+		caps_ok = caps_ok and caps[i].to_int() >= caps[i - 1].to_int()
+	if not _split_list(String(cfg.get("hero_max_levels", ""))).is_empty() and not caps_ok:
+		_err("config", 0, "hero_max_levels", "must be %d ascending integers of at least 1 separated by '|': '%s'" % [MAX_PROMOTION + 1, cfg.get("hero_max_levels", "")])
 	var mult := String(cfg.get("promote_mult", ""))
 	if mult.is_valid_float() and not mult.to_float() >= 1.0:
 		_err("config", 0, "promote_mult", "must be 1 or more: '%s'" % mult)
