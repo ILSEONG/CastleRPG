@@ -57,7 +57,8 @@ tavern_ssr_per_level,0.001
 tavern_sr_per_level,0.003
 gacha_10_min_sr,1
 hero_max_level_base,20
-hero_max_level_per_promotion,36
+hero_max_level_per_promotion,30
+hero_max_levels,20|50|80|120|160|200
 promote_shards,5|25|50|100|200
 promote_mult,1.3
 skill2_unlock_star,3

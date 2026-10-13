@@ -80,7 +80,7 @@ test('조각 부족은 409 not_enough_shards, 최대 승급은 409 max_promotion
   assert.equal((await S.req('POST', '/v1/hero/promote', { body: { hero_id: 'hans' } })).status, 401)
 })
 
-test('최대 레벨은 승급 기준: 승급 0은 20(넘으면 409 max_level), 승급하면 56까지. copies(중복)는 상한과 무관', async () => {
+test('최대 레벨은 승급 기준: 승급 0은 20(넘으면 409 max_level), 승급하면 50까지. copies(중복)는 상한과 무관', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await S.db.query('update player_state set gold_tenths = 1000000000000 where player_id = $1', [id])
@@ -89,8 +89,8 @@ test('최대 레벨은 승급 기준: 승급 0은 20(넘으면 409 max_level), �
   let r = await lv(1)
   assert.deepEqual([r.status, r.json.error], [409, 'max_level'])
   assert.equal((await promote(token, { hero_id: 'hans' })).status, 200)
-  r = await lv(36)
-  assert.deepEqual([r.status, r.json.level, r.json.player.heroes.hans], [200, 56, { copies: 9, level: 56, shards: 3, promotion: 1 }])
+  r = await lv(30)
+  assert.deepEqual([r.status, r.json.level, r.json.player.heroes.hans], [200, 50, { copies: 9, level: 50, shards: 3, promotion: 1 }])
   assert.equal((await lv(1)).json.error, 'max_level')
 })
 

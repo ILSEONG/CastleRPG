@@ -624,8 +624,8 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) a card tap (no slot picked) opens its detail and re-arms the open guard", "detail=%s" % heroes_win.detail_id)
 	_check(heroes_win.stat_values[0].text == "1,217" and heroes_win.stat_nexts[0].text == "→ 1,255 (+38)" and heroes_win.stat_values[1].text == "42"
 		and heroes_win.stat_nexts[1].text == "→ 43 (+1)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
-		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 56",
-		"(x) stats with the promotion bonus x1.3 and the next level in green (HP 1,217 -> 1,255 (+38), melee growth 3.15%); Lv 1 / 56 at promotion 1",
+		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 50",
+		"(x) stats with the promotion bonus x1.3 and the next level in green (HP 1,217 -> 1,255 (+38), melee growth 3.15%); Lv 1 / 50 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
 	_check(sk[0].contains("9초마다 3초 동안 반경 5m") and sk[1] == "수호의 오라 (패시브) — ★3에서 해금" and sk[2] == "심판의 빛 (액티브) — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
@@ -648,7 +648,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _frames(2)
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	live.sort_custom(func(a, b): return a.index < b.index)
-	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 56"
+	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 50"
 		and heroes_win.stat_values[0].text == "1,255" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
 		"(x) [레벨업] takes 240 gold (2400 tenths) and no food, Lv 2, light burst, changed stats flash green",
@@ -664,7 +664,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) [×10] shows the affordable count (3) and its total cost", "title=%s gold=%s" % [heroes_win._ten.title.text, heroes_win._ten.gold.text])
 	await _tap(heroes_win.ten_button.get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 0 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 56",
+	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 0 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 50",
 		"(x) [×10] raises 3 levels for the summed cost", "level=%d tenths=%d" % [Economy.level_of("arteon"), Economy.gold_tenths])
 	# 이전·다음: [다음]은 목록 순서로 다음 영웅, 오른쪽으로 끌면 이전
 	var order: Array = heroes_win.order
@@ -1921,8 +1921,8 @@ func _promotion_ui(heroes_win, recruit) -> void:
 		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
 		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
 	_check(heroes_win._promo.line.text == "조각 2 / 25" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
-		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.3 · 최대 레벨 56 → 92\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
-		"(x3) [승급] shows 조각 2 / 25 inside, is off with the reason 조각 부족, and previews x1.3 and max level 56 -> 92",
+		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.3 · 최대 레벨 50 → 80\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
+		"(x3) [승급] shows 조각 2 / 25 inside, is off with the reason 조각 부족, and previews x1.3 and max level 50 -> 80",
 		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
 	var ac = heroes_win.hero_cards.arteon
@@ -1943,10 +1943,10 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	var mult := 1.0 + 0.0315 * (lv - 1)  # 아르테온은 근접(hero_level_stat_melee)
 	var hero = _alive_heroes().filter(func(h): return h.def.id == "arteon")
 	_check(Economy.shards_of("arteon") == 5 and Economy.promotion_of("arteon") == 2 and heroes_win.big_card.stars == 2 and heroes_win.big_card.is_promoting()
-		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 92" % lv
+		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 80" % lv
 		and heroes_win.stat_values[0].text == UiKit.commas(roundi(936.0 * mult * 1.69)) and heroes_win.stat_values[0].text != hp0
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win._promo.line.text == "조각 5 / 50",
-		"(x3) [승급] spends 25 shards: ★2 (a star flies in, gold shards burst), HP x1.3 flashes green, Lv %d / 92, next 조각 5 / 50" % lv,
+		"(x3) [승급] spends 25 shards: ★2 (a star flies in, gold shards burst), HP x1.3 flashes green, Lv %d / 80, next 조각 5 / 50" % lv,
 		"shards=%d promo=%d hp=%s->%s label=%s" % [Economy.shards_of("arteon"), Economy.promotion_of("arteon"), hp0, heroes_win.stat_values[0].text, heroes_win.level_label.text])
 	_check(hero.size() == 1 and not pre.has(hero[0]) and is_equal_approx(hero[0].hp_max, 936.0 * mult * 1.69) and is_equal_approx(hero[0].atk, 32.0 * mult * 1.69),
 		"(x3) idle mode rebuilds the promoted hero at once with HP/atk x1.3^2", "hp=%s" % [hero.map(func(h): return h.hp_max)])

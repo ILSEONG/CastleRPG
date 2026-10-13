@@ -1643,10 +1643,10 @@ func test_deploy_and_promotion() -> void:
 		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.3^p (p 5 = x3.71), capped at 5")
 	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
 		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
-	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 56, 92, 128, 164, 200], "max level = 20 + 36 x promotion (200 at 5, 2026-10-13)")
-	check(GameData.levelup_cost("SSR", 69).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68)) and GameData.levelup_cost("SSR", 70).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * 1.04)
-		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.16, 68) * pow(1.0007, 68 * 68) * pow(1.04, 130)) and GameData.levelup_cost("SSR", 1, 199).gold < 10 ** 12,
-		"level-up gold: the curve up to Lv 69 -> 70, then x1.04 per level (Lv 199 -> 200 about 242억, SSR 1 -> 200 under 1조): %s" % [GameData.levelup_cost("SSR", 1, 199)])
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 50, 80, 120, 160, 200], "max level = hero_max_levels by promotion: 20 / 50 / 80 / 120 / 160 / 200 (2026-10-13)")
+	check(GameData.levelup_cost("SSR", 1).gold == 240 and GameData.levelup_cost("SSR", 20).gold == 8064 and GameData.levelup_cost("SSR", 50).gold == 328031
+		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.037, 198) * exp(8.2 * (1.0 - exp(-198.0 / 45.0)))) and absi(GameData.levelup_cost("SSR", 1, 199).gold - 26_400_000_000) < 200_000_000,
+		"level-up gold = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))): SSR Lv 20 8,064, Lv 50 32.8만, 1 -> 200 about 264억: %s" % [GameData.levelup_cost("SSR", 1, 199)])
 	var gs = GameStateScript.new()
 	check(gs.deploy() == GameData.default_deploy(4) and gs.hero_promotion("hans") == 0, "GameState deploy provider: starters, promotion 0")
 	gs.keep_level = 9
@@ -1930,9 +1930,9 @@ func test_hero_levels() -> void:
 		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.169115 / 10.0 + 23.0 * 2.169115 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 126,
 		"power = round((HP / 10 + atk x 2 / interval) x grade): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
-	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 70, 81, 94, 110, 241, 1089, 1296] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 139, 162, 483, 2177] \
-		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 279, 324, 966, 4354, 147430424], "gold cost table = round(base x 1.16^(L-1) x 1.0007^((L-1)^2)), same as the server")
-	check(GameData.levelup_cost("R", 1, 5) == {"gold": 415} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 27076}, "cost is gold only (no food), count sums the levels")
+	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 75, 92, 114, 139, 368, 1723, 2016] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 149, 184, 736, 3446] \
+		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 298, 369, 1471, 6891, 1692572], "gold cost table = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))), same as the server")
+	check(GameData.levelup_cost("R", 1, 5) == {"gold": 480} and GameData.levelup_cost("SSR", 1, 19) == {"gold": 42122}, "cost is gold only (no food), count sums the levels")
 	# 오프라인 레벨업
 	var e = _econ(1000.0)
 	var got := []
@@ -1940,10 +1940,10 @@ func test_hero_levels() -> void:
 	e.gold_tenths = 5005
 	e.res.food = 200
 	check(e.level_up("hans", 1) and e.level_of("hans") == 2 and e.gold_tenths == 4405 and e.res.food == 200 and got == [["hans", 2]], "offline level up takes 600 tenths and no food")
-	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 1955 and e.res.food == 200, "three levels at once take the summed cost")
+	check(e.level_up("hans", 3) and e.level_of("hans") == 5 and e.gold_tenths == 1595 and e.res.food == 200, "three levels at once take the summed cost")
 	var notes := []
 	e.notice.connect(func(t): notes.append(t))
-	e.gold_tenths = 1099  # 109.9골드 < 110
+	e.gold_tenths = 1389  # 138.9골드 < 139
 	check(not e.level_up("hans") and e.level_of("hans") == 5 and notes == ["골드 부족"] and e.levelup_block("hans") == "골드 부족", "not enough gold: no change, notice")
 	e.gold_tenths = 100000
 	e.res.food = 0
@@ -2028,8 +2028,8 @@ func test_promotion() -> void:
 	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
 		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
 	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
-	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 56
-		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 56 (Lv 20 can level again)")
+	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 50
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 50 (Lv 20 can level again)")
 	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
 	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
 	for i in 4:

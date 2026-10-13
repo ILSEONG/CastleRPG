@@ -127,7 +127,7 @@ export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters'
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult',
   'offline_gold_mult', 'tutorial_train_sec', 'lot_build_sec', 'quest_repeat_min_sec', 'tutorial_new_players'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
-export const CONFIG_LIST = ['starter_heroes', 'promote_shards']
+export const CONFIG_LIST = ['starter_heroes', 'promote_shards', 'hero_max_levels']
 // 개정 12 건물 효과 숫자 설정(스펙 §2.3, checkBuildings가 범위를 본다)과 성채 단계 표 "레벨:값|…"(rules.parseTiers, 값은 1 이상 정수 —
 // 기존 hero_slots 목록과 앱 Balance.INTERIOR_TILES를 대신한다)
 export const CONFIG_BUILDING_NUM = ['castle_hp_per_level', 'pop_base', 'pop_per_house', 'tavern_ssr_per_level', 'tavern_sr_per_level']
@@ -301,6 +301,10 @@ function checkGacha(config: CsvRow[], errors: string[]) {
   for (const k of ['hero_level_stat', 'hero_level_stat_melee']) {
     const stat = num(k)
     if (stat !== null && !(stat >= 0)) err(k, `must be 0 or more: '${raw(k)}'`)
+  }
+  const caps = raw('hero_max_levels').split('|').map((x) => x.trim())
+  if (byKey.has('hero_max_levels') && !(caps.length === MAX_PROMOTION + 1 && caps.every((x, i) => /^\d+$/.test(x) && Number(x) >= 1 && (i === 0 || Number(x) >= Number(caps[i - 1]))))) {
+    err('hero_max_levels', `must be ${MAX_PROMOTION + 1} ascending integers of at least 1 separated by '|': '${raw('hero_max_levels')}'`)
   }
   const mult = num('promote_mult')
   if (mult !== null && !(mult >= 1)) err('promote_mult', `must be 1 or more: '${raw('promote_mult')}'`)
