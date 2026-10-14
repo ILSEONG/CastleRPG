@@ -3,6 +3,8 @@ extends CanvasLayer
 ## 연결 상태 한 줄(혼자·방장·참가 중·연결 끊김). 아래: 내 영웅 4 띠(피규어 + HP, 누르면 그 영웅 선택, 쓰러지면 흐리게 + 부활 초) + [자동 진격].
 ## 가운데 알림(성문 파괴·성채 함락). 끝나면 결과 패널(점수·처치·성문·성채 + [나가기]).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
@@ -77,13 +79,13 @@ func _build_top(root: Control) -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
-	title_label = _label(("공성전 체험 · %s" if battle.plan.get("practice", false) else "공성전 · %s") % str(battle.plan.get("enemy_name", "상대 길드")), 30, MainHud.INK)
+	title_label = _label((Lang.t("war_hud.build_top") if battle.plan.get("practice", false) else Lang.t("war_hud.build_top_2")) % str(battle.plan.get("enemy_name", Lang.t("war_hud.build_top_3"))), 30, MainHud.INK)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(title_label)
 	time_label = _label("", 30, MainHud.INK)
 	row.add_child(time_label)
-	var leave := _button("나가기", UiKit.STEEL)
+	var leave := _button(Lang.t("war_hud.build_top_4"), UiKit.STEEL)
 	leave.pressed.connect(func(): battle.leave())
 	row.add_child(leave)
 	score_label = _label("", 24, MainHud.INK)
@@ -96,7 +98,7 @@ func _build_top(root: Control) -> void:
 	for i in 4:
 		bars.add_child(_bar_cell(WarRules.SIDE_NAMES[i], GATE_RED, gate_bars))
 	var keep_list := []
-	bars.add_child(_bar_cell("성채", KEEP_RED, keep_list))
+	bars.add_child(_bar_cell(Lang.t("war_hud.build_top_5"), KEEP_RED, keep_list))
 	keep_bar = keep_list[0]
 	role_label = _label("", 20, MainHud.INK.lightened(0.25))
 	role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -129,7 +131,7 @@ func _build_strip(root: Control) -> void:
 	col.add_theme_constant_override("separation", 10)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(col)
-	auto_button = _button("자동 진격", MainHud.ACCENT)
+	auto_button = _button(Lang.t("war_hud.build_strip"), MainHud.ACCENT)
 	auto_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	auto_button.pressed.connect(func(): battle.set_auto())
 	col.add_child(auto_button)
@@ -191,16 +193,16 @@ func _build_deploy(root: Control) -> void:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", 8)
 	deploy_panel.add_child(box)
-	var head := _label("배치 단계", 30, WIN_GOLD)
+	var head := _label(Lang.t("war_hud.build_deploy"), 30, WIN_GOLD)
 	head.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
 	head.add_theme_constant_override("outline_size", 6)
 	box.add_child(head)
-	var how := _label("내 영웅을 누르고 성 밖 바닥(붉은 선 바깥)을 눌러 자리를 잡으세요.\n자리 잡은 쪽 성문을 공격합니다.", 21, MainHud.INK)
+	var how := _label(Lang.t("war_hud.build_deploy_2"), 21, MainHud.INK)
 	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(how)
 	deploy_label = _label("", 22, MainHud.INK.lightened(0.15))
 	box.add_child(deploy_label)
-	start_button = _button("전투 시작", MainHud.ACCENT)
+	start_button = _button(Lang.t("war_hud.build_deploy_3"), MainHud.ACCENT)
 	start_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	start_button.custom_minimum_size = Vector2(260, 64)
 	start_button.pressed.connect(func(): battle.request_start())
@@ -226,23 +228,23 @@ func _build_result(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
 	panel.add_child(box)
-	result_title = _label("공성 종료", 52, WIN_GOLD)
+	result_title = _label(Lang.t("war_hud.build_result"), 52, WIN_GOLD)
 	result_title.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
 	result_title.add_theme_constant_override("outline_size", 8)
 	box.add_child(result_title)
 	result_body = _label("", 28, MainHud.INK)
 	box.add_child(result_body)
-	var out := _button("나가기", MainHud.ACCENT)
+	var out := _button(Lang.t("war_hud.build_result_2"), MainHud.ACCENT)
 	out.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	out.pressed.connect(func(): battle.leave())
 	box.add_child(out)
 
 
 func show_result(r: Dictionary) -> void:
-	result_title.text = "성채 함락!" if r.get("keep_broken", false) else "공성 종료"
-	var gates_txt := str(int(r.gates_broken)) + ("(점수는 %d개까지)" % WarRules.MAX_GATES_SCORED if int(r.gates_broken) > WarRules.MAX_GATES_SCORED else "")
-	result_body.text = "이번 전투 %d점\n수비 영웅 처치 %d · 성문 파괴 %s · 성채 %d점%s" % [int(r.points), int(r.kills), gates_txt,
-		int(r.get("keep_points", 0)), " · 성채 함락" if r.get("keep_broken", false) else ""]
+	result_title.text = Lang.t("war_hud.show_result") if r.get("keep_broken", false) else Lang.t("war_hud.show_result_2")
+	var gates_txt := str(int(r.gates_broken)) + (Lang.t("war_hud.show_result_3") % WarRules.MAX_GATES_SCORED if int(r.gates_broken) > WarRules.MAX_GATES_SCORED else "")
+	result_body.text = Lang.t("war_hud.show_result_4") % [int(r.points), int(r.kills), gates_txt,
+		int(r.get("keep_points", 0)), Lang.t("war_hud.show_result_5") if r.get("keep_broken", false) else ""]
 	result_layer.visible = true
 
 
@@ -266,8 +268,8 @@ func _process(delta: float) -> void:
 	auto_button.visible = not battle.deploying
 	if battle.deploying:
 		var t := UiKit.clock(battle.deploy_left)
-		deploy_label.text = ("모두 자리를 잡았으면 [전투 시작]을 누르세요 · %s 뒤 자동 시작" % t) if battle.can_start \
-			else ("길드장이 [전투 시작]을 누르면 시작합니다 · %s 뒤 자동 시작" % t)
+		deploy_label.text = (Lang.t("war_hud.process") % t) if battle.can_start \
+			else (Lang.t("war_hud.process_2") % t)
 		start_button.disabled = battle.start_sent
 	for i in 4:
 		gate_bars[i].value = battle.gates[i].hp_ratio() * 100.0
@@ -280,8 +282,8 @@ func _process(delta: float) -> void:
 
 
 func _update() -> void:
-	score_label.text = "이번 전투 %d점 · 처치 %d · 성문 %d/4" % [battle.points_now(), battle.kills, battle.gates_broken()]
-	var r := {"solo": "혼자 공격 중 (길드원 영웅은 자동)", "host": "길드원과 함께 · 이 기기가 전투를 진행 중", "puppet": "길드원과 함께 공격 중"}
+	score_label.text = Lang.t("war_hud.update") % [battle.points_now(), battle.kills, battle.gates_broken()]
+	var r := {"solo": Lang.t("war_hud.update.solo"), "host": Lang.t("war_hud.update.host"), "puppet": Lang.t("war_hud.update.puppet")}
 	role_label.text = status_text if status_text != "" else str(r.get(battle.role, ""))
 
 

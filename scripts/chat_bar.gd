@@ -4,6 +4,8 @@ extends CanvasLayer
 ## 자리: x1.5 배속 버튼 오른쪽, 아래 끝은 그 버튼(= [메뉴])과 맞추고 위로 자란다. 배속 버튼이 탭 바·초상화 줄·가이드 카드 위로
 ## 올라가면 같이 올라간다(매 프레임 맞춘다). 오른쪽 끝은 [메뉴] 버튼보다 왼쪽에서 멈춘다. 오프라인이면 숨는다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
@@ -15,7 +17,7 @@ const FONT_SIZE := 19
 const GAP := 12.0  # 배속 버튼과 사이
 const RIGHT := 128.0  # 화면 오른쪽 끝에서 이만큼 비운다([메뉴] 버튼 자리)
 const BG := Color(0.953, 0.886, 0.737, 0.86)  # 양피지(ScrollBox.PAPER) 반투명
-const CH_NAMES := {"all": "전체", "guild": "길드", "system": "시스템"}
+static var CH_NAMES := {"all": Lang.t("chat_bar.ch_names.all"), "guild": Lang.t("chat_bar.ch_names.guild"), "system": Lang.t("chat_bar.ch_names.system")}
 const ChatPanel := preload("res://scripts/chat_panel.gd")
 const CH_COLORS := ChatPanel.CH_COLORS
 const NAME_COLOR := ChatPanel.NAME_COLOR
@@ -87,7 +89,7 @@ func _draw_face() -> void:
 	var x0 := 38.0
 	var lines: Array = Chat.recent(LINES)
 	if lines.is_empty():
-		_face.draw_string(FONT, Vector2(x0, PAD + LINE_H - 8), "채팅", HORIZONTAL_ALIGNMENT_LEFT, sz.x - x0 - 8, FONT_SIZE, TIME_COLOR)
+		_face.draw_string(FONT, Vector2(x0, PAD + LINE_H - 8), Lang.t("chat_bar.draw_face"), HORIZONTAL_ALIGNMENT_LEFT, sz.x - x0 - 8, FONT_SIZE, TIME_COLOR)
 		return
 	var row0 := LINES - lines.size()  # 줄이 모자라면 아래부터 채운다
 	for k in lines.size():

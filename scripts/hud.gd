@@ -5,18 +5,20 @@ extends CanvasLayer
 ## 부서지면 회색 "파괴") — 디자인 보강 7번(2026-10-07): 예전 성 줄 + 성문 2×2(패널 ~194 px)를 접어 패널이 ~118 px.
 ## 하단에는 탭 바만 있다(끊김 띠·알림은 그 위).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const INK := Color(0.16, 0.18, 0.24)
-const TIPS := [
-	"영웅을 탭한 뒤 성문·성벽을 탭하면 위치를 옮길 수 있습니다",
-	"궁병은 성벽 위, 보병은 성문 앞을 지킵니다",
-	"FEVER가 가득 차면 버튼을 눌러 보세요",
-	"같은 영웅 조각을 모아 승급하면 스킬이 열립니다",
-	"막사 레벨을 올리면 훈련이 빨라집니다",
-	"성문이 부서지면 몬스터가 성채를 직접 공격합니다",
-	"성장 탭에서 골드로 공격력·체력을 올릴 수 있습니다",
-	"연구소에서 기술을 연구하면 영웅·병사·경제가 강해집니다",
-	"남는 재료는 상인에게 팔아 골드로 바꾸세요",
-	"스테이지가 끝나면 영웅이 시작 자리로 돌아옵니다",
+static var TIPS := [
+	Lang.t("hud.tips"),
+	Lang.t("hud.tips_2"),
+	Lang.t("hud.tips_3"),
+	Lang.t("hud.tips_4"),
+	Lang.t("hud.tips_5"),
+	Lang.t("hud.tips_6"),
+	Lang.t("hud.tips_7"),
+	Lang.t("hud.tips_8"),
+	Lang.t("hud.tips_9"),
+	Lang.t("hud.tips_10"),
 ]
 const PANEL_BG := Color(0.984, 0.969, 0.933, 0.78)  # UiKit.CREAM_PANEL
 const ACCENT := Color(0.98, 0.70, 0.20)
@@ -136,7 +138,7 @@ func _ready() -> void:
 	_button.pressed.connect(_on_button)
 	UiKit.apply_button(_button, UiKit.AMBER, 14.0)
 	head.add_child(_button)
-	_auto = UiKit.checkbox("연속 진행")
+	_auto = UiKit.checkbox(Lang.t("hud.ready"))
 	_auto.toggled.connect(_on_auto_toggled)
 	head.add_child(_auto)
 	Tutorial.register_ui("hud:auto", _auto)  # 가이드 화살표
@@ -146,7 +148,7 @@ func _ready() -> void:
 	castle_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	castle_row.add_theme_constant_override("separation", 6)
 	title_col.add_child(castle_row)
-	var castle_name := _side_name("성")
+	var castle_name := _side_name(Lang.t("hud.ready_2"))
 	castle_row.add_child(castle_name)
 	_castle_bar = _hp_bar(CASTLE, CASTLE_COLOR)
 	castle_row.add_child(_castle_bar)
@@ -360,7 +362,7 @@ func _set_hp(key: int, hp: float, hp_max: float) -> void:
 		e.flash.visible = true
 	e.last = hp
 	var broken := key != CASTLE and hp <= 0.0
-	e.num.text = "파괴" if broken else "%s / %s" % [UiKit.commas(ceili(hp)), UiKit.commas(roundi(hp_max))]
+	e.num.text = Lang.t("hud.set_hp") if broken else "%s / %s" % [UiKit.commas(ceili(hp)), UiKit.commas(roundi(hp_max))]
 	e.num.add_theme_font_size_override("font_size", 14 if e.num.text.length() <= 13 else 12)  # 성문 칸이 좁다(한 줄 4개) — 만 단위 숫자는 작게
 	b.add_theme_stylebox_override("background", UiKit.bar(BROKEN_GREY).fill if broken else UiKit.bar(e.color).background)
 
@@ -369,18 +371,18 @@ func _set_hp(key: int, hp: float, hp_max: float) -> void:
 func _on_cleared(stage: int) -> void:
 	_center.text = ""
 	result_banner.rays = GameData.round_in_stage(stage) == GameData.rounds_per_stage()
-	result_banner.play("%s 클리어" % GameData.round_label(stage), "win")
+	result_banner.play(Lang.t("hud.on_cleared") % GameData.round_label(stage), "win")
 
 
 func _on_failed(_stage: int) -> void:
 	_center.text = ""
-	result_banner.play("패배", "lose")
+	result_banner.play(Lang.t("hud.on_failed"), "lose")
 
 
 func _on_mode_changed(mode: int) -> void:
 	var g: int = GameState.stage  # 전체 라운드 g → 표기 "S-r"
 	_stage_label.text = GameData.round_label(g)
-	_round_label.text = "스테이지 %d · 라운드 %d/%d" % [GameData.round_stage(g), GameData.round_in_stage(g), GameData.rounds_per_stage()]
+	_round_label.text = Lang.t("hud.on_mode_changed") % [GameData.round_stage(g), GameData.round_in_stage(g), GameData.rounds_per_stage()]
 	if mode == GameState.Mode.IDLE or mode == GameState.Mode.STAGE:
 		_center.text = ""
 	if mode != GameState.Mode.RESULT:
@@ -388,14 +390,14 @@ func _on_mode_changed(mode: int) -> void:
 	hint.visible = mode == GameState.Mode.COUNTDOWN
 	if hint.visible:
 		_tip_n += 1
-		hint.text = "곧 %s 라운드가 시작됩니다\n%s" % [GameData.round_label(g), TIPS[_tip_n % TIPS.size()]]
+		hint.text = Lang.t("hud.on_mode_changed_2") % [GameData.round_label(g), TIPS[_tip_n % TIPS.size()]]
 	_refresh_button()
 
 
 ## 대기 "▶ 진행" → 스테이지 시작. 진행 중(스테이지·카운트다운·결과) "■ 중지" → 즉시 중지.
 func _refresh_button() -> void:
 	var idle: bool = GameState.mode == GameState.Mode.IDLE
-	_button.text = "▶ 진행" if idle else "■ 중지"
+	_button.text = Lang.t("hud.refresh_button") if idle else Lang.t("hud.refresh_button_2")
 	_button.disabled = false
 
 
@@ -456,7 +458,7 @@ func _build_fever_confirm() -> void:
 	col.add_theme_constant_override("separation", 24)
 	box.add_child(col)
 	var msg := Label.new()
-	msg.text = "FEVER 중입니다.\nFEVER를 끝내고 스테이지를 시작하시겠습니까?"
+	msg.text = Lang.t("hud.build_fever_confirm")
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.add_theme_font_size_override("font_size", 28)
 	msg.add_theme_color_override("font_color", INK)
@@ -467,7 +469,7 @@ func _build_fever_confirm() -> void:
 	col.add_child(row)
 	fever_yes = Button.new()
 	fever_no = Button.new()
-	for pair in [[fever_yes, "예", UiKit.AMBER, true], [fever_no, "아니요", UiKit.STEEL, false]]:
+	for pair in [[fever_yes, Lang.t("hud.build_fever_confirm_2"), UiKit.AMBER, true], [fever_no, Lang.t("hud.build_fever_confirm_3"), UiKit.STEEL, false]]:
 		var b: Button = pair[0]
 		b.text = pair[1]
 		b.custom_minimum_size = Vector2(180, 72)
@@ -546,7 +548,7 @@ func _build_link_ui() -> void:
 	var lines := VBoxContainer.new()
 	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	band.add_child(lines)
-	_link_label = _band_label("서버 연결 중…", 26)
+	_link_label = _band_label(Lang.t("hud.build_link_ui"), 26)
 	lines.add_child(_link_label)
 	_storage_label = _band_label(Net.STORAGE_TEXT, 20)
 	_storage_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -645,10 +647,10 @@ static func chip_text(n: int) -> String:
 	var sign := "-" if n < 0 else ""
 	var a := absi(n)
 	if a < 100_000_000:
-		return sign + commas(a / 10_000) + "만"
+		return sign + commas(a / 10_000) + Lang.t("hud.chip_text")
 	if a < 1_000_000_000_000:
-		return sign + _short(a, 100_000_000) + "억"
-	return sign + _short(a / 10_000, 100_000_000) + "조"
+		return sign + _short(a, 100_000_000) + Lang.t("hud.chip_text_2")
+	return sign + _short(a / 10_000, 100_000_000) + Lang.t("hud.chip_text_3")
 
 
 ## a ÷ unit을 버림으로 유효 3자리 남짓까지(1.23 · 12.3 · 123 · 1234) 적고 끝의 0·소수점은 뗀다.

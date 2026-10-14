@@ -2,6 +2,8 @@ extends "res://scripts/ui_window.gd"
 ## 운영 창 공통(2026-10-12: 공지·우편·관리자 시트): 시트 크기(상단 칩 줄 아래 ~ 탭 바 위) + 제목 가운데·오른쪽 위 닫기(X) +
 ## 굴리는 목록(body). 하위 창은 _build(title)를 부르고 body에 줄을 넣는다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const CLOSE_PX := 56.0
 const RED := Color(0.88, 0.22, 0.2)
@@ -102,7 +104,7 @@ static func line_edit(placeholder: String, max_len := 0) -> LineEdit:
 static func ago(unix: float, now: float) -> String:
 	var s := maxf(0.0, now - unix)
 	if s < 3600:
-		return "%d분 전" % maxi(1, int(s / 60))
+		return Lang.t("ops_sheet.ago") % maxi(1, int(s / 60))
 	if s < 86400:
-		return "%d시간 전" % int(s / 3600)
-	return "%d일 전" % int(s / 86400)
+		return Lang.t("ops_sheet.ago_2") % int(s / 3600)
+	return Lang.t("ops_sheet.ago_3") % int(s / 86400)

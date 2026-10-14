@@ -3,6 +3,8 @@ extends "res://scripts/ui_window.gd"
 ## 줄 = 미션 제목 + 진행 막대(n / 목표) + 보상, 오른쪽에 [받기](완료)·[이동](바로가기 — 창을 닫고 Tutorial.goto_requested)·"완료"(받음).
 ## 받을 수 있는 줄이 위, 받은 줄이 아래. 일일·주간은 위에 초기화까지 남은 시간. 진행·보상은 Missions(오토로드).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
@@ -12,8 +14,8 @@ const DONE_BG := Color(0.86, 0.87, 0.89, 0.7)
 const REWARD := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
 const CLOSE_PX := 56.0
-const HEAD := {"daily": "매일 00:00에 초기화", "weekly": "매주 월요일 00:00에 초기화",
-	"repeat": "받을 때마다 목표가 커지고 계속 받을 수 있습니다"}
+static var HEAD := {"daily": Lang.t("mission_panel.head.daily"), "weekly": Lang.t("mission_panel.head.weekly"),
+	"repeat": Lang.t("mission_panel.head.repeat")}
 
 var tab := "daily"
 var body: VBoxContainer
@@ -35,7 +37,7 @@ func _ready() -> void:
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(CLOSE_PX, 0)
 	head.add_child(pad)
-	var title := _title("미션")
+	var title := _title(Lang.t("mission_panel.ready"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var x := Button.new()
@@ -128,7 +130,7 @@ func _head() -> void:
 		left = Missions.next_day_at() - Missions.now_t()
 	elif tab == "weekly":
 		left = Missions.next_week_at() - Missions.now_t()
-	head_label.text = HEAD[tab] if tab == "repeat" else "%s · 남은 시간 %s" % [HEAD[tab], UiKit.duration(maxf(0.0, left))]
+	head_label.text = HEAD[tab] if tab == "repeat" else Lang.t("mission_panel.head") % [HEAD[tab], UiKit.duration(maxf(0.0, left))]
 
 
 ## 보이는 줄의 순서와 상태(받기·이동·완료·응답 대기·반복 횟수).
@@ -197,7 +199,7 @@ func _row(m: Dictionary) -> Control:
 	t.clip_text = true
 	name_row.add_child(t)
 	if m.type == "repeat" and Missions.times(m.id) > 0:
-		name_row.add_child(_label("%d회 받음" % Missions.times(m.id), 18, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
+		name_row.add_child(_label(Lang.t("mission_panel.row") % Missions.times(m.id), 18, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
 	v.add_child(name_row)
 	var goal := Missions.target(m)
 	var have := mini(Missions.progress(m), goal)
@@ -218,25 +220,25 @@ func _row(m: Dictionary) -> Control:
 	if not done and not ok:
 		_live.append({"m": m, "bar": bar, "n": n})
 	v.add_child(bar_row)
-	var rw := _label("보상: " + Missions.reward_text(m.reward), 18, REWARD if not done else SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	var rw := _label(Lang.t("mission_panel.row_2") + Missions.reward_text(m.reward), 18, REWARD if not done else SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	rw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(rw)
 	var side := Control.new()
 	side.custom_minimum_size = Vector2(120, 0)
 	r.add_child(side)
 	if done:
-		var l := _label("완료", 24, SUB)
+		var l := _label(Lang.t("mission_panel.row_3"), 24, SUB)
 		l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		side.add_child(l)
 		return card
 	var b: Button
 	if ok:
-		b = _button("받기", UiKit.AMBER, 24)  # 누르면 곧바로 받는다(서버 확인은 뒤에서 — Missions.claim)
+		b = _button(Lang.t("mission_panel.row_4"), UiKit.AMBER, 24)  # 누르면 곧바로 받는다(서버 확인은 뒤에서 — Missions.claim)
 		b.pressed.connect(func(): Missions.claim(m.id))
 		buttons["claim:" + m.id] = b
 	elif Missions.goto_of(m) != "":
-		b = _button("이동", UiKit.STEEL, 24)
+		b = _button(Lang.t("mission_panel.row_5"), UiKit.STEEL, 24)
 		b.pressed.connect(func():
 			close()
 			Tutorial.goto_requested.emit(Missions.goto_of(m)))

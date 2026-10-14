@@ -1,6 +1,8 @@
 extends RefCounted
 ## 기획 데이터 표(data/*.csv 또는 서버 /v1/gamedata). 처음 쓸 때 한 번 읽고 캐시한다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const Skills := preload("res://scripts/skills.gd")
@@ -115,7 +117,7 @@ const SUB_COUNT := {"SR": 1, "SSR": 1, "UR": 2, "LR": 3}
 const SUB_BASE := {"lifesteal": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0}, "crit_rate": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0},
 	"crit_dmg": {"SR": 6.0, "SSR": 9.0, "UR": 13.0, "LR": 18.0}, "aspd": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0},
 	"dmg_reduce": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0}, "skill_dmg": {"SR": 4.0, "SSR": 6.0, "UR": 9.0, "LR": 12.0}}
-const SUB_NAMES := {"lifesteal": "흡혈", "crit_rate": "치명타 확률", "crit_dmg": "치명타 피해", "aspd": "공격 속도", "dmg_reduce": "받는 피해 감소", "skill_dmg": "스킬 피해"}
+static var SUB_NAMES := {"lifesteal": Lang.t("game_data.sub_names.lifesteal"), "crit_rate": Lang.t("game_data.sub_names.crit_rate"), "crit_dmg": Lang.t("game_data.sub_names.crit_dmg"), "aspd": Lang.t("game_data.sub_names.aspd"), "dmg_reduce": Lang.t("game_data.sub_names.dmg_reduce"), "skill_dmg": Lang.t("game_data.sub_names.skill_dmg")}
 const DMG_REDUCE_CAP := 40.0  # 장비 받는 피해 감소 합계 상한(%)
 const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5

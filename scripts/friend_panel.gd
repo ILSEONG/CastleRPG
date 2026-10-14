@@ -7,6 +7,8 @@ extends "res://scripts/ui_window.gd"
 ## 친구 요청은 Economy.friend_op, 목록은 Economy.friends(응답이 오면 friends_changed로 다시 그린다).
 ## 오프라인이면 안내 한 줄만.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 const GameData := preload("res://scripts/game_data.gd")
 
@@ -39,7 +41,7 @@ var _snapshot := {}  # 그 직전 목록(거절되면 되돌린다)
 func _ready() -> void:
 	_build_window(680, 10)
 	layer = 4  # 던전 시트(2)·탭 바 위
-	content.add_child(_title("친구"))
+	content.add_child(_title(Lang.t("friend_panel.ready")))
 	offline_label = _label(Economy.FRIEND_OFFLINE_TEXT, 24, SUB)
 	content.add_child(offline_label)
 	_top = VBoxContainer.new()
@@ -52,14 +54,14 @@ func _ready() -> void:
 	code_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	code_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(code_label)
-	var copy := _button("복사", UiKit.STEEL, 22)
+	var copy := _button(Lang.t("friend_panel.ready_2"), UiKit.STEEL, 22)
 	copy.custom_minimum_size = Vector2(96, 48)
 	copy.pressed.connect(copy_code)
 	row.add_child(copy)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 6)
 	_top.add_child(tabs)
-	for t in [["list", "친구 목록"], ["add", "친구 추가"]]:
+	for t in [["list", Lang.t("friend_panel.ready_3")], ["add", Lang.t("friend_panel.ready_4")]]:
 		var b := _button(t[1], UiKit.STEEL, 24)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 54)
@@ -84,7 +86,7 @@ func _ready() -> void:
 	hero_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hero_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lend.add_child(hero_label)
-	var change := _button("바꾸기", UiKit.STEEL, 22)
+	var change := _button(Lang.t("friend_panel.ready_5"), UiKit.STEEL, 22)
 	change.custom_minimum_size = Vector2(110, 48)
 	change.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	change.pressed.connect(func(): pick_scroll.visible = not pick_scroll.visible; _fit())
@@ -101,31 +103,31 @@ func _ready() -> void:
 	add.add_theme_constant_override("separation", 8)
 	_add_page.add_child(add)
 	code_edit = LineEdit.new()
-	code_edit.placeholder_text = "친구 코드 8자리"
+	code_edit.placeholder_text = Lang.t("friend_panel.ready_6")
 	code_edit.max_length = 8
 	code_edit.custom_minimum_size = Vector2(0, 56)
 	code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	code_edit.add_theme_font_size_override("font_size", 26)
 	code_edit.text_submitted.connect(func(_t): send_code())
 	add.add_child(code_edit)
-	var send := _button("신청", HudScript.ACCENT, 24)
+	var send := _button(Lang.t("friend_panel.ready_7"), HudScript.ACCENT, 24)
 	send.custom_minimum_size = Vector2(110, 56)
 	send.pressed.connect(send_code)
 	add.add_child(send)
 	var rec_head := HBoxContainer.new()
 	rec_head.add_theme_constant_override("separation", 8)
 	_add_page.add_child(rec_head)
-	var rec_title := _label("추천 성주", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	var rec_title := _label(Lang.t("friend_panel.ready_8"), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	rec_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rec_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	rec_head.add_child(rec_title)
-	refresh_btn = _button("새로고침", UiKit.STEEL, 22)
+	refresh_btn = _button(Lang.t("friend_panel.ready_9"), UiKit.STEEL, 22)
 	refresh_btn.custom_minimum_size = Vector2(130, 48)
 	refresh_btn.pressed.connect(refresh_recommend)
 	rec_head.add_child(refresh_btn)
 	list = _scroll_list(_list_page, LIST_H)
 	rec_list = _scroll_list(_add_page, LIST_H - 8)  # 두 탭 창 높이를 맞춘다
-	var close_b := _button("닫기", UiKit.STEEL)
+	var close_b := _button(Lang.t("friend_panel.ready_10"), UiKit.STEEL)
 	close_b.pressed.connect(close)
 	content.add_child(close_b)
 	Economy.friends_changed.connect(_on_friends_changed)
@@ -229,7 +231,7 @@ func copy_code() -> void:
 	var code := str(Economy.friends.get("code", ""))
 	if code != "":
 		DisplayServer.clipboard_set(code)
-		Economy.notice.emit("친구 코드를 복사했습니다")
+		Economy.notice.emit(Lang.t("friend_panel.copy_code"))
 
 
 func send_code() -> void:
@@ -251,18 +253,18 @@ func _refresh() -> void:
 		_fit()
 		return
 	var f: Dictionary = Economy.friends
-	code_label.text = "%s · 친구 코드 %s" % [f.get("name", "…"), f.get("code", "…")] if not f.is_empty() else "친구 목록을 받는 중…"
+	code_label.text = Lang.t("friend_panel.refresh") % [f.get("name", "…"), f.get("code", "…")] if not f.is_empty() else Lang.t("friend_panel.refresh_2")
 	var h = f.get("hero")
 	hero_card.hero_id = h.hero_id if h is Dictionary else ""
 	hero_card.stars = int(h.promotion) if h is Dictionary else 0
 	hero_card.queue_redraw()
-	hero_label.text = ("빌려주는 영웅: %s Lv %d%s\n친구가 모집권 던전에 데려갑니다" % [GameData.hero(h.hero_id).get("name", h.hero_id), int(h.level),
-		"" if f.get("hero_chosen") is String else " (가장 강한 영웅)"]) if h is Dictionary else "빌려줄 영웅이 없습니다"
+	hero_label.text = (Lang.t("friend_panel.refresh_3") % [GameData.hero(h.hero_id).get("name", h.hero_id), int(h.level),
+		"" if f.get("hero_chosen") is String else Lang.t("friend_panel.refresh_4")]) if h is Dictionary else Lang.t("friend_panel.refresh_5")
 	_fill_picks(f)
 	for k in tab_btns:
 		UiKit.apply_button(tab_btns[k], UiKit.AMBER if k == tab else UiKit.STEEL, 14.0)
 	var n_in: int = f.get("incoming", []).size()
-	tab_btns.list.text = "친구 목록" if n_in == 0 else "친구 목록 (신청 %d)" % n_in
+	tab_btns.list.text = Lang.t("friend_panel.refresh_6") if n_in == 0 else Lang.t("friend_panel.refresh_7") % n_in
 	_list_page.visible = tab == "list"
 	_add_page.visible = tab == "add"
 	refresh_btn.disabled = Economy.friends_waiting
@@ -274,13 +276,13 @@ func _refresh() -> void:
 		_fit()
 		return
 	var used: Array = f.get("used_today", [])
-	_section(list, "받은 신청", f.get("incoming", []), func(p, row): _add_btn(row, "수락", HudScript.ACCENT, "accept", p.id); _add_btn(row, "거절", UiKit.STEEL, "remove", p.id))
+	_section(list, Lang.t("friend_panel.refresh_8"), f.get("incoming", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_9"), HudScript.ACCENT, "accept", p.id); _add_btn(row, Lang.t("friend_panel.refresh_10"), UiKit.STEEL, "remove", p.id))
 	var fr: Array = f.get("friends", [])
-	_section(list, "친구 %d / %d명" % [fr.size(), int(f.get("cap", 30))], fr, func(p, row): _add_btn(row, "삭제", UiKit.STEEL, "remove", p.id),
-		"아직 친구가 없습니다. 친구 코드를 주고받거나 [친구 추가] 탭의 추천 성주에게 신청해 보세요.", used)
-	_section(list, "보낸 신청", f.get("outgoing", []), func(p, row): _add_btn(row, "취소", UiKit.STEEL, "remove", p.id))
-	_section(rec_list, "", f.get("recommend", []), func(p, row): _add_btn(row, "신청", HudScript.ACCENT, "request", p.id),
-		"지금 추천할 성주가 없습니다. 잠시 뒤 [새로고침]을 눌러 보세요.")
+	_section(list, Lang.t("friend_panel.refresh_11") % [fr.size(), int(f.get("cap", 30))], fr, func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_12"), UiKit.STEEL, "remove", p.id),
+		Lang.t("friend_panel.refresh_13"), used)
+	_section(list, Lang.t("friend_panel.refresh_14"), f.get("outgoing", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_15"), UiKit.STEEL, "remove", p.id))
+	_section(rec_list, "", f.get("recommend", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_16"), HudScript.ACCENT, "request", p.id),
+		Lang.t("friend_panel.refresh_17"))
 	_fit()
 
 
@@ -289,7 +291,7 @@ func _fill_picks(f: Dictionary) -> void:
 	for c in pick_row.get_children():
 		pick_row.remove_child(c)
 		c.queue_free()
-	var auto := _button("자동", UiKit.AMBER if not (f.get("hero_chosen") is String) else UiKit.STEEL, 22)
+	var auto := _button(Lang.t("friend_panel.fill_picks"), UiKit.AMBER if not (f.get("hero_chosen") is String) else UiKit.STEEL, 22)
 	auto.custom_minimum_size = Vector2(90, PICK_SIZE.y)
 	auto.pressed.connect(func(): _hero_op(null))
 	pick_row.add_child(auto)
@@ -335,10 +337,10 @@ func _section(into: VBoxContainer, title: String, people: Array, buttons: Callab
 		info.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_child(info)
 		info.add_child(_label(str(p.get("name", "")), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-		var sub := "%s Lv %d · 전투력 %d" % [GameData.hero(h.hero_id).get("name", h.hero_id), int(h.level), int(h.power)] if h is Dictionary else "영웅 없음"
+		var sub := Lang.t("friend_panel.section.sub") % [GameData.hero(h.hero_id).get("name", h.hero_id), int(h.level), int(h.power)] if h is Dictionary else Lang.t("friend_panel.section.sub_2")
 		info.add_child(_label(sub, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 		if used.has(p.id):
-			info.add_child(_label("오늘 함께했습니다 · 내일 다시", 18, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
+			info.add_child(_label(Lang.t("friend_panel.section"), 18, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
 		buttons.call(p, row)
 
 

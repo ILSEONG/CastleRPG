@@ -6,16 +6,18 @@ extends CanvasLayer
 ## - 절전 모드 power_saver(기본 끔): SAVER_SEC초 동안 화면을 만지지 않으면 화면을 어둡게 덮고 프레임을 SAVER_FPS로 낮춘다.
 ##   게임은 그대로 돈다. 아무 곳이나 누르면 돌아온다(그 누름은 게임에 전달하지 않는다).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Prefs := preload("res://scripts/prefs.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const QUALITIES := ["high", "mid", "low"]
-const QUALITY_NAMES := {"high": "높음", "mid": "보통", "low": "낮음"}
+static var QUALITY_NAMES := {"high": Lang.t("graphics.quality_names.high"), "mid": Lang.t("graphics.quality_names.mid"), "low": Lang.t("graphics.quality_names.low")}
 const RENDER_FACTOR := {"high": 1.0, "mid": 0.8, "low": 0.65}
 const FPS_CHOICES := [60, 30]
 const SAVER_SEC := 60.0
 const SAVER_FPS := 10
-const SAVER_TEXT := "절전 모드\n화면을 누르면 돌아갑니다"
+static var SAVER_TEXT := Lang.t("graphics.saver_text")
 const ORIG_SHADOW := "gfx_orig_shadow"  # 조명 메타: 원래 그림자 켬?
 
 static var current = null

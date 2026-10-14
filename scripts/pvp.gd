@@ -8,15 +8,17 @@ extends Node
 ## 되돌리고 짧은 알림(전투는 나간다). 결과도 앱이 먼저 계산해 보여 주고 서버 값이 오면 맞춘다.
 ## 온라인(econ.net != null, 내보낸 APK): 서버 /v1/pvp*가 진실. 오프라인(개발·테스트): 같은 모양의 값을 user://pvp.json으로 계산한다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
 const GuildWarScript := preload("res://scripts/guild_war.gd")
 
 const SAVE_VERSION := 1
-const ERROR_TEXT := {"no_plays": "오늘 도전 횟수를 다 썼습니다", "bad_heroes": "보유한 영웅 5명을 고르세요", "sold_out": "오늘(이번 주) 구매 한도를 채웠습니다",
-	"not_enough_coins": "PVP 코인이 부족합니다", "bag_full": "보관함이 가득 찼습니다", "no_heroes": "조각을 받을 영웅이 없습니다", "conflict": "잠시 뒤 다시 시도하세요"}
-const BOT_NICK_A := ["졸린", "용감한", "배고픈", "빠른", "느긋한", "씩씩한", "조용한", "화난", "행복한", "수상한", "귀여운", "우직한"]
-const BOT_NICK_B := ["감자", "고양이", "기사", "궁수", "곰", "여우", "도토리", "망치", "방패", "늑대", "토끼", "마법사"]
+static var ERROR_TEXT := {"no_plays": Lang.t("pvp.error_text.no_plays"), "bad_heroes": Lang.t("pvp.error_text.bad_heroes"), "sold_out": Lang.t("pvp.error_text.sold_out"),
+	"not_enough_coins": Lang.t("pvp.error_text.not_enough_coins"), "bag_full": Lang.t("pvp.error_text.bag_full"), "no_heroes": Lang.t("pvp.error_text.no_heroes"), "conflict": Lang.t("pvp.error_text.conflict")}
+static var BOT_NICK_A := [Lang.t("pvp.bot_nick_a"), Lang.t("pvp.bot_nick_a_2"), Lang.t("pvp.bot_nick_a_3"), Lang.t("pvp.bot_nick_a_4"), Lang.t("pvp.bot_nick_a_5"), Lang.t("pvp.bot_nick_a_6"), Lang.t("pvp.bot_nick_a_7"), Lang.t("pvp.bot_nick_a_8"), Lang.t("pvp.bot_nick_a_9"), Lang.t("pvp.bot_nick_a_10"), Lang.t("pvp.bot_nick_a_11"), Lang.t("pvp.bot_nick_a_12")]
+static var BOT_NICK_B := [Lang.t("pvp.bot_nick_b"), Lang.t("pvp.bot_nick_b_2"), Lang.t("pvp.bot_nick_b_3"), Lang.t("pvp.bot_nick_b_4"), Lang.t("pvp.bot_nick_b_5"), Lang.t("pvp.bot_nick_b_6"), Lang.t("pvp.bot_nick_b_7"), Lang.t("pvp.bot_nick_b_8"), Lang.t("pvp.bot_nick_b_9"), Lang.t("pvp.bot_nick_b_10"), Lang.t("pvp.bot_nick_b_11"), Lang.t("pvp.bot_nick_b_12")]
 
 signal changed
 signal battle_started(run: Dictionary)  # {mode, opponent, me, soldiers, my_soldiers, time, gain, loss, online} — main이 pvp_battle.gd를 연다
@@ -123,22 +125,22 @@ func team_power(ids: Array) -> int:
 ## [전투 시작]이 안 되는 이유(되면 "").
 func start_block(mode: String, ids: Array) -> String:
 	if view.is_empty():
-		return "PVP 정보를 불러오는 중입니다"
+		return Lang.t("pvp.start_block")
 	if plays_left(mode) <= 0:
 		return ERROR_TEXT.no_plays
 	if opponent(mode).is_empty():
-		return "상대를 찾는 중입니다"
+		return Lang.t("pvp.start_block_2")
 	if ids.size() != PvpRules.TEAM:
-		return "영웅 %d명을 고르세요" % PvpRules.TEAM
+		return Lang.t("pvp.start_block_3") % PvpRules.TEAM
 	if not battle.is_empty() and not battle.get("done", false):
-		return "진행 중인 전투가 있습니다"
+		return Lang.t("pvp.start_block_4")
 	return ""
 
 
 func buy_block(id: String) -> String:
 	var it := shop_item(id)
 	if it.is_empty():
-		return "없는 상품입니다"
+		return Lang.t("pvp.buy_block")
 	if int(it.get("bought", 0)) >= int(it.limit):
 		return ERROR_TEXT.sold_out
 	if coins() < int(it.price):
@@ -175,7 +177,7 @@ func fetch_if_stale(sec := 20.0) -> void:
 ## 방어팀 저장: 화면은 곧바로 바뀌고 서버 확인은 뒤에서(거절되면 되돌리고 알림).
 func set_defense(mode: String, ids: Array) -> bool:
 	if ids.size() != PvpRules.TEAM:
-		_notice("방어 영웅 %d명을 고르세요" % PvpRules.TEAM)
+		_notice(Lang.t("pvp.set_defense") % PvpRules.TEAM)
 		return false
 	var mv := mode_view(mode)
 	var before = mv.duplicate(true)
@@ -184,12 +186,12 @@ func set_defense(mode: String, ids: Array) -> bool:
 	if mode == "total":
 		mv.soldiers = my_soldiers()
 	changed.emit()
-	_notice("방어팀을 저장했습니다")
+	_notice(Lang.t("pvp.set_defense_2"))
 	if online():
 		econ.net.send("POST", "/v1/pvp/defense", {"mode": mode, "heroes": ids.map(func(id): return hero_entry(id))}, func(d): _take(d), func():
 			view.modes[mode] = before
 			changed.emit()
-			_notice(ERROR_TEXT.get(econ.net.last_error, "방어팀을 저장하지 못했습니다")), true, true)
+			_notice(ERROR_TEXT.get(econ.net.last_error, Lang.t("pvp.set_defense_3"))), true, true)
 		return true
 	var lm: Dictionary = local.modes[mode]
 	lm.defense = ids.map(func(id): return _team_row(id))
@@ -243,7 +245,7 @@ func start(mode: String, ids: Array) -> bool:
 						_send_finish(w)
 					else:
 						(Engine.get_main_loop() as SceneTree).create_timer(wait, true, false, true).timeout.connect(func(): _send_finish(w, bid)), func():
-			var t: String = ERROR_TEXT.get(econ.net.last_error, "전투를 시작하지 못했습니다")
+			var t: String = ERROR_TEXT.get(econ.net.last_error, Lang.t("pvp.start"))
 			view = before
 			battle = {}
 			changed.emit()
@@ -287,7 +289,7 @@ func _send_finish(win: bool, bid: String = "") -> void:
 		var r = d.get("result")
 		if r is Dictionary:
 			if win and not r.get("win", false):
-				_notice("전투 결과를 확인하지 못해 패배로 기록되었습니다")
+				_notice(Lang.t("pvp.send_finish"))
 			result_ready.emit(r), func(): fetch(), true, true)
 
 
@@ -306,13 +308,13 @@ func buy(id: String) -> String:
 		econ.net.send("POST", "/v1/pvp/buy", {"id": id}, func(d):
 			econ.apply_server(d)
 			_take(d)
-			_notice("%s 구매 완료" % PvpRules.SHOP_NAMES.get(id, id)), func():
+			_notice(Lang.t("pvp.buy") % PvpRules.SHOP_NAMES.get(id, id)), func():
 			view = before
 			changed.emit()
-			_notice(ERROR_TEXT.get(econ.net.last_error, "구매하지 못했습니다")), true, true)
+			_notice(ERROR_TEXT.get(econ.net.last_error, Lang.t("pvp.buy_2"))), true, true)
 		return ""
 	local_buy(id, now_t())
-	_notice("%s 구매 완료" % PvpRules.SHOP_NAMES.get(id, id))
+	_notice(Lang.t("pvp.buy") % PvpRules.SHOP_NAMES.get(id, id))
 	return ""
 
 

@@ -8,6 +8,8 @@ extends Node3D
 ## 남은 영웅 체력 비율 합이 큰 쪽이 이긴다(같으면 방어 쪽). 결과는 Pvp.finish(앱이 먼저 계산해 보여 주고 서버 값이 오면 맞춘다).
 ## 서버가 시작을 거절하면(Pvp.battle_refused) 알림과 함께 곧바로 나간다. [나가기]는 두 번 눌러야 포기(패배).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
@@ -126,7 +128,7 @@ func _ready() -> void:
 	hud = HudScript.new()
 	hud.battle = self
 	add_child(hud)
-	hud.flash("전투 시작!", INTRO_SEC)
+	hud.flash(Lang.t("pvp_battle.ready"), INTRO_SEC)
 	Pvp.battle_refused.connect(_on_refused)
 	Pvp.result_ready.connect(_on_result_ready)
 	print("[pvp] %s mine %d+%d vs %s %d+%d" % [mode, _heroes[0].size(), _soldiers[0].size(), str(opp.get("name", "")), _heroes[1].size(), _soldiers[1].size()])
@@ -271,7 +273,7 @@ func _process(delta: float) -> void:
 				if rig != null:
 					rig.slowmo()
 				if hud != null:
-					hud.flash("결정타! 승리!" if _ko[0] else "전멸… 패배", 1.6, GOOD if _ko[0] else BAD)
+					hud.flash(Lang.t("pvp_battle.process") if _ko[0] else Lang.t("pvp_battle.process_2"), 1.6, GOOD if _ko[0] else BAD)
 			elif clock >= duration:
 				_end(team_hp(0) > team_hp(1), "time")
 
@@ -316,10 +318,10 @@ func _on_fell(u) -> void:
 
 ## 처치 멘트(2026-10-14 사용자 "처치 멘트 좀 더 멋있게"): 같은 줄이 연달아 나오지 않게 무작위. 첫 처치는 선제 멘트,
 ## 상대가 한 명 남으면 끝을 알리는 줄을 덧붙인다(연속 처치 집계는 여전히 없음).
-const KILL_LINES := ["%s 격파!", "일격필살! %s", "%s 제압!", "%s 쓰러뜨림!", "%s 섬멸!"]
-const FALL_LINES := ["%s 전사…", "%s 쓰러짐!", "%s 전투 불능!", "%s, 무릎 꿇다"]
-const FIRST_KILL := "선제 일격!\n%s 격파"
-const FIRST_FALL := "선제 일격 허용…\n%s 전사"
+static var KILL_LINES := [Lang.t("pvp_battle.kill_lines"), Lang.t("pvp_battle.kill_lines_2"), Lang.t("pvp_battle.kill_lines_3"), Lang.t("pvp_battle.kill_lines_4"), Lang.t("pvp_battle.kill_lines_5")]
+static var FALL_LINES := [Lang.t("pvp_battle.fall_lines"), Lang.t("pvp_battle.fall_lines_2"), Lang.t("pvp_battle.fall_lines_3"), Lang.t("pvp_battle.fall_lines_4")]
+static var FIRST_KILL := Lang.t("pvp_battle.first_kill")
+static var FIRST_FALL := Lang.t("pvp_battle.first_fall")
 var _last_line := -1
 
 
@@ -335,7 +337,7 @@ func kill_line(name: String, ours: bool, first: bool, left: int) -> String:
 		_last_line = i
 		text = pool[i] % name
 	if left == 1:
-		text += "\n적은 단 한 명!" if ours else "\n최후의 한 명! 버텨라!"
+		text += Lang.t("pvp_battle.kill_line") if ours else Lang.t("pvp_battle.kill_line_2")
 	return text
 
 

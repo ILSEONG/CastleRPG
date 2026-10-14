@@ -2,13 +2,15 @@ extends RefCounted
 ## 설정 창의 [알림] 칸(2026-10-12, 푸시 알림 Notify). settings_panel.gd가 add_to(창)로 붙이고 창을 열 때 refresh()를 부른다.
 ## 알림을 띄울 수 없는 빌드(웹·앱인토스·PC — Notify.supported() 거짓)에서는 칸을 만들지 않는다.
 
-const ROWS := [
-	["notify", "푸시 알림"],
-	["notify_timer", "건설·훈련·연구 완료"],
-	["notify_idle", "방치 보상 가득"],
-	["notify_daily", "출석 알림"],
-	["notify_war", "공성전 10분 전"],
-	["notify_night", "야간 알림 (22시~8시)"],
+const Lang := preload("res://scripts/lang.gd")
+
+static var ROWS := [
+	["notify", Lang.t("notify_settings.rows")],
+	["notify_timer", Lang.t("notify_settings.rows_2")],
+	["notify_idle", Lang.t("notify_settings.rows_3")],
+	["notify_daily", Lang.t("notify_settings.rows_4")],
+	["notify_war", Lang.t("notify_settings.rows_5")],
+	["notify_night", Lang.t("notify_settings.rows_6")],
 ]
 
 var toggles := {}  # Prefs 키 → 체크 버튼
@@ -21,7 +23,7 @@ static func add_to(panel: Node) -> RefCounted:
 	if notify == null or not notify.supported():
 		return null
 	var s := new()
-	s.section = panel._section("알림")
+	s.section = panel._section(Lang.t("notify_settings.add_to"))
 	panel.body.add_child(s.section)
 	for r in ROWS:
 		var key: String = r[0]
@@ -51,4 +53,4 @@ func refresh() -> void:
 			if k is Control:
 				k.queue_redraw()
 	var blocked: bool = notify.plugin != null and not notify.plugin.has_permission()
-	section.text = "알림 (휴대폰 설정에서 꺼져 있습니다)" if master_on and blocked else "알림"
+	section.text = Lang.t("notify_settings.refresh") if master_on and blocked else Lang.t("notify_settings.refresh_2")

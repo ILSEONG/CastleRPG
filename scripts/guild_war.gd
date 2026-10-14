@@ -10,6 +10,8 @@ extends Node
 ## 오프라인: 같은 모양의 war를 이 스크립트가 계산한다(상대·가상 점수는 seed로, 성 상태·오늘 전투·수비 영웅·보상은 user://guild_war.json).
 ## 테스트는 .new()로 만들어 save_path를 ""로 두고 now 인자·fixed_now를 쓴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const WarRules := preload("res://scripts/war_rules.gd")
 
@@ -20,10 +22,10 @@ const ENEMY_DAY_SPREAD := 0.25
 const ENEMY_POWER_RANGE := [0.85, 1.15]
 const VIRTUAL_POWER_RANGE := [0.8, 1.05]
 const MIN_POWER := 250
-const WAIT_TEXT := "응답 대기 중"
-const ERROR_TEXT := {"battle_done": "이번 주 공성전은 끝났습니다", "conquered": "이번 주 상대 성채를 이미 함락했습니다",
-	"not_yet": "아직 공성 시각이 아닙니다", "schedule_locked": "공성 시각이 이미 지났습니다", "schedule_past": "지금 이후의 시각을 고르세요",
-	"bad_heroes": "보유한 영웅 4명을 고르세요", "no_guild": "길드에 가입하세요", "nothing": "받을 보상이 없습니다", "not_host": "다른 길드원이 전투를 진행 중입니다", "not_leader": "길드장만 전투를 시작할 수 있습니다"}
+static var WAIT_TEXT := Lang.t("guild_war.wait_text")
+static var ERROR_TEXT := {"battle_done": Lang.t("guild_war.error_text.battle_done"), "conquered": Lang.t("guild_war.error_text.conquered"),
+	"not_yet": Lang.t("guild_war.error_text.not_yet"), "schedule_locked": Lang.t("guild_war.error_text.schedule_locked"), "schedule_past": Lang.t("guild_war.error_text.schedule_past"),
+	"bad_heroes": Lang.t("guild_war.error_text.bad_heroes"), "no_guild": Lang.t("guild_war.error_text.no_guild"), "nothing": Lang.t("guild_war.error_text.nothing"), "not_host": Lang.t("guild_war.error_text.not_host"), "not_leader": Lang.t("guild_war.error_text.not_leader")}
 
 signal changed
 signal battle_started(run: Dictionary)  # {plan, role, online} — main이 공성 전투 장면(war_battle.gd)을 연다
@@ -124,22 +126,22 @@ func defense() -> Array:
 
 func enter_block(ids: Array) -> String:
 	if guild_node == null or not guild_node.joined():
-		return "길드에 가입하세요"
+		return Lang.t("guild_war.enter_block")
 	if busy:
 		return WAIT_TEXT
 	if war.is_empty():
-		return "길드전 정보를 불러오는 중입니다"
+		return Lang.t("guild_war.enter_block_2")
 	if ids.size() != WarRules.SQUAD:
-		return "출전 영웅 %d명을 고르세요" % WarRules.SQUAD
+		return Lang.t("guild_war.enter_block_3") % WarRules.SQUAD
 	if online() and econ.get("admin") == true:  # 슈퍼관리자: 공성 시각을 기다리지 않고, 끝났으면 서버가 새 성으로 다시 연다
 		return ""
 	if int(war.get("castle", {}).get("keep", {}).get("hp", 1)) <= 0:
-		return "이번 주 상대 성채를 이미 함락했습니다"
+		return Lang.t("guild_war.enter_block_4")
 	match str(war.get("battle", {}).get("state", "")):
 		"done":
-			return "이번 주 공성전은 끝났습니다"
+			return Lang.t("guild_war.enter_block_5")
 		"waiting":
-			return "공성 시각 %s에 열립니다" % at_text(float(war.get("schedule", {}).get("at", 0.0)))
+			return Lang.t("guild_war.enter_block_6") % at_text(float(war.get("schedule", {}).get("at", 0.0)))
 	return ""
 
 
@@ -147,24 +149,24 @@ func enter_block(ids: Array) -> String:
 static func at_text(at: float) -> String:
 	var day := GameData.reset_day(at)
 	var hour := roundi((at - GameData.reset_at(day)) / 3600.0)
-	return "%s요일 %d:00" % [WarRules.DAY_NAMES[day_in_week(day)], hour]
+	return Lang.t("guild_war.at_text") % [WarRules.DAY_NAMES[day_in_week(day)], hour]
 
 
 func schedule_block(day: int, hour: int) -> String:
 	if guild_node == null or not guild_node.joined():
-		return "길드에 가입하세요"
+		return Lang.t("guild_war.schedule_block")
 	if busy:
 		return WAIT_TEXT
 	if war.is_empty():
-		return "길드전 정보를 불러오는 중입니다"
+		return Lang.t("guild_war.schedule_block_2")
 	var sch: Dictionary = war.get("schedule", {})
 	if not sch.get("can_change", false):
 		if now_t() < float(sch.get("at", 0.0)) and sch.has("leader") and not sch.leader:
-			return "길드장이 없는 길드는 토요일 21:00에 열립니다" if sch.get("fixed", false) else "길드장만 공성 시각을 정할 수 있습니다"
+			return Lang.t("guild_war.schedule_block_3") if sch.get("fixed", false) else Lang.t("guild_war.schedule_block_4")
 		return ERROR_TEXT.schedule_locked
 	var at := pick_at(int(war.week), day, hour)
 	if at < 0.0:
-		return "이번 주 안의 시각을 고르세요"
+		return Lang.t("guild_war.schedule_block_5")
 	if at <= now_t():
 		return ERROR_TEXT.schedule_past
 	return ""
@@ -192,22 +194,22 @@ func fetch_if_stale(sec := 20.0) -> void:
 
 func set_defense(ids: Array) -> void:
 	if ids.size() != WarRules.SQUAD:
-		_notice("수비 영웅 %d명을 고르세요" % WarRules.SQUAD)
+		_notice(Lang.t("guild_war.set_defense") % WarRules.SQUAD)
 		return
 	if online():
 		if busy:  # 앞 요청 응답 전 두 번째 탭은 무시
 			return
 		if not econ.net.up:
-			_notice("연결 대기 중")
+			_notice(Lang.t("guild_war.set_defense_2"))
 			return
 		war.defense = ids.duplicate()  # 곧바로 「저장됨」(거절되면 _post가 다시 받아 되돌린다)
 		_post("defense", {"heroes": ids.map(func(id): return hero_entry(id))}, func(_d): pass)
-		_notice("수비 영웅을 저장했습니다")
+		_notice(Lang.t("guild_war.set_defense_3"))
 		return
 	local.defense = ids.duplicate()
 	save()
 	fetch()
-	_notice("수비 영웅을 저장했습니다")
+	_notice(Lang.t("guild_war.set_defense_3"))
 
 
 ## 이번 주 공성 시각을 정한다(길드장만 — 서버가 확인, 그 시각이 오기 전까지). day 0 = 월요일.
@@ -220,18 +222,18 @@ func set_schedule(day: int, hour: int) -> bool:
 		return false
 	if online():
 		if not econ.net.up:
-			_notice("연결 대기 중")
+			_notice(Lang.t("guild_war.set_schedule"))
 			return false
 		var at := pick_at(int(war.week), day, hour)
 		if war.get("schedule") is Dictionary:
 			war.schedule.at = at  # 곧바로 새 시각을 보인다(거절되면 _post가 다시 받아 되돌린다)
 		_post("schedule", {"day": day, "hour": hour}, func(_d): pass)
-		_notice("이번 주 공성 시각: %s" % at_text(at))
+		_notice(Lang.t("guild_war.set_schedule_2") % at_text(at))
 		return true
 	local.at = pick_at(int(war.week), day, hour)
 	save()
 	fetch()
-	_notice("이번 주 공성 시각: %s" % at_text(float(local.at)))
+	_notice(Lang.t("guild_war.set_schedule_2") % at_text(float(local.at)))
 	return true
 
 
@@ -263,7 +265,7 @@ func enter(ids: Array) -> bool:
 func practice_enter() -> bool:
 	var ids := default_squad()
 	if ids.is_empty():
-		_notice("배치할 영웅이 없습니다")
+		_notice(Lang.t("guild_war.practice_enter"))
 		return false
 	var power := 0.0
 	for id in ids:
@@ -273,12 +275,12 @@ func practice_enter() -> bool:
 	var mx := castle_max(enemy.defenders, 1)
 	var roster := []
 	for i in 3:
-		roster.append({"owner": "v:%d" % i, "name": "길드원 %d" % (i + 1), "squad": i, "lane": i % 4, "ai": true, "heroes": random_squad(r, power)})
+		roster.append({"owner": "v:%d" % i, "name": Lang.t("guild_war.practice_enter.name") % (i + 1), "squad": i, "lane": i % 4, "ai": true, "heroes": random_squad(r, power)})
 	var mine := []
 	for id in ids:
 		var e := hero_entry(id)
 		mine.append({"hero": id, "level": econ.level_of(id), "promotion": econ.promotion_of(id), "hp": e.hp, "atk": e.atk})
-	roster.append({"owner": "me", "name": "나", "squad": 3, "lane": 2, "ai": false, "heroes": mine})
+	roster.append({"owner": "me", "name": Lang.t("guild_war.practice_enter.name_2"), "squad": 3, "lane": 2, "ai": false, "heroes": mine})
 	var gates := []
 	for i in 4:
 		gates.append({"hp": mx.gates[i], "max": mx.gates[i]})
@@ -305,7 +307,7 @@ func start_battle(battle_id: String, done: Callable) -> void:
 	econ.net.send("POST", "/v1/guild/war/start", {"battle_id": battle_id}, func(d):
 		_take(d)
 		done.call(true), func():
-		_notice(ERROR_TEXT.get(econ.net.last_error, "전투를 시작하지 못했습니다"))
+		_notice(ERROR_TEXT.get(econ.net.last_error, Lang.t("guild_war.start_battle")))
 		done.call(false), true, true)
 
 
@@ -314,7 +316,7 @@ func claim() -> void:
 		if busy or not (war.get("claim") is Dictionary):  # 응답 전 두 번째 탭·이미 받음
 			return
 		if not econ.net.up:
-			_notice("연결 대기 중")
+			_notice(Lang.t("guild_war.claim"))
 			return
 		var cl: Dictionary = war.claim
 		war.erase("claim")  # 곧바로 보상 카드를 치우고 알린다(거절되면 _post가 알리고 다시 받는다)
@@ -339,12 +341,12 @@ func claim() -> void:
 
 static func _claim_text(r: Dictionary) -> String:
 	var rw: Dictionary = r.get("reward", {})
-	return "길드전 %s 보상: 길드 코인 +%d · 다이아 +%d" % ["승리" if r.get("win", false) else "참여", int(rw.get("coins", 0)), int(rw.get("diamonds", 0))]
+	return Lang.t("guild_war.claim_text") % [Lang.t("guild_war.claim_text_2") if r.get("win", false) else Lang.t("guild_war.claim_text_3"), int(rw.get("coins", 0)), int(rw.get("diamonds", 0))]
 
 
 func _post(op: String, body: Dictionary, done: Callable) -> void:
 	if not econ.net.up:
-		_notice("연결 대기 중")
+		_notice(Lang.t("guild_war.post"))
 		return
 	busy = true
 	changed.emit()
@@ -355,7 +357,7 @@ func _post(op: String, body: Dictionary, done: Callable) -> void:
 		_take(d)
 		done.call(d), func():
 		busy = false
-		_notice(ERROR_TEXT.get(econ.net.last_error, "길드전 요청을 처리하지 못했습니다"))
+		_notice(ERROR_TEXT.get(econ.net.last_error, Lang.t("guild_war.post_2")))
 		fetch()
 		changed.emit(), true, true)
 
@@ -508,7 +510,7 @@ static func enemy_points(seed_n: int, week: int, ratio: float, cap: int) -> int:
 
 ## 우리 길드원 {key, name, power, real}: 나 + 가상 길드원.
 func our_members() -> Array:
-	var out := [{"key": "me", "name": "나", "power": guild_node.my_power() if guild_node != null else 0, "real": true}]
+	var out := [{"key": "me", "name": Lang.t("guild_war.our_members.name"), "power": guild_node.my_power() if guild_node != null else 0, "real": true}]
 	if guild_node != null:
 		var ms: Array = guild_node.members_now()
 		for i in ms.size():
@@ -575,7 +577,7 @@ func local_view(now: float) -> Dictionary:
 	return {"week": week, "day": day_in_week(day), "week_ends": GameData.reset_at(week_start(week + 1)),
 		"enemy": {"name": enemy.name, "emblem": enemy.emblem, "power": enemy.power, "members": enemy.members.size()},
 		"points": castle_points(c, float(mx.keep)), "enemy_points": ep_now, "enemy_days": [ep] if now >= ends else [],
-		"schedule": {"at": at, "ends_at": ends, "by": "나" if float(local.get("at", -1.0)) >= 0.0 else "", "set": float(local.get("at", -1.0)) >= 0.0, "can_change": now < at},
+		"schedule": {"at": at, "ends_at": ends, "by": Lang.t("guild_war.local_view.by") if float(local.get("at", -1.0)) >= 0.0 else "", "set": float(local.get("at", -1.0)) >= 0.0, "can_change": now < at},
 		"castle": {"gates": gates, "keep": {"hp": c.keep, "max": mx.keep}, "kills": kills_in(c), "defenders": enemy.defenders.size()},
 		"battle": {"state": state, "me_in": b is Dictionary, "started_at": at, "ends_at": ends},
 		"defense": local.defense, "members": members, "claim": _local_claim(week)}
@@ -630,7 +632,7 @@ func local_enter(entries: Array, now: float) -> Dictionary:
 	var mine := []
 	for e in entries:
 		mine.append({"hero": e.id, "level": econ.level_of(e.id), "promotion": econ.promotion_of(e.id), "hp": e.hp, "atk": e.atk})
-	roster.append({"owner": "me", "name": "나", "squad": roster.size(), "lane": roster.size() % 4, "ai": false, "heroes": mine})
+	roster.append({"owner": "me", "name": Lang.t("guild_war.local_enter.name"), "squad": roster.size(), "lane": roster.size() % 4, "ai": false, "heroes": mine})
 	var gates := []
 	for i in 4:
 		gates.append({"hp": c.gates[i], "max": mx.gates[i]})

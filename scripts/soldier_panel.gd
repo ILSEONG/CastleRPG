@@ -8,6 +8,8 @@ extends "res://scripts/ui_window.gd"
 ## 편집(work)은 열 때 지금 배치로 시작하고, 합성으로 보유가 줄면 보유로 자른다. 영웅 시트처럼 칩 줄 아래 ~ 탭 바 위를 채우고 뒤 입력을 막는다.
 ## 훈련 상태는 이 시트에 없다(건물 창·월드 막대·말풍선이 보여 준다). unit_icon·figure는 건물 창 훈련 칸도 쓴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
 const Art := preload("res://scripts/art.gd")
@@ -15,7 +17,7 @@ const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const EMPTY_TEXT := "보유한 병사가 없습니다"
+static var EMPTY_TEXT := Lang.t("soldier_panel.empty_text")
 const ROW_ICON_PX := 72.0
 const CHEVRON := Color(1.0, 0.84, 0.3)  # hp_bars 갈매기와 같은 금색 + 진한 테두리
 const CHEVRON_EDGE := Color(0.12, 0.10, 0.14)
@@ -40,7 +42,7 @@ func _ready() -> void:
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)  # 시트가 화면을 채운다
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_title("병사"))
+	content.add_child(_title(Lang.t("soldier_panel.ready")))
 	summary_label = _label("", 30)
 	content.add_child(summary_label)
 	empty_label = _label(EMPTY_TEXT, 26, HudScript.INK.lightened(0.3))
@@ -56,11 +58,11 @@ func _ready() -> void:
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 10)
 	content.add_child(bar)
-	auto_button = _button("자동 배치", UiKit.STEEL, 26)
+	auto_button = _button(Lang.t("soldier_panel.ready_2"), UiKit.STEEL, 26)
 	auto_button.pressed.connect(func(): _set_work(Economy.auto_deploy()))
-	clear_button = _button("모두 해제", UiKit.STEEL, 26)
+	clear_button = _button(Lang.t("soldier_panel.ready_3"), UiKit.STEEL, 26)
 	clear_button.pressed.connect(func(): _set_work({}))
-	apply_button = _button("적용")
+	apply_button = _button(Lang.t("soldier_panel.ready_4"))
 	apply_button.pressed.connect(apply)
 	for b in [auto_button, clear_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -103,8 +105,8 @@ func merge(key: String) -> void:
 
 func apply() -> void:
 	if Economy.set_soldier_deploy(work):
-		var later := "" if GameState.mode == GameState.Mode.IDLE else " — 다음 스테이지부터"
-		Economy.notice.emit("병사 배치를 적용했습니다" + later)
+		var later := "" if GameState.mode == GameState.Mode.IDLE else Lang.t("soldier_panel.apply.later")
+		Economy.notice.emit(Lang.t("soldier_panel.apply") + later)
 	_refresh()
 
 
@@ -130,14 +132,14 @@ func _refresh() -> void:
 		_rebuild_rows(keys)
 	var pop := Economy.population()
 	var total := _total(work)
-	summary_label.text = "배치 %d / %d (인구)" % [total, pop]
+	summary_label.text = Lang.t("soldier_panel.refresh") % [total, pop]
 	for k in rows:
 		var n := int(work.get(k, 0))
 		var r: Dictionary = rows[k]
 		var p := EconomyScript.parse_soldier_key(k)
 		var why := Economy.merge_block(p[0], p[1])
 		r.count.text = str(n)
-		r.have.text = "보유 %d" % int(owned[k])
+		r.have.text = Lang.t("soldier_panel.refresh_2") % int(owned[k])
 		r.minus.disabled = n == 0
 		r.plus.disabled = n >= int(owned[k]) or total >= pop
 		r.merge.disabled = why != ""
@@ -166,7 +168,7 @@ func _celebrate(key: String) -> void:
 	have.add_theme_color_override("font_color", GREEN)
 	have.create_tween().tween_property(have, "theme_override_colors/font_color", HudScript.INK.lightened(0.3), 0.6)
 	var p := EconomyScript.parse_soldier_key(key)
-	Economy.notice.emit("%s T%d 합성 완료" % [GameData.soldier(p[0]).name, p[1]])
+	Economy.notice.emit(Lang.t("soldier_panel.celebrate") % [GameData.soldier(p[0]).name, p[1]])
 
 
 func _rebuild_rows(keys: Array) -> void:
@@ -189,7 +191,7 @@ func _rebuild_rows(keys: Array) -> void:
 		var reason := _label("", 18, RED, HORIZONTAL_ALIGNMENT_LEFT)
 		info.add_child(reason)
 		row.add_child(info)
-		var mg := _button("합성 %d→1" % int(GameData.config_num("soldier_merge_count")), HudScript.ACCENT, 22)
+		var mg := _button(Lang.t("soldier_panel.rebuild_rows") % int(GameData.config_num("soldier_merge_count")), HudScript.ACCENT, 22)
 		mg.custom_minimum_size = Vector2(124, 56)
 		mg.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		mg.pressed.connect(merge.bind(k))

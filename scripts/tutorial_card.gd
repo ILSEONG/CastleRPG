@@ -6,6 +6,8 @@ extends CanvasLayer
 ## 위 층의 창이 덮으면 함께 가려진다.
 ## 튜토리얼이 아니면(끝남·건너뜀) 숨는다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
@@ -101,12 +103,12 @@ func _refresh() -> void:
 		_arrow.queue_redraw()
 		return
 	var done: bool = Tutorial.complete()
-	step_label.text = ("반복 퀘스트 %d" % (Tutorial.rep_n + 1)) if Tutorial.repeating() else "가이드 %d/%d" % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
+	step_label.text = (Lang.t("tutorial_card.refresh") % (Tutorial.rep_n + 1)) if Tutorial.repeating() else Lang.t("tutorial_card.refresh_2") % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
 	var prog: String = Tutorial.progress_text()
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
 	desc_label.text = Tutorial.mission_desc(m)
-	reward_label.text = "보상: " + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
-	action_button.text = "보상 받기" if done else Tutorial.action_label(m)
+	reward_label.text = Lang.t("tutorial_card.refresh_3") + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
+	action_button.text = Lang.t("tutorial_card.refresh_4") if done else Tutorial.action_label(m)
 	action_button.visible = done or Tutorial.action_shown(m)
 	action_button.disabled = done and Tutorial.econ != null and Tutorial.econ.quest_waiting()
 	UiKit.apply_button(action_button, UiKit.AMBER if done else UiKit.STEEL, 12.0)

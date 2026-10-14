@@ -1,6 +1,8 @@
 extends RefCounted
 ## 맵·성 기하 상수. 몬스터·스테이지·영웅·자원·설정 수치는 data/*.csv(GameData)에 있다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 # --- 맵·성 기하 (개정 2) ---
 const TILE := 2.0                     # 격자 타일 한 칸 (미터). 성 내부 넓이는 성채 단계 표(GameData.interior_half, 개정 12)
 const WALL_T := 2.0                   # 성벽 두께 (1타일)
@@ -23,24 +25,24 @@ const CAMERA_SIZE_MAX := 150.0
 
 ## 건물 배치 (플레이스홀더). cell = 최소 모서리 타일 좌표, size = 타일 수. 성 중심이 타일 경계 (0,0).
 ## 레벨 1 내부 타일 범위 -10..9. 성채 외 건물은 벽 쪽 2칸 여유(-8..7: 계단 띠 + 성문 안쪽↔계단 앞 통로)를 두고 십자 도로(-1·0)를 피한다.
-const BUILDINGS := [
-	{"id": "keep", "name": "성채", "cell": Vector2i(-2, -2), "size": Vector2i(4, 4)},
-	{"id": "barracks", "name": "보병 막사", "cell": Vector2i(2, -8), "size": Vector2i(3, 3)},
-	{"id": "archery", "name": "궁병 훈련소", "cell": Vector2i(5, -8), "size": Vector2i(3, 3)},  # 개정 13 병사 건물
-	{"id": "stable", "name": "기병 마구간", "cell": Vector2i(-8, -8), "size": Vector2i(3, 3)},
-	{"id": "tavern", "name": "주점", "cell": Vector2i(5, -5), "size": Vector2i(3, 3)},
-	{"id": "lab", "name": "연구소", "cell": Vector2i(-5, -8), "size": Vector2i(3, 3)},
-	{"id": "houses", "name": "민가", "cell": Vector2i(-8, -5), "size": Vector2i(3, 3)},
-	{"id": "lumber", "name": "벌목장", "cell": Vector2i(2, 5), "size": Vector2i(3, 3)},
-	{"id": "quarry", "name": "채석장", "cell": Vector2i(5, 2), "size": Vector2i(3, 3)},
-	{"id": "farm", "name": "농장", "cell": Vector2i(-5, 5), "size": Vector2i(3, 3)},
+static var BUILDINGS := [
+	{"id": "keep", "name": Lang.t("balance.buildings.keep.name"), "cell": Vector2i(-2, -2), "size": Vector2i(4, 4)},
+	{"id": "barracks", "name": Lang.t("balance.buildings.barracks.name"), "cell": Vector2i(2, -8), "size": Vector2i(3, 3)},
+	{"id": "archery", "name": Lang.t("balance.buildings.archery.name"), "cell": Vector2i(5, -8), "size": Vector2i(3, 3)},  # 개정 13 병사 건물
+	{"id": "stable", "name": Lang.t("balance.buildings.stable.name"), "cell": Vector2i(-8, -8), "size": Vector2i(3, 3)},
+	{"id": "tavern", "name": Lang.t("balance.buildings.tavern.name"), "cell": Vector2i(5, -5), "size": Vector2i(3, 3)},
+	{"id": "lab", "name": Lang.t("balance.buildings.lab.name"), "cell": Vector2i(-5, -8), "size": Vector2i(3, 3)},
+	{"id": "houses", "name": Lang.t("balance.buildings.houses.name"), "cell": Vector2i(-8, -5), "size": Vector2i(3, 3)},
+	{"id": "lumber", "name": Lang.t("balance.buildings.lumber.name"), "cell": Vector2i(2, 5), "size": Vector2i(3, 3)},
+	{"id": "quarry", "name": Lang.t("balance.buildings.quarry.name"), "cell": Vector2i(5, 2), "size": Vector2i(3, 3)},
+	{"id": "farm", "name": Lang.t("balance.buildings.farm.name"), "cell": Vector2i(-5, 5), "size": Vector2i(3, 3)},
 	# 2026-10-13 성채 레벨로 여는 새 건물: 기본 자리 없음(처음 지을 때 [건설]로 자리를 고른다 — 서버 DEFAULT_CELLS에도 없다)
-	{"id": "warehouse", "name": "창고", "size": Vector2i(3, 3)},
-	{"id": "goldmine", "name": "금광", "size": Vector2i(3, 3)},
-	{"id": "forge", "name": "대장간", "size": Vector2i(3, 3)},
-	{"id": "guild_hall", "name": "길드 회관", "size": Vector2i(3, 3)},
-	{"id": "watchtower", "name": "망루", "size": Vector2i(3, 3)},
-	{"id": "dispatch", "name": "파견소", "size": Vector2i(3, 3)},  # 의뢰(파견) — 의뢰 기능은 따로
+	{"id": "warehouse", "name": Lang.t("balance.buildings.warehouse.name"), "size": Vector2i(3, 3)},
+	{"id": "goldmine", "name": Lang.t("balance.buildings.goldmine.name"), "size": Vector2i(3, 3)},
+	{"id": "forge", "name": Lang.t("balance.buildings.forge.name"), "size": Vector2i(3, 3)},
+	{"id": "guild_hall", "name": Lang.t("balance.buildings.guild_hall.name"), "size": Vector2i(3, 3)},
+	{"id": "watchtower", "name": Lang.t("balance.buildings.watchtower.name"), "size": Vector2i(3, 3)},
+	{"id": "dispatch", "name": Lang.t("balance.buildings.dispatch.name"), "size": Vector2i(3, 3)},  # 의뢰(파견) — 의뢰 기능은 따로
 ]
 
 ## 상인 자리 (개정 7). 막사·벌목장·채석장 사이 빈 터(십자 도로 밖). 수레는 상인 +X 쪽.
@@ -61,12 +63,12 @@ const SOLDIER_GAP := 0.9
 const WALL_MARGIN_TILES := 2
 const KEEP_OUT := [Rect2i(-1, 2, 5, 3), Rect2i(-4, 2, 3, 2)]  # 병사 광장(SOLDIER_X·Z + 발밑 0.45 m), 상인·수레 — 타일
 const FIXED := ["keep"]  # 옮기거나 새로 놓지 않는 건물
-const PLACE_TEXT := {  # placement_block 이유 → 안내 문구
-	"out": "성벽에 너무 가깝습니다",
-	"road": "길 위에는 지을 수 없습니다",
-	"square": "광장에는 지을 수 없습니다",
-	"overlap": "다른 건물과 겹칩니다",
-	"fixed": "옮길 수 없는 건물입니다",
+static var PLACE_TEXT := {  # placement_block 이유 → 안내 문구
+	"out": Lang.t("balance.place_text.out"),
+	"road": Lang.t("balance.place_text.road"),
+	"square": Lang.t("balance.place_text.square"),
+	"overlap": Lang.t("balance.place_text.overlap"),
+	"fixed": Lang.t("balance.place_text.fixed"),
 }
 
 static var active := {}  # 건물 id → 지금 칸(지어졌거나 자리를 잡은 건물만). Economy가 맞춘다. 비었고 active_set이 false면 기본 배치

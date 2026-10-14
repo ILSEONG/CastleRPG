@@ -3,11 +3,13 @@ extends VBoxContainer
 ## 그 타이머에 쓸 수 있는 보유 아이템(짧은 것부터, 전용 → 범용)마다 한 줄: "건설 가속 1시간 ×3" [1개] [n개](남은 시간을 채우는 수, 2개 이상일 때만).
 ## 규칙·상태는 Economy 가속 API(speedups_for·speedup_name·use_speedup)다. 보유·타이머가 바뀌면 부르는 쪽이 refresh한다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const EconomyScript := preload("res://scripts/economy.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
-const EMPTY_TEXT := "가속 아이템이 없습니다. 미션·출석·상점에서 받을 수 있습니다."
+static var EMPTY_TEXT := Lang.t("speedup_list.empty_text")
 
 var target := "build"  # build | research
 var building := ""  # 건설: 그 건물(""이면 1번 일꾼)
@@ -49,9 +51,9 @@ func refresh() -> void:
 		var l := _label("%s ×%d" % [EconomyScript.speedup_name(id), have], 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(l)
-		row.add_child(_use_button(id, 1, "1개"))
+		row.add_child(_use_button(id, 1, Lang.t("speedup_list.refresh")))
 		if need > 1:
-			row.add_child(_use_button(id, need, "%d개" % need))
+			row.add_child(_use_button(id, need, Lang.t("speedup_list.refresh_2") % need))
 		add_child(row)
 
 

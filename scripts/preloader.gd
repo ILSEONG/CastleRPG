@@ -12,6 +12,8 @@ extends CanvasLayer
 ## 렌더링(2·3·5)은 처음 그릴 때 셰이더도 컴파일되어 그 뒤 첫 등장 모델이 멈칫하지 않는다. 다 되면(또는 TIMEOUT_SEC) 걷히고 finished.
 ## 헤드리스(렌더러 없음 — 테스트)는 아무것도 덮지 않고 곧바로 끝낸다(그림은 어차피 자리표시).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const SceneSnap := preload("res://scripts/scene_snap.gd")
@@ -37,8 +39,8 @@ const WARM_DIST := 9.0  # 워밍업 모델을 카메라 앞 이만큼에 둔다
 const FADE_SEC := 0.25
 const DUNGEON_TYPES := ["gold", "equip"]  # dungeon_panel.TYPES
 const DUNGEON_KEY := "dungeon_band:%s"  # dungeon_panel.SNAP_KEY
-const CONNECT_TEXT := "서버에 연결하는 중…"
-const LOAD_TEXT := "게임 데이터를 불러오는 중…"
+static var CONNECT_TEXT := Lang.t("preloader.connect_text")
+static var LOAD_TEXT := Lang.t("preloader.load_text")
 const CONNECT_SHARE := 0.3  # 온라인: 막대에서 서버 연결 몫(나머지가 불러오기)
 ## 앱 아이콘 느낌(splash 그림과 같은 색): 글자는 흰색에 따뜻한 갈색 테두리, 막대는 크림 바탕·지붕 파랑 채움, 테두리는 각 색의 어두운 쪽
 const TEXT_EDGE := Color(0.55, 0.27, 0.07)
@@ -303,7 +305,7 @@ func _build_ui() -> void:
 	box.add_theme_constant_override("separation", 12)
 	root.add_child(box)
 	label = Label.new()
-	label.text = "게임 데이터를 불러오는 중…"
+	label.text = Lang.t("preloader.build_ui")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 28)
 	label.add_theme_color_override("font_color", Color.WHITE)

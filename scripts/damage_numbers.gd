@@ -12,6 +12,8 @@ extends Node2D
 ##    왼쪽은 띠 위로 솟은 금빛 창(도는 빛살 — 금·흰 빛 영웅은 짙은 남보라)이고 그 안에 영웅 일러스트(HeroArt)가 들어간다 — 빛살은 일러스트를
 ##    두른 테두리로 보인다. 같은 날 잠깐 게임 속 모델 자세로 바꿨다가 사용자 "멋없는걸로 하지말고 일러스트를 써"로 일러스트로 돌아왔다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 enum Kind { HIT, CRIT, SKILL, POISON, HURT, DODGE, HEAL, BANNER }  # BANNER = 스킬 표시(_tags)
 
 const MAX_NUMBERS := 80
@@ -182,7 +184,7 @@ func _anchor(target) -> Vector3:
 
 
 func _push(pos: Vector3, dx: float, amount: float, kind: int) -> void:
-	var text := "회피" if kind == Kind.DODGE else format(amount)
+	var text := Lang.t("damage_numbers.push.text") if kind == Kind.DODGE else format(amount)
 	if kind == Kind.CRIT:
 		text += "!"
 	elif kind == Kind.HEAL:

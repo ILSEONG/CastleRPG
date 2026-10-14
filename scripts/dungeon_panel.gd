@@ -17,6 +17,8 @@ extends "res://scripts/ui_window.gd"
 ## PVP(사용자 2026-10-07): 시트 맨 위 탭 [던전][PVP]. PVP 탭 = pvp_view.gd(모드 카드 둘 → 결투·총력전 메인 페이지, 팀 고르기, 상점 창).
 ## 가이드 PVP 미션 전엔 PVP 탭이 잠겨 있고 누르면 화면 중상단 토스트(다른 잠금과 같은 모양).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
@@ -29,7 +31,7 @@ const TabBarScript := preload("res://scripts/tab_bar.gd")
 const PvpViewScript := preload("res://scripts/pvp_view.gd")
 
 const TYPES := ["gold", "equip", "ticket"]
-const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
+static var NAMES := {"gold": Lang.t("dungeon_panel.names.gold"), "equip": Lang.t("dungeon_panel.names.equip"), "ticket": Lang.t("dungeon_panel.names.ticket")}
 const HELPER_SIZE := Vector2(136, 184)
 const BAND_H := 180.0  # 720 화면 띠 628×180 = DungeonSnaps.SIZE의 반(다른 비율이면 스냅샷을 잘라 채운다)
 const BAND_CHAMFER := 12.0
@@ -101,7 +103,7 @@ func _build_tabs() -> void:
 	_tabs_row = HBoxContainer.new()
 	_tabs_row.add_theme_constant_override("separation", 6)
 	content.add_child(_tabs_row)
-	for t in [["dungeon", "던전"], ["pvp", "PVP"]]:
+	for t in [["dungeon", Lang.t("dungeon_panel.build_tabs")], ["pvp", "PVP"]]:
 		var b := _button(t[1], UiKit.STEEL, 28)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 60)
@@ -179,7 +181,7 @@ func _build_card(t: String) -> Control:
 	var keys := _label("", 28)
 	head.add_child(keys)
 	if t == "ticket":  # 도우미를 빌려줄 친구
-		var fb := _button("친구", UiKit.STEEL, 22)
+		var fb := _button(Lang.t("dungeon_panel.build_card"), UiKit.STEEL, 22)
 		fb.custom_minimum_size = Vector2(88, 44)
 		fb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		fb.pressed.connect(func(): friend_panel.open())
@@ -189,7 +191,7 @@ func _build_card(t: String) -> Control:
 		var row_g := HBoxContainer.new()
 		row_g.add_theme_constant_override("separation", 8)
 		box.add_child(row_g)
-		var note := _label("열쇠가 없으면 골드로 도전", 20, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_LEFT)
+		var note := _label(Lang.t("dungeon_panel.build_card_2"), 20, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_LEFT)
 		note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		note.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row_g.add_child(note)
@@ -216,7 +218,7 @@ func _build_card(t: String) -> Control:
 	var next := _button("▶", UiKit.STEEL, 26)
 	next.custom_minimum_size = Vector2(64, 64)
 	next.pressed.connect(step_level.bind(t, 1))
-	var go := _button("도전")
+	var go := _button(Lang.t("dungeon_panel.build_card_3"))
 	go.custom_minimum_size = Vector2(0, 64)
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	go.pressed.connect(open_form.bind(t))
@@ -237,7 +239,7 @@ func _build_form() -> void:
 	content.add_child(_form_view)
 	form_title = _title("")
 	_form_view.add_child(form_title)
-	_form_view.add_child(_label("영웅을 눌러 넣고 빼세요", 22, HudScript.INK.lightened(0.3)))
+	_form_view.add_child(_label(Lang.t("dungeon_panel.build_form"), 22, HudScript.INK.lightened(0.3)))
 	var slots_center := CenterContainer.new()
 	_form_view.add_child(slots_center)
 	_slot_grid = GridContainer.new()
@@ -254,7 +256,7 @@ func _build_form() -> void:
 	helper_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	helper_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	head.add_child(helper_title)
-	var fb := _button("친구 관리", UiKit.STEEL, 20)
+	var fb := _button(Lang.t("dungeon_panel.build_form_2"), UiKit.STEEL, 20)
 	fb.custom_minimum_size = Vector2(120, 44)
 	fb.pressed.connect(func(): friend_panel.open())
 	head.add_child(fb)
@@ -285,11 +287,11 @@ func _build_form() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	_form_view.add_child(row)
-	back_button = _button("뒤로", UiKit.STEEL)
+	back_button = _button(Lang.t("dungeon_panel.build_form_3"), UiKit.STEEL)
 	back_button.pressed.connect(_show_list)
-	auto_button = _button("자동 편성", UiKit.STEEL)
+	auto_button = _button(Lang.t("dungeon_panel.build_form_4"), UiKit.STEEL)
 	auto_button.pressed.connect(auto_party)
-	go_button = _button("출전")
+	go_button = _button(Lang.t("dungeon_panel.build_form_5"))
 	go_button.pressed.connect(deploy)
 	for b in [back_button, auto_button, go_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -379,18 +381,18 @@ func _refresh() -> void:
 		levels[t] = lv
 		var c: Dictionary = cards[t]
 		c.keys.text = "%d / %d" % [st.keys, st.key_cap]
-		c.info.text = "다음 지급 %s · 최고 %d단계" % [UiKit.clock(st.reset_in), st.best_level]
+		c.info.text = Lang.t("dungeon_panel.refresh") % [UiKit.clock(st.reset_in), st.best_level]
 		var rw := Economy.dungeon_reward(t, lv)
 		if t == "gold":
-			c.reward.text = "보상 %s 골드" % UiKit.commas(rw.gold)
+			c.reward.text = Lang.t("dungeon_panel.refresh_2") % UiKit.commas(rw.gold)
 		elif t == "ticket":
-			c.reward.text = "보상 다이아 모집권 %d장 · 도우미 영웅 1명과 함께" % rw.tickets
+			c.reward.text = Lang.t("dungeon_panel.refresh_3") % rw.tickets
 		else:
-			c.reward.text = "장비 %d개 · %s" % [rw.count, odds_text(rw.weights)]
+			c.reward.text = Lang.t("dungeon_panel.refresh_4") % [rw.count, odds_text(rw.weights)]
 			c.gold.text = UiKit.commas(Economy.gold)
 			c.gold.add_theme_color_override("font_color", RED if Economy.gold < int(st.extra_cost) else HudScript.INK)
 			c.cost.text = "/ %s" % UiKit.commas(st.extra_cost)
-		c.level.text = "%d단계" % lv
+		c.level.text = Lang.t("dungeon_panel.refresh_5") % lv
 		c.prev.disabled = lv <= 1
 		c.next.disabled = lv >= int(st.max_level)
 		var why := Economy.dungeon_block(t, lv, Economy.default_party(t))
@@ -406,7 +408,7 @@ func _refresh() -> void:
 			c.locked = locked
 			bands[t].queue_redraw()
 		c.reason.visible = c.reason.text != ""
-	bag_button.text = "보관함 %d / %d" % [Economy.bag.size(), int(GameData.config_num("equip_bag_cap"))]
+	bag_button.text = Lang.t("dungeon_panel.refresh_6") % [Economy.bag.size(), int(GameData.config_num("equip_bag_cap"))]
 
 
 # --- 출전 편성 ---
@@ -456,7 +458,7 @@ func tap_hero(id: String) -> void:
 	if party.has(id):
 		party.erase(id)
 	elif id == helper_hero():
-		Economy.notice.emit("도우미로 고른 영웅입니다")
+		Economy.notice.emit(Lang.t("dungeon_panel.tap_hero"))
 	elif party.size() < GameData.party_size(form_type):
 		party.append(id)
 	_refresh_form()
@@ -546,10 +548,10 @@ func _refresh_form() -> void:
 		c.queue_redraw()
 	_refresh_helpers()
 	var lv := level_of(form_type)
-	form_title.text = "%s %d단계 출전" % [NAMES[form_type], lv]
+	form_title.text = Lang.t("dungeon_panel.refresh_form") % [NAMES[form_type], lv]
 	var why := Economy.dungeon_block(form_type, lv, party, helper_id if form_type == "ticket" else null)
 	go_button.disabled = why != ""
-	form_reason.text = ("출전 %d / %d명" % [party.size(), size]) + (" + 도우미 %d / 1명" % int(helper_id != "") if form_type == "ticket" else "") \
+	form_reason.text = (Lang.t("dungeon_panel.refresh_form_2") % [party.size(), size]) + (Lang.t("dungeon_panel.refresh_form_3") % int(helper_id != "") if form_type == "ticket" else "") \
 		if why in ["", "bad_party", "waiting", "no_helper"] else Economy.DUNGEON_TEXT.get(why, "")
 	form_reason.add_theme_color_override("font_color", HudScript.INK if why == "" else RED)
 	auto_button.disabled = party == Economy.default_party(form_type)
@@ -567,7 +569,7 @@ func _refresh_helpers() -> void:
 	if not keys.has(helper_id):
 		helper_id = ""
 	var friends := hs.any(func(h): return h.has("friend"))
-	helper_title.text = "함께할 친구 영웅 (친구마다 하루 한 번)" if friends else "추천 도우미 (함께할 친구가 없어 비슷한 전투력으로 골랐습니다)"
+	helper_title.text = Lang.t("dungeon_panel.refresh_helpers") if friends else Lang.t("dungeon_panel.refresh_helpers_2")
 	helper_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if keys != helper_cards.keys():
 		for c in _helper_row.get_children():
@@ -585,7 +587,7 @@ func _refresh_helpers() -> void:
 			var key: String = h.key
 			card.tapped.connect(func(_c): pick_helper(key))
 			col.add_child(card)
-			var nm := _label(h.friend.name if h.has("friend") else "추천", 18, HudScript.INK)
+			var nm := _label(h.friend.name if h.has("friend") else Lang.t("dungeon_panel.refresh_helpers_3"), 18, HudScript.INK)
 			nm.custom_minimum_size = Vector2(HELPER_SIZE.x, 0)
 			nm.clip_text = true
 			col.add_child(nm)

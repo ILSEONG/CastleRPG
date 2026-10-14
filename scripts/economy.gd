@@ -25,6 +25,8 @@ extends Node
 ## (+ 알림 "연구 완료: 벌목술 Lv 3"). 서버 권위 효과(생산·건설·판매·처치 골드·훈련 시간·비용·인구)는 오프라인도 여기서 같은 식으로 반영한다.
 ## 오토로드 이름(Net·GameState)을 쓰지 않는다 — tests/run_tests.gd(-s, 오토로드 없음)가 이 스크립트를 preload한다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 const Balance := preload("res://scripts/balance.gd")
@@ -43,90 +45,90 @@ const SAVE_VERSION := 12  # 2: gold_tenths(0.1 단위). 1은 gold × 10으로 �
 # 12: research {levels: {노드: 레벨}, current: {id, finish} 또는 null}(개정 24). 11 이하는 연구 없음
 const SAVE_INTERVAL := 10.0
 const TUTORIAL_TRAIN_SEC := 5.0  # 튜토리얼 훈련 1마리 시간(사용자 2026-10-06)
-const WAIT_TEXT := "연결 대기 중"
-const ROLLBACK_TEXT := "서버에서 처리되지 않아 되돌렸습니다"
+static var WAIT_TEXT := Lang.t("economy.wait_text")
+static var ROLLBACK_TEXT := Lang.t("economy.rollback_text")
 const OFFLINE_MIN_SEC := 60.0  # 오프라인 처치 골드: 이보다 짧게 떠났으면 없음(서버 rules.OFFLINE_MIN_SEC)
 const POUCH_KINDS := ["gold", "res"]  # 방치 주머니(서버 pouches.ts): 골드·자원
 const POUCH_MINUTES := [10, 30, 60, 120, 240, 360]
 const POUCH_PREFIX := "pouch_"  # 보상 표 키: pouch_<id>
-const POUCH_FAIL_TEXT := "주머니를 열지 못했습니다 — 보유 수를 다시 확인합니다"
+static var POUCH_FAIL_TEXT := Lang.t("economy.pouch_fail_text")
 ## 가속 아이템·일꾼 고용권(서버 speedups.ts, 2026-10-13 라오킹식 건설): build_<분>(건설)·research_<분>(연구)·any_<분>(범용)·builder_<분>(두 번째 일꾼)
 const SPEEDUP_KINDS := ["build", "research", "any"]
 const SPEEDUP_MINUTES := [5, 15, 60, 180, 480, 1440]
 const BUILDER_MINUTES := [1440, 2880, 10080, 43200]
 const SPEEDUP_PREFIX := "speedup_"  # 보상 표 키: speedup_<id>
-const SPEEDUP_KIND_NAMES := {"build": "건설 가속", "research": "연구 가속", "any": "범용 가속", "builder": "일꾼 고용권"}
-const SPEEDUP_FAIL_TEXT := "가속을 쓰지 못했습니다 — 보유 수를 다시 확인합니다"
+static var SPEEDUP_KIND_NAMES := {"build": Lang.t("economy.speedup_kind_names.build"), "research": Lang.t("economy.speedup_kind_names.research"), "any": Lang.t("economy.speedup_kind_names.any"), "builder": Lang.t("economy.speedup_kind_names.builder")}
+static var SPEEDUP_FAIL_TEXT := Lang.t("economy.speedup_fail_text")
 const ShopItems := preload("res://scripts/shop_items.gd")
-const SHOP_FAIL_TEXT := "구매가 처리되지 않아 되돌렸습니다"
+static var SHOP_FAIL_TEXT := Lang.t("economy.shop_fail_text")
 const IapItems := preload("res://scripts/iap_items.gd")
-const IAP_FAIL_TEXT := "보상을 받지 못해 되돌렸습니다"
+static var IAP_FAIL_TEXT := Lang.t("economy.iap_fail_text")
 const OFFLINE_KIND := "grunt"  # 방치 스폰은 전부 grunt(WaveDirector MODE_IDLE, 서버 rules.OFFLINE_KIND)
 const MAX_KILL_COUNT := 10000  # 서버 상한: 한 보고에서 몬스터 한 종류의 수(넘으면 400으로 묶음 전체를 버린다)
-const NO_GOLD_TEXT := "골드가 부족합니다"
-const NO_DIA_TEXT := "다이아가 부족합니다"
-const NO_TICKET_TEXT := "다이아 모집권이 부족합니다"
-const QUEST_FAIL_TEXT := {"too_soon": "잠시 뒤에 다시 받아 주세요", "not_done": "아직 미션을 끝내지 않았습니다", "stale": "이미 받은 보상입니다"}
-const QUEST_FAIL_DEFAULT := "보상을 받지 못했습니다. 잠시 뒤에 다시 시도해 주세요"
-const GACHA_LEVEL_TEXT := "골드 모집 Lv %d! SSR %s%%"  # 레벨업 알림(개정 23)
-const GACHA_LEVEL_NO_SSR_TEXT := "골드 모집 Lv %d! SR %s%% · SSR은 Lv %d부터"  # SSR이 아직 없는 레벨(2026-10-12)
-const GACHA_FAIL_TEXT := "모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다"
-const DEPLOY_FAIL_TEXT := "배치를 저장하지 못했습니다"
-const LEVELUP_FAIL_TEXT := "레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
-const PROMOTE_FAIL_TEXT := "승급 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다"
+static var NO_GOLD_TEXT := Lang.t("economy.no_gold_text")
+static var NO_DIA_TEXT := Lang.t("economy.no_dia_text")
+static var NO_TICKET_TEXT := Lang.t("economy.no_ticket_text")
+static var QUEST_FAIL_TEXT := {"too_soon": Lang.t("economy.quest_fail_text.too_soon"), "not_done": Lang.t("economy.quest_fail_text.not_done"), "stale": Lang.t("economy.quest_fail_text.stale")}
+static var QUEST_FAIL_DEFAULT := Lang.t("economy.quest_fail_default")
+static var GACHA_LEVEL_TEXT := Lang.t("economy.gacha_level_text")  # 레벨업 알림(개정 23)
+static var GACHA_LEVEL_NO_SSR_TEXT := Lang.t("economy.gacha_level_no_ssr_text")  # SSR이 아직 없는 레벨(2026-10-12)
+static var GACHA_FAIL_TEXT := Lang.t("economy.gacha_fail_text")
+static var DEPLOY_FAIL_TEXT := Lang.t("economy.deploy_fail_text")
+static var LEVELUP_FAIL_TEXT := Lang.t("economy.levelup_fail_text")
+static var PROMOTE_FAIL_TEXT := Lang.t("economy.promote_fail_text")
 ## 승급 못 하는 이유(promote_block, 서버 409 코드 → 같은 문구)
-const PROMOTE_TEXT := {"not_owned": "보유하지 않은 영웅", "max_promotion": "최대 승급", "not_enough_shards": "조각 부족", "waiting": ""}
+static var PROMOTE_TEXT := {"not_owned": Lang.t("economy.promote_text.not_owned"), "max_promotion": Lang.t("economy.promote_text.max_promotion"), "not_enough_shards": Lang.t("economy.promote_text.not_enough_shards"), "waiting": ""}
 const FOOD := "food"  # 레벨업 식량 자원 id
-const BUILD_FAIL_TEXT := "건설 결과를 받지 못했습니다 — 건물 상태를 다시 확인합니다"
+static var BUILD_FAIL_TEXT := Lang.t("economy.build_fail_text")
 const BUILD_POLL_SEC := 2.0  # 온라인: 끝나는 시각이 지난 건설을 서버에 다시 물어보는 간격
 ## 업그레이드 못 하는 이유 코드 → 문구(upgrade_block, 서버 409 코드와 같다. in_progress·waiting은 앱만).
-const BLOCK_TEXT := {
-	"unknown": "알 수 없는 건물", "max_level": "최대 레벨", "keep_cap": "성채 레벨이 부족합니다", "prereq": "선행 조건 미충족",
-	"in_progress": "건설 중", "builder_busy": "다른 건물 건설 중", "not_enough": "자원 부족", "waiting": "",
-	"unbuilt": "아직 짓지 않은 건물",
-	"out": "성벽에 너무 가깝습니다", "road": "길 위에는 지을 수 없습니다", "square": "광장에는 지을 수 없습니다",  # 자유 건설 자리(Balance.PLACE_TEXT)
-	"overlap": "다른 건물과 겹칩니다", "fixed": "옮길 수 없는 건물입니다", "bad_cell": "지을 수 없는 자리입니다",
+static var BLOCK_TEXT := {
+	"unknown": Lang.t("economy.block_text.unknown"), "max_level": Lang.t("economy.block_text.max_level"), "keep_cap": Lang.t("economy.block_text.keep_cap"), "prereq": Lang.t("economy.block_text.prereq"),
+	"in_progress": Lang.t("economy.block_text.in_progress"), "builder_busy": Lang.t("economy.block_text.builder_busy"), "not_enough": Lang.t("economy.block_text.not_enough"), "waiting": "",
+	"unbuilt": Lang.t("economy.block_text.unbuilt"),
+	"out": Lang.t("economy.block_text.out"), "road": Lang.t("economy.block_text.road"), "square": Lang.t("economy.block_text.square"),  # 자유 건설 자리(Balance.PLACE_TEXT)
+	"overlap": Lang.t("economy.block_text.overlap"), "fixed": Lang.t("economy.block_text.fixed"), "bad_cell": Lang.t("economy.block_text.bad_cell"),
 }
 ## 병사(개정 13). 자동 배치: 티어 높은 것부터, 같은 티어는 이 순서(스펙 §6 "보병 → 기병 → 궁병", 표에 없는 병종은 뒤에 표 순서로).
 const AUTO_ORDER := ["infantry", "cavalry", "archer"]
 ## 합성·배치 못 하는 이유 코드 → 문구(merge_block·soldier_deploy_block, 서버 409 코드 not_enough·max_tier와 같다).
-const SOLDIER_TEXT := {
-	"unknown": "알 수 없는 병사", "max_tier": "최대 티어입니다", "not_enough": "병사가 부족합니다", "waiting": "",
-	"bad_key": "알 수 없는 병사", "not_owned": "보유한 병사보다 많습니다", "over_population": "인구 한도를 넘습니다",
+static var SOLDIER_TEXT := {
+	"unknown": Lang.t("economy.soldier_text.unknown"), "max_tier": Lang.t("economy.soldier_text.max_tier"), "not_enough": Lang.t("economy.soldier_text.not_enough"), "waiting": "",
+	"bad_key": Lang.t("economy.soldier_text.bad_key"), "not_owned": Lang.t("economy.soldier_text.not_owned"), "over_population": Lang.t("economy.soldier_text.over_population"),
 }
-const MERGE_FAIL_TEXT := "합성 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
-const SOLDIER_DEPLOY_FAIL_TEXT := "병사 배치를 저장하지 못했습니다"
+static var MERGE_FAIL_TEXT := Lang.t("economy.merge_fail_text")
+static var SOLDIER_DEPLOY_FAIL_TEXT := Lang.t("economy.soldier_deploy_fail_text")
 ## 훈련 못 하는 이유 코드 → 문구(train_block, 서버 409 코드 training·ready_to_collect·not_enough·not_ready·empty와 같다. 나머지는 앱만).
-const TRAIN_TEXT := {
-	"unknown": "병사 건물이 아닙니다", "bad_count": "훈련 수량을 고르세요", "training": "훈련 중입니다", "ready_to_collect": "훈련 완료 — 먼저 수령하세요",
-	"not_enough": "자원 부족", "not_ready": "아직 훈련 중입니다", "empty": "훈련 중인 병사가 없습니다", "waiting": "",
+static var TRAIN_TEXT := {
+	"unknown": Lang.t("economy.train_text.unknown"), "bad_count": Lang.t("economy.train_text.bad_count"), "training": Lang.t("economy.train_text.training"), "ready_to_collect": Lang.t("economy.train_text.ready_to_collect"),
+	"not_enough": Lang.t("economy.train_text.not_enough"), "not_ready": Lang.t("economy.train_text.not_ready"), "empty": Lang.t("economy.train_text.empty"), "waiting": "",
 }
-const TRAIN_FAIL_TEXT := "훈련 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다"
-const GROWTH_FAIL_TEXT := "강화 결과를 받지 못했습니다 — 성장 상태를 다시 확인합니다"
-const CANCEL_TEXT := "훈련을 취소했습니다 — 비용 50% 환불"
+static var TRAIN_FAIL_TEXT := Lang.t("economy.train_fail_text")
+static var GROWTH_FAIL_TEXT := Lang.t("economy.growth_fail_text")
+static var CANCEL_TEXT := Lang.t("economy.cancel_text")
 ## 던전 못 하는 이유 코드 → 문구(dungeon_block·finish 거부, 서버 409/400 코드와 같다. waiting은 앱만).
-const DUNGEON_TEXT := {
-	"unknown": "알 수 없는 던전", "locked": "아직 열리지 않은 단계입니다", "bad_party": "출전 영웅을 확인하세요", "bag_full": "보관함이 가득 찼습니다",
-	"no_key": "열쇠가 없습니다", "not_enough_gold": "골드가 부족합니다", "waiting": "", "implausible": "전투 기록이 맞지 않습니다",
-	"run_expired": "도전 시간이 지났습니다", "run_closed": "끝난 도전입니다", "unknown_run": "끝난 도전입니다",
-	"no_helper": "함께할 도우미 영웅을 고르세요", "helper_used": "오늘 이미 함께한 영웅입니다", "helper_unavailable": "도우미 목록이 바뀌었습니다 — 다시 고르세요",
+static var DUNGEON_TEXT := {
+	"unknown": Lang.t("economy.dungeon_text.unknown"), "locked": Lang.t("economy.dungeon_text.locked"), "bad_party": Lang.t("economy.dungeon_text.bad_party"), "bag_full": Lang.t("economy.dungeon_text.bag_full"),
+	"no_key": Lang.t("economy.dungeon_text.no_key"), "not_enough_gold": Lang.t("economy.dungeon_text.not_enough_gold"), "waiting": "", "implausible": Lang.t("economy.dungeon_text.implausible"),
+	"run_expired": Lang.t("economy.dungeon_text.run_expired"), "run_closed": Lang.t("economy.dungeon_text.run_closed"), "unknown_run": Lang.t("economy.dungeon_text.unknown_run"),
+	"no_helper": Lang.t("economy.dungeon_text.no_helper"), "helper_used": Lang.t("economy.dungeon_text.helper_used"), "helper_unavailable": Lang.t("economy.dungeon_text.helper_unavailable"),
 }
-const DUNGEON_FAIL_TEXT := "던전 결과를 받지 못했습니다 — 상태를 다시 확인합니다"
+static var DUNGEON_FAIL_TEXT := Lang.t("economy.dungeon_fail_text")
 ## 장착·판매 못 하는 이유 코드 → 문구(equip_block·sell_block, 서버 코드와 같다).
-const EQUIP_TEXT := {
-	"not_owned": "보유하지 않은 영웅", "bad_slot": "알 수 없는 부위", "unknown_item": "보관함에 없는 장비", "wrong_slot": "부위가 맞지 않습니다",
-	"wrong_weapon": "이 영웅이 쓸 수 없는 무기입니다", "equipped": "장착 중인 장비는 팔 수 없습니다", "bad_request": "팔 장비를 고르세요", "waiting": "",
+static var EQUIP_TEXT := {
+	"not_owned": Lang.t("economy.equip_text.not_owned"), "bad_slot": Lang.t("economy.equip_text.bad_slot"), "unknown_item": Lang.t("economy.equip_text.unknown_item"), "wrong_slot": Lang.t("economy.equip_text.wrong_slot"),
+	"wrong_weapon": Lang.t("economy.equip_text.wrong_weapon"), "equipped": Lang.t("economy.equip_text.equipped"), "bad_request": Lang.t("economy.equip_text.bad_request"), "waiting": "",
 }
-const EQUIP_FAIL_TEXT := "장비 결과를 받지 못했습니다 — 보관함을 다시 확인합니다"
+static var EQUIP_FAIL_TEXT := Lang.t("economy.equip_fail_text")
 ## 연구 못 하는 이유 코드 → 문구(research_block, 서버 404/409 코드와 같다. waiting은 앱만, 개정 24).
-const RESEARCH_TEXT := {
-	"unknown_research": "알 수 없는 연구", "research_busy": "다른 연구가 진행 중입니다", "max_level": "최대 레벨", "locked": "잠긴 연구입니다",
-	"not_enough_resources": "자원 부족", "not_enough_gold": "골드 부족", "no_research": "진행 중인 연구가 없습니다",
-	"not_enough_diamonds": "다이아가 부족합니다", "waiting": "", "lab_unbuilt": "연구소를 먼저 지으세요",
+static var RESEARCH_TEXT := {
+	"unknown_research": Lang.t("economy.research_text.unknown_research"), "research_busy": Lang.t("economy.research_text.research_busy"), "max_level": Lang.t("economy.research_text.max_level"), "locked": Lang.t("economy.research_text.locked"),
+	"not_enough_resources": Lang.t("economy.research_text.not_enough_resources"), "not_enough_gold": Lang.t("economy.research_text.not_enough_gold"), "no_research": Lang.t("economy.research_text.no_research"),
+	"not_enough_diamonds": Lang.t("economy.research_text.not_enough_diamonds"), "waiting": "", "lab_unbuilt": Lang.t("economy.research_text.lab_unbuilt"),
 }
-const RESEARCH_DONE_TEXT := "연구 완료: %s Lv %d"
-const RESEARCH_CANCEL_TEXT := "연구를 취소했습니다 — 비용 50% 환불"
-const RESEARCH_FAIL_TEXT := "연구 결과를 받지 못했습니다 — 연구 상태를 다시 확인합니다"
+static var RESEARCH_DONE_TEXT := Lang.t("economy.research_done_text")
+static var RESEARCH_CANCEL_TEXT := Lang.t("economy.research_cancel_text")
+static var RESEARCH_FAIL_TEXT := Lang.t("economy.research_fail_text")
 
 signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
@@ -735,11 +737,11 @@ func level_of(hero_id: String) -> int:
 func levelup_block(hero_id: String, count := 1) -> String:
 	var h := GameData.hero(hero_id)
 	if h.is_empty() or int(heroes.get(hero_id, 0)) < 1:
-		return "보유하지 않은 영웅"
+		return Lang.t("economy.levelup_block")
 	if level_of(hero_id) + count > GameData.max_level(promotion_of(hero_id)):
-		return "최대 레벨"
+		return Lang.t("economy.levelup_block_2")
 	var cost := GameData.levelup_cost(h.grade, level_of(hero_id), count)
-	return "골드 부족" if gold < cost.gold else ""
+	return Lang.t("economy.levelup_block_3") if gold < cost.gold else ""
 
 
 ## 지금 감당할 수 있는 레벨업 횟수(최대 cap, 최대 레벨까지). [×10] 버튼.
@@ -759,7 +761,7 @@ func level_up(hero_id: String, count := 1) -> bool:
 		notice.emit(why)
 		return false
 	if net != null:
-		var why_fail := func(): return {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}.get(net.last_error, LEVELUP_FAIL_TEXT)
+		var why_fail := func(): return {"not_enough_gold": NO_GOLD_TEXT, "max_level": Lang.t("economy.level_up.max_level")}.get(net.last_error, LEVELUP_FAIL_TEXT)
 		return _instant(level_up.bind(hero_id, count), "/v1/hero/levelup", {"hero_id": hero_id, "count": count}, why_fail)
 	var cost := GameData.levelup_cost(GameData.hero(hero_id).grade, level_of(hero_id), count)
 	gold_tenths -= int(cost.gold) * 10
@@ -816,12 +818,12 @@ func upgrade_count_affordable(id: String, max_n := 10) -> int:
 func growth_block(id: String, count := 1) -> String:
 	var u := GameData.upgrade_def(id)
 	if u.is_empty() or count < 1:
-		return "알 수 없는 항목"
+		return Lang.t("economy.growth_block")
 	if _waiting.has("growth"):
-		return "응답 대기 중"
+		return Lang.t("economy.growth_block_2")
 	if upgrade_level(id) + count > int(u.max_level):
-		return "최대 레벨"
-	return "골드 부족" if gold < upgrade_total_cost(id, count) else ""
+		return Lang.t("economy.growth_block_3")
+	return Lang.t("economy.growth_block_4") if gold < upgrade_total_cost(id, count) else ""
 
 
 ## 성장 강화 count번. 안 되면 알림만. 오프라인은 골드(× 10 tenths)를 빼고 올려 저장, 온라인은 /v1/upgrade(once — 다시 보내면 두 번 오를 수 있어
@@ -829,11 +831,11 @@ func growth_block(id: String, count := 1) -> String:
 func growth_up(id: String, count := 1) -> bool:
 	var why := growth_block(id, count)
 	if why != "":
-		if why != "응답 대기 중":
+		if why != Lang.t("economy.growth_block_2"):
 			notice.emit(why)
 		return false
 	if net != null:
-		var why_fail := func(): return {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}.get(net.last_error, GROWTH_FAIL_TEXT)
+		var why_fail := func(): return {"not_enough_gold": NO_GOLD_TEXT, "max_level": Lang.t("economy.growth_up.max_level")}.get(net.last_error, GROWTH_FAIL_TEXT)
 		return _instant(growth_up.bind(id, count), "/v1/upgrade", {"id": id, "count": count}, why_fail)
 	gold_tenths -= upgrade_total_cost(id, count) * 10
 	upgrades[id] = upgrade_level(id) + count
@@ -1223,10 +1225,10 @@ static func speedup_parse(id: String) -> Dictionary:
 ## 분 → "5분"·"1시간"·"1일"·"7일"
 static func minutes_text(m: int) -> String:
 	if m >= 1440 and m % 1440 == 0:
-		return "%d일" % (m / 1440)
+		return Lang.t("economy.minutes_text") % (m / 1440)
 	if m >= 60 and m % 60 == 0:
-		return "%d시간" % (m / 60)
-	return "%d분" % m
+		return Lang.t("economy.minutes_text_2") % (m / 60)
+	return Lang.t("economy.minutes_text_3") % m
 
 
 ## "건설 가속 1시간"·"일꾼 고용권 2일"
@@ -1258,7 +1260,7 @@ static func speedup_reward_parts(reward: Dictionary) -> Array:
 	var out := []
 	for id in speedup_ids():
 		if sz.has(id):
-			out.append(speedup_name(id) + ("" if int(sz[id]) == 1 else " %d개" % int(sz[id])))
+			out.append(speedup_name(id) + ("" if int(sz[id]) == 1 else Lang.t("economy.speedup_reward_parts") % int(sz[id])))
 	return out
 
 
@@ -1358,8 +1360,8 @@ static func pouch_name(id: String) -> String:
 	if pz.is_empty():
 		return id
 	var m: int = pz.min
-	var t := ("%d시간" % (m / 60)) if m >= 60 else ("%d분" % m)
-	return "%s 주머니(%s)" % ["골드" if pz.kind == "gold" else "자원", t]
+	var t := (Lang.t("economy.pouch_name") % (m / 60)) if m >= 60 else (Lang.t("economy.pouch_name_2") % m)
+	return Lang.t("economy.pouch_name_3") % [Lang.t("economy.pouch_name_4") if pz.kind == "gold" else Lang.t("economy.pouch_name_5"), t]
 
 
 ## 보상 → 주머니 {id: 개수}(pouch_<id> 키만).
@@ -3946,7 +3948,7 @@ func _on_growth(data: Dictionary, count := 1) -> void:
 ## 거부(409 max_level·not_enough_gold, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
 func _on_growth_failed() -> void:
 	_waiting.erase("growth")
-	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}
+	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": Lang.t("economy.on_growth_failed.max_level")}
 	notice.emit(why.get(net.last_error, GROWTH_FAIL_TEXT))
 	net.refresh()
 	changed.emit()
@@ -3962,7 +3964,7 @@ func _on_levelup(data: Dictionary, hero_id: String, count := 1) -> void:
 ## 거부(409 max_level·not_enough_gold, 404)나 응답 유실: 알림 + 상태를 새로 받는다(이미 반영됐으면 거기 보인다).
 func _on_levelup_failed() -> void:
 	_waiting.erase("levelup")
-	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": "최대 레벨입니다"}
+	var why := {"not_enough_gold": NO_GOLD_TEXT, "max_level": Lang.t("economy.on_levelup_failed.max_level")}
 	notice.emit(why.get(net.last_error, LEVELUP_FAIL_TEXT))
 	net.refresh()
 	changed.emit()
@@ -4620,14 +4622,14 @@ static func _num(v) -> bool:
 
 # --- 친구(2026-10-06, 모집권 던전 도우미 — 온라인만) ---
 
-const FRIEND_TEXT := {
-	"unknown_player": "그 친구 코드를 가진 성주가 없습니다", "self": "내 친구 코드입니다", "already_friends": "이미 친구입니다",
-	"already_requested": "이미 친구 신청을 보냈습니다", "friend_full": "친구 목록과 보낸 신청이 가득 찼습니다", "their_full": "상대의 친구 목록이 가득 찼습니다",
-	"no_request": "친구 신청이 없어졌습니다", "not_friend": "이미 친구가 아닙니다", "not_owned": "가지고 있지 않은 영웅입니다",
-	"bad_request": "친구 코드는 8자리입니다",
+static var FRIEND_TEXT := {
+	"unknown_player": Lang.t("economy.friend_text.unknown_player"), "self": Lang.t("economy.friend_text.self"), "already_friends": Lang.t("economy.friend_text.already_friends"),
+	"already_requested": Lang.t("economy.friend_text.already_requested"), "friend_full": Lang.t("economy.friend_text.friend_full"), "their_full": Lang.t("economy.friend_text.their_full"),
+	"no_request": Lang.t("economy.friend_text.no_request"), "not_friend": Lang.t("economy.friend_text.not_friend"), "not_owned": Lang.t("economy.friend_text.not_owned"),
+	"bad_request": Lang.t("economy.friend_text.bad_request"),
 }
-const FRIEND_DONE_TEXT := {"request": "친구 신청을 보냈습니다", "accept": "친구가 되었습니다", "remove": "정리했습니다", "hero": "빌려줄 영웅을 바꿨습니다"}
-const FRIEND_OFFLINE_TEXT := "친구는 온라인에서만 쓸 수 있습니다"
+static var FRIEND_DONE_TEXT := {"request": Lang.t("economy.friend_done_text.request"), "accept": Lang.t("economy.friend_done_text.accept"), "remove": Lang.t("economy.friend_done_text.remove"), "hero": Lang.t("economy.friend_done_text.hero")}
+static var FRIEND_OFFLINE_TEXT := Lang.t("economy.friend_offline_text")
 
 
 ## 친구 목록 받기(GET /v1/friends). 오프라인이거나 응답 대기 중이면 아무것도 안 한다.
@@ -4675,5 +4677,5 @@ func _on_friends_failed(_data = null) -> void:
 	friends_waiting = false
 	var code: String = net.last_error if net != null else ""
 	if code != "":
-		notice.emit(FRIEND_TEXT.get(code, "친구 요청이 처리되지 않았습니다"))
+		notice.emit(FRIEND_TEXT.get(code, Lang.t("economy.on_friends_failed")))
 	friends_changed.emit()

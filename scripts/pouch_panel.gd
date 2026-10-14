@@ -4,6 +4,8 @@ extends "res://scripts/ui_window.gd"
 ## 보유한 주머니만, 골드 먼저·짧은 시간 먼저. 주머니는 출석·미션 보상으로 받는다(서버 pouches.ts).
 ## 아래에 가속 아이템(2026-10-13): 보유 개수만 보이고(건설·연구 창의 [가속]에서 쓴다), 일꾼 고용권만 여기서 [사용].
 
+const Lang := preload("res://scripts/lang.gd")
+
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const ShopArt := preload("res://scripts/shop_art.gd")
@@ -13,11 +15,11 @@ const ROW_BG := Color(1, 1, 1, 0.75)
 const VALUE := Color(0.13, 0.50, 0.24)
 const CLOSE_PX := 56.0
 const ICON_PX := 72.0
-const EMPTY_TEXT := "가방이 비었습니다\n출석 이벤트와 미션 보상으로 받을 수 있습니다"
-const SPEEDUP_HEAD := "가속 아이템"
-const SPEEDUP_HINT := "건설·연구 중인 창의 [가속]에서 씁니다"
-const EMPTY_VALUE_TEXT := "자원 건물을 지은 뒤에 열 수 있습니다"
-const HEAD_TEXT := "열면 지금 방치 수입 기준으로 적힌 시간만큼 받습니다"
+static var EMPTY_TEXT := Lang.t("pouch_panel.empty_text")
+static var SPEEDUP_HEAD := Lang.t("pouch_panel.speedup_head")
+static var SPEEDUP_HINT := Lang.t("pouch_panel.speedup_hint")
+static var EMPTY_VALUE_TEXT := Lang.t("pouch_panel.empty_value_text")
+static var HEAD_TEXT := Lang.t("pouch_panel.head_text")
 const GOLD_SACK := Color(0.80, 0.58, 0.26)
 const RES_SACK := Color(0.52, 0.62, 0.36)
 
@@ -37,7 +39,7 @@ func _ready() -> void:
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(CLOSE_PX, 0)
 	head.add_child(pad)
-	var title := _title("가방")
+	var title := _title(Lang.t("pouch_panel.ready"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var x := Button.new()
@@ -106,18 +108,18 @@ func open_all(id: String) -> void:
 func _on_opened(o: Dictionary) -> void:
 	var name := Economy.pouch_name(str(o.get("id", "")))
 	var n := int(o.get("count", 1))
-	Economy.notice.emit("%s%s: %s" % [name, (" %d개" % n) if n > 1 else "", value_text(int(o.get("gold_tenths", 0)), o.get("res", {}))])
+	Economy.notice.emit("%s%s: %s" % [name, (Lang.t("pouch_panel.on_opened") % n) if n > 1 else "", value_text(int(o.get("gold_tenths", 0)), o.get("res", {}))])
 
 
 ## "골드 +12,345" 또는 "목재 +300 · 석재 +150 · 식량 +300"(받을 것이 없으면 "받을 것이 없습니다").
 static func value_text(gold_tenths: int, res: Dictionary) -> String:
 	var parts: Array = []
 	if gold_tenths > 0:
-		parts.append("골드 +" + UiKit.commas(gold_tenths / 10))
-	for k in [["wood", "목재"], ["stone", "석재"], ["food", "식량"]]:
+		parts.append(Lang.t("pouch_panel.value_text") + UiKit.commas(gold_tenths / 10))
+	for k in [["wood", Lang.t("pouch_panel.value_text_2")], ["stone", Lang.t("pouch_panel.value_text_3")], ["food", Lang.t("pouch_panel.value_text_4")]]:
 		if int(res.get(k[0], 0)) > 0:
 			parts.append("%s +%s" % [k[1], UiKit.commas(int(res[k[0]]))])
-	return " · ".join(parts) if not parts.is_empty() else "받을 것이 없습니다"
+	return " · ".join(parts) if not parts.is_empty() else Lang.t("pouch_panel.value_text_5")
 
 
 func _rebuild() -> void:
@@ -154,9 +156,9 @@ func _speedup_row(id: String) -> Control:
 	var t := _label(Economy.speedup_name(id), 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	r.add_child(t)
-	r.add_child(_label("보유 %d개" % Economy.speedup_count(id), 20, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
+	r.add_child(_label(Lang.t("pouch_panel.speedup_row") % Economy.speedup_count(id), 20, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
 	if str(Economy.speedup_parse(id).get("kind", "")) == "builder":
-		var use := _button("사용", UiKit.AMBER, 22)
+		var use := _button(Lang.t("pouch_panel.speedup_row_2"), UiKit.AMBER, 22)
 		use.custom_minimum_size = Vector2(100, 56)
 		use.disabled = Economy.speedup_waiting()
 		use.pressed.connect(func(): Economy.use_speedup(id, 1))
@@ -187,15 +189,15 @@ func _row(id: String) -> Control:
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.clip_text = true
 	name_row.add_child(t)
-	name_row.add_child(_label("보유 %d개" % Economy.pouch_count(id), 20, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
+	name_row.add_child(_label(Lang.t("pouch_panel.row") % Economy.pouch_count(id), 20, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
 	v.add_child(name_row)
 	var val := Economy.pouch_value(id, GameState.stage)
 	var empty := Economy.pouch_empty(id, GameState.stage)
-	var vl := _label(EMPTY_VALUE_TEXT if empty else "1개: " + value_text(int(val.gold_tenths), val.res), 18, SUB if empty else VALUE, HORIZONTAL_ALIGNMENT_LEFT)
+	var vl := _label(EMPTY_VALUE_TEXT if empty else Lang.t("pouch_panel.row_2") + value_text(int(val.gold_tenths), val.res), 18, SUB if empty else VALUE, HORIZONTAL_ALIGNMENT_LEFT)
 	vl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(vl)
 	var wait := Economy.pouch_waiting()
-	var one := _button("열기", UiKit.AMBER, 22)
+	var one := _button(Lang.t("pouch_panel.row_3"), UiKit.AMBER, 22)
 	one.custom_minimum_size = Vector2(100, 56)
 	one.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	one.disabled = wait or empty
@@ -204,7 +206,7 @@ func _row(id: String) -> Control:
 	buttons["open:" + id] = one
 	Tutorial.register_ui("bag:open", one, func(): return not one.disabled)  # 가이드 「주머니 열기」 화살표
 	if Economy.pouch_count(id) > 1:
-		var all := _button("모두", UiKit.STEEL, 22)
+		var all := _button(Lang.t("pouch_panel.row_4"), UiKit.STEEL, 22)
 		all.custom_minimum_size = Vector2(90, 56)
 		all.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		all.disabled = wait or empty

@@ -2,6 +2,8 @@ extends RefCounted
 ## 장비 능력치 글자·색(2026-10-07 장비 개편): 기본 능력치와 특수 능력치(SR 1줄 … LR 3줄)를 [[글자, 색]]으로. 굴림이 기준값(100)보다
 ## 높으면 초록, 낮으면 빨강, 같으면 검정. 보관함·장비 고르기·던전 결과(bag_panel.gd)가 쓴다. 오토로드를 부르지 않는다(단위 테스트).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
@@ -18,9 +20,9 @@ static func stat_parts(it: Dictionary) -> Array:
 	if b.hp > 0:
 		out.append(["HP +%s" % UiKit.commas(s.hp), cmp_color(s.hp, b.hp)])
 	if b.atk > 0:
-		out.append(["공격 +%s" % UiKit.commas(s.atk), cmp_color(s.atk, b.atk)])
+		out.append([Lang.t("item_text.stat_parts") % UiKit.commas(s.atk), cmp_color(s.atk, b.atk)])
 	if b.speed_pct > 0.0:
-		out.append(["이동 +%s%%" % pct_text(s.speed_pct), cmp_color(s.speed_pct, b.speed_pct)])
+		out.append([Lang.t("item_text.stat_parts_2") % pct_text(s.speed_pct), cmp_color(s.speed_pct, b.speed_pct)])
 	return out
 
 

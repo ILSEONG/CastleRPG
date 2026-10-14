@@ -3,6 +3,8 @@ extends RefCounted
 ## 씬·오토로드 의존 없음. 위치 함수는 static이고 성 내부 절반 크기(half)를 인자로 받는다.
 ## side: 0=N(-z) 1=E(+x) 2=S(+z) 3=W(-x)
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 
@@ -17,7 +19,7 @@ const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
 const SIDE_DIR: Array[Vector3] = [
 	Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0),
 ]
-const SIDE_NAMES := ["북", "동", "남", "서"]  # 면 방향 이름(HUD 성문 막대·문루 글자)
+static var SIDE_NAMES := [Lang.t("formation.side_names"), Lang.t("formation.side_names_2"), Lang.t("formation.side_names_3"), Lang.t("formation.side_names_4")]  # 면 방향 이름(HUD 성문 막대·문루 글자)
 
 static var _keep_half: float = Balance.building("keep").size.x * Balance.TILE / 2.0  # 성채 외벽 절반 크기. 로드 때 한 번 계산
 

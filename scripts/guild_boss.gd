@@ -5,6 +5,8 @@ extends Node3D
 ## 0이 되면 그 레벨 처치(배너) 뒤 같은 판에서 다음 레벨 HP로 찬다(공격력도 오른다). 시간이 다 되면 드래곤이 받은 피해 합(dragon.dealt = 판 점수)을
 ## Guild.finish_boss로 내고 결과(boss_done: 등급·코인·골드·도달 레벨)를 띄운다. 온라인은 서버가 피해를 받아 등급·보상을 정한다(상한은 서버 guild.ts BOSS_DMG_CAP).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const HeroScript := preload("res://scripts/hero.gd")
@@ -102,7 +104,7 @@ func _ready() -> void:
 	_build_hud()
 	Guild.boss_done.connect(_on_done)
 	_set_active(false)
-	_show_banner("드래곤 출현!", INTRO_SEC + 0.3)
+	_show_banner(Lang.t("guild_boss.ready"), INTRO_SEC + 0.3)
 	print("[guild boss] level %d hp %d heroes %d" % [dragon.level, int(dragon.hp), heroes.size()])
 
 
@@ -142,7 +144,7 @@ func _process(delta: float) -> void:
 			clock += delta
 			if not _wiped and not heroes.any(func(h): return h.is_alive()):
 				_wiped = true  # 전멸해도 시간은 끝까지 흐른다(서버는 전투 시간이 지나야 결과를 받는다)
-				_show_banner("전멸!", 1.6)
+				_show_banner(Lang.t("guild_boss.process"), 1.6)
 			if clock >= fight_sec():
 				_report()
 		Phase.REPORT:
@@ -156,13 +158,13 @@ func _report() -> void:
 	phase = Phase.REPORT
 	_set_active(false)
 	dragon.closed = true
-	_show_banner("전투 종료", 1.0)
+	_show_banner(Lang.t("guild_boss.report"), 1.0)
 	Guild.finish_boss(str(run.get("run_id", "")), dragon.dealt)
 
 
 func _on_level_cleared(lv: int) -> void:
 	kills += 1
-	_show_banner("드래곤 Lv %d 처치!" % lv, 1.4)
+	_show_banner(Lang.t("guild_boss.on_level_cleared") % lv, 1.4)
 	Fx.kick(self, dragon.global_position, 0.6, 0.12)
 
 
@@ -245,11 +247,11 @@ func _build_hud() -> void:
 
 func _update_hud() -> void:
 	_title.text = "Lv %d  %s" % [dragon.level, GuildScript.boss_name(dragon.level)]
-	_time.text = "%.1f초" % time_left() if phase != Phase.INTRO else "%d초" % roundi(fight_sec())
+	_time.text = Lang.t("guild_boss.update_hud") % time_left() if phase != Phase.INTRO else Lang.t("guild_boss.update_hud_2") % roundi(fight_sec())
 	_hp_bar.max_value = dragon.hp_max
 	_hp_bar.value = maxf(0.0, dragon.hp)
 	_hp_text.text = "%s / %s" % [UiKit.commas(int(dragon.hp)), UiKit.commas(int(dragon.hp_max))]
-	_dmg.text = "총 피해 %s" % UiKit.commas(int(dragon.dealt))
+	_dmg.text = Lang.t("guild_boss.update_hud_3") % UiKit.commas(int(dragon.dealt))
 
 
 func _show_banner(text: String, sec: float) -> void:
@@ -262,26 +264,26 @@ func _show_result() -> void:
 	for c in _result_box.get_children():
 		c.queue_free()
 	if result.has("error") or not result.has("grade"):
-		_result_box.add_child(_label("결과를 받지 못했습니다", 40, GuildPanel.RED))
-		_result_box.add_child(_label("총 피해 %s · 길드 창에서 다시 확인하세요" % UiKit.commas(int(dragon.dealt)), 24, MainHud.INK, true))
+		_result_box.add_child(_label(Lang.t("guild_boss.show_result"), 40, GuildPanel.RED))
+		_result_box.add_child(_label(Lang.t("guild_boss.show_result_2") % UiKit.commas(int(dragon.dealt)), 24, MainHud.INK, true))
 	else:
 		var banner = ResultBanner.new()  # 창 윗변에 걸친 금빛 리본(디자인 보강 4번)
 		banner.overhang = 40.0
 		_result_box.add_child(banner)
-		banner.play("도전 완료", "win")
+		banner.play(Lang.t("guild_boss.show_result_3"), "win")
 		var grade := str(result.grade)
 		var head := _label(grade, 96, GuildPanel.grade_color(grade))
 		head.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.9))
 		head.add_theme_constant_override("outline_size", 10)
 		_result_box.add_child(head)
-		_result_box.add_child(_label("드래곤 Lv %d 도달 · 점수 %s" % [int(result.get("level", 1)), UiKit.commas(int(result.dmg))], 32, MainHud.INK))
+		_result_box.add_child(_label(Lang.t("guild_boss.show_result_4") % [int(result.get("level", 1)), UiKit.commas(int(result.dmg))], 32, MainHud.INK))
 		if float(result.get("sent", result.dmg)) > float(result.dmg) + 0.5:
-			_result_box.add_child(_label("(한 판에 인정되는 점수 한도까지만 반영)", 20, GuildPanel.SUB))
-		_result_box.add_child(_label("길드 코인 +%d · 골드 +%s" % [int(result.coins), UiKit.commas(int(result.gold))], 28, GOLD.darkened(0.15)))
+			_result_box.add_child(_label(Lang.t("guild_boss.show_result_5"), 20, GuildPanel.SUB))
+		_result_box.add_child(_label(Lang.t("guild_boss.show_result_6") % [int(result.coins), UiKit.commas(int(result.gold))], 28, GOLD.darkened(0.15)))
 		if result.has("total"):
-			_result_box.add_child(_label("오늘 내 점수 %s · 길드 점수에 더해집니다" % UiKit.commas(int(result.total)), 24, GuildPanel.GREEN, true))
+			_result_box.add_child(_label(Lang.t("guild_boss.show_result_7") % UiKit.commas(int(result.total)), 24, GuildPanel.GREEN, true))
 	var ok := Button.new()
-	ok.text = "확인"
+	ok.text = Lang.t("guild_boss.show_result_8")
 	ok.custom_minimum_size = Vector2(0, 76)
 	ok.add_theme_font_size_override("font_size", 30)
 	UiKit.apply_button(ok, MainHud.ACCENT, 14.0)

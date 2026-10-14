@@ -9,6 +9,8 @@ extends CanvasLayer
 ## 성공하면 Net.set_auth(제공자, 세션) 뒤 logged_in. 게스트는 Net.set_auth("guest") 뒤 logged_in. 기다리는 동안은 안내 창
 ## ([브라우저 다시 열기] [취소]), 실패는 버튼 아래 한 줄로 알린다. 기기 id를 함께 보내 그 기기의 게스트 진행을 소셜 계정에 잇는다(서버 규칙).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const TossBridgeScript := preload("res://scripts/toss_bridge.gd")
@@ -22,22 +24,22 @@ const BUTTON_W := 560.0
 const BUTTON_H := 88.0
 const SHADE := Color(0.36, 0.17, 0.04)  # 아래 그라데이션(주황 하늘의 어두운 쪽)
 ## 제공자 → [버튼 글자, 바탕, 글자색, 테두리(없으면 투명)] — 각 사 로그인 버튼 지침의 색
-const BRANDS := {
-	"google": ["Google로 시작하기", Color("FFFFFF"), Color("1F1F1F"), Color("747775")],
-	"kakao": ["카카오로 시작하기", Color("FEE500"), Color(0, 0, 0, 0.85), Color(0, 0, 0, 0)],
-	"naver": ["네이버로 시작하기", Color("03C75A"), Color("FFFFFF"), Color(0, 0, 0, 0)],
+static var BRANDS := {
+	"google": [Lang.t("login_screen.brands"), Color("FFFFFF"), Color("1F1F1F"), Color("747775")],
+	"kakao": [Lang.t("login_screen.brands_2"), Color("FEE500"), Color(0, 0, 0, 0.85), Color(0, 0, 0, 0)],
+	"naver": [Lang.t("login_screen.brands_3"), Color("03C75A"), Color("FFFFFF"), Color(0, 0, 0, 0)],
 }
 ## 실패 코드 → 안내
-const ERRORS := {
-	"provider_unavailable": "아직 준비 중인 로그인입니다",
-	"login_denied": "로그인이 취소되었습니다",
-	"login_failed": "로그인하지 못했습니다. 다시 시도해 주세요",
-	"login_expired": "로그인 시간이 초과되었습니다. 다시 시도해 주세요",
-	"net": "서버에 연결할 수 없습니다",
-	"UNSUPPORTED": "토스 앱을 최신 버전으로 업데이트해 주세요",
-	"INVALID_CATEGORY": "토스 로그인을 쓸 수 없는 미니앱입니다",
-	"NO_BRIDGE": "토스 앱에서 열어 주세요",
-	"ERROR": "토스 로그인 정보를 받지 못했습니다. 다시 시도해 주세요",
+static var ERRORS := {
+	"provider_unavailable": Lang.t("login_screen.errors.provider_unavailable"),
+	"login_denied": Lang.t("login_screen.errors.login_denied"),
+	"login_failed": Lang.t("login_screen.errors.login_failed"),
+	"login_expired": Lang.t("login_screen.errors.login_expired"),
+	"net": Lang.t("login_screen.errors.net"),
+	"UNSUPPORTED": Lang.t("login_screen.errors.unsupported"),
+	"INVALID_CATEGORY": Lang.t("login_screen.errors.invalid_category"),
+	"NO_BRIDGE": Lang.t("login_screen.errors.no_bridge"),
+	"ERROR": Lang.t("login_screen.errors.error"),
 }
 
 var buttons := {}  # 제공자 → Button
@@ -96,8 +98,8 @@ func _ready() -> void:
 	terms.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	terms.offset_top = -66
 	terms.offset_bottom = -36
-	for part in [["로그인하면 ", ""], ["이용약관", Links.TERMS_URL], [" 및 ", ""], ["개인정보처리방침", Links.PRIVACY_URL], ["에 동의하게 됩니다.", ""]]:
-		if part[0] == "이용약관" or part[0] == "개인정보처리방침":
+	for part in [[Lang.t("login_screen.ready"), ""], [Lang.t("login_screen.ready_2"), Links.TERMS_URL], [Lang.t("login_screen.ready_3"), ""], [Lang.t("login_screen.ready_4"), Links.PRIVACY_URL], [Lang.t("login_screen.ready_5"), ""]]:
+		if part[0] == Lang.t("login_screen.ready_2") or part[0] == Lang.t("login_screen.ready_4"):
 			var link := LinkButton.new()
 			link.text = part[0]
 			link.underline = LinkButton.UNDERLINE_MODE_ALWAYS
@@ -272,7 +274,7 @@ func _button_block() -> Control:
 		buttons[p] = b
 		box.add_child(b)
 	guest_button = Button.new()
-	guest_button.text = "게스트로 시작하기"
+	guest_button.text = Lang.t("login_screen.button_block")
 	guest_button.flat = true
 	guest_button.custom_minimum_size = Vector2(0, 56)
 	guest_button.add_theme_font_size_override("font_size", 24)
@@ -287,7 +289,7 @@ func _button_block() -> Control:
 	guest_button.visible = not ReleasePlatform.is_toss()  # 앱인토스는 토스 계정만
 	box.add_child(guest_button)
 	retry_button = Button.new()
-	retry_button.text = "다시 시도"
+	retry_button.text = Lang.t("login_screen.button_block_2")
 	retry_button.custom_minimum_size = Vector2(BUTTON_W, BUTTON_H)
 	retry_button.add_theme_font_size_override("font_size", 30)
 	retry_button.focus_mode = Control.FOCUS_NONE
@@ -379,14 +381,14 @@ func _wait_block() -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 18)
 	panel.add_child(box)
-	box.add_child(_text("브라우저에서 로그인해 주세요", 32, UiKit.INK))
-	var hint := _text("로그인을 마치고 게임으로 돌아오면 자동으로 시작합니다", 22, UiKit.INK.lightened(0.3))
+	box.add_child(_text(Lang.t("login_screen.wait_block"), 32, UiKit.INK))
+	var hint := _text(Lang.t("login_screen.wait_block_2"), 22, UiKit.INK.lightened(0.3))
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(hint)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	var again := Button.new()
-	again.text = "브라우저 다시 열기"
+	again.text = Lang.t("login_screen.wait_block_3")
 	again.custom_minimum_size = Vector2(0, 64)
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again.add_theme_font_size_override("font_size", 24)
@@ -396,7 +398,7 @@ func _wait_block() -> Control:
 			opener.call(_url))
 	row.add_child(again)
 	var stop := Button.new()
-	stop.text = "취소"
+	stop.text = Lang.t("login_screen.wait_block_4")
 	stop.custom_minimum_size = Vector2(150, 64)
 	stop.add_theme_font_size_override("font_size", 24)
 	UiKit.apply_button(stop, UiKit.STEEL, 12.0)

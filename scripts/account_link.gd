@@ -6,19 +6,21 @@ extends Node
 ## 실패: 409 already_linked(그 로그인이 이미 다른 계정 것 — 아무것도 옮기지 않는다)·provider_taken(이 계정에 같은 종류가 이미 있다).
 ## 연결된 목록: GET /v1/auth/links {links:[provider]}.
 
+const Lang := preload("res://scripts/lang.gd")
+
 signal changed  # links·pending·message가 바뀌었다
 
 const POLL_SEC := 2.0
 const WAIT_SEC := 600.0  # 서버의 진행 행 수명(10분)
 const PROVIDERS := ["google", "kakao", "naver"]
-const NAMES := {"google": "Google", "kakao": "카카오", "naver": "네이버"}
-const ERRORS := {
-	"already_linked": "그 계정은 이미 다른 게임 계정에 연결되어 있습니다. 연결하지 않았습니다",
-	"provider_taken": "이 계정에는 이미 같은 종류의 로그인이 연결되어 있습니다",
-	"provider_unavailable": "아직 준비 중인 로그인입니다",
-	"login_denied": "연결을 취소했습니다",
-	"login_expired": "시간이 초과되었습니다. 다시 눌러 주세요",
-	"net": "서버에 연결할 수 없습니다",
+static var NAMES := {"google": "Google", "kakao": Lang.t("account_link.names.kakao"), "naver": Lang.t("account_link.names.naver")}
+static var ERRORS := {
+	"already_linked": Lang.t("account_link.errors.already_linked"),
+	"provider_taken": Lang.t("account_link.errors.provider_taken"),
+	"provider_unavailable": Lang.t("account_link.errors.provider_unavailable"),
+	"login_denied": Lang.t("account_link.errors.login_denied"),
+	"login_expired": Lang.t("account_link.errors.login_expired"),
+	"net": Lang.t("account_link.errors.net"),
 }
 
 var links: Array = []  # 이 계정에 연결된 로그인
@@ -59,7 +61,7 @@ func start(provider: String) -> void:
 		return
 	pending = provider
 	_verifier = Crypto.new().generate_random_bytes(32).hex_encode()
-	_set_message("브라우저에서 %s 로그인을 마치면 바로 연결됩니다" % NAMES.get(provider, provider))
+	_set_message(Lang.t("account_link.start") % NAMES.get(provider, provider))
 	Net.send("POST", "/v1/auth/link/start", {"provider": provider, "challenge": _sha256_hex(_verifier)}, _on_started, func(): _finish(Net.last_error))
 
 
@@ -112,7 +114,7 @@ func _on_poll(result: int, code: int, _headers: PackedStringArray, raw: PackedBy
 			links.append(provider)
 		pending = ""
 		_state = ""
-		_set_message("%s 계정과 연결했습니다. 다른 기기에서도 %s로 이어서 할 수 있습니다" % [NAMES.get(provider, provider), NAMES.get(provider, provider)])
+		_set_message(Lang.t("account_link.on_poll") % [NAMES.get(provider, provider), NAMES.get(provider, provider)])
 		return
 	_finish(str(data.get("error", "")) if data is Dictionary else "login_failed")
 
@@ -120,7 +122,7 @@ func _on_poll(result: int, code: int, _headers: PackedStringArray, raw: PackedBy
 func _finish(error: String) -> void:
 	pending = ""
 	_state = ""
-	_set_message(ERRORS.get(error, "연결하지 못했습니다. 다시 시도해 주세요"))
+	_set_message(ERRORS.get(error, Lang.t("account_link.finish")))
 
 
 func _set_message(text: String) -> void:

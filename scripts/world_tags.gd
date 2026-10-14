@@ -9,6 +9,8 @@ extends Node2D
 ## 그리기 호출 상한: 알약 삼각형 전부 canvas_item_add_triangle_array 한 번 + 외곽선 draw_multiline 한 번 +
 ## 태그마다 글자 ≤ 2(태그 ≤ MAX_TAGS). layout()은 프레임마다 한 번만 계산한다(badges가 먼저 불러도 같은 결과).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Formation := preload("res://scripts/formation.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -83,14 +85,14 @@ func _sync() -> void:
 		var nm := ""
 		var lv := ""
 		if t.id == "merchant":
-			nm = "상인"
+			nm = Lang.t("world_tags.sync")
 		elif t.id.begins_with("gate:"):
 			nm = ""  # 문루 방향 글자는 그리지 않는다 — 태그는 크기 0 기준점으로만 남아 성문 건설 막대를 받친다
 		elif scenery.hidden.has(t.id):
 			nm = ""  # 자리를 안 잡은 공터(자유 건설): 이름표 없음
 		else:
 			nm = GameData.building_name(t.id)
-			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else "공터"  # 튜토리얼 공터
+			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else Lang.t("world_tags.sync_2")  # 튜토리얼 공터
 		if scenery.tag_anchors.has(t.id):
 			t.anchor = scenery.tag_anchors[t.id]  # 자유 건설로 옮기면 따라간다
 		if nm != t.get("name") or lv != t.get("lv"):

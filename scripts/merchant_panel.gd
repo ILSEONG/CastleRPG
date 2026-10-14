@@ -3,6 +3,8 @@ extends "res://scripts/ui_window.gd"
 ## 자원마다 자기 시세(행의 ×배율), 위에 다음 시세까지 mm:ss. 시세·남은 시간은 매초, 보유량은 Economy.changed마다 갱신한다.
 ## 금색(2배) 행의 배율은 반짝인다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const QtyBox := preload("res://scripts/qty_box.gd")
@@ -45,19 +47,19 @@ var qtys: Dictionary:  # 자원 id → 고른 수량(접힌 칸은 0)
 func _ready() -> void:
 	_build_window(DIALOG_W)
 	var col := content
-	col.add_child(_title("상인"))
+	col.add_child(_title(Lang.t("merchant_panel.ready")))
 	_timer_label = _label("", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_CENTER)
 	col.add_child(_timer_label)
 	for r in GameData.resources():
 		var id: String = r.id
 		col.add_child(_row(id))
-	sell_selected_button = _button("선택 판매 · 0골드")
+	sell_selected_button = _button(Lang.t("merchant_panel.ready_2"))
 	sell_selected_button.pressed.connect(_sell_selected)
 	col.add_child(sell_selected_button)
-	sell_all_button = _button("전부 판매")
+	sell_all_button = _button(Lang.t("merchant_panel.ready_3"))
 	sell_all_button.pressed.connect(func(): Economy.sell_all(_now()))
 	col.add_child(sell_all_button)
-	var close_button := _button("닫기", Color(0.55, 0.6, 0.7))
+	var close_button := _button(Lang.t("merchant_panel.ready_4"), Color(0.55, 0.6, 0.7))
 	close_button.pressed.connect(close)
 	col.add_child(close_button)
 	Economy.changed.connect(func(): if visible: _refresh(_now()))
@@ -89,7 +91,7 @@ func _now() -> float:
 func _refresh(now: float) -> void:
 	_last_sec = floori(now)
 	var left := floori(Economy.seconds_to_next_rate(now))  # 59:59 → 00:00
-	_timer_label.text = "다음 시세까지 %02d:%02d" % [left / 60, left % 60]
+	_timer_label.text = Lang.t("merchant_panel.refresh") % [left / 60, left % 60]
 	var any := false
 	for r in GameData.resources():
 		var id: String = r.id
@@ -99,7 +101,7 @@ func _refresh(now: float) -> void:
 		rate_labels[id].add_theme_color_override("font_color", rate_color(rate))
 		_jackpot[id] = rate >= GameData.config_num("merchant_jackpot_rate")
 		_amount_labels[id].text = HudScript.commas(amount)
-		_value_labels[id].text = "→ %s골드" % HudScript.commas(Economy.sell_gold(id, amount, rate))
+		_value_labels[id].text = Lang.t("merchant_panel.refresh_2") % HudScript.commas(Economy.sell_gold(id, amount, rate))
 		sell_buttons[id].disabled = amount == 0
 		any = any or amount > 0
 		if qty_boxes[id].visible and amount == 0:
@@ -144,7 +146,7 @@ func _main_row(id: String) -> HBoxContainer:
 	var value := _label("", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
 	value.custom_minimum_size = Vector2(170, 0)
 	row.add_child(value)
-	var sell := _button("판매")
+	var sell := _button(Lang.t("merchant_panel.main_row"))
 	sell.custom_minimum_size = Vector2(110, 52)
 	sell.pressed.connect(func(): _toggle_qty(id))
 	row.add_child(sell)
@@ -206,10 +208,10 @@ func _qty_labels(now: float) -> void:
 			continue
 		var q: int = qty_inputs[id].value
 		var g := Economy.sell_gold(id, q, Economy.current_rate(id, now))
-		qty_gold_labels[id].text = "→ %s골드" % HudScript.commas(g)
+		qty_gold_labels[id].text = Lang.t("merchant_panel.qty_labels") % HudScript.commas(g)
 		total_amount += q
 		total_gold += g
-	sell_selected_button.text = "선택 판매 · %s골드" % HudScript.commas(total_gold)
+	sell_selected_button.text = Lang.t("merchant_panel.qty_labels_2") % HudScript.commas(total_gold)
 	sell_selected_button.disabled = total_amount == 0
 
 

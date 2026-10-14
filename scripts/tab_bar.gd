@@ -7,13 +7,15 @@ extends CanvasLayer
 ## (visibility_changed) — 건물 탭으로 연 창도 그 탭이 선택되고, 창이 닫히면 선택이 없어진다. 이미 선택된 탭을 다시 누르면 그 창을 닫는다.
 ## 층 3: 창(층 2)의 어두운 배경 위라 창이 열려 있어도 탭 바는 계속 누를 수 있다(창의 연 직후 보호 시간에는 누름이 버려진다).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const UiWindow := preload("res://scripts/ui_window.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TABS := [["growth", "성장"], ["hero", "영웅"], ["soldier", "병사"], ["dungeon", "던전"], ["recruit", "모집"], ["shop", "상점"]]
+static var TABS := [["growth", Lang.t("tab_bar.tabs")], ["hero", Lang.t("tab_bar.tabs_2")], ["soldier", Lang.t("tab_bar.tabs_3")], ["dungeon", Lang.t("tab_bar.tabs_4")], ["recruit", Lang.t("tab_bar.tabs_5")], ["shop", Lang.t("tab_bar.tabs_6")]]
 const RAISE := 4.0
 const PAD := 8.0  # 바 안 여백·탭 사이 간격의 절반
 const ICON_PX := 46.0

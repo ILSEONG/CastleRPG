@@ -4,6 +4,8 @@ extends RefCounted
 ## 이번 주 공성전(공성 시각 — 길드장이 요일·시를 고른다, 상태·남은 시간) + [공격 분대][수비 분대] 고르기 + 영웅 격자(보유 영웅, 전투력 순, 4명) + [공성 시작/전투 합류] 또는 [수비 영웅 저장],
 ## 지난 주 보상([보상 받기]), 규칙 한 장.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const WarRules := preload("res://scripts/war_rules.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -24,7 +26,7 @@ static func build(p) -> void:
 	var w: Dictionary = GuildWar.war
 	if w.is_empty():
 		var c = p._card()
-		c.get_child(0).add_child(p._label("길드전 정보를 불러오는 중입니다", 24, SUB))
+		c.get_child(0).add_child(p._label(Lang.t("war_panel.build"), 24, SUB))
 		p.body.add_child(c)
 		return
 	var sel := _sel(p)
@@ -52,19 +54,19 @@ static func _enemy_card(p, w: Dictionary) -> void:
 	row.add_child(p._emblem_box(int(w.enemy.emblem), 84))
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_child(p._label("이번 주 상대  %s" % w.enemy.name, 28, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(p._label("길드원 %d명 · 전투력 %s" % [int(w.enemy.members), UiKit.commas(int(w.enemy.power))], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(p._label(Lang.t("war_panel.enemy_card") % w.enemy.name, 28, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(p._label(Lang.t("war_panel.enemy_card_2") % [int(w.enemy.members), UiKit.commas(int(w.enemy.power))], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	row.add_child(info)
 	v.add_child(row)
 	var score := HBoxContainer.new()
 	score.alignment = BoxContainer.ALIGNMENT_CENTER
 	score.add_theme_constant_override("separation", 18)
-	score.add_child(p._label("우리 %d" % int(w.points), 40, BLUE))
+	score.add_child(p._label(Lang.t("war_panel.enemy_card_3") % int(w.points), 40, BLUE))
 	score.add_child(p._label(":", 40, SUB))
-	score.add_child(p._label("%d 상대" % int(w.enemy_points), 40, RED))
+	score.add_child(p._label(Lang.t("war_panel.enemy_card_4") % int(w.enemy_points), 40, RED))
 	v.add_child(score)
 	var left := maxf(0.0, float(w.get("week_ends", 0.0)) - GuildWar.now_t())
-	v.add_child(p._label("주간 결산까지 %s · 상대 점수는 우리 공성 시간이 끝나면 나옵니다" % UiKit.duration(left), 19, SUB))
+	v.add_child(p._label(Lang.t("war_panel.enemy_card_5") % UiKit.duration(left), 19, SUB))
 	p.body.add_child(c)
 
 
@@ -72,10 +74,10 @@ static func _castle_card(p, w: Dictionary) -> void:
 	var c = p._card()
 	var v: VBoxContainer = c.get_child(0)
 	var cs: Dictionary = w.castle
-	v.add_child(p._label("상대 성 · 수비 영웅 처치 %d / %d" % [int(cs.kills), int(cs.defenders)], 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(p._label(Lang.t("war_panel.castle_card") % [int(cs.kills), int(cs.defenders)], 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for i in 4:
 		v.add_child(_bar_row(p, WarRules.SIDE_NAMES[i], float(cs.gates[i].hp), float(cs.gates[i].max), UiKit.AMBER))
-	v.add_child(_bar_row(p, "성채", float(cs.keep.hp), float(cs.keep.max), RED))
+	v.add_child(_bar_row(p, Lang.t("war_panel.castle_card_2"), float(cs.keep.hp), float(cs.keep.max), RED))
 	p.body.add_child(c)
 
 
@@ -93,7 +95,7 @@ static func _bar_row(p, name_s: String, hp: float, mx: float, color: Color) -> C
 	bar.max_value = maxf(1.0, mx)
 	bar.value = maxf(0.0, hp)
 	UiKit.apply_bar(bar, color)
-	var t = p._label("파괴" if hp <= 0.0 else "%s / %s" % [UiKit.commas(int(hp)), UiKit.commas(int(mx))], 17, Color.WHITE)
+	var t = p._label(Lang.t("war_panel.bar_row") if hp <= 0.0 else "%s / %s" % [UiKit.commas(int(hp)), UiKit.commas(int(mx))], 17, Color.WHITE)
 	t.add_theme_color_override("font_outline_color", Color(MainHud.INK, 0.85))
 	t.add_theme_constant_override("outline_size", 5)
 	t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -115,29 +117,29 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 			var left := maxf(0.0, float(b.get("ends_at", 0.0)) - GuildWar.now_t())
 			var to_fight := float(b.get("started_at", 0.0)) - GuildWar.now_t()
 			if b.get("deploying", false) and to_fight > 0.0:
-				head = "배치 중 · 길드장이 시작하거나 %s 뒤 전투 시작" % UiKit.clock(to_fight)
+				head = Lang.t("war_panel.battle_card") % UiKit.clock(to_fight)
 			else:
-				head = "공성전 진행 중 · 남은 시간 %s" % UiKit.clock(left)
+				head = Lang.t("war_panel.battle_card_2") % UiKit.clock(left)
 			if b.has("joined"):
-				head += " · 참가 %d명" % int(b.joined)
+				head += Lang.t("war_panel.battle_card_3") % int(b.joined)
 		"done":
-			head = "이번 주 공성전은 끝났습니다 · 다음 주에 다시"
+			head = Lang.t("war_panel.battle_card_4")
 		_:
-			head = "이번 주 공성 %s · %s 뒤 %d분 동안 열립니다" % [GuildWar.at_text(at), UiKit.duration(maxf(0.0, at - GuildWar.now_t())),
+			head = Lang.t("war_panel.battle_card_5") % [GuildWar.at_text(at), UiKit.duration(maxf(0.0, at - GuildWar.now_t())),
 				roundi(WarRules.BATTLE_SEC / 60.0)]
 	v.add_child(p._label(head, 22, MainHud.INK))
 	if state != "live" and GuildWar.online() and Economy.admin:  # 슈퍼관리자: 시각을 기다리지 않고 바로(끝났으면 새 성으로 다시)
-		v.add_child(p._label("관리자: [공성 시작]으로 지금 바로 열 수 있습니다", 18, SUB))
-	var who := ("%s님이 정한 시각" % str(sch.by)) if sch.get("set", false) and str(sch.get("by", "")) != "" \
-		else ("길드장이 없는 길드는 토요일 21:00" if sch.get("fixed", false) else "길드장이 정하지 않으면 토요일 21:00")
+		v.add_child(p._label(Lang.t("war_panel.battle_card_6"), 18, SUB))
+	var who := (Lang.t("war_panel.battle_card_7") % str(sch.by)) if sch.get("set", false) and str(sch.get("by", "")) != "" \
+		else (Lang.t("war_panel.battle_card_8") if sch.get("fixed", false) else Lang.t("war_panel.battle_card_9"))
 	v.add_child(p._label(who, 18, SUB))
 	if sch.get("can_change", false):
 		_schedule_picker(p, v, at)
 	elif state == "waiting" and not sch.get("fixed", false):
-		v.add_child(p._label("공성 요일과 시각은 길드장이 정합니다", 18, SUB))
+		v.add_child(p._label(Lang.t("war_panel.battle_card_10"), 18, SUB))
 	var modes := HBoxContainer.new()
 	modes.add_theme_constant_override("separation", 8)
-	for m in [["attack", "공격 분대"], ["defense", "수비 분대"]]:
+	for m in [["attack", Lang.t("war_panel.battle_card_11")], ["defense", Lang.t("war_panel.battle_card_12")]]:
 		var mb = p._button(m[1], UiKit.AMBER if sel.mode == m[0] else UiKit.STEEL, 24)
 		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		mb.pressed.connect(func():
@@ -147,7 +149,7 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 		p.buttons["war_mode:" + m[0]] = mb
 	v.add_child(modes)
 	var picked: Array = sel[sel.mode]
-	v.add_child(p._label(("직접 조종할 영웅 4명을 고르세요" if sel.mode == "attack" else "우리 성을 지킬 영웅 4명(수비 AI)을 고르세요") + "  %d/%d" % [picked.size(), WarRules.SQUAD], 19, SUB))
+	v.add_child(p._label((Lang.t("war_panel.battle_card_13") if sel.mode == "attack" else Lang.t("war_panel.battle_card_14")) + "  %d/%d" % [picked.size(), WarRules.SQUAD], 19, SUB))
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 8)
@@ -158,14 +160,14 @@ static func _battle_card(p, w: Dictionary, sel: Dictionary) -> void:
 	var act
 	if sel.mode == "attack":
 		var why := GuildWar.enter_block(picked)
-		act = p._button("전투 합류" if state == "live" else "공성 시작", UiKit.AMBER, 30)
+		act = p._button(Lang.t("war_panel.battle_card_15") if state == "live" else Lang.t("war_panel.battle_card_16"), UiKit.AMBER, 30)
 		act.disabled = why != ""
 		act.pressed.connect(func(): GuildWar.enter(picked.duplicate()))
 		if why != "" and not GuildWar.busy:
 			v.add_child(p._label(why, 19, RED))
 	else:
 		var same: bool = picked == GuildWar.defense()
-		act = p._button("저장됨" if same else "수비 영웅 저장", UiKit.AMBER, 30)
+		act = p._button(Lang.t("war_panel.battle_card_17") if same else Lang.t("war_panel.battle_card_18"), UiKit.AMBER, 30)
 		act.disabled = same or picked.size() != WarRules.SQUAD or GuildWar.busy
 		act.pressed.connect(func(): GuildWar.set_defense(picked.duplicate()))
 	act.custom_minimum_size = Vector2(0, 72)
@@ -204,12 +206,12 @@ static func _schedule_picker(p, v: VBoxContainer, at: float) -> void:
 		p.buttons["war_hour:%d" % step] = hb
 		if step < 0:
 			row.add_child(hb)
-			row.add_child(p._label("%s요일 %02d:00" % [WarRules.DAY_NAMES[int(pick.day)], int(pick.hour)], 26, MainHud.INK))
+			row.add_child(p._label(Lang.t("war_panel.schedule_picker") % [WarRules.DAY_NAMES[int(pick.day)], int(pick.hour)], 26, MainHud.INK))
 		else:
 			row.add_child(hb)
 	var why := GuildWar.schedule_block(int(pick.day), int(pick.hour))
 	var same := absf(GuildWar.pick_at(int(GuildWar.war.get("week", 0)), int(pick.day), int(pick.hour)) - at) < 1.0
-	var sb = p._button("시각 정하기", UiKit.AMBER, 22)
+	var sb = p._button(Lang.t("war_panel.schedule_picker_2"), UiKit.AMBER, 22)
 	sb.custom_minimum_size = Vector2(170, 54)
 	sb.disabled = why != "" or same
 	sb.pressed.connect(func():
@@ -267,9 +269,9 @@ static func _tile(p, id: String, picked: Array) -> Control:
 static func _claim_card(p, cl: Dictionary) -> void:
 	var c = p._card(Color(1.0, 0.97, 0.85, 0.9))
 	var v: VBoxContainer = c.get_child(0)
-	v.add_child(p._label("지난 주 길드전 %s  %d : %d" % ["승리!" if cl.win else "패배", int(cl.points), int(cl.enemy_points)], 26, GREEN if cl.win else RED))
+	v.add_child(p._label(Lang.t("war_panel.claim_card") % [Lang.t("war_panel.claim_card_2") if cl.win else Lang.t("war_panel.claim_card_3"), int(cl.points), int(cl.enemy_points)], 26, GREEN if cl.win else RED))
 	var rw: Dictionary = cl.reward
-	var b = p._button("보상 받기  길드 코인 %d · 다이아 %d" % [int(rw.coins), int(rw.diamonds)], UiKit.AMBER, 24)
+	var b = p._button(Lang.t("war_panel.claim_card_4") % [int(rw.coins), int(rw.diamonds)], UiKit.AMBER, 24)
 	b.disabled = GuildWar.busy
 	b.pressed.connect(func(): GuildWar.claim())
 	v.add_child(b)
@@ -280,16 +282,16 @@ static func _claim_card(p, cl: Dictionary) -> void:
 static func _rules_card(p) -> void:
 	var c = p._card()
 	var v: VBoxContainer = c.get_child(0)
-	v.add_child(p._label("공성전 규칙", 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	for t in ["길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.",
-			"공성전은 한 주에 한 번, 길드장이 정한 요일·시각에 열립니다. 정하지 않으면 토요일 21:00입니다.",
-			"성문 체력은 성 주인 길드 레벨 × %s입니다(상대 길드는 우리 길드와 같은 레벨)." % UiKit.commas(roundi(WarRules.GATE_HP_PER_LEVEL)),
-			"먼저 배치 단계에서 성 밖 어디를 공격할지 영웅 자리를 잡습니다. 길드장이 [전투 시작]을 누르면 %d분 동안 싸우고, 아무도 누르지 않으면 %d분 뒤 저절로 시작합니다." % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
-			"상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.",
-			"점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점(%d개까지) · 성채 최대 체력의 %d%%를 깎을 때마다 1점" % [WarRules.PTS_KILL, WarRules.PTS_GATE, WarRules.MAX_GATES_SCORED, roundi(WarRules.KEEP_STEP * 100.0)],
-			"공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(목숨 %d개). 모두 목숨을 다 쓰면 전투가 끝납니다." % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],
-			"수비 영웅은 성벽 앞에서 싸워 체력 ×%s · 공격력 ×%s 수성 보너스를 받습니다." % [str(WarRules.DEF_HP_MULT), str(WarRules.DEF_ATK_MULT)],
-			"주간 보상: 승리 길드 코인 %d · 다이아 %d / 패배 길드 코인 %d · 다이아 %d" % [WarRules.REWARD_WIN.coins, WarRules.REWARD_WIN.diamonds,
+	v.add_child(p._label(Lang.t("war_panel.rules_card"), 24, MainHud.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	for t in [Lang.t("war_panel.rules_card_2"),
+			Lang.t("war_panel.rules_card_3"),
+			Lang.t("war_panel.rules_card_4") % UiKit.commas(roundi(WarRules.GATE_HP_PER_LEVEL)),
+			Lang.t("war_panel.rules_card_5") % [roundi(WarRules.BATTLE_SEC / 60.0), roundi(WarRules.DEPLOY_SEC / 60.0)],
+			Lang.t("war_panel.rules_card_6"),
+			Lang.t("war_panel.rules_card_7") % [WarRules.PTS_KILL, WarRules.PTS_GATE, WarRules.MAX_GATES_SCORED, roundi(WarRules.KEEP_STEP * 100.0)],
+			Lang.t("war_panel.rules_card_8") % [roundi(WarRules.RESPAWN_SEC), WarRules.ATTACK_LIVES],
+			Lang.t("war_panel.rules_card_9") % [str(WarRules.DEF_HP_MULT), str(WarRules.DEF_ATK_MULT)],
+			Lang.t("war_panel.rules_card_10") % [WarRules.REWARD_WIN.coins, WarRules.REWARD_WIN.diamonds,
 				WarRules.REWARD_LOSE.coins, WarRules.REWARD_LOSE.diamonds]]:
 		var l = p._label("· " + t, 18, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

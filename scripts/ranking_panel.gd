@@ -3,16 +3,18 @@ extends "res://scripts/ui_window.gd"
 ## 하위 탭 [스테이지][전투력][길드]. 오른쪽 위 [X]나 바깥(배경) 탭으로 닫는다.
 ## 목록 = 상위 50(1~3위 메달), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const GuildPanel := preload("res://scripts/guild_panel.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const SUBTABS := [["stage", "스테이지"], ["power", "전투력"], ["guild", "길드"]]
-const HEAD := {
-	"stage": "도달한 라운드 순 · 먼저 도달한 사람이 위",
-	"power": "출전 영웅 전투력 합 순",
-	"guild": "길드 레벨 순 · 같으면 누적 경험치 순",
+static var SUBTABS := [["stage", Lang.t("ranking_panel.subtabs")], ["power", Lang.t("ranking_panel.subtabs_2")], ["guild", Lang.t("ranking_panel.subtabs_3")]]
+static var HEAD := {
+	"stage": Lang.t("ranking_panel.head.stage"),
+	"power": Lang.t("ranking_panel.head.power"),
+	"guild": Lang.t("ranking_panel.head.guild"),
 }
 const MEDALS := [Color(0.98, 0.76, 0.18), Color(0.74, 0.78, 0.84), Color(0.80, 0.52, 0.28)]
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
@@ -42,7 +44,7 @@ func _ready() -> void:
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(CLOSE_PX, 0)
 	head.add_child(pad)
-	var title := _title("랭킹")
+	var title := _title(Lang.t("ranking_panel.ready"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var x := Button.new()
@@ -156,26 +158,26 @@ func _rebuild() -> void:
 	body.add_child(_label(HEAD[b], 20, SUB))
 	var d: Dictionary = data.get(b, {})
 	if d.is_empty():
-		var msg := "불러오는 중…"
+		var msg := Lang.t("ranking_panel.rebuild.msg")
 		if not Net.is_online():
-			msg = "랭킹은 서버에 접속했을 때 볼 수 있습니다"
+			msg = Lang.t("ranking_panel.rebuild")
 		elif _failed.get(b, false):
-			msg = "랭킹을 불러오지 못했습니다\n잠시 뒤 다시 열어 주세요"
+			msg = Lang.t("ranking_panel.rebuild_2")
 		body.add_child(_spacer(40))
 		body.add_child(_label(msg, 26, SUB))
 		return
 	var top: Array = d.get("top", [])
 	if top.is_empty():
 		body.add_child(_spacer(40))
-		body.add_child(_label("아직 기록이 없습니다", 26, SUB))
+		body.add_child(_label(Lang.t("ranking_panel.rebuild_3"), 26, SUB))
 	for e in top:
 		body.add_child(_row(e, b))
 	var me = d.get("me")
-	me_box.add_child(_label("내 길드" if b == "guild" else "내 순위", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	me_box.add_child(_label(Lang.t("ranking_panel.rebuild_4") if b == "guild" else Lang.t("ranking_panel.rebuild_5"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	if me is Dictionary:
 		me_box.add_child(_row(me, b))
 	else:
-		var why := "길드에 가입하면 내 길드 순위가 보입니다" if b == "guild" else ("전투력이 0이면 순위에 오르지 않습니다" if b == "power" else "순위 없음")
+		var why := Lang.t("ranking_panel.rebuild.why") if b == "guild" else (Lang.t("ranking_panel.rebuild_6") if b == "power" else Lang.t("ranking_panel.rebuild_7"))
 		var card := _card(ROW_BG)
 		card.get_child(0).add_child(_label(why, 22, SUB))
 		me_box.add_child(card)
@@ -206,7 +208,7 @@ func _row(e: Dictionary, b: String) -> Control:
 	nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_row.add_child(nl)
 	if mine:
-		var tag := _label("내 길드" if b == "guild" else "나", 16, Color.WHITE)
+		var tag := _label(Lang.t("ranking_panel.row") if b == "guild" else Lang.t("ranking_panel.row_2"), 16, Color.WHITE)
 		tag.custom_minimum_size = Vector2(0, 26)
 		tag.add_theme_stylebox_override("normal", UiKit.panel(Color(0.85, 0.42, 0.12), 6.0, 4))
 		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -214,9 +216,9 @@ func _row(e: Dictionary, b: String) -> Control:
 	v.add_child(name_row)
 	var sub := ""
 	if b == "guild":
-		sub = "길드원 %d명 · 드래곤 점수 %s" % [int(e.get("members", 0)), UiKit.commas(int(e.get("boss", 0)))]
+		sub = Lang.t("ranking_panel.row_3") % [int(e.get("members", 0)), UiKit.commas(int(e.get("boss", 0)))]
 	elif e.has("guild"):
-		sub = "길드 " + str(e.guild)
+		sub = Lang.t("ranking_panel.row_4") + str(e.guild)
 	if sub != "":
 		v.add_child(_label(sub, 18, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	r.add_child(v)

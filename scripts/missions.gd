@@ -8,48 +8,50 @@ extends Node
 ## 미션 표(DEFS)는 server/src/missions.ts와 같다(온라인은 GET /v1/missions가 준 표를 쓴다).
 ## 저장: user://missions.json {version, day, week, counts: {d: {kind: n}, w: {kind: n}, r: {id: n}}, claimed: {d, w, wd, r}}.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")  # 주머니 이름(pouch_name)
 
 const SAVE_VERSION := 1
-const TYPES := [["daily", "일일"], ["weekly", "주간"], ["repeat", "반복"]]
+static var TYPES := [["daily", Lang.t("missions.types")], ["weekly", Lang.t("missions.types_2")], ["repeat", Lang.t("missions.types_3")]]
 ## server/src/missions.ts DEFS와 같은 표. kind: 여기서 세는 사건, daily_count = 오늘 받은 다른 일일 미션 수, daily_bonus = 이번 주 일일 보너스 받은 날 수.
-const DEFS := [
-	{"id": "d_kill", "type": "daily", "kind": "kill", "title": "몬스터 %d마리 처치", "target": 300, "reward": {"gold": 3000, "pouch_gold_10": 1, "speedup_build_15": 1}},
-	{"id": "d_collect", "type": "daily", "kind": "collect", "title": "자원 %d번 수집", "target": 5, "reward": {"wood": 3000, "stone": 3000, "food": 3000, "pouch_res_10": 1, "speedup_research_15": 1}},
-	{"id": "d_sell", "type": "daily", "kind": "sell", "title": "상인과 %d번 거래", "target": 2, "reward": {"gold": 2000}},
-	{"id": "d_hero", "type": "daily", "kind": "hero_level", "title": "영웅 레벨업 %d회", "target": 5, "reward": {"gold": 3000}},
-	{"id": "d_growth", "type": "daily", "kind": "growth", "title": "성장 강화 %d회", "target": 3, "reward": {"gold": 3000}},
-	{"id": "d_gacha", "type": "daily", "kind": "gacha", "title": "영웅 %d회 모집", "target": 10, "reward": {"diamonds": 30}},
-	{"id": "d_dungeon", "type": "daily", "kind": "dungeon_win", "title": "던전 %d번 클리어", "target": 2, "reward": {"diamonds": 30}},
-	{"id": "d_guild", "type": "daily", "kind": "guild_attend", "title": "길드 출석", "target": 1, "reward": {"diamonds": 20}},
-	{"id": "d_all", "type": "daily", "kind": "daily_count", "title": "일일 미션 %d개 완료", "target": 6, "reward": {"diamonds": 100, "tickets": 1, "pouch_gold_60": 1, "speedup_build_60": 2, "speedup_research_60": 1, "speedup_any_60": 1}},
-	{"id": "w_bonus", "type": "weekly", "kind": "daily_bonus", "title": "일일 미션 보너스 %d일 받기", "target": 5, "reward": {"tickets": 5, "pouch_gold_360": 1, "pouch_res_360": 1, "speedup_any_480": 2, "speedup_builder_2880": 1}},
-	{"id": "w_kill", "type": "weekly", "kind": "kill", "title": "몬스터 %d마리 처치", "target": 3000, "reward": {"gold": 30000, "pouch_gold_240": 1}},
-	{"id": "w_dungeon", "type": "weekly", "kind": "dungeon_win", "title": "던전 %d번 클리어", "target": 10, "reward": {"diamonds": 150}},
-	{"id": "w_gacha", "type": "weekly", "kind": "gacha", "title": "영웅 %d회 모집", "target": 50, "reward": {"diamonds": 150}},
-	{"id": "w_hero", "type": "weekly", "kind": "hero_level", "title": "영웅 레벨업 %d회", "target": 30, "reward": {"gold": 30000}},
-	{"id": "w_build", "type": "weekly", "kind": "build_up", "title": "건물 레벨업 %d번 완료", "target": 3, "reward": {"wood": 20000, "stone": 20000, "food": 20000, "pouch_res_240": 1, "speedup_build_480": 1}},
-	{"id": "w_research", "type": "weekly", "kind": "research", "title": "연구 %d번 시작", "target": 2, "reward": {"gold": 20000, "speedup_research_480": 1}},
-	{"id": "w_train", "type": "weekly", "kind": "train", "title": "병사 훈련 %d번", "target": 3, "reward": {"gold": 10000}},
-	{"id": "w_boss", "type": "weekly", "kind": "guild_boss", "title": "길드 보스 %d번 도전", "target": 3, "reward": {"diamonds": 100}},
-	{"id": "r_kill", "type": "repeat", "kind": "kill", "title": "몬스터 %d마리 처치", "target": 1000, "step": 500, "reward": {"gold": 5000, "pouch_gold_30": 1}},
-	{"id": "r_stage", "type": "repeat", "kind": "stage", "title": "라운드 %d번 클리어", "target": 10, "step": 5, "reward": {"diamonds": 20, "speedup_any_5": 1}},
-	{"id": "r_collect", "type": "repeat", "kind": "collect", "title": "자원 %d번 수집", "target": 20, "step": 10, "reward": {"wood": 5000, "stone": 5000, "food": 5000, "pouch_res_30": 1}},
-	{"id": "r_sell", "type": "repeat", "kind": "sell", "title": "상인과 %d번 거래", "target": 10, "step": 5, "reward": {"gold": 5000}},
-	{"id": "r_hero", "type": "repeat", "kind": "hero_level", "title": "영웅 레벨업 %d회", "target": 20, "step": 10, "reward": {"gold": 5000}},
-	{"id": "r_growth", "type": "repeat", "kind": "growth", "title": "성장 강화 %d회", "target": 20, "step": 10, "reward": {"gold": 5000}},
-	{"id": "r_gacha_dia", "type": "repeat", "kind": "gacha_dia", "title": "다이아·모집권으로 영웅 %d회 모집", "target": 30, "step": 10, "reward": {"tickets": 1}},
-	{"id": "r_dungeon", "type": "repeat", "kind": "dungeon_win", "title": "던전 %d번 클리어", "target": 5, "step": 3, "reward": {"diamonds": 30}},
+static var DEFS := [
+	{"id": "d_kill", "type": "daily", "kind": "kill", "title": Lang.t("missions.defs.d_kill.title"), "target": 300, "reward": {"gold": 3000, "pouch_gold_10": 1, "speedup_build_15": 1}},
+	{"id": "d_collect", "type": "daily", "kind": "collect", "title": Lang.t("missions.defs.d_collect.title"), "target": 5, "reward": {"wood": 3000, "stone": 3000, "food": 3000, "pouch_res_10": 1, "speedup_research_15": 1}},
+	{"id": "d_sell", "type": "daily", "kind": "sell", "title": Lang.t("missions.defs.d_sell.title"), "target": 2, "reward": {"gold": 2000}},
+	{"id": "d_hero", "type": "daily", "kind": "hero_level", "title": Lang.t("missions.defs.d_hero.title"), "target": 5, "reward": {"gold": 3000}},
+	{"id": "d_growth", "type": "daily", "kind": "growth", "title": Lang.t("missions.defs.d_growth.title"), "target": 3, "reward": {"gold": 3000}},
+	{"id": "d_gacha", "type": "daily", "kind": "gacha", "title": Lang.t("missions.defs.d_gacha.title"), "target": 10, "reward": {"diamonds": 30}},
+	{"id": "d_dungeon", "type": "daily", "kind": "dungeon_win", "title": Lang.t("missions.defs.d_dungeon.title"), "target": 2, "reward": {"diamonds": 30}},
+	{"id": "d_guild", "type": "daily", "kind": "guild_attend", "title": Lang.t("missions.defs.d_guild.title"), "target": 1, "reward": {"diamonds": 20}},
+	{"id": "d_all", "type": "daily", "kind": "daily_count", "title": Lang.t("missions.defs.d_all.title"), "target": 6, "reward": {"diamonds": 100, "tickets": 1, "pouch_gold_60": 1, "speedup_build_60": 2, "speedup_research_60": 1, "speedup_any_60": 1}},
+	{"id": "w_bonus", "type": "weekly", "kind": "daily_bonus", "title": Lang.t("missions.defs.w_bonus.title"), "target": 5, "reward": {"tickets": 5, "pouch_gold_360": 1, "pouch_res_360": 1, "speedup_any_480": 2, "speedup_builder_2880": 1}},
+	{"id": "w_kill", "type": "weekly", "kind": "kill", "title": Lang.t("missions.defs.w_kill.title"), "target": 3000, "reward": {"gold": 30000, "pouch_gold_240": 1}},
+	{"id": "w_dungeon", "type": "weekly", "kind": "dungeon_win", "title": Lang.t("missions.defs.w_dungeon.title"), "target": 10, "reward": {"diamonds": 150}},
+	{"id": "w_gacha", "type": "weekly", "kind": "gacha", "title": Lang.t("missions.defs.w_gacha.title"), "target": 50, "reward": {"diamonds": 150}},
+	{"id": "w_hero", "type": "weekly", "kind": "hero_level", "title": Lang.t("missions.defs.w_hero.title"), "target": 30, "reward": {"gold": 30000}},
+	{"id": "w_build", "type": "weekly", "kind": "build_up", "title": Lang.t("missions.defs.w_build.title"), "target": 3, "reward": {"wood": 20000, "stone": 20000, "food": 20000, "pouch_res_240": 1, "speedup_build_480": 1}},
+	{"id": "w_research", "type": "weekly", "kind": "research", "title": Lang.t("missions.defs.w_research.title"), "target": 2, "reward": {"gold": 20000, "speedup_research_480": 1}},
+	{"id": "w_train", "type": "weekly", "kind": "train", "title": Lang.t("missions.defs.w_train.title"), "target": 3, "reward": {"gold": 10000}},
+	{"id": "w_boss", "type": "weekly", "kind": "guild_boss", "title": Lang.t("missions.defs.w_boss.title"), "target": 3, "reward": {"diamonds": 100}},
+	{"id": "r_kill", "type": "repeat", "kind": "kill", "title": Lang.t("missions.defs.r_kill.title"), "target": 1000, "step": 500, "reward": {"gold": 5000, "pouch_gold_30": 1}},
+	{"id": "r_stage", "type": "repeat", "kind": "stage", "title": Lang.t("missions.defs.r_stage.title"), "target": 10, "step": 5, "reward": {"diamonds": 20, "speedup_any_5": 1}},
+	{"id": "r_collect", "type": "repeat", "kind": "collect", "title": Lang.t("missions.defs.r_collect.title"), "target": 20, "step": 10, "reward": {"wood": 5000, "stone": 5000, "food": 5000, "pouch_res_30": 1}},
+	{"id": "r_sell", "type": "repeat", "kind": "sell", "title": Lang.t("missions.defs.r_sell.title"), "target": 10, "step": 5, "reward": {"gold": 5000}},
+	{"id": "r_hero", "type": "repeat", "kind": "hero_level", "title": Lang.t("missions.defs.r_hero.title"), "target": 20, "step": 10, "reward": {"gold": 5000}},
+	{"id": "r_growth", "type": "repeat", "kind": "growth", "title": Lang.t("missions.defs.r_growth.title"), "target": 20, "step": 10, "reward": {"gold": 5000}},
+	{"id": "r_gacha_dia", "type": "repeat", "kind": "gacha_dia", "title": Lang.t("missions.defs.r_gacha_dia.title"), "target": 30, "step": 10, "reward": {"tickets": 1}},
+	{"id": "r_dungeon", "type": "repeat", "kind": "dungeon_win", "title": Lang.t("missions.defs.r_dungeon.title"), "target": 5, "step": 3, "reward": {"diamonds": 30}},
 ]
 ## 사건 → [바로가기] 대상(Tutorial.goto_requested 형식 — main이 처리한다). 없으면 버튼 없음.
 const GOTO := {"kill": "stage", "stage": "stage", "collect": "look:lumber", "sell": "merchant", "hero_level": "tab:hero", "growth": "tab:growth",
 	"gacha": "tab:recruit", "gacha_dia": "tab:recruit", "dungeon_win": "tab:dungeon", "guild_attend": "tab:guild", "guild_boss": "tab:guild", "build_up": "building:keep",
 	"research": "building:lab", "train": "building:barracks"}
-const FAIL_TEXT := {"claimed": "이미 받은 보상입니다", "not_done": "아직 완료하지 않았습니다", "too_soon": "잠시 뒤 다시 받아 주세요",
-	"stale": "진행 상황을 새로 받았습니다. 다시 눌러 주세요"}
-const FAIL_DEFAULT := "보상을 받지 못했습니다"
-const WAIT_TEXT := "연결 대기 중"
+static var FAIL_TEXT := {"claimed": Lang.t("missions.fail_text.claimed"), "not_done": Lang.t("missions.fail_text.not_done"), "too_soon": Lang.t("missions.fail_text.too_soon"),
+	"stale": Lang.t("missions.fail_text.stale")}
+static var FAIL_DEFAULT := Lang.t("missions.fail_default")
+static var WAIT_TEXT := Lang.t("missions.wait_text")
 
 signal changed  # 진행·받은 기록·응답 대기가 바뀌었다(창·메뉴 빨간 점이 다시 그린다)
 
@@ -396,30 +398,30 @@ func _on_claim_failed(key: String, m: Dictionary, need: int) -> void:
 
 func _reward_notice(r: Dictionary) -> void:
 	if econ != null:
-		econ.notice.emit("미션 보상: " + reward_text(r))
+		econ.notice.emit(Lang.t("missions.reward_notice") + reward_text(r))
 
 
 static func reward_text(r: Dictionary) -> String:
 	var parts: Array = []
 	if r.has("gold"):
-		parts.append("골드 %s" % _commas(int(r.gold)))
+		parts.append(Lang.t("missions.reward_text") % _commas(int(r.gold)))
 	if r.has("diamonds"):
-		parts.append("다이아 %s" % _commas(int(r.diamonds)))
+		parts.append(Lang.t("missions.reward_text_2") % _commas(int(r.diamonds)))
 	if r.has("wood") and int(r.get("wood", 0)) == int(r.get("stone", -1)) and int(r.wood) == int(r.get("food", -1)):
-		parts.append("목재·석재·식량 각 %s" % _commas(int(r.wood)))
+		parts.append(Lang.t("missions.reward_text_3") % _commas(int(r.wood)))
 	else:
-		for k in [["wood", "목재"], ["stone", "석재"], ["food", "식량"]]:
+		for k in [["wood", Lang.t("missions.reward_text_4")], ["stone", Lang.t("missions.reward_text_5")], ["food", Lang.t("missions.reward_text_6")]]:
 			if r.has(k[0]):
 				parts.append("%s %s" % [k[1], _commas(int(r[k[0]]))])
-	for k in [["keys_gold", "골드 던전 입장권"], ["keys_equip", "장비 던전 입장권"], ["keys_ticket", "모집권 던전 입장권"]]:
+	for k in [["keys_gold", Lang.t("missions.reward_text_7")], ["keys_equip", Lang.t("missions.reward_text_8")], ["keys_ticket", Lang.t("missions.reward_text_9")]]:
 		if r.has(k[0]):
 			parts.append("%s %d" % [k[1], int(r[k[0]])])
 	if r.has("tickets"):
-		parts.append("다이아 모집권 %d장" % int(r.tickets))
+		parts.append(Lang.t("missions.reward_text_10") % int(r.tickets))
 	var pz := EconomyScript.pouches_in(r)
 	for id in EconomyScript.pouch_ids():
 		if pz.has(id):
-			parts.append(EconomyScript.pouch_name(id) + ("" if int(pz[id]) == 1 else " %d개" % int(pz[id])))
+			parts.append(EconomyScript.pouch_name(id) + ("" if int(pz[id]) == 1 else Lang.t("missions.reward_text_11") % int(pz[id])))
 	parts.append_array(EconomyScript.speedup_reward_parts(r))  # 2026-10-13 가속 아이템·일꾼 고용권
 	return " + ".join(parts)
 

@@ -6,6 +6,8 @@ extends Node
 ## 다음 고블린은 잡힌 때부터 다시 INTERVAL초 뒤에 나온다(나와 있는 동안엔 새로 안 나온다).
 ## 개발용: --goblin-now면 3초 뒤 바로 나온다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GoldGoblin := preload("res://scripts/gold_goblin.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Sfx := preload("res://scripts/sfx.gd")
@@ -48,7 +50,7 @@ func spawn():
 	g.died.connect(_on_died)
 	get_parent().add_child(g)
 	goblin = g
-	Economy.notice.emit("황금 고블린이 나타났습니다! 영웅이 잡으면 황금 보따리를 얻습니다")
+	Economy.notice.emit(Lang.t("goblin_director.spawn"))
 	return g
 
 
@@ -64,10 +66,10 @@ func _on_died(g) -> void:
 
 
 func _on_claimed(got: Dictionary) -> void:
-	var parts := ["골드 +%s" % UiKit.commas(int(got.get("gold_tenths", 0)) / 10)]
+	var parts := [Lang.t("goblin_director.on_claimed") % UiKit.commas(int(got.get("gold_tenths", 0)) / 10)]
 	var r = got.get("reward", {})
 	if r is Dictionary:
 		if int(r.get("diamonds", 0)) > 0:
-			parts.append("다이아 +%d" % int(r.diamonds))
+			parts.append(Lang.t("goblin_director.on_claimed_2") % int(r.diamonds))
 		parts.append_array(Economy.speedup_reward_parts(r))
-	Economy.notice.emit("황금 보따리: " + ", ".join(parts))
+	Economy.notice.emit(Lang.t("goblin_director.on_claimed_3") + ", ".join(parts))

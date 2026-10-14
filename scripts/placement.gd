@@ -5,6 +5,8 @@ extends Node3D
 ## 자리 규칙은 Economy.place_block(= Balance.placement_block, 서버와 같다). 짓기는 Economy.build_at, 옮기기는 Economy.move_building.
 ## 고르는 동안 영웅·건물 탭(unit_picker)은 쉬고, 스테이지가 시작되면 그만둔다. 옮기는 건물은 원래 자리에서 잠깐 숨긴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
@@ -23,9 +25,9 @@ const GHOST_ALPHA := 0.72
 const TAP_PX := 14.0  # 이보다 덜 움직이고 떼면 탭(그 자리로 옮긴다)
 const GRAB_PAD := 1.0  # 부지보다 이만큼(m) 넓게 잡아도 건물을 끈다
 const PAN_SEC := 0.35
-const HINT := "초록 칸 안으로 건물을 끌거나 그곳을 누르세요"
-const OK_TEXT := "여기에 지을 수 있습니다"
-const NO_SPACE_TEXT := "성 안에 빈 자리가 없습니다"
+static var HINT := Lang.t("placement.hint")
+static var OK_TEXT := Lang.t("placement.ok_text")
+static var NO_SPACE_TEXT := Lang.t("placement.no_space_text")
 
 var camera: Camera3D
 var rig  # camera_rig.gd(시작할 때 그 자리로 카메라를 옮긴다)
@@ -116,10 +118,10 @@ func _build_bar() -> void:
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
 	box.add_child(buttons)
-	cancel_button = _button("취소", UiKit.STEEL)
+	cancel_button = _button(Lang.t("placement.build_bar"), UiKit.STEEL)
 	cancel_button.pressed.connect(cancel)
 	buttons.add_child(cancel_button)
-	confirm_button = _button("건설", UiKit.AMBER)
+	confirm_button = _button(Lang.t("placement.build_bar_2"), UiKit.AMBER)
 	confirm_button.pressed.connect(confirm)
 	buttons.add_child(confirm_button)
 
@@ -176,8 +178,8 @@ func start(id: String) -> bool:
 	if moving and scenery != null and scenery.lots.has(id):
 		scenery.lots[id].mi.visible = false
 	_set_picker(false)
-	title_label.text = "%s %s" % [GameData.building_name(id), "옮기기" if moving else "건설"]
-	confirm_button.text = "여기로 이동" if moving else "건설"
+	title_label.text = "%s %s" % [GameData.building_name(id), Lang.t("placement.start") if moving else Lang.t("placement.start_2")]
+	confirm_button.text = Lang.t("placement.start_3") if moving else Lang.t("placement.start_2")
 	_fill_cost()
 	_layer.visible = true
 	_update()
@@ -261,7 +263,7 @@ func _fill_cost() -> void:
 		cost_row.add_child(_label(26, HudScript.INK))
 		(cost_row.get_child(cost_row.get_child_count() - 1) as Label).text = UiKit.commas(need) + "  "
 	var t := _label(26, HudScript.INK)
-	t.text = "건설 시간 " + UiKit.duration(Economy.upgrade_sec(building_id))
+	t.text = Lang.t("placement.fill_cost") + UiKit.duration(Economy.upgrade_sec(building_id))
 	cost_row.add_child(t)
 
 

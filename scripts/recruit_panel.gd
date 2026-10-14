@@ -12,6 +12,8 @@ extends "res://scripts/ui_window.gd"
 ## 다른 창(영웅·거래)이 열려 있으면 그 위로 열지 않고 알림만 띄우고, 결과는 다음에 주점 창을 열 때 보여 준다. 결과 화면이 뜨면 연 직후처럼
 ## 보호 시간을 다시 건다([확인] 연타 방지).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
@@ -27,11 +29,11 @@ const CARD_SIZE := Vector2(118, 180)
 const GOLD := GameData.GACHA_GOLD
 const DIA := GameData.GACHA_DIA
 const TICKET := GameData.GACHA_TICKET  # 다이아 모집권(튜토리얼 보상): 다이아 탭에서 장당 1회
-const TITLE := "영웅 모집"
-const LATE_TEXT := "모집 결과 도착 — 주점에서 확인하세요"
-const DUP_TEXT := "+1 조각"  # 이미 가진 영웅(개정 15)
+static var TITLE := Lang.t("recruit_panel.title")
+static var LATE_TEXT := Lang.t("recruit_panel.late_text")
+static var DUP_TEXT := Lang.t("recruit_panel.dup_text")  # 이미 가진 영웅(개정 15)
 const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
-const SSR_TEXT := "SSR 등장 — 자동 모집을 멈췄습니다"
+static var SSR_TEXT := Lang.t("recruit_panel.ssr_text")
 const REVEAL_ONE := 0.45  # 1회: 뒷면을 보여 준 뒤 뒤집기까지(SR·SSR 예고 빛이 다 번진다)
 const REVEAL_FIRST := 0.3  # 10회: 첫 카드
 const REVEAL_STEP := 0.1  # 10회: 카드 사이
@@ -88,8 +90,8 @@ func _ready() -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 10)
 	_pick_view.add_child(tabs)
-	gold_tab = _tab("골드 모집", GOLD, tabs)
-	dia_tab = _tab("다이아 모집", DIA, tabs)
+	gold_tab = _tab(Lang.t("recruit_panel.ready"), GOLD, tabs)
+	dia_tab = _tab(Lang.t("recruit_panel.ready_2"), DIA, tabs)
 
 	_gold_box = VBoxContainer.new()
 	_gold_box.add_theme_constant_override("separation", 6)
@@ -127,7 +129,7 @@ func _ready() -> void:
 	_pick_view.add_child(rates_row)
 	rates_label = _label("", 26)
 	rates_row.add_child(rates_label)
-	odds_button = _button("확률 정보", UiKit.STEEL, 20)
+	odds_button = _button(Lang.t("recruit_panel.ready_3"), UiKit.STEEL, 20)
 	odds_button.focus_mode = Control.FOCUS_NONE
 	odds_button.custom_minimum_size = Vector2(130, 44)
 	odds_button.pressed.connect(func(): odds.show_for(currency, Economy.gacha_state().gold_level, Economy.building_level(GameData.TAVERN)))
@@ -153,7 +155,7 @@ func _ready() -> void:
 	level_button.custom_minimum_size = Vector2(0, 56)
 	level_button.pressed.connect(open_building)
 	_pick_view.add_child(level_button)
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("recruit_panel.ready_4"), UiKit.STEEL)
 	close_button.pressed.connect(close)
 	_pick_view.add_child(close_button)
 
@@ -170,17 +172,17 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	_result_view.add_child(row)
-	again_button = _button("재모집", UiKit.AMBER)
+	again_button = _button(Lang.t("recruit_panel.ready_5"), UiKit.AMBER)
 	again_button.custom_minimum_size = Vector2(0, 72)
 	again_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again_button.pressed.connect(_again)
 	row.add_child(again_button)
-	confirm_button = _button("확인")
+	confirm_button = _button(Lang.t("recruit_panel.ready_6"))
 	confirm_button.custom_minimum_size = Vector2(0, 72)
 	confirm_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	confirm_button.pressed.connect(_on_confirm)
 	row.add_child(confirm_button)
-	auto_box = UiKit.checkbox("자동 모집")
+	auto_box = UiKit.checkbox(Lang.t("recruit_panel.ready_7"))
 	auto_box.set_pressed_no_signal(Fever.auto_recruit)
 	auto_box.toggled.connect(_on_auto_toggled)
 	_result_view.add_child(auto_box)
@@ -210,13 +212,13 @@ func _build_shop_ask() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 18)
 	box.add_child(col)
-	col.add_child(_label("다이아가 부족합니다", 32))
-	col.add_child(_label("다이아 상점으로 이동하시겠습니까?", 24, HudScript.INK.lightened(0.2)))
+	col.add_child(_label(Lang.t("recruit_panel.build_shop_ask"), 32))
+	col.add_child(_label(Lang.t("recruit_panel.build_shop_ask_2"), 24, HudScript.INK.lightened(0.2)))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 24)
 	col.add_child(row)
-	for pair in [["이동", UiKit.GRADE_COLORS.SR, true], ["취소", UiKit.STEEL, false]]:
+	for pair in [[Lang.t("recruit_panel.build_shop_ask_3"), UiKit.GRADE_COLORS.SR, true], [Lang.t("recruit_panel.build_shop_ask_4"), UiKit.STEEL, false]]:
 		var b := _button(pair[0], pair[1], 28)
 		b.custom_minimum_size = Vector2(200, 72)
 		b.focus_mode = Control.FOCUS_NONE
@@ -329,7 +331,7 @@ static func _rates_line(rates: Dictionary) -> String:
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
 	if ssr <= 0.0:  # 골드 모집 Lv 1~2(SSR은 GameData.GOLD_SSR_FROM부터)
-		return "SSR Lv %d부터 · SR %s%% · R %s%%" % [GameData.GOLD_SSR_FROM, Skills.num_text(sr * 100.0), Skills.num_text((1.0 - sr) * 100.0)]
+		return Lang.t("recruit_panel.rates_line") % [GameData.GOLD_SSR_FROM, Skills.num_text(sr * 100.0), Skills.num_text((1.0 - sr) * 100.0)]
 	return "SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0), Skills.num_text((1.0 - ssr - sr) * 100.0)]
 
 
@@ -510,36 +512,36 @@ func _refresh() -> void:
 		level_button.text = building_panel.levelup_text(GameData.TAVERN)
 	var st: Dictionary = Economy.gacha_state()
 	var lv: int = st.gold_level
-	level_label.text = "골드 모집 Lv %d" % lv
+	level_label.text = Lang.t("recruit_panel.refresh") % lv
 	var maxed: bool = st.gold_next <= 0
 	progress_bar.max_value = 1 if maxed else st.gold_next
 	progress_bar.value = 1 if maxed else st.gold_pulls
-	progress_label.text = "최대 레벨" if maxed else "다음 레벨까지 %d/%d" % [st.gold_pulls, st.gold_next]
+	progress_label.text = Lang.t("recruit_panel.refresh_2") if maxed else Lang.t("recruit_panel.refresh_3") % [st.gold_pulls, st.gold_next]
 	preview_label.visible = not maxed
 	if not maxed:
 		var nr := GameData.gacha_rates(GOLD, lv + 1, Economy.building_level(GameData.TAVERN))
-		preview_label.text = "Lv %d: SSR %s%% · SR %s%% · 1회 %s" % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
+		preview_label.text = Lang.t("recruit_panel.refresh_4") % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
-	dia_label.text = "보유 %s" % UiKit.commas(Economy.diamonds)
-	pity_label.text = "SSR 확정까지 %d회" % st.pity_left
+	dia_label.text = Lang.t("recruit_panel.refresh_5") % UiKit.commas(Economy.diamonds)
+	pity_label.text = Lang.t("recruit_panel.refresh_6") % st.pity_left
 	var tk := Economy.dia_tickets
 	var tk_shown := tk > 0 and currency == DIA
 	if ticket_label.visible != tk_shown:
 		ticket_label.visible = tk_shown
 		if visible:
 			_fit()
-	ticket_label.text = "다이아 모집권 %d장" % tk
+	ticket_label.text = Lang.t("recruit_panel.refresh_7") % tk
 	rates_label.text = rates_text(currency)
 	for i in 2:
 		var b: Button = [one_button, ten_button][i]
 		var n: int = [1, 10][i]
 		var cur := pull_currency(n)
-		var unit: String = {DIA: "다이아 ", TICKET: "모집권 "}.get(cur, "")
+		var unit: String = {DIA: Lang.t("recruit_panel.refresh_8"), TICKET: Lang.t("recruit_panel.refresh_9")}.get(cur, "")
 		var pad := "      " if cur == DIA else ""  # 버튼 앞 보석 자리(다이아일 때만)
 		var cost := Economy.gacha_cost(cur, n)
-		b.text = "%s%d회 %s%s" % [pad, n, unit, (("%d장" % cost) if cur == TICKET else UiKit.commas(cost))]
+		b.text = Lang.t("recruit_panel.refresh_10") % [pad, n, unit, ((Lang.t("recruit_panel.refresh_11") % cost) if cur == TICKET else UiKit.commas(cost))]
 		if n == 10 and cur != GOLD:  # SR 이상 보장은 다이아(모집권 포함) 10연차만
-			b.text += " · SR 이상 %d장" % int(GameData.config_num("gacha_10_min_sr"))
+			b.text += Lang.t("recruit_panel.refresh_12") % int(GameData.config_num("gacha_10_min_sr"))
 		_btn_gems[i].visible = cur == DIA
 		if b.get_meta("cur", GOLD) != cur:  # 모집권 버튼은 SR 색
 			b.set_meta("cur", cur)
@@ -550,9 +552,9 @@ func _refresh() -> void:
 	var cost := Economy.gacha_cost(again_cur, _count)
 	var short := Economy.wallet(again_cur) < cost
 	if auto_running() and not short:
-		again_button.text = "자동 모집 중"
+		again_button.text = Lang.t("recruit_panel.refresh_13")
 	elif again_cur == TICKET:
-		again_button.text = "재모집 모집권 %d장" % cost
+		again_button.text = Lang.t("recruit_panel.refresh_14") % cost
 	else:
-		again_button.text = "재모집 %s%s" % ["다이아 " if again_cur == DIA else "", UiKit.commas(cost)] + (("\n다이아 부족" if again_cur == DIA else "\n골드 부족") if short else "")
+		again_button.text = Lang.t("recruit_panel.refresh_15") % [Lang.t("recruit_panel.refresh_8") if again_cur == DIA else "", UiKit.commas(cost)] + ((Lang.t("recruit_panel.refresh_16") if again_cur == DIA else Lang.t("recruit_panel.refresh_17")) if short else "")
 	again_button.disabled = (short and again_cur == GOLD) or auto_running()

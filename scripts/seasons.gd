@@ -6,12 +6,14 @@ extends Node
 ## 색을 BLEND_SEC 동안 섞고 가운데에 메시를 갈아 끼우며, 화면 가운데 "스테이지 N · 계절" 띠를 띄운다.
 ## 개발용 `-- --season=N`(웹 `?season=N`, 디버그 빌드만): 그 계절로 시작. 오토로드는 /root에서 찾는다(헤드리스 -s 테스트가 이 파일을 preload).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
-const NAMES := ["봄", "여름", "가을", "겨울"]
-const BANNER_TEXT := "스테이지 %d · %s"
+static var NAMES := [Lang.t("seasons.names"), Lang.t("seasons.names_2"), Lang.t("seasons.names_3"), Lang.t("seasons.names_4")]
+static var BANNER_TEXT := Lang.t("seasons.banner_text")
 const BLEND_SEC := 1.2
 const BANNER_SEC := 1.8  # 띠가 다 보이는 시간(나타남·사라짐 제외)
 const MAX_PARTICLES := 150

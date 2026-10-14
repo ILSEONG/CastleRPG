@@ -19,6 +19,8 @@ extends Node3D
 ## 던전(개정 18): Economy.dungeon_started → 이 월드를 트리에서 떼어 두고 던전 장면(dungeon.gd)을 붙인다(_enter_dungeon), [나가기] → leave_dungeon.
 ## 개발용 `-- --dungeon=gold|equip|ticket`(웹 `?dungeon=`): 디버그·오프라인에서 곧바로 그 던전 1단계(_dev_dungeon).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
@@ -55,7 +57,7 @@ var _loading = null  # 로딩 화면(온라인: 서버 연결부터, 첫 월드�
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 const SeasonsScript := preload("res://scripts/seasons.gd")
 const GATE_PAN_SEC := 0.4  # HUD 성문 막대 탭 → 카메라가 그 성문으로 옮겨 가는 시간
-const EXPANDED_TEXT := "성이 넓어졌습니다!"
+static var EXPANDED_TEXT := Lang.t("main.expanded_text")
 
 static var rebuilds := 0  # 월드를 다시 만든 횟수(성채 단계 변경). 개발용 1회 설정(econ-demo·--heroes·auto-stage)은 첫 월드에서만
 static var _expanded_notice := false

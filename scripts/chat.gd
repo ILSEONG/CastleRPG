@@ -4,6 +4,8 @@ extends Node
 ## 보내면 내 줄이 바로 보이고(대기 표시 없음) 서버가 받으면 서버 줄로 바뀐다. 서버가 거절하면 그 줄을 지우고 짧은 알림(notice)을 낸다.
 ## 오프라인(서버 없음)이면 아무것도 보내지 않는다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 signal changed  # 메시지 목록·길드 채널 유무가 바뀌었다
 signal notice(text: String)  # 보내기가 거절됐다 등 짧은 알림
 signal reports_changed  # 관리자 신고 목록을 받았다
@@ -14,13 +16,13 @@ const KEEP := 100  # 채널마다 들고 있는 메시지 수
 const OPEN_POLL_SEC := 3.0
 const IDLE_POLL_SEC := 20.0
 const CHANNELS := ["all", "guild"]
-const REFUSALS := {
-	"too_fast": "조금 천천히 보내 주세요",
-	"no_guild": "길드에 들어가야 길드 채팅을 쓸 수 있습니다",
-	"empty": "보낼 내용을 적어 주세요",
-	"too_many": "오늘은 신고를 더 할 수 없습니다",
-	"no_message": "이 메시지는 신고할 수 없습니다",
-	"own_message": "내 메시지는 신고할 수 없습니다",
+static var REFUSALS := {
+	"too_fast": Lang.t("chat.refusals.too_fast"),
+	"no_guild": Lang.t("chat.refusals.no_guild"),
+	"empty": Lang.t("chat.refusals.empty"),
+	"too_many": Lang.t("chat.refusals.too_many"),
+	"no_message": Lang.t("chat.refusals.no_message"),
+	"own_message": Lang.t("chat.refusals.own_message"),
 }
 
 var messages := {"all": [], "guild": []}  # 채널 → [{id, name, text, at, me, local?}] (오래된 것부터)
@@ -40,7 +42,7 @@ var _local_seq := 0
 
 
 const SYSTEM_KEEP := 30
-const WELCOME := "채팅 예절을 지켜 주세요. 욕설은 자동으로 가려지며, 다른 성주의 메시지를 누르면 신고할 수 있습니다."
+static var WELCOME := Lang.t("chat.welcome")
 
 
 func _ready() -> void:
@@ -189,7 +191,7 @@ func send(ch: String, raw: String) -> bool:
 	if text == "":
 		return false
 	if not online():
-		notice.emit("온라인에서만 채팅할 수 있습니다")
+		notice.emit(Lang.t("chat.send"))
 		return false
 	if ch == "guild" and not has_guild:
 		notice.emit(REFUSALS.no_guild)
@@ -200,7 +202,7 @@ func send(ch: String, raw: String) -> bool:
 	_last_send_ms = Time.get_ticks_msec()
 	_local_seq += 1
 	var lid := -_local_seq
-	var me_name := str(Economy.friends.get("name", "나"))
+	var me_name := str(Economy.friends.get("name", Lang.t("chat.send_2")))
 	messages[ch].append({"id": lid, "name": me_name, "text": text, "at": _now(), "me": true, "local": true})
 	changed.emit()
 	Net.send("POST", "/v1/chat", {"channel": ch, "text": text}, func(d): _on_sent(ch, lid, d), func(): _on_refused(ch, lid))
@@ -219,7 +221,7 @@ func _on_sent(ch: String, lid: int, d: Dictionary) -> void:
 func _on_refused(ch: String, lid: int) -> void:
 	messages[ch] = messages[ch].filter(func(m): return int(m.id) != lid)
 	changed.emit()
-	notice.emit(REFUSALS.get(Net.last_error, "메시지를 보내지 못했습니다"))
+	notice.emit(REFUSALS.get(Net.last_error, Lang.t("chat.on_refused")))
 
 
 ## 서버 clean과 같다: 줄바꿈·제어 문자 → 공백, 공백 하나로, 앞뒤 공백 지움, MAX_LEN 글자까지.
@@ -245,11 +247,11 @@ func report(id: int) -> void:
 		return
 	reported[id] = true
 	changed.emit()
-	notice.emit("신고했습니다. 확인 후 조치하겠습니다")
+	notice.emit(Lang.t("chat.report"))
 	Net.send("POST", "/v1/chat/report", {"id": id}, func(_d): pass, func():
 		reported.erase(id)
 		changed.emit()
-		notice.emit(REFUSALS.get(Net.last_error, "신고하지 못했습니다")))
+		notice.emit(REFUSALS.get(Net.last_error, Lang.t("chat.report_2"))))
 
 
 ## 관리자: 신고 목록을 받는다.

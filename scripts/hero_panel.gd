@@ -22,6 +22,8 @@ extends "res://scripts/ui_window.gd"
 ## 누르면 확인 창(영웅마다 "이름 ★1 → ★3 · 조각 30", 넘치면 스크롤) → [승급]·[취소]. 오를 영웅이 없거나 응답 대기면 비활성.
 ## 보유 격자 뒤에 미보유 영웅(등급 SSR → SR → R, 같으면 표 순서): 흐린 카드 + "미보유", Lv·전투력 없음. 배치·상세 안 됨(탭하면 알림).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const Skills := preload("res://scripts/skills.gd")
 const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
@@ -44,19 +46,19 @@ const PROMOTE_COLOR := Color("8A5CC8")  # [승급] 버튼(SR 보라 — [레벨�
 const PREVIEW_COLOR := Color("8A5A0B")  # 승급 미리보기 글자(진한 금색)
 const GRADE_RANK := {"SSR": 0, "SR": 1, "R": 2}
 const SORTS := ["power", "grade", "level"]
-const SORT_NAMES := {"power": "전투력", "grade": "등급", "level": "레벨"}
-const HINT := "슬롯을 누른 뒤 영웅을 고르세요"
+static var SORT_NAMES := {"power": Lang.t("hero_panel.sort_names.power"), "grade": Lang.t("hero_panel.sort_names.grade"), "level": Lang.t("hero_panel.sort_names.level")}
+static var HINT := Lang.t("hero_panel.hint")
 const GREEN := Color(0.13, 0.58, 0.24)
 const REASON_COLOR := Color(0.78, 0.22, 0.18)
 const SWIPE_PX := 80.0
 const TEN := 10
-const STAT_NAMES := ["HP", "공격", "공격 간격", "사거리", "전투력"]
+static var STAT_NAMES := ["HP", Lang.t("hero_panel.stat_names"), Lang.t("hero_panel.stat_names_2"), Lang.t("hero_panel.stat_names_3"), Lang.t("hero_panel.stat_names_4")]
 const LOCKED_GRAY := Color(0.55, 0.55, 0.58)  # 잠긴 스킬 줄
 const UNLOCK_GOLD := Color("C8901A")  # 해금 반짝임
 const LOCKED_MODULATE := Color(0.5, 0.5, 0.55, 0.8)  # 미보유 카드(흐리게)
-const UNOWNED_TEXT := "미보유"
-const UNOWNED_NOTICE := "아직 보유하지 않은 영웅입니다"
-const AUTO_EQUIP_TEXT := "장비 자동착용"
+static var UNOWNED_TEXT := Lang.t("hero_panel.unowned_text")
+static var UNOWNED_NOTICE := Lang.t("hero_panel.unowned_notice")
+static var AUTO_EQUIP_TEXT := Lang.t("hero_panel.auto_equip_text")
 const PROMOTE_ALL_ROW_H := 42.0  # 일괄 승급 확인 창 한 줄 높이(줄 수만큼 창이 자라고 넘치면 스크롤)
 const PROMOTE_ALL_LIST_MAX_H := 560.0
 const AUTO_EQUIP_PX := Vector2(150, 50)  # [장비 자동착용] 크기(큰 카드 오른쪽 아래)
@@ -140,7 +142,7 @@ func _build_list() -> void:
 	_list_view.add_theme_constant_override("separation", 10)
 	_list_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_list_view)
-	_list_view.add_child(_title("영웅"))
+	_list_view.add_child(_title(Lang.t("hero_panel.build_list")))
 	var slots_center := CenterContainer.new()
 	_list_view.add_child(slots_center)
 	_slot_grid = GridContainer.new()
@@ -153,11 +155,11 @@ func _build_list() -> void:
 	_list_view.add_child(row)
 	sort_button = _button("", UiKit.STEEL, 26)
 	sort_button.pressed.connect(cycle_sort)
-	promote_all_button = _button("일괄 승급", PROMOTE_COLOR, 26)
+	promote_all_button = _button(Lang.t("hero_panel.build_list_2"), PROMOTE_COLOR, 26)
 	promote_all_button.pressed.connect(ask_promote_all)
-	auto_button = _button("자동 배치", UiKit.STEEL, 26)
+	auto_button = _button(Lang.t("hero_panel.build_list_3"), UiKit.STEEL, 26)
 	auto_button.pressed.connect(auto_deploy)
-	apply_button = _button("적용")
+	apply_button = _button(Lang.t("hero_panel.build_list_4"))
 	apply_button.pressed.connect(apply)
 	Tutorial.register_ui("hero:auto_deploy", auto_button, func(): return not auto_button.disabled)  # 가이드 화살표
 	Tutorial.register_ui("hero:apply", apply_button, func(): return not apply_button.disabled)
@@ -197,8 +199,8 @@ func _build_promote_all_confirm() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 18)
 	box.add_child(col)
-	col.add_child(_label("일괄 승급", 32))
-	col.add_child(_label("아래 영웅을 승급하시겠습니까?", 24, HudScript.INK.lightened(0.2)))
+	col.add_child(_label(Lang.t("hero_panel.build_promote_all_confirm"), 32))
+	col.add_child(_label(Lang.t("hero_panel.build_promote_all_confirm_2"), 24, HudScript.INK.lightened(0.2)))
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	col.add_child(scroll)
@@ -211,7 +213,7 @@ func _build_promote_all_confirm() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 24)
 	col.add_child(row)
-	for pair in [["승급", PROMOTE_COLOR, true], ["취소", UiKit.STEEL, false]]:
+	for pair in [[Lang.t("hero_panel.build_promote_all_confirm_3"), PROMOTE_COLOR, true], [Lang.t("hero_panel.build_promote_all_confirm_4"), UiKit.STEEL, false]]:
 		var b := _button(pair[0], pair[1], 28)
 		b.custom_minimum_size = Vector2(200, 72)
 		b.focus_mode = Control.FOCUS_NONE
@@ -223,7 +225,7 @@ func _build_promote_all_confirm() -> void:
 func ask_promote_all() -> void:
 	_promote_all_plan = Economy.promote_all_plan()
 	if _promote_all_plan.is_empty():
-		Economy.notice.emit("승급할 수 있는 영웅이 없습니다")
+		Economy.notice.emit(Lang.t("hero_panel.ask_promote_all"))
 		return
 	for c in promote_all_list.get_children():
 		promote_all_list.remove_child(c)
@@ -236,7 +238,7 @@ func ask_promote_all() -> void:
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		line.add_child(name_label)
 		line.add_child(_label("★%d → ★%d" % [r.from, r.to], 24, PREVIEW_COLOR, HORIZONTAL_ALIGNMENT_RIGHT))
-		var cost := _label("조각 %d" % r.shards, 22, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_RIGHT)
+		var cost := _label(Lang.t("hero_panel.ask_promote_all_2") % r.shards, 22, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_RIGHT)
 		cost.custom_minimum_size = Vector2(130, 0)
 		line.add_child(cost)
 		promote_all_list.add_child(line)
@@ -256,7 +258,7 @@ func _on_promoted_all(results: Array) -> void:
 	if results.is_empty():
 		return
 	promotions_shown += 1
-	Economy.notice.emit("영웅 %d명 승급 완료" % results.size())
+	Economy.notice.emit(Lang.t("hero_panel.on_promoted_all") % results.size())
 
 
 func _build_detail() -> void:
@@ -289,7 +291,7 @@ func _build_detail() -> void:
 	names.add_child(title_label)
 	grade_label = _label("", 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	names.add_child(grade_label)
-	deploy_button = _button("배치", UiKit.STEEL, 24)
+	deploy_button = _button(Lang.t("hero_panel.build_detail"), UiKit.STEEL, 24)
 	deploy_button.custom_minimum_size = Vector2(170, 64)
 	deploy_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	deploy_button.pressed.connect(deploy_here)
@@ -362,7 +364,7 @@ func _build_detail() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	_detail_view.add_child(row)
-	_one = _cost_button("레벨업")
+	_one = _cost_button(Lang.t("hero_panel.build_detail_2"))
 	level_button = _one.button
 	level_button.pressed.connect(_press_level.bind(false))
 	_ten = _cost_button("×10")
@@ -386,11 +388,11 @@ func _build_detail() -> void:
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 12)
 	_detail_view.add_child(nav)
-	prev_button = _button("< 이전", UiKit.STEEL)
+	prev_button = _button(Lang.t("hero_panel.build_detail_3"), UiKit.STEEL)
 	prev_button.pressed.connect(step.bind(-1))
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("hero_panel.build_detail_4"), UiKit.STEEL)
 	close_button.pressed.connect(_show_list)
-	next_button = _button("다음 >", UiKit.STEEL)
+	next_button = _button(Lang.t("hero_panel.build_detail_5"), UiKit.STEEL)
 	next_button.pressed.connect(step.bind(1))
 	for b in [prev_button, close_button, next_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -454,9 +456,9 @@ func auto_equip() -> void:
 		return
 	var n := Economy.auto_equip(detail_id)
 	if n > 0:
-		Economy.notice.emit("장비 %d개를 착용했습니다" % n)
+		Economy.notice.emit(Lang.t("hero_panel.auto_equip") % n)
 	elif not Economy.equip_waiting() and Economy.auto_equip_plan(detail_id).is_empty():
-		Economy.notice.emit("더 좋은 장비가 없습니다")
+		Economy.notice.emit(Lang.t("hero_panel.auto_equip_2"))
 
 
 ## 비용 버튼: 위 제목, 아래 [골드 아이콘 숫자](버튼 안, 입력은 버튼이 받는다).
@@ -500,7 +502,7 @@ func _promote_button() -> Dictionary:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(box)
-	var title := _on_button_label("승급", 28)
+	var title := _on_button_label(Lang.t("hero_panel.promote_button"), 28)
 	box.add_child(title)
 	var line := _on_button_label("", 22)
 	box.add_child(line)
@@ -608,8 +610,8 @@ func apply() -> void:
 		_auto_used = false
 		Tutorial.note("auto_deploy")  # 가이드 「자동 배치 써 보기」
 	if GameState.deploy() == work:
-		var later := "" if GameState.mode == GameState.Mode.IDLE else " — 다음 스테이지부터"
-		Economy.notice.emit("배치를 적용했습니다" + later)
+		var later := "" if GameState.mode == GameState.Mode.IDLE else Lang.t("hero_panel.apply.later")
+		Economy.notice.emit(Lang.t("hero_panel.apply") + later)
 	_rebuild()
 
 
@@ -688,7 +690,7 @@ func _rebuild() -> void:
 		c.shard_need = Economy.promote_cost(id)
 		c.can_promote = Economy.promote_block(id) == ""
 		c.queue_redraw()
-	sort_button.text = "정렬: " + SORT_NAMES[sort_mode]
+	sort_button.text = Lang.t("hero_panel.rebuild") + SORT_NAMES[sort_mode]
 	apply_button.disabled = work == GameState.deploy()
 	auto_button.disabled = work == Economy.auto_hero_deploy(work.size())
 	promote_all_button.disabled = Economy.promote_waiting() or Economy.promote_all_plan().is_empty()
@@ -743,7 +745,7 @@ func _on_promoted(id: String, promotion: int) -> void:
 	var rows := skill_rows(GameData.hero(id), promotion) if not GameData.hero(id).is_empty() else []
 	var opened := range(rows.size()).filter(func(i): return rows[i].star == promotion and promotion > 0)
 	for i in opened:
-		Economy.notice.emit("스킬 해금! " + rows[i].name)
+		Economy.notice.emit(Lang.t("hero_panel.on_promoted") + rows[i].name)
 	if not is_showing_detail() or id != detail_id:
 		return
 	_refresh_detail()
@@ -800,7 +802,7 @@ func _refresh_detail() -> void:
 	big_card.queue_redraw()
 	title_label.text = "%s %s" % [h.title, h.name]
 	title_label.add_theme_color_override("font_color", UiKit.GRADE_COLORS[h.grade].lightened(0.15))
-	grade_label.text = "%s · %s" % [h.grade, "근접" if h.role == "melee" else "원거리"]
+	grade_label.text = "%s · %s" % [h.grade, Lang.t("hero_panel.refresh_detail") if h.role == "melee" else Lang.t("hero_panel.refresh_detail_2")]
 	level_label.text = "Lv %d / %d" % [mini(lv, mx), mx]
 	level_bar.max_value = mx
 	level_bar.value = lv
@@ -813,7 +815,7 @@ func _refresh_detail() -> void:
 	for i in rows.size():
 		var r = rows[i]
 		if r == null:
-			stat_values[i].text = Skills.num_text(h.atk_interval) + "초" if i == 2 else Skills.num_text(h.range) + "m"
+			stat_values[i].text = Skills.num_text(h.atk_interval) + Lang.t("hero_panel.refresh_detail_3") if i == 2 else Skills.num_text(h.range) + "m"
 			stat_nexts[i].text = ""
 		else:
 			stat_values[i].text = UiKit.commas(r[0])
@@ -830,33 +832,33 @@ func _refresh_detail() -> void:
 	_refresh_equip(id, h)
 	var waiting: bool = Economy.levelup_waiting()
 	var why := Economy.levelup_block(id)
-	_set_cost(_one, "레벨업", 1 if grow else 0, h.grade, lv)
+	_set_cost(_one, Lang.t("hero_panel.refresh_detail_4"), 1 if grow else 0, h.grade, lv)
 	level_button.disabled = why != "" or waiting
 	var n := Economy.levelup_affordable(id, TEN)
 	var shown := n if n > 0 else mini(TEN, mx - lv)
-	_set_cost(_ten, "×10 (%d회)" % shown if shown > 0 else "×10", shown, h.grade, lv)
+	_set_cost(_ten, Lang.t("hero_panel.refresh_detail_5") % shown if shown > 0 else "×10", shown, h.grade, lv)
 	ten_button.disabled = n == 0 or waiting
 	reason_label.text = why
 	# 승급(개정 15): 버튼 안 "조각 12 / 25"(최대면 "MAX"), 미리보기 한 줄, 못 하는 이유
 	var need := Economy.promote_cost(id)
 	var pwhy := Economy.promote_block(id)
-	_promo.title.text = "승급" if need <= 0 else "승급 ★%d" % (pr + 1)
-	_promo.line.text = "조각 %d / %d" % [Economy.shards_of(id), need] if need > 0 else "조각 %d · MAX" % Economy.shards_of(id)
+	_promo.title.text = Lang.t("hero_panel.refresh_detail_6") if need <= 0 else Lang.t("hero_panel.refresh_detail_7") % (pr + 1)
+	_promo.line.text = Lang.t("hero_panel.refresh_detail_8") % [Economy.shards_of(id), need] if need > 0 else Lang.t("hero_panel.refresh_detail_9") % Economy.shards_of(id)
 	promote_button.disabled = pwhy != ""
 	promote_reason.text = Economy.PROMOTE_TEXT.get(pwhy, "") if pwhy != "waiting" else ""
-	if why == "최대 레벨" and need > 0:  # 최대 레벨에 닿았다: 올리는 법(승급)을 바로 알려 준다
-		reason_label.text = "최대 레벨 — [승급]하면 Lv %d까지" % GameData.max_level(pr + 1)
+	if why == Lang.t("economy.levelup_block_2") and need > 0:  # 최대 레벨에 닿았다: 올리는 법(승급)을 바로 알려 준다
+		reason_label.text = Lang.t("hero_panel.refresh_detail_11") % GameData.max_level(pr + 1)
 		if pwhy == "not_enough_shards":
-			promote_reason.text = "조각 부족 — 모집에서 이 영웅이 다시 나오면 조각이 쌓입니다"
+			promote_reason.text = Lang.t("hero_panel.refresh_detail_12")
 	if need > 0:
-		promote_preview.text = "승급하면 HP·공격 → ×%s · 최대 레벨 %d → %d" % [Skills.num_text(GameData.config_num("promote_mult")), mx, GameData.max_level(pr + 1)]
+		promote_preview.text = Lang.t("hero_panel.refresh_detail_13") % [Skills.num_text(GameData.config_num("promote_mult")), mx, GameData.max_level(pr + 1)]
 		var next := sk_rows.filter(func(r): return r.locked)
 		if not next.is_empty():  # 개정 17: 다음 해금
-			promote_preview.text += "\n★%d 달성 시 스킬 해금: %s" % [next[0].star, next[0].name]
+			promote_preview.text += Lang.t("hero_panel.refresh_detail_14") % [next[0].star, next[0].name]
 	else:
-		promote_preview.text = "최대 승급 ★%d — HP·공격 ×%s" % [pr, Skills.num_text(GameData.promote_mult(pr))]
+		promote_preview.text = Lang.t("hero_panel.refresh_detail_15") % [pr, Skills.num_text(GameData.promote_mult(pr))]
 	var d := GameState.deploy()
-	deploy_button.text = "배치 중" if d.has(id) else ("빈 슬롯 없음" if not d.has(null) else "배치")
+	deploy_button.text = Lang.t("hero_panel.refresh_detail_16") if d.has(id) else (Lang.t("hero_panel.refresh_detail_17") if not d.has(null) else Lang.t("hero_panel.refresh_detail_18"))
 	deploy_button.disabled = d.has(id) or not d.has(null)
 	prev_button.disabled = order.size() < 2
 	next_button.disabled = order.size() < 2
@@ -875,14 +877,14 @@ func _refresh_equip(id: String, h: Dictionary) -> void:
 	if b.hp > 0:
 		parts.append("HP +%s" % UiKit.commas(b.hp))
 	if b.atk > 0:
-		parts.append("공격 +%s" % UiKit.commas(b.atk))
+		parts.append(Lang.t("hero_panel.refresh_equip") % UiKit.commas(b.atk))
 	if b.speed_pct > 0.0:
-		parts.append("이동 +%s%%" % BagPanel.pct_text(b.speed_pct))
+		parts.append(Lang.t("hero_panel.refresh_equip_2") % BagPanel.pct_text(b.speed_pct))
 	for k in GameData.SUB_STATS:
 		if b[k] > 0.0:
 			var v: float = minf(b[k], GameData.DMG_REDUCE_CAP) if k == "dmg_reduce" else b[k]
 			parts.append("%s +%s%%" % [GameData.SUB_NAMES[k], BagPanel.pct_text(v)])
-	equip_label.text = "장비 " + " · ".join(parts) if not parts.is_empty() else ""
+	equip_label.text = Lang.t("hero_panel.refresh_equip_3") + " · ".join(parts) if not parts.is_empty() else ""
 	equip_label.visible = not parts.is_empty()
 	auto_equip_button.disabled = Economy.equip_waiting() or Economy.auto_equip_plan(id).is_empty()
 
@@ -917,8 +919,8 @@ static func skill_rows(h: Dictionary, promotion: int) -> Array:
 		var nm := Skills.name_of(kinds[i], h.id)
 		var locked := promotion < star
 		out.append({"kind": kinds[i], "name": nm, "star": star, "locked": locked,
-			"text": "%s (%s) — %s" % [nm, "액티브" if HeroSkillsScript.is_active(kinds[i]) else "패시브",
-				"★%d에서 해금" % star if locked else Skills.describe(kinds[i], h.skills[kinds[i]])]})
+			"text": "%s (%s) — %s" % [nm, Lang.t("hero_panel.skill_rows") if HeroSkillsScript.is_active(kinds[i]) else Lang.t("hero_panel.skill_rows_2"),
+				Lang.t("hero_panel.skill_rows_3") % star if locked else Skills.describe(kinds[i], h.skills[kinds[i]])]})
 	return out
 
 

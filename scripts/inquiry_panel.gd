@@ -4,8 +4,8 @@ extends "res://scripts/ops_sheet.gd"
 ## 아래: 내 문의 목록 — 분류·상태(답변 대기 / 답변 완료 / 종료)·보낸 때, 답변이 있으면 그 글. 답변은 우편([문의 답변])으로도 온다.
 ## [보내기]는 곧바로 목록에 들어가고 칸이 비워진다. 서버가 거절하면 목록에서 빠지고 쓴 글이 칸에 돌아온다.
 
-const CATEGORIES := [["account", "계정·로그인"], ["payment", "결제·상점"], ["bug", "버그·오류"], ["suggest", "건의"], ["other", "기타"]]
-const STATUS := {"open": ["답변 대기", Color(0.86, 0.55, 0.16)], "answered": ["답변 완료", Color(0.30, 0.60, 0.36)], "closed": ["종료", Color(0.50, 0.52, 0.58)]}
+static var CATEGORIES := [["account", Lang.t("inquiry_panel.categories")], ["payment", Lang.t("inquiry_panel.categories_2")], ["bug", Lang.t("inquiry_panel.categories_3")], ["suggest", Lang.t("inquiry_panel.categories_4")], ["other", Lang.t("inquiry_panel.categories_5")]]
+static var STATUS := {"open": [Lang.t("inquiry_panel.status"), Color(0.86, 0.55, 0.16)], "answered": [Lang.t("inquiry_panel.status_2"), Color(0.30, 0.60, 0.36)], "closed": [Lang.t("inquiry_panel.status_3"), Color(0.50, 0.52, 0.58)]}
 const MAX_LEN := 1000
 
 var category := "bug"
@@ -17,7 +17,7 @@ var _sig := ""
 
 
 func _ready() -> void:
-	_build("문의하기")
+	_build(Lang.t("inquiry_panel.ready"))
 	var v := _card(Color(1.0, 0.97, 0.88, 0.95))
 	var cats := GridContainer.new()
 	cats.columns = 3
@@ -33,7 +33,7 @@ func _ready() -> void:
 		buttons["cat:" + c[0]] = b
 	v.add_child(cats)
 	input = TextEdit.new()
-	input.placeholder_text = "무엇이 궁금하거나 불편하셨나요? 자세히 적어 주시면 빨리 도와드릴 수 있어요"
+	input.placeholder_text = Lang.t("inquiry_panel.ready_2")
 	input.custom_minimum_size = Vector2(0, 200)
 	input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	input.add_theme_font_size_override("font_size", 23)
@@ -47,13 +47,13 @@ func _ready() -> void:
 			input.set_caret_line(input.get_line_count() - 1)
 			input.set_caret_column(input.get_line(input.get_line_count() - 1).length()))
 	v.add_child(input)
-	v.add_child(_wrap("닉네임·친구 코드·로그인 방식·게임 버전·기기 정보가 함께 전달됩니다. 답변은 우편으로 알려 드려요.", 20, SUB))
-	send_button = _button("보내기", HudScript.ACCENT, 24)
+	v.add_child(_wrap(Lang.t("inquiry_panel.ready_3"), 20, SUB))
+	send_button = _button(Lang.t("inquiry_panel.ready_4"), HudScript.ACCENT, 24)
 	send_button.custom_minimum_size = Vector2(0, 56)
 	send_button.pressed.connect(send)
 	v.add_child(send_button)
 	buttons["send"] = send_button
-	body.add_child(_label("내 문의", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	body.add_child(_label(Lang.t("inquiry_panel.ready_5"), 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	list = VBoxContainer.new()
 	list.add_theme_constant_override("separation", 10)
 	body.add_child(list)
@@ -106,7 +106,7 @@ func _rebuild() -> void:
 		list.remove_child(c)
 		c.queue_free()
 	if LiveOps.inquiries.is_empty():
-		list.add_child(_wrap("보낸 문의가 없어요" if Net.is_online() else "문의는 온라인에서만 보낼 수 있어요", 24, SUB, HORIZONTAL_ALIGNMENT_CENTER))
+		list.add_child(_wrap(Lang.t("inquiry_panel.rebuild") if Net.is_online() else Lang.t("inquiry_panel.rebuild_2"), 24, SUB, HORIZONTAL_ALIGNMENT_CENTER))
 		return
 	var now := Economy.time_now()
 	var names := {}
@@ -128,7 +128,7 @@ func _rebuild() -> void:
 		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tag.add_child(_label(st[0], 20, Color.WHITE))
 		row.add_child(tag)
-		row.add_child(_wrap(str(names.get(str(q.get("category", "")), "문의")), 24))
+		row.add_child(_wrap(str(names.get(str(q.get("category", "")), Lang.t("inquiry_panel.rebuild_3"))), 24))
 		row.add_child(_label(ago(float(q.get("at", now)), now), 20, SUB, HORIZONTAL_ALIGNMENT_RIGHT))
 		v.add_child(row)
 		v.add_child(_wrap(str(q.get("body", "")), 22))
@@ -137,7 +137,7 @@ func _rebuild() -> void:
 			var ans := PanelContainer.new()
 			ans.add_theme_stylebox_override("panel", UiKit.panel(Color(0.90, 0.96, 0.90, 1.0), 10.0, 12))
 			var av := VBoxContainer.new()
-			av.add_child(_label("운영자 답변", 20, Color(0.20, 0.45, 0.24)))
+			av.add_child(_label(Lang.t("inquiry_panel.rebuild_4"), 20, Color(0.20, 0.45, 0.24)))
 			av.add_child(_wrap(a, 22))
 			ans.add_child(av)
 			v.add_child(ans)

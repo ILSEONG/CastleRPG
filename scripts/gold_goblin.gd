@@ -9,6 +9,8 @@ extends "res://scripts/monster.gd"
 ##  - 속도 = 지금 성에 나온 영웅들 평균 이동 속도 × SPEED_RATIO(영웅이 없으면 영웅 표 평균).
 ##  - 시간 제한 없이 잡힐 때까지 남는다. 잡히면 died → 감독이 서버에 보상을 받는다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const SPEED_RATIO := 0.85
 const HP_MULT := 15.0  # 그 스테이지 졸개(grunt) HP × 이만큼(사용자 2026-10-14, 30에서 내림)
 const FLEE_SEC := 2.2
@@ -18,7 +20,7 @@ const PAUSE := Vector2(0.3, 1.2)  # 지점에 닿으면 이만큼 두리번거�
 const SPARK_SEC := 0.3
 const SPARK := Color(1.0, 0.85, 0.3)
 const BODY_SCALE := 1.35  # 보통 고블린보다 크게(멀리서도 보이게)
-const NAME_TEXT := "황금 고블린"
+static var NAME_TEXT := Lang.t("gold_goblin.name_text")
 const NAME_COLOR := Color(1.0, 0.84, 0.25)
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 

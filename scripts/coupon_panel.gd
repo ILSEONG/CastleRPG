@@ -2,6 +2,8 @@ extends "res://scripts/ui_window.gd"
 ## 쿠폰 입력 창(2026-10-12, 설정 창 [쿠폰 입력]). 번호를 넣고 [사용] → LiveOps.redeem(POST /v1/coupon). 결과(받은 보상 또는 거절 이유)를
 ## 창 안 한 줄로 보인다. 대소문자·띄어쓰기·하이픈은 서버가 무시한다. 화면 키보드가 올라오면 창을 그 위로 올린다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const OpsSheet := preload("res://scripts/ops_sheet.gd")
 const OK_INK := Color(0.20, 0.52, 0.26)
 const BAD_INK := Color(0.80, 0.22, 0.18)
@@ -13,10 +15,10 @@ var use_button: Button
 
 func _ready() -> void:
 	_build_window(560, 14)
-	content.add_child(_title("쿠폰 입력"))
-	var hint := _label("받은 쿠폰 번호를 입력해 주세요", 22, Color(0.16, 0.18, 0.24, 0.62))
+	content.add_child(_title(Lang.t("coupon_panel.ready")))
+	var hint := _label(Lang.t("coupon_panel.ready_2"), 22, Color(0.16, 0.18, 0.24, 0.62))
 	content.add_child(hint)
-	input = OpsSheet.line_edit("쿠폰 번호", 24)
+	input = OpsSheet.line_edit(Lang.t("coupon_panel.ready_3"), 24)
 	input.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	input.text_submitted.connect(func(_t): use())
 	content.add_child(input)
@@ -26,11 +28,11 @@ func _ready() -> void:
 	content.add_child(result_label)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("coupon_panel.ready_4"), UiKit.STEEL)
 	close_button.custom_minimum_size.x = 160
 	close_button.pressed.connect(close)
 	row.add_child(close_button)
-	use_button = _button("사용")
+	use_button = _button(Lang.t("coupon_panel.ready_5"))
 	use_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	use_button.pressed.connect(use)
 	row.add_child(use_button)

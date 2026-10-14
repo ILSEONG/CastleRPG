@@ -10,6 +10,8 @@ extends RefCounted
 ## 보석·카드는 *_geometry가 삼각형 배열(점 3개씩 + 점마다 색)을 돌려준다 — 매 프레임 다시 그리는 쪽은 이것을 캐시해
 ## canvas_item_add_triangle_array 한 번으로 그린다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const ScrollBox := preload("res://scripts/scroll_box.gd")
 const Art := preload("res://scripts/art.gd")
@@ -106,8 +108,8 @@ static func duration(sec: float) -> String:
 	if s < 3600:
 		return "%02d:%02d" % [s / 60, s % 60]
 	if s < 86400:
-		return "%d시간 %d분" % [s / 3600, s % 3600 / 60]
-	return "%d일 %d시간" % [s / 86400, s % 86400 / 3600]
+		return Lang.t("ui_kit.duration") % [s / 3600, s % 3600 / 60]
+	return Lang.t("ui_kit.duration_2") % [s / 86400, s % 86400 / 3600]
 
 
 ## 병사 생산 시간(초, 올림): 1시간 이상 "h:mm:ss", 미만 "mm:ss"(개정 13 §6 "다음 2:41:10"). 0.001초 빼고 올린다 —

@@ -3,6 +3,8 @@ extends CanvasLayer
 ## 남은 영웅 수. 결투면 아래: [자동] + 내 영웅 5 띠(피규어 + HP + 스킬 쿨, 누르면 그 영웅 선택, 쓰러지면 흐리게). 가운데 알림 띠.
 ## 끝나면 결과 패널: 승리/패배, 포인트 증감·지금 등급, PVP 코인, [확인](나가기).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
@@ -76,25 +78,25 @@ func _build_top(root: Control) -> void:
 	box.add_child(row)
 	var opp: Dictionary = battle.run.get("opponent", {})
 	var tier: Dictionary = PvpRules.tier_of(int(opp.get("points", 0)))
-	var title := _label("%s · %s (%s)" % [PvpRules.NAMES.get(battle.mode, "PVP"), str(opp.get("name", "상대")), tier.name], 28, MainHud.INK)
+	var title := _label("%s · %s (%s)" % [PvpRules.NAMES.get(battle.mode, "PVP"), str(opp.get("name", Lang.t("pvp_hud.build_top"))), tier.name], 28, MainHud.INK)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.clip_text = true
 	row.add_child(title)
 	time_label = _label("", 30, MainHud.INK)
 	row.add_child(time_label)
-	leave_button = _button("나가기", UiKit.STEEL)
+	leave_button = _button(Lang.t("pvp_hud.build_top_2"), UiKit.STEEL)
 	leave_button.pressed.connect(_on_leave)
 	row.add_child(leave_button)
 	var bars := HBoxContainer.new()
 	bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bars.add_theme_constant_override("separation", 12)
 	box.add_child(bars)
-	var mine := _bar_cell("내 팀", HP_GREEN)
+	var mine := _bar_cell(Lang.t("pvp_hud.build_top_3"), HP_GREEN)
 	my_bar = mine[0]
 	my_count = mine[1]
 	bars.add_child(mine[2])
-	var foe := _bar_cell("상대 팀", HP_RED)
+	var foe := _bar_cell(Lang.t("pvp_hud.build_top_4"), HP_RED)
 	foe_bar = foe[0]
 	foe_count = foe[1]
 	bars.add_child(foe[2])
@@ -133,11 +135,11 @@ func _build_strip(root: Control) -> void:
 	col.add_theme_constant_override("separation", 10)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(col)
-	var auto := _button("자동 전투", MainHud.ACCENT)
+	var auto := _button(Lang.t("pvp_hud.build_strip"), MainHud.ACCENT)
 	auto.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	auto.pressed.connect(func(): battle.set_auto())
 	col.add_child(auto)
-	col.add_child(_label("영웅을 눌러 고르고 바닥을 눌러 옮기세요", 20, Color.WHITE))
+	col.add_child(_label(Lang.t("pvp_hud.build_strip_2"), 20, Color.WHITE))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", int(HeroStrip.GAP))
@@ -203,7 +205,7 @@ func _build_result(root: Control) -> void:
 	box.add_child(result_title)
 	result_body = _label("", 28, MainHud.INK)
 	box.add_child(result_body)
-	var ok := _button("확인", MainHud.ACCENT)
+	var ok := _button(Lang.t("pvp_hud.build_result"), MainHud.ACCENT)
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ok.pressed.connect(func(): battle.leave())
 	box.add_child(ok)
@@ -211,18 +213,18 @@ func _build_result(root: Control) -> void:
 
 func show_result(r: Dictionary) -> void:
 	var win: bool = r.get("win", false)
-	result_title.play("승리!" if win else "패배", "win" if win else "lose")
+	result_title.play(Lang.t("pvp_hud.show_result") if win else Lang.t("pvp_hud.show_result_2"), "win" if win else "lose")
 	var why := ""
 	match str(r.get("reason", "")):
 		"time":
-			why = "시간 종료 — 남은 체력으로 판정\n"
+			why = Lang.t("pvp_hud.show_result_3")
 		"forfeit":
-			why = "전투를 포기했습니다\n"
+			why = Lang.t("pvp_hud.show_result_4")
 	var pts := Pvp.points(battle.mode)
 	var tier: Dictionary = PvpRules.tier_of(pts)
 	var d := int(r.get("delta", 0))
-	var line := "포인트 %s%d → %d (%s)" % ["+" if d > 0 else "", d, pts, tier.name] if d != 0 else "포인트 %d (%s)" % [pts, tier.name]
-	result_body.text = "%s%s\nPVP 코인 +%d" % [why, line, int(r.get("coins", 0))]
+	var line := Lang.t("pvp_hud.show_result.line") % ["+" if d > 0 else "", d, pts, tier.name] if d != 0 else Lang.t("pvp_hud.show_result.line_2") % [pts, tier.name]
+	result_body.text = Lang.t("pvp_hud.show_result_5") % [why, line, int(r.get("coins", 0))]
 	result_layer.visible = true
 	leave_button.visible = false
 
@@ -245,13 +247,13 @@ func _on_leave() -> void:
 		return
 	_armed = ARM_SEC
 	_armed_ms = Time.get_ticks_msec()
-	leave_button.text = "포기?"
-	flash("한 번 더 누르면 포기합니다 (패배)", ARM_SEC)
+	leave_button.text = Lang.t("pvp_hud.on_leave")
+	flash(Lang.t("pvp_hud.on_leave_2"), ARM_SEC)
 
 
 func refresh() -> void:
-	my_count.text = "영웅 %d / %d" % [battle.alive(0), battle.units(0).size()]
-	foe_count.text = "영웅 %d / %d" % [battle.alive(1), battle.units(1).size()]
+	my_count.text = Lang.t("pvp_hud.refresh") % [battle.alive(0), battle.units(0).size()]
+	foe_count.text = Lang.t("pvp_hud.refresh") % [battle.alive(1), battle.units(1).size()]
 
 
 func _process(delta: float) -> void:
@@ -262,7 +264,7 @@ func _process(delta: float) -> void:
 	if _armed > 0.0:
 		_armed -= delta
 		if _armed <= 0.0:
-			leave_button.text = "나가기"
+			leave_button.text = Lang.t("pvp_hud.process")
 	time_label.text = UiKit.clock(battle.time_left())
 	my_bar.value = battle.team_hp_ratio(0) * 100.0
 	foe_bar.value = battle.team_hp_ratio(1) * 100.0

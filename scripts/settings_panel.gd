@@ -15,6 +15,8 @@ extends "res://scripts/ui_window.gd"
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
 ## 로그인 줄 [쿠폰 입력](온라인) → 쿠폰 창(coupon_panel.gd), 버전 줄 [운영 관리](슈퍼관리자만) → 관리자 창(admin_panel.gd: 공지·점검·업데이트·우편·쿠폰).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Prefs := preload("res://scripts/prefs.gd")
 const GraphicsScript := preload("res://scripts/graphics.gd")
 const Links := preload("res://scripts/support_links.gd")
@@ -22,10 +24,10 @@ const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const NotifySettings := preload("res://scripts/notify_settings.gd")
 const AccountLinkScript := preload("res://scripts/account_link.gd")
 
-const TITLE := "설정"
+static var TITLE := Lang.t("settings_panel.title")
 const WIDTH := 600.0
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
-const LOGIN_NAMES := {"guest": "게스트", "google": "Google", "kakao": "카카오", "naver": "네이버", "toss": "토스"}
+static var LOGIN_NAMES := {"guest": Lang.t("settings_panel.login_names.guest"), "google": "Google", "kakao": Lang.t("settings_panel.login_names.kakao"), "naver": Lang.t("settings_panel.login_names.naver"), "toss": Lang.t("settings_panel.login_names.toss")}
 const SCROLL_H := 820.0  # 가운데 스크롤 높이(제목·[닫기] 제외)
 const DELETE_ARM_SEC := 4.0  # [계정 삭제]를 한 번 누른 뒤 확인을 기다리는 시간
 const CONFIRM_GAP_SEC := 0.4  # 확인 누름은 첫 누름 뒤 이만큼 지나야 받는다 — 빠른 두 번 누름(실수)이 곧바로 삭제·로그아웃하지 않게
@@ -84,16 +86,16 @@ func _ready() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pad.add_child(body)
 
-	body.add_child(_section("사운드"))
-	music_check = _toggle_row("배경음악", func(on: bool): Music.set_enabled(on))
-	volume_slider = _slider_row("배경음악 음량")
+	body.add_child(_section(Lang.t("settings_panel.ready")))
+	music_check = _toggle_row(Lang.t("settings_panel.ready_2"), func(on: bool): Music.set_enabled(on))
+	volume_slider = _slider_row(Lang.t("settings_panel.ready_3"))
 	volume_label = volume_slider.get_parent().get_child(2)
 	volume_slider.value_changed.connect(func(v: float):
 		Music.set_volume(v / 100.0, false)  # 끄는 동안 바로 들린다
 		volume_label.text = "%d%%" % int(v))
 	volume_slider.drag_ended.connect(func(_changed): Music.save_settings())
-	sfx_check = _toggle_row("효과음", func(on: bool): SoundFx.set_enabled(on))
-	sfx_slider = _slider_row("효과음 음량")
+	sfx_check = _toggle_row(Lang.t("settings_panel.ready_4"), func(on: bool): SoundFx.set_enabled(on))
+	sfx_slider = _slider_row(Lang.t("settings_panel.ready_5"))
 	sfx_label = sfx_slider.get_parent().get_child(2)
 	sfx_slider.value_changed.connect(func(v: float):
 		SoundFx.set_volume(v / 100.0, false)
@@ -102,38 +104,38 @@ func _ready() -> void:
 		SoundFx.set_volume(sfx_slider.value / 100.0)
 		SoundFx.emit_sound("click"))  # 손을 떼면 저장하고 크기를 들려 준다
 
-	body.add_child(_section("화면"))
-	quality_buttons = _choice_row("그래픽 품질", GraphicsScript.QUALITIES.map(func(q): return [q, GraphicsScript.QUALITY_NAMES[q]]),
+	body.add_child(_section(Lang.t("settings_panel.ready_6")))
+	quality_buttons = _choice_row(Lang.t("settings_panel.ready_7"), GraphicsScript.QUALITIES.map(func(q): return [q, GraphicsScript.QUALITY_NAMES[q]]),
 		func(q): _set_gfx("gfx_quality", q))
-	fps_buttons = _choice_row("프레임", GraphicsScript.FPS_CHOICES.map(func(f): return [f, "%d" % f]), func(f): _set_gfx("gfx_fps", f))
-	saver_check = _toggle_row("절전 모드", func(on: bool): _set_gfx("power_saver", on))
-	var saver_hint := _label("1분간 조작이 없으면 화면을 어둡게 하고 프레임을 낮춥니다", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	fps_buttons = _choice_row(Lang.t("settings_panel.ready_8"), GraphicsScript.FPS_CHOICES.map(func(f): return [f, "%d" % f]), func(f): _set_gfx("gfx_fps", f))
+	saver_check = _toggle_row(Lang.t("settings_panel.ready_9"), func(on: bool): _set_gfx("power_saver", on))
+	var saver_hint := _label(Lang.t("settings_panel.ready_10"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	saver_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(saver_hint)
-	shake_check = _toggle_row("화면 흔들림", func(on: bool): Prefs.set_value("shake", on))
-	numbers_check = _toggle_row("피해 숫자 표시", func(on: bool): Prefs.set_value("damage_numbers", on))
+	shake_check = _toggle_row(Lang.t("settings_panel.ready_11"), func(on: bool): Prefs.set_value("shake", on))
+	numbers_check = _toggle_row(Lang.t("settings_panel.ready_12"), func(on: bool): Prefs.set_value("damage_numbers", on))
 	notify_rows = NotifySettings.add_to(self)  # 푸시 알림 켬/끔(안드로이드만)
 
-	body.add_child(_section("계정"))
-	name_label = _info_row("닉네임")
+	body.add_child(_section(Lang.t("settings_panel.ready_13")))
+	name_label = _info_row(Lang.t("settings_panel.ready_14"))
 	var code_row := HBoxContainer.new()
 	code_row.add_theme_constant_override("separation", 12)
-	code_row.add_child(_row_label("친구 코드"))
+	code_row.add_child(_row_label(Lang.t("settings_panel.ready_15")))
 	code_label = _label("", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
 	code_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	code_row.add_child(code_label)
-	copy_button = _button("복사", UiKit.STEEL, 22)
+	copy_button = _button(Lang.t("settings_panel.ready_16"), UiKit.STEEL, 22)
 	copy_button.custom_minimum_size = Vector2(88, 48)
 	copy_button.pressed.connect(copy_code)
 	code_row.add_child(copy_button)
 	body.add_child(code_row)
-	login_label = _info_row("로그인")
+	login_label = _info_row(Lang.t("settings_panel.ready_17"))
 	account_link = AccountLinkScript.new()
 	add_child(account_link)
 	account_link.changed.connect(_refresh)
 	link_row = HBoxContainer.new()
 	link_row.add_theme_constant_override("separation", 8)
-	link_row.add_child(_row_label("계정 연결"))
+	link_row.add_child(_row_label(Lang.t("settings_panel.ready_18")))
 	for provider in AccountLinkScript.PROVIDERS:
 		var b := _button(AccountLinkScript.NAMES[provider], UiKit.STEEL, 22)
 		b.custom_minimum_size = Vector2(0, 52)
@@ -145,28 +147,28 @@ func _ready() -> void:
 	link_label = _label("", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	link_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(link_label)
-	logout_button = _button("로그아웃 · 계정 전환", UiKit.STEEL, 22)
+	logout_button = _button(Lang.t("settings_panel.ready_19"), UiKit.STEEL, 22)
 	logout_button.custom_minimum_size = Vector2(0, 56)
 	logout_button.pressed.connect(press_logout)
 	body.add_child(logout_button)
-	coupon_button = _button("쿠폰 입력", UiKit.STEEL, 22)  # 쿠폰(2026-10-12, LiveOps): 로그인 줄 오른쪽(창 높이를 늘리지 않게)
+	coupon_button = _button(Lang.t("settings_panel.ready_20"), UiKit.STEEL, 22)  # 쿠폰(2026-10-12, LiveOps): 로그인 줄 오른쪽(창 높이를 늘리지 않게)
 	coupon_button.custom_minimum_size = Vector2(150, 48)
 	coupon_button.pressed.connect(func():
 		if coupon != null:
 			close()
 			coupon.open())
 	login_label.get_parent().add_child(coupon_button)
-	delete_button = _button("계정 삭제", UiKit.STEEL, 22)
+	delete_button = _button(Lang.t("settings_panel.ready_21"), UiKit.STEEL, 22)
 	delete_button.custom_minimum_size = Vector2(0, 56)
 	delete_button.pressed.connect(press_delete)
 	body.add_child(delete_button)
 
-	body.add_child(_section("정보 · 지원"))
-	version_label = _info_row("게임 버전")
+	body.add_child(_section(Lang.t("settings_panel.ready_22")))
+	version_label = _info_row(Lang.t("settings_panel.ready_23"))
 	var docs := HBoxContainer.new()
 	docs.add_theme_constant_override("separation", 10)
-	terms_button = _button("이용약관", UiKit.STEEL, 22)
-	privacy_button = _button("개인정보처리방침", UiKit.STEEL, 22)
+	terms_button = _button(Lang.t("settings_panel.ready_24"), UiKit.STEEL, 22)
+	privacy_button = _button(Lang.t("settings_panel.ready_25"), UiKit.STEEL, 22)
 	for b in [terms_button, privacy_button]:
 		b.custom_minimum_size = Vector2(0, 56)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -174,11 +176,11 @@ func _ready() -> void:
 	terms_button.pressed.connect(func(): open_link(Links.TERMS_URL))
 	privacy_button.pressed.connect(func(): open_link(Links.PRIVACY_URL))
 	body.add_child(docs)
-	inquiry_button = _button("문의하기", UiKit.STEEL, 22)
+	inquiry_button = _button(Lang.t("settings_panel.ready_26"), UiKit.STEEL, 22)
 	inquiry_button.custom_minimum_size = Vector2(0, 56)
 	inquiry_button.pressed.connect(open_inquiry)
 	body.add_child(inquiry_button)
-	admin_button = _button("운영 관리", UiKit.AMBER, 22)  # 공지·점검·우편·쿠폰 만들기(슈퍼관리자만 보인다) — 버전 줄 오른쪽
+	admin_button = _button(Lang.t("settings_panel.ready_27"), UiKit.AMBER, 22)  # 공지·점검·우편·쿠폰 만들기(슈퍼관리자만 보인다) — 버전 줄 오른쪽
 	admin_button.custom_minimum_size = Vector2(150, 48)
 	admin_button.pressed.connect(func():
 		if admin_panel != null:
@@ -186,7 +188,7 @@ func _ready() -> void:
 			admin_panel.open())
 	version_label.get_parent().add_child(admin_button)
 
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("settings_panel.ready_28"), UiKit.STEEL)
 	close_button.pressed.connect(close)
 	content.add_child(close_button)
 	Economy.friends_changed.connect(_refresh)
@@ -224,7 +226,7 @@ func _refresh() -> void:
 	sfx_label.text = "%d%%" % int(sfx_slider.value)
 	var online := Net.is_online()
 	var code := str(Economy.friends.get("code", ""))
-	name_label.text = str(Economy.friends.get("name", "…")) if online else "오프라인 모드"
+	name_label.text = str(Economy.friends.get("name", "…")) if online else Lang.t("settings_panel.refresh")
 	code_label.text = code if code != "" else ("…" if online else "-")
 	copy_button.visible = code != ""
 	login_label.text = LOGIN_NAMES.get(Net.auth_mode, "-") if online else "-"
@@ -274,14 +276,14 @@ func press_logout() -> void:
 	_logout_armed = 0.0
 	_logging_out = true  # 다시 열 때까지 또 누르지 못하게(로그아웃·재시작이 두 번 돌지 않게)
 	Net.logout()
-	Economy.notice.emit("로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다")
+	Economy.notice.emit(Lang.t("settings_panel.press_logout"))
 	await get_tree().create_timer(1.5).timeout
 	Net.restart.call()
 
 
 func _style_logout() -> void:
 	var armed := _logout_armed > 0.0
-	logout_button.text = "한 번 더 누르면 로그아웃합니다" if armed else "로그아웃 · 계정 전환"
+	logout_button.text = Lang.t("settings_panel.style_logout") if armed else Lang.t("settings_panel.style_logout_2")
 	UiKit.apply_button(logout_button, UiKit.AMBER if armed else UiKit.STEEL, 12.0)
 
 
@@ -299,9 +301,9 @@ func _style_links(online: bool) -> void:
 	if account_link.message != "":
 		link_label.text = account_link.message
 	elif Net.auth_mode == "guest":
-		link_label.text = "게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없습니다. 연결해 두면 진행이 그대로 남습니다"
+		link_label.text = Lang.t("settings_panel.style_links")
 	else:
-		link_label.text = "다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있습니다"
+		link_label.text = Lang.t("settings_panel.style_links_2")
 
 
 ## 웹 주소를 브라우저로 연다. 비어 있으면 준비 중 알림.
@@ -315,7 +317,7 @@ func open_link(url: String) -> void:
 ## [문의하기](2026-10-14): 게임 안 문의 창(inquiry_panel.gd — 문의 표, 답변은 우편). 온라인이 아니면 알림.
 func open_inquiry() -> void:
 	if inquiry == null or not Net.is_online():
-		Economy.notice.emit("문의는 온라인에서만 보낼 수 있습니다")
+		Economy.notice.emit(Lang.t("settings_panel.open_inquiry"))
 		return
 	close()
 	inquiry.open()
@@ -337,12 +339,12 @@ func press_delete() -> void:
 		func():
 			_deleting = false
 			_style_delete()
-			Economy.notice.emit("계정을 삭제하지 못했습니다. 다시 시도해 주세요"))
+			Economy.notice.emit(Lang.t("settings_panel.press_delete")))
 
 
 func _style_delete() -> void:
 	var armed := _delete_armed > 0.0
-	delete_button.text = "한 번 더 누르면 계정이 삭제됩니다" if armed else "계정 삭제"
+	delete_button.text = Lang.t("settings_panel.style_delete") if armed else Lang.t("settings_panel.style_delete_2")
 	UiKit.apply_button(delete_button, Color(0.85, 0.27, 0.22) if armed else UiKit.STEEL, 12.0)
 
 
@@ -350,7 +352,7 @@ func copy_code() -> void:
 	var code := str(Economy.friends.get("code", ""))
 	if code != "":
 		DisplayServer.clipboard_set(code)
-		Economy.notice.emit("친구 코드를 복사했습니다")
+		Economy.notice.emit(Lang.t("settings_panel.copy_code"))
 
 
 ## [이름 | 슬라이더 0..100 | "n%"] 한 줄. 반환 = 슬라이더(줄의 1번 자식, 글자 = 2번 자식).
@@ -394,7 +396,7 @@ func _toggle_row(text: String, on_change: Callable) -> Button:
 	var l := _row_label(text)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(l)
-	var b := UiKit.checkbox("켬")
+	var b := UiKit.checkbox(Lang.t("settings_panel.toggle_row"))
 	b.custom_minimum_size = Vector2(110, 64)
 	b.toggled.connect(on_change)
 	row.add_child(b)

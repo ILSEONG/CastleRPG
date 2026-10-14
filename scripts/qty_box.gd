@@ -3,6 +3,8 @@ extends VBoxContainer
 ## [−]·[+]는 누르고 있으면 HOLD_DELAY 뒤부터 가속(초당 10 → 50). 입력은 규칙에 맞게 고쳐 쓴다(문자·음수는 최소, 넘치면 최대 —
 ## 빈 칸은 쓰는 중이라 둔다). [최대] = max_value. 값이 바뀌면 value_changed. 범위는 쓰는 창이 set_range로 정한다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 
 const HOLD_DELAY := 0.4  # 누르고 있으면 이 시간 뒤부터 가속
@@ -41,7 +43,7 @@ func _init() -> void:
 	plus = _button("+", 64)
 	plus.button_down.connect(func(): _hold_start(1))
 	plus.button_up.connect(func(): _hold_dir = 0)
-	max_button = _button("최대", 90)
+	max_button = _button(Lang.t("qty_box.init"), 90)
 	max_button.pressed.connect(func(): set_value(max_value))
 	for n in [minus, edit, plus, max_button]:
 		top.add_child(n)

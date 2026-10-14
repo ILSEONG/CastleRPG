@@ -9,26 +9,28 @@ extends "res://scripts/ui_window.gd"
 ## - 내 판매: 판매 중(남은 시간, [내리기] — 즉시 보관함으로) · 판매 완료(받을 금액). 위에 [대금 받기](즉시 반영). 받을 대금이 있으면 탭·메뉴에 빨간 점.
 ## 온라인 전용(오프라인이면 안내 글). 버튼은 기다리는 글자로 바뀌지 않는다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 
-const TABS := [["buy", "구매"], ["sell", "판매 등록"], ["mine", "내 판매"]]
-const CUR_NAMES := {"gold": "골드", "diamonds": "다이아"}
-const SORTS := [["cheap", "낮은 가격"], ["dear", "높은 가격"], ["new", "최신"]]
+static var TABS := [["buy", Lang.t("exchange_panel.tabs")], ["sell", Lang.t("exchange_panel.tabs_2")], ["mine", Lang.t("exchange_panel.tabs_3")]]
+static var CUR_NAMES := {"gold": Lang.t("exchange_panel.cur_names.gold"), "diamonds": Lang.t("exchange_panel.cur_names.diamonds")}
+static var SORTS := [["cheap", Lang.t("exchange_panel.sorts")], ["dear", Lang.t("exchange_panel.sorts_2")], ["new", Lang.t("exchange_panel.sorts_3")]]
 const FEE_PCT := 10  # 서버 market.ts FEE_PCT와 같다
 const MAX_ACTIVE := 10
 const PRICE_LIMITS := {"gold": [100, 1000000000], "diamonds": [10, 100000]}
-const FAIL_TEXT := {
-	"sold_out": "이미 팔린 장비입니다", "own_listing": "내 판매는 살 수 없습니다", "price_changed": "값이 바뀌었습니다 — 목록을 새로 받았습니다",
-	"bag_full": "보관함이 가득 찼습니다", "not_enough_gold": "골드가 부족합니다", "not_enough_diamonds": "다이아가 부족합니다",
-	"too_many_listings": "판매는 동시에 10개까지입니다", "equipped": "장착 중인 장비는 올릴 수 없습니다",
-	"unknown_item": "보관함에 없는 장비입니다", "bad_price": "값을 다시 정해 주세요", "already_sold": "이미 팔렸습니다 — 대금을 받으세요",
-	"not_active": "이미 끝난 판매입니다", "nothing_to_collect": "받을 대금이 없습니다",
+static var FAIL_TEXT := {
+	"sold_out": Lang.t("exchange_panel.fail_text.sold_out"), "own_listing": Lang.t("exchange_panel.fail_text.own_listing"), "price_changed": Lang.t("exchange_panel.fail_text.price_changed"),
+	"bag_full": Lang.t("exchange_panel.fail_text.bag_full"), "not_enough_gold": Lang.t("exchange_panel.fail_text.not_enough_gold"), "not_enough_diamonds": Lang.t("exchange_panel.fail_text.not_enough_diamonds"),
+	"too_many_listings": Lang.t("exchange_panel.fail_text.too_many_listings"), "equipped": Lang.t("exchange_panel.fail_text.equipped"),
+	"unknown_item": Lang.t("exchange_panel.fail_text.unknown_item"), "bad_price": Lang.t("exchange_panel.fail_text.bad_price"), "already_sold": Lang.t("exchange_panel.fail_text.already_sold"),
+	"not_active": Lang.t("exchange_panel.fail_text.not_active"), "nothing_to_collect": Lang.t("exchange_panel.fail_text.nothing_to_collect"),
 }
-const FAIL_DEFAULT := "거래소 응답을 받지 못했습니다 — 다시 확인하겠습니다"
-const OFFLINE_TEXT := "거래소는 온라인에서 이용할 수 있습니다"
+static var FAIL_DEFAULT := Lang.t("exchange_panel.fail_default")
+static var OFFLINE_TEXT := Lang.t("exchange_panel.offline_text")
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const GOOD := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
@@ -69,7 +71,7 @@ func _ready() -> void:
 	var pad := Control.new()
 	pad.custom_minimum_size = Vector2(CLOSE_PX, 0)
 	head.add_child(pad)
-	var title := _title("거래소")
+	var title := _title(Lang.t("exchange_panel.ready"))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var x := Button.new()  # 다른 창(상점·랭킹)과 같은 ✕ 그림 버튼
@@ -197,7 +199,7 @@ func fetch_mine() -> void:
 
 func _on_wallet() -> void:
 	if visible and wallet_label != null:
-		wallet_label.text = "보유  골드 %s · 다이아 %s" % [UiKit.commas(Economy.gold), UiKit.commas(Economy.diamonds)]
+		wallet_label.text = Lang.t("exchange_panel.on_wallet") % [UiKit.commas(Economy.gold), UiKit.commas(Economy.diamonds)]
 
 
 func _on_state() -> void:
@@ -265,7 +267,7 @@ func list_item(item_id: int, cur: String, price: int) -> bool:
 		return true, "/v1/market/list", {"item_id": item_id, "currency": cur, "price": price}, _fail_text)
 	if ok:
 		picked = 0
-		Economy.notice.emit("판매 등록: %s · %s %s" % [BagPanel.item_name(it), UiKit.commas(price), CUR_NAMES[cur]])
+		Economy.notice.emit(Lang.t("exchange_panel.list_item") % [BagPanel.item_name(it), UiKit.commas(price), CUR_NAMES[cur]])
 	return ok
 
 
@@ -305,10 +307,10 @@ func collect() -> bool:
 	if ok:
 		var parts := []
 		if sum.gold > 0:
-			parts.append("+%s 골드" % UiKit.commas(sum.gold))
+			parts.append(Lang.t("exchange_panel.collect") % UiKit.commas(sum.gold))
 		if sum.diamonds > 0:
-			parts.append("+%s 다이아" % UiKit.commas(sum.diamonds))
-		Economy.notice.emit("판매 대금 " + " · ".join(parts))
+			parts.append(Lang.t("exchange_panel.collect_2") % UiKit.commas(sum.diamonds))
+		Economy.notice.emit(Lang.t("exchange_panel.collect_3") + " · ".join(parts))
 	return ok
 
 
@@ -357,7 +359,7 @@ func buy(listing: Dictionary) -> void:
 	if not ok:
 		_buying.erase(lid)
 		return
-	Economy.notice.emit("구매 완료: %s — 보관함에 넣었습니다" % (BagPanel.item_name(it[0]) if not it.is_empty() else "장비"))
+	Economy.notice.emit(Lang.t("exchange_panel.buy") % (BagPanel.item_name(it[0]) if not it.is_empty() else Lang.t("exchange_panel.buy_2")))
 	listings = listings.filter(func(l): return int(l.id) != lid)
 	_rebuild()
 
@@ -378,7 +380,7 @@ static func left_text(expires: float) -> String:
 	var left := maxf(0.0, expires - Economy.time_now())
 	var h := int(left) / 3600
 	var m := (int(left) % 3600) / 60
-	return "남은 시간 %d시간 %d분" % [h, m] if h > 0 else "남은 시간 %d분" % maxi(1, m)
+	return Lang.t("exchange_panel.left_text") % [h, m] if h > 0 else Lang.t("exchange_panel.left_text_2") % maxi(1, m)
 
 
 static func price_text(cur: String, n: int) -> String:
@@ -403,7 +405,7 @@ func _rebuild() -> void:
 		var b: Button = buttons["tab:" + t[0]]
 		UiKit.apply_button(b, UiKit.AMBER if t[0] == tab else UiKit.STEEL, 14.0)
 		b.get_child(0).queue_redraw()
-	wallet_label.text = "보유  골드 %s · 다이아 %s" % [UiKit.commas(Economy.gold), UiKit.commas(Economy.diamonds)]
+	wallet_label.text = Lang.t("exchange_panel.rebuild") % [UiKit.commas(Economy.gold), UiKit.commas(Economy.diamonds)]
 	if not online():
 		head_label.text = OFFLINE_TEXT
 		return
@@ -417,17 +419,17 @@ func _rebuild() -> void:
 
 
 func _build_buy() -> void:
-	head_label.text = "다른 성주가 올린 장비 · 사면 바로 보관함에 들어갑니다"
+	head_label.text = Lang.t("exchange_panel.build_buy")
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
-	var cb := _small("통화: " + CUR_NAMES[currency], func():
+	var cb := _small(Lang.t("exchange_panel.build_buy_2") + CUR_NAMES[currency], func():
 		currency = "diamonds" if currency == "gold" else "gold"
 		refresh())
-	var sb := _small("부위: " + (BagPanel.ITEM_NAMES[slot_filter] if slot_filter != "" else "전체"), func():
+	var sb := _small(Lang.t("exchange_panel.build_buy_3") + (BagPanel.ITEM_NAMES[slot_filter] if slot_filter != "" else Lang.t("exchange_panel.build_buy_4")), func():
 		var opts: Array = [""] + GameData.EQUIP_SLOTS
 		slot_filter = opts[(opts.find(slot_filter) + 1) % opts.size()]
 		refresh())
-	var gb := _small("등급: " + (grade_filter if grade_filter != "" else "전체"), func():
+	var gb := _small(Lang.t("exchange_panel.build_buy_5") + (grade_filter if grade_filter != "" else Lang.t("exchange_panel.build_buy_4")), func():
 		var opts: Array = [""] + GameData.EQUIP_GRADES
 		grade_filter = opts[(opts.find(grade_filter) + 1) % opts.size()]
 		refresh())
@@ -440,14 +442,14 @@ func _build_buy() -> void:
 	buttons["cur"] = cb
 	body.add_child(row)
 	if listings.is_empty():
-		body.add_child(_label("올라온 장비가 없습니다", 24, SUB))
+		body.add_child(_label(Lang.t("exchange_panel.build_buy_6"), 24, SUB))
 		return
 	for l in listings:
 		var items := Economy._item_list([l.get("item", {})])
 		if items.is_empty():
 			continue
 		var it: Dictionary = items[0]
-		var b := _button("구매", HudScript.ACCENT, 24)
+		var b := _button(Lang.t("exchange_panel.build_buy_7"), HudScript.ACCENT, 24)
 		b.custom_minimum_size = Vector2(120, 56)
 		var lr: Dictionary = l
 		b.pressed.connect(func(): ask_buy(lr))
@@ -458,10 +460,10 @@ func _build_buy() -> void:
 
 func _build_sell() -> void:
 	var n := active_count()
-	head_label.text = "판매 중 %d / %d · 판매 기간 48시간 · 정산 수수료 %d%%" % [n, MAX_ACTIVE, FEE_PCT]
+	head_label.text = Lang.t("exchange_panel.build_sell") % [n, MAX_ACTIVE, FEE_PCT]
 	var items := sellable_items()
 	if items.is_empty():
-		body.add_child(_label("올릴 수 있는 장비가 없습니다 (장착 중인 장비는 올릴 수 없습니다)", 22, SUB))
+		body.add_child(_label(Lang.t("exchange_panel.build_sell_2"), 22, SUB))
 	if picked != 0 and Economy.item(picked).is_empty():
 		picked = 0
 	for it in items:
@@ -482,7 +484,7 @@ func _build_sell() -> void:
 
 func _build_sell_form() -> void:
 	if picked == 0:
-		footer.add_child(_label("올릴 장비를 고르세요", 22, SUB))
+		footer.add_child(_label(Lang.t("exchange_panel.build_sell_form"), 22, SUB))
 		return
 	var it := Economy.item(picked)
 	footer.add_child(_label(BagPanel.item_name(it) + "  " + BagPanel.stat_text(it), 22, Art.ITEM_GRADE_COLORS[it.grade].darkened(0.35)))
@@ -500,7 +502,7 @@ func _build_sell_form() -> void:
 	var prev := price_edit.text if price_edit != null and is_instance_valid(price_edit) else ""
 	price_edit = LineEdit.new()
 	price_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-	price_edit.placeholder_text = "값 (%s~%s)" % [UiKit.commas(PRICE_LIMITS[sell_currency][0]), UiKit.commas(PRICE_LIMITS[sell_currency][1])]
+	price_edit.placeholder_text = Lang.t("exchange_panel.build_sell_form_2") % [UiKit.commas(PRICE_LIMITS[sell_currency][0]), UiKit.commas(PRICE_LIMITS[sell_currency][1])]
 	price_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	price_edit.add_theme_font_size_override("font_size", 26)
 	price_edit.custom_minimum_size = Vector2(0, 56)
@@ -510,12 +512,12 @@ func _build_sell_form() -> void:
 	footer.add_child(row)
 	var get_label := _label("", 22, GOOD)
 	footer.add_child(get_label)
-	var lb := _button("판매 등록", HudScript.ACCENT, 28)
+	var lb := _button(Lang.t("exchange_panel.build_sell_form_3"), HudScript.ACCENT, 28)
 	buttons["list"] = lb
 	footer.add_child(lb)
 	var upd := func(_t: String):
 		var p := price_value()
-		get_label.text = "받는 금액 %s (수수료 %d%% %s)" % [price_text(sell_currency, proceeds_of(p)), FEE_PCT, UiKit.commas(p - proceeds_of(p))] if p > 0 else "값을 입력하세요"
+		get_label.text = Lang.t("exchange_panel.build_sell_form_4") % [price_text(sell_currency, proceeds_of(p)), FEE_PCT, UiKit.commas(p - proceeds_of(p))] if p > 0 else Lang.t("exchange_panel.build_sell_form_5")
 		lb.disabled = list_block(picked, sell_currency, p) != ""
 	price_edit.text_changed.connect(upd)
 	upd.call("")
@@ -540,14 +542,14 @@ func price_value() -> int:
 func _build_mine() -> void:
 	var mine: Array = Economy.market.get("mine", [])
 	var sum := collect_sum()
-	head_label.text = "판매 중 %d / %d · 팔리면 값의 %d%%를 받습니다" % [active_count(), MAX_ACTIVE, 100 - FEE_PCT]
+	head_label.text = Lang.t("exchange_panel.build_mine") % [active_count(), MAX_ACTIVE, 100 - FEE_PCT]
 	if sum.gold > 0 or sum.diamonds > 0:
 		var parts := []
 		if sum.gold > 0:
 			parts.append(price_text("gold", sum.gold))
 		if sum.diamonds > 0:
 			parts.append(price_text("diamonds", sum.diamonds))
-		var cb := _button("대금 받기  " + " · ".join(parts), HudScript.ACCENT, 26)
+		var cb := _button(Lang.t("exchange_panel.build_mine_2") + " · ".join(parts), HudScript.ACCENT, 26)
 		cb.pressed.connect(collect)
 		buttons["collect"] = cb
 		body.add_child(cb)
@@ -563,16 +565,16 @@ func _build_mine() -> void:
 		var lr: Dictionary = l
 		var action: Button = null
 		if not sold:
-			action = _button("내리기", UiKit.STEEL, 24)
+			action = _button(Lang.t("exchange_panel.build_mine_3"), UiKit.STEEL, 24)
 			action.custom_minimum_size = Vector2(120, 56)
 			action.disabled = int(l.id) <= 0
 			action.pressed.connect(func(): cancel_listing(lr))
 			buttons["cancel:%d" % int(l.id)] = action
-		var tail := "판매 완료 · 받을 금액 %s" % price_text(str(l.currency), int(l.proceeds)) if sold else ""
+		var tail := Lang.t("exchange_panel.build_mine.tail") % price_text(str(l.currency), int(l.proceeds)) if sold else ""
 		body.add_child(_item_row(items[0], tail, -1.0 if sold else float(l.expires_at), price_text(str(l.currency), int(l.price)), action,
 			Color(0.86, 0.95, 0.86, 0.9) if sold else ROW_BG))
 	if shown == 0:
-		body.add_child(_label("판매 중인 장비가 없습니다 — [판매 등록]에서 올려 보세요", 22, SUB))
+		body.add_child(_label(Lang.t("exchange_panel.build_mine_4"), 22, SUB))
 
 
 ## 장비 줄: 칸 + 이름(등급 색)·능력치 + 보조 글자(남은 시간) + 값 + 버튼.
@@ -595,7 +597,7 @@ func _item_row(it: Dictionary, sub: String, expires: float, price: String, actio
 	info.add_child(_label(BagPanel.item_name(it), 24, Art.ITEM_GRADE_COLORS[it.grade].darkened(0.35), HORIZONTAL_ALIGNMENT_LEFT))
 	info.add_child(BagPanel.stat_box(it, 20))  # 보관함과 같은 능력치 칸(기준보다 높으면 초록, 낮으면 빨강, 특수 능력치 줄)
 	if sub != "" or expires > 0.0:
-		var s := _label(sub + (left_text(expires) if expires > 0.0 else ""), 18, GOOD if sub.begins_with("판매 완료") else SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		var s := _label(sub + (left_text(expires) if expires > 0.0 else ""), 18, GOOD if sub.begins_with(Lang.t("exchange_panel.item_row")) else SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		if expires > 0.0:
 			s.set_meta("expires", expires)
 			s.set_meta("prefix", sub)
@@ -641,10 +643,10 @@ func _build_confirm() -> void:
 	v.add_child(_confirm_label)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var no := _button("취소", UiKit.STEEL, 26)
+	var no := _button(Lang.t("exchange_panel.build_confirm"), UiKit.STEEL, 26)
 	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	no.pressed.connect(func(): confirm.visible = false)
-	_confirm_ok = _button("구매", HudScript.ACCENT, 26)
+	_confirm_ok = _button(Lang.t("exchange_panel.build_confirm_2"), HudScript.ACCENT, 26)
 	_confirm_ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_confirm_ok.pressed.connect(func():
 		confirm.visible = false
@@ -662,5 +664,5 @@ func ask_buy(listing: Dictionary) -> void:
 	if items.is_empty():
 		return
 	_confirm_listing = listing
-	_confirm_label.text = "%s\n%s\n\n%s에 구매하시겠습니까?" % [BagPanel.item_name(items[0]), BagPanel.stat_text(items[0]), price_text(str(listing.currency), int(listing.price))]
+	_confirm_label.text = Lang.t("exchange_panel.ask_buy") % [BagPanel.item_name(items[0]), BagPanel.stat_text(items[0]), price_text(str(listing.currency), int(listing.price))]
 	confirm.visible = true

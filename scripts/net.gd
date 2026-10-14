@@ -11,6 +11,8 @@ extends Node
 ## 응답의 server_now − 로컬 시각으로 Economy.clock_offset을 맞춘다. 처치 골드는 10초마다·스테이지 클리어 때 보낸다.
 ## 서버 stage가 진실: 클리어가 거부되면(cleared:false) 다음 스테이지 경계(GameState.refill)에서 GameState.stage를 서버 값으로 맞춘다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 
@@ -23,7 +25,7 @@ const SERVER_TRIES := 4  # 접속 뒤 5xx·408·429는 한 요청을 이만큼 �
 const DEVICE_RE := "^[A-Za-z0-9-]{16,128}$"
 const SESSION_RE := "^[0-9a-f]{64}$"
 const LOGIN_PROVIDERS := ["google", "kakao", "naver"]
-const STORAGE_TEXT := "브라우저 저장소가 꺼져 있어 진행이 저장되지 않을 수 있습니다"
+static var STORAGE_TEXT := Lang.t("net.storage_text")
 
 signal connected     # 끊긴 상태(또는 첫 접속 전)에서 서버에 닿았다
 signal disconnected  # 연결된 상태에서 요청이 서버에 닿지 못했다(연결 불가·시간 초과) 또는 연속 401
@@ -136,7 +138,7 @@ func forget_account() -> void:
 	if FileAccess.file_exists(device_path):
 		DirAccess.remove_absolute(device_path)
 	device_id = ""
-	Economy.notice.emit("계정을 삭제했습니다")
+	Economy.notice.emit(Lang.t("net.forget_account"))
 	await get_tree().create_timer(1.5).timeout
 	restart.call()
 

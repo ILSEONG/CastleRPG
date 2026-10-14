@@ -4,6 +4,8 @@ extends "res://scripts/ui_window.gd"
 ## 떠 있는 동안 성 화면 왼쪽(배속 버튼 위)에 [핫딜 59:59] 버튼이 남아 다시 열 수 있다. 사기는 다른 결제 상품과 같은 Economy.iap_buy(₩).
 ## 튜토리얼 중에는 띄우지 않는다(계기를 보내지 않음).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const IapItems := preload("res://scripts/iap_items.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
@@ -31,7 +33,7 @@ var _boss_wait := 0  # 깬 보스 라운드 — 서버가 알면 핫딜 계기�
 func _ready() -> void:
 	_build_window(600, 14)
 	layer = 3  # 모집 창 등 다른 창(2) 위 — 다이아 부족 핫딜은 모집 창 위에 뜬다
-	var head := _label("핫딜 · 1시간 한정 특가", 26, RED)
+	var head := _label(Lang.t("hot_deal.ready"), 26, RED)
 	content.add_child(head)
 	_badge = Control.new()
 	_badge.custom_minimum_size = Vector2(0, 150)
@@ -58,12 +60,12 @@ func _ready() -> void:
 		if not h.is_empty():
 			Economy.iap_buy(str(h.id)))
 	row.add_child(buy_button)
-	var later := _button("나중에", UiKit.STEEL, 26)
+	var later := _button(Lang.t("hot_deal.ready_2"), UiKit.STEEL, 26)
 	later.focus_mode = Control.FOCUS_NONE
 	later.custom_minimum_size = Vector2(180, 76)
 	later.pressed.connect(close)
 	row.add_child(later)
-	var note := _label("결제 기능은 출시 전에 연결됩니다", 18, Color(HudScript.INK, 0.7))
+	var note := _label(Lang.t("hot_deal.ready_3"), 18, Color(HudScript.INK, 0.7))
 	content.add_child(note)
 	_build_hud_button()
 	Economy.hot_offered.connect(_on_offered)
@@ -159,7 +161,7 @@ func _sync() -> void:
 func _tick() -> void:
 	var h := Economy.active_hot()
 	var left := maxf(0.0, float(h.get("until", 0.0)) - Economy.time_now())
-	time_label.text = "남은 시간 " + UiKit.duration(left)
+	time_label.text = Lang.t("hot_deal.tick") + UiKit.duration(left)
 	_face.queue_redraw()
 
 
@@ -200,7 +202,7 @@ func _left_text() -> String:
 func _draw_face() -> void:
 	var ink := Color(UiKit.INK, 0.85)
 	IconsScript.draw_icon(_face, "diamond", Vector2(BTN_SIZE.x / 2.0, 24.0), 30.0)
-	_text(_face, "핫딜", 54.0, 20, Color.WHITE, ink)
+	_text(_face, Lang.t("hot_deal.draw_face"), 54.0, 20, Color.WHITE, ink)
 	_text(_face, _left_text(), 76.0, 16, Color(1, 0.93, 0.6), ink)
 
 
@@ -223,8 +225,8 @@ func _draw_badge() -> void:
 		var a := TAU * k / 24.0
 		pts.append(o + Vector2(cos(a), sin(a)) * (58.0 if k % 2 == 0 else 46.0))
 	_badge.draw_colored_polygon(pts, RED)
-	_text_at(_badge, "가치", o + Vector2(0, -6), 18)
-	_text_at(_badge, "%d배" % int(p.get("value", 1)), o + Vector2(0, 20), 26)
+	_text_at(_badge, Lang.t("hot_deal.draw_badge"), o + Vector2(0, -6), 18)
+	_text_at(_badge, Lang.t("hot_deal.draw_badge_2") % int(p.get("value", 1)), o + Vector2(0, 20), 26)
 
 
 func _text_at(c: Control, t: String, at: Vector2, size: int) -> void:

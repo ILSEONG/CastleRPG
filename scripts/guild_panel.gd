@@ -9,6 +9,8 @@ extends "res://scripts/ui_window.gd"
 ##   상점 = 길드 코인 상품(일일·주간 한도). 길드원 = 오늘 기여도 순(나 포함): 직위·이름·전투력·출석·마지막 활동.
 ## 내용은 Guild.changed 때 다시 만든다(스크롤 위치는 지킨다).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GuildScript := preload("res://scripts/guild.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
@@ -16,7 +18,7 @@ const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const DragonModelScript := preload("res://scripts/dragon_model.gd")
 const WarPanel := preload("res://scripts/war_panel.gd")
 
-const SUBTABS := [["home", "홈"], ["boss", "보스"], ["war", "길드전"], ["shop", "상점"], ["members", "길드원"]]
+static var SUBTABS := [["home", Lang.t("guild_panel.subtabs")], ["boss", Lang.t("guild_panel.subtabs_2")], ["war", Lang.t("guild_panel.subtabs_3")], ["shop", Lang.t("guild_panel.subtabs_4")], ["members", Lang.t("guild_panel.subtabs_5")]]
 const EMBLEM_COLORS := [Color(0.80, 0.22, 0.20), Color(0.22, 0.42, 0.78), Color(0.24, 0.60, 0.32), Color(0.56, 0.30, 0.70),
 	Color(0.92, 0.62, 0.16), Color(0.18, 0.55, 0.60), Color(0.35, 0.36, 0.42), Color(0.86, 0.40, 0.58)]
 const GREEN := Color(0.13, 0.50, 0.22)
@@ -52,7 +54,7 @@ func _ready() -> void:
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)  # 시트가 화면을 채운다
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_title("길드"))
+	content.add_child(_title(Lang.t("guild_panel.ready")))
 	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -141,9 +143,9 @@ func _rebuild() -> void:
 		body.remove_child(c)
 		c.queue_free()
 	if Guild.online() and Guild.remote.is_empty():
-		_center_note("길드 정보를 불러오는 중입니다", "서버에 연결되면 바로 보입니다")
+		_center_note(Lang.t("guild_panel.rebuild"), Lang.t("guild_panel.rebuild_2"))
 	elif not Guild.is_unlocked():
-		_center_note("1-10 라운드를 클리어하면 길드가 열립니다", "길드에 가입하면 출석·기부 보상, 길드 버프, 길드 보스가 열립니다")
+		_center_note(Lang.t("guild_panel.rebuild_3"), Lang.t("guild_panel.rebuild_4"))
 	elif not Guild.joined():
 		_build_join()
 	else:
@@ -171,15 +173,15 @@ func _center_note(head: String, sub: String) -> void:
 # --- 미가입 ---
 
 func _build_join() -> void:
-	var intro := _label("길드에 가입하면 매일 출석·기부 보상과 영웅 능력치 버프, 길드 보스에 도전할 수 있습니다.", 22, SUB)
+	var intro := _label(Lang.t("guild_panel.build_join"), 22, SUB)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(intro)
 	body.add_child(_coin_line())
 	var head := HBoxContainer.new()
-	var t := _label("추천 길드", 30, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	var t := _label(Lang.t("guild_panel.build_join_2"), 30, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t)
-	var refresh := _button("새로고침", UiKit.STEEL, 22)
+	var refresh := _button(Lang.t("guild_panel.build_join_3"), UiKit.STEEL, 22)
 	refresh.custom_minimum_size = Vector2(130, 48)
 	refresh.pressed.connect(Guild.refresh_recommendations)
 	head.add_child(refresh)
@@ -200,19 +202,19 @@ func _rec_row(rec: Dictionary, i: int) -> Control:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 0)
 	info.add_child(_label(rec.name, 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label("Lv %d · 길드원 %d/%d · 평균 전투력 %s" % [rec.level, rec.count, int(rec.get("capacity", GuildScript.capacity(int(rec.level)))), UiKit.commas(rec.power)], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(_label(Lang.t("guild_panel.rec_row") % [rec.level, rec.count, int(rec.get("capacity", GuildScript.capacity(int(rec.level)))), UiKit.commas(rec.power)], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	var n := _label(rec.notice, 20, GREEN, HORIZONTAL_ALIGNMENT_LEFT)
 	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	n.clip_text = true
 	info.add_child(n)
 	row.add_child(info)
-	var b := _button("가입", UiKit.AMBER, 24)
+	var b := _button(Lang.t("guild_panel.rec_row_2"), UiKit.AMBER, 24)
 	b.custom_minimum_size = Vector2(104, 64)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.pressed.connect(func():
 		if Guild.join(rec):
 			tab = "home"
-			Economy.notice.emit("%s에 가입했습니다!" % rec.name))
+			Economy.notice.emit(Lang.t("guild_panel.rec_row_3") % rec.name))
 	row.add_child(b)
 	buttons["join:%d" % i] = b
 	return card
@@ -221,12 +223,12 @@ func _rec_row(rec: Dictionary, i: int) -> Control:
 func _create_card() -> Control:
 	var card := _card()
 	var v: VBoxContainer = card.get_child(0)
-	v.add_child(_label("길드 창설", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	var s := _label("직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어옵니다.", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	v.add_child(_label(Lang.t("guild_panel.create_card"), 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	var s := _label(Lang.t("guild_panel.create_card_2"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(s)
 	name_edit = LineEdit.new()
-	name_edit.placeholder_text = "길드 이름(2~8글자)"
+	name_edit.placeholder_text = Lang.t("guild_panel.create_card_3")
 	name_edit.max_length = 8
 	name_edit.text = _create_name
 	name_edit.custom_minimum_size = Vector2(0, 56)
@@ -251,13 +253,13 @@ func _create_card() -> Control:
 			_dirty = true)
 		picks.add_child(b)
 	v.add_child(picks)
-	var c := _button("창설  골드 %s" % UiKit.commas(GuildScript.CREATE_GOLD), UiKit.AMBER, 26)
+	var c := _button(Lang.t("guild_panel.create_card_4") % UiKit.commas(GuildScript.CREATE_GOLD), UiKit.AMBER, 26)
 	c.pressed.connect(func():
 		var n := name_edit.text
 		if Guild.create(n, emblem_pick):
 			_create_name = ""
 			tab = "home"
-			Economy.notice.emit("「%s」 길드를 창설했습니다!" % n.strip_edges())
+			Economy.notice.emit(Lang.t("guild_panel.create_card_5") % n.strip_edges())
 		elif not Guild.busy:  # 빠른 두 번째 탭(첫 요청 응답 전)은 조용히 무시
 			Economy.notice.emit(Guild.create_block(n)))
 	v.add_child(c)
@@ -269,7 +271,7 @@ func _create_card() -> Control:
 func _refresh_create() -> void:
 	if buttons.has("create") and name_edit != null:
 		var why := Guild.create_block(name_edit.text)
-		buttons.create.disabled = why != "" and why != "길드 이름은 2~8글자입니다"  # 이름은 눌렀을 때 알려 준다
+		buttons.create.disabled = why != "" and why != Lang.t("guild.create_block")  # 이름은 눌렀을 때 알려 준다
 
 
 # --- 가입 ---
@@ -286,7 +288,7 @@ func _build_joined() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
 	info.add_child(_label(g.name, 32, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	info.add_child(_label("Lv %d · 길드원 %d/%d" % [g.level, Guild.members_now().size() + 1, int(g.get("capacity", GuildScript.capacity(int(g.level))))], 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	info.add_child(_label(Lang.t("guild_panel.build_joined") % [g.level, Guild.members_now().size() + 1, int(g.get("capacity", GuildScript.capacity(int(g.level))))], 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	var bar := ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 26)
 	bar.show_percentage = false
@@ -299,7 +301,7 @@ func _build_joined() -> void:
 	bar.add_child(bl)
 	info.add_child(bar)
 	row.add_child(info)
-	hv.add_child(_label("길드 버프  영웅 공격력 +%d%% · 체력 +%d%%" % [roundi(Guild.buff_pct()), roundi(Guild.buff_pct())], 24, GREEN))
+	hv.add_child(_label(Lang.t("guild_panel.build_joined_2") % [roundi(Guild.buff_pct()), roundi(Guild.buff_pct())], 24, GREEN))
 	body.add_child(head)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
@@ -331,7 +333,7 @@ func _build_home() -> void:
 	var g: Dictionary = Guild.guild
 	var note := _card()
 	var nv: VBoxContainer = note.get_child(0)
-	nv.add_child(_label("공지", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	nv.add_child(_label(Lang.t("guild_panel.build_home"), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var nt := _label(g.notice, 22, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	nt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	nv.add_child(nt)
@@ -342,12 +344,12 @@ func _build_home() -> void:
 	var ar := HBoxContainer.new()
 	var at := VBoxContainer.new()
 	at.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	at.add_child(_label("길드 출석", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-	at.add_child(_label("골드 +%s · 길드 코인 +%d · 경험치 +%d" % [UiKit.commas(GuildScript.ATTEND_REWARD.gold), GuildScript.ATTEND_REWARD.coins,
+	at.add_child(_label(Lang.t("guild_panel.build_home_2"), 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	at.add_child(_label(Lang.t("guild_panel.build_home_3") % [UiKit.commas(GuildScript.ATTEND_REWARD.gold), GuildScript.ATTEND_REWARD.coins,
 		GuildScript.ATTEND_EXP], 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	ar.add_child(at)
 	var done: bool = Guild.me.get("attended", false)
-	var ab := _button("출석 완료" if done else "출석하기", UiKit.STEEL if done else UiKit.AMBER, 24)
+	var ab := _button(Lang.t("guild_panel.build_home_4") if done else Lang.t("guild_panel.build_home_5"), UiKit.STEEL if done else UiKit.AMBER, 24)
 	ab.custom_minimum_size = Vector2(150, 64)
 	ab.disabled = done
 	ab.pressed.connect(func(): Guild.attend())
@@ -356,7 +358,7 @@ func _build_home() -> void:
 	av.add_child(ar)
 	var cnt := Guild.attend_count()
 	var top: int = GuildScript.ATTEND_BOXES[-1][0]
-	av.add_child(_label("오늘 출석 인원 %d명" % cnt, 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	av.add_child(_label(Lang.t("guild_panel.build_home_6") % cnt, 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var pb := ProgressBar.new()
 	pb.custom_minimum_size = Vector2(0, 18)
 	pb.show_percentage = false
@@ -383,15 +385,15 @@ func _build_home() -> void:
 		chest.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		chest.draw.connect(func(): draw_chest(chest, chest.size / 2.0, 40.0, st == "claimed"))
 		face.add_child(chest)
-		var lab := "%d명" % GuildScript.ATTEND_BOXES[i][0] if st != "claimed" else "받음"
+		var lab := Lang.t("guild_panel.build_home.lab") % GuildScript.ATTEND_BOXES[i][0] if st != "claimed" else Lang.t("guild_panel.build_home.lab_2")
 		face.add_child(_small(lab, 18, HudScript.INK))
-		var gtext := ("다이아 %d" % give.diamonds) if give.has("diamonds") else ("코인 %d" % give.coins)
+		var gtext := (Lang.t("guild_panel.build_home_7") % give.diamonds) if give.has("diamonds") else (Lang.t("guild_panel.build_home_8") % give.coins)
 		face.add_child(_small(gtext, 15, SUB))
 		b.add_child(face)
 		b.pressed.connect(func():
 			var ok := Guild.claim_box(i)
 			if ok:
-				Economy.notice.emit("출석 상자: " + _give_text(give)))
+				Economy.notice.emit(Lang.t("guild_panel.build_home_9") + _give_text(give)))
 		boxes.add_child(b)
 		buttons["box:%d" % i] = b
 	av.add_child(boxes)
@@ -399,7 +401,7 @@ func _build_home() -> void:
 	# 기부
 	var don := _card()
 	var dv: VBoxContainer = don.get_child(0)
-	dv.add_child(_label("길드 기부", 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	dv.add_child(_label(Lang.t("guild_panel.build_home_10"), 28, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for kind in GuildScript.DONATION_ORDER:
 		var d: Dictionary = GuildScript.DONATIONS[kind]
 		var r := HBoxContainer.new()
@@ -414,10 +416,10 @@ func _build_home() -> void:
 		dvv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		dvv.add_theme_constant_override("separation", 0)
 		dvv.add_child(_label(d.name, 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-		dvv.add_child(_label("경험치 +%d · 코인 +%d" % [d.exp, d.coins], 19, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
-		dvv.add_child(_label("오늘 %d/%d회" % [Guild.donations_left(kind), d.daily], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+		dvv.add_child(_label(Lang.t("guild_panel.build_home_11") % [d.exp, d.coins], 19, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
+		dvv.add_child(_label(Lang.t("guild_panel.build_home_12") % [Guild.donations_left(kind), d.daily], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 		r.add_child(dvv)
-		var cost := ("골드 %s" % UiKit.commas(d.gold)) if int(d.gold) > 0 else ("다이아 %d" % d.diamonds)
+		var cost := (Lang.t("guild_panel.build_home_13") % UiKit.commas(d.gold)) if int(d.gold) > 0 else (Lang.t("guild_panel.build_home_7") % d.diamonds)
 		var why := Guild.donate_block(kind)
 		var b := _button(cost, UiKit.AMBER, 21)
 		b.custom_minimum_size = Vector2(170, 60)
@@ -425,7 +427,7 @@ func _build_home() -> void:
 		b.disabled = why != ""
 		b.pressed.connect(func():
 			if Guild.donate(kind):
-				Economy.notice.emit("%s 완료! 길드 코인 +%d" % [d.name, d.coins]))
+				Economy.notice.emit(Lang.t("guild_panel.build_home_14") % [d.name, d.coins]))
 		r.add_child(b)
 		buttons["donate:" + kind] = b
 		dv.add_child(r)
@@ -433,30 +435,30 @@ func _build_home() -> void:
 	# 활동 기록
 	var lg := _card()
 	var lv: VBoxContainer = lg.get_child(0)
-	lv.add_child(_label("활동 기록", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	lv.add_child(_label(Lang.t("guild_panel.build_home_15"), 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var logs: Array = g.log.duplicate()
 	logs.reverse()
 	if logs.is_empty():
-		lv.add_child(_label("아직 기록이 없습니다", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+		lv.add_child(_label(Lang.t("guild_panel.build_home_16"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	for e in logs.slice(0, 8):
 		var l := _label("%s  %s" % [ago(Guild.now_t() - float(e.t)), e.text], 19, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		l.clip_text = true
 		lv.add_child(l)
 	body.add_child(lg)
-	var leave := _button("한 번 더 누르면 탈퇴합니다" if _leave_armed > 0.0 else "길드 탈퇴", RED if _leave_armed > 0.0 else UiKit.STEEL, 22)
+	var leave := _button(Lang.t("guild_panel.build_home_17") if _leave_armed > 0.0 else Lang.t("guild_panel.build_home_18"), RED if _leave_armed > 0.0 else UiKit.STEEL, 22)
 	leave.custom_minimum_size = Vector2(0, 52)
 	leave.pressed.connect(func():
 		if _leave_armed > 0.0:
 			_leave_armed = 0.0
 			if Guild.leave():  # 응답 전 다시 누른 탭은 무시(두 번 탈퇴 요청·알림 없음)
-				Economy.notice.emit("길드를 탈퇴했습니다. 길드 코인은 그대로 남습니다")
+				Economy.notice.emit(Lang.t("guild_panel.build_home_19"))
 		else:
 			_leave_armed = LEAVE_CONFIRM_SEC
 			_rebuild())
 	body.add_child(leave)
 	buttons["leave"] = leave
-	var reset := _label("매일 00:00 초기화 · 남은 시간 %s" % UiKit.clock(Guild.reset_in()), 18, SUB)
+	var reset := _label(Lang.t("guild_panel.build_home_20") % UiKit.clock(Guild.reset_in()), 18, SUB)
 	body.add_child(reset)
 
 
@@ -467,21 +469,21 @@ func _build_boss() -> void:
 	if not is_instance_valid(_dragon_box):
 		_dragon_box = dragon_view(Vector2(560, 300))
 	v.add_child(_dragon_box)
-	var desc := _label("하루 %d번 도전할 수 있습니다. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수입니다." % GuildScript.BOSS_TRIES, 18, SUB)
+	var desc := _label(Lang.t("guild_panel.build_boss") % GuildScript.BOSS_TRIES, 18, SUB)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(desc)
 	var sc := HBoxContainer.new()
 	sc.alignment = BoxContainer.ALIGNMENT_CENTER
 	sc.add_theme_constant_override("separation", 28)
-	sc.add_child(_label("내 점수 %s" % UiKit.commas(int(Guild.me.get("boss_total", 0))), 26, HudScript.ACCENT.darkened(0.2)))
-	sc.add_child(_label("길드 점수 %s" % UiKit.commas(int(Guild.boss_score())), 26, GREEN))
+	sc.add_child(_label(Lang.t("guild_panel.build_boss_2") % UiKit.commas(int(Guild.me.get("boss_total", 0))), 26, HudScript.ACCENT.darkened(0.2)))
+	sc.add_child(_label(Lang.t("guild_panel.build_boss_3") % UiKit.commas(int(Guild.boss_score())), 26, GREEN))
 	v.add_child(sc)
 	var tries := GuildScript.BOSS_TRIES - int(Guild.me.get("boss_tries", 0))
 	var best := float(Guild.me.get("boss_best", 0))
-	v.add_child(_label("내 팀 초당 피해 %s · 오늘 최고 %s%s" % [UiKit.commas(roundi(Guild.team_dps())), UiKit.commas(int(best)),
+	v.add_child(_label(Lang.t("guild_panel.build_boss_4") % [UiKit.commas(roundi(Guild.team_dps())), UiKit.commas(int(best)),
 		(" (Lv %d)" % GuildScript.boss_reach(best)) if best > 0.0 else ""], 22))
 	var why := Guild.boss_block()
-	var b := _button("도전  (%d/%d)" % [tries, GuildScript.BOSS_TRIES] if why == "" or tries > 0 else "내일 다시 도전", UiKit.AMBER, 30)
+	var b := _button(Lang.t("guild_panel.build_boss_5") % [tries, GuildScript.BOSS_TRIES] if why == "" or tries > 0 else Lang.t("guild_panel.build_boss_6"), UiKit.AMBER, 30)
 	b.custom_minimum_size = Vector2(0, 72)
 	b.disabled = why != ""
 	b.pressed.connect(_start_fight)
@@ -493,22 +495,22 @@ func _build_boss() -> void:
 	# 등급표
 	var gc := _card()
 	var gv: VBoxContainer = gc.get_child(0)
-	gv.add_child(_label("도달 레벨별 보상", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	gv.add_child(_label(Lang.t("guild_panel.build_boss_7"), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	for gr in GuildScript.BOSS_GRADES:
 		var r := HBoxContainer.new()
 		var gl := _label(gr[0], 26, grade_color(gr[0]))
 		gl.custom_minimum_size = Vector2(72, 0)
 		r.add_child(gl)
-		var cond := _label(("Lv %d 이상" % int(gr[1])) if int(gr[1]) > 1 else "참여", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		var cond := _label((Lang.t("guild_panel.build_boss_8") % int(gr[1])) if int(gr[1]) > 1 else Lang.t("guild_panel.build_boss_9"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		cond.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r.add_child(cond)
-		r.add_child(_label("코인 %d · 골드 %s" % [gr[2], UiKit.commas(gr[3])], 20, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT))
+		r.add_child(_label(Lang.t("guild_panel.build_boss_10") % [gr[2], UiKit.commas(gr[3])], 20, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT))
 		gv.add_child(r)
 	body.add_child(gc)
 	# 오늘 피해 순위
 	var rk := _card()
 	var rv: VBoxContainer = rk.get_child(0)
-	rv.add_child(_label("오늘 점수 순위", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	rv.add_child(_label(Lang.t("guild_panel.build_boss_11"), 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var list := []
 	for m in Guild.members_now():
 		if float(m.dmg) > 0.0:
@@ -517,7 +519,7 @@ func _build_boss() -> void:
 		list.append([GuildScript.MY_NAME, float(Guild.me.boss_total), true])
 	list.sort_custom(func(a, b2): return a[1] > b2[1])
 	if list.is_empty():
-		rv.add_child(_label("아직 아무도 도전하지 않았습니다", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+		rv.add_child(_label(Lang.t("guild_panel.build_boss_12"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 	for i in mini(list.size(), 10):
 		var r := HBoxContainer.new()
 		var c := HudScript.ACCENT.darkened(0.2) if list[i][2] else HudScript.INK
@@ -546,13 +548,13 @@ func _build_shop() -> void:
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.add_theme_constant_override("separation", 0)
 		v.add_child(_label(it.name, 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-		var desc := "보유 영웅 중 무작위 조각 %d개" % give.shards if give.has("shards") else ("보유 SSR 영웅 무작위 조각 1개" if give.has("ssr_shards") else _give_text(give))
+		var desc := Lang.t("guild_panel.build_shop.desc") % give.shards if give.has("shards") else (Lang.t("guild_panel.build_shop") if give.has("ssr_shards") else _give_text(give))
 		if give.has("equip"):
-			desc = "장비 1개 (장비 던전 최고 %d단계 등급 확률, 부위·능력치 무작위)" % maxi(1, int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
+			desc = Lang.t("guild_panel.build_shop_2") % maxi(1, int(Economy.dungeons.get("equip", {}).get("best_level", 0)))
 		var dl := _label(desc, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 긴 설명(장비 상자)이 창을 화면보다 넓히지 않게 줄바꿈
 		v.add_child(dl)
-		v.add_child(_label("%s %d/%d" % ["오늘" if it.period == "day" else "이번 주", Guild.shop_left(it.id), it.limit], 19, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
+		v.add_child(_label("%s %d/%d" % [Lang.t("guild_panel.build_shop_3") if it.period == "day" else Lang.t("guild_panel.build_shop_4"), Guild.shop_left(it.id), it.limit], 19, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
 		r.add_child(v)
 		var b := _button("", UiKit.AMBER, 22)
 		b.custom_minimum_size = Vector2(140, 64)
@@ -578,7 +580,7 @@ func _build_shop() -> void:
 		r.add_child(b)
 		buttons["buy:" + id] = b
 		body.add_child(card)
-	body.add_child(_label("일일 상품은 매일 00:00, 주간 상품은 매주 초기화됩니다", 18, SUB))
+	body.add_child(_label(Lang.t("guild_panel.build_shop_5"), 18, SUB))
 
 
 func _build_members() -> void:
@@ -590,7 +592,7 @@ func _build_members() -> void:
 	for m in Guild.members_now(now):
 		list.append(m)
 	list.sort_custom(func(a, b): return int(a.contrib) > int(b.contrib) or (int(a.contrib) == int(b.contrib) and int(a.power) > int(b.power)))
-	body.add_child(_label("길드원 %d명 · 오늘 기여도 순" % list.size(), 22, SUB))
+	body.add_child(_label(Lang.t("guild_panel.build_members") % list.size(), 22, SUB))
 	for m in list:
 		var card := _card(UiKit.AMBER.lightened(0.7) if m.get("me", false) else Color(1, 1, 1, 0.75))
 		var r := HBoxContainer.new()
@@ -608,13 +610,13 @@ func _build_members() -> void:
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.add_theme_constant_override("separation", 0)
 		v.add_child(_label(m.name, 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
-		var seen := "접속 중" if m.get("me", false) or now - float(m.last) < 600.0 else (ago(now - float(m.last)) if float(m.last) > 0.0 else "오늘 미접속")
-		v.add_child(_label("전투력 %s · %s" % [UiKit.commas(int(m.power)), seen], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+		var seen := Lang.t("guild_panel.build_members.seen") if m.get("me", false) or now - float(m.last) < 600.0 else (ago(now - float(m.last)) if float(m.last) > 0.0 else Lang.t("guild_panel.build_members_2"))
+		v.add_child(_label(Lang.t("guild_panel.build_members_3") % [UiKit.commas(int(m.power)), seen], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 		r.add_child(v)
 		var rv := VBoxContainer.new()
 		rv.add_theme_constant_override("separation", 0)
-		rv.add_child(_label("기여 %d" % int(m.contrib), 22, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT))
-		rv.add_child(_label("출석" if m.att else "미출석", 18, GREEN if m.att else SUB, HORIZONTAL_ALIGNMENT_RIGHT))
+		rv.add_child(_label(Lang.t("guild_panel.build_members_4") % int(m.contrib), 22, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT))
+		rv.add_child(_label(Lang.t("guild_panel.build_members_5") if m.att else Lang.t("guild_panel.build_members_6"), 18, GREEN if m.att else SUB, HORIZONTAL_ALIGNMENT_RIGHT))
 		r.add_child(rv)
 		body.add_child(card)
 
@@ -792,7 +794,7 @@ func _coin_line() -> Control:
 	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	c.draw.connect(func(): draw_coin(c, c.size / 2.0, 34.0))
 	h.add_child(c)
-	h.add_child(_label(" 길드 코인 %s" % UiKit.commas(Guild.coins), 28))
+	h.add_child(_label(Lang.t("guild_panel.coin_line") % UiKit.commas(Guild.coins), 28))
 	return h
 
 
@@ -808,22 +810,22 @@ func _small(text: String, fs: int, color: Color, outline := false) -> Label:
 static func _give_text(give: Dictionary) -> String:
 	var parts := []
 	if give.has("gold"):
-		parts.append("골드 %s" % UiKit.commas(give.gold))
+		parts.append(Lang.t("guild_panel.give_text") % UiKit.commas(give.gold))
 	if give.has("diamonds"):
-		parts.append("다이아 %d" % give.diamonds)
+		parts.append(Lang.t("guild_panel.give_text_2") % give.diamonds)
 	if give.has("food"):
-		parts.append("식량 %d" % give.food)
+		parts.append(Lang.t("guild_panel.give_text_3") % give.food)
 	if give.has("coins"):
-		parts.append("길드 코인 %d" % give.coins)
+		parts.append(Lang.t("guild_panel.give_text_4") % give.coins)
 	return " · ".join(parts)
 
 
 ## 지난 시간: "방금", "12분 전", "3시간 전", "2일 전".
 static func ago(sec: float) -> String:
 	if sec < 60.0:
-		return "방금"
+		return Lang.t("guild_panel.ago")
 	if sec < 3600.0:
-		return "%d분 전" % int(sec / 60.0)
+		return Lang.t("guild_panel.ago_2") % int(sec / 60.0)
 	if sec < 86400.0:
-		return "%d시간 전" % int(sec / 3600.0)
-	return "%d일 전" % int(sec / 86400.0)
+		return Lang.t("guild_panel.ago_3") % int(sec / 3600.0)
+	return Lang.t("guild_panel.ago_4") % int(sec / 86400.0)

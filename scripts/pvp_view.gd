@@ -6,6 +6,8 @@ extends VBoxContainer
 ## - 팀 고르기(출전·방어 같은 화면): 슬롯 5 + 보유 영웅 격자(전투력 순) + [자동 편성] [뒤로] [확인]. 방어팀 [확인]은 곧바로 저장(Pvp.set_defense).
 ## 버튼은 누르는 즉시 반영된다(Pvp가 앱 값을 먼저 바꾸고 서버 확인은 뒤에서) — 기다리는 글자가 없다. 막히면 버튼을 끄고 빨간 이유 한 줄.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -101,7 +103,7 @@ func _build_home() -> void:
 	_home.add_child(_coin_row(func(l): _coin_label = l))
 	for m in PvpRules.MODES:
 		_home.add_child(_mode_card(m))
-	var note := _label("모드마다 하루 %d번 · 이기면 포인트와 PVP 코인, 지면 포인트가 조금 줄어듭니다" % PvpRules.PLAYS, 20, HudScript.INK.lightened(0.3))
+	var note := _label(Lang.t("pvp_view.build_home") % PvpRules.PLAYS, 20, HudScript.INK.lightened(0.3))
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_home.add_child(note)
 
@@ -119,7 +121,7 @@ func _coin_row(keep: Callable) -> Control:
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(l)
 	keep.call(l)
-	var b := _button("상점", UiKit.AMBER, 24)
+	var b := _button(Lang.t("pvp_view.coin_row"), UiKit.AMBER, 24)
 	b.custom_minimum_size = Vector2(120, 52)
 	b.pressed.connect(open_shop)
 	row.add_child(b)
@@ -159,7 +161,7 @@ func _mode_card(m: String) -> Control:
 	plays.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	plays.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	foot.add_child(plays)
-	var enter := _button("입장", HudScript.ACCENT, 26)
+	var enter := _button(Lang.t("pvp_view.mode_card"), HudScript.ACCENT, 26)
 	enter.custom_minimum_size = Vector2(140, 60)
 	enter.pressed.connect(open_mode.bind(m))
 	foot.add_child(enter)
@@ -183,14 +185,14 @@ func _build_page() -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 8)
 	_page.add_child(head)
-	var back := _button("◀ 뒤로", UiKit.STEEL, 22)
+	var back := _button(Lang.t("pvp_view.build_page"), UiKit.STEEL, 22)
 	back.custom_minimum_size = Vector2(120, 52)
 	back.pressed.connect(show_home)
 	head.add_child(back)
 	_p.title = _label("", 36, HudScript.INK)
 	_p.title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(_p.title)
-	var sb := _button("상점", UiKit.AMBER, 22)
+	var sb := _button(Lang.t("pvp_view.build_page_2"), UiKit.AMBER, 22)
 	sb.custom_minimum_size = Vector2(120, 52)
 	sb.pressed.connect(open_shop)
 	head.add_child(sb)
@@ -242,13 +244,13 @@ func _build_page() -> void:
 	_p.opp_row = _card_row()
 	ocol.add_child(_p.opp_row.get_parent())
 	# 출전
-	body.add_child(_section("출전 영웅", "팀 바꾸기", func(): _open_picker("team")))
+	body.add_child(_section(Lang.t("pvp_view.build_page_3"), Lang.t("pvp_view.build_page_4"), func(): _open_picker("team")))
 	_p.team_row = _card_row()
 	body.add_child(_p.team_row.get_parent())
 	_p.team_info = _label("", 20, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_LEFT)
 	body.add_child(_p.team_info)
 	# 방어
-	body.add_child(_section("방어팀", "방어팀 설정", func(): _open_picker("defense")))
+	body.add_child(_section(Lang.t("pvp_view.build_page_5"), Lang.t("pvp_view.build_page_6"), func(): _open_picker("defense")))
 	_p.def_row = _card_row()
 	body.add_child(_p.def_row.get_parent())
 	_p.def_info = _label("", 20, HudScript.INK.lightened(0.3), HORIZONTAL_ALIGNMENT_LEFT)
@@ -256,7 +258,7 @@ func _build_page() -> void:
 	body.add_child(_p.def_info)
 	_p.reason = _label("", 22, RED)
 	_page.add_child(_p.reason)
-	_p.start = _button("전투 시작", HudScript.ACCENT, 32)
+	_p.start = _button(Lang.t("pvp_view.build_page_7"), HudScript.ACCENT, 32)
 	_p.start.custom_minimum_size = Vector2(0, 76)
 	_p.start.pressed.connect(_start)
 	_page.add_child(_p.start)
@@ -329,7 +331,7 @@ func _build_picker() -> void:
 	add_child(_picker)
 	_pick_title = _label("", 34, HudScript.INK)
 	_picker.add_child(_pick_title)
-	_picker.add_child(_label("영웅을 눌러 넣고 빼세요", 22, HudScript.INK.lightened(0.3)))
+	_picker.add_child(_label(Lang.t("pvp_view.build_picker"), 22, HudScript.INK.lightened(0.3)))
 	var sc := CenterContainer.new()
 	_picker.add_child(sc)
 	var srow := HBoxContainer.new()
@@ -362,16 +364,16 @@ func _build_picker() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	_picker.add_child(row)
-	var back := _button("뒤로", UiKit.STEEL)
+	var back := _button(Lang.t("pvp_view.build_picker_2"), UiKit.STEEL)
 	back.pressed.connect(func():
 		picking = ""
 		refresh()
 		_guard())
-	var auto := _button("자동 편성", UiKit.STEEL)
+	var auto := _button(Lang.t("pvp_view.build_picker_3"), UiKit.STEEL)
 	auto.pressed.connect(func():
 		pick = Pvp.owned_heroes().slice(0, PvpRules.TEAM)
 		_refresh_picker())
-	_pick_ok = _button("확인")
+	_pick_ok = _button(Lang.t("pvp_view.build_picker_4"))
 	_pick_ok.pressed.connect(_confirm_pick)
 	buttons["pick_ok"] = _pick_ok
 	for b in [back, auto, _pick_ok]:
@@ -402,7 +404,7 @@ func _confirm_pick() -> void:
 
 
 func _refresh_picker() -> void:
-	_pick_title.text = "%s %s" % [PvpRules.NAMES.get(page, ""), "출전 영웅" if picking == "team" else "방어팀"]
+	_pick_title.text = "%s %s" % [PvpRules.NAMES.get(page, ""), Lang.t("pvp_view.refresh_picker") if picking == "team" else Lang.t("pvp_view.refresh_picker_2")]
 	var ids := Pvp.owned_heroes()
 	if ids != _pick_cards.keys():
 		for c in _pick_cards.values():
@@ -435,7 +437,7 @@ func _refresh_picker() -> void:
 		c.queue_redraw()
 	var ok := pick.size() == PvpRules.TEAM
 	_pick_ok.disabled = not ok
-	_pick_reason.text = "%d / %d명 · 전투력 %s" % [pick.size(), PvpRules.TEAM, UiKit.commas(Pvp.team_power(pick))]
+	_pick_reason.text = Lang.t("pvp_view.refresh_picker_3") % [pick.size(), PvpRules.TEAM, UiKit.commas(Pvp.team_power(pick))]
 	_pick_reason.add_theme_color_override("font_color", HudScript.INK if ok else RED)
 
 
@@ -453,10 +455,10 @@ func _process(delta: float) -> void:
 
 func _plays_text(m: String) -> String:
 	var left := Pvp.plays_left(m)
-	var t := "오늘 남은 도전 %d / %d" % [left, PvpRules.PLAYS]
+	var t := Lang.t("pvp_view.plays_text.t") % [left, PvpRules.PLAYS]
 	var nr := float(Pvp.view.get("next_reset", 0.0))
 	if nr > 0.0:
-		t += " · 초기화 %s" % UiKit.clock(maxf(0.0, nr - Pvp.now_t()))
+		t += Lang.t("pvp_view.plays_text") % UiKit.clock(maxf(0.0, nr - Pvp.now_t()))
 	return t
 
 
@@ -467,15 +469,15 @@ func refresh() -> void:
 	_page.visible = page != "" and picking == ""
 	_picker.visible = page != "" and picking != ""
 	if _coin_label != null:
-		_coin_label.text = "PVP 코인 %s" % UiKit.commas(Pvp.coins())
+		_coin_label.text = Lang.t("pvp_view.refresh") % UiKit.commas(Pvp.coins())
 	if page == "":
 		for m in _cards:
 			var c: Dictionary = _cards[m]
 			var pts := Pvp.points(m)
 			var t := PvpRules.tier_of(pts)
-			c.tier.text = "%s · %s점" % [t.name, UiKit.commas(pts)]
+			c.tier.text = Lang.t("pvp_view.refresh_2") % [t.name, UiKit.commas(pts)]
 			c.bar.value = _tier_progress(pts) * 100.0
-			c.plays.text = "오늘 %d / %d" % [Pvp.plays_left(m), PvpRules.PLAYS]
+			c.plays.text = Lang.t("pvp_view.refresh_3") % [Pvp.plays_left(m), PvpRules.PLAYS]
 			c.badge.queue_redraw()
 		return
 	if picking != "":
@@ -485,23 +487,23 @@ func refresh() -> void:
 	var pts := Pvp.points(page)
 	var t := PvpRules.tier_of(pts)
 	_p.title.text = PvpRules.NAMES[page]
-	_p.tier.text = "%s · %s점" % [t.name, UiKit.commas(pts)]
+	_p.tier.text = Lang.t("pvp_view.refresh_2") % [t.name, UiKit.commas(pts)]
 	_p.bar.value = _tier_progress(pts) * 100.0
-	_p.record.text = "%d승 %d패%s" % [int(mv.get("wins", 0)), int(mv.get("losses", 0)),
-		"" if int(t.next) < 0 else " · 다음 등급까지 %s점" % UiKit.commas(int(t.next) - pts)]
+	_p.record.text = Lang.t("pvp_view.refresh_4") % [int(mv.get("wins", 0)), int(mv.get("losses", 0)),
+		"" if int(t.next) < 0 else Lang.t("pvp_view.refresh_5") % UiKit.commas(int(t.next) - pts)]
 	_p.plays.text = _plays_text(page)
 	_p.badge.queue_redraw()
 	var o := Pvp.opponent(page)
 	if o.is_empty():
-		_p.opp_name.text = "상대를 찾는 중"
+		_p.opp_name.text = Lang.t("pvp_view.refresh_6")
 		_p.opp_info.text = ""
 		_fill_row(_p.opp_row, [])
 	else:
 		var ot := PvpRules.tier_of(int(o.get("points", 0)))
-		_p.opp_name.text = "상대 · %s" % str(o.get("name", ""))
-		var info := "%s %s점 · 전투력 %s" % [ot.name, UiKit.commas(int(o.get("points", 0))), UiKit.commas(int(o.get("power", 0)))]
+		_p.opp_name.text = Lang.t("pvp_view.refresh_7") % str(o.get("name", ""))
+		var info := Lang.t("pvp_view.refresh.info") % [ot.name, UiKit.commas(int(o.get("points", 0))), UiKit.commas(int(o.get("power", 0)))]
 		if page == "total":
-			info += " · 병사 %d마리" % PvpRules.soldier_count(o.get("soldiers", {}))
+			info += Lang.t("pvp_view.refresh_8") % PvpRules.soldier_count(o.get("soldiers", {}))
 		_p.opp_info.text = info
 		_fill_row(_p.opp_row, o.get("heroes", []))
 	var tm: Array = team.get(page, [])
@@ -509,18 +511,18 @@ func refresh() -> void:
 	team[page] = tm
 	_fill_row(_p.team_row, tm)
 	var soldiers := Pvp.my_soldiers()
-	_p.team_info.text = "전투력 %s%s" % [UiKit.commas(Pvp.team_power(tm)),
-		(" · 병사 %d마리 (보유 병사 중 높은 티어 %d마리까지)" % [PvpRules.soldier_count(soldiers), PvpRules.SOLDIER_CAP]) if page == "total" else ""]
+	_p.team_info.text = Lang.t("pvp_view.refresh_9") % [UiKit.commas(Pvp.team_power(tm)),
+		(Lang.t("pvp_view.refresh_10") % [PvpRules.soldier_count(soldiers), PvpRules.SOLDIER_CAP]) if page == "total" else ""]
 	var d := Pvp.defense(page)
 	_fill_row(_p.def_row, d)
 	if d.is_empty():
-		_p.def_info.text = "아직 방어팀이 없습니다 — 처음 출전한 팀이 방어팀이 됩니다"
+		_p.def_info.text = Lang.t("pvp_view.refresh_11")
 	else:
-		_p.def_info.text = "다른 성주가 이 팀과 싸웁니다 (AI가 대신 조종)%s" % \
-			(" · 방어 병사 %d마리" % PvpRules.soldier_count(mv.get("soldiers", {})) if page == "total" else "")
+		_p.def_info.text = Lang.t("pvp_view.refresh_12") % \
+			(Lang.t("pvp_view.refresh_13") % PvpRules.soldier_count(mv.get("soldiers", {})) if page == "total" else "")
 	var why := Pvp.start_block(page, tm)
 	_p.start.disabled = why != ""
-	_p.start.text = "전투 시작 (%d/%d)" % [Pvp.plays_left(page), PvpRules.PLAYS]
+	_p.start.text = Lang.t("pvp_view.refresh_14") % [Pvp.plays_left(page), PvpRules.PLAYS]
 	_p.reason.text = why
 	_p.reason.visible = why != ""
 

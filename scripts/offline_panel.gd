@@ -3,10 +3,12 @@ extends "res://scripts/ui_window.gd"
 ## 처치 골드 배율·상한(offline_gold_mult·accum_cap_min, Economy.offline_reward)은 창에 적지 않는다. [확인] 또는 배경 탭으로 닫는다.
 ## 창을 만들기 전에 정산이 끝났으면(온라인 응답이 먼저 옴) 만들 때 Economy.offline_report로 곧바로 연다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const IconsScript := preload("res://scripts/icons.gd")
 
 const DIALOG_W := 560.0
-const TITLE := "방치 보상"
+static var TITLE := Lang.t("offline_panel.title")
 
 var away_label: Label
 var kills_label: Label
@@ -31,7 +33,7 @@ func _ready() -> void:
 	gold_label = _label("", 38, HudScript.INK)
 	row.add_child(gold_label)
 	content.add_child(row)
-	ok_button = _button("확인")
+	ok_button = _button(Lang.t("offline_panel.ready"))
 	ok_button.pressed.connect(close)
 	content.add_child(ok_button)
 	Economy.offline_reported.connect(show_report)
@@ -43,9 +45,9 @@ func _ready() -> void:
 func show_report(r: Dictionary) -> void:
 	Economy.offline_report = {}
 	var away := float(r.get("away_sec", 0.0))
-	away_label.text = "방치 시간  " + away_text(away)
-	kills_label.text = "처치한 적  %s마리" % UiKit.commas(int(r.get("kills", 0)))
-	gold_label.text = "+%s 골드" % UiKit.commas(int(r.get("gold_tenths", 0)) / 10)
+	away_label.text = Lang.t("offline_panel.show_report") + away_text(away)
+	kills_label.text = Lang.t("offline_panel.show_report_2") % UiKit.commas(int(r.get("kills", 0)))
+	gold_label.text = Lang.t("offline_panel.show_report_3") % UiKit.commas(int(r.get("gold_tenths", 0)) / 10)
 	_fit()
 	open()
 
@@ -54,10 +56,10 @@ func show_report(r: Dictionary) -> void:
 static func away_text(sec: float) -> String:
 	var m := floori(maxf(0.0, sec) / 60.0)
 	if m < 1:
-		return "1분 미만"
+		return Lang.t("offline_panel.away_text")
 	if m < 60:
-		return "%d분" % m
+		return Lang.t("offline_panel.away_text_2") % m
 	var h := m / 60
 	if h < 24:
-		return "%d시간 %d분" % [h, m % 60] if m % 60 > 0 else "%d시간" % h
-	return "%d일 %d시간" % [h / 24, h % 24] if h % 24 > 0 else "%d일" % (h / 24)
+		return Lang.t("offline_panel.away_text_3") % [h, m % 60] if m % 60 > 0 else Lang.t("offline_panel.away_text_4") % h
+	return Lang.t("offline_panel.away_text_5") % [h / 24, h % 24] if h % 24 > 0 else Lang.t("offline_panel.away_text_6") % (h / 24)

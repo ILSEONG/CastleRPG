@@ -6,6 +6,8 @@ extends Node
 ## - 새 길드원이 들어오면 서버가 roster(그 분대)를 보낸다 — 모두 분대를 더한다. 길드장이 [전투 시작]을 누르면 서버가 start를 보낸다(배치 끝).
 ## 연결이 안 되거나 끊기면 이 기기가 혼자 이어서 판단하고, 끝나면 REST(/v1/guild/war/finish)로 결과를 보낸다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const CKPT_SEC := 10.0
 const CONNECT_WAIT := 8.0
 
@@ -38,7 +40,7 @@ func _ready() -> void:
 	if url == "" or ws.connect_to_url(url) != OK:
 		_go_solo()
 	else:
-		_status("실시간 연결 중…")
+		_status(Lang.t("war_net.ready"))
 
 
 func _process(delta: float) -> void:
@@ -108,7 +110,7 @@ func _go_solo() -> void:
 	link = "solo"
 	if not battle.done and battle.role == "puppet":
 		battle.set_role("host")
-	_status("실시간 연결이 끊겨 혼자 진행합니다")
+	_status(Lang.t("war_net.go_solo"))
 
 
 func _on_command(uid: int, pos) -> void:

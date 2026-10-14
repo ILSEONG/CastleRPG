@@ -5,6 +5,8 @@ extends "res://scripts/ui_window.gd"
 ## - 장비 고르기(영웅 상세 장비 칸 → open_pick(영웅, 부위)): 그 부위(무기는 그 영웅 무기 종류만) 장비 줄마다 [장착], 위에 지금 낀 장비와
 ##   [해제]. 장착·해제하면 닫는다.
 ## 줄 = 장비 칸(item_tile, 등급 테두리) + "SR 모자 Lv 3" + 능력치 + 장착 표시. 층 4(탭 바 위) — 닫을 때까지 뒤 창은 그대로 있다.
+
+const Lang := preload("res://scripts/lang.gd")
 # ponytail: 바뀔 때마다 줄을 전부 다시 만든다(상한 300줄). 느려지면 줄 재사용.
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -12,12 +14,12 @@ const Art := preload("res://scripts/art.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const ItemText := preload("res://scripts/item_text.gd")
 
-const ITEM_NAMES := {"weapon": "무기", "hat": "모자", "top": "상의", "bottom": "하의", "shoes": "신발", "pauldron": "견장", "gloves": "장갑",
-	"sword": "검", "axe": "도끼", "staff": "지팡이", "crossbow": "석궁", "dagger": "단검"}
+static var ITEM_NAMES := {"weapon": Lang.t("bag_panel.item_names.weapon"), "hat": Lang.t("bag_panel.item_names.hat"), "top": Lang.t("bag_panel.item_names.top"), "bottom": Lang.t("bag_panel.item_names.bottom"), "shoes": Lang.t("bag_panel.item_names.shoes"), "pauldron": Lang.t("bag_panel.item_names.pauldron"), "gloves": Lang.t("bag_panel.item_names.gloves"),
+	"sword": Lang.t("bag_panel.item_names.sword"), "axe": Lang.t("bag_panel.item_names.axe"), "staff": Lang.t("bag_panel.item_names.staff"), "crossbow": Lang.t("bag_panel.item_names.crossbow"), "dagger": Lang.t("bag_panel.item_names.dagger")}
 const SORTS := ["grade", "score", "new"]
-const SORT_NAMES := {"grade": "등급", "score": "능력치", "new": "최신"}
+static var SORT_NAMES := {"grade": Lang.t("bag_panel.sort_names.grade"), "score": Lang.t("bag_panel.sort_names.score"), "new": Lang.t("bag_panel.sort_names.new")}
 const TILE_PX := 72.0
-const EMPTY_TEXT := "장비가 없습니다"
+static var EMPTY_TEXT := Lang.t("bag_panel.empty_text")
 const OWNER_COLOR := Color(0.2, 0.42, 0.75)
 
 var mode := "bag"  # "bag" | "pick"
@@ -63,7 +65,7 @@ func _ready() -> void:
 	cur_info.add_child(current_label)
 	_cur_stats = VBoxContainer.new()
 	cur_info.add_child(_cur_stats)
-	unequip_button = _button("해제", UiKit.STEEL, 26)
+	unequip_button = _button(Lang.t("bag_panel.ready"), UiKit.STEEL, 26)
 	unequip_button.custom_minimum_size = Vector2(140, 56)
 	unequip_button.pressed.connect(unequip)
 	_pick_row.add_child(unequip_button)
@@ -95,11 +97,11 @@ func _ready() -> void:
 	sum_label = _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	sum_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sell_row.add_child(sum_label)
-	sell_button = _button("판매")
+	sell_button = _button(Lang.t("bag_panel.ready_2"))
 	sell_button.custom_minimum_size = Vector2(160, 56)
 	sell_button.pressed.connect(sell)
 	_sell_row.add_child(sell_button)
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("bag_panel.ready_3"), UiKit.STEEL)
 	close_button.pressed.connect(close)
 	content.add_child(close_button)
 	_fit_sheet()
@@ -157,7 +159,7 @@ func sell() -> void:
 	var ids := selected.keys()
 	var g := Economy.sell_items(ids)
 	if g > 0:
-		Economy.notice.emit("장비 %d개 판매 +%s 골드" % [ids.size(), UiKit.commas(g)])
+		Economy.notice.emit(Lang.t("bag_panel.sell") % [ids.size(), UiKit.commas(g)])
 	selected = {}
 	_refresh()
 
@@ -210,7 +212,7 @@ func _refresh() -> void:
 	if pick:
 		var cur: Dictionary = Economy.hero_equipment(hero_id).get(slot, {})
 		title_label.text = "%s · %s" % [GameData.hero(hero_id).get("name", ""), ITEM_NAMES.get(slot, slot)]
-		current_label.text = "지금: " + (item_name(cur) if not cur.is_empty() else "없음")
+		current_label.text = Lang.t("bag_panel.refresh") + (item_name(cur) if not cur.is_empty() else Lang.t("bag_panel.refresh_2"))
 		for c in _cur_stats.get_children():
 			_cur_stats.remove_child(c)
 			c.queue_free()
@@ -218,14 +220,14 @@ func _refresh() -> void:
 			_cur_stats.add_child(stat_box(cur, 20))
 		unequip_button.disabled = cur.is_empty() or Economy.equip_block(hero_id, slot, int(cur.get("id", 0))) == "waiting"
 	else:
-		title_label.text = "보관함 %d / %d" % [Economy.bag.size(), int(GameData.config_num("equip_bag_cap"))]
-		slot_button.text = "부위: " + (ITEM_NAMES[slot_filter] if slot_filter != "" else "전체")
-		grade_button.text = "등급: " + (grade_filter if grade_filter != "" else "전체")
-		sort_button.text = "정렬: " + SORT_NAMES[sort_mode]
+		title_label.text = Lang.t("bag_panel.refresh_3") % [Economy.bag.size(), int(GameData.config_num("equip_bag_cap"))]
+		slot_button.text = Lang.t("bag_panel.refresh_4") + (ITEM_NAMES[slot_filter] if slot_filter != "" else Lang.t("bag_panel.refresh_5"))
+		grade_button.text = Lang.t("bag_panel.refresh_6") + (grade_filter if grade_filter != "" else Lang.t("bag_panel.refresh_5"))
+		sort_button.text = Lang.t("bag_panel.refresh_7") + SORT_NAMES[sort_mode]
 		var g := 0
 		for id in selected:
 			g += GameData.item_sell_value(Economy.item(id))
-		sum_label.text = "%d개 선택 · +%s 골드" % [selected.size(), UiKit.commas(g)]
+		sum_label.text = Lang.t("bag_panel.refresh_8") % [selected.size(), UiKit.commas(g)]
 		sell_button.disabled = Economy.sell_block(selected.keys()) != ""
 	_rebuild(shown_items())
 
@@ -253,12 +255,12 @@ func _rebuild(items: Array) -> void:
 		info.add_child(nm)
 		info.add_child(stat_box(it, 20))
 		if owner != "":
-			info.add_child(_label("장착: " + str(GameData.hero(owner).get("name", owner)), 18, OWNER_COLOR, HORIZONTAL_ALIGNMENT_LEFT))
+			info.add_child(_label(Lang.t("bag_panel.rebuild") + str(GameData.hero(owner).get("name", owner)), 18, OWNER_COLOR, HORIZONTAL_ALIGNMENT_LEFT))
 		row.add_child(info)
 		var r := {"box": row}
 		if mode == "pick":
 			var mine := owner == hero_id
-			var b := _button("장착 중" if mine else "장착", UiKit.STEEL if mine else HudScript.ACCENT, 24)
+			var b := _button(Lang.t("bag_panel.rebuild_2") if mine else Lang.t("bag_panel.rebuild_3"), UiKit.STEEL if mine else HudScript.ACCENT, 24)
 			b.custom_minimum_size = Vector2(130, 56)
 			b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			b.disabled = mine or Economy.equip_block(hero_id, slot, id) != ""

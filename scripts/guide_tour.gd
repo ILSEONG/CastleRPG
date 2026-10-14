@@ -6,6 +6,8 @@ extends CanvasLayer
 ##   (점으로 이어서 사전 키·배열 번호, 배열이면 보이는 것 전부를 감싼다) · "war3d:gate:<면>|keep|mine|def:<면>" — 공성 전장의 3D 위치(카메라로 화면에 옮김).
 ## 못 찾거나 안 보이는 단계는 건너뛴다. pause면 그동안 게임 트리를 멈춘다(공성전 체험 — 이 층만 돈다).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
@@ -67,7 +69,7 @@ func _ready() -> void:
 	_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	box.add_child(_foot)
 	_skip = Button.new()
-	_skip.text = "건너뛰기"
+	_skip.text = Lang.t("guide_tour.ready")
 	_skip.focus_mode = Control.FOCUS_NONE
 	_skip.add_theme_font_override("font", FONT)
 	_skip.add_theme_font_size_override("font_size", 20)
@@ -119,7 +121,7 @@ func next() -> void:
 	_title.text = str(st.get("title", ""))
 	_title.visible = _title.text != ""
 	_text.text = str(st.text)
-	_foot.text = "%d / %d · 화면을 누르면 다음" % [index + 1, steps.size()] if index + 1 < steps.size() else "%d / %d · 화면을 누르면 닫힙니다" % [index + 1, steps.size()]
+	_foot.text = Lang.t("guide_tour.next") % [index + 1, steps.size()] if index + 1 < steps.size() else Lang.t("guide_tour.next_2") % [index + 1, steps.size()]
 	_place_bubble()
 	_dim.queue_redraw()
 

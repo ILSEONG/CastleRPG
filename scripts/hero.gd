@@ -11,6 +11,8 @@ extends Node3D
 ## 개정 18 아레나(던전): castle·formation = null로 setup하고 add_child 전에 free_pos·idle_dir을 넣는다. 성 전용 로직(자리·성문·
 ## 계단·영역·리필·방치 무적)은 건너뛰고 거리 제한 없이 가장 가까운 괴물과 싸운다. 기절(apply_stun)은 데스나이트 돌진.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
@@ -95,7 +97,7 @@ var _blast_cd := 0.0
 var _level := 1
 var _promotion := 0
 var helper := false  # 모집권 던전 도우미(내 영웅이 아님): 내 장비를 끼지 않는다 — setup 전에 켠다
-var helper_tag := "도우미"  # HUD 얼굴 위 꼬리표(친구 영웅이면 "친구")
+var helper_tag := Lang.t("hero.helper_tag")  # HUD 얼굴 위 꼬리표(친구 영웅이면 "친구")
 var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이 쓴다
 var _aspd := 1.0  # 공격 간격 나눗수 = 1 + 성장 공격속도
 var _speed := 0.0  # 이동 속도 = def.speed × (1 + 성장 이동속도 + 신발 %)

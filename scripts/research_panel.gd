@@ -10,6 +10,8 @@ extends "res://scripts/ui_window.gd"
 ## 아이콘(사용자 규칙: 바로 알아보게): 보병·궁병·기병 훈련은 실제 병사 3D 초상(SoldierPanel.unit_icon), 나머지는 Icons 로우폴리 그림(ICONS).
 ## 규칙·상태는 전부 Economy 연구 API다. Economy.changed·research_changed마다, 열려 있는 동안 매초 다시 그린다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
 const IconsScript := preload("res://scripts/icons.gd")
@@ -18,7 +20,7 @@ const SoldierPanel := preload("res://scripts/soldier_panel.gd")
 const Skills := preload("res://scripts/skills.gd")
 const SpeedupList := preload("res://scripts/speedup_list.gd")
 
-const BRANCH_NAMES := {"economy": "경제", "military": "군사", "hero": "영웅"}
+static var BRANCH_NAMES := {"economy": Lang.t("research_panel.branch_names.economy"), "military": Lang.t("research_panel.branch_names.military"), "hero": Lang.t("research_panel.branch_names.hero")}
 const BRANCH_TINT := {"economy": Color(0.98, 0.88, 0.62), "military": Color(0.95, 0.76, 0.72), "hero": Color(0.76, 0.84, 0.98)}  # 아이콘 바탕
 ## 노드 → 아이콘(Icons kind). 없는 노드(서버가 더한 노드)는 효과로(EFFECT_ICONS), 그것도 없으면 플라스크.
 const ICONS := {"wood_tech": "wood", "stone_tech": "stone", "food_tech": "food", "construct": "hammer", "commerce": "scales", "plunder": "coin_bag",
@@ -30,20 +32,20 @@ const EFFECT_ICONS := {"wood_pct": "wood", "stone_pct": "stone", "food_pct": "fo
 	"skill_pct": "orb", "inf_pct": "axe", "arc_pct": "crossbow", "cav_pct": "haste"}
 const SOLDIER_EFFECTS := {"inf_pct": "infantry", "arc_pct": "archer", "cav_pct": "cavalry"}  # 이 효과의 1단 노드는 실제 병사 초상
 const SOLDIER_NODES := ["inf_drill", "arc_drill", "cav_drill"]  # 3D 초상은 이 셋만(깊은 단 병종 노드는 그림 — 3D 초상이 수십 개면 무겁다)
-const EFFECT_NAMES := {"wood_pct": "목재 생산", "stone_pct": "석재 생산", "food_pct": "식량 생산", "res_pct": "모든 자원 생산",
-	"build_speed_pct": "건설 속도", "research_speed_pct": "연구 속도", "sell_pct": "판매 금액", "kill_gold_pct": "처치 골드",
-	"inf_pct": "보병 공격·체력", "arc_pct": "궁병 공격·체력", "cav_pct": "기병 공격·체력", "soldier_pct": "모든 병사 공격·체력",
-	"castle_hp_pct": "성 최대 체력", "gate_hp_pct": "성문 최대 체력", "train_speed_pct": "훈련 속도", "train_cost_pct": "훈련 비용",
-	"pop_add": "인구", "hero_atk_pct": "영웅 공격력", "hero_hp_pct": "영웅 체력", "skill_pct": "영웅 스킬 피해"}
-const EFFECT_DESC := {"wood_pct": "벌목장의 목재 생산량이 늘어납니다.", "stone_pct": "채석장의 석재 생산량이 늘어납니다.",
-	"food_pct": "농장의 식량 생산량이 늘어납니다.", "res_pct": "모든 자원 생산량이 늘어납니다.", "build_speed_pct": "건물 건설 시간이 줄어듭니다.",
-	"research_speed_pct": "연구 시간이 줄어듭니다.", "sell_pct": "상인에게 자원을 더 비싸게 팝니다.", "kill_gold_pct": "몬스터 처치 골드가 늘어납니다.",
-	"inf_pct": "보병의 공격력과 체력이 오릅니다.", "arc_pct": "궁병의 공격력과 체력이 오릅니다.", "cav_pct": "기병의 공격력과 체력이 오릅니다.",
-	"soldier_pct": "모든 병사의 공격력과 체력이 오릅니다.", "castle_hp_pct": "성의 최대 체력이 오릅니다.", "gate_hp_pct": "성문의 최대 체력이 오릅니다.",
-	"train_speed_pct": "병사 훈련 시간이 줄어듭니다.", "train_cost_pct": "병사 훈련 비용이 줄어듭니다.", "pop_add": "인구(병사 배치 상한)가 늘어납니다.",
-	"hero_atk_pct": "모든 영웅의 공격력이 오릅니다.", "hero_hp_pct": "모든 영웅의 체력이 오릅니다.", "skill_pct": "영웅 스킬의 추가 피해가 늘어납니다."}
-const IDLE_TEXT := "진행 중인 연구 없음 — 연구할 기술을 고르세요"
-const AVAILABLE_TEXT := "연구 가능"
+static var EFFECT_NAMES := {"wood_pct": Lang.t("research_panel.effect_names.wood_pct"), "stone_pct": Lang.t("research_panel.effect_names.stone_pct"), "food_pct": Lang.t("research_panel.effect_names.food_pct"), "res_pct": Lang.t("research_panel.effect_names.res_pct"),
+	"build_speed_pct": Lang.t("research_panel.effect_names.build_speed_pct"), "research_speed_pct": Lang.t("research_panel.effect_names.research_speed_pct"), "sell_pct": Lang.t("research_panel.effect_names.sell_pct"), "kill_gold_pct": Lang.t("research_panel.effect_names.kill_gold_pct"),
+	"inf_pct": Lang.t("research_panel.effect_names.inf_pct"), "arc_pct": Lang.t("research_panel.effect_names.arc_pct"), "cav_pct": Lang.t("research_panel.effect_names.cav_pct"), "soldier_pct": Lang.t("research_panel.effect_names.soldier_pct"),
+	"castle_hp_pct": Lang.t("research_panel.effect_names.castle_hp_pct"), "gate_hp_pct": Lang.t("research_panel.effect_names.gate_hp_pct"), "train_speed_pct": Lang.t("research_panel.effect_names.train_speed_pct"), "train_cost_pct": Lang.t("research_panel.effect_names.train_cost_pct"),
+	"pop_add": Lang.t("research_panel.effect_names.pop_add"), "hero_atk_pct": Lang.t("research_panel.effect_names.hero_atk_pct"), "hero_hp_pct": Lang.t("research_panel.effect_names.hero_hp_pct"), "skill_pct": Lang.t("research_panel.effect_names.skill_pct")}
+static var EFFECT_DESC := {"wood_pct": Lang.t("research_panel.effect_desc.wood_pct"), "stone_pct": Lang.t("research_panel.effect_desc.stone_pct"),
+	"food_pct": Lang.t("research_panel.effect_desc.food_pct"), "res_pct": Lang.t("research_panel.effect_desc.res_pct"), "build_speed_pct": Lang.t("research_panel.effect_desc.build_speed_pct"),
+	"research_speed_pct": Lang.t("research_panel.effect_desc.research_speed_pct"), "sell_pct": Lang.t("research_panel.effect_desc.sell_pct"), "kill_gold_pct": Lang.t("research_panel.effect_desc.kill_gold_pct"),
+	"inf_pct": Lang.t("research_panel.effect_desc.inf_pct"), "arc_pct": Lang.t("research_panel.effect_desc.arc_pct"), "cav_pct": Lang.t("research_panel.effect_desc.cav_pct"),
+	"soldier_pct": Lang.t("research_panel.effect_desc.soldier_pct"), "castle_hp_pct": Lang.t("research_panel.effect_desc.castle_hp_pct"), "gate_hp_pct": Lang.t("research_panel.effect_desc.gate_hp_pct"),
+	"train_speed_pct": Lang.t("research_panel.effect_desc.train_speed_pct"), "train_cost_pct": Lang.t("research_panel.effect_desc.train_cost_pct"), "pop_add": Lang.t("research_panel.effect_desc.pop_add"),
+	"hero_atk_pct": Lang.t("research_panel.effect_desc.hero_atk_pct"), "hero_hp_pct": Lang.t("research_panel.effect_desc.hero_hp_pct"), "skill_pct": Lang.t("research_panel.effect_desc.skill_pct")}
+static var IDLE_TEXT := Lang.t("research_panel.idle_text")
+static var AVAILABLE_TEXT := Lang.t("research_panel.available_text")
 const CARD_SIZE := Vector2(158, 178)
 const CARD_ICON_PX := 64.0
 const DETAIL_ICON_PX := 112.0
@@ -141,7 +143,7 @@ func _ready() -> void:
 	tree.add_theme_constant_override("separation", 22)
 	tree.draw.connect(_draw_links)
 	_scroll.add_child(tree)
-	close_button = _button("닫기", UiKit.STEEL)
+	close_button = _button(Lang.t("research_panel.ready"), UiKit.STEEL)
 	close_button.pressed.connect(close)
 	content.add_child(close_button)
 	_fit_sheet()
@@ -184,11 +186,11 @@ func _build_current() -> void:
 	dia_button.custom_minimum_size = Vector2(196, 52)
 	dia_button.pressed.connect(func(): _acted(Economy.finish_research_now()))
 	btns.add_child(dia_button)
-	cancel_button = _button("취소", UiKit.STEEL, 22)
+	cancel_button = _button(Lang.t("research_panel.build_current"), UiKit.STEEL, 22)
 	cancel_button.custom_minimum_size = Vector2(196, 44)
 	cancel_button.pressed.connect(func(): _acted(Economy.cancel_research()))
 	btns.add_child(cancel_button)
-	speedup_button = _button("가속 ▼", UiKit.AMBER, 22)  # 2026-10-13: 연구 가속·범용 가속 아이템 목록
+	speedup_button = _button(Lang.t("research_panel.build_current_2"), UiKit.AMBER, 22)  # 2026-10-13: 연구 가속·범용 가속 아이템 목록
 	speedup_button.custom_minimum_size = Vector2(196, 44)
 	speedup_button.pressed.connect(func():
 		speedups.visible = not speedups.visible
@@ -274,7 +276,7 @@ func _build_detail() -> void:
 	box.add_child(detail_time)
 	detail_reason = _label("", 22, RED)
 	box.add_child(detail_reason)
-	start_button = _button("연구", GREEN)
+	start_button = _button(Lang.t("research_panel.build_detail"), GREEN)
 	start_button.custom_minimum_size = Vector2(0, 64)
 	start_button.pressed.connect(func(): _acted(Economy.start_research(detail_id)))
 	box.add_child(start_button)
@@ -292,11 +294,11 @@ func _build_detail() -> void:
 	detail_dia.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_dia.pressed.connect(func(): _acted(Economy.finish_research_now()))
 	run_btns.add_child(detail_dia)
-	detail_cancel = _button("취소", UiKit.STEEL, 24)
+	detail_cancel = _button(Lang.t("research_panel.build_detail_2"), UiKit.STEEL, 24)
 	detail_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_cancel.pressed.connect(func(): _acted(Economy.cancel_research()))
 	run_btns.add_child(detail_cancel)
-	var close_detail_button := _button("닫기", UiKit.STEEL)
+	var close_detail_button := _button(Lang.t("research_panel.build_detail_3"), UiKit.STEEL)
 	close_detail_button.pressed.connect(close_detail)
 	box.add_child(close_detail_button)
 
@@ -339,7 +341,7 @@ func _dia_button(font_size: int) -> Button:
 
 ## 즉시 완료 버튼 글자: 다이아 비용이 있으면 "◆ n 즉시 완료", 남은 5분 이하(비용 0)면 다이아 없이 "무료 즉시 완료"(사용자 2026-10-06).
 static func _set_dia(b: Button, dia: int) -> void:
-	b.text = "무료 즉시 완료" if dia == 0 else "      %d 즉시 완료" % dia
+	b.text = Lang.t("research_panel.set_dia") if dia == 0 else Lang.t("research_panel.set_dia_2") % dia
 	for ch in b.get_children():
 		ch.visible = dia > 0
 
@@ -407,7 +409,7 @@ func _rebuild_tree() -> void:
 		mark.alignment = BoxContainer.ALIGNMENT_CENTER
 		mark.add_theme_constant_override("separation", 2)
 		row.add_child(mark)
-		mark.add_child(_label("%d단" % t, 28))
+		mark.add_child(_label(Lang.t("research_panel.rebuild_tree") % t, 28))
 		var lock := Control.new()
 		lock.custom_minimum_size = Vector2(TIER_W, 30)
 		lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -568,8 +570,8 @@ func _refresh() -> void:
 	var now := Economy.time_now()
 	_last_sec = floori(now)
 	var lab := Economy.building_level(GameData.LAB)
-	title_label.text = "연구소 Lv %d" % lab
-	speed_label.text = "연구 속도 +%s%%" % Skills.num_text(Economy.research_speed() * 100.0)
+	title_label.text = Lang.t("research_panel.refresh") % lab
+	speed_label.text = Lang.t("research_panel.refresh_2") % Skills.num_text(Economy.research_speed() * 100.0)
 	if building_panel != null:
 		level_button.text = building_panel.levelup_text(GameData.LAB)
 	level_button.visible = building_panel != null
@@ -577,7 +579,7 @@ func _refresh() -> void:
 	for t in tier_marks:
 		var locked: bool = lab < int(tier_marks[t].lab)
 		tier_marks[t].lock.visible = locked
-		tier_marks[t].need.text = "연구소 Lv %d 필요" % int(tier_marks[t].lab) if locked else ""
+		tier_marks[t].need.text = Lang.t("research_panel.refresh_3") % int(tier_marks[t].lab) if locked else ""
 		tier_marks[t].need.visible = locked
 	for id in cards:
 		_refresh_card(id, now)
@@ -597,12 +599,12 @@ func _refresh_current(now: float) -> void:
 		_swap_icon(_cur_icon_box, cur, CUR_ICON_PX)
 	cur_name.text = "%s Lv %d" % [GameData.research_def(cur).get("name", cur), Economy.research_level(cur) + 1]
 	cur_bar.value = Economy.research_progress(now)
-	cur_left.text = "남은 시간 " + UiKit.duration(Economy.research_left(now))
+	cur_left.text = Lang.t("research_panel.refresh_current") + UiKit.duration(Economy.research_left(now))
 	var dia := Economy.research_dia_cost(now)
 	_set_dia(dia_button, dia)
 	dia_button.disabled = Economy.diamonds < dia or Economy.research_waiting()
 	cancel_button.disabled = Economy.research_waiting()
-	speedup_button.text = "가속 ▲" if speedups.visible else "가속 ▼"
+	speedup_button.text = Lang.t("research_panel.refresh_current_2") if speedups.visible else Lang.t("research_panel.refresh_current_3")
 	if speedups.visible:
 		speedups.refresh()
 
@@ -663,11 +665,11 @@ func _refresh_detail(now: float) -> void:
 	detail_name.text = "%s Lv %d/%d" % [d.name, lv, mx]
 	detail_desc.text = EFFECT_DESC.get(d.effect, "")
 	var now_v := effect_value(d.effect, lv * float(d.per_level))
-	detail_effect.text = "%s  현재 %s" % [EFFECT_NAMES.get(d.effect, d.effect), now_v] + (" (최대)" if lv >= mx else " → 다음 " + effect_value(d.effect, (lv + 1) * float(d.per_level)))
+	detail_effect.text = Lang.t("research_panel.refresh_detail") % [EFFECT_NAMES.get(d.effect, d.effect), now_v] + (Lang.t("research_panel.refresh_detail_2") if lv >= mx else Lang.t("research_panel.refresh_detail_3") + effect_value(d.effect, (lv + 1) * float(d.per_level)))
 	_clear(detail_reqs)
 	for r in Economy.research_requirements(id):
-		var what: String = "연구소" if r.kind == "lab" else str(GameData.research_def(r.id).get("name", r.id))
-		var text := "%s %s Lv %d 필요" % ["✓" if r.ok else "✗", what, int(r.need)] + ("" if r.ok else " (현재 %d)" % int(r.have))
+		var what: String = Lang.t("research_panel.refresh_detail.what") if r.kind == "lab" else str(GameData.research_def(r.id).get("name", r.id))
+		var text := Lang.t("research_panel.refresh_detail.text") % ["✓" if r.ok else "✗", what, int(r.need)] + ("" if r.ok else Lang.t("research_panel.refresh_detail_4") % int(r.have))
 		detail_reqs.add_child(_label(text, 24, GREEN if r.ok else RED))
 	var cost := Economy.research_cost(id)
 	var have := {"wood": int(Economy.res.get("wood", 0)), "stone": int(Economy.res.get("stone", 0)), "food": int(Economy.res.get("food", 0)), "gold": Economy.gold}
@@ -681,7 +683,7 @@ func _refresh_detail(now: float) -> void:
 		_cost_grid.get_child(l.get_index() - 1).visible = shown  # 아이콘
 	var open_lv := lv < mx and not running
 	_cost_grid.get_parent().visible = open_lv and not cost.is_empty()
-	detail_time.text = "연구 시간 " + UiKit.duration(Economy.research_sec(id))
+	detail_time.text = Lang.t("research_panel.refresh_detail_5") + UiKit.duration(Economy.research_sec(id))
 	detail_time.visible = open_lv
 	var why := Economy.research_block(id)
 	var reason: String = EconomyScript.RESEARCH_TEXT.get(why, "") if why != "waiting" else ""
@@ -695,7 +697,7 @@ func _refresh_detail(now: float) -> void:
 	detail_run.visible = running
 	if running:
 		detail_bar.value = Economy.research_progress(now)
-		detail_left.text = "Lv %d → %d 연구 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.research_left(now))]
+		detail_left.text = Lang.t("research_panel.refresh_detail_6") % [lv, lv + 1, UiKit.duration(Economy.research_left(now))]
 		var dia := Economy.research_dia_cost(now)
 		_set_dia(detail_dia, dia)
 		detail_dia.disabled = Economy.diamonds < dia or Economy.research_waiting()
@@ -705,7 +707,7 @@ func _refresh_detail(now: float) -> void:
 ## 효과 값 글자: % 효과는 "+15%"(훈련 비용은 "-4%"), 인구는 "+2명".
 static func effect_value(effect: String, v: float) -> String:
 	if effect == "pop_add":
-		return "+%d명" % int(v)
+		return Lang.t("research_panel.effect_value") % int(v)
 	return "%s%s%%" % ["-" if effect == "train_cost_pct" else "+", Skills.num_text(v)]
 
 

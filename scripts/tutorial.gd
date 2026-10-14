@@ -11,6 +11,8 @@ extends Node
 ## 저장: user://tutorial.json {version, state: active | done | skipped, step, claimed, count, best_stage}.
 ## 테스트는 .new()로 만들어 econ·gs·guild를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const GuideTour := preload("res://scripts/guide_tour.gd")
 const GuideTours := preload("res://scripts/guide_tours.gd")
@@ -47,8 +49,8 @@ const HERO_LEVELS := 5  # 영웅 레벨업 미션 보상이 대는 레벨업 횟
 const KEYS := 2  # 던전 미션 보상 열쇠
 const RESEARCH_ID := "wood_tech"  # 연구 미션 보상이 대는 연구(1단계 아무 연구나 같은 비용)
 const START_BUILT := ["keep", "gate"]  # 새 게임에 지어져 있는 건물(성채 + 성벽·성문)
-const DONE_TEXT := "가이드 완료! 이제 자유롭게 성을 키워 보세요"
-const LOCKED_TEXT := "가이드를 진행하면 열립니다"
+static var DONE_TEXT := Lang.t("tutorial.done_text")
+static var LOCKED_TEXT := Lang.t("tutorial.locked_text")
 
 ## 가이드(사용자 2026-10-07 "튜토리얼말고 가이드라고 명칭을 바꾸고, 신메뉴나 신기능 오픈 텀을 적당히 길게 둬, 그 텀은 영웅 레벨업이나, 능력치 레벨업 등으로
 ## 적절하게 매꿔줘"): 새 메뉴·기능을 여는 미션 사이에 성장 미션(영웅 레벨·능력치 레벨·스테이지·건물 레벨, reward가 적힌 행)을 2~3개씩 둔다.
@@ -58,174 +60,174 @@ const LOCKED_TEXT := "가이드를 진행하면 열립니다"
 ## stage(arg = 클리어할 전체 라운드 g — 제목은 "S-r", GameData.round_label) · hero_level · growth ·
 ## gacha(arg = 모집 장수) · deploy_new · train(arg = 병사 건물) · dungeon(arg = 종류) · equip · soldier_deploy · research · guild ·
 ## hero_lv(arg = [명, Lv] — 그 레벨 이상 영웅 수) · growth_lv(arg = [성장 id, Lv]) · pvp(PVP 한 판, 미션이 된 뒤부터)
-const MISSIONS := [
-	{"id": "look_keep", "title": "성채 살펴보기", "desc": "성 한가운데 성채를 눌러 건물 창을 열어 보세요. 성채 레벨이 다른 건물의 최대 레벨을 정합니다.",
+static var MISSIONS := [
+	{"id": "look_keep", "title": Lang.t("tutorial.missions.look_keep.title"), "desc": Lang.t("tutorial.missions.look_keep.desc"),
 		"kind": "open", "arg": "keep", "goto": "building:keep"},
-	{"id": "build_lumber", "title": "벌목장 건설", "desc": "왼쪽 아래 [건설] 버튼을 눌러 펼쳐진 목록에서 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.", "kind": "build", "arg": "lumber",
+	{"id": "build_lumber", "title": Lang.t("tutorial.missions.build_lumber.title"), "desc": Lang.t("tutorial.missions.build_lumber.desc"), "kind": "build", "arg": "lumber",
 		"goto": "building:lumber"},
-	{"id": "build_quarry", "title": "채석장 건설", "desc": "[건설] 버튼을 눌러 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.", "kind": "build", "arg": "quarry", "goto": "building:quarry"},
-	{"id": "build_farm", "title": "농장 건설", "desc": "[건설] 버튼을 눌러 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.", "kind": "build", "arg": "farm", "goto": "building:farm"},
-	{"id": "kill_30", "title": "몬스터 30마리 처치", "desc": "성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.",
+	{"id": "build_quarry", "title": Lang.t("tutorial.missions.build_quarry.title"), "desc": Lang.t("tutorial.missions.build_quarry.desc"), "kind": "build", "arg": "quarry", "goto": "building:quarry"},
+	{"id": "build_farm", "title": Lang.t("tutorial.missions.build_farm.title"), "desc": Lang.t("tutorial.missions.build_farm.desc"), "kind": "build", "arg": "farm", "goto": "building:farm"},
+	{"id": "kill_30", "title": Lang.t("tutorial.missions.kill_30.title"), "desc": Lang.t("tutorial.missions.kill_30.desc"),
 		"kind": "kill", "arg": 30},  # 처치 미션은 모두 goto 없음: 대기 중에도 몬스터가 와서 끝난다 — 바로가기·화살표가 [진행]을 가리키지 않는다(사용자 2026-10-13 "몬스터 몇마리 처리 가이드 왜 바로가기가 저기로")
-	{"id": "collect", "title": "자원 수집", "desc": "생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.", "kind": "collect", "goto": "look:lumber"},
-	{"id": "sell", "title": "상인과 거래", "desc": "성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.", "kind": "sell", "goto": "merchant"},
-	{"id": "attend", "title": "출석 보상 받기", "desc": "오른쪽 아래 [메뉴] → [이벤트]에서 오늘의 출석 보상을 받으세요. 매일 한 번, 28일 동안 보상이 쌓입니다.",
+	{"id": "collect", "title": Lang.t("tutorial.missions.collect.title"), "desc": Lang.t("tutorial.missions.collect.desc"), "kind": "collect", "goto": "look:lumber"},
+	{"id": "sell", "title": Lang.t("tutorial.missions.sell.title"), "desc": Lang.t("tutorial.missions.sell.desc"), "kind": "sell", "goto": "merchant"},
+	{"id": "attend", "title": Lang.t("tutorial.missions.attend.title"), "desc": Lang.t("tutorial.missions.attend.desc"),
 		"kind": "attend", "goto": "tab:event", "point": ["event:claim", "menu:event", "menu"], "reward": {"diamonds": 50}},
-	{"id": "pouch", "title": "주머니 열기", "desc": "출석 보상으로 받은 골드 주머니를 [메뉴] → [가방]에서 여세요. 주머니는 그 시간만큼의 방치 수입을 바로 줍니다.",
+	{"id": "pouch", "title": Lang.t("tutorial.missions.pouch.title"), "desc": Lang.t("tutorial.missions.pouch.desc"),
 		"kind": "pouch", "goto": "tab:bag", "point": ["bag:open", "menu:bag", "menu"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_1", "title": "스테이지 1-1 클리어", "desc": "위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있습니다.",
+	{"id": "stage_1_1", "title": Lang.t("tutorial.missions.stage_1_1.title"), "desc": Lang.t("tutorial.missions.stage_1_1.desc"),
 		"kind": "stage", "arg": 1, "goto": "stage"},
-	{"id": "auto_on", "title": "연속 진행 켜기", "desc": "위쪽 [▶ 진행] 옆 [연속 진행]을 체크하세요. 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어서 도전합니다.",
+	{"id": "auto_on", "title": Lang.t("tutorial.missions.auto_on.title"), "desc": Lang.t("tutorial.missions.auto_on.desc"),
 		"kind": "auto_on", "goto": "", "point": ["hud:auto"], "reward": {"diamonds": 50}},
-	{"id": "speed_on", "title": "전투 배속 켜기", "desc": "스테이지를 진행하는 동안 왼쪽 배속 버튼(x1.5 OFF)을 누르세요. 누를 때마다 x1.5 → x2 → 끔으로 바뀌고 스테이지 전투가 빨라집니다. 대기 중에는 버튼이 숨고, 건설·훈련 시간은 그대로입니다.",
+	{"id": "speed_on", "title": Lang.t("tutorial.missions.speed_on.title"), "desc": Lang.t("tutorial.missions.speed_on.desc"),
 		"kind": "speed_on", "goto": "", "point": ["hud:speed", "hud:go"], "reward": {"diamonds": 50}},
-	{"id": "hero_level", "title": "영웅 레벨업", "desc": "[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.",
+	{"id": "hero_level", "title": Lang.t("tutorial.missions.hero_level.title"), "desc": Lang.t("tutorial.missions.hero_level.desc"),
 		"kind": "hero_level", "goto": "tab:hero"},
-	{"id": "hero_lv4_5", "title": "영웅 4명 Lv 5 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_5", "title": Lang.t("tutorial.missions.hero_lv4_5.title"), "desc": Lang.t("tutorial.missions.hero_lv4_5.desc"),
 		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
-	{"id": "mission_claim", "title": "일일 미션 보상 받기", "desc": "[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 「영웅 레벨업 5회」는 방금 끝났습니다. 미션은 매일 새로 열립니다.",
+	{"id": "mission_claim", "title": Lang.t("tutorial.missions.mission_claim.title"), "desc": Lang.t("tutorial.missions.mission_claim.desc"),
 		"kind": "mission_claim", "goto": "tab:mission", "point": ["menu:mission", "menu"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_2", "title": "스테이지 1-2 클리어", "desc": "전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.",
+	{"id": "stage_1_2", "title": Lang.t("tutorial.missions.stage_1_2.title"), "desc": Lang.t("tutorial.missions.stage_1_2.desc"),
 		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "growth", "title": "성장 강화", "desc": "[성장] 탭에서 골드로 모든 영웅의 공격력·체력을 올리세요.", "kind": "growth", "goto": "tab:growth"},
-	{"id": "atk_3", "title": "공격력 Lv 3 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 3까지 올리세요.",
+	{"id": "growth", "title": Lang.t("tutorial.missions.growth.title"), "desc": Lang.t("tutorial.missions.growth.desc"), "kind": "growth", "goto": "tab:growth"},
+	{"id": "atk_3", "title": Lang.t("tutorial.missions.atk_3.title"), "desc": Lang.t("tutorial.missions.atk_3.desc"),
 		"kind": "growth_lv", "arg": ["atk", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
-	{"id": "hp_3", "title": "체력 Lv 3 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 3까지 올리세요.",
+	{"id": "hp_3", "title": Lang.t("tutorial.missions.hp_3.title"), "desc": Lang.t("tutorial.missions.hp_3.desc"),
 		"kind": "growth_lv", "arg": ["hp", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
-	{"id": "hero_lv4_8", "title": "영웅 4명 Lv 8 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 8 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_8", "title": Lang.t("tutorial.missions.hero_lv4_8.title"), "desc": Lang.t("tutorial.missions.hero_lv4_8.desc"),
 		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
-	{"id": "build_tavern", "title": "주점 건설", "desc": "[건설] 버튼을 눌러 주점을 골라 원하는 자리에 지으세요. 주점에서 새 영웅을 모집합니다.", "kind": "build", "arg": "tavern", "goto": "building:tavern"},
-	{"id": "gacha", "title": "영웅 모집", "desc": "[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.", "kind": "gacha", "arg": 10, "goto": "recruit"},
-	{"id": "deploy_new", "title": "새 영웅 배치", "desc": "[영웅] 탭 위쪽 배치 슬롯 하나를 누른 뒤, 새로 모집한 영웅을 골라 [적용]을 누르세요.", "kind": "deploy_new", "goto": "tab:hero"},
-	{"id": "auto_deploy", "title": "자동 배치 써 보기", "desc": "[영웅] 탭의 [자동 배치]를 누른 뒤 [적용]을 누르세요. 전투력이 높은 영웅부터 알맞은 자리에 채워 줍니다.",
+	{"id": "build_tavern", "title": Lang.t("tutorial.missions.build_tavern.title"), "desc": Lang.t("tutorial.missions.build_tavern.desc"), "kind": "build", "arg": "tavern", "goto": "building:tavern"},
+	{"id": "gacha", "title": Lang.t("tutorial.missions.gacha.title"), "desc": Lang.t("tutorial.missions.gacha.desc"), "kind": "gacha", "arg": 10, "goto": "recruit"},
+	{"id": "deploy_new", "title": Lang.t("tutorial.missions.deploy_new.title"), "desc": Lang.t("tutorial.missions.deploy_new.desc"), "kind": "deploy_new", "goto": "tab:hero"},
+	{"id": "auto_deploy", "title": Lang.t("tutorial.missions.auto_deploy.title"), "desc": Lang.t("tutorial.missions.auto_deploy.desc"),
 		"kind": "auto_deploy", "goto": "tab:hero", "point": ["hero:apply", "hero:auto_deploy", "tab:hero"], "reward": {"diamonds": 50}},
-	{"id": "hero_lv4_10", "title": "영웅 4명 Lv 10 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_10", "title": Lang.t("tutorial.missions.hero_lv4_10.title"), "desc": Lang.t("tutorial.missions.hero_lv4_10.desc"),
 		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
-	{"id": "shop_free", "title": "상점 무료 선물 받기", "desc": "아래 [상점] 탭의 [일일]에서 「무료」 선물을 받으세요. 매일 00:00에 다시 받을 수 있습니다.",
+	{"id": "shop_free", "title": Lang.t("tutorial.missions.shop_free.title"), "desc": Lang.t("tutorial.missions.shop_free.desc"),
 		"kind": "shop_free", "goto": "tab:shop", "point": ["tab:shop"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_3", "title": "스테이지 1-3 클리어", "desc": "새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.", "kind": "stage", "arg": 3,
+	{"id": "stage_1_3", "title": Lang.t("tutorial.missions.stage_1_3.title"), "desc": Lang.t("tutorial.missions.stage_1_3.desc"), "kind": "stage", "arg": 3,
 		"goto": "stage"},
-	{"id": "atk_5", "title": "공격력 Lv 5 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 5까지 올리세요.",
+	{"id": "atk_5", "title": Lang.t("tutorial.missions.atk_5.title"), "desc": Lang.t("tutorial.missions.atk_5.desc"),
 		"kind": "growth_lv", "arg": ["atk", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
-	{"id": "hp_5", "title": "체력 Lv 5 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 5까지 올리세요.",
+	{"id": "hp_5", "title": Lang.t("tutorial.missions.hp_5.title"), "desc": Lang.t("tutorial.missions.hp_5.desc"),
 		"kind": "growth_lv", "arg": ["hp", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
-	{"id": "build_barracks", "title": "보병 막사 건설", "desc": "[건설] 버튼을 눌러 보병 막사를 골라 원하는 자리에 지으세요. 보병을 훈련합니다.", "kind": "build", "arg": "barracks",
+	{"id": "build_barracks", "title": Lang.t("tutorial.missions.build_barracks.title"), "desc": Lang.t("tutorial.missions.build_barracks.desc"), "kind": "build", "arg": "barracks",
 		"goto": "building:barracks"},
-	{"id": "train", "title": "보병 훈련", "desc": "보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 가이드에서는 5초면 끝납니다.", "kind": "train",
+	{"id": "train", "title": Lang.t("tutorial.missions.train.title"), "desc": Lang.t("tutorial.missions.train.desc"), "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
-	{"id": "build_houses", "title": "민가 건설", "desc": "[건설] 버튼을 눌러 민가를 골라 원하는 자리에 지으세요. 인구만큼 병사를 배치할 수 있습니다.", "kind": "build", "arg": "houses", "goto": "building:houses"},
-	{"id": "hero_lv4_12", "title": "영웅 4명 Lv 12 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "build_houses", "title": Lang.t("tutorial.missions.build_houses.title"), "desc": Lang.t("tutorial.missions.build_houses.desc"), "kind": "build", "arg": "houses", "goto": "building:houses"},
+	{"id": "hero_lv4_12", "title": Lang.t("tutorial.missions.hero_lv4_12.title"), "desc": Lang.t("tutorial.missions.hero_lv4_12.desc"),
 		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
-	{"id": "stage_1_4", "title": "스테이지 1-4 클리어", "desc": "전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+	{"id": "stage_1_4", "title": Lang.t("tutorial.missions.stage_1_4.title"), "desc": Lang.t("tutorial.missions.stage_1_4.desc"),
 		"kind": "stage", "arg": 4, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "kill_100", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.", "kind": "kill", "arg": 100},
-	{"id": "dungeon_gold", "title": "골드 던전", "desc": "[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권(열쇠)은 매일 다시 채워집니다.",
+	{"id": "kill_100", "title": Lang.t("tutorial.missions.kill_100.title"), "desc": Lang.t("tutorial.missions.kill_100.desc"), "kind": "kill", "arg": 100},
+	{"id": "dungeon_gold", "title": Lang.t("tutorial.missions.dungeon_gold.title"), "desc": Lang.t("tutorial.missions.dungeon_gold.desc"),
 		"kind": "dungeon", "arg": "gold", "goto": "tab:dungeon"},
-	{"id": "atk_8", "title": "공격력 Lv 8 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 8까지 올리세요.",
+	{"id": "atk_8", "title": Lang.t("tutorial.missions.atk_8.title"), "desc": Lang.t("tutorial.missions.atk_8.desc"),
 		"kind": "growth_lv", "arg": ["atk", 8], "goto": "tab:growth", "reward": {"gold": 4000}},
-	{"id": "hp_8", "title": "체력 Lv 8 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 8까지 올리세요.",
+	{"id": "hp_8", "title": Lang.t("tutorial.missions.hp_8.title"), "desc": Lang.t("tutorial.missions.hp_8.desc"),
 		"kind": "growth_lv", "arg": ["hp", 8], "goto": "tab:growth", "reward": {"gold": 4000}},
-	{"id": "dungeon_equip", "title": "장비 던전", "desc": "[던전] 탭에서 장비 던전 1단계를 클리어해 장비를 얻으세요.", "kind": "dungeon", "arg": "equip",
+	{"id": "dungeon_equip", "title": Lang.t("tutorial.missions.dungeon_equip.title"), "desc": Lang.t("tutorial.missions.dungeon_equip.desc"), "kind": "dungeon", "arg": "equip",
 		"goto": "tab:dungeon"},
-	{"id": "hero_lv4_14", "title": "영웅 4명 Lv 14 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 14 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_14", "title": Lang.t("tutorial.missions.hero_lv4_14.title"), "desc": Lang.t("tutorial.missions.hero_lv4_14.desc"),
 		"kind": "hero_lv", "arg": [4, 14], "goto": "tab:hero", "reward": {"gold": 4000}},
-	{"id": "atk_10", "title": "공격력 Lv 10 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 10까지 올리세요.",
+	{"id": "atk_10", "title": Lang.t("tutorial.missions.atk_10.title"), "desc": Lang.t("tutorial.missions.atk_10.desc"),
 		"kind": "growth_lv", "arg": ["atk", 10], "goto": "tab:growth", "reward": {"gold": 5000}},
-	{"id": "dungeon_ticket", "title": "모집권 던전", "desc": "[던전] 탭에서 모집권 던전 1단계를 클리어하세요. 내 영웅 4명과 친구(없으면 추천) 도우미 1명이 바위 골렘과 싸우고, 다이아 모집권을 얻습니다.",
+	{"id": "dungeon_ticket", "title": Lang.t("tutorial.missions.dungeon_ticket.title"), "desc": Lang.t("tutorial.missions.dungeon_ticket.desc"),
 		"kind": "dungeon", "arg": "ticket", "goto": "tab:dungeon"},
-	{"id": "equip", "title": "장비 장착", "desc": "[영웅] 탭에서 영웅을 골라 얻은 장비를 장착하세요.", "kind": "equip", "goto": "tab:hero"},
-	{"id": "hp_10", "title": "체력 Lv 10 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 10까지 올리세요.",
+	{"id": "equip", "title": Lang.t("tutorial.missions.equip.title"), "desc": Lang.t("tutorial.missions.equip.desc"), "kind": "equip", "goto": "tab:hero"},
+	{"id": "hp_10", "title": Lang.t("tutorial.missions.hp_10.title"), "desc": Lang.t("tutorial.missions.hp_10.desc"),
 		"kind": "growth_lv", "arg": ["hp", 10], "goto": "tab:growth", "reward": {"gold": 5000}},
-	{"id": "hero_lv4_15", "title": "영웅 4명 Lv 15 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 15 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_15", "title": Lang.t("tutorial.missions.hero_lv4_15.title"), "desc": Lang.t("tutorial.missions.hero_lv4_15.desc"),
 		"kind": "hero_lv", "arg": [4, 15], "goto": "tab:hero", "reward": {"gold": 5000}},
-	{"id": "soldier_deploy", "title": "병사 배치", "desc": "훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5마리를 합성하면 상위 티어가 됩니다.",
+	{"id": "soldier_deploy", "title": Lang.t("tutorial.missions.soldier_deploy.title"), "desc": Lang.t("tutorial.missions.soldier_deploy.desc"),
 		"kind": "soldier_deploy", "goto": "tab:soldier"},
-	{"id": "stage_1_5", "title": "스테이지 1-5 클리어", "desc": "병사와 함께 1-5까지 클리어하세요. 병사는 전투가 시작되면 성채 앞에 나타납니다.", "kind": "stage",
+	{"id": "stage_1_5", "title": Lang.t("tutorial.missions.stage_1_5.title"), "desc": Lang.t("tutorial.missions.stage_1_5.desc"), "kind": "stage",
 		"arg": 5, "goto": "stage"},
-	{"id": "atk_12", "title": "공격력 Lv 12 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 12까지 올리세요.",
+	{"id": "atk_12", "title": Lang.t("tutorial.missions.atk_12.title"), "desc": Lang.t("tutorial.missions.atk_12.desc"),
 		"kind": "growth_lv", "arg": ["atk", 12], "goto": "tab:growth", "reward": {"gold": 6000}},
-	{"id": "stage_1_6", "title": "스테이지 1-6 클리어", "desc": "전투를 이어 가 1-6까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.",
+	{"id": "stage_1_6", "title": Lang.t("tutorial.missions.stage_1_6.title"), "desc": Lang.t("tutorial.missions.stage_1_6.desc"),
 		"kind": "stage", "arg": 6, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "build_lab", "title": "연구소 건설", "desc": "[건설] 버튼을 눌러 연구소를 골라 원하는 자리에 지으세요. 기술을 연구해 경제·영웅·병사를 강하게 합니다.", "kind": "build", "arg": "lab",
+	{"id": "build_lab", "title": Lang.t("tutorial.missions.build_lab.title"), "desc": Lang.t("tutorial.missions.build_lab.desc"), "kind": "build", "arg": "lab",
 		"goto": "building:lab"},
-	{"id": "research", "title": "연구 시작", "desc": "연구소를 눌러 [연구]에서 아무 기술이나 연구를 시작하세요.", "kind": "research", "goto": "building:lab"},
-	{"id": "hp_12", "title": "체력 Lv 12 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 12까지 올리세요.",
+	{"id": "research", "title": Lang.t("tutorial.missions.research.title"), "desc": Lang.t("tutorial.missions.research.desc"), "kind": "research", "goto": "building:lab"},
+	{"id": "hp_12", "title": Lang.t("tutorial.missions.hp_12.title"), "desc": Lang.t("tutorial.missions.hp_12.desc"),
 		"kind": "growth_lv", "arg": ["hp", 12], "goto": "tab:growth", "reward": {"gold": 6000}},
-	{"id": "hero_lv4_16", "title": "영웅 4명 Lv 16 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 16 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "hero_lv4_16", "title": Lang.t("tutorial.missions.hero_lv4_16.title"), "desc": Lang.t("tutorial.missions.hero_lv4_16.desc"),
 		"kind": "hero_lv", "arg": [4, 16], "goto": "tab:hero", "reward": {"gold": 6000}},
-	{"id": "stage_1_7", "title": "스테이지 1-7 클리어", "desc": "전투를 이어 가 1-7까지 클리어하세요. 막히면 모집권으로 영웅을 모집해 더 강한 영웅을 배치하고, 조각이 모이면 [영웅] 탭에서 승급하세요.",
+	{"id": "stage_1_7", "title": Lang.t("tutorial.missions.stage_1_7.title"), "desc": Lang.t("tutorial.missions.stage_1_7.desc"),
 		"kind": "stage", "arg": 7, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "build_archery", "title": "궁병 훈련소 건설", "desc": "[건설] 버튼을 눌러 궁병 훈련소를 골라 원하는 자리에 지으세요. 궁병은 성벽 위에서 싸웁니다.", "kind": "build", "arg": "archery",
+	{"id": "build_archery", "title": Lang.t("tutorial.missions.build_archery.title"), "desc": Lang.t("tutorial.missions.build_archery.desc"), "kind": "build", "arg": "archery",
 		"goto": "building:archery"},
-	{"id": "atk_14", "title": "공격력 Lv 14 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 14까지 올리세요.",
+	{"id": "atk_14", "title": Lang.t("tutorial.missions.atk_14.title"), "desc": Lang.t("tutorial.missions.atk_14.desc"),
 		"kind": "growth_lv", "arg": ["atk", 14], "goto": "tab:growth", "reward": {"gold": 7000}},
-	{"id": "hp_14", "title": "체력 Lv 14 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 14까지 올리세요.",
+	{"id": "hp_14", "title": Lang.t("tutorial.missions.hp_14.title"), "desc": Lang.t("tutorial.missions.hp_14.desc"),
 		"kind": "growth_lv", "arg": ["hp", 14], "goto": "tab:growth", "reward": {"gold": 7000}},
-	{"id": "build_stable", "title": "기병 마구간 건설", "desc": "[건설] 버튼을 눌러 기병 마구간을 골라 원하는 자리에 지으세요. 기병은 빠르게 돌격합니다.", "kind": "build", "arg": "stable",
+	{"id": "build_stable", "title": Lang.t("tutorial.missions.build_stable.title"), "desc": Lang.t("tutorial.missions.build_stable.desc"), "kind": "build", "arg": "stable",
 		"goto": "building:stable"},
-	{"id": "keep_2", "title": "성채 레벨업", "desc": "성채를 Lv 2로 올리세요. 다른 건물도 그만큼 더 올릴 수 있습니다.", "kind": "level", "arg": ["keep", 2],
+	{"id": "keep_2", "title": Lang.t("tutorial.missions.keep_2.title"), "desc": Lang.t("tutorial.missions.keep_2.desc"), "kind": "level", "arg": ["keep", 2],
 		"goto": "building:keep"},
-	{"id": "lumber_2", "title": "벌목장 Lv 2", "desc": "벌목장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.",
+	{"id": "lumber_2", "title": Lang.t("tutorial.missions.lumber_2.title"), "desc": Lang.t("tutorial.missions.lumber_2.desc"),
 		"kind": "level", "arg": ["lumber", 2], "goto": "building:lumber", "reward": {"diamonds": 100}},
-	{"id": "farm_2", "title": "농장 Lv 2", "desc": "농장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.",
+	{"id": "farm_2", "title": Lang.t("tutorial.missions.farm_2.title"), "desc": Lang.t("tutorial.missions.farm_2.desc"),
 		"kind": "level", "arg": ["farm", 2], "goto": "building:farm", "reward": {"diamonds": 100}},
-	{"id": "gate_2", "title": "성문 강화", "desc": "성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.", "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
-	{"id": "kill_100_2", "title": "몬스터 100마리 처치", "desc": "몬스터 100마리를 처치하세요. 대기 중에도, 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.", "kind": "kill", "arg": 100},  # 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로") — 자리는 그대로
-	{"id": "hero_lv4_18", "title": "영웅 4명 Lv 18 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.",
+	{"id": "gate_2", "title": Lang.t("tutorial.missions.gate_2.title"), "desc": Lang.t("tutorial.missions.gate_2.desc"), "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
+	{"id": "kill_100_2", "title": Lang.t("tutorial.missions.kill_100_2.title"), "desc": Lang.t("tutorial.missions.kill_100_2.desc"), "kind": "kill", "arg": 100},  # 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로") — 자리는 그대로
+	{"id": "hero_lv4_18", "title": Lang.t("tutorial.missions.hero_lv4_18.title"), "desc": Lang.t("tutorial.missions.hero_lv4_18.desc"),
 		"kind": "hero_lv", "arg": [4, 18], "goto": "tab:hero", "reward": {"gold": 8000}},
-	{"id": "atk_16", "title": "공격력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 16까지 올리세요.",
+	{"id": "atk_16", "title": Lang.t("tutorial.missions.atk_16.title"), "desc": Lang.t("tutorial.missions.atk_16.desc"),
 		"kind": "growth_lv", "arg": ["atk", 16], "goto": "tab:growth", "reward": {"gold": 8000}},
-	{"id": "stage_1_10", "title": "스테이지 1-10 클리어", "desc": "1-10까지 클리어하세요. 한 성문이 밀리면 그쪽으로 영웅을 옮기고, 약한 영웅 자리는 모집한 SSR·SR 영웅으로 바꾸세요. 클리어하면 길드가 열립니다.", "kind": "stage",
+	{"id": "stage_1_10", "title": Lang.t("tutorial.missions.stage_1_10.title"), "desc": Lang.t("tutorial.missions.stage_1_10.desc"), "kind": "stage",
 		"arg": 10, "goto": "stage"},
-	{"id": "guild", "title": "길드 가입", "desc": "오른쪽 아래 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. 출석·기부로 길드 버프를 올립니다.", "kind": "guild",
+	{"id": "guild", "title": Lang.t("tutorial.missions.guild.title"), "desc": Lang.t("tutorial.missions.guild.desc"), "kind": "guild",
 		"goto": "tab:guild"},
-	{"id": "guild_attend", "title": "길드 출석·기부", "desc": "[메뉴] → [길드]에서 [출석]을 누르고 기부를 한 번 하세요. 출석과 기부는 매일 할 수 있고, 길드 레벨이 오르면 모든 영웅의 공격력·체력이 오릅니다.",
+	{"id": "guild_attend", "title": Lang.t("tutorial.missions.guild_attend.title"), "desc": Lang.t("tutorial.missions.guild_attend.desc"),
 		"kind": "guild_attend", "goto": "tab:guild", "point": ["@guild_panel:buttons.attend", "@guild_panel:buttons.donate:gold", "@guild_panel:buttons.tab:home", "menu:guild", "menu"],
 		"reward": {"diamonds": 50}},
-	{"id": "hp_16", "title": "체력 Lv 16 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.",
+	{"id": "hp_16", "title": Lang.t("tutorial.missions.hp_16.title"), "desc": Lang.t("tutorial.missions.hp_16.desc"),
 		"kind": "growth_lv", "arg": ["hp", 16], "goto": "tab:growth", "reward": {"gold": 9000}},
-	{"id": "hero_lv4_20", "title": "영웅 4명 Lv 20 달성", "desc": "[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 다음 미션에서 승급으로 더 올리는 법을 배웁니다.",
+	{"id": "hero_lv4_20", "title": Lang.t("tutorial.missions.hero_lv4_20.title"), "desc": Lang.t("tutorial.missions.hero_lv4_20.desc"),
 		"kind": "hero_lv", "arg": [4, 20], "goto": "tab:hero", "reward": {"gold": 9000}},
-	{"id": "promote", "title": "영웅 승급하기", "desc": "영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",
+	{"id": "promote", "title": Lang.t("tutorial.missions.promote.title"), "desc": Lang.t("tutorial.missions.promote.desc"),
 		"kind": "promote", "goto": "tab:hero", "point": ["hero:promote", "hero:promote_all", "tab:hero"], "reward": {"diamonds": 50}},
-	{"id": "guild_boss", "title": "길드 보스 도전", "desc": "[메뉴] → [길드]의 [보스] 탭에서 드래곤에게 한 번 도전하세요. 하루 2번 도전할 수 있고, 준 피해에 따라 등급과 길드 코인을 받습니다.",
+	{"id": "guild_boss", "title": Lang.t("tutorial.missions.guild_boss.title"), "desc": Lang.t("tutorial.missions.guild_boss.desc"),
 		"kind": "guild_boss", "goto": "tab:guild", "point": ["@guild_panel:buttons.boss", "@guild_panel:buttons.tab:boss", "menu:guild", "menu"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_12", "title": "스테이지 1-12 클리어", "desc": "전투를 이어 가 1-12까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
+	{"id": "stage_1_12", "title": Lang.t("tutorial.missions.stage_1_12.title"), "desc": Lang.t("tutorial.missions.stage_1_12.desc"),
 		"kind": "stage", "arg": 12, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "siege_try", "title": "공성전 체험", "desc": "길드끼리 성을 공격하는 공성전을 연습 상대와 한 번 해 보세요. 기록과 점수는 남지 않고, 가이드가 중간중간 멈추며 화면을 설명합니다. [바로가기]를 누르면 시작합니다.",
+	{"id": "siege_try", "title": Lang.t("tutorial.missions.siege_try.title"), "desc": Lang.t("tutorial.missions.siege_try.desc"),
 		"kind": "siege_try", "goto": "siege_practice", "reward": {"diamonds": 50}},
-	{"id": "pvp", "title": "PVP 결투", "desc": "[던전] 탭 위쪽 [PVP]에서 결투나 총력전을 한 판 하세요. 다른 플레이어의 방어팀과 싸워 PVP 코인을 얻고, 코인은 상점에서 씁니다.",
+	{"id": "pvp", "title": Lang.t("tutorial.missions.pvp.title"), "desc": Lang.t("tutorial.missions.pvp.desc"),
 		"kind": "pvp", "goto": "pvp", "reward": {"tickets": 10}},
-	{"id": "fever", "title": "FEVER 쓰기", "desc": "몬스터를 처치하면 [진행] 왼쪽 FEVER 게이지가 찹니다. 가득 차면 FEVER 버튼을 눌러 잠시 몬스터를 몰아서 잡으세요(대기 중에만).",
+	{"id": "fever", "title": Lang.t("tutorial.missions.fever.title"), "desc": Lang.t("tutorial.missions.fever.desc"),
 		"kind": "fever", "goto": "", "point": ["hud:fever"], "reward": {"diamonds": 50}},
-	{"id": "atk_18", "title": "공격력 Lv 18 달성", "desc": "[성장] 탭에서 모든 영웅의 공격력을 Lv 18까지 올리세요.",
+	{"id": "atk_18", "title": Lang.t("tutorial.missions.atk_18.title"), "desc": Lang.t("tutorial.missions.atk_18.desc"),
 		"kind": "growth_lv", "arg": ["atk", 18], "goto": "tab:growth", "reward": {"gold": 10000}},
-	{"id": "hp_18", "title": "체력 Lv 18 달성", "desc": "[성장] 탭에서 모든 영웅의 체력을 Lv 18까지 올리세요.",
+	{"id": "hp_18", "title": Lang.t("tutorial.missions.hp_18.title"), "desc": Lang.t("tutorial.missions.hp_18.desc"),
 		"kind": "growth_lv", "arg": ["hp", 18], "goto": "tab:growth", "reward": {"gold": 10000}},
-	{"id": "stage_1_15", "title": "스테이지 1-15 클리어", "desc": "전투를 이어 가 1-15까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.",
+	{"id": "stage_1_15", "title": Lang.t("tutorial.missions.stage_1_15.title"), "desc": Lang.t("tutorial.missions.stage_1_15.desc"),
 		"kind": "stage", "arg": 15, "goto": "stage", "reward": {"diamonds": 200}},
-	{"id": "exchange_look", "title": "거래소 둘러보기", "desc": "[메뉴] → [거래소]를 열어 보세요. 다른 성주가 올린 장비를 골드·다이아로 사고, 내 장비를 올려 팔 수 있습니다.",
+	{"id": "exchange_look", "title": Lang.t("tutorial.missions.exchange_look.title"), "desc": Lang.t("tutorial.missions.exchange_look.desc"),
 		"kind": "open", "arg": "exchange", "goto": "tab:exchange", "reward": {"diamonds": 50}},
 ]
 ## 반복 퀘스트(사용자 2026-10-06 "퀘스트로 할 수 있는 게 끝나면 반복 퀘스트로"): 튜토리얼을 끝냈거나 건너뛴(기존 저장) 플레이어에게 이 순서로 끝없이
 ## 돈다. 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다. kind: kill·collect·sell·gacha·dungeon_win·build_up(사건 수), stage(지금 도달한
 ## 라운드 + 2를 클리어), growth_up·hero_up(퀘스트를 받은 뒤 오른 성장 레벨·영웅 레벨 합). 보상은 적게: 한 바퀴에 다이아 20 + 모집권 1.
 ## 목표 = base + step × c, 보상 = reward × (1 + c)(fixed는 늘지 않음).
-const REPEATS := [
-	{"kind": "kill", "base": 100, "step": 50, "title": "몬스터 %d마리 처치", "goto": "", "reward": {"gold": 3000}},  # 처치 미션은 기다리기만(바로가기·화살표 없음, 사용자 2026-10-13)
-	{"kind": "collect", "base": 3, "step": 1, "title": "자원 %d번 수집", "goto": "look:lumber", "reward": {"gold": 2000}},
-	{"kind": "stage", "title": "스테이지 %s 클리어", "goto": "stage", "fixed": {"diamonds": 20}},
-	{"kind": "growth_up", "base": 3, "step": 1, "title": "성장 강화 %d회", "goto": "tab:growth", "reward": {"gold": 5000}},
-	{"kind": "sell", "base": 1, "step": 0, "title": "상인에게 자원 팔기", "goto": "merchant", "reward": {"gold": 2000}},
-	{"kind": "hero_up", "base": 5, "step": 2, "title": "영웅 레벨업 %d회", "goto": "tab:hero", "reward": {"gold": 5000}},
-	{"kind": "gacha", "base": 10, "step": 0, "title": "영웅 %d회 모집", "goto": "tab:recruit", "fixed": {"tickets": 1}},
-	{"kind": "dungeon_win", "base": 1, "step": 0, "title": "던전 %d번 클리어", "goto": "tab:dungeon", "fixed": {"keys_gold": 1}},
-	{"kind": "build_up", "base": 1, "step": 0, "title": "건물 %d번 레벨업", "goto": "building:keep", "reward": {"wood": 3000, "stone": 3000, "food": 3000}},
+static var REPEATS := [
+	{"kind": "kill", "base": 100, "step": 50, "title": Lang.t("tutorial.repeats.title"), "goto": "", "reward": {"gold": 3000}},  # 처치 미션은 기다리기만(바로가기·화살표 없음, 사용자 2026-10-13)
+	{"kind": "collect", "base": 3, "step": 1, "title": Lang.t("tutorial.repeats.title_2"), "goto": "look:lumber", "reward": {"gold": 2000}},
+	{"kind": "stage", "title": Lang.t("tutorial.repeats.title_3"), "goto": "stage", "fixed": {"diamonds": 20}},
+	{"kind": "growth_up", "base": 3, "step": 1, "title": Lang.t("tutorial.repeats.title_4"), "goto": "tab:growth", "reward": {"gold": 5000}},
+	{"kind": "sell", "base": 1, "step": 0, "title": Lang.t("tutorial.repeats.title_5"), "goto": "merchant", "reward": {"gold": 2000}},
+	{"kind": "hero_up", "base": 5, "step": 2, "title": Lang.t("tutorial.repeats.title_6"), "goto": "tab:hero", "reward": {"gold": 5000}},
+	{"kind": "gacha", "base": 10, "step": 0, "title": Lang.t("tutorial.repeats.title_7"), "goto": "tab:recruit", "fixed": {"tickets": 1}},
+	{"kind": "dungeon_win", "base": 1, "step": 0, "title": Lang.t("tutorial.repeats.title_8"), "goto": "tab:dungeon", "fixed": {"keys_gold": 1}},
+	{"kind": "build_up", "base": 1, "step": 0, "title": Lang.t("tutorial.repeats.title_9"), "goto": "building:keep", "reward": {"wood": 3000, "stone": 3000, "food": 3000}},
 ]
-const REPEAT_DESC := {
-	"kill": "몬스터를 처치하세요. 방치 중 처치도 셉니다.", "collect": "생산 건물을 눌러 자원을 수집하세요.", "stage": "전투를 이어 가 목표 라운드를 클리어하세요.",
-	"growth_up": "[성장] 탭에서 강화하세요.", "sell": "상인에게 남는 자원을 파세요.", "hero_up": "[영웅] 탭에서 영웅을 레벨업하세요(여러 영웅 합산).",
-	"gacha": "골드·다이아·모집권 어느 모집이든 셉니다.", "dungeon_win": "골드·장비 던전 아무 단계나 클리어하세요.", "build_up": "아무 건물이나 레벨업을 끝내세요.",
+static var REPEAT_DESC := {
+	"kill": Lang.t("tutorial.repeat_desc.kill"), "collect": Lang.t("tutorial.repeat_desc.collect"), "stage": Lang.t("tutorial.repeat_desc.stage"),
+	"growth_up": Lang.t("tutorial.repeat_desc.growth_up"), "sell": Lang.t("tutorial.repeat_desc.sell"), "hero_up": Lang.t("tutorial.repeat_desc.hero_up"),
+	"gacha": Lang.t("tutorial.repeat_desc.gacha"), "dungeon_win": Lang.t("tutorial.repeat_desc.dungeon_win"), "build_up": Lang.t("tutorial.repeat_desc.build_up"),
 }
 
 ## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
@@ -582,7 +584,7 @@ func _needs_guild_now(m: Dictionary) -> bool:
 ## 가이드 카드에 보일 미션 설명: 길드가 필요한 미션인데 길드가 없으면 가입 안내를 앞에 붙인다.
 func mission_desc(m: Dictionary) -> String:
 	if _needs_guild_now(m):
-		return "지금 길드에 속해 있지 않습니다. 먼저 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. " + str(m.desc)
+		return Lang.t("tutorial.mission_desc") + str(m.desc)
 	return str(m.get("desc", ""))
 
 
@@ -678,19 +680,19 @@ func pvp_locked() -> bool:
 
 ## 잠긴 PVP 문구: "가이드 64번째 미션 「PVP 결투」에서 열려요".
 func pvp_lock_text() -> String:
-	return _lock_text(mission_index(PVP_MISSION), "열립니다")
+	return _lock_text(mission_index(PVP_MISSION), Lang.t("tutorial.pvp_lock_text"))
 
 
 ## 잠긴 던전 문구: "튜토리얼 20번째 미션 「장비 던전」에서 열려요".
 func dungeon_lock_text(type: String) -> String:
-	return _lock_text(mission_index(str(DUNGEON_MISSION.get(type, ""))), "열립니다")
+	return _lock_text(mission_index(str(DUNGEON_MISSION.get(type, ""))), Lang.t("tutorial.dungeon_lock_text"))
 
 
 ## 잠긴 탭 문구: "튜토리얼 9번째 미션 「영웅 레벨업」에서 열려요".
 func tab_lock_text(tab_id: String) -> String:
 	if str(TAB_MISSION.get(tab_id, "-")) == "":
-		return "가이드를 마치면 열립니다"
-	return _lock_text(mission_index(str(TAB_MISSION.get(tab_id, ""))), "열립니다")
+		return Lang.t("tutorial.tab_lock_text")
+	return _lock_text(mission_index(str(TAB_MISSION.get(tab_id, ""))), Lang.t("tutorial.tab_lock_text_2"))
 
 
 ## 공터를 그 건설 미션 전에 지으려 하는가(사용자 2026-10-06: 건물 첫 건축은 튜토리얼 미션에서만). 이미 지은 건물·튜토리얼 밖은 false.
@@ -713,7 +715,7 @@ func build_mission_index(id: String) -> int:
 
 ## 잠긴 공터 문구: "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요".
 func build_lock_text(id: String) -> String:
-	return _lock_text(build_mission_index(id), "건설할 수 있습니다")
+	return _lock_text(build_mission_index(id), Lang.t("tutorial.build_lock_text"))
 
 
 ## 슈퍼관리자(Economy.admin, 서버가 정한다): 기능 잠금이 모두 열린다.
@@ -724,7 +726,7 @@ func _admin() -> bool:
 func _lock_text(i: int, tail: String) -> String:
 	if i < 0:
 		return LOCKED_TEXT
-	return "가이드 %d번째 미션 「%s」에서 %s" % [i + 1, MISSIONS[i].title, tail]
+	return Lang.t("tutorial.lock_text") % [i + 1, MISSIONS[i].title, tail]
 
 
 ## 사건 알림(수집·판매·모집·건물 창 열기). 지금 미션의 종류와 같으면 센다.
@@ -898,17 +900,17 @@ static func reward_text(r: Dictionary) -> String:
 		if r.has(res.id):
 			parts.append("%s %s" % [res.name, _commas(int(r[res.id]))])
 	if r.has("diamonds"):
-		parts.append("다이아 %s" % _commas(int(r.diamonds)))
+		parts.append(Lang.t("tutorial.reward_text") % _commas(int(r.diamonds)))
 	if r.has("gold"):
-		parts.append("골드 %s" % _commas(int(r.gold)))
+		parts.append(Lang.t("tutorial.reward_text_2") % _commas(int(r.gold)))
 	if r.has("keys_gold"):
-		parts.append("골드 던전 입장권 %d" % int(r.keys_gold))
+		parts.append(Lang.t("tutorial.reward_text_3") % int(r.keys_gold))
 	if r.has("keys_equip"):
-		parts.append("장비 던전 입장권 %d" % int(r.keys_equip))
+		parts.append(Lang.t("tutorial.reward_text_4") % int(r.keys_equip))
 	if r.has("keys_ticket"):
-		parts.append("모집권 던전 입장권 %d" % int(r.keys_ticket))
+		parts.append(Lang.t("tutorial.reward_text_5") % int(r.keys_ticket))
 	if r.has("tickets"):
-		parts.append("다이아 모집권 %d" % int(r.tickets))
+		parts.append(Lang.t("tutorial.reward_text_6") % int(r.tickets))
 	return " · ".join(parts)
 
 
@@ -976,7 +978,7 @@ func goto_current() -> void:
 
 ## 카드 버튼 글자: 하는 일과 맞춘다. 전투 미션(goto stage)은 HUD [▶ 진행]과 같은 일을 하므로 "▶ 진행"(사용자 2026-10-13 "진행버튼이 바로가기야?").
 func action_label(m: Dictionary) -> String:
-	return "▶ 진행" if goto_of(m) == "stage" else "바로가기"
+	return Lang.t("tutorial.action_label") if goto_of(m) == "stage" else Lang.t("tutorial.action_label_2")
 
 
 ## 카드 버튼을 보일까(보상 받기 전): 갈 곳이 없거나(기다리는 미션), 전투 미션인데 이미 전투 중이면 숨긴다.

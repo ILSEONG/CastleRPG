@@ -11,6 +11,8 @@ extends Node3D
 ## 직접 도전하면 새 장면에서 다시 돈다). [포기]: 패배로 닫고(소모 없음) 곧바로 성으로. 개발 훅: Economy.debug_win_on이면 시작하자마자
 ## Economy.debug_win(즉시 승리).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const HeroScript := preload("res://scripts/hero.gd")
@@ -35,9 +37,9 @@ const LOOT_SEC := 1.6  # 상자가 다 떨어지고 결과 화면이 뜰 때까�
 const CHEST_FLY := 0.6
 const CHEST_R := 2.6  # 상자가 떨어지는 반경(m)
 const CHEST_UP := 3.0  # 상자가 튀어 오르는 높이(m)
-const STOP_KEYS := "열쇠가 없어 자동 도전을 멈췄습니다"
-const STOP_LOSS := "패배 — 자동 도전을 멈췄습니다"
-const STOP_FAIL := "도전을 시작하지 못해 자동 도전을 멈췄습니다"
+static var STOP_KEYS := Lang.t("dungeon.stop_keys")
+static var STOP_LOSS := Lang.t("dungeon.stop_loss")
+static var STOP_FAIL := Lang.t("dungeon.stop_fail")
 
 var run := {}
 var main  # 돌아갈 성 월드(main.gd). 없으면(테스트) 스스로 사라진다
@@ -99,7 +101,7 @@ func _ready() -> void:
 	if hp is Dictionary and not GameData.hero(str(hp.hero_id)).is_empty():
 		var h = HeroScript.new()
 		h.helper = true
-		h.helper_tag = "친구" if hp.has("friend") else "도우미"
+		h.helper_tag = Lang.t("dungeon.ready") if hp.has("friend") else Lang.t("dungeon.ready_2")
 		h.setup(heroes.size(), GameData.hero(str(hp.hero_id)), null, null, int(hp.promotion), int(hp.level))
 		h.free_pos = stage.heroes[heroes.size() % stage.heroes.size()]
 		h.idle_dir = -ArenaKit.DOWN

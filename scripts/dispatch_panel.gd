@@ -7,12 +7,14 @@ extends "res://scripts/ui_window.gd"
 ## 버튼은 누르는 즉시 결과가 보이고(보내기·받기·즉시 완료·새로고침 다이아) 서버가 확인한다 — 거절되면 되돌리고 다시 받는다.
 ## 의뢰 이름은 희귀도별 이름표에서 의뢰 id로 고른다(서버는 이름을 모른다).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const EventPanel := preload("res://scripts/event_panel.gd")
 
-const TITLE := "파견소"
+static var TITLE := Lang.t("dispatch_panel.title")
 const CLOSE_PX := 56.0
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const CARD_BG := Color(1, 1, 1, 0.78)
@@ -24,17 +26,17 @@ const PICK_PX := 104.0
 const RARITY_COLORS := {"N": Color("9AA3AE"), "R": Color("4A90D9"), "SR": Color("9B59B6"), "SSR": Color("E5A823")}
 const GRADES := ["R", "SR", "SSR"]
 const RARITY_ORDER := ["N", "R", "SR", "SSR"]
-const TYPE_NAMES := {"tank": "탱커", "bruiser": "전사", "assassin": "암살자", "caster": "마법사", "marksman": "사수", "support": "지원가"}
-const NAMES := {
-	"N": ["마을 순찰", "약초 채집", "길 잃은 양 찾기", "우물 청소", "장작 나르기", "밀밭 지키기"],
-	"R": ["산적 소탕", "상단 호위", "늑대 무리 사냥", "폐광 조사", "다리 보수 호위"],
-	"SR": ["고블린 소굴 토벌", "고대 유적 탐사", "마법 수정 회수", "오크 전초기지 정찰"],
-	"SSR": ["드래곤 둥지 정찰", "잊힌 왕의 보물", "마왕군 보급로 습격", "하늘섬 탐험"],
+static var TYPE_NAMES := {"tank": Lang.t("dispatch_panel.type_names.tank"), "bruiser": Lang.t("dispatch_panel.type_names.bruiser"), "assassin": Lang.t("dispatch_panel.type_names.assassin"), "caster": Lang.t("dispatch_panel.type_names.caster"), "marksman": Lang.t("dispatch_panel.type_names.marksman"), "support": Lang.t("dispatch_panel.type_names.support")}
+static var NAMES := {
+	"N": [Lang.t("dispatch_panel.names"), Lang.t("dispatch_panel.names_2"), Lang.t("dispatch_panel.names_3"), Lang.t("dispatch_panel.names_4"), Lang.t("dispatch_panel.names_5"), Lang.t("dispatch_panel.names_6")],
+	"R": [Lang.t("dispatch_panel.names_7"), Lang.t("dispatch_panel.names_8"), Lang.t("dispatch_panel.names_9"), Lang.t("dispatch_panel.names_10"), Lang.t("dispatch_panel.names_11")],
+	"SR": [Lang.t("dispatch_panel.names_12"), Lang.t("dispatch_panel.names_13"), Lang.t("dispatch_panel.names_14"), Lang.t("dispatch_panel.names_15")],
+	"SSR": [Lang.t("dispatch_panel.names_16"), Lang.t("dispatch_panel.names_17"), Lang.t("dispatch_panel.names_18"), Lang.t("dispatch_panel.names_19")],
 }
-const FAIL_TEXT := {"no_building": "파견소를 먼저 지어야 합니다", "busy": "다른 의뢰에 간 영웅이 있습니다", "bad_heroes": "조건에 맞지 않는 영웅이 있습니다",
-	"not_enough": "다이아가 부족합니다", "limit": "오늘은 더 새로고침할 수 없습니다", "nothing": "바꿀 의뢰가 없습니다", "not_done": "아직 끝나지 않았습니다"}
-const OFFLINE_TEXT := "파견소는 온라인에서만 이용할 수 있습니다"
-const NO_OFFICE_TEXT := "[건설]에서 파견소를 지으면 의뢰를 받을 수 있습니다"
+static var FAIL_TEXT := {"no_building": Lang.t("dispatch_panel.fail_text.no_building"), "busy": Lang.t("dispatch_panel.fail_text.busy"), "bad_heroes": Lang.t("dispatch_panel.fail_text.bad_heroes"),
+	"not_enough": Lang.t("dispatch_panel.fail_text.not_enough"), "limit": Lang.t("dispatch_panel.fail_text.limit"), "nothing": Lang.t("dispatch_panel.fail_text.nothing"), "not_done": Lang.t("dispatch_panel.fail_text.not_done")}
+static var OFFLINE_TEXT := Lang.t("dispatch_panel.offline_text")
+static var NO_OFFICE_TEXT := Lang.t("dispatch_panel.no_office_text")
 
 var level_button: Button  # [파견소 레벨업 ›] → 파견소 건물 창(사용자 2026-10-14)
 var building_panel  # 건물 창(building_panel.gd). main이 넣는다
@@ -155,7 +157,7 @@ func _process(delta: float) -> void:
 		if is_done(j, now) and not _seen_done.has(id):
 			_rebuild()
 			return
-		_time_labels[id].text = "남은 시간 " + UiKit.clock(float(j.finish) - now)
+		_time_labels[id].text = Lang.t("dispatch_panel.process") + UiKit.clock(float(j.finish) - now)
 	_update_info(now)
 
 
@@ -215,7 +217,7 @@ func _post(path: String, body_d: Dictionary, key := "") -> void:
 	, func():
 		if key != "":
 			Economy.unpredict(key)
-		Economy.notice.emit(FAIL_TEXT.get(Net.last_error, "요청을 처리하지 못했습니다. 잠시 뒤 다시 시도해 주세요"))
+		Economy.notice.emit(FAIL_TEXT.get(Net.last_error, Lang.t("dispatch_panel.post")))
 		fetch()
 	, true, true)
 
@@ -299,7 +301,7 @@ func send(id: int, heroes: Array) -> void:
 	j.finish = Economy.time_now() + duration_sec(j)
 	picking = -1
 	chosen = []
-	Economy.notice.emit("「%s」에 영웅을 보냈습니다" % job_name(j))
+	Economy.notice.emit(Lang.t("dispatch_panel.send") % job_name(j))
 	_post("/v1/dispatch/start", {"jobs": [{"id": id, "heroes": heroes}]})
 	_rebuild()
 
@@ -320,9 +322,9 @@ func send_all() -> void:
 		j.finish = Economy.time_now() + duration_sec(j)
 		jobs.append({"id": int(j.id), "heroes": pick})
 	if jobs.is_empty():
-		Economy.notice.emit("보낼 수 있는 의뢰가 없습니다")
+		Economy.notice.emit(Lang.t("dispatch_panel.send_all"))
 		return
-	Economy.notice.emit("의뢰 %d개에 영웅을 보냈습니다" % jobs.size())
+	Economy.notice.emit(Lang.t("dispatch_panel.send_all_2") % jobs.size())
 	_post("/v1/dispatch/start", {"jobs": jobs})
 	_rebuild()
 
@@ -343,7 +345,7 @@ func claim(ids: Array) -> void:
 	data.list = keep
 	var key := "dispatch:%d" % Time.get_ticks_msec()
 	Economy.predict_reward(key, got)
-	Economy.notice.emit("의뢰 보상: " + EventPanel.reward_text(got))
+	Economy.notice.emit(Lang.t("dispatch_panel.claim") + EventPanel.reward_text(got))
 	_post("/v1/dispatch/claim", {"ids": ids.filter(func(x): return true)}, key)
 	if claimed > 0:
 		_rebuild()
@@ -412,10 +414,10 @@ func _update_info(now: float) -> void:
 		odds_label.text = ""
 		return
 	var left := maxf(0.0, float(data.get("next_reset", now)) - now)
-	info_label.text = "오늘 받은 의뢰 %d / %d · 새 의뢰까지 %s" % [int(data.get("got", 0)), int(data.get("slots", 0)), UiKit.duration(left)]
+	info_label.text = Lang.t("dispatch_panel.update_info") % [int(data.get("got", 0)), int(data.get("slots", 0)), UiKit.duration(left)]
 	var o: Array = data.get("odds", [])
 	if o.size() == 4:
-		odds_label.text = "의뢰 확률  N %s%% · R %s%% · SR %s%% · SSR %s%%" % [_pct(o[0]), _pct(o[1]), _pct(o[2]), _pct(o[3])]
+		odds_label.text = Lang.t("dispatch_panel.update_info_2") % [_pct(o[0]), _pct(o[1]), _pct(o[2]), _pct(o[3])]
 
 
 static func _pct(v) -> String:
@@ -436,7 +438,7 @@ func _rebuild() -> void:
 	_refresh_level_button()
 	_update_info(Economy.time_now())
 	if failed != "" or data.is_empty():
-		var t := "불러오는 중입니다" if loading else (OFFLINE_TEXT if failed == "offline" else NO_OFFICE_TEXT if failed == "no_building" else "의뢰를 불러오지 못했습니다")
+		var t := Lang.t("dispatch_panel.rebuild.t") if loading else (OFFLINE_TEXT if failed == "offline" else NO_OFFICE_TEXT if failed == "no_building" else Lang.t("dispatch_panel.rebuild"))
 		body.add_child(_label(t, 24, SUB))
 		return
 	if picking >= 0:
@@ -444,25 +446,25 @@ func _rebuild() -> void:
 		return
 	var now := Economy.time_now()
 	var free := bool(data.get("free_refresh", false))
-	var ref := _button("새로고침 (무료)" if free else "새로고침 💎%d" % int(data.get("refresh_dia", 50)), UiKit.STEEL if free else DIA, 22)
+	var ref := _button(Lang.t("dispatch_panel.rebuild_2") if free else Lang.t("dispatch_panel.rebuild_3") % int(data.get("refresh_dia", 50)), UiKit.STEEL if free else DIA, 22)
 	ref.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ref.pressed.connect(refresh)
 	tools.add_child(ref)
 	buttons["refresh"] = ref
-	var all := _button("모두 보내기", HudScript.ACCENT, 22)
+	var all := _button(Lang.t("dispatch_panel.rebuild_4"), HudScript.ACCENT, 22)
 	all.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	all.disabled = not list().any(func(j): return not is_started(j))
 	all.pressed.connect(send_all)
 	tools.add_child(all)
 	buttons["send_all"] = all
-	var get_all := _button("모두 받기", GO, 22)
+	var get_all := _button(Lang.t("dispatch_panel.rebuild_5"), GO, 22)
 	get_all.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	get_all.disabled = not list().any(func(j): return is_done(j, now))
 	get_all.pressed.connect(claim_all)
 	tools.add_child(get_all)
 	buttons["claim_all"] = get_all
 	if list().is_empty():
-		body.add_child(_label("오늘 의뢰를 모두 마쳤습니다. 새 의뢰는 내일 들어옵니다", 24, SUB))
+		body.add_child(_label(Lang.t("dispatch_panel.rebuild_6"), 24, SUB))
 		return
 	var order := list().duplicate()
 	order.sort_custom(func(a, b):  # 받을 것 → 진행 중 → 시작 전, 같은 상태는 희귀도 높은 순
@@ -513,7 +515,7 @@ func _card(j: Dictionary, now: float) -> Control:
 	var cond := _label(cond_text(j), 19, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	cond.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(cond)
-	var rw := _label("보상  " + EventPanel.reward_text(j.reward), 20, Color(0.13, 0.50, 0.24), HORIZONTAL_ALIGNMENT_LEFT)
+	var rw := _label(Lang.t("dispatch_panel.card") + EventPanel.reward_text(j.reward), 20, Color(0.13, 0.50, 0.24), HORIZONTAL_ALIGNMENT_LEFT)
 	rw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(rw)
 	if is_started(j):
@@ -522,7 +524,7 @@ func _card(j: Dictionary, now: float) -> Control:
 		for h in j.heroes:
 			faces.add_child(_face(str(h), FACE_PX))
 		if not done:
-			var t := _label("남은 시간 " + UiKit.clock(float(j.finish) - now), 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+			var t := _label(Lang.t("dispatch_panel.card_2") + UiKit.clock(float(j.finish) - now), 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			faces.add_child(t)
 			_time_labels[id] = t
@@ -532,17 +534,17 @@ func _card(j: Dictionary, now: float) -> Control:
 	act.custom_minimum_size = Vector2(150, 0)
 	row.add_child(act)
 	if done:
-		var b := _button("받기", GO, 26)
+		var b := _button(Lang.t("dispatch_panel.card_3"), GO, 26)
 		b.pressed.connect(func(): claim([id]))
 		act.add_child(b)
 		buttons["claim:%d" % id] = b
 	elif is_started(j):
-		var b := _button("즉시 완료\n💎%d" % finish_cost(j), DIA, 20)
+		var b := _button(Lang.t("dispatch_panel.card_4") % finish_cost(j), DIA, 20)
 		b.pressed.connect(func(): finish_now(id))
 		act.add_child(b)
 		buttons["finish:%d" % id] = b
 	else:
-		var b := _button("보내기", HudScript.ACCENT, 26)
+		var b := _button(Lang.t("dispatch_panel.card_5"), HudScript.ACCENT, 26)
 		b.pressed.connect(func():
 			picking = id
 			chosen = []
@@ -556,16 +558,16 @@ func _card(j: Dictionary, now: float) -> Control:
 static func span_text(sec: int) -> String:
 	if sec >= 3600:
 		var m := sec % 3600 / 60
-		return "%d시간" % (sec / 3600) + ("" if m == 0 else " %d분" % m)
+		return Lang.t("dispatch_panel.span_text") % (sec / 3600) + ("" if m == 0 else Lang.t("dispatch_panel.span_text_2") % m)
 	var r := sec % 60
-	return "%d분" % (sec / 60) + ("" if r == 0 else " %d초" % r)
+	return Lang.t("dispatch_panel.span_text_3") % (sec / 60) + ("" if r == 0 else Lang.t("dispatch_panel.span_text_4") % r)
 
 
 ## "영웅 2명 · SR 이상 · 탱커 / 마법사 / 사수"
 static func cond_text(j: Dictionary) -> String:
 	var types: Array = (j.get("types", []) as Array).map(func(t): return TYPE_NAMES.get(str(t), str(t)))
 	var grade := str(j.get("grade", "R"))
-	return "영웅 %d명 · %s · %s" % [int(j.get("size", 1)), "등급 무관" if grade == "R" else grade + " 이상", " / ".join(types)]
+	return Lang.t("dispatch_panel.cond_text") % [int(j.get("size", 1)), Lang.t("dispatch_panel.cond_text_2") if grade == "R" else grade + Lang.t("dispatch_panel.cond_text_3"), " / ".join(types)]
 
 
 ## 희귀도 보석: 깎은 8각 + 희귀도 글자.
@@ -613,14 +615,14 @@ func _build_pick() -> void:
 		picking = -1
 		_rebuild()
 		return
-	var head := _label("「%s」 영웅 %d명을 고르세요" % [job_name(j), int(j.size)], 26, HudScript.INK)
+	var head := _label(Lang.t("dispatch_panel.build_pick") % [job_name(j), int(j.size)], 26, HudScript.INK)
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_child(head)
 	body.add_child(_label(cond_text(j), 20, SUB))
 	var taken := busy()
 	var cands := candidates(j)
 	if cands.is_empty():
-		body.add_child(_label("조건에 맞는 영웅이 없습니다\n다른 의뢰를 보내거나 새로고침하세요", 22, SUB))
+		body.add_child(_label(Lang.t("dispatch_panel.build_pick_2"), 22, SUB))
 	var grid := GridContainer.new()
 	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 8)
@@ -629,7 +631,7 @@ func _build_pick() -> void:
 	body.add_child(grid)
 	for h in cands:
 		grid.add_child(_pick_button(str(h), taken.has(h)))
-	var back := _button("뒤로", UiKit.STEEL, 24)
+	var back := _button(Lang.t("dispatch_panel.build_pick_3"), UiKit.STEEL, 24)
 	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back.pressed.connect(func():
 		picking = -1
@@ -637,16 +639,16 @@ func _build_pick() -> void:
 		_rebuild())
 	tools.add_child(back)
 	buttons["back"] = back
-	var auto := _button("자동 선택", UiKit.STEEL, 24)
+	var auto := _button(Lang.t("dispatch_panel.build_pick_4"), UiKit.STEEL, 24)
 	auto.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	auto.pressed.connect(func():
 		chosen = auto_pick(j, taken)
 		if chosen.is_empty():
-			Economy.notice.emit("쉬고 있는 영웅 중 조건에 맞는 영웅이 모자랍니다")
+			Economy.notice.emit(Lang.t("dispatch_panel.build_pick_5"))
 		_rebuild())
 	tools.add_child(auto)
 	buttons["auto"] = auto
-	var go := _button("보내기 %d/%d" % [chosen.size(), int(j.size)], HudScript.ACCENT, 24)
+	var go := _button(Lang.t("dispatch_panel.build_pick_6") % [chosen.size(), int(j.size)], HudScript.ACCENT, 24)
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	go.disabled = chosen.size() != int(j.size)
 	go.pressed.connect(func(): send(int(j.id), chosen))
@@ -679,7 +681,7 @@ func _pick_button(hero_id: String, is_busy: bool) -> Control:
 		var oct := LowpolyBox.octagon(r.grow(-1.0), PICK_PX * 0.2)
 		if is_busy:
 			cover.draw_colored_polygon(oct, Color(0.1, 0.1, 0.12, 0.6))
-			_text(cover, "파견 중", Vector2(PICK_PX / 2.0, PICK_PX / 2.0 + 8.0), 20, Color.WHITE)
+			_text(cover, Lang.t("dispatch_panel.pick_button"), Vector2(PICK_PX / 2.0, PICK_PX / 2.0 + 8.0), 20, Color.WHITE)
 		oct.append(oct[0])
 		cover.draw_polyline(oct, HudScript.ACCENT if on else UiKit.OUTLINE, 6.0 if on else 2.0, true)
 		if on:

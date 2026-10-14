@@ -1,0 +1,2348 @@
+key,ko,en,ja,zh,note
+account_link.names.kakao,카카오,,,,scripts/account_link.gd
+account_link.names.naver,네이버,,,,scripts/account_link.gd
+account_link.errors.already_linked,그 계정은 이미 다른 게임 계정에 연결되어 있습니다. 연결하지 않았습니다,,,,scripts/account_link.gd
+account_link.errors.provider_taken,이 계정에는 이미 같은 종류의 로그인이 연결되어 있습니다,,,,scripts/account_link.gd
+account_link.errors.provider_unavailable,아직 준비 중인 로그인입니다,,,,scripts/account_link.gd
+account_link.errors.login_denied,연결을 취소했습니다,,,,scripts/account_link.gd
+account_link.errors.login_expired,시간이 초과되었습니다. 다시 눌러 주세요,,,,scripts/account_link.gd
+account_link.errors.net,서버에 연결할 수 없습니다,,,,scripts/account_link.gd
+account_link.start,브라우저에서 %s 로그인을 마치면 바로 연결됩니다,,,,scripts/account_link.gd
+account_link.on_poll,%s 계정과 연결했습니다. 다른 기기에서도 %s로 이어서 할 수 있습니다,,,,scripts/account_link.gd
+account_link.finish,연결하지 못했습니다. 다시 시도해 주세요,,,,scripts/account_link.gd
+ad_player.ready,광고,,,,scripts/ad_player.gd
+ad_player.ready_2,광고 연결 전 시험 화면입니다,,,,scripts/ad_player.gd
+ad_player.ready_3,닫기,,,,scripts/ad_player.gd
+ad_player.play_real,광고를 불러오는 중입니다,,,,scripts/ad_player.gd
+ad_player.play_real_2,끝까지 보면 보상을 받습니다,,,,scripts/ad_player.gd
+ad_player.on_ad_loaded,광고를 불러오지 못했습니다,,,,scripts/ad_player.gd
+ad_player.on_ad_loaded_2,잠시 후 다시 시도하세요,,,,scripts/ad_player.gd
+ad_player.tick,%d초 뒤 보상을 받습니다 · 닫으면 보상이 없습니다,,,,scripts/ad_player.gd
+bag_panel.item_names.weapon,무기,,,,scripts/bag_panel.gd
+bag_panel.item_names.hat,모자,,,,scripts/bag_panel.gd
+bag_panel.item_names.top,상의,,,,scripts/bag_panel.gd
+bag_panel.item_names.bottom,하의,,,,scripts/bag_panel.gd
+bag_panel.item_names.shoes,신발,,,,scripts/bag_panel.gd
+bag_panel.item_names.pauldron,견장,,,,scripts/bag_panel.gd
+bag_panel.item_names.gloves,장갑,,,,scripts/bag_panel.gd
+bag_panel.item_names.sword,검,,,,scripts/bag_panel.gd
+bag_panel.item_names.axe,도끼,,,,scripts/bag_panel.gd
+bag_panel.item_names.staff,지팡이,,,,scripts/bag_panel.gd
+bag_panel.item_names.crossbow,석궁,,,,scripts/bag_panel.gd
+bag_panel.item_names.dagger,단검,,,,scripts/bag_panel.gd
+bag_panel.sort_names.grade,등급,,,,scripts/bag_panel.gd
+bag_panel.sort_names.score,능력치,,,,scripts/bag_panel.gd
+bag_panel.sort_names.new,최신,,,,scripts/bag_panel.gd
+bag_panel.empty_text,장비가 없습니다,,,,scripts/bag_panel.gd
+bag_panel.ready,해제,,,,scripts/bag_panel.gd
+bag_panel.ready_2,판매,,,,scripts/bag_panel.gd
+bag_panel.ready_3,닫기,,,,scripts/bag_panel.gd
+bag_panel.sell,장비 %d개 판매 +%s 골드,,,,scripts/bag_panel.gd
+bag_panel.refresh,지금: ,,,,scripts/bag_panel.gd
+bag_panel.refresh_2,없음,,,,scripts/bag_panel.gd
+bag_panel.refresh_3,보관함 %d / %d,,,,scripts/bag_panel.gd
+bag_panel.refresh_4,부위: ,,,,scripts/bag_panel.gd
+bag_panel.refresh_5,전체,,,,scripts/bag_panel.gd
+bag_panel.refresh_6,등급: ,,,,scripts/bag_panel.gd
+bag_panel.refresh_7,정렬: ,,,,scripts/bag_panel.gd
+bag_panel.refresh_8,%d개 선택 · +%s 골드,,,,scripts/bag_panel.gd
+bag_panel.rebuild,장착: ,,,,scripts/bag_panel.gd
+bag_panel.rebuild_2,장착 중,,,,scripts/bag_panel.gd
+bag_panel.rebuild_3,장착,,,,scripts/bag_panel.gd
+balance.buildings.keep.name,성채,,,,scripts/balance.gd
+balance.buildings.barracks.name,보병 막사,,,,scripts/balance.gd
+balance.buildings.archery.name,궁병 훈련소,,,,scripts/balance.gd
+balance.buildings.stable.name,기병 마구간,,,,scripts/balance.gd
+balance.buildings.tavern.name,주점,,,,scripts/balance.gd
+balance.buildings.lab.name,연구소,,,,scripts/balance.gd
+balance.buildings.houses.name,민가,,,,scripts/balance.gd
+balance.buildings.lumber.name,벌목장,,,,scripts/balance.gd
+balance.buildings.quarry.name,채석장,,,,scripts/balance.gd
+balance.buildings.farm.name,농장,,,,scripts/balance.gd
+balance.buildings.warehouse.name,창고,,,,scripts/balance.gd
+balance.buildings.goldmine.name,금광,,,,scripts/balance.gd
+balance.buildings.forge.name,대장간,,,,scripts/balance.gd
+balance.buildings.guild_hall.name,길드 회관,,,,scripts/balance.gd
+balance.buildings.watchtower.name,망루,,,,scripts/balance.gd
+balance.buildings.dispatch.name,파견소,,,,scripts/balance.gd
+balance.place_text.out,성벽에 너무 가깝습니다,,,,scripts/balance.gd
+balance.place_text.road,길 위에는 지을 수 없습니다,,,,scripts/balance.gd
+balance.place_text.square,광장에는 지을 수 없습니다,,,,scripts/balance.gd
+balance.place_text.overlap,다른 건물과 겹칩니다,,,,scripts/balance.gd
+balance.place_text.fixed,옮길 수 없는 건물입니다,,,,scripts/balance.gd
+build_button.draw_face,건설,,,,scripts/build_button.gd
+build_list_panel.build_text,건설,,,,scripts/build_list_panel.gd
+build_list_panel.move_text,이동,,,,scripts/build_list_panel.gd
+build_list_panel.view_text,보기,,,,scripts/build_list_panel.gd
+build_list_panel.lock_text,잠김,,,,scripts/build_list_panel.gd
+build_list_panel.refresh,건설 중,,,,scripts/build_list_panel.gd
+build_list_panel.refresh_2,공터,,,,scripts/build_list_panel.gd
+build_list_panel.refresh_3,미건설 · ,,,,scripts/build_list_panel.gd
+build_list_panel.refresh_4,성채 Lv %d 필요,,,,scripts/build_list_panel.gd
+build_list_panel.refresh_5,미건설,,,,scripts/build_list_panel.gd
+building_panel.upgrade_text,업그레이드,,,,scripts/building_panel.gd
+building_panel.build_text,건설,,,,scripts/building_panel.gd
+building_panel.research_text,연구,,,,scripts/building_panel.gd
+building_panel.dispatch_text,의뢰 보기,,,,scripts/building_panel.gd
+building_panel.recruit_text,영웅 모집,,,,scripts/building_panel.gd
+building_panel.cancel_text,취소(50% 환불),,,,scripts/building_panel.gd
+building_panel.free_text,무료 즉시 완료,,,,scripts/building_panel.gd
+building_panel.speedup_text,가속,,,,scripts/building_panel.gd
+building_panel.tiered_keep,영웅 슬롯,,,,scripts/building_panel.gd
+building_panel.tiered_keep_2,성 넓이,,,,scripts/building_panel.gd
+building_panel.tiered_keep_3,면마다 성문,,,,scripts/building_panel.gd
+building_panel.tiered_keep_4,성 모습,,,,scripts/building_panel.gd
+building_panel.desc.keep,성의 중심. 다른 건물의 최대 레벨을 정합니다.,,,,scripts/building_panel.gd
+building_panel.desc.gate,네 성문이 함께 쓰는 레벨입니다.,,,,scripts/building_panel.gd
+building_panel.desc.barracks,보병을 훈련합니다.,,,,scripts/building_panel.gd
+building_panel.desc.archery,궁병을 훈련합니다.,,,,scripts/building_panel.gd
+building_panel.desc.stable,기병을 훈련합니다.,,,,scripts/building_panel.gd
+building_panel.desc.tavern,영웅을 모집합니다.,,,,scripts/building_panel.gd
+building_panel.desc.lab,기술을 연구합니다. 레벨이 오르면 상위 연구가 열리고 연구 속도가 빨라집니다.,,,,scripts/building_panel.gd
+building_panel.desc.houses,주민이 사는 집. 인구만큼 병사를 배치할 수 있습니다.,,,,scripts/building_panel.gd
+building_panel.desc.lumber,목재를 생산합니다.,,,,scripts/building_panel.gd
+building_panel.desc.quarry,석재를 생산합니다.,,,,scripts/building_panel.gd
+building_panel.desc.farm,식량을 생산합니다.,,,,scripts/building_panel.gd
+building_panel.desc.warehouse,자원과 금광이 쌓이는 최대 시간을 늘립니다.,,,,scripts/building_panel.gd
+building_panel.desc.goldmine,골드를 생산합니다. 눌러서 받으세요.,,,,scripts/building_panel.gd
+building_panel.desc.forge,장비 던전에서 장비가 하나 더 나올 확률을 줍니다.,,,,scripts/building_panel.gd
+building_panel.desc.guild_hall,길드에 가입하면 길드원 도움으로 건설·연구 시간이 줄어듭니다.,,,,scripts/building_panel.gd
+building_panel.desc.watchtower,전투 중 성 밖 몬스터에게 화살을 쏩니다.,,,,scripts/building_panel.gd
+building_panel.desc.dispatch,영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수와 높은 희귀도 확률이 오르고 파견 시간이 줄어듭니다.,,,,scripts/building_panel.gd
+building_panel.ready,선행 조건,,,,scripts/building_panel.gd
+building_panel.ready_2,닫기,,,,scripts/building_panel.gd
+building_panel.levelup_text,%s 레벨업 중 · %s ›,,,,scripts/building_panel.gd
+building_panel.levelup_text_2,%s 정보 (최대 레벨) ›,,,,scripts/building_panel.gd
+building_panel.levelup_text_3,%s 레벨업 Lv %d → %d ›,,,,scripts/building_panel.gd
+building_panel.refresh,%s · 공터,,,,scripts/building_panel.gd
+building_panel.refresh_2,지으면 %s %s,,,,scripts/building_panel.gd
+building_panel.refresh.text,%s %s Lv %d 필요,,,,scripts/building_panel.gd
+building_panel.refresh_3,건설 시간 ,,,,scripts/building_panel.gd
+building_panel.refresh_4,건설 중 · 남은 시간 %s,,,,scripts/building_panel.gd
+building_panel.refresh_5,Lv %d → %d 건설 중 · 남은 시간 %s,,,,scripts/building_panel.gd
+building_panel.refresh_6,두 번째 일꾼 남은 기간 %s,,,,scripts/building_panel.gd
+building_panel.build_train_box,훈련,,,,scripts/building_panel.gd
+building_panel.build_train_box_2,수령,,,,scripts/building_panel.gd
+building_panel.refresh_training,T%d %s ×%d · 남은 %s,,,,scripts/building_panel.gd
+building_panel.refresh_training_2,T%d %s ×%d 훈련 완료,,,,scripts/building_panel.gd
+building_panel.refresh_training_3,T%d %s · 1마리 %s,,,,scripts/building_panel.gd
+building_panel.refresh_training_4,훈련 시간 ,,,,scripts/building_panel.gd
+building_panel.train_preview,Lv %d → T%d 해금,,,,scripts/building_panel.gd
+building_panel.train_preview_2,1마리 %s → %s,,,,scripts/building_panel.gd
+building_panel.effect_lines,생산,,,,scripts/building_panel.gd
+building_panel.effect_lines_2,%d/분,,,,scripts/building_panel.gd
+building_panel.effect_lines_3,1마리,,,,scripts/building_panel.gd
+building_panel.effect_lines_4,쌓이는 시간,,,,scripts/building_panel.gd
+building_panel.effect_lines_5,골드 생산,,,,scripts/building_panel.gd
+building_panel.effect_lines_6,%s/분,,,,scripts/building_panel.gd
+building_panel.effect_lines_7,장비 추가 확률,,,,scripts/building_panel.gd
+building_panel.effect_lines_8,길드 도움,,,,scripts/building_panel.gd
+building_panel.effect_lines_9,%d회,,,,scripts/building_panel.gd
+building_panel.effect_lines_10,화살 피해,,,,scripts/building_panel.gd
+building_panel.effect_lines_11,졸개 HP %s%%,,,,scripts/building_panel.gd
+building_panel.effect_lines_12,건물 최대,,,,scripts/building_panel.gd
+building_panel.effect_lines_13,성 HP,,,,scripts/building_panel.gd
+building_panel.effect_lines_14,영웅 슬롯,,,,scripts/building_panel.gd
+building_panel.effect_lines_15,성 넓이,,,,scripts/building_panel.gd
+building_panel.effect_lines_16,%d칸,,,,scripts/building_panel.gd
+building_panel.effect_lines_17,면마다 성문,,,,scripts/building_panel.gd
+building_panel.effect_lines_18,%d개,,,,scripts/building_panel.gd
+building_panel.effect_lines_19,성 모습,,,,scripts/building_panel.gd
+building_panel.effect_lines_20,%d단계,,,,scripts/building_panel.gd
+building_panel.effect_lines_21,성문 HP,,,,scripts/building_panel.gd
+building_panel.effect_lines_22,연구 속도,,,,scripts/building_panel.gd
+building_panel.effect_lines_23,인구,,,,scripts/building_panel.gd
+building_panel.effect_lines_24,하루 의뢰,,,,scripts/building_panel.gd
+building_panel.effect_lines_25,SR·SSR 확률,,,,scripts/building_panel.gd
+building_panel.effect_lines_26,파견 시간,,,,scripts/building_panel.gd
+building_panel.effect_lines_27,SSR 확률,,,,scripts/building_panel.gd
+building_panel.effect_lines_28,SR 확률,,,,scripts/building_panel.gd
+buildings.done_text,%s Lv %d 완료,,,,scripts/buildings.gd
+buildings.built_text,%s 건설 완료,,,,scripts/buildings.gd
+castle.look_text,성의 모습이 더 웅장해졌습니다,,,,scripts/castle.gd
+chat.refusals.too_fast,조금 천천히 보내 주세요,,,,scripts/chat.gd
+chat.refusals.no_guild,길드에 들어가야 길드 채팅을 쓸 수 있습니다,,,,scripts/chat.gd
+chat.refusals.empty,보낼 내용을 적어 주세요,,,,scripts/chat.gd
+chat.refusals.too_many,오늘은 신고를 더 할 수 없습니다,,,,scripts/chat.gd
+chat.refusals.no_message,이 메시지는 신고할 수 없습니다,,,,scripts/chat.gd
+chat.refusals.own_message,내 메시지는 신고할 수 없습니다,,,,scripts/chat.gd
+chat.welcome,"채팅 예절을 지켜 주세요. 욕설은 자동으로 가려지며, 다른 성주의 메시지를 누르면 신고할 수 있습니다.",,,,scripts/chat.gd
+chat.send,온라인에서만 채팅할 수 있습니다,,,,scripts/chat.gd
+chat.send_2,나,,,,scripts/chat.gd
+chat.on_refused,메시지를 보내지 못했습니다,,,,scripts/chat.gd
+chat.report,신고했습니다. 확인 후 조치하겠습니다,,,,scripts/chat.gd
+chat.report_2,신고하지 못했습니다,,,,scripts/chat.gd
+chat_bar.ch_names.all,전체,,,,scripts/chat_bar.gd
+chat_bar.ch_names.guild,길드,,,,scripts/chat_bar.gd
+chat_bar.ch_names.system,시스템,,,,scripts/chat_bar.gd
+chat_bar.draw_face,채팅,,,,scripts/chat_bar.gd
+chat_panel.ch_names.all,전체,,,,scripts/chat_panel.gd
+chat_panel.ch_names.guild,길드,,,,scripts/chat_panel.gd
+chat_panel.ch_names.system,시스템,,,,scripts/chat_panel.gd
+chat_panel.tabs,전체,,,,scripts/chat_panel.gd
+chat_panel.tabs_2,길드,,,,scripts/chat_panel.gd
+chat_panel.tabs_3,시스템,,,,scripts/chat_panel.gd
+chat_panel.tabs_4,신고,,,,scripts/chat_panel.gd
+chat_panel.tab_titles.all,전체 채팅,,,,scripts/chat_panel.gd
+chat_panel.tab_titles.guild,길드 채팅,,,,scripts/chat_panel.gd
+chat_panel.tab_titles.system,시스템 알림,,,,scripts/chat_panel.gd
+chat_panel.tab_titles.reports,신고 목록,,,,scripts/chat_panel.gd
+chat_panel.build_head,전체 채팅,,,,scripts/chat_panel.gd
+chat_panel.build_input,전체,,,,scripts/chat_panel.gd
+chat_panel.build_input_2,메시지 입력 (최대 %d자),,,,scripts/chat_panel.gd
+chat_panel.build_input_3,전송,,,,scripts/chat_panel.gd
+chat_panel.build_confirm,이 메시지를 신고하시겠습니까?,,,,scripts/chat_panel.gd
+chat_panel.build_confirm_2,"신고한 사람, 신고된 사람, 당시 채팅 내용이 운영자에게 전달됩니다",,,,scripts/chat_panel.gd
+chat_panel.build_confirm_3,취소,,,,scripts/chat_panel.gd
+chat_panel.build_confirm_4,신고,,,,scripts/chat_panel.gd
+chat_panel.rebuild,채팅은 서버에 접속했을 때 쓸 수 있습니다,,,,scripts/chat_panel.gd
+chat_panel.rebuild_2,길드원에게 첫 인사를 남겨 보세요!,,,,scripts/chat_panel.gd
+chat_panel.rebuild_3,아직 메시지가 없습니다,,,,scripts/chat_panel.gd
+chat_panel.line,  [color=#%s](신고함)[/color],,,,scripts/chat_panel.gd
+chat_panel.rebuild_reports.msg,신고를 불러오지 못했습니다,,,,scripts/chat_panel.gd
+chat_panel.rebuild_reports,아직 신고가 없습니다,,,,scripts/chat_panel.gd
+chat_panel.rebuild_reports_2,불러오는 중,,,,scripts/chat_panel.gd
+chat_panel.rebuild_reports_3,전체,,,,scripts/chat_panel.gd
+chat_panel.rebuild_reports_4,길드,,,,scripts/chat_panel.gd
+chat_panel.rebuild_reports_5,신고된 메시지: ,,,,scripts/chat_panel.gd
+coupon_panel.ready,쿠폰 입력,,,,scripts/coupon_panel.gd
+coupon_panel.ready_2,받은 쿠폰 번호를 입력해 주세요,,,,scripts/coupon_panel.gd
+coupon_panel.ready_3,쿠폰 번호,,,,scripts/coupon_panel.gd
+coupon_panel.ready_4,닫기,,,,scripts/coupon_panel.gd
+coupon_panel.ready_5,사용,,,,scripts/coupon_panel.gd
+damage_numbers.push.text,회피,,,,scripts/damage_numbers.gd
+dispatch_panel.title,파견소,,,,scripts/dispatch_panel.gd
+dispatch_panel.type_names.tank,탱커,,,,scripts/dispatch_panel.gd
+dispatch_panel.type_names.bruiser,전사,,,,scripts/dispatch_panel.gd
+dispatch_panel.type_names.assassin,암살자,,,,scripts/dispatch_panel.gd
+dispatch_panel.type_names.caster,마법사,,,,scripts/dispatch_panel.gd
+dispatch_panel.type_names.marksman,사수,,,,scripts/dispatch_panel.gd
+dispatch_panel.type_names.support,지원가,,,,scripts/dispatch_panel.gd
+dispatch_panel.names,마을 순찰,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_2,약초 채집,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_3,길 잃은 양 찾기,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_4,우물 청소,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_5,장작 나르기,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_6,밀밭 지키기,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_7,산적 소탕,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_8,상단 호위,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_9,늑대 무리 사냥,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_10,폐광 조사,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_11,다리 보수 호위,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_12,고블린 소굴 토벌,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_13,고대 유적 탐사,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_14,마법 수정 회수,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_15,오크 전초기지 정찰,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_16,드래곤 둥지 정찰,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_17,잊힌 왕의 보물,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_18,마왕군 보급로 습격,,,,scripts/dispatch_panel.gd
+dispatch_panel.names_19,하늘섬 탐험,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.no_building,파견소를 먼저 지어야 합니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.busy,다른 의뢰에 간 영웅이 있습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.bad_heroes,조건에 맞지 않는 영웅이 있습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.not_enough,다이아가 부족합니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.limit,오늘은 더 새로고침할 수 없습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.nothing,바꿀 의뢰가 없습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.not_done,아직 끝나지 않았습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.offline_text,파견소는 온라인에서만 이용할 수 있습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.no_office_text,[건설]에서 파견소를 지으면 의뢰를 받을 수 있습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.process,남은 시간 ,,,,scripts/dispatch_panel.gd
+dispatch_panel.post,요청을 처리하지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/dispatch_panel.gd
+dispatch_panel.send,「%s」에 영웅을 보냈습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.send_all,보낼 수 있는 의뢰가 없습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.send_all_2,의뢰 %d개에 영웅을 보냈습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.claim,의뢰 보상: ,,,,scripts/dispatch_panel.gd
+dispatch_panel.update_info,오늘 받은 의뢰 %d / %d · 새 의뢰까지 %s,,,,scripts/dispatch_panel.gd
+dispatch_panel.update_info_2,의뢰 확률  N %s%% · R %s%% · SR %s%% · SSR %s%%,,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild.t,불러오는 중입니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild,의뢰를 불러오지 못했습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild_2,새로고침 (무료),,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild_3,새로고침 💎%d,,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild_4,모두 보내기,,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild_5,모두 받기,,,,scripts/dispatch_panel.gd
+dispatch_panel.rebuild_6,오늘 의뢰를 모두 마쳤습니다. 새 의뢰는 내일 들어옵니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.card,보상  ,,,,scripts/dispatch_panel.gd
+dispatch_panel.card_2,남은 시간 ,,,,scripts/dispatch_panel.gd
+dispatch_panel.card_3,받기,,,,scripts/dispatch_panel.gd
+dispatch_panel.card_4,즉시 완료\n💎%d,,,,scripts/dispatch_panel.gd
+dispatch_panel.card_5,보내기,,,,scripts/dispatch_panel.gd
+dispatch_panel.span_text,%d시간,,,,scripts/dispatch_panel.gd
+dispatch_panel.span_text_2, %d분,,,,scripts/dispatch_panel.gd
+dispatch_panel.span_text_3,%d분,,,,scripts/dispatch_panel.gd
+dispatch_panel.span_text_4, %d초,,,,scripts/dispatch_panel.gd
+dispatch_panel.cond_text,영웅 %d명 · %s · %s,,,,scripts/dispatch_panel.gd
+dispatch_panel.cond_text_2,등급 무관,,,,scripts/dispatch_panel.gd
+dispatch_panel.cond_text_3, 이상,,,,scripts/dispatch_panel.gd
+dispatch_panel.build_pick,「%s」 영웅 %d명을 고르세요,,,,scripts/dispatch_panel.gd
+dispatch_panel.build_pick_2,조건에 맞는 영웅이 없습니다\n다른 의뢰를 보내거나 새로고침하세요,,,,scripts/dispatch_panel.gd
+dispatch_panel.build_pick_3,뒤로,,,,scripts/dispatch_panel.gd
+dispatch_panel.build_pick_4,자동 선택,,,,scripts/dispatch_panel.gd
+dispatch_panel.build_pick_5,쉬고 있는 영웅 중 조건에 맞는 영웅이 모자랍니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.build_pick_6,보내기 %d/%d,,,,scripts/dispatch_panel.gd
+dispatch_panel.pick_button,파견 중,,,,scripts/dispatch_panel.gd
+dungeon.stop_keys,열쇠가 없어 자동 도전을 멈췄습니다,,,,scripts/dungeon.gd
+dungeon.stop_loss,패배 — 자동 도전을 멈췄습니다,,,,scripts/dungeon.gd
+dungeon.stop_fail,도전을 시작하지 못해 자동 도전을 멈췄습니다,,,,scripts/dungeon.gd
+dungeon.ready,친구,,,,scripts/dungeon.gd
+dungeon.ready_2,도우미,,,,scripts/dungeon.gd
+dungeon_hud.names.gold,골드 던전,,,,scripts/dungeon_hud.gd
+dungeon_hud.names.equip,장비 던전,,,,scripts/dungeon_hud.gd
+dungeon_hud.names.ticket,모집권 던전,,,,scripts/dungeon_hud.gd
+dungeon_hud.boss_names.goblin_king,왕고블린,,,,scripts/dungeon_hud.gd
+dungeon_hud.boss_names.death_knight,데스나이트,,,,scripts/dungeon_hud.gd
+dungeon_hud.boss_names.rock_golem,바위 골렘,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_top,포기,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_result,다음 단계,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_result_2,다시,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_result_3,나가기,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_result_4,다음 단계 자동 도전,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_result_5,현재 단계 자동 반복,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result,승리!,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_2,패배,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_3,%s %d단계,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_4,+%s 골드,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_5,다이아 모집권 +%d,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_6,특수 %d줄,,,,scripts/dungeon_hud.gd
+dungeon_hud.update_auto_label,자동 도전을 멈췄습니다,,,,scripts/dungeon_hud.gd
+dungeon_hud.update_auto_label_2,%d초 뒤 자동 도전,,,,scripts/dungeon_hud.gd
+dungeon_hud.update,%s %d단계,,,,scripts/dungeon_hud.gd
+dungeon_hud.update_2,%s  %s / %s · 남은 적 %d,,,,scripts/dungeon_hud.gd
+dungeon_hud.update_3,남은 적 %d,,,,scripts/dungeon_hud.gd
+dungeon_hud.update_4,승리!,,,,scripts/dungeon_hud.gd
+dungeon_hud.update_5,결과 확인 중…,,,,scripts/dungeon_hud.gd
+dungeon_panel.names.gold,골드 던전,,,,scripts/dungeon_panel.gd
+dungeon_panel.names.equip,장비 던전,,,,scripts/dungeon_panel.gd
+dungeon_panel.names.ticket,모집권 던전,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_tabs,던전,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_card,친구,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_card_2,열쇠가 없으면 골드로 도전,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_card_3,도전,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_form,영웅을 눌러 넣고 빼세요,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_form_2,친구 관리,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_form_3,뒤로,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_form_4,자동 편성,,,,scripts/dungeon_panel.gd
+dungeon_panel.build_form_5,출전,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh,다음 지급 %s · 최고 %d단계,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_2,보상 %s 골드,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_3,보상 다이아 모집권 %d장 · 도우미 영웅 1명과 함께,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_4,장비 %d개 · %s,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_5,%d단계,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_6,보관함 %d / %d,,,,scripts/dungeon_panel.gd
+dungeon_panel.tap_hero,도우미로 고른 영웅입니다,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_form,%s %d단계 출전,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_form_2,출전 %d / %d명,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_form_3, + 도우미 %d / 1명,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_helpers,함께할 친구 영웅 (친구마다 하루 한 번),,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_helpers_2,추천 도우미 (함께할 친구가 없어 비슷한 전투력으로 골랐습니다),,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_helpers_3,추천,,,,scripts/dungeon_panel.gd
+economy.wait_text,연결 대기 중,,,,scripts/economy.gd
+economy.rollback_text,서버에서 처리되지 않아 되돌렸습니다,,,,scripts/economy.gd
+economy.pouch_fail_text,주머니를 열지 못했습니다 — 보유 수를 다시 확인합니다,,,,scripts/economy.gd
+economy.speedup_kind_names.build,건설 가속,,,,scripts/economy.gd
+economy.speedup_kind_names.research,연구 가속,,,,scripts/economy.gd
+economy.speedup_kind_names.any,범용 가속,,,,scripts/economy.gd
+economy.speedup_kind_names.builder,일꾼 고용권,,,,scripts/economy.gd
+economy.speedup_fail_text,가속을 쓰지 못했습니다 — 보유 수를 다시 확인합니다,,,,scripts/economy.gd
+economy.shop_fail_text,구매가 처리되지 않아 되돌렸습니다,,,,scripts/economy.gd
+economy.iap_fail_text,보상을 받지 못해 되돌렸습니다,,,,scripts/economy.gd
+economy.no_gold_text,골드가 부족합니다,,,,scripts/economy.gd
+economy.no_dia_text,다이아가 부족합니다,,,,scripts/economy.gd
+economy.no_ticket_text,다이아 모집권이 부족합니다,,,,scripts/economy.gd
+economy.quest_fail_text.too_soon,잠시 뒤에 다시 받아 주세요,,,,scripts/economy.gd
+economy.quest_fail_text.not_done,아직 미션을 끝내지 않았습니다,,,,scripts/economy.gd
+economy.quest_fail_text.stale,이미 받은 보상입니다,,,,scripts/economy.gd
+economy.quest_fail_default,보상을 받지 못했습니다. 잠시 뒤에 다시 시도해 주세요,,,,scripts/economy.gd
+economy.gacha_level_text,골드 모집 Lv %d! SSR %s%%,,,,scripts/economy.gd
+economy.gacha_level_no_ssr_text,골드 모집 Lv %d! SR %s%% · SSR은 Lv %d부터,,,,scripts/economy.gd
+economy.gacha_fail_text,모집 결과를 받지 못했습니다 — 보유 영웅을 다시 확인합니다,,,,scripts/economy.gd
+economy.deploy_fail_text,배치를 저장하지 못했습니다,,,,scripts/economy.gd
+economy.levelup_fail_text,레벨업 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.promote_fail_text,승급 결과를 받지 못했습니다 — 영웅 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.promote_text.not_owned,보유하지 않은 영웅,,,,scripts/economy.gd
+economy.promote_text.max_promotion,최대 승급,,,,scripts/economy.gd
+economy.promote_text.not_enough_shards,조각 부족,,,,scripts/economy.gd
+economy.build_fail_text,건설 결과를 받지 못했습니다 — 건물 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.block_text.unknown,알 수 없는 건물,,,,scripts/economy.gd
+economy.block_text.max_level,최대 레벨,,,,scripts/economy.gd
+economy.block_text.keep_cap,성채 레벨이 부족합니다,,,,scripts/economy.gd
+economy.block_text.prereq,선행 조건 미충족,,,,scripts/economy.gd
+economy.block_text.in_progress,건설 중,,,,scripts/economy.gd
+economy.block_text.builder_busy,다른 건물 건설 중,,,,scripts/economy.gd
+economy.block_text.not_enough,자원 부족,,,,scripts/economy.gd
+economy.block_text.unbuilt,아직 짓지 않은 건물,,,,scripts/economy.gd
+economy.block_text.out,성벽에 너무 가깝습니다,,,,scripts/economy.gd
+economy.block_text.road,길 위에는 지을 수 없습니다,,,,scripts/economy.gd
+economy.block_text.square,광장에는 지을 수 없습니다,,,,scripts/economy.gd
+economy.block_text.overlap,다른 건물과 겹칩니다,,,,scripts/economy.gd
+economy.block_text.fixed,옮길 수 없는 건물입니다,,,,scripts/economy.gd
+economy.block_text.bad_cell,지을 수 없는 자리입니다,,,,scripts/economy.gd
+economy.soldier_text.unknown,알 수 없는 병사,,,,scripts/economy.gd
+economy.soldier_text.max_tier,최대 티어입니다,,,,scripts/economy.gd
+economy.soldier_text.not_enough,병사가 부족합니다,,,,scripts/economy.gd
+economy.soldier_text.bad_key,알 수 없는 병사,,,,scripts/economy.gd
+economy.soldier_text.not_owned,보유한 병사보다 많습니다,,,,scripts/economy.gd
+economy.soldier_text.over_population,인구 한도를 넘습니다,,,,scripts/economy.gd
+economy.merge_fail_text,합성 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.soldier_deploy_fail_text,병사 배치를 저장하지 못했습니다,,,,scripts/economy.gd
+economy.train_text.unknown,병사 건물이 아닙니다,,,,scripts/economy.gd
+economy.train_text.bad_count,훈련 수량을 고르세요,,,,scripts/economy.gd
+economy.train_text.training,훈련 중입니다,,,,scripts/economy.gd
+economy.train_text.ready_to_collect,훈련 완료 — 먼저 수령하세요,,,,scripts/economy.gd
+economy.train_text.not_enough,자원 부족,,,,scripts/economy.gd
+economy.train_text.not_ready,아직 훈련 중입니다,,,,scripts/economy.gd
+economy.train_text.empty,훈련 중인 병사가 없습니다,,,,scripts/economy.gd
+economy.train_fail_text,훈련 결과를 받지 못했습니다 — 병사 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.growth_fail_text,강화 결과를 받지 못했습니다 — 성장 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.cancel_text,훈련을 취소했습니다 — 비용 50% 환불,,,,scripts/economy.gd
+economy.dungeon_text.unknown,알 수 없는 던전,,,,scripts/economy.gd
+economy.dungeon_text.locked,아직 열리지 않은 단계입니다,,,,scripts/economy.gd
+economy.dungeon_text.bad_party,출전 영웅을 확인하세요,,,,scripts/economy.gd
+economy.dungeon_text.bag_full,보관함이 가득 찼습니다,,,,scripts/economy.gd
+economy.dungeon_text.no_key,열쇠가 없습니다,,,,scripts/economy.gd
+economy.dungeon_text.not_enough_gold,골드가 부족합니다,,,,scripts/economy.gd
+economy.dungeon_text.implausible,전투 기록이 맞지 않습니다,,,,scripts/economy.gd
+economy.dungeon_text.run_expired,도전 시간이 지났습니다,,,,scripts/economy.gd
+economy.dungeon_text.run_closed,끝난 도전입니다,,,,scripts/economy.gd
+economy.dungeon_text.unknown_run,끝난 도전입니다,,,,scripts/economy.gd
+economy.dungeon_text.no_helper,함께할 도우미 영웅을 고르세요,,,,scripts/economy.gd
+economy.dungeon_text.helper_used,오늘 이미 함께한 영웅입니다,,,,scripts/economy.gd
+economy.dungeon_text.helper_unavailable,도우미 목록이 바뀌었습니다 — 다시 고르세요,,,,scripts/economy.gd
+economy.dungeon_fail_text,던전 결과를 받지 못했습니다 — 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.equip_text.not_owned,보유하지 않은 영웅,,,,scripts/economy.gd
+economy.equip_text.bad_slot,알 수 없는 부위,,,,scripts/economy.gd
+economy.equip_text.unknown_item,보관함에 없는 장비,,,,scripts/economy.gd
+economy.equip_text.wrong_slot,부위가 맞지 않습니다,,,,scripts/economy.gd
+economy.equip_text.wrong_weapon,이 영웅이 쓸 수 없는 무기입니다,,,,scripts/economy.gd
+economy.equip_text.equipped,장착 중인 장비는 팔 수 없습니다,,,,scripts/economy.gd
+economy.equip_text.bad_request,팔 장비를 고르세요,,,,scripts/economy.gd
+economy.equip_fail_text,장비 결과를 받지 못했습니다 — 보관함을 다시 확인합니다,,,,scripts/economy.gd
+economy.research_text.unknown_research,알 수 없는 연구,,,,scripts/economy.gd
+economy.research_text.research_busy,다른 연구가 진행 중입니다,,,,scripts/economy.gd
+economy.research_text.max_level,최대 레벨,,,,scripts/economy.gd
+economy.research_text.locked,잠긴 연구입니다,,,,scripts/economy.gd
+economy.research_text.not_enough_resources,자원 부족,,,,scripts/economy.gd
+economy.research_text.not_enough_gold,골드 부족,,,,scripts/economy.gd
+economy.research_text.no_research,진행 중인 연구가 없습니다,,,,scripts/economy.gd
+economy.research_text.not_enough_diamonds,다이아가 부족합니다,,,,scripts/economy.gd
+economy.research_text.lab_unbuilt,연구소를 먼저 지으세요,,,,scripts/economy.gd
+economy.research_done_text,연구 완료: %s Lv %d,,,,scripts/economy.gd
+economy.research_cancel_text,연구를 취소했습니다 — 비용 50% 환불,,,,scripts/economy.gd
+economy.research_fail_text,연구 결과를 받지 못했습니다 — 연구 상태를 다시 확인합니다,,,,scripts/economy.gd
+economy.levelup_block,보유하지 않은 영웅,,,,scripts/economy.gd
+economy.levelup_block_2,최대 레벨,,,,scripts/economy.gd
+economy.levelup_block_3,골드 부족,,,,scripts/economy.gd
+economy.level_up.max_level,최대 레벨입니다,,,,scripts/economy.gd
+economy.growth_block,알 수 없는 항목,,,,scripts/economy.gd
+economy.growth_block_2,응답 대기 중,,,,scripts/economy.gd
+economy.growth_block_3,최대 레벨,,,,scripts/economy.gd
+economy.growth_block_4,골드 부족,,,,scripts/economy.gd
+economy.growth_up.max_level,최대 레벨입니다,,,,scripts/economy.gd
+economy.minutes_text,%d일,,,,scripts/economy.gd
+economy.minutes_text_2,%d시간,,,,scripts/economy.gd
+economy.minutes_text_3,%d분,,,,scripts/economy.gd
+economy.speedup_reward_parts, %d개,,,,scripts/economy.gd
+economy.pouch_name,%d시간,,,,scripts/economy.gd
+economy.pouch_name_2,%d분,,,,scripts/economy.gd
+economy.pouch_name_3,%s 주머니(%s),,,,scripts/economy.gd
+economy.pouch_name_4,골드,,,,scripts/economy.gd
+economy.pouch_name_5,자원,,,,scripts/economy.gd
+economy.on_growth_failed.max_level,최대 레벨입니다,,,,scripts/economy.gd
+economy.on_levelup_failed.max_level,최대 레벨입니다,,,,scripts/economy.gd
+economy.friend_text.unknown_player,그 친구 코드를 가진 성주가 없습니다,,,,scripts/economy.gd
+economy.friend_text.self,내 친구 코드입니다,,,,scripts/economy.gd
+economy.friend_text.already_friends,이미 친구입니다,,,,scripts/economy.gd
+economy.friend_text.already_requested,이미 친구 신청을 보냈습니다,,,,scripts/economy.gd
+economy.friend_text.friend_full,친구 목록과 보낸 신청이 가득 찼습니다,,,,scripts/economy.gd
+economy.friend_text.their_full,상대의 친구 목록이 가득 찼습니다,,,,scripts/economy.gd
+economy.friend_text.no_request,친구 신청이 없어졌습니다,,,,scripts/economy.gd
+economy.friend_text.not_friend,이미 친구가 아닙니다,,,,scripts/economy.gd
+economy.friend_text.not_owned,가지고 있지 않은 영웅입니다,,,,scripts/economy.gd
+economy.friend_text.bad_request,친구 코드는 8자리입니다,,,,scripts/economy.gd
+economy.friend_done_text.request,친구 신청을 보냈습니다,,,,scripts/economy.gd
+economy.friend_done_text.accept,친구가 되었습니다,,,,scripts/economy.gd
+economy.friend_done_text.remove,정리했습니다,,,,scripts/economy.gd
+economy.friend_done_text.hero,빌려줄 영웅을 바꿨습니다,,,,scripts/economy.gd
+economy.friend_offline_text,친구는 온라인에서만 쓸 수 있습니다,,,,scripts/economy.gd
+economy.on_friends_failed,친구 요청이 처리되지 않았습니다,,,,scripts/economy.gd
+event_panel.title,28일 출석 이벤트,,,,scripts/event_panel.gd
+event_panel.key_names.gold,골드 던전 열쇠,,,,scripts/event_panel.gd
+event_panel.key_names.equip,장비 던전 열쇠,,,,scripts/event_panel.gd
+event_panel.key_names.ticket,모집권 던전 열쇠,,,,scripts/event_panel.gd
+event_panel.fail_text.claimed,오늘은 이미 받았습니다,,,,scripts/event_panel.gd
+event_panel.fail_text.finished,모든 출석 보상을 받았습니다,,,,scripts/event_panel.gd
+event_panel.fail_text.stale,출석 정보가 바뀌었습니다. 다시 열어 주세요,,,,scripts/event_panel.gd
+event_panel.ready,닫기,,,,scripts/event_panel.gd
+event_panel.ready_2,오늘의 보상 받기,,,,scripts/event_panel.gd
+event_panel.claim,%d일차 출석 보상을 받았습니다!,,,,scripts/event_panel.gd
+event_panel.on_claim_failed,보상을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/event_panel.gd
+event_panel.rebuild,온라인에서만 참여할 수 있습니다,,,,scripts/event_panel.gd
+event_panel.rebuild_2,출석 정보를 불러오는 중…,,,,scripts/event_panel.gd
+event_panel.rebuild_3,연결이 끊겨 불러오지 못했습니다,,,,scripts/event_panel.gd
+event_panel.rebuild_4,오늘의 보상 받기,,,,scripts/event_panel.gd
+event_panel.rebuild_5,"출석 %d / %d일 · 하루 한 번, 날짜가 이어지지 않아도 됩니다",,,,scripts/event_panel.gd
+event_panel.rebuild_6,모두 받았습니다,,,,scripts/event_panel.gd
+event_panel.rebuild_7,%d일차 보상 받기,,,,scripts/event_panel.gd
+event_panel.rebuild_8,내일 다시 와 주세요,,,,scripts/event_panel.gd
+event_panel.update_info.head,%d일차,,,,scripts/event_panel.gd
+event_panel.update_info,(받음),,,,scripts/event_panel.gd
+event_panel.update_info_2,(오늘),,,,scripts/event_panel.gd
+event_panel.reward_text,%s 영웅 %s(%s),,,,scripts/event_panel.gd
+event_panel.reward_text_2,영웅 ,,,,scripts/event_panel.gd
+event_panel.reward_text_3,%s 장비 상자(부위·능력치 무작위),,,,scripts/event_panel.gd
+event_panel.reward_text_4,골드 ,,,,scripts/event_panel.gd
+event_panel.reward_text_5,다이아 ,,,,scripts/event_panel.gd
+event_panel.reward_text_6,목재·석재·식량 각 ,,,,scripts/event_panel.gd
+event_panel.reward_text_7,목재,,,,scripts/event_panel.gd
+event_panel.reward_text_8,석재,,,,scripts/event_panel.gd
+event_panel.reward_text_9,식량,,,,scripts/event_panel.gd
+event_panel.reward_text_10,%s %d개,,,,scripts/event_panel.gd
+event_panel.reward_text_11,다이아 모집권 %d장,,,,scripts/event_panel.gd
+event_panel.reward_text_12, %d개,,,,scripts/event_panel.gd
+event_panel.cell_lines,%s 장비,,,,scripts/event_panel.gd
+event_panel.cell_lines_2,각 ,,,,scripts/event_panel.gd
+event_panel.cell_lines_3,모집권 %d,,,,scripts/event_panel.gd
+event_panel.cell_lines_4,주머니 ,,,,scripts/event_panel.gd
+event_panel.cell_lines_5,%d시간,,,,scripts/event_panel.gd
+event_panel.cell_lines_6,%d분,,,,scripts/event_panel.gd
+event_panel.cell_lines_7,주머니 %d개,,,,scripts/event_panel.gd
+event_panel.short_num,%d만,,,,scripts/event_panel.gd
+event_panel.short_num_2,%.1f만,,,,scripts/event_panel.gd
+event_panel.draw_cell,%d일,,,,scripts/event_panel.gd
+exchange_panel.tabs,구매,,,,scripts/exchange_panel.gd
+exchange_panel.tabs_2,판매 등록,,,,scripts/exchange_panel.gd
+exchange_panel.tabs_3,내 판매,,,,scripts/exchange_panel.gd
+exchange_panel.cur_names.gold,골드,,,,scripts/exchange_panel.gd
+exchange_panel.cur_names.diamonds,다이아,,,,scripts/exchange_panel.gd
+exchange_panel.sorts,낮은 가격,,,,scripts/exchange_panel.gd
+exchange_panel.sorts_2,높은 가격,,,,scripts/exchange_panel.gd
+exchange_panel.sorts_3,최신,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.sold_out,이미 팔린 장비입니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.own_listing,내 판매는 살 수 없습니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.price_changed,값이 바뀌었습니다 — 목록을 새로 받았습니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.bag_full,보관함이 가득 찼습니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.not_enough_gold,골드가 부족합니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.not_enough_diamonds,다이아가 부족합니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.too_many_listings,판매는 동시에 10개까지입니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.equipped,장착 중인 장비는 올릴 수 없습니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.unknown_item,보관함에 없는 장비입니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.bad_price,값을 다시 정해 주세요,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.already_sold,이미 팔렸습니다 — 대금을 받으세요,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.not_active,이미 끝난 판매입니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_text.nothing_to_collect,받을 대금이 없습니다,,,,scripts/exchange_panel.gd
+exchange_panel.fail_default,거래소 응답을 받지 못했습니다 — 다시 확인하겠습니다,,,,scripts/exchange_panel.gd
+exchange_panel.offline_text,거래소는 온라인에서 이용할 수 있습니다,,,,scripts/exchange_panel.gd
+exchange_panel.ready,거래소,,,,scripts/exchange_panel.gd
+exchange_panel.on_wallet,보유  골드 %s · 다이아 %s,,,,scripts/exchange_panel.gd
+exchange_panel.list_item,판매 등록: %s · %s %s,,,,scripts/exchange_panel.gd
+exchange_panel.collect,+%s 골드,,,,scripts/exchange_panel.gd
+exchange_panel.collect_2,+%s 다이아,,,,scripts/exchange_panel.gd
+exchange_panel.collect_3,판매 대금 ,,,,scripts/exchange_panel.gd
+exchange_panel.buy,구매 완료: %s — 보관함에 넣었습니다,,,,scripts/exchange_panel.gd
+exchange_panel.buy_2,장비,,,,scripts/exchange_panel.gd
+exchange_panel.left_text,남은 시간 %d시간 %d분,,,,scripts/exchange_panel.gd
+exchange_panel.left_text_2,남은 시간 %d분,,,,scripts/exchange_panel.gd
+exchange_panel.rebuild,보유  골드 %s · 다이아 %s,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy,다른 성주가 올린 장비 · 사면 바로 보관함에 들어갑니다,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy_2,통화: ,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy_3,부위: ,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy_4,전체,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy_5,등급: ,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy_6,올라온 장비가 없습니다,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy_7,구매,,,,scripts/exchange_panel.gd
+exchange_panel.build_sell,판매 중 %d / %d · 판매 기간 48시간 · 정산 수수료 %d%%,,,,scripts/exchange_panel.gd
+exchange_panel.build_sell_2,올릴 수 있는 장비가 없습니다 (장착 중인 장비는 올릴 수 없습니다),,,,scripts/exchange_panel.gd
+exchange_panel.build_sell_form,올릴 장비를 고르세요,,,,scripts/exchange_panel.gd
+exchange_panel.build_sell_form_2,값 (%s~%s),,,,scripts/exchange_panel.gd
+exchange_panel.build_sell_form_3,판매 등록,,,,scripts/exchange_panel.gd
+exchange_panel.build_sell_form_4,받는 금액 %s (수수료 %d%% %s),,,,scripts/exchange_panel.gd
+exchange_panel.build_sell_form_5,값을 입력하세요,,,,scripts/exchange_panel.gd
+exchange_panel.build_mine,판매 중 %d / %d · 팔리면 값의 %d%%를 받습니다,,,,scripts/exchange_panel.gd
+exchange_panel.build_mine_2,대금 받기  ,,,,scripts/exchange_panel.gd
+exchange_panel.build_mine_3,내리기,,,,scripts/exchange_panel.gd
+exchange_panel.build_mine.tail,판매 완료 · 받을 금액 %s,,,,scripts/exchange_panel.gd
+exchange_panel.build_mine_4,판매 중인 장비가 없습니다 — [판매 등록]에서 올려 보세요,,,,scripts/exchange_panel.gd
+exchange_panel.item_row,판매 완료,,,,scripts/exchange_panel.gd
+exchange_panel.build_confirm,취소,,,,scripts/exchange_panel.gd
+exchange_panel.build_confirm_2,구매,,,,scripts/exchange_panel.gd
+exchange_panel.ask_buy,%s\n%s\n\n%s에 구매하시겠습니까?,,,,scripts/exchange_panel.gd
+fever_button.on_pressed,스테이지 진행 중엔 FEVER를 쓸 수 없습니다,,,,scripts/fever_button.gd
+fever_button.on_pressed_2,몬스터 %d마리 더,,,,scripts/fever_button.gd
+formation.side_names,북,,,,scripts/formation.gd
+formation.side_names_2,동,,,,scripts/formation.gd
+formation.side_names_3,남,,,,scripts/formation.gd
+formation.side_names_4,서,,,,scripts/formation.gd
+friend_panel.ready,친구,,,,scripts/friend_panel.gd
+friend_panel.ready_2,복사,,,,scripts/friend_panel.gd
+friend_panel.ready_3,친구 목록,,,,scripts/friend_panel.gd
+friend_panel.ready_4,친구 추가,,,,scripts/friend_panel.gd
+friend_panel.ready_5,바꾸기,,,,scripts/friend_panel.gd
+friend_panel.ready_6,친구 코드 8자리,,,,scripts/friend_panel.gd
+friend_panel.ready_7,신청,,,,scripts/friend_panel.gd
+friend_panel.ready_8,추천 성주,,,,scripts/friend_panel.gd
+friend_panel.ready_9,새로고침,,,,scripts/friend_panel.gd
+friend_panel.ready_10,닫기,,,,scripts/friend_panel.gd
+friend_panel.copy_code,친구 코드를 복사했습니다,,,,scripts/friend_panel.gd
+friend_panel.refresh,%s · 친구 코드 %s,,,,scripts/friend_panel.gd
+friend_panel.refresh_2,친구 목록을 받는 중…,,,,scripts/friend_panel.gd
+friend_panel.refresh_3,빌려주는 영웅: %s Lv %d%s\n친구가 모집권 던전에 데려갑니다,,,,scripts/friend_panel.gd
+friend_panel.refresh_4, (가장 강한 영웅),,,,scripts/friend_panel.gd
+friend_panel.refresh_5,빌려줄 영웅이 없습니다,,,,scripts/friend_panel.gd
+friend_panel.refresh_6,친구 목록,,,,scripts/friend_panel.gd
+friend_panel.refresh_7,친구 목록 (신청 %d),,,,scripts/friend_panel.gd
+friend_panel.refresh_8,받은 신청,,,,scripts/friend_panel.gd
+friend_panel.refresh_9,수락,,,,scripts/friend_panel.gd
+friend_panel.refresh_10,거절,,,,scripts/friend_panel.gd
+friend_panel.refresh_11,친구 %d / %d명,,,,scripts/friend_panel.gd
+friend_panel.refresh_12,삭제,,,,scripts/friend_panel.gd
+friend_panel.refresh_13,아직 친구가 없습니다. 친구 코드를 주고받거나 [친구 추가] 탭의 추천 성주에게 신청해 보세요.,,,,scripts/friend_panel.gd
+friend_panel.refresh_14,보낸 신청,,,,scripts/friend_panel.gd
+friend_panel.refresh_15,취소,,,,scripts/friend_panel.gd
+friend_panel.refresh_16,신청,,,,scripts/friend_panel.gd
+friend_panel.refresh_17,지금 추천할 성주가 없습니다. 잠시 뒤 [새로고침]을 눌러 보세요.,,,,scripts/friend_panel.gd
+friend_panel.fill_picks,자동,,,,scripts/friend_panel.gd
+friend_panel.section.sub,%s Lv %d · 전투력 %d,,,,scripts/friend_panel.gd
+friend_panel.section.sub_2,영웅 없음,,,,scripts/friend_panel.gd
+friend_panel.section,오늘 함께했습니다 · 내일 다시,,,,scripts/friend_panel.gd
+gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
+gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
+gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
+gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
+gacha_odds.show_for_4,주점 Lv %d 보너스 포함: SSR +%s · SR +%s,,,,scripts/gacha_odds.gd
+gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
+gacha_odds.show_for_6,10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다),,,,scripts/gacha_odds.gd
+gacha_odds.show_for_7,"골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다",,,,scripts/gacha_odds.gd
+gacha_odds.show_for_8,등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림,,,,scripts/gacha_odds.gd
+gacha_odds.show_for_9,%s (%d명) — 한 명당 %s,,,,scripts/gacha_odds.gd
+gacha_odds.show_for_10,골드 모집 레벨별 등급 확률,,,,scripts/gacha_odds.gd
+gacha_odds.show_for.up, · 레벨업 %s회,,,,scripts/gacha_odds.gd
+game_data.sub_names.lifesteal,흡혈,,,,scripts/game_data.gd
+game_data.sub_names.crit_rate,치명타 확률,,,,scripts/game_data.gd
+game_data.sub_names.crit_dmg,치명타 피해,,,,scripts/game_data.gd
+game_data.sub_names.aspd,공격 속도,,,,scripts/game_data.gd
+game_data.sub_names.dmg_reduce,받는 피해 감소,,,,scripts/game_data.gd
+game_data.sub_names.skill_dmg,스킬 피해,,,,scripts/game_data.gd
+goblin_director.spawn,황금 고블린이 나타났습니다! 영웅이 잡으면 황금 보따리를 얻습니다,,,,scripts/goblin_director.gd
+goblin_director.on_claimed,골드 +%s,,,,scripts/goblin_director.gd
+goblin_director.on_claimed_2,다이아 +%d,,,,scripts/goblin_director.gd
+goblin_director.on_claimed_3,황금 보따리: ,,,,scripts/goblin_director.gd
+gold_goblin.name_text,황금 고블린,,,,scripts/gold_goblin.gd
+graphics.quality_names.high,높음,,,,scripts/graphics.gd
+graphics.quality_names.mid,보통,,,,scripts/graphics.gd
+graphics.quality_names.low,낮음,,,,scripts/graphics.gd
+graphics.saver_text,절전 모드\n화면을 누르면 돌아갑니다,,,,scripts/graphics.gd
+growth_panel.note,성장은 모든 영웅·병사에게 적용됩니다,,,,scripts/growth_panel.gd
+growth_panel.wait,응답 대기 중,,,,scripts/growth_panel.gd
+growth_panel.ready,성장,,,,scripts/growth_panel.gd
+growth_panel.refresh,보유 골드 %s,,,,scripts/growth_panel.gd
+growth_panel.refresh_2, (최대),,,,scripts/growth_panel.gd
+growth_panel.refresh_3,강화,,,,scripts/growth_panel.gd
+growth_panel.row,강화,,,,scripts/growth_panel.gd
+guide_tour.ready,건너뛰기,,,,scripts/guide_tour.gd
+guide_tour.next,%d / %d · 화면을 누르면 다음,,,,scripts/guide_tour.gd
+guide_tour.next_2,%d / %d · 화면을 누르면 닫힙니다,,,,scripts/guide_tour.gd
+guide_tours.tours.title,성 화면 둘러보기,,,,scripts/guide_tours.gd
+guide_tours.tours.text,"성주님, 환영합니다. 화면의 각 부분이 하는 일을 하나씩 알려 드립니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_2,가지고 있는 골드·목재·석재·식량·다이아입니다. 건설·레벨업·모집에 씁니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_3,"지금 스테이지와 라운드입니다. 한 스테이지는 25라운드이고, 다 막으면 다음 스테이지로 넘어갑니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_4,성의 체력입니다. 성문을 부수고 들어온 몬스터가 성을 공격합니다. 0이 되면 그 스테이지 도전에 실패합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_5,북·동·남·서 네 성문의 체력입니다. 누르면 그 성문으로 화면이 이동합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_6,[진행]을 누르면 스테이지 전투를 시작합니다. 누르지 않으면 대기하며 영웅들이 몬스터를 잡아 골드를 모읍니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_7,[연속 진행]을 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어 갑니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_8,"FEVER 게이지입니다. 몬스터를 잡으면 차고, 가득 차면 눌러 잠시 몬스터를 몰아서 잡습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_9,"[건설]을 누르면 지을 수 있는 건물 목록이 펼쳐집니다. 원하는 자리에 짓고, 지은 건물은 옮길 수 있습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_10,[메뉴]에는 이벤트·미션·가방·길드·우편 같은 기능이 모여 있습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_11,아래 탭에서 성장·영웅·병사·던전·모집·상점을 엽니다. 잠긴 탭은 가이드를 진행하면 하나씩 열립니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_12,"가이드 카드입니다. 지금 할 일과 보상이 나옵니다. [바로가기]를 누르면 할 곳으로 이동하고, 다 하면 [보상 받기]가 켜집니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_13,건물 이름과 지금 레벨입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_14,지금 효과와 다음 레벨 효과(초록)입니다. 성채 레벨은 다른 건물이 오를 수 있는 최대 레벨을 정합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_15,레벨업에 필요한 조건입니다. 모두 ✓가 되어야 올릴 수 있습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_16,레벨업에 드는 자원입니다. 빨간 숫자는 모자란 자원입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_17,"[레벨업]을 누르면 일꾼이 공사를 시작합니다. 시간이 지나면 끝나고, 가속 아이템으로 줄일 수 있습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_18,출전 자리입니다. 여기 선 영웅이 성문을 지킵니다. 자리를 누른 뒤 아래 영웅을 누르면 그 자리에 섭니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_19,"가지고 있는 영웅입니다. 카드를 누르면 자세히 보고 레벨업합니다. 초록 ▲는 레벨업, 금색 ⬆는 승급할 수 있다는 표시입니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_20,[정렬]을 누를 때마다 전투력·등급·레벨 순으로 바뀝니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_21,[자동 배치]는 전투력 높은 영웅으로 자리를 채웁니다. [적용]을 눌러야 확정됩니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_22,[일괄 승급]은 조각이 모인 영웅을 한 번에 승급합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_23,능력치입니다. 옆의 초록 숫자는 다음 레벨 값입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_24,스킬입니다. 잠긴 스킬은 승급하면 열립니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_25,[레벨업]은 골드로 1레벨 올립니다. 옆 [×10]은 여러 번을 한 번에 합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_26,[승급]은 그 영웅의 조각으로 별을 올립니다. 최대 레벨과 능력치가 함께 오릅니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_27,[배치]를 누르면 이 영웅을 출전 자리에 세웁니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_28,성장은 골드로 합니다. 지금 가진 골드입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_29,[강화]를 누르면 모든 영웅의 공격력이 오릅니다. 누르고 있으면 계속 강화합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_30,[×10]은 10번을 한 번에 강화합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_31,체력·공격 속도·치명타 같은 다른 능력치도 같은 방법으로 올립니다. 모든 영웅에게 함께 적용됩니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_32,골드 모집입니다. 골드로 영웅을 모집합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_33,"다이아 모집입니다. SSR 영웅이 더 잘 나오고, 다이아 모집권이 있으면 다이아 대신 씁니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_34,"골드 모집 레벨입니다. 모집할수록 오르고, 레벨이 높을수록 좋은 영웅이 잘 나옵니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_35,[10회]는 10명을 한 번에 모집합니다. 다이아 모집은 10회마다 SR 이상 1명을 보장합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_36,[확률 정보]에서 영웅마다 나올 확률을 볼 수 있습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_37,이 건물에서 훈련하는 병사와 1마리 훈련 시간입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_38,훈련 비용입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_39,"[훈련]을 누르면 시작합니다. 다 되면 [받기]로 병사를 데려오고, [병사] 탭에서 성문에 배치합니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_40,던전과 PVP를 고릅니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_41,골드 던전입니다. 깨면 골드를 받습니다. 장비 던전과 모집권 던전은 가이드를 진행하면 열립니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_42,남은 입장권입니다. 도전할 때 1장씩 씁니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_43,단계입니다. 높은 단계일수록 어렵고 보상이 큽니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_44,[도전]을 누르면 출전 영웅을 고르는 화면으로 갑니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_45,던전에 들어갈 영웅 자리입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_46,"영웅을 누르면 자리에 넣고, 다시 누르면 뺍니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_47,전투력 높은 영웅으로 자리를 한 번에 채웁니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_48,준비가 되면 눌러 던전에 들어갑니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_49,연구 분야입니다. 분야마다 다른 능력을 올립니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_50,연구 카드입니다. 위 단 연구를 올리면 아래 단이 열립니다. 카드를 누르면 자세히 봅니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_51,지금 진행 중인 연구와 남은 시간입니다. 연구는 한 번에 하나씩 합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_52,이 연구의 효과입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_53,필요한 자원입니다(가진 양 / 필요한 양).,,,,scripts/guide_tours.gd
+guide_tours.tours.text_54,[연구]를 누르면 시작합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_55,추천 길드입니다. [가입]을 누르면 바로 들어갑니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_56,길드를 직접 만들 수도 있습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_57,[출석]은 하루 한 번 합니다. 길드 경험치와 보상을 받습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_58,오늘 출석한 길드원 수가 늘면 상자를 차례로 열 수 있습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_59,기부하면 길드 경험치가 오릅니다. 길드 레벨이 오르면 모든 영웅의 공격력·체력이 오릅니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_60,[보스]에서는 길드원과 함께 드래곤과 싸웁니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_61,[길드전]에서는 일주일에 한 번 다른 길드의 성을 공격합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_62,[상점]에서 길드 코인으로 물건을 삽니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_63,[도전]은 하루 2번 할 수 있습니다. 제한 시간 동안 드래곤에게 준 피해로 등급(S~D)과 길드 코인이 정해집니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.title_2,공성전 체험,,,,scripts/guide_tours.gd
+guide_tours.tours.text_64,"공성전은 길드끼리 상대 성을 공격하는 전투입니다. 이번 체험은 연습이라 기록이 남지 않습니다. 화면을 누를 때마다 하나씩 설명하고, 그동안 전투는 멈춰 있습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_65,"남은 시간입니다. 실제 공성전은 10분, 체험은 4분입니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_66,상대 성의 네 성문(북·동·남·서) 체력입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_67,가운데 성채의 체력입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_68,이것이 상대의 성채입니다. 성문을 부수고 들어가 성채를 치면 큰 점수를 얻습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_69,"성문 앞과 성벽 위에는 상대 길드원이 정해 둔 수비 영웅이 섭니다. 근접 영웅은 성문 앞, 원거리 영웅은 성벽 위에서 막습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_70,내 영웅 4명입니다. 성 밖 진영에서 시작합니다. 나머지 길드원의 영웅은 AI가 움직입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_71,아래 띠에서 내 영웅을 고를 수도 있습니다. 쓰러진 영웅은 흐리게 보입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_72,지금은 배치 단계입니다. 내 영웅을 누르고 붉은 선 바깥 바닥을 누르면 그 자리로 옮깁니다. 자리 잡은 쪽 성문을 공격합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_73,자리를 다 잡았으면 [전투 시작]을 누르세요. 실제 공성전은 길드장이 누르거나 배치 시간이 끝나면 시작합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_74,전투가 시작되었습니다. 영웅들이 성문으로 가서 수비 영웅과 싸우고 성문을 공격합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_75,"이번 전투 점수입니다. 수비 영웅 처치 1점, 성문 파괴 10점(성문 점수는 2개까지), 성채는 최대 체력의 3%를 깎을 때마다 1점입니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_76,성문 체력이 0이 되면 그 면으로 성 안에 들어갈 수 있습니다. 한 성문에 힘을 모으면 빨리 부서집니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_77,[자동 진격]을 누르면 내 영웅도 AI가 알아서 움직입니다. 직접 움직이려면 내 영웅을 누르고 갈 곳을 누르세요.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_78,영웅이 쓰러졌습니다. 공격 영웅은 30초 뒤 진영에서 한 번 다시 일어납니다. 두 번째로 쓰러지면 그 전투에서는 더 싸우지 못합니다. 수비 영웅은 다시 일어나지 않습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_79,성문이 부서졌습니다! 이제 그 면으로 들어가 성채를 칠 수 있습니다. 성채를 무너뜨리면 전투가 바로 끝납니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_80,"체험이 끝났습니다. 실제 공성전은 일주일에 한 번 길드장이 정한 시각에 열리고, 점수가 더 높은 길드가 이깁니다. [나가기]를 누르면 성으로 돌아갑니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_81,[구매]에서는 다른 성주가 올린 장비를 봅니다. 통화·부위·등급으로 거르고 가격순으로 정렬합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_82,"[판매 등록]에서는 내 장비를 골라 값을 정해 올립니다. 48시간 동안 걸리고, 동시에 10개까지 올릴 수 있습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_83,[내 판매]에서는 올린 장비를 봅니다. 팔리면 수수료 10%를 뺀 대금을 [대금 받기]로 받습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_84,가지고 있는 골드와 다이아입니다.,,,,scripts/guide_tours.gd
+guild.my_name,나,,,,scripts/guild.gd
+guild.roles,길드장,,,,scripts/guild.gd
+guild.roles_2,부길드장,,,,scripts/guild.gd
+guild.roles_3,정예,,,,scripts/guild.gd
+guild.roles_4,길드원,,,,scripts/guild.gd
+guild.donations.name,골드 기부,,,,scripts/guild.gd
+guild.donations.name_2,다이아 기부,,,,scripts/guild.gd
+guild.donations.name_3,왕실 기부,,,,scripts/guild.gd
+guild.boss_names,드래곤,,,,scripts/guild.gd
+guild.shop.dia.name,다이아 50,,,,scripts/guild.gd
+guild.shop.gold.name,"골드 30,000",,,,scripts/guild.gd
+guild.shop.equip.name,장비 상자,,,,scripts/guild.gd
+guild.shop.shards.name,영웅 조각 상자,,,,scripts/guild.gd
+guild.shop.ssr.name,SSR 조각,,,,scripts/guild.gd
+guild.name_a,새벽,,,,scripts/guild.gd
+guild.name_a_2,은빛,,,,scripts/guild.gd
+guild.name_a_3,붉은,,,,scripts/guild.gd
+guild.name_a_4,강철,,,,scripts/guild.gd
+guild.name_a_5,푸른,,,,scripts/guild.gd
+guild.name_a_6,황금,,,,scripts/guild.gd
+guild.name_a_7,서리,,,,scripts/guild.gd
+guild.name_a_8,폭풍,,,,scripts/guild.gd
+guild.name_a_9,달빛,,,,scripts/guild.gd
+guild.name_a_10,불꽃,,,,scripts/guild.gd
+guild.name_a_11,검은,,,,scripts/guild.gd
+guild.name_a_12,하얀,,,,scripts/guild.gd
+guild.name_a_13,용맹한,,,,scripts/guild.gd
+guild.name_a_14,고요한,,,,scripts/guild.gd
+guild.name_a_15,별빛,,,,scripts/guild.gd
+guild.name_a_16,천둥,,,,scripts/guild.gd
+guild.name_b,방패단,,,,scripts/guild.gd
+guild.name_b_2,기사단,,,,scripts/guild.gd
+guild.name_b_3,수호대,,,,scripts/guild.gd
+guild.name_b_4,검술회,,,,scripts/guild.gd
+guild.name_b_5,원정대,,,,scripts/guild.gd
+guild.name_b_6,늑대단,,,,scripts/guild.gd
+guild.name_b_7,망루,,,,scripts/guild.gd
+guild.name_b_8,용병단,,,,scripts/guild.gd
+guild.name_b_9,결사대,,,,scripts/guild.gd
+guild.name_b_10,깃발단,,,,scripts/guild.gd
+guild.name_b_11,성채,,,,scripts/guild.gd
+guild.name_b_12,사냥단,,,,scripts/guild.gd
+guild.nick_a,졸린,,,,scripts/guild.gd
+guild.nick_a_2,용감한,,,,scripts/guild.gd
+guild.nick_a_3,배고픈,,,,scripts/guild.gd
+guild.nick_a_4,빠른,,,,scripts/guild.gd
+guild.nick_a_5,느긋한,,,,scripts/guild.gd
+guild.nick_a_6,씩씩한,,,,scripts/guild.gd
+guild.nick_a_7,조용한,,,,scripts/guild.gd
+guild.nick_a_8,화난,,,,scripts/guild.gd
+guild.nick_a_9,행복한,,,,scripts/guild.gd
+guild.nick_a_10,수상한,,,,scripts/guild.gd
+guild.nick_a_11,귀여운,,,,scripts/guild.gd
+guild.nick_a_12,우직한,,,,scripts/guild.gd
+guild.nick_a_13,새침한,,,,scripts/guild.gd
+guild.nick_a_14,엉뚱한,,,,scripts/guild.gd
+guild.nick_b,감자,,,,scripts/guild.gd
+guild.nick_b_2,고양이,,,,scripts/guild.gd
+guild.nick_b_3,기사,,,,scripts/guild.gd
+guild.nick_b_4,궁수,,,,scripts/guild.gd
+guild.nick_b_5,곰,,,,scripts/guild.gd
+guild.nick_b_6,여우,,,,scripts/guild.gd
+guild.nick_b_7,도토리,,,,scripts/guild.gd
+guild.nick_b_8,망치,,,,scripts/guild.gd
+guild.nick_b_9,방패,,,,scripts/guild.gd
+guild.nick_b_10,늑대,,,,scripts/guild.gd
+guild.nick_b_11,토끼,,,,scripts/guild.gd
+guild.nick_b_12,수염,,,,scripts/guild.gd
+guild.nick_b_13,마법사,,,,scripts/guild.gd
+guild.nick_b_14,호박,,,,scripts/guild.gd
+guild.notices,매일 출석과 기부 부탁드려요!,,,,scripts/guild.gd
+guild.notices_2,보스는 하루 두 번 꼭 쳐 주세요,,,,scripts/guild.gd
+guild.notices_3,즐겁게 함께 성장해요,,,,scripts/guild.gd
+guild.notices_4,"초보 환영, 질문은 언제든지",,,,scripts/guild.gd
+guild.notices_5,주말엔 왕실 기부 이벤트!,,,,scripts/guild.gd
+guild.notices_6,출석 20명 달성 목표!,,,,scripts/guild.gd
+guild.wait_text,응답 대기 중,,,,scripts/guild.gd
+guild.error_text.locked,1-10 라운드를 클리어하면 열립니다,,,,scripts/guild.gd
+guild.error_text.in_guild,이미 길드에 가입했습니다,,,,scripts/guild.gd
+guild.error_text.full,길드 인원이 가득 찼습니다,,,,scripts/guild.gd
+guild.error_text.name_taken,이미 있는 길드 이름입니다,,,,scripts/guild.gd
+guild.error_text.not_enough_gold,골드가 부족합니다,,,,scripts/guild.gd
+guild.error_text.not_enough_diamonds,다이아가 부족합니다,,,,scripts/guild.gd
+guild.error_text.attended,오늘은 이미 출석했습니다,,,,scripts/guild.gd
+guild.error_text.claimed,이미 받은 상자입니다,,,,scripts/guild.gd
+guild.error_text.donated,오늘 기부 횟수를 다 썼습니다,,,,scripts/guild.gd
+guild.error_text.no_tries,오늘 도전 횟수를 다 썼습니다,,,,scripts/guild.gd
+guild.error_text.no_heroes,배치된 영웅이 없습니다,,,,scripts/guild.gd
+guild.error_text.nothing,받을 보상이 없습니다,,,,scripts/guild.gd
+guild.error_text.sold_out,구매 한도에 도달했습니다,,,,scripts/guild.gd
+guild.error_text.not_enough_coins,길드 코인이 부족합니다,,,,scripts/guild.gd
+guild.error_text.no_guild,길드에 가입하세요,,,,scripts/guild.gd
+guild.error_text.no_such_guild,길드를 찾을 수 없습니다,,,,scripts/guild.gd
+guild.error_text.bad_name,길드 이름은 2~8글자입니다,,,,scripts/guild.gd
+guild.error_text.no_run,보스 전투 기록을 찾지 못했습니다,,,,scripts/guild.gd
+guild.error_text.too_early,보스 전투가 아직 끝나지 않았습니다,,,,scripts/guild.gd
+guild.error_text.bag_full,장비 보관함이 가득 찼습니다,,,,scripts/guild.gd
+guild.add_exp,길드 레벨 업! Lv %d · 영웅 공격력·체력 +%d%%,,,,scripts/guild.gd
+guild.boss_block,길드에 가입하세요,,,,scripts/guild.gd
+guild.boss_block_2,오늘 도전 횟수를 다 썼습니다,,,,scripts/guild.gd
+guild.boss_block_3,배치된 영웅이 없습니다,,,,scripts/guild.gd
+guild.finish_boss,%s님이 %s Lv %d 도달 · %s점,,,,scripts/guild.gd
+guild.attend_block,길드에 가입하세요,,,,scripts/guild.gd
+guild.attend_block_2,오늘은 이미 출석했습니다,,,,scripts/guild.gd
+guild.attend,출석 완료! 골드 +%s · 길드 코인 +%d,,,,scripts/guild.gd
+guild.attend_2,%s님이 출석했습니다,,,,scripts/guild.gd
+guild.donate_block,길드에 가입하세요,,,,scripts/guild.gd
+guild.donate_block_2,알 수 없는 기부,,,,scripts/guild.gd
+guild.donate_block_3,오늘 기부 횟수를 다 썼습니다,,,,scripts/guild.gd
+guild.donate_block_4,골드가 부족합니다,,,,scripts/guild.gd
+guild.donate_block_5,다이아가 부족합니다,,,,scripts/guild.gd
+guild.donate,%s님이 %s를 했습니다,,,,scripts/guild.gd
+guild.buy_block,알 수 없는 상품,,,,scripts/guild.gd
+guild.buy_block_2,구매 한도에 도달했습니다,,,,scripts/guild.gd
+guild.buy_block_3,길드 코인이 부족합니다,,,,scripts/guild.gd
+guild.buy_block_4,조각을 받을 영웅이 없습니다,,,,scripts/guild.gd
+guild.buy_block_5,장비 보관함이 가득 찼습니다,,,,scripts/guild.gd
+guild.buy,%s 조각 +%d,,,,scripts/guild.gd
+guild.buy_2,%s 구매 완료,,,,scripts/guild.gd
+guild.grant,길드 코인 +%d,,,,scripts/guild.gd
+guild.grant_2,골드 +%s,,,,scripts/guild.gd
+guild.grant_3,다이아 +%d,,,,scripts/guild.gd
+guild.grant_4,식량 +%d,,,,scripts/guild.gd
+guild.grant_5,%s 조각 +1,,,,scripts/guild.gd
+guild.item_text.weapon,무기,,,,scripts/guild.gd
+guild.item_text.hat,모자,,,,scripts/guild.gd
+guild.item_text.top,상의,,,,scripts/guild.gd
+guild.item_text.bottom,하의,,,,scripts/guild.gd
+guild.item_text.shoes,신발,,,,scripts/guild.gd
+guild.item_text.pauldron,견장,,,,scripts/guild.gd
+guild.item_text.gloves,장갑,,,,scripts/guild.gd
+guild.item_text,%s %s 획득,,,,scripts/guild.gd
+guild.item_text_2,장비,,,,scripts/guild.gd
+guild.join_block,1-10 라운드를 클리어하면 열립니다,,,,scripts/guild.gd
+guild.join_block_2,이미 길드에 가입했습니다,,,,scripts/guild.gd
+guild.join,%s님이 길드에 가입했습니다,,,,scripts/guild.gd
+guild.create_block,길드 이름은 2~8글자입니다,,,,scripts/guild.gd
+guild.create_block_2,골드가 부족합니다,,,,scripts/guild.gd
+guild.create,함께 성장할 길드원을 모집합니다!,,,,scripts/guild.gd
+guild.create_2,%s님이 길드를 창설했습니다,,,,scripts/guild.gd
+guild.tick,%s님이 %s를 했습니다,,,,scripts/guild.gd
+guild.tick_2,%s님이 출석했습니다,,,,scripts/guild.gd
+guild.post,연결 대기 중,,,,scripts/guild.gd
+guild.post_instant,연결 대기 중,,,,scripts/guild.gd
+guild.on_instant_failed,길드 요청을 처리하지 못했습니다,,,,scripts/guild.gd
+guild.on_post_failed,길드 요청을 처리하지 못했습니다,,,,scripts/guild.gd
+guild_boss.ready,드래곤 출현!,,,,scripts/guild_boss.gd
+guild_boss.process,전멸!,,,,scripts/guild_boss.gd
+guild_boss.report,전투 종료,,,,scripts/guild_boss.gd
+guild_boss.on_level_cleared,드래곤 Lv %d 처치!,,,,scripts/guild_boss.gd
+guild_boss.update_hud,%.1f초,,,,scripts/guild_boss.gd
+guild_boss.update_hud_2,%d초,,,,scripts/guild_boss.gd
+guild_boss.update_hud_3,총 피해 %s,,,,scripts/guild_boss.gd
+guild_boss.show_result,결과를 받지 못했습니다,,,,scripts/guild_boss.gd
+guild_boss.show_result_2,총 피해 %s · 길드 창에서 다시 확인하세요,,,,scripts/guild_boss.gd
+guild_boss.show_result_3,도전 완료,,,,scripts/guild_boss.gd
+guild_boss.show_result_4,드래곤 Lv %d 도달 · 점수 %s,,,,scripts/guild_boss.gd
+guild_boss.show_result_5,(한 판에 인정되는 점수 한도까지만 반영),,,,scripts/guild_boss.gd
+guild_boss.show_result_6,길드 코인 +%d · 골드 +%s,,,,scripts/guild_boss.gd
+guild_boss.show_result_7,오늘 내 점수 %s · 길드 점수에 더해집니다,,,,scripts/guild_boss.gd
+guild_boss.show_result_8,확인,,,,scripts/guild_boss.gd
+guild_panel.subtabs,홈,,,,scripts/guild_panel.gd
+guild_panel.subtabs_2,보스,,,,scripts/guild_panel.gd
+guild_panel.subtabs_3,길드전,,,,scripts/guild_panel.gd
+guild_panel.subtabs_4,상점,,,,scripts/guild_panel.gd
+guild_panel.subtabs_5,길드원,,,,scripts/guild_panel.gd
+guild_panel.ready,길드,,,,scripts/guild_panel.gd
+guild_panel.rebuild,길드 정보를 불러오는 중입니다,,,,scripts/guild_panel.gd
+guild_panel.rebuild_2,서버에 연결되면 바로 보입니다,,,,scripts/guild_panel.gd
+guild_panel.rebuild_3,1-10 라운드를 클리어하면 길드가 열립니다,,,,scripts/guild_panel.gd
+guild_panel.rebuild_4,"길드에 가입하면 출석·기부 보상, 길드 버프, 길드 보스가 열립니다",,,,scripts/guild_panel.gd
+guild_panel.build_join,"길드에 가입하면 매일 출석·기부 보상과 영웅 능력치 버프, 길드 보스에 도전할 수 있습니다.",,,,scripts/guild_panel.gd
+guild_panel.build_join_2,추천 길드,,,,scripts/guild_panel.gd
+guild_panel.build_join_3,새로고침,,,,scripts/guild_panel.gd
+guild_panel.rec_row,Lv %d · 길드원 %d/%d · 평균 전투력 %s,,,,scripts/guild_panel.gd
+guild_panel.rec_row_2,가입,,,,scripts/guild_panel.gd
+guild_panel.rec_row_3,%s에 가입했습니다!,,,,scripts/guild_panel.gd
+guild_panel.create_card,길드 창설,,,,scripts/guild_panel.gd
+guild_panel.create_card_2,직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어옵니다.,,,,scripts/guild_panel.gd
+guild_panel.create_card_3,길드 이름(2~8글자),,,,scripts/guild_panel.gd
+guild_panel.create_card_4,창설  골드 %s,,,,scripts/guild_panel.gd
+guild_panel.create_card_5,「%s」 길드를 창설했습니다!,,,,scripts/guild_panel.gd
+guild_panel.build_joined,Lv %d · 길드원 %d/%d,,,,scripts/guild_panel.gd
+guild_panel.build_joined_2,길드 버프  영웅 공격력 +%d%% · 체력 +%d%%,,,,scripts/guild_panel.gd
+guild_panel.build_home,공지,,,,scripts/guild_panel.gd
+guild_panel.build_home_2,길드 출석,,,,scripts/guild_panel.gd
+guild_panel.build_home_3,골드 +%s · 길드 코인 +%d · 경험치 +%d,,,,scripts/guild_panel.gd
+guild_panel.build_home_4,출석 완료,,,,scripts/guild_panel.gd
+guild_panel.build_home_5,출석하기,,,,scripts/guild_panel.gd
+guild_panel.build_home_6,오늘 출석 인원 %d명,,,,scripts/guild_panel.gd
+guild_panel.build_home.lab,%d명,,,,scripts/guild_panel.gd
+guild_panel.build_home.lab_2,받음,,,,scripts/guild_panel.gd
+guild_panel.build_home_7,다이아 %d,,,,scripts/guild_panel.gd
+guild_panel.build_home_8,코인 %d,,,,scripts/guild_panel.gd
+guild_panel.build_home_9,출석 상자: ,,,,scripts/guild_panel.gd
+guild_panel.build_home_10,길드 기부,,,,scripts/guild_panel.gd
+guild_panel.build_home_11,경험치 +%d · 코인 +%d,,,,scripts/guild_panel.gd
+guild_panel.build_home_12,오늘 %d/%d회,,,,scripts/guild_panel.gd
+guild_panel.build_home_13,골드 %s,,,,scripts/guild_panel.gd
+guild_panel.build_home_14,%s 완료! 길드 코인 +%d,,,,scripts/guild_panel.gd
+guild_panel.build_home_15,활동 기록,,,,scripts/guild_panel.gd
+guild_panel.build_home_16,아직 기록이 없습니다,,,,scripts/guild_panel.gd
+guild_panel.build_home_17,한 번 더 누르면 탈퇴합니다,,,,scripts/guild_panel.gd
+guild_panel.build_home_18,길드 탈퇴,,,,scripts/guild_panel.gd
+guild_panel.build_home_19,길드를 탈퇴했습니다. 길드 코인은 그대로 남습니다,,,,scripts/guild_panel.gd
+guild_panel.build_home_20,매일 00:00 초기화 · 남은 시간 %s,,,,scripts/guild_panel.gd
+guild_panel.build_boss,"하루 %d번 도전할 수 있습니다. 매 판 Lv 1에서 시작해 쓰러뜨릴 때마다 레벨이 오릅니다. 준 피해가 점수이고, 길드원 점수의 합이 길드 점수입니다.",,,,scripts/guild_panel.gd
+guild_panel.build_boss_2,내 점수 %s,,,,scripts/guild_panel.gd
+guild_panel.build_boss_3,길드 점수 %s,,,,scripts/guild_panel.gd
+guild_panel.build_boss_4,내 팀 초당 피해 %s · 오늘 최고 %s%s,,,,scripts/guild_panel.gd
+guild_panel.build_boss_5,도전  (%d/%d),,,,scripts/guild_panel.gd
+guild_panel.build_boss_6,내일 다시 도전,,,,scripts/guild_panel.gd
+guild_panel.build_boss_7,도달 레벨별 보상,,,,scripts/guild_panel.gd
+guild_panel.build_boss_8,Lv %d 이상,,,,scripts/guild_panel.gd
+guild_panel.build_boss_9,참여,,,,scripts/guild_panel.gd
+guild_panel.build_boss_10,코인 %d · 골드 %s,,,,scripts/guild_panel.gd
+guild_panel.build_boss_11,오늘 점수 순위,,,,scripts/guild_panel.gd
+guild_panel.build_boss_12,아직 아무도 도전하지 않았습니다,,,,scripts/guild_panel.gd
+guild_panel.build_shop.desc,보유 영웅 중 무작위 조각 %d개,,,,scripts/guild_panel.gd
+guild_panel.build_shop,보유 SSR 영웅 무작위 조각 1개,,,,scripts/guild_panel.gd
+guild_panel.build_shop_2,"장비 1개 (장비 던전 최고 %d단계 등급 확률, 부위·능력치 무작위)",,,,scripts/guild_panel.gd
+guild_panel.build_shop_3,오늘,,,,scripts/guild_panel.gd
+guild_panel.build_shop_4,이번 주,,,,scripts/guild_panel.gd
+guild_panel.build_shop_5,"일일 상품은 매일 00:00, 주간 상품은 매주 초기화됩니다",,,,scripts/guild_panel.gd
+guild_panel.build_members,길드원 %d명 · 오늘 기여도 순,,,,scripts/guild_panel.gd
+guild_panel.build_members.seen,접속 중,,,,scripts/guild_panel.gd
+guild_panel.build_members_2,오늘 미접속,,,,scripts/guild_panel.gd
+guild_panel.build_members_3,전투력 %s · %s,,,,scripts/guild_panel.gd
+guild_panel.build_members_4,기여 %d,,,,scripts/guild_panel.gd
+guild_panel.build_members_5,출석,,,,scripts/guild_panel.gd
+guild_panel.build_members_6,미출석,,,,scripts/guild_panel.gd
+guild_panel.coin_line, 길드 코인 %s,,,,scripts/guild_panel.gd
+guild_panel.give_text,골드 %s,,,,scripts/guild_panel.gd
+guild_panel.give_text_2,다이아 %d,,,,scripts/guild_panel.gd
+guild_panel.give_text_3,식량 %d,,,,scripts/guild_panel.gd
+guild_panel.give_text_4,길드 코인 %d,,,,scripts/guild_panel.gd
+guild_panel.ago,방금,,,,scripts/guild_panel.gd
+guild_panel.ago_2,%d분 전,,,,scripts/guild_panel.gd
+guild_panel.ago_3,%d시간 전,,,,scripts/guild_panel.gd
+guild_panel.ago_4,%d일 전,,,,scripts/guild_panel.gd
+guild_war.wait_text,응답 대기 중,,,,scripts/guild_war.gd
+guild_war.error_text.battle_done,이번 주 공성전은 끝났습니다,,,,scripts/guild_war.gd
+guild_war.error_text.conquered,이번 주 상대 성채를 이미 함락했습니다,,,,scripts/guild_war.gd
+guild_war.error_text.not_yet,아직 공성 시각이 아닙니다,,,,scripts/guild_war.gd
+guild_war.error_text.schedule_locked,공성 시각이 이미 지났습니다,,,,scripts/guild_war.gd
+guild_war.error_text.schedule_past,지금 이후의 시각을 고르세요,,,,scripts/guild_war.gd
+guild_war.error_text.bad_heroes,보유한 영웅 4명을 고르세요,,,,scripts/guild_war.gd
+guild_war.error_text.no_guild,길드에 가입하세요,,,,scripts/guild_war.gd
+guild_war.error_text.nothing,받을 보상이 없습니다,,,,scripts/guild_war.gd
+guild_war.error_text.not_host,다른 길드원이 전투를 진행 중입니다,,,,scripts/guild_war.gd
+guild_war.error_text.not_leader,길드장만 전투를 시작할 수 있습니다,,,,scripts/guild_war.gd
+guild_war.enter_block,길드에 가입하세요,,,,scripts/guild_war.gd
+guild_war.enter_block_2,길드전 정보를 불러오는 중입니다,,,,scripts/guild_war.gd
+guild_war.enter_block_3,출전 영웅 %d명을 고르세요,,,,scripts/guild_war.gd
+guild_war.enter_block_4,이번 주 상대 성채를 이미 함락했습니다,,,,scripts/guild_war.gd
+guild_war.enter_block_5,이번 주 공성전은 끝났습니다,,,,scripts/guild_war.gd
+guild_war.enter_block_6,공성 시각 %s에 열립니다,,,,scripts/guild_war.gd
+guild_war.at_text,%s요일 %d:00,,,,scripts/guild_war.gd
+guild_war.schedule_block,길드에 가입하세요,,,,scripts/guild_war.gd
+guild_war.schedule_block_2,길드전 정보를 불러오는 중입니다,,,,scripts/guild_war.gd
+guild_war.schedule_block_3,길드장이 없는 길드는 토요일 21:00에 열립니다,,,,scripts/guild_war.gd
+guild_war.schedule_block_4,길드장만 공성 시각을 정할 수 있습니다,,,,scripts/guild_war.gd
+guild_war.schedule_block_5,이번 주 안의 시각을 고르세요,,,,scripts/guild_war.gd
+guild_war.set_defense,수비 영웅 %d명을 고르세요,,,,scripts/guild_war.gd
+guild_war.set_defense_2,연결 대기 중,,,,scripts/guild_war.gd
+guild_war.set_defense_3,수비 영웅을 저장했습니다,,,,scripts/guild_war.gd
+guild_war.set_schedule,연결 대기 중,,,,scripts/guild_war.gd
+guild_war.set_schedule_2,이번 주 공성 시각: %s,,,,scripts/guild_war.gd
+guild_war.practice_enter,배치할 영웅이 없습니다,,,,scripts/guild_war.gd
+guild_war.practice_enter.name,길드원 %d,,,,scripts/guild_war.gd
+guild_war.practice_enter.name_2,나,,,,scripts/guild_war.gd
+guild_war.start_battle,전투를 시작하지 못했습니다,,,,scripts/guild_war.gd
+guild_war.claim,연결 대기 중,,,,scripts/guild_war.gd
+guild_war.claim_text,길드전 %s 보상: 길드 코인 +%d · 다이아 +%d,,,,scripts/guild_war.gd
+guild_war.claim_text_2,승리,,,,scripts/guild_war.gd
+guild_war.claim_text_3,참여,,,,scripts/guild_war.gd
+guild_war.post,연결 대기 중,,,,scripts/guild_war.gd
+guild_war.post_2,길드전 요청을 처리하지 못했습니다,,,,scripts/guild_war.gd
+guild_war.our_members.name,나,,,,scripts/guild_war.gd
+guild_war.local_view.by,나,,,,scripts/guild_war.gd
+guild_war.local_enter.name,나,,,,scripts/guild_war.gd
+hero.helper_tag,도우미,,,,scripts/hero.gd
+hero_card.empty_text,빈 칸,,,,scripts/hero_card.gd
+hero_card.shard_text,조각 %d / %d,,,,scripts/hero_card.gd
+hero_card.draw_model_chip,그림,,,,scripts/hero_card.gd
+hero_card.draw_list_info,배치,,,,scripts/hero_card.gd
+hero_card.draw_list_info_2,전투력 %s,,,,scripts/hero_card.gd
+hero_panel.sort_names.power,전투력,,,,scripts/hero_panel.gd
+hero_panel.sort_names.grade,등급,,,,scripts/hero_panel.gd
+hero_panel.sort_names.level,레벨,,,,scripts/hero_panel.gd
+hero_panel.hint,슬롯을 누른 뒤 영웅을 고르세요,,,,scripts/hero_panel.gd
+hero_panel.stat_names,공격,,,,scripts/hero_panel.gd
+hero_panel.stat_names_2,공격 간격,,,,scripts/hero_panel.gd
+hero_panel.stat_names_3,사거리,,,,scripts/hero_panel.gd
+hero_panel.stat_names_4,전투력,,,,scripts/hero_panel.gd
+hero_panel.unowned_text,미보유,,,,scripts/hero_panel.gd
+hero_panel.unowned_notice,아직 보유하지 않은 영웅입니다,,,,scripts/hero_panel.gd
+hero_panel.auto_equip_text,장비 자동착용,,,,scripts/hero_panel.gd
+hero_panel.build_list,영웅,,,,scripts/hero_panel.gd
+hero_panel.build_list_2,일괄 승급,,,,scripts/hero_panel.gd
+hero_panel.build_list_3,자동 배치,,,,scripts/hero_panel.gd
+hero_panel.build_list_4,적용,,,,scripts/hero_panel.gd
+hero_panel.build_promote_all_confirm,일괄 승급,,,,scripts/hero_panel.gd
+hero_panel.build_promote_all_confirm_2,아래 영웅을 승급하시겠습니까?,,,,scripts/hero_panel.gd
+hero_panel.build_promote_all_confirm_3,승급,,,,scripts/hero_panel.gd
+hero_panel.build_promote_all_confirm_4,취소,,,,scripts/hero_panel.gd
+hero_panel.ask_promote_all,승급할 수 있는 영웅이 없습니다,,,,scripts/hero_panel.gd
+hero_panel.ask_promote_all_2,조각 %d,,,,scripts/hero_panel.gd
+hero_panel.on_promoted_all,영웅 %d명 승급 완료,,,,scripts/hero_panel.gd
+hero_panel.build_detail,배치,,,,scripts/hero_panel.gd
+hero_panel.build_detail_2,레벨업,,,,scripts/hero_panel.gd
+hero_panel.build_detail_3,< 이전,,,,scripts/hero_panel.gd
+hero_panel.build_detail_4,닫기,,,,scripts/hero_panel.gd
+hero_panel.build_detail_5,다음 >,,,,scripts/hero_panel.gd
+hero_panel.auto_equip,장비 %d개를 착용했습니다,,,,scripts/hero_panel.gd
+hero_panel.auto_equip_2,더 좋은 장비가 없습니다,,,,scripts/hero_panel.gd
+hero_panel.promote_button,승급,,,,scripts/hero_panel.gd
+hero_panel.apply.later, — 다음 스테이지부터,,,,scripts/hero_panel.gd
+hero_panel.apply,배치를 적용했습니다,,,,scripts/hero_panel.gd
+hero_panel.rebuild,정렬: ,,,,scripts/hero_panel.gd
+hero_panel.on_promoted,스킬 해금! ,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail,근접,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_2,원거리,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_3,초,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_4,레벨업,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_5,×10 (%d회),,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_6,승급,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_7,승급 ★%d,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_8,조각 %d / %d,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_9,조각 %d · MAX,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_11,최대 레벨 — [승급]하면 Lv %d까지,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_12,조각 부족 — 모집에서 이 영웅이 다시 나오면 조각이 쌓입니다,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_13,승급하면 HP·공격 → ×%s · 최대 레벨 %d → %d,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_14,\n★%d 달성 시 스킬 해금: %s,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_15,최대 승급 ★%d — HP·공격 ×%s,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_16,배치 중,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_17,빈 슬롯 없음,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_18,배치,,,,scripts/hero_panel.gd
+hero_panel.refresh_equip,공격 +%s,,,,scripts/hero_panel.gd
+hero_panel.refresh_equip_2,이동 +%s%%,,,,scripts/hero_panel.gd
+hero_panel.refresh_equip_3,장비 ,,,,scripts/hero_panel.gd
+hero_panel.skill_rows,액티브,,,,scripts/hero_panel.gd
+hero_panel.skill_rows_2,패시브,,,,scripts/hero_panel.gd
+hero_panel.skill_rows_3,★%d에서 해금,,,,scripts/hero_panel.gd
+hot_deal.ready,핫딜 · 1시간 한정 특가,,,,scripts/hot_deal.gd
+hot_deal.ready_2,나중에,,,,scripts/hot_deal.gd
+hot_deal.ready_3,결제 기능은 출시 전에 연결됩니다,,,,scripts/hot_deal.gd
+hot_deal.tick,남은 시간 ,,,,scripts/hot_deal.gd
+hot_deal.draw_face,핫딜,,,,scripts/hot_deal.gd
+hot_deal.draw_badge,가치,,,,scripts/hot_deal.gd
+hot_deal.draw_badge_2,%d배,,,,scripts/hot_deal.gd
+hud.tips,영웅을 탭한 뒤 성문·성벽을 탭하면 위치를 옮길 수 있습니다,,,,scripts/hud.gd
+hud.tips_2,"궁병은 성벽 위, 보병은 성문 앞을 지킵니다",,,,scripts/hud.gd
+hud.tips_3,FEVER가 가득 차면 버튼을 눌러 보세요,,,,scripts/hud.gd
+hud.tips_4,같은 영웅 조각을 모아 승급하면 스킬이 열립니다,,,,scripts/hud.gd
+hud.tips_5,막사 레벨을 올리면 훈련이 빨라집니다,,,,scripts/hud.gd
+hud.tips_6,성문이 부서지면 몬스터가 성채를 직접 공격합니다,,,,scripts/hud.gd
+hud.tips_7,성장 탭에서 골드로 공격력·체력을 올릴 수 있습니다,,,,scripts/hud.gd
+hud.tips_8,연구소에서 기술을 연구하면 영웅·병사·경제가 강해집니다,,,,scripts/hud.gd
+hud.tips_9,남는 재료는 상인에게 팔아 골드로 바꾸세요,,,,scripts/hud.gd
+hud.tips_10,스테이지가 끝나면 영웅이 시작 자리로 돌아옵니다,,,,scripts/hud.gd
+hud.ready,연속 진행,,,,scripts/hud.gd
+hud.ready_2,성,,,,scripts/hud.gd
+hud.set_hp,파괴,,,,scripts/hud.gd
+hud.on_cleared,%s 클리어,,,,scripts/hud.gd
+hud.on_failed,패배,,,,scripts/hud.gd
+hud.on_mode_changed,스테이지 %d · 라운드 %d/%d,,,,scripts/hud.gd
+hud.on_mode_changed_2,곧 %s 라운드가 시작됩니다\n%s,,,,scripts/hud.gd
+hud.refresh_button,▶ 진행,,,,scripts/hud.gd
+hud.refresh_button_2,■ 중지,,,,scripts/hud.gd
+hud.build_fever_confirm,FEVER 중입니다.\nFEVER를 끝내고 스테이지를 시작하시겠습니까?,,,,scripts/hud.gd
+hud.build_fever_confirm_2,예,,,,scripts/hud.gd
+hud.build_fever_confirm_3,아니요,,,,scripts/hud.gd
+hud.build_link_ui,서버 연결 중…,,,,scripts/hud.gd
+hud.chip_text,만,,,,scripts/hud.gd
+hud.chip_text_2,억,,,,scripts/hud.gd
+hud.chip_text_3,조,,,,scripts/hud.gd
+iap_items.products.dia_1.name,"다이아 1,650",,,,scripts/iap_items.gd
+iap_items.products.dia_2.name,"다이아 8,000",,,,scripts/iap_items.gd
+iap_items.products.dia_3.name,"다이아 16,500",,,,scripts/iap_items.gd
+iap_items.products.dia_4.name,"다이아 46,500",,,,scripts/iap_items.gd
+iap_items.products.dia_5.name,"다이아 87,000",,,,scripts/iap_items.gd
+iap_items.products.dia_6.name,"다이아 156,000",,,,scripts/iap_items.gd
+iap_items.products.monthly.name,성주의 월정액,,,,scripts/iap_items.gd
+iap_items.products.monthly_plus.name,왕의 월정액,,,,scripts/iap_items.gd
+iap_items.products.pkg_starter.name,신규 성주 패키지,,,,scripts/iap_items.gd
+iap_items.products.pkg_daily.name,일일 특가 패키지,,,,scripts/iap_items.gd
+iap_items.products.pkg_weekly.name,주간 특가 패키지,,,,scripts/iap_items.gd
+iap_items.products.pkg_growth.name,성장 지원 패키지,,,,scripts/iap_items.gd
+iap_items.products.hot_boss.name,보스 격파 기념 특가,,,,scripts/iap_items.gd
+iap_items.products.hot_dia.name,다이아 긴급 지원,,,,scripts/iap_items.gd
+iap_items.products.hot_defeat.name,패배 극복 특가,,,,scripts/iap_items.gd
+iap_items.products.pass_growth.name,성장 패스,,,,scripts/iap_items.gd
+iap_items.products.no_ads.name,광고 제거,,,,scripts/iap_items.gd
+inquiry_panel.categories,계정·로그인,,,,scripts/inquiry_panel.gd
+inquiry_panel.categories_2,결제·상점,,,,scripts/inquiry_panel.gd
+inquiry_panel.categories_3,버그·오류,,,,scripts/inquiry_panel.gd
+inquiry_panel.categories_4,건의,,,,scripts/inquiry_panel.gd
+inquiry_panel.categories_5,기타,,,,scripts/inquiry_panel.gd
+inquiry_panel.status,답변 대기,,,,scripts/inquiry_panel.gd
+inquiry_panel.status_2,답변 완료,,,,scripts/inquiry_panel.gd
+inquiry_panel.status_3,종료,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready,문의하기,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready_2,무엇이 궁금하거나 불편하셨나요? 자세히 적어 주시면 빨리 도와드릴 수 있어요,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready_3,닉네임·친구 코드·로그인 방식·게임 버전·기기 정보가 함께 전달됩니다. 답변은 우편으로 알려 드려요.,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready_4,보내기,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready_5,내 문의,,,,scripts/inquiry_panel.gd
+inquiry_panel.rebuild,보낸 문의가 없어요,,,,scripts/inquiry_panel.gd
+inquiry_panel.rebuild_2,문의는 온라인에서만 보낼 수 있어요,,,,scripts/inquiry_panel.gd
+inquiry_panel.rebuild_3,문의,,,,scripts/inquiry_panel.gd
+inquiry_panel.rebuild_4,운영자 답변,,,,scripts/inquiry_panel.gd
+item_text.stat_parts,공격 +%s,,,,scripts/item_text.gd
+item_text.stat_parts_2,이동 +%s%%,,,,scripts/item_text.gd
+live_ops.key_names.gold,골드 던전 열쇠,,,,scripts/live_ops.gd
+live_ops.key_names.equip,장비 던전 열쇠,,,,scripts/live_ops.gd
+live_ops.key_names.ticket,모집권 던전 열쇠,,,,scripts/live_ops.gd
+live_ops.inquiry_text.too_many_inquiries,답변을 기다리는 문의가 많습니다. 답변을 받은 뒤 다시 보내 주세요,,,,scripts/live_ops.gd
+live_ops.coupon_text.unknown_coupon,없는 쿠폰 번호입니다,,,,scripts/live_ops.gd
+live_ops.coupon_text.coupon_used,이미 사용한 쿠폰입니다,,,,scripts/live_ops.gd
+live_ops.coupon_text.coupon_expired,기간이 지난 쿠폰입니다,,,,scripts/live_ops.gd
+live_ops.coupon_text.coupon_used_up,선착순 수량이 모두 소진된 쿠폰입니다,,,,scripts/live_ops.gd
+live_ops.coupon_text.coupon_not_started,아직 사용할 수 없는 쿠폰입니다,,,,scripts/live_ops.gd
+live_ops.claim,서버에 연결된 뒤 받을 수 있습니다,,,,scripts/live_ops.gd
+live_ops.claim_2,우편을 받았습니다,,,,scripts/live_ops.gd
+live_ops.claim_3,우편 %d개를 받았습니다,,,,scripts/live_ops.gd
+live_ops.on_claimed,장비 %d개가 보관함에 들어갔습니다,,,,scripts/live_ops.gd
+live_ops.on_claim_failed,이미 받았거나 기간이 지난 우편입니다,,,,scripts/live_ops.gd
+live_ops.on_claim_failed_2,우편을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/live_ops.gd
+live_ops.redeem,쿠폰 번호를 확인해 주세요,,,,scripts/live_ops.gd
+live_ops.redeem_2,서버에 연결된 뒤 사용할 수 있습니다,,,,scripts/live_ops.gd
+live_ops.redeem_3,쿠폰 보상을 받았습니다,,,,scripts/live_ops.gd
+live_ops.redeem_4,쿠폰을 사용하지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/live_ops.gd
+live_ops.reward_text,%s 영웅 %s,,,,scripts/live_ops.gd
+live_ops.reward_text_2, %d장,,,,scripts/live_ops.gd
+live_ops.reward_text_3,%s 장비 %d개,,,,scripts/live_ops.gd
+live_ops.reward_text_4,장비 %d개,,,,scripts/live_ops.gd
+live_ops.reward_text_5,골드,,,,scripts/live_ops.gd
+live_ops.reward_text_6,다이아,,,,scripts/live_ops.gd
+live_ops.reward_text_7,목재,,,,scripts/live_ops.gd
+live_ops.reward_text_8,석재,,,,scripts/live_ops.gd
+live_ops.reward_text_9,식량,,,,scripts/live_ops.gd
+live_ops.reward_text_10,다이아 모집권 %d장,,,,scripts/live_ops.gd
+live_ops.reward_text_11,%s %d개,,,,scripts/live_ops.gd
+live_ops.reward_text_12, %d개,,,,scripts/live_ops.gd
+live_ops.on_blocked.text,새 버전이 나왔습니다. 업데이트 후 이용해 주세요.,,,,scripts/live_ops.gd
+live_ops.send_inquiry,문의 내용을 적어 주세요,,,,scripts/live_ops.gd
+live_ops.send_inquiry_2,서버에 연결된 뒤 보낼 수 있습니다,,,,scripts/live_ops.gd
+live_ops.send_inquiry_3,문의를 보냈습니다. 답변은 우편으로 알려 드려요,,,,scripts/live_ops.gd
+live_ops.send_inquiry_4,문의를 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/live_ops.gd
+login_screen.brands,Google로 시작하기,,,,scripts/login_screen.gd
+login_screen.brands_2,카카오로 시작하기,,,,scripts/login_screen.gd
+login_screen.brands_3,네이버로 시작하기,,,,scripts/login_screen.gd
+login_screen.errors.provider_unavailable,아직 준비 중인 로그인입니다,,,,scripts/login_screen.gd
+login_screen.errors.login_denied,로그인이 취소되었습니다,,,,scripts/login_screen.gd
+login_screen.errors.login_failed,로그인하지 못했습니다. 다시 시도해 주세요,,,,scripts/login_screen.gd
+login_screen.errors.login_expired,로그인 시간이 초과되었습니다. 다시 시도해 주세요,,,,scripts/login_screen.gd
+login_screen.errors.net,서버에 연결할 수 없습니다,,,,scripts/login_screen.gd
+login_screen.errors.unsupported,토스 앱을 최신 버전으로 업데이트해 주세요,,,,scripts/login_screen.gd
+login_screen.errors.invalid_category,토스 로그인을 쓸 수 없는 미니앱입니다,,,,scripts/login_screen.gd
+login_screen.errors.no_bridge,토스 앱에서 열어 주세요,,,,scripts/login_screen.gd
+login_screen.errors.error,토스 로그인 정보를 받지 못했습니다. 다시 시도해 주세요,,,,scripts/login_screen.gd
+login_screen.ready,로그인하면 ,,,,scripts/login_screen.gd
+login_screen.ready_2,이용약관,,,,scripts/login_screen.gd
+login_screen.ready_3, 및 ,,,,scripts/login_screen.gd
+login_screen.ready_4,개인정보처리방침,,,,scripts/login_screen.gd
+login_screen.ready_5,에 동의하게 됩니다.,,,,scripts/login_screen.gd
+login_screen.button_block,게스트로 시작하기,,,,scripts/login_screen.gd
+login_screen.button_block_2,다시 시도,,,,scripts/login_screen.gd
+login_screen.wait_block,브라우저에서 로그인해 주세요,,,,scripts/login_screen.gd
+login_screen.wait_block_2,로그인을 마치고 게임으로 돌아오면 자동으로 시작합니다,,,,scripts/login_screen.gd
+login_screen.wait_block_3,브라우저 다시 열기,,,,scripts/login_screen.gd
+login_screen.wait_block_4,취소,,,,scripts/login_screen.gd
+mail_panel.ready,우편함,,,,scripts/mail_panel.gd
+mail_panel.ready_2,모두 받기,,,,scripts/mail_panel.gd
+mail_panel.rebuild,받을 우편 %d개,,,,scripts/mail_panel.gd
+mail_panel.rebuild_2,받을 우편이 없습니다,,,,scripts/mail_panel.gd
+mail_panel.rebuild_3,우편함은 온라인에서만 쓸 수 있습니다,,,,scripts/mail_panel.gd
+mail_panel.rebuild_4,%d일 남음,,,,scripts/mail_panel.gd
+mail_panel.rebuild_5,%d시간 남음,,,,scripts/mail_panel.gd
+mail_panel.rebuild_6,보상: ,,,,scripts/mail_panel.gd
+mail_panel.rebuild_7,보상 없음,,,,scripts/mail_panel.gd
+mail_panel.rebuild_8,받기,,,,scripts/mail_panel.gd
+mail_panel.rebuild_9,확인,,,,scripts/mail_panel.gd
+main.expanded_text,성이 넓어졌습니다!,,,,scripts/main.gd
+merchant_panel.ready,상인,,,,scripts/merchant_panel.gd
+merchant_panel.ready_2,선택 판매 · 0골드,,,,scripts/merchant_panel.gd
+merchant_panel.ready_3,전부 판매,,,,scripts/merchant_panel.gd
+merchant_panel.ready_4,닫기,,,,scripts/merchant_panel.gd
+merchant_panel.refresh,다음 시세까지 %02d:%02d,,,,scripts/merchant_panel.gd
+merchant_panel.refresh_2,→ %s골드,,,,scripts/merchant_panel.gd
+merchant_panel.main_row,판매,,,,scripts/merchant_panel.gd
+merchant_panel.qty_labels,→ %s골드,,,,scripts/merchant_panel.gd
+merchant_panel.qty_labels_2,선택 판매 · %s골드,,,,scripts/merchant_panel.gd
+mission_panel.head.daily,매일 00:00에 초기화,,,,scripts/mission_panel.gd
+mission_panel.head.weekly,매주 월요일 00:00에 초기화,,,,scripts/mission_panel.gd
+mission_panel.head.repeat,받을 때마다 목표가 커지고 계속 받을 수 있습니다,,,,scripts/mission_panel.gd
+mission_panel.ready,미션,,,,scripts/mission_panel.gd
+mission_panel.head,%s · 남은 시간 %s,,,,scripts/mission_panel.gd
+mission_panel.row,%d회 받음,,,,scripts/mission_panel.gd
+mission_panel.row_2,보상: ,,,,scripts/mission_panel.gd
+mission_panel.row_3,완료,,,,scripts/mission_panel.gd
+mission_panel.row_4,받기,,,,scripts/mission_panel.gd
+mission_panel.row_5,이동,,,,scripts/mission_panel.gd
+missions.types,일일,,,,scripts/missions.gd
+missions.types_2,주간,,,,scripts/missions.gd
+missions.types_3,반복,,,,scripts/missions.gd
+missions.defs.d_kill.title,몬스터 %d마리 처치,,,,scripts/missions.gd
+missions.defs.d_collect.title,자원 %d번 수집,,,,scripts/missions.gd
+missions.defs.d_sell.title,상인과 %d번 거래,,,,scripts/missions.gd
+missions.defs.d_hero.title,영웅 레벨업 %d회,,,,scripts/missions.gd
+missions.defs.d_growth.title,성장 강화 %d회,,,,scripts/missions.gd
+missions.defs.d_gacha.title,영웅 %d회 모집,,,,scripts/missions.gd
+missions.defs.d_dungeon.title,던전 %d번 클리어,,,,scripts/missions.gd
+missions.defs.d_guild.title,길드 출석,,,,scripts/missions.gd
+missions.defs.d_all.title,일일 미션 %d개 완료,,,,scripts/missions.gd
+missions.defs.w_bonus.title,일일 미션 보너스 %d일 받기,,,,scripts/missions.gd
+missions.defs.w_kill.title,몬스터 %d마리 처치,,,,scripts/missions.gd
+missions.defs.w_dungeon.title,던전 %d번 클리어,,,,scripts/missions.gd
+missions.defs.w_gacha.title,영웅 %d회 모집,,,,scripts/missions.gd
+missions.defs.w_hero.title,영웅 레벨업 %d회,,,,scripts/missions.gd
+missions.defs.w_build.title,건물 레벨업 %d번 완료,,,,scripts/missions.gd
+missions.defs.w_research.title,연구 %d번 시작,,,,scripts/missions.gd
+missions.defs.w_train.title,병사 훈련 %d번,,,,scripts/missions.gd
+missions.defs.w_boss.title,길드 보스 %d번 도전,,,,scripts/missions.gd
+missions.defs.r_kill.title,몬스터 %d마리 처치,,,,scripts/missions.gd
+missions.defs.r_stage.title,라운드 %d번 클리어,,,,scripts/missions.gd
+missions.defs.r_collect.title,자원 %d번 수집,,,,scripts/missions.gd
+missions.defs.r_sell.title,상인과 %d번 거래,,,,scripts/missions.gd
+missions.defs.r_hero.title,영웅 레벨업 %d회,,,,scripts/missions.gd
+missions.defs.r_growth.title,성장 강화 %d회,,,,scripts/missions.gd
+missions.defs.r_gacha_dia.title,다이아·모집권으로 영웅 %d회 모집,,,,scripts/missions.gd
+missions.defs.r_dungeon.title,던전 %d번 클리어,,,,scripts/missions.gd
+missions.fail_text.claimed,이미 받은 보상입니다,,,,scripts/missions.gd
+missions.fail_text.not_done,아직 완료하지 않았습니다,,,,scripts/missions.gd
+missions.fail_text.too_soon,잠시 뒤 다시 받아 주세요,,,,scripts/missions.gd
+missions.fail_text.stale,진행 상황을 새로 받았습니다. 다시 눌러 주세요,,,,scripts/missions.gd
+missions.fail_default,보상을 받지 못했습니다,,,,scripts/missions.gd
+missions.wait_text,연결 대기 중,,,,scripts/missions.gd
+missions.reward_notice,미션 보상: ,,,,scripts/missions.gd
+missions.reward_text,골드 %s,,,,scripts/missions.gd
+missions.reward_text_2,다이아 %s,,,,scripts/missions.gd
+missions.reward_text_3,목재·석재·식량 각 %s,,,,scripts/missions.gd
+missions.reward_text_4,목재,,,,scripts/missions.gd
+missions.reward_text_5,석재,,,,scripts/missions.gd
+missions.reward_text_6,식량,,,,scripts/missions.gd
+missions.reward_text_7,골드 던전 입장권,,,,scripts/missions.gd
+missions.reward_text_8,장비 던전 입장권,,,,scripts/missions.gd
+missions.reward_text_9,모집권 던전 입장권,,,,scripts/missions.gd
+missions.reward_text_10,다이아 모집권 %d장,,,,scripts/missions.gd
+missions.reward_text_11, %d개,,,,scripts/missions.gd
+net.storage_text,브라우저 저장소가 꺼져 있어 진행이 저장되지 않을 수 있습니다,,,,scripts/net.gd
+net.forget_account,계정을 삭제했습니다,,,,scripts/net.gd
+notice_panel.kinds,공지,,,,scripts/notice_panel.gd
+notice_panel.kinds_2,이벤트,,,,scripts/notice_panel.gd
+notice_panel.kinds_3,업데이트,,,,scripts/notice_panel.gd
+notice_panel.kinds_4,점검,,,,scripts/notice_panel.gd
+notice_panel.ready,공지사항,,,,scripts/notice_panel.gd
+notice_panel.rebuild,등록된 공지사항이 없습니다,,,,scripts/notice_panel.gd
+notice_panel.rebuild_2,공지사항은 온라인에서만 볼 수 있습니다,,,,scripts/notice_panel.gd
+notice_panel.rebuild_3,고정 ,,,,scripts/notice_panel.gd
+notify.plan,건물,,,,scripts/notify.gd
+notify.plan_2,건설 완료,,,,scripts/notify.gd
+notify.plan_3,%s 공사가 끝났습니다. 다음 공사를 시작해 보세요!,,,,scripts/notify.gd
+notify.plan_4,연구 완료,,,,scripts/notify.gd
+notify.plan_5,%s 연구가 끝났습니다.,,,,scripts/notify.gd
+notify.plan_6,연구가 끝났습니다.,,,,scripts/notify.gd
+notify.plan_7,병사,,,,scripts/notify.gd
+notify.plan_8,훈련 완료,,,,scripts/notify.gd
+notify.plan_9,%s %d마리 훈련이 끝났습니다. 병사를 데려가세요!,,,,scripts/notify.gd
+notify.plan_10,방치 보상 가득,,,,scripts/notify.gd
+notify.plan_11,%d시간 동안 쌓인 방치 골드와 자원이 가득 찼습니다. 더 쌓이지 않으니 받으러 오세요!,,,,scripts/notify.gd
+notify.plan_12,오늘의 출석 보상,,,,scripts/notify.gd
+notify.plan_13,출석 보상과 새 일일 미션이 기다리고 있습니다.,,,,scripts/notify.gd
+notify.plan_14,공성전 10분 전,,,,scripts/notify.gd
+notify.plan_15,10분 뒤 길드 공성전이 시작됩니다. 길드원과 함께 성을 공격할 준비를 하세요!,,,,scripts/notify.gd
+notify_settings.rows,푸시 알림,,,,scripts/notify_settings.gd
+notify_settings.rows_2,건설·훈련·연구 완료,,,,scripts/notify_settings.gd
+notify_settings.rows_3,방치 보상 가득,,,,scripts/notify_settings.gd
+notify_settings.rows_4,출석 알림,,,,scripts/notify_settings.gd
+notify_settings.rows_5,공성전 10분 전,,,,scripts/notify_settings.gd
+notify_settings.rows_6,야간 알림 (22시~8시),,,,scripts/notify_settings.gd
+notify_settings.add_to,알림,,,,scripts/notify_settings.gd
+notify_settings.refresh,알림 (휴대폰 설정에서 꺼져 있습니다),,,,scripts/notify_settings.gd
+notify_settings.refresh_2,알림,,,,scripts/notify_settings.gd
+offline_panel.title,방치 보상,,,,scripts/offline_panel.gd
+offline_panel.ready,확인,,,,scripts/offline_panel.gd
+offline_panel.show_report,방치 시간  ,,,,scripts/offline_panel.gd
+offline_panel.show_report_2,처치한 적  %s마리,,,,scripts/offline_panel.gd
+offline_panel.show_report_3,+%s 골드,,,,scripts/offline_panel.gd
+offline_panel.away_text,1분 미만,,,,scripts/offline_panel.gd
+offline_panel.away_text_2,%d분,,,,scripts/offline_panel.gd
+offline_panel.away_text_3,%d시간 %d분,,,,scripts/offline_panel.gd
+offline_panel.away_text_4,%d시간,,,,scripts/offline_panel.gd
+offline_panel.away_text_5,%d일 %d시간,,,,scripts/offline_panel.gd
+offline_panel.away_text_6,%d일,,,,scripts/offline_panel.gd
+ops_overlay.ready,업데이트,,,,scripts/ops_overlay.gd
+ops_overlay.refresh,업데이트가 필요합니다,,,,scripts/ops_overlay.gd
+ops_overlay.refresh_2,서버 점검 중,,,,scripts/ops_overlay.gd
+ops_overlay.refresh_3,새 버전이 나왔습니다.\n업데이트한 뒤 이어서 플레이해 주세요.,,,,scripts/ops_overlay.gd
+ops_overlay.refresh_4,지금 버전 %s · 필요한 버전 %s 이상,,,,scripts/ops_overlay.gd
+ops_overlay.refresh_5,더 좋은 게임을 위해 점검하고 있습니다.\n잠시 뒤 다시 접속해 주세요.,,,,scripts/ops_overlay.gd
+ops_overlay.refresh_6,점검 종료 예정 %s\n,,,,scripts/ops_overlay.gd
+ops_overlay.refresh_7,점검이 끝나면 자동으로 이어집니다,,,,scripts/ops_overlay.gd
+ops_overlay.clock_text,%d월 %d일 %02d:%02d,,,,scripts/ops_overlay.gd
+ops_sheet.ago,%d분 전,,,,scripts/ops_sheet.gd
+ops_sheet.ago_2,%d시간 전,,,,scripts/ops_sheet.gd
+ops_sheet.ago_3,%d일 전,,,,scripts/ops_sheet.gd
+placement.hint,초록 칸 안으로 건물을 끌거나 그곳을 누르세요,,,,scripts/placement.gd
+placement.ok_text,여기에 지을 수 있습니다,,,,scripts/placement.gd
+placement.no_space_text,성 안에 빈 자리가 없습니다,,,,scripts/placement.gd
+placement.build_bar,취소,,,,scripts/placement.gd
+placement.build_bar_2,건설,,,,scripts/placement.gd
+placement.start,옮기기,,,,scripts/placement.gd
+placement.start_2,건설,,,,scripts/placement.gd
+placement.start_3,여기로 이동,,,,scripts/placement.gd
+placement.fill_cost,건설 시간 ,,,,scripts/placement.gd
+pouch_panel.empty_text,가방이 비었습니다\n출석 이벤트와 미션 보상으로 받을 수 있습니다,,,,scripts/pouch_panel.gd
+pouch_panel.speedup_head,가속 아이템,,,,scripts/pouch_panel.gd
+pouch_panel.speedup_hint,건설·연구 중인 창의 [가속]에서 씁니다,,,,scripts/pouch_panel.gd
+pouch_panel.empty_value_text,자원 건물을 지은 뒤에 열 수 있습니다,,,,scripts/pouch_panel.gd
+pouch_panel.head_text,열면 지금 방치 수입 기준으로 적힌 시간만큼 받습니다,,,,scripts/pouch_panel.gd
+pouch_panel.ready,가방,,,,scripts/pouch_panel.gd
+pouch_panel.on_opened, %d개,,,,scripts/pouch_panel.gd
+pouch_panel.value_text,골드 +,,,,scripts/pouch_panel.gd
+pouch_panel.value_text_2,목재,,,,scripts/pouch_panel.gd
+pouch_panel.value_text_3,석재,,,,scripts/pouch_panel.gd
+pouch_panel.value_text_4,식량,,,,scripts/pouch_panel.gd
+pouch_panel.value_text_5,받을 것이 없습니다,,,,scripts/pouch_panel.gd
+pouch_panel.speedup_row,보유 %d개,,,,scripts/pouch_panel.gd
+pouch_panel.speedup_row_2,사용,,,,scripts/pouch_panel.gd
+pouch_panel.row,보유 %d개,,,,scripts/pouch_panel.gd
+pouch_panel.row_2,1개: ,,,,scripts/pouch_panel.gd
+pouch_panel.row_3,열기,,,,scripts/pouch_panel.gd
+pouch_panel.row_4,모두,,,,scripts/pouch_panel.gd
+preloader.connect_text,서버에 연결하는 중…,,,,scripts/preloader.gd
+preloader.load_text,게임 데이터를 불러오는 중…,,,,scripts/preloader.gd
+preloader.build_ui,게임 데이터를 불러오는 중…,,,,scripts/preloader.gd
+pvp.error_text.no_plays,오늘 도전 횟수를 다 썼습니다,,,,scripts/pvp.gd
+pvp.error_text.bad_heroes,보유한 영웅 5명을 고르세요,,,,scripts/pvp.gd
+pvp.error_text.sold_out,오늘(이번 주) 구매 한도를 채웠습니다,,,,scripts/pvp.gd
+pvp.error_text.not_enough_coins,PVP 코인이 부족합니다,,,,scripts/pvp.gd
+pvp.error_text.bag_full,보관함이 가득 찼습니다,,,,scripts/pvp.gd
+pvp.error_text.no_heroes,조각을 받을 영웅이 없습니다,,,,scripts/pvp.gd
+pvp.error_text.conflict,잠시 뒤 다시 시도하세요,,,,scripts/pvp.gd
+pvp.bot_nick_a,졸린,,,,scripts/pvp.gd
+pvp.bot_nick_a_2,용감한,,,,scripts/pvp.gd
+pvp.bot_nick_a_3,배고픈,,,,scripts/pvp.gd
+pvp.bot_nick_a_4,빠른,,,,scripts/pvp.gd
+pvp.bot_nick_a_5,느긋한,,,,scripts/pvp.gd
+pvp.bot_nick_a_6,씩씩한,,,,scripts/pvp.gd
+pvp.bot_nick_a_7,조용한,,,,scripts/pvp.gd
+pvp.bot_nick_a_8,화난,,,,scripts/pvp.gd
+pvp.bot_nick_a_9,행복한,,,,scripts/pvp.gd
+pvp.bot_nick_a_10,수상한,,,,scripts/pvp.gd
+pvp.bot_nick_a_11,귀여운,,,,scripts/pvp.gd
+pvp.bot_nick_a_12,우직한,,,,scripts/pvp.gd
+pvp.bot_nick_b,감자,,,,scripts/pvp.gd
+pvp.bot_nick_b_2,고양이,,,,scripts/pvp.gd
+pvp.bot_nick_b_3,기사,,,,scripts/pvp.gd
+pvp.bot_nick_b_4,궁수,,,,scripts/pvp.gd
+pvp.bot_nick_b_5,곰,,,,scripts/pvp.gd
+pvp.bot_nick_b_6,여우,,,,scripts/pvp.gd
+pvp.bot_nick_b_7,도토리,,,,scripts/pvp.gd
+pvp.bot_nick_b_8,망치,,,,scripts/pvp.gd
+pvp.bot_nick_b_9,방패,,,,scripts/pvp.gd
+pvp.bot_nick_b_10,늑대,,,,scripts/pvp.gd
+pvp.bot_nick_b_11,토끼,,,,scripts/pvp.gd
+pvp.bot_nick_b_12,마법사,,,,scripts/pvp.gd
+pvp.start_block,PVP 정보를 불러오는 중입니다,,,,scripts/pvp.gd
+pvp.start_block_2,상대를 찾는 중입니다,,,,scripts/pvp.gd
+pvp.start_block_3,영웅 %d명을 고르세요,,,,scripts/pvp.gd
+pvp.start_block_4,진행 중인 전투가 있습니다,,,,scripts/pvp.gd
+pvp.buy_block,없는 상품입니다,,,,scripts/pvp.gd
+pvp.set_defense,방어 영웅 %d명을 고르세요,,,,scripts/pvp.gd
+pvp.set_defense_2,방어팀을 저장했습니다,,,,scripts/pvp.gd
+pvp.set_defense_3,방어팀을 저장하지 못했습니다,,,,scripts/pvp.gd
+pvp.start,전투를 시작하지 못했습니다,,,,scripts/pvp.gd
+pvp.send_finish,전투 결과를 확인하지 못해 패배로 기록되었습니다,,,,scripts/pvp.gd
+pvp.buy,%s 구매 완료,,,,scripts/pvp.gd
+pvp.buy_2,구매하지 못했습니다,,,,scripts/pvp.gd
+pvp_battle.ready,전투 시작!,,,,scripts/pvp_battle.gd
+pvp_battle.process,결정타! 승리!,,,,scripts/pvp_battle.gd
+pvp_battle.process_2,전멸… 패배,,,,scripts/pvp_battle.gd
+pvp_battle.kill_lines,%s 격파!,,,,scripts/pvp_battle.gd
+pvp_battle.kill_lines_2,일격필살! %s,,,,scripts/pvp_battle.gd
+pvp_battle.kill_lines_3,%s 제압!,,,,scripts/pvp_battle.gd
+pvp_battle.kill_lines_4,%s 쓰러뜨림!,,,,scripts/pvp_battle.gd
+pvp_battle.kill_lines_5,%s 섬멸!,,,,scripts/pvp_battle.gd
+pvp_battle.fall_lines,%s 전사…,,,,scripts/pvp_battle.gd
+pvp_battle.fall_lines_2,%s 쓰러짐!,,,,scripts/pvp_battle.gd
+pvp_battle.fall_lines_3,%s 전투 불능!,,,,scripts/pvp_battle.gd
+pvp_battle.fall_lines_4,"%s, 무릎 꿇다",,,,scripts/pvp_battle.gd
+pvp_battle.first_kill,선제 일격!\n%s 격파,,,,scripts/pvp_battle.gd
+pvp_battle.first_fall,선제 일격 허용…\n%s 전사,,,,scripts/pvp_battle.gd
+pvp_battle.kill_line,\n적은 단 한 명!,,,,scripts/pvp_battle.gd
+pvp_battle.kill_line_2,\n최후의 한 명! 버텨라!,,,,scripts/pvp_battle.gd
+pvp_hud.build_top,상대,,,,scripts/pvp_hud.gd
+pvp_hud.build_top_2,나가기,,,,scripts/pvp_hud.gd
+pvp_hud.build_top_3,내 팀,,,,scripts/pvp_hud.gd
+pvp_hud.build_top_4,상대 팀,,,,scripts/pvp_hud.gd
+pvp_hud.build_strip,자동 전투,,,,scripts/pvp_hud.gd
+pvp_hud.build_strip_2,영웅을 눌러 고르고 바닥을 눌러 옮기세요,,,,scripts/pvp_hud.gd
+pvp_hud.build_result,확인,,,,scripts/pvp_hud.gd
+pvp_hud.show_result,승리!,,,,scripts/pvp_hud.gd
+pvp_hud.show_result_2,패배,,,,scripts/pvp_hud.gd
+pvp_hud.show_result_3,시간 종료 — 남은 체력으로 판정\n,,,,scripts/pvp_hud.gd
+pvp_hud.show_result_4,전투를 포기했습니다\n,,,,scripts/pvp_hud.gd
+pvp_hud.show_result.line,포인트 %s%d → %d (%s),,,,scripts/pvp_hud.gd
+pvp_hud.show_result.line_2,포인트 %d (%s),,,,scripts/pvp_hud.gd
+pvp_hud.show_result_5,%s%s\nPVP 코인 +%d,,,,scripts/pvp_hud.gd
+pvp_hud.on_leave,포기?,,,,scripts/pvp_hud.gd
+pvp_hud.on_leave_2,한 번 더 누르면 포기합니다 (패배),,,,scripts/pvp_hud.gd
+pvp_hud.refresh,영웅 %d / %d,,,,scripts/pvp_hud.gd
+pvp_hud.process,나가기,,,,scripts/pvp_hud.gd
+pvp_rules.names.duel,결투,,,,scripts/pvp_rules.gd
+pvp_rules.names.total,총력전,,,,scripts/pvp_rules.gd
+pvp_rules.blurb.duel,영웅 5 대 5 · 내 영웅을 직접 조종,,,,scripts/pvp_rules.gd
+pvp_rules.blurb.total,영웅 5 + 병사 대 영웅 5 + 병사 · 자동 전투,,,,scripts/pvp_rules.gd
+pvp_rules.tiers,브론즈,,,,scripts/pvp_rules.gd
+pvp_rules.tiers_2,실버,,,,scripts/pvp_rules.gd
+pvp_rules.tiers_3,골드,,,,scripts/pvp_rules.gd
+pvp_rules.tiers_4,플래티넘,,,,scripts/pvp_rules.gd
+pvp_rules.tiers_5,다이아몬드,,,,scripts/pvp_rules.gd
+pvp_rules.tiers_6,마스터,,,,scripts/pvp_rules.gd
+pvp_rules.tiers_7,챌린저,,,,scripts/pvp_rules.gd
+pvp_rules.shop_names.gold,"골드 30,000",,,,scripts/pvp_rules.gd
+pvp_rules.shop_names.equip,장비 상자,,,,scripts/pvp_rules.gd
+pvp_rules.shop_names.dia,다이아 50,,,,scripts/pvp_rules.gd
+pvp_rules.shop_names.ticket,다이아 모집권 1장,,,,scripts/pvp_rules.gd
+pvp_rules.shop_names.shards,영웅 조각 3개,,,,scripts/pvp_rules.gd
+pvp_rules.shop_names.ssr,SSR 영웅 조각 1개,,,,scripts/pvp_rules.gd
+pvp_view.build_home,"모드마다 하루 %d번 · 이기면 포인트와 PVP 코인, 지면 포인트가 조금 줄어듭니다",,,,scripts/pvp_view.gd
+pvp_view.coin_row,상점,,,,scripts/pvp_view.gd
+pvp_view.mode_card,입장,,,,scripts/pvp_view.gd
+pvp_view.build_page,◀ 뒤로,,,,scripts/pvp_view.gd
+pvp_view.build_page_2,상점,,,,scripts/pvp_view.gd
+pvp_view.build_page_3,출전 영웅,,,,scripts/pvp_view.gd
+pvp_view.build_page_4,팀 바꾸기,,,,scripts/pvp_view.gd
+pvp_view.build_page_5,방어팀,,,,scripts/pvp_view.gd
+pvp_view.build_page_6,방어팀 설정,,,,scripts/pvp_view.gd
+pvp_view.build_page_7,전투 시작,,,,scripts/pvp_view.gd
+pvp_view.build_picker,영웅을 눌러 넣고 빼세요,,,,scripts/pvp_view.gd
+pvp_view.build_picker_2,뒤로,,,,scripts/pvp_view.gd
+pvp_view.build_picker_3,자동 편성,,,,scripts/pvp_view.gd
+pvp_view.build_picker_4,확인,,,,scripts/pvp_view.gd
+pvp_view.refresh_picker,출전 영웅,,,,scripts/pvp_view.gd
+pvp_view.refresh_picker_2,방어팀,,,,scripts/pvp_view.gd
+pvp_view.refresh_picker_3,%d / %d명 · 전투력 %s,,,,scripts/pvp_view.gd
+pvp_view.plays_text.t,오늘 남은 도전 %d / %d,,,,scripts/pvp_view.gd
+pvp_view.plays_text, · 초기화 %s,,,,scripts/pvp_view.gd
+pvp_view.refresh,PVP 코인 %s,,,,scripts/pvp_view.gd
+pvp_view.refresh_2,%s · %s점,,,,scripts/pvp_view.gd
+pvp_view.refresh_3,오늘 %d / %d,,,,scripts/pvp_view.gd
+pvp_view.refresh_4,%d승 %d패%s,,,,scripts/pvp_view.gd
+pvp_view.refresh_5, · 다음 등급까지 %s점,,,,scripts/pvp_view.gd
+pvp_view.refresh_6,상대를 찾는 중,,,,scripts/pvp_view.gd
+pvp_view.refresh_7,상대 · %s,,,,scripts/pvp_view.gd
+pvp_view.refresh.info,%s %s점 · 전투력 %s,,,,scripts/pvp_view.gd
+pvp_view.refresh_8, · 병사 %d마리,,,,scripts/pvp_view.gd
+pvp_view.refresh_9,전투력 %s%s,,,,scripts/pvp_view.gd
+pvp_view.refresh_10, · 병사 %d마리 (보유 병사 중 높은 티어 %d마리까지),,,,scripts/pvp_view.gd
+pvp_view.refresh_11,아직 방어팀이 없습니다 — 처음 출전한 팀이 방어팀이 됩니다,,,,scripts/pvp_view.gd
+pvp_view.refresh_12,다른 성주가 이 팀과 싸웁니다 (AI가 대신 조종)%s,,,,scripts/pvp_view.gd
+pvp_view.refresh_13, · 방어 병사 %d마리,,,,scripts/pvp_view.gd
+pvp_view.refresh_14,전투 시작 (%d/%d),,,,scripts/pvp_view.gd
+qty_box.init,최대,,,,scripts/qty_box.gd
+ranking_panel.subtabs,스테이지,,,,scripts/ranking_panel.gd
+ranking_panel.subtabs_2,전투력,,,,scripts/ranking_panel.gd
+ranking_panel.subtabs_3,길드,,,,scripts/ranking_panel.gd
+ranking_panel.head.stage,도달한 라운드 순 · 먼저 도달한 사람이 위,,,,scripts/ranking_panel.gd
+ranking_panel.head.power,출전 영웅 전투력 합 순,,,,scripts/ranking_panel.gd
+ranking_panel.head.guild,길드 레벨 순 · 같으면 누적 경험치 순,,,,scripts/ranking_panel.gd
+ranking_panel.ready,랭킹,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild.msg,불러오는 중…,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild,랭킹은 서버에 접속했을 때 볼 수 있습니다,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild_2,랭킹을 불러오지 못했습니다\n잠시 뒤 다시 열어 주세요,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild_3,아직 기록이 없습니다,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild_4,내 길드,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild_5,내 순위,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild.why,길드에 가입하면 내 길드 순위가 보입니다,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild_6,전투력이 0이면 순위에 오르지 않습니다,,,,scripts/ranking_panel.gd
+ranking_panel.rebuild_7,순위 없음,,,,scripts/ranking_panel.gd
+ranking_panel.row,내 길드,,,,scripts/ranking_panel.gd
+ranking_panel.row_2,나,,,,scripts/ranking_panel.gd
+ranking_panel.row_3,길드원 %d명 · 드래곤 점수 %s,,,,scripts/ranking_panel.gd
+ranking_panel.row_4,길드 ,,,,scripts/ranking_panel.gd
+recruit_panel.title,영웅 모집,,,,scripts/recruit_panel.gd
+recruit_panel.late_text,모집 결과 도착 — 주점에서 확인하세요,,,,scripts/recruit_panel.gd
+recruit_panel.dup_text,+1 조각,,,,scripts/recruit_panel.gd
+recruit_panel.ssr_text,SSR 등장 — 자동 모집을 멈췄습니다,,,,scripts/recruit_panel.gd
+recruit_panel.ready,골드 모집,,,,scripts/recruit_panel.gd
+recruit_panel.ready_2,다이아 모집,,,,scripts/recruit_panel.gd
+recruit_panel.ready_3,확률 정보,,,,scripts/recruit_panel.gd
+recruit_panel.ready_4,닫기,,,,scripts/recruit_panel.gd
+recruit_panel.ready_5,재모집,,,,scripts/recruit_panel.gd
+recruit_panel.ready_6,확인,,,,scripts/recruit_panel.gd
+recruit_panel.ready_7,자동 모집,,,,scripts/recruit_panel.gd
+recruit_panel.build_shop_ask,다이아가 부족합니다,,,,scripts/recruit_panel.gd
+recruit_panel.build_shop_ask_2,다이아 상점으로 이동하시겠습니까?,,,,scripts/recruit_panel.gd
+recruit_panel.build_shop_ask_3,이동,,,,scripts/recruit_panel.gd
+recruit_panel.build_shop_ask_4,취소,,,,scripts/recruit_panel.gd
+recruit_panel.rates_line,SSR Lv %d부터 · SR %s%% · R %s%%,,,,scripts/recruit_panel.gd
+recruit_panel.refresh,골드 모집 Lv %d,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_2,최대 레벨,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_3,다음 레벨까지 %d/%d,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_4,Lv %d: SSR %s%% · SR %s%% · 1회 %s,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_5,보유 %s,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_6,SSR 확정까지 %d회,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_7,다이아 모집권 %d장,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_8,다이아 ,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_9,모집권 ,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_10,%s%d회 %s%s,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_11,%d장,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_12, · SR 이상 %d장,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_13,자동 모집 중,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_14,재모집 모집권 %d장,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_15,재모집 %s%s,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_16,\n다이아 부족,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_17,\n골드 부족,,,,scripts/recruit_panel.gd
+release_platform.iap_off_text,결제는 토스 출시 후 열립니다,,,,scripts/release_platform.gd
+release_platform.iap_off_text_2,결제는 Google Play 출시 후 열립니다,,,,scripts/release_platform.gd
+research_panel.branch_names.economy,경제,,,,scripts/research_panel.gd
+research_panel.branch_names.military,군사,,,,scripts/research_panel.gd
+research_panel.branch_names.hero,영웅,,,,scripts/research_panel.gd
+research_panel.effect_names.wood_pct,목재 생산,,,,scripts/research_panel.gd
+research_panel.effect_names.stone_pct,석재 생산,,,,scripts/research_panel.gd
+research_panel.effect_names.food_pct,식량 생산,,,,scripts/research_panel.gd
+research_panel.effect_names.res_pct,모든 자원 생산,,,,scripts/research_panel.gd
+research_panel.effect_names.build_speed_pct,건설 속도,,,,scripts/research_panel.gd
+research_panel.effect_names.research_speed_pct,연구 속도,,,,scripts/research_panel.gd
+research_panel.effect_names.sell_pct,판매 금액,,,,scripts/research_panel.gd
+research_panel.effect_names.kill_gold_pct,처치 골드,,,,scripts/research_panel.gd
+research_panel.effect_names.inf_pct,보병 공격·체력,,,,scripts/research_panel.gd
+research_panel.effect_names.arc_pct,궁병 공격·체력,,,,scripts/research_panel.gd
+research_panel.effect_names.cav_pct,기병 공격·체력,,,,scripts/research_panel.gd
+research_panel.effect_names.soldier_pct,모든 병사 공격·체력,,,,scripts/research_panel.gd
+research_panel.effect_names.castle_hp_pct,성 최대 체력,,,,scripts/research_panel.gd
+research_panel.effect_names.gate_hp_pct,성문 최대 체력,,,,scripts/research_panel.gd
+research_panel.effect_names.train_speed_pct,훈련 속도,,,,scripts/research_panel.gd
+research_panel.effect_names.train_cost_pct,훈련 비용,,,,scripts/research_panel.gd
+research_panel.effect_names.pop_add,인구,,,,scripts/research_panel.gd
+research_panel.effect_names.hero_atk_pct,영웅 공격력,,,,scripts/research_panel.gd
+research_panel.effect_names.hero_hp_pct,영웅 체력,,,,scripts/research_panel.gd
+research_panel.effect_names.skill_pct,영웅 스킬 피해,,,,scripts/research_panel.gd
+research_panel.effect_desc.wood_pct,벌목장의 목재 생산량이 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.stone_pct,채석장의 석재 생산량이 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.food_pct,농장의 식량 생산량이 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.res_pct,모든 자원 생산량이 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.build_speed_pct,건물 건설 시간이 줄어듭니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.research_speed_pct,연구 시간이 줄어듭니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.sell_pct,상인에게 자원을 더 비싸게 팝니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.kill_gold_pct,몬스터 처치 골드가 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.inf_pct,보병의 공격력과 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.arc_pct,궁병의 공격력과 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.cav_pct,기병의 공격력과 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.soldier_pct,모든 병사의 공격력과 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.castle_hp_pct,성의 최대 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.gate_hp_pct,성문의 최대 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.train_speed_pct,병사 훈련 시간이 줄어듭니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.train_cost_pct,병사 훈련 비용이 줄어듭니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.pop_add,인구(병사 배치 상한)가 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.hero_atk_pct,모든 영웅의 공격력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.hero_hp_pct,모든 영웅의 체력이 오릅니다.,,,,scripts/research_panel.gd
+research_panel.effect_desc.skill_pct,영웅 스킬의 추가 피해가 늘어납니다.,,,,scripts/research_panel.gd
+research_panel.idle_text,진행 중인 연구 없음 — 연구할 기술을 고르세요,,,,scripts/research_panel.gd
+research_panel.available_text,연구 가능,,,,scripts/research_panel.gd
+research_panel.ready,닫기,,,,scripts/research_panel.gd
+research_panel.build_current,취소,,,,scripts/research_panel.gd
+research_panel.build_current_2,가속 ▼,,,,scripts/research_panel.gd
+research_panel.build_detail,연구,,,,scripts/research_panel.gd
+research_panel.build_detail_2,취소,,,,scripts/research_panel.gd
+research_panel.build_detail_3,닫기,,,,scripts/research_panel.gd
+research_panel.set_dia,무료 즉시 완료,,,,scripts/research_panel.gd
+research_panel.set_dia_2,      %d 즉시 완료,,,,scripts/research_panel.gd
+research_panel.rebuild_tree,%d단,,,,scripts/research_panel.gd
+research_panel.refresh,연구소 Lv %d,,,,scripts/research_panel.gd
+research_panel.refresh_2,연구 속도 +%s%%,,,,scripts/research_panel.gd
+research_panel.refresh_3,연구소 Lv %d 필요,,,,scripts/research_panel.gd
+research_panel.refresh_current,남은 시간 ,,,,scripts/research_panel.gd
+research_panel.refresh_current_2,가속 ▲,,,,scripts/research_panel.gd
+research_panel.refresh_current_3,가속 ▼,,,,scripts/research_panel.gd
+research_panel.refresh_detail,%s  현재 %s,,,,scripts/research_panel.gd
+research_panel.refresh_detail_2, (최대),,,,scripts/research_panel.gd
+research_panel.refresh_detail_3, → 다음 ,,,,scripts/research_panel.gd
+research_panel.refresh_detail.what,연구소,,,,scripts/research_panel.gd
+research_panel.refresh_detail.text,%s %s Lv %d 필요,,,,scripts/research_panel.gd
+research_panel.refresh_detail_4, (현재 %d),,,,scripts/research_panel.gd
+research_panel.refresh_detail_5,연구 시간 ,,,,scripts/research_panel.gd
+research_panel.refresh_detail_6,Lv %d → %d 연구 중 · 남은 시간 %s,,,,scripts/research_panel.gd
+research_panel.effect_value,+%d명,,,,scripts/research_panel.gd
+seasons.names,봄,,,,scripts/seasons.gd
+seasons.names_2,여름,,,,scripts/seasons.gd
+seasons.names_3,가을,,,,scripts/seasons.gd
+seasons.names_4,겨울,,,,scripts/seasons.gd
+seasons.banner_text,스테이지 %d · %s,,,,scripts/seasons.gd
+settings_panel.title,설정,,,,scripts/settings_panel.gd
+settings_panel.login_names.guest,게스트,,,,scripts/settings_panel.gd
+settings_panel.login_names.kakao,카카오,,,,scripts/settings_panel.gd
+settings_panel.login_names.naver,네이버,,,,scripts/settings_panel.gd
+settings_panel.login_names.toss,토스,,,,scripts/settings_panel.gd
+settings_panel.ready,사운드,,,,scripts/settings_panel.gd
+settings_panel.ready_2,배경음악,,,,scripts/settings_panel.gd
+settings_panel.ready_3,배경음악 음량,,,,scripts/settings_panel.gd
+settings_panel.ready_4,효과음,,,,scripts/settings_panel.gd
+settings_panel.ready_5,효과음 음량,,,,scripts/settings_panel.gd
+settings_panel.ready_6,화면,,,,scripts/settings_panel.gd
+settings_panel.ready_7,그래픽 품질,,,,scripts/settings_panel.gd
+settings_panel.ready_8,프레임,,,,scripts/settings_panel.gd
+settings_panel.ready_9,절전 모드,,,,scripts/settings_panel.gd
+settings_panel.ready_10,1분간 조작이 없으면 화면을 어둡게 하고 프레임을 낮춥니다,,,,scripts/settings_panel.gd
+settings_panel.ready_11,화면 흔들림,,,,scripts/settings_panel.gd
+settings_panel.ready_12,피해 숫자 표시,,,,scripts/settings_panel.gd
+settings_panel.ready_13,계정,,,,scripts/settings_panel.gd
+settings_panel.ready_14,닉네임,,,,scripts/settings_panel.gd
+settings_panel.ready_15,친구 코드,,,,scripts/settings_panel.gd
+settings_panel.ready_16,복사,,,,scripts/settings_panel.gd
+settings_panel.ready_17,로그인,,,,scripts/settings_panel.gd
+settings_panel.ready_18,계정 연결,,,,scripts/settings_panel.gd
+settings_panel.ready_19,로그아웃 · 계정 전환,,,,scripts/settings_panel.gd
+settings_panel.ready_20,쿠폰 입력,,,,scripts/settings_panel.gd
+settings_panel.ready_21,계정 삭제,,,,scripts/settings_panel.gd
+settings_panel.ready_22,정보 · 지원,,,,scripts/settings_panel.gd
+settings_panel.ready_23,게임 버전,,,,scripts/settings_panel.gd
+settings_panel.ready_24,이용약관,,,,scripts/settings_panel.gd
+settings_panel.ready_25,개인정보처리방침,,,,scripts/settings_panel.gd
+settings_panel.ready_26,문의하기,,,,scripts/settings_panel.gd
+settings_panel.ready_27,운영 관리,,,,scripts/settings_panel.gd
+settings_panel.ready_28,닫기,,,,scripts/settings_panel.gd
+settings_panel.refresh,오프라인 모드,,,,scripts/settings_panel.gd
+settings_panel.press_logout,로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다,,,,scripts/settings_panel.gd
+settings_panel.style_logout,한 번 더 누르면 로그아웃합니다,,,,scripts/settings_panel.gd
+settings_panel.style_logout_2,로그아웃 · 계정 전환,,,,scripts/settings_panel.gd
+settings_panel.style_links,게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없습니다. 연결해 두면 진행이 그대로 남습니다,,,,scripts/settings_panel.gd
+settings_panel.style_links_2,다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있습니다,,,,scripts/settings_panel.gd
+settings_panel.open_inquiry,문의는 온라인에서만 보낼 수 있습니다,,,,scripts/settings_panel.gd
+settings_panel.press_delete,계정을 삭제하지 못했습니다. 다시 시도해 주세요,,,,scripts/settings_panel.gd
+settings_panel.style_delete,한 번 더 누르면 계정이 삭제됩니다,,,,scripts/settings_panel.gd
+settings_panel.style_delete_2,계정 삭제,,,,scripts/settings_panel.gd
+settings_panel.copy_code,친구 코드를 복사했습니다,,,,scripts/settings_panel.gd
+settings_panel.toggle_row,켬,,,,scripts/settings_panel.gd
+shop_items.items.d_free.name,매일 무료 선물,,,,scripts/shop_items.gd
+shop_items.items.d_ticket.name,다이아 모집권 할인,,,,scripts/shop_items.gd
+shop_items.items.d_pouch_gold.name,골드 주머니(1시간),,,,scripts/shop_items.gd
+shop_items.items.d_pouch_res.name,자원 주머니(1시간),,,,scripts/shop_items.gd
+shop_items.items.d_key_gold.name,골드 던전 입장권,,,,scripts/shop_items.gd
+shop_items.items.d_key_equip.name,장비 던전 입장권,,,,scripts/shop_items.gd
+shop_items.items.d_key_ticket.name,모집권 던전 입장권,,,,scripts/shop_items.gd
+shop_items.items.d_res.name,자원 꾸러미,,,,scripts/shop_items.gd
+shop_items.items.d_sp_build.name,건설 가속 1시간,,,,scripts/shop_items.gd
+shop_items.items.d_sp_research.name,연구 가속 1시간,,,,scripts/shop_items.gd
+shop_items.items.a_dia.name,광고 다이아,,,,scripts/shop_items.gd
+shop_items.items.a_ticket.name,광고 모집권,,,,scripts/shop_items.gd
+shop_items.items.a_key_gold.name,골드 던전 입장권,,,,scripts/shop_items.gd
+shop_items.items.a_key_equip.name,장비 던전 입장권,,,,scripts/shop_items.gd
+shop_items.items.a_key_ticket.name,모집권 던전 입장권,,,,scripts/shop_items.gd
+shop_items.items.a_pouch_gold.name,골드 주머니(1시간),,,,scripts/shop_items.gd
+shop_items.items.a_pouch_res.name,자원 주머니(1시간),,,,scripts/shop_items.gd
+shop_items.items.a_sp_any.name,범용 가속 15분,,,,scripts/shop_items.gd
+shop_items.items.w_free.name,주간 무료 선물,,,,scripts/shop_items.gd
+shop_items.items.w_tickets.name,모집권 10장 묶음,,,,scripts/shop_items.gd
+shop_items.items.w_pouch_gold.name,골드 주머니(6시간),,,,scripts/shop_items.gd
+shop_items.items.w_pouch_res.name,자원 주머니(6시간),,,,scripts/shop_items.gd
+shop_items.items.w_sp_any.name,범용 가속 8시간,,,,scripts/shop_items.gd
+shop_items.items.w_sp_build.name,건설 가속 1일,,,,scripts/shop_items.gd
+shop_items.items.w_sp_research.name,연구 가속 1일,,,,scripts/shop_items.gd
+shop_items.items.w_builder.name,일꾼 고용권 7일,,,,scripts/shop_items.gd
+shop_items.items.w_res.name,큰 자원 꾸러미,,,,scripts/shop_items.gd
+shop_panel.pvp_note,PVP 코인은 결투·총력전에서 얻습니다 (승리 %d · 패배 %d),,,,scripts/shop_panel.gd
+shop_panel.tabs,패키지,,,,scripts/shop_panel.gd
+shop_panel.tabs_2,패스,,,,scripts/shop_panel.gd
+shop_panel.tabs_3,광고,,,,scripts/shop_panel.gd
+shop_panel.tabs_4,일일,,,,scripts/shop_panel.gd
+shop_panel.tabs_5,주간,,,,scripts/shop_panel.gd
+shop_panel.tabs_6,다이아,,,,scripts/shop_panel.gd
+shop_panel.head.package,월정액·특가 패키지,,,,scripts/shop_panel.gd
+shop_panel.head.pass,라운드를 깰 때마다 보상 · 패스를 사면 유료 보상도,,,,scripts/shop_panel.gd
+shop_panel.head.daily,매일 00:00에 초기화,,,,scripts/shop_panel.gd
+shop_panel.head.ad,광고를 보면 무료 · 매일 00:00에 초기화,,,,scripts/shop_panel.gd
+shop_panel.head.weekly,매주 월요일 00:00에 초기화,,,,scripts/shop_panel.gd
+shop_panel.head.diamond,단계마다 첫 구매는 다이아 2배,,,,scripts/shop_panel.gd
+shop_panel.head.pvp,"PVP 코인 상점 · 일일 상품은 매일, 주간 상품은 월요일 00:00에 초기화",,,,scripts/shop_panel.gd
+shop_panel.note_text,결제 기능은 출시 전에 연결됩니다,,,,scripts/shop_panel.gd
+shop_panel.sold_text,매진,,,,scripts/shop_panel.gd
+shop_panel.free_text,무료,,,,scripts/shop_panel.gd
+shop_panel.ad_text,광고 보기,,,,scripts/shop_panel.gd
+shop_panel.ad_free_text,바로 받기,,,,scripts/shop_panel.gd
+shop_panel.short_text.diamonds,다이아가 부족합니다,,,,scripts/shop_panel.gd
+shop_panel.short_text.gold,골드가 부족합니다,,,,scripts/shop_panel.gd
+shop_panel.ready,상점,,,,scripts/shop_panel.gd
+shop_panel.hot_time,남은 시간 ,,,,scripts/shop_panel.gd
+shop_panel.head,%s · 남은 시간 %s,,,,scripts/shop_panel.gd
+shop_panel.wallet,보유  PVP 코인 %s,,,,scripts/shop_panel.gd
+shop_panel.wallet_2,보유  다이아 %s  ·  골드 %s,,,,scripts/shop_panel.gd
+shop_panel.card,이번 주,,,,scripts/shop_panel.gd
+shop_panel.card_2,오늘,,,,scripts/shop_panel.gd
+shop_panel.buy,받음: ,,,,scripts/shop_panel.gd
+shop_panel.buy_2,구매: ,,,,scripts/shop_panel.gd
+shop_panel.pvp_card,오늘,,,,scripts/shop_panel.gd
+shop_panel.pvp_card_2,이번 주,,,,scripts/shop_panel.gd
+shop_panel.pvp_card_3,구매: ,,,,scripts/shop_panel.gd
+shop_panel.pack_card,첫 구매 2배,,,,scripts/shop_panel.gd
+shop_panel.pack_card_2,다이아 %s,,,,scripts/shop_panel.gd
+shop_panel.pack_card_3,+%s 보너스,,,,scripts/shop_panel.gd
+shop_panel.build_packages,핫딜 · ,,,,scripts/shop_panel.gd
+shop_panel.build_packages_2,가치 %d배,,,,scripts/shop_panel.gd
+shop_panel.build_packages_3,구매 즉시 ,,,,scripts/shop_panel.gd
+shop_panel.build_packages_4,%d일간 매일 %s,,,,scripts/shop_panel.gd
+shop_panel.build_packages_5,남은 기간 %d일,,,,scripts/shop_panel.gd
+shop_panel.build_packages_6,총 %s 이상의 가치,,,,scripts/shop_panel.gd
+shop_panel.build_packages_7,오늘 받기,,,,scripts/shop_panel.gd
+shop_panel.build_packages_8,오늘 받음,,,,scripts/shop_panel.gd
+shop_panel.build_packages_9,연장 ₩,,,,scripts/shop_panel.gd
+shop_panel.build_packages_10,구매함,,,,scripts/shop_panel.gd
+shop_panel.build_packages_11, (영구),,,,scripts/shop_panel.gd
+shop_panel.build_packages_12,[광고] 상점 보상을 광고 없이 바로 받습니다,,,,scripts/shop_panel.gd
+shop_panel.build_packages_13,계정당 1회,,,,scripts/shop_panel.gd
+shop_panel.build_packages.once,계정당 1회,,,,scripts/shop_panel.gd
+shop_panel.build_packages.daily,매일 1회,,,,scripts/shop_panel.gd
+shop_panel.build_packages.weekly,매주 1회,,,,scripts/shop_panel.gd
+shop_panel.value_text,다이아 %s,,,,scripts/shop_panel.gd
+shop_panel.build_pass,구매함,,,,scripts/shop_panel.gd
+shop_panel.build_pass_2,성장 패스,,,,scripts/shop_panel.gd
+shop_panel.build_pass_3,"라운드를 깰 때마다 무료 보상, 패스가 있으면 유료 보상도 받습니다",,,,scripts/shop_panel.gd
+shop_panel.build_pass_4,산 뒤에는 지난 단계 유료 보상도 받을 수 있습니다,,,,scripts/shop_panel.gd
+shop_panel.pass_head,단계,,,,scripts/shop_panel.gd
+shop_panel.pass_head_2,무료,,,,scripts/shop_panel.gd
+shop_panel.pass_head_3,패스,,,,scripts/shop_panel.gd
+shop_panel.growth_cell,받음,,,,scripts/shop_panel.gd
+shop_panel.growth_cell_2,받기,,,,scripts/shop_panel.gd
+shop_panel.growth_cell_3,패스 필요,,,,scripts/shop_panel.gd
+shop_panel.growth_cell_4,잠김,,,,scripts/shop_panel.gd
+side_menu.items,설정,,,,scripts/side_menu.gd
+side_menu.items_2,공지,,,,scripts/side_menu.gd
+side_menu.items_3,우편,,,,scripts/side_menu.gd
+side_menu.items_4,가방,,,,scripts/side_menu.gd
+side_menu.items_5,미션,,,,scripts/side_menu.gd
+side_menu.items_6,랭킹,,,,scripts/side_menu.gd
+side_menu.items_7,친구,,,,scripts/side_menu.gd
+side_menu.items_8,이벤트,,,,scripts/side_menu.gd
+side_menu.items_9,거래소,,,,scripts/side_menu.gd
+side_menu.items_10,길드,,,,scripts/side_menu.gd
+side_menu.ready,메뉴,,,,scripts/side_menu.gd
+side_menu.draw_face,닫기,,,,scripts/side_menu.gd
+side_menu.draw_face_2,메뉴,,,,scripts/side_menu.gd
+skills.names.heal_aura,치유의 기도,,,,scripts/skills.gd
+skills.names.atk_aura,용기의 오라,,,,scripts/skills.gd
+skills.names.dmg_reduce,철벽,,,,scripts/skills.gd
+skills.names.dodge,회피,,,,scripts/skills.gd
+skills.names.thorns,가시 갑옷,,,,scripts/skills.gd
+skills.names.lifesteal,흡혈,,,,scripts/skills.gd
+skills.names.haste,신속,,,,scripts/skills.gd
+skills.names.rage,광분,,,,scripts/skills.gd
+skills.names.crit,치명타,,,,scripts/skills.gd
+skills.names.execute,마무리 일격,,,,scripts/skills.gd
+skills.names.boss_slayer,거인 사냥,,,,scripts/skills.gd
+skills.names.cleave,휩쓸기,,,,scripts/skills.gd
+skills.names.multishot,다중 사격,,,,scripts/skills.gd
+skills.names.chain,연쇄,,,,scripts/skills.gd
+skills.names.aoe_blast,폭발,,,,scripts/skills.gd
+skills.names.slow,둔화,,,,scripts/skills.gd
+skills.names.stun,기절,,,,scripts/skills.gd
+skills.names.poison,독,,,,scripts/skills.gd
+skills.names.gate_repair,성문 수리,,,,scripts/skills.gd
+skills.names.meteor,메테오,,,,scripts/skills.gd
+skills.names.inferno,화염 지대,,,,scripts/skills.gd
+skills.names.earthquake,지진,,,,scripts/skills.gd
+skills.names.ground_slam,대지 강타,,,,scripts/skills.gd
+skills.names.blizzard,눈보라,,,,scripts/skills.gd
+skills.names.tornado,회오리바람,,,,scripts/skills.gd
+skills.names.thunder_storm,뇌우,,,,scripts/skills.gd
+skills.names.arrow_rain,화살비,,,,scripts/skills.gd
+skills.names.poison_cloud,독구름,,,,scripts/skills.gd
+skills.names.frost_nova,서리 폭발,,,,scripts/skills.gd
+skills.names.whirlwind,회오리 베기,,,,scripts/skills.gd
+skills.names.war_cry,전투 함성,,,,scripts/skills.gd
+skills.names.shockwave,충격파,,,,scripts/skills.gd
+skills.names.spear_throw,창 투척,,,,scripts/skills.gd
+skills.names.ice_spikes,얼음 가시,,,,scripts/skills.gd
+skills.names.dragon_breath,용의 숨결,,,,scripts/skills.gd
+skills.names.starfall,별똥별,,,,scripts/skills.gd
+skills.names.sky_bolt,낙뢰,,,,scripts/skills.gd
+skills.names.comet,혜성,,,,scripts/skills.gd
+skills.names.holy_smite,심판의 빛,,,,scripts/skills.gd
+skills.names.shadow_strike,그림자 습격,,,,scripts/skills.gd
+skills.names.void_rift,공허 균열,,,,scripts/skills.gd
+skills.names.solar_flare,태양 섬광,,,,scripts/skills.gd
+skills.names.abyss_hand,심연의 손,,,,scripts/skills.gd
+skills.names.lava_burst,용암 분출,,,,scripts/skills.gd
+skills.names.sanctuary,성역,,,,scripts/skills.gd
+skills.names.mass_heal,대치유,,,,scripts/skills.gd
+skills.names.resurrection,부활의 기도,,,,scripts/skills.gd
+skills.names.battle_hymn,전투 찬가,,,,scripts/skills.gd
+skills.names.shield_ally,수호 축복,,,,scripts/skills.gd
+skills.names.shield,보호막,,,,scripts/skills.gd
+skills.names.taunt,도발,,,,scripts/skills.gd
+skills.names.summon_wolf,늑대 소환,,,,scripts/skills.gd
+skills.names.summon_skeleton,해골 병사,,,,scripts/skills.gd
+skills.names.summon_golem,골렘 소환,,,,scripts/skills.gd
+skills.names.summon_treant,나무 정령,,,,scripts/skills.gd
+skills.names.summon_spirit,정령 소환,,,,scripts/skills.gd
+skills.names.summon_phoenix,불사조,,,,scripts/skills.gd
+skills.names.summon_hawk,매 부르기,,,,scripts/skills.gd
+skills.names.summon_turret,포탑 설치,,,,scripts/skills.gd
+skills.names.burn_hit,화상 타격,,,,scripts/skills.gd
+skills.names.bleed_hit,출혈,,,,scripts/skills.gd
+skills.names.curse_hit,저주,,,,scripts/skills.gd
+skills.names.freeze_hit,빙결,,,,scripts/skills.gd
+skills.names.root_hit,속박,,,,scripts/skills.gd
+skills.names.shock_hit,감전,,,,scripts/skills.gd
+skills.names.knockback_hit,밀쳐내기,,,,scripts/skills.gd
+skills.names.armor_break,갑옷 파괴,,,,scripts/skills.gd
+skills.names.weaken_hit,약화,,,,scripts/skills.gd
+skills.names.hunter_mark,사냥꾼의 표식,,,,scripts/skills.gd
+skills.names.double_strike,연속 공격,,,,scripts/skills.gd
+skills.names.barrage,연사,,,,scripts/skills.gd
+skills.names.splash,파편 튀기기,,,,scripts/skills.gd
+skills.names.pierce,관통,,,,scripts/skills.gd
+skills.names.ricochet,도탄,,,,scripts/skills.gd
+skills.names.echo_strike,메아리 베기,,,,scripts/skills.gd
+skills.names.heavy_blow,강타,,,,scripts/skills.gd
+skills.names.corpse_explosion,시체 폭발,,,,scripts/skills.gd
+skills.names.soul_harvest,영혼 수확,,,,scripts/skills.gd
+skills.names.bloodlust,피의 갈망,,,,scripts/skills.gd
+skills.names.frost_shatter,얼음 파편,,,,scripts/skills.gd
+skills.names.wildfire,들불,,,,scripts/skills.gd
+skills.names.frenzy,광란,,,,scripts/skills.gd
+skills.names.last_stand,배수진,,,,scripts/skills.gd
+skills.names.opportunist,약점 포착,,,,scripts/skills.gd
+skills.names.pyromancy,화염 숙련,,,,scripts/skills.gd
+skills.names.first_strike,기선 제압,,,,scripts/skills.gd
+skills.names.focus,집중,,,,scripts/skills.gd
+skills.names.sharpshooter,저격,,,,scripts/skills.gd
+skills.names.brawler,난전,,,,scripts/skills.gd
+skills.names.berserker,광전사,,,,scripts/skills.gd
+skills.names.regen,재생,,,,scripts/skills.gd
+skills.names.revive,불굴,,,,scripts/skills.gd
+skills.names.block,방패 막기,,,,scripts/skills.gd
+skills.names.fortify,요새화,,,,scripts/skills.gd
+skills.names.second_wind,재기,,,,scripts/skills.gd
+skills.names.invincible,금강불괴,,,,scripts/skills.gd
+skills.names.stoneskin,돌 피부,,,,scripts/skills.gd
+skills.names.counter,반격,,,,scripts/skills.gd
+skills.names.haste_aura,질풍의 오라,,,,scripts/skills.gd
+skills.names.guard_aura,수호의 오라,,,,scripts/skills.gd
+skills.names.regen_aura,생명의 오라,,,,scripts/skills.gd
+skills.names.ignite,점화,,,,scripts/skills.gd
+skills.names.piercing_shot,관통 사격,,,,scripts/skills.gd
+skills.names.blood_rage,피의 격노,,,,scripts/skills.gd
+skills.names.frost_chain,서리 사슬,,,,scripts/skills.gd
+skills.names.rend,난도질,,,,scripts/skills.gd
+skills.names.bulwark,방벽,,,,scripts/skills.gd
+skills.names.crushing_blow,분쇄 일격,,,,scripts/skills.gd
+skills.names.sunder,갑옷 가르기,,,,scripts/skills.gd
+skills.names.shield_bash,방패 밀치기,,,,scripts/skills.gd
+skills.names.snare,덫,,,,scripts/skills.gd
+skills.names.blade_flurry,칼날 난무,,,,scripts/skills.gd
+skills.names.parry,받아치기,,,,scripts/skills.gd
+skills.names.fire_bolt,화염탄,,,,scripts/skills.gd
+skills.names.firespread,들불 번지기,,,,scripts/skills.gd
+skills.names.axe_volley,도끼 세례,,,,scripts/skills.gd
+skills.names.boomerang,회전 도끼,,,,scripts/skills.gd
+skills.names.spear_sweep,창 휩쓸기,,,,scripts/skills.gd
+skills.names.drain_slash,흡혈 베기,,,,scripts/skills.gd
+skills.names.volley,연발 사격,,,,scripts/skills.gd
+skills.names.wide_swing,크게 휘두르기,,,,scripts/skills.gd
+skills.names.cheap_shot,급소 찌르기,,,,scripts/skills.gd
+skills.names.crescent,초승달 베기,,,,scripts/skills.gd
+skills.names.lunar_veil,달빛 장막,,,,scripts/skills.gd
+skills.names.howl,야성의 포효,,,,scripts/skills.gd
+skills.names.deep_freeze,급속 냉동,,,,scripts/skills.gd
+skills.names.hex,역병의 저주,,,,scripts/skills.gd
+skills.names.scorch,불바다,,,,scripts/skills.gd
+skills.names.gale,돌개바람,,,,scripts/skills.gd
+skills.names.solar_spark,햇빛 파편,,,,scripts/skills.gd
+skills.names.frost_spike,서리 가시,,,,scripts/skills.gd
+skills.names.magma,끓는 늪,,,,scripts/skills.gd
+skills.hero_names.poison,화상,,,,scripts/skills.gd
+skills.hero_names.aoe_blast,화염구,,,,scripts/skills.gd
+skills.texts.heal_aura,{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 각자 최대 HP의 {c}%만큼 회복합니다.,,,,scripts/skills.gd
+skills.texts.atk_aura,반경 {a}m 안 다른 영웅의 공격력을 {b}% 올립니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
+skills.texts.dmg_reduce,받는 피해를 {a}% 줄입니다.,,,,scripts/skills.gd
+skills.texts.dodge,{a}% 확률로 피해를 피합니다.,,,,scripts/skills.gd
+skills.texts.thorns,맞으면 받은 피해의 {a}%와 공격력의 {a}% 중 큰 값만큼 공격한 적에게 되돌려 줍니다.,,,,scripts/skills.gd
+skills.texts.lifesteal,준 피해의 {a}%만큼 HP를 회복합니다.,,,,scripts/skills.gd
+skills.texts.haste,공격 속도가 {a}% 빨라집니다.,,,,scripts/skills.gd
+skills.texts.rage,잃은 HP 비율만큼 공격 속도가 빨라집니다(최대 {a}%).,,,,scripts/skills.gd
+skills.texts.crit,{a}% 확률로 {bx}배 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.execute,HP가 {a}% 이하인 적에게 피해를 {b}% 더 줍니다.,,,,scripts/skills.gd
+skills.texts.boss_slayer,보스에게 주는 피해가 {a}% 늘어납니다(다른 적에게는 그 1/5만큼).,,,,scripts/skills.gd
+skills.texts.cleave,근접 공격 때 대상 주변 {a}m 안 다른 적에게 피해의 {b}%를 줍니다.,,,,scripts/skills.gd
+skills.texts.multishot,사거리 안 가까운 적 {a}마리를 동시에 공격합니다.,,,,scripts/skills.gd
+skills.texts.chain,"맞은 적에서 {c}m 안 가장 가까운 다른 적으로 {a}번 튕기며, 튕길 때마다 피해가 {b}%가 됩니다.",,,,scripts/skills.gd
+skills.texts.aoe_blast,{a}초마다 대상 위치에 폭발을 일으켜 반경 {b}m 안 모든 적에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.slow,맞은 적의 이동 속도를 {b}초 동안 {a}% 늦춥니다.,,,,scripts/skills.gd
+skills.texts.stun,{a}번째 공격마다 대상을 {b}초 동안 기절시킵니다.,,,,scripts/skills.gd
+skills.texts.poison,맞은 적이 {b}초 동안 매초 공격력의 {a}% 독 피해를 입습니다.,,,,scripts/skills.gd
+skills.texts.gate_repair,"{a}초마다 자기 쪽 성문 HP를 최대치의 {b}%만큼 수리합니다(성문 앞이나 같은 쪽 성벽 위에 있을 때, 부서진 성문 제외).",,,,scripts/skills.gd
+skills.texts.meteor,{a}초마다 대상 위치에 운석을 떨어뜨려 반경 {b}m 안 적에게 공격력의 {c}% 피해를 주고 불태웁니다.,,,,scripts/skills.gd
+skills.texts.inferno,{a}초마다 대상 위치 반경 {b}m를 3초 동안 불태워 안의 적에게 매초 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.earthquake,{a}초마다 땅을 흔들어 반경 {b}m 안 적에게 공격력의 {c}% 피해를 주고 1초 기절시킵니다.,,,,scripts/skills.gd
+skills.texts.ground_slam,{a}초마다 땅을 내리쳐 반경 {b}m 안 적에게 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.blizzard,"{a}초마다 대상 위치 반경 {b}m에 눈보라를 일으켜 2초 동안 4번, 공격력의 {c}% 피해를 주고 늦춥니다.",,,,scripts/skills.gd
+skills.texts.tornado,{a}초마다 대상 위치에 회오리를 일으켜 3초 동안 반경 {b}m 안 적에게 매초 공격력의 {c}% 피해를 주고 늦춥니다.,,,,scripts/skills.gd
+skills.texts.thunder_storm,{a}초마다 대상 위치 반경 {b}m에 번개를 5번 내리쳐 각각 맞은 곳 주변 적에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.arrow_rain,{a}초마다 대상 위치 반경 {b}m에 화살비를 3번 퍼부어 각각 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.poison_cloud,{a}초마다 대상 위치 반경 {b}m에 4초 동안 독구름을 깔아 안의 적에게 매초 공격력의 {c}% 독 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.frost_nova,{a}초마다 주변 반경 {b}m 적에게 공격력의 80% 피해를 주고 {c}초 동안 얼립니다.,,,,scripts/skills.gd
+skills.texts.whirlwind,{a}초마다 제자리에서 세 바퀴 돌며 반경 {b}m 안 적에게 각각 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.war_cry,{a}초마다 함성을 질러 반경 {b}m 안 적의 공격력을 4초 동안 {c}% 낮춥니다.,,,,scripts/skills.gd
+skills.texts.shockwave,{a}초마다 대상 쪽으로 길이 {b}m 충격파를 날려 닿는 적에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.spear_throw,{a}초마다 대상 쪽으로 창을 던져 길이 {b}m 일직선의 적을 꿰뚫어 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.ice_spikes,{a}초마다 대상 쪽으로 길이 {b}m 얼음 가시를 솟게 해 공격력의 {c}% 피해를 주고 0.8초 얼립니다.,,,,scripts/skills.gd
+skills.texts.dragon_breath,{a}초마다 대상 쪽 {b}m 부채꼴에 불을 뿜어 공격력의 {c}% 피해를 주고 불태웁니다.,,,,scripts/skills.gd
+skills.texts.starfall,{a}초마다 사거리 안 적 최대 {b}마리에게 별똥별을 떨어뜨려 각각 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.sky_bolt,{a}초마다 사거리 안 적 최대 {b}마리에게 하늘에서 번개를 내리쳐 공격력의 {c}% 피해를 주고 잠깐 기절시킵니다.,,,,scripts/skills.gd
+skills.texts.comet,{a}초마다 사거리 안에서 HP가 가장 많은 적에게 혜성을 떨어뜨려 반경 {b}m 안 적에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.holy_smite,"{a}초마다 사거리 안에서 HP가 가장 많은 적에게 빛기둥을 내려 공격력의 {b}% 피해를 주고, 준 피해의 {c}%만큼 가장 다친 아군을 치유합니다.",,,,scripts/skills.gd
+skills.texts.shadow_strike,{a}초마다 주변에서 HP 비율이 가장 낮은 적의 그림자에서 나타나 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.void_rift,{a}초마다 대상 위치 반경 {b}m에 균열을 열어 공격력의 60% 피해를 주고 5초 동안 받는 피해를 {c}% 늘립니다.,,,,scripts/skills.gd
+skills.texts.solar_flare,{a}초마다 대상 위치 반경 {b}m에 섬광을 터뜨려 공격력의 {c}% 피해를 주고 3초 동안 공격력을 30% 낮춥니다.,,,,scripts/skills.gd
+skills.texts.abyss_hand,{a}초마다 대상 위치 반경 {b}m 안 적을 {c}초 동안 붙잡고 공격력의 50% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.lava_burst,{a}초마다 대상 위치 반경 {b}m에 용암을 뿜어 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.sanctuary,{a}초마다 3초 동안 반경 {b}m 성역을 펼쳐 안의 아군 영웅을 매초 최대 HP의 {c}% 회복합니다.,,,,scripts/skills.gd
+skills.texts.mass_heal,{a}초마다 모든 아군 영웅의 HP를 각자 최대 HP의 {b}% 회복합니다.,,,,scripts/skills.gd
+skills.texts.resurrection,{a}초마다 쓰러진 아군 영웅 하나를 최대 HP의 {b}%로 되살립니다.,,,,scripts/skills.gd
+skills.texts.battle_hymn,{a}초마다 모든 아군 영웅의 공격력을 {c}초 동안 {b}% 올립니다.,,,,scripts/skills.gd
+skills.texts.shield_ally,{a}초마다 가장 다친 아군 영웅에게 최대 HP의 {b}% 보호막을 씌웁니다.,,,,scripts/skills.gd
+skills.texts.shield,{a}초마다 자신에게 최대 HP의 {b}% 보호막을 씌웁니다.,,,,scripts/skills.gd
+skills.texts.taunt,{a}초마다 반경 {b}m 안 적이 {c}초 동안 자신만 노리게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_wolf,{a}초마다 늑대 두 마리를 {c}초 동안 불러 공격력의 {b}% 피해로 싸우게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_skeleton,{a}초마다 해골 병사 두 기를 {c}초 동안 일으켜 공격력의 {b}% 피해로 싸우게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_golem,{a}초마다 골렘을 {c}초 동안 불러 공격력의 {b}% 피해로 적을 밀쳐내게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_treant,{a}초마다 나무 정령을 {c}초 동안 불러 공격력의 {b}% 피해로 적을 붙잡게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_spirit,{a}초마다 정령을 {c}초 동안 불러 공격력의 {b}% 마력탄을 쏘게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_phoenix,{a}초마다 불사조를 {c}초 동안 불러 공격력의 {b}% 불꽃으로 적을 불태우게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_hawk,{a}초마다 매를 {c}초 동안 불러 공격력의 {b}% 피해로 적을 덮치게 합니다.,,,,scripts/skills.gd
+skills.texts.summon_turret,{a}초마다 포탑을 {c}초 동안 세워 공격력의 {b}% 화살을 쏘게 합니다.,,,,scripts/skills.gd
+skills.texts.burn_hit,공격이 {a}% 확률로 적을 {c}초 동안 불태워 매초 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.bleed_hit,공격이 {a}% 확률로 {c}초 동안 출혈을 일으켜 매초 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.curse_hit,공격이 {a}% 확률로 {c}초 동안 저주를 걸어 매초 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.freeze_hit,공격이 {a}% 확률로 적을 {b}초 동안 얼립니다.,,,,scripts/skills.gd
+skills.texts.root_hit,공격이 {a}% 확률로 적을 {b}초 동안 묶어 움직이지 못하게 합니다.,,,,scripts/skills.gd
+skills.texts.shock_hit,공격이 {a}% 확률로 대상에게 번개를 떨어뜨려 공격력의 {b}% 피해를 더 줍니다.,,,,scripts/skills.gd
+skills.texts.knockback_hit,공격이 {a}% 확률로 적을 {b}m 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.armor_break,공격이 {a}% 확률로 적이 {c}초 동안 받는 피해를 {b}% 늘립니다.,,,,scripts/skills.gd
+skills.texts.weaken_hit,공격이 {a}% 확률로 적의 공격력을 {c}초 동안 {b}% 낮춥니다.,,,,scripts/skills.gd
+skills.texts.hunter_mark,맞은 적에게 표식을 남겨 {b}초 동안 받는 피해를 {a}% 늘립니다.,,,,scripts/skills.gd
+skills.texts.double_strike,공격이 {a}% 확률로 한 번 더 적중합니다.,,,,scripts/skills.gd
+skills.texts.barrage,공격이 {a}% 확률로 화살 {b}발을 더 쏩니다(각각 피해 50%).,,,,scripts/skills.gd
+skills.texts.splash,맞은 적 주변 {a}m 안 다른 적에게 피해의 {b}%를 줍니다.,,,,scripts/skills.gd
+skills.texts.pierce,대상 뒤 {a}m 안 일직선의 적에게도 피해의 {b}%를 줍니다.,,,,scripts/skills.gd
+skills.texts.ricochet,"맞힌 뒤 가까운 다른 적에게 {a}번 튕기며, 튕길 때마다 피해가 {b}%가 됩니다.",,,,scripts/skills.gd
+skills.texts.echo_strike,{a}번째 공격마다 대상 주변 반경 {b}m에 충격파를 일으켜 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.heavy_blow,{a}번째 공격마다 {bx}배 피해를 주고 대상을 {c}m 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.corpse_explosion,처치한 적이 터져 반경 {a}m 안 적에게 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.soul_harvest,적을 처치하면 최대 HP의 {a}%를 회복하고 5초 동안 공격력이 {b}% 오릅니다(5번까지 겹침).,,,,scripts/skills.gd
+skills.texts.bloodlust,적을 처치하면 {b}초 동안 공격 속도가 {a}% 빨라집니다.,,,,scripts/skills.gd
+skills.texts.frost_shatter,느려지거나 얼어 있던 적을 처치하면 얼음이 터져 반경 {a}m 안 적에게 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.wildfire,불타던 적을 처치하면 반경 {a}m 안 적에게 불이 옮겨 붙어 3초 동안 매초 공격력의 {b}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.frenzy,같은 적을 연달아 칠 때마다 공격 속도가 {a}%씩 빨라집니다(최대 {b}번).,,,,scripts/skills.gd
+skills.texts.last_stand,HP가 {a}% 이하이면 공격력이 {b}% 오릅니다.,,,,scripts/skills.gd
+skills.texts.opportunist,느려지거나 기절·빙결·속박된 적에게 피해를 {a}% 더 줍니다.,,,,scripts/skills.gd
+skills.texts.pyromancy,불타는 적에게 피해를 {a}% 더 줍니다.,,,,scripts/skills.gd
+skills.texts.first_strike,HP가 90% 이상인 적에게 피해를 {a}% 더 줍니다.,,,,scripts/skills.gd
+skills.texts.focus,같은 적을 공격하는 동안 1초마다 피해가 {a}%씩 늘어납니다(최대 {b}%).,,,,scripts/skills.gd
+skills.texts.sharpshooter,사거리 절반보다 먼 적에게 피해를 {a}% 더 줍니다.,,,,scripts/skills.gd
+skills.texts.brawler,주변 3m 안 적 하나마다 피해가 {a}% 늘어납니다(최대 {b}%).,,,,scripts/skills.gd
+skills.texts.berserker,공격력이 {a}% 오르지만 받는 피해가 {b}% 늘어납니다.,,,,scripts/skills.gd
+skills.texts.regen,매초 최대 HP의 {a}%를 회복합니다.,,,,scripts/skills.gd
+skills.texts.revive,"쓰러지면 한 번, 최대 HP의 {a}%로 다시 일어납니다(전투가 새로 시작될 때마다 다시 생깁니다).",,,,scripts/skills.gd
+skills.texts.block,{a}% 확률로 받는 피해를 {b}% 막습니다.,,,,scripts/skills.gd
+skills.texts.fortify,자기 자리를 지키는 동안 받는 피해를 {a}% 줄입니다.,,,,scripts/skills.gd
+skills.texts.second_wind,HP가 {a}% 아래로 떨어지면 최대 HP의 {b}%를 회복합니다({c}초에 한 번).,,,,scripts/skills.gd
+skills.texts.invincible,HP가 {a}% 아래로 떨어지면 {b}초 동안 피해를 받지 않습니다({c}초에 한 번).,,,,scripts/skills.gd
+skills.texts.stoneskin,받는 피해가 {a}% 줄어듭니다.,,,,scripts/skills.gd
+skills.texts.counter,맞으면 {a}% 확률로 공격한 적에게 공격력의 {b}% 피해로 반격합니다.,,,,scripts/skills.gd
+skills.texts.haste_aura,반경 {a}m 안 아군 영웅(자신 포함)의 공격 속도가 {b}% 빨라집니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
+skills.texts.guard_aura,반경 {a}m 안 아군 영웅(자신 포함)이 받는 피해가 {b}% 줄어듭니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
+skills.texts.regen_aura,반경 {a}m 안 아군 영웅(자신 포함)이 매초 최대 HP의 {b}%를 회복합니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
+skills.texts.ignite,{a}초마다 사거리 안 적 최대 {b}마리에게 불을 붙여 3초 동안 매초 공격력의 {c}% 화상 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.piercing_shot,{a}초마다 대상 쪽으로 길이 {b}m를 꿰뚫는 화살을 쏘아 닿는 적 모두에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.blood_rage,{a}초마다 포효하며 {b}초 동안 공격 속도가 {c}% 빨라집니다.,,,,scripts/skills.gd
+skills.texts.frost_chain,"{a}초마다 대상에게 얼음 번개를 쏘아 가까운 적으로 {b}번 튕기며, 맞은 적마다 공격력의 {c}% 피해를 주고 2초 동안 40% 늦춥니다.",,,,scripts/skills.gd
+skills.texts.rend,{a}초마다 대상을 난도질해 공격력의 {b}% 피해를 주고 3초 동안 매초 공격력의 {c}% 출혈 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.bulwark,"{a}초마다 방패를 세워 {b}초 동안 받는 피해를 {c}% 줄이고, 주변 적이 자신을 노리게 합니다.",,,,scripts/skills.gd
+skills.texts.crushing_blow,{a}초마다 대상에게 공격력의 {b}% 일격을 내리치고 {c}m 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.sunder,{a}초마다 주변 반경 {b}m 적을 베어 공격력의 100% 피해를 주고 4초 동안 받는 피해를 {c}% 늘립니다.,,,,scripts/skills.gd
+skills.texts.shield_bash,{a}초마다 방패로 주변 반경 {b}m 적을 밀쳐 공격력의 {c}% 피해를 주고 1초 기절시킵니다.,,,,scripts/skills.gd
+skills.texts.snare,{a}초마다 대상 위치에 덫을 던져 반경 {b}m 적에게 공격력의 50% 피해를 주고 {c}초 동안 묶습니다.,,,,scripts/skills.gd
+skills.texts.blade_flurry,{a}초마다 대상을 {b}번 연달아 베어 각각 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.parry,"{a}초마다 {b}초 동안 받는 공격을 모두 막고, 막을 때마다 공격한 적에게 공격력의 {c}% 피해로 반격합니다.",,,,scripts/skills.gd
+skills.texts.fire_bolt,{a}초마다 대상에게 화염탄을 쏘아 공격력의 {b}% 피해를 주고 3초 동안 매초 공격력의 {c}% 화상 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.firespread,{a}초마다 대상 위치 반경 {b}m에 불길을 번지게 해 공격력의 {c}% 피해를 주고 3초 동안 매초 공격력의 15% 화상 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.axe_volley,{a}초마다 사거리 안 적 최대 {b}마리에게 도끼를 던져 각각 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.boomerang,{a}초마다 대상 쪽으로 길이 {b}m 회전 도끼를 던져 닿는 적에게 공격력의 {c}% 피해를 주고 1.5m 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.spear_sweep,{a}초마다 창을 크게 휘둘러 앞쪽 {b}m 부채꼴 적에게 공격력의 {c}% 피해를 주고 1m 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.drain_slash,{a}초마다 대상을 베어 공격력의 {b}% 피해를 주고 준 피해의 {c}%만큼 HP를 회복합니다.,,,,scripts/skills.gd
+skills.texts.volley,{a}초마다 대상에게 화살 {b}발을 연달아 쏘아 각각 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.wide_swing,{a}초마다 도끼를 크게 휘둘러 주변 반경 {b}m 적에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.cheap_shot,{a}초마다 대상의 급소를 찔러 공격력의 {b}% 피해를 주고 {c}초 기절시킵니다.,,,,scripts/skills.gd
+skills.texts.crescent,{a}초마다 앞쪽 {b}m 부채꼴에 초승달 참격을 날려 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.lunar_veil,{a}초마다 대상 위치 반경 {b}m에 달빛을 내려 공격력의 80% 피해를 주고 3초 동안 공격력을 {c}% 낮춥니다.,,,,scripts/skills.gd
+skills.texts.howl,{a}초마다 포효해 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 최대 HP의 {c}%만큼 회복합니다.,,,,scripts/skills.gd
+skills.texts.deep_freeze,{a}초마다 사거리 안 적 최대 {b}마리를 {c}초 동안 얼립니다.,,,,scripts/skills.gd
+skills.texts.hex,{a}초마다 대상 위치 반경 {b}m 적에게 4초 동안 저주를 걸어 매초 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.scorch,공격이 {a}% 확률로 맞은 자리 반경 {b}m를 3초 동안 불태워 안의 적에게 매초 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.gale,공격이 {a}% 확률로 맞은 자리에 회오리를 일으켜 3초 동안 반경 {b}m 안 적에게 매초 공격력의 {c}% 피해를 주고 늦춥니다.,,,,scripts/skills.gd
+skills.texts.solar_spark,공격이 {a}% 확률로 맞은 자리에 섬광을 터뜨려 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 3초 동안 공격력을 30% 낮춥니다.,,,,scripts/skills.gd
+skills.texts.frost_spike,공격이 {a}% 확률로 대상 쪽으로 길이 {b}m 얼음 가시를 솟게 해 공격력의 {c}% 피해를 주고 0.8초 얼립니다.,,,,scripts/skills.gd
+skills.texts.magma,공격이 {a}% 확률로 맞은 자리에 용암을 뿜어 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
+soldier_panel.empty_text,보유한 병사가 없습니다,,,,scripts/soldier_panel.gd
+soldier_panel.ready,병사,,,,scripts/soldier_panel.gd
+soldier_panel.ready_2,자동 배치,,,,scripts/soldier_panel.gd
+soldier_panel.ready_3,모두 해제,,,,scripts/soldier_panel.gd
+soldier_panel.ready_4,적용,,,,scripts/soldier_panel.gd
+soldier_panel.apply.later, — 다음 스테이지부터,,,,scripts/soldier_panel.gd
+soldier_panel.apply,병사 배치를 적용했습니다,,,,scripts/soldier_panel.gd
+soldier_panel.refresh,배치 %d / %d (인구),,,,scripts/soldier_panel.gd
+soldier_panel.refresh_2,보유 %d,,,,scripts/soldier_panel.gd
+soldier_panel.celebrate,%s T%d 합성 완료,,,,scripts/soldier_panel.gd
+soldier_panel.rebuild_rows,합성 %d→1,,,,scripts/soldier_panel.gd
+speedup_list.empty_text,가속 아이템이 없습니다. 미션·출석·상점에서 받을 수 있습니다.,,,,scripts/speedup_list.gd
+speedup_list.refresh,1개,,,,scripts/speedup_list.gd
+speedup_list.refresh_2,%d개,,,,scripts/speedup_list.gd
+store_pay.done_text,결제가 완료되어 지급했습니다,,,,scripts/store_pay.gd
+store_pay.pending_text,결제를 확인하고 있습니다. 확인되면 다음 접속 때 지급됩니다,,,,scripts/store_pay.gd
+store_pay.fail_text,결제를 확인하지 못했습니다. 지급되지 않은 결제는 자동으로 환불됩니다,,,,scripts/store_pay.gd
+store_pay.open_fail_text,결제 창을 열지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/store_pay.gd
+store_pay.unsupported_text,토스 앱을 최신 버전으로 업데이트해 주세요,,,,scripts/store_pay.gd
+support_links.not_ready,준비 중입니다. 곧 열립니다,,,,scripts/support_links.gd
+tab_bar.tabs,성장,,,,scripts/tab_bar.gd
+tab_bar.tabs_2,영웅,,,,scripts/tab_bar.gd
+tab_bar.tabs_3,병사,,,,scripts/tab_bar.gd
+tab_bar.tabs_4,던전,,,,scripts/tab_bar.gd
+tab_bar.tabs_5,모집,,,,scripts/tab_bar.gd
+tab_bar.tabs_6,상점,,,,scripts/tab_bar.gd
+tutorial.done_text,가이드 완료! 이제 자유롭게 성을 키워 보세요,,,,scripts/tutorial.gd
+tutorial.locked_text,가이드를 진행하면 열립니다,,,,scripts/tutorial.gd
+tutorial.missions.look_keep.title,성채 살펴보기,,,,scripts/tutorial.gd
+tutorial.missions.look_keep.desc,성 한가운데 성채를 눌러 건물 창을 열어 보세요. 성채 레벨이 다른 건물의 최대 레벨을 정합니다.,,,,scripts/tutorial.gd
+tutorial.missions.build_lumber.title,벌목장 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_lumber.desc,왼쪽 아래 [건설] 버튼을 눌러 펼쳐진 목록에서 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.,,,,scripts/tutorial.gd
+tutorial.missions.build_quarry.title,채석장 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_quarry.desc,[건설] 버튼을 눌러 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.,,,,scripts/tutorial.gd
+tutorial.missions.build_farm.title,농장 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_farm.desc,[건설] 버튼을 눌러 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_30.desc,성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.,,,,scripts/tutorial.gd
+tutorial.missions.collect.title,자원 수집,,,,scripts/tutorial.gd
+tutorial.missions.collect.desc,생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.,,,,scripts/tutorial.gd
+tutorial.missions.sell.title,상인과 거래,,,,scripts/tutorial.gd
+tutorial.missions.sell.desc,성채 앞 상인을 눌러 남는 자원을 골드로 파세요. 시세는 매시간 바뀝니다.,,,,scripts/tutorial.gd
+tutorial.missions.attend.title,출석 보상 받기,,,,scripts/tutorial.gd
+tutorial.missions.attend.desc,"오른쪽 아래 [메뉴] → [이벤트]에서 오늘의 출석 보상을 받으세요. 매일 한 번, 28일 동안 보상이 쌓입니다.",,,,scripts/tutorial.gd
+tutorial.missions.pouch.title,주머니 열기,,,,scripts/tutorial.gd
+tutorial.missions.pouch.desc,출석 보상으로 받은 골드 주머니를 [메뉴] → [가방]에서 여세요. 주머니는 그 시간만큼의 방치 수입을 바로 줍니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_1.title,스테이지 1-1 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_1.desc,위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있습니다.,,,,scripts/tutorial.gd
+tutorial.missions.auto_on.title,연속 진행 켜기,,,,scripts/tutorial.gd
+tutorial.missions.auto_on.desc,위쪽 [▶ 진행] 옆 [연속 진행]을 체크하세요. 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어서 도전합니다.,,,,scripts/tutorial.gd
+tutorial.missions.speed_on.title,전투 배속 켜기,,,,scripts/tutorial.gd
+tutorial.missions.speed_on.desc,"스테이지를 진행하는 동안 왼쪽 배속 버튼(x1.5 OFF)을 누르세요. 누를 때마다 x1.5 → x2 → 끔으로 바뀌고 스테이지 전투가 빨라집니다. 대기 중에는 버튼이 숨고, 건설·훈련 시간은 그대로입니다.",,,,scripts/tutorial.gd
+tutorial.missions.hero_level.title,영웅 레벨업,,,,scripts/tutorial.gd
+tutorial.missions.hero_level.desc,[영웅] 탭에서 영웅을 골라 골드로 레벨업하세요. 같은 영웅 조각을 모으면 승급해 스킬이 열립니다.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_5.title,영웅 4명 Lv 5 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_5.desc,[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.mission_claim.title,일일 미션 보상 받기,,,,scripts/tutorial.gd
+tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 「영웅 레벨업 5회」는 방금 끝났습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_2.title,스테이지 1-2 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_2.desc,전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.growth.title,성장 강화,,,,scripts/tutorial.gd
+tutorial.missions.growth.desc,[성장] 탭에서 골드로 모든 영웅의 공격력·체력을 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.atk_3.title,공격력 Lv 3 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_3.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 3까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_3.title,체력 Lv 3 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_3.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 3까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_8.title,영웅 4명 Lv 8 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_8.desc,[영웅] 탭에서 영웅 4명을 Lv 8 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.build_tavern.title,주점 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_tavern.desc,[건설] 버튼을 눌러 주점을 골라 원하는 자리에 지으세요. 주점에서 새 영웅을 모집합니다.,,,,scripts/tutorial.gd
+tutorial.missions.gacha.title,영웅 모집,,,,scripts/tutorial.gd
+tutorial.missions.gacha.desc,[모집] 탭의 다이아 모집에서 다이아 모집권으로 10회 모집하세요.,,,,scripts/tutorial.gd
+tutorial.missions.deploy_new.title,새 영웅 배치,,,,scripts/tutorial.gd
+tutorial.missions.deploy_new.desc,"[영웅] 탭 위쪽 배치 슬롯 하나를 누른 뒤, 새로 모집한 영웅을 골라 [적용]을 누르세요.",,,,scripts/tutorial.gd
+tutorial.missions.auto_deploy.title,자동 배치 써 보기,,,,scripts/tutorial.gd
+tutorial.missions.auto_deploy.desc,[영웅] 탭의 [자동 배치]를 누른 뒤 [적용]을 누르세요. 전투력이 높은 영웅부터 알맞은 자리에 채워 줍니다.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_10.title,영웅 4명 Lv 10 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_10.desc,[영웅] 탭에서 영웅 4명을 Lv 10 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.shop_free.title,상점 무료 선물 받기,,,,scripts/tutorial.gd
+tutorial.missions.shop_free.desc,아래 [상점] 탭의 [일일]에서 「무료」 선물을 받으세요. 매일 00:00에 다시 받을 수 있습니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_3.title,스테이지 1-3 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_3.desc,새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.,,,,scripts/tutorial.gd
+tutorial.missions.atk_5.title,공격력 Lv 5 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_5.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 5까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_5.title,체력 Lv 5 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_5.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 5까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.build_barracks.title,보병 막사 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_barracks.desc,[건설] 버튼을 눌러 보병 막사를 골라 원하는 자리에 지으세요. 보병을 훈련합니다.,,,,scripts/tutorial.gd
+tutorial.missions.train.title,보병 훈련,,,,scripts/tutorial.gd
+tutorial.missions.train.desc,보병 막사를 눌러 보병 1마리 훈련을 시작하세요. 가이드에서는 5초면 끝납니다.,,,,scripts/tutorial.gd
+tutorial.missions.build_houses.title,민가 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_houses.desc,[건설] 버튼을 눌러 민가를 골라 원하는 자리에 지으세요. 인구만큼 병사를 배치할 수 있습니다.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_12.title,영웅 4명 Lv 12 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_12.desc,[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_4.title,스테이지 1-4 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_4.desc,전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.kill_100.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_100.desc,몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_gold.title,골드 던전,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_gold.desc,[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권(열쇠)은 매일 다시 채워집니다.,,,,scripts/tutorial.gd
+tutorial.missions.atk_8.title,공격력 Lv 8 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_8.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 8까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_8.title,체력 Lv 8 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_8.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 8까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_equip.title,장비 던전,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_equip.desc,[던전] 탭에서 장비 던전 1단계를 클리어해 장비를 얻으세요.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_14.title,영웅 4명 Lv 14 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_14.desc,[영웅] 탭에서 영웅 4명을 Lv 14 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.atk_10.title,공격력 Lv 10 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_10.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 10까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_ticket.title,모집권 던전,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_ticket.desc,"[던전] 탭에서 모집권 던전 1단계를 클리어하세요. 내 영웅 4명과 친구(없으면 추천) 도우미 1명이 바위 골렘과 싸우고, 다이아 모집권을 얻습니다.",,,,scripts/tutorial.gd
+tutorial.missions.equip.title,장비 장착,,,,scripts/tutorial.gd
+tutorial.missions.equip.desc,[영웅] 탭에서 영웅을 골라 얻은 장비를 장착하세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_10.title,체력 Lv 10 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_10.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 10까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_15.title,영웅 4명 Lv 15 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_15.desc,[영웅] 탭에서 영웅 4명을 Lv 15 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.soldier_deploy.title,병사 배치,,,,scripts/tutorial.gd
+tutorial.missions.soldier_deploy.desc,"훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5마리를 합성하면 상위 티어가 됩니다.",,,,scripts/tutorial.gd
+tutorial.missions.stage_1_5.title,스테이지 1-5 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_5.desc,병사와 함께 1-5까지 클리어하세요. 병사는 전투가 시작되면 성채 앞에 나타납니다.,,,,scripts/tutorial.gd
+tutorial.missions.atk_12.title,공격력 Lv 12 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_12.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 12까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_6.title,스테이지 1-6 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_6.desc,전투를 이어 가 1-6까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.build_lab.title,연구소 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_lab.desc,[건설] 버튼을 눌러 연구소를 골라 원하는 자리에 지으세요. 기술을 연구해 경제·영웅·병사를 강하게 합니다.,,,,scripts/tutorial.gd
+tutorial.missions.research.title,연구 시작,,,,scripts/tutorial.gd
+tutorial.missions.research.desc,연구소를 눌러 [연구]에서 아무 기술이나 연구를 시작하세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_12.title,체력 Lv 12 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_12.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 12까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_16.title,영웅 4명 Lv 16 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_16.desc,[영웅] 탭에서 영웅 4명을 Lv 16 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_7.title,스테이지 1-7 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_7.desc,"전투를 이어 가 1-7까지 클리어하세요. 막히면 모집권으로 영웅을 모집해 더 강한 영웅을 배치하고, 조각이 모이면 [영웅] 탭에서 승급하세요.",,,,scripts/tutorial.gd
+tutorial.missions.build_archery.title,궁병 훈련소 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_archery.desc,[건설] 버튼을 눌러 궁병 훈련소를 골라 원하는 자리에 지으세요. 궁병은 성벽 위에서 싸웁니다.,,,,scripts/tutorial.gd
+tutorial.missions.atk_14.title,공격력 Lv 14 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_14.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 14까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_14.title,체력 Lv 14 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_14.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 14까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.build_stable.title,기병 마구간 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_stable.desc,[건설] 버튼을 눌러 기병 마구간을 골라 원하는 자리에 지으세요. 기병은 빠르게 돌격합니다.,,,,scripts/tutorial.gd
+tutorial.missions.keep_2.title,성채 레벨업,,,,scripts/tutorial.gd
+tutorial.missions.keep_2.desc,성채를 Lv 2로 올리세요. 다른 건물도 그만큼 더 올릴 수 있습니다.,,,,scripts/tutorial.gd
+tutorial.missions.lumber_2.title,벌목장 Lv 2,,,,scripts/tutorial.gd
+tutorial.missions.lumber_2.desc,벌목장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.,,,,scripts/tutorial.gd
+tutorial.missions.farm_2.title,농장 Lv 2,,,,scripts/tutorial.gd
+tutorial.missions.farm_2.desc,농장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.,,,,scripts/tutorial.gd
+tutorial.missions.gate_2.title,성문 강화,,,,scripts/tutorial.gd
+tutorial.missions.gate_2.desc,성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_100_2.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_100_2.desc,"몬스터 100마리를 처치하세요. 대기 중에도, 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.",,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_18.title,영웅 4명 Lv 18 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_18.desc,[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
+tutorial.missions.atk_16.title,공격력 Lv 16 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_16.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 16까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_10.title,스테이지 1-10 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_10.desc,"1-10까지 클리어하세요. 한 성문이 밀리면 그쪽으로 영웅을 옮기고, 약한 영웅 자리는 모집한 SSR·SR 영웅으로 바꾸세요. 클리어하면 길드가 열립니다.",,,,scripts/tutorial.gd
+tutorial.missions.guild.title,길드 가입,,,,scripts/tutorial.gd
+tutorial.missions.guild.desc,오른쪽 아래 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. 출석·기부로 길드 버프를 올립니다.,,,,scripts/tutorial.gd
+tutorial.missions.guild_attend.title,길드 출석·기부,,,,scripts/tutorial.gd
+tutorial.missions.guild_attend.desc,"[메뉴] → [길드]에서 [출석]을 누르고 기부를 한 번 하세요. 출석과 기부는 매일 할 수 있고, 길드 레벨이 오르면 모든 영웅의 공격력·체력이 오릅니다.",,,,scripts/tutorial.gd
+tutorial.missions.hp_16.title,체력 Lv 16 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_16.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_20.title,영웅 4명 Lv 20 달성,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_20.desc,[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 다음 미션에서 승급으로 더 올리는 법을 배웁니다.,,,,scripts/tutorial.gd
+tutorial.missions.promote.title,영웅 승급하기,,,,scripts/tutorial.gd
+tutorial.missions.promote.desc,"영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",,,,scripts/tutorial.gd
+tutorial.missions.guild_boss.title,길드 보스 도전,,,,scripts/tutorial.gd
+tutorial.missions.guild_boss.desc,"[메뉴] → [길드]의 [보스] 탭에서 드래곤에게 한 번 도전하세요. 하루 2번 도전할 수 있고, 준 피해에 따라 등급과 길드 코인을 받습니다.",,,,scripts/tutorial.gd
+tutorial.missions.stage_1_12.title,스테이지 1-12 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_12.desc,전투를 이어 가 1-12까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.siege_try.title,공성전 체험,,,,scripts/tutorial.gd
+tutorial.missions.siege_try.desc,"길드끼리 성을 공격하는 공성전을 연습 상대와 한 번 해 보세요. 기록과 점수는 남지 않고, 가이드가 중간중간 멈추며 화면을 설명합니다. [바로가기]를 누르면 시작합니다.",,,,scripts/tutorial.gd
+tutorial.missions.pvp.title,PVP 결투,,,,scripts/tutorial.gd
+tutorial.missions.pvp.desc,"[던전] 탭 위쪽 [PVP]에서 결투나 총력전을 한 판 하세요. 다른 플레이어의 방어팀과 싸워 PVP 코인을 얻고, 코인은 상점에서 씁니다.",,,,scripts/tutorial.gd
+tutorial.missions.fever.title,FEVER 쓰기,,,,scripts/tutorial.gd
+tutorial.missions.fever.desc,몬스터를 처치하면 [진행] 왼쪽 FEVER 게이지가 찹니다. 가득 차면 FEVER 버튼을 눌러 잠시 몬스터를 몰아서 잡으세요(대기 중에만).,,,,scripts/tutorial.gd
+tutorial.missions.atk_18.title,공격력 Lv 18 달성,,,,scripts/tutorial.gd
+tutorial.missions.atk_18.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 18까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.hp_18.title,체력 Lv 18 달성,,,,scripts/tutorial.gd
+tutorial.missions.hp_18.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 18까지 올리세요.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_15.title,스테이지 1-15 클리어,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_15.desc,전투를 이어 가 1-15까지 클리어하세요. 막히면 약한 영웅을 모집한 영웅으로 바꾸고 승급·레벨업·성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.exchange_look.title,거래소 둘러보기,,,,scripts/tutorial.gd
+tutorial.missions.exchange_look.desc,"[메뉴] → [거래소]를 열어 보세요. 다른 성주가 올린 장비를 골드·다이아로 사고, 내 장비를 올려 팔 수 있습니다.",,,,scripts/tutorial.gd
+tutorial.repeats.title,몬스터 %d마리 처치,,,,scripts/tutorial.gd
+tutorial.repeats.title_2,자원 %d번 수집,,,,scripts/tutorial.gd
+tutorial.repeats.title_3,스테이지 %s 클리어,,,,scripts/tutorial.gd
+tutorial.repeats.title_4,성장 강화 %d회,,,,scripts/tutorial.gd
+tutorial.repeats.title_5,상인에게 자원 팔기,,,,scripts/tutorial.gd
+tutorial.repeats.title_6,영웅 레벨업 %d회,,,,scripts/tutorial.gd
+tutorial.repeats.title_7,영웅 %d회 모집,,,,scripts/tutorial.gd
+tutorial.repeats.title_8,던전 %d번 클리어,,,,scripts/tutorial.gd
+tutorial.repeats.title_9,건물 %d번 레벨업,,,,scripts/tutorial.gd
+tutorial.repeat_desc.kill,몬스터를 처치하세요. 방치 중 처치도 셉니다.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.collect,생산 건물을 눌러 자원을 수집하세요.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.stage,전투를 이어 가 목표 라운드를 클리어하세요.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.growth_up,[성장] 탭에서 강화하세요.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.sell,상인에게 남는 자원을 파세요.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.hero_up,[영웅] 탭에서 영웅을 레벨업하세요(여러 영웅 합산).,,,,scripts/tutorial.gd
+tutorial.repeat_desc.gacha,골드·다이아·모집권 어느 모집이든 셉니다.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.dungeon_win,골드·장비 던전 아무 단계나 클리어하세요.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.build_up,아무 건물이나 레벨업을 끝내세요.,,,,scripts/tutorial.gd
+tutorial.mission_desc,지금 길드에 속해 있지 않습니다. 먼저 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. ,,,,scripts/tutorial.gd
+tutorial.pvp_lock_text,열립니다,,,,scripts/tutorial.gd
+tutorial.dungeon_lock_text,열립니다,,,,scripts/tutorial.gd
+tutorial.tab_lock_text,가이드를 마치면 열립니다,,,,scripts/tutorial.gd
+tutorial.tab_lock_text_2,열립니다,,,,scripts/tutorial.gd
+tutorial.build_lock_text,건설할 수 있습니다,,,,scripts/tutorial.gd
+tutorial.lock_text,가이드 %d번째 미션 「%s」에서 %s,,,,scripts/tutorial.gd
+tutorial.reward_text,다이아 %s,,,,scripts/tutorial.gd
+tutorial.reward_text_2,골드 %s,,,,scripts/tutorial.gd
+tutorial.reward_text_3,골드 던전 입장권 %d,,,,scripts/tutorial.gd
+tutorial.reward_text_4,장비 던전 입장권 %d,,,,scripts/tutorial.gd
+tutorial.reward_text_5,모집권 던전 입장권 %d,,,,scripts/tutorial.gd
+tutorial.reward_text_6,다이아 모집권 %d,,,,scripts/tutorial.gd
+tutorial.action_label,▶ 진행,,,,scripts/tutorial.gd
+tutorial.action_label_2,바로가기,,,,scripts/tutorial.gd
+tutorial_card.refresh,반복 퀘스트 %d,,,,scripts/tutorial_card.gd
+tutorial_card.refresh_2,가이드 %d/%d,,,,scripts/tutorial_card.gd
+tutorial_card.refresh_3,보상: ,,,,scripts/tutorial_card.gd
+tutorial_card.refresh_4,보상 받기,,,,scripts/tutorial_card.gd
+ui_kit.duration,%d시간 %d분,,,,scripts/ui_kit.gd
+ui_kit.duration_2,%d일 %d시간,,,,scripts/ui_kit.gd
+war_battle.on_gate_broken,%s 파괴!,,,,scripts/war_battle.gd
+war_battle.on_keep_broken,성채 함락!,,,,scripts/war_battle.gd
+war_battle.begin_fight,전투 시작!,,,,scripts/war_battle.gd
+war_hud.build_top,공성전 체험 · %s,,,,scripts/war_hud.gd
+war_hud.build_top_2,공성전 · %s,,,,scripts/war_hud.gd
+war_hud.build_top_3,상대 길드,,,,scripts/war_hud.gd
+war_hud.build_top_4,나가기,,,,scripts/war_hud.gd
+war_hud.build_top_5,성채,,,,scripts/war_hud.gd
+war_hud.build_strip,자동 진격,,,,scripts/war_hud.gd
+war_hud.build_deploy,배치 단계,,,,scripts/war_hud.gd
+war_hud.build_deploy_2,내 영웅을 누르고 성 밖 바닥(붉은 선 바깥)을 눌러 자리를 잡으세요.\n자리 잡은 쪽 성문을 공격합니다.,,,,scripts/war_hud.gd
+war_hud.build_deploy_3,전투 시작,,,,scripts/war_hud.gd
+war_hud.build_result,공성 종료,,,,scripts/war_hud.gd
+war_hud.build_result_2,나가기,,,,scripts/war_hud.gd
+war_hud.show_result,성채 함락!,,,,scripts/war_hud.gd
+war_hud.show_result_2,공성 종료,,,,scripts/war_hud.gd
+war_hud.show_result_3,(점수는 %d개까지),,,,scripts/war_hud.gd
+war_hud.show_result_4,이번 전투 %d점\n수비 영웅 처치 %d · 성문 파괴 %s · 성채 %d점%s,,,,scripts/war_hud.gd
+war_hud.show_result_5, · 성채 함락,,,,scripts/war_hud.gd
+war_hud.process,모두 자리를 잡았으면 [전투 시작]을 누르세요 · %s 뒤 자동 시작,,,,scripts/war_hud.gd
+war_hud.process_2,길드장이 [전투 시작]을 누르면 시작합니다 · %s 뒤 자동 시작,,,,scripts/war_hud.gd
+war_hud.update,이번 전투 %d점 · 처치 %d · 성문 %d/4,,,,scripts/war_hud.gd
+war_hud.update.solo,혼자 공격 중 (길드원 영웅은 자동),,,,scripts/war_hud.gd
+war_hud.update.host,길드원과 함께 · 이 기기가 전투를 진행 중,,,,scripts/war_hud.gd
+war_hud.update.puppet,길드원과 함께 공격 중,,,,scripts/war_hud.gd
+war_net.ready,실시간 연결 중…,,,,scripts/war_net.gd
+war_net.go_solo,실시간 연결이 끊겨 혼자 진행합니다,,,,scripts/war_net.gd
+war_panel.build,길드전 정보를 불러오는 중입니다,,,,scripts/war_panel.gd
+war_panel.enemy_card,이번 주 상대  %s,,,,scripts/war_panel.gd
+war_panel.enemy_card_2,길드원 %d명 · 전투력 %s,,,,scripts/war_panel.gd
+war_panel.enemy_card_3,우리 %d,,,,scripts/war_panel.gd
+war_panel.enemy_card_4,%d 상대,,,,scripts/war_panel.gd
+war_panel.enemy_card_5,주간 결산까지 %s · 상대 점수는 우리 공성 시간이 끝나면 나옵니다,,,,scripts/war_panel.gd
+war_panel.castle_card,상대 성 · 수비 영웅 처치 %d / %d,,,,scripts/war_panel.gd
+war_panel.castle_card_2,성채,,,,scripts/war_panel.gd
+war_panel.bar_row,파괴,,,,scripts/war_panel.gd
+war_panel.battle_card,배치 중 · 길드장이 시작하거나 %s 뒤 전투 시작,,,,scripts/war_panel.gd
+war_panel.battle_card_2,공성전 진행 중 · 남은 시간 %s,,,,scripts/war_panel.gd
+war_panel.battle_card_3, · 참가 %d명,,,,scripts/war_panel.gd
+war_panel.battle_card_4,이번 주 공성전은 끝났습니다 · 다음 주에 다시,,,,scripts/war_panel.gd
+war_panel.battle_card_5,이번 주 공성 %s · %s 뒤 %d분 동안 열립니다,,,,scripts/war_panel.gd
+war_panel.battle_card_6,관리자: [공성 시작]으로 지금 바로 열 수 있습니다,,,,scripts/war_panel.gd
+war_panel.battle_card_7,%s님이 정한 시각,,,,scripts/war_panel.gd
+war_panel.battle_card_8,길드장이 없는 길드는 토요일 21:00,,,,scripts/war_panel.gd
+war_panel.battle_card_9,길드장이 정하지 않으면 토요일 21:00,,,,scripts/war_panel.gd
+war_panel.battle_card_10,공성 요일과 시각은 길드장이 정합니다,,,,scripts/war_panel.gd
+war_panel.battle_card_11,공격 분대,,,,scripts/war_panel.gd
+war_panel.battle_card_12,수비 분대,,,,scripts/war_panel.gd
+war_panel.battle_card_13,직접 조종할 영웅 4명을 고르세요,,,,scripts/war_panel.gd
+war_panel.battle_card_14,우리 성을 지킬 영웅 4명(수비 AI)을 고르세요,,,,scripts/war_panel.gd
+war_panel.battle_card_15,전투 합류,,,,scripts/war_panel.gd
+war_panel.battle_card_16,공성 시작,,,,scripts/war_panel.gd
+war_panel.battle_card_17,저장됨,,,,scripts/war_panel.gd
+war_panel.battle_card_18,수비 영웅 저장,,,,scripts/war_panel.gd
+war_panel.schedule_picker,%s요일 %02d:00,,,,scripts/war_panel.gd
+war_panel.schedule_picker_2,시각 정하기,,,,scripts/war_panel.gd
+war_panel.claim_card,지난 주 길드전 %s  %d : %d,,,,scripts/war_panel.gd
+war_panel.claim_card_2,승리!,,,,scripts/war_panel.gd
+war_panel.claim_card_3,패배,,,,scripts/war_panel.gd
+war_panel.claim_card_4,보상 받기  길드 코인 %d · 다이아 %d,,,,scripts/war_panel.gd
+war_panel.rules_card,공성전 규칙,,,,scripts/war_panel.gd
+war_panel.rules_card_2,길드원 모두가 한 전투에 함께 들어가 각자 영웅 4명을 직접 조종합니다. 자리에 없는 길드원 분대는 자동으로 진격합니다.,,,,scripts/war_panel.gd
+war_panel.rules_card_3,"공성전은 한 주에 한 번, 길드장이 정한 요일·시각에 열립니다. 정하지 않으면 토요일 21:00입니다.",,,,scripts/war_panel.gd
+war_panel.rules_card_4,성문 체력은 성 주인 길드 레벨 × %s입니다(상대 길드는 우리 길드와 같은 레벨).,,,,scripts/war_panel.gd
+war_panel.rules_card_5,"먼저 배치 단계에서 성 밖 어디를 공격할지 영웅 자리를 잡습니다. 길드장이 [전투 시작]을 누르면 %d분 동안 싸우고, 아무도 누르지 않으면 %d분 뒤 저절로 시작합니다.",,,,scripts/war_panel.gd
+war_panel.rules_card_6,상대 성은 상대 길드원이 고른 수비 영웅이 지킵니다.,,,,scripts/war_panel.gd
+war_panel.rules_card_7,점수: 수비 영웅 처치 %d점 · 성문 파괴 %d점(%d개까지) · 성채 최대 체력의 %d%%를 깎을 때마다 1점,,,,scripts/war_panel.gd
+war_panel.rules_card_8,공격 영웅은 쓰러지면 %d초 뒤 진영에서 다시 일어납니다(목숨 %d개). 모두 목숨을 다 쓰면 전투가 끝납니다.,,,,scripts/war_panel.gd
+war_panel.rules_card_9,수비 영웅은 성벽 앞에서 싸워 체력 ×%s · 공격력 ×%s 수성 보너스를 받습니다.,,,,scripts/war_panel.gd
+war_panel.rules_card_10,주간 보상: 승리 길드 코인 %d · 다이아 %d / 패배 길드 코인 %d · 다이아 %d,,,,scripts/war_panel.gd
+war_rules.day_names,월,,,,scripts/war_rules.gd
+war_rules.day_names_2,화,,,,scripts/war_rules.gd
+war_rules.day_names_3,수,,,,scripts/war_rules.gd
+war_rules.day_names_4,목,,,,scripts/war_rules.gd
+war_rules.day_names_5,금,,,,scripts/war_rules.gd
+war_rules.day_names_6,토,,,,scripts/war_rules.gd
+war_rules.day_names_7,일,,,,scripts/war_rules.gd
+war_rules.side_names,북문,,,,scripts/war_rules.gd
+war_rules.side_names_2,동문,,,,scripts/war_rules.gd
+war_rules.side_names_3,남문,,,,scripts/war_rules.gd
+war_rules.side_names_4,서문,,,,scripts/war_rules.gd
+world_tags.sync,상인,,,,scripts/world_tags.gd
+world_tags.sync_2,공터,,,,scripts/world_tags.gd

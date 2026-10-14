@@ -18,6 +18,8 @@ extends Button
 ## 이름·칭호·전투력을 흰 글자로 올린다(art_rect, ART_SHADE). live 큰 카드도 그림이 먼저고, 오른위 [3D] 칩(model_chip_rect)을 누르면
 ## 실시간 모델(show_model)로, [그림]을 누르면 다시 그림으로 바꾼다. 그림일 때 live 미리보기는 내리고 끌기는 상세 좌우 스와이프로 넘긴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -74,7 +76,7 @@ var stars := 0
 var corner := ""  # 왼위 작은 글자(슬롯 번호)
 var highlight := false  # 고른 슬롯·카드: 호박색 테두리
 var checked := false  # 고른 카드(던전 도우미·출전 편성, 빌려줄 영웅): 초록 굵은 테두리 + 오른위 체크 배지(_draw_check_band·_badge)
-var empty_text := "빈 칸"
+var empty_text := Lang.t("hero_card.empty_text")
 var level := 0  # > 0이면 "Lv N"
 var power := 0  # > 0이면 "전투력 N"
 var deployed := false  # "배치" 배지
@@ -331,7 +333,7 @@ func _bar_space() -> float:
 
 ## 막대 글자: "조각 3 / 5", 최대 승급이면 "MAX".
 func shard_text() -> String:
-	return "MAX" if shard_need <= 0 else "조각 %d / %d" % [shards, shard_need]
+	return "MAX" if shard_need <= 0 else Lang.t("hero_card.shard_text") % [shards, shard_need]
 
 
 ## 별 줄 [가운데, 별 반지름]: 목록·모집은 아래(막대 위)에 작게, live는 아래 별 줄에 크게.
@@ -436,7 +438,7 @@ func _draw_model_chip() -> void:
 	draw_colored_polygon(oct, Color(0.08, 0.07, 0.12, 0.72))
 	oct.append(oct[0])
 	draw_polyline(oct, Color(1, 1, 1, 0.8), 1.5, true)
-	draw_string(FONT, Vector2(r.position.x, r.end.y - 9.0), "그림" if show_model else "3D", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 18, Color.WHITE)
+	draw_string(FONT, Vector2(r.position.x, r.end.y - 9.0), Lang.t("hero_card.draw_model_chip") if show_model else "3D", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 18, Color.WHITE)
 
 
 ## 그릴 피규어: live면 실시간 미리보기(전신), 아니면 흉상 캐시(렌더 전엔 자리표시 실루엣).
@@ -509,7 +511,7 @@ func _draw_list_info() -> void:
 	if deployed:
 		var chip := Rect2(8, 36, 48, 24)
 		draw_colored_polygon(LowpolyBox.octagon(chip, 5.0), UiKit.AMBER)
-		draw_string(FONT, Vector2(chip.position.x, chip.end.y - 6), "배치", HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, 16, Color.WHITE)
+		draw_string(FONT, Vector2(chip.position.x, chip.end.y - 6), Lang.t("hero_card.draw_list_info"), HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, 16, Color.WHITE)
 	if can_level:
 		var c := Vector2(size.x - 22, 22)
 		var tri := PackedVector2Array([c + Vector2(0, -11), c + Vector2(11, 8), c + Vector2(-11, 8)])
@@ -525,9 +527,9 @@ func _draw_list_info() -> void:
 		draw_polyline(arrow, UiKit.OUTLINE, 1.5, true)
 	if power > 0:
 		if art_style():
-			_text("전투력 %s" % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, Color.WHITE, true, UiKit.INK)
+			_text(Lang.t("hero_card.draw_list_info_2") % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, Color.WHITE, true, UiKit.INK)
 		else:
-			_text("전투력 %s" % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, UiKit.INK.lightened(0.15))
+			_text(Lang.t("hero_card.draw_list_info_2") % UiKit.commas(power), size.y - 34.0 - _bar_space(), 17, UiKit.INK.lightened(0.15))
 
 
 ## 조각 막대(개정 15): 어두운 바탕 + 보라 채움(모였거나 최대 승급이면 금색) + 가운데 흰 글자.

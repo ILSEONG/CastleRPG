@@ -5,6 +5,8 @@ extends CanvasLayer
 ## 못 지으면(가이드 잠금·다른 건물 건설 중·자원 부족) 카드를 흐리게 하고 이유 한 줄 — 눌러도 이유 알림만. 카드가 넘치면 옆으로 끈다(TouchScroll).
 ## 카드를 누르면 띠를 접고 자리 고르기(placement.gd). 띠 밖을 누르거나 [건설] 버튼을 다시 누르면 접힌다. 펼친 동안 미니 채팅(hide_while_open)은 숨긴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const Balance := preload("res://scripts/balance.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
@@ -24,10 +26,10 @@ const CLOSE_SEC := 0.14
 const CARD_STAGGER := 0.035
 const CARD_POP := 0.2
 const RED := Color(0.78, 0.22, 0.18)
-const BUILD_TEXT := "건설"
-const MOVE_TEXT := "이동"
-const VIEW_TEXT := "보기"
-const LOCK_TEXT := "잠김"
+static var BUILD_TEXT := Lang.t("build_list_panel.build_text")
+static var MOVE_TEXT := Lang.t("build_list_panel.move_text")
+static var VIEW_TEXT := Lang.t("build_list_panel.view_text")
+static var LOCK_TEXT := Lang.t("build_list_panel.lock_text")
 const CAM_ROT := Vector3(-30, 45, 0)  # 성 화면 카메라와 비슷한 3/4 시점
 
 var placement  # placement.gd — main이 넣는다
@@ -295,11 +297,11 @@ func _refresh() -> void:
 			r.action_label.text = MOVE_TEXT
 			color = UiKit.STEEL
 		elif Economy.is_placed(id):
-			r.status.text = "건설 중" if Economy.is_building(id) else "공터"
+			r.status.text = Lang.t("build_list_panel.refresh") if Economy.is_building(id) else Lang.t("build_list_panel.refresh_2")
 			r.action_label.text = VIEW_TEXT
 			color = UiKit.STEEL
 		else:
-			r.status.text = "미건설 · " + UiKit.duration(Economy.upgrade_sec(id))
+			r.status.text = Lang.t("build_list_panel.refresh_3") + UiKit.duration(Economy.upgrade_sec(id))
 			r.action_label.text = BUILD_TEXT
 			var cost := Economy.upgrade_cost(id)
 			for k in GameData.BUILD_RES:
@@ -336,7 +338,7 @@ func _refresh() -> void:
 				if block == "builder_busy":
 					why += " (%s)" % GameData.building_name(str(Economy.build.id))
 				elif block == "keep_cap":  # 성채 레벨로 여는 새 건물·n번째 채
-					why = "성채 Lv %d 필요" % GameData.unlock_keep(id)
+					why = Lang.t("build_list_panel.refresh_4") % GameData.unlock_keep(id)
 		var locked := not Economy.is_built(id) and not Economy.is_placed(id) and Economy.upgrade_block(id, now) == "keep_cap"
 		r.why = why
 		r.reason.text = why
@@ -345,7 +347,7 @@ func _refresh() -> void:
 		if locked:  # 성채 레벨이 모자란 건물·n번째 채: 잿빛 모습 + 잠김, 비용 대신 필요한 성채 레벨
 			r.action_label.text = LOCK_TEXT
 			color = Color(0.55, 0.53, 0.50)
-			r.status.text = "미건설"
+			r.status.text = Lang.t("build_list_panel.refresh_5")
 		r.preview.modulate = Color(0.45, 0.45, 0.48) if locked else Color.WHITE
 		r.tag.visible = why == "" and not Economy.is_built(id) and not Economy.is_placed(id) and GameData.unlock_keep(id) > 1
 		r.action.add_theme_stylebox_override("panel", UiKit.panel(color.darkened(0.25) if why != "" and not locked else color, 8.0, 2))

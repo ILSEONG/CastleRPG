@@ -12,13 +12,15 @@ extends Node
 ## 결제가 안 열린 경우(서버에 그 플랫폼 결제 키가 없음·플러그인 없음): 알림만(ReleasePlatform.iap_off_text).
 ## 실결제는 결제 창이 곧바로 뜨는 것 말고는 미리 반영하지 않는다(진짜 돈 — 서버 확인 뒤에 지급).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const PLUGIN := "CastleBilling"
-const DONE_TEXT := "결제가 완료되어 지급했습니다"
-const PENDING_TEXT := "결제를 확인하고 있습니다. 확인되면 다음 접속 때 지급됩니다"
-const FAIL_TEXT := "결제를 확인하지 못했습니다. 지급되지 않은 결제는 자동으로 환불됩니다"
-const OPEN_FAIL_TEXT := "결제 창을 열지 못했습니다. 잠시 뒤 다시 시도해 주세요"
-const UNSUPPORTED_TEXT := "토스 앱을 최신 버전으로 업데이트해 주세요"
+static var DONE_TEXT := Lang.t("store_pay.done_text")
+static var PENDING_TEXT := Lang.t("store_pay.pending_text")
+static var FAIL_TEXT := Lang.t("store_pay.fail_text")
+static var OPEN_FAIL_TEXT := Lang.t("store_pay.open_fail_text")
+static var UNSUPPORTED_TEXT := Lang.t("store_pay.unsupported_text")
 const PURCHASED := 1  # Google Purchase.PurchaseState
 const PENDING := 2
 const USER_CANCELED := 1  # Google BillingResponseCode

@@ -10,6 +10,8 @@ extends "res://scripts/ui_window.gd"
 ## 관리자(Economy.admin)는 [신고] 탭에서 신고 목록(신고한 사람 → 신고된 사람, 메시지 원문, 당시 앞뒤 채팅)을 본다.
 ## 휴대폰 키보드가 올라오면 창 아래 끝을 키보드 위로 올린다. 상태·폴링은 오토로드 Chat(chat.gd).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const RAIL_BG := Color(0.89, 0.80, 0.62, 1.0)  # 세로 탭 줄(양피지보다 진하게)
@@ -21,10 +23,10 @@ const TEXT := Color(0.16, 0.18, 0.24)  # 먹색(HudScript.INK)
 const NAME_COLOR := Color(0.14, 0.33, 0.60)
 const ME_COLOR := Color(0.70, 0.40, 0.04)
 const REPORTED := Color(0.78, 0.20, 0.16)
-const CH_NAMES := {"all": "전체", "guild": "길드", "system": "시스템"}
+static var CH_NAMES := {"all": Lang.t("chat_panel.ch_names.all"), "guild": Lang.t("chat_panel.ch_names.guild"), "system": Lang.t("chat_panel.ch_names.system")}
 const CH_COLORS := {"all": Color(0.45, 0.32, 0.18), "guild": Color(0.16, 0.48, 0.22), "system": Color(0.74, 0.40, 0.02)}
-const TABS := [["all", "전체"], ["guild", "길드"], ["system", "시스템"], ["reports", "신고"]]
-const TAB_TITLES := {"all": "전체 채팅", "guild": "길드 채팅", "system": "시스템 알림", "reports": "신고 목록"}
+static var TABS := [["all", Lang.t("chat_panel.tabs")], ["guild", Lang.t("chat_panel.tabs_2")], ["system", Lang.t("chat_panel.tabs_3")], ["reports", Lang.t("chat_panel.tabs_4")]]
+static var TAB_TITLES := {"all": Lang.t("chat_panel.tab_titles.all"), "guild": Lang.t("chat_panel.tab_titles.guild"), "system": Lang.t("chat_panel.tab_titles.system"), "reports": Lang.t("chat_panel.tab_titles.reports")}
 const WIDTH_FRAC := 0.86  # 화면 너비 중 창 너비
 const MAX_W := 660.0
 const RAIL_W := 104.0
@@ -116,7 +118,7 @@ func _build_rail() -> Control:
 ## 위: 채널 이름(왼쪽) + 닫기(◀, 오른쪽).
 func _build_head() -> Control:
 	var head := HBoxContainer.new()
-	title_label = _label("전체 채팅", 26, TEXT, HORIZONTAL_ALIGNMENT_LEFT)
+	title_label = _label(Lang.t("chat_panel.build_head"), 26, TEXT, HORIZONTAL_ALIGNMENT_LEFT)
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title_label)
 	var x := Button.new()
@@ -141,7 +143,7 @@ func _build_input() -> Control:
 	var row := HBoxContainer.new()
 	input_row = row
 	row.add_theme_constant_override("separation", 6)
-	var chip := _button("전체", TAB_OFF, 20)
+	var chip := _button(Lang.t("chat_panel.build_input"), TAB_OFF, 20)
 	chip.focus_mode = Control.FOCUS_NONE
 	chip.custom_minimum_size = Vector2(76, 58)
 	chip.pressed.connect(_toggle_channel)
@@ -149,7 +151,7 @@ func _build_input() -> Control:
 	buttons["channel"] = chip
 	input = LineEdit.new()
 	input.max_length = Chat.MAX_LEN
-	input.placeholder_text = "메시지 입력 (최대 %d자)" % Chat.MAX_LEN
+	input.placeholder_text = Lang.t("chat_panel.build_input_2") % Chat.MAX_LEN
 	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	input.custom_minimum_size = Vector2(0, 58)
 	input.add_theme_font_size_override("font_size", 22)
@@ -161,7 +163,7 @@ func _build_input() -> Control:
 	input.add_theme_stylebox_override("focus", field)
 	input.text_submitted.connect(func(_t): send())
 	row.add_child(input)
-	var sb := _button("전송", UiKit.AMBER, 22)
+	var sb := _button(Lang.t("chat_panel.build_input_3"), UiKit.AMBER, 22)
 	sb.focus_mode = Control.FOCUS_NONE
 	sb.custom_minimum_size = Vector2(92, 58)
 	sb.pressed.connect(send)
@@ -208,16 +210,16 @@ func _build_confirm() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 16)
 	confirm_box.add_child(v)
-	v.add_child(_label("이 메시지를 신고하시겠습니까?", 28))
+	v.add_child(_label(Lang.t("chat_panel.build_confirm"), 28))
 	confirm_label = _label("", 22, Color(HudScript.INK, 0.7))
 	confirm_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	confirm_label.custom_minimum_size = Vector2(470, 0)
 	v.add_child(confirm_label)
-	v.add_child(_label("신고한 사람, 신고된 사람, 당시 채팅 내용이 운영자에게 전달됩니다", 18, Color(HudScript.INK, 0.62)))
+	v.add_child(_label(Lang.t("chat_panel.build_confirm_2"), 18, Color(HudScript.INK, 0.62)))
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
-	var no := _button("취소", UiKit.STEEL, 24)
-	var yes := _button("신고", Color(0.86, 0.32, 0.26), 24)
+	var no := _button(Lang.t("chat_panel.build_confirm_3"), UiKit.STEEL, 24)
+	var yes := _button(Lang.t("chat_panel.build_confirm_4"), Color(0.86, 0.32, 0.26), 24)
 	for b in [no, yes]:
 		b.focus_mode = Control.FOCUS_NONE
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -364,10 +366,10 @@ func _rebuild() -> void:
 		list.remove_child(c)  # 바로 빼야 옛 줄+새 줄이 한 프레임 겹쳐 높이가 튀지 않는다(읽던 자리가 유지된다)
 		c.queue_free()
 	if not Net.is_online():
-		list.add_child(_label("채팅은 서버에 접속했을 때 쓸 수 있습니다", 22, SUB))
+		list.add_child(_label(Lang.t("chat_panel.rebuild"), 22, SUB))
 		return
 	if xs.is_empty():
-		list.add_child(_label("길드원에게 첫 인사를 남겨 보세요!" if tab == "guild" else "아직 메시지가 없습니다", 22, SUB))
+		list.add_child(_label(Lang.t("chat_panel.rebuild_2") if tab == "guild" else Lang.t("chat_panel.rebuild_3"), 22, SUB))
 	for m in xs:
 		list.add_child(_line(m))
 	if follow:
@@ -413,7 +415,7 @@ func _line(m: Dictionary) -> Control:
 		var nc := ME_COLOR if mine else NAME_COLOR
 		l.text = tag + "[color=#%s]%s:[/color] %s" % [nc.to_html(false), _esc(str(m.name)), _esc(str(m.text))]
 		if Chat.reported.has(int(m.get("id", 0))):
-			l.text += "  [color=#%s](신고함)[/color]" % REPORTED.to_html(false)
+			l.text += Lang.t("chat_panel.line") % REPORTED.to_html(false)
 	p.add_child(l)
 	return p
 
@@ -424,7 +426,7 @@ func _rebuild_reports() -> void:
 	for c in list.get_children():
 		c.queue_free()
 	if Chat.reports.is_empty():
-		var msg := "신고를 불러오지 못했습니다" if Chat.reports_state == "failed" else ("아직 신고가 없습니다" if Chat.reports_state == "ok" else "불러오는 중")
+		var msg := Lang.t("chat_panel.rebuild_reports.msg") if Chat.reports_state == "failed" else (Lang.t("chat_panel.rebuild_reports") if Chat.reports_state == "ok" else Lang.t("chat_panel.rebuild_reports_2"))
 		list.add_child(_label(msg, 22, SUB))
 		return
 	for r in Chat.reports:
@@ -434,11 +436,11 @@ func _rebuild_reports() -> void:
 		v.add_theme_constant_override("separation", 4)
 		p.add_child(v)
 		var when := Time.get_datetime_string_from_unix_time(int(float(r.get("at", 0)) + 9 * 3600), true)  # 한국 시각
-		var head := _label("%s → %s  ·  %s  ·  %s" % [r.get("reporter_name", ""), r.get("target_name", ""), "전체" if r.get("channel") == "all" else "길드", when], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+		var head := _label("%s → %s  ·  %s  ·  %s" % [r.get("reporter_name", ""), r.get("target_name", ""), Lang.t("chat_panel.rebuild_reports_3") if r.get("channel") == "all" else Lang.t("chat_panel.rebuild_reports_4"), when], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 		head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(head)
 		var said := str(r.get("raw")) if r.get("raw") != null else str(r.get("text", ""))
-		var main := _label("신고된 메시지: " + said, 21, REPORTED, HORIZONTAL_ALIGNMENT_LEFT)
+		var main := _label(Lang.t("chat_panel.rebuild_reports_5") + said, 21, REPORTED, HORIZONTAL_ALIGNMENT_LEFT)
 		main.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(main)
 		for c in r.get("context", []):

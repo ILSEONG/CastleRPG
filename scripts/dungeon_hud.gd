@@ -5,6 +5,8 @@ extends CanvasLayer
 ## 패배면 맨 위에 던전·단계, 그 밑에 "패배"(실패면 그 이유), 보상 줄 없음. [나가기]·[다시]·[다음 단계](이겼고 최고 + 1 이하일 때), 체크 둘 "현재 단계 자동 반복"·
 ## "다음 단계 자동 도전"(서로 배타, Fever.dungeon_auto), 자동 상태 한 줄("2초 뒤 자동 도전"·"자동 도전을 멈췄습니다").
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -17,8 +19,8 @@ const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const ResultBanner := preload("res://scripts/result_banner.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const NAMES := {"gold": "골드 던전", "equip": "장비 던전", "ticket": "모집권 던전"}
-const BOSS_NAMES := {"goblin_king": "왕고블린", "death_knight": "데스나이트", "rock_golem": "바위 골렘"}
+static var NAMES := {"gold": Lang.t("dungeon_hud.names.gold"), "equip": Lang.t("dungeon_hud.names.equip"), "ticket": Lang.t("dungeon_hud.names.ticket")}
+static var BOSS_NAMES := {"goblin_king": Lang.t("dungeon_hud.boss_names.goblin_king"), "death_knight": Lang.t("dungeon_hud.boss_names.death_knight"), "rock_golem": Lang.t("dungeon_hud.boss_names.rock_golem")}
 const HELPER_TAG := Color(0.36, 0.62, 0.88)  # 모집권 던전 도우미 띠 칸 표시
 const FACE_PX := 96.0
 const TILE_PX := 96.0
@@ -112,7 +114,7 @@ func _build_top(root: Control) -> void:
 	time_label = _label("", 32, MainHud.INK)
 	row.add_child(time_label)
 	give_up_button = Button.new()
-	give_up_button.text = "포기"
+	give_up_button.text = Lang.t("dungeon_hud.build_top")
 	give_up_button.custom_minimum_size = Vector2(110, 56)
 	give_up_button.add_theme_font_size_override("font_size", 26)
 	UiKit.apply_button(give_up_button, UiKit.STEEL, 12.0)
@@ -219,11 +221,11 @@ func _build_result(root: Control) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
-	next_button = _button("다음 단계", MainHud.ACCENT)
+	next_button = _button(Lang.t("dungeon_hud.build_result"), MainHud.ACCENT)
 	next_button.pressed.connect(func(): dungeon.next_level())
-	again_button = _button("다시", UiKit.AMBER)
+	again_button = _button(Lang.t("dungeon_hud.build_result_2"), UiKit.AMBER)
 	again_button.pressed.connect(func(): dungeon.retry())
-	exit_button = _button("나가기", UiKit.STEEL)
+	exit_button = _button(Lang.t("dungeon_hud.build_result_3"), UiKit.STEEL)
 	exit_button.pressed.connect(func(): dungeon.leave())
 	for b in [exit_button, again_button, next_button]:  # 왼쪽부터 나가기·다시·다음 단계(사용자 요청)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -232,9 +234,9 @@ func _build_result(root: Control) -> void:
 	checks.alignment = BoxContainer.ALIGNMENT_CENTER
 	checks.add_theme_constant_override("separation", 16)
 	box.add_child(checks)
-	auto_next_box = _checkbox("다음 단계 자동 도전")
+	auto_next_box = _checkbox(Lang.t("dungeon_hud.build_result_4"))
 	auto_next_box.toggled.connect(_on_auto.bind("next"))
-	auto_repeat_box = _checkbox("현재 단계 자동 반복")
+	auto_repeat_box = _checkbox(Lang.t("dungeon_hud.build_result_5"))
 	auto_repeat_box.toggled.connect(_on_auto.bind("repeat"))
 	checks.add_child(auto_repeat_box)  # 왼쪽 현재 단계 자동 반복, 오른쪽 다음 단계 자동 도전(사용자 요청)
 	checks.add_child(auto_next_box)
@@ -247,8 +249,8 @@ func show_result() -> void:
 	var res: Dictionary = dungeon.result
 	var win: bool = res.get("win", false)
 	var err := str(res.get("error", ""))
-	result_title.play("승리!" if win else ("패배" if err == "" else Economy.DUNGEON_TEXT.get(err, Economy.DUNGEON_FAIL_TEXT)), "win" if win else ("lose" if err == "" else "info"))
-	result_sub.text = "%s %d단계" % [NAMES.get(dungeon.run.type, ""), int(dungeon.run.level)]
+	result_title.play(Lang.t("dungeon_hud.show_result") if win else (Lang.t("dungeon_hud.show_result_2") if err == "" else Economy.DUNGEON_TEXT.get(err, Economy.DUNGEON_FAIL_TEXT)), "win" if win else ("lose" if err == "" else "info"))
+	result_sub.text = Lang.t("dungeon_hud.show_result_3") % [NAMES.get(dungeon.run.type, ""), int(dungeon.run.level)]
 	# 패배면 던전·단계를 맨 위에, 그 밑에 패배 문구(사용자 요청). 승리면 제목 밑 — 승리 리본은 창 윗변에 걸친다(디자인 보강 4번).
 	result_sub.get_parent().move_child(result_sub, 1 if win else 0)
 	result_title.overhang = 40.0 if win else 0.0
@@ -265,7 +267,7 @@ func show_result() -> void:
 		icon.custom_minimum_size = Vector2(72, 72)
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		reward_box.add_child(icon)
-		gold_label = _label("+%s 골드" % UiKit.commas(floori(rw.gold_tenths / 10.0)), 40, WIN_GOLD.darkened(0.2))
+		gold_label = _label(Lang.t("dungeon_hud.show_result_4") % UiKit.commas(floori(rw.gold_tenths / 10.0)), 40, WIN_GOLD.darkened(0.2))
 		reward_box.add_child(gold_label)
 	if rw.has("tickets"):  # 모집권 던전: 다이아 모집권
 		var icon = IconsScript.new()
@@ -273,7 +275,7 @@ func show_result() -> void:
 		icon.custom_minimum_size = Vector2(80, 80)
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		reward_box.add_child(icon)
-		gold_label = _label("다이아 모집권 +%d" % int(rw.tickets), 40, Color(0.46, 0.28, 0.72))
+		gold_label = _label(Lang.t("dungeon_hud.show_result_5") % int(rw.tickets), 40, Color(0.46, 0.28, 0.72))
 		reward_box.add_child(gold_label)
 	for it in rw.get("items", []):
 		var cell := VBoxContainer.new()
@@ -289,7 +291,7 @@ func show_result() -> void:
 		if not main.is_empty():
 			cell.add_child(_label(main[0][0], 16, main[0][1]))
 		if not it.get("subs", []).is_empty():
-			cell.add_child(_label("특수 %d줄" % it.subs.size(), 16, MainHud.INK.lightened(0.3)))
+			cell.add_child(_label(Lang.t("dungeon_hud.show_result_6") % it.subs.size(), 16, MainHud.INK.lightened(0.3)))
 		reward_box.add_child(cell)
 		reward_tiles.append(tile)
 	reward_box.visible = win  # 패배면 보상 줄 없이(사용자 요청: "보상 없음 · 열쇠는 그대로" 삭제)
@@ -319,11 +321,11 @@ func _update_auto_label() -> void:
 	if Fever.dungeon_auto == "":
 		auto_label.text = ""
 	elif dungeon.auto_halted:
-		auto_label.text = "자동 도전을 멈췄습니다"
+		auto_label.text = Lang.t("dungeon_hud.update_auto_label")
 	elif dungeon.starting:
 		auto_label.text = ""  # 대기 문구 없음(버튼이 꺼진 것으로 충분)
 	elif dungeon.auto_left >= 0.0:
-		auto_label.text = "%d초 뒤 자동 도전" % ceili(dungeon.auto_left)
+		auto_label.text = Lang.t("dungeon_hud.update_auto_label_2") % ceili(dungeon.auto_left)
 	else:
 		auto_label.text = ""
 
@@ -343,20 +345,20 @@ func _process(delta: float) -> void:
 
 func _update() -> void:
 	var d = dungeon
-	title_label.text = "%s %d단계" % [NAMES.get(d.run.type, ""), int(d.run.level)]
+	title_label.text = Lang.t("dungeon_hud.update") % [NAMES.get(d.run.type, ""), int(d.run.level)]
 	time_label.text = UiKit.clock(maxf(0.0, d.time_limit() - d.clock))
 	give_up_button.visible = d.phase == d.Phase.FIGHT
 	var b = d.boss
 	boss_bar.visible = b != null
 	if b != null:
 		boss_bar.value = b.hp_ratio() * 100.0
-		boss_label.text = "%s  %s / %s · 남은 적 %d" % [BOSS_NAMES.get(b.kind, b.kind), UiKit.commas(ceili(b.hp)), UiKit.commas(roundi(b.hp_max)), d.enemies_left()]
+		boss_label.text = Lang.t("dungeon_hud.update_2") % [BOSS_NAMES.get(b.kind, b.kind), UiKit.commas(ceili(b.hp)), UiKit.commas(roundi(b.hp_max)), d.enemies_left()]
 	else:
-		boss_label.text = "남은 적 %d" % d.enemies_left()
+		boss_label.text = Lang.t("dungeon_hud.update_3") % d.enemies_left()
 	if d.phase == d.Phase.WON or d.phase == d.Phase.LOOT:
-		banner.text = "승리!"
+		banner.text = Lang.t("dungeon_hud.update_4")
 	elif d.phase == d.Phase.REPORT:
-		banner.text = "결과 확인 중…"
+		banner.text = Lang.t("dungeon_hud.update_5")
 	else:
 		banner.text = ""
 	for s in strip:

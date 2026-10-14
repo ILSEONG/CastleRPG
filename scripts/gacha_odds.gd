@@ -4,6 +4,8 @@ extends Control
 ## 확률은 서버 뽑기(rules.ts rollGacha·gachaRates)와 같은 식: 등급(주점 보너스 포함)을 정한 뒤 그 등급 영웅 중 균등 → 영웅 확률 = 등급 확률 / 그 등급 영웅 수.
 ## 보장(다이아 천장·10회 SR 이상)으로 바뀌는 장도 그 등급 안에서 균등이다. 확률 값은 바꾸지 않는다 — 보여 주기만.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
@@ -64,7 +66,7 @@ func _ready() -> void:
 	list.add_theme_constant_override("separation", 4)
 	scroll.add_child(list)
 	close_button = Button.new()
-	close_button.text = "닫기"
+	close_button.text = Lang.t("gacha_odds.ready")
 	close_button.focus_mode = Control.FOCUS_NONE
 	close_button.custom_minimum_size = Vector2(220, 68)
 	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -80,30 +82,30 @@ func show_for(currency: String, gold_level: int, tavern: int) -> void:
 		c.queue_free()
 	var dia := currency != GameData.GACHA_GOLD
 	var rates := GameData.gacha_rates(GameData.GACHA_DIA if dia else GameData.GACHA_GOLD, gold_level, tavern)
-	title_label.text = "모집 확률 · " + ("다이아 모집(모집권 포함)" if dia else "골드 모집 Lv %d" % gold_level)
+	title_label.text = Lang.t("gacha_odds.show_for") + (Lang.t("gacha_odds.show_for_2") if dia else Lang.t("gacha_odds.show_for_3") % gold_level)
 	_line("SSR %s · SR %s · R %s" % [pct(rates.ssr), pct(rates.sr), pct(1.0 - rates.ssr - rates.sr)], 24, UiKit.INK)
 	var t := maxi(tavern, 1) - 1
 	if t > 0:
-		_line("주점 Lv %d 보너스 포함: SSR +%s · SR +%s" % [tavern, pct(GameData.config_num("tavern_ssr_per_level") * t), pct(GameData.config_num("tavern_sr_per_level") * t)], 20, SUB)
+		_line(Lang.t("gacha_odds.show_for_4") % [tavern, pct(GameData.config_num("tavern_ssr_per_level") * t), pct(GameData.config_num("tavern_sr_per_level") * t)], 20, SUB)
 	if dia:
-		_line("%d회째 모집은 SSR 확정(SSR이 나오면 다시 1부터 셉니다)" % int(GameData.config_num("gacha_dia_pity")), 20, SUB)
-		_line("10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다)" % int(GameData.config_num("gacha_10_min_sr")), 20, SUB)
+		_line(Lang.t("gacha_odds.show_for_5") % int(GameData.config_num("gacha_dia_pity")), 20, SUB)
+		_line(Lang.t("gacha_odds.show_for_6") % int(GameData.config_num("gacha_10_min_sr")), 20, SUB)
 	else:
-		_line("골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다" % GameData.GOLD_SSR_FROM, 20, SUB)
-	_line("등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림", 18, SUB)
+		_line(Lang.t("gacha_odds.show_for_7") % GameData.GOLD_SSR_FROM, 20, SUB)
+	_line(Lang.t("gacha_odds.show_for_8"), 18, SUB)
 	var grade := ""
 	for o in hero_odds(rates):
 		if o.grade != grade:
 			grade = o.grade
 			var n := hero_odds(rates).filter(func(x): return x.grade == grade).size()
-			_line("%s (%d명) — 한 명당 %s" % [grade, n, pct(o.p)], 24, UiKit.GRADE_COLORS[grade].darkened(0.25))
+			_line(Lang.t("gacha_odds.show_for_9") % [grade, n, pct(o.p)], 24, UiKit.GRADE_COLORS[grade].darkened(0.25))
 		_hero_row(o)
 	if not dia:
-		_line("골드 모집 레벨별 등급 확률", 24, UiKit.INK)
+		_line(Lang.t("gacha_odds.show_for_10"), 24, UiKit.INK)
 		for lv in range(1, int(GameData.config_num("gacha_gold_level_max")) + 1):
 			var r := GameData.gacha_rates(GameData.GACHA_GOLD, lv, tavern)
 			var need := GameData.gacha_gold_next(lv)
-			var up := " · 레벨업 %s회" % UiKit.commas(need) if need > 0 else ""
+			var up := Lang.t("gacha_odds.show_for.up") % UiKit.commas(need) if need > 0 else ""
 			_line("Lv %d: SSR %s · SR %s · R %s%s" % [lv, pct(r.ssr), pct(r.sr), pct(1.0 - r.ssr - r.sr), up], 18, UiKit.INK if lv == gold_level else SUB)
 	visible = true
 

@@ -5,14 +5,16 @@ extends "res://scripts/ui_window.gd"
 ## [강화]는 누르는 순간 한 번, 누르고 있으면 HOLD_DELAY 뒤부터 가속(qty_box와 같은 초당 10 → 50). 강화는 Economy.growth_up
 ## (오프라인은 곧바로, 온라인은 응답 때 — 응답을 기다리는 동안 길게 누르기는 쉬었다 잇는다). 영웅 시트처럼 칩 줄 아래 ~ 탭 바 위를 채운다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const QtyBox := preload("res://scripts/qty_box.gd")
 
 const ICONS := {"atk": "sword", "hp": "heart", "aspd": "haste", "mspd": "shoes", "crit_rate": "target", "crit_dmg": "burst"}  # 항목 id → 아이콘
-const NOTE := "성장은 모든 영웅·병사에게 적용됩니다"
-const WAIT := "응답 대기 중"  # Economy.growth_block의 잠깐 막힘(버튼을 끄지 않는다 — 누르고 있는 동안 뗌을 놓치지 않게)
+static var NOTE := Lang.t("growth_panel.note")
+static var WAIT := Lang.t("growth_panel.wait")  # Economy.growth_block의 잠깐 막힘(버튼을 끄지 않는다 — 누르고 있는 동안 뗌을 놓치지 않게)
 const TEN := 10
 const ICON_PX := 72.0
 const GREEN := Color(0.13, 0.50, 0.22)
@@ -29,7 +31,7 @@ func _ready() -> void:
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)  # 시트가 화면을 채운다
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(_title("성장"))
+	content.add_child(_title(Lang.t("growth_panel.ready")))
 	var top := HBoxContainer.new()
 	top.alignment = BoxContainer.ALIGNMENT_CENTER
 	top.add_theme_constant_override("separation", 8)
@@ -104,7 +106,7 @@ func _tick_hold(delta: float) -> void:
 func _refresh() -> void:
 	if not visible:
 		return
-	gold_label.text = "보유 골드 %s" % UiKit.commas(Economy.gold)
+	gold_label.text = Lang.t("growth_panel.refresh") % UiKit.commas(Economy.gold)
 	var waiting := Economy.upgrades_waiting()
 	for id in rows:
 		var r: Dictionary = rows[id]
@@ -113,9 +115,9 @@ func _refresh() -> void:
 		var mx := int(u.max_level)
 		var unit := "%" if u.unit == "pct" else "%p"
 		r.lv.text = "Lv %d / %d" % [lv, mx]
-		r.effect.text = effect_text(lv * float(u.per_level), unit) + (" (최대)" if lv >= mx else " → " + effect_text((lv + 1) * float(u.per_level), unit))
+		r.effect.text = effect_text(lv * float(u.per_level), unit) + (Lang.t("growth_panel.refresh_2") if lv >= mx else " → " + effect_text((lv + 1) * float(u.per_level), unit))
 		var why := Economy.growth_block(id)
-		r.up.title.text = "강화" if lv < mx else "MAX"
+		r.up.title.text = Lang.t("growth_panel.refresh_3") if lv < mx else "MAX"
 		r.up.gold.text = UiKit.commas(GameData.upgrade_cost(id, lv)) if lv < mx else "-"
 		r.up.button.disabled = why != "" and why != WAIT
 		r.ten.title.text = "×10"
@@ -145,7 +147,7 @@ func _row(u: Dictionary) -> Control:
 	var effect := _label("", 22, GREEN, HORIZONTAL_ALIGNMENT_LEFT)
 	info.add_child(effect)
 	row.add_child(info)
-	var up := _cost_button("강화", 124.0)
+	var up := _cost_button(Lang.t("growth_panel.row"), 124.0)
 	up.button.button_down.connect(_hold_start.bind(u.id))
 	up.button.button_up.connect(func(): _hold_id = "")
 	row.add_child(up.button)

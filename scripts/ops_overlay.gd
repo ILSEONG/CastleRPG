@@ -3,6 +3,8 @@ extends CanvasLayer
 ## 점검: "서버 점검 중" + 관리자가 적은 안내 + 끝나는 예정 시각. 서버가 다시 답하면 LiveOps.on_ok가 걷는다(Net이 계속 다시 묻는다).
 ## 업데이트: "업데이트가 필요합니다" + [업데이트] — 스토어 주소(관리자가 정한 것, 없으면 Google Play 앱 페이지)를 연다. 웹(앱인토스)은 새로 고침.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 
@@ -47,7 +49,7 @@ func _ready() -> void:
 	time_label = _label("", 24, SUB)
 	box.add_child(time_label)
 	update_button = Button.new()
-	update_button.text = "업데이트"
+	update_button.text = Lang.t("ops_overlay.ready")
 	update_button.custom_minimum_size = Vector2(0, 64)
 	update_button.add_theme_font_size_override("font_size", 28)
 	UiKit.apply_button(update_button, HudScript.ACCENT, 14.0)
@@ -72,15 +74,15 @@ func _refresh() -> void:
 	if not visible:
 		return
 	var update := str(b.get("kind", "")) == "update"
-	title_label.text = "업데이트가 필요합니다" if update else "서버 점검 중"
+	title_label.text = Lang.t("ops_overlay.refresh") if update else Lang.t("ops_overlay.refresh_2")
 	if update:
-		text_label.text = "새 버전이 나왔습니다.\n업데이트한 뒤 이어서 플레이해 주세요."
-		time_label.text = "지금 버전 %s · 필요한 버전 %s 이상" % [LiveOps.app_version(), str(b.get("min_version", ""))]
+		text_label.text = Lang.t("ops_overlay.refresh_3")
+		time_label.text = Lang.t("ops_overlay.refresh_4") % [LiveOps.app_version(), str(b.get("min_version", ""))]
 	else:
 		var t := str(b.get("text", ""))
-		text_label.text = t if t != "" else "더 좋은 게임을 위해 점검하고 있습니다.\n잠시 뒤 다시 접속해 주세요."
+		text_label.text = t if t != "" else Lang.t("ops_overlay.refresh_5")
 		var until := float(b.get("until", 0.0))
-		time_label.text = ("점검 종료 예정 %s\n" % clock_text(until) if until > 0.0 else "") + "점검이 끝나면 자동으로 이어집니다"
+		time_label.text = (Lang.t("ops_overlay.refresh_6") % clock_text(until) if until > 0.0 else "") + Lang.t("ops_overlay.refresh_7")
 	update_button.visible = update
 	panel.offset_left = 0
 	panel.offset_right = 0
@@ -92,7 +94,7 @@ func _refresh() -> void:
 static func clock_text(unix: float) -> String:
 	var bias := int(Time.get_time_zone_from_system().get("bias", 0))
 	var d := Time.get_datetime_dict_from_unix_time(int(unix) + bias * 60)
-	return "%d월 %d일 %02d:%02d" % [d.month, d.day, d.hour, d.minute]
+	return Lang.t("ops_overlay.clock_text") % [d.month, d.day, d.hour, d.minute]
 
 
 func open_store() -> void:

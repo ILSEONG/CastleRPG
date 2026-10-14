@@ -11,6 +11,8 @@ extends "res://scripts/ui_window.gd"
 ## 연구소(개정 24 §1): 설명 아래 큰 [연구](research_panel을 연다), 효과 "연구 속도 +0% → +2%". 효과 값(생산·인구·성/성문 HP·1마리 시간)은
 ## 지금 연구 효과를 넣어 보인다(Economy.research_bonus).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")
 const IconsScript := preload("res://scripts/icons.gd")
@@ -24,34 +26,34 @@ signal goto_building(id: String)  # 못 채운 선행 조건 줄을 눌렀다: �
 
 const GREEN := Color(0.13, 0.58, 0.24)
 const RED := Color(0.78, 0.22, 0.18)
-const UPGRADE_TEXT := "업그레이드"
-const BUILD_TEXT := "건설"  # 튜토리얼 공터
+static var UPGRADE_TEXT := Lang.t("building_panel.upgrade_text")
+static var BUILD_TEXT := Lang.t("building_panel.build_text")  # 튜토리얼 공터
 const TRAIN_ICON_PX := 72.0
-const RESEARCH_TEXT := "연구"
-const DISPATCH_TEXT := "의뢰 보기"
-const RECRUIT_TEXT := "영웅 모집"
-const CANCEL_TEXT := "취소(50% 환불)"
-const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
-const SPEEDUP_TEXT := "가속"  # 2026-10-13: 가속 아이템 목록을 펼친다
-const TIERED_KEEP := ["영웅 슬롯", "성 넓이", "면마다 성문", "성 모습"]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
-const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
-	"keep": "성의 중심. 다른 건물의 최대 레벨을 정합니다.",
-	"gate": "네 성문이 함께 쓰는 레벨입니다.",
-	"barracks": "보병을 훈련합니다.",
-	"archery": "궁병을 훈련합니다.",
-	"stable": "기병을 훈련합니다.",
-	"tavern": "영웅을 모집합니다.",
-	"lab": "기술을 연구합니다. 레벨이 오르면 상위 연구가 열리고 연구 속도가 빨라집니다.",
-	"houses": "주민이 사는 집. 인구만큼 병사를 배치할 수 있습니다.",
-	"lumber": "목재를 생산합니다.",
-	"quarry": "석재를 생산합니다.",
-	"farm": "식량을 생산합니다.",
-	"warehouse": "자원과 금광이 쌓이는 최대 시간을 늘립니다.",
-	"goldmine": "골드를 생산합니다. 눌러서 받으세요.",
-	"forge": "장비 던전에서 장비가 하나 더 나올 확률을 줍니다.",
-	"guild_hall": "길드에 가입하면 길드원 도움으로 건설·연구 시간이 줄어듭니다.",
-	"watchtower": "전투 중 성 밖 몬스터에게 화살을 쏩니다.",
-	"dispatch": "영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수와 높은 희귀도 확률이 오르고 파견 시간이 줄어듭니다.",
+static var RESEARCH_TEXT := Lang.t("building_panel.research_text")
+static var DISPATCH_TEXT := Lang.t("building_panel.dispatch_text")
+static var RECRUIT_TEXT := Lang.t("building_panel.recruit_text")
+static var CANCEL_TEXT := Lang.t("building_panel.cancel_text")
+static var FREE_TEXT := Lang.t("building_panel.free_text")  # 남은 시간 5분 이하(Economy.free_finish_sec)
+static var SPEEDUP_TEXT := Lang.t("building_panel.speedup_text")  # 2026-10-13: 가속 아이템 목록을 펼친다
+static var TIERED_KEEP := [Lang.t("building_panel.tiered_keep"), Lang.t("building_panel.tiered_keep_2"), Lang.t("building_panel.tiered_keep_3"), Lang.t("building_panel.tiered_keep_4")]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
+static var DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
+	"keep": Lang.t("building_panel.desc.keep"),
+	"gate": Lang.t("building_panel.desc.gate"),
+	"barracks": Lang.t("building_panel.desc.barracks"),
+	"archery": Lang.t("building_panel.desc.archery"),
+	"stable": Lang.t("building_panel.desc.stable"),
+	"tavern": Lang.t("building_panel.desc.tavern"),
+	"lab": Lang.t("building_panel.desc.lab"),
+	"houses": Lang.t("building_panel.desc.houses"),
+	"lumber": Lang.t("building_panel.desc.lumber"),
+	"quarry": Lang.t("building_panel.desc.quarry"),
+	"farm": Lang.t("building_panel.desc.farm"),
+	"warehouse": Lang.t("building_panel.desc.warehouse"),
+	"goldmine": Lang.t("building_panel.desc.goldmine"),
+	"forge": Lang.t("building_panel.desc.forge"),
+	"guild_hall": Lang.t("building_panel.desc.guild_hall"),
+	"watchtower": Lang.t("building_panel.desc.watchtower"),
+	"dispatch": Lang.t("building_panel.desc.dispatch"),
 }
 
 const ACT_GUARD_MS := 400
@@ -132,7 +134,7 @@ func _ready() -> void:
 	_build_train_box()
 	effects = VBoxContainer.new()
 	content.add_child(effects)
-	_reqs_title = _label("선행 조건", 22, HudScript.INK.lightened(0.3))
+	_reqs_title = _label(Lang.t("building_panel.ready"), 22, HudScript.INK.lightened(0.3))
 	content.add_child(_reqs_title)
 	reqs = VBoxContainer.new()
 	content.add_child(reqs)
@@ -182,7 +184,7 @@ func _ready() -> void:
 	upgrade_button = _button(UPGRADE_TEXT)
 	upgrade_button.pressed.connect(func(): _acted(Economy.upgrade(building_id, Economy.time_now())))
 	content.add_child(upgrade_button)
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("building_panel.ready_2"), UiKit.STEEL)
 	close_button.pressed.connect(close)
 	content.add_child(close_button)
 	Economy.changed.connect(func(): if visible: _refresh())
@@ -230,10 +232,10 @@ static func levelup_text(id: String) -> String:
 	var name := GameData.building_name(id)
 	var lv := Economy.building_level(id)
 	if Economy.is_building(id):
-		return "%s 레벨업 중 · %s ›" % [name, UiKit.duration(Economy.build_left(Economy.time_now(), id))]
+		return Lang.t("building_panel.levelup_text") % [name, UiKit.duration(Economy.build_left(Economy.time_now(), id))]
 	if lv >= int(GameData.building_def(id).get("max_level", 0)):
-		return "%s 정보 (최대 레벨) ›" % name
-	return "%s 레벨업 Lv %d → %d ›" % [name, lv, lv + 1]
+		return Lang.t("building_panel.levelup_text_2") % name
+	return Lang.t("building_panel.levelup_text_3") % [name, lv, lv + 1]
 
 
 ## 연구소 [연구]: 이 창을 닫고 연구 창을 연다.
@@ -265,7 +267,7 @@ func _refresh() -> void:
 	var maxed := lv >= int(d.max_level)
 	var building: bool = Economy.is_building(id)
 	var lot := not Economy.is_built(id)  # 튜토리얼 공터: 짓기(0 → 1)
-	title_label.text = "%s · 공터" % GameData.building_name(id) if lot else "%s Lv %d" % [GameData.building_name(id), lv]
+	title_label.text = Lang.t("building_panel.refresh") % GameData.building_name(id) if lot else "%s Lv %d" % [GameData.building_name(id), lv]
 	desc_label.text = DESC.get(GameData.type_of(id), "")
 	research_button.visible = id == GameData.LAB and not lot
 	dispatch_button.visible = GameData.type_of(id) == GameData.DISPATCH and not lot
@@ -273,7 +275,7 @@ func _refresh() -> void:
 	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
 	_clear(effects)
 	for row in (effect_lines(id, 1) if lot else []):
-		effects.add_child(_label("지으면 %s %s" % [row[0], row[1]], 28, GREEN))
+		effects.add_child(_label(Lang.t("building_panel.refresh_2") % [row[0], row[1]], 28, GREEN))
 	for row in ([] if lot else effect_lines(id, lv)):
 		var line := HBoxContainer.new()
 		line.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -286,7 +288,7 @@ func _refresh() -> void:
 	var rq := Economy.requirements(id)
 	for r in rq:
 		var bname: String = GameData.building_name(r.id)
-		var text := "%s %s Lv %d 필요" % ["✓" if r.ok else "✗", bname, int(r.need)]
+		var text := Lang.t("building_panel.refresh.text") % ["✓" if r.ok else "✗", bname, int(r.need)]
 		reqs.add_child(_label(text, 26, GREEN) if r.ok else _req_link(text + "  ›", str(r.id)))
 	_reqs_title.visible = not rq.is_empty()
 	var cost := Economy.upgrade_cost(id)
@@ -300,7 +302,7 @@ func _refresh() -> void:
 		cost_labels[r].visible = shown
 		_cost_row.get_child(cost_labels[r].get_index() - 1).visible = shown  # 아이콘
 	_cost_row.visible = not maxed and not building
-	time_label.text = "건설 시간 " + UiKit.duration(Economy.upgrade_sec(id))
+	time_label.text = Lang.t("building_panel.refresh_3") + UiKit.duration(Economy.upgrade_sec(id))
 	time_label.visible = not maxed and not building
 	_progress_box.visible = building
 	free_build_button.visible = building and Economy.can_free_build(now, id)
@@ -312,13 +314,13 @@ func _refresh() -> void:
 		speedups.building = id
 		speedups.refresh()
 	progress.value = Economy.build_progress(now, id)
-	left_label.text = ("건설 중 · 남은 시간 %s" % UiKit.duration(Economy.build_left(now, id))) if lot \
-		else "Lv %d → %d 건설 중 · 남은 시간 %s" % [lv, lv + 1, UiKit.duration(Economy.build_left(now, id))]
+	left_label.text = (Lang.t("building_panel.refresh_4") % UiKit.duration(Economy.build_left(now, id))) if lot \
+		else Lang.t("building_panel.refresh_5") % [lv, lv + 1, UiKit.duration(Economy.build_left(now, id))]
 	var why := Economy.upgrade_block(id, now)
 	var reason: String = Economy.BLOCK_TEXT.get(why, "")
 	if why == "builder_busy":  # 무엇을 짓는지·남은 시간도(일꾼마다)
 		reason += " (%s)" % ", ".join(Economy.build_jobs().map(func(j): return "%s %s" % [GameData.building_name(str(j.id)), UiKit.duration(Economy.build_left(now, str(j.id)))]))
-	builder_label.text = ("두 번째 일꾼 남은 기간 %s" % UiKit.duration(Economy.builder2_until - now)) if Economy.builder2_active(now) else ""
+	builder_label.text = (Lang.t("building_panel.refresh_6") % UiKit.duration(Economy.builder2_until - now)) if Economy.builder2_active(now) else ""
 	builder_label.visible = builder_label.text != ""
 	reason_label.text = reason
 	reason_label.visible = reason != "" and why != "in_progress"  # 짓는 중은 진행 막대가 말한다
@@ -384,7 +386,7 @@ func _build_train_box() -> void:
 		train_cost_labels[r] = l
 	train_time_label = _label("", 26)
 	empty_box.add_child(train_time_label)
-	train_button = _button("훈련", GREEN)
+	train_button = _button(Lang.t("building_panel.build_train_box"), GREEN)
 	train_button.pressed.connect(func(): _acted(Economy.start_training(building_id, qty.value)))
 	empty_box.add_child(train_button)
 	train_reason = _label("", 24, RED)
@@ -412,7 +414,7 @@ func _build_train_box() -> void:
 	train_box.add_child(done_box)
 	done_label = _label("", 28, GREEN)
 	done_box.add_child(done_label)
-	collect_button = _button("수령", GREEN)
+	collect_button = _button(Lang.t("building_panel.build_train_box_2"), GREEN)
 	collect_button.pressed.connect(func(): _acted(Economy.collect_training(building_id)))
 	done_box.add_child(collect_button)
 
@@ -440,8 +442,8 @@ func _refresh_training(type: String) -> void:
 	if q.count > 0:
 		var left := maxf(0.0, float(q.finish) - Economy.time_now())
 		train_bar.value = Economy.train_progress(id)
-		run_label.text = "T%d %s ×%d · 남은 %s" % [tier, nm, q.count, UiKit.clock(left)]
-		done_label.text = "T%d %s ×%d 훈련 완료" % [tier, nm, q.count]
+		run_label.text = Lang.t("building_panel.refresh_training") % [tier, nm, q.count, UiKit.clock(left)]
+		done_label.text = Lang.t("building_panel.refresh_training_2") % [tier, nm, q.count]
 		free_train_button.visible = Economy.can_free_train(id)
 		cancel_button.disabled = Economy.training_waiting(id, "cancel")
 		collect_button.disabled = Economy.training_waiting(id, "collect")
@@ -450,7 +452,7 @@ func _refresh_training(type: String) -> void:
 	qty.visible = Economy.train_max(id) > 1  # 훈련은 1마리씩(사용자 2026-10-06) — 수량 고르기 없음
 	var n: int = qty.value
 	var lv := Economy.building_level(id)
-	unit_label.text = "T%d %s · 1마리 %s" % [tier, nm, UiKit.clock(Economy.train_time(id, 1))]
+	unit_label.text = Lang.t("building_panel.refresh_training_3") % [tier, nm, UiKit.clock(Economy.train_time(id, 1))]
 	next_label.text = train_preview(id, lv)
 	next_label.visible = next_label.text != ""
 	var cost := Economy.train_cost_now(type, n, tier)
@@ -461,7 +463,7 @@ func _refresh_training(type: String) -> void:
 		train_cost_labels[r].visible = need > 0
 		_train_cost_row.get_child(train_cost_labels[r].get_index() - 1).visible = need > 0  # 아이콘
 	_train_cost_row.visible = not cost.is_empty()
-	train_time_label.text = "훈련 시간 " + UiKit.clock(Economy.train_time(id, n))
+	train_time_label.text = Lang.t("building_panel.refresh_training_4") + UiKit.clock(Economy.train_time(id, n))
 	var why := Economy.train_block(id, n)
 	train_button.disabled = why != ""
 	train_reason.text = EconomyScript.TRAIN_TEXT.get(why, "")
@@ -473,9 +475,9 @@ static func train_preview(id: String, lv: int) -> String:
 	if lv >= int(GameData.building_def(id).get("max_level", 0)):
 		return ""
 	if GameData.train_tier(lv + 1) > GameData.train_tier(lv):
-		return "Lv %d → T%d 해금" % [lv + 1, GameData.train_tier(lv + 1)]
+		return Lang.t("building_panel.train_preview") % [lv + 1, GameData.train_tier(lv + 1)]
 	var k := 1.0 + float(Economy.research_bonus().train_speed_pct) / 100.0  # 개정 24 훈련 교범
-	return "1마리 %s → %s" % [UiKit.clock(GameData.soldier_unit_sec(lv) / k), UiKit.clock(GameData.soldier_unit_sec(lv + 1) / k)]
+	return Lang.t("building_panel.train_preview_2") % [UiKit.clock(GameData.soldier_unit_sec(lv) / k), UiKit.clock(GameData.soldier_unit_sec(lv + 1) / k)]
 
 
 ## 지금 자원으로 훈련할 수 있는 수(무료면 아주 큰 수).
@@ -497,52 +499,52 @@ static func effect_lines(id: String, lv: int) -> Array:
 	var res := GameData.resource_of_building(id)
 	if res != "":
 		var pct := Economy.res_pct(res)
-		return [["생산", "%d/분" % EconomyScript.rate_per_min(res, lv, pct), "%d/분" % EconomyScript.rate_per_min(res, n, pct)]]
+		return [[Lang.t("building_panel.effect_lines"), Lang.t("building_panel.effect_lines_2") % EconomyScript.rate_per_min(res, lv, pct), Lang.t("building_panel.effect_lines_2") % EconomyScript.rate_per_min(res, n, pct)]]
 	if GameData.soldier_of_building(id) != "":
 		var k := 1.0 + float(rb.train_speed_pct) / 100.0
 		var tn := GameData.train_tier(n)
 		var next_unit := UiKit.clock(GameData.soldier_unit_sec(n) / k)
-		return [["1마리", UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
+		return [[Lang.t("building_panel.effect_lines_3"), UiKit.clock(GameData.soldier_unit_sec(lv) / k), ("T%d " % tn if tn > GameData.train_tier(lv) else "") + next_unit]]  # 티어가 바뀌면 "T2 3:00:00"
 	match GameData.type_of(id):
 		"warehouse":  # 2026-10-13 새 건물
-			return [["쌓이는 시간", UiKit.duration(GameData.accum_cap_min(lv) * 60.0), UiKit.duration(GameData.accum_cap_min(n) * 60.0)]]
+			return [[Lang.t("building_panel.effect_lines_4"), UiKit.duration(GameData.accum_cap_min(lv) * 60.0), UiKit.duration(GameData.accum_cap_min(n) * 60.0)]]
 		"goldmine":
-			return [["골드 생산", "%s/분" % UiKit.commas(GameData.goldmine_per_min(lv)), "%s/분" % UiKit.commas(GameData.goldmine_per_min(n))]]
+			return [[Lang.t("building_panel.effect_lines_5"), Lang.t("building_panel.effect_lines_6") % UiKit.commas(GameData.goldmine_per_min(lv)), Lang.t("building_panel.effect_lines_6") % UiKit.commas(GameData.goldmine_per_min(n))]]
 		"forge":
-			return [["장비 추가 확률", _pct(GameData.forge_extra_p(lv)), _pct(GameData.forge_extra_p(n))]]
+			return [[Lang.t("building_panel.effect_lines_7"), _pct(GameData.forge_extra_p(lv)), _pct(GameData.forge_extra_p(n))]]
 		"guild_hall":
-			return [["길드 도움", "%d회" % GameData.guild_helps(lv), "%d회" % GameData.guild_helps(n)]]
+			return [[Lang.t("building_panel.effect_lines_8"), Lang.t("building_panel.effect_lines_9") % GameData.guild_helps(lv), Lang.t("building_panel.effect_lines_9") % GameData.guild_helps(n)]]
 		"watchtower":
 			var p0 := GameData.config_num("watchtower_grunt_pct_base")
 			var p1 := GameData.config_num("watchtower_grunt_pct_per_level")
-			return [["화살 피해", "졸개 HP %s%%" % Skills.num_text(p0 + p1 * lv), "졸개 HP %s%%" % Skills.num_text(p0 + p1 * n)]]
+			return [[Lang.t("building_panel.effect_lines_10"), Lang.t("building_panel.effect_lines_11") % Skills.num_text(p0 + p1 * lv), Lang.t("building_panel.effect_lines_11") % Skills.num_text(p0 + p1 * n)]]
 		"keep":
 			var hp := 1.0 + float(rb.castle_hp_pct) / 100.0
-			var rows := [["건물 최대", "Lv %d" % lv, "Lv %d" % n],
-				["성 HP", UiKit.commas(roundi(GameData.castle_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.castle_hp_max(n) * hp))],
-				["영웅 슬롯", str(GameData.hero_slots(lv)), str(GameData.hero_slots(n))],
-				["성 넓이", "%d칸" % GameData.interior_tiles(lv), "%d칸" % GameData.interior_tiles(n)],
-				["면마다 성문", "%d개" % GameData.gates_at(lv), "%d개" % GameData.gates_at(n)],
-				["성 모습", "%d단계" % (GameData.castle_look(lv) + 1), "%d단계" % (GameData.castle_look(n) + 1)]]
+			var rows := [[Lang.t("building_panel.effect_lines_12"), "Lv %d" % lv, "Lv %d" % n],
+				[Lang.t("building_panel.effect_lines_13"), UiKit.commas(roundi(GameData.castle_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.castle_hp_max(n) * hp))],
+				[Lang.t("building_panel.effect_lines_14"), str(GameData.hero_slots(lv)), str(GameData.hero_slots(n))],
+				[Lang.t("building_panel.effect_lines_15"), Lang.t("building_panel.effect_lines_16") % GameData.interior_tiles(lv), Lang.t("building_panel.effect_lines_16") % GameData.interior_tiles(n)],
+				[Lang.t("building_panel.effect_lines_17"), Lang.t("building_panel.effect_lines_18") % GameData.gates_at(lv), Lang.t("building_panel.effect_lines_18") % GameData.gates_at(n)],
+				[Lang.t("building_panel.effect_lines_19"), Lang.t("building_panel.effect_lines_20") % (GameData.castle_look(lv) + 1), Lang.t("building_panel.effect_lines_20") % (GameData.castle_look(n) + 1)]]
 			var maxed := lv >= int(GameData.building_def("keep").get("max_level", 0))
 			return rows.filter(func(r): return not r[0] in TIERED_KEEP or (r[1] != r[2] and not maxed))
 		"gate":
 			var hp := 1.0 + float(rb.gate_hp_pct) / 100.0
-			return [["성문 HP", UiKit.commas(roundi(GameData.gate_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.gate_hp_max(n) * hp))]]
+			return [[Lang.t("building_panel.effect_lines_21"), UiKit.commas(roundi(GameData.gate_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.gate_hp_max(n) * hp))]]
 		"lab":  # 연구소 몫의 연구 속도만(연구 방법론은 연구 창 위에 합쳐 보인다)
-			return [["연구 속도", _pct(GameData.research_speed({}, lv), "+"), _pct(GameData.research_speed({}, n), "+")]]
+			return [[Lang.t("building_panel.effect_lines_22"), _pct(GameData.research_speed({}, lv), "+"), _pct(GameData.research_speed({}, n), "+")]]
 		"houses":
 			var add := int(rb.pop_add)
-			return [["인구", str(GameData.population(lv) + add), str(GameData.population(n) + add)]]
+			return [[Lang.t("building_panel.effect_lines_23"), str(GameData.population(lv) + add), str(GameData.population(n) + add)]]
 		"dispatch":
 			var DP := preload("res://scripts/dispatch_panel.gd")
-			return [["하루 의뢰", "%d개" % DP.slots(lv), "%d개" % DP.slots(n)],
-				["SR·SSR 확률", "%s%% · %s%%" % [DP._pct(DP.odds(lv)[2]), DP._pct(DP.odds(lv)[3])], "%s%% · %s%%" % [DP._pct(DP.odds(n)[2]), DP._pct(DP.odds(n)[3])]],
-				["파견 시간", "%d%%" % roundi(DP.time_mult(lv) * 100.0), "%d%%" % roundi(DP.time_mult(n) * 100.0)]]
+			return [[Lang.t("building_panel.effect_lines_24"), Lang.t("building_panel.effect_lines_18") % DP.slots(lv), Lang.t("building_panel.effect_lines_18") % DP.slots(n)],
+				[Lang.t("building_panel.effect_lines_25"), "%s%% · %s%%" % [DP._pct(DP.odds(lv)[2]), DP._pct(DP.odds(lv)[3])], "%s%% · %s%%" % [DP._pct(DP.odds(n)[2]), DP._pct(DP.odds(n)[3])]],
+				[Lang.t("building_panel.effect_lines_26"), "%d%%" % roundi(DP.time_mult(lv) * 100.0), "%d%%" % roundi(DP.time_mult(n) * 100.0)]]
 		"tavern":
 			var a := GameData.gacha_rates(GameData.GACHA_GOLD, 1, lv)  # 골드 Lv 1 기준(주점 보너스만 보인다)
 			var b := GameData.gacha_rates(GameData.GACHA_GOLD, 1, n)
-			return [["SSR 확률", _pct(a.ssr), _pct(b.ssr)], ["SR 확률", _pct(a.sr), _pct(b.sr)]]
+			return [[Lang.t("building_panel.effect_lines_27"), _pct(a.ssr), _pct(b.ssr)], [Lang.t("building_panel.effect_lines_28"), _pct(a.sr), _pct(b.sr)]]
 	return []
 
 

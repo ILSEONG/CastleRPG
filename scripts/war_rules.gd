@@ -4,6 +4,8 @@ extends RefCounted
 ## (안 정하면 토요일 21:00) 그때부터 BATTLE_SEC초 · 그 사이 누구나 합류. 점수 = 수비 영웅 처치 1 · 성문 10(2개까지) · 성채 최대 체력 3%마다 1(사용자), 주간 보상(승리·패배).
 ## 길드원 = 15명(길드 6레벨부터 20명 — 길드 쪽 규칙). 길드원 한 명 = 영웅 4명(공격 분대 / 수비 분대).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const BATTLE_SEC := 600.0
 const DEPLOY_SEC := 300.0  # 배치 단계(2026-10-07 사용자): 공성 시각부터 공격팀이 성 밖에 자리를 잡는다. 길드장(또는 슈퍼관리자)이 [전투 시작]을 누르거나
                            # 이만큼 지나면 저절로 시작한다(서버 guild_war.ts DEPLOY_SEC와 같다). 배치 시간은 전투 시간(BATTLE_SEC)에 안 들어간다
@@ -20,7 +22,7 @@ const KEEP_STEP := 0.03  # 성채 최대 체력의 이만큼을 깎을 때마다
 const KEEP_MAX_PTS := 33  # floor(1 / KEEP_STEP)
 const DEFAULT_DAY := 5  # 길드원이 공성 시각을 안 정하면: 토요일(주 안 5번째 날, 0 = 월요일)
 const DEFAULT_HOUR := 21
-const DAY_NAMES := ["월", "화", "수", "목", "금", "토", "일"]
+static var DAY_NAMES := [Lang.t("war_rules.day_names"), Lang.t("war_rules.day_names_2"), Lang.t("war_rules.day_names_3"), Lang.t("war_rules.day_names_4"), Lang.t("war_rules.day_names_5"), Lang.t("war_rules.day_names_6"), Lang.t("war_rules.day_names_7")]
 const REWARD_WIN := {"coins": 300, "diamonds": 100}
 const REWARD_LOSE := {"coins": 100, "diamonds": 30}
 const GATE_HP_PER_LEVEL := 10000.0  # 2026-10-11 사용자: 성문 체력 = 성 주인 길드 레벨 × 이만큼(서버 GATE_HP_PER_LEVEL과 같다)
@@ -35,7 +37,7 @@ const GATE_TOP_R := 11.0  # 성벽 위에서 성문 가운데로부터 이 옆 �
 const KEEP_ALERT := 8.0  # 공격 영웅이 성채 외벽에서 이 거리 안에 들어오면 수비가 성채를 지키러 모인다(수비의 궁극 목적 = 성채)
 const KEEP_LEVEL := 9  # 공성 성 크기(성채 레벨 → GameData.interior_half) — 9 = 28칸 단계, 면마다 성문 2개(내구도는 면마다 하나)
 const CAMP_D := 24.0  # 공격 진영: 성벽 바깥면에서 이 거리
-const SIDE_NAMES := ["북문", "동문", "남문", "서문"]
+static var SIDE_NAMES := [Lang.t("war_rules.side_names"), Lang.t("war_rules.side_names_2"), Lang.t("war_rules.side_names_3"), Lang.t("war_rules.side_names_4")]
 
 
 ## 성문 최대 체력 = 성 주인 길드 레벨 × GATE_HP_PER_LEVEL(네 성문 같다).

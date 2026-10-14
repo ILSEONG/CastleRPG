@@ -3,24 +3,26 @@ extends RefCounted
 ## kind: diamond(충전: 첫 구매는 기본 다이아 2배, 이후 기본 + bonus)·monthly(월정액 days일, 사면 give + 매일 daily)·package(period 기간 한도 limit)·
 ## pass(성장 패스: GROWTH 유료 보상)·hot(핫딜: 계기에 1시간 뜬 것만 한 번, value = 가치 배수 표시). krw = 원화 가격. 실결제는 Economy.iap_buy → StorePay(Google Play·토스, 서버 키가 없으면 알림만).
 
-const PRODUCTS := [
-	{ "id": "dia_1", "kind": "diamond", "name": "다이아 1,650", "krw": 1200, "give": { "diamonds": 1650 }, "bonus": 150 },
-	{ "id": "dia_2", "kind": "diamond", "name": "다이아 8,000", "krw": 5900, "give": { "diamonds": 8000 }, "bonus": 1650 },
-	{ "id": "dia_3", "kind": "diamond", "name": "다이아 16,500", "krw": 12000, "give": { "diamonds": 16500 }, "bonus": 4400 },
-	{ "id": "dia_4", "kind": "diamond", "name": "다이아 46,500", "krw": 33000, "give": { "diamonds": 46500 }, "bonus": 15000 },
-	{ "id": "dia_5", "kind": "diamond", "name": "다이아 87,000", "krw": 59000, "give": { "diamonds": 87000 }, "bonus": 31000 },
-	{ "id": "dia_6", "kind": "diamond", "name": "다이아 156,000", "krw": 99000, "give": { "diamonds": 156000 }, "bonus": 66000 },
-	{ "id": "monthly", "kind": "monthly", "name": "성주의 월정액", "krw": 4900, "give": { "diamonds": 1500 }, "days": 30, "daily": { "diamonds": 500, "speedup_build_60": 1, "speedup_research_60": 1 } },
-	{ "id": "monthly_plus", "kind": "monthly", "name": "왕의 월정액", "krw": 14900, "give": { "diamonds": 5000, "speedup_builder_43200": 1 }, "days": 30, "daily": { "diamonds": 800, "tickets": 3, "pouch_gold_240": 1, "speedup_any_180": 1 } },
-	{ "id": "pkg_starter", "kind": "package", "name": "신규 성주 패키지", "krw": 1200, "period": "once", "limit": 1, "give": { "diamonds": 1500, "tickets": 30, "pouch_gold_120": 5, "pouch_res_120": 5, "speedup_builder_10080": 1, "speedup_build_60": 5 } },
-	{ "id": "pkg_daily", "kind": "package", "name": "일일 특가 패키지", "krw": 1200, "period": "daily", "limit": 1, "give": { "diamonds": 600, "tickets": 8, "keys_gold": 3, "speedup_any_60": 3 } },
-	{ "id": "pkg_weekly", "kind": "package", "name": "주간 특가 패키지", "krw": 5900, "period": "weekly", "limit": 1, "give": { "diamonds": 4000, "tickets": 50, "keys_equip": 5, "speedup_any_480": 3, "speedup_builder_10080": 1 } },
-	{ "id": "pkg_growth", "kind": "package", "name": "성장 지원 패키지", "krw": 33000, "period": "once", "limit": 1, "give": { "diamonds": 30000, "tickets": 150, "pouch_gold_360": 10, "pouch_res_360": 10, "speedup_builder_43200": 1, "speedup_build_1440": 5, "speedup_research_1440": 5 } },
-	{ "id": "hot_boss", "kind": "hot", "name": "보스 격파 기념 특가", "krw": 3300, "value": 5, "give": { "diamonds": 18000, "tickets": 20, "pouch_gold_360": 3, "speedup_build_480": 3 } },
-	{ "id": "hot_dia", "kind": "hot", "name": "다이아 긴급 지원", "krw": 5900, "value": 5, "give": { "diamonds": 40000, "tickets": 15 } },
-	{ "id": "hot_defeat", "kind": "hot", "name": "패배 극복 특가", "krw": 4900, "value": 5, "give": { "diamonds": 30000, "tickets": 20, "pouch_gold_360": 5, "pouch_res_360": 5, "speedup_any_480": 3 } },
-	{ "id": "pass_growth", "kind": "pass", "name": "성장 패스", "krw": 9900, "give": {} },
-	{ "id": "no_ads", "kind": "pass", "name": "광고 제거", "krw": 5500, "give": {} },
+const Lang := preload("res://scripts/lang.gd")
+
+static var PRODUCTS := [
+	{ "id": "dia_1", "kind": "diamond", "name": Lang.t("iap_items.products.dia_1.name"), "krw": 1200, "give": { "diamonds": 1650 }, "bonus": 150 },
+	{ "id": "dia_2", "kind": "diamond", "name": Lang.t("iap_items.products.dia_2.name"), "krw": 5900, "give": { "diamonds": 8000 }, "bonus": 1650 },
+	{ "id": "dia_3", "kind": "diamond", "name": Lang.t("iap_items.products.dia_3.name"), "krw": 12000, "give": { "diamonds": 16500 }, "bonus": 4400 },
+	{ "id": "dia_4", "kind": "diamond", "name": Lang.t("iap_items.products.dia_4.name"), "krw": 33000, "give": { "diamonds": 46500 }, "bonus": 15000 },
+	{ "id": "dia_5", "kind": "diamond", "name": Lang.t("iap_items.products.dia_5.name"), "krw": 59000, "give": { "diamonds": 87000 }, "bonus": 31000 },
+	{ "id": "dia_6", "kind": "diamond", "name": Lang.t("iap_items.products.dia_6.name"), "krw": 99000, "give": { "diamonds": 156000 }, "bonus": 66000 },
+	{ "id": "monthly", "kind": "monthly", "name": Lang.t("iap_items.products.monthly.name"), "krw": 4900, "give": { "diamonds": 1500 }, "days": 30, "daily": { "diamonds": 500, "speedup_build_60": 1, "speedup_research_60": 1 } },
+	{ "id": "monthly_plus", "kind": "monthly", "name": Lang.t("iap_items.products.monthly_plus.name"), "krw": 14900, "give": { "diamonds": 5000, "speedup_builder_43200": 1 }, "days": 30, "daily": { "diamonds": 800, "tickets": 3, "pouch_gold_240": 1, "speedup_any_180": 1 } },
+	{ "id": "pkg_starter", "kind": "package", "name": Lang.t("iap_items.products.pkg_starter.name"), "krw": 1200, "period": "once", "limit": 1, "give": { "diamonds": 1500, "tickets": 30, "pouch_gold_120": 5, "pouch_res_120": 5, "speedup_builder_10080": 1, "speedup_build_60": 5 } },
+	{ "id": "pkg_daily", "kind": "package", "name": Lang.t("iap_items.products.pkg_daily.name"), "krw": 1200, "period": "daily", "limit": 1, "give": { "diamonds": 600, "tickets": 8, "keys_gold": 3, "speedup_any_60": 3 } },
+	{ "id": "pkg_weekly", "kind": "package", "name": Lang.t("iap_items.products.pkg_weekly.name"), "krw": 5900, "period": "weekly", "limit": 1, "give": { "diamonds": 4000, "tickets": 50, "keys_equip": 5, "speedup_any_480": 3, "speedup_builder_10080": 1 } },
+	{ "id": "pkg_growth", "kind": "package", "name": Lang.t("iap_items.products.pkg_growth.name"), "krw": 33000, "period": "once", "limit": 1, "give": { "diamonds": 30000, "tickets": 150, "pouch_gold_360": 10, "pouch_res_360": 10, "speedup_builder_43200": 1, "speedup_build_1440": 5, "speedup_research_1440": 5 } },
+	{ "id": "hot_boss", "kind": "hot", "name": Lang.t("iap_items.products.hot_boss.name"), "krw": 3300, "value": 5, "give": { "diamonds": 18000, "tickets": 20, "pouch_gold_360": 3, "speedup_build_480": 3 } },
+	{ "id": "hot_dia", "kind": "hot", "name": Lang.t("iap_items.products.hot_dia.name"), "krw": 5900, "value": 5, "give": { "diamonds": 40000, "tickets": 15 } },
+	{ "id": "hot_defeat", "kind": "hot", "name": Lang.t("iap_items.products.hot_defeat.name"), "krw": 4900, "value": 5, "give": { "diamonds": 30000, "tickets": 20, "pouch_gold_360": 5, "pouch_res_360": 5, "speedup_any_480": 3 } },
+	{ "id": "pass_growth", "kind": "pass", "name": Lang.t("iap_items.products.pass_growth.name"), "krw": 9900, "give": {} },
+	{ "id": "no_ads", "kind": "pass", "name": Lang.t("iap_items.products.no_ads.name"), "krw": 5500, "give": {} },
 ]
 
 ## 성장 패스 단계: round(깬 라운드)에 닿으면 free(누구나)·paid(패스 구매자).

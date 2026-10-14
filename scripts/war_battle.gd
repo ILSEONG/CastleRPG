@@ -13,6 +13,8 @@ extends Node3D
 ## (deploy_unit — 그 면이 그 영웅이 칠 면이 된다). 수비·AI 분대는 제자리. [전투 시작](길드장·슈퍼관리자, 오프라인은 누구나)을 누르거나
 ## deploy_left가 0이 되면 begin_fight — 그때부터 시계·전투가 돈다. 온라인은 서버가 시작을 정하고 방에 start를 알린다(war_net).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const TownKit := preload("res://scripts/town_kit.gd")
@@ -516,7 +518,7 @@ func _on_gate_broken(g) -> void:
 	for at in Formation.gate_offsets(half):
 		Fx.blast(self, Formation.gate_position(half, g.side, at), Color(0.6, 0.5, 0.4), 3.0, GameData.fx_shake(), 1)
 	if hud != null:
-		hud.flash("%s 파괴!" % WarRules.SIDE_NAMES[g.side])
+		hud.flash(Lang.t("war_battle.on_gate_broken") % WarRules.SIDE_NAMES[g.side])
 	score_changed.emit()
 
 
@@ -526,7 +528,7 @@ func _on_keep_broken(_k) -> void:
 			n.remove_from_group("monsters")
 	Fx.blast(self, Vector3.ZERO, Color(0.7, 0.55, 0.4), 6.0, GameData.fx_shake(), 2)
 	if hud != null:
-		hud.flash("성채 함락!")
+		hud.flash(Lang.t("war_battle.on_keep_broken"))
 	score_changed.emit()
 
 
@@ -777,7 +779,7 @@ func begin_fight() -> void:
 		if not u.puppet:
 			u.set_process(not done)
 	if hud != null:
-		hud.flash("전투 시작!")
+		hud.flash(Lang.t("war_battle.begin_fight"))
 		hud.refresh_role()
 
 

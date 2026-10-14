@@ -5,6 +5,8 @@ extends RefCounted
 ##   (앱인토스 게임 출시 가이드: 사용자 식별키로 식별, 진입하자마자 로그인 시트를 띄우지 않는다). 결제는 토스 인앱 결제(연결 전).
 ## 값: 프로젝트 설정 castle/platform. 앱인토스 내보내기 프리셋(피처 태그 apps_in_toss)이 castle/platform.apps_in_toss로 덮어쓴다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GOOGLE_PLAY := "google_play"
 const APPS_IN_TOSS := "apps_in_toss"
 
@@ -28,7 +30,7 @@ static func login_providers() -> Array:
 
 ## 결제 상품을 눌렀는데 아직 결제가 연결되지 않았을 때의 안내.
 static func iap_off_text() -> String:
-	return "결제는 토스 출시 후 열립니다" if is_toss() else "결제는 Google Play 출시 후 열립니다"
+	return Lang.t("release_platform.iap_off_text") if is_toss() else Lang.t("release_platform.iap_off_text_2")
 
 
 ## 웹 주소의 쿼리 문자열(eval 없이 — 앱인토스 보안 기준). 웹이 아니면 "".

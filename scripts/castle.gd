@@ -7,6 +7,8 @@ extends Node3D
 ## 단계는 성 크기와 따로 바뀌므로 메시만 _look 아래에 다시 만든다(탭 판정·위치는 그대로).
 ## side: 0=N(-z) 1=E(+x) 2=S(+z) 3=W(-x)
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const Art := preload("res://scripts/art.gd")
@@ -17,7 +19,7 @@ const LAYER_GATE := 2
 const LAYER_WALL := 8
 const TAP_MARGIN := Vector3(1, 1, 1)  # 탭 판정 박스 여유
 const SIDE_TAG_Y := Balance.WALL_H + 2.5  # 문루(기둥 지붕 끝 ~5.3 m) 위 방향 글자 이름표 아랫변 기준점 높이
-const LOOK_TEXT := "성의 모습이 더 웅장해졌습니다"
+static var LOOK_TEXT := Lang.t("castle.look_text")
 const LOOK_TEXT_DELAY := 1.8  # 초(HUD 알림 TOAST_SEC 1.6 뒤)
 
 var half: float = 0.0

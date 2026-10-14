@@ -5,6 +5,8 @@ extends "res://scripts/ui_window.gd"
 ## [오늘의 보상 받기] → POST /v1/attendance/claim {day}(once — 재전송하지 않는다) → 응답을 Economy.apply_server로 반영.
 ## 하루 = 서버 일일 리셋(00:00 KST) 기준 한 번. 오프라인이면 "온라인에서만" 안내.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const IconsScript := preload("res://scripts/icons.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
 const HeroArt := preload("res://scripts/hero_art.gd")
@@ -15,7 +17,7 @@ const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const ShopArt := preload("res://scripts/shop_art.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const TITLE := "28일 출석 이벤트"
+static var TITLE := Lang.t("event_panel.title")
 const COLS := 7
 const CELL := Vector2(86, 118)
 const GAP := 6
@@ -26,8 +28,8 @@ const TODAY := Color(0.98, 0.70, 0.12)
 const DONE_INK := Color(0.30, 0.62, 0.32)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const TICKET := Color(0.61, 0.42, 0.84)  # 다이아 모집권(SR 보라)
-const KEY_NAMES := {"gold": "골드 던전 열쇠", "equip": "장비 던전 열쇠", "ticket": "모집권 던전 열쇠"}
-const FAIL_TEXT := {"claimed": "오늘은 이미 받았습니다", "finished": "모든 출석 보상을 받았습니다", "stale": "출석 정보가 바뀌었습니다. 다시 열어 주세요"}
+static var KEY_NAMES := {"gold": Lang.t("event_panel.key_names.gold"), "equip": Lang.t("event_panel.key_names.equip"), "ticket": Lang.t("event_panel.key_names.ticket")}
+static var FAIL_TEXT := {"claimed": Lang.t("event_panel.fail_text.claimed"), "finished": Lang.t("event_panel.fail_text.finished"), "stale": Lang.t("event_panel.fail_text.stale")}
 
 var data := {}  # 서버 응답 {n, days, can_claim, next_reset, rewards}
 var loading := false
@@ -61,11 +63,11 @@ func _ready() -> void:
 	content.add_child(info)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var close_button := _button("닫기", UiKit.STEEL)
+	var close_button := _button(Lang.t("event_panel.ready"), UiKit.STEEL)
 	close_button.custom_minimum_size.x = 160
 	close_button.pressed.connect(close)
 	row.add_child(close_button)
-	claim_button = _button("오늘의 보상 받기")
+	claim_button = _button(Lang.t("event_panel.ready_2"))
 	claim_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	claim_button.pressed.connect(claim)
 	Tutorial.register_ui("event:claim", claim_button, can_claim)  # 가이드 「출석 보상 받기」 화살표
@@ -133,7 +135,7 @@ func claim() -> void:
 	data.n = day
 	data.can_claim = false
 	selected = day - 1
-	Economy.notice.emit("%d일차 출석 보상을 받았습니다!" % day)
+	Economy.notice.emit(Lang.t("event_panel.claim") % day)
 	Net.send("POST", "/v1/attendance/claim", {"day": day}, _on_claimed.bind(key), _on_claim_failed.bind(key, day), true, true)
 	_rebuild()
 
@@ -151,7 +153,7 @@ func _on_claim_failed(key: String, day: int) -> void:
 	if claimed_n() == day:
 		data.n = day - 1
 		data.can_claim = true
-	Economy.notice.emit(FAIL_TEXT.get(Net.last_error, "보상을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요"))
+	Economy.notice.emit(FAIL_TEXT.get(Net.last_error, Lang.t("event_panel.on_claim_failed")))
 	Net.refresh()
 	fetch()
 	_rebuild()
@@ -164,9 +166,9 @@ func _rebuild() -> void:
 	var rewards: Array = data.get("rewards", [])
 	if rewards.is_empty():
 		progress.text = ""
-		info.text = "온라인에서만 참여할 수 있습니다" if not Net.is_online() else ("출석 정보를 불러오는 중…" if loading or not failed else "연결이 끊겨 불러오지 못했습니다")
+		info.text = Lang.t("event_panel.rebuild") if not Net.is_online() else (Lang.t("event_panel.rebuild_2") if loading or not failed else Lang.t("event_panel.rebuild_3"))
 		claim_button.disabled = true
-		claim_button.text = "오늘의 보상 받기"
+		claim_button.text = Lang.t("event_panel.rebuild_4")
 		_fit()
 		return
 	var n := claimed_n()
@@ -186,13 +188,13 @@ func _rebuild() -> void:
 			_update_info())
 		grid.add_child(b)
 		cells.append(b)
-	progress.text = "출석 %d / %d일 · 하루 한 번, 날짜가 이어지지 않아도 됩니다" % [n, rewards.size()]
+	progress.text = Lang.t("event_panel.rebuild_5") % [n, rewards.size()]
 	if n >= rewards.size():
-		claim_button.text = "모두 받았습니다"
+		claim_button.text = Lang.t("event_panel.rebuild_6")
 	elif can_claim():
-		claim_button.text = "%d일차 보상 받기" % (n + 1)
+		claim_button.text = Lang.t("event_panel.rebuild_7") % (n + 1)
 	else:
-		claim_button.text = "내일 다시 와 주세요"
+		claim_button.text = Lang.t("event_panel.rebuild_8")
 	claim_button.disabled = not can_claim() or not Net.up
 	_update_info()
 	_fit()
@@ -208,11 +210,11 @@ func _update_info() -> void:
 	if rewards.is_empty():
 		return
 	var i := selected if selected >= 0 else mini(claimed_n(), rewards.size() - 1)
-	var head := "%d일차" % (i + 1)
+	var head := Lang.t("event_panel.update_info.head") % (i + 1)
 	if i < claimed_n():
-		head += "(받음)"
+		head += Lang.t("event_panel.update_info")
 	elif i == claimed_n() and can_claim():
-		head += "(오늘)"
+		head += Lang.t("event_panel.update_info_2")
 	info.text = head + ": " + reward_text(rewards[i])
 	_redraw_cells()
 
@@ -222,28 +224,28 @@ static func reward_text(r: Dictionary) -> String:
 	var parts: Array = []
 	if r.has("hero"):
 		var h := GameData.hero(str(r.hero))
-		parts.append("%s 영웅 %s(%s)" % [h.get("grade", ""), h.get("name", str(r.hero)), h.get("title", "")] if not h.is_empty() else "영웅 " + str(r.hero))
+		parts.append(Lang.t("event_panel.reward_text") % [h.get("grade", ""), h.get("name", str(r.hero)), h.get("title", "")] if not h.is_empty() else Lang.t("event_panel.reward_text_2") + str(r.hero))
 	if r.get("equip") is Dictionary:
-		parts.append("%s 장비 상자(부위·능력치 무작위)" % r.equip.get("grade", ""))
+		parts.append(Lang.t("event_panel.reward_text_3") % r.equip.get("grade", ""))
 	if r.has("gold"):
-		parts.append("골드 " + UiKit.commas(int(r.gold)))
+		parts.append(Lang.t("event_panel.reward_text_4") + UiKit.commas(int(r.gold)))
 	if r.has("diamonds"):
-		parts.append("다이아 " + UiKit.commas(int(r.diamonds)))
+		parts.append(Lang.t("event_panel.reward_text_5") + UiKit.commas(int(r.diamonds)))
 	if r.has("wood") and int(r.get("wood", 0)) == int(r.get("stone", -1)) and int(r.wood) == int(r.get("food", -1)):
-		parts.append("목재·석재·식량 각 " + UiKit.commas(int(r.wood)))
+		parts.append(Lang.t("event_panel.reward_text_6") + UiKit.commas(int(r.wood)))
 	else:
-		for k in [["wood", "목재"], ["stone", "석재"], ["food", "식량"]]:
+		for k in [["wood", Lang.t("event_panel.reward_text_7")], ["stone", Lang.t("event_panel.reward_text_8")], ["food", Lang.t("event_panel.reward_text_9")]]:
 			if r.has(k[0]):
 				parts.append("%s %s" % [k[1], UiKit.commas(int(r[k[0]]))])
 	for t in KEY_NAMES:
 		if r.has("keys_" + t):
-			parts.append("%s %d개" % [KEY_NAMES[t], int(r["keys_" + t])])
+			parts.append(Lang.t("event_panel.reward_text_10") % [KEY_NAMES[t], int(r["keys_" + t])])
 	if r.has("tickets"):
-		parts.append("다이아 모집권 %d장" % int(r.tickets))
+		parts.append(Lang.t("event_panel.reward_text_11") % int(r.tickets))
 	var pz := Economy.pouches_in(r)
 	for id in Economy.pouch_ids():
 		if pz.has(id):
-			parts.append(Economy.pouch_name(id) + ("" if int(pz[id]) == 1 else " %d개" % int(pz[id])))
+			parts.append(Economy.pouch_name(id) + ("" if int(pz[id]) == 1 else Lang.t("event_panel.reward_text_12") % int(pz[id])))
 	parts.append_array(Economy.speedup_reward_parts(r))  # 2026-10-13 가속 아이템·일꾼 고용권
 	return " + ".join(parts)
 
@@ -254,25 +256,25 @@ static func cell_lines(r: Dictionary) -> Array:
 	if r.has("hero"):
 		lines.append(str(GameData.hero(str(r.hero)).get("name", r.hero)))
 	if r.get("equip") is Dictionary:
-		lines.append("%s 장비" % r.equip.get("grade", ""))
+		lines.append(Lang.t("event_panel.cell_lines") % r.equip.get("grade", ""))
 	if r.has("gold"):
 		lines.append(short_num(int(r.gold)))
 	if r.has("diamonds"):
 		lines.append(str(int(r.diamonds)))
 	if r.has("wood"):
-		lines.append("각 " + short_num(int(r.wood)))
+		lines.append(Lang.t("event_panel.cell_lines_2") + short_num(int(r.wood)))
 	for t in KEY_NAMES:
 		if r.has("keys_" + t):
 			lines.append("x%d" % int(r["keys_" + t]))
 	if r.has("tickets"):
-		lines.append(("모집권 %d" if lines.size() > 0 else "x%d") % int(r.tickets))
+		lines.append((Lang.t("event_panel.cell_lines_3") if lines.size() > 0 else "x%d") % int(r.tickets))
 	var pz := Economy.pouches_in(r)
 	if pz.size() == 1:
 		var id: String = pz.keys()[0]
 		var m := int(Economy.pouch_parse(id).min)
-		lines.append("주머니 " + (("%d시간" % (m / 60)) if m >= 60 else ("%d분" % m)))
+		lines.append(Lang.t("event_panel.cell_lines_4") + ((Lang.t("event_panel.cell_lines_5") % (m / 60)) if m >= 60 else (Lang.t("event_panel.cell_lines_6") % m)))
 	elif pz.size() > 1:
-		lines.append("주머니 %d개" % pz.size())
+		lines.append(Lang.t("event_panel.cell_lines_7") % pz.size())
 	return lines
 
 
@@ -280,7 +282,7 @@ static func cell_lines(r: Dictionary) -> Array:
 static func short_num(v: int) -> String:
 	if v >= 10000:
 		var m := v / 10000.0
-		return ("%d만" % int(m)) if is_equal_approx(m, roundf(m)) else ("%.1f만" % m)
+		return (Lang.t("event_panel.short_num") % int(m)) if is_equal_approx(m, roundf(m)) else (Lang.t("event_panel.short_num_2") % m)
 	return UiKit.commas(v)
 
 
@@ -299,7 +301,7 @@ func _draw_cell(c: Control, i: int, r: Dictionary, n: int) -> void:
 	c.draw_polyline(line, edge, 4.0 if today else (3.0 if i == selected else 1.5), true)
 	if i == selected and not today:
 		c.draw_polyline(line, Color(UiKit.INK, 0.5), 3.0, true)
-	c.draw_string(FONT, Vector2(0, 22), "%d일" % day, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 18, TODAY.darkened(0.35) if big else SUB)
+	c.draw_string(FONT, Vector2(0, 22), Lang.t("event_panel.draw_cell") % day, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 18, TODAY.darkened(0.35) if big else SUB)
 	var ctr := Vector2(c.size.x / 2.0, 56)
 	_draw_reward_icon(c, r, ctr, 42.0)
 	var pz := Economy.pouches_in(r)

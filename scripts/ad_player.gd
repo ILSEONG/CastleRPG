@@ -5,6 +5,8 @@ extends Control
 ## 플러그인이 없는 곳(PC, 앱인토스 — 토스 광고 미연결)은 SECONDS초짜리 시험 화면이다.
 ## 광고 제거(Economy.ad_free) 구매자는 이 창을 거치지 않는다(shop_panel._buy).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const AdConfig := preload("res://scripts/ad_config.gd")
 
@@ -37,9 +39,9 @@ func _ready() -> void:
 	col.position -= Vector2(280, 160)
 	col.add_theme_constant_override("separation", 18)
 	add_child(col)
-	title_label = _label("광고", 40, Color.WHITE)
+	title_label = _label(Lang.t("ad_player.ready"), 40, Color.WHITE)
 	col.add_child(title_label)
-	sub_label = _label("광고 연결 전 시험 화면입니다", 22, Color(1, 1, 1, 0.7))
+	sub_label = _label(Lang.t("ad_player.ready_2"), 22, Color(1, 1, 1, 0.7))
 	col.add_child(sub_label)
 	bar = ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 22)
@@ -49,7 +51,7 @@ func _ready() -> void:
 	time_label = _label("", 26, Color(1, 0.93, 0.6))
 	col.add_child(time_label)
 	close_button = Button.new()
-	close_button.text = "닫기"
+	close_button.text = Lang.t("ad_player.ready_3")
 	close_button.focus_mode = Control.FOCUS_NONE
 	close_button.custom_minimum_size = Vector2(200, 64)
 	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -84,8 +86,8 @@ func play(done: Callable) -> void:
 ## 실제 광고: 불러 둔 게 있으면 곧바로 띄우고, 없으면 "불러오는 중" 화면에서 기다린다.
 func _play_real() -> void:
 	_waiting = true
-	sub_label.text = "광고를 불러오는 중입니다"
-	time_label.text = "끝까지 보면 보상을 받습니다"
+	sub_label.text = Lang.t("ad_player.play_real")
+	time_label.text = Lang.t("ad_player.play_real_2")
 	bar.visible = false
 	visible = true
 	if _ads.isLoaded():
@@ -101,8 +103,8 @@ func _on_ad_loaded(ok: bool, _error: String) -> void:
 		_ads.show()
 		return
 	_waiting = false
-	sub_label.text = "광고를 불러오지 못했습니다"
-	time_label.text = "잠시 후 다시 시도하세요"
+	sub_label.text = Lang.t("ad_player.on_ad_loaded")
+	time_label.text = Lang.t("ad_player.on_ad_loaded_2")
 
 
 func _on_ad_closed(earned: bool) -> void:
@@ -131,7 +133,7 @@ func _process(delta: float) -> void:
 
 func _tick() -> void:
 	bar.value = SECONDS - _left
-	time_label.text = "%d초 뒤 보상을 받습니다 · 닫으면 보상이 없습니다" % ceili(_left)
+	time_label.text = Lang.t("ad_player.tick") % ceili(_left)
 
 
 func _label(text: String, size: int, color: Color) -> Label:

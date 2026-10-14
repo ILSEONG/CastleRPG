@@ -6,6 +6,8 @@ extends Node3D
 ## 빛 조각(Fx.repair)과 알림 "벌목장 Lv 4 완료". 이름표 "벌목장 Lv 3"·"상인"은 world_tags.gd(화면 공간, 개정 15)가 tag_anchors·merchant_anchor에
 ## 그린다. 머리 위 진행 막대·남은 시간은 badges.gd(화면 공간, 이름표 위).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Balance := preload("res://scripts/balance.gd")
 const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
@@ -22,10 +24,10 @@ const MOUNTAIN_VARIANTS := 5
 const SCAFFOLD_MARGIN := 0.35  # 비계 기둥이 건물 AABB 밖으로 떨어진 거리(m)
 const SCAFFOLD_POST := 0.28  # 기둥 굵기
 const SCAFFOLD_RAIL := 0.14  # 가로대 굵기
-const DONE_TEXT := "%s Lv %d 완료"
+static var DONE_TEXT := Lang.t("buildings.done_text")
 const TAG_UP := 0.3  # 지붕(메시 AABB 윗면) 위 이 높이가 이름표 아랫변 기준점
 const LOT_TAP_H := 1.6  # 공터 탭 판정체 최소 높이(낮은 말뚝만 있어도 누르기 쉽게)
-const BUILT_TEXT := "%s 건설 완료"
+static var BUILT_TEXT := Lang.t("buildings.built_text")
 
 var half: float  # 성 내부 절반 크기. 기본값 없음 — main이 add_child 전에 castle.half로 설정
 var merchant_anchor: Vector3  # 상인 이름표 "상인" 기준점(머리 위) — 시세·남은 시간은 상인을 눌러 여는 거래 창에서 본다

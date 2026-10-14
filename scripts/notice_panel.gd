@@ -4,8 +4,8 @@ extends "res://scripts/ops_sheet.gd"
 ## 열면 본 것으로 저장한다(LiveOps.mark_seen — [공지] 빨간 점과 성 화면 자동 띄우기가 꺼진다).
 ## 새 공지가 있으면 로딩이 끝난 뒤 한 번 저절로 열린다(_process).
 
-const KINDS := {"notice": ["공지", Color(0.33, 0.47, 0.72)], "event": ["이벤트", Color(0.86, 0.45, 0.20)],
-	"update": ["업데이트", Color(0.30, 0.60, 0.36)], "maintenance": ["점검", Color(0.62, 0.38, 0.78)]}
+static var KINDS := {"notice": [Lang.t("notice_panel.kinds"), Color(0.33, 0.47, 0.72)], "event": [Lang.t("notice_panel.kinds_2"), Color(0.86, 0.45, 0.20)],
+	"update": [Lang.t("notice_panel.kinds_3"), Color(0.30, 0.60, 0.36)], "maintenance": [Lang.t("notice_panel.kinds_4"), Color(0.62, 0.38, 0.78)]}
 
 const PreloaderScript := preload("res://scripts/preloader.gd")
 const AUTO_DELAY_SEC := 1.5  # 로딩 화면이 걷히고 이만큼 뒤(다른 창이 없을 때) 새 공지를 띄운다
@@ -17,7 +17,7 @@ var _auto_t := 0.0
 
 
 func _ready() -> void:
-	_build("공지사항")
+	_build(Lang.t("notice_panel.ready"))
 	LiveOps.changed.connect(func():
 		if visible:
 			_rebuild())
@@ -56,7 +56,7 @@ func _rebuild() -> void:
 	_sig = sig
 	_clear_body()
 	if LiveOps.notices.is_empty():
-		body.add_child(_wrap("등록된 공지사항이 없습니다" if Net.is_online() else "공지사항은 온라인에서만 볼 수 있습니다", 26, SUB, HORIZONTAL_ALIGNMENT_CENTER))
+		body.add_child(_wrap(Lang.t("notice_panel.rebuild") if Net.is_online() else Lang.t("notice_panel.rebuild_2"), 26, SUB, HORIZONTAL_ALIGNMENT_CENTER))
 		return
 	var now := Economy.time_now()
 	for n in LiveOps.notices:
@@ -68,7 +68,7 @@ func _rebuild() -> void:
 		var tag := PanelContainer.new()
 		tag.add_theme_stylebox_override("panel", UiKit.panel(k[1], 8.0, 6))
 		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		tag.add_child(_label(("고정 " if n.get("pinned", false) else "") + k[0], 20, Color.WHITE))
+		tag.add_child(_label((Lang.t("notice_panel.rebuild_3") if n.get("pinned", false) else "") + k[0], 20, Color.WHITE))
 		row.add_child(tag)
 		var t := _wrap(str(n.title), 26)
 		row.add_child(t)

@@ -12,6 +12,8 @@ extends Node
 ##   거절되면 목록에서 빼고 쓴 글을 돌려준다(inquiry_failed). 답변은 우편([문의 답변])으로 오고, 문의 창 목록에도 보인다.
 ## 앱 버전(프로젝트 설정 application/config/version)은 Net이 모든 요청에 X-App-Version으로 보낸다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const Prefs := preload("res://scripts/prefs.gd")
 const OverlayScript := preload("res://scripts/ops_overlay.gd")
@@ -23,11 +25,11 @@ signal inquiry_failed(category: String, text: String)  # 문의를 못 보냈다
 signal block_changed  # 점검·업데이트 안내가 생기거나 걷혔다
 
 const SEEN_KEY := "notice_seen"
-const KEY_NAMES := {"gold": "골드 던전 열쇠", "equip": "장비 던전 열쇠", "ticket": "모집권 던전 열쇠"}
+static var KEY_NAMES := {"gold": Lang.t("live_ops.key_names.gold"), "equip": Lang.t("live_ops.key_names.equip"), "ticket": Lang.t("live_ops.key_names.ticket")}
 const MAIL_POLL_SEC := 300.0  # 창을 안 열어도 이만큼마다 우편을 다시 본다(관리자가 보낸 보상 빨간 점)
-const INQUIRY_TEXT := {"too_many_inquiries": "답변을 기다리는 문의가 많습니다. 답변을 받은 뒤 다시 보내 주세요"}
-const COUPON_TEXT := {"unknown_coupon": "없는 쿠폰 번호입니다", "coupon_used": "이미 사용한 쿠폰입니다", "coupon_expired": "기간이 지난 쿠폰입니다",
-	"coupon_used_up": "선착순 수량이 모두 소진된 쿠폰입니다", "coupon_not_started": "아직 사용할 수 없는 쿠폰입니다"}
+static var INQUIRY_TEXT := {"too_many_inquiries": Lang.t("live_ops.inquiry_text.too_many_inquiries")}
+static var COUPON_TEXT := {"unknown_coupon": Lang.t("live_ops.coupon_text.unknown_coupon"), "coupon_used": Lang.t("live_ops.coupon_text.coupon_used"), "coupon_expired": Lang.t("live_ops.coupon_text.coupon_expired"),
+	"coupon_used_up": Lang.t("live_ops.coupon_text.coupon_used_up"), "coupon_not_started": Lang.t("live_ops.coupon_text.coupon_not_started")}
 
 var notices: Array = []  # [{id, title, body, kind, pinned, at}]
 var mails: Array = []  # [{id, title, body, reward, at, expires}] — 받는 중인 것은 빠져 있다
@@ -127,7 +129,7 @@ func mail_count() -> int:
 ## 우편 받기(ids가 비면 전부). 곧바로 목록에서 빼고 보상을 보인다. 보냈으면 true.
 func claim(ids: Array = []) -> bool:
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 받을 수 있습니다")
+		Economy.notice.emit(Lang.t("live_ops.claim"))
 		return false
 	var take := mails.filter(func(m): return ids.is_empty() or ids.has(int(m.id)))
 	if take.is_empty():
@@ -139,7 +141,7 @@ func claim(ids: Array = []) -> bool:
 	mails = mails.filter(func(m): return not send_ids.has(int(m.id)))
 	Economy.predict_reward(key, sum_rewards(take))
 	var text := reward_text(sum_rewards(take))
-	Economy.notice.emit(("우편을 받았습니다" if take.size() == 1 else "우편 %d개를 받았습니다" % take.size()) + ("" if text == "" else ": " + text))
+	Economy.notice.emit((Lang.t("live_ops.claim_2") if take.size() == 1 else Lang.t("live_ops.claim_3") % take.size()) + ("" if text == "" else ": " + text))
 	changed.emit()
 	Net.send("POST", "/v1/mail/claim", {"ids": send_ids}, _on_claimed.bind(key), _on_claim_failed.bind(key), true, true)
 	return true
@@ -151,7 +153,7 @@ func _on_claimed(d: Dictionary, key: String) -> void:
 	Economy.apply_server(d)
 	var r = d.get("reward")
 	if r is Dictionary and r.get("items") is Array and not r.items.is_empty():
-		Economy.notice.emit("장비 %d개가 보관함에 들어갔습니다" % r.items.size())
+		Economy.notice.emit(Lang.t("live_ops.on_claimed") % r.items.size())
 	changed.emit()
 
 
@@ -160,11 +162,11 @@ func _on_claim_failed(key: String) -> void:
 	claiming.erase(key)
 	Economy.unpredict(key)
 	if Net.last_error == "claimed":
-		Economy.notice.emit("이미 받았거나 기간이 지난 우편입니다")
+		Economy.notice.emit(Lang.t("live_ops.on_claim_failed"))
 	else:
 		mails = back + mails  # 되돌린다
 		mails.sort_custom(func(a, b): return float(a.get("at", 0)) > float(b.get("at", 0)))
-		Economy.notice.emit("우편을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요")
+		Economy.notice.emit(Lang.t("live_ops.on_claim_failed_2"))
 	Net.refresh()
 	fetch_mail()
 	changed.emit()
@@ -174,10 +176,10 @@ func _on_claim_failed(key: String) -> void:
 func redeem(code: String, done: Callable) -> bool:
 	var c := code.strip_edges().to_upper().replace("-", "").replace(" ", "")
 	if c.length() < 4:
-		done.call(false, "쿠폰 번호를 확인해 주세요")
+		done.call(false, Lang.t("live_ops.redeem"))
 		return false
 	if not Net.up or redeeming:
-		done.call(false, "서버에 연결된 뒤 사용할 수 있습니다")
+		done.call(false, Lang.t("live_ops.redeem_2"))
 		return false
 	redeeming = true
 	Net.send("POST", "/v1/coupon", {"code": c}, func(d: Dictionary):
@@ -185,10 +187,10 @@ func redeem(code: String, done: Callable) -> bool:
 		Economy.apply_server(d)
 		var r = d.get("reward")
 		var text := reward_text(r) if r is Dictionary else ""
-		done.call(true, "쿠폰 보상을 받았습니다" + ("" if text == "" else ": " + text)),
+		done.call(true, Lang.t("live_ops.redeem_3") + ("" if text == "" else ": " + text)),
 		func():
 			redeeming = false
-			done.call(false, COUPON_TEXT.get(Net.last_error, "쿠폰을 사용하지 못했습니다. 잠시 뒤 다시 시도해 주세요")),
+			done.call(false, COUPON_TEXT.get(Net.last_error, Lang.t("live_ops.redeem_4"))),
 		true, true)
 	return true
 
@@ -225,26 +227,26 @@ static func reward_text(r: Dictionary) -> String:
 	for id in heroes:
 		var h: Dictionary = GameData.hero(str(id))
 		var n := int(heroes[id])
-		parts.append("%s 영웅 %s" % [h.get("grade", ""), h.get("name", str(id))] + ("" if n == 1 else " %d장" % n))
+		parts.append(Lang.t("live_ops.reward_text") % [h.get("grade", ""), h.get("name", str(id))] + ("" if n == 1 else Lang.t("live_ops.reward_text_2") % n))
 	if r.get("equip") is Dictionary:
-		parts.append("%s 장비 %d개" % [r.equip.get("grade", ""), int(r.equip.get("n", 1))])
+		parts.append(Lang.t("live_ops.reward_text_3") % [r.equip.get("grade", ""), int(r.equip.get("n", 1))])
 	if r.get("equips") is Dictionary:
 		for g in r.equips:
-			parts.append("%s 장비 %d개" % [g, int(r.equips[g])])
+			parts.append(Lang.t("live_ops.reward_text_3") % [g, int(r.equips[g])])
 	if r.get("items") is Array and not r.has("equip") and not r.has("equips"):
-		parts.append("장비 %d개" % r.items.size())
-	for k in [["gold", "골드"], ["diamonds", "다이아"], ["wood", "목재"], ["stone", "석재"], ["food", "식량"]]:
+		parts.append(Lang.t("live_ops.reward_text_4") % r.items.size())
+	for k in [["gold", Lang.t("live_ops.reward_text_5")], ["diamonds", Lang.t("live_ops.reward_text_6")], ["wood", Lang.t("live_ops.reward_text_7")], ["stone", Lang.t("live_ops.reward_text_8")], ["food", Lang.t("live_ops.reward_text_9")]]:
 		if int(r.get(k[0], 0)) > 0:
 			parts.append("%s %s" % [k[1], UiKit.commas(int(r[k[0]]))])
 	if int(r.get("tickets", 0)) > 0:
-		parts.append("다이아 모집권 %d장" % int(r.tickets))
+		parts.append(Lang.t("live_ops.reward_text_10") % int(r.tickets))
 	for t in KEY_NAMES:
 		if int(r.get("keys_" + t, 0)) > 0:
-			parts.append("%s %d개" % [KEY_NAMES[t], int(r["keys_" + t])])
+			parts.append(Lang.t("live_ops.reward_text_11") % [KEY_NAMES[t], int(r["keys_" + t])])
 	var pz := Economy.pouches_in(r)
 	for id in Economy.pouch_ids():
 		if pz.has(id):
-			parts.append(Economy.pouch_name(id) + ("" if int(pz[id]) == 1 else " %d개" % int(pz[id])))
+			parts.append(Economy.pouch_name(id) + ("" if int(pz[id]) == 1 else Lang.t("live_ops.reward_text_12") % int(pz[id])))
 	parts.append_array(Economy.speedup_reward_parts(r))  # 2026-10-13 가속 아이템·일꾼 고용권
 	return " + ".join(parts)
 
@@ -256,7 +258,7 @@ static func reward_text(r: Dictionary) -> String:
 func on_blocked(code: int, data: Dictionary) -> void:
 	var b := {}
 	if code == 426:
-		b = {"kind": "update", "text": "새 버전이 나왔습니다. 업데이트 후 이용해 주세요.", "min_version": str(data.get("min_version", "")),
+		b = {"kind": "update", "text": Lang.t("live_ops.on_blocked.text"), "min_version": str(data.get("min_version", "")),
 			"store_url": str(data.get("store_url", ""))}
 	else:
 		var until = data.get("until")
@@ -299,16 +301,16 @@ static func inquiry_info() -> Dictionary:
 func send_inquiry(category: String, text: String) -> bool:
 	var t := text.strip_edges()
 	if t == "":
-		Economy.notice.emit("문의 내용을 적어 주세요")
+		Economy.notice.emit(Lang.t("live_ops.send_inquiry"))
 		return false
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 보낼 수 있습니다")
+		Economy.notice.emit(Lang.t("live_ops.send_inquiry_2"))
 		return false
 	_seq += 1
 	var key := "q%d-%d-%d" % [int(Time.get_unix_time_from_system()), _seq, randi() % 100000]
 	var q := {"id": -_seq, "key": key, "category": category, "body": t, "status": "open", "answer": "", "at": Economy.time_now(), "pending": true}
 	inquiries.push_front(q)
-	Economy.notice.emit("문의를 보냈습니다. 답변은 우편으로 알려 드려요")
+	Economy.notice.emit(Lang.t("live_ops.send_inquiry_3"))
 	changed.emit()
 	Net.send("POST", "/v1/inquiry", {"key": key, "category": category, "body": t, "info": inquiry_info()}, func(d: Dictionary):
 		var i := inquiries.find(q)
@@ -320,7 +322,7 @@ func send_inquiry(category: String, text: String) -> bool:
 		changed.emit(),
 		func():
 			inquiries.erase(q)
-			Economy.notice.emit(INQUIRY_TEXT.get(Net.last_error, "문의를 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요"))
+			Economy.notice.emit(INQUIRY_TEXT.get(Net.last_error, Lang.t("live_ops.send_inquiry_4")))
 			inquiry_failed.emit(category, t)
 			changed.emit(),
 		true, true)

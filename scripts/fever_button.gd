@@ -3,6 +3,8 @@ extends Button
 ## FEVER 중엔 남은 시간과 계속 타는 불꽃, 화면 가장자리 붉은 빛, 시작 때 가운데 "FEVER!" 큰 글자. 상태는 오토로드 Fever.
 ## FEVER는 방치 스폰 배속이라 방치(대기) 때만 켤 수 있다. 스테이지 진행 중(스테이지·결과·카운트다운)엔 흐리게 두고 탭은 알림만.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 
@@ -72,12 +74,12 @@ func _on_pressed() -> void:
 	if Fever.active():
 		return
 	if blocked():
-		Economy.notice.emit("스테이지 진행 중엔 FEVER를 쓸 수 없습니다")
+		Economy.notice.emit(Lang.t("fever_button.on_pressed"))
 		return
 	if Fever.start():
 		banner_left = BANNER_SEC
 	else:
-		Economy.notice.emit("몬스터 %d마리 더" % (Fever.kills_needed() - Fever.gauge))
+		Economy.notice.emit(Lang.t("fever_button.on_pressed_2") % (Fever.kills_needed() - Fever.gauge))
 
 
 ## 버튼 글자: FEVER 중 남은 시간 "2:59", 가득 "FEVER!", 아니면 "73%".

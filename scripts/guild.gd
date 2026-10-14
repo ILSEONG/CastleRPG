@@ -10,6 +10,8 @@ extends Node
 ## 저장: user://guild.json(Economy 저장과 따로). 길드 코인은 탈퇴해도 남고, 오늘 기여도·출석 상자는 길드를 옮기면 새로 센다.
 ## 테스트는 .new()로 만들어 econ·gs를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎). 시각은 인자 now.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 
 const SAVE_VERSION := 1
@@ -22,18 +24,18 @@ const BUFF_PER_LEVEL := 1.0  # 길드 레벨당 영웅 공격력·체력 +%
 const CREATE_GOLD := 500000
 const SIM_DAYS_MAX := 7  # 앱을 오래 껐다 켜도 가상 길드원 활동은 최근 이 날수만 센다
 const LOG_MAX := 30
-const MY_NAME := "나"
-const ROLES := ["길드장", "부길드장", "정예", "길드원"]
+static var MY_NAME := Lang.t("guild.my_name")
+static var ROLES := [Lang.t("guild.roles"), Lang.t("guild.roles_2"), Lang.t("guild.roles_3"), Lang.t("guild.roles_4")]
 
 const ATTEND_REWARD := {"gold": 3000, "coins": 30}
 const ATTEND_EXP := 10
 ## 출석 인원 상자: [오늘 출석 인원(나 포함), 보상]
 const ATTEND_BOXES := [[5, {"coins": 20, "gold": 5000}], [10, {"coins": 40, "diamonds": 20}], [15, {"coins": 60, "diamonds": 30}],
 	[20, {"coins": 100, "diamonds": 50}]]
-const DONATIONS := {
-	"gold": {"name": "골드 기부", "gold": 10000, "diamonds": 0, "exp": 20, "coins": 20, "daily": 3},
-	"dia": {"name": "다이아 기부", "gold": 0, "diamonds": 50, "exp": 60, "coins": 60, "daily": 1},
-	"royal": {"name": "왕실 기부", "gold": 0, "diamonds": 200, "exp": 250, "coins": 250, "daily": 1},
+static var DONATIONS := {
+	"gold": {"name": Lang.t("guild.donations.name"), "gold": 10000, "diamonds": 0, "exp": 20, "coins": 20, "daily": 3},
+	"dia": {"name": Lang.t("guild.donations.name_2"), "gold": 0, "diamonds": 50, "exp": 60, "coins": 60, "daily": 1},
+	"royal": {"name": Lang.t("guild.donations.name_3"), "gold": 0, "diamonds": 200, "exp": 250, "coins": 250, "daily": 1},
 }
 const DONATION_ORDER := ["gold", "dia", "royal"]
 
@@ -42,7 +44,7 @@ const BOSS_FIGHT_SEC := 40.0  # 2026-10-07 20 → 40초. 실제 전투 시간(�
 const BOSS_DMG_CAP := 3.0  # 받는 피해 상한 = 시작 때 배치 영웅 초당 피해 합 × 전투 초 × 이것(서버 guild.ts와 같다, 조작 방지)
 const BOSS_HP_BASE := 1000.0  # 드래곤 Lv n 최대 HP = BASE × GROWTH^(n−1) — 매 판 Lv 1부터(서버 guild.ts와 같다)
 const BOSS_HP_GROWTH := 1.22
-const BOSS_NAMES := ["드래곤"]
+static var BOSS_NAMES := [Lang.t("guild.boss_names")]
 ## 판 등급: [등급, 도달한 드래곤 레벨 이상, 코인, 골드]
 ## 판 등급(2026-10-07 B-~SSS+ 15단계, 서버 guild.ts BOSS_GRADES와 같다): [등급, 도달 레벨 이상, 코인, 골드]
 const BOSS_GRADES := [
@@ -64,20 +66,20 @@ const BOSS_GRADES := [
 ]
 
 ## 길드 상점. give 키: gold·diamonds·equip(장비 상자 — 장비 던전 최고 단계 드롭 1개)·shards(보유 영웅 무작위 조각)·ssr_shards(보유 SSR 무작위 조각). period: day | week
-const SHOP := [
-	{"id": "dia", "name": "다이아 50", "give": {"diamonds": 50}, "price": 150, "limit": 2, "period": "day"},
-	{"id": "gold", "name": "골드 30,000", "give": {"gold": 30000}, "price": 60, "limit": 3, "period": "day"},
-	{"id": "equip", "name": "장비 상자", "give": {"equip": 1}, "price": 50, "limit": 3, "period": "day"},
-	{"id": "shards", "name": "영웅 조각 상자", "give": {"shards": 3}, "price": 200, "limit": 5, "period": "week"},
-	{"id": "ssr", "name": "SSR 조각", "give": {"ssr_shards": 1}, "price": 600, "limit": 2, "period": "week"},
+static var SHOP := [
+	{"id": "dia", "name": Lang.t("guild.shop.dia.name"), "give": {"diamonds": 50}, "price": 150, "limit": 2, "period": "day"},
+	{"id": "gold", "name": Lang.t("guild.shop.gold.name"), "give": {"gold": 30000}, "price": 60, "limit": 3, "period": "day"},
+	{"id": "equip", "name": Lang.t("guild.shop.equip.name"), "give": {"equip": 1}, "price": 50, "limit": 3, "period": "day"},
+	{"id": "shards", "name": Lang.t("guild.shop.shards.name"), "give": {"shards": 3}, "price": 200, "limit": 5, "period": "week"},
+	{"id": "ssr", "name": Lang.t("guild.shop.ssr.name"), "give": {"ssr_shards": 1}, "price": 600, "limit": 2, "period": "week"},
 ]
 
-const NAME_A := ["새벽", "은빛", "붉은", "강철", "푸른", "황금", "서리", "폭풍", "달빛", "불꽃", "검은", "하얀", "용맹한", "고요한", "별빛", "천둥"]
-const NAME_B := ["방패단", "기사단", "수호대", "검술회", "원정대", "늑대단", "망루", "용병단", "결사대", "깃발단", "성채", "사냥단"]
-const NICK_A := ["졸린", "용감한", "배고픈", "빠른", "느긋한", "씩씩한", "조용한", "화난", "행복한", "수상한", "귀여운", "우직한", "새침한", "엉뚱한"]
-const NICK_B := ["감자", "고양이", "기사", "궁수", "곰", "여우", "도토리", "망치", "방패", "늑대", "토끼", "수염", "마법사", "호박"]
-const NOTICES := ["매일 출석과 기부 부탁드려요!", "보스는 하루 두 번 꼭 쳐 주세요", "즐겁게 함께 성장해요", "초보 환영, 질문은 언제든지",
-	"주말엔 왕실 기부 이벤트!", "출석 20명 달성 목표!"]
+static var NAME_A := [Lang.t("guild.name_a"), Lang.t("guild.name_a_2"), Lang.t("guild.name_a_3"), Lang.t("guild.name_a_4"), Lang.t("guild.name_a_5"), Lang.t("guild.name_a_6"), Lang.t("guild.name_a_7"), Lang.t("guild.name_a_8"), Lang.t("guild.name_a_9"), Lang.t("guild.name_a_10"), Lang.t("guild.name_a_11"), Lang.t("guild.name_a_12"), Lang.t("guild.name_a_13"), Lang.t("guild.name_a_14"), Lang.t("guild.name_a_15"), Lang.t("guild.name_a_16")]
+static var NAME_B := [Lang.t("guild.name_b"), Lang.t("guild.name_b_2"), Lang.t("guild.name_b_3"), Lang.t("guild.name_b_4"), Lang.t("guild.name_b_5"), Lang.t("guild.name_b_6"), Lang.t("guild.name_b_7"), Lang.t("guild.name_b_8"), Lang.t("guild.name_b_9"), Lang.t("guild.name_b_10"), Lang.t("guild.name_b_11"), Lang.t("guild.name_b_12")]
+static var NICK_A := [Lang.t("guild.nick_a"), Lang.t("guild.nick_a_2"), Lang.t("guild.nick_a_3"), Lang.t("guild.nick_a_4"), Lang.t("guild.nick_a_5"), Lang.t("guild.nick_a_6"), Lang.t("guild.nick_a_7"), Lang.t("guild.nick_a_8"), Lang.t("guild.nick_a_9"), Lang.t("guild.nick_a_10"), Lang.t("guild.nick_a_11"), Lang.t("guild.nick_a_12"), Lang.t("guild.nick_a_13"), Lang.t("guild.nick_a_14")]
+static var NICK_B := [Lang.t("guild.nick_b"), Lang.t("guild.nick_b_2"), Lang.t("guild.nick_b_3"), Lang.t("guild.nick_b_4"), Lang.t("guild.nick_b_5"), Lang.t("guild.nick_b_6"), Lang.t("guild.nick_b_7"), Lang.t("guild.nick_b_8"), Lang.t("guild.nick_b_9"), Lang.t("guild.nick_b_10"), Lang.t("guild.nick_b_11"), Lang.t("guild.nick_b_12"), Lang.t("guild.nick_b_13"), Lang.t("guild.nick_b_14")]
+static var NOTICES := [Lang.t("guild.notices"), Lang.t("guild.notices_2"), Lang.t("guild.notices_3"), Lang.t("guild.notices_4"),
+	Lang.t("guild.notices_5"), Lang.t("guild.notices_6")]
 const EMBLEMS := 8  # 문장 모양·색 수(guild_panel이 그린다)
 
 signal changed  # 길드 상태(가입·출석·기부·보스·상점·가상 길드원 활동)가 바뀌었다
@@ -115,16 +117,16 @@ var _boss_run := {}  # 오프라인: 진행 중인 보스 전투(start_boss → 
 var _last_op := ""  # 온라인: 마지막으로 보낸 쓰기(실패 처리)
 var _fetched := false  # 온라인: 접속 뒤 한 번 받았다(길드 버프)
 
-const WAIT_TEXT := "응답 대기 중"
+static var WAIT_TEXT := Lang.t("guild.wait_text")
 ## 서버 409 코드 → 문구
-const ERROR_TEXT := {
-	"locked": "1-10 라운드를 클리어하면 열립니다", "in_guild": "이미 길드에 가입했습니다", "full": "길드 인원이 가득 찼습니다",
-	"name_taken": "이미 있는 길드 이름입니다", "not_enough_gold": "골드가 부족합니다", "not_enough_diamonds": "다이아가 부족합니다",
-	"attended": "오늘은 이미 출석했습니다", "claimed": "이미 받은 상자입니다", "donated": "오늘 기부 횟수를 다 썼습니다",
-	"no_tries": "오늘 도전 횟수를 다 썼습니다", "no_heroes": "배치된 영웅이 없습니다", "nothing": "받을 보상이 없습니다",
-	"sold_out": "구매 한도에 도달했습니다", "not_enough_coins": "길드 코인이 부족합니다", "no_guild": "길드에 가입하세요",
-	"no_such_guild": "길드를 찾을 수 없습니다", "bad_name": "길드 이름은 2~8글자입니다",
-	"no_run": "보스 전투 기록을 찾지 못했습니다", "too_early": "보스 전투가 아직 끝나지 않았습니다", "bag_full": "장비 보관함이 가득 찼습니다",
+static var ERROR_TEXT := {
+	"locked": Lang.t("guild.error_text.locked"), "in_guild": Lang.t("guild.error_text.in_guild"), "full": Lang.t("guild.error_text.full"),
+	"name_taken": Lang.t("guild.error_text.name_taken"), "not_enough_gold": Lang.t("guild.error_text.not_enough_gold"), "not_enough_diamonds": Lang.t("guild.error_text.not_enough_diamonds"),
+	"attended": Lang.t("guild.error_text.attended"), "claimed": Lang.t("guild.error_text.claimed"), "donated": Lang.t("guild.error_text.donated"),
+	"no_tries": Lang.t("guild.error_text.no_tries"), "no_heroes": Lang.t("guild.error_text.no_heroes"), "nothing": Lang.t("guild.error_text.nothing"),
+	"sold_out": Lang.t("guild.error_text.sold_out"), "not_enough_coins": Lang.t("guild.error_text.not_enough_coins"), "no_guild": Lang.t("guild.error_text.no_guild"),
+	"no_such_guild": Lang.t("guild.error_text.no_such_guild"), "bad_name": Lang.t("guild.error_text.bad_name"),
+	"no_run": Lang.t("guild.error_text.no_run"), "too_early": Lang.t("guild.error_text.too_early"), "bag_full": Lang.t("guild.error_text.bag_full"),
 }
 
 
@@ -224,7 +226,7 @@ func _add_exp(n: int, quiet := false) -> void:
 		up = true
 	if up:
 		if not quiet:
-			notice.emit("길드 레벨 업! Lv %d · 영웅 공격력·체력 +%d%%" % [int(guild.level), roundi(buff_pct())])
+			notice.emit(Lang.t("guild.add_exp") % [int(guild.level), roundi(buff_pct())])
 		_emit_buff()
 
 
@@ -312,14 +314,14 @@ func my_power() -> int:
 
 func boss_block() -> String:
 	if not joined():
-		return "길드에 가입하세요"
+		return Lang.t("guild.boss_block")
 	if _locked:
 		return WAIT_TEXT
 	_roll_day(now_t())
 	if int(me.boss_tries) >= BOSS_TRIES:
-		return "오늘 도전 횟수를 다 썼습니다"
+		return Lang.t("guild.boss_block_2")
 	if team_dps() <= 0.0:
-		return "배치된 영웅이 없습니다"
+		return Lang.t("guild.boss_block_3")
 	return ""
 
 
@@ -370,7 +372,7 @@ func finish_boss(run_id: String, dmg: float, now := -1.0) -> void:
 	me.boss_total = float(me.boss_total) + dmg
 	me.contrib = int(me.contrib) + 10
 	_grant({"coins": int(g[2]), "gold": int(g[3])})
-	_log("%s님이 %s Lv %d 도달 · %s점" % [MY_NAME, boss_name(lv), lv, _commas(int(dmg))], now)
+	_log(Lang.t("guild.finish_boss") % [MY_NAME, boss_name(lv), lv, _commas(int(dmg))], now)
 	save()
 	changed.emit()
 	boss_done.emit({"dmg": dmg, "grade": g[0], "coins": int(g[2]), "gold": int(g[3]), "level": lv, "killed": lv - 1, "total": float(me.boss_total)})
@@ -411,11 +413,11 @@ func reset_in(now := -1.0) -> float:
 
 func attend_block() -> String:
 	if not joined():
-		return "길드에 가입하세요"
+		return Lang.t("guild.attend_block")
 	if _locked:
 		return WAIT_TEXT
 	_roll_day(now_t())
-	return "오늘은 이미 출석했습니다" if me.attended else ""
+	return Lang.t("guild.attend_block_2") if me.attended else ""
 
 
 func attend(now := -1.0) -> bool:
@@ -429,13 +431,13 @@ func attend(now := -1.0) -> bool:
 			me.contrib = int(me.contrib) + ATTEND_EXP
 			_grant(ATTEND_REWARD)
 			_add_exp(ATTEND_EXP, true)
-			notice.emit("출석 완료! 골드 +%s · 길드 코인 +%d" % [_commas(ATTEND_REWARD.gold), ATTEND_REWARD.coins])
+			notice.emit(Lang.t("guild.attend") % [_commas(ATTEND_REWARD.gold), ATTEND_REWARD.coins])
 		return _post_instant("attend", {}, apply, func(_d): acted.emit("guild_attend"))
 	me.attended = true
 	me.contrib = int(me.contrib) + ATTEND_EXP
 	_grant(ATTEND_REWARD)
 	_add_exp(ATTEND_EXP)
-	_log("%s님이 출석했습니다" % MY_NAME, now)
+	_log(Lang.t("guild.attend_2") % MY_NAME, now)
 	save()
 	changed.emit()
 	acted.emit("guild_attend")
@@ -489,18 +491,18 @@ func donations_left(kind: String) -> int:
 
 func donate_block(kind: String) -> String:
 	if not joined():
-		return "길드에 가입하세요"
+		return Lang.t("guild.donate_block")
 	if not DONATIONS.has(kind):
-		return "알 수 없는 기부"
+		return Lang.t("guild.donate_block_2")
 	if _locked:
 		return WAIT_TEXT
 	if donations_left(kind) <= 0:
-		return "오늘 기부 횟수를 다 썼습니다"
+		return Lang.t("guild.donate_block_3")
 	var d: Dictionary = DONATIONS[kind]
 	if econ != null and int(econ.gold) < int(d.gold):
-		return "골드가 부족합니다"
+		return Lang.t("guild.donate_block_4")
 	if econ != null and int(econ.diamonds) < int(d.diamonds):
-		return "다이아가 부족합니다"
+		return Lang.t("guild.donate_block_5")
 	return ""
 
 
@@ -524,7 +526,7 @@ func donate(kind: String, now := -1.0) -> bool:
 	me.contrib = int(me.contrib) + int(d.exp)
 	_grant({"coins": int(d.coins)})
 	_add_exp(int(d.exp))
-	_log("%s님이 %s를 했습니다" % [MY_NAME, d.name], now)
+	_log(Lang.t("guild.donate") % [MY_NAME, d.name], now)
 	save()
 	changed.emit()
 	return true
@@ -551,17 +553,17 @@ func shop_left(id: String) -> int:
 func buy_block(id: String) -> String:
 	var it := shop_item(id)
 	if it.is_empty():
-		return "알 수 없는 상품"
+		return Lang.t("guild.buy_block")
 	if _locked:
 		return WAIT_TEXT
 	if shop_left(id) <= 0:
-		return "구매 한도에 도달했습니다"
+		return Lang.t("guild.buy_block_2")
 	if coins < int(it.price):
-		return "길드 코인이 부족합니다"
+		return Lang.t("guild.buy_block_3")
 	if (it.give.has("shards") and _owned("").is_empty()) or (it.give.has("ssr_shards") and _owned("SSR").is_empty()):
-		return "조각을 받을 영웅이 없습니다"
+		return Lang.t("guild.buy_block_4")
 	if it.give.has("equip") and econ != null and econ.bag.size() + int(it.give.equip) > int(GameData.config_num("equip_bag_cap")):
-		return "장비 보관함이 가득 찼습니다"
+		return Lang.t("guild.buy_block_5")
 	return ""
 
 
@@ -578,10 +580,10 @@ func buy(id: String) -> String:
 		_post_instant("buy", {"id": id}, pay, func(d):
 			var parts := []
 			for hid in d.get("result", {}).get("shards", {}):
-				parts.append("%s 조각 +%d" % [GameData.hero(hid).get("name", hid), int(d.result.shards[hid])])
+				parts.append(Lang.t("guild.buy") % [GameData.hero(hid).get("name", hid), int(d.result.shards[hid])])
 			for x in d.get("result", {}).get("items", []):
 				parts.append(item_text(x))
-			notice.emit(" · ".join(parts) if not parts.is_empty() else "%s 구매 완료" % it.name))
+			notice.emit(" · ".join(parts) if not parts.is_empty() else Lang.t("guild.buy_2") % it.name))
 		return ""
 	coins -= int(it.price)
 	var bought: Dictionary = (shop_day if it.period == "day" else shop_week).bought
@@ -613,19 +615,19 @@ func _grant(give: Dictionary) -> String:
 		match k:
 			"coins":
 				coins += n
-				parts.append("길드 코인 +%d" % n)
+				parts.append(Lang.t("guild.grant") % n)
 			"gold":
 				if econ != null:
 					econ.add_gold_tenths(n * 10)
-				parts.append("골드 +%s" % _commas(n))
+				parts.append(Lang.t("guild.grant_2") % _commas(n))
 			"diamonds":
 				if econ != null:
 					econ.diamonds += n
-				parts.append("다이아 +%d" % n)
+				parts.append(Lang.t("guild.grant_3") % n)
 			"food":
 				if econ != null:
 					econ.res["food"] = int(econ.res.get("food", 0)) + n
-				parts.append("식량 +%d" % n)
+				parts.append(Lang.t("guild.grant_4") % n)
 			"equip":  # 장비 상자: 장비 던전 최고 단계(없으면 1)의 드롭(서버 grant와 같다)
 				if econ != null:
 					var lv := maxi(1, int(econ.dungeons.get("equip", {}).get("best_level", 0)))
@@ -643,7 +645,7 @@ func _grant(give: Dictionary) -> String:
 						break
 					var id: String = pool[rng.randi_range(0, pool.size() - 1)]
 					econ.hero_shards[id] = int(econ.hero_shards.get(id, 0)) + 1
-					parts.append("%s 조각 +1" % GameData.hero(id).get("name", id))
+					parts.append(Lang.t("guild.grant_5") % GameData.hero(id).get("name", id))
 	if econ != null and give.keys().any(func(k): return k != "coins"):
 		econ.changed.emit()
 		if give.has("shards") or give.has("ssr_shards"):
@@ -654,8 +656,8 @@ func _grant(give: Dictionary) -> String:
 
 ## 장비 한 줄 설명: "SR 무기 Lv 3"
 static func item_text(it: Dictionary) -> String:
-	var slot_names := {"weapon": "무기", "hat": "모자", "top": "상의", "bottom": "하의", "shoes": "신발", "pauldron": "견장", "gloves": "장갑"}
-	return "%s %s 획득" % [str(it.get("grade", "")), slot_names.get(str(it.get("slot", "")), "장비")]
+	var slot_names := {"weapon": Lang.t("guild.item_text.weapon"), "hat": Lang.t("guild.item_text.hat"), "top": Lang.t("guild.item_text.top"), "bottom": Lang.t("guild.item_text.bottom"), "shoes": Lang.t("guild.item_text.shoes"), "pauldron": Lang.t("guild.item_text.pauldron"), "gloves": Lang.t("guild.item_text.gloves")}
+	return Lang.t("guild.item_text") % [str(it.get("grade", "")), slot_names.get(str(it.get("slot", "")), Lang.t("guild.item_text_2"))]
 
 
 func _pay(gold_n: int, dia_n: int) -> void:
@@ -700,9 +702,9 @@ func join_block() -> String:
 	if _locked:
 		return WAIT_TEXT
 	if not is_unlocked():
-		return "1-10 라운드를 클리어하면 열립니다"
+		return Lang.t("guild.join_block")
 	if joined():
-		return "이미 길드에 가입했습니다"
+		return Lang.t("guild.join_block_2")
 	return ""
 
 
@@ -724,7 +726,7 @@ func join(rec: Dictionary, now := -1.0) -> bool:
 		members[1].role = ROLES[1]
 	_set_guild(rec.name, int(rec.emblem), int(rec.level), r.randi_range(0, exp_need(int(rec.level)) / 2), int(rec.seed), false, str(rec.notice), members, now)
 	guild.sim_t = GameData.reset_at(GameData.reset_day(now))  # 오늘 이미 한 길드원 활동은 보이게
-	_log("%s님이 길드에 가입했습니다" % MY_NAME, now)
+	_log(Lang.t("guild.join") % MY_NAME, now)
 	tick(now, true)
 	save()
 	changed.emit()
@@ -738,9 +740,9 @@ func create_block(name_text: String) -> String:
 		return b
 	var n := name_text.strip_edges()
 	if n.length() < 2 or n.length() > 8:
-		return "길드 이름은 2~8글자입니다"
+		return Lang.t("guild.create_block")
 	if econ != null and int(econ.gold) < CREATE_GOLD:
-		return "골드가 부족합니다"
+		return Lang.t("guild.create_block_2")
 	return ""
 
 
@@ -762,9 +764,9 @@ func create(name_text: String, emblem: int, now := -1.0) -> bool:
 	for i in MEMBERS_MAX - 1:
 		t += r.randf_range(0.5, 3.0) * 3600.0 if i > 0 else 600.0
 		members.append(_member(r, i, 1, t))
-	_set_guild(name_text.strip_edges(), clampi(emblem, 0, EMBLEMS - 1), 1, 0, r.randi(), true, "함께 성장할 길드원을 모집합니다!", members, now)
+	_set_guild(name_text.strip_edges(), clampi(emblem, 0, EMBLEMS - 1), 1, 0, r.randi(), true, Lang.t("guild.create"), members, now)
 	guild.sim_t = now
-	_log("%s님이 길드를 창설했습니다" % MY_NAME, now)
+	_log(Lang.t("guild.create_2") % MY_NAME, now)
 	save()
 	changed.emit()
 	_emit_buff()
@@ -857,9 +859,9 @@ func tick(now: float, quiet := false) -> void:
 			m.contrib = int(m.contrib) + exp_n + 10 * int(e.hits)
 			m.dmg = float(m.dmg) + float(e.dmg)
 			if e.kind != "":
-				_log("%s님이 %s를 했습니다" % [m.name, DONATIONS[e.kind].name], e.t)
+				_log(Lang.t("guild.tick") % [m.name, DONATIONS[e.kind].name], e.t)
 			else:
-				_log("%s님이 출석했습니다" % m.name, e.t)
+				_log(Lang.t("guild.tick_2") % m.name, e.t)
 	guild.sim_t = now
 	if not events.is_empty():
 		save()
@@ -895,7 +897,7 @@ func fetch() -> void:
 
 func _post(op: String, body := {}, done := Callable()) -> void:
 	if not econ.net.up:
-		notice.emit("연결 대기 중")
+		notice.emit(Lang.t("guild.post"))
 		return
 	_locked = true
 	_last_op = op
@@ -915,7 +917,7 @@ func _on_post(d: Dictionary, done: Callable) -> void:
 ## 골드 차이는 Economy가 응답 전까지 들고 있다(_hold_gold). 응답이 오면 서버 값으로 맞추고, 거절되면 마지막 서버 값으로 되돌린다.
 func _post_instant(op: String, body: Dictionary, local: Callable, done := Callable()) -> bool:
 	if not econ.net.up:
-		notice.emit("연결 대기 중")
+		notice.emit(Lang.t("guild.post_instant"))
 		return false
 	if _pending == 0:
 		_latest = remote.duplicate(true)  # me·guild는 remote 안 사전과 같은 것이라 local이 고치기 전에 떠 둔다(거절되면 이 값으로)
@@ -946,7 +948,7 @@ func _on_instant_failed(dg: int) -> void:
 	econ._hold = maxi(0, econ._hold - 1)
 	econ._hold_gold -= dg
 	_pending = maxi(0, _pending - 1)
-	notice.emit(ERROR_TEXT.get(econ.net.last_error, "길드 요청을 처리하지 못했습니다"))
+	notice.emit(ERROR_TEXT.get(econ.net.last_error, Lang.t("guild.on_instant_failed")))
 	if econ._hold == 0 and not econ._last_server.is_empty():
 		econ.apply_server(econ._last_server)  # 되돌린다(마지막 서버 상태)
 	else:
@@ -961,7 +963,7 @@ func _on_instant_failed(dg: int) -> void:
 ## 거부(409 코드 → 문구)·응답 유실: 알림 + 길드 값을 새로 받는다.
 func _on_post_failed() -> void:
 	_locked = false
-	notice.emit(ERROR_TEXT.get(econ.net.last_error, "길드 요청을 처리하지 못했습니다"))
+	notice.emit(ERROR_TEXT.get(econ.net.last_error, Lang.t("guild.on_post_failed")))
 	if _last_op == "boss/finish":
 		boss_done.emit({"error": econ.net.last_error})
 	elif _last_op == "boss/start":

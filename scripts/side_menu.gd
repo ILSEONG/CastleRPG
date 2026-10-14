@@ -8,6 +8,8 @@ extends CanvasLayer
 ## [공지]·[우편](2026-10-12, 온라인 운영 도구 LiveOps): 공지사항 창·우편함 창. 안 본 공지·받을 우편이 있으면 빨간 점.
 ## main.gd가 만들고 windows = {settings, notice, mail, bag(방치 주머니), mission, ranking, friend, event, guild}(ui_window 창)를 넣는다. 친구 창은 던전 시트가 만든 것(friend_panel.gd)을 그대로 연다.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
@@ -15,8 +17,8 @@ const PouchPanel := preload("res://scripts/pouch_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const ITEMS := [["settings", "설정"], ["notice", "공지"], ["mail", "우편"], ["bag", "가방"], ["mission", "미션"], ["ranking", "랭킹"], ["friend", "친구"], ["event", "이벤트"], ["exchange", "거래소"],
-	["guild", "길드"]]
+static var ITEMS := [["settings", Lang.t("side_menu.items")], ["notice", Lang.t("side_menu.items_2")], ["mail", Lang.t("side_menu.items_3")], ["bag", Lang.t("side_menu.items_4")], ["mission", Lang.t("side_menu.items_5")], ["ranking", Lang.t("side_menu.items_6")], ["friend", Lang.t("side_menu.items_7")], ["event", Lang.t("side_menu.items_8")], ["exchange", Lang.t("side_menu.items_9")],
+	["guild", Lang.t("side_menu.items_10")]]
 const LOCKABLE := ["exchange", "guild"]  # 가이드 잠금(Tutorial.tab_locked)이 있는 항목
 const SIZE := Vector2(84, 84)
 const SIDE := 16.0
@@ -60,7 +62,7 @@ func _ready() -> void:
 		b.pressed.connect(func(): pick(it[0]))
 		buttons[it[0]] = b
 		_col.add_child(b)
-	toggle = _make_button("toggle", "메뉴")
+	toggle = _make_button("toggle", Lang.t("side_menu.ready"))
 	toggle.pressed.connect(func(): set_open(not is_open))
 	_col.add_child(toggle)
 	Tutorial.register_ui("menu", toggle, func(): return not is_open)  # 가이드 화살표: 접혀 있으면 [메뉴], 펼치면 그 항목
@@ -221,7 +223,7 @@ func _draw_face(c: Control, id: String, text: String) -> void:
 			draw_envelope(c, ctr, 44.0)
 		_:
 			draw_chevron(c, ctr, 30.0, is_open)
-			text = "닫기" if is_open else "메뉴"
+			text = Lang.t("side_menu.draw_face") if is_open else Lang.t("side_menu.draw_face_2")
 	if _dots.has(id):
 		var dp := Vector2(SIZE.x - 12, 12)
 		c.draw_circle(dp, 9.0, Color(0.88, 0.22, 0.2))

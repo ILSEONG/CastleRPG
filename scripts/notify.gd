@@ -7,6 +7,8 @@ extends Node
 ## 공성전(길드장이 정한 공성 시각 10분 전). 켬/끔은 Prefs(설정 창 [알림]): notify(전체) · notify_timer · notify_idle · notify_daily · notify_war, 기본 켬.
 ## 야간(한국 시각 22시~8시)에 울릴 알림은 8시로 미룬다 — notify_night(야간 알림 받기, 기본 끔)를 켜면 그대로. 공성전은 길드장이 정한 시각이라 야간에도 그대로.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const Prefs := preload("res://scripts/prefs.gd")
 const GameData := preload("res://scripts/game_data.gd")
 
@@ -116,32 +118,32 @@ static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 	if opts.get("notify_timer", true):
 		var b: Dictionary = state.get("build", {})
 		if not b.is_empty():
-			var name := str(GameData.building_def(str(b.id)).get("name", "건물"))
-			out.append(_n(ID_BUILD, float(b.finish), "건설 완료", "%s 공사가 끝났습니다. 다음 공사를 시작해 보세요!" % name))
+			var name := str(GameData.building_def(str(b.id)).get("name", Lang.t("notify.plan")))
+			out.append(_n(ID_BUILD, float(b.finish), Lang.t("notify.plan_2"), Lang.t("notify.plan_3") % name))
 		var b2: Dictionary = state.get("build2", {})
 		if not b2.is_empty():
-			var name2 := str(GameData.building_def(str(b2.id)).get("name", "건물"))
-			out.append(_n(ID_BUILD2, float(b2.finish), "건설 완료", "%s 공사가 끝났습니다. 다음 공사를 시작해 보세요!" % name2))
+			var name2 := str(GameData.building_def(str(b2.id)).get("name", Lang.t("notify.plan")))
+			out.append(_n(ID_BUILD2, float(b2.finish), Lang.t("notify.plan_2"), Lang.t("notify.plan_3") % name2))
 		var r: Dictionary = state.get("research", {})
 		if not r.is_empty():
 			var rname := str(GameData.research_def(str(r.id)).get("name", ""))
-			out.append(_n(ID_RESEARCH, float(r.finish), "연구 완료", ("%s 연구가 끝났습니다." % rname) if rname != "" else "연구가 끝났습니다."))
+			out.append(_n(ID_RESEARCH, float(r.finish), Lang.t("notify.plan_4"), (Lang.t("notify.plan_5") % rname) if rname != "" else Lang.t("notify.plan_6")))
 		var t: Dictionary = state.get("train", {})
 		var ids := t.keys()
 		ids.sort()
 		for i in ids.size():
 			var q: Dictionary = t[ids[i]]
-			var sname := str(GameData.soldier(GameData.soldier_of_building(str(ids[i]))).get("name", "병사"))
-			out.append(_n(ID_TRAIN + i, float(q.finish), "훈련 완료", "%s %d마리 훈련이 끝났습니다. 병사를 데려가세요!" % [sname, int(q.get("count", 0))]))
+			var sname := str(GameData.soldier(GameData.soldier_of_building(str(ids[i]))).get("name", Lang.t("notify.plan_7")))
+			out.append(_n(ID_TRAIN + i, float(q.finish), Lang.t("notify.plan_8"), Lang.t("notify.plan_9") % [sname, int(q.get("count", 0))]))
 	if opts.get("notify_idle", true) and float(state.get("cap_min", 0.0)) > 0.0:
 		var hours := roundi(float(state.cap_min) / 60.0)
-		out.append(_n(ID_IDLE, now + float(state.cap_min) * 60.0, "방치 보상 가득",
-			"%d시간 동안 쌓인 방치 골드와 자원이 가득 찼습니다. 더 쌓이지 않으니 받으러 오세요!" % hours))
+		out.append(_n(ID_IDLE, now + float(state.cap_min) * 60.0, Lang.t("notify.plan_10"),
+			Lang.t("notify.plan_11") % hours))
 	if opts.get("notify_daily", true):
 		var noon := kst_day_start(now) + DAILY_HOUR * 3600.0
 		if not (state.get("attend_open", false) and noon > now + 1800.0):
 			noon = kst_day_start(GameData.next_reset(now)) + DAILY_HOUR * 3600.0
-		out.append(_n(ID_DAILY, noon, "오늘의 출석 보상", "출석 보상과 새 일일 미션이 기다리고 있습니다."))
+		out.append(_n(ID_DAILY, noon, Lang.t("notify.plan_12"), Lang.t("notify.plan_13")))
 	var keep := []
 	for n in out:
 		if float(n.at) < now + MIN_DELAY:
@@ -152,7 +154,7 @@ static func plan(state: Dictionary, now: float, opts: Dictionary) -> Array:
 	var war_at := float(state.get("war_at", -1.0))
 	# 공성전: 길드장이 정한 시각의 WAR_LEAD_SEC 전(사용자 10-12). 길드장이 고른 시각이라 야간에도 미루지 않는다.
 	if opts.get("notify_war", true) and war_at - WAR_LEAD_SEC >= now + MIN_DELAY:
-		keep.append(_n(ID_WAR, war_at - WAR_LEAD_SEC, "공성전 10분 전", "10분 뒤 길드 공성전이 시작됩니다. 길드원과 함께 성을 공격할 준비를 하세요!"))
+		keep.append(_n(ID_WAR, war_at - WAR_LEAD_SEC, Lang.t("notify.plan_14"), Lang.t("notify.plan_15")))
 	return keep
 
 
