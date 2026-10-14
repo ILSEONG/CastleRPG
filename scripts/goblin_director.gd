@@ -69,7 +69,7 @@ func _on_died(g) -> void:
 func _on_escaped() -> void:
 	goblin = null
 	next_at = _now() + randf_range(INTERVAL.x, INTERVAL.y)
-	Economy.notice.emit("황금 고블린이 도망쳤습니다")
+	Economy.notice.emit(Lang.t("goblin_director.on_escaped"))
 
 
 func _on_claimed(got: Dictionary) -> void:

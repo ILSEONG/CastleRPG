@@ -2346,3 +2346,4 @@ war_rules.side_names_3,남문,,,,scripts/war_rules.gd
 war_rules.side_names_4,서문,,,,scripts/war_rules.gd
 world_tags.sync,상인,,,,scripts/world_tags.gd
 world_tags.sync_2,공터,,,,scripts/world_tags.gd
+goblin_director.on_escaped,황금 고블린이 도망쳤습니다,,,,scripts/goblin_director.gd
