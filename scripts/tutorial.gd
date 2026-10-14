@@ -338,6 +338,9 @@ func _sync_server() -> void:
 	if int(q.rep_n) != rep_n:
 		rep_n = int(q.rep_n)
 		rep_quest = {}
+	var sr := _server_rep()
+	if rep_quest.get("kind", "") == "stage" and int(sr.get("from", 0)) > 0 and int(rep_quest.get("arg", 0)) != int(sr.from) + 1:
+		rep_quest = {}  # 저장해 둔 목표 라운드가 서버 기준과 다르다(동기화 전에 만들었거나 다시 깔았다 — 2026-10-14 「1-2 클리어」)
 	_server_known = true
 	if [state, step, rep_n] != before:
 		if was_known:
@@ -489,6 +492,9 @@ func _make_repeat(n: int) -> Dictionary:
 	var q := {"kind": d.kind, "goto": d.goto, "desc": REPEAT_DESC.get(d.kind, ""), "cycle": c, "base_value": 0}
 	if d.kind == "stage":
 		var reached := maxi(best_stage, int(gs.stage) if gs != null else 1)  # 다음에 할 라운드
+		var sr := _server_rep()
+		if not sr.is_empty():  # 온라인: 서버가 지난 반복 퀘스트를 받을 때 저장한 라운드(없으면 이미 끝 — 방금 깬 라운드로 보인다)
+			reached = int(sr.from) if int(sr.from) > 0 else maxi(1, reached - 2)
 		q.arg = reached + 1  # 두 라운드 더
 		q.title = d.title % GameData.round_label(q.arg)
 	else:
@@ -500,6 +506,30 @@ func _make_repeat(n: int) -> Dictionary:
 		q.base_value = _hero_level_sum(true)
 		q.ups = true
 	return q
+
+
+## 온라인 서버가 센 지금 반복 퀘스트 진행 {have, need, from}(Economy.server_quest.rep — 번호가 같을 때만), 없으면 {}.
+## 온라인 카드는 이 값으로 진행·완료를 보인다(서버가 같은 값으로 보상을 판정한다 — 2026-10-14 앱이 따로 세던 기준이
+## 어긋나 「1-2 클리어」가 ✓인데 받아지지 않았다).
+func _server_rep() -> Dictionary:
+	if not online or econ == null:
+		return {}
+	var q: Dictionary = econ.server_quest
+	var r = q.get("rep", {})
+	if not r is Dictionary or r.is_empty() or int(q.get("rep_n", -1)) != rep_n:
+		return {}
+	return r
+
+
+## 서버 반복 퀘스트 진행 + 아직 서버에 보내지 않은(응답 전) 처치(처치는 10초마다 몰아 보낸다).
+func _rep_have(m: Dictionary, sr: Dictionary) -> int:
+	var n := int(sr.have)
+	if m.get("kind", "") == "kill":
+		for part in [econ.kills_pending, econ.kills_sent]:
+			for st in part:
+				for k in part[st]:
+					n += int(part[st][k])
+	return n
 
 
 func _growth_sum() -> int:
@@ -896,6 +926,9 @@ func progress_text() -> String:
 	var m := mission()
 	if m.is_empty():
 		return ""
+	var sr: Dictionary = _server_rep() if not active() else {}
+	if not sr.is_empty():  # 온라인 반복 퀘스트: 서버가 센 진행(라운드·한 번짜리는 숫자 없이)
+		return "" if m.kind == "stage" or int(sr.need) <= 1 else "%d/%d" % [mini(_rep_have(m, sr), int(sr.need)), int(sr.need)]
 	if m.kind in ["growth_up", "hero_up"]:
 		return "%d/%d" % [mini(_delta(m), int(m.arg)), int(m.arg)]
 	if m.kind == "hero_lv":
@@ -965,6 +998,9 @@ func goto_of(m: Dictionary) -> String:
 func _done(m: Dictionary) -> bool:
 	if econ == null:
 		return false
+	var sr: Dictionary = _server_rep() if not active() else {}
+	if not sr.is_empty():  # 온라인 반복 퀘스트: 서버 판정과 같은 값
+		return _rep_have(m, sr) >= int(sr.need)
 	match m.kind:
 		"open", "sell", "pvp", "mission_claim":
 			return count >= 1

@@ -176,7 +176,7 @@ var gold: int:  # 정수 골드(표시·판매·모집 비용 판정용). 쓰면
 var res: Dictionary = {}           # 자원 id → int
 var last_collect: Dictionary = {}  # 자원 건물 id → 마지막 수집. 유닉스 초(float)
 var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 모든 건물)
-var server_quest: Dictionary = {}  # 온라인: 서버 퀘스트 진행 {tut_state, tut_step, rep_n}(apply_server가 채운다, 오프라인은 비어 있다)
+var server_quest: Dictionary = {}  # 온라인: 서버 퀘스트 진행 {tut_state, tut_step, rep_n, rep: {have, need, from} 또는 {}}(apply_server가 채운다, 오프라인은 비어 있다)
 var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않은 건물 id → true. 레벨은 1로 두고 "공터"로 보인다 — 짓기(0 → 1)는 일꾼이
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
 var layout: Dictionary = {}       # 자유 건설(사용자 2026-10-13): 건물 id → 부지 칸 Vector2i(플레이어가 고른 자리). 없으면 기본 자리(Balance.BUILDINGS).
@@ -3369,7 +3369,7 @@ func apply_server(data: Dictionary) -> bool:
 	var quest_before := server_quest.duplicate()
 	var sq = p.get("quest")
 	if sq is Dictionary and sq.get("tut_state") in ["active", "done", "skipped"] and _num(sq.get("tut_step")) and _num(sq.get("rep_n")):
-		server_quest = {"tut_state": str(sq.tut_state), "tut_step": maxi(0, int(sq.tut_step)), "rep_n": maxi(0, int(sq.rep_n))}
+		server_quest = {"tut_state": str(sq.tut_state), "tut_step": maxi(0, int(sq.tut_step)), "rep_n": maxi(0, int(sq.rep_n)), "rep": _quest_rep(sq.get("rep"))}
 	var research_before := [research_levels.duplicate(), research_current.duplicate()]
 	if p.get("research") is Dictionary:  # {levels: {id: L}, current: {id, finish} 또는 null}
 		var rs := _research_state(p.research)
@@ -3477,6 +3477,13 @@ func apply_server(data: Dictionary) -> bool:
 	if server_quest != quest_before:
 		quest_synced.emit()
 	return true
+
+
+## 서버 반복 퀘스트 진행 {have, need, from}(from = 라운드 퀘스트를 셀 기준 라운드, 없으면 0). 가이드 중이거나 이상하면 {}.
+func _quest_rep(r) -> Dictionary:
+	if not r is Dictionary or not _num(r.get("have")) or not _num(r.get("need")):
+		return {}
+	return {"have": maxi(0, int(r.have)), "need": maxi(0, int(r.need)), "from": maxi(0, int(r.from)) if _num(r.get("from")) else 0}
 
 
 ## 온라인 퀘스트 보상 받기: POST /v1/quest/claim {type: tutorial, step} | {type: repeat, n}(once — 재전송하지 않는다. 서버가 같은 번호를

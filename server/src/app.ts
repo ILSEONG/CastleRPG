@@ -667,7 +667,7 @@ export function createApp(opts: AppOptions) {
         diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
-        quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n }, // 튜토리얼·반복 퀘스트 진행
+        quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n, rep: repeatView(p, game, now) }, // 튜토리얼·반복 퀘스트 진행
         layout: p.layout, // 자유 건설: 건물 → [x, y](고른 것만)
         dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => keysOf(game).includes(b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
@@ -1929,6 +1929,12 @@ export function createApp(opts: AppOptions) {
   // --- 미션(missions.ts): 일일·주간·반복 ---
 
   // 미션 진행(오늘 기준으로 맞춘 것) + 다음 일일·주간 리셋 시각.
+  // 지금 반복 퀘스트의 서버 진행 {have, need, from}(가이드 중이거나 반복 행이 없으면 null) — 앱 카드가 이 값으로 진행·완료를 보인다
+  function repeatView(p: Player, g: Game, now: number) {
+    const rq = p.quest.tut_state === 'active' ? null : R.repeatQuest(g.quests, p.quest.rep_n)
+    return rq ? Q.repeatProgress(rq.def.id, rq.cycle, p.stage, M.normalize(p.missions, today(g, now)).c) : null
+  }
+
   function missionView(p: Player, g: Game, now: number) {
     const h = R.cfgNum(g.config, 'daily_reset_utc_hour')
     const m = M.normalize(p.missions, today(g, now))
