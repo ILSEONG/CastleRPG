@@ -381,6 +381,18 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       await query('update guild_wars set battle_at = to_timestamp($3::float8), battle_by = $4 where guild_id = $1 and week = $2', [g.id, week, x.now - 1, 'test'])
       return c.json({ server_now: x.now, war: await warView(x) })
     })
+
+    // 통합 체크용(2026-10-14): 이번 주 전쟁(성 상태·점수)·전투를 지난 주로 옮긴다 — 앱 체크가 [보상 받기]를 바로 시험한다(이번 주는 새 상대로 다시 열린다).
+    app.post('/v1/test/war_last_week', auth, async (c) => {
+      const x = await ctx(c)
+      const { g } = needGuild(x)
+      const week = W.weekOf(R.resetDay(x.now, x.hour))
+      await warRow(x, week)
+      await query('delete from guild_wars where guild_id = $1 and week = $2', [g.id, week - 1])
+      await query('update guild_wars set week = week - 1 where guild_id = $1 and week = $2', [g.id, week])
+      await query('update guild_war_battles set week = week - 1 where guild_id = $1 and week = $2', [g.id, week])
+      return c.json({ server_now: x.now, war: await warView(x) })
+    })
   }
 
   // 실시간 방 연결: 토큰 확인·로스터 확인·성 상태 저장.

@@ -71,12 +71,12 @@ static func battle_at(week: int, saved: float) -> float:
 	return saved if saved >= 0.0 else GameData.reset_at(week_start(week) + WarRules.DEFAULT_DAY) + WarRules.DEFAULT_HOUR * 3600.0
 
 
-## 고른 (주 안 날 0~6, 시 0~23) → 시각(전투가 다음 주 리셋 전에 끝나야 한다). 못 쓰면 -1.
+## 고른 (주 안 날 0~6, 시 0~23) → 시각(배치·전투가 다음 주 리셋 전에 끝나야 한다). 못 쓰면 -1.
 static func pick_at(week: int, day: int, hour: int) -> float:
 	if day < 0 or day > 6 or hour < 0 or hour > 23:
 		return -1.0
 	var at := GameData.reset_at(week_start(week) + day) + hour * 3600.0
-	return at if at + WarRules.BATTLE_SEC <= GameData.reset_at(week_start(week + 1)) else -1.0
+	return at if at + WarRules.DEPLOY_SEC + WarRules.BATTLE_SEC <= GameData.reset_at(week_start(week + 1)) else -1.0  # 배치 + 전투(서버 pickAt과 같다)
 
 
 static func day_in_week(day: int) -> int:
@@ -318,7 +318,9 @@ func claim() -> void:
 			return
 		var cl: Dictionary = war.claim
 		war.erase("claim")  # 곧바로 보상 카드를 치우고 알린다(거절되면 _post가 알리고 다시 받는다)
-		_post("claim", {}, func(_d): pass)
+		_post("claim", {}, func(_d):
+			if guild_node != null:
+				guild_node.fetch())  # 길드 코인은 길드 값에 있다(응답엔 플레이어·길드전만 — 받지 않으면 창이 다시 받을 때까지 코인이 그대로였다)
 		_notice(_claim_text(cl))
 		return
 	var cl = war.get("claim")
