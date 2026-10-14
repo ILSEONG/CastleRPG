@@ -984,8 +984,14 @@ func _done(m: Dictionary) -> bool:
 			return count >= 1 or (fever != null and fever.active())
 		"guild_attend":  # 오늘 길드 출석과 기부를 했다
 			return guild != null and guild.joined() and guild.me.get("attended", false) == true and not Dictionary(guild.me.get("donations", {})).is_empty()
-		"guild_boss":  # 길드 보스에 도전했다(오늘 도전 횟수를 썼다)
-			return count >= 1 or (guild != null and int(guild.me.get("boss_tries", 0)) > 0)
+		"guild_boss":  # 길드 보스 도전을 끝냈다. 온라인은 서버가 센 끝낸 판(미션 사건 guild_boss — 시작만 하고 나가면 서버는 세지 않는다,
+			# 통합 테스트 2026-10-14: 도전 횟수만 보고 ✓를 띄워 [보상 받기]가 not_done으로 되돌려졌다), 오프라인은 오늘 쓴 도전 횟수
+			if count >= 1:
+				return true
+			if online:
+				var c = econ.server_missions.get("c", {})
+				return c is Dictionary and (int(Dictionary(c.get("d", {})).get("guild_boss", 0)) > 0 or int(Dictionary(c.get("w", {})).get("guild_boss", 0)) > 0)
+			return guild != null and int(guild.me.get("boss_tries", 0)) > 0
 		"siege_try":  # 공성전 체험을 끝냈다
 			return count >= 1
 		"promote":  # 승급했다(이미 승급한 영웅이 있어도 통과)

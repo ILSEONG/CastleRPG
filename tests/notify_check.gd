@@ -87,7 +87,7 @@ func _plan_checks() -> void:
 	_check(str(p.get(NotifyScript.ID_RESEARCH, {}).get("body", "")).contains("벌목술"), "research names the node")
 	_check(p.has(NotifyScript.ID_TRAIN) and p.has(NotifyScript.ID_TRAIN + 1), "one per training queue")
 	var bodies := str(p.get(NotifyScript.ID_TRAIN, {}).get("body", "")) + str(p.get(NotifyScript.ID_TRAIN + 1, {}).get("body", ""))
-	_check(bodies.contains("보병 30명") and bodies.contains("궁병 5명"), "training says soldier + count: " + bodies)
+	_check(bodies.contains("보병 30마리") and bodies.contains("궁병 5마리"), "training says soldier + count: " + bodies)
 	_check(is_equal_approx(p.get(NotifyScript.ID_IDLE, {}).get("at", 0.0), kst(8.0, 1)), "idle full at 22:00 → next 08:00 (night)")
 	_check(is_equal_approx(p.get(NotifyScript.ID_DAILY, {}).get("at", 0.0), kst(12.0)), "attendance open → today 12:00")
 	_check(is_equal_approx(p.get(NotifyScript.ID_WAR, {}).get("at", 0.0), kst(21.0) - 600.0), "war 10 min before schedule")

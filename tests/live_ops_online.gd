@@ -240,6 +240,7 @@ func _ready() -> void:
 	await _snap("11c_admin_delete_request")
 	admin.buttons["inq_delete:%d" % did].pressed.emit()
 	_check(admin._inq_row(did).get("status") == "open", "first press only asks again", "")
+	await get_tree().create_timer(0.5).timeout  # 확인 두 번 누르기는 0.4초 간격이 필요하다(버튼 전수조사 2026-10-14)
 	admin.buttons["inq_delete:%d" % did].pressed.emit()
 	_check(admin._inq_row(did).get("status") == "closed", "second press shows it deleted at once", str(admin._inq_row(did)))
 	_check(await _wait_until(func(): return str(admin._inq_row(did).get("answer", "")).contains("계정 삭제 완료") and str(admin._inq_row(did).get("code", "x")) == "" , 10.0),

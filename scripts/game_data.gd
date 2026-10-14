@@ -385,6 +385,16 @@ static func guild_helps(level: int) -> int:
 	return 0 if level <= 0 else floori(config_num("guild_hall_helps_base") + config_num("guild_hall_helps_per_level") * (level - 1))
 
 
+## 도움 helps회를 받은 뒤 남은 초(서버 rules.afterHelps): 한 번에 max(guild_help_min_sec, 남은 × guild_help_pct%)씩, 0 아래로는 안 간다.
+static func after_helps(sec: float, helps: int) -> int:
+	var left := sec
+	for i in helps:
+		if left <= 0.0:
+			break
+		left -= maxf(config_num("guild_help_min_sec"), left * config_num("guild_help_pct") / 100.0)
+	return maxi(0, roundi(left))
+
+
 ## 대장간 장비 던전 추가 드롭 확률(0..1).
 static func forge_extra_p(level: int) -> float:
 	return clampf(maxi(0, level) * config_num("forge_extra_drop_pct_per_level") / 100.0, 0.0, 1.0)

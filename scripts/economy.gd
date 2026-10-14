@@ -550,7 +550,7 @@ func _report_offline(away: float, kills: int, tenths: int) -> void:
 	if away < OFFLINE_MIN_SEC:
 		return
 	offline_report = {"away_sec": away, "kills": kills, "gold_tenths": tenths}
-	offline_reported.emit(offline_report)
+	offline_reported.emit(offline_report.duplicate())  # 사본: 받는 쪽(개요 창)이 offline_report를 비워도 다른 받는 쪽은 값을 본다
 
 
 ## 쌓인 양을 보유량에 더하고 마지막 수집 시각을 옮긴다(§2). 수집량을 돌려준다. 온라인은 요청만 보내고 0(결과는 collected).
@@ -1379,6 +1379,8 @@ func pouch_count(id: String) -> int:
 ## 주머니 하나를 지금 열면 받는 값 {gold_tenths, res: {자원 id → 양}}(서버 app.ts pouchValue와 같은 식).
 ## 골드 = 그 시간 동안의 오프라인 처치 골드(현재 스테이지·연구·offline_gold_mult), 자원 = 자원 건물이 그 시간 동안 쌓는 양(짓지 않은 건물은 0).
 func pouch_value(id: String, stage_n: int) -> Dictionary:
+	if net != null and server_stage > 0:
+		stage_n = server_stage  # 온라인은 서버 stage(서버 pouchValue·고블린 골드와 같은 값)
 	var pz := pouch_parse(id)
 	var out := {"gold_tenths": 0, "res": {}}
 	if pz.is_empty():
@@ -1409,6 +1411,8 @@ func pouch_waiting() -> bool:
 
 ## 주머니 count개를 연다. 온라인은 POST /v1/pouch/open(응답이 오면 pouch_opened), 오프라인은 곧바로 더하고 저장한다.
 func open_pouch(id: String, count: int, stage_n: int) -> bool:
+	if net != null and server_stage > 0:
+		stage_n = server_stage  # 온라인: 서버는 player.stage로 센다(로컬 스테이지는 경계에서야 맞춰진다 — 예측이 서버와 같게, 통합 테스트 2026-10-14)
 	if count <= 0 or pouch_count(id) < count or pouch_waiting() or pouch_empty(id, stage_n):
 		return false
 	if net != null:
@@ -1908,9 +1912,17 @@ func upgrade_sec(id: String) -> int:
 
 ## L → L+1 건설 시간에 연구 build_speed_pct를 넣은 값(서버 /v1/building/upgrade와 같은 식).
 func _build_sec(id: String, level: int) -> int:
-	if unbuilt.has(id) and GameData.unlock_keep(id) == 0:
-		return roundi(GameData.config_num("lot_build_sec"))  # 튜토리얼 공터 첫 건설(0 → 1)은 lot_build_sec초(사용자 2026-10-06). 새 건물·n번째 채는 Lv 1 시간
-	return roundi(GameData.build_sec(id, level) / (1.0 + float(research_bonus().build_speed_pct) / 100.0))
+	var sec := roundi(GameData.config_num("lot_build_sec")) if unbuilt.has(id) and GameData.unlock_keep(id) == 0 \
+		else roundi(GameData.build_sec(id, level) / (1.0 + float(research_bonus().build_speed_pct) / 100.0))  # 튜토리얼 공터 첫 건설(0 → 1)은 lot_build_sec초(사용자 2026-10-06)
+	return GameData.after_helps(sec, guild_helps()) if guild_helps() > 0 else sec  # 길드 회관 도움(서버와 같다 — 빠져 있어 곧바로 보인 끝 시각이 서버보다 늦었다)
+
+
+## 길드 회관 도움 횟수: 길드에 들어 있고 회관을 지었을 때만(서버 /v1/building/upgrade·/v1/research/start와 같다).
+func guild_helps() -> int:
+	var g := get_node_or_null("/root/Guild") if is_inside_tree() else null  # 테스트의 .new() Economy는 트리 밖
+	if g == null or not g.joined() or unbuilt.has(GameData.GUILD_HALL) or not levels.has(GameData.GUILD_HALL):
+		return 0
+	return GameData.guild_helps(building_level(GameData.GUILD_HALL))
 
 
 ## 선행 조건 목록(건물 창 ✓/✗): [{id, need, have, ok}]. 성채가 아니면 성채 상한(성채 Lv 목표 필요)이 먼저, 그다음 req1·req2
@@ -2501,7 +2513,9 @@ func research_cost(id: String) -> Dictionary:
 ## 다음 레벨 연구 시간(초, 지금 속도. 최대 레벨·모르는 노드면 0).
 func research_sec(id: String) -> int:
 	var d := GameData.research_def(id)
-	return GameData.research_sec(id, research_level(id), research_speed()) if not d.is_empty() and research_level(id) < int(d.max_level) else 0
+	if d.is_empty() or research_level(id) >= int(d.max_level):
+		return 0
+	return GameData.after_helps(GameData.research_sec(id, research_level(id), research_speed()), guild_helps())  # 길드 회관 도움(서버와 같다)
 
 
 ## 연구 못 하는 이유 코드(문구 RESEARCH_TEXT, 서버와 같은 순서). 되면 "".
@@ -3776,6 +3790,9 @@ func _sell_online(target: String, amount := -1) -> void:
 			var n: int = int(res.get(r.id, 0)) if amount < 0 or target == "all" else mini(amount, int(res.get(r.id, 0)))
 			if n > 0:
 				list.append({"res": r.id, "amount": n})
+	if list.is_empty():  # 팔 것이 없다(보유 0): 오프라인 sell처럼 아무것도 안 한다 — 보내면 409 not_enough뿐(통합 테스트 2026-10-14)
+		_waiting.erase(key)
+		return
 	_predict_sell(key, list)
 	# once: 사용자 동작 — 서버가 반영했는데 답만 잃었을 때 다시 보내면 같은 자원을 두 번 판다(_sell_many_online과 같다)
 	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unsell.bind(key), true, true)
@@ -4134,6 +4151,8 @@ func _on_dungeon_finished(data: Dictionary, run_id: String) -> void:
 	if rw is Dictionary:
 		if _num(rw.get("gold_tenths")):
 			rewards.gold_tenths = int(rw.gold_tenths)
+		if _num(rw.get("tickets")):  # 모집권 던전 보상(빠져 있어 온라인 결과 화면에 모집권 줄이 안 나왔다)
+			rewards.tickets = int(rw.tickets)
 		if rw.get("items") is Array:
 			rewards.items = _item_list(rw.items)
 	dungeon_finished.emit({"run_id": run_id, "win": data.get("win") == true, "rewards": rewards, "repeated": data.get("repeated") == true})

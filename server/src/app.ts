@@ -3481,6 +3481,16 @@ export function createApp(opts: AppOptions) {
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
 
+    // 통합 테스트용(오프라인 처치 골드): 지난 활동 시각(last_active)을 minutes분 앞당긴다 — 다음 /v1/offline이 그만큼 떠나 있던 것으로 센다.
+    app.post('/v1/test/away', auth, async (c) => {
+      const minutes = intField(await body(c), 'minutes', 0, MAX_AGE_MIN)
+      const id = c.get('playerId') as string
+      await query(`update player_state set version = version + 1, last_active = coalesce(last_active, now()) - $2::float8 * interval '1 second' where player_id = $1`, [id, minutes * 60])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
     // 통합 테스트용(개정 15): 보유 영웅의 조각 수를 정한다(서버 모집은 암호학적 난수라 중복을 만들 수 없다). 없는 영웅은 아무것도 안 바뀐다.
     app.post('/v1/test/shards', auth, async (c) => {
       const b = await body(c)
