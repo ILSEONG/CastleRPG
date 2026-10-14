@@ -19,12 +19,14 @@ var _sig := ""
 func _ready() -> void:
 	_build("문의하기")
 	var v := _card(Color(1.0, 0.97, 0.88, 0.95))
-	var cats := HFlowContainer.new()
+	var cats := GridContainer.new()
+	cats.columns = 3
 	cats.add_theme_constant_override("h_separation", 6)
 	cats.add_theme_constant_override("v_separation", 6)
 	for c in CATEGORIES:
 		var b := _button(c[1], UiKit.STEEL, 22)
 		b.custom_minimum_size = Vector2(0, 50)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(func(): pick(c[0]))
 		cats.add_child(b)
 		cat_buttons[c[0]] = b

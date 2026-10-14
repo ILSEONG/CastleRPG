@@ -126,6 +126,24 @@ func _ready() -> void:
 	await _snap("06_coupon_bad")
 	coupon.close()
 
+	# 문의하기(2026-10-14): 설정 [문의하기] → 게임 안 문의 창, [보내기]는 곧바로 목록에 들어가고 칸이 비워진다
+	settings.open()
+	await _frames(4)
+	settings.inquiry_button.pressed.emit()
+	var inquiry = settings.inquiry
+	await _frames(6)
+	_check(inquiry.is_open() and not settings.is_open(), "inquiry window opens from settings", "")
+	inquiry.pick("payment")
+	inquiry.input.text = "다이아가 안 들어왔어요"
+	inquiry.send()
+	_check(inquiry.input.text == "" and LiveOps.inquiries.size() == 1 and LiveOps.inquiries[0].get("pending", false), "send shows the inquiry at once", str(LiveOps.inquiries))
+	inquiry.send()  # 빈 칸 연타: 아무것도 안 보낸다
+	_check(LiveOps.inquiries.size() == 1, "double tap sends once", str(LiveOps.inquiries.size()))
+	_check(await _wait_until(func(): return int(LiveOps.inquiries[0].id) > 0, 10.0), "server stores the inquiry", str(LiveOps.inquiries))
+	await _frames(6)
+	await _snap("06b_inquiry")
+	inquiry.close()
+
 	# 점검: 관리자가 켜면 다음 요청이 503 → 화면 전체 안내, 끄면 저절로 걷힌다
 	var now := Economy.time_now()
 	await _raw("POST", "/v1/admin/status", {"maintenance": true, "maintenance_text": "길드전 개선 점검 중이에요. 점검 보상은 우편으로 드려요.", "maintenance_until": now + 5400}, _admin)
@@ -180,6 +198,29 @@ func _ready() -> void:
 	_check(admin.f.m_send.text.begins_with("한 번 더"), "mail to all asks once more", admin.f.m_send.text)
 	admin.send_mail()
 	_check(await _wait_until(func(): return admin.ops.get("mails", []).any(func(m): return m.title == "관리자 창 우편"), 10.0), "mail sent from the admin window", "")
+	# 관리자 창 [문의]: 내가 보낸 문의에 답하면 곧바로 답변 완료, 우편으로 온다
+	admin.pick("inquiry")
+	var qid := int(LiveOps.inquiries[0].id)
+	_check(await _wait_until(func(): return not admin._inq_row(qid).is_empty(), 10.0), "admin sees the inquiry", str(admin.inq))
+	await _frames(4)
+	await _snap("11_admin_inquiry")
+	admin.buttons["inq_answer:%d" % qid].pressed.emit()
+	await _frames(2)
+	admin.f.q_answer.text = "확인 후 지급했습니다"
+	admin.f.q_diamonds.text = "50"
+	await _snap("11b_admin_inquiry_answer")
+	admin.answer(qid)
+	_check(admin._inq_row(qid).get("status") == "answered", "answer shows at once", str(admin._inq_row(qid)))
+	LiveOps.fetch_mail()
+	_check(await _wait_until(func(): return LiveOps.mails.any(func(m): return str(m.title) == "[문의 답변] 결제·상점"), 10.0), "answer arrives as mail", str(LiveOps.mails))
+	LiveOps.fetch_inquiries()
+	_check(await _wait_until(func(): return str(LiveOps.inquiries[0].get("answer", "")) == "확인 후 지급했습니다", 10.0), "my inquiry shows the answer", str(LiveOps.inquiries))
+	admin.close()
+	settings.inquiry.open()
+	await _frames(8)
+	await _snap("12_inquiry_answered")
+	settings.inquiry.close()
+	admin.open()
 	admin.close()
 	_finish()
 
