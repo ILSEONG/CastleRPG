@@ -34,7 +34,7 @@ services:
         sync: false
       - key: OAUTH_NAVER_SECRET
         sync: false
-      - key: LEGAL_OPERATOR        # 약관·개인정보처리방침에 적힐 운영자 이름(개인 이름 또는 상호) — /legal/terms·/legal/privacy
+      - key: LEGAL_OPERATOR        # 약관·개인정보처리방침의 운영자 상호(비우면 코드 기본값 일성게임즈, 사업자등록번호는 LEGAL_BIZ_NO 또는 기본값) — /legal/terms·/legal/privacy
         sync: false
       - key: LEGAL_EMAIL           # 문의·개인정보 보호책임자 이메일(공개됨)
         sync: false

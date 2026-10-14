@@ -9,7 +9,7 @@ extends "res://scripts/ui_window.gd"
 ## 계정(2026-10-12): [로그아웃·계정 전환](앱인토스 빌드 제외, 두 번 눌러 확인) → 서버 세션을 지우고 다시 열면 로그인 화면(Net.logout + Net.restart).
 ## 계정 연결(2026-10-12, Google Play 빌드·온라인): [Google]·[카카오]·[네이버] — 지금 계정(게스트 포함)에 그 로그인을 붙인다(account_link.gd).
 ##   연결된 것은 "✓", 결과·안내는 그 아래 한 줄.
-## 정보·지원: 게임 버전, [이용약관]·[개인정보처리방침](브라우저로 연다), [문의하기](메일 앱 — 받는 주소·플레이어 정보가 채워진다).
+## 정보·지원: 게임 버전, [이용약관]·[개인정보처리방침](브라우저로 연다), [문의하기](게임 안 문의 창 — 플레이어 정보가 저절로 붙는다).
 ##   주소는 support_links.gd 상수(출시 작업이 채운다). 비어 있으면 "준비 중" 알림.
 ## 줄이 많아 가운데는 세로 스크롤(body), 제목과 [닫기]는 고정.
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
@@ -47,6 +47,7 @@ var delete_button: Button
 var coupon_button: Button
 var admin_button: Button
 var coupon  # 쿠폰 입력 창(coupon_panel.gd) — main이 넣는다
+var inquiry  # 문의 창(inquiry_panel.gd) — main이 넣는다
 var admin_panel  # 운영 관리 창(admin_panel.gd, 슈퍼관리자만) — main이 넣는다
 var _delete_armed := 0.0
 var _deleting := false
@@ -311,19 +312,13 @@ func open_link(url: String) -> void:
 	OS.shell_open(url)
 
 
-## [문의하기]: 메일 앱을 받는 주소 + 제목 + 플레이어 정보(닉네임·친구 코드·로그인·버전·기기)를 채워 연다. 주소가 비어 있으면 준비 중 알림.
+## [문의하기](2026-10-14): 게임 안 문의 창(inquiry_panel.gd — 문의 표, 답변은 우편). 온라인이 아니면 알림.
 func open_inquiry() -> void:
-	if Links.SUPPORT_EMAIL == "":
-		Economy.notice.emit(Links.NOT_READY)
+	if inquiry == null or not Net.is_online():
+		Economy.notice.emit("문의는 온라인에서만 보낼 수 있습니다")
 		return
-	OS.shell_open(inquiry_url())
-
-
-func inquiry_url() -> String:
-	var info := "\n\n----\n닉네임: %s\n친구 코드: %s\n로그인: %s\n버전: %s (%s)\n기기: %s %s" % [
-		str(Economy.friends.get("name", "-")), str(Economy.friends.get("code", "-")), LOGIN_NAMES.get(Net.auth_mode, "-"),
-		str(ProjectSettings.get_setting("application/config/version", "")), ReleasePlatform.current(), OS.get_name(), OS.get_model_name()]
-	return "mailto:%s?subject=%s&body=%s" % [Links.SUPPORT_EMAIL, "[CastleRPG] 문의".uri_encode(), ("문의 내용을 적어 주세요." + info).uri_encode()]
+	close()
+	inquiry.open()
 
 
 ## [계정 삭제]: 첫 번째는 확인을 묻고(빨간 "한 번 더 누르면 계정이 삭제됩니다"), 4초 안에 다시 누르면 서버에서 지운다. 되돌릴 수 없다.

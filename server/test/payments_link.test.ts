@@ -158,18 +158,25 @@ test('tossVerifier: 주문 상태 조회 결과로 판정, readPayments는 키�
 })
 
 test('약관·개인정보처리방침·계정 삭제 안내 페이지: 공개 HTML, 운영자·연락처가 들어간다', async () => {
-  const S = await setup({ legal: { operator: '테스트 운영자', email: 'help@example.com' } })
+  const S = await setup({ legal: { operator: '테스트 운영자', email: 'help@example.com', bizNo: '123-45-67890' } })
   try {
     for (const path of ['/legal/terms', '/legal/privacy', '/legal/account-deletion']) {
       const r = await S.req('GET', path)
       assert.equal(r.status, 200, path)
       assert.ok(r.headers.get('content-type')?.includes('text/html'), path)
-      assert.ok(r.text.includes('테스트 운영자') && r.text.includes('help@example.com'), path)
+      assert.ok(r.text.includes('테스트 운영자') && (path === '/legal/account-deletion' || r.text.includes('help@example.com')), path)
     }
     assert.ok((await S.req('GET', '/legal/privacy')).text.includes('개인정보 보호책임자'))
+    for (const path of ['/legal/terms', '/legal/privacy', '/legal/account-deletion']) assert.ok((await S.req('GET', path)).text.includes('사업자등록번호: 123-45-67890'), path)
     const plain = await setup()
     try {
-      assert.ok((await plain.req('GET', '/legal/terms')).text.includes('연락처 등록 예정'))
+      // 이메일이 없으면 약관·방침의 문의는 게임 안 [문의하기](2026-10-14), 앱 없이 삭제 요청은 웹 양식(web_deletion.test.ts)
+      for (const path of ['/legal/terms', '/legal/privacy']) {
+        const t = (await plain.req('GET', path)).text
+        assert.ok(t.includes('설정 → 문의하기') && !t.includes('연락처 등록 예정'), path)
+      }
+      const del = (await plain.req('GET', '/legal/account-deletion')).text
+      assert.ok(del.includes('action="/legal/account-deletion"') && !del.includes('연락처 등록 예정'))
     } finally {
       await plain.close()
     }

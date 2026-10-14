@@ -28,6 +28,7 @@ import { registerMarket } from './market.ts'
 import { registerChat } from './chat.ts'
 import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
+import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
@@ -1371,6 +1372,12 @@ export function createApp(opts: AppOptions) {
     const id = c.get('playerId') as string
     const b = await body(c)
     if (b.confirm !== 'delete') throw new ApiError(400, 'confirm_required', 'send {"confirm":"delete"}')
+    await deletePlayer(id)
+    return c.json({ ok: true })
+  })
+
+  // 계정 지우기(앱 [계정 삭제]·관리자 웹 삭제 요청 처리 공통).
+  async function deletePlayer(id: string) {
     const [g] = await query('select g.id from guilds g join player_guild pg on pg.guild_id = g.id where pg.player_id = $1 and g.owner = $1', [id])
     if (g) {
       const [next] = await query('select player_id from player_guild where guild_id = $1 and player_id <> $2 order by joined_at, player_id limit 1', [g.id, id])
@@ -1378,8 +1385,7 @@ export function createApp(opts: AppOptions) {
       else await query('delete from guilds where id = $1', [g.id])
     }
     await query('delete from players where id = $1', [id])
-    return c.json({ ok: true })
-  })
+  }
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
@@ -3621,6 +3627,7 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
+  registerInquiry(app, { query, auth, clock, body, ApiError, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })
 
   return app
 }

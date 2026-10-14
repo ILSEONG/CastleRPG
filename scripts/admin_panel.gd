@@ -6,10 +6,13 @@ extends "res://scripts/ops_sheet.gd"
 ##  우편 — 받는 사람(all = 모두, 아니면 친구 코드)·제목·본문·보상·기간(일)·새 계정도 받기로 보내기, 목록(받은 사람 수)에서 [회수].
 ##  쿠폰 — 코드·보상·최대 사용 수(빈칸 = 무제한)·기간(일, 빈칸 = 무기한)·메모로 만들기, 목록(사용 수)에서 [끄기]/[켜기].
 ## 모두에게 영향을 주는 버튼(점검 켜기·모두에게 보내기)은 한 번 더 눌러야 실행된다(4초 안).
+##  문의(2026-10-14) — 플레이어 문의(server/src/inquiry.ts) 대기 목록(오래된 것 먼저)·전체. [답변하기]로 그 문의만 답변 칸 + 보상을 펼쳐
+##   [답변 보내기] → 그 플레이어에게 우편([문의 답변]), 상태가 곧바로 "답변 완료"로 바뀐다(거절되면 되돌린다). [종료]·[다시 열기].
+##   계정 삭제 요청(분류 delete, 앱 없이 웹 양식 /legal/account-deletion): 본인 확인 뒤 [계정 삭제] 두 번 → 그 계정 삭제(자동 삭제 없음).
 ## 보상 = 골드·다이아·다이아 모집권·목재·석재·식량·던전 열쇠 셋·영웅(+장 수)·장비(등급 + 개수) — 넣는 값 그대로(서버가 범위를 본다).
 
 const GameData := preload("res://scripts/game_data.gd")
-const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], ["coupon", "쿠폰"]]
+const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], ["coupon", "쿠폰"], ["inquiry", "문의"]]
 const KIND_ITEMS := [["notice", "공지"], ["event", "이벤트"], ["update", "업데이트"], ["maintenance", "점검"]]
 const REWARD_FIELDS := [["gold", "골드"], ["diamonds", "다이아"], ["tickets", "모집권"], ["wood", "목재"], ["stone", "석재"], ["food", "식량"],
 	["keys_gold", "골드 열쇠"], ["keys_equip", "장비 열쇠"], ["keys_ticket", "모집권 열쇠"]]
@@ -21,6 +24,9 @@ var tab := "status"
 var ops := {}  # GET /v1/admin/ops 응답
 var f := {}  # 입력 칸(이름 → LineEdit·TextEdit·OptionButton·Button)
 var editing_notice := 0  # 수정 중인 공지 id(0 = 새 공지)
+var inq := {}  # GET /v1/admin/inquiries 응답
+var inq_all := false  # 문의: 전체 보기(아니면 답변 대기만)
+var answering := 0  # 답변 칸을 펼친 문의 id
 var _armed := ""  # 한 번 누른 위험 버튼 이름
 var _armed_button: Button
 var _armed_text := ""
@@ -52,6 +58,9 @@ func _on_open() -> void:
 func pick(t: String) -> void:
 	tab = t
 	editing_notice = 0
+	answering = 0
+	if t == "inquiry":
+		fetch_inquiries()
 	_disarm()
 	_rebuild()
 
@@ -109,6 +118,8 @@ func _rebuild() -> void:
 			_build_mail()
 		"coupon":
 			_build_coupon()
+		"inquiry":
+			_build_inquiry()
 
 
 # --- 상태 ---
@@ -327,6 +338,158 @@ func _build_coupon() -> void:
 		t.pressed.connect(func(): _post("/v1/admin/coupon/disable", {"code": code, "disabled": off}, "바꿨습니다"))
 		r.add_child(t)
 		c.add_child(r)
+
+
+# --- 문의 ---
+
+const INQ_CATS := {"account": "계정·로그인", "payment": "결제·상점", "bug": "버그·오류", "suggest": "건의", "other": "기타", "delete": "계정 삭제 요청"}
+const INQ_STATUS := {"open": "답변 대기", "answered": "답변 완료", "closed": "종료"}
+
+
+func fetch_inquiries() -> void:
+	if Net.up:
+		Net.send("GET", "/v1/admin/inquiries" + ("?filter=all" if inq_all else ""), null, func(d: Dictionary):
+			inq = d
+			if tab == "inquiry":
+				_rebuild(), func(): Economy.notice.emit("문의 목록을 받지 못했습니다(관리자만 쓸 수 있습니다)"))
+
+
+func _build_inquiry() -> void:
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	top.add_child(_wrap("답변 대기 %d개" % int(inq.get("open", 0)), 24))
+	for opt in [[false, "대기"], [true, "전체"]]:
+		var b := _button(opt[1], HudScript.ACCENT if inq_all == opt[0] else UiKit.STEEL, 22)
+		b.custom_minimum_size = Vector2(96, 50)
+		b.pressed.connect(func():
+			inq_all = opt[0]
+			answering = 0
+			fetch_inquiries()
+			_rebuild())
+		top.add_child(b)
+		buttons["inq_filter:" + opt[1]] = b
+	body.add_child(top)
+	var rows: Array = inq.get("inquiries", [])
+	if rows.is_empty():
+		body.add_child(_wrap("문의가 없습니다", 24, SUB, HORIZONTAL_ALIGNMENT_CENTER))
+	var now := Economy.time_now()
+	for q in rows:
+		var id := int(q.id)
+		var st := str(q.get("status", "open"))
+		var v := _card(Color(1.0, 0.95, 0.86, 0.95) if st == "open" else (Color(0.92, 0.92, 0.92, 0.85) if st == "closed" else Color(1, 1, 1, 0.85)))
+		var info: Dictionary = q.get("info", {}) if q.get("info") is Dictionary else {}
+		v.add_child(_wrap("[%s] %s · %s · %s" % [INQ_STATUS.get(st, st), INQ_CATS.get(str(q.get("category", "")), "기타"), str(q.get("code", "")),
+			ago(float(q.get("at", now)), now)], 22, HudScript.INK))
+		v.add_child(_wrap(str(q.get("body", "")), 22))
+		var meta := []
+		for k in ["name", "login", "version", "platform", "device", "contact"]:
+			if str(info.get(k, "")) != "":
+				meta.append(str(info[k]))
+		if not meta.is_empty():
+			v.add_child(_wrap(" · ".join(meta), 19, SUB))
+		if str(q.get("answer", "")) != "":
+			v.add_child(_wrap("답변: " + str(q.answer), 21, Color(0.20, 0.45, 0.24)))
+		if answering == id:
+			f.q_answer = _text_edit("답변(그 플레이어에게 우편으로 갑니다)")
+			f.q_answer.text = str(q.get("answer", ""))
+			v.add_child(f.q_answer)
+			_reward_editor(v, "q_")
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		if answering == id:
+			var send := _button("답변 보내기", HudScript.ACCENT, 22)
+			send.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			send.pressed.connect(func(): answer(id))
+			row.add_child(send)
+			buttons["inq_send:%d" % id] = send
+		else:
+			var a := _button("답변하기" if str(q.get("answer", "")) == "" else "다시 답하기", HudScript.ACCENT, 22)
+			a.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			a.pressed.connect(func():
+				answering = id
+				_rebuild())
+			row.add_child(a)
+			buttons["inq_answer:%d" % id] = a
+		if str(q.get("category", "")) == "delete" and str(q.get("code", "")) != "" and st != "closed":
+			var del := _button("계정 삭제", UiKit.STEEL, 22)
+			del.custom_minimum_size = Vector2(150, 0)
+			del.pressed.connect(func():
+				if _confirm("inq_del:%d" % id, del, "한 번 더: 삭제"):
+					delete_account(id))
+			row.add_child(del)
+			buttons["inq_delete:%d" % id] = del
+		var c := _button("다시 열기" if st == "closed" else "종료", UiKit.STEEL, 22)
+		c.custom_minimum_size = Vector2(130, 0)
+		c.pressed.connect(func(): set_closed(id, st != "closed"))
+		row.add_child(c)
+		buttons["inq_close:%d" % id] = c
+		v.add_child(row)
+
+
+func _inq_row(id: int) -> Dictionary:
+	for q in inq.get("inquiries", []):
+		if int(q.id) == id:
+			return q
+	return {}
+
+
+## 답변 보내기: 곧바로 "답변 완료"로 보이고 칸을 접는다. 서버가 거절하면 되돌린다(같은 답변 연타는 서버가 한 번만 보낸다).
+func answer(id: int) -> void:
+	var q := _inq_row(id)
+	var text: String = f.q_answer.text.strip_edges() if f.has("q_answer") else ""
+	if q.is_empty() or text == "":
+		Economy.notice.emit("답변을 적어 주세요")
+		return
+	if not Net.up:
+		Economy.notice.emit("서버에 연결된 뒤 다시 해 주세요")
+		return
+	var back := q.duplicate()
+	var d := {"id": id, "answer": text, "reward": _reward_of("q_")}
+	q.answer = text
+	q.status = "answered"
+	answering = 0
+	inq.open = maxi(0, int(inq.get("open", 0)) - (1 if back.get("status") == "open" else 0))
+	Economy.notice.emit("답변을 보냈습니다(우편)")
+	_rebuild()
+	Net.send("POST", "/v1/admin/inquiry/answer", d, func(_r: Dictionary): fetch_inquiries(), func():
+		q.merge(back, true)
+		Economy.notice.emit("답변을 보내지 못했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음"))
+		fetch_inquiries(), true, true)
+
+
+## 웹 계정 삭제 요청(분류 delete, /legal/account-deletion 양식) 처리: 본인 계정인지 확인한 뒤 두 번 눌러 지운다. 곧바로 "종료"로 보이고
+## 거절되면 되돌린다(서버 /v1/admin/inquiry/delete_account — 그 계정을 지우고 요청은 처리 기록으로 남긴다).
+func delete_account(id: int) -> void:
+	var q := _inq_row(id)
+	if q.is_empty() or not Net.up:
+		return
+	var back := q.duplicate()
+	q.status = "closed"
+	q.answer = "계정 삭제 완료 (친구 코드 %s)" % str(q.get("code", ""))
+	q.code = ""
+	inq.open = maxi(0, int(inq.get("open", 0)) - (1 if back.get("status") == "open" else 0))
+	Economy.notice.emit("계정을 삭제했습니다")
+	_rebuild()
+	Net.send("POST", "/v1/admin/inquiry/delete_account", {"id": id}, func(_r: Dictionary): fetch_inquiries(), func():
+		q.merge(back, true)
+		Economy.notice.emit("삭제하지 못했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음"))
+		fetch_inquiries(), true, true)
+
+
+## 종료·다시 열기: 곧바로 바꿔 보이고, 거절되면 되돌린다.
+func set_closed(id: int, closed: bool) -> void:
+	var q := _inq_row(id)
+	if q.is_empty() or not Net.up:
+		return
+	var was := str(q.get("status", "open"))
+	q.status = "closed" if closed else ("answered" if str(q.get("answer", "")) != "" else "open")
+	_rebuild()
+	Net.send("POST", "/v1/admin/inquiry/close", {"id": id, "closed": closed}, func(r: Dictionary):
+		q.status = str(r.get("status", q.status))
+		_rebuild(), func():
+		q.status = was
+		Economy.notice.emit("바꾸지 못했습니다")
+		_rebuild(), true, true)
 
 
 # --- 보상 입력 ---

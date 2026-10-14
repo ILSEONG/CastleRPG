@@ -7,19 +7,25 @@ extends Node
 ## - 쿠폰: POST /v1/coupon {code} → 결과를 done(ok, 글)로(설정 창 [쿠폰 입력] → coupon_panel.gd).
 ## - 점검·강제 업데이트: Net이 503 maintenance·426 update_required를 받으면 block()을 부른다 → 화면 전체를 덮는 안내(ops_overlay.gd).
 ##   점검은 서버가 다시 답하면(Net._on_completed ok) 걷힌다. 업데이트는 [업데이트](스토어 주소, 웹이면 새로 고침)만 남는다.
+## - 고객 문의(2026-10-14, server/src/inquiry.ts): 설정 [문의하기] → 문의 창(inquiry_panel.gd). [보내기]를 누르면 곧바로 내 문의 목록 맨 위에
+##   "답변 대기"로 들어가고 입력 칸이 비워진다(POST /v1/inquiry — 보낼 때마다 만든 key로 연타·재전송이 두 번 쌓이지 않는다).
+##   거절되면 목록에서 빼고 쓴 글을 돌려준다(inquiry_failed). 답변은 우편([문의 답변])으로 오고, 문의 창 목록에도 보인다.
 ## 앱 버전(프로젝트 설정 application/config/version)은 Net이 모든 요청에 X-App-Version으로 보낸다.
 
+const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const Prefs := preload("res://scripts/prefs.gd")
 const OverlayScript := preload("res://scripts/ops_overlay.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
 signal changed  # 공지·우편 목록이 바뀌었다
+signal inquiry_failed(category: String, text: String)  # 문의를 못 보냈다(문의 창이 쓴 글을 되돌린다)
 signal block_changed  # 점검·업데이트 안내가 생기거나 걷혔다
 
 const SEEN_KEY := "notice_seen"
 const KEY_NAMES := {"gold": "골드 던전 열쇠", "equip": "장비 던전 열쇠", "ticket": "모집권 던전 열쇠"}
 const MAIL_POLL_SEC := 300.0  # 창을 안 열어도 이만큼마다 우편을 다시 본다(관리자가 보낸 보상 빨간 점)
+const INQUIRY_TEXT := {"too_many_inquiries": "답변을 기다리는 문의가 많습니다. 답변을 받은 뒤 다시 보내 주세요"}
 const COUPON_TEXT := {"unknown_coupon": "없는 쿠폰 번호입니다", "coupon_used": "이미 사용한 쿠폰입니다", "coupon_expired": "기간이 지난 쿠폰입니다",
 	"coupon_used_up": "선착순 수량이 모두 소진된 쿠폰입니다", "coupon_not_started": "아직 사용할 수 없는 쿠폰입니다"}
 
@@ -31,6 +37,8 @@ var block := {}  # {} 또는 {kind: "maintenance"|"update", text, until, store_u
 var overlay  # ops_overlay.gd
 var claiming := {}  # 받는 중 key → [우편들](거절되면 되돌린다)
 var redeeming := false
+var inquiries: Array = []  # 내 문의 [{id, category, body, status, answer, at, answered_at}] — 보내는 중인 것은 id < 0, pending
+var inquiries_loaded := false
 
 var _poll := MAIL_POLL_SEC
 var _seq := 0
@@ -267,3 +275,53 @@ func on_ok() -> void:
 
 func is_blocked() -> bool:
 	return not block.is_empty()
+
+
+# --- 고객 문의 ---
+
+func fetch_inquiries() -> void:
+	if Net.is_online() and Net.up:
+		Net.send("GET", "/v1/inquiry", null, func(d: Dictionary):
+			if d.get("inquiries") is Array:
+				var pending := inquiries.filter(func(q): return q.get("pending", false))
+				inquiries = pending + d.inquiries.filter(func(q): return q is Dictionary)
+				inquiries_loaded = true
+				changed.emit())
+
+
+## 앱이 문의에 붙이는 플레이어 정보(친구 코드는 서버가 안다).
+static func inquiry_info() -> Dictionary:
+	return {"name": str(Economy.friends.get("name", "")), "login": Net.auth_mode, "version": app_version(),
+		"platform": ReleasePlatform.current(), "device": ("%s %s" % [OS.get_name(), OS.get_model_name()]).strip_edges()}
+
+
+## 문의 보내기. 곧바로 목록 맨 위에 넣는다. 보냈으면 true(글이 비었거나 서버가 없으면 false — 알림을 띄운다).
+func send_inquiry(category: String, text: String) -> bool:
+	var t := text.strip_edges()
+	if t == "":
+		Economy.notice.emit("문의 내용을 적어 주세요")
+		return false
+	if not Net.up:
+		Economy.notice.emit("서버에 연결된 뒤 보낼 수 있습니다")
+		return false
+	_seq += 1
+	var key := "q%d-%d-%d" % [int(Time.get_unix_time_from_system()), _seq, randi() % 100000]
+	var q := {"id": -_seq, "key": key, "category": category, "body": t, "status": "open", "answer": "", "at": Economy.time_now(), "pending": true}
+	inquiries.push_front(q)
+	Economy.notice.emit("문의를 보냈습니다. 답변은 우편으로 알려 드려요")
+	changed.emit()
+	Net.send("POST", "/v1/inquiry", {"key": key, "category": category, "body": t, "info": inquiry_info()}, func(d: Dictionary):
+		var i := inquiries.find(q)
+		if d.get("inquiry") is Dictionary:
+			if i >= 0:
+				inquiries[i] = d.inquiry
+		elif i >= 0:
+			inquiries.remove_at(i)
+		changed.emit(),
+		func():
+			inquiries.erase(q)
+			Economy.notice.emit(INQUIRY_TEXT.get(Net.last_error, "문의를 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요"))
+			inquiry_failed.emit(category, t)
+			changed.emit(),
+		true, true)
+	return true
