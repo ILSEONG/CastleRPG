@@ -33,7 +33,7 @@ function page(title: string, body: string): string {
 body{margin:0;background:#f6f1e6;color:#1f2430;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.7}
 main{max-width:760px;margin:0 auto;padding:28px 20px 60px}h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px}
 p,li{font-size:15px}table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid #cfc6b3;padding:6px 8px;vertical-align:top;text-align:left}
-th{background:#ece3cf}.date{color:#5b6478;font-size:14px;margin-bottom:20px}nav a{margin-right:14px;font-size:14px}
+input,select,textarea{box-sizing:border-box}th{background:#ece3cf}.date{color:#5b6478;font-size:14px;margin-bottom:20px}nav a{margin-right:14px;font-size:14px}
 </style></head><body><main><nav><a href="/legal/terms">이용약관</a><a href="/legal/privacy">개인정보처리방침</a><a href="/legal/account-deletion">계정 삭제</a></nav>
 <h1>${GAME} ${title}</h1><div class="date">시행일: ${EFFECTIVE}</div>${body}</main></body></html>`
 }
@@ -138,6 +138,33 @@ export function privacyPage(info: LegalInfo): string {
 <p>이 방침을 바꾸면 시행 7일 전부터 이 페이지와 게임 안에 알립니다.</p>`)
 }
 
+// 앱 없이 삭제 요청 양식(2026-10-14): POST /legal/account-deletion → 문의 표(category 'delete', inquiry.ts)에 쌓이고
+// 관리자가 운영 관리 [문의] 탭에서 확인한 뒤 [계정 삭제]로 지운다(자동 삭제 없음). website 칸은 자동 입력 막기용(사람에게 안 보임).
+function deletionForm(error: string): string {
+  const opt = (v: string, t: string) => `<option value="${v}">${t}</option>`
+  return `<form method="post" action="/legal/account-deletion" style="background:#fffaf0;border:1px solid #cfc6b3;border-radius:10px;padding:14px 16px">
+${error ? `<p style="color:#b03a2e;margin-top:0">${esc(error)}</p>` : ''}
+<p style="margin-top:0"><label>친구 코드(설정 화면에 보이는 8자리)<br><input name="code" maxlength="8" autocomplete="off" style="width:100%;font-size:16px;padding:6px"></label></p>
+<p><label>로그인 방식<br><select name="login" style="width:100%;font-size:16px;padding:6px">${opt('', '선택')}${opt('google', 'Google')}${opt('kakao', '카카오')}${opt('naver', '네이버')}${opt('toss', '토스')}${opt('guest', '게스트')}</select></label></p>
+<p><label>Google 로그인 이메일(Google로 로그인했다면, 본인 확인용)<br><input name="email" type="email" maxlength="120" style="width:100%;font-size:16px;padding:6px"></label></p>
+<p><label>삭제 사유(선택)<br><textarea name="reason" maxlength="500" rows="3" style="width:100%;font-size:15px;padding:6px"></textarea></label></p>
+<p style="display:none"><label>website<input name="website" tabindex="-1" autocomplete="off"></label></p>
+<p style="font-size:13px;color:#5b6478">친구 코드나 Google 이메일 중 하나는 꼭 적어 주세요. 적은 내용은 삭제 요청 확인에만 쓰고, 처리가 끝나면 삭제 처리 기록으로만 남깁니다.</p>
+<button type="submit" style="font-size:16px;padding:8px 18px">삭제 요청 보내기</button></form>`
+}
+
+export function deletionFormPage(info: LegalInfo, error: string): string {
+  const w = who(info)
+  return page('계정 삭제 요청', `${deletionForm(error)}<p>운영자(상호): ${w.operator}${w.biz}</p>`)
+}
+
+export function deletionDonePage(info: LegalInfo): string {
+  const w = who(info)
+  return page('계정 삭제 요청', `<p><b>삭제 요청을 받았어요.</b></p>
+<p>운영자가 본인 계정인지 확인한 뒤 10일 안에 삭제합니다. 삭제되면 같은 로그인으로 들어갔을 때 새 계정으로 시작됩니다.</p>
+<p><a href="/legal/account-deletion">계정 삭제 안내로 돌아가기</a></p><p>운영자(상호): ${w.operator}${w.biz}</p>`)
+}
+
 export function deletionPage(info: LegalInfo): string {
   const w = who(info)
   return page('계정 삭제 안내', `
@@ -146,11 +173,11 @@ export function deletionPage(info: LegalInfo): string {
 <li>[계정] 칸의 [계정 삭제]를 누르고, "한 번 더 누르면 계정이 삭제됩니다"가 보이면 한 번 더 누릅니다.</li>
 <li>계정과 게임 진행, 재화, 아이템, 친구·길드 관계, 채팅 기록이 바로 지워지며 되살릴 수 없습니다.</li></ol>
 <h2>앱 없이 삭제 요청하기</h2>
-<p>앱을 지웠거나 열 수 없으면 ${w.email} 로 아래 내용을 보내 주세요. 본인 확인 뒤 10일 안에 삭제하고 결과를 알려 드립니다.</p>
-<ul><li>게임 닉네임 또는 친구 코드(설정 화면에 표시)</li>
-<li>로그인 방식(Google·카카오·네이버·토스·게스트)과, Google이면 그 계정의 이메일</li></ul>
+<p>앱을 지웠거나 열 수 없으면 아래 양식으로 요청해 주세요. 운영자가 본인 계정인지 확인한 뒤 10일 안에 삭제합니다. 삭제되면 같은 로그인으로 들어갔을 때 새 계정으로 시작됩니다.</p>
+${deletionForm('')}
 <h2>지워지는 것과 남는 것</h2>
 <ul><li>지워지는 것: 계정 식별 정보(로그인 연결, 이메일, 기기 식별값), 게임 진행·재화·아이템, 친구·길드, 채팅 메시지, 랭킹 기록</li>
-<li>법령에 따라 남는 것: 결제 기록(주문 번호·상품·시각) 5년, 채팅 신고 기록 1년, 접속 기록 3개월. 기간이 끝나면 지웁니다.</li></ul>
+<li>법령에 따라 남는 것: 결제 기록(주문 번호·상품·시각) 5년, 채팅 신고 기록 1년, 접속 기록 3개월. 기간이 끝나면 지웁니다.</li>
+<li>앱 없이 보낸 삭제 요청은 처리 기록(요청 내용·처리 시각)으로 1년 보관한 뒤 지웁니다.</li></ul>
 <p>운영자(상호): ${w.operator}${w.biz}</p>`)
 }

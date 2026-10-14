@@ -8,6 +8,7 @@ extends "res://scripts/ops_sheet.gd"
 ## 모두에게 영향을 주는 버튼(점검 켜기·모두에게 보내기)은 한 번 더 눌러야 실행된다(4초 안).
 ##  문의(2026-10-14) — 플레이어 문의(server/src/inquiry.ts) 대기 목록(오래된 것 먼저)·전체. [답변하기]로 그 문의만 답변 칸 + 보상을 펼쳐
 ##   [답변 보내기] → 그 플레이어에게 우편([문의 답변]), 상태가 곧바로 "답변 완료"로 바뀐다(거절되면 되돌린다). [종료]·[다시 열기].
+##   계정 삭제 요청(분류 delete, 앱 없이 웹 양식 /legal/account-deletion): 본인 확인 뒤 [계정 삭제] 두 번 → 그 계정 삭제(자동 삭제 없음).
 ## 보상 = 골드·다이아·다이아 모집권·목재·석재·식량·던전 열쇠 셋·영웅(+장 수)·장비(등급 + 개수) — 넣는 값 그대로(서버가 범위를 본다).
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -337,7 +338,7 @@ func _build_coupon() -> void:
 
 # --- 문의 ---
 
-const INQ_CATS := {"account": "계정·로그인", "payment": "결제·상점", "bug": "버그·오류", "suggest": "건의", "other": "기타"}
+const INQ_CATS := {"account": "계정·로그인", "payment": "결제·상점", "bug": "버그·오류", "suggest": "건의", "other": "기타", "delete": "계정 삭제 요청"}
 const INQ_STATUS := {"open": "답변 대기", "answered": "답변 완료", "closed": "종료"}
 
 
@@ -377,7 +378,7 @@ func _build_inquiry() -> void:
 			ago(float(q.get("at", now)), now)], 22, HudScript.INK))
 		v.add_child(_wrap(str(q.get("body", "")), 22))
 		var meta := []
-		for k in ["name", "login", "version", "platform", "device"]:
+		for k in ["name", "login", "version", "platform", "device", "contact"]:
 			if str(info.get(k, "")) != "":
 				meta.append(str(info[k]))
 		if not meta.is_empty():
@@ -405,6 +406,14 @@ func _build_inquiry() -> void:
 				_rebuild())
 			row.add_child(a)
 			buttons["inq_answer:%d" % id] = a
+		if str(q.get("category", "")) == "delete" and str(q.get("code", "")) != "" and st != "closed":
+			var del := _button("계정 삭제", UiKit.STEEL, 22)
+			del.custom_minimum_size = Vector2(150, 0)
+			del.pressed.connect(func():
+				if _confirm("inq_del:%d" % id, del, "한 번 더: 삭제"):
+					delete_account(id))
+			row.add_child(del)
+			buttons["inq_delete:%d" % id] = del
 		var c := _button("다시 열기" if st == "closed" else "종료", UiKit.STEEL, 22)
 		c.custom_minimum_size = Vector2(130, 0)
 		c.pressed.connect(func(): set_closed(id, st != "closed"))
@@ -441,6 +450,25 @@ func answer(id: int) -> void:
 	Net.send("POST", "/v1/admin/inquiry/answer", d, func(_r: Dictionary): fetch_inquiries(), func():
 		q.merge(back, true)
 		Economy.notice.emit("답변을 보내지 못했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음"))
+		fetch_inquiries(), true, true)
+
+
+## 웹 계정 삭제 요청(분류 delete, /legal/account-deletion 양식) 처리: 본인 계정인지 확인한 뒤 두 번 눌러 지운다. 곧바로 "종료"로 보이고
+## 거절되면 되돌린다(서버 /v1/admin/inquiry/delete_account — 그 계정을 지우고 요청은 처리 기록으로 남긴다).
+func delete_account(id: int) -> void:
+	var q := _inq_row(id)
+	if q.is_empty() or not Net.up:
+		return
+	var back := q.duplicate()
+	q.status = "closed"
+	q.answer = "계정 삭제 완료 (친구 코드 %s)" % str(q.get("code", ""))
+	q.code = ""
+	inq.open = maxi(0, int(inq.get("open", 0)) - (1 if back.get("status") == "open" else 0))
+	Economy.notice.emit("계정을 삭제했습니다")
+	_rebuild()
+	Net.send("POST", "/v1/admin/inquiry/delete_account", {"id": id}, func(_r: Dictionary): fetch_inquiries(), func():
+		q.merge(back, true)
+		Economy.notice.emit("삭제하지 못했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음"))
 		fetch_inquiries(), true, true)
 
 
