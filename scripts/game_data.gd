@@ -756,11 +756,20 @@ static func research_defs() -> Array:
 	return _research
 
 
+## id → 행 색인(표가 바뀌면 다시 만든다). 대기 화면 연구소 말풍선이 매 프레임 노드마다 부른다 — 줄마다 훑으면 프레임당 수천 번 비교(발열).
+static var _research_idx := {}
+static var _research_idx_of: Array = []
+
+
 static func research_def(id: String) -> Dictionary:
-	for d in research_defs():
-		if d.id == id:
-			return d
-	return {}
+	var defs := research_defs()
+	if not is_same(defs, _research_idx_of):
+		_research_idx = {}
+		for d in defs:
+			if not _research_idx.has(d.id):
+				_research_idx[d.id] = d
+		_research_idx_of = defs
+	return _research_idx.get(id, {})
 
 
 ## 레벨 n → n+1 비용 {wood, stone, food, gold}(정수, 골드는 정수 골드) = round(값 × research_cost_growth^n), n은 0부터. 모르는 노드면 {}.

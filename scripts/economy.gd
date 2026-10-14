@@ -2707,13 +2707,26 @@ func _on_research_free_failed() -> void:
 
 
 ## 월드 말풍선(스펙 §5): 진행 중인 연구가 없고 지금 시작할 수 있는 노드가 있다.
+## 대기 화면이 매 프레임 여러 번 묻는다 — 판단에 쓰는 상태(자원·골드·연구·연구소 레벨·공터·대기)가 그대로면 지난 답을 쓴다
+## (전엔 프레임마다 노드 200여 개의 조건을 다 따졌다 — 발열). 그래도 1초마다는 새로 따진다.
+var _ra_key := -1
+var _ra := false
+
+
 func research_available() -> bool:
 	if not research_current.is_empty():
 		return false
+	var key := hash([res, gold_tenths, research_levels, building_level(GameData.LAB), unbuilt.has(GameData.LAB), _waiting.has("research"),
+		GameData.research_defs().size(), Time.get_ticks_msec() / 1000])  # 초가 바뀌면 다시(설정표가 바뀌어도 1초 안에 맞는다)
+	if key == _ra_key:
+		return _ra
+	_ra_key = key
+	_ra = false
 	for d in GameData.research_defs():
 		if research_block(d.id) == "":
-			return true
-	return false
+			_ra = true
+			break
+	return _ra
 
 
 func research_waiting() -> bool:

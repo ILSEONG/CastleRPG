@@ -88,7 +88,21 @@ static func center_of(id: String) -> Vector3:
 
 
 ## 지금 성 안에 있는 건물 부지 [{id, cell, size}] — 길 막기(formation.clamp_push)·말풍선 자리. Economy가 맞추기 전(테스트)은 기본 자리가 있는 건물 전부.
+## 겹침 해소가 유닛이 밀릴 때마다(전투 중 프레임당 수백 번) 부르므로 active가 바뀔 때만 다시 만든다(전엔 매번 건물 표를 다시 읽어
+## 겹침 해소가 3배 무거웠다 — 발열). 돌려준 배열은 고치지 말 것.
+static var _plots := []
+static var _plots_key := -1
+
+
 static func plots() -> Array:
+	var key := hash([active_set, active])
+	if key != _plots_key:
+		_plots = _build_plots()
+		_plots_key = key
+	return _plots
+
+
+static func _build_plots() -> Array:
 	var out := []
 	if not active_set:
 		for b in BUILDINGS:
