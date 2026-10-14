@@ -226,6 +226,9 @@ func _build_world() -> void:
 	var admin_panel = preload("res://scripts/admin_panel.gd").new()  # 운영 관리(슈퍼관리자만): 설정 창이 연다
 	add_child(admin_panel)
 	settings_panel.coupon = coupon_panel
+	var inquiry_panel = preload("res://scripts/inquiry_panel.gd").new()  # 문의하기(2026-10-14): 설정 창이 연다
+	add_child(inquiry_panel)
+	settings_panel.inquiry = inquiry_panel
 	settings_panel.admin_panel = admin_panel
 	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][공지][우편][가방][미션][랭킹][친구][이벤트][거래소][길드]
 	side_menu.windows = {"settings": settings_panel, "notice": notice_panel, "mail": mail_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,

@@ -19,6 +19,7 @@ Godot 앱과 Neon Postgres 사이의 권위 서버다(개정 9 스펙 `docs/supe
 | `src/rules.ts` | 경제 규칙(순수 함수, 시간 인자): 수집, 시세, 판매, 스테이지 연장, 처치 골드·상한. |
 | `src/db.ts` | Neon/PGlite `query`·`batch`(한 트랜잭션), 마이그레이션 러너(`schema_migrations`). |
 | `src/live_ops.ts` | 운영 도구(마이그레이션 039): 공지사항, 점검·최소 버전 관문(503 maintenance · 426 update_required), 우편함, 쿠폰, 관리자 `/v1/admin/*`. 엔드포인트 목록은 파일 머리 주석. |
+| `src/inquiry.ts` | 고객 문의(마이그레이션 047): 게임 안 [문의하기] → `inquiries` 표, 관리자 답변은 우편으로. 엔드포인트 목록은 파일 머리 주석. |
 | `src/seed.ts` | `data/*.csv`를 검증하고 기획 표 전부를 한 트랜잭션으로 upsert한다. 사라진 키는 지운다. |
 | `src/cli.ts` | `npm run migrate` / `npm run seed`. |
 | `migrations/*.sql` | 이름순으로 적용된다. 파일 하나가 한 트랜잭션이다. |
@@ -207,6 +208,10 @@ npm --prefix server test
   - 관리자(`admin_emails`)만 앱 [설정 → 운영 관리]에서 공지·점검·최소 버전·우편·쿠폰을 만든다. DB를 손으로 만질 필요가 없다.
   - 점검 중이면 관리자가 아닌 요청은 503 `maintenance`(로그인·`/v1/status`·`/v1/notices`·기획 표는 열림). 앱이 `X-App-Version`을 보내고 `min_version`보다 낮으면 426 `update_required`(이 머리글을 보내기 전 APK는 막지 못한다).
   - 상태는 서버마다 10초 들고 있는다(관리자가 바꾼 서버는 바로). 우편 받기·쿠폰은 version 가드 한 문장(받은 기록·사용 기록이 있으면 전체가 안 바뀐다, 쿠폰 전체 상한은 마지막 한 장을 한 사람만).
+- 고객 문의(2026-10-14, `src/inquiry.ts`, 마이그레이션 047)
+  - 문의 이메일은 두지 않는다. 앱 [설정 → 문의하기]에서 분류·내용을 보내면(플레이어 정보는 앱이 붙인다) `inquiries`에 쌓이고, 내 문의 목록에서 답변 상태를 본다.
+  - 관리자는 [운영 관리 → 문의]에서 답하고 닫는다. 답변은 그 플레이어에게 우편(보상을 붙일 수 있다)으로 간다. 같은 key·같은 답변 연타는 한 번만.
+  - 한 계정에 답변 대기 5개·하루 10개까지(429 `too_many_inquiries`). 약관·개인정보처리방침의 연락처는 `LEGAL_EMAIL`이 없으면 게임 안 문의하기를 가리킨다.
 
 ## 소셜 로그인(Google·카카오·네이버)
 

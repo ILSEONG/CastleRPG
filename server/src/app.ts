@@ -28,6 +28,7 @@ import { registerMarket } from './market.ts'
 import { registerChat } from './chat.ts'
 import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
+import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
 
 export interface AppOptions {
@@ -3617,6 +3618,7 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
+  registerInquiry(app, { query, auth, clock, body, ApiError, loadGame, isAdmin })
 
   return app
 }

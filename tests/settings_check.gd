@@ -153,8 +153,8 @@ func _run() -> void:
 	# 로그아웃·약관·문의(2026-10-12): 오프라인이면 로그아웃은 숨김, 주소가 비면 준비 중
 	_check(not w.logout_button.visible, "offline: no logout", "")
 	_check(w.terms_button.visible and w.privacy_button.visible and w.inquiry_button.visible, "terms, privacy, inquiry buttons shown", "")
-	var url: String = w.inquiry_url()
-	_check(url.begins_with("mailto:") and url.contains("subject=") and url.contains("body="), "inquiry mail link carries subject and player info", url.left(80))
+	w.open_inquiry()  # 오프라인: 문의 창 대신 알림(2026-10-14 — 문의는 게임 안 문의 창, tests/live_ops_online)
+	_check(w.visible, "offline inquiry keeps settings open", "")
 	var out := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
