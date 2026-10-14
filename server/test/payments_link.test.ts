@@ -167,6 +167,7 @@ test('약관·개인정보처리방침·계정 삭제 안내 페이지: 공개 H
       assert.ok(r.text.includes('테스트 운영자') && (path === '/legal/account-deletion' || r.text.includes('help@example.com')), path)
     }
     assert.ok((await S.req('GET', '/legal/privacy')).text.includes('개인정보 보호책임자'))
+    assert.ok((await S.req('GET', '/legal/privacy')).text.includes('광고 식별자(Android 광고 ID)')) // 보상형 광고(AdMob, 2026-10-14)
     for (const path of ['/legal/terms', '/legal/privacy', '/legal/account-deletion']) assert.ok((await S.req('GET', path)).text.includes('사업자등록번호: 123-45-67890'), path)
     const plain = await setup()
     try {
