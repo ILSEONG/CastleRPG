@@ -5,7 +5,9 @@ extends Node2D
 ##  - 이름 띠(banner, 액티브·한 판 한 번 패시브): 머리 위 깎인 모서리 상자(영웅 색, 어두운 테두리) + 스킬 그림 + 흰 이름, 1.2초.
 ##    상대 팀(team 1)은 작게 + 어두운 바탕·붉은 테두리. 띠끼리 겹치면 위로 밀고, 화면 밖으로 나가지 않게 안으로 들인다.
 ##  - 확률 패시브(text = ""): 이름 없이 스킬 그림 동그라미만 0.8초.
-##  - 컷인(cutin, 우리 편 SSR 궁극기): 화면 왼쪽 가운데로 스킬 이름 띠가 미끄러져 들어왔다 나간다. 한 번에 하나, CUTIN_GAP초 간격.
+##  - 컷인(cutin, 우리 편 SSR): 화면 왼쪽 가운데로 스킬 이름 띠가 미끄러져 들어왔다 나간다. 한 번에 하나 — 떠 있으면 줄 서서 이어 나온다
+##    (2026-10-14 사용자 "SSR은 스킬 쓸 때 나오는게 있고 안나오는게 있어, 다 나오는게 맞아": 예전엔 5초 간격에 걸린 것을 버렸다).
+##    궁극기는 늘, 다른 발동 스킬은 같은 영웅이 CUTIN_HERO_GAP초 안에 컷인을 안 띄웠을 때만(궁극기가 조건부라 드문 루미나·발두르도 나오게).
 ##    2026-10-13 개편: 띠·창은 로우폴리 면(면마다 밝기 조금씩), 속도선 대신 뾰족한 조각, 위아래 금 테, 외곽선은 같은 색을 어둡게.
 ##    왼쪽은 띠 위로 솟은 금빛 창(도는 빛살 — 금·흰 빛 영웅은 짙은 남보라)이고 그 안에 영웅 일러스트(HeroArt)가 들어간다 — 빛살은 일러스트를
 ##    두른 테두리로 보인다. 같은 날 잠깐 게임 속 모델 자세로 바꿨다가 사용자 "멋없는걸로 하지말고 일러스트를 써"로 일러스트로 돌아왔다.
@@ -42,7 +44,9 @@ const ENEMY_EDGE := Color(0.90, 0.26, 0.22)
 const CUTIN_LIFE := 1.3  # 컷인 전체 시간(초)
 const CUTIN_IN := 0.16  # 들어오는 시간
 const CUTIN_OUT := 0.2  # 나가는 시간
-const CUTIN_GAP := 5.0  # 컷인 사이 최소 간격(실제 초)
+const CUTIN_HERO_GAP := 12.0  # 같은 영웅의 궁극기 아닌 스킬 컷인 사이 최소 간격(게임 초) — 궁극기는 간격 없이 늘
+const CUTIN_QUEUE := 4  # 기다리는 컷인 최대 수(넘치면 가장 오래된 궁극기 아닌 것부터 버린다)
+const CUTIN_LIFE_BUSY := 1.0  # 뒤에 기다리는 컷인이 있으면 지금 컷인은 이만큼만(줄이 길어지지 않게)
 const CUTIN_Y := 0.205  # 띠 윗변 = 화면 높이 × 이 값(위 정보 패널 아래, 화면 가운데 싸움은 가리지 않게)
 const CUTIN_H := 128.0  # 띠 높이
 const CUTIN_POP := 54.0  # 금빛 창이 띠 위로 솟는 높이(위 정보 패널 아래까지만)
@@ -78,8 +82,10 @@ var tag_rects: Array = []  # 지난 프레임에 그린 스킬 표시 자리(Rec
 
 var _list: Array = []   # 살아 있는 숫자 {pos: 월드, text, kind, age, dx}. 나이순
 var _tags: Array = []   # 스킬 표시 {pos: 월드, text(""면 그림만), skill, kind = BANNER, age, life, bg = 영웅 색, enemy, lift}. 나이순
-var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, age}(없으면 비어 있다)
-var _cut_ms := -1000000  # 마지막 컷인 시작(ms)
+var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, ult, life, age}(없으면 비어 있다)
+var _cut_q: Array = []  # 기다리는 컷인(같은 꼴, 앞부터)
+var _hero_cut := {}     # 영웅 id → 마지막 컷인을 띄운(줄 세운) _clock
+var _clock := 0.0       # 게임 시간(초, _process delta 합 — 배속을 따른다)
 var _glyphs := {}       # 그림 이름 → SkillIcons.shapes(매 프레임 새로 만들지 않게)
 var _dt := 0.0
 var _poison := {}       # 대상 id → {target, sum, age, pos}
@@ -114,15 +120,33 @@ static func banner(target, skill: String, text: String, color: Color, enemy := f
 		"life": BANNER_LIFE if text != "" else PROC_LIFE, "bg": color, "enemy": enemy, "lift": 0.0})
 
 
-## 우리 편 SSR 궁극기 컷인. 이미 하나가 떠 있거나 CUTIN_GAP초가 안 지났으면 건너뛴다(쌓아 두지 않는다).
-static func cutin(hero_id: String, text: String, sub: String, color: Color, skill: String) -> void:
+## 우리 편 SSR 컷인. ult = 궁극기(늘 띄운다). 아니면 그 영웅이 CUTIN_HERO_GAP초 안에 컷인을 안 띄웠을 때만.
+## 떠 있는 컷인이 있으면 줄을 선다 — 같은 영웅이 이미 기다리면 그 자리를 새것으로(궁극기가 이긴다), 줄이 넘치면 오래된 것부터 버린다.
+static func cutin(hero_id: String, text: String, sub: String, color: Color, skill: String, ult := true) -> void:
 	if current == null:
 		return
-	var now := Time.get_ticks_msec()
-	if not current._cut.is_empty() or now - current._cut_ms < int(CUTIN_GAP * 1000.0):
+	var me = current
+	if not ult and me._clock - float(me._hero_cut.get(hero_id, -INF)) < CUTIN_HERO_GAP:
 		return
-	current._cut_ms = now
-	current._cut = {"hero": hero_id, "text": text, "sub": sub, "bg": color, "skill": skill, "age": 0.0}
+	me._hero_cut[hero_id] = me._clock
+	var c := {"hero": hero_id, "text": text, "sub": sub, "bg": color, "skill": skill, "ult": ult, "life": CUTIN_LIFE, "age": 0.0}
+	if me._cut.is_empty():
+		me._cut = c
+		return
+	for i in me._cut_q.size():
+		if me._cut_q[i].hero == hero_id:
+			if ult or not me._cut_q[i].ult:
+				me._cut_q[i] = c
+			return
+	me._cut_q.append(c)
+	while me._cut_q.size() > CUTIN_QUEUE:
+		var drop := 0
+		for i in me._cut_q.size():
+			if not me._cut_q[i].ult:
+				drop = i
+				break
+		me._cut_q.remove_at(drop)
+	me._cut.life = minf(me._cut.life, maxf(CUTIN_LIFE_BUSY, me._cut.age + CUTIN_OUT))  # 기다리는 게 생겼다 — 지금 것을 조금 일찍 뺀다
 
 
 ## 띠 바탕색: 영웅 색이 밝으면(노랑·연두 …) 흰 글자가 읽히게 어둡게 누른다.
@@ -194,10 +218,13 @@ func _process(delta: float) -> void:
 			_tags.remove_at(i)
 		else:
 			i += 1
+	_clock += delta
 	if not _cut.is_empty():
 		_cut.age += delta
-		if _cut.age >= CUTIN_LIFE:
-			_cut = {}
+		if _cut.age >= _cut.life:
+			_cut = _cut_q.pop_front() if not _cut_q.is_empty() else {}
+			if not _cut.is_empty() and not _cut_q.is_empty():
+				_cut.life = CUTIN_LIFE_BUSY
 	for id in (_poison.keys() if not _poison.is_empty() else []):
 		var p: Dictionary = _poison[id]
 		p.age += delta
@@ -344,8 +371,8 @@ func _draw_cutin() -> void:
 	var alpha := 1.0
 	if age < CUTIN_IN:
 		x = -vs.x * (1.0 - ease(age / CUTIN_IN, 0.35))
-	elif age > CUTIN_LIFE - CUTIN_OUT:
-		var k := (age - (CUTIN_LIFE - CUTIN_OUT)) / CUTIN_OUT
+	elif age > _cut.life - CUTIN_OUT:
+		var k := clampf((age - (_cut.life - CUTIN_OUT)) / CUTIN_OUT, 0.0, 1.0)
 		x = -vs.x * ease(k, 2.4)
 		alpha = 1.0 - k
 	var y0 := roundf(vs.y * CUTIN_Y)
@@ -389,7 +416,7 @@ func _draw_cutin() -> void:
 	var win := PackedVector2Array([Vector2(x - 2.0, wt), Vector2(xr.call(wt) - ch, wt), Vector2(xr.call(wt + ch), wt + ch),
 		Vector2(xr.call(wb), wb), Vector2(x - 2.0, wb)])
 	var wr := Rect2(x - 2.0, wt, xr.call(wt) + 2.0 - x, wb - wt)
-	var zoom: float = lerpf(CUTIN_ZOOM[0], CUTIN_ZOOM[1], clampf(age / CUTIN_LIFE, 0.0, 1.0))
+	var zoom: float = lerpf(CUTIN_ZOOM[0], CUTIN_ZOOM[1], clampf(age / _cut.life, 0.0, 1.0))
 	if HeroArt.draw_in(self, _cut.hero, win, wr, 0.34, zoom):
 		if alpha < 1.0:
 			draw_colored_polygon(win, Color(band, 1.0 - alpha))  # 빠질 때 그림도 흐려지게

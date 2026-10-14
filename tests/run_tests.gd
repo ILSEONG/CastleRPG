@@ -1230,6 +1230,31 @@ func test_castle_parts() -> void:
 	for pair in [["wall_run", TownKitScript.wall_run(10.0)], ["gatehouse", TownKitScript.gatehouse()], ["gate_doors", TownKitScript.gate_doors()], ["corner_tower", TownKitScript.corner_tower()], ["stairs", TownKitScript.stairs()]]:
 		var m: ArrayMesh = pair[1]
 		check(m.get_surface_count() == 1 and m.get_aabb().size.length() > 0.5, "%s has one non-empty surface" % pair[0])
+	# 성 모습 단계(성채 Lv 5·10·15·22·30, 2026-10-14): 문루·모서리 탑은 단계마다 한 표면, 성벽 장식은 2단계부터.
+	# 장식은 성벽 위 길(중심선 ±WALK_HALF)·계단 띠를 막지 않는다 — 성벽 높이 위 정점은 중심선에서 WALK_HALF + 0.2 밖, 계단 칸 안에 정점이 없다.
+	for lk in 6:
+		check(TownKitScript.gatehouse(lk).get_surface_count() == 1 and TownKitScript.corner_tower(lk).get_surface_count() == 1, "castle look %d gatehouse/tower are one surface" % lk)
+	check(GameData.castle_look(1) == 0 and GameData.castle_look(5) == 1 and GameData.castle_look(14) == 2 and GameData.castle_look(22) == 4 and GameData.castle_look(30) == 5, "castle look steps at keep 5/10/15/22/30")
+	for tiles in [20, 28, 36]:
+		var half: float = tiles * Balance.TILE / 2.0
+		var offs := FormationScript.gate_offsets(half)
+		check(TownKitScript.castle_dressing(half, offs, 1) == null, "no wall dressing below look 2 (%d tiles)" % tiles)
+		for lk in [2, 3, 4, 5]:
+			var dm: ArrayMesh = TownKitScript.castle_dressing(half, offs, lk)
+			var dv: PackedVector3Array = dm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			var c: float = half + Balance.WALL_T / 2.0
+			var on_walk := 0
+			var on_stair := 0
+			for v in dv:
+				var out := maxf(absf(v.x), absf(v.z))  # 가까운 면 쪽 중심에서의 거리
+				var along := minf(absf(v.x), absf(v.z))
+				if v.y > Balance.WALL_H + 0.01 and absf(out - c) < FormationScript.WALK_HALF + 0.2:
+					on_walk += 1
+				for at in offs:
+					var d := absf(along - absf(float(at)))
+					if out > half - Balance.STAIR_W + 0.01 and out < half - 0.01 and d > Balance.GATE_W / 2.0 + Balance.STAIR_GAP and d < Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN:
+						on_stair += 1
+			check(dv.size() > 0 and on_walk == 0 and on_stair == 0, "wall dressing look %d (%d tiles) keeps the wall walk and stairs clear: walk %d stair %d" % [lk, tiles, on_walk, on_stair])
 	var sm: ArrayMesh = TownKitScript.stairs()
 	var st: AABB = sm.get_aabb()
 	check(is_equal_approx(st.size.x, Balance.STAIR_RUN) and is_equal_approx(st.end.y, Balance.WALL_H) and is_equal_approx(st.size.z, Balance.STAIR_W), "stairs span run x wall height x stair width: %s" % st)
@@ -1256,8 +1281,8 @@ func test_castle_parts() -> void:
 
 ## 건물 레시피는 부지 안·바닥 위·부지 가운데, 자연물·산은 한 표면으로 땅 근처에 놓인다.
 func test_town_recipes() -> void:
-	for b in Balance.BUILDINGS:
-		var m: ArrayMesh = TownKitScript.building(b.id)
+	for b in Balance.BUILDINGS + [{"id": "keep", "size": Balance.building("keep").size, "look": 5}, {"id": "keep", "size": Balance.building("keep").size, "look": 3}]:
+		var m: ArrayMesh = TownKitScript.building(b.id, b.get("look", 0))
 		var box := m.get_aabb()
 		var plot := Vector2(b.size.x * Balance.TILE - Art.BUILDING_GAP, b.size.y * Balance.TILE - Art.BUILDING_GAP)
 		check(box.size.x <= plot.x + 0.01 and box.size.z <= plot.y + 0.01, "%s fits its plot: %s vs %s" % [b.id, box.size, plot])
