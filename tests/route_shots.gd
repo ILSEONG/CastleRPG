@@ -55,20 +55,27 @@ func _ready() -> void:
 			break
 	_check(not is_instance_valid(ra), "route removed on arrival")
 	_shots.append(get_viewport().get_texture().get_image())
-	# 영웅을 고른 채 몬스터를 누르면 선택이 풀린다(이동 명령 없음)
-	var mon = null
-	for m in get_tree().get_nodes_in_group("monsters"):
+	# 영웅을 고른 채 몬스터를 누르면 공격 명령(사용자 2026-10-14): 선택은 그대로, 빨간 표적 링
+	var mon = preload("res://scripts/monster.gd").new()  # 탁 트인 바닥에 멈춰 선 적(표적 링이 성벽에 가리지 않게)
+	mon.setup("grunt", 2, 1, a.castle, 30.0)
+	_main.add_child(mon)
+	mon.global_position = picker._ground_point(Vector2(560, 1010))
+	mon.set_process(false)
+	await _frames(2)
+	for m in ([] if mon != null else get_tree().get_nodes_in_group("monsters")):
 		var mp: Vector2 = picker.camera.unproject_position(m.global_position + Vector3(0, 0.8, 0))
 		if m.is_alive() and get_viewport().get_visible_rect().grow(-80).has_point(mp) and picker._hero_at(mp, picker.HERO_TAP_PX) == null:
 			mon = m
 			break
 	if mon != null:
 		picker._select(a)
-		var keep: Vector3 = a.free_pos
 		picker._pending = picker.camera.unproject_position(mon.global_position + Vector3(0, 0.8, 0))
 		await get_tree().physics_frame
 		await get_tree().physics_frame
-		_check(picker.selected == null and a.free_pos == keep, "monster tap clears the hero selection without a move")
+		_check(picker.selected == a and a.focus_target() == mon and picker._routes.get(a) != null and picker._routes[a].target == mon,
+			"monster tap orders an attack and keeps the selection")
+		await _frames(20)
+		_shots.append(get_viewport().get_texture().get_image())
 	else:
 		_check(false, "found an on-screen monster for the monster tap")
 	var out := "/tmp/route.png"

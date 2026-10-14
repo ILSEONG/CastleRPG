@@ -41,6 +41,11 @@ const NAMED_PASSIVES := ["revive", "invincible", "second_wind"]  # 한 판에 �
 const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
 const CAST_RECOVER := 0.3  # 발동 순간 뒤 이만큼 더 제자리에서 모션을 마저 한다(초) — 곧바로 평타 모션이 덮지 않게
 const ARENA_PAD := 0.2  # 던전·드래곤 아레나: 영웅끼리 몸 둘레 여유(m, ally_pad) — 둘 합 1.3 m 떨어져 선다
+const KEEP_SLOT_R := 1.5  # 같은 성문·성벽을 거듭 누를 때 지금 자리에서 이만큼 안을 누르면 자리를 바꾸지 않는다(2026-10-14 우왕좌왕)
+const KEEP_ROUTE_SLACK := 4.0  # 지금 경로의 도착지만 바꾼 길이 새로 짠 길보다 이만큼(m) 안쪽으로만 길면 지금 경로를 지킨다
+const ON_LINE_R := 0.6  # 새 경로 첫 구간 선에서 이만큼 안이고 그 구간 가운데에 있으면 첫 점은 이미 지나쳤다
+const FOCUS_REPLAN := 0.5  # 공격 명령: 걷는 중 표적을 다시 보는 간격(초)
+const FOCUS_DRIFT := 1.5  # 공격 명령: 표적이 경로 끝에서 이만큼 움직였으면 경로를 다시 짠다
 
 var castle
 var formation
@@ -103,6 +108,9 @@ var _stun_fx: Node3D
 var _cast_fn := Callable()  # 발동 모션 중인 스킬(개정 25): 모션의 발동 순간에 부른다. 비었으면 시전 중 아님
 var _cast_left := 0.0  # 발동 순간까지 남은 초
 var _cast_style := "attack"  # 발동 순간 연출 종류(hero_skills.cast_style, 2026-10-13)
+var _focus  # 공격 명령 표적(2026-10-14, unit_picker): 쓰러지거나 새 명령이 올 때까지 이것만 쫓아가 친다
+var _focus_cd := 0.0  # 걷는 중 표적을 다시 볼 때까지 남은 초
+var _focus_moved := false  # 표적을 쫓느라 자리를 떠났다 — 쓰러뜨린 곳에 선다
 var _cast_t := 0.0  # 시전 자세 남은 초(발동 순간 + CAST_RECOVER) — 이 동안 평타·추격을 쉬고 제자리에 선다(이동 명령은 예외)
 
 
@@ -177,6 +185,7 @@ func reset() -> void:
 	state = State.IDLE
 	_target = null
 	_swing = null
+	_focus = null
 	_linger = 0.0
 	_attacks = 0
 	_cancel_cast()
@@ -226,19 +235,32 @@ func stand_position() -> Vector3:
 ## 자리 변경 명령. 목표 자리가 가득 차면 false (현재 자리 유지).
 ## near(성문 중앙 기준 옆 거리)를 주면 그 지점에 가장 가까운 빈 슬롯 — 같은 자리 안에서도 옮긴다(성벽 위 좌↔우).
 func move_to(p_side: int, p_post: int, near := NAN) -> bool:
+	if p_side == side and p_post == post and not is_nan(near) and int(formation.assignment(index).get("slot", -1)) == slot \
+			and absf(Formation.perp(side).dot(stand_position()) - near) <= KEEP_SLOT_R:
+		_focus = null
+		_replan_stable()  # 같은 자리 근처를 다시 눌렀다: 자리는 그대로(옆 자리로 오가지 않게)
+		return true
 	var s: int = formation.claim(index, p_side, p_post) if is_nan(near) else formation.claim_near(index, p_side, p_post, near)
 	if s < 0:
 		return false
 	side = p_side
 	post = p_post
 	slot = s
-	_replan()
+	_focus = null
+	_replan_stable()
 	return true
 
 
 ## 자유 이동 명령: 슬롯을 비우고 바닥 지점 p에 선다. 대기 방향은 가장 가까운 면의 바깥.
 ## 아레나(던전)에서는 그 뒤로 그 지점에서 aggro 안의 적만 노린다(hold) — 안 그러면 도착하자마자 가장 가까운 적에게 다시 달려간다.
 func move_to_point(p: Vector3) -> void:
+	_focus = null
+	_set_free(p)
+	_replan_stable()
+
+
+## 자유 위치 p에 서게 한다(경로는 쓰는 쪽이). 슬롯을 비운다.
+func _set_free(p: Vector3) -> void:
 	if formation != null:
 		formation.release(index)
 	post = Formation.POST_FREE
@@ -247,7 +269,133 @@ func move_to_point(p: Vector3) -> void:
 		side = Formation.side_of(free_pos)
 	else:
 		hold = true
+
+
+## 플레이어 명령의 경로(사용자 2026-10-14 "이동하려는 쪽을 계속 누르면 루트가 시시각각 바뀌며 우왕좌왕"):
+## (1) 지금 걷는 경로의 도착지만 새 자리로 바꾼 길(마지막 구간을 곧장 갈 수 있을 때)이 새로 짠 길보다 KEEP_ROUTE_SLACK 넘게 길지 않으면
+##     그 길을 쓴다 — 성 모서리 근처를 거듭 누를 때 지나는 성문이 이쪽저쪽으로 바뀌지 않는다.
+## (2) 아니면 새로 짠 길에서 이미 지나친 앞 점(성문 통과 지점 등 — 지나가는 반경 안에서 떼어 냈다)을 뺀다 — 왔던 쪽으로 돌아서지 않는다.
+func _replan_stable() -> void:
+	if not is_inside_tree():
+		return
+	var old: Array[Vector3] = _path.duplicate()
 	_replan()
+	if _path.is_empty():
+		return
+	var dest: Vector3 = _path[_path.size() - 1]
+	if old.size() >= 2 and Crowd.level(global_position.y) != -1:
+		var keep: Array[Vector3] = old.slice(0, old.size() - 1)
+		var leg := _route_between(keep[keep.size() - 1], dest)
+		keep.append(dest)
+		if leg.size() == 1 and Formation.path_length(global_position, keep) <= Formation.path_length(global_position, _path) + KEEP_ROUTE_SLACK:
+			_path = keep
+			return
+	_path = _skip_passed(_path)
+
+
+## from → to 경로(도착점 포함). 성은 성문·계단(Formation.route), 아레나는 곧장. 공성전(war_hero)이 덮어쓴다.
+func _route_between(from: Vector3, to: Vector3) -> Array[Vector3]:
+	if castle == null:
+		var out: Array[Vector3] = [to]
+		return out
+	return Formation.route(castle.half, from, to)
+
+
+## 지금 위치 → to 경로.
+func _route_to(to: Vector3) -> Array[Vector3]:
+	return _route_between(global_position, to)
+
+
+## 경로 앞 점 중 이미 지나친 것(영웅이 그 점 → 다음 점 구간 위, 가운데에 있다)을 뺀다. 높이가 바뀌는 점(계단)은 빼지 않는다.
+func _skip_passed(p: Array[Vector3]) -> Array[Vector3]:
+	var here := global_position
+	while p.size() >= 2:
+		var a: Vector3 = p[0]
+		var b: Vector3 = p[1]
+		if absf(a.y - here.y) > 0.05 or absf(b.y - a.y) > 0.05:
+			break
+		var ab := Vector3(b.x - a.x, 0.0, b.z - a.z)
+		var ah := Vector3(here.x - a.x, 0.0, here.z - a.z)
+		var len2 := ab.length_squared()
+		if len2 < 0.0001:
+			break
+		var t := ab.dot(ah) / len2
+		if t <= 0.0 or t >= 1.0 or (ah - ab * t).length() > ON_LINE_R:
+			break
+		p.pop_front()
+	return p
+
+
+# --- 공격 명령(사용자 2026-10-14 "영웅으로 적 유닛 클릭하면 타겟팅") ---
+
+## 영웅을 고른 채 적을 누르면(unit_picker): 그 적에게 가서 쓰러질 때까지 그것만 친다(새 이동·공격 명령이 오면 그만).
+## 지금 자리에서 닿으면(성벽 위 원거리 등) 자리를 지키며 치고, 아니면 자리를 떠나 쫓아가 쓰러뜨린 곳에 선다(자유 위치).
+## 같은 적을 거듭 눌러도 아무것도 바꾸지 않는다(빠른 연타).
+func attack_unit(m) -> void:
+	if m == null or not is_instance_valid(m) or not m.is_alive() or m == _focus or state == State.DEAD:
+		return
+	_focus = m
+	_focus_moved = false
+	_focus_cd = 0.0
+	_target = m
+	_linger = 0.0
+	if _swing != null and _swing != m:
+		_swing = null  # 다른 적을 휘두르던 공격은 거둔다 — 곧바로 새 표적으로
+
+
+## 지금 쫓는 공격 명령 표적(없으면 null).
+func focus_target():
+	return _focus if _focus_ok() else null
+
+
+func _focus_ok() -> bool:
+	return _focus != null and is_instance_valid(_focus) and _focus.is_inside_tree() and _focus.is_alive()
+
+
+## 표적이 쓰러졌다(사라졌다): 쫓느라 자리를 떠났으면 지금 선 곳을 자리로 삼는다(되돌아 걷지 않는다).
+func _end_focus() -> void:
+	_focus = null
+	if _focus_moved and Crowd.level(global_position.y) == 0:
+		_set_free(global_position)
+		_path.clear()
+	_focus_moved = false
+
+
+## 표적 쪽으로 걸어갈 바닥 지점. 공성전은 성벽 몸·성채를 피한 자리(war_hero).
+func _focus_dest(fp: Vector3) -> Vector3:
+	return Vector3(fp.x, 0.0, fp.z)
+
+
+func _can_hit(fp: Vector3) -> bool:
+	return Formation.flat_distance(global_position, fp) <= _reach(_focus) and sees(global_position, fp)
+
+
+## 바닥에서 표적까지 곧장 쫓을 수 있나(같은 영역, 성문·계단·성채를 돌 일 없음).
+func _straight_to(fp: Vector3) -> bool:
+	return not is_on_wall() and Crowd.level(global_position.y) == 0 and _route_to(_focus_dest(fp)).size() == 1
+
+
+## 표적 쪽 경로를 짠다(성문·계단을 거쳐서). 자리를 떠난다.
+func _go_focus(fp: Vector3) -> void:
+	var dest := _focus_dest(fp)
+	_set_free(dest)
+	_focus_moved = true
+	_path = _skip_passed(_route_to(dest))
+
+
+## 걷는 중 표적 확인: 닿거나 곧장 쫓을 수 있으면 걷기를 멈추고(계단 중간은 마저), 표적이 경로 끝에서 멀어졌으면 다시 짠다.
+func _focus_walk() -> void:
+	if not _focus_ok():
+		_end_focus()
+		return
+	if Crowd.level(global_position.y) == -1:
+		return
+	var fp: Vector3 = _focus.global_position
+	if _can_hit(fp) or _straight_to(fp):
+		_path.clear()
+		return
+	if Formation.flat_distance(_path[_path.size() - 1], _focus_dest(fp)) > FOCUS_DRIFT:
+		_go_focus(fp)
 
 
 func _replan() -> void:
@@ -411,6 +559,11 @@ func _process(delta: float) -> void:
 	_tick_skills(delta)
 	_tick_swing(delta)
 	_tick_cast(delta)
+	if _focus != null and not _path.is_empty():
+		_focus_cd -= delta
+		if _focus_cd <= 0.0:
+			_focus_cd = FOCUS_REPLAN
+			_focus_walk()
 	if not _path.is_empty():
 		var wp: Vector3 = _path[0]
 		state = State.MOVE
@@ -430,10 +583,23 @@ func _process(delta: float) -> void:
 			_model.face(_target.global_position - global_position)
 		return
 	_scan_cd -= delta
+	if _focus != null:
+		if not _focus_ok():
+			_end_focus()
+		else:
+			_target = _focus
+			var fp: Vector3 = _focus.global_position
+			if not _can_hit(fp):
+				if not _straight_to(fp):
+					_go_focus(fp)  # 성문·계단을 거쳐서 — 다음 프레임부터 걷는다
+					return
+				if not _focus_moved:
+					_set_free(_focus_dest(fp))  # 곧장 쫓는다: 자리를 떠난다
+					_focus_moved = true
 	# 표적이 죽거나 사라지면 다음 스캔을 기다리지 않고 이 프레임에 다시 찾는다(기다리는 동안 자리 쪽으로 물러나지 않게).
 	# 휘두르는 중인 사거리 안 표적은 스캔이 놓쳐도(aggro 경계 등) 그대로 둔다.
 	var lost: bool = _target != null and not (is_instance_valid(_target) and _target.is_alive())
-	if _scan_cd <= 0.0 or lost:
+	if _focus == null and (_scan_cd <= 0.0 or lost):
 		_scan_cd = SCAN_INTERVAL
 		if not _swinging_at(_target):
 			_target = _find_target()

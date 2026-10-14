@@ -25,6 +25,7 @@ var post_pos := Vector3.ZERO  # 수비: 지키는 자리 / 공격: 진영 자리
 var war_half := 0.0
 var battle  # war_battle.gd(brain·목표 위치)
 var commanded := false  # 플레이어가 이동 명령을 내렸다(자동 진격 멈춤)
+var focus_uid := -1  # 공격 명령 표적의 uid(꼭두각시 기기가 방장에게 보낸다). 없으면 -1
 var mine := false  # 이 기기의 플레이어 영웅(선택·조종 가능)
 var puppet := false  # 온라인: 방장이 아닌 기기 — 따라 그리기만
 var is_boss := false  # 거인 사냥(boss_slayer) 대상 아님
@@ -397,11 +398,55 @@ func set_home(p: Vector3, go := true) -> void:
 
 ## 플레이어 이동 명령(unit_picker): 자동 진격을 멈추고 그 자리를 지킨다.
 func move_to_point(p: Vector3) -> void:
-	if battle != null and battle.deploying:
+	if battle != null and battle.get("deploying") == true:  # PVP 전장에는 배치 단계가 없다
 		battle.deploy_unit(self, p)  # 배치 중: 걸어가지 않고 그 자리에 선다
 		return
 	commanded = true
-	set_home(_command_point(p))
+	_focus = null
+	focus_uid = -1
+	set_home(_command_point(p), false)
+	_target = null
+	_replan_stable()
+
+
+## 플레이어 공격 명령(unit_picker, 2026-10-14): 그 적을 쫓아가 쓰러질 때까지 친다(자동 진격 멈춤). 배치 중엔 없다.
+## 꼭두각시 기기: 걷지 않으니 그 적 자리로 이동 명령을 주고 표적 uid를 함께 방장에게 보낸다(war_battle._relay_my_commands).
+func attack_unit(m) -> void:
+	if (battle != null and battle.get("deploying") == true) or m == null or not is_instance_valid(m) or not m.is_alive() or m == _focus:
+		return
+	if puppet:
+		move_to_point(m.global_position)
+		_focus = m
+		focus_uid = int(m.get("uid")) if m.get("uid") != null else -1
+		return
+	commanded = true
+	focus_uid = int(m.get("uid")) if m.get("uid") != null else -1
+	super.attack_unit(m)
+
+
+## 공격 명령은 자동 진격으로 돌아가거나(set_auto) 도발에 걸리면 그만.
+func _focus_ok() -> bool:
+	return commanded and not (_taunt_t > 0.0 and is_instance_valid(_taunt_by) and _taunt_by.is_alive()) and super._focus_ok()
+
+
+func _set_free(p: Vector3) -> void:
+	commanded = true
+	set_home(p, false)
+
+
+func _focus_dest(fp: Vector3) -> Vector3:
+	return _command_point(Vector3(fp.x, 0.0, fp.z))
+
+
+func _route_between(from: Vector3, to: Vector3) -> Array[Vector3]:
+	if war_half <= 0.0:
+		var out: Array[Vector3] = [to]
+		return out
+	return _unclip(from, _route_raw(from, to))
+
+
+func _route_to(to: Vector3) -> Array[Vector3]:
+	return _route(to)
 
 
 ## 공격 이동 명령 자리: 성채 위면 성채 앞으로, 성벽 몸 속이면 성 밖으로, 들어갈(부서진) 성문이 없는데 성 안이면 그 면 성문 앞으로.

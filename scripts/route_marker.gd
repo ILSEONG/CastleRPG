@@ -3,6 +3,8 @@ extends Node3D
 ## 점선 마디는 도착지에서부터 재므로 땅에 붙어 있다(영웅이 걸어도 흐르지 않고 뒤쪽부터 사라진다).
 ## 영웅이 걸어가면 띠가 줄어들고, 도착하면(또는 새 명령·복귀로 경로가 바뀌거나 쓰러지면) 스스로 사라진다.
 ## unit_picker가 명령마다 영웅당 하나씩 만든다(이전 것은 지운다). 공성전 꼭두각시(puppet)는 경로를 걷지 않으므로 도착지까지 곧은 선.
+## 공격 명령(target, 2026-10-14): 링은 빨갛고 표적 발밑을 따라다닌다. 점선은 영웅이 표적에 닿을 거리 밖일 때만. 표적이 쓰러지거나
+## 영웅이 다른 명령을 받으면(focus_target이 바뀌면) 사라진다.
 
 const Art := preload("res://scripts/art.gd")
 
@@ -14,20 +16,25 @@ const ARRIVE_R := 0.45  # 도착지와 이 거리 안이면 도착
 const PULSE_HZ := 1.6
 const DASH := 0.9  # 점선 한 마디 길이
 const GAP := 0.9  # 마디 사이 빈칸
+const TARGET_COLOR := Color(0.92, 0.22, 0.16)  # 공격 명령 링(빨강)
+const TARGET_EDGE := Color(0.45, 0.06, 0.04, 0.8)
 
 var hero
 var dest := Vector3.ZERO
+var target  # 공격 명령 표적(없으면 이동 명령)
 
 var _line: MeshInstance3D
 var _mesh := ImmediateMesh.new()
 var _edge_mesh := ImmediateMesh.new()
 var _ring: MeshInstance3D
 var _t := 0.0
+var _ring_scale := 1.0
 
 
-func setup(p_hero, p_dest: Vector3) -> void:
+func setup(p_hero, p_dest: Vector3, p_target = null) -> void:
 	hero = p_hero
 	dest = p_dest
+	target = p_target
 
 
 func _ready() -> void:
@@ -75,14 +82,41 @@ func _ready() -> void:
 	ring_edge.position.y = -0.04
 	ring_edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_ring.add_child(ring_edge)
+	if target != null:
+		rmat.albedo_color = TARGET_COLOR
+		var tedge := emat.duplicate() as StandardMaterial3D
+		tedge.albedo_color = TARGET_EDGE
+		ring_edge.material_override = tedge
+		var hr := float(target.hit_radius()) if target.has_method("hit_radius") else 0.0
+		_ring_scale = maxf(1.0, hr + 0.4)  # 큰 적(보스·드래곤)은 몸 둘레에
 	_ring.position = dest + Vector3(0, LIFT, 0)
 	_update()
 
 
 func _process(delta: float) -> void:
 	_t += delta
-	_ring.scale = Vector3.ONE * (1.0 + 0.12 * sin(_t * TAU * PULSE_HZ))
+	_ring.scale = Vector3.ONE * _ring_scale * (1.0 + 0.12 * sin(_t * TAU * PULSE_HZ))
 	_update()
+
+
+## 공격 명령 표시가 살아 있나: 표적이 살아 있고 영웅이 아직 그 표적을 쫓는다.
+func target_live() -> bool:
+	return target != null and is_instance_valid(target) and target.is_inside_tree() and target.is_alive() \
+		and hero != null and is_instance_valid(hero) and hero.is_alive() and hero.focus_target() == target
+
+
+## 공격 명령 점선: 영웅 → 남은 경로 → 표적. 닿을 거리 안이면 빈 배열(링만).
+func target_points() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var pos: Vector3 = hero.global_position
+	if Vector2(pos.x - dest.x, pos.z - dest.z).length() <= float(hero.def.range) + float(target.hit_radius() if target.has_method("hit_radius") else 0.0) + 0.3:
+		return out
+	out.append(pos)
+	if hero.get("puppet") != true:
+		for p in hero._path:
+			out.append(p)
+	out.append(dest)
+	return out
 
 
 ## 남은 경로 점들(영웅 위치부터 도착지까지). 표시를 끝낼 때면 빈 배열.
@@ -111,10 +145,19 @@ func points() -> Array[Vector3]:
 
 
 func _update() -> void:
-	var pts := points()
-	if pts.size() < 2:
-		queue_free()
-		return
+	var pts: Array[Vector3]
+	if target != null:
+		if not target_live():
+			queue_free()
+			return
+		dest = target.global_position
+		_ring.position = dest + Vector3(0, LIFT, 0)
+		pts = target_points()
+	else:
+		pts = points()
+		if pts.size() < 2:
+			queue_free()
+			return
 	var dashes := _dashes(pts)
 	_strips(_mesh, dashes, WIDTH, 0.0, LIFT)
 	_strips(_edge_mesh, dashes, WIDTH + EDGE * 2.0, EDGE, LIFT - 0.02)
