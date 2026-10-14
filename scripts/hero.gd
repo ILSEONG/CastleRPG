@@ -80,6 +80,7 @@ var _tier := 0  # 연출 단계(Fx.tier_of 등급): 높을수록 스킬 이펙�
 var _aura_ring: MeshInstance3D  # atk_aura를 받는 중 표시
 var _aura_cd := 0.0
 var _banner_at := -INF  # 마지막 이름 띠 시각(초)
+var _banner_kind := ""  # 마지막 이름 띠 스킬(궁극기가 같은 스킬 간격까지 건너뛰지 않게)
 var _proc_at := -INF  # 마지막 확률 패시브 그림 시각(초)
 var _target
 var _atk_cd := 0.0
@@ -974,26 +975,30 @@ func _nearest_others(exclude, from: Vector3, radius: float, n: int) -> Array:
 
 ## 스킬 발동 표시(개정 17 §3, 2026-10-12 개편): 머리 위 표시 + 발밑 링 맥동. 액티브·한 판 한 번 패시브(NAMED_PASSIVES)는 이름 띠,
 ## 확률 패시브는 이름 없이 스킬 그림만 — 둘은 따로 BANNER_GAP초에 한 번(확률 패시브가 액티브 이름을 가리지 않게).
-## 우리 편 SSR의 궁극기(해금된 가장 높은 칸의 액티브)는 화면 컷인도 띄운다. 상대 팀(team 1)은 작은 띠.
+## 우리 편 SSR은 발동 스킬마다 화면 컷인도 띄운다 — 궁극기(해금된 가장 높은 칸의 액티브)는 늘, 다른 발동 스킬은 DamageNumbers가 영웅마다
+## 간격을 둔다(2026-10-14 "다 나오는게 맞아"). 궁극기는 다른 스킬 이름 띠의 간격(BANNER_GAP)에 막히지 않는다(바로 뒤에 써도 빠지지 않게 — 같은 스킬끼리는 막힌다).
+## 상대 팀(team 1)은 작은 띠.
 func _announce(kind: String) -> void:
 	if not is_inside_tree():
 		return
 	var now := Time.get_ticks_msec() / 1000.0
 	var named := HeroSkillsScript.is_active(kind) or kind in NAMED_PASSIVES
+	var enemy: bool = get("team") == 1
+	var ssr: bool = not enemy and def.get("grade", "") == "SSR"
+	var ult: bool = named and ssr and kind == _ult_kind()
 	if named:
-		if now - _banner_at < BANNER_GAP:
+		if now - _banner_at < BANNER_GAP and (not ult or kind == _banner_kind):
 			return
 		_banner_at = now
+		_banner_kind = kind
 	else:
 		if now - _proc_at < BANNER_GAP:
 			return
 		_proc_at = now
-	var enemy: bool = get("team") == 1
 	var label := Skills.name_of(kind, def.id)
 	DamageNumbers.banner(self, kind, label if named else "", _color, enemy)
-	var ult: bool = named and not enemy and def.get("grade", "") == "SSR" and kind == _ult_kind()
-	if ult:
-		DamageNumbers.cutin(str(def.id), label, str(def.get("name", "")), _color, kind)
+	if ssr and HeroSkillsScript.is_active(kind):
+		DamageNumbers.cutin(str(def.id), label, str(def.get("name", "")), _color, kind, ult)
 	Fx.pulse(self, _foot, _color, _tier, named, ult)
 	if _tier >= 2 and GameData.fx_shake():  # SSR 발동: 화면이 잠깐 당겨진다(아트 방향 §4, 흔들림 설정을 따른다)
 		var cam := get_viewport().get_camera_3d()

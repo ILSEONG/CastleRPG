@@ -33,7 +33,7 @@ const RECRUIT_TEXT := "영웅 모집"
 const CANCEL_TEXT := "취소(50% 환불)"
 const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
 const SPEEDUP_TEXT := "가속"  # 2026-10-13: 가속 아이템 목록을 펼친다
-const TIERED_KEEP := ["영웅 슬롯", "성 넓이", "면마다 성문"]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
+const TIERED_KEEP := ["영웅 슬롯", "성 넓이", "면마다 성문", "성 모습"]  # 성채 효과 중 다음 레벨에서 바뀔 때만 쓰는 줄
 const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"keep": "성의 중심. 다른 건물의 최대 레벨을 정합니다.",
 	"gate": "네 성문이 함께 쓰는 레벨입니다.",
@@ -522,7 +522,8 @@ static func effect_lines(id: String, lv: int) -> Array:
 				["성 HP", UiKit.commas(roundi(GameData.castle_hp_max(lv) * hp)), UiKit.commas(roundi(GameData.castle_hp_max(n) * hp))],
 				["영웅 슬롯", str(GameData.hero_slots(lv)), str(GameData.hero_slots(n))],
 				["성 넓이", "%d칸" % GameData.interior_tiles(lv), "%d칸" % GameData.interior_tiles(n)],
-				["면마다 성문", "%d개" % GameData.gates_at(lv), "%d개" % GameData.gates_at(n)]]
+				["면마다 성문", "%d개" % GameData.gates_at(lv), "%d개" % GameData.gates_at(n)],
+				["성 모습", "%d단계" % (GameData.castle_look(lv) + 1), "%d단계" % (GameData.castle_look(n) + 1)]]
 			var maxed := lv >= int(GameData.building_def("keep").get("max_level", 0))
 			return rows.filter(func(r): return not r[0] in TIERED_KEEP or (r[1] != r[2] and not maxed))
 		"gate":

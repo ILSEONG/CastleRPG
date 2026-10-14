@@ -1193,8 +1193,8 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 00:02", "reqs=%s time=%s" % [rows, bwin.time_label.text])
 	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
 	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면마다 성문", "1개", "2개"]]
-		and names.call(9) == ["건물 최대", "성 HP"] and names.call(21).size() == 5 and names.call(30) == ["건물 최대", "성 HP"],
-		"(B) keep slot/area/gate lines only when the next level changes them: Lv 1 none, Lv 8 → 9 영웅 슬롯 4 → 8, 성 넓이 20칸 → 28칸, 성문 1 → 2, Lv 9 none, Lv 21 → 22 all, max level none",
+		and names.call(9) == ["건물 최대", "성 HP", "성 모습"] and bwin.effect_lines("keep", 4)[2] == ["성 모습", "1단계", "2단계"] and names.call(21).size() == 6 and names.call(30) == ["건물 최대", "성 HP"],
+		"(B) keep slot/area/gate/look lines only when the next level changes them: Lv 1 none, Lv 4 → 5 성 모습 1 → 2단계, Lv 8 → 9 영웅 슬롯 4 → 8, 성 넓이 20칸 → 28칸, 성문 1 → 2, Lv 9 → 10 성 모습 only, Lv 21 → 22 all, max level none",
 		"Lv1=%s Lv8=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 8), names.call(30)])
 	await _guard_wait()
 	await _tap(bwin.upgrade_button.get_global_rect().get_center())
@@ -1226,6 +1226,23 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"(B) pulling the time in completes it: keep Lv 2, scaffold gone, tag '성채 Lv 2', light shards, notice '성채 Lv 2 완료'",
 		"keep=%d scaffold=%s tag=%s fx=%d->%d toast=%s" % [Economy.building_level("keep"), scenery.scaffold_id, wt.text("keep"), fx0,
 			get_tree().get_nodes_in_group("fx").size(), hud._toast.text])
+
+	# 성 모습 단계(2026-10-14): 성채 Lv 5에서 성 크기는 그대로 — 월드를 다시 만들지 않고 성벽·문루·탑·성채 메시만 1단계로, 낮추면 되돌린다
+	var look_main = _main
+	var keep_mesh0: Mesh = scenery.lots.keep.mi.mesh
+	var keep_top0: float = keep_mesh0.get_aabb().end.y
+	var castle_meshes0: int = _main.castle._look.get_child_count()
+	Economy.levels["keep"] = 5
+	Economy.changed.emit()
+	await _frames(2)
+	_check(_main == look_main and _main.castle.look == 1 and _main.castle._look.get_child_count() == castle_meshes0 and scenery.lots.keep.mi.mesh != keep_mesh0
+		and scenery.lots.keep.mi.mesh.get_aabb().end.y > keep_top0 - 0.01 and _main.castle._gate_doors.all(func(d): return d.size() == 1 and d[0].visible),
+		"(B) keep Lv 5 restyles the castle in place (look 1): same world, new keep mesh, gatehouses/towers swapped, doors still shut",
+		"look=%d meshes=%d->%d keep top %.2f->%.2f" % [_main.castle.look, castle_meshes0, _main.castle._look.get_child_count(), keep_top0, scenery.lots.keep.mi.mesh.get_aabb().end.y])
+	Economy.levels["keep"] = 2
+	Economy.changed.emit()
+	await _frames(2)
+	_check(_main.castle.look == 0 and scenery.lots.keep.mi.mesh.get_aabb().end.y == keep_top0, "(B) back to keep Lv 2 restores look 0", "look=%d" % _main.castle.look)
 
 	# 벌목장 업그레이드 → 다른 건물(채석장)은 일꾼이 바빠 비활성(무엇을 짓는지·남은 시간)
 	await _tap(lp)

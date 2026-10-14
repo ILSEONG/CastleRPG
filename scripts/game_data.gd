@@ -473,6 +473,15 @@ static func interior_half(keep_level: int) -> float:
 	return interior_tiles(keep_level) * Balance.TILE / 2.0
 
 
+## 성 모습 단계(보기만, 2026-10-14 사용자 "성채 레벨업 높아지면 성 분위기가 전체적으로 더 멋있어지게"): 성채가 이 레벨에 닿을 때마다
+## 성채·성벽·탑·문루 장식이 한 단계 웅장해진다(0~5 — TownKit 레시피의 look). 서버·밸런스와 무관한 연출 값.
+const CASTLE_LOOK_LEVELS := [5, 10, 15, 22, 30]
+
+
+static func castle_look(keep_level: int) -> int:
+	return CASTLE_LOOK_LEVELS.filter(func(l): return keep_level >= l).size()
+
+
 ## 면마다 성문 수 = 성 내부 절반 크기 half가 도달한 성 내부 단계 수(keep_interior_tiers — 20칸 1개, 28칸 2개, 36칸 3개).
 ## 단계 표에 없는 크기는 그보다 작은 단계까지 센다(최소 1).
 static func gates_per_side(half: float) -> int:

@@ -163,7 +163,7 @@ func start(id: String) -> bool:
 		return false
 	building_id = id
 	cell = c
-	var full: Mesh = TownKit.building(id)
+	var full: Mesh = TownKit.building(id, GameData.castle_look(Economy.building_level(GameData.KEEP)))
 	_ghost.mesh = full
 	var b := Balance.building(id)
 	var pm := BoxMesh.new()
