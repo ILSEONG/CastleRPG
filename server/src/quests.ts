@@ -67,12 +67,24 @@ export const REPEATS: Record<string, { ev: string; base: number; step: number }>
   rep_build_up: { ev: 'build_up', base: 1, step: 0 },
 }
 
-// 반복 퀘스트 완료: 마지막 반복 퀘스트를 받은 뒤(qs, 없으면 이 기능이 생긴 뒤) 센 사건이 목표 이상. 라운드는 받을 때 라운드 + 2 이상.
-export function repeatDone(id: string, cycle: number, stage: number, c: Counters): boolean {
+// 반복 퀘스트 진행(앱 카드가 그대로 보여 준다 — 2026-10-14 앱이 따로 세던 기준이 어긋나 「1-2 클리어」가 떠도 받을 수 없었다):
+// have = 마지막 반복 퀘스트를 받은 뒤(qs, 없으면 이 기능이 생긴 뒤) 센 사건(라운드는 오른 라운드 수), need = 목표,
+// from = 받을 때 라운드(라운드 퀘스트만 — 앱이 「스테이지 from 클리어」로 보인다. 기준이 없으면 null이고 이미 끝난 것으로 본다).
+export function repeatProgress(id: string, cycle: number, stage: number, c: Counters): { have: number; need: number; from: number | null } | null {
   const r = REPEATS[id]
-  if (!r) return true
-  if (r.ev === 'stage') return c.qs?.stage === undefined || stage >= c.qs.stage + r.base
-  return (c.t[r.ev] ?? 0) - (c.qs?.[r.ev] ?? 0) >= r.base + r.step * cycle
+  if (!r) return null
+  const need = r.base + r.step * cycle
+  if (r.ev === 'stage') {
+    const from = c.qs?.stage
+    return from === undefined ? { have: need, need, from: null } : { have: Math.max(0, stage - from), need, from }
+  }
+  return { have: Math.max(0, (c.t[r.ev] ?? 0) - (c.qs?.[r.ev] ?? 0)), need, from: null }
+}
+
+// 반복 퀘스트 완료: 진행이 목표 이상(라운드는 받을 때 라운드 + 2 이상).
+export function repeatDone(id: string, cycle: number, stage: number, c: Counters): boolean {
+  const pr = repeatProgress(id, cycle, stage, c)
+  return pr === null || pr.have >= pr.need
 }
 
 // 반복 퀘스트를 받은(또는 가이드를 끝낸) 때의 기준값

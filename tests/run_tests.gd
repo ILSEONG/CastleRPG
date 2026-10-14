@@ -5522,7 +5522,7 @@ func test_tutorial_online() -> void:
 	t._connect()
 	t.go_online()
 	check(t.online and t.mission().is_empty() and not t.active(), "online tutorial: no card until the server says where the player is")
-	check(e.apply_server(reply) and e.dia_tickets == 7 and e.unbuilt == {"lumber": true} and e.server_quest == {"tut_state": "active", "tut_step": 3, "rep_n": 0},
+	check(e.apply_server(reply) and e.dia_tickets == 7 and e.unbuilt == {"lumber": true} and e.server_quest == {"tut_state": "active", "tut_step": 3, "rep_n": 0, "rep": {}},
 		"apply_server reads quest progress, lots (known buildings only) and tickets")
 	check(t.active() and t.step == 3 and t.mission().id == TutorialScript.MISSIONS[3].id and e.tutorial_training, "online tutorial follows the server step")
 	t.count = 5
@@ -5539,6 +5539,31 @@ func test_tutorial_online() -> void:
 	check(not t.active() and t.repeating() and t.rep_n == 2 and t.mission().kind == TutorialScript.REPEATS[2].kind and notes.has(TutorialScript.DONE_TEXT)
 		and not e.tutorial_training, "online: tutorial done → repeat quest from the server's number")
 	check(not e.quest_claim_online({"type": "repeat", "n": 2}), "no network, no claim")
+	# 온라인 반복 퀘스트는 서버가 센 진행으로(2026-10-14 동기화 전에 만들어 저장된 「1-2 클리어」가 ✓인데 서버가 받아 주지 않던 버그)
+	t.rep_quest = {"kind": "stage", "goto": "stage", "desc": "", "cycle": 0, "base_value": 0, "arg": 2, "title": "스테이지 1-2 클리어"}
+	gs.stage = 12
+	check(t.complete(), "(before) a stale local stage target looks done")
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 2, "rep": {"have": 1, "need": 2, "from": 11}}
+	e.apply_server(reply)
+	var sq: Dictionary = t.mission()
+	check(sq.kind == "stage" and int(sq.arg) == 12 and sq.title == "스테이지 %s 클리어" % GameData.round_label(12) and not t.complete() and t.progress_text() == "",
+		"online stage repeat: target from the server's round (stale 1-2 rebuilt), not done until the server counts it: %s" % [sq])
+	reply.player.quest.rep = {"have": 2, "need": 2, "from": 11}
+	e.apply_server(reply)
+	check(t.complete(), "online stage repeat: done when the server counts two more rounds")
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 9, "rep": {"have": 40, "need": 150, "from": null}}
+	e.kills_pending = {12: {"goblin": 5}}
+	e.apply_server(reply)
+	check(t.mission().kind == "kill" and t.progress_text() == "45/150" and not t.complete(), "online kill repeat: server count + unsent kills (%s)" % t.progress_text())
+	t.count = 500
+	check(not t.complete(), "online: the local count can't finish a repeat quest the server hasn't counted")
+	reply.player.quest.rep = {"have": 150, "need": 150, "from": null}
+	e.kills_pending = {}
+	e.apply_server(reply)
+	check(t.complete() and t.progress_text() == "150/150", "online kill repeat: done at the server's count")
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 3, "rep": {"have": 1, "need": 3, "from": null}}
+	e.apply_server(reply)
+	check(t.mission().kind == "growth_up" and t.progress_text() == "1/3" and not t.complete(), "online growth repeat: server count, not the local level sum")
 	# 온라인 판매 응답도 sold를 낸다(튜토리얼 7 "상인과 거래" — 응답에서 세지 않아 깨지지 않던 버그)
 	var sales := []
 	e.sold.connect(func(g): sales.append(g))
