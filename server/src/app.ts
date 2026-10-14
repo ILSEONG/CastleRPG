@@ -3564,6 +3564,7 @@ export function createApp(opts: AppOptions) {
       for (const [bid, lv] of Object.entries(levels)) {
         if (!Number.isInteger(lv) || (lv as number) < 1 || (lv as number) > 30) continue
         await query('update player_buildings set level = $3 where player_id = $1 and building = $2', [id, bid, lv])
+        await query('update player_state set unbuilt = array_remove(unbuilt, $2) where player_id = $1', [id, bid]) // 레벨을 정하면 지은 건물(튜토리얼 공터 해제)
         if (bid === 'keep') await query('update player_state set keep_level = $2 where player_id = $1', [id, lv])
         if (bid === 'gate') await query('update player_state set gate_level = $2 where player_id = $1', [id, lv])
       }

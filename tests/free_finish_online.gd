@@ -35,6 +35,9 @@ func _ready() -> void:
 	Economy.notice.connect(func(s): _notes.append(s))
 	_check(await _wait_until(func(): return Net.up, 15.0), "connected", "")
 	await _frames(30)
+	# 새 계정은 튜토리얼 공터(가이드 2026-10-13)로 시작한다 — 기본 건물을 Lv 1로 지은 상태로 맞춘다
+	await _request("/v1/test/levels", {"levels": {"barracks": 1, "tavern": 1, "lab": 1, "houses": 1, "lumber": 1, "quarry": 1, "farm": 1, "archery": 1, "stable": 1}})
+	await _frames(10)
 	await _request("/v1/test/age", {"minutes": 720})
 	for b in ["lumber", "quarry", "farm"]:
 		Economy.collect(b, Economy.time_now())
@@ -62,6 +65,13 @@ func _ready() -> void:
 	var inf := int(Economy.soldier_counts().get("infantry:1", 0))
 	panel.open_building("barracks")
 	await _frames(3)
+	# 가이드 첫 보병 1마리는 5초 훈련(가이드 2026-10-13) — 먼저 받아 두고, 두 번째부터 3시간
+	panel.train_button.pressed.emit()
+	await _wait_until(func(): return Economy.training("barracks").get("ready", false) and not Economy.training_waiting("barracks", "train"), 15.0)
+	Economy.collect_training("barracks")
+	await _wait_until(func(): return not Economy.training_waiting("barracks", "collect"), 10.0)
+	await _frames(5)
+	inf = int(Economy.soldier_counts().get("infantry:1", 0))
 	panel.train_button.pressed.emit()
 	_check(await _wait_until(func(): return Economy.training("barracks").count > 0 and not Economy.training_waiting("barracks", "train"), 10.0), "training started", "")
 	await _frames(5)
