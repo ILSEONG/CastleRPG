@@ -303,6 +303,8 @@ func _knockback_cases() -> void:
 ## (7) taunt: 거리 제한 없이 그 영웅만 노린다. 성벽 위·다른 영역 영웅은 무시, 대상이 죽거나 끝나면 곧바로 평소 표적으로.
 func _taunt_cases() -> void:
 	var heroes := _heroes()
+	for h in heroes:  # 영웅이 걷거나 싸우면 '가장 가까운 영웅'이 바뀐다(화면을 그리면 프레임이 길어 자주 — 체크가 들쭉날쭉했다). 이 사례 동안 멈춘다
+		h.set_process(false)
 	var near = heroes[0]  # 성문 앞 근접 영웅(성 밖)
 	var wall = null
 	for h in heroes:
@@ -344,6 +346,9 @@ func _taunt_cases() -> void:
 	for h in [far_h, inside_h]:
 		h.formation.release(h.index)
 		h.queue_free()
+	for h in heroes:
+		if is_instance_valid(h):
+			h.set_process(true)
 	await _clear()
 
 
