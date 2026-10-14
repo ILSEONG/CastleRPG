@@ -1556,6 +1556,18 @@ func _research_ui(tabs, hud) -> void:
 		"(RS) research window: 연구소 Lv 1 · 연구 속도 +0%, the idle line, economy tab with tiers 1-40 (tier 2 locked: 연구소 Lv 3 필요), cards Lv 0/10, construct locked",
 		"title=%s speed=%s idle=%s cards=%s tiers=%s need2=%s state=%s" % [rw.title_label.text, rw.speed_label.text, rw.idle_label.visible, rw.cards.keys(), rw.tier_marks.keys(),
 		rw.tier_marks[2].need.text, rw.cards.wood_tech.state.text])
+	# 사용자 2026-10-14 "연구소 레벨업은 어떻게 해?": 연구 창 [연구소 레벨업 ›] → 연구소 건물 창(비용·시간·[업그레이드]) → [연구]로 돌아온다
+	_check(rw.level_button.visible and rw.level_button.text == "연구소 레벨업 Lv 1 → 2 ›", "(RS) research window has [연구소 레벨업 Lv 1 → 2 ›]", "visible=%s text=%s" % [rw.level_button.visible, rw.level_button.text])
+	await _tap(_center(rw.level_button))
+	await _frames(2)
+	_check(bwin.is_open() and not rw.is_open() and bwin.building_id == GameData.LAB and bwin.upgrade_button.visible and bwin.research_button.visible,
+		"(RS) [연구소 레벨업 ›] closes the research window and opens the lab building window with [업그레이드] and [연구]",
+		"building=%s research=%s id=%s up=%s" % [bwin.is_open(), rw.is_open(), bwin.building_id, bwin.upgrade_button.visible])
+	await _unguarded(bwin)
+	await _tap(_center(bwin.research_button))
+	await _frames(2)
+	_check(rw.is_open() and not bwin.is_open(), "(RS) and [연구] goes back to the research window", "research=%s building=%s" % [rw.is_open(), bwin.is_open()])
+	await _unguarded(rw)
 	var icons := preload("res://scripts/icons.gd")
 	var all_icons := GameData.research_defs().all(func(d): return rw.soldier_of_node(d.id) != "" or not icons.shapes(rw.icon_kind(d.id)).is_empty())
 	var soldier_nodes: Array = GameData.research_defs().filter(func(d): return rw.soldier_of_node(d.id) != "").map(func(d): return [d.id, rw.soldier_of_node(d.id)])

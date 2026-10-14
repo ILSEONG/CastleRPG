@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/feature_levelup_check.gd" id="1"]
+
+[node name="FeatureLevelupCheck" type="Node"]
+script = ExtResource("1")
