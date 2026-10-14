@@ -1047,11 +1047,20 @@ func building_cell(id: String) -> Vector2i:
 
 
 ## 성 안에 서 있는 건물 id → 칸(except는 뺀다).
+## 서버 placedCells와 같다: 고른 자리(layout)가 있거나, 지었고 기본 자리가 있는 건물만(자리 없는 지은 건물은 성 안에 없다). layout의 모르는 키도 센다.
 func placed_cells(except := "") -> Dictionary:
 	var out := {}
-	for k in GameData.building_keys():
-		if k != except and is_placed(k):
-			out[k] = building_cell(k)
+	var keys: Array = GameData.building_keys()
+	for k in layout:
+		if not keys.has(k):
+			keys.append(k)
+	for k in keys:
+		if k == except:
+			continue
+		if layout.has(k):
+			out[k] = layout[k]
+		elif is_built(k) and Balance.building(k).has("cell"):
+			out[k] = Balance.building(k).cell
 	return out
 
 
