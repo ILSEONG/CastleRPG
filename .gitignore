@@ -17,3 +17,15 @@ android_plugins/*/build/
 android_plugins/*/.gradle/
 android_plugins/*/local.properties
 android/.build_version
+# 비밀·서명 파일(2026-10-14 보안 점검)
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.pem
+*.p12
+*.key
+credentials*.json
+*service-account*.json
+*.ait

@@ -27,6 +27,7 @@
 import type { Context, Hono, Next } from 'hono'
 import * as P from './pouches.ts'
 import * as S from './speedups.ts'
+import { Limiter } from './ratelimit.ts'
 
 export const NUMERIC = ['gold', 'diamonds', 'tickets', 'wood', 'stone', 'food', 'keys_gold', 'keys_equip', 'keys_ticket'] as const
 export const MAX_AMOUNT: Record<string, number> = { gold: 1e12, diamonds: 1e7, tickets: 10000, wood: 1e12, stone: 1e12, food: 1e12,
@@ -41,6 +42,7 @@ export const MAX_BODY = 2000
 export const MAIL_PAGE = 100 // 우편함에 보이는 최대 개수
 export const MAIL_DEFAULT_DAYS = 30
 export const CODE_RE = /^[A-Z0-9]{4,20}$/
+export const COUPON_MISSES = 10 // 한 계정이 10분에 틀릴 수 있는 쿠폰 코드 수(코드 맞히기 막기). 넘으면 429 too_many_attempts
 export const VERSION_RE = /^\d+(\.\d+){0,3}$/
 // 점검·업데이트 중에도 여는 경로(로그인·상태·공지·기획 표·관리자)
 const OPEN_IN_MAINTENANCE = [/^\/v1\/(health|status|notices|gamedata)$/, /^\/v1\/auth\//, /^\/v1\/admin\//, /^\/v1\/test\//]
@@ -150,6 +152,7 @@ export function opsGate(d: Any) {
 
 export function registerLiveOps(app: Hono<Any>, d: Any) {
   const { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status, setStatus } = d
+  const couponMisses = new Limiter(COUPON_MISSES, 600)
 
   const str = (b: Record<string, unknown>, key: string, max: number, required = true): string => {
     const v = b[key]
@@ -255,10 +258,15 @@ export function registerLiveOps(app: Hono<Any>, d: Any) {
   app.post('/v1/coupon', auth, async (c: Context) => {
     const b = await body(c)
     const code = String(b.code ?? '').trim().toUpperCase().replace(/[\s-]/g, '')
-    if (!CODE_RE.test(code)) throw new ApiError(404, 'unknown_coupon', 'no such coupon')
     const id = c.get('playerId') as string
+    if (couponMisses.blocked(id, clock())) throw new ApiError(429, 'too_many_attempts', 'too many wrong coupon codes; try again later')
+    const miss = () => {
+      couponMisses.take(id, clock())
+      return new ApiError(404, 'unknown_coupon', 'no such coupon')
+    }
+    if (!CODE_RE.test(code)) throw miss()
     return mutate(c, (p: Any, g: Any, now: number, cp: Any) => {
-      if (!cp || cp.disabled) throw new ApiError(404, 'unknown_coupon', 'no such coupon')
+      if (!cp || cp.disabled) throw miss()
       if (cp.used) throw new ApiError(409, 'coupon_used', 'this account already used the coupon')
       if (cp.starts > now) throw new ApiError(409, 'coupon_not_started', 'the coupon is not active yet')
       if (cp.expires && cp.expires <= now) throw new ApiError(409, 'coupon_expired', 'the coupon has expired')

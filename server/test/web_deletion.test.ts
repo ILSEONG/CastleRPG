@@ -88,3 +88,16 @@ test('앱 [문의하기]는 delete 분류를 고를 수 없고, 관리자 삭제
   assert.equal((await S.req('POST', '/v1/admin/inquiry/delete_account', { token: admin.token, body: { id: own.id } })).json.error, 'own_account')
   assert.equal((await S.req('POST', '/v1/admin/inquiry/delete_account', { token: p.token, body: { id: own.id } })).status, 403)
 })
+
+test('양식: 친구 코드만이면 "본인 확인 안 됨", 친구 코드와 Google 이메일이 같은 계정이면 "일치" (남의 코드로 지우기 요청 막기)', async () => {
+  const victim = await S.login()
+  const vc = await code(victim.id)
+  await send({ code: vc })
+  const only = (await requests()).find((q: any) => q.player === victim.id)
+  assert.ok(only.body.includes('본인 확인 안 됨'))
+  const p = await S.login()
+  await S.db.query("insert into player_identities (provider, provider_uid, player_id, email) values ('google', 'wd-both', $1, 'both@example.com')", [p.id])
+  await send({ code: await code(p.id), email: 'both@example.com' })
+  const both = (await requests()).find((q: any) => q.player === p.id)
+  assert.ok(both.body.includes('본인 확인: 친구 코드와 Google 이메일 일치'))
+})

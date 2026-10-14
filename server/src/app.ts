@@ -30,6 +30,7 @@ import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
 import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
+import * as RL from './ratelimit.ts'
 
 export interface AppOptions {
   query: Query
@@ -55,8 +56,11 @@ const MAX_INT4 = 2_147_483_647
 const MAX_AGE_MIN = 100_000
 const MAX_LEVELUP_COUNT = 100
 const MAX_SELL_ITEMS = 1000 // 개정 18: 장비 판매 한 번의 개수
+const DUNGEON_DPS_SLACK = 6 // 던전 승리 힘 타당성 여유 배수(치명타·스킬·길드 버프를 넉넉히 덮는다)
 const RUN_KEEP_SEC = 86400 // 끝난 run은 하루 남긴다(재전송 멱등), 그 뒤 새 start가 지운다
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
+const NEW_ACCOUNTS_PER_IP = 20 // 10분에 한 IP가 만들 수 있는 새 계정(게스트·토스)
+const OAUTH_STARTS_PER_IP = 60 // 10분에 한 IP의 소셜 로그인 시작
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TOSS_HASH_RE = /^[A-Za-z0-9+/=_.:-]{8,512}$/ // 앱인토스 getUserKeyForGame hash
 const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge·세션 비밀(32바이트 hex)
@@ -513,6 +517,21 @@ export function createApp(opts: AppOptions) {
     }
   }
 
+  // 편성 영웅(+도우미)의 서버 계산 초당 피해(길드 공성전·보스와 같은 식 G.teamDps — 장비·성장·연구 반영, 길드 버프·치명타·스킬 제외)
+  function partyDps(p: Player, g: Game, party: string[], helper: R.Helper | null): number {
+    const cfg = (k: string) => R.cfgNum(g.config, k)
+    const defs = g.heroes.map((h) => ({ id: String(h.id), role: String(h.role), atk: Number(h.atk), hp: Number(h.hp), atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
+    const up = (uid: string) => {
+      const d = g.upgrades.find((u) => u.id === uid)
+      return d ? Math.min(p.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
+    }
+    const research = R.researchBonus(g.research, p.research).hero_atk_pct
+    const equip = R.heroEquip(p.items, p.equipment)
+    let out = G.teamDps(party.filter((id) => Object.hasOwn(p.heroes, id)), p.heroes, defs, cfg, up('atk'), up('aspd'), 0, equip, research)
+    if (helper) out += G.teamDps([helper.hero_id], { [helper.hero_id]: { level: helper.level, promotion: helper.promotion } }, defs, cfg, up('atk'), up('aspd'), 0, {}, research)
+    return out
+  }
+
   // 개정 18: run 한 행(그 플레이어 것만). 없으면 null.
   async function loadRun(runId: string, playerId: string): Promise<Run | null> {
     const [r] = await query(RUN_SQL, [runId, playerId])
@@ -856,7 +875,8 @@ export function createApp(opts: AppOptions) {
     }
     const runResult = ch.runClose ? ', (select result from rc) as run_result' : ''
     // 거래소 사기: 판매는 잡았는데 내 쪽(version·값)이 안 바뀌었으면 0으로 나눠 문장 전체를 되돌린다(판매는 그대로 남는다) — null(다시 시도)
-    const buyCheck = (ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) then 1 else 0 end) as mb_ok' : '')
+    // 장비가 판매자에게 그대로 있어야 한다(mbi 1행) — 기한 끝 순간 판매자가 그 장비를 상점에 판 경우 구매자가 값만 내고 빈손이 되지 않게(2026-10-14 보안 점검)
+    const buyCheck = (ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) and (select count(*) from mbi) = (select count(*) from s) then 1 else 0 end) as mb_ok' : '')
       // 쿠폰 전체 상한: 다른 사람이 마지막 한 장을 먼저 썼으면(cu가 비었는데 내 쪽은 바뀜) 문장 전체를 되돌린다 — null(다시 계산하면 coupon_used_up)
       + (ch.coupon ? ', 1 / (case when (select count(*) from cu) = (select count(*) from s) then 1 else 0 end) as cu_ok' : '')
     let r: Row
@@ -882,6 +902,12 @@ export function createApp(opts: AppOptions) {
     if (ch.marketCollect?.length) {
       const ids = `${p(JSON.stringify(ch.marketCollect))}::jsonb`
       g += ` and (select count(*) from market_listings where seller_id = $1 and status = 'sold' and id in (select x::bigint from jsonb_array_elements_text(${ids}) as x))
+        = jsonb_array_length(${ids})`
+    }
+    if (ch.sellItems?.length) {
+      // 장비 판매: 그 장비가 아직 전부 내 것이어야 한다(기한 끝 순간 거래소에서 팔린 장비를 상점에 또 팔아 골드를 두 번 받지 못하게)
+      const ids = `${p(JSON.stringify(ch.sellItems))}::jsonb`
+      g += ` and (select count(*) from player_items where player_id = $1 and id in (select x::bigint from jsonb_array_elements_text(${ids}) as x))
         = jsonb_array_length(${ids})`
     }
     if (ch.marketBuy) {
@@ -1163,6 +1189,15 @@ export function createApp(opts: AppOptions) {
     return sign({ sub: playerId, iat, exp: iat + TOKEN_TTL }, secret, 'HS256')
   }
 
+  // 도배 상한(ratelimit.ts, 2026-10-14 보안 점검): 한 IP가 새 계정을 10분에 NEW_ACCOUNTS_PER_IP개까지(통신사 공유 IP도 넉넉하게),
+  // 소셜 로그인 시작은 10분에 OAUTH_STARTS_PER_IP번까지. 이미 있는 계정의 로그인은 세지 않는다. 넘으면 429 too_many_requests.
+  const newAccounts = new RL.Limiter(NEW_ACCOUNTS_PER_IP, 600)
+  const oauthStarts = new RL.Limiter(OAUTH_STARTS_PER_IP, 600)
+  const ipLimit = (c: Context, l: RL.Limiter) => {
+    const ip = RL.clientIp(c)
+    if (ip && !l.take(ip, clock())) throw new ApiError(429, 'too_many_requests', 'too many requests from this network; try again later')
+  }
+
   app.post('/v1/auth/guest', async (c) => {
     const b = await body(c)
     const device = b.device_id
@@ -1170,6 +1205,7 @@ export function createApp(opts: AppOptions) {
       throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
     }
     const now = clock()
+    if (!(await query('select 1 from players where device_id = $1', [device])).length) ipLimit(c, newAccounts)
     const [r] = await query(ENSURE_SQL, [device, now, JSON.stringify(await starters())])
     return c.json({ token: await issueToken(r.id, now), player_id: r.id })
   })
@@ -1192,6 +1228,7 @@ export function createApp(opts: AppOptions) {
     if (typeof b.challenge !== 'string' || !HEX64_RE.test(b.challenge)) throw new ApiError(400, 'bad_challenge', 'challenge must be 64 lowercase hex characters')
     const device = b.device_id
     if (device !== undefined && (typeof device !== 'string' || !DEVICE_RE.test(device))) throw new ApiError(400, 'bad_device_id', 'device_id must be 16-128 characters of [A-Za-z0-9-]')
+    ipLimit(c, oauthStarts)
     const now = clock()
     await query('delete from oauth_logins where created_at < to_timestamp($1::float8)', [now - 86400]) // 오래된 진행 행 정리
     let link: string | null = null
@@ -1361,7 +1398,9 @@ export function createApp(opts: AppOptions) {
     const b = await body(c)
     if (typeof b.hash !== 'string' || !TOSS_HASH_RE.test(b.hash)) throw new ApiError(400, 'bad_hash', 'hash must be 8-512 characters of [A-Za-z0-9+/=_.:-]')
     const now = clock()
-    const r = await resolvePlayer('toss', sha256hex(`toss:${b.hash}`), null, now)
+    const uid = sha256hex(`toss:${b.hash}`)
+    if (!(await query("select 1 from player_identities where provider = 'toss' and provider_uid = $1", [uid])).length) ipLimit(c, newAccounts)
+    const r = await resolvePlayer('toss', uid, null, now)
     await query('update players set last_seen = to_timestamp($2::float8) where id = $1', [r.id, now])
     return c.json({ token: await issueToken(r.id, now), player_id: r.id, provider: 'toss', is_new: r.isNew })
   })
@@ -1513,13 +1552,25 @@ export function createApp(opts: AppOptions) {
       const row = R.stageRow(stage, g.stages)
       const bucket = R.killBucket(p.last_kill_report, now, R.cfgNum(g.config, 'kill_rate_cap'), R.cfgNum(g.config, 'kill_burst_sec'))
       const pct = bonus(p, g).kill_gold_pct // 개정 24: 처치 1회 tenths × (100 + kill_gold_pct) / 100, 내림
-      const priced = entries.map(([id, n]) => ({ id, count: n as number, gold: Math.floor(R.killGoldTenths(Number(monsters.get(id).gold), row) * (100 + pct) / 100) }))
+      // 보스(성 방어 epic_boss)는 스테이지 끝에만 나온다(한 스테이지 최대 BOSSES_PER_STAGE). 오늘 받은 보스 처치는 (오늘 클리어 + 1) × 그 수까지 —
+      // 앱을 고쳐 전부 보스로 보고해 처치 골드를 25배로 받지 못하게(2026-10-14 보안 점검). 넘는 보스 수는 받지 않는다(0 골드).
+      const cd = M.normalize(p.missions, today(g, now)).c.d
+      let bossLeft = Math.max(0, R.BOSSES_PER_STAGE * ((cd.stage ?? 0) + 1) - (cd.boss_kill ?? 0))
+      const asked = entries.map(([id, n]) => {
+        if (!R.CASTLE_BOSSES.includes(id)) return [id, n as number] as const
+        const k = Math.min(n as number, bossLeft)
+        bossLeft -= k
+        return [id, k] as const
+      })
+      const priced = asked.map(([id, n]) => ({ id, count: n, gold: Math.floor(R.killGoldTenths(Number(monsters.get(id).gold), row) * (100 + pct) / 100) }))
       const { kept, clamped } = R.clampKills(priced, bucket.cap)
       const tenths = priced.reduce((s, k) => s + kept[k.id] * k.gold, 0) // k.gold = 처치 1회 tenths
       const total = priced.reduce((s, k) => s + k.count, 0)
       const keptTotal = priced.reduce((s, k) => s + kept[k.id], 0)
       const log = total > 0 ? { kind: 'kills', detail: { seq, stage, asked_stage: askedStage, kills, kept, cap: bucket.cap, clamped, gold_tenths: tenths } } : undefined
-      return { change: { goldTenths: tenths, lastKillReport: bucket.after(keptTotal), killSeq: seq, log }, extra: { gold_gained_tenths: tenths } }
+      const bosses = R.CASTLE_BOSSES.reduce((a, id) => a + (kept[id] ?? 0), 0)
+      return { change: { goldTenths: tenths, lastKillReport: bucket.after(keptTotal), killSeq: seq, log, ...(bosses ? { events: { boss_kill: bosses } } : {}) },
+        extra: { gold_gained_tenths: tenths } }
     })
   })
 
@@ -2808,6 +2859,13 @@ export function createApp(opts: AppOptions) {
       if (elapsed < min || elapsed > limit || real < elapsed / R.MAX_GAME_SPEED - R.RUN_SLACK_SEC) {
         throw new ApiError(409, 'implausible', `a win needs ${min}..${limit} s of battle and as much real time (elapsed ${elapsed}, real ${real.toFixed(1)})`)
       }
+      // 힘 타당성(2026-10-14 보안 점검): 편성(+도우미)의 서버 계산 초당 피해 × 제한 시간 × DUNGEON_DPS_SLACK으로 그 단계 적 HP 합을 못 깎으면 409 implausible
+      // (전투는 앱이 돌린다 — 약한 편성으로 높은 단계를 이겼다고 보내 보상을 올리지 못하게). 치명타·스킬은 여유 배수로 덮는다.
+      const enemyHp = R.dungeonEnemies(g.dungeons, type, run.level, g.config).reduce((a, e) => a + e.count * e.hp, 0)
+      const dps = partyDps(p, g, run.party, run.helper)
+      if (dps * limit * DUNGEON_DPS_SLACK < enemyHp) { // 제한 시간 전체로 본다(빨리 깬 정상 승리가 걸리지 않게)
+        throw new ApiError(409, 'implausible', `the party can't deal ${Math.round(enemyHp)} damage in ${limit} s`)
+      }
       const st = dungeonState(p, g, type, now)
       const next = { ...st, best_level: Math.max(st.best_level, run.level) }
       let cost = 0
@@ -3314,7 +3372,7 @@ export function createApp(opts: AppOptions) {
 
   app.post('/v1/guild/donate', auth, async (c) => {
     const kind = strField(await body(c), 'kind')
-    const d = G.DONATIONS[kind]
+    const d = Object.hasOwn(G.DONATIONS, kind) ? G.DONATIONS[kind] : undefined
     if (!d) throw new ApiError(400, 'bad_kind', `unknown donation '${kind}'`)
     return guildMutate(c, (x) => {
       const { g } = needGuild(x)
@@ -3644,7 +3702,7 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
-  registerInquiry(app, { query, auth, clock, body, ApiError, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })
+  registerInquiry(app, { query, auth, clock, body, ApiError, clientIp: RL.clientIp, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })
 
   return app
 }

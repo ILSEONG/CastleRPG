@@ -149,10 +149,15 @@ test('war: view, defense heroes, a system guild keeps Saturday 21:00, enter open
   const r4 = await S.req('POST', '/v1/guild/war/enter', { token: b.token, body: { heroes: squad() } })
   assert.equal(r4.json.plan.deploy_left, 0)
   S.clock.t += 60
-  // 끝: 성 상태를 보내면 점수가 오르고 전투가 닫힌다
+  // 시간이 남았는데 온 finish: 성 상태(점수)는 합치지만 전투는 닫지 않는다 — 한 명이 길드 전체 공성을 끝내지 못한다(2026-10-14 보안 점검)
   const d1 = plan.defenders[0]
-  const fin = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: plan.battle_id,
-    state: { gates: [0, plan.gates[1].hp, plan.gates[2].hp, plan.gates[3].hp], keep: plan.keep.hp, defenders: { [d1.uid]: 0 } } } })
+  const state = { gates: [0, plan.gates[1].hp, plan.gates[2].hp, plan.gates[3].hp], keep: plan.keep.hp, defenders: { [d1.uid]: 0 } }
+  const early = await S.req('POST', '/v1/guild/war/finish', { token: b.token, body: { battle_id: plan.battle_id, state } })
+  assert.equal(early.json.war.points, W.PTS_KILL + W.PTS_GATE)
+  assert.equal(early.json.war.battle.state, 'live')
+  // 끝: 전투 시간이 다 된 finish는 전투를 닫는다
+  S.clock.t = startedAt + W.BATTLE_SEC - 2
+  const fin = await S.req('POST', '/v1/guild/war/finish', { token: a.token, body: { battle_id: plan.battle_id, state } })
   assert.equal(fin.status, 200, JSON.stringify(fin.json))
   assert.equal(fin.json.war.points, W.PTS_KILL + W.PTS_GATE)
   assert.equal(fin.json.war.battle.state, 'done')
@@ -239,7 +244,7 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
     // [전투 시작] → 방에 start
     assert.equal((await req('POST', '/v1/guild/war/start', b.token, { battle_id: pb.battle_id })).json.started, true)
     await until(() => B.msgs.some((m) => m.t === 'start'))
-    S.clock.t += 120
+    S.clock.t += W.BATTLE_SEC
     const d1 = pb.defenders[0]
     B.ws.send(JSON.stringify({ t: 'end', state: { defenders: { [d1.uid]: 0 }, gates: [pb.gates[0].hp, 0, pb.gates[2].hp, pb.gates[3].hp], keep: pb.keep.hp } }))
     await until(() => B.msgs.some((m) => m.t === 'end'))

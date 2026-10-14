@@ -774,7 +774,7 @@ func _connect_dev_log() -> void:
 
 
 func _auto_stage_requested() -> bool:
-	return _flag_requested("auto-stage")
+	return OS.is_debug_build() and _flag_requested("auto-stage")  # 출시 빌드에서는 URL로 저장을 끄지 못하게
 
 
 ## 네이티브는 유저 인자 `-- --flag`, 웹은 URL `?flag`.

@@ -17,6 +17,7 @@ import { LIVE_PATH } from './war_live.ts'
 import type { WarLive } from './war_live.ts'
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
+const END_SLACK = 5 // 초: 전투 끝 직전에 온 final은 끝난 것으로 본다(앱 타이머·전송 지연)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any
@@ -290,7 +291,8 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     return c.json({ server_now: x.now, war: await warView(x), plan })
   })
 
-  // 성 상태 합치기(실시간 방의 ckpt·end, 또는 REST finish). 그 전투의 로스터에 있는 사람만. final이면 전투를 닫는다.
+  // 성 상태 합치기(실시간 방의 ckpt·end, 또는 REST finish). 그 전투의 로스터에 있는 사람만. 성채가 무너졌거나 시간이 다 된 final이면 전투를 닫는다.
+  // 반환: 이번에 전투를 닫았나
   async function saveState(battleId: string, pid: string, state: Any, final: boolean) {
     const [b] = await query(`select guild_id::text, week, roster, closed, extract(epoch from started_at)::float8 as started_at,
       extract(epoch from ends_at)::float8 as ends_at from guild_war_battles where id = $1`, [battleId])
@@ -316,8 +318,13 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       const ok = await query('update guild_wars set castle = $3::jsonb where guild_id = $1 and week = $2 and castle = $4::jsonb returning 1',
         [x.g.id, Number(b.week), JSON.stringify(merged), JSON.stringify(w.castle)])
       if (!ok.length) continue
-      if (final || merged.keep <= 0) await query('update guild_war_battles set closed = true where id = $1', [battleId])
-      return true
+      // 닫기는 성채가 무너졌거나 전투 시간이 다 됐을 때만(END_SLACK초 여유) — 길드원 한 명이 시작하자마자 finish를 보내 길드 전체의
+      // 공성을 끝내 버리지 못하게(2026-10-14 보안 점검). 일찍 온 final은 성 상태만 합치고 전투는 열어 둔다.
+      if (merged.keep <= 0 || (final && now >= Number(b.ends_at) - END_SLACK)) {
+        await query('update guild_war_battles set closed = true where id = $1', [battleId])
+        return true
+      }
+      return false
     }
     return false
   }
@@ -404,7 +411,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       return !!b && !b.closed && clock() < Number(b.ends_at) + 30 && (json(b.roster) as Any[]).some((s) => s.owner === pid)
     }
     live.onState = async (battleId: string, pid: string, state: unknown, final: boolean) => {
-      await saveState(battleId, pid, state, final)
+      return saveState(battleId, pid, state, final)
     }
   }
 }

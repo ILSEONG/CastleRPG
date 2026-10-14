@@ -170,6 +170,10 @@ export function killBucket(lastReport: number, now: number, ratePerSec: number, 
 }
 
 // 스테이지 최소 클리어 시간(초) = 웨이브 수 × 웨이브 크기 / 초당 처치 상한. 이보다 빠른 클리어는 받지 않는다.
+// 성 방어 보스(몬스터 표 id): 스테이지 끝에 남쪽 하나, 보스 라운드는 네 성문에 하나씩(앱 wave_director.gd) — 한 스테이지 최대 4
+export const CASTLE_BOSSES = ['epic_boss']
+export const BOSSES_PER_STAGE = 4
+
 export const minClearSec = (row: StageRow, ratePerSec: number) => (row.waves * row.wave_size) / ratePerSec
 
 // --- 영웅 (개정 10) ---
