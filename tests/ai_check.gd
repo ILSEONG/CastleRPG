@@ -342,7 +342,7 @@ func _skill_cases(heroes: Array) -> void:
 	_g.hp = 60.0  # 표 HP 24는 공격 44 한 방에 죽는다 — 예전 HP로 한 방은 버티게
 	_g.hp_max = 60.0
 	await _wait_until(func(): return _alive(_g) and _g._slow_t > 0.0, 3.0)
-	var base_speed: float = _g._stats.speed
+	var base_speed: float = _g._speed  # 표 속도 × 스테이지 배율 × 성 웨이브 배율(CASTLE_WAVE_PACE, 2026-10-06) — 둔화 전
 	# process_frame은 각 _process 전에 온다: 이 프레임의 delta(이 뒤에 움직일 몫)부터 센다 — 프레임 간격이 들쭉날쭉해도 맞게
 	var q0: Vector3 = _g.global_position
 	var t := get_process_delta_time()
@@ -964,13 +964,13 @@ func _attack_sync() -> void:
 	var a: float = h.atk * h._aura_mult()
 
 	# 근접: 간격(0.8초)보다 긴 애니메이션은 빨리 돌고(길이 ≤ 간격 × 0.9), 타격 순간도 같은 비율로 당겨진다. 시작 직후엔 HP 그대로, 타격 순간에 준다
-	var anim: String = h._model._spec.anims.attack
-	var length: float = h._model._anim.get_animation(anim).length
-	var speed := maxf(1.0, length / (0.8 * Art.ATTACK_FIT))
 	h._target = m
 	h._attack(0.8)
+	var anim: String = h._model._current  # 평타 모션이 여럿(attacks)이면 돌아가며 고른다 — 실제로 튼 모션으로 본다
+	var length: float = h._model._anim.get_animation(anim).length
+	var speed := maxf(1.0, length / (0.8 * Art.ATTACK_FIT))
 	var at: float = h._swing_left
-	_check(anim == "1H_Melee_Attack_Chop" and speed > 1.0 and is_equal_approx(at, length * Art.HIT_FRAC[anim] / speed)
+	_check(Art.HIT_FRAC.has(anim) and speed >= 1.0 and is_equal_approx(at, length * Art.HIT_FRAC[anim] / speed)
 		and is_equal_approx(h._model._anim.get_playing_speed(), speed) and length / speed <= 0.8 * Art.ATTACK_FIT + 0.001,
 		"(A) an animation longer than the interval plays faster (length / speed <= interval x 0.9) and its hit moment moves with it",
 		"anim=%s len=%.3f speed=%.2f hit=%.3f" % [anim, length, h._model._anim.get_playing_speed(), at])
@@ -1827,7 +1827,7 @@ func _round_cases() -> void:
 			m._advance(1.0)
 			moved["%s@%d" % [kind, g]] = Formation.flat_distance(p0, m.global_position)
 			m.queue_free()
-	_check(is_equal_approx(moved["grunt@1"], 2.5) and is_equal_approx(moved["grunt@26"] / moved["grunt@1"], 1.08)
+	_check(is_equal_approx(moved["grunt@1"], 2.5 * GameData.CASTLE_WAVE_PACE) and is_equal_approx(moved["grunt@26"] / moved["grunt@1"], 1.08)
 		and is_equal_approx(moved["epic_boss@26"] / moved["epic_boss@1"], 1.08),
 		"(round) stage 2 (g = 26) grunts and bosses walk 1.08x as far in 1 s as stage 1", str(moved))
 	GameState.stage = g0
