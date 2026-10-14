@@ -36,6 +36,8 @@ const FAIL_TEXT := {"no_building": "파견소를 먼저 지어야 합니다", "b
 const OFFLINE_TEXT := "파견소는 온라인에서만 이용할 수 있습니다"
 const NO_OFFICE_TEXT := "[건설]에서 파견소를 지으면 의뢰를 받을 수 있습니다"
 
+var level_button: Button  # [파견소 레벨업 ›] → 파견소 건물 창(사용자 2026-10-14)
+var building_panel  # 건물 창(building_panel.gd). main이 넣는다
 var data := {}  # 서버 dispatch: {list, level, slots, got, odds, time_mult, free_refresh, refresh_dia, paid_left, next_reset}
 var loading := false
 var failed := ""  # 실패 사유(빈 문자열 = 없음)
@@ -67,6 +69,10 @@ func _ready() -> void:
 	head.add_child(title_label)
 	head.add_child(_close_button())
 	content.add_child(head)
+	level_button = _button("", UiKit.STEEL, 22)
+	level_button.custom_minimum_size = Vector2(0, 56)
+	level_button.pressed.connect(open_building)
+	content.add_child(level_button)
 	info_label = _label("", 22, SUB)
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(info_label)
@@ -91,6 +97,20 @@ func _ready() -> void:
 
 func _fit() -> void:
 	_fit_sheet()
+
+
+## [파견소 레벨업 ›]: 이 창을 닫고 파견소 건물 창을 연다(돌아오는 길은 건물 창 [의뢰 보기]).
+func open_building() -> void:
+	if building_panel == null:
+		return
+	close()
+	building_panel.open_building(GameData.DISPATCH)
+
+
+func _refresh_level_button() -> void:
+	level_button.visible = building_panel != null and Economy.is_built(GameData.DISPATCH)
+	if level_button.visible:
+		level_button.text = building_panel.levelup_text(GameData.DISPATCH)
 
 
 func _close_button() -> Button:
@@ -127,6 +147,7 @@ func _process(delta: float) -> void:
 		return
 	_tick = 0.5
 	var now := Economy.time_now()
+	_refresh_level_button()
 	for id in _time_labels:
 		var j := job(id)
 		if j.is_empty() or not is_instance_valid(_time_labels[id]):
@@ -412,6 +433,7 @@ func _rebuild() -> void:
 	for c in body.get_children():
 		c.queue_free()
 	title_label.text = TITLE if level() <= 0 else "%s Lv %d" % [TITLE, level()]
+	_refresh_level_button()
 	_update_info(Economy.time_now())
 	if failed != "" or data.is_empty():
 		var t := "불러오는 중입니다" if loading else (OFFLINE_TEXT if failed == "offline" else NO_OFFICE_TEXT if failed == "no_building" else "의뢰를 불러오지 못했습니다")

@@ -92,6 +92,32 @@ func _run() -> void:
 	var others: Dictionary = Economy.placed_cells("lumber")
 	_check(Balance.rect_block(Rect2i(0, 5, 1, 1), half, others) == "road" and Balance.rect_block(Rect2i(5, 5, 1, 1), half, others) == ""
 		and Balance.rect_block(Rect2i(half - 1, 5, 1, 1), half, others) == "out", "tile rules: road red, free floor green, wall lane red", "")
+	# 자리는 초록이어도 짓기가 막히면(자원 부족 등) 막대가 그 이유를 빨갛게 보이고 [건설]을 끈다 — 눌러도 아무 일 없는 것처럼 보이지 않게
+	var stone: int = Economy.res.stone
+	Economy.res.stone = 0
+	Economy.changed.emit()
+	await _frames(2)
+	_check(not pl.ok and pl.confirm_button.disabled and pl.hint_label.text == Economy.BLOCK_TEXT.not_enough, "green spot but short on stone: reason in the bar, [건설] off", pl.hint_label.text)
+	await _shot("_blocked")
+	Economy.res.stone = stone
+	Economy.changed.emit()
+	await _frames(2)
+	_check(pl.ok and not pl.confirm_button.disabled, "enough again: [건설] back on", pl.hint_label.text)
+	Economy.notice.emit(Economy.ROLLBACK_TEXT)
+	_check(pl.hint_label.text == Economy.ROLLBACK_TEXT, "notices show inside the bar while placing (the bar covers the HUD toast)", pl.hint_label.text)
+	pl._update()
+	# 서버 placedCells와 같은 자리 세기: 자리 없는 지은 건물은 빼고, layout의 모르는 키는 3×3으로 센다
+	var saved_layout: Dictionary = Economy.layout.duplicate()
+	var saved_unbuilt: Dictionary = Economy.unbuilt.duplicate()
+	Economy.unbuilt.erase("warehouse")
+	var pc: Dictionary = Economy.placed_cells()
+	_check(not pc.has("warehouse"), "a built building with no spot does not block (0, 0)", str(pc))
+	Economy.layout["old_key"] = Vector2i(5, 5)
+	_check(Economy.place_block("lumber", Vector2i(4, 4)) == "overlap", "a stale layout key still blocks like the server (3×3)", "")
+	Economy.layout = saved_layout
+	Economy.unbuilt = saved_unbuilt
+	Economy.changed.emit()
+	await _frames(2)
 	await _frames(20)
 	await _shot("_ok")
 
