@@ -732,7 +732,8 @@ func claim() -> bool:
 	if not complete():
 		return false
 	if online:  # 서버가 보상을 주고 진행을 올린다(응답 → Economy.quest_synced → _sync_server)
-		return econ.quest_claim_online({"type": "repeat", "n": rep_n} if repeating() else {"type": "tutorial", "step": step})
+		return econ.quest_claim_online({"type": "repeat", "n": rep_n} if repeating() else {"type": "tutorial", "step": step},
+			repeat_reward(rep_quest) if repeating() else reward(step))  # 보상은 누르는 즉시 보이고 서버가 거절하면 되돌린다
 	if repeating():
 		econ.grant(repeat_reward(rep_quest))
 		rep_n += 1

@@ -164,12 +164,20 @@ func sell() -> void:
 
 func equip(id: int) -> void:
 	if Economy.equip(hero_id, slot, id):
-		close()
+		_close_to_detail()
 
 
 func unequip() -> void:
 	if Economy.unequip(hero_id, slot):
-		close()
+		_close_to_detail()
+
+
+## 닫고 밑에 열린 창(영웅 상세)의 누름 보호를 다시 건다 — 더블 탭의 두 번째 누름이 그 자리의 [레벨업]·[승급] 등을 누르지 않게.
+func _close_to_detail() -> void:
+	close()
+	for w in get_tree().get_nodes_in_group(GROUP):
+		if w != self and w.visible:
+			w._arm_guard()
 
 
 ## 지금 보여 줄 장비(사본): bag = 필터·정렬, pick = 그 부위·무기 종류만(등급 → 능력치 점수 순).

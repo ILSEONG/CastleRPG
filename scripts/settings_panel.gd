@@ -28,6 +28,7 @@ const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const LOGIN_NAMES := {"guest": "게스트", "google": "Google", "kakao": "카카오", "naver": "네이버", "toss": "토스"}
 const SCROLL_H := 820.0  # 가운데 스크롤 높이(제목·[닫기] 제외)
 const DELETE_ARM_SEC := 4.0  # [계정 삭제]를 한 번 누른 뒤 확인을 기다리는 시간
+const CONFIRM_GAP_SEC := 0.4  # 확인 누름은 첫 누름 뒤 이만큼 지나야 받는다 — 빠른 두 번 누름(실수)이 곧바로 삭제·로그아웃하지 않게
 
 var music_check: Button
 var volume_slider: HSlider
@@ -55,6 +56,7 @@ var fps_buttons := {}  # 프레임 → Button
 var saver_check: Button
 var logout_button: Button
 var _logout_armed := 0.0
+var _logging_out := false
 var terms_button: Button
 var privacy_button: Button
 var inquiry_button: Button
@@ -260,13 +262,16 @@ func _set_gfx(key: String, value) -> void:
 ## [로그아웃 · 계정 전환]: 첫 번째는 확인을 묻고, DELETE_ARM_SEC초 안에 다시 누르면 로그아웃 뒤 다시 연다(다음 실행은 로그인 화면).
 ## 서버 세션 지우기는 응답을 기다리지 않는다(Net.logout). 진행은 계정에 그대로 남는다.
 func press_logout() -> void:
-	if not Net.is_online() or ReleasePlatform.is_toss():
+	if _logging_out or not Net.is_online() or ReleasePlatform.is_toss():
 		return
 	if _logout_armed <= 0.0:
 		_logout_armed = DELETE_ARM_SEC
 		_style_logout()
 		return
+	if _logout_armed > DELETE_ARM_SEC - CONFIRM_GAP_SEC:
+		return  # 첫 누름과 같은 두 번 누름 — 확인으로 치지 않는다
 	_logout_armed = 0.0
+	_logging_out = true  # 다시 열 때까지 또 누르지 못하게(로그아웃·재시작이 두 번 돌지 않게)
 	Net.logout()
 	Economy.notice.emit("로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다")
 	await get_tree().create_timer(1.5).timeout
@@ -329,6 +334,8 @@ func press_delete() -> void:
 		_delete_armed = DELETE_ARM_SEC
 		_style_delete()
 		return
+	if _delete_armed > DELETE_ARM_SEC - CONFIRM_GAP_SEC:
+		return  # 첫 누름과 같은 두 번 누름 — 확인으로 치지 않는다
 	_delete_armed = 0.0
 	_deleting = true
 	Net.send("POST", "/v1/account/delete", {"confirm": "delete"}, func(_d): Net.forget_account(),

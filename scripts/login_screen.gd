@@ -55,6 +55,7 @@ var _url := ""
 var _polling := false
 var _poll_left := 0.0
 var _done := Callable()  # 지금 요청의 응답 처리
+var _entered := false  # logged_in을 이미 보냈다 — 빠른 두 번 누름이 로그인을 두 번 하지 않게
 var opener := func(url: String): OS.shell_open(url)  # 제공자 로그인 주소 열기(테스트는 바꾼다 — 브라우저를 띄우지 않게)
 
 
@@ -154,18 +155,20 @@ func _process(delta: float) -> void:
 
 ## 게스트로 시작: 기기 id 계정(지금까지와 같다).
 func press_guest() -> void:
-	if _polling:
-		return
+	if _entered or _polling or _provider != "":
+		return  # 이미 들어갔거나 소셜 로그인을 시작했다
+	_entered = true
 	Net.set_auth("guest")
 	logged_in.emit()
 
 
 ## 소셜 로그인 시작(Google·카카오·네이버).
 func press_provider(provider: String) -> void:
-	if _polling or _provider != "":
+	if _entered or _polling or _provider != "":
 		return
 	_provider = provider
 	_message("")
+	wait_panel.visible = true  # 누르는 즉시 안내 창(브라우저 주소는 응답이 오면 연다) — 다른 버튼도 가린다
 	_verifier = Crypto.new().generate_random_bytes(32).hex_encode()
 	_request("/v1/auth/oauth/start", {"provider": provider, "challenge": sha256_hex(_verifier), "device_id": Net.ensure_device_id()}, _on_started)
 
@@ -175,7 +178,10 @@ func cancel() -> void:
 	_polling = false
 	_provider = ""
 	_state = ""
+	_url = ""
 	wait_panel.visible = false
+	_http.cancel_request()  # 응답 전 시작 요청은 버린다(취소 뒤 브라우저가 열리거나 다음 요청이 막히지 않게)
+	_done = Callable()
 
 
 static func sha256_hex(text: String) -> String:
@@ -189,6 +195,8 @@ func _on_started(code: int, data) -> void:
 	if code != 200 or not (data is Dictionary) or not (data.get("url") is String) or not (data.get("state") is String):
 		_fail(_code_of(code, data))
 		return
+	if _provider == "":
+		return  # 그사이 취소했다
 	_state = data.state
 	_url = data.url
 	_polling = true
@@ -203,7 +211,10 @@ func _on_poll(code: int, data) -> void:
 	if code == 202 or code == 0:  # 아직(브라우저에서 로그인 중) 또는 잠깐 끊김 — 계속 기다린다
 		return
 	if code == 200 and data is Dictionary and data.get("session") is String and data.get("token") is String:
+		if _entered:
+			return
 		_polling = false
+		_entered = true
 		Net.set_auth(_provider, data.session)
 		Net.token = data.token
 		logged_in.emit()
@@ -380,7 +391,9 @@ func _wait_block() -> Control:
 	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	again.add_theme_font_size_override("font_size", 24)
 	UiKit.apply_button(again, Color(0.98, 0.70, 0.20), 12.0)
-	again.pressed.connect(func(): opener.call(_url))
+	again.pressed.connect(func():
+		if _url != "":
+			opener.call(_url))
 	row.add_child(again)
 	var stop := Button.new()
 	stop.text = "취소"

@@ -57,6 +57,7 @@ var _confirm_label: Label
 var _confirm_ok: Button
 var _confirm_listing := {}
 var _tick := 0.0
+var _buying := {}  # 응답을 기다리는 구매(판매 id) — 같은 판매를 두 번 사지 않게, 목록에서도 뺀다
 var _fetch_n := 0  # 마지막으로 보낸 목록 요청 번호(늦게 온 옛 응답은 버린다)
 
 
@@ -181,7 +182,7 @@ func fetch_listings() -> void:
 	var q := "/v1/market?currency=%s&sort=%s&slot=%s&grade=%s" % [currency, sort_mode, slot_filter, grade_filter]
 	Economy.net.send("GET", q, null, func(d: Dictionary):
 		if n == _fetch_n and d.get("listings") is Array:
-			listings = d.listings
+			listings = (d.listings as Array).filter(func(l): return not (l is Dictionary and _buying.has(int(l.get("id", 0)))))
 			if d.get("rules") is Dictionary:
 				Economy.market["rules"] = d.rules
 			_rebuild())
@@ -270,6 +271,8 @@ func cancel_listing(listing: Dictionary) -> bool:
 	var lid := int(listing.id)
 	if lid <= 0:  # 아직 서버가 번호를 안 준 판매(방금 올림)
 		return false
+	if not Economy.market.get("mine", []).any(func(l): return int(l.id) == lid):  # 빠른 두 번째 탭: 이미 내렸다(장비가 두 번 돌아오지 않게)
+		return false
 	var items := Economy._item_list([listing.get("item", {})])
 	return Economy._instant(func():
 		Economy.market["mine"] = Economy.market.get("mine", []).filter(func(l): return int(l.id) != lid)
@@ -313,13 +316,17 @@ static func collect_sum() -> Dictionary:
 	return s
 
 
-## 사기(서버가 정한다): 결과가 오면 알리고 목록을 새로 받는다.
+## 사기: 곧바로 값을 빼고 장비를 보관함에 넣고 목록에서 지운다(Economy._instant — 서버가 거절하면 되돌리고 알린다).
+## 같은 판매를 응답 전에 다시 사지 않게 목록에서 바로 빠지고, _buying에 남는다.
 func buy(listing: Dictionary) -> void:
 	if not online() or not Economy.net.up:
 		Economy.notice.emit(OFFLINE_TEXT if not online() else Economy.WAIT_TEXT)
 		return
 	var cur := str(listing.currency)
 	var price := int(listing.price)
+	var lid := int(listing.id)
+	if _buying.has(lid):  # 응답 전 같은 판매를 또 눌렀다
+		return
 	var have: int = Economy.gold if cur == "gold" else Economy.diamonds
 	if have < price:
 		Economy.notice.emit(FAIL_TEXT["not_enough_" + cur])
@@ -327,20 +334,27 @@ func buy(listing: Dictionary) -> void:
 	if Economy.bag.size() >= int(GameData.config_num("equip_bag_cap")):
 		Economy.notice.emit(FAIL_TEXT.bag_full)
 		return
-	var lid := int(listing.id)
-	Economy.net.flush_kills()
-	Economy.net.send("POST", "/v1/market/buy", {"id": lid, "currency": cur, "price": price}, func(d: Dictionary):
-		Economy.apply_server(d)
-		var it := Economy._item_list([listing.get("item", {})])
-		Economy.notice.emit("구매 완료: %s — 보관함에 넣었습니다" % (BagPanel.item_name(it[0]) if not it.is_empty() else "장비"))
-		listings = listings.filter(func(l): return int(l.id) != lid)
-		_rebuild()
-		if visible and tab == "buy":
-			fetch_listings(), func():
-		Economy.notice.emit(str(FAIL_TEXT.get(Economy.net.last_error, FAIL_DEFAULT)))
+	var it := Economy._item_list([listing.get("item", {})])
+	_buying[lid] = true
+	var ok := Economy._instant(func():
+		if cur == "gold":
+			Economy.gold_tenths -= price * 10
+		else:
+			Economy.diamonds -= price
+		Economy.bag = Economy.bag + it
+		Economy._reindex_items()
+		Economy.items_changed.emit()
+		return true, "/v1/market/buy", {"id": lid, "currency": cur, "price": price}, func() -> String:
+		_buying.erase(lid)
 		if visible and tab == "buy":
 			fetch_listings()
-		Economy.net.refresh(), true, true)
+		return str(FAIL_TEXT.get(Economy.net.last_error, FAIL_DEFAULT)))
+	if not ok:
+		_buying.erase(lid)
+		return
+	Economy.notice.emit("구매 완료: %s — 보관함에 넣었습니다" % (BagPanel.item_name(it[0]) if not it.is_empty() else "장비"))
+	listings = listings.filter(func(l): return int(l.id) != lid)
+	_rebuild()
 
 
 func _fail_text() -> String:

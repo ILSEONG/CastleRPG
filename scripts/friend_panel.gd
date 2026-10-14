@@ -32,6 +32,8 @@ var tab_btns := {}
 var _top: VBoxContainer
 var _list_page: VBoxContainer
 var _add_page: VBoxContainer
+var _optimistic = null  # 곧바로 바꿔 보인 친구 목록(응답 전). 서버 응답은 새 사전으로 바꾸니, 응답 뒤에도 이 사전 그대로면 거절된 것
+var _snapshot := {}  # 그 직전 목록(거절되면 되돌린다)
 
 
 func _ready() -> void:
@@ -126,7 +128,7 @@ func _ready() -> void:
 	var close_b := _button("닫기", UiKit.STEEL)
 	close_b.pressed.connect(close)
 	content.add_child(close_b)
-	Economy.friends_changed.connect(_refresh)
+	Economy.friends_changed.connect(_on_friends_changed)
 
 
 func _scroll_list(parent: Control, h: float) -> VBoxContainer:
@@ -146,6 +148,67 @@ func _on_open() -> void:
 	tab = "list"
 	Economy.friends_load()
 	_refresh()
+
+
+func _on_friends_changed() -> void:
+	if _optimistic != null and not Economy.friends_waiting:
+		if is_same(Economy.friends, _optimistic):  # 거절·끊김: 곧바로 바꾼 것을 되돌린다(알림은 Economy가 띄웠다)
+			Economy.friends = _snapshot
+		_optimistic = null
+		_snapshot = {}
+	_refresh()
+
+
+## 친구 요청을 곧바로 반영해 보이고(local이 목록 사본을 고친다) Economy.friend_op로 보낸다. 응답이 오면 서버 목록으로, 거절되면 되돌린다.
+## 응답 전에는 Economy.friends_waiting이라 같은 요청이 두 번 나가지 않는다.
+func _op(op: String, body: Dictionary, local: Callable) -> void:
+	if Economy.net == null or Economy.friends_waiting or not Economy.net.up or Economy.friends.is_empty():
+		Economy.friend_op(op, body)  # 알림(오프라인·끊김)은 그쪽이 띄운다
+		return
+	var snap: Dictionary = Economy.friends
+	var f: Dictionary = snap.duplicate(true)
+	local.call(f)
+	Economy.friends = f
+	if Economy.friend_op(op, body):  # friends_changed → 곧바로 다시 그린다
+		_optimistic = f
+		_snapshot = snap
+	else:
+		Economy.friends = snap
+
+
+func _person_op(op: String, id: String) -> void:
+	var local := func(f: Dictionary):
+		var drop := func(k: String) -> Dictionary:
+			var hit := {}
+			var keep := []
+			for x in f.get(k, []):
+				if x is Dictionary and str(x.get("id", "")) == id:
+					hit = x
+				else:
+					keep.append(x)
+			f[k] = keep
+			return hit
+		if op == "accept":
+			var p: Dictionary = drop.call("incoming")
+			if not p.is_empty():
+				f["friends"] = f.get("friends", []) + [p]
+		elif op == "request":
+			var p: Dictionary = drop.call("recommend")
+			if not p.is_empty():
+				f["outgoing"] = f.get("outgoing", []) + [p]
+		else:  # remove: 삭제·거절·취소
+			drop.call("incoming")
+			drop.call("friends")
+			drop.call("outgoing")
+	_op(op, {"id": id}, local)
+
+
+func _hero_op(id) -> void:
+	var local := func(f: Dictionary):
+		f["hero_chosen"] = id
+		if id is String:
+			f["hero"] = {"hero_id": id, "level": Economy.level_of(id), "promotion": Economy.promotion_of(id)}
+	_op("hero", {"hero_id": id}, local)
 
 
 func pick_tab(t: String) -> void:
@@ -228,7 +291,7 @@ func _fill_picks(f: Dictionary) -> void:
 		c.queue_free()
 	var auto := _button("자동", UiKit.AMBER if not (f.get("hero_chosen") is String) else UiKit.STEEL, 22)
 	auto.custom_minimum_size = Vector2(90, PICK_SIZE.y)
-	auto.pressed.connect(func(): Economy.friend_op("hero", {"hero_id": null}))
+	auto.pressed.connect(func(): _hero_op(null))
 	pick_row.add_child(auto)
 	var ids: Array = Economy.heroes.keys().filter(func(id): return int(Economy.heroes[id]) >= 1 and not GameData.hero(id).is_empty())
 	var pw := {}
@@ -242,7 +305,7 @@ func _fill_picks(f: Dictionary) -> void:
 		card.level = Economy.level_of(id)
 		card.stars = Economy.promotion_of(id)
 		card.checked = f.get("hero_chosen") == id
-		card.tapped.connect(func(_c): Economy.friend_op("hero", {"hero_id": id}))
+		card.tapped.connect(func(_c): _hero_op(id))
 		pick_row.add_child(card)
 
 
@@ -284,5 +347,5 @@ func _add_btn(row: HBoxContainer, text: String, color: Color, op: String, id: St
 	b.custom_minimum_size = Vector2(88, 52)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.disabled = Economy.friends_waiting
-	b.pressed.connect(func(): Economy.friend_op(op, {"id": id}))
+	b.pressed.connect(func(): _person_op(op, id))
 	row.add_child(b)

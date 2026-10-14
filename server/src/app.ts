@@ -2297,6 +2297,10 @@ export function createApp(opts: AppOptions) {
     if (!row) {
       const [old] = await query('select player_id from iap_orders where order_id = $1', [orderKey])
       if (old && String(old.player_id) === id) {
+        // 같은 영수증이 동시에 두 번(빠른 재전송): 먼저 온 요청이 아직 지급 전이면(지급은 economy_log iap와 한 문장) already로 답하지 않는다 —
+        // 그 요청이 실패해 주문 행을 지우면 지급 없이 결제를 소비(finish)해 버린다. 409 order_pending → 앱이 나중에 다시 보낸다.
+        const [paid] = await query("select 1 from economy_log where player_id = $1 and kind = 'iap' and detail->>'order_id' = $2 limit 1", [id, orderKey])
+        if (!paid) throw new ApiError(409, 'order_pending', 'this order is being processed; try again')
         await finish()
         return c.json({ already: true, product: pr.id })
       }

@@ -306,7 +306,7 @@ func refresh_result() -> void:
 	var ticket: bool = dungeon.run.type == "ticket"
 	again_button.visible = not ticket or not dungeon.result.get("win", false)
 	auto_next_box.get_parent().visible = not ticket
-	for b in [next_button, again_button]:
+	for b in [next_button, again_button, exit_button]:  # 시작 요청 중 [나가기]면 응답이 성 화면에서 다시 던전으로 끌고 간다
 		b.disabled = dungeon.starting
 	auto_next_box.set_pressed_no_signal(Fever.dungeon_auto == "next")
 	auto_repeat_box.set_pressed_no_signal(Fever.dungeon_auto == "repeat")
@@ -321,7 +321,7 @@ func _update_auto_label() -> void:
 	elif dungeon.auto_halted:
 		auto_label.text = "자동 도전을 멈췄습니다"
 	elif dungeon.starting:
-		auto_label.text = "다음 도전 시작 중…"
+		auto_label.text = ""  # 대기 문구 없음(버튼이 꺼진 것으로 충분)
 	elif dungeon.auto_left >= 0.0:
 		auto_label.text = "%d초 뒤 자동 도전" % ceili(dungeon.auto_left)
 	else:

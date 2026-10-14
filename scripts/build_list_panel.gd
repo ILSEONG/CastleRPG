@@ -43,6 +43,9 @@ var _list: HBoxContainer
 var _tween: Tween
 var _opening := 0  # 펼치기 차례(기다리는 사이 접혔으면 그 펼치기는 버린다)
 var _hidden := []  # 펼치며 숨긴 것(접을 때 되돌린다)
+var _opened_ms := -100000  # 편 시각 — OPEN_GUARD_MS 동안 누름을 버린다(더블 탭의 두 번째가 곧바로 접거나 카드를 누르지 않게)
+var _closing := false  # 접히는 중(사라지기 전 카드 탭은 무시)
+const OPEN_GUARD_MS := 400
 
 
 func _ready() -> void:
@@ -193,6 +196,8 @@ func open() -> void:
 	_refresh()
 	_layout()
 	visible = true
+	_closing = false
+	_opened_ms = Time.get_ticks_msec()
 	_hidden = []
 	for n in hide_while_open:
 		if is_instance_valid(n) and n.visible:
@@ -230,8 +235,9 @@ func open() -> void:
 
 ## 접는다(왼쪽으로 말려 들어간다).
 func close() -> void:
-	if not visible:
+	if not visible or _closing:
 		return
+	_closing = true
 	_opening += 1
 	if _tween != null:
 		_tween.kill()
@@ -244,8 +250,15 @@ func close() -> void:
 	_tween.tween_callback(func(): visible = false)
 
 
+## 편 직후 누름(마우스·터치)은 GUI보다 먼저 먹는다(ui_window와 같은 보호).
+func _input(event: InputEvent) -> void:
+	if visible and (event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed \
+			and Time.get_ticks_msec() - _opened_ms < OPEN_GUARD_MS:
+		get_viewport().set_input_as_handled()
+
+
 func toggle() -> void:
-	if visible:
+	if visible and not _closing:
 		close()
 	else:
 		open()
@@ -349,6 +362,8 @@ func _rank(id: String, why: String, locked: bool) -> int:
 
 ## 카드: 지은 건물 → 옮기기, 짓는 중인 공터 → 건물 창, 미건설 → 짓기(못 지으면 이유 알림만).
 func _on_pressed(id: String) -> void:
+	if _closing:
+		return  # 접히는 중인 띠의 카드
 	var why: String = rows[id].why
 	if why != "":
 		Economy.notice.emit(why)

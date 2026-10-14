@@ -258,7 +258,7 @@ func _create_card() -> Control:
 			_create_name = ""
 			tab = "home"
 			Economy.notice.emit("「%s」 길드를 창설했습니다!" % n.strip_edges())
-		else:
+		elif not Guild.busy:  # 빠른 두 번째 탭(첫 요청 응답 전)은 조용히 무시
 			Economy.notice.emit(Guild.create_block(n)))
 	v.add_child(c)
 	buttons["create"] = c
@@ -449,8 +449,8 @@ func _build_home() -> void:
 	leave.pressed.connect(func():
 		if _leave_armed > 0.0:
 			_leave_armed = 0.0
-			Guild.leave()
-			Economy.notice.emit("길드를 탈퇴했습니다. 길드 코인은 그대로 남습니다")
+			if Guild.leave():  # 응답 전 다시 누른 탭은 무시(두 번 탈퇴 요청·알림 없음)
+				Economy.notice.emit("길드를 탈퇴했습니다. 길드 코인은 그대로 남습니다")
 		else:
 			_leave_armed = LEAVE_CONFIRM_SEC
 			_rebuild())
@@ -623,7 +623,7 @@ func _build_members() -> void:
 
 ## [도전]: 실제 전투 시작(Guild.start_boss → boss_started → main이 드래곤 전투 장면을 연다). 결과는 그 장면이 띄운다.
 func _start_fight() -> void:
-	if not Guild.start_boss():
+	if not Guild.start_boss() and not Guild.busy:  # 응답 전 두 번째 탭은 조용히 무시(시작은 한 번만)
 		Economy.notice.emit(Guild.boss_block())
 
 

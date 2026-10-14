@@ -195,7 +195,14 @@ func set_defense(ids: Array) -> void:
 		_notice("수비 영웅 %d명을 고르세요" % WarRules.SQUAD)
 		return
 	if online():
-		_post("defense", {"heroes": ids.map(func(id): return hero_entry(id))}, func(_d): _notice("수비 영웅을 저장했습니다"))
+		if busy:  # 앞 요청 응답 전 두 번째 탭은 무시
+			return
+		if not econ.net.up:
+			_notice("연결 대기 중")
+			return
+		war.defense = ids.duplicate()  # 곧바로 「저장됨」(거절되면 _post가 다시 받아 되돌린다)
+		_post("defense", {"heroes": ids.map(func(id): return hero_entry(id))}, func(_d): pass)
+		_notice("수비 영웅을 저장했습니다")
 		return
 	local.defense = ids.duplicate()
 	save()
@@ -205,12 +212,21 @@ func set_defense(ids: Array) -> void:
 
 ## 이번 주 공성 시각을 정한다(길드장만 — 서버가 확인, 그 시각이 오기 전까지). day 0 = 월요일.
 func set_schedule(day: int, hour: int) -> bool:
+	if busy:  # 앞 요청 응답 전 두 번째 탭은 조용히 무시
+		return false
 	var why := schedule_block(day, hour)
 	if why != "":
 		_notice(why)
 		return false
 	if online():
-		_post("schedule", {"day": day, "hour": hour}, func(_d): _notice("이번 주 공성 시각: %s" % at_text(pick_at(int(war.week), day, hour))))
+		if not econ.net.up:
+			_notice("연결 대기 중")
+			return false
+		var at := pick_at(int(war.week), day, hour)
+		if war.get("schedule") is Dictionary:
+			war.schedule.at = at  # 곧바로 새 시각을 보인다(거절되면 _post가 다시 받아 되돌린다)
+		_post("schedule", {"day": day, "hour": hour}, func(_d): pass)
+		_notice("이번 주 공성 시각: %s" % at_text(at))
 		return true
 	local.at = pick_at(int(war.week), day, hour)
 	save()
@@ -221,6 +237,8 @@ func set_schedule(day: int, hour: int) -> bool:
 
 ## 이번 주 공성 전투에 들어간다(공성 시각 ~ +BATTLE_SEC, 없으면 연다). 성공하면 battle_started.
 func enter(ids: Array) -> bool:
+	if busy:  # 응답 전 두 번째 탭: 전투를 두 번 열지 않고 알림도 없이 무시
+		return false
 	var why := enter_block(ids)
 	if why != "":
 		_notice(why)
@@ -293,9 +311,15 @@ func start_battle(battle_id: String, done: Callable) -> void:
 
 func claim() -> void:
 	if online():
-		_post("claim", {}, func(d):
-			var r: Dictionary = d.get("result", {})
-			_notice(_claim_text(r)))
+		if busy or not (war.get("claim") is Dictionary):  # 응답 전 두 번째 탭·이미 받음
+			return
+		if not econ.net.up:
+			_notice("연결 대기 중")
+			return
+		var cl: Dictionary = war.claim
+		war.erase("claim")  # 곧바로 보상 카드를 치우고 알린다(거절되면 _post가 알리고 다시 받는다)
+		_post("claim", {}, func(_d): pass)
+		_notice(_claim_text(cl))
 		return
 	var cl = war.get("claim")
 	if not (cl is Dictionary):

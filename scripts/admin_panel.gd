@@ -15,6 +15,7 @@ const REWARD_FIELDS := [["gold", "골드"], ["diamonds", "다이아"], ["tickets
 	["keys_gold", "골드 열쇠"], ["keys_equip", "장비 열쇠"], ["keys_ticket", "모집권 열쇠"]]
 const GRADES := ["N", "R", "SR", "SSR", "UR", "LR"]
 const ARM_SEC := 4.0
+const CONFIRM_GAP_SEC := 0.4  # 확인 누름은 첫 누름 뒤 이만큼 지나야 받는다(빠른 두 번 누름은 확인이 아니다)
 
 var tab := "status"
 var ops := {}  # GET /v1/admin/ops 응답
@@ -24,6 +25,7 @@ var _armed := ""  # 한 번 누른 위험 버튼 이름
 var _armed_button: Button
 var _armed_text := ""
 var _armed_left := 0.0
+var _posting := {}  # 응답 전인 POST 경로
 
 
 func _ready() -> void:
@@ -71,6 +73,8 @@ func _process(delta: float) -> void:
 ## 위험한 버튼: 첫 번째 누름은 그 버튼 글을 확인 문구로 바꾸고(입력은 그대로), ARM_SEC 안에 다시 누르면 true.
 func _confirm(name: String, b: Button, ask: String) -> bool:
 	if _armed == name and _armed_button == b:
+		if _armed_left > ARM_SEC - CONFIRM_GAP_SEC:
+			return false  # 첫 누름과 같은 두 번 누름 — 확인으로 치지 않는다
 		_disarm()
 		return true
 	_disarm()
@@ -388,12 +392,18 @@ func _post(path: String, d: Dictionary, ok_text: String, after := Callable()) ->
 	if not Net.up:
 		Economy.notice.emit("서버에 연결된 뒤 다시 해 주세요")
 		return
+	if _posting.has(path):
+		return  # 같은 요청이 응답 전 — 두 번 누름이 우편·공지·쿠폰을 두 번 만들지 않게
+	_posting[path] = true
 	Net.send("POST", path, d, func(_r: Dictionary):
+		_posting.erase(path)
 		Economy.notice.emit(ok_text)
 		if after.is_valid():
 			after.call()
 		fetch(),
-		func(): Economy.notice.emit("실패했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음")))
+		func():
+			_posting.erase(path)
+			Economy.notice.emit("실패했습니다: %s" % (Net.last_error if Net.last_error != "" else "서버 응답 없음")))
 
 
 func _text_edit(placeholder: String) -> TextEdit:

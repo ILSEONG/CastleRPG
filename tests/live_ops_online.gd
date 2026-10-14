@@ -178,6 +178,7 @@ func _ready() -> void:
 	admin.f.m_gold.text = "1234"
 	admin.send_mail()
 	_check(admin.f.m_send.text.begins_with("한 번 더"), "mail to all asks once more", admin.f.m_send.text)
+	await get_tree().create_timer(0.5).timeout  # 확인 탭은 0.4초 뒤부터(빠른 두 번 탭 막기)
 	admin.send_mail()
 	_check(await _wait_until(func(): return admin.ops.get("mails", []).any(func(m): return m.title == "관리자 창 우편"), 10.0), "mail sent from the admin window", "")
 	admin.close()

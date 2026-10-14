@@ -246,6 +246,7 @@ func ask_promote_all() -> void:
 
 func _on_promote_all_confirm(yes: bool) -> void:
 	promote_all_confirm.visible = false
+	_arm_guard()  # 확인 창 밑 목록(카드·버튼)을 더블 탭의 두 번째 누름이 누르지 않게
 	if yes:
 		Economy.promote_all(_promote_all_plan)
 

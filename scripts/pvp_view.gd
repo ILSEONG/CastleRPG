@@ -69,6 +69,7 @@ func show_home() -> void:
 	page = ""
 	picking = ""
 	refresh()
+	_guard()
 
 
 func open_mode(mode: String) -> void:
@@ -77,6 +78,17 @@ func open_mode(mode: String) -> void:
 	if not team.has(mode) or team[mode].size() != PvpRules.TEAM:
 		team[mode] = Pvp.default_team(mode)
 	refresh()
+	_guard()
+
+
+## 화면(홈·모드·팀 고르기)이 바뀌면 이 화면을 품은 창(던전 창)의 누름 보호를 다시 건다 — 더블 탭의 두 번째 누름이 새 화면의 같은 자리
+## 버튼(팀 고르기 [확인]·[뒤로] 자리의 [전투 시작] 등)을 누르지 않게.
+func _guard() -> void:
+	var w = get_parent()
+	while w != null and not w.has_method("_arm_guard"):
+		w = w.get_parent()
+	if w != null:
+		w._arm_guard()
 
 
 # --- 홈 ---
@@ -353,7 +365,8 @@ func _build_picker() -> void:
 	var back := _button("뒤로", UiKit.STEEL)
 	back.pressed.connect(func():
 		picking = ""
-		refresh())
+		refresh()
+		_guard())
 	var auto := _button("자동 편성", UiKit.STEEL)
 	auto.pressed.connect(func():
 		pick = Pvp.owned_heroes().slice(0, PvpRules.TEAM)
@@ -373,6 +386,7 @@ func _open_picker(kind: String) -> void:
 	if pick.is_empty():
 		pick = Pvp.default_team(page)
 	refresh()
+	_guard()
 
 
 func _confirm_pick() -> void:
@@ -384,6 +398,7 @@ func _confirm_pick() -> void:
 		Pvp.set_defense(page, pick.duplicate())
 	picking = ""
 	refresh()
+	_guard()
 
 
 func _refresh_picker() -> void:

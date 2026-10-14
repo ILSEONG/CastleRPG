@@ -55,6 +55,8 @@ func _ready() -> void:
 
 ## 광고를 띄운다. 끝까지 보면 done.call().
 func play(done: Callable) -> void:
+	if visible:
+		return  # 이미 재생 중(빠른 두 번 누름) — 같은 광고를 다시 시작하지 않는다
 	if instant:
 		done.call()
 		return

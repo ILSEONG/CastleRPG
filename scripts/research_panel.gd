@@ -57,6 +57,12 @@ const MAX_GOLD := Color(0.95, 0.72, 0.16)
 const GREEN := Color(0.13, 0.55, 0.24)
 const RED := Color(0.78, 0.22, 0.18)
 
+const ACT_GUARD_MS := 400
+const ACT_GUARD_PX := 60.0
+var _act_ms := -100000  # 마지막 동작(_acted) 시각과 그 누름 자리
+var _act_pos := Vector2.INF
+var _press_pos := Vector2.INF  # 마지막 누름 자리·시각(버튼은 뗄 때 눌리므로 그 누름이 방금이었을 때만 쓴다)
+var _press_ms := -100000
 var branch := "economy"
 var branch_buttons := {}  # 분야 → 탭 버튼
 var cards := {}  # 노드 id → {button, face, box, name, lv, bar, state, lock}(지금 분야만)
@@ -170,11 +176,11 @@ func _build_current() -> void:
 	cur_row.add_child(btns)
 	dia_button = _dia_button(22)
 	dia_button.custom_minimum_size = Vector2(196, 52)
-	dia_button.pressed.connect(func(): Economy.finish_research_now())
+	dia_button.pressed.connect(func(): _acted(Economy.finish_research_now()))
 	btns.add_child(dia_button)
 	cancel_button = _button("취소", UiKit.STEEL, 22)
 	cancel_button.custom_minimum_size = Vector2(196, 44)
-	cancel_button.pressed.connect(func(): Economy.cancel_research())
+	cancel_button.pressed.connect(func(): _acted(Economy.cancel_research()))
 	btns.add_child(cancel_button)
 	speedup_button = _button("가속 ▼", UiKit.AMBER, 22)  # 2026-10-13: 연구 가속·범용 가속 아이템 목록
 	speedup_button.custom_minimum_size = Vector2(196, 44)
@@ -183,6 +189,7 @@ func _build_current() -> void:
 		_refresh())
 	btns.add_child(speedup_button)
 	speedups = SpeedupList.new()
+	speedups.used.connect(_acted.bind(true))
 	speedups.target = "research"
 	speedups.visible = false
 	cur_row.add_sibling(speedups)
@@ -263,7 +270,7 @@ func _build_detail() -> void:
 	box.add_child(detail_reason)
 	start_button = _button("연구", GREEN)
 	start_button.custom_minimum_size = Vector2(0, 64)
-	start_button.pressed.connect(func(): Economy.start_research(detail_id))
+	start_button.pressed.connect(func(): _acted(Economy.start_research(detail_id)))
 	box.add_child(start_button)
 	detail_run = VBoxContainer.new()
 	detail_run.add_theme_constant_override("separation", 6)
@@ -277,15 +284,35 @@ func _build_detail() -> void:
 	detail_run.add_child(run_btns)
 	detail_dia = _dia_button(24)
 	detail_dia.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail_dia.pressed.connect(func(): Economy.finish_research_now())
+	detail_dia.pressed.connect(func(): _acted(Economy.finish_research_now()))
 	run_btns.add_child(detail_dia)
 	detail_cancel = _button("취소", UiKit.STEEL, 24)
 	detail_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail_cancel.pressed.connect(func(): Economy.cancel_research())
+	detail_cancel.pressed.connect(func(): _acted(Economy.cancel_research()))
 	run_btns.add_child(detail_cancel)
 	var close_detail_button := _button("닫기", UiKit.STEEL)
 	close_detail_button.pressed.connect(close_detail)
 	box.add_child(close_detail_button)
+
+
+## 연구 시작·즉시 완료·취소가 됐으면 누름 보호를 다시 건다: [연구] 자리에 [즉시 완료]·[취소]가(끝나면 반대로) 떠서
+## 더블 탭의 두 번째 누름이 다이아를 쓰거나 방금 시작한 연구를 취소하지 않게.
+func _acted(ok: bool) -> void:
+	if ok:
+		_act_ms = Time.get_ticks_msec()
+		_act_pos = _press_pos if _act_ms - _press_ms < 1500 else Vector2.INF
+
+
+## 동작 직후 ACT_GUARD_MS 안에 같은 자리(ACT_GUARD_PX 안)를 다시 누르면 GUI보다 먼저 먹는다(다른 자리 누름은 그대로).
+func _input(event: InputEvent) -> void:
+	super._input(event)
+	if not visible or not ((event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed):
+		return
+	if Time.get_ticks_msec() - _act_ms < ACT_GUARD_MS and event.position.distance_to(_act_pos) < ACT_GUARD_PX:
+		get_viewport().set_input_as_handled()
+		return
+	_press_pos = event.position
+	_press_ms = Time.get_ticks_msec()
 
 
 ## 다이아 버튼: 왼쪽 보석 아이콘 + "N 즉시 완료"(글자는 보석 자리만큼 오른쪽으로).

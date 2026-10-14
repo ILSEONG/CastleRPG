@@ -53,6 +53,12 @@ const DESC := {  # 설명 한 줄(건물 표에 설명 열이 없다)
 	"dispatch": "영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수와 높은 희귀도 확률이 오르고 파견 시간이 줄어듭니다.",
 }
 
+const ACT_GUARD_MS := 400
+const ACT_GUARD_PX := 60.0
+var _act_ms := -100000  # 마지막 동작(_acted) 시각과 그 누름 자리
+var _act_pos := Vector2.INF
+var _press_pos := Vector2.INF  # 마지막 누름 자리·시각(버튼은 뗄 때 눌리므로 그 누름이 방금이었을 때만 쓴다)
+var _press_ms := -100000
 var building_id := ""
 var research  # 연구 창(research_panel.gd, 개정 24). main이 넣는다
 var dispatch  # 파견소 창(dispatch_panel.gd, 2026-10-13). main이 넣는다
@@ -151,7 +157,7 @@ func _ready() -> void:
 	left_label = _label("", 26)
 	_progress_box.add_child(left_label)
 	free_build_button = _button(FREE_TEXT, GREEN)  # 남은 5분 이하면 무료 즉시 완료(사용자 2026-10-06)
-	free_build_button.pressed.connect(func(): Economy.free_finish_build(building_id))
+	free_build_button.pressed.connect(func(): _acted(Economy.free_finish_build(building_id)))
 	_progress_box.add_child(free_build_button)
 	speedup_button = _button(SPEEDUP_TEXT, UiKit.AMBER)
 	speedup_button.pressed.connect(func():
@@ -159,6 +165,7 @@ func _ready() -> void:
 		_refresh())
 	_progress_box.add_child(speedup_button)
 	speedups = SpeedupList.new()
+	speedups.used.connect(_acted.bind(true))
 	speedups.visible = false
 	_progress_box.add_child(speedups)
 	builder_label = _label("", 22, HudScript.INK.lightened(0.3))
@@ -166,7 +173,7 @@ func _ready() -> void:
 	reason_label = _label("", 24, RED)
 	content.add_child(reason_label)
 	upgrade_button = _button(UPGRADE_TEXT)
-	upgrade_button.pressed.connect(func(): Economy.upgrade(building_id, Economy.time_now()))
+	upgrade_button.pressed.connect(func(): _acted(Economy.upgrade(building_id, Economy.time_now())))
 	content.add_child(upgrade_button)
 	var close_button := _button("닫기", UiKit.STEEL)
 	close_button.pressed.connect(close)
@@ -292,6 +299,26 @@ func _refresh() -> void:
 	_fit()
 
 
+## 건설·훈련 동작이 됐으면 누름 보호를 다시 건다: 칸이 바뀌어(업그레이드 → 즉시 완료·가속, 훈련 → 취소, 수령 → 훈련) 더블 탭의
+## 두 번째 누름이 그 자리에 새로 뜬 다른 버튼을 누르지 않게.
+func _acted(ok: bool) -> void:
+	if ok:
+		_act_ms = Time.get_ticks_msec()
+		_act_pos = _press_pos if _act_ms - _press_ms < 1500 else Vector2.INF
+
+
+## 동작 직후 ACT_GUARD_MS 안에 같은 자리(ACT_GUARD_PX 안)를 다시 누르면 GUI보다 먼저 먹는다(다른 자리 누름은 그대로).
+func _input(event: InputEvent) -> void:
+	super._input(event)
+	if not visible or not ((event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed):
+		return
+	if Time.get_ticks_msec() - _act_ms < ACT_GUARD_MS and event.position.distance_to(_act_pos) < ACT_GUARD_PX:
+		get_viewport().set_input_as_handled()
+		return
+	_press_pos = event.position
+	_press_ms = Time.get_ticks_msec()
+
+
 ## 훈련 칸(개정 16): 비었을 때 / 훈련 중 / 완료 셋 중 하나만 보인다.
 func _build_train_box() -> void:
 	train_box = VBoxContainer.new()
@@ -330,7 +357,7 @@ func _build_train_box() -> void:
 	train_time_label = _label("", 26)
 	empty_box.add_child(train_time_label)
 	train_button = _button("훈련", GREEN)
-	train_button.pressed.connect(func(): Economy.start_training(building_id, qty.value))
+	train_button.pressed.connect(func(): _acted(Economy.start_training(building_id, qty.value)))
 	empty_box.add_child(train_button)
 	train_reason = _label("", 24, RED)
 	empty_box.add_child(train_reason)
@@ -347,10 +374,10 @@ func _build_train_box() -> void:
 	run_label = _label("", 26)
 	run_box.add_child(run_label)
 	free_train_button = _button(FREE_TEXT, GREEN)
-	free_train_button.pressed.connect(func(): Economy.free_finish_training(building_id))
+	free_train_button.pressed.connect(func(): _acted(Economy.free_finish_training(building_id)))
 	run_box.add_child(free_train_button)
 	cancel_button = _button(CANCEL_TEXT, UiKit.STEEL)
-	cancel_button.pressed.connect(func(): Economy.cancel_training(building_id))
+	cancel_button.pressed.connect(func(): _acted(Economy.cancel_training(building_id)))
 	run_box.add_child(cancel_button)
 	done_box = VBoxContainer.new()
 	done_box.add_theme_constant_override("separation", 8)
@@ -358,7 +385,7 @@ func _build_train_box() -> void:
 	done_label = _label("", 28, GREEN)
 	done_box.add_child(done_label)
 	collect_button = _button("수령", GREEN)
-	collect_button.pressed.connect(func(): Economy.collect_training(building_id))
+	collect_button.pressed.connect(func(): _acted(Economy.collect_training(building_id)))
 	done_box.add_child(collect_button)
 
 

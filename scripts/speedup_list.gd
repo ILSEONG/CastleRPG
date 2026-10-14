@@ -11,6 +11,8 @@ const EMPTY_TEXT := "가속 아이템이 없습니다. 미션·출석·상점에
 
 var target := "build"  # build | research
 var building := ""  # 건설: 그 건물(""이면 1번 일꾼)
+signal used  # 아이템을 썼다(타이머가 끝나면 창 배치가 바뀐다 — 창이 누름 보호를 다시 건다)
+
 var _key := ""  # 마지막으로 그린 내용(보유·남은 시간 분) — 같으면 다시 만들지 않는다
 
 
@@ -27,11 +29,13 @@ func refresh() -> void:
 	var now := Economy.time_now()
 	var left := left_sec(now)
 	var ids := Economy.speedups_for(target)
-	var key := "%s|%s|%d|%s" % [target, building, ceili(left / 60.0), ",".join(ids.map(func(i): return "%s:%d" % [i, Economy.speedup_count(i)]))]
+	var key := "%s|%s|%d|%s|%s" % [target, building, ceili(left / 60.0), ",".join(ids.map(func(i): return "%s:%d" % [i, Economy.speedup_count(i)])),
+		Economy.speedup_waiting()]  # 응답이 오면(보유 수가 그대로여도) 꺼 둔 버튼을 다시 켠다
 	if key == _key:
 		return
 	_key = key
 	for c in get_children():
+		remove_child(c)  # 같은 프레임의 두 번째 누름이 지울 버튼에 닿지 않게
 		c.queue_free()
 	if ids.is_empty():
 		add_child(_label(EMPTY_TEXT, 22, HudScript.INK.lightened(0.3)))
@@ -61,7 +65,8 @@ func _use_button(id: String, n: int, text: String) -> Button:
 	b.pressed.connect(func():
 		if Economy.use_speedup(id, n, target, building):
 			_key = ""
-			refresh())
+			refresh()
+			used.emit())
 	return b
 
 

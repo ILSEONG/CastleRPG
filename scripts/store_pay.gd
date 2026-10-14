@@ -30,6 +30,8 @@ var _querying := false  # 되찾기(queryPurchases) 결과를 받는 중 — 결
 var _sent := {}  # 서버에 보내는 중인 토큰(같은 결제를 겹쳐 보내지 않게)
 var _quiet := {}  # 되찾기로 보낸 토큰 — 실패 알림을 띄우지 않는다
 var _js_cbs := []  # JavaScriptBridge 콜백이 불리기 전에 사라지지 않게
+var _opening_until := 0.0  # 결제 창을 여는 중(실제 초) — 빠른 두 번 누름이 결제 창을 두 번 열지 않게
+const OPEN_GUARD_SEC := 2.0
 
 
 ## 이 빌드의 결제 제공자.
@@ -56,6 +58,10 @@ func buy(id: String) -> bool:
 	if not Net.up:
 		Economy.notice.emit(Economy.WAIT_TEXT)
 		return false
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _opening_until:
+		return false  # 앞 누름의 결제 창이 뜨는 중 — 같은 결제를 겹쳐 열지 않는다
+	_opening_until = now + OPEN_GUARD_SEC
 	match provider():
 		"test":
 			_send(id, "test", str(fake_store.call(id)))
@@ -134,6 +140,7 @@ func _google() -> Object:
 
 
 func _on_google_token(product: String, token: String, state: int) -> void:
+	_opening_until = 0.0
 	if state == PURCHASED:
 		_send(product, "google", token, _querying)
 	elif state == PENDING and not _querying:
@@ -141,6 +148,7 @@ func _on_google_token(product: String, token: String, state: int) -> void:
 
 
 func _on_google_error(code: int, message: String) -> void:
+	_opening_until = 0.0
 	if code == USER_CANCELED:
 		return
 	push_warning("billing error %d: %s" % [code, message])
@@ -177,6 +185,7 @@ func _toss_buy(id: String) -> void:
 		var order := str(args[0]) if args.size() > 0 else ""
 		_send(id, "toss", order, false, func(ok: bool): api.granted(order, ok)))
 	var on_done := JavaScriptBridge.create_callback(func(args: Array):
+		_opening_until = 0.0
 		var kind := str(args[0]) if args.size() > 0 else ""
 		var detail := str(args[1]) if args.size() > 1 else ""
 		if kind == "error":
@@ -185,7 +194,7 @@ func _toss_buy(id: String) -> void:
 			elif not detail.to_upper().contains("CANCEL"):
 				push_warning("toss iap error: " + detail)
 				Economy.notice.emit(OPEN_FAIL_TEXT))
-	_js_cbs = [on_grant, on_done]  # 이전 결제의 콜백은 끝났다
+	_js_cbs.append_array([on_grant, on_done])  # 앞 결제의 콜백도 남긴다(덮어쓰면 아직 안 끝난 결제의 지급 콜백이 사라진다)
 	api.buy(_toss_sku(id), on_grant, on_done)
 
 

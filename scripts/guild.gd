@@ -5,7 +5,7 @@ extends Node
 ## 길드 코인으로 길드 상점. 다른 길드원은 가상 길드원이다: 길드 seed와 날짜로 정해지는 시각에 출석·기부·보스 공격을 한다(_simulate).
 ## 오프라인: 보상·비용은 Economy에 바로 반영하고 둘 다 저장한다. 온라인(econ.net != null, 내보낸 APK): 서버 길드(/v1/guild*)가 진실이다 —
 ## 실제 유저 + 가상 길드원(서버가 계산). 응답의 guild 값을 이 스크립트의 같은 필드(guild·me·coins·shop_*)에 옮겨 담아 창은 두 모드를 같은 코드로 그린다.
-## 온라인 쓰기는 요청만 보내고(busy 동안 막힘 "응답 대기 중") 응답이 오면 Economy.apply_server + 길드 값을 반영한다.
+## 온라인 쓰기: 출석·상자·기부·구매는 곧바로 반영하고 보낸다(_post_instant, 거절되면 되돌림). 가입·창설·탈퇴·보스는 요청만 보내고(_locked 동안 같은 동작 막힘) 응답이 오면 Economy.apply_server + 길드 값을 반영한다.
 ## 날짜는 던전과 같은 일일 리셋(GameData.reset_day, 00:00 KST). 주간 상점은 reset_day / 7.
 ## 저장: user://guild.json(Economy 저장과 따로). 길드 코인은 탈퇴해도 남고, 오늘 기여도·출석 상자는 길드를 옮기면 새로 센다.
 ## 테스트는 .new()로 만들어 econ·gs를 넣고 save_path를 ""로 둔다(트리에 안 넣으면 _ready 안 돎). 시각은 인자 now.
@@ -102,7 +102,14 @@ var fixed_now := -1.0  # 테스트: 0 이상이면 now_t()가 이 값
 
 var _sim_cd := 0.0
 var _last_buff := -1.0
-var busy := false  # 온라인: 응답 대기 중
+## 온라인: 길드 쓰기 응답 대기 중(어느 요청이든). 출석·상자·기부·구매는 곧바로 반영하고(_post_instant) 막지 않는다 —
+## 같은 동작이 두 번 나가지 않게 막는 건 _locked(가입·창설·탈퇴·보스)와 곧바로 바뀐 상태(출석함·받은 상자·남은 기부·남은 한도)다.
+var busy: bool:
+	get:
+		return _locked or _pending > 0
+var _locked := false  # 온라인: 가입·창설·탈퇴·보스 시작/끝 응답 전
+var _pending := 0  # 온라인: 곧바로 반영하고 응답을 기다리는 쓰기 수
+var _latest = null  # 온라인: _pending 동안 받은 마지막 서버 길드 값(다 끝나면 반영)
 var remote := {}  # 온라인: 마지막 서버 길드 값(GET /v1/guild·쓰기 응답의 guild)
 var _boss_run := {}  # 오프라인: 진행 중인 보스 전투(start_boss → finish_boss)
 var _last_op := ""  # 온라인: 마지막으로 보낸 쓰기(실패 처리)
@@ -306,7 +313,7 @@ func my_power() -> int:
 func boss_block() -> String:
 	if not joined():
 		return "길드에 가입하세요"
-	if busy:
+	if _locked:
 		return WAIT_TEXT
 	_roll_day(now_t())
 	if int(me.boss_tries) >= BOSS_TRIES:
@@ -326,6 +333,9 @@ func start_boss(now := -1.0) -> bool:
 	if online():
 		econ.net.flush_kills()
 		_post("boss/start", {}, func(d): boss_started.emit(d.get("result", {})))
+		if _locked:  # 보냈다: 도전 횟수를 곧바로 줄여 보인다(거절되면 _on_post_failed가 서버 값을 다시 받는다)
+			me.boss_tries = int(me.boss_tries) + 1
+			changed.emit()
 		return true
 	tick(now)
 	me.boss_tries = int(me.boss_tries) + 1
@@ -345,7 +355,7 @@ func finish_boss(run_id: String, dmg: float, now := -1.0) -> void:
 	dmg = maxf(0.0, roundf(dmg))
 	if online():
 		_post("boss/finish", {"run_id": run_id, "dmg": int(dmg)}, func(d): boss_done.emit(d.get("result", {})))
-		if not busy:  # 연결이 없어 보내지 못했다
+		if not _locked:  # 연결이 없어 보내지 못했다
 			boss_done.emit({"error": "offline"})
 		return
 	if _boss_run.is_empty() or str(_boss_run.run_id) != run_id or not joined():
@@ -402,7 +412,7 @@ func reset_in(now := -1.0) -> float:
 func attend_block() -> String:
 	if not joined():
 		return "길드에 가입하세요"
-	if busy:
+	if _locked:
 		return WAIT_TEXT
 	_roll_day(now_t())
 	return "오늘은 이미 출석했습니다" if me.attended else ""
@@ -413,11 +423,14 @@ func attend(now := -1.0) -> bool:
 		now = now_t()
 	if attend_block() != "":
 		return false
-	if online():
-		_post("attend", {}, func(_d):
+	if online():  # 곧바로 출석·보상을 보이고 서버가 확인한다(거절되면 되돌린다)
+		var apply := func():
+			me.attended = true
+			me.contrib = int(me.contrib) + ATTEND_EXP
+			_grant(ATTEND_REWARD)
+			_add_exp(ATTEND_EXP, true)
 			notice.emit("출석 완료! 골드 +%s · 길드 코인 +%d" % [_commas(ATTEND_REWARD.gold), ATTEND_REWARD.coins])
-			acted.emit("guild_attend"))
-		return true
+		return _post_instant("attend", {}, apply, func(_d): acted.emit("guild_attend"))
 	me.attended = true
 	me.contrib = int(me.contrib) + ATTEND_EXP
 	_grant(ATTEND_REWARD)
@@ -454,11 +467,12 @@ func box_state(i: int) -> String:
 
 
 func claim_box(i: int) -> bool:
-	if i < 0 or i >= ATTEND_BOXES.size() or box_state(i) != "ready" or busy:
+	if i < 0 or i >= ATTEND_BOXES.size() or box_state(i) != "ready" or _locked:
 		return false
-	if online():
-		_post("box", {"index": i})
-		return true
+	if online():  # 곧바로 받은 상자·보상을 보인다(거절되면 되돌린다)
+		return _post_instant("box", {"index": i}, func():
+			me.boxes.append(i)
+			_grant(ATTEND_BOXES[i][1]))
 	me.boxes.append(i)
 	_grant(ATTEND_BOXES[i][1])
 	save()
@@ -478,7 +492,7 @@ func donate_block(kind: String) -> String:
 		return "길드에 가입하세요"
 	if not DONATIONS.has(kind):
 		return "알 수 없는 기부"
-	if busy:
+	if _locked:
 		return WAIT_TEXT
 	if donations_left(kind) <= 0:
 		return "오늘 기부 횟수를 다 썼습니다"
@@ -499,8 +513,12 @@ func donate(kind: String, now := -1.0) -> bool:
 	if online():
 		if int(d.gold) > 0:
 			econ.net.flush_kills()  # 골드는 서버 값으로 판정한다
-		_post("donate", {"kind": kind})
-		return true
+		return _post_instant("donate", {"kind": kind}, func():  # 곧바로 비용·횟수·코인을 보인다(거절되면 되돌린다)
+			_pay(int(d.gold), int(d.diamonds))
+			me.donations[kind] = int(me.donations.get(kind, 0)) + 1
+			me.contrib = int(me.contrib) + int(d.exp)
+			coins += int(d.coins)
+			_add_exp(int(d.exp), true))
 	_pay(int(d.gold), int(d.diamonds))
 	me.donations[kind] = int(me.donations.get(kind, 0)) + 1
 	me.contrib = int(me.contrib) + int(d.exp)
@@ -534,7 +552,7 @@ func buy_block(id: String) -> String:
 	var it := shop_item(id)
 	if it.is_empty():
 		return "알 수 없는 상품"
-	if busy:
+	if _locked:
 		return WAIT_TEXT
 	if shop_left(id) <= 0:
 		return "구매 한도에 도달했습니다"
@@ -552,8 +570,12 @@ func buy(id: String) -> String:
 	if buy_block(id) != "":
 		return ""
 	var it := shop_item(id)
-	if online():
-		_post("buy", {"id": id}, func(d):
+	if online():  # 코인·한도는 곧바로 줄이고, 무엇을 받았는지(무작위)는 응답이 오면 알린다
+		var pay := func():
+			coins -= int(it.price)
+			var b: Dictionary = (shop_day if it.period == "day" else shop_week).bought
+			b[id] = int(b.get(id, 0)) + 1
+		_post_instant("buy", {"id": id}, pay, func(d):
 			var parts := []
 			for hid in d.get("result", {}).get("shards", {}):
 				parts.append("%s 조각 +%d" % [GameData.hero(hid).get("name", hid), int(d.result.shards[hid])])
@@ -675,7 +697,7 @@ func refresh_recommendations() -> void:
 
 
 func join_block() -> String:
-	if busy:
+	if _locked:
 		return WAIT_TEXT
 	if not is_unlocked():
 		return "1-10 라운드를 클리어하면 열립니다"
@@ -750,7 +772,7 @@ func create(name_text: String, emblem: int, now := -1.0) -> bool:
 
 
 func leave() -> bool:
-	if not joined() or busy:
+	if not joined() or _locked:
 		return false
 	if online():
 		_post("leave")
@@ -875,23 +897,70 @@ func _post(op: String, body := {}, done := Callable()) -> void:
 	if not econ.net.up:
 		notice.emit("연결 대기 중")
 		return
-	busy = true
+	_locked = true
 	_last_op = op
 	changed.emit()
 	econ.net.send("POST", "/v1/guild/" + op, body, _on_post.bind(done), _on_post_failed, true, true)
 
 
 func _on_post(d: Dictionary, done: Callable) -> void:
-	busy = false
+	_locked = false
 	econ.apply_server(d)
 	_take(d.get("guild"))
 	if done.is_valid():
 		done.call(d)
 
 
+## 곧바로 반영하는 쓰기(Economy._instant와 같은 방식): local이 길드 값·Economy(골드·다이아·코인)를 바로 바꾸고, 요청은 once로 보낸다.
+## 골드 차이는 Economy가 응답 전까지 들고 있다(_hold_gold). 응답이 오면 서버 값으로 맞추고, 거절되면 마지막 서버 값으로 되돌린다.
+func _post_instant(op: String, body: Dictionary, local: Callable, done := Callable()) -> bool:
+	if not econ.net.up:
+		notice.emit("연결 대기 중")
+		return false
+	if _pending == 0:
+		_latest = remote.duplicate(true)  # me·guild는 remote 안 사전과 같은 것이라 local이 고치기 전에 떠 둔다(거절되면 이 값으로)
+	var g0: int = econ.gold_tenths
+	local.call()
+	var dg: int = econ.gold_tenths - g0
+	econ._hold += 1
+	econ._hold_gold += dg
+	econ._recalc_gold()
+	econ.changed.emit()
+	_pending += 1
+	changed.emit()
+	econ.net.send("POST", "/v1/guild/" + op, body, _on_instant.bind(dg, done), _on_instant_failed.bind(dg), true, true)
+	return true
+
+
+func _on_instant(d: Dictionary, dg: int, done: Callable) -> void:
+	econ._hold = maxi(0, econ._hold - 1)
+	econ._hold_gold -= dg
+	_pending = maxi(0, _pending - 1)
+	econ.apply_server(d)
+	_take(d.get("guild"))
+	if done.is_valid():
+		done.call(d)
+
+
+func _on_instant_failed(dg: int) -> void:
+	econ._hold = maxi(0, econ._hold - 1)
+	econ._hold_gold -= dg
+	_pending = maxi(0, _pending - 1)
+	notice.emit(ERROR_TEXT.get(econ.net.last_error, "길드 요청을 처리하지 못했습니다"))
+	if econ._hold == 0 and not econ._last_server.is_empty():
+		econ.apply_server(econ._last_server)  # 되돌린다(마지막 서버 상태)
+	else:
+		econ._recalc_gold()
+		econ.changed.emit()
+	if _pending == 0 and _latest is Dictionary:
+		_take(_latest)  # 길드 값도 마지막 서버 값으로
+	econ.net.refresh()
+	fetch()
+
+
 ## 거부(409 코드 → 문구)·응답 유실: 알림 + 길드 값을 새로 받는다.
 func _on_post_failed() -> void:
-	busy = false
+	_locked = false
 	notice.emit(ERROR_TEXT.get(econ.net.last_error, "길드 요청을 처리하지 못했습니다"))
 	if _last_op == "boss/finish":
 		boss_done.emit({"error": econ.net.last_error})
@@ -904,6 +973,9 @@ func _on_post_failed() -> void:
 ## 서버 길드 값 → 이 스크립트의 필드(창이 두 모드를 같은 코드로 그린다).
 func _take(v) -> void:
 	if not (v is Dictionary):
+		return
+	if _pending > 0:  # 곧바로 반영한 쓰기의 응답 전: 그 값을 덮지 않게 다 끝난 뒤 한꺼번에
+		_latest = v
 		return
 	remote = v
 	coins = int(v.get("coins", 0))

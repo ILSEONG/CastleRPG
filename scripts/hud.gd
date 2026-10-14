@@ -75,6 +75,8 @@ var _lock_left := 0.0
 var fever_confirm: Control  # FEVER 중 [진행] → "FEVER를 끝내고 시작할까요?" [예]·[아니오]
 var fever_yes: Button
 var fever_no: Button
+var _button_ms := -100000  # [▶ 진행]·[■ 중지]를 마지막으로 누른 시각 — 빠른 두 번 탭이 시작하자마자 중지하지 않게
+const TOGGLE_GUARD_MS := 300
 
 
 func _ready() -> void:
@@ -398,10 +400,23 @@ func _refresh_button() -> void:
 
 
 func _on_button() -> void:
+	if Time.get_ticks_msec() - _button_ms < TOGGLE_GUARD_MS:
+		return  # 더블 탭의 두 번째 누름(시작 → 곧바로 중지가 되지 않게)
+	var m0: int = GameState.mode
 	if GameState.mode == GameState.Mode.IDLE:
 		request_stage()
 	else:
 		GameState.stop_stage()
+	if GameState.mode != m0:
+		_button_ms = Time.get_ticks_msec()  # 모드를 바꾼 누름만(FEVER 확인 창을 띄운 누름은 아니다)
+
+
+## 진행 버튼 밖을 누르면 더블 탭 보호를 푼다(두 번 연달아 같은 버튼을 누른 것만 막는다).
+func _input(event: InputEvent) -> void:
+	if _button_ms < 0 or not ((event is InputEventMouseButton or event is InputEventScreenTouch) and event.pressed):
+		return
+	if not _button.get_global_rect().has_point(event.position):
+		_button_ms = -100000
 
 
 ## 대기에서 스테이지 시작. FEVER 중이면 바로 시작하지 않고 끊을지 묻는다([예] = FEVER 끝 + 시작).

@@ -32,6 +32,8 @@ var result_body: Label
 
 var _flash_left := 0.0
 var _armed := 0.0
+var _armed_ms := 0  # [나가기]를 처음 누른 시각 — 더블 탭(ARM_GAP_MS 안의 두 번째 누름)은 확인으로 치지 않는다
+const ARM_GAP_MS := 300
 
 
 func _ready() -> void:
@@ -237,9 +239,12 @@ func _on_leave() -> void:
 		battle.leave()
 		return
 	if _armed > 0.0:
+		if Time.get_ticks_msec() - _armed_ms < ARM_GAP_MS:
+			return  # 빠른 두 번 탭: "한 번 더 누르면 포기" 안내를 보기도 전에 포기하지 않게
 		battle.forfeit()
 		return
 	_armed = ARM_SEC
+	_armed_ms = Time.get_ticks_msec()
 	leave_button.text = "포기?"
 	flash("한 번 더 누르면 포기합니다 (패배)", ARM_SEC)
 

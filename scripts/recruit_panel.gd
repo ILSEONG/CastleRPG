@@ -220,6 +220,7 @@ func _build_shop_ask() -> void:
 
 func _on_shop_ask(go: bool) -> void:
 	shop_ask.visible = false
+	_arm_guard()  # [취소] 밑의 [1회]·[10회]를 더블 탭의 두 번째 누름이 누르지 않게
 	if go and shop != null:
 		close()  # 모집 창을 닫고 상점 시트(하단 탭 [상점])의 [다이아] 탭
 		shop.open_tab("diamond")
@@ -452,6 +453,7 @@ func _on_confirm() -> void:
 		auto_box.button_pressed = false
 	_halted = true
 	_show_pick()
+	_arm_guard()  # 결과 화면 [확인] 자리에 뜨는 [10회 모집]을 더블 탭의 두 번째 누름이 누르지 않게
 
 
 func _on_auto_toggled(on: bool) -> void:

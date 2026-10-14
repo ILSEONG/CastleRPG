@@ -928,6 +928,9 @@ func promote_all(plan: Array = []) -> bool:
 	if _waiting.has("promote"):
 		notice.emit(PROMOTE_TEXT.waiting)
 		return false
+	for r in plan:  # 이미 반영된 계획(확인 창 [승급]을 빠르게 두 번): 조각을 두 번 빼지 않는다
+		if promotion_of(str(r.hero_id)) != int(r.get("from", promotion_of(str(r.hero_id)))) or shards_of(str(r.hero_id)) < int(r.shards):
+			return false
 	if net != null:
 		if not net.up:
 			notice.emit(WAIT_TEXT)
@@ -1303,7 +1306,8 @@ func use_speedup(id: String, count: int, target := "", building := "") -> bool:
 			body.target = target
 			if target == "build" and building != "":
 				body.building = building
-		return _instant(use_speedup.bind(id, count, target, building), "/v1/speedup/use", body, func(): return SPEEDUP_FAIL_TEXT)
+		# 곧바로 줄여 보이고, 응답까지 speedup_waiting(목록 버튼을 끈다 — 빠른 두 번 탭이 아이템을 두 번 쓰지 않게)
+		return _instant(use_speedup.bind(id, count, target, building), "/v1/speedup/use", body, func(): return SPEEDUP_FAIL_TEXT, true, "speedup")
 	speedups[id] = speedup_count(id) - count
 	if speedups[id] <= 0:
 		speedups.erase(id)
@@ -3464,13 +3468,17 @@ func apply_server(data: Dictionary) -> bool:
 ## 온라인 퀘스트 보상 받기: POST /v1/quest/claim {type: tutorial, step} | {type: repeat, n}(once — 재전송하지 않는다. 서버가 같은 번호를
 ## 두 번 받지 않는다). 응답 → apply_server(보상·진행) → granted(보상) → quest_claimed(true). 거부·유실이면 상태를 새로 받고 quest_claimed(false).
 ## 보냈으면 true.
-func quest_claim_online(body: Dictionary) -> bool:
+## reward를 주면 응답을 기다리지 않고 곧바로 더해 보인다(predict_reward — 응답이 오면 서버 값, 거절되면 되돌린다).
+func quest_claim_online(body: Dictionary, reward := {}) -> bool:
 	if net == null or _waiting.has("quest"):
 		return false
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
 	_waiting["quest"] = true
+	if not reward.is_empty():
+		predict_reward("quest", reward)
+		changed.emit()
 	net.flush_kills()
 	net.send("POST", "/v1/quest/claim", body, _on_quest_claimed, _on_quest_claim_failed, true, true)
 	return true
@@ -3482,6 +3490,7 @@ func quest_waiting() -> bool:
 
 func _on_quest_claimed(data: Dictionary) -> void:
 	_waiting.erase("quest")
+	settle("quest")
 	apply_server(data)
 	if data.get("reward") is Dictionary:
 		granted.emit(data.reward)
@@ -3490,6 +3499,7 @@ func _on_quest_claimed(data: Dictionary) -> void:
 
 func _on_quest_claim_failed() -> void:
 	_waiting.erase("quest")
+	_unpredict("quest")
 	notice.emit(QUEST_FAIL_TEXT.get(net.last_error, QUEST_FAIL_DEFAULT))
 	net.refresh()
 	quest_claimed.emit(false)
@@ -3653,7 +3663,8 @@ func _predict(key: String, apply: Callable, gold := 0) -> void:
 ## 온라인 동작을 응답을 기다리지 않고 곧바로 반영한다: local(오프라인과 같은 규칙의 그 동작 — net을 잠깐 비워 오프라인 길로 부른다)을
 ## 지금 하고 서버에 보낸다. 응답이 올 때까지 다른 응답은 상태를 덮지 않고(골드만), 응답이 오면 서버 상태로 맞춘다. 거절되면 마지막 서버 상태로
 ## 되돌리고 fail_text()를 알린다(""이면 알리지 않는다). local이 false면(막힘) 보내지 않는다. 보냈으면 true.
-func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true) -> bool:
+## wait = 응답이 올 때까지 _waiting에 둘 키(""이면 두지 않는다) — 같은 버튼을 빠르게 두 번 눌러 한 번 하려던 동작이 두 번 가지 않게(가속 아이템 등).
+func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true, wait := "") -> bool:
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
@@ -3668,22 +3679,28 @@ func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callab
 	var dg := gold_tenths - g0
 	_hold += 1
 	_hold_gold += dg
+	if wait != "":
+		_waiting[wait] = true
 	_recalc_gold()
 	changed.emit()
 	net.flush_kills()  # 골드 비용은 서버 골드로 판정한다 — 쌓인 처치를 먼저
-	net.send("POST", path, body, _on_instant.bind(dg), _on_instant_failed.bind(dg, fail_text), true, once)
+	net.send("POST", path, body, _on_instant.bind(dg, wait), _on_instant_failed.bind(dg, fail_text, wait), true, once)
 	return true
 
 
-func _on_instant(data: Dictionary, dg: int) -> void:
+func _on_instant(data: Dictionary, dg: int, wait := "") -> void:
 	_hold = maxi(0, _hold - 1)
 	_hold_gold -= dg
+	if wait != "":
+		_waiting.erase(wait)
 	apply_server(data)
 
 
-func _on_instant_failed(dg: int, fail_text: Callable) -> void:
+func _on_instant_failed(dg: int, fail_text: Callable, wait := "") -> void:
 	_hold = maxi(0, _hold - 1)
 	_hold_gold -= dg
+	if wait != "":
+		_waiting.erase(wait)
 	var t: String = fail_text.call()
 	if t != "":
 		notice.emit(t)
@@ -3760,7 +3777,8 @@ func _sell_online(target: String, amount := -1) -> void:
 			if n > 0:
 				list.append({"res": r.id, "amount": n})
 	_predict_sell(key, list)
-	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unsell.bind(key))
+	# once: 사용자 동작 — 서버가 반영했는데 답만 잃었을 때 다시 보내면 같은 자원을 두 번 판다(_sell_many_online과 같다)
+	net.send("POST", "/v1/sell", body, _on_sold.bind(key), _unsell.bind(key), true, true)
 
 
 ## 여러 자원 판매는 사용자 동작이라 한 번만 보낸다(once: 다시 보내지 않는다).

@@ -14,6 +14,7 @@ var title_label: Label
 var text_label: Label
 var time_label: Label
 var update_button: Button
+var _store_at := -10.0  # 마지막으로 스토어를 연 때(실제 초) — 빠른 두 번 누름이 스토어·새로고침을 두 번 하지 않게
 
 
 func _ready() -> void:
@@ -95,6 +96,10 @@ static func clock_text(unix: float) -> String:
 
 
 func open_store() -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _store_at < 1.5:
+		return
+	_store_at = now
 	if OS.has_feature("web"):
 		var loc = JavaScriptBridge.get_interface("location")
 		if loc != null:
