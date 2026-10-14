@@ -84,6 +84,8 @@ func _ready() -> void:
 	add_child(_floor)
 	_build_bar()
 	GameState.mode_changed.connect(func(m): if m != GameState.Mode.IDLE: cancel())
+	Economy.notice.connect(_on_notice)
+	Economy.changed.connect(func(): if is_active(): _update())  # 자원·일꾼·연결이 바뀌면 안내와 [건설]을 다시 맞춘다
 
 
 func _build_bar() -> void:
@@ -279,13 +281,40 @@ func _update() -> void:
 	_ghost.position = c
 	_plate.position = c + Vector3(0, 0.04, 0)
 	_plate_mat.albedo_color = OK_COLOR if why == "" else BAD_COLOR
+	var stop := _build_stop() if why == "" else ""  # 자리는 되지만 지금 짓기가 안 되는 이유(자원·일꾼·연결 — 누르면 서버도 거절한다)
 	if why != "":
 		hint_label.text = Balance.PLACE_TEXT.get(why, "")
+		hint_label.add_theme_color_override("font_color", RED)
+	elif stop != "":
+		hint_label.text = stop
 		hint_label.add_theme_color_override("font_color", RED)
 	else:
 		hint_label.text = HINT if moving and not ok else OK_TEXT
 		hint_label.add_theme_color_override("font_color", GREEN)
+	ok = ok and stop == ""
 	confirm_button.disabled = not ok
+
+
+## 공터 짓기: 자리 말고 짓기를 막는 것(Economy.upgrade와 같은 검사). 옮기기는 무료라 없다. 응답 대기 중("waiting")은 버튼만 잠깐 막는다.
+func _build_stop() -> String:
+	if moving:
+		return ""
+	if Tutorial.build_locked(building_id):
+		return Tutorial.build_lock_text(building_id)
+	var block := Economy.upgrade_block(building_id, Economy.time_now())
+	if block != "":
+		return Economy.BLOCK_TEXT.get(block, Economy.BUILD_FAIL_TEXT)
+	if Economy.net != null and not Economy.net.up:
+		return Economy.WAIT_TEXT
+	return ""
+
+
+## 고르는 동안 알림(서버 거절·연결 대기 등)은 아래 막대가 HUD 알림 자리를 가리므로 막대 안내 줄에 빨갛게 띄운다.
+func _on_notice(text: String) -> void:
+	if not is_active() or text == "":
+		return
+	hint_label.text = text
+	hint_label.add_theme_color_override("font_color", RED)
 
 
 ## 화면 점 → 땅(y = 0) 위 점. 못 닿으면 null.

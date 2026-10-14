@@ -130,7 +130,7 @@ static func rect_block(r: Rect2i, half_tiles: int, others: Dictionary, skip := "
 		if r.intersects(k):
 			return "square"
 	for oid in others:
-		if oid != skip and r.intersects(Rect2i(others[oid], building(oid).get("size", Vector2i.ONE))):
+		if oid != skip and r.intersects(Rect2i(others[oid], building(oid).get("size", Vector2i(3, 3)))):  # 모르는 키는 서버 plotSize처럼 3×3
 			return "overlap"
 	return ""
 
