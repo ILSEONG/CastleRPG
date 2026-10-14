@@ -683,6 +683,9 @@ func apply_command(owner: String, uid: int, pos) -> void:
 		u.commanded = false
 	else:
 		u.move_to_point(Vector3(float(pos[0]), 0.0, float(pos[1])))
+		var foe = units_by_uid.get(int(pos[2])) if pos.size() >= 3 else null  # 공격 명령(2026-10-14): [x, z, 표적 uid]
+		if foe != null and foe.team != u.team and foe.is_alive():
+			u.attack_unit(foe)
 
 
 var _sent_home := {}
@@ -804,9 +807,13 @@ func _build_deploy_marks() -> void:
 ## 꼭두각시 기기에서 내 영웅에 이동 명령을 주면(unit_picker → move_to_point) 방장에게 보낸다.
 func _relay_my_commands() -> void:
 	for u in my_units():
-		if u.commanded and _sent_home.get(u.uid) != u.free_pos:
-			_sent_home[u.uid] = u.free_pos
-			command_sent.emit(u.uid, [snappedf(u.free_pos.x, 0.01), snappedf(u.free_pos.z, 0.01)])
+		var order := [u.free_pos, u.focus_uid]
+		if u.commanded and _sent_home.get(u.uid) != order:
+			_sent_home[u.uid] = order
+			var pos := [snappedf(u.free_pos.x, 0.01), snappedf(u.free_pos.z, 0.01)]
+			if u.focus_uid >= 0:
+				pos.append(u.focus_uid)  # 공격 명령: 방장이 그 적을 쫓게(예전 방장은 셋째 값을 무시하고 그 자리로 이동만)
+			command_sent.emit(u.uid, pos)
 		elif not u.commanded and _sent_home.has(u.uid):
 			_sent_home.erase(u.uid)
 

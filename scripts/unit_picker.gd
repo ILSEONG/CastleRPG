@@ -3,7 +3,7 @@ extends Node
 ## 영웅 선택 / 선택 영웅을 성문 앞(성문 탭)·성벽 위(성벽 탭 — 누른 지점에 가장 가까운 빈 자리, 같은 면 좌↔우도)·바닥 지점(그 외)으로 이동.
 ## 판정: 선택된 산 영웅이 없으면 HERO_TAP_PX 안 영웅 선택 → 상인·건물·성문(창) → 선택 해제. 있으면
 ## HERO_TAP_PRECISE_PX 안 영웅(선택된 영웅 자신이면 해제, 아니면 그 영웅 선택) → 성문 → 성벽 →
-## MONSTER_TAP_PX 안 괴물(선택 해제) → HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창 + 선택 해제) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
+## FOE_TAP_PX 안 적(공격 명령 — 그 적을 쫓아가 쓰러질 때까지 친다, 사용자 2026-10-14) → HERO_TAP_PX 안 다른 영웅 선택 → 상인·건물(창 + 선택 해제) → 바닥 자유 이동 순 (성문 앞 전사가 성문 탭을 가로채지 않게).
 ## 영웅을 고른 채 UI(버튼·창 등 GUI가 먹는 곳)를 누르면 선택을 푼다 — 그 누름으로 선택이 바뀌었으면(초상화 줄) 그대로.
 ## 드래그(카메라 이동)와 구분: 누른 뒤 뗄 때까지 TAP_MAX_PX 넘게 움직이지 않고 두 번째 손가락도 없을 때만 탭.
 ## 상인 탭은 거래 창, 주점 탭은 모집 창, 자원 건물 탭은 쌓인 게 있으면 수집(+N)·없으면 건물 창, 병사 건물 탭은 훈련이 끝났으면 수령
@@ -30,7 +30,7 @@ const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — 건물보다 먼�
 const TAP_MAX_PX := 12.0
 const HERO_TAP_PX := 32.0  # 화면(논리 720px 폭 기준)에서 영웅 중심까지 이 거리 안이면 그 영웅. 줌과 무관
 const HERO_TAP_PRECISE_PX := 12.0  # 영웅 선택 중에는 이만큼 가까워야 성문·성벽보다 영웅이 먼저
-const MONSTER_TAP_PX := 16.0  # 영웅 선택 중 괴물 중심에서 이 안을 누르면 선택 해제(바닥 이동 아님)
+const FOE_TAP_PX := 24.0  # 영웅 선택 중 적 중심에서 이 안(+ 큰 적은 몸 반지름)을 누르면 공격 명령(바닥 이동 아님)
 const GROUND_MARGIN := 4.0   # 바닥 명령 지점을 맵 가장자리에서 이만큼 안으로 자른다
 const LONG_PRESS_MS := 500
 const MAX_TAP_HITS := 4  # 한 탭 레이가 꿰어 보는 건물 판정체 수(_building_hit)
@@ -123,8 +123,10 @@ func _physics_process(_delta: float) -> void:
 	if hero != null:
 		_select(null if hero == selected else hero)  # 선택된 영웅을 다시 누르면 해제
 		return
-	if _monster_at(screen_pos, MONSTER_TAP_PX):
-		_select(null)
+	var foe = _foe_at(screen_pos, FOE_TAP_PX)
+	if foe != null:
+		selected.attack_unit(foe)  # 같은 적을 거듭 누르면 영웅 쪽에서 무시한다
+		_show_target(selected, foe)
 		return
 	if arena_r <= 0.0:
 		var hit := _pick(screen_pos, LAYER_GATE)
@@ -264,12 +266,25 @@ func _ground_point(screen_pos: Vector2):
 
 ## 이동 명령의 경로와 도착지를 영웅이 도착할 때까지 띄운다(route_marker.gd). 같은 영웅의 이전 표시는 지운다.
 func _show_route(hero, dest: Vector3) -> void:
+	_show_marker(hero, dest, null)
+
+
+## 공격 명령 표시: 영웅 → 표적 점선 + 표적 발밑 빨간 링(표적이 쓰러지거나 새 명령이면 사라진다).
+func _show_target(hero, foe) -> void:
+	if hero.has_method("focus_target") and hero.focus_target() != foe and hero.get("puppet") != true:
+		return  # 명령을 받지 않았다(배치 중 등)
+	_show_marker(hero, foe.global_position, foe)
+
+
+func _show_marker(hero, dest: Vector3, foe) -> void:
 	var old = _routes.get(hero)
-	if old != null and is_instance_valid(old):
+	if old != null and is_instance_valid(old) and not old.is_queued_for_deletion():
+		if old.target == foe and (foe != null or Vector2(old.dest.x - dest.x, old.dest.z - dest.z).length() < 0.01):
+			return  # 같은 명령을 거듭 눌렀다: 표시 그대로(깜빡이지 않게)
 		old.queue_free()
 	var m := RouteMarker.new()
 	m.name = "Route"
-	m.setup(hero, dest)
+	m.setup(hero, dest, foe)
 	get_parent().add_child(m)
 	_routes[hero] = m
 	for h in _routes.keys():  # 사라진 영웅·표시 정리
@@ -291,18 +306,30 @@ func _hero_at(screen_pos: Vector2, radius_px: float):
 	return best
 
 
-## 탭 위치에서 화면상 radius_px 안에 살아 있는 괴물(적)이 있는가.
-func _monster_at(screen_pos: Vector2, radius_px: float) -> bool:
-	for m in get_tree().get_nodes_in_group("monsters"):
-		if not is_instance_valid(m) or not m.is_inside_tree() or m.get("is_structure") == true:  # 공성전 성문·성채는 괴물이 아니다
+## 탭 위치에서 화면상 가장 가까운, 선택 영웅의 살아 있는 적(영웅의 적 그룹 — 성·던전은 괴물, PVP는 상대 영웅·병사, 공성전은 수비 영웅).
+## radius_px에 큰 적(보스·드래곤)은 화면상 몸 반지름을 더한다. 공성전 성문·성채는 적이 아니다(누르면 바닥 이동). 없으면 null.
+func _foe_at(screen_pos: Vector2, radius_px: float):
+	var group: String = selected.get("foes") if selected != null and selected.get("foes") != null else "monsters"
+	var right := camera.global_transform.basis.x
+	var best = null
+	var best_d := INF
+	for m in get_tree().get_nodes_in_group(group):
+		if not is_instance_valid(m) or not m.is_inside_tree() or m.get("is_structure") == true or not (m is Node3D):
 			continue
 		if m.has_method("is_alive") and not m.is_alive():
 			continue
-		if camera.is_position_behind(m.global_position):
+		if not m.is_visible_in_tree() or camera.is_position_behind(m.global_position):
 			continue
-		if camera.unproject_position(m.global_position + Vector3(0, 0.8, 0)).distance_to(screen_pos) <= radius_px:
-			return true
-	return false
+		var c := camera.unproject_position(m.global_position + Vector3(0, 0.8, 0))
+		var r := radius_px
+		var hr := float(m.hit_radius()) if m.has_method("hit_radius") else 0.0
+		if hr > 0.0:
+			r += camera.unproject_position(m.global_position + Vector3(0, 0.8, 0) + right * hr).distance_to(c)
+		var d := c.distance_to(screen_pos)
+		if d <= r and d < best_d:
+			best_d = d
+			best = m
+	return best
 
 
 func _select(hero) -> void:

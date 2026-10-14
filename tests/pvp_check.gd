@@ -89,6 +89,8 @@ func _run() -> void:
 		_ended = {}
 		_check(Pvp.start(m, team), "%s start accepted" % m)
 		_check(Pvp.plays_left(m) == PvpRules.PLAYS - 1, "%s play used instantly" % m)
+		if m == "duel":
+			await _duel_attack_case()
 		var t := 0.0
 		while _ended.is_empty() and t < 200.0:
 			await get_tree().create_timer(0.5, true, false, true).timeout
@@ -127,3 +129,42 @@ func _run() -> void:
 		Pvp.buy("gold")
 	await _frames(2)
 	_check(Pvp.buy_block("gold") != "", "daily limit 3 reached")
+
+
+## 결투 공격 명령(사용자 2026-10-14): 내 영웅에게 가장 먼 상대를 짚으면 그것만 쫓고, [자동]이면 명령이 풀린다.
+func _duel_attack_case() -> void:
+	var b = null
+	var BattleScript = load("res://scripts/pvp_battle.gd")
+	for i in 400:
+		b = _find(get_tree().root, BattleScript)
+		if b != null and b.phase == b.Phase.FIGHT:
+			break
+		await _frames(1)
+	if b == null or b.phase != b.Phase.FIGHT:
+		_check(false, "duel reached the fight phase for the attack order")
+		return
+	var h = b.my_units()[0]
+	var far = null
+	for f in get_tree().get_nodes_in_group("pvp1"):
+		if f.is_alive() and (far == null or h.global_position.distance_to(f.global_position) > h.global_position.distance_to(far.global_position)):
+			far = f
+	var spot: Vector3 = h.global_position + Vector3(1.5, 0, 0)
+	h.move_to_point(spot)
+	_check(h.commanded and Vector2(h.free_pos.x - spot.x, h.free_pos.z - spot.z).length() < 0.01, "duel: ground tap moves my hero (no deploy phase in PVP)")
+	var d0: float = h.global_position.distance_to(far.global_position)
+	h.attack_unit(far)
+	_check(h.focus_target() == far and h.commanded, "duel: attack order on the farthest enemy")
+	await get_tree().create_timer(0.6, true, false, true).timeout
+	_check(not far.is_alive() or (h.focus_target() == far and h.global_position.distance_to(far.global_position) < d0), "duel: hero goes after the ordered enemy")
+	b.set_auto()
+	_check(h.focus_target() == null, "duel: [자동] cancels the attack order")
+
+
+func _find(n: Node, script):
+	if n.get_script() == script:
+		return n
+	for c in n.get_children():
+		var r = _find(c, script)
+		if r != null:
+			return r
+	return null
