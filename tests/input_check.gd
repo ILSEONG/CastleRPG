@@ -1235,14 +1235,15 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	Economy.levels["keep"] = 5
 	Economy.changed.emit()
 	await _frames(2)
-	_check(_main == look_main and _main.castle.look == 1 and _main.castle._look.get_child_count() == castle_meshes0 and scenery.lots.keep.mi.mesh != keep_mesh0
+	_check(_main == look_main and _main.castle.look == 1 and _main.castle._look.get_child_count() == castle_meshes0 + 1 and scenery.lots.keep.mi.mesh != keep_mesh0
 		and scenery.lots.keep.mi.mesh.get_aabb().end.y > keep_top0 - 0.01 and _main.castle._gate_doors.all(func(d): return d.size() == 1 and d[0].visible),
-		"(B) keep Lv 5 restyles the castle in place (look 1): same world, new keep mesh, gatehouses/towers swapped, doors still shut",
+		"(B) keep Lv 5 restyles the castle in place (look 1): same world, new keep mesh, gatehouses/towers swapped + wall dressing added, doors still shut",
 		"look=%d meshes=%d->%d keep top %.2f->%.2f" % [_main.castle.look, castle_meshes0, _main.castle._look.get_child_count(), keep_top0, scenery.lots.keep.mi.mesh.get_aabb().end.y])
 	Economy.levels["keep"] = 2
 	Economy.changed.emit()
 	await _frames(2)
-	_check(_main.castle.look == 0 and scenery.lots.keep.mi.mesh.get_aabb().end.y == keep_top0, "(B) back to keep Lv 2 restores look 0", "look=%d" % _main.castle.look)
+	_check(_main.castle.look == 0 and scenery.lots.keep.mi.mesh.get_aabb().end.y == keep_top0 and _main.castle._look.get_child_count() == castle_meshes0, "(B) back to keep Lv 2 restores look 0",
+		"look=%d meshes=%d" % [_main.castle.look, _main.castle._look.get_child_count()])
 
 	# 벌목장 업그레이드 → 다른 건물(채석장)은 일꾼이 바빠 비활성(무엇을 짓는지·남은 시간)
 	await _tap(lp)

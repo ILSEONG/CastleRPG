@@ -110,6 +110,10 @@ func _sync_lots() -> void:
 		_keep_look = lk
 		lots[GameData.KEEP].full = TownKit.building(GameData.KEEP, lk)
 		lots[GameData.KEEP].lot = null  # 다시 그리기(_show_lot이 같은 자리·모습이면 건너뛴다)
+		_add_gate_sites()  # 문루도 단계마다 커진다 — 성문 비계도 새 크기로
+		if GameData.GATE in scaffold_id.split(","):
+			scaffold_id = ""
+			_sync_build()
 	for id in lots:
 		_show_lot(id)
 
@@ -265,9 +269,9 @@ func _nature_spot_ok(p: Vector2, keep_out: float) -> bool:
 
 # --- 건물 레벨업 표시(개정 12 §2.5) ---
 
-## 성문 자리: 모든 문루의 AABB(castle.gd와 같은 놓임 — 로컬 +Z가 성 바깥, 면마다 성문 1·2·3개).
+## 성문 자리: 모든 문루의 AABB(castle.gd와 같은 놓임 — 로컬 +Z가 성 바깥, 면마다 성문 1·2·3개, 지금 성 모습 단계의 문루).
 func _add_gate_sites() -> void:
-	var aabb := TownKit.gatehouse().get_aabb()
+	var aabb := TownKit.gatehouse(_keep_look).get_aabb()
 	var boxes := []
 	for side in 4:
 		var dir: Vector3 = Formation.SIDE_DIR[side]

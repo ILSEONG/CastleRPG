@@ -29,7 +29,6 @@ const CROP := Color(0.69, 0.60, 0.28)
 const SOIL := Color(0.45, 0.34, 0.24)
 const FLAG := Color(0.72, 0.24, 0.22)
 const GOLD := Color(0.69, 0.53, 0.12)        # 금광 금(ArenaKit.GOLD 0.85/0.62/0.16을 윗면 한도 0.69로 낮춤)
-const ROOF_GOLD := Color(0.58, 0.42, 0.10)   # 성 모습 5단계 금 지붕(해 쪽 경사가 노랗게 날아가지 않게 GOLD보다 어둡게)
 const COALS := Color(0.95, 0.42, 0.10)       # 대장간 숯불(ArenaKit.COALS와 같다, 일부러 밝게)
 const IRON := Color(0.30, 0.30, 0.34)        # 모루·쇠테
 const SOOT := Color(0.16, 0.14, 0.13)        # 갱도 입구 어둠
@@ -56,31 +55,59 @@ static func wall_run(length: float) -> ArrayMesh:
 	return k.commit()
 
 
-## 문루: 성문 좌우 기둥 탑(바깥 절반, 파란 피라미드 지붕) + 성문 위 통로 다리. 아래(0~WALL_H−0.6)는 통로.
-## look(성 모습 단계, GameData.castle_look): 1+ 기둥 끝 삼각기, 3+ 기둥이 높아지고 금 꼭지·바깥면 횃불, 4+ 성문 위 문장(방패).
+## 성 모습 단계(GameData.castle_look 0~5 = 성채 Lv 1·5·10·15·22·30)별 크기. 성 전체(문루·모서리 탑·성벽 탑·성벽 띠·성채)가
+## 단계마다 눈에 띄게 커진다(사용자 2026-10-14 "성 전부가 웅장해져야지"). 금색 큰 면은 쓰지 않는다("금색되는거 촌스러워").
+const LOOK_GATE_W := [1.2, 1.6, 1.6, 1.8, 2.0, 2.0]         # 문루 탑 폭(성문 가장자리에서 바깥으로)
+const LOOK_GATE_OUT := [0.6, 0.75, 0.75, 0.85, 0.95, 0.95]  # 문루 탑이 성벽 바깥면보다 튀어나온 길이(괴물이 서는 성문 앞 0.8 m 근처까지)
+const LOOK_GATE_UP := [1.2, 1.9, 2.5, 3.0, 3.6, 4.2]        # 문루 탑이 성벽 위로 솟은 높이
+const LOOK_GATE_ROOF := [1.1, 1.4, 1.6, 1.9, 2.2, 2.5]
+const LOOK_TOWER_R := [1.7, 1.85, 1.85, 1.95, 1.95, 1.95]   # 모서리 탑 반지름(변심 ≤ 1.8 — 성벽 위 병사 끝자리 앞)
+const LOOK_TOWER_H := [5.0, 5.8, 6.6, 7.4, 8.0, 8.4]        # 모서리 탑 몸통 높이
+const LOOK_TOWER_ROOF := [2.5, 2.8, 3.1, 3.3, 3.6, 3.0]
+const LOOK_WALL_TOWER_UP := [0.0, 0.0, 0.9, 1.5, 1.8, 2.2]  # 성벽 탑(2단계부터)이 성벽 위로 솟은 높이
+const WALL_TOWER_W := 2.4                  # 성벽 탑 폭(성벽 방향)
+const WALL_TOWER_D := 1.9                  # 성벽 탑이 성벽 바깥면에서 튀어나온 길이
+
+
+## 문루: 성문 좌우 탑(바깥 절반, 파란 지붕) + 성문 위 통로 다리. 아래(0~WALL_H−0.6)는 통로.
+## look(성 모습 단계): 탑이 단계마다 넓고 높아진다. 1+ 활 구멍·삼각기, 2+ 기단·쇠 꼭지, 3+ 내민 꼭대기 띠·횃불, 4+ 성문 위 높은 흉벽·문장(방패).
 static func gatehouse(look := 0) -> ArrayMesh:
 	var k = MeshKit.new()
 	var h := Balance.WALL_H
-	var z1 := Balance.WALL_T / 2.0 + PILLAR_OUT
+	var pw: float = LOOK_GATE_W[look]
+	var z1: float = Balance.WALL_T / 2.0 + LOOK_GATE_OUT[look]
+	var ph: float = h + LOOK_GATE_UP[look]
+	var roof: float = LOOK_GATE_ROOF[look]
 	k.box(Vector3(0, h - 0.6, 0), Vector3(Balance.GATE_W, 0.6, Balance.WALL_T), STONE)
-	_merlons(k, Balance.GATE_W, h)
-	var ph := h + 1.2 + (0.9 if look >= 3 else 0.0)
-	var roof := 1.1 + (0.4 if look >= 3 else 0.0)
+	if look >= 4:  # 성문 위 바깥 가장자리 흉벽을 한 단 올린다(성벽 위 길은 그대로)
+		k.box(Vector3(0, h, Balance.WALL_T / 2.0 - MERLON_T / 2.0), Vector3(Balance.GATE_W, 0.5, MERLON_T), STONE)
+		_merlons(k, Balance.GATE_W, h + 0.5)
+	else:
+		_merlons(k, Balance.GATE_W, h)
+	var zc := (PILLAR_Z0 + z1) / 2.0
+	var d := z1 - PILLAR_Z0
 	for s in [-1.0, 1.0]:
-		var x: float = s * (Balance.GATE_W / 2.0 + PILLAR_W / 2.0)
-		var zc := (PILLAR_Z0 + z1) / 2.0
-		k.box(Vector3(x, 0, zc), Vector3(PILLAR_W, ph, z1 - PILLAR_Z0), STONE)
+		var x: float = s * (Balance.GATE_W / 2.0 + pw / 2.0)
+		k.box(Vector3(x, 0, zc), Vector3(pw, ph, d), STONE)
+		if look >= 2:  # 기단(성문 쪽 면은 탑 면보다 조금 안 — 통로를 좁히지 않고 같은 면에 겹치지 않는다)
+			k.box(Vector3(x + s * 0.16, 0, zc + 0.1), Vector3(pw + 0.28, 1.0, d + 0.2), STONE_DARK)
+		if look >= 1:
+			_slit(k, Vector3(x, h + (0.25 if look >= 3 else 0.45), z1))
 		if look >= 3:
-			k.box(Vector3(x, ph - 0.3, zc), Vector3(PILLAR_W + 0.14, 0.18, z1 - PILLAR_Z0 + 0.14), STONE_DARK)
-		k.pyramid(Vector3(x, ph, zc), PILLAR_W + 0.3, roof, ROOF_BLUE)
-		var tip := Vector3(x, ph + roof, zc)
-		if look >= 3:
+			_slit(k, Vector3(x, h + 1.35, z1))
+		var top := ph
+		if look >= 3:  # 내민 꼭대기 띠(받침 + 띠)
+			k.box(Vector3(x, ph - 0.7, zc), Vector3(pw + 0.12, 0.25, d + 0.12), STONE_DARK)
+			k.box(Vector3(x, ph - 0.45, zc), Vector3(pw + 0.36, 0.45, d + 0.36), STONE_DARK)
+		_hip(k, Vector3(x, top, zc), pw + (0.5 if look >= 3 else 0.3), d + (0.5 if look >= 3 else 0.3), roof, ROOF_BLUE)
+		var tip := Vector3(x, top + roof, zc)
+		if look >= 2:
 			_finial(k, tip, 0.16)
 			tip.y += 0.3
 		if look >= 1:
-			_pennant(k, tip, s, 0.9 if look >= 3 else 0.7)
+			_pennant(k, tip, s, 0.7 + 0.1 * (look - 1))
 		if look >= 3:
-			_sconce(k, Vector3(x, 2.0, z1))
+			_sconce(k, Vector3(x, 2.2, z1))
 	if look >= 4:
 		_crest(k, Vector3(0, h - 1.15, Balance.WALL_T / 2.0 + 0.1), 1.0)
 	return k.commit()
@@ -101,28 +128,50 @@ static func gate_doors() -> ArrayMesh:
 
 
 ## 모서리 탑: 8각 기둥 + 윗단 톱니 + 8각 원뿔 파란 지붕 + 깃발. 바닥 중심이 원점.
-## look: 1+ 깃발이 커진다, 2+ 탑이 높아지고(+1.5 m) 금 꼭지, 3+ 기단 띠·윗단 돌림띠, 4+ 한 번 더 높아지고 지붕이 커진다, 5 금 지붕 띠.
+## look: 단계마다 굵고 높아진다(LOOK_TOWER_*). 1+ 활 구멍·큰 깃발, 2+ 비탈 기단·가운데 띠·쇠 꼭지, 3+ 내민 꼭대기(까치발 + 흉벽),
+## 4+ 네 모퉁이 작은 망루, 5 꼭대기 위에 작은 탑을 한 단 더 올린 2단 탑.
 static func corner_tower(look := 0) -> ArrayMesh:
 	var k = MeshKit.new()
-	var r := Balance.TOWER_SIZE / 2.0 + 0.2
-	var h := Balance.WALL_H + 2.0 + (1.5 if look >= 2 else 0.0) + (1.0 if look >= 4 else 0.0)
+	var r: float = LOOK_TOWER_R[look]
+	var h: float = LOOK_TOWER_H[look]
 	k.prism_n(Vector3.ZERO, 8, r, r, h, STONE, PI / 8.0)
+	if look >= 2:
+		k.prism_n(Vector3.ZERO, 8, r + 0.45, r + 0.1, 1.4, STONE_DARK, PI / 8.0)  # 비탈 기단
+		k.prism_n(Vector3(0, h * 0.5, 0), 8, r + 0.08, r + 0.08, 0.25, STONE_DARK, PI / 8.0)  # 가운데 띠
+	if look >= 1:
+		_ring_slits(k, r, h * 0.66 if look < 3 else h * 0.72)
 	if look >= 3:
-		k.prism_n(Vector3.ZERO, 8, r + 0.3, r + 0.12, 0.9, STONE_DARK, PI / 8.0)  # 기단
-		k.prism_n(Vector3(0, h - 0.45, 0), 8, r + 0.12, r + 0.12, 0.45, STONE_DARK, PI / 8.0)  # 톱니 아래 돌림띠
+		_ring_slits(k, r, h * 0.3)
+	var top_r := r
+	var top := h
+	if look >= 3:  # 내민 꼭대기: 바깥으로 벌어지는 까치발 + 흉벽
+		k.prism_n(Vector3(0, h - 0.6, 0), 8, r, r + 0.45, 0.6, STONE_DARK, PI / 8.0)
+		top_r = r + 0.45
+		k.prism_n(Vector3(0, h, 0), 8, top_r, top_r, 0.5, STONE, PI / 8.0)
+		top = h + 0.5
 	for i in 8:
 		var a := TAU * i / 8.0
-		var m := r * cos(PI / 8.0) - 0.2  # 면 가운데(변심 거리)에서 안쪽으로
-		k.xform = Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * m, h, sin(a) * m))
+		var m := top_r * cos(PI / 8.0) - 0.2  # 면 가운데(변심 거리)에서 안쪽으로
+		k.xform = Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * m, top, sin(a) * m))
 		k.box(Vector3.ZERO, Vector3(0.4, MERLON_H, 0.6), STONE_DARK)
 	k.xform = Transform3D.IDENTITY
-	var roof_y := h + MERLON_H
-	var roof_h := 2.5 + (0.8 if look >= 4 else 0.0)
-	var roof_r := r + 0.3 + (0.15 if look >= 4 else 0.0)
-	if look >= 5:
-		k.prism_n(Vector3(0, roof_y, 0), 8, roof_r + 0.05, roof_r - 0.1, 0.3, ROOF_GOLD, PI / 8.0)
-		roof_y += 0.3
-		roof_r -= 0.1
+	if look >= 4:  # 네 모퉁이(대각선) 작은 망루: 받침 + 몸통 + 원뿔 지붕
+		for i in 4:
+			var a := PI / 4.0 + PI / 2.0 * i
+			var p := Vector3(cos(a), 0, sin(a)) * (top_r + 0.15)
+			k.prism_n(p + Vector3(0, h - 1.5, 0), 6, 0.12, 0.5, 0.7, STONE_DARK)
+			k.prism_n(p + Vector3(0, h - 0.8, 0), 6, 0.5, 0.5, 1.9, STONE)
+			k.cone(p + Vector3(0, h + 1.1, 0), 6, 0.68, 1.3, ROOF_BLUE)
+	var roof_h: float = LOOK_TOWER_ROOF[look]
+	var roof_y := top + MERLON_H
+	var roof_r := top_r + 0.3
+	if look >= 5:  # 2단: 꼭대기 흉벽 안에 작은 탑을 하나 더
+		var ur := 1.3
+		k.prism_n(Vector3(0, top, 0), 8, ur, ur, 2.2, STONE, PI / 8.0)
+		_ring_slits(k, ur, top + 0.9)
+		k.prism_n(Vector3(0, top + 1.95, 0), 8, ur + 0.15, ur + 0.15, 0.25, STONE_DARK, PI / 8.0)
+		roof_y = top + 2.2
+		roof_r = ur + 0.4
 	k.cone(Vector3(0, roof_y, 0), 8, roof_r, roof_h, ROOF_BLUE, PI / 8.0)
 	var tip := Vector3(0, roof_y + roof_h, 0)
 	if look >= 2:
@@ -132,6 +181,16 @@ static func corner_tower(look := 0) -> ArrayMesh:
 	k.box(tip, Vector3(0.1, 1.2 * f, 0.1), WOOD)
 	k.box(tip + Vector3(0.35 * f + 0.05, 0.75 * f, 0), Vector3(0.7 * f, 0.4 * f, 0.05), FLAG)
 	return k.commit()
+
+
+## 8각 탑(rot π/8 — 면이 축 방향) 여덟 면 가운데의 활 구멍, 높이 y.
+static func _ring_slits(k, r: float, y: float) -> void:
+	for i in 8:
+		var a := TAU * i / 8.0
+		var m := r * cos(PI / 8.0)
+		k.xform = Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * m, y, sin(a) * m))
+		k.box(Vector3.ZERO, Vector3(0.08, 0.7, 0.16), WINDOW)
+	k.xform = Transform3D.IDENTITY
 
 
 ## 계단(로컬 규약이 다르다): 길이 방향 +X로 올라간다 — x=0 높이 0, x=STAIR_RUN 높이 WALL_H. 폭 Z = STAIR_W(가운데 기준).
@@ -188,83 +247,110 @@ static func building(id: String, look := 0) -> ArrayMesh:
 
 
 ## 성채: 석조 본체 + 톱니, 네 모서리 6각 탑(파란 원뿔), 가운데 8각 탑(파란 원뿔 + 깃발), 문·창.
-## look(성 모습 단계): 1+ 본체에 걸린 깃발·모서리 탑 삼각기, 2+ 탑들이 높아지고 금 꼭지·금 고리, 3+ 돌 기단·앞 계단(전체가 기단 위로),
-## 4+ 가운데 탑 발코니 한 층 더·첨탑이 더 높게, 5 금 첨탑·큰 깃발. 부지 ±3.7 안(테스트).
+## look(성 모습 단계): 1+ 본체에 걸린 깃발·모서리 탑 삼각기, 2+ 돌 기단·앞 계단·본체 한 층 더(2층 창·층 띠)·쇠 꼭지,
+## 3+ 문 둘레 돌테, 4+ 가운데 탑 발코니·첨탑이 더 높게, 5 가운데 탑 꼭대기에 톱니 둘레 + 창 달린 등탑 + 네 작은 첨탑.
+## 탑들은 단계마다 높아진다. 금색 면은 쓰지 않는다. 부지 ±3.7 안(테스트).
 static func _keep(k, look := 0) -> void:
 	var base := 0.0
-	if look >= 3:
+	if look >= 2:
 		base = 0.35
 		k.box(Vector3.ZERO, Vector3(7.0, base, 7.0), STONE_DARK)
 		k.box(Vector3(0, 0, 3.55), Vector3(2.4, base * 0.5, 0.3), STONE_DARK)  # 앞 계단 한 단
 	var up := Transform3D(Basis.IDENTITY, Vector3(0, base, 0))
 	k.xform = up
-	k.box(Vector3.ZERO, Vector3(5.2, 3.6, 5.2), STONE)
-	k.box(Vector3(0, 3.6, 0), Vector3(5.5, 0.3, 5.5), STONE_DARK)
+	var bh := 3.6 if look < 2 else 4.4  # 본체 높이(2단계부터 한 층 더)
+	k.box(Vector3.ZERO, Vector3(5.2, bh, 5.2), STONE)
+	if look >= 2:
+		k.box(Vector3(0, bh - 1.95, 0), Vector3(5.34, 0.22, 5.34), STONE_DARK)  # 층 띠
+	k.box(Vector3(0, bh, 0), Vector3(5.5, 0.3, 5.5), STONE_DARK)
 	for i in 4:
 		k.xform = up * Transform3D(Basis(Vector3.UP, i * PI / 2.0), Vector3.ZERO)
 		for x in [-1.0, 0.0, 1.0]:
-			k.box(Vector3(x, 3.9, 2.55), Vector3(0.5, 0.45, 0.35), STONE_DARK)
+			k.box(Vector3(x, bh + 0.3, 2.55), Vector3(0.5, 0.45, 0.35), STONE_DARK)
 		if look >= 1:  # 본체 네 면에 걸린 깃발: 앞(+Z)은 문 양옆 둘, 나머지는 가운데 하나
 			for x in ([-1.05, 1.05] if i == 0 else [0.0]):
-				_banner(k, Vector3(x, 3.55, 2.6), 0.55 if i == 0 else 0.8, 1.7, look >= 4)
+				_banner(k, Vector3(x, bh - 0.05, 2.6 if look < 2 else 2.72), 0.55 if i == 0 else 0.8, 1.7 if look < 2 else 2.2)  # 층 띠 앞으로
+		if look >= 2:  # 2층 창
+			for x in ([-1.6, 1.6] if i == 0 else [-1.5, 1.5]):
+				k.box(Vector3(x, bh - 1.45, 2.6), Vector3(0.4, 0.75, 0.1), WINDOW)
 	k.xform = up
-	var t_h := 5.0 + (1.0 if look >= 2 else 0.0) + (0.6 if look >= 4 else 0.0)
+	var t_h: float = 5.0 + [0.0, 0.6, 1.6, 2.0, 2.6, 3.0][look]
+	var t_roof := 1.9 + (0.5 if look >= 4 else 0.0)
 	for c in [Vector3(-2.5, 0, -2.5), Vector3(2.5, 0, -2.5), Vector3(2.5, 0, 2.5), Vector3(-2.5, 0, 2.5)]:
 		k.prism_n(c, 6, 0.95, 0.95, t_h, STONE)
 		if look >= 2:
 			k.prism_n(c + Vector3(0, t_h - 0.3, 0), 6, 1.05, 1.05, 0.3, STONE_DARK)
-		k.cone(c + Vector3(0, t_h, 0), 6, 1.15, 1.9, ROOF_BLUE)
-		var tip: Vector3 = c + Vector3(0, t_h + 1.9, 0)
+		k.cone(c + Vector3(0, t_h, 0), 6, 1.15, t_roof, ROOF_BLUE)
+		var tip: Vector3 = c + Vector3(0, t_h + t_roof, 0)
 		if look >= 2:
 			_finial(k, tip, 0.16)
 			tip.y += 0.3
 		if look >= 1:
-			_pennant(k, tip, 1.0, 0.75)
-	var c_h := 4.2 + (1.2 if look >= 2 else 0.0) + (1.0 if look >= 4 else 0.0)
-	k.prism_n(Vector3(0, 3.9, 0), 8, 1.6, 1.6, c_h, STONE, PI / 8.0)
-	var top := 3.9 + c_h
+			_pennant(k, tip, 1.0, 0.75 + 0.05 * look)
+	var c0 := bh + 0.3  # 가운데 탑 바닥
+	var c_h: float = 4.2 + [0.0, 0.5, 1.0, 1.4, 2.0, 2.0][look]
+	k.prism_n(Vector3(0, c0, 0), 8, 1.6, 1.6, c_h, STONE, PI / 8.0)
+	var top := c0 + c_h
 	if look >= 4:  # 가운데 탑 중간 발코니(돌림 바닥 + 톱니)
-		var by := 3.9 + c_h * 0.55
+		var by := c0 + c_h * 0.55
 		k.prism_n(Vector3(0, by, 0), 8, 1.95, 1.95, 0.25, STONE_DARK, PI / 8.0)
 		for i in 8:
 			var a := TAU * i / 8.0 + PI / 8.0
 			k.xform = up * Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * 1.78, by + 0.25, sin(a) * 1.78))
 			k.box(Vector3.ZERO, Vector3(0.45, 0.35, 0.3), STONE_DARK)
 		k.xform = up
-	k.prism_n(Vector3(0, top, 0), 8, 1.75, 1.75, 0.3, GOLD if look >= 2 else STONE_DARK, PI / 8.0)
-	var spire := 3.0 + (1.3 if look >= 4 else 0.0)
-	k.cone(Vector3(0, top + 0.3, 0), 8, 1.95, spire, ROOF_GOLD if look >= 5 else ROOF_BLUE, PI / 8.0)
-	var tip := Vector3(0, top + 0.3 + spire, 0)
+	k.prism_n(Vector3(0, top, 0), 8, 1.75, 1.75, 0.3, STONE_DARK, PI / 8.0)
+	top += 0.3
+	var spire_r := 1.95
+	if look >= 5:  # 꼭대기 한 단 더: 톱니 둘레 + 창 달린 등탑 + 네 작은 첨탑
+		for i in 4:
+			var a := PI / 2.0 * i
+			k.xform = up * Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * 1.5, top, sin(a) * 1.5))
+			k.box(Vector3.ZERO, Vector3(0.35, 0.45, 0.6), STONE_DARK)
+			k.xform = up
+			var p := Vector3(cos(a + PI / 4.0), 0, sin(a + PI / 4.0)) * 1.45
+			k.prism_n(p + Vector3(0, top, 0), 4, 0.22, 0.22, 0.55, STONE, PI / 4.0)
+			k.cone(p + Vector3(0, top + 0.55, 0), 4, 0.3, 1.1, ROOF_BLUE, PI / 4.0)
+		k.prism_n(Vector3(0, top, 0), 8, 1.1, 1.1, 1.8, STONE, PI / 8.0)
+		k.box(Vector3(0, top + 0.5, 1.03), Vector3(0.36, 0.8, 0.1), WINDOW)
+		k.box(Vector3(1.03, top + 0.5, 0), Vector3(0.1, 0.8, 0.36), WINDOW)
+		top += 1.8
+		k.prism_n(Vector3(0, top, 0), 8, 1.25, 1.25, 0.25, STONE_DARK, PI / 8.0)
+		top += 0.25
+		spire_r = 1.5
+	var spire: float = [3.0, 3.0, 3.6, 3.6, 4.3, 3.8][look]
+	k.cone(Vector3(0, top, 0), 8, spire_r, spire, ROOF_BLUE, PI / 8.0)
+	var tip := Vector3(0, top + spire, 0)
 	if look >= 2:
 		_finial(k, tip, 0.24)
 		tip.y += 0.45
-	var f := 1.0 + 0.25 * maxi(look - 1, 0)  # 깃발이 단계마다 커진다
+	var f := 1.0 + 0.2 * maxi(look - 1, 0)  # 깃발이 단계마다 커진다
 	k.box(tip, Vector3(0.12, 1.5 * f, 0.12), WOOD)
 	k.box(tip + Vector3(0.4 * f + 0.05, 0.9 * f, 0), Vector3(0.8 * f, 0.5 * f, 0.05), FLAG)
+	if look >= 3:  # 문 둘레 돌테
+		k.box(Vector3(0, 0, 2.62), Vector3(1.85, 2.4, 0.12), STONE_DARK)
 	k.box(Vector3(0, 0, 2.6), Vector3(1.4, 2.2, 0.2), WOOD)
 	for x in [-1.6, 1.6]:
 		k.box(Vector3(x, 1.8, 2.6), Vector3(0.4, 0.8, 0.1), WINDOW)
 		k.box(Vector3(2.6, 1.8, x), Vector3(0.1, 0.8, 0.4), WINDOW)
-	k.box(Vector3(0, 6.0, 1.5), Vector3(0.4, 0.8, 0.1), WINDOW)
-	k.box(Vector3(1.5, 6.0, 0), Vector3(0.1, 0.8, 0.4), WINDOW)
+	k.box(Vector3(0, c0 + 2.1, 1.5), Vector3(0.4, 0.8, 0.1), WINDOW)
+	k.box(Vector3(1.5, c0 + 2.1, 0), Vector3(0.1, 0.8, 0.4), WINDOW)
 	k.xform = Transform3D.IDENTITY
 
 
 # --- 성 모습 장식(look) 부품: 로컬 +Z가 붙는 벽 바깥 ---
 
-## 벽에 걸린 깃발: 윗변 가운데 top(벽면 위, +Z가 벽 바깥), 폭 w, 길이 l(제비꼬리 끝 제외). 금 마름모 문장, gold_edge면 금 테두리.
-static func _banner(k, top: Vector3, w: float, l: float, gold_edge := false) -> void:
+## 벽에 걸린 깃발: 윗변 가운데 top(벽면 위, +Z가 벽 바깥), 폭 w, 길이 l(제비꼬리 끝 제외). 흰 마름모 문장.
+static func _banner(k, top: Vector3, w: float, l: float) -> void:
 	var z := top.z
 	k.box(Vector3(top.x, top.y - 0.06, z + 0.06), Vector3(w + 0.2, 0.1, 0.1), WOOD_DARK)  # 걸이 막대
-	if gold_edge:
-		k.box(Vector3(top.x, top.y - l - 0.04, z + 0.02), Vector3(w + 0.12, l, 0.04), GOLD)
 	k.box(Vector3(top.x, top.y - l, z + 0.04), Vector3(w, l - 0.08, 0.06), FLAG)
 	var y0 := top.y - l
 	var f := z + 0.1
 	k.face([Vector3(top.x - w / 2.0, y0 + 0.001, f), Vector3(top.x + w / 2.0, y0 + 0.001, f), Vector3(top.x, y0 - w * 0.5, f)], Vector3.BACK, FLAG.darkened(0.12))
 	var d := w * 0.3
 	var cy := top.y - l * 0.42
-	k.face([Vector3(top.x, cy + d, f + 0.01), Vector3(top.x + d * 0.8, cy, f + 0.01), Vector3(top.x, cy - d, f + 0.01), Vector3(top.x - d * 0.8, cy, f + 0.01)], Vector3.BACK, GOLD)
+	k.face([Vector3(top.x, cy + d, f + 0.01), Vector3(top.x + d * 0.8, cy, f + 0.01), Vector3(top.x, cy - d, f + 0.01), Vector3(top.x - d * 0.8, cy, f + 0.01)], Vector3.BACK, PLASTER)
 
 
 ## 꼭대기 삼각기: 깃대 아래 끝 base, 깃발이 dir(±1) X쪽으로. 크기 s.
@@ -278,10 +364,10 @@ static func _pennant(k, base: Vector3, dir: float, s: float) -> void:
 	k.face([a, b, c], Vector3.FORWARD, FLAG.darkened(0.12))
 
 
-## 지붕 꼭대기 금 장식(위아래 4각 뿔 = 마름모 구슬). 아래 끝 base, 반지름 r.
+## 지붕 꼭대기 쇠 장식(위아래 4각 뿔 = 마름모 구슬). 아래 끝 base, 반지름 r.
 static func _finial(k, base: Vector3, r: float) -> void:
-	k.prism_n(base, 4, r * 0.4, r, r * 0.8, GOLD)
-	k.cone(base + Vector3(0, r * 0.8, 0), 4, r, r * 1.2, GOLD)
+	k.prism_n(base, 4, r * 0.4, r, r * 0.8, IRON)
+	k.cone(base + Vector3(0, r * 0.8, 0), 4, r, r * 1.2, IRON)
 
 
 ## 벽걸이 횃불: 벽면 위 점 at(+Z 바깥), 받침 + 쇠 그릇 + 숯불.
@@ -291,68 +377,176 @@ static func _sconce(k, at: Vector3) -> void:
 	k.cone(at + Vector3(0, 0.42, 0.3), 6, 0.18, 0.4, COALS)
 
 
-## 성문 위 문장: 금 테두리 방패(빨강 + 금 띠). 아래 가운데 base(벽면 위, +Z 바깥), 폭 w.
+## 활 구멍: 벽면(+Z 바깥) 위 아래 가운데 at.
+static func _slit(k, at: Vector3) -> void:
+	k.box(at, Vector3(0.16, 0.7, 0.08), WINDOW)
+
+
+## 모임지붕: 바닥 가운데 base, 가로 sx·세로 sz, 높이 height. 용마루는 긴 쪽 방향(정사각형이면 뾰족).
+static func _hip(k, base: Vector3, sx: float, sz: float, height: float, color: Color) -> void:
+	var hx := sx / 2.0
+	var hz := sz / 2.0
+	var e := [base + Vector3(-hx, 0, -hz), base + Vector3(hx, 0, -hz), base + Vector3(hx, 0, hz), base + Vector3(-hx, 0, hz)]
+	var long_x := hx >= hz
+	var r := absf(hx - hz)
+	var ra: Vector3 = base + (Vector3(-r, height, 0) if long_x else Vector3(0, height, -r))
+	var rb: Vector3 = base + (Vector3(r, height, 0) if long_x else Vector3(0, height, r))
+	var run := minf(hx, hz)
+	var sides := [[e[0], e[1], Vector3(0, run, -height)], [e[3], e[2], Vector3(0, run, height)], [e[0], e[3], Vector3(-height, run, 0)], [e[1], e[2], Vector3(height, run, 0)]]
+	for i in 4:
+		var p0: Vector3 = sides[i][0]
+		var p1: Vector3 = sides[i][1]
+		var long_side := (i < 2) == long_x  # 긴 변 = 사다리꼴(용마루 두 끝), 짧은 변 = 삼각형
+		var near := ra if p0.distance_to(ra) < p0.distance_to(rb) else rb
+		var far := rb if near == ra else ra
+		var col: Color = color if long_side else color.darkened(0.08)
+		if long_side and r > 0.001:
+			k.face([p0, p1, far, near], sides[i][2], col)
+		else:
+			k.face([p0, p1, near], sides[i][2], col)
+
+
+## 성문 위 문장: 쇠 테두리 방패(빨강 + 흰 십자). 아래 가운데 base(벽면 위, +Z 바깥), 폭 w.
 static func _crest(k, base: Vector3, w: float) -> void:
 	var z := base.z
 	var h := w * 0.75
 	var tip := w * 0.45
-	for layer in [[w + 0.16, GOLD, 0.05], [w, FLAG, 0.1]]:
+	for layer in [[w + 0.16, IRON, 0.05], [w, FLAG, 0.1]]:
 		var hw: float = layer[0] / 2.0
 		var zz: float = z + layer[2]
 		var e: float = (layer[0] - w) / 2.0
 		k.face([Vector3(-hw, base.y + tip - e, zz), Vector3(hw, base.y + tip - e, zz), Vector3(hw, base.y + tip + h + e, zz), Vector3(-hw, base.y + tip + h + e, zz)], Vector3.BACK, layer[1])
 		k.face([Vector3(-hw, base.y + tip - e, zz), Vector3(hw, base.y + tip - e, zz), Vector3(0, base.y - e, zz)], Vector3.BACK, layer[1])
-	k.box(Vector3(0, base.y + tip, z + 0.12), Vector3(0.18, h * 0.95, 0.03), GOLD)
-	k.box(Vector3(0, base.y + tip + h * 0.5, z + 0.12), Vector3(w * 0.9, 0.16, 0.03), GOLD)
+	k.box(Vector3(0, base.y + tip, z + 0.12), Vector3(0.18, h * 0.95, 0.03), PLASTER)
+	k.box(Vector3(0, base.y + tip + h * 0.5, z + 0.12), Vector3(w * 0.9, 0.16, 0.03), PLASTER)
 
 
-## 성벽 장식(성 모습 단계 look ≥ 2, 성 하나에 메시 하나): 성벽 바깥면·안쪽면에 걸린 깃발(모서리 탑·문루 기둥·계단을 비켜 고르게),
-## 3+ 바깥 깃발 위 성벽 바깥 가장자리에 삼각기(궁병이 서는 중심선에서 0.8 m 밖), 4+ 바깥면 톱니 아래 돌림띠.
-## 성 로컬 좌표(성 중심 원점, castle.gd와 같은 놓임). 장식이 없으면 null.
+## 성벽 바깥면 내민 띠(성 모습 3단계+): 톱니 바로 아래 0.3 m 튀어나온 띠 + 그 아래 까치발(약 0.9 m 간격). 로컬 원점 = 토막 가운데 중심선, 길이 length.
+static func _machicolation(k, length: float) -> void:
+	var face := Balance.WALL_T / 2.0
+	k.box(Vector3(0, Balance.WALL_H - 0.45, face + 0.15), Vector3(length, 0.45, 0.32), STONE_DARK)
+	var n := maxi(1, roundi(length / 0.9))
+	for i in n:
+		var x := -length / 2.0 + length * (i + 0.5) / n
+		k.box(Vector3(x, Balance.WALL_H - 0.85, face + 0.11), Vector3(0.26, 0.4, 0.22), STONE_DARK)
+
+
+## 네모 탑 꼭대기 톱니(둘레): 바닥 가운데 base, 가로 sx·세로 sz.
+static func _merlon_rect(k, base: Vector3, sx: float, sz: float) -> void:
+	for x in [-sx / 2.0 + 0.2, 0.0, sx / 2.0 - 0.2]:
+		for z in [-sz / 2.0 + 0.2, sz / 2.0 - 0.2]:
+			k.box(base + Vector3(x, 0, z), Vector3(0.4, MERLON_H, 0.4), STONE_DARK)
+	for x in [-sx / 2.0 + 0.2, sx / 2.0 - 0.2]:
+		k.box(base + Vector3(x, 0, 0), Vector3(0.4, MERLON_H, 0.4), STONE_DARK)
+
+
+## 성벽 탑(성 모습 2단계+): 성벽 바깥면에 붙어 밖으로 튀어나온 네모 탑. 로컬 원점 = 성벽 중심선 바닥, +Z = 성 바깥.
+## 성벽 위 길을 막지 않게 바깥면부터 밖으로만 짓는다(지붕 처마도 바깥면 0.2 m 안까지). 단계마다 높아진다(LOOK_WALL_TOWER_UP).
+## 2+ 기단·활 구멍·꼭대기 톱니·삼각기, 3+ 내민 꼭대기 띠·바깥면 깃발, 4+ 파란 모임지붕(5는 더 높게).
+static func _wall_tower(k, look: int) -> void:
+	var z0 := Balance.WALL_T / 2.0 - 0.02
+	var w := WALL_TOWER_W
+	var d := WALL_TOWER_D
+	var zc := z0 + d / 2.0
+	var z1 := z0 + d
+	var th: float = Balance.WALL_H + LOOK_WALL_TOWER_UP[look]
+	k.box(Vector3(0, 0, zc), Vector3(w, th, d), STONE)
+	k.box(Vector3(0, 0, zc + 0.15), Vector3(w + 0.3, 1.1, d + 0.3), STONE_DARK)  # 기단
+	for x in [-0.75, 0.75]:
+		_slit(k, Vector3(x, 1.8, z1))
+	if look >= 3:
+		k.box(Vector3(0, th - 0.45, zc + 0.085), Vector3(w + 0.3, 0.45, d + 0.15), STONE_DARK)  # 내민 꼭대기 띠(안쪽 면은 탑 면 뒤로 숨긴다)
+		_banner(k, Vector3(0, th - 0.5, z1), 1.0, 1.6)
+	if look < 4:
+		_merlon_rect(k, Vector3(0, th, zc), w, d)
+		_pennant(k, Vector3(0, th, zc), 1.0, 0.9)
+		return
+	var roof := 1.6 if look < 5 else 2.0
+	_hip(k, Vector3(0, th, zc), w + 0.5, d + 0.4, roof, ROOF_BLUE)
+	var tip := Vector3(0, th + roof, zc)
+	_finial(k, tip, 0.14)
+	_pennant(k, tip + Vector3(0, 0.25, 0), 1.0, 0.9)
+
+
+## 성벽 장식(성 모습 단계 look ≥ 1, 성 하나에 메시 하나). 성 로컬 좌표(성 중심 원점, castle.gd와 같은 놓임). look 0이면 null.
+## 1+ 바깥면 아래 기단(성문 사이 토막마다), 2+ 성벽 탑(바깥면, 모서리 탑·문루 사이 7 m 넘는 구간에 약 14 m마다)·안쪽면 깃발(계단 너머 ~ 모서리 탑)·
+## 바깥면 깃발(성벽 탑 사이), 3+ 바깥면 내민 띠(깃발은 성벽 탑으로 옮긴다)·기단이 높아진다, 4+·5 성벽 탑이 높아지고 지붕·횃불.
+## 성벽 위 길(중심선 ±WALK_HALF)·계단 띠는 비운다(테스트).
 static func castle_dressing(half: float, offs: Array, look: int) -> ArrayMesh:
-	if look < 2:
+	if look < 1:
 		return null
 	var k = MeshKit.new()
 	var c := half + Balance.WALL_T / 2.0
-	var tower := Balance.TOWER_SIZE / 2.0 + 1.2
-	var spacing := 7.0 if look < 4 else 5.5
-	var w := 1.3 if look < 4 else 1.5
-	var l := 1.8 if look < 4 else 2.1
+	var face := Balance.WALL_T / 2.0
+	var corner: float = LOOK_TOWER_R[look] + 0.45 + 0.5  # 모서리 탑(기단 포함) 둘레 여유
+	var gate_side: float = Balance.GATE_W / 2.0 + LOOK_GATE_W[look] + 0.15 + 0.5  # 문루 탑(기단 포함) 바깥 끝 + 여유
+	var stair := Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN + 0.8
+	var inner_corner := Balance.TOWER_SIZE / 2.0 + 1.2
+	var plinth_h := 0.7 if look < 3 else 1.0
+	var plinth_d := 0.3 if look < 3 else 0.4
 	for side in 4:
 		var dir: Vector3 = Formation.SIDE_DIR[side]
 		var out := Basis(Vector3.UP, atan2(dir.x, dir.z))  # 로컬 +Z가 성 바깥
 		var inn := Basis(Vector3.UP, atan2(-dir.x, -dir.z))  # 로컬 +Z가 성 안
-		# 바깥면: 모서리 탑 ~ 문루 기둥 바깥 끝 사이 / 안쪽면: 계단 아랫단 너머 ~ 모서리 탑
-		var outer := []
-		var inner := []
-		var pill := Balance.GATE_W / 2.0 + PILLAR_W + 0.5
-		var stair := Balance.GATE_W / 2.0 + Balance.STAIR_GAP + Balance.STAIR_RUN + 0.8
-		var prev_o := -c + tower
-		var prev_i := -c + tower
+		# 성문 사이 바깥면 토막(모서리 탑 중심선 ~ 성문 가장자리, 성문 사이): 기단·내민 띠. 성문 쪽 끝은 문루 탑 옆면과 겹치지 않게 조금 띄운다.
+		var edges: Array = [-c]
 		for at in offs:
-			outer.append([prev_o, at - pill])
-			inner.append([prev_i, at - stair])
-			prev_o = at + pill
-			prev_i = at + stair
-		outer.append([prev_o, c - tower])
-		inner.append([prev_i, c - tower])
-		for pair in [[outer, out, Balance.WALL_T / 2.0], [inner, inn, Balance.WALL_T / 2.0]]:
-			for seg in pair[0]:
-				var a: float = seg[0]
-				var b: float = seg[1]
-				var n := floori((b - a) / spacing)
-				if b - a < w + 0.6:
+			edges.append_array([at - Balance.GATE_W / 2.0 - 0.05, at + Balance.GATE_W / 2.0 + 0.05])
+		edges.append(c)
+		for i in range(0, edges.size(), 2):
+			var a: float = edges[i]
+			var b: float = edges[i + 1]
+			k.xform = Transform3D(out, Formation.gate_position(half, side, (a + b) / 2.0))
+			k.box(Vector3(0, 0, face + plinth_d / 2.0 - 0.01), Vector3(b - a, plinth_h, plinth_d + 0.02), STONE_DARK)
+			if look >= 3:
+				_machicolation(k, b - a)
+		# 바깥면 빈 구간(모서리 탑 ~ 문루 탑, 문루 탑 사이)에 성벽 탑을 고르게
+		var free := []
+		var prev := -c + corner
+		for at in offs:
+			free.append([prev, at - gate_side])
+			prev = at + gate_side
+		free.append([prev, c - corner])
+		var towers := []
+		if look >= 2:
+			for seg in free:
+				var span: float = seg[1] - seg[0]
+				if span < 7.0:  # 모서리 탑·문루 탑에 붙어 답답해 보이는 짧은 구간은 비운다
 					continue
-				n = maxi(n, 1)
-				for i in n:
-					var at: float = a + (b - a) * (i + 0.5) / n
-					k.xform = Transform3D(pair[1], Formation.gate_position(half, side, at))
-					_banner(k, Vector3(0, Balance.WALL_H - 0.15, pair[2]), w, l, look >= 4)
-					if look >= 3 and pair[1] == out:
-						_pennant(k, Vector3(0, Balance.WALL_H, Balance.WALL_T / 2.0 - MERLON_T / 2.0), 1.0, 0.9 if look < 4 else 1.05)
-		if look >= 4:  # 바깥면 돌림띠(톱니 바로 아래, 문루 사이도 이어서)
-			k.xform = Transform3D(out, Formation.gate_position(half, side))
-			k.box(Vector3(0, Balance.WALL_H - 0.38, Balance.WALL_T / 2.0 + 0.05), Vector3(2.0 * c, 0.22, 0.12), STONE_DARK)
+				var n := maxi(1, roundi(span / 14.0))
+				for j in n:
+					towers.append(seg[0] + span * (j + 0.5) / n)
+		for at in towers:
+			k.xform = Transform3D(out, Formation.gate_position(half, side, at))
+			_wall_tower(k, look)
+		if look < 2:
+			continue
+		# 깃발: 안쪽면은 계단 아랫단 너머 ~ 모서리 탑, 바깥면(2단계만)은 성벽 탑 사이 빈 곳
+		var hang := []  # [구간, 놓임, 폭, 길이]
+		var prev_i := -c + inner_corner
+		for at in offs:
+			hang.append([[prev_i, at - stair], inn, 1.3 if look < 4 else 1.5, 1.8 if look < 4 else 2.1])
+			prev_i = at + stair
+		hang.append([[prev_i, c - inner_corner], inn, 1.3 if look < 4 else 1.5, 1.8 if look < 4 else 2.1])
+		if look == 2:
+			var clear := WALL_TOWER_W / 2.0 + 0.15 + 0.6
+			for seg in free:
+				var a: float = seg[0]
+				for t in towers:
+					if t > seg[0] and t < seg[1]:
+						hang.append([[a, t - clear], out, 1.3, 1.45])
+						a = t + clear
+				hang.append([[a, seg[1]], out, 1.3, 1.45])
+		for hg in hang:
+			var a: float = hg[0][0]
+			var b: float = hg[0][1]
+			var w: float = hg[2]
+			if b - a < w + 0.6:
+				continue
+			var n := maxi(1, floori((b - a) / 7.0))
+			for i in n:
+				k.xform = Transform3D(hg[1], Formation.gate_position(half, side, a + (b - a) * (i + 0.5) / n))
+				_banner(k, Vector3(0, Balance.WALL_H - 0.15, face), w, hg[3])
 	k.xform = Transform3D.IDENTITY
 	return k.commit()
 

@@ -1230,16 +1230,25 @@ func test_castle_parts() -> void:
 	for pair in [["wall_run", TownKitScript.wall_run(10.0)], ["gatehouse", TownKitScript.gatehouse()], ["gate_doors", TownKitScript.gate_doors()], ["corner_tower", TownKitScript.corner_tower()], ["stairs", TownKitScript.stairs()]]:
 		var m: ArrayMesh = pair[1]
 		check(m.get_surface_count() == 1 and m.get_aabb().size.length() > 0.5, "%s has one non-empty surface" % pair[0])
-	# 성 모습 단계(성채 Lv 5·10·15·22·30, 2026-10-14): 문루·모서리 탑은 단계마다 한 표면, 성벽 장식은 2단계부터.
+	# 성 모습 단계(성채 Lv 5·10·15·22·30, 2026-10-14): 문루·모서리 탑은 단계마다 한 표면이고 단계마다 높아진다, 성벽 장식(기단·성벽 탑·띠·깃발)은 1단계부터.
 	# 장식은 성벽 위 길(중심선 ±WALK_HALF)·계단 띠를 막지 않는다 — 성벽 높이 위 정점은 중심선에서 WALK_HALF + 0.2 밖, 계단 칸 안에 정점이 없다.
 	for lk in 6:
 		check(TownKitScript.gatehouse(lk).get_surface_count() == 1 and TownKitScript.corner_tower(lk).get_surface_count() == 1, "castle look %d gatehouse/tower are one surface" % lk)
+		if lk > 0:
+			check(TownKitScript.gatehouse(lk).get_aabb().end.y > TownKitScript.gatehouse(lk - 1).get_aabb().end.y and TownKitScript.corner_tower(lk).get_aabb().end.y > TownKitScript.corner_tower(lk - 1).get_aabb().end.y, "castle look %d gate and corner towers are taller than look %d" % [lk, lk - 1])
+		# 문루 탑은 바깥 절반(성벽 위 길 밖)에만 — 머리 높이(성벽 위 2.2 m)까지 정점은 중심선에서 PILLAR_Z0 밖(지붕 처마 0.15 m는 허용)
+		var gv: PackedVector3Array = TownKitScript.gatehouse(lk).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var g_walk := 0
+		for v in gv:
+			if v.y > Balance.WALL_H + 0.01 and v.y < Balance.WALL_H + 2.2 and v.z < TownKitScript.PILLAR_Z0 - 0.2 and absf(v.x) > Balance.GATE_W / 2.0 + 0.01:
+				g_walk += 1
+		check(g_walk == 0, "castle look %d gate towers keep the wall walk clear: %d" % [lk, g_walk])
 	check(GameData.castle_look(1) == 0 and GameData.castle_look(5) == 1 and GameData.castle_look(14) == 2 and GameData.castle_look(22) == 4 and GameData.castle_look(30) == 5, "castle look steps at keep 5/10/15/22/30")
 	for tiles in [20, 28, 36]:
 		var half: float = tiles * Balance.TILE / 2.0
 		var offs := FormationScript.gate_offsets(half)
-		check(TownKitScript.castle_dressing(half, offs, 1) == null, "no wall dressing below look 2 (%d tiles)" % tiles)
-		for lk in [2, 3, 4, 5]:
+		check(TownKitScript.castle_dressing(half, offs, 0) == null, "no wall dressing at look 0 (%d tiles)" % tiles)
+		for lk in [1, 2, 3, 4, 5]:
 			var dm: ArrayMesh = TownKitScript.castle_dressing(half, offs, lk)
 			var dv: PackedVector3Array = dm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 			var c: float = half + Balance.WALL_T / 2.0
@@ -1281,7 +1290,8 @@ func test_castle_parts() -> void:
 
 ## 건물 레시피는 부지 안·바닥 위·부지 가운데, 자연물·산은 한 표면으로 땅 근처에 놓인다.
 func test_town_recipes() -> void:
-	for b in Balance.BUILDINGS + [{"id": "keep", "size": Balance.building("keep").size, "look": 5}, {"id": "keep", "size": Balance.building("keep").size, "look": 3}]:
+	var keep_size: Vector2i = Balance.building("keep").size
+	for b in Balance.BUILDINGS + [1, 2, 3, 4, 5].map(func(lk): return {"id": "keep", "size": keep_size, "look": lk}):
 		var m: ArrayMesh = TownKitScript.building(b.id, b.get("look", 0))
 		var box := m.get_aabb()
 		var plot := Vector2(b.size.x * Balance.TILE - Art.BUILDING_GAP, b.size.y * Balance.TILE - Art.BUILDING_GAP)
