@@ -1,22 +1,26 @@
 extends "res://scripts/monster.gd"
 ## 황금 고블린(사용자 2026-10-13 "황금보따리를 들고있는 고블린이 돌아댕기게, 이동속도는 영웅들의 0.85배속, 무작위로 맵을 돌아댕기다가,
-## 영웅에게 피격되면 피격 반대방향으로 도망가게"). 2026-10-14 HP 30배 → 15배, 시간이 지나도 사라지지(도망치지) 않는다.
+## 영웅에게 피격되면 피격 반대방향으로 도망가게"). 2026-10-14 HP 30배 → 15배, "황금고블린 2분뒤에 사라지게" — LIFE_SEC 120.
 ## 성 전투 지도(방치·스테이지)에만 나온다 — 나오는 때는 goblin_director.gd.
 ## 괴물(monster.gd)을 이어 받아 영웅·병사·망루의 표적이 되고 스킬 상태(둔화·기절·밀려남 …)도 그대로 받는다. 다른 점:
 ##  - 아무도 치지 않는다(표적을 찾지 않고 도발도 안 걸린다). 리필(라운드 다시 시작)에도 사라지지 않는다.
 ##  - 성 밖 고리(성벽 바깥면에서 RING_IN ~ RING_OUT m)를 무작위 지점으로 돌아다닌다. 성벽 안으로는 못 들어가고 벽을 따라 미끄러진다.
 ##  - 맞으면(지속 피해 틱 빼고) 친 쪽(자기를 노리는 영웅·병사 중 가장 가까운 것, 없으면 가장 가까운 영웅·병사) 반대 방향으로 FLEE_SEC초 달아난다.
 ##  - 속도 = 지금 성에 나온 영웅들 평균 이동 속도 × SPEED_RATIO(영웅이 없으면 영웅 표 평균).
-##  - 시간 제한 없이 잡힐 때까지 남는다. 잡히면 died → 감독이 서버에 보상을 받는다.
+##  - LIFE_SEC초 안에 못 잡으면 바깥으로 달아나 사라진다(escaped). 잡히면 died → 감독이 서버에 보상을 받는다.
+
+signal escaped
 
 const SPEED_RATIO := 0.85
 const HP_MULT := 15.0  # 그 스테이지 졸개(grunt) HP × 이만큼(사용자 2026-10-14, 30에서 내림)
+const LIFE_SEC := 120.0  # 나온 지 2분 안에 못 잡으면 사라진다(사용자 2026-10-14)
 const FLEE_SEC := 2.2
 const RING_IN := 2.5  # 성벽 바깥면에서(m) — 성문 앞 영웅 자리(1.5 m) 바로 바깥
 const RING_OUT := 18.0
 const PAUSE := Vector2(0.3, 1.2)  # 지점에 닿으면 이만큼 두리번거린다(초)
 const SPARK_SEC := 0.3
 const SPARK := Color(1.0, 0.85, 0.3)
+const AWAY := 30.0  # 달아날 때 성벽 바깥면에서 이만큼 멀어지면 사라진다
 const BODY_SCALE := 1.35  # 보통 고블린보다 크게(멀리서도 보이게)
 const NAME_TEXT := "황금 고블린"
 const NAME_COLOR := Color(1.0, 0.84, 0.25)
@@ -27,7 +31,10 @@ var _has_wp := false
 var _pause := 0.0
 var _flee_dir := Vector3.ZERO
 var _flee_t := 0.0
+var _life := LIFE_SEC
+var _leaving := false
 var _spark_t := 0.0
+var _gone := false
 var _disc: Node3D  # 발밑 금빛 원판(맥동)
 var _t := 0.0
 
@@ -89,6 +96,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _gone:
+		return
 	super._process(delta)
 	if _dead:
 		return
@@ -99,6 +108,11 @@ func _process(delta: float) -> void:
 	if _spark_t <= 0.0 and Fx.live() < Fx.MAX_LIVE / 2:
 		_spark_t = SPARK_SEC
 		Fx.spark(get_parent(), global_position + Vector3(randf_range(-0.3, 0.3), 0.9, randf_range(-0.3, 0.3)), SPARK, 0.35)
+	_life -= delta
+	if _life <= 0.0 and not _leaving:
+		_leaving = true  # 2분: 이때부터 못 잡는다(표적에서 빠지고 피해도 안 받는다) — 바깥으로 뛰어 나가 사라진다
+		_flee_t = 0.0
+		remove_from_group("monsters")
 
 
 ## 표적을 찾지 않는다 — 늘 _advance(돌아다니기·달아나기).
@@ -119,6 +133,8 @@ func _vanish() -> void:
 
 
 func take_damage(amount: float, dmg_kind := 0) -> void:
+	if _leaving:
+		return
 	super.take_damage(amount, dmg_kind)
 	if _dead or dmg_kind == DamageNumbers.Kind.POISON or _flee_t > FLEE_SEC - 0.4:
 		return
@@ -155,6 +171,16 @@ func _attacker():
 
 func _advance(delta: float) -> void:
 	var step := speed() * delta
+	if _leaving:
+		var out := Vector3(global_position.x, 0.0, global_position.z)
+		if out.length() < 0.1:
+			out = Vector3(1, 0, 0)
+		_go(global_position + out.normalized() * step)
+		if _ring_dist(global_position) > AWAY:
+			_gone = true
+			escaped.emit()
+			queue_free()
+		return
 	if _flee_t > 0.0:
 		_flee_t -= delta
 		_go(global_position + _flee_dir * step)
@@ -180,7 +206,9 @@ func _advance(delta: float) -> void:
 ## next로 걷는다(성벽 안·고리 바깥으로는 미끄러진다). 거의 못 움직였으면 false.
 func _go(next: Vector3) -> bool:
 	var before := global_position
-	var p := _keep_in(_keep_out(next))
+	var p := _keep_out(next)
+	if not _leaving:
+		p = _keep_in(p)
 	p.y = 0.0
 	_model.face(p - before)
 	global_position = p
@@ -211,6 +239,11 @@ func _keep_in(p: Vector3) -> Vector3:
 	p.x = clampf(p.x, -r, r)
 	p.z = clampf(p.z, -r, r)
 	return p
+
+
+## 성벽 바깥면에서 떨어진 거리(정사각형 거리).
+func _ring_dist(p: Vector3) -> float:
+	return maxf(absf(p.x), absf(p.z)) - (castle.half + Balance.WALL_T)
 
 
 ## 다음 지점: 지금 면 또는 이웃 면(성 반대편으로 가로지르지 않게)의 고리 안 무작위 자리.
