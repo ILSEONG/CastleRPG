@@ -166,11 +166,11 @@ export function registerPvp(app: Hono<Any>, d: Any) {
           power = case when $7 then $10 else power end
           where player_id = $1 and mode = $2 and day = $11 and plays = $12 and points = $13 and next = $14::jsonb returning player_id),
         b as (insert into pvp_battles (player_id, mode, opponent, started_at, loss, gain)
-          select player_id, $2, $14::jsonb, to_timestamp($15::float8), $5, $16 from u returning id::text),
+          select player_id, $2, $17::jsonb, to_timestamp($15::float8), $5, $16 from u returning id::text),
         w as (update pvp_wallet set coins = coins + ${P.COINS_LOSS} where player_id = $1 and exists (select 1 from u) returning 1)
         select (select id from b) as id`,
       [x.id, mode, x.today, used + 1, loss, JSON.stringify(nextOpp), setDefense, JSON.stringify(team), JSON.stringify(soldiers), P.teamPower(team, defs),
-        r.day, r.plays, r.points, JSON.stringify(opp), x.now, gain])
+        r.day, r.plays, r.points, JSON.stringify(opp), x.now, gain, JSON.stringify({ ...opp, my_power: P.teamPower(team, defs) })])
       if (!res?.id) continue
       const battle = { id: String(res.id), mode, opponent: oppView(opp), me: team, my_soldiers: soldiers, loss, gain, time: P.BATTLE_SEC[mode] }
       return c.json({ server_now: x.now, pvp: await pvpView(x), battle })
@@ -183,11 +183,12 @@ export function registerPvp(app: Hono<Any>, d: Any) {
     const battleId = strField(b, 'battle_id')
     if (!/^[0-9a-f-]{36}$/i.test(battleId)) throw new ApiError(400, 'bad_request', "'battle_id' must be a uuid")
     const x = await ctx(c)
-    const [bt] = await query(`select mode, loss, gain, closed, result, extract(epoch from started_at)::float8 as started_at from pvp_battles
+    const [bt] = await query(`select mode, loss, gain, closed, result, extract(epoch from started_at)::float8 as started_at,
+      (opponent->>'power')::float8 as opp_power, (opponent->>'my_power')::float8 as my_power from pvp_battles
       where id = $1 and player_id = $2`, [battleId, x.id])
     if (!bt) throw new ApiError(404, 'no_battle', 'unknown battle')
     if (!bt.closed) {
-      const win = P.acceptWin(b.win === true, x.now - Number(bt.started_at))
+      const win = P.acceptWin(b.win === true, x.now - Number(bt.started_at)) && P.plausibleWin(bt.my_power == null ? null : Number(bt.my_power), Number(bt.opp_power))
       const delta = win ? Number(bt.gain) : -Number(bt.loss)
       const coins = win ? P.COINS_WIN : P.COINS_LOSS
       const result = { win, delta, coins, claimed_win: b.win === true }

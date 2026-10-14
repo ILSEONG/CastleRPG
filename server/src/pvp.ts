@@ -152,6 +152,14 @@ export function acceptWin(win: boolean, elapsed: number): boolean {
   return win && elapsed >= MIN_WIN_SEC / MAX_GAME_SPEED && elapsed <= LATE_SEC
 }
 
+// 힘 차이로 보는 승리 타당성(2026-10-14 보안 점검): 내 팀 힘이 상대의 MIN_WIN_POWER_RATIO보다 작으면 이긴다고 보내도 패배로 친다
+// (전투는 앱이 돌린다 — 고친 앱이 늘 win:true를 보내 약한 팀으로 최상위까지 오르지 못하게). 시작 때 힘을 적지 않은 예전 전투(null)는 그대로.
+export const MIN_WIN_POWER_RATIO = 0.4
+export function plausibleWin(myPower: number | null, oppPower: number): boolean {
+  if (myPower === null || !Number.isFinite(myPower) || !Number.isFinite(oppPower) || oppPower <= 0) return true
+  return myPower >= oppPower * MIN_WIN_POWER_RATIO
+}
+
 export interface Shop { day: number; week: number; bought: Record<string, number> }
 export function shopToday(saved: Partial<Shop> | null, day: number, week: number): Shop {
   const s = saved ?? {}

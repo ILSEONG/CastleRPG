@@ -12,16 +12,20 @@ import type { WebSocket } from 'ws'
 
 export const LIVE_PATH = '/v1/guild/war/live'
 const MAX_MSG = 256 * 1024
+// 도배 막기(2026-10-14 보안 점검): 한 연결이 1초에 보낼 수 있는 메시지(방장 snap은 0.1초마다 — x2 배속이어도 넉넉하게),
+// 성 상태 저장(ckpt — 앱은 10초마다)은 방마다 CKPT_GAP초에 한 번·한 번에 하나만 DB에 간다. end는 늘 받는다.
+const MSG_PER_SEC = 60
+const CKPT_GAP = 2
 
-interface Client { ws: WebSocket; pid: string; at: number }
-interface Room { clients: Client[]; host: Client | null; last: string | null }
+interface Client { ws: WebSocket; pid: string; at: number; win: number; n: number }
+interface Room { clients: Client[]; host: Client | null; last: string | null; ckptAt: number; saving: boolean }
 
 export class WarLive {
   rooms = new Map<string, Room>()
   // createApp이 채운다
   verify: (token: string) => Promise<string | null> = async () => null
   canJoin: (battleId: string, pid: string) => Promise<boolean> = async () => false
-  onState: (battleId: string, pid: string, state: unknown, final: boolean) => Promise<void> = async () => {}
+  onState: (battleId: string, pid: string, state: unknown, final: boolean) => Promise<boolean> = async () => false // true = 전투가 닫혔다
   private wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG })
   private seq = 0
 
@@ -47,14 +51,14 @@ export class WarLive {
   join(battle: string, pid: string, ws: WebSocket) {
     let room = this.rooms.get(battle)
     if (!room) {
-      room = { clients: [], host: null, last: null }
+      room = { clients: [], host: null, last: null, ckptAt: 0, saving: false }
       this.rooms.set(battle, room)
     }
     for (const old of room.clients.filter((c) => c.pid === pid)) {
       this.drop(battle, old)
       old.ws.close(4000, 'replaced')
     }
-    const me: Client = { ws, pid, at: ++this.seq }
+    const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0 }
     room.clients.push(me)
     if (!room.host) room.host = me
     send(ws, { t: 'hello', host: room.host === me, snap: room.last ? JSON.parse(room.last) : null })
@@ -66,6 +70,12 @@ export class WarLive {
   private onMessage(battle: string, me: Client, raw: string) {
     const room = this.rooms.get(battle)
     if (!room || !room.clients.includes(me)) return
+    const sec = Math.floor(Date.now() / 1000)
+    if (me.win !== sec) {
+      me.win = sec
+      me.n = 0
+    }
+    if (++me.n > MSG_PER_SEC) return
     let m: Record<string, unknown>
     try {
       m = JSON.parse(raw)
@@ -79,9 +89,15 @@ export class WarLive {
       room.last = JSON.stringify(m.s)
       for (const c of room.clients) if (c !== me) sendRaw(c.ws, out)
     } else if ((m.t === 'ckpt' || m.t === 'end') && isHost) {
-      void this.onState(battle, me.pid, m.state, m.t === 'end').then(() => {
-        if (m.t === 'end') this.broadcast(battle, { t: 'end' })
-      }, (e) => console.warn(`[war] state save failed: ${(e as Error).message}`))
+      const end = m.t === 'end'
+      const now = Date.now() / 1000
+      if (!end && (room.saving || now - room.ckptAt < CKPT_GAP)) return
+      room.saving = true
+      room.ckptAt = now
+      void this.onState(battle, me.pid, m.state, end).then((closed) => {
+        // 일찍 온 end(시간이 남았고 성채가 서 있다)는 전투를 닫지 않는다 — 그때는 다른 길드원을 내보내지 않는다
+        if (closed) this.broadcast(battle, { t: 'end' })
+      }, (e) => console.warn(`[war] state save failed: ${(e as Error).message}`)).finally(() => { room.saving = false })
     } else if (m.t === 'cmd' && !isHost && room.host) {
       send(room.host.ws, { t: 'cmd', from: me.pid, uid: m.uid, pos: m.pos ?? null })
     }

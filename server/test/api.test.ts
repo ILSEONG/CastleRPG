@@ -315,8 +315,8 @@ test('처치 상한(토큰 버킷): ceil(인정 초 × kill_rate_cap), 인정 �
   r = await kill(2, { grunt: 30 }) // 같은 순간: 버킷이 비었다 — 슬랙 없음
   assert.equal(r.json.gold_gained_tenths, 0)
   S.clock.t = T0 + 24 // 상한 70: 싼 grunt부터 인정, 비싼 epic_boss를 먼저 버린다
-  r = await kill(3, { epic_boss: 20, grunt: 60 })
-  assert.equal(r.json.gold_gained_tenths, (60 * 10 + 10 * 250) * 10)
+  r = await kill(3, { epic_boss: 4, grunt: 70 })
+  assert.equal(r.json.gold_gained_tenths, 70 * 10 * 10)
   S.clock.t = T0 + 34 // 상한 50 안: 그대로, 쓴 40개(8초)만큼만 보고 시각이 앞으로
   r = await kill(4, { grunt: 40 })
   assert.equal(r.json.gold_gained_tenths, 4000)
@@ -324,12 +324,12 @@ test('처치 상한(토큰 버킷): ceil(인정 초 × kill_rate_cap), 인정 �
   S.clock.t = T0 + 1034 // 오래 쉬어도 버킷은 kill_burst_sec(60) × 5 = 300
   r = await kill(5, { grunt: 1000 })
   assert.equal(r.json.gold_gained_tenths, 300 * 100)
-  assert.equal(r.json.player.gold_tenths, (500 + 0 + 3100 + 400 + 3000) * 10)
+  assert.equal(r.json.player.gold_tenths, (500 + 0 + 700 + 400 + 3000) * 10)
   assert.equal(await lkr(), S.clock.t)
   const ks = await logs(id, 'kills')
   assert.deepEqual(ks.map((k) => k.detail.clamped), [true, true, true, false, true])
   assert.deepEqual(ks.map((k) => k.detail.cap), [50, 0, 70, 50, 300])
-  assert.deepEqual(ks[2].detail.kept, { epic_boss: 10, grunt: 60 })
+  assert.deepEqual(ks[2].detail.kept, { epic_boss: 0, grunt: 70 })
 })
 
 test('골드 무한 생성 차단: 같은 순간 /v1/kills 50연타는 합쳐서 버킷(300) 이상 못 얻는다', async () => {
@@ -338,12 +338,26 @@ test('골드 무한 생성 차단: 같은 순간 /v1/kills 50연타는 합쳐서
   S.clock.t = T0 + 1000
   let total = 0
   for (let seq = 1; seq <= 50; seq++) {
-    const r = await S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills: { epic_boss: 20 } } })
+    const r = await S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills: { grunt: 20 } } })
     assert.equal(r.status, 200)
     total += r.json.gold_gained_tenths
   }
-  assert.equal(total, 300 * 250 * 10) // 리뷰 시나리오: 버킷이 없으면 50 × (20 × 250) = 250,000골드
-  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold_tenths, 300 * 250 * 10)
+  assert.equal(total, 300 * 10 * 10) // 리뷰 시나리오: 버킷이 없으면 50 × 20마리
+  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold_tenths, 300 * 10 * 10)
+})
+
+test('보스 처치 상한(2026-10-14 보안 점검): 하루 (스테이지 클리어 + 1) × 4마리까지 — 전부 보스로 보고해 골드를 25배로 받지 못한다', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  S.clock.t = T0 + 1000
+  let r = await S.req('POST', '/v1/kills', { token, body: { seq: 1, stage: 1, kills: { epic_boss: 20 } } })
+  assert.equal(r.json.gold_gained_tenths, 4 * 250 * 10)
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 2, stage: 1, kills: { epic_boss: 20, grunt: 5 } } })
+  assert.equal(r.json.gold_gained_tenths, 5 * 10 * 10) // 오늘 보스 몫을 다 썼다 — 졸개만
+  assert.equal((await S.req('POST', '/v1/stage/clear', { token, body: { stage: 1 } })).json.cleared, true)
+  S.clock.t = T0 + 2000
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 3, stage: 2, kills: { epic_boss: 1 } } }) // 클리어 1번 → 4마리 더
+  assert.ok(r.json.gold_gained_tenths > 0)
 })
 
 test('처치 멱등: seq <= kill_seq면 반영 없이 현재 상태 + gold_gained_tenths 0, 크면 반영하고 kill_seq = seq', async () => {
