@@ -47,7 +47,12 @@ try {
   process.exit(1)
 }
 console.log(`[server] payments: ${['google', 'toss'].filter((k) => (payments as any)[k]).join(', ') || 'off'}`)
-const legal = { operator: process.env.LEGAL_OPERATOR?.trim() ?? '', email: process.env.LEGAL_EMAIL?.trim() ?? '' } // 약관·개인정보처리방침 운영자·연락처
+// 약관·개인정보처리방침 운영자·사업자등록번호(기본값 = 사장님 사업자, 2026-10-14)·연락처. 환경 변수가 있으면 그 값
+const legal = {
+  operator: process.env.LEGAL_OPERATOR?.trim() || '일성게임즈',
+  bizNo: process.env.LEGAL_BIZ_NO?.trim() || '227-15-93850',
+  email: process.env.LEGAL_EMAIL?.trim() ?? '',
+}
 const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, gameCacheSec, payments, legal })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
