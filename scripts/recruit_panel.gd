@@ -59,6 +59,8 @@ var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
 var shop  # 상점 시트(shop_panel.gd, main이 넣는다) — [이동]이 [다이아] 탭으로 연다
+var level_button: Button  # [주점 레벨업 ›] → 주점 건물 창(사용자 2026-10-14)
+var building_panel  # 건물 창(building_panel.gd). main이 넣는다
 var hot  # 핫딜(hot_deal.gd, main이 넣는다) — 다이아가 부족하면 다이아 긴급 지원 핫딜 계기
 
 var _art_box: Control
@@ -147,6 +149,10 @@ func _ready() -> void:
 		icon.offset_bottom = 15
 		b.add_child(icon)
 		_btn_gems.append(icon)
+	level_button = _button("", UiKit.STEEL, 22)
+	level_button.custom_minimum_size = Vector2(0, 56)
+	level_button.pressed.connect(open_building)
+	_pick_view.add_child(level_button)
 	var close_button := _button("닫기", UiKit.STEEL)
 	close_button.pressed.connect(close)
 	_pick_view.add_child(close_button)
@@ -490,7 +496,18 @@ func _process(delta: float) -> void:
 	_recruit(_count, _cur)
 
 
+## [주점 레벨업 ›]: 이 창을 닫고 주점 건물 창을 연다(돌아오는 길은 건물 창 [영웅 모집]).
+func open_building() -> void:
+	if building_panel == null:
+		return
+	close()
+	building_panel.open_building(GameData.TAVERN)
+
+
 func _refresh() -> void:
+	level_button.visible = building_panel != null and Economy.is_built(GameData.TAVERN)
+	if level_button.visible:
+		level_button.text = building_panel.levelup_text(GameData.TAVERN)
 	var st: Dictionary = Economy.gacha_state()
 	var lv: int = st.gold_level
 	level_label.text = "골드 모집 Lv %d" % lv

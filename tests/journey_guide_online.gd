@@ -414,6 +414,12 @@ func _repeats(n: int) -> void:
 		var reward: Dictionary = Tutorial.repeat_reward(q)
 		_check(Tutorial.repeating() and card.panel.visible and card.step_label.text == "반복 퀘스트 %d" % (Tutorial.rep_n + 1) and str(q.title) in card.title_label.text
 			and card.reward_label.text == "보상: " + Tutorial.reward_text(reward) and not reward.is_empty(), tag + " card", "%s | %s | %s" % [card.step_label.text, card.title_label.text, card.reward_label.text])
+		# 2026-10-14: 카드는 서버가 센 진행을 보인다(앱이 따로 세던 기준이 어긋나 「1-2 클리어」가 ✓인데 받아지지 않았다)
+		var sr: Dictionary = Economy.server_quest.get("rep", {})
+		_check(not sr.is_empty() and int(sr.have) < int(sr.need) and not Tutorial.complete()
+			and (str(q.kind) != "stage" or int(q.arg) == int(sr.from) + 1)
+			and (int(sr.need) <= 1 or str(q.kind) == "stage" or Tutorial.progress_text() == "%d/%d" % [int(sr.have), int(sr.need)]),
+			tag + " card shows the server's progress and isn't done yet", "rep=%s progress=%s q=%s" % [sr, Tutorial.progress_text(), q])
 		await _repeat_satisfy(q, tag)
 		var done := await _wait_until(func(): return Tutorial.complete(), 20.0)
 		_check(done, tag + " target reached", "count=%d progress=%s q=%s" % [Tutorial.count, Tutorial.progress_text(), q])

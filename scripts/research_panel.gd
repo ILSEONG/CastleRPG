@@ -81,6 +81,8 @@ var speedups: VBoxContainer  # speedup_list.gd(펼쳤을 때만)
 var idle_label: Label
 var tree: VBoxContainer  # 단 줄들(연결선은 여기 뒤에 그린다)
 var close_button: Button
+var level_button: Button  # [연구소 레벨업 ›] → 건물 창(비용·시간·선행 조건·[가속]) — 사용자 2026-10-14
+var building_panel  # 건물 창(building_panel.gd). main이 넣는다
 # 노드 상세(아래에서 뜨는 창)
 var detail: Control
 var detail_id := ""
@@ -115,6 +117,10 @@ func _ready() -> void:
 	content.add_child(title_label)
 	speed_label = _label("", 24, GREEN)
 	content.add_child(speed_label)
+	level_button = _button("", UiKit.STEEL, 24)
+	level_button.custom_minimum_size = Vector2(0, 60)
+	level_button.pressed.connect(open_building)
+	content.add_child(level_button)
 	_build_current()
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 10)
@@ -548,6 +554,14 @@ func _process(_delta: float) -> void:
 		_refresh()
 
 
+## [연구소 레벨업 ›]: 이 창을 닫고 연구소 건물 창을 연다(돌아오는 길은 건물 창 [연구]).
+func open_building() -> void:
+	if building_panel == null:
+		return
+	close()
+	building_panel.open_building(GameData.LAB)
+
+
 func _refresh() -> void:
 	if not visible:
 		return
@@ -556,6 +570,9 @@ func _refresh() -> void:
 	var lab := Economy.building_level(GameData.LAB)
 	title_label.text = "연구소 Lv %d" % lab
 	speed_label.text = "연구 속도 +%s%%" % Skills.num_text(Economy.research_speed() * 100.0)
+	if building_panel != null:
+		level_button.text = building_panel.levelup_text(GameData.LAB)
+	level_button.visible = building_panel != null
 	_refresh_current(now)
 	for t in tier_marks:
 		var locked: bool = lab < int(tier_marks[t].lab)

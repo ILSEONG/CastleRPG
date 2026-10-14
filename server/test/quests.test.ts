@@ -37,7 +37,7 @@ test('새 플레이어: 튜토리얼 active, 성채·성문 밖 건물은 공터
   S.clock.t = T0
   const { token } = await S.login()
   const p = await player(token)
-  assert.deepEqual(p.quest, { tut_state: 'active', tut_step: 0, rep_n: 0 })
+  assert.deepEqual(p.quest, { tut_state: 'active', tut_step: 0, rep_n: 0, rep: null }) // 가이드 중엔 반복 퀘스트 진행이 없다
   assert.equal(p.dia_tickets, 0)
   assert.deepEqual(p.unbuilt, ['archery', 'barracks', 'farm', 'houses', 'lab', 'lumber', 'quarry', 'stable', 'tavern', ...LOTS].sort())
   assert.equal(p.buildings.lumber.level, 1)
@@ -153,6 +153,7 @@ test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_
   assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'tutorial_running')
   await S.db.query("update player_state set tut_state = 'skipped' where player_id = $1", [id])
   const gold0 = (await player(token)).gold
+  assert.deepEqual((await player(token)).quest.rep, { have: 0, need: 100, from: null }) // 앱 카드가 이 진행을 보인다
   assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
   await pump(token)
   let r = await claim(token, { type: 'repeat', n: 0 })
@@ -167,8 +168,10 @@ test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_
   await pump(token)
   assert.deepEqual((await claim(token, { type: 'repeat', n: 1 })).json.reward, { gold: 2000 })
   S.clock.t = T0 + 60
+  assert.deepEqual((await player(token)).quest.rep, { have: 0, need: 2, from: 1 }) // 앱: 「스테이지 1-2 클리어」(받을 때 라운드 1 → 1-2까지 깨면 3)
   assert.equal((await claim(token, { type: 'repeat', n: 2 })).json.error, 'not_done') // 받을 때 라운드 + 2
   await setStage(token, 3)
+  assert.deepEqual((await player(token)).quest.rep, { have: 2, need: 2, from: 1 })
   r = await claim(token, { type: 'repeat', n: 2 })
   assert.deepEqual([r.json.reward, r.json.player.diamonds], [{ diamonds: 20 }, 20])
   // 두 번째 바퀴: reward × 2, fixed 그대로
