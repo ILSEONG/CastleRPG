@@ -14,6 +14,8 @@ const MAX_FLING := 5000.0
 var _press := false
 var _start := Vector2.ZERO
 var _hit: Control  # 누른 자리 맨 위 컨트롤
+var _chain: Array = []  # 누른 순간 _hit 조상의 ScrollContainer(가까운 것 먼저). 끌기 시작 전에 목록을 다시 그려 _hit이 지워져도 이걸로 굴린다
+var _dragged := false  # 이번 누름이 스크롤 끌기가 됐다(was_drag — 누름에 반응하는 줄이 놓을 때 확인)
 var _scroll: ScrollContainer  # 끌고 있는 목록
 var _axis := 1  # 0 가로, 1 세로
 var _vel := 0.0  # 관성 속도(px/s, 스크롤 값 기준)
@@ -32,7 +34,9 @@ func _input(event: InputEvent) -> void:
 			_press = true
 			_start = event.position
 			_scroll = null
+			_dragged = false
 			_hit = find_control_at(get_tree().root, event.position)
+			_chain = scroll_chain(_hit)
 		else:
 			_press = false
 			if _scroll != null and is_instance_valid(_scroll):
@@ -40,16 +44,20 @@ func _input(event: InputEvent) -> void:
 				_last_us = Time.get_ticks_usec()
 			_scroll = null
 			_hit = null
+			_chain = []
 	elif event is InputEventMouseMotion and _press:
 		if _scroll == null:
 			var d: Vector2 = event.position - _start
-			if d.length() < DEADZONE or _hit == null or not is_instance_valid(_hit):
+			if d.length() < DEADZONE or _chain.is_empty():
 				return
 			_axis = 0 if absf(d.x) > absf(d.y) else 1
-			_scroll = scroll_for(_hit, _axis)
+			# 누른 뒤 목록을 다시 그렸어도(처치·자원 변화로 창이 새로 그림 — 2026-10-14 "거래소 드래그") 누른 순간의 목록으로 굴린다
+			_scroll = scroll_for(_hit, _axis) if _hit != null and is_instance_valid(_hit) and _hit.is_inside_tree() else _pick(_chain, _axis)
 			if _scroll == null:
 				_hit = null  # 이 누름은 스크롤과 무관(카메라 팬 등) — 다시 찾지 않는다
+				_chain = []
 				return
+			_dragged = true
 			_scroll.propagate_notification(Control.NOTIFICATION_SCROLL_BEGIN)  # 누른 버튼 취소(떼도 안 눌림)
 			_vel = 0.0
 			_last_us = Time.get_ticks_usec()
@@ -80,6 +88,30 @@ func _process(_delta: float) -> void:
 	_vel *= maxf(0.0, 1.0 - FRICTION * dt)
 	if absf(_vel) < MIN_FLING or is_equal_approx(bar.value, before):
 		_fling = null
+
+
+## 지금 누름(또는 방금 놓은 누름)이 목록 끌기였나. 누름·놓음에 반응하는 줄(gui_input)은 놓을 때 이걸 보고 끌기면 무시한다.
+func was_drag() -> bool:
+	return _dragged
+
+
+## c와 그 조상의 ScrollContainer(가까운 것 먼저).
+static func scroll_chain(c: Node) -> Array:
+	var out := []
+	while c != null:
+		if c is ScrollContainer:
+			out.append(c)
+		c = c.get_parent()
+	return out
+
+
+static func _pick(chain: Array, axis: int) -> ScrollContainer:
+	for sc in chain:
+		if is_instance_valid(sc):
+			var r := scroll_for(sc, axis)
+			if r == sc:
+				return r
+	return null
 
 
 static func _bar(sc: ScrollContainer, axis: int) -> ScrollBar:

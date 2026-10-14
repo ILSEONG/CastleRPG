@@ -129,7 +129,7 @@ func _ready() -> void:
 	content.add_child(footer)
 	_build_confirm()
 	_fit_sheet()
-	Economy.changed.connect(_on_state)
+	Economy.changed.connect(_on_wallet)  # 처치마다 골드가 바뀐다 — 목록을 다시 그리지 않고 보유 줄만(다시 그리면 끌던 목록이 끊겼다, 2026-10-14)
 	Economy.items_changed.connect(_on_state)
 	Economy.market_changed.connect(_on_state)
 
@@ -193,6 +193,11 @@ func fetch_mine() -> void:
 		if d.get("mine") is Array:
 			Economy.market = {"rules": d.get("rules", {}), "mine": d.mine}
 			Economy.market_changed.emit())
+
+
+func _on_wallet() -> void:
+	if visible and wallet_label != null:
+		wallet_label.text = "보유  골드 %s · 다이아 %s" % [UiKit.commas(Economy.gold), UiKit.commas(Economy.diamonds)]
 
 
 func _on_state() -> void:
@@ -465,7 +470,9 @@ func _build_sell() -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		row.gui_input.connect(func(e: InputEvent):
 			var mb := e as InputEventMouseButton
-			if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			# 놓을 때 고른다(누르는 순간 고르면 끌어서 목록을 굴리려던 손가락이 장비를 고르고 목록을 다시 그렸다 — 2026-10-14)
+			if mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and not TouchScroll.was_drag() \
+					and Rect2(Vector2.ZERO, row.size).has_point(mb.position):
 				picked = 0 if picked == id else id
 				_rebuild())
 		buttons["pick:%d" % id] = row

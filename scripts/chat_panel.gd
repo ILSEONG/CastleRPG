@@ -354,8 +354,14 @@ func _rebuild() -> void:
 		stamp += int(m.id) * 31 + (17 if m.get("local", false) else 0)
 	if stamp == _shown:
 		return
+	# 맨 아래로 따라갈지: 새로 열었거나 탭을 바꿨거나(_shown -1), 맨 아래 근처를 보고 있었거나, 내가 보낸 줄. 위로 올려 옛 줄을 읽는 중
+	# (끄는 중 포함)에는 남의 새 줄이 와도 그 자리에 둔다(2026-10-14 스크롤 끌기 점검 — 읽던 자리가 맨 아래로 튀었다)
+	var bar := scroll.get_v_scroll_bar()
+	var follow: bool = _shown == -1 or bar.max_value - bar.page - bar.value < 120.0 \
+		or (not xs.is_empty() and xs[-1].get("local", false))
 	_shown = stamp
 	for c in list.get_children():
+		list.remove_child(c)  # 바로 빼야 옛 줄+새 줄이 한 프레임 겹쳐 높이가 튀지 않는다(읽던 자리가 유지된다)
 		c.queue_free()
 	if not Net.is_online():
 		list.add_child(_label("채팅은 서버에 접속했을 때 쓸 수 있습니다", 22, SUB))
@@ -364,7 +370,8 @@ func _rebuild() -> void:
 		list.add_child(_label("길드원에게 첫 인사를 남겨 보세요!" if tab == "guild" else "아직 메시지가 없습니다", 22, SUB))
 	for m in xs:
 		list.add_child(_line(m))
-	_scroll_end()  # 새 줄이 오면 맨 아래로
+	if follow:
+		_scroll_end()  # 새 줄이 오면 맨 아래로(맨 아래를 보고 있을 때만)
 
 
 func _scroll_end() -> void:

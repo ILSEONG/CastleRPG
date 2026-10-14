@@ -289,8 +289,7 @@ func _refresh() -> void:
 		var r: Dictionary = rows[id]
 		var why := ""
 		var color := UiKit.AMBER
-		for c in r.costs.get_children():
-			c.queue_free()
+		var cost_sig := ""  # 비용 칸 지문 — 바뀔 때만 다시 만든다(처치마다 다시 만들어 끌던 카드 줄이 깜빡였다, 2026-10-14)
 		if Economy.is_built(id):
 			r.status.text = "Lv %d" % Economy.building_level(id)
 			r.action_label.text = MOVE_TEXT
@@ -303,6 +302,16 @@ func _refresh() -> void:
 			r.status.text = "미건설 · " + UiKit.duration(Economy.upgrade_sec(id))
 			r.action_label.text = BUILD_TEXT
 			var cost := Economy.upgrade_cost(id)
+			for k in GameData.BUILD_RES:
+				var need := int(cost.get(k, 0))
+				if need > 0:
+					cost_sig += "%s:%d:%s;" % [k, need, int(Economy.res.get(k, 0)) < need]
+		if cost_sig != str(r.get("cost_sig", "-")):
+			r.cost_sig = cost_sig
+			for c in r.costs.get_children():
+				r.costs.remove_child(c)
+				c.queue_free()
+			var cost := Economy.upgrade_cost(id) if cost_sig != "" else {}
 			for k in GameData.BUILD_RES:
 				var need := int(cost.get(k, 0))
 				if need <= 0:
@@ -318,6 +327,7 @@ func _refresh() -> void:
 				cell.add_child(icon)
 				cell.add_child(_label(UiKit.commas(need), 15, RED if int(Economy.res.get(k, 0)) < need else HudScript.INK))
 				r.costs.add_child(cell)
+		if not Economy.is_built(id) and not Economy.is_placed(id):
 			if Tutorial.build_locked(id):
 				why = Tutorial.build_lock_text(id)
 			else:
@@ -345,6 +355,8 @@ func _refresh() -> void:
 		r.card.self_modulate = Color.WHITE
 		order.append([_rank(id, why, locked), order.size(), id])
 	order.sort()
+	if TouchScroll._press and _list.get_child_count() > 0:  # 손가락이 카드 줄을 끄는 중엔 순서를 바꾸지 않는다(카드가 손가락 밑에서 자리를 바꿨다) — 다음 갱신에
+		return
 	for k in order.size():
 		_list.move_child(rows[order[k][2]].card, k)
 
