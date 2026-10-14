@@ -1,7 +1,7 @@
 extends Node
 ## 황금 고블린 체크 + 화면(개발용, 오프라인): 성 화면에서 감독이 고블린을 내보내고(나오는 간격 5~10분),
 ## 1) 성 밖 고리를 돌아다니고 성벽 안으로는 안 들어간다, 2) 속도 = 나온 영웅 평균 × 0.85, 3) 맞으면 친 영웅 반대쪽으로 달아난다,
-## 4) 잡으면 골드(방치 15분 몫)가 오르고 다음 고블린은 잡힌 때부터 5~10분 뒤, 5) HP = 졸개 × 15, 시간이 지나도 사라지지 않고 나와 있는 동안 새로 안 나온다. 화면이 필요하다:
+## 4) 잡으면 골드(방치 15분 몫)가 오르고 다음 고블린은 잡힌 때부터 5~10분 뒤, 5) HP = 졸개 × 15, 나와 있는 동안 새로 안 나오고, 2분 안에 못 잡으면 달아나 사라진다(다음은 그때부터 5~10분 뒤). 화면이 필요하다:
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/goblin_check.tscn -- --out=/tmp/goblin
 ## --movie면 체크 대신 자막을 단 시연(영상용 — --write-movie와 함께). 마지막 줄이 GOBLIN CHECK PASSED(실패면 종료 코드 1).
 
@@ -102,14 +102,29 @@ func _ready() -> void:
 	var st: Dictionary = GameData.stage(GameState.stage)
 	var want_hp := float(GameData.monster("grunt").hp) * float(st.hp_mult) * 15.0
 	_check(absf(g2.hp_max - want_hp) < 0.01, "HP = grunt × 15", "%.0f vs %.0f" % [g2.hp_max, want_hp])
-	# 사라지지 않는다 + 나와 있는 동안 새로 안 나온다
+	# 나와 있는 동안 새로 안 나온다 + 2분이 지나면 바깥으로 달아나 사라진다
 	g2.hp = 1e12
+	var gone := [false]
+	g2.escaped.connect(func(): gone[0] = true)
 	Director.next_at = 0.0  # 등장 시각이 지나도
 	Engine.time_scale = 4.0
-	await get_tree().create_timer(30.0, true, false, true).timeout  # 게임 시간 120초(예전 수명 90초보다 길게)
-	Engine.time_scale = 1.0
-	_check(is_instance_valid(g2) and g2.is_alive() and _dir.goblin == g2, "still there after 120 s (no escape)", "")
+	await get_tree().create_timer(25.0, true, false, true).timeout  # 게임 시간 100초
+	_check(is_instance_valid(g2) and g2.is_alive() and not gone[0], "still there at 100 s", "")
 	_check(get_tree().get_nodes_in_group("gold_goblin").size() == 1, "no second goblin while one is out", str(get_tree().get_nodes_in_group("gold_goblin").size()))
+	Director.next_at = 1e12
+	await _wait_cond(func(): return is_instance_valid(g2) and g2._leaving, 20.0)
+	var g2_hit := [false]
+	if is_instance_valid(g2):
+		_check(not g2.is_in_group("monsters"), "leaving goblin is no longer a target", "")
+		g2.died.connect(func(_g): g2_hit[0] = true)
+		g2.hp = 1.0
+		g2.take_damage(10.0, DamageNumbers.Kind.HIT)
+	await _wait_cond(func(): return gone[0], 20.0)
+	Engine.time_scale = 1.0
+	_check(gone[0] and not is_instance_valid(g2), "after 2 min → runs off and escapes", "")
+	_check(not g2_hit[0], "can't be caught once it starts leaving", "")
+	var wait2 := Director.next_at - Time.get_ticks_msec() / 1000.0
+	_check(wait2 >= Director.INTERVAL.x - 1.0 and wait2 <= Director.INTERVAL.y + 1.0, "next goblin 5–10 min after it escaped", "%.0f s" % wait2)
 	_finish()
 
 
@@ -175,6 +190,12 @@ func _snap(name_s: String) -> void:
 	var path := "%s_%s.png" % [_out, name_s]
 	get_viewport().get_texture().get_image().save_png(path)
 	print("saved ", path)
+
+
+func _wait_cond(cond: Callable, sec: float) -> void:
+	var end := Time.get_ticks_msec() + int(sec * 1000.0)
+	while not cond.call() and Time.get_ticks_msec() < end:
+		await get_tree().process_frame
 
 
 func _frames(n: int) -> void:
