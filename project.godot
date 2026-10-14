@@ -52,7 +52,7 @@ window/handheld/orientation=1
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/castle_notify/plugin.cfg", "res://addons/castle_billing/plugin.cfg")
+enabled=PackedStringArray("res://addons/castle_notify/plugin.cfg", "res://addons/castle_billing/plugin.cfg", "res://addons/castle_ads/plugin.cfg")
 
 [gui]
 

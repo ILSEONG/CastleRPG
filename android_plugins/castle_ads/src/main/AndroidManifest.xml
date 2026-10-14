@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Godot 플러그인 v2 등록: Engine.get_singleton("CastleAds") -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.CastleAds"
+            android:value="com.ilesong.castlerpg.ads.CastleAds" />
+        <!-- 광고 앱 ID(com.google.android.gms.ads.APPLICATION_ID)는 export_plugin.gd 가 scripts/ad_config.gd 값으로 넣는다. -->
+    </application>
+</manifest>
