@@ -1,0 +1,16 @@
+// CastleAds — Godot 4 안드로이드 플러그인(v2): Google 모바일 광고(AdMob) 보상형 광고 래퍼.
+// 빌드: android_plugins/castle_ads/build.sh → addons/castle_ads/bin/castle_ads-release.aar
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'castle_ads'

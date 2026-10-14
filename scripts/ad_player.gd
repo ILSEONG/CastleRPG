@@ -1,17 +1,22 @@
 extends Control
 ## 보상형 광고 재생(상점 [광고] 탭, 2026-10-12): play(done)으로 열고, 끝까지 보면 done.call()로 보상을 받게 한다. 중간에 [닫기]면 보상 없음.
-## 광고 네트워크(Google Play = AdMob, 앱인토스 = 토스 광고)가 아직 연결되지 않아 지금은 SECONDS초짜리 시험 화면이다 —
-## 연결하면 play()에서 그 SDK의 보상형 광고를 띄우고 보상 콜백에서 done.call()을 부르면 된다(서버는 body.ad = true를 받는다).
+## 안드로이드 APK: CastleAds 플러그인(AdMob 보상형 광고, ID는 scripts/ad_config.gd — 지금은 Google 테스트 ID)을 띄우고,
+## 끝까지 봐서 보상 콜백이 왔을 때만 done.call()(서버는 body.ad = true를 받는다). 불러오지 못하면 보상 없이 안내만 한다.
+## 플러그인이 없는 곳(PC, 앱인토스 — 토스 광고 미연결)은 SECONDS초짜리 시험 화면이다.
 ## 광고 제거(Economy.ad_free) 구매자는 이 창을 거치지 않는다(shop_panel._buy).
 
 const UiKit := preload("res://scripts/ui_kit.gd")
+const AdConfig := preload("res://scripts/ad_config.gd")
 
 const SECONDS := 5.0
 static var instant := false  # 테스트: 곧바로 끝까지 본 것으로
 
 var _done: Callable
 var _left := 0.0
+var _ads: Object  # CastleAds 싱글턴(안드로이드 APK에서만)
+var _waiting := false  # 실제 광고: 불러오는 중이거나 화면에 떠 있음
 var title_label: Label
+var sub_label: Label
 var time_label: Label
 var bar: ProgressBar
 var close_button: Button
@@ -34,7 +39,8 @@ func _ready() -> void:
 	add_child(col)
 	title_label = _label("광고", 40, Color.WHITE)
 	col.add_child(title_label)
-	col.add_child(_label("광고 연결 전 시험 화면입니다", 22, Color(1, 1, 1, 0.7)))
+	sub_label = _label("광고 연결 전 시험 화면입니다", 22, Color(1, 1, 1, 0.7))
+	col.add_child(sub_label)
 	bar = ProgressBar.new()
 	bar.custom_minimum_size = Vector2(0, 22)
 	bar.show_percentage = false
@@ -49,8 +55,14 @@ func _ready() -> void:
 	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close_button.add_theme_font_size_override("font_size", 24)
 	UiKit.apply_button(close_button, UiKit.STEEL, 12.0)
-	close_button.pressed.connect(func(): visible = false)
+	close_button.pressed.connect(_close)
 	col.add_child(close_button)
+	if Engine.has_singleton("CastleAds"):
+		_ads = Engine.get_singleton("CastleAds")
+		_ads.connect("ad_loaded", _on_ad_loaded)
+		_ads.connect("ad_closed", _on_ad_closed)
+		_ads.initialize()
+		_ads.load(AdConfig.ANDROID_REWARDED_ID)  # 미리 불러 두면 누르자마자 뜬다
 
 
 ## 광고를 띄운다. 끝까지 보면 done.call().
@@ -61,13 +73,53 @@ func play(done: Callable) -> void:
 		done.call()
 		return
 	_done = done
+	if _ads != null:
+		_play_real()
+		return
 	_left = SECONDS
 	_tick()
 	visible = true
 
 
+## 실제 광고: 불러 둔 게 있으면 곧바로 띄우고, 없으면 "불러오는 중" 화면에서 기다린다.
+func _play_real() -> void:
+	_waiting = true
+	sub_label.text = "광고를 불러오는 중입니다"
+	time_label.text = "끝까지 보면 보상을 받습니다"
+	bar.visible = false
+	visible = true
+	if _ads.isLoaded():
+		_ads.show()
+	else:
+		_ads.load(AdConfig.ANDROID_REWARDED_ID)
+
+
+func _on_ad_loaded(ok: bool, _error: String) -> void:
+	if not _waiting:
+		return  # 미리 불러 두기만 한 것
+	if ok:
+		_ads.show()
+		return
+	_waiting = false
+	sub_label.text = "광고를 불러오지 못했습니다"
+	time_label.text = "잠시 후 다시 시도하세요"
+
+
+func _on_ad_closed(earned: bool) -> void:
+	_waiting = false
+	visible = false
+	_ads.load(AdConfig.ANDROID_REWARDED_ID)  # 다음 광고를 미리 불러 둔다
+	if earned and _done.is_valid():
+		_done.call()
+
+
+func _close() -> void:
+	_waiting = false
+	visible = false
+
+
 func _process(delta: float) -> void:
-	if not visible:
+	if not visible or _ads != null:
 		return
 	_left -= delta
 	if _left <= 0.0:
