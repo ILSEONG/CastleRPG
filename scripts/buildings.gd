@@ -36,12 +36,14 @@ var _built_now := {}  # 방금 공터에서 다 지은 건물 id(building_done �
 var lots := {}  # 건물 id → 부지 {mi(메시), body(탭 판정체), center, size, full, lot(지금 공터로 보이는가), cell(지금 칸, 숨김이면 null)}
 var hidden := {}  # 자리를 안 잡은 공터 id → true(성 안에 안 보인다 — 이름표도 없다)
 var _scaffolds: Array = []
+var _keep_look := 0  # 성채 메시의 성 모습 단계(GameData.castle_look) — 넘으면 성채 메시를 다시 만든다(_sync_lots)
 ## 자연물·산 MultiMesh마다 {mm, recipe(TownKit 레시피), idx(레시피 안 변형 번호), state(만들기 전 rng 상태), base(기본 메시)}.
 ## seasons.gd(개정 22)가 같은 rng 상태 + 계절 팔레트로 다시 만든 메시를 갈아 끼운다.
 var season_slots: Array = []
 
 
 func _ready() -> void:
+	_keep_look = GameData.castle_look(Economy.building_level(GameData.KEEP))
 	for b in Balance.entries():  # 새 건물·자원 건물 n번째 채 포함(자리를 안 잡은 공터는 숨김)
 		_place_building(b)
 	_add_gate_sites()
@@ -58,7 +60,7 @@ func _place_building(b: Dictionary) -> void:
 	var mi := MeshInstance3D.new()
 	mi.material_override = Art.lowpoly_vc_material()
 	add_child(mi)
-	lots[b.id] = {"mi": mi, "body": null, "center": Vector3.ZERO, "size": b.size, "full": TownKit.building(b.id), "lot": null, "cell": null}
+	lots[b.id] = {"mi": mi, "body": null, "center": Vector3.ZERO, "size": b.size, "full": TownKit.building(b.id, _keep_look), "lot": null, "cell": null}
 	_show_lot(b.id)
 
 
@@ -103,6 +105,11 @@ func _show_lot(id: String) -> void:
 
 
 func _sync_lots() -> void:
+	var lk := GameData.castle_look(Economy.building_level(GameData.KEEP))
+	if lk != _keep_look and lots.has(GameData.KEEP):
+		_keep_look = lk
+		lots[GameData.KEEP].full = TownKit.building(GameData.KEEP, lk)
+		lots[GameData.KEEP].lot = null  # 다시 그리기(_show_lot이 같은 자리·모습이면 건너뛴다)
 	for id in lots:
 		_show_lot(id)
 

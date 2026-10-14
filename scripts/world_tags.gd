@@ -238,9 +238,10 @@ func _draw() -> void:
 			pts.append_array(xf * t.pts)
 			cols.append_array(t.cols)
 			segs.append_array(xf * t.segs)
-	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), pts, cols)
-	draw_multiline(segs, EDGE, 1.5, true)
-	draw_calls += 2
+	if not pts.is_empty():  # 화면 안 이름표가 방향 글자뿐이면 알약이 없다(빈 배열이면 엔진 오류)
+		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), pts, cols)
+		draw_multiline(segs, EDGE, 1.5, true)
+		draw_calls += 2
 	for t in tags:
 		if not rects.has(t.id) or t.name == "":
 			continue
