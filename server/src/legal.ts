@@ -1,11 +1,12 @@
 // 이용약관·개인정보처리방침·계정 삭제 안내(2026-10-12, Google Play·앱인토스 등록용 공개 주소). 서버가 HTML로 준다:
 //   /legal/terms · /legal/privacy · /legal/account-deletion  (예: https://castlerpg-api.onrender.com/legal/privacy)
-// 앱은 scripts/support_links.gd의 같은 주소로 연다. 운영자 이름·연락 이메일은 환경 변수(LEGAL_OPERATOR, LEGAL_EMAIL)로 넣는다
-// (저장소에 개인 연락처를 두지 않는다). 비어 있으면 "등록 예정"으로 보인다 — 스토어 심사 전에 반드시 채운다.
+// 앱은 scripts/support_links.gd의 같은 주소로 연다. 운영자(상호)·사업자등록번호는 main.ts 기본값(일성게임즈, 2026-10-14 사장님이 알려 줌),
+// 환경 변수 LEGAL_OPERATOR·LEGAL_BIZ_NO·LEGAL_EMAIL로 바꿀 수 있다(저장소에 개인 연락처를 두지 않는다). 메일이 비면 "등록 예정".
 
 export interface LegalInfo {
   operator: string // 운영자(개인 이름 또는 상호)
   email: string // 문의·개인정보 보호책임자 연락처
+  bizNo?: string // 사업자등록번호
 }
 
 export const EFFECTIVE = '2026년 10월 12일'
@@ -16,6 +17,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function who(info: LegalInfo) {
   return {
     operator: esc(info.operator || `${GAME} 운영자`),
+    biz: info.bizNo ? `<br>사업자등록번호: ${esc(info.bizNo)}` : '',
     email: info.email ? `<a href="mailto:${esc(info.email)}">${esc(info.email)}</a>` : '(연락처 등록 예정)',
   }
 }
@@ -74,7 +76,7 @@ export function termsPage(info: LegalInfo): string {
 <h2>제11조 (분쟁 해결과 관할)</h2>
 <p>게임 이용과 관련한 분쟁은 운영자와 이용자가 성실히 협의해 해결하며, 소송이 필요하면 민사소송법에 따른 관할 법원으로 합니다. 이 약관은 대한민국 법을 따릅니다.</p>
 <h2>문의</h2>
-<p>운영자: ${w.operator}<br>이메일: ${w.email}</p>`)
+<p>운영자(상호): ${w.operator}${w.biz}<br>이메일: ${w.email}</p>`)
 }
 
 export function privacyPage(info: LegalInfo): string {
@@ -125,7 +127,7 @@ export function privacyPage(info: LegalInfo): string {
 <h2>10. 만 14세 미만 아동</h2>
 <p>게임은 만 14세 미만 아동의 개인정보를 일부러 수집하지 않습니다. 만 14세 미만 아동이 가입한 사실을 알게 되면 법정대리인의 동의를 받거나 그 정보를 지웁니다.</p>
 <h2>11. 개인정보 보호책임자</h2>
-<p>개인정보 보호책임자: ${w.operator}<br>이메일: ${w.email}</p>
+<p>개인정보처리자(상호): ${w.operator}${w.biz}<br>개인정보 보호책임자: ${w.operator}<br>이메일: ${w.email}</p>
 <p>개인정보 침해 신고·상담: 개인정보침해신고센터(privacy.kisa.or.kr, 국번 없이 118), 개인정보 분쟁조정위원회(www.kopico.go.kr, 1833-6972), 대검찰청 사이버수사과(www.spo.go.kr, 1301), 경찰청 사이버수사국(ecrm.police.go.kr, 182)</p>
 <h2>12. 방침의 변경</h2>
 <p>이 방침을 바꾸면 시행 7일 전부터 이 페이지와 게임 안에 알립니다.</p>`)
@@ -145,5 +147,5 @@ export function deletionPage(info: LegalInfo): string {
 <h2>지워지는 것과 남는 것</h2>
 <ul><li>지워지는 것: 계정 식별 정보(로그인 연결, 이메일, 기기 식별값), 게임 진행·재화·아이템, 친구·길드, 채팅 메시지, 랭킹 기록</li>
 <li>법령에 따라 남는 것: 결제 기록(주문 번호·상품·시각) 5년, 채팅 신고 기록 1년, 접속 기록 3개월. 기간이 끝나면 지웁니다.</li></ul>
-<p>운영자: ${w.operator}</p>`)
+<p>운영자(상호): ${w.operator}${w.biz}</p>`)
 }
