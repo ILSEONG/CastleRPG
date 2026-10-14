@@ -42,7 +42,7 @@ const SOLDIER_GAP := 1.4
 const TARGET_SEC := {"duel": 40.0, "total": 55.0}
 const TTK_CALIB := {"duel": 1.2, "total": 1.35}
 const HP_MULT_MAX := 30.0
-## 처치 알림·결정타(2026-10-07 전투 재미): 첫 처치 "퍼스트 블러드!", 그 밖엔 "○○ 처치"(연속 처치 알림은 없음 — 사용자 2026-10-07 "더블~펜타 킬은 하지마")(초록 = 우리가, 빨강 = 우리 영웅이 쓰러짐). 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과.
+## 처치 알림·결정타(2026-10-07 전투 재미): 처치 멘트는 kill_line(아래)(연속 처치 알림은 없음 — 사용자 2026-10-07 "더블~펜타 킬은 하지마")(초록 = 우리가, 빨강 = 우리 영웅이 쓰러짐). 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과.
 const KO_SEC := 0.45
 const GOOD := Color(0.55, 1.0, 0.55)
 const BAD := Color(1.0, 0.5, 0.45)
@@ -271,7 +271,7 @@ func _process(delta: float) -> void:
 				if rig != null:
 					rig.slowmo()
 				if hud != null:
-					hud.flash("승리!" if _ko[0] else "패배", 1.6, GOOD if _ko[0] else BAD)
+					hud.flash("결정타! 승리!" if _ko[0] else "전멸… 패배", 1.6, GOOD if _ko[0] else BAD)
 			elif clock >= duration:
 				_end(team_hp(0) > team_hp(1), "time")
 
@@ -309,12 +309,34 @@ func _on_fell(u) -> void:
 		return  # 마지막 처치는 결정타 띠가 맡는다
 	var killer: int = 1 - int(u.team)
 	_kills += 1
-	var name := str(u.def.get("name", ""))
-	var text := "%s 처치" % name if killer == 0 else "%s 쓰러짐" % name
-	if _kills == 1:
-		text = "퍼스트 블러드! " + text
+	var text := kill_line(str(u.def.get("name", "")), killer == 0, _kills == 1, alive(u.team))
 	if hud != null:
 		hud.flash(text, 1.4, GOOD if killer == 0 else BAD)
+
+
+## 처치 멘트(2026-10-14 사용자 "처치 멘트 좀 더 멋있게"): 같은 줄이 연달아 나오지 않게 무작위. 첫 처치는 선제 멘트,
+## 상대가 한 명 남으면 끝을 알리는 줄을 덧붙인다(연속 처치 집계는 여전히 없음).
+const KILL_LINES := ["%s 격파!", "일격필살! %s", "%s 제압!", "%s 쓰러뜨림!", "%s 섬멸!"]
+const FALL_LINES := ["%s 전사…", "%s 쓰러짐!", "%s 전투 불능!", "%s, 무릎 꿇다"]
+const FIRST_KILL := "선제 일격!\n%s 격파"
+const FIRST_FALL := "선제 일격 허용…\n%s 전사"
+var _last_line := -1
+
+
+func kill_line(name: String, ours: bool, first: bool, left: int) -> String:
+	var text: String
+	if first:
+		text = (FIRST_KILL if ours else FIRST_FALL) % name
+	else:
+		var pool: Array = KILL_LINES if ours else FALL_LINES
+		var i := randi() % pool.size()
+		if i == _last_line:
+			i = (i + 1) % pool.size()
+		_last_line = i
+		text = pool[i] % name
+	if left == 1:
+		text += "\n적은 단 한 명!" if ours else "\n최후의 한 명! 버텨라!"
+	return text
 
 
 func _end(win: bool, reason: String) -> void:

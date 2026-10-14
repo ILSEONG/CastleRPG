@@ -179,9 +179,13 @@ func _build_world() -> void:
 	var research_panel = ResearchPanelScript.new()  # 연구 창(개정 24): 연구소 건물 창 [연구]·플라스크 말풍선
 	add_child(research_panel)
 	building_panel.research = research_panel
+	research_panel.building_panel = building_panel  # [연구소 레벨업 ›](사용자 2026-10-14)
+	building_panel.recruit = recruit
+	recruit.building_panel = building_panel
 	var dispatch_panel = preload("res://scripts/dispatch_panel.gd").new()  # 파견소 창(2026-10-13): 파견소 건물 창 [의뢰 보기]
 	add_child(dispatch_panel)
 	building_panel.dispatch = dispatch_panel
+	dispatch_panel.building_panel = building_panel
 	picker.dispatch = dispatch_panel
 	building_panel.goto_building.connect(func(bid): _tutorial_goto("building:" + bid))  # 선행 조건 줄 → 그 건물(사용자 2026-10-13)
 	picker.research = research_panel

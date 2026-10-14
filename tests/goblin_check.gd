@@ -1,7 +1,7 @@
 extends Node
 ## 황금 고블린 체크 + 화면(개발용, 오프라인): 성 화면에서 감독이 고블린을 내보내고(나오는 간격 5~10분),
 ## 1) 성 밖 고리를 돌아다니고 성벽 안으로는 안 들어간다, 2) 속도 = 나온 영웅 평균 × 0.85, 3) 맞으면 친 영웅 반대쪽으로 달아난다,
-## 4) 잡으면 골드(방치 15분 몫)가 오른다, 5) 시간이 다 되면 바깥으로 달아나 escaped. 화면이 필요하다:
+## 4) 잡으면 골드(방치 15분 몫)가 오르고 다음 고블린은 잡힌 때부터 5~10분 뒤, 5) HP = 졸개 × 15, 시간이 지나도 사라지지 않고 나와 있는 동안 새로 안 나온다. 화면이 필요하다:
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/goblin_check.tscn -- --out=/tmp/goblin
 ## --movie면 체크 대신 자막을 단 시연(영상용 — --write-movie와 함께). 마지막 줄이 GOBLIN CHECK PASSED(실패면 종료 코드 1).
 
@@ -10,6 +10,7 @@ const Director := preload("res://scripts/goblin_director.gd")
 const Formation := preload("res://scripts/formation.gd")
 const Balance := preload("res://scripts/balance.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
+const GameData := preload("res://scripts/game_data.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 var _out := "/tmp/goblin"
@@ -74,8 +75,6 @@ func _ready() -> void:
 	await _snap("1_wander")
 	# 맞으면 반대쪽으로: 가장 가까운 영웅을 고블린 바로 옆에 두고 친다
 	var h = heroes[0]
-	g._leaving = false
-	g._life = 999.0
 	g.global_position = _ring(0, 8.0)
 	h.global_position = g.global_position + Vector3(2.0, 0, 0)
 	h._target = g
@@ -96,16 +95,21 @@ func _ready() -> void:
 	await _snap("3_caught")
 	_check(Economy.gold_tenths - gold >= want and want > 0, "caught → idle gold 15 min", "%d (want %d)" % [Economy.gold_tenths - gold, want])
 	_check(_dir.goblin == null, "director cleared", "")
-	# 놓치기
+	var wait := Director.next_at - Time.get_ticks_msec() / 1000.0
+	_check(wait >= Director.INTERVAL.x - 1.0 and wait <= Director.INTERVAL.y + 1.0, "next goblin 5–10 min after the catch", "%.0f s" % wait)
+	# HP = 그 스테이지 졸개 × 15
 	var g2 = _dir.spawn()
-	var gone := [false]
-	g2.escaped.connect(func(): gone[0] = true)
+	var st: Dictionary = GameData.stage(GameState.stage)
+	var want_hp := float(GameData.monster("grunt").hp) * float(st.hp_mult) * 15.0
+	_check(absf(g2.hp_max - want_hp) < 0.01, "HP = grunt × 15", "%.0f vs %.0f" % [g2.hp_max, want_hp])
+	# 사라지지 않는다 + 나와 있는 동안 새로 안 나온다
 	g2.hp = 1e12
-	g2._life = 0.0
+	Director.next_at = 0.0  # 등장 시각이 지나도
 	Engine.time_scale = 4.0
-	await get_tree().create_timer(30.0, true, false, true).timeout
+	await get_tree().create_timer(30.0, true, false, true).timeout  # 게임 시간 120초(예전 수명 90초보다 길게)
 	Engine.time_scale = 1.0
-	_check(gone[0] and not is_instance_valid(g2), "time up → runs off and escapes", "")
+	_check(is_instance_valid(g2) and g2.is_alive() and _dir.goblin == g2, "still there after 120 s (no escape)", "")
+	_check(get_tree().get_nodes_in_group("gold_goblin").size() == 1, "no second goblin while one is out", str(get_tree().get_nodes_in_group("gold_goblin").size()))
 	_finish()
 
 
@@ -126,7 +130,7 @@ func _movie() -> void:
 	add_child(layer)
 	_say("황금 고블린: 5~10분마다 성 밖에 나타납니다")
 	var g = _dir.spawn()
-	g.hp *= 0.35  # 영상 길이에 맞게(잡히는 데 걸리는 시간만 줄인다)
+	g.hp *= 0.7  # 영상 길이에 맞게(잡히는 데 걸리는 시간만 줄인다)
 	g.hp_max = g.hp
 	g.global_position = _ring(2, 14.0)
 	_follow(g)

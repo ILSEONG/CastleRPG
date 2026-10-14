@@ -29,6 +29,7 @@ const BUILD_TEXT := "건설"  # 튜토리얼 공터
 const TRAIN_ICON_PX := 72.0
 const RESEARCH_TEXT := "연구"
 const DISPATCH_TEXT := "의뢰 보기"
+const RECRUIT_TEXT := "영웅 모집"
 const CANCEL_TEXT := "취소(50% 환불)"
 const FREE_TEXT := "무료 즉시 완료"  # 남은 시간 5분 이하(Economy.free_finish_sec)
 const SPEEDUP_TEXT := "가속"  # 2026-10-13: 가속 아이템 목록을 펼친다
@@ -62,10 +63,12 @@ var _press_ms := -100000
 var building_id := ""
 var research  # 연구 창(research_panel.gd, 개정 24). main이 넣는다
 var dispatch  # 파견소 창(dispatch_panel.gd, 2026-10-13). main이 넣는다
+var recruit  # 모집 창(recruit_panel.gd). main이 넣는다 — 주점 [영웅 모집](2026-10-14)
 var title_label: Label
 var desc_label: Label
 var research_button: Button  # 연구소만: [연구] → 연구 창
 var dispatch_button: Button  # 파견소만: [의뢰 보기] → 파견소 창
+var recruit_button: Button  # 주점만: [영웅 모집] → 모집 창
 var effects: VBoxContainer  # 효과 줄: HBox[지금(검정), → 다음(초록)]
 var reqs: VBoxContainer  # 선행 조건 줄 Label
 var cost_labels := {}  # 자원 id → 비용 숫자 Label(아이콘과 한 칸)
@@ -122,6 +125,10 @@ func _ready() -> void:
 	dispatch_button.custom_minimum_size = Vector2(0, 84)
 	dispatch_button.pressed.connect(open_dispatch)
 	content.add_child(dispatch_button)
+	recruit_button = _button(RECRUIT_TEXT, UiKit.GRADE_COLORS.SR, 32)
+	recruit_button.custom_minimum_size = Vector2(0, 84)
+	recruit_button.pressed.connect(open_recruit)
+	content.add_child(recruit_button)
 	_build_train_box()
 	effects = VBoxContainer.new()
 	content.add_child(effects)
@@ -209,6 +216,26 @@ func open_dispatch() -> void:
 	dispatch.open()
 
 
+## 주점 [영웅 모집]: 이 창을 닫고 모집 창을 연다.
+func open_recruit() -> void:
+	if recruit == null:
+		return
+	close()
+	recruit.open()
+
+
+## 기능 창(연구·모집·파견소)에서 건물 창으로 가는 버튼 글자(사용자 2026-10-14 "연구소 레벨업은 어떻게 해?").
+## 건설 중이면 남은 시간, 최대 레벨이면 "정보", 아니면 "Lv n → n+1 레벨업".
+static func levelup_text(id: String) -> String:
+	var name := GameData.building_name(id)
+	var lv := Economy.building_level(id)
+	if Economy.is_building(id):
+		return "%s 레벨업 중 · %s ›" % [name, UiKit.duration(Economy.build_left(Economy.time_now(), id))]
+	if lv >= int(GameData.building_def(id).get("max_level", 0)):
+		return "%s 정보 (최대 레벨) ›" % name
+	return "%s 레벨업 Lv %d → %d ›" % [name, lv, lv + 1]
+
+
 ## 연구소 [연구]: 이 창을 닫고 연구 창을 연다.
 func open_research() -> void:
 	if research == null:
@@ -242,6 +269,7 @@ func _refresh() -> void:
 	desc_label.text = DESC.get(GameData.type_of(id), "")
 	research_button.visible = id == GameData.LAB and not lot
 	dispatch_button.visible = GameData.type_of(id) == GameData.DISPATCH and not lot
+	recruit_button.visible = id == GameData.TAVERN and not lot and recruit != null
 	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
 	_clear(effects)
 	for row in (effect_lines(id, 1) if lot else []):
