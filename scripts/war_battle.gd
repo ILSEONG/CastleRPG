@@ -39,7 +39,8 @@ signal finished(result)
 signal command_sent(uid, pos)  # 꼭두각시 기기: 내 영웅 이동 명령(war_net이 방장에게)
 signal score_changed
 
-const SNAP_SEC := 0.1
+const SNAP_SEC := 0.2  # 2026-10-15 서버 전송량: 0.1 → 0.2(꼭두각시는 war_hero가 속도로 사이를 메운다)
+const SNAP_FULL_SEC := 3.0  # 바뀐 영웅만 보내다가 이만큼마다 한 장 전부(서버가 다시 켜져 마지막 장을 잃어도 새로 들어온 사람이 다 받게)
 const WALL_POSTS := [-1.0, 1.0, -4.5, 4.5, -6.5, 6.5, -8.5, 8.5, -10.5, 10.5]  # 원거리 수비 성벽 위 자리: 성문 가운데에서 옆 거리(성문 위 ±1부터, 문루 기둥 ±2.6 밖은 2 m씩)
 const BREACH_COLS := 5  # 근접 수비 성문 안쪽 자리: 성문마다 한 줄 5명(2 m 간격), 넘치면 안쪽으로 한 줄 더
 const BREACH_GAP := 2.0
@@ -76,6 +77,9 @@ var _def: Array = []
 var _respawn: Array = []  # [유닛, 남은 초]
 var _doors: Array = []
 var _snap_cd := 0.0
+var _sent_rows := {}  # 방장: uid 문자열 → 마지막으로 보낸 행
+var _sent_moved := {}  # 방장: 지난 장에서 바뀌었던 uid — 멈춘 다음 장에 한 번 더 보내 꼭두각시 속도를 0으로
+var _full_cd := 0.0
 var _leaving := false
 
 
@@ -613,6 +617,8 @@ func end_from_host() -> void:
 ## 역할 바꾸기: 꼭두각시 → 방장(이전 방장이 나감)이면 지금 상태에서 이어서 판단한다.
 func set_role(r: String) -> void:
 	role = r
+	_sent_rows = {}  # 방장이 되면 첫 장은 전부
+	_full_cd = 0.0
 	for u in _att + _def:
 		u.puppet = role == "puppet"
 		if not u.puppet:
@@ -635,6 +641,28 @@ func snapshot() -> Dictionary:
 		for u in _att:
 			lanes[str(u.uid)] = u.lane
 		out.l = lanes
+	return out
+
+
+## 방장이 실제로 보내는 장: 행은 바뀐 영웅(+ 지난 장에 바뀐 영웅)만, SNAP_FULL_SEC마다 전부. 서버(war_live.ts)가 행을 합쳐 둔다.
+func snapshot_delta() -> Dictionary:
+	var out := snapshot()
+	var full := _full_cd <= 0.0
+	if full:
+		_full_cd = SNAP_FULL_SEC
+	_full_cd -= SNAP_SEC
+	var rows := {}
+	var moved := {}
+	for k in out.u:
+		var row: Array = out.u[k]
+		var changed: bool = _sent_rows.get(k) != row
+		if full or changed or _sent_moved.has(k):
+			rows[k] = row
+		if changed:
+			moved[k] = true
+		_sent_rows[k] = row
+	_sent_moved = moved
+	out.u = rows
 	return out
 
 

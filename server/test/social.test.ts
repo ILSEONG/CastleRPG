@@ -154,6 +154,36 @@ test('취소 → 401 login_denied, 제공자 오류 → 콜백 502 + 401 login_f
   }
 })
 
+test('안드로이드 브라우저: 콜백이 끝나면 게임 앱 링크(castlerpg://oauth)로 302 — 못 열면 결과 안내 페이지, 다른 기기는 안내 페이지 그대로', async () => {
+  const P = fakeProviders()
+  const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })
+  const UA = { 'user-agent': 'Mozilla/5.0 (Linux; Android 14; SM-S918N) AppleWebKit/537.36 Chrome/129.0 Mobile Safari/537.36' }
+  const androidCallback = (q: Record<string, string>) => S.req('GET', `/v1/auth/google/callback?${new URLSearchParams(q)}`, { headers: UA })
+  const intent = (r: string) => `intent://oauth#Intent;scheme=castlerpg;package=com.ilesong.castlerpg;S.browser_fallback_url=${encodeURIComponent(`https://api.example.com/v1/auth/result?r=${r}`)};end`
+  try {
+    S.clock.t = T0
+    const a = await begin(S, 'google')
+    const ok = await androidCallback({ code: 'uid:AND-1', state: a.state })
+    assert.deepEqual([ok.status, ok.headers.get('location')], [302, intent('ok')])
+    const p = await S.req('POST', '/v1/auth/oauth/poll', { body: { state: a.state, verifier: a.verifier } })
+    assert.equal(p.status, 200) // 앱은 돌아오자마자 poll로 결과를 받는다
+    const b = await begin(S, 'google')
+    const no = await androidCallback({ error: 'access_denied', state: b.state })
+    assert.deepEqual([no.status, no.headers.get('location')], [302, intent('denied')])
+    const bad = await androidCallback({ code: 'uid:x', state: 'f'.repeat(64) })
+    assert.equal(bad.status, 400) // 모르는 진행 — 앱으로 보내지 않고 안내만
+    const page = await S.req('GET', '/v1/auth/result?r=ok', { headers: UA })
+    assert.ok(page.text.includes('로그인되었습니다') && page.text.includes('게임으로 돌아가기') && page.text.includes('intent://oauth#Intent;scheme=castlerpg;'))
+    const fail = await S.req('GET', '/v1/auth/result?r=already_linked')
+    assert.ok(fail.text.includes('로그인하지 못했습니다') && !fail.text.includes('게임으로 돌아가기'))
+    const c = await begin(S, 'google')
+    const pc = await callback(S, 'google', { code: 'uid:PC-1', state: c.state })
+    assert.deepEqual([pc.status, pc.headers.get('location')], [200, null])
+  } finally {
+    await S.close()
+  }
+})
+
 test('자동 로그인 세션: 같은 플레이어 토큰, 로그아웃하면 401 bad_session', async () => {
   const P = fakeProviders()
   const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })

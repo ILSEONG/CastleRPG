@@ -254,12 +254,14 @@ func _case_puppet() -> void:
 	var host = _battle(plan, "host")
 	var pup = _battle(plan, "puppet")
 	pup.visible = false
-	await _run(host, 6.0, 0.5, func():
-		pup.apply_snapshot(host.snapshot())
+	var sent := [0, 0]  # 실제로 보낸 행 수, 전부 보냈다면의 행 수
+	await _run(host, 7.0, host.SNAP_SEC, func():  # 실제처럼: SNAP_SEC마다 바뀐 영웅만(snapshot_delta)
+		var s: Dictionary = host.snapshot_delta()
+		sent[0] += s.u.size()
+		sent[1] += host.units_by_uid.size()
+		pup.apply_snapshot(s)
 		return false)
-	await _run(host, 1.0, 0.1, func():
-		pup.apply_snapshot(host.snapshot())
-		return false)
+	_check(sent[0] < sent[1], "delta snaps send fewer hero rows than full snaps (%d of %d)" % [sent[0], sent[1]])
 	var worst := 0.0
 	for uid in host.units_by_uid:
 		var h = host.units_by_uid[uid]

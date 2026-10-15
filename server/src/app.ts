@@ -1,4 +1,5 @@
 // Hono 앱 팩토리. 시계(now)·쿼리 함수를 주입받아 테스트에서 포트 없이 app.request()로 돌린다.
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import type { Context, Next } from 'hono'
@@ -206,6 +207,7 @@ interface Change {
   sellItems?: number[] // 지울 장비 id
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   equips?: { hero_id: string; slot: string; item_id: number }[] // 한 번에 여러 부위 장착(자동착용) — 부위·장비는 서로 다르다
+  unequipAll?: string // 그 영웅의 장비를 모든 부위에서 뺀다(전체 해제)
   diamonds?: number // 다이아 증감(개정 23)
   diaTickets?: number // 다이아 모집권 증감(모집권 던전)
   gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
@@ -572,7 +574,20 @@ export function createApp(opts: AppOptions) {
 
   // 플레이어 상태 읽기. 플레이어 상태를 읽거나 쓰는 모든 요청이 여기를 지난다 — 다 지은 건물·끝난 연구가 있으면 먼저 완료하고
   // (게으른 완료, 개정 12·24) 다시 읽는다. 빠진 자원·건물 행은 한 번 채우고 다시 읽는다.
+  // /v1/boot은 창 데이터 GET 여러 개를 한꺼번에 부른다 — 각자 플레이어를 읽으면 로그인마다 같은 큰 쿼리가 6번 돈다.
+  // boot 안의 하위 요청은 첫 읽기만 한 번 읽은 것을 복사해 쓴다(다시 읽기·충돌 재시도는 늘 DB에서).
+  const bootShare = new AsyncLocalStorage<{ id: string; used: boolean; shared: { p: Promise<Player> | null } }>()
   async function loadPlayer(id: string, game: Game, now: number): Promise<Player> {
+    const b = bootShare.getStore()
+    if (b && !b.used && b.id === id) {
+      b.used = true
+      b.shared.p ??= readPlayer(id, game, now)
+      return structuredClone(await b.shared.p)
+    }
+    return readPlayer(id, game, now)
+  }
+
+  async function readPlayer(id: string, game: Game, now: number): Promise<Player> {
     let ensured = false
     let ensuredDungeons = false
     for (let i = 0; i < MAX_ATTEMPTS + 3; i++) { // 행 채우기(자원·건물, 던전)·건설 완료·연구 완료가 한 번씩 다시 읽게 한다
@@ -1064,6 +1079,9 @@ export function createApp(opts: AppOptions) {
           on conflict (player_id, hero_id, slot) do update set item_id = excluded.item_id returning 1)`)
       }
     }
+    if (ch.unequipAll) {
+      ctes.push(`equa as (delete from player_equipment where player_id = ${sid} and hero_id = ${p(ch.unequipAll)} returning 1)`)
+    }
     ;(ch.equips ?? []).forEach((e, i) => {
       const hero = p(e.hero_id)
       const slot = p(e.slot)
@@ -1270,7 +1288,12 @@ export function createApp(opts: AppOptions) {
     const p = c.req.param('provider')
     const state = c.req.query('state') ?? ''
     const code = c.req.query('code') ?? ''
-    const page = (ok: boolean, status: number) => c.html(O.resultPage(ok), status as any)
+    const android = O.isAndroid(c.req.header('user-agent'))
+    const page = (ok: boolean, status: number) => c.html(O.resultPage(ok, undefined, android), status as any)
+    // 안드로이드 앱에서 연 로그인은 끝나면 게임 앱으로 곧장 돌려보낸다(앱이 결과를 바로 받는다). 앱을 못 열면 결과 안내 페이지로.
+    const done = (r: string, status: number) => android
+      ? c.redirect(O.appReturnUrl(`${oauth.redirectBase}/v1/auth/result?r=${r}`), 302)
+      : r === 'ok' ? page(true, status) : c.html(O.resultPage(false, LINK_ERRORS[r]), status as any)
     if (!O.isProvider(p) || !HEX64_RE.test(state)) return page(false, 400)
     const now = clock()
     const [row] = await query(`select provider, link_player, link_only, extract(epoch from created_at)::float8 as created_at, player_id, error
@@ -1278,7 +1301,7 @@ export function createApp(opts: AppOptions) {
     if (!row || row.provider !== p || row.player_id || row.error || now - Number(row.created_at) > OAUTH_TTL) return page(false, 400)
     const fail = async (error: string, status: number) => {
       await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, error])
-      return page(false, status)
+      return done(error, status)
     }
     if (c.req.query('error') || !code || !O.enabledProviders(oauth).includes(p)) return fail('denied', 200) // 사용자가 취소·거부
     let uid: string
@@ -1292,9 +1315,15 @@ export function createApp(opts: AppOptions) {
     const err = await finishLogin(state, row, p, uid, email, now)
     if (err) {
       await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, err])
-      return c.html(O.resultPage(false, LINK_ERRORS[err]), 200)
+      return done(err, 200)
     }
-    return page(true, 200)
+    return done('ok', 200)
+  })
+
+  // 앱으로 못 돌아간 브라우저가 보는 결과 안내(appReturnUrl의 fallback). r = ok 또는 오류 코드.
+  app.get('/v1/auth/result', (c) => {
+    const r = c.req.query('r') ?? ''
+    return c.html(O.resultPage(r === 'ok', LINK_ERRORS[r], O.isAndroid(c.req.header('user-agent'))))
   })
 
   // 제공자 확인을 마친 로그인을 끝낸다: 보통 로그인은 그 소셜 계정의 플레이어(없으면 기기 게스트를 잇거나 새로), 연동(link_only)은 요청한
@@ -3002,6 +3031,15 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // 전체 해제: {hero_id} — 그 영웅이 낀 장비를 모든 부위에서 뺀다(보관함으로). 낀 게 없으면 그대로 200(멱등).
+  app.post('/v1/equip/clear', auth, async (c) => {
+    const heroId = strField(await body(c), 'hero_id')
+    return mutate(c, (p, g) => {
+      if (!g.heroes.some((h) => h.id === heroId) || !Object.hasOwn(p.heroes, heroId)) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      return p.equipment.some((e) => e.hero_id === heroId) ? { change: { unequipAll: heroId }, reload: true } : {}
+    })
+  })
+
   // 장비 판매(스펙 §5): {item_ids: [...]}(1..1000개, 겹치면 400). 남의·없는 장비 404 unknown_item, 장착 중이면 409 equipped(하나라도 그러면
   // 아무것도 안 판다). 값 = round(equip_sell_base × 등급 배율)의 합. 장비 삭제·골드·economy_log item_sell은 version 가드 한 문장.
   app.post('/v1/items/sell', auth, async (c) => {
@@ -3503,9 +3541,10 @@ export function createApp(opts: AppOptions) {
   }
   app.get('/v1/boot', auth, async (c) => {
     const headers = { authorization: c.req.header('authorization') ?? '' }
+    const shared = { p: null }
     const parts = await Promise.all(Object.entries(BOOT_PARTS).map(async ([k, path]) => {
       try {
-        const r = await app.request(path, { headers })
+        const r = await bootShare.run({ id: c.get('playerId') as string, used: false, shared }, () => app.request(path, { headers }))
         return [k, r.ok ? await r.json() : null] as const
       } catch {
         return [k, null] as const

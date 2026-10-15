@@ -2700,6 +2700,18 @@ func _auto_equip_ui(hwin) -> void:
 		"(D) [장비 자동착용] puts on the best bag item per slot (N hat -> LR hat), skips other weapon kinds and items worn by others, then turns off",
 		"eq=%s want=%s ella=%s" % [eq, want, Economy.equipment.get("ella", {})])
 	_check(Economy.auto_equip("hans") == 0, "(D) a second auto-equip changes nothing", "")
+	# [전체 해제]: [장비 자동착용] 바로 왼쪽 — 한스 장비만 모두 빼고(엘라 장갑은 그대로) 꺼진다
+	var ub: Rect2 = hwin.unequip_all_button.get_global_rect()
+	var worn: int = Economy.equipment.get("hans", {}).size()
+	_check(hwin.big_card.get_global_rect().encloses(ub) and not ub.intersects(hwin.auto_equip_button.get_global_rect()) and ub.end.x <= hwin.auto_equip_button.get_global_rect().position.x
+		and not hwin.equip_slots.values().any(func(q): return q.button.get_global_rect().intersects(ub)) and not hwin.unequip_all_button.disabled and worn > 0,
+		"(D) [전체 해제] sits left of [장비 자동착용] inside the big card and is on while the hero wears gear", "button=%s worn=%d" % [ub, worn])
+	await _tap(ub.get_center())
+	await _frames(2)
+	_check(not Economy.equipment.has("hans") and int(Economy.equipment.get("ella", {}).get("gloves", 0)) == 990004 and hwin.unequip_all_button.disabled
+		and not hwin.auto_equip_button.disabled and _child(HudScript)._toast.text == "장비 %d개를 해제했습니다" % worn and Economy.bag.size() == 9,
+		"(D) [전체 해제] takes every item off this hero only, items stay in the bag, auto-equip is on again", "eq=%s" % [Economy.equipment])
+	_check(Economy.unequip_all("hans") == 0, "(D) a second unequip-all changes nothing", "")
 	for s in GameData.EQUIP_SLOTS:
 		Economy.unequip("hans", s)
 	Economy.unequip("ella", "gloves")

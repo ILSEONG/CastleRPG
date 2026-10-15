@@ -60,7 +60,7 @@ func _process(delta: float) -> void:
 				_on_message(ws.get_packet().get_string_from_utf8())
 			if battle.role == "host" and not battle.done:
 				if battle.snapshot_due():
-					_send({"t": "snap", "s": battle.snapshot()})
+					_send({"t": "snap", "s": battle.snapshot_delta()})
 				_ckpt -= delta
 				if _ckpt <= 0.0:
 					_ckpt = CKPT_SEC

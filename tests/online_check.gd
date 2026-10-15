@@ -626,6 +626,13 @@ func _phase3_social(state_path: String) -> void:
 	_check(ls.wait_panel.visible and Net.logins == 0, "(s1) polling while the browser login is unfinished keeps waiting", "")
 	var done := await _post_json("/v1/test/oauth_complete", {"state": ls._state, "provider_uid": "kakao-user-1"})
 	_check(done.get("ok") == true and done.get("is_new") == false, "(s1) test hook finishes the login on the device's guest account (linked, not new)", str(done))
+	ls._poll_left = 1000.0  # 다음 정기 poll은 멀리 — 앱으로 돌아온 순간의 poll만 결과를 받게
+	ls.notification(NOTIFICATION_APPLICATION_RESUMED)  # 로그인 완료 링크로 브라우저에서 게임으로 돌아옴
+	var ls_ref: WeakRef = weakref(ls)  # 로그인되면 로그인 화면이 사라진다
+	var quick: bool = await _wait_until(func():
+		var o = ls_ref.get_ref()
+		return o == null or not o._polling, 5.0)
+	_check(quick, "(s1) coming back to the game from the browser asks for the result at once (no waiting for the next poll)", "")
 	var built := await _wait_until(func(): return _main.camera != null, 30.0)
 	var auth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Net.auth_path))
 	_check(built and Net.auth_mode == "kakao" and auth.mode == "kakao" and str(auth.session).length() == 64 and Net.logins == 1,
@@ -1518,6 +1525,17 @@ func _dungeons_online(state_path: String) -> void:
 		kept = kept and int(Economy.equipment.get(auto_hero, {}).get(sl, -1)) == int(plan[sl])
 	_check(kept and Net.requested.get("/v1/equip/many", 0) == many0 + 1 and Net.requested.get("/v1/equip", 0) == one0,
 		"(z) auto-equip sends one /v1/equip/many and the server keeps the set", "many=%d one=%d eq=%s" % [Net.requested.get("/v1/equip/many", 0) - many0, Net.requested.get("/v1/equip", 0) - one0, Economy.equipment])
+	# 전체 해제: 곧바로 다 빠지고 요청은 /v1/equip/clear 하나, 서버도 비운다. 그 뒤 다시 자동착용(phase 2가 보는 상태로 되돌림)
+	var clear0: int = Net.requested.get("/v1/equip/clear", 0)
+	var n_clear: int = Economy.unequip_all(auto_hero) if auto_hero != "" else 0
+	_check(n_clear >= plan.size() and n_clear > 0 and not Economy.equipment.has(auto_hero) and Economy.equip_pending(auto_hero),
+		"(z) unequip-all takes everything off at once before the server answers", "hero=%s n=%d eq=%s" % [auto_hero, n_clear, Economy.equipment])
+	await _wait_until(func(): return Economy._equip_predicts.is_empty(), 15.0)
+	_check(not Economy.equipment.has(auto_hero) and Net.requested.get("/v1/equip/clear", 0) == clear0 + 1 and Net.requested.get("/v1/equip", 0) == one0,
+		"(z) unequip-all sends one /v1/equip/clear and the server keeps the hero bare", "clear=%d eq=%s" % [Net.requested.get("/v1/equip/clear", 0) - clear0, Economy.equipment])
+	if auto_hero != "":
+		Economy.auto_equip(auto_hero)
+		await _wait_until(func(): return Economy._equip_predicts.is_empty(), 15.0)
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
 	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)

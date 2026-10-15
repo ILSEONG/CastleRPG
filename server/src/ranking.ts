@@ -97,10 +97,21 @@ export function view(e: Entry, rank: number, me: boolean) {
 // 목록 캐시(보드마다). 플레이어 보드는 한 번 읽어 넷을 함께 만든다.
 export function rankingStore(query: Query, clock: () => number, loadGame: () => Promise<GameLike>) {
   const cache = new Map<Board, { at: number; list: Entry[] }>()
-  async function list(board: Board): Promise<{ at: number; list: Entry[] }> {
+  // 만드는 중인 목록(플레이어 보드 둘은 'player' 하나). 캐시가 끝난 순간 몰린 요청이 다 같이 전체 플레이어를 읽지 않고 한 번을 기다린다.
+  const building = new Map<string, Promise<{ at: number; list: Entry[] }>>()
+  function list(board: Board): Promise<{ at: number; list: Entry[] }> {
     const now = clock()
     const hit = cache.get(board)
-    if (hit && now - hit.at < RANK_CACHE_SEC && now >= hit.at) return hit
+    if (hit && now - hit.at < RANK_CACHE_SEC && now >= hit.at) return Promise.resolve(hit)
+    const key = board === 'guild' ? 'guild' : 'player'
+    let p = building.get(key)
+    if (!p) {
+      p = rebuild(board, now).finally(() => building.delete(key))
+      building.set(key, p)
+    }
+    return p.then(() => cache.get(board)!)
+  }
+  async function rebuild(board: Board, now: number): Promise<{ at: number; list: Entry[] }> {
     const game = await loadGame()
     if (board === 'guild') {
       const v = { at: now, list: guildEntries(await query(GUILDS_SQL), now, R.cfgNum(game.config, 'daily_reset_utc_hour')) }
@@ -121,5 +132,5 @@ export function rankingStore(query: Query, clock: () => number, loadGame: () => 
       me: i >= 0 ? view(xs[i], i + 1, true) : null,
     }
   }
-  return { board, clear: () => cache.clear() }
+  return { board, clear: () => { cache.clear(); building.clear() } }
 }

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { serve } from '@hono/node-server'
 import * as W from '../src/guild_war.ts'
-import { WarLive } from '../src/war_live.ts'
+import { mergeSnap, WarLive } from '../src/war_live.ts'
 import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
@@ -352,4 +352,11 @@ test('war: defender kills count toward the damage cap (a state with every defend
   const c = { gates: [0, 0, 0, 0], keep: 0, dead: { 1: 0, 2: 0.5 } }
   assert.equal(W.defenderDamage(defs, c), 1250)
   assert.equal(W.defenderDamage(defs, { gates: [], keep: 0, dead: {} }), 0)
+})
+
+test('war live mergeSnap: delta snaps keep earlier hero rows, other fields take the new snap', () => {
+  const a = mergeSnap(null, { c: 1, u: { '1': [0, 0], '2': [5, 5] }, k: 100 })
+  const b = mergeSnap(a, { c: 2, u: { '2': [6, 6] }, k: 90 }) as any
+  assert.deepEqual(b, { c: 2, u: { '1': [0, 0], '2': [6, 6] }, k: 90 })
+  assert.deepEqual(mergeSnap(b, 'junk'), 'junk')
 })

@@ -12,6 +12,7 @@ const FxStatus := preload("res://scripts/fx_status.gd")
 const DOT_TAGS := ["burn", "bleed", "curse"]
 const KNOCK_SEC := 0.2
 const PUPPET_LERP := 12.0  # 꼭두각시 위치 따라잡기(1/초)
+const PUPPET_LEAD := 0.25  # 꼭두각시: 다음 장이 올 때까지 마지막 속도로 이만큼(초)까지 앞으로 그린다(장 간격 0.2초)
 
 signal fell(unit)  # 쓰러짐(점수·부활 대기)
 
@@ -61,6 +62,8 @@ var _status := {}
 var _fell_sent := false
 # 꼭두각시(온라인)
 var _p_pos := Vector3.ZERO
+var _p_vel := Vector3.ZERO  # 두 장 사이 속도(m/s)
+var _p_at := 0.0  # 마지막 장을 받은 시각(실제 초)
 var _p_face := Vector3.ZERO
 var _p_state := -1
 var _p_swings := 0
@@ -725,11 +728,17 @@ func status_fx(k: String):
 ## 꼭두각시: 방장 스냅샷이 오기 전·배치 중 내가 옮긴 자리에 그대로 선다(스냅샷 전 기본값 (0,0,0) = 성 한가운데로 끌려가지 않게).
 func puppet_hold(p: Vector3) -> void:
 	_p_pos = p
+	_p_vel = Vector3.ZERO
 	global_position = p
 
 
 func puppet_apply(row: Array) -> void:
-	_p_pos = Vector3(float(row[0]), float(row[6]) if row.size() > 6 else 0.0, float(row[1]))  # [6] = 높이(성벽 위)
+	var pos := Vector3(float(row[0]), float(row[6]) if row.size() > 6 else 0.0, float(row[1]))  # [6] = 높이(성벽 위)
+	var t := Time.get_ticks_msec() / 1000.0
+	var gap := t - _p_at
+	_p_vel = (pos - _p_pos) / gap if gap > 0.05 and gap < 0.6 and int(row[4]) != State.DEAD else Vector3.ZERO
+	_p_at = t
+	_p_pos = pos
 	_p_face = Vector3(sin(float(row[2])), 0.0, cos(float(row[2])))
 	var new_hp := float(row[3]) * hp_max
 	if new_hp < hp - 0.5:
@@ -773,7 +782,8 @@ func puppet_row() -> Array:
 func _puppet_tick(delta: float) -> void:
 	if state == State.DEAD:
 		return
-	global_position = global_position.lerp(_p_pos, minf(1.0, delta * PUPPET_LERP))
+	var lead := minf(Time.get_ticks_msec() / 1000.0 - _p_at, PUPPET_LEAD)
+	global_position = global_position.lerp(_p_pos + _p_vel * lead, minf(1.0, delta * PUPPET_LERP))
 	if _p_face.length() > 0.1:
 		_model.face(_p_face)
 
