@@ -16,10 +16,16 @@ static var _horse_mesh: ArrayMesh  # 말 메시는 하나를 같이 쓴다
 
 ## parent 아래에 병종 type의 몸을 만든다(모델 먼저, 그다음 말). 반환 [UnitModel, 말 MeshInstance3D 또는 null].
 ## world = 월드 병사: UnitModel.crowd_lod(화면 밖·붐빌 때 간헐 갱신, 붐비면 그림자 끔 — add_child 전에 정해야 한다).
-static func build(parent: Node3D, type: String, world := false) -> Array:
+## outfit = 옷 색 하나(알파 0이면 원래 옷) — 파티 퀘스트에서 성주마다 병사 옷 색을 다르게(Art.outfit_palette, 사용자 2026-10-15).
+static func build(parent: Node3D, type: String, world := false, outfit := Color(0, 0, 0, 0)) -> Array:
 	var model = UnitModelScript.new()
 	model.crowd_lod = world
-	model.setup(Art.soldier_spec(type, GameData.soldier(type).model), Art.SOLDIER_SCALE)
+	var spec := Art.soldier_spec(type, GameData.soldier(type).model)
+	if outfit.a > 0.0:
+		var m := str(GameData.soldier(type).model)
+		spec.look = "outfit:%s:%s" % [m, outfit.to_html(false)]
+		spec.palette = Art.look_cells(m, Art.outfit_palette(m, outfit))
+	model.setup(spec, Art.SOLDIER_SCALE)
 	parent.add_child(model)
 	if not Art.SOLDIERS[type].get("horse", false):
 		return [model, null]

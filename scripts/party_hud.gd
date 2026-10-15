@@ -127,6 +127,14 @@ func _build_seats(root: Control) -> void:
 			who += "" if who == Lang.t("party_hud.build_seats") else Lang.t("party_hud.build_seats_2")
 		elif s.get("bot", false):
 			who += " (AI)"
+		if battle.quest == "spider":  # 이 성주 병사의 옷 색(PartyRules.SEAT_COLORS)
+			var dot := Panel.new()
+			dot.custom_minimum_size = Vector2(16, 16)
+			dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var c: Color = PartyRules.SEAT_COLORS[i % PartyRules.SEAT_COLORS.size()]
+			dot.add_theme_stylebox_override("panel", UiKit.panel(c, 4.0, 0))
+			head.add_child(dot)
 		var nl := _label(who, 18, Color(0.12, 0.40, 0.78) if i == battle.me else MainHud.INK)
 		nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL

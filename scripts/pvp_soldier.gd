@@ -38,6 +38,7 @@ var hp_max := 0.0
 var atk := 0.0
 var is_boss := false
 var kind := "soldier"
+var outfit := Color(0, 0, 0, 0)  # 옷 색(알파 0 = 원래 옷) — 파티 퀘스트에서 성주 자리마다(PartyRules.SEAT_COLORS), add_child 전에
 var march_dir := Vector3.FORWARD  # 적이 없을 때 걷는 쪽
 
 var _model
@@ -94,7 +95,7 @@ func _ready() -> void:
 	add_to_group("crowd")
 	add_to_group("pvp%d" % team)
 	add_to_group("soldiers" if team == 0 else "monsters")
-	var body := SoldierBody.build(self, type, true)
+	var body := SoldierBody.build(self, type, true, outfit)
 	_model = body[0]
 	_horse = body[1]
 	_disc = Fx.soldier_disc(Art.SOLDIERS[type].color if team == 0 else Color(0.85, 0.25, 0.2), 0.75 if _horse != null else 0.42)

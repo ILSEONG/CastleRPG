@@ -192,6 +192,7 @@ func _spawn_soldiers() -> void:
 			var home: Vector3 = base + ArenaKit.RIGHT * ((k % 2) - 0.5) * SOLDIER_GAP + ArenaKit.DOWN * (k / 2) * SOLDIER_GAP
 			s.setup_party({"hp": float(x.get("hp", 0.0)), "atk": float(x.get("atk", 0.0))}, i, home)
 			s.party = self
+			s.outfit = PartyRules.SEAT_COLORS[i % PartyRules.SEAT_COLORS.size()]
 			s.march_dir = -ArenaKit.DOWN
 			add_child(s)
 			s.global_position = home

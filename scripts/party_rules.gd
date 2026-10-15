@@ -11,6 +11,9 @@ static var NAMES := {"lich": Lang.t("party_rules.names.lich"), "spider": Lang.t(
 static var BOSS_NAMES := {"lich": Lang.t("party_rules.boss_names.lich"), "spider": Lang.t("party_rules.boss_names.spider")}
 const SEATS := {"lich": 4, "spider": 3}
 const SOLDIERS_PER := 4
+## 거미 여왕: 성주 자리마다 병사 옷 색(사용자 2026-10-15 "병사들 옷 플레이어 단위로 다르게") — 자리 순서는 모든 기기가 같다(서버가 정한 seats).
+## 자리 표(HUD)의 이름 앞 색 점도 같은 색. 금색은 쓰지 않는다.
+const SEAT_COLORS := [Color("2F6FD6"), Color("C8352B"), Color("7E3FB8"), Color("2E9E8F")]
 const DIFFS := 4
 const DIFF_MULT := [1.0, 10.0, 50.0, 150.0]
 static var DIFF_NAMES := [Lang.t("party_rules.diff_names"), Lang.t("party_rules.diff_names_2"), Lang.t("party_rules.diff_names_3"), Lang.t("party_rules.diff_names_4")]

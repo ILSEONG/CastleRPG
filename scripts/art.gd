@@ -561,6 +561,16 @@ static func put_body(model: Node3D, path: String) -> void:
 
 
 ## 이름 붙은 팔레트(LOOK_SLOTS 이름 → 색) → 칸 번호 → 색.
+## 병사 옷 색 하나 → 그 모델의 칸 팔레트(LOOK_SLOTS 이름): 기사 = 망토·장식·깃·띠, 두건 궁수 = 웃옷·두건·소매·끈. 갑옷 쇠·피부·무기는 그대로.
+static func outfit_palette(model: String, c: Color) -> Dictionary:
+	match model:
+		"Knight":
+			return {"cape": c, "trim": c.darkened(0.25), "ribbon": c.lightened(0.35), "belt": c.darkened(0.5)}
+		"Rogue", "Rogue_Hooded":
+			return {"tunic": c, "hood": c.darkened(0.2), "arms": c.lightened(0.15), "strap": c.darkened(0.5)}
+	return {}
+
+
 static func look_cells(model: String, palette: Dictionary) -> Dictionary:
 	var out := {}
 	for slot in palette:

@@ -112,6 +112,14 @@ func _run() -> void:
 			return
 		_check(b.boss != null and b.boss.is_alive(), "%s: boss up" % quest)
 		_check(b.player_units().size() == (4 if quest == "lich" else 12), "%s: party units %d" % [quest, b.player_units().size()])
+		if quest == "spider":  # 성주마다 병사 옷 색이 다르고, 한 성주의 4마리는 같다
+			var by_seat := {}
+			for s in b.soldiers:
+				by_seat[s.owner_seat] = by_seat.get(s.owner_seat, []) + [s.outfit]
+			var ok := by_seat.size() == 3
+			for k in by_seat:
+				ok = ok and by_seat[k].all(func(c): return c == PartyRules.SEAT_COLORS[k] and c.a > 0.0)
+			_check(ok, "spider: each lord's 4 soldiers wear that seat's outfit color")
 		Engine.time_scale = 8.0
 		var t := 0.0
 		while not b.done and t < 260.0:
