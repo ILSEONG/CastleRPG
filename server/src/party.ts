@@ -34,6 +34,14 @@ export const CONFIRM_SEC = 15 // [입장 수락] 제한 시간
 export const BOT_WAIT_SEC = 30 // 이만큼 기다리면 빈 자리를 AI 성주가 채운다
 export const QUEUE_STALE_SEC = 12 // 대기 중 이만큼 상태를 묻지 않으면(앱을 껐다) 대기열에서 뺀다
 export const MATCH_TTL_SEC = 1800 // 끝나지 않은 매치는 이만큼 뒤 지운다
+// 파티 코드(사용자 2026-10-15 "파티코드 있어서 파티를 구성할수잇어"): [파티 만들기] → 코드 → 다른 성주가 [코드로 참가]. 방장이 [매칭 시작]을 누르면
+// 파티원이 한 묶음으로 대기열에 들어가 같은 매치에 앉고, 빈자리는 무작위 매칭 → BOT_WAIT_SEC 뒤 AI 성주(Claude 기본값).
+export const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // 헷갈리는 0·O·1·I 뺌
+export const CODE_LEN = 6
+export const LOBBY_STALE_SEC = 30 // 파티원이 이만큼 상태를 묻지 않으면(앱을 껐다) 파티에서 뺀다(대기·매치 중은 빼지 않는다)
+export const LOBBY_TTL_SEC = 6 * 3600 // 오래된 파티는 지운다
+export const JOIN_TRIES = 10 // 틀린 코드 시도 수(JOIN_WINDOW_SEC 안) — 넘으면 잠시 막는다(코드 맞히기 막기)
+export const JOIN_WINDOW_SEC = 600
 
 export const bossStats = (q: Quest, diff: number) => ({ hp: BOSS[q].hp * DIFF_MULT[diff - 1], atk: BOSS[q].atk * DIFF_MULT[diff - 1] })
 
@@ -63,7 +71,10 @@ export interface Seat {
   power: number // 비슷한 AI 성주 고르기 기준
   accepted: boolean
   left?: boolean // 판을 끝냈거나 나갔다(이 매치로 다시 묶지 않는다)
+  group?: string // 파티 코드(같은 코드의 대기는 한 매치에 함께 앉는다)
 }
+export interface Lobby { code: string; quest: Quest; diff: number; leader: string; members: { seat: Seat; seen: number }[]; created: number }
+export type LobbyError = 'no_code' | 'full' | 'not_leader' | 'no_lobby' | 'busy'
 export interface Ticket { seat: Seat; quest: Quest; diff: number; since: number; seen: number }
 export interface Match {
   id: string
@@ -82,6 +93,7 @@ export interface Match {
 export class PartyHub {
   queue: Ticket[] = []
   matches = new Map<string, Match>()
+  lobbies = new Map<string, Lobby>()
   private seq = 0
   makeBot: (quest: Quest, diff: number, like: Seat, n: number, rand: () => number) => Seat
   rand: () => number
@@ -159,17 +171,41 @@ export class PartyHub {
       if (m.state === 'confirm' && now >= m.deadline) this.dissolve(m, new Set(m.seats.filter((s) => s.pid && !s.accepted).map((s) => s.pid!)), now)
       else if (now - m.created > MATCH_TTL_SEC) this.matches.delete(m.id)
     }
+    for (const l of [...this.lobbies.values()]) {
+      for (const m of [...l.members]) {
+        const pid = m.seat.pid!
+        if (now - m.seen > LOBBY_STALE_SEC && !this.ticketOf(pid) && !this.matchOf(pid)) this.leaveLobby(pid)
+      }
+      if (now - l.created > LOBBY_TTL_SEC) {
+        this.queue = this.queue.filter((t) => t.seat.group !== l.code)
+        this.lobbies.delete(l.code)
+      }
+    }
     for (const q of QUESTS) {
       for (let d = 1; d <= DIFFS; d++) {
         for (;;) {
           const pool = this.queue.filter((t) => t.quest === q && t.diff === d)
           if (!pool.length) break
+          // 파티(같은 group)는 한 덩어리 — 먼저 온 순서로 덩어리째 자리에 넣는다
+          const units: Ticket[][] = []
+          const byKey = new Map<string, Ticket[]>()
+          for (const t of pool) {
+            const k = t.seat.group ? `g:${t.seat.group}` : `p:${t.seat.pid}`
+            let u = byKey.get(k)
+            if (!u) {
+              u = []
+              byKey.set(k, u)
+              units.push(u)
+            }
+            u.push(t)
+          }
           const need = SEATS[q]
-          let picks: Ticket[]
-          if (pool.length >= need) picks = pool.slice(0, need)
-          else if (now - pool[0].since >= BOT_WAIT_SEC) picks = pool
+          // 가장 오래 기다린 덩어리 먼저, 나머지는 큰 덩어리부터(파티가 혼자 온 사람들 때문에 밀리지 않게) — 같은 크기는 먼저 온 순서
+          const picks: Ticket[] = [...units[0]]
+          const rest = units.slice(1).map((u, i) => ({ u, i })).sort((a, b) => b.u.length - a.u.length || a.i - b.i)
+          for (const { u } of rest) if (picks.length + u.length <= need) picks.push(...u)
+          if (picks.length >= need || picks.some((t) => now - t.since >= BOT_WAIT_SEC)) this.open(q, d, picks, now)
           else break
-          this.open(q, d, picks, now)
         }
       }
     }
@@ -183,6 +219,90 @@ export class PartyHub {
     for (let n = 0; seats.length < SEATS[quest]; n++) seats.push({ ...this.makeBot(quest, diff, seats[n % picks.length], n, r), accepted: true })
     const id = `${now.toFixed(0)}-${++this.seq}-${randomUUID().slice(0, 8)}`
     this.matches.set(id, { id, quest, diff, seats, state: 'confirm', deadline: now + CONFIRM_SEC, started: 0, seed: Math.floor(this.rand() * 2 ** 31), result: null, created: now })
+  }
+
+  // --- 파티(코드) ---
+
+  lobbyOf(pid: string): Lobby | null {
+    for (const l of this.lobbies.values()) if (l.members.some((m) => m.seat.pid === pid)) return l
+    return null
+  }
+
+  private newCode(): string {
+    for (;;) {
+      let c = ''
+      for (let i = 0; i < CODE_LEN; i++) c += CODE_CHARS[Math.floor(this.rand() * CODE_CHARS.length)]
+      if (!this.lobbies.has(c)) return c
+    }
+  }
+
+  // [파티 만들기]: 다른 파티·대기에서 빠지고 새 파티의 방장이 된다. 수락 확인 중이면 'busy'.
+  createLobby(seat: Seat, quest: Quest, diff: number, now: number): Lobby | LobbyError {
+    if (this.matchOf(seat.pid!)?.state === 'confirm') return 'busy'
+    this.leaveLobby(seat.pid!)
+    this.leave(seat.pid!)
+    const l: Lobby = { code: this.newCode(), quest, diff, leader: seat.pid!, members: [{ seat: { ...seat, accepted: false }, seen: now }], created: now }
+    this.lobbies.set(l.code, l)
+    return l
+  }
+
+  // [코드로 참가]: 같은 파티에 다시 보내면 출전만 바꾼다. 다른 파티에 있었으면 거기서 빠진다.
+  joinLobby(code: string, seat: Seat, now: number): Lobby | LobbyError {
+    const l = this.lobbies.get(code)
+    if (!l) return 'no_code'
+    const mine = l.members.find((m) => m.seat.pid === seat.pid)
+    if (mine) {
+      mine.seat = { ...seat, accepted: false, group: mine.seat.group }
+      mine.seen = now
+      return l
+    }
+    if (l.members.length >= SEATS[l.quest]) return 'full'
+    if (this.matchOf(seat.pid!)?.state === 'confirm') return 'busy'
+    this.leaveLobby(seat.pid!)
+    this.leave(seat.pid!)
+    l.members.push({ seat: { ...seat, accepted: false }, seen: now })
+    return l
+  }
+
+  // 파티 나가기: 대기 중이면 대기에서도 빠진다. 방장이 나가면 다음 사람이 방장, 아무도 없으면 파티를 지운다.
+  leaveLobby(pid: string) {
+    const l = this.lobbyOf(pid)
+    if (!l) return
+    l.members = l.members.filter((m) => m.seat.pid !== pid)
+    const t = this.ticketOf(pid)
+    if (t?.seat.group === l.code) this.leave(pid)
+    if (!l.members.length) this.lobbies.delete(l.code)
+    else if (l.leader === pid) l.leader = l.members[0].seat.pid!
+  }
+
+  // 방장이 [매칭 시작]: 파티원 모두 한 묶음(group = 코드)으로 대기열에. 수락 확인·시작한 판에 있는 파티원이 있으면 'busy'.
+  startLobby(pid: string, diff: number, now: number): Lobby | LobbyError {
+    const l = this.lobbyOf(pid)
+    if (!l) return 'no_lobby'
+    if (l.leader !== pid) return 'not_leader'
+    if (l.members.some((m) => this.matchOf(m.seat.pid!)?.state === 'confirm')) return 'busy'
+    l.diff = diff
+    for (const m of l.members) {
+      const pm = this.matchOf(m.seat.pid!)
+      if (pm) this.release(m.seat.pid!)
+      this.leave(m.seat.pid!)
+      m.seen = now
+      this.queue.push({ seat: { ...m.seat, accepted: false, group: l.code }, quest: l.quest, diff, since: now, seen: now })
+    }
+    this.tick(now)
+    return l
+  }
+
+  // 방장 [취소]: 파티원 대기를 모두 뺀다(파티는 그대로).
+  cancelLobby(pid: string) {
+    const l = this.lobbyOf(pid)
+    if (!l || l.leader !== pid) return
+    this.queue = this.queue.filter((t) => t.seat.group !== l.code)
+  }
+
+  lobbySeen(pid: string, now: number) {
+    const m = this.lobbyOf(pid)?.members.find((x) => x.seat.pid === pid)
+    if (m) m.seen = now
   }
 
   // 방장(또는 혼자 남은 기기)이 알린 결과 — 처음 것만 남긴다.

@@ -13,10 +13,14 @@ const PartyRules := preload("res://scripts/party_rules.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
 
 const POLL_SEC := 1.0
+const LOBBY_POLL_SEC := 2.0  # 파티 대기실(매칭 전)에서 묻는 간격
+const OFFLINE_CODE := "TEST00"  # 오프라인 파티 코드(혼자 — 참가는 온라인에서만)
 const OFFLINE_WAIT := 2.0
 const SAVE_PATH := "user://party.json"
 static var ERROR_TEXT := {"locked": Lang.t("party.error_text.locked"), "bag_full": Lang.t("party.error_text.bag_full"), "no_soldiers": Lang.t("party.error_text.no_soldiers"),
-	"in_match": Lang.t("party.error_text.in_match"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict")}
+	"in_match": Lang.t("party.error_text.in_match"), "no_code": Lang.t("party.error_text.no_code"), "full": Lang.t("party.error_text.full"), "not_leader": Lang.t("party.error_text.not_leader"),
+	"no_lobby": Lang.t("party.error_text.no_lobby"), "busy": Lang.t("party.error_text.busy"), "member_locked": Lang.t("party.error_text.member_locked"),
+	"rate_limited": Lang.t("party.error_text.rate_limited"), "in_lobby": Lang.t("party.error_text.in_lobby"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict")}
 static var FAIL_TEXT := Lang.t("party.fail_text")
 
 signal changed
@@ -178,9 +182,11 @@ func last_diff(q: String) -> int:
 
 
 ## [매칭 시작]이 안 되는 까닭("" = 된다).
-func queue_block(q: String, diff: int, hero: String, soldiers: Array) -> String:
+func queue_block(q: String, diff: int, hero: String, soldiers: Array, lobby_ok := false) -> String:
 	if state() != "idle":
 		return Lang.t("party.queue_block")
+	if in_lobby() and not lobby_ok:
+		return ERROR_TEXT.in_lobby
 	if not unlocked(q, diff):
 		return Lang.t("party.queue_block_2") % PartyRules.DIFF_NAMES[diff - 2]
 	if econ != null and econ.bag_full():
@@ -195,9 +201,10 @@ func queue_block(q: String, diff: int, hero: String, soldiers: Array) -> String:
 # --- 매칭 ---
 
 ## [매칭 시작]: 곧바로 대기 띠가 보이고 서버 확인은 뒤에서(거절되면 되돌리고 알림).
-func start_queue(q: String, diff: int, hero := "", soldiers := []) -> bool:
-	if queue_block(q, diff, hero, soldiers) != "":
+func start_queue(q: String, diff: int, hero := "", soldiers := [], from_lobby := false) -> bool:
+	if queue_block(q, diff, hero, soldiers, from_lobby) != "":
 		return false
+	_epoch += 1
 	remember(q, diff, hero, soldiers)
 	view.queue = {"state": "queued", "quest": q, "diff": diff, "waited": 0, "bot_in": int(PartyRules.BOT_WAIT_SEC), "since": _now()}
 	changed.emit()
@@ -218,12 +225,148 @@ func start_queue(q: String, diff: int, hero := "", soldiers := []) -> bool:
 	return true
 
 
+# --- 파티 코드(사용자 2026-10-15 "파티코드 있어서 파티를 구성할수잇어") ---
+## [파티 만들기] → 코드가 나오고, 다른 성주는 [코드로 참가]. 방장이 [매칭 시작]을 누르면 파티원이 함께 대기열에 들어가 같은 판에 앉는다
+## (빈자리는 무작위 매칭 → BOT_WAIT_SEC 뒤 AI 성주). view.lobby = {code, quest, diff, leader, size, members: [{name, me, leader, hero?, soldiers?}]} 또는 null.
+## 버튼은 앱 값을 먼저 바꾸고(코드는 서버가 정하니 "······"로) 서버가 거절하면 되돌린다. 빠른 두 번 탭은 _lobby_busy로 한 번만.
+
+var _lobby_busy := false
+var _epoch := 0  # 버튼(매칭·취소·수락·파티)을 누를 때마다 +1 — 그 전에 보낸 상태 묻기의 답은 버린다
+
+
+func lobby() -> Dictionary:
+	var l = view.get("lobby")
+	return l if l is Dictionary else {}
+
+
+func in_lobby() -> bool:
+	return not lobby().is_empty()
+
+
+func lobby_leader() -> bool:
+	return lobby().get("leader", false) == true
+
+
+func _pick_body(q: String, hero: String, soldiers: Array) -> Dictionary:
+	var body := {}
+	if q == "lich":
+		body.hero = GuildWar.hero_entry(hero) if has_node("/root/GuildWar") else {"id": hero, "hp": 0, "atk": 0}
+	else:
+		body.soldiers = soldiers
+	return body
+
+
+## [파티 만들기]: 내가 방장인 파티(그 퀘스트). 막히면 이유("" = 됨).
+func create_lobby(q: String, diff: int, hero := "", soldiers := []) -> String:
+	var why := queue_block(q, diff, hero, soldiers, true)
+	if why != "" or _lobby_busy:
+		return why
+	remember(q, diff, hero, soldiers)
+	_epoch += 1
+	var before = view.get("lobby")
+	var me := _my_seat(q, picks.get(q, {}))
+	me.leader = true
+	view.lobby = {"code": "" if online() else OFFLINE_CODE, "quest": q, "diff": diff, "leader": true, "size": int(PartyRules.SEATS[q]), "members": [me]}
+	changed.emit()
+	if not online():
+		return ""
+	var body := _pick_body(q, hero, soldiers)
+	body.quest = q
+	body.diff = diff
+	_lobby_busy = true
+	econ.net.send("POST", "/v1/party/lobby/create", body, func(d): _lobby_busy = false; _take(d), func():
+		_lobby_busy = false
+		view.lobby = before
+		_notice(ERROR_TEXT.get(econ.net.last_error, FAIL_TEXT))
+		changed.emit(), true, true)
+	return ""
+
+
+## [코드로 참가]: 결과는 done(ok, 글). 같은 파티 코드로 다시 보내면 내 출전만 바꾼다.
+func join_lobby(code: String, done := Callable()) -> void:
+	code = code.strip_edges().to_upper().replace(" ", "").replace("-", "")
+	if code.length() < 4:
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.no_code)
+		return
+	if not online():
+		if done.is_valid():
+			done.call(false, Lang.t("party.join_lobby"))
+		return
+	if _lobby_busy or state() != "idle":
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.in_match if state() != "idle" else "")
+		return
+	_lobby_busy = true
+	_epoch += 1
+	# 퀘스트는 코드가 정한다 — 두 퀘스트 출전을 모두 보내고 서버가 맞는 쪽을 쓴다
+	var body := {"code": code, "hero": _pick_body("lich", pick_hero(), []).hero, "soldiers": pick_soldiers()}
+	econ.net.send("POST", "/v1/party/lobby/join", body, func(d):
+		_lobby_busy = false
+		_take(d)
+		if done.is_valid():
+			done.call(true, ""), func():
+		_lobby_busy = false
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.get(econ.net.last_error, FAIL_TEXT)), true, true)
+
+
+## 파티에서 내 출전(영웅·병사)을 바꿨다 — 서버 파티 자리에도 알린다.
+func update_lobby_pick(hero := "", soldiers := []) -> void:
+	var l := lobby()
+	if l.is_empty() or str(l.get("code", "")) == "" or not online() or state() != "idle":
+		return
+	var q := str(l.get("quest", "lich"))
+	remember(q, int(l.get("diff", 1)), hero, soldiers)
+	var body := _pick_body(q, hero, soldiers)
+	body.code = str(l.code)
+	econ.net.send("POST", "/v1/party/lobby/join", body, func(d): _take(d), Callable(), true, false)
+
+
+## [파티 나가기].
+func leave_lobby() -> void:
+	if not in_lobby():
+		return
+	if state() == "queued":
+		cancel()
+	view.lobby = null
+	_epoch += 1
+	changed.emit()
+	if online():
+		econ.net.send("POST", "/v1/party/lobby/leave", {}, func(d): _take(d), Callable(), true, true)
+
+
+## 방장 [매칭 시작]: 파티원 모두 함께 대기. 막히면 이유("" = 됨).
+func start_lobby(diff: int) -> String:
+	var l := lobby()
+	if l.is_empty() or not lobby_leader():
+		return ERROR_TEXT.not_leader
+	var q := str(l.get("quest", "lich"))
+	if not unlocked(q, diff):
+		return Lang.t("party.queue_block_2") % PartyRules.DIFF_NAMES[diff - 2]
+	if state() != "idle":
+		return ""
+	_epoch += 1
+	l.diff = diff
+	if not online():
+		var me: Dictionary = l.members[0]
+		return "" if start_queue(q, diff, str(me.get("hero", {}).get("hero", "")), Party.pick_soldiers() if q == "spider" else [], true) else Lang.t("party.queue_block_4")
+	view.queue = {"state": "queued", "quest": q, "diff": diff, "waited": 0, "bot_in": int(PartyRules.BOT_WAIT_SEC), "since": _now()}
+	changed.emit()
+	econ.net.send("POST", "/v1/party/lobby/start", {"diff": diff}, func(d): _take(d), func():
+		view.queue = {"state": "idle"}
+		_notice(ERROR_TEXT.get(econ.net.last_error, FAIL_TEXT))
+		changed.emit(), true, true)
+	return ""
+
+
 ## [취소](대기 중) — 확인 중이면 거절과 같다.
 func cancel() -> void:
 	var was := state()
 	if was == "idle" or was == "live":
 		return
 	view.queue = {"state": "idle"}
+	_epoch += 1
 	changed.emit()
 	if online():
 		econ.net.send("POST", "/v1/party/cancel", {}, func(d): _take(d), Callable(), true, true)
@@ -234,6 +377,7 @@ func accept(yes: bool) -> void:
 	var q := queue()
 	if str(q.get("state", "")) != "confirm" or (yes and q.get("accepted", false)):
 		return
+	_epoch += 1
 	if not yes:
 		view.queue = {"state": "idle"}
 		changed.emit()
@@ -258,7 +402,11 @@ func fetch() -> void:
 	if not online() or _busy or not econ.net.up:
 		return
 	_busy = true
-	econ.net.send("GET", "/v1/party", null, func(d): _busy = false; _take(d), func(): _busy = false, true, true)
+	var e := _epoch
+	econ.net.send("GET", "/v1/party", null, func(d):
+		_busy = false
+		if e == _epoch:  # 그사이 버튼을 눌렀으면 옛 상태로 되돌리지 않는다(그 버튼의 답이 새 상태를 준다)
+			_take(d), func(): _busy = false, true, true)
 
 
 func _take(d) -> void:
@@ -295,6 +443,12 @@ func _after_state() -> void:
 
 func _process(delta: float) -> void:
 	var st := state()
+	if in_lobby() and st == "idle" and online():  # 파티 대기실: 파티원·방장의 매칭 시작을 묻는다(서버는 안 묻는 파티원을 뺀다)
+		_poll -= delta
+		if _poll <= 0.0:
+			_poll = LOBBY_POLL_SEC
+			fetch()
+		return
 	if st == "queued" or st == "confirm":
 		if not online():
 			_offline_t -= delta

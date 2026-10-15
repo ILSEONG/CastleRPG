@@ -156,3 +156,79 @@ test('party: the super admin gets AI lords at once (owner testing alone)', async
   const q2 = await queueLich(n, 1)
   assert.equal(q2.json.party.queue.state, 'queued', 'other players still wait for real lords first')
 })
+
+test('party hub: a party (code) sits together, strangers fill the rest, then AI lords', () => {
+  let n = 0
+  const bot = (): PQ.Seat => ({ pid: null, name: `bot${n++}`, dps: 1, power: 1, accepted: true })
+  const hub = new PQ.PartyHub(bot, () => 0.3)
+  const seat = (pid: string): PQ.Seat => ({ pid, name: pid, dps: 10, power: 100, accepted: false })
+  const l = hub.createLobby(seat('lead'), 'lich', 1, 0) as PQ.Lobby
+  assert.equal(l.code.length, PQ.CODE_LEN)
+  assert.equal(hub.joinLobby('NOPE00', seat('x'), 1), 'no_code')
+  assert.ok(typeof hub.joinLobby(l.code, seat('m1'), 1) !== 'string')
+  assert.ok(typeof hub.joinLobby(l.code, seat('m2'), 1) !== 'string')
+  // 혼자 온 두 사람이 먼저 기다리고 있다: 파티 3명 + 한 사람이 한 매치, 남은 사람은 계속 대기
+  hub.join(seat('s1'), 'lich', 1, 2)
+  hub.join(seat('s2'), 'lich', 1, 2)
+  assert.equal(hub.startLobby('m1', 1, 3), 'not_leader')
+  hub.startLobby('lead', 1, 3)
+  const m = hub.matchOf('lead')!
+  assert.ok(m, 'the party matched')
+  assert.deepEqual(m.seats.map((s) => s.pid).filter((p) => p !== 's1' && p !== 's2').sort(), ['lead', 'm1', 'm2'])
+  assert.ok(hub.matchOf('m1') === m && hub.matchOf('m2') === m, 'party members are in the same match')
+  assert.equal(m.seats.length, 4)
+  // 파티는 가득 차면 못 들어간다(리치 4명)
+  assert.ok(typeof hub.joinLobby(l.code, seat('m3'), 4) !== 'string')
+  assert.equal(hub.joinLobby(l.code, seat('m4'), 4), 'full')
+  // 방장이 나가면 다음 사람이 방장, 다 나가면 파티가 없어진다
+  hub.leaveLobby('lead')
+  assert.equal(hub.lobbies.get(l.code)!.leader, 'm1')
+  for (const p of ['m1', 'm2', 'm3']) hub.leaveLobby(p)
+  assert.equal(hub.lobbies.size, 0)
+  // 혼자인 파티: 기다린 뒤 AI 성주
+  const l2 = hub.createLobby(seat('solo'), 'spider', 1, 100) as PQ.Lobby
+  hub.joinLobby(l2.code, seat('p2'), 100)
+  hub.startLobby('solo', 1, 100)
+  assert.equal(hub.matchOf('solo'), null)
+  hub.seen('solo', 100 + PQ.BOT_WAIT_SEC)
+  hub.seen('p2', 100 + PQ.BOT_WAIT_SEC)
+  hub.tick(100 + PQ.BOT_WAIT_SEC)
+  const m2 = hub.matchOf('solo')!
+  assert.ok(m2 && hub.matchOf('p2') === m2 && m2.seats.filter((s) => s.pid == null).length === 1)
+})
+
+test('party routes: create a party, join by code, leader starts, wrong codes are rate limited', async () => {
+  const a = await player()
+  const b = await player()
+  const c = await player()
+  const lich = { quest: 'lich', diff: 1, hero: { id: 'hans', hp: 500, atk: 40 } }
+  const cr = await S.req('POST', '/v1/party/lobby/create', { token: a.token, body: lich })
+  assert.equal(cr.status, 200, JSON.stringify(cr.json))
+  const code = cr.json.party.lobby.code
+  assert.equal(cr.json.party.lobby.leader, true)
+  const jb = await S.req('POST', '/v1/party/lobby/join', { token: b.token, body: { code: code.toLowerCase(), hero: lich.hero } })
+  assert.equal(jb.status, 200, JSON.stringify(jb.json))
+  assert.equal(jb.json.party.lobby.members.length, 2)
+  assert.equal(jb.json.party.lobby.leader, false)
+  const solo = await queueLich(b)
+  assert.equal(solo.json.error, 'in_lobby', 'a party member cannot queue alone')
+  const notLead = await S.req('POST', '/v1/party/lobby/start', { token: b.token, body: { diff: 1 } })
+  assert.equal(notLead.json.error, 'not_leader')
+  const locked = await S.req('POST', '/v1/party/lobby/start', { token: a.token, body: { diff: 2 } })
+  assert.equal(locked.json.error, 'member_locked')
+  const st = await S.req('POST', '/v1/party/lobby/start', { token: a.token, body: { diff: 1 } })
+  assert.equal(st.json.party.queue.state, 'queued')
+  const sb = await S.req('GET', '/v1/party', { token: b.token })
+  assert.equal(sb.json.party.queue.state, 'queued', 'the member is queued too')
+  await S.req('POST', '/v1/test/party_bots_now', { token: a.token })
+  const ca = await S.req('GET', '/v1/party', { token: a.token })
+  const cb = await S.req('GET', '/v1/party', { token: b.token })
+  assert.equal(ca.json.party.queue.state, 'confirm', JSON.stringify(ca.json.party.queue))
+  assert.equal(ca.json.party.queue.match_id, cb.json.party.queue.match_id, 'same match')
+  // 틀린 코드는 JOIN_TRIES번까지만
+  let last = 0
+  for (let i = 0; i <= PQ.JOIN_TRIES; i++) last = (await S.req('POST', '/v1/party/lobby/join', { token: c.token, body: { code: 'ZZZZZ9', hero: lich.hero } })).status
+  assert.equal(last, 429)
+  const lv = await S.req('POST', '/v1/party/lobby/leave', { token: b.token })
+  assert.equal(lv.json.party.lobby, null)
+})

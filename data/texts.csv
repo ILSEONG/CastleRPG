@@ -2686,3 +2686,32 @@ guide_tours.tours.text_89,보상은 퀘스트마다 하루 3번까지 받습니�
 guide_tours.tours.text_90,거미 여왕의 둥지: 성주 3명이 병사 4마리씩 내보내 자동으로 싸웁니다. 이기면 목걸이(체력)를 받습니다. 병사 티어가 낮으면 버티기 어렵습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_91,[자동 수락]을 켜 두면 매칭이 잡히자마자 입장합니다. 끄면 뜨는 창에서 [입장 수락]을 직접 누르세요.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_92,[매칭 시작]을 누르면 함께할 성주를 찾습니다. 30초 안에 자리가 다 차지 않으면 AI 성주가 빈자리를 채웁니다. 리치의 무덤 쉬움을 한 번 이겨 보세요.,,,,scripts/guide_tours.gd
+party.error_text.no_code,그 코드의 파티가 없습니다,,,,scripts/party.gd
+party.error_text.full,파티가 가득 찼습니다,,,,scripts/party.gd
+party.error_text.not_leader,방장만 매칭을 시작할 수 있습니다,,,,scripts/party.gd
+party.error_text.no_lobby,파티가 없어졌습니다,,,,scripts/party.gd
+party.error_text.busy,파티원이 입장 수락 중입니다,,,,scripts/party.gd
+party.error_text.member_locked,아직 이 난이도를 못 연 파티원이 있습니다,,,,scripts/party.gd
+party.error_text.rate_limited,코드를 너무 많이 틀렸습니다. 잠시 뒤 다시 시도하세요,,,,scripts/party.gd
+party.error_text.in_lobby,파티에 있는 동안은 방장이 매칭을 시작합니다,,,,scripts/party.gd
+party.join_lobby,파티 코드는 온라인에서만 쓸 수 있습니다,,,,scripts/party.gd
+party_view.ready_3,코드로 참가,,,,scripts/party_view.gd
+party_view.card_2,복사,,,,scripts/party_view.gd
+party_view.card_3,파티 만들기,,,,scripts/party_view.gd
+party_view.copy_code,파티 코드를 복사했습니다,,,,scripts/party_view.gd
+party_view.refresh_10,방장이 시작합니다,,,,scripts/party_view.gd
+party_view.refresh_11,파티로 매칭 시작,,,,scripts/party_view.gd
+party_view.refresh_12,파티 나가기,,,,scripts/party_view.gd
+party_view.refresh_13,파티 만들기,,,,scripts/party_view.gd
+party_view.refresh_14,파티 코드  %s,,,,scripts/party_view.gd
+party_view.refresh_15,나,,,,scripts/party_view.gd
+party_view.refresh_16, (나),,,,scripts/party_view.gd
+party_view.refresh_17, · 방장,,,,scripts/party_view.gd
+party_view.refresh_18,병사 %d마리 (최고 T%d),,,,scripts/party_view.gd
+party_view.refresh_19,"빈자리 %d — 매칭을 시작하면 다른 성주로, %d초 뒤에는 AI 성주로 채웁니다",,,,scripts/party_view.gd
+party_view.refresh_20,방장이 매칭을 시작하면 입장 수락 창이 뜹니다,,,,scripts/party_view.gd
+party_code_panel.ready,코드로 참가,,,,scripts/party_code_panel.gd
+party_code_panel.ready_2,친구에게 받은 파티 코드를 넣으세요,,,,scripts/party_code_panel.gd
+party_code_panel.ready_3,파티 코드 6자리,,,,scripts/party_code_panel.gd
+party_code_panel.ready_4,닫기,,,,scripts/party_code_panel.gd
+party_code_panel.ready_5,참가,,,,scripts/party_code_panel.gd

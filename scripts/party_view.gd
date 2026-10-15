@@ -37,6 +37,11 @@ func _ready() -> void:
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(intro)
+	var join := _button(Lang.t("party_view.ready_3"), UiKit.STEEL, 22)
+	join.custom_minimum_size = Vector2(150, 56)
+	join.pressed.connect(_open_code)
+	top.add_child(join)
+	buttons["join_code"] = join
 	auto_box = UiKit.checkbox(Lang.t("party_view.ready_2"))
 	auto_box.custom_minimum_size = Vector2(190, 64)
 	auto_box.button_pressed = Party.auto_accept
@@ -128,11 +133,41 @@ func _card(q: String) -> Control:
 	var reason := _label("", 20, RED)
 	reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(reason)
+	# 파티(코드): 이 퀘스트 파티에 있으면 코드·파티원·빈자리
+	var lobby_box := PanelContainer.new()
+	lobby_box.add_theme_stylebox_override("panel", UiKit.panel(Color(0.93, 0.88, 0.74, 0.9), 10.0, 10))
+	box.add_child(lobby_box)
+	var lb := VBoxContainer.new()
+	lb.add_theme_constant_override("separation", 4)
+	lobby_box.add_child(lb)
+	var code_row := HBoxContainer.new()
+	code_row.add_theme_constant_override("separation", 8)
+	lb.add_child(code_row)
+	var code_label := _label("", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	code_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	code_row.add_child(code_label)
+	var copy := _button(Lang.t("party_view.card_2"), UiKit.STEEL, 20)
+	copy.custom_minimum_size = Vector2(90, 44)
+	copy.pressed.connect(_copy_code)
+	code_row.add_child(copy)
+	var members := _label("", 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	members.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lb.add_child(members)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
+	box.add_child(row2)
+	var party_b := _button(Lang.t("party_view.card_3"), UiKit.STEEL, 24)
+	party_b.custom_minimum_size = Vector2(200, 56)
+	party_b.pressed.connect(_party_button.bind(q))
+	row2.add_child(party_b)
+	buttons["party:" + q] = party_b
 	var start := _button(Lang.t("party_view.card"), HudScript.ACCENT, 28)
+	start.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start.pressed.connect(_start.bind(q))
-	box.add_child(start)
+	row2.add_child(start)
 	buttons["start:" + q] = start
-	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "row": pick_row, "reason": reason, "start": start}
+	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "row": pick_row, "reason": reason, "start": start,
+		"lobby": lobby_box, "code": code_label, "copy": copy, "members": members, "party": party_b}
 	return panel
 
 
@@ -150,6 +185,8 @@ func _step_hero(d: int) -> void:
 		return
 	hero_i = posmod(hero_i + d, owned.size())
 	refresh()
+	if _my_lobby("lich"):
+		Party.update_lobby_pick(_hero())
 
 
 func _hero() -> String:
@@ -160,11 +197,55 @@ func _hero() -> String:
 func _start(q: String) -> void:
 	var soldiers: Array = Party.pick_soldiers() if q == "spider" else []
 	var h := _hero() if q == "lich" else ""
+	if _my_lobby(q):  # 파티 방장: 파티원과 함께 매칭
+		var w := Party.start_lobby(int(diff[q]))
+		if w != "":
+			Economy.notice.emit(w)
+		refresh()
+		return
 	if not Party.start_queue(q, int(diff[q]), h, soldiers):
 		var why := Party.queue_block(q, int(diff[q]), h, soldiers)
 		if why != "":
 			Economy.notice.emit(why)
 	refresh()
+
+
+func _my_lobby(q: String) -> bool:
+	return Party.in_lobby() and str(Party.lobby().get("quest", "")) == q
+
+
+## [파티 만들기] · 파티 안이면 [파티 나가기].
+var _party_ms := -100000
+
+
+func _party_button(q: String) -> void:
+	if Time.get_ticks_msec() - _party_ms < 500:  # 빠른 두 번 탭: 만들자마자 나가지 않게
+		return
+	_party_ms = Time.get_ticks_msec()
+	if _my_lobby(q):
+		Party.leave_lobby()
+	else:
+		var w := Party.create_lobby(q, int(diff[q]), _hero() if q == "lich" else "", Party.pick_soldiers() if q == "spider" else [])
+		if w != "":
+			Economy.notice.emit(w)
+	refresh()
+
+
+func _copy_code() -> void:
+	var code := str(Party.lobby().get("code", ""))
+	if code != "":
+		DisplayServer.clipboard_set(code)
+		Economy.notice.emit(Lang.t("party_view.copy_code"))
+
+
+var code_panel  # party_code_panel.gd(처음 누를 때 만든다)
+
+
+func _open_code() -> void:
+	if code_panel == null:
+		code_panel = preload("res://scripts/party_code_panel.gd").new()
+		get_tree().root.add_child(code_panel)
+	code_panel.open()
 
 
 func refresh() -> void:
@@ -187,6 +268,7 @@ func refresh() -> void:
 			var open := Party.unlocked(q, lv)
 			b.text = PartyRules.DIFF_NAMES[i] if open else Lang.t("party_view.refresh") % PartyRules.DIFF_NAMES[i]
 			UiKit.apply_button(b, PartyRules.DIFF_COLORS[i] if lv == d else (UiKit.STEEL if open else UiKit.STEEL.darkened(0.3)), 12.0)
+			b.disabled = _my_lobby(q) and not Party.lobby_leader()  # 파티원: 난이도는 방장이 정한다
 		var odds := PartyRules.drop_odds(d)
 		var parts := []
 		for g in odds:
@@ -210,16 +292,59 @@ func refresh() -> void:
 			c.pick.text = Lang.t("party_view.refresh_6") % (", ".join(names) if not names.is_empty() else Lang.t("party_view.refresh_7"))
 		var why := ""
 		if st == "idle":
-			why = Party.queue_block(q, d, _hero() if q == "lich" else "", soldiers)
+			why = Party.queue_block(q, d, _hero() if q == "lich" else "", soldiers, _my_lobby(q))
+		c.reason.text = why
+		c.reason.visible = why != ""
+		var mine := _my_lobby(q)
+		var leader := mine and Party.lobby_leader()
+		if mine and not leader and st == "idle":
+			why = ""
 		c.reason.text = why
 		c.reason.visible = why != ""
 		var start: Button = c.start
 		if st != "idle" and busy_q == q:
 			start.text = Lang.t("party_view.refresh_8")
 			start.disabled = true
+		elif mine and not leader:
+			start.text = Lang.t("party_view.refresh_10")
+			start.disabled = true
 		else:
-			start.text = Lang.t("party_view.refresh_9")
+			start.text = Lang.t("party_view.refresh_11") if leader else Lang.t("party_view.refresh_9")
 			start.disabled = st != "idle" or why != ""
+		# 파티(코드)
+		var pb: Button = c.party
+		pb.text = Lang.t("party_view.refresh_12") if mine else Lang.t("party_view.refresh_13")
+		pb.disabled = (not mine and (st != "idle" or (Party.in_lobby() and not mine))) or (mine and st == "confirm")
+		c.lobby.visible = mine
+		if mine:
+			var l := Party.lobby()
+			var code := str(l.get("code", ""))
+			c.code.text = Lang.t("party_view.refresh_14") % (code if code != "" else "······")
+			c.copy.disabled = code == ""
+			var lines := []
+			for m in l.get("members", []):
+				var who := str(m.get("name", ""))
+				if m.get("me", false) and who != Lang.t("party_view.refresh_15"):
+					who += Lang.t("party_view.refresh_16")
+				if m.get("leader", false):
+					who += Lang.t("party_view.refresh_17")
+				var what := ""
+				var h = m.get("hero")
+				if h is Dictionary:
+					what = "%s Lv %d" % [GameData.hero(str(h.get("hero", ""))).get("name", "?"), int(h.get("level", 1))]
+				var so = m.get("soldiers")
+				if so is Array and not so.is_empty():
+					var top := 0
+					for x in so:
+						top = maxi(top, int(x.get("tier", 1)))
+					what = Lang.t("party_view.refresh_18") % [so.size(), top]
+				lines.append("%s  —  %s" % [who, what] if what != "" else who)
+			var empty: int = int(l.get("size", PartyRules.SEATS[q])) - (l.get("members", []) as Array).size()
+			if empty > 0:
+				lines.append(Lang.t("party_view.refresh_19") % [empty, int(PartyRules.BOT_WAIT_SEC)])
+			if not leader:
+				lines.append(Lang.t("party_view.refresh_20"))
+			c.members.text = "\n".join(lines)
 
 
 static func _pct(v: float) -> String:

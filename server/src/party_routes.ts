@@ -5,7 +5,8 @@
 //  POST /v1/party/cancel                           대기 그만두기(확인 중이면 거절과 같다)
 //  POST /v1/party/accept {match_id, accept}        [입장 수락]·거절
 //  POST /v1/party/finish {run_id, win, elapsed}    판 결과 — 승리면 타당성 검사 뒤 장신구 1개(하루 REWARD_CLEARS번까지). 같은 판을 다시 보내면 같은 결과
-// party = {quests: {lich|spider: {best, clears_left}}, queue: 내 상태}. 내 상태(앱이 대기 중 1초마다 GET /v1/party로 묻는다):
+//  POST /v1/party/lobby/create|join|leave|start  파티 코드(아래 '파티 코드' 묶음 참고) — 같은 파티는 한 매치에 함께 앉는다
+// party = {quests: {lich|spider: {best, clears_left}}, queue: 내 상태, lobby: 내 파티 또는 null}. 내 상태(앱이 대기 중 1초마다 GET /v1/party로 묻는다):
 //  {state: 'idle'} · {state: 'queued', quest, diff, waited, bot_in} · {state: 'confirm', match_id, quest, diff, left, seats, accepted}
 //  · {state: 'live', match_id, run_id, quest, diff, seed, elapsed, time_limit, boss, seats, me, result}
 // seats = [{name, bot, me, accepted, hero?, soldiers?}](자리 순서 = 전투 자리 번호). 플레이어 id는 내보내지 않는다.
@@ -106,22 +107,24 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       time_limit: PQ.TIME_LIMIT[m.quest], boss, seats, me: m.seats.findIndex((s) => s.pid === x.id), result: m.result }
   }
 
-  const view = async (x: Any) => ({ server_now: x.now, party: { quests: await stats(x), queue: await myState(x) } })
+  const lobbyView = (x: Any) => {
+    hub.lobbySeen(x.id, x.now)
+    const l = hub.lobbyOf(x.id)
+    if (!l) return null
+    return { code: l.code, quest: l.quest, diff: l.diff, leader: l.leader === x.id, size: PQ.SEATS[l.quest],
+      members: l.members.map((m) => ({ ...seatView(m.seat, x.id), leader: m.seat.pid === l.leader })) }
+  }
+  const view = async (x: Any) => {
+    const queue = await myState(x)
+    return { server_now: x.now, party: { quests: await stats(x), queue, lobby: lobbyView(x) } }
+  }
 
   app.get('/v1/party', auth, async (c) => c.json(await view(await ctx(c))))
 
-  app.post('/v1/party/queue', auth, async (c) => {
-    const b = await body(c)
-    const x = await ctx(c)
-    const quest = b.quest
-    if (!PQ.isQuest(quest)) throw new ApiError(400, 'bad_request', `'quest' must be one of ${PQ.QUESTS.join(', ')}`)
-    const diff = b.diff
-    if (typeof diff !== 'number' || !Number.isInteger(diff) || diff < 1 || diff > PQ.DIFFS) throw new ApiError(400, 'bad_request', `'diff' must be 1..${PQ.DIFFS}`)
-    const st = (await stats(x))[quest]
-    if (diff > st.best + 1) throw blocked('locked', `difficulty ${diff} is locked (best ${st.best})`)
+  // 출전 자리(리치 = 보유 영웅 1명, 능력치는 서버가 자른다 · 거미 여왕 = 보유 병사 4마리). 틀리면 400/409.
+  async function seatFor(x: Any, quest: PQ.Quest, b: Any): Promise<PQ.Seat> {
     if (x.pl.items.length + 1 > R.cfgNum(x.game.config, 'equip_bag_cap')) throw blocked('bag_full', 'the item bag is full')
     const name = R.friendName(x.id)
-    let seat: PQ.Seat
     if (quest === 'lich') {
       const h = b.hero as Any
       const id = typeof h?.id === 'string' ? h.id : ''
@@ -132,36 +135,125 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       const lim = R.statLimit(x.pl, x.game, gx.st ? G.buffPct(gx.st.lv.level) : 0)
       const s = capStats(def, Number(own.level), Number(own.promotion), h.hp, h.atk, cfgOf(x.game), lim)
       const hero = { hero: id, level: Number(own.level), promotion: Number(own.promotion), hp: Math.round(s.hp), atk: Math.round(s.atk * 10) / 10 }
-      seat = { pid: x.id, name, hero, dps: hero.atk / Math.max(0.1, def.atk_interval), power: R.powerOf(def, hero.hp, hero.atk), accepted: false }
-    } else {
-      const list = b.soldiers
-      if (!Array.isArray(list) || list.length !== PQ.SOLDIERS_PER) throw new ApiError(400, 'bad_party', `'soldiers' must be ${PQ.SOLDIERS_PER} {type, tier}`)
-      const need: Record<string, number> = {}
-      const soldiers: PQ.SoldierUnit[] = []
-      for (const raw of list as Any[]) {
-        const tier = Number(raw?.tier)
-        const s = Number.isInteger(tier) && tier >= 1 && tier <= 99 ? soldierOf(x.game, String(raw?.type ?? ''), tier) : null
-        if (!s) throw new ApiError(400, 'bad_party', `'soldiers' must be ${PQ.SOLDIERS_PER} {type, tier}`)
-        const k = `${s.type}:${s.tier}`
-        need[k] = (need[k] ?? 0) + 1
-        soldiers.push({ type: s.type, tier: s.tier, hp: s.hp, atk: s.atk })
-      }
-      for (const [k, n] of Object.entries(need)) if ((x.pl.soldiers[k] ?? 0) < n) throw blocked('no_soldiers', `not enough ${k} soldiers`)
-      const dps = soldierDps(x.game, soldiers)
-      seat = { pid: x.id, name, soldiers, dps, power: soldiers.reduce((a, s) => a + s.hp / 10 + s.atk * 2, 0), accepted: false }
+      return { pid: x.id, name, hero, dps: hero.atk / Math.max(0.1, def.atk_interval), power: R.powerOf(def, hero.hp, hero.atk), accepted: false }
     }
+    const list = b.soldiers
+    if (!Array.isArray(list) || list.length !== PQ.SOLDIERS_PER) throw new ApiError(400, 'bad_party', `'soldiers' must be ${PQ.SOLDIERS_PER} {type, tier}`)
+    const need: Record<string, number> = {}
+    const soldiers: PQ.SoldierUnit[] = []
+    for (const raw of list as Any[]) {
+      const tier = Number(raw?.tier)
+      const s = Number.isInteger(tier) && tier >= 1 && tier <= 99 ? soldierOf(x.game, String(raw?.type ?? ''), tier) : null
+      if (!s) throw new ApiError(400, 'bad_party', `'soldiers' must be ${PQ.SOLDIERS_PER} {type, tier}`)
+      const k = `${s.type}:${s.tier}`
+      need[k] = (need[k] ?? 0) + 1
+      soldiers.push({ type: s.type, tier: s.tier, hp: s.hp, atk: s.atk })
+    }
+    for (const [k, n] of Object.entries(need)) if ((x.pl.soldiers[k] ?? 0) < n) throw blocked('no_soldiers', `not enough ${k} soldiers`)
+    const dps = soldierDps(x.game, soldiers)
+    return { pid: x.id, name, soldiers, dps, power: soldiers.reduce((a, s) => a + s.hp / 10 + s.atk * 2, 0), accepted: false }
+  }
+
+  const diffOf = (v: unknown) => {
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > PQ.DIFFS) throw new ApiError(400, 'bad_request', `'diff' must be 1..${PQ.DIFFS}`)
+    return v
+  }
+
+  // 슈퍼관리자(운영자 시험, 사용자 2026-10-15 "테스트할때는 AI 성주랑 같이 해"): 기다리지 않고 바로 AI 성주로 채운다(실제 대기자가 있으면 함께 묶인다).
+  const botsNow = (x: Any) => {
+    if (!x.pl.admin) return
+    const t = hub.ticketOf(x.id)
+    if (!t) return
+    for (const q of hub.queue) if (q === t || (t.seat.group && q.seat.group === t.seat.group)) q.since = x.now - PQ.BOT_WAIT_SEC
+    hub.tick(x.now)
+  }
+
+  app.post('/v1/party/queue', auth, async (c) => {
+    const b = await body(c)
+    const x = await ctx(c)
+    const quest = b.quest
+    if (!PQ.isQuest(quest)) throw new ApiError(400, 'bad_request', `'quest' must be one of ${PQ.QUESTS.join(', ')}`)
+    const diff = diffOf(b.diff)
+    const st = (await stats(x))[quest]
+    if (diff > st.best + 1) throw blocked('locked', `difficulty ${diff} is locked (best ${st.best})`)
+    if (hub.lobbyOf(x.id)) throw blocked('in_lobby', 'leave your party first (the party leader starts matching)')
+    const seat = await seatFor(x, quest, b)
     if (!hub.join(seat, quest, diff, x.now)) throw blocked('in_match', 'you are already in a party match')
-    // 슈퍼관리자(운영자 시험, 사용자 2026-10-15 "테스트할때는 AI 성주랑 같이 해"): 기다리지 않고 바로 AI 성주로 채운다(실제 대기자가 있으면 함께 묶인다).
-    if (x.pl.admin) {
-      const t = hub.ticketOf(x.id)
-      if (t) t.since = x.now - PQ.BOT_WAIT_SEC
-      hub.tick(x.now)
+    botsNow(x)
+    return c.json(await view(x))
+  })
+
+  // --- 파티 코드 ---
+  //  POST /v1/party/lobby/create {quest, diff, hero?, soldiers?} → 새 파티(내가 방장) · POST /v1/party/lobby/join {code, hero?, soldiers?} → 참가(같은 파티면 출전만 바꿈)
+  //  POST /v1/party/lobby/leave · POST /v1/party/lobby/start {diff}(방장만 — 파티원 모두 그 난이도가 열려 있어야 한다)
+  //  party.lobby = {code, quest, diff, leader(내가 방장), size, members: [{name, me, leader, hero?, soldiers?}]}(파티에 없으면 null)
+  const joinTries = new Map<string, { n: number; since: number }>() // 틀린 코드 시도(플레이어마다)
+  const lobbyFail = (e: PQ.LobbyError) => {
+    const why: Record<PQ.LobbyError, string> = { no_code: 'no party with that code', full: 'the party is full', not_leader: 'only the party leader can start',
+      no_lobby: 'you are not in a party', busy: 'a party member is in a match confirm' }
+    return blocked(e, why[e])
+  }
+
+  app.post('/v1/party/lobby/create', auth, async (c) => {
+    const b = await body(c)
+    const x = await ctx(c)
+    const quest = b.quest
+    if (!PQ.isQuest(quest)) throw new ApiError(400, 'bad_request', `'quest' must be one of ${PQ.QUESTS.join(', ')}`)
+    const diff = diffOf(b.diff)
+    if (diff > (await stats(x))[quest].best + 1) throw blocked('locked', `difficulty ${diff} is locked`)
+    const r = hub.createLobby(await seatFor(x, quest, b), quest, diff, x.now)
+    if (typeof r === 'string') throw lobbyFail(r)
+    return c.json(await view(x))
+  })
+
+  app.post('/v1/party/lobby/join', auth, async (c) => {
+    const b = await body(c)
+    const x = await ctx(c)
+    const code = String(b.code ?? '').trim().toUpperCase()
+    const tries = joinTries.get(x.id)
+    if (tries && x.now - tries.since > PQ.JOIN_WINDOW_SEC) joinTries.delete(x.id)
+    const l = /^[A-Z0-9]{4,8}$/.test(code) ? hub.lobbies.get(code) : undefined
+    if (!l) {
+      const t = joinTries.get(x.id) ?? { n: 0, since: x.now }
+      t.n += 1
+      joinTries.set(x.id, t)
+      if (t.n > PQ.JOIN_TRIES) throw new ApiError(429, 'rate_limited', 'too many wrong party codes, try again later')
+      throw lobbyFail('no_code')
     }
+    if (joinTries.size > 10000) joinTries.clear()
+    const r = hub.joinLobby(code, await seatFor(x, l.quest, b), x.now)
+    if (typeof r === 'string') throw lobbyFail(r)
+    return c.json(await view(x))
+  })
+
+  app.post('/v1/party/lobby/leave', auth, async (c) => {
+    const x = await ctx(c)
+    hub.leaveLobby(x.id)
+    return c.json(await view(x))
+  })
+
+  app.post('/v1/party/lobby/start', auth, async (c) => {
+    const b = await body(c)
+    const x = await ctx(c)
+    const diff = diffOf(b.diff)
+    const l = hub.lobbyOf(x.id)
+    if (!l) throw lobbyFail('no_lobby')
+    if (l.leader !== x.id) throw lobbyFail('not_leader')
+    // 파티원 모두 그 난이도가 열려 있어야 한다(서버 기록)
+    const ids = l.members.map((m) => m.seat.pid!)
+    const rows = await query('select player_id::text as id, best from party_stats where quest = $1 and player_id = any($2::uuid[])', [l.quest, ids])
+    const best = new Map(rows.map((r: Any) => [r.id, Number(r.best)]))
+    const stuck = l.members.find((m) => diff > (best.get(m.seat.pid!) ?? 0) + 1)
+    if (stuck) throw blocked('member_locked', `${stuck.seat.name} has not cleared the previous difficulty`)
+    const r = hub.startLobby(x.id, diff, x.now)
+    if (typeof r === 'string') throw lobbyFail(r)
+    botsNow(x)
     return c.json(await view(x))
   })
 
   app.post('/v1/party/cancel', auth, async (c) => {
     const x = await ctx(c)
+    hub.cancelLobby(x.id)
     hub.leave(x.id)
     const m = hub.matchOf(x.id)
     if (m && m.state === 'confirm') hub.answer(x.id, m.id, false, x.now)
@@ -241,7 +333,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     app.post('/v1/test/party_bots_now', auth, async (c) => {
       const x = await ctx(c)
       const t = hub.ticketOf(x.id)
-      if (t) t.since = x.now - PQ.BOT_WAIT_SEC
+      for (const q of hub.queue) if (q === t || (t?.seat.group && q.seat.group === t.seat.group)) q.since = x.now - PQ.BOT_WAIT_SEC
       return c.json(await view(x))
     })
   }

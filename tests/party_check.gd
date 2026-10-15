@@ -143,6 +143,38 @@ func _run() -> void:
 		b.leave()
 		await _frames(4)
 		_check(_battle() == null, "%s: back to the castle" % quest)
+	# 파티 코드(오프라인: 혼자 파티 — 코드 TEST00, 참가는 온라인에서만)
+	view.buttons["party:spider"].pressed.emit()
+	view.buttons["party:spider"].pressed.emit()  # 빠른 두 번 탭: 만들자마자 나가지 않는다
+	await _frames(2)
+	_check(Party.in_lobby() and Party.lobby_leader() and str(Party.lobby().code) == Party.OFFLINE_CODE, "party: [파티 만들기] makes me the leader with a code")
+	_check(view._cards.spider.lobby.visible and view._cards.spider.code.text.contains(Party.OFFLINE_CODE), "party: the card shows the code and members")
+	_check(view.buttons["start:lich"].disabled, "party: other quest's [매칭 시작] is off while in a party")
+	var got := []
+	Party.join_lobby("ABCD12", func(ok, t): got.append([ok, t]))
+	_check(got.size() == 1 and not got[0][0], "party: joining by code needs online (offline says so)")
+	view.buttons["start:spider"].pressed.emit()
+	await _frames(2)
+	_check(Party.state() == "queued", "party: leader [매칭 시작] queues the party")
+	await get_tree().create_timer(2.6).timeout
+	Party.accept(true)
+	await _frames(4)
+	var b3 = _battle()
+	_check(b3 != null and b3.quest == "spider", "party: the party battle opens")
+	if b3 != null:  # 포기(두 번 누름)로 나온다
+		b3.hud._on_leave()
+		await get_tree().create_timer(0.5, true, false, true).timeout
+		b3.hud._on_leave()
+		await _frames(6)
+		if _battle() != null:
+			_battle().hud.result_layer.visible = true
+			_battle().leave()
+			await _frames(4)
+	_check(_battle() == null, "party: back to the castle after the party battle")
+	await get_tree().create_timer(0.6, true, false, true).timeout
+	view.buttons["party:spider"].pressed.emit()
+	await _frames(2)
+	_check(not Party.in_lobby() and not view._cards.spider.lobby.visible, "party: [파티 나가기] leaves")
 	# 자동 수락
 	Party.set_auto_accept(true)
 	view.buttons["start:lich"].pressed.emit()
