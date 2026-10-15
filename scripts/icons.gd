@@ -5,7 +5,7 @@ extends Control
 const Art := preload("res://scripts/art.gd")
 
 const KINDS := ["gold", "wood", "stone", "food", "diamond"]  # 재화(HUD 칩이 이 순서로 쓴다, 개정 23: 다이아 칩)
-const ITEM_KINDS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves", "sword", "axe", "staff", "crossbow", "dagger"]
+const ITEM_KINDS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves", "sword", "axe", "staff", "crossbow", "dagger", "ring", "necklace"]  # 2026-10-15 장신구 반지·목걸이
 const RESEARCH_KINDS := ["hammer", "scales", "coin_bag", "flask", "res_pile", "wall", "gate", "book", "cart", "tent", "elite", "orb", "glow_sword", "heart_shield"]  # 개정 24
 const OUTLINE := Color(0.16, 0.11, 0.07)
 const ITEM_ICON_FRAC := 0.74  # 장비 칸 한 변 중 아이콘 크기
@@ -681,7 +681,47 @@ static func _item_shapes(kind_name: String) -> Array:
 				[_ax(a, b, [Vector2(0.17, 0.046), Vector2(0.19, 0.046), Vector2(0.19, -0.046), Vector2(0.17, -0.046)]), LEATHER_LIGHT, false],
 				[_ax(a, b, [Vector2(0.22, 0.15), Vector2(0.29, 0.13), Vector2(0.29, -0.13), Vector2(0.22, -0.15)]), STEEL_DARK, true],
 			]
+		"ring":  # 반지(비스듬히 위에서): 뒤쪽 띠(어둡게) + 앞쪽 띠(밝은 윗면) + 위에 쇠 받침과 하늘색 보석
+			var c := Vector2(0.0, 0.10)
+			var back := _arc(c, Vector2(0.38, 0.30), PI, TAU, 8) + _arc(c, Vector2(0.27, 0.19), TAU, PI, 8)
+			var front := _arc(c, Vector2(0.38, 0.30), 0.0, PI, 10) + _arc(c, Vector2(0.27, 0.19), PI, 0.0, 10)
+			var shine := _arc(c, Vector2(0.38, 0.30), PI * 0.55, PI * 0.95, 4) + _arc(c, Vector2(0.31, 0.23), PI * 0.95, PI * 0.55, 4)
+			var g := Vector2(0.0, -0.22)
+			return [
+				[back, STEEL_DARK, true],
+				[front, STEEL, true],
+				[shine, STEEL_LIGHT, false],
+				[_ngon(6, 0.15, 0.0).map(func(q): return q + g + Vector2(0.0, 0.03)), STEEL_DARK, true],
+				[[g + Vector2(0.0, -0.13), g + Vector2(0.11, -0.02), g + Vector2(0.0, 0.10), g + Vector2(-0.11, -0.02)], GEM, true],
+				[[g + Vector2(0.0, -0.13), g + Vector2(0.0, -0.02), g + Vector2(-0.11, -0.02)], GEM.lightened(0.45), false],
+				[[g + Vector2(0.0, -0.02), g + Vector2(0.11, -0.02), g + Vector2(0.0, 0.10)], GEM.darkened(0.25), false],
+			]
+		"necklace":  # 목걸이: 위가 열린 U자 사슬(고리 마디) + 가운데 고리에 매달린 길쭉한 하늘색 보석
+			var out := []
+			for i in 11:  # 사슬 마디: (-0.36, -0.40) → 아래 가운데 → (0.36, -0.40)
+				var u := float(i) / 10.0
+				var at := Vector2(lerpf(-0.36, 0.36, u), -0.40 + 0.46 * sin(PI * u))
+				out.append([_ngon(6, 0.05, PI / 6.0 if i % 2 else 0.0).map(func(q): return Vector2(q.x * (1.3 if i % 2 else 0.8), q.y) + at),
+					STEEL if i % 2 else STEEL_DARK, true])
+			var g := Vector2(0.0, 0.27)
+			out.append_array([
+				[[Vector2(-0.035, 0.05), Vector2(0.035, 0.05), Vector2(0.035, 0.13), Vector2(-0.035, 0.13)], STEEL_DARK, true],
+				[[g + Vector2(0.0, -0.15), g + Vector2(0.10, -0.08), g + Vector2(0.10, 0.08), g + Vector2(0.0, 0.17), g + Vector2(-0.10, 0.08),
+					g + Vector2(-0.10, -0.08)], GEM, true],
+				[[g + Vector2(0.0, -0.15), g + Vector2(0.0, 0.0), g + Vector2(-0.10, 0.08), g + Vector2(-0.10, -0.08)], GEM.lightened(0.45), false],
+				[[g + Vector2(0.0, 0.0), g + Vector2(0.10, 0.08), g + Vector2(0.0, 0.17)], GEM.darkened(0.25), false],
+			])
+			return out
 	return []
+
+
+## 타원 호(점 n+1개): c 중심, 반지름 r(x·y), 각 a0 → a1(화면 좌표 — 0..PI가 아래쪽 반).
+static func _arc(c: Vector2, r: Vector2, a0: float, a1: float, n: int) -> Array:
+	var pts := []
+	for i in n + 1:
+		var a := lerpf(a0, a1, float(i) / n)
+		pts.append(c + Vector2(cos(a) * r.x, sin(a) * r.y))
+	return pts
 
 
 ## 축 좌표 → 단위 좌표: p0에서 p1 쪽으로 s(=x), 진행 방향 왼쪽(화면에서 위·왼쪽) 법선으로 t(=y). 무기를 대각선으로 그릴 때.

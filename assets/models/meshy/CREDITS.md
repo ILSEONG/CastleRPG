@@ -52,3 +52,6 @@ Meshy(meshy.ai) Pro 플랜으로 생성 — 유료 플랜 생성물은 생성자
 | `enemies/goblin.glb` | 2026-10-06 | image-to-3d `01a10eb9-3c95-77dd-9681-f4387a361bb7`(meshy-t2) | image-to-image `01a10eb6-c018-7149-aa75-4e41c302b07c`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `enemies/goblin_king.glb` | 2026-10-06 | image-to-3d `01a10eb9-4185-76fe-bcd6-05df89b6e7c4`(meshy-7) | image-to-image `01a10eb6-c23f-77f3-8ef1-2ea90e7b2ec2`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
 | `enemies/death_knight.glb` | 2026-10-06 | image-to-3d `01a10eb9-444b-7392-a5e0-2aff0a8e6cae`(meshy-7) | image-to-image `01a10eb6-c480-718c-a3f9-82cbaddda3ac`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `enemies/lich.glb` | 2026-10-15 | image-to-3d `01a13db1-76cb-7363-a643-7778f9f60984`(meshy-7, 리메시 4,500) | image-to-image `01a13db0-1796-70bd-857d-b623fc2fb988`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `enemies/spider_queen.glb` | 2026-10-15 | image-to-3d `01a13db1-7975-7418-a098-41d00ca25545`(meshy-7, 리메시 5,000) | image-to-image `01a13db0-1a8b-7283-97fa-011847b09ff0`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |
+| `enemies/spiderling.glb` | 2026-10-15 | image-to-3d `01a13db1-b653-71bc-85c5-7040fb23c128`(meshy-7, 리메시 1,400) | image-to-image `01a13db0-1c6b-76d4-867a-453030f4c798`(nano-banana-2, 참조 = 아르테온 컨셉) | Pro |

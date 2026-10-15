@@ -15,6 +15,7 @@ const ItemTileScript := preload("res://scripts/item_tile.gd")
 const ItemText := preload("res://scripts/item_text.gd")
 
 static var ITEM_NAMES := {"weapon": Lang.t("bag_panel.item_names.weapon"), "hat": Lang.t("bag_panel.item_names.hat"), "top": Lang.t("bag_panel.item_names.top"), "bottom": Lang.t("bag_panel.item_names.bottom"), "shoes": Lang.t("bag_panel.item_names.shoes"), "pauldron": Lang.t("bag_panel.item_names.pauldron"), "gloves": Lang.t("bag_panel.item_names.gloves"),
+	"ring": "반지", "necklace": "목걸이",
 	"sword": Lang.t("bag_panel.item_names.sword"), "axe": Lang.t("bag_panel.item_names.axe"), "staff": Lang.t("bag_panel.item_names.staff"), "crossbow": Lang.t("bag_panel.item_names.crossbow"), "dagger": Lang.t("bag_panel.item_names.dagger")}
 const SORTS := ["grade", "score", "new"]
 static var SORT_NAMES := {"grade": Lang.t("bag_panel.sort_names.grade"), "score": Lang.t("bag_panel.sort_names.score"), "new": Lang.t("bag_panel.sort_names.new")}

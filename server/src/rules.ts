@@ -614,12 +614,14 @@ export const DUNGEON_TYPES = ['gold', 'equip', 'ticket'] // ticket = 모집권 �
 export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR'] // 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
 export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5 }
 export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves'] // 모든 영웅이 쓴다
-export const EQUIP_SLOTS = ['weapon', ...ARMOR_SLOTS]
+export const ACCESSORY_SLOTS = ['ring', 'necklace'] // 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다
+export const EQUIP_SLOTS = ['weapon', ...ARMOR_SLOTS, ...ACCESSORY_SLOTS]
 export const WEAPON_OF: Record<string, string> = { Knight: 'sword', Barbarian: 'axe', Mage: 'staff', Rogue_Hooded: 'crossbow', Rogue: 'dagger' } // 영웅 모델 → 무기 종류
 export const WEAPON_KINDS = ['sword', 'axe', 'staff', 'crossbow', 'dagger']
 // 부위 → [능력치, 기준값]. 2026-10-07 장비 레벨 없앰: 기준값 = 예전 Lv 10 값(반올림). 실제 값 = round(기준값 × 등급 배율 × 굴림 % / 100)
 export const SLOT_STAT: Record<string, [string, number]> = {
   weapon: ['atk', 20], top: ['hp', 130], bottom: ['hp', 130], hat: ['hp', 80], pauldron: ['hp', 80], gloves: ['atk', 8], shoes: ['hp', 65],
+  ring: ['atk', 12], necklace: ['hp', 110], // 장신구(2026-10-15, Claude 기본값 — 반지 = 장갑의 1.5배 공격, 목걸이 = 상의와 투구 사이 체력)
 }
 export const SHOES_SPEED_PCT = 3 // 신발 이동속도 기준 +3%(등급 무관, 굴림은 적용)
 // 능력치마다 따로 굴리는 배율(정수 %): 85~115. 저장은 rolls {hp|atk|speed_pct: %}, 없으면 100(기준값)

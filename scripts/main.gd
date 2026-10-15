@@ -304,6 +304,7 @@ func _build_world() -> void:
 	Guild.boss_started.connect(_on_guild_boss_started)
 	GuildWar.battle_started.connect(_on_guild_war_started)
 	Pvp.battle_started.connect(_on_pvp_started)
+	Party.battle_started.connect(_on_party_started)
 	GameState.mode_changed.connect(_on_mode_changed)
 	_set_battle_ui(GameState.mode != GameState.Mode.IDLE)
 	if OS.is_debug_build() and rebuilds == 0:
@@ -416,6 +417,12 @@ func _on_pvp_started(run: Dictionary) -> void:
 		_enter_dungeon.call_deferred(run, preload("res://scripts/pvp_battle.gd"), "guild_war")
 
 
+## 파티 퀘스트(Party.battle_started — 리치·거미 여왕): 같은 자리에 파티 전투 장면(party_battle.gd)을 붙인다. 리치 = 망자의 성채, 거미 여왕 = 보스 곡.
+func _on_party_started(run: Dictionary) -> void:
+	if not run.is_empty():
+		_enter_dungeon.call_deferred(run, preload("res://scripts/party_battle.gd"), "dungeon_equip" if str(run.get("quest", "")) == "lich" else "boss")
+
+
 ## music = 그 장면의 배경음악 테마(Music.override — 나가면 성 월드 곡으로 돌아간다).
 func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scripts/dungeon.gd"), music := "") -> void:
 	var d = scene_script.new()
@@ -432,7 +439,7 @@ func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scrip
 		return
 	_dungeon = d
 	Music.override = music
-	if scene_script.resource_path != "res://scripts/war_battle.gd":  # 길드전은 늘 1배(사용자 2026-10-07 "길드전은 아니야")
+	if not scene_script.resource_path in ["res://scripts/war_battle.gd", "res://scripts/party_battle.gd"]:  # 길드전은 늘 1배(사용자 2026-10-07 "길드전은 아니야"), 파티 퀘스트도 여럿이 함께라 1배
 		d.add_child(preload("res://scripts/speed_button.gd").new())  # 던전·PVP·길드 보스에도 같은 배속 버튼(x1 → x1.5 → x2, 성 화면과 같은 설정)
 	_host.add_child(d)
 

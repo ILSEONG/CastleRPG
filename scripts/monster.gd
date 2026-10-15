@@ -38,6 +38,9 @@ var hp: float = 0.0
 var hp_max: float = 0.0
 var atk: float = 0.0
 var is_boss := false  # 보스(GameData.BOSS_KINDS — 성 대보스·왕고블린·데스나이트): 거인 사냥(boss_slayer) 대상
+var uid := 0  # 파티 퀘스트(실시간): 전투 안 고유 번호(공격 명령 표적·스냅샷 행)
+var puppet := false  # 파티 퀘스트 꼭두각시 기기: 방장 스냅샷을 따라 그리기만(판단·피해 없음)
+var swings := 0  # 휘두른 횟수(꼭두각시가 공격 모션을 맞춰 튼다)
 
 var _stats: Dictionary = {}
 var _speed := 0.0  # 기본 이동속도 × 스테이지 배율(개정 22 §3) × 성 웨이브 배율(setup)
@@ -54,6 +57,9 @@ var _poison_t := 0.0
 var _dot_dps := PackedFloat64Array([0.0, 0.0, 0.0])  # DOT_TAGS 칸마다 초당 피해
 var _dot_t := PackedFloat64Array([0.0, 0.0, 0.0])  # DOT_TAGS 칸마다 남은 초
 var _freeze_t := 0.0
+var _p_pos := Vector3.INF  # 꼭두각시: 방장이 보낸 자리(INF = 아직)
+var _p_face := Vector3.ZERO
+var _p_walk := false
 var _iced := false  # 얼어서 모델 애니메이션을 멈춰 둔 상태
 var _root_t := 0.0
 var _vuln_pct := 0.0
@@ -151,6 +157,9 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 
 func _process(delta: float) -> void:
 	if _dead:
+		return
+	if puppet:
+		_puppet_tick(delta)
 		return
 	_walking = false
 	_slow_t -= delta
@@ -268,6 +277,7 @@ func _spread(p: Vector3, w: float) -> Vector3:
 
 ## 공격 시작(개정 12-2 §3): 대상(what = AT_HERO면 영웅 hero, 성(-1)·성문 면(0..3)이면 그 지점 at)을 고정하고 모션을 재생한다. 피해는 타격 순간(_release)에.
 func _swing(hero, what: int, at: Vector3) -> void:
+	swings += 1
 	_atk_cd = _stats.atk_interval
 	_swing_hero = hero
 	_swing_side = what
@@ -595,3 +605,47 @@ func bar_scale() -> float:
 func _vanish() -> void:
 	_dead = true
 	queue_free()
+
+
+# --- 파티 퀘스트 실시간(party_battle.gd): 방장 기기만 판단하고, 다른 기기의 적은 꼭두각시 ---
+
+## 방장이 보내는 한 줄: [x, z, 방향(라디안), 체력 비율, 걷는 중(0/1), 휘두른 횟수].
+func puppet_row() -> Array:
+	return [snappedf(global_position.x, 0.01), snappedf(global_position.z, 0.01), snappedf(_model.rotation.y, 0.01),
+		snappedf(hp / maxf(1.0, hp_max), 0.001), 1 if _walking else 0, swings]
+
+
+func puppet_apply(row: Array) -> void:
+	if _dead or row.size() < 6:
+		return
+	var first := _p_pos == Vector3.INF
+	_p_pos = Vector3(float(row[0]), 0.0, float(row[1]))
+	if first:
+		global_position = _p_pos
+	_p_face = Vector3(sin(float(row[2])), 0.0, cos(float(row[2])))
+	var new_hp := float(row[3]) * hp_max
+	if new_hp <= 0.0:
+		take_damage(hp, DamageNumbers.Kind.HIT)  # 쓰러짐(보통 죽음 연출·died 신호)
+		return
+	if new_hp < hp - 0.5:
+		take_damage(hp - new_hp, DamageNumbers.Kind.HIT)
+	elif new_hp > hp + 0.5:
+		hp = new_hp
+	var walk := int(row[4]) == 1
+	if int(row[5]) != swings:
+		swings = int(row[5])
+		_model.play_attack(float(_stats.get("atk_interval", 1.0)))
+	elif walk != _p_walk:
+		if walk:
+			_model.play_walk()
+		else:
+			_model.play_idle()
+	_p_walk = walk
+
+
+func _puppet_tick(delta: float) -> void:
+	if _p_pos == Vector3.INF:
+		return
+	global_position = global_position.lerp(_p_pos, minf(1.0, delta * 12.0))
+	if _p_face.length() > 0.1:
+		_model.face(_p_face)

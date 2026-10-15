@@ -31,10 +31,10 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
-const EQUIP_PX := 72.0  # 장비 칸 한 변
+const EQUIP_PX := 64.0  # 장비 칸 한 변(2026-10-15 장신구 두 칸이 늘어 72 → 64)
 const DOT_R := 9.0  # 장비 칸 빨간 점 반지름(논리 px)
 const DOT_RED := Color(0.9, 0.18, 0.15)
-const EQUIP_LEFT := 4  # 왼쪽 줄 칸 수(GameData.EQUIP_SLOTS 앞에서부터)
+const EQUIP_LEFT := 5  # 왼쪽 줄 칸 수(GameData.EQUIP_SLOTS 앞에서부터 — 9칸: 왼쪽 5 · 오른쪽 4)
 const EQUIP_COLOR := Color(0.2, 0.42, 0.75)
 
 const SLOT_SIZE := Vector2(140, 150)
@@ -399,7 +399,7 @@ func _build_detail() -> void:
 		nav.add_child(b)
 
 
-## 장비 칸 7개(개정 18): 큰 카드 안 양옆 세로 줄(피규어 칸 바깥). 칸 = 평면 버튼 + 장비 그림(item_tile).
+## 장비 칸 9개(개정 18 + 2026-10-15 장신구): 큰 카드 안 양옆 세로 줄(피규어 칸 바깥). 칸 = 평면 버튼 + 장비 그림(item_tile).
 func _build_equip_slots() -> void:
 	var cols := []
 	for side in 2:

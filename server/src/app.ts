@@ -30,6 +30,8 @@ import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
 import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
+import { registerParty } from './party_routes.ts'
+import type { PartyLive } from './party_live.ts'
 import * as RL from './ratelimit.ts'
 import { DEFAULT_LANG, LANGS, loadBundledTexts, setTexts, textMaps, txt, type TextRow } from './texts.ts'
 
@@ -43,6 +45,7 @@ export interface AppOptions {
   oauth?: O.OAuthConfig // 소셜 로그인 제공자 키·공개 주소(없으면 소셜 로그인 꺼짐)
   fetch?: typeof fetch // 제공자 호출(테스트는 가짜)
   warLive?: WarLive // 공성전 실시간 방(main.ts가 만들어 http 서버에 붙인다). 없으면 방 없이(REST finish만)
+  partyLive?: PartyLive // 파티 퀘스트 실시간 방(main.ts가 만들어 붙인다). 없으면 방 없이(REST finish만)
   payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
   legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
   gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
@@ -3735,6 +3738,8 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
+  registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, testHooks: !!opts.allowTestHooks },
+    opts.partyLive)
   registerInquiry(app, { query, auth, clock, body, ApiError, clientIp: RL.clientIp, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })
 
   return app

@@ -17,8 +17,10 @@ from meshy_heroes import REF, STYLE, TAIL, req  # noqa: E402
 ms.OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meshy", "out", "enemies")
 ms.STATE = os.path.join(ms.OUT, "state.json")
 
-BOSS = {"goblin_king", "death_knight", "rock_golem", "ogre_warlord", "demon_lord", "minotaur", "dragon"}
-CREATURE = {"dragon"}  # 사람 모양이 아니다: 소환수 스타일(ms.STYLE)·T자세 없음, 뼈대 대신 부품(dev/meshy_dragon_fit.py)
+BOSS = {"goblin_king", "death_knight", "rock_golem", "ogre_warlord", "demon_lord", "minotaur", "dragon", "lich", "spider_queen"}
+CREATURE = {"dragon", "spider_queen", "spiderling"}  # 사람 모양이 아니다: 소환수 스타일(ms.STYLE)·T자세 없음, 뼈대 대신 부품(dev/meshy_dragon_fit.py·meshy_spider_fit.py)
+POLY = {"dragon": 6000, "spider_queen": 5000, "spiderling": 1400}  # 리메시 삼각형 수(없으면 4,500). 새끼 거미는 화면에 30~60마리라 적게
+SMALL = {"spiderling"}  # 졸개지만 meshy-7 + 리메시(30 크레딧): meshy-t2는 삼각형 수를 못 정하고(4천 안팎) meshy-5는 2026-10에 없어졌다
 DESC = {
     "goblin": ("goblin raider, small green-skinned goblin with long pointed ears, big nose and a toothy grin, ragged brown "
                "leather vest and hood pushed back, dark gray pants, rope belt, bare green arms and feet wrapped in cloth."),
@@ -54,6 +56,17 @@ DESC = {
                      "shoulder armor, belt with a skull buckle, red war paint stripes, brown fur kilt."),
     "demon_lord": ("demon lord, tall muscular demon with crimson skin, big curved black horns, glowing orange eyes, black "
                    "spiked plate armor on chest and shoulders, tattered black cape, small flames on the shoulders."),
+    # 파티 퀘스트 보스(2026-10-15): 리치(Mage 뼈대 — 시전 모션, 지팡이는 KayKit 2H_Staff)와 거미 여왕 + 새끼 거미(부품, dev/meshy_spider_fit.py).
+    "lich": ("lich king, undead sorcerer with a skull face and glowing cyan soul-fire eyes, tall horned bone crown, tattered "
+             "dark violet robe with teal trim and a torn ragged hem at the ankles, high collar, bony hands and feet, glowing "
+             "teal runes on the chest."),
+    "spider_queen": ("giant spider queen, huge bloated round purple-black abdomen with glowing green markings, dark purple carapace "
+                     "with a crown of sharp spikes on the head, many glowing green eyes, two big curved fangs, eight long jointed "
+                     "legs spread wide to the sides, clearly apart, tips on the ground. Seen from the front-left three-quarter view, "
+                     "slightly from above."),
+    "spiderling": ("small spider, round dark purple body and abdomen with a few green spots, glowing green eyes, two small fangs, "
+                   "eight thick legs spread wide to the sides, clearly apart, tips on the ground. Seen from the front-left "
+                   "three-quarter view, slightly from above."),
     "minotaur": ("minotaur, huge bull-headed brute with brown fur, big curved horns, golden nose ring, glowing red eyes, "
                  "bare muscular chest with straps, iron bracers, dark leather kilt, hoofed feet."),
 }
@@ -81,8 +94,8 @@ def model(kinds):
         body = {"input_task_id": s[k]["concept"]["id"], "should_texture": True, "target_formats": ["glb"]}
         if k not in CREATURE:
             body["pose_mode"] = "t-pose"
-        if k in BOSS:
-            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle", "target_polycount": 6000 if k in CREATURE else 4500})
+        if k in BOSS or k in SMALL:
+            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle", "target_polycount": POLY.get(k, 4500)})
         else:
             body.update({"model_type": "smart-topology", "ai_model": "meshy-t2"})
         t = req("POST", "/image-to-3d", body)

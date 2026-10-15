@@ -60,6 +60,26 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    던전 적은 던전 전용 — 성 순환에 넣지 않는다. 검사: tests/run_tests.gd `test_meshy_enemies`, `test_enemy_looks`.
 텍스처 임포트는 영웅·소환수·적 모두 손실 압축(compress/mode=1, 품질 0.7) — 무손실이면 APK가 GitHub 파일 한도(100 MiB)를 넘는다.
 
+## 파티 퀘스트 보스(2026-10-15): 리치 · 거미 여왕 · 새끼 거미
+크레딧 126(컨셉 nano-banana-2 6 × 3 + meshy-7 리메시 30 × 3 + 장신구 아이콘 9 × 2). 원본 컨셉·Meshy GLB는 프로젝트 파일 enemies/<kind>/, 모습은 party/models_preview.png.
+- 리치(`lich`): `dev/meshy_enemies.py`(T자세, meshy-7 4,500) → `dev/meshy_fit.py assets/models/characters/Mage.glb …` = Mage 뼈대(4,680 삼각형).
+  `Art.MONSTER_MODELS.lich`: 손에는 KayKit 2H_Staff만(책·완드·모자 숨김), body_scale 1.12, 평타 Spellcast_Shoot·지팡이 베기 둘(무작위).
+  시전 모션 이름(UnitModel.play_cast): Spellcast_Shoot · Spellcast_Raise · Spellcast_Long · Spellcasting(반복 — play_loop), 그 밖에 Cheer · Use_Item.
+- 거미 여왕(`spider_queen`, 5,463 삼각형)·새끼 거미(`spiderling`, 1,460 삼각형 · 텍스처 512): 사람 모양이 아니라 드래곤처럼 부품.
+  `dev/meshy_enemies.py`(CREATURE, 3/4 시점, meshy-7 리메시 5,000·1,400 — meshy-t2는 삼각형 수를 못 정하고 meshy-5는 없어졌다) →
+  `python3 dev/meshy_spider_fit.py <meshy>.glb assets/models/meshy/enemies/<kind>.glb --open 0.05(여왕)|0.10(새끼, --tex 512)`:
+  메시 속을 채운 복셀을 공으로 열어(opening) 가는 다리를 지우고 남은 몸을 허리(단면이 가장 작은 z)에서 Body·Abdomen으로, 앞쪽 42%를 Head로 나눈다.
+  다리 = 나머지 연결 덩어리 큰 것 8개(L1~L4 −X, R1~R4 +X, 1 = 앞), 관절 = 몸과 맞닿은 정점 고리 가운데. Meshy 여왕은 다리가 6개라
+  둘째 다리는 가운데 다리를 앞다리 쪽으로 돌린 복사본이다(스크립트가 6개면 저절로).
+- 움직임: `scripts/spider_model.gd`(size = 키 m, queen) — 걸음·대기·물기(여왕은 내려찍기도)·스킬 web·lunge·brood·acid(play_skill), mouth()·abdomen_tip().
+  새끼는 crowd_lod면 붐빌 때 자세를 3프레임에 한 번(화면 밖 4), 그림자 끔. 검사: tests/run_tests.gd `test_spider_models`·`test_meshy_enemies`(lich),
+  트리 안 동작·사진 `tests/party_models_check.tscn`(-- --shot=FILE).
+
+## 장신구 아이콘(2026-10-15): 반지·목걸이
+`ring`·`necklace` × 6등급 = `assets/ui/items/<부위>_<등급>.png`(장비 아이콘과 같은 자르기·임포트). Icons.ITEM_KINDS 13종, 벡터 그림도 있다(반지 = 띠 + 보석,
+목걸이 = 고리 사슬 + 매달린 보석). 프롬프트는 장비 틀과 같고 6등급만 "radiant pearl-white platinum"(금을 최고 등급 강조로 쓰지 않는다).
+원본·프롬프트는 프로젝트 파일 design/equipment/(ring_sheet.png·necklace_sheet.png, prompts.json).
+
 ## 장비 아이콘(2026-10-07)
 부위 11종(Icons.ITEM_KINDS) × 등급 6단계 = 66개 그림 `assets/ui/items/<부위>_<등급>.png`(128 px, 투명 배경, 손실 압축 0.85 + 밉맵).
 `Icons.draw_item`이 그림이 있으면 그것을, 없으면 예전 벡터 그림을 그린다. 칸 장식(바탕 그러데이션, SR↑ 빛 번짐, SSR↑ 금 징,

@@ -415,6 +415,16 @@ const MONSTER_MODELS := {
 		"anims": {"idle": "Unarmed_Idle", "walk": "Running_A", "attack": "Unarmed_Melee_Attack_Punch_A", "death": "Death_B"},
 		"attacks": ["Unarmed_Melee_Attack_Punch_A", "Unarmed_Melee_Attack_Punch_B"],
 	},
+	# 파티 퀘스트 보스 리치(2026-10-15): Meshy 몸 + Mage 뼈대(시전 모션 Spellcast_Shoot·Raise·Long·Spellcasting) — 손에는 KayKit 양손 지팡이만.
+	# 거미 여왕·새끼 거미는 사람 모양이 아니라 여기 없다(scripts/spider_model.gd를 바로 쓴다).
+	"lich": {
+		"scene": CHAR_DIR + "Mage.glb",
+		"hide": ["Spellbook", "Spellbook_open", "1H_Wand", "Mage_Hat"],
+		"body_scale": 1.12,  # 데스나이트(2.2)와 같은 표 크기에서 더 크게 — 마른 로브 몸
+		"scale": 2.2,
+		"anims": {"idle": "Idle", "walk": "Walking_A", "attack": "Spellcast_Shoot", "death": "Death_B"},
+		"attacks": ["Spellcast_Shoot", "2H_Melee_Attack_Slice", "2H_Melee_Attack_Chop"],  # 영혼 탄·지팡이 가로 베기·내려치기(무작위)
+	},
 }
 
 ## 장비 등급 색(개정 18 §5). LR은 무지개 금 — 정적인 곳(드랍 상자)은 이 금색, 아이콘 테두리는 Icons.draw_item이 흐르게 그린다.

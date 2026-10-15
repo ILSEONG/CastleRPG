@@ -3070,6 +3070,18 @@ func debug_win(run_id := "") -> bool:
 	return true
 
 
+## 오프라인(개발·테스트) 보상 장비 하나를 보관함에 넣는다(파티 퀘스트 장신구). 넣은 장비(id 포함)를 돌려준다.
+func add_local_item(item: Dictionary) -> Dictionary:
+	var it := item.duplicate(true)
+	it.id = next_item_id
+	next_item_id += 1
+	bag.append(it.duplicate(true))
+	_reindex_items()
+	save()
+	items_changed.emit()
+	return it
+
+
 ## 보관함(사본, id 순) [{id, slot, weapon_kind(무기만, 아니면 null), grade, level}].
 func items() -> Array:
 	return bag.duplicate(true)

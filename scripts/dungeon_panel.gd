@@ -29,6 +29,7 @@ const DungeonArt := preload("res://scripts/dungeon_art.gd")
 const FriendPanelScript := preload("res://scripts/friend_panel.gd")
 const TabBarScript := preload("res://scripts/tab_bar.gd")
 const PvpViewScript := preload("res://scripts/pvp_view.gd")
+const PartyViewScript := preload("res://scripts/party_view.gd")
 
 const TYPES := ["gold", "equip", "ticket"]
 static var NAMES := {"gold": Lang.t("dungeon_panel.names.gold"), "equip": Lang.t("dungeon_panel.names.equip"), "ticket": Lang.t("dungeon_panel.names.ticket")}
@@ -64,8 +65,9 @@ var helper_box: VBoxContainer
 var helper_title: Label
 var friend_panel  # 친구 창(이 시트가 만든다)
 var _helper_row: HBoxContainer
-var section := "dungeon"  # 맨 위 탭: "dungeon" | "pvp"
+var section := "dungeon"  # 맨 위 탭: "dungeon" | "pvp" | "party"
 var pvp  # PVP 탭 내용(pvp_view.gd)
+var party_tab  # 파티 탭 내용(party_view.gd — 리치·거미 여왕 파티 퀘스트, 2026-10-15)
 var section_buttons := {}
 
 var _tabs_row: HBoxContainer
@@ -88,6 +90,9 @@ func _ready() -> void:
 	pvp = PvpViewScript.new()
 	pvp.visible = false
 	content.add_child(pvp)
+	party_tab = PartyViewScript.new()
+	party_tab.visible = false
+	content.add_child(party_tab)
 	_fit_sheet()
 	friend_panel = FriendPanelScript.new()
 	add_child(friend_panel)
@@ -98,12 +103,12 @@ func _ready() -> void:
 	Economy.dungeon_started.connect(_on_dungeon_started)
 
 
-## 맨 위 탭 [던전][PVP](고른 탭은 호박색).
+## 맨 위 탭 [던전][PVP][파티](고른 탭은 호박색).
 func _build_tabs() -> void:
 	_tabs_row = HBoxContainer.new()
 	_tabs_row.add_theme_constant_override("separation", 6)
 	content.add_child(_tabs_row)
-	for t in [["dungeon", Lang.t("dungeon_panel.build_tabs")], ["pvp", "PVP"]]:
+	for t in [["dungeon", Lang.t("dungeon_panel.build_tabs")], ["pvp", "PVP"], ["party", "파티"]]:
 		var b := _button(t[1], UiKit.STEEL, 28)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 60)
@@ -345,6 +350,7 @@ func _show_list(guard := true) -> void:
 	_form_view.visible = false
 	_list_view.visible = section == "dungeon"
 	pvp.visible = section == "pvp"
+	party_tab.visible = section == "party"
 	_tabs_row.visible = true
 	_style_tabs()
 	_refresh()

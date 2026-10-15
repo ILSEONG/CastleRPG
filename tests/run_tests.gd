@@ -134,6 +134,7 @@ func _init() -> void:
 	test_meshy_bodies()
 	test_attack_sets()
 	test_meshy_enemies()
+	test_spider_models()
 	test_portrait_looks()
 	test_scene_snap()
 	test_crowd()
@@ -3484,7 +3485,8 @@ func test_item_icons() -> void:
 		var sig := str(shapes)
 		check(not seen.has(sig), "item icon %s differs from %s" % [kind, seen.get(sig, "")])
 		seen[sig] = kind
-	check(IconsScript.ITEM_KINDS.size() == 11 and not IconsScript.KINDS.has("sword"), "11 equipment kinds; resource chip kinds stay resources")
+	check(IconsScript.ITEM_KINDS.size() == 13 and IconsScript.ITEM_KINDS.has("ring") and IconsScript.ITEM_KINDS.has("necklace") and not IconsScript.KINDS.has("sword"),
+		"13 equipment kinds (2026-10-15 + ring·necklace); resource chip kinds stay resources")
 	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR"], "six item grades in order")
 	check(IconsScript.item_tile().all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "item tile inside the unit box")
 	var n := 33
@@ -3504,7 +3506,7 @@ func test_item_icons() -> void:
 			var img := tex.get_image()
 			if img.is_compressed():
 				img.decompress()
-			check(img.get_pixel(1, 1).a < 0.05 and img.get_pixel(126, 126).a < 0.05 and (img.get_pixel(64, 64).a > 0.0 or img.get_pixel(64, 40).a > 0.0),
+			check(img.get_pixel(1, 1).a < 0.05 and img.get_pixel(126, 126).a < 0.05 and (img.get_pixel(64, 64).a > 0.0 or img.get_pixel(64, 40).a > 0.0 or img.get_pixel(64, 96).a > 0.0),  # 목걸이는 가운데가 빈 고리 — 아래 펜던트
 				"painted icon %s_%s: transparent corners, something in the middle" % [kind, g])
 			sigs[str(img.get_pixel(64, 64)) + str(img.get_pixel(40, 80)) + str(img.get_pixel(80, 40))] = true
 		check(sigs.size() >= 5, "painted icons for %s differ by grade" % kind)
@@ -4536,7 +4538,7 @@ func test_meshy_enemies() -> void:
 	MeshMergeScript.enabled = false
 	const UnitModelScript := preload("res://scripts/unit_model.gd")
 	for kind in ["goblin", "goblin_king", "death_knight", "zombie", "lizardman", "werewolf", "imp", "ratman", "mushroom", "frost_troll",
-			"ogre_warlord", "demon_lord", "minotaur", "rock_golem", "golemite"]:
+			"ogre_warlord", "demon_lord", "minotaur", "rock_golem", "golemite", "lich"]:
 		var spec := Art.monster_spec(kind)
 		check(spec.get("body", "") == Art.MESHY_ENEMY_DIR + str(Art.MONSTER_MODELS[kind].get("meshy", kind)) + ".glb" and not spec.has("tint")
 			and spec.parts.all(func(p): return String(p[0]).begins_with("handslot")), "%s: Meshy body, hand parts only %s" % [kind, spec.get("parts")])
@@ -4555,6 +4557,36 @@ func test_meshy_enemies() -> void:
 	check(Art.monster_spec("death_knight") == Art.MONSTER_MODELS.death_knight, "meshy_bodies off: dungeon enemies back to KayKit")
 	Art.meshy_bodies = true
 	MeshMergeScript.enabled = true
+
+
+## 파티 퀘스트 리치·거미(2026-10-15): 리치는 Mage 뼈대(시전 모션이 있다), 거미 GLB는 부품 11개(Body·Abdomen·Head·다리 8, 원점 = 관절),
+## 여왕 삼각형 ≤ 6,000 · 새끼 ≤ 1,500(한 화면 30~60마리). 움직임은 tests/party_models_check.tscn(트리 안)에서 본다.
+func test_spider_models() -> void:
+	var lich := Art.monster_spec("lich")
+	var mage: Node3D = Art.instance(lich.scene)
+	var ap := mage.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	for a in ["Spellcast_Shoot", "Spellcast_Raise", "Spellcast_Long", "Spellcasting", lich.anims.idle, lich.anims.walk, lich.anims.death] + lich.attacks:
+		check(ap.has_animation(a), "lich rig has %s" % a)
+	mage.free()
+	for kind in ["spider_queen", "spiderling"]:
+		var root: Node3D = Art.instance("res://assets/models/meshy/enemies/%s.glb" % kind)
+		var tris := 0
+		for n in ["Body", "Abdomen", "Head", "L1", "L2", "L3", "L4", "R1", "R2", "R3", "R4"]:
+			var mi := root.get_node_or_null(n) as MeshInstance3D
+			check(mi != null and mi.mesh != null, "%s has part %s" % [kind, n])
+			if mi != null and mi.mesh != null:
+				tris += mi.mesh.get_faces().size() / 3
+		check(tris > 500 and tris <= (6000 if kind == "spider_queen" else 1500), "%s triangles %d" % [kind, tris])
+		var l1 := root.get_node_or_null("L1") as Node3D
+		var r1 := root.get_node_or_null("R1") as Node3D
+		check(l1 != null and r1 != null and l1.position.x < 0.0 and r1.position.x > 0.0 and l1.position.z > (root.get_node("L4") as Node3D).position.z,
+			"%s legs: L = −X, R = +X, 1 = front" % kind)
+		root.free()
+	var sm = load("res://scripts/spider_model.gd").new()
+	for m in ["play_idle", "play_walk", "play_attack", "is_busy", "play_cast", "play_loop", "play_death", "reset_pose", "face", "hit_react",
+			"play_skill", "mouth", "abdomen_tip"]:
+		check(sm.has_method(m), "spider_model has %s" % m)
+	sm.free()
 
 
 ## 피규어(목록·상세 미리보기·모집 결과 카드)도 같은 생김새: Portraits.spec_of("hero:id") == Art.hero_spec — 팔레트·부품·swap·크기까지. 병사는 그대로.
