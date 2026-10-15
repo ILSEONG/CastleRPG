@@ -45,7 +45,8 @@ var dia_tab: Button
 var one_button: Button
 var ten_button: Button
 var confirm_button: Button
-var again_button: Button  # [재모집 N] — 자동 중엔 "자동 모집 중"
+var again_button: Button  # [1회 더] — 결과 화면에서 바로 이어 뽑기(2026-10-15 사용자 "연속뽑기 기능이 왜 없어"). 자동 중엔 "자동 모집 중"
+var again10_button: Button  # [10회 더]
 var auto_box: Button  # 자동 모집 체크박스(Fever.auto_recruit에 저장). 골드 결과에서만 보인다
 var auto_delay := AUTO_DELAY  # 테스트가 줄인다
 var cards: Array = []  # 지금 보이는 결과 카드(hero_card — 저마다 뒤집기 연출 card_reveal 안에 있다)
@@ -177,14 +178,16 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	_result_view.add_child(row)
-	again_button = _button(Lang.t("recruit_panel.ready_5"), UiKit.AMBER)
-	again_button.custom_minimum_size = Vector2(0, 72)
-	again_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	again_button.pressed.connect(_again)
-	row.add_child(again_button)
-	confirm_button = _button(Lang.t("recruit_panel.ready_6"))
-	confirm_button.custom_minimum_size = Vector2(0, 72)
-	confirm_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	again_button = _button("", UiKit.AMBER, 24)
+	again10_button = _button("", HudScript.ACCENT, 24)
+	for b in [again_button, again10_button]:
+		b.custom_minimum_size = Vector2(0, 84)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(b)
+	again_button.pressed.connect(_again.bind(1))
+	again10_button.pressed.connect(_again.bind(10))
+	confirm_button = _button(Lang.t("recruit_panel.ready_6"), UiKit.STEEL, 24)
+	confirm_button.custom_minimum_size = Vector2(132, 84)
 	confirm_button.pressed.connect(_on_confirm)
 	row.add_child(confirm_button)
 	auto_box = UiKit.checkbox(Lang.t("recruit_panel.ready_7"))
@@ -496,9 +499,12 @@ func auto_running() -> bool:
 	return auto_box.button_pressed and not _halted and _cur == GOLD
 
 
-func _again() -> void:
-	if not _waiting and not again_button.disabled:
-		_pull(_count, _cur)
+## [1회 더]·[10회 더]: 방금 뽑은 재화(골드 / 다이아·모집권)로 n회 더. 모집권이 모자라면 다이아, 다이아가 모자라면 상점 이동 창.
+## 참고: 원신·니케·에픽세븐의 결과 화면 [1회 더]·[10회 더](연속 뽑기).
+func _again(n: int) -> void:
+	var b: Button = again_button if n == 1 else again10_button
+	if not _waiting and not b.disabled:
+		_pull(n, GOLD if _cur == GOLD else DIA)
 
 
 ## [확인]: 자동이 돌고 있었다면 멈추고(체크도 푼다) 결과 화면을 닫는다.
@@ -596,13 +602,19 @@ func _refresh() -> void:
 			UiKit.apply_button(b, UiKit.GRADE_COLORS.SR if cur == TICKET else HudScript.ACCENT, 14.0)
 		# 골드는 모자라면 끈다. 다이아는 눌러서 상점 이동 창을 띄운다
 		b.disabled = cur == GOLD and Economy.wallet(GOLD) < cost  # 응답을 기다리는 동안에도 모양은 그대로(재탭은 _pull이 무시)
-	var again_cur := pull_currency(_count, _cur)
-	var cost := Economy.gacha_cost(again_cur, _count)
-	var short := Economy.wallet(again_cur) < cost
-	if auto_running() and not short:
-		again_button.text = Lang.t("recruit_panel.refresh_13")
-	elif again_cur == TICKET:
-		again_button.text = Lang.t("recruit_panel.refresh_14") % cost
-	else:
-		again_button.text = Lang.t("recruit_panel.refresh_15") % [Lang.t("recruit_panel.refresh_8") if again_cur == DIA else "", UiKit.commas(cost)] + ((Lang.t("recruit_panel.refresh_16") if again_cur == DIA else Lang.t("recruit_panel.refresh_17")) if short else "")
-	again_button.disabled = (short and again_cur == GOLD) or auto_running()
+	for i in 2:
+		var b: Button = [again_button, again10_button][i]
+		var n: int = [1, 10][i]
+		var again_cur := pull_currency(n, GOLD if _cur == GOLD else DIA)
+		var cost := Economy.gacha_cost(again_cur, n)
+		var short := Economy.wallet(again_cur) < cost
+		var head := Lang.t("recruit_panel.refresh.head") % n
+		if auto_running() and n == _count and not short:
+			b.text = Lang.t("recruit_panel.refresh_13")
+		elif again_cur == TICKET:
+			b.text = head + "\n" + Lang.t("recruit_panel.refresh_18") % cost
+		elif short:
+			b.text = head + (Lang.t("recruit_panel.refresh_16") if again_cur == DIA else Lang.t("recruit_panel.refresh_17"))
+		else:
+			b.text = head + "\n" + (Lang.t("recruit_panel.refresh_8") if again_cur == DIA else "") + UiKit.commas(cost)
+		b.disabled = (short and again_cur == GOLD) or auto_running()

@@ -1520,7 +1520,6 @@ recruit_panel.ready,골드 모집,,,,scripts/recruit_panel.gd
 recruit_panel.ready_2,다이아 모집,,,,scripts/recruit_panel.gd
 recruit_panel.ready_3,확률 정보,,,,scripts/recruit_panel.gd
 recruit_panel.ready_4,닫기,,,,scripts/recruit_panel.gd
-recruit_panel.ready_5,재모집,,,,scripts/recruit_panel.gd
 recruit_panel.ready_6,확인,,,,scripts/recruit_panel.gd
 recruit_panel.ready_7,자동 모집,,,,scripts/recruit_panel.gd
 recruit_panel.build_shop_ask,다이아가 부족합니다,,,,scripts/recruit_panel.gd
@@ -1541,8 +1540,6 @@ recruit_panel.refresh_10,%s%d회 %s%s,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_11,%d장,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_12, · SR 이상 %d장,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_13,자동 모집 중,,,,scripts/recruit_panel.gd
-recruit_panel.refresh_14,재모집 모집권 %d장,,,,scripts/recruit_panel.gd
-recruit_panel.refresh_15,재모집 %s%s,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_16,\n다이아 부족,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_17,\n골드 부족,,,,scripts/recruit_panel.gd
 release_platform.iap_off_text,결제는 토스 출시 후 열립니다,,,,scripts/release_platform.gd
@@ -2742,3 +2739,5 @@ party_invite_panel.invite,초대함,,,,scripts/party_invite_panel.gd
 party_invite_panel.invite_2,초대,,,,scripts/party_invite_panel.gd
 summon_stage.init,건너뛰기 ›,,,,scripts/summon_stage.gd
 summon_stage.draw_splash,화면을 누르면 계속,,,,scripts/summon_stage.gd
+recruit_panel.refresh.head,%d회 더,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_18,모집권 %d장,,,,scripts/recruit_panel.gd
