@@ -19,6 +19,7 @@ const MISSION_TOURS := {
 	"guild_boss": ["guild_boss"],
 	"siege_try": ["war_deploy", "war_fight", "war_respawn", "war_breach", "war_end"],
 	"exchange_look": ["exchange"],
+	"party_clear": ["party"],
 }
 
 static var TOURS := {
@@ -145,5 +146,15 @@ static var TOURS := {
 		{"at": "exchange_panel:buttons.tab:sell", "text": Lang.t("guide_tours.tours.text_82")},
 		{"at": "exchange_panel:buttons.tab:mine", "text": Lang.t("guide_tours.tours.text_83")},
 		{"at": "exchange_panel:wallet_label", "text": Lang.t("guide_tours.tours.text_84")},
+	]},
+	"party": {"when": "party_view:buttons.start:lich", "steps": [
+		{"title": Lang.t("guide_tours.tours.title_3"), "text": Lang.t("guide_tours.tours.text_85")},
+		{"at": "party_view:panels.lich", "text": Lang.t("guide_tours.tours.text_86")},
+		{"at": "party_view:_cards.lich.row", "text": Lang.t("guide_tours.tours.text_87")},
+		{"at": "party_view:_cards.lich.diffs", "text": Lang.t("guide_tours.tours.text_88")},
+		{"at": "party_view:_cards.lich.left", "text": Lang.t("guide_tours.tours.text_89")},
+		{"at": "party_view:panels.spider", "text": Lang.t("guide_tours.tours.text_90")},
+		{"at": "party_view:auto_box", "text": Lang.t("guide_tours.tours.text_91")},
+		{"at": "party_view:buttons.start:lich", "text": Lang.t("guide_tours.tours.text_92")},
 	]},
 }

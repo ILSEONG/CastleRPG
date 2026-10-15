@@ -23,6 +23,7 @@ var diff := {}  # 퀘스트 → 고른 난이도
 var hero_i := 0  # 리치 출전 영웅(owned_heroes 순번)
 var buttons := {}  # 테스트용 "start:lich", "diff:lich:2", "auto" …
 var auto_box: Button
+var panels := {}  # 퀘스트 → 카드(가이드 포커스 설명이 가리킨다)
 var _cards := {}  # 퀘스트 → {diffs: [Button], odds, left, pick, reason, start}
 
 
@@ -68,6 +69,7 @@ func _ready() -> void:
 func _card(q: String) -> Control:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiKit.panel(Color(1, 1, 1, 0.55), 14.0, 14))
+	panels[q] = panel
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
@@ -130,7 +132,7 @@ func _card(q: String) -> Control:
 	start.pressed.connect(_start.bind(q))
 	box.add_child(start)
 	buttons["start:" + q] = start
-	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "reason": reason, "start": start}
+	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "row": pick_row, "reason": reason, "start": start}
 	return panel
 
 

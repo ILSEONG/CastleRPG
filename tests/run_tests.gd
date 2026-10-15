@@ -3373,6 +3373,15 @@ func test_crit_roll_params() -> void:
 
 
 ## 온라인 흉내: send를 기록만 한다.
+## 가이드 파티 미션: Party.best만 흉내(퀘스트 → 깬 최고 난이도)
+class PartyBestStub extends RefCounted:
+	var bests: Dictionary
+	func _init(b: Dictionary) -> void:
+		bests = b
+	func best(q: String) -> int:
+		return int(bests.get(q, 0))
+
+
 class GrowthNet extends RefCounted:
 	var up := true
 	var last_error := ""
@@ -5338,7 +5347,7 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 80 and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 81 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5360,6 +5369,24 @@ func test_tutorial() -> void:
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
 	t.note("pvp")
 	check(t.complete(), "guide: one PVP battle completes the PVP mission")
+	# 2026-10-15 가이드 81: 파티 던전 첫 클리어(리치·거미 여왕 어느 쪽이든)
+	t.step = t.mission_index("party_clear")
+	t.count = 0
+	var pm: Dictionary = t.mission()
+	check(t.step == TutorialScript.MISSIONS.size() - 1 and pm.kind == "party" and t.goto_of(pm) == "party" and t.action_label(pm) == "바로가기" and t.action_shown(pm)
+		and t.point_keys(pm) == ["@party_view:buttons.start:lich", "@dungeon_panel:section_buttons.party", "tab:dungeon"] and t.reward(t.step) == {"diamonds": 50}
+		and not t.complete(), "guide: the last mission is the first party dungeon clear (goes to [파티], arrow on the lich [매칭 시작], 50 diamonds)")
+	t.note("party")
+	check(t.complete(), "guide: a party win completes it")
+	t.count = 0
+	var fake_party := {"lich": 0, "spider": 1}
+	t.party = PartyBestStub.new(fake_party)
+	check(t.complete(), "guide: an earlier party clear (best ≥ 1, either quest) also counts")
+	fake_party.spider = 0
+	check(not t.complete(), "guide: no party clear yet, not complete")
+	t.party = null
+	check(GuideToursScript.MISSION_TOURS.get("party_clear", []) == ["party"] and str(GuideToursScript.TOURS.party.when) == "party_view:buttons.start:lich"
+		and GuideToursScript.TOURS.party.steps.size() >= 6, "guide: the party mission has a focus tour on the [파티] tab")
 	t.step = t.mission_index("stage_1_12")
 	t.count = 0
 	check(not t.complete(), "guide: 1-12 is not cleared by the guild unlock")

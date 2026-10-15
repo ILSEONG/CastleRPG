@@ -15,6 +15,7 @@ const SpawnerScript := preload("res://scripts/spawner.gd")
 const PlacementScript := preload("res://scripts/placement.gd")
 const CardScript := preload("res://scripts/tutorial_card.gd")
 const UiWindowScript := preload("res://scripts/ui_window.gd")
+const GuideTour := preload("res://scripts/guide_tour.gd")
 
 var _main
 var _shots: Array = []
@@ -50,7 +51,7 @@ func _ready() -> void:
 	Guild.boss_started.connect(func(r): _boss_run = r)
 	_check(await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0) and Tutorial.active() and Tutorial.step == 0, "guide starts at mission 1", str(Economy.server_quest))
 	var total: int = Tutorial.MISSIONS.size()
-	_check(total == 80, "the guide has 80 missions", str(total))
+	_check(total == 81, "the guide has 81 missions", str(total))
 	var guard := 0
 	var upto := int(Net.arg_value("upto")) if Net.arg_value("upto") != "" else total  # 디버그: 이 미션까지만
 	while Tutorial.active() and guard < total + 2 and Tutorial.step < upto:
@@ -77,7 +78,7 @@ func _mission(i: int) -> bool:
 	var card = _child(CardScript)
 	await _frames(2)
 	var reward: Dictionary = Tutorial.reward(i)
-	var text_ok: bool = card.panel.visible and card.step_label.text == "가이드 %d/80" % (i + 1) and str(m.title) in card.title_label.text and card.desc_label.text.length() > 10 \
+	var text_ok: bool = card.panel.visible and card.step_label.text == "가이드 %d/%d" % [i + 1, Tutorial.MISSIONS.size()] and str(m.title) in card.title_label.text and card.desc_label.text.length() > 10 \
 		and card.reward_label.text == "보상: " + Tutorial.reward_text(reward) and not reward.is_empty() and Tutorial.reward_text(reward) != ""
 	_check(text_ok, tag + " card: step, title, description, reward", "%s | %s | %s | %s" % [card.step_label.text, card.title_label.text, card.desc_label.text, card.reward_label.text])
 	if not Tutorial.complete():
@@ -354,6 +355,35 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 			await _frames(30)
 			Pvp.finish(false, 10.0)
 			await _frames(30)
+			await _leave_scene()
+		"party":  # 2026-10-15 가이드 81: [파티] 탭의 리치 [매칭 시작] → AI 성주로 채움(테스트 훅) → [입장 수락] → 전투 끝까지(×2 — 서버는 최대 배속보다 빠른 승리를 받지 않는다)
+			var pv = GuideTour.find_script_node(get_tree().root, "res://scripts/party_view.gd")
+			_check(pv != null and pv.is_visible_in_tree() and pv.buttons["start:lich"].is_visible_in_tree() and Tutorial.point_target() == pv.buttons["start:lich"],
+				tag + " [바로가기] opens the [파티] tab and the arrow sits on the lich [매칭 시작]", str(Tutorial.point_target()))
+			if pv == null:
+				return
+			pv.buttons["start:lich"].pressed.emit()
+			await _wait_until(func(): return Party.state() == "queued" and not Party._busy, 10.0)
+			await _request("/v1/test/party_bots_now", {})
+			_check(await _wait_until(func(): return Party.state() == "confirm", 15.0), tag + " AI lords fill the party", Party.state())
+			var started := []
+			var cb := func(r): started.append(r)
+			Party.battle_started.connect(cb)
+			Party.accept(true)
+			_check(await _wait_until(func(): return not started.is_empty(), 20.0), tag + " the lich fight starts", Party.state())
+			Party.battle_started.disconnect(cb)
+			await _frames(10)
+			var b = GuideTour.find_script_node(get_tree().root, "res://scripts/party_battle.gd")
+			if b != null:
+				Engine.time_scale = 2.0
+				await _wait_until(func(): return b.done, 200.0)
+				Engine.time_scale = 1.0
+				print("INFO %s lich easy: win %s clock %.1f" % [tag, b.result.get("win"), b.clock])
+				await _wait_until(func(): return Tutorial.complete() or not b.result.get("pending", false), 20.0)
+				if b.hud != null:
+					b.hud.result_layer.visible = true
+				b.leave()
+				await _frames(10)
 			await _leave_scene()
 		"fever":
 			_sim(tag, "FEVER gauge filled directly")

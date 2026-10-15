@@ -2675,3 +2675,14 @@ party_view.refresh_6,출전 병사: %s,,,,scripts/party_view.gd
 party_view.refresh_7,없음,,,,scripts/party_view.gd
 party_view.refresh_8,매칭 중,,,,scripts/party_view.gd
 party_view.refresh_9,매칭 시작,,,,scripts/party_view.gd
+tutorial.missions.party_clear.title,파티 던전 클리어,,,,scripts/tutorial.gd
+tutorial.missions.party_clear.desc,[던전] 탭 위쪽 [파티]에서 다른 성주와 함께 보스를 잡습니다. 리치의 무덤 쉬움에 데려갈 영웅을 고르고 [매칭 시작]을 누르세요. 30초 안에 자리가 다 차지 않으면 AI 성주가 채워 줍니다.,,,,scripts/tutorial.gd
+guide_tours.tours.title_3,파티 던전,,,,scripts/guide_tours.gd
+guide_tours.tours.text_85,다른 성주와 한 팀이 되어 강한 보스를 함께 잡는 곳입니다. 이기면 영웅에게 끼울 장신구를 받습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_86,리치의 무덤: 성주 4명이 영웅 1명씩 데리고 들어갑니다. 내 영웅을 눌러 고르고 바닥이나 적을 누르면 움직입니다. 이기면 반지(공격)를 받습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_87,◀ ▶로 데려갈 영웅을 고르세요. 레벨이 높고 튼튼한 영웅이 좋습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_88,"난이도는 쉬움부터 시작합니다. 한 난이도를 깨면 다음 난이도가 열리고, 어려울수록 좋은 등급 장신구가 나옵니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_89,보상은 퀘스트마다 하루 3번까지 받습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_90,거미 여왕의 둥지: 성주 3명이 병사 4마리씩 내보내 자동으로 싸웁니다. 이기면 목걸이(체력)를 받습니다. 병사 티어가 낮으면 버티기 어렵습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_91,[자동 수락]을 켜 두면 매칭이 잡히자마자 입장합니다. 끄면 뜨는 창에서 [입장 수락]을 직접 누르세요.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_92,[매칭 시작]을 누르면 함께할 성주를 찾습니다. 30초 안에 자리가 다 차지 않으면 AI 성주가 빈자리를 채웁니다. 리치의 무덤 쉬움을 한 번 이겨 보세요.,,,,scripts/guide_tours.gd

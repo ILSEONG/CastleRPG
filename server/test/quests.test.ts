@@ -131,20 +131,29 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
   assert.equal((await claim(token, { type: 'tutorial', step: t })).json.player.dia_tickets, 10)
   // 마지막
-  await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, rows.length - 2])
-  assert.equal(rows[rows.length - 2].id, 'stage_1_15')
-  assert.equal(rows[rows.length - 1].id, 'exchange_look') // 가이드 2026-10-13: 1-15 뒤 거래소 둘러보기(앱이 센다)
-  assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 2 })).json.error, 'not_done') // 1-15를 아직 안 깼다
+  await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, rows.length - 3])
+  assert.equal(rows[rows.length - 3].id, 'stage_1_15')
+  assert.equal(rows[rows.length - 2].id, 'exchange_look') // 가이드 2026-10-13: 1-15 뒤 거래소 둘러보기(앱이 센다)
+  assert.equal(rows[rows.length - 1].id, 'party_clear') // 가이드 2026-10-15: 마지막 = 파티 던전 첫 클리어
+  assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 3 })).json.error, 'not_done') // 1-15를 아직 안 깼다
   await setStage(token, 16)
+  r = await claim(token, { type: 'tutorial', step: rows.length - 3 })
+  assert.equal(r.status, 200)
+  assert.equal(r.json.player.quest.tut_state, 'active')
   r = await claim(token, { type: 'tutorial', step: rows.length - 2 })
   assert.equal(r.status, 200)
   assert.equal(r.json.player.quest.tut_state, 'active')
+  assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 1 })).json.error, 'not_done') // 파티 던전을 아직 못 이겼다
+  await S.db.query("insert into party_stats (player_id, quest, best, day, clears) values ($1, 'spider', 0, 0, 0)", [id]) // 지기만 했다
+  assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 1 })).json.error, 'not_done')
+  await S.db.query("insert into party_stats (player_id, quest, best, day, clears) values ($1, 'lich', 1, 0, 1)", [id])
   r = await claim(token, { type: 'tutorial', step: rows.length - 1 })
   assert.equal(r.status, 200)
+  assert.deepEqual(r.json.reward, { diamonds: 50 })
   assert.equal(r.json.player.quest.tut_state, 'done')
   assert.equal((await claim(token, { type: 'tutorial', step: rows.length })).json.error, 'no_tutorial')
   const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'quest' order by id", [id])
-  assert.equal(logs.length, 6)
+  assert.equal(logs.length, 7)
 })
 
 test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_sec 간격, 보상 = reward × (1 + 바퀴) + fixed', async () => {

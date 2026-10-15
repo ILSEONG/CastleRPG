@@ -208,6 +208,10 @@ static var MISSIONS := [
 		"kind": "stage", "arg": 15, "goto": "stage", "reward": {"diamonds": 200}},
 	{"id": "exchange_look", "title": Lang.t("tutorial.missions.exchange_look.title"), "desc": Lang.t("tutorial.missions.exchange_look.desc"),
 		"kind": "open", "arg": "exchange", "goto": "tab:exchange", "reward": {"diamonds": 50}},
+	# 2026-10-15 파티 던전(사용자 「가이드 퀘스트도 추가됐어?」 → 81번째): [파티] 탭 포커스 설명 뒤 첫 클리어. 리치·거미 여왕 어느 쪽이든 되고, 화살표는
+	# 리치의 무덤(가이드를 마칠 무렵 Lv 20 영웅이면 쉬움을 이긴다 — 거미 여왕은 1티어 병사로 진다, party_check 시뮬)
+	{"id": "party_clear", "title": Lang.t("tutorial.missions.party_clear.title"), "desc": Lang.t("tutorial.missions.party_clear.desc"),
+		"kind": "party", "goto": "party", "reward": {"diamonds": 50}},
 ]
 ## 반복 퀘스트(사용자 2026-10-06 "퀘스트로 할 수 있는 게 끝나면 반복 퀘스트로"): 튜토리얼을 끝냈거나 건너뛴(기존 저장) 플레이어에게 이 순서로 끝없이
 ## 돈다. 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다. kind: kill·collect·sell·gacha·dungeon_win·build_up(사건 수), stage(지금 도달한
@@ -249,6 +253,7 @@ var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
 var gs = null  # GameState
 var guild = null  # Guild
 var pvp = null  # Pvp(PVP 결과 → pvp 미션)
+var party = null  # Party(파티 던전 결과·최고 난이도 → party 미션)
 var fever = null  # Fever(연속 진행 체크·FEVER — auto_on·fever 미션)
 ## 가이드가 가리킬 UI(사용자 2026-10-13 "그런거 하나하나 가이드로"): 키 → {node: Control, show: Callable(없으면 늘)}. 각 화면이 register_ui로 넣는다.
 ## 미션의 point(키 목록, 앞에서부터 보이는 첫 것) — 없으면 goto에서 만든다(point_keys). tutorial_card가 그 위에 화살표를 그린다.
@@ -279,6 +284,7 @@ func _ready() -> void:
 	gs = get_node_or_null("/root/GameState")
 	guild = get_node_or_null("/root/Guild")
 	pvp = get_node_or_null("/root/Pvp")
+	party = get_node_or_null("/root/Party")
 	fever = get_node_or_null("/root/Fever")
 	_connect()
 	_start.call_deferred()  # 첫 장면이 붙은 뒤에 본다(체크 장면·개발 실행은 건너뛴다)
@@ -371,6 +377,8 @@ func _connect() -> void:
 		guild.changed.connect(check)
 	if pvp != null:
 		pvp.result_ready.connect(func(_r): note("pvp"))
+	if party != null:
+		party.result_ready.connect(func(r): if r.get("win", false) == true: note("party"))
 	if econ != null:
 		econ.pouch_opened.connect(func(_o): note("pouch"))
 		econ.promoted.connect(func(_h, _p): note("promote"))
@@ -608,6 +616,8 @@ func point_keys(m: Dictionary) -> Array:
 		return ["tab:recruit"]
 	if g == "pvp":
 		return ["dungeon:pvp", "tab:dungeon"]
+	if g == "party":  # [파티] 탭이면 리치의 [매칭 시작], 던전 창의 다른 탭이면 [파티], 창이 닫혔으면 [던전] 탭
+		return ["@party_view:buttons.start:lich", "@dungeon_panel:section_buttons.party", "tab:dungeon"]
 	return []
 
 
@@ -1032,6 +1042,8 @@ func _done(m: Dictionary) -> bool:
 			return guild != null and int(guild.me.get("boss_tries", 0)) > 0
 		"siege_try":  # 공성전 체험을 끝냈다
 			return count >= 1
+		"party":  # 파티 던전을 한 번 이겼다(어느 쪽이든 — 쉬움 이상 최고 기록이 있으면 통과)
+			return count >= 1 or (party != null and party.has_method("best") and (int(party.best("lich")) >= 1 or int(party.best("spider")) >= 1))
 		"promote":  # 승급했다(이미 승급한 영웅이 있어도 통과)
 			return count >= 1 or econ.hero_promotions.values().any(func(v): return int(v) > 0)
 		"hero_lv":

@@ -1863,7 +1863,7 @@ export function createApp(opts: AppOptions) {
     const type = b.type
     if (type !== 'tutorial' && type !== 'repeat') throw new ApiError(400, 'bad_request', "'type' must be tutorial or repeat")
     const num = intField(b, type === 'tutorial' ? 'step' : 'n', 0, MAX_INT4)
-    return mutate(c, (p, g, now, facts: { guild: boolean; pvp: boolean; starters: string[] }) => {
+    return mutate(c, (p, g, now, facts: { guild: boolean; pvp: boolean; party: boolean; starters: string[] }) => {
       const q = p.quest
       let reward: Record<string, number>
       let quest: NonNullable<Change['quest']>
@@ -1885,7 +1885,7 @@ export function createApp(opts: AppOptions) {
           upgrades: p.upgrades, trainingOrSoldiers: Object.values(p.buildings).some((b) => b.train) || Object.values(p.soldiers).some((n) => n > 0),
           dungeonBest: Object.fromEntries(Object.entries(p.dungeons).map(([k, d]) => [k, d.best_level])), equipped: p.equipment.length,
           soldierDeployed: Object.values(p.soldier_deploy).reduce((a, n) => a + (Number(n) || 0), 0),
-          research: p.research_cur !== null || Object.keys(p.research).length > 0, guild: facts.guild, pvp: facts.pvp, admin: p.admin, c: m.c,
+          research: p.research_cur !== null || Object.keys(p.research).length > 0, guild: facts.guild, pvp: facts.pvp, party: facts.party, admin: p.admin, c: m.c,
         })
         if (!done) throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         reward = R.parseReward(def.reward) ?? {}
@@ -1918,8 +1918,8 @@ export function createApp(opts: AppOptions) {
       return { change, extra: { reward }, reload: Boolean(keyType) }
     }, async (pid) => {
       const [r] = await query(`select exists (select 1 from player_guild where player_id = $1 and guild_id is not null) as guild,
-        exists (select 1 from pvp_battles where player_id = $1) as pvp`, [pid])
-      return { guild: r?.guild === true, pvp: r?.pvp === true, starters: await starters() }
+        exists (select 1 from pvp_battles where player_id = $1) as pvp, exists (select 1 from party_stats where player_id = $1 and best >= 1) as party`, [pid])
+      return { guild: r?.guild === true, pvp: r?.pvp === true, party: r?.party === true, starters: await starters() }
     })
   })
 

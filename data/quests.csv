@@ -79,6 +79,7 @@ atk_18,tutorial,,gold:5370,
 hp_18,tutorial,,gold:10000,
 stage_1_15,tutorial,,diamonds:200,
 exchange_look,tutorial,,diamonds:50,
+party_clear,tutorial,,diamonds:50,
 rep_kill,repeat,,gold:3000,
 rep_collect,repeat,,gold:2000,
 rep_stage,repeat,,,diamonds:20

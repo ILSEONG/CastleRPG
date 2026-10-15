@@ -18,6 +18,7 @@ export interface QuestFacts {
   research: boolean // 연구 중이거나 연구한 적이 있다
   guild: boolean
   pvp: boolean // PVP를 한 판이라도 했다
+  party: boolean // 파티 던전을 한 번이라도 이겼다(party_stats best ≥ 1)
   admin: boolean
   c: Counters
 }
@@ -48,6 +49,7 @@ export function tutorialDone(id: string, f: QuestFacts): boolean {
     case 'research': return f.research
     case 'guild': return f.guild
     case 'pvp': return f.pvp
+    case 'party_clear': return f.party // 2026-10-15 가이드 81: 리치·거미 여왕 어느 쪽이든
     case 'guild_attend': return f.guild && t(f, 'guild_attend') >= 1 // 2026-10-13 가이드 80: 출석은 서버가 센다(기부는 앱만)
     case 'guild_boss': return f.guild && t(f, 'guild_boss') >= 1
   }
