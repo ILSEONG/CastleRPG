@@ -203,6 +203,7 @@ interface Change {
   sellItems?: number[] // 지울 장비 id
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   equips?: { hero_id: string; slot: string; item_id: number }[] // 한 번에 여러 부위 장착(자동착용) — 부위·장비는 서로 다르다
+  unequipAll?: string // 그 영웅의 장비를 모든 부위에서 뺀다(전체 해제)
   diamonds?: number // 다이아 증감(개정 23)
   diaTickets?: number // 다이아 모집권 증감(모집권 던전)
   gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
@@ -1060,6 +1061,9 @@ export function createApp(opts: AppOptions) {
         ctes.push(`eq1 as (insert into player_equipment (player_id, hero_id, slot, item_id) select player_id, ${hero}, ${slot}, ${item}::bigint from s
           on conflict (player_id, hero_id, slot) do update set item_id = excluded.item_id returning 1)`)
       }
+    }
+    if (ch.unequipAll) {
+      ctes.push(`equa as (delete from player_equipment where player_id = ${sid} and hero_id = ${p(ch.unequipAll)} returning 1)`)
     }
     ;(ch.equips ?? []).forEach((e, i) => {
       const hero = p(e.hero_id)
@@ -2996,6 +3000,15 @@ export function createApp(opts: AppOptions) {
         if (p.equipment.find((e) => e.hero_id === heroId && e.slot === slot)?.item_id !== itemId) equips.push({ hero_id: heroId, slot, item_id: itemId })
       }
       return equips.length ? { change: { equips }, reload: true } : {}
+    })
+  })
+
+  // 전체 해제: {hero_id} — 그 영웅이 낀 장비를 모든 부위에서 뺀다(보관함으로). 낀 게 없으면 그대로 200(멱등).
+  app.post('/v1/equip/clear', auth, async (c) => {
+    const heroId = strField(await body(c), 'hero_id')
+    return mutate(c, (p, g) => {
+      if (!g.heroes.some((h) => h.id === heroId) || !Object.hasOwn(p.heroes, heroId)) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      return p.equipment.some((e) => e.hero_id === heroId) ? { change: { unequipAll: heroId }, reload: true } : {}
     })
   })
 

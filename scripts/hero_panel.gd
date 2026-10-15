@@ -67,6 +67,7 @@ var bag  # 장비 고르기 창(bag_panel). main이 넣는다
 var equip_slots := {}  # 부위 → {button, tile}(개정 18)
 var equip_label: Label  # 장비 합계 줄(장비가 없으면 숨김)
 var auto_equip_button: Button  # [장비 자동착용](바꿀 게 없거나 응답 대기면 비활성)
+var unequip_all_button: Button  # [전체 해제](낀 장비가 없거나 응답 대기면 비활성) — [장비 자동착용] 바로 왼쪽
 var slot_cards: Array = []
 var hero_cards := {}  # 영웅 id → 보유 격자 카드(정렬 순서)
 var locked_cards := {}  # 영웅 id → 미보유 카드(보유 카드 뒤, unowned_sorted 순서)
@@ -442,6 +443,17 @@ func _build_equip_slots() -> void:
 	Tutorial.register_ui("hero:promote_all", promote_all_button, func(): return not promote_all_button.disabled)
 	big_card.add_child(auto_equip_button)
 	auto_equip_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 10)
+	# [전체 해제]: [장비 자동착용] 바로 왼쪽, 같은 크기
+	unequip_all_button = _button(Lang.t("hero_panel.build_equip_slots"), EQUIP_COLOR, 19)
+	unequip_all_button.custom_minimum_size = AUTO_EQUIP_PX
+	unequip_all_button.size = AUTO_EQUIP_PX
+	unequip_all_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	unequip_all_button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	unequip_all_button.pressed.connect(unequip_all)
+	big_card.add_child(unequip_all_button)
+	unequip_all_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 10)
+	unequip_all_button.offset_left -= AUTO_EQUIP_PX.x + 8.0
+	unequip_all_button.offset_right -= AUTO_EQUIP_PX.x + 8.0
 
 
 ## 장비 칸 탭: 그 부위 장비 고르기(장착·해제).
@@ -459,6 +471,15 @@ func auto_equip() -> void:
 		Economy.notice.emit(Lang.t("hero_panel.auto_equip") % n)
 	elif not Economy.equip_waiting() and Economy.auto_equip_plan(detail_id).is_empty():
 		Economy.notice.emit(Lang.t("hero_panel.auto_equip_2"))
+
+
+## [전체 해제]: 이 영웅이 낀 장비를 모두 뺀다(온라인도 곧바로 보이고 /v1/equip/clear 한 번으로 확인).
+func unequip_all() -> void:
+	if detail_id == "" or not owns(detail_id):
+		return
+	var n := Economy.unequip_all(detail_id)
+	if n > 0:
+		Economy.notice.emit(Lang.t("hero_panel.unequip_all") % n)
 
 
 ## 비용 버튼: 위 제목, 아래 [골드 아이콘 숫자](버튼 안, 입력은 버튼이 받는다).
@@ -886,7 +907,8 @@ func _refresh_equip(id: String, h: Dictionary) -> void:
 			parts.append("%s +%s%%" % [GameData.SUB_NAMES[k], BagPanel.pct_text(v)])
 	equip_label.text = Lang.t("hero_panel.refresh_equip_3") + " · ".join(parts) if not parts.is_empty() else ""
 	equip_label.visible = not parts.is_empty()
-	auto_equip_button.disabled = Economy.equip_waiting() or Economy.auto_equip_plan(id).is_empty()
+	auto_equip_button.disabled = Economy.equip_waiting() or Economy.equip_pending(id) or Economy.auto_equip_plan(id).is_empty()
+	unequip_all_button.disabled = Economy.equip_waiting() or Economy.equip_pending(id) or Economy.equipment.get(id, {}).is_empty()
 
 
 func _set_cost(btn: Dictionary, title: String, count: int, grade: String, lv: int) -> void:

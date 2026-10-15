@@ -435,6 +435,24 @@ test('한 번에 장착(/v1/equip/many): 여러 부위를 한 요청으로, 다�
   assert.equal(rows[0].n, 4)
 })
 
+test('전체 해제(/v1/equip/clear): 그 영웅의 모든 부위를 한 요청으로 빼고 다른 영웅은 그대로, 미보유 404, 빈 영웅도 200', async () => {
+  const { token, id } = await fresh()
+  const [sword, hat, top, shoes] = await addItems(S.db.query, id, [{ slot: 'weapon', weapon_kind: 'sword' }, { slot: 'hat' }, { slot: 'top' }, { slot: 'shoes' }])
+  const clear = (body: unknown) => S.req('POST', '/v1/equip/clear', { token, body })
+  await S.req('POST', '/v1/equip/many', { token, body: { hero_id: 'hans', items: [{ slot: 'weapon', item_id: sword }, { slot: 'hat', item_id: hat }, { slot: 'top', item_id: top }] } })
+  await equip(token, { hero_id: 'ella', slot: 'shoes', item_id: shoes })
+  for (const [body, status, code] of [[{ hero_id: 'kyle' }, 404, 'not_owned'], [{ hero_id: '__proto__' }, 404, 'not_owned'], [{}, 400, 'bad_request']] as [unknown, number, string][]) {
+    const r = await clear(body)
+    assert.deepEqual([r.status, r.json.error], [status, code], JSON.stringify(body))
+  }
+  let r = await clear({ hero_id: 'hans' })
+  assert.deepEqual([r.status, r.json.player.equipment], [200, { ella: { shoes } }])
+  assert.equal(r.json.player.items.length, 4) // 보관함에 그대로
+  r = await clear({ hero_id: 'hans' }) // 멱등
+  assert.deepEqual([r.status, r.json.player.equipment], [200, { ella: { shoes } }])
+  assert.deepEqual((await clear({ hero_id: 'dorik' })).status, 200)
+})
+
 test('판매: 값 = round(100 × 배율)의 합, 장착 중이면 409 equipped, 없는·남의·겹친 id는 거부 — 하나라도 틀리면 아무것도 안 판다, 로그', async () => {
   const { token, id } = await fresh()
   const other = await fresh()

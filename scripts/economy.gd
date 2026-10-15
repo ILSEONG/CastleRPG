@@ -244,7 +244,7 @@ var _save_cd := SAVE_INTERVAL
 var _gacha_cur := ""  # 응답 대기 중인 온라인 모집의 재화(미션 gacha_dia)
 var _waiting := {}  # 응답 대기 중인 요청 키(건물 id, "sell:<자원>", "gacha") — 재탭 무시
 var _key_predicts := {}  # 온라인 상점 입장권 즉시 반영: 요청 키 → {던전 종류: 열쇠 수}(응답 전 다른 서버 응답의 열쇠 위에 다시 얹는다)
-var _equip_predicts := {}  # 온라인 자동착용 즉시 반영: 영웅 id → {부위: 장비 id}. 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
+var _equip_predicts := {}  # 온라인 자동착용·전체 해제 즉시 반영: 영웅 id → {부위: 장비 id}(전체 해제는 {}). 응답 전 다른 서버 응답이 와도 _apply_server18이 다시 얹는다
 var _predicts := {}  # 온라인 즉시 반영(수집·판매·건설): 요청 키 → {apply: 서버 상태 위에 그 동작을 다시 하는 Callable, gold: 더한 골드(0.1)}. 응답 전 다른 응답이 와도 apply_server가 다시 얹는다
 var _hold := 0  # 곧바로 반영하고 보낸 동작(_instant) 중 응답 안 온 수 — 그동안 다른 응답은 상태에 덮지 않는다(그 상태엔 이 동작이 없다)
 var _hold_gold := 0  # 그 동작들이 바꾼 골드(0.1) — 미룬 응답의 서버 골드에 더해 보인다
@@ -3167,6 +3167,11 @@ func equip_waiting() -> bool:
 	return _waiting.has("equip")
 
 
+## 그 영웅의 자동착용·전체 해제 응답 대기 중인가(온라인 — 곧바로 보이지만 확인 전에는 둘 다 막는다).
+func equip_pending(hero_id: String) -> bool:
+	return _equip_predicts.has(hero_id)
+
+
 ## 장비 자동착용(영웅 상세 [장비 자동착용]): auto_equip_plan을 한 번에 낀다. 오프라인은 곧바로 저장, 온라인도 곧바로 보이게 끼고
 ## /v1/equip/many 한 번으로 확인한다(거절·유실이면 되돌리고 알림). 바꾼 부위 수, 못 하면 0.
 func auto_equip(hero_id: String) -> int:
@@ -3194,6 +3199,29 @@ func auto_equip(hero_id: String) -> int:
 	equipment[hero_id] = eq
 	_equipment_saved()
 	return plan.size()
+
+
+## 전체 해제(영웅 상세 [전체 해제]): 그 영웅이 낀 장비를 모든 부위에서 뺀다(보관함으로). 오프라인은 곧바로 저장, 온라인도 곧바로 보이게 빼고
+## /v1/equip/clear 한 번으로 확인한다(거절·유실이면 되돌리고 알림). 뺀 부위 수, 못 하면 0.
+func unequip_all(hero_id: String) -> int:
+	if _waiting.has("equip") or _equip_predicts.has(hero_id):
+		return 0
+	var n: int = equipment.get(hero_id, {}).size()
+	if n == 0:
+		return 0
+	if net != null:
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return 0
+		var before := equipment.duplicate(true)
+		_equip_predicts[hero_id] = {}
+		_apply_equip_predicts()
+		_equip_signals(before)
+		net.send("POST", "/v1/equip/clear", {"hero_id": hero_id}, _on_auto_equipped.bind(hero_id), _on_auto_equip_failed.bind(hero_id))
+		return n
+	equipment.erase(hero_id)
+	_equipment_saved()
+	return n
 
 
 ## 장착 못 하는 이유 코드(문구 EQUIP_TEXT, 서버와 같은 순서). 되면 "". not_owned → bad_slot → unknown_item → wrong_slot → wrong_weapon(그 영웅
@@ -4211,10 +4239,13 @@ func _apply_equip_predicts() -> void:
 					eq[other].erase(s)
 			if eq[other].is_empty():
 				eq.erase(other)
-		var mine: Dictionary = eq.get(hid, {})
+		var mine: Dictionary = eq.get(hid, {}) if not plan.is_empty() else {}  # {} = 전체 해제
 		for s in plan:
 			mine[s] = plan[s]
-		eq[hid] = mine
+		if mine.is_empty():
+			eq.erase(hid)
+		else:
+			eq[hid] = mine
 		equipment = eq
 
 

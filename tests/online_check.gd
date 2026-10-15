@@ -1518,6 +1518,17 @@ func _dungeons_online(state_path: String) -> void:
 		kept = kept and int(Economy.equipment.get(auto_hero, {}).get(sl, -1)) == int(plan[sl])
 	_check(kept and Net.requested.get("/v1/equip/many", 0) == many0 + 1 and Net.requested.get("/v1/equip", 0) == one0,
 		"(z) auto-equip sends one /v1/equip/many and the server keeps the set", "many=%d one=%d eq=%s" % [Net.requested.get("/v1/equip/many", 0) - many0, Net.requested.get("/v1/equip", 0) - one0, Economy.equipment])
+	# 전체 해제: 곧바로 다 빠지고 요청은 /v1/equip/clear 하나, 서버도 비운다. 그 뒤 다시 자동착용(phase 2가 보는 상태로 되돌림)
+	var clear0: int = Net.requested.get("/v1/equip/clear", 0)
+	var n_clear: int = Economy.unequip_all(auto_hero) if auto_hero != "" else 0
+	_check(n_clear >= plan.size() and n_clear > 0 and not Economy.equipment.has(auto_hero) and Economy.equip_pending(auto_hero),
+		"(z) unequip-all takes everything off at once before the server answers", "hero=%s n=%d eq=%s" % [auto_hero, n_clear, Economy.equipment])
+	await _wait_until(func(): return Economy._equip_predicts.is_empty(), 15.0)
+	_check(not Economy.equipment.has(auto_hero) and Net.requested.get("/v1/equip/clear", 0) == clear0 + 1 and Net.requested.get("/v1/equip", 0) == one0,
+		"(z) unequip-all sends one /v1/equip/clear and the server keeps the hero bare", "clear=%d eq=%s" % [Net.requested.get("/v1/equip/clear", 0) - clear0, Economy.equipment])
+	if auto_hero != "":
+		Economy.auto_equip(auto_hero)
+		await _wait_until(func(): return Economy._equip_predicts.is_empty(), 15.0)
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
 	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)

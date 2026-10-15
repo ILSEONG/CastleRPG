@@ -2574,3 +2574,5 @@ server.guild.role.leader,길드장,,,,server/src/guild.ts
 server.guild.role.vice,부길드장,,,,server/src/guild.ts
 server.guild.role.elite,정예,,,,server/src/guild.ts
 server.guild.role.member,길드원,,,,server/src/guild.ts
+hero_panel.build_equip_slots,전체 해제,,,,scripts/hero_panel.gd
+hero_panel.unequip_all,장비 %d개를 해제했습니다,,,,scripts/hero_panel.gd
