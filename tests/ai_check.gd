@@ -284,13 +284,13 @@ func _skill_cases(heroes: Array) -> void:
 	_clear_monsters()
 	await _frames(1)
 
-	# (l) heal_aura: 루미나(북 성벽 위)가 4초 쿨마다 반경 8 m 안 다친 한스(북 성문 앞, 약 4.7 m)를 최대 HP의 6% 회복
+	# (l) heal_aura: 루미나(북 성벽 위)가 쿨마다 반경 안 다친 한스(북 성문 앞, 약 4.7 m)를 최대 HP의 c%(heroes.csv) 회복
 	var lu = _add_hero("lumina", 100)
 	var hans = heroes[0]
 	hans.take_damage(200.0)
 	var hp0: float = hans.hp
 	await _wait_until(func(): return hans.hp > hp0, 5.0)
-	_check(is_equal_approx(hans.hp - hp0, hans.hp_max * 0.06), "(l) heal_aura heals a nearby ally by c% of its max HP", "hp %.1f -> %.1f" % [hp0, hans.hp])
+	_check(is_equal_approx(hans.hp - hp0, hans.hp_max * lu._sk.heal_aura[2] / 100.0), "(l) heal_aura heals a nearby ally by c% of its max HP", "hp %.1f -> %.1f" % [hp0, hans.hp])
 	_remove_hero(lu)
 	GameState.refill()
 	await _frames(1)

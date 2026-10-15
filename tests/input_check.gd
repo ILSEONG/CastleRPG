@@ -435,7 +435,7 @@ func _recruit_and_heroes(rig) -> void:
 		"tenths=%d copies=%d->%d cards=%d" % [Economy.gold_tenths, copies0, _copies(), recruit.cards.size()])
 	await _tap(recruit.confirm_button.get_global_rect().get_center())  # 결과가 막 떴다(오프라인은 곧바로) — 보호 시간
 	_check(recruit.is_showing_results(), "(s) a press on [확인] right after the results appear is ignored (results stay up)", "")
-	await _guard_wait()
+	await _unguarded(recruit)
 	await _tap(recruit.confirm_button.get_global_rect().get_center())
 	_check(recruit.is_open() and not recruit.is_showing_results() and recruit.one_button.disabled, "(s) [확인] goes back; [1회] is off at 0 gold", "")
 
@@ -2055,7 +2055,7 @@ func _alive_heroes() -> Array:
 ## 창의 연 직후 보호 시간이 확실히 지나게(타이머 0.45초 뒤에도 실제 시각으로 아직이면 프레임을 더 기다린다 — 부하에 따라 엇갈린다).
 func _unguarded(win) -> void:
 	await _guard_wait()
-	while win.is_guarded():
+	while win.is_guarded() or (win.get("stage") != null and win.stage.is_busy()):  # 모집 창: 소환 연출이 걷힐 때까지
 		await _frames(1)
 
 

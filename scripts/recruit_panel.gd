@@ -22,6 +22,7 @@ const SceneSnap := preload("res://scripts/scene_snap.gd")
 const RecruitArt := preload("res://scripts/recruit_art.gd")
 const RecruitBanner := preload("res://scripts/recruit_banner.gd")
 const CardReveal := preload("res://scripts/card_reveal.gd")
+const SummonStage := preload("res://scripts/summon_stage.gd")
 const GachaOdds := preload("res://scripts/gacha_odds.gd")
 
 const DIALOG_W := 680
@@ -34,9 +35,11 @@ static var LATE_TEXT := Lang.t("recruit_panel.late_text")
 static var DUP_TEXT := Lang.t("recruit_panel.dup_text")  # 이미 가진 영웅(개정 15)
 const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
 static var SSR_TEXT := Lang.t("recruit_panel.ssr_text")
-const REVEAL_ONE := 0.45  # 1회: 뒷면을 보여 준 뒤 뒤집기까지(SR·SSR 예고 빛이 다 번진다)
-const REVEAL_FIRST := 0.3  # 10회: 첫 카드
-const REVEAL_STEP := 0.1  # 10회: 카드 사이
+const REVEAL_ONE := 0.15  # 1회: 소환진이 걷힌 뒤 뒤집기까지(SR·SSR은 등급 빛이 다 모일 때까지 — CardReveal.begin)
+const REVEAL_FIRST := 0.12  # 10회: 소환진이 걷힌 뒤 첫 카드
+const REVEAL_STEP := 0.07  # 10회: 카드 사이(R·SR 먼저 왼쪽 위부터, SSR은 맨 끝에 무지개빛을 모았다가 하나씩)
+const SSR_GAP := 0.6  # 10회: SSR 카드끼리 사이
+const ONE_SCALE := 1.5  # 1회 결과 카드는 이만큼 크게
 var gold_tab: Button
 var dia_tab: Button
 var one_button: Button
@@ -79,6 +82,8 @@ var _halted := false  # 재화 부족·SSR·실패·창 닫힘으로 자동이 �
 var _auto_left := 0.0  # 다음 자동 모집까지 남은 초
 var _late: Array = []  # 다른 창이 열려 있어 못 보여 준 결과(다음에 열 때)
 var _reveals: Array = []  # 결과 카드마다 뒤집기 연출(card_reveal.gd, 그리드의 자식)
+var stage  # 소환 연출 막(summon_stage.gd — 소환진 + SSR 일러스트 화면, 창 맨 위)
+var _no_splash := false  # [건너뛰기]: 이번 결과는 SSR 화면도 건너뛴다
 
 
 func _ready() -> void:
@@ -189,6 +194,11 @@ func _ready() -> void:
 	_build_shop_ask()
 	odds = GachaOdds.new()
 	add_child(odds)
+	stage = SummonStage.new()  # 맨 위(확률 창·상점 확인 창 위)
+	stage.intro_done.connect(_start_flips)
+	stage.skip_all.connect(_skip_all)
+	stage.splash_done.connect(_arm_guard)  # 걷힌 직후 연타가 밑의 [확인]을 누르지 않게
+	add_child(stage)
 	Economy.changed.connect(func(): if visible: _refresh())
 	Economy.gacha_done.connect(_on_gacha_done)
 	set_currency(GOLD)
@@ -386,8 +396,9 @@ func _on_gacha_done(results: Array) -> void:
 	_show_results(results)
 
 
-## 결과 카드 1장 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다. 카드는 뒷면으로 떴다가 차례로 뒤집힌다(디자인 보강 4번 —
-## 1회는 REVEAL_ONE초 뒤, 10회는 왼쪽 위부터 REVEAL_STEP초 간격). 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고, 자동 모집 중엔 기다리지 않는다.
+## 결과 카드 1장(ONE_SCALE배 크게) 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다. 먼저 화면 전체에 소환진(summon_stage — 최고 등급 빛 예고)이
+## 돌고, 걷히면 뒷면 카드가 차례로 뒤집힌다(_start_flips). SSR 카드가 펴지면 SSR 일러스트 화면. 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고,
+## [건너뛰기]는 SSR 화면까지 건너뛴다. 자동 모집 중엔 소환진 없이 바로 뒤집는다.
 func _show_results(results: Array) -> void:
 	for h in _reveals:
 		_grid.remove_child(h)
@@ -396,6 +407,8 @@ func _show_results(results: Array) -> void:
 	cards.clear()
 	_grid.columns = mini(5, results.size())
 	var fast := auto_running()
+	var one := results.size() == 1
+	_no_splash = false
 	for i in results.size():
 		var r: Dictionary = results[i]
 		var card = HeroCardScript.new()
@@ -410,10 +423,10 @@ func _show_results(results: Array) -> void:
 			card.shards = int(r.get("shards", 0))
 			card.shard_need = Economy.promote_cost(r.hero_id)
 		var holder = CardReveal.new()
-		holder.custom_minimum_size = CARD_SIZE
-		var wait := 0.0 if fast else (REVEAL_ONE if results.size() == 1 else REVEAL_FIRST + REVEAL_STEP * i)
-		holder.setup(card, String(r.grade), wait)
+		holder.custom_minimum_size = CARD_SIZE * (ONE_SCALE if one else 1.0)
+		holder.setup(card, String(r.grade), 0.0 if fast else -1.0)  # 소환진이 걷히면 _start_flips가 차례를 준다
 		holder.skip_requested.connect(reveal_all)
+		holder.revealed.connect(_on_card_revealed.bind(r))
 		_grid.add_child(holder)
 		_reveals.append(holder)
 		cards.append(card)
@@ -424,6 +437,11 @@ func _show_results(results: Array) -> void:
 	for i in results.size():
 		cards[i].highlight = stop and results[i].grade == "SSR"
 	_auto_left = auto_delay
+	if fast:
+		stage.stop()
+	else:
+		var best := "SSR" if results.any(func(x): return x.grade == "SSR") else ("SR" if results.any(func(x): return x.grade == "SR") else "R")
+		stage.play(best, results.size())
 	auto_box.visible = _cur == GOLD  # 자동 모집은 골드만
 	_pick_view.visible = false
 	_result_view.visible = true
@@ -438,7 +456,35 @@ func reveal_all() -> void:
 		h.reveal_now()
 
 
+## 소환진이 걷혔다: R·SR 카드는 왼쪽 위부터 REVEAL_STEP 간격, SSR 카드는 그 뒤에 무지개빛을 모았다가 하나씩(SSR_GAP).
+func _start_flips() -> void:
+	_arm_guard()  # 소환진이 걷힌 직후 연타가 밑의 [확인]·[재모집]을 누르지 않게
+	var at := REVEAL_ONE if _reveals.size() == 1 else REVEAL_FIRST
+	for h in _reveals:
+		if h.grade != "SSR":
+			h.begin(at)
+			at += REVEAL_STEP
+	for h in _reveals:
+		if h.grade == "SSR":
+			h.begin(at + h.tease_sec())
+			at += h.tease_sec() + SSR_GAP
+
+
+## [건너뛰기]: 카드를 모두 바로 열고 SSR 화면도 띄우지 않는다.
+func _skip_all() -> void:
+	_no_splash = true
+	reveal_all()
+
+
+## 카드가 펴졌다: SSR이면 일러스트 화면(건너뛰기를 누르지 않았으면).
+func _on_card_revealed(_holder, r: Dictionary) -> void:
+	if r.grade == "SSR" and not _no_splash and visible:
+		stage.splash(String(r.hero_id), bool(r.get("new", false)))
+
+
 func _show_pick() -> void:
+	if stage != null:
+		stage.stop()
 	_result_view.visible = false
 	_pick_view.visible = true
 	_fit()
@@ -476,6 +522,8 @@ func close() -> void:
 	_halted = true
 	if shop_ask != null:
 		shop_ask.visible = false
+	if stage != null:
+		stage.stop()
 	super.close()
 
 

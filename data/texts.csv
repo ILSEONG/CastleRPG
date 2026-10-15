@@ -2740,3 +2740,5 @@ party_invite_panel.row_5,초대,,,,scripts/party_invite_panel.gd
 party_invite_panel.row_6,파티원,,,,scripts/party_invite_panel.gd
 party_invite_panel.invite,초대함,,,,scripts/party_invite_panel.gd
 party_invite_panel.invite_2,초대,,,,scripts/party_invite_panel.gd
+summon_stage.init,건너뛰기 ›,,,,scripts/summon_stage.gd
+summon_stage.draw_splash,화면을 누르면 계속,,,,scripts/summon_stage.gd

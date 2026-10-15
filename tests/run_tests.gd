@@ -3541,7 +3541,7 @@ func test_card_reveal_and_banner() -> void:
 	h._t = 0.5 + CardReveal.FLIP_SEC * 0.75
 	h._apply()
 	check(c.visible and h.shown and got[0] == 1 and c.scale.x < 1.0 and c.modulate.r > 1.0, "reveal: the front unfolds (narrow, flashing) and says so once")
-	h._t = 0.5 + CardReveal.FLIP_SEC * 2.0
+	h._t = 0.5 + CardReveal.FLIP_SEC + CardReveal.FLASH_SEC
 	h._apply()
 	check(h.is_revealed() and got[0] == 1 and is_equal_approx(c.scale.x, 1.0) and is_equal_approx(c.modulate.r, 1.0), "reveal: then settles at full size, no flash, no second signal")
 	h.free()
@@ -3551,6 +3551,15 @@ func test_card_reveal_and_banner() -> void:
 	h2.reveal_now()
 	check(h2.is_revealed() and c2.visible and h2.shown, "reveal: reveal_now() skips the wait (tap to skip)")
 	h2.free()
+	var h3 = CardReveal.new()
+	var c3 := Control.new()
+	h3.setup(c3, "SSR", -1.0)
+	h3._t = 30.0
+	h3._apply()
+	check(not c3.visible and not h3.shown, "reveal: a negative wait holds the back until begin() (the summon intro plays first)")
+	h3.begin(0.1)
+	check(is_equal_approx(h3._flip_at, 30.0 + CardReveal.SSR_CHARGE) and h3.tease_sec() > CardReveal.TEASE_SEC, "reveal: begin() on an SSR waits at least its rainbow charge")
+	h3.free()
 	var b = ResultBanner.new()
 	check(b.mouse_filter == Control.MOUSE_FILTER_IGNORE and not b.is_playing(), "banner: ignores taps, idle until played")
 	b.play("승리!", "win")
