@@ -405,11 +405,14 @@ func _build_equip_slots() -> void:
 	var cols := []
 	for side in 2:
 		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 8)
+		col.add_theme_constant_override("separation", 8 if side == 0 else 2)
 		col.grow_horizontal = Control.GROW_DIRECTION_END if side == 0 else Control.GROW_DIRECTION_BEGIN
-		col.grow_vertical = Control.GROW_DIRECTION_BOTH
+		col.grow_vertical = Control.GROW_DIRECTION_BOTH if side == 0 else Control.GROW_DIRECTION_END
 		big_card.add_child(col)
-		col.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT if side == 0 else Control.PRESET_CENTER_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 14)
+		col.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT if side == 0 else Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_KEEP_SIZE, 14)
+		if side == 1:  # 오른쪽 줄(견장·장갑·반지·목걸이 4칸): 위 [3D] 칩(16–50) 밑에서 시작해 아래 [장비 자동착용] 위에서 끝난다
+			col.offset_top = 54.0
+			col.offset_bottom = 54.0
 		cols.append(col)
 	for i in GameData.EQUIP_SLOTS.size():
 		var s: String = GameData.EQUIP_SLOTS[i]

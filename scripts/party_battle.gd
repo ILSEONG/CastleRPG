@@ -132,7 +132,7 @@ func _ready() -> void:
 	hud = HudScript.new()
 	hud.battle = self
 	add_child(hud)
-	hud.flash("%s 등장!" % PartyRules.BOSS_NAMES.get(quest, ""), INTRO_SEC)
+	hud.flash(Lang.t("party_battle.ready") % PartyRules.BOSS_NAMES.get(quest, ""), INTRO_SEC)
 	Party.result_ready.connect(_on_result_ready)
 	if run.get("online", false) and Economy.net != null:
 		role = "puppet"  # 방이 방장을 정해 줄 때까지(hello) — 연결이 안 되면 혼자(host)
@@ -368,11 +368,11 @@ func boss_line(key: String) -> void:
 		return
 	match key:
 		"harvest":
-			hud.flash("리치가 영혼을 거둡니다! 수정을 모두 깨세요!", 3.0, Color(0.55, 1.0, 0.9))
+			hud.flash(Lang.t("party_battle.boss_line"), 3.0, Color(0.55, 1.0, 0.9))
 		"harvest_broken":
-			hud.flash("수정이 모두 깨졌습니다! 리치가 무방비 상태입니다!", 2.5, GOOD)
+			hud.flash(Lang.t("party_battle.boss_line_2"), 2.5, GOOD)
 		"hatch":
-			hud.flash("알이 깨어났습니다!", 1.6, BAD)
+			hud.flash(Lang.t("party_battle.boss_line_3"), 1.6, BAD)
 
 
 # --- 진행 ---
@@ -429,7 +429,7 @@ func _process(delta: float) -> void:
 			if player_units().is_empty():
 				_ko_win = false
 				_ko_left = KO_SEC
-				hud.flash("전멸했습니다", 2.0, BAD)
+				hud.flash(Lang.t("party_battle.process"), 2.0, BAD)
 			elif clock >= duration:
 				_end(false, "time")
 
@@ -446,7 +446,7 @@ func _on_boss_died(_b) -> void:
 	if role == "host" and phase == Phase.FIGHT and _ko_left < 0.0:
 		_ko_win = true
 		_ko_left = KO_SEC
-		hud.flash("%s 처치!" % PartyRules.BOSS_NAMES.get(quest, ""), 2.2, GOOD)
+		hud.flash(Lang.t("party_battle.on_boss_died") % PartyRules.BOSS_NAMES.get(quest, ""), 2.2, GOOD)
 
 
 func _on_hero_fell(u) -> void:
@@ -456,7 +456,7 @@ func _on_hero_fell(u) -> void:
 		return
 	_revive.append([u, REVIVE_SEC])
 	if u.mine:
-		hud.flash("영웅이 쓰러졌습니다 — %d초 뒤 부활합니다" % int(REVIVE_SEC), 2.0, BAD)
+		hud.flash(Lang.t("party_battle.on_hero_fell") % int(REVIVE_SEC), 2.0, BAD)
 
 
 ## 내 영웅 부활까지 남은 초(없으면 -1).

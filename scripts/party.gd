@@ -15,9 +15,9 @@ const PvpRules := preload("res://scripts/pvp_rules.gd")
 const POLL_SEC := 1.0
 const OFFLINE_WAIT := 2.0
 const SAVE_PATH := "user://party.json"
-static var ERROR_TEXT := {"locked": "이전 난이도를 먼저 깨야 합니다", "bag_full": "보관함이 가득 찼습니다", "no_soldiers": "병사가 모자랍니다",
-	"in_match": "이미 매칭된 파티가 있습니다", "bad_party": "출전을 다시 골라 주세요", "no_match": "파티가 흩어졌습니다", "conflict": "잠시 뒤 다시 시도하세요"}
-static var FAIL_TEXT := "매칭을 시작하지 못했습니다"
+static var ERROR_TEXT := {"locked": Lang.t("party.error_text.locked"), "bag_full": Lang.t("party.error_text.bag_full"), "no_soldiers": Lang.t("party.error_text.no_soldiers"),
+	"in_match": Lang.t("party.error_text.in_match"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict")}
+static var FAIL_TEXT := Lang.t("party.fail_text")
 
 signal changed
 signal battle_started(run: Dictionary)  # 서버 live 상태 {match_id, run_id, quest, diff, seed, elapsed, time_limit, boss, seats, me, online}
@@ -180,15 +180,15 @@ func last_diff(q: String) -> int:
 ## [매칭 시작]이 안 되는 까닭("" = 된다).
 func queue_block(q: String, diff: int, hero: String, soldiers: Array) -> String:
 	if state() != "idle":
-		return "이미 매칭 중입니다"
+		return Lang.t("party.queue_block")
 	if not unlocked(q, diff):
-		return "%s 난이도를 먼저 깨야 합니다" % PartyRules.DIFF_NAMES[diff - 2]
+		return Lang.t("party.queue_block_2") % PartyRules.DIFF_NAMES[diff - 2]
 	if econ != null and econ.bag_full():
-		return "보관함이 가득 찼습니다"
+		return Lang.t("party.queue_block_3")
 	if q == "lich" and hero == "":
-		return "출전할 영웅이 없습니다"
+		return Lang.t("party.queue_block_4")
 	if q == "spider" and (soldiers.size() != PartyRules.SOLDIERS_PER or not soldiers_ok(soldiers, owned_soldiers())):
-		return "병사 %d마리가 필요합니다(훈련한 병사만 출전합니다)" % PartyRules.SOLDIERS_PER
+		return Lang.t("party.queue_block_5") % PartyRules.SOLDIERS_PER
 	return ""
 
 
@@ -347,9 +347,9 @@ func _offline_confirm() -> void:
 	var quest := str(q.get("quest", "lich"))
 	var p: Dictionary = picks.get(quest, {})
 	var seats := [_my_seat(quest, p)]
-	var names := ["로엔", "베릭", "실라", "카엘"]
+	var names := [Lang.t("party.offline_confirm"), Lang.t("party.offline_confirm_2"), Lang.t("party.offline_confirm_3"), Lang.t("party.offline_confirm_4")]
 	for i in range(1, int(PartyRules.SEATS[quest])):
-		var s := {"name": names[i] + " 성주", "bot": true, "me": false, "accepted": true}
+		var s := {"name": names[i] + Lang.t("party.offline_confirm_5"), "bot": true, "me": false, "accepted": true}
 		if quest == "lich":
 			var all: Array = GameData.heroes()
 			var def: Dictionary = all[_rng.randi() % all.size()]
@@ -365,7 +365,7 @@ func _offline_confirm() -> void:
 
 
 func _my_seat(quest: String, p: Dictionary) -> Dictionary:
-	var s := {"name": "나", "bot": false, "me": true, "accepted": false}
+	var s := {"name": Lang.t("party.my_seat.name"), "bot": false, "me": true, "accepted": false}
 	if quest == "lich":
 		var id := str(p.get("hero", pick_hero()))
 		var e: Dictionary = GuildWar.hero_entry(id) if has_node("/root/GuildWar") and econ != null else {"hp": 500.0, "atk": 40.0}

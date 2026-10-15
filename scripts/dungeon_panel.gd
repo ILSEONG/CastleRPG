@@ -108,7 +108,7 @@ func _build_tabs() -> void:
 	_tabs_row = HBoxContainer.new()
 	_tabs_row.add_theme_constant_override("separation", 6)
 	content.add_child(_tabs_row)
-	for t in [["dungeon", Lang.t("dungeon_panel.build_tabs")], ["pvp", "PVP"], ["party", "파티"]]:
+	for t in [["dungeon", Lang.t("dungeon_panel.build_tabs")], ["pvp", "PVP"], ["party", Lang.t("dungeon_panel.build_tabs_2")]]:
 		var b := _button(t[1], UiKit.STEEL, 28)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 60)

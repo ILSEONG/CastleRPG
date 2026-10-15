@@ -5,6 +5,8 @@ extends VBoxContainer
 ## 고른 난이도의 장신구 등급 확률, 출전(리치 = 영웅 1명 ◀ ▶로 고르기, 거미 여왕 = 병사 4마리 — 높은 티어부터), [매칭 시작].
 ## 매칭 중이면 버튼이 "매칭 중"으로 꺼지고(대기 띠·입장 수락 창은 party_overlay.gd가 어느 화면에서든 띄운다), 막히면 빨간 이유 한 줄.
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -12,10 +14,10 @@ const PartyRules := preload("res://scripts/party_rules.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 
 const RED := Color(0.78, 0.22, 0.18)
-const INFO := {"lich": "성주 4명 · 영웅 1명씩 직접 조종 · 실시간", "spider": "성주 3명 · 병사 4마리씩 자동 전투 · 실시간"}
-const BLURB := {"lich": "리치의 스킬 5가지를 피하며 쓰러뜨리세요. 영혼 수확이 시작되면 수정을 모두 깨야 합니다.",
-	"spider": "끝없이 몰려오는 거미 부하와 알을 막으며 거미 여왕을 쓰러뜨리세요."}
-const REWARD := {"lich": "반지", "spider": "목걸이"}
+static var INFO := {"lich": Lang.t("party_view.info.lich"), "spider": Lang.t("party_view.info.spider")}
+static var BLURB := {"lich": Lang.t("party_view.blurb.lich"),
+	"spider": Lang.t("party_view.blurb.spider")}
+static var REWARD := {"lich": Lang.t("party_view.reward.lich"), "spider": Lang.t("party_view.reward.spider")}
 
 var diff := {}  # 퀘스트 → 고른 난이도
 var hero_i := 0  # 리치 출전 영웅(owned_heroes 순번)
@@ -30,11 +32,11 @@ func _ready() -> void:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 8)
 	add_child(top)
-	var intro := _label("다른 성주와 함께 강력한 보스를 쓰러뜨리고 장신구를 얻으세요", 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	var intro := _label(Lang.t("party_view.ready"), 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(intro)
-	auto_box = UiKit.checkbox("자동 수락")
+	auto_box = UiKit.checkbox(Lang.t("party_view.ready_2"))
 	auto_box.custom_minimum_size = Vector2(190, 64)
 	auto_box.button_pressed = Party.auto_accept
 	auto_box.toggled.connect(func(on): Party.set_auto_accept(on))
@@ -124,7 +126,7 @@ func _card(q: String) -> Control:
 	var reason := _label("", 20, RED)
 	reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(reason)
-	var start := _button("매칭 시작", HudScript.ACCENT, 28)
+	var start := _button(Lang.t("party_view.card"), HudScript.ACCENT, 28)
 	start.pressed.connect(_start.bind(q))
 	box.add_child(start)
 	buttons["start:" + q] = start
@@ -134,7 +136,7 @@ func _card(q: String) -> Control:
 
 func _pick_diff(q: String, d: int) -> void:
 	if not Party.unlocked(q, d):
-		Economy.notice.emit("%s 난이도를 먼저 깨야 합니다" % PartyRules.DIFF_NAMES[d - 2])
+		Economy.notice.emit(Lang.t("party_view.pick_diff") % PartyRules.DIFF_NAMES[d - 2])
 		return
 	diff[q] = d
 	refresh()
@@ -181,19 +183,19 @@ func refresh() -> void:
 			var b: Button = c.diffs[i]
 			var lv: int = i + 1
 			var open := Party.unlocked(q, lv)
-			b.text = PartyRules.DIFF_NAMES[i] if open else "%s (잠김)" % PartyRules.DIFF_NAMES[i]
+			b.text = PartyRules.DIFF_NAMES[i] if open else Lang.t("party_view.refresh") % PartyRules.DIFF_NAMES[i]
 			UiKit.apply_button(b, PartyRules.DIFF_COLORS[i] if lv == d else (UiKit.STEEL if open else UiKit.STEEL.darkened(0.3)), 12.0)
 		var odds := PartyRules.drop_odds(d)
 		var parts := []
 		for g in odds:
 			parts.append("%s %s%%" % [g, _pct(float(odds[g]))])
-		c.odds.text = "%s 등급 확률: %s" % [REWARD[q], " · ".join(parts)]
-		c.left.text = "보상 %s · 오늘 남은 보상 %d/%d" % [REWARD[q], Party.clears_left(q), PartyRules.REWARD_CLEARS]
+		c.odds.text = Lang.t("party_view.refresh_2") % [REWARD[q], " · ".join(parts)]
+		c.left.text = Lang.t("party_view.refresh_3") % [REWARD[q], Party.clears_left(q), PartyRules.REWARD_CLEARS]
 		var soldiers: Array = []
 		if q == "lich":
 			var h := _hero()
 			var def := GameData.hero(h)
-			c.pick.text = "출전 영웅: %s Lv %d" % [def.get("name", "-"), Economy.level_of(h)] if not def.is_empty() else "출전할 영웅이 없습니다"
+			c.pick.text = Lang.t("party_view.refresh_4") % [def.get("name", "-"), Economy.level_of(h)] if not def.is_empty() else Lang.t("party_view.refresh_5")
 		else:
 			soldiers = Party.pick_soldiers()
 			var counts := {}
@@ -203,7 +205,7 @@ func refresh() -> void:
 			var names := []
 			for k in counts:
 				names.append("%s ×%d" % [k, counts[k]])
-			c.pick.text = "출전 병사: %s" % (", ".join(names) if not names.is_empty() else "없음")
+			c.pick.text = Lang.t("party_view.refresh_6") % (", ".join(names) if not names.is_empty() else Lang.t("party_view.refresh_7"))
 		var why := ""
 		if st == "idle":
 			why = Party.queue_block(q, d, _hero() if q == "lich" else "", soldiers)
@@ -211,10 +213,10 @@ func refresh() -> void:
 		c.reason.visible = why != ""
 		var start: Button = c.start
 		if st != "idle" and busy_q == q:
-			start.text = "매칭 중"
+			start.text = Lang.t("party_view.refresh_8")
 			start.disabled = true
 		else:
-			start.text = "매칭 시작"
+			start.text = Lang.t("party_view.refresh_9")
 			start.disabled = st != "idle" or why != ""
 
 

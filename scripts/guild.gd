@@ -656,7 +656,7 @@ func _grant(give: Dictionary) -> String:
 
 ## 장비 한 줄 설명: "SR 무기 Lv 3"
 static func item_text(it: Dictionary) -> String:
-	var slot_names := {"weapon": Lang.t("guild.item_text.weapon"), "hat": Lang.t("guild.item_text.hat"), "top": Lang.t("guild.item_text.top"), "bottom": Lang.t("guild.item_text.bottom"), "shoes": Lang.t("guild.item_text.shoes"), "pauldron": Lang.t("guild.item_text.pauldron"), "gloves": Lang.t("guild.item_text.gloves"), "ring": "반지", "necklace": "목걸이"}
+	var slot_names := {"weapon": Lang.t("guild.item_text.weapon"), "hat": Lang.t("guild.item_text.hat"), "top": Lang.t("guild.item_text.top"), "bottom": Lang.t("guild.item_text.bottom"), "shoes": Lang.t("guild.item_text.shoes"), "pauldron": Lang.t("guild.item_text.pauldron"), "gloves": Lang.t("guild.item_text.gloves"), "ring": Lang.t("guild.item_text.ring"), "necklace": Lang.t("guild.item_text.necklace")}
 	return Lang.t("guild.item_text") % [str(it.get("grade", "")), slot_names.get(str(it.get("slot", "")), Lang.t("guild.item_text_2"))]
 
 

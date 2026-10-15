@@ -3,6 +3,8 @@ extends CanvasLayer
 ## 왼쪽: 성주 목록(이름 + AI 표시, 리치 = 영웅 체력 막대, 거미 여왕 = 남은 병사 수). 리치면 아래: [자동] + 안내, 내 영웅이 쓰러지면 부활까지 남은 초.
 ## 가운데 알림 띠. 끝나면 결과 패널: 승리/패배, 보상 장신구(등급 칸 + 이름) 또는 "오늘 보상을 모두 받았습니다", [확인](나가기).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const UiKit := preload("res://scripts/ui_kit.gd")
 const MainHud := preload("res://scripts/hud.gd")
 const ResultBanner := preload("res://scripts/result_banner.gd")
@@ -14,7 +16,7 @@ const HP_GREEN := Color(0.35, 0.8, 0.4)
 const HP_RED := Color(0.86, 0.3, 0.24)
 const ARM_SEC := 2.5
 const ARM_GAP_MS := 300
-const SLOT_NAMES := {"ring": "반지", "necklace": "목걸이"}
+static var SLOT_NAMES := {"ring": Lang.t("party_hud.slot_names.ring"), "necklace": Lang.t("party_hud.slot_names.necklace")}
 
 var battle  # party_battle.gd
 var time_label: Label
@@ -44,10 +46,12 @@ func _ready() -> void:
 	_build_seats(root)
 	if battle.quest == "lich":
 		_build_bottom(root)
-	banner = _label("", 46, Color.WHITE)
-	banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	banner.offset_top = 380
-	banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	banner = _label("", 40, Color.WHITE)  # 화면 폭 안에서 줄바꿈(긴 보스 대사가 잘리지 않게), 자리 표(420~) 위
+	banner.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	banner.offset_left = 24
+	banner.offset_right = -24
+	banner.offset_top = 300
+	banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	banner.add_theme_color_override("font_outline_color", MainHud.INK)
 	banner.add_theme_constant_override("outline_size", 12)
 	banner.visible = false
@@ -80,7 +84,7 @@ func _build_top(root: Control) -> void:
 	row.add_child(title)
 	time_label = _label("", 30, MainHud.INK)
 	row.add_child(time_label)
-	leave_button = _button("나가기", UiKit.STEEL)
+	leave_button = _button(Lang.t("party_hud.build_top"), UiKit.STEEL)
 	leave_button.pressed.connect(_on_leave)
 	row.add_child(leave_button)
 	var head := HBoxContainer.new()
@@ -120,7 +124,7 @@ func _build_seats(root: Control) -> void:
 		box.add_child(head)
 		var who := str(s.get("name", ""))
 		if i == battle.me:
-			who += "" if who == "나" else " (나)"
+			who += "" if who == Lang.t("party_hud.build_seats") else Lang.t("party_hud.build_seats_2")
 		elif s.get("bot", false):
 			who += " (AI)"
 		var nl := _label(who, 18, Color(0.12, 0.40, 0.78) if i == battle.me else MainHud.INK)
@@ -154,11 +158,11 @@ func _build_bottom(root: Control) -> void:
 	revive_label.add_theme_color_override("font_outline_color", MainHud.INK)
 	revive_label.add_theme_constant_override("outline_size", 8)
 	col.add_child(revive_label)
-	var auto := _button("자동", MainHud.ACCENT)
+	var auto := _button(Lang.t("party_hud.build_bottom"), MainHud.ACCENT)
 	auto.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	auto.pressed.connect(func(): battle.set_auto())
 	col.add_child(auto)
-	var hint := _label("내 영웅을 눌러 고르고, 바닥이나 적을 누르세요. 빨간 범위는 피하세요!", 20, Color.WHITE)
+	var hint := _label(Lang.t("party_hud.build_bottom_2"), 20, Color.WHITE)
 	hint.add_theme_color_override("font_outline_color", MainHud.INK)
 	hint.add_theme_constant_override("outline_size", 6)
 	col.add_child(hint)
@@ -192,7 +196,7 @@ func _build_result(root: Control) -> void:
 	result_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	result_body.custom_minimum_size = Vector2(540, 0)
 	box.add_child(result_body)
-	var ok := _button("확인", MainHud.ACCENT)
+	var ok := _button(Lang.t("party_hud.build_result"), MainHud.ACCENT)
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ok.pressed.connect(func(): battle.leave())
 	box.add_child(ok)
@@ -200,19 +204,19 @@ func _build_result(root: Control) -> void:
 
 func show_result(r: Dictionary) -> void:
 	var win: bool = r.get("win", false)
-	result_title.play("승리!" if win else "패배", "win" if win else "lose")
+	result_title.play(Lang.t("party_hud.show_result") if win else Lang.t("party_hud.show_result_2"), "win" if win else "lose")
 	for c in result_items.get_children():
 		c.queue_free()
 	var lines := []
 	match str(r.get("reason", "")):
 		"time":
-			lines.append("제한 시간이 지났습니다")
+			lines.append(Lang.t("party_hud.show_result_3"))
 		"wipe":
-			lines.append("모두 쓰러졌습니다")
+			lines.append(Lang.t("party_hud.show_result_4"))
 		"forfeit":
-			lines.append("전투를 포기했습니다")
+			lines.append(Lang.t("party_hud.show_result_5"))
 	if r.get("pending", false):
-		lines.append("결과를 확인하고 있습니다")
+		lines.append(Lang.t("party_hud.show_result_6"))
 	else:
 		var items: Array = r.get("rewards", {}).get("items", []) if r.get("rewards") is Dictionary else []
 		for it in items:
@@ -223,13 +227,13 @@ func show_result(r: Dictionary) -> void:
 			var stats := []
 			for p in ItemText.stat_parts(it):
 				stats.append(str(p[0]))
-			lines.append("%s %s 획득! %s" % [str(it.get("grade", "")), SLOT_NAMES.get(str(it.get("slot", "")), ""), " ".join(stats)])
+			lines.append(Lang.t("party_hud.show_result_7") % [str(it.get("grade", "")), SLOT_NAMES.get(str(it.get("slot", "")), ""), " ".join(stats)])
 		if r.get("no_reward", false):
-			lines.append("오늘 받을 수 있는 보상을 모두 받았습니다")
+			lines.append(Lang.t("party_hud.show_result_8"))
 		elif win and items.is_empty() and r.has("error"):
-			lines.append("보상을 받지 못했습니다. 잠시 뒤 다시 확인해 주세요")
+			lines.append(Lang.t("party_hud.show_result_9"))
 		elif not win and r.get("claimed_win", false):
-			lines.append("승리로 인정되지 않았습니다")
+			lines.append(Lang.t("party_hud.show_result_10"))
 	result_body.text = "\n".join(lines)
 	result_layer.visible = true
 	leave_button.visible = false
@@ -253,8 +257,8 @@ func _on_leave() -> void:
 		return
 	_armed = ARM_SEC
 	_armed_ms = Time.get_ticks_msec()
-	leave_button.text = "포기"
-	flash("한 번 더 누르면 포기합니다(패배)", ARM_SEC)
+	leave_button.text = Lang.t("party_hud.on_leave")
+	flash(Lang.t("party_hud.on_leave_2"), ARM_SEC)
 
 
 func refresh() -> void:
@@ -263,7 +267,7 @@ func refresh() -> void:
 		if battle.quest == "lich":
 			var h = battle.heroes[i] if i < battle.heroes.size() else null
 			r.bar.value = h.hp_ratio() * 100.0 if h != null and h.is_alive() else 0.0
-			r.count.text = "" if h == null or h.is_alive() else "부활 대기"
+			r.count.text = "" if h == null or h.is_alive() else Lang.t("party_hud.refresh")
 		else:
 			var mine: Array = battle.soldiers.filter(func(s): return s.owner_seat == i)
 			var alive := mine.filter(func(s): return s.is_alive())
@@ -281,7 +285,7 @@ func _process(delta: float) -> void:
 			banner.visible = false
 	if _armed > 0.0 and Time.get_ticks_msec() - _armed_ms >= ARM_SEC * 1000.0:
 		_armed = 0.0
-		leave_button.text = "나가기"
+		leave_button.text = Lang.t("party_hud.process")
 	time_label.text = UiKit.clock(battle.time_left())
 	var ratio: float = battle.boss_hp_ratio()
 	boss_bar.value = ratio * 100.0
@@ -294,7 +298,7 @@ func _process(delta: float) -> void:
 			left = battle.revive_left(mine[0])
 		revive_label.visible = left >= 0.0
 		if left >= 0.0:
-			revive_label.text = "부활까지 %d초" % ceili(left)
+			revive_label.text = Lang.t("party_hud.process_2") % ceili(left)
 
 
 func _label(text: String, size: int, color: Color) -> Label:

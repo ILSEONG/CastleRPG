@@ -5,6 +5,8 @@ extends CanvasLayer
 ##   모두 수락하면 전투가 열린다(Party.battle_started). 내가 수락했으면 버튼이 꺼지고 "다른 성주를 기다립니다".
 ## 버튼은 누르는 즉시 반영(Party가 앱 값을 먼저 바꾼다) — 빠른 두 번 탭도 한 번만 보낸다(Party.accept가 이미 수락했으면 무시).
 
+const Lang := preload("res://scripts/lang.gd")
+
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
@@ -63,7 +65,7 @@ func _build_bar(root: Control) -> void:
 	col.add_child(bar_text)
 	bar_sub = _label("", 18, GREY)
 	col.add_child(bar_sub)
-	cancel_button = _button("취소", UiKit.STEEL, 24)
+	cancel_button = _button(Lang.t("party_overlay.build_bar"), UiKit.STEEL, 24)
 	cancel_button.custom_minimum_size = Vector2(110, 56)
 	cancel_button.pressed.connect(func(): Party.cancel())
 	row.add_child(cancel_button)
@@ -85,7 +87,7 @@ func _build_confirm(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
-	title = _label("파티가 모였습니다!", 36, HudScript.INK)
+	title = _label(Lang.t("party_overlay.build_confirm"), 36, HudScript.INK)
 	box.add_child(title)
 	info = _label("", 24, HudScript.INK)
 	box.add_child(info)
@@ -102,16 +104,16 @@ func _build_confirm(root: Control) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
-	decline_button = _button("거절", UiKit.STEEL, 26)
+	decline_button = _button(Lang.t("party_overlay.build_confirm_2"), UiKit.STEEL, 26)
 	decline_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	decline_button.pressed.connect(func(): Party.accept(false))
 	row.add_child(decline_button)
-	accept_button = _button("입장 수락", HudScript.ACCENT, 28)
+	accept_button = _button(Lang.t("party_overlay.build_confirm_3"), HudScript.ACCENT, 28)
 	accept_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	accept_button.size_flags_stretch_ratio = 1.6
 	accept_button.pressed.connect(func(): Party.accept(true))
 	row.add_child(accept_button)
-	auto_box = UiKit.checkbox("다음부터 자동 수락")
+	auto_box = UiKit.checkbox(Lang.t("party_overlay.build_confirm_4"))
 	auto_box.custom_minimum_size = Vector2(300, 64)
 	auto_box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	auto_box.toggled.connect(func(on): Party.set_auto_accept(on))
@@ -124,7 +126,7 @@ func refresh() -> void:
 	bar.visible = st == "queued"
 	dim.visible = st == "confirm"
 	if st == "queued":
-		bar_text.text = "%s · %s 매칭 중" % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1]]
+		bar_text.text = Lang.t("party_overlay.refresh") % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1]]
 	if st != "confirm":
 		_match = ""
 		return
@@ -141,7 +143,7 @@ func refresh() -> void:
 		seat_box.add_child(_seat_row(s))
 	var mine: bool = q.get("accepted", false)
 	accept_button.disabled = mine
-	accept_button.text = "다른 성주를 기다립니다" if mine else "입장 수락"
+	accept_button.text = Lang.t("party_overlay.refresh_2") if mine else Lang.t("party_overlay.refresh_3")
 	decline_button.visible = not mine
 	auto_box.set_pressed_no_signal(Party.auto_accept)
 	auto_box.queue_redraw()
@@ -152,7 +154,7 @@ func _seat_row(s: Dictionary) -> Control:
 	row.add_theme_constant_override("separation", 10)
 	var name := str(s.get("name", ""))
 	if s.get("me", false):
-		name += "" if name == "나" else " (나)"
+		name += "" if name == Lang.t("party_overlay.seat_row") else Lang.t("party_overlay.seat_row_2")
 	elif s.get("bot", false):
 		name += " (AI)"
 	var nl := _label(name, 22, HudScript.INK)
@@ -169,14 +171,14 @@ func _seat_row(s: Dictionary) -> Control:
 		var top := 0
 		for x in so:
 			top = maxi(top, int(x.get("tier", 1)))
-		what = "병사 %d마리 (최고 T%d)" % [so.size(), top]
+		what = Lang.t("party_overlay.seat_row_3") % [so.size(), top]
 	var wl := _label(what, 20, GREY)
 	wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	wl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wl.clip_text = true
 	row.add_child(wl)
 	var ok: bool = s.get("accepted", false)
-	row.add_child(_label("수락" if ok else "대기", 22, GREEN if ok else GREY))
+	row.add_child(_label(Lang.t("party_overlay.seat_row_4") if ok else Lang.t("party_overlay.seat_row_5"), 22, GREEN if ok else GREY))
 	return row
 
 
@@ -185,13 +187,13 @@ func _process(_delta: float) -> void:
 	match str(q.get("state", "")):
 		"queued":
 			var waited := maxf(0.0, _now() - float(q.get("since", _now())))
-			bar_text.text = "%s · %s 매칭 중 %s" % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1], UiKit.clock(waited)]
+			bar_text.text = Lang.t("party_overlay.process") % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1], UiKit.clock(waited)]
 			var bot_in := ceili(PartyRules.BOT_WAIT_SEC - waited)
-			bar_sub.text = "%d초 뒤 AI 성주가 빈자리를 채웁니다" % bot_in if bot_in > 0 else "AI 성주를 부르고 있습니다"
+			bar_sub.text = Lang.t("party_overlay.process_2") % bot_in if bot_in > 0 else Lang.t("party_overlay.process_3")
 		"confirm":
 			var left := maxf(0.0, _confirm_end - _now())
 			timer_bar.value = left / _confirm_len * 100.0
-			timer_label.text = "%d초 안에 모두 수락하면 시작합니다" % ceili(left)
+			timer_label.text = Lang.t("party_overlay.process_4") % ceili(left)
 
 
 func _now() -> float:

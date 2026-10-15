@@ -7,13 +7,13 @@ extends RefCounted
 const Lang := preload("res://scripts/lang.gd")
 
 const QUESTS := ["lich", "spider"]
-static var NAMES := {"lich": "리치의 무덤", "spider": "거미 여왕의 둥지"}
-static var BOSS_NAMES := {"lich": "리치", "spider": "거미 여왕"}
+static var NAMES := {"lich": Lang.t("party_rules.names.lich"), "spider": Lang.t("party_rules.names.spider")}
+static var BOSS_NAMES := {"lich": Lang.t("party_rules.boss_names.lich"), "spider": Lang.t("party_rules.boss_names.spider")}
 const SEATS := {"lich": 4, "spider": 3}
 const SOLDIERS_PER := 4
 const DIFFS := 4
 const DIFF_MULT := [1.0, 10.0, 50.0, 150.0]
-static var DIFF_NAMES := ["쉬움", "보통", "어려움", "매우 어려움"]
+static var DIFF_NAMES := [Lang.t("party_rules.diff_names"), Lang.t("party_rules.diff_names_2"), Lang.t("party_rules.diff_names_3"), Lang.t("party_rules.diff_names_4")]
 const DIFF_COLORS := [Color(0.30, 0.62, 0.32), Color(0.24, 0.48, 0.78), Color(0.78, 0.42, 0.16), Color(0.72, 0.16, 0.20)]
 const ACCESSORY := {"lich": "ring", "spider": "necklace"}
 const BOSS := {"lich": {"hp": 14000.0, "atk": 70.0}, "spider": {"hp": 9000.0, "atk": 40.0}}  # 쉬움 기준

@@ -2604,9 +2604,9 @@ func _dungeon_ui(tabs) -> void:
 	await _guard_wait()
 	var slot_b: Button = hwin.equip_slots[it.slot].button
 	var card: Rect2 = hwin.big_card.get_global_rect()
-	_check(hwin.equip_slots.size() == 7 and hwin.equip_slots.values().all(func(s): return s.tile.grade == "" and card.encloses(s.button.get_global_rect()))
+	_check(hwin.equip_slots.size() == GameData.EQUIP_SLOTS.size() and hwin.equip_slots.values().all(func(s): return s.tile.grade == "" and card.encloses(s.button.get_global_rect()))
 		and not hwin.equip_label.visible and hwin.equip_slots.weapon.tile.kind == "sword",
-		"(D) hero detail: 7 empty equipment slots on the big card (hans's weapon slot shows a sword)", "card=%s" % card)
+		"(D) hero detail: 9 empty equipment slots on the big card (hans's weapon slot shows a sword)", "card=%s" % card)
 	_check(hwin.equip_slots[it.slot].dot.visible and hwin.equip_slots.values().all(func(q): return q.dot.visible == Economy.equip_upgrade_available("hans", hwin.equip_slots.find_key(q))),
 		"(D) an empty slot with an unequipped item for it shows the red dot (top right)", "dot=%s" % hwin.equip_slots[it.slot].dot.visible)
 	print("INPUT INFO: hero equipment slots %s" % [hwin.equip_slots.keys().map(func(s): return [s, hwin.equip_slots[s].button.get_global_rect()])])
