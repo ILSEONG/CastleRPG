@@ -1238,6 +1238,26 @@ static func _install(t: Dictionary) -> void:
 	_equip_drop = t.equip_drop
 	_config = t.config
 	_loaded = true
+	_apply_text_names()
+
+
+## 다국어(Lang): 기획 표 이름 칸을 그 언어 문구로(키 data.<표>.<id>.<칸>, 서버 texts.ts DATA_TEXTS). 한국어는 표 값이 원본이라 그대로.
+const TEXT_COLS := {"heroes": ["name", "title", "desc"], "buildings": ["name"], "research": ["name"], "resources": ["name"], "soldiers": ["name"], "upgrades": ["name"]}
+
+
+static func _apply_text_names() -> void:
+	if Lang.lang == Lang.DEFAULT_LANG:
+		return
+	var tables := {"heroes": _heroes, "buildings": _buildings, "research": _research, "resources": _resources, "soldiers": _soldiers, "upgrades": _upgrades}
+	for table in TEXT_COLS:
+		var rows = tables[table]
+		for row in (rows.values() if rows is Dictionary else rows):
+			if not (row is Dictionary) or not row.has("id"):
+				continue
+			for col in TEXT_COLS[table]:
+				var key := "data.%s.%s.%s" % [table, row.id, col]
+				if Lang.has(key):
+					row[col] = Lang.t(key)
 
 
 static func _err(src: String, line: int, col: String, why: String) -> void:

@@ -2347,3 +2347,230 @@ war_rules.side_names_4,서문,,,,scripts/war_rules.gd
 world_tags.sync,상인,,,,scripts/world_tags.gd
 world_tags.sync_2,공터,,,,scripts/world_tags.gd
 goblin_director.on_escaped,황금 고블린이 도망쳤습니다,,,,scripts/goblin_director.gd
+server.app.link_errors.already_linked,이미 다른 게임 계정에 연결된 계정입니다,,,,server/src/app.ts
+server.app.link_errors.provider_taken,이 게임 계정에는 이미 같은 종류의 계정이 연결되어 있습니다,,,,server/src/app.ts
+server.app.guild_join.text,{playerName}님이 길드에 가입했습니다,,,,server/src/app.ts
+server.app.guild_create.text,{playerName}님이 길드를 창설했습니다,,,,server/src/app.ts
+server.app.guild_leave.text,{playerName}님이 길드를 떠났습니다,,,,server/src/app.ts
+server.app.guild_attend.text,{playerName}님이 출석했습니다,,,,server/src/app.ts
+server.app.guild_donate.text,{playerName}님이 {name}를 했습니다,,,,server/src/app.ts
+server.app.guild_boss_finish.text,{playerName}님이 드래곤 Lv {reached} 도달 · {dmg}점,,,,server/src/app.ts
+server.guild.donations.name,골드 기부,,,,server/src/guild.ts
+server.guild.donations.name_2,다이아 기부,,,,server/src/guild.ts
+server.guild.donations.name_3,왕실 기부,,,,server/src/guild.ts
+server.guild.boss_names,드래곤,,,,server/src/guild.ts
+server.guild.name_a,새벽,,,,server/src/guild.ts
+server.guild.name_a_2,은빛,,,,server/src/guild.ts
+server.guild.name_a_3,붉은,,,,server/src/guild.ts
+server.guild.name_a_4,강철,,,,server/src/guild.ts
+server.guild.name_a_5,푸른,,,,server/src/guild.ts
+server.guild.name_a_6,황금,,,,server/src/guild.ts
+server.guild.name_a_7,서리,,,,server/src/guild.ts
+server.guild.name_a_8,폭풍,,,,server/src/guild.ts
+server.guild.name_a_9,달빛,,,,server/src/guild.ts
+server.guild.name_a_10,불꽃,,,,server/src/guild.ts
+server.guild.name_a_11,검은,,,,server/src/guild.ts
+server.guild.name_a_12,하얀,,,,server/src/guild.ts
+server.guild.name_a_13,용맹한,,,,server/src/guild.ts
+server.guild.name_a_14,고요한,,,,server/src/guild.ts
+server.guild.name_a_15,별빛,,,,server/src/guild.ts
+server.guild.name_a_16,천둥,,,,server/src/guild.ts
+server.guild.name_b,방패단,,,,server/src/guild.ts
+server.guild.name_b_2,기사단,,,,server/src/guild.ts
+server.guild.name_b_3,수호대,,,,server/src/guild.ts
+server.guild.name_b_4,검술회,,,,server/src/guild.ts
+server.guild.name_b_5,원정대,,,,server/src/guild.ts
+server.guild.name_b_6,늑대단,,,,server/src/guild.ts
+server.guild.name_b_7,망루,,,,server/src/guild.ts
+server.guild.name_b_8,용병단,,,,server/src/guild.ts
+server.guild.name_b_9,결사대,,,,server/src/guild.ts
+server.guild.name_b_10,깃발단,,,,server/src/guild.ts
+server.guild.name_b_11,성채,,,,server/src/guild.ts
+server.guild.name_b_12,사냥단,,,,server/src/guild.ts
+server.guild.nick_a,졸린,,,,server/src/guild.ts
+server.guild.nick_a_2,용감한,,,,server/src/guild.ts
+server.guild.nick_a_3,배고픈,,,,server/src/guild.ts
+server.guild.nick_a_4,빠른,,,,server/src/guild.ts
+server.guild.nick_a_5,느긋한,,,,server/src/guild.ts
+server.guild.nick_a_6,씩씩한,,,,server/src/guild.ts
+server.guild.nick_a_7,조용한,,,,server/src/guild.ts
+server.guild.nick_a_8,화난,,,,server/src/guild.ts
+server.guild.nick_a_9,행복한,,,,server/src/guild.ts
+server.guild.nick_a_10,수상한,,,,server/src/guild.ts
+server.guild.nick_a_11,귀여운,,,,server/src/guild.ts
+server.guild.nick_a_12,우직한,,,,server/src/guild.ts
+server.guild.nick_a_13,새침한,,,,server/src/guild.ts
+server.guild.nick_a_14,엉뚱한,,,,server/src/guild.ts
+server.guild.nick_b,감자,,,,server/src/guild.ts
+server.guild.nick_b_2,고양이,,,,server/src/guild.ts
+server.guild.nick_b_3,기사,,,,server/src/guild.ts
+server.guild.nick_b_4,궁수,,,,server/src/guild.ts
+server.guild.nick_b_5,곰,,,,server/src/guild.ts
+server.guild.nick_b_6,여우,,,,server/src/guild.ts
+server.guild.nick_b_7,도토리,,,,server/src/guild.ts
+server.guild.nick_b_8,망치,,,,server/src/guild.ts
+server.guild.nick_b_9,방패,,,,server/src/guild.ts
+server.guild.nick_b_10,늑대,,,,server/src/guild.ts
+server.guild.nick_b_11,토끼,,,,server/src/guild.ts
+server.guild.nick_b_12,수염,,,,server/src/guild.ts
+server.guild.nick_b_13,마법사,,,,server/src/guild.ts
+server.guild.nick_b_14,호박,,,,server/src/guild.ts
+server.guild.notices,매일 출석과 기부 부탁드려요!,,,,server/src/guild.ts
+server.guild.notices_2,보스는 하루 두 번 꼭 쳐 주세요,,,,server/src/guild.ts
+server.guild.notices_3,즐겁게 함께 성장해요,,,,server/src/guild.ts
+server.guild.notices_4,"초보 환영, 질문은 언제든지",,,,server/src/guild.ts
+server.guild.notices_5,주말엔 왕실 기부 이벤트!,,,,server/src/guild.ts
+server.guild.notices_6,출석 20명 달성 목표!,,,,server/src/guild.ts
+server.guild.created_notice,함께 성장할 길드원을 모집합니다!,,,,server/src/guild.ts
+server.guild.virtualtotals.text,{name}님이 {name2}를 했습니다,,,,server/src/guild.ts
+server.guild.virtualtotals.text_2,{name}님이 출석했습니다,,,,server/src/guild.ts
+server.iap.products.dia_1.name,"다이아 1,650",,,,server/src/iap.ts
+server.iap.products.dia_2.name,"다이아 8,000",,,,server/src/iap.ts
+server.iap.products.dia_3.name,"다이아 16,500",,,,server/src/iap.ts
+server.iap.products.dia_4.name,"다이아 46,500",,,,server/src/iap.ts
+server.iap.products.dia_5.name,"다이아 87,000",,,,server/src/iap.ts
+server.iap.products.dia_6.name,"다이아 156,000",,,,server/src/iap.ts
+server.iap.products.monthly.name,성주의 월정액,,,,server/src/iap.ts
+server.iap.products.monthly_plus.name,왕의 월정액,,,,server/src/iap.ts
+server.iap.products.pkg_starter.name,신규 성주 패키지,,,,server/src/iap.ts
+server.iap.products.pkg_daily.name,일일 특가 패키지,,,,server/src/iap.ts
+server.iap.products.pkg_weekly.name,주간 특가 패키지,,,,server/src/iap.ts
+server.iap.products.pkg_growth.name,성장 지원 패키지,,,,server/src/iap.ts
+server.iap.products.hot_boss.name,보스 격파 기념 특가,,,,server/src/iap.ts
+server.iap.products.hot_dia.name,다이아 긴급 지원,,,,server/src/iap.ts
+server.iap.products.hot_defeat.name,패배 극복 특가,,,,server/src/iap.ts
+server.iap.products.pass_growth.name,성장 패스,,,,server/src/iap.ts
+server.iap.products.no_ads.name,광고 제거,,,,server/src/iap.ts
+server.inquiry.categories.account,계정·로그인,,,,server/src/inquiry.ts
+server.inquiry.categories.payment,결제·상점,,,,server/src/inquiry.ts
+server.inquiry.categories.bug,버그·오류,,,,server/src/inquiry.ts
+server.inquiry.categories.suggest,건의,,,,server/src/inquiry.ts
+server.inquiry.categories.other,기타,,,,server/src/inquiry.ts
+server.inquiry.categories.delete,계정 삭제 요청,,,,server/src/inquiry.ts
+server.inquiry.web_logins.kakao,카카오,,,,server/src/inquiry.ts
+server.inquiry.web_logins.naver,네이버,,,,server/src/inquiry.ts
+server.inquiry.web_logins.toss,토스,,,,server/src/inquiry.ts
+server.inquiry.web_logins.guest,게스트,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion,친구 코드는 숫자와 A~F로 된 8자리예요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_2,이메일 주소를 다시 확인해 주세요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_3,친구 코드나 Google 이메일 중 하나는 적어 주세요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_4,요청이 많아 지금은 받을 수 없어요. 잠시 뒤에 다시 보내 주세요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_5,요청이 많아 지금은 받을 수 없어요. 내일 다시 보내 주세요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion.null,본인 확인: 친구 코드와 Google 이메일 일치,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion.null_2,본인 확인 안 됨: 친구 코드와 Google 이메일이 같은 계정이 아님 — 삭제 전 본인인지 확인 필요,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion.platform,웹(앱 없이 삭제 요청),,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_6,계정 삭제 요청 — 친구 코드 {code}{player},,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_7,(없음),,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_8, · 일치하는 계정 없음,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_9,사유: {reason},,,,server/src/inquiry.ts
+server.inquiry.admin_inquiry_answer,[문의 답변] {category},,,,server/src/inquiry.ts
+server.inquiry.admin_inquiry_answer_2,문의,,,,server/src/inquiry.ts
+server.inquiry.admin_inquiry_answer_3,{answer}\n\n— 보내신 문의: {short},,,,server/src/inquiry.ts
+server.inquiry.admin_inquiry_delete_account,계정 삭제 완료 (친구 코드 {code}),,,,server/src/inquiry.ts
+server.missions.defs.d_kill.title,몬스터 %d마리 처치,,,,server/src/missions.ts
+server.missions.defs.d_collect.title,자원 %d번 수집,,,,server/src/missions.ts
+server.missions.defs.d_sell.title,상인과 %d번 거래,,,,server/src/missions.ts
+server.missions.defs.d_hero.title,영웅 레벨업 %d회,,,,server/src/missions.ts
+server.missions.defs.d_growth.title,성장 강화 %d회,,,,server/src/missions.ts
+server.missions.defs.d_gacha.title,영웅 %d회 모집,,,,server/src/missions.ts
+server.missions.defs.d_dungeon.title,던전 %d번 클리어,,,,server/src/missions.ts
+server.missions.defs.d_guild.title,길드 출석,,,,server/src/missions.ts
+server.missions.defs.d_all.title,일일 미션 %d개 완료,,,,server/src/missions.ts
+server.missions.defs.w_bonus.title,일일 미션 보너스 %d일 받기,,,,server/src/missions.ts
+server.missions.defs.w_kill.title,몬스터 %d마리 처치,,,,server/src/missions.ts
+server.missions.defs.w_dungeon.title,던전 %d번 클리어,,,,server/src/missions.ts
+server.missions.defs.w_gacha.title,영웅 %d회 모집,,,,server/src/missions.ts
+server.missions.defs.w_hero.title,영웅 레벨업 %d회,,,,server/src/missions.ts
+server.missions.defs.w_build.title,건물 레벨업 %d번 완료,,,,server/src/missions.ts
+server.missions.defs.w_research.title,연구 %d번 시작,,,,server/src/missions.ts
+server.missions.defs.w_train.title,병사 훈련 %d번,,,,server/src/missions.ts
+server.missions.defs.w_boss.title,길드 보스 %d번 도전,,,,server/src/missions.ts
+server.missions.defs.r_kill.title,몬스터 %d마리 처치,,,,server/src/missions.ts
+server.missions.defs.r_stage.title,라운드 %d번 클리어,,,,server/src/missions.ts
+server.missions.defs.r_collect.title,자원 %d번 수집,,,,server/src/missions.ts
+server.missions.defs.r_sell.title,상인과 %d번 거래,,,,server/src/missions.ts
+server.missions.defs.r_hero.title,영웅 레벨업 %d회,,,,server/src/missions.ts
+server.missions.defs.r_growth.title,성장 강화 %d회,,,,server/src/missions.ts
+server.missions.defs.r_gacha_dia.title,다이아·모집권으로 영웅 %d회 모집,,,,server/src/missions.ts
+server.missions.defs.r_dungeon.title,던전 %d번 클리어,,,,server/src/missions.ts
+server.oauth.resultpage,로그인되었습니다,,,,server/src/oauth.ts
+server.oauth.resultpage_2,로그인하지 못했습니다,,,,server/src/oauth.ts
+server.oauth.resultpage_3,게임으로 돌아가 주세요. 이 창은 닫아도 됩니다.,,,,server/src/oauth.ts
+server.oauth.resultpage_4,{why}. 게임으로 돌아가 주세요.,,,,server/src/oauth.ts
+server.oauth.resultpage_5,게임으로 돌아가 다시 시도해 주세요.,,,,server/src/oauth.ts
+server.pvp.tiers,브론즈,,,,server/src/pvp.ts
+server.pvp.tiers_2,실버,,,,server/src/pvp.ts
+server.pvp.tiers_3,골드,,,,server/src/pvp.ts
+server.pvp.tiers_4,플래티넘,,,,server/src/pvp.ts
+server.pvp.tiers_5,다이아몬드,,,,server/src/pvp.ts
+server.pvp.tiers_6,마스터,,,,server/src/pvp.ts
+server.pvp.tiers_7,챌린저,,,,server/src/pvp.ts
+server.rules.nick_a,졸린,,,,server/src/rules.ts
+server.rules.nick_a_2,용감한,,,,server/src/rules.ts
+server.rules.nick_a_3,배고픈,,,,server/src/rules.ts
+server.rules.nick_a_4,빠른,,,,server/src/rules.ts
+server.rules.nick_a_5,느긋한,,,,server/src/rules.ts
+server.rules.nick_a_6,씩씩한,,,,server/src/rules.ts
+server.rules.nick_a_7,조용한,,,,server/src/rules.ts
+server.rules.nick_a_8,화난,,,,server/src/rules.ts
+server.rules.nick_a_9,행복한,,,,server/src/rules.ts
+server.rules.nick_a_10,수상한,,,,server/src/rules.ts
+server.rules.nick_a_11,귀여운,,,,server/src/rules.ts
+server.rules.nick_a_12,우직한,,,,server/src/rules.ts
+server.rules.nick_a_13,새침한,,,,server/src/rules.ts
+server.rules.nick_a_14,엉뚱한,,,,server/src/rules.ts
+server.rules.nick_b,감자,,,,server/src/rules.ts
+server.rules.nick_b_2,고양이,,,,server/src/rules.ts
+server.rules.nick_b_3,기사,,,,server/src/rules.ts
+server.rules.nick_b_4,궁수,,,,server/src/rules.ts
+server.rules.nick_b_5,곰,,,,server/src/rules.ts
+server.rules.nick_b_6,여우,,,,server/src/rules.ts
+server.rules.nick_b_7,도토리,,,,server/src/rules.ts
+server.rules.nick_b_8,망치,,,,server/src/rules.ts
+server.rules.nick_b_9,방패,,,,server/src/rules.ts
+server.rules.nick_b_10,늑대,,,,server/src/rules.ts
+server.rules.nick_b_11,토끼,,,,server/src/rules.ts
+server.rules.nick_b_12,수염,,,,server/src/rules.ts
+server.rules.nick_b_13,마법사,,,,server/src/rules.ts
+server.rules.nick_b_14,호박,,,,server/src/rules.ts
+server.shop.items.d_free.name,매일 무료 선물,,,,server/src/shop.ts
+server.shop.items.d_ticket.name,다이아 모집권 할인,,,,server/src/shop.ts
+server.shop.items.d_pouch_gold.name,골드 주머니(1시간),,,,server/src/shop.ts
+server.shop.items.d_pouch_res.name,자원 주머니(1시간),,,,server/src/shop.ts
+server.shop.items.d_key_gold.name,골드 던전 입장권,,,,server/src/shop.ts
+server.shop.items.d_key_equip.name,장비 던전 입장권,,,,server/src/shop.ts
+server.shop.items.d_key_ticket.name,모집권 던전 입장권,,,,server/src/shop.ts
+server.shop.items.d_res.name,자원 꾸러미,,,,server/src/shop.ts
+server.shop.items.d_sp_build.name,건설 가속 1시간,,,,server/src/shop.ts
+server.shop.items.d_sp_research.name,연구 가속 1시간,,,,server/src/shop.ts
+server.shop.items.a_dia.name,광고 다이아,,,,server/src/shop.ts
+server.shop.items.a_ticket.name,광고 모집권,,,,server/src/shop.ts
+server.shop.items.a_key_gold.name,골드 던전 입장권,,,,server/src/shop.ts
+server.shop.items.a_key_equip.name,장비 던전 입장권,,,,server/src/shop.ts
+server.shop.items.a_key_ticket.name,모집권 던전 입장권,,,,server/src/shop.ts
+server.shop.items.a_pouch_gold.name,골드 주머니(1시간),,,,server/src/shop.ts
+server.shop.items.a_pouch_res.name,자원 주머니(1시간),,,,server/src/shop.ts
+server.shop.items.a_sp_any.name,범용 가속 15분,,,,server/src/shop.ts
+server.shop.items.w_free.name,주간 무료 선물,,,,server/src/shop.ts
+server.shop.items.w_tickets.name,모집권 10장 묶음,,,,server/src/shop.ts
+server.shop.items.w_pouch_gold.name,골드 주머니(6시간),,,,server/src/shop.ts
+server.shop.items.w_pouch_res.name,자원 주머니(6시간),,,,server/src/shop.ts
+server.shop.items.w_sp_any.name,범용 가속 8시간,,,,server/src/shop.ts
+server.shop.items.w_sp_build.name,건설 가속 1일,,,,server/src/shop.ts
+server.shop.items.w_sp_research.name,연구 가속 1일,,,,server/src/shop.ts
+server.shop.items.w_builder.name,일꾼 고용권 7일,,,,server/src/shop.ts
+server.shop.items.w_res.name,큰 자원 꾸러미,,,,server/src/shop.ts
+server.war_routes.guild_war_schedule,월,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_2,화,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_3,수,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_4,목,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_5,금,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_6,토,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_7,일,,,,server/src/war_routes.ts
+server.war_routes.guild_war_schedule_8,{by}님이 이번 주 공성 시각을 {day}요일 {hour}:00로 정했습니다,,,,server/src/war_routes.ts
+server.war_routes.guild_war_enter.name,용병 {i},,,,server/src/war_routes.ts
+server.war_routes.guild_war_start,{playerName}님이 공성 전투를 시작했습니다,,,,server/src/war_routes.ts
+server.guild.role.leader,길드장,,,,server/src/guild.ts
+server.guild.role.vice,부길드장,,,,server/src/guild.ts
+server.guild.role.elite,정예,,,,server/src/guild.ts
+server.guild.role.member,길드원,,,,server/src/guild.ts

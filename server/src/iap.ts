@@ -11,6 +11,7 @@
 // hot: {id, until: 끝나는 시각(유닉스 초), bought} | null, hcool: {계기: 마지막으로 뜬 시각}, hs: 핫딜을 띄운 마지막 보스 단계(깬 라운드 / 25)}.
 // 앱 scripts/iap_items.gd가 같은 표를 쓴다(단위 테스트가 비교한다).
 import { weekOf } from './missions.ts'
+import { txt } from './texts.ts'
 
 export type Reward = Record<string, number>
 export type Kind = 'diamond' | 'monthly' | 'package' | 'pass' | 'hot'
@@ -32,28 +33,28 @@ export interface Product {
 
 export const PRODUCTS: Product[] = [
   // 다이아 충전
-  { id: 'dia_1', kind: 'diamond', name: '다이아 1,650', krw: 1200, give: { diamonds: 1650 }, bonus: 150 },
-  { id: 'dia_2', kind: 'diamond', name: '다이아 8,000', krw: 5900, give: { diamonds: 8000 }, bonus: 1650 },
-  { id: 'dia_3', kind: 'diamond', name: '다이아 16,500', krw: 12000, give: { diamonds: 16500 }, bonus: 4400 },
-  { id: 'dia_4', kind: 'diamond', name: '다이아 46,500', krw: 33000, give: { diamonds: 46500 }, bonus: 15000 },
-  { id: 'dia_5', kind: 'diamond', name: '다이아 87,000', krw: 59000, give: { diamonds: 87000 }, bonus: 31000 },
-  { id: 'dia_6', kind: 'diamond', name: '다이아 156,000', krw: 99000, give: { diamonds: 156000 }, bonus: 66000 },
+  { id: 'dia_1', kind: 'diamond', name: txt('server.iap.products.dia_1.name'), krw: 1200, give: { diamonds: 1650 }, bonus: 150 },
+  { id: 'dia_2', kind: 'diamond', name: txt('server.iap.products.dia_2.name'), krw: 5900, give: { diamonds: 8000 }, bonus: 1650 },
+  { id: 'dia_3', kind: 'diamond', name: txt('server.iap.products.dia_3.name'), krw: 12000, give: { diamonds: 16500 }, bonus: 4400 },
+  { id: 'dia_4', kind: 'diamond', name: txt('server.iap.products.dia_4.name'), krw: 33000, give: { diamonds: 46500 }, bonus: 15000 },
+  { id: 'dia_5', kind: 'diamond', name: txt('server.iap.products.dia_5.name'), krw: 59000, give: { diamonds: 87000 }, bonus: 31000 },
+  { id: 'dia_6', kind: 'diamond', name: txt('server.iap.products.dia_6.name'), krw: 99000, give: { diamonds: 156000 }, bonus: 66000 },
   // 월정액
-  { id: 'monthly', kind: 'monthly', name: '성주의 월정액', krw: 4900, give: { diamonds: 1500 }, days: 30, daily: { diamonds: 500, speedup_build_60: 1, speedup_research_60: 1 } },
-  { id: 'monthly_plus', kind: 'monthly', name: '왕의 월정액', krw: 14900, give: { diamonds: 5000, speedup_builder_43200: 1 }, days: 30, daily: { diamonds: 800, tickets: 3, pouch_gold_240: 1, speedup_any_180: 1 } },
+  { id: 'monthly', kind: 'monthly', name: txt('server.iap.products.monthly.name'), krw: 4900, give: { diamonds: 1500 }, days: 30, daily: { diamonds: 500, speedup_build_60: 1, speedup_research_60: 1 } },
+  { id: 'monthly_plus', kind: 'monthly', name: txt('server.iap.products.monthly_plus.name'), krw: 14900, give: { diamonds: 5000, speedup_builder_43200: 1 }, days: 30, daily: { diamonds: 800, tickets: 3, pouch_gold_240: 1, speedup_any_180: 1 } },
   // 패키지
-  { id: 'pkg_starter', kind: 'package', name: '신규 성주 패키지', krw: 1200, period: 'once', limit: 1, give: { diamonds: 1500, tickets: 30, pouch_gold_120: 5, pouch_res_120: 5, speedup_builder_10080: 1, speedup_build_60: 5 } },
-  { id: 'pkg_daily', kind: 'package', name: '일일 특가 패키지', krw: 1200, period: 'daily', limit: 1, give: { diamonds: 600, tickets: 8, keys_gold: 3, speedup_any_60: 3 } },
-  { id: 'pkg_weekly', kind: 'package', name: '주간 특가 패키지', krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 4000, tickets: 50, keys_equip: 5, speedup_any_480: 3, speedup_builder_10080: 1 } },
-  { id: 'pkg_growth', kind: 'package', name: '성장 지원 패키지', krw: 33000, period: 'once', limit: 1, give: { diamonds: 30000, tickets: 150, pouch_gold_360: 10, pouch_res_360: 10, speedup_builder_43200: 1, speedup_build_1440: 5, speedup_research_1440: 5 } },
+  { id: 'pkg_starter', kind: 'package', name: txt('server.iap.products.pkg_starter.name'), krw: 1200, period: 'once', limit: 1, give: { diamonds: 1500, tickets: 30, pouch_gold_120: 5, pouch_res_120: 5, speedup_builder_10080: 1, speedup_build_60: 5 } },
+  { id: 'pkg_daily', kind: 'package', name: txt('server.iap.products.pkg_daily.name'), krw: 1200, period: 'daily', limit: 1, give: { diamonds: 600, tickets: 8, keys_gold: 3, speedup_any_60: 3 } },
+  { id: 'pkg_weekly', kind: 'package', name: txt('server.iap.products.pkg_weekly.name'), krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 4000, tickets: 50, keys_equip: 5, speedup_any_480: 3, speedup_builder_10080: 1 } },
+  { id: 'pkg_growth', kind: 'package', name: txt('server.iap.products.pkg_growth.name'), krw: 33000, period: 'once', limit: 1, give: { diamonds: 30000, tickets: 150, pouch_gold_360: 10, pouch_res_360: 10, speedup_builder_43200: 1, speedup_build_1440: 5, speedup_research_1440: 5 } },
   // 핫딜(1시간 한정, 뜬 것만)
-  { id: 'hot_boss', kind: 'hot', name: '보스 격파 기념 특가', krw: 3300, value: 5, give: { diamonds: 18000, tickets: 20, pouch_gold_360: 3, speedup_build_480: 3 } },
-  { id: 'hot_dia', kind: 'hot', name: '다이아 긴급 지원', krw: 5900, value: 5, give: { diamonds: 40000, tickets: 15 } },
-  { id: 'hot_defeat', kind: 'hot', name: '패배 극복 특가', krw: 4900, value: 5, give: { diamonds: 30000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5, speedup_any_480: 3 } },
+  { id: 'hot_boss', kind: 'hot', name: txt('server.iap.products.hot_boss.name'), krw: 3300, value: 5, give: { diamonds: 18000, tickets: 20, pouch_gold_360: 3, speedup_build_480: 3 } },
+  { id: 'hot_dia', kind: 'hot', name: txt('server.iap.products.hot_dia.name'), krw: 5900, value: 5, give: { diamonds: 40000, tickets: 15 } },
+  { id: 'hot_defeat', kind: 'hot', name: txt('server.iap.products.hot_defeat.name'), krw: 4900, value: 5, give: { diamonds: 30000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5, speedup_any_480: 3 } },
   // 패스
-  { id: 'pass_growth', kind: 'pass', name: '성장 패스', krw: 9900, give: {} },
+  { id: 'pass_growth', kind: 'pass', name: txt('server.iap.products.pass_growth.name'), krw: 9900, give: {} },
   // 광고 제거: 상점 [광고] 상품을 광고 없이 바로 받는다(view.ad_free). 구매 보너스는 없다(사용자 2026-10-12 "광고제거 사면 이득보는걸 지우고").
-  { id: 'no_ads', kind: 'pass', name: '광고 제거', krw: 5500, give: {} },
+  { id: 'no_ads', kind: 'pass', name: txt('server.iap.products.no_ads.name'), krw: 5500, give: {} },
 ]
 
 // 성장 패스 단계: 라운드(GameData.round_label — 25라운드 = 1스테이지)를 깨면 받는다. free = 누구나, paid = 패스 구매자.

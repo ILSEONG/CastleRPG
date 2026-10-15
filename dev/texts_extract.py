@@ -368,8 +368,25 @@ def main(argv):
         print(__doc__)
         return 2
     rels = [r for r in list_files(files) if r not in SKIP_FILES]
+    ts_rels = [r for r in rels if r.endswith('.ts') and r not in TS_SKIP_FILES]
+    if not files:
+        ts_rels = sorted('server/src/' + f for f in os.listdir(os.path.join(ROOT, 'server', 'src'))
+                         if f.endswith('.ts') and 'server/src/' + f not in TS_SKIP_FILES)
+    rels = [r for r in rels if r.endswith('.gd')]
     rows = read_csv()
     by_key = {r['key']: r for r in rows}
+    if ts_rels:
+        if check:
+            left = ts_main(ts_rels, rows, by_key, True)
+            for r, ln, v in left:
+                print('%s:%d: %s' % (r, ln, v.replace('\n', '\\n')))
+            if left:
+                print('%d Korean literals in server code not in data/texts.csv' % len(left))
+            ts_left = len(left)
+        else:
+            ts_added = ts_main(ts_rels, rows, by_key, False)
+            print('server: %d texts added' % ts_added)
+            write_csv(rows)
     srcs = {}
     for r in rels:
         with open(os.path.join(ROOT, r), encoding='utf-8') as f:
@@ -380,7 +397,17 @@ def main(argv):
         for r, ln, v in left:
             print('%s:%d: %s' % (r, ln, v.replace('\n', '\\n')))
         print('%d Korean literals not in data/texts.csv' % len(left))
-        return 1 if left else 0
+        used = set()
+        for d in SCAN_DIRS + ['server/src']:
+            for base, _, fs in os.walk(os.path.join(ROOT, d)):
+                for f in fs:
+                    if f.endswith('.gd') or f.endswith('.ts'):
+                        with open(os.path.join(base, f), encoding='utf-8') as fh:
+                            used.update(re.findall(r'(?:Lang\.t|txt)\(["\']([a-z0-9_.]+)["\']', fh.read()))
+        unused = [r['key'] for r in rows if r['key'] not in used and not r['key'].startswith('data.')]
+        if unused:
+            print('%d keys in data/texts.csv not used by code (remove them if the text is gone): %s' % (len(unused), ' '.join(unused[:20])))
+        return 1 if left or (ts_rels and ts_left) else 0
     added = 0
     uses_lang = set()
     for r in rels:
@@ -432,6 +459,295 @@ def main(argv):
             print('skip %s:%d (%s)' % (r, j.src.count('\n', 0, s) + 1, why))
     print('%d files changed, %d texts added (data/texts.csv now %d rows)' % (len(uses_lang), added, len(rows)))
     return 0
+
+
+# --- 서버 TypeScript(server/src/*.ts) ---
+# '…'·"…"·`…${식}…` 안의 한글 → txt('키') / txt('키', { 이름: 식 }). 값의 ${식} 자리는 {이름}.
+TS_SKIP_FILES = {'server/src/legal.ts', 'server/src/profanity.ts', 'server/src/seed.ts', 'server/src/main.ts',
+                 'server/src/texts.ts', 'server/src/cli.ts', 'server/src/env.ts'}
+TS_SKIP_CALLS = {'log', 'warn', 'error', 'info', 'debug', 'Error', 'TypeError', 'RangeError'}
+TS_IMPORT = "import { txt } from './texts.ts'"
+ROUTE_CALLS = {'get', 'post', 'put', 'delete', 'patch'}
+
+
+def ts_scan_string(src, i):
+    """i = 따옴표 위치. (끝 위치, 조각) — 템플릿이면 조각 = [('s', 글), ('e', 식 시작, 식 끝)...]."""
+    q = src[i]
+    j = i + 1
+    if q != '`':
+        while src[j] != q:
+            if src[j] == '\\':
+                j += 1
+            elif src[j] == '\n':
+                raise ValueError('unterminated string')
+            j += 1
+        return j + 1, [('s', src[i + 1:j])]
+    parts = []
+    buf_start = j
+    while True:
+        c = src[j]
+        if c == '\\':
+            j += 2
+            continue
+        if c == '`':
+            parts.append(('s', src[buf_start:j]))
+            return j + 1, parts
+        if c == '$' and src[j + 1] == '{':
+            parts.append(('s', src[buf_start:j]))
+            k = j + 2
+            depth = 1
+            while depth:
+                ch = src[k]
+                if ch in '\'"`':
+                    k, _ = ts_scan_string(src, k)
+                    continue
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                k += 1
+            parts.append(('e', j + 2, k - 1))
+            j = k
+            buf_start = j
+            continue
+        j += 1
+
+
+def ts_decode(body):
+    return decode_gd(body.replace('\\`', '`').replace('\\$', '$'), False)
+
+
+def ts_quote(s):
+    return "'" + s.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n') + "'"
+
+
+def ts_param_name(expr, used):
+    e = expr.strip()
+    wrappers = {'toLocaleString', 'join', 'toString', 'String', 'Number', 'slice', 'trim', 'Math', 'round', 'floor', 'en', 'US', 'ko', 'KR'}
+    e2 = re.sub(r"'[^']*'", '', e)
+    m = re.fullmatch(r'(?:[A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z_][A-Za-z0-9_]*)\s*(\([^()]*\))?', e2)
+    if m and m.group(1) not in wrappers:
+        name = m.group(1)
+    else:
+        words = [w for w in re.findall(r'[A-Za-z_][A-Za-z0-9_]*', e2) if w not in wrappers]
+        name = words[-1] if words else 'v'
+    base = name
+    n = 2
+    while name in used:
+        name = '%s%d' % (base, n)
+        n += 1
+    used.add(name)
+    return name
+
+
+class TsJob:
+    def __init__(self, rel, src):
+        self.rel = rel
+        self.src = src
+        self.stem = key_part(os.path.basename(rel)[:-3])
+        self.found = []  # (parts, value, start, end, params[(name, expr)])
+        self.skipped = []
+
+    def analyze(self, src=None, base=0, ctx=None):
+        src = self.src if src is None else src
+        n = len(src)
+        i = 0
+        stack = ctx or []  # 프레임 {'ch','call','route','id','key'}
+        top = None
+        prev = None  # 마지막 의미 있는 토큰(kind, text)
+        while i < n:
+            c = src[i]
+            if src.startswith('//', i):
+                j = src.find('\n', i)
+                i = n if j < 0 else j
+                continue
+            if src.startswith('/*', i):
+                j = src.find('*/', i + 2)
+                i = n if j < 0 else j + 2
+                continue
+            if c == '/' and (prev is None or (prev[0] == 'op' and prev[1] in '(,=:[!&|?{};+-*%<>~^') or (prev[0] == 'id' and prev[1] in ('return', 'typeof', 'case'))):
+                j = i + 1
+                in_cls = False
+                while j < n and src[j] != '\n':
+                    if src[j] == '\\':
+                        j += 2
+                        continue
+                    if src[j] == '[':
+                        in_cls = True
+                    elif src[j] == ']':
+                        in_cls = False
+                    elif src[j] == '/' and not in_cls:
+                        break
+                    j += 1
+                i = j + 1
+                prev = ('re', '')
+                continue
+            if c in '\'"`':
+                end, parts = ts_scan_string(src, i)
+                statics = ''.join(p[1] for p in parts if p[0] == 's')
+                # 프레임 정보: 라우트 경로, 객체 id·키
+                if stack and stack[-1]['ch'] == '(' and stack[-1]['call'] in ROUTE_CALLS and stack[-1].get('route') is None and c != '`':
+                    stack[-1]['route'] = parts[0][1]
+                if stack and stack[-1]['ch'] == '{' and prev and prev[0] == 'op' and prev[1] == ':' and stack[-1].get('key') == 'id' and c != '`':
+                    stack[-1]['id'] = parts[0][1]
+                if HANGUL.search(statics):
+                    calls = [f['call'] for f in stack if f['call']]
+                    if any(cn in TS_SKIP_CALLS for cn in calls):
+                        pass
+                    else:
+                        self._found(src, base, i, end, parts, stack, top)
+                elif c == '`':
+                    for p in parts:
+                        if p[0] == 'e':
+                            self.analyze(src[p[1]:p[2]], base + p[1], [dict(f) for f in stack])
+                prev = ('str', '')
+                i = end
+                continue
+            m = IDENT.match(src, i)
+            if m:
+                w = m.group(0)
+                line_start = src.rfind('\n', 0, i) + 1
+                if not stack and line_start == src.rfind('\n', 0, i) + 1 and src[line_start:i].strip() in ('', 'export', 'export async', 'async', 'export default'):
+                    pass
+                if not stack and w in ('const', 'let', 'function', 'class', 'interface', 'type'):
+                    m2 = IDENT.match(src, m.end() + 1) if m.end() < n else None
+                    j = m.end()
+                    while j < n and src[j] in ' \t*':
+                        j += 1
+                    m2 = IDENT.match(src, j)
+                    if m2:
+                        top = m2.group(0)
+                if stack and stack[-1]['ch'] == '{':
+                    k = m.end()
+                    while k < n and src[k] in ' \t':
+                        k += 1
+                    if k < n and src[k] == ':' and not src.startswith('::', k):
+                        stack[-1]['key'] = w
+                prev = ('id', w)
+                i = m.end()
+                continue
+            if c in '([{':
+                call = prev[1] if (c == '(' and prev and prev[0] == 'id') else None
+                stack.append({'ch': c, 'call': call, 'route': None, 'id': None, 'key': None})
+            elif c in ')]}':
+                if stack:
+                    stack.pop()
+            elif c == ',' and stack and stack[-1]['ch'] == '{':
+                stack[-1]['key'] = None
+            if c not in ' \t\r\n':
+                prev = ('op', c)
+            i += 1
+        return self
+
+    def _found(self, src, base, i, end, parts, stack, top):
+        params = []
+        used = set()
+        value = ''
+        for p in parts:
+            if p[0] == 's':
+                value += ts_decode(p[1]) if src[i] == '`' else decode_gd(p[1], False)
+            else:
+                expr = src[p[1]:p[2]]
+                name = ts_param_name(expr, used)
+                # 식 안의 한글 문자열도 옮긴다(따로 키)
+                sub = TsJob(self.rel, expr)
+                sub.stem = self.stem
+                sub.analyze(expr, 0, [dict(f) for f in stack])
+                if sub.found:
+                    self.nested = getattr(self, 'nested', [])
+                    expr = ('__NESTED__', expr, sub.found)
+                params.append((name, expr))
+                value += '{%s}' % name
+        if '{' in ''.join(p[1] for p in parts if p[0] == 's'):
+            self.skipped.append((base + i, 'literal { in text'))
+            return
+        key_parts = []
+        route = next((f['route'] for f in reversed(stack) if f.get('route')), None)
+        if route:
+            key_parts.append(key_part(route.replace('/v1/', '').replace('/', '_').replace(':', '')))
+        elif top:
+            key_parts.append(key_part(top))
+        oid = next((f['id'] for f in reversed(stack) if f['ch'] == '{' and f.get('id')), None)
+        if oid:
+            key_parts.append(key_part(oid))
+        if stack and stack[-1]['ch'] == '{' and stack[-1].get('key'):
+            key_parts.append(key_part(stack[-1]['key']))
+        self.found.append(([p for p in key_parts if p], value, base + i, base + end, params))
+
+
+def ts_render_expr(expr, assign):
+    if isinstance(expr, tuple):
+        _, text, found = expr
+        out = text
+        calls = [(s, e, ts_call(assign(parts, value), params, assign)) for parts, value, s, e, params in sorted(found, key=lambda f: f[2])]
+        for s, e, t in reversed(calls):
+            out = out[:s] + t + out[e:]
+        return out
+    return expr
+
+
+def ts_call(key, params, assign):
+    if not params:
+        return "txt('%s')" % key
+    items = []
+    for name, expr in params:
+        ex = ts_render_expr(expr, assign).strip()
+        items.append(name if ex == name else '%s: %s' % (name, ex))
+    return "txt('%s', { %s })" % (key, ', '.join(items))
+
+
+def ts_main(rels, rows, by_key, check):
+    jobs = {}
+    for r in rels:
+        with open(os.path.join(ROOT, r), encoding='utf-8') as f:
+            jobs[r] = TsJob(r, f.read()).analyze()
+    if check:
+        return [(r, j.src.count('\n', 0, f[2]) + 1, f[1]) for r, j in jobs.items() for f in j.found]
+    added = 0
+    for r, j in jobs.items():
+        if not j.found:
+            continue
+        counters = {}
+
+        def assign(parts, value, j=j, r=r, counters=counters):
+            nonlocal added
+            base = '.'.join(['server', j.stem] + parts)
+            if not parts:
+                counters[base] = counters.get(base, 0) + 1
+                base = '%s.%03d' % (base, counters[base])
+            key = base
+            n = 2
+            while key in by_key and unescape_value(by_key[key]['ko']) != value:
+                key = '%s_%d' % (base, n)
+                n += 1
+            if key not in by_key:
+                row = {c: '' for c in COLUMNS}
+                row.update({'key': key, 'ko': escape_value(value), 'note': r})
+                rows.append(row)
+                by_key[key] = row
+                added += 1
+            return key
+        out = j.src
+        calls = [(s, e, ts_call(assign(parts, value), params, assign)) for parts, value, s, e, params in sorted(j.found, key=lambda f: f[2])]
+        for s, e, text in reversed(calls):
+            out = out[:s] + text + out[e:]
+        if TS_IMPORT not in out:
+            lines = out.split('\n')
+            last = max(i for i, l in enumerate(lines) if l.startswith('import ') or (l.startswith('  ') and i > 0 and lines[i - 1].startswith('import ') and not lines[i - 1].rstrip().endswith("'")) or l.startswith('} from ')) if any(l.startswith('import ') for l in lines) else -1
+            # 여러 줄 import가 끝나는 줄까지
+            while last >= 0 and last + 1 < len(lines) and not (lines[last].rstrip().endswith("'") or lines[last].rstrip().endswith("';")):
+                last += 1
+            if last < 0:  # import가 없으면 맨 위 주석 덩어리 뒤
+                while last + 1 < len(lines) and lines[last + 1].startswith('//'):
+                    last += 1
+            lines.insert(last + 1, TS_IMPORT)
+            out = '\n'.join(lines)
+        with open(os.path.join(ROOT, r), 'w', encoding='utf-8') as f:
+            f.write(out)
+        for s, why in j.skipped:
+            print('skip %s:%d (%s)' % (r, j.src.count('\n', 0, s) + 1, why))
+        print('%s: %d texts' % (r, len(j.found)))
+    return added
 
 
 if __name__ == '__main__':

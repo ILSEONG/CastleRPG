@@ -14,12 +14,13 @@ import { randomUUID } from 'node:crypto'
 import * as L from './legal.ts'
 import * as LO from './live_ops.ts'
 import { Limiter } from './ratelimit.ts'
+import { txt } from './texts.ts'
 
-export const CATEGORIES: Record<string, string> = { account: '계정·로그인', payment: '결제·상점', bug: '버그·오류', suggest: '건의', other: '기타', delete: '계정 삭제 요청' }
+export const CATEGORIES: Record<string, string> = { account: txt('server.inquiry.categories.account'), payment: txt('server.inquiry.categories.payment'), bug: txt('server.inquiry.categories.bug'), suggest: txt('server.inquiry.categories.suggest'), other: txt('server.inquiry.categories.other'), delete: txt('server.inquiry.categories.delete') }
 export const APP_CATEGORIES = ['account', 'payment', 'bug', 'suggest', 'other'] // 앱 [문의하기]가 고를 수 있는 것('delete'는 웹 양식만)
 export const WEB_DELETE_PER_DAY = 200 // 웹 삭제 요청 하루 상한(전체) — 양식 도배 막기
 export const WEB_DELETE_PER_IP = 5 // 한 IP가 한 시간에 보낼 수 있는 웹 삭제 요청(한 사람이 전체 상한을 다 채우지 못하게)
-export const WEB_LOGINS: Record<string, string> = { google: 'Google', kakao: '카카오', naver: '네이버', toss: '토스', guest: '게스트' }
+export const WEB_LOGINS: Record<string, string> = { google: 'Google', kakao: txt('server.inquiry.web_logins.kakao'), naver: txt('server.inquiry.web_logins.naver'), toss: txt('server.inquiry.web_logins.toss'), guest: txt('server.inquiry.web_logins.guest') }
 export const INFO_KEYS = ['name', 'login', 'version', 'platform', 'device', 'contact'] as const
 export const MAX_BODY = 1000
 export const MAX_ANSWER = 2000
@@ -103,29 +104,29 @@ export function registerInquiry(app: Hono<Any>, d: Any) {
     const email = str('email', 120).toLowerCase()
     const login = str('login', 10)
     const reason = str('reason', 500)
-    if (code !== '' && !/^[0-9A-F]{8}$/.test(code)) return c.html(L.deletionFormPage(legal, '친구 코드는 숫자와 A~F로 된 8자리예요.'), 400)
-    if (email !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.html(L.deletionFormPage(legal, '이메일 주소를 다시 확인해 주세요.'), 400)
-    if (code === '' && email === '') return c.html(L.deletionFormPage(legal, '친구 코드나 Google 이메일 중 하나는 적어 주세요.'), 400)
+    if (code !== '' && !/^[0-9A-F]{8}$/.test(code)) return c.html(L.deletionFormPage(legal, txt('server.inquiry.legal_account_deletion')), 400)
+    if (email !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.html(L.deletionFormPage(legal, txt('server.inquiry.legal_account_deletion_2')), 400)
+    if (code === '' && email === '') return c.html(L.deletionFormPage(legal, txt('server.inquiry.legal_account_deletion_3')), 400)
     const now = clock()
     const ip = clientIp?.(c) ?? null
-    if (ip && !webDeletes.take(ip, now)) return c.html(L.deletionFormPage(legal, '요청이 많아 지금은 받을 수 없어요. 잠시 뒤에 다시 보내 주세요.'), 429)
+    if (ip && !webDeletes.take(ip, now)) return c.html(L.deletionFormPage(legal, txt('server.inquiry.legal_account_deletion_4')), 429)
     const [n] = await query(`select count(*)::int as n from inquiries where category = 'delete' and created_at > to_timestamp($1::float8 - 86400)`, [now])
-    if (Number(n.n) >= WEB_DELETE_PER_DAY) return c.html(L.deletionFormPage(legal, '요청이 많아 지금은 받을 수 없어요. 내일 다시 보내 주세요.'), 429)
+    if (Number(n.n) >= WEB_DELETE_PER_DAY) return c.html(L.deletionFormPage(legal, txt('server.inquiry.legal_account_deletion_5')), 429)
     let player: string | null = null
     if (code !== '') player = (await query('select id::text as id from players where friend_code = $1', [code]))[0]?.id ?? null
     const byEmail = email !== '' ? (await query(`select player_id::text as id from player_identities where provider = 'google' and lower(email) = $1 limit 1`, [email]))[0]?.id ?? null : null
     if (!player) player = byEmail
     // 본인 확인 표시(관리자용): 친구 코드는 남에게도 보이므로 코드만으로는 본인인지 알 수 없다. 코드와 Google 이메일이 같은 계정을 가리킬 때만 '일치'.
-    const check = !player ? '' : code !== '' && byEmail === player ? '본인 확인: 친구 코드와 Google 이메일 일치'
-      : '본인 확인 안 됨: 친구 코드와 Google 이메일이 같은 계정이 아님 — 삭제 전 본인인지 확인 필요'
+    const check = !player ? '' : code !== '' && byEmail === player ? txt('server.inquiry.legal_account_deletion.null')
+      : txt('server.inquiry.legal_account_deletion.null_2')
     if (player && (await query(`select 1 from inquiries where player_id = $1 and category = 'delete' and status <> 'closed'`, [player])).length) {
       return c.html(L.deletionDonePage(legal))
     }
-    const info: Record<string, string> = { platform: '웹(앱 없이 삭제 요청)' }
+    const info: Record<string, string> = { platform: txt('server.inquiry.legal_account_deletion.platform') }
     if (player) info.name = friendName(player)
     if (WEB_LOGINS[login]) info.login = WEB_LOGINS[login]
     if (email) info.contact = email
-    const text = [`계정 삭제 요청 — 친구 코드 ${code || '(없음)'}${player ? '' : ' · 일치하는 계정 없음'}`, check, reason ? `사유: ${reason}` : ''].filter(Boolean).join('\n')
+    const text = [txt('server.inquiry.legal_account_deletion_6', { code: code || txt('server.inquiry.legal_account_deletion_7'), player: player ? '' : txt('server.inquiry.legal_account_deletion_8') }), check, reason ? txt('server.inquiry.legal_account_deletion_9', { reason }) : ''].filter(Boolean).join('\n')
     await query(`insert into inquiries (player_id, client_key, category, body, info, created_at) values ($1, $2, 'delete', $3, $4::jsonb, to_timestamp($5::float8))`,
       [player, `web-delete:${randomUUID()}`, text, JSON.stringify(info), now])
     return c.html(L.deletionDonePage(legal))
@@ -153,8 +154,8 @@ export function registerInquiry(app: Hono<Any>, d: Any) {
     if (!q) throw new ApiError(404, 'unknown_inquiry', 'no such inquiry')
     const now = clock()
     const short = [...String(q.body)].slice(0, 100).join('') + ([...String(q.body)].length > 100 ? '…' : '')
-    const title = `[문의 답변] ${CATEGORIES[String(q.category)] ?? '문의'}`
-    const mailBody = `${answer}\n\n— 보내신 문의: ${short}`
+    const title = txt('server.inquiry.admin_inquiry_answer', { category: CATEGORIES[String(q.category)] ?? txt('server.inquiry.admin_inquiry_answer_2') })
+    const mailBody = txt('server.inquiry.admin_inquiry_answer_3', { answer, short })
     // 답변 + 우편을 한 문장으로. 같은 답변이 이미 있으면(연타) 아무것도 하지 않는다.
     const [r] = await query(`with t as (select id, player_id from inquiries where id = $1 and answer is distinct from $2),
         m as (insert into mails (player_id, title, body, reward, created_at, expires_at)
@@ -178,7 +179,7 @@ export function registerInquiry(app: Hono<Any>, d: Any) {
     if (q.player === c.get('playerId')) throw new ApiError(409, 'own_account', "can't delete your own account here")
     const now = clock()
     await query(`update inquiries set player_id = null, status = 'closed', answer = $2, answered_at = to_timestamp($3::float8) where id = $1`,
-      [b.id, `계정 삭제 완료 (친구 코드 ${q.code})`, now])
+      [b.id, txt('server.inquiry.admin_inquiry_delete_account', { code: q.code }), now])
     await deletePlayer(String(q.player))
     // 처리 기록 보관 1년(계정 삭제 안내에 적은 기간) — 지난 삭제 요청 기록은 여기서 함께 지운다
     await query(`delete from inquiries where category = 'delete' and player_id is null and created_at < to_timestamp($1::float8 - ${365 * 86400})`, [now])

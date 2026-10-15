@@ -29,6 +29,7 @@ function dataCopy(changes: Record<string, string> = {}): string {
   const d = mkdtempSync(join(tmpdir(), 'castle-data-'))
   tmp.push(d)
   for (const t of TABLES) cpSync(join(DATA_DIR, t.file), join(d, t.file))
+  cpSync(join(DATA_DIR, 'texts.csv'), join(d, 'texts.csv'))
   for (const [f, text] of Object.entries(changes)) writeFileSync(join(d, f), text)
   return d
 }

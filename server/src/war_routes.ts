@@ -15,6 +15,7 @@ import * as R from './rules.ts'
 import { mulberry32 } from './rules.ts'
 import { LIVE_PATH } from './war_live.ts'
 import type { WarLive } from './war_live.ts'
+import { txt } from './texts.ts'
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 const END_SLACK = 5 // 초: 전투 끝 직전에 온 final은 끝난 것으로 본다(앱 타이머·전송 지연)
@@ -210,9 +211,9 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const by = G.playerName(x.id)
     await query('update guild_wars set battle_at = to_timestamp($3::float8), battle_by = $4 where guild_id = $1 and week = $2 and (battle_at is null or battle_at > to_timestamp($5::float8))',
       [g.id, week, at, by, x.now])
-    const dayNames = ['월', '화', '수', '목', '금', '토', '일']
+    const dayNames = [txt('server.war_routes.guild_war_schedule'), txt('server.war_routes.guild_war_schedule_2'), txt('server.war_routes.guild_war_schedule_3'), txt('server.war_routes.guild_war_schedule_4'), txt('server.war_routes.guild_war_schedule_5'), txt('server.war_routes.guild_war_schedule_6'), txt('server.war_routes.guild_war_schedule_7')]
     await query('insert into guild_log (guild_id, at, text) values ($1, to_timestamp($2::float8), $3)',
-      [g.id, x.now, `${by}님이 이번 주 공성 시각을 ${dayNames[Number(b.day)]}요일 ${Number(b.hour)}:00로 정했습니다`])
+      [g.id, x.now, txt('server.war_routes.guild_war_schedule_8', { by, day: dayNames[Number(b.day)], hour: Number(b.hour) })])
     return c.json({ server_now: x.now, war: await warView(x) })
   })
 
@@ -259,7 +260,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
       for (let i = 0; i < w.members - ms.length; i++) {
         const r = mulberry32(G.mix(Number(g.seed), week, day >>> 0, 1000 + i))
         const pw = avg * (W.VIRTUAL_POWER_RANGE[0] + r() * (W.VIRTUAL_POWER_RANGE[1] - W.VIRTUAL_POWER_RANGE[0]))
-        roster.push({ owner: `m:${i}`, name: `용병 ${i + 1}`, squad: roster.length, lane: roster.length % 4, ai: true, heroes: W.randomSquad(r, defsOf(x.game), pw, cfg) })
+        roster.push({ owner: `m:${i}`, name: txt('server.war_routes.guild_war_enter.name', { i: i + 1 }), squad: roster.length, lane: roster.length % 4, ai: true, heroes: W.randomSquad(r, defsOf(x.game), pw, cfg) })
       }
       added = { owner: x.id, name: G.playerName(x.id), squad: roster.length, lane: roster.length % 4, ai: false, heroes: sq }
       roster.push(added)
@@ -339,7 +340,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const [r] = await query(`update guild_war_battles set started_at = to_timestamp($3::float8), ends_at = to_timestamp($4::float8)
       where id = $1 and guild_id = $2 and not closed and started_at > to_timestamp($3::float8) returning 1`, [battleId, g.id, x.now, x.now + W.BATTLE_SEC])
     if (r && live) live.broadcast(battleId, { t: 'start', by: G.playerName(x.id) })
-    if (r) await query('insert into guild_log (guild_id, at, text) values ($1, to_timestamp($2::float8), $3)', [g.id, x.now, `${G.playerName(x.id)}님이 공성 전투를 시작했습니다`])
+    if (r) await query('insert into guild_log (guild_id, at, text) values ($1, to_timestamp($2::float8), $3)', [g.id, x.now, txt('server.war_routes.guild_war_start', { playerName: G.playerName(x.id) })])
     return c.json({ server_now: x.now, war: await warView(x), started: Boolean(r) })
   })
 

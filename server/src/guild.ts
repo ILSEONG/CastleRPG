@@ -2,6 +2,7 @@
 // 길드 경험치·보스 누적 피해 = 실제 길드원이 쌓은 값(guilds.exp·boss_damage) + 가상 길드원 몫(virtualTotals — 길드 seed·생성 시각·지금으로
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
 import { mulberry32, powerOf, resetAt, resetDay } from './rules.ts'
+import { txt } from './texts.ts'
 
 // 길드 레벨은 끝이 없다(2026-10-06 사용자: "길드 레벨은 무제한"). 레벨마다 영웅 공격력·체력 +BUFF_PER_LEVEL %.
 // 길드 인원(실제 + 가상): 1~5레벨 15명, FULL_LEVEL(6)부터 20명(최대 20명 유지). 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
@@ -17,9 +18,9 @@ export const ATTEND_EXP = 10
 export const ATTEND_BOXES: [number, Record<string, number>][] = [[5, { coins: 20, gold: 5000 }], [10, { coins: 40, diamonds: 20 }],
   [15, { coins: 60, diamonds: 30 }], [20, { coins: 100, diamonds: 50 }]]
 export const DONATIONS: Record<string, { name: string; gold: number; diamonds: number; exp: number; coins: number; daily: number }> = {
-  gold: { name: '골드 기부', gold: 10000, diamonds: 0, exp: 20, coins: 20, daily: 3 },
-  dia: { name: '다이아 기부', gold: 0, diamonds: 50, exp: 60, coins: 60, daily: 1 },
-  royal: { name: '왕실 기부', gold: 0, diamonds: 200, exp: 250, coins: 250, daily: 1 },
+  gold: { name: txt('server.guild.donations.name'), gold: 10000, diamonds: 0, exp: 20, coins: 20, daily: 3 },
+  dia: { name: txt('server.guild.donations.name_2'), gold: 0, diamonds: 50, exp: 60, coins: 60, daily: 1 },
+  royal: { name: txt('server.guild.donations.name_3'), gold: 0, diamonds: 200, exp: 250, coins: 250, daily: 1 },
 }
 export const BOSS_TRIES = 2
 export const BOSS_FIGHT_SEC = 40 // 2026-10-07 사용자: 20 → 40초
@@ -27,7 +28,7 @@ export const BOSS_FIGHT_SEC = 40 // 2026-10-07 사용자: 20 → 40초
 // 한 판 점수 = 그 판에서 드래곤에 준 피해. 내 점수 = 오늘 두 판의 합, 길드 점수 = 길드원 점수의 합(오늘). Lv n 최대 HP = BASE × GROWTH^(n−1).
 export const BOSS_HP_BASE = 1000
 export const BOSS_HP_GROWTH = 1.22
-export const BOSS_NAMES = ['드래곤']
+export const BOSS_NAMES = [txt('server.guild.boss_names')]
 // 실제 전투(앱이 BOSS_FIGHT_SEC초 동안 영웅으로 드래곤을 친다): 시작에 도전 1회를 쓰고, 끝에 앱이 낸 피해를 받는다.
 // 받는 피해 상한 = 시작 때 내 팀 초당 피해 × 초 × BOSS_DMG_CAP(조작 방지 — 실제 전투가 이보다 많이 내면 잘린다).
 // 시작 뒤 BOSS_FIGHT_SEC ÷ 2(x2 배속까지, rules.MAX_GAME_SPEED) − BOSS_SLACK_SEC 실제 초 전에 끝내면 거절(too_early), BOSS_RUN_TTL초가 지나면 피해 0으로 끝난다.
@@ -65,13 +66,13 @@ export const SYSTEM_VIRTUAL = [12, 18] // 시스템 길드 가상 길드원 수 
 export const CREATED_VIRTUAL = 10 // 직접 만든 길드: 가상 길드원이 몇 시간마다 한 명씩 이만큼까지 들어온다
 export const SIM_DAYS_MAX = 400 // 가상 활동을 세는 최대 날수(아주 오래된 길드도 계산량이 묶이게)
 
-const NAME_A = ['새벽', '은빛', '붉은', '강철', '푸른', '황금', '서리', '폭풍', '달빛', '불꽃', '검은', '하얀', '용맹한', '고요한', '별빛', '천둥']
-const NAME_B = ['방패단', '기사단', '수호대', '검술회', '원정대', '늑대단', '망루', '용병단', '결사대', '깃발단', '성채', '사냥단']
-const NICK_A = ['졸린', '용감한', '배고픈', '빠른', '느긋한', '씩씩한', '조용한', '화난', '행복한', '수상한', '귀여운', '우직한', '새침한', '엉뚱한']
-const NICK_B = ['감자', '고양이', '기사', '궁수', '곰', '여우', '도토리', '망치', '방패', '늑대', '토끼', '수염', '마법사', '호박']
-export const NOTICES = ['매일 출석과 기부 부탁드려요!', '보스는 하루 두 번 꼭 쳐 주세요', '즐겁게 함께 성장해요', '초보 환영, 질문은 언제든지',
-  '주말엔 왕실 기부 이벤트!', '출석 20명 달성 목표!']
-export const CREATED_NOTICE = '함께 성장할 길드원을 모집합니다!'
+const NAME_A = [txt('server.guild.name_a'), txt('server.guild.name_a_2'), txt('server.guild.name_a_3'), txt('server.guild.name_a_4'), txt('server.guild.name_a_5'), txt('server.guild.name_a_6'), txt('server.guild.name_a_7'), txt('server.guild.name_a_8'), txt('server.guild.name_a_9'), txt('server.guild.name_a_10'), txt('server.guild.name_a_11'), txt('server.guild.name_a_12'), txt('server.guild.name_a_13'), txt('server.guild.name_a_14'), txt('server.guild.name_a_15'), txt('server.guild.name_a_16')]
+const NAME_B = [txt('server.guild.name_b'), txt('server.guild.name_b_2'), txt('server.guild.name_b_3'), txt('server.guild.name_b_4'), txt('server.guild.name_b_5'), txt('server.guild.name_b_6'), txt('server.guild.name_b_7'), txt('server.guild.name_b_8'), txt('server.guild.name_b_9'), txt('server.guild.name_b_10'), txt('server.guild.name_b_11'), txt('server.guild.name_b_12')]
+const NICK_A = [txt('server.guild.nick_a'), txt('server.guild.nick_a_2'), txt('server.guild.nick_a_3'), txt('server.guild.nick_a_4'), txt('server.guild.nick_a_5'), txt('server.guild.nick_a_6'), txt('server.guild.nick_a_7'), txt('server.guild.nick_a_8'), txt('server.guild.nick_a_9'), txt('server.guild.nick_a_10'), txt('server.guild.nick_a_11'), txt('server.guild.nick_a_12'), txt('server.guild.nick_a_13'), txt('server.guild.nick_a_14')]
+const NICK_B = [txt('server.guild.nick_b'), txt('server.guild.nick_b_2'), txt('server.guild.nick_b_3'), txt('server.guild.nick_b_4'), txt('server.guild.nick_b_5'), txt('server.guild.nick_b_6'), txt('server.guild.nick_b_7'), txt('server.guild.nick_b_8'), txt('server.guild.nick_b_9'), txt('server.guild.nick_b_10'), txt('server.guild.nick_b_11'), txt('server.guild.nick_b_12'), txt('server.guild.nick_b_13'), txt('server.guild.nick_b_14')]
+export const NOTICES = [txt('server.guild.notices'), txt('server.guild.notices_2'), txt('server.guild.notices_3'), txt('server.guild.notices_4'),
+  txt('server.guild.notices_5'), txt('server.guild.notices_6')]
+export const CREATED_NOTICE = txt('server.guild.created_notice')
 
 // 정수 seed들 → 32비트 seed(순서가 다르면 다른 값).
 export function mix(...xs: number[]): number {
@@ -173,7 +174,7 @@ export function virtualMembers(g: GuildRow): VMember[] {
   let t = g.created_at
   for (let i = 0; i < g.virtual_n; i++) {
     if (!g.system) t += i === 0 ? 600 : range(r, 0.5, 3) * 3600
-    const role = g.system ? (i === 0 ? '길드장' : i === 1 ? '부길드장' : i < 6 ? '정예' : '길드원') : (i < 3 ? '정예' : '길드원')
+    const role = g.system ? (i === 0 ? txt('server.guild.role.leader') : i === 1 ? txt('server.guild.role.vice') : i < 6 ? txt('server.guild.role.elite') : txt('server.guild.role.member')) : (i < 3 ? txt('server.guild.role.elite') : txt('server.guild.role.member'))
     out.push({ i, name: nickname(mix(g.seed, 1000 + i)), role, power0: (250 + Math.floor(r() * 1100)) * VIRTUAL_POWER_SCALE, att_p: range(r, 0.55, 0.97), join_t: g.system ? g.created_at : t })
   }
   return out
@@ -219,7 +220,7 @@ export function virtualTotals(g: GuildRow, now: number, hour: number) {
         s.contrib = e.exp + 10 * e.hits
         s.dmg = e.dmg
         s.kind = e.kind
-        log.push({ t: e.t, text: e.kind ? `${m.name}님이 ${DONATIONS[e.kind].name}를 했습니다` : `${m.name}님이 출석했습니다` })
+        log.push({ t: e.t, text: e.kind ? txt('server.guild.virtualtotals.text', { name: m.name, name2: DONATIONS[e.kind].name }) : txt('server.guild.virtualtotals.text_2', { name: m.name }) })
       }
     }
   }

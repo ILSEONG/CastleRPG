@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Db, Query } from './db.ts'
+import { dataTextRows, mergeTexts, parseTexts, TEXT_COLS, type TextRow } from './texts.ts'
 import { BUILD_LV_COLS, BUILD_RES, DUNGEON_TYPES, EQUIP_GRADES, GATE, KEEP, MAX_PROMOTION, parseLevelList, parseNeeds, parseReward, parseTiers, parseTrainCost, QUEST_REWARD_KEYS, QUEST_TYPES,
   RESEARCH_BRANCHES, RESEARCH_EFFECTS, UPGRADE_UNITS,
   WEAPON_OF } from './rules.ts'
@@ -656,6 +657,26 @@ function seedSql(spec: TableSpec): string {
     select (select count(*) from up)::int as upserted, (select count(*) from del)::int as deleted`
 }
 
+// 게임 문구(texts.ts): data/texts.csv + 기획 표 이름 칸(data.<표>.<id>.<칸>). 오류가 있으면 CsvError.
+export async function readTextRows(dataDir = DATA_DIR, tables?: Tables): Promise<TextRow[]> {
+  const errors: string[] = []
+  let text = ''
+  try {
+    text = await readFile(join(dataDir, 'texts.csv'), 'utf8')
+  } catch {
+    errors.push(`texts.csv line 0 column '': cannot open file`)
+  }
+  const rows = text ? parseTexts(text, errors) : []
+  if (errors.length) throw new CsvError(errors)
+  return mergeTexts(rows, dataTextRows((tables ?? await readTables(dataDir)) as Record<string, Record<string, unknown>[]>))
+}
+
+const TEXTS_SQL = `with src as (select * from jsonb_to_recordset($1::jsonb) as x(${TEXT_COLS.map((c) => `${ident(c)} text`).join(', ')})),
+    up as (insert into texts (${TEXT_COLS.map(ident).join(', ')}) select ${TEXT_COLS.map(ident).join(', ')} from src
+      on conflict (key) do update set ${TEXT_COLS.slice(1).map((c) => `${ident(c)} = excluded.${ident(c)}`).join(', ')} returning 1),
+    del as (delete from texts where key not in (select key from src) returning 1)
+    select (select count(*) from up)::int as upserted, (select count(*) from del)::int as deleted`
+
 // CSV로 기획 표를 덮어쓴다 — 표 전부를 한 트랜잭션(batch)으로, 중간에 실패하면 아무 표도 안 바뀐다. 표별 {upserted, deleted}.
 export async function seed(db: Pick<Db, 'batch'>, dataDir = DATA_DIR): Promise<Record<string, { upserted: number; deleted: number }>> {
   const tables = await readTables(dataDir)
@@ -668,18 +689,21 @@ export async function seed(db: Pick<Db, 'batch'>, dataDir = DATA_DIR): Promise<R
     })
     return { text: seedSql(spec), params: [JSON.stringify(rows)] }
   })
+  stmts.push({ text: TEXTS_SQL, params: [JSON.stringify(await readTextRows(dataDir, tables))] })
   const out = await db.batch(stmts)
   const result: Record<string, { upserted: number; deleted: number }> = {}
   TABLES.forEach((spec, i) => {
     const [r] = out[i]
     result[spec.name] = { upserted: Number(r.upserted), deleted: Number(r.deleted) }
   })
+  const [tr] = out[TABLES.length]
+  result.texts = { upserted: Number(tr.upserted), deleted: Number(tr.deleted) }
   return result
 }
 
 // 기획 표 중 하나라도 비었으면 true(개발 서버 첫 시작 때 시드).
 export async function planningEmpty(query: Query): Promise<boolean> {
   const sel = TABLES.map((t) => `(select count(*) from ${t.table})::int as ${t.name}`).join(', ')
-  const [r] = await query(`select ${sel}`)
-  return TABLES.some((t) => Number(r[t.name]) === 0)
+  const [r] = await query(`select ${sel}, (select count(*) from texts)::int as texts`)
+  return TABLES.some((t) => Number(r[t.name]) === 0) || Number(r.texts) === 0
 }

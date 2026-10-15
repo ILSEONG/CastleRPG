@@ -7,6 +7,7 @@ import { MAX_GAME_SPEED, mulberry32, powerOf, type StatLimit } from './rules.ts'
 import { mix, nickname } from './guild.ts'
 import { capStats, fitHero, heroStats } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
+import { txt } from './texts.ts'
 
 export const MODES = ['duel', 'total'] as const
 export type Mode = (typeof MODES)[number]
@@ -29,8 +30,8 @@ export const MIN_POWER = 250
 
 // [id, 이름, 이 포인트 이상]
 export const TIERS: [string, string, number][] = [
-  ['bronze', '브론즈', 0], ['silver', '실버', 200], ['gold', '골드', 500], ['platinum', '플래티넘', 900],
-  ['diamond', '다이아몬드', 1400], ['master', '마스터', 2000], ['challenger', '챌린저', 2700],
+  ['bronze', txt('server.pvp.tiers'), 0], ['silver', txt('server.pvp.tiers_2'), 200], ['gold', txt('server.pvp.tiers_3'), 500], ['platinum', txt('server.pvp.tiers_4'), 900],
+  ['diamond', txt('server.pvp.tiers_5'), 1400], ['master', txt('server.pvp.tiers_6'), 2000], ['challenger', txt('server.pvp.tiers_7'), 2700],
 ]
 
 // PVP 상점(코인). period: day = 매일 리셋, week = 월요일 리셋(길드전과 같은 주).

@@ -1,6 +1,7 @@
 // 소셜 로그인(Google·카카오·네이버) — OAuth 2.0 인가 코드 흐름. 앱은 시스템 브라우저로 /v1/auth/oauth/start가 준 url을 열고,
 // 제공자가 서버 콜백(/v1/auth/:provider/callback)으로 돌려보내면 서버가 code를 토큰으로 바꿔 제공자 사용자 id만 읽는다
 // (이름은 받지 않는다. Google만 확인된 이메일을 읽는다 — 슈퍼관리자 판별용, admin_emails 표와 맞춘다). 앱은 그동안 /v1/auth/oauth/poll로 결과를 기다린다. 제공자 호출은 주입한 fetch로(테스트는 가짜).
+import { txt } from './texts.ts'
 
 export const PROVIDERS = ['google', 'kakao', 'naver'] as const
 export type Provider = (typeof PROVIDERS)[number]
@@ -95,8 +96,8 @@ export async function fetchUid(cfg: OAuthConfig, p: Provider, code: string, stat
 
 // 콜백 결과 페이지(브라우저에 보인다). 앱으로 돌아가라는 안내만.
 export function resultPage(ok: boolean, why?: string): string {
-  const title = ok ? '로그인되었습니다' : '로그인하지 못했습니다'
-  const body = ok ? '게임으로 돌아가 주세요. 이 창은 닫아도 됩니다.' : why ? `${why}. 게임으로 돌아가 주세요.` : '게임으로 돌아가 다시 시도해 주세요.'
+  const title = ok ? txt('server.oauth.resultpage') : txt('server.oauth.resultpage_2')
+  const body = ok ? txt('server.oauth.resultpage_3') : why ? txt('server.oauth.resultpage_4', { why }) : txt('server.oauth.resultpage_5')
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CastleRPG</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;
 background:#5b93d8;color:#1f2430}.c{background:#fbf6ea;border:3px solid #2b2f3a;border-radius:18px;padding:32px 28px;max-width:320px;text-align:center}

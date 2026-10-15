@@ -1,5 +1,6 @@
 // 경제 규칙(순수 함수, 시간은 인자 — 유닉스 초). 앱 economy.gd(개정 7)·game_data.gd(개정 8)와 같은 규칙.
 import { randomBytes } from 'node:crypto'
+import { txt } from './texts.ts'
 
 export type Config = Record<string, string>
 
@@ -787,8 +788,8 @@ export const FRIEND_RECOMMEND = 5 // 추천 친구 수(최근 3일 안에 접속
 export const FRIEND_RECENT_SEC = 3 * 86400
 
 // 플레이어 이름: id(uuid)에서 정해지는 별명(같은 id면 늘 같다 — 길드 guild.ts playerName과 같은 규칙·같은 낱말).
-const NICK_A = ['졸린', '용감한', '배고픈', '빠른', '느긋한', '씩씩한', '조용한', '화난', '행복한', '수상한', '귀여운', '우직한', '새침한', '엉뚱한']
-const NICK_B = ['감자', '고양이', '기사', '궁수', '곰', '여우', '도토리', '망치', '방패', '늑대', '토끼', '수염', '마법사', '호박']
+const NICK_A = [txt('server.rules.nick_a'), txt('server.rules.nick_a_2'), txt('server.rules.nick_a_3'), txt('server.rules.nick_a_4'), txt('server.rules.nick_a_5'), txt('server.rules.nick_a_6'), txt('server.rules.nick_a_7'), txt('server.rules.nick_a_8'), txt('server.rules.nick_a_9'), txt('server.rules.nick_a_10'), txt('server.rules.nick_a_11'), txt('server.rules.nick_a_12'), txt('server.rules.nick_a_13'), txt('server.rules.nick_a_14')]
+const NICK_B = [txt('server.rules.nick_b'), txt('server.rules.nick_b_2'), txt('server.rules.nick_b_3'), txt('server.rules.nick_b_4'), txt('server.rules.nick_b_5'), txt('server.rules.nick_b_6'), txt('server.rules.nick_b_7'), txt('server.rules.nick_b_8'), txt('server.rules.nick_b_9'), txt('server.rules.nick_b_10'), txt('server.rules.nick_b_11'), txt('server.rules.nick_b_12'), txt('server.rules.nick_b_13'), txt('server.rules.nick_b_14')]
 
 function mixName(...xs: number[]): number {
   let h = 0x811c9dc5

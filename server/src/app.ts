@@ -31,6 +31,7 @@ import { registerLiveOps } from './live_ops.ts'
 import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
 import * as RL from './ratelimit.ts'
+import { DEFAULT_LANG, LANGS, loadBundledTexts, setTexts, textMaps, txt, type TextRow } from './texts.ts'
 
 export interface AppOptions {
   query: Query
@@ -64,7 +65,7 @@ const OAUTH_STARTS_PER_IP = 60 // 10분에 한 IP의 소셜 로그인 시작
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TOSS_HASH_RE = /^[A-Za-z0-9+/=_.:-]{8,512}$/ // 앱인토스 getUserKeyForGame hash
 const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge·세션 비밀(32바이트 hex)
-const LINK_ERRORS: Record<string, string> = { already_linked: '이미 다른 게임 계정에 연결된 계정입니다', provider_taken: '이 게임 계정에는 이미 같은 종류의 계정이 연결되어 있습니다' }
+const LINK_ERRORS: Record<string, string> = { already_linked: txt('server.app.link_errors.already_linked'), provider_taken: txt('server.app.link_errors.provider_taken') }
 const OAUTH_TTL = 600 // 진행 중 소셜 로그인 유효 시간(초)
 const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
 
@@ -498,6 +499,7 @@ export function createApp(opts: AppOptions) {
   const gameCacheMs = Math.max(0, opts.gameCacheSec ?? 0) * 1000
   let gameMemo: { at: number; p: Promise<Game> } | null = null
   function loadGame(): Promise<Game> {
+    loadTexts().catch(() => {}) // 서버 문구(txt)도 DB 값으로 — 표가 없으면(마이그레이션 전) 저장소 값 그대로
     if (!gameCacheMs) return readGame()
     const t = Date.now()
     if (!gameMemo || t - gameMemo.at >= gameCacheMs) {
@@ -506,6 +508,27 @@ export function createApp(opts: AppOptions) {
       gameMemo = memo
     }
     return gameMemo.p
+  }
+
+  // DB texts 표 → 언어별 사전(+ 서버 txt()가 쓰는 값도 바꾼다). 기획 표와 같은 캐시 주기. 표가 비었으면(시드 전) 저장소 texts.csv 그대로.
+  let textsMemo: { at: number; p: Promise<{ maps: Record<string, Record<string, string>>; versions: Record<string, string> }> } | null = null
+  function loadTexts() {
+    const now = Date.now()
+    if (!textsMemo || now - textsMemo.at >= gameCacheMs) {
+      const memo = {
+        at: now,
+        p: query('select * from texts order by key').then((rows) => {
+          const list = rows.length ? (rows as unknown as TextRow[]) : loadBundledTexts()
+          setTexts(list)
+          const maps = textMaps(list)
+          const versions = Object.fromEntries(Object.entries(maps).map(([l, m]) => [l, createHash('sha256').update(JSON.stringify(m)).digest('hex').slice(0, 16)]))
+          return { maps, versions }
+        }),
+      }
+      memo.p.catch(() => { if (textsMemo === memo) textsMemo = null })
+      textsMemo = memo
+    }
+    return textsMemo.p
   }
 
   async function readGame(): Promise<Game> {
@@ -1425,6 +1448,16 @@ export function createApp(opts: AppOptions) {
     }
     await query('delete from players where id = $1', [id])
   }
+
+  // 게임 문구(texts.ts, 2026-10-14): ?lang=ko|en|ja|zh(없거나 모르면 ko) → {version, lang, texts: {키: 문장}}. 로그인 없이(로딩 화면에서 받는다).
+  // ?v=<가진 버전>이 같으면 {version, lang, same: true}만 — 앱이 user://에 둔 표를 그대로 쓴다.
+  app.get('/v1/texts', async (c) => {
+    const lang = (LANGS as readonly string[]).includes(c.req.query('lang') ?? '') ? String(c.req.query('lang')) : DEFAULT_LANG
+    const t = await loadTexts()
+    const version = t.versions[lang]
+    if (c.req.query('v') === version) return c.json({ version, lang, same: true })
+    return c.json({ version, lang, texts: t.maps[lang] })
+  })
 
   app.get('/v1/gamedata', async (c) => {
     const g = await loadGame()
@@ -3208,7 +3241,7 @@ export function createApp(opts: AppOptions) {
       const mm = G.mineToday(m.mine, x.now, x.hour)
       if (mm.attended) att++
       score += mm.boss_total
-      members.push({ name: G.playerName(m.player_id), role: m.player_id === g.owner ? '길드장' : '길드원', power: m.power, contrib: mm.contrib, att: mm.attended,
+      members.push({ name: G.playerName(m.player_id), role: m.player_id === g.owner ? txt('server.guild.role.leader') : txt('server.guild.role.member'), power: m.power, contrib: mm.contrib, att: mm.attended,
         dmg: mm.boss_total, last: m.last_active ?? 0, real: true })
     }
     const cap = G.capacity(st.lv.level)
@@ -3216,7 +3249,7 @@ export function createApp(opts: AppOptions) {
       const d = st.vt.day[vm.i]
       if (d.att) att++
       score += d.dmg
-      const role = g.owner != null && vm.role === '길드장' ? '정예' : vm.role
+      const role = g.owner != null && vm.role === txt('server.guild.role.leader') ? txt('server.guild.role.elite') : vm.role
       members.push({ name: vm.name, role, power: d.power, contrib: d.contrib, att: d.att, dmg: d.dmg, last: d.last })
     }
     const logs = (await query(`select extract(epoch from at)::float8 as t, text from guild_log where guild_id = $1 and at > to_timestamp($2::float8)
@@ -3300,7 +3333,7 @@ export function createApp(opts: AppOptions) {
       const [{ n }] = await query('select count(*)::int as n from player_guild where guild_id = $1', [gid])
       const st = guildState(g, x.now, x.hour)
       if (Number(n) >= G.capacity(st.lv.level)) throw blocked('full', 'guild is full')
-      return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드에 가입했습니다` } } } }
+      return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now }), log: { guild_id: gid, text: txt('server.app.guild_join.text', { playerName: G.playerName(x.id) }) } } } }
     })
   })
 
@@ -3321,7 +3354,7 @@ export function createApp(opts: AppOptions) {
           goldTenths: -G.CREATE_GOLD * 10,
           guild: {
             create: { id: gid, name, emblem, seed: Math.floor(random() * 2 ** 31), virtual_n: G.CREATED_VIRTUAL, notice: G.CREATED_NOTICE },
-            row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: 1 }), log: { guild_id: gid, text: `${G.playerName(x.id)}님이 길드를 창설했습니다` },
+            row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: 1 }), log: { guild_id: gid, text: txt('server.app.guild_create.text', { playerName: G.playerName(x.id) }) },
           },
           log: { kind: 'guild', detail: { action: 'create', name, gold: G.CREATE_GOLD } },
         },
@@ -3335,7 +3368,7 @@ export function createApp(opts: AppOptions) {
       change: {
         guild: {
           row: rowOf(x, { guild_id: null, joined_at: null, mine: { ...x.mine, contrib: 0 } }), // 출석·받은 상자는 그날 그대로(나갔다 들어와 다시 받지 않게)
-          log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 길드를 떠났습니다` }, leave: { guild_id: g.id, owner: g.owner === x.id },
+          log: { guild_id: g.id, text: txt('server.app.guild_leave.text', { playerName: G.playerName(x.id) }) }, leave: { guild_id: g.id, owner: g.owner === x.id },
         },
       },
     }
@@ -3349,7 +3382,7 @@ export function createApp(opts: AppOptions) {
     grant(x, G.ATTEND_REWARD, ch, coins)
     ch.guild = {
       row: rowOf(x, { coins: coins.n, mine: { ...x.mine, attended: true, contrib: x.mine.contrib + G.ATTEND_EXP } }),
-      add: { guild_id: g.id, exp: G.ATTEND_EXP, dmg: 0 }, log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 출석했습니다` },
+      add: { guild_id: g.id, exp: G.ATTEND_EXP, dmg: 0 }, log: { guild_id: g.id, text: txt('server.app.guild_attend.text', { playerName: G.playerName(x.id) }) },
     }
     ch.events = { guild_attend: 1 }
     return { change: ch }
@@ -3384,7 +3417,7 @@ export function createApp(opts: AppOptions) {
         change: {
           goldTenths: d.gold ? -d.gold * 10 : undefined, diamonds: d.diamonds ? -d.diamonds : undefined,
           guild: { row: rowOf(x, { coins: x.pg.coins + d.coins, mine }), add: { guild_id: g.id, exp: d.exp, dmg: 0 },
-            log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 ${d.name}를 했습니다` } },
+            log: { guild_id: g.id, text: txt('server.app.guild_donate.text', { playerName: G.playerName(x.id), name: d.name }) } },
         },
       }
     })
@@ -3420,7 +3453,7 @@ export function createApp(opts: AppOptions) {
       grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
-        log: { guild_id: g.id, text: `${G.playerName(x.id)}님이 드래곤 Lv ${reached} 도달 · ${dmg.toLocaleString('en-US')}점` } }
+        log: { guild_id: g.id, text: txt('server.app.guild_boss_finish.text', { playerName: G.playerName(x.id), reached, dmg: dmg.toLocaleString('en-US') }) } }
       ch.events = { guild_boss: 1 }
       return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
     })

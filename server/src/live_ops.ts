@@ -45,7 +45,7 @@ export const CODE_RE = /^[A-Z0-9]{4,20}$/
 export const COUPON_MISSES = 10 // 한 계정이 10분에 틀릴 수 있는 쿠폰 코드 수(코드 맞히기 막기). 넘으면 429 too_many_attempts
 export const VERSION_RE = /^\d+(\.\d+){0,3}$/
 // 점검·업데이트 중에도 여는 경로(로그인·상태·공지·기획 표·관리자)
-const OPEN_IN_MAINTENANCE = [/^\/v1\/(health|status|notices|gamedata)$/, /^\/v1\/auth\//, /^\/v1\/admin\//, /^\/v1\/test\//]
+const OPEN_IN_MAINTENANCE = [/^\/v1\/(health|status|notices|gamedata|texts)$/, /^\/v1\/auth\//, /^\/v1\/admin\//, /^\/v1\/test\//]
 const OPEN_IN_UPDATE = [/^\/v1\/(health|status|notices)$/, /^\/v1\/test\//]
 
 export interface Reward {

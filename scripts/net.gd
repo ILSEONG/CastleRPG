@@ -180,6 +180,7 @@ func start() -> void:
 			_busy = false
 			_queue.append(_login_item())
 			send("GET", "/v1/gamedata", null, _on_gamedata, Callable(), false)
+			_send_texts()
 			send("GET", "/v1/player", null, _on_first_player, _retry_first_player)
 		return
 	_started = true
@@ -193,6 +194,7 @@ func start() -> void:
 	ensure_device_id()
 	_queue.append(_login_item())
 	send("GET", "/v1/gamedata", null, _on_gamedata, Callable(), false)
+	_send_texts()
 	send("GET", "/v1/player", null, _on_first_player, _retry_first_player)
 	set_process(true)
 
@@ -491,6 +493,16 @@ func _go_down() -> void:
 func _on_login(data: Dictionary) -> void:
 	token = str(data.get("token", ""))
 	logins += 1
+
+
+## 게임 문구(Lang, GET /v1/texts): 가진 버전(v)이 서버와 같으면 서버는 same만 돌려준다. 옛 서버(404)·실패는 앱에 든 표 그대로.
+func _send_texts() -> void:
+	send("GET", "/v1/texts?lang=%s&v=%s" % [Lang.lang, Lang.version.uri_encode()], null, _on_texts, Callable(), false)
+
+
+func _on_texts(data: Dictionary) -> void:
+	if not data.get("same", false):
+		Lang.apply_remote(data)
 
 
 func _on_gamedata(data: Dictionary) -> void:
