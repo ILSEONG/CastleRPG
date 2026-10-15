@@ -81,6 +81,12 @@ func _on_started(d: Dictionary) -> void:
 	opener.call(d.url)
 
 
+## 브라우저에서 게임으로 돌아오면(로그인 완료 링크·직접 전환) 기다리지 않고 바로 결과를 묻는다.
+func _notification(what: int) -> void:
+	if _state != "" and (what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_APPLICATION_FOCUS_IN):
+		_poll_left = 0.0
+
+
 func _process(delta: float) -> void:
 	if pending == "" or _state == "":
 		return

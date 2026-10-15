@@ -1281,7 +1281,12 @@ export function createApp(opts: AppOptions) {
     const p = c.req.param('provider')
     const state = c.req.query('state') ?? ''
     const code = c.req.query('code') ?? ''
-    const page = (ok: boolean, status: number) => c.html(O.resultPage(ok), status as any)
+    const android = O.isAndroid(c.req.header('user-agent'))
+    const page = (ok: boolean, status: number) => c.html(O.resultPage(ok, undefined, android), status as any)
+    // 안드로이드 앱에서 연 로그인은 끝나면 게임 앱으로 곧장 돌려보낸다(앱이 결과를 바로 받는다). 앱을 못 열면 결과 안내 페이지로.
+    const done = (r: string, status: number) => android
+      ? c.redirect(O.appReturnUrl(`${oauth.redirectBase}/v1/auth/result?r=${r}`), 302)
+      : r === 'ok' ? page(true, status) : c.html(O.resultPage(false, LINK_ERRORS[r]), status as any)
     if (!O.isProvider(p) || !HEX64_RE.test(state)) return page(false, 400)
     const now = clock()
     const [row] = await query(`select provider, link_player, link_only, extract(epoch from created_at)::float8 as created_at, player_id, error
@@ -1289,7 +1294,7 @@ export function createApp(opts: AppOptions) {
     if (!row || row.provider !== p || row.player_id || row.error || now - Number(row.created_at) > OAUTH_TTL) return page(false, 400)
     const fail = async (error: string, status: number) => {
       await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, error])
-      return page(false, status)
+      return done(error, status)
     }
     if (c.req.query('error') || !code || !O.enabledProviders(oauth).includes(p)) return fail('denied', 200) // 사용자가 취소·거부
     let uid: string
@@ -1303,9 +1308,15 @@ export function createApp(opts: AppOptions) {
     const err = await finishLogin(state, row, p, uid, email, now)
     if (err) {
       await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, err])
-      return c.html(O.resultPage(false, LINK_ERRORS[err]), 200)
+      return done(err, 200)
     }
-    return page(true, 200)
+    return done('ok', 200)
+  })
+
+  // 앱으로 못 돌아간 브라우저가 보는 결과 안내(appReturnUrl의 fallback). r = ok 또는 오류 코드.
+  app.get('/v1/auth/result', (c) => {
+    const r = c.req.query('r') ?? ''
+    return c.html(O.resultPage(r === 'ok', LINK_ERRORS[r], O.isAndroid(c.req.header('user-agent'))))
   })
 
   // 제공자 확인을 마친 로그인을 끝낸다: 보통 로그인은 그 소셜 계정의 플레이어(없으면 기기 게스트를 잇거나 새로), 연동(link_only)은 요청한
