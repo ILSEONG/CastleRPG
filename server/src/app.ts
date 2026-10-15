@@ -1195,6 +1195,9 @@ export function createApp(opts: AppOptions) {
     return v
   }
 
+  // 접속 중 표시(파티 초대 대상): 마지막으로 인증된 요청을 보낸 시각. 서버 한 대 메모리.
+  const seenAt = new Map<string, number>()
+
   // Authorization: Bearer <JWT>. 서명은 hono/jwt, 만료는 주입 시계로 확인한다.
   async function auth(c: Context, next: Next) {
     const h = c.req.header('authorization') ?? ''
@@ -1209,6 +1212,8 @@ export function createApp(opts: AppOptions) {
     if (typeof payload.exp !== 'number' || payload.exp <= clock()) throw new ApiError(401, 'token_expired', 'token expired')
     if (typeof payload.sub !== 'string' || !UUID_RE.test(payload.sub)) throw new ApiError(401, 'bad_token', 'invalid token subject')
     c.set('playerId', payload.sub)
+    if (seenAt.size >= 50_000) seenAt.clear() // 메모리 지키기(접속 표시만 잠시 비게 된다)
+    seenAt.set(payload.sub, clock())
     await next()
   }
 
@@ -3777,7 +3782,7 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
-  registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, testHooks: !!opts.allowTestHooks },
+  registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
     opts.partyLive)
   registerInquiry(app, { query, auth, clock, body, ApiError, clientIp: RL.clientIp, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })
 

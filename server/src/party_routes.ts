@@ -6,6 +6,7 @@
 //  POST /v1/party/accept {match_id, accept}        [입장 수락]·거절
 //  POST /v1/party/finish {run_id, win, elapsed}    판 결과 — 승리면 타당성 검사 뒤 장신구 1개(하루 REWARD_CLEARS번까지). 같은 판을 다시 보내면 같은 결과
 //  POST /v1/party/lobby/create|join|leave|start  파티 코드(아래 '파티 코드' 묶음 참고) — 같은 파티는 한 매치에 함께 앉는다
+//  GET /v1/party/invites|invitable · POST /v1/party/invite|invite/decline  친구·길드원 초대(아래 '초대' 묶음)
 // party = {quests: {lich|spider: {best, clears_left}}, queue: 내 상태, lobby: 내 파티 또는 null}. 내 상태(앱이 대기 중 1초마다 GET /v1/party로 묻는다):
 //  {state: 'idle'} · {state: 'queued', quest, diff, waited, bot_in} · {state: 'confirm', match_id, quest, diff, left, seats, accepted}
 //  · {state: 'live', match_id, run_id, quest, diff, seed, elapsed, time_limit, boss, seats, me, result}
@@ -18,6 +19,7 @@ import * as R from './rules.ts'
 import { capStats, fitHero, heroStats } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
 import type { PartyLive } from './party_live.ts'
+import { Limiter } from './ratelimit.ts'
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -27,6 +29,7 @@ type Any = any
 
 export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
   const { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view: playerView, body, blocked, random, ApiError, verifyToken } = d
+  const seenAt: Map<string, number> = d.seenAt ?? new Map()
 
   const cfgOf = (game: Any) => Object.assign((k: string) => R.cfgNum(game.config, k), { config: game.config })
   const defsOf = (game: Any): HeroDef[] => game.heroes.map((h: Any) => ({ id: String(h.id), role: String(h.role), hp: Number(h.hp), atk: Number(h.atk),
@@ -223,6 +226,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     if (joinTries.size > 10000) joinTries.clear()
     const r = hub.joinLobby(code, await seatFor(x, l.quest, b), x.now)
     if (typeof r === 'string') throw lobbyFail(r)
+    hub.invitesOf(x.id, x.now) // 이 파티로 온 초대는 여기서 지워진다
     return c.json(await view(x))
   })
 
@@ -249,6 +253,74 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     if (typeof r === 'string') throw lobbyFail(r)
     botsNow(x)
     return c.json(await view(x))
+  })
+
+  // --- 초대 ---
+  //  GET  /v1/party/invites            → {server_now, invites: [{id, name, quest, diff, code, left}]} 받은 초대(앱이 켜져 있으면 늘 묻는다 — DB를 읽지 않는다)
+  //  GET  /v1/party/invitable          → {server_now, people: [{id, name, friend, guild, online, member}]} 친구(수락한)·같은 길드원
+  //  POST /v1/party/invite {to}        내 파티로 초대(친구·길드원, 지금 접속 중이어야 한다) · POST /v1/party/invite/decline {id} 거절
+  //  수락 = POST /v1/party/lobby/join {code}(초대에 든 코드)
+  const inviteLimit = new Limiter(PQ.INVITE_MAX, PQ.INVITE_WINDOW_SEC)
+  const online = (id: string, now: number) => now - (seenAt.get(id) ?? -1e12) <= PQ.ONLINE_SEC
+  async function relations(me: string): Promise<Map<string, { friend: boolean; guild: boolean }>> {
+    const rows = await query(`select case when l.a = $1 then l.b else l.a end::text as id, true as friend, false as guild from friend_links l
+        where (l.a = $1 or l.b = $1) and l.accepted
+      union all select pg.player_id::text, false, true from player_guild pg
+        where pg.guild_id = (select guild_id from player_guild where player_id = $1) and pg.guild_id is not null and pg.player_id <> $1`, [me])
+    const out = new Map<string, { friend: boolean; guild: boolean }>()
+    for (const r of rows) {
+      const o = out.get(r.id) ?? { friend: false, guild: false }
+      if (r.friend) o.friend = true
+      if (r.guild) o.guild = true
+      out.set(r.id, o)
+    }
+    return out
+  }
+  const invitesView = (id: string, now: number) => {
+    hub.tick(now)
+    return hub.invitesOf(id, now).map((i) => ({ id: i.id, name: i.name, quest: i.quest, diff: i.diff, code: i.code,
+      left: Math.max(0, Math.ceil(PQ.INVITE_TTL_SEC - (now - i.at))) }))
+  }
+
+  app.get('/v1/party/invites', auth, async (c) => {
+    const id = c.get('playerId') as string
+    const now = clock()
+    return c.json({ server_now: now, invites: invitesView(id, now) })
+  })
+
+  app.get('/v1/party/invitable', auth, async (c) => {
+    const id = c.get('playerId') as string
+    const now = clock()
+    const l = hub.lobbyOf(id)
+    const people = [...(await relations(id)).entries()].map(([pid, r]) => ({ id: pid, name: R.friendName(pid), friend: r.friend, guild: r.guild,
+      online: online(pid, now), member: !!l?.members.some((m) => m.seat.pid === pid) }))
+    people.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
+    return c.json({ server_now: now, people })
+  })
+
+  app.post('/v1/party/invite', auth, async (c) => {
+    const b = await body(c)
+    const id = c.get('playerId') as string
+    const now = clock()
+    const to = typeof b.to === 'string' && UUID_RE.test(b.to) ? b.to.toLowerCase() : ''
+    if (!to) throw new ApiError(400, 'bad_request', "'to' must be a player id")
+    if (!hub.lobbyOf(id)) throw lobbyFail('no_lobby')
+    if (!(await relations(id)).has(to)) throw blocked('not_friend', 'you can invite friends and guild members only')
+    if (!online(to, now)) throw blocked('offline', 'that lord is not online')
+    if (!inviteLimit.take(id, now)) throw new ApiError(429, 'rate_limited', 'too many invites, try again later')
+    hub.tick(now)
+    const r = hub.invite(id, to, now)
+    if (r === 'member') throw blocked('member', 'already in your party')
+    if (typeof r === 'string') throw lobbyFail(r)
+    return c.json({ server_now: now, sent: true })
+  })
+
+  app.post('/v1/party/invite/decline', auth, async (c) => {
+    const b = await body(c)
+    const id = c.get('playerId') as string
+    hub.dropInvite(id, String(b.id ?? ''))
+    const now = clock()
+    return c.json({ server_now: now, invites: invitesView(id, now) })
   })
 
   app.post('/v1/party/cancel', auth, async (c) => {

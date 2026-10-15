@@ -150,6 +150,11 @@ func _card(q: String) -> Control:
 	copy.custom_minimum_size = Vector2(90, 44)
 	copy.pressed.connect(_copy_code)
 	code_row.add_child(copy)
+	var inv := _button(Lang.t("party_view.card_4"), HudScript.ACCENT, 20)
+	inv.custom_minimum_size = Vector2(90, 44)
+	inv.pressed.connect(_open_invite)
+	code_row.add_child(inv)
+	buttons["invite:" + q] = inv
 	var members := _label("", 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	members.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lb.add_child(members)
@@ -167,7 +172,7 @@ func _card(q: String) -> Control:
 	row2.add_child(start)
 	buttons["start:" + q] = start
 	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "row": pick_row, "reason": reason, "start": start,
-		"lobby": lobby_box, "code": code_label, "copy": copy, "members": members, "party": party_b}
+		"lobby": lobby_box, "code": code_label, "copy": copy, "invite": inv, "members": members, "party": party_b}
 	return panel
 
 
@@ -239,6 +244,17 @@ func _copy_code() -> void:
 
 
 var code_panel  # party_code_panel.gd(처음 누를 때 만든다)
+var invite_panel  # party_invite_panel.gd(처음 누를 때 만든다)
+
+
+func _open_invite() -> void:
+	if not Party.online():
+		Economy.notice.emit(Lang.t("party_view.open_invite"))
+		return
+	if invite_panel == null:
+		invite_panel = preload("res://scripts/party_invite_panel.gd").new()
+		get_tree().root.add_child(invite_panel)
+	invite_panel.open()
 
 
 func _open_code() -> void:
@@ -321,6 +337,7 @@ func refresh() -> void:
 			var code := str(l.get("code", ""))
 			c.code.text = Lang.t("party_view.refresh_14") % (code if code != "" else "······")
 			c.copy.disabled = code == ""
+			c.invite.disabled = code == "" or st != "idle" or l.get("members", []).size() >= int(l.get("size", 4))
 			var lines := []
 			for m in l.get("members", []):
 				var who := str(m.get("name", ""))

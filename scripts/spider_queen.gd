@@ -156,11 +156,13 @@ func web() -> void:
 
 
 func _shoot_web(target, delay: float) -> void:
+	var tid: int = target.get_instance_id()  # 잡힌 값이 판 끝에 지워져도 오류가 안 나게 id로 잡는다
 	get_tree().create_timer(delay, false).timeout.connect(func():
-		if not is_instance_valid(target) or not target.is_alive() or not is_alive():
+		var tgt = instance_from_id(tid)
+		if not is_instance_valid(tgt) or not tgt.is_alive() or not is_alive():
 			return
 		var p = preload("res://scripts/projectile.gd").new()
-		p.target = target
+		p.target = tgt
 		p.speed = 16.0
 		p.kind = "bolt"
 		p.color = WEB
@@ -314,6 +316,8 @@ func play_event(ev: Array) -> void:
 				var p2 := Vector3(float(flat[k]), 0, float(flat[k + 1]))
 				Fx.telegraph_circle(par, p2, ACID_R, ACID_TELE)
 				var fall := 0.6
+				var par_id := par.get_instance_id()
 				get_tree().create_timer(maxf(0.05, ACID_TELE - fall), false).timeout.connect(func():
-					if is_instance_valid(par):
-						Fx.meteor(par, p2, VENOM, ACID_R, 1, fall))
+					var pn = instance_from_id(par_id)
+					if is_instance_valid(pn):
+						Fx.meteor(pn, p2, VENOM, ACID_R, 1, fall))

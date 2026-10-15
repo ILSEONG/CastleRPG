@@ -97,7 +97,42 @@ func _ready() -> void:
 		await get_tree().create_timer(0.5, true, false, true).timeout
 		b.hud._on_leave()
 		await _frames(20)
+	await _invite_flow()
 	_finish()
+
+
+## 초대: A와 B가 친구 → B가 파티를 만들고 A를 초대 → A 화면에 수락·거절 창 → [수락] → A가 B의 파티에. A의 [초대] 창에 B가 '파티원'.
+func _invite_flow() -> void:
+	Party.leave_lobby()
+	await _frames(10)
+	var fa = await _http("GET", "/v1/friends", null, Net.token)
+	var fb = await _http("GET", "/v1/friends", null, _b_token)
+	await _http("POST", "/v1/friends/request", {"code": str(fa.get("code", ""))}, _b_token)
+	var acc = await _http("POST", "/v1/friends/request", {"code": str(fb.get("code", ""))}, Net.token)
+	var a_id := ""
+	for f in (await _http("GET", "/v1/friends", null, _b_token)).get("friends", []):
+		a_id = str(f.get("id", ""))
+	_check(acc.get("friends", []).size() == 1 and a_id != "", "A and B are friends", acc)
+	await _http("POST", "/v1/party/lobby/create", {"quest": "lich", "diff": 1, "hero": {"id": "hans", "hp": 500, "atk": 40}}, _b_token)
+	var inv = await _http("POST", "/v1/party/invite", {"to": a_id}, _b_token)
+	_check(inv.get("sent", false) == true, "B invited A (A is online)", inv)
+	var ov = Party.get_child(0)
+	_check(await _wait_until(func(): return ov.invite_dim.visible, 15.0), "A gets the invite window", Party.invites)
+	_check(ov.invite_info.text.contains("리치의 무덤"), "the invite names the quest", ov.invite_info.text)
+	await _snap("6_invite")
+	ov.invite_accept.pressed.emit()
+	ov.invite_accept.pressed.emit()
+	_check(not ov.invite_dim.visible, "[수락] closes the window at once", "")
+	_check(await _wait_until(func(): return Party.lobby().get("members", []).size() == 2, 10.0), "A joined B's party from the invite", Party.lobby())
+	var tabs = _find("res://scripts/tab_bar.gd")
+	var view = tabs.windows.dungeon.party_tab
+	await _frames(10)
+	view._open_invite()
+	_check(await _wait_until(func(): return view.invite_panel.buttons.size() == 1, 10.0), "A's [초대] window lists friend B", view.invite_panel.status_label.text)
+	var bb: Button = view.invite_panel.buttons.values()[0] if view.invite_panel.buttons.size() > 0 else null
+	_check(bb != null and bb.disabled and bb.text == "파티원", "B shows as a party member (not invitable)", bb.text if bb else "")
+	await _snap("7_invite_list")
+	view.invite_panel.close()
 
 
 func _battle():

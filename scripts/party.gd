@@ -14,18 +14,21 @@ const PvpRules := preload("res://scripts/pvp_rules.gd")
 
 const POLL_SEC := 1.0
 const LOBBY_POLL_SEC := 2.0  # 파티 대기실(매칭 전)에서 묻는 간격
+const INVITE_POLL_SEC := 8.0  # 받은 초대를 묻는 간격(앱이 켜져 있는 동안 — 서버는 이 요청으로 '접속 중'을 안다)
 const OFFLINE_CODE := "TEST00"  # 오프라인 파티 코드(혼자 — 참가는 온라인에서만)
 const OFFLINE_WAIT := 2.0
 const SAVE_PATH := "user://party.json"
 static var ERROR_TEXT := {"locked": Lang.t("party.error_text.locked"), "bag_full": Lang.t("party.error_text.bag_full"), "no_soldiers": Lang.t("party.error_text.no_soldiers"),
 	"in_match": Lang.t("party.error_text.in_match"), "no_code": Lang.t("party.error_text.no_code"), "full": Lang.t("party.error_text.full"), "not_leader": Lang.t("party.error_text.not_leader"),
 	"no_lobby": Lang.t("party.error_text.no_lobby"), "busy": Lang.t("party.error_text.busy"), "member_locked": Lang.t("party.error_text.member_locked"),
-	"rate_limited": Lang.t("party.error_text.rate_limited"), "in_lobby": Lang.t("party.error_text.in_lobby"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict")}
+	"rate_limited": Lang.t("party.error_text.rate_limited"), "in_lobby": Lang.t("party.error_text.in_lobby"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict"),
+	"not_friend": Lang.t("party.error_text.not_friend"), "offline": Lang.t("party.error_text.offline"), "member": Lang.t("party.error_text.member")}
 static var FAIL_TEXT := Lang.t("party.fail_text")
 
 signal changed
 signal battle_started(run: Dictionary)  # 서버 live 상태 {match_id, run_id, quest, diff, seed, elapsed, time_limit, boss, seats, me, online}
 signal result_ready(result: Dictionary)  # {win, rewards: {items}, no_reward}
+signal invites_changed  # 받은 파티 초대가 바뀌었다(party_overlay.gd가 수락·거절 창을 띄운다)
 
 var view := {}  # {quests: {lich|spider: {best, clears_left}}, queue: {state, …}}. 비면 아직 모름
 var auto_accept := false
@@ -35,7 +38,11 @@ var econ
 var started_match := ""  # battle_started를 보낸 매치(같은 매치로 두 번 열지 않는다)
 var finishing := {}  # run_id → true(결과를 보내는 중)
 
+var invites := []  # 받은 초대 [{id, name, quest, diff, code, left, until}](서버 GET /v1/party/invites)
 var _poll := 0.0
+var _inv_poll := 1.0
+var _inv_busy := false
+var _gone := {}  # 수락·거절한 초대 id(서버 답이 오기 전 묻기 답에 다시 나오지 않게)
 var _busy := false  # 서버 요청 하나가 오가는 중(대기열 묻기는 겹쳐 보내지 않는다)
 var _offline_t := 0.0
 var _local := {}  # 오프라인 {quests: {q: {best, day, clears}}}
@@ -442,6 +449,11 @@ func _after_state() -> void:
 
 
 func _process(delta: float) -> void:
+	if online():
+		_inv_poll -= delta
+		if _inv_poll <= 0.0:
+			_inv_poll = INVITE_POLL_SEC
+			fetch_invites()
 	var st := state()
 	if in_lobby() and st == "idle" and online():  # 파티 대기실: 파티원·방장의 매칭 시작을 묻는다(서버는 안 묻는 파티원을 뺀다)
 		_poll -= delta
@@ -459,6 +471,80 @@ func _process(delta: float) -> void:
 		if _poll <= 0.0:
 			_poll = POLL_SEC
 			fetch()
+
+
+# --- 초대(사용자 2026-10-15 "그냥 초대도되고"): 파티 안 [초대] → 접속 중인 친구·길드원을 골라 부른다. 받은 사람은 수락·거절 창(party_overlay.gd).
+#     수락 = 초대에 든 코드로 참가(join_lobby). 서버가 친구·길드원·접속 중·도배를 검사한다.
+
+func fetch_invites() -> void:
+	if not online() or _inv_busy or not econ.net.up:
+		return
+	_inv_busy = true
+	econ.net.send("GET", "/v1/party/invites", null, func(d):
+		_inv_busy = false
+		_take_invites(d), func(): _inv_busy = false, true, false)
+
+
+func _take_invites(d) -> void:
+	if not (d is Dictionary and d.get("invites") is Array):
+		return
+	var out := []
+	for i in d.invites:
+		if i is Dictionary and not _gone.has(str(i.get("id", ""))):
+			var x: Dictionary = i.duplicate()
+			x.until = _now() + float(i.get("left", 0))
+			out.append(x)
+	var ids := func(list: Array) -> Array: return list.map(func(i): return str(i.get("id", "")))
+	if ids.call(out) != ids.call(invites):
+		invites = out
+		invites_changed.emit()
+
+
+## 초대할 수 있는 사람(친구·길드원, 접속 중 먼저). done(people: Array 또는 null = 실패).
+func invitable(done: Callable) -> void:
+	if not online():
+		done.call(null)
+		return
+	econ.net.send("GET", "/v1/party/invitable", null, func(d):
+		done.call(d.get("people", []) if d is Dictionary else null), func(): done.call(null), true, false)
+
+
+## [초대]: done(ok, 글). 버튼은 부르는 쪽이 먼저 '초대함'으로 바꾸고 실패면 되돌린다.
+func invite(to_id: String, done := Callable()) -> void:
+	if not online() or not in_lobby():
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.no_lobby if online() else Lang.t("party.invite"))
+		return
+	econ.net.send("POST", "/v1/party/invite", {"to": to_id}, func(_d):
+		if done.is_valid():
+			done.call(true, ""), func():
+		if done.is_valid():
+			done.call(false, ERROR_TEXT.get(econ.net.last_error, FAIL_TEXT)), true, true)
+
+
+## 받은 초대 [수락]: 창은 바로 닫고(앱 값 먼저), 코드로 참가한다. 실패면 알림.
+func accept_invite(inv: Dictionary) -> void:
+	var id := str(inv.get("id", ""))
+	if _gone.has(id):
+		return
+	_gone[id] = true
+	invites = invites.filter(func(i): return str(i.get("id", "")) != id)
+	invites_changed.emit()
+	join_lobby(str(inv.get("code", "")), func(ok, text):
+		if not ok and text != "":
+			_notice(text))
+
+
+## 받은 초대 [거절].
+func decline_invite(inv: Dictionary) -> void:
+	var id := str(inv.get("id", ""))
+	if _gone.has(id):
+		return
+	_gone[id] = true
+	invites = invites.filter(func(i): return str(i.get("id", "")) != id)
+	invites_changed.emit()
+	if online():
+		econ.net.send("POST", "/v1/party/invite/decline", {"id": id}, func(_d): pass, Callable(), true, false)
 
 
 ## 판 결과(방장이든 아니든 각자 보낸다 — 서버는 방장이 방에서 알린 결과를 쓴다). 결과는 result_ready.

@@ -360,9 +360,11 @@ func play_event(ev: Array) -> void:
 			for i in range(0, flat.size() - 1, 2):
 				var p := Vector3(float(flat[i]), 0, float(flat[i + 1]))
 				Fx.telegraph_circle(par, p, CURSE_R, CURSE_TELE)
+				var par_id := par.get_instance_id()
 				get_tree().create_timer(CURSE_TELE, false).timeout.connect(func():
-					if is_instance_valid(par):
-						Fx.zone(par, p, CURSE, CURSE_R, CURSE_LAST, "poison_cloud", 1))
+					var pn = instance_from_id(par_id)
+					if is_instance_valid(pn):
+						Fx.zone(pn, p, CURSE, CURSE_R, CURSE_LAST, "poison_cloud", 1))
 		"harvest":
 			match int(ev[1]):
 				1:

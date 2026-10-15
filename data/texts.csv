@@ -2715,3 +2715,28 @@ party_code_panel.ready_2,친구에게 받은 파티 코드를 넣으세요,,,,sc
 party_code_panel.ready_3,파티 코드 6자리,,,,scripts/party_code_panel.gd
 party_code_panel.ready_4,닫기,,,,scripts/party_code_panel.gd
 party_code_panel.ready_5,참가,,,,scripts/party_code_panel.gd
+party.error_text.not_friend,친구나 길드원만 초대할 수 있습니다,,,,scripts/party.gd
+party.error_text.offline,지금 접속 중이 아닌 성주입니다,,,,scripts/party.gd
+party.error_text.member,이미 파티에 있는 성주입니다,,,,scripts/party.gd
+party.invite,온라인에서만 초대할 수 있습니다,,,,scripts/party.gd
+party_view.card_4,초대,,,,scripts/party_view.gd
+party_view.open_invite,온라인에서만 초대할 수 있습니다,,,,scripts/party_view.gd
+party_overlay.build_invite,파티 초대,,,,scripts/party_overlay.gd
+party_overlay.build_invite_2,거절,,,,scripts/party_overlay.gd
+party_overlay.build_invite_3,수락,,,,scripts/party_overlay.gd
+party_overlay.refresh_invite,%s님이 %s · %s 파티에 초대했습니다,,,,scripts/party_overlay.gd
+party_overlay.process_5,%d초 뒤 사라집니다,,,,scripts/party_overlay.gd
+party_invite_panel.ready,파티 초대,,,,scripts/party_invite_panel.gd
+party_invite_panel.ready_2,접속 중인 친구와 길드원을 부를 수 있습니다,,,,scripts/party_invite_panel.gd
+party_invite_panel.ready_3,닫기,,,,scripts/party_invite_panel.gd
+party_invite_panel.on_open,불러오는 중,,,,scripts/party_invite_panel.gd
+party_invite_panel.on_open_2,목록을 불러오지 못했습니다,,,,scripts/party_invite_panel.gd
+party_invite_panel.on_open_3,친구나 길드원이 없습니다. 친구를 맺거나 길드에 들어가면 초대할 수 있습니다,,,,scripts/party_invite_panel.gd
+party_invite_panel.row,친구,,,,scripts/party_invite_panel.gd
+party_invite_panel.row_2,길드원,,,,scripts/party_invite_panel.gd
+party_invite_panel.row_3,접속 중,,,,scripts/party_invite_panel.gd
+party_invite_panel.row_4,접속 안 함,,,,scripts/party_invite_panel.gd
+party_invite_panel.row_5,초대,,,,scripts/party_invite_panel.gd
+party_invite_panel.row_6,파티원,,,,scripts/party_invite_panel.gd
+party_invite_panel.invite,초대함,,,,scripts/party_invite_panel.gd
+party_invite_panel.invite_2,초대,,,,scripts/party_invite_panel.gd

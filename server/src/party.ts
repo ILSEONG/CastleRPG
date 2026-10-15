@@ -42,6 +42,12 @@ export const LOBBY_STALE_SEC = 30 // 파티원이 이만큼 상태를 묻지 않
 export const LOBBY_TTL_SEC = 6 * 3600 // 오래된 파티는 지운다
 export const JOIN_TRIES = 10 // 틀린 코드 시도 수(JOIN_WINDOW_SEC 안) — 넘으면 잠시 막는다(코드 맞히기 막기)
 export const JOIN_WINDOW_SEC = 600
+// 초대(사용자 2026-10-15 "그냥 초대도되고", Claude 기본값): 친구·같은 길드원 중 지금 접속 중인 성주에게. 받은 초대는 INVITE_TTL_SEC 뒤 사라진다.
+export const INVITE_TTL_SEC = 60
+export const INVITE_INBOX = 5 // 한 사람이 들고 있는 초대 수(넘으면 오래된 것부터 버린다)
+export const INVITE_MAX = 20 // 보낸 초대 수 상한(INVITE_WINDOW_SEC 안, 도배 막기)
+export const INVITE_WINDOW_SEC = 600
+export const ONLINE_SEC = 60 // 마지막 요청이 이 안이면 '접속 중'(앱은 켜져 있으면 20초마다 채팅·초대를 묻는다)
 
 export const bossStats = (q: Quest, diff: number) => ({ hp: BOSS[q].hp * DIFF_MULT[diff - 1], atk: BOSS[q].atk * DIFF_MULT[diff - 1] })
 
@@ -75,6 +81,7 @@ export interface Seat {
 }
 export interface Lobby { code: string; quest: Quest; diff: number; leader: string; members: { seat: Seat; seen: number }[]; created: number }
 export type LobbyError = 'no_code' | 'full' | 'not_leader' | 'no_lobby' | 'busy'
+export interface Invite { id: string; from: string; name: string; code: string; quest: Quest; diff: number; at: number }
 export interface Ticket { seat: Seat; quest: Quest; diff: number; since: number; seen: number }
 export interface Match {
   id: string
@@ -94,6 +101,7 @@ export class PartyHub {
   queue: Ticket[] = []
   matches = new Map<string, Match>()
   lobbies = new Map<string, Lobby>()
+  invites = new Map<string, Invite[]>() // 받는 사람 → 받은 초대(새것이 뒤)
   private seq = 0
   makeBot: (quest: Quest, diff: number, like: Seat, n: number, rand: () => number) => Seat
   rand: () => number
@@ -181,6 +189,7 @@ export class PartyHub {
         this.lobbies.delete(l.code)
       }
     }
+    for (const [pid, list] of this.invites) if (list.every((i) => now - i.at >= INVITE_TTL_SEC)) this.invites.delete(pid)
     for (const q of QUESTS) {
       for (let d = 1; d <= DIFFS; d++) {
         for (;;) {
@@ -298,6 +307,40 @@ export class PartyHub {
     const l = this.lobbyOf(pid)
     if (!l || l.leader !== pid) return
     this.queue = this.queue.filter((t) => t.seat.group !== l.code)
+  }
+
+  // [초대]: 내 파티로 부른다. 같은 사람에게 다시 보내면 앞 초대를 새것으로 바꾼다. 이미 파티원이거나 파티가 가득이면 오류.
+  invite(from: string, to: string, now: number): Invite | LobbyError | 'member' {
+    const l = this.lobbyOf(from)
+    if (!l) return 'no_lobby'
+    if (l.members.some((m) => m.seat.pid === to)) return 'member'
+    if (l.members.length >= SEATS[l.quest]) return 'full'
+    const name = l.members.find((m) => m.seat.pid === from)!.seat.name
+    const inv: Invite = { id: randomUUID(), from, name, code: l.code, quest: l.quest, diff: l.diff, at: now }
+    const list = (this.invites.get(to) ?? []).filter((i) => i.from !== from && now - i.at < INVITE_TTL_SEC)
+    list.push(inv)
+    this.invites.set(to, list.slice(-INVITE_INBOX))
+    return inv
+  }
+
+  // 받은 초대(지난 것, 파티가 없어졌거나 가득 찬 것, 이미 그 파티에 있는 것은 뺀다)
+  invitesOf(pid: string, now: number): Invite[] {
+    const list = this.invites.get(pid)
+    if (!list) return []
+    const mine = this.lobbyOf(pid)?.code
+    const ok = list.filter((i) => {
+      const l = this.lobbies.get(i.code)
+      return now - i.at < INVITE_TTL_SEC && l && i.code !== mine && l.members.length < SEATS[l.quest] && l.members.some((m) => m.seat.pid === i.from)
+    })
+    if (ok.length) this.invites.set(pid, ok)
+    else this.invites.delete(pid)
+    return ok
+  }
+
+  dropInvite(pid: string, id: string) {
+    const list = (this.invites.get(pid) ?? []).filter((i) => i.id !== id)
+    if (list.length) this.invites.set(pid, list)
+    else this.invites.delete(pid)
   }
 
   lobbySeen(pid: string, now: number) {

@@ -232,3 +232,46 @@ test('party routes: create a party, join by code, leader starts, wrong codes are
   const lv = await S.req('POST', '/v1/party/lobby/leave', { token: b.token })
   assert.equal(lv.json.party.lobby, null)
 })
+
+test('party routes: invite an online friend or guild member, they accept with the code or decline', async () => {
+  const a = await player()
+  const b = await player()
+  const g = await player()
+  const stranger = await player()
+  const away = await player()
+  await S.db.query('insert into friend_links (a, b, accepted) values ($1, $2, true), ($1, $3, true)', [a.id, b.id, away.id])
+  const [gid] = await S.db.query(`insert into guilds (name, seed, created_at, virtual_n) values ('초대길드', 1, now(), 0) returning id`)
+  await S.db.query('insert into player_guild (player_id, guild_id, joined_at) values ($1, $3, now()), ($2, $3, now())', [a.id, g.id, gid.id])
+  for (const p of [b, g, stranger]) await S.req('GET', '/v1/party/invites', { token: p.token }) // 접속 중(away는 요청이 없다)
+  const lich = { quest: 'lich', diff: 1, hero: { id: 'hans', hp: 500, atk: 40 } }
+  const noParty = await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: b.id } })
+  assert.equal(noParty.json.error, 'no_lobby')
+  await S.req('POST', '/v1/party/lobby/create', { token: a.token, body: lich })
+  const list = await S.req('GET', '/v1/party/invitable', { token: a.token })
+  const byId = new Map(list.json.people.map((x: any) => [x.id, x]))
+  assert.equal(list.json.people.length, 3, 'friends + guild members, not strangers')
+  assert.deepEqual([(byId.get(b.id) as any).online, (byId.get(g.id) as any).guild, (byId.get(away.id) as any).online], [true, true, false])
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: stranger.id } })).json.error, 'not_friend')
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: away.id } })).json.error, 'offline')
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: b.id } })).status, 200)
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: b.id } })).status, 200, 'sending again replaces it')
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: g.id } })).status, 200)
+  const ib = await S.req('GET', '/v1/party/invites', { token: b.token })
+  assert.equal(ib.json.invites.length, 1)
+  const inv = ib.json.invites[0]
+  assert.equal(inv.quest, 'lich')
+  assert.equal(inv.name, R.friendName(a.id))
+  // b 수락(코드로 참가) → 초대가 사라진다
+  const jb = await S.req('POST', '/v1/party/lobby/join', { token: b.token, body: { code: inv.code, hero: lich.hero } })
+  assert.equal(jb.json.party.lobby.members.length, 2)
+  assert.equal((await S.req('GET', '/v1/party/invites', { token: b.token })).json.invites.length, 0)
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: b.id } })).json.error, 'member')
+  // g 거절
+  const ig = await S.req('GET', '/v1/party/invites', { token: g.token })
+  const dg = await S.req('POST', '/v1/party/invite/decline', { token: g.token, body: { id: ig.json.invites[0].id } })
+  assert.equal(dg.json.invites.length, 0)
+  // 도배 막기
+  let last = 0
+  for (let i = 0; i < PQ.INVITE_MAX; i++) last = (await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: g.id } })).status
+  assert.equal(last, 429)
+})
