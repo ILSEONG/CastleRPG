@@ -75,7 +75,15 @@ func _ready() -> void:
 	await _wait(0.9)  # 소환진이 걷힌 직후의 보호 시간(연타 방지) 뒤에 카드를 누른다
 	if not rp.cards.is_empty():
 		_tap(rp._reveals[0].get_global_rect().get_center())
-	await _wait(3.0)
+	await _wait(2.0)
+	_say("결과 화면에서 바로 [1회 더] · [10회 더] — 같은 재화로 이어서 뽑습니다")
+	Economy.diamonds = maxi(Economy.diamonds, 30000)
+	Economy.changed.emit()
+	await _wait(2.2)
+	_tap(rp.again10_button.get_global_rect().get_center())  # 실제 다이아 10회(결과는 확률대로)
+	await _wait(1.0)
+	_say("[10회 더]를 누르면 다이아 2,700으로 곧바로 10회 더")
+	await _wait(6.0)
 	print("MOVIE gacha done")
 	get_tree().quit()
 
