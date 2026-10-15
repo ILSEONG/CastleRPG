@@ -856,9 +856,12 @@ func _tab_px(tabs, id: String) -> Vector2:
 	return tabs.buttons[id].get_global_rect().get_center()
 
 
-## 창의 연 직후 보호 시간(OPEN_GUARD_MS)이 지나게.
+## 창의 연 직후 보호 시간(OPEN_GUARD_MS)이 지나게. 보호는 실제 시각(Time.get_ticks_msec)으로 재므로 기다림도 실제 시각으로 잰다 —
+## 게임 시간 타이머는 그 프레임 앞부분(창을 열기 전 작업)까지 첫 delta에 넣어 일찍 끝날 수 있다(느린 첫 실행에서 탭이 보호에 먹혔다).
 func _guard_wait() -> void:
-	await get_tree().create_timer(0.45).timeout
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 450:
+		await get_tree().process_frame
 
 
 func _copies() -> int:
