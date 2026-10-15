@@ -28,3 +28,27 @@ test('boot: one call returns the same views as the per-window GETs', async () =>
 test('boot: needs a token', async () => {
   assert.equal((await S.req('GET', '/v1/boot')).status, 401)
 })
+
+test('boot: the window GETs share one player read; ranking rebuilds once for parallel misses', async () => {
+  let reads = 0
+  let boards = 0
+  const C = await setup({
+    wrapQuery: (q) => async (text, params) => {
+      if (text.includes('from player_state s where')) reads++
+      if (text.includes('left join player_guild pg on pg.player_id = s.player_id')) boards++
+      return q(text, params)
+    },
+  })
+  try {
+    const { token } = await C.login()
+    await C.req('GET', '/v1/player', { token }) // 새 플레이어 행 채우기(첫 읽기의 다시 읽기)는 여기서 끝낸다
+    reads = 0
+    boards = 0
+    const r = await C.req('GET', '/v1/boot', { token })
+    assert.equal(r.status, 200)
+    assert.equal(reads, 1)
+    assert.equal(boards, 1) // ranking_stage + ranking_power together
+  } finally {
+    await C.close()
+  }
+})
