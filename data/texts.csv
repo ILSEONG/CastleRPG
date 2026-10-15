@@ -2498,6 +2498,7 @@ server.oauth.resultpage_2,로그인하지 못했습니다,,,,server/src/oauth.ts
 server.oauth.resultpage_3,게임으로 돌아가 주세요. 이 창은 닫아도 됩니다.,,,,server/src/oauth.ts
 server.oauth.resultpage_4,{why}. 게임으로 돌아가 주세요.,,,,server/src/oauth.ts
 server.oauth.resultpage_5,게임으로 돌아가 다시 시도해 주세요.,,,,server/src/oauth.ts
+server.oauth.back_to_game,게임으로 돌아가기,,,,server/src/oauth.ts
 server.pvp.tiers,브론즈,,,,server/src/pvp.ts
 server.pvp.tiers_2,실버,,,,server/src/pvp.ts
 server.pvp.tiers_3,골드,,,,server/src/pvp.ts

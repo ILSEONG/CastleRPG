@@ -18,7 +18,7 @@ const MSG_PER_SEC = 60
 const CKPT_GAP = 2
 
 interface Client { ws: WebSocket; pid: string; at: number; win: number; n: number }
-interface Room { clients: Client[]; host: Client | null; last: string | null; ckptAt: number; saving: boolean }
+interface Room { clients: Client[]; host: Client | null; last: unknown; ckptAt: number; saving: boolean }
 
 export class WarLive {
   rooms = new Map<string, Room>()
@@ -61,7 +61,7 @@ export class WarLive {
     const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0 }
     room.clients.push(me)
     if (!room.host) room.host = me
-    send(ws, { t: 'hello', host: room.host === me, snap: room.last ? JSON.parse(room.last) : null })
+    send(ws, { t: 'hello', host: room.host === me, snap: room.last ?? null })
     ws.on('message', (raw) => this.onMessage(battle, me, String(raw)))
     ws.on('close', () => this.drop(battle, me))
     ws.on('error', () => this.drop(battle, me))
@@ -86,7 +86,7 @@ export class WarLive {
     const isHost = room.host === me
     if (m.t === 'snap' && isHost) {
       const out = JSON.stringify({ t: 'snap', s: m.s })
-      room.last = JSON.stringify(m.s)
+      room.last = mergeSnap(room.last, m.s)
       for (const c of room.clients) if (c !== me) sendRaw(c.ws, out)
     } else if ((m.t === 'ckpt' || m.t === 'end') && isHost) {
       const end = m.t === 'end'
@@ -111,7 +111,7 @@ export class WarLive {
     room.clients.splice(i, 1)
     if (room.host === me) {
       room.host = room.clients.reduce<Client | null>((a, c) => (a == null || c.at < a.at ? c : a), null)
-      if (room.host) send(room.host.ws, { t: 'host', snap: room.last ? JSON.parse(room.last) : null })
+      if (room.host) send(room.host.ws, { t: 'host', snap: room.last ?? null })
     }
     if (room.clients.length === 0) this.rooms.delete(battle)
   }
@@ -132,6 +132,16 @@ export class WarLive {
     this.rooms.clear()
     this.wss.close()
   }
+}
+
+// 방장은 바뀐 영웅 행만 보낸다(앱 war_battle.snapshot_delta) — 새로 들어온 사람·새 방장이 받을 마지막 장은 영웅 행(u)을 합친 것.
+// 행 말고는 새 장 값 그대로. 예전 앱(늘 전부 보냄)도 같다.
+export function mergeSnap(prev: any, s: unknown): unknown {
+  if (!prev || !s || typeof s !== 'object' || Array.isArray(s)) return s
+  const u = (s as Record<string, unknown>).u
+  if (!prev || typeof prev !== 'object' || !u || typeof u !== 'object' || Array.isArray(u)) return s
+  const pu = prev.u && typeof prev.u === 'object' && !Array.isArray(prev.u) ? prev.u : {}
+  return { ...(s as Record<string, unknown>), u: { ...pu, ...(u as Record<string, unknown>) } }
 }
 
 function send(ws: WebSocket, msg: unknown) {

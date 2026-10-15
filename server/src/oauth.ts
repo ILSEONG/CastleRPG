@@ -95,12 +95,22 @@ export async function fetchUid(cfg: OAuthConfig, p: Provider, code: string, stat
 }
 
 // 콜백 결과 페이지(브라우저에 보인다). 앱으로 돌아가라는 안내만.
-export function resultPage(ok: boolean, why?: string): string {
+// 로그인을 마친 브라우저를 게임 앱으로 돌려보내는 안드로이드 링크(APK 매니페스트의 castlerpg://oauth — addons/castle_billing/export_plugin.gd).
+// 앱이 없거나(옛 APK) 브라우저가 막으면 fallback(결과 안내 페이지)으로 간다.
+export const APP_PACKAGE = 'com.ilesong.castlerpg'
+export const appReturnUrl = (fallback?: string) =>
+  `intent://oauth#Intent;scheme=castlerpg;package=${APP_PACKAGE};${fallback ? `S.browser_fallback_url=${encodeURIComponent(fallback)};` : ''}end`
+export const isAndroid = (ua: string | undefined) => /Android/i.test(ua ?? '')
+
+// back: 안드로이드면 [게임으로 돌아가기] 버튼(앱 링크)을 붙인다.
+export function resultPage(ok: boolean, why?: string, back = false): string {
   const title = ok ? txt('server.oauth.resultpage') : txt('server.oauth.resultpage_2')
   const body = ok ? txt('server.oauth.resultpage_3') : why ? txt('server.oauth.resultpage_4', { why }) : txt('server.oauth.resultpage_5')
+  const button = back ? `<a class="b" href="${appReturnUrl()}">${txt('server.oauth.back_to_game')}</a>` : ''
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CastleRPG</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;
 background:#5b93d8;color:#1f2430}.c{background:#fbf6ea;border:3px solid #2b2f3a;border-radius:18px;padding:32px 28px;max-width:320px;text-align:center}
-h1{font-size:22px;margin:0 0 12px}p{margin:0;font-size:16px;line-height:1.5}</style></head>
-<body><div class="c"><h1>${title}</h1><p>${body}</p></div></body></html>`
+h1{font-size:22px;margin:0 0 12px}p{margin:0;font-size:16px;line-height:1.5}
+.b{display:inline-block;margin-top:20px;padding:12px 22px;background:#3f8f4f;color:#fff;border:3px solid #24552e;border-radius:12px;font-weight:700;text-decoration:none}</style></head>
+<body><div class="c"><h1>${title}</h1><p>${body}</p>${button}</div></body></html>`
 }

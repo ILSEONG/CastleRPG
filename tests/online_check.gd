@@ -626,6 +626,13 @@ func _phase3_social(state_path: String) -> void:
 	_check(ls.wait_panel.visible and Net.logins == 0, "(s1) polling while the browser login is unfinished keeps waiting", "")
 	var done := await _post_json("/v1/test/oauth_complete", {"state": ls._state, "provider_uid": "kakao-user-1"})
 	_check(done.get("ok") == true and done.get("is_new") == false, "(s1) test hook finishes the login on the device's guest account (linked, not new)", str(done))
+	ls._poll_left = 1000.0  # 다음 정기 poll은 멀리 — 앱으로 돌아온 순간의 poll만 결과를 받게
+	ls.notification(NOTIFICATION_APPLICATION_RESUMED)  # 로그인 완료 링크로 브라우저에서 게임으로 돌아옴
+	var ls_ref: WeakRef = weakref(ls)  # 로그인되면 로그인 화면이 사라진다
+	var quick: bool = await _wait_until(func():
+		var o = ls_ref.get_ref()
+		return o == null or not o._polling, 5.0)
+	_check(quick, "(s1) coming back to the game from the browser asks for the result at once (no waiting for the next poll)", "")
 	var built := await _wait_until(func(): return _main.camera != null, 30.0)
 	var auth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Net.auth_path))
 	_check(built and Net.auth_mode == "kakao" and auth.mode == "kakao" and str(auth.session).length() == 64 and Net.logins == 1,
