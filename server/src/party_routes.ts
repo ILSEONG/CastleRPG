@@ -151,6 +151,12 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       seat = { pid: x.id, name, soldiers, dps, power: soldiers.reduce((a, s) => a + s.hp / 10 + s.atk * 2, 0), accepted: false }
     }
     if (!hub.join(seat, quest, diff, x.now)) throw blocked('in_match', 'you are already in a party match')
+    // 슈퍼관리자(운영자 시험, 사용자 2026-10-15 "테스트할때는 AI 성주랑 같이 해"): 기다리지 않고 바로 AI 성주로 채운다(실제 대기자가 있으면 함께 묶인다).
+    if (x.pl.admin) {
+      const t = hub.ticketOf(x.id)
+      if (t) t.since = x.now - PQ.BOT_WAIT_SEC
+      hub.tick(x.now)
+    }
     return c.json(await view(x))
   })
 

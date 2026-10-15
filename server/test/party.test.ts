@@ -144,3 +144,15 @@ test('party routes: locked difficulty, too-fast win, no soldiers, decline', asyn
   const no = await S.req('POST', '/v1/party/accept', { token: p2.token, body: { match_id: c3.json.party.queue.match_id, accept: false } })
   assert.equal(no.json.party.queue.state, 'idle')
 })
+
+test('party: the super admin gets AI lords at once (owner testing alone)', async () => {
+  const p = await player()
+  await S.req('POST', '/v1/test/admin', { token: p.token })
+  const q = await queueLich(p, 1)
+  assert.equal(q.status, 200)
+  assert.equal(q.json.party.queue.state, 'confirm', JSON.stringify(q.json.party.queue))
+  assert.equal(q.json.party.queue.seats.filter((s: { bot?: boolean }) => s.bot).length, 3)
+  const n = await player()
+  const q2 = await queueLich(n, 1)
+  assert.equal(q2.json.party.queue.state, 'queued', 'other players still wait for real lords first')
+})
