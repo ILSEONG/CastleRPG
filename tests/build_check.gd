@@ -160,6 +160,7 @@ func _run() -> void:
 	Economy.build_rejected.emit("lumber", target, Economy.BLOCK_TEXT.overlap)
 	await _frames(3)
 	_check(pl.is_active() and pl.building_id == "lumber" and pl.cell == target and pl.hint_label.text == Economy.BLOCK_TEXT.overlap, "server refusal reopens placement at that spot with the reason", "%s %s" % [pl.cell, pl.hint_label.text])
+	await _shot("_rejected")
 	pl.cancel()
 	Economy.build = job
 	Economy.layout["lumber"] = lay
