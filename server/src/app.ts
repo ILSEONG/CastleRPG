@@ -2088,43 +2088,66 @@ export function createApp(opts: AppOptions) {
     const n = d.type === 'repeat' ? intField(b, 'n', 0, MAX_INT4) : 0
     return mutate(c, (p, g, now) => {
       const m = M.normalize(p.missions, today(g, now))
-      if (d.type === 'daily') {
-        if (m.d.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed today')
-        if (d.kind === 'daily_count' && M.dailyCount(m) < d.target) throw new ApiError(409, 'not_done', `claim ${d.target} daily missions first`)
-        if (d.kind !== 'daily_count' && M.progress(d, m) < d.target) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
-        m.d = [...m.d, d.id]
-        if (d.kind === 'daily_count') m.wd += 1
-      } else if (d.type === 'weekly') {
-        if (m.w.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed this week')
-        if (d.kind === 'daily_bonus' && m.wd < d.target) throw new ApiError(409, 'not_done', `claim the daily bonus on ${d.target} days first`)
-        if (d.kind !== 'daily_bonus' && M.progress(d, m) < d.target) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
-        m.w = [...m.w, d.id]
-      } else {
-        const done = m.r[d.id] ?? 0
-        if (n !== done) throw new ApiError(409, 'stale', `mission '${d.id}' has been claimed ${done} times`)
-        const need = M.targetOf(d, done)
-        if (M.progress(d, m) < need) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
-        m.c = { ...m.c, rb: { ...m.c.rb, [d.id]: (m.c.rb[d.id] ?? 0) + need } }
-        m.r = { ...m.r, [d.id]: done + 1 }
-        m.rt = now
-      }
+      claimStep(d, m, n, now)
       const reward = d.reward
       const change: Change = { missions: m, log: { kind: 'mission', detail: { id: d.id, n, reward } } }
-      const res = Object.fromEntries(R.BUILD_RES.filter((r) => (reward[r] ?? 0) > 0).map((r) => [r, reward[r]]))
-      if (Object.keys(res).length) change.res = res
-      if (reward.gold) change.goldTenths = reward.gold * 10
-      if (reward.diamonds) change.diamonds = reward.diamonds
-      if (reward.tickets) change.diaTickets = reward.tickets
-      const keyType = R.DUNGEON_TYPES.find((t) => (reward[`keys_${t}`] ?? 0) > 0)
-      if (keyType) {
-        const st = dungeonState(p, g, keyType, now)
-        change.dungeon = { type: keyType, state: { ...st, keys: st.keys + reward[`keys_${keyType}`] } }
+      const reload = addReward(p, g, now, reward, change)
+      return { change, extra: { id: d.id, reward }, reload }
+    })
+  })
+
+  // 미션 하나 받기 판정 + 받은 기록(m을 바꾼다). 못 받으면 ApiError(409 claimed·not_done·stale).
+  function claimStep(d: M.MissionDef, m: M.MissionState, n: number, now: number) {
+    if (d.type === 'daily') {
+      if (m.d.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed today')
+      if (d.kind === 'daily_count' && M.dailyCount(m) < d.target) throw new ApiError(409, 'not_done', `claim ${d.target} daily missions first`)
+      if (d.kind !== 'daily_count' && M.progress(d, m) < d.target) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
+      m.d = [...m.d, d.id]
+      if (d.kind === 'daily_count') m.wd += 1
+    } else if (d.type === 'weekly') {
+      if (m.w.includes(d.id)) throw new ApiError(409, 'claimed', 'already claimed this week')
+      if (d.kind === 'daily_bonus' && m.wd < d.target) throw new ApiError(409, 'not_done', `claim the daily bonus on ${d.target} days first`)
+      if (d.kind !== 'daily_bonus' && M.progress(d, m) < d.target) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
+      m.w = [...m.w, d.id]
+    } else {
+      const done = m.r[d.id] ?? 0
+      if (n !== done) throw new ApiError(409, 'stale', `mission '${d.id}' has been claimed ${done} times`)
+      const need = M.targetOf(d, done)
+      if (M.progress(d, m) < need) throw new ApiError(409, 'not_done', `mission '${d.id}' is not done`)
+      m.c = { ...m.c, rb: { ...m.c.rb, [d.id]: (m.c.rb[d.id] ?? 0) + need } }
+      m.r = { ...m.r, [d.id]: done + 1 }
+      m.rt = now
+    }
+  }
+
+  // 한 종류 모두 받기. body = {type: daily | weekly | repeat}. 서버가 받을 수 있는 것을 표 순서로 모두 받는다 — 보너스(daily_count·daily_bonus)는
+  // 다른 미션을 받은 뒤에 다시 보고, 반복 미션은 목표를 넘은 만큼 여러 번(미션마다 최대 M.MAX_REPEAT_CLAIMS). 하나도 없으면 409 nothing
+  // (빠른 두 번 누름의 두 번째). 보상 합계·받은 기록·economy_log mission_all을 version 가드 한 문장으로. 응답 claimed = {ids, reward}.
+  app.post('/v1/mission/claim_all', auth, async (c) => {
+    const type = (await body(c)).type
+    if (type !== 'daily' && type !== 'weekly' && type !== 'repeat') throw new ApiError(400, 'bad_request', "'type' must be daily, weekly or repeat")
+    return mutate(c, (p, g, now) => {
+      const m = M.normalize(p.missions, today(g, now))
+      const ids: string[] = []
+      const got: Record<string, number> = {}
+      const rows = M.DEFS.filter((d) => d.type === type)
+      const bonus = (d: M.MissionDef) => d.kind === 'daily_count' || d.kind === 'daily_bonus'
+      for (const d of [...rows.filter((x) => !bonus(x)), ...rows.filter(bonus)]) {
+        for (let k = 0; k < (type === 'repeat' ? M.MAX_REPEAT_CLAIMS : 1); k++) {
+          try {
+            claimStep(d, m, m.r[d.id] ?? 0, now)
+          } catch (e) {
+            if (e instanceof ApiError) break
+            throw e
+          }
+          ids.push(d.id)
+          for (const [key, v] of Object.entries(d.reward)) got[key] = (got[key] ?? 0) + v
+        }
       }
-      const pz = P.fromReward(reward)
-      if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
-      const sz = S.fromReward(reward)
-      if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
-      return { change, extra: { id: d.id, reward }, reload: Boolean(keyType) }
+      if (!ids.length) throw new ApiError(409, 'nothing', 'no missions to claim')
+      const change: Change = { missions: m, log: { kind: 'mission_all', detail: { type, ids, reward: got } } }
+      const reload = addReward(p, g, now, got, change)
+      return { change, extra: { claimed: { ids, reward: got } }, reload }
     })
   })
 

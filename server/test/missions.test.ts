@@ -165,3 +165,39 @@ test('반복 미션 다이아·모집권 모집: 골드 모집은 세지 않는�
   assert.equal(c.r.r_gacha_dia, 10)
   assert.equal(M.def('r_gacha_dia')?.kind, 'gacha_dia')
 })
+
+const claimAll = (token: string, type: string) => S.req('POST', '/v1/mission/claim_all', { token, body: { type } })
+
+test('모두 받기(일일): 받을 수 있는 것을 다 받고 보너스는 마지막에, 보상 합계, 두 번째는 409 nothing', async () => {
+  S.clock.t = monday
+  const { token } = await S.login()
+  assert.equal((await claimAll(token, 'daily')).json.error, 'nothing')
+  await S.req('POST', '/v1/test/events', { token, body: { events: { kill: 300, collect: 5, sell: 2, hero_level: 5, growth: 3, gacha: 10 } } })
+  const before = (await S.req('GET', '/v1/player', { token })).json.player
+  assert.equal((await claimRaw(token, { id: 'd_kill' })).status, 200) // 하나는 미리 받아 둔다
+  const r = await claimAll(token, 'daily')
+  assert.equal(r.status, 200)
+  assert.deepEqual(r.json.claimed.ids, ['d_collect', 'd_sell', 'd_hero', 'd_growth', 'd_gacha', 'd_all'])
+  const sum: Record<string, number> = {}
+  for (const id of r.json.claimed.ids) for (const [k, v] of Object.entries(M.def(id)!.reward)) sum[k] = (sum[k] ?? 0) + v
+  assert.deepEqual(r.json.claimed.reward, sum)
+  assert.equal(r.json.player.diamonds, before.diamonds + (sum.diamonds ?? 0))
+  assert.equal(r.json.player.gold, before.gold + 3000 + (sum.gold ?? 0))
+  assert.deepEqual([r.json.player.missions.d.length, r.json.player.missions.wd], [7, 1])
+  assert.equal((await claimAll(token, 'daily')).json.error, 'nothing')
+  const [log] = await S.db.query("select detail from economy_log where kind = 'mission_all' order by at desc limit 1")
+  assert.deepEqual(log.detail.ids, r.json.claimed.ids)
+})
+
+test('모두 받기(주간·반복): 주간은 완료한 것만, 반복은 목표를 넘은 만큼 여러 번, 종류가 틀리면 400', async () => {
+  S.clock.t = monday
+  const { token } = await S.login()
+  await S.req('POST', '/v1/test/events', { token, body: { events: { kill: 3000, research: 2 } } })
+  const w = await claimAll(token, 'weekly')
+  assert.deepEqual(w.json.claimed.ids, ['w_kill', 'w_research'])
+  const r = await claimAll(token, 'repeat') // 처치 3000: 1000 + 1500 → 2번, 남은 500
+  assert.deepEqual(r.json.claimed.ids, ['r_kill', 'r_kill'])
+  assert.equal(r.json.player.missions.r.r_kill, 2)
+  assert.equal((await claimAll(token, 'repeat')).json.error, 'nothing')
+  assert.equal((await claimAll(token, 'all')).status, 400)
+})

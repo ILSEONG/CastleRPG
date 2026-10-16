@@ -28,6 +28,7 @@ const PAN_SEC := 0.35
 static var HINT := Lang.t("placement.hint")
 static var OK_TEXT := Lang.t("placement.ok_text")
 static var NO_SPACE_TEXT := Lang.t("placement.no_space_text")
+static var WAITING_TEXT := Lang.t("placement.waiting_text")
 
 var camera: Camera3D
 var rig  # camera_rig.gd(시작할 때 그 자리로 카메라를 옮긴다)
@@ -87,6 +88,7 @@ func _ready() -> void:
 	_build_bar()
 	GameState.mode_changed.connect(func(m): if m != GameState.Mode.IDLE: cancel())
 	Economy.notice.connect(_on_notice)
+	Economy.build_rejected.connect(_on_rejected)
 	Economy.changed.connect(func(): if is_active(): _update())  # 자원·일꾼·연결이 바뀌면 안내와 [건설]을 다시 맞춘다
 
 
@@ -223,6 +225,9 @@ func confirm() -> void:
 	var done: bool = Economy.move_building(building_id, cell) if moving else Economy.build_at(building_id, cell, Economy.time_now())
 	if done:
 		_end()
+	elif hint_label.get_theme_color("font_color") != RED:  # 알림 없이 안 됐다 — 아무 일 없는 것처럼 두지 않는다
+		hint_label.text = Economy.BUILD_FAIL_TEXT
+		hint_label.add_theme_color_override("font_color", RED)
 
 
 func _end() -> void:
@@ -301,6 +306,8 @@ func _update() -> void:
 func _build_stop() -> String:
 	if moving:
 		return ""
+	if Economy.build_waiting():
+		return WAITING_TEXT
 	if Tutorial.build_locked(building_id):
 		return Tutorial.build_lock_text(building_id)
 	var block := Economy.upgrade_block(building_id, Economy.time_now())
@@ -309,6 +316,19 @@ func _build_stop() -> String:
 	if Economy.net != null and not Economy.net.up:
 		return Economy.WAIT_TEXT
 	return ""
+
+
+## 서버가 공터 짓기를 거절했다(이미 되돌림): 그 자리로 자리 고르기를 다시 열고 막대에 서버가 말한 이유를 보인다.
+func _on_rejected(id: String, at: Variant, text: String) -> void:
+	if is_active() or GameState.mode != GameState.Mode.IDLE or not Economy.unbuilt.has(id):
+		return
+	if not start(id):
+		return
+	if at is Vector2i:
+		cell = at
+		_update()
+	hint_label.text = text
+	hint_label.add_theme_color_override("font_color", RED)
 
 
 ## 고르는 동안 알림(서버 거절·연결 대기 등)은 아래 막대가 HUD 알림 자리를 가리므로 막대 안내 줄에 빨갛게 띄운다.

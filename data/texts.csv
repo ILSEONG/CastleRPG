@@ -1336,6 +1336,7 @@ ops_sheet.ago_3,%d일 전,,,,scripts/ops_sheet.gd
 placement.hint,초록 칸 안으로 건물을 끌거나 그곳을 누르세요,,,,scripts/placement.gd
 placement.ok_text,여기에 지을 수 있습니다,,,,scripts/placement.gd
 placement.no_space_text,성 안에 빈 자리가 없습니다,,,,scripts/placement.gd
+placement.waiting_text,앞선 건설 요청의 응답을 기다리는 중입니다,,,,scripts/placement.gd
 placement.build_bar,취소,,,,scripts/placement.gd
 placement.build_bar_2,건설,,,,scripts/placement.gd
 placement.start,옮기기,,,,scripts/placement.gd
@@ -2741,3 +2742,5 @@ summon_stage.init,건너뛰기 ›,,,,scripts/summon_stage.gd
 summon_stage.draw_splash,화면을 누르면 계속,,,,scripts/summon_stage.gd
 recruit_panel.refresh.head,%d회 더,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_18,모집권 %d장,,,,scripts/recruit_panel.gd
+mission_panel.ready_2,모두 받기,,,,scripts/mission_panel.gd
+missions.fail_text.nothing,받을 보상이 없습니다,,,,scripts/missions.gd

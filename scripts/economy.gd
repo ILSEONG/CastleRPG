@@ -139,6 +139,7 @@ signal gacha_leveled(level: int)  # 골드 모집 레벨이 올랐다(개정 23,
 signal promoted(hero_id: String, promotion: int)  # 승급 성공(온라인은 응답이 왔을 때, 개정 15)
 signal promoted_all(results: Array)  # 일괄 승급 성공 [{hero_id, from, to, shards}](온라인은 응답이 왔을 때)
 signal leveled(hero_id: String, level: int)  # 레벨업 성공(온라인은 응답이 왔을 때)
+signal build_rejected(building_id: String, cell: Variant, text: String)  # 온라인 공터 짓기를 서버가 거절했다(되돌린 뒤) — 자리 고르기가 그 자리로 다시 열어 이유를 보인다
 signal build_started(building_id: String, finish: float)  # 건설 시작(온라인은 응답이 왔을 때). finish = 끝나는 시각(보정 시각, 유닉스 초)
 signal building_done(building_id: String, level: int)  # 건설 완료 — 새 레벨(온라인은 서버 응답에서 레벨이 오른 것을 봤을 때)
 signal soldiers_changed  # 병사 보유·배치·합성 대기가 바뀌었다(개정 13)
@@ -181,6 +182,7 @@ var levels: Dictionary = {}        # 건물 id → int(개정 12: 건물 표의 
 var server_quest: Dictionary = {}  # 온라인: 서버 퀘스트 진행 {tut_state, tut_step, rep_n, rep: {have, need, from} 또는 {}}(apply_server가 채운다, 오프라인은 비어 있다)
 var unbuilt: Dictionary = {}       # 튜토리얼(새 게임): 아직 짓지 않은 건물 id → true. 레벨은 1로 두고 "공터"로 보인다 — 짓기(0 → 1)는 일꾼이
                                    # L1 비용·시간으로 한다. 생산·훈련·연구·선행 조건에서는 레벨 0으로 친다. 저장 "unbuilt"(없으면 모두 지어짐)
+var _build_req := {}  # 응답을 기다리는 온라인 짓기 {id, cell}(거절되면 build_rejected)
 var layout: Dictionary = {}       # 자유 건설(사용자 2026-10-13): 건물 id → 부지 칸 Vector2i(플레이어가 고른 자리). 없으면 기본 자리(Balance.BUILDINGS).
                                    # 공터(unbuilt)는 자리를 잡아야(layout에 있어야) 성 안에 보인다. 저장 "layout" {id: [x, y]}, 서버 player.layout
 var fresh_game := false  # load_save가 저장 파일이 없는 새 게임으로 시작했다(튜토리얼이 본다)
@@ -2046,6 +2048,11 @@ func complete_due(now: float) -> void:
 static func free_finish_sec() -> float:
 	var v := GameData.config_num("free_finish_sec")
 	return v if v > 0.0 else 300.0
+
+
+## 건설 요청(짓기·즉시 완료)의 서버 응답을 기다리는 중 — 그동안 새 짓기는 안 간다(두 번 탭 막기).
+func build_waiting() -> bool:
+	return _waiting.has("build")
 
 
 ## 남은 초 left가 무료 즉시 완료 범위(0 초과 · 기준 이하)인가.
@@ -4163,6 +4170,7 @@ func _upgrade_online(id: String, cell: Variant = null) -> bool:
 		elif free_builder(t0) == 1:
 			build = {"id": id, "finish": t0 + sec})
 	build_started.emit(id, t0 + sec)
+	_build_req = {"id": id, "cell": cell}
 	var body := {"building": id}
 	if cell is Vector2i:
 		body["cell"] = [cell.x, cell.y]  # 자유 건설: 공터를 고른 자리에(서버도 같은 규칙으로 확인)
@@ -4172,6 +4180,7 @@ func _upgrade_online(id: String, cell: Variant = null) -> bool:
 
 func _on_upgraded(data: Dictionary) -> void:
 	_waiting.erase("build")
+	_build_req = {}
 	_predicts.erase("build")
 	apply_server(data)
 	var job = data.get("build")
@@ -4184,7 +4193,11 @@ func _on_upgraded(data: Dictionary) -> void:
 func _on_upgrade_failed() -> void:
 	_waiting.erase("build")
 	_unpredict("build")
-	notice.emit(BLOCK_TEXT.get(net.last_error, BUILD_FAIL_TEXT))
+	var text: String = BLOCK_TEXT.get(net.last_error, BUILD_FAIL_TEXT)
+	notice.emit(text)
+	if _build_req.get("cell") is Vector2i:
+		build_rejected.emit(str(_build_req.id), _build_req.cell, text)
+	_build_req = {}
 	net.refresh()
 	changed.emit()
 
