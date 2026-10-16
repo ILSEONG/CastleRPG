@@ -1154,8 +1154,10 @@ export function createApp(opts: AppOptions) {
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       const now = clock()
       const game = await loadGame()
-      let pl = await loadPlayer(id, game, now)
-      const { change: planned, extra, reload, after } = plan(pl, game, now, pre ? await pre(id) : undefined)
+      // pre(같이 읽을 것)는 플레이어 행과 따로라 같이 묻는다 — DB 왕복 하나를 덜 기다린다(2026-10-16 가이드 [보상 받기] 빠르게)
+      const [loaded, ctx] = await Promise.all([loadPlayer(id, game, now), pre ? pre(id) : undefined])
+      let pl = loaded
+      const { change: planned, extra, reload, after } = plan(pl, game, now, ctx)
       const change = planned && withEvents(planned, pl, game, now)
       let more = {}
       if (change) {
@@ -1230,8 +1232,9 @@ export function createApp(opts: AppOptions) {
   // 시작 영웅(새 플레이어). 시드 전 DB(마이그레이션만 적용)면 설정 행이 없다 — 마이그레이션 005와 같은 스펙 기본값을 쓴다(영웅 0명이 되지 않게)
   async function starters(): Promise<string[]> {
     const [cfg] = await query("select value from game_config where key = 'starter_heroes'")
-    return String(cfg?.value ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
+    return starterList(cfg?.value)
   }
+  const starterList = (v: unknown): string[] => String(v ?? DEFAULT_STARTERS).split('|').map((x) => x.trim()).filter(Boolean)
 
   async function issueToken(playerId: string, now: number): Promise<string> {
     const iat = Math.floor(now)
@@ -1922,9 +1925,11 @@ export function createApp(opts: AppOptions) {
       }
       return { change, extra: { reward }, reload: Boolean(keyType) }
     }, async (pid) => {
+      if (type !== 'tutorial') return { guild: false, pvp: false, party: false, starters: [] } // 반복 퀘스트는 이 사실들을 안 본다
       const [r] = await query(`select exists (select 1 from player_guild where player_id = $1 and guild_id is not null) as guild,
-        exists (select 1 from pvp_battles where player_id = $1) as pvp, exists (select 1 from party_stats where player_id = $1 and best >= 1) as party`, [pid])
-      return { guild: r?.guild === true, pvp: r?.pvp === true, party: r?.party === true, starters: await starters() }
+        exists (select 1 from pvp_battles where player_id = $1) as pvp, exists (select 1 from party_stats where player_id = $1 and best >= 1) as party,
+        (select value from game_config where key = 'starter_heroes') as starters`, [pid])
+      return { guild: r?.guild === true, pvp: r?.pvp === true, party: r?.party === true, starters: starterList(r?.starters) }
     })
   })
 

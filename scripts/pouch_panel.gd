@@ -29,6 +29,7 @@ var head_label: Label  # 주머니 안내(주머니가 있을 때만)
 var buttons := {}  # 테스트용: "open:<id>", "all:<id>", "close"
 
 var _dirty := true
+var _sig = null  # 지금 줄을 만든 내용(_content_sig) — 같으면 다시 만들지 않는다
 
 
 func _ready() -> void:
@@ -75,7 +76,7 @@ func _ready() -> void:
 	_fit_sheet()
 	Economy.pouches_changed.connect(func(): _dirty = true)
 	Economy.speedups_changed.connect(func(): _dirty = true)
-	Economy.changed.connect(func(): _dirty = true)  # 스테이지·건물 레벨이 오르면 여는 값도 바뀐다
+	Economy.changed.connect(func(): _dirty = true)  # 스테이지·건물 레벨이 오르면 여는 값도 바뀐다(처치마다 오지만 내용이 같으면 그대로 — _process)
 	Economy.pouch_opened.connect(_on_opened)
 
 
@@ -87,9 +88,24 @@ func _on_open() -> void:
 	_rebuild()
 
 
+## 내용이 바뀐 때만 줄을 다시 만든다(사용자 2026-10-16 "화살표가 고정되지않아" — 처치 골드(Economy.changed)마다 [열기]를 새로 만들어
+## 가이드 화살표가 새 버튼으로 옮겨 다니며 튀었고, 누르는 중인 버튼이 사라지기도 했다).
 func _process(_delta: float) -> void:
 	if visible and _dirty:
-		_rebuild()
+		_dirty = false
+		if _content_sig() != _sig:
+			_rebuild()
+
+
+## 줄 내용: 보유 주머니·개수·여는 값(또는 빈 주머니)·여는 중, 가속 아이템·개수·쓰는 중.
+func _content_sig() -> Array:
+	var out: Array = [Economy.pouch_waiting(), Economy.speedup_waiting()]
+	for id in owned():
+		var val := Economy.pouch_value(id, GameState.stage)
+		out.append([id, Economy.pouch_count(id), int(val.gold_tenths) / 10, val.res])
+	for id in owned_speedups():
+		out.append([id, Economy.speedup_count(id)])
+	return out
 
 
 ## 보유한 주머니 id(골드 먼저, 짧은 시간 먼저).
@@ -124,6 +140,7 @@ static func value_text(gold_tenths: int, res: Dictionary) -> String:
 
 func _rebuild() -> void:
 	_dirty = false
+	_sig = _content_sig()
 	for k in buttons.keys():
 		if k != "close":
 			buttons.erase(k)
@@ -135,6 +152,12 @@ func _rebuild() -> void:
 	head_label.visible = not ids.is_empty()
 	for id in ids:
 		body.add_child(_row(id))
+	var point: Button = null  # 가이드 「주머니 열기」 화살표: 맨 위의 열 수 있는 [열기](예전엔 마지막 줄 — 목록이 길면 화면 밖)
+	for id in ids:
+		if point == null or (point.disabled and not buttons["open:" + id].disabled):
+			point = buttons["open:" + id]
+	if point != null:
+		Tutorial.register_ui("bag:open", point, func(): return is_instance_valid(point) and not point.disabled)
 	if not sp.is_empty():
 		body.add_child(_label(SPEEDUP_HEAD, 24, HudScript.INK))
 		body.add_child(_label(SPEEDUP_HINT, 18, SUB))
@@ -204,7 +227,6 @@ func _row(id: String) -> Control:
 	one.pressed.connect(open_one.bind(id))
 	r.add_child(one)
 	buttons["open:" + id] = one
-	Tutorial.register_ui("bag:open", one, func(): return not one.disabled)  # 가이드 「주머니 열기」 화살표
 	if Economy.pouch_count(id) > 1:
 		var all := _button(Lang.t("pouch_panel.row_4"), UiKit.STEEL, 22)
 		all.custom_minimum_size = Vector2(90, 56)

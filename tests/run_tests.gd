@@ -5651,6 +5651,48 @@ func test_tutorial_online() -> void:
 	sell_reply.gold_gained = 120
 	e._on_sold(sell_reply, "sell:all")
 	check(sales == [120], "an online sale reply with gold signals sold (nothing sold, no signal)")
+	# [보상 받기]는 누르는 즉시(사용자 2026-10-16 "보상받기 누르면 좀 빠르게"): 보상·다음 미션이 곧바로, 서버 확인은 뒤에서, 거절이면 되돌린다
+	var cn := GrowthNet.new()
+	e.net = cn
+	var ki: int = t.mission_index("kill_30")
+	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
+	e.apply_server(reply)
+	t.count = 30
+	var r0: Dictionary = t.reward(ki)
+	var w0 := [e.gold, e.diamonds, int(e.res.get("wood", 0))]
+	var sounds := [0]
+	e.granted.connect(func(_r): sounds[0] += 1)
+	check(t.complete() and t.claim(), "online claim sent")
+	check(t.step == ki + 1 and t.count == 0 and t.mission().id == "collect" and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
+		and cn.sent[0].body == {"type": "tutorial", "step": ki} and cn.sent[0].once and sounds[0] == 1,
+		"online claim: the next mission and the reward sound come at once, one request (step %d)" % t.step)
+	check([e.gold, e.diamonds, int(e.res.get("wood", 0))] == [w0[0] + int(r0.get("gold", 0)), w0[1] + int(r0.get("diamonds", 0)), w0[2] + int(r0.get("wood", 0))],
+		"online claim: the reward shows before the reply %s" % [r0])
+	check(not e.quest_claim_online({"type": "tutorial", "step": ki}, r0) and cn.sent.size() == 1, "the same step can't be sent twice (fast double tap)")
+	check(not t.claim_blocked(), "guide claims can follow before the reply")
+	t.count = 1
+	check(t.complete() and t.claim() and t.step == ki + 2 and cn.sent.size() == 2 and cn.sent[1].body == {"type": "tutorial", "step": ki + 1}, "the next guide claim goes before the first reply")
+	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
+	e.apply_server(reply)  # 처치 보내기 응답 등(서버는 아직 누르기 전 단계)
+	check(t.step == ki + 2, "an older server step doesn't pull the card back while claims are in flight")
+	reply.player.quest = {"tut_state": "active", "tut_step": ki + 1, "rep_n": 0}
+	cn.sent[0].done.call(reply)
+	check(t.step == ki + 2 and e.quest_waiting(), "the first reply keeps the card on the newest mission")
+	notes.clear()
+	cn.last_error = "not_done"
+	t.count = 7
+	cn.sent[1].fail.call()
+	check(t.step == ki + 1 and t.count == 1 and not e.quest_waiting() and notes == [EconomyScript.QUEST_FAIL_TEXT.not_done] and cn.refreshed == 1,
+		"a rejected claim goes back to that mission with its count (step %d count %d %s)" % [t.step, t.count, notes])
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 3, "rep": {"have": 3, "need": 3, "from": null}}
+	e.apply_server(reply)
+	check(t.repeating() and t.complete() and t.claim() and t.rep_n == 4 and cn.sent.size() == 3 and cn.sent[2].body == {"type": "repeat", "n": 3},
+		"online repeat claim: the next repeat quest at once")
+	check(t.claim_blocked() and not e.quest_claim_online({"type": "repeat", "n": 4}, {}), "repeat claims wait for the reply (server gap)")
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 4, "rep": {"have": 0, "need": 1, "from": null}}
+	cn.sent[2].done.call(reply)
+	check(t.rep_n == 4 and not t.claim_blocked() and not t.complete(), "the repeat reply confirms it")
+	e.net = null
 	t.free()
 	gs.free()
 	e.free()

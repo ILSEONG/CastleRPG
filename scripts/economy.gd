@@ -155,7 +155,7 @@ signal sold(gold: int)  # 튜토리얼: 상인에게 자원을 팔았다(오프�
 signal granted(reward: Dictionary)  # 튜토리얼 보상을 받았다(grant)
 signal friends_changed  # 친구 목록(friends)이 새로 왔거나 친구 요청 응답 대기가 바뀌었다(온라인만)
 signal quest_synced  # 온라인: 서버 퀘스트 진행(server_quest)을 받았다 — Tutorial이 맞춘다
-signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server·granted 뒤)
+signal quest_claimed(ok: bool)  # 온라인 보상 받기 응답(성공이면 apply_server 뒤 — 보상 소리 granted는 누를 때)
 signal acted(kind: String, n: int)  # 미션(Missions)이 세는 행동이 성공했다: hero_level·growth·train·research(온라인은 응답이 왔을 때)
 signal dispatch_changed  # 파견소 진행 중 의뢰(끝나는 시각)가 바뀌었다
 signal pouches_changed  # 방치 주머니 보유·응답 대기가 바뀌었다
@@ -3551,40 +3551,47 @@ func _quest_rep(r) -> Dictionary:
 
 
 ## 온라인 퀘스트 보상 받기: POST /v1/quest/claim {type: tutorial, step} | {type: repeat, n}(once — 재전송하지 않는다. 서버가 같은 번호를
-## 두 번 받지 않는다). 응답 → apply_server(보상·진행) → granted(보상) → quest_claimed(true). 거부·유실이면 상태를 새로 받고 quest_claimed(false).
-## 보냈으면 true.
-## reward를 주면 응답을 기다리지 않고 곧바로 더해 보인다(predict_reward — 응답이 오면 서버 값, 거절되면 되돌린다).
+## 두 번 받지 않는다). 보냈으면 true. 누르는 즉시(사용자 2026-10-16 "보상받기 누르면 좀 빠르게"): reward를 곧바로 더해 보이고(predict_reward)
+## granted(보상 소리)를 내며, Tutorial이 다음 미션으로 넘긴다 — 서버 확인은 뒤에서. 응답 → apply_server → quest_claimed(true).
+## 거부·유실이면 그 보상을 빼고(마지막 서버 상태) 상태를 새로 받고 quest_claimed(false)(Tutorial이 미션을 되돌린다).
+## 가이드는 번호마다 따로 기다려 앞 응답 전에도 다음 미션을 받을 수 있다(net이 순서대로 보낸다 — 서버는 앞 번호가 들어간 뒤 다음을 본다).
+## 같은 번호는 한 번만 간다(빠른 두 번 탭). 반복 퀘스트는 서버 간격(quest_repeat_min_sec)이 있어 한 번에 하나.
 func quest_claim_online(body: Dictionary, reward := {}) -> bool:
-	if net == null or _waiting.has("quest"):
+	if net == null:
+		return false
+	var key := "quest:%s:%d" % [str(body.get("type", "")), int(body.get("step", body.get("n", 0)))]
+	if _waiting.has(key) or (body.get("type") == "repeat" and quest_waiting()):
 		return false
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
-	_waiting["quest"] = true
+	_waiting[key] = true
 	if not reward.is_empty():
-		predict_reward("quest", reward)
-		changed.emit()
+		predict_reward(key, reward)
+		granted.emit(reward)
 	net.flush_kills()
-	net.send("POST", "/v1/quest/claim", body, _on_quest_claimed, _on_quest_claim_failed, true, true)
+	net.send("POST", "/v1/quest/claim", body, _on_quest_claimed.bind(key), _on_quest_claim_failed.bind(key), true, true)
 	return true
 
 
+## 보낸 퀘스트 보상 받기 중 응답이 안 온 것이 있다.
 func quest_waiting() -> bool:
-	return _waiting.has("quest")
+	for k in _waiting:
+		if str(k).begins_with("quest:"):
+			return true
+	return false
 
 
-func _on_quest_claimed(data: Dictionary) -> void:
-	_waiting.erase("quest")
-	settle("quest")
+func _on_quest_claimed(data: Dictionary, key: String) -> void:
+	_waiting.erase(key)
+	settle(key)
 	apply_server(data)
-	if data.get("reward") is Dictionary:
-		granted.emit(data.reward)
 	quest_claimed.emit(true)
 
 
-func _on_quest_claim_failed() -> void:
-	_waiting.erase("quest")
-	_unpredict("quest")
+func _on_quest_claim_failed(key: String) -> void:
+	_waiting.erase(key)
+	_unpredict(key)
 	notice.emit(QUEST_FAIL_TEXT.get(net.last_error, QUEST_FAIL_DEFAULT))
 	net.refresh()
 	quest_claimed.emit(false)

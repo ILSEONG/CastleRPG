@@ -18,6 +18,8 @@ const BUTTON_W := 168.0
 const ARROW := Vector2(30, 26)  # 화살표 폭·높이(px)
 const BOUNCE_PX := 8.0
 const BOUNCE_HZ := 1.6
+const TARGET_SETTLE_FRAMES := 2  # 가리킬 버튼이 바뀐 뒤 이만큼은 지난 자리(새 버튼이 컨테이너 자리를 잡는 동안)
+const CLAIM_GUARD_MS := 400  # [보상 받기] 뒤 이 시간 동안 카드 버튼 누름을 버린다(ui_window OPEN_GUARD_MS와 같은 값)
 
 var tags  # world_tags.gd(건물 이름표 덩어리 자리). main이 넣는다
 var build_button  # build_button.gd — 자리를 안 잡은 공터 미션이면 화살표가 이 버튼을 가리킨다(자유 건설)
@@ -31,6 +33,10 @@ var action_button: Button
 var _arrow: Control
 var _pointer: Control  # 버튼 화살표(가리키는 버튼의 CanvasLayer로 옮겨 다닌다)
 var _t := 0.0
+var _claimed_ms := -100000  # 마지막으로 [보상 받기]를 누른 때
+var _last_rect := Rect2()  # 화살표가 마지막으로 가리킨 자리(_draw_pointer)
+var _target_id := 0  # 화살표가 가리키는 버튼(인스턴스 id)과 그 버튼을 처음 가리킨 프레임
+var _target_since := 0
 
 
 func _ready() -> void:
@@ -110,15 +116,19 @@ func _refresh() -> void:
 	reward_label.text = Lang.t("tutorial_card.refresh_3") + Tutorial.reward_text(Tutorial.repeat_reward(m) if Tutorial.repeating() else Tutorial.reward(Tutorial.step))
 	action_button.text = Lang.t("tutorial_card.refresh_4") if done else Tutorial.action_label(m)
 	action_button.visible = done or Tutorial.action_shown(m)
-	action_button.disabled = done and Tutorial.econ != null and Tutorial.econ.quest_waiting()
+	action_button.disabled = done and Tutorial.claim_blocked()
 	UiKit.apply_button(action_button, UiKit.AMBER if done else UiKit.STEEL, 12.0)
 	panel.offset_top = panel.offset_bottom  # 높이 0에서 내용만큼 위로 자란다(grow BEGIN)
 
 
+## [보상 받기]는 누르는 즉시 다음 미션으로 넘어간다(2026-10-16) — 빠른 두 번 탭의 두 번째가 바뀐 카드(다음 미션의 [보상 받기]·[바로가기])를
+## 누르지 않게 CLAIM_GUARD_MS 동안은 버린다.
 func _on_action() -> void:
+	if Time.get_ticks_msec() - _claimed_ms < CLAIM_GUARD_MS:
+		return
 	if Tutorial.complete():
-		if Tutorial.claim() and Tutorial.online:
-			_refresh()  # 응답 전 버튼을 끈다(응답이 오면 Tutorial.changed가 다시 그린다)
+		if Tutorial.claim():
+			_claimed_ms = Time.get_ticks_msec()
 	else:
 		Tutorial.goto_current()
 
@@ -194,9 +204,24 @@ func _place_pointer() -> void:
 func _draw_pointer() -> void:
 	var target: Control = Tutorial.point_target() if panel.visible else null
 	if target == null:
+		_last_rect = Rect2()
+		_target_id = 0
 		return
-	var inv := _pointer.get_global_transform_with_canvas().affine_inverse()
-	var r := Rect2(inv * target.get_global_transform_with_canvas().origin, target.size * target.get_global_transform_with_canvas().get_scale())
+	# 가리킬 버튼이 막 바뀌었으면(창이 줄을 다시 만들었다) 컨테이너가 새 버튼 자리를 잡기 전이라 줄 맨 왼쪽 위에 있다 — 두 프레임 동안은
+	# 지난 자리를 그대로 그린다(사용자 2026-10-16 "화살표가 고정되지않아": 가방 [열기] 화살표가 처치마다 아이콘 자리로 튀었다).
+	var frame := Engine.get_process_frames()
+	if target.get_instance_id() != _target_id:
+		_target_id = target.get_instance_id()
+		_target_since = frame
+	var r: Rect2
+	if frame - _target_since < TARGET_SETTLE_FRAMES:
+		if _last_rect.size == Vector2.ZERO:
+			return
+		r = _last_rect
+	else:
+		var inv := _pointer.get_global_transform_with_canvas().affine_inverse()
+		r = Rect2(inv * target.get_global_transform_with_canvas().origin, target.size * target.get_global_transform_with_canvas().get_scale())
+		_last_rect = r
 	var pulse := 0.5 + 0.5 * sin(_t * TAU * BOUNCE_HZ)
 	_pointer.draw_rect(r.grow(4.0), Color(UiKit.AMBER, 0.55 + 0.45 * pulse), false, 4.0)
 	var up := r.get_center().y < _pointer.size.y * 0.3  # 위쪽 버튼: 아래에서 위를 가리킨다

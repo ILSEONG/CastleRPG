@@ -40,6 +40,7 @@ func _ready() -> void:
 	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top.add_child(coin)
 	gold_label = _label("", 30)
+	gold_label.add_theme_font_override("font", UiKit.tabular_font())  # 처치 골드마다 폭이 바뀌어 가이드 포커스가 흔들렸다(2026-10-16)
 	top.add_child(gold_label)
 	content.add_child(top)
 	var scroll := ScrollContainer.new()

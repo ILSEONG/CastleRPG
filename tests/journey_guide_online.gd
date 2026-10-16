@@ -26,6 +26,7 @@ var _resp_done := false
 var _resp_err := ""
 var _infos: Array = []
 var _boss_run := {}
+var _claim_ms: Array = []  # [보상 받기] 하나: [다음 미션이 보일 때까지, 서버가 받아들일 때까지](ms)
 
 
 func _ready() -> void:
@@ -63,6 +64,15 @@ func _ready() -> void:
 		"step=%d state=%s server=%s" % [Tutorial.step, Tutorial.state, Economy.server_quest])
 	if not Tutorial.active():
 		await _repeats(9)
+	if not _claim_ms.is_empty():
+		var a := 0
+		var b := 0
+		var mx := 0
+		for c in _claim_ms:
+			a += int(c[0])
+			b += int(c[1])
+			mx = maxi(mx, int(c[0]))
+		_infos.append("claim speed (%d claims): next mission after avg %d ms (max %d), server confirmed after avg %d ms" % [_claim_ms.size(), a / _claim_ms.size(), mx, b / _claim_ms.size()])
 	for s in _infos:
 		print("INFO " + s)
 	await _snap()
@@ -97,12 +107,17 @@ func _mission(i: int) -> bool:
 	_check(card.action_button.visible and not card.action_button.disabled and card.action_button.text == "보상 받기", tag + " card shows [보상 받기]",
 		"%s visible=%s title=%s complete=%s" % [card.action_button.text, card.action_button.visible, card.title_label.text, Tutorial.complete()])
 	_notes.clear()
+	var t0 := Time.get_ticks_msec()
 	card.action_button.pressed.emit()
 	card.action_button.pressed.emit()  # 빠른 두 번 탭 = 한 번
 	var s1 := _state()
 	var bad := _added(s0, s1, reward, false)
 	_check(bad.is_empty(), tag + " reward %s shows at once" % Tutorial.reward_text(reward), str(bad))
+	_check(Tutorial.step == i + 1, tag + " next mission shows at once (server confirms behind — 2026-10-16)", "step=%d" % Tutorial.step)
+	await _wait_until(func(): return Tutorial.step == i + 1, 15.0)
+	var t_next := Time.get_ticks_msec() - t0
 	var moved := await _wait_until(func(): return Tutorial.step == i + 1 and not Economy.quest_waiting(), 15.0)
+	_claim_ms.append([t_next, Time.get_ticks_msec() - t0])
 	await _settle()
 	_check(moved and not _notes.has(EconomyScript.ROLLBACK_TEXT) and not _notes.has(EconomyScript.QUEST_FAIL_DEFAULT), tag + " server accepted the claim (step %d → %d)" % [i + 1, i + 2],
 		"step=%d notes=%s" % [Tutorial.step, _notes])
@@ -463,10 +478,16 @@ func _repeats(n: int) -> void:
 		var rn := Tutorial.rep_n
 		card = _child(CardScript)
 		_notes.clear()
+		var t0 := Time.get_ticks_msec()
 		card.action_button.pressed.emit()
+		card.action_button.pressed.emit()  # 빠른 두 번 탭 = 한 번
 		var bad := _added(s0, _state(), reward, false)
 		_check(bad.is_empty(), tag + " reward shows at once", str(bad))
+		_check(Tutorial.rep_n == rn + 1, tag + " next repeat quest shows at once", "rep_n=%d" % Tutorial.rep_n)
+		await _wait_until(func(): return Tutorial.rep_n == rn + 1, 15.0)
+		var t_next := Time.get_ticks_msec() - t0
 		var moved := await _wait_until(func(): return Tutorial.rep_n == rn + 1 and not Economy.quest_waiting(), 15.0)
+		_claim_ms.append([t_next, Time.get_ticks_msec() - t0])
 		await _settle()
 		_check(moved and not _notes.has(EconomyScript.ROLLBACK_TEXT), tag + " server accepted", "rep_n=%d notes=%s" % [Tutorial.rep_n, _notes])
 		if not moved:

@@ -30,6 +30,17 @@ const CARD_OUTLINE_W := 2.0
 const CARD_GEM_R := 12.0  # 카드 위쪽 가운데 등급 보석
 
 static var _cache := {}
+static var _tabular: FontVariation
+
+
+## 숫자 폭이 같은 글꼴(OpenType tnum — 기본 글꼴 Pretendard): 처치마다 바뀌는 숫자(보유 골드)가 좌우로 흔들리지 않게(가이드 포커스가
+## 그 숫자를 감쌀 때 들썩이지 않게 — 2026-10-16).
+static func tabular_font() -> Font:
+	if _tabular == null:
+		_tabular = FontVariation.new()
+		_tabular.base_font = load(str(ProjectSettings.get_setting("gui/theme/custom_font", "res://assets/fonts/Pretendard-SemiBold.otf")))
+		_tabular.opentype_features = {TextServerManager.get_primary_interface().name_to_tag("tnum"): 1}
+	return _tabular
 
 
 ## 패널 박스. 내용 여백 margin px.

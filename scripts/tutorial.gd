@@ -273,6 +273,7 @@ var rep_n := 0  # 끝낸 반복 퀘스트 수(다음 퀘스트 = REPEATS[rep_n %
 var rep_quest := {}  # 지금 반복 퀘스트(만들 때 목표·기준값을 정해 저장): {kind, arg, base_value, title, desc, goto}
 
 var _server_known := false  # 온라인: 서버 퀘스트 진행을 한 번이라도 받았다
+var _claiming: Array = []  # 온라인: 보내고 응답 전인 [보상 받기]마다 누르기 전 상태 {state, step, rep_n, rep_quest, count}(보낸 순서)
 var _check_cd := 0.0
 var _was_complete := false
 var _was_no_guild := false
@@ -328,14 +329,46 @@ func go_online() -> void:
 	changed.emit()
 
 
-func _on_claimed(_ok: bool) -> void:
-	changed.emit()  # 카드 버튼(응답 대기) 다시 그리기
+## 서버가 [보상 받기]에 답했다(보낸 순서대로 온다). 거절이면 그 받기 전 미션으로 되돌린다 — 뒤에 이어 보낸 받기도 서버가 받지 않으므로
+## (앞 번호가 안 들어갔다) 기다리던 것을 모두 버리고, 그 응답들은 서버 진행을 그대로 따른다. 모두 답했으면 서버 진행에 맞춘다.
+func _on_claimed(ok: bool) -> void:
+	var snap: Dictionary = _claiming.pop_front() if not _claiming.is_empty() else {}
+	if not ok and not snap.is_empty():
+		_claiming.clear()
+		state = str(snap.state)
+		step = int(snap.step)
+		rep_n = int(snap.rep_n)
+		rep_quest = snap.rep_quest
+		count = int(snap.count)
+		_was_complete = false
+		save()
+	if _claiming.is_empty() and not (ok and _server_behind()):
+		_sync_server()
+	else:
+		changed.emit()
+
+
+## 카드 [보상 받기]를 끈다: 반복 퀘스트는 앞 받기의 응답이 올 때까지(서버 간격이 있어 이어 받을 수 없다). 가이드는 이어 받을 수 있다.
+func claim_blocked() -> bool:
+	return online and econ != null and repeating() and econ.quest_waiting()
+
+
+## 서버 진행이 앱보다 뒤다(받기 응답이 아직 반영 전 — 다른 즉시 반영 응답을 기다리는 동안 apply_server가 미룬다). 곧 따라온다.
+func _server_behind() -> bool:
+	var q: Dictionary = econ.server_quest if econ != null else {}
+	if q.is_empty():
+		return false
+	return int(q.tut_step) < step or int(q.rep_n) < rep_n
 
 
 ## 서버 퀘스트 진행을 받아 맞춘다. 미션이 바뀌었으면 사건 수를 새로 센다. 튜토리얼이 막 끝났으면 알림.
 func _sync_server() -> void:
 	var q: Dictionary = econ.server_quest if econ != null else {}
 	if q.is_empty():
+		return
+	if not _claiming.is_empty():  # [보상 받기] 응답 전: 서버 진행은 아직 누르기 전 값이다 — 앱이 먼저 넘긴 미션을 그대로 둔다
+		changed.emit()
+		check()
 		return
 	var was_known := _server_known
 	var before := [state, step, rep_n]
@@ -633,7 +666,7 @@ func point_target() -> Control:
 				return n
 			continue
 		var t = ui_targets.get(k)
-		if t == null or not is_instance_valid(t.node) or not t.node.is_visible_in_tree():
+		if t == null or not is_instance_valid(t.node) or t.node.is_queued_for_deletion() or not t.node.is_visible_in_tree():
 			continue
 		if t.show.is_valid() and not t.show.call():
 			continue
@@ -770,37 +803,43 @@ func check() -> void:
 
 
 ## 보상 받기: 지금 미션이 끝났으면 보상을 주고 다음 미션으로. 마지막이면 튜토리얼 끝. 받았으면 true.
+## 온라인도 누르는 즉시 보상을 더해 보이고 다음 미션으로 넘긴다(사용자 2026-10-16 "보상받기 누르면 좀 빠르게" — 예전엔 처치 보내기 + 받기
+## 두 번의 서버 왕복을 기다렸다). 서버 확인은 뒤에서 받고(_on_claimed), 거절되면 누르기 전 미션으로 되돌린다.
 func claim() -> bool:
 	if not complete():
 		return false
-	if online:  # 서버가 보상을 주고 진행을 올린다(응답 → Economy.quest_synced → _sync_server)
-		return econ.quest_claim_online({"type": "repeat", "n": rep_n} if repeating() else {"type": "tutorial", "step": step},
-			repeat_reward(rep_quest) if repeating() else reward(step))  # 보상은 누르는 즉시 보이고 서버가 거절하면 되돌린다
-	if repeating():
-		econ.grant(repeat_reward(rep_quest))
+	var rep := repeating()
+	if online:  # 서버가 보상을 주고 진행을 올린다 — 응답 전에 여기서 먼저 넘긴다
+		if not econ.quest_claim_online({"type": "repeat", "n": rep_n} if rep else {"type": "tutorial", "step": step},
+				repeat_reward(rep_quest) if rep else reward(step)):  # 보상은 누르는 즉시 보이고 서버가 거절하면 되돌린다
+			return false
+		_claiming.append({"state": state, "step": step, "rep_n": rep_n, "rep_quest": rep_quest.duplicate(), "count": count})
+		_advance(rep)
+		return true
+	if econ != null:
+		econ.grant(repeat_reward(rep_quest) if rep else reward(step))
+	_advance(rep)
+	return true
+
+
+## 받은 미션 다음으로: 반복 퀘스트면 다음 번호(목표·기준값은 지금 상태로 새로), 가이드면 다음 단계(마지막이면 끝 — 알림).
+func _advance(rep: bool) -> void:
+	if rep:
 		rep_n += 1
 		rep_quest = {}
-		count = 0
-		_was_complete = false
-		mission()  # 다음 퀘스트(목표·기준값을 지금 상태로)
-		save()
-		changed.emit()
-		check()
-		return true
-	var r := reward(step)
-	if econ != null:
-		econ.grant(r)
-	step += 1
+	else:
+		step += 1
+		if step >= MISSIONS.size():
+			state = "done"
+			if econ != null:
+				econ.notice.emit(DONE_TEXT)
 	count = 0
 	_was_complete = false
-	if step >= MISSIONS.size():
-		state = "done"
-		if econ != null:
-			econ.notice.emit(DONE_TEXT)
+	if rep:
+		mission()  # 다음 퀘스트(목표·기준값을 지금 상태로)
 	save()
 	changed.emit()
 	check()
-	return true
 
 
 ## 미션 i의 보상(사용자 2026-10-12 "가이드 보상이 다음 가이드에 필요한 자원을 줄 수 있게"): 바로 다음 미션(i+1)이 자원·골드를 쓰면
