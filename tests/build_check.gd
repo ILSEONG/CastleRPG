@@ -106,6 +106,16 @@ func _run() -> void:
 	Economy.notice.emit(Economy.ROLLBACK_TEXT)
 	_check(pl.hint_label.text == Economy.ROLLBACK_TEXT, "notices show inside the bar while placing (the bar covers the HUD toast)", pl.hint_label.text)
 	pl._update()
+	# 앞선 건설 요청 응답 대기 중이면 막대가 그렇게 말하고 [건설]을 끈다(조용히 안 눌리는 일 없게)
+	Economy._waiting["build"] = true
+	Economy._predicts["build"] = {}
+	Economy.changed.emit()
+	await _frames(2)
+	_check(not pl.ok and pl.confirm_button.disabled and pl.hint_label.text == pl.WAITING_TEXT, "waiting for an earlier build reply: said in the bar, [건설] off", pl.hint_label.text)
+	Economy._waiting.erase("build")
+	Economy._predicts.erase("build")
+	Economy.changed.emit()
+	await _frames(2)
 	# 서버 placedCells와 같은 자리 세기: 자리 없는 지은 건물은 빼고, layout의 모르는 키는 3×3으로 센다
 	var saved_layout: Dictionary = Economy.layout.duplicate()
 	var saved_unbuilt: Dictionary = Economy.unbuilt.duplicate()
@@ -142,6 +152,19 @@ func _run() -> void:
 	_check(not pl._floor.visible, "floor tiles hide after building", "")
 	_check(not pl.is_active() and Economy.layout.get("lumber") == target and str(Economy.build.get("id", "")) == "lumber", "[건설] places it and starts building", "%s %s" % [Economy.layout, Economy.build])
 	_check(scenery.lots.lumber.mi.visible and scenery.lots.lumber.lot == true and scenery.lots.lumber.cell == target, "construction lot shows at the chosen spot", "")
+	# 서버가 거절하면(되돌린 뒤) 그 자리로 자리 고르기가 다시 열리고 서버가 말한 이유가 막대에 보인다
+	var job: Dictionary = Economy.build.duplicate()
+	var lay = Economy.layout.get("lumber")
+	Economy.build = {}
+	Economy.layout.erase("lumber")
+	Economy.build_rejected.emit("lumber", target, Economy.BLOCK_TEXT.overlap)
+	await _frames(3)
+	_check(pl.is_active() and pl.building_id == "lumber" and pl.cell == target and pl.hint_label.text == Economy.BLOCK_TEXT.overlap, "server refusal reopens placement at that spot with the reason", "%s %s" % [pl.cell, pl.hint_label.text])
+	pl.cancel()
+	Economy.build = job
+	Economy.layout["lumber"] = lay
+	Economy.changed.emit()
+	await _frames(3)
 	Economy.build.finish = Economy.time_now() - 1.0
 	Economy.complete_due(Economy.time_now())
 	await _frames(10)
