@@ -14,6 +14,7 @@ const GameData := preload("res://scripts/game_data.gd")
 const EconomyScript := preload("res://scripts/economy.gd")  # 주머니 이름(pouch_name)
 
 const SAVE_VERSION := 1
+const MAX_REPEAT_CLAIMS := 50  # 모두 받기에서 반복 미션 하나를 한 번에 받는 최대 횟수(서버 M.MAX_REPEAT_CLAIMS와 같다)
 static var TYPES := [["daily", Lang.t("missions.types")], ["weekly", Lang.t("missions.types_2")], ["repeat", Lang.t("missions.types_3")]]
 ## server/src/missions.ts DEFS와 같은 표. kind: 여기서 세는 사건, daily_count = 오늘 받은 다른 일일 미션 수, daily_bonus = 이번 주 일일 보너스 받은 날 수.
 static var DEFS := [
@@ -48,7 +49,7 @@ static var DEFS := [
 const GOTO := {"kill": "stage", "stage": "stage", "collect": "look:lumber", "sell": "merchant", "hero_level": "tab:hero", "growth": "tab:growth",
 	"gacha": "tab:recruit", "gacha_dia": "tab:recruit", "dungeon_win": "tab:dungeon", "guild_attend": "tab:guild", "guild_boss": "tab:guild", "build_up": "building:keep",
 	"research": "building:lab", "train": "building:barracks"}
-static var FAIL_TEXT := {"claimed": Lang.t("missions.fail_text.claimed"), "not_done": Lang.t("missions.fail_text.not_done"), "too_soon": Lang.t("missions.fail_text.too_soon"),
+static var FAIL_TEXT := {"nothing": Lang.t("missions.fail_text.nothing"), "claimed": Lang.t("missions.fail_text.claimed"), "not_done": Lang.t("missions.fail_text.not_done"), "too_soon": Lang.t("missions.fail_text.too_soon"),
 	"stale": Lang.t("missions.fail_text.stale")}
 static var FAIL_DEFAULT := Lang.t("missions.fail_default")
 static var WAIT_TEXT := Lang.t("missions.wait_text")
@@ -341,6 +342,69 @@ func claim(id: String) -> bool:
 	save()
 	changed.emit()
 	return true
+
+
+## 모두 받기(일일·주간·반복 탭 [모두 받기]): 그 종류에서 지금 받을 수 있는 것을 표 순서로 모두 — 보너스(daily_count·daily_bonus)는 다른 미션을
+## 받은 뒤에 다시 보고, 반복 미션은 목표를 넘은 만큼 여러 번. 온라인은 합계를 곧바로 반영하고 토스트 한 번 → POST /v1/mission/claim_all {type}
+## (서버가 같은 순서로 다시 판정한다) → 응답이 오면 서버 값, 거절되면 되돌린다. 받을 게 없으면 false.
+func claim_all(type: String) -> bool:
+	if net != null and not net.up:
+		econ.notice.emit(WAIT_TEXT)
+		return false
+	var seq := _claim_all_seq(type)
+	if seq.is_empty():
+		return false
+	if net == null:
+		for m in seq:
+			claim(str(m.id))
+		return true
+	var got := {}
+	for m in seq:
+		for k in m.reward:
+			got[k] = int(got.get(k, 0)) + int(m.reward[k])
+	var key := "mission_all:%s:%d" % [type, Time.get_ticks_msec()]
+	pending[key] = str(seq[0].id)
+	econ.predict_reward(key, got, func():
+		for m in seq:
+			_mark_claimed(m))
+	econ.granted.emit(got)
+	_reward_notice(got)
+	net.flush_kills()
+	net.send("POST", "/v1/mission/claim_all", {"type": type}, _on_claimed.bind(key), _on_claim_all_failed.bind(key), true, true)
+	changed.emit()
+	return true
+
+
+## 모두 받기로 받을 미션 순서(반복 미션은 받는 횟수만큼 여러 번). 온라인은 받은 기록에 하나씩 얹어 보며 고르고 원래대로 돌려 둔다.
+func _claim_all_seq(type: String) -> Array:
+	var rows := list(type)
+	var bonus := func(m): return str(m.kind) in ["daily_count", "daily_bonus"]
+	var order: Array = rows.filter(func(m): return not bonus.call(m)) + rows.filter(bonus)
+	var seq: Array = []
+	if net == null:
+		for m in order:
+			if can_claim(m):
+				seq.append(m)  # 오프라인은 claim()이 하나씩 받는다(반복 미션은 한 번 — 다시 누르면 다음 번)
+		return seq
+	var saved: Dictionary = econ.server_missions.duplicate(true)
+	for m in order:
+		var k := 0
+		while can_claim(m) and k < MAX_REPEAT_CLAIMS:
+			seq.append(m)
+			_mark_claimed(m)
+			k += 1
+			if m.type != "repeat":
+				break
+	econ.server_missions = saved
+	return seq
+
+
+func _on_claim_all_failed(key: String) -> void:
+	pending.erase(key)
+	econ.unpredict(key)
+	econ.notice.emit(FAIL_TEXT.get(net.last_error, FAIL_DEFAULT))
+	net.refresh()
+	changed.emit()
 
 
 ## 온라인 받은 기록(Economy.server_missions)에 이 받기를 더한다 — 서버 응답 위에도 응답이 올 때까지 다시 얹힌다(복사해서 바꾼다).

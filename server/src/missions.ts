@@ -88,6 +88,9 @@ export const weekStart = (week: number) => week * 7 - 4
 
 export const def = (id: string) => DEFS.find((d) => d.id === id)
 
+// 모두 받기에서 반복 미션 하나를 한 번에 받는 최대 횟수
+export const MAX_REPEAT_CLAIMS = 50
+
 // 반복 미션 목표(받은 횟수 n번째)
 export const targetOf = (d: MissionDef, n: number) => d.target + (d.step ?? 0) * n
 
