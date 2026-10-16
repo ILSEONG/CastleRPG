@@ -95,6 +95,22 @@ func _ready() -> void:
 		_check(await _wait_until(func(): return Missions.waiting == "" and Missions.times(id) == 1, 10.0), "a real tap during combat claims " + id,
 			"times=%d" % Missions.times(id))
 		await _frames(10)
+	# [모두 받기](일일): 여러 개 + 보너스를 한 번에, 곧바로 반영, 빠른 두 번 누름은 한 번만 보낸다
+	await _events({"collect": 5, "sell": 2, "hero_level": 5, "growth": 3, "gacha": 10, "dungeon_win": 2})
+	_panel._pick("daily")
+	await _frames(20)
+	_check(not _panel.all_button.disabled, "모두 받기 is on when daily rewards are ready", "")
+	var dia := Economy.diamonds
+	var claims_before: int = Economy.server_missions.get("d", []).size()
+	_panel.all_button.pressed.emit()
+	_check(Economy.diamonds > dia and Missions.ready_count("daily") == 0, "모두 받기 shows the rewards at once", "%d -> %d" % [dia, Economy.diamonds])
+	_check(not Missions.claim_all("daily"), "second fast press sends nothing", "")
+	_check(await _wait_until(func(): return Missions.waiting == "", 10.0), "claim_all answered", "")
+	var d: Array = Economy.server_missions.get("d", [])
+	_check(d.has("d_all") and d.size() >= claims_before + 6, "server recorded every daily + the bonus", str(d))
+	await _frames(20)
+	_check(_panel.all_button.disabled, "모두 받기 off when nothing is left", "")
+	await _snap()  # 6. 모두 받은 뒤
 	_sheet()
 	_finish()
 
