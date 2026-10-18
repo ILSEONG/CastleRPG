@@ -1098,8 +1098,8 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 	var wt = _child(preload("res://scripts/world_tags.gd"))
 	_check(Economy.levels.values().all(func(l): return l == 1) and Economy.build.is_empty() and wt.text("lumber") == "벌목장 Lv 1"
 		and wt.text("keep") == "성채 Lv 1" and scenery.tag_anchors.size() == Balance.entries().size()
-		and Balance.BUILDINGS.filter(func(b): return b.has("cell")).all(func(b): return wt.text(b.id) == "%s Lv 1" % b.name)
-		and scenery.hidden.size() == GameData.lot_keys().size(), "(B) every building's name tag reads '이름 Lv N'",
+		and Balance.BUILDINGS.filter(func(b): return b.has("cell")).all(func(b): return wt.text(b.id) == ("%s" % b.name if b.id == "tavern" else "%s Lv 1" % b.name))  # 주점은 레벨이 없다(2026-10-18)
+		and scenery.hidden.size() == GameData.lot_keys().size(), "(B) every building's name tag reads '이름 Lv N' (주점: just its name)",
 		"lumber=%s keep=%s" % [wt.text("lumber"), wt.text("keep")])
 
 	# 길게 누르기(0.5초): 누른 채 건물 창이 열리고, 뗀 뒤에도 수집하지 않는다. 창을 닫은 뒤 누르지 않은 마우스 움직임은 카메라를 못 옮긴다
