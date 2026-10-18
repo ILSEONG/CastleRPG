@@ -89,6 +89,10 @@ func _run(bwin, rw, rec, dw) -> void:
 		and not bwin.reason_label.visible and bwin.recruit_button.visible and bwin.effects.get_child_count() == 0,
 		"tavern building window: just 주점, no [업그레이드]/cost/time/max-level line, [영웅 모집] stays",
 		"title=%s up=%s time=%s reason=%s(%s) effects=%d" % [bwin.title_label.text, bwin.upgrade_button.visible, bwin.time_label.visible, bwin.reason_label.visible, bwin.reason_label.text, bwin.effects.get_child_count()])
+	var wt = _child("res://scripts/world_tags.gd")
+	if wt != null:
+		wt._sync()
+		_check(wt.text(GameData.TAVERN) == "주점" and wt.text(GameData.LAB).begins_with("연구소 Lv"), "map tag: 주점 without Lv, 연구소 with Lv", "%s / %s" % [wt.text(GameData.TAVERN), wt.text(GameData.LAB)])
 	_check(Economy.upgrade_block(GameData.TAVERN, Economy.time_now()) == "max_level", "the tavern cannot be upgraded (max_level)", Economy.upgrade_block(GameData.TAVERN, Economy.time_now()))
 	bwin.close()
 	await _frames(3)

@@ -92,7 +92,7 @@ func _sync() -> void:
 			nm = ""  # 자리를 안 잡은 공터(자유 건설): 이름표 없음
 		else:
 			nm = GameData.building_name(t.id)
-			lv = "Lv %d" % Economy.building_level(t.id) if Economy.is_built(t.id) else Lang.t("world_tags.sync_2")  # 튜토리얼 공터
+			lv = Lang.t("world_tags.sync_2") if not Economy.is_built(t.id) else "" if Economy.no_levels(t.id) else "Lv %d" % Economy.building_level(t.id)  # 튜토리얼 공터 · 주점은 레벨이 없다(2026-10-18)
 		if scenery.tag_anchors.has(t.id):
 			t.anchor = scenery.tag_anchors[t.id]  # 자유 건설로 옮기면 따라간다
 		if nm != t.get("name") or lv != t.get("lv"):
