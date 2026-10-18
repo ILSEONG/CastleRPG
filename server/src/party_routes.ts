@@ -39,7 +39,8 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     const s = game.soldiers.find((x: Any) => String(x.id) === type)
     if (!s) return null
     const m = R.cfgNum(game.config, 'soldier_tier_mult') ** (Math.max(1, tier) - 1)
-    return { type, tier, hp: Math.round(Number(s.hp) * m), atk: Math.round(Number(s.atk) * m * 10) / 10, interval: Number(s.atk_interval) }
+    const ma = R.cfgNum(game.config, 'soldier_atk_tier_mult') ** (Math.max(1, tier) - 1) // 2026-10-18 공격만 ×1.6, 앱 GameData.soldier_stats와 같다
+    return { type, tier, hp: Math.round(Number(s.hp) * m), atk: Math.round(Number(s.atk) * ma * 10) / 10, interval: Number(s.atk_interval) }
   }
   const soldierDps = (game: Any, list: PQ.SoldierUnit[]) => list.reduce((a, s) => a + s.atk / Math.max(0.1, soldierOf(game, s.type, s.tier)?.interval ?? 1), 0)
 

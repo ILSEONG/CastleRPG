@@ -2437,8 +2437,9 @@ func test_soldiers() -> void:
 	check(GameData.soldier_of_building("stable") == "cavalry" and GameData.soldier_of_building("lab") == "" and GameData.building_def("barracks").name == "보병 막사", "soldier buildings")
 	var i1 := GameData.soldier_stats("infantry", 1)
 	var i2 := GameData.soldier_stats("infantry", 2)
-	check(i1 == {"hp": 320.0, "atk": 22.0, "range": 1.6, "atk_interval": 1.0, "speed": 4.0, "aggro": 7.0} and i2.hp == 640.0 and i2.atk == 44.0 and i2.range == 1.6 and i2.speed == 4.0
-		and GameData.soldier_stats("cavalry", 5).hp == 240.0 * 16.0 and GameData.soldier_stats("knight", 1).is_empty(), "tier t: hp/atk x 2^(t-1), the rest unchanged: %s" % [i2])
+	check(i1 == {"hp": 320.0, "atk": 22.0, "range": 1.6, "atk_interval": 1.0, "speed": 4.0, "aggro": 7.0} and i2.hp == 640.0 and is_equal_approx(i2.atk, 35.2) and i2.range == 1.6 and i2.speed == 4.0
+		and GameData.soldier_stats("cavalry", 5).hp == 240.0 * 16.0 and is_equal_approx(GameData.soldier_stats("infantry", 5).atk, 22.0 * pow(1.6, 4)) and GameData.soldier_stats("knight", 1).is_empty(),
+		"tier t: hp x 2^(t-1), atk x 1.6^(t-1) (2026-10-18), the rest unchanged: %s" % [i2])
 	check(GameData.soldier_stats("cavalry", 1).speed == 2.0 * GameData.soldier_stats("infantry", 1).speed, "cavalry moves twice as fast as infantry")
 	check(GameData.soldier_unit_sec(1) == 10800.0 and GameData.soldier_unit_sec(2) == 9000.0 and GameData.soldier_unit_sec(6) == 1800.0 and GameData.soldier_unit_sec(7) == 10800.0,
 		"unit time = 180 - 30 x step min (rev 19): Lv 1 3:00, Lv 2 2:30, Lv 6 0:30, Lv 7 back to 3:00 (next tier)")

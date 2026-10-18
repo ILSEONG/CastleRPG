@@ -72,7 +72,7 @@ const POP_KEYS := ["pop_base", "pop_per_house"]
 const SOLDIER_STR_COLS := ["id", "name", "building", "model"]
 const SOLDIER_NUM_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]  # 1티어 기준
 const SOLDIER_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 크다(나머지는 0 이상)
-const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "train_base_min", "train_step_min", "train_cost_tier_mult", "soldier_merge_count",
+const SOLDIER_NUM_KEYS := ["soldier_max_tier", "soldier_tier_mult", "soldier_atk_tier_mult", "train_base_min", "train_step_min", "train_cost_tier_mult", "soldier_merge_count",
 	"train_batch_base", "train_batch_per_level"]
 const SOLDIER_INT_KEYS := ["soldier_max_tier", "soldier_merge_count", "train_batch_base", "train_base_min", "train_step_min", "train_cost_tier_mult"]  # 1 이상 정수(나머지는 0보다 크다)
 const SOLDIER_INT0_KEYS := ["train_batch_per_level"]  # 0 이상 정수(개정 16)
@@ -586,13 +586,14 @@ static func train_max(level: int) -> int:
 	return int(config_num("train_batch_base")) + int(config_num("train_batch_per_level")) * (maxi(level, 1) - 1)
 
 
-## 티어 t 능력치 {hp, atk, range, atk_interval, speed, aggro}: HP·공격 × soldier_tier_mult^(t−1), 나머지는 같다. 모르는 병종이면 {}.
+## 티어 t 능력치 {hp, atk, range, atk_interval, speed, aggro}: HP × soldier_tier_mult^(t−1), 공격 × soldier_atk_tier_mult^(t−1)(2026-10-18 ×2 → ×1.6), 나머지는 같다. 모르는 병종이면 {}.
 static func soldier_stats(type: String, tier: int) -> Dictionary:
 	var d := soldier(type)
 	if d.is_empty():
 		return {}
 	var m := _grown(1.0, config_num("soldier_tier_mult"), maxi(tier, 1) - 1)
-	return {"hp": float(d.hp) * m, "atk": float(d.atk) * m, "range": float(d.range), "atk_interval": float(d.atk_interval),
+	var ma := _grown(1.0, config_num("soldier_atk_tier_mult"), maxi(tier, 1) - 1)
+	return {"hp": float(d.hp) * m, "atk": float(d.atk) * ma, "range": float(d.range), "atk_interval": float(d.atk_interval),
 		"speed": float(d.speed), "aggro": float(d.aggro)}
 
 
