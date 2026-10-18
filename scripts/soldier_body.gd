@@ -26,6 +26,8 @@ static func build(parent: Node3D, type: String, tier := 1, world := false, outfi
 		var m := str(GameData.soldier(type).model)
 		spec.look = "outfit:%s:%s" % [m, outfit.to_html(false)]
 		spec.palette = Art.look_cells(m, Art.outfit_palette(m, outfit))
+		if spec.has("body"):
+			spec.team = outfit  # Meshy 몸은 칸 아틀라스가 아니라 셰이더가 왕청색 천을 바꾼다(Art.team_tint)
 	model.setup(spec, Art.SOLDIER_SCALE)
 	parent.add_child(model)
 	if not Art.SOLDIERS[type].get("horse", false):

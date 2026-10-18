@@ -571,6 +571,24 @@ static func put_body(model: Node3D, path: String) -> void:
 	body.skeleton = NodePath("..")
 
 
+## Meshy 몸(MESHY_BODY)의 왕청색 천을 성주 색 c로 바꾼다(셰이더 use_team — 병사 단계별 몸은 천을 모두 왕청색으로 그렸다, dev/meshy_soldiers.py).
+## UnitModel.dress가 재질을 그림 방식대로 바꾼 뒤 부른다. 재질·색마다 하나를 공유한다.
+static func team_tint(model: Node, c: Color) -> void:
+	for node in model.find_children(MESHY_BODY, "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		for i in mi.mesh.get_surface_count():
+			var src := mi.get_active_material(i) as ShaderMaterial
+			if src == null:
+				continue
+			var k := [src.get_instance_id(), c]
+			if not _team_cache.has(k):
+				var m: ShaderMaterial = src.duplicate()
+				m.set_shader_parameter("use_team", true)
+				m.set_shader_parameter("team_color", c)
+				_team_cache[k] = m
+			mi.set_surface_override_material(i, _team_cache[k])
+
+
 ## 이름 붙은 팔레트(LOOK_SLOTS 이름 → 색) → 칸 번호 → 색.
 ## 병사 옷 색 하나 → 그 모델의 칸 팔레트(LOOK_SLOTS 이름): 기사 = 망토·장식·깃·띠, 두건 궁수 = 웃옷·두건·소매·끈. 갑옷 쇠·피부·무기는 그대로.
 static func outfit_palette(model: String, c: Color) -> Dictionary:
@@ -694,6 +712,7 @@ static func remap_texture(key: String, palette: Dictionary) -> ImageTexture:
 
 static var unit_style := "toon"  # 영웅·몬스터 그림 방식: lowpoly(원래 각진 면) · toon(카툰) · real(실사풍). 성·건물·이펙트는 늘 로우폴리
 static var _toon_cache := {}  # 로우폴리 재질 id -> 카툰 재질
+static var _team_cache := {}  # [재질 id, 성주 색] -> 천 색을 바꾼 재질(team_tint)
 static var _real_cache := {}  # 로우폴리 재질 id -> 실사풍 재질
 
 

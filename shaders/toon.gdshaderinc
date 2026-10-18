@@ -7,6 +7,12 @@ uniform bool use_texture = true;
 uniform bool use_vertex_color = false;
 uniform bool use_remap = false;
 uniform sampler2D remap_tex : source_color, filter_nearest;
+// 성주 색(2026-10-18 병사 단계별 Meshy 몸): 텍스처에서 왕청색 천(team_hue 둘레, 채도 높은 텍셀)만 team_color로 바꾼다 — 밝기 비(team_ref 대비)는 그대로.
+uniform bool use_team = false;
+uniform vec4 team_color : source_color = vec4(0.25, 0.43, 0.69, 1.0);
+uniform vec4 team_ref : source_color = vec4(0.25, 0.43, 0.69, 1.0);
+uniform float team_hue = 0.6;
+uniform float team_width = 0.07;
 uniform float shade = 0.34;  // 그늘 밝기(빛 대비)
 uniform float lit_level = 0.72;  // 밝은 면 밝기(1이면 각진 면 전부가 정면처럼 밝아 색이 바랜다)
 uniform float saturation = 1.18;  // 카툰다운 진한 색
@@ -27,6 +33,27 @@ void fragment() {
 				float k = dot(t.rgb, luma) / max(dot(mid, luma), 0.01);
 				t.rgb = r.rgb * clamp(k, 0.0, 1.6);
 			}
+		}
+		if (use_team) {
+			float mx = max(t.r, max(t.g, t.b));
+			float mn = min(t.r, min(t.g, t.b));
+			float d = mx - mn;
+			float h = 0.0;
+			if (d > 0.0001) {
+				if (mx == t.r) {
+					h = mod((t.g - t.b) / d, 6.0) / 6.0;
+				} else if (mx == t.g) {
+					h = ((t.b - t.r) / d + 2.0) / 6.0;
+				} else {
+					h = ((t.r - t.g) / d + 4.0) / 6.0;
+				}
+			}
+			float dh = abs(h - team_hue);
+			dh = min(dh, 1.0 - dh);
+			float w = (1.0 - smoothstep(team_width * 0.6, team_width, dh)) * smoothstep(0.22, 0.38, d / max(mx, 0.0001)) * step(0.08, mx);
+			vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+			float k = dot(t.rgb, luma) / max(dot(team_ref.rgb, luma), 0.01);
+			t.rgb = mix(t.rgb, team_color.rgb * clamp(k, 0.0, 1.6), w);
 		}
 		c *= t;
 	}

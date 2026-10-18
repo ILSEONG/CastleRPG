@@ -2114,7 +2114,7 @@ func _soldier_figures(tabs) -> void:
 	var skel := p._pivot.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var hand := skel.get_bone_global_pose(skel.find_bone("hand.r")).origin
 	var rest := skel.get_bone_global_rest(skel.find_bone("hand.r")).origin
-	_check(kids.size() == 2 and kids[1] is MeshInstance3D and kids[1].mesh == SB._horse_mesh and is_equal_approx(kids[0].position.y, SB.RIDER_Y)
+	_check(kids.size() == 2 and kids[1] is MeshInstance3D and kids[1].mesh == SB._horse_meshes.get([1, preload("res://scripts/town_kit.gd").HORSE_CLOTH]) and is_equal_approx(kids[0].position.y, SB.RIDER_Y)
 		and is_equal_approx(kids[0].scale.x, preload("res://scripts/art.gd").SOLDIER_SCALE) and hand.y < rest.y - 0.2,
 		"(F) the cavalry figure is the world soldier's body: the shared horse mesh with the knight on its back, in the idle pose", "kids=%d hand=%s rest=%s" % [kids.size(), hand, rest])
 	var gear := {"soldier:infantry": [["1H_Sword", "Rectangle_Shield"], ["2H_Sword"]], "soldier:archer": [["2H_Crossbow"], ["Knife", "1H_Crossbow"]]}

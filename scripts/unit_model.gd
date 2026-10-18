@@ -106,6 +106,8 @@ static func dress(model: Node3D, spec: Dictionary) -> void:
 		skel.add_child(slot)
 		slot.add_child(a[1])
 	Art.stylize(model)  # 영웅·몬스터 그림 방식(Art.unit_style: 실사풍·카툰·로우폴리) — 성·건물·이펙트는 로우폴리 그대로
+	if spec.has("team"):
+		Art.team_tint(model, spec.team)  # Meshy 병사 몸의 천 = 성주 색(파티·대전)
 	MeshMerge.merge(model, str(spec.hash()))  # 부위 메시를 재질마다 하나로(그리기 호출 ~10 → 1~3, mesh_merge.gd)
 
 
