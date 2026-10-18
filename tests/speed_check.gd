@@ -119,6 +119,19 @@ func _run() -> void:
 	b.pressed.emit()
 	_check(is_equal_approx(Engine.time_scale, 1.5), "and x1.5 again", str(Engine.time_scale))
 	_check(b.text == "", "no waiting label on the button", b.text)
+	# 카운트다운은 정배속(사용자 2026-10-18): 다음 스테이지 카운트다운 동안 1배, 버튼은 x1.5 그대로 보이고, 전투가 시작되면 x1.5
+	GameState._set_mode(GameState.Mode.COUNTDOWN)
+	await _frames(2)
+	_check(is_equal_approx(Engine.time_scale, 1.0) and b.visible and is_equal_approx(SpeedButton.level(), 1.5), "countdown: 1x, button still shows x1.5", str(Engine.time_scale))
+	var c0 := GameState.countdown_left()
+	var cd_t0 := Time.get_ticks_msec()
+	await get_tree().create_timer(0.5, true, false, true).timeout
+	var cd_game := c0 - GameState.countdown_left()
+	var cd_real := (Time.get_ticks_msec() - cd_t0) / 1000.0
+	_check(GameState.mode == GameState.Mode.COUNTDOWN and absf(cd_game - cd_real) < 0.15, "countdown ticks in real seconds", "game %.2f real %.2f" % [cd_game, cd_real])
+	GameState._set_mode(GameState.Mode.STAGE)
+	await _frames(2)
+	_check(is_equal_approx(Engine.time_scale, 1.5), "combat starts: x1.5", str(Engine.time_scale))
 	GameState._set_mode(GameState.Mode.IDLE)
 	await _frames(2)
 	_check(not b.visible and is_equal_approx(Engine.time_scale, 1.0), "back to idle: hidden, 1x", str(Engine.time_scale))
@@ -190,6 +203,33 @@ func _run() -> void:
 		await _frames(3)
 		_check(is_equal_approx(Engine.time_scale, _castle_want()), "after guild war: castle speed again", "%s mode %d" % [Engine.time_scale, GameState.mode])
 
+	# PVP 시작 띠도 정배속(2026-10-18): 띠 동안 1배(버튼은 x1.5), 싸움부터 x1.5
+	Pvp.save_path = ""
+	Pvp.load_save()
+	Pvp.fetch()
+	var started := Pvp.start("duel", Pvp.default_team("duel"))
+	var pb = null
+	for i in 30:
+		pb = _child_with(_main._dungeon, "res://scripts/pvp_battle.gd") if _main._dungeon != null and _main._dungeon.get_script().resource_path == "res://scripts/pvp_battle.gd" else null
+		if pb == null and _main._dungeon != null and _main._dungeon.get_script().resource_path == "res://scripts/pvp_battle.gd":
+			pb = _main._dungeon
+		if pb != null:
+			break
+		await _frames(1)
+	_check(started and pb != null, "PVP duel started", str(Pvp.start_block("duel", Pvp.default_team("duel"))))
+	if pb != null:
+		await _frames(2)
+		var psp = _child_with(pb, "res://scripts/speed_button.gd")
+		_check(pb.phase == pb.Phase.INTRO and is_equal_approx(Engine.time_scale, 1.0) and psp != null and psp.button.visible, "PVP intro: 1x, button shows", "%s phase %d" % [Engine.time_scale, pb.phase])
+		for i in 300:
+			if pb.phase != pb.Phase.INTRO:
+				break
+			await _frames(1)
+		_check(pb.phase == pb.Phase.FIGHT and is_equal_approx(Engine.time_scale, 1.5), "PVP fight: x1.5", "%s phase %d" % [Engine.time_scale, pb.phase])
+		_main.leave_dungeon()
+		await _frames(3)
+		_check(is_equal_approx(Engine.time_scale, _castle_want()), "after PVP: castle speed again", "%s mode %d" % [Engine.time_scale, GameState.mode])
+
 	# 방치 ↔ 스테이지: 대기로 돌아오면 1배, 스테이지를 시작하면 다시 1.5배
 	GameState._set_mode(GameState.Mode.IDLE)
 	await _frames(2)
@@ -213,7 +253,7 @@ func _file() -> Dictionary:
 
 
 func _castle_want() -> float:
-	return 1.0 if GameState.mode == GameState.Mode.IDLE else 1.5
+	return 1.0 if GameState.mode in [GameState.Mode.IDLE, GameState.Mode.COUNTDOWN] else 1.5
 
 
 func _child_with(n: Node, path: String) -> Node:
