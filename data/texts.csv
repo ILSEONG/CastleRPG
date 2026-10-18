@@ -117,6 +117,7 @@ building_panel.levelup_text_3,%s Lv %d · 레벨업 ›,,,,scripts/building_pane
 building_panel.refresh,%s · 공터,,,,scripts/building_panel.gd
 building_panel.refresh_2,지으면 %s %s,,,,scripts/building_panel.gd
 building_panel.refresh.text,%s %s Lv %d 필요,,,,scripts/building_panel.gd
+building_panel.refresh.text_built,%s %s 필요,,,,scripts/building_panel.gd
 building_panel.refresh_3,건설 시간 ,,,,scripts/building_panel.gd
 building_panel.refresh_4,건설 중 · 남은 시간 %s,,,,scripts/building_panel.gd
 building_panel.refresh_5,Lv %d → %d 건설 중 · 남은 시간 %s,,,,scripts/building_panel.gd

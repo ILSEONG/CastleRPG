@@ -491,7 +491,8 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
   const to = lv(id) + 1
   if (lv(id) >= def.max_level) return 'max_level'
   if (id !== KEEP && to > lv(KEEP)) return 'keep_cap'
-  for (const req of [def.req1, def.req2]) if (req && lv(req) < to - 1) return 'prereq'
+  // 레벨이 없는 건물(max_level 1, 주점 — 사용자 2026-10-18 "주점 레벨 없애")은 지어 두기만 하면 된다: 요구 레벨 = min(T−1, 그 건물 최대 레벨)
+  for (const req of [def.req1, def.req2]) if (req && lv(req) < Math.min(to - 1, defs.find((d) => d.id === req)?.max_level ?? to - 1)) return 'prereq'
   if (builderBusy) return 'builder_busy'
   const cost = buildCost(def, lv(id))
   if (BUILD_RES.some((r) => (res[r] ?? 0) < cost[r])) return 'not_enough'

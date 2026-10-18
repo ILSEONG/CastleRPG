@@ -2198,14 +2198,14 @@ func test_buildings() -> void:
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
 	var none := {"wood": 0, "stone": 0, "food": 0}
 	var rich := {"wood": 1000000, "stone": 1000000, "food": 1000000}
-	var tav := _lv({"keep": 5, "tavern": 3, "barracks": 3})
+	var tav := _lv({"keep": 5, "archery": 3, "barracks": 3})
 	check(EconomyScript.upgrade_block_for("mine", _lv({}), "", rich) == "unknown", "unknown building")
 	check(EconomyScript.upgrade_block_for("farm", _lv({"farm": 30, "keep": 30}), "keep", none) == "max_level", "max level comes first")
 	check(EconomyScript.upgrade_block_for("lumber", _lv({}), "keep", none) == "keep_cap", "no building above the keep (target 2 > keep 1)")
 	check(EconomyScript.upgrade_block_for("keep", _lv({"keep": 3, "barracks": 3}), "lab", none) == "prereq", "keep 4 needs gate >= 3")
-	check(EconomyScript.upgrade_block_for("tavern", _lv({"keep": 5, "tavern": 3, "barracks": 2}), "lab", none) == "prereq", "tavern 4 needs barracks >= 3")
-	check(EconomyScript.upgrade_block_for("tavern", tav, "lab", none) == "builder_busy" and EconomyScript.upgrade_block_for("tavern", tav, "tavern", none) == "in_progress", "one builder: busy elsewhere / this one")
-	check(EconomyScript.upgrade_block_for("tavern", tav, "", none) == "not_enough" and EconomyScript.upgrade_block_for("tavern", tav, "", GameData.build_cost("tavern", 3)) == "", "resources last; the exact cost is enough")
+	check(EconomyScript.upgrade_block_for("archery", _lv({"keep": 5, "archery": 3, "barracks": 2}), "lab", none) == "prereq", "archery 4 needs barracks >= 3")
+	check(EconomyScript.upgrade_block_for("archery", tav, "lab", none) == "builder_busy" and EconomyScript.upgrade_block_for("archery", tav, "archery", none) == "in_progress", "one builder: busy elsewhere / this one")
+	check(EconomyScript.upgrade_block_for("archery", tav, "", none) == "not_enough" and EconomyScript.upgrade_block_for("archery", tav, "", GameData.build_cost("archery", 3)) == "", "resources last; the exact cost is enough")
 	check(EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 375, "stone": 0, "food": 374}) == "not_enough" and EconomyScript.upgrade_block_for("keep", _lv({}), "", {"wood": 375, "stone": 0, "food": 375}) == "", "keep 1 -> 2 needs gate/barracks >= 1 and 375/0/375")
 	check(["unknown", "max_level", "keep_cap", "prereq", "in_progress", "builder_busy", "not_enough", "waiting"].all(func(c): return EconomyScript.BLOCK_TEXT.has(c)), "every reason code has a text")
 	# 오프라인 업그레이드

@@ -219,7 +219,7 @@ func _placement_refusals(id: String) -> void:
 # --- 3) 업그레이드 ---
 func _phase_upgrades() -> void:
 	var big := {"wood": 90000000, "stone": 90000000, "food": 90000000}
-	await _set_levels({"keep": 12, "gate": 5, "lumber": 4, "quarry": 4, "farm": 2, "stable": 3, "houses": 4, "lab": 5, "tavern": 6, "barracks": 6}, big)
+	await _set_levels({"keep": 12, "gate": 5, "lumber": 4, "quarry": 4, "farm": 2, "stable": 3, "houses": 4, "lab": 5, "archery": 6, "barracks": 6}, big)
 	await _wait_until(func(): return Economy.building_level("lumber") == 4 and not Economy.unbuilt.has("farm"), 5.0)
 	await _diff("(up) mid-game levels")
 	var panel = _main._picker.building_panel
@@ -287,37 +287,37 @@ func _phase_upgrades() -> void:
 	_check(Economy.use_speedup("builder_1440", 1), "(up) the builder pass hires builder 2", "")
 	await _settle()
 	await _diff("(up) builder 2 hired")
-	_check(Economy.upgrade("tavern", Economy.time_now()), "(up) tavern 6→7 on builder 1", "")
+	_check(Economy.upgrade("archery", Economy.time_now()), "(up) archery 6→7 on builder 1", "")
 	await _settle()
 	_check(Economy.upgrade("houses", Economy.time_now()) and Economy.build_jobs().size() == 2, "(up) houses 4→5 on builder 2 at the same time", str(Economy.build_jobs()))
 	await _settle()
 	await _diff("(up) two builders")
-	var f0 := float(Economy.build_job("tavern").finish)
-	_check(Economy.use_speedup("any_5", 1, "build", "tavern") and absf(float(Economy.build_job("tavern").finish) - (f0 - 300.0)) < 1.0, "(up) any_5 on tavern pulls 5 min at once", "")
+	var f0 := float(Economy.build_job("archery").finish)
+	_check(Economy.use_speedup("any_5", 1, "build", "archery") and absf(float(Economy.build_job("archery").finish) - (f0 - 300.0)) < 1.0, "(up) any_5 on archery pulls 5 min at once", "")
 	await _settle()
-	await _diff("(up) tavern after any_5")
-	_check(Economy.use_speedup("build_15", 1, "build", "tavern"), "(up) build_15 on tavern", "")
+	await _diff("(up) archery after any_5")
+	_check(Economy.use_speedup("build_15", 1, "build", "archery"), "(up) build_15 on archery", "")
 	await _settle()
-	var left := Economy.build_left(Economy.time_now(), "tavern")
+	var left := Economy.build_left(Economy.time_now(), "archery")
 	var guard := 0
 	while left > Economy.free_finish_sec() and guard < 12:  # 남은 시간을 넘지 않는 가장 큰 가속부터
 		guard += 1
 		for sid in ["build_60", "build_15", "build_5"]:
 			if Economy.speedup_count(sid) > 0 and float(Economy.speedup_parse(sid).min) * 60.0 < left - 5.0:
-				Economy.use_speedup(sid, 1, "build", "tavern")
+				Economy.use_speedup(sid, 1, "build", "archery")
 				break
 		await _settle()
-		left = Economy.build_left(Economy.time_now(), "tavern")
-	await _diff("(up) tavern after speed-ups")
-	panel.open_building("tavern")
+		left = Economy.build_left(Economy.time_now(), "archery")
+	await _diff("(up) archery after speed-ups")
+	panel.open_building("archery")
 	await _frames(3)
-	_check(left > 0.0 and left <= Economy.free_finish_sec() and panel.free_build_button.visible, "(up) tavern ≤ 5 min left: [무료 즉시 완료] shows", "left=%s" % left)
+	_check(left > 0.0 and left <= Economy.free_finish_sec() and panel.free_build_button.visible, "(up) archery ≤ 5 min left: [무료 즉시 완료] shows", "left=%s" % left)
 	panel.free_build_button.pressed.emit()
-	_check(Economy.building_level("tavern") == 7 and not Economy.is_building("tavern"), "(up) free finish: tavern 7 at once", str(Economy.build_jobs()))
+	_check(Economy.building_level("archery") == 7 and not Economy.is_building("archery"), "(up) free finish: archery 7 at once", str(Economy.build_jobs()))
 	await _settle()
 	panel.close()
-	_check(not _notes.has(EconomyScript.ROLLBACK_TEXT) and Economy.building_level("tavern") == 7, "(up) server accepted the free finish", "")
-	await _diff("(up) tavern 5 (free finish)")
+	_check(not _notes.has(EconomyScript.ROLLBACK_TEXT) and Economy.building_level("archery") == 7, "(up) server accepted the free finish", "")
+	await _diff("(up) archery 5 (free finish)")
 	await _request("/v1/test/build_now", {})
 	await _settle()
 	await _diff("(up) houses done")

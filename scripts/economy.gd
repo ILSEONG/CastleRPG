@@ -1016,7 +1016,7 @@ static func upgrade_block_for(id: String, lv: Dictionary, build_id: String, have
 	if id != GameData.KEEP and level + 1 > maxi(1, int(lv.get(GameData.KEEP, 1))):
 		return "keep_cap"
 	for c in GameData.BUILDING_REQ_COLS:
-		if d[c] != "" and int(lv.get(d[c], 1)) < level:  # 공터(튜토리얼)는 0
+		if d[c] != "" and int(lv.get(d[c], 1)) < req_need(d[c], level):  # 공터(튜토리얼)는 0
 			return "prereq"
 	if build_id != "":
 		return "in_progress" if build_id == id else "builder_busy"
@@ -1025,6 +1025,18 @@ static func upgrade_block_for(id: String, lv: Dictionary, build_id: String, have
 		if int(have.get(r, 0)) < int(cost[r]):
 			return "not_enough"
 	return ""
+
+
+## 선행 건물 req에 필요한 레벨: 보통 목표 − 1, 레벨이 없는 건물(max_level 1, 주점 — 사용자 2026-10-18)은 지어 두기만(1). 서버 upgradeBlock과 같다.
+static func req_need(req: String, want: int) -> int:
+	var d := GameData.building_def(req)
+	return mini(want, int(d.max_level)) if not d.is_empty() else want
+
+
+## 레벨이 없는 건물(max_level 1 — 주점): 건물 창·목록에 "Lv"를 쓰지 않고 업그레이드도 없다.
+static func no_levels(id: String) -> bool:
+	var d := GameData.building_def(id)
+	return not d.is_empty() and int(d.max_level) <= 1
 
 
 func building_level(id: String) -> int:
@@ -1953,7 +1965,8 @@ func requirements(id: String) -> Array:
 		out.append({"id": GameData.KEEP, "need": to, "have": building_level(GameData.KEEP), "ok": building_level(GameData.KEEP) >= to})
 	for c in GameData.BUILDING_REQ_COLS:
 		if d[c] != "":
-			out.append({"id": d[c], "need": to - 1, "have": shown_level(d[c]), "ok": shown_level(d[c]) >= to - 1})
+			var need := req_need(d[c], to - 1)
+			out.append({"id": d[c], "need": need, "have": shown_level(d[c]), "ok": shown_level(d[c]) >= need})
 	return out
 
 

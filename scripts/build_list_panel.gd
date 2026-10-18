@@ -293,7 +293,7 @@ func _refresh() -> void:
 		var color := UiKit.AMBER
 		var cost_sig := ""  # 비용 칸 지문 — 바뀔 때만 다시 만든다(처치마다 다시 만들어 끌던 카드 줄이 깜빡였다, 2026-10-14)
 		if Economy.is_built(id):
-			r.status.text = "Lv %d" % Economy.building_level(id)
+			r.status.text = "" if Economy.no_levels(id) else "Lv %d" % Economy.building_level(id)  # 주점은 레벨이 없다(2026-10-18)
 			r.action_label.text = MOVE_TEXT
 			color = UiKit.STEEL
 		elif Economy.is_placed(id):

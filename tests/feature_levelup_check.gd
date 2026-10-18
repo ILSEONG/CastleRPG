@@ -55,7 +55,7 @@ func _run(bwin, rw, rec, dw) -> void:
 		Economy.unbuilt.erase(id)
 		Economy.levels[id] = 3
 	Economy.changed.emit()
-	var cases := [[GameData.LAB, rw, "research_button"], [GameData.TAVERN, rec, "recruit_button"], [GameData.DISPATCH, dw, "dispatch_button"]]
+	var cases := [[GameData.LAB, rw, "research_button"], [GameData.DISPATCH, dw, "dispatch_button"]]  # 주점은 레벨이 없다(아래)
 	for c in cases:
 		var id: String = c[0]
 		var win = c[1]
@@ -75,6 +75,38 @@ func _run(bwin, rw, rec, dw) -> void:
 		_check(back.visible, "%s building window has its feature button back (%s)" % [id, back.text], "")
 		bwin.close()
 		await _frames(3)
+	# 사용자 2026-10-18 "주점 레벨 없애": 주점은 레벨이 없는 건물 — 모집 창에 레벨 버튼이 없고, 건물 창은 이름만·[업그레이드]·비용·시간·"최대 레벨" 없이
+	# [영웅 모집]만, 옛 계정의 주점 레벨(여기선 3)은 무시. 주점을 선행으로 둔 길드 회관·파견소는 "✓ 주점 필요"(지어 두기만 하면 된다).
+	rec.open()
+	await _frames(3)
+	_check(rec.get("level_button") == null, "recruit window has no tavern level button", "")
+	await _shot("tavern_window")
+	rec.close()
+	bwin.open_building(GameData.TAVERN)
+	await _frames(3)
+	await _shot("tavern_building")
+	_check(bwin.title_label.text == "주점" and not bwin.upgrade_button.visible and not bwin.time_label.visible and not bwin._cost_row.visible
+		and not bwin.reason_label.visible and bwin.recruit_button.visible and bwin.effects.get_child_count() == 0,
+		"tavern building window: just 주점, no [업그레이드]/cost/time/max-level line, [영웅 모집] stays",
+		"title=%s up=%s time=%s reason=%s(%s) effects=%d" % [bwin.title_label.text, bwin.upgrade_button.visible, bwin.time_label.visible, bwin.reason_label.visible, bwin.reason_label.text, bwin.effects.get_child_count()])
+	_check(Economy.upgrade_block(GameData.TAVERN, Economy.time_now()) == "max_level", "the tavern cannot be upgraded (max_level)", Economy.upgrade_block(GameData.TAVERN, Economy.time_now()))
+	bwin.close()
+	await _frames(3)
+	Economy.levels[GameData.TAVERN] = 1
+	Economy.levels[GameData.KEEP] = 20
+	Economy.levels[GameData.DISPATCH] = 10
+	var req: Array = Economy.requirements(GameData.DISPATCH).filter(func(r): return r.id == GameData.TAVERN)
+	_check(req.size() == 1 and int(req[0].need) == 1 and req[0].ok, "파견소 Lv 10 → 11 only needs the tavern built", str(req))
+	_check(Economy.upgrade_block_for(GameData.DISPATCH, {"keep": 20, "dispatch": 10, "tavern": 1}, "", {"wood": 1e12, "stone": 1e12, "food": 1e12}) == "",
+		"upgrade_block_for passes the tavern prereq with tavern 1", "")
+	bwin.open_building(GameData.DISPATCH)
+	await _frames(3)
+	var lines: Array = bwin.reqs.get_children().map(func(n): return n.text)
+	_check(lines.has("✓ 주점 필요"), "파견소 window shows ✓ 주점 필요", str(lines))
+	bwin.close()
+	await _frames(3)
+	Economy.levels[GameData.KEEP] = 1
+	Economy.levels[GameData.DISPATCH] = 3
 	# 사용자 2026-10-18 "무료 레벨업이 되는 상황(5분 이내)인데 가속 버튼이 잠깐 나왔다가 버튼이 바뀌는 상황이 너무 많아":
 	# 남은 5분 이하 건설은 서버 응답을 기다리는 동안에도 [무료 즉시 완료]가 그대로(꺼짐만), [가속]으로 바뀌지 않는다.
 	var now := Economy.time_now()

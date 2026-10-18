@@ -96,12 +96,24 @@ test('검사 순서(rules.upgradeBlock): 존재 → 최대 레벨 → 성채 상
   assert.equal(R.upgradeBlock('farm', d, lv({ farm: 30, keep: 30 }), true, none), 'max_level') // 최대 레벨이 먼저
   assert.equal(R.upgradeBlock('lumber', d, lv({}), true, none), 'keep_cap') // 목표 2 > 성채 1
   assert.equal(R.upgradeBlock('keep', d, lv({ keep: 3, gate: 1, barracks: 3 }), true, none), 'prereq') // 성채 4: 성문 ≥ 3 필요
-  assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 2 }), true, none), 'prereq') // 주점 4: 막사 ≥ 3
-  assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 3 }), true, none), 'builder_busy')
-  assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 3 }), false, none), 'not_enough')
-  assert.equal(R.upgradeBlock('tavern', d, lv({ keep: 5, tavern: 3, barracks: 3 }), false, R.buildCost(d.find((x) => x.id === 'tavern') as R.BuildingDef, 3)), '')
+  assert.equal(R.upgradeBlock('archery', d, lv({ keep: 5, archery: 3, barracks: 2 }), true, none), 'prereq') // 궁병 훈련소 4: 막사 ≥ 3
+  assert.equal(R.upgradeBlock('archery', d, lv({ keep: 5, archery: 3, barracks: 3 }), true, none), 'builder_busy')
+  assert.equal(R.upgradeBlock('archery', d, lv({ keep: 5, archery: 3, barracks: 3 }), false, none), 'not_enough')
+  assert.equal(R.upgradeBlock('archery', d, lv({ keep: 5, archery: 3, barracks: 3 }), false, R.buildCost(d.find((x) => x.id === 'archery') as R.BuildingDef, 3)), '')
   assert.equal(R.upgradeBlock('keep', d, lv({}), false, { wood: 375, stone: 0, food: 374 }), 'not_enough')
   assert.equal(R.upgradeBlock('keep', d, lv({}), false, { wood: 375, stone: 0, food: 375 }), '') // 성채 1 → 2: 성문·막사 ≥ 1
+})
+
+test('주점은 레벨이 없다(사용자 2026-10-18 "주점 레벨 없애"): 업그레이드는 max_level, 주점을 선행으로 둔 건물은 주점 1이면 된다', async () => {
+  const d = await defs()
+  const HUGE = { wood: 1e12, stone: 1e12, food: 1e12 }
+  assert.equal(d.find((x) => x.id === 'tavern')?.max_level, 1)
+  const lv = (o: Record<string, number>) => ({ keep: 20, gate: 1, barracks: 1, tavern: 1, lab: 1, houses: 1, lumber: 1, quarry: 1, farm: 1, ...o })
+  assert.equal(R.upgradeBlock('tavern', d, lv({}), false, HUGE), 'max_level')
+  assert.equal(R.upgradeBlock('tavern', d, lv({ tavern: 7 }), false, HUGE), 'max_level') // 옛 계정의 레벨은 무시
+  assert.equal(R.upgradeBlock('dispatch', d, lv({ dispatch: 15 }), false, HUGE), '') // 파견소 16: 주점은 지어 두기만
+  assert.equal(R.upgradeBlock('guild_hall', d, lv({ guild_hall: 15 }), false, HUGE), '')
+  assert.equal(R.upgradeBlock('lab', d, lv({ lab: 15, houses: 14 }), false, HUGE), 'prereq') // 다른 선행은 그대로 T−1
 })
 
 test('새 플레이어: 모든 건물 레벨 1·일꾼 없음. 업그레이드 → 자원 차감·일꾼(서버 시각 + 시간)·로그, 중복은 409 builder_busy, 응답 build', async () => {
@@ -188,16 +200,16 @@ test('자원 건물 업그레이드: 먼저 자동 수집(남은 초 유지)하�
   assert.deepEqual((await player(token)).res, { wood: 0, stone: 0, food: 0 })
 })
 
-test('선행·상한·최대 레벨: 주점 4는 막사 ≥ 3, 성채 4는 성문·막사 ≥ 3, 최대 레벨이면 409 max_level', async () => {
+test('선행·상한·최대 레벨: 궁병 훈련소 4는 막사 ≥ 3, 성채 4는 성문·막사 ≥ 3, 최대 레벨이면 409 max_level', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await setRes(id, RICH)
-  await setLevels(id, { keep: 5, tavern: 3, barracks: 2 })
-  assert.equal((await upgrade(token, 'tavern')).json.error, 'prereq')
+  await setLevels(id, { keep: 5, archery: 3, barracks: 2 })
+  assert.equal((await upgrade(token, 'archery')).json.error, 'prereq')
   await setLevels(id, { barracks: 3 })
-  assert.equal((await upgrade(token, 'tavern')).status, 200)
+  assert.equal((await upgrade(token, 'archery')).status, 200)
   S.clock.t += 10_000
-  assert.equal((await player(token)).buildings.tavern.level, 4)
+  assert.equal((await player(token)).buildings.archery.level, 4)
   await setLevels(id, { keep: 3, gate: 3, barracks: 2 })
   assert.equal((await upgrade(token, 'keep')).json.error, 'prereq')
   await setLevels(id, { farm: 30, keep: 30 })
@@ -342,7 +354,7 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
   const bld = readFileSync(join(DATA_DIR, 'buildings.csv'), 'utf8')
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8')
   const cases: [string, string, RegExp][] = [
-    ['buildings.csv', bld.replace('tavern,주점,30,375,0,375,13,barracks,', 'tavern,주점,30,375,0,375,13,mine,'), /buildings\.csv line 5 column 'req1': unknown building 'mine'/],
+    ['buildings.csv', bld.replace('tavern,주점,1,375,0,375,13,barracks,', 'tavern,주점,1,375,0,375,13,mine,'), /buildings\.csv line 5 column 'req1': unknown building 'mine'/],
     ['buildings.csv', bld.replace('lab,연구소,30,450,0,300,', 'lab,연구소,30,-450,0,300,'), /buildings\.csv line 6 column 'wood': must be 0 or more: -450/],
     ['buildings.csv', bld.replace('lab,연구소,30,450,0,300,', 'lab,연구소,30,450.5,0,300,'), /column 'wood': not an integer: '450\.5'/],
     ['buildings.csv', bld.replace('houses,민가,30,375,0,375,20,', 'houses,민가,30,375,0,375,0,'), /line 7 column 'base_sec': must be greater than 0: 0/],

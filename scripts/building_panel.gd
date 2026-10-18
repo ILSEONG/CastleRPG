@@ -267,12 +267,14 @@ func _refresh() -> void:
 	var maxed := lv >= int(d.max_level)
 	var building: bool = Economy.is_building(id)
 	var lot := not Economy.is_built(id)  # 튜토리얼 공터: 짓기(0 → 1)
-	title_label.text = Lang.t("building_panel.refresh") % GameData.building_name(id) if lot else "%s Lv %d" % [GameData.building_name(id), lv]
+	var flat := Economy.no_levels(id)  # 레벨이 없는 건물(주점, 사용자 2026-10-18 "주점 레벨 없애") — 이름만, 업그레이드 없음
+	title_label.text = Lang.t("building_panel.refresh") % GameData.building_name(id) if lot else GameData.building_name(id) if flat else "%s Lv %d" % [GameData.building_name(id), lv]
 	desc_label.text = DESC.get(GameData.type_of(id), "")
 	research_button.visible = id == GameData.LAB and not lot
 	dispatch_button.visible = GameData.type_of(id) == GameData.DISPATCH and not lot
 	recruit_button.visible = id == GameData.TAVERN and not lot and recruit != null
 	upgrade_button.text = BUILD_TEXT if lot else UPGRADE_TEXT
+	upgrade_button.visible = lot or not flat
 	_clear(effects)
 	for row in (effect_lines(id, 1) if lot else []):
 		effects.add_child(_label(Lang.t("building_panel.refresh_2") % [row[0], row[1]], 28, GREEN))
@@ -288,7 +290,8 @@ func _refresh() -> void:
 	var rq := Economy.requirements(id)
 	for r in rq:
 		var bname: String = GameData.building_name(r.id)
-		var text := Lang.t("building_panel.refresh.text") % ["✓" if r.ok else "✗", bname, int(r.need)]
+		var text := (Lang.t("building_panel.refresh.text_built") % ["✓" if r.ok else "✗", bname]) if Economy.no_levels(str(r.id)) \
+			else Lang.t("building_panel.refresh.text") % ["✓" if r.ok else "✗", bname, int(r.need)]
 		reqs.add_child(_label(text, 26, GREEN) if r.ok else _req_link(text + "  ›", str(r.id)))
 	_reqs_title.visible = not rq.is_empty()
 	var cost := Economy.upgrade_cost(id)
@@ -324,7 +327,7 @@ func _refresh() -> void:
 	builder_label.text = (Lang.t("building_panel.refresh_6") % UiKit.duration(Economy.builder2_until - now)) if Economy.builder2_active(now) else ""
 	builder_label.visible = builder_label.text != ""
 	reason_label.text = reason
-	reason_label.visible = reason != "" and why != "in_progress"  # 짓는 중은 진행 막대가 말한다
+	reason_label.visible = reason != "" and why != "in_progress" and not (flat and not lot)  # 짓는 중은 진행 막대가 말한다 · 레벨 없는 건물은 "최대 레벨"도 안 쓴다
 	upgrade_button.disabled = why != ""
 	_refresh_training("" if lot else GameData.soldier_of_building(id))
 	_fit()

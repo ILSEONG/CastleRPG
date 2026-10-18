@@ -183,7 +183,6 @@ func _build_world() -> void:
 	building_panel.research = research_panel
 	research_panel.building_panel = building_panel  # [연구소 레벨업 ›](사용자 2026-10-14)
 	building_panel.recruit = recruit
-	recruit.building_panel = building_panel
 	var dispatch_panel = preload("res://scripts/dispatch_panel.gd").new()  # 파견소 창(2026-10-13): 파견소 건물 창 [의뢰 보기]
 	add_child(dispatch_panel)
 	building_panel.dispatch = dispatch_panel
