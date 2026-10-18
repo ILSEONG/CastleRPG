@@ -26,6 +26,7 @@ func _ready() -> void:
 		if a.begins_with("--out="):
 			_out = a.substr(6)
 	Economy.save_path = ""
+	Director.save_path = ""
 	Fever.save_path = ""
 	Economy.reset(Time.get_unix_time_from_system())
 	_main = preload("res://scenes/main.tscn").instantiate()
@@ -38,18 +39,39 @@ func _ready() -> void:
 		elif p == "res://scripts/camera_rig.gd":
 			_rig = c
 	_check(_dir != null, "goblin director is in the castle world", "")
-	_check(Director.next_at - Time.get_ticks_msec() / 1000.0 >= Director.INTERVAL.x - 60.0 or OS.get_cmdline_user_args().has("--goblin-now"),
-		"first goblin waits 5–10 min", "%.0f s" % (Director.next_at - Time.get_ticks_msec() / 1000.0))
+	_check(Director.left >= Director.INTERVAL.x - 60.0 or OS.get_cmdline_user_args().has("--goblin-now"),
+		"first goblin waits 5–10 min", "%.0f s" % Director.left)
 	if _fails > 0:
 		return _finish()
 	if OS.get_cmdline_user_args().has("--movie"):
 		await _movie()
 		get_tree().quit()
 		return
+	# 플레이 시간만 센다: 배속 ×2여도 실제 초로 줄고, 앱이 포커스를 잃으면 멈춘다
+	var l0 := Director.left
+	var t0 := Time.get_ticks_msec()
+	Engine.time_scale = 2.0
+	await _wait(1.0)
+	Engine.time_scale = 1.0
+	var real := (Time.get_ticks_msec() - t0) / 1000.0
+	_check(absf((l0 - Director.left) - real) < 0.3, "countdown uses real play seconds (x2 speed doesn't speed it up)", "%.2f vs %.2f" % [l0 - Director.left, real])
+	_dir.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	var l1 := Director.left
+	await _wait(1.0)
+	_check(Director.left == l1, "paused while the app is in the background", "%.2f -> %.2f" % [l1, Director.left])
+	_dir.notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	await _wait(0.5)
+	_check(Director.left < l1, "resumes counting when back", "")
+	# 성 화면이 아닐 때(던전 등 — 감독이 트리 밖) 멈춘다
+	var parent: Node = _dir.get_parent()
+	parent.remove_child(_dir)
+	var l2 := Director.left
+	await _wait(1.0)
+	_check(Director.left == l2, "paused while off the castle map", "")
+	parent.add_child(_dir)
 	var g = _dir.spawn()
 	if _rig != null:
 		_rig.zoom_by(0.45)
-	_check(Director.next_at - Time.get_ticks_msec() / 1000.0 >= Director.INTERVAL.x - 1.0, "next goblin 5–10 min after this one", "")
 	await _frames(5)
 	_check(g.is_in_group("monsters") and g.is_alive(), "goblin is a target for heroes", "")
 	var heroes := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
@@ -95,7 +117,7 @@ func _ready() -> void:
 	await _snap("3_caught")
 	_check(Economy.gold_tenths - gold >= want and want > 0, "caught → idle gold 15 min", "%d (want %d)" % [Economy.gold_tenths - gold, want])
 	_check(_dir.goblin == null, "director cleared", "")
-	var wait := Director.next_at - Time.get_ticks_msec() / 1000.0
+	var wait := Director.left
 	_check(wait >= Director.INTERVAL.x - 1.0 and wait <= Director.INTERVAL.y + 1.0, "next goblin 5–10 min after the catch", "%.0f s" % wait)
 	# HP = 그 스테이지 졸개 × 15
 	var g2 = _dir.spawn()
@@ -106,12 +128,12 @@ func _ready() -> void:
 	g2.hp = 1e12
 	var gone := [false]
 	g2.escaped.connect(func(): gone[0] = true)
-	Director.next_at = 0.0  # 등장 시각이 지나도
+	Director.left = 0.0  # 등장 시각이 지나도
 	Engine.time_scale = 4.0
 	await get_tree().create_timer(25.0, true, false, true).timeout  # 게임 시간 100초
 	_check(is_instance_valid(g2) and g2.is_alive() and not gone[0], "still there at 100 s", "")
 	_check(get_tree().get_nodes_in_group("gold_goblin").size() == 1, "no second goblin while one is out", str(get_tree().get_nodes_in_group("gold_goblin").size()))
-	Director.next_at = 1e12
+	Director.left = 1e12
 	await _wait_cond(func(): return is_instance_valid(g2) and g2._leaving, 20.0)
 	var g2_hit := [false]
 	if is_instance_valid(g2):
@@ -123,7 +145,7 @@ func _ready() -> void:
 	Engine.time_scale = 1.0
 	_check(gone[0] and not is_instance_valid(g2), "after 2 min → runs off and escapes", "")
 	_check(not g2_hit[0], "can't be caught once it starts leaving", "")
-	var wait2 := Director.next_at - Time.get_ticks_msec() / 1000.0
+	var wait2 := Director.left
 	_check(wait2 >= Director.INTERVAL.x - 1.0 and wait2 <= Director.INTERVAL.y + 1.0, "next goblin 5–10 min after it escaped", "%.0f s" % wait2)
 	_finish()
 
