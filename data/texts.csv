@@ -111,9 +111,9 @@ building_panel.desc.watchtower,전투 중 성 밖 몬스터에게 화살을 쏩�
 building_panel.desc.dispatch,영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수와 높은 희귀도 확률이 오르고 파견 시간이 줄어듭니다.,,,,scripts/building_panel.gd
 building_panel.ready,선행 조건,,,,scripts/building_panel.gd
 building_panel.ready_2,닫기,,,,scripts/building_panel.gd
-building_panel.levelup_text,%s 레벨업 중 · %s ›,,,,scripts/building_panel.gd
-building_panel.levelup_text_2,%s 정보 (최대 레벨) ›,,,,scripts/building_panel.gd
-building_panel.levelup_text_3,%s 레벨업 Lv %d → %d ›,,,,scripts/building_panel.gd
+building_panel.levelup_text,%s Lv %d · 레벨업 중 %s ›,,,,scripts/building_panel.gd
+building_panel.levelup_text_2,%s Lv %d (최대 레벨) ›,,,,scripts/building_panel.gd
+building_panel.levelup_text_3,%s Lv %d · 레벨업 ›,,,,scripts/building_panel.gd
 building_panel.refresh,%s · 공터,,,,scripts/building_panel.gd
 building_panel.refresh_2,지으면 %s %s,,,,scripts/building_panel.gd
 building_panel.refresh.text,%s %s Lv %d 필요,,,,scripts/building_panel.gd

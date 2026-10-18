@@ -227,15 +227,15 @@ func open_recruit() -> void:
 
 
 ## 기능 창(연구·모집·파견소)에서 건물 창으로 가는 버튼 글자(사용자 2026-10-14 "연구소 레벨업은 어떻게 해?").
-## 건설 중이면 남은 시간, 최대 레벨이면 "정보", 아니면 "Lv n → n+1 레벨업".
+## 지금 레벨을 앞에 쓴다: "주점 Lv 3 · 레벨업 ›", 건설 중이면 "· 레벨업 중 남은 시간", 최대면 "(최대 레벨)".
 static func levelup_text(id: String) -> String:
 	var name := GameData.building_name(id)
 	var lv := Economy.building_level(id)
 	if Economy.is_building(id):
-		return Lang.t("building_panel.levelup_text") % [name, UiKit.duration(Economy.build_left(Economy.time_now(), id))]
+		return Lang.t("building_panel.levelup_text") % [name, lv, UiKit.duration(Economy.build_left(Economy.time_now(), id))]
 	if lv >= int(GameData.building_def(id).get("max_level", 0)):
-		return Lang.t("building_panel.levelup_text_2") % name
-	return Lang.t("building_panel.levelup_text_3") % [name, lv, lv + 1]
+		return Lang.t("building_panel.levelup_text_2") % [name, lv]
+	return Lang.t("building_panel.levelup_text_3") % [name, lv]
 
 
 ## 연구소 [연구]: 이 창을 닫고 연구 창을 연다.

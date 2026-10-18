@@ -119,7 +119,7 @@ func _ready() -> void:
 	content.add_child(title_label)
 	speed_label = _label("", 24, GREEN)
 	content.add_child(speed_label)
-	level_button = _button("", UiKit.STEEL, 24)
+	level_button = _button("", UiKit.LEVELUP, 26)
 	level_button.custom_minimum_size = Vector2(0, 60)
 	level_button.pressed.connect(open_building)
 	content.add_child(level_button)

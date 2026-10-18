@@ -1578,7 +1578,7 @@ func _research_ui(tabs, hud) -> void:
 		"title=%s speed=%s idle=%s cards=%s tiers=%s need2=%s state=%s" % [rw.title_label.text, rw.speed_label.text, rw.idle_label.visible, rw.cards.keys(), rw.tier_marks.keys(),
 		rw.tier_marks[2].need.text, rw.cards.wood_tech.state.text])
 	# 사용자 2026-10-14 "연구소 레벨업은 어떻게 해?": 연구 창 [연구소 레벨업 ›] → 연구소 건물 창(비용·시간·[업그레이드]) → [연구]로 돌아온다
-	_check(rw.level_button.visible and rw.level_button.text == "연구소 레벨업 Lv 1 → 2 ›", "(RS) research window has [연구소 레벨업 Lv 1 → 2 ›]", "visible=%s text=%s" % [rw.level_button.visible, rw.level_button.text])
+	_check(rw.level_button.visible and rw.level_button.text == "연구소 Lv 1 · 레벨업 ›", "(RS) research window has [연구소 Lv 1 · 레벨업 ›]", "visible=%s text=%s" % [rw.level_button.visible, rw.level_button.text])
 	await _tap(_center(rw.level_button))
 	await _frames(2)
 	_check(bwin.is_open() and not rw.is_open() and bwin.building_id == GameData.LAB and bwin.upgrade_button.visible and bwin.research_button.visible,

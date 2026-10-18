@@ -1,8 +1,8 @@
 extends Node
 ## 기능 창 → 건물 레벨업 체크(사용자 2026-10-14 "연구소 레벨업은 어떻게 해? 지금 연구소 클릭하면 연구만 가능해"):
-## 연구소·주점·파견소는 탭하면 기능 창(연구·모집·의뢰)이 바로 열린다. 그 창마다 [<건물> 레벨업 Lv n → n+1 ›]가 있어
+## 연구소·주점·파견소는 탭하면 기능 창(연구·모집·의뢰)이 바로 열린다. 그 창마다 [<건물> Lv n · 레벨업 ›](2026-10-18: 지금 레벨을 앞에, 나무색 — "주점은 레벨이 없어")가 있어
 ## 누르면 기능 창이 닫히고 그 건물 창(비용·시간·선행 조건·[업그레이드]·[가속])이 열리고, 건물 창의 기능 버튼으로 돌아온다.
-## 건설 중이면 "레벨업 중 · 남은 시간", 최대 레벨이면 "정보 (최대 레벨)". 공터(안 지은 주점·파견소)면 버튼이 없다.
+## 건설 중이면 "· 레벨업 중 남은 시간", 최대 레벨이면 "(최대 레벨)". 공터(안 지은 주점·파견소)면 버튼이 없다.
 ## 실행: godot --headless --path . res://tests/feature_levelup_check.tscn
 ## 화면: xvfb-run -a godot --path . --resolution 720x1280 res://tests/feature_levelup_check.tscn -- --out=/tmp/levelup (창마다 png)
 
@@ -62,7 +62,7 @@ func _run(bwin, rw, rec, dw) -> void:
 		var name := GameData.building_name(id)
 		win.open()
 		await _frames(3)
-		_check(win.level_button.visible and win.level_button.text == "%s 레벨업 Lv 3 → 4 ›" % name, "%s window shows [%s 레벨업 Lv 3 → 4 ›]" % [id, name],
+		_check(win.level_button.visible and win.level_button.text == "%s Lv 3 · 레벨업 ›" % name, "%s window shows [%s Lv 3 · 레벨업 ›]" % [id, name],
 			"visible=%s text=%s" % [win.level_button.visible, win.level_button.text])
 		await _shot("%s_window" % id)
 		win.level_button.pressed.emit()
@@ -76,9 +76,9 @@ func _run(bwin, rw, rec, dw) -> void:
 		bwin.close()
 		await _frames(3)
 	# 건설 중 / 최대 레벨 / 공터
-	_check(bwin.levelup_text(GameData.LAB).begins_with("연구소 레벨업 Lv"), "idle lab text", bwin.levelup_text(GameData.LAB))
+	_check(bwin.levelup_text(GameData.LAB).begins_with("연구소 Lv 3 · 레벨업"), "idle lab text", bwin.levelup_text(GameData.LAB))
 	Economy.levels[GameData.LAB] = int(GameData.building_def(GameData.LAB).max_level)
-	_check(bwin.levelup_text(GameData.LAB) == "연구소 정보 (최대 레벨) ›", "max-level text", bwin.levelup_text(GameData.LAB))
+	_check(bwin.levelup_text(GameData.LAB) == "연구소 Lv %d (최대 레벨) ›" % int(GameData.building_def(GameData.LAB).max_level), "max-level text", bwin.levelup_text(GameData.LAB))
 	Economy.unbuilt[GameData.DISPATCH] = true
 	dw.open()
 	await _frames(3)

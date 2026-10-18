@@ -21,6 +21,7 @@ const CREAM_PANEL := Color(0.984, 0.969, 0.933, 0.78)  # 반투명 크림(HUD �
 const CREAM_DIALOG := Color(0.984, 0.969, 0.933, 0.97)  # 거의 불투명(창)
 const AMBER := Color("F9B233")
 const STEEL := Color("8C9AB0")
+const LEVELUP := Color("B07A3C")  # 기능 창의 [<건물> Lv n · 레벨업 ›] 나무색(2026-10-18: 회색이라 꺼진 버튼처럼 보였다)
 const INK := Color(0.16, 0.18, 0.24)
 const OUTLINE := Color(0.16, 0.18, 0.24, 0.6)  # 카드·보석·이름표 선(박스 외곽선은 LowpolyBox.edge_color)
 const GRADE_COLORS := Art.GRADE_COLORS  # 스펙 §3.1. 값은 Art 한 곳에만 둔다

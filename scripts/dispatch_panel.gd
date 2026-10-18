@@ -71,7 +71,7 @@ func _ready() -> void:
 	head.add_child(title_label)
 	head.add_child(_close_button())
 	content.add_child(head)
-	level_button = _button("", UiKit.STEEL, 22)
+	level_button = _button("", UiKit.LEVELUP, 26)
 	level_button.custom_minimum_size = Vector2(0, 56)
 	level_button.pressed.connect(open_building)
 	content.add_child(level_button)
