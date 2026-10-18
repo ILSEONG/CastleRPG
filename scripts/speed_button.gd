@@ -8,6 +8,8 @@ extends CanvasLayer
 ## 빠르게 하고, 대기(방치)로 돌아오면 켜 둔 채로 1배. 대기(방치) 중에는 버튼을 숨긴다(사용자 2026-10-13 "방치모드일때는 빼줘" —
 ## 자리 계산은 계속해서 채팅 줄·[핫딜]이 따라오는 자리는 그대로).
 ## x2(사용자 2026-10-13 "1.5를 한번더 누르면 2배"): 누를 때마다 x1 → x1.5 → x2 → x1. 설정 "speed_level"(1·1.5·2), 예전 "speed_x15" 켬은 x1.5로 읽는다.
+## 카운트다운은 정배속(사용자 2026-10-18 "카운트다운할때 배속이 걸려있어도 카운트다운은 정배속으로"): 성 화면 연속 진행 카운트다운(GameState
+## COUNTDOWN)과 PVP·길드 드래곤 시작 띠(hold) 동안은 1배, 싸움이 시작되면 고른 배율. 버튼은 그동안에도 고른 단계를 보여 준다.
 ## 건물·훈련·연구·방치 수입·초기화는 실제 시각(Economy.time_now)이라 배속과 무관.
 ## 자리: 왼쪽 아래, 오른쪽 아래 [메뉴] 토글 버튼과 같은 높이(사용자 2026-10-07 "메뉴 버튼과 같은 높이") — 메뉴가 없으면 화면 높이 CENTER_Y 지점.
 ## 단 하단 영웅 초상화 줄·튜토리얼 카드보다 위(매 프레임 맞춘다). 채팅 줄과 [핫딜] 버튼은 이 버튼을 따라온다.
@@ -32,6 +34,8 @@ const OFF_COLOR := Color(0.30, 0.34, 0.46)  # 오른쪽 아래 메뉴 버튼과 
 static var base := 0.0
 static var _live := 0  # 트리에 있는 배속 버튼 수(월드를 다시 만들 때 새 버튼이 먼저 들어와도 끄지 않게)
 static var _idle := false  # 성 화면이 대기(방치) 중 — 이때는 1배
+static var _countdown := false  # 성 화면 다음 스테이지 카운트다운 중 — 1배
+static var _hold := false  # PVP·드래곤 시작 띠(전투 전) — 1배(hold)
 
 var castle := false  # 성 화면 버튼(main): 방치 중엔 1배
 var card  # tutorial_card.gd(있으면 그 위로)
@@ -67,7 +71,13 @@ static func next_level(cur: float) -> float:
 
 ## 지금 배율(버튼이 트리에 있고 방치 중이 아니면 고른 배율).
 static func speed() -> float:
-	return level() if _live > 0 and not _idle else 1.0
+	return level() if _live > 0 and not _idle and not _countdown and not _hold else 1.0
+
+
+## 전투 전 시작 띠 동안 1배로 묶는다(PVP·길드 드래곤). 싸움이 시작되면 hold(false).
+static func hold(on: bool) -> void:
+	_hold = on
+	_apply()
 
 
 static func _apply() -> void:
@@ -108,6 +118,7 @@ func _enter_tree() -> void:
 		var gs := get_node_or_null("/root/GameState")
 		if gs != null:
 			_idle = gs.mode == gs.Mode.IDLE
+			_countdown = gs.mode == gs.Mode.COUNTDOWN
 			if not gs.mode_changed.is_connected(_on_mode):
 				gs.mode_changed.connect(_on_mode)
 	_apply()
@@ -119,6 +130,9 @@ func _exit_tree() -> void:
 	_live -= 1
 	if castle:
 		_idle = false  # 던전·PVP·드래곤은 방치와 상관없다
+		_countdown = false
+	else:
+		_hold = false  # 전투 장면을 떠났다
 	_apply()
 
 
@@ -127,6 +141,7 @@ func _on_mode(mode: int) -> void:
 		return
 	var gs := get_node_or_null("/root/GameState")
 	_idle = gs != null and mode == gs.Mode.IDLE
+	_countdown = gs != null and mode == gs.Mode.COUNTDOWN
 	_apply()
 	_sync_visible()
 
