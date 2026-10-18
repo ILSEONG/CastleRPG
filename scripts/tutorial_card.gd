@@ -4,7 +4,8 @@ extends CanvasLayer
 ## 설명·보상은 늘 보인다(사용자 2026-10-06: 접기 없음). 건물 미션이면 그 건물 이름표 위에 통통 튀는 호박색 화살표를 그린다(tags.stacks).
 ## 버튼 미션(탭·메뉴·HUD·창 안 버튼)이면 그 버튼(Tutorial.point_target) 테두리를 두르고 화살표로 가리킨다. 화살표는 그 버튼과 같은 층에 그려서
 ## 위 층의 창이 덮으면 함께 가려진다.
-## 튜토리얼이 아니면(끝남·건너뜀) 숨는다.
+## 튜토리얼이 아니면(끝남·건너뜀) 숨는다. 스테이지를 미는 동안(스테이지·결과·카운트다운 — main._set_battle_ui와 같은 때)도 카드와
+## 화살표를 숨기고 방치로 돌아오면 다시 보인다(사용자 2026-10-18 "스테이지 밀때는 가이드 안보이게해줘"). 미션 진행은 그동안에도 센다.
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -89,7 +90,7 @@ func _ready() -> void:
 	action_button.pressed.connect(_on_action)
 	row.add_child(action_button)
 	Tutorial.changed.connect(_refresh)
-	GameState.mode_changed.connect(func(_m): _refresh())  # 전투 미션 버튼(▶ 진행)은 전투 중엔 숨긴다
+	GameState.mode_changed.connect(func(_m): _refresh())  # 스테이지를 미는 동안은 카드·화살표를 숨긴다
 	_refresh()
 
 
@@ -104,8 +105,8 @@ func _label(size: int, color: Color) -> Label:
 
 func _refresh() -> void:
 	var m: Dictionary = Tutorial.mission()
-	panel.visible = not m.is_empty()
-	if m.is_empty():
+	panel.visible = not m.is_empty() and GameState.mode == GameState.Mode.IDLE
+	if not panel.visible:
 		_arrow.queue_redraw()
 		return
 	var done: bool = Tutorial.complete()
