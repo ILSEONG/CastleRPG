@@ -263,6 +263,7 @@ var tours_seen := {}  # 본 포커스 설명 id → true(guide_tours.gd — 다�
 var tour_node: Node = null  # 지금 떠 있는 포커스 설명(guide_tour.gd)
 var tours_on := false  # 실제 게임(_start)만 켠다 — 테스트 장면·개발 실행은 설명이 입력을 막지 않게 끈다
 var _tour_cd := 0.0
+const LOADING_GROUP := "loading_screen"  # preloader.gd GROUP — 첫 로딩 화면이 덮고 있다
 const MENU_ITEMS := ["settings", "bag", "mission", "ranking", "friend", "event", "guild", "exchange", "mail"]  # 오른쪽 아래 메뉴 항목(하단 탭이 아님)
 var state := "skipped"  # active | done | skipped
 var step := 0  # 지금 미션 번호(0부터)
@@ -439,6 +440,8 @@ func _process(delta: float) -> void:
 ## 지금 미션의 포커스 설명 중 아직 안 본 것이 띄울 때가 되었으면 띄운다(표 순서로 먼저 된 것 하나씩).
 func _check_tours() -> void:
 	if not tours_on or not active() or repeating() or is_instance_valid(tour_node) or not is_inside_tree():
+		return
+	if get_tree().get_first_node_in_group(LOADING_GROUP) != null:  # 첫 로딩 화면이 걷힌 뒤에(사용자 2026-10-18 "이게 게임 로딩창일때부터 떠")
 		return
 	for tid in GuideTours.MISSION_TOURS.get(str(mission().get("id", "")), []):
 		if tours_seen.has(tid):

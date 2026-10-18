@@ -28,6 +28,8 @@ const SummonScript := preload("res://scripts/summon.gd")
 
 signal finished
 
+const GROUP := "loading_screen"  # 덮고 있는 동안(걷혀 지워질 때까지) — 가이드 포커스 설명은 이 화면이 없을 때만 뜬다
+
 const SPLASH := preload("res://assets/ui/splash.png")
 const ROOT := "res://assets"
 const EXTS := ["glb", "gltf", "png", "jpg", "webp", "otf", "ttf", "ogg", "wav", "mp3"]
@@ -290,6 +292,7 @@ func _finish(instant: bool) -> void:
 
 
 func _build_ui() -> void:
+	add_to_group(GROUP)
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_STOP  # 다 될 때까지 뒤 화면 입력을 막는다
