@@ -1,11 +1,14 @@
 extends Node2D
 ## 월드 이름표(개정 15 다듬기): 건물 "이름 Lv N"·상인 "상인"을 Label3D 대신 화면 공간에서 한 번에 그린다
 ## (hp_bars·badges 방식 — 줌·회전과 무관하게 글자 NAME_SIZE 논리 px). 태그 = 로우폴리 알약(크림 8각 면 분할, 건물은 오른쪽에 짙은 "Lv N" 칸).
-## 자리: 기준점(anchor — 지붕·머리·문루 위 월드 좌표)의 화면 위치 바로 위. 태그 위에는 badges.gd의 건설 막대·말풍선이 쌓인다 —
+## 자리: 기준점(anchor — 지붕·머리·문루 위 월드 좌표)의 화면 위치 바로 위. 태그 위에는 badges.gd의 말풍선·건설 막대가 쌓인다 —
 ## 태그와 한 덩어리(stack, 크기는 badges.stack_size)로 놓고, badges는 top(id)(태그 윗변 가운데)에서 그린다.
 ## 매 프레임 겹침 피하기(place, 욕심쟁이 한 번): 기준점이 화면 아래인 덩어리부터 놓고, 이미 놓은 덩어리와 GAP보다 가까우면 그 위로 민다.
 ## 밀려 올라간 덩어리도 건물까지 잇는 선(지시선)은 긋지 않는다.
-## 많이 축소하면(카메라 폭 > NAMES_HIDE_SIZE) 이름표는 그리지 않는다(자리도 차지하지 않는다) — 막대·말풍선만 기준점 위에 남는다.
+## 말풍선이 뜬 건물의 덩어리는 고정(pinned, 사용자 2026-10-18 "말풍선 위치 안바뀌게해" — 라이즈 오브 킹덤즈·로드 모바일·화이트아웃 서바이벌처럼
+## 수집 아이콘은 늘 제 건물 위 같은 자리): 밀지도, 화면 끝에서 당기지도 않고 기준점 바로 위에 둔다 — 다른 덩어리가 피해 간다.
+## 많이 축소하면(카메라 폭 > NAMES_HIDE_SIZE) 이름표는 그리지 않는다(자리도 차지하지 않는다) — 막대만 기준점 위에 남는다.
+## 말풍선이 뜬 건물은 숨긴 이름표 자리를 비워 둬 말풍선이 같은 높이에 남는다.
 ## 그리기 호출 상한: 알약 삼각형 전부 canvas_item_add_triangle_array 한 번 + 외곽선 draw_multiline 한 번 +
 ## 태그마다 글자 ≤ 2(태그 ≤ MAX_TAGS). layout()은 프레임마다 한 번만 계산한다(badges가 먼저 불러도 같은 결과).
 
@@ -46,7 +49,8 @@ var rects := {}  # id → 이번 프레임 태그 알약 Rect2(화면 밖이면 
 var stacks := {}  # id → 이번 프레임 덩어리 Rect2(태그 + 위에 쌓인 것)
 var desired := {}  # id → 겹침 피하기 전 덩어리 Rect2(테스트용)
 var draw_calls := 0  # 지난 그리기의 그리기 호출 수(테스트용)
-var names_hidden := false  # 이번 프레임 많이 축소해 이름표를 숨겼다 — 막대·말풍선은 기준점 바로 위에 그대로 쌓인다
+var names_hidden := false  # 이번 프레임 많이 축소해 이름표를 숨겼다 — 막대는 기준점 바로 위, 말풍선은 이름표 자리 위 그대로
+var pinned := {}  # id → true: 이번 프레임 말풍선이 떠서 고정한 덩어리(밀기·화면 끝 당기기 없음)
 
 var _frame := -1
 
@@ -152,11 +156,13 @@ func layout(force := false) -> void:
 	rects.clear()
 	stacks.clear()
 	desired.clear()
+	pinned.clear()
 	var view := get_viewport_rect().grow(SCREEN_MARGIN)
 	var now := Economy.time_now()
 	names_hidden = camera.size > NAMES_HIDE_SIZE
-	var shown := []  # [태그, 기준점 화면 위치]
+	var shown := []  # [태그, 기준점 화면 위치, 이름표 자리 높이]
 	var want := []
+	var pins := []
 	for t in tags:
 		if shown.size() >= MAX_TAGS:
 			break
@@ -166,29 +172,33 @@ func layout(force := false) -> void:
 		if not view.has_point(p):
 			continue
 		var extra: Vector2 = badges.stack_size(t.id, now) if badges != null else Vector2.ZERO
-		var tsz: Vector2 = Vector2.ZERO if names_hidden else t.size  # 숨기면 이름표 자리 없이 막대·말풍선만
-		var w := maxf(tsz.x, extra.x)
-		var h: float = tsz.y + extra.y
+		var pin: bool = badges != null and badges.bubble_on(t.id, now)
+		var tag_h: float = t.size.y if not names_hidden or pin else 0.0  # 숨기면 이름표 자리 없이 막대만 — 말풍선이 뜬 건물은 자리를 비워 둔다
+		var w := maxf(0.0 if names_hidden else t.size.x, extra.x)
+		var h: float = tag_h + extra.y
 		want.append(Rect2(p.x - w / 2.0, p.y - h, w, h))
-		shown.append([t, p])
-	var placed := place(_inside(want, shown.map(func(e): return e[1].x)))
+		pins.append(pin)
+		shown.append([t, p, tag_h])
+	var placed := place(_inside(want, shown.map(func(e): return e[1].x), pins), GAP, pins)
 	for i in shown.size():
 		var t: Dictionary = shown[i][0]
 		var s: Rect2 = placed[i]
 		desired[t.id] = want[i]
 		stacks[t.id] = s
+		if pins[i]:
+			pinned[t.id] = true
 		var tsz: Vector2 = Vector2.ZERO if names_hidden else t.size
-		rects[t.id] = Rect2(Vector2(s.get_center().x - tsz.x / 2.0, s.end.y - tsz.y), tsz)
+		rects[t.id] = Rect2(Vector2(s.get_center().x - tsz.x / 2.0, s.end.y - shown[i][2]), tsz)  # 숨긴 이름표도 윗변은 비워 둔 자리 위(top)
 
 
 ## 기준점이 화면 안인 덩어리가 화면 좌우 끝에 잘리면 EDGE_PAD만큼 안으로 민다(디자인 보강 7번 — "궁병 훈련소"가 오른쪽에서 잘렸다).
-## 기준점이 화면 밖인 덩어리는 그대로 두어 자연스럽게 밀려 나간다. desired는 밀기 전 자리 그대로다.
-func _inside(want: Array, xs: Array) -> Array:
+## 기준점이 화면 밖인 덩어리, 고정한 덩어리(pins — 말풍선)는 그대로 둔다. desired는 밀기 전 자리 그대로다.
+func _inside(want: Array, xs: Array, pins := []) -> Array:
 	var vw := get_viewport_rect().size.x
 	var out := []
 	for i in want.size():
 		var r: Rect2 = want[i]
-		if xs[i] >= 0.0 and xs[i] <= vw and r.size.x < vw - EDGE_PAD * 2.0:
+		if xs[i] >= 0.0 and xs[i] <= vw and r.size.x < vw - EDGE_PAD * 2.0 and not (i < pins.size() and pins[i]):
 			r.position.x = clampf(r.position.x, EDGE_PAD, vw - EDGE_PAD - r.size.x)
 		out.append(r)
 	return out
@@ -196,14 +206,21 @@ func _inside(want: Array, xs: Array) -> Array:
 
 ## 욕심쟁이 겹침 피하기(순수 함수). want[i] = 덩어리 i가 가고 싶은 화면 상자(아랫변 = 기준점). 아랫변이 화면 아래인 것부터 놓고,
 ## 놓은 상자와 gap보다 가까우면 그 위로 민다(위로만 움직여 반드시 끝난다). 반환 = 같은 순서의 최종 상자.
+## pins[i]가 참인 상자(말풍선이 뜬 덩어리)는 먼저 제자리에 놓고 움직이지 않는다 — 나머지가 피한다. 고정끼리는 서로 밀지 않는다.
 ## (개정 21: 방치 모드에 병사 대열이 없어 병사 장애물은 뺐다.)
-static func place(want: Array, gap := GAP) -> Array:
+static func place(want: Array, gap := GAP, pins := []) -> Array:
 	var order := range(want.size())
 	order.sort_custom(func(a, b): return want[a].end.y > want[b].end.y or (want[a].end.y == want[b].end.y and want[a].position.x < want[b].position.x))
 	var out := []
 	out.resize(want.size())
 	var placed := []
+	for i in want.size():
+		if i < pins.size() and pins[i]:
+			placed.append(want[i])
+			out[i] = want[i]
 	for i in order:
+		if out[i] != null:
+			continue
 		var r: Rect2 = want[i]
 		for _guard in placed.size() + 1:
 			var hit = null
