@@ -1,6 +1,6 @@
 """Meshy T자세 메시 -> KayKit 뼈대에 입힌 몸 GLB (docs/meshy-assets.md "게임에 넣기").
 
-Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose]
+Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose]
 Needs numpy and Pillow.
 
 Writes a body-only GLB: the KayKit joint hierarchy and skin (same joints, order and
@@ -409,7 +409,7 @@ def main():
     bP, bJ, bW, body_nodes = base_body(g)
     P, uv, idx, texdata, nrm = load_meshy(meshy)
     info0 = {}
-    if arms_down(P) or "--unpose" in sys.argv:
+    if (arms_down(P) and "--no-unpose" not in sys.argv) or "--unpose" in sys.argv:  # --no-unpose: 망토·깃털이 팔 높이 판정을 흐릴 때
         P, nrm, info0 = unpose_arms(P, nrm, bP, bJ, bW, g, idx)
     Q, info = align(P, bP, g)
     info.update(info0)

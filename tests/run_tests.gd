@@ -2915,7 +2915,7 @@ func test_soldier_figures() -> void:
 		var ok: bool = root.get_child_count() == (2 if type == "cavalry" else 1) and root.get_child(0) == m and is_equal_approx(m.scale.x, Art.SOLDIER_SCALE * Art.CHARACTER_SCALE)
 		ok = ok and m._spec == Art.soldier_spec(type, GameData.soldier(type).model) and not m.manual
 		if type == "cavalry":
-			ok = ok and b[1] is MeshInstance3D and is_equal_approx(b[1].scale.x, Art.SOLDIER_SCALE) and is_equal_approx(m.position.y, SoldierBody.RIDER_Y)
+			ok = ok and b[1] is MeshInstance3D and is_equal_approx(b[1].scale.x, Art.SOLDIER_SCALE) and is_equal_approx(m.position.y, SoldierBody.rider_y(m._spec))
 		else:
 			ok = ok and b[1] == null and m.position.y == 0.0
 		check(ok, "SoldierBody.build(%s): the soldier model (gear %s)%s" % [type, Art.SOLDIERS[type].gear, " on a horse" if type == "cavalry" else ""])
@@ -2939,8 +2939,13 @@ func test_soldier_figures() -> void:
 	check(ba[1].mesh == bb[1].mesh and ba[1].mesh != bc[1].mesh and ba[1].mesh != bd[1].mesh and ba[0]._spec == Art.soldier_spec("cavalry", "Knight", 5),
 		"SoldierBody.build(cavalry, tier): same tier + colour share one horse mesh; another colour or tier gets its own")
 	r2.free()
-	check(Art.soldier_body("infantry", 3) == "" or Art.soldier_spec("infantry", "Knight", 3).body == Art.soldier_body("infantry", 3),
-		"soldier_spec(tier) wears that tier's Meshy body when the file exists (KayKit body otherwise)")
+	var bodies_ok := true
+	for type in ["infantry", "archer", "cavalry"]:
+		for t in range(1, 6):
+			var sp: Dictionary = Art.soldier_spec(type, GameData.soldier(type).model, t)
+			bodies_ok = bodies_ok and Art.soldier_body(type, t) != "" and sp.get("body", "") == Art.soldier_body(type, t) and is_equal_approx(sp.body_scale, Art.SOLDIER_BODY_SCALE)
+	check(bodies_ok, "every soldier type x tier 1-5 wears its own Meshy body (assets/models/meshy/soldiers/<type>_t<tier>.glb) at SOLDIER_BODY_SCALE")
+	check(SoldierBody.rider_y(Art.soldier_spec("cavalry", "Knight", 3)) < SoldierBody.RIDER_Y, "a bigger rider body sits lower so its hips stay on the horse's back")
 	check(PortraitsScript.soldier_key("archer", 1) == "soldier:archer" and PortraitsScript.soldier_key("archer", 4) == "soldier:archer:4"
 		and PortraitsScript.soldier_tier("soldier:archer:4") == 4 and PortraitsScript.soldier_tier("soldier:archer") == 1
 		and PortraitsScript.spec_of("soldier:archer:4") == Art.soldier_spec("archer", "Rogue_Hooded", 4) and not PortraitsScript.spec_of("soldier:archer:4").is_empty(),

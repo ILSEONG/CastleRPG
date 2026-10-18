@@ -47,7 +47,7 @@ void fragment() {
 			}
 			float dh = abs(h - team_hue);
 			dh = min(dh, 1.0 - dh);
-			float w = (1.0 - smoothstep(team_width * 0.6, team_width, dh)) * smoothstep(0.22, 0.38, d / max(mx, 0.0001)) * step(0.08, mx);
+			float w = (1.0 - smoothstep(team_width * 0.6, team_width, dh)) * smoothstep(0.28, 0.42, d / max(mx, 0.0001)) * step(0.08, mx);
 			vec3 luma = vec3(0.2126, 0.7152, 0.0722);
 			float k = dot(t.rgb, luma) / max(dot(team_ref.rgb, luma), 0.01);
 			t.rgb = mix(t.rgb, team_color.rgb * clamp(k, 0.0, 1.6), w);

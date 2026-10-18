@@ -21,23 +21,32 @@ func _ready() -> void:
 	sun.shadow_enabled = true
 	add_child(sun)
 	var type := "infantry"
+	var near := 0
+	var outfit := Color(0, 0, 0, 0)
 	var out := "/tmp/tiers.png"
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			out = a.substr(6)
 		elif a.begins_with("--type="):
 			type = a.substr(7)
+		elif a.begins_with("--outfit="):  # 성주 색(파티·대전) 미리보기, 예: --outfit=c0392b
+			outfit = Color(a.substr(9))
+		elif a.begins_with("--near="):  # 한 단계만 가까이(1~5)
+			near = int(a.substr(7))
 	for t in range(1, 6):
 		var p := Node3D.new()
 		p.position = Vector3((t - 3) * GAP, 0, 0)
 		p.rotation.y = deg_to_rad(35)
 		add_child(p)
-		SoldierBody.build(p, type, t)
+		SoldierBody.build(p, type, t, false, outfit)
 	var cam := Camera3D.new()
 	cam.fov = 32
 	cam.position = Vector3(0, 4.2, 10.5) if not OS.get_cmdline_user_args().has("--high") else Vector3(0, 9.0, 8.5)
 	add_child(cam)
 	cam.look_at(Vector3(0, 0.95, 0))
+	if near > 0:
+		cam.position = Vector3((near - 3) * GAP, 1.8, 4.2)
+		cam.look_at(Vector3((near - 3) * GAP, 0.85, 0))
 	for i in 30:
 		await get_tree().process_frame
 	get_viewport().get_texture().get_image().save_png(out)

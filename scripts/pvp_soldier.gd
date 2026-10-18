@@ -101,8 +101,6 @@ func _ready() -> void:
 	_disc = Fx.soldier_disc(Art.SOLDIERS[type].color if team == 0 else Color(0.85, 0.25, 0.2), 0.75 if _horse != null else 0.42)
 	_disc.position.y = 0.02
 	add_child(_disc)
-	if _horse != null:
-		_model.position.y = SoldierBody.RIDER_Y
 	_face(march_dir)
 	_model.play_idle()
 
@@ -128,7 +126,7 @@ func push_mass() -> float:
 
 
 func bar_height() -> float:
-	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE * Art.SOLDIER_SCALE + (SoldierBody.RIDER_Y if _horse != null else 0.0)
+	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE * Art.SOLDIER_SCALE + (_model.position.y if _horse != null else 0.0)
 
 
 func bar_scale() -> float:

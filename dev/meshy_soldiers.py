@@ -2,6 +2,7 @@
 
   python3 dev/meshy_soldiers.py concept <id>...   T자세 컨셉(image-to-image, 참조 = dev/meshy/arteon_concept.png) 시작
   python3 dev/meshy_soldiers.py model <id>...     끝난 컨셉으로 3D 시작 — 컨셉을 눈으로 본 뒤에
+  python3 dev/meshy_soldiers.py redo <id>...      팔이 내려온 결과를 meshy-7로 다시(30 크레딧)
   python3 dev/meshy_soldiers.py poll              상태 갱신, 끝난 것 내려받기(dev/meshy/out/soldiers/<id>/)
   몸 만들기: python3 dev/meshy_fit.py <뼈대> dev/meshy/out/soldiers/<id>/<id>_meshy.glb assets/models/meshy/soldiers/<id>.glb
             (뼈대 = 보병·기병 assets/models/characters/Knight.glb, 궁병 Rogue_Hooded.glb — soldiers.csv model)
@@ -54,11 +55,14 @@ def concept(ids):
         print(k, "concept", t["result"])
 
 
-def model(ids):
+def model(ids, redo=False):
     for k in ids:
         s = ms.load()
-        body = {"input_task_id": s[k]["concept"]["id"], "should_texture": True, "target_formats": ["glb"], "pose_mode": "t-pose",
-                "model_type": "smart-topology", "ai_model": "meshy-t2"}
+        body = {"input_task_id": s[k]["concept"]["id"], "should_texture": True, "target_formats": ["glb"], "pose_mode": "t-pose"}
+        if redo:  # t2가 팔을 내린 A자세로 냈을 때(infantry_t5): meshy-7 + 리메시 4,500(30 크레딧) — 영웅 토르빈과 같은 처방
+            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle", "target_polycount": 4500})
+        else:
+            body.update({"model_type": "smart-topology", "ai_model": "meshy-t2"})
         t = req("POST", "/image-to-3d", body)
         s[k]["model"] = {"id": t["result"], "status": "PENDING", "ai_model": body["ai_model"]}
         ms.save(s)
@@ -66,4 +70,5 @@ def model(ids):
 
 
 if __name__ == "__main__":
-    {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "poll": ms.poll}[sys.argv[1]]()
+    {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "redo": lambda: model(sys.argv[2:], True),
+     "poll": ms.poll}[sys.argv[1]]()

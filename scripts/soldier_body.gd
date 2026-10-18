@@ -9,7 +9,7 @@ const TownKit := preload("res://scripts/town_kit.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 
 const RIDER_HIP := 0.48  # KayKit 기사 엉덩이(다리 뿌리 0.41~0.52) — 말 등에 앉는 높이
-const RIDER_Y := (TownKit.HORSE_BACK - RIDER_HIP) * Art.SOLDIER_SCALE  # 기사 모델 높이 = (말 등 − 엉덩이) × 크기
+const RIDER_Y := (TownKit.HORSE_BACK - RIDER_HIP) * Art.SOLDIER_SCALE  # 기사 모델 높이 = (말 등 − 엉덩이) × 크기(KayKit 몸)
 
 static var _horse_meshes := {}  # [단계, 천 색] → 말 메시(같은 것끼리 같이 쓴다)
 
@@ -41,5 +41,10 @@ static func build(parent: Node3D, type: String, tier := 1, world := false, outfi
 	horse.material_override = Art.lowpoly_vc_material()
 	horse.scale = Vector3.ONE * Art.SOLDIER_SCALE  # 말 길이 ≈ 2.0 m — 기병은 두 줄 건너 선다(Formation.soldier_spots)
 	parent.add_child(horse)
-	model.position.y = RIDER_Y
+	model.position.y = rider_y(spec)
 	return [model, horse]
+
+
+## 스펙의 기사 높이: 몸을 키우면(body_scale — Meshy 병사 몸) 엉덩이도 그만큼 올라가 그만큼 낮춘다.
+static func rider_y(spec: Dictionary) -> float:
+	return (TownKit.HORSE_BACK - RIDER_HIP * float(spec.get("body_scale", 1.0))) * Art.SOLDIER_SCALE

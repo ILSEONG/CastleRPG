@@ -75,6 +75,16 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
   새끼는 crowd_lod면 붐빌 때 자세를 3프레임에 한 번(화면 밖 4), 그림자 끔. 검사: tests/run_tests.gd `test_spider_models`·`test_meshy_enemies`(lich),
   트리 안 동작·사진 `tests/party_models_check.tscn`(-- --shot=FILE).
 
+## 병사 단계별 몸(2026-10-18): 보병·궁병·기병 × 1~5단계 15종
+- 스크립트 `dev/meshy_soldiers.py`(concept → 눈으로 확인 → model → poll). id = `<병종>_t<단계>`. 컨셉 6 + meshy-t2 15 = 21/종.
+  t2가 팔을 내린 A자세로 내면 `redo`(meshy-7 + 리메시 4,500, 30) — infantry_t5가 그랬다.
+- 단계 말: 1 천·가죽 → 2 가죽 갑옷 → 3 사슬 → 4 판금 + 망토 → 5 은빛 판금 정예(라이즈 오브 킹덤즈·로드 모바일처럼 단계마다 다른 병사). 금색 없음.
+- 천은 모든 단계 같은 왕청색으로 그린다: 파티·대전 성주 색은 셰이더 `use_team`이 그 색 띠만 바꾼다(`Art.team_tint`).
+- 몸 만들기: `python3 dev/meshy_fit.py <뼈대> dev/meshy/out/soldiers/<id>/<id>_meshy.glb assets/models/meshy/soldiers/<id>.glb --tex 512`
+  (보병·기병 Knight.glb, 궁병 Rogue_Hooded.glb). 텍스처 512 · 손실 압축(`compress/mode=1`) — 15종 합쳐 약 5MB.
+- 게임: `Art.soldier_spec(type, model, tier)`가 파일이 있으면 입히고 `SOLDIER_BODY_SCALE`(1.1)로 키운다. 기병 말은 코드(`TownKit.horse(tier)`).
+- 미리보기: `tests/soldier_tier_shots.tscn`(`--type= --outfit= --near=`), 성 안 대열 `tests/soldier_tier_world.tscn`.
+
 ## 장신구 아이콘(2026-10-15): 반지·목걸이
 `ring`·`necklace` × 6등급 = `assets/ui/items/<부위>_<등급>.png`(장비 아이콘과 같은 자르기·임포트). Icons.ITEM_KINDS 13종, 벡터 그림도 있다(반지 = 띠 + 보석,
 목걸이 = 고리 사슬 + 매달린 보석). 프롬프트는 장비 틀과 같고 6등급만 "radiant pearl-white platinum"(금을 최고 등급 강조로 쓰지 않는다).

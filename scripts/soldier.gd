@@ -27,7 +27,6 @@ const ARRIVE_EPS := 0.05
 const SWING_SLACK := 0.6  # 근접 타격 순간 대상이 사거리 + 이만큼 안이면 맞는다(영웅과 같다)
 const MUZZLE := Vector3(0, 1.33 * Art.SOLDIER_SCALE, 0)  # 화살이 나가는 높이(모델 1.33 m × 병사 크기)
 const ARROW_SPEED := 30.0
-const RIDER_Y := SoldierBody.RIDER_Y  # 기사 모델 높이(말 등 − 엉덩이) × 병사 크기
 const BOB := 0.06  # 말이 걸을 때 위아래 흔들림(m)
 const BOB_HZ := 2.5
 const HOLD_RADIUS := 6.0  # 자리를 지키는 병사는 자리에서 이만큼 밖으로 쫓지 않는다
@@ -38,6 +37,7 @@ const VANISH_SEC := 0.3
 
 var type := ""
 var tier := 1
+var _rider_y := 0.0  # 말 탄 기사 모델 높이(SoldierBody.rider_y)
 var side := 0  # 원래 면(역할 자리)
 var slot := 0  # 원래 면에서 그 병종의 몇 번째
 var spawn := Vector3.ZERO  # 등장 자리(광장)
@@ -109,6 +109,7 @@ func _ready() -> void:
 	var body := SoldierBody.build(self, type, tier, true)  # 모델(crowd_lod) + 기병이면 말(병사 피규어도 같은 것으로 만든다)
 	_model = body[0]
 	_horse = body[1]
+	_rider_y = _model.position.y  # 말 탄 기사 높이(몸 크기마다 — SoldierBody.rider_y), 말이 없으면 0
 	_disc = Fx.soldier_disc(art.color, 0.75 if _horse != null else 0.42)
 	_disc.position.y = 0.02
 	add_child(_disc)
@@ -224,7 +225,7 @@ func push_mass() -> float:
 
 
 func bar_height() -> float:
-	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE * Art.SOLDIER_SCALE + (RIDER_Y if _horse != null else 0.0)
+	return Art.HEAD_HEIGHT * Art.CHARACTER_SCALE * Art.SOLDIER_SCALE + _rider_y
 
 
 func bar_scale() -> float:
@@ -463,7 +464,7 @@ func _face(dir: Vector3) -> void:
 func _seat(y: float) -> void:
 	if _horse != null:
 		_horse.position.y = y
-		_model.position.y = RIDER_Y + y
+		_model.position.y = _rider_y + y
 
 
 ## 말은 걸을 때 위아래로 흔들린다(애니메이션 자체는 UnitModel.crowd_lod가 돌린다).

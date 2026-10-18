@@ -480,6 +480,7 @@ const SOLDIERS := {
 	"cavalry": {"gear": "1H_Sword", "role": "melee", "color": Color("#4F81BD"), "horse": true},
 }
 const SOLDIER_SCALE := 0.9  # 개정 15: 0.75는 성채 앞 대열이 너무 작아 보였다(격자 0.9 m 간격 그대로)
+const SOLDIER_BODY_SCALE := 1.1  # 단계별 Meshy 몸(2026-10-18): KayKit 큰 머리보다 작아 보여 조금 키운다(0.9 × 1.1 ≈ 영웅 Meshy 몸 크기)
 const SOLDIER_BAR := Color(0.45, 0.78, 0.98)  # 병사 HP 바(하늘색)
 
 
@@ -494,6 +495,7 @@ static func soldier_spec(type: String, model: String, tier := 1) -> Dictionary:
 	var body := soldier_body(type, tier)
 	if body != "":
 		spec.body = body
+		spec.body_scale = SOLDIER_BODY_SCALE
 	return spec
 
 
