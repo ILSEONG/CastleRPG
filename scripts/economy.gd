@@ -2062,7 +2062,13 @@ static func free_finish_ok(left: float) -> bool:
 
 ## 진행 중 건설을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]). id = 그 건물(""이면 1번 일꾼, 쉬면 2번).
 func can_free_build(now: float, id := "") -> bool:
-	return not build_job(id).is_empty() and free_finish_ok(build_left(now, id)) and not _waiting.has("build")
+	return free_build_due(now, id) and not _waiting.has("build")
+
+
+## 남은 시간만 보면 무료 즉시 완료 범위다(서버 응답 대기와 무관). 건물 창은 이걸로 [무료 즉시 완료]를 보이고, 기다리는 동안은 끄기만 한다 —
+## 대기 중에 [가속]으로 바뀌었다가 응답 뒤 다시 [무료 즉시 완료]로 돌아오던 깜빡임(사용자 2026-10-18).
+func free_build_due(now: float, id := "") -> bool:
+	return not build_job(id).is_empty() and free_finish_ok(build_left(now, id))
 
 
 ## 건설 무료 즉시 완료. 오프라인은 끝나는 시각을 지금으로 두고 완료, 온라인은 곧바로 완료로 보이고 /v1/building/finish {building}(once). 했거나 보냈으면 true.
@@ -2117,8 +2123,13 @@ func _on_build_free_failed() -> void:
 
 ## 훈련을 지금 무료로 끝낼 수 있다(건물 창 [즉시 완료]).
 func can_free_train(building_id: String) -> bool:
+	return free_train_due(building_id) and not _waiting.has("collect:" + building_id)
+
+
+## 남은 시간만 보면 훈련 무료 즉시 완료 범위다(free_build_due와 같은 까닭).
+func free_train_due(building_id: String) -> bool:
 	var q := training(building_id)
-	return q.count > 0 and not q.ready and free_finish_ok(float(q.finish) - time_now()) and not _waiting.has("collect:" + building_id)
+	return q.count > 0 and not q.ready and free_finish_ok(float(q.finish) - time_now())
 
 
 ## 훈련 무료 즉시 완료 = 바로 수령. 오프라인은 끝나는 시각을 지금으로 두고 수령, 온라인은 곧바로 받은 것으로 보이고

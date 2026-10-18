@@ -305,7 +305,8 @@ func _refresh() -> void:
 	time_label.text = Lang.t("building_panel.refresh_3") + UiKit.duration(Economy.upgrade_sec(id))
 	time_label.visible = not maxed and not building
 	_progress_box.visible = building
-	free_build_button.visible = building and Economy.can_free_build(now, id)
+	free_build_button.visible = building and Economy.free_build_due(now, id)
+	free_build_button.disabled = not Economy.can_free_build(now, id)  # 서버 응답을 기다리는 동안은 끄기만(버튼이 [가속]으로 바뀌지 않는다)
 	speedup_button.visible = building and not free_build_button.visible
 	speedup_button.text = SPEEDUP_TEXT + (" ▲" if speedups.visible else " ▼")
 	speedups.visible = speedups.visible and speedup_button.visible
@@ -444,7 +445,8 @@ func _refresh_training(type: String) -> void:
 		train_bar.value = Economy.train_progress(id)
 		run_label.text = Lang.t("building_panel.refresh_training") % [tier, nm, q.count, UiKit.clock(left)]
 		done_label.text = Lang.t("building_panel.refresh_training_2") % [tier, nm, q.count]
-		free_train_button.visible = Economy.can_free_train(id)
+		free_train_button.visible = Economy.free_train_due(id)
+		free_train_button.disabled = not Economy.can_free_train(id)
 		cancel_button.disabled = Economy.training_waiting(id, "cancel")
 		collect_button.disabled = Economy.training_waiting(id, "collect")
 		return

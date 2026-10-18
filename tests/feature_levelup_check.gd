@@ -75,6 +75,25 @@ func _run(bwin, rw, rec, dw) -> void:
 		_check(back.visible, "%s building window has its feature button back (%s)" % [id, back.text], "")
 		bwin.close()
 		await _frames(3)
+	# 사용자 2026-10-18 "무료 레벨업이 되는 상황(5분 이내)인데 가속 버튼이 잠깐 나왔다가 버튼이 바뀌는 상황이 너무 많아":
+	# 남은 5분 이하 건설은 서버 응답을 기다리는 동안에도 [무료 즉시 완료]가 그대로(꺼짐만), [가속]으로 바뀌지 않는다.
+	var now := Economy.time_now()
+	Economy.build = {"id": GameData.LAB, "finish": now + 120.0, "start": now - 10.0}
+	Economy._waiting["build"] = true
+	bwin.open_building(GameData.LAB)
+	await _frames(3)
+	_check(bwin.free_build_button.visible and bwin.free_build_button.disabled and not bwin.speedup_button.visible,
+		"≤5 min build while a build request waits: [무료 즉시 완료] stays (disabled), no [가속] flash",
+		"free=%s disabled=%s speedup=%s" % [bwin.free_build_button.visible, bwin.free_build_button.disabled, bwin.speedup_button.visible])
+	Economy._waiting.erase("build")
+	await get_tree().create_timer(1.2).timeout
+	_check(bwin.free_build_button.visible and not bwin.free_build_button.disabled and not bwin.speedup_button.visible, "after the reply it is enabled", "")
+	Economy.build["finish"] = Economy.time_now() + 3600.0
+	await get_tree().create_timer(1.2).timeout
+	_check(bwin.speedup_button.visible and not bwin.free_build_button.visible, "1 h left: [가속] instead", "")
+	Economy.build = {}
+	bwin.close()
+	await _frames(3)
 	# 건설 중 / 최대 레벨 / 공터
 	_check(bwin.levelup_text(GameData.LAB).begins_with("연구소 Lv 3 · 레벨업"), "idle lab text", bwin.levelup_text(GameData.LAB))
 	Economy.levels[GameData.LAB] = int(GameData.building_def(GameData.LAB).max_level)
