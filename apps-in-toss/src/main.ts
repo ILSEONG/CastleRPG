@@ -7,6 +7,7 @@
 //   onDone('error', 코드)('UNSUPPORTED' = 토스 앱이 오래됨).
 //   pendingOrders(cb): 결제는 됐는데 지급이 안 끝난 주문 cb(JSON [{orderId, sku}]) — 게임이 다시 서버에 보내고 completeGrant(orderId).
 // - 안드로이드 뒤로 가기: 종료 확인 창(출시 가이드: 종료할 때 확인 모달) → closeView().
+// - 백그라운드로 가면 게임 소리를 멈춘다(AudioContext suspend).
 import { closeView, getUserKeyForGame, graniteEvent, IAP } from '@apps-in-toss/web-framework'
 
 declare global {
@@ -99,6 +100,27 @@ try {
 } catch {
   // 토스 밖(일반 브라우저)에서는 뒤로 가기 이벤트가 없다
 }
+
+// --- 백그라운드 소리 멈춤(출시 가이드: 토스 앱을 내리거나 화면이 꺼지면 소리가 나지 않아야 한다) ---
+// 게임 엔진이 만드는 AudioContext를 모아 두고, 화면이 가려지면 suspend, 다시 보이면 resume한다.
+const audioContexts: AudioContext[] = []
+const BaseAudioContext = window.AudioContext ?? (window as any).webkitAudioContext
+if (BaseAudioContext) {
+  const Tracked = class extends BaseAudioContext {
+    constructor(...args: any[]) {
+      super(...args)
+      audioContexts.push(this as unknown as AudioContext)
+    }
+  }
+  window.AudioContext = Tracked as typeof AudioContext
+  ;(window as any).webkitAudioContext = Tracked
+}
+document.addEventListener('visibilitychange', () => {
+  for (const ctx of audioContexts) {
+    if (document.hidden) void ctx.suspend().catch(() => {})
+    else void ctx.resume().catch(() => {})
+  }
+})
 
 // --- 게임 시작 ---
 const bar = document.querySelector('#bar > div') as HTMLDivElement
