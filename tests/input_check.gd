@@ -2349,11 +2349,11 @@ func _recruit_repeat(recruit) -> void:
 	_check(Economy.gold == 10000 and recruit.cards.size() == 1, "(rr) [1회 더] on a 10-pull result pulls once (gold -10,000)", "gold=%d cards=%d" % [Economy.gold, recruit.cards.size()])
 	recruit.close()
 	# 시드: 10연차 3번에 SSR이 없는 시드(골드 부족 정지), 1회 두 번째에 SSR이 처음 나오는 시드(SSR 정지)
-	var lvl: Dictionary = GameData.gacha_rates("gold", 1, Economy.building_level(GameData.TAVERN))  # 아래 자동 모집은 골드 Lv 1에서 뽑는다(SSR 없음)
-	var lvl3: Dictionary = GameData.gacha_rates("gold", 3, Economy.building_level(GameData.TAVERN))  # SSR 멈춤은 골드 Lv 3(SSR은 Lv 3부터)
+	var lvl: Dictionary = GameData.gacha_rates("gold", 1)  # 아래 자동 모집은 골드 Lv 1에서 뽑는다(SSR 없음)
+	var lvl3: Dictionary = GameData.gacha_rates("gold", 3)  # SSR 멈춤은 골드 Lv 3(SSR은 Lv 3부터)
 	var seed_no_ssr := -1
 	var seed_ssr2 := -1
-	for s in range(1, 5000):  # Lv 3 SSR 0.7%: "두 번째에 처음 SSR"은 시드 140개에 하나꼴
+	for s in range(1, 5000):  # Lv 3 SSR 0.65%: "두 번째에 처음 SSR"은 시드 150개에 하나꼴
 		if seed_no_ssr > 0 and seed_ssr2 > 0:
 			break
 		var r := RandomNumberGenerator.new()
@@ -2802,8 +2802,8 @@ func _recruit23_ui(recruit) -> void:
 	dlg = recruit.dialog.get_global_rect()
 	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.dia_label.text == "보유 600"
 		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
-		and recruit.rates_label.text == "SSR 8% · SR 30% · R 62%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
-		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 8/30/62, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
+		and recruit.rates_label.text == "SSR 5% · SR 30% · R 65%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
+		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 5/30/65, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
 		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)

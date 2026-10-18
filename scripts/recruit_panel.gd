@@ -142,7 +142,7 @@ func _ready() -> void:
 	odds_button = _button(Lang.t("recruit_panel.ready_3"), UiKit.STEEL, 20)
 	odds_button.focus_mode = Control.FOCUS_NONE
 	odds_button.custom_minimum_size = Vector2(130, 44)
-	odds_button.pressed.connect(func(): odds.show_for(currency, Economy.gacha_state().gold_level, Economy.building_level(GameData.TAVERN)))
+	odds_button.pressed.connect(func(): odds.show_for(currency, Economy.gacha_state().gold_level))
 	rates_row.add_child(odds_button)
 	one_button = _button("")
 	one_button.pressed.connect(_pull.bind(1))
@@ -573,7 +573,7 @@ func _refresh() -> void:
 	progress_label.text = Lang.t("recruit_panel.refresh_2") if maxed else Lang.t("recruit_panel.refresh_3") % [st.gold_pulls, st.gold_next]
 	preview_label.visible = not maxed
 	if not maxed:
-		var nr := GameData.gacha_rates(GOLD, lv + 1, Economy.building_level(GameData.TAVERN))
+		var nr := GameData.gacha_rates(GOLD, lv + 1)
 		preview_label.text = Lang.t("recruit_panel.refresh_4") % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
 	dia_label.text = Lang.t("recruit_panel.refresh_5") % UiKit.commas(Economy.diamonds)

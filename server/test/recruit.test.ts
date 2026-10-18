@@ -29,20 +29,20 @@ const setState = (id: string, sql: string, v: number) => S.db.query(`update play
 const share = (out: { grade: string }[], g: string) => out.filter((x) => x.grade === g).length / out.length
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
 
-test('골드 비용·확률 공식: 1회 = 10000 × 1.25^(L−1)을 50 단위로(L1 10,000 · L2 12,500 · L5 24,400 · L10 74,500), 10회 = × 10(할인 없음), SSR 0.5% + 0.1%p·SR 5% + 0.5%p(L10 1.4% · 9.5%), 주점 보너스는 더한다', () => {
+test('골드 비용·확률 공식: 1회 = 10000 × 1.25^(L−1)을 50 단위로(L1 10,000 · L2 12,500 · L5 24,400 · L10 74,500), 10회 = × 10(할인 없음), SSR 0.55% + 0.05%p·SR 5% + 0.5%p(L10 1% · 9.5%), 주점 레벨 보너스 없음', () => {
   assert.deepEqual([1, 2, 5, 10].map((l) => R.gachaCost(CFG, 'gold', 1, l)), [10000, 12500, 24400, 74500])
   assert.deepEqual([1, 10].map((l) => R.gachaCost(CFG, 'gold', 10, l)), [100000, 745000])
   assert.equal(R.gachaCost(CFG, 'gold', 1, 11), 74500) // 최대 레벨 넘는 값은 최대로
-  const l4 = R.gachaRates(CFG, 'gold', 4, 1)
-  const l10 = R.gachaRates(CFG, 'gold', 10, 1)
-  assert.ok(near(l4.ssr, 0.008) && near(l4.sr, 0.065) && near(l10.ssr, 0.014) && near(l10.sr, 0.095), JSON.stringify([l4, l10]))
-  for (const l of [1, 2]) assert.equal(R.gachaRates(CFG, 'gold', l, 11).ssr, 0) // SSR은 골드 Lv 3부터(주점 보너스도 없음)
-  assert.ok(near(R.gachaRates(CFG, 'gold', 3, 1).ssr, 0.007))
-  const t3 = R.gachaRates(CFG, 'gold', 10, 3) // 주점 3: + 0.2%p · 0.6%p
-  assert.ok(near(t3.ssr, 0.016) && near(t3.sr, 0.101), JSON.stringify(t3))
+  const l4 = R.gachaRates(CFG, 'gold', 4)
+  const l10 = R.gachaRates(CFG, 'gold', 10)
+  assert.ok(near(l4.ssr, 0.007) && near(l4.sr, 0.065) && near(l10.ssr, 0.01) && near(l10.sr, 0.095), JSON.stringify([l4, l10]))
+  for (const l of [1, 2]) assert.equal(R.gachaRates(CFG, 'gold', l).ssr, 0) // SSR은 골드 Lv 3부터(주점 보너스도 없음)
+  assert.ok(near(R.gachaRates(CFG, 'gold', 3).ssr, 0.0065))
+  const t3 = R.gachaRates(CFG, 'gold', 10) // 주점 레벨 보너스 없음(2026-10-18)
+  assert.ok(near(t3.ssr, 0.01) && near(t3.sr, 0.095), JSON.stringify(t3))
   assert.deepEqual([R.gachaCost(CFG, 'diamond', 1, 7), R.gachaCost(CFG, 'diamond', 10, 7)], [300, 2700]) // 다이아는 레벨 없음
-  const d = R.gachaRates(CFG, 'diamond', 10, 3)
-  assert.ok(near(d.ssr, 0.082) && near(d.sr, 0.306), JSON.stringify(d))
+  const d = R.gachaRates(CFG, 'diamond', 10)
+  assert.ok(near(d.ssr, 0.05) && near(d.sr, 0.3), JSON.stringify(d))
 })
 
 test('골드 레벨업: 그 레벨 누적 ≥ 40 × L²이면 L+1, 남은 횟수는 넘기고 한 번에 여러 레벨, 최대 10(누적 0)', () => {
@@ -56,17 +56,15 @@ test('골드 레벨업: 그 레벨 누적 ≥ 40 × L²이면 L+1, 남은 횟수
   assert.deepEqual(R.goldLevelUp(CFG, 10, 0, 10), { level: 10, pulls: 0 })
 })
 
-test('확률 표본(10만 장, 암호학적 난수): 골드 Lv 10은 SSR 1.4% · SR 9.5%(허용 오차 약 6.5σ), 다이아는 SSR 8% · SR 30%(천장 없이) — 다이아가 골드 최대 레벨보다 좋다', () => {
+test('확률 표본(10만 장, 암호학적 난수): 골드 Lv 10은 SSR 1% · SR 9.5%(허용 오차 약 6.5σ), 다이아는 SSR 5% · SR 30%(천장 없이) — 다이아가 골드 최대 레벨보다 좋다', () => {
   const n = 100_000
-  const gold = R.rollGacha(n, HEROES, CFG, R.cryptoRandom, R.gachaRates(CFG, 'gold', 10, 1))
-  assert.ok(Math.abs(share(gold, 'SSR') - 0.014) <= 0.0025 && Math.abs(share(gold, 'SR') - 0.095) <= 0.006, `gold L10 ${share(gold, 'SSR')} ${share(gold, 'SR')}`)
-  const dia = R.rollGacha(n, HEROES, CFG, R.cryptoRandom, R.gachaRates(CFG, 'diamond', 1, 1))
-  assert.ok(Math.abs(share(dia, 'SSR') - 0.08) <= 0.004 && Math.abs(share(dia, 'SR') - 0.3) <= 0.008, `diamond ${share(dia, 'SSR')} ${share(dia, 'SR')}`)
-  for (const t of [1, 10, 30]) {
-    const g = R.gachaRates(CFG, 'gold', 10, t)
-    const dr = R.gachaRates(CFG, 'diamond', 1, t)
-    assert.ok(dr.ssr > g.ssr && dr.sr > g.sr, `tavern ${t}: ${JSON.stringify([dr, g])}`)
-  }
+  const gold = R.rollGacha(n, HEROES, CFG, R.cryptoRandom, R.gachaRates(CFG, 'gold', 10))
+  assert.ok(Math.abs(share(gold, 'SSR') - 0.01) <= 0.0025 && Math.abs(share(gold, 'SR') - 0.095) <= 0.006, `gold L10 ${share(gold, 'SSR')} ${share(gold, 'SR')}`)
+  const dia = R.rollGacha(n, HEROES, CFG, R.cryptoRandom, R.gachaRates(CFG, 'diamond', 1))
+  assert.ok(Math.abs(share(dia, 'SSR') - 0.05) <= 0.004 && Math.abs(share(dia, 'SR') - 0.3) <= 0.008, `diamond ${share(dia, 'SSR')} ${share(dia, 'SR')}`)
+  const g = R.gachaRates(CFG, 'gold', 10)
+  const dr = R.gachaRates(CFG, 'diamond', 1)
+  assert.ok(dr.ssr > g.ssr && dr.sr > g.sr, JSON.stringify([dr, g]))
   const l1 = R.rollGacha(n, HEROES, CFG, R.cryptoRandom) // 기본 = 골드 Lv 1
   assert.ok(share(l1, 'SSR') === 0 && Math.abs(share(l1, 'SR') - 0.05) <= 0.0045, `gold L1 ${share(l1, 'SSR')} ${share(l1, 'SR')}`)
 })
@@ -74,15 +72,15 @@ test('확률 표본(10만 장, 암호학적 난수): 골드 Lv 10은 SSR 1.4% ·
 test('천장(결정적 난수): SSR 없이 49장이면 50번째가 SSR, 카운터는 SSR에서 0. 10연차 중간에도, 자연 SSR도 카운터를 0으로', () => {
   const allR = () => 0.99
   const pity = { n: 0, max: 50 }
-  const first = R.rollGacha(49, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1, 1), pity)
+  const first = R.rollGacha(49, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1), pity)
   assert.deepEqual([first.every((x) => x.grade === 'R'), pity.n], [true, 49])
-  assert.deepEqual([R.rollGacha(1, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1, 1), pity)[0].grade, pity.n], ['SSR', 0])
+  assert.deepEqual([R.rollGacha(1, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1), pity)[0].grade, pity.n], ['SSR', 0])
   pity.n = 45
-  const ten = R.rollGacha(10, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1, 1), pity)
+  const ten = R.rollGacha(10, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1), pity)
   assert.deepEqual([ten.map((x) => x.grade), pity.n], [['R', 'R', 'R', 'R', 'SSR', 'R', 'R', 'R', 'R', 'R'], 5]) // 5번째(누적 50)가 SSR
   pity.n = 30
   const seq = [0.5, 0, 0.01, 0, 0.5, 0] // R, 자연 SSR, R
-  R.rollGacha(3, HEROES, CFG, () => seq.shift() ?? 0.5, R.gachaRates(CFG, 'diamond', 1, 1), pity)
+  R.rollGacha(3, HEROES, CFG, () => seq.shift() ?? 0.5, R.gachaRates(CFG, 'diamond', 1), pity)
   assert.equal(pity.n, 1)
 })
 

@@ -1843,7 +1843,7 @@ export function createApp(opts: AppOptions) {
       for (const [id, h] of Object.entries(p.heroes)) owned[id] = { copies: h.copies, shards: h.shards }
       const add: Record<string, number> = {}
       const pity = dia ? { n: p.gacha.dia_pity, max: R.cfgNum(g.config, 'gacha_dia_pity') } : undefined
-      const rates = R.gachaRates(g.config, dia ? R.GACHA_DIA : currency, lv, level(p, R.TAVERN))
+      const rates = R.gachaRates(g.config, dia ? R.GACHA_DIA : currency, lv)
       const results = R.rollGacha(count, g.heroes, g.config, random, rates, pity).map(({ id, grade }) => {
         const o = owned[id]
         const isNew = !(o?.copies > 0)

@@ -543,10 +543,6 @@ static func effect_lines(id: String, lv: int) -> Array:
 			return [[Lang.t("building_panel.effect_lines_24"), Lang.t("building_panel.effect_lines_18") % DP.slots(lv), Lang.t("building_panel.effect_lines_18") % DP.slots(n)],
 				[Lang.t("building_panel.effect_lines_25"), "%s%% · %s%%" % [DP._pct(DP.odds(lv)[2]), DP._pct(DP.odds(lv)[3])], "%s%% · %s%%" % [DP._pct(DP.odds(n)[2]), DP._pct(DP.odds(n)[3])]],
 				[Lang.t("building_panel.effect_lines_26"), "%d%%" % roundi(DP.time_mult(lv) * 100.0), "%d%%" % roundi(DP.time_mult(n) * 100.0)]]
-		"tavern":
-			var a := GameData.gacha_rates(GameData.GACHA_GOLD, 1, lv)  # 골드 Lv 1 기준(주점 보너스만 보인다)
-			var b := GameData.gacha_rates(GameData.GACHA_GOLD, 1, n)
-			return [[Lang.t("building_panel.effect_lines_27"), _pct(a.ssr), _pct(b.ssr)], [Lang.t("building_panel.effect_lines_28"), _pct(a.sr), _pct(b.sr)]]
 	return []
 
 

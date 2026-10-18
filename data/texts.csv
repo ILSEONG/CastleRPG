@@ -155,8 +155,6 @@ building_panel.effect_lines_23,인구,,,,scripts/building_panel.gd
 building_panel.effect_lines_24,하루 의뢰,,,,scripts/building_panel.gd
 building_panel.effect_lines_25,SR·SSR 확률,,,,scripts/building_panel.gd
 building_panel.effect_lines_26,파견 시간,,,,scripts/building_panel.gd
-building_panel.effect_lines_27,SSR 확률,,,,scripts/building_panel.gd
-building_panel.effect_lines_28,SR 확률,,,,scripts/building_panel.gd
 buildings.done_text,%s Lv %d 완료,,,,scripts/buildings.gd
 buildings.built_text,%s 건설 완료,,,,scripts/buildings.gd
 castle.look_text,성의 모습이 더 웅장해졌습니다,,,,scripts/castle.gd
@@ -607,7 +605,6 @@ gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
-gacha_odds.show_for_4,주점 Lv %d 보너스 포함: SSR +%s · SR +%s,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_6,10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_7,"골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다",,,,scripts/gacha_odds.gd
