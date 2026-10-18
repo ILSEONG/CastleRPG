@@ -102,7 +102,7 @@ func _physics_process(_delta: float) -> void:
 		if _gui_tap and selected != null and selected == _gui_sel:
 			_select(null)  # UI를 눌렀다(초상화로 다른 영웅을 고른 게 아니면)
 		_gui_tap = false
-	if arena_r <= 0.0 and _press_pos != Vector2.INF and _press_ms >= 0 and Time.get_ticks_msec() - _press_ms >= LONG_PRESS_MS:
+	if arena_r <= 0.0 and not stage_running() and _press_pos != Vector2.INF and _press_ms >= 0 and Time.get_ticks_msec() - _press_ms >= LONG_PRESS_MS:
 		_press_ms = -1
 		var id := _building_at(_press_pos)
 		if id != "":
@@ -203,10 +203,12 @@ func _bubble_hit(screen_pos: Vector2) -> String:
 
 ## 말풍선(화면 공간) → 상인(레이어 32) → 건물(레이어 16) → 성문(레이어 2, 선택된 영웅이 없을 때만 여기 온다) 탭. 처리했으면 true.
 func _tap_object(screen_pos: Vector2) -> bool:
-	var id := _bubble_hit(screen_pos)
-	if id == "" and not _pick(screen_pos, LAYER_MERCHANT).is_empty():
+	if not _pick(screen_pos, LAYER_MERCHANT).is_empty() and (stage_running() or _bubble_hit(screen_pos) == ""):
 		panel.open()
 		return true
+	if stage_running():
+		return false  # 스테이지를 미는 동안 건물·말풍선·성문은 탭이 안 된다(사용자 2026-10-18) — 탭은 영웅 고르기로
+	var id := _bubble_hit(screen_pos)
 	if id == "":
 		id = _building_hit(screen_pos)
 	if id != "" and not Economy.is_built(id):  # 튜토리얼 공터: 짓기 창
@@ -233,6 +235,11 @@ func _tap_object(screen_pos: Vector2) -> bool:
 		return false
 	building_panel.open_building(id)
 	return true
+
+
+## 스테이지 전투 중(성 화면에서 스테이지를 미는 동안). 이때는 건물 탭·길게 누르기가 아무것도 열지 않는다.
+static func stage_running() -> bool:
+	return GameState.mode == GameState.Mode.STAGE or GameState.mode == GameState.Mode.COUNTDOWN
 
 
 ## 길게 누른 자리의 건물 id(성문은 "gate"). 상인·건물 아닌 곳이면 "".

@@ -202,6 +202,33 @@ func _run() -> void:
 	pl.cancel()
 	_check(not pl.is_active() and scenery.lots.houses.mi.visible and Economy.layout.houses == dest, "cancel keeps the building where it was", "")
 	await _copies(list, pl, btn)
+	await _stage_taps(pl)
+
+
+## 스테이지를 미는 동안 건물 탭·길게 누르기는 아무것도 열지 않는다(사용자 2026-10-18 "스테이지 밀때는 건물 클릭 안되게"). 대기 중엔 그대로 열린다.
+func _stage_taps(pl) -> void:
+	if pl.is_active():
+		pl.cancel()
+	var bp = _find("res://scripts/building_panel.gd")
+	var cam: Camera3D = _main.camera
+	pl.rig.pan_to(Balance.center_of("houses"), 0.05)
+	await get_tree().create_timer(0.4).timeout
+	var at := cam.unproject_position(Balance.center_of("houses") + Vector3(0, 1.0, 0))
+	await _tap(at)
+	await get_tree().create_timer(0.2).timeout
+	_check(bp.visible and bp.building_id == "houses", "idle: tapping a building opens it", "%s %s" % [bp.visible, bp.building_id])
+	bp.close()
+	await get_tree().create_timer(0.4).timeout
+	GameState.mode = GameState.Mode.STAGE
+	await _tap(at)
+	await get_tree().create_timer(0.2).timeout
+	_check(not bp.visible, "stage running: tapping a building opens nothing", str(bp.visible))
+	_mouse(at, true)
+	await get_tree().create_timer(1.0).timeout
+	_mouse(at, false)
+	await _frames(3)
+	_check(not bp.visible, "stage running: long-pressing a building opens nothing", str(bp.visible))
+	GameState.mode = GameState.Mode.IDLE
 
 
 ## 새 건물·n번째 채(2026-10-13): 성채 Lv 5면 벌목장 2는 지을 수 있고 금광(4)도 열림, 대장간(8)·벌목장 3(10)은 잠김.
