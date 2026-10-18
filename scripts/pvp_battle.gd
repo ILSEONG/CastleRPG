@@ -8,6 +8,7 @@ extends Node3D
 ## 남은 영웅 체력 비율 합이 큰 쪽이 이긴다(같으면 방어 쪽). 결과는 Pvp.finish(앱이 먼저 계산해 보여 주고 서버 값이 오면 맞춘다).
 ## 서버가 시작을 거절하면(Pvp.battle_refused) 알림과 함께 곧바로 나간다. [나가기]는 두 번 눌러야 포기(패배).
 
+const SpeedButton := preload("res://scripts/speed_button.gd")
 const Lang := preload("res://scripts/lang.gd")
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -77,6 +78,7 @@ var _ko := []  # [win, reason]  # 테스트·시뮬: 0보다 크면 이 배율�
 
 
 func _ready() -> void:
+	SpeedButton.hold(true)  # 시작 띠 동안은 정배속(사용자 2026-10-18)
 	mode = str(run.get("mode", "duel"))
 	duration = float(run.get("time", PvpRules.BATTLE_SEC.get(mode, 90.0)))
 	brain = BrainScript.new(self)
@@ -258,6 +260,7 @@ func _process(delta: float) -> void:
 			if _intro <= 0.0:
 				phase = Phase.FIGHT
 				_freeze(false)
+				SpeedButton.hold(false)  # 싸움부터 고른 배속
 		Phase.FIGHT:
 			if _ko_left >= 0.0:  # 결정타 슬로모션 중(시계는 쓰러진 순간에 멈춘다)
 				_ko_left -= delta

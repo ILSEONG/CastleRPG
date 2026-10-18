@@ -5,6 +5,7 @@ extends Node3D
 ## 0이 되면 그 레벨 처치(배너) 뒤 같은 판에서 다음 레벨 HP로 찬다(공격력도 오른다). 시간이 다 되면 드래곤이 받은 피해 합(dragon.dealt = 판 점수)을
 ## Guild.finish_boss로 내고 결과(boss_done: 등급·코인·골드·도달 레벨)를 띄운다. 온라인은 서버가 피해를 받아 등급·보상을 정한다(상한은 서버 guild.ts BOSS_DMG_CAP).
 
+const SpeedButton := preload("res://scripts/speed_button.gd")
 const Lang := preload("res://scripts/lang.gd")
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -58,6 +59,7 @@ var _result_box: VBoxContainer
 
 
 func _ready() -> void:
+	SpeedButton.hold(true)  # 시작 띠 동안은 정배속(사용자 2026-10-18)
 	var stage: Dictionary = ArenaKit.lair()
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
@@ -140,6 +142,7 @@ func _process(delta: float) -> void:
 			if _intro <= 0.0:
 				phase = Phase.FIGHT
 				_set_active(true)
+				SpeedButton.hold(false)  # 싸움부터 고른 배속
 		Phase.FIGHT:
 			clock += delta
 			if not _wiped and not heroes.any(func(h): return h.is_alive()):
