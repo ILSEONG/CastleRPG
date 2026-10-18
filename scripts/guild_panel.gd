@@ -63,6 +63,7 @@ func _ready() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 12)
 	scroll.add_child(body)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-10-18)
 	_fit_sheet()
 	Guild.changed.connect(_on_changed)
 	Economy.changed.connect(_on_econ_changed)

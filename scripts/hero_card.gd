@@ -86,6 +86,7 @@ var shard_need := 0  # 다음 승급에 드는 조각. 0 = 최대 승급("MAX")
 var can_promote := false  # 오른위 금색 ⬆(승급 가능)
 var badge_color := Color("D9480F")  # badge 글자색(NEW 주황, 모집 창이 "+1 조각"에 보라로 바꾼다)
 var promote_fxs := 0  # 승급 연출 횟수(테스트용)
+var chip_right_pad := 0.0  # [3D] 칩을 오른쪽 끝에서 더 비키는 폭(영웅 창 오른쪽 위 닫기 X 자리)
 var show_model := false:  # live 큰 카드: true면 일러스트 대신 실시간 3D 모델
 	set(v):
 		show_model = v
@@ -373,7 +374,7 @@ func art_rect() -> Rect2:
 
 ## live 큰 카드의 [3D]/[그림] 칩(오른위).
 func model_chip_rect() -> Rect2:
-	return Rect2(size.x - CHIP_SIZE.x - 14.0, 16.0, CHIP_SIZE.x, CHIP_SIZE.y)
+	return Rect2(size.x - CHIP_SIZE.x - 14.0 - chip_right_pad, 16.0, CHIP_SIZE.x, CHIP_SIZE.y)
 
 
 ## 일러스트: 깎은 8각 안을 그림으로 채우고(얼굴이 위쪽 FACE_AT), 아래 ART_SHADE부터 어둡게 덮은 뒤 안쪽 테두리를 등급 색으로.

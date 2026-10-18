@@ -692,6 +692,19 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _guard_wait()
 	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 시트 바깥 배경
 	_check(not heroes_win.is_open() and tabs.selected == "", "(x) a backdrop tap above the sheet closes it and no tab is selected", "")
+	# 사용자 2026-10-18 "팝업창 닫는 버튼이 없어": 탭 시트도 오른쪽 위 X로 닫힌다(목록·상세 둘 다)
+	for detail in [false, true]:
+		tabs.press("hero")
+		if detail:
+			heroes_win.show_detail("arteon")
+		await _guard_wait()
+		var was_open: bool = heroes_win.is_open() and heroes_win.is_showing_detail() == detail
+		var xr: Rect2 = heroes_win.close_x.get_global_rect()
+		var chip: Rect2 = heroes_win.big_card.model_chip_rect()
+		chip.position += heroes_win.big_card.get_global_rect().position
+		await _tap(xr.get_center())
+		_check(was_open and heroes_win.close_x.size.x >= 56.0 and not heroes_win.is_open() and tabs.selected == "" and (not detail or not xr.intersects(chip)),
+			"(x) the top-right X closes the hero sheet (detail=%s) and does not cover the [3D] chip" % detail, "x=%s chip=%s" % [xr, chip])
 
 	# (y) 늦게 온 모집 결과(온라인): 다른 창이 열려 있으면 그 위로 모집 창을 열지 않고 알림, 다음에 주점 창을 열 때 보여 준다.
 	#     아무 창도 없으면 모집 창을 열어 보여 준다.

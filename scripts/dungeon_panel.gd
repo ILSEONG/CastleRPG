@@ -93,6 +93,7 @@ func _ready() -> void:
 	party_tab = PartyViewScript.new()
 	party_tab.visible = false
 	content.add_child(party_tab)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-10-18)
 	_fit_sheet()
 	friend_panel = FriendPanelScript.new()
 	add_child(friend_panel)
@@ -115,6 +116,9 @@ func _build_tabs() -> void:
 		b.pressed.connect(set_section.bind(t[0]))
 		_tabs_row.add_child(b)
 		section_buttons[t[0]] = b
+	var x_room := Control.new()  # 오른쪽 위 닫기(X) 자리
+	x_room.custom_minimum_size = Vector2(CLOSE_X_PX, 0)
+	_tabs_row.add_child(x_room)
 
 
 ## 탭 바꾸기. PVP는 가이드 PVP 미션에 닿거나 가이드를 마치거나 건너뛴 뒤에만(잠겨 있으면 토스트).

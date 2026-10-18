@@ -124,6 +124,7 @@ func _ready() -> void:
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_build_list()
 	_build_detail()
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-10-18)
 	_fit()
 	Economy.roster_changed.connect(_refresh)
 	Economy.changed.connect(_refresh)
@@ -274,6 +275,7 @@ func _build_detail() -> void:
 	big_card.custom_minimum_size = Vector2(0, BIG_CARD_MIN_H)
 	big_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	big_card.size_flags_stretch_ratio = 3.0
+	big_card.chip_right_pad = CLOSE_X_PX + 4.0  # 창 오른쪽 위 닫기(X)와 안 겹치게
 	big_card.live = true  # 개정 14 §2: 실시간 피규어(대기 애니메이션), 끌어서 돌린다
 	_detail_view.add_child(big_card)
 	_build_equip_slots()

@@ -5,7 +5,7 @@ extends "res://scripts/ui_window.gd"
 const Lang := preload("res://scripts/lang.gd")
 
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
-const CLOSE_PX := 56.0
+const CLOSE_PX := CLOSE_X_PX
 const RED := Color(0.88, 0.22, 0.2)
 
 var head: HBoxContainer
@@ -25,23 +25,10 @@ func _build(title_text: String) -> void:
 	var title := _title(title_text)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	var x := Button.new()
-	x.focus_mode = Control.FOCUS_NONE
-	x.custom_minimum_size = Vector2(CLOSE_PX, CLOSE_PX)
-	x.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	UiKit.apply_button(x, UiKit.STEEL, 10.0)
-	x.pressed.connect(close)
-	var face := Control.new()
-	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	face.draw.connect(func():
-		var c := face.size / 2.0
-		var r := CLOSE_PX * 0.2
-		for d in [Vector2(r, r), Vector2(r, -r)]:
-			face.draw_line(c - d, c + d, Color.WHITE, 5.0, true))
-	x.add_child(face)
+	var x := make_close_x(close)
 	head.add_child(x)
 	buttons["close"] = x
+	close_x = x
 	content.add_child(head)
 	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

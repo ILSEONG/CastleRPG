@@ -42,6 +42,7 @@ func _ready() -> void:
 	_build_window(0, 10)
 	dialog.get_parent().color = Color(0, 0, 0, 0)  # 시트가 화면을 채운다
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-10-18)
 	content.add_child(_title(Lang.t("soldier_panel.ready")))
 	summary_label = _label("", 30)
 	content.add_child(summary_label)
