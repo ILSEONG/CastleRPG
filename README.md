@@ -2,3 +2,4 @@
 
 - castle-rpg.ait: 앱인토스 콘솔 [번들 파일 올리기]에 올리는 파일 (appName castle-rpg, main 37d1497, 2026-10-18)
 - icon_600.png / icon_1024.png: 앱 아이콘
+- thumbnail_1932x828.png, screenshot_1~5 (636x1048): 콘솔 노출 정보 이미지
