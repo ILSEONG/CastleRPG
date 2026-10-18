@@ -2216,6 +2216,9 @@ func _world_tags() -> void:
 		and wt.top("lumber") != null and badges.badge_ids(Economy.time_now()).has("lumber"),
 		"(T) idle mode with 30 soldiers deployed: none stands in the world; the lumber mill's bubble rides on its tag (stack %.0f px)" % lumber_h, "n=%d" % _main.soldiers.size())
 	_tags_ok(wt, "default camera with bubbles")
+	var lumber_off := _bubble_off(wt, badges, "lumber")
+	_check(lumber_off == Vector2(0, -WT.TAG_H - 2.0) and wt.pinned.has("lumber") and wt.stacks.lumber == wt.desired.lumber,
+		"(T) a building with a bubble keeps its stack where it wants to sit; the bubble tip is right above its own tag", "off=%s" % lumber_off)
 	rig.zoom_by(30.0 / _camera.size)
 	await _frames(2)
 	_tags_ok(wt, "zoomed in with bubbles")
@@ -2226,6 +2229,9 @@ func _world_tags() -> void:
 	var got: Array = WT.place([a, b, c], 3.0)
 	_check(got[0] == a and got[1].end.y <= a.position.y - 3.0 and got[1].position.x == b.position.x and got[2] == c,
 		"(T) place(): the lower tag keeps its spot, the upper one goes above it; a tag clear of the others stays put", "%s" % [got])
+	got = WT.place([a, b], 3.0, [false, true])
+	_check(got[1] == b and got[0].end.y <= b.position.y - 3.0,
+		"(T) place(): a pinned stack (bubble up) never moves; the other one goes around it", "%s" % [got])
 	# 많이 축소하면 이름표를 그리지 않는다(자리도 없음) — 자원 말풍선은 건물 위에 그대로
 	Economy.last_collect["lumber"] = now - 3600.0
 	Economy.changed.emit()
@@ -2235,6 +2241,8 @@ func _world_tags() -> void:
 	_check(wt.names_hidden and flat and wt.draw_calls <= 1 and wt.stacks.get("lumber", Rect2()).size.y > 0.0,
 		"(T) zoomed far out: building names are hidden (no pills, no strings) but the lumber bubble still stacks above its building",
 		"hidden=%s flat=%s draws=%d lumber=%s" % [wt.names_hidden, flat, wt.draw_calls, wt.stacks.get("lumber")])
+	_check(_bubble_off(wt, badges, "lumber") == lumber_off, "(T) zoomed far out the bubble stays at the same spot over its building (it does not drop onto the roof)",
+		"off=%s was %s" % [_bubble_off(wt, badges, "lumber"), lumber_off])
 	rig.zoom_by(Balance.CAMERA_SIZE_DEFAULT / _camera.size)
 	await _frames(2)
 	_check(not wt.names_hidden and wt.draw_calls > 3, "(T) zooming back in shows the names again", "draws=%d" % wt.draw_calls)
@@ -2248,6 +2256,16 @@ func _world_tags() -> void:
 	rig.rotation_degrees.y = cam0[1]
 	rig.zoom_by(cam0[2] / _camera.size)
 	await _frames(2)
+
+
+## 건물 id 말풍선 꼬리 끝 - 그 건물 이름표 기준점(화면) — 늘 같아야 한다(사용자 2026-10-18 "말풍선 위치 안바뀌게해").
+func _bubble_off(wt, badges, id: String) -> Vector2:
+	wt.layout(true)
+	var tip = badges.bubble_tip(id)
+	for t in wt.tags:
+		if t.id == id and tip != null:
+			return (tip - _camera.unproject_position(t.anchor)).round()
+	return Vector2.INF
 
 
 ## ids 중 둘의 상자가 겹치는지(rects: id → Rect2, 없는 id는 건너뛴다).

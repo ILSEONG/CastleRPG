@@ -2,11 +2,14 @@ extends Node2D
 ## 자원 건물 말풍선(쌓인 게 5분 이상이면 이름표 위에 자원 아이콘)과 수집 "+N" 떠오르기.
 ## hp_bars 방식: 화면 공간에 매 프레임 한 번에 그린다. 건물 위치·높이는 Balance.BUILDINGS와 TownKit 메시 AABB에서.
 ## 건설 중(개정 12 §2.5): 짓는 건물(성문은 문루 넷) 이름표 위에 진행 막대 + 남은 시간(UiKit.duration, 초가 바뀔 때마다 글자가 바뀐다).
-## 그 건물의 말풍선은 막대 위로 올린다. 자리는 scenery(buildings.gd).sites.
+## 자리는 scenery(buildings.gd).sites.
+## 말풍선 자리는 늘 같다(사용자 2026-10-18 "말풍선 위치 안바뀌게해"): 제 건물 이름표 바로 위 — 막대가 생겨도, 다른 이름표와 가까워도, 화면 끝이어도,
+## 많이 축소해 이름표를 숨겨도 그 자리(world_tags가 그 덩어리를 고정한다). 라이즈 오브 킹덤즈·로드 모바일·화이트아웃 서바이벌의 수집 아이콘처럼
+## 건물 위 한 점에 붙어 위아래로 살짝 흔들리기만 한다(BOB_PX).
 ## 개정 15: 막대·말풍선은 화면 공간 이름표(world_tags.gd, tags)의 윗변(tags.top) 위에 쌓는다 — 이름표와 한 덩어리로 겹침·병사 대열을 피한다
 ## (덩어리 크기 = stack_size). tags가 없으면 예전처럼 지붕 위 ANCHOR_UP 월드 좌표에.
 ## 훈련(개정 16): 병사 건물이 훈련 중이면 건설 막대와 같은 막대 + 남은 시간(h:mm:ss), 끝났으면 병사 피규어 말풍선(자원 말풍선과 같은 8각 면).
-## 같은 건물을 짓는 중이면 건설 막대 위에 쌓는다. 쌓는 순서(아래 → 위): 이름표, 건설 막대, 훈련 막대 또는 말풍선.
+## 같은 건물을 짓는 중이면 건설 막대 위에 쌓는다. 쌓는 순서(아래 → 위): 이름표, 말풍선, 건설 막대, 훈련 막대.
 ## 연구(개정 24): 연구가 비어 있고 시작할 수 있는 노드가 있으면(Economy.research_available) 연구소 위에 플라스크 말풍선(자원 말풍선과 같은 모양) —
 ## 연구소를 탭하면 연구 창이 열린다(unit_picker).
 
@@ -29,7 +32,7 @@ const POP_FONT := 28
 const INK := Color(0.16, 0.18, 0.24)
 const BUILD_BAR := Vector2(96, 12)  # 건설 진행 막대(논리 px)
 const BUILD_FONT := 22
-const BUILD_LIFT_PX := 44.0  # 막대 + 남은 시간 글자 덩어리 높이 — 짓는 중인 자원 건물의 말풍선을 이만큼 위로 올린다
+const BUILD_LIFT_PX := 44.0  # 막대 + 남은 시간 글자 덩어리 높이 — 같은 건물의 훈련 막대를 이만큼 위로 올린다
 const BUILD_W := 104.0  # 막대·남은 시간 덩어리 폭
 const BUILD_AT_PX := 10.0  # 이름표 윗변 → 막대 가운데
 const BUBBLE_BLOCK := 58.0  # 말풍선 덩어리 높이(꼬리 2 + 지름 + 8 + 흔들림)
@@ -83,7 +86,31 @@ func dispatch_bubble(now: float) -> bool:
 	return Economy.built_level(GameData.DISPATCH) > 0 and Economy.dispatch_finishes.any(func(t): return float(t) <= now)
 
 
-## 지금 말풍선이 뜬 건물 id들(자원·훈련 완료·연구 플라스크) — 말풍선 탭 판정(unit_picker)용. stack_size의 말풍선 조건과 같다.
+## 이름표 tag_id(건물 id, 성문은 "gate:<면>")의 건물에 지금 말풍선(자원·훈련 완료·연구 플라스크·파견 자루)이 뜨나.
+func bubble_on(tag_id: String, now: float) -> bool:
+	var id := tag_id.get_slice(":", 0)
+	if not _anchors.has(id):
+		return false
+	var q := Economy.training(id)
+	return (Economy.yield_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()) or (id == GameData.DISPATCH and dispatch_bubble(now))
+
+
+## 말풍선 꼬리 끝 화면 좌표(흔들림 빼고): 이름표 윗변 가운데 바로 위 — 늘 같은 자리. 화면 밖이면 null.
+func bubble_tip(id: String):
+	var at = _base(id, anchor(id))
+	return at + Vector2(0, -2.0 if tags != null else 0.0) if at != null else null
+
+
+## 말풍선 탭 상자(unit_picker): 꼬리 끝 위 BUBBLE_BLOCK 높이, 폭은 덩어리 폭(이름표만큼 넉넉히). 화면 밖이면 Rect2().
+func bubble_rect(id: String) -> Rect2:
+	var tip = bubble_tip(id)
+	if tip == null:
+		return Rect2()
+	var w := maxf(BUBBLE_R * 2.0 + 4.0, tags.stacks.get(id, Rect2()).size.x if tags != null else 0.0)
+	return Rect2(tip.x - w / 2.0, tip.y - BUBBLE_BLOCK + 2.0, w, BUBBLE_BLOCK)
+
+
+## 지금 말풍선이 뜬 건물 id들(자원·훈련 완료·연구 플라스크) — 말풍선 탭 판정(unit_picker)용. bubble_on과 같다.
 func bubble_ids(now: float) -> Array:
 	var out: Array = badge_ids(now) + training_ids().ready
 	if research_bubble():
@@ -117,44 +144,35 @@ func _draw() -> void:
 		var bars := build_anchors(bid)
 		for i in bars.size():
 			var at = _base(bid if bid != GameData.GATE else "gate:%d" % i, bars[i])
-			if at != null and view.has_point(at):
-				_draw_build_bar(at + Vector2(0, -BUILD_AT_PX if tags != null else 0.0), Economy.build_progress(now, bid), UiKit.duration(Economy.build_left(now, bid)))
+			if at != null:
+				at += Vector2(0, (-BUILD_AT_PX if tags != null else 0.0) - (BUBBLE_BLOCK if bubble_on(bid, now) else 0.0))  # 말풍선이 뜨면 그 위
+				if view.has_point(at):
+					_draw_build_bar(at, Economy.build_progress(now, bid), UiKit.duration(Economy.build_left(now, bid)))
 	for id in badge_ids(now):
-		var at = _base(id, anchor(id))
-		if at == null:
-			continue
-		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
-		if view.has_point(tip):
-			_draw_bubble(tip, Economy.yield_of(id))
+		_bubble_at(id, bob, view, Economy.yield_of(id))
 	var tr := training_ids()
 	for id in tr.bars:
 		var at = _base(id, anchor(id))
 		if at != null:
-			at += Vector2(0, (-BUILD_AT_PX if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
+			at += Vector2(0, (-BUILD_AT_PX if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0) - (BUBBLE_BLOCK if bubble_on(id, now) else 0.0))
 			if view.has_point(at):
 				_draw_build_bar(at, Economy.train_progress(id), UiKit.clock(maxf(0.0, Economy.training(id).finish - now)))
 	for id in tr.ready:
-		var at = _base(id, anchor(id))
-		if at == null:
-			continue
-		var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(id) else 0.0))
-		if view.has_point(tip):
-			_draw_bubble(tip, "", GameData.soldier_of_building(id))
+		_bubble_at(id, bob, view, "", GameData.soldier_of_building(id))
 	if research_bubble():
-		var at = _base(GameData.LAB, anchor(GameData.LAB))
-		if at != null:
-			var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(GameData.LAB) else 0.0))
-			if view.has_point(tip):
-				_draw_bubble(tip, "flask")
+		_bubble_at(GameData.LAB, bob, view, "flask")
 	if dispatch_bubble(now):
-		var at = _base(GameData.DISPATCH, anchor(GameData.DISPATCH))
-		if at != null:
-			var tip: Vector2 = at + Vector2(0, bob - (2.0 if tags != null else 0.0) - (BUILD_LIFT_PX if Economy.is_building(GameData.DISPATCH) else 0.0))
-			if view.has_point(tip):
-				_draw_bubble(tip, "coin_bag")
+		_bubble_at(GameData.DISPATCH, bob, view, "coin_bag")
 	for p in _pops:
 		var at := camera.unproject_position(p.pos) + Vector2(0, -POP_RISE_PX * p.age / POP_SEC)
 		_draw_pop(at, p)
+
+
+## 건물 id의 말풍선을 제자리(bubble_tip)에 흔들림만 더해 그린다(화면 밖이면 건너뛴다).
+func _bubble_at(id: String, bob: float, view: Rect2, kind: String, soldier := "") -> void:
+	var tip = bubble_tip(id)
+	if tip != null and view.has_point(tip + Vector2(0, bob)):
+		_draw_bubble(tip + Vector2(0, bob), kind, soldier)
 
 
 ## tip = 꼬리 끝(건물 쪽). 흰 둥근 말풍선이 그 위에 뜬다. 안에는 자원 아이콘(kind) 또는 병종 피규어(soldier — 훈련 완료, 개정 16).
@@ -190,17 +208,17 @@ func _base(tag_id: String, world: Vector3):
 
 
 ## 이름표 tag_id(건물 id, 성문은 "gate:<면>") 위에 쌓을 덩어리 크기 Vector2(최소 폭, 높이) — world_tags가 이름표와 한 덩어리로 놓는다.
-## 짓는 중이면 막대 + 남은 시간, 그 위에 훈련 막대(개정 16), 말풍선(자원·훈련 완료)이 뜨면 맨 위에 말풍선.
+## 말풍선(자원·훈련 완료·연구·파견)이 뜨면 이름표 바로 위에 말풍선, 그 위에 짓는 중이면 막대 + 남은 시간, 그 위에 훈련 막대(개정 16).
 func stack_size(tag_id: String, now: float) -> Vector2:
 	var id := tag_id.get_slice(":", 0)
 	var out := Vector2.ZERO
+	if bubble_on(tag_id, now):
+		out = Vector2(BUBBLE_R * 2.0 + 4.0, BUBBLE_BLOCK)
 	if Economy.is_building(id):
-		out = Vector2(BUILD_W, BUILD_LIFT_PX)
+		out = Vector2(BUILD_W, out.y + BUILD_LIFT_PX)
 	var q := Economy.training(id)
 	if q.count > 0 and not q.ready:
 		out = Vector2(BUILD_W, out.y + BUILD_LIFT_PX)
-	if (Economy.yield_of(id) != "" and Economy.show_badge(id, now)) or (q.count > 0 and q.ready) or (id == GameData.LAB and research_bubble()) or (id == GameData.DISPATCH and dispatch_bubble(now)):
-		out = Vector2(maxf(out.x, BUBBLE_R * 2.0 + 4.0), out.y + BUBBLE_BLOCK)
 	return out
 
 
