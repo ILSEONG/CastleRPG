@@ -1133,8 +1133,8 @@ func _soldier_cases() -> void:
 	var arc1 = ss.filter(func(s): return s.type == "archer" and s.tier == 1)[0]
 	var inf1 = ss.filter(func(s): return s.type == "infantry")[0]
 	var inf_n = ss.filter(func(s): return s.type == "infantry" and s.side == 0 and s.slot == 0)[0]
-	_check(inf1.hp_max == 320.0 and inf1.atk == 22.0 and arc1.hp_max == 180.0 and arc2.hp_max == 2.0 * arc1.hp_max and arc2.atk == 2.0 * arc1.atk and arc2.side == 0 and arc2.slot == 0,
-		"(S) tier 2 stats are twice tier 1 (archer 360 / 36); the highest tier takes the north first", "t2=%.0f/%.0f side %d" % [arc2.hp_max, arc2.atk, arc2.side])
+	_check(inf1.hp_max == 320.0 and inf1.atk == 22.0 and arc1.hp_max == 180.0 and arc2.hp_max == 2.0 * arc1.hp_max and is_equal_approx(arc2.atk, 1.6 * arc1.atk) and arc2.side == 0 and arc2.slot == 0,
+		"(S) tier 2: HP x2, attack x1.6 of tier 1 (archer 360 / 28.8, 2026-10-18); the highest tier takes the north first", "t2=%.0f/%.0f side %d" % [arc2.hp_max, arc2.atk, arc2.side])
 	Engine.time_scale = SOLDIER_TIME_SCALE
 	await _wait_until(func(): return ss.all(func(s): return _soldier_home(s)), 60.0)
 	var by: Dictionary = {"archer": [], "infantry": [], "cavalry": []}
