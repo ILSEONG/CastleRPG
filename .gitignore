@@ -29,3 +29,4 @@ android/.build_version
 credentials*.json
 *service-account*.json
 *.ait
+__pycache__/
