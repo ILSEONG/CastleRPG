@@ -17,6 +17,7 @@ const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 const OK_COLOR := Color(0.25, 0.85, 0.35, 0.55)
 const FLOOR_OK := Color(0.3, 0.9, 0.4, 0.28)  # 바닥 칸: 지을 수 있는 칸
+const FLOOR_SQUARE := Color(1.0, 0.72, 0.15, 0.4)  # 병사 광장·상인 자리(노랑 — 길과 따로 보이게, 2026-10-18 "저 자리에 건물을 못지어")
 const FLOOR_BAD := Color(0.9, 0.3, 0.25, 0.22)  # 성벽 옆 통로·십자 길·광장(영웅·병사·괴물이 다니는 곳 — 화면엔 그냥 돌바닥이라 칸으로 보여 준다)
 const BAD_COLOR := Color(0.95, 0.25, 0.2, 0.55)
 const GREEN := Color(0.13, 0.58, 0.24)
@@ -28,6 +29,7 @@ const PAN_SEC := 0.35
 static var HINT := Lang.t("placement.hint")
 static var OK_TEXT := Lang.t("placement.ok_text")
 static var NO_SPACE_TEXT := Lang.t("placement.no_space_text")
+static var SQUARE_LABEL := Lang.t("placement.square_label")
 static var WAITING_TEXT := Lang.t("placement.waiting_text")
 
 var camera: Camera3D
@@ -51,6 +53,7 @@ var _layer: CanvasLayer
 var _ghost: MeshInstance3D
 var _plate: MeshInstance3D
 var _plate_mat: StandardMaterial3D
+var _square_label: Label3D  # 고르는 동안 병사 광장 위 이름표("병사 광장")
 var _floor: MeshInstance3D  # 고르는 동안 성 안 바닥 칸(초록 = 지을 수 있음, 빨강 = 길·통로·광장)
 var _press := Vector2.INF  # 누른 화면 위치(건물 밖에서 눌렀을 때만 — 탭 판정)
 var _grab := false  # 건물을 잡고 끄는 중
@@ -85,6 +88,21 @@ func _ready() -> void:
 	_floor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_floor.visible = false
 	add_child(_floor)
+	_square_label = Label3D.new()
+	_square_label.text = SQUARE_LABEL
+	_square_label.font = FONT
+	_square_label.font_size = 64
+	_square_label.outline_size = 22
+	_square_label.modulate = Color(1, 0.93, 0.6)
+	_square_label.outline_modulate = Color(0.2, 0.12, 0.02)
+	_square_label.render_priority = 20  # 반투명 건물 미리보기 위에
+	_square_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_square_label.no_depth_test = true
+	_square_label.pixel_size = 0.022
+	var sq: Rect2i = Balance.KEEP_OUT[0]
+	_square_label.position = Vector3((sq.position.x + sq.size.x / 2.0) * Balance.TILE, 1.2, (sq.position.y + sq.size.y / 2.0) * Balance.TILE)
+	_square_label.visible = false
+	add_child(_square_label)
 	_build_bar()
 	GameState.mode_changed.connect(func(m): if m != GameState.Mode.IDLE: cancel())
 	Economy.notice.connect(_on_notice)
@@ -177,6 +195,7 @@ func start(id: String) -> bool:
 	_plate.visible = true
 	_floor.mesh = _floor_mesh(id)
 	_floor.visible = true
+	_square_label.visible = true
 	if moving and scenery != null and scenery.lots.has(id):
 		scenery.lots[id].mi.visible = false
 	_set_picker(false)
@@ -204,7 +223,7 @@ func _floor_mesh(id: String) -> ArrayMesh:
 			var why := Balance.rect_block(Rect2i(x, y, 1, 1), half, others)
 			if why == "overlap":
 				continue
-			st.set_color(FLOOR_OK if why == "" else FLOOR_BAD)
+			st.set_color(FLOOR_OK if why == "" else (FLOOR_SQUARE if why == "square" else FLOOR_BAD))
 			var a := Vector3(x * t + pad, 0.03, y * t + pad)
 			var b := Vector3((x + 1) * t - pad, 0.03, (y + 1) * t - pad)
 			for v in [a, Vector3(b.x, 0.03, a.z), b, a, b, Vector3(a.x, 0.03, b.z)]:
@@ -239,6 +258,7 @@ func _end() -> void:
 	_ghost.visible = false
 	_plate.visible = false
 	_floor.visible = false
+	_square_label.visible = false
 	_layer.visible = false
 	_set_picker(true)
 
