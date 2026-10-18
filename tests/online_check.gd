@@ -796,7 +796,8 @@ func _phase6_quests() -> void:
 	Tutorial.note("open", 1, "keep")
 	var food0 := int(Economy.res.get("food", 0))
 	_check(Tutorial.complete() and Tutorial.claim(), "(q) mission 1 done; claim sent to the server", "complete=%s" % Tutorial.complete())
-	var got := await _wait_until(func(): return Tutorial.step == 1, 10.0)
+	_check(Tutorial.step == 1, "(q) the card moves to mission 2 at once (the server confirms behind — 2026-10-16)", "step=%d" % Tutorial.step)
+	var got := await _wait_until(func(): return Tutorial.step == 1 and not Economy.quest_waiting() and int(Economy.server_quest.tut_step) == 1, 10.0)
 	_check(got and int(Economy.res.get("food", 0)) == food0 + int(Tutorial.reward(0).food) and Tutorial.count == 0 and Tutorial.mission().id == "build_lumber",
 		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d food=%d->%d" % [Tutorial.step, food0, int(Economy.res.get("food", 0))])
 	var t0 := Economy.time_now()
@@ -807,7 +808,7 @@ func _phase6_quests() -> void:
 	_check(started and built and Economy.building_level("lumber") == 1 and Tutorial.complete(), "(q) the finished lot leaves the server's lot list and completes mission 2",
 		"unbuilt=%s" % [Economy.unbuilt.keys()])
 	Tutorial.claim()
-	got = await _wait_until(func(): return Tutorial.step == 2, 10.0)
+	got = await _wait_until(func(): return Tutorial.step == 2 and not Economy.quest_waiting(), 10.0)  # 카드는 곧바로 넘어간다 — 서버 응답까지 기다린다
 	_check(got and Economy.server_quest.tut_step == 2, "(q) claiming mission 2 moves the server to mission 3", "quest=%s" % [Economy.server_quest])
 	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그)
 	var sales := []
