@@ -1,7 +1,7 @@
 extends Node
 ## 영웅 피규어(개정 14 §2): 숨긴 SubViewport 하나(정사각 SIZE px, 투명 배경)에서 모델(gear 포함, 대기 자세 첫 프레임,
 ## 살짝 왼쪽 위 3/4 시점, main과 같은 조명·로우폴리 재질)을 키마다 한 번 렌더링해 ImageTexture로 캐시한다.
-## 키 = "hero:<영웅 id>" 또는 "soldier:<병종>"(개정 15: 보병 = 기사 + 칼·방패, 궁병 = 두건 도적 + 쇠뇌, 기병 = 로우폴리 말 + 기사 —
+## 키 = "hero:<영웅 id>" 또는 "soldier:<병종>[:<단계>]"(개정 15: 보병 = 기사 + 칼·방패, 궁병 = 두건 도적 + 쇠뇌, 기병 = 로우폴리 말 + 기사 —
 ## 월드 병사와 같은 SoldierBody.build로 만든다). "bust:<영웅 id>"(디자인 보강 5번) = 같은 모델의 흉상: 머리 뼈(목) 높이에 맞춰
 ## 가슴께~머리 위만 조금 더 정면에서 찍어 얼굴이 늘 같은 자리(FACE_Y)에 크게 온다 — 목록·모집 카드와 전투 초상화(draw_face)가 쓴다.
 ## portrait(key)는 바로 돌려준다: 캐시가 있으면 그것, 없으면 자리표시(등급 색 실루엣)를 주고 렌더를 큐에 넣는다 → 끝나면
@@ -135,7 +135,7 @@ static func spec_of(key: String) -> Dictionary:
 	if not h.is_empty():
 		return Art.hero_spec(h)
 	var s := _soldier_of(key)
-	return Art.soldier_spec(s.id, s.model) if not s.is_empty() else {}
+	return Art.soldier_spec(s.id, s.model, soldier_tier(key)) if not s.is_empty() else {}
 
 
 ## 자리표시: 등급 색(병사는 NEUTRAL) 반투명 실루엣. 색마다 하나를 공유한다.
@@ -196,12 +196,23 @@ static func _hero_of(key: String) -> Dictionary:
 	return {}
 
 
-## "soldier:<병종>" → 병종 행(앱이 그릴 수 있는 병종만). 아니면 {}.
+## "soldier:<병종>[:<단계>]" → 병종 행(앱이 그릴 수 있는 병종만). 아니면 {}.
 static func _soldier_of(key: String) -> Dictionary:
 	if not key.begins_with("soldier:"):
 		return {}
-	var s := GameData.soldier(key.trim_prefix("soldier:"))
+	var s := GameData.soldier(key.trim_prefix("soldier:").get_slice(":", 0))
 	return s if not s.is_empty() and Art.SOLDIERS.has(s.id) else {}
+
+
+## 병사 피규어 키의 단계(없으면 1). 2026-10-18: 단계마다 외형이 달라 피규어도 단계별이다.
+static func soldier_tier(key: String) -> int:
+	var parts := key.split(":")
+	return maxi(1, int(parts[2])) if parts.size() > 2 else 1
+
+
+## 병종·단계 → 피규어 키(1단계는 "soldier:<병종>" 그대로).
+static func soldier_key(type: String, tier := 1) -> String:
+	return "soldier:" + type if tier <= 1 else "soldier:%s:%d" % [type, tier]
 
 
 ## 렌더 요청(렌더러가 있고 모델이 있는 키만, 한 번씩).
@@ -282,7 +293,7 @@ func _show(key: String) -> void:
 		return
 	var m
 	if key.begins_with("soldier:"):
-		m = SoldierBody.build(_pivot, key.trim_prefix("soldier:"))[0]  # 월드 병사와 같은 몸(기병은 말 + 기사)
+		m = SoldierBody.build(_pivot, _soldier_of(key).id, soldier_tier(key))[0]  # 월드 병사와 같은 몸(기병은 말 + 기사, 단계별 외형)
 	else:
 		m = UnitModelScript.new()
 		m.setup(spec)

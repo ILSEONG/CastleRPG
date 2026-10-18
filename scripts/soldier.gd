@@ -106,7 +106,7 @@ func _ready() -> void:
 	add_to_group("soldiers")
 	add_to_group("crowd")  # 겹침 해소(crowd.gd)
 	var art: Dictionary = Art.SOLDIERS[type]
-	var body := SoldierBody.build(self, type, true)  # 모델(crowd_lod) + 기병이면 말(병사 피규어도 같은 것으로 만든다)
+	var body := SoldierBody.build(self, type, tier, true)  # 모델(crowd_lod) + 기병이면 말(병사 피규어도 같은 것으로 만든다)
 	_model = body[0]
 	_horse = body[1]
 	_disc = Fx.soldier_disc(art.color, 0.75 if _horse != null else 0.42)

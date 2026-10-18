@@ -95,7 +95,7 @@ func _ready() -> void:
 	add_to_group("crowd")
 	add_to_group("pvp%d" % team)
 	add_to_group("soldiers" if team == 0 else "monsters")
-	var body := SoldierBody.build(self, type, true, outfit)
+	var body := SoldierBody.build(self, type, tier, true, outfit)
 	_model = body[0]
 	_horse = body[1]
 	_disc = Fx.soldier_disc(Art.SOLDIERS[type].color if team == 0 else Color(0.85, 0.25, 0.2), 0.75 if _horse != null else 0.42)

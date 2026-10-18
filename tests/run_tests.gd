@@ -2920,6 +2920,31 @@ func test_soldier_figures() -> void:
 			ok = ok and b[1] == null and m.position.y == 0.0
 		check(ok, "SoldierBody.build(%s): the soldier model (gear %s)%s" % [type, Art.SOLDIERS[type].gear, " on a horse" if type == "cavalry" else ""])
 		root.free()
+	# 2026-10-18 단계별 외형: 말은 단계마다 털색·마구가 다르고(높을수록 더 갖춤), 발자리는 1단계 말과 거의 같다. 천 색 = 성주 색.
+	var h1 := TownKitScript.horse(1).get_aabb()
+	var tris := []
+	var fits := true
+	for t in range(1, 6):
+		var hm := TownKitScript.horse(t)
+		tris.append(hm.surface_get_array_len(0))
+		var hb := hm.get_aabb()
+		fits = fits and hm.get_surface_count() == 1 and absf(hb.position.y) < 0.01 and hb.size.x <= 0.6 and absf(hb.position.z - h1.position.z) < 0.05 and absf(hb.end.z - h1.end.z) < 0.05
+	check(fits and tris[0] < tris[2] and tris[2] < tris[3] and tris[3] < tris[4] and TownKitScript.HORSE_COATS[4][0] != TownKitScript.HORSE_COATS[0][0],
+		"horse tiers 1-5: more tack each tier (vertices %s), coat colour changes, footprint stays the tier-1 horse's" % [tris])
+	var r2 := Node3D.new()
+	var ba: Array = SoldierBody.build(r2, "cavalry", 5)
+	var bb: Array = SoldierBody.build(r2, "cavalry", 5)
+	var bc: Array = SoldierBody.build(r2, "cavalry", 5, false, Color.RED)
+	var bd: Array = SoldierBody.build(r2, "cavalry", 1)
+	check(ba[1].mesh == bb[1].mesh and ba[1].mesh != bc[1].mesh and ba[1].mesh != bd[1].mesh and ba[0]._spec == Art.soldier_spec("cavalry", "Knight", 5),
+		"SoldierBody.build(cavalry, tier): same tier + colour share one horse mesh; another colour or tier gets its own")
+	r2.free()
+	check(Art.soldier_body("infantry", 3) == "" or Art.soldier_spec("infantry", "Knight", 3).body == Art.soldier_body("infantry", 3),
+		"soldier_spec(tier) wears that tier's Meshy body when the file exists (KayKit body otherwise)")
+	check(PortraitsScript.soldier_key("archer", 1) == "soldier:archer" and PortraitsScript.soldier_key("archer", 4) == "soldier:archer:4"
+		and PortraitsScript.soldier_tier("soldier:archer:4") == 4 and PortraitsScript.soldier_tier("soldier:archer") == 1
+		and PortraitsScript.spec_of("soldier:archer:4") == Art.soldier_spec("archer", "Rogue_Hooded", 4) and not PortraitsScript.spec_of("soldier:archer:4").is_empty(),
+		"soldier figure keys carry the tier (soldier:<type>:<tier>, tier 1 keeps the old key)")
 	var inf: Dictionary = Art.soldier_spec("infantry", "Knight")
 	var arc: Dictionary = Art.soldier_spec("archer", "Rogue_Hooded")
 	check(GameData.soldier("infantry").model == "Knight" and not inf.hide.has("1H_Sword") and not inf.hide.has("Rectangle_Shield") and inf.hide.has("2H_Sword")

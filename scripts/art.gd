@@ -221,6 +221,7 @@ const HERO_LOOKS := {
 ## 손 부품(handslot)만 단다. meshy_bodies = false면 KayKit 생김새로 돌아간다.
 const MESHY_HERO_DIR := "res://assets/models/meshy/heroes/"
 const MESHY_ENEMY_DIR := "res://assets/models/meshy/enemies/"  # 던전 적(monster_spec) — 같은 몸 파일 형식, 뼈대 = MONSTER_MODELS scene
+const MESHY_SOLDIER_DIR := "res://assets/models/meshy/soldiers/"  # 병사 단계별 몸(soldier_spec, <병종>_t<단계>.glb — 2026-10-18)
 const MESHY_BODY := "MeshyBody"
 static var meshy_bodies := true
 
@@ -483,13 +484,23 @@ const SOLDIER_BAR := Color(0.45, 0.78, 0.98)  # 병사 HP 바(하늘색)
 
 
 ## 병종 → UnitModel 스펙(hero_spec과 같은 규칙). 말 탄 병사는 걷지 않고 대기 동작 그대로(말이 걷는다).
-static func soldier_spec(type: String, model: String) -> Dictionary:
+## tier = 병사 단계(2026-10-18): 그 단계의 Meshy 몸(MESHY_SOLDIER_DIR/<병종>_t<단계>.glb)이 있으면 영웅처럼 KayKit 몸을 그것으로 바꾼다(무기는 KayKit 그대로).
+static func soldier_spec(type: String, model: String, tier := 1) -> Dictionary:
 	var a: Dictionary = SOLDIERS[type]
 	var spec := hero_spec({"model": model, "gear": a.gear, "role": a.role})
 	if a.get("horse", false):
 		spec.anims.walk = spec.anims.idle
 	spec.erase("attacks")  # 병사는 평타 하나(모션 셋은 영웅·보스)
+	var body := soldier_body(type, tier)
+	if body != "":
+		spec.body = body
 	return spec
+
+
+## 병종·단계의 Meshy 몸 파일(없거나 꺼져 있으면 "" — KayKit 몸 그대로).
+static func soldier_body(type: String, tier: int) -> String:
+	var path := MESHY_SOLDIER_DIR + "%s_t%d.glb" % [type, tier]
+	return path if meshy_bodies and ResourceLoader.exists(path) else ""
 
 ## 영웅 정의(GameData.hero) → UnitModel 스펙: gear만 보이고, 공격 애니메이션은 역할·모델·주무기로 고른다.
 ## 영웅마다 생김새(HERO_LOOKS, 개정 23)가 있으면 더한다: palette = 텍스처 칸 → 색(remap), hide += 모자·무기 바꿈, parts = 코드 부품, body_scale.

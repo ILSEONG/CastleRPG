@@ -112,6 +112,9 @@ func begin() -> void:
 		_portraits.append("hero:" + str(h.id))
 	for s in GameData.soldiers():
 		_portraits.append("soldier:" + str(s.id))
+	for t in range(2, int(GameData.config_num("soldier_max_tier")) + 1):  # 단계별 피규어(2026-10-18 단계마다 외형이 다르다)
+		for s in GameData.soldiers():
+			_portraits.append(PortraitsScript.soldier_key(str(s.id), t))
 	for k in _portraits:
 		PortraitsScript.portrait(k)  # 렌더를 줄 세운다(한 프레임에 하나)
 	for t in DUNGEON_TYPES.filter(func(t): return not DungeonArt.has_art(t)):  # 그림이 있는 던전은 스냅샷을 안 찍는다

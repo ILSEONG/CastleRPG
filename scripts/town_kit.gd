@@ -1006,24 +1006,64 @@ static func _barrel(k, p: Vector3) -> void:
 
 
 ## 말(개정 13 기병, 원점 = 발 사이 바닥, 머리 +Z): 몸통·목·머리·다리 넷·꼬리, 갈색(갈기·꼬리는 진하게). 기병 등 높이 = HORSE_BACK.
+## 병사 단계(tier 1~5, 2026-10-18 사용자 "병사 레벨에 따라 외형이 달라졌으면" — 라이즈 오브 킹덤즈·로드 모바일처럼 단계마다 다른 병사)마다
+## 말 털색(갈색 → 황갈색 → 진갈색 → 검정 → 회백색)과 마구가 갖춰진다: 1 안장·굴레 → 2 안장 천 → 3 마의(천을 옆·앞·뒤로 늘어뜨림, 진한 말) → 4 + 강철 말 투구·목 판·가슴 판(검은 말)
+## → 5 흰 테 두른 긴 마의 + 엉덩이 판 + 깃털 장식(회백색 말). cloth = 천 색(파티·대전 성주 색). 금색은 쓰지 않는다(사용자 2026-10-14).
 const HORSE_BACK := 1.15
 const HORSE := Color(0.50, 0.33, 0.20)
 const HORSE_DARK := Color(0.28, 0.19, 0.13)
+const HORSE_COATS := [[HORSE, HORSE_DARK], [Color(0.7, 0.53, 0.32), Color(0.4, 0.27, 0.16)], [Color(0.36, 0.22, 0.14), Color(0.16, 0.11, 0.08)],
+	[Color(0.2, 0.18, 0.18), Color(0.09, 0.08, 0.08)], [Color(0.84, 0.84, 0.86), Color(0.56, 0.57, 0.62)]]  # 단계별 [털, 갈기·꼬리·발굽]
+const HORSE_CLOTH := Color("3F6FB0")  # 기본 천 색(기병 파랑)
+const TACK := Color(0.34, 0.2, 0.11)  # 안장·굴레 가죽
+const BARD_STEEL := Color(0.7, 0.74, 0.8)
+const BARD_TRIM := Color(0.93, 0.94, 0.96)  # 5단계 마의 테(흰빛 — 금색 대신)
 
 
-static func horse() -> ArrayMesh:
+static func horse(tier := 1, cloth := HORSE_CLOTH) -> ArrayMesh:
+	var t := clampi(tier, 1, HORSE_COATS.size())
+	var coat: Color = HORSE_COATS[t - 1][0]
+	var dark: Color = HORSE_COATS[t - 1][1]
 	var k = MeshKit.new()
 	for p in [Vector3(-0.17, 0, 0.45), Vector3(0.17, 0, 0.45), Vector3(-0.17, 0, -0.45), Vector3(0.17, 0, -0.45)]:
-		k.box(p, Vector3(0.14, 0.75, 0.14), HORSE)
-		k.box(p, Vector3(0.15, 0.12, 0.15), HORSE_DARK)  # 발굽
-	k.box(Vector3(0, 0.7, 0), Vector3(0.5, 0.45, 1.25), HORSE)  # 몸통(위 = HORSE_BACK)
+		k.box(p, Vector3(0.14, 0.75, 0.14), coat)
+		k.box(p, Vector3(0.15, 0.12, 0.15), dark)  # 발굽
+	k.box(Vector3(0, 0.7, 0), Vector3(0.5, 0.45, 1.25), coat)  # 몸통(위 = HORSE_BACK)
+	k.box(Vector3(0, HORSE_BACK, -0.02), Vector3(0.34, 0.06, 0.4), TACK)  # 안장
+	if t == 2:  # 안장 천: 등 위 + 양옆으로 배까지(기사 다리 밖으로 보이게 길게)
+		k.box(Vector3(0, HORSE_BACK - 0.03, -0.04), Vector3(0.56, 0.04, 0.84), cloth)
+		for sx in [-1.0, 1.0]:
+			k.box(Vector3(sx * 0.27, 0.74, -0.04), Vector3(0.03, 0.39, 0.84), cloth)
+			k.box(Vector3(sx * 0.275, 0.74, -0.04), Vector3(0.035, 0.06, 0.85), cloth.darkened(0.3))
+	elif t >= 3:  # 마의: 등을 덮고 옆·앞·뒤로 무릎께까지(5단계는 더 길게 + 흰 테)
+		var low := 0.34 if t >= 5 else 0.44
+		var hem := cloth.darkened(0.3)
+		k.box(Vector3(0, HORSE_BACK - 0.03, 0), Vector3(0.56, 0.04, 1.29), cloth)
+		for sx in [-1.0, 1.0]:
+			k.box(Vector3(sx * 0.27, low, 0), Vector3(0.03, HORSE_BACK - low, 1.29), cloth)
+			k.box(Vector3(sx * 0.275, low, 0), Vector3(0.035, 0.07, 1.3), BARD_TRIM if t >= 5 else hem)
+		for sz in [-1.0, 1.0]:
+			k.box(Vector3(0, low + 0.06, sz * 0.645), Vector3(0.56, HORSE_BACK - low - 0.06, 0.03), cloth)
+		if t >= 4:
+			k.box(Vector3(0, 0.66, 0.67), Vector3(0.46, 0.42, 0.05), BARD_STEEL)  # 가슴 판
+		if t >= 5:
+			k.box(Vector3(0, HORSE_BACK, -0.45), Vector3(0.5, 0.06, 0.34), BARD_STEEL)  # 엉덩이 판
 	k.xform = Transform3D(Basis(Vector3.RIGHT, 0.6), Vector3(0, 0.95, 0.5))  # 목: 앞(+Z)으로 기울어 올라간다(위 끝 ≈ (0, 1.57, 0.92))
-	k.box(Vector3.ZERO, Vector3(0.28, 0.75, 0.32), HORSE)
-	k.box(Vector3(0, 0, -0.17), Vector3(0.1, 0.8, 0.08), HORSE_DARK)  # 갈기(목 뒤)
+	k.box(Vector3.ZERO, Vector3(0.28, 0.75, 0.32), coat)
+	k.box(Vector3(0, 0, -0.17), Vector3(0.1, 0.8, 0.08), dark)  # 갈기(목 뒤)
+	if t >= 4:
+		k.box(Vector3(0, 0.12, -0.2), Vector3(0.2, 0.6, 0.05), BARD_STEEL)  # 목 판(갈기 위)
 	k.xform = Transform3D(Basis(Vector3.RIGHT, 0.5), Vector3(0, 1.5, 0.95))  # 머리: 코가 아래 앞으로
-	k.box(Vector3(0, -0.15, 0.12), Vector3(0.24, 0.3, 0.5), HORSE)
+	k.box(Vector3(0, -0.15, 0.12), Vector3(0.24, 0.3, 0.5), coat)
+	k.box(Vector3(0, -0.02, 0.24), Vector3(0.26, 0.04, 0.05), TACK)  # 굴레(코 위 끈)
+	if t >= 4:
+		k.box(Vector3(0, 0.12, 0.12), Vector3(0.27, 0.06, 0.46), BARD_STEEL)  # 말 투구(정수리~콧등)
+	if t >= 5:  # 깃털 장식: 귀 뒤 정수리에서 뒤로 눕힌 볏(앞으로 서면 뿔처럼 보인다)
+		k.xform = Transform3D(Basis(Vector3.RIGHT, -0.5), Vector3(0, 1.6, 0.84))
+		k.box(Vector3.ZERO, Vector3(0.06, 0.3, 0.2), cloth.darkened(0.15))
+		k.box(Vector3(0, 0.3, -0.02), Vector3(0.065, 0.05, 0.16), BARD_TRIM)
 	k.xform = Transform3D(Basis(Vector3.RIGHT, 0.6), Vector3(0, 1.0, -0.62))  # 꼬리: 뒤로 늘어진다
-	k.box(Vector3(0, -0.5, 0), Vector3(0.12, 0.55, 0.1), HORSE_DARK)
+	k.box(Vector3(0, -0.5, 0), Vector3(0.12, 0.55, 0.1), dark)
 	k.xform = Transform3D.IDENTITY
 	return k.commit()
 

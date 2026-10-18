@@ -219,8 +219,8 @@ func _step_button(text: String, key: String, d: int) -> Button:
 
 ## 병종 그림 텍스처 = 병사 피규어(Portraits "soldier:<병종>" — 월드 병사와 같은 몸). 렌더 전에는 자리표시를 주고 렌더를 요청한다.
 ## 병사 행·칸은 모두 이것으로 그린다(렌더가 끝나면 portrait_ready에 칸을 다시 그린다 — unit_icon).
-static func figure(type: String) -> Texture2D:
-	return PortraitsScript.portrait("soldier:" + type)
+static func figure(type: String, tier := 1) -> Texture2D:
+	return PortraitsScript.portrait(PortraitsScript.soldier_key(type, tier))
 
 
 ## 병종 그림 칸(px × px, 입력 없음). tier > 0이면 오른위에 갈매기 tier개(월드 머리 위 티어 표시와 같은 모양).
@@ -242,8 +242,8 @@ static func _draw_unit(c: Control, type: String, tier: int) -> void:
 	c.draw_colored_polygon(oct, Color(Art.SOLDIERS.get(type, {}).get("color", UiKit.STEEL)).lightened(0.35))
 	oct.append(oct[0])
 	c.draw_polyline(oct, UiKit.OUTLINE, 2.0, true)
-	var tex := figure(type)
-	if PortraitsScript.has_portrait("soldier:" + type):
+	var tex := figure(type, tier)
+	if PortraitsScript.has_portrait(PortraitsScript.soldier_key(type, tier)):
 		c.draw_texture_rect(tex, r, false)
 	else:
 		var glyph := str(GameData.soldier(type).get("name", "?")).left(1)

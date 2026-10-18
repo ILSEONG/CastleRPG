@@ -1,6 +1,6 @@
 extends RefCounted
 ## 병종 몸(개정 13 §7, 개정 15 다듬기): UnitModel(Art.soldier_spec, 크기 Art.SOLDIER_SCALE) + 기병이면 로우폴리 말(TownKit.horse, 같은 크기)과
-## 그 등 위 기사(RIDER_Y). 월드 병사(soldier.gd)와 병사 피규어(Portraits "soldier:<병종>")가 이것 하나로 만든다.
+## 그 등 위 기사(RIDER_Y). 월드 병사(soldier.gd)와 병사 피규어(Portraits "soldier:<병종>[:<단계>]")가 이것 하나로 만든다.
 ## 오토로드 참조 없음 → 헤드리스 테스트(run_tests -s)와 Portraits에서 preload 가능.
 
 const Art := preload("res://scripts/art.gd")
@@ -11,16 +11,17 @@ const UnitModelScript := preload("res://scripts/unit_model.gd")
 const RIDER_HIP := 0.48  # KayKit 기사 엉덩이(다리 뿌리 0.41~0.52) — 말 등에 앉는 높이
 const RIDER_Y := (TownKit.HORSE_BACK - RIDER_HIP) * Art.SOLDIER_SCALE  # 기사 모델 높이 = (말 등 − 엉덩이) × 크기
 
-static var _horse_mesh: ArrayMesh  # 말 메시는 하나를 같이 쓴다
+static var _horse_meshes := {}  # [단계, 천 색] → 말 메시(같은 것끼리 같이 쓴다)
 
 
-## parent 아래에 병종 type의 몸을 만든다(모델 먼저, 그다음 말). 반환 [UnitModel, 말 MeshInstance3D 또는 null].
+## parent 아래에 병종 type·단계 tier의 몸을 만든다(모델 먼저, 그다음 말). 반환 [UnitModel, 말 MeshInstance3D 또는 null].
+## tier = 병사 단계 1~5(2026-10-18: 단계마다 외형이 다르다 — 말은 TownKit.horse(tier), 몸은 Art.soldier_spec이 단계별 몸을 고른다).
 ## world = 월드 병사: UnitModel.crowd_lod(화면 밖·붐빌 때 간헐 갱신, 붐비면 그림자 끔 — add_child 전에 정해야 한다).
-## outfit = 옷 색 하나(알파 0이면 원래 옷) — 파티 퀘스트에서 성주마다 병사 옷 색을 다르게(Art.outfit_palette, 사용자 2026-10-15).
-static func build(parent: Node3D, type: String, world := false, outfit := Color(0, 0, 0, 0)) -> Array:
+## outfit = 옷 색 하나(알파 0이면 원래 옷) — 파티 퀘스트에서 성주마다 병사 옷 색을 다르게(Art.outfit_palette, 사용자 2026-10-15). 말 천도 이 색.
+static func build(parent: Node3D, type: String, tier := 1, world := false, outfit := Color(0, 0, 0, 0)) -> Array:
 	var model = UnitModelScript.new()
 	model.crowd_lod = world
-	var spec := Art.soldier_spec(type, GameData.soldier(type).model)
+	var spec := Art.soldier_spec(type, GameData.soldier(type).model, tier)
 	if outfit.a > 0.0:
 		var m := str(GameData.soldier(type).model)
 		spec.look = "outfit:%s:%s" % [m, outfit.to_html(false)]
@@ -29,10 +30,12 @@ static func build(parent: Node3D, type: String, world := false, outfit := Color(
 	parent.add_child(model)
 	if not Art.SOLDIERS[type].get("horse", false):
 		return [model, null]
-	if _horse_mesh == null:
-		_horse_mesh = TownKit.horse()
+	var cloth := outfit if outfit.a > 0.0 else TownKit.HORSE_CLOTH
+	var key := [clampi(tier, 1, TownKit.HORSE_COATS.size()), cloth]
+	if not _horse_meshes.has(key):
+		_horse_meshes[key] = TownKit.horse(key[0], cloth)
 	var horse := MeshInstance3D.new()
-	horse.mesh = _horse_mesh
+	horse.mesh = _horse_meshes[key]
 	horse.material_override = Art.lowpoly_vc_material()
 	horse.scale = Vector3.ONE * Art.SOLDIER_SCALE  # 말 길이 ≈ 2.0 m — 기병은 두 줄 건너 선다(Formation.soldier_spots)
 	parent.add_child(horse)
