@@ -346,7 +346,7 @@ func gacha_cost(currency: String, count: int) -> int:
 
 
 ## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
-## rand = [0, 1) 난수 Callable(테스트는 주입). rates = GameData.gacha_rates(비면 골드 Lv 1·주점 1).
+## rand = [0, 1) 난수 Callable(테스트는 주입). rates = GameData.gacha_rates(비면 골드 Lv 1).
 ## pity(다이아 모집만, 개정 23) {n, max}가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — pity를 바꿔 둔다. 다이아 10연차는 또
 ## SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 ## 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
@@ -356,7 +356,7 @@ static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> A
 		if pools.has(h.grade):
 			pools[h.grade].append(h.id)
 	if rates.is_empty():
-		rates = GameData.gacha_rates(GameData.GACHA_GOLD, 1, 1)
+		rates = GameData.gacha_rates(GameData.GACHA_GOLD, 1)
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
 	var out := []
@@ -1835,7 +1835,7 @@ func population() -> int:
 func gacha_rates(currency := GameData.GACHA_GOLD) -> Dictionary:
 	if currency == GameData.GACHA_TICKET:
 		currency = GameData.GACHA_DIA
-	return GameData.gacha_rates(currency, gacha_gold_level, building_level(GameData.TAVERN))
+	return GameData.gacha_rates(currency, gacha_gold_level)
 
 
 ## 모집 상태(개정 23): {gold_level, gold_pulls, gold_next(다음 레벨까지 필요한 누적, 최대면 0), dia_pity, pity_left(SSR 확정까지 남은 수)}.

@@ -454,16 +454,15 @@ export function gachaCost(config: Config, currency: string, count: number, level
   return goldCost1(config, level) * count
 }
 
-// 모집 확률 {ssr, sr}(R은 나머지). 골드 = base + step × (L − 1), 다이아 = 고정. 둘 다 주점 보너스(tavern_*_per_level × (주점 − 1))를 더한다.
-// 골드 모집 레벨이 GOLD_SSR_FROM보다 낮으면 SSR 0(주점 보너스도 없음).
-export function gachaRates(config: Config, currency: string, level: number, tavernLevel: number) {
-  const t = Math.max(tavernLevel, 1) - 1
+// 모집 확률 {ssr, sr}(R은 나머지). 골드 = base + step × (L − 1), 다이아 = 고정. 주점 레벨 보너스는 없다(사용자 2026-10-18 "주점 레벨 없애" —
+// 설정 tavern_*_per_level은 예전 앱 호환으로 0으로 남겨 둔다). 골드 모집 레벨이 GOLD_SSR_FROM보다 낮으면 SSR 0.
+export function gachaRates(config: Config, currency: string, level: number) {
   const k = goldLevel(config, level) - 1
   const dia = currency === GACHA_DIA
   const ssr = dia ? cfgNum(config, 'gacha_dia_ssr') : cfgNum(config, 'gacha_gold_ssr_base') + cfgNum(config, 'gacha_gold_ssr_step') * k
   const sr = dia ? cfgNum(config, 'gacha_dia_sr') : cfgNum(config, 'gacha_gold_sr_base') + cfgNum(config, 'gacha_gold_sr_step') * k
   const noSsr = !dia && goldLevel(config, level) < GOLD_SSR_FROM
-  return { ssr: noSsr ? 0 : ssr + cfgNum(config, 'tavern_ssr_per_level') * t, sr: sr + cfgNum(config, 'tavern_sr_per_level') * t }
+  return { ssr: noSsr ? 0 : ssr, sr }
 }
 
 // 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L²(낮은 레벨은 조금, 높은 레벨은 크게 — 사용자 2026-10-12). 최대 레벨이면 null.
@@ -500,12 +499,12 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
 }
 
 // 모집(스펙 §3.6): 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
-// rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1·주점 1).
+// rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1).
 // pity(다이아 모집만, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다. 다이아 10연차는 또
 // SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 // 앱 Economy.roll_gacha와 같은 규칙.
 export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
-  rates = gachaRates(config, GACHA_GOLD, 1, 1), pity?: { n: number; max: number }) {
+  rates = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number }) {
   const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {

@@ -597,15 +597,14 @@ static func soldier_stats(type: String, tier: int) -> Dictionary:
 
 
 ## 모집 확률 {ssr, sr}(R은 나머지, 서버 rules.gachaRates와 같은 식). 골드 = base + step × (모집 레벨 − 1), 다이아 = 고정(개정 23).
-## 둘 다 주점 보너스 tavern_*_per_level × (주점 − 1)을 더한다.
-static func gacha_rates(currency: String, gold_level: int, tavern_level: int) -> Dictionary:
-	var t := maxi(tavern_level, 1) - 1
+## 주점 레벨 보너스는 없다(사용자 2026-10-18 "주점 레벨 없애" — 설정 tavern_*_per_level은 예전 앱 호환으로 0).
+static func gacha_rates(currency: String, gold_level: int) -> Dictionary:
 	var k := _gold_level(gold_level) - 1
 	var dia := currency == GACHA_DIA
 	var ssr := config_num("gacha_dia_ssr") if dia else config_num("gacha_gold_ssr_base") + config_num("gacha_gold_ssr_step") * k
 	var sr := config_num("gacha_dia_sr") if dia else config_num("gacha_gold_sr_base") + config_num("gacha_gold_sr_step") * k
 	var no_ssr := not dia and _gold_level(gold_level) < GOLD_SSR_FROM
-	return {"ssr": 0.0 if no_ssr else ssr + config_num("tavern_ssr_per_level") * t, "sr": sr + config_num("tavern_sr_per_level") * t}
+	return {"ssr": 0.0 if no_ssr else ssr, "sr": sr}
 
 
 ## 모집 비용(정수 골드 또는 다이아). 골드 1회 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림, 10회 = × 10(할인 없음).

@@ -86,10 +86,6 @@ test('단계 표: "레벨:값|…" 파싱(1부터 오름차순), 레벨 이하 �
   assert.deepEqual([0, 1, 5, 10].map((l) => R.tierValue(CFG, 'keep_interior_tiers', l)), [20, 20, 24, 28])
   assert.throws(() => R.heroSlots({ keep_slot_tiers: '4|8|12' }, 1), /tier table/)
   assert.deepEqual([0, 1, 2, 3, 30].map((l) => R.population(CFG, l)), [6, 6, 8, 10, 64]) // 인구 = 6 + 2 × (민가 − 1)
-  const r11 = R.gachaRates(CFG, 'gold', 3, 11) // 골드 SSR은 Lv 3부터
-  const r1 = R.gachaRates(CFG, 'gold', 3, 1)
-  assert.ok(Math.abs(r1.ssr - 0.007) < 1e-12 && Math.abs(r1.sr - 0.06) < 1e-12, JSON.stringify(r1))
-  assert.ok(Math.abs(r11.ssr - 0.017) < 1e-12 && Math.abs(r11.sr - 0.09) < 1e-12, JSON.stringify(r11))
 })
 
 test('검사 순서(rules.upgradeBlock): 존재 → 최대 레벨 → 성채 상한(성채 제외) → 선행(req ≥ T−1) → 일꾼 → 자원', async () => {
@@ -257,15 +253,15 @@ test('원자성: 끝난 건설을 두 요청이 동시에 읽어도 완료는 �
   }
 })
 
-test('주점·민가 효과: 주점 레벨이 모집 확률을 올리고(SSR +0.1%p/레벨), 민가 레벨이 인구(player.population)를 늘린다. 축적 상한은 민가와 무관(720분)', async () => {
+test('주점·민가 효과: 주점 레벨은 모집 확률을 바꾸지 않고(2026-10-18 주점 레벨 보너스 없앰), 민가 레벨이 인구(player.population)를 늘린다. 축적 상한은 민가와 무관(720분)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await S.db.query('update player_state set gold_tenths = 400000, gacha_gold_level = 3 where player_id = $1', [id]) // 골드 SSR은 Lv 3부터(0.7%)
-  rand.next = [0.0075, 0] // 주점 1: SSR 0.7% 밖 → SR(풀 첫째 bron)
+  await S.db.query('update player_state set gold_tenths = 400000, gacha_gold_level = 3 where player_id = $1', [id]) // 골드 SSR은 Lv 3부터(0.65%)
+  rand.next = [0.0075, 0] // 주점 1: SSR 0.65% 밖 → SR(풀 첫째 bron)
   assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => x.grade), ['SR'])
-  await setLevels(id, { tavern: 2 }) // SSR 0.8%
+  await setLevels(id, { tavern: 2 }) // 주점이 올라도 SSR 0.65% 그대로
   rand.next = [0.0075, 0]
-  assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => [x.grade, x.hero_id]), [['SSR', 'arteon']])
+  assert.deepEqual((await S.req('POST', '/v1/gacha', { token, body: { count: 1 } })).json.results.map((x: any) => x.grade), ['SR'])
   rand.next = []
   assert.equal((await player(token)).population, 6) // 민가 1
   await setLevels(id, { houses: 4 })
@@ -365,7 +361,7 @@ test('시드 검증: 건물 선행은 표 안, 비용 0 이상 정수, base_sec 
     ['config.csv', cfg.replace('keep_slot_tiers,1:4|9:8|22:12', 'keep_slot_tiers,4|8|12'), /config\.csv line 5 column 'value': not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,1:20|5:24.5'), /not a tier table/],
     ['config.csv', cfg.replace('keep_interior_tiers,1:20|9:28|22:36', 'keep_interior_tiers,2:20'), /not a tier table/],
-    ['config.csv', cfg.replace('tavern_sr_per_level,0.003', 'tavern_sr_per_level,1.5'), /tavern_sr_per_level must be in 0\.\.1: '1\.5'/],
+    ['config.csv', cfg.replace('tavern_sr_per_level,0', 'tavern_sr_per_level,1.5'), /tavern_sr_per_level must be in 0\.\.1: '1\.5'/],
     ['config.csv', cfg.replace('castle_hp_per_level,200', 'castle_hp_per_level,-200'), /castle_hp_per_level must be 0 or more/], // 개정 24: lab_atk_per_level 삭제
     ['config.csv', cfg.replace(/^pop_per_house,.*\n/m, ''), /missing key 'pop_per_house'/],
     ['config.csv', cfg.replace('pop_base,6', 'pop_base,6.5'), /pop_base must be a non-negative integer: '6\.5'/],

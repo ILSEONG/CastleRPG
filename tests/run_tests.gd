@@ -1767,7 +1767,7 @@ func test_gacha_offline() -> void:
 		c[x.grade] += 1
 	check(out.size() == n and c.SSR == 0 and absf(c.SR / float(n) - 0.05) <= 0.0045, "gold Lv 1 rates SSR 0 (from Lv 3), SR 5%% +- 0.45%% (~6.5 sigma): %s" % [c])
 	check(out.slice(0, 200).all(func(x): return GameData.hero(x.id).grade == x.grade), "each pull is a hero of its grade")
-	var dia := GameData.gacha_rates("diamond", 1, 1)
+	var dia := GameData.gacha_rates("diamond", 1)
 	var all_ten := true
 	for i in 2000:
 		var ten: Array = EconomyScript.roll_gacha(10, rng.randf, dia, {"n": 0, "max": 50})
@@ -2186,17 +2186,15 @@ func test_buildings() -> void:
 	check(GameData.castle_hp_max(1) == 1000.0 and GameData.castle_hp_max(5) == 1800.0 and GameData.gate_hp_max(3) == 1200.0, "castle hp = 1000 + 200 x (keep - 1), gate hp = 400 x gate")
 	check([0, 1, 2, 3, 30].map(func(l): return GameData.population(l)) == [6, 6, 8, 10, 64], "population = 6 + 2 x (houses - 1)")
 	check(is_equal_approx(GameData.research_speed({}, 1), 0.0) and is_equal_approx(GameData.research_speed({}, 30), 0.58), "lab: research speed +2% per level above 1 (Lv 30 = +58%)")
-	var r1 := GameData.gacha_rates("gold", 3, 1)
-	var r11 := GameData.gacha_rates("gold", 3, 11)
-	check(is_equal_approx(r1.ssr, 0.007) and is_equal_approx(r1.sr, 0.06) and is_equal_approx(r11.ssr, 0.017) and is_equal_approx(r11.sr, 0.09)
-		and GameData.gacha_rates("gold", 2, 11).ssr == 0.0, "tavern: SSR +0.1%p, SR +0.3%p per level (gold SSR only from Lv 3)")
+	var r1 := GameData.gacha_rates("gold", 3)
+	check(is_equal_approx(r1.ssr, 0.0065) and is_equal_approx(r1.sr, 0.06) and GameData.gacha_rates("gold", 2).ssr == 0.0, "gold Lv 3 SSR 0.65%, SR 6%; no SSR below Lv 3; no tavern bonus")
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
 	check(st == {"hp": 396.0, "atk": 23.0} and not GameData.CONFIG_NUM_KEYS.has("lab_atk_per_level") and not GameData.BUILDING_NUM_KEYS.has("lab_atk_per_level")
 		and GameData.config_num("lab_atk_per_level") == 0.0 and GameData.hero_power(hans, 1, 0) == roundi(396.0 / 10.0 + 23.0 * 2.0 / 0.8),
 		"rev 24: the lab no longer raises hero attack (no lab_atk_per_level); stats and power ignore building levels: %s" % [st])
-	var rig := func(): return 0.0075  # 등급 굴림 0.0075(골드 Lv 3): 주점 1(SSR 0.7%)은 SR, 주점 2(0.8%)는 SSR
-	check(EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 3, 1))[0].grade == "SR" and EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 3, 2))[0].grade == "SSR", "offline recruiting uses the tavern odds")
+	var rig := func(): return 0.006  # 등급 굴림 0.006(골드 Lv 3, SSR 0.65%)은 SSR, 0.0075는 SR
+	check(EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 3))[0].grade == "SSR" and EconomyScript.roll_gacha(1, func(): return 0.0075, GameData.gacha_rates("gold", 3))[0].grade == "SR", "offline recruiting uses the gold-level odds")
 	# 판단(순수 함수): unknown → max_level → keep_cap → prereq → in_progress/builder_busy → not_enough
 	var none := {"wood": 0, "stone": 0, "food": 0}
 	var rich := {"wood": 1000000, "stone": 1000000, "food": 1000000}
@@ -4148,13 +4146,13 @@ func test_recruit_r23() -> void:
 	check([1, 2, 5, 10].map(func(l): return GameData.gacha_cost("gold", 1, l)) == [10000, 12500, 24400, 74500], "rev 23: gold 1-pull 10000 / 12500 / 24400 / 74500 at Lv 1 / 2 / 5 / 10")
 	check(GameData.gacha_cost("gold", 10, 10) == 745000 and GameData.gacha_cost("gold", 1, 99) == 74500 and GameData.gacha_cost("diamond", 1, 7) == 300
 		and GameData.gacha_cost("diamond", 10, 7) == 2700, "rev 23: gold 10-pull = 1-pull x 10 (no discount), levels clamp to the max, diamonds ignore the level")
-	var l4 := GameData.gacha_rates("gold", 4, 1)
-	var l10 := GameData.gacha_rates("gold", 10, 1)
-	var dia := GameData.gacha_rates("diamond", 1, 1)
-	check(is_equal_approx(l4.ssr, 0.008) and is_equal_approx(l4.sr, 0.065) and is_equal_approx(l10.ssr, 0.014) and is_equal_approx(l10.sr, 0.095),
-		"rev 23: gold rates SSR 0.5%% + 0.1%%p, SR 5%% + 0.5%%p per level (Lv 10: 1.4%% / 9.5%%): %s %s" % [l4, l10])
-	check(is_equal_approx(dia.ssr, 0.08) and is_equal_approx(dia.sr, 0.3) and dia.ssr > l10.ssr and dia.sr > l10.sr and is_equal_approx(GameData.gacha_rates("diamond", 1, 3).ssr, 0.082),
-		"rev 23: diamond rates 8% / 30% beat gold max level; the tavern bonus applies too")
+	var l4 := GameData.gacha_rates("gold", 4)
+	var l10 := GameData.gacha_rates("gold", 10)
+	var dia := GameData.gacha_rates("diamond", 1)
+	check(is_equal_approx(l4.ssr, 0.007) and is_equal_approx(l4.sr, 0.065) and is_equal_approx(l10.ssr, 0.01) and is_equal_approx(l10.sr, 0.095),
+		"rev 23: gold rates SSR 0.55%% + 0.05%%p, SR 5%% + 0.5%%p per level (Lv 10: 1%% / 9.5%%): %s %s" % [l4, l10])
+	check(is_equal_approx(dia.ssr, 0.05) and is_equal_approx(dia.sr, 0.3) and dia.ssr > l10.ssr and dia.sr > l10.sr and is_equal_approx(GameData.gacha_rates("diamond", 1).ssr, 0.05),
+		"rev 23: diamond rates 5% / 30% beat gold max level; no tavern bonus")
 	# 레벨업
 	check([1, 2, 9, 10].map(func(l): return GameData.gacha_gold_next(l)) == [40, 160, 3240, 0], "rev 23: next level at 40 x L^2, none at max")
 	check(GameData.gacha_level_up(1, 39, 1) == {"level": 2, "pulls": 0} and GameData.gacha_level_up(1, 38, 1) == {"level": 1, "pulls": 39}
@@ -4175,7 +4173,7 @@ func test_recruit_r23() -> void:
 	var sample: Array = EconomyScript.roll_gacha(100000, rng.randf, l10)
 	var ssr := sample.filter(func(x): return x.grade == "SSR").size() / 100000.0
 	var sr := sample.filter(func(x): return x.grade == "SR").size() / 100000.0
-	check(absf(ssr - 0.014) <= 0.0025 and absf(sr - 0.095) <= 0.006, "rev 23: gold Lv 10 sample SSR 1.4%% +- 0.25%%, SR 9.5%% +- 0.6%%: %s %s" % [ssr, sr])
+	check(absf(ssr - 0.01) <= 0.0025 and absf(sr - 0.095) <= 0.006, "rev 23: gold Lv 10 sample SSR 1%% +- 0.25%%, SR 9.5%% +- 0.6%%: %s %s" % [ssr, sr])
 	# 오프라인 골드: 10연차 3번 = 30회 → Lv 2(알림·시그널·비용)
 	var e = _econ(1000.0)
 	var notes := []
@@ -4245,7 +4243,7 @@ func test_recruit_r23() -> void:
 	e.free()
 	e2.free()
 	# 설정 검증(서버 seed와 같은 규칙): 다이아는 골드 최대 레벨보다 좋아야 한다 등
-	var cases := [["gacha_dia_ssr", "0.014"], ["gacha_dia_sr", "0.095"], ["gacha_gold_ssr_step", "0.01"], ["gacha_gold_level_max", "0"],
+	var cases := [["gacha_dia_ssr", "0.01"], ["gacha_dia_sr", "0.095"], ["gacha_gold_ssr_step", "0.01"], ["gacha_gold_level_max", "0"],
 		["gacha_gold_level_pulls", "2.5"], ["gacha_dia_pity", "0"], ["gacha_gold_cost_growth", "0.9"], ["gacha_gold_sr_step", "0.11"]]
 	logged = _errors.count
 	var errs := 0
@@ -5894,8 +5892,8 @@ func test_sfx() -> void:
 func test_gacha_odds() -> void:
 	var Odds := preload("res://scripts/gacha_odds.gd")
 	for cur in [GameData.GACHA_DIA, GameData.GACHA_GOLD]:
-		for tav in [1, 5]:
-			var rates := GameData.gacha_rates(cur, 3, tav)
+		for tav in [1]:
+			var rates := GameData.gacha_rates(cur, 3)
 			var odds: Array = Odds.hero_odds(rates)
 			var sum := 0.0
 			var ok := odds.size() == GameData.heroes().size()
@@ -5905,5 +5903,5 @@ func test_gacha_odds() -> void:
 				var gp: float = rates.ssr if o.grade == "SSR" else (rates.sr if o.grade == "SR" else 1.0 - rates.ssr - rates.sr)
 				ok = ok and is_equal_approx(float(o.p), gp / n)
 			check(ok and is_equal_approx(sum, 1.0), "gacha odds: every hero listed, each = grade rate / grade size, sum 1 (%s, tavern %d)" % [cur, tav])
-	var dia: Array = Odds.hero_odds(GameData.gacha_rates(GameData.GACHA_DIA, 1, 1))
-	check(Odds.pct(float(dia[0].p)) == "0.5000%" and dia[0].grade == "SSR", "gacha odds: a diamond SSR hero shows 0.5000%% (8%% / 16)")
+	var dia: Array = Odds.hero_odds(GameData.gacha_rates(GameData.GACHA_DIA, 1))
+	check(Odds.pct(float(dia[0].p)) == "0.3125%" and dia[0].grade == "SSR", "gacha odds: a diamond SSR hero shows 0.3125%% (5%% / 16)")

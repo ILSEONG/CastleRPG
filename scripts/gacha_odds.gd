@@ -76,17 +76,14 @@ func _ready() -> void:
 	col.add_child(close_button)
 
 
-## currency = 골드 또는 다이아(모집권은 다이아와 같다). gold_level·tavern = 지금 골드 모집 레벨·주점 레벨.
-func show_for(currency: String, gold_level: int, tavern: int) -> void:
+## currency = 골드 또는 다이아(모집권은 다이아와 같다). gold_level = 지금 골드 모집 레벨.
+func show_for(currency: String, gold_level: int) -> void:
 	for c in list.get_children():
 		c.queue_free()
 	var dia := currency != GameData.GACHA_GOLD
-	var rates := GameData.gacha_rates(GameData.GACHA_DIA if dia else GameData.GACHA_GOLD, gold_level, tavern)
+	var rates := GameData.gacha_rates(GameData.GACHA_DIA if dia else GameData.GACHA_GOLD, gold_level)
 	title_label.text = Lang.t("gacha_odds.show_for") + (Lang.t("gacha_odds.show_for_2") if dia else Lang.t("gacha_odds.show_for_3") % gold_level)
 	_line("SSR %s · SR %s · R %s" % [pct(rates.ssr), pct(rates.sr), pct(1.0 - rates.ssr - rates.sr)], 24, UiKit.INK)
-	var t := maxi(tavern, 1) - 1
-	if t > 0:
-		_line(Lang.t("gacha_odds.show_for_4") % [tavern, pct(GameData.config_num("tavern_ssr_per_level") * t), pct(GameData.config_num("tavern_sr_per_level") * t)], 20, SUB)
 	if dia:
 		_line(Lang.t("gacha_odds.show_for_5") % int(GameData.config_num("gacha_dia_pity")), 20, SUB)
 		_line(Lang.t("gacha_odds.show_for_6") % int(GameData.config_num("gacha_10_min_sr")), 20, SUB)
@@ -103,7 +100,7 @@ func show_for(currency: String, gold_level: int, tavern: int) -> void:
 	if not dia:
 		_line(Lang.t("gacha_odds.show_for_10"), 24, UiKit.INK)
 		for lv in range(1, int(GameData.config_num("gacha_gold_level_max")) + 1):
-			var r := GameData.gacha_rates(GameData.GACHA_GOLD, lv, tavern)
+			var r := GameData.gacha_rates(GameData.GACHA_GOLD, lv)
 			var need := GameData.gacha_gold_next(lv)
 			var up := Lang.t("gacha_odds.show_for.up") % UiKit.commas(need) if need > 0 else ""
 			_line("Lv %d: SSR %s · SR %s · R %s%s" % [lv, pct(r.ssr), pct(r.sr), pct(1.0 - r.ssr - r.sr), up], 18, UiKit.INK if lv == gold_level else SUB)
