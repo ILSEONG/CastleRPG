@@ -122,6 +122,9 @@ func set_section(s: String) -> void:
 	if s == "pvp" and pvp_locked():
 		Tutorial.lock_notice.emit(Tutorial.pvp_lock_text())
 		return
+	if s == "party" and Tutorial.party_locked():
+		Tutorial.lock_notice.emit(Tutorial.party_lock_text())
+		return
 	section = s
 	if s == "pvp":
 		pvp.show_home()
@@ -135,7 +138,7 @@ func pvp_locked() -> bool:
 func _style_tabs() -> void:
 	for k in section_buttons:
 		var on: bool = k == section
-		UiKit.apply_button(section_buttons[k], UiKit.AMBER if on else (UiKit.STEEL.darkened(0.25) if k == "pvp" and pvp_locked() else UiKit.STEEL), 14.0)
+		UiKit.apply_button(section_buttons[k], UiKit.AMBER if on else (UiKit.STEEL.darkened(0.25) if (k == "pvp" and pvp_locked()) or (k == "party" and Tutorial.party_locked()) else UiKit.STEEL), 14.0)
 
 
 func _build_list() -> void:
@@ -345,7 +348,7 @@ func step_level(t: String, d: int) -> void:
 
 func _show_list(guard := true) -> void:
 	form_type = ""
-	if section == "pvp" and pvp_locked():
+	if (section == "pvp" and pvp_locked()) or (section == "party" and Tutorial.party_locked()):
 		section = "dungeon"
 	_form_view.visible = false
 	_list_view.visible = section == "dungeon"

@@ -2634,7 +2634,6 @@ party_overlay.build_confirm,파티가 모였습니다!,,,,scripts/party_overlay.
 party_overlay.build_confirm_2,거절,,,,scripts/party_overlay.gd
 party_overlay.build_confirm_3,입장 수락,,,,scripts/party_overlay.gd
 party_overlay.build_confirm_4,다음부터 자동 수락,,,,scripts/party_overlay.gd
-party_overlay.refresh,%s · %s 매칭 중,,,,scripts/party_overlay.gd
 party_overlay.refresh_2,다른 성주를 기다립니다,,,,scripts/party_overlay.gd
 party_overlay.refresh_3,입장 수락,,,,scripts/party_overlay.gd
 party_overlay.seat_row,나,,,,scripts/party_overlay.gd
@@ -2744,3 +2743,6 @@ recruit_panel.refresh.head,%d회 더,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_18,모집권 %d장,,,,scripts/recruit_panel.gd
 mission_panel.ready_2,모두 받기,,,,scripts/mission_panel.gd
 missions.fail_text.nothing,받을 보상이 없습니다,,,,scripts/missions.gd
+party.error_text.guide_locked,가이드에서 파티 던전 미션에 닿으면 열립니다,,,,scripts/party.gd
+party.error_text.their_locked,그 성주는 아직 가이드에서 파티 던전에 닿지 않았습니다,,,,scripts/party.gd
+party_invite_panel.row_7,가이드 중,,,,scripts/party_invite_panel.gd

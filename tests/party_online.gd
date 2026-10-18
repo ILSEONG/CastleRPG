@@ -30,6 +30,8 @@ func _ready() -> void:
 	Net.device_path = device
 	Net.auth_path = device.get_base_dir().path_join("auth.json")
 	DirAccess.remove_absolute(device)
+	# 새 계정은 가이드 없이(가이드 중이면 파티 던전이 81번 미션까지 잠긴다 — 잠금은 party_check·서버 테스트가 본다)
+	await _http("POST", "/v1/test/config", {"key": "tutorial_new_players", "value": "0"}, "")
 	Net.set_auth("guest")
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -117,7 +119,7 @@ func _invite_flow() -> void:
 	var inv = await _http("POST", "/v1/party/invite", {"to": a_id}, _b_token)
 	_check(inv.get("sent", false) == true, "B invited A (A is online)", inv)
 	var ov = Party.get_child(0)
-	_check(await _wait_until(func(): return ov.invite_dim.visible, 15.0), "A gets the invite window", Party.invites)
+	_check(await _wait_until(func(): return ov.invite_dim.visible, 15.0), "A gets the invite window", [Party.state(), Party.queue(), Party.invites])
 	_check(ov.invite_info.text.contains("리치의 무덤"), "the invite names the quest", ov.invite_info.text)
 	await _snap("6_invite")
 	ov.invite_accept.pressed.emit()

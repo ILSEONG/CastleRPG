@@ -22,7 +22,8 @@ static var ERROR_TEXT := {"locked": Lang.t("party.error_text.locked"), "bag_full
 	"in_match": Lang.t("party.error_text.in_match"), "no_code": Lang.t("party.error_text.no_code"), "full": Lang.t("party.error_text.full"), "not_leader": Lang.t("party.error_text.not_leader"),
 	"no_lobby": Lang.t("party.error_text.no_lobby"), "busy": Lang.t("party.error_text.busy"), "member_locked": Lang.t("party.error_text.member_locked"),
 	"rate_limited": Lang.t("party.error_text.rate_limited"), "in_lobby": Lang.t("party.error_text.in_lobby"), "bad_party": Lang.t("party.error_text.bad_party"), "no_match": Lang.t("party.error_text.no_match"), "conflict": Lang.t("party.error_text.conflict"),
-	"not_friend": Lang.t("party.error_text.not_friend"), "offline": Lang.t("party.error_text.offline"), "member": Lang.t("party.error_text.member")}
+	"not_friend": Lang.t("party.error_text.not_friend"), "offline": Lang.t("party.error_text.offline"), "member": Lang.t("party.error_text.member"),
+	"guide_locked": Lang.t("party.error_text.guide_locked"), "their_locked": Lang.t("party.error_text.their_locked")}
 static var FAIL_TEXT := Lang.t("party.fail_text")
 
 signal changed
@@ -424,9 +425,13 @@ func _take(d) -> void:
 	if q is Dictionary and str(q.get("state", "")) == "live" and finishing.size() > 0:
 		p.queue = {"state": "idle"}  # 결과를 보내는 중인 판(서버가 놓아주기 전 응답) — 다시 열지 않는다
 		q = p.queue
+	var old := queue()
 	view = p
 	if q is Dictionary:
 		q.since = _now() - float(q.get("waited", 0))
+		# 같은 대기면 시작 시각을 그대로 둔다(서버 waited는 초 단위로 잘려 있어 매번 바꾸면 시계가 앞뒤로 튄다 — 2초 넘게 어긋날 때만 맞춘다)
+		if str(old.get("state", "")) == str(q.get("state", "")) and old.get("quest") == q.get("quest") and old.has("since") and absf(float(old.since) - float(q.since)) < 2.0:
+			q.since = float(old.since)
 	changed.emit()
 	_after_state()
 

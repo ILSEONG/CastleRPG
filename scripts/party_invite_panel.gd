@@ -104,6 +104,9 @@ func _row(p: Dictionary) -> Control:
 	if p.get("member", false):
 		b.text = Lang.t("party_invite_panel.row_6")
 		b.disabled = true
+	elif p.get("locked", false):  # 가이드에서 아직 파티 던전에 닿지 않은 성주
+		b.text = Lang.t("party_invite_panel.row_7")
+		b.disabled = true
 	elif not on:
 		b.disabled = true
 	b.pressed.connect(_invite.bind(id, b))

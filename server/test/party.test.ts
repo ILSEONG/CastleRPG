@@ -275,3 +275,24 @@ test('party routes: invite an online friend or guild member, they accept with th
   for (let i = 0; i < PQ.INVITE_MAX; i++) last = (await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: g.id } })).status
   assert.equal(last, 429)
 })
+
+test('party routes: locked until the guide reaches the party mission (finished/skipped guides and the super admin are open)', async () => {
+  const a = await player()
+  const b = await player()
+  const [{ n }] = await S.db.query(`select count(*)::int as n from quest_defs where type = 'tutorial' and ord < (select ord from quest_defs where id = 'party_clear')`)
+  await S.db.query(`update player_state set tut_state = 'active', tut_step = 3 where player_id = $1`, [b.id])
+  const lich = { quest: 'lich', diff: 1, hero: { id: 'hans', hp: 500, atk: 40 } }
+  assert.equal((await S.req('POST', '/v1/party/queue', { token: b.token, body: lich })).json.error, 'guide_locked')
+  assert.equal((await S.req('POST', '/v1/party/lobby/create', { token: b.token, body: lich })).json.error, 'guide_locked')
+  // a가 파티를 만들고 친구 b를 부르면: 목록에 잠김 표시, 초대는 거절
+  await S.db.query('insert into friend_links (a, b, accepted) values ($1, $2, true)', [a.id, b.id])
+  const cr = await S.req('POST', '/v1/party/lobby/create', { token: a.token, body: lich })
+  assert.equal(cr.status, 200, 'a skipped guide is open')
+  assert.equal((await S.req('POST', '/v1/party/lobby/join', { token: b.token, body: { code: cr.json.party.lobby.code, hero: lich.hero } })).json.error, 'guide_locked')
+  const list = await S.req('GET', '/v1/party/invitable', { token: a.token })
+  assert.equal(list.json.people[0].locked, true)
+  assert.equal((await S.req('POST', '/v1/party/invite', { token: a.token, body: { to: b.id } })).json.error, 'their_locked')
+  // 가이드가 파티 미션에 닿으면 열린다
+  await S.db.query(`update player_state set tut_step = $2 where player_id = $1`, [b.id, n])
+  assert.equal((await S.req('POST', '/v1/party/lobby/join', { token: b.token, body: { code: cr.json.party.lobby.code, hero: lich.hero } })).status, 200)
+})

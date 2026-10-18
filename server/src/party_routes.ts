@@ -22,6 +22,7 @@ import type { PartyLive } from './party_live.ts'
 import { Limiter } from './ratelimit.ts'
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
+const PARTY_MISSION = 'party_clear' // 가이드 미션 id(data/quests.csv)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -157,6 +158,17 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     return { pid: x.id, name, soldiers, dps, power: soldiers.reduce((a, s) => a + s.hp / 10 + s.atk * 2, 0), accepted: false }
   }
 
+  // 가이드 잠금(사용자 2026-10-18 "파티던전도 가이드 퀘스트 깨기전에는 잠겨있고"): 가이드 중이면 파티 던전 미션(party_clear)에 닿기 전까지 못 쓴다.
+  // 가이드를 마쳤거나 건너뛴 계정, 슈퍼관리자는 열려 있다(앱 Tutorial.party_locked와 같다).
+  const guideLocked = (pl: Any, game: Any) => {
+    if (pl.admin || pl.quest?.tut_state !== 'active') return false
+    const at = game.quests.filter((d: Any) => d.type === 'tutorial').findIndex((d: Any) => d.id === PARTY_MISSION)
+    return at >= 0 && Number(pl.quest.tut_step) < at
+  }
+  const notLocked = (x: Any) => {
+    if (guideLocked(x.pl, x.game)) throw blocked('guide_locked', 'party dungeons open at the guide party mission')
+  }
+
   const diffOf = (v: unknown) => {
     if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > PQ.DIFFS) throw new ApiError(400, 'bad_request', `'diff' must be 1..${PQ.DIFFS}`)
     return v
@@ -174,6 +186,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
   app.post('/v1/party/queue', auth, async (c) => {
     const b = await body(c)
     const x = await ctx(c)
+    notLocked(x)
     const quest = b.quest
     if (!PQ.isQuest(quest)) throw new ApiError(400, 'bad_request', `'quest' must be one of ${PQ.QUESTS.join(', ')}`)
     const diff = diffOf(b.diff)
@@ -200,6 +213,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
   app.post('/v1/party/lobby/create', auth, async (c) => {
     const b = await body(c)
     const x = await ctx(c)
+    notLocked(x)
     const quest = b.quest
     if (!PQ.isQuest(quest)) throw new ApiError(400, 'bad_request', `'quest' must be one of ${PQ.QUESTS.join(', ')}`)
     const diff = diffOf(b.diff)
@@ -212,6 +226,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
   app.post('/v1/party/lobby/join', auth, async (c) => {
     const b = await body(c)
     const x = await ctx(c)
+    notLocked(x)
     const code = String(b.code ?? '').trim().toUpperCase()
     const tries = joinTries.get(x.id)
     if (tries && x.now - tries.since > PQ.JOIN_WINDOW_SEC) joinTries.delete(x.id)
@@ -257,7 +272,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
 
   // --- 초대 ---
   //  GET  /v1/party/invites            → {server_now, invites: [{id, name, quest, diff, code, left}]} 받은 초대(앱이 켜져 있으면 늘 묻는다 — DB를 읽지 않는다)
-  //  GET  /v1/party/invitable          → {server_now, people: [{id, name, friend, guild, online, member}]} 친구(수락한)·같은 길드원
+  //  GET  /v1/party/invitable          → {server_now, people: [{id, name, friend, guild, online, member, locked}]} 친구(수락한)·같은 길드원
   //  POST /v1/party/invite {to}        내 파티로 초대(친구·길드원, 지금 접속 중이어야 한다) · POST /v1/party/invite/decline {id} 거절
   //  수락 = POST /v1/party/lobby/join {code}(초대에 든 코드)
   const inviteLimit = new Limiter(PQ.INVITE_MAX, PQ.INVITE_WINDOW_SEC)
@@ -292,8 +307,14 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     const id = c.get('playerId') as string
     const now = clock()
     const l = hub.lobbyOf(id)
-    const people = [...(await relations(id)).entries()].map(([pid, r]) => ({ id: pid, name: R.friendName(pid), friend: r.friend, guild: r.guild,
-      online: online(pid, now), member: !!l?.members.some((m) => m.seat.pid === pid) }))
+    const rel = await relations(id)
+    // 가이드에서 아직 파티 던전에 닿지 않은 사람(초대 못 함 — 슈퍼관리자는 초대할 때 다시 본다)
+    const game = await loadGame()
+    const at = game.quests.filter((d: Any) => d.type === 'tutorial').findIndex((d: Any) => d.id === PARTY_MISSION)
+    const st = rel.size ? await query(`select player_id::text as id, tut_state, tut_step from player_state where player_id = any($1::uuid[])`, [[...rel.keys()]]) : []
+    const locked = new Set(st.filter((r: Any) => r.tut_state === 'active' && at >= 0 && Number(r.tut_step) < at).map((r: Any) => r.id))
+    const people = [...rel.entries()].map(([pid, r]) => ({ id: pid, name: R.friendName(pid), friend: r.friend, guild: r.guild,
+      online: online(pid, now), member: !!l?.members.some((m) => m.seat.pid === pid), locked: locked.has(pid) }))
     people.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
     return c.json({ server_now: now, people })
   })
@@ -307,6 +328,8 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
     if (!hub.lobbyOf(id)) throw lobbyFail('no_lobby')
     if (!(await relations(id)).has(to)) throw blocked('not_friend', 'you can invite friends and guild members only')
     if (!online(to, now)) throw blocked('offline', 'that lord is not online')
+    const game = await loadGame()
+    if (guideLocked(await loadPlayer(to, game, now), game)) throw blocked('their_locked', 'that lord has not reached party dungeons in the guide yet')
     if (!inviteLimit.take(id, now)) throw new ApiError(429, 'rate_limited', 'too many invites, try again later')
     hub.tick(now)
     const r = hub.invite(id, to, now)

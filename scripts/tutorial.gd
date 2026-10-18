@@ -243,6 +243,7 @@ const DUNGEON_MISSION := {"gold": "dungeon_gold", "equip": "dungeon_equip", "tic
 const TRAIN_MISSION := "train"
 ## PVP(던전 창의 [PVP])는 이 미션에 닿을 때 열린다(가이드를 끝내거나 건너뛰면 열림).
 const PVP_MISSION := "pvp"
+const PARTY_MISSION := "party_clear"  # 파티 던전은 이 미션에 닿아야 열린다(사용자 2026-10-18)
 
 signal changed  # 미션·완료·보상 상태가 바뀌었다
 signal lock_notice(text: String)  # 잠긴 공터·탭·던전을 눌렀다 — HUD가 화면 중상단 토스트로 띄운다
@@ -719,6 +720,18 @@ func pvp_locked() -> bool:
 	if _admin():
 		return false
 	return active() and step < mission_index(PVP_MISSION)
+
+
+## 파티 던전이 잠겼는가: 가이드 중이고 파티 던전 미션에 아직 닿지 않았다(가이드를 마쳤거나 건너뛰면 열림 — 서버 party_routes guideLocked와 같다).
+func party_locked() -> bool:
+	if _admin():
+		return false
+	return active() and step < mission_index(PARTY_MISSION)
+
+
+## 잠긴 파티 던전 문구: "가이드 81번째 미션 「파티 던전 클리어」에서 열립니다".
+func party_lock_text() -> String:
+	return _lock_text(mission_index(PARTY_MISSION), Lang.t("tutorial.pvp_lock_text"))
 
 
 ## 잠긴 PVP 문구: "가이드 64번째 미션 「PVP 결투」에서 열려요".

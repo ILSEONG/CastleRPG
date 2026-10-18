@@ -39,6 +39,7 @@ var invite_decline: Button
 var _invite := {}  # 지금 띄운 초대
 
 var _match := ""
+var _seats_key := ""
 var _confirm_end := 0.0
 var _confirm_len := 1.0
 
@@ -180,6 +181,7 @@ func _refresh_invite(st: String) -> void:
 	if _invite.is_empty():
 		return
 	var quest := str(_invite.get("quest", "lich"))
+	_tick_invite()
 	invite_info.text = Lang.t("party_overlay.refresh_invite") % [str(_invite.get("name", "")), PartyRules.NAMES.get(quest, ""),
 		PartyRules.DIFF_NAMES[clampi(int(_invite.get("diff", 1)), 1, 4) - 1]]
 
@@ -191,9 +193,10 @@ func refresh() -> void:
 	bar.visible = st == "queued"
 	dim.visible = st == "confirm"
 	if st == "queued":
-		bar_text.text = Lang.t("party_overlay.refresh") % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1]]
+		_tick_bar(q)  # 시계가 든 같은 문구로 바로 바꾼다(시계 없는 문구를 한 프레임 보이면 띠 폭이 바뀌어 깜빡인다 — 사용자 2026-10-18)
 	if st != "confirm":
 		_match = ""
+		_seats_key = ""
 		return
 	var id := str(q.get("match_id", ""))
 	if id != _match:
@@ -202,14 +205,18 @@ func refresh() -> void:
 		_confirm_end = _now() + _confirm_len
 	var quest := str(q.get("quest", "lich"))
 	info.text = "%s · %s" % [PartyRules.NAMES.get(quest, ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1]]
-	for c in seat_box.get_children():
-		c.queue_free()
-	for s in q.get("seats", []):
-		seat_box.add_child(_seat_row(s))
+	var key := str(q.get("seats", []))
+	if key != _seats_key:  # 같은 자리 표면 다시 만들지 않는다(묻기마다 다시 만들면 깜빡인다)
+		_seats_key = key
+		for c in seat_box.get_children():
+			c.queue_free()
+		for s in q.get("seats", []):
+			seat_box.add_child(_seat_row(s))
 	var mine: bool = q.get("accepted", false)
 	accept_button.disabled = mine
 	accept_button.text = Lang.t("party_overlay.refresh_2") if mine else Lang.t("party_overlay.refresh_3")
 	decline_button.visible = not mine
+	_tick_confirm()
 	auto_box.set_pressed_no_signal(Party.auto_accept)
 	auto_box.queue_redraw()
 
@@ -254,18 +261,38 @@ func _process(_delta: float) -> void:
 		if left <= 0.0:
 			refresh()  # 시간이 지난 초대는 닫는다(다음 초대가 있으면 그것)
 		else:
-			invite_timer.text = Lang.t("party_overlay.process_5") % ceili(left)
+			_tick_invite()
 	match str(q.get("state", "")):
 		"queued":
-			var waited := maxf(0.0, _now() - float(q.get("since", _now())))
-			bar_text.text = Lang.t("party_overlay.process") % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1], UiKit.clock(waited)]
-			var bot_in := ceili(PartyRules.BOT_WAIT_SEC - waited)
-			bar_sub.text = Lang.t("party_overlay.process_2") % bot_in if bot_in > 0 else Lang.t("party_overlay.process_3")
+			_tick_bar(q)
 		"confirm":
-			var left := maxf(0.0, _confirm_end - _now())
-			timer_bar.value = left / _confirm_len * 100.0
-			timer_label.text = Lang.t("party_overlay.process_4") % ceili(left)
+			_tick_confirm()
 
+
+## 대기 띠 글(이름·난이도·기다린 시간, AI 성주까지 남은 초). 글이 같으면 건드리지 않는다.
+func _tick_bar(q: Dictionary) -> void:
+	var waited := maxf(0.0, _now() - float(q.get("since", _now())))
+	var t: String = Lang.t("party_overlay.process") % [PartyRules.NAMES.get(str(q.get("quest", "")), ""), PartyRules.DIFF_NAMES[clampi(int(q.get("diff", 1)), 1, 4) - 1], UiKit.clock(waited)]
+	if bar_text.text != t:
+		bar_text.text = t
+	var bot_in := ceili(PartyRules.BOT_WAIT_SEC - waited)
+	var sub: String = Lang.t("party_overlay.process_2") % bot_in if bot_in > 0 else Lang.t("party_overlay.process_3")
+	if bar_sub.text != sub:
+		bar_sub.text = sub
+
+
+func _tick_confirm() -> void:
+	var left := maxf(0.0, _confirm_end - _now())
+	timer_bar.value = left / _confirm_len * 100.0
+	var t: String = Lang.t("party_overlay.process_4") % ceili(left)
+	if timer_label.text != t:
+		timer_label.text = t
+
+
+func _tick_invite() -> void:
+	var t: String = Lang.t("party_overlay.process_5") % ceili(maxf(0.0, float(_invite.get("until", 0.0)) - _now()))
+	if invite_timer.text != t:
+		invite_timer.text = t
 
 func _now() -> float:
 	return Party._now()

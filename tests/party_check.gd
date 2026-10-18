@@ -86,6 +86,32 @@ func _run() -> void:
 	_check(panel != null, "dungeon panel found")
 	panel.open()
 	await _frames(2)
+	# 가이드 잠금(사용자 2026-10-18): 가이드 중 파티 던전 미션 전에는 [파티]가 잠겨 있고 이유가 뜬다. 그 미션에 닿거나 가이드를 마치면 열린다.
+	var tut_state = Tutorial.state
+	var tut_step = Tutorial.step
+	var said := []
+	var hear := func(t): said.append(t)
+	Tutorial.lock_notice.connect(hear)
+	Tutorial.state = "active"
+	Tutorial.step = 0
+	panel.section_buttons.party.pressed.emit()
+	await _frames(2)
+	_check(panel.section != "party" and not panel.party_tab.visible and said.size() == 1 and str(said[0]).contains("파티 던전 클리어"),
+		"guide: [파티] is locked before the party mission, the toast names the mission (%s)" % [said])
+	Tutorial.step = Tutorial.mission_index(Tutorial.PARTY_MISSION)
+	panel.section_buttons.party.pressed.emit()
+	await _frames(2)
+	_check(panel.section == "party" and panel.party_tab.visible, "guide: [파티] opens at the party mission")
+	Tutorial.lock_notice.disconnect(hear)
+	Tutorial.state = "done"
+	panel.set_section("dungeon")
+	panel.set_section("party")
+	await _frames(2)
+	_check(panel.section == "party", "guide finished: [파티] is open")
+	Tutorial.state = tut_state
+	Tutorial.step = tut_step
+	if Tutorial.party_locked():
+		Tutorial.state = "skipped"
 	panel.set_section("party")
 	await _frames(2)
 	var view = panel.party_tab
@@ -98,6 +124,11 @@ func _run() -> void:
 		await _frames(2)
 		_check(Party.state() == "queued", "%s: queued at once" % quest)
 		_check(view.buttons["start:" + quest].disabled, "%s: start button off while matching" % quest)
+		if quest == "lich":  # 깜빡임(사용자 2026-10-18): 상태가 다시 와도(1초마다) 띠 글은 시계가 든 그대로
+			var ov = Party.get_child(0)
+			var before: String = ov.bar_text.text
+			Party.changed.emit()
+			_check(ov.bar_text.text == before and before.contains(":"), "%s: matching bar text stays the same when the state is re-sent (no blink): %s" % [quest, ov.bar_text.text])
 		var overlay = Party.get_child(0)
 		_check(overlay.bar.visible, "%s: matching bar shows" % quest)
 		await get_tree().create_timer(PartyRules.CONFIRM_SEC * 0.0 + 2.5).timeout
