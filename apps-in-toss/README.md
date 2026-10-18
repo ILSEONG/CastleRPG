@@ -15,7 +15,7 @@
 ## 빌드
 
 ```sh
-GODOT=godot bash dev/build-toss.sh        # → apps-in-toss/castlerpg.ait (콘솔에 올린다)
+GODOT=godot bash dev/build-toss.sh        # → apps-in-toss/castle-rpg.ait (콘솔에 올린다)
 BUILD=debug GODOT=godot bash dev/build-toss.sh   # 토스 밖 브라우저 시험용(?api=…&toss_hash=…)
 ```
 
