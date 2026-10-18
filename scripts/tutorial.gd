@@ -443,10 +443,13 @@ func _check_tours() -> void:
 		return
 	if get_tree().get_first_node_in_group(LOADING_GROUP) != null:  # 첫 로딩 화면이 걷힌 뒤에(사용자 2026-10-18 "이게 게임 로딩창일때부터 떠")
 		return
+	var battle: bool = gs != null and gs.mode != gs.Mode.IDLE  # 스테이지를 미는 동안은 띄우지 않는다(사용자 2026-10-18 "스테이지 밀때는 가이드 안보이게해줘")
 	for tid in GuideTours.MISSION_TOURS.get(str(mission().get("id", "")), []):
 		if tours_seen.has(tid):
 			continue
 		var t: Dictionary = GuideTours.TOURS[tid]
+		if battle and not str(t.when).begins_with("war?"):  # 공성전 체험 전장 설명은 그 장면 안이라 그대로
+			continue
 		if tour_ready(str(t.when)):
 			start_tour(tid)
 			return
