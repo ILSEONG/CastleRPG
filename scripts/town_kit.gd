@@ -255,7 +255,10 @@ static func _keep(k, look := 0) -> void:
 	if look >= 2:
 		base = 0.35
 		k.box(Vector3.ZERO, Vector3(7.0, base, 7.0), STONE_DARK)
-		k.box(Vector3(0, 0, 3.55), Vector3(2.4, base * 0.5, 0.3), STONE_DARK)  # 앞 계단 한 단
+		for i in 4:  # 네 문 앞 계단 한 단
+			k.xform = Transform3D(Basis(Vector3.UP, i * PI / 2.0), Vector3.ZERO)
+			k.box(Vector3(0, 0, 3.55), Vector3(2.4, base * 0.5, 0.3), STONE_DARK)
+		k.xform = Transform3D.IDENTITY
 	var up := Transform3D(Basis.IDENTITY, Vector3(0, base, 0))
 	k.xform = up
 	var bh := 3.6 if look < 2 else 4.4  # 본체 높이(2단계부터 한 층 더)
@@ -267,9 +270,9 @@ static func _keep(k, look := 0) -> void:
 		k.xform = up * Transform3D(Basis(Vector3.UP, i * PI / 2.0), Vector3.ZERO)
 		for x in [-1.0, 0.0, 1.0]:
 			k.box(Vector3(x, bh + 0.3, 2.55), Vector3(0.5, 0.45, 0.35), STONE_DARK)
-		if look >= 1:  # 본체 네 면에 걸린 깃발: 앞(+Z)은 문 양옆 둘, 나머지는 가운데 하나
-			for x in ([-1.05, 1.05] if i == 0 else [0.0]):
-				_banner(k, Vector3(x, bh - 0.05, 2.6 if look < 2 else 2.72), 0.55 if i == 0 else 0.8, 1.7 if look < 2 else 2.2)  # 층 띠 앞으로
+		if look >= 1:  # 본체 네 면에 걸린 깃발: 문 양옆 둘
+			for x in [-1.05, 1.05]:
+				_banner(k, Vector3(x, bh - 0.05, 2.6 if look < 2 else 2.72), 0.55, 1.7 if look < 2 else 2.2)  # 층 띠 앞으로
 		if look >= 2:  # 2층 창
 			for x in ([-1.6, 1.6] if i == 0 else [-1.5, 1.5]):
 				k.box(Vector3(x, bh - 1.45, 2.6), Vector3(0.4, 0.75, 0.1), WINDOW)
@@ -327,12 +330,14 @@ static func _keep(k, look := 0) -> void:
 	var f := 1.0 + 0.2 * maxi(look - 1, 0)  # 깃발이 단계마다 커진다
 	k.box(tip, Vector3(0.12, 1.5 * f, 0.12), WOOD)
 	k.box(tip + Vector3(0.4 * f + 0.05, 0.9 * f, 0), Vector3(0.8 * f, 0.5 * f, 0.05), FLAG)
-	if look >= 3:  # 문 둘레 돌테
-		k.box(Vector3(0, 0, 2.62), Vector3(1.85, 2.4, 0.12), STONE_DARK)
-	k.box(Vector3(0, 0, 2.6), Vector3(1.4, 2.2, 0.2), WOOD)
-	for x in [-1.6, 1.6]:
-		k.box(Vector3(x, 1.8, 2.6), Vector3(0.4, 0.8, 0.1), WINDOW)
-		k.box(Vector3(2.6, 1.8, x), Vector3(0.1, 0.8, 0.4), WINDOW)
+	for i in 4:  # 동서남북 네 면에 문(병사가 스테이지 시작에 이 문들로 나온다 — Formation.soldier_spots)
+		k.xform = up * Transform3D(Basis(Vector3.UP, i * PI / 2.0), Vector3.ZERO)
+		if look >= 3:  # 문 둘레 돌테
+			k.box(Vector3(0, 0, 2.62), Vector3(1.85, 2.4, 0.12), STONE_DARK)
+		k.box(Vector3(0, 0, 2.6), Vector3(1.4, 2.2, 0.2), WOOD)
+		for x in [-1.6, 1.6]:
+			k.box(Vector3(x, 1.8, 2.6), Vector3(0.4, 0.8, 0.1), WINDOW)
+	k.xform = up
 	k.box(Vector3(0, c0 + 2.1, 1.5), Vector3(0.4, 0.8, 0.1), WINDOW)
 	k.box(Vector3(1.5, c0 + 2.1, 0), Vector3(0.1, 0.8, 0.4), WINDOW)
 	k.xform = Transform3D.IDENTITY

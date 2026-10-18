@@ -13,8 +13,8 @@ extends Node3D
 ## 건물 완료(개정 12, Economy.building_done): 성채·성문 → 성·성문 최대 HP(GameState.apply_levels). 연구 완료(개정 24, Economy.research_done) →
 ## 성·성문 최대 HP(같은 비율로, apply_levels(true)) — 영웅·병사 능력치는 각자 research_changed로 곧바로 다시 읽는다. 성채가 단계를 넘어 성 내부·영웅 슬롯이 바뀌면 "성이 넓어졌습니다!" 알림 후 다음 방치 시점(지금 방치면 즉시)에
 ## 월드를 다시 만든다(씬 다시 읽기 — 상태는 오토로드 Economy·GameState·Net에 있어 그대로 이어진다).
-## 병사(개정 21 §1): 방치 모드에는 없다. 스테이지가 시작되면(GameState.Mode.STAGE) 병사 배치(Economy.soldier_deploy)대로 성채 정문 앞
-## 광장(Formation.soldier_spots)에 등장시키고 역할 자리(SoldierCommand.assign_posts)로 보낸다. 리필 때는 스테이지 시작 자리로 되돌리고
+## 병사(개정 21 §1): 방치 모드에는 없다. 스테이지가 시작되면(GameState.Mode.STAGE) 병사 배치(Economy.soldier_deploy)대로
+## 성채 동서남북 문(Formation.soldier_spots)으로 나오게 하고 역할 자리(SoldierCommand.assign_posts)로 보낸다. 리필 때는 스테이지 시작 자리로 되돌리고
 ## (연속 진행이면 그대로 다음 스테이지 — 배치가 바뀌었으면 그때 다시 만든다), 방치로 돌아가면 사라진다. 지원 판단은 SoldierCommand 하나.
 ## 던전(개정 18): Economy.dungeon_started → 이 월드를 트리에서 떼어 두고 던전 장면(dungeon.gd)을 붙인다(_enter_dungeon), [나가기] → leave_dungeon.
 ## 개발용 `-- --dungeon=gold|equip|ticket`(웹 `?dungeon=`): 디버그·오프라인에서 곧바로 그 던전 1단계(_dev_dungeon).
@@ -600,7 +600,7 @@ func _retire(i: int) -> void:
 	h.retire()
 
 
-## 스테이지 시작: 병사 배치(Economy.soldier_deploy)대로 광장에 등장시킨다. 연속 진행으로 이미 서 있고 배치도 같으면 그대로 둔다.
+## 스테이지 시작: 병사 배치(Economy.soldier_deploy)대로 성채 동서남북 문(맡은 면 쪽)으로 나오게 한다. 연속 진행으로 이미 서 있고 배치도 같으면 그대로 둔다.
 func spawn_soldiers() -> void:
 	var d: Dictionary = Economy.soldier_deploy()
 	if not soldiers.is_empty() and d == _soldier_key:
@@ -613,13 +613,15 @@ func spawn_soldiers() -> void:
 		if not p.is_empty():
 			for i in int(d[k]):
 				units.append({"type": p[0], "tier": p[1]})
-	var spots: Array = FormationScript.soldier_spots(units)
 	var posts: Array = SoldierCommandScript.assign_posts(units)
+	var sides: Array = posts.map(func(p): return p.side)
+	var spots: Array = FormationScript.soldier_spots(units, sides)
+	var waits: Array = FormationScript.soldier_waits(units, sides)
 	for i in units.size():
 		if spots[i] == null:
-			continue  # 66칸을 넘는 배치(인구 상한이 막는다)
+			continue  # 66명을 넘는 배치(인구 상한이 막는다)
 		var s = SoldierScript.new()
-		s.setup(units[i].type, units[i].tier, posts[i].side, posts[i].slot, spots[i], castle)
+		s.setup(units[i].type, units[i].tier, posts[i].side, posts[i].slot, spots[i], castle, waits[i])
 		add_child(s)
 		soldiers.append(s)
 

@@ -1048,7 +1048,7 @@ func test_free_placement() -> void:
 			check(Balance.placement_block(b.id, b.cell, 10, defaults) == "", "default %s spot passes the rules" % b.id)
 	check(Balance.placement_block("lumber", Vector2i(-1, 5), 10, defaults) == "road", "north-south road blocked")
 	check(Balance.placement_block("lumber", Vector2i(5, -1), 10, defaults) == "road", "east-west road blocked")
-	check(Balance.placement_block("lumber", Vector2i(1, 3), 10, defaults) == "square", "soldier square blocked")
+	check(Balance.placement_block("lumber", Vector2i(1, 3), 10, defaults) == "", "no soldier square in front of the keep any more (soldiers come out of the keep doors)")
 	check(Balance.placement_block("lumber", Vector2i(-4, 2), 10, {}) == "square", "merchant spot blocked")
 	check(Balance.placement_block("lumber", Vector2i(6, 5), 10, defaults) == "out", "2-tile wall margin kept")
 	check(Balance.placement_block("lumber", Vector2i(5, 5), 10, defaults) == "", "free corner spot ok")
@@ -1058,14 +1058,17 @@ func test_free_placement() -> void:
 	var cart_box := TownKitScript.merchant_cart().get_aabb()
 	var keep_out := [Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS),
 		Rect2(cart_c.x + cart_box.position.x, cart_c.z + cart_box.position.z, cart_box.size.x, cart_box.size.z)]
-	var soldiers := []
-	var grid: Vector2i = F.soldier_grid()
-	for c in grid.x:
-		for r in grid.y:
-			soldiers.append(Vector2(Balance.SOLDIER_X.x + c * Balance.SOLDIER_GAP, Balance.SOLDIER_Z.x + r * Balance.SOLDIER_GAP))
 	for level in [1, 9, 22]:
 		var h := GameData.interior_half(level)
 		var ht := GameData.interior_tiles(level) / 2
+		var soldiers := []  # 성채 동서남북 문 → 십자 도로 → 안쪽 통로 가운데(병사 등장 길, 그 뒤는 route — 아래 경로 표본이 본다)
+		var door_units := range(8).map(func(_i): return {"type": "infantry", "tier": 1})
+		var door_sides := range(8).map(func(i): return i % 4)
+		for spot in F.soldier_spots(door_units, door_sides):
+			var legs: Array = [spot] + F.soldier_entry_route(h, spot, F.gate_inner(h, F.side_of(spot))).slice(0, 2)
+			for i in range(1, legs.size()):
+				for q in _leg_samples(legs[i - 1], legs[i]):
+					soldiers.append(Vector2(q.x, q.z))
 		var spots: Array = []
 		for side in 4:
 			for at in F.gate_offsets(h):
@@ -1114,7 +1117,7 @@ func test_free_placement() -> void:
 					if plot.intersects(rc):
 						bad.append("merchant %s" % cell)
 		check(valid > 20, "level %d: many free spots (%d)" % [level, valid])
-		check(bad.is_empty(), "level %d: no allowed spot touches a route, stair, soldier spot or the merchant: %s" % [level, bad.slice(0, 3)])
+		check(bad.is_empty(), "level %d: no allowed spot touches a route, stair, the soldiers' way out of the keep doors or the merchant: %s" % [level, bad.slice(0, 3)])
 
 
 ## 건물 부지(성채 포함)는 계단·성문 통과 지점과 계단 발판을 비우고, 모든 자리 사이 경로(면을 넘나드는 것 포함)의 지상 구간은 부지·계단 발판을 지나지 않는다.
@@ -2630,45 +2633,22 @@ func test_soldiers() -> void:
 	GameData.load_tables()
 	_legacy_training()
 	check(GameData.errors == 0 and GameData.soldiers().size() == 3, "default tables restored")
-	# 성채 앞 자리 격자: 11 × 6 = 66칸, 겹침 없음, 범위 안, 상인·수레·건물 부지 밖. 67번째는 자리 없음
+	# 병사 등장 자리(사용자 2026-10-18 "성채 동서남북 문에서 나오게해"): 맡은 면 쪽 성채 문 안, 문마다 좌우 두 줄, 0.3초마다 두 명씩. 67번째는 자리 없음
 	var units := []
+	var sides := []
 	for i in 66:
 		units.append({"type": ["infantry", "archer", "cavalry"][i % 3], "tier": 1 + i % 5})
-	var spots: Array = FormationScript.soldier_spots(units)
-	var seen := {}
-	var inside := true
-	for p in spots:
-		if p == null:
-			inside = false
-			continue
-		seen[str(p)] = true
-		inside = inside and p.x >= Balance.SOLDIER_X.x - 0.001 and p.x <= Balance.SOLDIER_X.y + 0.001 and p.z >= Balance.SOLDIER_Z.x - 0.001 and p.z <= Balance.SOLDIER_Z.y + 0.001 and p.y == 0.0
-	check(FormationScript.soldier_grid() == Vector2i(11, 6) and seen.size() == 66 and inside, "66 soldiers get 66 distinct spots inside the square in front of the keep")
-	check(FormationScript.soldier_spots(units + [{"type": "infantry", "tier": 1}]).count(null) == 1, "67 soldiers: one of them gets no spot")
-	var cart_box := TownKitScript.merchant_cart().get_aabb()
-	var cart_c: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
-	var keep_out := [  # 상인·수레·건물 부지(병사 발밑 원판 반지름만큼 넓혀서)
-		Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS),
-		Rect2(cart_c.x + cart_box.position.x, cart_c.z + cart_box.position.z, cart_box.size.x, cart_box.size.z),
-	]
-	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
-		keep_out.append(Rect2(Vector2(b.cell) * Balance.TILE, Vector2(b.size) * Balance.TILE))
-	var hits := []
-	for p in spots:
-		for r in keep_out:
-			if (r as Rect2).grow(0.45).has_point(Vector2(p.x, p.z)):
-				hits.append([p, r])
-	check(hits.is_empty(), "soldier spots stay clear of the merchant, the cart and every building plot: %s" % [hits.slice(0, 2)])
-	var few: Array = FormationScript.soldier_spots([{"type": "infantry", "tier": 1}, {"type": "infantry", "tier": 2}, {"type": "infantry", "tier": 2},
-		{"type": "archer", "tier": 1}, {"type": "archer", "tier": 1}, {"type": "cavalry", "tier": 3}, {"type": "cavalry", "tier": 1}])
-	var want := [Vector3(3.9, 0, 9.1), Vector3(3.0, 0, 9.1), Vector3(2.1, 0, 9.1), Vector3(3.0, 0, 4.6), Vector3(2.1, 0, 4.6), Vector3(-1.5, 0, 9.1), Vector3(7.5, 0, 9.1)]
-	var rows_ok := true
-	for i in want.size():
-		rows_ok = rows_ok and few[i] is Vector3 and (few[i] as Vector3).is_equal_approx(want[i])
-	check(rows_ok, "ranks: infantry front row (gate side) highest tier in the middle, archers back row, cavalry at both ends: %s" % [few])
-	var cav: Array = FormationScript.soldier_spots(range(6).map(func(i): return {"type": "cavalry", "tier": 1}))
-	var cav_zs := cav.filter(func(p): return is_equal_approx(p.x, Balance.SOLDIER_X.x)).map(func(p): return snappedf(p.z, 0.01))
-	check(cav_zs == [9.1, 7.3, 5.5] and cav.all(func(p): return is_equal_approx(absf(p.x - 3.0), 4.5)), "six cavalry: both end columns, every other row (horses do not overlap): %s" % [cav])
+		sides.append(i % 4)
+	var spots: Array = FormationScript.soldier_spots(units, sides)
+	var doors_ok := spots.size() == 66 and not spots.has(null)
+	for i in spots.size():
+		var p: Vector3 = spots[i]
+		doors_ok = doors_ok and FormationScript.side_of(p) == sides[i] and is_equal_approx(FormationScript.SIDE_DIR[sides[i]].dot(p), FormationScript.KEEP_DOOR_IN) \
+			and is_equal_approx(absf(FormationScript.perp(sides[i]).dot(p)), FormationScript.DOOR_LANE) and p.y == 0.0
+	check(doors_ok and spots[0] != spots[4] and spots[0] == spots[8], "66 soldiers: each starts inside the keep door of its own side (N/E/S/W), two lanes per door")
+	check(FormationScript.soldier_waits(units, sides).slice(0, 12) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.3, 0.3, 0.3], "two soldiers come out of each door every 0.3 s")
+	check(FormationScript.soldier_spots(units + [{"type": "infantry", "tier": 1}], sides + [0]).count(null) == 1, "67 soldiers: one of them gets no spot")
+	check(FormationScript.soldier_spots([{"type": "infantry", "tier": 1}])[0].z > 0.0, "no sides given: the south door")
 	var horse := TownKitScript.horse()
 	var hb := horse.get_aabb()
 	check(horse.get_surface_count() == 1 and absf(hb.position.y) < 0.01 and hb.end.y > TownKitScript.HORSE_BACK and hb.end.y < 2.0 and hb.size.z > hb.size.x * 2.0,
@@ -2900,7 +2880,6 @@ func test_keep_tier_lockstep() -> void:
 
 
 ## 개정 15: 병종 몸(SoldierBody — 월드 병사와 병사 피규어가 같이 쓴다)과 병사 크기 0.9. 트리 밖이라 모델 안(GLB)은 만들지 않고 조립만 본다.
-## 크기를 키워도 대열 격자(11 × 6, 0.9 m)는 그대로이고, 병사·말 발자리가 건물 메시·상인·수레에 닿지 않는다.
 func test_soldier_figures() -> void:
 	const SoldierBody := preload("res://scripts/soldier_body.gd")
 	check(Art.SOLDIER_SCALE == 0.9 and is_equal_approx(SoldierBody.RIDER_Y, (TownKitScript.HORSE_BACK - SoldierBody.RIDER_HIP) * 0.9),
@@ -2954,30 +2933,6 @@ func test_soldier_figures() -> void:
 	check(GameData.soldier("infantry").model == "Knight" and not inf.hide.has("1H_Sword") and not inf.hide.has("Rectangle_Shield") and inf.hide.has("2H_Sword")
 		and GameData.soldier("archer").model == "Rogue_Hooded" and not arc.hide.has("2H_Crossbow") and arc.hide.has("Knife"),
 		"infantry = Knight with sword and shield; archer = Rogue_Hooded with the crossbow")
-	# 0.9 크기 발자리: 보병·궁병 0.8 m 정사각, 기병은 말(+Z를 본다) — 건물 메시·상인·수레와 겹치지 않는다
-	var units := []
-	for i in 66:
-		units.append({"type": ["infantry", "archer", "cavalry"][i % 3], "tier": 1})
-	var spots: Array = FormationScript.soldier_spots(units)
-	var hb: AABB = TownKitScript.horse().get_aabb()
-	var s := Art.SOLDIER_SCALE
-	var blocks := []
-	for b in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
-		var c := Vector3((b.cell.x + b.size.x / 2.0) * Balance.TILE, 0, (b.cell.y + b.size.y / 2.0) * Balance.TILE)
-		var box: AABB = TownKitScript.building(b.id).get_aabb()
-		blocks.append([b.id, Rect2(c.x + box.position.x, c.z + box.position.z, box.size.x, box.size.z)])
-	var cart: AABB = TownKitScript.merchant_cart().get_aabb()
-	var cc: Vector3 = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
-	blocks.append(["cart", Rect2(cc.x + cart.position.x, cc.z + cart.position.z, cart.size.x, cart.size.z)])
-	blocks.append(["merchant", Rect2(Balance.MERCHANT_POS.x - Balance.MERCHANT_RADIUS, Balance.MERCHANT_POS.z - Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS, 2.0 * Balance.MERCHANT_RADIUS)])
-	var hits := []
-	for i in spots.size():
-		var p: Vector3 = spots[i]
-		var foot := Rect2(p.x + hb.position.x * s, p.z + hb.position.z * s, hb.size.x * s, hb.size.z * s) if units[i].type == "cavalry" else Rect2(p.x - 0.4, p.z - 0.4, 0.8, 0.8)
-		for blk in blocks:
-			if foot.intersects(blk[1]):
-				hits.append([units[i].type, p, blk[0]])
-	check(FormationScript.soldier_grid() == Vector2i(11, 6) and hits.is_empty(), "at 0.9 the 66-soldier formation (horses %.2f m long) still clears every building mesh, the merchant and the cart: %s" % [hb.size.z * s, hits.slice(0, 3)])
 
 
 ## 개정 17 §1·§2: 스킬 해금 함수(등급·★별 쓰는 스킬), 표 22행 × 칸 수(SSR·SR 3, R 2), 잠긴 스킬은 전투 수식에 안 들어간다.
@@ -3134,7 +3089,7 @@ func test_economy_sell_many() -> void:
 
 
 ## 개정 21 §2 병사 역할 자리(순수 함수): 궁병 성벽 자리(영웅 성벽 자리·계단 착지점과 안 겹침), 보병 성문 앞 줄(영웅 성문 앞 1.5 m보다 바깥)·
-## 부서진 성문 안쪽 막는 줄(성문 폭 안), 기병 순찰 점·고리 경로(성 안에 안 들어감), 광장 → 역할 자리 등장 경로(건물 부지를 안 지남),
+## 부서진 성문 안쪽 막는 줄(성문 폭 안), 기병 순찰 점·고리 경로(성 안에 안 들어감), 성채 문 → 역할 자리 등장 경로(건물 부지를 안 지남),
 ## 역할 배정(병종마다 티어 높은 순 북·동·남·서 차례).
 func test_soldier_posts() -> void:
 	const SC := preload("res://scripts/soldier_command.gd")
@@ -3189,22 +3144,25 @@ func test_soldier_posts() -> void:
 		ring_ok = ring_ok and path[-1] == b
 	check(ring_ok, "ring_route never enters the castle (200 random pairs around the ring)")
 	var plots := []
-	for bd in Balance.BUILDINGS.filter(func(x): return x.has("cell")):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다)
+	for bd in Balance.BUILDINGS.filter(func(x): return x.has("cell") and x.id != "keep"):  # 기본 자리가 있는 건물(새 건물은 자리를 골라 짓는다). 병사는 성채 안에서 나온다
 		plots.append(Rect2(Vector2(bd.cell) * Balance.TILE, Vector2(bd.size) * Balance.TILE))
 	var entry_ok := true
 	var units := []
+	var sides := []
 	for i in 66:
 		units.append({"type": "infantry", "tier": 1})
-	for spot in FormationScript.soldier_spots(units):
-		for post in [FormationScript.soldier_wall_spot(half, 0, 3), FormationScript.gate_row_spot(half, 1, 2), FormationScript.patrol_points(half, 3, 1)[0]]:
+		sides.append(i % 4)
+	for spot in FormationScript.soldier_spots(units, sides):
+		var s := FormationScript.side_of(spot)
+		for post in [FormationScript.soldier_wall_spot(half, s, 3), FormationScript.gate_row_spot(half, s, 2), FormationScript.patrol_points(half, s, 1)[0], FormationScript.gate_row_spot(half, (s + 1) % 4, 0)]:
 			var path := FormationScript.soldier_entry_route(half, spot, post)
-			entry_ok = entry_ok and path[-1] == post
+			entry_ok = entry_ok and path[-1] == post and path[1] == FormationScript.gate_inner(half, s)
 			var prev: Vector3 = spot
-			for p in path.slice(0, 2):  # 광장 → 가운데 길 → 남문 안쪽(그 뒤는 route — 통로 고리 테스트가 본다)
+			for p in path.slice(0, 2):  # 성채 문 → 십자 도로 → 그 면 안쪽 통로(그 뒤는 route — 통로 고리 테스트가 본다)
 				for pl in plots:
 					entry_ok = entry_ok and not _segment_hits(pl, prev, p)
 				prev = p
-	check(entry_ok, "entry route: plaza spot -> middle road -> south gate inside -> route(); the plaza legs cross no building plot and end at the post")
+	check(entry_ok, "entry route: keep door of its side -> cross road -> that side's inner lane -> route(); the door legs cross no building plot and end at the post")
 	var posts: Array = SC.assign_posts([{"type": "infantry", "tier": 1}, {"type": "infantry", "tier": 3}, {"type": "archer", "tier": 1}, {"type": "infantry", "tier": 2},
 		{"type": "infantry", "tier": 1}, {"type": "infantry", "tier": 1}, {"type": "cavalry", "tier": 1}])
 	var want := [{"side": 2, "slot": 0}, {"side": 0, "slot": 0}, {"side": 0, "slot": 0}, {"side": 1, "slot": 0}, {"side": 3, "slot": 0}, {"side": 0, "slot": 1}, {"side": 0, "slot": 0}]

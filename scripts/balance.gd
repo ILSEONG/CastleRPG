@@ -46,22 +46,17 @@ static var BUILDINGS := [
 ]
 
 ## 상인 자리 (개정 7). 막사·벌목장·채석장 사이 빈 터(십자 도로 밖). 수레는 상인 +X 쪽.
-const MERCHANT_POS := Vector3(-5.5, 0, 6.5)  # 성채 정문 앞 광장 왼쪽 — 벌목장·채석장 말풍선과 화면에서 겹치지 않는 자리
+const MERCHANT_POS := Vector3(-5.5, 0, 6.5)  # 성채 정문 앞 왼쪽 — 벌목장·채석장 말풍선과 화면에서 겹치지 않는 자리
 const MERCHANT_CART_OFFSET := Vector3(2.0, 0, 0)
 const MERCHANT_RADIUS := 0.6
-
-## 성채 앞 병사 자리(개정 13 §7): 성채 정문(+Z) 앞 광장의 격자 x ∈ SOLDIER_X, z ∈ SOLDIER_Z, 간격 SOLDIER_GAP(11 × 6 = 66칸).
-const SOLDIER_X := Vector2(-1.5, 7.5)
-const SOLDIER_Z := Vector2(4.6, 9.4)
-const SOLDIER_GAP := 0.9
 
 
 ## 자유 건설(사용자 2026-10-13 "건물을 선택하고 내가 원하는 공간에다 건물을 짓는"): 성채(가운데 고정)를 뺀 건물은 성 안 격자 어디에나 짓는다.
 ## 위 BUILDINGS의 cell은 기본 자리(옛 저장·이미 지은 건물). 지금 자리는 Economy.layout이 정하고 Economy가 active에 맞춘다.
 ## 자리 규칙(placement_block — 서버 rules.placementBlock과 같다): 성 내부 벽 쪽 2타일(계단 띠 + 성문 안쪽 통로) 밖, 십자 도로(-1·0줄) 밖,
-## 성채 앞 병사 광장·상인 자리(KEEP_OUT) 밖, 다른 건물과 겹치지 않음. 영웅·병사·괴물 길은 이 칸들 위로만 다닌다(테스트).
+## 상인 자리(KEEP_OUT) 밖, 다른 건물과 겹치지 않음. 영웅·병사·괴물 길은 이 칸들 위로만 다닌다(테스트).
 const WALL_MARGIN_TILES := 2
-const KEEP_OUT := [Rect2i(-1, 2, 5, 3), Rect2i(-4, 2, 3, 2)]  # 병사 광장(SOLDIER_X·Z + 발밑 0.45 m), 상인·수레 — 타일
+const KEEP_OUT := [Rect2i(-4, 2, 3, 2)]  # 상인·수레 — 타일(병사 광장은 없앴다: 병사는 성채 문으로 나온다 — 사용자 2026-10-18)
 const FIXED := ["keep"]  # 옮기거나 새로 놓지 않는 건물
 static var PLACE_TEXT := {  # placement_block 이유 → 안내 문구
 	"out": Lang.t("balance.place_text.out"),

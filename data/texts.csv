@@ -67,7 +67,7 @@ balance.buildings.watchtower.name,망루,,,,scripts/balance.gd
 balance.buildings.dispatch.name,파견소,,,,scripts/balance.gd
 balance.place_text.out,성벽에 너무 가깝습니다,,,,scripts/balance.gd
 balance.place_text.road,길 위에는 지을 수 없습니다,,,,scripts/balance.gd
-balance.place_text.square,병사가 서는 광장(노란 칸)에는 지을 수 없습니다,,,,scripts/balance.gd
+balance.place_text.square,상인 자리에는 지을 수 없습니다,,,,scripts/balance.gd
 balance.place_text.overlap,다른 건물과 겹칩니다,,,,scripts/balance.gd
 balance.place_text.fixed,옮길 수 없는 건물입니다,,,,scripts/balance.gd
 build_button.draw_face,건설,,,,scripts/build_button.gd
@@ -371,7 +371,7 @@ economy.block_text.not_enough,자원 부족,,,,scripts/economy.gd
 economy.block_text.unbuilt,아직 짓지 않은 건물,,,,scripts/economy.gd
 economy.block_text.out,성벽에 너무 가깝습니다,,,,scripts/economy.gd
 economy.block_text.road,길 위에는 지을 수 없습니다,,,,scripts/economy.gd
-economy.block_text.square,병사가 서는 광장(노란 칸)에는 지을 수 없습니다,,,,scripts/economy.gd
+economy.block_text.square,상인 자리에는 지을 수 없습니다,,,,scripts/economy.gd
 economy.block_text.overlap,다른 건물과 겹칩니다,,,,scripts/economy.gd
 economy.block_text.fixed,옮길 수 없는 건물입니다,,,,scripts/economy.gd
 economy.block_text.bad_cell,지을 수 없는 자리입니다,,,,scripts/economy.gd
@@ -1334,7 +1334,6 @@ ops_sheet.ago_3,%d일 전,,,,scripts/ops_sheet.gd
 placement.hint,초록 칸 안으로 건물을 끌거나 그곳을 누르세요,,,,scripts/placement.gd
 placement.ok_text,여기에 지을 수 있습니다,,,,scripts/placement.gd
 placement.no_space_text,성 안에 빈 자리가 없습니다,,,,scripts/placement.gd
-placement.square_label,병사 광장,,,,scripts/placement.gd
 placement.waiting_text,앞선 건설 요청의 응답을 기다리는 중입니다,,,,scripts/placement.gd
 placement.build_bar,취소,,,,scripts/placement.gd
 placement.build_bar_2,건설,,,,scripts/placement.gd

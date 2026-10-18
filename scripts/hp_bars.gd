@@ -53,7 +53,7 @@ func _draw() -> void:
 
 func _add_group(group: String, color: Color, view: Rect2) -> void:
 	for u in get_tree().get_nodes_in_group(group):
-		if not u.is_alive():
+		if not u.is_alive() or not u.visible:  # 숨은 병사(성채 문에서 나오기 전)
 			continue
 		var p := camera.unproject_position(u.global_position + Vector3(0, u.bar_height(), 0))
 		if not view.has_point(p):

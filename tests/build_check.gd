@@ -141,20 +141,6 @@ func _run() -> void:
 	_check(Vector2(pl._center().x, pl._center().z).distance_to(Vector2(road.x, road.z)) <= Balance.TILE + 0.01, "ghost follows the finger on the 2 m grid", str(pl._center()))
 	await _frames(10)
 	await _shot("_bad")
-	# 성채 앞 병사 광장: 노란 칸 + "병사 광장" 이름표, 이유 문구가 노란 칸을 가리킨다
-	var keep_cell: Vector2i = pl.cell
-	pl.cell = Vector2i(4, 3)  # 광장 바로 오른쪽 빈 칸(초록) — 광장 노란 칸이 다 보인다
-	pl._update()
-	_check(pl.ok, "right next to the square is buildable", pl.hint_label.text)
-	await _frames(10)
-	await _shot("_square_free")
-	pl.cell = Vector2i(1, 2)
-	pl._update()
-	_check(pl.hint_label.text == Balance.PLACE_TEXT.square and pl._square_label.visible and not pl.ok, "the soldier square is labelled and its reason names the yellow tiles", pl.hint_label.text)
-	await _frames(10)
-	await _shot("_square")
-	pl.cell = keep_cell
-	pl._update()
 
 	# 탭: 성 왼쪽 아래 빈 곳(-8, 5) 가운데를 누르면 거기로
 	var target := Vector2i(-8, 5)

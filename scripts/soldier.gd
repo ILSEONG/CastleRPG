@@ -1,7 +1,7 @@
 extends Node3D
 ## 병사(개정 13 §7, 개정 21). 병종·티어(능력치 = GameData.soldier_stats)와 역할 자리(면 side · 그 면 병종 칸 slot, SoldierCommand.assign_posts)로 만든다.
-## 스테이지 동안만 있다(개정 21 §1): main이 스테이지 시작에 성채 정문 앞 광장 자리(spawn, Formation.soldier_spots)에서 RISE_SEC 동안 솟아오르게
-## 만들고(먼지 고리), 곧바로 역할 자리로 간다(Formation.soldier_entry_route). 연속 진행 클리어의 리필은 reset(되살아나 자리로 순간 이동),
+## 스테이지 동안만 있다(개정 21 §1): main이 스테이지 시작에 맡은 면 쪽 성채 문 안(spawn, Formation.soldier_spots)에 만들고, 같은 문 차례만큼
+## 기다렸다가(Formation.soldier_waits) 문으로 걸어 나와 역할 자리로 간다(Formation.soldier_entry_route). 연속 진행 클리어의 리필은 reset(되살아나 자리로 순간 이동),
 ## 방치로 돌아가면 vanish(VANISH_SEC 동안 작아지며 사라짐).
 ## 역할(§2): 궁병 = 성벽 위 병사 자리(사거리 안 적을 쏘고 떠나지 않는다), 보병 = 성문 앞 줄(자리에서 aggro 안·같은 영역 적, HOLD_RADIUS 밖으로는
 ## 쫓지 않는다. 성문이 부서지면 안쪽 막는 줄), 기병 = 순찰 고리에서 맡은 두 성문 사이를 오가며 aggro 안 성 밖 적에게 돌진(성 안에 들어가지 않는다.
@@ -40,7 +40,7 @@ var tier := 1
 var _rider_y := 0.0  # 말 탄 기사 모델 높이(SoldierBody.rider_y)
 var side := 0  # 원래 면(역할 자리)
 var slot := 0  # 원래 면에서 그 병종의 몇 번째
-var spawn := Vector3.ZERO  # 등장 자리(광장)
+var spawn := Vector3.ZERO  # 등장 자리(성채 문 안)
 var castle
 var stats := {}  # GameData.soldier_stats
 var hp := 0.0
@@ -63,7 +63,8 @@ var _swing_left := 0.0
 var _walking := false
 var _bob_t := 0.0
 var _path: Array[Vector3] = []
-var _rise := 0.0  # 솟아오르는 남은 초
+var _rise := 0.0  # 문에서 나오기까지 남은 초(그동안 숨어 있다)
+var _wait := 0.0  # 같은 문 차례(Formation.soldier_waits)
 var _linger := 0.0  # 교전 뒤 제자리에 더 머물 초
 var _patrol: Array[Vector3] = []  # 기병 순찰 점 셋(맡은 성문 앞 · 모서리 · 옆 성문 앞)
 var _pi := 0
@@ -72,12 +73,13 @@ var _bonus := {}  # 성장 효과(Economy.upgrade_bonus) — 치명타 굴림이
 
 
 ## add_child 전에 호출.
-func setup(p_type: String, p_tier: int, p_side: int, p_slot: int, p_spawn: Vector3, p_castle) -> void:
+func setup(p_type: String, p_tier: int, p_side: int, p_slot: int, p_spawn: Vector3, p_castle, p_wait := 0.0) -> void:
 	type = p_type
 	tier = p_tier
 	side = p_side
 	slot = p_slot
 	spawn = p_spawn
+	_wait = p_wait
 	castle = p_castle
 	refresh_stats()
 	Economy.upgrades_changed.connect(refresh_stats)  # 성장·연구는 곧바로(개정 20·24)
@@ -116,9 +118,9 @@ func _ready() -> void:
 	GameState.gate_broken.connect(_on_gate_broken)
 	_seat(0.0)
 	_face(Formation.SIDE_DIR[side])
-	global_position = spawn - Vector3(0, RISE_DEPTH, 0)
-	_rise = RISE_SEC
-	Fx.dust(get_parent(), spawn)
+	global_position = spawn - Vector3(0, RISE_DEPTH, 0)  # 땅 밑(겹침 해소가 건너뛴다)에 숨어 있다가 차례가 되면 문 안에 선다
+	visible = false
+	_rise = _wait + RISE_SEC
 
 
 ## 연속 진행 클리어의 리필: 되살아나 HP를 채우고 지원을 풀고 스테이지 시작 자리(역할 자리, 기병은 순찰 첫 점)에 선다.
@@ -132,6 +134,7 @@ func reset() -> void:
 	_atk_cd = 0.0
 	_linger = 0.0
 	_rise = 0.0
+	visible = true
 	_path.clear()
 	_pi = 0
 	_pdir = 1
@@ -246,10 +249,11 @@ func _process(delta: float) -> void:
 	_bob(delta)
 	if _dead or GameState.mode == GameState.Mode.COUNTDOWN:  # 연속 진행 카운트다운: 리필로 돌아온 자리에 서 있는다
 		return
-	if _rise > 0.0:  # 등장: 아래에서 솟아오른 뒤 역할 자리로
+	if _rise > 0.0:  # 등장: 차례가 되면 성채 문 안에 서서 걸어 나와 역할 자리로
 		_rise = maxf(0.0, _rise - delta)
-		global_position.y = -RISE_DEPTH * _rise / RISE_SEC
 		if _rise == 0.0:
+			global_position = spawn
+			visible = true
 			_path = Formation.soldier_entry_route(castle.half, spawn, post())
 		return
 	_atk_cd -= delta

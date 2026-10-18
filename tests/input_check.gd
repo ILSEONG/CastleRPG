@@ -1007,7 +1007,7 @@ func _open_hero(px: Vector2) -> bool:
 
 
 ## (P) 개정 21 §1: 병사는 조종하지 않는다 — 스테이지 중 영웅에서 먼(화면 40 px 넘게) 병사를 탭해도 아무도 선택되지 않는다.
-##     병사는 처리를 끄고 등장 자리(광장 바닥)에 세워 둔다. 끝나면 중지(병사는 사라진다).
+##     병사는 처리를 끄고 성채 문 앞 십자 도로에 세워 둔다. 끝나면 중지(병사는 사라진다).
 func _soldier_tap() -> void:
 	var rig = _camera.get_parent()
 	var cam0 := [rig.position, rig.rotation_degrees.y, _camera.size]
@@ -1024,7 +1024,8 @@ func _soldier_tap() -> void:
 	var ss := get_tree().get_nodes_in_group("soldiers")
 	for s in ss:
 		s.set_process(false)
-		s.global_position = s.spawn
+		s.visible = true
+		s.global_position = s.spawn + Formation.SIDE_DIR[s.side] * 3.0  # 성채 문을 막 나온 십자 도로 위
 	await _frames(1)
 	var pick = null
 	var px := Vector2.ZERO

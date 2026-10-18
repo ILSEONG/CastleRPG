@@ -197,7 +197,7 @@ export const DEFAULT_CELLS: Record<string, [number, number]> = {
   houses: [-8, -5], lumber: [2, 5], quarry: [5, 2], farm: [-5, 5],
 }
 export const WALL_MARGIN_TILES = 2
-export const KEEP_OUT: [number, number, number, number][] = [[-1, 2, 5, 3], [-4, 2, 3, 2]] // 병사 광장, 상인·수레 (x, y, w, h)
+export const KEEP_OUT: [number, number, number, number][] = [[-4, 2, 3, 2]] // 상인·수레 (x, y, w, h). 병사 광장은 없앴다 — 병사는 성채 문으로 나온다(2026-10-18)
 const plotSize = (id: string): [number, number] => PLOT_SIZE[typeOf(id)] ?? [3, 3]
 
 // --- 새 건물·자원 건물 여러 채(사용자 2026-10-13) ---

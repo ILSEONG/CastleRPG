@@ -1116,14 +1116,19 @@ func _soldier_cases() -> void:
 	GameState.start_stage()
 	await _frames(1)
 	var ss: Array = _main.soldiers.duplicate()
-	var spots: Array = Formation.soldier_spots(ss.map(func(s): return {"type": s.type, "tier": s.tier}))
+	var unit_list: Array = ss.map(func(s): return {"type": s.type, "tier": s.tier})
+	var side_list: Array = ss.map(func(s): return s.side)
+	var spots: Array = Formation.soldier_spots(unit_list, side_list)
+	var waits: Array = Formation.soldier_waits(unit_list, side_list)
 	var rising := ss.size() == 16 and get_tree().get_nodes_in_group("soldiers").size() == 16
 	for i in ss.size():
-		rising = rising and ss[i].spawn.is_equal_approx(spots[i]) and ss[i]._rise > 0.0 and ss[i].global_position.y < 0.0 \
+		rising = rising and ss[i].spawn.is_equal_approx(spots[i]) and Formation.side_of(spots[i]) == ss[i].side and is_equal_approx(ss[i]._wait, waits[i]) \
+			and ss[i]._rise > 0.0 and ss[i].global_position.y < 0.0 and not ss[i].visible \
 			and is_equal_approx(ss[i]._model.scale.x, Art.SOLDIER_SCALE) and (ss[i]._horse != null) == (ss[i].type == "cavalry")
-	var dust: int = get_tree().get_nodes_in_group(Fx.GROUP).filter(func(n): return n.get_meta("fx", "") == "dust").size()
-	_check(rising and dust > 0, "(S) stage start: all 16 deployed soldiers rise out of the plaza in front of the keep (0.9 size, cavalry on a horse, dust rings)",
-		"n=%d dust=%d" % [ss.size(), dust])
+	_check(rising and waits.max() > 0.0, "(S) stage start: all 16 deployed soldiers wait inside the keep door of their own side (N/E/S/W) and come out in turn (0.9 size, cavalry on a horse)",
+		"n=%d" % ss.size())
+	await _wait_until(func(): return ss.all(func(s): return s._rise == 0.0), 5.0)
+	_check(ss.all(func(s): return s.visible and absf(s.global_position.y) < 0.01), "(S) every soldier has come out of its keep door (visible, on the ground)", "")
 	var arc2 = ss.filter(func(s): return s.type == "archer" and s.tier == 2)[0]
 	var arc1 = ss.filter(func(s): return s.type == "archer" and s.tier == 1)[0]
 	var inf1 = ss.filter(func(s): return s.type == "infantry")[0]

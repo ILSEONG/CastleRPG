@@ -469,50 +469,41 @@ static func flat_distance(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
-# --- 병사 자리(개정 13 §7) ---
+# --- 병사 등장(사용자 2026-10-18 "병사 나오는 부분이 성채 동서남북 문에서 나오게해") ---
 
-## 병종 → 대열 자리: 보병은 앞줄(성문 쪽 z 큰 쪽), 궁병은 뒷줄(성채 쪽), 기병은 양 끝 열. 표에 없는 병종은 보병처럼 앞줄.
-const SOLDIER_LINE := {"infantry": "front", "archer": "back", "cavalry": "flank"}
-const SOLDIER_FIRST := ["flank", "front", "back"]  # 자리를 고르는 순서 — 기병이 먼저 양 끝을 잡는다
-
-
-## 격자 크기 Vector2i(열, 줄) = (11, 6): Balance.SOLDIER_X·Z 범위를 SOLDIER_GAP 간격으로.
-static func soldier_grid() -> Vector2i:
-	return Vector2i(floori((Balance.SOLDIER_X.y - Balance.SOLDIER_X.x) / Balance.SOLDIER_GAP + 0.001) + 1,
-		floori((Balance.SOLDIER_Z.y - Balance.SOLDIER_Z.x) / Balance.SOLDIER_GAP + 0.001) + 1)
+const SOLDIER_MAX := 66  # 한 번에 서는 병사 상한(인구 상한이 막는다)
+const KEEP_DOOR_IN := 1.8  # 등장 자리: 성채 본체(반 2.6 m) 안 — 문으로 걸어 나온다
+const KEEP_DOOR_OUT := 4.6  # 문을 나와 성채 부지(반 4 m) 밖 십자 도로 위
+const DOOR_LANE := 0.45  # 문 하나로 두 줄(좌우)
+const DOOR_GAP_SEC := 0.3  # 같은 문에서 다음 두 명이 나오기까지
 
 
-## 병사 자리(순수 함수). units = [{type, tier}] → 같은 순서의 자리 Vector3(칸이 모자라 못 선 병사는 null, 최대 66칸).
-## 같은 병종은 티어 높은 순으로 가운데부터(기병은 양 끝 열의 앞부터) 채운다. 기병은 말이 길어(≈ 1.65 m) 한 줄 건너(0, 2, 4줄) 먼저 선다.
-static func soldier_spots(units: Array) -> Array:
-	var size := soldier_grid()
-	var mid := (size.x - 1) / 2.0
+## 병사 등장 자리(순수 함수). units = [{type, tier}], sides = 같은 순서의 면(SoldierCommand.assign_posts의 side — 비면 모두 남쪽).
+## 맡은 면 쪽 성채 문 안 자리 Vector3(같은 문은 좌우 두 줄로 번갈아). SOLDIER_MAX를 넘는 병사는 null.
+static func soldier_spots(units: Array, sides: Array = []) -> Array:
 	var out := []
 	out.resize(units.size())
-	var taken := {}
-	for line in SOLDIER_FIRST:
-		var mine := range(units.size()).filter(func(i): return SOLDIER_LINE.get(units[i].type, "front") == line)
-		mine.sort_custom(func(a, b): return units[a].tier > units[b].tier or (units[a].tier == units[b].tier and a < b))
-		var cells := []  # [우선순위, 칸(열, 줄 — 줄 0 = 앞)]
-		for c in size.x:
-			for r in size.y:
-				var key: float
-				match line:
-					"flank": key = mini(c, size.x - 1 - c) * 1000.0 + (r % 2) * 100.0 + r * 10.0 + c * 0.01
-					"back": key = (size.y - 1 - r) * 1000.0 + absf(c - mid) * 10.0 + c * 0.01
-					_: key = r * 1000.0 + absf(c - mid) * 10.0 + c * 0.01
-				cells.append([key, Vector2i(c, r)])
-		cells.sort_custom(func(a, b): return a[0] < b[0])
-		var k := 0
-		for i in mine:
-			while k < cells.size() and taken.has(cells[k][1]):
-				k += 1
-			if k == cells.size():
-				break
-			var cell: Vector2i = cells[k][1]
-			taken[cell] = true
-			out[i] = Vector3(Balance.SOLDIER_X.x + cell.x * Balance.SOLDIER_GAP, 0.0, Balance.SOLDIER_Z.x + (size.y - 1 - cell.y) * Balance.SOLDIER_GAP)
+	for i in mini(units.size(), SOLDIER_MAX):
+		var s: int = sides[i] if i < sides.size() else 2
+		var q := _door_queue(sides, i, s)
+		out[i] = SIDE_DIR[s] * KEEP_DOOR_IN + perp(s) * (DOOR_LANE if q % 2 == 1 else -DOOR_LANE)
 	return out
+
+
+## 병사가 문에서 나오기까지 기다리는 초(같은 문 차례 q → q / 2 × DOOR_GAP_SEC). soldier_spots와 같은 순서.
+static func soldier_waits(units: Array, sides: Array = []) -> Array:
+	var out := []
+	for i in units.size():
+		out.append(float(_door_queue(sides, i, sides[i] if i < sides.size() else 2) / 2) * DOOR_GAP_SEC)
+	return out
+
+
+static func _door_queue(sides: Array, i: int, s: int) -> int:
+	var q := 0
+	for j in i:
+		if (sides[j] if j < sides.size() else 2) == s:
+			q += 1
+	return q
 
 
 # --- 병사 역할 자리(개정 21 §2) ---
@@ -602,12 +593,13 @@ static func ring_route(half: float, from: Vector3, to: Vector3) -> Array[Vector3
 	return out
 
 
-## 등장 자리(성채 정문 앞 광장) → 역할 자리: 광장 가운데 길(x = 0)로 나가 남문 안쪽을 거쳐 route()로 — 건물을 가로지르지 않는다.
-## 남쪽 가운데 성문이 없으면(성문 2개) 남쪽 안쪽 통로 가운데로 나가 거기서 route() — 통로를 따라 성문으로 간다.
+## 등장 자리(성채 문 안) → 역할 자리: 그 면 문으로 나와 십자 도로를 따라 그 면 안쪽 통로 가운데(gate_inner)로, 거기서 route() — 건물을 가로지르지 않는다
+## (십자 도로·통로에는 건물을 못 짓는다). 그 면 가운데 성문이 없으면(성문 2개) route()가 통로를 따라 성문으로 간다.
 static func soldier_entry_route(half: float, spot: Vector3, post: Vector3) -> Array[Vector3]:
-	var south := gate_inner(half, 2)
-	var out: Array[Vector3] = [Vector3(0, 0, spot.z), south]
-	out.append_array(route(half, south, post))
+	var s := side_of(spot)
+	var inner := gate_inner(half, s)
+	var out: Array[Vector3] = [SIDE_DIR[s] * KEEP_DOOR_OUT + perp(s) * perp(s).dot(spot), inner]
+	out.append_array(route(half, inner, post))
 	return out
 
 
