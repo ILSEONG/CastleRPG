@@ -30,9 +30,14 @@ signal ended(result)
 enum Phase { INTRO, FIGHT, RESULT }
 
 const INTRO_SEC := 1.6
-const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R, "total": ArenaKit.ARENA_END - 0.6}  # 총력전 22 m(결투장 끝벽 안)
-const FIELD_SIDE := {"duel": INF, "total": ArenaKit.ARENA_SIDE}  # 화면 가로(spot v)로 이만큼 안(결투장 양옆 벽)
-const CAMERA_SIZE := {"duel": 24.0, "total": 28.0}  # 가장 먼 줌
+## 결투 무대 넓히기(사용자 2026-10-19 "맵이 좁아 영웅 컨트롤이 안 되는 곳은 맵 크기를 키워줘"): 예전엔 반경 14 원이라 뒷줄(11.6 m)에서
+## 옆으로 7.8 m·뒤로 2.4 m뿐이었다. 사원을 DUEL_GROW_Z m 앞뒤로·DUEL_GROW_X m 옆으로 넓히고(ArenaKit.temple) 원을 20 m, 옆은 기둥 줄 안 14 m.
+## 시작 자리(FRONT_D)는 그대로.
+const DUEL_GROW_Z := 6.5
+const DUEL_GROW_X := 4.0
+const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R + DUEL_GROW_Z - 0.5, "total": ArenaKit.ARENA_END - 0.6}  # 결투 20 m, 총력전 22 m(결투장 끝벽 안)
+const FIELD_SIDE := {"duel": 14.0, "total": ArenaKit.ARENA_SIDE}  # 화면 가로(spot v)로 이만큼 안(결투 = 기둥 줄 안, 총력전 = 결투장 양옆 벽)
+const CAMERA_SIZE := {"duel": 30.0, "total": 28.0}  # 가장 먼 줌(결투는 넓어진 무대만큼 24 → 30)
 const FOLLOW_MIN := {"duel": 18.0, "total": 20.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
 const FRONT_D := {"duel": 9.0, "total": 16.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 2배)
 const ROW_GAP := 2.6  # 앞줄 ↔ 뒷줄
@@ -82,7 +87,7 @@ func _ready() -> void:
 	mode = str(run.get("mode", "duel"))
 	duration = float(run.get("time", PvpRules.BATTLE_SEC.get(mode, 90.0)))
 	brain = BrainScript.new(self)
-	var stage: Dictionary = ArenaKit.temple() if mode == "duel" else ArenaKit.colosseum()
+	var stage: Dictionary = ArenaKit.temple(DUEL_GROW_Z, DUEL_GROW_X) if mode == "duel" else ArenaKit.colosseum()
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = CrowdScript.new()
