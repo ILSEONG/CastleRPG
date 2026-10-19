@@ -592,7 +592,9 @@ static func _star_texture() -> ImageTexture:
 ## 사원 좌표(홀과 같은 HALL_YAW: +Z = 화면 아래, +X = 화면 오른쪽 → spot(u, v) = 사원 (v, u)). 사암 판석 앞뜰(가운데 밝은 참배길),
 ## 양옆 기둥 줄(기둥 다섯 + 위 들보), 뒤쪽 3단 돌계단 위 사당(기둥 넷·붉은 박공지붕·금 장식), 계단 양옆 수호 석상, 참배길 따라 돌등(불꽃),
 ## 앞뜰 밖 풀밭·숲·먼 산. 돌 부분은 메시 하나, 불꽃은 MultiMesh 하나. 영웅 5(내 4 + 도우미) = 화면 아래 두 줄(3 + 2), 바위 골렘 = 계단 앞.
-static func temple() -> Dictionary:
+## grow_z·grow_x(m, PVP 결투 — 사용자 2026-10-19 "맵이 좁아 영웅 컨트롤이 안 되는 곳은 키워줘"): 사당·석상·화로를 grow_z m 뒤로,
+## 기둥 줄을 grow_x m 바깥으로, 판석 앞뜰도 그만큼 넓힌다. 기본 0 = 모집권 던전 그대로.
+static func temple(grow_z := 0.0, grow_x := 0.0) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "Temple"
 	var plane := PlaneMesh.new()
@@ -614,17 +616,17 @@ static func temple() -> Dictionary:
 	site.rotation.y = HALL_YAW
 	root.add_child(site)
 	var k = MeshKit.new()
-	_temple_floor(k, rng)
-	_temple_columns(k)
-	_temple_shrine(k)
+	_temple_floor(k, rng, grow_z, grow_x)
+	_temple_columns(k, grow_z, grow_x)
+	_temple_shrine(k, grow_z)
 	var fires := []
 	for z in [-8.0, -1.0, 6.0]:
 		for x in [-5.0, 5.0]:
 			_stone_lantern(k, Vector3(x, 0, z))
 			fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.55), Vector3(x, LANTERN_H, z)))
 	for x in [-7.0, 7.0]:
-		fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.8), Vector3(x, 3.1 + 1.45, -20.5)))
-		_brazier(k, Vector3(x, 3.1, -20.5))
+		fires.append(Transform3D(Basis().scaled(Vector3.ONE * 0.8), Vector3(x, 3.1 + 1.45, -20.5 - grow_z)))
+		_brazier(k, Vector3(x, 3.1, -20.5 - grow_z))
 	var stone := MeshInstance3D.new()
 	stone.mesh = k.commit()
 	stone.material_override = Art.lowpoly_vc_material()
@@ -633,7 +635,7 @@ static func temple() -> Dictionary:
 	var trees := []
 	for f in [TownKit.tree_pine, TownKit.tree_round, TownKit.tree_round, TownKit.bush]:
 		trees.append(f.call(rng))
-	_scatter(root, trees, 80, TEMPLE_FIGHT_R + 9.0, 110.0, rng, 0.9, 1.3, 3)
+	_scatter(root, trees, 80, TEMPLE_FIGHT_R + 9.0 + maxf(grow_z, grow_x), 110.0, rng, 0.9, 1.3, 3)
 	var peaks := []
 	for i in 4:
 		peaks.append(TownKit.mountain(rng))
@@ -651,16 +653,18 @@ static func temple() -> Dictionary:
 
 ## 초원 위 사원(2026-10-06 사용자 "초원 + 사원"): 앞뜰은 풀밭 — 가운데 4 m 참배길만 밝은 판석으로 이어지고, 사당 앞(z < −12)은 판석 마당,
 ## 나머지는 풀밭에 흩어진 옛 판석(이끼 낀 것 많음)과 들꽃.
-static func _temple_floor(k, rng: RandomNumberGenerator) -> void:
-	var h := TEMPLE_HALF
+static func _temple_floor(k, rng: RandomNumberGenerator, gz := 0.0, gx := 0.0) -> void:
+	var h := TEMPLE_HALF + gz  # 앞뒤(z) 반 변
+	var hx := TEMPLE_HALF + gx  # 옆(x) 반 변
+	var yard_z := -12.0 - gz
 	_flat(k, Vector3(-2.2, 0.005, -h - 9.0), Vector3(2.2, 0.005, h + 1.0), SANDSTONE_DARK.darkened(0.25))
-	_flat(k, Vector3(-h - 1.0, 0.005, -h - 9.0), Vector3(h + 1.0, 0.005, -12.0), SANDSTONE_DARK.darkened(0.25))
-	for ix in int(h):
+	_flat(k, Vector3(-hx - 1.0, 0.005, -h - 9.0), Vector3(hx + 1.0, 0.005, yard_z), SANDSTONE_DARK.darkened(0.25))
+	for ix in int(hx):
 		for iz in int(h + 4.0):
-			var x0 := -h + ix * 2.0 + 0.07
+			var x0 := -hx + ix * 2.0 + 0.07
 			var z0 := -h - 8.0 + iz * 2.0 + 0.07
 			var path := absf(x0 + 0.93) < 2.1
-			var yard := z0 < -12.0
+			var yard := z0 < yard_z
 			if not path and not yard and rng.randf() > 0.12:
 				continue
 			var c := SANDSTONE_LIGHT if path else SANDSTONE.darkened(rng.randf_range(0.0, 0.12))
@@ -669,7 +673,7 @@ static func _temple_floor(k, rng: RandomNumberGenerator) -> void:
 			var y := rng.randf_range(0.02, 0.05)
 			k.face([Vector3(x0, y, z0), Vector3(x0 + 1.86, y, z0), Vector3(x0 + 1.86, y, z0 + 1.86), Vector3(x0, y, z0 + 1.86)], Vector3.UP, c)
 	for i in 70:  # 들꽃: 참배길 밖 풀밭에 작은 꽃
-		var p := Vector3(rng.randf_range(-h - 4.0, h + 4.0), 0, rng.randf_range(-12.0, h + 4.0))
+		var p := Vector3(rng.randf_range(-hx - 4.0, hx + 4.0), 0, rng.randf_range(yard_z, h + 4.0))
 		if absf(p.x) < 2.6:
 			continue
 		k.pyramid(p, 0.12, 0.28, MOSS.darkened(0.1))
@@ -677,37 +681,40 @@ static func _temple_floor(k, rng: RandomNumberGenerator) -> void:
 
 
 ## 양옆 기둥 줄: x = ±11, z = −14..10에 다섯씩(받침·8각 기둥·머리), 기둥 위 들보. 앞 끝 하나는 부러진 밑동.
-static func _temple_columns(k) -> void:
+static func _temple_columns(k, gz := 0.0, gx := 0.0) -> void:
+	var zs := []  # 기본 −14..10(6 m 간격). 넓히면 −14−gz..10+gz를 같은 다섯 칸으로
+	for i in 5:
+		zs.append(lerpf(-14.0 - gz, 10.0 + gz, i / 4.0))
 	for sx in [-1.0, 1.0]:
-		var x: float = sx * 11.0
-		for z in [-14.0, -8.0, -2.0, 4.0, 10.0]:
+		var x: float = sx * (11.0 + gx)
+		for z in zs:
 			var base := Vector3(x, 0, z)
 			k.box(base, Vector3(1.8, 0.5, 1.8), SANDSTONE_DARK)
-			if z == 10.0 and sx > 0.0:
+			if z == zs[4] and sx > 0.0:
 				k.prism_n(base + Vector3(0, 0.5, 0), 8, 0.64, 0.6, 1.4, SANDSTONE, PI / 8.0)
 				continue
 			k.prism_n(base + Vector3(0, 0.5, 0), 8, 0.64, 0.56, COLUMN_H - 0.5, SANDSTONE, PI / 8.0)
 			k.box(base + Vector3(0, COLUMN_H, 0), Vector3(1.5, 0.4, 1.5), SANDSTONE_DARK)
 			k.box(base + Vector3(0, COLUMN_H + 0.4, 0), Vector3(1.8, 0.25, 1.8), GOLD_TRIM)
-		var end_z: float = 4.0 if sx > 0.0 else 10.0
-		k.box(Vector3(x, COLUMN_H + 0.65, (-14.0 + end_z) / 2.0), Vector3(1.4, 0.7, end_z + 14.0 + 1.6), SANDSTONE_DARK)
+		var end_z: float = zs[3] if sx > 0.0 else zs[4]
+		k.box(Vector3(x, COLUMN_H + 0.65, (zs[0] + end_z) / 2.0), Vector3(1.4, 0.7, end_z - zs[0] + 1.6), SANDSTONE_DARK)
 
 
 ## 사당: 3단 돌계단(z = −15부터 뒤로 높아짐) 위 단(높이 3.1), 기둥 넷 + 들보 + 붉은 박공지붕(금 용마루), 안쪽 어두운 문, 계단 양옆 수호 석상.
-static func _temple_shrine(k) -> void:
+static func _temple_shrine(k, gz := 0.0) -> void:
 	for i in 3:
-		k.box(Vector3(0, i * 1.0, -16.0 - i * 1.6), Vector3(24.0 - i * 2.0, 1.05, 3.6), SANDSTONE_DARK if i % 2 == 0 else SANDSTONE)
-	k.box(Vector3(0, 0, -26.0), Vector3(20.0, 3.1, 14.0), SANDSTONE_DARK)
+		k.box(Vector3(0, i * 1.0, -16.0 - gz - i * 1.6), Vector3(24.0 - i * 2.0, 1.05, 3.6), SANDSTONE_DARK if i % 2 == 0 else SANDSTONE)
+	k.box(Vector3(0, 0, -26.0 - gz), Vector3(20.0, 3.1, 14.0), SANDSTONE_DARK)
 	var top := 3.1
-	k.box(Vector3(0, top, -27.0), Vector3(11.0, 4.6, 6.0), SANDSTONE)
-	k.box(Vector3(0, top, -23.95), Vector3(3.0, 3.4, 0.1), Color(0.16, 0.12, 0.10))
+	k.box(Vector3(0, top, -27.0 - gz), Vector3(11.0, 4.6, 6.0), SANDSTONE)
+	k.box(Vector3(0, top, -23.95 - gz), Vector3(3.0, 3.4, 0.1), Color(0.16, 0.12, 0.10))
 	for x in [-5.0, -2.2, 2.2, 5.0]:
-		k.prism_n(Vector3(x, top, -22.6), 8, 0.42, 0.38, 4.6, SANDSTONE_LIGHT, PI / 8.0)
-	k.box(Vector3(0, top + 4.6, -25.0), Vector3(12.4, 0.6, 6.4), GOLD_TRIM)
-	k.gable(Vector3(0, top + 5.2, -25.0), Vector3(12.0, 0, 7.0), 3.0, ROOF_RED, 0.6)
-	k.box(Vector3(0, top + 8.1, -25.0), Vector3(13.0, 0.3, 0.4), GOLD_TRIM)
+		k.prism_n(Vector3(x, top, -22.6 - gz), 8, 0.42, 0.38, 4.6, SANDSTONE_LIGHT, PI / 8.0)
+	k.box(Vector3(0, top + 4.6, -25.0 - gz), Vector3(12.4, 0.6, 6.4), GOLD_TRIM)
+	k.gable(Vector3(0, top + 5.2, -25.0 - gz), Vector3(12.0, 0, 7.0), 3.0, ROOF_RED, 0.6)
+	k.box(Vector3(0, top + 8.1, -25.0 - gz), Vector3(13.0, 0.3, 0.4), GOLD_TRIM)
 	for x in [-7.5, 7.5]:  # 수호 석상: 받침 + 웅크린 몸 + 머리 + 귀
-		var b := Vector3(float(x), 0, -13.5)
+		var b := Vector3(float(x), 0, -13.5 - gz)
 		k.box(b, Vector3(2.0, 1.0, 2.0), SANDSTONE_DARK)
 		k.prism_n(b + Vector3(0, 1.0, 0), 6, 0.85, 0.6, 1.7, STATUE, PI / 6.0)
 		k.box(b + Vector3(0, 2.6, 0.25), Vector3(1.1, 0.95, 1.1), STATUE)

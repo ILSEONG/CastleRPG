@@ -9,7 +9,8 @@ const MeshKit := preload("res://scripts/mesh_kit.gd")
 const ArenaKit := preload("res://scripts/arena_kit.gd")
 const GroundShader := preload("res://shaders/ground_grid.gdshader")
 
-const FIGHT_R := 13.0
+const FIGHT_R := 17.0  # 13 → 17(사용자 2026-10-19 "맵 규모가 좁아서 영웅 컨트롤이 안되는 곳은 맵 크기를 좀 키워줘" — tests/arena_room로 잰 피할 자리가 다른 던전의 절반)
+const S := FIGHT_R / 13.0  # 장식 배치는 반경 13 m로 그렸다 — 가로(xz)만 이만큼 늘린다(크기·높이는 그대로)
 const BOSS_U := -6.0
 const SEAT_U := 7.0
 
@@ -38,6 +39,11 @@ static func seat_spots(n: int) -> Array:
 	for i in n:
 		out.append(spot(SEAT_U, (i - (n - 1) / 2.0) * 3.0))
 	return out
+
+
+## 반경 13 m로 그린 자리(사이트 좌표) → 지금 무대 크기(가로만).
+static func _xz(v: Vector3) -> Vector3:
+	return Vector3(v.x * S, v.y, v.z * S)
 
 
 static func _ground(a: Color, b: Color) -> MeshInstance3D:
@@ -92,40 +98,40 @@ static func crypt() -> Dictionary:
 	root.add_child(site)
 	var k = MeshKit.new()
 	# 바닥: 판석 무늬(어두운 칸·이끼 얼룩), 가운데 소환진(보라 고리 두 겹 + 룬 조각)
-	for i in 70:
-		var c := Vector3(rng.randf_range(-16, 16), 0.012, rng.randf_range(-16, 16))
+	for i in int(70 * S * S):
+		var c := _xz(Vector3(rng.randf_range(-16, 16), 0.012, rng.randf_range(-16, 16)))
 		k.box(c, Vector3(rng.randf_range(1.2, 2.0), 0.03, rng.randf_range(1.2, 2.0)), CRYPT_DARK if rng.randf() < 0.5 else CRYPT_LIGHT.darkened(0.12))
-	for i in 14:
-		ArenaKit._blot(k, Vector3(rng.randf_range(-15, 15), 0.03, rng.randf_range(-15, 15)), rng.randf_range(0.6, 1.4), 7, CRYPT_MOSS, rng)
+	for i in int(14 * S * S):
+		ArenaKit._blot(k, _xz(Vector3(rng.randf_range(-15, 15), 0.03, rng.randf_range(-15, 15))), rng.randf_range(0.6, 1.4), 7, CRYPT_MOSS, rng)
 	_rune_circle(k, Vector3(0, 0.04, BOSS_U), 4.2, rng)
 	# 둘레: 부서진 기둥 두 줄, 묘비, 해골 더미, 바위
 	for side in [-1.0, 1.0]:
 		for z in [-12.0, -6.0, 0.0, 6.0, 12.0]:
 			var h := rng.randf_range(2.0, 6.5)
-			k.prism_n(Vector3(side * 15.5, 0, z), 6, 0.95, 0.85, h, CRYPT_LIGHT.darkened(rng.randf_range(0.0, 0.15)))
-			k.box(Vector3(side * 15.5, 0, z), Vector3(2.4, 0.5, 2.4), CRYPT_DARK)
+			k.prism_n(_xz(Vector3(side * 15.5, 0, z)), 6, 0.95, 0.85, h, CRYPT_LIGHT.darkened(rng.randf_range(0.0, 0.15)))
+			k.box(_xz(Vector3(side * 15.5, 0, z)), Vector3(2.4, 0.5, 2.4), CRYPT_DARK)
 			if h < 3.5:  # 무너진 기둥 조각
-				k.rock(Vector3(side * (14.0 + rng.randf() * 1.5), 0, z + rng.randf_range(-1.5, 1.5)), 0.7, CRYPT_LIGHT.darkened(0.1), rng, 0.6, 0.0)
+				k.rock(_xz(Vector3(side * (14.0 + rng.randf() * 1.5), 0, z + rng.randf_range(-1.5, 1.5))), 0.7, CRYPT_LIGHT.darkened(0.1), rng, 0.6, 0.0)
 	for i in 16:
 		var a := rng.randf() * TAU
-		var r := rng.randf_range(FIGHT_R + 1.5, 19.0)
+		var r := rng.randf_range(FIGHT_R + 1.5, 19.0 * S)
 		var p := Vector3(cos(a) * r, 0, sin(a) * r)
-		if p.z < -10.0 and absf(p.x) < 6.0:
+		if p.z < -10.0 * S and absf(p.x) < 6.0 * S:
 			continue  # 제단 앞은 비운다
 		_tombstone(k, p, rng)
 	for i in 10:
 		var a := rng.randf() * TAU
-		var r := rng.randf_range(FIGHT_R + 0.5, 18.0)
+		var r := rng.randf_range(FIGHT_R + 0.5, 18.0 * S)
 		_skull_pile(k, Vector3(cos(a) * r, 0, sin(a) * r), rng)
-	for i in 30:
+	for i in int(30 * S):
 		var a := rng.randf() * TAU
-		var r := rng.randf_range(19.0, 34.0)
+		var r := rng.randf_range(19.0 * S, 34.0 * S)
 		ArenaKit._crag(k, Vector3(cos(a) * r, 0, sin(a) * r), rng.randf_range(2.0, 4.0), rng.randf_range(3.0, 8.0), rng, -Vector3(cos(a), 0, sin(a)),
 			[CRYPT_DARK.darkened(0.2), CRYPT_DARK, CRYPT_STONE, CURSE.darkened(0.55)])
 	for i in 12:
-		ArenaKit._bone(k, Vector3(rng.randf_range(-12, 12), 0, rng.randf_range(-12, 12)), rng.randf() * TAU, rng.randf_range(0.4, 0.8))
+		ArenaKit._bone(k, _xz(Vector3(rng.randf_range(-12, 12), 0, rng.randf_range(-12, 12))), rng.randf() * TAU, rng.randf_range(0.4, 0.8))
 	# 뒤: 제단(계단 셋 + 석관 + 뒤 아치)
-	var alt := Vector3(0, 0, -17.5)
+	var alt := _xz(Vector3(0, 0, -17.5))
 	for s in 3:
 		k.box(alt + Vector3(0, s * 0.35, 0), Vector3(11.0 - s * 2.0, 0.35, 6.0 - s * 1.2), CRYPT_LIGHT.darkened(0.06 * s))
 	k.box(alt + Vector3(0, 1.05, 0), Vector3(2.0, 0.9, 3.6), CRYPT_DARK)
@@ -136,7 +142,7 @@ static func crypt() -> Dictionary:
 	k.pyramid(alt + Vector3(0, 8.2, -2.6), 2.0, 1.6, CRYPT_DARK)
 	_commit(k, site)
 	# 영혼불 화로(청록 불꽃 + 점광원)
-	var braziers := [Vector3(-9.5, 0, -11.0), Vector3(9.5, 0, -11.0), Vector3(-12.0, 0, 4.0), Vector3(12.0, 0, 4.0), Vector3(-3.6, 0, -16.0), Vector3(3.6, 0, -16.0)]
+	var braziers := [Vector3(-9.5, 0, -11.0), Vector3(9.5, 0, -11.0), Vector3(-12.0, 0, 4.0), Vector3(12.0, 0, 4.0), Vector3(-3.6, 0, -16.0), Vector3(3.6, 0, -16.0)].map(func(v): return _xz(v))
 	var fk = MeshKit.new()
 	var fires := []
 	for b in braziers:
@@ -145,13 +151,13 @@ static func crypt() -> Dictionary:
 		fires.append(b + Vector3(0, 1.3, 0))
 	_commit(fk, site)
 	_flames(site, fires, 0.75, SOUL)
-	var mist := _mist(SOUL.darkened(0.3), Vector3(16, 0.2, 16))
+	var mist := _mist(SOUL.darkened(0.3), _xz(Vector3(16, 0.2, 16)))
 	site.add_child(mist)
 	var hw := Basis(Vector3.UP, ArenaKit.HALL_YAW)
 	return {"root": root, "seats": seat_spots(4), "boss": spot(BOSS_U, 0.0), "light": {
 		"background": Color(0.05, 0.06, 0.09), "ambient": Color(0.55, 0.58, 0.72), "ambient_energy": 0.85,
 		"sun_color": Color(0.70, 0.78, 1.0), "sun_energy": 0.75, "sun_rot": Vector3(-58, -35, 0), "shadows": true,
-		"omni": [[hw * Vector3(-9.5, 2.2, -11.0), SOUL, 1.6, 12.0], [hw * Vector3(9.5, 2.2, -11.0), SOUL, 1.6, 12.0],
+		"omni": [[hw * _xz(Vector3(-9.5, 2.2, -11.0)), SOUL, 1.6, 12.0], [hw * _xz(Vector3(9.5, 2.2, -11.0)), SOUL, 1.6, 12.0],
 			[hw * Vector3(0.0, 3.0, BOSS_U), CURSE, 1.4, 11.0]]}}
 
 
@@ -236,22 +242,23 @@ static func nest() -> Dictionary:
 	site.rotation.y = ArenaKit.HALL_YAW
 	root.add_child(site)
 	var k = MeshKit.new()
-	for i in 24:
-		ArenaKit._blot(k, Vector3(rng.randf_range(-16, 16), 0.02, rng.randf_range(-16, 16)), rng.randf_range(0.8, 2.0), 7, NEST_DARK if rng.randf() < 0.6 else NEST_ROCK, rng)
-	for i in 30:  # 바닥 거미줄 자국(가는 흰 줄)
+	for i in int(24 * S * S):
+		ArenaKit._blot(k, _xz(Vector3(rng.randf_range(-16, 16), 0.02, rng.randf_range(-16, 16))), rng.randf_range(0.8, 2.0), 7, NEST_DARK if rng.randf() < 0.6 else NEST_ROCK, rng)
+	for i in int(30 * S * S):  # 바닥 거미줄 자국(가는 흰 줄)
 		var a := rng.randf() * TAU
-		var p := Vector3(rng.randf_range(-14, 14), 0.03, rng.randf_range(-14, 14))
+		var p := _xz(Vector3(rng.randf_range(-14, 14), 0.03, rng.randf_range(-14, 14)))
 		var q := p + Vector3(cos(a), 0, sin(a)) * rng.randf_range(1.5, 3.5)
 		_strand(k, p, q, 0.025, WEB.darkened(0.25))
 	# 둘레 바위벽(안쪽으로 기운 큰 바위) — 앞(화면 아래)은 낮게
-	for i in 40:
-		var a := TAU * i / 40.0 + rng.randf_range(-0.05, 0.05)
+	var walls := int(40 * S)
+	for i in walls:
+		var a := TAU * i / float(walls) + rng.randf_range(-0.05, 0.05)
 		var r := rng.randf_range(FIGHT_R + 4.0, FIGHT_R + 8.0)
 		var front := sin(a) > 0.5  # +z 쪽(화면 아래)
 		ArenaKit._crag(k, Vector3(cos(a) * r, 0, sin(a) * r), rng.randf_range(2.2, 3.6), rng.randf_range(2.0, 3.0) if front else rng.randf_range(5.0, 10.0), rng,
 			-Vector3(cos(a), 0, sin(a)), [NEST_DARK.darkened(0.2), NEST_DARK, NEST_ROCK, VENOM.darkened(0.6)])
 	# 벽과 벽, 벽과 바닥을 잇는 거미줄
-	for i in 26:
+	for i in int(26 * S):
 		var a := rng.randf() * TAU
 		var r0 := FIGHT_R + 4.5
 		var top := Vector3(cos(a) * r0, rng.randf_range(2.5, 6.0), sin(a) * r0)
@@ -261,28 +268,28 @@ static func nest() -> Dictionary:
 		var low := Vector3(cos(b) * rng.randf_range(FIGHT_R + 0.5, FIGHT_R + 3.0), 0.05, sin(b) * rng.randf_range(FIGHT_R + 0.5, FIGHT_R + 3.0))
 		_strand(k, top, low, 0.04, WEB)
 	# 뒤: 여왕의 큰 거미줄(바퀴살 + 나선) 두 벽 사이
-	_web_wheel(k, Vector3(0, 6.0, -18.5), 6.5)
+	_web_wheel(k, _xz(Vector3(0, 6.0, -18.5)), 6.5)
 	# 알 더미·고치·뼈
-	for c in [Vector3(-10.5, 0, -8.0), Vector3(10.5, 0, -6.0), Vector3(-12.0, 0, 6.0), Vector3(11.5, 0, 8.0), Vector3(-5.0, 0, -15.0), Vector3(6.0, 0, -15.5)]:
+	for c in [Vector3(-10.5, 0, -8.0), Vector3(10.5, 0, -6.0), Vector3(-12.0, 0, 6.0), Vector3(11.5, 0, 8.0), Vector3(-5.0, 0, -15.0), Vector3(6.0, 0, -15.5)].map(func(v): return _xz(v)):
 		_egg_cluster(k, c, rng)
 	for i in 8:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(FIGHT_R + 0.5, FIGHT_R + 3.5)
 		_cocoon(k, Vector3(cos(a) * r, 0, sin(a) * r), rng)
 	for i in 14:
-		ArenaKit._bone(k, Vector3(rng.randf_range(-13, 13), 0, rng.randf_range(-13, 13)), rng.randf() * TAU, rng.randf_range(0.4, 0.9))
+		ArenaKit._bone(k, _xz(Vector3(rng.randf_range(-13, 13), 0, rng.randf_range(-13, 13))), rng.randf() * TAU, rng.randf_range(0.4, 0.9))
 	_commit(k, site)
 	var glow := []  # 독 웅덩이 빛(작은 초록 불꽃)
-	for c in [Vector3(-12.5, 0, -2.0), Vector3(12.8, 0, 0.0), Vector3(-3.0, 0, -16.5), Vector3(3.5, 0, -16.8)]:
+	for c in [Vector3(-12.5, 0, -2.0), Vector3(12.8, 0, 0.0), Vector3(-3.0, 0, -16.5), Vector3(3.5, 0, -16.8)].map(func(v): return _xz(v)):
 		glow.append(c + Vector3(0, 0.1, 0))
 	_flames(site, glow, 0.6, VENOM)
-	site.add_child(_mist(VENOM.darkened(0.4), Vector3(16, 0.2, 16)))
+	site.add_child(_mist(VENOM.darkened(0.4), _xz(Vector3(16, 0.2, 16))))
 	var hw := Basis(Vector3.UP, ArenaKit.HALL_YAW)
 	return {"root": root, "seats": seat_spots(3), "boss": spot(BOSS_U, 0.0), "light": {
 		"background": Color(0.07, 0.05, 0.04), "ambient": Color(0.66, 0.60, 0.54), "ambient_energy": 0.85,
 		"sun_color": Color(0.95, 0.88, 0.75), "sun_energy": 0.8, "sun_rot": Vector3(-60, -35, 0), "shadows": true,
-		"omni": [[hw * Vector3(-12.5, 1.5, -2.0), VENOM, 1.5, 10.0], [hw * Vector3(12.8, 1.5, 0.0), VENOM, 1.5, 10.0],
-			[hw * Vector3(0.0, 4.0, -15.0), Color(0.9, 0.85, 0.7), 1.0, 12.0]]}}
+		"omni": [[hw * _xz(Vector3(-12.5, 1.5, -2.0)), VENOM, 1.5, 10.0], [hw * _xz(Vector3(12.8, 1.5, 0.0)), VENOM, 1.5, 10.0],
+			[hw * _xz(Vector3(0.0, 4.0, -15.0)), Color(0.9, 0.85, 0.7), 1.0, 12.0]]}}
 
 
 static func _strand(k, a: Vector3, b: Vector3, r: float, color: Color) -> void:

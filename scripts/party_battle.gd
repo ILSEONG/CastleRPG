@@ -40,7 +40,7 @@ const SNAP_SEC := 0.2  # 초당 5장(공성전과 같은 간격)
 const REVIVE_SEC := 15.0
 const KO_SEC := 0.8
 const FIELD_R := PartyArena.FIGHT_R
-const CAMERA_SIZE := 30.0
+const CAMERA_SIZE := 38.0  # 가장 먼 줌(화면 가로 m) — 무대 지름 34 m가 다 들어간다(2026-10-19 무대 13 → 17 m, 예전 30)
 const FOLLOW_MIN := 20.0
 const BOSS_ROW := {"lich": {"speed": 2.4, "range": 2.6, "atk_interval": 1.6, "aggro": 40.0, "scale": 2.2},
 	"spider": {"speed": 2.8, "range": 2.8, "atk_interval": 1.5, "aggro": 40.0, "scale": 1.0}}
