@@ -250,6 +250,8 @@ func _defend(u) -> void:
 		# 성벽 원거리: 성채가 위협받는데 성벽에서 쏠 적이 없으면 내려가 성채 앞에서 쏜다
 		if _keep_threat > 0 and u.current_target() == null and not busy_here:
 			want = battle.keep_guard_spot(s, 10 + spot)
+		elif _support.has(u.uid):
+			want = _support[u.uid].pos  # 내 면이 조용하고 다른 면이 위험: 그 면 성벽 위 빈자리에서 막는다(2026-10-19 사용자)
 	elif _keep_threat > 0 and not (busy_here and not own_open):
 		want = battle.keep_guard_spot(s, spot)  # 성채가 먼저(내 성문 앞에서 막고 있는 중이 아니면)
 	elif own_open:
@@ -285,6 +287,62 @@ func _survey() -> void:
 		elif _near_wall(a.global_position):
 			_press[_side_of(a.global_position)] += 1
 	_keep_threat = battle.keep_threat()
+	_assign_support()
+
+
+## 성벽 궁수 지원(2026-10-19 사용자: "자기 성벽 쪽에 적군이 없고 다른 성벽이 위험하면 자리를 옮겨, 최대한 성벽 위에서 막게"):
+## 면 위험도 = 그 면 성벽 앞 공격 영웅 수(성 안에 들어온 적은 성채 지키기 몫). SUPPORT_MIN 이상인 면이 위험(지원 중이면 1 이상이면 계속).
+## 자기 면에 공격 영웅이 하나도 없는 성벽 궁수만 간다. 가는 곳은 그 면 성벽 위 빈 자리(그 면 궁수 다음 순번) — 성문 가까운 자리부터.
+## 자기 면에 적이 오거나 위험이 끝나면 제자리로 돌아간다. 여러 면이 위험하면 위험도 ÷ (1 + 이미 간 궁수 × SUPPORT_SHARE)가 큰 면으로 나눠 간다.
+const SUPPORT_MIN := 2
+const SUPPORT_SHARE := 0.5
+var _support := {}  # 지원 중인 궁수 uid → {side, pos}
+
+
+func _assign_support() -> void:
+	var threat := [0, 0, 0, 0]
+	for k in 4:
+		threat[k] = _press[k]  # 성벽이 위험 = 그 면 성벽 앞 공격 영웅(성 안에 들어온 적은 성채 지키기 몫)
+	var archers := []
+	var own_n := [0, 0, 0, 0]  # 면마다 제 성벽 자리에 선 궁수 수(지원 자리는 그 다음부터)
+	for u in battle.units(1):
+		if u.is_alive() and u.post_pos.y > Balance.WALL_H / 2.0:
+			archers.append(u)
+			own_n[u.lane] = maxi(own_n[u.lane], u.post_slot + 1)
+	archers.sort_custom(func(a, b): return a.uid < b.uid)
+	var prev := _support
+	_support = {}
+	var sent := [0, 0, 0, 0]
+	var picks := []
+	for u in archers:
+		var s: int = u.lane
+		if _press[s] > 0 or _inside_at[s] > 0:
+			continue  # 내 면에 적이 있다: 제자리
+		var cur: int = prev[u.uid].side if prev.has(u.uid) else -1
+		if cur >= 0 and threat[cur] >= 1:
+			picks.append([u, cur])  # 지원 중인 면이 아직 위험하면 그대로(이리저리 옮기지 않게)
+			sent[cur] += 1
+			continue
+		var best := -1
+		var best_v := 0.0
+		for k in 4:
+			if k == s or threat[k] < SUPPORT_MIN:
+				continue
+			var v: float = float(threat[k]) / (1.0 + float(sent[k]) * SUPPORT_SHARE)
+			if v > best_v:
+				best_v = v
+				best = k
+		if best >= 0:
+			picks.append([u, best])
+			sent[best] += 1
+	var wall_n: int = Formation.gates_per_side(battle.half) * battle.WALL_POSTS.size()
+	var used := own_n.duplicate()
+	for pk in picks:
+		var k: int = pk[1]
+		if used[k] >= wall_n:
+			continue  # 그 면 성벽 자리가 다 찼다
+		_support[pk[0].uid] = {"side": k, "pos": battle.wall_post(k, used[k])}
+		used[k] += 1
 
 
 ## 지원 갈 뚫린 성문: 성문이 부서진 면 중 공격 영웅이 가장 많이 몰린 곳(안 + 밖). 없으면 -1.
