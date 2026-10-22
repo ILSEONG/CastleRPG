@@ -12,6 +12,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 GODOT=${GODOT:-./tools/Godot_v4.7.2-stable_win64_console.exe}
 KEYSTORE=${KEYSTORE:-$HOME/.local/share/godot/keystores/debug.keystore}
+# 스토어 업로드 키(2026-10-22): KEYSTORE=<upload .jks> KEY_ALIAS=upload KEY_PASSWORD=<비밀번호>. 비우면 테스트 키(debug.keystore).
+KEY_ALIAS=${KEY_ALIAS:-androiddebugkey}
+KEY_PASSWORD=${KEY_PASSWORD:-android}
 FORMAT=${FORMAT:-apk}
 case "$FORMAT" in
 	apk) OUT=export/android/CastleRPG.apk; EXPORT_FORMAT=0 ;;
@@ -37,8 +40,8 @@ INSTALL=()
 if [ "${BUILD:-release}" = "debug" ]; then
 	"$GODOT" --headless --quiet --path . "${INSTALL[@]}" --export-debug "Android" "$OUT"
 else
-	GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$KEYSTORE" GODOT_ANDROID_KEYSTORE_RELEASE_USER=androiddebugkey \
-		GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=android \
+	GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$KEYSTORE" GODOT_ANDROID_KEYSTORE_RELEASE_USER="$KEY_ALIAS" \
+		GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$KEY_PASSWORD" \
 		"$GODOT" --headless --quiet --path . "${INSTALL[@]}" --export-release "Android" "$OUT"
 fi
 ls -la "$OUT"
