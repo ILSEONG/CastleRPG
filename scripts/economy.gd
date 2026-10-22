@@ -1557,7 +1557,7 @@ func _shop_mark(x: Dictionary) -> void:
 
 ## 상품 하나를 산다(값 빼기 + 받기). 온라인은 곧바로 반영하고 POST /v1/shop/buy {id, n}(n = 이미 산 수 — 재전송이 두 번 사지 않는다).
 ## ad = 보상형 광고를 끝까지 봤다(광고 상품 — 광고 제거 구매자는 보지 않아도 된다, ad_free).
-func buy_shop(id: String, ad := false) -> bool:
+func buy_shop(id: String, ad := false, ad_token := "") -> bool:
 	if shop_block(id) != "":
 		return false
 	var x := ShopItems.find(id)
@@ -1586,12 +1586,23 @@ func buy_shop(id: String, ad := false) -> bool:
 		shop_changed.emit()
 		dungeons_changed.emit()
 		net.flush_kills()
-		net.send("POST", "/v1/shop/buy", {"id": id, "n": n, "ad": ad}, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
+		var body := {"id": id, "n": n, "ad": ad}
+		if ad_token != "":
+			body.ad_token = ad_token  # 광고 서버 확인(AdMob SSV) 표 — ad_start
+		net.send("POST", "/v1/shop/buy", body, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
 		return true
 	_shop_mark(x)
 	grant(r)  # 저장·changed·열쇠까지
 	shop_changed.emit()
 	return true
+
+
+## 보상형 광고를 띄우기 전에 서버에서 표를 받는다(AdMob 서버 확인 custom_data, 2026-10-22). 오프라인·실패면 "" — 광고는 그대로 띄운다.
+func ad_start(done: Callable) -> void:
+	if net == null or not net.up:
+		done.call("")
+		return
+	net.send("POST", "/v1/ads/start", {}, func(data): done.call(str(data.get("token", "")) if data is Dictionary else ""), func(): done.call(""), true, true)
 
 
 # --- 결제 상품(서버 iap.ts, 표 iap_items.gd): 다이아 충전·월정액·패키지·성장 패스. 사는 것은 실결제(Google Play 연결 전 — 알림만),

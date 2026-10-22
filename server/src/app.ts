@@ -22,6 +22,7 @@ import * as S from './speedups.ts'
 import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
 import * as Pay from './payments.ts'
+import * as Ads from './ads.ts'
 import * as L from './legal.ts'
 import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
@@ -49,6 +50,7 @@ export interface AppOptions {
   partyLive?: PartyLive // 파티 퀘스트 실시간 방(main.ts가 만들어 붙인다). 없으면 방 없이(REST finish만)
   payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
   legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
+  adWaitMs?: number // 광고 서버 확인(AdMob SSV) 콜백을 상점 구매가 기다리는 최대 시간(기본 10초, 테스트 0)
   gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
 }
 
@@ -2343,6 +2345,72 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // --- 보상형 광고 서버 확인(AdMob SSV, ads.ts) ---
+  // 앱은 광고를 띄우기 전에 /v1/ads/start로 표를 받아 광고의 custom_data로 넘긴다. AdMob이 끝까지 본 광고마다 /admob/ssv를 서명해 부르면 표가 확인된다.
+  // 운영 설정 ops_config ad_ssv = '1'이면 상점 [광고] 상품은 확인된 표가 있어야 받는다(아니면 예전처럼 body.ad = true, 기록에 ssv 여부만 남긴다).
+  const adKey = Ads.keyStore(opts.fetch ?? fetch)
+  const adWaitMs = opts.adWaitMs ?? 10_000
+  async function adClaim(playerId: string, raw: unknown, usedFor: string): Promise<{ token: string; verified: boolean; required: boolean }> {
+    const token = typeof raw === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(raw) ? raw : ''
+    let required = false
+    try {
+      required = (await query("select value from ops_config where key = 'ad_ssv'"))[0]?.value === '1'
+    } catch {
+      required = false
+    }
+    if (!token) return { token, verified: false, required }
+    const until = Date.now() + (required ? adWaitMs : 0)
+    for (;;) {
+      try {
+        const r = await query(`update ad_views set used_for = $3 where token = $1 and player_id = $2 and verified_at is not null
+          and (used_for is null or used_for = $3) returning token`, [token, playerId, usedFor])
+        if (r.length) return { token, verified: true, required }
+      } catch {
+        return { token: '', verified: false, required }
+      }
+      if (Date.now() >= until) return { token: '', verified: false, required }
+      await new Promise((ok) => setTimeout(ok, 500)) // AdMob 콜백은 보통 광고를 닫기 전후 몇 초 안에 온다
+    }
+  }
+
+  // 광고 표 받기. 한 시간에 60장까지(광고 상품은 하루 20개 남짓).
+  app.post('/v1/ads/start', auth, async (c) => {
+    const id = c.get('playerId') as string
+    try {
+      const [cnt] = await query("select count(*)::int as n from ad_views where player_id = $1 and created_at > now() - interval '1 hour'", [id])
+      if (Number(cnt?.n ?? 0) >= 60) throw new ApiError(429, 'too_many_ads', 'too many ads; try again later')
+      const token = randomBytes(18).toString('base64url')
+      await query('insert into ad_views (token, player_id) values ($1, $2)', [token, id])
+      return c.json({ token })
+    } catch (e) {
+      if (e instanceof ApiError) throw e
+      console.warn(`[server] ads start: ${(e as Error).message}`)
+      throw new ApiError(503, 'ads_unavailable', 'ad check is not ready')
+    }
+  })
+
+  // AdMob 콜백(공개, AdMob 콘솔 광고 단위 → 서버 측 확인 URL). 서명이 틀리면 403, 맞으면 늘 200(같은 거래 재전송·콘솔 시험 호출 포함).
+  app.get('/admob/ssv', async (c) => {
+    const url = c.req.url
+    const raw = url.includes('?') ? url.slice(url.indexOf('?') + 1) : ''
+    let v: Ads.SsvParams | null = null
+    try {
+      v = await Ads.verifySsv(raw, adKey)
+    } catch (e) {
+      console.warn(`[server] admob ssv keys: ${(e as Error).message}`)
+      return c.json({ error: 'keys_unavailable' }, 503) // AdMob이 나중에 다시 부른다
+    }
+    if (!v) return c.json({ error: 'bad_signature' }, 403)
+    if (v.custom_data && v.transaction_id) {
+      try {
+        await query('update ad_views set verified_at = now(), transaction_id = $2 where token = $1 and verified_at is null', [v.custom_data, v.transaction_id])
+      } catch (e) {
+        if (!/duplicate|unique/i.test((e as Error).message)) console.warn(`[server] admob ssv: ${(e as Error).message}`)
+      }
+    }
+    return c.json({ ok: true })
+  })
+
   // --- 상점(shop.ts): 일일·주간 한정 상품, 다이아·골드로 산다(실결제 없음) ---
 
   // 상품 하나 사기. body = {id, n}: n = 이번 기간(오늘·이번 주)에 이미 산 수와 같아야 한다(아니면 409 stale — 재전송이 두 번 사지 않는다).
@@ -2353,40 +2421,48 @@ export function createApp(opts: AppOptions) {
     const x = SH.item(sid)
     if (!x) throw new ApiError(404, 'unknown_item', `unknown shop item '${sid}'`)
     const n = intField(b, 'n', 0, MAX_INT4)
-    return mutate(c, (p, g, now) => {
-      const st = SH.normalize(p.shop, today(g, now))
-      const had = SH.bought(st, x)
-      if (had >= x.limit) throw new ApiError(409, 'sold_out', `'${x.id}' is sold out for this period`)
-      if (n !== had) throw new ApiError(409, 'stale', `'${x.id}' has been bought ${had} times`)
-      const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
-      if (x.currency === 'ad' && !free && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
-      const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(x.currency === 'ad' ? { ad: !free } : {}) } } }
-      const give = x.give as Record<string, number>
-      let gold = (give.gold ?? 0) * 10
-      let dia = give.diamonds ?? 0
-      if (x.currency === 'diamonds') {
-        if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
-        dia -= x.price
-      } else if (x.currency === 'gold') {
-        if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
-        gold -= x.price * 10
-      }
-      if (gold) change.goldTenths = gold
-      if (dia) change.diamonds = dia
-      const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
-      if (Object.keys(res).length) change.res = res
-      if (give.tickets) change.diaTickets = give.tickets
-      const keyType = R.DUNGEON_TYPES.find((t) => (give[`keys_${t}`] ?? 0) > 0)
-      if (keyType) {
-        const ds = dungeonState(p, g, keyType, now)
-        change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + give[`keys_${keyType}`] } }
-      }
-      const pz = P.fromReward(give)
-      if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
-      const sz = S.fromReward(give)
-      if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
-      return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
-    })
+    const ad = x.currency === 'ad' ? await adClaim(c.get('playerId') as string, b.ad_token, `${x.id}:${n}`) : null
+    try {
+      return await mutate(c, (p, g, now) => {
+        const st = SH.normalize(p.shop, today(g, now))
+        const had = SH.bought(st, x)
+        if (had >= x.limit) throw new ApiError(409, 'sold_out', `'${x.id}' is sold out for this period`)
+        if (n !== had) throw new ApiError(409, 'stale', `'${x.id}' has been bought ${had} times`)
+        const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
+        if (ad && !free && ad.required && !ad.verified) throw new ApiError(409, 'ad_unverified', `'${x.id}' needs an ad confirmed by AdMob`)
+        if (ad && !free && !ad.required && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
+        const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(ad ? { ad: !free, ssv: ad.verified } : {}) } } }
+        const give = x.give as Record<string, number>
+        let gold = (give.gold ?? 0) * 10
+        let dia = give.diamonds ?? 0
+        if (x.currency === 'diamonds') {
+          if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
+          dia -= x.price
+        } else if (x.currency === 'gold') {
+          if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
+          gold -= x.price * 10
+        }
+        if (gold) change.goldTenths = gold
+        if (dia) change.diamonds = dia
+        const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
+        if (Object.keys(res).length) change.res = res
+        if (give.tickets) change.diaTickets = give.tickets
+        const keyType = R.DUNGEON_TYPES.find((t) => (give[`keys_${t}`] ?? 0) > 0)
+        if (keyType) {
+          const ds = dungeonState(p, g, keyType, now)
+          change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + give[`keys_${keyType}`] } }
+        }
+        const pz = P.fromReward(give)
+        if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+        const sz = S.fromReward(give)
+        if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
+        return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
+      })
+    } catch (e) {
+      // 같은 n의 재전송(stale)이 아니면 표를 돌려놓는다 — 한도·점검 등으로 못 산 광고는 다음 구매에 다시 쓴다
+      if (ad?.token && !(e instanceof ApiError && e.code === 'stale')) await query('update ad_views set used_for = null where token = $1 and used_for = $2', [ad.token, `${x.id}:${n}`]).catch(() => {})
+      throw e
+    }
   })
 
   // --- 결제 상품(iap.ts): 다이아 충전·월정액·패키지·성장 패스 ---

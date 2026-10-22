@@ -1,7 +1,8 @@
 extends Control
 ## 보상형 광고 재생(상점 [광고] 탭, 2026-10-12): play(done)으로 열고, 끝까지 보면 done.call()로 보상을 받게 한다. 중간에 [닫기]면 보상 없음.
 ## 안드로이드 APK: CastleAds 플러그인(AdMob 보상형 광고, ID는 scripts/ad_config.gd — 지금은 Google 테스트 ID)을 띄우고,
-## 끝까지 봐서 보상 콜백이 왔을 때만 done.call()(서버는 body.ad = true를 받는다). 불러오지 못하면 보상 없이 안내만 한다.
+## 끝까지 봐서 보상 콜백이 왔을 때만 done.call(표)(서버는 body.ad = true와 표를 받는다). 불러오지 못하면 보상 없이 안내만 한다.
+## 표(2026-10-22): 띄우기 전에 Economy.ad_start로 받아 광고의 서버 확인(SSV) custom_data로 넘긴다 — AdMob이 게임 서버에 직접 "끝까지 봤다"를 알린다.
 ## 플러그인이 없는 곳(PC, 앱인토스 — 토스 광고 미연결)은 SECONDS초짜리 시험 화면이다.
 ## 광고 제거(Economy.ad_free) 구매자는 이 창을 거치지 않는다(shop_panel._buy).
 
@@ -17,6 +18,7 @@ var _done: Callable
 var _left := 0.0
 var _ads: Object  # CastleAds 싱글턴(안드로이드 APK에서만)
 var _waiting := false  # 실제 광고: 불러오는 중이거나 화면에 떠 있음
+var _token := ""  # 이번 광고의 서버 확인 표(Economy.ad_start)
 var title_label: Label
 var sub_label: Label
 var time_label: Label
@@ -67,12 +69,12 @@ func _ready() -> void:
 		_ads.load(AdConfig.ANDROID_REWARDED_ID)  # 미리 불러 두면 누르자마자 뜬다
 
 
-## 광고를 띄운다. 끝까지 보면 done.call().
+## 광고를 띄운다. 끝까지 보면 done.call(표) — 표는 실제 광고의 서버 확인 값(시험 화면·실패면 "").
 func play(done: Callable) -> void:
 	if visible:
 		return  # 이미 재생 중(빠른 두 번 누름) — 같은 광고를 다시 시작하지 않는다
 	if instant:
-		done.call()
+		done.call("")
 		return
 	_done = done
 	if _ads != null:
@@ -86,10 +88,19 @@ func play(done: Callable) -> void:
 ## 실제 광고: 불러 둔 게 있으면 곧바로 띄우고, 없으면 "불러오는 중" 화면에서 기다린다.
 func _play_real() -> void:
 	_waiting = true
+	_token = ""
 	sub_label.text = Lang.t("ad_player.play_real")
 	time_label.text = Lang.t("ad_player.play_real_2")
 	bar.visible = false
 	visible = true
+	Economy.ad_start(_on_token)
+
+
+func _on_token(token: String) -> void:
+	if not _waiting:
+		return  # 표를 받는 사이 [닫기]
+	_token = token
+	_ads.setSsv(token)
 	if _ads.isLoaded():
 		_ads.show()
 	else:
@@ -112,7 +123,7 @@ func _on_ad_closed(earned: bool) -> void:
 	visible = false
 	_ads.load(AdConfig.ANDROID_REWARDED_ID)  # 다음 광고를 미리 불러 둔다
 	if earned and _done.is_valid():
-		_done.call()
+		_done.call(_token)
 
 
 func _close() -> void:
@@ -126,7 +137,7 @@ func _process(delta: float) -> void:
 	_left -= delta
 	if _left <= 0.0:
 		visible = false
-		_done.call()
+		_done.call("")
 		return
 	_tick()
 
