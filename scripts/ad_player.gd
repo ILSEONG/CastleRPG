@@ -107,14 +107,16 @@ func _on_token(token: String) -> void:
 		_ads.load(AdConfig.ANDROID_REWARDED_ID)
 
 
-func _on_ad_loaded(ok: bool, _error: String) -> void:
+func _on_ad_loaded(ok: bool, error: String) -> void:
 	if not _waiting:
 		return  # 미리 불러 두기만 한 것
 	if ok:
 		_ads.show()
 		return
 	_waiting = false
-	sub_label.text = Lang.t("ad_player.on_ad_loaded")
+	# AdMob 오류 번호(앞의 "3:No fill." 중 3)를 같이 보여 준다 — 폰 로그 없이 원인을 알 수 있게(0 내부, 1 잘못된 요청, 2 네트워크, 3 광고 없음)
+	var code := error.get_slice(":", 0)
+	sub_label.text = Lang.t("ad_player.on_ad_loaded") + (" (%s)" % code if code != "" else "")
 	time_label.text = Lang.t("ad_player.on_ad_loaded_2")
 
 
