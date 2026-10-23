@@ -56,7 +56,7 @@ func _ready() -> void:
 # --- 1) 가이드 공터 첫 건설 ---
 func _phase_lots() -> void:
 	var ok := await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0)
-	_check(ok and Tutorial.active() and Tutorial.mission().id == "look_keep" and Economy.unbuilt.has("lumber") and Economy.unbuilt.has("warehouse")
+	_check(ok and Tutorial.active() and Tutorial.mission().id == "stage_1_1" and Economy.unbuilt.has("lumber") and Economy.unbuilt.has("warehouse")
 		and Economy.unbuilt.has("lumber#2") and not Economy.unbuilt.has("keep") and not Economy.unbuilt.has("gate"),
 		"(lots) fresh guest: guide mission 1, empty lots (keep·gate built)", "unbuilt=%s m=%s" % [Economy.unbuilt.keys(), Tutorial.mission()])
 	await _diff("(lots) start state")
@@ -64,7 +64,7 @@ func _phase_lots() -> void:
 	var placement = _child(PlacementScript)
 	tray.open()
 	await _frames(5)
-	_check(str(tray.rows.lumber.why) == Tutorial.build_lock_text("lumber") and "2번째" in str(tray.rows.lumber.why),
+	_check(str(tray.rows.lumber.why) == Tutorial.build_lock_text("lumber") and "10번째" in str(tray.rows.lumber.why),
 		"(lots) before its mission the lumber card says which guide mission opens it", str(tray.rows.lumber.why))
 	_notes.clear()
 	tray._on_pressed("lumber")
@@ -73,15 +73,20 @@ func _phase_lots() -> void:
 	tray.close()
 	await _frames(10)
 	var panel = _main._picker.building_panel
-	panel.open_building("keep")
-	await _frames(3)
-	panel.close()
-	_check(Tutorial.complete(), "(lots) opening the keep window completes guide 1", "")
-	var stone0 := int(Economy.res.get("stone", 0))
+	# 가이드 1번은 첫 전투(2026-10-23): 1-1 클리어는 테스트 훅으로, 그다음 벌목장 미션(10번)으로 건너뛴다(그 앞 미션 보상만큼 자원을 준다)
+	await _request("/v1/test/stage", {"stage": 2})
+	GameState.stage = Economy.server_stage
+	Tutorial.note_stage(Economy.server_stage)
+	_check(Tutorial.complete(), "(lots) clearing 1-1 completes guide 1", "")
+	var gold0 := Economy.gold
 	var r0: Dictionary = Tutorial.reward(0)
-	_check(Tutorial.claim() and int(Economy.res.get("stone", 0)) == stone0 + int(r0.get("stone", 0)), "(lots) claim shows the reward at once", str([r0, Economy.res]))
+	_check(Tutorial.claim() and Economy.gold >= gold0 + int(r0.get("gold", 0)), "(lots) claim shows the reward at once", str([r0, Economy.gold]))
 	_check(await _wait_until(func(): return Tutorial.step == 1 and not Economy.quest_waiting(), 10.0), "(lots) server moved the guide to 2", str(Economy.server_quest))
 	await _diff("(lots) after guide reward 1")
+	var lb: int = Tutorial.mission_index("build_lumber")
+	await _request("/v1/test/levels", {"res": GameData.build_cost("lumber", 1)})
+	await _request("/v1/test/tut_step", {"step": lb})
+	_check(Tutorial.step == lb and Tutorial.mission().id == "build_lumber", "(lots) the guide is on the lumber mission", "step=%d" % Tutorial.step)
 	# 벌목장: [건설] 띠 → 카드 → 자리 고르기 → [건설]
 	tray.open()
 	await _frames(5)
@@ -102,10 +107,11 @@ func _phase_lots() -> void:
 	await _diff("(lots) lumber lot building")
 	_check(await _wait_until(func(): return not Economy.unbuilt.has("lumber"), 15.0), "(lots) the lot finishes after lot_build_sec (client polls)", str(Economy.build))
 	await _settle()
-	_check(Tutorial.complete(), "(lots) guide 2 (build lumber) complete", "")
+	_check(Tutorial.complete(), "(lots) guide 10 (build lumber) complete", "")
 	await _diff("(lots) lumber built")
 	Tutorial.claim()
-	await _wait_until(func(): return Tutorial.step == 2 and not Economy.quest_waiting(), 10.0)
+	await _wait_until(func(): return Tutorial.step == lb + 1 and not Economy.quest_waiting(), 10.0)
+	_check(Tutorial.mission().id == "build_quarry_farm", "(lots) next: quarry + farm in one mission", str(Tutorial.mission().get("id", "")))
 	# 채석장: 공터 건물 창 [건설](기본 자리, cell 없이)
 	panel.open_building("quarry")
 	await _frames(3)

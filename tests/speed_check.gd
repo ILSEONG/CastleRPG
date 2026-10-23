@@ -45,7 +45,8 @@ func _run() -> void:
 	await _frames(5)
 	Tutorial.save_path = ""
 	Tutorial.state = "active"  # 미션 카드가 보이게(버튼이 그 위로 올라가는지)
-	Tutorial.step = 3
+	Tutorial.step = Tutorial.mission_index("atk_3")  # 배속·[건설]이 나타난 뒤(초반 단순화 2026-10-23: 그 전엔 숨는다)
+	Tutorial.changed.emit()
 	await _frames(5)
 	var sp = _find("res://scripts/speed_button.gd")
 	_check(sp != null, "speed button exists on the castle screen", "")

@@ -2,7 +2,7 @@ extends "res://scripts/ops_sheet.gd"
 ## 공지사항 창(2026-10-12, 오른쪽 아래 메뉴 [공지]). 서버 공지(LiveOps.notices — GET /v1/notices, 관리자 창에서 쓴다)를
 ## 고정 먼저·새것 순으로 보인다. 줄 = [종류 꼬리표] 제목 · 날짜, 누르면 본문을 펼치고 접는다(처음엔 맨 위 하나만 펼친다).
 ## 열면 본 것으로 저장한다(LiveOps.mark_seen — [공지] 빨간 점과 성 화면 자동 띄우기가 꺼진다).
-## 새 공지가 있으면 로딩이 끝난 뒤 한 번 저절로 열린다(_process).
+## 새 공지가 있으면 로딩이 끝난 뒤 한 번 저절로 열린다(_process). 가이드 중인 새 성주는 첫 미션(1-1)을 마친 뒤부터.
 
 static var KINDS := {"notice": [Lang.t("notice_panel.kinds"), Color(0.33, 0.47, 0.72)], "event": [Lang.t("notice_panel.kinds_2"), Color(0.86, 0.45, 0.20)],
 	"update": [Lang.t("notice_panel.kinds_3"), Color(0.30, 0.60, 0.36)], "maintenance": [Lang.t("notice_panel.kinds_4"), Color(0.62, 0.38, 0.78)]}
@@ -28,7 +28,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if auto_shown or visible:
 		return
-	if not (PreloaderScript.done and Net.ready_once and LiveOps.notices_loaded and GameState.mode == GameState.Mode.IDLE) or _another_window_open():
+	if not (PreloaderScript.done and Net.ready_once and LiveOps.notices_loaded and GameState.mode == GameState.Mode.IDLE) or _another_window_open() \
+			or not Tutorial.ui_shown("notice_auto"):  # 가이드 중이면 1-1 클리어(첫 미션) 뒤부터(초반 단순화 2026-10-23)
 		_auto_t = 0.0
 		return
 	_auto_t += delta

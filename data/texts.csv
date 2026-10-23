@@ -639,7 +639,6 @@ guide_tour.ready,건너뛰기,,,,scripts/guide_tour.gd
 guide_tour.next,%d / %d · 화면을 누르면 다음,,,,scripts/guide_tour.gd
 guide_tour.next_2,%d / %d · 화면을 누르면 닫힙니다,,,,scripts/guide_tour.gd
 guide_tours.tours.title,성 화면 둘러보기,,,,scripts/guide_tours.gd
-guide_tours.tours.text,"성주님, 환영합니다. 화면의 각 부분이 하는 일을 하나씩 알려 드립니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_2,가지고 있는 골드·목재·석재·식량·다이아입니다. 건설·레벨업·모집에 씁니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_3,"지금 스테이지와 라운드입니다. 한 스테이지는 25라운드이고, 다 막으면 다음 스테이지로 넘어갑니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_4,성의 체력입니다. 성문을 부수고 들어온 몬스터가 성을 공격합니다. 0이 되면 그 스테이지 도전에 실패합니다.,,,,scripts/guide_tours.gd
@@ -649,8 +648,8 @@ guide_tours.tours.text_7,[연속 진행]을 켜 두면 스테이지를 깬 뒤 �
 guide_tours.tours.text_8,"FEVER 게이지입니다. 몬스터를 잡으면 차고, 가득 차면 눌러 잠시 몬스터를 몰아서 잡습니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_9,"[건설]을 누르면 지을 수 있는 건물 목록이 펼쳐집니다. 원하는 자리에 짓고, 지은 건물은 옮길 수 있습니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_10,[메뉴]에는 이벤트·미션·가방·길드·우편 같은 기능이 모여 있습니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_11,아래 탭에서 성장·영웅·병사·던전·모집·상점을 엽니다. 잠긴 탭은 가이드를 진행하면 하나씩 열립니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_12,"가이드 카드입니다. 지금 할 일과 보상이 나옵니다. [바로가기]를 누르면 할 곳으로 이동하고, 다 하면 [보상 받기]가 켜집니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_11,아래 탭에서 영웅·성장·상점 같은 창을 엽니다. 새 탭은 가이드를 진행하면 하나씩 생깁니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_12,"가이드 카드입니다. 지금 할 일과 보상이 나옵니다. 카드의 버튼을 누르면 할 곳으로 바로 가고, 다 하면 [보상 받기]가 켜집니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_13,건물 이름과 지금 레벨입니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_14,지금 효과와 다음 레벨 효과(초록)입니다. 성채 레벨은 다른 건물이 오를 수 있는 최대 레벨을 정합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_15,레벨업에 필요한 조건입니다. 모두 ✓가 되어야 올릴 수 있습니다.,,,,scripts/guide_tours.gd
@@ -2060,16 +2059,8 @@ tab_bar.tabs_5,모집,,,,scripts/tab_bar.gd
 tab_bar.tabs_6,상점,,,,scripts/tab_bar.gd
 tutorial.done_text,가이드 완료! 이제 자유롭게 성을 키워 보세요,,,,scripts/tutorial.gd
 tutorial.locked_text,가이드를 진행하면 열립니다,,,,scripts/tutorial.gd
-tutorial.missions.look_keep.title,성채 살펴보기,,,,scripts/tutorial.gd
-tutorial.missions.look_keep.desc,성 한가운데 성채를 눌러 건물 창을 열어 보세요. 성채 레벨이 다른 건물의 최대 레벨을 정합니다.,,,,scripts/tutorial.gd
 tutorial.missions.build_lumber.title,벌목장 건설,,,,scripts/tutorial.gd
 tutorial.missions.build_lumber.desc,왼쪽 아래 [건설] 버튼을 눌러 펼쳐진 목록에서 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.,,,,scripts/tutorial.gd
-tutorial.missions.build_quarry.title,채석장 건설,,,,scripts/tutorial.gd
-tutorial.missions.build_quarry.desc,[건설] 버튼을 눌러 채석장을 골라 원하는 자리에 지으세요. 석재를 생산합니다.,,,,scripts/tutorial.gd
-tutorial.missions.build_farm.title,농장 건설,,,,scripts/tutorial.gd
-tutorial.missions.build_farm.desc,[건설] 버튼을 눌러 농장을 골라 원하는 자리에 지으세요. 식량을 생산합니다.,,,,scripts/tutorial.gd
-tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
-tutorial.missions.kill_30.desc,성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.,,,,scripts/tutorial.gd
 tutorial.missions.collect.title,자원 수집,,,,scripts/tutorial.gd
 tutorial.missions.collect.desc,생산 건물에 자원이 쌓이면(1분마다) 건물을 눌러 수집하세요.,,,,scripts/tutorial.gd
 tutorial.missions.sell.title,상인과 거래,,,,scripts/tutorial.gd
@@ -2079,7 +2070,7 @@ tutorial.missions.attend.desc,"오른쪽 아래 [메뉴] → [이벤트]에서 �
 tutorial.missions.pouch.title,주머니 열기,,,,scripts/tutorial.gd
 tutorial.missions.pouch.desc,출석 보상으로 받은 골드 주머니를 [메뉴] → [가방]에서 여세요. 주머니는 그 시간만큼의 방치 수입을 바로 줍니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_1.title,스테이지 1-1 클리어,,,,scripts/tutorial.gd
-tutorial.missions.stage_1_1.desc,위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 영웅을 누른 뒤 성문을 누르면 자리를 옮길 수 있습니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_1.desc,"위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 몬스터를 잡을 때마다 골드가 쌓이고, 그 골드로 영웅을 키웁니다.",,,,scripts/tutorial.gd
 tutorial.missions.auto_on.title,연속 진행 켜기,,,,scripts/tutorial.gd
 tutorial.missions.auto_on.desc,위쪽 [▶ 진행] 옆 [연속 진행]을 체크하세요. 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어서 도전합니다.,,,,scripts/tutorial.gd
 tutorial.missions.speed_on.title,전투 배속 켜기,,,,scripts/tutorial.gd
@@ -2089,7 +2080,7 @@ tutorial.missions.hero_level.desc,[영웅] 탭에서 영웅을 골라 골드로 
 tutorial.missions.hero_lv4_5.title,영웅 4명 Lv 5 달성,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_5.desc,[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
 tutorial.missions.mission_claim.title,일일 미션 보상 받기,,,,scripts/tutorial.gd
-tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 「영웅 레벨업 5회」는 방금 끝났습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
+tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 「영웅 레벨업 5회」는 이미 끝났습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_2.title,스테이지 1-2 클리어,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_2.desc,전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.,,,,scripts/tutorial.gd
 tutorial.missions.growth.title,성장 강화,,,,scripts/tutorial.gd
@@ -2113,7 +2104,7 @@ tutorial.missions.hero_lv4_10.desc,[영웅] 탭에서 영웅 4명을 Lv 10 이�
 tutorial.missions.shop_free.title,상점 무료 선물 받기,,,,scripts/tutorial.gd
 tutorial.missions.shop_free.desc,아래 [상점] 탭의 [일일]에서 「무료」 선물을 받으세요. 매일 00:00에 다시 받을 수 있습니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_3.title,스테이지 1-3 클리어,,,,scripts/tutorial.gd
-tutorial.missions.stage_1_3.desc,새 영웅과 함께 1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_3.desc,1-3까지 클리어하세요. 라운드가 오를수록 몬스터가 강해집니다. 막히면 [영웅] 탭에서 영웅을 레벨업하세요.,,,,scripts/tutorial.gd
 tutorial.missions.atk_5.title,공격력 Lv 5 달성,,,,scripts/tutorial.gd
 tutorial.missions.atk_5.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 5까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.hp_5.title,체력 Lv 5 달성,,,,scripts/tutorial.gd
@@ -2748,3 +2739,7 @@ skill_auto_button.draw_face,스킬,,,,scripts/skill_auto_button.gd
 hero.tick_skill_req.why,다친 아군이 없습니다,,,,scripts/hero.gd
 hero.tick_skill_req,고칠 성문이 없습니다,,,,scripts/hero.gd
 hero.tick_skill_req_2,가까이 적이 없습니다,,,,scripts/hero.gd
+tutorial.missions.build_quarry_farm.title,채석장·농장 건설,,,,scripts/tutorial.gd
+tutorial.missions.build_quarry_farm.desc,"[건설] 버튼을 눌러 채석장과 농장을 지으세요. 채석장은 석재, 농장은 식량을 생산합니다.",,,,scripts/tutorial.gd
+reveal_banner.flush,새 기능: %s,,,,scripts/reveal_banner.gd
+reveal_banner.speed_name,배속,,,,scripts/reveal_banner.gd

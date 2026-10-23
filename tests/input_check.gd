@@ -2898,7 +2898,7 @@ func _recruit23_ui(recruit) -> void:
 	Economy.changed.emit()
 	await _frames(2)
 	var row: Rect2 = hud._chip_row.get_global_rect()
-	var chips: Array = hud._chip_row.get_children()
+	var chips: Array = hud._chip_row.get_children().filter(func(c): return c != hud._chip_gap)  # 빈칸(가이드 중 숨긴 칩 자리)은 빼고
 	var dl: Label = hud._chips["diamond"]
 	var need: float = dl.get_theme_font("font").get_string_size("9,999,999", HORIZONTAL_ALIGNMENT_LEFT, -1, dl.get_theme_font_size("font_size")).x
 	print("INPUT INFO: top chips %s, label widths %s, 9,999,999 needs %.1f px" % [row, hud._chips.values().map(func(l): return l.size.x), need])

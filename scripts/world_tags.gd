@@ -63,6 +63,9 @@ func _ready() -> void:
 		tags.append({"id": "gate:%d" % side, "anchor": castle.side_anchors[side]})
 	_sync()
 	Economy.changed.connect(_sync)
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.changed.connect(_sync)  # 가이드가 상인을 보이게 했다(초반 단순화 2026-10-23)
 
 
 func _process(_delta: float) -> void:
@@ -89,7 +92,7 @@ func _sync() -> void:
 		var nm := ""
 		var lv := ""
 		if t.id == "merchant":
-			nm = Lang.t("world_tags.sync")
+			nm = Lang.t("world_tags.sync") if not scenery.has_method("merchant_shown") or scenery.merchant_shown() else ""
 		elif t.id.begins_with("gate:"):
 			nm = ""  # 문루 방향 글자는 그리지 않는다 — 태그는 크기 0 기준점으로만 남아 성문 건설 막대를 받친다
 		elif scenery.hidden.has(t.id):

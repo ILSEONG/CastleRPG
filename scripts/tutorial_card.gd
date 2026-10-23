@@ -38,6 +38,7 @@ var _claimed_ms := -100000  # 마지막으로 [보상 받기]를 누른 때
 var _last_rect := Rect2()  # 화살표가 마지막으로 가리킨 자리(_draw_pointer)
 var _target_id := 0  # 화살표가 가리키는 버튼(인스턴스 id)과 그 버튼을 처음 가리킨 프레임
 var _target_since := 0
+var tabs  # tab_bar.gd — 탭 바가 숨어 있으면(가이드 첫 전투 전) 카드가 그 자리까지 내려간다
 
 
 func _ready() -> void:
@@ -136,6 +137,10 @@ func _on_action() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	var bottom := -(GAP_ABOVE_TABS + (0.0 if tabs != null and not tabs.bar_shown() else float(HudScript.TAB_BAR_H)))
+	if panel.offset_bottom != bottom:
+		panel.offset_bottom = bottom
+		panel.offset_top = bottom  # 높이 0에서 내용만큼 위로 다시 자란다
 	if panel.visible and Tutorial.complete():  # 보상 받기 맥동
 		action_button.scale = Vector2.ONE * (1.0 + 0.04 * sin(_t * TAU * BOUNCE_HZ))
 		action_button.pivot_offset = action_button.size / 2.0

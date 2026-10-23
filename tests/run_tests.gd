@@ -5229,28 +5229,75 @@ func test_tutorial() -> void:
 	check(e.upgrade_block("keep", now) == "prereq" or e.upgrade_block("keep", now) == "not_enough", "tutorial: keep Lv 2 waits for its prerequisites")
 	e.res = {"wood": 0, "stone": 0, "food": 0}
 	check(e.upgrade_block("lumber", now) == "not_enough", "tutorial: building a lot costs the Lv 1 price")
-	# 1. 성채 살펴보기 — 사건(건물 창)
-	check(not t.complete() and t.tab_locked("hero") and t.tab_locked("guild") and not t.tab_locked("merchant"), "tutorial: tabs locked at the start")
+	# 초반 화면(초반 단순화 2026-10-23): 가이드 중인 새 성주는 골드·다이아·[진행]·가이드 카드만. 나머지는 그 기능을 쓰는 미션에서 나타난다.
+	check(not t.ui_shown("chip:wood") and not t.ui_shown("chip:stone") and not t.ui_shown("tab:hero") and not t.ui_shown("tab:shop") and not t.ui_shown("build_button")
+		and not t.ui_shown("merchant") and not t.ui_shown("hud:auto") and not t.ui_shown("hud:speed") and not t.ui_shown("menu:event") and not t.ui_shown("menu:ranking")
+		and not t.ui_shown("chat") and not t.ui_shown("notice_auto") and t.ui_shown("menu:settings") and t.ui_shown("menu:notice") and t.ui_shown("menu:mail"),
+		"guide: a new game shows only the basics (gold, diamonds, [진행], settings/notice/mail)")
+	# 1. 스테이지 1-1 — 첫 전투가 첫 미션
+	check(str(t.mission().id) == "stage_1_1" and not t.complete() and t.tab_locked("hero") and t.tab_locked("guild") and not t.tab_locked("merchant"),
+		"tutorial: the first mission is the first battle; tabs locked at the start")
 	e.admin = true  # 슈퍼관리자(서버 player.admin): 가이드 중에도 잠금이 없다
-	check(not t.tab_locked("hero") and not t.tab_locked("exchange") and not t.pvp_locked() and not t.dungeon_locked("ticket") and not t.build_locked("lumber"),
-		"admin: every guide lock is open")
+	check(not t.tab_locked("hero") and not t.tab_locked("exchange") and not t.pvp_locked() and not t.dungeon_locked("ticket") and not t.build_locked("lumber")
+		and t.ui_shown("build_button") and t.ui_shown("chip:wood") and t.ui_shown("chat"), "admin: every guide lock is open and nothing is hidden")
 	e.admin = false
-	t.note("open", 1, "lumber")
-	check(not t.complete(), "tutorial: opening another building does not count")
-	t.note("open", 1, "keep")
+	gs.stage = 2  # 1-1 클리어
 	var r0: Dictionary = t.reward(0)
+	var hero_gold := int(t.need_of(1).get("gold", 0))
+	check(t.complete() and hero_gold > 0 and int(r0.gold) == ceili(hero_gold * 1.2 / 10.0) * 10,
+		"tutorial: mission 1 pays the next mission's gold + margin: %s" % [r0])
+	var gold0: int = e.gold
+	check(t.claim() and t.step == 1 and e.gold == gold0 + int(r0.gold), "tutorial: claim grants and advances")
+	t._check_ui()
+	check(t.ui_shown("tab:hero") and t.ui_shown("tab:shop") and t.ui_shown("notice_auto") and not t.ui_shown("tab:growth") and not t.ui_shown("build_button")
+		and not t.ui_shown("chip:wood"), "guide: [영웅]·[상점] tabs and the notice popup appear after 1-1")
+	# 벌목장 건설 — [건설] 버튼·목재 칩이 이때, 일꾼으로 0 → 1
+	t.step = t.mission_index("build_lumber")
+	e.res = {"wood": 0, "stone": 0, "food": 0}
+	check(t.ui_shown("build_button") and t.ui_shown("chip:wood") and not t.ui_shown("chip:stone") and not t.ui_shown("merchant"),
+		"guide: [건설] and the wood chip appear with the lumber mission")
+	check(e.upgrade_block("lumber", now) == "not_enough", "tutorial: building a lot costs the Lv 1 price")
 	var c1 := GameData.build_cost("lumber", 1)
-	check(t.complete() and int(r0.food) == ceili(int(c1.food) * 1.2 / 10.0) * 10 and int(r0.stone) >= int(c1.stone),
-		"tutorial: mission 1 pays the next mission's resources + margin: %s" % [r0])
-	var food0 := int(e.res.get("food", 0))
-	check(t.claim() and t.step == 1 and int(e.res.food) == food0 + int(r0.food), "tutorial: claim grants and advances")
-	# 2. 벌목장 건설 — 일꾼으로 0 → 1
+	e.res = {"wood": int(c1.get("wood", 0)), "stone": int(c1.get("stone", 0)), "food": int(c1.get("food", 0))}
 	check(e.upgrade_block("lumber", now) == "" and e.upgrade("lumber", now), "tutorial: lot construction starts with the reward")
 	check(is_equal_approx(float(e.build.finish), now + 5.0), "tutorial: building a lot takes lot_build_sec (5 s): %s" % [e.build])
 	check(e.requirements("lumber").is_empty() and not t.complete(), "tutorial: lot has no prerequisites; mission waits for the build")
 	e.complete_due(now + 100000.0)
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
 	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 200, "tutorial: production counts from the build finish")
+	# 채석장·농장(하나로 합친 미션): 둘 다 지어야 끝, 화살표는 아직 안 지은 쪽
+	check(t.claim() and str(t.mission().id) == "build_quarry_farm" and t.ui_shown("chip:stone") and t.ui_shown("chip:food"), "guide: quarry + farm is one mission; their chips appear")
+	var qf: Dictionary = t.mission()
+	var need_qf: Dictionary = t.need_of(t.step)
+	var cq := GameData.build_cost("quarry", 1)
+	var cf := GameData.build_cost("farm", 1)
+	check(t.goto_of(qf) == "building:quarry" and int(need_qf.res.get("wood", 0)) == int(cq.get("wood", 0)) + int(cf.get("wood", 0)),
+		"guide: quarry + farm points at the quarry first and needs both costs")
+	e.unbuilt.erase("quarry")
+	check(not t.complete() and t.goto_of(qf) == "building:farm", "guide: quarry alone does not finish it; the arrow moves to the farm")
+	e.unbuilt.erase("farm")
+	check(t.complete(), "guide: quarry + farm built finishes the mission")
+	# 저장: 나타난 요소(ui_seen)는 저장·복원된다. 초반 단순화 전(v5) 저장으로 이어 하는 성주는 화면을 숨기지 않는다
+	var tut_tmp := "user://_test_tutorial_ui.json"
+	t.save_path = tut_tmp
+	t._check_ui()
+	t.save()
+	var t2 = TutorialScript.new()
+	t2.save_path = tut_tmp
+	t2.econ = e
+	t2.gs = gs
+	check(t2.load_save() and t2.ui_seen.has("build_button") and t2.ui_seen.has("tab:hero") and not t2.ui_seen.has("merchant") and t2.step == t.step,
+		"guide: revealed UI is saved and restored: %s" % [t2.ui_seen.keys()])
+	var fv5 := FileAccess.open(tut_tmp, FileAccess.WRITE)
+	fv5.store_string(JSON.stringify({"version": 5, "state": "active", "step": 5, "tours_seen": ["intro"]}))
+	fv5.close()
+	check(t2.load_save() and t2.step == 0 and t2.ui_shown("merchant") and t2.ui_shown("tab:dungeon") and t2.ui_shown("chat") and t2.tours_seen.has("economy"),
+		"guide: a v5 save (old step 5 = collect) continues at 1-1 with the full screen and without the split intro tours")
+	t2.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tut_tmp))
+	t.save_path = ""
+	t.step = 0
+	gs.stage = 1
 	# 보상 규칙
 	var kinds := {}
 	for i in TutorialScript.MISSIONS.size():
@@ -5315,7 +5362,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 42번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 39번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5324,26 +5371,27 @@ func test_tutorial() -> void:
 		if m.kind != "build":
 			continue
 		var mi: int = t.mission_index(m.id)
-		e.unbuilt = {m.arg: true}
-		t.step = mi - 1
-		var before: bool = t.build_locked(m.arg)
-		t.step = mi
-		var at: bool = t.build_locked(m.arg)
-		e.unbuilt = {}
-		t.step = mi - 1
-		blocks.append(before and not at and not t.build_locked(m.arg))
+		for bid in TutorialScript.build_ids(m):  # 채석장·농장은 한 미션에 둘
+			e.unbuilt = {bid: true}
+			t.step = mi - 1
+			var before: bool = t.build_locked(bid)
+			t.step = mi
+			var at: bool = t.build_locked(bid)
+			e.unbuilt = {}
+			t.step = mi - 1
+			blocks.append(before and not at and not t.build_locked(bid))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 21번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 13번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 20번째 미션 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 2번째 미션 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
-	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
+	var intro := ["hero_level", "growth", "build_lumber", "sell", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
 		"soldier_deploy", "build_lab", "build_archery", "build_stable", "guild", "pvp"]
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 81 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 78 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5359,7 +5407,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 75번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5394,6 +5442,12 @@ func test_tutorial() -> void:
 	check(TutorialScript.map_step(TutorialScript.V4_IDS, 66) == t.mission_index("guild") and TutorialScript.map_step(TutorialScript.V4_IDS, 67) == t.mission_index("hp_16")
 		and TutorialScript.map_step(TutorialScript.V4_IDS, 75) == t.mission_index("stage_1_15")
 		and TutorialScript.map_step(TutorialScript.V4_IDS, 76) == TutorialScript.MISSIONS.size(), "guide: old v4 steps map to the same mission id")
+	# v5(81개) → v6(78개, 초반 단순화 2026-10-23): 옛 순서에서 이미 한 미션은 건너뛰고 새 순서에서 아직 안 한 첫 미션부터
+	check(TutorialScript.map_v5(0) == 0 and TutorialScript.map_v5(5) == 0 and TutorialScript.map_v5(10) == t.mission_index("hero_level")
+		and TutorialScript.map_v5(16) == t.mission_index("growth") and TutorialScript.map_v5(17) == t.mission_index("hero_lv4_8")
+		and TutorialScript.map_v5(27) == t.mission_index("atk_5") and TutorialScript.map_v5(80) == t.mission_index("party_clear")
+		and TutorialScript.map_v5(81) == TutorialScript.MISSIONS.size() and TutorialScript.map_step(TutorialScript.V4_IDS, 7) == t.mission_index("stage_1_1"),
+		"guide: old v5 steps continue at the first mission not done yet")
 	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
 	t.step = t.mission_index("siege_try")
 	t.count = 0
@@ -5448,7 +5502,7 @@ func test_tutorial() -> void:
 		t.note(id)
 		check(t.complete(), "guide: %s completes on its action (before %s)" % [id, before])
 	# 처치·스테이지
-	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
+	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_100")
 	t.count = 0
 	for km in TutorialScript.MISSIONS.filter(func(x): return x.kind == "kill"):
 		check(t.point_keys(km).is_empty() and not t.action_shown(km), "guide: kill mission %s just waits (idle kills count) — no arrow, no card button" % km.id)
@@ -5456,11 +5510,11 @@ func test_tutorial() -> void:
 	var s11: Dictionary = TutorialScript.MISSIONS[t.mission_index("stage_1_1")]
 	check(t.action_label(s11) == "▶ 진행" and t.point_keys(s11) == ["hud:go"] and t.action_label(TutorialScript.MISSIONS[t.mission_index("build_lumber")]) == "바로가기",
 		"guide: battle missions label the card button ▶ 진행 like the HUD button it points at")
-	for i in 29:
+	for i in 99:
 		e.add_kill("grunt", 1)
-	check(not t.complete() and t.progress_text() == "29/30", "tutorial: kill mission counts kills")
+	check(not t.complete() and t.progress_text() == "99/100", "tutorial: kill mission counts kills")
 	e.add_kill("grunt", 1)
-	check(t.complete(), "tutorial: 30 kills complete the mission")
+	check(t.complete(), "tutorial: 100 kills complete the mission")
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("stage_1_3")
 	check(not t.complete(), "tutorial: 1-3 not cleared yet")
 	gs.stage = 4
@@ -5480,7 +5534,7 @@ func test_tutorial() -> void:
 	var e2 = EconomyScript.new()
 	e2.save_path = ECON_TMP
 	e2.load_save(now)
-	check(e2.dia_tickets == 3 and not e2.is_built("farm") and e2.is_built("lumber") and not e2.fresh_game, "tutorial: save keeps lots and tickets")
+	check(e2.dia_tickets == 3 and not e2.is_built("tavern") and e2.is_built("farm") and e2.is_built("lumber") and not e2.fresh_game, "tutorial: save keeps lots and tickets")
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var d: Dictionary = JSON.parse_string(f.get_as_text())
 	f.close()
@@ -5563,7 +5617,7 @@ func test_tutorial_online() -> void:
 			var m: Dictionary = TutorialScript.MISSIONS[i]
 			var needs := ""
 			if m.kind == "build":
-				needs = "build:%s" % m.arg
+				needs = "build:%s" % "+".join(TutorialScript.build_ids(m))  # 여러 건물(채석장·농장)은 build:quarry+farm
 			elif m.kind == "level":
 				needs = "level:%s:%d" % [m.arg[0], int(m.arg[1])]
 			if tut[i][0] != m.id or tut[i][2] != needs or tut[i][3] != enc.call(tmp.reward(i)):
@@ -5641,16 +5695,16 @@ func test_tutorial_online() -> void:
 	# [보상 받기]는 누르는 즉시(사용자 2026-10-16 "보상받기 누르면 좀 빠르게"): 보상·다음 미션이 곧바로, 서버 확인은 뒤에서, 거절이면 되돌린다
 	var cn := GrowthNet.new()
 	e.net = cn
-	var ki: int = t.mission_index("kill_30")
+	var ki: int = t.mission_index("collect")  # 수집 → 상인과 거래(둘 다 한 번 하면 끝)
 	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
 	e.apply_server(reply)
-	t.count = 30
+	t.count = 1
 	var r0: Dictionary = t.reward(ki)
 	var w0 := [e.gold, e.diamonds, int(e.res.get("wood", 0))]
 	var sounds := [0]
 	e.granted.connect(func(_r): sounds[0] += 1)
 	check(t.complete() and t.claim(), "online claim sent")
-	check(t.step == ki + 1 and t.count == 0 and t.mission().id == "collect" and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
+	check(t.step == ki + 1 and t.count == 0 and t.mission().id == "sell" and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
 		and cn.sent[0].body == {"type": "tutorial", "step": ki} and cn.sent[0].once and sounds[0] == 1,
 		"online claim: the next mission and the reward sound come at once, one request (step %d)" % t.step)
 	check([e.gold, e.diamonds, int(e.res.get("wood", 0))] == [w0[0] + int(r0.get("gold", 0)), w0[1] + int(r0.get("diamonds", 0)), w0[2] + int(r0.get("wood", 0))],
