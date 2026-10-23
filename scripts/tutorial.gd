@@ -16,6 +16,7 @@ const Lang := preload("res://scripts/lang.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const GuideTour := preload("res://scripts/guide_tour.gd")
 const GuideTours := preload("res://scripts/guide_tours.gd")
+const GameLog := preload("res://scripts/game_log.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
 const SAVE_VERSION := 5  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
@@ -847,9 +848,11 @@ func _advance(rep: bool) -> void:
 		rep_n += 1
 		rep_quest = {}
 	else:
+		GameLog.event("guide_step", {"step": step + 1, "id": str(MISSIONS[step].id) if step < MISSIONS.size() else ""})
 		step += 1
 		if step >= MISSIONS.size():
 			state = "done"
+			GameLog.event("guide_done")
 			if econ != null:
 				econ.notice.emit(DONE_TEXT)
 	count = 0

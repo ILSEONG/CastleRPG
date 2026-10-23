@@ -15,6 +15,7 @@ extends Node
 const Lang := preload("res://scripts/lang.gd")
 
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
+const GameLog := preload("res://scripts/game_log.gd")
 const PLUGIN := "CastleBilling"
 static var DONE_TEXT := Lang.t("store_pay.done_text")
 static var PENDING_TEXT := Lang.t("store_pay.pending_text")
@@ -96,10 +97,10 @@ func _send(product: String, prov: String, token: String, quiet := false, answer 
 	if quiet:
 		_quiet[token] = true
 	Net.send("POST", "/v1/iap/purchase", {"product": product, "provider": prov, "token": token},
-		func(d: Dictionary): _on_sent(d, token, answer), func(): _on_send_failed(token, answer))
+		func(d: Dictionary): _on_sent(d, token, answer, product), func(): _on_send_failed(token, answer))
 
 
-func _on_sent(d: Dictionary, token: String, answer: Callable) -> void:
+func _on_sent(d: Dictionary, token: String, answer: Callable, product := "") -> void:
 	var quiet: bool = _quiet.has(token)
 	_sent.erase(token)
 	_quiet.erase(token)
@@ -112,6 +113,7 @@ func _on_sent(d: Dictionary, token: String, answer: Callable) -> void:
 	if d.get("already") == true:
 		Net.refresh()  # 이미 받은 주문(되찾기) — 상태만 새로
 	else:
+		GameLog.event("purchase", {"product": product})
 		Economy.apply_server(d)
 		Economy.shop_changed.emit()
 		Economy.dungeons_changed.emit()
