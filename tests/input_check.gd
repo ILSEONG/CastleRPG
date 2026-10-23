@@ -88,12 +88,13 @@ func _run() -> void:
 	_check(_picker.selected == archer and [archer.side, archer.post] == before,
 		"(b) drag-and-return on a gate does not order", "selected=%s side/post=%s" % [_name(_picker.selected), [archer.side, archer.post]])
 
-	# (c) 궁수 선택 중 전사가 서 있는 성문 정중앙 탭 → 궁수에게 성문 앞 명령 (F1 회귀)
+	# (c) 궁수 선택 중 전사가 서 있는 성문 탭 → 궁수에게 성문 앞 명령 (F1 회귀). 성벽 3 m(2026-10-23)부터 성문 앞 자리는 성문 정중앙에서
+	#     HERO_TAP_PX 밖이라 전사 쪽 바깥면 가운데를 누른다
 	_picker._select(null)
 	await _tap(_hero_px(archer))
-	var gate := _gate_px(0)
+	var gate := _gate_px(0, true)
 	var warrior_d := _hero_px(warrior).distance_to(gate)
-	_check(warrior_d <= PickerScript.HERO_TAP_PX, "(c) precondition: warrior within HERO_TAP_PX of the gate center", "d=%.1f" % warrior_d)
+	_check(warrior_d <= PickerScript.HERO_TAP_PX, "(c) precondition: warrior within HERO_TAP_PX of the gate's outer face", "d=%.1f" % warrior_d)
 	await _tap(gate)
 	_check(_picker.selected == archer and archer.side == 0 and archer.post == Formation.POST_GATE,
 		"(c) gate tap with an archer selected orders the archer to the gate front (warrior %.1f px away)" % warrior_d,
@@ -900,9 +901,10 @@ func _hero_px(h) -> Vector2:
 	return _camera.unproject_position(h.global_position + Vector3(0, 0.8, 0))
 
 
-func _gate_px(side: int) -> Vector2:
+func _gate_px(side: int, outer := false) -> Vector2:
 	var half: float = _main.castle.half
-	return _camera.unproject_position(Formation.gate_position(half, side) + Vector3(0, Balance.WALL_H / 2.0, 0))
+	var face := Formation.SIDE_DIR[side] * (Balance.WALL_T / 2.0) if outer else Vector3.ZERO  # outer: 성문 바깥면 가운데(탭 상자 안, 성문 앞 자리 쪽)
+	return _camera.unproject_position(Formation.gate_position(half, side) + face + Vector3(0, Balance.WALL_H / 2.0, 0))
 
 
 ## 성문 옆 벽 토막(end = +1이면 +perp 쪽, -1이면 -perp 쪽) 중앙.

@@ -30,6 +30,7 @@ import { registerMarket } from './market.ts'
 import { registerChat } from './chat.ts'
 import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
+import { dayRecorder, registerRetention } from './retention.ts'
 import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
 import { registerParty } from './party_routes.ts'
@@ -1201,6 +1202,8 @@ export function createApp(opts: AppOptions) {
 
   // 접속 중 표시(파티 초대 대상): 마지막으로 인증된 요청을 보낸 시각. 서버 한 대 메모리.
   const seenAt = new Map<string, number>()
+  // 이탈 기록(retention.ts): 플레이어마다 하루 첫 인증 요청에 접속한 날을 남긴다.
+  const recordDay = dayRecorder(query)
 
   // Authorization: Bearer <JWT>. 서명은 hono/jwt, 만료는 주입 시계로 확인한다.
   async function auth(c: Context, next: Next) {
@@ -1218,6 +1221,7 @@ export function createApp(opts: AppOptions) {
     c.set('playerId', payload.sub)
     if (seenAt.size >= 50_000) seenAt.clear() // 메모리 지키기(접속 표시만 잠시 비게 된다)
     seenAt.set(payload.sub, clock())
+    await recordDay(payload.sub, clock())
     await next()
   }
 
@@ -3886,6 +3890,7 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
+  registerRetention(app, { query, auth, clock, ApiError, isAdmin })
   registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
     opts.partyLive)
   registerInquiry(app, { query, auth, clock, body, ApiError, clientIp: RL.clientIp, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })

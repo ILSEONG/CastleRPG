@@ -3118,8 +3118,8 @@ func test_soldier_posts() -> void:
 		var q := FormationScript.gate_row_spot(half, 0, k, true)
 		rows_ok = rows_ok and FormationScript.is_inside(half, q) and absf(q.x) <= Balance.GATE_W / 2.0 and -q.z < half
 	var r0 := [FormationScript.gate_row_spot(half, 0, 0), FormationScript.gate_row_spot(half, 0, 1), FormationScript.gate_row_spot(half, 0, 3)]
-	check(rows_ok and seen.size() == 16 and r0[0].is_equal_approx(Vector3(0, 0, -(half + 5.2))) and r0[1].is_equal_approx(Vector3(-2.4, 0, -(half + 5.2)))
-		and r0[2].is_equal_approx(Vector3(-1.0, 0, -(half + 6.8))),
+	check(rows_ok and seen.size() == 16 and r0[0].is_equal_approx(Vector3(0, 0, -(half + Balance.WALL_T + 3.2))) and r0[1].is_equal_approx(Vector3(-2.4, 0, -(half + Balance.WALL_T + 3.2)))
+		and r0[2].is_equal_approx(Vector3(-1.0, 0, -(half + Balance.WALL_T + 4.8))),
 		"infantry rows: 3.2 m row 0/-2.4/+2.4, 4.8 m row -1/+1/-3.2/+3.2 … outside the hero gate slots; a broken gate moves them to blocking rows inside the gate width: %s" % [r0])
 	var r := FormationScript.patrol_radius(half)
 	var pts := FormationScript.patrol_points(half, 0, 1)

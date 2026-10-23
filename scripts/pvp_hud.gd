@@ -3,6 +3,7 @@ extends CanvasLayer
 ## 남은 영웅 수. 결투면 아래: [자동] + 내 영웅 5 띠(피규어 + HP + 스킬 쿨, 누르면 그 영웅 선택, 쓰러지면 흐리게). 가운데 알림 띠.
 ## 끝나면 결과 패널: 승리/패배, 포인트 증감·지금 등급, PVP 코인, [확인](나가기).
 
+const SkillAuto := preload("res://scripts/skill_auto_button.gd")
 const Lang := preload("res://scripts/lang.gd")
 
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -19,6 +20,7 @@ const HP_RED := Color(0.86, 0.3, 0.24)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 const ARM_SEC := 2.5
 
+var skill_auto  # skill_auto_button.gd(결투만)
 var battle  # pvp_battle.gd
 var time_label: Label
 var my_bar: ProgressBar
@@ -135,6 +137,9 @@ func _build_strip(root: Control) -> void:
 	col.add_theme_constant_override("separation", 10)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(col)
+	skill_auto = SkillAuto.new()  # [스킬 AUTO](2026-10-23): 결투 띠 오른쪽 위
+	skill_auto.row = col
+	add_child(skill_auto)
 	var auto := _button(Lang.t("pvp_hud.build_strip"), MainHud.ACCENT)
 	auto.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	auto.pressed.connect(func(): battle.set_auto())
@@ -156,7 +161,7 @@ func _build_strip(root: Control) -> void:
 		face.pressed.connect(_pick.bind(h))
 		if PortraitsScript.current != null:
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(HeroStrip.face_with_slots(face, h, px))
+		cell.add_child(HeroStrip.face_with_slots(face, h, px, HeroStrip.col_px(battle.my_units().size(), 688.0, HeroStrip.GAP)))
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(px, 14)
 		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
