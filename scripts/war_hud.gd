@@ -151,7 +151,7 @@ func _build_strip(root: Control) -> void:
 		face.pressed.connect(_pick.bind(h))
 		if PortraitsScript.current != null:
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(HeroStrip.face_with_slots(face, h, px))  # [쿨][초상화][쿨]
+		cell.add_child(HeroStrip.face_with_slots(face, h, px, HeroStrip.col_px(battle.my_units().size(), 688.0, HeroStrip.GAP)))  # [쿨][초상화][쿨]
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(px, 14)
 		bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER

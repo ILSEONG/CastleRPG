@@ -158,6 +158,7 @@ func _duel_attack_case() -> void:
 	_check(not far.is_alive() or (h.focus_target() == far and h.global_position.distance_to(far.global_position) < d0), "duel: hero goes after the ordered enemy")
 	b.set_auto()
 	_check(h.focus_target() == null, "duel: [자동] cancels the attack order")
+	_check(h.manual_ok() and not far.manual_ok(), "duel: my heroes take skill slot taps, the opponent's do not")
 
 
 func _find(n: Node, script):

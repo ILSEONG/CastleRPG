@@ -54,6 +54,7 @@ var _press_ms := -1 # 누른 시각(길게 누르기를 아직 안 본 누름). 
 var _gui_tap := false  # 이번 누름을 GUI가 먹었다(_unhandled_input에 오지 않았다)
 var _gui_sel  # 누른 순간의 선택 영웅
 var _gui_check := false  # 뗐다 — 다음 물리 프레임에 GUI 누름이면 선택 해제
+static var keep_select := false  # 이번 GUI 누름은 선택을 풀지 않는다(스킬 칸 — hero_strip.tap_slot이 켠다)
 var _routes := {}  # 영웅 → 이동 경로 표시(route_marker.gd). 영웅마다 하나, 새 명령이면 바꾼다
 
 
@@ -99,9 +100,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	if _gui_check:
 		_gui_check = false
-		if _gui_tap and selected != null and selected == _gui_sel:
-			_select(null)  # UI를 눌렀다(초상화로 다른 영웅을 고른 게 아니면)
+		if _gui_tap and selected != null and selected == _gui_sel and not keep_select:
+			_select(null)  # UI를 눌렀다(초상화로 다른 영웅을 고른 게 아니면, 스킬 칸도 아니면)
 		_gui_tap = false
+		keep_select = false
 	if arena_r <= 0.0 and not stage_running() and _press_pos != Vector2.INF and _press_ms >= 0 and Time.get_ticks_msec() - _press_ms >= LONG_PRESS_MS:
 		_press_ms = -1
 		var id := _building_at(_press_pos)

@@ -2744,3 +2744,7 @@ missions.fail_text.nothing,받을 보상이 없습니다,,,,scripts/missions.gd
 party.error_text.guide_locked,가이드에서 파티 던전 미션에 닿으면 열립니다,,,,scripts/party.gd
 party.error_text.their_locked,그 성주는 아직 가이드에서 파티 던전에 닿지 않았습니다,,,,scripts/party.gd
 party_invite_panel.row_7,가이드 중,,,,scripts/party_invite_panel.gd
+skill_auto_button.draw_face,스킬,,,,scripts/skill_auto_button.gd
+hero.tick_skill_req.why,다친 아군이 없습니다,,,,scripts/hero.gd
+hero.tick_skill_req,고칠 성문이 없습니다,,,,scripts/hero.gd
+hero.tick_skill_req_2,가까이 적이 없습니다,,,,scripts/hero.gd

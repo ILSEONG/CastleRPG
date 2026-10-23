@@ -273,6 +273,9 @@ func _build_world() -> void:
 	_strip.heroes_fn = strip_heroes
 	add_child(_strip)
 	speed.strip = _strip
+	var skill_auto = preload("res://scripts/skill_auto_button.gd").new()  # 오른쪽 아래 [스킬 AUTO](2026-10-23): 끄면 초상화 위 스킬 칸을 눌러 쓴다
+	skill_auto.row = _strip.row
+	add_child(skill_auto)
 	build_btn.strip = _strip
 	var chat_panel = preload("res://scripts/chat_panel.gd").new()  # 채팅 창(전체·길드, 온라인)
 	add_child(chat_panel)

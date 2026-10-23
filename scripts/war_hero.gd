@@ -427,6 +427,11 @@ func attack_unit(m) -> void:
 	super.attack_unit(m)
 
 
+## 스킬 수동(2026-10-23)은 공성전에 없다 — 여럿이 함께 싸우고 꼭두각시 기기는 방장이 돌린다. PVP 결투는 pvp_hero가 켠다.
+func manual_ok() -> bool:
+	return false
+
+
 ## 공격 명령은 자동 진격으로 돌아가거나(set_auto) 도발에 걸리면 그만.
 func _focus_ok() -> bool:
 	return commanded and not (_taunt_t > 0.0 and is_instance_valid(_taunt_by) and _taunt_by.is_alive()) and super._focus_ok()
