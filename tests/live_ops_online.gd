@@ -177,7 +177,7 @@ func _ready() -> void:
 	_check(await _wait_until(func(): return admin.is_open() and not admin.ops.is_empty(), 10.0), "admin window loads ops", "")
 	await _frames(6)
 	await _snap("10_admin_status")
-	for t in ["notice", "mail", "coupon"]:
+	for t in ["notice", "mail", "coupon", "retention"]:
 		admin.pick(t)
 		await _frames(6)
 		await _snap("11_admin_" + t)
