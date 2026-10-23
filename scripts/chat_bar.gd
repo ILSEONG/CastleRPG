@@ -48,6 +48,7 @@ func _ready() -> void:
 	_face.draw.connect(_draw_face)
 	button.add_child(_face)
 	add_child(button)
+	Tutorial.register_ui("chat", button, func(): return false)  # 「새 기능」 띠가 튀게 할 버튼(가이드 화살표는 가리키지 않는다)
 	Chat.changed.connect(_face.queue_redraw)
 	_place()
 
@@ -58,7 +59,7 @@ func _open() -> void:
 
 
 func _process(_delta: float) -> void:
-	button.visible = Chat.online()
+	button.visible = Chat.online() and Tutorial.ui_shown("chat")  # 가이드 중에는 1-5를 깬 뒤에(초반 단순화 2026-10-23)
 	_place()
 
 
@@ -66,7 +67,7 @@ func _place() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var left := 16.0
 	var bottom := vp.y * 0.70 + 42.0
-	if speed != null and speed.button != null:
+	if speed != null and speed.button != null and speed.button.visible:
 		left = speed.button.position.x + speed.button.size.x + GAP
 		bottom = speed.button.position.y + speed.button.size.y
 	var w := maxf(vp.x - RIGHT - left, 160.0)

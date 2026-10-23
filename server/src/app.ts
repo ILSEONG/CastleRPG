@@ -1890,7 +1890,7 @@ export function createApp(opts: AppOptions) {
         if (num !== q.tut_step || num >= rows.length) throw new ApiError(409, 'stale', `tutorial step is ${q.tut_step}`)
         const def = rows[num]
         const need = R.parseNeeds(def.needs)
-        if (need && (p.unbuilt.includes(need.building) || level(p, need.building) < need.level)) {
+        if (need && need.buildings.some((b) => p.unbuilt.includes(b) || level(p, b) < need.level)) {
           throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         }
         const owned = Object.entries(p.heroes).filter(([, h]) => h.copies > 0)
@@ -3785,6 +3785,16 @@ export function createApp(opts: AppOptions) {
       const id = c.get('playerId') as string
       await query('update player_state set version = version + 1, stage = $2 where player_id = $1', [id, stage])
       ranking.clear() // 로딩 화면(/v1/boot)이 이미 받아 캐시한 랭킹 목록을 버린다 — 체크가 바로 새 스테이지를 보게
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
+    // 통합 체크용(2026-10-23): 가이드 단계를 step으로(진행 중). 첫 미션이 첫 전투가 되어 공터 짓기 미션으로 건너뛸 때(tests/online_check·journey_buildings_online)
+    app.post('/v1/test/tut_step', auth, async (c) => {
+      const step = intField(await body(c), 'step', 0, 1000)
+      const id = c.get('playerId') as string
+      await query("update player_state set version = version + 1, tut_state = 'active', tut_step = $2 where player_id = $1", [id, step])
       const now = clock()
       const game = await loadGame()
       return c.json(view(await loadPlayer(id, game, now), game, now))

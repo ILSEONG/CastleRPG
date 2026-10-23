@@ -790,26 +790,34 @@ func _phase6_quests() -> void:
 	if not await _start_world():
 		return
 	var synced := await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0)
-	_check(synced and Tutorial.active() and Tutorial.step == 0 and Tutorial.mission().id == "look_keep" and Economy.unbuilt.has("lumber") and not Economy.unbuilt.has("keep")
-		and Economy.tutorial_training, "(q) a new online player starts the tutorial from the server: card on mission 1, empty lots",
+	_check(synced and Tutorial.active() and Tutorial.step == 0 and Tutorial.mission().id == "stage_1_1" and Economy.unbuilt.has("lumber") and not Economy.unbuilt.has("keep")
+		and Economy.tutorial_training, "(q) a new online player starts the tutorial from the server: card on mission 1 (the first battle), empty lots",
 		"quest=%s unbuilt=%s mission=%s" % [Economy.server_quest, Economy.unbuilt.keys(), Tutorial.mission()])
-	Tutorial.note("open", 1, "keep")
-	var food0 := int(Economy.res.get("food", 0))
+	await _request("POST", "/v1/test/stage", {"stage": 2})  # 1-1 클리어(가이드 1번 = 첫 전투, 2026-10-23)
+	GameState.stage = Economy.server_stage
+	Tutorial.note_stage(Economy.server_stage)
+	var gold0 := Economy.gold
 	_check(Tutorial.complete() and Tutorial.claim(), "(q) mission 1 done; claim sent to the server", "complete=%s" % Tutorial.complete())
 	_check(Tutorial.step == 1, "(q) the card moves to mission 2 at once (the server confirms behind — 2026-10-16)", "step=%d" % Tutorial.step)
 	var got := await _wait_until(func(): return Tutorial.step == 1 and not Economy.quest_waiting() and int(Economy.server_quest.tut_step) == 1, 10.0)
-	_check(got and int(Economy.res.get("food", 0)) == food0 + int(Tutorial.reward(0).food) and Tutorial.count == 0 and Tutorial.mission().id == "build_lumber",
-		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d food=%d->%d" % [Tutorial.step, food0, int(Economy.res.get("food", 0))])
+	_check(got and Economy.gold >= gold0 + int(Tutorial.reward(0).gold) and Tutorial.count == 0 and Tutorial.mission().id == "hero_level",
+		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d gold=%d->%d" % [Tutorial.step, gold0, Economy.gold])
+	# 벌목장 공터 미션으로(테스트 훅) — 그 앞 미션의 보상(석재·식량)으로 짓는다
+	var lb: int = Tutorial.mission_index("build_lumber")
+	await _request("POST", "/v1/test/levels", {"res": GameData.build_cost("lumber", 1)})
+	await _request("POST", "/v1/test/tut_step", {"step": lb})
+	_check(Tutorial.step == lb and Tutorial.mission().id == "build_lumber", "(q) the guide is on the lumber mission", "step=%d" % Tutorial.step)
 	var t0 := Economy.time_now()
 	_check(Economy.upgrade_block("lumber", t0) == "" and Economy.upgrade("lumber", t0), "(q) the lumber lot can be built with the reward", Economy.upgrade_block("lumber", t0))
 	var started := await _wait_until(func(): return Economy.is_building("lumber"), 10.0)
 	Economy.finish_build_now()
 	var built := await _wait_until(func(): return not Economy.unbuilt.has("lumber"), 10.0)
-	_check(started and built and Economy.building_level("lumber") == 1 and Tutorial.complete(), "(q) the finished lot leaves the server's lot list and completes mission 2",
+	_check(started and built and Economy.building_level("lumber") == 1 and Tutorial.complete(), "(q) the finished lot leaves the server's lot list and completes the lumber mission",
 		"unbuilt=%s" % [Economy.unbuilt.keys()])
 	Tutorial.claim()
-	got = await _wait_until(func(): return Tutorial.step == 2 and not Economy.quest_waiting(), 10.0)  # 카드는 곧바로 넘어간다 — 서버 응답까지 기다린다
-	_check(got and Economy.server_quest.tut_step == 2, "(q) claiming mission 2 moves the server to mission 3", "quest=%s" % [Economy.server_quest])
+	got = await _wait_until(func(): return Tutorial.step == lb + 1 and not Economy.quest_waiting(), 10.0)  # 카드는 곧바로 넘어간다 — 서버 응답까지 기다린다
+	_check(got and int(Economy.server_quest.tut_step) == lb + 1 and Tutorial.mission().id == "build_quarry_farm", "(q) claiming the lumber mission moves the server to quarry + farm",
+		"quest=%s" % [Economy.server_quest])
 	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그)
 	var sales := []
 	Economy.sold.connect(func(g): sales.append(g))

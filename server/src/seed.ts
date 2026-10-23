@@ -559,7 +559,7 @@ function checkQuests(t: Tables, errors: string[]) {
     if (!QUEST_TYPES.includes(String(r.type))) err(r._line, 'type', `must be one of ${QUEST_TYPES.join('/')}: '${r.type}'`)
     for (const c of ['reward', 'fixed']) if (parseReward(r[c] as string | null) === null) err(r._line, c, `must be 'key:amount|…' with keys ${QUEST_REWARD_KEYS.join('/')}: '${r[c]}'`)
     const n = parseNeeds(r.needs as string | null)
-    if (n === null) err(r._line, 'needs', `must be empty, build:<building> or level:<building>:<level>: '${r.needs}'`)
+    if (n === null) err(r._line, 'needs', `must be empty, build:<building>[+<building>…] or level:<building>:<level>: '${r.needs}'`)
   }
   for (const ty of QUEST_TYPES) if (t.quests && !rows.some((r) => r.type === ty)) errors.push(`quests.csv line 0 column 'type': no ${ty} quests`)
 }
