@@ -39,7 +39,7 @@ const SLATE := Color(0.32, 0.35, 0.44)       # 길드 회관 지붕
 const MERLON_H := 0.6
 const MERLON_T := 0.4
 const PILLAR_W := 1.2                      # 문루 기둥 탑 폭(성문 가장자리 바깥으로)
-const PILLAR_Z0 := 0.45                    # 기둥 탑 안쪽 면(z). 성벽 위 중심선(z=0)을 걷는 영웅이 기둥을 뚫지 않게 바깥 절반에만 둔다
+const PILLAR_Z0 := Balance.WALL_T / 2.0 - 0.55  # 기둥 탑 안쪽 면(z, 바깥면에서 0.55 m). 성벽 위 중심선(z=0)을 걷는 영웅이 기둥을 뚫지 않게 바깥쪽에만 둔다
 const PILLAR_OUT := 0.6                    # 기둥 탑이 성벽 바깥면보다 튀어나온 길이
 const PARAPET_GAP := Balance.STAIR_GAP + 2.0 * Balance.STAIR_RUN / Balance.STAIR_STEPS  # 안쪽 난간을 양 끝에서 비우는 길이(계단 윗단 → 성벽 위 길)
 
@@ -61,7 +61,7 @@ const LOOK_GATE_W := [1.2, 1.6, 1.6, 1.8, 2.0, 2.0]         # 문루 탑 폭(성
 const LOOK_GATE_OUT := [0.6, 0.75, 0.75, 0.85, 0.95, 0.95]  # 문루 탑이 성벽 바깥면보다 튀어나온 길이(괴물이 서는 성문 앞 0.8 m 근처까지)
 const LOOK_GATE_UP := [1.2, 1.9, 2.5, 3.0, 3.6, 4.2]        # 문루 탑이 성벽 위로 솟은 높이
 const LOOK_GATE_ROOF := [1.1, 1.4, 1.6, 1.9, 2.2, 2.5]
-const LOOK_TOWER_R := [1.7, 1.85, 1.85, 1.95, 1.95, 1.95]   # 모서리 탑 반지름(변심 ≤ 1.8 — 성벽 위 병사 끝자리 앞)
+const LOOK_TOWER_R := [2.25, 2.4, 2.4, 2.5, 2.5, 2.5]   # 모서리 탑 반지름(변심 ≤ TOWER_SIZE/2 + 0.3 — 성벽 위 병사 끝자리 앞). 성벽 3 m(2026-10-23)에 맞춰 +0.55
 const LOOK_TOWER_H := [5.0, 5.8, 6.6, 7.4, 8.0, 8.4]        # 모서리 탑 몸통 높이
 const LOOK_TOWER_ROOF := [2.5, 2.8, 3.1, 3.3, 3.6, 3.0]
 const LOOK_WALL_TOWER_UP := [0.0, 0.0, 0.9, 1.5, 1.8, 2.2]  # 성벽 탑(2단계부터)이 성벽 위로 솟은 높이

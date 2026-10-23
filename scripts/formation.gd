@@ -12,7 +12,7 @@ const POST_GATE := 0
 const POST_WALL := 1
 const POST_FREE := 2          # 자유 위치 (슬롯 없음)
 const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점·계단 앞 지점이 성벽 바깥면·계단 띠에서 떨어진 거리
-const WALK_HALF := 0.55  # 성벽 길: 중심선에서 이만큼 안(성벽 두께 2 m − 몸) — 밀려도 여기를 벗어나지 않는다(clamp_push)
+const WALK_HALF := Balance.WALL_T / 2.0 - 0.45  # 성벽 길: 중심선에서 이만큼 안(성벽 두께 − 몸) — 밀려도 여기를 벗어나지 않는다(clamp_push)
 const REGION_OUTSIDE := 0
 const REGION_INSIDE := 1
 const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
@@ -510,7 +510,7 @@ static func _door_queue(sides: Array, i: int, s: int) -> int:
 
 const SOLDIER_WALL_OFFSETS := [2.5, 6.0, 10.0, 13.0]  # 성벽 위 병사 자리 좌우 거리 — 그 뒤로 3.5 m씩(모서리 탑 앞까지). 영웅 자리 ±4·±8과 엇갈린다
 const SOLDIER_WALL_STEP := 3.5
-const SOLDIER_WALL_OUT := 0.5  # 성벽 중심선(영웅 자리·계단 윗단 착지점 줄)보다 총안 쪽으로. 넘치면 둘째 줄은 안쪽
+const SOLDIER_WALL_OUT := Balance.WALL_T / 2.0 - 0.5  # 성벽 중심선(영웅 자리·계단 윗단 착지점 줄)보다 총안 쪽으로(바깥면에서 0.5 m). 넘치면 둘째 줄은 안쪽
 const GATE_ROW_FIRST := 3.2  # 보병 첫 줄: 성벽 바깥면에서(영웅 성문 앞 자리 1.5 m보다 바깥)
 const GATE_ROW_GAP := 1.6
 const GATE_ROWS := [[0.0, -2.4, 2.4], [-1.0, 1.0, -3.2, 3.2]]  # 줄마다 번갈아(가운데부터)
