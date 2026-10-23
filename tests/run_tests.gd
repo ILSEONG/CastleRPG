@@ -2671,21 +2671,21 @@ func test_economy_sell_amount() -> void:
 	check(e.sell("wood", now) == EconomyScript.sell_value("wood", 9, rate) and e.res.wood == 0, "sell without amount still sells all")
 
 
-## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 2000에서 가득, FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
+## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 900에서 가득(2026-10-23: 방치 1.5마리/초로 약 10분), FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
 func test_fever() -> void:
 	GameData.load_tables()
 	var f = preload("res://scripts/fever.gd").new()
 	f.save_path = ""
-	check(f.kills_needed() == 2000 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
+	check(f.kills_needed() == 900 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
 	for i in 50:
 		f.add_kill(false)  # 스테이지 모드 처치는 세지 않는다
 	check(f.gauge == 0, "stage-mode kills do not charge the gauge")
-	for i in 1999:
+	for i in 899:
 		f.add_kill(true)
-	check(f.gauge == 1999 and not f.full() and not f.start() and f.mult() == 1.0, "1999 idle kills: not full, cannot start, spawn mult 1")
+	check(f.gauge == 899 and not f.full() and not f.start() and f.mult() == 1.0, "899 idle kills: not full, cannot start, spawn mult 1")
 	f.add_kill(true)
 	f.add_kill(true)
-	check(f.gauge == 2000 and f.full() and f.ratio() == 1.0, "2000 idle kills fill the gauge (and stay at 2000)")
+	check(f.gauge == 900 and f.full() and f.ratio() == 1.0, "900 idle kills fill the gauge (and stay at 900)")
 	check(f.start() and f.active() and f.gauge == 0 and f.left == 180.0 and f.mult() == 3.0, "start: 180 s, gauge back to 0, spawn mult 3")
 	f.add_kill(true)
 	check(f.gauge == 0 and not f.start(), "the gauge does not charge during FEVER")
@@ -5002,7 +5002,7 @@ func test_research_r24() -> void:
 func test_offline_gold() -> void:
 	GameData.load_tables()
 	var per := GameData.kill_gold_tenths("grunt", 1)
-	check(per == 100 and GameData.config_num("offline_gold_mult") == 0.4 and GameData.config_num("fever_kills") == 2000.0, "grunt 100 tenths at stage 1, mult 0.4, fever 2000")
+	check(per == 100 and GameData.config_num("offline_gold_mult") == 0.4 and GameData.config_num("fever_kills") == 900.0, "grunt 100 tenths at stage 1, mult 0.4, fever 900")
 	check(EconomyScript.offline_reward(3600.0, 1, per) == {"sec": 3600.0, "kills": 5400, "tenths": 216000}, "1 h: 5400 kills, 21,600 gold (40%)")
 	check(EconomyScript.offline_reward(59.9, 1, per).tenths == 0 and EconomyScript.offline_reward(60.0, 1, per) == {"sec": 60.0, "kills": 90, "tenths": 3600}, "under 60 s nothing")
 	check(EconomyScript.offline_reward(360000.0, 1, per) == {"sec": 43200.0, "kills": 64800, "tenths": 2592000}, "capped at 12 h")

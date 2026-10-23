@@ -72,7 +72,7 @@ hero_level_stat_melee,0.0315
 levelup_gold_R,60
 levelup_gold_SR,120
 levelup_gold_SSR,240
-fever_kills,2000
+fever_kills,900
 fever_sec,180
 fever_spawn_mult,3
 daily_reset_utc_hour,15
