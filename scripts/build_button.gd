@@ -48,6 +48,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	button.visible = Tutorial.ui_shown("build_button")  # 가이드 중에는 첫 건설 미션까지 숨긴다(초반 단순화 2026-10-23)
 	_place()
 
 

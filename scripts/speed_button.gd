@@ -146,10 +146,11 @@ func _on_mode(mode: int) -> void:
 	_sync_visible()
 
 
-## 성 화면 버튼은 대기(방치) 중 숨긴다.
+## 성 화면 버튼은 대기(방치) 중 숨긴다. 가이드 중에는 「전투 배속 켜기」 미션까지 숨긴다(초반 단순화 2026-10-23, Tutorial.ui_shown).
 func _sync_visible() -> void:
 	if button != null:
-		button.visible = not (castle and _idle)
+		var tut := get_node_or_null("/root/Tutorial") if castle else null
+		button.visible = not (castle and _idle) and (tut == null or tut.ui_shown("hud:speed"))
 
 
 ## 다음 단계로(x1 → x1.5 → x2 → x1) — 바로 적용, 기기에만 저장.
@@ -177,6 +178,7 @@ func _refresh() -> void:
 
 
 func _process(_delta: float) -> void:
+	_sync_visible()
 	_place()
 
 

@@ -38,6 +38,7 @@ var _built_now := {}  # 방금 공터에서 다 지은 건물 id(building_done �
 var lots := {}  # 건물 id → 부지 {mi(메시), body(탭 판정체), center, size, full, lot(지금 공터로 보이는가), cell(지금 칸, 숨김이면 null)}
 var hidden := {}  # 자리를 안 잡은 공터 id → true(성 안에 안 보인다 — 이름표도 없다)
 var _scaffolds: Array = []
+var _merchant_nodes: Array = []  # 상인·수레·탭 판정체 — 가이드 중에는 「상인과 거래」 미션까지 숨긴다(초반 단순화 2026-10-23)
 var _keep_look := 0  # 성채 메시의 성 모습 단계(GameData.castle_look) — 넘으면 성채 메시를 다시 만든다(_sync_lots)
 ## 자연물·산 MultiMesh마다 {mm, recipe(TownKit 레시피), idx(레시피 안 변형 번호), state(만들기 전 rng 상태), base(기본 메시)}.
 ## seasons.gd(개정 22)가 같은 rng 상태 + 계절 팔레트로 다시 만든 메시를 갈아 끼운다.
@@ -56,6 +57,15 @@ func _ready() -> void:
 	Economy.changed.connect(_sync_lots)
 	Economy.building_done.connect(_on_building_done)
 	_sync_build()
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.changed.connect(_sync_merchant)
+		tut.ui_revealed.connect(_on_ui_revealed)
+	_sync_merchant()
+
+
+func _on_ui_revealed(_key: String) -> void:
+	_sync_merchant()
 
 
 func _place_building(b: Dictionary) -> void:
@@ -144,16 +154,35 @@ func _place_merchant() -> void:
 	npc.position = Balance.MERCHANT_POS
 	npc.face(Vector3(1, 0, 1))
 	add_child(npc)
+	_merchant_nodes.append(npc)
 	var cart := MeshInstance3D.new()
 	cart.mesh = TownKit.merchant_cart()
 	cart.material_override = Art.lowpoly_vc_material()
 	cart.position = Balance.MERCHANT_POS + Balance.MERCHANT_CART_OFFSET
 	add_child(cart)
+	_merchant_nodes.append(cart)
 	merchant_anchor = Balance.MERCHANT_POS + Vector3(0, Art.HEAD_HEIGHT + 0.1, 0)
 	var r := Vector3(Balance.MERCHANT_RADIUS, Art.HEAD_HEIGHT, Balance.MERCHANT_RADIUS)
 	var box := AABB(Balance.MERCHANT_POS - Vector3(r.x, 0, r.z), r * 2.0 * Vector3(1, 0.5, 1))  # 상인 기둥
 	box = box.merge(AABB(cart.position + cart.mesh.get_aabb().position, cart.mesh.get_aabb().size))
-	_add_tap_body(Vector3(box.get_center().x, 0, box.get_center().z), Vector3(box.size.x, box.end.y, box.size.z), LAYER_MERCHANT).set_meta("merchant", true)
+	var body := _add_tap_body(Vector3(box.get_center().x, 0, box.get_center().z), Vector3(box.size.x, box.end.y, box.size.z), LAYER_MERCHANT)
+	body.set_meta("merchant", true)
+	_merchant_nodes.append(body)
+
+
+## 상인이 보인다(가이드 중에는 「상인과 거래」 미션부터 — Tutorial.ui_shown). world_tags가 이름표 "상인"도 이걸 따른다.
+func merchant_shown() -> bool:
+	var tut := get_node_or_null("/root/Tutorial") if is_inside_tree() else null  # 월드를 내린 뒤 이름표가 물어도
+	return tut == null or tut.ui_shown("merchant")
+
+
+func _sync_merchant() -> void:
+	var on := merchant_shown()
+	for n in _merchant_nodes:
+		if n is StaticBody3D:
+			n.collision_layer = LAYER_MERCHANT if on else 0  # 숨은 상인은 눌리지 않는다
+		else:
+			n.visible = on
 
 
 ## 탭 판정체: 물리 이동과 무관(마스크 0). 바닥 중심 ground_center, 크기 size.

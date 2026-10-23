@@ -66,6 +66,7 @@ var _auto: Button  # 연속 진행 체크박스(진행 버튼 오른쪽)
 var _fever: Button  # FEVER 버튼(fever_button.gd)
 var _chips := {}  # 아이콘 kind(gold·wood·stone·food·diamond) → 숫자 Label
 var _chip_row: Control
+var _chip_gap: Control  # 가이드 중 숨긴 재화 칸만큼 오른쪽을 비운다(남은 칸이 넓어지지 않게 — 초반 단순화 2026-10-23)
 var _banner: Control  # 온라인 띠(아래 버튼 위): 끊김 "서버 연결 중…" + 웹 비영구 저장소 경고
 var _link_label: Label
 var _storage_label: Label
@@ -218,6 +219,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_compass()
+	_apply_reveal()
 	if GameState.mode == GameState.Mode.COUNTDOWN:
 		_center.text = str(ceili(GameState.countdown_left()))
 	var real := delta / maxf(Engine.time_scale, 0.01)  # 알림은 실제 초(x1.5 배속·히트스톱과 무관)
@@ -526,8 +528,13 @@ func _build_chips(root: Control) -> void:
 		label.add_theme_color_override("font_color", INK)
 		inner.add_child(label)
 		_chips[kind] = label
+	_chip_gap = Control.new()
+	_chip_gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chip_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_chip_gap)
 	Economy.changed.connect(_refresh_chips)
 	_refresh_chips()
+	_apply_reveal()
 
 
 ## 온라인 알림: 탭 바 바로 위 띠(상단 자원 칩·스테이지 패널·탭 바를 가리지 않는다) — 끊기면 "서버 연결 중…", 웹 저장소가 영구가 아니면
@@ -630,6 +637,23 @@ func _on_notice(text: String) -> void:
 	_toast.modulate.a = 1.0
 	_toast.visible = true
 	_toast_left = TOAST_SEC
+
+
+## 가이드 중 숨긴 화면 요소(Tutorial.ui_shown — 초반 단순화 2026-10-23): 목재·석재·식량 칸, [연속 진행], FEVER는 그 기능을 쓰는
+## 가이드 미션이 올 때 나타난다. 숨긴 칸 수만큼 빈 칸(_chip_gap)이 오른쪽을 채워 남은 칸 폭은 그대로다.
+func _apply_reveal() -> void:
+	var hidden := 0
+	for kind in ["wood", "stone", "food"]:
+		var chip: Control = _chips[kind].get_parent().get_parent()
+		var on: bool = Tutorial.ui_shown("chip:" + kind)
+		chip.visible = on
+		if not on:
+			hidden += 1
+	_chip_gap.visible = hidden > 0
+	_chip_gap.size_flags_stretch_ratio = maxf(1.0, float(hidden))
+	if _auto != null:  # _build_chips가 부를 때는 아직 없다
+		_auto.visible = Tutorial.ui_shown("hud:auto")
+		_fever.visible = Tutorial.ui_shown("hud:fever")
 
 
 func _refresh_chips() -> void:

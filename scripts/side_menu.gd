@@ -41,6 +41,7 @@ var _split := 0  # _col2로 옮긴 항목 수(ITEMS 앞에서부터)
 var _dots := {}  # 빨간 점을 그린 버튼 id → true
 var _t := 0.0  # 펼침 정도 0..1
 var _locked := {}  # 잠겨 흐리게 그린 항목 id → true
+var _shown_sig := "?"  # 가이드 중 보이는 항목 id들(_shown_ids — 초반 단순화 2026-10-23). 처음엔 어느 것과도 다르게
 
 
 func _ready() -> void:
@@ -92,6 +93,9 @@ func dots() -> Dictionary:
 		d.guild = true
 	if Economy.market_sold > 0 and not Tutorial.tab_locked("exchange"):  # 거래소: 팔린 장비 대금
 		d.exchange = true
+	for id in d.keys():  # 가이드 중 숨긴 항목의 점은 [메뉴]에도 올리지 않는다
+		if not Tutorial.ui_shown("menu:" + str(id)):
+			d.erase(id)
 	if not d.is_empty():
 		d.toggle = true
 	return d
@@ -103,10 +107,21 @@ func guild_mission() -> bool:
 	return Tutorial.active() and not m.is_empty() and str(m.get("goto", "")) == "tab:guild" and not Tutorial.complete()
 
 
+## 보이는 항목(ITEMS 순서): 가이드 중에는 그 기능을 쓰는 미션이 올 때까지 숨긴다(Tutorial.ui_shown "menu:<id>" — 설정·공지·우편은 늘).
+func _shown_ids() -> Array:
+	var out := []
+	for it in ITEMS:
+		if Tutorial.ui_shown("menu:" + it[0]):
+			out.append(it[0])
+	return out
+
+
 func set_open(on: bool) -> void:
 	is_open = on
+	var shown := _shown_ids()
+	_shown_sig = ",".join(shown)
 	for id in buttons:
-		buttons[id].visible = on
+		buttons[id].visible = on and id in shown
 	if on:
 		_t = 0.0
 	toggle.get_child(0).queue_redraw()
@@ -124,6 +139,9 @@ func pick(id: String) -> void:
 
 
 func _process(delta: float) -> void:
+	if ",".join(_shown_ids()) != _shown_sig:  # 가이드가 새 항목을 열었다
+		set_open(is_open)
+		_split = -1
 	var d := dots()
 	for id in LOCKABLE:
 		var locked := Tutorial.tab_locked(id)
@@ -146,7 +164,8 @@ func _process(delta: float) -> void:
 		bottom = maxf(bottom, vh - card.panel.global_position.y + ABOVE)
 	var vh2 := get_viewport().get_visible_rect().size.y
 	var fits := maxi(2, int((vh2 - bottom - TOP_LIMIT + GAP) / (SIZE.y + GAP)))
-	var split := clampi(ITEMS.size() + 1 - fits, 0, ITEMS.size() - 1)
+	var shown_n := _shown_sig.count(",") + 1 if _shown_sig != "" else 0
+	var split := clampi(shown_n + 1 - fits, 0, maxi(0, shown_n - 1))
 	if split != _split:
 		_set_split(split)
 	_col.offset_right = -SIDE
@@ -166,18 +185,30 @@ func _process(delta: float) -> void:
 			b.get_child(0).position.y = (1.0 - _t) * 18.0 * (ITEMS.size() - i)
 
 
-## 위쪽 n개 항목을 왼쪽 둘째 줄로(나머지와 [메뉴]는 오른쪽 줄). 순서는 ITEMS 그대로.
+## 보이는 항목 중 위쪽 n개를 왼쪽 둘째 줄로(나머지와 [메뉴]는 오른쪽 줄). 순서는 ITEMS 그대로. 숨긴 항목은 오른쪽 줄 맨 위에 둔다(안 보인다).
 func _set_split(n: int) -> void:
 	_split = n
-	for i in ITEMS.size():
-		var b: Button = buttons[ITEMS[i][0]]
-		var want: VBoxContainer = _col2 if i < n else _col
+	var shown := _shown_ids()
+	var order := []  # 오른쪽 줄 순서: 숨긴 항목 → 보이는 항목 중 n번째부터
+	var left := []
+	for it in ITEMS:
+		var k := shown.find(it[0])
+		if k < 0:
+			order.push_front(it[0])
+		elif k < n:
+			left.append(it[0])
+		else:
+			order.append(it[0])
+	for id in left + order:
+		var b: Button = buttons[id]
+		var want: VBoxContainer = _col2 if id in left else _col
 		if b.get_parent() != want:
 			b.get_parent().remove_child(b)
 			want.add_child(b)
-	for i in ITEMS.size():  # 순서 맞추기(오른쪽 줄 맨 아래는 [메뉴])
-		var b: Button = buttons[ITEMS[i][0]]
-		b.get_parent().move_child(b, i if i < n else i - n)
+	for i in left.size():
+		_col2.move_child(buttons[left[i]], i)
+	for i in order.size():
+		_col.move_child(buttons[order[i]], i)
 	_col.move_child(toggle, _col.get_child_count() - 1)
 
 

@@ -34,6 +34,7 @@ var buttons := {}  # 탭 id → Button
 
 var _bar: Control
 var _shop_dot := false
+var _shown_sig := "?"  # 지금 보이는 탭 id들(가이드 중 숨긴 탭 — _layout). 처음엔 어느 것과도 달라 한 번은 배치한다(탭이 하나도 없을 때도)
 
 
 func _ready() -> void:
@@ -65,6 +66,35 @@ func _ready() -> void:
 		windows[id].visibility_changed.connect(_refresh)
 	Tutorial.changed.connect(_refresh)  # 튜토리얼: 탭은 그 탭을 소개하는 미션에 닿을 때 열린다
 	_refresh()
+	_layout()
+
+
+## 가이드 중에는 아직 안 열린 탭을 자물쇠로 늘어놓지 않고 숨긴다(초반 단순화 2026-10-23, Tutorial.ui_shown "tab:<id>"). 보이는 탭은
+## 한 칸(바 폭의 1/6) 그대로 가운데에 모이고, 하나도 없으면(첫 전투 전) 바 자체를 숨긴다 — 가이드 카드가 그 자리로 내려간다.
+func _layout() -> void:
+	var vis := []
+	for t in TABS:
+		if Tutorial.ui_shown("tab:" + t[0]):
+			vis.append(t[0])
+	var sig := ",".join(vis)
+	if sig == _shown_sig:
+		return
+	_shown_sig = sig
+	var n := float(TABS.size())
+	var start := (n - vis.size()) / 2.0
+	for t in TABS:
+		var b: Button = buttons[t[0]]
+		var k := vis.find(t[0])
+		b.visible = k >= 0
+		if k >= 0:
+			b.anchor_left = (start + k) / n
+			b.anchor_right = (start + k + 1.0) / n
+	_bar.visible = not vis.is_empty()
+
+
+## 탭 바가 보인다(가이드 첫 전투 전엔 탭이 하나도 없어 숨는다).
+func bar_shown() -> bool:
+	return _bar != null and _bar.visible
 
 
 ## 탭 누름: 그 탭의 창이 닫혀 있으면 다른 창(건물 창 등 탭 밖 창 포함)을 모두 닫고 연다. 열려 있으면 모두 닫는다.
@@ -117,8 +147,9 @@ func _draw_face(face: Control, i: int) -> void:
 
 
 func _process(_delta: float) -> void:
-	var d: bool = Economy.shop_free_left("daily") or Economy.shop_free_left("weekly") \
-		or not Economy.iap_claim_left(maxi(GameState.stage, Economy.server_stage) - 1).is_empty()
+	_layout()
+	var d: bool = (Economy.shop_free_left("daily") or Economy.shop_free_left("weekly") \
+		or not Economy.iap_claim_left(maxi(GameState.stage, Economy.server_stage) - 1).is_empty()) and Tutorial.ui_shown("shop_dot")
 	if d != _shop_dot and buttons.has("shop"):
 		_shop_dot = d
 		buttons.shop.get_child(0).queue_redraw()

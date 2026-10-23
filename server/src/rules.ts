@@ -1057,13 +1057,14 @@ export function parseReward(text: string | null | undefined): Record<string, num
   return out
 }
 
-// needs 형식: 빈칸 | build:<건물> | level:<건물>:<Lv ≥ 1>. 아니면 null, 맞으면 {kind, building, level}.
-export function parseNeeds(text: string | null | undefined): { kind: string; building: string; level: number } | null | undefined {
+// needs 형식: 빈칸 | build:<건물>[+<건물>…] | level:<건물>:<Lv ≥ 1>. 아니면 null, 맞으면 {kind, buildings, level}.
+// build는 적힌 건물을 모두 지어야 한다(2026-10-23 가이드 「채석장·농장 건설」 = build:quarry+farm).
+export function parseNeeds(text: string | null | undefined): { kind: string; buildings: string[]; level: number } | null | undefined {
   if (text == null || String(text).trim() === '') return undefined
-  const b = /^build:([a-z_]+)$/.exec(String(text).trim())
-  if (b) return { kind: 'build', building: b[1], level: 1 }
+  const b = /^build:([a-z_]+(?:\+[a-z_]+)*)$/.exec(String(text).trim())
+  if (b) return { kind: 'build', buildings: b[1].split('+'), level: 1 }
   const l = /^level:([a-z_]+):(\d+)$/.exec(String(text).trim())
-  if (l && Number(l[2]) >= 1) return { kind: 'level', building: l[1], level: Number(l[2]) }
+  if (l && Number(l[2]) >= 1) return { kind: 'level', buildings: [l[1]], level: Number(l[2]) }
   return null
 }
 

@@ -2,7 +2,7 @@ extends Node
 ## 스테이지를 미는 동안 가이드를 숨긴다(사용자 2026-10-18 "스테이지 밀때는 가이드 안보이게해줘").
 ## 새 게임으로 main을 띄운다. 대기에서는 카드·화살표가 보이고, 스테이지·결과·카운트다운 동안은 카드·화살표(버튼·건물 이름표)·
 ## 포커스 설명이 하나도 안 보여야 한다. 그동안 미션은 계속 세고(1-1 클리어 → ✓), 방치로 돌아오면 카드가 바로 다시 보이고
-## 첫 미션의 「성 화면 둘러보기」 설명도 그때 뜬다.
+## 「스테이지 1-2」의 포커스 설명(스테이지 정보)도 그때 뜬다.
 ## 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/guide_battle_hide_check.tscn  (마지막 줄 GUIDE BATTLE HIDE PASSED)
 ##   -- --shot=<png 경로>: 첫 전투 2초 뒤 화면을 저장한다(전·후 비교용)
 
@@ -58,11 +58,11 @@ func _ready() -> void:
 	_check(back >= 0.0 and back < 0.1, "idle again: the card comes back at once", "after %.2f s" % back)
 	_check(_card.title_label.text.begins_with("✓") and _card.action_button.visible, "idle again: the card shows ✓ and [보상 받기]", _card.title_label.text)
 
-	# 2) 첫 미션 「성채 살펴보기」(건물 이름표 화살표 + 「성 화면 둘러보기」 설명): 전투 중엔 설명이 안 뜨고 방치로 오면 뜬다
-	_set_mission("look_keep")
+	# 2) 「스테이지 1-2 클리어」(포커스 설명 「스테이지 정보」, 초반 단순화 2026-10-23): 전투 중엔 설명이 안 뜨고 방치로 오면 뜬다
+	_set_mission("stage_1_2")
 	for i in 10:
 		await get_tree().process_frame
-	_check(_card.panel.visible and Tutorial.target_building() == "keep", "idle: the card and the keep arrow show", "target=%s" % Tutorial.target_building())
+	_check(_card.panel.visible and _card._target_id != 0, "idle: the card and the [▶ 진행] arrow show", "visible=%s" % _card.panel.visible)
 	GameState.start_stage()
 	Tutorial.tours_on = true  # 전투 중엔 「성 화면 둘러보기」가 떠선 안 된다
 	await _watch(1.0)
@@ -80,7 +80,7 @@ func _ready() -> void:
 		if Tutorial.tour_node != null and is_instance_valid(Tutorial.tour_node):
 			tour = str(Tutorial.tour_node.id)
 			break
-	_check(_card.panel.visible and tour == "intro", "idle again: the card shows and the focus tour (성 화면 둘러보기) starts", "visible=%s tour=%s" % [_card.panel.visible, tour])
+	_check(_card.panel.visible and tour == "stage_info", "idle again: the card shows and the focus tour (스테이지 정보) starts", "visible=%s tour=%s" % [_card.panel.visible, tour])
 	for i in 30:  # 화면 기록(--write-movie)에 설명이 뜬 성 화면이 남게
 		await get_tree().process_frame
 	print("GUIDE BATTLE HIDE %s" % ("PASSED" if _fails == 0 else "FAILED %d" % _fails))
