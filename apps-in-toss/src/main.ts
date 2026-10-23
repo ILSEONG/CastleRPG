@@ -6,9 +6,11 @@
 //   granted(orderId, ok)로 답하면 그 값이 SDK processProductGrant의 결과(true = 지급 완료)가 된다. 끝나면 onDone('success', orderId) 또는
 //   onDone('error', 코드)('UNSUPPORTED' = 토스 앱이 오래됨).
 //   pendingOrders(cb): 결제는 됐는데 지급이 안 끝난 주문 cb(JSON [{orderId, sku}]) — 게임이 다시 서버에 보내고 completeGrant(orderId).
+// - log(name, json)(2026-10-23, 이탈 기록): 게임 분석 이벤트(scripts/game_log.gd) → SDK Analytics.log(앱인토스 콘솔 분석에서 본다).
+//   json = 평평한 {키: 값}. 실패·미지원 토스 앱은 조용히 넘긴다.
 // - 안드로이드 뒤로 가기: 종료 확인 창(출시 가이드: 종료할 때 확인 모달) → closeView().
 // - 백그라운드로 가면 게임 소리를 멈춘다(AudioContext suspend).
-import { closeView, getUserKeyForGame, graniteEvent, IAP } from '@apps-in-toss/web-framework'
+import { Analytics, closeView, getUserKeyForGame, graniteEvent, IAP } from '@apps-in-toss/web-framework'
 
 declare global {
   interface Window {
@@ -18,12 +20,20 @@ declare global {
       granted: (orderId: string, ok: boolean) => void
       pendingOrders: (cb: (json: string) => void) => void
       completeGrant: (orderId: string) => void
+      log: (name: string, json: string) => void
     }
     Engine: any
   }
 }
 
 window.castleToss = {
+  log(name, json) {
+    try {
+      const params = JSON.parse(json || '{}')
+      Analytics.log({ log_name: name, log_type: 'event', params: params && typeof params === 'object' ? params : {} }).catch(() => {})
+    } catch { /* 기록만 빠진다 */ }
+  },
+
   getUserKey(cb) {
     getUserKeyForGame()
       .then((r: any) => {
