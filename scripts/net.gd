@@ -62,6 +62,7 @@ var _first_tries := 0
 var _flush_cd := FLUSH_SEC
 var _refreshing := false
 var _started := false
+var _retry_gen := 0  # 다시 보내기 예약 세대(retry_now가 올리면 그 전 예약은 무시)
 var _halted := false  # session_lost 뒤: 큐를 보내지 않는다(start()가 다시 풀어 준다)
 
 
@@ -352,7 +353,24 @@ func _next() -> void:
 
 ## 머리 요청을 sec초 뒤 다시 보낸다(그동안 _busy라 다른 요청은 기다린다).
 func _retry_in(sec: float) -> void:
-	get_tree().create_timer(sec, true, false, true).timeout.connect(_send_head)  # 실제 초
+	var gen := _retry_gen
+	get_tree().create_timer(sec, true, false, true).timeout.connect(func():  # 실제 초
+		if gen == _retry_gen:  # retry_now가 먼저 보냈으면 이 예약은 버린다
+			_send_head())
+
+
+## 끊긴 채 다시 보낼 차례를 기다릴 때 지금 바로 다시 보낸다(로딩 화면 [다시 연결]). 보냈으면 true.
+func retry_now() -> bool:
+	if up or _queue.is_empty() or _http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+		return false
+	_retry_gen += 1
+	_send_head()
+	return true
+
+
+## 첫 접속 전에 연결 실패가 이어지는가(로딩 화면이 인터넷 확인 안내와 [다시 연결]을 보인다).
+func first_connect_failing() -> bool:
+	return is_online() and not ready_once and not up and _fails >= 2
 
 
 func _send_head() -> void:

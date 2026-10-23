@@ -2744,3 +2744,5 @@ missions.fail_text.nothing,받을 보상이 없습니다,,,,scripts/missions.gd
 party.error_text.guide_locked,가이드에서 파티 던전 미션에 닿으면 열립니다,,,,scripts/party.gd
 party.error_text.their_locked,그 성주는 아직 가이드에서 파티 던전에 닿지 않았습니다,,,,scripts/party.gd
 party_invite_panel.row_7,가이드 중,,,,scripts/party_invite_panel.gd
+preloader.offline_text,서버에 연결할 수 없습니다\n인터넷 연결을 확인해 주세요,,,,scripts/preloader.gd
+preloader.retry_text,다시 연결,,,,scripts/preloader.gd
