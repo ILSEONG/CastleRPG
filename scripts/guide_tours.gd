@@ -18,7 +18,7 @@ const MISSION_TOURS := {
 	"fever": ["fever"],
 	"gacha": ["recruit"],
 	"train": ["train"],
-	"dungeon_gold": ["dungeon", "dungeon_form"],
+	"dungeon_gold": ["dungeon", "dungeon_form", "skill"],
 	"research": ["research", "research_detail"],
 	"guild": ["guild_join"],
 	"guild_attend": ["guild_home"],
@@ -100,6 +100,12 @@ static var TOURS := {
 		{"at": "dungeon_panel:cards.gold.keys", "text": Lang.t("guide_tours.tours.text_42")},
 		{"at": "dungeon_panel:cards.gold.level", "text": Lang.t("guide_tours.tours.text_43")},
 		{"at": "dungeon_panel:cards.gold.go", "text": Lang.t("guide_tours.tours.text_44")},
+	]},
+	# 스킬 자동/수동(2026-10-23 영웅 터치 조작 스레드, 사용자 "가이드에도 반영했어?"): 첫 골드 던전 전투가 시작되면 멈추고 설명한다.
+	# 성 스테이지 전투 중에는 가이드를 띄우지 않으므로(사용자 2026-10-18) 던전에서. 성 화면의 같은 버튼은 대기 중 숨어 있어 여기서만 뜬다.
+	"skill": {"when": "skill_auto_button:button", "pause": true, "steps": [
+		{"at": "skill_auto_button:button", "title": Lang.t("guide_tours.tours.title_4"), "text": Lang.t("guide_tours.tours.skill_auto")},
+		{"at": "skill_auto_button:row", "text": Lang.t("guide_tours.tours.text_93")},
 	]},
 	"dungeon_form": {"when": "dungeon_panel:go_button", "steps": [
 		{"at": "dungeon_panel:_slot_grid", "text": Lang.t("guide_tours.tours.text_45")},

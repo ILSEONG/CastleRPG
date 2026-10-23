@@ -2743,3 +2743,6 @@ tutorial.missions.build_quarry_farm.title,채석장·농장 건설,,,,scripts/tu
 tutorial.missions.build_quarry_farm.desc,"[건설] 버튼을 눌러 채석장과 농장을 지으세요. 채석장은 석재, 농장은 식량을 생산합니다.",,,,scripts/tutorial.gd
 reveal_banner.flush,새 기능: %s,,,,scripts/reveal_banner.gd
 reveal_banner.speed_name,배속,,,,scripts/reveal_banner.gd
+guide_tours.tours.title_4,스킬 자동·수동,,,,scripts/guide_tours.gd
+guide_tours.tours.skill_auto,"[스킬 AUTO] 버튼입니다. 켜 두면 스킬이 저절로 나가고, 끄면 원하는 때에 직접 씁니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_93,스킬 AUTO를 끄면 준비된 스킬 칸이 빛납니다. 그 칸을 누르면 그 영웅이 바로 스킬을 씁니다.,,,,scripts/guide_tours.gd
