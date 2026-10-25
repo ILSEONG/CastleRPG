@@ -251,7 +251,7 @@ func _route_raw(from: Vector3, to: Vector3) -> Array[Vector3]:
 	var from_in := Formation.is_inside(war_half, from)
 	var to_in := Formation.is_inside(war_half, to)
 	if team == 1 or (from_in and to_in):
-		return around_keep(from, Formation.route(war_half, from, to))
+		return around_keep(from, Formation.shortest_route(war_half, from, to))
 	if not from_in and not to_in:
 		return Formation.ring_route(war_half, from, to)
 	var outside_pt := to if from_in else from
@@ -271,20 +271,20 @@ func _route_raw(from: Vector3, to: Vector3) -> Array[Vector3]:
 			best = s
 	if best < 0:
 		if from_in:
-			return around_keep(from, Formation.route(war_half, from, to))  # 안에 있는데 열린 성문이 없다(없을 일) — 예전대로
+			return around_keep(from, Formation.shortest_route(war_half, from, to))  # 안에 있는데 열린 성문이 없다(없을 일) — 예전대로
 		var s0 := Formation.side_of(to)
 		return Formation.ring_route(war_half, from, Formation.gate_outer(war_half, s0, Formation.nearest_gate_at(war_half, s0, to)))
 	var at_b := Formation.nearest_gate_at(war_half, best, inside_pt)
 	var g_out := Formation.gate_outer(war_half, best, at_b)
 	var g_in := Formation.gate_inner(war_half, best, at_b)
 	if from_in:
-		out = around_keep(from, Formation.route(war_half, from, g_in))
+		out = around_keep(from, Formation.shortest_route(war_half, from, g_in))
 		out.append(g_out)
 		out.append_array(Formation.ring_route(war_half, g_out, to))
 	else:
 		out = Formation.ring_route(war_half, from, g_out)
 		out.append(g_in)
-		out.append_array(around_keep(g_in, Formation.route(war_half, g_in, to)))
+		out.append_array(around_keep(g_in, Formation.shortest_route(war_half, g_in, to)))
 	return out
 
 

@@ -45,7 +45,7 @@ const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
 const CAST_RECOVER := 0.3  # 발동 순간 뒤 이만큼 더 제자리에서 모션을 마저 한다(초) — 곧바로 평타 모션이 덮지 않게
 const ARENA_PAD := 0.2  # 던전·드래곤 아레나: 영웅끼리 몸 둘레 여유(m, ally_pad) — 둘 합 1.3 m 떨어져 선다
 const KEEP_SLOT_R := 1.5  # 같은 성문·성벽을 거듭 누를 때 지금 자리에서 이만큼 안을 누르면 자리를 바꾸지 않는다(2026-10-14 우왕좌왕)
-const KEEP_ROUTE_SLACK := 4.0  # 지금 경로의 도착지만 바꾼 길이 새로 짠 길보다 이만큼(m) 안쪽으로만 길면 지금 경로를 지킨다
+const KEEP_ROUTE_SLACK := 0.05  # 지금 경로의 도착지만 바꾼 길이 새로 짠(가장 짧은) 길과 같은 길이일 때만 지금 경로를 지킨다(사용자 2026-10-25 "무조건 최단 경로" — 예전 4 m)
 const ON_LINE_R := 0.6  # 새 경로 첫 구간 선에서 이만큼 안이고 그 구간 가운데에 있으면 첫 점은 이미 지나쳤다
 const SKILL_REQ_SEC := 3.0  # 스킬 수동: 칸을 누른 뒤 이만큼 안에 못 쓰면(사거리 안 적·다친 아군 없음) 취소하고 알린다
 const FOCUS_REPLAN := 0.5  # 공격 명령: 걷는 중 표적을 다시 보는 간격(초)
@@ -326,7 +326,7 @@ func _set_free(p: Vector3) -> void:
 
 
 ## 플레이어 명령의 경로(사용자 2026-10-14 "이동하려는 쪽을 계속 누르면 루트가 시시각각 바뀌며 우왕좌왕"):
-## (1) 지금 걷는 경로의 도착지만 새 자리로 바꾼 길(마지막 구간을 곧장 갈 수 있을 때)이 새로 짠 길보다 KEEP_ROUTE_SLACK 넘게 길지 않으면
+## (1) 지금 걷는 경로의 도착지만 새 자리로 바꾼 길(마지막 구간을 곧장 갈 수 있을 때)이 새로 짠 가장 짧은 길과 길이가 같으면(KEEP_ROUTE_SLACK)
 ##     그 길을 쓴다 — 성 모서리 근처를 거듭 누를 때 지나는 성문이 이쪽저쪽으로 바뀌지 않는다.
 ## (2) 아니면 새로 짠 길에서 이미 지나친 앞 점(성문 통과 지점 등 — 지나가는 반경 안에서 떼어 냈다)을 뺀다 — 왔던 쪽으로 돌아서지 않는다.
 func _replan_stable() -> void:
@@ -352,7 +352,7 @@ func _route_between(from: Vector3, to: Vector3) -> Array[Vector3]:
 	if castle == null:
 		var out: Array[Vector3] = [to]
 		return out
-	return Formation.route(castle.half, from, to)
+	return Formation.shortest_route(castle.half, from, to)
 
 
 ## 지금 위치 → to 경로.
@@ -459,7 +459,7 @@ func _replan() -> void:
 		_path = [stand_position()]  # 아레나: 곧장
 		_target = null
 		return
-	_path = Formation.route(castle.half, global_position, stand_position())
+	_path = Formation.shortest_route(castle.half, global_position, stand_position())
 
 
 ## 실제 높이로 판정한다 — 오르내리는 중에는 지상 취급.

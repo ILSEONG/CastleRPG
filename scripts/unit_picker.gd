@@ -132,6 +132,11 @@ func _physics_process(_delta: float) -> void:
 		return
 	if arena_r <= 0.0:
 		var hit := _pick(screen_pos, LAYER_GATE)
+		if not hit.is_empty() and hit.position.y >= Balance.WALL_H:  # 성문 탭 상자의 윗면 = 성문 바로 위 성벽(사용자 2026-10-25) — 그 성문 위 자리로
+			var tside: int = hit.collider.get_meta("side")
+			if selected.move_to(tside, Formation.POST_WALL, float(hit.collider.get_meta("at", 0.0))):
+				_show_route(selected, selected.stand_position())
+			return
 		if not hit.is_empty():
 			var gside: int = hit.collider.get_meta("side")
 			if selected.move_to(gside, Formation.POST_GATE, float(hit.collider.get_meta("at", 0.0))):  # 누른 성문 앞 빈 자리(가까운 순)
@@ -140,6 +145,8 @@ func _physics_process(_delta: float) -> void:
 		hit = _pick(screen_pos, LAYER_WALL)
 		if not hit.is_empty():
 			var wside: int = hit.collider.get_meta("side")
+			if hit.collider.has_meta("tower"):  # 모서리 탑: 누른 곳이 더 기운 면
+				wside = Formation.side_of(Vector3(hit.position.x, 0.0, hit.position.z))
 			if selected.move_to(wside, Formation.POST_WALL, Formation.perp(wside).dot(hit.position)):  # 누른 쪽에 가까운 빈 자리
 				_show_route(selected, selected.stand_position())
 			return

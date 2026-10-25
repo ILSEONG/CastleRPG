@@ -70,6 +70,7 @@ func _build_look(lk: int) -> void:
 	var gate_mesh := TownKit.gatehouse(lk)
 	var doors_mesh := TownKit.gate_doors()
 	var stairs_mesh := TownKit.stairs()
+	_add_tower_taps(lk)
 	var walls := {}  # 토막 길이 → 메시
 	for side in 4:
 		var dir: Vector3 = Formation.SIDE_DIR[side]
@@ -159,7 +160,20 @@ func _along(perp: Vector3, length: float, height: float, thickness: float) -> Ve
 	return Vector3(thickness, height, length)
 
 
-func _add_tap_area(ground_center: Vector3, size: Vector3, layer: int, side: int, at := NAN) -> void:
+## 모서리 탑 탭 영역(사용자 2026-10-25 성문 위 성벽 탭과 같이): 탑 몸통 + 지붕 절반 높이까지 성벽 탭(LAYER_WALL, "tower") —
+## 탑 윗부분을 눌러도 레이가 탑 너머 성 밖 바닥으로 빠지지 않고, 누른 쪽 면의 성벽 위 끝자리로 간다(unit_picker).
+## 탑 크기가 성 모습 단계마다 달라 _look 아래에 둔다(단계가 바뀌면 같이 다시 만든다).
+func _add_tower_taps(lk: int) -> void:
+	var c := half + Balance.WALL_T / 2.0
+	var w: float = float(TownKit.LOOK_TOWER_R[lk]) * 2.0
+	var h: float = float(TownKit.LOOK_TOWER_H[lk]) + float(TownKit.LOOK_TOWER_ROOF[lk]) * 0.5
+	for k in 4:
+		var corner: Vector3 = (Formation.SIDE_DIR[k] + Formation.SIDE_DIR[(k + 1) % 4]) * c
+		var area := _add_tap_area(corner, Vector3(w, h, w), LAYER_WALL, k, NAN, _look)
+		area.set_meta("tower", true)
+
+
+func _add_tap_area(ground_center: Vector3, size: Vector3, layer: int, side: int, at := NAN, parent: Node = null) -> Area3D:
 	var area := Area3D.new()
 	area.collision_layer = layer
 	area.collision_mask = 0
@@ -172,7 +186,8 @@ func _add_tap_area(ground_center: Vector3, size: Vector3, layer: int, side: int,
 	area.set_meta("side", side)
 	if not is_nan(at):
 		area.set_meta("at", at)  # 성문 탭: 그 성문의 옆 위치(그 성문 앞 빈 자리로)
-	add_child(area)
+	(parent if parent != null else self).add_child(area)
+	return area
 
 
 ## 성문 내구도는 면마다 하나(같은 면 성문끼리 공유): 부서지면 그 면 문짝이 모두 열린다.
