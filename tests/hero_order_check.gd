@@ -118,7 +118,8 @@ func _attack_cases(heroes: Array) -> void:
 func _route_cases(heroes: Array) -> void:
 	var h = heroes[2]
 	var archer = heroes[3]
-	# (e) 성 안 → 성 밖 모서리 근처 도착지(북쪽 면), 다음 탭은 대각선 너머(동쪽 면)로 조금 — 지나는 성문은 그대로
+	# (e) 성 안 → 성 밖 모서리 근처 도착지(북쪽 면), 다음 탭은 대각선 너머(동쪽 면)로 조금 — 무조건 가장 짧은 길(사용자 2026-10-25):
+	#     동쪽 성문이 더 가까워지면 그쪽으로 바꾼다. 같은 곳을 거듭 누르면 길은 그대로.
 	var gates: Array = Formation.gate_offsets(_half)
 	var diag := Formation.SIDE_DIR[0] + Formation.SIDE_DIR[1]
 	_place(h, diag * (_half * 0.4))
@@ -127,13 +128,46 @@ func _route_cases(heroes: Array) -> void:
 	h.move_to_point(d1)
 	var g1: Vector3 = h._path[0]
 	var d2 := diag * far + Formation.SIDE_DIR[1] * 0.4
-	var fresh := Formation.route(_half, h.global_position, d2)
 	h.move_to_point(d2)
-	_check(fresh[0].distance_to(g1) > 1.0, "(e) setup: a fresh route would switch gates", "fresh %s g1 %s" % [fresh[0], g1])
-	_check(h._path[0].distance_to(g1) < 0.01 and h._path[h._path.size() - 1].distance_to(d2) < 0.01, "(e) re-tapping across the corner keeps the gate already chosen",
-		"first %s was %s" % [h._path[0], g1])
+	var best := Formation.shortest_route(_half, h.global_position, d2)
+	_check(absf(Formation.path_length(h.global_position, h._path) - Formation.path_length(h.global_position, best)) < 0.01 and h._path[0].distance_to(g1) > 1.0,
+		"(e) re-tapping across the corner takes the now-shorter gate", "first %s was %s" % [h._path[0], g1])
+	var again: Array = h._path.duplicate()
+	h.move_to_point(d2)
+	_check(h._path == again, "(e) tapping the same spot again keeps the same route")
+	# (h) 가장 짧은 길: 성벽 위 성문 오른쪽 3 m → 성 안 성문 왼쪽 바닥이면 성문 위를 건너 왼쪽 계단으로 내려간다
+	var at0 := float(gates[0])
+	var from_w := Formation.gate_position(_half, 0, at0 + 3.0) + Vector3(0, Balance.WALL_H, 0)
+	var to_g := Formation.SIDE_DIR[0] * (_half - 6.0) + Formation.perp(0) * (at0 - 8.0)
+	var sp := Formation.shortest_route(_half, from_w, to_g)
+	var landing_l := Formation.wall_landing(_half, 0, -1.0, at0)
+	_check(sp[0].distance_to(landing_l) < 0.01 and Formation.path_length(from_w, sp) < Formation.path_length(from_w, Formation.route(_half, from_w, to_g)) - 1.0,
+		"(h) a wall hero crosses over the gate to the nearer stairs", "first %s left landing %s" % [sp[0], landing_l])
+	# (h) 아무 두 곳(성 안·밖·성벽 위)이든 영웅 길은 예전 길보다 길지 않고, 영웅이 실제로 그 길을 쓴다
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 25
+	var worse := 0
+	for i in 400:
+		var pts := []
+		for j in 2:
+			var kind := rng.randi_range(0, 2)
+			var side := rng.randi_range(0, 3)
+			var t := rng.randf_range(-_half + 2.5, _half - 2.5)
+			if kind == 0:
+				pts.append(Formation.SIDE_DIR[side] * (_half + Balance.WALL_T / 2.0) + Formation.perp(side) * t + Vector3(0, Balance.WALL_H, 0))
+			elif kind == 1:
+				pts.append(Formation.SIDE_DIR[side] * (_half - Balance.STAIR_W - 1.5) + Formation.perp(side) * t * 0.8)
+			else:
+				pts.append(Formation.SIDE_DIR[side] * (_half + Balance.WALL_T + rng.randf_range(2.0, 8.0)) + Formation.perp(side) * t)
+		if Formation.path_length(pts[0], Formation.shortest_route(_half, pts[0], pts[1])) > Formation.path_length(pts[0], Formation.route(_half, pts[0], pts[1])) + 0.001:
+			worse += 1
+	_check(worse == 0, "(h) shortest route is never longer than the old route (400 random pairs)", "%d worse" % worse)
+	h.global_position = from_w
+	h._path.clear()
+	h.move_to_point(to_g)
+	_check(h._path[0].distance_to(landing_l) < 0.01, "(h) a hero ordered from the wall uses the shortest route", "first %s" % h._path[0])
 	# (f) 성문 통로 안(안쪽 통과 지점을 지났다)에서 다시 누르면 안쪽 통과 지점으로 돌아서지 않는다
-	var at := float(gates[0])
+	var at := at0
 	var gin := Formation.gate_inner(_half, 0, at)
 	var gout := Formation.gate_outer(_half, 0, at)
 	_place(h, gin.lerp(gout, 0.4))

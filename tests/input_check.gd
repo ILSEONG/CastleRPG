@@ -89,10 +89,10 @@ func _run() -> void:
 		"(b) drag-and-return on a gate does not order", "selected=%s side/post=%s" % [_name(_picker.selected), [archer.side, archer.post]])
 
 	# (c) 궁수 선택 중 전사가 서 있는 성문 탭 → 궁수에게 성문 앞 명령 (F1 회귀). 성벽 3 m(2026-10-23)부터 성문 앞 자리는 성문 정중앙에서
-	#     HERO_TAP_PX 밖이라 전사 쪽 바깥면 가운데를 누른다
+	#     HERO_TAP_PX 밖이라 전사 쪽을 누른다 — 성문 상자 윗면은 성문 위 성벽(2026-10-25, (d2))이라 옆면에서
 	_picker._select(null)
 	await _tap(_hero_px(archer))
-	var gate := _gate_px(0, true)
+	var gate := _gate_face_px(0, _hero_px(warrior), PickerScript.HERO_TAP_PRECISE_PX + 2.0)  # 성문 옆면(윗면은 성문 위 성벽 — 2026-10-25) 중 전사에 가까운 곳(전사를 바로 누른 건 아닌)
 	var warrior_d := _hero_px(warrior).distance_to(gate)
 	_check(warrior_d <= PickerScript.HERO_TAP_PX, "(c) precondition: warrior within HERO_TAP_PX of the gate's outer face", "d=%.1f" % warrior_d)
 	await _tap(gate)
@@ -106,6 +106,30 @@ func _run() -> void:
 	_check(_picker.selected == archer2 and archer2.side == 2 and archer2.post == Formation.POST_WALL,
 		"(d) wall tap with a hero selected orders a wall-top move",
 		"selected=%s side/post=%s" % [_name(_picker.selected), [archer2.side, archer2.post]])
+
+	# (d2) 성문 바로 위 성벽(성문 탭 상자 윗면) 탭 → 그 성문 위 자리로(사용자 2026-10-25 "성문 바로 위 성벽은 왜 클릭이 안돼") — 네 면 성문마다
+	var half_d: float = _main.castle.half
+	var tops := []
+	for side in 4:
+		for at in Formation.gate_offsets(half_d):
+			await _tap(_hero_px(archer2)) if _picker.selected != archer2 else null
+			var top := Formation.gate_position(half_d, side, at) + Vector3(0, Balance.WALL_H, 0)
+			await _tap(_camera.unproject_position(top))
+			await _frames(2)
+			var ok: bool = _picker.selected == archer2 and archer2.side == side and archer2.post == Formation.POST_WALL \
+				and absf(Formation.perp(side).dot(archer2.stand_position()) - at) < 0.01 and absf(archer2.stand_position().y - Balance.WALL_H) < 0.01
+			tops.append("%d@%.0f:%s" % [side, at, "ok" if ok else "%s/%d/%d" % [_name(_picker.selected), archer2.side, archer2.post]])
+	_check(tops.all(func(t): return t.ends_with(":ok")), "(d2) tapping the wall right above each gate sends the hero onto the wall above that gate", "%s" % [tops])
+
+	# (d3) 모서리 탑 탭(탑 몸 가운데 높이) → 성벽 위 명령(가까운 면)
+	var towers := []
+	for k in 4:
+		var corner := (Formation.SIDE_DIR[k] + Formation.SIDE_DIR[(k + 1) % 4]) * (half_d + Balance.WALL_T / 2.0) + Vector3(0, Balance.WALL_H + 3.0, 0)
+		await _tap(_hero_px(archer2)) if _picker.selected != archer2 else null
+		await _tap(_camera.unproject_position(corner))
+		await _frames(2)
+		towers.append("%d:%s" % [k, "ok" if _picker.selected == archer2 and archer2.post == Formation.POST_WALL and archer2.side in [k, (k + 1) % 4] else "%s/%d/%d" % [_name(_picker.selected), archer2.side, archer2.post]])
+	_check(towers.all(func(t): return t.ends_with(":ok")), "(d3) tapping a corner tower sends the hero onto the wall next to it", "%s" % [towers])
 
 	# (e) 터치: 누른 중 두 번째 손가락 → 탭 취소. 핀치(벌리기) → camera.size 감소, 선택 없음
 	_picker._select(null)
@@ -905,6 +929,20 @@ func _gate_px(side: int, outer := false) -> Vector2:
 	var half: float = _main.castle.half
 	var face := Formation.SIDE_DIR[side] * (Balance.WALL_T / 2.0) if outer else Vector3.ZERO  # outer: 성문 바깥면 가운데(탭 상자 안, 성문 앞 자리 쪽)
 	return _camera.unproject_position(Formation.gate_position(half, side) + face + Vector3(0, Balance.WALL_H / 2.0, 0))
+
+
+## 성문 탭 상자의 옆면(윗면 아래 — 성문 앞 명령)이 걸리는 화면 점 중 near에서 min_d 밖으로 가장 가까운 것(2 px 격자).
+func _gate_face_px(side: int, near: Vector2, min_d := 0.0) -> Vector2:
+	var best := Vector2.INF
+	var c := _gate_px(side)
+	for dx in range(-80, 81, 2):
+		for dy in range(-80, 81, 2):
+			var px := c + Vector2(dx, dy)
+			var hit: Dictionary = _picker._pick(px, PickerScript.LAYER_GATE)
+			if not hit.is_empty() and int(hit.collider.get_meta("side")) == side and hit.position.y < Balance.WALL_H \
+					and px.distance_to(near) >= min_d and px.distance_to(near) < best.distance_to(near):
+				best = px
+	return best
 
 
 ## 성문 옆 벽 토막(end = +1이면 +perp 쪽, -1이면 -perp 쪽) 중앙.

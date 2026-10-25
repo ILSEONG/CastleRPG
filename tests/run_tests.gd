@@ -760,6 +760,9 @@ func test_formation_claims() -> void:
 	check(g.claim_near(0, 0, wall, -99.0) == left, "claim_near keeps the hero's own slot when it is nearest")
 	for i in range(2, 2 + FormationScript.capacity(wall)):
 		g.claim(i, 0, wall)
+	var above: int = g.claim_near(19, 0, wall, 0.0)  # 성문 바로 위 자리(2026-10-25): 누른 곳으로만 — claim(저절로)은 쓰지 않는다
+	check(above >= FormationScript.capacity(wall) and absf(FormationScript.perp(0).dot(FormationScript.slot_position(g.castle_half, 0, wall, above))) < 0.01,
+		"claim_near on the gate top takes the slot right above the gate (not used by auto placement)")
 	check(g.claim_near(20, 0, wall, 0.0) == -1 and g.assignment(20).is_empty(), "claim_near on a full wall fails and assigns nothing")
 
 
@@ -1666,6 +1669,9 @@ func test_heroes_table() -> void:
 	# 초상화 쿨 칸 스킬 그림(2026-10-06): 발동형마다 그림이 있고 그 그림은 도형이 있다
 	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE:
 		check(SkillIconsScript.KIND.has(k) and not SkillIconsScript.shapes(SkillIconsScript.glyph_of(k)).is_empty(), "skill %s has a thumbnail" % k)
+	# 그린 스킬 아이콘(2026-10-25): 그림이 있는 종류(발동형·패시브 86종)는 모두 assets/ui/skills 그림이 있다(안 쓰는 발동형은 짝 패시브 그림)
+	for k in SkillIconsScript.KIND:
+		check(SkillIconsScript.texture_of(k) != null, "skill %s has a painted icon" % k)
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
