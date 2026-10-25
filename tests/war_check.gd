@@ -446,6 +446,21 @@ func _case_defense() -> void:
 		b.brain.think(d)
 	var guards := melee.filter(func(d): return Formation.flat_distance(d.free_pos, Vector3.ZERO) < Formation.keep_target(0).length() + 6.0)
 	_check(guards.size() >= melee.size() / 2, "defenders fall back to guard the keep (%d of %d)" % [guards.size(), melee.size()])
+	# 성채 체력 절반 이하(2026-10-25 사용자): 공격이 성채 근처에 없어도 근접 전부·쏠 적이 없는 성벽 원거리가 성채 앞으로
+	for a in b.units(0):
+		a.global_position = Formation.SIDE_DIR[1] * (b.half + 60.0)
+	b.keep.set_hp(b.keep.hp_max * 0.45)
+	b.brain._survey_t = -INF
+	for d in b.units(1):
+		b.brain.think(d)
+	var near_keep := func(d): return Formation.flat_distance(d.free_pos, Vector3.ZERO) < Formation.keep_target(0).length() + 12.0 and d.free_pos.y < 0.5
+	_check(melee.all(near_keep) and archers.all(near_keep), "keep at 45%%: all defenders come to guard the keep (melee %d/%d, archers %d/%d)"
+		% [melee.filter(near_keep).size(), melee.size(), archers.filter(near_keep).size(), archers.size()])
+	b.keep.set_hp(b.keep.hp_max * 0.55)
+	b.brain._survey_t = -INF
+	for d in b.units(1):
+		b.brain.think(d)
+	_check(archers.all(func(d): return d.free_pos.is_equal_approx(d.post_pos)), "keep above half with no attackers near: archers go back to the walls")
 	b.queue_free()
 	await get_tree().process_frame
 

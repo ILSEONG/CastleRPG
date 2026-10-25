@@ -35,6 +35,7 @@ const DEF_ATK_MULT := 1.3
 const GATE_TOP_MULT := 1.2  # 성문 위(성문 위·바로 옆 성벽, GATE_TOP_R 안) 원거리 수비 영웅 피해 배율(2026-10-07 사용자). 수성 보너스(DEF_ATK_MULT)에 곱한다
 const GATE_TOP_R := 11.0  # 성벽 위에서 성문 가운데로부터 이 옆 거리 안 = 성문 위
 const KEEP_ALERT := 8.0  # 공격 영웅이 성채 외벽에서 이 거리 안에 들어오면 수비가 성채를 지키러 모인다(수비의 궁극 목적 = 성채)
+const KEEP_LOW_GUARD := 0.5  # 성채 체력이 최대의 이만큼 이하면 근접 수비 전부와 쏠 적이 없는 성벽 원거리가 성채 앞으로 모인다(2026-10-25 사용자)
 const KEEP_LEVEL := 9  # 공성 성 크기(성채 레벨 → GameData.interior_half) — 9 = 28칸 단계, 면마다 성문 2개(내구도는 면마다 하나)
 const CAMP_D := 24.0  # 공격 진영: 성벽 바깥면에서 이 거리
 static var SIDE_NAMES := [Lang.t("war_rules.side_names"), Lang.t("war_rules.side_names_2"), Lang.t("war_rules.side_names_3"), Lang.t("war_rules.side_names_4")]

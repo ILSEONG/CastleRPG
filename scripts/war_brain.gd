@@ -13,6 +13,7 @@ extends RefCounted
 
 const Formation := preload("res://scripts/formation.gd")
 const Balance := preload("res://scripts/balance.gd")
+const WarRulesB := preload("res://scripts/war_rules.gd")
 
 const LEASH := 11.0
 const FOCUS_BONUS := 1.6
@@ -246,7 +247,13 @@ func _defend(u) -> void:
 	var archer: bool = u.post_pos.y > Balance.WALL_H / 2.0
 	var own_open: bool = not battle.gate(s).is_alive()
 	var busy_here: bool = _press[s] > 0 or (own_open and _inside_at[s] > 0)
-	if archer:
+	if _keep_low:
+		# 성채 체력 절반 이하(2026-10-25 사용자): 근접은 모두, 성벽 원거리는 내 면 성벽 앞을 쏘고 있지 않으면 성채 앞으로 모인다
+		if not archer:
+			want = battle.keep_guard_spot(s, spot)
+		elif not (busy_here and u.current_target() != null):
+			want = battle.keep_guard_spot(s, 10 + spot)  # 근접(0~9번) 뒷줄
+	elif archer:
 		# 성벽 원거리: 성채가 위협받는데 성벽에서 쏠 적이 없으면 내려가 성채 앞에서 쏜다
 		if _keep_threat > 0 and u.current_target() == null and not busy_here:
 			want = battle.keep_guard_spot(s, 10 + spot)
@@ -265,11 +272,13 @@ func _defend(u) -> void:
 		u.set_home(want, u.current_target() == null)
 
 
-## 성 둘레 형세(0.5초마다 한 번): 면마다 성 밖 공격 영웅 수(_press), 면마다 성 안 공격 영웅 수(_inside_at), 성채 근처 공격 영웅 수(_keep_threat).
+## 성 둘레 형세(0.5초마다 한 번): 면마다 성 밖 공격 영웅 수(_press), 면마다 성 안 공격 영웅 수(_inside_at), 성채 근처 공격 영웅 수(_keep_threat),
+## 성채 체력 절반 이하(_keep_low — 근접 전부와 쏠 적이 없는 성벽 원거리가 성채 앞으로).
 var _survey_t := -INF
 var _press := [0, 0, 0, 0]
 var _inside_at := [0, 0, 0, 0]
 var _keep_threat := 0
+var _keep_low := false  # 성채 체력이 WarRules.KEEP_LOW_GUARD 이하: 수비가 성채로 모인다
 
 
 func _survey() -> void:
@@ -287,6 +296,7 @@ func _survey() -> void:
 		elif _near_wall(a.global_position):
 			_press[_side_of(a.global_position)] += 1
 	_keep_threat = battle.keep_threat()
+	_keep_low = battle.keep != null and battle.keep.is_alive() and battle.keep.hp <= battle.keep.hp_max * WarRulesB.KEEP_LOW_GUARD
 	_assign_support()
 
 
