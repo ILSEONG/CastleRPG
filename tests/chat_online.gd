@@ -78,9 +78,15 @@ func _ready() -> void:
 	_check(hm == "%02d:%02d" % [want.hour, want.minute] or hm.length() == 5, "line time is KST hh:mm", hm)
 	await _frames(3)
 	var shown := false
+	var xs := {}  # 줄 글(머리표) 왼쪽 끝 x — 안내 줄(시각 없음)과 같아야 한다
 	for c in _panel.list.get_children():
-		if c.get_child_count() > 0 and c.get_child(0) is RichTextLabel and c.get_child(0).get_parsed_text().begins_with(hm + " [전체]"):
-			shown = true
+		if c.get_child_count() > 0 and c.get_child(0) is HBoxContainer:
+			var row: HBoxContainer = c.get_child(0)
+			var rt: RichTextLabel = row.get_child(1)
+			xs[roundi(rt.global_position.x)] = true
+			if row.get_child(0).text == hm and rt.get_parsed_text().begins_with("[전체]"):
+				shown = true
+	_check(xs.size() == 1, "every line's [channel] tag starts at the same x (welcome line too)", str(xs.keys()))
 	_check(shown and _panel.clock(0.0) == "", "chat lines start with hh:mm (none on the welcome line)", hm)
 	_panel.input.text = "또 보내기"
 	_panel.send()
