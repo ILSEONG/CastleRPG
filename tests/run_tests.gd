@@ -172,8 +172,8 @@ func test_game_data() -> void:
 	GameData.load_tables()
 	check(GameData.errors == 0, "default tables load without errors")
 	var grunt := GameData.monster("grunt")
-	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 ×5(grunt 2 → 10, epic_boss 50 → 250)
-	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 10 and GameData.monster("epic_boss").gold == 250, "monster table values")
+	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 ×5(grunt 2 → 10, epic_boss 50 → 250) 뒤 절반(grunt 5, epic_boss 125)
+	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 5 and GameData.monster("epic_boss").gold == 125, "monster table values")
 	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
 		for kind in ["grunt", "epic_boss"]:
 			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])
@@ -187,8 +187,8 @@ func test_game_data() -> void:
 	var r29 := GameData.stage(29)
 	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.10 * 39), "stage beyond table extrapolates hp_mult")
 	check(int(GameData.stage(40).wave_size) == 8 and int(GameData.stage(200).waves) == 3, "extrapolated waves/size stay 3 x 8 (flat table)")
-	check(GameData.kill_gold_tenths("grunt", 1) == 100 and GameData.kill_gold_tenths("grunt", 2) == 121 and GameData.kill_gold_tenths("grunt", 3) == 143, "kill_gold_tenths = gold x gold_mult in tenths (grunt 10: 10 x 1.21 -> 121, 10 x 1.43 -> 143)")
-	check(GameData.kill_gold_tenths("epic_boss", 2) == 3025 and GameData.kill_gold_tenths("grunt", 31) == 943, "kill_gold_tenths boss (250 x 1.21) and extrapolated stage (9.07 x 7/6.8 x 1.01)")
+	check(GameData.kill_gold_tenths("grunt", 1) == 50 and GameData.kill_gold_tenths("grunt", 2) == 61 and GameData.kill_gold_tenths("grunt", 3) == 72, "kill_gold_tenths = gold x gold_mult in tenths, rounded half up (grunt 5: 5 x 1.21 = 6.05 -> 61, 5 x 1.43 = 7.15 -> 72)")
+	check(GameData.kill_gold_tenths("epic_boss", 2) == 1513 and GameData.kill_gold_tenths("grunt", 31) == 472, "kill_gold_tenths boss (125 x 1.21 = 151.25 -> 1513) and extrapolated stage (5 x 9.07 x 7/6.8 x 1.01 = 47.15 -> 472)")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
 	var mp := "user://t_monsters.csv"
 	var sp := "user://t_stages.csv"
@@ -1013,7 +1013,7 @@ func test_new_buildings() -> void:
 	check(GameData.building_name("farm#2") == "농장 2" and GameData.building_def("farm#2").id == "farm" and GameData.resource_of_building("farm#2") == "food", "copies use the type's row")
 	check(Balance.building("lumber#2").name == "벌목장 2" and not Balance.building("lumber#2").has("cell") and Balance.building("lumber#2").size == Vector2i(3, 3)
 		and Balance.entries().size() == GameData.building_keys().size() - 1, "Balance entries include copies (no default cell; the gate is not a plot)")
-	check(GameData.goldmine_per_min(1) == 20 and GameData.goldmine_per_min(30) == 3286 and GameData.accum_cap_min(2) == 840.0 and GameData.guild_helps(10) == 11, "goldmine / warehouse / guild hall numbers")
+	check(GameData.goldmine_per_min(1) == 10 and GameData.goldmine_per_min(30) == 1643 and GameData.accum_cap_min(2) == 840.0 and GameData.guild_helps(10) == 11, "goldmine / warehouse / guild hall numbers")
 	var now := 1.8e9
 	var e = _econ(now)
 	check(e.unbuilt.has("lumber#2") and e.unbuilt.has("goldmine") and not e.unbuilt.has("lumber") and e.last_collect.has("lumber#2") and e.last_collect.has("goldmine"), "new game: copies and new buildings are lots")
@@ -1025,9 +1025,9 @@ func test_new_buildings() -> void:
 	e.complete_due(now + 1e6)
 	check(e.is_built("goldmine") and e.building_level("goldmine") == 1, "goldmine built at Lv 1")
 	var t0: float = e.last_collect.goldmine
-	check(e.pending("goldmine", t0 + 600.0) == 200 and e.pending("goldmine", t0 + 1e7) == 20 * 720, "goldmine pending: 20/min, capped at 720 min")
+	check(e.pending("goldmine", t0 + 600.0) == 100 and e.pending("goldmine", t0 + 1e7) == 10 * 720, "goldmine pending: 10/min, capped at 720 min")
 	var g0: int = e.gold_tenths
-	check(e.collect("goldmine", t0 + 600.0) == 200 and e.gold_tenths - g0 == 2000, "collect the goldmine adds gold")
+	check(e.collect("goldmine", t0 + 600.0) == 100 and e.gold_tenths - g0 == 1000, "collect the goldmine adds gold")
 	e.unbuilt.erase("warehouse")
 	e.levels.warehouse = 2
 	check(e.cap_min() == 840.0 and e.pending("lumber", float(e.last_collect.lumber) + 1e7) == 840 * 100, "a Lv 2 warehouse raises the cap by 120 min")
@@ -1617,15 +1617,15 @@ func test_gold_tenths() -> void:
 	check(e.gold_tenths == 70, "setting whole gold writes x10 tenths")
 	e.gold_tenths = 5
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 126 and e.gold == 12, "an offline kill adds 12.1 gold at stage 2 on top of 0.5 and shows 12")
+	check(e.gold_tenths == 66 and e.gold == 6, "an offline kill adds 6.1 gold at stage 2 (5 x 1.21 = 6.05 rounded) on top of 0.5 and shows 6")
 	e.add_kill("grunt", 2)
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 368 and e.gold == 36, "tenths accumulate across kills (0.5 + 36.3 shows 36)")
+	check(e.gold_tenths == 188 and e.gold == 18, "tenths accumulate across kills (0.5 + 18.3 shows 18)")
 	e.save()
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var saved = JSON.parse_string(f.get_as_text())
 	f.close()
-	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 368 and not saved.has("gold"), "save writes the current version with gold_tenths")
+	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 188 and not saved.has("gold"), "save writes the current version with gold_tenths")
 	var v1 := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 	v1.store_string(JSON.stringify({"version": 1, "gold": 41, "res": {"wood": 3, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}))
 	v1.close()
@@ -4924,7 +4924,7 @@ func test_research_r24() -> void:
 	e.research_levels = {"plunder": 2}
 	var g0: int = e.gold_tenths
 	e.add_kill("grunt", 1)
-	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3327, "kill gold = floor(tenths x 1.10): grunt 100 -> 110, boss 3025 -> 3327")
+	check(e.kill_tenths("grunt", 1) == 55 and e.gold_tenths == g0 + 55 and e.kill_tenths("epic_boss", 2) == 1664, "kill gold = floor(tenths x 1.10): grunt 50 -> 55, boss 1513 -> 1664")
 	e.research_levels = {"drill_manual": 5, "logistics": 5}
 	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 4050, "wood": 2700}
 		and EconomyScript.train_cost("infantry", 3) == {"food": 4500, "wood": 3000}, "training: time / 1.15, cost x 0.90 rounded (4500/3000 -> 4050/2700)")
@@ -5002,10 +5002,10 @@ func test_research_r24() -> void:
 func test_offline_gold() -> void:
 	GameData.load_tables()
 	var per := GameData.kill_gold_tenths("grunt", 1)
-	check(per == 100 and GameData.config_num("offline_gold_mult") == 0.4 and GameData.config_num("fever_kills") == 900.0, "grunt 100 tenths at stage 1, mult 0.4, fever 900")
-	check(EconomyScript.offline_reward(3600.0, 1, per) == {"sec": 3600.0, "kills": 5400, "tenths": 216000}, "1 h: 5400 kills, 21,600 gold (40%)")
-	check(EconomyScript.offline_reward(59.9, 1, per).tenths == 0 and EconomyScript.offline_reward(60.0, 1, per) == {"sec": 60.0, "kills": 90, "tenths": 3600}, "under 60 s nothing")
-	check(EconomyScript.offline_reward(360000.0, 1, per) == {"sec": 43200.0, "kills": 64800, "tenths": 2592000}, "capped at 12 h")
+	check(per == 50 and GameData.config_num("offline_gold_mult") == 0.4 and GameData.config_num("fever_kills") == 900.0, "grunt 50 tenths at stage 1, mult 0.4, fever 900")
+	check(EconomyScript.offline_reward(3600.0, 1, per) == {"sec": 3600.0, "kills": 5400, "tenths": 108000}, "1 h: 5400 kills, 10,800 gold (40%)")
+	check(EconomyScript.offline_reward(59.9, 1, per).tenths == 0 and EconomyScript.offline_reward(60.0, 1, per) == {"sec": 60.0, "kills": 90, "tenths": 1800}, "under 60 s nothing")
+	check(EconomyScript.offline_reward(360000.0, 1, per) == {"sec": 43200.0, "kills": 64800, "tenths": 1296000}, "capped at 12 h")
 	var tmp := OS.get_temp_dir().path_join("castle_offline_%d.json" % OS.get_process_id())
 	var e = _econ(1.8e9)
 	e.save_path = tmp
@@ -5017,13 +5017,13 @@ func test_offline_gold() -> void:
 	var got := []
 	e2.offline_reported.connect(func(r): got.append(r))
 	e2.claim_offline(1, from + 3600.0)
-	check(from > 0.0 and e2.gold_tenths == 216000 and got == [{"away_sec": 3600.0, "kills": 5400, "gold_tenths": 216000}] and e2.offline_report == got[0],
-		"load → claim after 1 h: +21,600 gold and one report (from=%s gold=%d got=%s)" % [from, e2.gold_tenths, got])
+	check(from > 0.0 and e2.gold_tenths == 108000 and got == [{"away_sec": 3600.0, "kills": 5400, "gold_tenths": 108000}] and e2.offline_report == got[0],
+		"load → claim after 1 h: +10,800 gold and one report (from=%s gold=%d got=%s)" % [from, e2.gold_tenths, got])
 	e2.claim_offline(1, from + 7200.0)
-	check(e2.gold_tenths == 216000 and got.size() == 1, "a second claim without leaving again gives nothing")
+	check(e2.gold_tenths == 108000 and got.size() == 1, "a second claim without leaving again gives nothing")
 	e2._away_from = from + 7200.0  # 백그라운드로 갔다(PAUSED)
 	e2.claim_offline(1, from + 7230.0)
-	check(e2.gold_tenths == 216000 and got.size() == 1, "back after 30 s: no gold, no report")
+	check(e2.gold_tenths == 108000 and got.size() == 1, "back after 30 s: no gold, no report")
 	var e3 = _econ(1.8e9)
 	e3.claim_offline(1, 1.8e9)
 	check(e3.gold_tenths == 0 and e3.offline_report.is_empty(), "a new game (no save) has nothing to claim")

@@ -97,12 +97,13 @@ func _draw_face() -> void:
 		_draw_line(lines[k], x0, PAD + (row0 + k + 1) * LINE_H - 8.0, sz.x - 8.0)
 
 
-## 한 줄: 시:분 [채널] 이름: 내용(넘치면 …). 시스템 줄은 이름 없이 주황 글씨, 안내 줄은 시각 없이.
+## 한 줄: 시:분 [채널] 이름: 내용(넘치면 …). 시스템 줄은 이름 없이 주황 글씨.
+## 시:분 칸은 너비가 고정이라 시각이 없는 안내 줄도 [채널] 머리표가 위아래 줄과 같은 자리(사용자 2026-10-25).
 func _draw_line(m: Dictionary, x: float, y: float, right: float) -> void:
 	var hm := ChatPanel.clock(float(m.get("at", 0)))
 	if hm != "":
 		_face.draw_string(FONT, Vector2(x, y), hm, HORIZONTAL_ALIGNMENT_LEFT, -1, TIME_SIZE, TIME_COLOR)
-		x += FONT.get_string_size(hm, HORIZONTAL_ALIGNMENT_LEFT, -1, TIME_SIZE).x + 6.0
+	x += ChatPanel.time_width(TIME_SIZE) + 6.0
 	var ch: String = m.get("ch", "all")
 	var tag := "[%s]" % CH_NAMES.get(ch, "")
 	var tc: Color = CH_COLORS.get(ch, Color.WHITE)

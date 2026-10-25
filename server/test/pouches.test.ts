@@ -26,7 +26,7 @@ test('pouches.ts: 12종, 보상 키 → 주머니, 더하기·빼기', () => {
   assert.deepEqual(P.normalize({ gold_10: 2, res_30: 0, x: 4, gold_60: 1.5 }), { gold_10: 2 })
 })
 
-test('출석 1일차 골드 주머니(30분) → 열면 스테이지 1 방치 골드 30분(108,000 tenths), 다시 열면 not_enough', async () => {
+test('출석 1일차 골드 주머니(30분) → 열면 스테이지 1 방치 골드 30분(54,000 tenths), 다시 열면 not_enough', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   let r = await S.req('POST', '/v1/attendance/claim', { token, body: { day: 1 } })
@@ -34,8 +34,8 @@ test('출석 1일차 골드 주머니(30분) → 열면 스테이지 1 방치 �
   const before = r.json.player.gold_tenths
   r = await open(token, 'gold_30')
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.opened, { id: 'gold_30', count: 1, gold_tenths: 108_000, res: {} })
-  assert.equal(r.json.player.gold_tenths, before + 108_000)
+  assert.deepEqual(r.json.opened, { id: 'gold_30', count: 1, gold_tenths: 54_000, res: {} })
+  assert.equal(r.json.player.gold_tenths, before + 54_000)
   assert.deepEqual(r.json.player.pouches, {})
   assert.equal((await open(token, 'gold_30')).json.error, 'not_enough')
   assert.equal((await open(token, 'gold_15')).status, 404)
@@ -65,7 +65,7 @@ test('미션 보상의 주머니: 일일 처치 미션 → 골드 주머니(10�
   const r = await S.req('POST', '/v1/mission/claim', { token, body: { id: 'd_kill' } })
   assert.equal(r.status, 200)
   assert.deepEqual(r.json.player.pouches, { gold_10: 1 })
-  assert.equal((await open(token, 'gold_10')).json.opened.gold_tenths, 36_000)
+  assert.equal((await open(token, 'gold_10')).json.opened.gold_tenths, 18_000)
 })
 
 test('받을 것이 없으면(튜토리얼: 자원 건물이 공터) 409 empty, 주머니는 남는다', async () => {

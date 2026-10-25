@@ -260,15 +260,15 @@ test('효과: 판매(sell_pct, 자원마다 내림 — 단일·all·items), 처�
   r = await S.req('POST', '/v1/sell', { token, body: { res: 'all' } })
   assert.equal(r.json.gold_gained, want(5, 'stone', 2) + want(6, 'food', 1))
   assert.ok(want(1000, 'wood', 1) > R.sellValue(1000, 1, rates.wood))
-  // 처치 골드: 1단계 grunt 100 tenths × 1.15 = 115, 보스 2500 → 2875
+  // 처치 골드: 1단계 grunt 50 tenths × 1.15 = 57.5 → 57(내림), 보스 1250 → 1437.5 → 1437
   await setResearch(id, { plunder: 3 })
   S.clock.t = T0 + 60 // 처치 상한 버킷: 가입 뒤 30초
-  const base = R.killGoldTenths(10, G.stages[0])
-  assert.equal(base, 100)
+  const base = R.killGoldTenths(5, G.stages[0])
+  assert.equal(base, 50)
   const before = (await player(token)).gold_tenths
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 1, stage: 1, kills: { grunt: 3, epic_boss: 1 } } })
-  assert.equal(r.json.gold_gained_tenths, 3 * 115 + 2875)
-  assert.equal(r.json.player.gold_tenths, before + 3 * 115 + 2875)
+  assert.equal(r.json.gold_gained_tenths, 3 * 57 + 1437)
+  assert.equal(r.json.player.gold_tenths, before + 3 * 57 + 1437)
 })
 
 test('효과: 훈련 시간(train_speed_pct, 반올림 없음)·비용(train_cost_pct, 반올림)·취소 환불(할인된 비용의 절반), 인구(pop_add)', async () => {

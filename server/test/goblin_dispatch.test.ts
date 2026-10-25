@@ -54,9 +54,9 @@ test('황금 고블린: 방치 골드 15분, 4분 30초 안에 또 받으면 too
   const p0 = (await S.req('GET', '/v1/player', { token })).json.player
   let r = await S.req('POST', '/v1/goblin/claim', { token })
   assert.equal(r.status, 200)
-  assert.equal(r.json.goblin.gold_tenths, 54_000) // 스테이지 1 방치 골드 15분(주머니 10분 = 36,000)
+  assert.equal(r.json.goblin.gold_tenths, 27_000) // 스테이지 1 방치 골드 15분(주머니 10분 = 18,000)
   assert.equal(r.json.goblin.n, 1)
-  assert.ok(r.json.player.gold_tenths >= p0.gold_tenths + 54_000)
+  assert.ok(r.json.player.gold_tenths >= p0.gold_tenths + 27_000)
   S.clock.t = T0 + GB.MIN_GAP_SEC - 1
   r = await S.req('POST', '/v1/goblin/claim', { token })
   assert.equal(r.json.error, 'too_soon')
