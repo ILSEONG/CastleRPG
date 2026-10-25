@@ -1460,11 +1460,11 @@ func open_pouch(id: String, count: int, stage_n: int) -> bool:
 
 # --- 황금 고블린(서버 goblin.ts): 성 전투 지도에 5~10분마다 나와 돌아다니다 영웅이 잡으면 보따리(방치 골드 GOBLIN_GOLD_MIN분 + 덤) ---
 
-const GOBLIN_GOLD_MIN := 15  # 서버 GB.GOLD_MIN
+const GOBLIN_GOLD_MIN := 30  # 서버 GB.GOLD_MIN. 처치 골드 절반(2026-10-25) 뒤에도 예전 15분치와 같은 골드
 signal goblin_claimed(got: Dictionary)  # {gold_tenths, reward(덤: 가속·다이아), n} — 응답이 왔을 때(오프라인은 곧바로)
 
 
-## 지금 방치 골드 GOBLIN_GOLD_MIN분(tenths) — 방치 주머니 골드와 같은 식(10분 주머니 × 1.5).
+## 지금 방치 골드 GOBLIN_GOLD_MIN분(tenths) — 방치 주머니 골드와 같은 식(10분 주머니 × 3).
 func goblin_gold_tenths(stage_n: int) -> int:
 	return int(pouch_value("gold_10", stage_n).gold_tenths) * GOBLIN_GOLD_MIN / 10
 
