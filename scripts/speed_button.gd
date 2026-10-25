@@ -13,11 +13,14 @@ extends CanvasLayer
 ## 건물·훈련·연구·방치 수입·초기화는 실제 시각(Economy.time_now)이라 배속과 무관.
 ## 자리: 왼쪽 아래, 오른쪽 아래 [메뉴] 토글 버튼과 같은 높이(사용자 2026-10-07 "메뉴 버튼과 같은 높이") — 메뉴가 없으면 화면 높이 CENTER_Y 지점.
 ## 단 하단 영웅 초상화 줄·튜토리얼 카드보다 위(매 프레임 맞춘다). 채팅 줄과 [핫딜] 버튼은 이 버튼을 따라온다.
+## 던전·PVP·길드 보스(사용자 2026-10-25 "여기서는 왜 배속버튼이 위에있어?"): 초상화 줄 바로 위, 오른쪽 [스킬 AUTO]와 같은 높이로
+## 마주 본다(성 화면과 같은 왼쪽 아래). [스킬 AUTO]가 없으면 화면 아래쪽 BOTTOM_GAP 위.
 
 const UiKit := preload("res://scripts/ui_kit.gd")
 const Prefs := preload("res://scripts/prefs.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 const HudScript := preload("res://scripts/hud.gd")
+const AutoScript := preload("res://scripts/skill_auto_button.gd")
 
 const SPEED := 1.5
 const LEVELS := [1.0, 1.5, 2.0]  # 누를 때마다 다음 단계(서버 rules.MAX_GAME_SPEED = 마지막 값)
@@ -28,6 +31,7 @@ const SIZE := Vector2(84, 84)
 const SIDE := 16.0
 const ABOVE := 12.0  # 탭 바·초상화 줄·미션 카드 위 여백
 const CENTER_Y := 0.70  # 버튼 가운데 = 화면 높이의 이 지점(왼쪽 중하단)
+const BOTTOM_GAP := 20.0  # 전투 장면에 [스킬 AUTO]가 없을 때 화면 아래에서 띄우는 거리(초상화 줄과 같은 여백)
 const OFF_COLOR := Color(0.30, 0.34, 0.46)  # 오른쪽 아래 메뉴 버튼과 같은 강철색
 
 ## 히트스톱(camera_rig)이 끝날 때 되돌릴 배율. 0이면 이 버튼이 손대지 않았다(히트스톱은 시작 전 배율로 되돌린다).
@@ -44,6 +48,8 @@ var menu  # side_menu.gd(그 [메뉴] 토글과 아래 끝을 맞춘다)
 var below  # build_button.gd(성 화면 [건물] 버튼 — 보이면 그 위로, 2026-10-13)
 var button: Button
 var _face: Control
+var _looks := 0
+var _auto  # 전투 장면의 skill_auto_button.gd(찾으면 같은 높이로)
 
 
 static func is_on() -> bool:
@@ -184,6 +190,11 @@ func _process(_delta: float) -> void:
 
 func _place() -> void:
 	var vh := get_viewport().get_visible_rect().size.y
+	if not castle:
+		var a = _battle_auto()
+		var ab: float = a.button.position.y + a.button.size.y if a != null and a.button.visible else vh - BOTTOM_GAP
+		button.position = Vector2(SIDE, ab - SIZE.y)
+		return
 	var bottom := vh * CENTER_Y + SIZE.y / 2.0  # 버튼 아래 끝(위에서 잰 y)
 	if menu != null and is_instance_valid(menu) and menu.toggle != null and menu.toggle.size.y > 0.0:
 		bottom = menu.toggle.global_position.y + menu.toggle.size.y  # [메뉴] 토글과 같은 높이
@@ -196,6 +207,27 @@ func _place() -> void:
 	if below != null and is_instance_valid(below) and below.visible and below.button != null:
 		bottom = minf(bottom, below.button.position.y - ABOVE)  # [건물] 버튼 위
 	button.position = Vector2(SIDE, bottom - SIZE.y)
+
+
+## 이 버튼이 붙은 전투 장면의 [스킬 AUTO] 버튼(없으면 null).
+func _battle_auto():
+	if _auto != null and is_instance_valid(_auto):
+		return _auto
+	var p := get_parent()
+	if p != null and _looks < 30:  # 장면 HUD는 이 버튼보다 늦게 만들어진다: 처음 몇 프레임만 찾아본다(매 프레임 트리를 훑지 않게)
+		_looks += 1
+		_auto = _find_auto(p)
+	return _auto
+
+
+func _find_auto(n: Node):
+	for c in n.get_children():
+		if c.get_script() == AutoScript:
+			return c
+		var f = _find_auto(c)
+		if f != null:
+			return f
+	return null
 
 
 func _draw_face() -> void:
