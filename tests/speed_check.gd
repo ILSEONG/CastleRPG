@@ -170,6 +170,14 @@ func _run() -> void:
 	await _frames(10)
 	var dsp = _child_with(_main._dungeon, "res://scripts/speed_button.gd")
 	_check(_main._dungeon != null and dsp != null and dsp.button.visible, "dungeon has the speed button", "")
+	if dsp != null:
+		var dau = _deep_with(_main._dungeon, "res://scripts/skill_auto_button.gd")
+		var dr: Rect2 = dsp.button.get_global_rect()
+		_check(dau != null and dau.button.visible and absf(dr.end.y - dau.button.get_global_rect().end.y) < 1.0 and dr.position.x <= 20.0,
+			"dungeon: bottom-left, level with [스킬 AUTO] (above the portraits)", "%s vs %s" % [dr, dau.button.get_global_rect() if dau != null else Rect2()])
+		if out != "":
+			await _frames(30)
+			get_viewport().get_texture().get_image().save_png(out.get_basename() + "_dungeon.png")
 	_check(is_equal_approx(Engine.time_scale, 1.5), "dungeon runs at x1.5", str(Engine.time_scale))
 	if dsp != null:
 		dsp.button.pressed.emit()
@@ -222,6 +230,10 @@ func _run() -> void:
 		await _frames(2)
 		var psp = _child_with(pb, "res://scripts/speed_button.gd")
 		_check(pb.phase == pb.Phase.INTRO and is_equal_approx(Engine.time_scale, 1.0) and psp != null and psp.button.visible, "PVP intro: 1x, button shows", "%s phase %d" % [Engine.time_scale, pb.phase])
+		if psp != null:
+			var pau = _deep_with(pb, "res://scripts/skill_auto_button.gd")
+			var pr: Rect2 = psp.button.get_global_rect()
+			_check(pau != null and pau.button.visible and absf(pr.end.y - pau.button.get_global_rect().end.y) < 1.0, "PVP: level with [스킬 AUTO]", str(pr))
 		for i in 300:
 			if pb.phase != pb.Phase.INTRO:
 				break
@@ -255,6 +267,17 @@ func _file() -> Dictionary:
 
 func _castle_want() -> float:
 	return 1.0 if GameState.mode in [GameState.Mode.IDLE, GameState.Mode.COUNTDOWN] else 1.5
+
+
+func _deep_with(n: Node, path: String) -> Node:
+	var f := _child_with(n, path)
+	if f != null or n == null:
+		return f
+	for c in n.get_children():
+		f = _deep_with(c, path)
+		if f != null:
+			return f
+	return null
 
 
 func _child_with(n: Node, path: String) -> Node:
