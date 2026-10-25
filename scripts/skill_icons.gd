@@ -1,7 +1,8 @@
 extends RefCounted
 ## 발동형 스킬 썸네일(사용자 2026-10-06: 영웅 초상화 좌우 아래 쿨 칸에 스킬 그림). 아이콘(icons.gd)과 같은 평면 로우폴리 —
-## 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽. 칸 = 속성 색 원 + 그 위 그림 하나(KIND).
-## 그림은 icons.gd의 것을 다시 쓰거나(검·도끼·망치·과녁…) 여기서 정의한 스킬 그림(불덩이·눈송이·번개…). 텍스처 없음(APK 크기 0).
+## 각진 다각형, 면마다 단색, 밝은 면 하나, 얇은 진한 외곽. 칸 = 속성 색 둥근 바탕 + 그 위 그림 하나(KIND, draw_shaped).
+## 그림은 icons.gd의 것을 다시 쓰거나(검·도끼·망치·과녁…) 여기서 정의한 스킬 그림(불덩이·눈송이·번개…).
+## 2026-10-25부터 그린 아이콘(assets/ui/skills/<kind>.jpg)이 있으면 그것을 먼저 쓴다(texture_of).
 
 const Icons := preload("res://scripts/icons.gd")
 
@@ -57,6 +58,54 @@ const KIND := {
 }
 
 
+## 그린 아이콘(사용자 2026-10-25 "스킬 아이콘이 너무 허접해"): assets/ui/skills/<kind>.jpg(사용자가 ChatGPT로 만든 판을
+## dev/skill_icon_slice.py로 자른 것)가 있으면 도형 대신 그것을 동그랗게 잘라 그리고 속성 색을 진하게 한 테를 두른다(금색 아님).
+## 영웅이 안 쓰는 발동형은 같은 모습의 확률 패시브 그림을 빌린다.
+const TEX_DIR := "res://assets/ui/skills/"
+const TEX_ALIAS := {"inferno": "scorch", "tornado": "gale", "ice_spikes": "frost_spike", "solar_flare": "solar_spark", "lava_burst": "magma"}
+const TEX_UV_R := 0.47  # 원 안에 보일 그림 몫(칸 반지름 0.5 — 가장자리 검은 선 찌꺼기를 조금 깎는다)
+const CIRCLE_N := 32
+static var _tex := {}  # 그림 kind → Texture2D(없으면 null)
+static var _tex_gray := {}  # 그림 kind → 회색 Texture2D(잠김)
+static var _shapes := {}  # 그림 이름 → shapes
+const GRAD_STEPS := 10  # 도형 칸 둥근 그라데이션 단계
+
+
+static func texture_of(kind: String, gray := false) -> Texture2D:
+	var k: String = TEX_ALIAS.get(kind, kind)
+	if not _tex.has(k):
+		var path := TEX_DIR + k + ".jpg"
+		_tex[k] = load(path) if ResourceLoader.exists(path) else null
+	if not gray or _tex[k] == null:
+		return _tex[k]
+	if not _tex_gray.has(k):
+		var img: Image = _tex[k].get_image()
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_L8)
+		img.convert(Image.FORMAT_RGB8)
+		img.generate_mipmaps()
+		_tex_gray[k] = ImageTexture.create_from_image(img)
+	return _tex_gray[k]
+
+
+## 그린 아이콘을 at 중심 반지름 r 원으로 + 속성 색 테. alpha = 투명도(사라지는 머리 위 띠).
+static func draw_picture(ci: CanvasItem, kind: String, tex: Texture2D, at: Vector2, r: float, dim := false, alpha := 1.0) -> void:
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for i in CIRCLE_N:
+		var d := Vector2.from_angle(TAU * i / CIRCLE_N)
+		pts.append(at + d * r)
+		uvs.append(Vector2(0.5, 0.5) + d * TEX_UV_R)
+	var shade := 0.8 if dim else 1.0
+	ci.draw_colored_polygon(pts, Color(shade, shade, shade, alpha), uvs, tex)
+	var rim := bg_of(kind).darkened(0.5)
+	if dim:
+		rim = _gray(rim)
+	var w := maxf(1.5, r * 0.11)
+	ci.draw_arc(at, r - w / 2.0, 0.0, TAU, CIRCLE_N, Color(rim, alpha), w, true)
+
+
 static func glyph_of(kind: String) -> String:
 	return KIND.get(kind, ["burst", STEEL])[0]
 
@@ -65,31 +114,58 @@ static func bg_of(kind: String) -> Color:
 	return KIND.get(kind, ["burst", STEEL])[1]
 
 
-## ci에 at 중심 반지름 r 원 칸: 속성 바탕 + 밝은 위 반달 + 그림. dim이면 회색으로 눌러 그린다(잠김).
-static func draw_badge(ci: CanvasItem, kind: String, at: Vector2, r: float, dim := false) -> void:
-	var bg := bg_of(kind)
-	if dim:
-		bg = _gray(bg)
-	ci.draw_circle(at, r, bg)
-	var top := PackedVector2Array()
-	for i in 13:
-		top.append(at + Vector2.from_angle(PI + PI * i / 12.0) * r)
-	ci.draw_colored_polygon(top, Color(1, 1, 1, 0.14))
-	draw_glyph(ci, glyph_of(kind), at, r * 1.5, dim)
+## ci에 at 중심 반지름 r 원 칸: 그린 아이콘이 있으면 그것(draw_picture), 없으면 도형 칸(draw_shaped).
+## dim이면 회색으로 눌러 그린다(잠김). alpha = 투명도(사라지는 머리 위 띠).
+static func draw_badge(ci: CanvasItem, kind: String, at: Vector2, r: float, dim := false, alpha := 1.0) -> void:
+	var tex := texture_of(kind, dim)
+	if tex != null:
+		draw_picture(ci, kind, tex, at, r, dim, alpha)
+	else:
+		draw_shaped(ci, kind, at, r, dim, alpha)
 
 
-static func draw_glyph(ci: CanvasItem, glyph: String, center: Vector2, size_px: float, dim := false) -> void:
+## 도형 칸(2026-10-25 다듬음 — 예전엔 속성 색 원 + 밝은 위 반달 + 작은 그림): 속성 색 진한 테 + 가운데 위가 밝은 둥근 그라데이션 +
+## 위 왼쪽 밝은 면 두 개(로우폴리) + 그림자 깔린 큰 그림 + 위 테 하이라이트.
+static func draw_shaped(ci: CanvasItem, kind: String, at: Vector2, r: float, dim := false, alpha := 1.0) -> void:
+	var bg := _gray(bg_of(kind)) if dim else bg_of(kind)
+	var w := maxf(2.0, r * 0.12)
+	ci.draw_circle(at, r, Color(bg.darkened(0.55), alpha))
+	for i in GRAD_STEPS:
+		var t := float(i) / (GRAD_STEPS - 1)
+		ci.draw_circle(at + Vector2(0, -r * 0.18) * t, (r - w) * (1.0 - t * 0.85), Color(bg.darkened(0.2).lerp(bg.lightened(0.35), t), alpha))
+	var corner := func(a: float) -> Vector2: return at + Vector2.from_angle(PI * a) * (r - w)
+	ci.draw_colored_polygon(PackedVector2Array([at, corner.call(1.05), corner.call(1.35)]), Color(1, 1, 1, 0.10 * alpha))
+	ci.draw_colored_polygon(PackedVector2Array([at, corner.call(1.35), corner.call(1.7)]), Color(1, 1, 1, 0.16 * alpha))
+	var size_px := r * 1.56
+	var glyph := glyph_of(kind)
+	for shape in shapes_cached(glyph):  # 그림자
+		var pts := PackedVector2Array()
+		for p in shape[0]:
+			pts.append(at + Vector2(r * 0.05, r * 0.09) + p * size_px)
+		ci.draw_colored_polygon(pts, Color(0, 0, 0, 0.30 * alpha))
+	draw_glyph(ci, glyph, at, size_px, dim, alpha)
+	ci.draw_arc(at, r - w * 0.5, PI * 1.1, PI * 1.65, 12, Color(bg.lightened(0.55), 0.8 * alpha), w * 0.5, true)
+
+
+static func draw_glyph(ci: CanvasItem, glyph: String, center: Vector2, size_px: float, dim := false, alpha := 1.0) -> void:
 	var line_w := maxf(1.0, size_px / 28.0)
-	for shape in shapes(glyph):
+	for shape in shapes_cached(glyph):
 		var pts := PackedVector2Array()
 		for p in shape[0]:
 			pts.append(center + p * size_px)
-		var col: Color = shape[1]
+		var col: Color = _gray(shape[1]) if dim else shape[1]
 		if col.a > 0.0:
-			ci.draw_colored_polygon(pts, _gray(col) if dim else col)
+			ci.draw_colored_polygon(pts, Color(col, col.a * alpha))
 		if shape[2]:
 			pts.append(pts[0])
-			ci.draw_polyline(pts, OUTLINE, line_w)
+			ci.draw_polyline(pts, Color(OUTLINE, alpha), line_w)
+
+
+## shapes를 한 번만 만든다(칸·머리 위 띠가 매 프레임 그린다).
+static func shapes_cached(glyph: String) -> Array:
+	if not _shapes.has(glyph):
+		_shapes[glyph] = shapes(glyph)
+	return _shapes[glyph]
 
 
 static func _gray(c: Color) -> Color:

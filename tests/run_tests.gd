@@ -1669,6 +1669,9 @@ func test_heroes_table() -> void:
 	# 초상화 쿨 칸 스킬 그림(2026-10-06): 발동형마다 그림이 있고 그 그림은 도형이 있다
 	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE:
 		check(SkillIconsScript.KIND.has(k) and not SkillIconsScript.shapes(SkillIconsScript.glyph_of(k)).is_empty(), "skill %s has a thumbnail" % k)
+	# 그린 스킬 아이콘(2026-10-25): 그림이 있는 종류(발동형·패시브 86종)는 모두 assets/ui/skills 그림이 있다(안 쓰는 발동형은 짝 패시브 그림)
+	for k in SkillIconsScript.KIND:
+		check(SkillIconsScript.texture_of(k) != null, "skill %s has a painted icon" % k)
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,

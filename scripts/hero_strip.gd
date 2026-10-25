@@ -24,10 +24,10 @@ const SLOT_PAD := 6.0
 const SLOT_TALL := 10.0  # 스킬 칸 버튼 높이 = 지름 + 이만큼(위아래 누르는 여유)
 const PER_ROW := 6  # 한 줄 최대 영웅 수 — 넘으면 두 줄(성 배치 최대 12)
 const TWO_ROW_FACE := 64.0  # 두 줄일 때 초상화 상한(화면을 덜 가리게)
-const READY_GLOW := Color(1.0, 0.85, 0.35, 0.55)  # 수동: 준비된 칸 바깥 빛
+const READY_GLOW_A := 0.55  # 수동: 준비된 칸 바깥 빛(속성 색 밝게) 투명도
 const REQ_RING := Color(1.0, 1.0, 1.0, 0.95)  # 눌러서 쓰려는 중
 const READY_SEC := 0.5  # 남은 쿨이 이만큼 이하면 준비됨(조건을 기다리는 발동형은 0.5초마다 다시 본다)
-const SLOT_READY := Color(1.0, 0.8, 0.28)
+const READY_LIGHT := 0.55  # 준비된 칸 테 = 속성 색을 이만큼 밝게(2026-10-25 그린 아이콘 — 금색 테 대신)
 const SLOT_DARK := Color(0.12, 0.14, 0.2, 0.82)
 const SLOT_EMPTY := Color(0.12, 0.14, 0.2, 0.28)
 
@@ -131,7 +131,7 @@ func _draw_face(c: Control, h) -> void:
 
 ## 초상화 위 스킬 칸(사용자 2026-10-23 "스킬 버튼이 너무 작을 수 있으니 검토" — 예전엔 초상화 양옆 아래 지름 ~24 px 그림뿐이었다):
 ## [첫 액티브][둘째 액티브]를 초상화 위에 나란히, 칸마다 열 폭의 반 × (지름 + SLOT_TALL)을 누를 수 있다(지름은 열 폭에 맞춰 최대 SLOT_MAX).
-## 칸 = 스킬 그림(skill_icons.gd). 준비됨 = 그림 + 금 테(스킬 수동이면 바깥 빛), 쿨 = 남은 몫만큼 어둡게 덮고 시계 방향으로 걷힘 + 남은 초,
+## 칸 = 스킬 그림(skill_icons.gd). 준비됨 = 그림 + 속성 색 밝은 테(스킬 수동이면 바깥 빛), 쿨 = 남은 몫만큼 어둡게 덮고 시계 방향으로 걷힘 + 남은 초,
 ## 승급으로 잠김 = 자물쇠, 액티브가 하나뿐(R) = 오른쪽은 작은 흐린 점, 눌러서 쓰려는 중 = 흰 고리.
 ## 칸을 누르면 그 영웅이 그 스킬을 쓴다(hero.request_skill — [스킬 AUTO]를 끈 수동일 때 쓰는 길, 켜져 있어도 준비된 칸은 바로 쓴다).
 ## 누를 수 있는 건 내 편 영웅(hero.manual_ok — 공성전·총력전은 그림만). 칸을 눌러도 고른 영웅은 그대로(unit_picker.keep_select).
@@ -158,6 +158,7 @@ static func face_with_slots(face: Control, h, px: float, col_w := 0.0) -> VBoxCo
 		s.custom_minimum_size = Vector2(floorf(w / 2.0), d + SLOT_TALL)
 		s.mouse_filter = Control.MOUSE_FILTER_STOP if tappable else Control.MOUSE_FILTER_IGNORE
 		s.set_meta("slot_r", d / 2.0)
+		s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # 그린 스킬 아이콘(128 px)을 작게 그려도 거칠지 않게
 		s.draw.connect(func(): _draw_slot_at(s, wr.get_ref(), i))
 		s.pressed.connect(func(): tap_slot(wr.get_ref(), i))
 		face.draw.connect(s.queue_redraw)
@@ -231,12 +232,12 @@ static func _draw_slot(c: Control, at: Vector2, r: float, s: Dictionary, manual 
 	var ready := float(s.left) <= READY_SEC
 	if ready and manual:  # 수동: 준비된 칸은 바깥으로 빛이 맥동한다(눌러 쓰라는 표시)
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * 1.2)
-		c.draw_circle(at, r + 3.0 + 2.0 * pulse, Color(READY_GLOW, READY_GLOW.a * (0.5 + 0.5 * pulse)))
+		c.draw_circle(at, r + 3.0 + 2.0 * pulse, Color(SkillIcons.bg_of(kind).lightened(READY_LIGHT), READY_GLOW_A * (0.5 + 0.5 * pulse)))
 	SkillIcons.draw_badge(c, kind, at, r)
 	if s.get("req", false):  # 눌러서 쓰려는 중: 흰 고리
 		c.draw_arc(at, r + 1.0, 0.0, TAU, 28, REQ_RING, maxf(3.0, r * 0.14), true)
-	elif ready:  # 준비됨: 그림 그대로 + 금 테
-		c.draw_arc(at, r - 1.0, 0.0, TAU, 24, SLOT_READY, maxf(2.0, r * 0.16), true)
+	elif ready:  # 준비됨: 그림 그대로 + 속성 색 밝은 테
+		c.draw_arc(at, r - 1.0, 0.0, TAU, 24, SkillIcons.bg_of(kind).lightened(READY_LIGHT), maxf(2.0, r * 0.16), true)
 	else:  # 쿨: 남은 몫을 어둡게 덮고(시계 방향으로 걷힌다) 남은 초
 		var done := clampf(1.0 - float(s.left) / maxf(0.01, float(s.total)), 0.0, 1.0)
 		var pts := PackedVector2Array([at])

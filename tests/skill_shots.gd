@@ -1,6 +1,6 @@
 extends Node
 ## 스킬 칸·[스킬 AUTO] 화면(개발용, 2026-10-23): 스테이지 중 수동으로 두고 찍은 화면 + 영웅 12명(두 줄) 배치 화면.
-## 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/skill_shots.tscn -- --out=/tmp/skill.png
+## 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/skill_shots.tscn -- --out=/tmp/skill.png (아래 띠 원래 크기는 <out>_strip.png) [--heroes=valen,sylvana]
 
 const SkillAuto := preload("res://scripts/skill_auto_button.gd")
 
@@ -11,8 +11,12 @@ func _ready() -> void:
 	Economy.save_path = ""
 	Fever.save_path = ""
 	Economy.reset(Time.get_unix_time_from_system())
-	for h in preload("res://scripts/game_data.gd").heroes().slice(0, 5):
-		Economy.heroes[h.id] = 1
+	var ids: Array = preload("res://scripts/game_data.gd").heroes().slice(0, 5).map(func(h): return h.id)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--heroes="):  # 찍을 영웅(쉼표로)
+			ids = Array(a.substr(9).split(","))
+	for id in ids:
+		Economy.heroes[id] = 1
 	var was := SkillAuto.is_auto()
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
@@ -28,6 +32,7 @@ func _ready() -> void:
 	hs[1]._skx._cd[hs[1]._skx._cd.keys()[0]] = 5.0 if not hs[1]._skx._cd.is_empty() else 0.0  # 쿨 도는 칸 하나
 	await _frames(20)
 	var shots := [get_viewport().get_texture().get_image()]
+	var full: Image = shots[0].duplicate()
 	strip.heroes_fn = func(): return hs + hs + hs  # 12칸(두 줄) 배치 모양
 	await _frames(20)
 	shots.append(get_viewport().get_texture().get_image())
@@ -43,6 +48,7 @@ func _ready() -> void:
 		im.resize(540, 960)
 		sheet.blit_rect(im, Rect2i(0, 0, 540, 960), Vector2i(540 * i, 0))
 	sheet.save_png(out)
+	full.get_region(Rect2i(0, 1280 - 420, 720, 420)).save_png(out.get_basename() + "_strip.png")  # 아래 초상화·스킬 칸 원래 크기
 	print("saved ", out)
 	get_tree().quit(0)
 

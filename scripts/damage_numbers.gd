@@ -88,7 +88,6 @@ var _cut := {}          # 지금 컷인 {hero, text, sub, bg, skill, ult, life, 
 var _cut_q: Array = []  # 기다리는 컷인(같은 꼴, 앞부터)
 var _hero_cut := {}     # 영웅 id → 마지막 컷인을 띄운(줄 세운) _clock
 var _clock := 0.0       # 게임 시간(초, _process delta 합 — 배속을 따른다)
-var _glyphs := {}       # 그림 이름 → SkillIcons.shapes(매 프레임 새로 만들지 않게)
 var _dt := 0.0
 var _poison := {}       # 대상 id → {target, sum, age, pos}
 var _shown := false
@@ -97,6 +96,7 @@ var _cache := {}        # 정수 → 문자열
 
 func _enter_tree() -> void:
 	current = self
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS  # 그린 스킬 아이콘(128 px)을 작게 그려도 거칠지 않게
 
 
 func _exit_tree() -> void:
@@ -340,28 +340,9 @@ func _draw_tags() -> void:
 			draws += 2
 
 
-## 스킬 그림 동그라미(SkillIcons.draw_badge와 같은 모양, 사라질 때 투명도를 따른다).
+## 스킬 그림 동그라미(SkillIcons.draw_badge, 사라질 때 투명도를 따른다).
 func _badge(at: Vector2, r: float, skill: String, alpha: float) -> void:
-	draw_circle(at, r, Color(SkillIcons.bg_of(skill), alpha))
-	var top := PackedVector2Array()
-	for i in 13:
-		top.append(at + Vector2.from_angle(PI + PI * i / 12.0) * r)
-	draw_colored_polygon(top, Color(1, 1, 1, 0.14 * alpha))
-	var glyph := SkillIcons.glyph_of(skill)
-	if not _glyphs.has(glyph):
-		_glyphs[glyph] = SkillIcons.shapes(glyph)
-	var size_px := r * 1.5
-	var line_w := maxf(1.0, size_px / 28.0)
-	for shape in _glyphs[glyph]:
-		var pts := PackedVector2Array()
-		for q in shape[0]:
-			pts.append(at + q * size_px)
-		var col: Color = shape[1]
-		if col.a > 0.0:
-			draw_colored_polygon(pts, Color(col, col.a * alpha))
-		if shape[2]:
-			pts.append(pts[0])
-			draw_polyline(pts, Color(SkillIcons.OUTLINE, alpha), line_w)
+	SkillIcons.draw_badge(self, skill, at, r, false, alpha)
 
 
 ## 컷인: 왼쪽에서 기울어진 띠가 미끄러져 들어와 띠 위로 솟은 금빛 창 속 영웅 일러스트 + 영웅 이름 + 스킬 그림·이름을 보이고 왼쪽으로 빠진다.
