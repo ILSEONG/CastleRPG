@@ -46,10 +46,16 @@ func _ready() -> void:
 	_check(not Tutorial.complete(), "the mission is not done before the clear", "")
 	GameState.on_all_monsters_dead()  # 1-1 클리어 → 결과
 	_check(Tutorial.complete(), "the mission still counts while the guide is hidden (1-1 cleared → ✓)", "step=%d" % Tutorial.step)
-	await _cycle()
-	GameState.stop_stage()  # 방치로
-	var back := -1.0
+	# 연속 진행이어도 가이드 보상이 준비됐으면 결과 뒤 다음 라운드로 넘어가지 않고 대기(사용자 2026-10-25 "라운드 끝에 멈춤")
+	var counted := false
 	var t0 := Time.get_ticks_msec()
+	while GameState.mode != GameState.Mode.IDLE and Time.get_ticks_msec() - t0 < 10000:
+		await _watch(0.0)
+		counted = counted or GameState.mode == GameState.Mode.COUNTDOWN
+	_check(GameState.mode == GameState.Mode.IDLE and not counted and GameState.auto_continue,
+		"with 연속 진행 on and a guide reward ready, the round ends in idle (no countdown to the next round)", "mode=%d countdown=%s" % [GameState.mode, counted])
+	var back := -1.0
+	t0 = Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t0 < 3000:
 		await get_tree().process_frame
 		if _card.panel.visible:
@@ -66,8 +72,11 @@ func _ready() -> void:
 	GameState.start_stage()
 	Tutorial.tours_on = true  # 전투 중엔 「성 화면 둘러보기」가 떠선 안 된다
 	await _watch(1.0)
+	var hold: Callable = GameState.auto_hold
+	GameState.auto_hold = Callable()  # 카운트다운 동안 숨김을 보려고 이번만 멈춤을 끈다(멈춤은 1)에서 봤다)
 	GameState.on_all_monsters_dead()
 	await _cycle()
+	GameState.auto_hold = hold
 	for m in [GameState.Mode.STAGE, GameState.Mode.RESULT, GameState.Mode.COUNTDOWN]:
 		var name: String = GameState.Mode.keys()[m]
 		_check(int(_frames.get(m, 0)) > 0, "%s ran" % name, "")

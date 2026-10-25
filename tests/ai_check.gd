@@ -1172,12 +1172,12 @@ func _soldier_cases() -> void:
 	var best := -1.0
 	for s in by.infantry:
 		if s.slot == 0 and s.side != 0:
-			var spot: Vector3 = s.global_position + Formation.SIDE_DIR[s.side] * 3.0
+			var spot: Vector3 = s.global_position + Formation.SIDE_DIR[s.side] * 1.5  # 순찰 기병이 3 m 안쪽까지 돌아 1.5 m(2026-10-25)
 			var dmin: float = by.cavalry.map(func(c): return Formation.flat_distance(c.global_position, spot)).min()
 			if dmin > best:
 				best = dmin
 				gate_inf = s
-	var grunt = _spawn("grunt", gate_inf.side, gate_inf.global_position + Formation.SIDE_DIR[gate_inf.side] * 3.0)
+	var grunt = _spawn("grunt", gate_inf.side, gate_inf.global_position + Formation.SIDE_DIR[gate_inf.side] * 1.5)
 	await _frames(2)
 	_check(_alive(grunt) and grunt._target_hero == gate_inf, "(S) a monster in front of a gate goes for the infantry standing there",
 		"target=%s nearest cavalry %.1f m" % [grunt._target_hero if _alive(grunt) else null, best])
@@ -1360,14 +1360,20 @@ func _strike_sync(inf1, arc) -> void:
 	await _frames(1)
 	var counts := []
 	var home: Vector3 = inf1.global_position
-	for where in [Vector3(0, 0, 0), Vector3(0, 0, 500)]:
+	var cam := get_viewport().get_camera_3d()
+	var vs := get_viewport().get_visible_rect().size
+	var ro := cam.project_ray_origin(Vector2(-12, vs.y * 0.5))  # 화면 왼쪽 가장자리 바로 밖(발밑) — 몸은 화면에 걸친다
+	var rd := cam.project_ray_normal(Vector2(-12, vs.y * 0.5))
+	var edge := ro + rd * (-ro.y / rd.y)
+	for where in [Vector3(0, 0, 0), edge, Vector3(0, 0, 500)]:
 		inf1.global_position = where
 		var n := 0
 		for i in 8:
 			n += 1 if inf1._model.tick(0.016) else 0
 		counts.append(n)
 	inf1.global_position = home
-	_check(counts == [8, 2], "(S) on screen a soldier animates every frame, off screen every 4th frame", "advances=%s" % [counts])
+	_check(counts == [8, 8, 2], "(S) on screen a soldier animates every frame, also with its feet just past the screen edge (2026-10-25 skeletons stuttered coming in), far off screen every 4th frame",
+		"advances=%s edge=%s" % [counts, edge])
 	Engine.time_scale = SOLDIER_TIME_SCALE
 	inf1._target = null
 	arc._target = null

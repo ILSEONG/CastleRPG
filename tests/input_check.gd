@@ -1840,7 +1840,8 @@ func _rotate_ui(hud) -> void:
 func _fever_ui(hud) -> void:
 	var fb = hud._fever
 	Fever.reset()
-	Fever.gauge = 720
+	var fmax: int = Fever.kills_needed()
+	Fever.gauge = int(fmax * 0.36)  # 36%(fever_kills가 바뀌어도 — 10-23 2000 → 900)
 	await _frames(2)
 	var fr: Rect2 = fb.get_global_rect()
 	var br: Rect2 = hud._button.get_global_rect()
@@ -1848,7 +1849,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == 720 and hud._toast.visible and hud._toast.text == "몬스터 1280마리 더",
+	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더" % (fmax - int(fmax * 0.36)),
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)

@@ -313,6 +313,8 @@ func _ready() -> void:
 	pvp = get_node_or_null("/root/Pvp")
 	party = get_node_or_null("/root/Party")
 	fever = get_node_or_null("/root/Fever")
+	if gs != null:  # 연속 진행 중 가이드 보상이 준비되면 그 라운드 끝에 멈춘다 — 스테이지 중엔 카드가 숨으니 대기에서 보이게(사용자 2026-10-25)
+		gs.auto_hold = func(): return active() and complete()
 	_connect()
 	_start.call_deferred()  # 첫 장면이 붙은 뒤에 본다(체크 장면·개발 실행은 건너뛴다)
 
