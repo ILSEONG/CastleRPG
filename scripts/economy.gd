@@ -2463,7 +2463,7 @@ func start_training(building_id: String, n: int) -> bool:
 		notice.emit(TRAIN_TEXT.get(why, TRAIN_FAIL_TEXT))
 		return false
 	if net != null:
-		return _instant(start_training.bind(building_id, n), "/v1/soldiers/train", {"building": building_id, "count": n}, _train_fail_text.bind(false))
+		return _instant(start_training.bind(building_id, n), "/v1/soldiers/train", {"building": building_id, "count": n, "at": time_now()}, _train_fail_text.bind(false))
 	var cost := train_cost_now(GameData.soldier_of_building(building_id), n, train_tier(building_id))
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
@@ -2612,7 +2612,7 @@ func start_research(id: String) -> bool:
 			notice.emit(RESEARCH_TEXT.get(why, RESEARCH_FAIL_TEXT))
 		return false
 	if net != null:
-		return _instant(start_research.bind(id), "/v1/research/start", {"id": id}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
+		return _instant(start_research.bind(id), "/v1/research/start", {"id": id, "at": time_now()}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
 	var cost := research_cost(id)
 	for r in GameData.BUILD_RES:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
@@ -4206,7 +4206,7 @@ func _upgrade_online(id: String, cell: Variant = null) -> bool:
 			build = {"id": id, "finish": t0 + sec})
 	build_started.emit(id, t0 + sec)
 	_build_req = {"id": id, "cell": cell}
-	var body := {"building": id}
+	var body := {"building": id, "at": t0}  # 누른 시각(서버 시계) — 줄 서 늦게 가도 서버가 같은 시각부터 센다(사용자 2026-10-25 "5초로 다시 재설정")
 	if cell is Vector2i:
 		body["cell"] = [cell.x, cell.y]  # 자유 건설: 공터를 고른 자리에(서버도 같은 규칙으로 확인)
 	net.send("POST", "/v1/building/upgrade", body, _on_upgraded, _on_upgrade_failed, true, true)

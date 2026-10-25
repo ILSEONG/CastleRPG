@@ -1177,6 +1177,15 @@ export function createApp(opts: AppOptions) {
 
   // --- 입력 ---
 
+  // 시작 시각(사용자 2026-10-25 "남은 시간이 5초에서 갑자기 5초로 다시 재설정"): 앱은 누른 순간부터 타이머를 돌리는데, 요청은 앞선 요청(처치 보고 등)
+  // 뒤에 줄 서서 몇 초 늦게 올 수 있다. 서버가 받은 때부터 세면 응답에서 끝나는 시각이 늦어져 남은 시간이 되돌아간다. 그래서 앱이 보낸 누른 시각
+  // at(서버 시계 초)을 쓰되 지금 − START_SLACK_SEC ~ 지금으로 자른다(없거나 이상하면 지금).
+  const START_SLACK_SEC = 15
+  function startAt(b: Record<string, unknown>, now: number): number {
+    const at = b.at
+    return typeof at === 'number' && Number.isFinite(at) ? Math.min(now, Math.max(now - START_SLACK_SEC, at)) : now
+  }
+
   async function body(c: Context): Promise<Record<string, unknown>> {
     let b: unknown
     try {
@@ -1736,7 +1745,7 @@ export function createApp(opts: AppOptions) {
       const baseSec = lot && need === 0 ? R.cfgNum(g.config, 'lot_build_sec') // 튜토리얼 공터 첫 건설은 lot_build_sec초(사용자 2026-10-06)
         : R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100)) // 개정 24: 연구 build_speed_pct
       const helps = inGuild ? R.guildHelps(g.config, builtLevel(p, R.GUILD_HALL)) : 0 // 길드 회관: 길드원 도움(2026-10-13)
-      const finish = now + (helps > 0 ? R.afterHelps(baseSec, helps, g.config) : baseSec)
+      const finish = startAt(b0, now) + (helps > 0 ? R.afterHelps(baseSec, helps, g.config) : baseSec)
       const delta: Record<string, number> = {}
       for (const r of R.BUILD_RES) {
         const d = (collect?.res === r ? collect.amount : 0) - cost[r]
@@ -2821,7 +2830,7 @@ export function createApp(opts: AppOptions) {
       const cost = R.trainCost(g.config, s.id, count, tier, rb.train_cost_pct)
       if (Object.entries(cost).some(([r, v]) => (p.res[r] ?? 0) < v)) throw new ApiError(409, 'not_enough', `training ${count} costs ${JSON.stringify(cost)}`)
       const unit = tut ? R.cfgNum(g.config, 'tutorial_train_sec') : R.soldierUnitSec(g.config, lv)
-      const train = { count, tier, finish: now + count * (tut ? unit : unit / (1 + rb.train_speed_pct / 100)) }
+      const train = { count, tier, finish: startAt(b, now) + count * (tut ? unit : unit / (1 + rb.train_speed_pct / 100)) }
       const res = Object.fromEntries(Object.entries(cost).filter(([, v]) => v > 0).map(([r, v]) => [r, -v]))
       return {
         change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, tier, level: lv, unit_sec: unit, cost, finish: train.finish } } },
@@ -2878,7 +2887,8 @@ export function createApp(opts: AppOptions) {
   // not_enough_gold(rules.researchBlock 순서). 비용(자원, 골드 × 10 tenths)을 전부 빼고 진행(끝나는 시각 = 지금 + 연구 시간)·
   // economy_log research start는 version 가드 한 문장 — 같은 순간 두 번 보내도 하나는 409 research_busy다.
   app.post('/v1/research/start', auth, async (c) => {
-    const id = strField(await body(c), 'id')
+    const rb0 = await body(c)
+    const id = strField(rb0, 'id')
     const inGuild = await guildMember(c.get('playerId') as string) // 길드 회관 도움(2026-10-13)
     return mutate(c, (p, g, now) => {
       const def = g.research.find((d) => d.id === id)
@@ -2892,7 +2902,7 @@ export function createApp(opts: AppOptions) {
       const cost = R.researchCost(g.config, def, from)
       const helps = inGuild ? R.guildHelps(g.config, builtLevel(p, R.GUILD_HALL)) : 0 // 길드 회관: 길드원 도움(2026-10-13)
       const sec = R.afterHelps(R.researchSec(g.config, def, from, R.researchSpeed(g.config, bonus(p, g), lab)), helps, g.config)
-      const finish = now + sec
+      const finish = startAt(rb0, now) + sec
       const res = Object.fromEntries(R.BUILD_RES.filter((r) => cost[r] > 0).map((r) => [r, -cost[r]]))
       return {
         change: {
