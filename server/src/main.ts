@@ -6,8 +6,8 @@ import { readEnv } from './env.ts'
 import { enabledProviders } from './oauth.ts'
 import type { OAuthConfig } from './oauth.ts'
 import { planningEmpty, seed } from './seed.ts'
-import { WarLive } from './war_live.ts'
-import { PartyLive } from './party_live.ts'
+import { LIVE_PATH, WarLive } from './war_live.ts'
+import { PARTY_LIVE_PATH, PartyLive } from './party_live.ts'
 import { readPayments } from './payments.ts'
 
 let cfg: ReturnType<typeof readEnv>
@@ -62,6 +62,13 @@ const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
 })
 warLive.attach(server as import('node:http').Server)
 partyLive.attach(server as import('node:http').Server)
+// 실시간 방이 아닌 경로의 Upgrade 요청은 아무도 닫지 않아 소켓이 영원히 열려 있다 — 곧바로 끊는다
+server.on('upgrade', (req: import('node:http').IncomingMessage, sock: import('node:stream').Duplex) => {
+  const path = new URL(req.url ?? '/', 'http://x').pathname
+  if (path !== LIVE_PATH && path !== PARTY_LIVE_PATH) sock.destroy()
+})
+// 놓친 거부 하나로 하나뿐인 서버가 꺼지지 않게(Node 기본 = 프로세스 종료) — 남기고 계속 돈다
+process.on('unhandledRejection', (e) => console.error('[server] unhandled rejection:', (e as Error)?.stack ?? String(e)))
 
 // 자기 깨우기: 공개 주소로 들어오는 요청이어야 호스팅이 "활동"으로 센다(Render 무료 인스턴스 15분 규칙). 실패해도 경고만.
 if (cfg.keepAliveMin > 0) {

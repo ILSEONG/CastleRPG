@@ -29,7 +29,10 @@ export class PartyLive {
     server.on('upgrade', (req: IncomingMessage, sock: Duplex, head: Buffer) => {
       const url = new URL(req.url ?? '/', 'http://x')
       if (url.pathname !== PARTY_LIVE_PATH) return
-      void this.accept(req, sock, head, url)
+      this.accept(req, sock, head, url).catch((e) => { // 처리 안 된 거부는 프로세스를 끝낸다(war_live.ts와 같다)
+        console.warn(`[party] live accept failed: ${(e as Error).message}`)
+        sock.destroy()
+      })
     })
   }
 

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import { serve } from '@hono/node-server'
 import * as W from '../src/guild_war.ts'
-import { mergeSnap, WarLive } from '../src/war_live.ts'
+import { MAX_UNITS, mergeSnap, WarLive } from '../src/war_live.ts'
 import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
@@ -237,6 +237,17 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
     // 다른 길드 사람·토큰 없음은 못 들어온다
     const outsider = await member()
     await assert.rejects(open(outsider.token))
+    // uuid가 아닌 battle(대시 36개)은 DB 오류가 나기 전에 거절 — 처리 안 된 거부로 프로세스가 끝나지 않는다(이 테스트가 계속 돈다)
+    await assert.rejects(new Promise((res, rej) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}${pa.live}?battle=${'-'.repeat(36)}&token=${a.token}`)
+      ws.onopen = () => res(ws)
+      ws.onerror = () => rej(new Error('refused'))
+    }))
+    // 확인 중 오류가 나도 소켓만 닫는다
+    const canJoin = live.canJoin
+    live.canJoin = async () => { throw new Error('db down') }
+    await assert.rejects(open(b.token))
+    live.canJoin = canJoin
     // 방장이 나가면 B가 이어받는다(마지막 스냅샷과 함께)
     A.ws.close()
     await until(() => B.msgs.some((m) => m.t === 'host'))
@@ -359,4 +370,12 @@ test('war live mergeSnap: delta snaps keep earlier hero rows, other fields take 
   const b = mergeSnap(a, { c: 2, u: { '2': [6, 6] }, k: 90 }) as any
   assert.deepEqual(b, { c: 2, u: { '1': [0, 0], '2': [6, 6] }, k: 90 })
   assert.deepEqual(mergeSnap(b, 'junk'), 'junk')
+  // 행이 아닌 값(문자열·긴 배열·숫자 아닌 칸)은 버린다
+  assert.deepEqual((mergeSnap(b, { c: 3, u: { '3': 'x'.repeat(1000), '4': new Array(50).fill(0), '5': [1, 'a'], '6': [1, 2] } }) as any).u,
+    { '1': [0, 0], '2': [6, 6], '6': [1, 2] })
+  // 매번 새 키를 보내도 마지막 장은 MAX_UNITS 행을 넘지 않는다(넘으면 이번 장만 남긴다)
+  let last: any = null
+  for (let i = 0; i < 5; i++) last = mergeSnap(last, { c: i, u: Object.fromEntries(Array.from({ length: 400 }, (_, j) => [`${i}-${j}`, [j]])) })
+  assert.ok(Object.keys(last.u).length <= MAX_UNITS)
+  assert.ok(Object.hasOwn(last.u, '4-0'), 'the newest snap stays')
 })

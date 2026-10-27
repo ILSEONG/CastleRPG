@@ -25,6 +25,11 @@ const send = async (form: Record<string, string>) => {
 const code = async (id: string) => String((await S.db.query('select friend_code from players where id = $1', [id]))[0].friend_code)
 const requests = async () => (await S.req('GET', '/v1/admin/inquiries?filter=all', { token: admin.token })).json.inquiries.filter((q: any) => q.category === 'delete')
 
+test('양식 본문도 크기 상한(413) — 큰 양식 하나로 서버 메모리를 다 쓰지 못한다', async () => {
+  const r = await send({ code: 'x'.repeat(200_000), note: 'big' })
+  assert.equal(r.status, 413)
+})
+
 test('삭제 안내 페이지에 요청 양식, 사업자 정보', async () => {
   const r = await S.req('GET', '/legal/account-deletion')
   assert.ok(r.text.includes('action="/legal/account-deletion"') && r.text.includes('name="code"') && r.text.includes('227-15-93850'))

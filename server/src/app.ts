@@ -443,15 +443,15 @@ export function createApp(opts: AppOptions) {
     maxAge: 600,
   }))
 
-  // 본문은 다 읽기 전에 크기로 끊는다(Content-Length가 있으면 그것으로, 없으면 읽으면서 센다).
-  app.use('/v1/*', bodyLimit({
+  // 본문은 다 읽기 전에 크기로 끊는다(Content-Length가 있으면 그것으로, 없으면 읽으면서 센다). /v1 밖(웹 삭제 양식 /legal/*)도 — 큰 양식 하나로 메모리를 다 쓰지 못하게
+  app.use('*', bodyLimit({
     maxSize: MAX_BODY,
     onError: (c) => c.json({ error: 'payload_too_large', message: `request body must be at most ${MAX_BODY} bytes` }, 413),
   }))
 
   app.onError((err, c) => {
     if (err instanceof ApiError) return c.json({ error: err.code, message: err.message }, err.status as any)
-    console.error('[server] unhandled error:', err)
+    console.error('[server] unhandled error:', err.stack ?? err.message) // 오류 객체 전체는 남기지 않는다 — PG 오류의 where·detail에 요청 값이 들어 있다
     return c.json({ error: 'internal', message: 'internal server error' }, 500)
   })
   app.notFound((c) => c.json({ error: 'not_found', message: `no such endpoint: ${c.req.method} ${c.req.path}` }, 404))

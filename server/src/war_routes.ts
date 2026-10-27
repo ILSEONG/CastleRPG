@@ -407,7 +407,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
   if (live) {
     live.verify = d.verifyToken
     live.canJoin = async (battleId: string, pid: string) => {
-      if (!/^[0-9a-f-]{36}$/i.test(battleId)) return false
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(battleId)) return false // uuid가 아니면 DB가 오류를 낸다
       const [b] = await query('select roster, closed, extract(epoch from ends_at)::float8 as ends_at from guild_war_battles where id = $1', [battleId])
       return !!b && !b.closed && clock() < Number(b.ends_at) + 30 && (json(b.roster) as Any[]).some((s) => s.owner === pid)
     }

@@ -33,7 +33,11 @@ export class WarLive {
     server.on('upgrade', (req: IncomingMessage, sock: Duplex, head: Buffer) => {
       const url = new URL(req.url ?? '/', 'http://x')
       if (url.pathname !== LIVE_PATH) return
-      void this.accept(req, sock, head, url)
+      // 확인 중 오류(DB 오류 등)가 처리 안 된 거부로 새면 Node가 프로세스를 끝낸다 — 소켓만 닫는다
+      this.accept(req, sock, head, url).catch((e) => {
+        console.warn(`[war] live accept failed: ${(e as Error).message}`)
+        sock.destroy()
+      })
     })
   }
 
@@ -136,12 +140,20 @@ export class WarLive {
 
 // 방장은 바뀐 영웅 행만 보낸다(앱 war_battle.snapshot_delta) — 새로 들어온 사람·새 방장이 받을 마지막 장은 영웅 행(u)을 합친 것.
 // 행 말고는 새 장 값 그대로. 예전 앱(늘 전부 보냄)도 같다.
+// 행 = 숫자 몇 개(앱 war_hero/monster.puppet_row)만 받고, 합친 행이 MAX_UNITS를 넘으면 이번 장만 남긴다(2026-10-27 보안 점검:
+// 방장이 매번 새 키를 보내 마지막 장을 끝없이 키워 서버 메모리를 다 쓰지 못하게 — 정상 전투는 수백 행, 3초마다 전부 다시 온다).
+export const MAX_UNITS = 1024
+const MAX_ROW = 12
+const okRow = ([k, v]: [string, unknown]) => k.length <= 32 && Array.isArray(v) && v.length <= MAX_ROW && v.every((x) => typeof x === 'number')
+
 export function mergeSnap(prev: any, s: unknown): unknown {
-  if (!prev || !s || typeof s !== 'object' || Array.isArray(s)) return s
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return s
   const u = (s as Record<string, unknown>).u
-  if (!prev || typeof prev !== 'object' || !u || typeof u !== 'object' || Array.isArray(u)) return s
-  const pu = prev.u && typeof prev.u === 'object' && !Array.isArray(prev.u) ? prev.u : {}
-  return { ...(s as Record<string, unknown>), u: { ...pu, ...(u as Record<string, unknown>) } }
+  if (!u || typeof u !== 'object' || Array.isArray(u)) return s
+  const rows = Object.fromEntries(Object.entries(u).filter(okRow).slice(0, MAX_UNITS))
+  const pu = prev && typeof prev === 'object' && prev.u && typeof prev.u === 'object' && !Array.isArray(prev.u) ? prev.u : {}
+  const merged = { ...pu, ...rows }
+  return { ...(s as Record<string, unknown>), u: Object.keys(merged).length > MAX_UNITS ? rows : merged }
 }
 
 function send(ws: WebSocket, msg: unknown) {
