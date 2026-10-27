@@ -205,6 +205,34 @@ test('자동 로그인 세션: 같은 플레이어 토큰, 로그아웃하면 40
   }
 })
 
+test('관리자 계정 지키기: 결과를 받는 IP가 콜백(브라우저) IP와 다르면 403 admin_ip_mismatch(진행은 지운다) — 같거나 어느 쪽이든 모르면, 관리자가 아니면 그대로', async () => {
+  const P = fakeProviders()
+  const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })
+  try {
+    S.clock.t = T0
+    await S.db.query("insert into admin_emails (email) values ('boss@example.com')")
+    const at = (ip?: string) => (ip ? { headers: { 'cf-connecting-ip': ip } } : {})
+    const login = async (uid: string, cbIp?: string, pollIp?: string) => {
+      const a = await begin(S, 'google')
+      await S.req('GET', `/v1/auth/google/callback?${new URLSearchParams({ code: `uid:${uid}`, state: a.state })}`, at(cbIp))
+      const poll = () => S.req('POST', '/v1/auth/oauth/poll', { body: { state: a.state, verifier: a.verifier }, ...at(pollIp) })
+      return { r: await poll(), poll }
+    }
+    const phish = await login('BOSS', '198.51.100.1', '203.0.113.66') // 남(203.…)이 시작한 로그인을 관리자 브라우저(198.…)가 끝냈다
+    assert.deepEqual([phish.r.status, phish.r.json.error, phish.r.json.token], [403, 'admin_ip_mismatch', undefined])
+    assert.equal((await phish.poll()).status, 404)
+    assert.equal((await S.db.query('select count(*)::int as n from player_sessions'))[0].n, 0)
+    const same = await login('BOSS', '198.51.100.1', '198.51.100.1')
+    assert.equal(same.r.status, 200)
+    assert.equal((await S.req('GET', '/v1/player', { token: same.r.json.token })).json.player.admin, true)
+    assert.equal((await login('BOSS', undefined, '203.0.113.66')).r.status, 200, 'callback IP unknown')
+    assert.equal((await login('BOSS', '198.51.100.1')).r.status, 200, 'poll IP unknown')
+    assert.equal((await login('someone', '198.51.100.1', '203.0.113.66')).r.status, 200, 'not an admin')
+  } finally {
+    await S.close()
+  }
+})
+
 test('슈퍼관리자: Google 확인 이메일이 admin_emails에 있으면 player.admin, 길드 잠금 해제 — 확인 안 된 이메일·다른 제공자는 아니다', async () => {
   const P = fakeProviders()
   const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })

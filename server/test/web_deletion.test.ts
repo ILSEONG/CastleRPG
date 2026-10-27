@@ -89,6 +89,22 @@ test('앱 [문의하기]는 delete 분류를 고를 수 없고, 관리자 삭제
   assert.equal((await S.req('POST', '/v1/admin/inquiry/delete_account', { token: p.token, body: { id: own.id } })).status, 403)
 })
 
+test('양식: 남이 친구 코드만으로 먼저 낸 요청이 있어도 본인 확인된 요청(코드·이메일 일치)은 버려지지 않는다 — 그 요청을 바꿔 다시 연다', async () => {
+  const p = await S.login()
+  await S.db.query("insert into player_identities (provider, provider_uid, player_id, email) values ('google', 'wd-upgrade', $1, 'upgrade@example.com')", [p.id])
+  const c = await code(p.id)
+  await send({ code: c, reason: '남이 보냄' })
+  const first = (await requests()).filter((q: any) => q.player === p.id)
+  assert.ok(first.length === 1 && first[0].body.includes('본인 확인 안 됨'))
+  await S.req('POST', '/v1/admin/inquiry/answer', { token: admin.token, body: { id: first[0].id, answer: '본인 확인이 안 돼요' } })
+  await send({ code: c, email: 'upgrade@example.com', reason: '제가 보냅니다' })
+  const rows = (await requests()).filter((q: any) => q.player === p.id)
+  assert.deepEqual([rows.length, rows[0].id, rows[0].status, rows[0].info.contact], [1, first[0].id, 'open', 'upgrade@example.com'])
+  assert.ok(rows[0].body.includes('본인 확인: 친구 코드와 Google 이메일 일치') && rows[0].body.includes('제가 보냅니다'))
+  await send({ code: c, reason: '또 남이' }) // 확인 안 된 요청은 확인된 요청을 덮지 않는다
+  assert.ok((await requests()).find((q: any) => q.id === first[0].id).body.includes('제가 보냅니다'))
+})
+
 test('양식: 친구 코드만이면 "본인 확인 안 됨", 친구 코드와 Google 이메일이 같은 계정이면 "일치" (남의 코드로 지우기 요청 막기)', async () => {
   const victim = await S.login()
   const vc = await code(victim.id)

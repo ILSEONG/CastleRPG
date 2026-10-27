@@ -54,6 +54,7 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
     payments: o.payments,
     legal: o.legal,
     adWaitMs: 0,
+    rateLimits: false, // 요청 수 상한은 security.test.ts가 makeApp({rateLimits: true})로 따로 본다(시계가 멈춘 테스트가 한 창에 몰려 걸리지 않게)
     ...extra,
   })
   const app = makeApp()

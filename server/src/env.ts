@@ -15,6 +15,8 @@ export function readEnv(env: Record<string, string | undefined>) {
   if (databaseUrl) {
     if (!secret) throw new Error('DATABASE_URL is set but JWT_SECRET is missing')
     if (secret.length < MIN_SECRET_LEN) throw new Error(`JWT_SECRET must be at least ${MIN_SECRET_LEN} characters when DATABASE_URL is set`)
+    // 저장소에 공개된 개발 비밀이면 누구나 아무 계정의 토큰을 만들 수 있다
+    if (secret === DEV_SECRET) throw new Error('JWT_SECRET must not be the public dev secret when DATABASE_URL is set')
     if (allowTestHooks) throw new Error('ALLOW_TEST_HOOKS=1 is not allowed when DATABASE_URL is set')
   }
   // 개발 모드는 이 컴퓨터에서만 받는다. 운영은 모든 주소.

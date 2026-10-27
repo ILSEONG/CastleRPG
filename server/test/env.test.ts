@@ -6,10 +6,11 @@ import { DEV_SECRET, readEnv } from '../src/env.ts'
 const URL = 'postgresql://user:pass@example.invalid/db?sslmode=require'
 const LONG = 'x'.repeat(32)
 
-test('시작 거부: 운영(DATABASE_URL)에서 JWT_SECRET 없음·32자 미만·ALLOW_TEST_HOOKS=1', () => {
+test('시작 거부: 운영(DATABASE_URL)에서 JWT_SECRET 없음·32자 미만·공개 개발 비밀·ALLOW_TEST_HOOKS=1', () => {
   assert.throws(() => readEnv({ DATABASE_URL: URL }), /JWT_SECRET is missing/)
   assert.throws(() => readEnv({ DATABASE_URL: URL, JWT_SECRET: 'x'.repeat(31) }), /at least 32/)
   assert.throws(() => readEnv({ DATABASE_URL: URL, JWT_SECRET: LONG, ALLOW_TEST_HOOKS: '1' }), /ALLOW_TEST_HOOKS/)
+  assert.throws(() => readEnv({ DATABASE_URL: URL, JWT_SECRET: ` ${DEV_SECRET} ` }), /public dev secret/) // 저장소에 공개된 개발 비밀(32자 이상이라도)
   const ok = readEnv({ DATABASE_URL: URL, JWT_SECRET: LONG, CORS_ORIGINS: 'https://a.example, https://b.example' })
   assert.equal(ok.secret, LONG)
   assert.equal(ok.hostname, '0.0.0.0')

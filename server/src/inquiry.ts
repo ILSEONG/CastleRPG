@@ -93,7 +93,7 @@ export function registerInquiry(app: Hono<Any>, d: Any) {
 
   // --- 앱 없이 계정 삭제 요청(웹 양식, legal.ts deletionPage) ---
   // 친구 코드(8자리) 또는 Google 로그인 이메일로 계정을 찾아 문의 표에 category 'delete'로 쌓는다. 못 찾아도 남긴다(관리자가 확인) —
-  // 찾았는지는 화면에 알리지 않는다(이메일로 계정 유무를 떠보지 못하게). 같은 계정의 처리 대기 요청이 있으면 새로 쌓지 않는다.
+  // 찾았는지는 화면에 알리지 않는다(이메일로 계정 유무를 떠보지 못하게). 같은 계정의 처리 대기 요청이 있으면 새로 쌓지 않는다(본인 확인된 요청은 그 요청을 바꾼다).
   // 하루 WEB_DELETE_PER_DAY개(전체)를 넘으면 429. 자동 삭제는 없다 — 관리자 [계정 삭제](/v1/admin/inquiry/delete_account)만.
   app.post('/legal/account-deletion', async (c: Context) => {
     let f: Record<string, unknown> = {}
@@ -117,16 +117,22 @@ export function registerInquiry(app: Hono<Any>, d: Any) {
     const byEmail = email !== '' ? (await query(`select player_id::text as id from player_identities where provider = 'google' and lower(email) = $1 limit 1`, [email]))[0]?.id ?? null : null
     if (!player) player = byEmail
     // 본인 확인 표시(관리자용): 친구 코드는 남에게도 보이므로 코드만으로는 본인인지 알 수 없다. 코드와 Google 이메일이 같은 계정을 가리킬 때만 '일치'.
-    const check = !player ? '' : code !== '' && byEmail === player ? txt('server.inquiry.legal_account_deletion.null')
-      : txt('server.inquiry.legal_account_deletion.null_2')
-    if (player && (await query(`select 1 from inquiries where player_id = $1 and category = 'delete' and status <> 'closed'`, [player])).length) {
-      return c.html(L.deletionDonePage(legal))
-    }
+    const verified = !!player && code !== '' && byEmail === player
+    const check = !player ? '' : verified ? txt('server.inquiry.legal_account_deletion.null') : txt('server.inquiry.legal_account_deletion.null_2')
     const info: Record<string, string> = { platform: txt('server.inquiry.legal_account_deletion.platform') }
     if (player) info.name = friendName(player)
     if (WEB_LOGINS[login]) info.login = WEB_LOGINS[login]
     if (email) info.contact = email
     const text = [txt('server.inquiry.legal_account_deletion_6', { code: code || txt('server.inquiry.legal_account_deletion_7'), player: player ? '' : txt('server.inquiry.legal_account_deletion_8') }), check, reason ? txt('server.inquiry.legal_account_deletion_9', { reason }) : ''].filter(Boolean).join('\n')
+    // 같은 계정의 처리 대기 요청이 있으면 새로 쌓지 않는다. 다만 본인 확인된(코드·이메일 일치) 요청이면 그 요청을 이 내용으로 바꾸고 다시 연다
+    // — 남이 친구 코드만으로 먼저 낸 확인 안 된 요청 때문에 본인의 확인된 요청이 버려지지 않게.
+    if (player) {
+      const [old] = await query(`select id from inquiries where player_id = $1 and category = 'delete' and status <> 'closed' order by id limit 1`, [player])
+      if (old) {
+        if (verified) await query(`update inquiries set body = $2, info = $3::jsonb, status = 'open' where id = $1`, [old.id, text, JSON.stringify(info)])
+        return c.html(L.deletionDonePage(legal))
+      }
+    }
     await query(`insert into inquiries (player_id, client_key, category, body, info, created_at) values ($1, $2, 'delete', $3, $4::jsonb, to_timestamp($5::float8))`,
       [player, `web-delete:${randomUUID()}`, text, JSON.stringify(info), now])
     return c.html(L.deletionDonePage(legal))

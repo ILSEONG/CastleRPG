@@ -1,4 +1,5 @@
 // 보안 점검(2026-10-14): 계정 만들기 도배 상한, 쿠폰 코드 맞히기 상한, PVP·던전 승리 힘 타당성.
+// 2026-10-27: 동시 쿠폰 추측, 계정·IP 요청 수 상한, 계정 연동 시작 상한·정리.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as P from '../src/pvp.ts'
@@ -34,6 +35,66 @@ test('쿠폰: 틀린 코드 10번이면 10분 동안 429 too_many_attempts', asy
   S.clock.t += 601
   assert.equal((await S.req('POST', '/v1/coupon', { token: p.token, body: { code: 'NOPE99' } })).json.error, 'unknown_coupon')
   S.clock.t = T0
+})
+
+test('쿠폰: 동시에 보낸 틀린 코드도 10개까지만(시도를 먼저 센다), 맞힌 코드·이미 쓴 코드는 세지 않는다', async () => {
+  // 코드 찾기를 운영 Neon 왕복처럼 느리게 — 예전엔 틀린 것을 그 왕복 뒤에 세어 동시에 보낸 추측이 모두 상한 검사를 지났다(15개 다 404)
+  const slow = S.makeApp({ query: async (text, params) => {
+    if (text.includes('from coupons c where code')) await new Promise((r) => setTimeout(r, 300))
+    return S.db.query(text, params)
+  } })
+  const p = await S.login()
+  const rs = await Promise.all(Array.from({ length: 15 }, (_, i) => slow.request('/v1/coupon', { method: 'POST',
+    headers: { authorization: `Bearer ${p.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ code: `PAR${i}X` }) })))
+  assert.deepEqual([rs.filter((r) => r.status === 404).length, rs.filter((r) => r.status === 429).length], [10, 5])
+  await S.db.query(`insert into coupons (code, reward, starts_at) values ('SECRIGHT', '{"gold": 1}', to_timestamp($1::float8))`, [T0 - 1])
+  const q = await S.login()
+  const guess = (code: string) => S.req('POST', '/v1/coupon', { token: q.token, body: { code } })
+  for (let i = 0; i < 9; i++) assert.equal((await guess(`MISS${i}X`)).json.error, 'unknown_coupon')
+  assert.equal((await guess('SECRIGHT')).status, 200)
+  assert.equal((await guess('SECRIGHT')).json.error, 'coupon_used')
+  assert.equal((await guess('MISS9X')).json.error, 'unknown_coupon', '10th wrong code still answers')
+  assert.equal((await guess('MISS10X')).status, 429)
+})
+
+test('요청 수 상한: 계정마다 30초에 600개, 로그인 없는 DB 요청은 IP마다 1분에 240개(머리글 없으면 없음) — 건강 확인·테스트 훅은 세지 않는다', async () => {
+  const app = S.makeApp({ rateLimits: true, gameCacheSec: 10 })
+  const call = async (path: string, o: { token?: string; ip?: string; body?: string } = {}) => {
+    const r = await app.request(path, { method: o.body === undefined ? 'GET' : 'POST', body: o.body,
+      headers: { 'content-type': 'application/json', ...(o.token ? { authorization: `Bearer ${o.token}` } : {}), ...(o.ip ? { 'cf-connecting-ip': o.ip } : {}) } })
+    return [r.status, ((await r.json()) as any).error]
+  }
+  const a = await S.login()
+  for (let i = 0; i < 600; i++) assert.equal((await call('/v1/collect', { token: a.token, body: 'x' }))[0], 400) // 인증을 지나 본문에서 거절 — DB는 안 읽는다
+  assert.deepEqual(await call('/v1/player', { token: a.token }), [429, 'too_many_requests'])
+  assert.equal((await call('/v1/player', { token: (await S.login()).token }))[0], 200, 'another account')
+  assert.equal((await call('/v1/test/events', { token: a.token, body: '{"events": {}}' }))[0], 200, 'test hooks are not counted')
+  S.clock.t += 30
+  assert.equal((await call('/v1/player', { token: a.token }))[0], 200, 'next window')
+  const ip = '198.51.100.20'
+  for (let i = 0; i < 240; i++) assert.equal((await call('/v1/auth/logout', { ip, body: '{}' }))[0], 200)
+  assert.deepEqual(await call('/v1/status', { ip }), [429, 'too_many_requests'])
+  assert.equal((await call('/v1/auth/guest', { ip, body: '{}' }))[0], 429)
+  assert.equal((await call('/v1/health', { ip }))[0], 200)
+  assert.equal((await call('/v1/status', { ip: '198.51.100.21' }))[0], 200, 'another network')
+  assert.equal((await call('/v1/status'))[0], 200, 'no trusted IP header → no IP limit')
+  S.clock.t += 60
+  assert.equal((await call('/v1/status', { ip }))[0], 200, 'next window')
+  assert.equal((await S.req('GET', '/v1/status', { headers: { 'cf-connecting-ip': ip } })).status, 200, 'rateLimits: false app')
+  S.clock.t = T0
+})
+
+test('계정 연동 시작: 계정마다 10분에 20번, 하루 지난 진행 행을 지운다', async () => {
+  const challenge = 'a'.repeat(64)
+  const old = 'b'.repeat(64)
+  await S.db.query("insert into oauth_logins (state, provider, challenge, created_at) values ($1, 'google', $2, to_timestamp($3::float8))", [old, challenge, T0 - 86401])
+  const p = await S.login()
+  const start = (token: string) => S.req('POST', '/v1/auth/link/start', { token, body: { provider: 'google', challenge } })
+  for (let i = 0; i < 20; i++) assert.equal((await start(p.token)).status, 200)
+  assert.equal((await S.db.query('select count(*)::int as n from oauth_logins where state = $1', [old]))[0].n, 0)
+  const r = await start(p.token)
+  assert.deepEqual([r.status, r.json.error], [429, 'too_many_requests'])
+  assert.equal((await start((await S.login()).token)).status, 200, 'another account')
 })
 
 test('PVP: 내 팀 힘이 상대의 40%보다 작으면 win:true를 보내도 패배', async () => {

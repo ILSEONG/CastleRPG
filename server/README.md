@@ -97,6 +97,7 @@ npm --prefix server test
 
 모든 요청과 응답은 JSON이다. 시각은 유닉스 초(float)다. 오류는 `{"error": "<code>", "message": "..."}` 형식에 400·401·404·409·413·500을 쓴다.
 `/v1/*` 요청 본문은 16 KB까지다. 넘으면 읽기 전에 413 `payload_too_large`다.
+요청 수 상한(429 `too_many_requests`, 서버 한 대 메모리): 인증 요청은 계정마다 30초에 600개(테스트 훅 제외), 로그인 없이 DB를 읽는 요청(`status`·`notices`·`auth/guest`·`toss`·`oauth/poll`·`session`·`logout`·콜백)은 IP마다(`cf-connecting-ip`, 없으면 안 건다) 1분에 240개, 계정 연동 시작은 계정마다 10분에 20번.
 
 | 요청 | 인증 | 응답 |
 |---|---|---|
@@ -111,7 +112,7 @@ npm --prefix server test
 | `GET /v1/auth/providers` | 없음 | `{providers}` 켜진 소셜 로그인 |
 | `POST /v1/auth/oauth/start {provider, challenge, device_id?}` | 없음 | `{url, state, expires_in}` — 앱이 url을 브라우저로 연다. challenge = sha256(verifier) hex. device_id의 게스트 계정에 아직 소셜 계정이 없으면 그 계정에 잇는다 |
 | `GET /v1/auth/:provider/callback` | 제공자 | 안내 HTML. code → 제공자 사용자 id → 플레이어(없으면 만든다 — 회원가입 없음) |
-| `POST /v1/auth/oauth/poll {state, verifier}` | 없음 | 202 `{pending}` 또는 한 번만 `{token, player_id, session, provider, is_new}`. 401 `login_denied`·`login_failed`, 410 `login_expired`(10분) |
+| `POST /v1/auth/oauth/poll {state, verifier}` | 없음 | 202 `{pending}` 또는 한 번만 `{token, player_id, session, provider, is_new}`. 401 `login_denied`·`login_failed`, 410 `login_expired`(10분), 관리자 계정인데 콜백과 다른 IP면 403 `admin_ip_mismatch` |
 | `POST /v1/auth/session {session}` | 없음 | `{token, player_id, provider}` 자동 로그인. 모르면 401 `bad_session` |
 | `POST /v1/auth/logout {session}` | 없음 | `{ok}` 그 세션만 지운다 |
 | `POST /v1/offline {}` | Bearer | 플레이어 응답 + `offline {away_sec, kills, gold_gained_tenths}` — 지난 활동(상태를 바꾼 마지막 요청) 이후를 방치 처치로 쳐서 골드 × `offline_gold_mult`(상한 `accum_cap_min`분, 60초 미만 0). 앱을 켤 때·백그라운드에서 돌아올 때 |

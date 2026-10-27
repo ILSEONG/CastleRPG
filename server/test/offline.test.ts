@@ -41,6 +41,23 @@ test('POST /v1/offline: 첫 정산 0 → 1시간 뒤 방치 처치 × 0.4(스테
   }
 })
 
+test('떠나 있는 동안 끝난 연구를 다음 읽기가 완료해도 활동 시각은 그대로 — 6시간 떠나 있으면 오프라인 골드를 다 받는다', async () => {
+  const S = await setup()
+  try {
+    S.clock.t = T0
+    const { token, id } = await S.login()
+    await S.req('POST', '/v1/offline', { token, body: {} })
+    await S.db.query('update player_resources set amount = 10000 where player_id = $1', [id])
+    assert.equal((await S.req('POST', '/v1/research/start', { token, body: { id: 'wood_tech' } })).status, 200) // 60초 연구
+    S.clock.t = T0 + 6 * 3600
+    assert.deepEqual((await S.req('GET', '/v1/player', { token })).json.player.research, { levels: { wood_tech: 1 }, current: null }) // 게으른 완료
+    const r = await S.req('POST', '/v1/offline', { token, body: {} })
+    assert.deepEqual(r.json.offline, { away_sec: 6 * 3600, kills: 6 * 5400, gold_gained_tenths: 6 * 108_000 })
+  } finally {
+    await S.close()
+  }
+})
+
 test('상태를 바꾸는 요청(처치 보고)은 활동 시각을 옮긴다 — 앱을 켜 둔 동안은 오프라인으로 치지 않는다', async () => {
   const S = await setup()
   try {
