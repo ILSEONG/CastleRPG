@@ -152,7 +152,7 @@ export function opsGate(d: Any) {
 }
 
 export function registerLiveOps(app: Hono<Any>, d: Any) {
-  const { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status, setStatus } = d
+  const { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status, setStatus, cacheMs } = d
   const couponMisses = new Limiter(COUPON_MISSES, 600)
 
   const str = (b: Record<string, unknown>, key: string, max: number, required = true): string => {
@@ -202,16 +202,30 @@ export function registerLiveOps(app: Hono<Any>, d: Any) {
     return { maintenance: { on: st.maintenance, text: st.maintenance_text, until: st.maintenance_until }, min_version: st.min_version, store_url: st.store_url }
   }
 
+  // 로그인 없이 자주 읽는 공지(목록·최근 id)는 서버 상태(d.status)처럼 d.cacheMs 동안 한 번 읽은 것을 같이 쓴다(운영 10초, 테스트 0 = 매번).
+  // 관리자가 공지를 바꾸면 이 서버의 사본은 버린다.
+  const memo = new Map<string, { at: number; v: unknown }>()
+  async function cached<T>(key: string, read: () => Promise<T>): Promise<T> {
+    const m = memo.get(key)
+    if (cacheMs && m && Date.now() - m.at < cacheMs) return m.v as T
+    const v = await read()
+    memo.set(key, { at: Date.now(), v })
+    return v
+  }
+
   app.get('/v1/status', async (c: Context) => {
     const now = clock()
-    const [n] = await query(`select max(id)::int as id from notices where not hidden and starts_at <= to_timestamp($1::float8)
-      and (ends_at is null or ends_at > to_timestamp($1::float8))`, [now]).catch(() => [{ id: null }])
-    return c.json({ server_now: now, ...statusView(await status()), latest_notice: n?.id ?? 0 })
+    const latest = await cached('latest', async () => {
+      const [n] = await query(`select max(id)::int as id from notices where not hidden and starts_at <= to_timestamp($1::float8)
+        and (ends_at is null or ends_at > to_timestamp($1::float8))`, [now]).catch(() => [{ id: null }])
+      return n?.id ?? 0
+    })
+    return c.json({ server_now: now, ...statusView(await status()), latest_notice: latest })
   })
 
   app.get('/v1/notices', async (c: Context) => {
     const now = clock()
-    return c.json({ server_now: now, notices: await visibleNotices(now) })
+    return c.json({ server_now: now, notices: await cached('notices', () => visibleNotices(now)) })
   })
 
   // --- 우편함 ---
@@ -260,28 +274,35 @@ export function registerLiveOps(app: Hono<Any>, d: Any) {
     const b = await body(c)
     const code = String(b.code ?? '').trim().toUpperCase().replace(/[\s-]/g, '')
     const id = c.get('playerId') as string
-    if (couponMisses.blocked(id, clock())) throw new ApiError(429, 'too_many_attempts', 'too many wrong coupon codes; try again later')
+    // 시도마다 먼저 센다 — DB를 기다리는 동안 동시에 여러 코드를 보내도 상한을 넘지 못하게. 틀린 코드가 아니었으면(맞힌 코드·다른 거절) 되돌린다
+    const at = clock()
+    if (!couponMisses.take(id, at)) throw new ApiError(429, 'too_many_attempts', 'too many wrong coupon codes; try again later')
+    let missed = false
     const miss = () => {
-      couponMisses.take(id, clock())
+      missed = true
       return new ApiError(404, 'unknown_coupon', 'no such coupon')
     }
-    if (!CODE_RE.test(code)) throw miss()
-    return mutate(c, (p: Any, g: Any, now: number, cp: Any) => {
-      if (!cp || cp.disabled) throw miss()
-      if (cp.used) throw new ApiError(409, 'coupon_used', 'this account already used the coupon')
-      if (cp.starts > now) throw new ApiError(409, 'coupon_not_started', 'the coupon is not active yet')
-      if (cp.expires && cp.expires <= now) throw new ApiError(409, 'coupon_expired', 'the coupon has expired')
-      if (cp.max_uses !== null && cp.uses >= cp.max_uses) throw new ApiError(409, 'coupon_used_up', 'the coupon has been used up')
-      const { change, got } = rewardChange(p, g, now, [cp.reward])
-      change.coupon = { code, max_uses: cp.max_uses }
-      change.log = { kind: 'coupon', detail: { code, reward: got } }
-      return { change, extra: { code, reward: got }, reload: true }
-    }, async () => {
-      const [r] = await query(`select reward, max_uses, uses, disabled, extract(epoch from starts_at)::float8 as starts, extract(epoch from expires_at)::float8 as expires,
-        exists (select 1 from coupon_uses u where u.code = c.code and u.player_id = $2) as used from coupons c where code = $1`, [code, id])
-      return r ? { reward: typeof r.reward === 'string' ? JSON.parse(r.reward) : r.reward, max_uses: r.max_uses === null ? null : Number(r.max_uses),
-        uses: Number(r.uses), disabled: r.disabled === true, starts: Number(r.starts), expires: r.expires ? Number(r.expires) : null, used: r.used === true } : null
-    })
+    try {
+      if (!CODE_RE.test(code)) throw miss()
+      return await mutate(c, (p: Any, g: Any, now: number, cp: Any) => {
+        if (!cp || cp.disabled) throw miss()
+        if (cp.used) throw new ApiError(409, 'coupon_used', 'this account already used the coupon')
+        if (cp.starts > now) throw new ApiError(409, 'coupon_not_started', 'the coupon is not active yet')
+        if (cp.expires && cp.expires <= now) throw new ApiError(409, 'coupon_expired', 'the coupon has expired')
+        if (cp.max_uses !== null && cp.uses >= cp.max_uses) throw new ApiError(409, 'coupon_used_up', 'the coupon has been used up')
+        const { change, got } = rewardChange(p, g, now, [cp.reward])
+        change.coupon = { code, max_uses: cp.max_uses }
+        change.log = { kind: 'coupon', detail: { code, reward: got } }
+        return { change, extra: { code, reward: got }, reload: true }
+      }, async () => {
+        const [r] = await query(`select reward, max_uses, uses, disabled, extract(epoch from starts_at)::float8 as starts, extract(epoch from expires_at)::float8 as expires,
+          exists (select 1 from coupon_uses u where u.code = c.code and u.player_id = $2) as used from coupons c where code = $1`, [code, id])
+        return r ? { reward: typeof r.reward === 'string' ? JSON.parse(r.reward) : r.reward, max_uses: r.max_uses === null ? null : Number(r.max_uses),
+          uses: Number(r.uses), disabled: r.disabled === true, starts: Number(r.starts), expires: r.expires ? Number(r.expires) : null, used: r.used === true } : null
+      })
+    } finally {
+      if (!missed) couponMisses.untake(id, at)
+    }
   })
 
   // --- 관리자 ---
@@ -346,6 +367,7 @@ export function registerLiveOps(app: Hono<Any>, d: Any) {
         values ($1, $2, $3, $4, $5, to_timestamp($6::float8), to_timestamp($6::float8), to_timestamp($7::float8)) returning id::int as id`, [title, text, kind, pinned, hidden, now, ends])
       id = Number(r.id)
     }
+    memo.clear()
     return c.json({ server_now: now, id })
   })
 

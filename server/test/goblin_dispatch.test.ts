@@ -143,6 +143,27 @@ test('파견소: 목록(같은 날 같은 의뢰), 보내기 조건, 받기, 즉
   assert.equal(r.json.dispatch.paid_left, D.PAID_REFRESH_MAX - 1)
 })
 
+test('파견소: 새날 목록 정리는 활동이 아니다(오프라인 골드 그대로), 골드·장비 열쇠 의뢰를 같이 받으면 두 종류 다 들어간다', async () => {
+  S.clock.t = T0
+  const { token, id } = await withOffice(1)
+  await S.req('GET', '/v1/dispatch', { token })
+  await S.req('POST', '/v1/offline', { token, body: {} })
+  S.clock.t = T0 + DAY
+  assert.equal((await S.req('GET', '/v1/dispatch', { token })).status, 200) // 새날 몫을 뽑아 저장한다
+  assert.equal((await S.req('POST', '/v1/offline', { token, body: {} })).json.offline.away_sec, DAY)
+  const raw = (await S.db.query('select dispatch from player_state where player_id = $1', [id]))[0].dispatch
+  const st = typeof raw === 'string' ? JSON.parse(raw) : raw
+  st.list[0] = { ...st.list[0], heroes: ['hans'], finish: S.clock.t - 1, reward: { keys_gold: 1 } }
+  st.list[1] = { ...st.list[1], heroes: ['ella'], finish: S.clock.t - 1, reward: { keys_equip: 2 } }
+  await S.db.query('update player_state set dispatch = $2::jsonb where player_id = $1', [id, JSON.stringify(st)])
+  const before = (await S.req('GET', '/v1/player', { token })).json.player.dungeons
+  const r = await S.req('POST', '/v1/dispatch/claim', { token, body: { ids: [st.list[0].id, st.list[1].id] } })
+  assert.equal(r.status, 200)
+  assert.deepEqual(r.json.claimed.reward, { keys_gold: 1, keys_equip: 2 })
+  assert.deepEqual([r.json.player.dungeons.gold.keys, r.json.player.dungeons.equip.keys], [before.gold.keys + 1, before.equip.keys + 2])
+  S.clock.t = T0
+})
+
 test('파견소 레벨이 오르면 그날 바로 의뢰가 늘고, 다음 날은 새 의뢰(진행 중은 남는다)', async () => {
   S.clock.t = T0
   const { token, id } = await withOffice(4)

@@ -54,6 +54,7 @@ export interface AppOptions {
   adWaitMs?: number // 광고 서버 확인(AdMob SSV) 콜백을 상점 구매가 기다리는 최대 시간(기본 10초, 테스트 0)
   adUnits?: string[] // 광고 서버 확인을 받는 우리 보상형 광고 단위(비면 ads.ts AD_UNITS, 운영은 main.ts ADMOB_AD_UNITS)
   gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
+  rateLimits?: boolean // 요청 수 상한(계정마다 인증 요청, IP마다 로그인 없는 DB 요청). 기본 켬 — 테스트 헬퍼는 끄고 상한 테스트만 켠다
 }
 
 const TOKEN_TTL = 30 * 86400
@@ -70,6 +71,14 @@ const RUN_KEEP_SEC = 86400 // 끝난 run은 하루 남긴다(재전송 멱등), 
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const NEW_ACCOUNTS_PER_IP = 20 // 10분에 한 IP가 만들 수 있는 새 계정(게스트·토스)
 const OAUTH_STARTS_PER_IP = 60 // 10분에 한 IP의 소셜 로그인 시작
+const LINK_STARTS_PER_ACCOUNT = 20 // 10분에 한 계정의 계정 연동 시작
+// 계정마다 인증 요청 30초에 600개(평균 초당 20). 정직한 앱은 파티 1~2초·건설 대기 /v1/player 2초·채팅 3초·초대 8초 폴링을 다 더해도
+// 초당 3개 남짓, 로딩 일괄 조회(/v1/boot 안 하위 요청 ~11개)와 연타를 더해도 6배 넘게 남는다
+const ACCOUNT_REQS = 600
+const ACCOUNT_WINDOW_SEC = 30
+// 한 IP의 로그인 없는 DB 요청 1분에 240개. 소셜 로그인 결과 기다리기가 2초마다(분당 30) — 통신사 공유 IP에서 8명이 동시에 로그인해도 된다
+const PUBLIC_PER_IP = 240
+const PUBLIC_DB_PATHS = /^\/v1\/(status|notices|auth\/(guest|toss|oauth\/poll|session|logout|[a-z]+\/callback))$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TOSS_HASH_RE = /^[A-Za-z0-9+/=_.:-]{8,512}$/ // 앱인토스 getUserKeyForGame hash
 const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge·세션 비밀(32바이트 hex)
@@ -239,6 +248,7 @@ interface Change {
   // 운영 도구(live_ops.ts, 마이그레이션 039)
   mailClaim?: number[] // 받은 우편 id들(하나라도 이미 받았으면 전체가 안 바뀐다)
   coupon?: { code: string; max_uses: number | null } // 쓴 쿠폰(이 계정이 이미 썼으면 전체가 안 바뀐다, 전체 상한에 걸리면 되돌린다)
+  idle?: boolean // 플레이어 활동이 아닌 쓰기(게으른 연구 완료·파견 하루 정리) — last_active를 옮기지 않는다(건설 완료 completeSql과 같다, 오프라인 골드 기준)
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -499,6 +509,22 @@ export function createApp(opts: AppOptions) {
       where i.player_id = $1 and i.provider = 'google') as admin`, [id])
     return a?.admin === true
   }
+
+  // 요청 수 상한(ratelimit.ts, 2026-10-27 Neon 비용·도배): 로그인 없이 DB를 읽는 공개 요청은 IP마다 PUBLIC_PER_IP/분(IP 머리글이 없으면 걸지 않는다),
+  // 인증 요청은 계정마다(auth). 건강 확인·AdMob 콜백·테스트 훅은 세지 않는다. 점검 관문보다 먼저 — 막힌 요청은 DB에 닿지 않는다. 넘으면 429 too_many_requests.
+  const limits = opts.rateLimits ?? true
+  const ipLimit = (c: Context, l: RL.Limiter) => {
+    const ip = RL.clientIp(c)
+    if (ip && !l.take(ip, clock())) throw new ApiError(429, 'too_many_requests', 'too many requests from this network; try again later')
+  }
+  const publicIps = new RL.Limiter(PUBLIC_PER_IP, 60)
+  const accountReqs = new RL.Limiter(ACCOUNT_REQS, ACCOUNT_WINDOW_SEC)
+  if (limits) {
+    app.use('/v1/*', async (c, next) => {
+      if (PUBLIC_DB_PATHS.test(c.req.path)) ipLimit(c, publicIps)
+      await next()
+    })
+  }
   app.use('/v1/*', LO.opsGate({ status: opsStatus, tokenPlayer, isAdmin }))
 
   // --- 읽기 ---
@@ -674,10 +700,11 @@ export function createApp(opts: AppOptions) {
         continue // 이겼든 졌든(다른 요청이 먼저 완료했으면 build_id가 비어 있다) 다시 읽는다
       }
       if (p.research_cur && p.research_cur.finish <= now) {
-        // 개정 24: 끝난 연구 — 진행 비우기·레벨 +1·economy_log research done을 version 가드 한 문장으로(건설 완료와 같은 방식)
+        // 개정 24: 끝난 연구 — 진행 비우기·레벨 +1·economy_log research done을 version 가드 한 문장으로(건설 완료와 같은 방식).
+        // idle: 활동 시각은 그대로 — 떠나 있는 동안 끝난 연구를 다음 읽기가 완료해도 /v1/offline이 떠나 있던 시간을 0으로 보지 않게
         const cur = p.research_cur
         await commit(id, p.version, {
-          research: null, researchUp: cur.id,
+          research: null, researchUp: cur.id, idle: true,
           log: { kind: 'research', detail: { action: 'done', id: cur.id, level: (p.research[cur.id] ?? 0) + 1, finish: cur.finish } },
         }, now)
         continue // 이겼든 졌든 다시 읽는다
@@ -804,7 +831,8 @@ export function createApp(opts: AppOptions) {
       params.push(v)
       return `$${params.length}`
     }
-    const sets = ['version = version + 1', `last_active = to_timestamp(${p(now)}::float8)`] // 상태를 바꾸는 요청은 모두 활동(오프라인 골드 기준)
+    const sets = ['version = version + 1'] // 상태를 바꾸는 요청은 모두 활동(오프라인 골드 기준) — idle(게으른 완료·하루 정리)만 빼고
+    if (!ch.idle) sets.push(`last_active = to_timestamp(${p(now)}::float8)`)
     if (ch.goldTenths) sets.push(`gold_tenths = gold_tenths + ${p(bigint(ch.goldTenths))}::bigint`)
     if (ch.stage !== undefined) sets.push(`stage = ${p(ch.stage)}::int`)
     if (ch.lastKillReport !== undefined) sets.push(`last_kill_report = to_timestamp(${p(ch.lastKillReport)}::float8)`)
@@ -1229,6 +1257,9 @@ export function createApp(opts: AppOptions) {
     if (typeof payload.exp !== 'number' || payload.exp <= clock()) throw new ApiError(401, 'token_expired', 'token expired')
     if (typeof payload.sub !== 'string' || !UUID_RE.test(payload.sub)) throw new ApiError(401, 'bad_token', 'invalid token subject')
     c.set('playerId', payload.sub)
+    if (limits && !c.req.path.startsWith('/v1/test/') && !accountReqs.take(payload.sub, clock())) {
+      throw new ApiError(429, 'too_many_requests', 'too many requests from this account; slow down')
+    }
     if (seenAt.size >= 50_000) seenAt.clear() // 메모리 지키기(접속 표시만 잠시 비게 된다)
     seenAt.set(payload.sub, clock())
     await recordDay(payload.sub, clock())
@@ -1261,10 +1292,7 @@ export function createApp(opts: AppOptions) {
   // 소셜 로그인 시작은 10분에 OAUTH_STARTS_PER_IP번까지. 이미 있는 계정의 로그인은 세지 않는다. 넘으면 429 too_many_requests.
   const newAccounts = new RL.Limiter(NEW_ACCOUNTS_PER_IP, 600)
   const oauthStarts = new RL.Limiter(OAUTH_STARTS_PER_IP, 600)
-  const ipLimit = (c: Context, l: RL.Limiter) => {
-    const ip = RL.clientIp(c)
-    if (ip && !l.take(ip, clock())) throw new ApiError(429, 'too_many_requests', 'too many requests from this network; try again later')
-  }
+  const linkStarts = new RL.Limiter(LINK_STARTS_PER_ACCOUNT, 600) // 계정 연동 시작(계정마다)
 
   app.post('/v1/auth/guest', async (c) => {
     const b = await body(c)
@@ -1336,7 +1364,7 @@ export function createApp(opts: AppOptions) {
       console.warn(`[server] oauth: ${(e as Error).message}`)
       return fail('provider_error', 502)
     }
-    const err = await finishLogin(state, row, p, uid, email, now)
+    const err = await finishLogin(state, row, p, uid, email, now, RL.clientIp(c))
     if (err) {
       await query('update oauth_logins set error = $2 where state = $1 and player_id is null', [state, err])
       return done(err, 200)
@@ -1352,8 +1380,8 @@ export function createApp(opts: AppOptions) {
 
   // 제공자 확인을 마친 로그인을 끝낸다: 보통 로그인은 그 소셜 계정의 플레이어(없으면 기기 게스트를 잇거나 새로), 연동(link_only)은 요청한
   // 계정에만 잇는다 — 이미 다른 게임 계정에 이어진 소셜 계정이면 'already_linked', 이 계정에 같은 제공자의 다른 소셜 계정이 있으면
-  // 'provider_taken'(진행을 옮기거나 바꾸지 않는다). 오류 코드 또는 null.
-  async function finishLogin(state: string, row: Row, p: O.Provider, uid: string, email: string | null, now: number): Promise<string | null> {
+  // 'provider_taken'(진행을 옮기거나 바꾸지 않는다). 오류 코드 또는 null. ip = 콜백(브라우저)의 IP — 관리자 poll 확인용(모르면 null).
+  async function finishLogin(state: string, row: Row, p: O.Provider, uid: string, email: string | null, now: number, ip: string | null = null): Promise<string | null> {
     let r: { id: string; isNew: boolean }
     if (row.link_only) {
       const me = String(row.link_player)
@@ -1369,7 +1397,7 @@ export function createApp(opts: AppOptions) {
       r = await resolvePlayer(p, uid, row.link_player ?? null, now)
     }
     await saveEmail(p, uid, email)
-    await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew])
+    await query('update oauth_logins set player_id = $2, is_new = $3, callback_ip = $4 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew, ip])
     return null
   }
 
@@ -1382,10 +1410,12 @@ export function createApp(opts: AppOptions) {
     if (!O.enabledProviders(oauth).includes(provider)) throw new ApiError(503, 'provider_unavailable', `${provider} login is not configured on this server`)
     if (typeof b.challenge !== 'string' || !HEX64_RE.test(b.challenge)) throw new ApiError(400, 'bad_challenge', 'challenge must be 64 lowercase hex characters')
     const me = c.get('playerId') as string
+    if (!linkStarts.take(me, clock())) throw new ApiError(429, 'too_many_requests', 'too many account link attempts; try again later')
     if ((await query('select 1 from player_identities where player_id = $1 and provider = $2', [me, provider])).length) {
       throw new ApiError(409, 'provider_taken', `this account is already linked to ${provider}`)
     }
     const now = clock()
+    await query('delete from oauth_logins where created_at < to_timestamp($1::float8)', [now - 86400]) // 오래된 진행 행 정리(로그인 시작과 같다)
     const state = randomBytes(32).toString('hex')
     await query('insert into oauth_logins (state, provider, challenge, link_player, link_only, created_at) values ($1, $2, $3, $4, true, to_timestamp($5::float8))',
       [state, provider, b.challenge, me, now])
@@ -1421,7 +1451,8 @@ export function createApp(opts: AppOptions) {
   }
 
   // 결과 기다리기 {state, verifier}: 아직이면 202 {pending}. 끝났으면 한 번만 {token, player_id, session, provider, is_new}
-  // — session은 자동 로그인 비밀(앱이 저장, 서버는 sha256만). 취소·거부 401 login_denied, 제공자 오류 401 login_failed, 시간 초과 410.
+  // — session은 자동 로그인 비밀(앱이 저장, 서버는 sha256만). 취소·거부 401 login_denied, 제공자 오류 401 login_failed, 시간 초과 410,
+  // 관리자 계정인데 콜백과 다른 IP에서 받으면 403 admin_ip_mismatch.
   app.post('/v1/auth/oauth/poll', async (c) => {
     const b = await body(c)
     if (typeof b.state !== 'string' || !HEX64_RE.test(b.state)) throw new ApiError(400, 'bad_state', 'state must be 64 lowercase hex characters')
@@ -1443,8 +1474,14 @@ export function createApp(opts: AppOptions) {
       }
       return c.json({ pending: true }, 202)
     }
-    const [done] = await query('delete from oauth_logins where state = $1 and player_id is not null returning player_id', [b.state])
+    const [done] = await query('delete from oauth_logins where state = $1 and player_id is not null returning player_id, callback_ip', [b.state])
     if (!done) throw new ApiError(404, 'unknown_login', 'no such login (finished or never started)')
+    // 관리자 계정 지키기(로그인 낚시 — 남이 시작한 로그인 주소를 관리자가 열어 로그인하면 시작한 쪽이 결과를 받아 간다): 관리자면 결과를 받는 IP가
+    // 콜백(브라우저)의 IP와 같아야 한다. 어느 한쪽이라도 모르면 예전처럼 준다. 진행 행은 이미 지웠다 — 다시 로그인해야 한다.
+    const ip = RL.clientIp(c)
+    if (done.callback_ip && ip && done.callback_ip !== ip && (await isAdmin(String(done.player_id)))) {
+      throw new ApiError(403, 'admin_ip_mismatch', 'an admin login must be finished on the same network as the browser; log in again')
+    }
     const session = randomBytes(32).toString('hex')
     await query('insert into player_sessions (hash, player_id, provider, created_at, last_used) values ($1, $2, $3, to_timestamp($4::float8), to_timestamp($4::float8))',
       [sha256hex(session), done.player_id, row.provider, now])
@@ -1934,12 +1971,8 @@ export function createApp(opts: AppOptions) {
       if (reward.gold) change.goldTenths = reward.gold * 10
       if (reward.diamonds) change.diamonds = reward.diamonds
       if (reward.tickets) change.diaTickets = reward.tickets
-      const keyType = R.DUNGEON_TYPES.find((t) => (reward[`keys_${t}`] ?? 0) > 0)
-      if (keyType) {
-        const st = dungeonState(p, g, keyType, now)
-        change.dungeon = { type: keyType, state: { ...st, keys: st.keys + reward[`keys_${keyType}`] } }
-      }
-      return { change, extra: { reward }, reload: Boolean(keyType) }
+      const keys = addKeys(p, g, now, reward, change)
+      return { change, extra: { reward }, reload: keys }
     }, async (pid) => {
       if (type !== 'tutorial') return { guild: false, pvp: false, party: false, starters: [] } // 반복 퀘스트는 이 사실들을 안 본다
       const [r] = await query(`select exists (select 1 from player_guild where player_id = $1 and guild_id is not null) as guild,
@@ -1982,8 +2015,21 @@ export function createApp(opts: AppOptions) {
     return { ...rest, missions: M.addEvents(rest.missions ?? p.missions, ev, today(g, now)) }
   }
 
+  // 보상의 던전 열쇠(keys_<종류>)를 change에 더한다 — 종류마다 행 하나(dungeon + dungeonMore). 여러 종류를 한 번에 줘도 다 들어간다
+  // (예전엔 보상 대부분이 첫 종류만 줬다 — 파견 두 건을 같이 받으면 골드·장비 열쇠 중 하나가 사라졌다). 넣었으면 true(쓴 뒤 다시 읽기).
+  function addKeys(p: Player, g: Game, now: number, reward: Record<string, unknown>, change: Change): boolean {
+    const keys = R.DUNGEON_TYPES.filter((t) => Number(reward[`keys_${t}`] ?? 0) > 0).map((t) => {
+      const st = dungeonState(p, g, t, now)
+      return { type: t, state: { ...st, keys: st.keys + Number(reward[`keys_${t}`]) } }
+    })
+    if (!keys.length) return false
+    change.dungeon = keys[0]
+    if (keys.length > 1) change.dungeonMore = keys.slice(1)
+    return true
+  }
+
   // 우편·쿠폰 보상(live_ops.ts Reward) 여러 개 → 한 번의 변경. got = 실제로 받은 것(장비는 굴린 결과까지 — 응답·기록용).
-  // 열쇠는 던전 종류마다 행 하나(dungeon + dungeonMore). 없는 영웅 id는 건너뛴다(관리자가 넣을 때 이미 검사했다).
+  // 열쇠는 addKeys. 없는 영웅 id는 건너뛴다(관리자가 넣을 때 이미 검사했다).
   function rewardChange(p: Player, g: Game, now: number, rewards: LO.Reward[]): { change: Change; got: Record<string, unknown> } {
     const sum: Record<string, number> = {}
     const heroes: Record<string, number> = {}
@@ -2004,14 +2050,7 @@ export function createApp(opts: AppOptions) {
     if (sum.tickets) change.diaTickets = sum.tickets
     if (Object.keys(heroes).length) change.heroes = heroes
     if (items.length) change.items = items
-    const keys = R.DUNGEON_TYPES.filter((t) => (sum[`keys_${t}`] ?? 0) > 0).map((t) => {
-      const st = dungeonState(p, g, t, now)
-      return { type: t, state: { ...st, keys: st.keys + sum[`keys_${t}`] } }
-    })
-    if (keys.length) {
-      change.dungeon = keys[0]
-      if (keys.length > 1) change.dungeonMore = keys.slice(1)
-    }
+    addKeys(p, g, now, sum, change)
     const pz = P.fromReward(sum)
     if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
     const sz = S.fromReward(sum)
@@ -2053,18 +2092,14 @@ export function createApp(opts: AppOptions) {
         const rows = [{ min_level: 0, [reward.equip.grade]: 1 }]
         change.items = R.rollDrops(rows, 1, 1, R.cfgNum(g.config, 'equip_weapon_p'), random)
       }
-      const keyType = R.DUNGEON_TYPES.find((k) => ((reward as any)[`keys_${k}`] ?? 0) > 0)
-      if (keyType) {
-        const st = dungeonState(p, g, keyType, now)
-        change.dungeon = { type: keyType, state: { ...st, keys: st.keys + (reward as any)[`keys_${keyType}`] } }
-      }
+      const keys = addKeys(p, g, now, reward as Record<string, unknown>, change)
       const pz = P.fromReward(reward)
       if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
       const sz = S.fromReward(reward)
       if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
       const got = { ...reward, ...(change.items ? { items: change.items } : {}) }
       change.log = { kind: 'attendance', detail: { day, reward: got } }
-      return { change, extra: { day, reward: got }, reload: Boolean(keyType || change.items) }
+      return { change, extra: { day, reward: got }, reload: Boolean(keys || change.items) }
     })
   })
 
@@ -2260,10 +2295,10 @@ export function createApp(opts: AppOptions) {
       next_reset: R.nextReset(now, g.config) },
   })
 
-  // 의뢰 목록. 오늘 몫을 새로 뽑았으면 저장한다(같은 날 다시 열어도 같은 의뢰).
+  // 의뢰 목록. 오늘 몫을 새로 뽑았으면 저장한다(같은 날 다시 열어도 같은 의뢰). 보기만 하는 정리라 활동 시각은 그대로(idle).
   app.get('/v1/dispatch', auth, async (c) => mutate(c, (p, g, now) => {
     const { st, level, changed } = dispatchState(p, g, now)
-    return { change: changed ? { dispatch: st } : undefined, extra: dispatchExtra(st, level, g, now) }
+    return { change: changed ? { dispatch: st, idle: true } : undefined, extra: dispatchExtra(st, level, g, now) }
   }))
 
   // 보내기. body = {jobs: [{id, heroes: [영웅 id]}]} — 여러 의뢰를 한 번에(모두 보내기). 의뢰가 없거나 이미 보냈으면 409 stale,
@@ -2472,16 +2507,12 @@ export function createApp(opts: AppOptions) {
         const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
         if (Object.keys(res).length) change.res = res
         if (give.tickets) change.diaTickets = give.tickets
-        const keyType = R.DUNGEON_TYPES.find((t) => (give[`keys_${t}`] ?? 0) > 0)
-        if (keyType) {
-          const ds = dungeonState(p, g, keyType, now)
-          change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + give[`keys_${keyType}`] } }
-        }
+        const keys = addKeys(p, g, now, give, change)
         const pz = P.fromReward(give)
         if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
         const sz = S.fromReward(give)
         if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
-        return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
+        return { change, extra: { bought: { id: x.id, give: x.give } }, reload: keys }
       })
     } catch (e) {
       // 이 요청이 새로 잡은 표만, 구매 판단이 거절했을 때(sold_out·stale 등 409 — 쓰기 전) 돌려놓는다: 한도 등으로 못 산 광고는 다음 구매에 다시 쓴다.
@@ -2493,23 +2524,19 @@ export function createApp(opts: AppOptions) {
 
   // --- 결제 상품(iap.ts): 다이아 충전·월정액·패키지·성장 패스 ---
 
-  // 보상(보상 키 — 출석·미션과 같은 규칙)을 change에 더한다. 던전 열쇠는 한 종류만(Change.dungeon).
+  // 보상(보상 키 — 출석·미션과 같은 규칙)을 change에 더한다. 던전 열쇠는 종류마다(addKeys). 열쇠를 넣었으면 true(다시 읽기).
   function addReward(p: Player, g: Game, now: number, reward: Record<string, number>, change: Change) {
     const res = Object.fromEntries(R.BUILD_RES.filter((r) => (reward[r] ?? 0) > 0).map((r) => [r, reward[r] + (change.res?.[r] ?? 0)]))
     if (Object.keys(res).length) change.res = { ...change.res, ...res }
     if (reward.gold) change.goldTenths = (change.goldTenths ?? 0) + reward.gold * 10
     if (reward.diamonds) change.diamonds = (change.diamonds ?? 0) + reward.diamonds
     if (reward.tickets) change.diaTickets = (change.diaTickets ?? 0) + reward.tickets
-    const keyType = R.DUNGEON_TYPES.find((t) => (reward[`keys_${t}`] ?? 0) > 0)
-    if (keyType) {
-      const ds = dungeonState(p, g, keyType, now)
-      change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + reward[`keys_${keyType}`] } }
-    }
+    const keys = addKeys(p, g, now, reward, change)
     const pz = P.fromReward(reward)
     if (Object.keys(pz).length) change.pouches = P.add(change.pouches ?? p.pouches, pz)
     const sz = S.fromReward(reward)
     if (Object.keys(sz).length) change.speedups = S.add(change.speedups ?? p.speedups, sz)
-    return Boolean(keyType)
+    return keys
   }
 
   // 상품 사기(실결제 확인 뒤 지급). body = {product, provider: 'google'|'toss'|'test', token}
@@ -3927,7 +3954,7 @@ export function createApp(opts: AppOptions) {
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
-  registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
+  registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus, cacheMs: opsCacheMs })
   registerRetention(app, { query, auth, clock, ApiError, isAdmin })
   registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
     opts.partyLive)

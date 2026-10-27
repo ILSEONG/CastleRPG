@@ -1,4 +1,5 @@
 // 요청 횟수 상한(2026-10-14 보안 점검): 계정 만들기 도배(게스트·토스·소셜 시작), 쿠폰 코드 맞히기, 웹 계정 삭제 양식 도배를 막는다.
+// 2026-10-27: 계정마다 인증 요청 수·IP마다 로그인 없는 DB 요청 수(app.ts — Neon 비용·도배), 계정 연동 시작.
 // 서버 한 대의 메모리에만 센다(재시작하면 0부터) — 정확한 과금용이 아니라 자동화된 도배를 늦추는 용도. 창(window)마다 고정 칸으로 센다.
 import type { Context } from 'hono'
 
@@ -25,10 +26,10 @@ export class Limiter {
     return h.n <= this.max
   }
 
-  // 세기만 보고(늘리지 않고) 이미 넘었는지
-  blocked(key: string, now: number): boolean {
+  // at(그 take의 시각)에 센 것 하나를 되돌린다 — 세지 않을 결과였다(맞힌 쿠폰 코드 등). 그 뒤 창이 바뀌었으면 그대로.
+  untake(key: string, at: number) {
     const h = this.hits.get(key)
-    return !!h && now - h.start < this.windowSec && h.n >= this.max
+    if (h && h.start <= at && at - h.start < this.windowSec && h.n > 0) h.n--
   }
 
   private prune(now: number) {

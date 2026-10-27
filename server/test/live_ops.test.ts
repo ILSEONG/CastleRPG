@@ -55,6 +55,26 @@ test('공지: 만들기·고정·숨기기·기한, 로그인 없이 읽는다',
   assert.ok(ops.notices.some((n: any) => n.hidden))
 })
 
+test('공지·최근 공지 캐시(운영 10초): 같은 사본을 쓰다가, 이 서버의 관리자가 공지를 바꾸면 바로 버린다', async () => {
+  const app = S.makeApp({ gameCacheSec: 10 })
+  const get = async (path: string) => (await (await app.request(path)).json()) as any
+  const seen = (r: any, title: string) => r.notices.some((n: any) => n.title === title)
+  const s0 = (await get('/v1/status')).latest_notice
+  assert.ok(!seen(await get('/v1/notices'), 'DB로 넣은 공지'))
+  const [row] = await S.db.query(`insert into notices (title, body, kind, created_at, starts_at) values ('DB로 넣은 공지', '', 'notice', to_timestamp($1::float8),
+    to_timestamp($1::float8)) returning id::int as id`, [S.clock.t])
+  assert.ok(!seen(await get('/v1/notices'), 'DB로 넣은 공지'), 'cached list')
+  assert.equal((await get('/v1/status')).latest_notice, s0, 'cached latest id')
+  assert.ok(seen((await S.req('GET', '/v1/notices')).json, 'DB로 넣은 공지'), 'no cache in tests (gameCacheSec 0)')
+  const r = await app.request('/v1/admin/notice', { method: 'POST', headers: { authorization: `Bearer ${admin.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ title: '관리자 공지' }) })
+  const id = ((await r.json()) as any).id
+  assert.ok(id > row.id)
+  const after = await get('/v1/notices')
+  assert.ok(seen(after, 'DB로 넣은 공지') && seen(after, '관리자 공지'))
+  assert.equal((await get('/v1/status')).latest_notice, id)
+})
+
 test('점검: 일반 플레이어 503(로그인·상태·공지는 열림), 관리자는 통과, 끄면 다시 열림', async () => {
   const { token } = await S.login()
   const on = await A('/v1/admin/status', { maintenance: true, maintenance_text: '서버 점검 중입니다', maintenance_until: T0 + 3600 })
