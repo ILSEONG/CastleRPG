@@ -89,6 +89,8 @@ const HEX64_RE = /^[0-9a-f]{64}$/ // 소셜 로그인 state·verifier·challenge
 const LINK_ERRORS: Record<string, string> = { already_linked: txt('server.app.link_errors.already_linked'), provider_taken: txt('server.app.link_errors.provider_taken') }
 const OAUTH_TTL = 600 // 진행 중 소셜 로그인 유효 시간(초)
 const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
+// 마이그레이션 057(oauth_logins.callback_ip) 전 DB — 그 열이 없으면 IP 확인 없이 로그인을 이어 간다(배포 순서가 틀려도 로그인이 깨지지 않게)
+const noIpColumn = (e: unknown) => /callback_ip/.test((e as Error)?.message ?? '')
 
 export class ApiError extends Error {
   status: number
@@ -1328,9 +1330,17 @@ export function createApp(opts: AppOptions) {
   // 켜진 제공자(로그인 화면이 버튼을 고를 때 쓸 수 있다)
   app.get('/v1/auth/providers', (c) => c.json({ providers: O.enabledProviders(oauth) }))
 
+  // 소셜 로그인 시작·결과 받기는 앱(Origin 헤더 없음)과 CORS_ORIGINS에 적은 웹 빌드만 — 남의 웹 페이지가 피해자 브라우저 안에서 로그인을
+  // 시작하고 결과까지 받아 가면(같은 IP) 위의 IP 확인을 비켜 간다. CORS가 *(목록 없음)여도 이 경로들은 웹 출처를 받지 않는다.
+  const loginOrigin = (c: Context) => {
+    const origin = c.req.header('origin')
+    if (origin && !(opts.corsOrigins ?? []).includes(origin)) throw new ApiError(403, 'origin_not_allowed', 'social login is not allowed from this web page')
+  }
+
   // 로그인 시작 {provider, challenge = sha256(verifier) hex, device_id?}: 진행 행을 만들고 제공자 로그인 주소를 준다.
   // device_id가 있으면 그 기기의 게스트 계정에 이을 후보로 둔다(그 계정에 아직 소셜 계정이 없을 때만 콜백이 잇는다 — 진행 유지).
   app.post('/v1/auth/oauth/start', async (c) => {
+    loginOrigin(c)
     const b = await body(c)
     const provider = b.provider
     if (!O.isProvider(provider)) throw new ApiError(400, 'unknown_provider', `provider must be one of ${O.PROVIDERS.join(', ')}`)
@@ -1412,12 +1422,17 @@ export function createApp(opts: AppOptions) {
     }
     await saveEmail(p, uid, email)
     await query('update oauth_logins set player_id = $2, is_new = $3, callback_ip = $4 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew, ip])
+      .catch(async (e) => {
+        if (!noIpColumn(e)) throw e
+        await query('update oauth_logins set player_id = $2, is_new = $3 where state = $1 and player_id is null and error is null', [state, r.id, r.isNew])
+      })
     return null
   }
 
   // 계정 연동 시작(설정 [계정 연동], 로그인한 상태) {provider, challenge}: 지금 계정에 그 소셜 계정을 잇는 진행 행을 만든다. 뒤는 로그인과 같다
   // (브라우저 → 콜백 → /v1/auth/oauth/poll — 성공하면 그 소셜 로그인의 자동 로그인 세션을 준다. 실패 409 already_linked·provider_taken).
   app.post('/v1/auth/link/start', auth, async (c) => {
+    loginOrigin(c)
     const b = await body(c)
     const provider = b.provider
     if (!O.isProvider(provider)) throw new ApiError(400, 'unknown_provider', `provider must be one of ${O.PROVIDERS.join(', ')}`)
@@ -1466,8 +1481,9 @@ export function createApp(opts: AppOptions) {
 
   // 결과 기다리기 {state, verifier}: 아직이면 202 {pending}. 끝났으면 한 번만 {token, player_id, session, provider, is_new}
   // — session은 자동 로그인 비밀(앱이 저장, 서버는 sha256만). 취소·거부 401 login_denied, 제공자 오류 401 login_failed, 시간 초과 410,
-  // 관리자 계정인데 콜백과 다른 IP에서 받으면 403 admin_ip_mismatch.
+  // 콜백과 다른 IP에서 받으면 403 ip_mismatch(로그인 낚시 막기).
   app.post('/v1/auth/oauth/poll', async (c) => {
+    loginOrigin(c)
     const b = await body(c)
     if (typeof b.state !== 'string' || !HEX64_RE.test(b.state)) throw new ApiError(400, 'bad_state', 'state must be 64 lowercase hex characters')
     if (typeof b.verifier !== 'string' || !HEX64_RE.test(b.verifier)) throw new ApiError(400, 'bad_verifier', 'verifier must be 64 lowercase hex characters')
@@ -1488,13 +1504,18 @@ export function createApp(opts: AppOptions) {
       }
       return c.json({ pending: true }, 202)
     }
-    const [done] = await query('delete from oauth_logins where state = $1 and player_id is not null returning player_id, callback_ip', [b.state])
+    const done = (await query('delete from oauth_logins where state = $1 and player_id is not null returning player_id, callback_ip', [b.state])
+      .catch((e) => {
+        if (!noIpColumn(e)) throw e
+        return query('delete from oauth_logins where state = $1 and player_id is not null returning player_id', [b.state])
+      }))[0]
     if (!done) throw new ApiError(404, 'unknown_login', 'no such login (finished or never started)')
-    // 관리자 계정 지키기(로그인 낚시 — 남이 시작한 로그인 주소를 관리자가 열어 로그인하면 시작한 쪽이 결과를 받아 간다): 관리자면 결과를 받는 IP가
-    // 콜백(브라우저)의 IP와 같아야 한다. 어느 한쪽이라도 모르면 예전처럼 준다. 진행 행은 이미 지웠다 — 다시 로그인해야 한다.
+    // 로그인 낚시 막기(남이 시작한 로그인 주소를 열어 로그인하면 시작한 쪽이 결과를 받아 간다): 결과를 받는 IP가 콜백(브라우저)의 IP와 같아야 한다 —
+    // 정상 로그인은 같은 기기의 브라우저와 앱이다. 어느 한쪽이라도 모르면 예전처럼 준다. 진행 행은 이미 지웠다 — 다시 로그인해야 한다.
     const ip = RL.clientIp(c)
-    if (done.callback_ip && ip && done.callback_ip !== ip && (await isAdmin(String(done.player_id)))) {
-      throw new ApiError(403, 'admin_ip_mismatch', 'an admin login must be finished on the same network as the browser; log in again')
+    if (done.callback_ip && ip && done.callback_ip !== ip) {
+      console.warn('[server] oauth login refused: poll ip differs from the callback ip') // 정상 사용자가 자주 걸리면 여기서 보인다(IP는 남기지 않는다)
+      throw new ApiError(403, 'ip_mismatch', 'finish the login on the same network as the browser; log in again')
     }
     const session = randomBytes(32).toString('hex')
     await query('insert into player_sessions (hash, player_id, provider, created_at, last_used) values ($1, $2, $3, to_timestamp($4::float8), to_timestamp($4::float8))',

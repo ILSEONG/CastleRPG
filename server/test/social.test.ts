@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
 import { test } from 'node:test'
+import type { Query } from '../src/db.ts'
 import * as O from '../src/oauth.ts'
 import { setup, T0 } from './helpers.ts'
 
@@ -205,7 +206,7 @@ test('자동 로그인 세션: 같은 플레이어 토큰, 로그아웃하면 40
   }
 })
 
-test('관리자 계정 지키기: 결과를 받는 IP가 콜백(브라우저) IP와 다르면 403 admin_ip_mismatch(진행은 지운다) — 같거나 어느 쪽이든 모르면, 관리자가 아니면 그대로', async () => {
+test('로그인 낚시 막기: 결과를 받는 IP가 콜백(브라우저) IP와 다르면 403 ip_mismatch(진행은 지운다, 관리자·일반 모두) — 같거나 어느 쪽이든 모르면 그대로', async () => {
   const P = fakeProviders()
   const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })
   try {
@@ -219,7 +220,7 @@ test('관리자 계정 지키기: 결과를 받는 IP가 콜백(브라우저) IP
       return { r: await poll(), poll }
     }
     const phish = await login('BOSS', '198.51.100.1', '203.0.113.66') // 남(203.…)이 시작한 로그인을 관리자 브라우저(198.…)가 끝냈다
-    assert.deepEqual([phish.r.status, phish.r.json.error, phish.r.json.token], [403, 'admin_ip_mismatch', undefined])
+    assert.deepEqual([phish.r.status, phish.r.json.error, phish.r.json.token], [403, 'ip_mismatch', undefined])
     assert.equal((await phish.poll()).status, 404)
     assert.equal((await S.db.query('select count(*)::int as n from player_sessions'))[0].n, 0)
     const same = await login('BOSS', '198.51.100.1', '198.51.100.1')
@@ -227,7 +228,46 @@ test('관리자 계정 지키기: 결과를 받는 IP가 콜백(브라우저) IP
     assert.equal((await S.req('GET', '/v1/player', { token: same.r.json.token })).json.player.admin, true)
     assert.equal((await login('BOSS', undefined, '203.0.113.66')).r.status, 200, 'callback IP unknown')
     assert.equal((await login('BOSS', '198.51.100.1')).r.status, 200, 'poll IP unknown')
-    assert.equal((await login('someone', '198.51.100.1', '203.0.113.66')).r.status, 200, 'not an admin')
+    assert.equal((await login('someone', '198.51.100.1', '203.0.113.66')).r.json.error, 'ip_mismatch', 'ordinary accounts too')
+    assert.equal((await login('someone', '198.51.100.1', '198.51.100.1')).r.status, 200)
+  } finally {
+    await S.close()
+  }
+})
+
+test('로그인 낚시 막기: 웹 페이지(Origin 헤더)에서 소셜 로그인 시작·결과 받기는 CORS_ORIGINS에 있는 출처만, 앱(Origin 없음)은 그대로', async () => {
+  const P = fakeProviders()
+  const S = await setup({ oauth: OAUTH, fetch: P.fetchFn })
+  try {
+    S.clock.t = T0
+    const start = (headers: Record<string, string>) => S.req('POST', '/v1/auth/oauth/start', { body: { provider: 'google', challenge: 'a'.repeat(64) }, headers })
+    assert.equal((await start({ origin: 'https://evil.example' })).json.error, 'origin_not_allowed')
+    assert.equal((await start({})).status, 200)
+    const poll = await S.req('POST', '/v1/auth/oauth/poll', { body: { state: 'b'.repeat(64), verifier: 'c'.repeat(64) }, headers: { origin: 'https://evil.example' } })
+    assert.equal(poll.json.error, 'origin_not_allowed')
+    const web = S.makeApp({ corsOrigins: ['https://castle-rpg.web.tossmini.com'] })
+    const ok = await web.request('/v1/auth/oauth/start', { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://castle-rpg.web.tossmini.com' },
+      body: JSON.stringify({ provider: 'google', challenge: 'a'.repeat(64) }) })
+    assert.equal(ok.status, 200, 'a listed web build can still log in')
+  } finally {
+    await S.close()
+  }
+})
+
+test('마이그레이션 057 전 DB(callback_ip 열 없음)에서도 소셜 로그인이 된다 — IP 확인만 건너뛴다', async () => {
+  const P = fakeProviders()
+  const noCol = (q: Query): Query => async (text, params) => {
+    if (text.includes('callback_ip')) throw new Error('column "callback_ip" of relation "oauth_logins" does not exist')
+    return q(text, params)
+  }
+  const S = await setup({ oauth: OAUTH, fetch: P.fetchFn, wrapQuery: noCol })
+  try {
+    S.clock.t = T0
+    const a = await begin(S, 'google')
+    await S.req('GET', `/v1/auth/google/callback?${new URLSearchParams({ code: 'uid:OLD-DB', state: a.state })}`, { headers: { 'cf-connecting-ip': '198.51.100.1' } })
+    const r = await S.req('POST', '/v1/auth/oauth/poll', { body: { state: a.state, verifier: a.verifier }, headers: { 'cf-connecting-ip': '203.0.113.66' } })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    assert.ok(r.json.token)
   } finally {
     await S.close()
   }

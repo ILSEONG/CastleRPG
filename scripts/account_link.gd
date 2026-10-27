@@ -20,6 +20,7 @@ static var ERRORS := {
 	"provider_unavailable": Lang.t("account_link.errors.provider_unavailable"),
 	"login_denied": Lang.t("account_link.errors.login_denied"),
 	"login_expired": Lang.t("account_link.errors.login_expired"),
+	"ip_mismatch": Lang.t("account_link.errors.ip_mismatch"),
 	"net": Lang.t("account_link.errors.net"),
 }
 

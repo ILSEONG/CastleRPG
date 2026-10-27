@@ -6,6 +6,7 @@ account_link.errors.provider_taken,이 계정에는 이미 같은 종류의 로�
 account_link.errors.provider_unavailable,아직 준비 중인 로그인입니다,,,,scripts/account_link.gd
 account_link.errors.login_denied,연결을 취소했습니다,,,,scripts/account_link.gd
 account_link.errors.login_expired,시간이 초과되었습니다. 다시 눌러 주세요,,,,scripts/account_link.gd
+account_link.errors.ip_mismatch,브라우저와 같은 인터넷(와이파이·데이터)에서 연결을 마쳐 주세요. 다시 눌러 주세요,,,,scripts/account_link.gd
 account_link.errors.net,서버에 연결할 수 없습니다,,,,scripts/account_link.gd
 account_link.start,브라우저에서 %s 로그인을 마치면 바로 연결됩니다,,,,scripts/account_link.gd
 account_link.on_poll,%s 계정과 연결했습니다. 다른 기기에서도 %s로 이어서 할 수 있습니다,,,,scripts/account_link.gd
@@ -1178,6 +1179,7 @@ login_screen.brands_3,네이버로 시작하기,,,,scripts/login_screen.gd
 login_screen.errors.provider_unavailable,아직 준비 중인 로그인입니다,,,,scripts/login_screen.gd
 login_screen.errors.login_denied,로그인이 취소되었습니다,,,,scripts/login_screen.gd
 login_screen.errors.login_failed,로그인하지 못했습니다. 다시 시도해 주세요,,,,scripts/login_screen.gd
+login_screen.errors.ip_mismatch,브라우저와 같은 인터넷(와이파이·데이터)에서 로그인을 마쳐 주세요. 다시 시도해 주세요,,,,scripts/login_screen.gd
 login_screen.errors.login_expired,로그인 시간이 초과되었습니다. 다시 시도해 주세요,,,,scripts/login_screen.gd
 login_screen.errors.net,서버에 연결할 수 없습니다,,,,scripts/login_screen.gd
 login_screen.errors.unsupported,토스 앱을 최신 버전으로 업데이트해 주세요,,,,scripts/login_screen.gd

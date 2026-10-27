@@ -35,6 +35,7 @@ static var ERRORS := {
 	"login_denied": Lang.t("login_screen.errors.login_denied"),
 	"login_failed": Lang.t("login_screen.errors.login_failed"),
 	"login_expired": Lang.t("login_screen.errors.login_expired"),
+	"ip_mismatch": Lang.t("login_screen.errors.ip_mismatch"),
 	"net": Lang.t("login_screen.errors.net"),
 	"UNSUPPORTED": Lang.t("login_screen.errors.unsupported"),
 	"INVALID_CATEGORY": Lang.t("login_screen.errors.invalid_category"),
