@@ -114,6 +114,21 @@ test('pvp matchmaking: real defense team near my points', async () => {
   assert.equal(bad.status, 409)
 })
 
+test('pvp defense: near-zero stats cannot make a feeder team — each hero is at least its base stats (level, promotion)', async () => {
+  const p = await player()
+  const power = async (hp: number, atk: number) => {
+    const r = await S.req('POST', '/v1/pvp/defense', { token: p.token, body: { mode: 'duel', heroes: team(hp, atk) } })
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    return r.json.pvp.modes.duel.power as number
+  }
+  const top = await power(1e9, 1e9) // 상한까지 잘린다
+  const feeder = await power(0.0001, 0.0001)
+  assert.ok(feeder >= top * 0.95, `feeder ${feeder} vs capped ${top}`)
+  const [row] = await S.db.query("select defense from pvp_stats where player_id = $1 and mode = 'duel'", [p.id])
+  const def = typeof row.defense === 'string' ? JSON.parse(row.defense) : row.defense
+  assert.ok(def.every((h: any) => h.hp > 100 && h.atk > 5), JSON.stringify(def))
+})
+
 test('pvp shop: coins, limit, rewards', async () => {
   const p = await player()
   await S.req('GET', '/v1/pvp', { token: p.token })

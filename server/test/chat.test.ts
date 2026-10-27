@@ -48,6 +48,28 @@ test('chat: spam limit refuses a second message within the gap', async () => {
   assert.equal((await say(a.token, 'all', '셋')).status, 200)
 })
 
+test('chat: messages sent at the same moment — only one gets through even when the DB check cannot see the others', async () => {
+  // Neon에서는 같은 순간 문장끼리 서로의 insert를 못 봐 insert 안 not exists가 모두 지난다. PGlite는 한 문장씩 돌아 그 겨루기가 안 생기니 DB 검사를 빼고 본다
+  const T = await setup({
+    wrapQuery: (q) => async (text, params) => {
+      await new Promise((r) => setTimeout(r, 1))
+      return q(text.includes('insert into chat_messages') ? text.replace(/\n\s*where not exists[^\n]*/, '') : text, params)
+    },
+  })
+  try {
+    const a = await T.login()
+    const res = await Promise.all([1, 2, 3, 4, 5].map((i) => T.req('POST', '/v1/chat', { token: a.token, body: { channel: 'all', text: `동시 ${i}` } })))
+    assert.equal(res.filter((r) => r.status === 200).length, 1)
+    assert.ok(res.filter((r) => r.status !== 200).every((r) => r.json.error === 'too_fast'), JSON.stringify(res.map((r) => r.json)))
+    const [{ n }] = await T.db.query('select count(*)::int as n from chat_messages where player_id = $1', [a.id])
+    assert.equal(n, 1)
+    T.clock.t += GAP_SEC
+    assert.equal((await T.req('POST', '/v1/chat', { token: a.token, body: { channel: 'all', text: '다음' } })).status, 200, 'after the gap it sends again')
+  } finally {
+    await T.close()
+  }
+})
+
 test('chat: length cap, bad words masked, empty and bad input refused', async () => {
   const a = await S.login()
   wait()

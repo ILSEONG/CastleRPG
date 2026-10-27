@@ -99,6 +99,54 @@ test('상한: 친구 + 보낸 신청이 FRIEND_CAP이면 friend_full', async () 
   assert.equal((await post(c.token, 'request', { id: a.id })).json.error, 'their_full')
 })
 
+test('상한: 동시에 보낸 수락도 FRIEND_CAP을 넘지 못한다(진 쪽은 friend_full)', async () => {
+  let slow = false
+  const T = await setup({
+    wrapQuery: (q) => async (text, params) => {
+      if (slow) await new Promise((r) => setTimeout(r, 1)) // 요청들이 서로 끼어들게(모두 같은 친구 수를 읽은 뒤 쓴다)
+      return q(text, params)
+    },
+  })
+  try {
+    const me = await T.login()
+    for (let i = 0; i < R.FRIEND_CAP - 1; i++) {
+      const o = await T.login()
+      await T.db.query('insert into friend_links (a, b, accepted) values ($1, $2, true)', [me.id, o.id])
+    }
+    const askers: { id: string }[] = []
+    for (let i = 0; i < 5; i++) {
+      const o = await T.login()
+      await T.db.query('insert into friend_links (a, b) values ($1, $2)', [o.id, me.id])
+      askers.push(o)
+    }
+    slow = true
+    const res = await Promise.all(askers.map((o) => T.req('POST', '/v1/friends/accept', { token: me.token, body: { id: o.id } })))
+    slow = false
+    assert.equal(res.filter((r) => r.status === 200).length, 1)
+    assert.ok(res.filter((r) => r.status !== 200).every((r) => r.json.error === 'friend_full'), JSON.stringify(res.map((r) => r.json.error)))
+    const [{ n }] = await T.db.query('select count(*)::int as n from friend_links where (a = $1 or b = $1) and accepted', [me.id])
+    assert.equal(n, R.FRIEND_CAP)
+  } finally {
+    await T.close()
+  }
+})
+
+test('받은 신청은 FRIEND_INBOX(50)개까지 — 더 보내면 their_full', async () => {
+  const INBOX = 50 // app.ts FRIEND_INBOX
+  const target = await fresh(['hans'])
+  for (let i = 0; i < INBOX; i++) {
+    const o = await S.login()
+    assert.equal((await post(o.token, 'request', { id: target.id })).status, 200)
+  }
+  const late = await S.login()
+  assert.equal((await post(late.token, 'request', { id: target.id })).json.error, 'their_full')
+  assert.equal((await get(target.token)).incoming.length, INBOX)
+  // 하나를 거절하면 다시 받는다
+  const first = (await get(target.token)).incoming[0]
+  await post(target.token, 'remove', { id: first.id })
+  assert.equal((await post(late.token, 'request', { id: target.id })).status, 200)
+})
+
 test('모집권 던전: 친구가 있으면 도우미 = 친구 영웅(키 f:id), 클리어 뒤 그 친구는 오늘 못 쓰고 다 쓰면 시스템 후보', async () => {
   const a = await fresh()
   const b = await fresh(['luna', 'hans'])

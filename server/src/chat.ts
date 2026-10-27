@@ -9,6 +9,7 @@
 import type { Hono } from 'hono'
 import * as G from './guild.ts'
 import { mask } from './profanity.ts'
+import { Limiter } from './ratelimit.ts'
 
 export const MAX_LEN = 100 // 글자(코드 포인트) 수
 export const GAP_SEC = 2 // 한 사람이 다음 메시지를 보낼 수 있을 때까지
@@ -33,6 +34,8 @@ type Any = any
 export function registerChat(app: Hono<Any>, d: Any) {
   const { query, auth, clock, body, ApiError } = d
   const bad = (code: string, msg: string) => new ApiError(400, code, msg)
+  // GAP_SEC 안 두 번째 메시지는 메모리에서 먼저 막는다(2026-10-27 보안 점검: DB 검사는 insert 안 not exists라 동시에 보낸 여러 통이 모두 지났다). DB 검사도 그대로 둔다
+  const sendLimit = new Limiter(1, GAP_SEC)
 
   async function myGuild(id: string): Promise<{ id: string; name: string } | null> {
     const [r] = await query('select g.id::text as id, g.name from player_guild pg join guilds g on g.id = pg.guild_id where pg.player_id = $1', [id])
@@ -83,6 +86,7 @@ export function registerChat(app: Hono<Any>, d: Any) {
       channel = 'g:' + g.id
     }
     const now = clock()
+    if (!sendLimit.take(id, now)) throw bad('too_fast', `wait ${GAP_SEC} s between messages`)
     const raw = clean(b.text)
     const [r] = await query(`insert into chat_messages (channel, player_id, name, text, at, raw)
       select $1, $2, $3, $4, to_timestamp($5::float8), $6

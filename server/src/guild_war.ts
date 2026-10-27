@@ -223,6 +223,8 @@ export const enemySeed = (guildSeed: number, week: number) => mix(guildSeed, wee
 
 // 보내온 영웅 능력치를 믿을 만한 범위로 자른다(0보다 크게). lim(statLimit)이 있으면 상한 = (기본 + 그 영웅 장비) × 내 성장·연구·길드 배율
 // × STAT_SLACK(앱 반올림 몫) — 2026-10-07 전에는 기본 × STAT_CAP(4)이라 키운 계정·좋은 장비는 몰래 잘렸다. lim이 없으면 예전처럼 기본 × STAT_CAP.
+// 하한 = 기본(서버가 아는 레벨·승급, 장비·배율 없이) ÷ STAT_SLACK(같은 반올림 몫) — 2026-10-27 보안 점검: 능력치를 0에 가깝게 보내
+// 부계정에게 져 주는 '먹잇감' PVP 방어팀을 만들지 못하게(장비·성장·연구·길드 배율은 늘 1 이상이라 정상 값은 기본보다 작지 않다).
 export const STAT_SLACK = 1.01
 export function capStats(def: HeroDef, level: number, promotion: number, hp: unknown, atk: unknown, cfg: Cfg, lim?: StatLimit) {
   const base = heroStats(def, level, promotion, cfg)
@@ -232,7 +234,7 @@ export function capStats(def: HeroDef, level: number, promotion: number, hp: unk
   const h = Number(hp)
   const a = Number(atk)
   return {
-    hp: Number.isFinite(h) && h > 0 ? Math.min(h, maxHp) : base.hp,
-    atk: Number.isFinite(a) && a > 0 ? Math.min(a, maxAtk) : base.atk,
+    hp: Number.isFinite(h) && h > 0 ? Math.min(Math.max(h, base.hp / STAT_SLACK), maxHp) : base.hp,
+    atk: Number.isFinite(a) && a > 0 ? Math.min(Math.max(a, base.atk / STAT_SLACK), maxAtk) : base.atk,
   }
 }

@@ -3223,11 +3223,27 @@ export function createApp(opts: AppOptions) {
     }
   }
 
-  // 친구 + 보낸 신청 수(상한 검사용)
-  async function friendLoad(id: string): Promise<{ friends: number; sent: number }> {
-    const [r] = await query(`select count(*) filter (where accepted)::int as friends, count(*) filter (where not accepted and a = $1)::int as sent
-      from friend_links where a = $1 or b = $1`, [id])
-    return { friends: Number(r.friends), sent: Number(r.sent) }
+  // 같은 키의 상한 검사 + 쓰기를 이 서버 안에서 하나씩(2026-10-27 보안 점검: 동시에 보낸 친구 수락·길드 가입이 모두 같은 수를 읽어 상한을 넘었다 —
+  // 한 문장 안 count 조건도 READ COMMITTED에서는 같은 순간 문장끼리 서로의 행을 못 본다). 키 여럿은 정렬한 순서로 잡는다(서로 기다리며 멈추지 않게).
+  // ponytail: 서버 한 대 기준(파티 매칭·실시간 방·요청 상한도 메모리) — 여러 대로 늘리면 DB 잠금(행 카운터)으로 바꾼다.
+  const turns = new Map<string, Promise<unknown>>()
+  const oneTurn = <T>(key: string, f: () => Promise<T>): Promise<T> => {
+    const run = (turns.get(key) ?? Promise.resolve()).then(f)
+    const tail = run.then(() => {}, () => {})
+    turns.set(key, tail)
+    void tail.then(() => { if (turns.get(key) === tail) turns.delete(key) })
+    return run
+  }
+  const inTurn = <T>(keys: string[], f: () => Promise<T>): Promise<T> =>
+    [...new Set(keys)].sort().reduceRight<() => Promise<T>>((g, k) => () => oneTurn(k, g), f)()
+
+  const FRIEND_INBOX = 50 // 받은(아직 수락 안 한) 신청 상한 — 넘으면 보내는 쪽이 their_full(2026-10-27 보안 점검: 받은 신청이 끝없이 쌓였다)
+
+  // 친구 + 보낸 신청 수(상한 검사용), 받은 신청 수(inbox)
+  async function friendLoad(id: string): Promise<{ friends: number; sent: number; inbox: number }> {
+    const [r] = await query(`select count(*) filter (where accepted)::int as friends, count(*) filter (where not accepted and a = $1)::int as sent,
+      count(*) filter (where not accepted and b = $1)::int as inbox from friend_links where a = $1 or b = $1`, [id])
+    return { friends: Number(r.friends), sent: Number(r.sent), inbox: Number(r.inbox) }
   }
 
   async function acceptFriend(me: string, other: string) {
@@ -3247,7 +3263,7 @@ export function createApp(opts: AppOptions) {
   app.get('/v1/friends', auth, async (c) => c.json(await friendsView(c.get('playerId') as string)))
 
   // 친구 신청: {code} 또는 {id}(추천 목록). 없는 플레이어 404 unknown_player, 자기 자신 400 self, 이미 친구 409 already_friends,
-  // 이미 보냄 409 already_requested, 상한 409 friend_full·their_full. 상대가 이미 나에게 신청했으면 바로 수락한다.
+  // 이미 보냄 409 already_requested, 상한 409 friend_full·their_full(상대 친구가 가득이거나 받은 신청이 FRIEND_INBOX개). 상대가 이미 나에게 신청했으면 바로 수락한다.
   app.post('/v1/friends/request', auth, async (c) => {
     const me = c.get('playerId') as string
     const t = friendTarget(await body(c))
@@ -3255,17 +3271,18 @@ export function createApp(opts: AppOptions) {
     if (!row) throw new ApiError(404, 'unknown_player', 'no player with that friend code')
     const other = String(row.id)
     if (other === me) throw new ApiError(400, 'self', 'that is your own friend code')
-    const [link] = await query('select a, accepted from friend_links where (a = $1 and b = $2) or (a = $2 and b = $1)', [me, other])
-    if (link?.accepted) throw new ApiError(409, 'already_friends', 'already friends')
-    if (link && String(link.a) === me) throw new ApiError(409, 'already_requested', 'request already sent')
-    if (link) await acceptFriend(me, other)
-    else {
+    await inTurn([`f:${me}`, `f:${other}`], async () => {
+      const [link] = await query('select a, accepted from friend_links where (a = $1 and b = $2) or (a = $2 and b = $1)', [me, other])
+      if (link?.accepted) throw new ApiError(409, 'already_friends', 'already friends')
+      if (link && String(link.a) === me) throw new ApiError(409, 'already_requested', 'request already sent')
+      if (link) return acceptFriend(me, other)
       const mine = await friendLoad(me)
       if (mine.friends + mine.sent >= R.FRIEND_CAP) throw new ApiError(409, 'friend_full', `you already have ${R.FRIEND_CAP} friends and requests`)
-      if ((await friendLoad(other)).friends >= R.FRIEND_CAP) throw new ApiError(409, 'their_full', 'that player has no room for friends')
+      const theirs = await friendLoad(other)
+      if (theirs.friends >= R.FRIEND_CAP || theirs.inbox >= FRIEND_INBOX) throw new ApiError(409, 'their_full', 'that player has no room for friends')
       const ins = await query('insert into friend_links (a, b) values ($1, $2) on conflict do nothing returning 1', [me, other])
       if (!ins.length) throw new ApiError(409, 'already_requested', 'request already exists')
-    }
+    })
     return c.json(await friendsView(me))
   })
 
@@ -3274,7 +3291,8 @@ export function createApp(opts: AppOptions) {
     const me = c.get('playerId') as string
     const id = (await body(c)).id
     if (typeof id !== 'string' || !UUID_RE.test(id)) throw new ApiError(400, 'bad_request', "'id' must be a player id")
-    await acceptFriend(me, id.toLowerCase())
+    const other = id.toLowerCase()
+    await inTurn([`f:${me}`, `f:${other}`], () => acceptFriend(me, other))
     return c.json(await friendsView(me))
   })
 
@@ -3485,10 +3503,11 @@ export function createApp(opts: AppOptions) {
     return c.json({ server_now: now, guild: await guildView(await guildCtx(id, pl, game, now)) })
   })
 
+  // 가입: 정원 검사(실제 길드원 수)와 쓰기 사이에 같은 길드의 다른 가입이 끼지 않게 길드마다 하나씩(inTurn) — 동시에 보낸 가입이 정원을 넘지 못한다(2026-10-27 보안 점검)
   app.post('/v1/guild/join', auth, async (c) => {
     const gid = strField(await body(c), 'guild_id')
     if (!UUID_RE.test(gid)) throw new ApiError(400, 'bad_request', "'guild_id' must be a uuid")
-    return guildMutate(c, async (x) => {
+    return inTurn([`g:${gid.toLowerCase()}`], () => guildMutate(c, async (x) => {
       if (x.pl.stage < G.UNLOCK_STAGE && !x.pl.admin) throw blocked('locked', 'clear round 1-10 first')
       if (x.g) throw blocked('in_guild', 'already in a guild')
       const [gr] = await query(`select ${GUILD_COLS} from guilds where id = $1`, [gid])
@@ -3498,7 +3517,7 @@ export function createApp(opts: AppOptions) {
       const st = guildState(g, x.now, x.hour)
       if (Number(n) >= G.capacity(st.lv.level)) throw blocked('full', 'guild is full')
       return { change: { guild: { row: rowOf(x, { guild_id: gid, joined_at: x.now }), log: { guild_id: gid, text: txt('server.app.guild_join.text', { playerName: G.playerName(x.id) }) } } } }
-    })
+    }))
   })
 
   app.post('/v1/guild/create', auth, async (c) => {

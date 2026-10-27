@@ -1,10 +1,11 @@
 // 길드전(공성전, 마이그레이션 021, guild_war.ts·war_routes.ts·war_live.ts): 규칙(주·상대·성 합치기·점수), 수비 영웅, 전투 열기·합류·끝,
 // 한 주 한 번(길드원이 시각을 정한다, 기본 토요일 21:00), 주간 보상, 실시간 방(방장·중계·명령·방장 넘김·끝 저장).
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { after, before, test } from 'node:test'
 import { serve } from '@hono/node-server'
 import * as W from '../src/guild_war.ts'
-import { MAX_UNITS, mergeSnap, WarLive } from '../src/war_live.ts'
+import { MAX_BUFFER, MAX_MSG, MAX_UNITS, mergeSnap, WarLive } from '../src/war_live.ts'
 import { setup, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
@@ -237,6 +238,13 @@ test('war live room: host relay, commands, host hand-over, end saves the castle'
     // 다른 길드 사람·토큰 없음은 못 들어온다
     const outsider = await member()
     await assert.rejects(open(outsider.token))
+    // 로스터에 있어도 지금 그 길드원이 아니면(길드를 나갔다) 못 들어온다 — 먼저 들어와 방장이 돼 가짜 상태를 뿌리지 못하게
+    const leaver = await member(a.gid)
+    assert.equal((await req('POST', '/v1/guild/war/enter', leaver.token, { heroes: squad() })).status, 200)
+    assert.equal(await live.canJoin(pa.battle_id, leaver.id), true)
+    assert.equal((await req('POST', '/v1/guild/leave', leaver.token, {})).status, 200)
+    assert.equal(await live.canJoin(pa.battle_id, leaver.id), false)
+    await assert.rejects(open(leaver.token))
     // uuid가 아닌 battle(대시 36개)은 DB 오류가 나기 전에 거절 — 처리 안 된 거부로 프로세스가 끝나지 않는다(이 테스트가 계속 돈다)
     await assert.rejects(new Promise((res, rej) => {
       const ws = new WebSocket(`ws://127.0.0.1:${port}${pa.live}?battle=${'-'.repeat(36)}&token=${a.token}`)
@@ -363,6 +371,59 @@ test('war: defender kills count toward the damage cap (a state with every defend
   const c = { gates: [0, 0, 0, 0], keep: 0, dead: { 1: 0, 2: 0.5 } }
   assert.equal(W.defenderDamage(defs, c), 1250)
   assert.equal(W.defenderDamage(defs, { gates: [], keep: 0, dead: {} }), 0)
+})
+
+// 가짜 소켓(방이 쓰는 ws.WebSocket 부분만). close·terminate의 'close'는 진짜처럼 다음 틱에 온다
+function fakeWs() {
+  const ws = Object.assign(new EventEmitter(), {
+    readyState: 1, bufferedAmount: 0, sent: [] as any[], pings: 0, dead: false, closed: false,
+    send(s: string) { ws.sent.push(JSON.parse(s)) },
+    ping() { ws.pings++ },
+    terminate() { ws.dead = true; ws.shut() },
+    close() { ws.closed = true; ws.shut() },
+    shut() { ws.readyState = 2; setImmediate(() => { ws.readyState = 3; ws.emit('close') }) },
+  })
+  return ws
+}
+const tick = () => new Promise((r) => setImmediate(r))
+
+test('war live room: slow readers are cut, the heartbeat drops dead connections, a closed battle closes its room; an honest full snap fits MAX_MSG', async () => {
+  const live = new WarLive()
+  live.onState = async () => true // 성 상태 저장 → 전투가 닫혔다
+  try {
+    const [a, b, c] = [fakeWs(), fakeWs(), fakeWs()]
+    live.join('b1', 'pa', a as any)
+    live.join('b1', 'pb', b as any)
+    live.join('b1', 'pc', c as any)
+    // 받지 못하고 1 MB 넘게 쌓인 연결은 더 보내지 않고 끊는다
+    b.bufferedAmount = MAX_BUFFER + 1
+    a.emit('message', JSON.stringify({ t: 'snap', s: { c: 1 } }))
+    assert.ok(c.sent.some((m) => m.t === 'snap'))
+    assert.ok(b.dead && !b.sent.some((m) => m.t === 'snap'))
+    await tick()
+    // 심장 박동: ping, 다음 박동까지 pong이 없으면 끊는다
+    live.sweep()
+    assert.deepEqual([a.pings, c.pings], [1, 1])
+    c.emit('pong')
+    live.sweep()
+    assert.deepEqual([a.dead, c.dead, c.pings], [true, false, 2])
+    await tick() // a(방장)가 나가 c가 이어받는다
+    assert.ok(c.sent.some((m) => m.t === 'host'))
+    // 전투가 닫히면 end, 연결은 박동 하나 뒤에 닫는다(앱이 end를 먼저 읽게)
+    c.emit('message', JSON.stringify({ t: 'end', state: {} }))
+    await tick()
+    assert.ok(c.sent.some((m) => m.t === 'end'))
+    live.sweep()
+    c.emit('pong')
+    assert.equal(c.closed, false)
+    live.sweep()
+    assert.ok(c.closed && live.rooms.size === 0)
+  } finally {
+    live.close()
+  }
+  // 정상 전체 snap(공격·수비 영웅 160명 × 숫자 7개, 긴 소수로 적어도)은 MAX_MSG의 절반도 안 된다
+  const rows = Object.fromEntries(Array.from({ length: 160 }, (_, i) => [String(1000 + i), [-123.456789, 98.7654321, -3.14159265, 0.123456789, 4, 123, 0.0123456]]))
+  assert.ok(JSON.stringify({ t: 'snap', s: { c: 123.45, u: rows, g: [10000, 10000, 10000, 10000], k: 80000, n: 12, d: 0 } }).length < MAX_MSG / 2)
 })
 
 test('war live mergeSnap: delta snaps keep earlier hero rows, other fields take the new snap', () => {

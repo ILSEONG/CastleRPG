@@ -23,6 +23,9 @@ export const TIME_LIMIT: Record<Quest, number> = { lich: 180, spider: 180 } // �
 export const MIN_CLEAR_SEC = 2 // 이보다 빠른 승리는 받지 않는다(강한 파티의 빠른 승리는 아래 힘 검사로 본다)
 export const REWARD_CLEARS = 3 // 퀘스트마다 하루 보상 받는 클리어 수(넘으면 같이 싸울 수는 있고 보상만 없다)
 export const DPS_SLACK = 8 // 승리 힘 타당성 여유: 매치 초당 피해(서버 계산 — 스킬·치명타 빼고) × 걸린 시간 × 이만큼 ≥ 보스 HP(너무 약한·너무 빠른 승리를 함께 막는다)
+// 사람이 나 혼자(나머지 AI 성주)인 판의 여유(2026-10-27 보안 점검): 결과를 내 기기만 정한다. 파티 영웅은 서버가 준 능력치 그대로(성장 치명타·공격 속도 없음) —
+// 스킬·거인 사냥·보스 약점(수확 깨기 +30%)을 다 더해도 정상 승리는 초당 피해의 2배 안팎(수확 막·수정·회피로 쉬는 시간도 있다). 여유를 두고 3.
+export const SOLO_DPS_SLACK = 3
 // 난이도마다 장신구 등급 가중치(N R SR SSR UR LR — 다른 장비와 같은 등급)
 export const DROP_WEIGHTS: number[][] = [
   [50, 35, 13, 2, 0, 0],
