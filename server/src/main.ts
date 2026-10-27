@@ -55,7 +55,9 @@ const legal = {
   bizNo: process.env.LEGAL_BIZ_NO?.trim() || '227-15-93850',
   email: process.env.LEGAL_EMAIL?.trim() ?? '',
 }
-const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, partyLive, gameCacheSec, payments, legal })
+// 광고 서버 확인(AdMob SSV)을 받는 보상형 광고 단위: ADMOB_AD_UNITS(쉼표 구분 광고 단위 id). 없으면 ads.ts AD_UNITS(앱 ad_config.gd 값)
+const adUnits = (process.env.ADMOB_AD_UNITS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, partyLive, gameCacheSec, payments, legal, adUnits })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)

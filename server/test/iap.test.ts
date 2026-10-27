@@ -144,6 +144,46 @@ test('핫딜: 보스 단계·다이아 부족·패배 때 1시간, 한 번에 �
   assert.equal(r.json.player.iap.hs, 2)
 })
 
+test('핫딜 계기: __proto__·constructor 등 표에 없는 값은 400', async () => {
+  const { token } = await S.login()
+  for (const trigger of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    assert.equal((await S.req('POST', '/v1/iap/hot', { token, body: { trigger } })).status, 400, trigger)
+  }
+  assert.equal(IAP.offerHot(IAP.normalize({}, 0), '__proto__', 0, 0), 'unknown')
+  assert.deepEqual(IAP.normalize({ hcool: JSON.parse('{"__proto__": 1, "dia": 5}') }, 0).hcool, { dia: 5 })
+})
+
+test('지급이 들어간 뒤 다시 읽기에서 오류가 나도 주문 행은 남는다 — 재전송은 already(두 번 받지 않는다)', async () => {
+  let armed = false
+  let paid = false
+  const S2 = await setup({
+    wrapQuery: (q) => async (text, params) => {
+      if (armed && text.includes('insert into economy_log')) paid = true
+      else if (armed && paid && text.includes('from player_state s where')) {
+        armed = false
+        throw new Error('db gone')
+      }
+      return q(text, params)
+    },
+  })
+  try {
+    const { token, id } = await S2.login()
+    const send = () => S2.req('POST', '/v1/iap/purchase', { token, body: { product: 'pkg_daily', provider: 'test', order_id: 'after-commit' } })
+    armed = true
+    assert.equal((await send()).status, 500) // 일일 패키지(던전 열쇠) = 쓴 뒤 다시 읽는다
+    assert.equal(paid, true)
+    assert.equal((await S2.db.query("select 1 from iap_orders where order_id = 'test:after-commit'")).length, 1)
+    const again = await send()
+    assert.equal(again.json.already, true, JSON.stringify(again.json))
+    assert.equal((await S2.db.query("select 1 from economy_log where player_id = $1 and kind = 'iap'", [id])).length, 1)
+    // 지급 전 오류(한도)는 예전처럼 주문 행을 지운다
+    assert.equal((await S2.req('POST', '/v1/iap/purchase', { token, body: { product: 'pkg_daily', provider: 'test', order_id: 'limit' } })).json.error, 'limit')
+    assert.equal((await S2.db.query("select 1 from iap_orders where order_id = 'test:limit'")).length, 0)
+  } finally {
+    await S2.close()
+  }
+})
+
 test('광고 제거: 한 번만, 사면 ad_free(구매 보너스 없음)', async () => {
   S.clock.t = T0
   const { token } = await S.login()

@@ -97,6 +97,44 @@ test('토스 결제: sku가 상품 id와 다르면 TOSS_SKUS로 맞춘다, 뷰�
   }
 })
 
+test('토스 결제: 대소문자만 다른 같은 주문 번호는 한 번만 지급(already), UUID가 아니면 402', async () => {
+  const order = '0199a1ff-2baa-7495-bbfa-a0826ba8c7c0'
+  // 토스가 주문 번호를 대소문자 구분 없이 찾는다고 본다
+  const toss = Pay.tossVerifier(async (_path, body: any) => ({ status: 200, json: String(body.orderId).toLowerCase() === order
+    ? { resultType: 'SUCCESS', success: { orderId: order, status: 'PAYMENT_COMPLETED', sku: 'dia_1', reason: '' } }
+    : { resultType: 'SUCCESS', success: { orderId: body.orderId, status: 'NOT_FOUND', reason: '' } } }))
+  const S = await setup({ payments: { toss } })
+  try {
+    const { token, id } = await S.login()
+    const d0 = (await S.req('GET', '/v1/player', { token })).json.player.diamonds
+    assert.equal((await buy(S, token, 'dia_1', 'toss', order)).status, 200)
+    const again = await buy(S, token, 'dia_1', 'toss', order.toUpperCase())
+    assert.equal(again.json.already, true, JSON.stringify(again.json))
+    assert.equal((await buy(S, token, 'dia_1', 'toss', 'not-a-uuid')).json.error, 'payment_invalid')
+    assert.equal((await S.req('GET', '/v1/player', { token })).json.player.diamonds, d0 + 3300)
+    assert.equal((await S.db.query("select 1 from economy_log where player_id = $1 and kind = 'iap'", [id])).length, 1)
+  } finally {
+    await S.close()
+  }
+})
+
+test('실결제 확인은 한 플레이어가 10분에 30번까지(429, Google API 할당량), 플레이어마다·시간이 지나면 다시', async () => {
+  const g = fakeVerifier('GPA')
+  const S = await setup({ payments: { google: g.v } })
+  try {
+    const { token } = await S.login()
+    for (let i = 0; i < 30; i++) assert.equal((await buy(S, token, 'dia_1', 'google', 'nope')).json.error, 'payment_invalid')
+    const r = await buy(S, token, 'dia_1', 'google', 'nope')
+    assert.equal(r.status, 429)
+    assert.equal(r.json.error, 'too_many_requests')
+    assert.equal((await buy(S, (await S.login()).token, 'dia_1', 'google', 'nope')).json.error, 'payment_invalid')
+    S.clock.t += 600
+    assert.equal((await buy(S, token, 'dia_1', 'google', 'ok:dia_1:1')).status, 200)
+  } finally {
+    await S.close()
+  }
+})
+
 test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회, 상태·계정 확인, consume', async () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
   const calls: { url: string; init: any }[] = []
@@ -133,21 +171,30 @@ test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회,
   assert.ok(calls.at(-1)!.url.endsWith('/tokens/t1:consume') && calls.at(-1)!.init.method === 'POST')
 })
 
-test('tossVerifier: 주문 상태 조회 결과로 판정, readPayments는 키가 있는 제공자만 켠다', async () => {
+test('tossVerifier: 주문 상태 조회 결과로 판정, 주문 번호는 UUID만·소문자 키, 응답 주문 번호가 다르면 무효, readPayments는 키가 있는 제공자만 켠다', async () => {
+  const id = (x: string) => `0199a1ff-2baa-7495-bbfa-a0826ba8c7c${x}` // 토스 주문 번호(uuid v7)
   const status: Record<string, any> = {
-    a: { resultType: 'SUCCESS', success: { orderId: 'a', status: 'PAYMENT_COMPLETED', sku: 'dia_1', reason: '' } },
-    b: { resultType: 'SUCCESS', success: { orderId: 'b', status: 'ORDER_IN_PROGRESS', reason: '' } },
-    c: { resultType: 'SUCCESS', success: { orderId: 'c', status: 'REFUNDED', sku: 'dia_1', reason: '' } },
-    d: { resultType: 'FAIL', error: { errorCode: '4095', reason: 'limit' } },
+    [id('a')]: { resultType: 'SUCCESS', success: { orderId: id('a'), status: 'PAYMENT_COMPLETED', sku: 'dia_1', reason: '' } },
+    [id('b')]: { resultType: 'SUCCESS', success: { orderId: id('b'), status: 'ORDER_IN_PROGRESS', reason: '' } },
+    [id('c')]: { resultType: 'SUCCESS', success: { orderId: id('c'), status: 'REFUNDED', sku: 'dia_1', reason: '' } },
+    [id('d')]: { resultType: 'FAIL', error: { errorCode: '4095', reason: 'limit' } },
+    [id('e')]: { resultType: 'SUCCESS', success: { orderId: id('f'), status: 'PAYMENT_COMPLETED', sku: 'dia_1', reason: '' } },
   }
+  const asked: string[] = []
   const v = Pay.tossVerifier(async (path, body: any) => {
     assert.equal(path, '/api-partner/v1/apps-in-toss/order/get-order-status')
+    asked.push(body.orderId)
     return { status: 200, json: status[body.orderId] }
   })
-  assert.deepEqual(await v.verify({ product: 'dia_1', token: 'a', account: '' }), { ok: true, orderId: 'a', product: 'dia_1' })
-  assert.equal((await v.verify({ product: 'dia_1', token: 'b', account: '' })).pending, true)
-  assert.equal((await v.verify({ product: 'dia_1', token: 'c', account: '' })).ok, false)
-  await assert.rejects(v.verify({ product: 'dia_1', token: 'd', account: '' }))
+  assert.deepEqual(await v.verify({ product: 'dia_1', token: id('a'), account: '' }), { ok: true, orderId: id('a'), product: 'dia_1' })
+  assert.deepEqual(await v.verify({ product: 'dia_1', token: id('a').toUpperCase(), account: '' }), { ok: true, orderId: id('a'), product: 'dia_1' }) // 같은 주문 = 같은 키
+  assert.equal((await v.verify({ product: 'dia_1', token: id('b'), account: '' })).pending, true)
+  assert.equal((await v.verify({ product: 'dia_1', token: id('c'), account: '' })).ok, false)
+  await assert.rejects(v.verify({ product: 'dia_1', token: id('d'), account: '' }))
+  assert.equal((await v.verify({ product: 'dia_1', token: id('e'), account: '' })).ok, false) // 응답이 다른 주문
+  const n = asked.length
+  for (const bad of ['a', `${id('a')} `, `{${id('a')}}`, id('a').replace(/-/g, '')]) assert.equal((await v.verify({ product: 'dia_1', token: bad, account: '' })).ok, false)
+  assert.equal(asked.length, n) // UUID가 아니면 토스에 묻지도 않는다
   assert.deepEqual(Pay.readPayments({}), {})
   assert.throws(() => Pay.readPayments({ TOSS_MTLS_CERT: '-----BEGIN CERTIFICATE-----' }))
   assert.throws(() => Pay.readPayments({ GOOGLE_PLAY_SERVICE_ACCOUNT: '{"x":1}' }))

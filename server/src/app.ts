@@ -52,6 +52,7 @@ export interface AppOptions {
   payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
   legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
   adWaitMs?: number // 광고 서버 확인(AdMob SSV) 콜백을 상점 구매가 기다리는 최대 시간(기본 10초, 테스트 0)
+  adUnits?: string[] // 광고 서버 확인을 받는 우리 보상형 광고 단위(비면 ads.ts AD_UNITS, 운영은 main.ts ADMOB_AD_UNITS)
   gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
 }
 
@@ -2360,28 +2361,36 @@ export function createApp(opts: AppOptions) {
 
   // --- 보상형 광고 서버 확인(AdMob SSV, ads.ts) ---
   // 앱은 광고를 띄우기 전에 /v1/ads/start로 표를 받아 광고의 custom_data로 넘긴다. AdMob이 끝까지 본 광고마다 /admob/ssv를 서명해 부르면 표가 확인된다.
-  // 운영 설정 ops_config ad_ssv = '1'이면 상점 [광고] 상품은 확인된 표가 있어야 받는다(아니면 예전처럼 body.ad = true, 기록에 ssv 여부만 남긴다).
+  // 스위치 = 운영 설정 ops_config ad_ssv: '1'이면 상점 [광고] 상품은 확인된 표가 있어야 받는다(아니면 예전처럼 body.ad = true, 기록에 ssv 여부만 남긴다).
+  // 토스 계정(player_identities provider 'toss')은 '1'이어도 body.ad = true로 받는다 — 토스 미니앱 빌드에는 실제 광고가 없다(ad_player.gd 5초 자리 표시).
+  // ponytail: 토스 로그인은 서버 검증 없는 hash라 누구나 토스 계정을 만들 수 있다 — 토스에 실제 광고가 붙으면 이 예외를 없앤다.
   const adKey = Ads.keyStore(opts.fetch ?? fetch)
   const adWaitMs = opts.adWaitMs ?? 10_000
-  async function adClaim(playerId: string, raw: unknown, usedFor: string): Promise<{ token: string; verified: boolean; required: boolean }> {
+  const adUnits = opts.adUnits?.length ? opts.adUnits : Ads.AD_UNITS
+  // 표 쓰기: 내 표, AdMob이 확인했고, 만든 지 1시간 안. usedFor = 상품:리셋 날짜:n(날짜가 있어 다음 날 같은 n으로 다시 쓰지 못한다).
+  // fresh = 비어 있던 표를 이 요청이 잡았다(못 사면 돌려놓는다). 이미 같은 usedFor면 같은 구매의 재전송(stale로 끝난다).
+  async function adClaim(playerId: string, raw: unknown, usedFor: string): Promise<{ token: string; verified: boolean; fresh: boolean; required: boolean }> {
     const token = typeof raw === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(raw) ? raw : ''
     let required = false
     try {
-      required = (await query("select value from ops_config where key = 'ad_ssv'"))[0]?.value === '1'
+      const [r] = await query(`select coalesce((select value from ops_config where key = 'ad_ssv') = '1', false)
+        and not exists (select 1 from player_identities where player_id = $1 and provider = 'toss') as required`, [playerId])
+      required = r?.required === true
     } catch {
       required = false
     }
-    if (!token) return { token, verified: false, required }
+    const no = { token: '', verified: false, fresh: false, required }
+    if (!token) return no
     const until = Date.now() + (required ? adWaitMs : 0)
+    const mine = "token = $1 and player_id = $2 and verified_at is not null and created_at > now() - interval '1 hour'"
     for (;;) {
       try {
-        const r = await query(`update ad_views set used_for = $3 where token = $1 and player_id = $2 and verified_at is not null
-          and (used_for is null or used_for = $3) returning token`, [token, playerId, usedFor])
-        if (r.length) return { token, verified: true, required }
+        if ((await query(`update ad_views set used_for = $3 where ${mine} and used_for is null returning token`, [token, playerId, usedFor])).length) return { token, verified: true, fresh: true, required }
+        if ((await query(`select 1 from ad_views where ${mine} and used_for = $3`, [token, playerId, usedFor])).length) return { token, verified: true, fresh: false, required }
       } catch {
-        return { token: '', verified: false, required }
+        return no
       }
-      if (Date.now() >= until) return { token: '', verified: false, required }
+      if (Date.now() >= until) return no
       await new Promise((ok) => setTimeout(ok, 500)) // AdMob 콜백은 보통 광고를 닫기 전후 몇 초 안에 온다
     }
   }
@@ -2414,7 +2423,9 @@ export function createApp(opts: AppOptions) {
       return c.json({ error: 'keys_unavailable' }, 503) // AdMob이 나중에 다시 부른다
     }
     if (!v) return c.json({ error: 'bad_signature' }, 403)
-    if (v.custom_data && v.transaction_id) {
+    // 남의 광고 단위 콜백(서명은 맞다)은 표를 확인하지 않는다. 그래도 200(아니면 AdMob이 계속 다시 보낸다)
+    if (!Ads.adUnitOk(adUnits, v.ad_unit)) console.warn(`[server] admob ssv: ad unit '${v.ad_unit.slice(0, 64)}' is not ours`)
+    else if (v.custom_data && v.transaction_id) {
       try {
         await query('update ad_views set verified_at = now(), transaction_id = $2 where token = $1 and verified_at is null', [v.custom_data, v.transaction_id])
       } catch (e) {
@@ -2434,7 +2445,8 @@ export function createApp(opts: AppOptions) {
     const x = SH.item(sid)
     if (!x) throw new ApiError(404, 'unknown_item', `unknown shop item '${sid}'`)
     const n = intField(b, 'n', 0, MAX_INT4)
-    const ad = x.currency === 'ad' ? await adClaim(c.get('playerId') as string, b.ad_token, `${x.id}:${n}`) : null
+    const usedFor = x.currency === 'ad' ? `${x.id}:${today(await loadGame(), clock())}:${n}` : ''
+    const ad = usedFor ? await adClaim(c.get('playerId') as string, b.ad_token, usedFor) : null
     try {
       return await mutate(c, (p, g, now) => {
         const st = SH.normalize(p.shop, today(g, now))
@@ -2472,8 +2484,9 @@ export function createApp(opts: AppOptions) {
         return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
       })
     } catch (e) {
-      // 같은 n의 재전송(stale)이 아니면 표를 돌려놓는다 — 한도·점검 등으로 못 산 광고는 다음 구매에 다시 쓴다
-      if (ad?.token && !(e instanceof ApiError && e.code === 'stale')) await query('update ad_views set used_for = null where token = $1 and used_for = $2', [ad.token, `${x.id}:${n}`]).catch(() => {})
+      // 이 요청이 새로 잡은 표만, 구매 판단이 거절했을 때(sold_out·stale 등 409 — 쓰기 전) 돌려놓는다: 한도 등으로 못 산 광고는 다음 구매에 다시 쓴다.
+      // 이미 쓴 표를 다시 보낸 요청(재전송·다른 상품)과 쓴 뒤일 수 있는 오류(conflict·DB)는 건드리지 않는다
+      if (ad?.fresh && e instanceof ApiError && e.status === 409 && e.code !== 'conflict') await query('update ad_views set used_for = null where token = $1 and used_for = $2', [ad.token, usedFor]).catch(() => {})
       throw e
     }
   })
@@ -2505,7 +2518,8 @@ export function createApp(opts: AppOptions) {
   // 같은 주문은 한 번만 지급 — 이미 이 계정에 지급한 주문이면 200 {already: true}(앱이 결제 직후 꺼졌다 다시 보낸 복구, Google은 consume을 다시
   // 해 본다), 다른 계정 주문이면 409 duplicate_order. 결제 미완료 202 {pending: true}. 확인 실패 402 payment_invalid. 제공자가 꺼져 있으면
   // 503 payments_unavailable, 확인 서버 오류 502 payment_check_failed(앱이 다음 실행에 다시 보낸다). 한도를 넘으면 409 limit(지급 안 함 —
-  // Google은 consume하지 않아 자동 환불된다).
+  // Google은 consume하지 않아 자동 환불된다). 제공자 확인은 한 플레이어가 10분에 30번까지(Google API 할당량) — 넘으면 429 too_many_requests.
+  const iapChecks = new RL.Limiter(30, 600)
   app.post('/v1/iap/purchase', auth, async (c) => {
     const b = await body(c)
     const pid = strField(b, 'product')
@@ -2522,6 +2536,7 @@ export function createApp(opts: AppOptions) {
     } else if (provider === 'google' || provider === 'toss') {
       verifier = pay[provider]
       if (!verifier) throw new ApiError(503, 'payments_unavailable', `${provider} payments are not connected yet`)
+      if (!iapChecks.take(id, clock())) throw new ApiError(429, 'too_many_requests', 'too many purchase checks; try again later')
       let v: Pay.Verified
       try {
         v = await verifier.verify({ product: provider === 'toss' ? (pay.tossSkus?.[pr.id] ?? pr.id) : pr.id, token, account: Pay.accountTag(id) })
@@ -2567,7 +2582,10 @@ export function createApp(opts: AppOptions) {
         return { change, extra: { bought: { product: pr.id, give } }, reload }
       })
     } catch (e) {
-      await query('delete from iap_orders where order_id = $1', [orderKey])
+      // 지급이 안 들어갔을 때만 주문 행을 지운다(지급은 economy_log iap와 한 문장). 쓴 뒤 다시 읽기·응답에서 난 오류면 남긴다 — 지우면
+      // 복구 재전송이 두 번 받는다(남기면 재전송은 already). 확인 자체가 실패하면 남긴다
+      const [paid] = await query("select 1 from economy_log where player_id = $1 and kind = 'iap' and detail->>'order_id' = $2 limit 1", [id, orderKey]).catch(() => [true])
+      if (!paid) await query('delete from iap_orders where order_id = $1', [orderKey])
       throw e
     }
     await finish()
@@ -2579,7 +2597,7 @@ export function createApp(opts: AppOptions) {
   // 앱이 계기마다 그냥 보내도 되게 409로 거절하지 않는다(409는 앱이 상태를 다시 받는다). 보스는 쉬는 동안 깬 단계를 넘긴다.
   app.post('/v1/iap/hot', auth, async (c) => {
     const trigger = strField(await body(c), 'trigger')
-    if (!IAP.HOT[trigger]) throw new ApiError(400, 'bad_request', `unknown trigger '${trigger}'`)
+    if (!Object.hasOwn(IAP.HOT, trigger)) throw new ApiError(400, 'bad_request', `unknown trigger '${trigger}'`) // '__proto__' 등은 표에 없는 값
     return mutate(c, (p, g, now) => {
       const st = IAP.normalize(p.iap, today(g, now))
       const r = IAP.offerHot(st, trigger, now, p.stage - 1)

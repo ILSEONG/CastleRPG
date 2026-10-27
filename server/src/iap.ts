@@ -130,7 +130,7 @@ export function normalize(raw: unknown, day: number): IapState {
     passes: Array.isArray(s.passes) ? s.passes.filter((x): x is string => typeof x === 'string' && product(x)?.kind === 'pass') : [],
     gp: { free: idxs(gp.free, GROWTH.length), paid: idxs(gp.paid, GROWTH.length) },
     hot: hotOf(s.hot),
-    hcool: Object.fromEntries(Object.entries(obj(s.hcool)).filter(([k, v]) => HOT[k] && typeof v === 'number' && Number.isFinite(v))) as Record<string, number>,
+    hcool: Object.fromEntries(Object.entries(obj(s.hcool)).filter(([k, v]) => Object.hasOwn(HOT, k) && typeof v === 'number' && Number.isFinite(v))) as Record<string, number>,
     hs: Number.isInteger(s.hs) && (s.hs as number) >= 0 ? (s.hs as number) : 0,
   }
 }
@@ -145,8 +145,8 @@ export const activeHot = (s: IapState, now: number) => (s.hot && !s.hot.bought &
 
 // 핫딜 띄우기: 이미 떠 있으면 'active', 쉬는 시간이면 'cooldown', 보스는 새 단계를 깨지 않았으면 'not_ready'. 되면 새 상태.
 export function offerHot(s: IapState, trigger: string, now: number, cleared: number): IapState | 'active' | 'cooldown' | 'not_ready' | 'unknown' {
+  if (!Object.hasOwn(HOT, trigger)) return 'unknown' // '__proto__'·'constructor'는 HOT[...]로는 값이 있다
   const h = HOT[trigger]
-  if (!h) return 'unknown'
   if (activeHot(s, now)) return 'active'
   const stage = Math.floor(cleared / HOT_ROUNDS)
   if (trigger === 'boss' && stage <= s.hs) return 'not_ready'

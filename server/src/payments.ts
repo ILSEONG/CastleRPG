@@ -128,15 +128,22 @@ export function tossPost(cert: string, key: string): TossPost {
   })
 }
 
+// 토스 주문 번호는 UUID(v7). 소문자로 맞춘 값이 중복 지급 막기 키다 — 대소문자만 다른 같은 주문을 두 번 받지 못하게.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function tossVerifier(post: TossPost): Verifier {
   return {
     async verify({ product, token }) {
-      const r = await post('/api-partner/v1/apps-in-toss/order/get-order-status', { orderId: token })
+      if (!UUID_RE.test(token)) return { ok: false, orderId: '', product, reason: 'order id is not a uuid' }
+      const orderId = token.toLowerCase()
+      const r = await post('/api-partner/v1/apps-in-toss/order/get-order-status', { orderId })
       const s = r.json?.success
       if (r.status !== 200 || r.json?.resultType !== 'SUCCESS' || !s) throw new Error(`toss order lookup failed: ${r.status} ${r.json?.error?.errorCode ?? ''}`)
-      if (s.status === 'ORDER_IN_PROGRESS') return { ok: false, pending: true, orderId: token, product, reason: 'in progress' }
-      if (s.status !== 'PAYMENT_COMPLETED' && s.status !== 'PURCHASED') return { ok: false, orderId: token, product, reason: `status ${s.status}` }
-      return { ok: true, orderId: token, product: String(s.sku ?? '') }
+      // 응답의 orderId(요청한 주문 번호)가 있으면 같은 주문이어야 한다
+      if (s.orderId != null && String(s.orderId).toLowerCase() !== orderId) return { ok: false, orderId, product, reason: 'order id mismatch' }
+      if (s.status === 'ORDER_IN_PROGRESS') return { ok: false, pending: true, orderId, product, reason: 'in progress' }
+      if (s.status !== 'PAYMENT_COMPLETED' && s.status !== 'PURCHASED') return { ok: false, orderId, product, reason: `status ${s.status}` }
+      return { ok: true, orderId, product: String(s.sku ?? '') }
     },
   }
 }
