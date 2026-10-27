@@ -349,7 +349,7 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     const battleId = strField(b, 'battle_id')
     const id = c.get('playerId') as string
     if (live && live.hostOf(battleId) && live.hostOf(battleId) !== id) throw blocked('not_host', 'another member is running this battle')
-    await saveState(battleId, id, b.state, true)
+    if ((await saveState(battleId, id, b.state, true)) && live) live.end(battleId) // 방에 남은 길드원에게 end(방은 곧 닫힌다)
     const x = await ctx(c)
     return c.json({ server_now: x.now, war: await warView(x) })
   })
@@ -408,8 +408,10 @@ export function registerGuildWar(app: Hono<Any>, d: Any, live: WarLive | undefin
     live.verify = d.verifyToken
     live.canJoin = async (battleId: string, pid: string) => {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(battleId)) return false // uuid가 아니면 DB가 오류를 낸다
-      const [b] = await query('select roster, closed, extract(epoch from ends_at)::float8 as ends_at from guild_war_battles where id = $1', [battleId])
-      return !!b && !b.closed && clock() < Number(b.ends_at) + 30 && (json(b.roster) as Any[]).some((s) => s.owner === pid)
+      // 로스터에 있고 지금도 그 길드원(2026-10-27 보안 점검: 길드를 나간 사람이 먼저 들어와 방장이 돼 가짜 상태를 뿌리지 못하게)
+      const [b] = await query(`select roster, closed, extract(epoch from ends_at)::float8 as ends_at,
+        exists (select 1 from player_guild pg where pg.player_id = $2 and pg.guild_id = b.guild_id) as member from guild_war_battles b where id = $1`, [battleId, pid])
+      return !!b && !b.closed && b.member && clock() < Number(b.ends_at) + 30 && (json(b.roster) as Any[]).some((s) => s.owner === pid)
     }
     live.onState = async (battleId: string, pid: string, state: unknown, final: boolean) => {
       return saveState(battleId, pid, state, final)

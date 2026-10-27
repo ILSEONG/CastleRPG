@@ -1,8 +1,11 @@
 // 파티 퀘스트(마이그레이션 050, party.ts·party_routes.ts): 난이도 배수, 장신구 등급, 매칭(사람끼리·AI 성주 채움), 입장 수락·거절·시간 초과,
 // 판 결과(승리 타당성·하루 보상 수·재전송), 잠긴 난이도, 병사 보유 검사, 반지 장착.
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import { after, before, test } from 'node:test'
 import * as PQ from '../src/party.ts'
+import { MAX_BUFFER, PartyLive } from '../src/party_live.ts'
 import * as R from '../src/rules.ts'
 import { setup } from './helpers.ts'
 import type { Setup } from './helpers.ts'
@@ -100,9 +103,9 @@ test('party routes: queue, bots, accept, live run, win gives a ring once, replay
   assert.equal(live.state, 'live')
   assert.equal(live.boss.hp, PQ.BOSS.lich.hp)
   assert.equal(live.me, 0)
-  // 너무 이른 승리는 패배로 닫힌다
-  S.clock.t += 60
-  const fin = await S.req('POST', '/v1/party/finish', { token: p.token, body: { run_id: live.run_id, win: true, elapsed: 60 } })
+  // 너무 이른 승리는 패배로 닫힌다(AI 성주와만 한 판: 힘 여유 SOLO_DPS_SLACK — 한스 혼자의 초당 피해로도 170초면 쉬움 보스를 깎는다)
+  S.clock.t += 170
+  const fin = await S.req('POST', '/v1/party/finish', { token: p.token, body: { run_id: live.run_id, win: true, elapsed: 170 } })
   assert.equal(fin.status, 200, JSON.stringify(fin.json))
   assert.equal(fin.json.result.win, true, JSON.stringify(fin.json.result))
   const ring = fin.json.result.rewards.items[0]
@@ -110,8 +113,9 @@ test('party routes: queue, bots, accept, live run, win gives a ring once, replay
   assert.ok(fin.json.player.items.some((it: any) => it.slot === 'ring'))
   assert.equal(fin.json.party.quests.lich.best, 1)
   assert.equal(fin.json.party.quests.lich.clears_left, PQ.REWARD_CLEARS - 1)
-  const again = await S.req('POST', '/v1/party/finish', { token: p.token, body: { run_id: live.run_id, win: true, elapsed: 60 } })
+  const again = await S.req('POST', '/v1/party/finish', { token: p.token, body: { run_id: live.run_id, win: true, elapsed: 170 } })
   assert.deepEqual(again.json.result, fin.json.result)
+  assert.equal(ring.id, fin.json.player.items.find((it: any) => it.slot === 'ring').id, 'the result names the ring that was granted')
   assert.equal(again.json.player.items.filter((it: any) => it.slot === 'ring').length, 1, 'no second ring')
   // 반지를 낀다
   const eq = await S.req('POST', '/v1/equip', { token: p.token, body: { hero_id: 'hans', slot: 'ring', item_id: fin.json.player.items.find((it: any) => it.slot === 'ring').id } })
@@ -295,4 +299,140 @@ test('party routes: locked until the guide reaches the party mission (finished/s
   // 가이드가 파티 미션에 닿으면 열린다
   await S.db.query(`update player_state set tut_step = $2 where player_id = $1`, [b.id, n])
   assert.equal((await S.req('POST', '/v1/party/lobby/join', { token: b.token, body: { code: cr.json.party.lobby.code, hero: lich.hero } })).status, 200)
+})
+
+// 열린 run 하나를 바로 만든다(매칭 없이 — 결과 검사만 본다). match가 같으면 사람 여럿이 함께한 판
+async function openRun(T: Setup, pid: string, o: { match?: string; dps: number; ago: number }) {
+  const id = randomUUID()
+  await T.db.query(`insert into party_runs (id, match_id, player_id, quest, diff, dps, boss_hp, started_at) values ($1, $2, $3, 'lich', 1, $4, $5, to_timestamp($6::float8))`,
+    [id, o.match ?? randomUUID(), pid, o.dps, PQ.BOSS.lich.hp, T.clock.t - o.ago])
+  return id
+}
+const winRun = (T: Setup, token: string, run: string, elapsed: number) => T.req('POST', '/v1/party/finish', { token, body: { run_id: run, win: true, elapsed } })
+
+test('party finish: parallel finishes of many open runs give at most REWARD_CLEARS rings a day, and each result names a ring that was granted', async () => {
+  let slow = false
+  const T = await setup({
+    wrapQuery: (q) => async (text, params) => {
+      if (slow) await new Promise((r) => setTimeout(r, 1)) // 요청들이 서로 끼어들게(PGlite만으로는 한 요청씩 돈다)
+      return q(text, params)
+    },
+  })
+  try {
+    const p = await T.login()
+    const runs: string[] = []
+    for (let i = 0; i < 8; i++) runs.push(await openRun(T, p.id, { dps: 1000, ago: 100 }))
+    slow = true
+    const res = await Promise.all(runs.map((id) => winRun(T, p.token, id, 60)))
+    slow = false
+    assert.ok(res.every((r) => r.status === 200), JSON.stringify(res.map((r) => r.json)))
+    const rings = (await T.db.query("select id from player_items where player_id = $1 and slot = 'ring'", [p.id])).map((r) => Number(r.id)).sort()
+    const named = res.flatMap((r) => r.json.result.rewards.items ?? []).map((it: any) => Number(it.id)).sort()
+    assert.equal(rings.length, PQ.REWARD_CLEARS, 'the daily cap holds')
+    assert.deepEqual(named, rings, 'results name exactly the rings in the bag')
+    assert.ok(res.every((r) => r.json.result.win === true))
+    assert.equal(res.filter((r) => r.json.result.no_reward).length, runs.length - PQ.REWARD_CLEARS)
+    assert.equal((await T.req('GET', '/v1/party', { token: p.token })).json.party.quests.lich.clears_left, 0)
+  } finally {
+    await T.close()
+  }
+})
+
+test('party: a new run closes my other open runs (re-queueing after a match started cannot stack open runs)', async () => {
+  const p = await player()
+  const liveRun = async () => {
+    assert.equal((await queueLich(p)).status, 200)
+    const c = await S.req('POST', '/v1/test/party_bots_now', { token: p.token })
+    const acc = await S.req('POST', '/v1/party/accept', { token: p.token, body: { match_id: c.json.party.queue.match_id, accept: true } })
+    assert.equal(acc.json.party.queue.state, 'live', JSON.stringify(acc.json.party.queue))
+    return acc.json.party.queue.run_id as string
+  }
+  const first = await liveRun()
+  const second = await liveRun() // 앞 판을 끝내지 않고 다시 매칭
+  assert.notEqual(first, second)
+  const rows = await S.db.query('select id::text as id, closed from party_runs where player_id = $1', [p.id])
+  assert.deepEqual(Object.fromEntries(rows.map((r) => [r.id, r.closed])), { [first]: true, [second]: false })
+  S.clock.t += 170
+  const old = await winRun(S, p.token, first, 170)
+  assert.equal(old.json.result, null, 'the replaced run gives nothing')
+  assert.equal(old.json.player.items.filter((it: any) => it.slot === 'ring').length, 0)
+  assert.equal((await winRun(S, p.token, second, 170)).json.result.win, true)
+})
+
+test('party finish: alone with AI lords the win check is tighter (power slack SOLO_DPS_SLACK, real time >= elapsed); with another lord it stays DPS_SLACK', async () => {
+  const hp = PQ.BOSS.lich.hp
+  const e = hp / (100 * 5) // 초당 100: DPS_SLACK(8)로는 되고 SOLO_DPS_SLACK(3)로는 안 되는 시간
+  assert.ok(100 * e * PQ.DPS_SLACK >= hp && 100 * e * PQ.SOLO_DPS_SLACK < hp)
+  const a = await S.login()
+  assert.equal((await winRun(S, a.token, await openRun(S, a.id, { dps: 100, ago: 60 }), e)).json.result.win, false, 'too weak for a solo win')
+  assert.equal((await winRun(S, a.token, await openRun(S, a.id, { dps: 1000, ago: 60 }), 100)).json.result.win, false,
+    '100 s of battle in 60 s of real time (party battles are always x1)')
+  const ok = await winRun(S, a.token, await openRun(S, a.id, { dps: 1000, ago: 105 }), 100)
+  assert.equal(ok.json.result.win, true)
+  assert.equal(ok.json.result.rewards.items.length, 1)
+  // 사람 둘이 함께한 판: 예전 여유 그대로
+  const b = await S.login()
+  const c = await S.login()
+  const match = randomUUID()
+  const rb = await openRun(S, b.id, { match, dps: 100, ago: 60 })
+  await openRun(S, c.id, { match, dps: 100, ago: 60 })
+  assert.equal((await winRun(S, b.token, rb, e)).json.result.win, true)
+})
+
+// 가짜 소켓(방이 쓰는 ws.WebSocket 부분만). close·terminate의 'close'는 진짜처럼 다음 틱에 온다
+function fakeWs() {
+  const ws = Object.assign(new EventEmitter(), {
+    readyState: 1, bufferedAmount: 0, sent: [] as any[], pings: 0, dead: false, closed: false,
+    send(s: string) { ws.sent.push(JSON.parse(s)) },
+    ping() { ws.pings++ },
+    terminate() { ws.dead = true; ws.shut() },
+    close() { ws.closed = true; ws.shut() },
+    shut() { ws.readyState = 2; setImmediate(() => { ws.readyState = 3; ws.emit('close') }) },
+  })
+  return ws
+}
+const tick = () => new Promise((r) => setImmediate(r))
+
+test('party live room: slow readers are cut, the heartbeat drops dead connections, ended or removed matches close their rooms', async () => {
+  const live = new PartyLive()
+  const matches = new Set(['m1', 'm2'])
+  live.seatOf = (m) => (matches.has(m) ? 0 : -1)
+  try {
+    const [a, b, c] = [fakeWs(), fakeWs(), fakeWs()]
+    live.join('m1', 'pa', a as any)
+    live.join('m1', 'pb', b as any)
+    live.join('m1', 'pc', c as any)
+    assert.equal(a.sent[0].host, true)
+    // 받지 못하고 1 MB 넘게 쌓인 연결은 더 보내지 않고 끊는다
+    b.bufferedAmount = MAX_BUFFER + 1
+    a.emit('message', JSON.stringify({ t: 'snap', s: { c: 1 } }))
+    assert.ok(c.sent.some((m) => m.t === 'snap'))
+    assert.ok(b.dead && !b.sent.some((m) => m.t === 'snap'))
+    await tick()
+    // 심장 박동: ping, 다음 박동까지 pong이 없으면 끊는다
+    live.sweep()
+    assert.deepEqual([a.pings, c.pings], [1, 1])
+    a.emit('pong')
+    live.sweep()
+    assert.deepEqual([a.dead, c.dead, a.pings], [false, true, 2])
+    await tick()
+    // 매치가 없어지면(모두 끝냈다·30분) 방을 닫는다
+    matches.delete('m1')
+    live.sweep()
+    assert.ok(a.closed && !live.rooms.has('m1'))
+    // 끝난 방: end를 읽을 박동 하나를 주고 닫는다
+    const [d, e] = [fakeWs(), fakeWs()]
+    live.join('m2', 'pd', d as any)
+    live.join('m2', 'pe', e as any)
+    d.emit('message', JSON.stringify({ t: 'end', win: true, elapsed: 50 }))
+    assert.ok(e.sent.some((m) => m.t === 'end'))
+    live.sweep()
+    d.emit('pong')
+    e.emit('pong')
+    assert.equal(e.closed, false, 'one beat to read end')
+    live.sweep()
+    assert.deepEqual([d.closed, e.closed, live.rooms.size], [true, true, 0])
+  } finally {
+    live.close()
+  }
 })

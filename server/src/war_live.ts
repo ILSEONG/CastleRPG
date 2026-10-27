@@ -11,14 +11,17 @@ import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
 
 export const LIVE_PATH = '/v1/guild/war/live'
-const MAX_MSG = 256 * 1024
+// 메시지 크기 상한(2026-10-27 보안 점검: 256 KB → 64 KB): 방장이 3초마다 보내는 전체 snap = 영웅(공격·수비 합쳐 많아야 160) 행 × 숫자 7개 — 10 KB 안팎
+export const MAX_MSG = 64 * 1024
 // 도배 막기(2026-10-14 보안 점검): 한 연결이 1초에 보낼 수 있는 메시지(방장 snap은 0.1초마다 — x2 배속이어도 넉넉하게),
 // 성 상태 저장(ckpt — 앱은 10초마다)은 방마다 CKPT_GAP초에 한 번·한 번에 하나만 DB에 간다. end는 늘 받는다.
 const MSG_PER_SEC = 60
 const CKPT_GAP = 2
+export const MAX_BUFFER = 1 << 20 // 보내지 못하고 쌓인 바이트가 이만큼이면(받지 않는 연결) 끊는다 — 서버 메모리 지키기. 앱은 끊기면 혼자 이어 간다
+export const HEARTBEAT_MS = 30_000 // 이만큼마다 ping — 그 사이 pong이 없던 연결은 끊는다. 닫힌 전투의 방도 이때 닫는다(DB를 읽지 않는다)
 
-interface Client { ws: WebSocket; pid: string; at: number; win: number; n: number }
-interface Room { clients: Client[]; host: Client | null; last: unknown; ckptAt: number; saving: boolean }
+interface Client { ws: WebSocket; pid: string; at: number; win: number; n: number; alive: boolean }
+interface Room { clients: Client[]; host: Client | null; last: unknown; ckptAt: number; saving: boolean; ended: boolean; swept: boolean }
 
 export class WarLive {
   rooms = new Map<string, Room>()
@@ -28,6 +31,7 @@ export class WarLive {
   onState: (battleId: string, pid: string, state: unknown, final: boolean) => Promise<boolean> = async () => false // true = 전투가 닫혔다
   private wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG })
   private seq = 0
+  private beat = setInterval(() => this.sweep(), HEARTBEAT_MS).unref()
 
   attach(server: Server) {
     server.on('upgrade', (req: IncomingMessage, sock: Duplex, head: Buffer) => {
@@ -55,17 +59,18 @@ export class WarLive {
   join(battle: string, pid: string, ws: WebSocket) {
     let room = this.rooms.get(battle)
     if (!room) {
-      room = { clients: [], host: null, last: null, ckptAt: 0, saving: false }
+      room = { clients: [], host: null, last: null, ckptAt: 0, saving: false, ended: false, swept: false }
       this.rooms.set(battle, room)
     }
     for (const old of room.clients.filter((c) => c.pid === pid)) {
       this.drop(battle, old)
       old.ws.close(4000, 'replaced')
     }
-    const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0 }
+    const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0, alive: true }
     room.clients.push(me)
     if (!room.host) room.host = me
     send(ws, { t: 'hello', host: room.host === me, snap: room.last ?? null })
+    ws.on('pong', () => { me.alive = true })
     ws.on('message', (raw) => this.onMessage(battle, me, String(raw)))
     ws.on('close', () => this.drop(battle, me))
     ws.on('error', () => this.drop(battle, me))
@@ -100,7 +105,7 @@ export class WarLive {
       room.ckptAt = now
       void this.onState(battle, me.pid, m.state, end).then((closed) => {
         // 일찍 온 end(시간이 남았고 성채가 서 있다)는 전투를 닫지 않는다 — 그때는 다른 길드원을 내보내지 않는다
-        if (closed) this.broadcast(battle, { t: 'end' })
+        if (closed) this.end(battle)
       }, (e) => console.warn(`[war] state save failed: ${(e as Error).message}`)).finally(() => { room.saving = false })
     } else if (m.t === 'cmd' && !isHost && room.host) {
       send(room.host.ws, { t: 'cmd', from: me.pid, uid: m.uid, pos: m.pos ?? null })
@@ -131,7 +136,34 @@ export class WarLive {
     return this.rooms.get(battle)?.host?.pid ?? null
   }
 
+  // 전투가 닫혔다: 모두에게 end. 연결은 다음 심장 박동 뒤에 닫는다(앱이 end를 읽기 전에 끊기면 혼자 이어 싸운다)
+  end(battle: string) {
+    const room = this.rooms.get(battle)
+    if (room) room.ended = true
+    this.broadcast(battle, { t: 'end' })
+  }
+
+  // 심장 박동(HEARTBEAT_MS마다 — 메모리만 본다): 끝난 방은 한 번 더 기다렸다가 닫는다. 남은 연결은 지난 ping에 pong이 없었으면 끊고, 아니면 다시 ping.
+  sweep() {
+    for (const [battle, room] of [...this.rooms]) {
+      if (room.ended && room.swept) {
+        this.rooms.delete(battle)
+        for (const c of room.clients) c.ws.close(1000, 'ended')
+        continue
+      }
+      room.swept = room.ended
+      for (const c of room.clients) {
+        if (!c.alive) c.ws.terminate()
+        else if (c.ws.readyState === 1) {
+          c.alive = false
+          c.ws.ping()
+        }
+      }
+    }
+  }
+
   close() {
+    clearInterval(this.beat)
     for (const room of this.rooms.values()) for (const c of room.clients) c.ws.close()
     this.rooms.clear()
     this.wss.close()
@@ -160,6 +192,9 @@ function send(ws: WebSocket, msg: unknown) {
   sendRaw(ws, JSON.stringify(msg))
 }
 
+// 받는 쪽이 못 따라와 쌓이기만 하면 더 보내지 않고 끊는다(메모리 지키기)
 function sendRaw(ws: WebSocket, s: string) {
-  if (ws.readyState === 1) ws.send(s)
+  if (ws.readyState !== 1) return
+  if (ws.bufferedAmount > MAX_BUFFER) ws.terminate()
+  else ws.send(s)
 }

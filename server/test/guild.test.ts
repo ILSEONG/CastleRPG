@@ -249,3 +249,35 @@ test('guild: shop spends coins with limits and gives shards of owned heroes', as
   assert.equal(r.json.guild.coins, 450)
   assert.equal((await post(p.token, 'buy', { id: 'nope' })).status, 400)
 })
+
+test('guild: parallel joins cannot pass the member cap — the lost race is the normal full error', async () => {
+  let slow = false
+  const T = await setup({
+    wrapQuery: (q) => async (text, params) => {
+      if (slow) await new Promise((r) => setTimeout(r, 1)) // 요청들이 서로 끼어들게(모두 같은 길드원 수를 읽은 뒤 쓰기를 겨룬다)
+      return q(text, params)
+    },
+  })
+  try {
+    const owner = await T.login()
+    await T.db.query('update player_state set stage = 11, gold_tenths = $2 where player_id = $1', [owner.id, G.CREATE_GOLD * 10])
+    const made = await T.req('POST', '/v1/guild/create', { token: owner.token, body: { name: '정원길드', emblem: 0 } })
+    assert.equal(made.status, 200, JSON.stringify(made.json))
+    const { id: gid, capacity } = made.json.guild.guild
+    const joiners: { token: string }[] = []
+    for (let i = 0; i < capacity + 5; i++) {
+      const p = await T.login()
+      await T.db.query('update player_state set stage = 11 where player_id = $1', [p.id])
+      joiners.push(p)
+    }
+    slow = true
+    const res = await Promise.all(joiners.map((p) => T.req('POST', '/v1/guild/join', { token: p.token, body: { guild_id: gid } })))
+    slow = false
+    const [{ n }] = await T.db.query('select count(*)::int as n from player_guild where guild_id = $1', [gid])
+    assert.equal(n, capacity, 'real members never pass the capacity')
+    assert.equal(res.filter((r) => r.status === 200).length, capacity - 1)
+    assert.ok(res.filter((r) => r.status !== 200).every((r) => r.status === 409 && r.json.error === 'full'), JSON.stringify(res.map((r) => r.json.error)))
+  } finally {
+    await T.close()
+  }
+})

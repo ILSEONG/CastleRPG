@@ -10,11 +10,14 @@ import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
 
 export const PARTY_LIVE_PATH = '/v1/party/live'
-const MAX_MSG = 128 * 1024
+// 메시지 크기 상한(2026-10-27 보안 점검: 128 KB → 32 KB): 방장 snap = 영웅·병사(≤ 12)와 졸개(새끼 거미 상한 45 + 알·해골) 행 × 숫자 6~7개 — 많아야 10 KB 안팎
+export const MAX_MSG = 32 * 1024
 const MSG_PER_SEC = 40 // 방장 snap은 0.2초마다(x2 배속이어도 넉넉), 명령은 탭마다
+export const MAX_BUFFER = 1 << 20 // 보내지 못하고 쌓인 바이트가 이만큼이면(받지 않는 연결) 끊는다 — 서버 메모리 지키기. 앱은 끊기면 혼자 이어 간다
+export const HEARTBEAT_MS = 30_000 // 이만큼마다 ping — 그 사이 pong이 없던 연결은 끊는다. 끝난 방·없어진 매치의 연결도 이때 닫는다(DB를 읽지 않는다)
 
-interface Client { ws: WebSocket; pid: string; at: number; win: number; n: number }
-interface Room { clients: Client[]; host: Client | null; last: string | null; ended: boolean }
+interface Client { ws: WebSocket; pid: string; at: number; win: number; n: number; alive: boolean }
+interface Room { clients: Client[]; host: Client | null; last: string | null; ended: boolean; swept: boolean }
 
 export class PartyLive {
   rooms = new Map<string, Room>()
@@ -24,6 +27,7 @@ export class PartyLive {
   onEnd: (matchId: string, pid: string, win: boolean, elapsed: number) => void = () => {}
   private wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MSG })
   private seq = 0
+  private beat = setInterval(() => this.sweep(), HEARTBEAT_MS).unref()
 
   attach(server: Server) {
     server.on('upgrade', (req: IncomingMessage, sock: Duplex, head: Buffer) => {
@@ -50,17 +54,18 @@ export class PartyLive {
   join(match: string, pid: string, ws: WebSocket) {
     let room = this.rooms.get(match)
     if (!room) {
-      room = { clients: [], host: null, last: null, ended: false }
+      room = { clients: [], host: null, last: null, ended: false, swept: false }
       this.rooms.set(match, room)
     }
     for (const old of room.clients.filter((c) => c.pid === pid)) {
       this.drop(match, old)
       old.ws.close(4000, 'replaced')
     }
-    const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0 }
+    const me: Client = { ws, pid, at: ++this.seq, win: 0, n: 0, alive: true }
     room.clients.push(me)
     if (!room.host) room.host = me
     send(ws, { t: 'hello', host: room.host === me, snap: room.last ? JSON.parse(room.last) : null })
+    ws.on('pong', () => { me.alive = true })
     ws.on('message', (raw) => this.onMessage(match, me, String(raw)))
     ws.on('close', () => this.drop(match, me))
     ws.on('error', () => this.drop(match, me))
@@ -119,7 +124,29 @@ export class PartyLive {
     for (const c of room.clients) sendRaw(c.ws, out)
   }
 
+  // 심장 박동(HEARTBEAT_MS마다 — 메모리만 본다): 끝난 방은 한 번 더 기다렸다가(앱이 end를 읽고 나가게), 없어진 매치(모두 끝냈다·30분 지남)의 방은 바로 닫는다.
+  // 남은 연결은 지난 ping에 pong이 없었으면 끊고(앱이 꺼졌다·망이 끊겼다), 아니면 다시 ping.
+  sweep() {
+    for (const [match, room] of [...this.rooms]) {
+      const gone = !room.clients.some((c) => this.seatOf(match, c.pid) >= 0)
+      if (gone || (room.ended && room.swept)) {
+        this.rooms.delete(match)
+        for (const c of room.clients) c.ws.close(1000, 'ended')
+        continue
+      }
+      room.swept = room.ended
+      for (const c of room.clients) {
+        if (!c.alive) c.ws.terminate()
+        else if (c.ws.readyState === 1) {
+          c.alive = false
+          c.ws.ping()
+        }
+      }
+    }
+  }
+
   close() {
+    clearInterval(this.beat)
     for (const room of this.rooms.values()) for (const c of room.clients) c.ws.close()
     this.rooms.clear()
     this.wss.close()
@@ -130,6 +157,9 @@ function send(ws: WebSocket, msg: unknown) {
   sendRaw(ws, JSON.stringify(msg))
 }
 
+// 받는 쪽이 못 따라와 쌓이기만 하면 더 보내지 않고 끊는다(메모리 지키기)
 function sendRaw(ws: WebSocket, s: string) {
-  if (ws.readyState === 1) ws.send(s)
+  if (ws.readyState !== 1) return
+  if (ws.bufferedAmount > MAX_BUFFER) ws.terminate()
+  else ws.send(s)
 }

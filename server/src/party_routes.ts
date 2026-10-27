@@ -29,7 +29,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 type Any = any
 
 export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
-  const { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view: playerView, body, blocked, random, ApiError, verifyToken } = d
+  const { query, auth, clock, loadGame, loadPlayer, guildCtx, view: playerView, body, blocked, random, ApiError, verifyToken } = d
   const seenAt: Map<string, number> = d.seenAt ?? new Map()
 
   const cfgOf = (game: Any) => Object.assign((k: string) => R.cfgNum(game.config, k), { config: game.config })
@@ -102,11 +102,14 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       return { state: 'confirm', match_id: m.id, quest: m.quest, diff: m.diff, left: Math.max(0, Math.ceil(m.deadline - x.now)), seats,
         accepted: m.seats.find((s) => s.pid === x.id)!.accepted }
     }
-    // 시작한 판: 내 run 행(처음 물을 때 만든다 — 매치 전체 초당 피해·보스 HP를 함께 적어 승리 타당성에 쓴다)
+    // 시작한 판: 내 run 행(처음 물을 때 만든다 — 매치 전체 초당 피해·보스 HP를 함께 적어 승리 타당성에 쓴다).
+    // 새 run을 만들 때 내 다른 열린 run은 결과 없이 닫는다(한 번에 하나 — 다시 매칭해 열어 둔 run 여럿을 한꺼번에 끝내 하루 보상을 넘기지 못하게, 2026-10-27 보안 점검)
     const dps = m.seats.reduce((a, s) => a + s.dps, 0)
     const boss = PQ.bossStats(m.quest, m.diff)
-    await query(`insert into party_runs (id, match_id, player_id, quest, diff, dps, boss_hp, started_at) values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8::float8))
-      on conflict (match_id, player_id) do nothing`, [randomUUID(), m.id, x.id, m.quest, m.diff, dps, boss.hp, m.started])
+    await query(`with i as (insert into party_runs (id, match_id, player_id, quest, diff, dps, boss_hp, started_at) values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8::float8))
+        on conflict (match_id, player_id) do nothing returning 1)
+      update party_runs set closed = true where player_id = $3 and not closed and match_id <> $2 and exists (select 1 from i)`,
+    [randomUUID(), m.id, x.id, m.quest, m.diff, dps, boss.hp, m.started])
     const [run] = await query('select id::text as id from party_runs where match_id = $1 and player_id = $2', [m.id, x.id])
     return { state: 'live', match_id: m.id, run_id: run.id, quest: m.quest, diff: m.diff, seed: m.seed, elapsed: Math.max(0, x.now - m.started),
       time_limit: PQ.TIME_LIMIT[m.quest], boss, seats, me: m.seats.findIndex((s) => s.pid === x.id), result: m.result }
@@ -388,26 +391,35 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       const told = hub.matches.get(run.match_id)?.result ?? { win: b.win && !hostLive, elapsed }
       const real = x.now - Number(run.started_at)
       const limit = PQ.TIME_LIMIT[quest]
-      const plausible = told.elapsed >= PQ.MIN_CLEAR_SEC && told.elapsed <= limit + 5 && real >= told.elapsed / R.MAX_GAME_SPEED - R.RUN_SLACK_SEC
-        && real <= R.RUN_TTL_SEC && Number(run.dps) * told.elapsed * PQ.DPS_SLACK >= Number(run.boss_hp)
+      // 사람이 나 혼자(나머지는 AI 성주)인 판은 내 기기가 전부 판단한다 — 던전처럼 더 좁게 본다(2026-10-27 보안 점검): 힘 여유 SOLO_DPS_SLACK,
+      // 실제 경과 ≥ 걸린 시간(파티 전투는 늘 1배). 사람 수 = 이 매치의 run 행 수(사람마다 처음 물을 때 만든다 — 서버를 다시 켜도 남는다)
+      const [{ n: humans }] = await query('select count(*)::int as n from party_runs where match_id = $1', [run.match_id])
+      const solo = Number(humans) <= 1
+      const plausible = told.elapsed >= PQ.MIN_CLEAR_SEC && told.elapsed <= limit + 5 && real >= told.elapsed / (solo ? 1 : R.MAX_GAME_SPEED) - R.RUN_SLACK_SEC
+        && real <= R.RUN_TTL_SEC && Number(run.dps) * told.elapsed * (solo ? PQ.SOLO_DPS_SLACK : PQ.DPS_SLACK) >= Number(run.boss_hp)
       const win = told.win && plausible
-      const st = (await stats(x))[quest]
-      const reward = win && st.clears_left > 0
-      const item = reward ? R.rollItem(PQ.ACCESSORY[quest], null, PQ.dropGrade(R.EQUIP_GRADES, Number(run.diff), random), random) : null
-      // 먼저 run을 닫는다(한 요청만 이긴다) — 그 요청이 보상을 준다
-      const [closed] = await query(`with r as (update party_runs set closed = true, result = $3::jsonb where id = $1 and player_id = $2 and not closed returning quest, diff),
-          s as (insert into party_stats (player_id, quest, best, day, clears) select $2, quest, case when $4 then diff else 0 end, $5, case when $6 then 1 else 0 end from r
+      const item = win ? R.rollItem(PQ.ACCESSORY[quest], null, PQ.dropGrade(R.EQUIP_GRADES, Number(run.diff), random), random) : null
+      // 한 문장(2026-10-27 보안 점검 — 열린 run 여럿을 한꺼번에 끝내면 모두 같은 남은 횟수를 읽어 하루 보상을 넘겼고, 보관함 쓰기가 겨루다 지면 결과에만 장신구가 남았다):
+      // run 잠그기(아직 열렸을 때만, 같은 run은 한 요청만) → 하루 클리어 수 +1(REWARD_CLEARS + 1에서 멈춘다 — 행 잠금 뒤 최신 값으로 센다) → 그 수가
+      // REWARD_CLEARS 이하일 때만 장신구 → run 결과 = 실제로 넣은 장신구(id와 함께)
+      await query(`with r as (select id from party_runs where id = $1 and player_id = $2 and not closed for update),
+          s as (insert into party_stats (player_id, quest, best, day, clears) select $2, $3, case when $4 then $5::int else 0 end, $6, case when $4 then 1 else 0 end from r
             on conflict (player_id, quest) do update set best = greatest(party_stats.best, excluded.best),
-              clears = case when party_stats.day = excluded.day then party_stats.clears + excluded.clears else excluded.clears end, day = excluded.day returning 1)
-          select (select count(*) from r)::int as n`,
-      [runId, x.id, JSON.stringify({ win, rewards: item ? { items: [item] } : {}, claimed_win: b.win, no_reward: win && !reward }), win, x.today, reward])
-      if (Number(closed?.n) === 1 && item) {
-        for (let i = 0; i < 4; i++) {
-          const pl = await loadPlayer(x.id, x.game, x.now)
-          const r = await commit(x.id, pl.version, { items: [item], log: { kind: 'party_clear', detail: { run_id: runId, quest, diff: Number(run.diff), item } } }, x.now)
-          if (r) break
-        }
-      }
+              clears = case when party_stats.day = excluded.day then least(party_stats.clears + excluded.clears, ${PQ.REWARD_CLEARS + 1}) else excluded.clears end,
+              day = excluded.day returning clears),
+          it as (insert into player_items (player_id, slot, weapon_kind, grade, rolls, subs, created_at)
+            select $2, x.slot, x.weapon_kind, x.grade, coalesce(x.rolls, '{}'::jsonb), coalesce(x.subs, '[]'::jsonb), to_timestamp($7::float8)
+            from s, jsonb_to_recordset($8::jsonb) as x(slot text, weapon_kind text, grade text, rolls jsonb, subs jsonb) where $4 and s.clears <= ${PQ.REWARD_CLEARS}
+            returning id, slot, weapon_kind, grade, rolls, subs),
+          l as (insert into economy_log (player_id, kind, detail, at) select $2, 'party_clear', $9::jsonb || jsonb_build_object('item', to_jsonb(it)), to_timestamp($7::float8)
+            from it returning 1),
+          v as (update player_state set version = version + 1, last_active = to_timestamp($7::float8) where player_id = $2 and exists (select 1 from it) returning 1)
+        update party_runs set closed = true, result = jsonb_build_object('win', $4::boolean,
+            'rewards', case when exists (select 1 from it) then jsonb_build_object('items', (select jsonb_agg(to_jsonb(it)) from it)) else '{}'::jsonb end,
+            'claimed_win', $10::boolean, 'no_reward', $4::boolean and not exists (select 1 from it))
+          where id in (select id from r)`,
+      [runId, x.id, quest, win, Number(run.diff), x.today, x.now, JSON.stringify(item ? [item] : []),
+        JSON.stringify({ run_id: runId, quest, diff: Number(run.diff) }), b.win])
     }
     if (hub.matches.get(run.match_id)?.seats.some((s) => s.pid === x.id && !s.left)) hub.release(x.id) // 끝낸 판에서 놓아준다(다음 매칭)
     const [done] = await query('select result from party_runs where id = $1', [runId])
