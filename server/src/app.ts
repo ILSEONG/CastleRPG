@@ -65,6 +65,10 @@ const MAX_AGE_MIN = 100_000
 const MAX_LEVELUP_COUNT = 100
 const MAX_SELL_ITEMS = 1000 // 개정 18: 장비 판매 한 번의 개수
 const DUNGEON_DPS_SLACK = 6 // 던전 승리 힘 타당성 여유 배수(치명타·스킬·길드 버프를 넉넉히 덮는다)
+// 스테이지 클리어 힘 타당성(2026-10-27): 여유 배수(스킬·범위 공격·치명타·망루·길드 버프를 덮는다)와 긴 라운드 인정 상한(스폰 길이의 배수 — 튼튼한 성으로
+// 오래 버틴 라운드). 앱 전투를 그대로 돌린 보정: 정직한 팀이 깬 가장 어려운 라운드의 초당 피해 × 시간 / 적 HP는 2.1 이상(가장 낮은 것 = 튼튼한 성 + 범위 공격 팀).
+const STAGE_DPS_SLACK = 3
+const STAGE_LONG_ROUND = 2
 const RUN_KEEP_SEC = 86400 // 끝난 run은 하루 남긴다(재전송 멱등), 그 뒤 새 start가 지운다
 const DEVICE_RE = /^[A-Za-z0-9-]{16,128}$/
 const NEW_ACCOUNTS_PER_IP = 20 // 10분에 한 IP가 만들 수 있는 새 계정(게스트·토스)
@@ -548,19 +552,29 @@ export function createApp(opts: AppOptions) {
     }
   }
 
+  // 성장(업그레이드) 효과 = 분수(0.05 = +5%)
+  const upPct = (p: Player, g: Game, uid: string) => {
+    const d = g.upgrades.find((u) => u.id === uid)
+    return d ? Math.min(p.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
+  }
+
   // 편성 영웅(+도우미)의 서버 계산 초당 피해(길드 공성전·보스와 같은 식 G.teamDps — 장비·성장·연구 반영, 길드 버프·치명타·스킬 제외)
   function partyDps(p: Player, g: Game, party: string[], helper: R.Helper | null): number {
     const cfg = (k: string) => R.cfgNum(g.config, k)
     const defs = g.heroes.map((h) => ({ id: String(h.id), role: String(h.role), atk: Number(h.atk), hp: Number(h.hp), atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
-    const up = (uid: string) => {
-      const d = g.upgrades.find((u) => u.id === uid)
-      return d ? Math.min(p.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
-    }
+    const up = (uid: string) => upPct(p, g, uid)
     const research = R.researchBonus(g.research, p.research).hero_atk_pct
     const equip = R.heroEquip(p.items, p.equipment)
     let out = G.teamDps(party.filter((id) => Object.hasOwn(p.heroes, id)), p.heroes, defs, cfg, up('atk'), up('aspd'), 0, equip, research)
     if (helper) out += G.teamDps([helper.hero_id], { [helper.hero_id]: { level: helper.level, promotion: helper.promotion } }, defs, cfg, up('atk'), up('aspd'), 0, {}, research)
     return out
+  }
+
+  // 성 방어 초당 피해(스테이지 클리어 힘 타당성): 배치 영웅(슬롯 수까지, partyDps) + 배치 병사(보유로 자름, R.soldierDps). 망루·스킬·치명타·길드 버프는 빼고 여유 배수로 덮는다.
+  function castleDps(p: Player, g: Game): number {
+    const heroes = p.deploy.slice(0, R.heroSlots(g.config, level(p, R.KEEP))).filter((x): x is string => typeof x === 'string')
+    return partyDps(p, g, heroes, null) +
+      R.soldierDps(R.trimDeploy(p.soldier_deploy, p.soldiers), g.soldiers, g.config, upPct(p, g, 'atk'), upPct(p, g, 'aspd'), R.researchBonus(g.research, p.research))
   }
 
   // 개정 18: run 한 행(그 플레이어 것만). 없으면 null.
@@ -1685,7 +1699,19 @@ export function createApp(opts: AppOptions) {
       if (stage !== p.stage) return { extra: { cleared: false } } // 중복·재전송·앞지름: 변화 없음
       // 지난 클리어(새 계정이면 가입) 이후 최소 시간보다 빠르면 받지 않는다 — 스크립트로 스테이지를 올려 처치 골드를 키우지 못한다.
       const sec = now - p.last_stage_clear
-      if (sec < R.minClearSec(R.stageRow(stage, g.stages), R.cfgNum(g.config, 'kill_rate_cap'))) return { extra: { cleared: false } }
+      const row = R.stageRow(stage, g.stages)
+      if (sec < R.minClearSec(row, R.cfgNum(g.config, 'kill_rate_cap'))) return { extra: { cleared: false } }
+      // 힘 타당성(2026-10-27 보안 점검): 배치 영웅·병사의 서버 계산 초당 피해 × 시간 × STAGE_DPS_SLACK으로 그 라운드 적 HP 합을 못 깎으면 받지 않는다
+      // (같은 모양 cleared false — 앱은 다음 경계에서 서버 stage로 맞춘다). 시간 = 지난 클리어 이후 실제 초 × MAX_GAME_SPEED(x2 배속까지)를
+      // [스폰 길이, 스폰 길이 × STAGE_LONG_ROUND]로 자른다 — 빨리 보내는 스크립트는 스폰 길이만 받는다. 숫자는 economy_log stage_clear_refused(조정용).
+      const enemyHp = R.stageEnemyHp(stage, row, g.monsters, g.config)
+      const dps = castleDps(p, g)
+      const base = R.stageRoundSec(row, g.config)
+      const t = Math.min(Math.max(sec * R.MAX_GAME_SPEED, base), base * STAGE_LONG_ROUND)
+      if (dps * t * STAGE_DPS_SLACK < enemyHp) {
+        return { change: { log: { kind: 'stage_clear_refused', detail: { stage, sec, dps: Math.round(dps), budget_sec: t, slack: STAGE_DPS_SLACK, enemy_hp: Math.round(enemyHp) } } },
+          extra: { cleared: false } }
+      }
       return { change: { stage: stage + 1, lastStageClear: now, log: { kind: 'stage_clear', detail: { stage, sec } } }, extra: { cleared: true } }
     })
   })

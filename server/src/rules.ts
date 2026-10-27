@@ -177,6 +177,20 @@ export const BOSSES_PER_STAGE = 4
 
 export const minClearSec = (row: StageRow, ratePerSec: number) => (row.waves * row.wave_size) / ratePerSec
 
+// 클리어 힘 타당성(2026-10-27 보안 점검 — 새 계정이 5초마다 stage만 보내 601까지 올렸다). 라운드 n 적 HP 합(앱 wave_director.gd·monster.setup과 같은 식)
+// = hp_mult × (졸개 waves × wave_size × spawn_group마리 × grunt HP + 끝 보스 epic_boss HP). 보스 라운드(라운드 rounds_per_stage번째)는 네 성문 × boss_round_mult.
+export function stageEnemyHp(n: number, row: StageRow, monsters: { id: string; hp: number }[], config: Config): number {
+  const hp = (id: string) => Number(monsters.find((m) => m.id === id)?.hp ?? 0)
+  const rps = Math.max(1, Math.trunc(cfgNum(config, 'rounds_per_stage')))
+  const bosses = (Math.max(n, 1) - 1) % rps === rps - 1 ? BOSSES_PER_STAGE * cfgNum(config, 'boss_round_mult') : 1
+  const group = Math.max(1, roundHalfAway(cfgNum(config, 'spawn_group')))
+  return row.hp_mult * (row.waves * row.wave_size * group * hp('grunt') + bosses * hp(CASTLE_BOSSES[0]))
+}
+
+// 라운드 스폰 길이(게임 초) = waves × (wave_size × spawn_spacing_sec + wave_gap_sec) — 마지막에 보스가 나오는 때(앱 wave_director.gd). 이보다 빨리 끝나는 라운드는 없다.
+export const stageRoundSec = (row: StageRow, config: Config) =>
+  row.waves * (row.wave_size * cfgNum(config, 'spawn_spacing_sec') + cfgNum(config, 'wave_gap_sec'))
+
 // --- 영웅 (개정 10) ---
 
 // 배치 슬롯 수 = 성채 단계 표 keep_slot_tiers(개정 12). 앱 GameData.hero_slots와 같다.
@@ -418,6 +432,21 @@ export function trainCost(config: Config, type: string, n: number, tier = 1, pct
 // 묶음 상한 = train_batch_base + train_batch_per_level × (L − 1).
 export const trainMax = (config: Config, level: number) =>
   cfgNum(config, 'train_batch_base') + cfgNum(config, 'train_batch_per_level') * (Math.max(level, 1) - 1)
+
+// 배치 병사 초당 피해(앱 soldier.refresh_stats와 같은 식): Σ 수 × 공격 × soldier_atk_tier_mult^(티어−1) × (1 + 성장 공격) × (1 + (병종 연구 % + soldier_pct) / 100)
+// × (1 + 성장 공속) / 공격 간격. atkPct·aspdPct = 분수(0.05 = +5%), research = researchBonus. 모르는 키는 건너뛴다.
+const SOLDIER_RESEARCH: Record<string, string> = { infantry: 'inf_pct', archer: 'arc_pct', cavalry: 'cav_pct' } // 앱 GameData.SOLDIER_RESEARCH
+export function soldierDps(deploy: Record<string, number>, defs: SoldierDef[], config: Config, atkPct: number, aspdPct: number, research: Record<string, number>): number {
+  let out = 0
+  for (const [key, n] of Object.entries(deploy)) {
+    const k = parseSoldierKey(key, defs, cfgNum(config, 'soldier_max_tier'))
+    const d = k && defs.find((s) => s.id === k.type)
+    if (!k || !d) continue
+    const rs = 1 + ((research[SOLDIER_RESEARCH[k.type]] ?? 0) + (research.soldier_pct ?? 0)) / 100
+    out += (n * Number(d.atk) * cfgNum(config, 'soldier_atk_tier_mult') ** (k.tier - 1) * (1 + atkPct) * rs * (1 + aspdPct)) / Math.max(0.1, Number(d.atk_interval))
+  }
+  return out
+}
 
 // 취소 환불 = 비용의 절반(자원마다 내림).
 export const trainRefund = (cost: Record<string, number>) => Object.fromEntries(Object.entries(cost).map(([r, v]) => [r, Math.floor(v / 2)]))
