@@ -97,7 +97,7 @@ test('토스 결제: sku가 상품 id와 다르면 TOSS_SKUS로 맞춘다, 뷰�
   }
 })
 
-test('토스 결제: 대소문자만 다른 같은 주문 번호는 한 번만 지급(already), UUID가 아니면 402', async () => {
+test('토스 결제: 대소문자만 다른 같은 주문 번호는 한 번만 지급(already), 16진수·대시 모양이 아니면 402', async () => {
   const order = '0199a1ff-2baa-7495-bbfa-a0826ba8c7c0'
   // 토스가 주문 번호를 대소문자 구분 없이 찾는다고 본다
   const toss = Pay.tossVerifier(async (_path, body: any) => ({ status: 200, json: String(body.orderId).toLowerCase() === order
@@ -171,7 +171,7 @@ test('googleVerifier: 서비스 계정 JWT로 토큰을 받고 구매를 조회,
   assert.ok(calls.at(-1)!.url.endsWith('/tokens/t1:consume') && calls.at(-1)!.init.method === 'POST')
 })
 
-test('tossVerifier: 주문 상태 조회 결과로 판정, 주문 번호는 UUID만·소문자 키, 응답 주문 번호가 다르면 무효, readPayments는 키가 있는 제공자만 켠다', async () => {
+test('tossVerifier: 주문 상태 조회 결과로 판정, 주문 번호는 16진수·대시 모양만·소문자 키, 응답 주문 번호가 다르면 무효, readPayments는 키가 있는 제공자만 켠다', async () => {
   const id = (x: string) => `0199a1ff-2baa-7495-bbfa-a0826ba8c7c${x}` // 토스 주문 번호(uuid v7)
   const status: Record<string, any> = {
     [id('a')]: { resultType: 'SUCCESS', success: { orderId: id('a'), status: 'PAYMENT_COMPLETED', sku: 'dia_1', reason: '' } },
@@ -193,8 +193,10 @@ test('tossVerifier: 주문 상태 조회 결과로 판정, 주문 번호는 UUID
   await assert.rejects(v.verify({ product: 'dia_1', token: id('d'), account: '' }))
   assert.equal((await v.verify({ product: 'dia_1', token: id('e'), account: '' })).ok, false) // 응답이 다른 주문
   const n = asked.length
-  for (const bad of ['a', `${id('a')} `, `{${id('a')}}`, id('a').replace(/-/g, '')]) assert.equal((await v.verify({ product: 'dia_1', token: bad, account: '' })).ok, false)
-  assert.equal(asked.length, n) // UUID가 아니면 토스에 묻지도 않는다
+  for (const bad of ['a', `${id('a')} `, `{${id('a')}}`, `${id('a')}--x`, 'f'.repeat(65)]) assert.equal((await v.verify({ product: 'dia_1', token: bad, account: '' })).ok, false)
+  assert.equal(asked.length, n) // 16진수·대시 모양이 아니면 토스에 묻지도 않는다
+  await assert.rejects(v.verify({ product: 'dia_1', token: '13C9A1FF-2BAA-4495-BBFA-0000000000', account: '' })) // 문서 예시(마지막 묶음 10자)도 토스에 묻는다(이 가짜엔 없는 주문)
+  assert.equal(asked.at(-1), '13c9a1ff-2baa-4495-bbfa-0000000000')
   assert.deepEqual(Pay.readPayments({}), {})
   assert.throws(() => Pay.readPayments({ TOSS_MTLS_CERT: '-----BEGIN CERTIFICATE-----' }))
   assert.throws(() => Pay.readPayments({ GOOGLE_PLAY_SERVICE_ACCOUNT: '{"x":1}' }))

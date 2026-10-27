@@ -129,7 +129,8 @@ export function tossPost(cert: string, key: string): TossPost {
 }
 
 // 토스 주문 번호는 UUID(v7). 소문자로 맞춘 값이 중복 지급 막기 키다 — 대소문자만 다른 같은 주문을 두 번 받지 못하게.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// 모양은 16진수·대시만 본다(문서 예시에 마지막 묶음이 10자인 번호가 있다 — 정상 결제를 UUID 모양으로 거절하지 않게).
+const UUID_RE = /^(?=.{8,64}$)[0-9a-f]+(-[0-9a-f]+)*$/i
 
 export function tossVerifier(post: TossPost): Verifier {
   return {
