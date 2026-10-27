@@ -134,7 +134,8 @@ type Any = any
 export function opsGate(d: Any) {
   return async (c: Context, next: Next) => {
     const path = c.req.path
-    if (c.req.method === 'OPTIONS') return next()
+    // health는 점검·업데이트 중에도 열려 있어 상태가 결과를 바꾸지 않는다 — DB를 읽지 않는다(Render가 몇 초마다 쳐서 Neon이 잠들지 못했다)
+    if (c.req.method === 'OPTIONS' || path === '/v1/health') return next()
     const st: OpsStatus = await d.status()
     const v = c.req.header('x-app-version') ?? ''
     if (st.min_version && VERSION_RE.test(v) && cmpVersion(v, st.min_version) < 0 && !OPEN_IN_UPDATE.some((re) => re.test(path))) {

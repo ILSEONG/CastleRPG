@@ -28,6 +28,10 @@ test('health: 인증 없이 {ok, server_now}', async () => {
   const r = await S.req('GET', '/v1/health')
   assert.equal(r.status, 200)
   assert.deepEqual(r.json, { ok: true, server_now: T0 })
+  let calls = 0
+  const counted = S.makeApp({ query: async (text, params) => (calls++, S.db.query(text, params)) })
+  assert.equal((await counted.request('/v1/health')).status, 200)
+  assert.equal(calls, 0, 'health must not touch the DB (Render pings it every few seconds; Neon would never suspend)')
 })
 
 test('게스트 로그인: 같은 device_id면 같은 player, last_seen 갱신, 잘못된 device_id는 400', async () => {
