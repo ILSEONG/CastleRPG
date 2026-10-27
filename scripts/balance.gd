@@ -5,10 +5,10 @@ const Lang := preload("res://scripts/lang.gd")
 
 # --- 맵·성 기하 (개정 2) ---
 const TILE := 2.0                     # 격자 타일 한 칸 (미터). 성 내부 넓이는 성채 단계 표(GameData.interior_half, 개정 12)
-const WALL_T := 2.0                   # 성벽 두께 (1타일)
+const WALL_T := 3.0                   # 성벽 두께 (1.5타일 — 사용자 2026-10-23 "성벽 위 영웅이 위치하는 부분 두께를 좀 두껍게, 터치하기가 불편해": 2 → 3 m, 바깥으로)
 const WALL_H := 3.0                   # 성벽 높이 = 성벽 위 발판 높이
 const GATE_W := 4.0                   # 성문 폭 (2타일)
-const TOWER_SIZE := 3.0               # 모서리 탑 한 변
+const TOWER_SIZE := 4.0               # 모서리 탑 한 변(성벽이 두꺼워진 만큼 +1 m — 성벽 위 길 끝 자리는 그대로)
 const MAP_HALF := 120.0                # 바닥 절반 크기
 const SPAWN_MARGIN := 40.0            # 성벽 바깥면에서 스폰 지점까지
 const SPAWN_SPREAD := 6.0             # 스폰 지점 좌우 흩어짐 (±)

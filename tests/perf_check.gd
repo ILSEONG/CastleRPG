@@ -28,6 +28,7 @@ func _ready() -> void:
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(5)
+	Engine.max_fps = 0  # Graphics가 main을 붙인 뒤 설정 값(60)으로 다시 건다 — 다시 푼다
 	var crowd
 	for c in _main.get_children():
 		if c.get_script() == SpawnerScript:
@@ -51,6 +52,8 @@ func _ready() -> void:
 		m.global_position = (dirs[i % 4] as Vector3).rotated(Vector3.UP, randf_range(-0.6, 0.6)) * (half + 6.0 + randf() * 20.0)
 	await _frames(60)
 	var crowd_us := 0
+	Engine.max_fps = 0  # 측정 직전에 다시 푼다(Graphics.apply가 나중에 다시 걸 수 있다)
+	print("PERF max_fps ", Engine.max_fps)
 	var t0 := Time.get_ticks_usec()
 	for f in FRAMES:
 		await get_tree().process_frame

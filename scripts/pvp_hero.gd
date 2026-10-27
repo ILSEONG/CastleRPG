@@ -16,6 +16,11 @@ func _ready() -> void:
 	add_to_group("pvp%d" % team)
 
 
+## 스킬 수동(2026-10-23): 결투의 내 영웅만(총력전은 조종 없음).
+func manual_ok() -> bool:
+	return team == 0 and battle != null and battle.get("mode") == "duel"
+
+
 func cast_ok(k: String) -> bool:
 	return battle == null or battle.brain.cast_ok(self, k)
 

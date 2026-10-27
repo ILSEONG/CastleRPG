@@ -47,6 +47,8 @@ platform.apps_in_toss="apps_in_toss"
 
 window/size/viewport_width=720
 window/size/viewport_height=1280
+window/size/window_width_override.windows=540
+window/size/window_height_override.windows=960
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1

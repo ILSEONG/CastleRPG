@@ -13,6 +13,7 @@ extends CanvasLayer
 ## 헤드리스(렌더러 없음 — 테스트)는 아무것도 덮지 않고 곧바로 끝낸다(그림은 어차피 자리표시).
 
 const Lang := preload("res://scripts/lang.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 
 const GameData := preload("res://scripts/game_data.gd")
 const PortraitsScript := preload("res://scripts/portraits.gd")
@@ -43,6 +44,8 @@ const DUNGEON_TYPES := ["gold", "equip"]  # dungeon_panel.TYPES
 const DUNGEON_KEY := "dungeon_band:%s"  # dungeon_panel.SNAP_KEY
 static var CONNECT_TEXT := Lang.t("preloader.connect_text")
 static var LOAD_TEXT := Lang.t("preloader.load_text")
+static var OFFLINE_TEXT := Lang.t("preloader.offline_text")
+static var RETRY_TEXT := Lang.t("preloader.retry_text")
 const CONNECT_SHARE := 0.3  # 온라인: 막대에서 서버 연결 몫(나머지가 불러오기)
 ## 앱 아이콘 느낌(splash 그림과 같은 색): 글자는 흰색에 따뜻한 갈색 테두리, 막대는 크림 바탕·지붕 파랑 채움, 테두리는 각 색의 어두운 쪽
 const TEXT_EDGE := Color(0.55, 0.27, 0.07)
@@ -53,9 +56,11 @@ const BAR_FILL_EDGE := Color(0.14, 0.29, 0.54)
 
 static var _keep: Array = []  # 불러 둔 리소스(쥐고 있어야 캐시에 남는다)
 static var done := false  # 이번 실행에서 한 번 끝냈다(월드를 다시 만들 때는 다시 하지 않는다)
+static var timing := {}  # 이번 로딩에 걸린 초 {connect, assets, warm, total, left} — 끝날 때 한 줄 찍는다(폰 로그·테스트가 읽는다)
 
 var bar: ProgressBar
 var label: Label
+var retry_button: Button  # 첫 접속이 계속 실패하면 보인다(사용자 2026-10-23 첫 30분 점검: 연결 중… 에서 멈춘 것처럼 보였다)
 var connecting := false  # add_child 전에 true: 서버 연결 단계부터 보이고, begin()을 부를 때까지 불러오지 않는다
 
 var _started := false
@@ -77,10 +82,14 @@ var _warm_root: Node3D
 var _t := 0.0
 var _retry := 1.0
 var _closing := false
+var _ms0 := 0
+var _ms_begin := 0
+var _ms_assets := 0
 
 
 func _ready() -> void:
 	layer = 20
+	_ms0 = Time.get_ticks_msec()
 	if done or DisplayServer.get_name() == "headless":
 		if not connecting:
 			_finish.call_deferred(true)
@@ -97,6 +106,7 @@ func begin() -> void:
 	if _started or _closing:
 		return
 	_started = true
+	_ms_begin = Time.get_ticks_msec()
 	if done or bar == null:
 		_finish.call_deferred(true)
 		return
@@ -165,6 +175,7 @@ func _process(delta: float) -> void:
 			SceneSnap.snap(DUNGEON_KEY % t, DungeonSnaps.SIZE, DungeonSnaps.build.bind(t, Economy.default_party(t)), DungeonSnaps.WARM)
 		SceneSnap.snap(RecruitArt.KEY, RecruitArt.SIZE, RecruitArt.build, RecruitArt.WARM)
 	if _loading.is_empty() and not _warm_started:
+		_ms_assets = Time.get_ticks_msec()
 		_warm_start()
 	_warm_step()
 	var total := _paths.size() + _portraits.size() + _snaps.size() + _warm_total
@@ -178,6 +189,10 @@ func _process(delta: float) -> void:
 	if (left == 0 and not boot_left) or _t >= TIMEOUT_SEC:
 		if left > 0:
 			push_warning("preloader: %d items not ready after %.0f s; showing the game anyway" % [left, TIMEOUT_SEC])
+		var now := Time.get_ticks_msec()
+		timing = {"connect": (_ms_begin - _ms0) / 1000.0, "assets": ((_ms_assets if _ms_assets > 0 else now) - _ms_begin) / 1000.0,
+			"warm": (now - _ms_assets) / 1000.0 if _ms_assets > 0 else 0.0, "total": (now - _ms0) / 1000.0, "left": left}
+		print("preloader: %s" % timing)
 		_warm_clear()
 		_finish(false)
 
@@ -266,6 +281,10 @@ func _warm_clear() -> void:
 
 ## 서버 연결 단계 막대: 로그인·gamedata·player 응답마다 CONNECT_SHARE의 1/3씩, 기다리는 동안은 다음 단계 쪽으로 조금씩(넘지 않게).
 func _connect_progress(delta: float) -> void:
+	var failing := Net.first_connect_failing()
+	if retry_button != null and retry_button.visible != failing:
+		retry_button.visible = failing
+		label.text = OFFLINE_TEXT if failing else CONNECT_TEXT
 	var steps := int(Net.logins > 0) + int(Net.gamedata_version != "") + int(Net.ready_once)
 	if steps != _steps:
 		_steps = steps
@@ -334,6 +353,16 @@ func _build_ui() -> void:
 	bar.add_theme_stylebox_override("background", back)
 	bar.add_theme_stylebox_override("fill", fill)
 	box.add_child(bar)
+	retry_button = Button.new()
+	retry_button.text = RETRY_TEXT
+	retry_button.focus_mode = Control.FOCUS_NONE
+	retry_button.custom_minimum_size = Vector2(240, 64)
+	retry_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	retry_button.add_theme_font_size_override("font_size", 26)
+	UiKit.apply_button(retry_button, UiKit.STEEL, 12.0)
+	retry_button.visible = false
+	retry_button.pressed.connect(func(): Net.retry_now())
+	box.add_child(retry_button)
 	if Net.is_online() and not Net.storage_persistent:  # 웹 사생활 모드 등: 진행이 저장되지 않을 수 있다
 		var warn := Label.new()
 		warn.text = Net.STORAGE_TEXT

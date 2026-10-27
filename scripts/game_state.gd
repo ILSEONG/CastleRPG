@@ -23,6 +23,7 @@ var castle_hp := 0.0
 var gate_hp_max := 0.0
 var gate_hp: Array[float] = []
 var auto_continue := true  # 연속 진행: 클리어 뒤 카운트다운으로 다음 스테이지, 꺼지면 스테이지만 올리고 대기
+var auto_hold := Callable()  # true를 내면 연속 진행이어도 이번 결과 뒤엔 대기(가이드 보상이 준비됨 — Tutorial이 건다, 사용자 2026-10-25 "라운드 끝에 멈춤")
 
 var _timer := 0.0
 var _won := false
@@ -192,7 +193,7 @@ func advance(delta: float) -> void:
 			_timer -= delta
 			if _timer <= 0.0:
 				refill()
-				if _won and auto_continue:
+				if _won and auto_continue and not (auto_hold.is_valid() and auto_hold.call()):
 					_set_mode(Mode.COUNTDOWN)
 				else:
 					_set_mode(Mode.IDLE)

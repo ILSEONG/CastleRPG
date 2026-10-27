@@ -9,10 +9,12 @@ extends "res://scripts/ops_sheet.gd"
 ##  문의(2026-10-14) — 플레이어 문의(server/src/inquiry.ts) 대기 목록(오래된 것 먼저)·전체. [답변하기]로 그 문의만 답변 칸 + 보상을 펼쳐
 ##   [답변 보내기] → 그 플레이어에게 우편([문의 답변]), 상태가 곧바로 "답변 완료"로 바뀐다(거절되면 되돌린다). [종료]·[다시 열기].
 ##   계정 삭제 요청(분류 delete, 앱 없이 웹 양식 /legal/account-deletion): 본인 확인 뒤 [계정 삭제] 두 번 → 그 계정 삭제(자동 삭제 없음).
+##  통계(2026-10-23) — server/src/retention.ts: 오늘·7일 접속, 하루 뒤(D1)·일주일 뒤(D7) 복귀율, 날마다 접속 수, 가입한 날별 표,
+##   라운드 분포(5라운드씩), 가이드 미션마다 지금 멈춰 있는 수와 그중 며칠째 안 들어온(이탈) 수. 보기만 한다.
 ## 보상 = 골드·다이아·다이아 모집권·목재·석재·식량·던전 열쇠 셋·영웅(+장 수)·장비(등급 + 개수) — 넣는 값 그대로(서버가 범위를 본다).
 
 const GameData := preload("res://scripts/game_data.gd")
-const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], ["coupon", "쿠폰"], ["inquiry", "문의"]]
+const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], ["coupon", "쿠폰"], ["inquiry", "문의"], ["retention", "통계"]]
 const KIND_ITEMS := [["notice", "공지"], ["event", "이벤트"], ["update", "업데이트"], ["maintenance", "점검"]]
 const REWARD_FIELDS := [["gold", "골드"], ["diamonds", "다이아"], ["tickets", "모집권"], ["wood", "목재"], ["stone", "석재"], ["food", "식량"],
 	["keys_gold", "골드 열쇠"], ["keys_equip", "장비 열쇠"], ["keys_ticket", "모집권 열쇠"]]
@@ -27,6 +29,7 @@ var editing_notice := 0  # 수정 중인 공지 id(0 = 새 공지)
 var inq := {}  # GET /v1/admin/inquiries 응답
 var inq_all := false  # 문의: 전체 보기(아니면 답변 대기만)
 var answering := 0  # 답변 칸을 펼친 문의 id
+var ret := {}  # GET /v1/admin/retention 응답
 var _armed := ""  # 한 번 누른 위험 버튼 이름
 var _armed_button: Button
 var _armed_text := ""
@@ -52,6 +55,8 @@ func _ready() -> void:
 
 func _on_open() -> void:
 	fetch()
+	if tab == "retention":
+		fetch_retention()
 	_rebuild()
 
 
@@ -61,6 +66,8 @@ func pick(t: String) -> void:
 	answering = 0
 	if t == "inquiry":
 		fetch_inquiries()
+	if t == "retention":
+		fetch_retention()
 	_disarm()
 	_rebuild()
 
@@ -120,6 +127,8 @@ func _rebuild() -> void:
 			_build_coupon()
 		"inquiry":
 			_build_inquiry()
+		"retention":
+			_build_retention()
 
 
 # --- 상태 ---
@@ -424,6 +433,98 @@ func _build_inquiry() -> void:
 		row.add_child(c)
 		buttons["inq_close:%d" % id] = c
 		v.add_child(row)
+
+
+# --- 이탈 ---
+
+func fetch_retention() -> void:
+	if Net.up:
+		Net.send("GET", "/v1/admin/retention", null, func(d: Dictionary):
+			ret = d
+			if tab == "retention":
+				_rebuild(), func(): Economy.notice.emit("이탈 기록을 받지 못했습니다(관리자만 쓸 수 있습니다)"))
+
+
+## 돌아온 수 / 전체 → "3명(60%)", 아직 그날이 안 왔으면 "—"
+static func back_text(back, n: int) -> String:
+	if back == null or n <= 0:
+		return "—"
+	return "%d명(%d%%)" % [int(back), roundi(100.0 * float(back) / n)]
+
+
+## 라운드 번호 → "1-15"(25라운드 = 한 장)
+static func round_text(r: int) -> String:
+	return "%d-%d" % [(r - 1) / 25 + 1, (r - 1) % 25 + 1]
+
+
+static func mission_title(i: int, id: String) -> String:
+	if i < Tutorial.MISSIONS.size() and str(Tutorial.MISSIONS[i].get("id", "")) == id:
+		return str(Tutorial.MISSIONS[i].get("title", id))
+	return id
+
+
+func _build_retention() -> void:
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	top.add_child(_wrap("기준일 %s(한국 시간)" % str(ret.get("date", "—")), 24))
+	var rb := _button("새로 고침", UiKit.STEEL, 22)
+	rb.custom_minimum_size = Vector2(150, 50)
+	rb.pressed.connect(fetch_retention)
+	top.add_child(rb)
+	buttons["ret_refresh"] = rb
+	body.add_child(top)
+	if ret.is_empty():
+		body.add_child(_wrap("불러오는 중입니다", 24, SUB, HORIZONTAL_ALIGNMENT_CENTER))
+		return
+	var v := _card()
+	v.add_child(_label("접속", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(_wrap("전체 계정 %d명 · 오늘 접속 %d명 · 최근 7일 접속 %d명" % [int(ret.get("players", 0)), int(ret.get("dau", 0)), int(ret.get("wau", 0))], 23))
+	var d1: Dictionary = ret.get("d1", {})
+	var d7: Dictionary = ret.get("d7", {})
+	v.add_child(_wrap("하루 뒤 복귀(D1) %s · 일주일 뒤 복귀(D7) %s" % [back_text(d1.get("back"), int(d1.get("n", 0))),
+		back_text(d7.get("back"), int(d7.get("n", 0)))], 23, HudScript.INK))
+	v.add_child(_wrap("최근 30일 가입자 중 가입 다음 날(D1)·7일 뒤 그날(D7)에 한 번이라도 들어온 사람입니다. 숫자 앞은 그날이 지난 가입자 수 중 돌아온 수입니다.", 19, SUB))
+	var dv := _card()
+	dv.add_child(_label("날마다 접속", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	var daily: Array = ret.get("daily", [])
+	if daily.is_empty():
+		dv.add_child(_wrap("최근 2주 접속 기록이 없습니다", 21, SUB))
+	for r in daily:
+		dv.add_child(_wrap("%s · %d명" % [str(r.get("date", "")).substr(5), int(r.get("n", 0))], 21))
+	var c := _card()
+	c.add_child(_label("가입한 날별", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	var rows: Array = ret.get("cohorts", [])
+	if rows.is_empty():
+		c.add_child(_wrap("최근 2주 동안 새로 가입한 계정이 없습니다", 21, SUB))
+	for r in rows:
+		var n := int(r.get("n", 0))
+		c.add_child(_wrap("%s · 가입 %d명 · 하루 뒤 %s · 일주일 뒤 %s" % [str(r.get("date", "")).substr(5), n, back_text(r.get("d1"), n), back_text(r.get("d7"), n)], 21))
+	var away_days := int(ret.get("away_days", 3))
+	var sv := _card()
+	sv.add_child(_label("라운드 분포(다음에 할 라운드)", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	for r in ret.get("stages", []):
+		sv.add_child(_wrap("%s ~ %s · %d명(%d일 넘게 안 옴 %d명)" % [round_text(int(r.get("from", 1))), round_text(int(r.get("to", 1))), int(r.get("n", 0)),
+			away_days, int(r.get("away", 0))], 21))
+	var g: Dictionary = ret.get("guide", {})
+	var gv := _card()
+	gv.add_child(_label("가이드 어디서 멈추나", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	gv.add_child(_wrap("가이드를 받은 %d명 · 끝까지 %d명 · 진행 중 %d명" % [int(g.get("total", 0)), int(g.get("done", 0)), int(g.get("active", 0))], 23))
+	var worst := 0
+	for s in g.get("steps", []):
+		worst = maxi(worst, int(s.get("away", 0)))
+	var any := false
+	for s in g.get("steps", []):
+		var here := int(s.get("here", 0))
+		if here <= 0:
+			continue
+		any = true
+		var away := int(s.get("away", 0))
+		var i := int(s.get("i", 0))
+		gv.add_child(_wrap("%d. %s — 멈춤 %d명(%d일 넘게 안 옴 %d명) · 도달 %d명" % [i + 1, mission_title(i, str(s.get("id", ""))), here, away_days, away,
+			int(s.get("reached", 0))], 21, Color(0.78, 0.22, 0.18) if worst > 0 and away == worst else HudScript.INK))
+	if not any:
+		gv.add_child(_wrap("가이드 중간에 멈춘 사람이 없습니다", 21, SUB))
+	gv.add_child(_wrap("멈춤 = 지금 그 미션을 하고 있는 사람, 안 옴 = 마지막 접속이 %d일 넘게 지난 사람(이탈)입니다. 이탈이 가장 많은 미션은 빨간 글씨입니다." % away_days, 19, SUB))
 
 
 func _inq_row(id: int) -> Dictionary:

@@ -22,6 +22,7 @@ import * as S from './speedups.ts'
 import * as SH from './shop.ts'
 import * as IAP from './iap.ts'
 import * as Pay from './payments.ts'
+import * as Ads from './ads.ts'
 import * as L from './legal.ts'
 import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
@@ -29,6 +30,7 @@ import { registerMarket } from './market.ts'
 import { registerChat } from './chat.ts'
 import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
+import { dayRecorder, registerRetention } from './retention.ts'
 import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
 import { registerParty } from './party_routes.ts'
@@ -49,6 +51,7 @@ export interface AppOptions {
   partyLive?: PartyLive // 파티 퀘스트 실시간 방(main.ts가 만들어 붙인다). 없으면 방 없이(REST finish만)
   payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
   legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
+  adWaitMs?: number // 광고 서버 확인(AdMob SSV) 콜백을 상점 구매가 기다리는 최대 시간(기본 10초, 테스트 0)
   gameCacheSec?: number // 기획 표(loadGame) 재사용 시간(실제 초). 0·없음 = 요청마다 읽는다(테스트). 운영은 main.ts가 GAME_CACHE_SEC(기본 30)
 }
 
@@ -1174,6 +1177,15 @@ export function createApp(opts: AppOptions) {
 
   // --- 입력 ---
 
+  // 시작 시각(사용자 2026-10-25 "남은 시간이 5초에서 갑자기 5초로 다시 재설정"): 앱은 누른 순간부터 타이머를 돌리는데, 요청은 앞선 요청(처치 보고 등)
+  // 뒤에 줄 서서 몇 초 늦게 올 수 있다. 서버가 받은 때부터 세면 응답에서 끝나는 시각이 늦어져 남은 시간이 되돌아간다. 그래서 앱이 보낸 누른 시각
+  // at(서버 시계 초)을 쓰되 지금 − START_SLACK_SEC ~ 지금으로 자른다(없거나 이상하면 지금).
+  const START_SLACK_SEC = 15
+  function startAt(b: Record<string, unknown>, now: number): number {
+    const at = b.at
+    return typeof at === 'number' && Number.isFinite(at) ? Math.min(now, Math.max(now - START_SLACK_SEC, at)) : now
+  }
+
   async function body(c: Context): Promise<Record<string, unknown>> {
     let b: unknown
     try {
@@ -1199,6 +1211,8 @@ export function createApp(opts: AppOptions) {
 
   // 접속 중 표시(파티 초대 대상): 마지막으로 인증된 요청을 보낸 시각. 서버 한 대 메모리.
   const seenAt = new Map<string, number>()
+  // 이탈 기록(retention.ts): 플레이어마다 하루 첫 인증 요청에 접속한 날을 남긴다.
+  const recordDay = dayRecorder(query)
 
   // Authorization: Bearer <JWT>. 서명은 hono/jwt, 만료는 주입 시계로 확인한다.
   async function auth(c: Context, next: Next) {
@@ -1216,6 +1230,7 @@ export function createApp(opts: AppOptions) {
     c.set('playerId', payload.sub)
     if (seenAt.size >= 50_000) seenAt.clear() // 메모리 지키기(접속 표시만 잠시 비게 된다)
     seenAt.set(payload.sub, clock())
+    await recordDay(payload.sub, clock())
     await next()
   }
 
@@ -1730,7 +1745,7 @@ export function createApp(opts: AppOptions) {
       const baseSec = lot && need === 0 ? R.cfgNum(g.config, 'lot_build_sec') // 튜토리얼 공터 첫 건설은 lot_build_sec초(사용자 2026-10-06)
         : R.roundHalfAway(R.buildSec(def, from) / (1 + rb.build_speed_pct / 100)) // 개정 24: 연구 build_speed_pct
       const helps = inGuild ? R.guildHelps(g.config, builtLevel(p, R.GUILD_HALL)) : 0 // 길드 회관: 길드원 도움(2026-10-13)
-      const finish = now + (helps > 0 ? R.afterHelps(baseSec, helps, g.config) : baseSec)
+      const finish = startAt(b0, now) + (helps > 0 ? R.afterHelps(baseSec, helps, g.config) : baseSec)
       const delta: Record<string, number> = {}
       for (const r of R.BUILD_RES) {
         const d = (collect?.res === r ? collect.amount : 0) - cost[r]
@@ -1884,7 +1899,7 @@ export function createApp(opts: AppOptions) {
         if (num !== q.tut_step || num >= rows.length) throw new ApiError(409, 'stale', `tutorial step is ${q.tut_step}`)
         const def = rows[num]
         const need = R.parseNeeds(def.needs)
-        if (need && (p.unbuilt.includes(need.building) || level(p, need.building) < need.level)) {
+        if (need && need.buildings.some((b) => p.unbuilt.includes(b) || level(p, b) < need.level)) {
           throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         }
         const owned = Object.entries(p.heroes).filter(([, h]) => h.copies > 0)
@@ -2343,6 +2358,72 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  // --- 보상형 광고 서버 확인(AdMob SSV, ads.ts) ---
+  // 앱은 광고를 띄우기 전에 /v1/ads/start로 표를 받아 광고의 custom_data로 넘긴다. AdMob이 끝까지 본 광고마다 /admob/ssv를 서명해 부르면 표가 확인된다.
+  // 운영 설정 ops_config ad_ssv = '1'이면 상점 [광고] 상품은 확인된 표가 있어야 받는다(아니면 예전처럼 body.ad = true, 기록에 ssv 여부만 남긴다).
+  const adKey = Ads.keyStore(opts.fetch ?? fetch)
+  const adWaitMs = opts.adWaitMs ?? 10_000
+  async function adClaim(playerId: string, raw: unknown, usedFor: string): Promise<{ token: string; verified: boolean; required: boolean }> {
+    const token = typeof raw === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(raw) ? raw : ''
+    let required = false
+    try {
+      required = (await query("select value from ops_config where key = 'ad_ssv'"))[0]?.value === '1'
+    } catch {
+      required = false
+    }
+    if (!token) return { token, verified: false, required }
+    const until = Date.now() + (required ? adWaitMs : 0)
+    for (;;) {
+      try {
+        const r = await query(`update ad_views set used_for = $3 where token = $1 and player_id = $2 and verified_at is not null
+          and (used_for is null or used_for = $3) returning token`, [token, playerId, usedFor])
+        if (r.length) return { token, verified: true, required }
+      } catch {
+        return { token: '', verified: false, required }
+      }
+      if (Date.now() >= until) return { token: '', verified: false, required }
+      await new Promise((ok) => setTimeout(ok, 500)) // AdMob 콜백은 보통 광고를 닫기 전후 몇 초 안에 온다
+    }
+  }
+
+  // 광고 표 받기. 한 시간에 60장까지(광고 상품은 하루 20개 남짓).
+  app.post('/v1/ads/start', auth, async (c) => {
+    const id = c.get('playerId') as string
+    try {
+      const [cnt] = await query("select count(*)::int as n from ad_views where player_id = $1 and created_at > now() - interval '1 hour'", [id])
+      if (Number(cnt?.n ?? 0) >= 60) throw new ApiError(429, 'too_many_ads', 'too many ads; try again later')
+      const token = randomBytes(18).toString('base64url')
+      await query('insert into ad_views (token, player_id) values ($1, $2)', [token, id])
+      return c.json({ token })
+    } catch (e) {
+      if (e instanceof ApiError) throw e
+      console.warn(`[server] ads start: ${(e as Error).message}`)
+      throw new ApiError(503, 'ads_unavailable', 'ad check is not ready')
+    }
+  })
+
+  // AdMob 콜백(공개, AdMob 콘솔 광고 단위 → 서버 측 확인 URL). 서명이 틀리면 403, 맞으면 늘 200(같은 거래 재전송·콘솔 시험 호출 포함).
+  app.get('/admob/ssv', async (c) => {
+    const url = c.req.url
+    const raw = url.includes('?') ? url.slice(url.indexOf('?') + 1) : ''
+    let v: Ads.SsvParams | null = null
+    try {
+      v = await Ads.verifySsv(raw, adKey)
+    } catch (e) {
+      console.warn(`[server] admob ssv keys: ${(e as Error).message}`)
+      return c.json({ error: 'keys_unavailable' }, 503) // AdMob이 나중에 다시 부른다
+    }
+    if (!v) return c.json({ error: 'bad_signature' }, 403)
+    if (v.custom_data && v.transaction_id) {
+      try {
+        await query('update ad_views set verified_at = now(), transaction_id = $2 where token = $1 and verified_at is null', [v.custom_data, v.transaction_id])
+      } catch (e) {
+        if (!/duplicate|unique/i.test((e as Error).message)) console.warn(`[server] admob ssv: ${(e as Error).message}`)
+      }
+    }
+    return c.json({ ok: true })
+  })
+
   // --- 상점(shop.ts): 일일·주간 한정 상품, 다이아·골드로 산다(실결제 없음) ---
 
   // 상품 하나 사기. body = {id, n}: n = 이번 기간(오늘·이번 주)에 이미 산 수와 같아야 한다(아니면 409 stale — 재전송이 두 번 사지 않는다).
@@ -2353,40 +2434,48 @@ export function createApp(opts: AppOptions) {
     const x = SH.item(sid)
     if (!x) throw new ApiError(404, 'unknown_item', `unknown shop item '${sid}'`)
     const n = intField(b, 'n', 0, MAX_INT4)
-    return mutate(c, (p, g, now) => {
-      const st = SH.normalize(p.shop, today(g, now))
-      const had = SH.bought(st, x)
-      if (had >= x.limit) throw new ApiError(409, 'sold_out', `'${x.id}' is sold out for this period`)
-      if (n !== had) throw new ApiError(409, 'stale', `'${x.id}' has been bought ${had} times`)
-      const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
-      if (x.currency === 'ad' && !free && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
-      const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(x.currency === 'ad' ? { ad: !free } : {}) } } }
-      const give = x.give as Record<string, number>
-      let gold = (give.gold ?? 0) * 10
-      let dia = give.diamonds ?? 0
-      if (x.currency === 'diamonds') {
-        if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
-        dia -= x.price
-      } else if (x.currency === 'gold') {
-        if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
-        gold -= x.price * 10
-      }
-      if (gold) change.goldTenths = gold
-      if (dia) change.diamonds = dia
-      const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
-      if (Object.keys(res).length) change.res = res
-      if (give.tickets) change.diaTickets = give.tickets
-      const keyType = R.DUNGEON_TYPES.find((t) => (give[`keys_${t}`] ?? 0) > 0)
-      if (keyType) {
-        const ds = dungeonState(p, g, keyType, now)
-        change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + give[`keys_${keyType}`] } }
-      }
-      const pz = P.fromReward(give)
-      if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
-      const sz = S.fromReward(give)
-      if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
-      return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
-    })
+    const ad = x.currency === 'ad' ? await adClaim(c.get('playerId') as string, b.ad_token, `${x.id}:${n}`) : null
+    try {
+      return await mutate(c, (p, g, now) => {
+        const st = SH.normalize(p.shop, today(g, now))
+        const had = SH.bought(st, x)
+        if (had >= x.limit) throw new ApiError(409, 'sold_out', `'${x.id}' is sold out for this period`)
+        if (n !== had) throw new ApiError(409, 'stale', `'${x.id}' has been bought ${had} times`)
+        const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
+        if (ad && !free && ad.required && !ad.verified) throw new ApiError(409, 'ad_unverified', `'${x.id}' needs an ad confirmed by AdMob`)
+        if (ad && !free && !ad.required && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
+        const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(ad ? { ad: !free, ssv: ad.verified } : {}) } } }
+        const give = x.give as Record<string, number>
+        let gold = (give.gold ?? 0) * 10
+        let dia = give.diamonds ?? 0
+        if (x.currency === 'diamonds') {
+          if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
+          dia -= x.price
+        } else if (x.currency === 'gold') {
+          if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
+          gold -= x.price * 10
+        }
+        if (gold) change.goldTenths = gold
+        if (dia) change.diamonds = dia
+        const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
+        if (Object.keys(res).length) change.res = res
+        if (give.tickets) change.diaTickets = give.tickets
+        const keyType = R.DUNGEON_TYPES.find((t) => (give[`keys_${t}`] ?? 0) > 0)
+        if (keyType) {
+          const ds = dungeonState(p, g, keyType, now)
+          change.dungeon = { type: keyType, state: { ...ds, keys: ds.keys + give[`keys_${keyType}`] } }
+        }
+        const pz = P.fromReward(give)
+        if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
+        const sz = S.fromReward(give)
+        if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
+        return { change, extra: { bought: { id: x.id, give: x.give } }, reload: Boolean(keyType) }
+      })
+    } catch (e) {
+      // 같은 n의 재전송(stale)이 아니면 표를 돌려놓는다 — 한도·점검 등으로 못 산 광고는 다음 구매에 다시 쓴다
+      if (ad?.token && !(e instanceof ApiError && e.code === 'stale')) await query('update ad_views set used_for = null where token = $1 and used_for = $2', [ad.token, `${x.id}:${n}`]).catch(() => {})
+      throw e
+    }
   })
 
   // --- 결제 상품(iap.ts): 다이아 충전·월정액·패키지·성장 패스 ---
@@ -2741,7 +2830,7 @@ export function createApp(opts: AppOptions) {
       const cost = R.trainCost(g.config, s.id, count, tier, rb.train_cost_pct)
       if (Object.entries(cost).some(([r, v]) => (p.res[r] ?? 0) < v)) throw new ApiError(409, 'not_enough', `training ${count} costs ${JSON.stringify(cost)}`)
       const unit = tut ? R.cfgNum(g.config, 'tutorial_train_sec') : R.soldierUnitSec(g.config, lv)
-      const train = { count, tier, finish: now + count * (tut ? unit : unit / (1 + rb.train_speed_pct / 100)) }
+      const train = { count, tier, finish: startAt(b, now) + count * (tut ? unit : unit / (1 + rb.train_speed_pct / 100)) }
       const res = Object.fromEntries(Object.entries(cost).filter(([, v]) => v > 0).map(([r, v]) => [r, -v]))
       return {
         change: { res, train: { [building]: train }, log: { kind: 'train_start', detail: { building, type: s.id, count, tier, level: lv, unit_sec: unit, cost, finish: train.finish } } },
@@ -2798,7 +2887,8 @@ export function createApp(opts: AppOptions) {
   // not_enough_gold(rules.researchBlock 순서). 비용(자원, 골드 × 10 tenths)을 전부 빼고 진행(끝나는 시각 = 지금 + 연구 시간)·
   // economy_log research start는 version 가드 한 문장 — 같은 순간 두 번 보내도 하나는 409 research_busy다.
   app.post('/v1/research/start', auth, async (c) => {
-    const id = strField(await body(c), 'id')
+    const rb0 = await body(c)
+    const id = strField(rb0, 'id')
     const inGuild = await guildMember(c.get('playerId') as string) // 길드 회관 도움(2026-10-13)
     return mutate(c, (p, g, now) => {
       const def = g.research.find((d) => d.id === id)
@@ -2812,7 +2902,7 @@ export function createApp(opts: AppOptions) {
       const cost = R.researchCost(g.config, def, from)
       const helps = inGuild ? R.guildHelps(g.config, builtLevel(p, R.GUILD_HALL)) : 0 // 길드 회관: 길드원 도움(2026-10-13)
       const sec = R.afterHelps(R.researchSec(g.config, def, from, R.researchSpeed(g.config, bonus(p, g), lab)), helps, g.config)
-      const finish = now + sec
+      const finish = startAt(rb0, now) + sec
       const res = Object.fromEntries(R.BUILD_RES.filter((r) => cost[r] > 0).map((r) => [r, -cost[r]]))
       return {
         change: {
@@ -3710,6 +3800,16 @@ export function createApp(opts: AppOptions) {
       return c.json(view(await loadPlayer(id, game, now), game, now))
     })
 
+    // 통합 체크용(2026-10-23): 가이드 단계를 step으로(진행 중). 첫 미션이 첫 전투가 되어 공터 짓기 미션으로 건너뛸 때(tests/online_check·journey_buildings_online)
+    app.post('/v1/test/tut_step', auth, async (c) => {
+      const step = intField(await body(c), 'step', 0, 1000)
+      const id = c.get('playerId') as string
+      await query("update player_state set version = version + 1, tut_state = 'active', tut_step = $2 where player_id = $1", [id, step])
+      const now = clock()
+      const game = await loadGame()
+      return c.json(view(await loadPlayer(id, game, now), game, now))
+    })
+
     // 통합 체크용: 출석 이벤트 받은 날 수를 n으로, 오늘은 아직 안 받은 것으로(tests/attendance_online.gd)
     app.post('/v1/test/attendance', auth, async (c) => {
       const n = intField(await body(c), 'n', 0, A.DAYS)
@@ -3810,6 +3910,7 @@ export function createApp(opts: AppOptions) {
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
   registerChat(app, { query, auth, clock, body, ApiError })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus })
+  registerRetention(app, { query, auth, clock, ApiError, isAdmin })
   registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
     opts.partyLive)
   registerInquiry(app, { query, auth, clock, body, ApiError, clientIp: RL.clientIp, loadGame, isAdmin, deletePlayer, friendName: R.friendName, legal })

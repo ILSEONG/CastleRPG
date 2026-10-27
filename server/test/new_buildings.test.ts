@@ -84,11 +84,11 @@ test('금광: 분마다 골드가 쌓이고 /v1/collect로 받는다(창고 레�
   S.clock.t = T0 + 600 // 10분
   const r = await S.req('POST', '/v1/collect', { token, body: { building: 'goldmine' } })
   assert.equal(r.status, 200, JSON.stringify(r.json))
-  assert.equal(r.json.amount, 200) // Lv 1: 20/분
-  assert.equal(r.json.player.gold_tenths - g0, 2000)
+  assert.equal(r.json.amount, 100) // Lv 1: 10/분
+  assert.equal(r.json.player.gold_tenths - g0, 1000)
   // 상한: 720분(창고 없음) — 1000분 지나도 720분어치
   S.clock.t = T0 + 600 + 1000 * 60
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'goldmine' } })).json.amount, 20 * 720)
+  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'goldmine' } })).json.amount, 10 * 720)
   // 창고 Lv 2: 상한 +120분
   await levels(token, { keep: 3 })
   const w = await build(token, 'warehouse', [5, 5])
@@ -96,7 +96,7 @@ test('금광: 분마다 골드가 쌓이고 /v1/collect로 받는다(창고 레�
   await done(token)
   await levels(token, { warehouse: 2, keep: 4 })
   S.clock.t += 2000 * 60
-  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'goldmine' } })).json.amount, 20 * 840)
+  assert.equal((await S.req('POST', '/v1/collect', { token, body: { building: 'goldmine' } })).json.amount, 10 * 840)
   assert.ok(id)
 })
 

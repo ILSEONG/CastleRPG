@@ -261,22 +261,22 @@ test('처치 골드: Σ count × kill_gold(id, stage), stage는 player.stage로 
   S.clock.t = T0 + 1000 // 상한 넉넉히
   let r = await S.req('POST', '/v1/kills', { token, body: { seq: 1, stage: 1, kills: { grunt: 10, epic_boss: 1 } } })
   assert.equal(r.status, 200)
-  assert.equal(r.json.gold_gained_tenths, (10 * 10 + 250) * 10)
-  assert.equal(r.json.player.gold_tenths, 3500)
+  assert.equal(r.json.gold_gained_tenths, (10 * 5 + 125) * 10)
+  assert.equal(r.json.player.gold_tenths, 1750)
 
   await S.req('POST', '/v1/stage/clear', { token, body: { stage: 1 } })
   S.clock.t += 10
   await S.req('POST', '/v1/stage/clear', { token, body: { stage: 2 } }) // 이제 stage 3
   S.clock.t += 1000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 2, stage: 3, kills: { grunt: 10, epic_boss: 1 } } })
-  assert.equal(r.json.gold_gained_tenths, 10 * 143 + 3575) // gold_mult 1.43: 14.3 → 143, 357.5 → 3575
+  assert.equal(r.json.gold_gained_tenths, 10 * 72 + 1788) // gold_mult 1.43: 7.15 → 71.5 → 72, 178.75 → 1787.5 → 1788 (반올림)
   S.clock.t += 1000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 3, stage: 99, kills: { grunt: 10 } } }) // 3으로 자름
-  assert.equal(r.json.gold_gained_tenths, 1430)
+  assert.equal(r.json.gold_gained_tenths, 720)
   S.clock.t += 1000
-  r = await S.req('POST', '/v1/kills', { token, body: { seq: 4, stage: 2, kills: { grunt: 5 } } }) // 12.1 → 121 each
-  assert.equal(r.json.gold_gained_tenths, 605)
-  assert.equal(r.json.player.gold_tenths, 3500 + 5005 + 1430 + 605)
+  r = await S.req('POST', '/v1/kills', { token, body: { seq: 4, stage: 2, kills: { grunt: 5 } } }) // 6.05 → 60.5 → 61 each
+  assert.equal(r.json.gold_gained_tenths, 305)
+  assert.equal(r.json.player.gold_tenths, 1750 + 2508 + 720 + 305)
 
   const before = r.json.player.gold_tenths
   for (const body of [
@@ -299,8 +299,8 @@ test('처치 골드: Σ count × kill_gold(id, stage), stage는 player.stage로 
   S.clock.t += 1000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 5, stage: 1_000_000, kills: { grunt: 10_000 } } })
   assert.equal(r.status, 200)
-  assert.equal(r.json.gold_gained_tenths, 300 * 143)
-  assert.equal(r.json.player.gold_tenths, before + 42900)
+  assert.equal(r.json.gold_gained_tenths, 300 * 72)
+  assert.equal(r.json.player.gold_tenths, before + 21600)
   const ks = await logs(id, 'kills')
   assert.equal(ks.length, 5)
   assert.deepEqual(ks[2].detail.kept, { grunt: 10 })
@@ -315,20 +315,20 @@ test('처치 상한(토큰 버킷): ceil(인정 초 × kill_rate_cap), 인정 �
   const kill = (seq: number, kills: Record<string, number>) => S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills } })
   S.clock.t = T0 + 10 // 상한 ceil(10 × 5) = 50
   let r = await kill(1, { grunt: 100 })
-  assert.equal(r.json.gold_gained_tenths, 50 * 100) // 버킷은 처치 수(50)를 자른다 — 골드가 아니다
+  assert.equal(r.json.gold_gained_tenths, 50 * 50) // 버킷은 처치 수(50)를 자른다 — 골드가 아니다
   r = await kill(2, { grunt: 30 }) // 같은 순간: 버킷이 비었다 — 슬랙 없음
   assert.equal(r.json.gold_gained_tenths, 0)
   S.clock.t = T0 + 24 // 상한 70: 싼 grunt부터 인정, 비싼 epic_boss를 먼저 버린다
   r = await kill(3, { epic_boss: 4, grunt: 70 })
-  assert.equal(r.json.gold_gained_tenths, 70 * 10 * 10)
+  assert.equal(r.json.gold_gained_tenths, 70 * 5 * 10)
   S.clock.t = T0 + 34 // 상한 50 안: 그대로, 쓴 40개(8초)만큼만 보고 시각이 앞으로
   r = await kill(4, { grunt: 40 })
-  assert.equal(r.json.gold_gained_tenths, 4000)
+  assert.equal(r.json.gold_gained_tenths, 2000)
   assert.equal(await lkr(), T0 + 32)
   S.clock.t = T0 + 1034 // 오래 쉬어도 버킷은 kill_burst_sec(60) × 5 = 300
   r = await kill(5, { grunt: 1000 })
-  assert.equal(r.json.gold_gained_tenths, 300 * 100)
-  assert.equal(r.json.player.gold_tenths, (500 + 0 + 700 + 400 + 3000) * 10)
+  assert.equal(r.json.gold_gained_tenths, 300 * 50)
+  assert.equal(r.json.player.gold_tenths, (250 + 0 + 350 + 200 + 1500) * 10)
   assert.equal(await lkr(), S.clock.t)
   const ks = await logs(id, 'kills')
   assert.deepEqual(ks.map((k) => k.detail.clamped), [true, true, true, false, true])
@@ -346,8 +346,8 @@ test('골드 무한 생성 차단: 같은 순간 /v1/kills 50연타는 합쳐서
     assert.equal(r.status, 200)
     total += r.json.gold_gained_tenths
   }
-  assert.equal(total, 300 * 10 * 10) // 리뷰 시나리오: 버킷이 없으면 50 × 20마리
-  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold_tenths, 300 * 10 * 10)
+  assert.equal(total, 300 * 5 * 10) // 리뷰 시나리오: 버킷이 없으면 50 × 20마리
+  assert.equal((await S.req('GET', '/v1/player', { token })).json.player.gold_tenths, 300 * 5 * 10)
 })
 
 test('보스 처치 상한(2026-10-14 보안 점검): 하루 (스테이지 클리어 + 1) × 4마리까지 — 전부 보스로 보고해 골드를 25배로 받지 못한다', async () => {
@@ -355,9 +355,9 @@ test('보스 처치 상한(2026-10-14 보안 점검): 하루 (스테이지 클�
   const { token } = await S.login()
   S.clock.t = T0 + 1000
   let r = await S.req('POST', '/v1/kills', { token, body: { seq: 1, stage: 1, kills: { epic_boss: 20 } } })
-  assert.equal(r.json.gold_gained_tenths, 4 * 250 * 10)
+  assert.equal(r.json.gold_gained_tenths, 4 * 125 * 10)
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 2, stage: 1, kills: { epic_boss: 20, grunt: 5 } } })
-  assert.equal(r.json.gold_gained_tenths, 5 * 10 * 10) // 오늘 보스 몫을 다 썼다 — 졸개만
+  assert.equal(r.json.gold_gained_tenths, 5 * 5 * 10) // 오늘 보스 몫을 다 썼다 — 졸개만
   assert.equal((await S.req('POST', '/v1/stage/clear', { token, body: { stage: 1 } })).json.cleared, true)
   S.clock.t = T0 + 2000
   r = await S.req('POST', '/v1/kills', { token, body: { seq: 3, stage: 2, kills: { epic_boss: 1 } } }) // 클리어 1번 → 4마리 더
@@ -370,18 +370,18 @@ test('처치 멱등: seq <= kill_seq면 반영 없이 현재 상태 + gold_gaine
   S.clock.t = T0 + 100
   const kill = (seq: number, n: number) => S.req('POST', '/v1/kills', { token, body: { seq, stage: 1, kills: { grunt: n } } })
   let r = await kill(1, 10)
-  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [1000, 1000, 1])
+  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [500, 500, 1])
   r = await kill(1, 10) // 응답 유실 후 재전송
   assert.equal(r.status, 200)
-  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [0, 1000, 1])
+  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [0, 500, 1])
   r = await kill(0, 10)
-  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths], [0, 1000])
+  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths], [0, 500])
   r = await kill(2, 5)
-  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [500, 1500, 2])
+  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [250, 750, 2])
   r = await kill(1, 10) // 늦게 도착한 옛 번호
-  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [0, 1500, 2])
+  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.gold_tenths, r.json.player.kill_seq], [0, 750, 2])
   r = await kill(7, 1) // 번호를 건너뛰어도 크면 반영
-  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.kill_seq], [100, 7])
+  assert.deepEqual([r.json.gold_gained_tenths, r.json.player.kill_seq], [50, 7])
   assert.equal((await S.req('GET', '/v1/player', { token })).json.player.kill_seq, 7)
   assert.equal((await logs(id, 'kills')).length, 3)
 })
@@ -447,7 +447,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   const g = r.json
   assert.match(g.version, /^[0-9a-f]{16}$/)
   assert.equal(r.headers.get('etag'), `"${g.version}"`)
-  assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 24, atk: 4, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 10 })
+  assert.deepEqual(g.monsters[0], { id: 'grunt', hp: 24, atk: 4, speed: 2.5, range: 1.2, atk_interval: 1, aggro: 6, scale: 1, gold: 5 })
   assert.deepEqual(g.monsters.map((m: any) => m.id), ['grunt', 'epic_boss'])
   assert.equal(g.stages.length, 30)
   assert.deepEqual(g.stages[1], { stage: 2, hp_mult: 1.1, atk_mult: 1.1, gold_mult: 1.21, waves: 3, wave_size: 8, idle_interval: 8 })
@@ -491,7 +491,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   const changed = await S.req('GET', '/v1/gamedata')
   assert.notEqual(changed.json.version, g.version)
   assert.equal(changed.json.monsters[0].gold, 3)
-  await S.db.query("update monsters set gold = 10 where id = 'grunt'")
+  await S.db.query("update monsters set gold = 5 where id = 'grunt'")
   assert.equal((await S.req('GET', '/v1/gamedata')).json.version, g.version)
   await S.db.query("update game_config set value = '6' where key = 'kill_rate_cap'")
   assert.notEqual((await S.req('GET', '/v1/gamedata')).json.version, g.version)

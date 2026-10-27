@@ -12,7 +12,7 @@ const POST_GATE := 0
 const POST_WALL := 1
 const POST_FREE := 2          # 자유 위치 (슬롯 없음)
 const GATE_PASS_MARGIN := 1.0 # 성문 통과 지점·계단 앞 지점이 성벽 바깥면·계단 띠에서 떨어진 거리
-const WALK_HALF := 0.55  # 성벽 길: 중심선에서 이만큼 안(성벽 두께 2 m − 몸) — 밀려도 여기를 벗어나지 않는다(clamp_push)
+const WALK_HALF := Balance.WALL_T / 2.0 - 0.45  # 성벽 길: 중심선에서 이만큼 안(성벽 두께 − 몸) — 밀려도 여기를 벗어나지 않는다(clamp_push)
 const REGION_OUTSIDE := 0
 const REGION_INSIDE := 1
 const REGION_WALL := 2    # 성벽 위(계단 윗부분 포함)
@@ -131,15 +131,17 @@ static func gate_front_offsets(half: float) -> Array:
 ## 먼저 서로 다른 성문을 하나씩, 성 가운데 쪽부터(계단도 가운데 쪽 것을 써서 모서리 건물 부지를 지나지 않는다):
 ## 2개(±half/2) = 성문0 안쪽·성문1 안쪽·성문0 바깥·성문1 바깥, 3개(0·±2half/3) = 가운데 −4·오른쪽 안쪽·왼쪽 안쪽·가운데 +4.
 ## 전투 시뮬 2026-10-07: 예전처럼 가운데 ±4에 서면 성문(±half/2)에서 10 m 이상이라 사거리 8 m 원거리 영웅이 한 발도 못 쐈다.
+## 그 뒤에 성문마다 성문 바로 위 자리(사용자 2026-10-25 "성문 바로 위 성벽도 클릭 가능하게") — 누른 곳으로만 간다(claim_near).
+## 저절로 서는 자리(claim·capacity)는 앞의 WALL_TOP_SLOTS 개수까지라 예전 배치 그대로.
 static func wall_top_offsets(half: float) -> Array:
 	var n := gates_per_side(half)
-	if n <= 1:
-		return Balance.WALL_TOP_SLOTS.duplicate()
-	var d := absf(float(Balance.WALL_TOP_SLOTS[0]))
 	var g := gate_offsets(half, n)
+	if n <= 1:
+		return Balance.WALL_TOP_SLOTS.duplicate() + g
+	var d := absf(float(Balance.WALL_TOP_SLOTS[0]))
 	if n == 2:
-		return [g[0] + d, g[1] - d, g[0] - d, g[1] + d]
-	return [g[1] - d, g[2] - d, g[0] + d, g[1] + d]
+		return [g[0] + d, g[1] - d, g[0] - d, g[1] + d] + g
+	return [g[1] - d, g[2] - d, g[0] + d, g[1] + d] + g
 
 
 static func perp(side: int) -> Vector3:
@@ -236,6 +238,39 @@ static func _stair_of(half: float, side: int, p: Vector3) -> Array:
 ## 오를 때 stair_approach → 아랫단 → 윗단 → landing, 내릴 때 그 역순. 지상 구간은 stair_approach에서 끊기고
 ## 성 안팎을 오갈 때 성문을 지난다(_ground_route). 다른 면의 안쪽 통로 점끼리는 통로 모서리를 돈다(_lane_corners).
 static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
+	return _route_with(half, from, to, [], [], NAN, NAN)
+
+
+## 영웅 이동 경로(사용자 2026-10-25 "영웅 이동 경로는 무조건 최단 경로야"): route와 같은 길(성문·계단·통로 모서리)을 쓰되
+## 오르내릴 계단(그 면 성문마다 좌우 둘)과 지나갈 성문(그 면 성문 전부)을 모두 견주어 가장 짧은 길을 고른다.
+## route의 기본 선택(가장 가까운 성문·점 쪽 계단)이 같은 길이면 그것을 쓴다 — 같은 명령에 길이 이쪽저쪽으로 바뀌지 않게.
+static func shortest_route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
+	var best := route(half, from, to)
+	if best.size() <= 1:
+		return best
+	var best_d := path_length(from, best)
+	var stairs: Array = []
+	for at in gate_offsets(half):
+		stairs.append_array([[-1.0, at], [1.0, at]])
+	var none: Array = [[]]
+	var from_st: Array = stairs if region(half, from) == REGION_WALL else none
+	var to_st: Array = stairs if region(half, to) == REGION_WALL else none
+	var gates: Array = gate_offsets(half)
+	for sa in from_st:
+		for sb in to_st:
+			for ga in gates:
+				for gb in gates:
+					var p := _route_with(half, from, to, sa, sb, ga, gb)
+					var d := path_length(from, p)
+					if d < best_d - 0.01:
+						best_d = d
+						best = p
+	return best
+
+
+## route 본체. st_from·st_to = 성벽에서 내려올·성벽으로 올라갈 계단 [end, at](빈 배열이면 점에 가까운 것),
+## at_from·at_to = from 쪽·to 쪽 면에서 지날 성문의 옆 위치(NAN이면 점에 가까운 것).
+static func _route_with(half: float, from: Vector3, to: Vector3, st_from: Array, st_to: Array, at_from: float, at_to: float) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var from_wall := region(half, from) == REGION_WALL
 	var to_wall := region(half, to) == REGION_WALL
@@ -245,7 +280,7 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var ground_from := from
 	if from_wall:
 		var s := side_of(from)
-		var st := _stair_of(half, s, from)
+		var st: Array = st_from if not st_from.is_empty() else _stair_of(half, s, from)
 		path.append(wall_landing(half, s, st[0], st[1]))
 		path.append(stair_top(half, s, st[0], st[1]))
 		path.append(stair_bottom(half, s, st[0], st[1]))
@@ -255,10 +290,10 @@ static func route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
 	var tail: Array[Vector3] = []
 	if to_wall:
 		var s2 := side_of(to)
-		var st2 := _stair_of(half, s2, to)
+		var st2: Array = st_to if not st_to.is_empty() else _stair_of(half, s2, to)
 		ground_to = stair_approach(half, s2, st2[0], st2[1])
 		tail = [stair_bottom(half, s2, st2[0], st2[1]), stair_top(half, s2, st2[0], st2[1]), wall_landing(half, s2, st2[0], st2[1]), to]
-	path.append_array(_ground_route(half, ground_from, ground_to))
+	path.append_array(_ground_route(half, ground_from, ground_to, at_from, at_to))
 	path.append_array(tail)
 	var out: Array[Vector3] = []
 	var prev := from
@@ -292,32 +327,33 @@ static func _lane_corners(half: float, a: Vector3, b: Vector3) -> Array[Vector3]
 
 ## 지상 두 점 사이 경로(도착점 포함). 성 안팎을 오가거나 성을 가로지를 때는 성문을 지난다.
 ## "안" = 성벽 바깥면 안쪽(crosses_castle과 같은 경계). 문짝 상태와 무관하게 아군은 통과.
-static func _ground_route(half: float, from: Vector3, to: Vector3) -> Array[Vector3]:
+## at_from·at_to: from 쪽·to 쪽 면에서 지날 성문(NAN이면 그 점에 가장 가까운 성문).
+static func _ground_route(half: float, from: Vector3, to: Vector3, at_from := NAN, at_to := NAN) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var from_in := is_inside(half, from)
 	var to_in := is_inside(half, to)
 	if from_in and not to_in:
 		var s := side_of(to)
-		var at := nearest_gate_at(half, s, to)
+		var at := nearest_gate_at(half, s, to) if is_nan(at_to) else at_to
 		path.append(gate_inner(half, s, at))
 		path.append(gate_outer(half, s, at))
 	elif not from_in and to_in:
 		var s := side_of(from)
-		var at := nearest_gate_at(half, s, from)
+		var at := nearest_gate_at(half, s, from) if is_nan(at_from) else at_from
 		path.append(gate_outer(half, s, at))
 		path.append(gate_inner(half, s, at))
 	elif not from_in and not to_in and crosses_castle(half, from, to):
 		var a := side_of(from)
 		var b := side_of(to)
-		var at_a := nearest_gate_at(half, a, from)
+		var at_a := nearest_gate_at(half, a, from) if is_nan(at_from) else at_from
 		path.append(gate_outer(half, a, at_a))
 		path.append(gate_inner(half, a, at_a))
 		if b != a:
-			var at_b := nearest_gate_at(half, b, to)
+			var at_b := nearest_gate_at(half, b, to) if is_nan(at_to) else at_to
 			path.append(gate_inner(half, b, at_b))
 			path.append(gate_outer(half, b, at_b))
 		else:
-			var at_b := nearest_gate_at(half, b, to)
+			var at_b := nearest_gate_at(half, b, to) if is_nan(at_to) else at_to
 			if at_b != at_a:
 				path.append(gate_inner(half, b, at_b))
 				path.append(gate_outer(half, b, at_b))
@@ -510,7 +546,7 @@ static func _door_queue(sides: Array, i: int, s: int) -> int:
 
 const SOLDIER_WALL_OFFSETS := [2.5, 6.0, 10.0, 13.0]  # 성벽 위 병사 자리 좌우 거리 — 그 뒤로 3.5 m씩(모서리 탑 앞까지). 영웅 자리 ±4·±8과 엇갈린다
 const SOLDIER_WALL_STEP := 3.5
-const SOLDIER_WALL_OUT := 0.5  # 성벽 중심선(영웅 자리·계단 윗단 착지점 줄)보다 총안 쪽으로. 넘치면 둘째 줄은 안쪽
+const SOLDIER_WALL_OUT := Balance.WALL_T / 2.0 - 0.5  # 성벽 중심선(영웅 자리·계단 윗단 착지점 줄)보다 총안 쪽으로(바깥면에서 0.5 m). 넘치면 둘째 줄은 안쪽
 const GATE_ROW_FIRST := 3.2  # 보병 첫 줄: 성벽 바깥면에서(영웅 성문 앞 자리 1.5 m보다 바깥)
 const GATE_ROW_GAP := 1.6
 const GATE_ROWS := [[0.0, -2.4, 2.4], [-1.0, 1.0, -3.2, 3.2]]  # 줄마다 번갈아(가운데부터)

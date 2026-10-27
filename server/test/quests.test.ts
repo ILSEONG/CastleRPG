@@ -104,6 +104,9 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   const { token, id } = await S.login()
   const rows = await tutorialRows()
   const before = await player(token)
+  assert.equal(rows[0].id, 'stage_1_1') // 가이드 2026-10-23: 1번 = 첫 전투
+  assert.equal((await claim(token, { type: 'tutorial', step: 0 })).json.error, 'not_done')
+  await setStage(token, 2)
   let r = await claim(token, { type: 'tutorial', step: 0 })
   assert.equal(r.status, 200)
   const rw = R.parseReward(rows[0].reward as string)!
@@ -112,10 +115,18 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal(r.json.player.quest.tut_step, 1)
   assert.equal((await claim(token, { type: 'tutorial', step: 0 })).json.error, 'stale')
   assert.equal((await claim(token, { type: 'tutorial', step: 2 })).json.error, 'stale')
-  assert.equal(rows[1].needs, 'build:lumber')
-  assert.equal((await claim(token, { type: 'tutorial', step: 1 })).json.error, 'not_done')
+  const lb = rows.findIndex((x) => x.id === 'build_lumber')
+  assert.equal(rows[lb].needs, 'build:lumber')
+  await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, lb])
+  assert.equal((await claim(token, { type: 'tutorial', step: lb })).json.error, 'not_done')
   await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'lumber') where player_id = $1", [id])
-  assert.equal((await claim(token, { type: 'tutorial', step: 1 })).status, 200)
+  assert.equal((await claim(token, { type: 'tutorial', step: lb })).status, 200)
+  // 여러 건물(2026-10-23 채석장·농장): 둘 다 지어야
+  assert.equal(rows[lb + 1].needs, 'build:quarry+farm')
+  await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'quarry') where player_id = $1", [id])
+  assert.equal((await claim(token, { type: 'tutorial', step: lb + 1 })).json.error, 'not_done')
+  await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'farm') where player_id = $1", [id])
+  assert.equal((await claim(token, { type: 'tutorial', step: lb + 1 })).status, 200)
   // 열쇠 보상(kill_100 → 골드 던전 열쇠 2)
   const k = rows.findIndex((x) => x.reward === 'keys_gold:2')
   await S.db.query('update player_state set tut_step = $2, unbuilt = $3 where player_id = $1', [id, k, []])
@@ -129,7 +140,8 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.ok(rows[t].reward.split('|').includes('tickets:10')) // 가이드 2026-10-12: 다음 미션 골드도 함께
   await pump(token, 200)
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
-  assert.equal((await claim(token, { type: 'tutorial', step: t })).json.player.dia_tickets, 10)
+  const tk = (await player(token)).dia_tickets // 채석장·농장 보상(모집권 10)을 이미 받았다
+  assert.equal((await claim(token, { type: 'tutorial', step: t })).json.player.dia_tickets, tk + 10)
   // 마지막
   await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, rows.length - 3])
   assert.equal(rows[rows.length - 3].id, 'stage_1_15')
@@ -153,7 +165,7 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal(r.json.player.quest.tut_state, 'done')
   assert.equal((await claim(token, { type: 'tutorial', step: rows.length })).json.error, 'no_tutorial')
   const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'quest' order by id", [id])
-  assert.equal(logs.length, 7)
+  assert.equal(logs.length, 8) // 1-1·벌목장·채석장+농장·열쇠·모집권·1-15·거래소·파티
 })
 
 test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_sec 간격, 보상 = reward × (1 + 바퀴) + fixed', async () => {
@@ -227,7 +239,9 @@ test('퀘스트 표: 튜토리얼 행·반복 행, 보상 키 형식, needs 형�
   }
   assert.equal(R.parseReward('gold:1|gold:2'), null)
   assert.equal(R.parseReward('mana:1'), null)
-  assert.deepEqual(R.parseNeeds('level:keep:2'), { kind: 'level', building: 'keep', level: 2 })
+  assert.deepEqual(R.parseNeeds('level:keep:2'), { kind: 'level', buildings: ['keep'], level: 2 })
+  assert.deepEqual(R.parseNeeds('build:quarry+farm'), { kind: 'build', buildings: ['quarry', 'farm'], level: 1 })
+  assert.equal(R.parseNeeds('build:quarry+'), null)
   assert.equal(R.parseNeeds('level:keep:0'), null)
 })
 

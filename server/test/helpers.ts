@@ -53,6 +53,7 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
     fetch: o.fetch,
     payments: o.payments,
     legal: o.legal,
+    adWaitMs: 0,
     ...extra,
   })
   const app = makeApp()

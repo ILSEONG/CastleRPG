@@ -7,12 +7,18 @@ extends RefCounted
 const Lang := preload("res://scripts/lang.gd")
 
 const MISSION_TOURS := {
-	"look_keep": ["intro", "building"],
-	"hero_level": ["hero", "hero_detail"],
+	"stage_1_1": ["intro"],
+	"hero_level": ["tabs", "hero", "hero_detail"],
+	"stage_1_2": ["stage_info"],
 	"growth": ["growth"],
+	"auto_on": ["auto"],
+	"build_lumber": ["economy"],
+	"collect": ["building"],
+	"attend": ["menu"],
+	"fever": ["fever"],
 	"gacha": ["recruit"],
 	"train": ["train"],
-	"dungeon_gold": ["dungeon", "dungeon_form"],
+	"dungeon_gold": ["dungeon", "dungeon_form", "skill"],
 	"research": ["research", "research_detail"],
 	"guild": ["guild_join"],
 	"guild_attend": ["guild_home"],
@@ -23,19 +29,31 @@ const MISSION_TOURS := {
 }
 
 static var TOURS := {
+	# 2026-10-23 초반 단순화: 첫 화면 설명은 [진행]과 가이드 카드 둘만. 나머지는 그 요소가 처음 나타나거나 쓰일 미션에서 한 줄씩(MISSION_TOURS)
 	"intro": {"when": "ui:hud:go", "steps": [
-		{"title": Lang.t("guide_tours.tours.title"), "text": Lang.t("guide_tours.tours.text")},
-		{"at": "hud:_chip_row", "text": Lang.t("guide_tours.tours.text_2")},
+		{"at": "ui:hud:go", "title": Lang.t("guide_tours.tours.title"), "text": Lang.t("guide_tours.tours.text_6")},
+		{"at": "tutorial_card:panel", "text": Lang.t("guide_tours.tours.text_12")},
+	]},
+	"tabs": {"when": "tab_bar:buttons", "steps": [
+		{"at": "tab_bar:buttons", "text": Lang.t("guide_tours.tours.text_11")},
+	]},
+	"stage_info": {"when": "hud:_title_box", "steps": [
 		{"at": "hud:_title_box", "text": Lang.t("guide_tours.tours.text_3")},
 		{"at": "hud:_castle_bar", "text": Lang.t("guide_tours.tours.text_4")},
 		{"at": "hud:_gate_tiles", "text": Lang.t("guide_tours.tours.text_5")},
-		{"at": "ui:hud:go", "text": Lang.t("guide_tours.tours.text_6")},
+	]},
+	"auto": {"when": "ui:hud:auto", "steps": [
 		{"at": "ui:hud:auto", "text": Lang.t("guide_tours.tours.text_7")},
-		{"at": "ui:hud:fever", "text": Lang.t("guide_tours.tours.text_8")},
+	]},
+	"economy": {"when": "ui:build_button", "steps": [
+		{"at": "hud:_chip_row", "text": Lang.t("guide_tours.tours.text_2")},
 		{"at": "ui:build_button", "text": Lang.t("guide_tours.tours.text_9")},
+	]},
+	"menu": {"when": "ui:menu", "steps": [
 		{"at": "ui:menu", "text": Lang.t("guide_tours.tours.text_10")},
-		{"at": "tab_bar:buttons", "text": Lang.t("guide_tours.tours.text_11")},
-		{"at": "tutorial_card:panel", "text": Lang.t("guide_tours.tours.text_12")},
+	]},
+	"fever": {"when": "ui:hud:fever", "steps": [
+		{"at": "ui:hud:fever", "text": Lang.t("guide_tours.tours.text_8")},
 	]},
 	"building": {"when": "building_panel:upgrade_button", "steps": [
 		{"at": "building_panel:title_label", "text": Lang.t("guide_tours.tours.text_13")},
@@ -82,6 +100,12 @@ static var TOURS := {
 		{"at": "dungeon_panel:cards.gold.keys", "text": Lang.t("guide_tours.tours.text_42")},
 		{"at": "dungeon_panel:cards.gold.level", "text": Lang.t("guide_tours.tours.text_43")},
 		{"at": "dungeon_panel:cards.gold.go", "text": Lang.t("guide_tours.tours.text_44")},
+	]},
+	# 스킬 자동/수동(2026-10-23 영웅 터치 조작 스레드, 사용자 "가이드에도 반영했어?"): 첫 골드 던전 전투가 시작되면 멈추고 설명한다.
+	# 성 스테이지 전투 중에는 가이드를 띄우지 않으므로(사용자 2026-10-18) 던전에서. 성 화면의 같은 버튼은 대기 중 숨어 있어 여기서만 뜬다.
+	"skill": {"when": "skill_auto_button:button", "pause": true, "steps": [
+		{"at": "skill_auto_button:button", "title": Lang.t("guide_tours.tours.title_4"), "text": Lang.t("guide_tours.tours.skill_auto")},
+		{"at": "skill_auto_button:row", "text": Lang.t("guide_tours.tours.text_93")},
 	]},
 	"dungeon_form": {"when": "dungeon_panel:go_button", "steps": [
 		{"at": "dungeon_panel:_slot_grid", "text": Lang.t("guide_tours.tours.text_45")},

@@ -5,6 +5,7 @@ extends CanvasLayer
 ## 패배면 맨 위에 던전·단계, 그 밑에 "패배"(실패면 그 이유), 보상 줄 없음. [나가기]·[다시]·[다음 단계](이겼고 최고 + 1 이하일 때), 체크 둘 "현재 단계 자동 반복"·
 ## "다음 단계 자동 도전"(서로 배타, Fever.dungeon_auto), 자동 상태 한 줄("2초 뒤 자동 도전"·"자동 도전을 멈췄습니다").
 
+const SkillAuto := preload("res://scripts/skill_auto_button.gd")
 const Lang := preload("res://scripts/lang.gd")
 
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -30,6 +31,7 @@ const BOSS_RED := Color(0.86, 0.24, 0.2)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
 
+var skill_auto  # skill_auto_button.gd
 var dungeon  # dungeon.gd
 var title_label: Label
 var time_label: Label
@@ -140,6 +142,9 @@ func _build_strip(root: Control) -> void:
 	row.add_theme_constant_override("separation", int(HeroStrip.GAP))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(row)
+	skill_auto = SkillAuto.new()  # [스킬 AUTO](2026-10-23): 띠 오른쪽 위
+	skill_auto.row = row
+	add_child(skill_auto)
 	var px := HeroStrip.fit_px(dungeon.heroes.size(), FACE_PX, 688.0, HeroStrip.GAP)  # 화면(720) − 양옆 16
 	for h in dungeon.heroes:
 		var cell := VBoxContainer.new()
@@ -153,7 +158,7 @@ func _build_strip(root: Control) -> void:
 		face.pressed.connect(pick.bind(h))
 		if PortraitsScript.current != null:  # 피규어 렌더가 끝나면 다시 그린다
 			PortraitsScript.current.portrait_ready.connect(face.queue_redraw.unbind(1))
-		cell.add_child(HeroStrip.face_with_slots(face, h, px))  # [쿨][초상화][쿨]
+		cell.add_child(HeroStrip.face_with_slots(face, h, px, HeroStrip.col_px(dungeon.heroes.size(), 688.0, HeroStrip.GAP)))  # [쿨][초상화][쿨]
 		if h.helper:  # 모집권 던전 도우미: 피규어 위 파란 "도우미"(친구 영웅이면 "친구") 꼬리표
 			var tag := _label(h.helper_tag, 18, Color.WHITE)
 			tag.add_theme_color_override("font_outline_color", HELPER_TAG.darkened(0.4))

@@ -184,15 +184,19 @@ func tick(delta: float) -> void:
 	for k in _cd:
 		_cd[k] -= delta
 		if _cd[k] <= 0.0:
+			if not h.skill_go(k):
+				_cd[k] = 0.0  # 스킬 수동(2026-10-23): 칸을 누를 때까지 준비된 채 기다린다
+				continue
 			_cd[k] = _begin(k)
 
 
 ## 쿨이 찬 발동형 k(개정 25): 조건이 맞으면(_cast 미리 보기) 영웅이 발동 모션을 시작하고, 모션의 발동 순간에 실제로 쓴다 — 그때 조건이
 ## 깨졌으면(표적이 죽었다 등) RETRY 뒤 다시. 반환 = 다음에 볼 때까지 초(쿨 / RETRY / 영웅이 바쁘면 CAST_WAIT).
 func _begin(k: String) -> float:
+	var asked: bool = h._skill_req.has(k)  # 스킬 칸을 눌렀다: 머리(PVP)에 묻지 않고, 못 쓰면 자주 다시 본다
 	if not _cast(k, true):
-		return RETRY
-	if h.has_method("cast_ok") and not h.cast_ok(k):  # PVP 영웅: 머리(pvp_brain)가 좋은 때를 고른다
+		return CAST_WAIT if asked else RETRY
+	if not asked and h.has_method("cast_ok") and not h.cast_ok(k):  # PVP 영웅: 머리(pvp_brain)가 좋은 때를 고른다
 		return RETRY
 	if not h.begin_cast(cast_anim(k, h.def), func():
 			_retarget()
@@ -201,6 +205,7 @@ func _begin(k: String) -> float:
 			else:
 				_cd[k] = minf(_cd[k], RETRY), k):
 		return CAST_WAIT
+	h.skill_used(k)
 	return float(sk[k][0])
 
 

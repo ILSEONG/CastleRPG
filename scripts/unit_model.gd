@@ -16,6 +16,7 @@ const MeshMerge := preload("res://scripts/mesh_merge.gd")
 const HitFlashShader := preload("res://shaders/hit_flash.gdshader")
 
 const OFFSCREEN_EVERY := 4  # 화면 밖: 이 프레임마다 한 번
+const VIEW_MARGIN := 2.0  # m: 발밑이 화면 밖이어도 이만큼 안이면 화면 안으로 친다 — 몸·무기가 화면 가장자리로 들어오는 동안 띄엄띄엄 움직이지 않게(사용자 2026-10-25 "해골이 올때 파르르 떨린다")
 const CROWD_EVERY := 2  # 붐비면 화면 안도 이 프레임마다 한 번(crowd_lod)
 const CROWD_AT := 60
 const SHADOW_OFF_AT := 40  # 붐비면 crowd_lod 유닛 그림자 끔
@@ -29,6 +30,9 @@ static var _crowd_frame := -1
 static var _crowd_n := 0
 static var _crowd_shadows := true
 static var _flash_mat: ShaderMaterial
+static var _view_frame := -1
+static var _view_cam: Camera3D
+static var _view_planes: Array[Plane] = []
 
 var manual := false  # true면 애니메이션을 스스로 돌리지 않는다 — 쓰는 쪽이 advance(초)로 돌린다(recruit_art 정지 자세). add_child 전에
 var lod := false  # 월드 유닛: 화면 밖이면 간헐 갱신(위). add_child 전에
@@ -256,13 +260,27 @@ func tick(delta: float) -> bool:
 		if _shadows != _crowd_shadows:
 			_set_shadows(_crowd_shadows)
 	var every := CROWD_EVERY if crowded else 1
-	var cam := get_viewport().get_camera_3d()
-	if cam != null and not cam.is_position_in_frustum(global_position):
+	if not in_view(get_viewport().get_camera_3d(), global_position):
 		every = OFFSCREEN_EVERY
 	if _frame % every != 0:
 		return false
 	_anim.advance(_acc)
 	_acc = 0.0
+	return true
+
+
+## pos가 카메라 화면 안이거나 가장자리에서 VIEW_MARGIN m 안인가(카메라가 없으면 true). 절두체 면은 프레임마다 한 번만 받는다.
+static func in_view(cam: Camera3D, pos: Vector3) -> bool:
+	if cam == null:
+		return true
+	var f := Engine.get_process_frames()
+	if f != _view_frame or cam != _view_cam:
+		_view_frame = f
+		_view_cam = cam
+		_view_planes = cam.get_frustum()
+	for pl in _view_planes:
+		if pl.distance_to(pos) > VIEW_MARGIN:
+			return false
 	return true
 
 

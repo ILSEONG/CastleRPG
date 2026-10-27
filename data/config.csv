@@ -72,7 +72,7 @@ hero_level_stat_melee,0.0315
 levelup_gold_R,60
 levelup_gold_SR,120
 levelup_gold_SSR,240
-fever_kills,2000
+fever_kills,900
 fever_sec,180
 fever_spawn_mult,3
 daily_reset_utc_hour,15
@@ -115,7 +115,7 @@ quest_repeat_min_sec,30
 tutorial_new_players,1
 res_copy_tiers,1:1|5:2|10:3|15:4
 warehouse_cap_min_per_level,60
-goldmine_gold_base,20
+goldmine_gold_base,10
 goldmine_gold_exp,1.5
 forge_extra_drop_pct_per_level,2
 guild_hall_helps_base,2

@@ -27,6 +27,7 @@ const DONE := 0.01  # m
 const PASS_R := 0.5  # 경로 중간 점·순찰 점은 이만큼 안이면 지나간 것(arrive_r)
 const STEP_R := 0.7  # 계단 끝 중간 점(arrive_r) — 몸 둘(겹침 여유 포함 1.3 m)이 같은 점을 노려도 둘 다 닿는다
 const LEVEL_EPS := 0.3
+const WALL_PASS_R := 1.1  # 성벽 위 중간 점(계단 위 성벽 착지 등): 폭 2 m 성벽 위에서 둘이 나란히 같은 점을 노리면 둘 다 0.9 m 안팎에 멈췄다(공성 시뮬 2026-10-19)
 const BUSY_AT := 80
 const BUSY_EVERY := 2
 const SIDE := Vector2(0.70710678, -0.70710678)  # 화면 오른쪽(ArenaKit.RIGHT의 바닥 xz) — arena_side 기준
@@ -59,7 +60,9 @@ static func mass(r: float, braced: bool) -> float:
 static func arrive_r(path: Array, eps: float) -> float:
 	if path.size() <= 1:
 		return eps
-	return PASS_R if is_equal_approx(path[0].y, path[1].y) else maxf(eps, STEP_R)
+	if not is_equal_approx(path[0].y, path[1].y):
+		return maxf(eps, STEP_R)
+	return WALL_PASS_R if level(path[0].y) == 1 else PASS_R
 
 
 ## 층: 0 = 지상, 1 = 성벽 위, -1 = 그 사이(계단·솟는 중 — 부딪지 않음).

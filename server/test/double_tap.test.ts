@@ -44,6 +44,7 @@ test('튜토리얼 퀘스트 받기 두 번 탭: 단계는 한 번만 오르고 
   try {
     S.clock.t = T0
     const { token, id } = await S.login()
+    await S.db.query('update player_state set stage = 2 where player_id = $1', [id]) // 가이드 1번 = 스테이지 1-1 클리어(2026-10-23)
     const [ok, lost] = await race(S, b, () => S.req('POST', '/v1/quest/claim', { token, body: { type: 'tutorial', step: 0 } }))
     assert.equal(ok.status, 200, JSON.stringify(ok.json))
     assert.deepEqual([lost.status, lost.json.error], [409, 'stale'])

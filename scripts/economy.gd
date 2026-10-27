@@ -1460,11 +1460,11 @@ func open_pouch(id: String, count: int, stage_n: int) -> bool:
 
 # --- 황금 고블린(서버 goblin.ts): 성 전투 지도에 5~10분마다 나와 돌아다니다 영웅이 잡으면 보따리(방치 골드 GOBLIN_GOLD_MIN분 + 덤) ---
 
-const GOBLIN_GOLD_MIN := 15  # 서버 GB.GOLD_MIN
+const GOBLIN_GOLD_MIN := 30  # 서버 GB.GOLD_MIN. 처치 골드 절반(2026-10-25) 뒤에도 예전 15분치와 같은 골드
 signal goblin_claimed(got: Dictionary)  # {gold_tenths, reward(덤: 가속·다이아), n} — 응답이 왔을 때(오프라인은 곧바로)
 
 
-## 지금 방치 골드 GOBLIN_GOLD_MIN분(tenths) — 방치 주머니 골드와 같은 식(10분 주머니 × 1.5).
+## 지금 방치 골드 GOBLIN_GOLD_MIN분(tenths) — 방치 주머니 골드와 같은 식(10분 주머니 × 3).
 func goblin_gold_tenths(stage_n: int) -> int:
 	return int(pouch_value("gold_10", stage_n).gold_tenths) * GOBLIN_GOLD_MIN / 10
 
@@ -1557,7 +1557,7 @@ func _shop_mark(x: Dictionary) -> void:
 
 ## 상품 하나를 산다(값 빼기 + 받기). 온라인은 곧바로 반영하고 POST /v1/shop/buy {id, n}(n = 이미 산 수 — 재전송이 두 번 사지 않는다).
 ## ad = 보상형 광고를 끝까지 봤다(광고 상품 — 광고 제거 구매자는 보지 않아도 된다, ad_free).
-func buy_shop(id: String, ad := false) -> bool:
+func buy_shop(id: String, ad := false, ad_token := "") -> bool:
 	if shop_block(id) != "":
 		return false
 	var x := ShopItems.find(id)
@@ -1586,12 +1586,23 @@ func buy_shop(id: String, ad := false) -> bool:
 		shop_changed.emit()
 		dungeons_changed.emit()
 		net.flush_kills()
-		net.send("POST", "/v1/shop/buy", {"id": id, "n": n, "ad": ad}, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
+		var body := {"id": id, "n": n, "ad": ad}
+		if ad_token != "":
+			body.ad_token = ad_token  # 광고 서버 확인(AdMob SSV) 표 — ad_start
+		net.send("POST", "/v1/shop/buy", body, _on_shop_bought.bind(key), _on_shop_failed.bind(key), true, true)
 		return true
 	_shop_mark(x)
 	grant(r)  # 저장·changed·열쇠까지
 	shop_changed.emit()
 	return true
+
+
+## 보상형 광고를 띄우기 전에 서버에서 표를 받는다(AdMob 서버 확인 custom_data, 2026-10-22). 오프라인·실패면 "" — 광고는 그대로 띄운다.
+func ad_start(done: Callable) -> void:
+	if net == null or not net.up:
+		done.call("")
+		return
+	net.send("POST", "/v1/ads/start", {}, func(data): done.call(str(data.get("token", "")) if data is Dictionary else ""), func(): done.call(""), true, true)
 
 
 # --- 결제 상품(서버 iap.ts, 표 iap_items.gd): 다이아 충전·월정액·패키지·성장 패스. 사는 것은 실결제(Google Play 연결 전 — 알림만),
@@ -2452,7 +2463,7 @@ func start_training(building_id: String, n: int) -> bool:
 		notice.emit(TRAIN_TEXT.get(why, TRAIN_FAIL_TEXT))
 		return false
 	if net != null:
-		return _instant(start_training.bind(building_id, n), "/v1/soldiers/train", {"building": building_id, "count": n}, _train_fail_text.bind(false))
+		return _instant(start_training.bind(building_id, n), "/v1/soldiers/train", {"building": building_id, "count": n, "at": time_now()}, _train_fail_text.bind(false))
 	var cost := train_cost_now(GameData.soldier_of_building(building_id), n, train_tier(building_id))
 	for r in cost:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
@@ -2601,7 +2612,7 @@ func start_research(id: String) -> bool:
 			notice.emit(RESEARCH_TEXT.get(why, RESEARCH_FAIL_TEXT))
 		return false
 	if net != null:
-		return _instant(start_research.bind(id), "/v1/research/start", {"id": id}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
+		return _instant(start_research.bind(id), "/v1/research/start", {"id": id, "at": time_now()}, func(): return RESEARCH_TEXT.get(net.last_error, RESEARCH_FAIL_TEXT))
 	var cost := research_cost(id)
 	for r in GameData.BUILD_RES:
 		res[r] = int(res.get(r, 0)) - int(cost[r])
@@ -4195,7 +4206,7 @@ func _upgrade_online(id: String, cell: Variant = null) -> bool:
 			build = {"id": id, "finish": t0 + sec})
 	build_started.emit(id, t0 + sec)
 	_build_req = {"id": id, "cell": cell}
-	var body := {"building": id}
+	var body := {"building": id, "at": t0}  # 누른 시각(서버 시계) — 줄 서 늦게 가도 서버가 같은 시각부터 센다(사용자 2026-10-25 "5초로 다시 재설정")
 	if cell is Vector2i:
 		body["cell"] = [cell.x, cell.y]  # 자유 건설: 공터를 고른 자리에(서버도 같은 규칙으로 확인)
 	net.send("POST", "/v1/building/upgrade", body, _on_upgraded, _on_upgrade_failed, true, true)

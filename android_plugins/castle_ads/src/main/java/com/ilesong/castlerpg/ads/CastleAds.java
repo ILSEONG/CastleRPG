@@ -13,6 +13,7 @@ import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.gms.ads.rewarded.ServerSideVerificationOptions;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
@@ -26,7 +27,7 @@ import java.util.Set;
  * AdMob 보상형 광고를 GDScript 에 노출하는 Godot 플러그인(v2).
  * GDScript: Engine.get_singleton("CastleAds")
  *
- * 흐름: initialize() → load(unitId) → ad_loaded(ok, error) → show() → ad_closed(earned).
+ * 흐름: initialize() → load(unitId) → ad_loaded(ok, error) → [setSsv(표)] → show() → ad_closed(earned).
  * earned 는 사용자가 광고를 끝까지 봐서 보상 콜백이 온 경우에만 true.
  * 어떤 오류도 앱을 죽이지 않도록 모든 진입점을 감싼다.
  */
@@ -40,6 +41,7 @@ public class CastleAds extends GodotPlugin {
     private boolean loading = false;
     private boolean earned = false;
     private boolean showing = false;
+    private String ssvData = "";  // 다음 show()의 서버 확인(SSV) custom_data — 게임 서버가 준 표
 
     public CastleAds(Godot godot) {
         super(godot);
@@ -122,6 +124,12 @@ public class CastleAds extends GodotPlugin {
         return ad != null;
     }
 
+    /** 다음에 띄울 광고의 서버 확인(SSV) custom_data. AdMob이 끝까지 본 광고를 게임 서버(/admob/ssv)에 이 값과 함께 알린다. */
+    @UsedByGodot
+    public void setSsv(final String customData) {
+        ssvData = customData == null ? "" : customData;
+    }
+
     /** 불러온 광고를 띄운다. 닫히면 ad_closed(earned). 광고가 없으면 곧바로 ad_closed(false). */
     @UsedByGodot
     public void show() {
@@ -140,6 +148,10 @@ public class CastleAds extends GodotPlugin {
                 ad = null;  // 한 광고는 한 번만 보여 줄 수 있다
                 earned = false;
                 showing = true;
+                if (!ssvData.isEmpty()) {
+                    current.setServerSideVerificationOptions(new ServerSideVerificationOptions.Builder().setCustomData(ssvData).build());
+                }
+                ssvData = "";
                 current.setFullScreenContentCallback(new FullScreenContentCallback() {
                     @Override
                     public void onAdDismissedFullScreenContent() {

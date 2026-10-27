@@ -24,6 +24,7 @@ const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Crowd := preload("res://scripts/crowd.gd")
 const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
+const SkillAuto := preload("res://scripts/skill_auto_button.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 
 enum State { IDLE, MOVE, ATTACK, DEAD }
@@ -44,8 +45,9 @@ const AURA_SCAN := 0.25  # 오라 고리 표시를 다시 보는 간격(초)
 const CAST_RECOVER := 0.3  # 발동 순간 뒤 이만큼 더 제자리에서 모션을 마저 한다(초) — 곧바로 평타 모션이 덮지 않게
 const ARENA_PAD := 0.2  # 던전·드래곤 아레나: 영웅끼리 몸 둘레 여유(m, ally_pad) — 둘 합 1.3 m 떨어져 선다
 const KEEP_SLOT_R := 1.5  # 같은 성문·성벽을 거듭 누를 때 지금 자리에서 이만큼 안을 누르면 자리를 바꾸지 않는다(2026-10-14 우왕좌왕)
-const KEEP_ROUTE_SLACK := 4.0  # 지금 경로의 도착지만 바꾼 길이 새로 짠 길보다 이만큼(m) 안쪽으로만 길면 지금 경로를 지킨다
+const KEEP_ROUTE_SLACK := 0.05  # 지금 경로의 도착지만 바꾼 길이 새로 짠(가장 짧은) 길과 같은 길이일 때만 지금 경로를 지킨다(사용자 2026-10-25 "무조건 최단 경로" — 예전 4 m)
 const ON_LINE_R := 0.6  # 새 경로 첫 구간 선에서 이만큼 안이고 그 구간 가운데에 있으면 첫 점은 이미 지나쳤다
+const SKILL_REQ_SEC := 3.0  # 스킬 수동: 칸을 누른 뒤 이만큼 안에 못 쓰면(사거리 안 적·다친 아군 없음) 취소하고 알린다
 const FOCUS_REPLAN := 0.5  # 공격 명령: 걷는 중 표적을 다시 보는 간격(초)
 const FOCUS_DRIFT := 1.5  # 공격 명령: 표적이 경로 끝에서 이만큼 움직였으면 경로를 다시 짠다
 
@@ -110,6 +112,7 @@ var _stun_fx: Node3D
 var _cast_fn := Callable()  # 발동 모션 중인 스킬(개정 25): 모션의 발동 순간에 부른다. 비었으면 시전 중 아님
 var _cast_left := 0.0  # 발동 순간까지 남은 초
 var _cast_style := "attack"  # 발동 순간 연출 종류(hero_skills.cast_style, 2026-10-13)
+var _skill_req := {}  # 스킬 수동(2026-10-23): 칸을 눌러 기다리는 액티브 → 남은 초(SKILL_REQ_SEC). 쓰면 지운다
 var _focus  # 공격 명령 표적(2026-10-14, unit_picker): 쓰러지거나 새 명령이 올 때까지 이것만 쫓아가 친다
 var _focus_cd := 0.0  # 걷는 중 표적을 다시 볼 때까지 남은 초
 var _focus_moved := false  # 표적을 쫓느라 자리를 떠났다 — 쓰러뜨린 곳에 선다
@@ -188,6 +191,7 @@ func reset() -> void:
 	_target = null
 	_swing = null
 	_focus = null
+	_skill_req.clear()
 	_linger = 0.0
 	_attacks = 0
 	_cancel_cast()
@@ -224,8 +228,56 @@ func active_slots() -> Array:
 					left = _blast_cd
 				_:
 					left = _skx.cd_left(k)
-		out.append({"kind": k, "locked": locked, "total": total, "left": clampf(left, 0.0, total)})
+		out.append({"kind": k, "locked": locked, "total": total, "left": clampf(left, 0.0, total), "req": _skill_req.has(k)})
 	return out
+
+
+# --- 스킬 수동(사용자 2026-10-23 "블레이드 키우기·세븐나이츠 키우기처럼 자동을 끄면 스킬 칸을 눌러 직접") ---
+
+## 이 영웅의 액티브를 손으로 쓰는가: [스킬 AUTO]가 꺼졌고 내 쪽 영웅(성·던전 — 공성전·PVP는 war_hero/pvp_hero가 정한다).
+func manual_skills() -> bool:
+	return manual_ok() and not SkillAuto.is_auto()
+
+
+## 스킬 칸을 눌러 쓸 수 있는 영웅인가(내 편). 공성전은 아니다(war_hero), PVP는 결투의 내 영웅만(pvp_hero).
+func manual_ok() -> bool:
+	return allies == "heroes"
+
+
+## 스킬 칸 누름: 쿨이 찬 해금 액티브 k를 쓰게 한다 — 영웅이 휘두르는 중이면 끝나자마자, 조건(사거리 안 적·다친 아군)이 맞으면 곧바로.
+## SKILL_REQ_SEC 안에 못 쓰면 취소하고 머리 위에 까닭을 띄운다. 쿨이 도는 중·잠김·이미 기다리는 중이면 아무것도 안 한다(빠른 연타). 받았으면 true.
+func request_skill(k: String) -> bool:
+	if state == State.DEAD or not manual_ok() or not _sk.has(k) or _skill_req.has(k):
+		return false
+	for s in active_slots():
+		if s.kind == k and float(s.left) > 0.05:
+			return false
+	_skill_req[k] = SKILL_REQ_SEC
+	match k:  # 영웅 쪽 쿨 스킬은 다음 프레임 _tick_skills·교전이 쓴다
+		"heal_aura":
+			_heal_cd = minf(_heal_cd, 0.0)
+		"gate_repair":
+			_repair_cd = minf(_repair_cd, 0.0)
+	return true
+
+
+## k를 기다리는 중인가(칸을 눌렀다) — 수동이면 이것만 쓴다, 자동이면 언제나 쓴다.
+func skill_go(k: String) -> bool:
+	return _skill_req.has(k) or not manual_skills()
+
+
+## k를 썼다(기다림을 지운다).
+func skill_used(k: String) -> void:
+	_skill_req.erase(k)
+
+
+func _tick_skill_req(delta: float) -> void:
+	for k in _skill_req.keys():
+		_skill_req[k] -= delta
+		if _skill_req[k] <= 0.0:
+			_skill_req.erase(k)
+			var why := Lang.t("hero.tick_skill_req.why") if k == "heal_aura" else (Lang.t("hero.tick_skill_req") if k == "gate_repair" else Lang.t("hero.tick_skill_req_2"))
+			DamageNumbers.banner(self, k, why, Color(0.45, 0.48, 0.55))
 
 
 func stand_position() -> Vector3:
@@ -274,7 +326,7 @@ func _set_free(p: Vector3) -> void:
 
 
 ## 플레이어 명령의 경로(사용자 2026-10-14 "이동하려는 쪽을 계속 누르면 루트가 시시각각 바뀌며 우왕좌왕"):
-## (1) 지금 걷는 경로의 도착지만 새 자리로 바꾼 길(마지막 구간을 곧장 갈 수 있을 때)이 새로 짠 길보다 KEEP_ROUTE_SLACK 넘게 길지 않으면
+## (1) 지금 걷는 경로의 도착지만 새 자리로 바꾼 길(마지막 구간을 곧장 갈 수 있을 때)이 새로 짠 가장 짧은 길과 길이가 같으면(KEEP_ROUTE_SLACK)
 ##     그 길을 쓴다 — 성 모서리 근처를 거듭 누를 때 지나는 성문이 이쪽저쪽으로 바뀌지 않는다.
 ## (2) 아니면 새로 짠 길에서 이미 지나친 앞 점(성문 통과 지점 등 — 지나가는 반경 안에서 떼어 냈다)을 뺀다 — 왔던 쪽으로 돌아서지 않는다.
 func _replan_stable() -> void:
@@ -300,7 +352,7 @@ func _route_between(from: Vector3, to: Vector3) -> Array[Vector3]:
 	if castle == null:
 		var out: Array[Vector3] = [to]
 		return out
-	return Formation.route(castle.half, from, to)
+	return Formation.shortest_route(castle.half, from, to)
 
 
 ## 지금 위치 → to 경로.
@@ -407,7 +459,7 @@ func _replan() -> void:
 		_path = [stand_position()]  # 아레나: 곧장
 		_target = null
 		return
-	_path = Formation.route(castle.half, global_position, stand_position())
+	_path = Formation.shortest_route(castle.half, global_position, stand_position())
 
 
 ## 실제 높이로 판정한다 — 오르내리는 중에는 지상 취급.
@@ -558,6 +610,7 @@ func _process(delta: float) -> void:
 			_stun_fx.queue_free()
 		return
 	_atk_cd -= delta
+	_tick_skill_req(delta)
 	_tick_skills(delta)
 	_tick_swing(delta)
 	_tick_cast(delta)
@@ -613,8 +666,9 @@ func _process(delta: float) -> void:
 		_model.face(tpos - global_position)
 		if Formation.flat_distance(global_position, tpos) <= _reach(_target) and sees(global_position, tpos):  # 성벽 너머면 트인 데까지 다가간다
 			state = State.ATTACK
-			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null and _blast_ok(_target):
+			if _sk.has("aoe_blast") and _blast_cd <= 0.0 and _swing == null and skill_go("aoe_blast") and (_skill_req.has("aoe_blast") or _blast_ok(_target)):
 				_blast_cd = _sk.aoe_blast[0]
+				skill_used("aoe_blast")
 				begin_cast(HeroSkillsScript.cast_anim("aoe_blast", def), _cast_blast.bind(_target), "aoe_blast")  # 모션의 발동 순간에 터진다
 				return
 			if _atk_cd <= 0.0:
@@ -720,16 +774,25 @@ func _tick_skills(delta: float) -> void:
 	if _sk.has("heal_aura"):  # 다친 아군이 있을 때만 발동 모션(개정 26) → 발동 순간에 회복. 모션을 못 시작하면 곧 다시
 		_heal_cd -= delta
 		if _heal_cd <= 0.0:
-			_heal_cd = _sk.heal_aura[0]
-			if _anyone_hurt(_sk.heal_aura[1]) and not begin_cast(HeroSkillsScript.cast_anim("heal_aura", def), _heal_aura, "heal_aura"):
-				_heal_cd = HeroSkillsScript.CAST_WAIT
+			_heal_cd = _cool_skill("heal_aura", _anyone_hurt(_sk.heal_aura[1]), _heal_aura)
 	if _sk.has("gate_repair"):
 		_repair_cd -= delta
 		if _repair_cd <= 0.0:
-			_repair_cd = _sk.gate_repair[0]
-			if castle != null and holds_post() and GameState.gate_hp[side] > 0.0 and GameState.gate_hp[side] < GameState.gate_hp_max \
-					and not begin_cast(HeroSkillsScript.cast_anim("gate_repair", def), _gate_repair, "gate_repair"):
-				_repair_cd = HeroSkillsScript.CAST_WAIT
+			var hurt_gate: bool = castle != null and holds_post() and GameState.gate_hp[side] > 0.0 and GameState.gate_hp[side] < GameState.gate_hp_max
+			_repair_cd = _cool_skill("gate_repair", hurt_gate, _gate_repair)
+
+
+## 쿨이 찬 영웅 쪽 쿨 스킬 k(회복 오라·성문 수리): 조건 ok면 발동 모션 → 다음 쿨(못 시작하면 곧 다시). 반환 = 새 남은 쿨.
+## 자동: 조건이 안 맞으면 쿨을 한 바퀴 더 돈다(예전 그대로). 수동: 칸을 누를 때까지 준비된 채(0), 누르고 조건이 안 맞으면 맞을 때까지 본다.
+func _cool_skill(k: String, ok: bool, fn: Callable) -> float:
+	if not skill_go(k):
+		return 0.0
+	if ok:
+		if not begin_cast(HeroSkillsScript.cast_anim(k, def), fn, k):
+			return HeroSkillsScript.CAST_WAIT
+		skill_used(k)
+		return float(_sk[k][0])
+	return 0.0 if _skill_req.has(k) else float(_sk[k][0])
 
 
 ## 반경 안에 다친(체력이 다 차지 않은) 살아 있는 영웅이 있는가.

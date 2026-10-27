@@ -6,7 +6,7 @@ services:
     name: castlerpg-api            # 주소가 https://castlerpg-api.onrender.com 이 된다(이미 쓰는 이름이면 Render가 뒤에 글자를 붙인다)
     runtime: node
     region: singapore              # Neon 프로젝트(ap-southeast-1)와 같은 지역
-    plan: free                     # 15분 쉬면 잠들고 첫 요청에 ~1분 걸린다. 늘 깨어 있으려면 starter
+    plan: starter                  # 2026-10-22 무료 사용량 한도로 정지돼 Starter($7/월)로 올림. 무료는 15분 쉬면 잠들고 한 달 사용량 한도가 있다
     rootDir: server
     buildCommand: npm ci
     startCommand: node src/main.ts

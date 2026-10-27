@@ -172,8 +172,8 @@ func test_game_data() -> void:
 	GameData.load_tables()
 	check(GameData.errors == 0, "default tables load without errors")
 	var grunt := GameData.monster("grunt")
-	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 ×5(grunt 2 → 10, epic_boss 50 → 250)
-	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 10 and GameData.monster("epic_boss").gold == 250, "monster table values")
+	# grunt hp·atk 60·10 → 24·4(×0.4): 스폰 3배에도 시작 영웅으로 1스테이지 클리어. 처치 골드는 ×5(grunt 2 → 10, epic_boss 50 → 250) 뒤 절반(grunt 5, epic_boss 125)
+	check(grunt.hp == 24.0 and grunt.atk == 4.0 and grunt.gold == 5 and GameData.monster("epic_boss").gold == 125, "monster table values")
 	for key in ["hp", "atk", "speed", "range", "atk_interval", "scale", "aggro", "gold"]:
 		for kind in ["grunt", "epic_boss"]:
 			check(GameData.monster(kind).has(key), "monster %s has %s" % [kind, key])
@@ -187,8 +187,8 @@ func test_game_data() -> void:
 	var r29 := GameData.stage(29)
 	check(is_equal_approx(r31.hp_mult, 2.0 * r30.hp_mult - r29.hp_mult) and is_equal_approx(GameData.stage(40).hp_mult, 1.0 + 0.10 * 39), "stage beyond table extrapolates hp_mult")
 	check(int(GameData.stage(40).wave_size) == 8 and int(GameData.stage(200).waves) == 3, "extrapolated waves/size stay 3 x 8 (flat table)")
-	check(GameData.kill_gold_tenths("grunt", 1) == 100 and GameData.kill_gold_tenths("grunt", 2) == 121 and GameData.kill_gold_tenths("grunt", 3) == 143, "kill_gold_tenths = gold x gold_mult in tenths (grunt 10: 10 x 1.21 -> 121, 10 x 1.43 -> 143)")
-	check(GameData.kill_gold_tenths("epic_boss", 2) == 3025 and GameData.kill_gold_tenths("grunt", 31) == 943, "kill_gold_tenths boss (250 x 1.21) and extrapolated stage (9.07 x 7/6.8 x 1.01)")
+	check(GameData.kill_gold_tenths("grunt", 1) == 50 and GameData.kill_gold_tenths("grunt", 2) == 61 and GameData.kill_gold_tenths("grunt", 3) == 72, "kill_gold_tenths = gold x gold_mult in tenths, rounded half up (grunt 5: 5 x 1.21 = 6.05 -> 61, 5 x 1.43 = 7.15 -> 72)")
+	check(GameData.kill_gold_tenths("epic_boss", 2) == 1513 and GameData.kill_gold_tenths("grunt", 31) == 472, "kill_gold_tenths boss (125 x 1.21 = 151.25 -> 1513) and extrapolated stage (5 x 9.07 x 7/6.8 x 1.01 = 47.15 -> 472)")
 	# 임시 CSV: BOM, 빈 줄, CRLF, 열 순서 바꿈
 	var mp := "user://t_monsters.csv"
 	var sp := "user://t_stages.csv"
@@ -760,6 +760,9 @@ func test_formation_claims() -> void:
 	check(g.claim_near(0, 0, wall, -99.0) == left, "claim_near keeps the hero's own slot when it is nearest")
 	for i in range(2, 2 + FormationScript.capacity(wall)):
 		g.claim(i, 0, wall)
+	var above: int = g.claim_near(19, 0, wall, 0.0)  # 성문 바로 위 자리(2026-10-25): 누른 곳으로만 — claim(저절로)은 쓰지 않는다
+	check(above >= FormationScript.capacity(wall) and absf(FormationScript.perp(0).dot(FormationScript.slot_position(g.castle_half, 0, wall, above))) < 0.01,
+		"claim_near on the gate top takes the slot right above the gate (not used by auto placement)")
 	check(g.claim_near(20, 0, wall, 0.0) == -1 and g.assignment(20).is_empty(), "claim_near on a full wall fails and assigns nothing")
 
 
@@ -1013,7 +1016,7 @@ func test_new_buildings() -> void:
 	check(GameData.building_name("farm#2") == "농장 2" and GameData.building_def("farm#2").id == "farm" and GameData.resource_of_building("farm#2") == "food", "copies use the type's row")
 	check(Balance.building("lumber#2").name == "벌목장 2" and not Balance.building("lumber#2").has("cell") and Balance.building("lumber#2").size == Vector2i(3, 3)
 		and Balance.entries().size() == GameData.building_keys().size() - 1, "Balance entries include copies (no default cell; the gate is not a plot)")
-	check(GameData.goldmine_per_min(1) == 20 and GameData.goldmine_per_min(30) == 3286 and GameData.accum_cap_min(2) == 840.0 and GameData.guild_helps(10) == 11, "goldmine / warehouse / guild hall numbers")
+	check(GameData.goldmine_per_min(1) == 10 and GameData.goldmine_per_min(30) == 1643 and GameData.accum_cap_min(2) == 840.0 and GameData.guild_helps(10) == 11, "goldmine / warehouse / guild hall numbers")
 	var now := 1.8e9
 	var e = _econ(now)
 	check(e.unbuilt.has("lumber#2") and e.unbuilt.has("goldmine") and not e.unbuilt.has("lumber") and e.last_collect.has("lumber#2") and e.last_collect.has("goldmine"), "new game: copies and new buildings are lots")
@@ -1025,9 +1028,9 @@ func test_new_buildings() -> void:
 	e.complete_due(now + 1e6)
 	check(e.is_built("goldmine") and e.building_level("goldmine") == 1, "goldmine built at Lv 1")
 	var t0: float = e.last_collect.goldmine
-	check(e.pending("goldmine", t0 + 600.0) == 200 and e.pending("goldmine", t0 + 1e7) == 20 * 720, "goldmine pending: 20/min, capped at 720 min")
+	check(e.pending("goldmine", t0 + 600.0) == 100 and e.pending("goldmine", t0 + 1e7) == 10 * 720, "goldmine pending: 10/min, capped at 720 min")
 	var g0: int = e.gold_tenths
-	check(e.collect("goldmine", t0 + 600.0) == 200 and e.gold_tenths - g0 == 2000, "collect the goldmine adds gold")
+	check(e.collect("goldmine", t0 + 600.0) == 100 and e.gold_tenths - g0 == 1000, "collect the goldmine adds gold")
 	e.unbuilt.erase("warehouse")
 	e.levels.warehouse = 2
 	check(e.cap_min() == 840.0 and e.pending("lumber", float(e.last_collect.lumber) + 1e7) == 840 * 100, "a Lv 2 warehouse raises the cap by 120 min")
@@ -1617,15 +1620,15 @@ func test_gold_tenths() -> void:
 	check(e.gold_tenths == 70, "setting whole gold writes x10 tenths")
 	e.gold_tenths = 5
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 126 and e.gold == 12, "an offline kill adds 12.1 gold at stage 2 on top of 0.5 and shows 12")
+	check(e.gold_tenths == 66 and e.gold == 6, "an offline kill adds 6.1 gold at stage 2 (5 x 1.21 = 6.05 rounded) on top of 0.5 and shows 6")
 	e.add_kill("grunt", 2)
 	e.add_kill("grunt", 2)
-	check(e.gold_tenths == 368 and e.gold == 36, "tenths accumulate across kills (0.5 + 36.3 shows 36)")
+	check(e.gold_tenths == 188 and e.gold == 18, "tenths accumulate across kills (0.5 + 18.3 shows 18)")
 	e.save()
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var saved = JSON.parse_string(f.get_as_text())
 	f.close()
-	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 368 and not saved.has("gold"), "save writes the current version with gold_tenths")
+	check(int(saved.version) == EconomyScript.SAVE_VERSION and int(saved.gold_tenths) == 188 and not saved.has("gold"), "save writes the current version with gold_tenths")
 	var v1 := FileAccess.open(ECON_TMP, FileAccess.WRITE)
 	v1.store_string(JSON.stringify({"version": 1, "gold": 41, "res": {"wood": 3, "stone": 0, "food": 0}, "last_collect": {"lumber": now, "quarry": now, "farm": now}, "levels": {"lumber": 1, "quarry": 1, "farm": 1}}))
 	v1.close()
@@ -1666,6 +1669,9 @@ func test_heroes_table() -> void:
 	# 초상화 쿨 칸 스킬 그림(2026-10-06): 발동형마다 그림이 있고 그 그림은 도형이 있다
 	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE:
 		check(SkillIconsScript.KIND.has(k) and not SkillIconsScript.shapes(SkillIconsScript.glyph_of(k)).is_empty(), "skill %s has a thumbnail" % k)
+	# 그린 스킬 아이콘(2026-10-25): 그림이 있는 종류(발동형·패시브 86종)는 모두 assets/ui/skills 그림이 있다(안 쓰는 발동형은 짝 패시브 그림)
+	for k in SkillIconsScript.KIND:
+		check(SkillIconsScript.texture_of(k) != null, "skill %s has a painted icon" % k)
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
@@ -2671,21 +2677,21 @@ func test_economy_sell_amount() -> void:
 	check(e.sell("wood", now) == EconomyScript.sell_value("wood", 9, rate) and e.res.wood == 0, "sell without amount still sells all")
 
 
-## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 2000에서 가득, FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
+## 개정 14 §3 FEVER 상태: 게이지(방치 처치만, 900에서 가득(2026-10-23: 방치 1.5마리/초로 약 10분), FEVER 중 안 참), 시작 조건, 스폰 배율, 저장.
 func test_fever() -> void:
 	GameData.load_tables()
 	var f = preload("res://scripts/fever.gd").new()
 	f.save_path = ""
-	check(f.kills_needed() == 2000 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
+	check(f.kills_needed() == 900 and GameData.config_num("fever_sec") == 180.0 and GameData.config_num("fever_spawn_mult") == 3.0, "fever config keys")
 	for i in 50:
 		f.add_kill(false)  # 스테이지 모드 처치는 세지 않는다
 	check(f.gauge == 0, "stage-mode kills do not charge the gauge")
-	for i in 1999:
+	for i in 899:
 		f.add_kill(true)
-	check(f.gauge == 1999 and not f.full() and not f.start() and f.mult() == 1.0, "1999 idle kills: not full, cannot start, spawn mult 1")
+	check(f.gauge == 899 and not f.full() and not f.start() and f.mult() == 1.0, "899 idle kills: not full, cannot start, spawn mult 1")
 	f.add_kill(true)
 	f.add_kill(true)
-	check(f.gauge == 2000 and f.full() and f.ratio() == 1.0, "2000 idle kills fill the gauge (and stay at 2000)")
+	check(f.gauge == 900 and f.full() and f.ratio() == 1.0, "900 idle kills fill the gauge (and stay at 900)")
 	check(f.start() and f.active() and f.gauge == 0 and f.left == 180.0 and f.mult() == 3.0, "start: 180 s, gauge back to 0, spawn mult 3")
 	f.add_kill(true)
 	check(f.gauge == 0 and not f.start(), "the gauge does not charge during FEVER")
@@ -3118,8 +3124,8 @@ func test_soldier_posts() -> void:
 		var q := FormationScript.gate_row_spot(half, 0, k, true)
 		rows_ok = rows_ok and FormationScript.is_inside(half, q) and absf(q.x) <= Balance.GATE_W / 2.0 and -q.z < half
 	var r0 := [FormationScript.gate_row_spot(half, 0, 0), FormationScript.gate_row_spot(half, 0, 1), FormationScript.gate_row_spot(half, 0, 3)]
-	check(rows_ok and seen.size() == 16 and r0[0].is_equal_approx(Vector3(0, 0, -(half + 5.2))) and r0[1].is_equal_approx(Vector3(-2.4, 0, -(half + 5.2)))
-		and r0[2].is_equal_approx(Vector3(-1.0, 0, -(half + 6.8))),
+	check(rows_ok and seen.size() == 16 and r0[0].is_equal_approx(Vector3(0, 0, -(half + Balance.WALL_T + 3.2))) and r0[1].is_equal_approx(Vector3(-2.4, 0, -(half + Balance.WALL_T + 3.2)))
+		and r0[2].is_equal_approx(Vector3(-1.0, 0, -(half + Balance.WALL_T + 4.8))),
 		"infantry rows: 3.2 m row 0/-2.4/+2.4, 4.8 m row -1/+1/-3.2/+3.2 … outside the hero gate slots; a broken gate moves them to blocking rows inside the gate width: %s" % [r0])
 	var r := FormationScript.patrol_radius(half)
 	var pts := FormationScript.patrol_points(half, 0, 1)
@@ -4924,7 +4930,7 @@ func test_research_r24() -> void:
 	e.research_levels = {"plunder": 2}
 	var g0: int = e.gold_tenths
 	e.add_kill("grunt", 1)
-	check(e.kill_tenths("grunt", 1) == 110 and e.gold_tenths == g0 + 110 and e.kill_tenths("epic_boss", 2) == 3327, "kill gold = floor(tenths x 1.10): grunt 100 -> 110, boss 3025 -> 3327")
+	check(e.kill_tenths("grunt", 1) == 55 and e.gold_tenths == g0 + 55 and e.kill_tenths("epic_boss", 2) == 1664, "kill gold = floor(tenths x 1.10): grunt 50 -> 55, boss 1513 -> 1664")
 	e.research_levels = {"drill_manual": 5, "logistics": 5}
 	check(is_equal_approx(e.train_time("barracks", 2), 2.0 * 10800.0 / 1.15) and e.train_cost_now("infantry", 3) == {"food": 4050, "wood": 2700}
 		and EconomyScript.train_cost("infantry", 3) == {"food": 4500, "wood": 3000}, "training: time / 1.15, cost x 0.90 rounded (4500/3000 -> 4050/2700)")
@@ -5002,10 +5008,10 @@ func test_research_r24() -> void:
 func test_offline_gold() -> void:
 	GameData.load_tables()
 	var per := GameData.kill_gold_tenths("grunt", 1)
-	check(per == 100 and GameData.config_num("offline_gold_mult") == 0.4 and GameData.config_num("fever_kills") == 2000.0, "grunt 100 tenths at stage 1, mult 0.4, fever 2000")
-	check(EconomyScript.offline_reward(3600.0, 1, per) == {"sec": 3600.0, "kills": 5400, "tenths": 216000}, "1 h: 5400 kills, 21,600 gold (40%)")
-	check(EconomyScript.offline_reward(59.9, 1, per).tenths == 0 and EconomyScript.offline_reward(60.0, 1, per) == {"sec": 60.0, "kills": 90, "tenths": 3600}, "under 60 s nothing")
-	check(EconomyScript.offline_reward(360000.0, 1, per) == {"sec": 43200.0, "kills": 64800, "tenths": 2592000}, "capped at 12 h")
+	check(per == 50 and GameData.config_num("offline_gold_mult") == 0.4 and GameData.config_num("fever_kills") == 900.0, "grunt 50 tenths at stage 1, mult 0.4, fever 900")
+	check(EconomyScript.offline_reward(3600.0, 1, per) == {"sec": 3600.0, "kills": 5400, "tenths": 108000}, "1 h: 5400 kills, 10,800 gold (40%)")
+	check(EconomyScript.offline_reward(59.9, 1, per).tenths == 0 and EconomyScript.offline_reward(60.0, 1, per) == {"sec": 60.0, "kills": 90, "tenths": 1800}, "under 60 s nothing")
+	check(EconomyScript.offline_reward(360000.0, 1, per) == {"sec": 43200.0, "kills": 64800, "tenths": 1296000}, "capped at 12 h")
 	var tmp := OS.get_temp_dir().path_join("castle_offline_%d.json" % OS.get_process_id())
 	var e = _econ(1.8e9)
 	e.save_path = tmp
@@ -5017,13 +5023,13 @@ func test_offline_gold() -> void:
 	var got := []
 	e2.offline_reported.connect(func(r): got.append(r))
 	e2.claim_offline(1, from + 3600.0)
-	check(from > 0.0 and e2.gold_tenths == 216000 and got == [{"away_sec": 3600.0, "kills": 5400, "gold_tenths": 216000}] and e2.offline_report == got[0],
-		"load → claim after 1 h: +21,600 gold and one report (from=%s gold=%d got=%s)" % [from, e2.gold_tenths, got])
+	check(from > 0.0 and e2.gold_tenths == 108000 and got == [{"away_sec": 3600.0, "kills": 5400, "gold_tenths": 108000}] and e2.offline_report == got[0],
+		"load → claim after 1 h: +10,800 gold and one report (from=%s gold=%d got=%s)" % [from, e2.gold_tenths, got])
 	e2.claim_offline(1, from + 7200.0)
-	check(e2.gold_tenths == 216000 and got.size() == 1, "a second claim without leaving again gives nothing")
+	check(e2.gold_tenths == 108000 and got.size() == 1, "a second claim without leaving again gives nothing")
 	e2._away_from = from + 7200.0  # 백그라운드로 갔다(PAUSED)
 	e2.claim_offline(1, from + 7230.0)
-	check(e2.gold_tenths == 216000 and got.size() == 1, "back after 30 s: no gold, no report")
+	check(e2.gold_tenths == 108000 and got.size() == 1, "back after 30 s: no gold, no report")
 	var e3 = _econ(1.8e9)
 	e3.claim_offline(1, 1.8e9)
 	check(e3.gold_tenths == 0 and e3.offline_report.is_empty(), "a new game (no save) has nothing to claim")
@@ -5229,28 +5235,75 @@ func test_tutorial() -> void:
 	check(e.upgrade_block("keep", now) == "prereq" or e.upgrade_block("keep", now) == "not_enough", "tutorial: keep Lv 2 waits for its prerequisites")
 	e.res = {"wood": 0, "stone": 0, "food": 0}
 	check(e.upgrade_block("lumber", now) == "not_enough", "tutorial: building a lot costs the Lv 1 price")
-	# 1. 성채 살펴보기 — 사건(건물 창)
-	check(not t.complete() and t.tab_locked("hero") and t.tab_locked("guild") and not t.tab_locked("merchant"), "tutorial: tabs locked at the start")
+	# 초반 화면(초반 단순화 2026-10-23): 가이드 중인 새 성주는 골드·다이아·[진행]·가이드 카드만. 나머지는 그 기능을 쓰는 미션에서 나타난다.
+	check(not t.ui_shown("chip:wood") and not t.ui_shown("chip:stone") and not t.ui_shown("tab:hero") and not t.ui_shown("tab:shop") and not t.ui_shown("build_button")
+		and not t.ui_shown("merchant") and not t.ui_shown("hud:auto") and not t.ui_shown("hud:speed") and not t.ui_shown("menu:event") and not t.ui_shown("menu:ranking")
+		and not t.ui_shown("chat") and not t.ui_shown("notice_auto") and t.ui_shown("menu:settings") and t.ui_shown("menu:notice") and t.ui_shown("menu:mail"),
+		"guide: a new game shows only the basics (gold, diamonds, [진행], settings/notice/mail)")
+	# 1. 스테이지 1-1 — 첫 전투가 첫 미션
+	check(str(t.mission().id) == "stage_1_1" and not t.complete() and t.tab_locked("hero") and t.tab_locked("guild") and not t.tab_locked("merchant"),
+		"tutorial: the first mission is the first battle; tabs locked at the start")
 	e.admin = true  # 슈퍼관리자(서버 player.admin): 가이드 중에도 잠금이 없다
-	check(not t.tab_locked("hero") and not t.tab_locked("exchange") and not t.pvp_locked() and not t.dungeon_locked("ticket") and not t.build_locked("lumber"),
-		"admin: every guide lock is open")
+	check(not t.tab_locked("hero") and not t.tab_locked("exchange") and not t.pvp_locked() and not t.dungeon_locked("ticket") and not t.build_locked("lumber")
+		and t.ui_shown("build_button") and t.ui_shown("chip:wood") and t.ui_shown("chat"), "admin: every guide lock is open and nothing is hidden")
 	e.admin = false
-	t.note("open", 1, "lumber")
-	check(not t.complete(), "tutorial: opening another building does not count")
-	t.note("open", 1, "keep")
+	gs.stage = 2  # 1-1 클리어
 	var r0: Dictionary = t.reward(0)
+	var hero_gold := int(t.need_of(1).get("gold", 0))
+	check(t.complete() and hero_gold > 0 and int(r0.gold) == ceili(hero_gold * 1.2 / 10.0) * 10,
+		"tutorial: mission 1 pays the next mission's gold + margin: %s" % [r0])
+	var gold0: int = e.gold
+	check(t.claim() and t.step == 1 and e.gold == gold0 + int(r0.gold), "tutorial: claim grants and advances")
+	t._check_ui()
+	check(t.ui_shown("tab:hero") and t.ui_shown("tab:shop") and t.ui_shown("notice_auto") and not t.ui_shown("tab:growth") and not t.ui_shown("build_button")
+		and not t.ui_shown("chip:wood"), "guide: [영웅]·[상점] tabs and the notice popup appear after 1-1")
+	# 벌목장 건설 — [건설] 버튼·목재 칩이 이때, 일꾼으로 0 → 1
+	t.step = t.mission_index("build_lumber")
+	e.res = {"wood": 0, "stone": 0, "food": 0}
+	check(t.ui_shown("build_button") and t.ui_shown("chip:wood") and not t.ui_shown("chip:stone") and not t.ui_shown("merchant"),
+		"guide: [건설] and the wood chip appear with the lumber mission")
+	check(e.upgrade_block("lumber", now) == "not_enough", "tutorial: building a lot costs the Lv 1 price")
 	var c1 := GameData.build_cost("lumber", 1)
-	check(t.complete() and int(r0.food) == ceili(int(c1.food) * 1.2 / 10.0) * 10 and int(r0.stone) >= int(c1.stone),
-		"tutorial: mission 1 pays the next mission's resources + margin: %s" % [r0])
-	var food0 := int(e.res.get("food", 0))
-	check(t.claim() and t.step == 1 and int(e.res.food) == food0 + int(r0.food), "tutorial: claim grants and advances")
-	# 2. 벌목장 건설 — 일꾼으로 0 → 1
+	e.res = {"wood": int(c1.get("wood", 0)), "stone": int(c1.get("stone", 0)), "food": int(c1.get("food", 0))}
 	check(e.upgrade_block("lumber", now) == "" and e.upgrade("lumber", now), "tutorial: lot construction starts with the reward")
 	check(is_equal_approx(float(e.build.finish), now + 5.0), "tutorial: building a lot takes lot_build_sec (5 s): %s" % [e.build])
 	check(e.requirements("lumber").is_empty() and not t.complete(), "tutorial: lot has no prerequisites; mission waits for the build")
 	e.complete_due(now + 100000.0)
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
 	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 200, "tutorial: production counts from the build finish")
+	# 채석장·농장(하나로 합친 미션): 둘 다 지어야 끝, 화살표는 아직 안 지은 쪽
+	check(t.claim() and str(t.mission().id) == "build_quarry_farm" and t.ui_shown("chip:stone") and t.ui_shown("chip:food"), "guide: quarry + farm is one mission; their chips appear")
+	var qf: Dictionary = t.mission()
+	var need_qf: Dictionary = t.need_of(t.step)
+	var cq := GameData.build_cost("quarry", 1)
+	var cf := GameData.build_cost("farm", 1)
+	check(t.goto_of(qf) == "building:quarry" and int(need_qf.res.get("wood", 0)) == int(cq.get("wood", 0)) + int(cf.get("wood", 0)),
+		"guide: quarry + farm points at the quarry first and needs both costs")
+	e.unbuilt.erase("quarry")
+	check(not t.complete() and t.goto_of(qf) == "building:farm", "guide: quarry alone does not finish it; the arrow moves to the farm")
+	e.unbuilt.erase("farm")
+	check(t.complete(), "guide: quarry + farm built finishes the mission")
+	# 저장: 나타난 요소(ui_seen)는 저장·복원된다. 초반 단순화 전(v5) 저장으로 이어 하는 성주는 화면을 숨기지 않는다
+	var tut_tmp := "user://_test_tutorial_ui.json"
+	t.save_path = tut_tmp
+	t._check_ui()
+	t.save()
+	var t2 = TutorialScript.new()
+	t2.save_path = tut_tmp
+	t2.econ = e
+	t2.gs = gs
+	check(t2.load_save() and t2.ui_seen.has("build_button") and t2.ui_seen.has("tab:hero") and not t2.ui_seen.has("merchant") and t2.step == t.step,
+		"guide: revealed UI is saved and restored: %s" % [t2.ui_seen.keys()])
+	var fv5 := FileAccess.open(tut_tmp, FileAccess.WRITE)
+	fv5.store_string(JSON.stringify({"version": 5, "state": "active", "step": 5, "tours_seen": ["intro"]}))
+	fv5.close()
+	check(t2.load_save() and t2.step == 0 and t2.ui_shown("merchant") and t2.ui_shown("tab:dungeon") and t2.ui_shown("chat") and t2.tours_seen.has("economy"),
+		"guide: a v5 save (old step 5 = collect) continues at 1-1 with the full screen and without the split intro tours")
+	t2.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tut_tmp))
+	t.save_path = ""
+	t.step = 0
+	gs.stage = 1
 	# 보상 규칙
 	var kinds := {}
 	for i in TutorialScript.MISSIONS.size():
@@ -5315,7 +5368,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 42번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 39번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5324,26 +5377,27 @@ func test_tutorial() -> void:
 		if m.kind != "build":
 			continue
 		var mi: int = t.mission_index(m.id)
-		e.unbuilt = {m.arg: true}
-		t.step = mi - 1
-		var before: bool = t.build_locked(m.arg)
-		t.step = mi
-		var at: bool = t.build_locked(m.arg)
-		e.unbuilt = {}
-		t.step = mi - 1
-		blocks.append(before and not at and not t.build_locked(m.arg))
+		for bid in TutorialScript.build_ids(m):  # 채석장·농장은 한 미션에 둘
+			e.unbuilt = {bid: true}
+			t.step = mi - 1
+			var before: bool = t.build_locked(bid)
+			t.step = mi
+			var at: bool = t.build_locked(bid)
+			e.unbuilt = {}
+			t.step = mi - 1
+			blocks.append(before and not at and not t.build_locked(bid))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 21번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 13번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 20번째 미션 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 2번째 미션 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
-	var intro := ["build_lumber", "sell", "hero_level", "growth", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
+	var intro := ["hero_level", "growth", "build_lumber", "sell", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
 		"soldier_deploy", "build_lab", "build_archery", "build_stable", "guild", "pvp"]
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 81 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 78 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5359,7 +5413,7 @@ func test_tutorial() -> void:
 		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 75번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5394,6 +5448,12 @@ func test_tutorial() -> void:
 	check(TutorialScript.map_step(TutorialScript.V4_IDS, 66) == t.mission_index("guild") and TutorialScript.map_step(TutorialScript.V4_IDS, 67) == t.mission_index("hp_16")
 		and TutorialScript.map_step(TutorialScript.V4_IDS, 75) == t.mission_index("stage_1_15")
 		and TutorialScript.map_step(TutorialScript.V4_IDS, 76) == TutorialScript.MISSIONS.size(), "guide: old v4 steps map to the same mission id")
+	# v5(81개) → v6(78개, 초반 단순화 2026-10-23): 옛 순서에서 이미 한 미션은 건너뛰고 새 순서에서 아직 안 한 첫 미션부터
+	check(TutorialScript.map_v5(0) == 0 and TutorialScript.map_v5(5) == 0 and TutorialScript.map_v5(10) == t.mission_index("hero_level")
+		and TutorialScript.map_v5(16) == t.mission_index("growth") and TutorialScript.map_v5(17) == t.mission_index("hero_lv4_8")
+		and TutorialScript.map_v5(27) == t.mission_index("atk_5") and TutorialScript.map_v5(80) == t.mission_index("party_clear")
+		and TutorialScript.map_v5(81) == TutorialScript.MISSIONS.size() and TutorialScript.map_step(TutorialScript.V4_IDS, 7) == t.mission_index("stage_1_1"),
+		"guide: old v5 steps continue at the first mission not done yet")
 	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
 	t.step = t.mission_index("siege_try")
 	t.count = 0
@@ -5448,7 +5508,7 @@ func test_tutorial() -> void:
 		t.note(id)
 		check(t.complete(), "guide: %s completes on its action (before %s)" % [id, before])
 	# 처치·스테이지
-	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_30")
+	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("kill_100")
 	t.count = 0
 	for km in TutorialScript.MISSIONS.filter(func(x): return x.kind == "kill"):
 		check(t.point_keys(km).is_empty() and not t.action_shown(km), "guide: kill mission %s just waits (idle kills count) — no arrow, no card button" % km.id)
@@ -5456,11 +5516,11 @@ func test_tutorial() -> void:
 	var s11: Dictionary = TutorialScript.MISSIONS[t.mission_index("stage_1_1")]
 	check(t.action_label(s11) == "▶ 진행" and t.point_keys(s11) == ["hud:go"] and t.action_label(TutorialScript.MISSIONS[t.mission_index("build_lumber")]) == "바로가기",
 		"guide: battle missions label the card button ▶ 진행 like the HUD button it points at")
-	for i in 29:
+	for i in 99:
 		e.add_kill("grunt", 1)
-	check(not t.complete() and t.progress_text() == "29/30", "tutorial: kill mission counts kills")
+	check(not t.complete() and t.progress_text() == "99/100", "tutorial: kill mission counts kills")
 	e.add_kill("grunt", 1)
-	check(t.complete(), "tutorial: 30 kills complete the mission")
+	check(t.complete(), "tutorial: 100 kills complete the mission")
 	t.step = TutorialScript.MISSIONS.map(func(m): return m.id).find("stage_1_3")
 	check(not t.complete(), "tutorial: 1-3 not cleared yet")
 	gs.stage = 4
@@ -5480,7 +5540,7 @@ func test_tutorial() -> void:
 	var e2 = EconomyScript.new()
 	e2.save_path = ECON_TMP
 	e2.load_save(now)
-	check(e2.dia_tickets == 3 and not e2.is_built("farm") and e2.is_built("lumber") and not e2.fresh_game, "tutorial: save keeps lots and tickets")
+	check(e2.dia_tickets == 3 and not e2.is_built("tavern") and e2.is_built("farm") and e2.is_built("lumber") and not e2.fresh_game, "tutorial: save keeps lots and tickets")
 	var f := FileAccess.open(ECON_TMP, FileAccess.READ)
 	var d: Dictionary = JSON.parse_string(f.get_as_text())
 	f.close()
@@ -5563,7 +5623,7 @@ func test_tutorial_online() -> void:
 			var m: Dictionary = TutorialScript.MISSIONS[i]
 			var needs := ""
 			if m.kind == "build":
-				needs = "build:%s" % m.arg
+				needs = "build:%s" % "+".join(TutorialScript.build_ids(m))  # 여러 건물(채석장·농장)은 build:quarry+farm
 			elif m.kind == "level":
 				needs = "level:%s:%d" % [m.arg[0], int(m.arg[1])]
 			if tut[i][0] != m.id or tut[i][2] != needs or tut[i][3] != enc.call(tmp.reward(i)):
@@ -5641,16 +5701,16 @@ func test_tutorial_online() -> void:
 	# [보상 받기]는 누르는 즉시(사용자 2026-10-16 "보상받기 누르면 좀 빠르게"): 보상·다음 미션이 곧바로, 서버 확인은 뒤에서, 거절이면 되돌린다
 	var cn := GrowthNet.new()
 	e.net = cn
-	var ki: int = t.mission_index("kill_30")
+	var ki: int = t.mission_index("collect")  # 수집 → 상인과 거래(둘 다 한 번 하면 끝)
 	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
 	e.apply_server(reply)
-	t.count = 30
+	t.count = 1
 	var r0: Dictionary = t.reward(ki)
 	var w0 := [e.gold, e.diamonds, int(e.res.get("wood", 0))]
 	var sounds := [0]
 	e.granted.connect(func(_r): sounds[0] += 1)
 	check(t.complete() and t.claim(), "online claim sent")
-	check(t.step == ki + 1 and t.count == 0 and t.mission().id == "collect" and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
+	check(t.step == ki + 1 and t.count == 0 and t.mission().id == "sell" and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
 		and cn.sent[0].body == {"type": "tutorial", "step": ki} and cn.sent[0].once and sounds[0] == 1,
 		"online claim: the next mission and the reward sound come at once, one request (step %d)" % t.step)
 	check([e.gold, e.diamonds, int(e.res.get("wood", 0))] == [w0[0] + int(r0.get("gold", 0)), w0[1] + int(r0.get("diamonds", 0)), w0[2] + int(r0.get("wood", 0))],

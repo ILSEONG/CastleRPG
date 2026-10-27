@@ -1,5 +1,5 @@
 extends Node
-## 통합 테스트(2026-10-14) — 가이드 여정(온라인): 새 게스트로 로컬 서버(ALLOW_TEST_HOOKS=1, tutorial_new_players=1)에 접속해 가이드 80개 미션을 처음부터
+## 통합 테스트(2026-10-14) — 가이드 여정(온라인): 새 게스트로 로컬 서버(ALLOW_TEST_HOOKS=1, tutorial_new_players=1)에 접속해 가이드 78개 미션을 처음부터
 ## 하나씩 깬다. 미션마다 카드(제목·설명·보상·[바로가기])가 말이 되는지 보고 [바로가기]를 눌러 무엇이 열리는지 본 뒤, 버튼과 같은 함수로 목표를 채운다
 ## (실제 플레이로 오래 걸리는 처치·스테이지·FEVER 게이지는 테스트 훅/사건 수로 대신 — SIM 줄로 적는다). 카드 [보상 받기]로 받으면
 ## 보상이 곧바로 보이고(예측), 서버가 받아들이고(되돌림 없음), 앱 단계·보상 반영 상태 == 서버 GET /v1/player인지 본다.
@@ -52,7 +52,7 @@ func _ready() -> void:
 	Guild.boss_started.connect(func(r): _boss_run = r)
 	_check(await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0) and Tutorial.active() and Tutorial.step == 0, "guide starts at mission 1", str(Economy.server_quest))
 	var total: int = Tutorial.MISSIONS.size()
-	_check(total == 81, "the guide has 81 missions", str(total))
+	_check(total == 78, "the guide has 78 missions", str(total))
 	var guard := 0
 	var upto := int(Net.arg_value("upto")) if Net.arg_value("upto") != "" else total  # 디버그: 이 미션까지만
 	while Tutorial.active() and guard < total + 2 and Tutorial.step < upto:
@@ -168,22 +168,23 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 				_main._tutorial_ui.side_menu.pick("exchange")
 			await _frames(5)
 		"build":
-			var id := str(m.arg)
-			var placement = _child(PlacementScript)
-			if not placement.is_active() and not Economy.is_placed(id):
-				placement.start(id)
-				await _frames(3)
-			var why := Economy.upgrade_block(id, Economy.time_now())
-			if why == "not_enough":
-				_info("%s the previous reward does not cover building %s (cost %s, have %s)" % [tag, id, GameData.build_cost(id, 1), Economy.res])
-				await _request("/v1/test/levels", {"res": _plus(GameData.build_cost(id, 1))})
-			if placement.is_active():
-				placement.confirm()
-			elif not Economy.is_building(id) and Economy.unbuilt.has(id):
-				Economy.upgrade(id, Economy.time_now())
-			await _settle()
-			_check(Economy.is_building(id) or not Economy.unbuilt.has(id), tag + " %s lot started" % id, str(_notes.slice(-2)))
-			await _wait_until(func(): return not Economy.unbuilt.has(id), 12.0)
+			for bid in Tutorial.build_ids(m):  # 채석장·농장은 한 미션에 둘(2026-10-23)
+				var id := str(bid)
+				var placement = _child(PlacementScript)
+				if not placement.is_active() and not Economy.is_placed(id):
+					placement.start(id)
+					await _frames(3)
+				var why := Economy.upgrade_block(id, Economy.time_now())
+				if why == "not_enough":
+					_info("%s the previous reward does not cover building %s (cost %s, have %s)" % [tag, id, GameData.build_cost(id, 1), Economy.res])
+					await _request("/v1/test/levels", {"res": _plus(GameData.build_cost(id, 1))})
+				if placement.is_active():
+					placement.confirm()
+				elif not Economy.is_building(id) and Economy.unbuilt.has(id):
+					Economy.upgrade(id, Economy.time_now())
+				await _settle()
+				_check(Economy.is_building(id) or not Economy.unbuilt.has(id), tag + " %s lot started" % id, str(_notes.slice(-2)))
+				await _wait_until(func(): return not Economy.unbuilt.has(id), 12.0)
 		"level":
 			var id := str(m.arg[0])
 			while Economy.shown_level(id) < int(m.arg[1]):

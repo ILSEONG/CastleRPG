@@ -48,6 +48,7 @@ func _ready() -> void:
 	_face.draw.connect(_draw_face)
 	button.add_child(_face)
 	add_child(button)
+	Tutorial.register_ui("chat", button, func(): return false)  # 「새 기능」 띠가 튀게 할 버튼(가이드 화살표는 가리키지 않는다)
 	Chat.changed.connect(_face.queue_redraw)
 	_place()
 
@@ -58,7 +59,7 @@ func _open() -> void:
 
 
 func _process(_delta: float) -> void:
-	button.visible = Chat.online()
+	button.visible = Chat.online() and Tutorial.ui_shown("chat")  # 가이드 중에는 1-5를 깬 뒤에(초반 단순화 2026-10-23)
 	_place()
 
 
@@ -66,7 +67,7 @@ func _place() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var left := 16.0
 	var bottom := vp.y * 0.70 + 42.0
-	if speed != null and speed.button != null:
+	if speed != null and speed.button != null and speed.button.visible:
 		left = speed.button.position.x + speed.button.size.x + GAP
 		bottom = speed.button.position.y + speed.button.size.y
 	var w := maxf(vp.x - RIGHT - left, 160.0)
@@ -96,12 +97,13 @@ func _draw_face() -> void:
 		_draw_line(lines[k], x0, PAD + (row0 + k + 1) * LINE_H - 8.0, sz.x - 8.0)
 
 
-## 한 줄: 시:분 [채널] 이름: 내용(넘치면 …). 시스템 줄은 이름 없이 주황 글씨, 안내 줄은 시각 없이.
+## 한 줄: 시:분 [채널] 이름: 내용(넘치면 …). 시스템 줄은 이름 없이 주황 글씨.
+## 시:분 칸은 너비가 고정이라 시각이 없는 안내 줄도 [채널] 머리표가 위아래 줄과 같은 자리(사용자 2026-10-25).
 func _draw_line(m: Dictionary, x: float, y: float, right: float) -> void:
 	var hm := ChatPanel.clock(float(m.get("at", 0)))
 	if hm != "":
 		_face.draw_string(FONT, Vector2(x, y), hm, HORIZONTAL_ALIGNMENT_LEFT, -1, TIME_SIZE, TIME_COLOR)
-		x += FONT.get_string_size(hm, HORIZONTAL_ALIGNMENT_LEFT, -1, TIME_SIZE).x + 6.0
+	x += ChatPanel.time_width(TIME_SIZE) + 6.0
 	var ch: String = m.get("ch", "all")
 	var tag := "[%s]" % CH_NAMES.get(ch, "")
 	var tc: Color = CH_COLORS.get(ch, Color.WHITE)

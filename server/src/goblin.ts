@@ -6,7 +6,7 @@
 // 저장: player_state.goblin jsonb = {at(마지막으로 받은 유닉스 초), day(리셋 날짜), n(그날 잡은 수)}.
 
 export const MIN_GAP_SEC = 270
-export const GOLD_MIN = 15
+export const GOLD_MIN = 30  // 2026-10-25 처치 골드 절반 뒤에도 보따리 값은 그대로(사용자 "황금 고블린은 냅둬") — 예전 15분치와 같은 골드
 export const BONUS_DAILY = 20
 export const SPEEDUP_P = 0.3
 export const SPEEDUP = { speedup_any_5: 1 }

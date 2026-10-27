@@ -253,8 +253,7 @@ func _due() -> bool:
 		for mi in _flash_meshes:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var every := CROWD_EVERY if _crowd_n >= UnitModelScript.CROWD_AT else 1
-	var cam := get_viewport().get_camera_3d()
-	if cam != null and not cam.is_position_in_frustum(global_position):
+	if not UnitModelScript.in_view(get_viewport().get_camera_3d(), global_position):
 		every = OFFSCREEN_EVERY
 	return _frame % every == 0 or _act == "death"
 

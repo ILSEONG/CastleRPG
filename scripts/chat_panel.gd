@@ -33,6 +33,7 @@ const RAIL_W := 104.0
 const SLIDE_SEC := 0.18
 const NOTICE_SEC := 2.5
 const LINE_FONT := 21
+const TIME_FONT := 17  # 시:분
 
 var tab := "all"
 var send_ch := "all"  # [전체] 탭에서 보낼 채널(칩으로 전체 ↔ 길드)
@@ -382,7 +383,8 @@ func _scroll_end() -> void:
 	scroll.scroll_vertical = int(scroll.get_v_scroll_bar().max_value)
 
 
-## 한 줄: [채널] 이름: 내용(시스템은 노란 글씨만). 줄 바탕은 없고 누를 때만 신고 확인.
+## 한 줄: 시:분 칸(너비 고정 — 시각이 없는 안내 줄도 [채널] 머리표가 위아래 줄과 같은 자리) + [채널] 이름: 내용(시스템은 주황 글씨만).
+## 줄 바탕은 없고 누를 때만 신고 확인.
 func _line(m: Dictionary) -> Control:
 	var mine: bool = m.get("me", false)
 	var ch: String = m.get("ch", "all")
@@ -406,9 +408,18 @@ func _line(m: Dictionary) -> Control:
 	l.add_theme_font_override("normal_font", FONT)
 	l.add_theme_font_size_override("normal_font_size", LINE_FONT)
 	l.add_theme_color_override("default_color", TEXT)
-	var hm := clock(float(m.get("at", 0)))
-	var tag := ("[font_size=%d][color=#%s]%s[/color][/font_size] " % [LINE_FONT - 4, SUB.to_html(true), hm] if hm != "" else "")
-	tag += "[color=#%s][lb]%s][/color] " % [CH_COLORS.get(ch, TEXT).to_html(false), CH_NAMES.get(ch, "")]
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := _label(clock(float(m.get("at", 0))), TIME_FONT, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	t.name = "Time"
+	t.custom_minimum_size = Vector2(time_width(), FONT.get_height(LINE_FONT))  # 첫 줄 높이에 가운데
+	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	t.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_child(t)
+	row.add_child(l)
+	var tag := "[color=#%s][lb]%s][/color] " % [CH_COLORS.get(ch, TEXT).to_html(false), CH_NAMES.get(ch, "")]
 	if ch == "system":
 		l.text = tag + "[color=#%s]%s[/color]" % [CH_COLORS.system.to_html(false), _esc(str(m.text))]
 	else:
@@ -416,7 +427,7 @@ func _line(m: Dictionary) -> Control:
 		l.text = tag + "[color=#%s]%s:[/color] %s" % [nc.to_html(false), _esc(str(m.name)), _esc(str(m.text))]
 		if Chat.reported.has(int(m.get("id", 0))):
 			l.text += Lang.t("chat_panel.line") % REPORTED.to_html(false)
-	p.add_child(l)
+	p.add_child(row)
 	return p
 
 
@@ -453,6 +464,14 @@ func _rebuild_reports() -> void:
 
 
 ## 시:분(한국 시각, "09:05"). at이 0(안내 줄)이면 "".
+## 시:분 칸 너비: 가장 넓은 숫자로 쓴 "00:00"(숫자마다 너비가 달라도 칸은 같다).
+static func time_width(size := TIME_FONT) -> float:
+	var w := 0.0
+	for d in 10:
+		w = maxf(w, FONT.get_string_size("%d%d:%d%d" % [d, d, d, d], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x)
+	return ceilf(w)
+
+
 static func clock(at: float) -> String:
 	if at <= 0.0:
 		return ""

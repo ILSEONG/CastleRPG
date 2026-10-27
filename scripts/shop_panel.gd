@@ -349,8 +349,8 @@ func _buy(id: String) -> void:
 		return
 	var x := ShopItems.find(id)
 	if x.get("currency") == "ad" and not Economy.ad_free():
-		ad_player.play(func():
-			if Economy.buy_shop(id, true):
+		ad_player.play(func(ad_token: String):
+			if Economy.buy_shop(id, true, ad_token):
 				Economy.notice.emit(Lang.t("shop_panel.buy") + Missions.reward_text(x.give)))
 		return
 	if Economy.buy_shop(id):

@@ -16,11 +16,13 @@ const Lang := preload("res://scripts/lang.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const GuideTour := preload("res://scripts/guide_tour.gd")
 const GuideTours := preload("res://scripts/guide_tours.gd")
+const GameLog := preload("res://scripts/game_log.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 5  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+const SAVE_VERSION := 6  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
 ## 5: 길드 출석·기부, 길드 보스, 공성전 체험, 거래소 둘러보기 미션(2026-10-13 오후)이 끼었다
+## 6: 초반 단순화(2026-10-23) — 첫 전투(1-1)가 1번이 되고 앞부분 순서가 바뀌었다. 성채 살펴보기·몬스터 30마리가 빠지고 채석장·농장은 한 미션
 ## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
@@ -41,6 +43,15 @@ const V4_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kil
 	"soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12", "hero_lv4_16", "stage_1_7", "build_archery", "atk_14",
 	"hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18", "atk_16", "stage_1_10", "guild", "hp_16",
 	"hero_lv4_20", "promote", "stage_1_12", "pvp", "fever", "atk_18", "hp_18", "stage_1_15"]
+## 버전 5의 미션 순서(81개). 버전 5 저장의 단계 → 그 앞을 다 한 것으로 보고 지금 표에서 아직 안 한 첫 미션(map_v5). 서버는 migrations/054가 같은 일을 한다.
+const V5_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "attend", "pouch", "stage_1_1", "auto_on",
+	"speed_on", "hero_level", "hero_lv4_5", "mission_claim", "stage_1_2", "growth", "atk_3", "hp_3", "hero_lv4_8", "build_tavern", "gacha",
+	"deploy_new", "auto_deploy", "hero_lv4_10", "shop_free", "stage_1_3", "atk_5", "hp_5", "build_barracks", "train", "build_houses",
+	"hero_lv4_12", "stage_1_4", "kill_100", "dungeon_gold", "atk_8", "hp_8", "dungeon_equip", "hero_lv4_14", "atk_10", "dungeon_ticket",
+	"equip", "hp_10", "hero_lv4_15", "soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12", "hero_lv4_16",
+	"stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18",
+	"atk_16", "stage_1_10", "guild", "guild_attend", "hp_16", "hero_lv4_20", "promote", "guild_boss", "stage_1_12", "siege_try", "pvp",
+	"fever", "atk_18", "hp_18", "stage_1_15", "exchange_look", "party_clear"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
@@ -61,41 +72,42 @@ static var LOCKED_TEXT := Lang.t("tutorial.locked_text")
 ## gacha(arg = 모집 장수) · deploy_new · train(arg = 병사 건물) · dungeon(arg = 종류) · equip · soldier_deploy · research · guild ·
 ## hero_lv(arg = [명, Lv] — 그 레벨 이상 영웅 수) · growth_lv(arg = [성장 id, Lv]) · pvp(PVP 한 판, 미션이 된 뒤부터)
 static var MISSIONS := [
-	{"id": "look_keep", "title": Lang.t("tutorial.missions.look_keep.title"), "desc": Lang.t("tutorial.missions.look_keep.desc"),
-		"kind": "open", "arg": "keep", "goto": "building:keep"},
+	{"id": "stage_1_1", "title": Lang.t("tutorial.missions.stage_1_1.title"), "desc": Lang.t("tutorial.missions.stage_1_1.desc"),
+		"kind": "stage", "arg": 1, "goto": "stage"},
+	{"id": "hero_level", "title": Lang.t("tutorial.missions.hero_level.title"), "desc": Lang.t("tutorial.missions.hero_level.desc"),
+		"kind": "hero_level", "goto": "tab:hero"},
+	{"id": "hero_lv4_5", "title": Lang.t("tutorial.missions.hero_lv4_5.title"), "desc": Lang.t("tutorial.missions.hero_lv4_5.desc"),
+		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
+	{"id": "stage_1_2", "title": Lang.t("tutorial.missions.stage_1_2.title"), "desc": Lang.t("tutorial.missions.stage_1_2.desc"),
+		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
+	{"id": "growth", "title": Lang.t("tutorial.missions.growth.title"), "desc": Lang.t("tutorial.missions.growth.desc"), "kind": "growth", "goto": "tab:growth"},
+	{"id": "hero_lv4_8", "title": Lang.t("tutorial.missions.hero_lv4_8.title"), "desc": Lang.t("tutorial.missions.hero_lv4_8.desc"),
+		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
+	{"id": "speed_on", "title": Lang.t("tutorial.missions.speed_on.title"), "desc": Lang.t("tutorial.missions.speed_on.desc"),
+		"kind": "speed_on", "goto": "", "point": ["hud:speed", "hud:go"], "reward": {"diamonds": 50}},
+	{"id": "stage_1_3", "title": Lang.t("tutorial.missions.stage_1_3.title"), "desc": Lang.t("tutorial.missions.stage_1_3.desc"), "kind": "stage", "arg": 3,
+		"goto": "stage"},
+	{"id": "auto_on", "title": Lang.t("tutorial.missions.auto_on.title"), "desc": Lang.t("tutorial.missions.auto_on.desc"),
+		"kind": "auto_on", "goto": "", "point": ["hud:auto"], "reward": {"diamonds": 50}},
 	{"id": "build_lumber", "title": Lang.t("tutorial.missions.build_lumber.title"), "desc": Lang.t("tutorial.missions.build_lumber.desc"), "kind": "build", "arg": "lumber",
 		"goto": "building:lumber"},
-	{"id": "build_quarry", "title": Lang.t("tutorial.missions.build_quarry.title"), "desc": Lang.t("tutorial.missions.build_quarry.desc"), "kind": "build", "arg": "quarry", "goto": "building:quarry"},
-	{"id": "build_farm", "title": Lang.t("tutorial.missions.build_farm.title"), "desc": Lang.t("tutorial.missions.build_farm.desc"), "kind": "build", "arg": "farm", "goto": "building:farm"},
-	{"id": "kill_30", "title": Lang.t("tutorial.missions.kill_30.title"), "desc": Lang.t("tutorial.missions.kill_30.desc"),
-		"kind": "kill", "arg": 30},  # 처치 미션은 모두 goto 없음: 대기 중에도 몬스터가 와서 끝난다 — 바로가기·화살표가 [진행]을 가리키지 않는다(사용자 2026-10-13 "몬스터 몇마리 처리 가이드 왜 바로가기가 저기로")
+	# 채석장·농장은 한 미션(2026-10-23 초반 단순화): 둘 다 지으면 끝. [바로가기]·화살표는 아직 안 지은 쪽(goto_of)
+	{"id": "build_quarry_farm", "title": Lang.t("tutorial.missions.build_quarry_farm.title"), "desc": Lang.t("tutorial.missions.build_quarry_farm.desc"),
+		"kind": "build", "arg": ["quarry", "farm"], "goto": "building:quarry"},
 	{"id": "collect", "title": Lang.t("tutorial.missions.collect.title"), "desc": Lang.t("tutorial.missions.collect.desc"), "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": Lang.t("tutorial.missions.sell.title"), "desc": Lang.t("tutorial.missions.sell.desc"), "kind": "sell", "goto": "merchant"},
 	{"id": "attend", "title": Lang.t("tutorial.missions.attend.title"), "desc": Lang.t("tutorial.missions.attend.desc"),
 		"kind": "attend", "goto": "tab:event", "point": ["event:claim", "menu:event", "menu"], "reward": {"diamonds": 50}},
 	{"id": "pouch", "title": Lang.t("tutorial.missions.pouch.title"), "desc": Lang.t("tutorial.missions.pouch.desc"),
 		"kind": "pouch", "goto": "tab:bag", "point": ["bag:open", "menu:bag", "menu"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_1", "title": Lang.t("tutorial.missions.stage_1_1.title"), "desc": Lang.t("tutorial.missions.stage_1_1.desc"),
-		"kind": "stage", "arg": 1, "goto": "stage"},
-	{"id": "auto_on", "title": Lang.t("tutorial.missions.auto_on.title"), "desc": Lang.t("tutorial.missions.auto_on.desc"),
-		"kind": "auto_on", "goto": "", "point": ["hud:auto"], "reward": {"diamonds": 50}},
-	{"id": "speed_on", "title": Lang.t("tutorial.missions.speed_on.title"), "desc": Lang.t("tutorial.missions.speed_on.desc"),
-		"kind": "speed_on", "goto": "", "point": ["hud:speed", "hud:go"], "reward": {"diamonds": 50}},
-	{"id": "hero_level", "title": Lang.t("tutorial.missions.hero_level.title"), "desc": Lang.t("tutorial.missions.hero_level.desc"),
-		"kind": "hero_level", "goto": "tab:hero"},
-	{"id": "hero_lv4_5", "title": Lang.t("tutorial.missions.hero_lv4_5.title"), "desc": Lang.t("tutorial.missions.hero_lv4_5.desc"),
-		"kind": "hero_lv", "arg": [4, 5], "goto": "tab:hero", "reward": {"gold": 1000}},
 	{"id": "mission_claim", "title": Lang.t("tutorial.missions.mission_claim.title"), "desc": Lang.t("tutorial.missions.mission_claim.desc"),
 		"kind": "mission_claim", "goto": "tab:mission", "point": ["menu:mission", "menu"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_2", "title": Lang.t("tutorial.missions.stage_1_2.title"), "desc": Lang.t("tutorial.missions.stage_1_2.desc"),
-		"kind": "stage", "arg": 2, "goto": "stage", "reward": {"diamonds": 100}},
-	{"id": "growth", "title": Lang.t("tutorial.missions.growth.title"), "desc": Lang.t("tutorial.missions.growth.desc"), "kind": "growth", "goto": "tab:growth"},
+	{"id": "shop_free", "title": Lang.t("tutorial.missions.shop_free.title"), "desc": Lang.t("tutorial.missions.shop_free.desc"),
+		"kind": "shop_free", "goto": "tab:shop", "point": ["tab:shop"], "reward": {"diamonds": 50}},
 	{"id": "atk_3", "title": Lang.t("tutorial.missions.atk_3.title"), "desc": Lang.t("tutorial.missions.atk_3.desc"),
 		"kind": "growth_lv", "arg": ["atk", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
 	{"id": "hp_3", "title": Lang.t("tutorial.missions.hp_3.title"), "desc": Lang.t("tutorial.missions.hp_3.desc"),
 		"kind": "growth_lv", "arg": ["hp", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
-	{"id": "hero_lv4_8", "title": Lang.t("tutorial.missions.hero_lv4_8.title"), "desc": Lang.t("tutorial.missions.hero_lv4_8.desc"),
-		"kind": "hero_lv", "arg": [4, 8], "goto": "tab:hero", "reward": {"gold": 2000}},
 	{"id": "build_tavern", "title": Lang.t("tutorial.missions.build_tavern.title"), "desc": Lang.t("tutorial.missions.build_tavern.desc"), "kind": "build", "arg": "tavern", "goto": "building:tavern"},
 	{"id": "gacha", "title": Lang.t("tutorial.missions.gacha.title"), "desc": Lang.t("tutorial.missions.gacha.desc"), "kind": "gacha", "arg": 10, "goto": "recruit"},
 	{"id": "deploy_new", "title": Lang.t("tutorial.missions.deploy_new.title"), "desc": Lang.t("tutorial.missions.deploy_new.desc"), "kind": "deploy_new", "goto": "tab:hero"},
@@ -103,10 +115,6 @@ static var MISSIONS := [
 		"kind": "auto_deploy", "goto": "tab:hero", "point": ["hero:apply", "hero:auto_deploy", "tab:hero"], "reward": {"diamonds": 50}},
 	{"id": "hero_lv4_10", "title": Lang.t("tutorial.missions.hero_lv4_10.title"), "desc": Lang.t("tutorial.missions.hero_lv4_10.desc"),
 		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
-	{"id": "shop_free", "title": Lang.t("tutorial.missions.shop_free.title"), "desc": Lang.t("tutorial.missions.shop_free.desc"),
-		"kind": "shop_free", "goto": "tab:shop", "point": ["tab:shop"], "reward": {"diamonds": 50}},
-	{"id": "stage_1_3", "title": Lang.t("tutorial.missions.stage_1_3.title"), "desc": Lang.t("tutorial.missions.stage_1_3.desc"), "kind": "stage", "arg": 3,
-		"goto": "stage"},
 	{"id": "atk_5", "title": Lang.t("tutorial.missions.atk_5.title"), "desc": Lang.t("tutorial.missions.atk_5.desc"),
 		"kind": "growth_lv", "arg": ["atk", 5], "goto": "tab:growth", "reward": {"gold": 3000}},
 	{"id": "hp_5", "title": Lang.t("tutorial.missions.hp_5.title"), "desc": Lang.t("tutorial.missions.hp_5.desc"),
@@ -120,6 +128,7 @@ static var MISSIONS := [
 		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "stage_1_4", "title": Lang.t("tutorial.missions.stage_1_4.title"), "desc": Lang.t("tutorial.missions.stage_1_4.desc"),
 		"kind": "stage", "arg": 4, "goto": "stage", "reward": {"diamonds": 100}},
+	# 처치 미션은 모두 goto 없음: 대기 중에도 몬스터가 와서 끝난다 — 바로가기·화살표가 [진행]을 가리키지 않는다(사용자 2026-10-13 "몬스터 몇마리 처리 가이드 왜 바로가기가 저기로")
 	{"id": "kill_100", "title": Lang.t("tutorial.missions.kill_100.title"), "desc": Lang.t("tutorial.missions.kill_100.desc"), "kind": "kill", "arg": 100},
 	{"id": "dungeon_gold", "title": Lang.t("tutorial.missions.dungeon_gold.title"), "desc": Lang.t("tutorial.missions.dungeon_gold.desc"),
 		"kind": "dungeon", "arg": "gold", "goto": "tab:dungeon"},
@@ -248,6 +257,7 @@ const PARTY_MISSION := "party_clear"  # 파티 던전은 이 미션에 닿아야
 signal changed  # 미션·완료·보상 상태가 바뀌었다
 signal lock_notice(text: String)  # 잠긴 공터·탭·던전을 눌렀다 — HUD가 화면 중상단 토스트로 띄운다
 signal goto_requested(target: String)  # 카드 [바로가기] — main이 처리한다(건물 창·탭·상인·전투 시작)
+signal ui_revealed(key: String)  # 가이드 중 숨겨 둔 화면 요소(UI_KEYS)가 처음 나타났다 — HUD가 "새 기능" 띠를 띄우고 그 버튼이 튀어나온다
 
 var save_path := "user://tutorial.json"  # ""이면 저장하지 않는다
 var econ = null  # Economy(오토로드 또는 테스트가 넣은 것)
@@ -259,10 +269,24 @@ var fever = null  # Fever(연속 진행 체크·FEVER — auto_on·fever 미션)
 ## 가이드가 가리킬 UI(사용자 2026-10-13 "그런거 하나하나 가이드로"): 키 → {node: Control, show: Callable(없으면 늘)}. 각 화면이 register_ui로 넣는다.
 ## 미션의 point(키 목록, 앞에서부터 보이는 첫 것) — 없으면 goto에서 만든다(point_keys). tutorial_card가 그 위에 화살표를 그린다.
 var ui_targets := {}
+## 초반 단순화(사용자 2026-10-23 "처음 몇 시간 동안 보이는 재화·버튼을 줄이고"): 가이드 중에는 아래 화면 요소를 그 기능을 쓰는 미션이 올 때까지
+## 숨긴다(ui_shown). 한 번 나타나면 계속 보인다(ui_seen, 이 기기에 저장). 가이드를 끝냈거나 건너뛴 성주·운영자는 모두 보인다.
+## chip:<자원>(HUD 재화 칸) · hud:auto·hud:speed·hud:fever · build_button · merchant · tab:<탭> · menu:<항목> · chat(채팅 줄) ·
+## shop_dot(상점 빨간 점) · notice_auto(새 공지 창이 저절로 열림).
+const UI_KEYS := ["chip:wood", "chip:stone", "chip:food", "hud:auto", "hud:speed", "hud:fever", "build_button", "merchant", "tab:hero", "tab:growth",
+	"tab:soldier", "tab:dungeon", "tab:recruit", "tab:shop", "menu:event", "menu:bag", "menu:mission", "menu:ranking", "menu:friend", "menu:exchange",
+	"menu:guild", "chat", "shop_dot", "notice_auto"]
+const UI_STAGE := 5  # 랭킹·친구·채팅 줄은 이 스테이지(1-5)를 깬 뒤에 나타난다(제 기본값)
+## 2026-10-23 「성 화면 둘러보기」를 2단계로 줄이며 나머지를 미션마다 나눈 설명들 — 예전 긴 설명을 이미 본 성주에겐 다시 띄우지 않는다
+const INTRO_SPLIT_TOURS := ["stage_info", "tabs", "auto", "economy", "menu", "fever"]
+var ui_seen := {}  # 나타난 UI_KEYS 키 → true
+var _ui_primed := false  # 이번 실행에서 한 번 훑었다(처음 훑을 때 이미 조건이 찬 것은 띠 없이 조용히 나타난다)
+var _saved_state := ""  # 저장에서 읽은 가이드 상태(온라인은 서버가 답하기 전까지 이것으로 숨길지 정한다)
 var tours_seen := {}  # 본 포커스 설명 id → true(guide_tours.gd — 다시 안 띄운다, 이 기기에만 저장)
 var tour_node: Node = null  # 지금 떠 있는 포커스 설명(guide_tour.gd)
 var tours_on := false  # 실제 게임(_start)만 켠다 — 테스트 장면·개발 실행은 설명이 입력을 막지 않게 끈다
 var _tour_cd := 0.0
+var _ui_cd := 0.0
 const LOADING_GROUP := "loading_screen"  # preloader.gd GROUP — 첫 로딩 화면이 덮고 있다
 const MENU_ITEMS := ["settings", "bag", "mission", "ranking", "friend", "event", "guild", "exchange", "mail"]  # 오른쪽 아래 메뉴 항목(하단 탭이 아님)
 var state := "skipped"  # active | done | skipped
@@ -289,6 +313,8 @@ func _ready() -> void:
 	pvp = get_node_or_null("/root/Pvp")
 	party = get_node_or_null("/root/Party")
 	fever = get_node_or_null("/root/Fever")
+	if gs != null:  # 연속 진행 중 가이드 보상이 준비되면 그 라운드 끝에 멈춘다 — 스테이지 중엔 카드가 숨으니 대기에서 보이게(사용자 2026-10-25)
+		gs.auto_hold = func(): return active() and complete()
 	_connect()
 	_start.call_deferred()  # 첫 장면이 붙은 뒤에 본다(체크 장면·개발 실행은 건너뛴다)
 
@@ -423,6 +449,10 @@ func _connect() -> void:
 
 
 func _process(delta: float) -> void:
+	_ui_cd -= delta
+	if _ui_cd <= 0.0:
+		_ui_cd = 0.2
+		_check_ui()
 	if mission().is_empty():
 		return
 	_tour_cd -= delta
@@ -435,6 +465,91 @@ func _process(delta: float) -> void:
 		check()
 		if _dirty:
 			save()
+
+
+## 화면 요소 key(UI_KEYS)를 보일까. 가이드 중이 아니면(끝·건너뜀·운영자) 늘 보인다. 한 번 나타난 것은 계속 보인다.
+func ui_shown(key: String) -> bool:
+	if ui_seen.has(key) or not _ui_hiding():
+		return true
+	return _ui_rule(key)
+
+
+## 가이드 중이라 초반 화면 요소를 숨긴다. 온라인은 서버가 답하기 전엔 저장된 상태로 본다(답 전에 다 보였다 숨는 깜빡임이 없게).
+func _ui_hiding() -> bool:
+	if _admin():
+		return false
+	var st := state
+	if online and not _server_known:
+		st = _saved_state
+	return st == "active"
+
+
+## 그 요소가 나타날 때가 되었나: 그 기능을 쓰는 미션에 닿았거나(_reached) 이미 그 기능을 쓰고 있다.
+func _ui_rule(key: String) -> bool:
+	match key:
+		"chip:wood":
+			return _reached("build_lumber") or _res("wood") > 0
+		"chip:stone":
+			return _reached("build_quarry_farm") or _res("stone") > 0
+		"chip:food":
+			return _reached("build_quarry_farm") or _res("food") > 0
+		"hud:auto":
+			return _reached("auto_on") or (fever != null and fever.auto_next)
+		"hud:speed":
+			return _reached("speed_on") or _speed_on()
+		"hud:fever":
+			return _reached("fever") or (fever != null and (fever.active() or fever.full()))
+		"build_button":
+			return _reached("build_lumber")
+		"merchant":
+			return _reached("sell")
+		"tab:shop":
+			return _reached("hero_level")
+		"menu:event":
+			return _reached("attend")
+		"menu:bag":
+			return _reached("pouch")
+		"menu:mission":
+			return _reached("mission_claim")
+		"menu:ranking", "menu:friend", "chat":
+			return maxi(best_stage, int(gs.stage) if gs != null else 1) > UI_STAGE
+		"shop_dot":
+			return _reached("shop_free")
+		"notice_auto":
+			return step >= 1
+	if key.begins_with("tab:") or key.begins_with("menu:"):
+		return not tab_locked(key.get_slice(":", 1))
+	return true
+
+
+## 가이드가 그 미션에 닿았다(그 미션이 지금이거나 지났다). 표에 없는 id면 true.
+func _reached(id: String) -> bool:
+	var i := mission_index(id)
+	return i < 0 or step >= i
+
+
+func _res(kind: String) -> int:
+	return int(econ.res.get(kind, 0)) if econ != null else 0
+
+
+## 숨겨 둔 요소 중 이제 나타날 것을 ui_seen에 넣고 ui_revealed를 낸다. 이번 실행의 첫 훑기(이어 하는 성주)는 띠 없이 조용히.
+func _check_ui() -> void:
+	if not _ui_hiding():
+		return
+	var fresh := []
+	for key in UI_KEYS:
+		if not ui_seen.has(key) and _ui_rule(key):
+			ui_seen[key] = true
+			fresh.append(key)
+	if fresh.is_empty():
+		_ui_primed = true
+		return
+	_dirty = true
+	var loud := _ui_primed
+	_ui_primed = true
+	if loud:
+		for key in fresh:
+			ui_revealed.emit(key)
 
 
 ## 지금 미션의 포커스 설명 중 아직 안 본 것이 띄울 때가 되었으면 띄운다(표 순서로 먼저 된 것 하나씩).
@@ -500,6 +615,8 @@ func begin(on: bool) -> void:
 	state = "active" if on else "skipped"
 	step = 0
 	count = 0
+	ui_seen = {}
+	_ui_primed = false
 	if on and econ != null:
 		econ.start_unbuilt(START_BUILT)
 	save()
@@ -644,7 +761,7 @@ func point_keys(m: Dictionary) -> Array:
 		return ATTENDED_POINT  # 출석은 했다: [출석 완료] 대신 기부 버튼
 	if m.has("point"):
 		return m.point
-	var g := str(m.get("goto", ""))
+	var g := goto_of(m) if m.get("kind", "") == "build" else str(m.get("goto", ""))  # 여러 건물 미션은 아직 안 지은 쪽
 	if g.begins_with("tab:"):
 		var t := g.get_slice(":", 1)
 		return ["menu:" + t, "menu"] if t in MENU_ITEMS else [g]
@@ -767,12 +884,18 @@ func build_locked(id: String) -> bool:
 	return i >= 0 and step < i
 
 
-## 그 건물을 짓는 미션(kind build, arg id) 번호(0부터). 없으면 -1.
+## 그 건물을 짓는 미션(kind build, arg id — 채석장·농장처럼 arg가 목록이면 그 안에 있으면) 번호(0부터). 없으면 -1.
 func build_mission_index(id: String) -> int:
 	for i in MISSIONS.size():
-		if MISSIONS[i].kind == "build" and MISSIONS[i].get("arg") == id:
+		if MISSIONS[i].kind == "build" and id in build_ids(MISSIONS[i]):
 			return i
 	return -1
+
+
+## build 미션이 지을 건물들(arg 하나면 [arg]).
+static func build_ids(m: Dictionary) -> Array:
+	var a = m.get("arg")
+	return a if a is Array else [a]
 
 
 ## 잠긴 공터 문구: "튜토리얼 11번째 미션 「주점 건설」에서 건설할 수 있어요".
@@ -847,9 +970,11 @@ func _advance(rep: bool) -> void:
 		rep_n += 1
 		rep_quest = {}
 	else:
+		GameLog.event("guide_step", {"step": step + 1, "id": str(MISSIONS[step].id) if step < MISSIONS.size() else ""})
 		step += 1
 		if step >= MISSIONS.size():
 			state = "done"
+			GameLog.event("guide_done")
 			if econ != null:
 				econ.notice.emit(DONE_TEXT)
 	count = 0
@@ -913,7 +1038,12 @@ func need_of(i: int) -> Dictionary:
 	var m: Dictionary = MISSIONS[i]
 	match m.kind:
 		"build":
-			return {"res": GameData.build_cost(m.arg, 1)}
+			var c := {}
+			for id in build_ids(m):
+				var one: Dictionary = GameData.build_cost(id, 1)
+				for r in one:
+					c[r] = int(c.get(r, 0)) + int(one[r])
+			return {"res": c}
 		"level":
 			return {"res": GameData.build_cost(m.arg[0], int(m.arg[1]) - 1)}
 		"train":
@@ -1062,6 +1192,10 @@ func goto_of(m: Dictionary) -> String:
 	var g := str(m.get("goto", ""))
 	if m.get("kind", "") == "soldier_deploy" and econ != null and econ.soldier_counts().is_empty():
 		return "building:barracks"
+	if m.get("kind", "") == "build" and m.get("arg") is Array and econ != null:  # 여러 건물 미션: 아직 안 지은 첫 건물
+		for id in m.arg:
+			if not econ.is_built(id):
+				return "building:" + str(id)
 	return g
 
 
@@ -1113,7 +1247,7 @@ func _done(m: Dictionary) -> bool:
 		"growth_up", "hero_up":
 			return _delta(m) >= int(m.arg)
 		"build":
-			return econ.is_built(m.arg)
+			return build_ids(m).all(func(id): return econ.is_built(id))
 		"level":
 			return econ.shown_level(m.arg[0]) >= int(m.arg[1])
 		"stage":
@@ -1150,14 +1284,30 @@ static func v2_step(old: int) -> int:
 	return map_step(V2_IDS, old)
 
 
-## 옛 표(ids)의 단계 → 지금 표의 번호(같은 미션 id). 다 끝냈으면 지금 표 크기.
+## 옛 표(ids)의 단계 → 지금 표의 번호: 같은 미션 id의 버전 5 자리를 찾아(하던 미션 그대로, 그 뒤에 낀 미션은 건너뛴다) map_v5로 옮긴다.
+## 다 끝냈으면 지금 표 크기.
 static func map_step(ids: Array, old: int) -> int:
 	if old >= ids.size():
 		return MISSIONS.size()
+	var v5 := V5_IDS.find(ids[maxi(0, old)])
+	return map_v5(maxi(0, v5))
+
+
+## 버전 5 단계(V5_IDS 번호) → 지금 표의 번호(2026-10-23 초반 단순화로 앞부분 순서가 바뀌었다): 그 앞 미션은 다 한 것으로 보고 지금 표에서
+## 아직 안 한 첫 미션. 앞으로 옮겨 온 미션(1-1·영웅 레벨업…)을 아직 안 했으면 거기부터. 이미 한 미션이 뒤에 오면 조건이 채워져 있어 바로
+## [보상 받기]가 된다(건물·출석). 채석장·농장 합친 미션은 둘 다 했으면 한 것. 다 끝냈으면 지금 표 크기. 서버 migrations/054와 같은 표.
+static func map_v5(old: int) -> int:
+	if old >= V5_IDS.size():
+		return MISSIONS.size()
+	var done := {}
+	for i in maxi(0, old):
+		done[V5_IDS[i]] = true
+	if done.has("build_quarry") and done.has("build_farm"):
+		done["build_quarry_farm"] = true
 	for i in MISSIONS.size():
-		if MISSIONS[i].id == ids[maxi(0, old)]:
+		if not done.has(MISSIONS[i].id):
 			return i
-	return 0
+	return MISSIONS.size()
 
 
 func save() -> void:
@@ -1169,7 +1319,7 @@ func save() -> void:
 		push_warning("tutorial save failed: %s" % error_string(FileAccess.get_open_error()))
 		return
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "state": state, "step": step, "count": count, "best_stage": best_stage, "rep_n": rep_n,
-		"rep_quest": rep_quest, "tours_seen": tours_seen.keys()}))
+		"rep_quest": rep_quest, "tours_seen": tours_seen.keys(), "ui_seen": ui_seen.keys()}))
 	f.close()
 
 
@@ -1195,6 +1345,8 @@ func load_save() -> bool:
 		old_step = map_step(V3_IDS, old_step)
 	elif ver < 5:
 		old_step = map_step(V4_IDS, old_step)
+	elif ver < 6:
+		old_step = map_v5(old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))
@@ -1210,6 +1362,18 @@ func load_save() -> bool:
 	if ts is Array:
 		for x in ts:
 			tours_seen[str(x)] = true
+	if ver < 6 and tours_seen.has("intro"):  # 예전 12단계 「성 화면 둘러보기」를 본 성주: 그걸 나눈 설명은 다시 안 띄운다
+		for x in INTRO_SPLIT_TOURS:
+			tours_seen[x] = true
+	ui_seen = {}
+	var us = d.get("ui_seen", [])
+	if us is Array:
+		for x in us:
+			ui_seen[str(x)] = true
+	if ver < 6:  # 초반 단순화 전에 시작한 성주는 이미 다 보이던 화면 — 숨기지 않는다(새로 시작하는 성주만 하나씩 나타난다)
+		for k in UI_KEYS:
+			ui_seen[k] = true
+	_saved_state = state
 	if state == "active" and step >= MISSIONS.size():
 		state = "done"
 	return true

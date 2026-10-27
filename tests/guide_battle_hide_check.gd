@@ -2,7 +2,7 @@ extends Node
 ## 스테이지를 미는 동안 가이드를 숨긴다(사용자 2026-10-18 "스테이지 밀때는 가이드 안보이게해줘").
 ## 새 게임으로 main을 띄운다. 대기에서는 카드·화살표가 보이고, 스테이지·결과·카운트다운 동안은 카드·화살표(버튼·건물 이름표)·
 ## 포커스 설명이 하나도 안 보여야 한다. 그동안 미션은 계속 세고(1-1 클리어 → ✓), 방치로 돌아오면 카드가 바로 다시 보이고
-## 첫 미션의 「성 화면 둘러보기」 설명도 그때 뜬다.
+## 「스테이지 1-2」의 포커스 설명(스테이지 정보)도 그때 뜬다.
 ## 실행: xvfb-run -a godot --path . --resolution 720x1280 res://tests/guide_battle_hide_check.tscn  (마지막 줄 GUIDE BATTLE HIDE PASSED)
 ##   -- --shot=<png 경로>: 첫 전투 2초 뒤 화면을 저장한다(전·후 비교용)
 
@@ -46,10 +46,16 @@ func _ready() -> void:
 	_check(not Tutorial.complete(), "the mission is not done before the clear", "")
 	GameState.on_all_monsters_dead()  # 1-1 클리어 → 결과
 	_check(Tutorial.complete(), "the mission still counts while the guide is hidden (1-1 cleared → ✓)", "step=%d" % Tutorial.step)
-	await _cycle()
-	GameState.stop_stage()  # 방치로
-	var back := -1.0
+	# 연속 진행이어도 가이드 보상이 준비됐으면 결과 뒤 다음 라운드로 넘어가지 않고 대기(사용자 2026-10-25 "라운드 끝에 멈춤")
+	var counted := false
 	var t0 := Time.get_ticks_msec()
+	while GameState.mode != GameState.Mode.IDLE and Time.get_ticks_msec() - t0 < 10000:
+		await _watch(0.0)
+		counted = counted or GameState.mode == GameState.Mode.COUNTDOWN
+	_check(GameState.mode == GameState.Mode.IDLE and not counted and GameState.auto_continue,
+		"with 연속 진행 on and a guide reward ready, the round ends in idle (no countdown to the next round)", "mode=%d countdown=%s" % [GameState.mode, counted])
+	var back := -1.0
+	t0 = Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t0 < 3000:
 		await get_tree().process_frame
 		if _card.panel.visible:
@@ -58,16 +64,19 @@ func _ready() -> void:
 	_check(back >= 0.0 and back < 0.1, "idle again: the card comes back at once", "after %.2f s" % back)
 	_check(_card.title_label.text.begins_with("✓") and _card.action_button.visible, "idle again: the card shows ✓ and [보상 받기]", _card.title_label.text)
 
-	# 2) 첫 미션 「성채 살펴보기」(건물 이름표 화살표 + 「성 화면 둘러보기」 설명): 전투 중엔 설명이 안 뜨고 방치로 오면 뜬다
-	_set_mission("look_keep")
+	# 2) 「스테이지 1-2 클리어」(포커스 설명 「스테이지 정보」, 초반 단순화 2026-10-23): 전투 중엔 설명이 안 뜨고 방치로 오면 뜬다
+	_set_mission("stage_1_2")
 	for i in 10:
 		await get_tree().process_frame
-	_check(_card.panel.visible and Tutorial.target_building() == "keep", "idle: the card and the keep arrow show", "target=%s" % Tutorial.target_building())
+	_check(_card.panel.visible and _card._target_id != 0, "idle: the card and the [▶ 진행] arrow show", "visible=%s" % _card.panel.visible)
 	GameState.start_stage()
 	Tutorial.tours_on = true  # 전투 중엔 「성 화면 둘러보기」가 떠선 안 된다
 	await _watch(1.0)
+	var hold: Callable = GameState.auto_hold
+	GameState.auto_hold = Callable()  # 카운트다운 동안 숨김을 보려고 이번만 멈춤을 끈다(멈춤은 1)에서 봤다)
 	GameState.on_all_monsters_dead()
 	await _cycle()
+	GameState.auto_hold = hold
 	for m in [GameState.Mode.STAGE, GameState.Mode.RESULT, GameState.Mode.COUNTDOWN]:
 		var name: String = GameState.Mode.keys()[m]
 		_check(int(_frames.get(m, 0)) > 0, "%s ran" % name, "")
@@ -80,7 +89,7 @@ func _ready() -> void:
 		if Tutorial.tour_node != null and is_instance_valid(Tutorial.tour_node):
 			tour = str(Tutorial.tour_node.id)
 			break
-	_check(_card.panel.visible and tour == "intro", "idle again: the card shows and the focus tour (성 화면 둘러보기) starts", "visible=%s tour=%s" % [_card.panel.visible, tour])
+	_check(_card.panel.visible and tour == "stage_info", "idle again: the card shows and the focus tour (스테이지 정보) starts", "visible=%s tour=%s" % [_card.panel.visible, tour])
 	for i in 30:  # 화면 기록(--write-movie)에 설명이 뜬 성 화면이 남게
 		await get_tree().process_frame
 	print("GUIDE BATTLE HIDE %s" % ("PASSED" if _fails == 0 else "FAILED %d" % _fails))

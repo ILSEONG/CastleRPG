@@ -423,3 +423,19 @@ test('시드 검증: keep_slot_tiers는 keep_interior_tiers와 같은 레벨, �
   writeFileSync(join(dir, 'config.csv'), tiers('1:4|5:8', '1:20|5:24')) // 단계가 둘뿐이어도(최대 8) 규칙 안이면 통과
   await readTables(dir)
 })
+
+test('시작 시각 at(사용자 2026-10-25 "5초에서 다시 5초로 재설정"): 앱이 누른 시각부터 센다 — 지금 − 15초 ~ 지금으로 자른다, 없으면 지금', async () => {
+  S.clock.t = T0 + 1000
+  const go = async (at: unknown) => {
+    const { token, id } = await S.login()
+    await setRes(id, RICH)
+    const r = await S.req('POST', '/v1/building/upgrade', { token, body: at === undefined ? { building: 'keep' } : { building: 'keep', at } })
+    assert.equal(r.status, 200)
+    return r.json.build.finish - (T0 + 1000)
+  }
+  const base = await go(undefined) // 성채 1 → 2 시간(지금부터)
+  assert.equal(await go(T0 + 1000 - 4), base - 4) // 4초 전에 누름: 4초 앞당긴다
+  assert.equal(await go(T0 + 1000 - 100), base - 15) // 너무 옛날: 15초까지만
+  assert.equal(await go(T0 + 1000 + 30), base) // 미래: 지금
+  assert.equal(await go('x'), base) // 숫자가 아니면 지금
+})
