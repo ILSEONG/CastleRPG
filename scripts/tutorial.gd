@@ -19,10 +19,11 @@ const GuideTours := preload("res://scripts/guide_tours.gd")
 const GameLog := preload("res://scripts/game_log.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 6  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+const SAVE_VERSION := 7  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
 ## 5: 길드 출석·기부, 길드 보스, 공성전 체험, 거래소 둘러보기 미션(2026-10-13 오후)이 끼었다
 ## 6: 초반 단순화(2026-10-23) — 첫 전투(1-1)가 1번이 되고 앞부분 순서가 바뀌었다. 성채 살펴보기·몬스터 30마리가 빠지고 채석장·농장은 한 미션
+## 7: 메이플스토리 키우기식 리듬(2026-10-29) — 처치 미션 4개(30·40·50·60마리)가 끼고 두 번째 몬스터 100마리가 성채 Lv 2 뒤로 왔다
 ## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
@@ -43,7 +44,8 @@ const V4_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kil
 	"soldier_deploy", "stage_1_5", "atk_12", "stage_1_6", "build_lab", "research", "hp_12", "hero_lv4_16", "stage_1_7", "build_archery", "atk_14",
 	"hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18", "atk_16", "stage_1_10", "guild", "hp_16",
 	"hero_lv4_20", "promote", "stage_1_12", "pvp", "fever", "atk_18", "hp_18", "stage_1_15"]
-## 버전 5의 미션 순서(81개). 버전 5 저장의 단계 → 그 앞을 다 한 것으로 보고 지금 표에서 아직 안 한 첫 미션(map_v5). 서버는 migrations/054가 같은 일을 한다.
+## 버전 5의 미션 순서(81개). 버전 5 저장의 단계 → 그 앞을 다 한 것으로 보고 버전 6 표에서 아직 안 한 첫 미션(map_v5) → 지금 자리(map_v6).
+## 서버는 migrations/054·060이 같은 일을 한다.
 const V5_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "attend", "pouch", "stage_1_1", "auto_on",
 	"speed_on", "hero_level", "hero_lv4_5", "mission_claim", "stage_1_2", "growth", "atk_3", "hp_3", "hero_lv4_8", "build_tavern", "gacha",
 	"deploy_new", "auto_deploy", "hero_lv4_10", "shop_free", "stage_1_3", "atk_5", "hp_5", "build_barracks", "train", "build_houses",
@@ -52,6 +54,14 @@ const V5_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kil
 	"stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18",
 	"atk_16", "stage_1_10", "guild", "guild_attend", "hp_16", "hero_lv4_20", "promote", "guild_boss", "stage_1_12", "siege_try", "pvp",
 	"fever", "atk_18", "hp_18", "stage_1_15", "exchange_look", "party_clear"]
+## 버전 6의 미션 순서(78개). 버전 6 저장의 단계 → 하던 미션의 지금 자리(map_v6). 서버는 migrations/060이 같은 일을 한다.
+const V6_IDS := ["stage_1_1", "hero_level", "hero_lv4_5", "stage_1_2", "growth", "hero_lv4_8", "speed_on", "stage_1_3", "auto_on", "build_lumber",
+	"build_quarry_farm", "collect", "sell", "attend", "pouch", "mission_claim", "shop_free", "atk_3", "hp_3", "build_tavern", "gacha", "deploy_new",
+	"auto_deploy", "hero_lv4_10", "atk_5", "hp_5", "build_barracks", "train", "build_houses", "hero_lv4_12", "stage_1_4", "kill_100", "dungeon_gold",
+	"atk_8", "hp_8", "dungeon_equip", "hero_lv4_14", "atk_10", "dungeon_ticket", "equip", "hp_10", "hero_lv4_15", "soldier_deploy", "stage_1_5",
+	"atk_12", "stage_1_6", "build_lab", "research", "hp_12", "hero_lv4_16", "stage_1_7", "build_archery", "atk_14", "hp_14", "build_stable", "keep_2",
+	"lumber_2", "farm_2", "gate_2", "kill_100_2", "hero_lv4_18", "atk_16", "stage_1_10", "guild", "guild_attend", "hp_16", "hero_lv4_20", "promote",
+	"guild_boss", "stage_1_12", "siege_try", "pvp", "fever", "atk_18", "hp_18", "stage_1_15", "exchange_look", "party_clear"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
@@ -96,6 +106,10 @@ static var MISSIONS := [
 		"kind": "build", "arg": ["quarry", "farm"], "goto": "building:quarry"},
 	{"id": "collect", "title": Lang.t("tutorial.missions.collect.title"), "desc": Lang.t("tutorial.missions.collect.desc"), "kind": "collect", "goto": "look:lumber"},
 	{"id": "sell", "title": Lang.t("tutorial.missions.sell.title"), "desc": Lang.t("tutorial.missions.sell.desc"), "kind": "sell", "goto": "merchant"},
+	# 메이플스토리 키우기식 리듬(사용자 2026-10-29 "가이드 내용 구성을 메이플 키우기 게임처럼"): 전투 목표(스테이지·처치·던전…) 없이 6칸 이상
+	# 이어지지 않게 「몬스터 N마리 처치」를 끼운다 — 대기 중에도 저절로 찬다(30마리 ≈ 20초). 보상을 적어 두어 앞뒤 규칙 보상(다음 미션 비용)은 그대로
+	{"id": "kill_30", "title": Lang.t("tutorial.missions.kill_30.title"), "desc": Lang.t("tutorial.missions.kill_30.desc"), "kind": "kill", "arg": 30,
+		"reward": {"diamonds": 30}},
 	{"id": "attend", "title": Lang.t("tutorial.missions.attend.title"), "desc": Lang.t("tutorial.missions.attend.desc"),
 		"kind": "attend", "goto": "tab:event", "point": ["event:claim", "menu:event", "menu"], "reward": {"diamonds": 50}},
 	{"id": "pouch", "title": Lang.t("tutorial.missions.pouch.title"), "desc": Lang.t("tutorial.missions.pouch.desc"),
@@ -106,6 +120,8 @@ static var MISSIONS := [
 		"kind": "shop_free", "goto": "tab:shop", "point": ["tab:shop"], "reward": {"diamonds": 50}},
 	{"id": "atk_3", "title": Lang.t("tutorial.missions.atk_3.title"), "desc": Lang.t("tutorial.missions.atk_3.desc"),
 		"kind": "growth_lv", "arg": ["atk", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
+	{"id": "kill_40", "title": Lang.t("tutorial.missions.kill_40.title"), "desc": Lang.t("tutorial.missions.kill_40.desc"), "kind": "kill", "arg": 40,
+		"reward": {"diamonds": 30}},
 	{"id": "hp_3", "title": Lang.t("tutorial.missions.hp_3.title"), "desc": Lang.t("tutorial.missions.hp_3.desc"),
 		"kind": "growth_lv", "arg": ["hp", 3], "goto": "tab:growth", "reward": {"gold": 2000}},
 	{"id": "build_tavern", "title": Lang.t("tutorial.missions.build_tavern.title"), "desc": Lang.t("tutorial.missions.build_tavern.desc"), "kind": "build", "arg": "tavern", "goto": "building:tavern"},
@@ -113,6 +129,8 @@ static var MISSIONS := [
 	{"id": "deploy_new", "title": Lang.t("tutorial.missions.deploy_new.title"), "desc": Lang.t("tutorial.missions.deploy_new.desc"), "kind": "deploy_new", "goto": "tab:hero"},
 	{"id": "auto_deploy", "title": Lang.t("tutorial.missions.auto_deploy.title"), "desc": Lang.t("tutorial.missions.auto_deploy.desc"),
 		"kind": "auto_deploy", "goto": "tab:hero", "point": ["hero:apply", "hero:auto_deploy", "tab:hero"], "reward": {"diamonds": 50}},
+	{"id": "kill_50", "title": Lang.t("tutorial.missions.kill_50.title"), "desc": Lang.t("tutorial.missions.kill_50.desc"), "kind": "kill", "arg": 50,
+		"reward": {"diamonds": 30}},
 	{"id": "hero_lv4_10", "title": Lang.t("tutorial.missions.hero_lv4_10.title"), "desc": Lang.t("tutorial.missions.hero_lv4_10.desc"),
 		"kind": "hero_lv", "arg": [4, 10], "goto": "tab:hero", "reward": {"gold": 3000}},
 	{"id": "atk_5", "title": Lang.t("tutorial.missions.atk_5.title"), "desc": Lang.t("tutorial.missions.atk_5.desc"),
@@ -123,6 +141,8 @@ static var MISSIONS := [
 		"goto": "building:barracks"},
 	{"id": "train", "title": Lang.t("tutorial.missions.train.title"), "desc": Lang.t("tutorial.missions.train.desc"), "kind": "train",
 		"arg": "barracks", "goto": "building:barracks"},
+	{"id": "kill_60", "title": Lang.t("tutorial.missions.kill_60.title"), "desc": Lang.t("tutorial.missions.kill_60.desc"), "kind": "kill", "arg": 60,
+		"reward": {"diamonds": 30}},
 	{"id": "build_houses", "title": Lang.t("tutorial.missions.build_houses.title"), "desc": Lang.t("tutorial.missions.build_houses.desc"), "kind": "build", "arg": "houses", "goto": "building:houses"},
 	{"id": "hero_lv4_12", "title": Lang.t("tutorial.missions.hero_lv4_12.title"), "desc": Lang.t("tutorial.missions.hero_lv4_12.desc"),
 		"kind": "hero_lv", "arg": [4, 12], "goto": "tab:hero", "reward": {"gold": 3000}},
@@ -176,12 +196,12 @@ static var MISSIONS := [
 		"goto": "building:stable"},
 	{"id": "keep_2", "title": Lang.t("tutorial.missions.keep_2.title"), "desc": Lang.t("tutorial.missions.keep_2.desc"), "kind": "level", "arg": ["keep", 2],
 		"goto": "building:keep"},
+	{"id": "kill_100_2", "title": Lang.t("tutorial.missions.kill_100_2.title"), "desc": Lang.t("tutorial.missions.kill_100_2.desc"), "kind": "kill", "arg": 100},  # 2026-10-29 성문 Lv 2 뒤 → 성채 Lv 2 뒤(전투 목표 간격). 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로")
 	{"id": "lumber_2", "title": Lang.t("tutorial.missions.lumber_2.title"), "desc": Lang.t("tutorial.missions.lumber_2.desc"),
 		"kind": "level", "arg": ["lumber", 2], "goto": "building:lumber", "reward": {"diamonds": 100}},
 	{"id": "farm_2", "title": Lang.t("tutorial.missions.farm_2.title"), "desc": Lang.t("tutorial.missions.farm_2.desc"),
 		"kind": "level", "arg": ["farm", 2], "goto": "building:farm", "reward": {"diamonds": 100}},
 	{"id": "gate_2", "title": Lang.t("tutorial.missions.gate_2.title"), "desc": Lang.t("tutorial.missions.gate_2.desc"), "kind": "level", "arg": ["gate", 2], "goto": "building:gate"},
-	{"id": "kill_100_2", "title": Lang.t("tutorial.missions.kill_100_2.title"), "desc": Lang.t("tutorial.missions.kill_100_2.desc"), "kind": "kill", "arg": 100},  # 예전 kill_300(사용자 2026-10-13 "가이드 63 잡아야되는 적수100마리로") — 자리는 그대로
 	{"id": "hero_lv4_18", "title": Lang.t("tutorial.missions.hero_lv4_18.title"), "desc": Lang.t("tutorial.missions.hero_lv4_18.desc"),
 		"kind": "hero_lv", "arg": [4, 18], "goto": "tab:hero", "reward": {"gold": 8000}},
 	{"id": "atk_16", "title": Lang.t("tutorial.missions.atk_16.title"), "desc": Lang.t("tutorial.missions.atk_16.desc"),
@@ -223,24 +243,23 @@ static var MISSIONS := [
 		"kind": "party", "goto": "party", "reward": {"diamonds": 50}},
 ]
 ## 반복 퀘스트(사용자 2026-10-06 "퀘스트로 할 수 있는 게 끝나면 반복 퀘스트로"): 튜토리얼을 끝냈거나 건너뛴(기존 저장) 플레이어에게 이 순서로 끝없이
-## 돈다. 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다. kind: kill·collect·sell·gacha·dungeon_win·build_up(사건 수), stage(지금 도달한
-## 라운드 + 2를 클리어), growth_up·hero_up(퀘스트를 받은 뒤 오른 성장 레벨·영웅 레벨 합). 보상은 적게: 한 바퀴에 다이아 20 + 모집권 1.
+## 돈다. 카드에는 가이드 번호가 이어진다(「가이드 퀘스트 83」 — 메이플스토리 키우기처럼 끝나지 않는 한 줄, 2026-10-29). 순서도 메이플식:
+## 스테이지 돌파 → 처치 → 모집 → 던전 → 영웅 레벨 → 성장(서버 quests.csv 반복 행 순서와 같다). 건물 레벨업·자원 수집·상인 판매는 뺐다
+## (사용자 2026-10-29 "건물 레벨업 → 자원 수집 → 상인 판매는 제외 해"). 한 바퀴(c = rep_n / 크기)마다 목표가 커지고 보상도 는다.
+## kind: kill·gacha·dungeon_win(사건 수), stage(지금 도달한 라운드 + 2를 클리어), growth_up·hero_up(퀘스트를 받은 뒤 오른 성장 레벨·영웅 레벨 합).
+## 보상은 적게: 한 바퀴에 다이아 20 + 모집권 1.
 ## 목표 = base + step × c, 보상 = reward × (1 + c)(fixed는 늘지 않음).
 static var REPEATS := [
-	{"kind": "kill", "base": 100, "step": 50, "title": Lang.t("tutorial.repeats.title"), "goto": "", "reward": {"gold": 3000}},  # 처치 미션은 기다리기만(바로가기·화살표 없음, 사용자 2026-10-13)
-	{"kind": "collect", "base": 3, "step": 1, "title": Lang.t("tutorial.repeats.title_2"), "goto": "look:lumber", "reward": {"gold": 2000}},
 	{"kind": "stage", "title": Lang.t("tutorial.repeats.title_3"), "goto": "stage", "fixed": {"diamonds": 20}},
-	{"kind": "growth_up", "base": 3, "step": 1, "title": Lang.t("tutorial.repeats.title_4"), "goto": "tab:growth", "reward": {"gold": 5000}},
-	{"kind": "sell", "base": 1, "step": 0, "title": Lang.t("tutorial.repeats.title_5"), "goto": "merchant", "reward": {"gold": 2000}},
-	{"kind": "hero_up", "base": 5, "step": 2, "title": Lang.t("tutorial.repeats.title_6"), "goto": "tab:hero", "reward": {"gold": 5000}},
+	{"kind": "kill", "base": 100, "step": 50, "title": Lang.t("tutorial.repeats.title"), "goto": "", "reward": {"gold": 3000}},  # 처치 미션은 기다리기만(바로가기·화살표 없음, 사용자 2026-10-13)
 	{"kind": "gacha", "base": 10, "step": 0, "title": Lang.t("tutorial.repeats.title_7"), "goto": "tab:recruit", "fixed": {"tickets": 1}},
 	{"kind": "dungeon_win", "base": 1, "step": 0, "title": Lang.t("tutorial.repeats.title_8"), "goto": "tab:dungeon", "fixed": {"keys_gold": 1}},
-	{"kind": "build_up", "base": 1, "step": 0, "title": Lang.t("tutorial.repeats.title_9"), "goto": "building:keep", "reward": {"wood": 3000, "stone": 3000, "food": 3000}},
+	{"kind": "hero_up", "base": 5, "step": 2, "title": Lang.t("tutorial.repeats.title_6"), "goto": "tab:hero", "reward": {"gold": 5000}},
+	{"kind": "growth_up", "base": 3, "step": 1, "title": Lang.t("tutorial.repeats.title_4"), "goto": "tab:growth", "reward": {"gold": 5000}},
 ]
 static var REPEAT_DESC := {
-	"kill": Lang.t("tutorial.repeat_desc.kill"), "collect": Lang.t("tutorial.repeat_desc.collect"), "stage": Lang.t("tutorial.repeat_desc.stage"),
-	"growth_up": Lang.t("tutorial.repeat_desc.growth_up"), "sell": Lang.t("tutorial.repeat_desc.sell"), "hero_up": Lang.t("tutorial.repeat_desc.hero_up"),
-	"gacha": Lang.t("tutorial.repeat_desc.gacha"), "dungeon_win": Lang.t("tutorial.repeat_desc.dungeon_win"), "build_up": Lang.t("tutorial.repeat_desc.build_up"),
+	"kill": Lang.t("tutorial.repeat_desc.kill"), "stage": Lang.t("tutorial.repeat_desc.stage"), "growth_up": Lang.t("tutorial.repeat_desc.growth_up"),
+	"hero_up": Lang.t("tutorial.repeat_desc.hero_up"), "gacha": Lang.t("tutorial.repeat_desc.gacha"), "dungeon_win": Lang.t("tutorial.repeat_desc.dungeon_win"),
 }
 
 ## 하단 탭 → 그 탭을 처음 소개하는 미션 id(그 미션에 닿거나 튜토리얼이 끝나면 열린다).
@@ -640,7 +659,7 @@ func mission() -> Dictionary:
 		return MISSIONS[step] if step < MISSIONS.size() else {}
 	if not repeats_on or econ == null:
 		return {}
-	if rep_quest.is_empty():
+	if rep_quest.is_empty() or rep_quest.get("kind", "") != REPEATS[rep_n % REPEATS.size()].kind:  # 순서가 바뀌었으면(2026-10-29) 새로
 		rep_quest = _make_repeat(rep_n)
 		count = 0
 		_dirty = true
@@ -650,6 +669,12 @@ func mission() -> Dictionary:
 ## 반복 퀘스트인가(튜토리얼이 끝났거나 건너뜀).
 func repeating() -> bool:
 	return not active() and not mission().is_empty()
+
+
+## 카드에 보이는 가이드 퀘스트 번호(1부터): 가이드 미션은 그 번호, 반복 퀘스트는 가이드 다음 번호부터 이어진다(메이플스토리 키우기처럼
+## 끝나지 않는 한 줄 — 사용자 2026-10-29 "가이드 내용 구성을 메이플 키우기 게임처럼").
+func guide_number() -> int:
+	return step + 1 if active() else MISSIONS.size() + rep_n + 1
 
 
 ## n번째 반복 퀘스트(목표·기준값은 지금 상태로 정한다).
@@ -1293,9 +1318,9 @@ static func map_step(ids: Array, old: int) -> int:
 	return map_v5(maxi(0, v5))
 
 
-## 버전 5 단계(V5_IDS 번호) → 지금 표의 번호(2026-10-23 초반 단순화로 앞부분 순서가 바뀌었다): 그 앞 미션은 다 한 것으로 보고 지금 표에서
-## 아직 안 한 첫 미션. 앞으로 옮겨 온 미션(1-1·영웅 레벨업…)을 아직 안 했으면 거기부터. 이미 한 미션이 뒤에 오면 조건이 채워져 있어 바로
-## [보상 받기]가 된다(건물·출석). 채석장·농장 합친 미션은 둘 다 했으면 한 것. 다 끝냈으면 지금 표 크기. 서버 migrations/054와 같은 표.
+## 버전 5 단계(V5_IDS 번호) → 지금 표의 번호(2026-10-23 초반 단순화로 앞부분 순서가 바뀌었다): 그 앞 미션은 다 한 것으로 보고 버전 6 표에서
+## 아직 안 한 첫 미션 → map_v6. 앞으로 옮겨 온 미션(1-1·영웅 레벨업…)을 아직 안 했으면 거기부터. 이미 한 미션이 뒤에 오면 조건이 채워져 있어 바로
+## [보상 받기]가 된다(건물·출석). 채석장·농장 합친 미션은 둘 다 했으면 한 것. 다 끝냈으면 지금 표 크기. 서버 migrations/054(+060)와 같은 표.
 static func map_v5(old: int) -> int:
 	if old >= V5_IDS.size():
 		return MISSIONS.size()
@@ -1304,8 +1329,23 @@ static func map_v5(old: int) -> int:
 		done[V5_IDS[i]] = true
 	if done.has("build_quarry") and done.has("build_farm"):
 		done["build_quarry_farm"] = true
+	for i in V6_IDS.size():
+		if not done.has(V6_IDS[i]):
+			return map_v6(i)
+	return MISSIONS.size()
+
+
+## 버전 6 단계(V6_IDS 번호) → 지금 표의 번호(2026-10-29 처치 미션이 끼었다): 버전 6에서 그 앞 미션은 다 한 것으로 보고, 버전 6에도 있던 미션 중
+## 아직 안 한 첫 미션(하던 미션 — 그 앞에 새로 낀 처치 미션은 건너뛴다. 당겨 온 두 번째 몬스터 100마리를 아직 안 했으면 거기부터).
+## 다 끝냈으면 지금 표 크기. 서버 migrations/060과 같은 표.
+static func map_v6(old: int) -> int:
+	if old >= V6_IDS.size():
+		return MISSIONS.size()
+	var done := {}
+	for i in maxi(0, old):
+		done[V6_IDS[i]] = true
 	for i in MISSIONS.size():
-		if not done.has(MISSIONS[i].id):
+		if MISSIONS[i].id in V6_IDS and not done.has(MISSIONS[i].id):
 			return i
 	return MISSIONS.size()
 
@@ -1347,6 +1387,8 @@ func load_save() -> bool:
 		old_step = map_step(V4_IDS, old_step)
 	elif ver < 6:
 		old_step = map_v5(old_step)
+	elif ver < 7:
+		old_step = map_v6(old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
 	count = maxi(0, int(d.get("count", 0)))
 	best_stage = maxi(1, int(d.get("best_stage", 1)))

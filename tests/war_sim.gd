@@ -41,8 +41,9 @@ func _ready() -> void:
 func _scenario(sd: int) -> Dictionary:
 	_rng.seed = sd * 7919 + 17
 	seed(sd * 104729 + 3)
-	var att_n := _rng.randi_range(3, 20)
-	var def_n := _rng.randi_range(5, 20)
+	var max_n := int(_arg("max_n", "30"))  # 한 쪽 최대 길드원(길드 6레벨 정원 30명)
+	var att_n := _rng.randi_range(3, max_n)
+	var def_n := _rng.randi_range(5, max_n)
 	var att_lv := _rng.randi_range(15, 60)
 	var def_lv := clampi(att_lv + _rng.randi_range(-15, 15), 10, 60)
 	var mult := _rng.randf_range(0.7, 1.4)

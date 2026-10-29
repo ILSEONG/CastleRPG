@@ -66,12 +66,12 @@ func _case_offline_war() -> void:
 	_check(Guild.join(rec), "joined a guild")
 	GuildWar.fetch()
 	var w: Dictionary = GuildWar.war
-	_check(w.enemy.members == 20 and w.castle.defenders == 80, "level-6 guild meets a 20-member enemy with 80 defenders (%d, %d)" % [w.enemy.members, w.castle.defenders])
+	_check(w.enemy.members == 30 and w.castle.defenders == 120, "level-6 guild meets a 30-member enemy with 120 defenders (%d, %d)" % [w.enemy.members, w.castle.defenders])
 	var gmax: Array = w.castle.gates.map(func(g): return float(g.max))
 	_check(gmax == [60000.0, 60000.0, 60000.0, 60000.0] and w.castle.gates.all(func(g): return float(g.hp) == float(g.max)),
 		"gate HP = guild level 6 x 10,000 on all four gates: %s" % [gmax])
 	var e1: Dictionary = GuildWar.enemy_of()
-	_check(GuildWar.enemy_guild(int(GuildWar.local.seed), 20, float(GuildWar.local.power)).hash() == e1.hash(), "enemy is deterministic")
+	_check(GuildWar.enemy_guild(int(GuildWar.local.seed), 30, float(GuildWar.local.power)).hash() == e1.hash(), "enemy is deterministic")
 	var ids: Array = GuildWar.default_squad()
 	_check(ids.size() == 4, "default squad has 4 heroes")
 	var def_at := GuildWar.battle_at(int(w.week), -1.0)
@@ -87,7 +87,7 @@ func _case_offline_war() -> void:
 	GuildWar.fetch()
 	_check(GuildWar.war.battle.state == "live" and not GuildWar.war.schedule.can_change, "at the time the siege opens and the time is locked")
 	var plan := GuildWar.local_enter(ids.map(func(id): return GuildWar.hero_entry(id)), t0)
-	_check(plan.defenders.size() == 80 and plan.attackers.size() == Guild.members_now().size() + 1, "plan: 80 defenders, one squad per member (%d)" % plan.attackers.size())
+	_check(plan.defenders.size() == 120 and plan.attackers.size() == Guild.members_now().size() + 1, "plan: 120 defenders, one squad per member (%d)" % plan.attackers.size())
 	_check(plan.attackers.filter(func(sq): return not sq.ai).size() == 1, "only my squad is player-controlled")
 	var d1: Dictionary = plan.defenders[0]
 	var r := {"battle_id": plan.battle_id, "defenders": {str(d1.uid): 0.0, str(plan.defenders[1].uid): 0.5}, "gates": [0.0, plan.gates[1].hp + 99, plan.gates[2].hp, plan.gates[3].hp], "keep": plan.keep.hp}

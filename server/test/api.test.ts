@@ -128,7 +128,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       items: [], equipment: {},
       diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 40, dia_pity: 0 }, // 개정 23
       research: { levels: {}, current: null }, // 개정 24
-      quest: { tut_state: 'skipped', tut_step: 0, rep_n: 0, rep: { have: 0, need: 100, from: null } }, dia_tickets: 0, unbuilt: LOTS, layout: {}, // 튜토리얼·반복 퀘스트
+      quest: { tut_state: 'skipped', tut_step: 0, rep_n: 0, rep: { have: 2, need: 2, from: null } }, dia_tickets: 0, unbuilt: LOTS, layout: {}, // 튜토리얼·반복 퀘스트
       attendance: { n: 0, days: 28, can_claim: true }, // 출석 이벤트
       missions: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: [], w: [], wd: 0, r: {}, c: M.progressView(M.normalize({}, R.resetDay(T0, 15))), // 미션
         next_day: R.resetAt(R.resetDay(T0, 15) + 1, 15), next_week: R.resetAt(M.weekStart(M.weekOf(R.resetDay(T0, 15)) + 1), 15) },

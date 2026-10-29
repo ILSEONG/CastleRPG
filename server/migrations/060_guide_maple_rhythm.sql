@@ -1,0 +1,86 @@
+-- 가이드를 메이플스토리 키우기처럼(2026-10-29, 사용자 "가이드 내용 구성을 메이플 키우기 게임처럼 조정해줘"): 전투 목표가 몇 칸마다 오게
+-- 「몬스터 30·40·50·60마리 처치」 미션 4개가 끼고 두 번째 「몬스터 100마리 처치」가 성채 Lv 2 바로 뒤로 왔다(78개 → 82개).
+-- 진행 중인 플레이어의 단계(tut_step = 옛 표 번호)를 하던 미션의 새 번호로 옮긴다(그 앞에 낀 처치 미션은 건너뛴다). 다 끝낸(78 이상) 플레이어는
+-- 새 표 크기로. 앱 Tutorial.map_v6(V6_IDS)와 같은 표. 반복 퀘스트 순서는 quests.csv(neon:seed)가 바꾼다.
+update player_state set tut_step = case tut_step
+    when 0 then 0
+    when 1 then 1
+    when 2 then 2
+    when 3 then 3
+    when 4 then 4
+    when 5 then 5
+    when 6 then 6
+    when 7 then 7
+    when 8 then 8
+    when 9 then 9
+    when 10 then 10
+    when 11 then 11
+    when 12 then 12
+    when 13 then 14
+    when 14 then 15
+    when 15 then 16
+    when 16 then 17
+    when 17 then 18
+    when 18 then 20
+    when 19 then 21
+    when 20 then 22
+    when 21 then 23
+    when 22 then 24
+    when 23 then 26
+    when 24 then 27
+    when 25 then 28
+    when 26 then 29
+    when 27 then 30
+    when 28 then 32
+    when 29 then 33
+    when 30 then 34
+    when 31 then 35
+    when 32 then 36
+    when 33 then 37
+    when 34 then 38
+    when 35 then 39
+    when 36 then 40
+    when 37 then 41
+    when 38 then 42
+    when 39 then 43
+    when 40 then 44
+    when 41 then 45
+    when 42 then 46
+    when 43 then 47
+    when 44 then 48
+    when 45 then 49
+    when 46 then 50
+    when 47 then 51
+    when 48 then 52
+    when 49 then 53
+    when 50 then 54
+    when 51 then 55
+    when 52 then 56
+    when 53 then 57
+    when 54 then 58
+    when 55 then 59
+    when 56 then 60
+    when 57 then 60
+    when 58 then 60
+    when 59 then 60
+    when 60 then 64
+    when 61 then 65
+    when 62 then 66
+    when 63 then 67
+    when 64 then 68
+    when 65 then 69
+    when 66 then 70
+    when 67 then 71
+    when 68 then 72
+    when 69 then 73
+    when 70 then 74
+    when 71 then 75
+    when 72 then 76
+    when 73 then 77
+    when 74 then 78
+    when 75 then 79
+    when 76 then 80
+    when 77 then 81
+    else 82
+  end
+  where tut_step > 0;

@@ -1496,7 +1496,7 @@ ranking_panel.subtabs_2,전투력,,,,scripts/ranking_panel.gd
 ranking_panel.subtabs_3,길드,,,,scripts/ranking_panel.gd
 ranking_panel.head.stage,도달한 라운드 순 · 먼저 도달한 사람이 위,,,,scripts/ranking_panel.gd
 ranking_panel.head.power,출전 영웅 전투력 합 순,,,,scripts/ranking_panel.gd
-ranking_panel.head.guild,길드 레벨 순 · 같으면 누적 경험치 순,,,,scripts/ranking_panel.gd
+ranking_panel.head.guild,이번 주 드래곤 보스 길드 총 피해량 순 · 매주 월요일 0시 초기화,,,,scripts/ranking_panel.gd
 ranking_panel.ready,랭킹,,,,scripts/ranking_panel.gd
 ranking_panel.rebuild.msg,불러오는 중…,,,,scripts/ranking_panel.gd
 ranking_panel.rebuild,랭킹은 서버에 접속했을 때 볼 수 있습니다,,,,scripts/ranking_panel.gd
@@ -1509,7 +1509,6 @@ ranking_panel.rebuild_6,전투력이 0이면 순위에 오르지 않습니다,,,
 ranking_panel.rebuild_7,순위 없음,,,,scripts/ranking_panel.gd
 ranking_panel.row,내 길드,,,,scripts/ranking_panel.gd
 ranking_panel.row_2,나,,,,scripts/ranking_panel.gd
-ranking_panel.row_3,길드원 %d명 · 드래곤 점수 %s,,,,scripts/ranking_panel.gd
 ranking_panel.row_4,길드 ,,,,scripts/ranking_panel.gd
 recruit_panel.title,영웅 모집,,,,scripts/recruit_panel.gd
 recruit_panel.late_text,모집 결과 도착 — 주점에서 확인하세요,,,,scripts/recruit_panel.gd
@@ -2058,7 +2057,7 @@ tab_bar.tabs_3,병사,,,,scripts/tab_bar.gd
 tab_bar.tabs_4,던전,,,,scripts/tab_bar.gd
 tab_bar.tabs_5,모집,,,,scripts/tab_bar.gd
 tab_bar.tabs_6,상점,,,,scripts/tab_bar.gd
-tutorial.done_text,가이드 완료! 이제 자유롭게 성을 키워 보세요,,,,scripts/tutorial.gd
+tutorial.done_text,모든 기능이 열렸습니다. 가이드 퀘스트는 계속 이어집니다,,,,scripts/tutorial.gd
 tutorial.locked_text,가이드를 진행하면 열립니다,,,,scripts/tutorial.gd
 tutorial.missions.build_lumber.title,벌목장 건설,,,,scripts/tutorial.gd
 tutorial.missions.build_lumber.desc,왼쪽 아래 [건설] 버튼을 눌러 펼쳐진 목록에서 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.,,,,scripts/tutorial.gd
@@ -2120,6 +2119,14 @@ tutorial.missions.hero_lv4_12.title,영웅 4명 Lv 12 달성,,,,scripts/tutorial
 tutorial.missions.hero_lv4_12.desc,[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_4.title,스테이지 1-4 클리어,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_4.desc,전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_30.desc,성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_40.title,몬스터 40마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_40.desc,몬스터 40마리를 처치하세요. 대기 중에도 영웅들이 저절로 싸웁니다. 처치할 때마다 골드가 쌓여 다음 성장에 씁니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_50.title,몬스터 50마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_50.desc,새로 배치한 영웅들과 함께 몬스터 50마리를 처치하세요. 대기 중에도 저절로 싸웁니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_60.title,몬스터 60마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_60.desc,몬스터 60마리를 처치하세요. 대기 중에도 영웅들이 저절로 싸웁니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_100.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
 tutorial.missions.kill_100.desc,몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.,,,,scripts/tutorial.gd
 tutorial.missions.dungeon_gold.title,골드 던전,,,,scripts/tutorial.gd
@@ -2213,30 +2220,24 @@ tutorial.missions.stage_1_15.desc,전투를 이어 가 1-15까지 클리어하�
 tutorial.missions.exchange_look.title,거래소 둘러보기,,,,scripts/tutorial.gd
 tutorial.missions.exchange_look.desc,"[메뉴] → [거래소]를 열어 보세요. 다른 성주가 올린 장비를 골드·다이아로 사고, 내 장비를 올려 팔 수 있습니다.",,,,scripts/tutorial.gd
 tutorial.repeats.title,몬스터 %d마리 처치,,,,scripts/tutorial.gd
-tutorial.repeats.title_2,자원 %d번 수집,,,,scripts/tutorial.gd
 tutorial.repeats.title_3,스테이지 %s 클리어,,,,scripts/tutorial.gd
 tutorial.repeats.title_4,성장 강화 %d회,,,,scripts/tutorial.gd
-tutorial.repeats.title_5,상인에게 자원 팔기,,,,scripts/tutorial.gd
 tutorial.repeats.title_6,영웅 레벨업 %d회,,,,scripts/tutorial.gd
 tutorial.repeats.title_7,영웅 %d회 모집,,,,scripts/tutorial.gd
 tutorial.repeats.title_8,던전 %d번 클리어,,,,scripts/tutorial.gd
-tutorial.repeats.title_9,건물 %d번 레벨업,,,,scripts/tutorial.gd
 tutorial.repeat_desc.kill,몬스터를 처치하세요. 방치 중 처치도 셉니다.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.collect,생산 건물을 눌러 자원을 수집하세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.stage,전투를 이어 가 목표 라운드를 클리어하세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.growth_up,[성장] 탭에서 강화하세요.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.sell,상인에게 남는 자원을 파세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.hero_up,[영웅] 탭에서 영웅을 레벨업하세요(여러 영웅 합산).,,,,scripts/tutorial.gd
 tutorial.repeat_desc.gacha,골드·다이아·모집권 어느 모집이든 셉니다.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.dungeon_win,골드·장비 던전 아무 단계나 클리어하세요.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.build_up,아무 건물이나 레벨업을 끝내세요.,,,,scripts/tutorial.gd
 tutorial.mission_desc,지금 길드에 속해 있지 않습니다. 먼저 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. ,,,,scripts/tutorial.gd
 tutorial.pvp_lock_text,열립니다,,,,scripts/tutorial.gd
 tutorial.dungeon_lock_text,열립니다,,,,scripts/tutorial.gd
 tutorial.tab_lock_text,가이드를 마치면 열립니다,,,,scripts/tutorial.gd
 tutorial.tab_lock_text_2,열립니다,,,,scripts/tutorial.gd
 tutorial.build_lock_text,건설할 수 있습니다,,,,scripts/tutorial.gd
-tutorial.lock_text,가이드 %d번째 미션 「%s」에서 %s,,,,scripts/tutorial.gd
+tutorial.lock_text,가이드 퀘스트 %d 「%s」에서 %s,,,,scripts/tutorial.gd
 tutorial.reward_text,다이아 %s,,,,scripts/tutorial.gd
 tutorial.reward_text_2,골드 %s,,,,scripts/tutorial.gd
 tutorial.reward_text_3,골드 던전 입장권 %d,,,,scripts/tutorial.gd
@@ -2245,8 +2246,7 @@ tutorial.reward_text_5,모집권 던전 입장권 %d,,,,scripts/tutorial.gd
 tutorial.reward_text_6,다이아 모집권 %d,,,,scripts/tutorial.gd
 tutorial.action_label,▶ 진행,,,,scripts/tutorial.gd
 tutorial.action_label_2,바로가기,,,,scripts/tutorial.gd
-tutorial_card.refresh,반복 퀘스트 %d,,,,scripts/tutorial_card.gd
-tutorial_card.refresh_2,가이드 %d/%d,,,,scripts/tutorial_card.gd
+tutorial_card.guide_no,가이드 퀘스트 %d,,,,scripts/tutorial_card.gd
 tutorial_card.refresh_3,보상: ,,,,scripts/tutorial_card.gd
 tutorial_card.refresh_4,보상 받기,,,,scripts/tutorial_card.gd
 ui_kit.duration,%d시간 %d분,,,,scripts/ui_kit.gd
@@ -2771,3 +2771,15 @@ bag_panel.refresh_9,%d개 선택\n골드 +%s · 강화석 +%s,,,,scripts/bag_pan
 bag_panel.refresh_10,접기,,,,scripts/bag_panel.gd
 bag_panel.refresh_11,일괄 분해,,,,scripts/bag_panel.gd
 bag_panel.refresh_12,%s 이하\n%d개 · +%s,,,,scripts/bag_panel.gd
+server.ranking.guild_mail.title,[길드 랭킹] 주간 보상,,,,server/src/ranking.ts
+server.ranking.guild_mail.body,지난주 길드 랭킹에서 {guild} 길드가 {rank}위를 했습니다. 길드원 모두에게 드리는 보상입니다.,,,,server/src/ranking.ts
+ranking_panel.rebuild_8,이번 주 드래곤에 피해를 주면 순위에 오릅니다,,,,scripts/ranking_panel.gd
+ranking_panel.row_5,Lv %d · 길드원 %d명,,,,scripts/ranking_panel.gd
+ranking_panel.season_card,주간 보상 · 길드원 모두 우편으로 받습니다,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_2,이번 주 남은 시간 %d일 %d시간 %d분,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_3,%d위,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_4,%d~%d위,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_5,%s  %s %d개,,,,scripts/ranking_panel.gd
+live_ops.box_names.top,최고급 장비 상자,,,,scripts/live_ops.gd
+live_ops.box_names.high,고급 장비 상자,,,,scripts/live_ops.gd
+live_ops.box_names.normal,일반 장비 상자,,,,scripts/live_ops.gd

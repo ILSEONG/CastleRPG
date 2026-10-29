@@ -25,6 +25,9 @@ signal inquiry_failed(category: String, text: String)  # 문의를 못 보냈다
 signal block_changed  # 점검·업데이트 안내가 생기거나 걷혔다
 
 const SEEN_KEY := "notice_seen"
+## 장비 상자(서버 rules.EQUIP_BOXES, 보상 키 equip_box_<id>): 받으면 서버가 등급을 굴려 장비 하나씩 준다.
+const BOX_PREFIX := "equip_box_"
+static var BOX_NAMES := {"top": Lang.t("live_ops.box_names.top"), "high": Lang.t("live_ops.box_names.high"), "normal": Lang.t("live_ops.box_names.normal")}
 static var KEY_NAMES := {"gold": Lang.t("live_ops.key_names.gold"), "equip": Lang.t("live_ops.key_names.equip"), "ticket": Lang.t("live_ops.key_names.ticket")}
 const MAIL_POLL_SEC := 300.0  # 창을 안 열어도 이만큼마다 우편을 다시 본다(관리자가 보낸 보상 빨간 점)
 static var INQUIRY_TEXT := {"too_many_inquiries": Lang.t("live_ops.inquiry_text.too_many_inquiries")}
@@ -233,7 +236,12 @@ static func reward_text(r: Dictionary) -> String:
 	if r.get("equips") is Dictionary:
 		for g in r.equips:
 			parts.append(Lang.t("live_ops.reward_text_3") % [g, int(r.equips[g])])
-	if r.get("items") is Array and not r.has("equip") and not r.has("equips"):
+	var boxed := 0
+	for id in BOX_NAMES:
+		if int(r.get(BOX_PREFIX + id, 0)) > 0:
+			boxed += int(r[BOX_PREFIX + id])
+			parts.append(Lang.t("live_ops.reward_text_11") % [BOX_NAMES[id], int(r[BOX_PREFIX + id])])
+	if r.get("items") is Array and not r.has("equip") and not r.has("equips") and boxed == 0:
 		parts.append(Lang.t("live_ops.reward_text_4") % r.items.size())
 	for k in [["gold", Lang.t("live_ops.reward_text_5")], ["diamonds", Lang.t("live_ops.reward_text_6")], ["wood", Lang.t("live_ops.reward_text_7")], ["stone", Lang.t("live_ops.reward_text_8")], ["food", Lang.t("live_ops.reward_text_9")]]:
 		if int(r.get(k[0], 0)) > 0:

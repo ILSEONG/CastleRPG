@@ -641,6 +641,14 @@ export function upgradeCost(d: UpgradeDef, level: number, count: number): number
 
 export const DUNGEON_TYPES = ['gold', 'equip', 'ticket'] // ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 영웅 1, 보상 다이아 모집권
 export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'] // 낮은 등급부터(MR = 신화, 2026-10-29). equip_drop.csv 가중치 열 = 이 이름
+// 장비 상자(2026-10-29 길드 랭킹 보상, 기본값 Claude): 상자 하나 = 장비 1개(부위 무작위, rollDrops와 같은 굴림). 등급 확률(%) = 아래 가중치.
+// 보상 키 equip_box_<id>(우편·쿠폰 숫자 보상 — live_ops.ts NUMERIC). 앱 live_ops.gd BOX_NAMES와 같은 id.
+export const EQUIP_BOXES: Record<string, Record<string, number>> = {
+  normal: { N: 40, R: 40, SR: 17, SSR: 3 }, // 일반 장비 상자
+  high: { R: 30, SR: 45, SSR: 20, UR: 5 }, // 고급 장비 상자
+  top: { SSR: 50, UR: 40, LR: 10 }, // 최고급 장비 상자
+}
+export const EQUIP_BOX_PREFIX = 'equip_box_'
 export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5, MR: 9.2 }
 export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves'] // 모든 영웅이 쓴다
 export const ACCESSORY_SLOTS = ['ring', 'necklace'] // 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다

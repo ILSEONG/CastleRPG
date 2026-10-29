@@ -111,7 +111,7 @@ func _refresh() -> void:
 		_arrow.queue_redraw()
 		return
 	var done: bool = Tutorial.complete()
-	step_label.text = (Lang.t("tutorial_card.refresh") % (Tutorial.rep_n + 1)) if Tutorial.repeating() else Lang.t("tutorial_card.refresh_2") % [Tutorial.step + 1, Tutorial.MISSIONS.size()]
+	step_label.text = Lang.t("tutorial_card.guide_no") % Tutorial.guide_number()  # 「가이드 퀘스트 12」 — 반복 퀘스트도 번호가 이어진다(메이플스토리 키우기식, 2026-10-29)
 	var prog: String = Tutorial.progress_text()
 	title_label.text = ("✓ " if done else "") + str(m.title) + ("  " + prog if prog != "" else "")
 	desc_label.text = Tutorial.mission_desc(m)
