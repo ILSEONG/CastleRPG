@@ -19,6 +19,7 @@ const HeroScript := preload("res://scripts/hero.gd")
 const MonsterScript := preload("res://scripts/monster.gd")
 const DeathKnightScript := preload("res://scripts/death_knight.gd")
 const RockGolemScript := preload("res://scripts/rock_golem.gd")
+const OgreWarlordScript := preload("res://scripts/ogre_warlord.gd")
 const Fx := preload("res://scripts/fx.gd")
 const CameraRigScript := preload("res://scripts/camera_rig.gd")
 const HpBarsScript := preload("res://scripts/hp_bars.gd")
@@ -152,7 +153,7 @@ func _spawn_due() -> void:
 
 func _spawn(w: Dictionary) -> void:
 	for p in w.at:
-		var m = (DeathKnightScript if w.row.kind == "death_knight" else (RockGolemScript if w.row.kind == "rock_golem" else MonsterScript)).new()
+		var m = {"death_knight": DeathKnightScript, "rock_golem": RockGolemScript, "ogre_warlord": OgreWarlordScript}.get(w.row.kind, MonsterScript).new()
 		m.setup_arena(w.row)
 		m.position = p
 		m.died.connect(_on_enemy_died)
