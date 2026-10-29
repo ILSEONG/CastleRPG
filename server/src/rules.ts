@@ -759,13 +759,18 @@ export function applyReset(type: string, d: DungeonState, now: number, config: C
   return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h), ...(d.helpers_used ? { helpers_used: [] } : {}) }
 }
 
-// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…).
-export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * (1 + 2 * Math.max(extraToday, 0))
+// 장비 던전 골드 도전 비용(열쇠가 없을 때) = 단계별 고정: equip_extra_gold_base × equip_extra_gold_mult^(단계 − 1)을 천 단위로 올림
+// (사용자 2026-10-29 "장비 던전 단계별로 고정 골드 값" — 그날 횟수로 오르지 않는다. 1단계 10만, 10단계 28만, 30단계 267만, 50단계 2,560만. 예전 10만 × (1 + 2 × 그날 횟수)).
+export const extraCost = (config: Config, level: number) => {
+  const mult = config.equip_extra_gold_mult == null ? 1.12 : cfgNum(config, 'equip_extra_gold_mult')
+  return Math.ceil(roundHalfAway(grown(cfgNum(config, 'equip_extra_gold_base'), mult, Math.max(1, level) - 1)) / 1000) * 1000
+}
 export const partySize = (config: Config, type: string) => cfgNum(config, `${type}_dg_party`)
 export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `${type}_dg_min_sec`)
 
-// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)).
-export const goldReward = (config: Config, level: number) => roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1))
+// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1))를 천 단위로 올림(사용자 2026-10-29 "100의 자리에서 올림" — 1단계 20,000, 3단계 25,000).
+export const goldReward = (config: Config, level: number) =>
+  Math.ceil(roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1)) / 1000) * 1000
 
 // 적 능력치 성장: 골드 던전은 HP·공격 모두 gold_dg_growth, 장비·모집권 던전은 <종류>_dg_hp_growth·<종류>_dg_atk_growth.
 export function dungeonGrowth(config: Config, type: string) {
@@ -774,7 +779,7 @@ export function dungeonGrowth(config: Config, type: string) {
 }
 
 // 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
-// (사용자 2026-10-06: 10장, 5단계마다 2장씩 — 1~5단계 10, 6~10단계 12 …). ticket_reward_add가 없으면(시드 전) 1.
+// (사용자 2026-10-29 절반으로: 5장, 5단계마다 1장씩 — 1~5단계 5, 6~10단계 6 …. 예전 10장·2장씩). ticket_reward_add가 없으면(시드 전) 1.
 export const ticketReward = (config: Config, level: number) =>
   cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step'))) * (config.ticket_reward_add == null ? 1 : cfgNum(config, 'ticket_reward_add'))
 

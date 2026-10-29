@@ -2226,7 +2226,7 @@ func _hits(h, m, n: int) -> Array:
 
 
 ## (DG) 개정 18 던전(전투는 hero.gd·monster.gd 아레나): 성 월드는 트리 밖(GameState 정지), 방치 모드여도 아레나 영웅은 피해를 받는다.
-##  DG1 골드 던전 6명 대 고블린 10 → 5초 뒤 고블린 5 + 왕(16) — 서로 싸우고, 전멸이면 최소 시간 뒤 승리(+4,000·열쇠 −1).
+##  DG1 골드 던전 6명 대 고블린 10 → 5초 뒤 고블린 5 + 왕(16) — 서로 싸우고, 전멸이면 최소 시간 뒤 승리(+20,000·열쇠 −1).
 ##  DG2 패배: 출전 영웅 전멸 / 제한 시간 — 열쇠는 그대로. DG3 데스나이트 휩쓸기(반경 3 m 공격 × 1.5)·돌진(가장 먼 영웅 기절).
 ##  DG4 장비를 끼면 아레나 영웅 능력치 = 기본 × 배율 + 장비, 실제 타격 피해도 그 공격력.
 func _dungeon_cases() -> void:
@@ -2261,8 +2261,8 @@ func _dungeon_cases() -> void:
 	Economy.current_run.started_at = float(Economy.current_run.started_at) - 15.0  # 실제 경과도 최소 시간만큼
 	d.clock = GameData.min_clear_sec("gold") - 0.01
 	await _wait_until(func(): return d.phase == d.Phase.RESULT, 3.0)
-	_check(d.phase == d.Phase.RESULT and d.result.win and Economy.gold_tenths == gold0 + 40000 and Economy.dungeon_state("gold").keys == keys0 - 1
-		and Economy.dungeon_state("gold").best_level >= 1 and d.hud.result_layer.visible, "(DG1) at the minimum time the run finishes as a win: +4,000 gold, one key spent, result screen",
+	_check(d.phase == d.Phase.RESULT and d.result.win and Economy.gold_tenths == gold0 + 200000 and Economy.dungeon_state("gold").keys == keys0 - 1
+		and Economy.dungeon_state("gold").best_level >= 1 and d.hud.result_layer.visible, "(DG1) at the minimum time the run finishes as a win: +20,000 gold, one key spent, result screen",
 		"phase=%d result=%s gold %d -> %d keys=%d" % [d.phase, d.result, gold0, Economy.gold_tenths, Economy.dungeon_state("gold").keys])
 	# DG2 패배: 영웅 전멸
 	d = await _enter_dungeon("gold", Economy.default_party("gold"))

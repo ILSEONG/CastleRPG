@@ -2853,7 +2853,7 @@ func dungeon_state(type: String) -> Dictionary:
 	var nr := GameData.next_reset(now)
 	var out := {"keys": int(st.keys), "key_cap": int(GameData.config_num(type + "_key_cap")), "key_daily": int(GameData.config_num(type + "_key_daily")),
 		"best_level": int(st.best_level), "max_level": mini(int(st.best_level) + 1, GameData.MAX_DUNGEON_LEVEL), "extra_today": int(st.extra_today),
-		"extra_cost": GameData.extra_cost(int(st.extra_today)) if type == "equip" else 0, "next_reset": nr, "reset_in": maxf(0.0, nr - now)}
+		"extra_cost": GameData.extra_cost(mini(int(st.best_level) + 1, GameData.MAX_DUNGEON_LEVEL)) if type == "equip" else 0, "next_reset": nr, "reset_in": maxf(0.0, nr - now)}
 	if type == "ticket":
 		out["helpers_used"] = st.get("helpers_used", []).duplicate()
 		out["helpers"] = helper_candidates()
@@ -2985,7 +2985,7 @@ func dungeon_block(type: String, level: int, party: Array, helper = null) -> Str
 	if int(st.keys) < 1:
 		if type != "equip":
 			return "no_key"
-		if gold < GameData.extra_cost(int(st.extra_today)):
+		if gold < GameData.extra_cost(level):
 			return "not_enough_gold"
 	return "waiting" if _waiting.has("dungeon") else ""
 
@@ -3074,8 +3074,8 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 		var cost := 0
 		if int(st.keys) >= 1:
 			nxt.keys = int(st.keys) - 1
-		elif type == "equip" and gold >= GameData.extra_cost(int(st.extra_today)):
-			cost = GameData.extra_cost(int(st.extra_today))
+		elif type == "equip" and gold >= GameData.extra_cost(int(run.level)):
+			cost = GameData.extra_cost(int(run.level))
 			nxt.extra_today = int(st.extra_today) + 1
 		else:
 			fail.error = "no_key" if type != "equip" else "not_enough_gold"

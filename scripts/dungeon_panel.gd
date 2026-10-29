@@ -403,8 +403,9 @@ func _refresh() -> void:
 		else:
 			c.reward.text = Lang.t("dungeon_panel.refresh_4") % [rw.count, odds_text(rw.weights)]
 			c.gold.text = UiKit.commas(Economy.gold)
-			c.gold.add_theme_color_override("font_color", RED if Economy.gold < int(st.extra_cost) else HudScript.INK)
-			c.cost.text = "/ %s" % UiKit.commas(st.extra_cost)
+			var cost := GameData.extra_cost(lv)  # 고른 단계의 고정 비용(2026-10-29)
+			c.gold.add_theme_color_override("font_color", RED if Economy.gold < cost else HudScript.INK)
+			c.cost.text = "/ %s" % UiKit.commas(cost)
 		c.level.text = Lang.t("dungeon_panel.refresh_5") % lv
 		c.prev.disabled = lv <= 1
 		c.next.disabled = lv >= int(st.max_level)

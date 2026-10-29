@@ -151,7 +151,7 @@ const SOLDIER_INT_KEYS = ['soldier_max_tier', 'soldier_merge_count', 'train_batc
 const SOLDIER_INT0_KEYS = ['train_batch_per_level']
 export const CONFIG_TIERS = ['keep_slot_tiers', 'keep_interior_tiers', 'res_copy_tiers'] // res_copy_tiers = 성채 레벨:자원 건물 수(2026-10-13)
 // 개정 18 던전·장비 설정(checkDungeons가 범위를 본다). 정수 키는 0 이상 정수(INT1은 1 이상), 확률은 0..1, 성장·배율·제한 시간은 0보다 크다
-export const CONFIG_DUNGEON_NUM = ['daily_reset_utc_hour', 'gold_key_daily', 'gold_key_cap', 'equip_key_daily', 'equip_key_cap', 'equip_extra_gold_base',
+export const CONFIG_DUNGEON_NUM = ['daily_reset_utc_hour', 'gold_key_daily', 'gold_key_cap', 'equip_key_daily', 'equip_key_cap', 'equip_extra_gold_base', 'equip_extra_gold_mult',
   'gold_dg_base', 'gold_dg_mult', 'gold_dg_growth', 'equip_dg_hp_growth', 'equip_dg_atk_growth', 'gold_dg_party', 'equip_dg_party',
   'gold_dg_min_sec', 'equip_dg_min_sec', 'dungeon_time_limit', 'equip_drop_count', 'equip_weapon_p', 'equip_bag_cap', 'equip_sell_base',
   'ticket_key_daily', 'ticket_key_cap', 'ticket_dg_party', 'ticket_dg_min_sec', 'ticket_dg_hp_growth', 'ticket_dg_atk_growth', 'ticket_reward_base',
