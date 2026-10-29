@@ -31,6 +31,11 @@ API 키는 저장소에 두지 않는다 — 실행 환경의 환경 변수 `MES
    마지막으로 발(foot·toes 뼈가 가장 센 정점)의 가운데가 KayKit 발 가운데에 오게 몸을 좌우·앞뒤로만 옮긴다(높이는 그대로).
    몸통 기준만 쓰면 망토·화살통·배 때문에 몸이 앞뒤로 밀려 상세 화면 받침 가운데에서 벗어난다. 이미 만든 몸은
    `python3 dev/meshy_recenter.py [<id>...]`로 같은 보정을 GLB에 바로 한다(다시 돌려도 안 움직임).
+   UR 최고 설정(2026-10-29, 사용자 "모델링 퀄리티가 좆구리다"): 리메시 6천으로 뽑으면 얼굴·장식이 뭉개진다.
+   `dev/meshy_heroes.py hq <id>`(최신 모델, `geometry_resolution: 4k`, 4K 텍스처, 리메시 없음, 35 크레딧, 약 110만 삼각형) →
+   `python3 dev/meshy_decimate.py <id>_hq.glb <out>.glb --tris 12000 --head-tris 3000`(pymeshlab 텍스처 보존 축소, 머리에 면을 따로
+   남기고 35° 넘게 꺾인 모서리는 날카로운 법선) → `meshy_fit.py ... --tex 2048`. 크로노스: `--rigid-parts --tint-parts 4FE8F0`
+   (등 뒤 후광 고리 = 따로 떠 있는 조각 → 가슴 뼈에만 붙이고 컨셉처럼 청록으로 칠해 UR 마감에서 빛나게).
 4. 게임: `Art.hero_spec`이 `MESHY_HERO_DIR/<id>.glb`가 있으면 `spec.body`를 넣고, `UnitModel.dress`가 KayKit 몸(손 슬롯 무기 밖 메시)을
    숨긴 뒤 `MeshyBody`를 같은 Skin으로 스켈레톤에 단다. 팔레트는 무기에만, 머리·가슴 부품은 빼고 손 부품만 단다.
    `Art.meshy_bodies = false`면 KayKit 생김새. 검사: tests/run_tests.gd `test_meshy_bodies`.
