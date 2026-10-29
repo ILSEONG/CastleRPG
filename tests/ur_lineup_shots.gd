@@ -2,7 +2,7 @@ extends Node3D
 ## UR 영웅 외형(개발용, 2026-10-29): UR 6명(표에 없으면 아래 UR 표 값으로)을 같은 조명에 나란히 세워 찍는다. --ssr이면 SSR 6명(비교용).
 ## 화면이 필요하다. 실행: xvfb-run -a godot --path . --rendering-driver opengl3 --resolution 1500x600 res://tests/ur_lineup_shots.tscn -- --out=/tmp/ur.png
 ## --ids=a,b(그 영웅만) --close(가까이, 정면) --style=lowpoly|toon|real(그림 방식) --game(본 게임 조명) --yaw=도(몸 돌림)
-## --attack=비율(공격 모션의 그 순간에 멈춘다)
+## --attack=비율(공격 모션의 그 순간에 멈춘다) --ur=band_soft=1,shade=0.2(UR 마감 값 시험)
 
 const Art := preload("res://scripts/art.gd")
 const GameData := preload("res://scripts/game_data.gd")
@@ -52,6 +52,9 @@ func _ready() -> void:
 			yaw = float(a.substr(6))
 		elif a.begins_with("--attack="):
 			attack = float(a.substr(9))
+		elif a.begins_with("--ur="):  # UR 마감 값 시험: 이름=값,이름=값
+			for kv in a.substr(5).split(",", false):
+				Art.UR_LOOK[kv.get_slice("=", 0)] = float(kv.get_slice("=", 1))
 		elif a.begins_with("--style="):
 			Art.unit_style = a.substr(8)
 		elif a == "--game":

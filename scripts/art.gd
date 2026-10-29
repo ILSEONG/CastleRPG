@@ -738,8 +738,9 @@ static var _toon_cache := {}  # 로우폴리 재질 id -> 카툰 재질
 static var _team_cache := {}  # [재질 id, 성주 색] -> 천 색을 바꾼 재질(team_tint)
 static var _real_cache := {}  # 로우폴리 재질 id -> 실사풍 재질
 static var _ur_cache := {}  # 카툰 재질 id -> UR 마감 재질(ur_finish)
-const UR_WHITE_CAP := 0.74  # 가장 밝은 텍셀을 이만큼으로(해·주변광을 받아도 흰 천·털·얼굴의 그늘 결이 남는다)
-const UR_GLOW := 0.9  # 밝고 채도 높은 텍셀(보석·여우불·불꽃)이 스스로 내는 빛
+## UR 마감 재질 값(toon.gdshaderinc 유니폼): 흰 부분 눌러 결 살리기·보석 발광 + 두 단계 카툰 음영 대신 부드러운 입체 음영
+## (2026-10-29 사용자 "아직도 컨셉 디자인 느낌이 안살아" — Meshy 원본을 보통 조명으로 찍으면 컨셉과 가깝고, 두 단계 음영이 얼굴·옷 입체를 지웠다).
+static var UR_LOOK := {"white_cap": 0.85, "glow": 0.9, "band_soft": 1.0, "lit_level": 0.8, "shade": 0.15, "ambient": 0.5, "saturation": 1.05, "rim": 0.15}
 
 
 ## 영웅·몬스터 모델의 재질을 unit_style대로 바꾼다(UnitModel.dress가 합치기 전에 부른다).
@@ -812,8 +813,8 @@ static func ur_finish(root: Node) -> void:
 		var key := sm.get_instance_id()
 		if not _ur_cache.has(key):
 			var m: ShaderMaterial = sm.duplicate()
-			m.set_shader_parameter("white_cap", UR_WHITE_CAP)
-			m.set_shader_parameter("glow", UR_GLOW)
+			for p in UR_LOOK:
+				m.set_shader_parameter(p, UR_LOOK[p])
 			_ur_cache[key] = m
 		return _ur_cache[key])
 
