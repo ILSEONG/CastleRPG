@@ -54,7 +54,7 @@ export function registerPvp(app: Hono<Any>, d: Any) {
         return d ? [{ grade: d.grade, role: d.role, power: R.powerOf(d, h.hp, h.atk) }] : []
       })
     }
-    const eq = R.heroEquip(x.pl.items, x.pl.equipment)
+    const eq = R.heroEquip(x.pl.items, x.pl.equipment, x.pl.slot_levels ?? {})
     const ps = Object.entries(x.pl.heroes as Record<string, Any>).flatMap(([id, h]) => {
       const def = x.game.heroes.find((g: Any) => g.id === id)
       return def ? [{ grade: String(def.grade), role: String(def.role), power: R.heroPower(def, h.level, h.promotion, eq[id] ?? { hp: 0, atk: 0 }, x.game.config) }] : []

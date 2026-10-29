@@ -116,6 +116,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       heroes: Object.fromEntries(['hans', 'ella', 'dorik', 'nina'].map((h) => [h, { copies: 1, level: 1, shards: 0, promotion: 0 }])), // 개정 15: 조각·승급
       deploy: ['hans', 'ella', 'dorik', 'nina'],
       soldiers: {}, soldier_deploy: {}, // 개정 13
+      stones: 0, slot_levels: {}, // 2026-10-29 강화석·영웅 부위 강화
       training: { barracks: null, archery: null, stable: null }, // 개정 16: 병사 건물 훈련 대기열
       upgrades: {}, // 개정 20
       dungeons: { // 개정 18: 그날 지급분, 리셋 = 15:00 UTC(00:00 KST) — T0는 23:13:20 KST

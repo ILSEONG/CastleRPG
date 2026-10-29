@@ -2728,7 +2728,7 @@ func _dungeon_ui(tabs) -> void:
 	for x in ids:
 		value += GameData.item_sell_value(Economy.item(x))
 		await _tap(bag.rows[x].check.get_global_rect().get_center())
-	_check(bag.selected.size() == 2 and bag.sum_label.text == "2개 선택 · +%s 골드" % UiKit.commas(value) and not bag.sell_button.disabled,
+	_check(bag.selected.size() == 2 and bag.sum_label.text == "2개 선택\n골드 +%s · 강화석 +%s" % [UiKit.commas(value), UiKit.commas(bag.stones_of(ids))] and not bag.sell_button.disabled,
 		"(D) ticking two rows shows 2개 선택 and their sell value", "sum=%s" % bag.sum_label.text)
 	var g0: int = Economy.gold
 	await _tap(bag.sell_button.get_global_rect().get_center())
@@ -2764,15 +2764,90 @@ func _dungeon_ui(tabs) -> void:
 	Economy.fused.disconnect(on_fused)
 	Economy.bag = Economy.bag.filter(func(x): return int(x.id) != 990014 and int(x.id) != int(made.get("id", -1)))
 	Economy.items_changed.emit()
+	await _dismantle_ui(bag)
 	await _tap(bag.slot_button.get_global_rect().get_center())
 	_check(bag.slot_filter == "weapon" and bag.slot_button.text == "부위: 무기" and bag.rows.keys().all(func(x): return Economy.item(x).slot == "weapon"),
 		"(D) [부위] filter cycles to 무기 and lists only weapons", "filter=%s rows=%s" % [bag.slot_filter, bag.rows.keys()])
 	bag.slot_filter = ""
 	bag.close()
 	dwin.close()
+	await _slot_enhance_ui(bag, hwin, it)
 	Economy.unequip("hans", it.slot)
 	Economy.debug_win_on = false
 	Economy.dungeon_started.disconnect(on_start)
+
+
+## 보관함 [분해]·[일괄 분해](오프라인, 2026-10-29): 고른 장비 → 등급별 강화석, [N 이하]는 장착 안 한 N을 모두 분해. 끝나면 지운 실제 장비는 되돌린다.
+func _dismantle_ui(bag) -> void:
+	Economy.bag.append({"id": 990021, "slot": "hat", "weapon_kind": null, "grade": "SR", "rolls": {"hp": 100}, "subs": []})
+	Economy.bag.append({"id": 990022, "slot": "top", "weapon_kind": null, "grade": "LR", "rolls": {"hp": 100}, "subs": []})
+	Economy.bag.append({"id": 990023, "slot": "top", "weapon_kind": null, "grade": "N", "rolls": {"hp": 100}, "subs": []})
+	Economy.items_changed.emit()
+	await _frames(2)
+	_check(bag.dismantle_button.disabled and bag.stones_label.text == "강화석 %s" % UiKit.commas(Economy.stones) and bag.bulk_button.text == "일괄 분해"
+		and not bag._bulk_row.visible, "(D) [분해] is off with nothing picked; the stone count and [일괄 분해] show", "stones=%s" % bag.stones_label.text)
+	var s0: int = Economy.stones
+	bag.toggle(990021)
+	bag.toggle(990022)
+	_check(not bag.dismantle_button.disabled and bag.sum_label.text.ends_with("강화석 +105"), "(D) picking an SR and an LR shows 강화석 +105", "sum=%s" % bag.sum_label.text)
+	await _tap(bag.dismantle_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.stones == s0 + 105 and Economy.item(990021).is_empty() and Economy.item(990022).is_empty() and bag.selected.is_empty()
+		and bag.stones_label.text == "강화석 %s" % UiKit.commas(s0 + 105) and _child(HudScript)._toast.text.contains("강화석 +105"),
+		"(D) [분해] turns them into 105 stones (SR 5 + LR 100) and announces it", "stones %d -> %d" % [s0, Economy.stones])
+	await _guard_wait()
+	await _tap(bag.bulk_button.get_global_rect().get_center())
+	await _frames(2)
+	var ns: Array = Economy.dismantle_candidates("N")
+	var keep: Array = Economy.bag.filter(func(x): return int(x.id) in ns and int(x.id) != 990023)
+	_check(bag._bulk_row.visible and bag.bulk_buttons.size() == 5 and bag.bulk_buttons.N.text == "N 이하\n%d개 · +%d" % [ns.size(), ns.size()] and 990023 in ns,
+		"(D) [일괄 분해] opens [N 이하]…[UR 이하] with counts and stones", "N=%s" % bag.bulk_buttons.N.text)
+	s0 = Economy.stones
+	await _guard_wait()
+	await _tap(bag.bulk_buttons.N.get_global_rect().get_center())
+	await _frames(2)
+	_check(Economy.stones == s0 + ns.size() and Economy.dismantle_candidates("N").is_empty() and not bag._bulk_row.visible,
+		"(D) [N 이하] dismantles every unequipped N item at once", "stones %d -> %d" % [s0, Economy.stones])
+	for x in keep:
+		Economy.bag.append(x)
+	Economy._reindex_items()
+	Economy.stones = 0
+	Economy.items_changed.emit()
+
+
+## 장비 칸 → 장비 고르기의 영웅 부위 강화(오프라인, 2026-10-29): [강화]는 강화석·골드를 쓰고 그 영웅 그 부위 +1, 낀 장비 HP·공격 +5%,
+## 창은 열린 채, 영웅 상세 장비 칸에 "+1". 강화석이 모자라면 꺼진다. 장비를 빼도 부위 레벨은 남는다.
+func _slot_enhance_ui(bag, hwin, it: Dictionary) -> void:
+	Economy.stones = 5
+	Economy.gold = maxi(Economy.gold, 100000)
+	bag.open_pick("hans", it.slot)
+	await _frames(2)
+	_check(bag._enh_row.visible and bag.enh_button.disabled and Economy.slot_enhance_block("hans", it.slot) == "not_enough_stones"
+		and bag.enh_label.text.begins_with("부위 강화 +0") and bag.enh_label.text.contains("강화석 10/5"),
+		"(D) the slot picker shows 부위 강화 +0 and the next cost; [강화] is off with 5 of 10 stones", "label=%s" % bag.enh_label.text)
+	Economy.stones = 100
+	Economy.changed.emit()
+	await _frames(1)
+	var hp0: int = Economy.equipment_bonus("hans").hp
+	var g0: int = Economy.gold
+	await _guard_wait()
+	await _tap(bag.enh_button.get_global_rect().get_center())
+	await _frames(2)
+	var st := GameData.item_stats(it)
+	_check(bag.is_open() and Economy.slot_level("hans", it.slot) == 1 and Economy.stones == 90 and Economy.gold == g0 - 5000
+		and Economy.equipment_bonus("hans").hp == hp0 - st.hp + roundi(st.hp * 1.05) and bag.enh_label.text.begins_with("부위 강화 +1 · 체력·공격 +5%"),
+		"(D) [강화] spends 10 stones and 5,000 gold, the slot is +1 and the item's HP is x1.05; the picker stays open",
+		"lv=%d stones=%d hp %d -> %d" % [Economy.slot_level("hans", it.slot), Economy.stones, hp0, Economy.equipment_bonus("hans").hp])
+	bag.close()
+	hwin._refresh_equip("hans", GameData.hero("hans"))
+	_check(hwin.equip_slots[it.slot].level.visible and hwin.equip_slots[it.slot].level.text == "+1" and not hwin.equip_slots["hat" if it.slot != "hat" else "top"].level.visible,
+		"(D) the hero's slot shows +1 (other slots none)", "")
+	Economy.unequip("hans", it.slot)
+	_check(Economy.slot_level("hans", it.slot) == 1, "(D) taking the item off keeps the slot level", "")
+	Economy.equip("hans", it.slot, it.id)
+	Economy.slot_levels = {}
+	Economy.stones = 0
+	Economy.items_changed.emit()
 
 
 ## 영웅 상세 [장비 자동착용](오프라인): 부위마다 아무도 안 낀 장비 중 item_score 최고(지금보다 좋을 때만)를 낀다 — 낮은 모자는 높은 모자로

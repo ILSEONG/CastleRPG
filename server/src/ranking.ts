@@ -26,7 +26,7 @@ export interface Entry {
   tie?: number // 같은 값끼리 앞 순서(클수록 위, guild = 누적 경험치)
 }
 
-export const PLAYERS_SQL = `select s.player_id::text as id, s.stage, extract(epoch from s.last_stage_clear)::float8 as t, s.deploy,
+export const PLAYERS_SQL = `select s.player_id::text as id, s.stage, extract(epoch from s.last_stage_clear)::float8 as t, s.deploy, s.slot_levels,
   coalesce((select level from player_buildings b where b.player_id = s.player_id and b.building = $1), 1) as keep,
   coalesce((select json_object_agg(hero_id, json_build_object('level', level, 'promotion', promotion)) from player_heroes h where h.player_id = s.player_id), '{}'::json) as heroes,
   coalesce((select json_agg(json_build_object('hero_id', e.hero_id, 'item_id', i.id, 'id', i.id, 'slot', i.slot, 'grade', i.grade, 'rolls', i.rolls))
@@ -63,7 +63,7 @@ export function playerEntries(rows: Row[], board: Board, game: GameLike): Entry[
       const slots = R.heroSlots(game.config, Number(r.keep))
       const deploy = Array.isArray(raw) ? raw.slice(0, slots).filter((x): x is string => typeof x === 'string' && Object.hasOwn(heroes, x)) : []
       const eq = (json(r.equip ?? '[]') as any[]).map((x) => ({ id: Number(x.id), hero_id: String(x.hero_id), item_id: Number(x.item_id), slot: String(x.slot), weapon_kind: null, grade: String(x.grade), level: Number(x.level) }))
-      const power = G.teamPower(deploy, heroes, defs, cfg, R.heroEquip(eq, eq))
+      const power = G.teamPower(deploy, heroes, defs, cfg, R.heroEquip(eq, eq, R.cleanSlotLevels(json(r.slot_levels ?? '{}'))))
       if (power > 0) out.push({ ...base, value: power, t: 0 })
     }
   }

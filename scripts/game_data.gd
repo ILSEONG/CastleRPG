@@ -104,6 +104,14 @@ const EQUIP_GRADE_MULT := {"N": 1.0, "R": 1.5, "SR": 2.2, "SSR": 3.2, "UR": 4.6,
 const FUSE_FROM := "LR"
 const FUSE_TO := "MR"
 const FUSE_COUNT := 3
+## 분해(2026-10-29): 장비 하나 → 등급별 강화석(서버 rules.ts DISMANTLE_STONES).
+const DISMANTLE_STONES := {"N": 1, "R": 2, "SR": 5, "SSR": 15, "UR": 40, "LR": 100, "MR": 300}
+## 영웅 부위 강화(2026-10-29): 영웅마다 부위 레벨 0..SLOT_ENH_MAX — 그 부위에 낀 장비의 체력·공격 +SLOT_ENH_PCT%/레벨. 장비를 바꿔도 레벨은 부위에 남는다.
+## 레벨 L → L+1 비용 = 강화석 SLOT_ENH_STONES×(L+1), 골드 SLOT_ENH_GOLD×(L+1)(서버 rules.ts slotEnhCost).
+const SLOT_ENH_MAX := 20
+const SLOT_ENH_PCT := 5
+const SLOT_ENH_STONES := 10
+const SLOT_ENH_GOLD := 5000
 const ARMOR_SLOTS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves"]  # 모든 영웅이 쓴다
 const ACCESSORY_SLOTS := ["ring", "necklace"]  # 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다
 const EQUIP_SLOTS := ["weapon", "hat", "top", "bottom", "shoes", "pauldron", "gloves", "ring", "necklace"]
@@ -1157,6 +1165,15 @@ static func item_stats(item: Dictionary, base := false) -> Dictionary:
 
 
 ## 장비들의 합계 {hp, atk, speed_pct, 특수 능력치 %…}(hp·atk는 영웅 최종 능력치에 더한다 — hero_stats, 나머지는 전투 — hero.refresh_stats).
+static func slot_enh_cost(level: int) -> Dictionary:
+	return {"stones": SLOT_ENH_STONES * (level + 1), "gold": SLOT_ENH_GOLD * (level + 1)}
+
+
+## 부위 레벨의 체력·공격 배율(1 + 5% × 레벨, 0..SLOT_ENH_MAX로 자른다). 서버 rules.ts slotMult.
+static func slot_mult(level: int) -> float:
+	return 1.0 + SLOT_ENH_PCT * clampi(level, 0, SLOT_ENH_MAX) / 100.0
+
+
 static func equip_total(items: Array) -> Dictionary:
 	var out := item_stats({})
 	for it in items:
