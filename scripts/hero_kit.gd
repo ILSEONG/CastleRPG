@@ -21,6 +21,7 @@ const FIRE := Color("FF6A10")
 const FIRE_CORE := Color("FFD23A")
 const ICE := Color("C8F2FF")
 const ICE_DEEP := Color("62B8EE")
+const BOW_CANT := 30.0  # 청룡 장궁 기울기(도): 대기 땐 앞아래로 내려 든 활, 쏠 땐 거의 곧게 선 활
 
 ## 부품 id 전체(Art.HERO_LOOKS가 쓰는 것). has_part로 ArenaKit 부품과 가른다.
 const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pauldrons", "bron_crest", "torvin_mitre", "torvin_mace",
@@ -31,7 +32,7 @@ const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pau
 	"valen_crown", "valen_flames", "valen_orb", "frieda_crown", "frieda_collar", "frieda_flake", "morgana_horns", "morgana_skulls",
 	"gaia_crown", "gaia_staff", "selene_stars", "pip_hat", "pip_spirit", "tia_hat", "thorgar_crown", "thorgar_boulders", "thorgar_maul",
 	"orin_wolf", "grit_helmet", "grit_hammer", "dante_horns", "dante_wings", "kaz_goggles", "kaz_pack", "luna_tiara", "luna_blade",
-	"raven_crest", "raven_mantle", "baekho_glaive", "yeonhwa_fan", "chronos_hourglass"]
+	"raven_crest", "raven_mantle", "baekho_glaive", "yeonhwa_fan", "chronos_hourglass", "cheongryong_bow"]
 
 static var _meshes := {}
 
@@ -122,6 +123,7 @@ static func _build(id: String, k) -> void:
 		"baekho_glaive": _baekho_glaive(k)
 		"yeonhwa_fan": _yeonhwa_fan(k)
 		"chronos_hourglass": _chronos_hourglass(k)
+		"cheongryong_bow": _cheongryong_bow(k)
 		_: push_error("unknown hero part %s" % id)
 
 
@@ -949,6 +951,38 @@ static func _yeonhwa_fan(k) -> void:
 	for deg in [-36.0, 0.0, 36.0]:
 		var d := Vector3(sin(deg_to_rad(deg)), cos(deg_to_rad(deg)), 0)
 		_leaf(k, d * 0.8, d * 1.05, 0.12, 0.06, Vector3.BACK, Color("5FC8FF"), 0.4)
+
+
+## 청룡 장궁(쇠뇌 자리, 2026-10-29 사용자 "청룡 석궁 버리고 장궁으로 무기 만들어"): 손잡이(원점)에서 위아래(±Y)로 뻗은 비취 활채가
+## 시위 쪽(-X)으로 휘었다가 끝(고자)이 다시 앞으로 감기는 동양 각궁 꼴 + 은 고자 + 옥빛 시위, 손잡이 앞에 여의주와 용 지느러미 둘.
+## 겨누는 쪽 = +X(쇠뇌 개머리가 향하던 쪽).
+static func _cheongryong_bow(k) -> void:
+	var jade := Color("1E7A66")
+	var stripe := Color("2FB894")
+	var silver := Color("B8CCD4")
+	var b := Basis(Vector3.BACK, -deg_to_rad(BOW_CANT)).scaled(Vector3.ONE * 0.8)
+	var line := [Vector2(0.0, 0.12), Vector2(0.035, 0.36), Vector2(0.01, 0.6), Vector2(-0.07, 0.82), Vector2(-0.15, 0.98),
+		Vector2(-0.13, 1.1), Vector2(-0.04, 1.18)]
+	var n := line.size() - 1
+	for s in [1.0, -1.0]:
+		for i in n:
+			var p0: Vector2 = line[i]
+			var p1: Vector2 = line[i + 1]
+			var r0 := lerpf(0.055, 0.022, float(i) / n)
+			var r1 := lerpf(0.055, 0.022, float(i + 1) / n)
+			_tube(k, b * Vector3(p0.x, p0.y * s, 0), b * Vector3(p1.x, p1.y * s, 0), r0, r1, 6, jade if i < 4 else silver)
+			if i < 4:
+				_tube(k, b * Vector3(p0.x + r0 * 0.7, p0.y * s, 0), b * Vector3(p1.x + r1 * 0.7, p1.y * s, 0), r0 * 0.45, r1 * 0.45, 4, stripe)
+		_tube(k, b * Vector3(-0.04, 1.18 * s, 0), b * Vector3(0.03, 1.24 * s, 0), 0.024, 0.0, 5, silver)
+		_tube(k, b * Vector3(0, 0.1 * s, 0), b * Vector3(0, 0.14 * s, 0), 0.07, 0.07, 6, silver)
+		_leaf(k, b * Vector3(0.05, 0.08 * s, 0), b * Vector3(0.2, 0.34 * s, 0), 0.09, 0.03, Vector3.BACK, stripe, 0.3)
+	_tube(k, b * Vector3(0, -0.12, 0), b * Vector3(0, 0.12, 0), 0.06, 0.06, 6, Color("12302A"))
+	_tube(k, b * Vector3(-0.15, 0.98, 0), b * Vector3(-0.15, -0.98, 0), 0.009, 0.009, 4, Color("7FFFD8"))
+	k.xform = Transform3D(b, b * Vector3(0.1, 0, 0))
+	k.cone(Vector3.ZERO, 8, 0.055, 0.06, Color("C8FFF0"))
+	k.xform = Transform3D(b * Basis(Vector3.RIGHT, PI), b * Vector3(0.1, 0, 0))
+	k.cone(Vector3.ZERO, 8, 0.055, 0.06, Color("9FF5E0"))
+	k.xform = Transform3D.IDENTITY
 
 
 ## 시간의 지배자: 지팡이 머리(y ≈ 1.25) 위 모래시계(은 받침 둘 + 기둥 셋 + 옥빛 유리) + 허리에 두른 하늘색 시계 고리.

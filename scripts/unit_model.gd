@@ -109,9 +109,17 @@ static func dress(model: Node3D, spec: Dictionary) -> void:
 		slot.bone_name = a[0]
 		skel.add_child(slot)
 		slot.add_child(a[1])
+	var gs: float = spec.get("gear_scale", 1.0)
+	if gs != 1.0:  # 손에 든 무기만 작게(Art.HERO_LOOKS gear_scale)
+		for n in model.find_children("*", "BoneAttachment3D", true, false):
+			if String((n as BoneAttachment3D).bone_name).begins_with("handslot"):
+				for c in n.get_children():
+					(c as Node3D).scale *= gs
 	Art.stylize(model)  # 영웅·몬스터 그림 방식(Art.unit_style: 실사풍·카툰·로우폴리) — 성·건물·이펙트는 로우폴리 그대로
 	if spec.has("team"):
 		Art.team_tint(model, spec.team)  # Meshy 병사 몸의 천 = 성주 색(파티·대전)
+	if spec.get("finish", false):
+		Art.ur_finish(model)  # UR 영웅: 흰 부분 결 + 보석·불빛 발광
 	MeshMerge.merge(model, str(spec.hash()))  # 부위 메시를 재질마다 하나로(그리기 호출 ~10 → 1~3, mesh_merge.gd)
 
 
