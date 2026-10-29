@@ -149,6 +149,7 @@ func _init() -> void:
 	test_shop()
 	test_iap()
 	test_gacha_odds()
+	test_hero_ur()
 	test_sfx()
 	test_follow_cam()
 	test_portrait_focus()
@@ -235,7 +236,7 @@ func test_game_tables() -> void:
 	check(GameData.errors == 0, "default tables incl. heroes/resources/config load without errors")
 	# Balance에서 옮긴 값 — 이전 상수와 같다(하드코딩 기대값)
 	var heroes := GameData.heroes()
-	check(heroes.size() == 36 and heroes[0].id == "arteon" and heroes[21].id == "jack" and heroes[35].id == "tia", "heroes keep file order")
+	check(heroes.size() == 42 and heroes[0].id == "arteon" and heroes[21].id == "jack" and heroes[35].id == "tia" and heroes[41].id == "jujak", "heroes keep file order")
 	var w := GameData.hero("hans")
 	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
 		and w.color == "#95A5A6" and w.hp == 396.0 and w.atk == 23.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
@@ -325,7 +326,7 @@ func _remote_checks() -> int:
 	p.heroes[17].skill3 = null  # 한스(R): 셋째 칸 없음
 	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
-	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 36 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
+	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 42 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
 	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
 		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
@@ -397,7 +398,7 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"repeated skill": q.heroes[0].skill2 = "heal_aura"
 		"skill number missing": q.heroes[0].s1c = ""  # heal_aura는 숫자 셋
 		"skill number not a number": q.heroes[2].s1a = "three"
-		"grade unknown": q.heroes[0].grade = "UR"
+		"grade unknown": q.heroes[0].grade = "LR"
 		"role unknown": q.heroes[0].role = "flying"
 		"color not #RRGGBB": q.heroes[0].color = "gold"
 		"gacha cost not an integer": q.config.gacha_dia_cost_1 = "300.5"  # 서버 BigInt(-cost)가 throw
@@ -456,7 +457,7 @@ func test_apply_remote() -> void:
 	check(_errors.count - logged == expected, "rejected payloads report each error through push_error")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 36, "default tables restored after apply_remote tests")
+	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 42, "default tables restored after apply_remote tests")
 
 
 ## 2026-10-12: 라운드마다 졸개 72마리 뒤 남쪽 성문 보스 하나, 라운드 25(스테이지 마지막)는 네 성문에 하나씩 — HP × boss_round_mult.
@@ -1646,8 +1647,8 @@ func test_heroes_table() -> void:
 	const Skills := preload("res://scripts/skills.gd")
 	GameData.load_tables()
 	var hs := GameData.heroes()
-	check(hs.size() == 36, "36 heroes, got %d" % hs.size())
-	var grades := {"SSR": 0, "SR": 0, "R": 0}
+	check(hs.size() == 42, "42 heroes, got %d" % hs.size())
+	var grades := {"UR": 0, "SSR": 0, "SR": 0, "R": 0}
 	var used := {}
 	for h in hs:
 		grades[h.grade] += 1
@@ -1658,10 +1659,11 @@ func test_heroes_table() -> void:
 			used[k] = true
 		for g in h.gear.split("|"):
 			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
-	check(grades == {"SSR": 16, "SR": 12, "R": 8}, "grades 16/12/8: %s" % grades)
+	check(grades == {"UR": 6, "SSR": 16, "SR": 12, "R": 8}, "grades 6/16/12/8: %s" % grades)
 	# crit 스킬은 영웅 표에서 뺐다(성장 치명타와 헷갈리지 않게) — 종류는 남아 있어 표에 다시 쓸 수 있다
 	# 2026-10-06 재구성: 영웅 36명 × 고유 스킬 100종(예전 패시브 종류 일부는 표에서 빠졌지만 종류는 남아 있다)
-	check(used.size() == 100 and not used.has("crit"), "100 distinct skill kinds on heroes: %d" % used.size())
+	# 2026-10-29 태생 UR 6명 × 전용 스킬 3 = 118
+	check(used.size() == 118 and not used.has("crit"), "118 distinct skill kinds on heroes: %d" % used.size())
 	for h in hs:  # SSR·SR = 액티브·패시브·액티브, R = 액티브·패시브
 		var ks: Array = h.skills.keys()
 		var want: Array = [true, false] if h.grade == "R" else [true, false, true]
@@ -1670,8 +1672,12 @@ func test_heroes_table() -> void:
 	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE:
 		check(SkillIconsScript.KIND.has(k) and not SkillIconsScript.shapes(SkillIconsScript.glyph_of(k)).is_empty(), "skill %s has a thumbnail" % k)
 	# 그린 스킬 아이콘(2026-10-25): 그림이 있는 종류(발동형·패시브 86종)는 모두 assets/ui/skills 그림이 있다(안 쓰는 발동형은 짝 패시브 그림)
+	# 태생 UR 전용 18종은 그린 아이콘이 오기 전까지 도형으로 그린다(디자인 스레드가 그림을 넣으면 이 목록을 지운다)
+	var ur_pending := ["turtle_ward", "black_shell", "north_tide", "tiger_claw", "tiger_fury", "tiger_avatar", "fox_fire", "fox_charm",
+		"nine_tails", "dragon_arrow", "azure_tide", "azure_dragon", "time_stop", "time_haste", "time_collapse", "phoenix_wing",
+		"phoenix_blessing", "rebirth_flame"]
 	for k in SkillIconsScript.KIND:
-		check(SkillIconsScript.texture_of(k) != null, "skill %s has a painted icon" % k)
+		check(SkillIconsScript.texture_of(k) != null or k in ur_pending, "skill %s has a painted icon" % k)
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
@@ -2953,11 +2959,11 @@ func test_skill_unlock() -> void:
 	check(GameData.active_skills(hans, 0).keys() == ["drain_slash"] and GameData.active_skills(hans, 3).keys() == ["drain_slash", "dmg_reduce"]
 		and GameData.active_skills(hans, 5).size() == 2, "R hans: skill2 at 3, nothing more at 5")
 	check(GameData.active_skills(se, 5) == se.skills and GameData.active_skills({}, 5).is_empty(), "everything unlocked at 5 equals the table; no skills -> empty")
-	var counts := {"SSR": 0, "SR": 0, "R": 0}
+	var counts := {"UR": 0, "SSR": 0, "SR": 0, "R": 0}
 	for h in GameData.heroes():
 		counts[h.grade] += 1
 		check(h.skills.size() == GameData.GRADE_SKILLS[h.grade], "hero %s (%s) has %d skills" % [h.id, h.grade, h.skills.size()])
-	check(GameData.heroes().size() == 36 and counts == {"SSR": 16, "SR": 12, "R": 8}, "36 rows: 16 SSR, 12 SR, 8 R")
+	check(GameData.heroes().size() == 42 and counts == {"UR": 6, "SSR": 16, "SR": 12, "R": 8}, "42 rows: 6 UR, 16 SSR, 12 SR, 8 R")
 	# 잠긴 스킬은 전투 수식에 안 들어간다(능력치는 승급 배율만)
 	var kyle := GameData.hero("kyle")
 	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 61.0, 0.0, 0.2, false), 61.0)
@@ -4185,7 +4191,7 @@ func test_recruit_r23() -> void:
 	e.gacha_done.connect(func(r): got.append(r))
 	e.gold = 400000
 	check(e.gacha(10) and e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 30 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: three 10-pulls are 30/40 at Lv 1")
-	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160, "dia_pity": 0, "pity_left": 50}
+	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160, "dia_pity": 0, "pity_left": 50, "ur_pity": 0, "ur_pity_left": 200}
 		and ups == [2] and notes == ["골드 모집 Lv 2! SR 5.5% · SSR은 Lv 3부터"] and e.gacha_cost("gold", 1) == 12500,
 		"rev 23: the 40th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
 	# 오프라인 다이아
@@ -4317,7 +4323,7 @@ func test_equip_upgrade_dot() -> void:
 func test_hero_looks_unique() -> void:
 	Art.meshy_bodies = false
 	var heroes: Array = GameData.heroes()
-	check(heroes.size() == 36 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
+	check(heroes.size() == 42 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
 	var seen := {}
 	var looks := {}
 	for h in heroes:
@@ -4542,7 +4548,9 @@ func test_meshy_bodies() -> void:
 		check(same, "%s body file binds match the %s skin" % [h.id, h.model])
 		src.free()
 		model.free()
-	check(n == GameData.heroes().size(), "every hero has a Meshy body (%d of %d)" % [n, GameData.heroes().size()])
+	# 태생 UR(2026-10-29)은 새 컨셉 몸을 디자인 스레드가 만드는 중 — 그동안 KayKit 생김새(HERO_LOOKS)로 보인다
+	var want := GameData.heroes().filter(func(h): return h.grade != "UR" or ResourceLoader.exists(Art.MESHY_HERO_DIR + h.id + ".glb")).size()
+	check(n == want, "every non-UR hero has a Meshy body (%d of %d)" % [n, want])
 	Art.meshy_bodies = false
 	check(not Art.hero_spec(GameData.hero("arteon")).has("body"), "meshy_bodies off: back to the KayKit look")
 	Art.meshy_bodies = true
@@ -5951,12 +5959,50 @@ func test_gacha_odds() -> void:
 			var rates := GameData.gacha_rates(cur, 3)
 			var odds: Array = Odds.hero_odds(rates)
 			var sum := 0.0
-			var ok := odds.size() == GameData.heroes().size()
+			var ur: float = rates.ur
+			var ok := odds.size() == GameData.heroes().filter(func(h): return ur > 0.0 or h.grade != "UR").size()  # UR은 다이아만
 			for o in odds:
 				sum += float(o.p)
 				var n := GameData.heroes().filter(func(h): return h.grade == o.grade).size()
-				var gp: float = rates.ssr if o.grade == "SSR" else (rates.sr if o.grade == "SR" else 1.0 - rates.ssr - rates.sr)
+				var gp: float = ur if o.grade == "UR" else (rates.ssr if o.grade == "SSR" else (rates.sr if o.grade == "SR" else 1.0 - ur - rates.ssr - rates.sr))
 				ok = ok and is_equal_approx(float(o.p), gp / n)
 			check(ok and is_equal_approx(sum, 1.0), "gacha odds: every hero listed, each = grade rate / grade size, sum 1 (%s, tavern %d)" % [cur, tav])
 	var dia: Array = Odds.hero_odds(GameData.gacha_rates(GameData.GACHA_DIA, 1))
-	check(Odds.pct(float(dia[0].p)) == "0.3125%" and dia[0].grade == "SSR", "gacha odds: a diamond SSR hero shows 0.3125%% (5%% / 16)")
+	var dia_ssr: Array = dia.filter(func(o): return o.grade == "SSR")
+	check(Odds.pct(float(dia_ssr[0].p)) == "0.3125%" and dia[0].grade == "UR" and Odds.pct(float(dia[0].p)) == "0.0833%",
+		"gacha odds: a diamond SSR hero shows 0.3125%% (5%% / 16), a UR hero 0.0833%% (0.5%% / 6) and UR comes first")
+
+
+## 태생 UR(2026-10-29 사용자): 다이아만 UR(골드 0), UR 천장(u ≥ umax면 UR, n·u 모두 0), SSR 조각 10개 합성 → UR 1명(오프라인), 전투력 등급 배율 2.8.
+func test_hero_ur() -> void:
+	check(is_equal_approx(GameData.gacha_rates(GameData.GACHA_DIA, 1).ur, 0.005) and GameData.gacha_rates(GameData.GACHA_GOLD, 10).ur == 0.0,
+		"UR: diamond 0.5%, gold 0")
+	var pity := {"n": 20, "max": 50, "u": 199, "umax": 200}
+	var out: Array = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), pity)
+	check(out[0].grade == "UR" and pity.n == 0 and pity.u == 0, "UR pity at 199: an R roll becomes UR and both counters reset: %s %s" % [out, pity])
+	pity = {"n": 49, "max": 50, "u": 10, "umax": 200}
+	out = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), pity)
+	check(out[0].grade == "SSR" and pity.n == 0 and pity.u == 11, "SSR pity does not reset the UR counter: %s" % [pity])
+	var gold: Array = EconomyScript.roll_gacha(200, func(): return 0.0, GameData.gacha_rates(GameData.GACHA_GOLD, 10))
+	check(gold.all(func(x): return x.grade != "UR"), "gold never rolls UR")
+	var e = _econ(1000.0)
+	e.heroes["arteon"] = 3
+	e.hero_shards["arteon"] = 6
+	e.heroes["ignis"] = 2
+	e.hero_shards["ignis"] = 5
+	e.heroes["bron"] = 2
+	e.hero_shards["bron"] = 20
+	check(not e.fuse_ok({"arteon": 6, "ignis": 3}) and not e.fuse_ok({"arteon": 6, "bron": 4}) and not e.fuse_ok({"arteon": 7, "ignis": 3}) and e.fuse_ok({"arteon": 6, "ignis": 4}),
+		"fuse needs exactly 10 shards of owned SSR heroes")
+	var fill: Dictionary = e.fuse_autofill()
+	check(fill == {"arteon": 6, "ignis": 4}, "autofill takes the most shards first: %s" % fill)
+	var got := []
+	e.gacha_done.connect(func(r): got.append(r))
+	check(e.fuse_ur({"arteon": 6, "ignis": 4}) and got.size() == 1 and got[0].size() == 1 and got[0][0].grade == "UR" and got[0][0].new
+		and e.shards_of("arteon") == 0 and e.shards_of("ignis") == 1 and int(e.heroes.get(got[0][0].hero_id, 0)) == 1, "offline fuse: 10 SSR shards -> one new UR hero")
+	var ur := GameData.heroes().filter(func(h): return h.grade == "UR")
+	var ssr := GameData.hero("arteon")
+	var sol := GameData.hero("hyeonmu")
+	check(ur.size() == 6 and GameData.hero_power(sol, 1, 0, {}) > GameData.hero_power(ssr, 1, 0, {}) and GameData.levelup_cost("UR", 1, 1).gold > GameData.levelup_cost("SSR", 1, 1).gold,
+		"6 UR heroes; a UR tank outpowers the SSR tank at the same level; UR level-up costs more")
+	e.free()

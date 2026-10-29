@@ -22,6 +22,10 @@ const NEW_CLIPS := [["ignis", "ignite", 15.0], ["sylvana", "piercing_shot", 15.0
 	["dorik", "wide_swing", 12.0], ["jack", "cheap_shot", 12.0], ["frieda", "deep_freeze", 15.0], ["morgana", "hex", 15.0], ["luna", "crescent", 12.0],
 	["luna", "lunar_veil", 12.0], ["orin", "howl", 12.0], ["valen", "scorch", 15.0], ["gaia", "gale", 15.0], ["selene", "solar_spark", 15.0],
 	["pip", "frost_spike", 13.0], ["tia", "magma", 13.0]]
+## 2026-10-29 태생 UR 전용 액티브(--set=ur)
+const UR_CLIPS := [["hyeonmu", "turtle_ward", 12.0], ["hyeonmu", "north_tide", 13.0], ["baekho", "tiger_claw", 12.0], ["baekho", "tiger_avatar", 12.0],
+	["yeonhwa", "fox_fire", 13.0], ["yeonhwa", "nine_tails", 12.0], ["cheongryong", "dragon_arrow", 15.0], ["cheongryong", "azure_dragon", 15.0],
+	["chronos", "time_stop", 15.0], ["chronos", "time_collapse", 15.0], ["jujak", "phoenix_wing", 15.0], ["jujak", "rebirth_flame", 13.0]]
 const LEAD := 0.8  # 몬스터가 다가오는 동안(스킬 전)
 const AFTER := 2.6  # 발동 시작부터 찍는 시간
 
@@ -52,7 +56,7 @@ func _ready() -> void:
 			c.set_process(false)
 	GameState.mode = GameState.Mode.STAGE
 	await _frames(120)  # 불러오기 화면이 걷힐 때까지
-	for c in (NEW_CLIPS if _set == "new" else CLIPS):
+	for c in (NEW_CLIPS if _set == "new" else (UR_CLIPS if _set == "ur" else CLIPS)):
 		if _only == "" or _only == c[0] or _only == c[1]:
 			await _clip(c[0], c[1], c[2])
 	get_tree().quit(0)
@@ -121,6 +125,8 @@ func _clip(id: String, k: String, cam_size: float) -> void:
 				h._skx.sk = h._skx.sk.duplicate(true)
 				h._skx.sk[k][0] = 100.0
 			else:
+				if k == "rebirth_flame":  # 다친 아군이 있어야 쓴다
+					h.hp = h.hp_max * 0.5
 				h._skx._cd[k] = 0.0
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_jpg(dir.path_join("%04d.jpg" % n), 0.9)

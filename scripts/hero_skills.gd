@@ -13,6 +13,7 @@ const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Sfx := preload("res://scripts/sfx.gd")
+const UrFx := preload("res://scripts/ur_fx.gd")
 
 ## 발동형(쿨 a초). 처음엔 쿨의 FIRST_CD배만 기다린다(교전이 시작되면 곧 쓴다).
 const BULWARK_TAUNT_R := 4.0  # 방벽 도발 반경(m)
@@ -24,7 +25,12 @@ const ACTIVE := ["meteor", "inferno", "earthquake", "ground_slam", "blizzard", "
 	# 2026-10-06 스킬 재구성: 패시브에서 바뀐 액티브
 	"ignite", "piercing_shot", "blood_rage", "frost_chain", "rend", "bulwark", "crushing_blow", "sunder", "shield_bash", "snare",
 	"blade_flurry", "parry", "fire_bolt", "firespread", "axe_volley", "boomerang", "spear_sweep", "drain_slash", "volley", "wide_swing",
-	"cheap_shot", "crescent", "lunar_veil", "howl", "deep_freeze", "hex"]
+	"cheap_shot", "crescent", "lunar_veil", "howl", "deep_freeze", "hex",
+	# 2026-10-29 태생 UR 전용(사신·시간·불새) — 적용은 _cast_ur, 이펙트는 UrFx
+	"turtle_ward", "north_tide", "tiger_claw", "tiger_avatar", "fox_fire", "nine_tails", "dragon_arrow", "azure_dragon",
+	"time_stop", "time_collapse", "phoenix_wing", "rebirth_flame"]
+const UR_ACTIVE := ["turtle_ward", "north_tide", "tiger_claw", "tiger_avatar", "fox_fire", "nine_tails", "dragon_arrow", "azure_dragon",
+	"time_stop", "time_collapse", "phoenix_wing", "rebirth_flame"]
 ## 확률 발동 패시브(2026-10-06): 예전 액티브의 효과를 평타(주 대상)에 a% 확률로 붙인다 — 화염 지대·회오리·태양 섬광·얼음 가시·용암 분출
 const PROCS := ["scorch", "gale", "solar_spark", "frost_spike", "magma"]
 ## 소환 종류 → [summon.gd 종류, 마리 수]
@@ -61,6 +67,10 @@ const CAST_ANIM := {
 	"rend": "Dualwield_Melee_Attack_Slice", "crescent": "Dualwield_Melee_Attack_Slice", "blade_flurry": "Dualwield_Melee_Attack_Stab",
 	"crushing_blow": "2H_Melee_Attack_Chop", "sunder": "2H_Melee_Attack_Slice", "spear_sweep": "2H_Melee_Attack_Slice",
 	"drain_slash": "1H_Melee_Attack_Slice_Diagonal", "wide_swing": "1H_Melee_Attack_Slice_Horizontal", "cheap_shot": "1H_Melee_Attack_Stab",
+	# 2026-10-29 태생 UR(청룡시는 그 영웅의 평타 사격 모션)
+	"turtle_ward": "Block", "north_tide": "Jump_Full_Short", "tiger_claw": "2H_Melee_Attack_Slice", "tiger_avatar": "Cheer",
+	"fox_fire": "Throw", "nine_tails": "2H_Melee_Attack_Spin", "azure_dragon": "Spellcast_Raise", "time_stop": "Spellcast_Raise",
+	"time_collapse": "Spellcast_Long", "phoenix_wing": "Spellcast_Shoot", "rebirth_flame": "Spellcast_Raise",
 }
 const RETRY := 0.5  # 조건이 안 맞아 못 쓴 발동형은 이만큼 뒤에 다시 본다(매 프레임 찾지 않게)
 const AURA_SCAN := 0.25
@@ -80,6 +90,13 @@ const STEEL := Color(0.75, 0.82, 0.95)
 const MOON := Color(0.75, 0.8, 1.0)
 const WILD := Color(0.85, 0.65, 0.3)
 const CURSE := Color(0.45, 0.75, 0.3)
+const TORTOISE := Color(0.25, 0.62, 0.78)  # 현무 물빛
+const TIGER := Color(0.82, 0.92, 1.0)  # 백호 흰 번개
+const FOX := Color(1.0, 0.42, 0.62)  # 연화 여우불
+const AZURE := Color(0.2, 0.85, 0.7)  # 청룡 청록
+const TIME := Color(0.45, 0.85, 1.0)  # 크로노스 시간
+const PHOENIX := Color(1.0, 0.38, 0.15)  # 주작 불꽃
+const SHELL_FX_GAP := 0.4  # 흑귀갑 되돌림 물보라 최소 간격(초)
 
 var h  # 영웅(hero.gd) — 이 객체를 가진 노드
 var sk: Dictionary = {}
@@ -107,6 +124,8 @@ var _rage_t := 0.0  # 피의 격노 남은 초
 var _wall_t := 0.0  # 방벽 남은 초
 var _parry_t := 0.0  # 받아치기 남은 초
 var _wall_fx: Node3D
+var _tiger_t := 0.0  # 백호 현신 남은 초
+var _shell_fx := 0.0  # 흑귀갑 물보라 다음까지
 
 
 func _init(hero) -> void:
@@ -151,6 +170,7 @@ func reset() -> void:
 	_regen_acc = 0.0
 	_rage_t = 0.0
 	_parry_t = 0.0
+	_tiger_t = 0.0
 	_end_wall()
 
 
@@ -164,6 +184,8 @@ func tick(delta: float) -> void:
 	_hymn_t -= delta
 	_rage_t -= delta
 	_parry_t -= delta
+	_tiger_t -= delta
+	_shell_fx -= delta
 	if _wall_t > 0.0:
 		_wall_t -= delta
 		if _wall_t <= 0.0:
@@ -181,8 +203,9 @@ func tick(delta: float) -> void:
 	_tick_regen(delta)
 	if _focus_m != null:
 		_focus_t += delta
+	var cd_step := delta * (1.0 + float(sk.time_haste[0]) / 100.0) if sk.has("time_haste") else delta  # 시간 가속: 쿨이 빨리 돈다
 	for k in _cd:
-		_cd[k] -= delta
+		_cd[k] -= cd_step
 		if _cd[k] <= 0.0:
 			if not h.skill_go(k):
 				_cd[k] = 0.0  # 스킬 수동(2026-10-23): 칸을 누를 때까지 준비된 채 기다린다
@@ -232,8 +255,8 @@ func _retarget() -> void:
 
 ## 발동형 k를 쓸 때의 모션 이름(영웅 정의 hero_def — 모르는 종류는 그 영웅의 평타 모션).
 ## 발동 순간 연출 종류(Fx.release, 2026-10-13): 공격·강화·회복·소환·수리가 서로 달라 보이게.
-const BUFF_SKILLS := ["war_cry", "taunt", "battle_hymn", "shield", "shield_ally", "blood_rage", "bulwark", "parry"]
-const HEAL_SKILLS := ["heal_aura", "mass_heal", "resurrection", "sanctuary", "howl"]
+const BUFF_SKILLS := ["war_cry", "taunt", "battle_hymn", "shield", "shield_ally", "blood_rage", "bulwark", "parry", "turtle_ward", "tiger_avatar"]
+const HEAL_SKILLS := ["heal_aura", "mass_heal", "resurrection", "sanctuary", "howl", "phoenix_wing", "rebirth_flame"]
 static func cast_style(k: String) -> String:
 	if k in BUFF_SKILLS:
 		return "buff"
@@ -292,6 +315,8 @@ func speed_mult() -> float:
 		m += float(sk.bloodlust[0]) / 100.0
 	if sk.has("blood_rage") and _rage_t > 0.0:
 		m += float(sk.blood_rage[2]) / 100.0
+	if sk.has("tiger_avatar") and _tiger_t > 0.0:
+		m += float(sk.tiger_avatar[2]) / 100.0
 	return m
 
 
@@ -304,6 +329,8 @@ func atk_mult() -> float:
 		m *= 1.0 + float(sk.last_stand[1]) / 100.0
 	if sk.has("soul_harvest"):
 		m *= 1.0 + float(sk.soul_harvest[1]) / 100.0 * _harvest.size()
+	if sk.has("tiger_avatar") and _tiger_t > 0.0:
+		m *= 1.0 + float(sk.tiger_avatar[2]) / 100.0
 	return m
 
 
@@ -325,6 +352,8 @@ func damage_mult(m, attack_no: int, primary: bool) -> float:
 	if sk.has("brawler"):
 		var n := _near_monsters(h.global_position, BRAWL_R).size()
 		x *= 1.0 + minf(float(sk.brawler[0]) * n, float(sk.brawler[1])) / 100.0
+	if sk.has("azure_tide") and m.has_status("slow"):
+		x *= 1.0 + float(sk.azure_tide[0]) / 100.0
 	return x
 
 
@@ -373,6 +402,7 @@ func on_hit(m, d: float, primary: bool, attack_no: int, was: int) -> void:
 	for pk in PROCS:
 		if _roll(pk):
 			_proc(pk, m)
+	_ur_hit(m, attack_no)
 	if sk.has("splash"):
 		for o in _near_monsters(m.global_position, float(sk.splash[0]), m):
 			_hit(o, d * float(sk.splash[1]) / 100.0 * h._skill_mult)
@@ -478,6 +508,13 @@ func incoming(amount: float, source = null, reduce := 0.0) -> float:
 		x *= 1.0 - float(sk.block[1]) / 100.0
 		Fx.block(h)
 	x *= 1.0 - reduce
+	if sk.has("black_shell"):  # 흑귀갑: 덜 받고, 받은 만큼의 b%를 때린 적에게 물살로 되돌린다
+		x *= 1.0 - float(sk.black_shell[0]) / 100.0
+		if source != null and is_instance_valid(source) and source.has_method("is_alive") and source.is_alive() and float(sk.black_shell[1]) > 0.0:
+			_hit(source, x * float(sk.black_shell[1]) / 100.0 * h._skill_mult)
+			if _shell_fx <= 0.0 and is_instance_valid(source):
+				_shell_fx = SHELL_FX_GAP
+				Fx.splash(_world(), _flat(source.global_position), TORTOISE, 0.9)
 	if barrier > 0.0:
 		var soak := minf(barrier, x)
 		barrier -= soak
@@ -561,6 +598,11 @@ func _cast(k: String, dry := false) -> bool:
 	var here: Vector3 = h.global_position
 	var w := _world()
 	var tier: int = h._tier
+	if k in UR_ACTIVE:
+		var ok := _cast_ur(k, p, dry)
+		if ok and not dry:
+			_announce(k)
+		return ok
 	match k:
 		"meteor", "comet":
 			var tgt = t if k == "meteor" else _strongest(_reach())
@@ -1369,3 +1411,239 @@ func _later(sec: float, f: Callable) -> void:
 
 static func _flat(v: Vector3) -> Vector3:
 	return Vector3(v.x, 0.0, v.z)
+
+
+# --- 2026-10-29 태생 UR 전용 스킬(사신·시간·불새) ---
+
+## UR 패시브의 평타 효과(주 대상 m): 산군의 기세(a번째 타격마다 백호 번개 발톱) · 매혹(a% 확률 기절 + 받는 피해 증가) · 용궁의 물살(둔화).
+func _ur_hit(m, attack_no: int) -> void:
+	if not is_instance_valid(m) or not m.is_alive():
+		return
+	var a := _atk()
+	if sk.has("tiger_fury") and attack_no % int(sk.tiger_fury[0]) == 0:
+		var r := float(sk.tiger_fury[1])
+		var at: Vector3 = _flat(m.global_position)
+		var dir: Vector3 = _flat(at - h.global_position).normalized()
+		UrFx.claws(_world(), h.global_position, dir if dir != Vector3.ZERO else Vector3.FORWARD, r + 1.0, TIGER, attack_no % 2 == 0)
+		Fx.lightning(_world(), [at + HIT], TIGER, h._tier)
+		for o in _near_monsters(at, r):
+			_hit(o, a * float(sk.tiger_fury[2]) / 100.0 * h._skill_mult)
+		_announce("tiger_fury")
+	if _roll("fox_charm") and m.is_alive():
+		m.apply_stun(float(sk.fox_charm[1]))
+		m.apply_vulnerable(float(sk.fox_charm[2]), float(sk.fox_charm[1]) + 2.0)
+		UrFx.charm(m, FOX, _mark_h(m), float(sk.fox_charm[1]))
+		_announce("fox_charm")
+	if sk.has("azure_tide") and m.is_alive():
+		m.apply_slow(float(sk.azure_tide[1]), float(sk.azure_tide[2]))
+
+
+## 주작의 가호: 주작이 회복·부활시킨 아군이 b초 동안 공격력 +a%.
+func _bless(o) -> void:
+	if sk.has("phoenix_blessing") and o.get("_skx") != null and o.is_alive():
+		o._skx.add_hymn(float(sk.phoenix_blessing[0]), float(sk.phoenix_blessing[1]))
+
+
+## UR 발동형 k(p = 숫자). 조건이 안 맞으면 false. dry = 조건만 본다(_cast와 같은 약속).
+func _cast_ur(k: String, p: Array, dry: bool) -> bool:
+	var a := _atk()
+	var t = _combat_target()
+	var here: Vector3 = h.global_position
+	var w := _world()
+	var m: float = h._skill_mult
+	match k:
+		"turtle_ward":  # 현무 결계: 반경 b 아군(자신 포함)에게 현무 최대 HP c%의 보호막 + 주변 적 도발 3초
+			var r := float(p[1])
+			var near := _near_monsters(here, r)
+			if near.is_empty() and _hurt_allies(here, r).is_empty():
+				return false
+			if dry:
+				return true
+			UrFx.shell_dome(w, _flat(here), TORTOISE, r, 1.6)
+			for o in h.get_tree().get_nodes_in_group(h.allies):
+				if o.is_alive() and o.get("_skx") != null and Formation.flat_distance(here, o.global_position) <= r:
+					o._skx.add_barrier(h.hp_max * float(p[2]) / 100.0)
+			for o in near:
+				o.taunt(h, 3.0)
+				Fx.taunt_mark(o, _mark_h(o))
+		"north_tide":  # 북해 해일: 반경 b 적에게 c% 피해 + 기절 1.5초 + 밀침
+			var r := float(p[1])
+			var near := _near_monsters(here, r)
+			if near.is_empty():
+				return false
+			if dry:
+				return true
+			UrFx.tide(w, _flat(here), TORTOISE, r)
+			for o in near:
+				_hit(o, a * float(p[2]) / 100.0 * m)
+				if o.is_alive():
+					o.apply_stun(1.5)
+					o.knockback(here, 1.5)
+		"tiger_claw":  # 백호 참격: 앞쪽 부채꼴(길이 b)에 발톱 세 번, 번마다 c% — 마지막은 밀침
+			if t == null:
+				return false
+			if dry:
+				return true
+			var length := float(p[1])
+			var dmg: float = a * float(p[2]) / 100.0 * m
+			for i in 3:
+				_later(0.12 * i, func():
+					if not h.is_alive():
+						return
+					var tt = _combat_target()
+					var from: Vector3 = h.global_position
+					var dir: Vector3 = _flat((tt.global_position if tt != null else from + h.basis.z * -1.0) - from).normalized()
+					if dir == Vector3.ZERO:
+						dir = Vector3.FORWARD
+					UrFx.claws(_world(), from, dir, length, TIGER, i % 2 == 1)
+					for o in _cone_monsters(from, dir, length, deg_to_rad(55.0)):
+						_hit(o, dmg)
+						if i == 2 and o.is_alive():
+							o.knockback(from, 1.0))
+		"tiger_avatar":  # 백호 현신: b초 동안 공격력·공격 속도 +c%, 포효로 주변 4m 적 기절 1초
+			if t == null:
+				return false
+			if dry:
+				return true
+			_tiger_t = float(p[1])
+			UrFx.tiger_avatar(h, TIGER, float(p[1]))
+			Fx.buff(h, TIGER)
+			for o in _near_monsters(here, 4.0):
+				o.apply_stun(1.0)
+		"fox_fire":  # 여우불: 구슬 b개가 사거리 안 적들에게 흩어져 날아가 각각 c%
+			var pool := _near_monsters(here, _reach() + 3.0)
+			if pool.is_empty():
+				return false
+			if dry:
+				return true
+			pool.shuffle()
+			var dmg: float = a * float(p[2]) / 100.0 * m
+			var pop := func(o):
+				Fx.spark(_world(), o.global_position + HIT, FOX.lightened(0.4), 0.6)
+				Fx.halo(_world(), o.global_position + HIT, FOX, 1.2, 0.25, 1.3, "ur_fox_hit")
+			Fx.halo(w, here + MUZZLE, FOX, 2.4, 0.5, 1.3, "ur_fox_cast")
+			for i in int(p[1]):
+				_shoot(pool[i % pool.size()], "bolt", 12.0 + 1.5 * (i % 3), dmg, 0.06 * i, pop, FOX, true, true)
+		"nine_tails":  # 구미호 해방: 아홉 꼬리가 차례로 주변(반경 b)을 휩쓸어 번마다 c%, 마지막에 남은 적 기절 1초
+			var r := float(p[1])
+			if _near_monsters(here, r).is_empty():
+				return false
+			if dry:
+				return true
+			var dmg: float = a * float(p[2]) / 100.0 * m
+			for i in 9:
+				_later(0.09 * i, func():
+					if not h.is_alive():
+						return
+					var c: Vector3 = _flat(h.global_position)
+					UrFx.tail_sweep(_world(), c, FOX, r, TAU * i / 9.0)
+					for o in _near_monsters(c, r):
+						_hit(o, dmg)
+					if i == 8:
+						UrFx.fox_bloom(_world(), c, FOX, r)
+						for o in _near_monsters(c, r):
+							o.apply_stun(1.0)
+							UrFx.charm(o, FOX, _mark_h(o), 1.0))
+		"dragon_arrow":  # 청룡시: 대상 쪽 길이 b를 꿰뚫는 용 화살, c% + 둔화 40% 2초
+			if t == null:
+				return false
+			if dry:
+				return true
+			var dir: Vector3 = _flat(t.global_position - here).normalized()
+			if dir == Vector3.ZERO:
+				dir = Vector3.FORWARD
+			var length := float(p[1])
+			UrFx.dragon_arrow(w, here + MUZZLE, here + dir * length + HIT, AZURE)
+			for o in _line_monsters(here, dir, length, 1.8):
+				_hit(o, a * float(p[2]) / 100.0 * m)
+				if o.is_alive():
+					o.apply_slow(40.0, 2.0)
+		"azure_dragon":  # 청룡 강림: 대상 자리(반경 b)를 용이 3초 휘감아 0.5초마다 c% + 둔화, 끝에 두 배 피해
+			if t == null:
+				return false
+			if dry:
+				return true
+			var at: Vector3 = _flat(t.global_position)
+			var r := float(p[1])
+			var dmg: float = a * float(p[2]) / 100.0 * m
+			UrFx.dragon_coil(w, at, AZURE, r, 3.0)
+			for i in 7:
+				_later(0.5 * (i + 1), func():
+					var last := i == 6
+					if last:
+						Fx.nova(_world(), at, AZURE, r * 1.2, 2)
+						Fx._surge(_world(), Fx._mesh("pillar", AZURE), at, "ur_coil_end", r * 0.6, 6.0, 0.6, Fx.soft_material())
+					for o in _near_monsters(at, r):
+						_hit(o, dmg * (2.0 if last else 1.0))
+						if o.is_alive():
+							o.apply_slow(50.0, 0.7))
+		"time_stop":  # 시간 정지: 대상 자리 반경 b 적이 c초 동안 얼어붙는다(멈춘 시간) + 공격력 80% 피해
+			if t == null:
+				return false
+			if dry:
+				return true
+			var at: Vector3 = _flat(t.global_position)
+			var r := float(p[1])
+			UrFx.clock(w, at, TIME, r, float(p[2]))
+			Fx.screen_flash(w, at, TIME, 0.1)
+			for o in _near_monsters(at, r):
+				_hit(o, a * 0.8 * m)
+				if o.is_alive():
+					o.apply_freeze(float(p[2]))
+		"time_collapse":  # 시간 붕괴: 대상 자리에 균열이 1.2초 빨려들다 터져 반경 b 적에게 c% + 둔화 50% 3초
+			if t == null:
+				return false
+			if dry:
+				return true
+			var at: Vector3 = _flat(t.global_position)
+			var r := float(p[1])
+			var dmg: float = a * float(p[2]) / 100.0 * m
+			UrFx.collapse(w, at, TIME, r, 1.2)
+			_later(1.2, func():
+				Fx.blast(_world(), at, TIME, r, true, 2, 2)
+				for o in _near_monsters(at, r):
+					_hit(o, dmg)
+					if o.is_alive():
+						o.apply_slow(50.0, 3.0))
+		"phoenix_wing":  # 불새의 날개: 아군 모두 최대 HP b% 회복, 불새가 대상 자리(반경 3.5m)를 덮쳐 c% + 화상
+			if t == null and _hurt_allies(here, INF).is_empty():
+				return false
+			if dry:
+				return true
+			for o in h.get_tree().get_nodes_in_group(h.allies):
+				if o.is_alive():
+					o.heal(o.hp_max * float(p[1]) / 100.0)
+					Fx.heal_cross(o)
+					_bless(o)
+			if t != null:
+				var at: Vector3 = _flat(t.global_position)
+				var dmg: float = a * float(p[2]) / 100.0 * m
+				UrFx.phoenix(w, here + Vector3(0, 2.0, 0), at + Vector3(0, 1.0, 0), PHOENIX, 0.5)
+				_later(0.5, func():
+					for o in _near_monsters(at, 3.5):
+						_hit(o, dmg)
+						if o.is_alive():
+							o.apply_dot("burn", a * BURN_PCT / 100.0 * m, 3.0))
+			else:
+				UrFx.phoenix(w, here + Vector3(-3, 2.5, 0), here + Vector3(3, 2.5, 0), PHOENIX, 0.6)
+		"rebirth_flame":  # 환생의 불꽃: 쓰러진 아군을 모두 최대 HP b%로 되살리고, 살아 있는 아군은 c% 회복
+			var dead := []
+			for o in h.get_tree().get_nodes_in_group(h.allies):
+				if not o.is_alive() and o.has_method("revive") and o.is_inside_tree():
+					dead.append(o)
+			if dead.is_empty() and _hurt_allies(here, INF).is_empty():
+				return false
+			if dry:
+				return true
+			UrFx.phoenix(w, here + Vector3(0, 0.5, 0), here + Vector3(0, 6.0, 0), PHOENIX, 0.6, 3.2)
+			for o in h.get_tree().get_nodes_in_group(h.allies):
+				if o in dead:
+					o.revive(float(p[1]))
+					UrFx.rebirth(o, PHOENIX)
+				elif o.is_alive():
+					o.heal(o.hp_max * float(p[2]) / 100.0)
+					Fx.heal_ring(w, o.global_position, 1.2, 1)
+				_bless(o)
+		_:
+			return false
+	return true

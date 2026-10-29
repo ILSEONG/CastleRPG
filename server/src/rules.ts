@@ -491,7 +491,7 @@ export function gachaRates(config: Config, currency: string, level: number) {
   const ssr = dia ? cfgNum(config, 'gacha_dia_ssr') : cfgNum(config, 'gacha_gold_ssr_base') + cfgNum(config, 'gacha_gold_ssr_step') * k
   const sr = dia ? cfgNum(config, 'gacha_dia_sr') : cfgNum(config, 'gacha_gold_sr_base') + cfgNum(config, 'gacha_gold_sr_step') * k
   const noSsr = !dia && goldLevel(config, level) < GOLD_SSR_FROM
-  return { ssr: noSsr ? 0 : ssr, sr }
+  return { ur: dia ? cfgNum(config, 'gacha_dia_ur') : 0, ssr: noSsr ? 0 : ssr, sr } // UR은 다이아 모집에만(2026-10-29 사용자)
 }
 
 // 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L²(낮은 레벨은 조금, 높은 레벨은 크게 — 사용자 2026-10-12). 최대 레벨이면 null.
@@ -528,14 +528,15 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
   return ''
 }
 
-// 모집(스펙 §3.6): 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
+// 모집(스펙 §3.6): 장마다 등급(UR rates.ur, SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
 // rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1).
-// pity(다이아 모집만, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다. 다이아 10연차는 또
+// pity(다이아 모집만, 개정 23)가 있으면 장마다 n·u += 1, u ≥ umax면 UR 확정, 아니고 n ≥ max면 SSR 확정. UR이면 n = u = 0,
+// SSR이면 n = 0 — 바꿔 둔다(u·umax가 없으면 UR 천장 없음, 2026-10-29). 다이아 10연차는 또
 // SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 // 앱 Economy.roll_gacha와 같은 규칙.
 export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
-  rates = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number }) {
-  const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
+  rates: { ur?: number; ssr: number; sr: number } = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number; u?: number; umax?: number }) {
+  const pools: Record<string, string[]> = { UR: [], SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {
     const pool = pools[grade]
@@ -543,14 +544,23 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
     return { id: pool[Math.floor(rand() * pool.length)], grade }
   }
   const { ssr, sr } = rates
+  const ur = rates.ur ?? 0
+  const urPity = pity !== undefined && pity.u !== undefined && pity.umax !== undefined
   const out: { id: string; grade: string }[] = []
   for (let i = 0; i < count; i++) {
     const r = rand()
-    let grade = r < ssr ? 'SSR' : r < ssr + sr ? 'SR' : 'R'
+    let grade = r < ur ? 'UR' : r < ur + ssr ? 'SSR' : r < ur + ssr + sr ? 'SR' : 'R'
     if (pity) {
       pity.n += 1
-      if (pity.n >= pity.max) grade = 'SSR'
-      if (grade === 'SSR') pity.n = 0
+      if (urPity) {
+        pity.u! += 1
+        if (pity.u! >= pity.umax!) grade = 'UR'
+      }
+      if (pity.n >= pity.max && grade !== 'UR') grade = 'SSR'
+      if (grade === 'UR') {
+        pity.n = 0
+        if (urPity) pity.u = 0
+      } else if (grade === 'SSR') pity.n = 0
     }
     out.push(pick(grade))
   }
@@ -774,7 +784,7 @@ export const levelMult = (config: Config, level: number, role: string) =>
 export const promoteMult = (config: Config, promotion: number) => grown(1, cfgNum(config, 'promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
 // 전투력 = round((HP / 10 + 공격 × 2 / 공격 간격 × 원거리 배율) × 등급 배율), HP·공격 = 표 × 레벨 배율 × 승급 배율 + 장비.
 // 2026-10-06 밸런스(앱 GameData.POWER_GRADE·POWER_RANGED와 같다): 같은 레벨·승급·장비면 SSR > SR > R.
-export const POWER_GRADE: Record<string, number> = { SSR: 2.0, SR: 1.4, R: 1.0 }
+export const POWER_GRADE: Record<string, number> = { UR: 2.8, SSR: 2.0, SR: 1.4, R: 1.0 }
 export const POWER_RANGED = 2.0
 export const powerOf = (def: { role?: unknown; grade?: unknown; atk_interval: unknown }, hp: number, atk: number) =>
   roundHalfAway((hp / 10 + ((atk * 2) / Number(def.atk_interval)) * (String(def.role ?? '') === 'ranged' ? POWER_RANGED : 1)) * (POWER_GRADE[String(def.grade ?? '')] ?? 1))

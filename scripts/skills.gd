@@ -26,6 +26,8 @@ const KINDS := {
 	"shield_bash": 3, "snare": 3, "blade_flurry": 3, "parry": 3, "fire_bolt": 3, "firespread": 3, "axe_volley": 3, "boomerang": 3,
 	"spear_sweep": 3, "drain_slash": 3, "volley": 3, "wide_swing": 3, "cheap_shot": 3, "crescent": 3, "lunar_veil": 3, "howl": 3,
 	"deep_freeze": 3, "hex": 3, "scorch": 3, "gale": 3, "solar_spark": 3, "frost_spike": 3, "magma": 3,
+	# 2026-10-29 태생 UR 전용(영웅마다 액티브 · 패시브 · 궁극기) — 적용은 hero_skills.gd _cast_ur·_ur_hit
+	"turtle_ward": 3, "black_shell": 2, "north_tide": 3, "tiger_claw": 3, "tiger_fury": 3, "tiger_avatar": 3, "fox_fire": 3, "fox_charm": 3, "nine_tails": 3, "dragon_arrow": 3, "azure_tide": 3, "azure_dragon": 3, "time_stop": 3, "time_haste": 1, "time_collapse": 3, "phoenix_wing": 3, "phoenix_blessing": 2, "rebirth_flame": 3,
 }
 
 
@@ -73,6 +75,24 @@ const RULES := {
 	"deep_freeze": ["pos", "int1", "pos"], "hex": ["pos", "pos", "nonneg"], "scorch": ["pct", "pos", "nonneg"],
 	"gale": ["pct", "pos", "nonneg"], "solar_spark": ["pct", "pos", "nonneg"], "frost_spike": ["pct", "pos", "nonneg"],
 	"magma": ["pct", "pos", "nonneg"],
+	"turtle_ward": ["pos", "pos", "nonneg"],
+	"black_shell": ["pct", "nonneg"],
+	"north_tide": ["pos", "pos", "nonneg"],
+	"tiger_claw": ["pos", "pos", "nonneg"],
+	"tiger_fury": ["int1", "pos", "nonneg"],
+	"tiger_avatar": ["pos", "pos", "nonneg"],
+	"fox_fire": ["pos", "int1", "nonneg"],
+	"fox_charm": ["pct", "pos", "pct"],
+	"nine_tails": ["pos", "pos", "nonneg"],
+	"dragon_arrow": ["pos", "pos", "nonneg"],
+	"azure_tide": ["nonneg", "pct", "pos"],
+	"azure_dragon": ["pos", "pos", "nonneg"],
+	"time_stop": ["pos", "pos", "pos"],
+	"time_haste": ["nonneg"],
+	"time_collapse": ["pos", "pos", "nonneg"],
+	"phoenix_wing": ["pos", "nonneg", "nonneg"],
+	"phoenix_blessing": ["nonneg", "pos"],
+	"rebirth_flame": ["pos", "pct", "pct"],
 }
 const RULE_TEXT := {"pos": "greater than 0", "nonneg": "0 or more", "pct": "in 0..100", "int1": "an integer of 1 or more", "mult": "100 or more"}
 
@@ -106,6 +126,7 @@ static var NAMES := {
 	"drain_slash": Lang.t("skills.names.drain_slash"), "volley": Lang.t("skills.names.volley"), "wide_swing": Lang.t("skills.names.wide_swing"), "cheap_shot": Lang.t("skills.names.cheap_shot"), "crescent": Lang.t("skills.names.crescent"),
 	"lunar_veil": Lang.t("skills.names.lunar_veil"), "howl": Lang.t("skills.names.howl"), "deep_freeze": Lang.t("skills.names.deep_freeze"), "hex": Lang.t("skills.names.hex"), "scorch": Lang.t("skills.names.scorch"), "gale": Lang.t("skills.names.gale"),
 	"solar_spark": Lang.t("skills.names.solar_spark"), "frost_spike": Lang.t("skills.names.frost_spike"), "magma": Lang.t("skills.names.magma"),
+	"turtle_ward": Lang.t("skills.names.turtle_ward"), "black_shell": Lang.t("skills.names.black_shell"), "north_tide": Lang.t("skills.names.north_tide"), "tiger_claw": Lang.t("skills.names.tiger_claw"), "tiger_fury": Lang.t("skills.names.tiger_fury"), "tiger_avatar": Lang.t("skills.names.tiger_avatar"), "fox_fire": Lang.t("skills.names.fox_fire"), "fox_charm": Lang.t("skills.names.fox_charm"), "nine_tails": Lang.t("skills.names.nine_tails"), "dragon_arrow": Lang.t("skills.names.dragon_arrow"), "azure_tide": Lang.t("skills.names.azure_tide"), "azure_dragon": Lang.t("skills.names.azure_dragon"), "time_stop": Lang.t("skills.names.time_stop"), "time_haste": Lang.t("skills.names.time_haste"), "time_collapse": Lang.t("skills.names.time_collapse"), "phoenix_wing": Lang.t("skills.names.phoenix_wing"), "phoenix_blessing": Lang.t("skills.names.phoenix_blessing"), "rebirth_flame": Lang.t("skills.names.rebirth_flame"),
 }
 
 ## 영웅별 이름(개정 17 §2 표의 괄호·§3 예시): 영웅 id → {종류: 이름}. 없으면 NAMES.
@@ -252,6 +273,24 @@ static var TEXTS := {
 	"solar_spark": Lang.t("skills.texts.solar_spark"),
 	"frost_spike": Lang.t("skills.texts.frost_spike"),
 	"magma": Lang.t("skills.texts.magma"),
+	"turtle_ward": Lang.t("skills.texts.turtle_ward"),
+	"black_shell": Lang.t("skills.texts.black_shell"),
+	"north_tide": Lang.t("skills.texts.north_tide"),
+	"tiger_claw": Lang.t("skills.texts.tiger_claw"),
+	"tiger_fury": Lang.t("skills.texts.tiger_fury"),
+	"tiger_avatar": Lang.t("skills.texts.tiger_avatar"),
+	"fox_fire": Lang.t("skills.texts.fox_fire"),
+	"fox_charm": Lang.t("skills.texts.fox_charm"),
+	"nine_tails": Lang.t("skills.texts.nine_tails"),
+	"dragon_arrow": Lang.t("skills.texts.dragon_arrow"),
+	"azure_tide": Lang.t("skills.texts.azure_tide"),
+	"azure_dragon": Lang.t("skills.texts.azure_dragon"),
+	"time_stop": Lang.t("skills.texts.time_stop"),
+	"time_haste": Lang.t("skills.texts.time_haste"),
+	"time_collapse": Lang.t("skills.texts.time_collapse"),
+	"phoenix_wing": Lang.t("skills.texts.phoenix_wing"),
+	"phoenix_blessing": Lang.t("skills.texts.phoenix_blessing"),
+	"rebirth_flame": Lang.t("skills.texts.rebirth_flame"),
 }
 
 

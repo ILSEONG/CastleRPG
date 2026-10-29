@@ -65,7 +65,7 @@ test('마이그레이션 003: 001·002만 적용된 DB에서 올리면 gold가 g
   }
 })
 
-test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroes로 바꾸고, 시드가 36행을 채운다', async () => {
+test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroes로 바꾸고, 시드가 42행을 채운다', async () => {
   const old = await openDb({})
   const dir = mkdtempSync(join(tmpdir(), 'castle-mig-'))
   tmp.push(dir)
@@ -76,7 +76,7 @@ test('마이그레이션 004: 001·002만 적용된 DB에서 hero_roles를 heroe
   assert.equal((await old.query("select to_regclass('hero_roles') as t"))[0].t, null)
   assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 0)
   await seed(old)
-  assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 36)
+  assert.equal((await old.query('select count(*)::int as n from heroes'))[0].n, 42)
   await old.close()
 })
 
@@ -103,7 +103,7 @@ test('마이그레이션 003~005: 001·002만 적용된 DB에서 올리면 gold 
     }
     await assert.rejects(d.query("insert into player_heroes (player_id, hero_id, copies) values ($1, 'jack', 0)", [ids[0]]))
     await seed(d)
-    assert.equal((await d.query('select count(*)::int as n from heroes'))[0].n, 36)
+    assert.equal((await d.query('select count(*)::int as n from heroes'))[0].n, 42)
   } finally {
     await d.close()
   }
@@ -160,7 +160,7 @@ test('영웅 CSV: 빈 스킬 칸은 null, 숫자 칸 오류, 시작 영웅은 �
   assert.deepEqual(errs, ["h.csv line 3 column 'a': not a number: 'abc'"])
   const cfg = readFileSync(join(DATA_DIR, 'config.csv'), 'utf8').replace('starter_heroes,hans|', 'starter_heroes,ghost|')
   await assert.rejects(readTables(dataCopy({ 'config.csv': cfg })), /unknown hero 'ghost' in starter_heroes/)
-  const heroes = readFileSync(join(DATA_DIR, 'heroes.csv'), 'utf8').replace(',SSR,', ',UR,')
+  const heroes = readFileSync(join(DATA_DIR, 'heroes.csv'), 'utf8').replace(',SSR,', ',LR,')
   await assert.rejects(seed(db, dataCopy({ 'heroes.csv': heroes })))
   assert.equal((await db.query("select grade from heroes where id = 'arteon'"))[0].grade, 'SSR')
 })
@@ -232,7 +232,10 @@ test('모집 설정 검증(개정 23): 비용·보장 수는 0 이상 정수, �
     ['gacha_10_min_sr', '1.5', /gacha_10_min_sr must be a non-negative integer: '1\.5'/],
     ['gacha_dia_ssr', '1.5', /gacha_dia_ssr must be in 0\.\.1: '1\.5'/],
     ['gacha_dia_sr', '-0.1', /gacha_dia_sr must be in 0\.\.1: '-0\.1'/],
-    ['gacha_dia_sr', '0.98', /gacha_dia_sr plus gacha_dia_ssr must be at most 1: 0\.05 \+ 0\.98/],
+    ['gacha_dia_sr', '0.98', /gacha_dia_sr plus gacha_dia_ur and gacha_dia_ssr must be at most 1: 0\.005 \+ 0\.05 \+ 0\.98/],
+    ['gacha_dia_ur', '1.5', /gacha_dia_ur must be in 0\.\.1: '1\.5'/],
+    ['gacha_dia_ur_pity', '0', /gacha_dia_ur_pity must be an integer of at least 1: '0'/],
+    ['ur_fuse_shards', '2.5', /ur_fuse_shards must be an integer of at least 1: '2\.5'/],
     ['gacha_gold_level_max', '0', /gacha_gold_level_max must be an integer of at least 1: '0'/],
     ['gacha_gold_level_pulls', '2.5', /gacha_gold_level_pulls must be an integer of at least 1: '2\.5'/],
     ['gacha_dia_pity', '0', /gacha_dia_pity must be an integer of at least 1: '0'/],
@@ -259,7 +262,7 @@ test('모집 설정 검증(개정 23): 비용·보장 수는 0 이상 정수, �
   await assert.rejects(readTables(dir), /heroes\.csv line 0 column 'grade': no SR heroes to recruit/)
   writeFileSync(join(dir, 'heroes.csv'), lines.join('\n'))
   await readTables(withCfg('gacha_dia_cost_1', '0')) // 0원 모집·확률 경계(합 1)는 받는다
-  await readTables(withCfg('gacha_dia_sr', '0.92'))
+  await readTables(withCfg('gacha_dia_sr', '0.945')) // UR 0.005 + SSR 0.05 + SR 0.945 = 1
 })
 
 test('마이그레이션 006: 005까지 적용된 DB의 보유 영웅은 level 1이 되고, level은 1 이상이어야 한다', async () => {

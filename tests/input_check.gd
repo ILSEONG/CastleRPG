@@ -586,7 +586,7 @@ func _recruit_and_heroes(rig) -> void:
 	# 미보유 영웅: 보유 카드 뒤에 등급(SSR → SR → R) → 표 순서, 흐린 카드·"미보유"·Lv·전투력 없음, 배치·상세 안 됨
 	var locked: Array = heroes_win.locked_cards.keys()
 	var want_locked: Array = GameData.heroes().filter(func(h): return int(Economy.heroes.get(h.id, 0)) < 1).map(func(h): return h.id)
-	var rank := {"SSR": 0, "SR": 1, "R": 2}
+	var rank := {"UR": -1, "SSR": 0, "SR": 1, "R": 2}  # 태생 UR이 맨 앞(2026-10-29)
 	var file_order := GameData.heroes().map(func(h): return h.id)
 	want_locked.sort_custom(func(a, b): return [rank[GameData.hero(a).grade], file_order.find(a)] < [rank[GameData.hero(b).grade], file_order.find(b)])
 	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
@@ -2904,14 +2904,16 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	dlg = recruit.dialog.get_global_rect()
 	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.dia_label.text == "보유 600"
-		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
-		and recruit.rates_label.text == "SSR 5% · SR 30% · R 65%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
+		and recruit.pity_label.text == "SSR 확정까지 50회  ·  UR 확정까지 200회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
+		and recruit.rates_label.text == "UR 0.5% · SSR 5% · SR 30% · R 64.5%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
 		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 5/30/65, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
 		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
-	var ssr: bool = recruit.cards.size() == 1 and GameData.hero(recruit.cards[0].hero_id).grade == "SSR"
-	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회" % (50 if ssr else 49)
+	var top_g: String = GameData.hero(recruit.cards[0].hero_id).grade if recruit.cards.size() == 1 else ""
+	var ssr: bool = top_g in ["SSR", "UR"]  # UR도 SSR 천장을 되돌린다
+	var ur_left := 200 if top_g == "UR" else 199
+	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회  ·  UR 확정까지 %d회" % [50 if ssr else 49, ur_left]
 		and Economy.gold == gold0 and recruit.is_showing_results() and not recruit.auto_box.visible and recruit.again_button.text == "1회 더\n다이아 300" and recruit.again10_button.text == "10회 더\n다이아 부족",
 		"(r23) diamond [1회]: diamonds -300, the pity count goes down, gold untouched; no 자동 모집 box on diamond results",
 		"dia=%d pity=%d text=%s gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, recruit.pity_label.text, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])

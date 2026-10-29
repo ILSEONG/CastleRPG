@@ -24,6 +24,7 @@ const RecruitBanner := preload("res://scripts/recruit_banner.gd")
 const CardReveal := preload("res://scripts/card_reveal.gd")
 const SummonStage := preload("res://scripts/summon_stage.gd")
 const GachaOdds := preload("res://scripts/gacha_odds.gd")
+const FuseDialog := preload("res://scripts/fuse_dialog.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
@@ -62,6 +63,8 @@ var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
 var odds: Control  # 확률 안내 창
+var fuse_button: Button  # [SSR 조각 합성] — 다이아 탭(2026-10-29)
+var fuse: Control  # SSR 조각 합성 창(fuse_dialog.gd)
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
@@ -127,6 +130,10 @@ func _ready() -> void:
 	_dia_box.add_child(pity_label)
 	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
 	_dia_box.add_child(ticket_label)
+	fuse_button = _button("", UiKit.GRADE_COLORS.UR.darkened(0.1), 24)
+	fuse_button.focus_mode = Control.FOCUS_NONE
+	fuse_button.pressed.connect(func(): if not _waiting: fuse.open())
+	_dia_box.add_child(fuse_button)
 
 	var rates_row := HBoxContainer.new()
 	rates_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -192,6 +199,9 @@ func _ready() -> void:
 	_build_shop_ask()
 	odds = GachaOdds.new()
 	add_child(odds)
+	fuse = FuseDialog.new()
+	fuse.fused.connect(_on_fused)
+	add_child(fuse)
 	stage = SummonStage.new()  # 맨 위(확률 창·상점 확인 창 위)
 	stage.intro_done.connect(_start_flips)
 	stage.skip_all.connect(_skip_all)
@@ -338,6 +348,10 @@ static func rates_text(cur := GOLD) -> String:
 static func _rates_line(rates: Dictionary) -> String:
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
+	var ur: float = rates.get("ur", 0.0)
+	if ur > 0.0:  # 다이아(태생 UR은 다이아 모집에만 — 2026-10-29)
+		return "UR %s%% · SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ur * 100.0), Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0),
+			Skills.num_text((1.0 - ur - ssr - sr) * 100.0)]
 	if ssr <= 0.0:  # 골드 모집 Lv 1~2(SSR은 GameData.GOLD_SSR_FROM부터)
 		return Lang.t("recruit_panel.rates_line") % [GameData.GOLD_SSR_FROM, Skills.num_text(sr * 100.0), Skills.num_text((1.0 - sr) * 100.0)]
 	return "SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0), Skills.num_text((1.0 - ssr - sr) * 100.0)]
@@ -377,6 +391,19 @@ func _recruit(count: int, cur := "") -> void:
 		_halted = true
 		_waiting = false
 		_refresh()
+
+
+## SSR 조각 합성 창 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
+func _on_fused(picks: Dictionary) -> void:
+	if _waiting:
+		return
+	_count = 1
+	_cur = DIA
+	_halted = true
+	_waiting = true  # 오프라인은 fuse_ur 안에서 바로 gacha_done이 온다 — 그 전에 둔다
+	if not Economy.fuse_ur(picks):
+		_waiting = false
+	_refresh()
 
 
 func _on_gacha_done(results: Array) -> void:
@@ -566,7 +593,8 @@ func _refresh() -> void:
 		preview_label.text = Lang.t("recruit_panel.refresh_4") % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
 	dia_label.text = Lang.t("recruit_panel.refresh_5") % UiKit.commas(Economy.diamonds)
-	pity_label.text = Lang.t("recruit_panel.refresh_6") % st.pity_left
+	pity_label.text = Lang.t("recruit_panel.refresh_6") % st.pity_left + "  ·  " + (Lang.t("recruit_panel.refresh_14") % st.ur_pity_left)
+	fuse_button.text = Lang.t("recruit_panel.refresh_15") % Economy.fuse_cost()
 	var tk := Economy.dia_tickets
 	var tk_shown := tk > 0 and currency == DIA
 	if ticket_label.visible != tk_shown:
