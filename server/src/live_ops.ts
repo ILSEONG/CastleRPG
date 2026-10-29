@@ -23,15 +23,16 @@
 //  POST /v1/admin/coupon {code, reward, max_uses?, expires_at?, note?}           만들기(같은 코드면 409 coupon_exists)
 //  POST /v1/admin/coupon/disable {code, disabled}
 // 보상(reward): gold·diamonds·tickets(다이아 모집권)·wood·stone·food·keys_gold·keys_equip·keys_ticket·pouch_<id>(방치 주머니)·
-// hero(영웅 id) + hero_n(장 수, 기본 1)·equip {grade, n}(그 등급 장비 n개, 부위 무작위). 출석 보상과 같은 키(attendance.ts)에 개수를 더한 것.
+// hero(영웅 id) + hero_n(장 수, 기본 1)·equip {grade, n}(그 등급 장비 n개, 부위 무작위)·equip_box_<normal|high|top>(장비 상자 개수). 출석 보상과 같은 키(attendance.ts)에 개수를 더한 것.
 import type { Context, Hono, Next } from 'hono'
 import * as P from './pouches.ts'
 import * as S from './speedups.ts'
 import { Limiter } from './ratelimit.ts'
 
-export const NUMERIC = ['gold', 'diamonds', 'tickets', 'wood', 'stone', 'food', 'keys_gold', 'keys_equip', 'keys_ticket'] as const
+export const NUMERIC = ['gold', 'diamonds', 'tickets', 'wood', 'stone', 'food', 'keys_gold', 'keys_equip', 'keys_ticket',
+  'equip_box_normal', 'equip_box_high', 'equip_box_top'] as const // equip_box_* = 장비 상자(rules.EQUIP_BOXES, 받을 때 등급을 굴린다)
 export const MAX_AMOUNT: Record<string, number> = { gold: 1e12, diamonds: 1e7, tickets: 10000, wood: 1e12, stone: 1e12, food: 1e12,
-  keys_gold: 1000, keys_equip: 1000, keys_ticket: 1000 }
+  keys_gold: 1000, keys_equip: 1000, keys_ticket: 1000, equip_box_normal: 50, equip_box_high: 50, equip_box_top: 50 }
 export const MAX_HERO_N = 1000
 export const MAX_EQUIP_N = 50
 export const MAX_POUCH_N = 999
@@ -58,6 +59,9 @@ export interface Reward {
   keys_gold?: number
   keys_equip?: number
   keys_ticket?: number
+  equip_box_normal?: number
+  equip_box_high?: number
+  equip_box_top?: number
   hero?: string
   hero_n?: number
   equip?: { grade: string; n: number }

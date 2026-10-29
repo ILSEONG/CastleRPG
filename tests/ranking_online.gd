@@ -68,7 +68,8 @@ func _ready() -> void:
 	_panel._pick("guild")
 	_check(await _loaded("guild"), "guild board loads", "")
 	var g: Dictionary = _panel.data.guild
-	_check(int(g.get("total", 0)) >= 5, "guild board lists the system guilds", str(g.get("total")))
+	_check(int(g.get("total", 0)) >= 1, "guild board lists guilds with dragon damage this week", str(g.get("total")))
+	_check(g.get("season") is Dictionary and g.season.get("rewards", []).size() == 3, "weekly reward bands come with the board", str(g.get("season")))
 	_check(g.get("me") is Dictionary and str(g.me.name) == str(Guild.guild.get("name", "")), "my guild is marked", str(g.get("me")))
 	await _snap()  # 4. 길드
 	_panel.buttons.close.pressed.emit()

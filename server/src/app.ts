@@ -261,7 +261,7 @@ interface Change {
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
 interface GuildChange {
   row: { guild_id: string | null; joined_at: number | null; coins: number; mine: G.Mine; boss_seen: number; power: number } // player_guild 행 전체
-  add?: { guild_id: string; exp: number; dmg: number } // 길드 누적에 더한다
+  add?: { guild_id: string; exp: number; dmg: number; week?: number } // 길드 누적에 더한다(week가 있으면 dmg를 그 주 길드 랭킹 점수에도)
   log?: { guild_id: string; text: string }
   create?: { id: string; name: string; emblem: number; seed: number; virtual_n: number; notice: string }
   leave?: { guild_id: string; owner: boolean } // 길드장이 나가면 남은 실제 길드원 중 먼저 들어온 사람이 길드장, 아무도 없으면 직접 만든 길드는 지운다
@@ -1059,6 +1059,10 @@ export function createApp(opts: AppOptions) {
     if (gc.add && (gc.add.exp || gc.add.dmg)) {
       ctes.push(`ga as (update guilds set exp = exp + ${p(gc.add.exp)}::bigint, boss_damage = boss_damage + ${p(Math.round(gc.add.dmg))}::bigint
         where id = ${p(gc.add.guild_id)}::uuid and exists (select 1 from s) returning 1)`)
+      if (gc.add.week !== undefined && gc.add.dmg > 0) {
+        ctes.push(`gw as (insert into guild_week_damage (guild_id, week, dmg) select ${p(gc.add.guild_id)}::uuid, ${p(gc.add.week)}::int, ${p(Math.round(gc.add.dmg))}::bigint
+          from s on conflict (guild_id, week) do update set dmg = guild_week_damage.dmg + excluded.dmg returning 1)`)
+      }
     }
     if (gc.log) {
       ctes.push(`gl as (insert into guild_log (guild_id, at, text) select ${p(gc.log.guild_id)}::uuid, to_timestamp(${p(now)}::float8), ${p(gc.log.text)}
@@ -2089,6 +2093,10 @@ export function createApp(opts: AppOptions) {
         const rows = [{ min_level: 0, [rw.equip.grade]: 1 }]
         items.push(...R.rollDrops(rows, 1, rw.equip.n, R.cfgNum(g.config, 'equip_weapon_p'), random))
       }
+    }
+    for (const [box, w] of Object.entries(R.EQUIP_BOXES)) { // 장비 상자: 상자마다 등급 확률로 하나씩
+      const n = sum[R.EQUIP_BOX_PREFIX + box] ?? 0
+      if (n > 0) items.push(...R.rollDrops([{ min_level: 0, ...w }], 1, n, R.cfgNum(g.config, 'equip_weapon_p'), random))
     }
     const change: Change = {}
     const res = Object.fromEntries(R.BUILD_RES.filter((r) => (sum[r] ?? 0) > 0).map((r) => [r, sum[r]]))
@@ -3757,7 +3765,7 @@ export function createApp(opts: AppOptions) {
       const coins = { n: x.pg.coins }
       grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
-      ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
+      ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg, week: Rk.weekOf(R.resetDay(x.now, x.hour)) },
         log: { guild_id: g.id, text: txt('server.app.guild_boss_finish.text', { playerName: G.playerName(x.id), reached, dmg: dmg.toLocaleString('en-US') }) } }
       ch.events = { guild_boss: 1 }
       return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
@@ -3787,12 +3795,21 @@ export function createApp(opts: AppOptions) {
 
   // --- 랭킹(server/src/ranking.ts): 스테이지·전투력·던전(골드·장비)·길드. 목록은 잠깐 캐시한다 ---
   const ranking = Rk.rankingStore(query, clock, loadGame)
+  // 주가 바뀐 뒤 처음 우편함·길드 랭킹을 볼 때 지난 주 길드 랭킹 보상을 보낸다(정산은 한 번만, 실패해도 그 요청은 막지 않는다).
+  const settleGuildRank = () => ranking.settle().catch((e) => console.error('guild rank settle failed', e))
+  app.use('/v1/mail', async (c, next) => {
+    if (c.req.method === 'GET') await settleGuildRank()
+    return next()
+  })
   app.get('/v1/ranking/:board', auth, async (c) => {
     const board = c.req.param('board') as Rk.Board
     if (!Rk.BOARDS.includes(board)) throw new ApiError(400, 'bad_request', `board must be one of ${Rk.BOARDS.join(', ')}`)
     const id = c.get('playerId') as string
     let key: string | null = id
-    if (board === 'guild') key = (await query('select guild_id::text from player_guild where player_id = $1', [id]))[0]?.guild_id ?? null
+    if (board === 'guild') {
+      await settleGuildRank()
+      key = (await query('select guild_id::text from player_guild where player_id = $1', [id]))[0]?.guild_id ?? null
+    }
     return c.json(await ranking.board(board, key))
   })
 
