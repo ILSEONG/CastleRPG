@@ -5382,7 +5382,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 39번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 퀘스트 43 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5402,8 +5402,8 @@ func test_tutorial() -> void:
 			blocks.append(before and not at and not t.build_locked(bid))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 20번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 2번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 퀘스트 22 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 퀘스트 2 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
 	var intro := ["hero_level", "growth", "build_lumber", "sell", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
@@ -5411,7 +5411,16 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 78 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 82 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	# 메이플스토리 키우기식 리듬(2026-10-29): 1-1 뒤로 전투 목표(스테이지·처치·던전·PVP·길드 보스·공성전 체험·파티) 없이 6칸 이상 이어지지 않는다
+	var calm := 0
+	var calm_max := 0
+	for m in TutorialScript.MISSIONS:
+		calm = 0 if m.kind in ["stage", "kill", "dungeon", "pvp", "guild_boss", "siege_try", "party"] else calm + 1
+		calm_max = maxi(calm_max, calm)
+	var kills := TutorialScript.MISSIONS.filter(func(m): return m.kind == "kill").map(func(m): return int(m.arg))
+	check(calm_max <= 5 and kills == [30, 40, 50, 60, 100, 100] and t.reward(t.mission_index("kill_30")) == {"diamonds": 30},
+		"guide: a battle goal comes at least every 6th mission; kill goals grow 30 → 60 and pay 30 diamonds: %d %s" % [calm_max, kills])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5423,11 +5432,13 @@ func test_tutorial() -> void:
 	e.upgrades["atk"] = 2
 	check(not t.complete() and t.progress_text() == "Lv 2/3", "guide: stat level mission shows Lv 2/3")
 	e.upgrades["atk"] = 3
-	check(t.complete() and t.reward(t.step) == {"gold": TutorialScript._margin(int(t.need_of(t.step + 1).gold))} and int(t.need_of(t.step + 1).gold) == 3153,
-		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
+	var hp3: int = int(t.need_of(t.mission_index("hp_3")).gold)
+	check(t.complete() and t.reward(t.step) == {"gold": 2000} and hp3 == 3153 and t.mission_index("kill_40") == t.step + 1
+		and t.reward(t.step + 1) == {"gold": TutorialScript._margin(hp3), "diamonds": 30},
+		"guide: stat Lv 3 completes with its own gold; the kill mission after it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 퀘스트 76 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5468,6 +5479,12 @@ func test_tutorial() -> void:
 		and TutorialScript.map_v5(27) == t.mission_index("atk_5") and TutorialScript.map_v5(80) == t.mission_index("party_clear")
 		and TutorialScript.map_v5(81) == TutorialScript.MISSIONS.size() and TutorialScript.map_step(TutorialScript.V4_IDS, 7) == t.mission_index("stage_1_1"),
 		"guide: old v5 steps continue at the first mission not done yet")
+	# v6(78개) → v7(82개, 메이플식 처치 미션 2026-10-29): 하던 미션 그대로(그 앞에 낀 처치 미션은 건너뛴다), 당겨 온 두 번째 100마리는 안 했으면 거기부터
+	check(TutorialScript.map_v6(0) == 0 and TutorialScript.map_v6(13) == t.mission_index("attend") and TutorialScript.map_v6(30) == t.mission_index("stage_1_4")
+		and TutorialScript.map_v6(56) == t.mission_index("kill_100_2") and TutorialScript.map_v6(59) == t.mission_index("kill_100_2")
+		and TutorialScript.map_v6(60) == t.mission_index("hero_lv4_18") and TutorialScript.map_v6(77) == t.mission_index("party_clear")
+		and TutorialScript.map_v6(78) == TutorialScript.MISSIONS.size() and TutorialScript.V6_IDS.size() == 78,
+		"guide: v6 steps continue at the same mission; new kill missions before it are skipped")
 	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
 	t.step = t.mission_index("siege_try")
 	t.count = 0
@@ -5578,26 +5595,33 @@ func test_tutorial() -> void:
 	t.state = "done"
 	t.repeats_on = true
 	t.check()
-	# 반복 퀘스트: 처치 → 수집 → 스테이지 → 성장 … 바퀴마다 목표·보상이 커진다
-	var q: Dictionary = t.mission()
-	check(t.repeating() and q.kind == "kill" and int(q.arg) == 100 and int(t.repeat_reward(q).gold) == 3000, "repeat: first quest is kill 100 for 3,000 gold")
-	for i in 100:
-		e.add_kill("grunt", 1)
-	var g0: int = e.gold
-	check(t.complete() and t.claim() and e.gold == g0 + 3000 and t.mission().kind == "collect", "repeat: claim pays and moves on")
-	t.count = 3
-	t.claim()
+	# 반복 퀘스트(메이플스토리 키우기식 순서 2026-10-29): 스테이지 → 처치 → 모집 → 던전 → 영웅 → 성장(건물·수집·판매는 뺐다). 번호는 가이드 뒤로 이어지고
+	# 바퀴마다 목표·보상이 커진다
+	check(TutorialScript.REPEATS.map(func(d): return d.kind) == ["stage", "kill", "gacha", "dungeon_win", "hero_up", "growth_up"],
+		"repeat: Maple-style order (stage, kill, recruit, dungeon, hero levels, growth) without building/collect/sell")
 	gs.stage = 7
 	t.best_stage = 7
 	t.rep_quest = {}
-	q = t.mission()
-	check(q.kind == "stage" and not t.complete() and int(q.arg) == 8 and q.title == "스테이지 %s 클리어" % GameData.round_label(8), "repeat: stage target = reached + 1 (two more rounds)")
+	var q: Dictionary = t.mission()
+	check(t.repeating() and q.kind == "stage" and not t.complete() and int(q.arg) == 8 and q.title == "스테이지 %s 클리어" % GameData.round_label(8)
+		and t.guide_number() == TutorialScript.MISSIONS.size() + 1, "repeat: first quest is the stage breakthrough (reached + 1), numbered right after the guide")
 	gs.stage = 9
-	check(t.complete() and t.claim() and t.mission().kind == "growth_up" and t.progress_text() == "0/3", "repeat: stage cleared; growth counts from now")
-	t.rep_n = TutorialScript.REPEATS.size()
+	var d0: int = e.diamonds
+	check(t.complete() and t.claim() and e.diamonds == d0 + 20 and t.mission().kind == "kill" and t.guide_number() == TutorialScript.MISSIONS.size() + 2,
+		"repeat: stage cleared pays 20 diamonds; next is the kill quest, number goes on")
+	q = t.mission()
+	check(int(q.arg) == 100 and int(t.repeat_reward(q).gold) == 3000, "repeat: kill 100 for 3,000 gold")
+	for i in 100:
+		e.add_kill("grunt", 1)
+	var g0: int = e.gold
+	check(t.complete() and t.claim() and e.gold == g0 + 3000 and t.mission().kind == "gacha", "repeat: claim pays and moves on to recruiting")
+	t.rep_n = TutorialScript.REPEATS.map(func(d): return d.kind).find("growth_up")
+	t.rep_quest = {"kind": "collect", "arg": 3, "cycle": 0, "base_value": 0}  # 예전 순서로 저장해 둔 퀘스트
+	check(t.mission().kind == "growth_up" and t.progress_text() == "0/3", "repeat: a quest saved under the old order is rebuilt; growth counts from now")
+	t.rep_n = TutorialScript.REPEATS.size() + 1
 	t.rep_quest = {}
 	q = t.mission()
-	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
+	check(q.kind == "kill" and int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
 	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
 	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 180 * 60.0, "tutorial done: normal training time, still one per order")
 	check(not t.tab_locked("hero") and not t.dungeon_locked("ticket") and t.repeating(), "tutorial done: nothing locked, repeat quests")
@@ -5673,16 +5697,16 @@ func test_tutorial_online() -> void:
 	e.notice.connect(func(x): notes.append(x))
 	e.apply_server(reply)
 	check(t.step == 4 and t.count == 0 and e.unbuilt.is_empty(), "a new server step starts counting again")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 2}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 0}
 	e.apply_server(reply)
-	check(not t.active() and t.repeating() and t.rep_n == 2 and t.mission().kind == TutorialScript.REPEATS[2].kind and notes.has(TutorialScript.DONE_TEXT)
+	check(not t.active() and t.repeating() and t.rep_n == 0 and t.mission().kind == TutorialScript.REPEATS[0].kind and notes.has(TutorialScript.DONE_TEXT)
 		and not e.tutorial_training, "online: tutorial done → repeat quest from the server's number")
-	check(not e.quest_claim_online({"type": "repeat", "n": 2}), "no network, no claim")
+	check(not e.quest_claim_online({"type": "repeat", "n": 0}), "no network, no claim")
 	# 온라인 반복 퀘스트는 서버가 센 진행으로(2026-10-14 동기화 전에 만들어 저장된 「1-2 클리어」가 ✓인데 서버가 받아 주지 않던 버그)
 	t.rep_quest = {"kind": "stage", "goto": "stage", "desc": "", "cycle": 0, "base_value": 0, "arg": 2, "title": "스테이지 1-2 클리어"}
 	gs.stage = 12
 	check(t.complete(), "(before) a stale local stage target looks done")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 2, "rep": {"have": 1, "need": 2, "from": 11}}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 0, "rep": {"have": 1, "need": 2, "from": 11}}
 	e.apply_server(reply)
 	var sq: Dictionary = t.mission()
 	check(sq.kind == "stage" and int(sq.arg) == 12 and sq.title == "스테이지 %s 클리어" % GameData.round_label(12) and not t.complete() and t.progress_text() == "",
@@ -5690,7 +5714,7 @@ func test_tutorial_online() -> void:
 	reply.player.quest.rep = {"have": 2, "need": 2, "from": 11}
 	e.apply_server(reply)
 	check(t.complete(), "online stage repeat: done when the server counts two more rounds")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 9, "rep": {"have": 40, "need": 150, "from": null}}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 7, "rep": {"have": 40, "need": 150, "from": null}}
 	e.kills_pending = {12: {"goblin": 5}}
 	e.apply_server(reply)
 	check(t.mission().kind == "kill" and t.progress_text() == "45/150" and not t.complete(), "online kill repeat: server count + unsent kills (%s)" % t.progress_text())
@@ -5700,7 +5724,7 @@ func test_tutorial_online() -> void:
 	e.kills_pending = {}
 	e.apply_server(reply)
 	check(t.complete() and t.progress_text() == "150/150", "online kill repeat: done at the server's count")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 3, "rep": {"have": 1, "need": 3, "from": null}}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 5, "rep": {"have": 1, "need": 3, "from": null}}
 	e.apply_server(reply)
 	check(t.mission().kind == "growth_up" and t.progress_text() == "1/3" and not t.complete(), "online growth repeat: server count, not the local level sum")
 	# 온라인 판매 응답도 sold를 낸다(튜토리얼 7 "상인과 거래" — 응답에서 세지 않아 깨지지 않던 버그)
