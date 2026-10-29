@@ -3612,11 +3612,15 @@ export function createApp(opts: AppOptions) {
     let rows = (await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
       order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)]))
     const system = rows.filter((r) => r.owner == null).length
+    // 이름(무작위)이 이미 있는 길드와 겹치면 다른 seed로 다시 — 겹친 채 건너뛰면 추천이 RECOMMEND_N보다 적게 나왔다
     for (let k = system; k < G.RECOMMEND_N; k++) {
-      const seed = Math.floor(random() * 2 ** 31)
-      const sg = G.systemGuild(seed, x.now)
-      await query(`insert into guilds (name, emblem, notice, owner, seed, created_at, virtual_n) values ($1, $2, $3, null, $4, to_timestamp($5::float8), $6)
-        on conflict (name) do nothing`, [sg.name, sg.emblem, sg.notice, seed, sg.created_at, sg.virtual_n])
+      for (let tries = 0; tries < 20; tries++) {
+        const seed = Math.floor(random() * 2 ** 31)
+        const sg = G.systemGuild(seed, x.now)
+        const ins = await query(`insert into guilds (name, emblem, notice, owner, seed, created_at, virtual_n) values ($1, $2, $3, null, $4, to_timestamp($5::float8), $6)
+          on conflict (name) do nothing returning 1`, [sg.name, sg.emblem, sg.notice, seed, sg.created_at, sg.virtual_n])
+        if (ins.length) break
+      }
     }
     if (system < G.RECOMMEND_N) rows = await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
       order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)])

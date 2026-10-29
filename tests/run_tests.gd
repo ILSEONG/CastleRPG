@@ -3,6 +3,7 @@ extends SceneTree
 ## 실행: ./tools/Godot_v4.7.2-stable_win64_console.exe --headless --path . -s tests/run_tests.gd
 
 const Balance := preload("res://scripts/balance.gd")
+const LangScript := preload("res://scripts/lang.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const WaveDirector := preload("res://scripts/wave_director.gd")
 const GameStateScript := preload("res://scripts/game_state.gd")
@@ -37,6 +38,10 @@ var _errors := ErrorCounter.new()
 
 func _init() -> void:
 	OS.add_logger(_errors)
+	# 문구는 앱 표(data/texts.csv)만: 이 기기에 남은 서버 문구 캐시(user://texts_cache.json — 온라인 장면 테스트가 예전 서버 표로 남긴다)가
+	# 잠금 문구 검사를 흔들지 않게(장비 스레드 2026-10-29: 가이드 잠금 검사 3개가 캐시 때문에 실패)
+	LangScript._map = LangScript.read_csv(LangScript.PATH, LangScript.lang)
+	LangScript._loaded = true
 	test_game_data()
 	test_balance_tables()
 	test_game_tables()
@@ -5296,14 +5301,17 @@ func test_tutorial() -> void:
 	e.admin = false
 	gs.stage = 2  # 1-1 클리어
 	var r0: Dictionary = t.reward(0)
-	var hero_gold := int(t.need_of(1).get("gold", 0))
+	var hero_gold := int(t.need_of(t.mission_index("hero_level")).get("gold", 0))
 	check(t.complete() and hero_gold > 0 and int(r0.gold) == ceili(hero_gold * 1.2 / 10.0) * 10,
-		"tutorial: mission 1 pays the next mission's gold + margin: %s" % [r0])
+		"tutorial: mission 1 pays the gold of the next rule mission (hero level-up) + margin: %s" % [r0])
 	var gold0: int = e.gold
 	check(t.claim() and t.step == 1 and e.gold == gold0 + int(r0.gold), "tutorial: claim grants and advances")
 	t._check_ui()
-	check(t.ui_shown("tab:hero") and t.ui_shown("tab:shop") and t.ui_shown("notice_auto") and not t.ui_shown("tab:growth") and not t.ui_shown("build_button")
-		and not t.ui_shown("chip:wood"), "guide: [영웅]·[상점] tabs and the notice popup appear after 1-1")
+	check(not t.ui_shown("tab:hero") and t.ui_shown("notice_auto") and str(t.mission().kind) == "kill", "guide: after 1-1 a kill quest comes first; the notice popup is on")
+	t.step = t.mission_index("hero_level")
+	t._check_ui()
+	check(t.step == 2 and t.ui_shown("tab:hero") and t.ui_shown("tab:shop") and not t.ui_shown("tab:growth") and not t.ui_shown("build_button")
+		and not t.ui_shown("chip:wood"), "guide: [영웅]·[상점] tabs appear at guide quest 3 (hero level-up)")
 	# 벌목장 건설 — [건설] 버튼·목재 칩이 이때, 일꾼으로 0 → 1
 	t.step = t.mission_index("build_lumber")
 	e.res = {"wood": 0, "stone": 0, "food": 0}
@@ -5319,7 +5327,9 @@ func test_tutorial() -> void:
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
 	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 200, "tutorial: production counts from the build finish")
 	# 채석장·농장(하나로 합친 미션): 둘 다 지어야 끝, 화살표는 아직 안 지은 쪽
-	check(t.claim() and str(t.mission().id) == "build_quarry_farm" and t.ui_shown("chip:stone") and t.ui_shown("chip:food"), "guide: quarry + farm is one mission; their chips appear")
+	check(t.claim() and str(t.mission().kind) == "kill", "guide: a kill quest comes between the lumber mill and quarry + farm")
+	t.step = t.mission_index("build_quarry_farm")
+	check(str(t.mission().id) == "build_quarry_farm" and t.ui_shown("chip:stone") and t.ui_shown("chip:food"), "guide: quarry + farm is one mission; their chips appear")
 	var qf: Dictionary = t.mission()
 	var need_qf: Dictionary = t.need_of(t.step)
 	var cq := GameData.build_cost("quarry", 1)
@@ -5366,11 +5376,20 @@ func test_tutorial() -> void:
 			want_pay.gold = TutorialScript._margin(int(nd.gold))
 		var got_pay := {}
 		var rest_ok := true
+		var key_more := ""  # 던전 단계 퀘스트 앞: 그 던전 열쇠 1개 더(2026-10-29)
+		if i + 1 < TutorialScript.MISSIONS.size() and TutorialScript.MISSIONS[i + 1].kind == "dungeon_lv":
+			key_more = "keys_" + str(TutorialScript.MISSIONS[i + 1].arg[0])
 		for k in paid:
 			if k in TutorialScript.PAY_KEYS:
 				got_pay[k] = paid[k]
-			elif paid[k] != rw.get(k):
+			elif paid[k] != int(rw.get(k, 0)) + (1 if k == key_more else 0):
 				rest_ok = false
+		if key_more != "":
+			check(int(paid.get(key_more, 0)) == int(rw.get(key_more, 0)) + 1, "guide: mission %d before a dungeon stage quest adds 1 %s" % [i + 1, key_more])
+			paid = paid.duplicate()
+			paid.erase(key_more)
+			if rw.has(key_more):
+				paid[key_more] = rw[key_more]
 		check(rest_ok and (got_pay == want_pay if not want_pay.is_empty() else paid == rw),
 			"guide: mission %d pays the next mission's cost x1.2 (%s), other rewards kept: %s" % [i + 1, want_pay, paid])
 		if TutorialScript.MISSIONS[i].has("reward"):  # 가이드 성장 미션: 적힌 보상
@@ -5415,7 +5434,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 퀘스트 43 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 퀘스트 96 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5435,25 +5454,59 @@ func test_tutorial() -> void:
 			blocks.append(before and not at and not t.build_locked(bid))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 퀘스트 22 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 퀘스트 2 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 퀘스트 58 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 퀘스트 3 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
-	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
-	var intro := ["hero_level", "growth", "build_lumber", "sell", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
-		"soldier_deploy", "build_lab", "build_archery", "build_stable", "guild", "pvp"]
-	var gaps := []
-	for k in range(2, intro.size()):
-		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 82 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	# 메이플스토리 키우기식 간격(사용자 2026-10-29 "너무 급박하게 컨텐츠를 너무 빨리 푸는거같아 메이플 키우기 좀 참고하라고"): 기능이 처음 열리는
+	# 미션이 메이플 가이드 퀘스트 번호 근처(성장 8 = 스킬 8, 건설 25 = 스킬 강화 25, 주점 58 = 월드 보스 58, 골드 던전 79 = 영웅의 힘 79, 길드 140,
+	# PVP 247 = 아레나 247), 그 사이는 사이 퀘스트(돌파·처치·영웅·능력치·던전 단계)
+	var at := {"hero_level": 3, "growth": 8, "speed_on": 13, "auto_on": 18, "build_lumber": 25, "sell": 34, "attend": 40, "pouch": 45, "mission_claim": 50,
+		"shop_free": 54, "build_tavern": 58, "build_barracks": 67, "build_houses": 75, "dungeon_gold": 79, "dungeon_equip": 89, "dungeon_ticket": 96,
+		"soldier_deploy": 105, "build_lab": 115, "build_archery": 124, "build_stable": 131, "guild": 140, "promote": 160, "guild_boss": 175,
+		"siege_try": 200, "pvp": 247, "fever": 253, "exchange_look": 259, "party_clear": 265}
+	var off := []
+	for id in at:
+		if t.mission_index(id) + 1 != int(at[id]):
+			off.append("%s %d" % [id, t.mission_index(id) + 1])
+	var ids := TutorialScript.MISSIONS.map(func(m): return str(m.id))
+	var uniq := {}
+	for id in ids:
+		uniq[id] = true
+	check(TutorialScript.MISSIONS.size() == 265 and off.is_empty() and uniq.size() == ids.size() and TutorialScript.KEY_MISSIONS.all(func(m): return m.id in ids),
+		"guide: features open at MapleStory Idle-like guide quest numbers (265 quests, every old mission kept): %s" % [off])
+	# 사이 퀘스트는 이름에서 만든다: 제목·종류·목표·보상
+	var fk: Dictionary = TutorialScript.MISSIONS[t.mission_index("kill_10")]
+	var fs: Dictionary = TutorialScript.MISSIONS[t.mission_index("stage_1_8")]
+	var fh: Dictionary = TutorialScript.MISSIONS[t.mission_index("hero_lv4_3")]
+	var fc: Dictionary = TutorialScript.MISSIONS[t.mission_index("crit_rate_2")]
+	var fd: Dictionary = TutorialScript.MISSIONS[t.mission_index("dungeon_gold_2")]
+	check(fk.title == "몬스터 10마리 처치" and fk.kind == "kill" and int(fk.arg) == 10 and fk.reward == {"gold": 100} and not fk.has("goto")
+		and fs.title == "스테이지 1-8 클리어" and fs.kind == "stage" and int(fs.arg) == 8 and fs.reward == {"diamonds": 30}
+		and fh.title == "영웅 4명 Lv 3 달성" and fh.arg == [4, 3] and fh.reward == {"diamonds": 10}
+		and fc.title == "치명타 확률 Lv 2 달성" and fc.kind == "growth_lv" and fc.arg == ["crit_rate", 2] and fc.goto == "tab:growth"
+		and fd.title == "골드 던전 2단계 클리어" and fd.kind == "dungeon_lv" and fd.arg == ["gold", 2] and fd.goto == "tab:dungeon",
+		"guide: filler quests are built from their ids: %s %s %s %s %s" % [fk.title, fs.title, fh.title, fc.title, fd.title])
+	var di: int = t.mission_index("dungeon_gold_2")
+	var dg: Dictionary = GameData.fresh_dungeon("gold", e.time_now())
+	dg.best_level = 1
+	e.dungeons["gold"] = dg
+	t.step = di
+	var d1 := not t.complete()
+	dg.best_level = 2
+	check(d1 and t.complete() and int(t.reward(di - 1).get("keys_gold", 0)) >= 1, "guide: gold dungeon stage 2 quest waits for best stage 2; the quest before it gives a gold key")
+	e.dungeons.erase("gold")
 	# 메이플스토리 키우기식 리듬(2026-10-29): 1-1 뒤로 전투 목표(스테이지·처치·던전·PVP·길드 보스·공성전 체험·파티) 없이 6칸 이상 이어지지 않는다
 	var calm := 0
 	var calm_max := 0
 	for m in TutorialScript.MISSIONS:
-		calm = 0 if m.kind in ["stage", "kill", "dungeon", "pvp", "guild_boss", "siege_try", "party"] else calm + 1
+		calm = 0 if m.kind in ["stage", "kill", "dungeon", "dungeon_lv", "pvp", "guild_boss", "siege_try", "party"] else calm + 1
 		calm_max = maxi(calm_max, calm)
 	var kills := TutorialScript.MISSIONS.filter(func(m): return m.kind == "kill").map(func(m): return int(m.arg))
-	check(calm_max <= 5 and kills == [30, 40, 50, 60, 100, 100] and t.reward(t.mission_index("kill_30")) == {"diamonds": 30},
-		"guide: a battle goal comes at least every 6th mission; kill goals grow 30 → 60 and pay 30 diamonds: %d %s" % [calm_max, kills])
+	var grows := true
+	for k in range(1, kills.size()):
+		grows = grows and kills[k] >= kills[k - 1]
+	check(calm_max <= 5 and grows and kills[0] == 10 and kills[-1] <= 200 and t.reward(t.mission_index("kill_30")).get("diamonds") == 30,
+		"guide: a battle goal comes at least every 6th quest; kill goals grow 10 → %d: %d" % [kills[-1], calm_max])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5466,12 +5519,12 @@ func test_tutorial() -> void:
 	check(not t.complete() and t.progress_text() == "Lv 2/3", "guide: stat level mission shows Lv 2/3")
 	e.upgrades["atk"] = 3
 	var hp3: int = int(t.need_of(t.mission_index("hp_3")).gold)
-	check(t.complete() and t.reward(t.step) == {"gold": 2000} and hp3 == 3153 and t.mission_index("kill_40") == t.step + 1
-		and t.reward(t.step + 1) == {"gold": TutorialScript._margin(hp3), "diamonds": 30},
-		"guide: stat Lv 3 completes with its own gold; the kill mission after it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
+	check(t.complete() and t.reward(t.step) == {"gold": 2000} and hp3 == GameData.upgrade_cost("hp", 2) and t.mission_index("hp_3") == t.step + 2
+		and t.reward(t.step + 1) == {"gold": TutorialScript._margin(hp3)},
+		"guide: stat Lv 3 completes with its own gold; the kill quest after it pays the next quest's gold (HP Lv 2 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 퀘스트 76 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 퀘스트 247 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5498,26 +5551,31 @@ func test_tutorial() -> void:
 	t.step = t.mission_index("stage_1_12")
 	t.count = 0
 	check(not t.complete(), "guide: 1-12 is not cleared by the guild unlock")
-	check(TutorialScript.v2_step(0) == 0 and TutorialScript.v2_step(9) == t.mission_index("growth") and TutorialScript.v2_step(20) == t.mission_index("dungeon_ticket")
-		and TutorialScript.v2_step(33) == TutorialScript.MISSIONS.size(), "guide: old v2 steps map to the same mission id")
-	check(TutorialScript.map_step(TutorialScript.V3_IDS, 0) == 0 and TutorialScript.map_step(TutorialScript.V3_IDS, 7) == t.mission_index("stage_1_1")
-		and TutorialScript.map_step(TutorialScript.V3_IDS, 34) == t.mission_index("dungeon_ticket")
-		and TutorialScript.map_step(TutorialScript.V3_IDS, 67) == TutorialScript.MISSIONS.size(), "guide: old v3 steps map to the same mission id")
-	check(TutorialScript.map_step(TutorialScript.V4_IDS, 66) == t.mission_index("guild") and TutorialScript.map_step(TutorialScript.V4_IDS, 67) == t.mission_index("hp_16")
-		and TutorialScript.map_step(TutorialScript.V4_IDS, 75) == t.mission_index("stage_1_15")
-		and TutorialScript.map_step(TutorialScript.V4_IDS, 76) == TutorialScript.MISSIONS.size(), "guide: old v4 steps map to the same mission id")
-	# v5(81개) → v6(78개, 초반 단순화 2026-10-23): 옛 순서에서 이미 한 미션은 건너뛰고 새 순서에서 아직 안 한 첫 미션부터
-	check(TutorialScript.map_v5(0) == 0 and TutorialScript.map_v5(5) == 0 and TutorialScript.map_v5(10) == t.mission_index("hero_level")
-		and TutorialScript.map_v5(16) == t.mission_index("growth") and TutorialScript.map_v5(17) == t.mission_index("hero_lv4_8")
-		and TutorialScript.map_v5(27) == t.mission_index("atk_5") and TutorialScript.map_v5(80) == t.mission_index("party_clear")
-		and TutorialScript.map_v5(81) == TutorialScript.MISSIONS.size() and TutorialScript.map_step(TutorialScript.V4_IDS, 7) == t.mission_index("stage_1_1"),
-		"guide: old v5 steps continue at the first mission not done yet")
-	# v6(78개) → v7(82개, 메이플식 처치 미션 2026-10-29): 하던 미션 그대로(그 앞에 낀 처치 미션은 건너뛴다), 당겨 온 두 번째 100마리는 안 했으면 거기부터
-	check(TutorialScript.map_v6(0) == 0 and TutorialScript.map_v6(13) == t.mission_index("attend") and TutorialScript.map_v6(30) == t.mission_index("stage_1_4")
-		and TutorialScript.map_v6(56) == t.mission_index("kill_100_2") and TutorialScript.map_v6(59) == t.mission_index("kill_100_2")
-		and TutorialScript.map_v6(60) == t.mission_index("hero_lv4_18") and TutorialScript.map_v6(77) == t.mission_index("party_clear")
-		and TutorialScript.map_v6(78) == TutorialScript.MISSIONS.size() and TutorialScript.V6_IDS.size() == 78,
-		"guide: v6 steps continue at the same mission; new kill missions before it are skipped")
+	# 옛 저장(v2~v6)은 그 판의 표 → 다음 판 표 → … → v7 → 지금 표로 이어서 옮긴다(맨 처음·다 끝낸 것은 그대로)
+	check(TutorialScript.v2_step(0) == 0 and TutorialScript.v2_step(33) == TutorialScript.MISSIONS.size()
+		and TutorialScript.map_step(TutorialScript.V3_IDS, 0) == 0 and TutorialScript.map_step(TutorialScript.V3_IDS, 67) == TutorialScript.MISSIONS.size()
+		and TutorialScript.map_step(TutorialScript.V4_IDS, 76) == TutorialScript.MISSIONS.size() and TutorialScript.map_v5(0) == 0
+		and TutorialScript.map_v5(81) == TutorialScript.MISSIONS.size() and TutorialScript.map_v6(0) == 0 and TutorialScript.map_v6(78) == TutorialScript.MISSIONS.size()
+		and TutorialScript.V6_IDS.size() == 78 and TutorialScript.V7_IDS.size() == 82, "guide: old saves map through every version")
+	# v6(78개) → v7: 하던 미션(그 앞에 낀 처치 미션은 건너뛴다) → v8
+	check(TutorialScript.map_v6(13) == TutorialScript.map_v7(14) and TutorialScript.map_v6(56) == TutorialScript.map_v7(TutorialScript.V7_IDS.find("kill_100_2")),
+		"guide: v6 steps go to the same v7 mission, then on")
+	# v7(82개) → v8(265개, 메이플식 간격 2026-10-29): 이미 한 기능·행동 미션 중 새 표에서 가장 뒤에 있는 것의 다음 — 이미 연 기능은 열린 채
+	check(TutorialScript.map_v7(0) == 0 and TutorialScript.map_v7(1) == 1 and TutorialScript.map_v7(13) == t.mission_index("sell") + 1
+		and TutorialScript.map_v7(18) == t.mission_index("shop_free") + 1 and TutorialScript.map_v7(19) == t.mission_index("shop_free") + 1
+		and TutorialScript.map_v7(81) == t.mission_index("exchange_look") + 1 and TutorialScript.map_v7(82) == TutorialScript.MISSIONS.size(),
+		"guide: v7 steps continue after the furthest mission already done")
+	var tut_v7 := "user://_test_tutorial_v7.json"
+	var fv7 := FileAccess.open(tut_v7, FileAccess.WRITE)
+	fv7.store_string(JSON.stringify({"version": 7, "state": "active", "step": TutorialScript.V7_IDS.find("guild")}))
+	fv7.close()
+	var t7 = TutorialScript.new()
+	t7.save_path = tut_v7
+	t7.econ = e
+	check(t7.load_save() and t7.step == t.mission_index("stage_1_10") and t.mission_index("guild") == t7.step + 1,
+		"guide: a v7 save on the guild mission continues right before it (1-10, already cleared), not past atk 16 that moved later (%d)" % t7.step)
+	t7.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(tut_v7))
 	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
 	t.step = t.mission_index("siege_try")
 	t.count = 0
@@ -5772,7 +5830,7 @@ func test_tutorial_online() -> void:
 	# [보상 받기]는 누르는 즉시(사용자 2026-10-16 "보상받기 누르면 좀 빠르게"): 보상·다음 미션이 곧바로, 서버 확인은 뒤에서, 거절이면 되돌린다
 	var cn := GrowthNet.new()
 	e.net = cn
-	var ki: int = t.mission_index("collect")  # 수집 → 상인과 거래(둘 다 한 번 하면 끝)
+	var ki: int = t.mission_index("collect")  # 수집(한 번) → 몬스터 처치(사이 퀘스트 — 그 수만큼 세면 끝)
 	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
 	e.apply_server(reply)
 	t.count = 1
@@ -5781,14 +5839,15 @@ func test_tutorial_online() -> void:
 	var sounds := [0]
 	e.granted.connect(func(_r): sounds[0] += 1)
 	check(t.complete() and t.claim(), "online claim sent")
-	check(t.step == ki + 1 and t.count == 0 and t.mission().id == "sell" and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
+	check(t.step == ki + 1 and t.count == 0 and t.mission().id == TutorialScript.MISSIONS[ki + 1].id and cn.sent.size() == 1 and cn.sent[0].path == "/v1/quest/claim"
 		and cn.sent[0].body == {"type": "tutorial", "step": ki} and cn.sent[0].once and sounds[0] == 1,
 		"online claim: the next mission and the reward sound come at once, one request (step %d)" % t.step)
 	check([e.gold, e.diamonds, int(e.res.get("wood", 0))] == [w0[0] + int(r0.get("gold", 0)), w0[1] + int(r0.get("diamonds", 0)), w0[2] + int(r0.get("wood", 0))],
 		"online claim: the reward shows before the reply %s" % [r0])
 	check(not e.quest_claim_online({"type": "tutorial", "step": ki}, r0) and cn.sent.size() == 1, "the same step can't be sent twice (fast double tap)")
 	check(not t.claim_blocked(), "guide claims can follow before the reply")
-	t.count = 1
+	var c2 := maxi(1, int(t.mission().get("arg", 1)))
+	t.count = c2
 	check(t.complete() and t.claim() and t.step == ki + 2 and cn.sent.size() == 2 and cn.sent[1].body == {"type": "tutorial", "step": ki + 1}, "the next guide claim goes before the first reply")
 	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
 	e.apply_server(reply)  # 처치 보내기 응답 등(서버는 아직 누르기 전 단계)
@@ -5800,7 +5859,7 @@ func test_tutorial_online() -> void:
 	cn.last_error = "not_done"
 	t.count = 7
 	cn.sent[1].fail.call()
-	check(t.step == ki + 1 and t.count == 1 and not e.quest_waiting() and notes == [EconomyScript.QUEST_FAIL_TEXT.not_done] and cn.refreshed == 1,
+	check(t.step == ki + 1 and t.count == c2 and not e.quest_waiting() and notes == [EconomyScript.QUEST_FAIL_TEXT.not_done] and cn.refreshed == 1,
 		"a rejected claim goes back to that mission with its count (step %d count %d %s)" % [t.step, t.count, notes])
 	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 3, "rep": {"have": 3, "need": 3, "from": null}}
 	e.apply_server(reply)
