@@ -166,7 +166,7 @@ interface Player {
   dia_tickets: number // 다이아 모집권(모집권 던전 보상·튜토리얼 보상)
   stones: number // 강화석(2026-10-29: 장비 분해·강화석 던전 → 부위 강화)
   slot_levels: R.SlotLevels // 부위 강화: 영웅 → {부위: 레벨}
-  gacha: { gold_level: number; gold_pulls: number; dia_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터
+  gacha: { gold_level: number; gold_pulls: number; dia_pity: number; dia_ur_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터(SSR·UR)
   research: Record<string, number> // 개정 24: 연구 노드 id → 레벨(0 초과만)
   research_cur: { id: string; finish: number } | null // 진행 중인 연구(끝나는 시각 = 유닉스 초), 쉬면 null
   friends: { id: string; hero: string | null; heroes: Record<string, { level: number; promotion: number }> }[] // 친구(수락된 것만, id 순) — 대표 영웅·보유 영웅
@@ -281,7 +281,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
 }).join(',\n  ')
 
 const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.stones, s.slot_levels, s.unbuilt, s.layout,
-  s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.build2_id, s.speedups, s.soldier_deploy,
+  s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.gacha_dia_ur_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.build2_id, s.speedups, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
   coalesce((select json_object_agg(id, level) from player_research where player_id = s.player_id and level > 0), '{}'::json) as research,
@@ -695,7 +695,7 @@ export function createApp(opts: AppOptions) {
         dia_tickets: Number(r.dia_tickets ?? 0),
         stones: Number(r.stones ?? 0),
         slot_levels: R.cleanSlotLevels(json(r.slot_levels)),
-        gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity) },
+        gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity), dia_ur_pity: Number(r.gacha_dia_ur_pity ?? 0) },
         research: counts(json(r.research)),
         research_cur: typeof r.research_id === 'string' ? { id: r.research_id, finish: Number(r.research_finish) } : null,
         friends: (json(r.friends) as any[]).map((f) => ({ id: String(f.id), hero: typeof f.hero === 'string' ? f.hero : null, heroes: json(f.heroes) ?? {} })),
@@ -839,7 +839,7 @@ export function createApp(opts: AppOptions) {
       const st = dungeonState(p, g, t, now)
       out[t] = {
         keys: st.keys, key_cap: R.cfgNum(g.config, `${t}_key_cap`), key_daily: R.cfgNum(g.config, `${t}_key_daily`), best_level: st.best_level,
-        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, st.extra_today) : null, last_reset: st.last_reset,
+        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, Math.min(st.best_level + 1, R.MAX_DUNGEON_LEVEL)) : null, last_reset: st.last_reset,
         next_reset: R.nextReset(now, g.config),
         ...(t === 'ticket' ? { helpers: helpersOf(p, g, st, now), helpers_used: st.helpers_used ?? [] } : {}),
       }
@@ -876,6 +876,7 @@ export function createApp(opts: AppOptions) {
     if (ch.gacha?.gold_level !== undefined) sets.push(`gacha_gold_level = ${p(ch.gacha.gold_level)}::int`)
     if (ch.gacha?.gold_pulls !== undefined) sets.push(`gacha_gold_pulls = ${p(ch.gacha.gold_pulls)}::int`)
     if (ch.gacha?.dia_pity !== undefined) sets.push(`gacha_dia_pity = ${p(ch.gacha.dia_pity)}::int`)
+    if (ch.gacha?.dia_ur_pity !== undefined) sets.push(`gacha_dia_ur_pity = ${p(ch.gacha.dia_ur_pity)}::int`)
     if (ch.quest?.tut_state !== undefined) sets.push(`tut_state = ${p(ch.quest.tut_state)}::text`)
     if (ch.quest?.tut_step !== undefined) sets.push(`tut_step = ${p(ch.quest.tut_step)}::int`)
     if (ch.quest?.rep_n !== undefined) sets.push(`rep_n = ${p(ch.quest.rep_n)}::int`)
@@ -1955,7 +1956,7 @@ export function createApp(opts: AppOptions) {
       const owned: Record<string, { copies: number; shards: number }> = {}
       for (const [id, h] of Object.entries(p.heroes)) owned[id] = { copies: h.copies, shards: h.shards }
       const add: Record<string, number> = {}
-      const pity = dia ? { n: p.gacha.dia_pity, max: R.cfgNum(g.config, 'gacha_dia_pity') } : undefined
+      const pity = dia ? { n: p.gacha.dia_pity, max: R.cfgNum(g.config, 'gacha_dia_pity'), u: p.gacha.dia_ur_pity, umax: R.cfgNum(g.config, 'gacha_dia_ur_pity') } : undefined
       const rates = R.gachaRates(g.config, dia ? R.GACHA_DIA : currency, lv)
       const results = R.rollGacha(count, g.heroes, g.config, random, rates, pity).map(({ id, grade }) => {
         const o = owned[id]
@@ -1965,11 +1966,47 @@ export function createApp(opts: AppOptions) {
         return { hero_id: id, grade, new: isNew, copies: owned[id].copies, shards: owned[id].shards }
       })
       const up = R.goldLevelUp(g.config, lv, p.gacha.gold_pulls, count)
-      const gacha = pity ? { dia_pity: pity.n } : { gold_level: up.level, gold_pulls: up.pulls }
+      const gacha = pity ? { dia_pity: pity.n, dia_ur_pity: pity.u } : { gold_level: up.level, gold_pulls: up.pulls }
       const paid = ticket ? { dia_tickets: -cost } : dia ? { diamonds: -cost } : { gold_tenths: -cost * 10 }
-      const detail = { currency, count, cost, ...paid, level: lv, pity: p.gacha.dia_pity, after: gacha, results }
+      const detail = { currency, count, cost, ...paid, level: lv, pity: p.gacha.dia_pity, ur_pity: p.gacha.dia_ur_pity, after: gacha, results }
       return {
         change: { ...(ticket ? { diaTickets: -cost } : dia ? { diamonds: -cost } : { goldTenths: -cost * 10 }), heroes: add, gacha, log: { kind: 'gacha', detail } },
+        extra: { results },
+      }
+    })
+  })
+
+  // SSR 조각 합성(2026-10-29 사용자 "SSR을 10개 합성하면 UR 하나 나오게 해"): body = {picks: {영웅 id: 조각 수}} — 가진 SSR 영웅들의 조각을
+  // 합쳐 ur_fuse_shards개(정확히). 태생 UR 영웅 1명(균등, 서버 난수)이 나온다: 모집처럼 새 영웅이면 copies 1, 가진 영웅이면 copies·조각 +1.
+  // 조각 차감·영웅·economy_log fuse를 version 가드 한 문장으로. 앱 Economy.fuse_ur와 같은 규칙.
+  app.post('/v1/hero/fuse', auth, async (c) => {
+    const b = await body(c)
+    const picks = b.picks
+    if (!picks || typeof picks !== 'object' || Array.isArray(picks) || Object.keys(picks).length === 0 || Object.keys(picks).length > 64) {
+      throw new ApiError(400, 'bad_request', "'picks' must be an object of hero id → shards")
+    }
+    for (const v of Object.values(picks)) if (!Number.isInteger(v) || (v as number) < 1 || (v as number) > MAX_INT4) throw new ApiError(400, 'bad_request', "'picks' values must be positive integers")
+    return mutate(c, (p, g) => {
+      const need = R.cfgNum(g.config, 'ur_fuse_shards')
+      let total = 0
+      const shards: Record<string, number> = {}
+      for (const [id, n] of Object.entries(picks as Record<string, number>)) {
+        const def = g.heroes.find((h) => h.id === id)
+        const own = p.heroes[id]
+        if (!def || def.grade !== 'SSR') throw new ApiError(409, 'not_ssr', `${id} is not an SSR hero`)
+        if (!own || own.copies < 1 || own.shards < n) throw new ApiError(409, 'not_enough_shards', `${id} has ${own?.shards ?? 0} shards`)
+        shards[id] = -n
+        total += n
+      }
+      if (total !== need) throw new ApiError(409, 'wrong_count', `fusing takes exactly ${need} SSR shards (got ${total})`)
+      const pool = g.heroes.filter((h) => h.grade === 'UR').map((h) => h.id)
+      if (pool.length === 0) throw new ApiError(409, 'no_ur', 'no UR heroes')
+      const id = pool[Math.floor(random() * pool.length)]
+      const o = p.heroes[id]
+      const isNew = !(o?.copies > 0)
+      const results = [{ hero_id: id, grade: 'UR', new: isNew, copies: isNew ? 1 : o.copies + 1, shards: isNew ? 0 : o.shards + 1 }]
+      return {
+        change: { heroes: { [id]: 1 }, shards, log: { kind: 'fuse', detail: { picks, results } } },
         extra: { results },
       }
     })
@@ -3109,7 +3146,7 @@ export function createApp(opts: AppOptions) {
       }
       if (st.keys < 1) {
         if (type !== 'equip') throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
-        const cost = R.extraCost(g.config, st.extra_today)
+        const cost = R.extraCost(g.config, lvl)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
       }
       const run = { run_id: randomUUID(), type, level: lvl, party: party as string[], seed: Math.floor(random() * 2 ** 31), ...(helper ? { helper } : {}) }
@@ -3168,7 +3205,7 @@ export function createApp(opts: AppOptions) {
       let cost = 0
       if (st.keys >= 1) next.keys = st.keys - 1
       else if (type === 'equip') {
-        cost = R.extraCost(g.config, st.extra_today)
+        cost = R.extraCost(g.config, run.level)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
         next.extra_today = st.extra_today + 1
       } else throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)

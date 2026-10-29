@@ -491,7 +491,7 @@ export function gachaRates(config: Config, currency: string, level: number) {
   const ssr = dia ? cfgNum(config, 'gacha_dia_ssr') : cfgNum(config, 'gacha_gold_ssr_base') + cfgNum(config, 'gacha_gold_ssr_step') * k
   const sr = dia ? cfgNum(config, 'gacha_dia_sr') : cfgNum(config, 'gacha_gold_sr_base') + cfgNum(config, 'gacha_gold_sr_step') * k
   const noSsr = !dia && goldLevel(config, level) < GOLD_SSR_FROM
-  return { ssr: noSsr ? 0 : ssr, sr }
+  return { ur: dia ? cfgNum(config, 'gacha_dia_ur') : 0, ssr: noSsr ? 0 : ssr, sr } // UR은 다이아 모집에만(2026-10-29 사용자)
 }
 
 // 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L²(낮은 레벨은 조금, 높은 레벨은 크게 — 사용자 2026-10-12). 최대 레벨이면 null.
@@ -528,14 +528,15 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
   return ''
 }
 
-// 모집(스펙 §3.6): 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
+// 모집(스펙 §3.6): 장마다 등급(UR rates.ur, SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
 // rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1).
-// pity(다이아 모집만, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다. 다이아 10연차는 또
+// pity(다이아 모집만, 개정 23)가 있으면 장마다 n·u += 1, u ≥ umax면 UR 확정, 아니고 n ≥ max면 SSR 확정. UR이면 n = u = 0,
+// SSR이면 n = 0 — 바꿔 둔다(u·umax가 없으면 UR 천장 없음, 2026-10-29). 다이아 10연차는 또
 // SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 // 앱 Economy.roll_gacha와 같은 규칙.
 export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
-  rates = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number }) {
-  const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
+  rates: { ur?: number; ssr: number; sr: number } = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number; u?: number; umax?: number }) {
+  const pools: Record<string, string[]> = { UR: [], SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {
     const pool = pools[grade]
@@ -543,14 +544,23 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
     return { id: pool[Math.floor(rand() * pool.length)], grade }
   }
   const { ssr, sr } = rates
+  const ur = rates.ur ?? 0
+  const urPity = pity !== undefined && pity.u !== undefined && pity.umax !== undefined
   const out: { id: string; grade: string }[] = []
   for (let i = 0; i < count; i++) {
     const r = rand()
-    let grade = r < ssr ? 'SSR' : r < ssr + sr ? 'SR' : 'R'
+    let grade = r < ur ? 'UR' : r < ur + ssr ? 'SSR' : r < ur + ssr + sr ? 'SR' : 'R'
     if (pity) {
       pity.n += 1
-      if (pity.n >= pity.max) grade = 'SSR'
-      if (grade === 'SSR') pity.n = 0
+      if (urPity) {
+        pity.u! += 1
+        if (pity.u! >= pity.umax!) grade = 'UR'
+      }
+      if (pity.n >= pity.max && grade !== 'UR') grade = 'SSR'
+      if (grade === 'UR') {
+        pity.n = 0
+        if (urPity) pity.u = 0
+      } else if (grade === 'SSR') pity.n = 0
     }
     out.push(pick(grade))
   }
@@ -749,13 +759,18 @@ export function applyReset(type: string, d: DungeonState, now: number, config: C
   return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h), ...(d.helpers_used ? { helpers_used: [] } : {}) }
 }
 
-// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…).
-export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * (1 + 2 * Math.max(extraToday, 0))
+// 장비 던전 골드 도전 비용(열쇠가 없을 때) = 단계별 고정: equip_extra_gold_base × equip_extra_gold_mult^(단계 − 1)을 천 단위로 올림
+// (사용자 2026-10-29 "장비 던전 단계별로 고정 골드 값" — 그날 횟수로 오르지 않는다. 1단계 10만, 10단계 28만, 30단계 267만, 50단계 2,560만. 예전 10만 × (1 + 2 × 그날 횟수)).
+export const extraCost = (config: Config, level: number) => {
+  const mult = config.equip_extra_gold_mult == null ? 1.12 : cfgNum(config, 'equip_extra_gold_mult')
+  return Math.ceil(roundHalfAway(grown(cfgNum(config, 'equip_extra_gold_base'), mult, Math.max(1, level) - 1)) / 1000) * 1000
+}
 export const partySize = (config: Config, type: string) => cfgNum(config, `${type}_dg_party`)
 export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `${type}_dg_min_sec`)
 
-// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)).
-export const goldReward = (config: Config, level: number) => roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1))
+// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1))를 천 단위로 올림(사용자 2026-10-29 "100의 자리에서 올림" — 1단계 20,000, 3단계 25,000).
+export const goldReward = (config: Config, level: number) =>
+  Math.ceil(roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1)) / 1000) * 1000
 
 // 적 능력치 성장: 골드 던전은 HP·공격 모두 gold_dg_growth, 장비·모집권 던전은 <종류>_dg_hp_growth·<종류>_dg_atk_growth.
 export function dungeonGrowth(config: Config, type: string) {
@@ -764,7 +779,7 @@ export function dungeonGrowth(config: Config, type: string) {
 }
 
 // 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
-// (사용자 2026-10-06: 10장, 5단계마다 2장씩 — 1~5단계 10, 6~10단계 12 …). ticket_reward_add가 없으면(시드 전) 1.
+// (사용자 2026-10-29 절반으로: 5장, 5단계마다 1장씩 — 1~5단계 5, 6~10단계 6 …. 예전 10장·2장씩). ticket_reward_add가 없으면(시드 전) 1.
 export const ticketReward = (config: Config, level: number) =>
   cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step'))) * (config.ticket_reward_add == null ? 1 : cfgNum(config, 'ticket_reward_add'))
 
@@ -774,7 +789,7 @@ export const levelMult = (config: Config, level: number, role: string) =>
 export const promoteMult = (config: Config, promotion: number) => grown(1, cfgNum(config, 'promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
 // 전투력 = round((HP / 10 + 공격 × 2 / 공격 간격 × 원거리 배율) × 등급 배율), HP·공격 = 표 × 레벨 배율 × 승급 배율 + 장비.
 // 2026-10-06 밸런스(앱 GameData.POWER_GRADE·POWER_RANGED와 같다): 같은 레벨·승급·장비면 SSR > SR > R.
-export const POWER_GRADE: Record<string, number> = { SSR: 2.0, SR: 1.4, R: 1.0 }
+export const POWER_GRADE: Record<string, number> = { UR: 2.8, SSR: 2.0, SR: 1.4, R: 1.0 }
 export const POWER_RANGED = 2.0
 export const powerOf = (def: { role?: unknown; grade?: unknown; atk_interval: unknown }, hp: number, atk: number) =>
   roundHalfAway((hp / 10 + ((atk * 2) / Number(def.atk_interval)) * (String(def.role ?? '') === 'ranged' ? POWER_RANGED : 1)) * (POWER_GRADE[String(def.grade ?? '')] ?? 1))

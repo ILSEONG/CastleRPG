@@ -51,6 +51,7 @@ const WIN_CHAMFER := 7.0  # 창 위 모서리만 깎는다(흉상 아래는 곧�
 const BAND_H := 5.0  # 창 아래 고유 색 띠
 const FACE_AT := 0.45  # 창 세로에서 얼굴 가운데가 올 비율
 const RAYS := 10  # SR·SSR 창 빛살 수
+const SHINE_GRADES := ["SSR", "UR"]  # 면이 반짝이고 창 빛살이 도는 등급(UR = 주황 등급 색으로)
 const ART_INSET := 6.0  # 일러스트: 카드 테두리 안쪽 여백
 const ART_CHAMFER := 8.0
 const ART_SHADE := 0.42  # 일러스트 아래 어둡게 덮기 시작하는 높이(카드 세로 비율)
@@ -187,7 +188,7 @@ func _process(delta: float) -> void:
 
 ## SSR(반짝임)이거나 빛 조각·승급 연출이 남았을 때만 매 프레임 다시 그린다.
 func _update_process() -> void:
-	set_process(_burst > 0.0 or _pfx > 0.0 or (hero_id != "" and GameData.hero(hero_id).get("grade", "") == "SSR"))
+	set_process(_burst > 0.0 or _pfx > 0.0 or (hero_id != "" and GameData.hero(hero_id).get("grade", "") in SHINE_GRADES))
 
 
 ## 레벨업 성공 연출: 빛 조각이 가운데에서 BURST_SEC 동안 퍼지며 사라진다.
@@ -245,8 +246,8 @@ func _draw() -> void:
 			draw_texture_rect(figure_texture(), figure_rect(), false)
 		else:  # 목록·슬롯·모집: 등급 색 창에 흉상
 			RenderingServer.canvas_item_add_triangle_array(ci, PackedInt32Array(), _win, _win_cols)
-			if h.grade == "SSR" or h.grade == "SR":
-				_draw_rays(UiKit.GRADE_COLORS[h.grade], h.grade == "SSR")
+			if h.grade in SHINE_GRADES or h.grade == "SR":
+				_draw_rays(UiKit.GRADE_COLORS[h.grade], h.grade in SHINE_GRADES)
 			var tex := figure_texture()
 			var wr := portrait_rect()
 			draw_texture_rect_region(tex, wr, bust_region(tex.get_size(), wr.size))
@@ -670,7 +671,7 @@ func _ensure_geo(h: Dictionary) -> void:
 	geo_builds += 1
 	var r := Rect2(Vector2.ZERO, size)
 	var gc: Color = UiKit.GRADE_COLORS[h.grade]
-	var ssr: bool = h.grade == "SSR"
+	var ssr: bool = h.grade in SHINE_GRADES
 	var card := UiKit.facet_card_geometry(r, gc, UiKit.CREAM.lerp(gc, 0.18) if ssr else UiKit.CREAM)
 	_body = card[0]
 	_body_cols = card[1]

@@ -25,8 +25,8 @@ const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "
 const HERO_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]
 const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "model", "gear", "color", "desc"]
 const HERO_SKILL_COLS := [["skill1", "s1a", "s1b", "s1c"], ["skill2", "s2a", "s2b", "s2c"], ["skill3", "s3a", "s3b", "s3c"]]  # 빈 칸 = 없음(서버는 null)
-const GRADES := ["R", "SR", "SSR"]
-const GRADE_SKILLS := {"R": 2, "SR": 3, "SSR": 3}  # 등급별 스킬 수(개정 17) — skill1부터 빈틈없이. 서버 seed.GRADE_SKILLS
+const GRADES := ["R", "SR", "SSR", "UR"]  # 낮은 등급부터. UR = 태생 UR(2026-10-29 사용자 — 다이아 모집·SSR 조각 합성으로만)
+const GRADE_SKILLS := {"R": 2, "SR": 3, "SSR": 3, "UR": 3}  # 등급별 스킬 수(개정 17) — skill1부터 빈틈없이. 서버 seed.GRADE_SKILLS
 const UNLOCK_KEYS := ["skill2_unlock_star", "skill3_unlock_star"]  # 스킬 2·3이 열리는 승급(0..MAX_PROMOTION, 오름차순)
 const ROLES := ["melee", "ranged"]
 const HERO_POSITIVE_COLS := ["hp", "range", "atk_interval", "speed"]  # 0보다 커야 한다(간격 0이면 매 프레임 공격)
@@ -35,7 +35,7 @@ const GACHA_INT_KEYS := ["gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_10_min_
 # 개정 23 모집(서버 seed.GACHA_KEYS): 골드 레벨 비용·확률, 다이아 비용·확률·천장
 const GACHA_KEYS := ["gacha_gold_cost_base", "gacha_gold_cost_growth", "gacha_gold_level_max", "gacha_gold_level_pulls",
 	"gacha_gold_ssr_base", "gacha_gold_ssr_step", "gacha_gold_sr_base", "gacha_gold_sr_step",
-	"gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_dia_ssr", "gacha_dia_sr", "gacha_dia_pity"]
+	"gacha_dia_cost_1", "gacha_dia_cost_10", "gacha_dia_ssr", "gacha_dia_sr", "gacha_dia_pity", "gacha_dia_ur", "gacha_dia_ur_pity", "ur_fuse_shards"]
 const GACHA_GOLD := "gold"
 const GOLD_SSR_FROM := 3  # 골드 모집은 이 레벨부터 SSR(아래는 주점 보너스 포함 0 — 서버 rules.GOLD_SSR_FROM, 사용자 2026-10-12)
 const GACHA_DIA := "diamond"
@@ -46,7 +46,7 @@ const CONFIG_NUM_KEYS := ["castle_hp", "gate_hp_per_level", "max_live_monsters",
 	"spawn_spacing_sec", "accum_cap_min", "badge_min", "merchant_jackpot_p", "merchant_jackpot_rate", "merchant_rate_min",
 	"merchant_rate_max", "merchant_rate_step", "merchant_low_high_ratio", "kill_rate_cap", "promote_mult",
 	"gacha_10_min_sr",
-	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "hero_level_stat_melee", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR",
+	"hero_max_level_base", "hero_max_level_per_promotion", "hero_level_stat", "hero_level_stat_melee", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR", "levelup_gold_UR",
 	"fever_kills", "fever_sec", "fever_spawn_mult", "skill2_unlock_star", "skill3_unlock_star", "spawn_group",
 	"rounds_per_stage", "stage_speed_step", "stage_speed_cap", "boss_round_mult", "offline_gold_mult"] + GACHA_KEYS
 const CONFIG_LIST_KEYS := ["starter_heroes", "promote_shards", "hero_max_levels"]
@@ -80,7 +80,7 @@ const CONFIG_TIER_KEYS := ["keep_slot_tiers", "keep_interior_tiers"]  # 성채 �
 const MIN_INTERIOR_TILES := 20  # 건물 배치(Balance.BUILDINGS)가 들어가는 가장 작은 성 내부 — 더 작으면 그릴 수 없다
 const KEEP_SLOT_STEP := 4  # 성이 넓어질 때마다 영웅 슬롯 +4(사용자 규칙). 서버 seed.SLOT_STEP
 const MAX_HERO_SLOTS := 12  # 서버 seed.MAX_HERO_SLOTS
-const LEVELUP_INT_KEYS := ["hero_max_level_per_promotion", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR"]  # 0 이상 정수(개정 11, 12: 골드만, 15: 승급당)
+const LEVELUP_INT_KEYS := ["hero_max_level_per_promotion", "levelup_gold_R", "levelup_gold_SR", "levelup_gold_SSR", "levelup_gold_UR"]  # 0 이상 정수(개정 11, 12: 골드만, 15: 승급당)
 const UPGRADE_STR_COLS := ["id", "name", "unit"]  # 개정 20 공용 업그레이드(성장). unit = pct(%) | pp(%p)
 const UPGRADE_NUM_COLS := ["per_level", "max_level", "cost_base", "cost_growth"]
 const UPGRADE_UNITS := ["pct", "pp"]
@@ -136,7 +136,7 @@ const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
 const MAX_GAME_SPEED := 2.0  # 배속 버튼 최고 배율(speed_button.gd LEVELS 끝, 서버 rules.MAX_GAME_SPEED)
 const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
-const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base",
+const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "equip_extra_gold_mult",
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
 	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base",
 	"ticket_key_daily", "ticket_key_cap", "ticket_dg_party", "ticket_dg_min_sec", "ticket_dg_hp_growth", "ticket_dg_atk_growth", "ticket_reward_base",
@@ -609,7 +609,8 @@ static func soldier_stats(type: String, tier: int) -> Dictionary:
 		"speed": float(d.speed), "aggro": float(d.aggro)}
 
 
-## 모집 확률 {ssr, sr}(R은 나머지, 서버 rules.gachaRates와 같은 식). 골드 = base + step × (모집 레벨 − 1), 다이아 = 고정(개정 23).
+## 모집 확률 {ur, ssr, sr}(R은 나머지, 서버 rules.gachaRates와 같은 식). 골드 = base + step × (모집 레벨 − 1), 다이아 = 고정(개정 23).
+## UR은 다이아 모집에만(골드 0 — 2026-10-29 사용자 "다이아 뽑기에서만").
 ## 주점 레벨 보너스는 없다(사용자 2026-10-18 "주점 레벨 없애" — 설정 tavern_*_per_level은 예전 앱 호환으로 0).
 static func gacha_rates(currency: String, gold_level: int) -> Dictionary:
 	var k := _gold_level(gold_level) - 1
@@ -617,7 +618,7 @@ static func gacha_rates(currency: String, gold_level: int) -> Dictionary:
 	var ssr := config_num("gacha_dia_ssr") if dia else config_num("gacha_gold_ssr_base") + config_num("gacha_gold_ssr_step") * k
 	var sr := config_num("gacha_dia_sr") if dia else config_num("gacha_gold_sr_base") + config_num("gacha_gold_sr_step") * k
 	var no_ssr := not dia and _gold_level(gold_level) < GOLD_SSR_FROM
-	return {"ssr": 0.0 if no_ssr else ssr, "sr": sr}
+	return {"ur": config_num("gacha_dia_ur") if dia else 0.0, "ssr": 0.0 if no_ssr else ssr, "sr": sr}
 
 
 ## 모집 비용(정수 골드 또는 다이아). 골드 1회 = base × growth^(L−1)을 GOLD_COST_STEP 단위로 반올림, 10회 = × 10(할인 없음).
@@ -892,7 +893,7 @@ static func hero_stats(def: Dictionary, level: int, promotion: int, equip = null
 ## 전투력(목록 정렬·표시·랭킹·매칭) = round((HP / 10 + 공격 × 2 / 공격 간격 × 원거리 배율) × 등급 배율). HP·공격은 hero_stats(장비 포함).
 ## 2026-10-06 밸런스: 원거리는 성벽 위에서 맞지 않고 쏘므로 공격 점수 × POWER_RANGED, 등급 배율은 장비까지 포함한 전체에 —
 ## 같은 레벨·승급·장비면 SSR > SR > R(레벨 1~70, 승급 0~5, 장비 N~LR 1~60레벨 전부 확인). 서버 rules.ts·guild.ts·guild_war.ts heroPower와 같다.
-const POWER_GRADE := {"SSR": 2.0, "SR": 1.4, "R": 1.0}
+const POWER_GRADE := {"UR": 2.8, "SSR": 2.0, "SR": 1.4, "R": 1.0}
 const POWER_RANGED := 2.0
 static func hero_power(def: Dictionary, level: int, promotion: int, equip = null) -> int:
 	var s := hero_stats(def, level, promotion, equip)
@@ -1081,9 +1082,10 @@ static func dungeon_enemies(type: String, level: int) -> Array:
 	return out
 
 
-## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)). 1단계 4000, 2단계 4400.
+## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1))를 천 단위로 올림(사용자 2026-10-29 "100의 자리에서 올림"). 1단계 20,000, 2단계 22,000, 3단계 25,000.
 static func gold_reward(level: int) -> int:
-	return roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+	var g := roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+	return ceili(g / 1000.0) * 1000
 
 
 ## 단계 n의 등급 가중치 {N: w, …}(equip_drop.csv의 min_level ≤ n인 마지막 행).
@@ -1227,9 +1229,12 @@ static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
 	return out
 
 
-## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…, 예전엔 10만·20만·30만…).
-static func extra_cost(extra_today: int) -> int:
-	return int(config_num("equip_extra_gold_base")) * (1 + 2 * maxi(extra_today, 0))
+## 장비 던전 골드 도전 비용(열쇠가 없을 때) = 단계별 고정: equip_extra_gold_base × equip_extra_gold_mult^(단계 − 1)을 천 단위로 올림
+## (사용자 2026-10-29 — 그날 횟수로 오르지 않는다. 서버 rules.extraCost와 같다. 1단계 10만, 10단계 28만, 30단계 267만).
+static func extra_cost(level: int) -> int:
+	var mult := config_num("equip_extra_gold_mult") if _config.has("equip_extra_gold_mult") else 1.12
+	var g := roundi(_grown(config_num("equip_extra_gold_base"), mult, maxi(level, 1) - 1))
+	return ceili(g / 1000.0) * 1000
 
 
 ## 출전 인원(골드 6, 장비 4).
@@ -1550,7 +1555,7 @@ static func _check_contents(t: Dictionary) -> void:
 	var hero_ids: Array = t.heroes.map(func(h): return h.id)
 	for h in t.heroes:
 		if not h.grade in GRADES:
-			_err("heroes", h._line, "grade", "grade must be R, SR or SSR: '%s'" % h.grade)
+			_err("heroes", h._line, "grade", "grade must be R, SR, SSR or UR: '%s'" % h.grade)
 		if not h.role in ROLES:
 			_err("heroes", h._line, "role", "role must be melee or ranged: '%s'" % h.role)
 		if not (h.color.length() == 7 and h.color.begins_with("#") and h.color.substr(1).is_valid_hex_number()):
@@ -1855,7 +1860,8 @@ static func _check_gacha(cfg: Dictionary) -> void:
 static func _check_gacha_rates(cfg: Dictionary) -> void:
 	var v := {}  # 검사를 지난 값만
 	var rules := [
-		["gacha_gold_level_max", "int1"], ["gacha_gold_level_pulls", "int1"], ["gacha_dia_pity", "int1"], ["gacha_gold_cost_base", "nonneg"],
+		["gacha_gold_level_max", "int1"], ["gacha_gold_level_pulls", "int1"], ["gacha_dia_pity", "int1"], ["gacha_dia_ur_pity", "int1"],
+		["ur_fuse_shards", "int1"], ["gacha_dia_ur", "unit"], ["gacha_gold_cost_base", "nonneg"],
 		["gacha_gold_cost_growth", "ge1"], ["gacha_gold_ssr_base", "nonneg"], ["gacha_gold_ssr_step", "nonneg"], ["gacha_gold_sr_base", "nonneg"],
 		["gacha_gold_sr_step", "nonneg"], ["gacha_dia_ssr", "unit"], ["gacha_dia_sr", "unit"],
 	]
@@ -1870,8 +1876,8 @@ static func _check_gacha_rates(cfg: Dictionary) -> void:
 			v[r[0]] = x
 		else:
 			_err("config", 0, r[0], "must be %s: '%s'" % [why[r[1]], s])
-	if v.has("gacha_dia_ssr") and v.has("gacha_dia_sr") and v.gacha_dia_ssr + v.gacha_dia_sr > 1.0 + 1e-9:
-		_err("config", 0, "gacha_dia_sr", "gacha_dia_ssr + gacha_dia_sr must be at most 1: %s + %s" % [cfg.gacha_dia_ssr, cfg.gacha_dia_sr])
+	if v.has("gacha_dia_ssr") and v.has("gacha_dia_sr") and v.get("gacha_dia_ur", 0.0) + v.gacha_dia_ssr + v.gacha_dia_sr > 1.0 + 1e-9:
+		_err("config", 0, "gacha_dia_sr", "gacha_dia_ur + gacha_dia_ssr + gacha_dia_sr must be at most 1: %s + %s + %s" % [cfg.get("gacha_dia_ur", 0), cfg.gacha_dia_ssr, cfg.gacha_dia_sr])
 	if not ["gacha_gold_level_max", "gacha_gold_ssr_base", "gacha_gold_ssr_step", "gacha_gold_sr_base", "gacha_gold_sr_step"].all(func(k): return v.has(k)):
 		return
 	var ssr_max: float = v.gacha_gold_ssr_base + v.gacha_gold_ssr_step * (v.gacha_gold_level_max - 1.0)

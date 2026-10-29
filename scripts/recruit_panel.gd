@@ -24,6 +24,7 @@ const RecruitBanner := preload("res://scripts/recruit_banner.gd")
 const CardReveal := preload("res://scripts/card_reveal.gd")
 const SummonStage := preload("res://scripts/summon_stage.gd")
 const GachaOdds := preload("res://scripts/gacha_odds.gd")
+const FuseDialog := preload("res://scripts/fuse_dialog.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
@@ -39,6 +40,7 @@ const REVEAL_ONE := 0.15  # 1회: 소환진이 걷힌 뒤 뒤집기까지(SR·SS
 const REVEAL_FIRST := 0.12  # 10회: 소환진이 걷힌 뒤 첫 카드
 const REVEAL_STEP := 0.07  # 10회: 카드 사이(R·SR 먼저 왼쪽 위부터, SSR은 맨 끝에 무지개빛을 모았다가 하나씩)
 const SSR_GAP := 0.6  # 10회: SSR 카드끼리 사이
+const TOP_GRADES := ["SSR", "UR"]  # 맨 끝에 하나씩 뒤집고 일러스트 화면을 띄우는 등급(이 순서로 — UR이 마지막)
 const ONE_SCALE := 1.5  # 1회 결과 카드는 이만큼 크게
 var gold_tab: Button
 var dia_tab: Button
@@ -61,6 +63,8 @@ var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
 var odds: Control  # 확률 안내 창
+var fuse_button: Button  # [SSR 조각 합성] — 다이아 탭(2026-10-29)
+var fuse: Control  # SSR 조각 합성 창(fuse_dialog.gd)
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
@@ -126,6 +130,10 @@ func _ready() -> void:
 	_dia_box.add_child(pity_label)
 	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
 	_dia_box.add_child(ticket_label)
+	fuse_button = _button("", UiKit.GRADE_COLORS.UR.darkened(0.1), 24)
+	fuse_button.focus_mode = Control.FOCUS_NONE
+	fuse_button.pressed.connect(func(): if not _waiting: fuse.open())
+	_dia_box.add_child(fuse_button)
 
 	var rates_row := HBoxContainer.new()
 	rates_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -191,6 +199,9 @@ func _ready() -> void:
 	_build_shop_ask()
 	odds = GachaOdds.new()
 	add_child(odds)
+	fuse = FuseDialog.new()
+	fuse.fused.connect(_on_fused)
+	add_child(fuse)
 	stage = SummonStage.new()  # 맨 위(확률 창·상점 확인 창 위)
 	stage.intro_done.connect(_start_flips)
 	stage.skip_all.connect(_skip_all)
@@ -337,6 +348,10 @@ static func rates_text(cur := GOLD) -> String:
 static func _rates_line(rates: Dictionary) -> String:
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
+	var ur: float = rates.get("ur", 0.0)
+	if ur > 0.0:  # 다이아(태생 UR은 다이아 모집에만 — 2026-10-29)
+		return "UR %s%% · SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ur * 100.0), Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0),
+			Skills.num_text((1.0 - ur - ssr - sr) * 100.0)]
 	if ssr <= 0.0:  # 골드 모집 Lv 1~2(SSR은 GameData.GOLD_SSR_FROM부터)
 		return Lang.t("recruit_panel.rates_line") % [GameData.GOLD_SSR_FROM, Skills.num_text(sr * 100.0), Skills.num_text((1.0 - sr) * 100.0)]
 	return "SSR %s%% · SR %s%% · R %s%%" % [Skills.num_text(ssr * 100.0), Skills.num_text(sr * 100.0), Skills.num_text((1.0 - ssr - sr) * 100.0)]
@@ -378,6 +393,19 @@ func _recruit(count: int, cur := "") -> void:
 		_refresh()
 
 
+## SSR 조각 합성 창 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
+func _on_fused(picks: Dictionary) -> void:
+	if _waiting:
+		return
+	_count = 1
+	_cur = DIA
+	_halted = true
+	_waiting = true  # 오프라인은 fuse_ur 안에서 바로 gacha_done이 온다 — 그 전에 둔다
+	if not Economy.fuse_ur(picks):
+		_waiting = false
+	_refresh()
+
+
 func _on_gacha_done(results: Array) -> void:
 	_waiting = false
 	if results.is_empty():
@@ -394,7 +422,7 @@ func _on_gacha_done(results: Array) -> void:
 
 
 ## 결과 카드 1장(ONE_SCALE배 크게) 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다. 먼저 화면 전체에 소환진(summon_stage — 최고 등급 빛 예고)이
-## 돌고, 걷히면 뒷면 카드가 차례로 뒤집힌다(_start_flips). SSR 카드가 펴지면 SSR 일러스트 화면. 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고,
+## 돌고, 걷히면 뒷면 카드가 차례로 뒤집힌다(_start_flips). SSR·UR 카드가 펴지면 일러스트 화면(UR은 더 크게 — summon_stage). 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고,
 ## [건너뛰기]는 SSR 화면까지 건너뛴다. 자동 모집 중엔 소환진 없이 바로 뒤집는다.
 func _show_results(results: Array) -> void:
 	for h in _reveals:
@@ -427,17 +455,21 @@ func _show_results(results: Array) -> void:
 		_grid.add_child(holder)
 		_reveals.append(holder)
 		cards.append(card)
-	var stop := auto_running() and results.any(func(r): return r.grade == "SSR")
+	var stop := auto_running() and results.any(func(r): return r.grade in TOP_GRADES)
 	if stop:  # 안전: 자동 중 SSR이 나오면 멈추고 그 카드를 강조(반짝임은 카드가 이미 낸다)
 		_halted = true
 		Economy.notice.emit(SSR_TEXT)
 	for i in results.size():
-		cards[i].highlight = stop and results[i].grade == "SSR"
+		cards[i].highlight = stop and results[i].grade in TOP_GRADES
 	_auto_left = auto_delay
 	if fast:
 		stage.stop()
 	else:
-		var best := "SSR" if results.any(func(x): return x.grade == "SSR") else ("SR" if results.any(func(x): return x.grade == "SR") else "R")
+		var best := "R"
+		for g in ["UR", "SSR", "SR"]:
+			if results.any(func(x): return x.grade == g):
+				best = g
+				break
 		stage.play(best, results.size())
 	auto_box.visible = _cur == GOLD  # 자동 모집은 골드만
 	_pick_view.visible = false
@@ -453,18 +485,19 @@ func reveal_all() -> void:
 		h.reveal_now()
 
 
-## 소환진이 걷혔다: R·SR 카드는 왼쪽 위부터 REVEAL_STEP 간격, SSR 카드는 그 뒤에 무지개빛을 모았다가 하나씩(SSR_GAP).
+## 소환진이 걷혔다: R·SR 카드는 왼쪽 위부터 REVEAL_STEP 간격, SSR 카드는 그 뒤에 무지개빛을 모았다가 하나씩(SSR_GAP), UR은 맨 끝에.
 func _start_flips() -> void:
 	_arm_guard()  # 소환진이 걷힌 직후 연타가 밑의 [확인]·[재모집]을 누르지 않게
 	var at := REVEAL_ONE if _reveals.size() == 1 else REVEAL_FIRST
 	for h in _reveals:
-		if h.grade != "SSR":
+		if not h.grade in TOP_GRADES:
 			h.begin(at)
 			at += REVEAL_STEP
-	for h in _reveals:
-		if h.grade == "SSR":
-			h.begin(at + h.tease_sec())
-			at += h.tease_sec() + SSR_GAP
+	for g in TOP_GRADES:
+		for h in _reveals:
+			if h.grade == g:
+				h.begin(at + h.tease_sec())
+				at += h.tease_sec() + SSR_GAP
 
 
 ## [건너뛰기]: 카드를 모두 바로 열고 SSR 화면도 띄우지 않는다.
@@ -473,10 +506,10 @@ func _skip_all() -> void:
 	reveal_all()
 
 
-## 카드가 펴졌다: SSR이면 일러스트 화면(건너뛰기를 누르지 않았으면).
+## 카드가 펴졌다: SSR·UR이면 일러스트 화면(건너뛰기를 누르지 않았으면).
 func _on_card_revealed(_holder, r: Dictionary) -> void:
-	if r.grade == "SSR" and not _no_splash and visible:
-		stage.splash(String(r.hero_id), bool(r.get("new", false)))
+	if r.grade in TOP_GRADES and not _no_splash and visible:
+		stage.splash(String(r.hero_id), bool(r.get("new", false)), String(r.grade))
 
 
 func _show_pick() -> void:
@@ -560,7 +593,8 @@ func _refresh() -> void:
 		preview_label.text = Lang.t("recruit_panel.refresh_4") % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
 	dia_label.text = Lang.t("recruit_panel.refresh_5") % UiKit.commas(Economy.diamonds)
-	pity_label.text = Lang.t("recruit_panel.refresh_6") % st.pity_left
+	pity_label.text = Lang.t("recruit_panel.refresh_6") % st.pity_left + "  ·  " + (Lang.t("recruit_panel.refresh_14") % st.ur_pity_left)
+	fuse_button.text = Lang.t("recruit_panel.refresh_15") % Economy.fuse_cost()
 	var tk := Economy.dia_tickets
 	var tk_shown := tk > 0 and currency == DIA
 	if ticket_label.visible != tk_shown:

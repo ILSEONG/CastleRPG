@@ -13,11 +13,12 @@ const AOE_R := 3.5
 const HOLD_MAX := 6.0
 const AOE := ["meteor", "comet", "inferno", "poison_cloud", "blizzard", "tornado", "earthquake", "ground_slam", "frost_nova", "thunder_storm",
 	"arrow_rain", "whirlwind", "shockwave", "starfall", "void_rift", "solar_flare", "abyss_hand", "lava_burst", "dragon_breath", "firespread",
-	"wide_swing", "spear_sweep", "axe_volley", "volley", "crescent", "war_cry", "ice_spikes", "boomerang"]
-const SELF_AOE := ["earthquake", "ground_slam", "whirlwind", "war_cry", "wide_swing", "spear_sweep", "crescent"]
-const DEFENSIVE := ["shield", "bulwark", "parry", "lunar_veil", "blood_rage"]
+	"wide_swing", "spear_sweep", "axe_volley", "volley", "crescent", "war_cry", "ice_spikes", "boomerang",
+	"north_tide", "tiger_claw", "fox_fire", "nine_tails", "dragon_arrow", "azure_dragon", "time_stop", "time_collapse"]
+const SELF_AOE := ["earthquake", "ground_slam", "whirlwind", "war_cry", "wide_swing", "spear_sweep", "crescent", "north_tide", "nine_tails"]
+const DEFENSIVE := ["shield", "bulwark", "parry", "lunar_veil", "blood_rage", "turtle_ward", "tiger_avatar"]
 const CONTROL := ["deep_freeze", "frost_chain", "snare", "shield_bash", "hex", "cheap_shot", "taunt"]
-const SUPPORT := ["mass_heal", "sanctuary", "shield_ally"]
+const SUPPORT := ["mass_heal", "sanctuary", "shield_ally", "phoenix_wing", "rebirth_flame"]
 
 var battle  # pvp_battle.gd: units(team)
 var _held := {}  # 영웅 id·스킬 → 처음 미룬 시각

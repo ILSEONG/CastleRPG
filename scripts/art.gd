@@ -45,7 +45,8 @@ const HERO_MODELS := {
 	"Rogue": {"scene": CHAR_DIR + "Rogue.glb", "gear": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"]},
 	"Rogue_Hooded": {"scene": CHAR_DIR + "Rogue_Hooded.glb", "gear": ["Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife", "Throwable"]},
 }
-const GRADE_COLORS := {"R": Color("#8FA3B8"), "SR": Color("#9B6CD6"), "SSR": Color("#F2B233")}
+## UR(2026-10-29 "UR은 개멋지게 뽑아줘") = 짙은 주황(장비 UR과 같은 계열, 무지개는 LR 전용, 금색 아님).
+const GRADE_COLORS := {"R": Color("#8FA3B8"), "SR": Color("#9B6CD6"), "SSR": Color("#F2B233"), "UR": Color("#FF6A1F")}
 
 ## 영웅 생김새(개정 23) — 모델 텍스처(8×4 칸 아틀라스, 칸 = 왼쪽 위부터 0~31)에서 부위 이름 → 칸. GLB 메시마다 쓰는 칸을 세고
 ## 칸 하나씩 칠해 본 렌더로 정했다. 무기 칸도 있다(같은 칸을 쓰는 부착물은 같이 바뀐다 — 기사 steel = 칼날·방패 면).
@@ -213,6 +214,20 @@ const HERO_LOOKS := {
 	"raven": {"palette": {"hood": Color("3B3F58"), "tunic": Color("1E2030"), "arms": Color("2E3148"), "strap": Color("6A5ACD"),
 		"belt": Color("1A1A24"), "boots": Color("1A1A24"), "wood": Color("22222C"), "fit": Color("8E7CC3")},
 		"parts": [["head", "raven_crest"], ["chest", "raven_mantle"]], "scale": 1.04},
+	# UR(2026-10-29 "UR은 개멋지게 뽑아줘"): 몸은 모두 Meshy(dev/meshy_heroes.py UR_IDS — 겹친 갑옷·등 장식·빛나는 수정, 금색 없이),
+	# 여기는 무기 색·손 부품만(몸이 있으면 팔레트는 무기 칸에만 먹는다).
+	# 태양의 용기사: 흰 강철 칼·방패 + 주황 방패 테, 칼날을 감싸는 주황 불꽃
+	"hyeonmu": {"palette": {"steel": Color("F4F1EC"), "grip": Color("3A2A2A"), "rim": Color("FF6A1F")}, "parts": [["handslot.r", "solaris_flame"]]},
+	# 폭풍의 전쟁군주: 검은 강철 큰 도끼 + 하늘색 날, 도끼머리에서 갈라지는 번개
+	"baekho": {"palette": {"steel": Color("3A4250"), "edge": Color("8FD8FF"), "wood": Color("2A2A34")}, "parts": [["handslot.r", "ragna_bolts"]]},
+	# 월광 검성: 단검 대신 연보라 달빛 장검 두 자루
+	"yeonhwa": {"palette": {"blade": Color("D8CCFF")}, "swap": {"Knife": "kaien_blade", "Knife_Offhand": "kaien_blade"}},
+	# 별의 사수: 남색 쇠뇌 + 은 쇠붙이
+	"cheongryong": {"palette": {"wood": Color("2A2E5A"), "fit": Color("C8D0E8"), "blade": Color("8FB0FF")}},
+	# 공허의 대마도사: 지팡이 머리에 보라 수정 + 뜬 조각
+	"chronos": {"palette": {"gem": Color("B070FF")}, "parts": [["handslot.r", "nox_crystal"]]},
+	# 새벽의 여신: 흰 마법서 + 분홍 보석
+	"jujak": {"palette": {"book": Color("F6EEF2"), "gem": Color("FF8FA3")}},
 }
 
 ## Meshy 몸(docs/meshy-assets.md): 영웅 id 파일이 있으면 KayKit 몸(스킨 부위 + 모자·망토)을 숨기고 그 자리에 Meshy 메시를 단다.

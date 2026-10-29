@@ -40,7 +40,7 @@ const FLASH_A := [0.0, 0.0, 0.14]  # impact power → 화면 섬광 세기(camer
 const BURST_MULT := 1.4  # 입자 수 배율(2026-10-07 전체 강화)
 const SKY_H := 9.0  # 번개가 떨어지기 시작하는 높이(땅에서 m)
 const BOLT_HIT_Y := 0.8  # 번개 맞은 지점(hero HIT_HEIGHT)에서 땅까지
-const TIER := {"R": 0, "SR": 1, "SSR": 2}  # 등급 → 연출 단계
+const TIER := {"R": 0, "SR": 1, "SSR": 2, "UR": 2}  # UR은 SSR과 같은 단계(가장 높은 연출)  # 등급 → 연출 단계
 const TIER_SCALE := [1.2, 1.5, 1.85]  # 단계 → 스킬 이펙트 크기 배율
 
 static var _meshes := {}

@@ -586,7 +586,7 @@ func _recruit_and_heroes(rig) -> void:
 	# 미보유 영웅: 보유 카드 뒤에 등급(SSR → SR → R) → 표 순서, 흐린 카드·"미보유"·Lv·전투력 없음, 배치·상세 안 됨
 	var locked: Array = heroes_win.locked_cards.keys()
 	var want_locked: Array = GameData.heroes().filter(func(h): return int(Economy.heroes.get(h.id, 0)) < 1).map(func(h): return h.id)
-	var rank := {"SSR": 0, "SR": 1, "R": 2}
+	var rank := {"UR": -1, "SSR": 0, "SR": 1, "R": 2}  # 태생 UR이 맨 앞(2026-10-29)
 	var file_order := GameData.heroes().map(func(h): return h.id)
 	want_locked.sort_custom(func(a, b): return [rank[GameData.hero(a).grade], file_order.find(a)] < [rank[GameData.hero(b).grade], file_order.find(b)])
 	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
@@ -2578,7 +2578,7 @@ func _barracks_t2_window() -> void:
 
 
 ## (D) 개정 18 던전(오프라인, 즉시 승리 훅 Economy.debug_win_on): [던전] 탭 → 카드(열쇠·보상) → 골드 [도전] → 편성(6칸 = 전투력 상위, 영웅 카드 탭으로
-##     빼고 넣기) → [출전] → 던전 장면(성 월드는 트리 밖) → 결과(승리·+4,000 골드·열쇠 −1) → 자동 체크 둘은 배타 → "현재 단계 자동 반복"이
+##     빼고 넣기) → [출전] → 던전 장면(성 월드는 트리 밖) → 결과(승리·+20,000 골드·열쇠 −1) → 자동 체크 둘은 배타 → "현재 단계 자동 반복"이
 ##     2초마다 같은 단계를 돌고 열쇠 0에서 멈춤(알림) → [나가기] → 성. 장비 던전 → 상자 5개 → 결과 칸 5개. 영웅 상세 장비 칸 → 장착·해제.
 ##     보관함 → 장착 중은 못 고름, 여러 개 판매, 부위 필터. 캡처 좌표(720×1280 논리)를 INFO로 찍는다.
 func _dungeon_ui(tabs) -> void:
@@ -2595,9 +2595,9 @@ func _dungeon_ui(tabs) -> void:
 	await _guard_wait()
 	var gc: Dictionary = dwin.cards.gold
 	var ec: Dictionary = dwin.cards.equip
-	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "1 / 3" and gc.reward.text == "보상 4,000 골드"
+	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "2 / 3" and gc.reward.text == "보상 20,000 골드"
 		and gc.level.text == "1단계" and gc.prev.disabled and gc.next.disabled and not gc.go.disabled and ec.reward.text.begins_with("장비 5개 · N 60% · R 30% · SR 9% · SSR 1%"),
-		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 4,000; equip card 1 / 3 with the grade odds", "gold=%s equip=%s" % [gc.reward.text, ec.reward.text])
+		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 20,000; equip card 2 / 3 with the grade odds", "gold=%s equip=%s" % [gc.reward.text, ec.reward.text])
 	print("INPUT INFO: dungeon tab %s, gold [도전] %s, equip [도전] %s, [보관함] %s (720x1280 logical)" % [tabs.buttons.dungeon.get_global_rect(), gc.go.get_global_rect(),
 		ec.go.get_global_rect(), dwin.bag_button.get_global_rect()])
 	await _tap(gc.go.get_global_rect().get_center())
@@ -2623,9 +2623,9 @@ func _dungeon_ui(tabs) -> void:
 		return
 	await _dungeon_move(d)
 	var hud = d.hud
-	_check(d.phase == d.Phase.RESULT and d.result.win and hud.result_layer.visible and hud.result_title.text == "승리!" and hud.gold_label.text == "+4,000 골드"
-		and Economy.gold == 4000 and Economy.dungeon_state("gold").keys == keys0 - 1 and hud.next_button.visible and not hud.next_button.disabled,
-		"(D) instant-win hook: result 승리!, +4,000 골드, one key spent, [다음 단계] shown", "phase=%d result=%s gold=%d" % [d.phase, d.result, Economy.gold])
+	_check(d.phase == d.Phase.RESULT and d.result.win and hud.result_layer.visible and hud.result_title.text == "승리!" and hud.gold_label.text == "+20,000 골드"
+		and Economy.gold == 20000 and Economy.dungeon_state("gold").keys == keys0 - 1 and hud.next_button.visible and not hud.next_button.disabled,
+		"(D) instant-win hook: result 승리!, +20,000 골드, one key spent, [다음 단계] shown", "phase=%d result=%s gold=%d" % [d.phase, d.result, Economy.gold])
 	print("INPUT INFO: result panel %s, [다음 단계] %s, [다시] %s, [나가기] %s, 다음 단계 자동 %s, 현재 단계 자동 반복 %s" % [hud.result_title.get_parent().get_global_rect(),
 		hud.next_button.get_global_rect(), hud.again_button.get_global_rect(), hud.exit_button.get_global_rect(), hud.auto_next_box.get_global_rect(),
 		hud.auto_repeat_box.get_global_rect()])
@@ -2641,7 +2641,7 @@ func _dungeon_ui(tabs) -> void:
 	await _wait_until(func(): return Economy.dungeon_state("gold").keys == 0 and _main._dungeon != null and _main._dungeon.auto_halted, 15.0)
 	d = _main._dungeon
 	hud = d.hud
-	_check(started[0] == 3 and Economy.dungeon_state("gold").keys == 0 and Economy.gold == 12000 and d.run.level == 1 and d.auto_halted and hud.toast.visible
+	_check(started[0] == 3 and Economy.dungeon_state("gold").keys == 0 and Economy.gold == 60000 and d.run.level == 1 and d.auto_halted and hud.toast.visible
 		and hud.toast.text == d.STOP_KEYS and hud.auto_label.text == "자동 도전을 멈췄습니다",
 		"(D) auto repeat reruns level 1 every 2 s (keys 2 -> 1 -> 0) and stops with a notice when the keys run out",
 		"starts=%d keys=%d gold=%d halted=%s toast=%s" % [started[0], Economy.dungeon_state("gold").keys, Economy.gold, d.auto_halted, hud.toast.text])
@@ -2666,8 +2666,8 @@ func _dungeon_ui(tabs) -> void:
 		return
 	await _wait_until(func(): return d.phase == d.Phase.RESULT, 3.0)
 	_check(d.hud.result_layer.visible and d.hud.reward_tiles.size() == 5 and d.hud.reward_tiles.map(func(t): return t.grade) == d.result.rewards.items.map(func(i): return i.grade)
-		and d.drops.all(func(c): return absf(c.position.y) < 0.01) and Economy.dungeon_state("equip").keys == 0,
-		"(D) then the result shows the 5 items as grade tiles; the chests have landed; the equip key is spent", "phase=%d" % d.phase)
+		and d.drops.all(func(c): return absf(c.position.y) < 0.01) and Economy.dungeon_state("equip").keys == 1,
+		"(D) then the result shows the 5 items as grade tiles; the chests have landed; one equip key is spent (2 -> 1)", "phase=%d" % d.phase)
 	print("INPUT INFO: equip result tiles %s" % [d.hud.reward_tiles.map(func(t): return t.get_global_rect())])
 	await _tap(d.hud.exit_button.get_global_rect().get_center())
 	await _frames(3)
@@ -2979,14 +2979,16 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	dlg = recruit.dialog.get_global_rect()
 	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.dia_label.text == "보유 600"
-		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
-		and recruit.rates_label.text == "SSR 5% · SR 30% · R 65%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
+		and recruit.pity_label.text == "SSR 확정까지 50회  ·  UR 확정까지 200회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
+		and recruit.rates_label.text == "UR 0.5% · SSR 5% · SR 30% · R 64.5%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
 		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 5/30/65, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
 		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
-	var ssr: bool = recruit.cards.size() == 1 and GameData.hero(recruit.cards[0].hero_id).grade == "SSR"
-	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회" % (50 if ssr else 49)
+	var top_g: String = GameData.hero(recruit.cards[0].hero_id).grade if recruit.cards.size() == 1 else ""
+	var ssr: bool = top_g in ["SSR", "UR"]  # UR도 SSR 천장을 되돌린다
+	var ur_left := 200 if top_g == "UR" else 199
+	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회  ·  UR 확정까지 %d회" % [50 if ssr else 49, ur_left]
 		and Economy.gold == gold0 and recruit.is_showing_results() and not recruit.auto_box.visible and recruit.again_button.text == "1회 더\n다이아 300" and recruit.again10_button.text == "10회 더\n다이아 부족",
 		"(r23) diamond [1회]: diamonds -300, the pity count goes down, gold untouched; no 자동 모집 box on diamond results",
 		"dia=%d pity=%d text=%s gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, recruit.pity_label.text, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])
@@ -3068,8 +3070,9 @@ func _dungeon_gold_line(tabs) -> void:
 	var g0: int = Economy.gold_tenths
 	dwin.open()
 	await _frames(1)
+	Economy.dungeons.equip.keys = 0  # 하루 2개 중 남은 1개를 비워 골드 추가 도전을 본다
 	var st0 := Economy.dungeon_state("equip")
-	var cost: int = st0.extra_cost
+	var cost: int = GameData.extra_cost(dwin.level_of("equip"))  # 카드 = 고른 단계의 고정 비용
 	Economy.add_gold_tenths((cost - 1) * 10 - Economy.gold_tenths)
 	var short := [ec.gold.text, ec.cost.text, ec.gold.get_theme_color("font_color")]
 	Economy.add_gold_tenths(10)
@@ -3083,8 +3086,8 @@ func _dungeon_gold_line(tabs) -> void:
 	var ok := Economy.start_dungeon("equip", 1, Economy.default_party("equip")) and Economy.debug_win()
 	Economy.dungeon_started.connect(_main._on_dungeon_started)
 	var st := Economy.dungeon_state("equip")
-	_check(ok and st.extra_today == st0.extra_today + 1 and st.extra_cost > cost and Economy.gold == 0 and ec.gold.text == "0"
-		and ec.cost.text == "/ " + UiKit.commas(st.extra_cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
-		"(D) an extra run paid with gold raises the cost and the line follows at once (0 / new cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
+	_check(ok and st.extra_today == st0.extra_today + 1 and Economy.gold == 0 and ec.gold.text == "0"
+		and ec.cost.text == "/ " + UiKit.commas(cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
+		"(D) an extra run paid with gold keeps the fixed level cost and the line follows at once (0 / cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
 	Economy.add_gold_tenths(g0 - Economy.gold_tenths)
 	dwin.close()

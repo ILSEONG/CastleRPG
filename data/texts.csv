@@ -606,7 +606,7 @@ gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
-gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
+gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR 이상이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_6,10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_7,"골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다",,,,scripts/gacha_odds.gd
 gacha_odds.show_for_8,등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림,,,,scripts/gacha_odds.gd
@@ -1897,6 +1897,24 @@ skills.names.gale,돌개바람,,,,scripts/skills.gd
 skills.names.solar_spark,햇빛 파편,,,,scripts/skills.gd
 skills.names.frost_spike,서리 가시,,,,scripts/skills.gd
 skills.names.magma,끓는 늪,,,,scripts/skills.gd
+skills.names.turtle_ward,현무 결계,,,,scripts/skills.gd
+skills.names.black_shell,흑귀갑,,,,scripts/skills.gd
+skills.names.north_tide,북해 해일,,,,scripts/skills.gd
+skills.names.tiger_claw,백호 참격,,,,scripts/skills.gd
+skills.names.tiger_fury,산군의 기세,,,,scripts/skills.gd
+skills.names.tiger_avatar,백호 현신,,,,scripts/skills.gd
+skills.names.fox_fire,여우불,,,,scripts/skills.gd
+skills.names.fox_charm,매혹,,,,scripts/skills.gd
+skills.names.nine_tails,구미호 해방,,,,scripts/skills.gd
+skills.names.dragon_arrow,청룡시,,,,scripts/skills.gd
+skills.names.azure_tide,용궁의 물살,,,,scripts/skills.gd
+skills.names.azure_dragon,청룡 강림,,,,scripts/skills.gd
+skills.names.time_stop,시간 정지,,,,scripts/skills.gd
+skills.names.time_haste,시간 가속,,,,scripts/skills.gd
+skills.names.time_collapse,시간 붕괴,,,,scripts/skills.gd
+skills.names.phoenix_wing,불새의 날개,,,,scripts/skills.gd
+skills.names.phoenix_blessing,주작의 가호,,,,scripts/skills.gd
+skills.names.rebirth_flame,환생의 불꽃,,,,scripts/skills.gd
 skills.hero_names.poison,화상,,,,scripts/skills.gd
 skills.hero_names.aoe_blast,화염구,,,,scripts/skills.gd
 skills.texts.heal_aura,{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 각자 최대 HP의 {c}%만큼 회복합니다.,,,,scripts/skills.gd
@@ -2031,6 +2049,24 @@ skills.texts.gale,공격이 {a}% 확률로 맞은 자리에 회오리를 일으�
 skills.texts.solar_spark,공격이 {a}% 확률로 맞은 자리에 섬광을 터뜨려 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 3초 동안 공격력을 30% 낮춥니다.,,,,scripts/skills.gd
 skills.texts.frost_spike,공격이 {a}% 확률로 대상 쪽으로 길이 {b}m 얼음 가시를 솟게 해 공격력의 {c}% 피해를 주고 0.8초 얼립니다.,,,,scripts/skills.gd
 skills.texts.magma,공격이 {a}% 확률로 맞은 자리에 용암을 뿜어 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.turtle_ward,"{a}초마다 거북 등껍질 결계를 펼쳐 반경 {b}m 아군에게 자기 최대 HP {c}%의 보호막을 씌우고, 주변 적을 3초 동안 도발합니다.",,,,scripts/skills.gd
+skills.texts.black_shell,"받는 피해가 {a}% 줄고, 받은 피해의 {b}%를 때린 적에게 물살로 되돌려 줍니다.",,,,scripts/skills.gd
+skills.texts.north_tide,"{a}초마다 북해의 물기둥을 일으켜 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 1.5초 기절시키며 밀쳐냅니다.",,,,scripts/skills.gd
+skills.texts.tiger_claw,{a}초마다 앞쪽 {b}m를 백호의 발톱으로 세 번 할퀴어 번마다 공격력의 {c}% 피해를 줍니다. 마지막 발톱은 적을 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.tiger_fury,{a}번째 공격마다 흰 번개 발톱이 터져 맞은 적 주변 {b}m에 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.tiger_avatar,"{a}초마다 백호로 현신해 {b}초 동안 공격력과 공격 속도가 {c}% 오르고, 포효로 주변 적을 1초 기절시킵니다.",,,,scripts/skills.gd
+skills.texts.fox_fire,{a}초마다 여우불 {b}개를 흩뿌려 하나마다 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.fox_charm,"공격이 {a}% 확률로 적을 홀려 {b}초 동안 멈추게 하고, 그 뒤 2초까지 받는 피해를 {c}% 늘립니다.",,,,scripts/skills.gd
+skills.texts.nine_tails,"{a}초마다 아홉 꼬리로 주변 {b}m를 아홉 번 휩쓸어 번마다 공격력의 {c}% 피해를 주고, 마지막에 남은 적을 1초 홀립니다.",,,,scripts/skills.gd
+skills.texts.dragon_arrow,"{a}초마다 청룡이 깃든 화살로 앞쪽 {b}m의 적을 모두 꿰뚫어 공격력의 {c}% 피해를 주고, 2초 동안 40% 느리게 합니다.",,,,scripts/skills.gd
+skills.texts.azure_tide,"공격이 적을 {c}초 동안 {b}% 느리게 하고, 느려진 적에게 주는 피해가 {a}% 늘어납니다.",,,,scripts/skills.gd
+skills.texts.azure_dragon,"{a}초마다 청룡을 불러 대상 자리 반경 {b}m를 3초 동안 휘감아 0.5초마다 공격력의 {c}% 피해를 주고, 마지막에 두 배 피해를 줍니다.",,,,scripts/skills.gd
+skills.texts.time_stop,{a}초마다 시간을 멈춰 대상 자리 반경 {b}m 적을 {c}초 동안 얼어붙게 합니다.,,,,scripts/skills.gd
+skills.texts.time_haste,스킬 재사용 대기 시간이 {a}% 빨리 돌아옵니다.,,,,scripts/skills.gd
+skills.texts.time_collapse,"{a}초마다 대상 자리에 시간의 균열을 열어 1.2초 뒤 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 3초 동안 50% 느리게 합니다.",,,,scripts/skills.gd
+skills.texts.phoenix_wing,"{a}초마다 불새를 날려 아군 모두를 최대 HP의 {b}% 회복하고, 대상 자리 적에게 공격력의 {c}% 피해와 화상을 줍니다.",,,,scripts/skills.gd
+skills.texts.phoenix_blessing,스킬로 회복하거나 되살린 아군은 {b}초 동안 공격력이 {a}% 오릅니다.,,,,scripts/skills.gd
+skills.texts.rebirth_flame,"{a}초마다 쓰러진 아군을 모두 최대 HP의 {b}%로 되살리고, 살아 있는 아군은 최대 HP의 {c}% 회복합니다.",,,,scripts/skills.gd
 soldier_panel.empty_text,보유한 병사가 없습니다,,,,scripts/soldier_panel.gd
 soldier_panel.ready,병사,,,,scripts/soldier_panel.gd
 soldier_panel.ready_2,자동 배치,,,,scripts/soldier_panel.gd
@@ -2783,3 +2819,15 @@ ranking_panel.season_card_5,%s  %s %d개,,,,scripts/ranking_panel.gd
 live_ops.box_names.top,최고급 장비 상자,,,,scripts/live_ops.gd
 live_ops.box_names.high,고급 장비 상자,,,,scripts/live_ops.gd
 live_ops.box_names.normal,일반 장비 상자,,,,scripts/live_ops.gd
+fuse_dialog.ready,SSR 조각 합성,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_2,SSR 조각 %d개를 넣으면 태생 UR 영웅 1명이 무작위로 나옵니다,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_3,조각이 있는 SSR 영웅이 없습니다,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_4,자동 채우기,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_5,합성,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_6,닫기,,,,scripts/fuse_dialog.gd
+fuse_dialog.rebuild,%s  (조각 %d),,,,scripts/fuse_dialog.gd
+fuse_dialog.rebuild_2,넣은 조각 %d / %d,,,,scripts/fuse_dialog.gd
+recruit_panel.refresh_14,UR 확정까지 %d회,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_15,SSR 조각 합성 (%d개 → UR 1명),,,,scripts/recruit_panel.gd
+gacha_odds.show_for_4,%d회째 모집은 UR 확정(UR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
+economy.fuse_ur,SSR 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd

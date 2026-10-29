@@ -9,22 +9,26 @@ const Lang := preload("res://scripts/lang.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
-const GRADES := ["SSR", "SR", "R"]
+const GRADES := ["UR", "SSR", "SR", "R"]
 
 var title_label: Label
 var list: VBoxContainer  # 테스트가 읽는다: 영웅 줄은 meta "hero_id"·"p"
 var close_button: Button
 
 
-## 영웅별 확률 [{id, name, grade, p}](p = 0..1, 표 순서 SSR → SR → R, 그 안은 영웅 표 순서). rates = {ssr, sr}.
+## 영웅별 확률 [{id, name, grade, p}](p = 0..1, 표 순서 UR → SSR → SR → R, 그 안은 영웅 표 순서). rates = {ur, ssr, sr}.
+## UR 확률이 0(골드 모집)이면 UR 영웅은 빼고 보인다.
 static func hero_odds(rates: Dictionary) -> Array:
-	var by := {"SSR": [], "SR": [], "R": []}
+	var by := {"UR": [], "SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
 		if by.has(str(h.grade)):
 			by[str(h.grade)].append(h)
-	var gp := {"SSR": float(rates.ssr), "SR": float(rates.sr), "R": 1.0 - float(rates.ssr) - float(rates.sr)}
+	var ur := float(rates.get("ur", 0.0))
+	var gp := {"UR": ur, "SSR": float(rates.ssr), "SR": float(rates.sr), "R": 1.0 - ur - float(rates.ssr) - float(rates.sr)}
 	var out := []
 	for g in GRADES:
+		if g == "UR" and ur <= 0.0:
+			continue
 		for h in by[g]:
 			out.append({"id": h.id, "name": str(h.name), "grade": g, "p": gp[g] / float(by[g].size())})
 	return out
@@ -83,8 +87,12 @@ func show_for(currency: String, gold_level: int) -> void:
 	var dia := currency != GameData.GACHA_GOLD
 	var rates := GameData.gacha_rates(GameData.GACHA_DIA if dia else GameData.GACHA_GOLD, gold_level)
 	title_label.text = Lang.t("gacha_odds.show_for") + (Lang.t("gacha_odds.show_for_2") if dia else Lang.t("gacha_odds.show_for_3") % gold_level)
-	_line("SSR %s · SR %s · R %s" % [pct(rates.ssr), pct(rates.sr), pct(1.0 - rates.ssr - rates.sr)], 24, UiKit.INK)
 	if dia:
+		_line("UR %s · SSR %s · SR %s · R %s" % [pct(rates.ur), pct(rates.ssr), pct(rates.sr), pct(1.0 - rates.ur - rates.ssr - rates.sr)], 24, UiKit.INK)
+	else:
+		_line("SSR %s · SR %s · R %s" % [pct(rates.ssr), pct(rates.sr), pct(1.0 - rates.ssr - rates.sr)], 24, UiKit.INK)
+	if dia:
+		_line(Lang.t("gacha_odds.show_for_4") % int(GameData.config_num("gacha_dia_ur_pity")), 20, SUB)
 		_line(Lang.t("gacha_odds.show_for_5") % int(GameData.config_num("gacha_dia_pity")), 20, SUB)
 		_line(Lang.t("gacha_odds.show_for_6") % int(GameData.config_num("gacha_10_min_sr")), 20, SUB)
 	else:
