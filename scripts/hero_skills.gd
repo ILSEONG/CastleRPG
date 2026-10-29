@@ -1102,6 +1102,8 @@ func _shoot(target, kind: String, speed: float, dmg: float, delay: float, after 
 		pr.tail = tail
 		pr.big = big
 		pr.on_hit = func(m):
+			if not is_instance_valid(h):  # 쏜 영웅이 사라진 뒤 닿은 투사체는 아무것도 안 한다(_later와 같은 검사 — 가이드 통합 테스트 2026-10-29 충돌)
+				return
 			if is_instance_valid(m) and m.is_alive():
 				_hit(m, dmg)
 				if after.is_valid() and is_instance_valid(m):
@@ -1251,7 +1253,7 @@ func _barrage(m, n: int) -> void:
 			pr.speed = shot[1]
 			pr.color = h._color
 			pr.on_hit = func(target):
-				if is_instance_valid(target) and target.is_alive():
+				if is_instance_valid(h) and is_instance_valid(target) and target.is_alive():
 					_hit(target, d)
 			_world().add_child(pr)
 			pr.global_position = h.global_position + MUZZLE)
