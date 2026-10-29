@@ -4537,7 +4537,7 @@ func test_meshy_bodies() -> void:
 			model.free()
 			continue
 		var tris: int = body.mesh.get_faces().size() / 3
-		var cap := 6500 if h.grade == "UR" else 5000  # UR 몸은 6천 삼각형으로 리메시(dev/meshy_heroes.py UR_IDS)
+		var cap := 12500 if h.grade == "UR" else 5000  # UR 몸: 리메시 6천, 최고 설정 재생성은 dev/meshy_decimate.py로 1만2천
 		check(tris > 1000 and tris <= cap, "%s Meshy body within %d triangles (%d)" % [h.id, cap, tris])
 		var m := body.get_active_material(0) as ShaderMaterial
 		check(m != null and m.get_shader_parameter("use_texture") and m.get_shader_parameter("use_remap") != true,

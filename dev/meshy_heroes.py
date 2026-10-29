@@ -3,6 +3,7 @@
   python3 dev/meshy_heroes.py concept <id>...   컨셉(image-to-image, 참조 = dev/meshy/arteon_concept.png) 시작
   python3 dev/meshy_heroes.py model <id>...     끝난 컨셉으로 3D(image-to-3d) 시작 — 컨셉을 눈으로 본 뒤에
   python3 dev/meshy_heroes.py retex <id>...     끝난 3D에 컨셉 그림을 정면 시점으로 텍스처를 다시 입힌다(retexture 10, 4K, UV 그대로)
+  python3 dev/meshy_heroes.py hq <id>...        같은 컨셉으로 최고 설정 3D(최신 모델, 4k 지오메트리, 4K 텍스처, 리메시 없음, 35)
   python3 dev/meshy_heroes.py poll              상태 갱신, 끝난 것 내려받기(dev/meshy/out/<id>/)
 
 키: 환경 변수 MESHY_API_KEY(없으면 프록시가 넣는다고 가정). 상태는 dev/meshy/out/state.json.
@@ -142,10 +143,24 @@ def retex(ids):
         print(i, "retex", t["result"])
 
 
+## UR 최고 설정 재생성(2026-10-29 사용자 "모델링 퀄리티가 좆구리다"): 같은 컨셉으로 meshy 최신 모델, 정밀(4k) 지오메트리,
+## 4K 텍스처, 리메시 없음(35크레딧). 결과는 <id>_hq.glb — 게임 면 수로 줄이는 건 meshy_fit에서.
+def hq(ids):
+    for i in ids:
+        s = load()
+        body = {"input_task_id": s[i]["concept"]["id"], "pose_mode": "t-pose", "should_texture": True, "target_formats": ["glb"],
+                "ai_model": "latest", "geometry_resolution": "4k", "texture_resolution": "4k", "should_remesh": False}
+        t = req("POST", "/image-to-3d", body)
+        s[i]["hq"] = {"id": t["result"], "status": "PENDING"}
+        save(s)
+        print(i, "hq", t["result"])
+
+
 def poll():
     s = load()
     for i, e in s.items():
-        for kind, path in (("concept", "/image-to-image/"), ("model", "/image-to-3d/"), ("retex", "/retexture/")):
+        for kind, path in (("concept", "/image-to-image/"), ("model", "/image-to-3d/"), ("retex", "/retexture/"),
+                          ("hq", "/image-to-3d/")):
             t = e.get(kind)
             if not t or t.get("saved") or t["status"] in ("FAILED", "CANCELED"):
                 continue
@@ -154,7 +169,7 @@ def poll():
             if r["status"] == "SUCCEEDED":
                 os.makedirs(os.path.join(OUT, i), exist_ok=True)
                 url = r["image_urls"][0] if kind == "concept" else r["model_urls"]["glb"]
-                name = {"concept": "concept.png", "model": i + "_meshy.glb", "retex": i + "_retex.glb"}[kind]
+                name = {"concept": "concept.png", "model": i + "_meshy.glb", "retex": i + "_retex.glb", "hq": i + "_hq.glb"}[kind]
                 urllib.request.urlretrieve(url, os.path.join(OUT, i, name))
                 t["saved"] = True
             print(i, kind, t["status"], r.get("progress"))
@@ -163,4 +178,5 @@ def poll():
 
 if __name__ == "__main__":
     {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "retex": lambda: retex(sys.argv[2:]),
+     "hq": lambda: hq(sys.argv[2:]),
      "poll": poll}[sys.argv[1]]()

@@ -1,10 +1,12 @@
 """Meshy T자세 메시 -> KayKit 뼈대에 입힌 몸 GLB (docs/meshy-assets.md "게임에 넣기").
 
-Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose] [--arm-frac 0.8] [--arm-y REL] [--hand-x X] [--rigid-back M]
+Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose] [--arm-frac 0.8] [--arm-y REL] [--hand-x X] [--rigid-back M] [--rigid-parts [--tint-parts RRGGBB]]
 --arm-frac: arm line = median height of points wider than this share of the widest point. Raise it (0.95) when wings or a cape
 spread wider than the arms higher up (UR aurora 2026-10-29: the wing tops set the arm line and the body came out 30 % small).
 --arm-y REL: arm line at this share of the mesh height (feet 0 .. top 1) — when tail plumes or flames are the widest points.
 --hand-x X: hand tips at |x| = X in the Meshy mesh (its own units) — points farther out at arm height (flames, tails) are not hands.
+--rigid-parts: separate pieces that float behind the body (halo rings) follow the chest only.
+--tint-parts RRGGBB (with --rigid-parts): recolour those pieces in the texture.
 Needs numpy and Pillow.
 
 Writes a body-only GLB: the KayKit joint hierarchy and skin (same joints, order and
@@ -328,6 +330,58 @@ def rigid_back(Q, J, W, bP, g, margin):
     return top.astype(np.uint16), tw.astype(np.float32), int((t > 0).sum())
 
 
+def rigid_parts(Q, idx, J, W, g):
+    """Loose pieces behind the body (UR chronos halo rings, 2026-10-29) follow the chest bone only. They are separate
+    connected parts that would otherwise take arm weights where they pass the arm line and bend down with the arms."""
+    joints = g.j["skins"][0]["joints"]
+    chest = joints.index(next(k for k, n in enumerate(g.j["nodes"]) if n.get("name") == "chest"))
+    _, inv = np.unique(np.round(Q / 1e-5).astype(np.int64), axis=0, return_inverse=True)
+    inv = inv.reshape(-1)
+    par = np.arange(inv.max() + 1)
+
+    def find(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+    for a, b, c in inv[idx.reshape(-1, 3)]:
+        ra = find(a)
+        par[find(b)] = ra
+        par[find(c)] = ra
+    comp = np.array([find(i) for i in range(len(par))])[inv]
+    ids, cnt = np.unique(comp, return_counts=True)
+    mid = np.median(Q[comp == ids[cnt.argmax()], 2])
+    loose = np.zeros(len(Q), bool)
+    for c in ids[ids != ids[cnt.argmax()]]:
+        m = comp == c
+        if Q[m, 2].max() < mid:
+            loose |= m
+    J[loose] = 0
+    J[loose, 0] = chest
+    W[loose] = 0
+    W[loose, 0] = 1
+    return J, W, loose
+
+
+def tint(im, uv, idx, mask, color):
+    """Recolour the texels of the masked vertices' triangles (keeps their light/dark detail). Bright, saturated colours
+    glow under the UR finish (Art.UR_LOOK glow) — the chronos halo is a glowing cyan ring in its concept."""
+    from PIL import ImageDraw, ImageFilter
+    w, h = im.size
+    sel = Image.new("L", im.size, 0)
+    d = ImageDraw.Draw(sel)
+    for f in idx.reshape(-1, 3):
+        if mask[f].all():
+            d.polygon([(float(uv[k, 0]) * w, float(uv[k, 1]) * h) for k in f], fill=255)
+    sel = sel.filter(ImageFilter.MaxFilter(5))
+    a = np.asarray(im, np.float32) / 255
+    lum = a @ np.array([0.299, 0.587, 0.114], np.float32)
+    c = np.array([int(color[i:i + 2], 16) for i in (0, 2, 4)], np.float32) / 255
+    col = c[None, None] * np.clip(lum / max(np.median(lum[np.asarray(sel) > 0]), 1e-3), 0.7, 1.1)[..., None]
+    k = (np.asarray(sel, np.float32) / 255)[..., None]
+    return Image.fromarray((np.clip(a * (1 - k) + np.clip(col, 0, 1) * k, 0, 1) * 255).astype(np.uint8))
+
+
 def feet_centre(P, J, W, g):
     """Centroid of the points whose strongest bone is a foot or toe bone of g's skin."""
     names = [g.j["nodes"][n]["name"] for n in g.j["skins"][0]["joints"]]
@@ -454,10 +508,16 @@ def main():
     if opt("--rigid-back") is not None:  # 등 뒤 꼬리·깃 → 가슴에 단단히(구미호 꼬리 아홉 개가 팔과 함께 늘어지지 않게)
         J, W, nb = rigid_back(Q, J, W, bP, g, opt("--rigid-back"))
         info.update(rigid_back=nb)
+    loose = None
+    if "--rigid-parts" in sys.argv:  # 등 뒤에 따로 떠 있는 조각(후광 고리) → 가슴에 단단히
+        J, W, loose = rigid_parts(Q, idx, J, W, g)
+        info.update(rigid_parts=int(loose.sum()))
     info.update(feet_dx=float(d[0]), feet_dz=float(d[2]))
     im = Image.open(io.BytesIO(texdata)).convert("RGB")
     if max(im.size) > size:
         im = im.resize((size, size), Image.LANCZOS)
+    if "--tint-parts" in sys.argv and loose is not None:  # 떠 있는 조각 색(크로노스 후광 → 빛나는 청록)
+        im = tint(im, uv, idx, loose, sys.argv[sys.argv.index("--tint-parts") + 1])
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=88)
     if nrm is not None:
