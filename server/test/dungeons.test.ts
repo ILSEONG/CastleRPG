@@ -786,3 +786,22 @@ test('강화석 던전(2026-10-29): 영웅 5, 열쇠 하루 2·상한 3, 이기�
   assert.deepEqual([r.json.rewards, r.json.player.stones, r.json.player.dungeons.stone.keys, r.json.player.dungeons.stone.best_level], [{ stones: 30 }, 30, 1, 1])
   assert.deepEqual([1, 2, 10].map((n) => R.stoneReward({ stone_reward_base: '30', stone_reward_add: '3' }, n)), [30, 33, 57])
 })
+
+test('마이그레이션 063 전 라이브 DB(제약에 stone 없음·설정 값 없음)에서도 플레이어 읽기는 된다: 강화석 던전은 새 상태(열쇠 2)로만 보이고 다른 던전 행은 채워진다', async () => {
+  await S.db.query("alter table player_dungeons drop constraint if exists player_dungeons_type_check")
+  await S.db.query("alter table player_dungeons add constraint player_dungeons_type_check check (type in ('gold', 'equip', 'ticket')) not valid")
+  const saved = await S.db.query("select key, value from game_config where key like 'stone\\_%'")
+  await S.db.query("delete from game_config where key like 'stone\\_%'")
+  try {
+    const { token, id } = await fresh()
+    const p = await player(token)
+    assert.deepEqual([p.dungeons.stone.keys, p.dungeons.stone.key_cap, p.dungeons.gold.keys], [2, 3, 3])
+    const rows = await S.db.query('select type from player_dungeons where player_id = $1 order by type', [id])
+    assert.deepEqual(rows.map((r) => r.type), ['equip', 'gold', 'ticket'])
+    assert.equal((await player(token)).dungeons.stone.keys, 2) // 다시 읽어도 된다
+  } finally {
+    for (const r of saved) await S.db.query('insert into game_config (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [r.key, r.value])
+    await S.db.query("alter table player_dungeons drop constraint if exists player_dungeons_type_check")
+    await S.db.query("alter table player_dungeons add constraint player_dungeons_type_check check (type in ('gold', 'equip', 'ticket', 'stone'))")
+  }
+})
