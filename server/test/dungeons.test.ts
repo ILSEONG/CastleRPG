@@ -707,3 +707,63 @@ test('시드 검증: dungeons.csv(type·count·능력치 범위, 종류마다 �
   const t = await readTables(dir) // 원래대로면 통과
   assert.deepEqual(t.equip_drop.map((r) => r.min_level), [1, 5, 10, 15, 20, 35])
 })
+
+test('분해(/v1/items/dismantle): 등급별 강화석(N 1·R 2·SR 5·SSR 15·UR 40·LR 100·MR 300)을 더하고 장비는 사라진다, 장착·남의·없는·겹친 id는 거부(아무것도 안 바꾼다), 로그', async () => {
+  const { token, id } = await fresh()
+  const other = await fresh()
+  const grades = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR']
+  const ids = await addItems(S.db.query, id, grades.map((g) => ({ slot: 'hat', grade: g })))
+  const [w] = await addItems(S.db.query, id, [{ slot: 'weapon', weapon_kind: 'sword', grade: 'SR' }])
+  const [theirs] = await addItems(S.db.query, other.id, [{ slot: 'hat' }])
+  const dis = (x: unknown) => S.req('POST', '/v1/items/dismantle', { token, body: { item_ids: x } })
+  await equip(token, { hero_id: 'hans', slot: 'weapon', item_id: w })
+  for (const [x, status, code] of [[[ids[0], w], 409, 'equipped'], [[ids[0], theirs], 404, 'unknown_item'], [[ids[0], 999999], 404, 'unknown_item'],
+    [[ids[0], ids[0]], 400, 'bad_request'], [[], 400, 'bad_request'], ['x', 400, 'bad_request']] as [unknown, number, string][]) {
+    const r = await dis(x)
+    assert.deepEqual([r.status, r.json.error], [status, code], JSON.stringify(x))
+  }
+  assert.deepEqual([(await player(token)).items.length, (await player(token)).stones], [8, 0])
+  const r = await dis(ids)
+  assert.deepEqual([r.status, r.json.stones_gained, r.json.player.stones, r.json.player.items.map((x: any) => x.id)], [200, 463, 463, [w]])
+  assert.equal((await dis([ids[0]])).json.error, 'unknown_item') // 다시 분해할 수 없다
+  assert.deepEqual((await logs(id, 'item_dismantle')).map((l) => [l.detail.stones, l.detail.items.length]), [[463, 7]])
+  assert.deepEqual((await player(other.token)).items.map((x: any) => x.id), [theirs])
+})
+
+test('부위 강화(/v1/slot/enhance): 영웅·부위마다 레벨, 비용 = 레벨 L에서 강화석 10×(L+1)·골드 5,000×(L+1), 최대 20, 장비를 바꿔도 레벨은 부위에 남는다, 거부는 아무것도 안 바꾼다', async () => {
+  const { token, id } = await fresh()
+  const enh = (b: unknown) => S.req('POST', '/v1/slot/enhance', { token, body: b })
+  await S.db.query('update player_state set stones = 1000 where player_id = $1', [id])
+  await setGold(S.db.query, id, 1_000_000)
+  for (const [b, status, code] of [[{ hero_id: 'kyle', slot: 'hat' }, 404, 'not_owned'], [{ hero_id: '__proto__', slot: 'hat' }, 404, 'not_owned'],
+    [{ hero_id: 'hans', slot: 'tail' }, 400, 'bad_slot'], [{ hero_id: 'hans', slot: 'hat', times: 0 }, 400, 'bad_request'],
+    [{ hero_id: 'hans', slot: 'hat', times: 11 }, 400, 'bad_request']] as [unknown, number, string][]) {
+    const r = await enh(b)
+    assert.deepEqual([r.status, r.json.error], [status, code], JSON.stringify(b))
+  }
+  let r = await enh({ hero_id: 'hans', slot: 'hat' })
+  assert.deepEqual([r.status, r.json.player.slot_levels, r.json.player.stones, r.json.player.gold], [200, { hans: { hat: 1 } }, 990, 995_000])
+  r = await enh({ hero_id: 'hans', slot: 'hat', times: 3 }) // 레벨 1·2·3 → 20+30+40 강화석, 10,000+15,000+20,000 골드
+  assert.deepEqual([r.json.player.slot_levels, r.json.player.stones, r.json.player.gold], [{ hans: { hat: 4 } }, 900, 950_000])
+  r = await enh({ hero_id: 'ella', slot: 'weapon' })
+  assert.deepEqual(r.json.player.slot_levels, { hans: { hat: 4 }, ella: { weapon: 1 } })
+  assert.equal((await enh({ hero_id: 'hans', slot: 'hat', times: 10 })).json.error, 'not_enough_stones') // 50+…+140 = 950 > 890
+  await setGold(S.db.query, id, 100)
+  assert.equal((await enh({ hero_id: 'hans', slot: 'hat' })).json.error, 'not_enough_gold')
+  await S.db.query(`update player_state set stones = 100000, gold_tenths = 100000000000, slot_levels = '{"hans":{"hat":19}}' where player_id = $1`, [id])
+  assert.equal((await enh({ hero_id: 'hans', slot: 'hat', times: 2 })).json.error, 'max_level')
+  r = await enh({ hero_id: 'hans', slot: 'hat' })
+  assert.deepEqual(r.json.player.slot_levels.hans, { hat: 20 })
+  assert.equal((await enh({ hero_id: 'hans', slot: 'hat' })).json.error, 'max_level')
+  assert.deepEqual((await logs(id, 'slot_enhance')).map((l) => [l.detail.hero_id, l.detail.slot, l.detail.from, l.detail.to]).at(-1), ['hans', 'hat', 19, 20])
+  // 장비를 바꿔도 부위 레벨은 남고, 그 부위에 낀 장비의 체력·공격이 +5%/레벨(최대 +100%)
+  const [h1, h2] = await addItems(S.db.query, id, [{ slot: 'hat', grade: 'SR' }, { slot: 'hat', grade: 'UR' }])
+  await equip(token, { hero_id: 'hans', slot: 'hat', item_id: h1 })
+  r = await equip(token, { hero_id: 'hans', slot: 'hat', item_id: h2 })
+  assert.deepEqual(r.json.player.slot_levels.hans, { hat: 20 })
+  const it = r.json.player.items.find((x: any) => x.id === h2)
+  const eq = [{ hero_id: 'hans', item_id: h2 }]
+  assert.equal(R.heroEquip([it], eq, { hans: { hat: 20 } }).hans.hp, Math.round(R.itemStats(it).hp * 2))
+  assert.equal(R.heroEquip([it], eq, { hans: { hat: 4 } }).hans.hp, Math.round(R.itemStats(it).hp * 1.2))
+  assert.equal(R.heroEquip([it], eq, { ella: { hat: 20 } }).hans.hp, R.itemStats(it).hp) // 다른 영웅의 부위 레벨은 안 탄다
+})

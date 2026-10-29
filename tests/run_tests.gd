@@ -3989,6 +3989,34 @@ func test_equipment_offline() -> void:
 	check(e.sell_block([1]) == "equipped" and e.sell_block([]) == "bad_request" and e.sell_block([3, 3]) == "bad_request" and e.sell_block([3, 99]) == "unknown_item"
 		and e.sell_items([1, 3]) == 0 and notes[-1] == EconomyScript.EQUIP_TEXT.equipped and e.bag.size() == 5, "sell_block: equipped / empty / duplicate / unknown; a refused sale sells nothing")
 	check(e.sell_items([3, 4]) == 250 and e.gold_tenths == 2500 and e.bag.map(func(x): return x.id) == [1, 2, 5], "sell: round(100 x 1.5) + 100 = 250 gold, the items leave the bag")
+	# 분해(2026-10-29): 등급별 강화석, 장착 중은 못 한다
+	e.bag.append({"id": 6, "slot": "hat", "weapon_kind": null, "grade": "SSR", "rolls": {}, "subs": []})
+	check(e.dismantle_block([1]) == "equipped" and e.dismantle_items([1]) == 0 and e.stones == 0 and e.dismantle_candidates("SSR") == [2, 6] and e.dismantle_candidates("N") == [2],
+		"dismantle_block: equipped refused; candidates are unequipped items up to the grade")
+	check(e.dismantle_items([2, 6]) == 16 and e.stones == 16 and e.bag.map(func(x): return x.id) == [1, 5], "dismantle: N 1 + SSR 15 = 16 stones, the items leave the bag")
+	# 영웅 부위 강화: 레벨 L 비용 강화석 10×(L+1)·골드 5,000×(L+1), 그 부위 장비 hp·atk × (1 + 5% × L), 장비를 빼도 남는다
+	check(GameData.slot_enh_cost(0) == {"stones": 10, "gold": 5000} and GameData.slot_enh_cost(19) == {"stones": 200, "gold": 100000}
+		and GameData.slot_mult(0) == 1.0 and is_equal_approx(GameData.slot_mult(20), 2.0) and is_equal_approx(GameData.slot_mult(99), 2.0), "slot cost and multiplier (+5%%/level, max 20)")
+	e.stones = 100
+	e.gold = 100000
+	check(e.slot_enhance_block("hans", "cape") == "bad_slot" and e.slot_enhance_block("kyle", "shoes") == "not_owned" and e.slot_enhance_block("hans", "shoes", 21) == "max_level"
+		and e.slot_enhance_block("hans", "shoes", 5) == "not_enough_stones" and e.slot_enhance_block("hans", "shoes") == "", "slot_enhance_block: bad_slot / not_owned / max_level / not_enough_stones")
+	var r1: int = roster[0]
+	check(e.slot_enhance("hans", "shoes") and e.slot_levels == {"hans": {"shoes": 1}} and e.stones == 90 and e.gold == 95000 and roster[0] == r1 + 1
+		and _pick3(e.equipment_bonus("hans")) == [444, 44, 3.0], "slot enhance +1: 10 stones, 5,000 gold, shoes HP 423 -> 444 (x1.05): %s" % [e.equipment_bonus("hans")])
+	check(e.slot_enhance("hans", "shoes", 3) and e.slot_level("hans", "shoes") == 4 and e.stones == 0 and e.gold == 50000 and _pick3(e.equipment_bonus("hans")) == [508, 44, 3.0]
+		and not e.slot_enhance("hans", "shoes") and notes[-1] == EconomyScript.EQUIP_TEXT.not_enough_stones, "+3 more costs 20+30+40 stones; level 4 = x1.2; no stones left")
+	e.unequip("hans", "shoes")
+	check(e.slot_level("hans", "shoes") == 4 and e.equipment_bonus("hans").hp == 0 and e.slot_level("ella", "shoes") == 0, "the slot keeps its level with nothing on it; other heroes start at 0")
+	e.equip("hans", "shoes", 5)
+	e.save_path = ECON_TMP
+	e.save()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(Time.get_unix_time_from_system())
+	check(e2.stones == 0 and e2.slot_levels == {"hans": {"shoes": 4}} and e2.equipment_bonus("hans").hp == 508, "stones and slot levels survive save and load")
+	e2.free()
+	DirAccess.remove_absolute(ECON_TMP)
 	e.free()
 
 

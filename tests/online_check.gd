@@ -1565,8 +1565,32 @@ func _dungeons_online(state_path: String) -> void:
 		and Economy.items().filter(func(x): return x.grade == "MR").size() == 1 and Net.requested.get("/v1/items/fuse", 0) == fuse0 + 1,
 		"(z) one /v1/items/fuse: the bag holds the server's MR top with 4 special stats", "mr=%s" % [mr])
 	Economy.fused.disconnect(on_fused)
-	Economy.sell_items([int(mr.get("id", 0))])
-	await _wait_until(func(): return not Economy._waiting.has("sell_items") and Economy._hold == 0, 15.0)
+	# 분해(2026-10-29): MR 하나 → 강화석 300, 곧바로 빠지고 /v1/items/dismantle 하나로 서버 값과 같다
+	var st0: int = Economy.stones
+	var dis0: int = Net.requested.get("/v1/items/dismantle", 0)
+	var got_st := Economy.dismantle_items([int(mr.get("id", 0))])
+	_check(got_st == 300 and Economy.stones == st0 + 300 and Economy.item(int(mr.get("id", 0))).is_empty(),
+		"(z) dismantling the MR top shows +300 stones before the server answers", "got=%d stones=%d" % [got_st, Economy.stones])
+	await _wait_until(func(): return not Economy._waiting.has("dismantle") and Economy._hold == 0, 15.0)
+	_check(Economy.stones == st0 + 300 and Net.requested.get("/v1/items/dismantle", 0) == dis0 + 1 and Economy.item(int(mr.get("id", 0))).is_empty(),
+		"(z) one /v1/items/dismantle: the server keeps 300 stones", "stones=%d" % Economy.stones)
+	# 영웅 부위 강화: 곧바로 +1, /v1/slot/enhance 하나, 서버도 같은 레벨·강화석·골드. 장비 보너스 HP는 그 부위 장비 × 1.05
+	await _request("POST", "/v1/test/levels", {"gold": 100000})
+	Economy.apply_server(_resp if _resp is Dictionary else {})
+	var enh_hero: String = auto_hero if auto_hero != "" else str(Economy.heroes.keys()[0])
+	var enh_slot: String = str(Economy.hero_equipment(enh_hero).keys()[0]) if not Economy.hero_equipment(enh_hero).is_empty() else "hat"
+	var enh0: int = Net.requested.get("/v1/slot/enhance", 0)
+	var g0: int = Economy.gold
+	var enh_ok := Economy.slot_enhance(enh_hero, enh_slot)
+	_check(enh_ok and Economy.slot_level(enh_hero, enh_slot) == 1 and Economy.stones == st0 + 290 and Economy.gold == g0 - 5000,
+		"(z) slot enhance is +1 at once (10 stones, 5,000 gold)", "lv=%d stones=%d gold %d -> %d" % [Economy.slot_level(enh_hero, enh_slot), Economy.stones, g0, Economy.gold])
+	await _wait_until(func(): return not Economy._waiting.has("slot_enhance") and Economy._hold == 0, 15.0)
+	await _request("GET", "/v1/player")
+	var sp: Dictionary = _resp.get("player", {}) if _resp is Dictionary else {}
+	var cur: Dictionary = Economy.hero_equipment(enh_hero).get(enh_slot, {})
+	_check(Net.requested.get("/v1/slot/enhance", 0) == enh0 + 1 and Economy.slot_level(enh_hero, enh_slot) == 1 and int(sp.get("stones", -1)) == Economy.stones
+		and sp.get("slot_levels", {}).get(enh_hero, {}).get(enh_slot) == 1.0 and (cur.is_empty() or Economy.equipment_bonus(enh_hero).hp >= roundi(GameData.item_stats(cur).hp * 1.05)),
+		"(z) one /v1/slot/enhance: the server has the same slot level and stones", "server=%s/%s" % [sp.get("slot_levels"), sp.get("stones")])
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
 	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)
