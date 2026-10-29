@@ -116,6 +116,8 @@ func splash(hero_id: String, is_new: bool, grade := "") -> void:
 	if grade == "":
 		grade = str(GameData.hero(hero_id).get("grade", "SSR"))
 	_queue.append({"hero": hero_id, "new": is_new, "grade": grade})
+	if grade == "UR":
+		Portraits.portrait("big:" + hero_id)  # 연출 창에 크게 그릴 피규어 — 소환진이 도는 동안 미리 찍어 둔다
 	if mode == Mode.IDLE:
 		_next_splash()
 
@@ -454,7 +456,7 @@ func _draw_splash_ur() -> void:
 		if not HeroArt.draw_in(self, _splash.hero, win, wr, 0.3, zoom):  # 일러스트 전: 주황 창에 3D 전신 피규어
 			draw_colored_polygon(win, Color(ORANGE.darkened(0.45), a))
 			var fs := wr.size.y * 1.05 * zoom
-			draw_texture_rect(Portraits.portrait("hero:" + str(_splash.hero)), Rect2(wr.get_center() - Vector2(fs, fs) * 0.5, Vector2(fs, fs)), false,
+			draw_texture_rect(Portraits.portrait("big:" + str(_splash.hero)), Rect2(wr.get_center() - Vector2(fs, fs) * 0.5, Vector2(fs, fs)), false,
 				Color(1, 1, 1, a * clampf((open - 0.6) * 2.5, 0.0, 1.0)))
 		if a < 1.0:
 			draw_colored_polygon(win, Color(NIGHT, 1.0 - a))

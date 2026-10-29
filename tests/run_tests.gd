@@ -2815,6 +2815,8 @@ func test_portraits() -> void:
 	check(p.yaw == 0.0 and p._pivot.rotation_degrees.y == 0.0 and p._vp.size == Vector2i(P.LIVE_SIZE, P.LIVE_SIZE), "the next live hero starts facing front; live renders at LIVE_SIZE")
 	p.set_live("")
 	check(p.live_key == "" and p._vp.size == Vector2i(P.SIZE, P.SIZE), "live preview off; snapshots back at SIZE")
+	check(p._vp.msaa_3d == Viewport.MSAA_4X and P.LIVE_SIZE >= 1024 and P.BIG_SIZE >= 1024,
+		"figures drawn large stay sharp: 4x MSAA, live preview and big: snapshots at 1024 px")
 	P.current = null
 	p.free()
 	check(P.portrait("hero:hans") == tex, "the cache is static: it outlives the node (world rebuild)")
@@ -2852,7 +2854,8 @@ func test_portraits() -> void:
 	check(card._win.is_empty() and card._base.size() == 2 * HeroCardScript.BASE_SIDES * 3 and card._base_cols.has(Color(dorik.color).darkened(0.35))
 		and card._base[HeroCardScript.BASE_SIDES * 3].is_equal_approx(feet), "the live big card keeps the full figure on a pedestal in the unique colour")
 	card.free()
-	check(GameData.heroes().all(func(h): return P.spec_of("bust:" + h.id) == P.spec_of("hero:" + h.id)) and P.spec_of("bust:nobody").is_empty(), "bust keys render the same hero model as figure keys")
+	check(GameData.heroes().all(func(h): return P.spec_of("bust:" + h.id) == P.spec_of("hero:" + h.id) and P.spec_of("big:" + h.id) == P.spec_of("hero:" + h.id))
+		and P.spec_of("bust:nobody").is_empty() and P.spec_of("big:nobody").is_empty(), "bust: and big: keys render the same hero model as figure keys")
 	HeroArt.enabled = true
 
 
