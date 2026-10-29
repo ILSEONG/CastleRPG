@@ -153,15 +153,17 @@ export function registerMarket(app: Hono<Any>, d: Any) {
   })
 
   if (testHooks) {
-    // 통합 테스트용: 등급마다 장비 하나(부위 무작위, 굴림 rollItem)를 보관함에 넣는다 {grades: ['SR', ...]}.
+    // 통합 테스트용: 등급마다 장비 하나(부위 무작위 — slot을 주면 그 방어구 부위, 굴림 rollItem)를 보관함에 넣는다 {grades: ['SR', ...], slot?}.
     app.post('/v1/test/grant_items', auth, async (c: Any) => {
-      const grades = (await body(c)).grades
+      const b = await body(c)
+      const grades = b.grades
+      const only = typeof b.slot === 'string' && R.ARMOR_SLOTS.includes(b.slot) ? b.slot : null
       if (!Array.isArray(grades) || !grades.length || grades.length > 50 || !grades.every((g) => R.EQUIP_GRADES.includes(g))) {
         throw new ApiError(400, 'bad_request', "'grades' must be 1..50 equipment grades")
       }
       const slots = ['weapon', ...R.ARMOR_SLOTS]
       const items = grades.map((g: string) => {
-        const slot = slots[Math.floor(random() * slots.length)]
+        const slot = only ?? slots[Math.floor(random() * slots.length)]
         return R.rollItem(slot, slot === 'weapon' ? R.WEAPON_KINDS[Math.floor(random() * R.WEAPON_KINDS.length)] : null, g, random)
       })
       return run(c, async () => ({ change: { items } }))

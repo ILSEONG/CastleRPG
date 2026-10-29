@@ -115,11 +115,11 @@ test('보상·적 능력치·장비 능력치·판매 값: 골드 = round(4000 �
   assert.deepEqual(R.cleanRolls('shoes', 'N', { hp: 85, speed_pct: 115 }, [{ id: 'aspd', r: 100 }]), { rolls: { hp: 85, speed_pct: 115 }, subs: [] })
 })
 
-test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·35+, 장비 표본 — 무기 20%, 방어구 6부위 균등, 무기 종류 균등, 등급 = 가중치 비율', async () => {
+test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–14·15–19·20–34·35+(MR은 15단계부터), 장비 표본 — 무기 20%, 방어구 6부위 균등, 무기 종류 균등, 등급 = 가중치 비율', async () => {
   const rows = (await S.req('GET', '/v1/gamedata')).json.equip_drop
-  assert.deepEqual([1, 4, 5, 9, 10, 19, 20, 34, 35, 300].map((n) => R.dropWeights(rows, n).join('/')),
-    ['60/30/9/1/0/0', '60/30/9/1/0/0', '40/35/18/6/1/0', '40/35/18/6/1/0', '20/35/28/13/3.5/0.5', '20/35/28/13/3.5/0.5', '8/25/34/22/9/2',
-      '8/25/34/22/9/2', '2/13/30/30/18/7', '2/13/30/30/18/7'])
+  assert.deepEqual([1, 4, 5, 9, 10, 14, 15, 19, 20, 34, 35, 300].map((n) => R.dropWeights(rows, n).join('/')),
+    ['60/30/9/1/0/0/0', '60/30/9/1/0/0/0', '40/35/18/6/1/0/0', '40/35/18/6/1/0/0', '20/35/28/13/3.5/0.5/0', '20/35/28/13/3.5/0.5/0',
+      '20/35/28/13/3.5/0.5/0.05', '20/35/28/13/3.5/0.5/0.05', '8/25/34/22/9/2/0.1', '8/25/34/22/9/2/0.1', '2/13/30/30/18/7/0.3', '2/13/30/30/18/7/0.3'])
   // 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급 → 기본 능력치 굴림 → 특수 능력치(종류 → 굴림). 앱 GameData.roll_drops 테스트와 같은 난수열 → 같은 결과
   const seq = [0.1, 0.5, 0.95, 0.9, 0.0, 0.995, 0.9, 0.0, 0.995, 0.5, 0.4, 0.2]
   let k = 0
@@ -142,10 +142,16 @@ test('등급 표(equip_drop.csv): 단계 구간 1–4·5–9·10–19·20–34·
   assert.ok(Math.abs(rs.reduce((a, b) => a + b, 0) / rs.length - 100) < 0.2, 'rolls average 100')
   const subs = items.flatMap((x) => x.subs!)
   for (const id of R.SUB_STATS) assert.ok(Math.abs(subs.filter((x) => x.id === id).length / subs.length - 1 / 6) < 0.01, `sub ${id}`)
-  const w = [20, 35, 28, 13, 3.5, 0.5]
+  const w = [20, 35, 28, 13, 3.5, 0.5, 0]
   R.EQUIP_GRADES.forEach((g, i) => assert.ok(Math.abs(share((x) => x.grade === g) - w[i] / 100) < 0.005, `grade ${g}: ${share((x) => x.grade === g)}`))
   const low = R.rollDrops(rows, 1, 20_000, 0.2, R.mulberry32(7))
-  assert.ok(!low.some((x) => x.grade === 'UR' || x.grade === 'LR'), 'weight 0 grades never drop at levels 1-4')
+  assert.ok(!low.some((x) => x.grade === 'UR' || x.grade === 'LR' || x.grade === 'MR'), 'weight 0 grades never drop at levels 1-4')
+  // MR(신화): 14단계까지 0, 15단계부터 아주 낮은 확률(0.05 / 100.05)
+  assert.ok(!R.rollDrops(rows, 14, 50_000, 0.2, R.mulberry32(3)).some((x) => x.grade === 'MR'), 'no MR below level 15')
+  const hi = R.rollDrops(rows, 40, 200_000, 0.2, R.mulberry32(5))
+  const mr = hi.filter((x) => x.grade === 'MR')
+  assert.ok(Math.abs(mr.length / hi.length - 0.3 / 100.3) < 0.0008, `MR share at 35+: ${mr.length / hi.length}`)
+  assert.ok(mr.every((x) => x.subs!.length === 4), 'MR has 4 special stats')
   assert.equal(R.rollDrops(rows, 1, 5, 0.2, R.cryptoRandom).length, 5)
 })
 
@@ -453,6 +459,38 @@ test('전체 해제(/v1/equip/clear): 그 영웅의 모든 부위를 한 요청�
   assert.deepEqual((await clear({ hero_id: 'dorik' })).status, 200)
 })
 
+test('합성(/v1/items/fuse): 같은 부위 LR 3개 → 그 부위 MR 하나(특수 4줄, 배율 9.2), 장착·다른 등급·다른 부위·남의 장비는 거부하고 아무것도 안 바꾼다', async () => {
+  const { token, id } = await fresh()
+  const other = await fresh()
+  const [a, b, c, d, n, sw1, sw2, sw3, ax] = await addItems(S.db.query, id, [{ slot: 'hat', grade: 'LR' }, { slot: 'hat', grade: 'LR' }, { slot: 'hat', grade: 'LR' },
+    { slot: 'top', grade: 'LR' }, { slot: 'hat', grade: 'UR' }, { slot: 'weapon', weapon_kind: 'sword', grade: 'LR' }, { slot: 'weapon', weapon_kind: 'sword', grade: 'LR' },
+    { slot: 'weapon', weapon_kind: 'sword', grade: 'LR' }, { slot: 'weapon', weapon_kind: 'axe', grade: 'LR' }])
+  const [theirs] = await addItems(S.db.query, other.id, [{ slot: 'hat', grade: 'LR' }])
+  const fuse = (ids: unknown) => S.req('POST', '/v1/items/fuse', { token, body: { item_ids: ids } })
+  await equip(token, { hero_id: 'hans', slot: 'top', item_id: d })
+  const bad: [unknown, number, string][] = [[[a, b], 400, 'bad_request'], [[a, b, b], 400, 'bad_request'], [[a, b, c, n], 400, 'bad_request'], ['x', 400, 'bad_request'],
+    [[a, b, n], 409, 'not_fusable'], [[a, b, d], 409, 'equipped'], [[a, b, theirs], 404, 'unknown_item'], [[a, b, 999999], 404, 'unknown_item'],
+    [[sw1, sw2, ax], 409, 'mixed_slot'], [[a, b, sw1], 409, 'mixed_slot']]
+  for (const [ids, status, code] of bad) {
+    const r = await fuse(ids)
+    assert.deepEqual([r.status, r.json.error], [status, code], JSON.stringify(ids))
+  }
+  assert.equal((await player(token)).items.length, 9) // 거부는 아무것도 안 바꿨다
+  let r = await fuse([a, b, c])
+  assert.equal(r.status, 200)
+  const made = r.json.item
+  assert.deepEqual([made.slot, made.weapon_kind, made.grade, made.subs.length, new Set(made.subs.map((x: any) => x.id)).size], ['hat', null, 'MR', 4, 4])
+  const ids = r.json.player.items.map((x: any) => x.id)
+  assert.ok(![a, b, c].some((x) => ids.includes(x)) && ids.includes(made.id) && ids.length === 7, JSON.stringify(ids))
+  assert.deepEqual(r.json.player.items.find((x: any) => x.id === made.id), made)
+  assert.equal(R.itemStats(made).hp, Math.round(80 * 9.2 * made.rolls.hp / 100)) // 투구 기준 80 × MR 9.2 × 굴림
+  assert.deepEqual((await fuse([a, b, c])).json.error, 'unknown_item') // 다시 합성할 수 없다
+  r = await fuse([sw1, sw2, sw3])
+  assert.deepEqual([r.json.item.slot, r.json.item.weapon_kind, r.json.item.grade], ['weapon', 'sword', 'MR'])
+  assert.deepEqual((await logs(id, 'item_fuse')).map((l) => [l.detail.from.length, l.detail.to.grade]), [[3, 'MR'], [3, 'MR']])
+  assert.equal((await player(other.token)).items.length, 1)
+})
+
 test('판매: 값 = round(100 × 배율)의 합, 장착 중이면 409 equipped, 없는·남의·겹친 id는 거부 — 하나라도 틀리면 아무것도 안 판다, 로그', async () => {
   const { token, id } = await fresh()
   const other = await fresh()
@@ -664,5 +702,5 @@ test('시드 검증: dungeons.csv(type·count·능력치 범위, 종류마다 �
     writeFileSync(join(dir, file), files[file])
   }
   const t = await readTables(dir) // 원래대로면 통과
-  assert.deepEqual(t.equip_drop.map((r) => r.min_level), [1, 5, 10, 20, 35])
+  assert.deepEqual(t.equip_drop.map((r) => r.min_level), [1, 5, 10, 15, 20, 35])
 })

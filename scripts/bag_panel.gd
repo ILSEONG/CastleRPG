@@ -1,7 +1,7 @@
 extends "res://scripts/ui_window.gd"
 ## 장비 목록 창(개정 18 §8). 두 쓰임:
 ## - 보관함(던전 탭 [보관함] → open_bag): 제목 "보관함 n / 상한", [부위]·[등급]·[정렬] 순환 버튼, 장비 줄 목록 — 줄 오른쪽 체크로 여러 개 고름
-##   (장착 중은 못 고름, "장착: 이름"), 아래 "n개 선택 · +골드"와 [판매](Economy.sell_items).
+##   (장착 중은 못 고름, "장착: 이름"), 아래 "n개 선택 · +골드"와 [합성](같은 부위 LR 3개 → MR, Economy.fuse_items)·[판매](Economy.sell_items).
 ## - 장비 고르기(영웅 상세 장비 칸 → open_pick(영웅, 부위)): 그 부위(무기는 그 영웅 무기 종류만) 장비 줄마다 [장착], 위에 지금 낀 장비와
 ##   [해제]. 장착·해제하면 닫는다.
 ## 줄 = 장비 칸(item_tile, 등급 테두리) + "SR 모자 Lv 3" + 능력치 + 장착 표시. 층 4(탭 바 위) — 닫을 때까지 뒤 창은 그대로 있다.
@@ -40,6 +40,7 @@ var grade_button: Button
 var sort_button: Button
 var sum_label: Label
 var sell_button: Button
+var fuse_button: Button  # bag: [합성] — 같은 부위 LR 3개를 골랐을 때만(Economy.fuse_items → MR 신화)
 var empty_label: Label
 
 var _pick_row: HBoxContainer
@@ -98,6 +99,11 @@ func _ready() -> void:
 	sum_label = _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	sum_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sell_row.add_child(sum_label)
+	sum_label.clip_text = true
+	fuse_button = _button(Lang.t("bag_panel.ready_4"), Art.ITEM_GRADE_COLORS.MR, 24)
+	fuse_button.custom_minimum_size = Vector2(130, 56)
+	fuse_button.pressed.connect(fuse)
+	_sell_row.add_child(fuse_button)
 	sell_button = _button(Lang.t("bag_panel.ready_2"))
 	sell_button.custom_minimum_size = Vector2(160, 56)
 	sell_button.pressed.connect(sell)
@@ -107,6 +113,7 @@ func _ready() -> void:
 	content.add_child(close_button)
 	_fit_sheet()
 	Economy.items_changed.connect(_refresh)
+	Economy.fused.connect(func(it): Economy.notice.emit(Lang.t("bag_panel.ready_5") % item_name(it)))
 
 
 ## 보관함 시트를 연다(고른 것·필터는 비운다).
@@ -162,6 +169,14 @@ func sell() -> void:
 	if g > 0:
 		Economy.notice.emit(Lang.t("bag_panel.sell") % [ids.size(), UiKit.commas(g)])
 	selected = {}
+	_refresh()
+
+
+## [합성]: 고른 LR 3개(같은 부위, 무기는 같은 종류) → MR 하나. 결과 알림은 Economy.fused(온라인은 서버 응답 때).
+func fuse() -> void:
+	var ids := selected.keys()
+	selected = {}
+	Economy.fuse_items(ids)
 	_refresh()
 
 
@@ -230,6 +245,7 @@ func _refresh() -> void:
 			g += GameData.item_sell_value(Economy.item(id))
 		sum_label.text = Lang.t("bag_panel.refresh_8") % [selected.size(), UiKit.commas(g)]
 		sell_button.disabled = Economy.sell_block(selected.keys()) != ""
+		fuse_button.disabled = Economy.fuse_block(selected.keys()) != ""
 	_rebuild(shown_items())
 
 

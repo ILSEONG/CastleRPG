@@ -2750,3 +2750,7 @@ reveal_banner.speed_name,배속,,,,scripts/reveal_banner.gd
 guide_tours.tours.title_4,스킬 자동·수동,,,,scripts/guide_tours.gd
 guide_tours.tours.skill_auto,"[스킬 AUTO] 버튼입니다. 켜 두면 스킬이 저절로 나가고, 끄면 원하는 때에 직접 씁니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_93,스킬 AUTO를 끄면 준비된 스킬 칸이 빛납니다. 그 칸을 누르면 그 영웅이 바로 스킬을 씁니다.,,,,scripts/guide_tours.gd
+bag_panel.ready_4,합성,,,,scripts/bag_panel.gd
+bag_panel.ready_5,신화(MR) %s 완성!,,,,scripts/bag_panel.gd
+economy.equip_text.not_fusable,LR 장비만 합성할 수 있습니다,,,,scripts/economy.gd
+economy.equip_text.mixed_slot,같은 부위(무기는 같은 종류) 장비만 합성할 수 있습니다,,,,scripts/economy.gd

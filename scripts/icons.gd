@@ -10,7 +10,7 @@ const RESEARCH_KINDS := ["hammer", "scales", "coin_bag", "flask", "res_pile", "w
 const OUTLINE := Color(0.16, 0.11, 0.07)
 const ITEM_ICON_FRAC := 0.74  # 장비 칸 한 변 중 아이콘 크기
 const TILE_CHAMFER := 0.22  # 장비 칸 모서리 깎기(반 변 대비)
-const ITEM_GRADE_RANK := {"N": 0, "R": 1, "SR": 2, "SSR": 3, "UR": 4, "LR": 5}  # 칸 장식 단계
+const ITEM_GRADE_RANK := {"N": 0, "R": 1, "SR": 2, "SSR": 3, "UR": 4, "LR": 5, "MR": 6}  # 칸 장식 단계
 const ITEM_TEX_DIR := "res://assets/ui/items/"
 const ITEM_TEX_FRAC := 0.86  # 장비 칸 한 변 중 그린 그림(128 px 정사각, 물체는 그 92%) 크기
 
@@ -31,6 +31,8 @@ const CLOTH_DARK := Color(0.19, 0.28, 0.47)
 const PLUME := Color(0.82, 0.22, 0.20)
 const SLIT := Color(0.10, 0.10, 0.14)
 const GEM := Color(0.36, 0.86, 0.96)
+const BLOOD_GEM := Color(0.86, 0.12, 0.20)  # MR 귀퉁이 보석(금 장식 대신)
+const MR_AURA := Color(0.55, 0.02, 0.08)  # MR 검붉은 오라
 
 var kind := "gold":
 	set(v):
@@ -417,7 +419,8 @@ static func _growth_shapes(kind_name: String) -> Array:
 ## 장비 칸 하나(개정 18 §8, 2026-10-07 디자인 보강): 등급이 오를수록 칸이 화려해진다.
 ## 모든 등급: 가운데 밝고 가장자리 어두운 등급 색 바탕 + 어두운 바깥선·등급 색 테두리·안쪽 밝은 선 + 아이콘 그림자.
 ## SR↑ 아이콘 뒤 빛 번짐, SSR↑ 네 귀퉁이 금 징, UR↑ 뒤에서 퍼지는 빛살 + 반짝이 둘, LR 빛살이 돌고 반짝이 셋이 깜빡인다
-## (LR 테두리는 무지개 금이 흐른다 — 쓰는 쪽이 매 프레임 queue_redraw). t < 0이면 지금 시각.
+## (LR 테두리는 무지개 금이 흐른다 — 쓰는 쪽이 매 프레임 queue_redraw). MR(신화)은 칸 안 가장자리에서 검붉은 오라가 일렁이고, 빛살이 거꾸로
+## 돌며, 테두리는 검붉은 빛이 흐르고, 귀퉁이는 붉은 보석(금 장식 없음). t < 0이면 지금 시각.
 static func draw_item(ci: CanvasItem, kind_name: String, grade: String, center: Vector2, size_px: float, t := -1.0) -> void:
 	if t < 0.0:
 		t = Time.get_ticks_msec() / 1000.0
@@ -436,10 +439,19 @@ static func draw_item(ci: CanvasItem, kind_name: String, grade: String, center: 
 	for i in ring.size():
 		ci.draw_polygon(PackedVector2Array([center, ring[i], ring[(i + 1) % ring.size()]]), PackedColorArray([mid, edge, edge]))
 	ci.draw_colored_polygon(PackedVector2Array([pts[6], pts[7], pts[0], pts[1], pts[2]]), Color(1, 1, 1, 0.06))
+	if rank >= 6:  # MR 검붉은 오라: 가장자리에서 안으로 번지는 붉은 빛이 천천히 숨 쉰다
+		var pulse := 0.5 + 0.5 * sin(t * 2.2)
+		var aura := Color(MR_AURA.lightened(0.15), 0.55 + 0.25 * pulse)
+		var inner_k := 0.62 - 0.08 * pulse
+		for i in ring.size():
+			var a0: Vector2 = ring[i]
+			var a1: Vector2 = ring[(i + 1) % ring.size()]
+			ci.draw_polygon(PackedVector2Array([a0, a1, center + (a1 - center) * inner_k, center + (a0 - center) * inner_k]),
+				PackedColorArray([aura, aura, Color(aura, 0.0), Color(aura, 0.0)]))
 	if rank >= 4:  # 빛살(UR 고정, LR 천천히 돈다)
 		var rays := 12
-		var spin := t * 0.4 if rank >= 5 else 0.0
-		var ray_c := Color(base.lightened(0.6), 0.40 if rank >= 5 else 0.34)
+		var spin := (-t * 0.55 if rank >= 6 else t * 0.4) if rank >= 5 else 0.0
+		var ray_c := Color(base.lightened(0.45), 0.5) if rank >= 6 else Color(base.lightened(0.6), 0.40 if rank >= 5 else 0.34)
 		for i in rays:
 			var a := spin + TAU * i / rays
 			var w := TAU / rays * 0.22
@@ -466,7 +478,7 @@ static func draw_item(ci: CanvasItem, kind_name: String, grade: String, center: 
 		for i in [1, 3, 5, 7]:
 			var at := pts[i].lerp(pts[(i + 1) % 8], 0.5).lerp(center, 0.02)
 			var stud: Array = _ngon(4, size_px * 0.055, 0.0).map(func(q): return at + q)
-			ci.draw_colored_polygon(PackedVector2Array(stud), GEM if rank >= 5 else GOLD)
+			ci.draw_colored_polygon(PackedVector2Array(stud), BLOOD_GEM if rank >= 6 else (GEM if rank >= 5 else GOLD))
 			ci.draw_colored_polygon(PackedVector2Array([stud[2], stud[3], at]), Color(1, 1, 1, 0.55))
 			stud.append(stud[0])
 			ci.draw_polyline(PackedVector2Array(stud), OUTLINE, maxf(1.0, size_px / 72.0))
@@ -487,7 +499,7 @@ static func draw_item(ci: CanvasItem, kind_name: String, grade: String, center: 
 			if r < 0.8:
 				continue
 			var c2: Vector2 = center + spots[i] * size_px
-			ci.draw_colored_polygon(PackedVector2Array(_star(c2, r, r * 0.28, 4)), Color(1, 1, 0.92, 0.95))
+			ci.draw_colored_polygon(PackedVector2Array(_star(c2, r, r * 0.28, 4)), Color(1, 0.55, 0.55, 0.95) if rank >= 6 else Color(1, 1, 0.92, 0.95))
 			ci.draw_circle(c2, r * 0.45, Color(1, 1, 1, 0.5))
 
 
@@ -515,6 +527,9 @@ static func border_colors(grade: String, n: int, t: float) -> PackedColorArray:
 	for i in n:
 		if grade == "LR":
 			out.append(Color.from_hsv(fposmod(float(i) / (n - 1) - t * 0.35, 1.0), 0.6, 1.0).lerp(base, 0.35))
+		elif grade == "MR":  # 검붉은 빛이 둘레를 따라 흐른다(어두운 핏빛 ↔ 밝은 진홍)
+			var k := 0.5 + 0.5 * sin(TAU * (float(i) / (n - 1) * 2.0 - t * 0.5))
+			out.append(Color(0.30, 0.02, 0.05).lerp(Color(0.95, 0.18, 0.22), k))
 		else:
 			out.append(base)
 	return out

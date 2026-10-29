@@ -640,8 +640,8 @@ export function upgradeCost(d: UpgradeDef, level: number, count: number): number
 // --- 던전·장비 (개정 18 §2~§5) — 앱 GameData(던전·장비 블록)와 같은 식 ---
 
 export const DUNGEON_TYPES = ['gold', 'equip', 'ticket'] // ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 영웅 1, 보상 다이아 모집권
-export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR'] // 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
-export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5 }
+export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'] // 낮은 등급부터(MR = 신화, 2026-10-29). equip_drop.csv 가중치 열 = 이 이름
+export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5, MR: 9.2 }
 export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves'] // 모든 영웅이 쓴다
 export const ACCESSORY_SLOTS = ['ring', 'necklace'] // 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다
 export const EQUIP_SLOTS = ['weapon', ...ARMOR_SLOTS, ...ACCESSORY_SLOTS]
@@ -658,10 +658,10 @@ export const ROLL_MIN = 85
 export const ROLL_MAX = 115
 // 특수 능력치(SR 이상): 줄 수 SR·SSR 1, UR 2, LR 3(서로 다른 종류). 값 = 등급 기준값 × 굴림 % / 100(%, 소수 한 자리)
 export const SUB_STATS = ['lifesteal', 'crit_rate', 'crit_dmg', 'aspd', 'dmg_reduce', 'skill_dmg']
-export const SUB_COUNT: Record<string, number> = { SR: 1, SSR: 1, UR: 2, LR: 3 }
+export const SUB_COUNT: Record<string, number> = { SR: 1, SSR: 1, UR: 2, LR: 3, MR: 4 }
 export const SUB_BASE: Record<string, Record<string, number>> = {
-  lifesteal: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, crit_rate: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, crit_dmg: { SR: 6, SSR: 9, UR: 13, LR: 18 },
-  aspd: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, dmg_reduce: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, skill_dmg: { SR: 4, SSR: 6, UR: 9, LR: 12 },
+  lifesteal: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, crit_rate: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, crit_dmg: { SR: 6, SSR: 9, UR: 13, LR: 18, MR: 24 },
+  aspd: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, dmg_reduce: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, skill_dmg: { SR: 4, SSR: 6, UR: 9, LR: 12, MR: 16 },
 }
 export const RUN_TTL_SEC = 1800 // run 만료(30분)
 export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
@@ -974,6 +974,11 @@ export function statLimit(pl: { upgrades: Record<string, number>; research: Reco
   const g = 1 + Math.max(0, guildBuffPct) / 100
   return { equip: heroEquip(pl.items ?? [], pl.equipment ?? []), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }
 }
+
+// 장비 합성(2026-10-29 MR 신화 등급): 같은 부위(무기는 같은 종류) LR FUSE_COUNT개 → 그 부위 MR 하나(굴림·특수 능력치는 새로).
+export const FUSE_FROM = 'LR'
+export const FUSE_TO = 'MR'
+export const FUSE_COUNT = 3
 
 // 판매 값 = round(equip_sell_base × 등급 배율)(2026-10-07 장비 레벨 없앰).
 export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0))

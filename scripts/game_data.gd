@@ -98,8 +98,12 @@ const DUNGEON_TYPES := ["gold", "equip", "ticket"]  # ticket = 모집권 던전(
 const DUNGEON_STR_COLS := ["id", "type", "kind"]
 const DUNGEON_NUM_COLS := ["count", "delay", "hp", "atk", "speed", "range", "atk_interval", "aggro", "scale"]
 const DUNGEON_POSITIVE_COLS := ["hp", "speed", "range", "atk_interval", "scale"]  # 0보다 크다(delay·atk·aggro는 0 이상, count는 1 이상 정수)
-const EQUIP_GRADES := ["N", "R", "SR", "SSR", "UR", "LR"]  # 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
-const EQUIP_GRADE_MULT := {"N": 1.0, "R": 1.5, "SR": 2.2, "SSR": 3.2, "UR": 4.6, "LR": 6.5}
+const EQUIP_GRADES := ["N", "R", "SR", "SSR", "UR", "LR", "MR"]  # 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
+const EQUIP_GRADE_MULT := {"N": 1.0, "R": 1.5, "SR": 2.2, "SSR": 3.2, "UR": 4.6, "LR": 6.5, "MR": 9.2}  # MR = 신화(2026-10-29, LR 3개 합성·장비 던전 15단계+)
+## 장비 합성: 같은 부위(무기는 같은 종류) FUSE_FROM FUSE_COUNT개 → FUSE_TO 하나(서버 rules.ts FUSE_*).
+const FUSE_FROM := "LR"
+const FUSE_TO := "MR"
+const FUSE_COUNT := 3
 const ARMOR_SLOTS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves"]  # 모든 영웅이 쓴다
 const ACCESSORY_SLOTS := ["ring", "necklace"]  # 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다
 const EQUIP_SLOTS := ["weapon", "hat", "top", "bottom", "shoes", "pauldron", "gloves", "ring", "necklace"]
@@ -114,10 +118,10 @@ const ROLL_MIN := 85
 const ROLL_MAX := 115
 ## 특수 능력치(SR 이상): 줄 수 SR·SSR 1, UR 2, LR 3(서로 다른 종류). 값(%) = 등급 기준값 × 굴림 % / 100. 서버 rules.ts SUB_*와 같다.
 const SUB_STATS := ["lifesteal", "crit_rate", "crit_dmg", "aspd", "dmg_reduce", "skill_dmg"]
-const SUB_COUNT := {"SR": 1, "SSR": 1, "UR": 2, "LR": 3}
-const SUB_BASE := {"lifesteal": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0}, "crit_rate": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0},
-	"crit_dmg": {"SR": 6.0, "SSR": 9.0, "UR": 13.0, "LR": 18.0}, "aspd": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0},
-	"dmg_reduce": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0}, "skill_dmg": {"SR": 4.0, "SSR": 6.0, "UR": 9.0, "LR": 12.0}}
+const SUB_COUNT := {"SR": 1, "SSR": 1, "UR": 2, "LR": 3, "MR": 4}
+const SUB_BASE := {"lifesteal": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0, "MR": 8.0}, "crit_rate": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0, "MR": 8.0},
+	"crit_dmg": {"SR": 6.0, "SSR": 9.0, "UR": 13.0, "LR": 18.0, "MR": 24.0}, "aspd": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0, "MR": 8.0},
+	"dmg_reduce": {"SR": 2.0, "SSR": 3.0, "UR": 4.5, "LR": 6.0, "MR": 8.0}, "skill_dmg": {"SR": 4.0, "SSR": 6.0, "UR": 9.0, "LR": 12.0, "MR": 16.0}}
 static var SUB_NAMES := {"lifesteal": Lang.t("game_data.sub_names.lifesteal"), "crit_rate": Lang.t("game_data.sub_names.crit_rate"), "crit_dmg": Lang.t("game_data.sub_names.crit_dmg"), "aspd": Lang.t("game_data.sub_names.aspd"), "dmg_reduce": Lang.t("game_data.sub_names.dmg_reduce"), "skill_dmg": Lang.t("game_data.sub_names.skill_dmg")}
 const DMG_REDUCE_CAP := 40.0  # 장비 받는 피해 감소 합계 상한(%)
 const RUN_TTL_SEC := 1800.0  # run 만료(30분)

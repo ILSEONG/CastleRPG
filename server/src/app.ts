@@ -224,6 +224,7 @@ interface Change {
   runClose?: { run_id: string; result: { win: boolean; rewards: Record<string, unknown> } } // run 닫기 — 아직 열려 있을 때만 전체가 적용된다
   items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
   sellItems?: number[] // 지울 장비 id
+  fuse?: boolean // 장비 합성 — 결과 행에 새 장비 id(new_item_id)를 같이 받는다
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   equips?: { hero_id: string; slot: string; item_id: number }[] // 한 번에 여러 부위 장착(자동착용) — 부위·장비는 서로 다르다
   unequipAll?: string // 그 영웅의 장비를 모든 부위에서 뺀다(전체 해제)
@@ -962,7 +963,7 @@ export function createApp(opts: AppOptions) {
       ctes.push(`l as (insert into economy_log (player_id, kind, detail, at)
         select player_id, ${p(ch.log.kind)}, ${p(JSON.stringify(ch.log.detail))}::jsonb, to_timestamp(${p(now)}::float8) from s returning 1)`)
     }
-    const runResult = ch.runClose ? ', (select result from rc) as run_result' : ''
+    const runResult = (ch.runClose ? ', (select result from rc) as run_result' : '') + (ch.fuse ? ', (select min(id) from it)::float8 as new_item_id' : '')
     // 거래소 사기: 판매는 잡았는데 내 쪽(version·값)이 안 바뀌었으면 0으로 나눠 문장 전체를 되돌린다(판매는 그대로 남는다) — null(다시 시도)
     // 장비가 판매자에게 그대로 있어야 한다(mbi 1행) — 기한 끝 순간 판매자가 그 장비를 상점에 판 경우 구매자가 값만 내고 빈손이 되지 않게(2026-10-14 보안 점검)
     const buyCheck = (ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) and (select count(*) from mbi) = (select count(*) from s) then 1 else 0 end) as mb_ok' : '')
@@ -3275,6 +3276,35 @@ export function createApp(opts: AppOptions) {
         change: { goldTenths: gold * 10, sellItems: ids, log: { kind: 'item_sell', detail: { items: ids.map((id) => byId.get(id)), gold, gold_tenths: gold * 10 } } },
         extra: { gold_gained: gold },
         reload: true,
+      }
+    })
+  })
+
+  // 장비 합성(2026-10-29): {item_ids: [3개]} — 보관함의 LR(장착·판매 등록 아님) 같은 부위(무기는 같은 종류) 3개 → 그 부위 MR 하나(새 굴림).
+  // 거부: 400 bad_request(개수·겹침), 404 unknown_item, 409 equipped·not_fusable(LR이 아님)·mixed_slot(부위·무기 종류가 다름). 응답 item = 새 장비.
+  app.post('/v1/items/fuse', auth, async (c) => {
+    const ids = (await body(c)).item_ids
+    if (!Array.isArray(ids) || ids.length !== R.FUSE_COUNT || ids.some((x) => !isInt(x, 1, Number.MAX_SAFE_INTEGER)) || new Set(ids).size !== ids.length) {
+      throw new ApiError(400, 'bad_request', `'item_ids' must be ${R.FUSE_COUNT} distinct item ids`)
+    }
+    return mutate(c, (p) => {
+      const byId = new Map(p.items.map((x) => [x.id, x]))
+      const src: R.EquipItem[] = []
+      for (const id of ids as number[]) {
+        const it = byId.get(id)
+        if (!it) throw new ApiError(404, 'unknown_item', `item ${id} is not in the bag`)
+        if (p.equipment.some((e) => e.item_id === id)) throw new ApiError(409, 'equipped', `item ${id} is equipped`)
+        if (it.grade !== R.FUSE_FROM) throw new ApiError(409, 'not_fusable', `item ${id} is ${it.grade}, not ${R.FUSE_FROM}`)
+        src.push(it)
+      }
+      if (src.some((it) => it.slot !== src[0].slot || (it.weapon_kind ?? null) !== (src[0].weapon_kind ?? null))) {
+        throw new ApiError(409, 'mixed_slot', 'items must be the same slot (and weapon kind)')
+      }
+      const made = R.rollItem(src[0].slot, src[0].weapon_kind ?? null, R.FUSE_TO, random)
+      return {
+        change: { sellItems: ids, items: [made], fuse: true, log: { kind: 'item_fuse', detail: { from: src, to: made } } },
+        reload: true,
+        after: (r) => ({ item: { ...made, id: Number(r.new_item_id) } }),
       }
     })
   })

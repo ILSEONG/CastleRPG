@@ -1545,6 +1545,28 @@ func _dungeons_online(state_path: String) -> void:
 	if auto_hero != "":
 		Economy.auto_equip(auto_hero)
 		await _wait_until(func(): return Economy._equip_predicts.is_empty(), 15.0)
+	# 합성(MR 신화): 서버에 같은 부위 LR 3개를 넣고 합성 — 곧바로 3개가 빠지고 MR 하나, 요청은 /v1/items/fuse 하나, 서버가 굴린 MR(특수 4줄)로 맞춘다
+	var bag0: Array = Economy.items().map(func(x): return int(x.id))
+	await _request("POST", "/v1/test/grant_items", {"grades": ["LR", "LR", "LR"], "slot": "top"})
+	await _request("GET", "/v1/player")
+	Economy.apply_server(_resp if _resp is Dictionary else {})
+	var lr_ids: Array = Economy.items().filter(func(x): return x.grade == "LR" and not int(x.id) in bag0).map(func(x): return int(x.id))
+	var fuse0: int = Net.requested.get("/v1/items/fuse", 0)
+	var fused := []
+	var on_fused := func(x): fused.append(x)
+	Economy.fused.connect(on_fused)
+	var predicted := Economy.fuse_items(lr_ids)
+	_check(lr_ids.size() == 3 and predicted.get("grade") == "MR" and lr_ids.all(func(x): return Economy.item(x).is_empty()) and fused.is_empty(),
+		"(z) fusing three LR tops takes them out and shows an MR top before the server answers", "lr=%s predicted=%s" % [lr_ids, predicted])
+	await _wait_until(func(): return not fused.is_empty() or Net.requested.get("/v1/items/fuse", 0) == fuse0, 15.0)
+	await _wait_until(func(): return not Economy._waiting.has("fuse"), 15.0)
+	var mr: Dictionary = fused[0] if not fused.is_empty() else {}
+	_check(fused.size() == 1 and mr.grade == "MR" and mr.slot == "top" and mr.subs.size() == 4 and not Economy.item(int(mr.id)).is_empty()
+		and Economy.items().filter(func(x): return x.grade == "MR").size() == 1 and Net.requested.get("/v1/items/fuse", 0) == fuse0 + 1,
+		"(z) one /v1/items/fuse: the bag holds the server's MR top with 4 special stats", "mr=%s" % [mr])
+	Economy.fused.disconnect(on_fused)
+	Economy.sell_items([int(mr.get("id", 0))])
+	await _wait_until(func(): return not Economy._waiting.has("sell_items") and Economy._hold == 0, 15.0)
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
 	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)

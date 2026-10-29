@@ -3489,14 +3489,14 @@ func test_item_icons() -> void:
 		seen[sig] = kind
 	check(IconsScript.ITEM_KINDS.size() == 13 and IconsScript.ITEM_KINDS.has("ring") and IconsScript.ITEM_KINDS.has("necklace") and not IconsScript.KINDS.has("sword"),
 		"13 equipment kinds (2026-10-15 + ring·necklace); resource chip kinds stay resources")
-	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR"], "six item grades in order")
+	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR", "MR"], "seven item grades in order (MR 2026-10-29)")
 	check(IconsScript.item_tile().all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "item tile inside the unit box")
 	var n := 33
 	var sr := IconsScript.border_colors("SR", n, 0.0)
 	check(sr.size() == n and sr == IconsScript.border_colors("SR", n, 5.0) and sr[0] == Art.ITEM_GRADE_COLORS.SR, "SR border = grade colour, still")
 	var lr0 := IconsScript.border_colors("LR", n, 0.0)
 	check(lr0 != IconsScript.border_colors("LR", n, 0.5) and lr0[0].is_equal_approx(lr0[n - 1]), "LR border flows over time and wraps seamlessly")
-	# 그린 그림(2026-10-07): 부위 11종 × 등급 6단계가 모두 있고, 128 px 정사각, 네 귀퉁이는 투명(배경을 지웠다), 등급마다 다른 그림
+	# 그린 그림(2026-10-07): 부위 × 등급(MR은 LR을 검붉게 다시 칠함, dev/meshy/item_icons_mr.py)이 모두 있고, 128 px 정사각, 네 귀퉁이는 투명(배경을 지웠다), 등급마다 다른 그림
 	check(IconsScript.ITEM_GRADE_RANK.keys() == Art.ITEM_GRADE_COLORS.keys(), "tile decoration rank covers every grade in order")
 	for kind in IconsScript.ITEM_KINDS:
 		var sigs := {}
@@ -3761,9 +3761,11 @@ func test_dungeon_tables() -> void:
 	check(is_equal_approx(g3[0].hp, 120.0 * 1.12 * 1.12) and is_equal_approx(g3[2].atk, 40.0 * 1.12 * 1.12) and dk.size() == 1 and dk[0].kind == "death_knight"
 		and is_equal_approx(dk[0].hp, 6900.0) and is_equal_approx(dk[0].atk, 67.2) and dk[0].scale == 2.2, "enemy stats x growth^(n-1): goblins 1.12, death knight HP 1.15 / atk 1.12")
 	check([1, 2, 3, 10].map(func(n): return GameData.gold_reward(n)) == [4000, 4400, 4840, 9432], "gold reward = round(4000 x 1.1^(n-1))")
-	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
+	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0, "MR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
 		and GameData.drop_weights(5).UR == 1.0 and GameData.drop_weights(19).LR == 0.5 and GameData.drop_weights(20).SR == 34.0 and GameData.drop_weights(34).LR == 2.0
-		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0, "grade table bands 1-4, 5-9, 10-19, 20-34, 35+")
+		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0 and GameData.drop_weights(14).MR == 0.0 and GameData.drop_weights(15).MR == 0.05
+		and GameData.drop_weights(15).LR == 0.5 and GameData.drop_weights(20).MR == 0.1 and GameData.drop_weights(35).MR == 0.3,
+		"grade table bands 1-4, 5-9, 10-14, 15-19, 20-34, 35+ (MR from 15)")
 	# 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급 → 기본 굴림 → 특수(종류 → 굴림). 서버 테스트와 같은 난수열 → 같은 결과
 	var fixed := GameData.roll_drops(1, 2, _seq([0.1, 0.5, 0.95, 0.9, 0.0, 0.995, 0.9, 0.0, 0.995, 0.5, 0.4, 0.2]))
 	check(fixed == [{"slot": "weapon", "weapon_kind": "staff", "grade": "SR", "rolls": {"atk": 112}, "subs": [{"id": "lifesteal", "r": 115}]},
@@ -3773,7 +3775,7 @@ func test_dungeon_tables() -> void:
 	rng.seed = 18
 	var many := GameData.roll_drops(12, 60000, rng.randf)
 	var share := func(f: Callable) -> float: return many.filter(f).size() / 60000.0
-	var w := [20.0, 35.0, 28.0, 13.0, 3.5, 0.5]
+	var w := [20.0, 35.0, 28.0, 13.0, 3.5, 0.5, 0.0]
 	var grades_ok := true
 	for i in GameData.EQUIP_GRADES.size():
 		var gname: String = GameData.EQUIP_GRADES[i]
@@ -3792,7 +3794,11 @@ func test_dungeon_tables() -> void:
 	check(st.call("weapon", "N").atk == 20 and st.call("weapon", "SR", {"atk": 115}).atk == 51 and st.call("gloves", "R", {"atk": 85}).atk == 10
 		and st.call("shoes", "LR", {"hp": 100, "speed_pct": 85}).hp == 423 and is_equal_approx(st.call("shoes", "LR", {"speed_pct": 85}).speed_pct, 2.55)
 		and st.call("shoes", "N").speed_pct == 3.0 and st.call("top", "UR").hp == 598 and st.call("bottom", "N").hp == 130 and st.call("hat", "SSR").hp == 256
-		and st.call("pauldron", "R").hp == 120, "item stats = round(base x grade mult x roll / 100), shoes speed 3% x roll")
+		and st.call("pauldron", "R").hp == 120 and st.call("hat", "MR").hp == 736 and st.call("weapon", "MR", {"atk": 110}).atk == 202,
+		"item stats = round(base x grade mult x roll / 100), shoes speed 3% x roll, MR x9.2")
+	var mr := GameData.roll_item("hat", null, "MR", rng.randf)
+	check(mr.grade == "MR" and mr.subs.size() == 4 and _unique_count(mr.subs.map(func(y): return y.id)) == 4
+		and is_equal_approx(GameData.item_stats(mr, true).crit_dmg, 24.0 if mr.subs.any(func(y): return y.id == "crit_dmg") else 0.0), "MR rolls 4 different special stats (crit dmg base 24)")
 	var lr := {"slot": "hat", "grade": "LR", "rolls": {"hp": 90}, "subs": [{"id": "lifesteal", "r": 110}, {"id": "crit_dmg", "r": 85}, {"id": "dmg_reduce", "r": 100}]}
 	var ls := GameData.item_stats(lr)
 	var lb := GameData.item_stats(lr, true)

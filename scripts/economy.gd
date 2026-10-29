@@ -118,6 +118,7 @@ static var DUNGEON_FAIL_TEXT := Lang.t("economy.dungeon_fail_text")
 static var EQUIP_TEXT := {
 	"not_owned": Lang.t("economy.equip_text.not_owned"), "bad_slot": Lang.t("economy.equip_text.bad_slot"), "unknown_item": Lang.t("economy.equip_text.unknown_item"), "wrong_slot": Lang.t("economy.equip_text.wrong_slot"),
 	"wrong_weapon": Lang.t("economy.equip_text.wrong_weapon"), "equipped": Lang.t("economy.equip_text.equipped"), "bad_request": Lang.t("economy.equip_text.bad_request"), "waiting": "",
+	"not_fusable": Lang.t("economy.equip_text.not_fusable"), "mixed_slot": Lang.t("economy.equip_text.mixed_slot"),
 }
 static var EQUIP_FAIL_TEXT := Lang.t("economy.equip_fail_text")
 ## 연구 못 하는 이유 코드 → 문구(research_block, 서버 404/409 코드와 같다. waiting은 앱만, 개정 24).
@@ -146,6 +147,7 @@ signal soldiers_changed  # 병사 보유·배치·합성 대기가 바뀌었다(
 signal upgrades_changed  # 성장(공용 업그레이드) 레벨이 바뀌었다(개정 20)
 signal training_changed  # 훈련 대기열·응답 대기가 바뀌었다(개정 16). 완료(끝나는 시각 지남)는 시그널 없이 training().ready로 본다
 signal dungeons_changed  # 개정 18: 열쇠·최고 단계·추가 도전 횟수·응답 대기가 바뀌었다(일일 리셋은 시그널 없이 dungeon_state가 센다)
+signal fused(item: Dictionary)  # 장비 합성 결과 MR 장비(온라인은 서버 응답이 왔을 때 — 서버가 굴린 능력치)
 signal items_changed  # 보관함·장착이 바뀌었다(장착이 바뀌면 roster_changed도 — 영웅 능력치)
 signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, level, party, enemies, started_at, time_limit, paid_with}. 실패면 {}
 signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
@@ -3376,6 +3378,61 @@ func sell_items(ids: Array) -> int:
 	return g
 
 
+## 합성 못 하는 이유(문구 EQUIP_TEXT, 서버 /v1/items/fuse와 같은 순서): bad_request(개수·겹침) → unknown_item → equipped → not_fusable(LR 아님)
+## → mixed_slot(부위·무기 종류가 다름) → waiting. 되면 "".
+func fuse_block(ids: Array) -> String:
+	if ids.size() != GameData.FUSE_COUNT or ids.size() != _unique(ids).size():
+		return "bad_request"
+	for id in ids:
+		if not (id is int or id is float) or item(int(id)).is_empty():
+			return "unknown_item"
+		if item_owner(int(id)) != "":
+			return "equipped"
+		if item(int(id)).grade != GameData.FUSE_FROM:
+			return "not_fusable"
+	var first := item(int(ids[0]))
+	for id in ids:
+		var it := item(int(id))
+		if it.slot != first.slot or it.get("weapon_kind") != first.get("weapon_kind"):
+			return "mixed_slot"
+	return "waiting" if _waiting.has("fuse") else ""
+
+
+## 장비 합성(2026-10-29 MR 신화): 같은 부위 LR 3개 → 그 부위 MR 하나(새 굴림). 안 되면 알림만 하고 {}. 오프라인은 곧바로 저장하고 새 장비를,
+## 온라인은 곧바로 보이게 바꾸고(3개 빼고 MR 하나) /v1/items/fuse로 확인 — 서버가 굴린 결과가 오면 보관함을 서버 값으로 맞추고 fused를 알린다
+## (거절·유실이면 되돌리고 알림). 온라인은 예측한 장비를 돌려준다.
+func fuse_items(ids: Array, announce := true) -> Dictionary:
+	var why := fuse_block(ids)
+	if why != "":
+		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
+		return {}
+	var int_ids: Array = ids.map(func(x): return int(x))
+	if net != null:
+		var got := [{}]
+		_instant(func():
+			got[0] = fuse_items(int_ids, false)
+			return not got[0].is_empty(), "/v1/items/fuse", {"item_ids": int_ids}, func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT),
+			true, "fuse", func(data: Dictionary):
+				var it = data.get("item")
+				if it is Dictionary and _num(it.get("id")) and not item(int(it.id)).is_empty():
+					fused.emit(item(int(it.id))))
+		return got[0]
+	var src := item(int_ids[0])
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var made := GameData.roll_item(src.slot, src.get("weapon_kind"), GameData.FUSE_TO, func(): return rng.randf())
+	bag = bag.filter(func(it): return not int(it.id) in int_ids)
+	made.id = next_item_id
+	next_item_id += 1
+	bag.append(made)
+	_reindex_items()
+	save()
+	items_changed.emit()
+	if announce:
+		fused.emit(made.duplicate(true))
+	return made.duplicate(true)
+
+
 static func _unique(a: Array) -> Array:
 	var out := []
 	for x in a:
@@ -3798,7 +3855,8 @@ func _predict(key: String, apply: Callable, gold := 0) -> void:
 ## 지금 하고 서버에 보낸다. 응답이 올 때까지 다른 응답은 상태를 덮지 않고(골드만), 응답이 오면 서버 상태로 맞춘다. 거절되면 마지막 서버 상태로
 ## 되돌리고 fail_text()를 알린다(""이면 알리지 않는다). local이 false면(막힘) 보내지 않는다. 보냈으면 true.
 ## wait = 응답이 올 때까지 _waiting에 둘 키(""이면 두지 않는다) — 같은 버튼을 빠르게 두 번 눌러 한 번 하려던 동작이 두 번 가지 않게(가속 아이템 등).
-func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true, wait := "") -> bool:
+## after = 응답을 반영한 뒤 그 응답으로 할 일(없어도 된다).
+func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true, wait := "", after := Callable()) -> bool:
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
@@ -3818,16 +3876,18 @@ func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callab
 	_recalc_gold()
 	changed.emit()
 	net.flush_kills()  # 골드 비용은 서버 골드로 판정한다 — 쌓인 처치를 먼저
-	net.send("POST", path, body, _on_instant.bind(dg, wait), _on_instant_failed.bind(dg, fail_text, wait), true, once)
+	net.send("POST", path, body, _on_instant.bind(dg, wait, after), _on_instant_failed.bind(dg, fail_text, wait), true, once)
 	return true
 
 
-func _on_instant(data: Dictionary, dg: int, wait := "") -> void:
+func _on_instant(data: Dictionary, dg: int, wait := "", after := Callable()) -> void:
 	_hold = maxi(0, _hold - 1)
 	_hold_gold -= dg
 	if wait != "":
 		_waiting.erase(wait)
 	apply_server(data)
+	if after.is_valid():
+		after.call(data)
 
 
 func _on_instant_failed(dg: int, fail_text: Callable, wait := "") -> void:
