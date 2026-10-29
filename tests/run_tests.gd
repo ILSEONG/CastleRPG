@@ -3958,6 +3958,13 @@ func test_dungeons_offline() -> void:
 	e.dungeons.equip.last_reset = GameData.reset_at(GameData.reset_day(t0) - 1)
 	check(e.dungeon_state("gold").keys == 10 and e.dungeon_state("equip").keys == 2 and e.dungeon_state("equip").extra_today == 0, "offline daily reset: 4 missed days -> 10 (cap), equip +2 and extra runs back to 0")
 	check(not e.finish_dungeon("nope", true, 30.0) or finished[-1].get("error") == "unknown_run", "an unknown run is refused")
+	# 강화석 던전(2026-10-29): 영웅 5, 열쇠 2 / 3, 이기면 강화석 30 + 3씩
+	var ss: Dictionary = e.dungeon_state("stone")
+	check(ss.keys == 2 and ss.key_cap == 3 and GameData.party_size("stone") == 5 and e.dungeon_reward("stone", 1) == {"stones": 30} and e.dungeon_reward("stone", 10) == {"stones": 57}
+		and e.dungeon_enemies("stone", 1).map(func(x): return x.kind) == ["ratman", "ratman", "ogre_warlord"], "stone dungeon: 2 / 3 keys, 5 heroes, 30 stones (+3 per level), rat men + mine ogre")
+	var st0: int = e.stones
+	check(e.start_dungeon("stone", 1, GOLD6.slice(0, 5)) and e.debug_win() and finished[-1].win and finished[-1].rewards == {"stones": 30} and e.stones == st0 + 30
+		and e.dungeon_state("stone").keys == 1 and e.dungeon_state("stone").best_level == 1, "stone dungeon win: +30 stones, key -1, best 1")
 	e.free()
 
 

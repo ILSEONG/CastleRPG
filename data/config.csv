@@ -109,6 +109,14 @@ ticket_dg_atk_growth,1.12
 ticket_reward_base,5
 ticket_reward_step,5
 ticket_reward_add,1
+stone_key_daily,2
+stone_key_cap,3
+stone_dg_party,5
+stone_dg_min_sec,20
+stone_dg_hp_growth,1.15
+stone_dg_atk_growth,1.12
+stone_reward_base,30
+stone_reward_add,3
 rounds_per_stage,25
 stage_speed_step,0.08
 stage_speed_cap,2.0

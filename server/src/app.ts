@@ -3213,9 +3213,13 @@ export function createApp(opts: AppOptions) {
       let items: R.EquipItem[] = []
       let gain = 0
       let tickets = 0
+      let stones = 0
       if (type === 'gold') {
         gain = R.goldReward(g.config, run.level)
         rewards.gold_tenths = gain * 10
+      } else if (type === 'stone') {
+        stones = R.stoneReward(g.config, run.level)
+        rewards.stones = stones
       } else if (type === 'ticket') {
         tickets = R.ticketReward(g.config, run.level)
         rewards.tickets = tickets
@@ -3227,11 +3231,11 @@ export function createApp(opts: AppOptions) {
       }
       return {
         change: {
-          goldTenths: (gain - cost) * 10, diaTickets: tickets, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
+          goldTenths: (gain - cost) * 10, diaTickets: tickets, stones, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
           log: {
             kind: 'dungeon_clear', detail: {
               run_id: runId, type, level: run.level, elapsed, real, party: run.party, paid: cost ? { gold: cost } : { key: 1 }, keys_after: next.keys,
-              best_level: next.best_level, gold_tenths: gain * 10, items, ...(type === 'ticket' ? { tickets, helper: run.helper } : {}),
+              best_level: next.best_level, gold_tenths: gain * 10, items, ...(type === 'ticket' ? { tickets, helper: run.helper } : {}), ...(type === 'stone' ? { stones } : {}),
             },
           },
         },

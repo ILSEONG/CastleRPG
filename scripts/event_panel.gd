@@ -28,7 +28,7 @@ const TODAY := Color(0.98, 0.70, 0.12)
 const DONE_INK := Color(0.30, 0.62, 0.32)
 const SUB := Color(0.16, 0.18, 0.24, 0.62)
 const TICKET := Color(0.61, 0.42, 0.84)  # 다이아 모집권(SR 보라)
-static var KEY_NAMES := {"gold": Lang.t("event_panel.key_names.gold"), "equip": Lang.t("event_panel.key_names.equip"), "ticket": Lang.t("event_panel.key_names.ticket")}
+static var KEY_NAMES := {"gold": Lang.t("event_panel.key_names.gold"), "equip": Lang.t("event_panel.key_names.equip"), "ticket": Lang.t("event_panel.key_names.ticket"), "stone": Lang.t("event_panel.key_names.stone")}
 static var FAIL_TEXT := {"claimed": Lang.t("event_panel.fail_text.claimed"), "finished": Lang.t("event_panel.fail_text.finished"), "stale": Lang.t("event_panel.fail_text.stale")}
 
 var data := {}  # 서버 응답 {n, days, can_claim, next_reset, rewards}

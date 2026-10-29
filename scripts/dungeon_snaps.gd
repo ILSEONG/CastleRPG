@@ -46,6 +46,8 @@ static func build(root: Node3D, type: String, hero_ids: Array) -> void:
 		_gold(root, heroes)
 	elif type == "ticket":
 		_quarry(root, heroes)
+	elif type == "stone":
+		_crystal(root, heroes)
 	else:
 		_hall(root, heroes)
 
@@ -101,9 +103,25 @@ static func _quarry(root: Node3D, heroes: Array) -> void:
 	_camera(root, at.call(QUARRY_EYE.x, QUARRY_EYE.z) + Vector3(0, QUARRY_EYE.y, 0), at.call(QUARRY_LOOK.x, QUARRY_LOOK.z) + Vector3(0, QUARRY_LOOK.y, 0), QUARRY_FOV)
 
 
-static func _unit(root: Node3D, spec: Dictionary, pos: Vector3, facing: Vector3) -> void:
+## 강화석 던전(수정 광산, 2026-10-29): 영웅들 어깨 너머로 쥐인간 무리와 그 뒤 광산 오우거를 본다(모집권 띠와 같은 구도).
+static func _crystal(root: Node3D, heroes: Array) -> void:
+	var st: Dictionary = ArenaKit.crystal_mine()
+	root.add_child(ArenaKit.lighting(st.light))
+	root.add_child(st.root)
+	var g: Vector3 = st.boss
+	var at := func(side: float, front: float) -> Vector3: return g + ArenaKit.RIGHT * side + ArenaKit.DOWN * front
+	_unit(root, Art.monster_spec("ogre_warlord"), g, ArenaKit.DOWN, 1.6)
+	for o in [Vector2(-2.6, 3.0), Vector2(2.4, 3.4), Vector2(-0.4, 4.6), Vector2(4.4, 2.0), Vector2(-4.6, 2.2)]:
+		_unit(root, Art.monster_spec("ratman"), at.call(o.x, o.y), ArenaKit.DOWN)
+	for i in mini(heroes.size(), HEROES):
+		var p: Vector3 = at.call(QUARRY_HEROES[i].x, QUARRY_HEROES[i].y + 2.0)
+		_unit(root, heroes[i], p, g - p)
+	_camera(root, at.call(QUARRY_EYE.x, QUARRY_EYE.z + 2.0) + Vector3(0, QUARRY_EYE.y, 0), at.call(QUARRY_LOOK.x, QUARRY_LOOK.z) + Vector3(0, QUARRY_LOOK.y, 0), QUARRY_FOV)
+
+
+static func _unit(root: Node3D, spec: Dictionary, pos: Vector3, facing: Vector3, scale := 0.0) -> void:
 	var m = UnitModelScript.new()
-	m.setup(spec, spec.get("scale", 1.0))
+	m.setup(spec, scale if scale > 0.0 else spec.get("scale", 1.0))
 	m.position = pos
 	m.face(facing)
 	root.add_child(m)

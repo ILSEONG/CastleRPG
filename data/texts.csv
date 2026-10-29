@@ -2845,3 +2845,11 @@ dungeon_hud.show_result.rec,클리어 시간 %s,,,,scripts/dungeon_hud.gd
 dungeon_hud.show_result_7, · 최고 단계 갱신!,,,,scripts/dungeon_hud.gd
 dungeon_hud.build_intro,%d단계,,,,scripts/dungeon_hud.gd
 dungeon_hud.build_intro_2,전투 시작!,,,,scripts/dungeon_hud.gd
+dungeon_hud.names.stone,강화석 던전,,,,scripts/dungeon_hud.gd
+dungeon_hud.boss_names.ogre_warlord,광산 오우거,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_8,강화석 +%d,,,,scripts/dungeon_hud.gd
+dungeon_panel.names.stone,강화석 던전,,,,scripts/dungeon_panel.gd
+dungeon_panel.refresh_7,보상 강화석 %d개 · 영웅 부위 강화 재료,,,,scripts/dungeon_panel.gd
+event_panel.key_names.stone,강화석 던전 열쇠,,,,scripts/event_panel.gd
+live_ops.key_names.stone,강화석 던전 열쇠,,,,scripts/live_ops.gd
+missions.reward_text_12,강화석 던전 열쇠,,,,scripts/missions.gd

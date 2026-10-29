@@ -171,6 +171,7 @@ test('GET /v1/dungeon: 새 플레이어는 그날 지급분(골드 3/10, 장비 
     dungeons: {
       gold: { keys: 3, key_cap: 10, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: LAST, next_reset: MIDNIGHT },
       equip: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: LAST, next_reset: MIDNIGHT },
+      stone: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: null, last_reset: LAST, next_reset: MIDNIGHT }, // 강화석 던전
     },
   })
   assert.deepEqual((await S.req('GET', '/v1/items', { token })).json, { server_now: T0, items: [] })
@@ -616,7 +617,7 @@ test('마이그레이션 012: 011까지 적용된 DB에 던전·장비 표와 �
     await d.query('insert into player_state (player_id) values ($1)', [p.id])
     assert.deepEqual(await migrate(d), all.filter((f) => f >= '012'))
     const cfg = await d.query("select key, value from game_config where key like '%dg%' or key like '%key%' or key like 'equip%' or key like 'dungeon%' or key = 'daily_reset_utc_hour' order by key")
-    assert.equal(cfg.length, 26) // 모집권 던전 022 +6
+    assert.equal(cfg.length, 32) // 모집권 던전 022 +6, 강화석 던전 063 +6
     assert.deepEqual(cfg.find((r) => r.key === 'equip_bag_cap'), { key: 'equip_bag_cap', value: '300' })
     assert.deepEqual(await d.query('select * from player_dungeons'), [])
     await assert.rejects(d.query("insert into player_items (player_id, slot, grade, level) values ($1, 'weapon', 'N', 1)", [p.id]), /weapon_has_kind/)
@@ -673,7 +674,7 @@ test('시드 검증: dungeons.csv(type·count·능력치 범위, 종류마다 �
   for (const t of TABLES) cpSync(join(DATA_DIR, t.file), join(dir, t.file))
   const files = Object.fromEntries(['dungeons.csv', 'equip_drop.csv', 'config.csv', 'heroes.csv'].map((f) => [f, readFileSync(join(DATA_DIR, f), 'utf8')]))
   const cases: [string, (s: string) => string, RegExp][] = [
-    ['dungeons.csv', (s) => s.replace('gold_king,gold,', 'gold_king,fire,'), /dungeons\.csv line 4 column 'type': type must be gold or equip or ticket: 'fire'/],
+    ['dungeons.csv', (s) => s.replace('gold_king,gold,', 'gold_king,fire,'), /dungeons\.csv line 4 column 'type': type must be gold or equip or ticket or stone: 'fire'/],
     ['dungeons.csv', (s) => s.replace('gold_goblin_b,gold,goblin,5,', 'gold_goblin_b,gold,goblin,0,'), /line 3 column 'count': must be at least 1: 0/],
     ['dungeons.csv', (s) => s.replace(',1500,40,', ',0,40,'), /line 4 column 'hp': must be greater than 0: 0/],
     ['dungeons.csv', (s) => s.replace(',6000,60,', ',6000,-1,'), /line 5 column 'atk': must be 0 or more: -1/],
@@ -766,4 +767,22 @@ test('부위 강화(/v1/slot/enhance): 영웅·부위마다 레벨, 비용 = 레
   assert.equal(R.heroEquip([it], eq, { hans: { hat: 20 } }).hans.hp, Math.round(R.itemStats(it).hp * 2))
   assert.equal(R.heroEquip([it], eq, { hans: { hat: 4 } }).hans.hp, Math.round(R.itemStats(it).hp * 1.2))
   assert.equal(R.heroEquip([it], eq, { ella: { hat: 20 } }).hans.hp, R.itemStats(it).hp) // 다른 영웅의 부위 레벨은 안 탄다
+})
+
+test('강화석 던전(2026-10-29): 영웅 5, 열쇠 하루 2·상한 3, 이기면 강화석 30 + 3 × (단계 − 1)·열쇠 −1, 지면 아무것도 안 바뀐다', async () => {
+  const { token } = await fresh()
+  const party = GOLD6.slice(0, 5)
+  assert.equal((await start(token, { type: 'stone', level: 1, party: GOLD6 })).json.error, 'bad_party') // 6명은 안 된다
+  let s = await start(token, { type: 'stone', level: 1, party })
+  assert.equal(s.status, 200)
+  assert.deepEqual(s.json.enemies.map((e: any) => [e.kind, e.count]), [['ratman', 6], ['ratman', 4], ['ogre_warlord', 1]])
+  S.clock.t += 5
+  let r = await finish(token, { run_id: s.json.run_id, win: false, elapsed: 5 })
+  assert.deepEqual([r.json.player.stones, r.json.player.dungeons.stone.keys], [0, 2])
+  s = await start(token, { type: 'stone', level: 1, party })
+  S.clock.t += 30
+  r = await finish(token, { run_id: s.json.run_id, win: true, elapsed: 30 })
+  assert.equal(r.status, 200)
+  assert.deepEqual([r.json.rewards, r.json.player.stones, r.json.player.dungeons.stone.keys, r.json.player.dungeons.stone.best_level], [{ stones: 30 }, 30, 1, 1])
+  assert.deepEqual([1, 2, 10].map((n) => R.stoneReward({ stone_reward_base: '30', stone_reward_add: '3' }, n)), [30, 33, 57])
 })

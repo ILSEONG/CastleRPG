@@ -26,7 +26,7 @@ func _ready() -> void:
 	_main = preload("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	await _frames(30)
-	for t in ["gold", "equip", "ticket"]:
+	for t in ["gold", "equip", "ticket", "stone"]:
 		for c in get_children():
 			if c.get_script() == _main.get_script() and not c.is_queued_for_deletion():
 				_main = c
@@ -38,7 +38,7 @@ func _ready() -> void:
 					helper = str(hc.key)
 					break
 		var before: int = _main._dungeon.get_instance_id() if _main._dungeon != null else 0
-		Economy.debug_win_on = t != "ticket"
+		Economy.debug_win_on = t == "gold" or t == "equip"
 		Economy.start_dungeon(t, 1, party, helper)
 		await _wait_until(func(): return _main._dungeon != null and _main._dungeon.get_instance_id() != before and _main._dungeon.is_inside_tree(), 8.0)
 		var d = _main._dungeon
@@ -50,6 +50,10 @@ func _ready() -> void:
 		_shot("%s_in12" % t)
 		if t == "ticket":
 			d._report(false)
+		if t == "stone":  # 싸우는 모습도 한 장(6초), 그다음 즉시 승리
+			await get_tree().create_timer(5.0).timeout
+			_shot("%s_fight" % t)
+			Economy.debug_win(str(d.run.run_id))
 		await _wait_until(func(): return d.phase == d.Phase.RESULT, 25.0)
 		await get_tree().create_timer(0.8).timeout
 		_shot("%s_result" % t)

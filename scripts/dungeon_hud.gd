@@ -21,8 +21,8 @@ const ResultBanner := preload("res://scripts/result_banner.gd")
 const DungeonArt := preload("res://scripts/dungeon_art.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-static var NAMES := {"gold": Lang.t("dungeon_hud.names.gold"), "equip": Lang.t("dungeon_hud.names.equip"), "ticket": Lang.t("dungeon_hud.names.ticket")}
-static var BOSS_NAMES := {"goblin_king": Lang.t("dungeon_hud.boss_names.goblin_king"), "death_knight": Lang.t("dungeon_hud.boss_names.death_knight"), "rock_golem": Lang.t("dungeon_hud.boss_names.rock_golem")}
+static var NAMES := {"gold": Lang.t("dungeon_hud.names.gold"), "equip": Lang.t("dungeon_hud.names.equip"), "ticket": Lang.t("dungeon_hud.names.ticket"), "stone": Lang.t("dungeon_hud.names.stone")}
+static var BOSS_NAMES := {"goblin_king": Lang.t("dungeon_hud.boss_names.goblin_king"), "death_knight": Lang.t("dungeon_hud.boss_names.death_knight"), "rock_golem": Lang.t("dungeon_hud.boss_names.rock_golem"), "ogre_warlord": Lang.t("dungeon_hud.boss_names.ogre_warlord")}
 const HELPER_TAG := Color(0.36, 0.62, 0.88)  # 모집권 던전 도우미 띠 칸 표시
 const FACE_PX := 96.0
 const TILE_PX := 96.0
@@ -285,6 +285,14 @@ func show_result() -> void:
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		reward_box.add_child(icon)
 		gold_label = _label(Lang.t("dungeon_hud.show_result_4") % UiKit.commas(floori(rw.gold_tenths / 10.0)), 40, WIN_GOLD.darkened(0.2))
+		reward_box.add_child(gold_label)
+	if rw.has("stones"):  # 강화석 던전: 강화석
+		var icon = IconsScript.new()
+		icon.kind = "enh_stone"
+		icon.custom_minimum_size = Vector2(80, 80)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		reward_box.add_child(icon)
+		gold_label = _label(Lang.t("dungeon_hud.show_result_8") % int(rw.stones), 40, Color(0.40, 0.30, 0.70))
 		reward_box.add_child(gold_label)
 	if rw.has("tickets"):  # 모집권 던전: 다이아 모집권
 		var icon = IconsScript.new()

@@ -28,7 +28,7 @@ const SEEN_KEY := "notice_seen"
 ## 장비 상자(서버 rules.EQUIP_BOXES, 보상 키 equip_box_<id>): 받으면 서버가 등급을 굴려 장비 하나씩 준다.
 const BOX_PREFIX := "equip_box_"
 static var BOX_NAMES := {"top": Lang.t("live_ops.box_names.top"), "high": Lang.t("live_ops.box_names.high"), "normal": Lang.t("live_ops.box_names.normal")}
-static var KEY_NAMES := {"gold": Lang.t("live_ops.key_names.gold"), "equip": Lang.t("live_ops.key_names.equip"), "ticket": Lang.t("live_ops.key_names.ticket")}
+static var KEY_NAMES := {"gold": Lang.t("live_ops.key_names.gold"), "equip": Lang.t("live_ops.key_names.equip"), "ticket": Lang.t("live_ops.key_names.ticket"), "stone": Lang.t("live_ops.key_names.stone")}
 const MAIL_POLL_SEC := 300.0  # 창을 안 열어도 이만큼마다 우편을 다시 본다(관리자가 보낸 보상 빨간 점)
 static var INQUIRY_TEXT := {"too_many_inquiries": Lang.t("live_ops.inquiry_text.too_many_inquiries")}
 static var COUPON_TEXT := {"unknown_coupon": Lang.t("live_ops.coupon_text.unknown_coupon"), "coupon_used": Lang.t("live_ops.coupon_text.coupon_used"), "coupon_expired": Lang.t("live_ops.coupon_text.coupon_expired"),

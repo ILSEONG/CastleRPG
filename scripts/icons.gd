@@ -131,6 +131,22 @@ static func shapes(kind_name: String) -> Array:
 				[[Vector2(-0.24, -0.25), Vector2(-0.19, -0.29), Vector2(-0.14, -0.25), Vector2(-0.19, -0.21)], Color(1, 1, 1, 0.95), false],
 				[[tl, tr, r, b, l], Color(0, 0, 0, 0), true],
 			]
+		"enh_stone":  # 강화석(2026-10-29 강화석 던전 보상): 잿빛 돌 받침 위로 솟은 보랏빛 육각 수정 셋(가운데 큰 것, 밝은 왼쪽 면)
+			var rock := [Vector2(-0.46, 0.44), Vector2(-0.40, 0.22), Vector2(-0.14, 0.14), Vector2(0.18, 0.16), Vector2(0.42, 0.24), Vector2(0.46, 0.44)]
+			return [
+				[rock, Color(0.46, 0.47, 0.52), true],
+				[[Vector2(-0.40, 0.22), Vector2(-0.14, 0.14), Vector2(0.0, 0.30), Vector2(-0.30, 0.34)], Color(0.60, 0.61, 0.66), false],
+				# 왼쪽 작은 수정
+				[[Vector2(-0.38, 0.26), Vector2(-0.40, -0.02), Vector2(-0.30, -0.14), Vector2(-0.18, -0.04), Vector2(-0.16, 0.22)], Color(0.48, 0.38, 0.78), true],
+				[[Vector2(-0.38, 0.26), Vector2(-0.40, -0.02), Vector2(-0.30, -0.14), Vector2(-0.28, 0.24)], Color(0.66, 0.58, 0.92), false],
+				# 오른쪽 작은 수정
+				[[Vector2(0.16, 0.24), Vector2(0.18, 0.0), Vector2(0.30, -0.10), Vector2(0.42, 0.02), Vector2(0.38, 0.28)], Color(0.40, 0.30, 0.70), true],
+				[[Vector2(0.16, 0.24), Vector2(0.18, 0.0), Vector2(0.30, -0.10), Vector2(0.27, 0.26)], Color(0.56, 0.47, 0.86), false],
+				# 가운데 큰 수정
+				[[Vector2(-0.18, 0.26), Vector2(-0.20, -0.20), Vector2(-0.02, -0.46), Vector2(0.16, -0.20), Vector2(0.14, 0.26)], Color(0.52, 0.40, 0.86), true],
+				[[Vector2(-0.18, 0.26), Vector2(-0.20, -0.20), Vector2(-0.02, -0.46), Vector2(-0.02, 0.26)], Color(0.74, 0.66, 0.98), false],
+				[[Vector2(-0.14, -0.18), Vector2(-0.06, -0.34), Vector2(-0.04, -0.28), Vector2(-0.11, -0.12)], Color(1, 1, 1, 0.85), false],
+			]
 		"ticket":  # 다이아 모집권(모집권 던전 보상): 기울어진 보라 표(양옆 반원 홈) + 가운데 하늘색 다이아 + 금 테 줄
 			var rot := Transform2D(-0.22, Vector2.ZERO)
 			var body := [Vector2(-0.46, -0.26), Vector2(0.46, -0.26), Vector2(0.46, -0.08), Vector2(0.38, 0.0), Vector2(0.46, 0.08),

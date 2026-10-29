@@ -29,8 +29,8 @@ const PickerScript := preload("res://scripts/unit_picker.gd")
 
 enum Phase { FIGHT, WON, REPORT, LOOT, RESULT }
 
-const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0, "ticket": 28.0}  # 가장 먼 줌(무리가 퍼지면 여기까지 뺀다)
-const FOLLOW_MIN := {"gold": 22.0, "equip": 22.0, "ticket": 20.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
+const CAMERA_SIZE := {"gold": 44.0, "equip": 34.0, "ticket": 28.0, "stone": 40.0}  # 가장 먼 줌(무리가 퍼지면 여기까지 뺀다)
+const FOLLOW_MIN := {"gold": 22.0, "equip": 22.0, "ticket": 20.0, "stone": 22.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
 const SPLIT_KIND := "golemite"  # 모집권 던전: 이 종류 행은 바위 골렘이 쓰러질 때 그 자리에서 나온다(클래시 오브 클랜 골렘처럼 갈라진다)
 const AUTO_DELAY := 2.0
 const LOOT_SEC := 1.6  # 상자가 다 떨어지고 결과 화면이 뜰 때까지
@@ -68,7 +68,7 @@ var best_before := 0  # 들어올 때 최고 단계(결과의 "최고 단계 갱
 func _ready() -> void:
 	var type := str(run.type)
 	best_before = int(Economy.dungeon_state(type).get("best_level", 0))
-	var stage: Dictionary = ArenaKit.gold_mine() if type == "gold" else (ArenaKit.temple() if type == "ticket" else ArenaKit.castle())
+	var stage: Dictionary = ArenaKit.gold_mine() if type == "gold" else (ArenaKit.temple() if type == "ticket" else (ArenaKit.crystal_mine() if type == "stone" else ArenaKit.castle()))
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
 	var crowd = preload("res://scripts/crowd.gd").new()  # 유닛 겹침 해소(전투 자리 밖으로 밀지 않는다)
@@ -177,14 +177,14 @@ func _on_enemy_died(m) -> void:
 		Fx.quake(self, Vector3(at.x, 0.0, at.z), 2.2, 0)
 
 
-## 전투 자리 반경(겹침 해소·이동 선택): 광산(골드)은 PLAINS_FIGHT_R, 사원은 TEMPLE_FIGHT_R, 성은 홀 반 변.
+## 전투 자리 반경(겹침 해소·이동 선택): 광산(골드·강화석 수정 광산)은 PLAINS_FIGHT_R, 사원은 TEMPLE_FIGHT_R, 성은 홀 반 변.
 static func arena_r(type: String) -> float:
-	return ArenaKit.PLAINS_FIGHT_R if type == "gold" else (ArenaKit.TEMPLE_FIGHT_R if type == "ticket" else ArenaKit.HALL_HALF)
+	return ArenaKit.PLAINS_FIGHT_R if type == "gold" or type == "stone" else (ArenaKit.TEMPLE_FIGHT_R if type == "ticket" else ArenaKit.HALL_HALF)
 
 
 ## 화면 가로 폭(양옆이 막힌 무대): 골드 던전 광산 협곡만 MINE_SIDE, 나머지는 막히지 않음.
 static func arena_side(type: String) -> float:
-	return ArenaKit.MINE_SIDE if type == "gold" else INF
+	return ArenaKit.MINE_SIDE if type == "gold" or type == "stone" else INF
 
 
 func time_limit() -> float:
