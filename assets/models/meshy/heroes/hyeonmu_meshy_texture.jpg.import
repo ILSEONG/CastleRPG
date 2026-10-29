@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://25f5g7fqqlko"
-path="res://.godot/imported/ragna_meshy_texture.jpg-54e1c2ae6615b33fa33ab25385518064.ctex"
+uid="uid://c6j6msrv0tl0h"
+path="res://.godot/imported/hyeonmu_meshy_texture.jpg-1be23c826ab7f908817f8cd28008c232.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "8bc29e0cf5df4399b9396f8e16f92bc9"
+"md5": "0139e6efa70da21152de2a0ec14a652e"
 }
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/ragna_meshy_texture.jpg"
-dest_files=["res://.godot/imported/ragna_meshy_texture.jpg-54e1c2ae6615b33fa33ab25385518064.ctex"]
+source_file="res://assets/models/meshy/heroes/hyeonmu_meshy_texture.jpg"
+dest_files=["res://.godot/imported/hyeonmu_meshy_texture.jpg-1be23c826ab7f908817f8cd28008c232.ctex"]
 
 [params]
 

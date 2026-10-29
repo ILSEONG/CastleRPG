@@ -4422,7 +4422,10 @@ func test_hero_look_builder() -> void:
 			for c in ba.get_children():
 				if HeroKit.has_part(String(c.name)):
 					found.append([String(ba.bone_name), String(c.name)])
-					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.style_material(Art.lowpoly_vc_material()),
+					var vc: Material = Art.style_material(Art.lowpoly_vc_material())
+					if spec.get("finish", false):
+						vc = Art.ur_material(vc)  # UR 마감(Art.ur_finish)도 공유
+					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == vc,
 						"%s part %s is a shared vertex-color mesh (its unit-style material, shared)" % [h.id, c.name])
 					used[String(c.name)] = true
 		var want: Array = spec.parts.duplicate()
@@ -4562,7 +4565,8 @@ func test_meshy_bodies() -> void:
 			model.free()
 			continue
 		var tris: int = body.mesh.get_faces().size() / 3
-		check(tris > 1000 and tris <= 5000, "%s Meshy body within 5,000 triangles (%d)" % [h.id, tris])
+		var cap := 6500 if h.grade == "UR" else 5000  # UR 몸은 6천 삼각형으로 리메시(dev/meshy_heroes.py UR_IDS)
+		check(tris > 1000 and tris <= cap, "%s Meshy body within %d triangles (%d)" % [h.id, cap, tris])
 		var m := body.get_active_material(0) as ShaderMaterial
 		check(m != null and m.get_shader_parameter("use_texture") and m.get_shader_parameter("use_remap") != true,
 			"%s Meshy body draws its own texture (no color table)" % h.id)

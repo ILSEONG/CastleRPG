@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://g3vi7okk8g6i"
-path="res://.godot/imported/solaris.glb-977c381d30b63b3e6ef89efdda7bf552.scn"
+uid="uid://hpb4l4n6a4rn"
+path="res://.godot/imported/hyeonmu.glb-5ca2a6f572222992555efdfb5350f48c.scn"
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/solaris.glb"
-dest_files=["res://.godot/imported/solaris.glb-977c381d30b63b3e6ef89efdda7bf552.scn"]
+source_file="res://assets/models/meshy/heroes/hyeonmu.glb"
+dest_files=["res://.godot/imported/hyeonmu.glb-5ca2a6f572222992555efdfb5350f48c.scn"]
 
 [params]
 

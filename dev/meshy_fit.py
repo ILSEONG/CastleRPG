@@ -1,8 +1,10 @@
 """Meshy T자세 메시 -> KayKit 뼈대에 입힌 몸 GLB (docs/meshy-assets.md "게임에 넣기").
 
-Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose] [--arm-frac 0.8]
+Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose] [--arm-frac 0.8] [--arm-y REL] [--hand-x X] [--rigid-back M]
 --arm-frac: arm line = median height of points wider than this share of the widest point. Raise it (0.95) when wings or a cape
 spread wider than the arms higher up (UR aurora 2026-10-29: the wing tops set the arm line and the body came out 30 % small).
+--arm-y REL: arm line at this share of the mesh height (feet 0 .. top 1) — when tail plumes or flames are the widest points.
+--hand-x X: hand tips at |x| = X in the Meshy mesh (its own units) — points farther out at arm height (flames, tails) are not hands.
 Needs numpy and Pillow.
 
 Writes a body-only GLB: the KayKit joint hierarchy and skin (same joints, order and
@@ -145,14 +147,20 @@ def arm_line(P, frac=0.8):
     return np.median(arm[:, 1]), ax.max()
 
 
+def opt(name):
+    return float(sys.argv[sys.argv.index(name) + 1]) if name in sys.argv else None
+
+
 def align(P, base_P, g):
     """Uniform scale (feet -> arm line), centre, then stretch the arms so hand tips meet."""
     arm_y_b = joint_pos(g, "upperarm.l")[1]
     foot_b = base_P[:, 1].min()
     sh_b = abs(joint_pos(g, "upperarm.l")[0])
     tip_b = np.abs(base_P[np.abs(base_P[:, 1] - arm_y_b) < 0.15][:, 0]).max()
-    arm_y, _ = arm_line(P, float(sys.argv[sys.argv.index("--arm-frac") + 1]) if "--arm-frac" in sys.argv else 0.8)
+    arm_y, _ = arm_line(P, opt("--arm-frac") or 0.8)
     foot = P[:, 1].min()
+    if opt("--arm-y") is not None:
+        arm_y = foot + opt("--arm-y") * (P[:, 1].max() - foot)
     s = (arm_y_b - foot_b) / (arm_y - foot)
     Q = (P - [0, foot, 0]) * s + [0, foot_b, 0]
     band = np.abs(Q[:, 1] - arm_y_b) < 0.25
@@ -161,7 +169,10 @@ def align(P, base_P, g):
     torso = (np.abs(Q[:, 0]) < sh_b) & (Q[:, 1] > arm_y_b - 0.5) & (Q[:, 1] < arm_y_b)
     btorso = (np.abs(base_P[:, 0]) < sh_b) & (base_P[:, 1] > arm_y_b - 0.5) & (base_P[:, 1] < arm_y_b)
     Q[:, 2] += np.median(base_P[btorso, 2]) - np.median(Q[torso, 2])
-    tip = np.abs(Q[np.abs(Q[:, 1] - arm_y_b) < 0.15][:, 0]).max()
+    near = np.abs(Q[np.abs(Q[:, 1] - arm_y_b) < 0.15][:, 0])
+    if opt("--hand-x") is not None:
+        near = near[near <= (opt("--hand-x") + 0.02) * s]
+    tip = near.max()
     k = (tip_b - sh_b) / (tip - sh_b)
     ax = np.abs(Q[:, 0])
     out = ax > sh_b
@@ -295,6 +306,28 @@ def transfer(Q, base_P, base_J, base_W, njoints, idx, k=6, smooth=3):
     return top.astype(np.uint16), tw.astype(np.float32)
 
 
+def rigid_back(Q, J, W, bP, g, margin):
+    """Vertices more than margin behind the torso's back (tails, plumes) follow the chest bone only, blended over 8 cm.
+    Near the arm line they would otherwise take arm weights and hang down with the arms in the idle pose."""
+    joints = g.j["skins"][0]["joints"]
+    chest = joints.index(next(k for k, n in enumerate(g.j["nodes"]) if n.get("name") == "chest"))
+    sh = abs(joint_pos(g, "upperarm.l")[0])
+    hips_y = joint_pos(g, "hips")[1]
+    sh_y = joint_pos(g, "upperarm.l")[1]
+    torso = bP[(np.abs(bP[:, 0]) < sh) & (bP[:, 1] > hips_y) & (bP[:, 1] < sh_y)]
+    back = torso[:, 2].min()
+    t = np.clip((back - margin - Q[:, 2]) / 0.08, 0, 1)
+    n = len(Q)
+    D = np.zeros((n, len(joints)))
+    np.add.at(D, (np.repeat(np.arange(n), 4), J.reshape(-1).astype(np.int64)), W.reshape(-1))
+    D *= (1 - t)[:, None]
+    D[:, chest] += t
+    top = np.argsort(-D, axis=1)[:, :4]
+    tw = np.take_along_axis(D, top, 1)
+    tw /= tw.sum(1, keepdims=True)
+    return top.astype(np.uint16), tw.astype(np.float32), int((t > 0).sum())
+
+
 def feet_centre(P, J, W, g):
     """Centroid of the points whose strongest bone is a foot or toe bone of g's skin."""
     names = [g.j["nodes"][n]["name"] for n in g.j["skins"][0]["joints"]]
@@ -418,6 +451,9 @@ def main():
     J, W = transfer(Q, bP, bJ, bW, len(g.j["skins"][0]["joints"]), idx)
     d = feet_shift(Q, J, W, bP, bJ, bW, g)
     Q = Q + d
+    if opt("--rigid-back") is not None:  # 등 뒤 꼬리·깃 → 가슴에 단단히(구미호 꼬리 아홉 개가 팔과 함께 늘어지지 않게)
+        J, W, nb = rigid_back(Q, J, W, bP, g, opt("--rigid-back"))
+        info.update(rigid_back=nb)
     info.update(feet_dx=float(d[0]), feet_dz=float(d[2]))
     im = Image.open(io.BytesIO(texdata)).convert("RGB")
     if max(im.size) > size:

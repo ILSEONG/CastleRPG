@@ -5,6 +5,7 @@
 판 순서와 칸 순서는 아래 SHEETS가 정한다(지시문.md도 여기서 만든다 — 둘이 어긋나지 않게).
 
   python3 dev/skill_icon_slice.py --prompts /mnt/project-files/design/skill_icons/chatgpt_pack/지시문.md
+  python3 dev/skill_icon_slice.py --prompts /mnt/project-files/design/skill_icons/chatgpt_pack_ur/지시문.md --only 10,11  (UR)
   python3 dev/skill_icon_slice.py --sheet 1 판1.png [--sheet 2 판2.png ...] [--preview out.png]
 
 칸 경계는 판 1/3·2/3 근처에서 가장 어두운 세로·가로 줄(칸 사이 검은 선)을 찾고, 없으면 똑같이 3등분한다.
@@ -132,6 +133,29 @@ SHEETS = [
         ("war_cry", "전투 함성", "치켜든 뿔나팔에서 앞으로 퍼지는 붉은 소리 파동"),
         ("summon_treant", "나무 정령", "이끼와 잎이 달린 나무 정령, 굵은 가지 팔"),
     ]),
+    # UR 영웅 전용(2026-10-29, 능력치 스레드가 정한 id — 영웅마다 발동 / 상시 / 궁극기 순서). 최고 등급이라 지시문에 UR_EXTRA를 붙인다.
+    ("UR 현무·백호·연화", "1~3번은 짙은 남청·청록 물빛, 4~6번은 차가운 하늘색과 흰 번개빛, 7~9번은 분홍·진홍빛", [
+        ("turtle_ward", "현무 결계", "청록 육각형 무늬가 빛나는 반구 모양 거북 등껍질 결계(돔)"),
+        ("black_shell", "흑귀갑", "검은 거북 등껍질 방패에 부딪혀 사방으로 튀는 청록 물보라"),
+        ("north_tide", "북해 해일", "둥글게 줄지어 솟구치는 거대한 물기둥들과 하얀 물보라, 가운데 소용돌이"),
+        ("tiger_claw", "백호 참격", "대각선으로 크게 할퀸 흰 발톱 자국 세 줄과 하늘색 빛 번짐"),
+        ("tiger_fury", "산군의 기세", "흰 번개를 두르고 내리찍는 흰 호랑이 앞발과 날카로운 발톱"),
+        ("tiger_avatar", "백호 현신", "정면을 보고 포효하는 흰 호랑이 머리, 털 위로 흐르는 하늘색 번개"),
+        ("fox_fire", "여우불", "원을 그리며 떠 있는 분홍 여우불 아홉 개"),
+        ("fox_charm", "매혹", "흰 여우 꼬리 하나가 휘감은 빛나는 분홍 하트"),
+        ("nine_tails", "구미호 해방", "부채처럼 활짝 펼친 흰 여우 꼬리 아홉 개, 꼬리 끝마다 분홍 불꽃"),
+    ]),
+    ("UR 청룡·크로노스·주작", "1~3번은 비취·옥빛 청록, 4~6번은 짙은 남색과 하늘색 시간 빛, 7~9번은 주홍·붉은 불빛", [
+        ("dragon_arrow", "청룡시", "앞으로 날아가며 나선을 그리는 청록 동양 용으로 변하는 화살"),
+        ("azure_tide", "용궁의 물살", "발목 높이에서 감아 도는 옥빛 물결 소용돌이와 물방울"),
+        ("azure_dragon", "청룡 강림", "원을 그리며 몸을 휘감는 거대한 청록 동양 용, 가운데 빛나는 흰 여의주"),
+        ("time_stop", "시간 정지", "바닥에 누운 빛나는 하늘색 시계판(숫자 없이 눈금만)과 거꾸로 도는 시곗바늘, 공중에 멈춘 빛 조각들"),
+        ("time_haste", "시간 가속", "모래가 빠르게 쏟아지는 은빛 모래시계와 옆으로 휘는 하늘색 속도선"),
+        ("time_collapse", "시간 붕괴", "가운데 검푸른 균열로 빨려 들어가며 깨지는 시계판 조각들, 균열에서 터지는 하늘색 빛"),
+        ("phoenix_wing", "불새의 날개", "활짝 편 주홍 불꽃 날개 한 쌍과 그 사이로 쏟아지는 연둣빛 치유 빛"),
+        ("phoenix_blessing", "주작의 가호", "주홍 불꽃 깃털 세 개가 둘러싼 위로 선 은빛 검, 검에서 솟는 붉은 빛"),
+        ("rebirth_flame", "환생의 불꽃", "하늘로 솟는 거대한 불기둥과 그 양옆으로 펼쳐진 불새 날개"),
+    ]),
 ]
 
 PROMPT_HEAD = (
@@ -143,9 +167,12 @@ PROMPT_HEAD = (
     "- 배경은 칸마다 적힌 색의 빛과 그라데이션으로 칸을 꽉 채우고, 테두리·액자·금색 장식은 넣지 마.\n"
     "- 글자, 숫자, 로고, 사람 얼굴은 넣지 마.\n"
 )
+UR_EXTRA = "- 최고 등급(UR) 영웅의 스킬이라 다른 아이콘보다 빛, 에너지 조각, 파편을 훨씬 화려하게. 금색은 쓰지 말고 은색·흰색과 칸마다 적힌 색으로만.\n"
 
 
-def write_prompts(path: str) -> None:
+def write_prompts(path: str, only: list = None) -> None:
+    if only:
+        return _write_ur_prompts(path, only)
     lines = [
         "# 스킬 아이콘 ChatGPT 묶음",
         "",
@@ -163,6 +190,36 @@ def write_prompts(path: str) -> None:
         lines.append("")
         lines.append("```")
         lines.append(PROMPT_HEAD + f"- 배경 색: {bg}.")
+        lines.append("칸 순서(왼쪽 위부터 오른쪽으로, 한 줄씩):")
+        for j, (_kind, name, desc) in enumerate(cells, 1):
+            lines.append(f"{j}. {name}: {desc}")
+        lines.append("```")
+        lines.append("")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"wrote {path}")
+
+
+## UR 묶음(판 번호 only만): 이그니스 화풍 그림을 붙이고 판마다 새 대화가 아니라 한 대화에서 이어서.
+def _write_ur_prompts(path: str, only: list) -> None:
+    lines = [
+        "# UR 스킬 아이콘 ChatGPT 묶음 (UR 영웅 6명, 18개)",
+        "",
+        "만드는 법",
+        "1. ChatGPT에서 새 대화를 하나 열고 `00_화풍_참고.jpg`를 붙인 뒤, 아래 첫 번째 지시문을 그대로 붙여 넣습니다.",
+        "2. 같은 대화에서 두 번째 지시문을 붙여 넣습니다. 한 대화에서 이어서 해야 두 장의 화풍이 맞습니다.",
+        "3. 나온 판 두 장을 스레드에 올려 주세요. 순서만 맞으면 됩니다.",
+        "",
+        "마음에 안 드는 판은 \"다시\"라고 하면 됩니다. 칸이 조금 어긋나도 제가 맞춰 자릅니다.",
+        "한 칸만 마음에 안 들면 \"3번 칸만 다시, 더 크고 단순하게\"처럼 말하면 됩니다.",
+        "",
+    ]
+    for n in only:
+        title, bg, cells = SHEETS[n - 1]
+        lines.append(f"## {n}. {title} ({', '.join(c[1] for c in cells)})")
+        lines.append("")
+        lines.append("```")
+        lines.append(PROMPT_HEAD + UR_EXTRA + f"- 배경 색: {bg}.")
         lines.append("칸 순서(왼쪽 위부터 오른쪽으로, 한 줄씩):")
         for j, (_kind, name, desc) in enumerate(cells, 1):
             lines.append(f"{j}. {name}: {desc}")
@@ -230,12 +287,13 @@ def preview(paths: list, out: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prompts", help="지시문.md를 여기에 쓴다")
-    ap.add_argument("--sheet", nargs=2, action="append", metavar=("N", "IMAGE"), default=[], help="판 번호(1~9)와 그림")
+    ap.add_argument("--only", help="--prompts에 이 판 번호들만(쉼표, 예: 10,11 = UR)")
+    ap.add_argument("--sheet", nargs=2, action="append", metavar=("N", "IMAGE"), default=[], help="판 번호(1~11)와 그림")
     ap.add_argument("--preview", help="잘라 낸 아이콘 확인용 그림")
     ap.add_argument("--out", default=OUT_DIR, help="아이콘 저장 폴더(기본 assets/ui/skills)")
     a = ap.parse_args()
     if a.prompts:
-        write_prompts(a.prompts)
+        write_prompts(a.prompts, [int(x) for x in a.only.split(",")] if a.only else None)
     saved = []
     for n, path in a.sheet:
         cells = SHEETS[int(n) - 1][2]

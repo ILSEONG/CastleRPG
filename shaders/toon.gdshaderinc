@@ -19,6 +19,10 @@ uniform float saturation = 1.18;  // 카툰다운 진한 색
 uniform float ambient = 0.6;  // 주변광 반영(낮을수록 그늘이 또렷 — AO로 주변광만 줄인다)
 uniform float band_soft = 0.05;  // 밝은 면/그늘 경계 폭
 uniform float rim = 0.35;  // 테두리 빛 세기
+// UR 마감(Art.ur_finish, 2026-10-29): 밝은 텍셀을 white_cap까지 눌러 흰 천·털·얼굴이 빛에 하얗게 날아가지 않게(그늘 결이 남는다),
+// 밝고 채도 높은 텍셀(보석·여우불·불꽃)은 glow만큼 스스로 빛난다. 기본값이면 그대로.
+uniform float white_cap = 1.0;
+uniform float glow = 0.0;
 
 void fragment() {
 	vec4 c = albedo_color;
@@ -62,6 +66,12 @@ void fragment() {
 	}
 	float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
 	ALBEDO = clamp(mix(vec3(l), c.rgb, saturation), 0.0, 1.0);
+	ALBEDO *= mix(1.0, white_cap, smoothstep(0.45, 1.0, dot(ALBEDO, vec3(0.2126, 0.7152, 0.0722))));
+	if (glow > 0.0) {
+		float mx = max(c.r, max(c.g, c.b));
+		float sat = (mx - min(c.r, min(c.g, c.b))) / max(mx, 0.0001);
+		EMISSION = c.rgb * glow * smoothstep(0.62, 0.8, mx) * smoothstep(0.45, 0.6, sat);
+	}
 	if (!FRONT_FACING) {
 		NORMAL = -NORMAL;
 	}

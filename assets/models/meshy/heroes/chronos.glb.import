@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bw5cwd2uiuayi"
-path="res://.godot/imported/orion.glb-523211d0def17fb3efdf35854a6c49f6.scn"
+uid="uid://nj4t0g6thlg5"
+path="res://.godot/imported/chronos.glb-28da8f01eb15fc33c76f28a247d0b198.scn"
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/orion.glb"
-dest_files=["res://.godot/imported/orion.glb-523211d0def17fb3efdf35854a6c49f6.scn"]
+source_file="res://assets/models/meshy/heroes/chronos.glb"
+dest_files=["res://.godot/imported/chronos.glb-28da8f01eb15fc33c76f28a247d0b198.scn"]
 
 [params]
 

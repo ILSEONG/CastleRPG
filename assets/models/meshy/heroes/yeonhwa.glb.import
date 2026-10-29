@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bwkbv7rhcifb"
-path="res://.godot/imported/ragna.glb-89cbc0a594fd2b2f7b4493df4acc7b28.scn"
+uid="uid://c1x7yar4jw6av"
+path="res://.godot/imported/yeonhwa.glb-a52810a3d866c89e5d4f2f4e970ef2e4.scn"
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/ragna.glb"
-dest_files=["res://.godot/imported/ragna.glb-89cbc0a594fd2b2f7b4493df4acc7b28.scn"]
+source_file="res://assets/models/meshy/heroes/yeonhwa.glb"
+dest_files=["res://.godot/imported/yeonhwa.glb-a52810a3d866c89e5d4f2f4e970ef2e4.scn"]
 
 [params]
 
