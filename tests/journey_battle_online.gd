@@ -10,6 +10,7 @@ extends Node
 
 const GameData := preload("res://scripts/game_data.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 const DungeonScript := preload("res://scripts/dungeon.gd")
 const PvpBattleScript := preload("res://scripts/pvp_battle.gd")
 const HEROES := ["arteon", "ignis", "selene", "valen", "kyle", "mira"]
@@ -69,7 +70,7 @@ func _gold_dungeon() -> void:
 	_panel.open()
 	await _frames(10)
 	var c: Dictionary = _panel.cards.gold
-	_check(c.keys.text == "3 / 10" and c.reward.text == "보상 4,000 골드" and not c.go.disabled, "gold card: 3/10 keys, 4,000 gold at level 1", "%s | %s" % [c.keys.text, c.reward.text])
+	_check(c.keys.text == "3 / 10" and c.reward.text == "보상 20,000 골드" and not c.go.disabled, "gold card: 3/10 keys, 20,000 gold at level 1", "%s | %s" % [c.keys.text, c.reward.text])
 	await _snap()
 	_panel.open_form("gold")
 	await _frames(5)
@@ -80,13 +81,13 @@ func _gold_dungeon() -> void:
 	_panel.deploy()
 	var d = await _scene_result()
 	_check(d != null and d.result.get("win", false) and int(d.result.rewards.get("gold_tenths", 0)) == GameData.gold_reward(1) * 10,
-		"gold 1: win pays 4,000 gold", str(d.result if d != null else {}))
+		"gold 1: win pays 20,000 gold", str(d.result if d != null else {}))
 	if d == null:
 		return
-	_check(d.hud.gold_label != null and d.hud.gold_label.text == "+4,000 골드", "result shows +4,000 골드", d.hud.gold_label.text if d.hud.gold_label else "")
+	_check(d.hud.gold_label != null and d.hud.gold_label.text == "+20,000 골드", "result shows +20,000 골드", d.hud.gold_label.text if d.hud.gold_label else "")
 	var st := Economy.dungeon_state("gold")
 	_check(st.keys == 2 and st.best_level == 1 and st.max_level == 2, "key used, best level 1 (level 2 opens)", str(st))
-	_check(absi(Economy.gold - (g0 + 4000)) <= GOLD_SLACK, "gold +4,000 in the app", "%d → %d" % [g0, Economy.gold])
+	_check(absi(Economy.gold - (g0 + 20000)) <= GOLD_SLACK, "gold +20,000 in the app", "%d → %d" % [g0, Economy.gold])
 	await _compare_dungeon("gold", "after gold 1 win")
 	_check(d.hud.next_button.visible and d.hud.again_button.visible and d.hud.exit_button.visible, "[다음 단계]·[다시]·[나가기] shown after a win", "")
 	await _snap()
@@ -172,7 +173,7 @@ func _equip_dungeon() -> void:
 	_panel.open()
 	await _frames(5)
 	var c: Dictionary = _panel.cards.equip
-	_check(c.keys.text == "1 / 3" and c.reward.text.begins_with("장비 5개"), "equip card: 1/3 keys, 5 items", "%s | %s" % [c.keys.text, c.reward.text])
+	_check(c.keys.text == "2 / 3" and c.reward.text.begins_with("장비 5개"), "equip card: 2/3 keys, 5 items", "%s | %s" % [c.keys.text, c.reward.text])
 	_panel.open_form("equip")
 	_check(_panel.party.size() == 4, "equip form: 4 heroes", str(_panel.party))
 	var bag0: int = Economy.bag.size()
@@ -184,19 +185,26 @@ func _equip_dungeon() -> void:
 	var items: Array = d.result.rewards.get("items", [])
 	_check(d.result.win and items.size() >= 5 and Economy.bag.size() == bag0 + items.size(), "equip 1: win drops %d items into the bag" % items.size(), str(d.result))
 	_check(d.hud.reward_tiles.size() == items.size(), "result shows one tile per item", str(d.hud.reward_tiles.size()))
-	_check(Economy.dungeon_state("equip").keys == 0 and Economy.dungeon_state("equip").best_level == 1 and Economy.dungeon_state("equip").extra_cost == 100000,
-		"key used, best 1, extra run costs 100,000 gold", str(Economy.dungeon_state("equip")))
+	_check(Economy.dungeon_state("equip").keys == 1 and Economy.dungeon_state("equip").best_level == 1 and Economy.dungeon_state("equip").extra_cost == 112000,
+		"key used (2 → 1), best 1, the next level's extra run costs 112,000 gold", str(Economy.dungeon_state("equip")))
 	await _compare_dungeon("equip", "after equip 1")
 	await _compare_items("after equip 1")
 	await _snap()
+	# 남은 열쇠 1개도 [다시]로 쓴다(하루 지급 2개, 2026-10-29)
+	Economy.debug_win_on = true
+	d.hud.again_button.pressed.emit()
+	d = await _scene_result(d)
+	if d == null:
+		return
+	_check(d.result.win and Economy.dungeon_state("equip").keys == 0, "second key: win, 0 keys left", str(Economy.dungeon_state("equip")))
 	d.hud.exit_button.pressed.emit()
 	await _wait_until(func(): return _main._dungeon == null, 10.0)
-	# 열쇠 없이 골드 추가 도전(100,000)
-	await _request("/v1/test/grant_gold", {"amount": 150000})
+	# 열쇠 없이 골드 추가 도전(2단계 고정 112,000) — 골드를 150,000으로 맞춰 두 번째는 모자라게
+	await _request("/v1/test/grant_gold", {"amount": maxi(0, 150000 - Economy.gold)})
 	var g0 := Economy.gold
 	_panel.open()
 	await _frames(5)
-	_check(c.cost.text == "/ 100,000" and not c.go.disabled, "card shows the extra-run gold cost and [도전] is on", c.cost.text)
+	_check(c.cost.text == "/ " + UiKit.commas(GameData.extra_cost(_panel.level_of("equip"))) and not c.go.disabled, "card shows the selected level's fixed gold cost and [도전] is on", c.cost.text)
 	_panel.open_form("equip")
 	_panel.step_level("equip", 1)
 	_panel.deploy()
@@ -205,8 +213,8 @@ func _equip_dungeon() -> void:
 		return
 	_check(d2.result.win and str(d2.run.paid_with) == "gold" and int(d2.run.level) == 2, "equip 2 without a key: paid with gold, win", str(d2.run.get("paid_with")))
 	var st := Economy.dungeon_state("equip")
-	_check(st.extra_today == 1 and st.extra_cost == 300000 and st.best_level == 2, "extra run counted, next one costs 300,000", str(st))
-	_check(absi(Economy.gold - (g0 - 100000)) <= GOLD_SLACK, "100,000 gold spent", "%d → %d" % [g0, Economy.gold])
+	_check(st.extra_today == 1 and st.extra_cost == 126000 and st.best_level == 2, "extra run counted; the cost is per level (level 3: 126,000), not per run", str(st))
+	_check(absi(Economy.gold - (g0 - 112000)) <= GOLD_SLACK, "112,000 gold spent (level 2)", "%d → %d" % [g0, Economy.gold])
 	await _compare_dungeon("equip", "after the gold run")
 	await _compare_items("after the gold run")
 	d2.hud.exit_button.pressed.emit()
@@ -223,7 +231,7 @@ func _ticket_dungeon() -> void:
 	_panel.open()
 	await _frames(5)
 	var c: Dictionary = _panel.cards.ticket
-	_check(c.keys.text == "1 / 3" and c.reward.text.contains("다이아 모집권 10장"), "ticket card: 1/3 keys, 10 tickets", "%s | %s" % [c.keys.text, c.reward.text])
+	_check(c.keys.text == "3 / 3" and c.reward.text.contains("다이아 모집권 5장"), "ticket card: 3/3 keys, 5 tickets", "%s | %s" % [c.keys.text, c.reward.text])
 	var helpers: Array = Economy.helper_candidates()
 	_check(helpers.size() == 3, "3 helper candidates from the server", str(helpers))
 	_panel.open_form("ticket")
@@ -241,16 +249,16 @@ func _ticket_dungeon() -> void:
 	await _wait_until(func(): return d.phase == d.Phase.RESULT, 10.0)
 	_check(not d.result.win and d.hud.again_button.visible and not d.hud.next_button.visible and not d.hud.auto_next_box.get_parent().visible,
 		"ticket loss: [다시] only, no auto", str(d.result))
-	_check(Economy.dungeon_state("ticket").keys == 1, "ticket loss uses no key", "")
+	_check(Economy.dungeon_state("ticket").keys == 3, "ticket loss uses no key", "")
 	var t0 := Economy.dia_tickets
 	Economy.debug_win_on = true
 	d.hud.again_button.pressed.emit()
 	var d2 = await _scene_result(d)
 	if d2 == null:
 		return
-	_check(d2.result.win and int(d2.result.rewards.get("tickets", 0)) == GameData.ticket_reward(1), "ticket win: 10 tickets in the result", str(d2.result))
-	_check(d2.hud.gold_label != null and d2.hud.gold_label.text == "다이아 모집권 +10", "result shows 다이아 모집권 +10", d2.hud.gold_label.text if d2.hud.gold_label else "(none)")
-	_check(Economy.dia_tickets == t0 + 10, "tickets +10 in the app", "%d → %d" % [t0, Economy.dia_tickets])
+	_check(d2.result.win and int(d2.result.rewards.get("tickets", 0)) == GameData.ticket_reward(1), "ticket win: 5 tickets in the result", str(d2.result))
+	_check(d2.hud.gold_label != null and d2.hud.gold_label.text == "다이아 모집권 +5", "result shows 다이아 모집권 +5", d2.hud.gold_label.text if d2.hud.gold_label else "(none)")
+	_check(Economy.dia_tickets == t0 + 5, "tickets +5 in the app", "%d → %d" % [t0, Economy.dia_tickets])
 	_check(not d2.hud.again_button.visible and not d2.hud.next_button.visible, "after a ticket win: only [나가기]", "")
 	var used: Array = Economy.dungeon_state("ticket").helpers_used
 	_check(used == [str(helpers[0].key)] and Economy.helper_by_key(str(helpers[0].key)).is_empty(), "the helper is used for today", str(used))

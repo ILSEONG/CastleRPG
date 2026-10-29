@@ -2578,7 +2578,7 @@ func _barracks_t2_window() -> void:
 
 
 ## (D) 개정 18 던전(오프라인, 즉시 승리 훅 Economy.debug_win_on): [던전] 탭 → 카드(열쇠·보상) → 골드 [도전] → 편성(6칸 = 전투력 상위, 영웅 카드 탭으로
-##     빼고 넣기) → [출전] → 던전 장면(성 월드는 트리 밖) → 결과(승리·+4,000 골드·열쇠 −1) → 자동 체크 둘은 배타 → "현재 단계 자동 반복"이
+##     빼고 넣기) → [출전] → 던전 장면(성 월드는 트리 밖) → 결과(승리·+20,000 골드·열쇠 −1) → 자동 체크 둘은 배타 → "현재 단계 자동 반복"이
 ##     2초마다 같은 단계를 돌고 열쇠 0에서 멈춤(알림) → [나가기] → 성. 장비 던전 → 상자 5개 → 결과 칸 5개. 영웅 상세 장비 칸 → 장착·해제.
 ##     보관함 → 장착 중은 못 고름, 여러 개 판매, 부위 필터. 캡처 좌표(720×1280 논리)를 INFO로 찍는다.
 func _dungeon_ui(tabs) -> void:
@@ -2595,9 +2595,9 @@ func _dungeon_ui(tabs) -> void:
 	await _guard_wait()
 	var gc: Dictionary = dwin.cards.gold
 	var ec: Dictionary = dwin.cards.equip
-	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "1 / 3" and gc.reward.text == "보상 4,000 골드"
+	_check(dwin.is_open() and keys0 == 3 and gc.keys.text == "3 / 10" and ec.keys.text == "2 / 3" and gc.reward.text == "보상 20,000 골드"
 		and gc.level.text == "1단계" and gc.prev.disabled and gc.next.disabled and not gc.go.disabled and ec.reward.text.begins_with("장비 5개 · N 60% · R 30% · SR 9% · SSR 1%"),
-		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 4,000; equip card 1 / 3 with the grade odds", "gold=%s equip=%s" % [gc.reward.text, ec.reward.text])
+		"(D) [던전] sheet: gold card 3 / 10 keys, 1단계 (only level open), reward 20,000; equip card 2 / 3 with the grade odds", "gold=%s equip=%s" % [gc.reward.text, ec.reward.text])
 	print("INPUT INFO: dungeon tab %s, gold [도전] %s, equip [도전] %s, [보관함] %s (720x1280 logical)" % [tabs.buttons.dungeon.get_global_rect(), gc.go.get_global_rect(),
 		ec.go.get_global_rect(), dwin.bag_button.get_global_rect()])
 	await _tap(gc.go.get_global_rect().get_center())
@@ -2623,9 +2623,9 @@ func _dungeon_ui(tabs) -> void:
 		return
 	await _dungeon_move(d)
 	var hud = d.hud
-	_check(d.phase == d.Phase.RESULT and d.result.win and hud.result_layer.visible and hud.result_title.text == "승리!" and hud.gold_label.text == "+4,000 골드"
-		and Economy.gold == 4000 and Economy.dungeon_state("gold").keys == keys0 - 1 and hud.next_button.visible and not hud.next_button.disabled,
-		"(D) instant-win hook: result 승리!, +4,000 골드, one key spent, [다음 단계] shown", "phase=%d result=%s gold=%d" % [d.phase, d.result, Economy.gold])
+	_check(d.phase == d.Phase.RESULT and d.result.win and hud.result_layer.visible and hud.result_title.text == "승리!" and hud.gold_label.text == "+20,000 골드"
+		and Economy.gold == 20000 and Economy.dungeon_state("gold").keys == keys0 - 1 and hud.next_button.visible and not hud.next_button.disabled,
+		"(D) instant-win hook: result 승리!, +20,000 골드, one key spent, [다음 단계] shown", "phase=%d result=%s gold=%d" % [d.phase, d.result, Economy.gold])
 	print("INPUT INFO: result panel %s, [다음 단계] %s, [다시] %s, [나가기] %s, 다음 단계 자동 %s, 현재 단계 자동 반복 %s" % [hud.result_title.get_parent().get_global_rect(),
 		hud.next_button.get_global_rect(), hud.again_button.get_global_rect(), hud.exit_button.get_global_rect(), hud.auto_next_box.get_global_rect(),
 		hud.auto_repeat_box.get_global_rect()])
@@ -2641,7 +2641,7 @@ func _dungeon_ui(tabs) -> void:
 	await _wait_until(func(): return Economy.dungeon_state("gold").keys == 0 and _main._dungeon != null and _main._dungeon.auto_halted, 15.0)
 	d = _main._dungeon
 	hud = d.hud
-	_check(started[0] == 3 and Economy.dungeon_state("gold").keys == 0 and Economy.gold == 12000 and d.run.level == 1 and d.auto_halted and hud.toast.visible
+	_check(started[0] == 3 and Economy.dungeon_state("gold").keys == 0 and Economy.gold == 60000 and d.run.level == 1 and d.auto_halted and hud.toast.visible
 		and hud.toast.text == d.STOP_KEYS and hud.auto_label.text == "자동 도전을 멈췄습니다",
 		"(D) auto repeat reruns level 1 every 2 s (keys 2 -> 1 -> 0) and stops with a notice when the keys run out",
 		"starts=%d keys=%d gold=%d halted=%s toast=%s" % [started[0], Economy.dungeon_state("gold").keys, Economy.gold, d.auto_halted, hud.toast.text])
@@ -2666,8 +2666,8 @@ func _dungeon_ui(tabs) -> void:
 		return
 	await _wait_until(func(): return d.phase == d.Phase.RESULT, 3.0)
 	_check(d.hud.result_layer.visible and d.hud.reward_tiles.size() == 5 and d.hud.reward_tiles.map(func(t): return t.grade) == d.result.rewards.items.map(func(i): return i.grade)
-		and d.drops.all(func(c): return absf(c.position.y) < 0.01) and Economy.dungeon_state("equip").keys == 0,
-		"(D) then the result shows the 5 items as grade tiles; the chests have landed; the equip key is spent", "phase=%d" % d.phase)
+		and d.drops.all(func(c): return absf(c.position.y) < 0.01) and Economy.dungeon_state("equip").keys == 1,
+		"(D) then the result shows the 5 items as grade tiles; the chests have landed; one equip key is spent (2 -> 1)", "phase=%d" % d.phase)
 	print("INPUT INFO: equip result tiles %s" % [d.hud.reward_tiles.map(func(t): return t.get_global_rect())])
 	await _tap(d.hud.exit_button.get_global_rect().get_center())
 	await _frames(3)
@@ -2995,8 +2995,9 @@ func _dungeon_gold_line(tabs) -> void:
 	var g0: int = Economy.gold_tenths
 	dwin.open()
 	await _frames(1)
+	Economy.dungeons.equip.keys = 0  # 하루 2개 중 남은 1개를 비워 골드 추가 도전을 본다
 	var st0 := Economy.dungeon_state("equip")
-	var cost: int = st0.extra_cost
+	var cost: int = GameData.extra_cost(dwin.level_of("equip"))  # 카드 = 고른 단계의 고정 비용
 	Economy.add_gold_tenths((cost - 1) * 10 - Economy.gold_tenths)
 	var short := [ec.gold.text, ec.cost.text, ec.gold.get_theme_color("font_color")]
 	Economy.add_gold_tenths(10)
@@ -3010,8 +3011,8 @@ func _dungeon_gold_line(tabs) -> void:
 	var ok := Economy.start_dungeon("equip", 1, Economy.default_party("equip")) and Economy.debug_win()
 	Economy.dungeon_started.connect(_main._on_dungeon_started)
 	var st := Economy.dungeon_state("equip")
-	_check(ok and st.extra_today == st0.extra_today + 1 and st.extra_cost > cost and Economy.gold == 0 and ec.gold.text == "0"
-		and ec.cost.text == "/ " + UiKit.commas(st.extra_cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
-		"(D) an extra run paid with gold raises the cost and the line follows at once (0 / new cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
+	_check(ok and st.extra_today == st0.extra_today + 1 and Economy.gold == 0 and ec.gold.text == "0"
+		and ec.cost.text == "/ " + UiKit.commas(cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
+		"(D) an extra run paid with gold keeps the fixed level cost and the line follows at once (0 / cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
 	Economy.add_gold_tenths(g0 - Economy.gold_tenths)
 	dwin.close()

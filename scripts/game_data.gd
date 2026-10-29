@@ -128,7 +128,7 @@ const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
 const MAX_GAME_SPEED := 2.0  # 배속 버튼 최고 배율(speed_button.gd LEVELS 끝, 서버 rules.MAX_GAME_SPEED)
 const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
-const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base",
+const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "equip_extra_gold_mult",
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
 	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base",
 	"ticket_key_daily", "ticket_key_cap", "ticket_dg_party", "ticket_dg_min_sec", "ticket_dg_hp_growth", "ticket_dg_atk_growth", "ticket_reward_base",
@@ -1074,9 +1074,10 @@ static func dungeon_enemies(type: String, level: int) -> Array:
 	return out
 
 
-## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)). 1단계 4000, 2단계 4400.
+## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1))를 천 단위로 올림(사용자 2026-10-29 "100의 자리에서 올림"). 1단계 20,000, 2단계 22,000, 3단계 25,000.
 static func gold_reward(level: int) -> int:
-	return roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+	var g := roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+	return ceili(g / 1000.0) * 1000
 
 
 ## 단계 n의 등급 가중치 {N: w, …}(equip_drop.csv의 min_level ≤ n인 마지막 행).
@@ -1211,9 +1212,12 @@ static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
 	return out
 
 
-## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…, 예전엔 10만·20만·30만…).
-static func extra_cost(extra_today: int) -> int:
-	return int(config_num("equip_extra_gold_base")) * (1 + 2 * maxi(extra_today, 0))
+## 장비 던전 골드 도전 비용(열쇠가 없을 때) = 단계별 고정: equip_extra_gold_base × equip_extra_gold_mult^(단계 − 1)을 천 단위로 올림
+## (사용자 2026-10-29 — 그날 횟수로 오르지 않는다. 서버 rules.extraCost와 같다. 1단계 10만, 10단계 28만, 30단계 267만).
+static func extra_cost(level: int) -> int:
+	var mult := config_num("equip_extra_gold_mult") if _config.has("equip_extra_gold_mult") else 1.12
+	var g := roundi(_grown(config_num("equip_extra_gold_base"), mult, maxi(level, 1) - 1))
+	return ceili(g / 1000.0) * 1000
 
 
 ## 출전 인원(골드 6, 장비 4).

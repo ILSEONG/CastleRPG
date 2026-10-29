@@ -831,7 +831,7 @@ export function createApp(opts: AppOptions) {
       const st = dungeonState(p, g, t, now)
       out[t] = {
         keys: st.keys, key_cap: R.cfgNum(g.config, `${t}_key_cap`), key_daily: R.cfgNum(g.config, `${t}_key_daily`), best_level: st.best_level,
-        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, st.extra_today) : null, last_reset: st.last_reset,
+        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, Math.min(st.best_level + 1, R.MAX_DUNGEON_LEVEL)) : null, last_reset: st.last_reset,
         next_reset: R.nextReset(now, g.config),
         ...(t === 'ticket' ? { helpers: helpersOf(p, g, st, now), helpers_used: st.helpers_used ?? [] } : {}),
       }
@@ -3134,7 +3134,7 @@ export function createApp(opts: AppOptions) {
       }
       if (st.keys < 1) {
         if (type !== 'equip') throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
-        const cost = R.extraCost(g.config, st.extra_today)
+        const cost = R.extraCost(g.config, lvl)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
       }
       const run = { run_id: randomUUID(), type, level: lvl, party: party as string[], seed: Math.floor(random() * 2 ** 31), ...(helper ? { helper } : {}) }
@@ -3193,7 +3193,7 @@ export function createApp(opts: AppOptions) {
       let cost = 0
       if (st.keys >= 1) next.keys = st.keys - 1
       else if (type === 'equip') {
-        cost = R.extraCost(g.config, st.extra_today)
+        cost = R.extraCost(g.config, run.level)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
         next.extra_today = st.extra_today + 1
       } else throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
