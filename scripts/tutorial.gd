@@ -19,12 +19,14 @@ const GuideTours := preload("res://scripts/guide_tours.gd")
 const GameLog := preload("res://scripts/game_log.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 8  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+const SAVE_VERSION := 9  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
 ## 5: 길드 출석·기부, 길드 보스, 공성전 체험, 거래소 둘러보기 미션(2026-10-13 오후)이 끼었다
 ## 6: 초반 단순화(2026-10-23) — 첫 전투(1-1)가 1번이 되고 앞부분 순서가 바뀌었다. 성채 살펴보기·몬스터 30마리가 빠지고 채석장·농장은 한 미션
 ## 7: 메이플스토리 키우기식 리듬(2026-10-29) — 처치 미션 4개(30·40·50·60마리)가 끼고 두 번째 몬스터 100마리가 성채 Lv 2 뒤로 왔다
 ## 8: 메이플스토리 키우기식 간격(2026-10-29 오후) — 기능이 열리는 번호를 메이플 가이드 퀘스트 번호에 맞추고 사이를 순환 퀘스트로 채웠다(82 → 265)
+## 9: 처치 퀘스트 줄이기(사용자 2026-10-29 "몬스터 처치 가이드 퀘스트가 왜이렇게 자주나와") — 기능 미션 자리는 그대로, 처치는 10칸에 한 번만 남기고
+##    나머지 처치 칸을 영웅 레벨·능력치·영웅 모집·던전 클리어로 바꿨다. 번호가 같아 단계는 그대로 이어지고, 바뀐 칸의 진행 수만 새로 센다.
 ## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
@@ -72,6 +74,32 @@ const V7_IDS := ["stage_1_1", "hero_level", "hero_lv4_5", "stage_1_2", "growth",
 	"build_archery", "atk_14", "hp_14", "build_stable", "keep_2", "kill_100_2", "lumber_2", "farm_2", "gate_2", "hero_lv4_18", "atk_16", "stage_1_10",
 	"guild", "guild_attend", "hp_16", "hero_lv4_20", "promote", "guild_boss", "stage_1_12", "siege_try", "pvp", "fever", "atk_18", "hp_18",
 	"stage_1_15", "exchange_look", "party_clear"]
+## 버전 8의 가이드 순서(265개, 2026-10-29 오후). 버전 8 저장·서버 단계는 번호 그대로 이어지고(9는 같은 번호의 처치 칸만 바꿨다), 버전 7 이하는
+## 이 표로 옮긴다(서버 migrations/062가 같은 표로 옮겼다).
+const V8_IDS := [
+	"stage_1_1", "kill_10", "hero_level", "hero_lv4_3", "kill_10_2", "hero_lv4_5", "stage_1_2", "growth", "atk_2", "hero_lv4_6", "kill_20", "hero_lv4_7",
+	"speed_on", "kill_20_2", "hero_lv4_8", "hp_2", "stage_1_3", "auto_on", "kill_20_3", "hero_lv4_9", "atk_3", "kill_20_4", "hp_3", "kill_20_5",
+	"build_lumber", "kill_20_6", "atk_4", "build_quarry_farm", "kill_30", "hero_lv4_10", "collect", "kill_30_2", "hp_4", "sell", "kill_30_3", "kill_30_4",
+	"atk_5", "kill_30_5", "hero_lv4_11", "attend", "kill_30_6", "kill_30_7", "hp_5", "kill_30_8", "pouch", "kill_40", "kill_40_2", "atk_6",
+	"kill_40_3", "mission_claim", "kill_40_4", "stage_1_4", "kill_40_5", "shop_free", "kill_40_6", "hero_lv4_12", "kill_40_7", "build_tavern", "gacha", "hp_6",
+	"deploy_new", "kill_40_8", "atk_7", "auto_deploy", "kill_50", "hero_lv4_13", "build_barracks", "train", "kill_50_2", "hp_7", "kill_50_3", "atk_8",
+	"kill_50_4", "stage_1_5", "build_houses", "kill_50_5", "hero_lv4_14", "kill_50_6", "dungeon_gold", "kill_50_7", "hp_8", "kill_60", "dungeon_gold_2", "kill_60_2",
+	"atk_9", "kill_60_3", "hero_lv4_15", "kill_60_4", "dungeon_equip", "kill_60_5", "hp_9", "stage_1_6", "kill_60_6", "atk_10", "kill_60_7", "dungeon_ticket",
+	"kill_60_8", "equip", "kill_60_9", "dungeon_equip_2", "kill_70", "hp_10", "kill_70_2", "hero_lv4_16", "soldier_deploy", "crit_rate_1", "kill_70_3", "atk_11",
+	"stage_1_7", "kill_70_4", "aspd_1", "dungeon_ticket_2", "kill_70_5", "hp_11", "build_lab", "hero_lv4_17", "research", "crit_dmg_1", "stage_1_8", "atk_12",
+	"kill_80", "mspd_1", "kill_80_2", "build_archery", "hp_12", "kill_80_3", "hero_lv4_18", "kill_80_4", "crit_rate_2", "atk_13", "build_stable", "stage_1_9",
+	"keep_2", "aspd_2", "lumber_2", "kill_80_5", "farm_2", "gate_2", "stage_1_10", "guild", "hp_13", "hero_lv4_19", "guild_attend", "atk_14",
+	"kill_90", "mspd_2", "hp_14", "kill_90_2", "dungeon_gold_3", "crit_dmg_2", "crit_rate_3", "hero_lv4_20", "atk_15", "kill_90_4", "aspd_3", "kill_100",
+	"hp_15", "kill_100_2", "crit_dmg_3", "promote", "kill_100_3", "atk_16", "kill_100_4", "stage_1_11", "kill_100_5", "mspd_3", "kill_100_6", "hp_16",
+	"kill_100_7", "crit_rate_4", "kill_100_8", "atk_17", "kill_110", "aspd_4", "guild_boss", "kill_110_2", "hp_17", "kill_110_3", "kill_110_4", "crit_dmg_4",
+	"kill_110_5", "atk_18", "kill_110_6", "stage_1_12", "kill_110_7", "mspd_4", "kill_110_8", "hp_18", "kill_110_9", "kill_110_10", "crit_rate_5", "kill_120",
+	"atk_19", "kill_120_2", "kill_120_3", "kill_120_4", "aspd_5", "kill_120_5", "hp_19", "siege_try", "kill_120_6", "crit_dmg_5", "kill_120_7", "atk_20",
+	"kill_120_8", "kill_120_9", "stage_1_13", "kill_120_10", "mspd_5", "kill_130", "hp_20", "kill_130_2", "dungeon_equip_3", "kill_130_3", "atk_21", "kill_130_4",
+	"crit_rate_6", "kill_130_5", "aspd_6", "kill_130_6", "hp_21", "kill_130_7", "kill_130_8", "atk_22", "kill_130_9", "crit_dmg_6", "kill_130_10", "kill_140",
+	"kill_140_2", "mspd_6", "kill_140_3", "hp_22", "kill_140_4", "stage_1_14", "kill_140_5", "atk_23", "kill_140_6", "dungeon_gold_4", "kill_140_7", "crit_rate_7",
+	"kill_140_8", "hp_23", "kill_140_9", "aspd_7", "kill_140_10", "atk_24", "pvp", "kill_150", "crit_dmg_7", "kill_150_2", "stage_1_15", "kill_150_3",
+	"fever", "kill_150_4", "hp_24", "kill_150_5", "mspd_7", "kill_150_6", "exchange_look", "kill_150_7", "atk_25", "kill_150_8", "hp_25", "kill_160",
+	"party_clear"]
 const REWARD_MARGIN := 1.2  # 자원·골드 보상 = 다음 미션 비용 × 이 값
 const PAY_KEYS := ["wood", "stone", "food", "gold"]  # 다음 미션 비용으로 바뀌는 보상 키
 const TICKETS := 10  # 그 외 보상: 다이아 모집권 장수
@@ -258,37 +286,39 @@ static var KEY_MISSIONS := [
 ## 메이플스토리 키우기 가이드 퀘스트 번호 근처에 둔다 — 성장 8(메이플 스킬 8), 배속 13(무기 13), 건설 25(스킬 강화 25), 상인 34(성장 던전 34),
 ## 가방 45(EXP 던전 45), 주점 58(월드 보스 58), 막사 67(장비 던전 67), 민가 75(빠른 사냥 75), 골드 던전 79(영웅의 힘 79), 장비 던전 89(부스터 89),
 ## 모집권 던전 96(동료 96), 기병 마구간 131(강화 던전 131), 길드 140(길드 140), PVP 247(아레나 247). 그 사이는 메이플처럼 짧은 퀘스트가 돌며 채운다:
-## 스테이지 돌파 → 몬스터 처치 → 영웅 레벨 → 능력치 레벨(공격력·체력, 100번대부터 치명타 확률·공격 속도·치명타 피해·이동 속도) → 던전 단계.
-## KEY_MISSIONS에 있는 id는 그 미션, 나머지는 이름에서 만든다(_filler): kill_<수>[_<순번>] · stage_<S>_<라운드> · hero_lv4_<Lv> · <능력치>_<Lv> ·
-## dungeon_<종류>_<단계>. 서버 quests.ts tutorialDone이 같은 이름으로 판정한다.
+## 스테이지 돌파 · 영웅 레벨(4명, 1·2명) · 능력치 레벨 · 영웅 모집 · 던전 클리어·단계. 처치는 10칸에 한 번만(사용자 2026-10-29 "몬스터 처치 가이드
+## 퀘스트가 왜이렇게 자주나와" — 메이플 순환 14가지 중 처치는 1가지). 보병 막사를 지은 뒤로는 7칸쯤마다 건물 레벨업(사용자 2026-10-29 "중간중간 적절하게
+## 건물 퀘스트도해" — 라이즈 오브 킹덤즈처럼 성채 Lv 2 → 자원 건물 → 성채 Lv 3 …, 모두 5분 이하).
+## KEY_MISSIONS에 있는 id는 그 미션, 나머지는 이름에서 만든다(_filler): kill_<수>[_<순번>] · stage_<S>_<라운드> · hero_lv<명>_<Lv> · <능력치>_<Lv> · <건물>_<Lv>(레벨업) ·
+## dungeon_<종류>_<단계> · dwin_<종류>_<순번>(그 던전 한 번 클리어) · gacha_<회>_<순번>(영웅 모집). 서버 quests.ts tutorialDone이 같은 이름으로 판정한다.
 const ORDER := [
-	"stage_1_1", "kill_10", "hero_level", "hero_lv4_3", "kill_10_2", "hero_lv4_5", "stage_1_2", "growth", "atk_2", "hero_lv4_6",  # 1~10
-	"kill_20", "hero_lv4_7", "speed_on", "kill_20_2", "hero_lv4_8", "hp_2", "stage_1_3", "auto_on", "kill_20_3", "hero_lv4_9",  # 11~20
-	"atk_3", "kill_20_4", "hp_3", "kill_20_5", "build_lumber", "kill_20_6", "atk_4", "build_quarry_farm", "kill_30", "hero_lv4_10",  # 21~30
-	"collect", "kill_30_2", "hp_4", "sell", "kill_30_3", "kill_30_4", "atk_5", "kill_30_5", "hero_lv4_11", "attend",  # 31~40
-	"kill_30_6", "kill_30_7", "hp_5", "kill_30_8", "pouch", "kill_40", "kill_40_2", "atk_6", "kill_40_3", "mission_claim",  # 41~50
-	"kill_40_4", "stage_1_4", "kill_40_5", "shop_free", "kill_40_6", "hero_lv4_12", "kill_40_7", "build_tavern", "gacha", "hp_6",  # 51~60
-	"deploy_new", "kill_40_8", "atk_7", "auto_deploy", "kill_50", "hero_lv4_13", "build_barracks", "train", "kill_50_2", "hp_7",  # 61~70
-	"kill_50_3", "atk_8", "kill_50_4", "stage_1_5", "build_houses", "kill_50_5", "hero_lv4_14", "kill_50_6", "dungeon_gold", "kill_50_7",  # 71~80
-	"hp_8", "kill_60", "dungeon_gold_2", "kill_60_2", "atk_9", "kill_60_3", "hero_lv4_15", "kill_60_4", "dungeon_equip", "kill_60_5",  # 81~90
-	"hp_9", "stage_1_6", "kill_60_6", "atk_10", "kill_60_7", "dungeon_ticket", "kill_60_8", "equip", "kill_60_9", "dungeon_equip_2",  # 91~100
-	"kill_70", "hp_10", "kill_70_2", "hero_lv4_16", "soldier_deploy", "crit_rate_1", "kill_70_3", "atk_11", "stage_1_7", "kill_70_4",  # 101~110
-	"aspd_1", "dungeon_ticket_2", "kill_70_5", "hp_11", "build_lab", "hero_lv4_17", "research", "crit_dmg_1", "stage_1_8", "atk_12",  # 111~120
-	"kill_80", "mspd_1", "kill_80_2", "build_archery", "hp_12", "kill_80_3", "hero_lv4_18", "kill_80_4", "crit_rate_2", "atk_13",  # 121~130
-	"build_stable", "stage_1_9", "keep_2", "aspd_2", "lumber_2", "kill_80_5", "farm_2", "gate_2", "stage_1_10", "guild",  # 131~140
-	"hp_13", "hero_lv4_19", "guild_attend", "atk_14", "kill_90", "mspd_2", "hp_14", "kill_90_2", "dungeon_gold_3", "crit_dmg_2",  # 141~150
-	"crit_rate_3", "hero_lv4_20", "atk_15", "kill_90_4", "aspd_3", "kill_100", "hp_15", "kill_100_2", "crit_dmg_3", "promote",  # 151~160
-	"kill_100_3", "atk_16", "kill_100_4", "stage_1_11", "kill_100_5", "mspd_3", "kill_100_6", "hp_16", "kill_100_7", "crit_rate_4",  # 161~170
-	"kill_100_8", "atk_17", "kill_110", "aspd_4", "guild_boss", "kill_110_2", "hp_17", "kill_110_3", "kill_110_4", "crit_dmg_4",  # 171~180
-	"kill_110_5", "atk_18", "kill_110_6", "stage_1_12", "kill_110_7", "mspd_4", "kill_110_8", "hp_18", "kill_110_9", "kill_110_10",  # 181~190
-	"crit_rate_5", "kill_120", "atk_19", "kill_120_2", "kill_120_3", "kill_120_4", "aspd_5", "kill_120_5", "hp_19", "siege_try",  # 191~200
-	"kill_120_6", "crit_dmg_5", "kill_120_7", "atk_20", "kill_120_8", "kill_120_9", "stage_1_13", "kill_120_10", "mspd_5", "kill_130",  # 201~210
-	"hp_20", "kill_130_2", "dungeon_equip_3", "kill_130_3", "atk_21", "kill_130_4", "crit_rate_6", "kill_130_5", "aspd_6", "kill_130_6",  # 211~220
-	"hp_21", "kill_130_7", "kill_130_8", "atk_22", "kill_130_9", "crit_dmg_6", "kill_130_10", "kill_140", "kill_140_2", "mspd_6",  # 221~230
-	"kill_140_3", "hp_22", "kill_140_4", "stage_1_14", "kill_140_5", "atk_23", "kill_140_6", "dungeon_gold_4", "kill_140_7", "crit_rate_7",  # 231~240
-	"kill_140_8", "hp_23", "kill_140_9", "aspd_7", "kill_140_10", "atk_24", "pvp", "kill_150", "crit_dmg_7", "kill_150_2",  # 241~250
-	"stage_1_15", "kill_150_3", "fever", "kill_150_4", "hp_24", "kill_150_5", "mspd_7", "kill_150_6", "exchange_look", "kill_150_7",  # 251~260
-	"atk_25", "kill_150_8", "hp_25", "kill_160", "party_clear"  # 261~265
+	"stage_1_1", "kill_10", "hero_level", "hero_lv4_3", "hero_lv2_4", "hero_lv4_5", "stage_1_2", "growth", "atk_2", "hero_lv4_6",  # 1~10
+	"kill_20", "hero_lv4_7", "speed_on", "aspd_1", "hero_lv4_8", "hp_2", "stage_1_3", "auto_on", "hero_lv2_9", "hero_lv4_9",  # 11~20
+	"atk_3", "kill_20_4", "hp_3", "crit_rate_1", "build_lumber", "hero_lv2_10", "atk_4", "build_quarry_farm", "kill_30", "hero_lv4_10",  # 21~30
+	"collect", "mspd_1", "hp_4", "sell", "hero_lv2_11", "crit_dmg_1", "atk_5", "kill_30_5", "hero_lv4_11", "attend",  # 31~40
+	"hero_lv2_12", "aspd_2", "hp_5", "hero_lv1_13", "pouch", "kill_40", "crit_rate_2", "atk_6", "mspd_2", "mission_claim",  # 41~50
+	"crit_dmg_2", "stage_1_4", "aspd_3", "shop_free", "kill_40_6", "hero_lv4_12", "hero_lv2_13", "build_tavern", "gacha", "hp_6",  # 51~60
+	"deploy_new", "crit_rate_3", "atk_7", "auto_deploy", "kill_50", "hero_lv4_13", "build_barracks", "train", "hero_lv2_14", "hp_7",  # 61~70
+	"keep_2", "atk_8", "gacha_10_1", "stage_1_5", "build_houses", "kill_50_5", "hero_lv4_14", "lumber_2", "dungeon_gold", "mspd_3",  # 71~80
+	"hp_8", "kill_60", "dungeon_gold_2", "farm_2", "atk_9", "dwin_gold_1", "hero_lv4_15", "crit_dmg_3", "dungeon_equip", "dwin_equip_1",  # 81~90
+	"hp_9", "stage_1_6", "kill_60_6", "atk_10", "quarry_2", "dungeon_ticket", "aspd_4", "equip", "houses_2", "dungeon_equip_2",  # 91~100
+	"gacha_10_2", "hp_10", "kill_70_2", "hero_lv4_16", "soldier_deploy", "crit_rate_4", "barracks_2", "atk_11", "stage_1_7", "hero_lv2_17",  # 101~110
+	"aspd_5", "dungeon_ticket_2", "kill_70_5", "hp_11", "build_lab", "hero_lv4_17", "research", "crit_dmg_4", "stage_1_8", "atk_12",  # 111~120
+	"gate_2", "mspd_4", "kill_80_2", "build_archery", "hp_12", "keep_3", "hero_lv4_18", "crit_rate_5", "crit_rate_6", "atk_13",  # 121~130
+	"build_stable", "stage_1_9", "lumber_3", "aspd_6", "gacha_10_3", "kill_80_5", "farm_3", "dwin_ticket_1", "stage_1_10", "guild",  # 131~140
+	"hp_13", "hero_lv4_19", "guild_attend", "atk_14", "kill_90", "mspd_5", "hp_14", "quarry_3", "dungeon_gold_3", "crit_dmg_5",  # 141~150
+	"crit_rate_7", "hero_lv4_20", "atk_15", "barracks_3", "aspd_7", "kill_100", "hp_15", "houses_3", "crit_dmg_6", "promote",  # 151~160
+	"gate_3", "atk_16", "mspd_6", "stage_1_11", "dwin_gold_2", "mspd_7", "kill_100_2", "hp_16", "lab_2", "crit_rate_8",  # 161~170
+	"gacha_10_4", "atk_17", "crit_dmg_7", "aspd_8", "guild_boss", "kill_110_2", "hp_17", "archery_2", "aspd_9", "crit_dmg_8",  # 171~180
+	"dwin_equip_2", "atk_18", "lab_3", "stage_1_12", "kill_110_7", "mspd_8", "crit_rate_9", "hp_18", "stable_2", "dwin_ticket_2",  # 181~190
+	"crit_rate_10", "mspd_9", "atk_19", "kill_120_2", "crit_dmg_9", "archery_3", "aspd_10", "dwin_gold_3", "hp_19", "siege_try",  # 191~200
+	"aspd_11", "crit_dmg_10", "kill_120_7", "atk_20", "stable_3", "dwin_equip_3", "stage_1_13", "crit_rate_11", "mspd_10", "gacha_10_5",  # 201~210
+	"hp_20", "kill_130_2", "dungeon_equip_3", "mspd_11", "atk_21", "dwin_ticket_3", "crit_rate_12", "crit_dmg_11", "aspd_12", "dwin_gold_4",  # 211~220
+	"hp_21", "kill_130_7", "aspd_13", "atk_22", "crit_rate_13", "crit_dmg_12", "dwin_equip_4", "mspd_12", "dwin_ticket_4", "mspd_13",  # 221~230
+	"kill_140_3", "hp_22", "crit_dmg_13", "stage_1_14", "aspd_14", "atk_23", "dwin_gold_5", "dungeon_gold_4", "crit_rate_14", "crit_rate_15",  # 231~240
+	"kill_140_8", "hp_23", "dwin_equip_5", "aspd_15", "mspd_14", "atk_24", "pvp", "crit_dmg_14", "crit_dmg_15", "kill_150_2",  # 241~250
+	"stage_1_15", "gacha_10_6", "fever", "dwin_ticket_5", "hp_24", "aspd_16", "mspd_15", "dwin_gold_6", "exchange_look", "kill_150_7",  # 251~260
+	"atk_25", "crit_rate_16", "hp_25", "mspd_16", "party_clear"  # 261~265
 ]
 static var MISSIONS := _missions()
 ## 사이 퀘스트 보상(제 기본값, 2026-10-29): 처치는 골드 = 처치 수 × 이 값, 스테이지·던전 단계는 다이아 FILL_DIA_BIG, 영웅·능력치 레벨은 다이아 FILL_DIA.
@@ -918,16 +948,32 @@ static func _filler(id: String) -> Dictionary:
 		var who := int(p[1].substr(2))  # "lv4" → 4명
 		return {"id": id, "title": Lang.t("tutorial.fill.hero_lv.title") % [who, n], "desc": Lang.t("tutorial.fill.hero_lv.desc") % [who, n],
 			"kind": "hero_lv", "arg": [who, n], "goto": "tab:hero", "reward": {"diamonds": FILL_DIA}}
+	if id.begins_with("gacha_"):  # 영웅 모집 N회(앞 퀘스트 보상 모집권으로 — reward)
+		n = int(p[1])
+		return {"id": id, "title": Lang.t("tutorial.fill.gacha.title") % n, "desc": Lang.t("tutorial.fill.gacha.desc") % n, "kind": "gacha", "arg": n,
+			"goto": "recruit", "reward": {"diamonds": FILL_DIA}}
+	if id.begins_with("dwin_"):  # 던전 한 번 클리어(어느 단계든 — 앞 퀘스트 보상 열쇠로)
+		var dn := str(_dungeon_names().get(p[1], p[1]))
+		return {"id": id, "title": Lang.t("tutorial.fill.dungeon_win.title") % dn, "desc": Lang.t("tutorial.fill.dungeon_win.desc") % dn, "kind": "dungeon_win",
+			"arg": 1, "dungeon": p[1], "goto": "tab:dungeon", "reward": {"diamonds": FILL_DIA}}
 	if id.begins_with("dungeon_"):
-		var names := {"gold": Lang.t("tutorial.missions.dungeon_gold.title"), "equip": Lang.t("tutorial.missions.dungeon_equip.title"),
-			"ticket": Lang.t("tutorial.missions.dungeon_ticket.title")}
-		var dname := str(names.get(p[1], p[1]))
+		var dname := str(_dungeon_names().get(p[1], p[1]))
 		return {"id": id, "title": Lang.t("tutorial.fill.dungeon_lv.title") % [dname, n], "desc": Lang.t("tutorial.fill.dungeon_lv.desc") % [dname, n],
 			"kind": "dungeon_lv", "arg": [p[1], n], "goto": "tab:dungeon", "reward": {"diamonds": FILL_DIA_BIG}}
+	var bid := id.substr(0, id.rfind("_"))
+	if not GameData.building_def(bid).is_empty():  # 건물 레벨업(사용자 2026-10-29 "중간중간 적절하게 건물 퀘스트도해" — 모두 5분 이하라 [무료 즉시 완료])
+		var bname := str(GameData.building_def(bid).name)
+		return {"id": id, "title": Lang.t("tutorial.fill.level.title") % [bname, n], "desc": Lang.t("tutorial.fill.level.desc") % [bname, n], "kind": "level",
+			"arg": [bid, n], "goto": "building:" + bid, "reward": {"diamonds": FILL_DIA}}
 	var stat := id.substr(0, id.rfind("_"))  # 능력치(crit_rate처럼 _가 든 id도 있다)
 	var sname := str(GameData.upgrade_def(stat).get("name", stat))
 	return {"id": id, "title": Lang.t("tutorial.fill.growth_lv.title") % [sname, n], "desc": Lang.t("tutorial.fill.growth_lv.desc") % [sname, n],
 		"kind": "growth_lv", "arg": [stat, n], "goto": "tab:growth", "reward": {"diamonds": FILL_DIA}}
+
+
+static func _dungeon_names() -> Dictionary:
+	return {"gold": Lang.t("tutorial.missions.dungeon_gold.title"), "equip": Lang.t("tutorial.missions.dungeon_equip.title"),
+		"ticket": Lang.t("tutorial.missions.dungeon_ticket.title")}
 
 
 ## 지금 미션이 끝났는가(보상 받기 전).
@@ -1109,9 +1155,14 @@ func _advance(rep: bool) -> void:
 ## 바로 다음 미션이 자원·골드를 쓰지 않으면 원래 보상 그대로(base_reward).
 func reward(i: int) -> Dictionary:
 	var out := _rule_reward(i)
-	if i + 1 < MISSIONS.size() and MISSIONS[i + 1].kind == "dungeon_lv":  # 던전 단계 퀘스트 앞: 그 던전 열쇠 1개(오늘 열쇠를 다 썼어도 이어지게, 2026-10-29)
-		var k := "keys_" + str(MISSIONS[i + 1].arg[0])
+	if i + 1 >= MISSIONS.size():
+		return out
+	var nx: Dictionary = MISSIONS[i + 1]
+	if nx.kind in ["dungeon_lv", "dungeon_win"]:  # 던전 사이 퀘스트 앞: 그 던전 열쇠 1개(오늘 열쇠를 다 썼어도 이어지게, 2026-10-29)
+		var k := "keys_" + str(nx.arg[0] if nx.kind == "dungeon_lv" else nx.dungeon)
 		out[k] = int(out.get(k, 0)) + 1
+	if nx.kind == "gacha" and str(nx.id).begins_with("gacha_"):  # 모집 사이 퀘스트 앞: 그만큼 모집권
+		out.tickets = int(out.get("tickets", 0)) + int(nx.arg)
 	return out
 
 
@@ -1199,13 +1250,26 @@ func need_of(i: int) -> Dictionary:
 				if MISSIONS[k].kind == "growth_lv" and MISSIONS[k].arg[0] == m.arg[0]:
 					from = int(MISSIONS[k].arg[1])
 			return {"gold": _upgrade_gold(str(m.arg[0]), from, int(m.arg[1]))}
-		"hero_lv":  # n명을 앞 가이드 목표 레벨(없으면 1)부터 이 레벨까지. 모집 미션 전엔 R(시작 영웅), 뒤엔 SR로 셈
-			var lv0 := 1
-			for k in i:
-				if MISSIONS[k].kind == "hero_lv":
-					lv0 = int(MISSIONS[k].arg[1])
-			var grade := "R" if i < mission_index("gacha") else "SR"
-			return {"gold": int(m.arg[0]) * int(GameData.levelup_cost(grade, lv0, int(m.arg[1]) - lv0).gold)}
+		"hero_lv":  # 앞 가이드 목표로 영웅마다 오른 레벨(높은 순, 처음 1)에서 위의 n명을 이 레벨까지(1·2명 목표도 있다 — 2026-10-29).
+			# 모집 미션 전엔 R(시작 영웅), 뒤엔 SR로 셈
+			var lv := []
+			var gi := mission_index("gacha")
+			for k in i + 1:
+				if MISSIONS[k].kind != "hero_lv":
+					continue
+				var n := int(MISSIONS[k].arg[0])
+				while lv.size() < n:
+					lv.append(1)
+				var to := int(MISSIONS[k].arg[1])
+				var gold := 0
+				var grade := "R" if k < gi else "SR"
+				for j in n:
+					if lv[j] < to:
+						gold += int(GameData.levelup_cost(grade, lv[j], to - lv[j]).gold)
+						lv[j] = to
+				if k == i:
+					return {"gold": gold}
+			return {}
 	return {}
 
 
@@ -1456,15 +1520,18 @@ static func map_v6(old: int) -> int:
 ## 버전 7 단계(V7_IDS 번호) → 지금 표의 번호(2026-10-29 오후 메이플스토리 키우기식 간격 — 사이 퀘스트가 끼고 성장·스테이지·처치 미션이 제 길을
 ## 따라 자리를 옮겼다): 버전 7에서 그 앞 미션은 다 한 것으로 보고, 그중 기능·행동 미션(PATH_KINDS가 아닌 것과 첫 1-1)이 지금 표에서 가장 뒤에 있는 것의
 ## 다음부터. 이미 연 기능은 그대로 열려 있고, 그 앞으로 옮겨진 안 한 미션·사이 퀘스트는 건너뛴다. 뒤로 옮겨진 성장 미션은 닿으면 바로 끝나 있다.
-## 다 끝냈으면 지금 표 크기. 서버 migrations/062와 같은 표.
+## 다 끝냈으면 지금 표 크기. 서버 migrations/062와 같은 표(버전 8 순서 V8_IDS로 센다 — 9는 번호가 그대로라 그 번호를 쓴다).
 const PATH_KINDS := ["hero_lv", "growth_lv", "stage", "kill"]
 static func map_v7(old: int) -> int:
 	if old >= V7_IDS.size():
 		return MISSIONS.size()
+	var kinds := {}
+	for m in KEY_MISSIONS:
+		kinds[m.id] = m.kind
 	var last := -1
 	for i in maxi(0, old):
-		var j := ORDER.find(V7_IDS[i])
-		if j == 0 or not MISSIONS[j].kind in PATH_KINDS:
+		var j := V8_IDS.find(V7_IDS[i])
+		if j == 0 or not kinds.get(V7_IDS[i], "") in PATH_KINDS:
 			last = maxi(last, j)
 	return last + 1
 
@@ -1511,7 +1578,7 @@ func load_save() -> bool:
 	elif ver < 8:
 		old_step = map_v7(old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
-	count = maxi(0, int(d.get("count", 0)))
+	count = maxi(0, int(d.get("count", 0))) if ver >= 9 else 0  # 9: 같은 번호의 처치 칸이 다른 퀘스트가 됐을 수 있다 — 진행 수는 새로
 	best_stage = maxi(1, int(d.get("best_stage", 1)))
 	rep_n = maxi(0, int(d.get("rep_n", 0)))
 	var rq = d.get("rep_quest", {})

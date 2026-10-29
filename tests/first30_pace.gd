@@ -284,9 +284,10 @@ func _try(m: Dictionary) -> String:
 				return "훈련 대기"
 			Economy.set_soldier_deploy(Economy.auto_deploy())
 			return ""
-		"dungeon", "dungeon_lv":  # 던전 단계 사이 퀘스트(2026-10-29)는 최고 단계 + 1
-			var type := str(m.arg) if str(m.kind) == "dungeon" else str(m.arg[0])
-			var lv := 1 if str(m.kind) == "dungeon" else int(Economy.dungeon_state(type).best_level) + 1
+		"dungeon", "dungeon_lv", "dungeon_win":  # 던전 단계 사이 퀘스트(2026-10-29)는 최고 단계 + 1, 던전 클리어 사이 퀘스트는 지금 최고 단계
+			var type := str(m.arg) if str(m.kind) == "dungeon" else (str(m.dungeon) if str(m.kind) == "dungeon_win" else str(m.arg[0]))
+			var best := int(Economy.dungeon_state(type).best_level)
+			var lv := 1 if str(m.kind) == "dungeon" else (maxi(1, best) if str(m.kind) == "dungeon_win" else best + 1)
 			var party: Array = Economy.default_party(type)
 			var helper = null
 			if type == "ticket":  # 던전 창 편성처럼 첫 도우미 후보를 고른다(창을 열면 GET /v1/dungeon으로 후보를 받는다)

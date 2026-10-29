@@ -5327,7 +5327,7 @@ func test_tutorial() -> void:
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
 	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 200, "tutorial: production counts from the build finish")
 	# 채석장·농장(하나로 합친 미션): 둘 다 지어야 끝, 화살표는 아직 안 지은 쪽
-	check(t.claim() and str(t.mission().kind) == "kill", "guide: a kill quest comes between the lumber mill and quarry + farm")
+	check(t.claim() and str(t.mission().kind) == "hero_lv", "guide: a hero level quest comes between the lumber mill and quarry + farm")
 	t.step = t.mission_index("build_quarry_farm")
 	check(str(t.mission().id) == "build_quarry_farm" and t.ui_shown("chip:stone") and t.ui_shown("chip:food"), "guide: quarry + farm is one mission; their chips appear")
 	var qf: Dictionary = t.mission()
@@ -5376,16 +5376,22 @@ func test_tutorial() -> void:
 			want_pay.gold = TutorialScript._margin(int(nd.gold))
 		var got_pay := {}
 		var rest_ok := true
-		var key_more := ""  # 던전 단계 퀘스트 앞: 그 던전 열쇠 1개 더(2026-10-29)
-		if i + 1 < TutorialScript.MISSIONS.size() and TutorialScript.MISSIONS[i + 1].kind == "dungeon_lv":
-			key_more = "keys_" + str(TutorialScript.MISSIONS[i + 1].arg[0])
+		var key_more := ""  # 던전 사이 퀘스트 앞: 그 던전 열쇠 1개 더, 모집 사이 퀘스트 앞: 모집권 그 횟수만큼 더(2026-10-29)
+		var more := 0
+		var nx: Dictionary = TutorialScript.MISSIONS[i + 1] if i + 1 < TutorialScript.MISSIONS.size() else {}
+		if nx.get("kind", "") in ["dungeon_lv", "dungeon_win"]:
+			key_more = "keys_" + str(nx.arg[0] if nx.kind == "dungeon_lv" else nx.dungeon)
+			more = 1
+		elif nx.get("kind", "") == "gacha" and str(nx.id).begins_with("gacha_"):
+			key_more = "tickets"
+			more = int(nx.arg)
 		for k in paid:
 			if k in TutorialScript.PAY_KEYS:
 				got_pay[k] = paid[k]
-			elif paid[k] != int(rw.get(k, 0)) + (1 if k == key_more else 0):
+			elif paid[k] != int(rw.get(k, 0)) + (more if k == key_more else 0):
 				rest_ok = false
 		if key_more != "":
-			check(int(paid.get(key_more, 0)) == int(rw.get(key_more, 0)) + 1, "guide: mission %d before a dungeon stage quest adds 1 %s" % [i + 1, key_more])
+			check(int(paid.get(key_more, 0)) == int(rw.get(key_more, 0)) + more, "guide: mission %d before a dungeon / recruit quest adds %d %s" % [i + 1, more, key_more])
 			paid = paid.duplicate()
 			paid.erase(key_more)
 			if rw.has(key_more):
@@ -5480,6 +5486,45 @@ func test_tutorial() -> void:
 	var fh: Dictionary = TutorialScript.MISSIONS[t.mission_index("hero_lv4_3")]
 	var fc: Dictionary = TutorialScript.MISSIONS[t.mission_index("crit_rate_2")]
 	var fd: Dictionary = TutorialScript.MISSIONS[t.mission_index("dungeon_gold_2")]
+	var fg: Dictionary = TutorialScript.MISSIONS[t.mission_index("gacha_10_1")]
+	var fw: Dictionary = TutorialScript.MISSIONS[t.mission_index("dwin_gold_1")]
+	var fh2: Dictionary = TutorialScript.MISSIONS[t.mission_index("hero_lv2_4")]
+	var fb: Dictionary = TutorialScript.MISSIONS[t.mission_index("quarry_2")]
+	check(fg.title == "영웅 모집 10회" and fg.kind == "gacha" and int(fg.arg) == 10 and fg.goto == "recruit"
+		and int(t.reward(t.mission_index("gacha_10_1") - 1).get("tickets", 0)) >= 10
+		and fw.title == "골드 던전 클리어" and fw.kind == "dungeon_win" and fw.dungeon == "gold" and fw.goto == "tab:dungeon"
+		and int(t.reward(t.mission_index("dwin_gold_1") - 1).get("keys_gold", 0)) >= 1
+		and fh2.title == "영웅 2명 Lv 4 달성" and fh2.arg == [2, 4]
+		and t.need_of(t.mission_index("hero_lv2_4")).gold == 2 * int(GameData.levelup_cost("R", 3, 1).gold)
+		and fb.title == "채석장 Lv 2" and fb.kind == "level" and fb.arg == ["quarry", 2] and fb.goto == "building:quarry"
+		and t.need_of(t.mission_index("quarry_2")).res == GameData.build_cost("quarry", 1),
+		"guide: recruit / dungeon clear / 2-hero / building quests are built from their ids; the quest before pays tickets or a key: %s %s %s %s"
+		% [fg.title, fw.title, fh2.title, fb.title])
+	# 건물 레벨업 사이 퀘스트(사용자 2026-10-29 "중간중간 적절하게 건물 퀘스트도해"): 앞 퀘스트로 선행 조건이 차고, 모두 무료 즉시 완료 시간 안
+	var lvs := {"keep": 1, "gate": 1, "barracks": 0, "lumber": 0, "quarry": 0, "farm": 0, "houses": 0, "lab": 0, "archery": 0, "stable": 0}
+	var bad := []
+	var n_build := 0
+	for i in TutorialScript.MISSIONS.size():
+		var bm: Dictionary = TutorialScript.MISSIONS[i]
+		if bm.kind == "build":
+			for bid in t.build_ids(bm):
+				if lvs.has(bid):
+					lvs[bid] = maxi(1, int(lvs[bid]))
+		if bm.kind != "level":
+			continue
+		n_build += 1
+		var b := str(bm.arg[0])
+		var to := int(bm.arg[1])
+		var d := GameData.building_def(b)
+		var ok := int(lvs.get(b, 0)) == to - 1 and (b == "keep" or int(lvs.keep) >= to)
+		for c in GameData.BUILDING_REQ_COLS:
+			if str(d[c]) != "":
+				ok = ok and int(lvs.get(str(d[c]), 0)) >= to - 1
+		if not ok or GameData.build_sec(b, to - 1) > e.free_finish_sec():
+			bad.append("%d %s" % [i + 1, bm.id])
+		lvs[b] = to
+	check(n_build >= 20 and bad.is_empty() and t.mission_index("keep_2") > t.mission_index("build_barracks"),
+		"guide: %d building level quests, each reachable from the quests before it and finished free (<= 5 min): %s" % [n_build, bad])
 	check(fk.title == "몬스터 10마리 처치" and fk.kind == "kill" and int(fk.arg) == 10 and fk.reward == {"gold": 100} and not fk.has("goto")
 		and fs.title == "스테이지 1-8 클리어" and fs.kind == "stage" and int(fs.arg) == 8 and fs.reward == {"diamonds": 30}
 		and fh.title == "영웅 4명 Lv 3 달성" and fh.arg == [4, 3] and fh.reward == {"diamonds": 10}
@@ -5495,18 +5540,27 @@ func test_tutorial() -> void:
 	dg.best_level = 2
 	check(d1 and t.complete() and int(t.reward(di - 1).get("keys_gold", 0)) >= 1, "guide: gold dungeon stage 2 quest waits for best stage 2; the quest before it gives a gold key")
 	e.dungeons.erase("gold")
-	# 메이플스토리 키우기식 리듬(2026-10-29): 1-1 뒤로 전투 목표(스테이지·처치·던전·PVP·길드 보스·공성전 체험·파티) 없이 6칸 이상 이어지지 않는다
+	# 메이플스토리 키우기식 리듬(2026-10-29): 1-1 뒤로 전투 목표(스테이지·처치·던전·PVP·길드 보스·공성전 체험·파티) 없이 10칸 이상 이어지지 않고,
+	# 처치는 10칸에 한 번쯤만(사용자 2026-10-29 "몬스터 처치 가이드 퀘스트가 왜이렇게 자주나와")
 	var calm := 0
 	var calm_max := 0
 	for m in TutorialScript.MISSIONS:
-		calm = 0 if m.kind in ["stage", "kill", "dungeon", "dungeon_lv", "pvp", "guild_boss", "siege_try", "party"] else calm + 1
+		calm = 0 if m.kind in ["stage", "kill", "dungeon", "dungeon_lv", "dungeon_win", "pvp", "guild_boss", "siege_try", "party"] else calm + 1
 		calm_max = maxi(calm_max, calm)
 	var kills := TutorialScript.MISSIONS.filter(func(m): return m.kind == "kill").map(func(m): return int(m.arg))
 	var grows := true
 	for k in range(1, kills.size()):
 		grows = grows and kills[k] >= kills[k - 1]
-	check(calm_max <= 5 and grows and kills[0] == 10 and kills[-1] <= 200 and t.reward(t.mission_index("kill_30")).get("diamonds") == 30,
-		"guide: a battle goal comes at least every 6th quest; kill goals grow 10 → %d: %d" % [kills[-1], calm_max])
+	var kill_at := []
+	for i in TutorialScript.MISSIONS.size():
+		if TutorialScript.MISSIONS[i].kind == "kill":
+			kill_at.append(i)
+	var kill_gap := 99
+	for k in range(1, kill_at.size()):
+		kill_gap = mini(kill_gap, kill_at[k] - kill_at[k - 1])
+	check(calm_max <= 9 and grows and kills[0] == 10 and kills[-1] <= 200 and t.reward(t.mission_index("kill_30")).get("diamonds") == 30
+		and kills.size() <= 30 and kill_gap >= 6,
+		"guide: a battle goal comes at least every 10th quest; %d kill quests at least 6 apart (%d), goals grow 10 → %d: %d" % [kills.size(), kill_gap, kills[-1], calm_max])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5830,7 +5884,7 @@ func test_tutorial_online() -> void:
 	# [보상 받기]는 누르는 즉시(사용자 2026-10-16 "보상받기 누르면 좀 빠르게"): 보상·다음 미션이 곧바로, 서버 확인은 뒤에서, 거절이면 되돌린다
 	var cn := GrowthNet.new()
 	e.net = cn
-	var ki: int = t.mission_index("collect")  # 수집(한 번) → 몬스터 처치(사이 퀘스트 — 그 수만큼 세면 끝)
+	var ki: int = t.mission_index("pouch")  # 주머니 열기(한 번) → 몬스터 40마리 처치(그 수만큼 세면 끝)
 	reply.player.quest = {"tut_state": "active", "tut_step": ki, "rep_n": 0}
 	e.apply_server(reply)
 	t.count = 1

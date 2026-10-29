@@ -148,16 +148,29 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   const cr = rows.findIndex((x) => x.id === 'crit_rate_1')
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, cr])
   assert.equal((await claim(token, { type: 'tutorial', step: cr })).json.error, 'not_done')
-  // 자원 보상: 처치 퀘스트가 다음 미션(농장 Lv 2) 자원을 준다
+  // 자원 보상: 골드 던전 2단계 퀘스트가 다음 미션(농장 Lv 2) 자원을 준다
   const t = rows.findIndex((x) => x.id === 'farm_2') - 1
-  assert.ok(rows[t].id.startsWith('kill_'))
+  assert.equal(rows[t].id, 'dungeon_gold_2')
   const rr = R.parseReward(rows[t].reward as string)!
   assert.ok((rr.wood ?? 0) > 0 || (rr.stone ?? 0) > 0 || (rr.food ?? 0) > 0)
-  assert.ok(rows[rows.findIndex((x) => x.id === 'kill_100')].reward.split('|').includes('tickets:10')) // 규칙 미션 뒤로 아무것도 안 쓰면 모집권
+  assert.ok(rows[rows.findIndex((x) => x.id === 'build_quarry_farm')].reward.split('|').includes('tickets:10')) // 규칙 미션 뒤로 아무것도 안 쓰면 모집권
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
   const res0 = (await player(token)).res
   const kr = (await claim(token, { type: 'tutorial', step: t })).json.player.res
   assert.deepEqual(R.BUILD_RES.map((x) => kr[x] - res0[x]), R.BUILD_RES.map((x) => rr[x] ?? 0))
+  // 사이 퀘스트(2026-10-29 저녁 — 처치를 줄이고 대신 넣은 것): 영웅 모집 N회(누적 모집), 던전 클리어(누적 승리), 건물 레벨업(needs)
+  const g1 = rows.findIndex((x) => x.id === 'gacha_10_1')
+  const dw = rows.findIndex((x) => x.id === 'dwin_gold_1')
+  const q2 = rows.findIndex((x) => x.id === 'quarry_2')
+  assert.ok(rows[g1 - 1].reward.split('|').includes('tickets:10') && rows[dw - 1].reward.split('|').includes('keys_gold:1'))
+  assert.equal(rows[q2].needs, 'level:quarry:2')
+  const p2 = await S.login()
+  for (const [step, ev, n] of [[g1, 'gacha', 10], [dw, 'dungeon_win', 1]] as const) {
+    await S.db.query('update player_state set tut_step = $2 where player_id = $1', [p2.id, step])
+    assert.equal((await claim(p2.token, { type: 'tutorial', step })).json.error, 'not_done')
+    await S.req('POST', '/v1/test/events', { token: p2.token, body: { events: { [ev]: n } } })
+    assert.equal((await claim(p2.token, { type: 'tutorial', step })).status, 200)
+  }
   // 1-15 · 거래소 · 마지막(파티)
   const s15 = rows.findIndex((x) => x.id === 'stage_1_15')
   const ex = rows.findIndex((x) => x.id === 'exchange_look')

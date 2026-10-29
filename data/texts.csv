@@ -2165,6 +2165,12 @@ tutorial.fill.growth_lv.title,%s Lv %d 달성,,,,scripts/tutorial.gd
 tutorial.fill.growth_lv.desc,[성장] 탭에서 %s 레벨을 %d까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.fill.dungeon_lv.title,%s %d단계 클리어,,,,scripts/tutorial.gd
 tutorial.fill.dungeon_lv.desc,[던전] 탭에서 %s %d단계를 클리어하세요. 열쇠는 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
+tutorial.fill.gacha.title,영웅 모집 %d회,,,,scripts/tutorial.gd
+tutorial.fill.gacha.desc,[모집] 탭에서 영웅을 %d회 모집하세요. 모집권은 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
+tutorial.fill.dungeon_win.title,%s 클리어,,,,scripts/tutorial.gd
+tutorial.fill.dungeon_win.desc,[던전] 탭에서 %s에 한 번 도전해 이기세요. 단계는 아무거나 괜찮습니다. 열쇠는 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
+tutorial.fill.level.title,%s Lv %d,,,,scripts/tutorial.gd
+tutorial.fill.level.desc,성 화면에서 %s 건물을 눌러 Lv %d로 올리세요. 남은 시간이 5분 이하면 [무료 즉시 완료]로 바로 끝납니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
 tutorial.missions.kill_30.desc,성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_40.title,몬스터 40마리 처치,,,,scripts/tutorial.gd

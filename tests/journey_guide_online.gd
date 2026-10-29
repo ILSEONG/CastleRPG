@@ -326,6 +326,9 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 				if int(Economy.dungeon_state(dt).best_level) <= before:
 					_check(false, tag + " %s dungeon %d cleared" % [dt, before + 1], "")
 					break
+		"dungeon_win":  # 던전 클리어 사이 퀘스트(2026-10-29 저녁): 앞 퀘스트 보상 열쇠로 지금 최고 단계(없으면 1)
+			var dw := str(m.dungeon)
+			await _dungeon(dw, tag, maxi(1, int(Economy.dungeon_state(dw).best_level)))
 		"equip":
 			var done := false
 			for it in Economy.items():

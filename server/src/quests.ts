@@ -36,6 +36,8 @@ export function tutorialDone(id: string, f: QuestFacts): boolean {
   if ((m = /^hero_lv(\d+)_(\d+)$/.exec(id))) return f.heroLevels.filter((lv) => lv >= Number(m![2])).length >= Number(m[1])
   if ((m = /^(atk|hp|aspd|mspd|crit_rate|crit_dmg)_(\d+)$/.exec(id))) return (f.upgrades[m[1]] ?? 0) >= Number(m[2]) // 2026-10-29 사이 퀘스트: 능력치 6종
   if ((m = /^dungeon_(gold|equip|ticket)_(\d+)$/.exec(id))) return (f.dungeonBest[m[1]] ?? 0) >= Number(m[2]) // 2026-10-29 사이 퀘스트: 던전 N단계
+  if (/^dwin_(gold|equip|ticket)_\d+$/.test(id)) return t(f, 'dungeon_win') >= 1 // 2026-10-29 사이 퀘스트: 던전 한 번 클리어(누적 — 처치처럼 느슨하다)
+  if ((m = /^gacha_(\d+)_\d+$/.exec(id))) return t(f, 'gacha') >= Number(m[1]) // 2026-10-29 사이 퀘스트: 영웅 모집 N회(누적)
   if ((m = /^dungeon_(\w+)$/.exec(id))) return (f.dungeonBest[m[1]] ?? 0) >= 1
   switch (id) {
     case 'collect': return t(f, 'collect') >= 1
