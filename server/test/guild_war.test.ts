@@ -421,8 +421,8 @@ test('war live room: slow readers are cut, the heartbeat drops dead connections,
   } finally {
     live.close()
   }
-  // 정상 전체 snap(공격·수비 영웅 160명 × 숫자 7개, 긴 소수로 적어도)은 MAX_MSG의 절반도 안 된다
-  const rows = Object.fromEntries(Array.from({ length: 160 }, (_, i) => [String(1000 + i), [-123.456789, 98.7654321, -3.14159265, 0.123456789, 4, 123, 0.0123456]]))
+  // 정상 전체 snap(공격·수비 영웅 240명 × 숫자 7개, 긴 소수로 적어도)은 MAX_MSG의 절반도 안 된다
+  const rows = Object.fromEntries(Array.from({ length: 240 }, (_, i) => [String(1000 + i), [-123.456789, 98.7654321, -3.14159265, 0.123456789, 4, 123, 0.0123456]]))
   assert.ok(JSON.stringify({ t: 'snap', s: { c: 123.45, u: rows, g: [10000, 10000, 10000, 10000], k: 80000, n: 12, d: 0 } }).length < MAX_MSG / 2)
 })
 

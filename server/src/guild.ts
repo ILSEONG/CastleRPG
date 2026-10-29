@@ -5,11 +5,13 @@ import { mulberry32, powerOf, resetAt, resetDay } from './rules.ts'
 import { txt } from './texts.ts'
 
 // 길드 레벨은 끝이 없다(2026-10-06 사용자: "길드 레벨은 무제한"). 레벨마다 영웅 공격력·체력 +BUFF_PER_LEVEL %.
-// 길드 인원(실제 + 가상): 1~5레벨 15명, FULL_LEVEL(6)부터 20명(최대 20명 유지). 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
-export const FULL_LEVEL = 6
+// 길드 인원(실제 + 가상): 1레벨 15명, 레벨마다 +MEMBERS_PER_LEVEL명(2026-10-29 사용자), MEMBERS_MAX(FULL_LEVEL 6레벨)에서 멈춘다.
+// 실제 유저가 우선이고 가상 길드원은 남는 자리만 채운다(seated).
 export const MEMBERS_BASE = 15
-export const MEMBERS_MAX = 20
-export const capacity = (level: number) => (level >= FULL_LEVEL ? MEMBERS_MAX : MEMBERS_BASE)
+export const MEMBERS_PER_LEVEL = 3
+export const MEMBERS_MAX = 30
+export const FULL_LEVEL = 1 + Math.ceil((MEMBERS_MAX - MEMBERS_BASE) / MEMBERS_PER_LEVEL)
+export const capacity = (level: number) => Math.min(MEMBERS_MAX, MEMBERS_BASE + MEMBERS_PER_LEVEL * (Math.max(1, level) - 1))
 export const BUFF_PER_LEVEL = 1 // 길드 레벨당 영웅 공격력·체력 %
 export const UNLOCK_STAGE = 11 // 서버 stage(전체 라운드)가 이 이상 = 1-10 클리어
 export const CREATE_GOLD = 500_000

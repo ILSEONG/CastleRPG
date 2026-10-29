@@ -5131,7 +5131,7 @@ func test_guild() -> void:
 	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
 		"guild: diamond donation once a day")
 	# 인원·레벨: 1~5레벨 15명, 6레벨부터 20명(나 포함, 최대 20명), 레벨 끝 없음·버프 레벨당 1%
-	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(5) == 15 and GuildScript.capacity(6) == 20 and GuildScript.capacity(40) == 20 and GuildScript.buff_of(99) == 99.0,
+	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(2) == 18 and GuildScript.capacity(5) == 27 and GuildScript.capacity(6) == 30 and GuildScript.capacity(40) == 30 and GuildScript.buff_of(99) == 99.0,
 		"guild: 15 members, 20 from level 6 on, levels and buff have no cap")
 	check(g.members_now(now).size() + 1 <= GuildScript.capacity(int(g.guild.level)), "guild: members + me fit the capacity")
 	g.guild.level = 1
