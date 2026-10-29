@@ -18,6 +18,7 @@ const PortraitsScript := preload("res://scripts/portraits.gd")
 const HeroStrip := preload("res://scripts/hero_strip.gd")
 const LowpolyBox := preload("res://scripts/lowpoly_box.gd")
 const ResultBanner := preload("res://scripts/result_banner.gd")
+const DungeonArt := preload("res://scripts/dungeon_art.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 static var NAMES := {"gold": Lang.t("dungeon_hud.names.gold"), "equip": Lang.t("dungeon_hud.names.equip"), "ticket": Lang.t("dungeon_hud.names.ticket")}
@@ -30,6 +31,11 @@ const WIN_GOLD := Color("C8901A")
 const BOSS_RED := Color(0.86, 0.24, 0.2)
 const HP_GREEN := Color(0.35, 0.8, 0.4)
 const SELECT_GOLD := Color(1.0, 0.78, 0.2)
+const INTRO_IN := 0.3  # 입장 띠가 밀려 들어오는 시간(2026-10-29 던전 품질: 메이플스토리 키우기·세븐나이츠 키우기식 입장 연출)
+const INTRO_HOLD := 1.1
+const INTRO_OUT := 0.3
+const INTRO_FADE := 0.45  # 처음 검은 화면이 걷히는 시간
+const INTRO_BAND_H := 230.0
 
 var skill_auto  # skill_auto_button.gd
 var dungeon  # dungeon.gd
@@ -53,6 +59,8 @@ var exit_button: Button
 var auto_next_box: Button
 var auto_repeat_box: Button
 var auto_label: Label
+var record_label: Label  # 결과: 클리어 시간 · 최고 단계 갱신
+var intro: Control  # 입장 연출(띠 + 검은 막) — 끝나면 지운다. 전투는 막지 않는다
 
 var _toast_left := 0.0
 
@@ -89,6 +97,7 @@ func _ready() -> void:
 	toast.visible = false
 	root.add_child(toast)
 	_build_result(root)
+	_build_intro(root)
 	Economy.notice.connect(_on_notice)
 	_update()
 
@@ -245,6 +254,9 @@ func _build_result(root: Control) -> void:
 	auto_repeat_box.toggled.connect(_on_auto.bind("repeat"))
 	checks.add_child(auto_repeat_box)  # 왼쪽 현재 단계 자동 반복, 오른쪽 다음 단계 자동 도전(사용자 요청)
 	checks.add_child(auto_next_box)
+	record_label = _label("", 24, MainHud.INK.lightened(0.15))
+	box.add_child(record_label)
+	box.move_child(record_label, reward_box.get_index() + 1)
 	auto_label = _label("", 22, MainHud.INK.lightened(0.25))
 	box.add_child(auto_label)
 
@@ -299,7 +311,14 @@ func show_result() -> void:
 			cell.add_child(_label(Lang.t("dungeon_hud.show_result_6") % it.subs.size(), 16, MainHud.INK.lightened(0.3)))
 		reward_box.add_child(cell)
 		reward_tiles.append(tile)
+	var rec := Lang.t("dungeon_hud.show_result.rec") % UiKit.clock(dungeon.clock) if win else ""
+	if win and int(dungeon.run.level) > int(dungeon.best_before):
+		rec += Lang.t("dungeon_hud.show_result_7")
+	record_label.text = rec
+	record_label.visible = win
 	reward_box.visible = win  # 패배면 보상 줄 없이(사용자 요청: "보상 없음 · 열쇠는 그대로" 삭제)
+	if is_instance_valid(intro):  # 아주 빨리 끝난 판(즉시 승리 훅): 입장 띠가 결과를 가리지 않게
+		intro.queue_free()
 	result_layer.visible = true
 	refresh_result()
 
@@ -410,3 +429,90 @@ func _checkbox(text: String) -> Button:
 	var l: Label = b.get_child(1)
 	l.size = Vector2(244, 64)
 	return b
+
+
+## 입장 연출: 검은 막이 걷히고, 던전 그림 띠가 오른쪽에서 밀려 들어와 이름·단계·"전투 시작!"을 잠깐 보였다가 왼쪽으로 사라진다.
+## 화면 탭·전투는 막지 않는다(마우스 무시). 그림이 없으면 어두운 띠만.
+func _build_intro(root: Control) -> void:
+	intro = Control.new()
+	intro.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	intro.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(intro)
+	var fade := ColorRect.new()
+	fade.color = Color(0.04, 0.04, 0.06, 0.9)
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	intro.add_child(fade)
+	var band := Control.new()
+	band.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
+	band.offset_top = -INTRO_BAND_H * 0.5 - 120.0
+	band.offset_bottom = INTRO_BAND_H * 0.5 - 120.0
+	band.anchor_right = 1.0
+	band.offset_right = 0.0
+	band.clip_contents = true
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	intro.add_child(band)
+	var back := ColorRect.new()
+	back.color = Color(MainHud.INK, 0.92)
+	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.add_child(back)
+	var tex: Texture2D = DungeonArt.texture(str(dungeon.run.get("type", "")))
+	if tex != null:
+		var art := TextureRect.new()
+		art.texture = tex
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		band.add_child(art)
+		var shade := ColorRect.new()  # 글자가 읽히게 아래쪽을 어둡게
+		shade.color = Color(0, 0, 0, 0.42)
+		shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		band.add_child(shade)
+	for edge in [0.0, 1.0]:  # 위아래 테두리 선(먹색)
+		var line := ColorRect.new()
+		line.color = MainHud.INK
+		line.anchor_left = 0.0
+		line.anchor_right = 1.0
+		line.anchor_top = edge
+		line.anchor_bottom = edge
+		line.offset_top = -6.0 if edge > 0.5 else 0.0
+		line.offset_bottom = 0.0 if edge > 0.5 else 6.0
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		band.add_child(line)
+	var col := VBoxContainer.new()
+	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 0)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.add_child(col)
+	var name_l := _intro_label(NAMES.get(dungeon.run.get("type", ""), ""), 54)
+	col.add_child(name_l)
+	col.add_child(_intro_label(Lang.t("dungeon_hud.build_intro") % int(dungeon.run.get("level", 1)), 32))
+	var go := _intro_label(Lang.t("dungeon_hud.build_intro_2"), 40)
+	go.add_theme_color_override("font_color", Color(1.0, 0.93, 0.78))
+	col.add_child(go)
+	var w := 720.0
+	band.position.x = w
+	var tw := intro.create_tween()
+	tw.tween_property(fade, "color:a", 0.0, INTRO_FADE)
+	tw.parallel().tween_property(band, "position:x", 0.0, INTRO_IN).set_delay(0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(INTRO_HOLD)
+	tw.tween_property(band, "position:x", -w * 0.25, INTRO_OUT).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(band, "modulate:a", 0.0, INTRO_OUT)
+	tw.tween_callback(intro.queue_free)
+
+
+func _intro_label(text: String, font_size: int) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.add_theme_font_override("font", FONT)
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", Color.WHITE)
+	l.add_theme_color_override("font_outline_color", MainHud.INK)
+	l.add_theme_constant_override("outline_size", 10)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l

@@ -2841,3 +2841,7 @@ recruit_panel.refresh_14,UR 확정까지 %d회,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_15,SSR 조각 합성 (%d개 → UR 1명),,,,scripts/recruit_panel.gd
 gacha_odds.show_for_4,%d회째 모집은 UR 확정(UR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
 economy.fuse_ur,SSR 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd
+dungeon_hud.show_result.rec,클리어 시간 %s,,,,scripts/dungeon_hud.gd
+dungeon_hud.show_result_7, · 최고 단계 갱신!,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_intro,%d단계,,,,scripts/dungeon_hud.gd
+dungeon_hud.build_intro_2,전투 시작!,,,,scripts/dungeon_hud.gd

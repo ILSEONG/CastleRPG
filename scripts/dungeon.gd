@@ -62,10 +62,12 @@ var _splits: Array = []  # 보스가 쓰러지면 나올 무리(SPLIT_KIND 행) 
 var _live := 0
 var _corpse := Vector3.ZERO  # 보스(없으면 마지막 적)가 쓰러진 자리
 var _leaving := false
+var best_before := 0  # 들어올 때 최고 단계(결과의 "최고 단계 갱신!")
 
 
 func _ready() -> void:
 	var type := str(run.type)
+	best_before = int(Economy.dungeon_state(type).get("best_level", 0))
 	var stage: Dictionary = ArenaKit.gold_mine() if type == "gold" else (ArenaKit.temple() if type == "ticket" else ArenaKit.castle())
 	add_child(ArenaKit.lighting(stage.light))
 	add_child(stage.root)
