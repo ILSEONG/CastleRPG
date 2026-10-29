@@ -22,8 +22,8 @@ export const KEEP_STEP = 0.03 // 성채 최대 체력의 이만큼을 깎을 때
 export const KEEP_MAX_PTS = Math.floor(1 / KEEP_STEP + 1e-9)
 export const DEFAULT_DAY = 5 // 길드원이 시각을 안 정하면: 토요일(주 안 5번째 날, 0 = 월요일)
 export const DEFAULT_HOUR = 21 // 21:00(리셋 시각 기준 — KST)
-export const REWARD_WIN = { coins: 300, diamonds: 100 }
-export const REWARD_LOSE = { coins: 100, diamonds: 30 }
+export const REWARD_WIN = { coins: 1500, diamonds: 3000 } // 2026-10-29 사용자: 길드 코인 ×5, 다이아 ×30 (300·100 → 1,500·3,000)
+export const REWARD_LOSE = { coins: 500, diamonds: 900 } // (100·30 → 500·900)
 export const GATE_HP_SHARE = 3.0 // 2026-10-11 전에 만든 주(guild_wars.level 없음)만 쓴다: 성문 = 그 면 수비 체력 합 × 이것
 export const GATE_HP_PER_LEVEL = 10000 // 2026-10-11 사용자: 성문 체력 = 성 주인 길드 레벨 × 이것(앱 WarRules.GATE_HP_PER_LEVEL과 같다)
 export const KEEP_HP_SHARE = 6.0
