@@ -1,6 +1,8 @@
 """Meshy T자세 메시 -> KayKit 뼈대에 입힌 몸 GLB (docs/meshy-assets.md "게임에 넣기").
 
-Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose]
+Usage: python3 dev/meshy_fit.py assets/models/characters/Knight.glb hero_meshy.glb assets/models/meshy/heroes/<id>.glb [--tex 1024] [--unpose | --no-unpose] [--arm-frac 0.8]
+--arm-frac: arm line = median height of points wider than this share of the widest point. Raise it (0.95) when wings or a cape
+spread wider than the arms higher up (UR aurora 2026-10-29: the wing tops set the arm line and the body came out 30 % small).
 Needs numpy and Pillow.
 
 Writes a body-only GLB: the KayKit joint hierarchy and skin (same joints, order and
@@ -149,7 +151,7 @@ def align(P, base_P, g):
     foot_b = base_P[:, 1].min()
     sh_b = abs(joint_pos(g, "upperarm.l")[0])
     tip_b = np.abs(base_P[np.abs(base_P[:, 1] - arm_y_b) < 0.15][:, 0]).max()
-    arm_y, _ = arm_line(P)
+    arm_y, _ = arm_line(P, float(sys.argv[sys.argv.index("--arm-frac") + 1]) if "--arm-frac" in sys.argv else 0.8)
     foot = P[:, 1].min()
     s = (arm_y_b - foot_b) / (arm_y - foot)
     Q = (P - [0, foot, 0]) * s + [0, foot_b, 0]

@@ -5,7 +5,8 @@
   python3 dev/meshy_heroes.py poll              상태 갱신, 끝난 것 내려받기(dev/meshy/out/<id>/)
 
 키: 환경 변수 MESHY_API_KEY(없으면 프록시가 넣는다고 가정). 상태는 dev/meshy/out/state.json.
-크레딧(2026-10): 컨셉 nano-banana-2 6, 3D meshy-7 + 텍스처 30(SSR) · meshy-t2 smart-topology + 텍스처 15(SR·R).
+크레딧(2026-10): 컨셉 nano-banana-2 6, 3D meshy-7 + 텍스처 30(UR·SSR) · meshy-t2 smart-topology + 텍스처 15(SR·R).
+UR은 SSR보다 화려하게: 프롬프트에 UR_STYLE을 더하고(겹친 갑옷·큰 실루엣·빛나는 수정, 금색 없이) 리메시 6천 삼각형.
 """
 import base64, csv, json, os, sys, urllib.request
 
@@ -15,9 +16,12 @@ OUT = os.path.join(HERE, "meshy", "out")
 STATE = os.path.join(OUT, "state.json")
 REF = os.path.join(HERE, "meshy", "arteon_concept.png")
 GRADE = {r["id"]: r["grade"] for r in csv.DictReader(open(os.path.join(HERE, "..", "data", "heroes.csv")))}
+UR_IDS = ("solaris", "ragna", "kaien", "orion", "nox", "aurora")
 
 STYLE = ("Same art style, chibi proportions, T-pose, front camera and plain light gray background as the reference image: "
          "stylized low-poly faceted 3D game hero, flat-shaded crisp facets, big head, sturdy short body. New character: ")
+UR_STYLE = ("Legendary top-tier hero, far more ornate than a normal hero: layered armor pieces, large dramatic silhouette, "
+            "glowing crystal accents in the hero's color. Silver and white trim only, absolutely no gold. ")
 TAIL = " Arms straight out horizontally, empty open hands, no weapon, no shield, nothing held. Full body, front view."
 
 # 영웅 생김새(Art.HERO_LOOKS 주석을 영어로). 아르테온은 text-to-image(nano-banana-pro)로 만든 참조 그 자체.
@@ -56,7 +60,26 @@ DESC = {
     "selene": "star prophet woman, deep navy wizard hat with a big gold star at the tip, navy robe with star pattern, night-sky cape, gold belt, silver hair.",
     "pip": "apprentice spirit mage boy, the smallest hero, orange hair with a small tilted pointed hat, sky-blue robe, a tiny water spirit on the shoulder.",
     "grit": "mine blacksmith man, small and stout, yellow miner helmet with a headlamp, soot-gray shirt, brown leather apron, black beard.",
-    "tia": "swamp witch woman, droopy mossy hat with mushrooms, olive robe, mud-brown cape, purple sash, dark hair."
+    "tia": "swamp witch woman, droopy mossy hat with mushrooms, olive robe, mud-brown cape, purple sash, dark hair.",
+    # UR(태생): 원신 5성·블루 아카이브·세븐나이츠 키우기 최상위 등급 외형 참고 — 겹친 갑옷, 등 뒤 장식, 빛나는 수정.
+    "solaris": "radiant sun dragon knight man, white and bright orange layered plate armor, helmet shaped like a dragon head with a fan of "
+               "orange crystal sun-ray spikes behind the head, glowing orange sun crystal set in the chest plate, dragon-scale pauldrons, "
+               "two small white dragon wings on the back, long flowing orange-to-red cape, heroic face.",
+    "ragna": "storm warlord man, huge muscular barbarian, dark steel horned helmet crowned with jagged glowing sky-blue lightning crystals, "
+             "long white hair and braided white beard, storm-gray fur mantle over massive steel pauldrons engraved with lightning bolts, "
+             "glowing sky-blue rune tattoos on the bare arms, tattered navy war cape, belt with a blue crystal buckle.",
+    "kaien": "moonlight sword saint young man, long silver hair in a high ponytail, violet and white layered samurai-style outfit, "
+             "large silver crescent-moon ornament floating behind the head like a halo, long white scarf with violet ends, "
+             "light lacquered violet armor plates, glowing violet moon crystal on the chest, calm cool eyes.",
+    "orion": "star archer man, deep indigo hood with a silver star crest and glowing blue star points, long night-sky cape covered in "
+             "tiny white stars and constellation lines, white and indigo light armor, silver comet-shaped shoulder guard, "
+             "glowing blue star crystal on the chest, focused eyes.",
+    "nox": "void archmage man, tall dark violet wizard hat with a glowing violet crystal at the tip, black robe with glowing violet rune "
+           "lines, large purple cape with a starry void pattern, silver shoulder plates with violet crystal shards rising from them, "
+           "long white hair, pale skin, glowing violet eyes.",
+    "aurora": "dawn goddess woman, long pink-to-peach gradient hair with a white flower crown, pale pink glowing halo ring behind the "
+              "head, white flowing robe with soft pink and sky-blue layers, large white feathered angel wings with pink tips, "
+              "silver ornaments, gentle smile."
 }
 
 
@@ -80,7 +103,7 @@ def save(s):
 def concept(ids):
     ref = "data:image/png;base64," + base64.b64encode(open(REF, "rb").read()).decode()
     for i in ids:
-        prompt = STYLE + DESC[i] + TAIL
+        prompt = STYLE + (UR_STYLE if i in UR_IDS else "") + DESC[i] + TAIL
         t = req("POST", "/image-to-image", {"ai_model": "nano-banana-2", "prompt": prompt, "reference_image_urls": [ref]})
         s = load()
         s.setdefault(i, {})["concept"] = {"id": t["result"], "status": "PENDING"}
@@ -92,8 +115,9 @@ def model(ids):
     for i in ids:
         s = load()
         body = {"input_task_id": s[i]["concept"]["id"], "pose_mode": "t-pose", "should_texture": True, "target_formats": ["glb"]}
-        if GRADE[i] == "SSR":
-            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle", "target_polycount": 4500})
+        if i in UR_IDS or GRADE[i] == "SSR":
+            body.update({"ai_model": "meshy-7", "should_remesh": True, "topology": "triangle",
+                         "target_polycount": 6000 if i in UR_IDS else 4500})
         else:
             body.update({"model_type": "smart-topology", "ai_model": "meshy-t2"})
         t = req("POST", "/image-to-3d", body)

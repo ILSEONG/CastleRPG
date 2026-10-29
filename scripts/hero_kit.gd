@@ -21,6 +21,8 @@ const FIRE := Color("FF6A10")
 const FIRE_CORE := Color("FFD23A")
 const ICE := Color("C8F2FF")
 const ICE_DEEP := Color("62B8EE")
+const UR_FIRE := Color("FF6A1F")  # UR 불꽃(주황 — 노란 금빛 없이)
+const UR_FIRE_CORE := Color("FFE2D0")
 
 ## 부품 id 전체(Art.HERO_LOOKS가 쓰는 것). has_part로 ArenaKit 부품과 가른다.
 const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pauldrons", "bron_crest", "torvin_mitre", "torvin_mace",
@@ -31,7 +33,7 @@ const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pau
 	"valen_crown", "valen_flames", "valen_orb", "frieda_crown", "frieda_collar", "frieda_flake", "morgana_horns", "morgana_skulls",
 	"gaia_crown", "gaia_staff", "selene_stars", "pip_hat", "pip_spirit", "tia_hat", "thorgar_crown", "thorgar_boulders", "thorgar_maul",
 	"orin_wolf", "grit_helmet", "grit_hammer", "dante_horns", "dante_wings", "kaz_goggles", "kaz_pack", "luna_tiara", "luna_blade",
-	"raven_crest", "raven_mantle"]
+	"raven_crest", "raven_mantle", "solaris_flame", "ragna_bolts", "kaien_blade", "nox_crystal"]
 
 static var _meshes := {}
 
@@ -119,6 +121,10 @@ static func _build(id: String, k) -> void:
 		"luna_blade": _luna_blade(k)
 		"raven_crest": _raven_crest(k)
 		"raven_mantle": _raven_mantle(k)
+		"solaris_flame": _flame(k, Vector3(0, 0.6, 0), 0.95, 0.7, UR_FIRE, UR_FIRE_CORE)
+		"ragna_bolts": _ragna_bolts(k)
+		"kaien_blade": _kaien_blade(k)
+		"nox_crystal": _nox_crystal(k)
 		_: push_error("unknown hero part %s" % id)
 
 
@@ -189,15 +195,15 @@ static func _cap(k, y0: float, r: float, h: float, color: Color, z := 0.0) -> vo
 
 
 ## 불꽃 한 덩이(밑 c, 높이 h, 굵기 s): 바깥 주황 혀 다섯 + 안쪽 노란 혀 셋, 위로(+Y).
-static func _flame(k, c: Vector3, h: float, s: float) -> void:
+static func _flame(k, c: Vector3, h: float, s: float, outer := FIRE, core := FIRE_CORE) -> void:
 	for i in 5:
 		var a := TAU * i / 5.0
 		var d := Vector3(cos(a), 0, sin(a)) * 0.09 * s
-		_leaf(k, c + d, c + d * 1.6 + Vector3(0, h * (0.75 + 0.25 * (i % 2)), 0), 0.2 * s, 0.08 * s, d, FIRE, 0.35)
+		_leaf(k, c + d, c + d * 1.6 + Vector3(0, h * (0.75 + 0.25 * (i % 2)), 0), 0.2 * s, 0.08 * s, d, outer, 0.35)
 	for i in 3:
 		var a := TAU * i / 3.0 + 0.5
 		var d := Vector3(cos(a), 0, sin(a)) * 0.04 * s
-		_leaf(k, c + d, c + Vector3(0, h * 1.05, 0), 0.14 * s, 0.07 * s, d, FIRE_CORE, 0.35)
+		_leaf(k, c + d, c + Vector3(0, h * 1.05, 0), 0.14 * s, 0.07 * s, d, core, 0.35)
 
 
 ## 꽃(가운데 c, 꽃잎이 n에 수직인 면에 퍼짐): 꽃잎 다섯 + 가운데.
@@ -916,3 +922,36 @@ static func _raven_mantle(k) -> void:
 	for i in 5:
 		var a := (i - 2) * 0.5
 		_leaf(k, Vector3(sin(a) * 0.2, 0.26, -0.36), Vector3(sin(a) * 0.4, 0.62, -0.5), 0.2, 0.05, Vector3(0, 0.2, -1), black, 0.35)
+
+
+# --- UR(2026-10-29): 몸은 Meshy, 무기 손 부품만 ---
+
+## 폭풍의 전쟁군주: 큰 도끼 머리(y ≈ 1.3) 양옆에서 위로 갈라지는 하늘색 번개 둘.
+static func _ragna_bolts(k) -> void:
+	var blue := Color("8FD8FF")
+	for s in [-1.0, 1.0]:
+		var pts := [Vector3(s * 0.22, 1.12, 0.0), Vector3(s * 0.44, 1.4, 0.04), Vector3(s * 0.32, 1.48, 0.04), Vector3(s * 0.6, 1.86, 0.08)]
+		for i in 3:
+			_leaf(k, pts[i], pts[i + 1], 0.16, 0.06, Vector3(0, 0, 1), blue if i != 1 else Color("E6F7FF"), 0.5)
+
+
+## 월광 검성 장검(단검 자리, 양손 같은 메시): 남보라 손잡이, 은 코등이, 곧고 긴 연보라 칼날 + 가운데 보라 빛줄. 길이 ≈ 1.6.
+static func _kaien_blade(k) -> void:
+	k.prism_n(Vector3(0, -0.26, 0), 6, 0.04, 0.04, 0.32, Color("2A2440"))
+	k.box(Vector3(0, 0.05, 0), Vector3(0.22, 0.05, 0.1), Color("D0D4DA"))
+	var w := 0.06
+	_slab(k, [Vector3(-w, 0.1, 0), Vector3(w, 0.1, 0), Vector3(w * 0.9, 1.3, 0), Vector3(0.0, 1.52, 0), Vector3(-w * 0.9, 1.3, 0)], Vector3.BACK, 0.04, Color("E4DEFF"))
+	_slab(k, [Vector3(-0.015, 0.16, 0), Vector3(0.015, 0.16, 0), Vector3(0.015, 1.26, 0), Vector3(-0.015, 1.26, 0)], Vector3.BACK, 0.05, Color("9C7BFF"))
+
+
+## 공허의 대마도사: 지팡이 머리(y ≈ 1.25) 위 보라 수정 + 둘레에 뜬 작은 수정 조각 셋.
+static func _nox_crystal(k) -> void:
+	var violet := Color("B070FF")
+	var deep := Color("5A2BB0")
+	k.cone(Vector3(0, 1.32, 0), 4, 0.12, 0.46, violet, PI / 4.0)
+	k.xform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(0, 1.34, 0))
+	k.cone(Vector3.ZERO, 4, 0.12, 0.12, deep, PI / 4.0)
+	k.xform = Transform3D.IDENTITY
+	for i in 3:
+		var d := Vector3(cos(TAU * i / 3.0), 0, sin(TAU * i / 3.0))
+		k.cone(Vector3(0, 1.36 + 0.06 * i, 0) + d * 0.3, 4, 0.05, 0.18, violet.lightened(0.25), PI / 4.0)
