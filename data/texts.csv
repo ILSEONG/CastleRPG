@@ -1497,7 +1497,7 @@ ranking_panel.subtabs_2,전투력,,,,scripts/ranking_panel.gd
 ranking_panel.subtabs_3,길드,,,,scripts/ranking_panel.gd
 ranking_panel.head.stage,도달한 라운드 순 · 먼저 도달한 사람이 위,,,,scripts/ranking_panel.gd
 ranking_panel.head.power,출전 영웅 전투력 합 순,,,,scripts/ranking_panel.gd
-ranking_panel.head.guild,길드 레벨 순 · 같으면 누적 경험치 순,,,,scripts/ranking_panel.gd
+ranking_panel.head.guild,이번 주 드래곤 보스 길드 총 피해량 순 · 매주 월요일 0시 초기화,,,,scripts/ranking_panel.gd
 ranking_panel.ready,랭킹,,,,scripts/ranking_panel.gd
 ranking_panel.rebuild.msg,불러오는 중…,,,,scripts/ranking_panel.gd
 ranking_panel.rebuild,랭킹은 서버에 접속했을 때 볼 수 있습니다,,,,scripts/ranking_panel.gd
@@ -1510,7 +1510,6 @@ ranking_panel.rebuild_6,전투력이 0이면 순위에 오르지 않습니다,,,
 ranking_panel.rebuild_7,순위 없음,,,,scripts/ranking_panel.gd
 ranking_panel.row,내 길드,,,,scripts/ranking_panel.gd
 ranking_panel.row_2,나,,,,scripts/ranking_panel.gd
-ranking_panel.row_3,길드원 %d명 · 드래곤 점수 %s,,,,scripts/ranking_panel.gd
 ranking_panel.row_4,길드 ,,,,scripts/ranking_panel.gd
 recruit_panel.title,영웅 모집,,,,scripts/recruit_panel.gd
 recruit_panel.late_text,모집 결과 도착 — 주점에서 확인하세요,,,,scripts/recruit_panel.gd
@@ -2754,3 +2753,15 @@ bag_panel.ready_4,합성,,,,scripts/bag_panel.gd
 bag_panel.ready_5,신화(MR) %s 완성!,,,,scripts/bag_panel.gd
 economy.equip_text.not_fusable,LR 장비만 합성할 수 있습니다,,,,scripts/economy.gd
 economy.equip_text.mixed_slot,같은 부위(무기는 같은 종류) 장비만 합성할 수 있습니다,,,,scripts/economy.gd
+server.ranking.guild_mail.title,[길드 랭킹] 주간 보상,,,,server/src/ranking.ts
+server.ranking.guild_mail.body,지난주 길드 랭킹에서 {guild} 길드가 {rank}위를 했습니다. 길드원 모두에게 드리는 보상입니다.,,,,server/src/ranking.ts
+ranking_panel.rebuild_8,이번 주 드래곤에 피해를 주면 순위에 오릅니다,,,,scripts/ranking_panel.gd
+ranking_panel.row_5,Lv %d · 길드원 %d명,,,,scripts/ranking_panel.gd
+ranking_panel.season_card,주간 보상 · 길드원 모두 우편으로 받습니다,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_2,이번 주 남은 시간 %d일 %d시간 %d분,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_3,%d위,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_4,%d~%d위,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_5,%s  %s %d개,,,,scripts/ranking_panel.gd
+live_ops.box_names.top,최고급 장비 상자,,,,scripts/live_ops.gd
+live_ops.box_names.high,고급 장비 상자,,,,scripts/live_ops.gd
+live_ops.box_names.normal,일반 장비 상자,,,,scripts/live_ops.gd

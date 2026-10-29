@@ -229,6 +229,19 @@ export function virtualTotals(g: GuildRow, now: number, hour: number) {
   return { exp, dmg, members, day, log }
 }
 
+// 가상 길드원 몫의 보스 피해 중 리셋 날 from..to(포함)에 낸 것, until 시각까지(길드 랭킹 주간 점수 — ranking.ts).
+export function virtualDmgBetween(g: GuildRow, from: number, to: number, until: number, hour: number) {
+  const members = virtualMembers(g)
+  let dmg = 0
+  for (let d = Math.max(from, resetDay(g.created_at, hour)); d <= to; d++) {
+    for (const m of members) {
+      const e = virtualDay(g, m, d, hour)
+      if (e && e.t <= until) dmg += e.dmg
+    }
+  }
+  return dmg
+}
+
 // 시스템 길드 하나(추천 목록을 채운다): 생성 시각을 며칠 앞당겨 레벨이 붙어 있게.
 export function systemGuild(seed: number, now: number) {
   const r = mulberry32(mix(seed, 3))

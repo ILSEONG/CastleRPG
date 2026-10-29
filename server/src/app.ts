@@ -2090,6 +2090,10 @@ export function createApp(opts: AppOptions) {
         items.push(...R.rollDrops(rows, 1, rw.equip.n, R.cfgNum(g.config, 'equip_weapon_p'), random))
       }
     }
+    for (const [box, w] of Object.entries(R.EQUIP_BOXES)) { // 장비 상자: 상자마다 등급 확률로 하나씩
+      const n = sum[R.EQUIP_BOX_PREFIX + box] ?? 0
+      if (n > 0) items.push(...R.rollDrops([{ min_level: 0, ...w }], 1, n, R.cfgNum(g.config, 'equip_weapon_p'), random))
+    }
     const change: Change = {}
     const res = Object.fromEntries(R.BUILD_RES.filter((r) => (sum[r] ?? 0) > 0).map((r) => [r, sum[r]]))
     if (Object.keys(res).length) change.res = res
@@ -3744,7 +3748,8 @@ export function createApp(opts: AppOptions) {
     const b = await body(c)
     const runId = strField(b, 'run_id')
     const sent = intField(b, 'dmg', 0, 1e12)
-    return guildMutate(c, (x) => {
+    let week: { guild_id: string; week: number; dmg: number } | null = null
+    const res = await guildMutate(c, (x) => {
       const { g } = needGuild(x)
       const run = x.mine.boss_run
       if (!run || run.id !== runId) throw blocked('no_run', 'no such boss fight')
@@ -3757,11 +3762,20 @@ export function createApp(opts: AppOptions) {
       const coins = { n: x.pg.coins }
       grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
+      week = { guild_id: g.id, week: Rk.weekOf(R.resetDay(x.now, x.hour)), dmg: Math.round(dmg) }
       ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
         log: { guild_id: g.id, text: txt('server.app.guild_boss_finish.text', { playerName: G.playerName(x.id), reached, dmg: dmg.toLocaleString('en-US') }) } }
       ch.events = { guild_boss: 1 }
       return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
     })
+    // 이 판 피해를 이번 주 길드 랭킹 점수에(판이 저장된 뒤 — run은 한 번만 끝나므로 두 번 더하지 않는다). 실패해도 전투 결과는 그대로 준다.
+    const w = week as { guild_id: string; week: number; dmg: number } | null
+    if (res.status === 200 && w && w.dmg > 0) {
+      await query(`insert into guild_week_damage (guild_id, week, dmg) values ($1, $2, $3)
+        on conflict (guild_id, week) do update set dmg = guild_week_damage.dmg + excluded.dmg`, [w.guild_id, w.week, w.dmg])
+        .catch((e) => console.error('guild week damage failed', e))
+    }
+    return res
   })
 
 
@@ -3787,12 +3801,21 @@ export function createApp(opts: AppOptions) {
 
   // --- 랭킹(server/src/ranking.ts): 스테이지·전투력·던전(골드·장비)·길드. 목록은 잠깐 캐시한다 ---
   const ranking = Rk.rankingStore(query, clock, loadGame)
+  // 주가 바뀐 뒤 처음 우편함·길드 랭킹을 볼 때 지난 주 길드 랭킹 보상을 보낸다(정산은 한 번만, 실패해도 그 요청은 막지 않는다).
+  const settleGuildRank = () => ranking.settle().catch((e) => console.error('guild rank settle failed', e))
+  app.use('/v1/mail', async (c, next) => {
+    if (c.req.method === 'GET') await settleGuildRank()
+    return next()
+  })
   app.get('/v1/ranking/:board', auth, async (c) => {
     const board = c.req.param('board') as Rk.Board
     if (!Rk.BOARDS.includes(board)) throw new ApiError(400, 'bad_request', `board must be one of ${Rk.BOARDS.join(', ')}`)
     const id = c.get('playerId') as string
     let key: string | null = id
-    if (board === 'guild') key = (await query('select guild_id::text from player_guild where player_id = $1', [id]))[0]?.guild_id ?? null
+    if (board === 'guild') {
+      await settleGuildRank()
+      key = (await query('select guild_id::text from player_guild where player_id = $1', [id]))[0]?.guild_id ?? null
+    }
     return c.json(await ranking.board(board, key))
   })
 
