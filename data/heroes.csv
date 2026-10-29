@@ -35,3 +35,9 @@ selene,셀레네,별의 예언자,SR,ranged,caster,Mage,Spellbook_open,#3F51B5,2
 pip,핍,견습 정령술사,R,ranged,caster,Mage,1H_Wand,#80DEEA,200,22,9,1.2,6,12,summon_spirit,15,50,10,frost_spike,12,5,80,,,,,작은 정령 친구와 얼음 가시로 싸우는 견습생
 grit,그릿,광산 대장장이,R,melee,tank,Barbarian,1H_Axe|Barbarian_Round_Shield,#795548,420,20,1.8,0.8,5,8,summon_golem,18,60,12,revive,30,,,,,,,직접 빚은 돌 골렘과 함께 버티는 광산 대장장이
 tia,티아,늪지 마녀,R,ranged,caster,Mage,1H_Wand,#689F38,200,22,9,1.2,6,12,abyss_hand,11,3,1.5,magma,13,3,90,,,,,늪 바닥의 손과 끓는 용암을 부리는 마녀
+hyeonmu,현무,북방의 수호신,UR,melee,tank,Knight,1H_Sword|Badge_Shield,#2E6E8E,1310,45,1.8,0.8,5,8,turtle_ward,10,5,25,black_shell,20,30,,north_tide,14,6,320,북방의 검은 거북처럼 단단한 등껍질로 성문을 막아서는 수호신
+baekho,백호,서방의 대장군,UR,melee,bruiser,Barbarian,2H_Axe,#8EC5FF,1109,63,1.8,0.8,6,8,tiger_claw,7,4.5,120,tiger_fury,4,3,150,tiger_avatar,16,6,40,서방을 지키는 흰 호랑이의 기세로 적진을 찢어 놓는 대장군
+yeonhwa,연화,아홉 꼬리 구미호,UR,melee,assassin,Rogue,Knife|Knife_Offhand,#FF5A7A,806,85,1.8,0.64,7,9,fox_fire,6,9,70,fox_charm,15,1.2,20,nine_tails,14,4.5,90,아홉 꼬리를 휘날리며 홀린 적부터 하나씩 베어 내는 구미호
+cheongryong,청룡,동방의 용궁 사수,UR,ranged,marksman,Rogue_Hooded,2H_Crossbow,#26C6A0,616,56,12,1.0,6,12,dragon_arrow,7,14,320,azure_tide,30,30,1.5,azure_dragon,15,4.5,110,동방 용궁의 물살을 화살에 실어 먼 적까지 꿰뚫는 사수
+chronos,크로노스,시간의 지배자,UR,ranged,caster,Mage,2H_Staff,#4FD8FF,554,62,9,1.2,6,12,time_stop,12,4,2.5,time_haste,25,,,time_collapse,16,4,480,시간을 멈추고 무너뜨려 전장을 마음대로 다스리는 지배자
+jujak,주작,남방의 불새 무녀,UR,ranged,support,Mage,Spellbook_open,#FF5533,616,34,10,1.0,6,12,phoenix_wing,7,15,150,phoenix_blessing,15,5,,rebirth_flame,30,50,30,남방 불새의 불꽃으로 아군을 치유하고 다시 일으키는 무녀

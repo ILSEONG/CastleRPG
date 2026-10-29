@@ -56,6 +56,9 @@ gacha_dia_cost_10,2700
 gacha_dia_ssr,0.05
 gacha_dia_sr,0.30
 gacha_dia_pity,50
+gacha_dia_ur,0.005
+gacha_dia_ur_pity,200
+ur_fuse_shards,10
 tavern_ssr_per_level,0
 tavern_sr_per_level,0
 gacha_10_min_sr,1
@@ -72,6 +75,7 @@ hero_level_stat_melee,0.0315
 levelup_gold_R,60
 levelup_gold_SR,120
 levelup_gold_SSR,240
+levelup_gold_UR,480
 fever_kills,900
 fever_sec,180
 fever_spawn_mult,3

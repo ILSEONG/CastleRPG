@@ -18,7 +18,7 @@ const TABS := [["status", "상태"], ["notice", "공지"], ["mail", "우편"], [
 const KIND_ITEMS := [["notice", "공지"], ["event", "이벤트"], ["update", "업데이트"], ["maintenance", "점검"]]
 const REWARD_FIELDS := [["gold", "골드"], ["diamonds", "다이아"], ["tickets", "모집권"], ["wood", "목재"], ["stone", "석재"], ["food", "식량"],
 	["keys_gold", "골드 열쇠"], ["keys_equip", "장비 열쇠"], ["keys_ticket", "모집권 열쇠"]]
-const GRADES := ["N", "R", "SR", "SSR", "UR", "LR"]
+const GRADES := ["N", "R", "SR", "SSR", "UR", "LR", "MR"]
 const ARM_SEC := 4.0
 const CONFIRM_GAP_SEC := 0.4  # 확인 누름은 첫 누름 뒤 이만큼 지나야 받는다(빠른 두 번 누름은 확인이 아니다)
 

@@ -491,7 +491,7 @@ export function gachaRates(config: Config, currency: string, level: number) {
   const ssr = dia ? cfgNum(config, 'gacha_dia_ssr') : cfgNum(config, 'gacha_gold_ssr_base') + cfgNum(config, 'gacha_gold_ssr_step') * k
   const sr = dia ? cfgNum(config, 'gacha_dia_sr') : cfgNum(config, 'gacha_gold_sr_base') + cfgNum(config, 'gacha_gold_sr_step') * k
   const noSsr = !dia && goldLevel(config, level) < GOLD_SSR_FROM
-  return { ssr: noSsr ? 0 : ssr, sr }
+  return { ur: dia ? cfgNum(config, 'gacha_dia_ur') : 0, ssr: noSsr ? 0 : ssr, sr } // UR은 다이아 모집에만(2026-10-29 사용자)
 }
 
 // 다음 레벨까지 필요한 누적(그 레벨 안) = gacha_gold_level_pulls × L²(낮은 레벨은 조금, 높은 레벨은 크게 — 사용자 2026-10-12). 최대 레벨이면 null.
@@ -528,14 +528,15 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
   return ''
 }
 
-// 모집(스펙 §3.6): 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
+// 모집(스펙 §3.6): 장마다 등급(UR rates.ur, SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
 // rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1).
-// pity(다이아 모집만, 개정 23)가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — n을 바꿔 둔다. 다이아 10연차는 또
+// pity(다이아 모집만, 개정 23)가 있으면 장마다 n·u += 1, u ≥ umax면 UR 확정, 아니고 n ≥ max면 SSR 확정. UR이면 n = u = 0,
+// SSR이면 n = 0 — 바꿔 둔다(u·umax가 없으면 UR 천장 없음, 2026-10-29). 다이아 10연차는 또
 // SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 // 앱 Economy.roll_gacha와 같은 규칙.
 export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
-  rates = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number }) {
-  const pools: Record<string, string[]> = { SSR: [], SR: [], R: [] }
+  rates: { ur?: number; ssr: number; sr: number } = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number; u?: number; umax?: number }) {
+  const pools: Record<string, string[]> = { UR: [], SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {
     const pool = pools[grade]
@@ -543,14 +544,23 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
     return { id: pool[Math.floor(rand() * pool.length)], grade }
   }
   const { ssr, sr } = rates
+  const ur = rates.ur ?? 0
+  const urPity = pity !== undefined && pity.u !== undefined && pity.umax !== undefined
   const out: { id: string; grade: string }[] = []
   for (let i = 0; i < count; i++) {
     const r = rand()
-    let grade = r < ssr ? 'SSR' : r < ssr + sr ? 'SR' : 'R'
+    let grade = r < ur ? 'UR' : r < ur + ssr ? 'SSR' : r < ur + ssr + sr ? 'SR' : 'R'
     if (pity) {
       pity.n += 1
-      if (pity.n >= pity.max) grade = 'SSR'
-      if (grade === 'SSR') pity.n = 0
+      if (urPity) {
+        pity.u! += 1
+        if (pity.u! >= pity.umax!) grade = 'UR'
+      }
+      if (pity.n >= pity.max && grade !== 'UR') grade = 'SSR'
+      if (grade === 'UR') {
+        pity.n = 0
+        if (urPity) pity.u = 0
+      } else if (grade === 'SSR') pity.n = 0
     }
     out.push(pick(grade))
   }
@@ -640,8 +650,16 @@ export function upgradeCost(d: UpgradeDef, level: number, count: number): number
 // --- 던전·장비 (개정 18 §2~§5) — 앱 GameData(던전·장비 블록)와 같은 식 ---
 
 export const DUNGEON_TYPES = ['gold', 'equip', 'ticket'] // ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 영웅 1, 보상 다이아 모집권
-export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR'] // 낮은 등급부터. equip_drop.csv 가중치 열 = 이 이름
-export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5 }
+export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'] // 낮은 등급부터(MR = 신화, 2026-10-29). equip_drop.csv 가중치 열 = 이 이름
+// 장비 상자(2026-10-29 길드 랭킹 보상, 기본값 Claude): 상자 하나 = 장비 1개(부위 무작위, rollDrops와 같은 굴림). 등급 확률(%) = 아래 가중치.
+// 보상 키 equip_box_<id>(우편·쿠폰 숫자 보상 — live_ops.ts NUMERIC). 앱 live_ops.gd BOX_NAMES와 같은 id.
+export const EQUIP_BOXES: Record<string, Record<string, number>> = {
+  normal: { N: 40, R: 40, SR: 17, SSR: 3 }, // 일반 장비 상자
+  high: { R: 30, SR: 45, SSR: 20, UR: 5 }, // 고급 장비 상자
+  top: { SSR: 50, UR: 40, LR: 10 }, // 최고급 장비 상자
+}
+export const EQUIP_BOX_PREFIX = 'equip_box_'
+export const EQUIP_GRADE_MULT: Record<string, number> = { N: 1.0, R: 1.5, SR: 2.2, SSR: 3.2, UR: 4.6, LR: 6.5, MR: 9.2 }
 export const ARMOR_SLOTS = ['hat', 'top', 'bottom', 'shoes', 'pauldron', 'gloves'] // 모든 영웅이 쓴다
 export const ACCESSORY_SLOTS = ['ring', 'necklace'] // 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다
 export const EQUIP_SLOTS = ['weapon', ...ARMOR_SLOTS, ...ACCESSORY_SLOTS]
@@ -658,10 +676,10 @@ export const ROLL_MIN = 85
 export const ROLL_MAX = 115
 // 특수 능력치(SR 이상): 줄 수 SR·SSR 1, UR 2, LR 3(서로 다른 종류). 값 = 등급 기준값 × 굴림 % / 100(%, 소수 한 자리)
 export const SUB_STATS = ['lifesteal', 'crit_rate', 'crit_dmg', 'aspd', 'dmg_reduce', 'skill_dmg']
-export const SUB_COUNT: Record<string, number> = { SR: 1, SSR: 1, UR: 2, LR: 3 }
+export const SUB_COUNT: Record<string, number> = { SR: 1, SSR: 1, UR: 2, LR: 3, MR: 4 }
 export const SUB_BASE: Record<string, Record<string, number>> = {
-  lifesteal: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, crit_rate: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, crit_dmg: { SR: 6, SSR: 9, UR: 13, LR: 18 },
-  aspd: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, dmg_reduce: { SR: 2, SSR: 3, UR: 4.5, LR: 6 }, skill_dmg: { SR: 4, SSR: 6, UR: 9, LR: 12 },
+  lifesteal: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, crit_rate: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, crit_dmg: { SR: 6, SSR: 9, UR: 13, LR: 18, MR: 24 },
+  aspd: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, dmg_reduce: { SR: 2, SSR: 3, UR: 4.5, LR: 6, MR: 8 }, skill_dmg: { SR: 4, SSR: 6, UR: 9, LR: 12, MR: 16 },
 }
 export const RUN_TTL_SEC = 1800 // run 만료(30분)
 export const RUN_SLACK_SEC = 5 // finish 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
@@ -766,7 +784,7 @@ export const levelMult = (config: Config, level: number, role: string) =>
 export const promoteMult = (config: Config, promotion: number) => grown(1, cfgNum(config, 'promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
 // 전투력 = round((HP / 10 + 공격 × 2 / 공격 간격 × 원거리 배율) × 등급 배율), HP·공격 = 표 × 레벨 배율 × 승급 배율 + 장비.
 // 2026-10-06 밸런스(앱 GameData.POWER_GRADE·POWER_RANGED와 같다): 같은 레벨·승급·장비면 SSR > SR > R.
-export const POWER_GRADE: Record<string, number> = { SSR: 2.0, SR: 1.4, R: 1.0 }
+export const POWER_GRADE: Record<string, number> = { UR: 2.8, SSR: 2.0, SR: 1.4, R: 1.0 }
 export const POWER_RANGED = 2.0
 export const powerOf = (def: { role?: unknown; grade?: unknown; atk_interval: unknown }, hp: number, atk: number) =>
   roundHalfAway((hp / 10 + ((atk * 2) / Number(def.atk_interval)) * (String(def.role ?? '') === 'ranged' ? POWER_RANGED : 1)) * (POWER_GRADE[String(def.grade ?? '')] ?? 1))
@@ -974,6 +992,11 @@ export function statLimit(pl: { upgrades: Record<string, number>; research: Reco
   const g = 1 + Math.max(0, guildBuffPct) / 100
   return { equip: heroEquip(pl.items ?? [], pl.equipment ?? []), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }
 }
+
+// 장비 합성(2026-10-29 MR 신화 등급): 같은 부위(무기는 같은 종류) LR FUSE_COUNT개 → 그 부위 MR 하나(굴림·특수 능력치는 새로).
+export const FUSE_FROM = 'LR'
+export const FUSE_TO = 'MR'
+export const FUSE_COUNT = 3
 
 // 판매 값 = round(equip_sell_base × 등급 배율)(2026-10-07 장비 레벨 없앰).
 export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0))

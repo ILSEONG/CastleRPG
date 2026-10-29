@@ -16,9 +16,10 @@ const GameData := preload("res://scripts/game_data.gd")
 
 const SAVE_VERSION := 1
 const UNLOCK_ROUND := 11  # GameState.stage가 이 이상(= 1-10 클리어)이면 열린다. 한 번 열리면 저장한다
-const FULL_LEVEL := 6  # 길드 레벨은 끝이 없다(2026-10-06). 인원(나 포함)은 이 레벨부터 MEMBERS_MAX(최대 20명 유지)
-const MEMBERS_BASE := 15
-const MEMBERS_MAX := 20
+const MEMBERS_BASE := 15  # 길드 레벨은 끝이 없다(2026-10-06). 인원(나 포함) = 1레벨 15명 + 레벨마다 MEMBERS_PER_LEVEL명(2026-10-29), MEMBERS_MAX에서 멈춘다
+const MEMBERS_PER_LEVEL := 3
+const MEMBERS_MAX := 30
+const FULL_LEVEL := 6  # MEMBERS_MAX에 닿는 레벨
 const MAX_MEMBERS := MEMBERS_MAX
 const BUFF_PER_LEVEL := 1.0  # 길드 레벨당 영웅 공격력·체력 +%
 const CREATE_GOLD := 500000
@@ -201,9 +202,9 @@ static func exp_need(level: int) -> int:
 	return roundi(150.0 * pow(float(level), 1.3))
 
 
-## 길드 레벨 → 인원(나 포함): 1~5레벨 15명, 6레벨부터 20명. 가상 길드원은 남는 자리만 채운다(실제 유저 우선).
+## 길드 레벨 → 인원(나 포함): 1레벨 15명 + 레벨마다 3명, 6레벨부터 30명. 가상 길드원은 남는 자리만 채운다(실제 유저 우선).
 static func capacity(level: int) -> int:
-	return MEMBERS_MAX if level >= FULL_LEVEL else MEMBERS_BASE
+	return mini(MEMBERS_MAX, MEMBERS_BASE + MEMBERS_PER_LEVEL * (maxi(1, level) - 1))
 
 
 static func buff_of(level: int) -> float:

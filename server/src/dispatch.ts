@@ -12,7 +12,7 @@
 export const KEY = 'dispatch' // 건물 키
 export const RARITIES = ['N', 'R', 'SR', 'SSR'] as const
 export type Rarity = (typeof RARITIES)[number]
-export const GRADES = ['R', 'SR', 'SSR'] // 영웅 등급 낮은 순
+export const GRADES = ['R', 'SR', 'SSR', 'UR'] // 영웅 등급 낮은 순
 export const TYPES = ['tank', 'bruiser', 'assassin', 'caster', 'marksman', 'support'] // 영웅 유형(heroes.csv archetype)
 
 // 희귀도 규칙: 인원·최소 등급·허용 유형 수·기본 시간(분)·보상 후보(하나를 뽑는다)

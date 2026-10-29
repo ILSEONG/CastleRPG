@@ -1,9 +1,9 @@
 extends Node
-## 통합 테스트(2026-10-14) — 가이드 여정(온라인): 새 게스트로 로컬 서버(ALLOW_TEST_HOOKS=1, tutorial_new_players=1)에 접속해 가이드 78개 미션을 처음부터
+## 통합 테스트(2026-10-14) — 가이드 여정(온라인): 새 게스트로 로컬 서버(ALLOW_TEST_HOOKS=1, tutorial_new_players=1)에 접속해 가이드 82개 미션을 처음부터
 ## 하나씩 깬다. 미션마다 카드(제목·설명·보상·[바로가기])가 말이 되는지 보고 [바로가기]를 눌러 무엇이 열리는지 본 뒤, 버튼과 같은 함수로 목표를 채운다
 ## (실제 플레이로 오래 걸리는 처치·스테이지·FEVER 게이지는 테스트 훅/사건 수로 대신 — SIM 줄로 적는다). 카드 [보상 받기]로 받으면
 ## 보상이 곧바로 보이고(예측), 서버가 받아들이고(되돌림 없음), 앱 단계·보상 반영 상태 == 서버 GET /v1/player인지 본다.
-## 가이드가 끝나면 반복 퀘스트를 한 바퀴(9개) 같은 방식으로 돈다.
+## 가이드가 끝나면 반복 퀘스트를 한 바퀴(6개) 같은 방식으로 돈다.
 ## 실행: cd server && env -u DATABASE_URL PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=8802 node src/main.ts &
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/journey_guide_online.tscn -- --api=http://127.0.0.1:8802 --device=/tmp/x/device.json --out=/tmp/jg.png
 ## 마지막 줄이 JOURNEY GUIDE ONLINE PASSED(실패면 종료 코드 1). INFO 줄 = 실패는 아니지만 보고할 것(보상 부족 등).
@@ -52,7 +52,7 @@ func _ready() -> void:
 	Guild.boss_started.connect(func(r): _boss_run = r)
 	_check(await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0) and Tutorial.active() and Tutorial.step == 0, "guide starts at mission 1", str(Economy.server_quest))
 	var total: int = Tutorial.MISSIONS.size()
-	_check(total == 78, "the guide has 78 missions", str(total))
+	_check(total == 82, "the guide has 82 missions", str(total))
 	var guard := 0
 	var upto := int(Net.arg_value("upto")) if Net.arg_value("upto") != "" else total  # 디버그: 이 미션까지만
 	while Tutorial.active() and guard < total + 2 and Tutorial.step < upto:
@@ -63,7 +63,7 @@ func _ready() -> void:
 	_check(not Tutorial.active() and str(Economy.server_quest.get("tut_state", "")) == "done" and Tutorial.step == total, "the whole guide is done (client and server)",
 		"step=%d state=%s server=%s" % [Tutorial.step, Tutorial.state, Economy.server_quest])
 	if not Tutorial.active():
-		await _repeats(9)
+		await _repeats(Tutorial.REPEATS.size())
 	if not _claim_ms.is_empty():
 		var a := 0
 		var b := 0
@@ -88,7 +88,7 @@ func _mission(i: int) -> bool:
 	var card = _child(CardScript)
 	await _frames(2)
 	var reward: Dictionary = Tutorial.reward(i)
-	var text_ok: bool = card.panel.visible and card.step_label.text == "가이드 %d/%d" % [i + 1, Tutorial.MISSIONS.size()] and str(m.title) in card.title_label.text and card.desc_label.text.length() > 10 \
+	var text_ok: bool = card.panel.visible and card.step_label.text == "가이드 퀘스트 %d" % (i + 1) and str(m.title) in card.title_label.text and card.desc_label.text.length() > 10 \
 		and card.reward_label.text == "보상: " + Tutorial.reward_text(reward) and not reward.is_empty() and Tutorial.reward_text(reward) != ""
 	_check(text_ok, tag + " card: step, title, description, reward", "%s | %s | %s | %s" % [card.step_label.text, card.title_label.text, card.desc_label.text, card.reward_label.text])
 	if not Tutorial.complete():
@@ -372,7 +372,7 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 			Pvp.finish(false, 10.0)
 			await _frames(30)
 			await _leave_scene()
-		"party":  # 2026-10-15 가이드 81: [파티] 탭의 리치 [매칭 시작] → AI 성주로 채움(테스트 훅) → [입장 수락] → 전투 끝까지(×2 — 서버는 최대 배속보다 빠른 승리를 받지 않는다)
+		"party":  # 2026-10-15 가이드 81: [파티] 탭의 리치 [매칭 시작] → AI 성주로 채움(테스트 훅) → [입장 수락] → 전투 끝까지(×1 — AI 성주와만 한 판은 실제 시간 ≥ 걸린 시간만 받는다, 2026-10-27 보안 점검)
 			var pv = GuideTour.find_script_node(get_tree().root, "res://scripts/party_view.gd")
 			_check(pv != null and pv.is_visible_in_tree() and pv.buttons["start:lich"].is_visible_in_tree() and Tutorial.point_target() == pv.buttons["start:lich"],
 				tag + " [바로가기] opens the [파티] tab and the arrow sits on the lich [매칭 시작]", str(Tutorial.point_target()))
@@ -391,9 +391,7 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 			await _frames(10)
 			var b = GuideTour.find_script_node(get_tree().root, "res://scripts/party_battle.gd")
 			if b != null:
-				Engine.time_scale = 2.0
 				await _wait_until(func(): return b.done, 200.0)
-				Engine.time_scale = 1.0
 				print("INFO %s lich easy: win %s clock %.1f" % [tag, b.result.get("win"), b.clock])
 				await _wait_until(func(): return Tutorial.complete() or not b.result.get("pending", false), 20.0)
 				if b.hud != null:
@@ -458,7 +456,7 @@ func _repeats(n: int) -> void:
 		var card = _child(CardScript)
 		await _frames(2)
 		var reward: Dictionary = Tutorial.repeat_reward(q)
-		_check(Tutorial.repeating() and card.panel.visible and card.step_label.text == "반복 퀘스트 %d" % (Tutorial.rep_n + 1) and str(q.title) in card.title_label.text
+		_check(Tutorial.repeating() and card.panel.visible and card.step_label.text == "가이드 퀘스트 %d" % (Tutorial.MISSIONS.size() + Tutorial.rep_n + 1) and str(q.title) in card.title_label.text
 			and card.reward_label.text == "보상: " + Tutorial.reward_text(reward) and not reward.is_empty(), tag + " card", "%s | %s | %s" % [card.step_label.text, card.title_label.text, card.reward_label.text])
 		# 2026-10-14: 카드는 서버가 센 진행을 보인다(앱이 따로 세던 기준이 어긋나 「1-2 클리어」가 ✓인데 받아지지 않았다)
 		var sr: Dictionary = Economy.server_quest.get("rep", {})

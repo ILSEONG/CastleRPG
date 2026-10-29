@@ -2,7 +2,7 @@ extends RefCounted
 ## 길드전(공성전) 수치·규칙 한 곳(오토로드 의존 없음). 서버 server/src/guild_war.ts와 같은 값·식이다.
 ## 바꾸려면 여기와 서버 둘 다: 한 주 한 상대(월요일 리셋에 새 상대), 공성 전투는 한 주에 1번(2026-10-06 사용자) — 시각은 길드장이 정하고
 ## (안 정하면 토요일 21:00) 그때부터 BATTLE_SEC초 · 그 사이 누구나 합류. 점수 = 수비 영웅 처치 1 · 성문 10(2개까지) · 성채 최대 체력 3%마다 1(사용자), 주간 보상(승리·패배).
-## 길드원 = 15명(길드 6레벨부터 20명 — 길드 쪽 규칙). 길드원 한 명 = 영웅 4명(공격 분대 / 수비 분대).
+## 길드원 = 1레벨 15명 + 레벨마다 3명, 6레벨부터 30명(길드 쪽 규칙). 길드원 한 명 = 영웅 4명(공격 분대 / 수비 분대).
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -23,8 +23,8 @@ const KEEP_MAX_PTS := 33  # floor(1 / KEEP_STEP)
 const DEFAULT_DAY := 5  # 길드원이 공성 시각을 안 정하면: 토요일(주 안 5번째 날, 0 = 월요일)
 const DEFAULT_HOUR := 21
 static var DAY_NAMES := [Lang.t("war_rules.day_names"), Lang.t("war_rules.day_names_2"), Lang.t("war_rules.day_names_3"), Lang.t("war_rules.day_names_4"), Lang.t("war_rules.day_names_5"), Lang.t("war_rules.day_names_6"), Lang.t("war_rules.day_names_7")]
-const REWARD_WIN := {"coins": 300, "diamonds": 100}
-const REWARD_LOSE := {"coins": 100, "diamonds": 30}
+const REWARD_WIN := {"coins": 1500, "diamonds": 3000}  # 2026-10-29 사용자: 길드 코인 ×5, 다이아 ×30 (서버와 같다)
+const REWARD_LOSE := {"coins": 500, "diamonds": 900}
 const GATE_HP_PER_LEVEL := 10000.0  # 2026-10-11 사용자: 성문 체력 = 성 주인 길드 레벨 × 이만큼(서버 GATE_HP_PER_LEVEL과 같다)
 const GATE_HP_SHARE := 3.0  # 2026-10-11 전에 연 주(레벨을 안 남긴 주)만: 성문 체력 = 그 면 수비 영웅 최대 체력 합 × 이만큼
 const KEEP_HP_SHARE := 6.0  # 성채 체력 = 수비 영웅 전체 최대 체력 합 × 이만큼

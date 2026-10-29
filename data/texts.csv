@@ -607,7 +607,7 @@ gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
-gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
+gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR 이상이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_6,10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_7,"골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다",,,,scripts/gacha_odds.gd
 gacha_odds.show_for_8,등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림,,,,scripts/gacha_odds.gd
@@ -1497,7 +1497,7 @@ ranking_panel.subtabs_2,전투력,,,,scripts/ranking_panel.gd
 ranking_panel.subtabs_3,길드,,,,scripts/ranking_panel.gd
 ranking_panel.head.stage,도달한 라운드 순 · 먼저 도달한 사람이 위,,,,scripts/ranking_panel.gd
 ranking_panel.head.power,출전 영웅 전투력 합 순,,,,scripts/ranking_panel.gd
-ranking_panel.head.guild,길드 레벨 순 · 같으면 누적 경험치 순,,,,scripts/ranking_panel.gd
+ranking_panel.head.guild,이번 주 드래곤 보스 길드 총 피해량 순 · 매주 월요일 0시 초기화,,,,scripts/ranking_panel.gd
 ranking_panel.ready,랭킹,,,,scripts/ranking_panel.gd
 ranking_panel.rebuild.msg,불러오는 중…,,,,scripts/ranking_panel.gd
 ranking_panel.rebuild,랭킹은 서버에 접속했을 때 볼 수 있습니다,,,,scripts/ranking_panel.gd
@@ -1510,7 +1510,6 @@ ranking_panel.rebuild_6,전투력이 0이면 순위에 오르지 않습니다,,,
 ranking_panel.rebuild_7,순위 없음,,,,scripts/ranking_panel.gd
 ranking_panel.row,내 길드,,,,scripts/ranking_panel.gd
 ranking_panel.row_2,나,,,,scripts/ranking_panel.gd
-ranking_panel.row_3,길드원 %d명 · 드래곤 점수 %s,,,,scripts/ranking_panel.gd
 ranking_panel.row_4,길드 ,,,,scripts/ranking_panel.gd
 recruit_panel.title,영웅 모집,,,,scripts/recruit_panel.gd
 recruit_panel.late_text,모집 결과 도착 — 주점에서 확인하세요,,,,scripts/recruit_panel.gd
@@ -1899,6 +1898,24 @@ skills.names.gale,돌개바람,,,,scripts/skills.gd
 skills.names.solar_spark,햇빛 파편,,,,scripts/skills.gd
 skills.names.frost_spike,서리 가시,,,,scripts/skills.gd
 skills.names.magma,끓는 늪,,,,scripts/skills.gd
+skills.names.turtle_ward,현무 결계,,,,scripts/skills.gd
+skills.names.black_shell,흑귀갑,,,,scripts/skills.gd
+skills.names.north_tide,북해 해일,,,,scripts/skills.gd
+skills.names.tiger_claw,백호 참격,,,,scripts/skills.gd
+skills.names.tiger_fury,산군의 기세,,,,scripts/skills.gd
+skills.names.tiger_avatar,백호 현신,,,,scripts/skills.gd
+skills.names.fox_fire,여우불,,,,scripts/skills.gd
+skills.names.fox_charm,매혹,,,,scripts/skills.gd
+skills.names.nine_tails,구미호 해방,,,,scripts/skills.gd
+skills.names.dragon_arrow,청룡시,,,,scripts/skills.gd
+skills.names.azure_tide,용궁의 물살,,,,scripts/skills.gd
+skills.names.azure_dragon,청룡 강림,,,,scripts/skills.gd
+skills.names.time_stop,시간 정지,,,,scripts/skills.gd
+skills.names.time_haste,시간 가속,,,,scripts/skills.gd
+skills.names.time_collapse,시간 붕괴,,,,scripts/skills.gd
+skills.names.phoenix_wing,불새의 날개,,,,scripts/skills.gd
+skills.names.phoenix_blessing,주작의 가호,,,,scripts/skills.gd
+skills.names.rebirth_flame,환생의 불꽃,,,,scripts/skills.gd
 skills.hero_names.poison,화상,,,,scripts/skills.gd
 skills.hero_names.aoe_blast,화염구,,,,scripts/skills.gd
 skills.texts.heal_aura,{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 각자 최대 HP의 {c}%만큼 회복합니다.,,,,scripts/skills.gd
@@ -2033,6 +2050,24 @@ skills.texts.gale,공격이 {a}% 확률로 맞은 자리에 회오리를 일으�
 skills.texts.solar_spark,공격이 {a}% 확률로 맞은 자리에 섬광을 터뜨려 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 3초 동안 공격력을 30% 낮춥니다.,,,,scripts/skills.gd
 skills.texts.frost_spike,공격이 {a}% 확률로 대상 쪽으로 길이 {b}m 얼음 가시를 솟게 해 공격력의 {c}% 피해를 주고 0.8초 얼립니다.,,,,scripts/skills.gd
 skills.texts.magma,공격이 {a}% 확률로 맞은 자리에 용암을 뿜어 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.turtle_ward,"{a}초마다 거북 등껍질 결계를 펼쳐 반경 {b}m 아군에게 자기 최대 HP {c}%의 보호막을 씌우고, 주변 적을 3초 동안 도발합니다.",,,,scripts/skills.gd
+skills.texts.black_shell,"받는 피해가 {a}% 줄고, 받은 피해의 {b}%를 때린 적에게 물살로 되돌려 줍니다.",,,,scripts/skills.gd
+skills.texts.north_tide,"{a}초마다 북해의 물기둥을 일으켜 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 1.5초 기절시키며 밀쳐냅니다.",,,,scripts/skills.gd
+skills.texts.tiger_claw,{a}초마다 앞쪽 {b}m를 백호의 발톱으로 세 번 할퀴어 번마다 공격력의 {c}% 피해를 줍니다. 마지막 발톱은 적을 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.tiger_fury,{a}번째 공격마다 흰 번개 발톱이 터져 맞은 적 주변 {b}m에 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.tiger_avatar,"{a}초마다 백호로 현신해 {b}초 동안 공격력과 공격 속도가 {c}% 오르고, 포효로 주변 적을 1초 기절시킵니다.",,,,scripts/skills.gd
+skills.texts.fox_fire,{a}초마다 여우불 {b}개를 흩뿌려 하나마다 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
+skills.texts.fox_charm,"공격이 {a}% 확률로 적을 홀려 {b}초 동안 멈추게 하고, 그 뒤 2초까지 받는 피해를 {c}% 늘립니다.",,,,scripts/skills.gd
+skills.texts.nine_tails,"{a}초마다 아홉 꼬리로 주변 {b}m를 아홉 번 휩쓸어 번마다 공격력의 {c}% 피해를 주고, 마지막에 남은 적을 1초 홀립니다.",,,,scripts/skills.gd
+skills.texts.dragon_arrow,"{a}초마다 청룡이 깃든 화살로 앞쪽 {b}m의 적을 모두 꿰뚫어 공격력의 {c}% 피해를 주고, 2초 동안 40% 느리게 합니다.",,,,scripts/skills.gd
+skills.texts.azure_tide,"공격이 적을 {c}초 동안 {b}% 느리게 하고, 느려진 적에게 주는 피해가 {a}% 늘어납니다.",,,,scripts/skills.gd
+skills.texts.azure_dragon,"{a}초마다 청룡을 불러 대상 자리 반경 {b}m를 3초 동안 휘감아 0.5초마다 공격력의 {c}% 피해를 주고, 마지막에 두 배 피해를 줍니다.",,,,scripts/skills.gd
+skills.texts.time_stop,{a}초마다 시간을 멈춰 대상 자리 반경 {b}m 적을 {c}초 동안 얼어붙게 합니다.,,,,scripts/skills.gd
+skills.texts.time_haste,스킬 재사용 대기 시간이 {a}% 빨리 돌아옵니다.,,,,scripts/skills.gd
+skills.texts.time_collapse,"{a}초마다 대상 자리에 시간의 균열을 열어 1.2초 뒤 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 3초 동안 50% 느리게 합니다.",,,,scripts/skills.gd
+skills.texts.phoenix_wing,"{a}초마다 불새를 날려 아군 모두를 최대 HP의 {b}% 회복하고, 대상 자리 적에게 공격력의 {c}% 피해와 화상을 줍니다.",,,,scripts/skills.gd
+skills.texts.phoenix_blessing,스킬로 회복하거나 되살린 아군은 {b}초 동안 공격력이 {a}% 오릅니다.,,,,scripts/skills.gd
+skills.texts.rebirth_flame,"{a}초마다 쓰러진 아군을 모두 최대 HP의 {b}%로 되살리고, 살아 있는 아군은 최대 HP의 {c}% 회복합니다.",,,,scripts/skills.gd
 soldier_panel.empty_text,보유한 병사가 없습니다,,,,scripts/soldier_panel.gd
 soldier_panel.ready,병사,,,,scripts/soldier_panel.gd
 soldier_panel.ready_2,자동 배치,,,,scripts/soldier_panel.gd
@@ -2059,7 +2094,7 @@ tab_bar.tabs_3,병사,,,,scripts/tab_bar.gd
 tab_bar.tabs_4,던전,,,,scripts/tab_bar.gd
 tab_bar.tabs_5,모집,,,,scripts/tab_bar.gd
 tab_bar.tabs_6,상점,,,,scripts/tab_bar.gd
-tutorial.done_text,가이드 완료! 이제 자유롭게 성을 키워 보세요,,,,scripts/tutorial.gd
+tutorial.done_text,모든 기능이 열렸습니다. 가이드 퀘스트는 계속 이어집니다,,,,scripts/tutorial.gd
 tutorial.locked_text,가이드를 진행하면 열립니다,,,,scripts/tutorial.gd
 tutorial.missions.build_lumber.title,벌목장 건설,,,,scripts/tutorial.gd
 tutorial.missions.build_lumber.desc,왼쪽 아래 [건설] 버튼을 눌러 펼쳐진 목록에서 벌목장을 고르고 원하는 자리에 지으세요. 목재를 생산합니다.,,,,scripts/tutorial.gd
@@ -2121,6 +2156,14 @@ tutorial.missions.hero_lv4_12.title,영웅 4명 Lv 12 달성,,,,scripts/tutorial
 tutorial.missions.hero_lv4_12.desc,[영웅] 탭에서 영웅 4명을 Lv 12 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_4.title,스테이지 1-4 클리어,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_4.desc,전투를 이어 가 1-4까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
+tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_30.desc,성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_40.title,몬스터 40마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_40.desc,몬스터 40마리를 처치하세요. 대기 중에도 영웅들이 저절로 싸웁니다. 처치할 때마다 골드가 쌓여 다음 성장에 씁니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_50.title,몬스터 50마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_50.desc,새로 배치한 영웅들과 함께 몬스터 50마리를 처치하세요. 대기 중에도 저절로 싸웁니다.,,,,scripts/tutorial.gd
+tutorial.missions.kill_60.title,몬스터 60마리 처치,,,,scripts/tutorial.gd
+tutorial.missions.kill_60.desc,몬스터 60마리를 처치하세요. 대기 중에도 영웅들이 저절로 싸웁니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_100.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
 tutorial.missions.kill_100.desc,몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.,,,,scripts/tutorial.gd
 tutorial.missions.dungeon_gold.title,골드 던전,,,,scripts/tutorial.gd
@@ -2214,30 +2257,24 @@ tutorial.missions.stage_1_15.desc,전투를 이어 가 1-15까지 클리어하�
 tutorial.missions.exchange_look.title,거래소 둘러보기,,,,scripts/tutorial.gd
 tutorial.missions.exchange_look.desc,"[메뉴] → [거래소]를 열어 보세요. 다른 성주가 올린 장비를 골드·다이아로 사고, 내 장비를 올려 팔 수 있습니다.",,,,scripts/tutorial.gd
 tutorial.repeats.title,몬스터 %d마리 처치,,,,scripts/tutorial.gd
-tutorial.repeats.title_2,자원 %d번 수집,,,,scripts/tutorial.gd
 tutorial.repeats.title_3,스테이지 %s 클리어,,,,scripts/tutorial.gd
 tutorial.repeats.title_4,성장 강화 %d회,,,,scripts/tutorial.gd
-tutorial.repeats.title_5,상인에게 자원 팔기,,,,scripts/tutorial.gd
 tutorial.repeats.title_6,영웅 레벨업 %d회,,,,scripts/tutorial.gd
 tutorial.repeats.title_7,영웅 %d회 모집,,,,scripts/tutorial.gd
 tutorial.repeats.title_8,던전 %d번 클리어,,,,scripts/tutorial.gd
-tutorial.repeats.title_9,건물 %d번 레벨업,,,,scripts/tutorial.gd
 tutorial.repeat_desc.kill,몬스터를 처치하세요. 방치 중 처치도 셉니다.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.collect,생산 건물을 눌러 자원을 수집하세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.stage,전투를 이어 가 목표 라운드를 클리어하세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.growth_up,[성장] 탭에서 강화하세요.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.sell,상인에게 남는 자원을 파세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.hero_up,[영웅] 탭에서 영웅을 레벨업하세요(여러 영웅 합산).,,,,scripts/tutorial.gd
 tutorial.repeat_desc.gacha,골드·다이아·모집권 어느 모집이든 셉니다.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.dungeon_win,골드·장비 던전 아무 단계나 클리어하세요.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.build_up,아무 건물이나 레벨업을 끝내세요.,,,,scripts/tutorial.gd
 tutorial.mission_desc,지금 길드에 속해 있지 않습니다. 먼저 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. ,,,,scripts/tutorial.gd
 tutorial.pvp_lock_text,열립니다,,,,scripts/tutorial.gd
 tutorial.dungeon_lock_text,열립니다,,,,scripts/tutorial.gd
 tutorial.tab_lock_text,가이드를 마치면 열립니다,,,,scripts/tutorial.gd
 tutorial.tab_lock_text_2,열립니다,,,,scripts/tutorial.gd
 tutorial.build_lock_text,건설할 수 있습니다,,,,scripts/tutorial.gd
-tutorial.lock_text,가이드 %d번째 미션 「%s」에서 %s,,,,scripts/tutorial.gd
+tutorial.lock_text,가이드 퀘스트 %d 「%s」에서 %s,,,,scripts/tutorial.gd
 tutorial.reward_text,다이아 %s,,,,scripts/tutorial.gd
 tutorial.reward_text_2,골드 %s,,,,scripts/tutorial.gd
 tutorial.reward_text_3,골드 던전 입장권 %d,,,,scripts/tutorial.gd
@@ -2246,8 +2283,7 @@ tutorial.reward_text_5,모집권 던전 입장권 %d,,,,scripts/tutorial.gd
 tutorial.reward_text_6,다이아 모집권 %d,,,,scripts/tutorial.gd
 tutorial.action_label,▶ 진행,,,,scripts/tutorial.gd
 tutorial.action_label_2,바로가기,,,,scripts/tutorial.gd
-tutorial_card.refresh,반복 퀘스트 %d,,,,scripts/tutorial_card.gd
-tutorial_card.refresh_2,가이드 %d/%d,,,,scripts/tutorial_card.gd
+tutorial_card.guide_no,가이드 퀘스트 %d,,,,scripts/tutorial_card.gd
 tutorial_card.refresh_3,보상: ,,,,scripts/tutorial_card.gd
 tutorial_card.refresh_4,보상 받기,,,,scripts/tutorial_card.gd
 ui_kit.duration,%d시간 %d분,,,,scripts/ui_kit.gd
@@ -2750,3 +2786,31 @@ reveal_banner.speed_name,배속,,,,scripts/reveal_banner.gd
 guide_tours.tours.title_4,스킬 자동·수동,,,,scripts/guide_tours.gd
 guide_tours.tours.skill_auto,"[스킬 AUTO] 버튼입니다. 켜 두면 스킬이 저절로 나가고, 끄면 원하는 때에 직접 씁니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_93,스킬 AUTO를 끄면 준비된 스킬 칸이 빛납니다. 그 칸을 누르면 그 영웅이 바로 스킬을 씁니다.,,,,scripts/guide_tours.gd
+bag_panel.ready_4,합성,,,,scripts/bag_panel.gd
+bag_panel.ready_5,신화(MR) %s 완성!,,,,scripts/bag_panel.gd
+economy.equip_text.not_fusable,LR 장비만 합성할 수 있습니다,,,,scripts/economy.gd
+economy.equip_text.mixed_slot,같은 부위(무기는 같은 종류) 장비만 합성할 수 있습니다,,,,scripts/economy.gd
+server.ranking.guild_mail.title,[길드 랭킹] 주간 보상,,,,server/src/ranking.ts
+server.ranking.guild_mail.body,지난주 길드 랭킹에서 {guild} 길드가 {rank}위를 했습니다. 길드원 모두에게 드리는 보상입니다.,,,,server/src/ranking.ts
+ranking_panel.rebuild_8,이번 주 드래곤에 피해를 주면 순위에 오릅니다,,,,scripts/ranking_panel.gd
+ranking_panel.row_5,Lv %d · 길드원 %d명,,,,scripts/ranking_panel.gd
+ranking_panel.season_card,주간 보상 · 길드원 모두 우편으로 받습니다,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_2,이번 주 남은 시간 %d일 %d시간 %d분,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_3,%d위,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_4,%d~%d위,,,,scripts/ranking_panel.gd
+ranking_panel.season_card_5,%s  %s %d개,,,,scripts/ranking_panel.gd
+live_ops.box_names.top,최고급 장비 상자,,,,scripts/live_ops.gd
+live_ops.box_names.high,고급 장비 상자,,,,scripts/live_ops.gd
+live_ops.box_names.normal,일반 장비 상자,,,,scripts/live_ops.gd
+fuse_dialog.ready,SSR 조각 합성,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_2,SSR 조각 %d개를 넣으면 태생 UR 영웅 1명이 무작위로 나옵니다,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_3,조각이 있는 SSR 영웅이 없습니다,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_4,자동 채우기,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_5,합성,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_6,닫기,,,,scripts/fuse_dialog.gd
+fuse_dialog.rebuild,%s  (조각 %d),,,,scripts/fuse_dialog.gd
+fuse_dialog.rebuild_2,넣은 조각 %d / %d,,,,scripts/fuse_dialog.gd
+recruit_panel.refresh_14,UR 확정까지 %d회,,,,scripts/recruit_panel.gd
+recruit_panel.refresh_15,SSR 조각 합성 (%d개 → UR 1명),,,,scripts/recruit_panel.gd
+gacha_odds.show_for_4,%d회째 모집은 UR 확정(UR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
+economy.fuse_ur,SSR 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd

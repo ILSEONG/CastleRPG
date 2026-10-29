@@ -586,7 +586,7 @@ func _recruit_and_heroes(rig) -> void:
 	# 미보유 영웅: 보유 카드 뒤에 등급(SSR → SR → R) → 표 순서, 흐린 카드·"미보유"·Lv·전투력 없음, 배치·상세 안 됨
 	var locked: Array = heroes_win.locked_cards.keys()
 	var want_locked: Array = GameData.heroes().filter(func(h): return int(Economy.heroes.get(h.id, 0)) < 1).map(func(h): return h.id)
-	var rank := {"SSR": 0, "SR": 1, "R": 2}
+	var rank := {"UR": -1, "SSR": 0, "SR": 1, "R": 2}  # 태생 UR이 맨 앞(2026-10-29)
 	var file_order := GameData.heroes().map(func(h): return h.id)
 	want_locked.sort_custom(func(a, b): return [rank[GameData.hero(a).grade], file_order.find(a)] < [rank[GameData.hero(b).grade], file_order.find(b)])
 	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
@@ -2734,6 +2734,36 @@ func _dungeon_ui(tabs) -> void:
 	await _tap(bag.sell_button.get_global_rect().get_center())
 	_check(Economy.bag.size() == 3 and Economy.gold == g0 + value and ids.all(func(x): return Economy.item(x).is_empty()) and bag.title_label.text == "보관함 3 / 300"
 		and bag.selected.is_empty(), "(D) [판매] sells both for round(10 x grade mult x level) each", "bag=%d gold %d -> %d" % [Economy.bag.size(), g0, Economy.gold])
+	# [합성]: 같은 부위 LR 3개 → MR 하나(신화, 특수 4줄). 2개나 다른 등급이 섞이면 꺼져 있다
+	var lrs := [990011, 990012, 990013]
+	for x in lrs:
+		Economy.bag.append({"id": x, "slot": "hat", "weapon_kind": null, "grade": "LR", "rolls": {"hp": 100}, "subs": []})
+	Economy.bag.append({"id": 990014, "slot": "hat", "weapon_kind": null, "grade": "UR", "rolls": {"hp": 100}, "subs": []})
+	Economy.items_changed.emit()
+	await _frames(2)
+	_check(bag.fuse_button.disabled and bag.fuse_button.get_global_rect().end.x <= bag.sell_button.get_global_rect().position.x + 1.0,
+		"(D) [합성] sits left of [판매] and is off with nothing picked", "fuse=%s" % bag.fuse_button.get_global_rect())
+	bag.toggle(990011)
+	bag.toggle(990012)
+	bag.toggle(990014)
+	_check(bag.fuse_button.disabled and Economy.fuse_block(bag.selected.keys()) == "not_fusable", "(D) [합성] stays off with a UR in the three", "")
+	bag.toggle(990014)
+	bag.toggle(990013)
+	_check(not bag.fuse_button.disabled, "(D) [합성] turns on with three LR hats picked", "sel=%s" % [bag.selected.keys()])
+	var got_mr := []
+	var on_fused := func(x): got_mr.append(x)
+	Economy.fused.connect(on_fused)
+	var n0: int = Economy.bag.size()
+	await _tap(bag.fuse_button.get_global_rect().get_center())
+	await _frames(2)
+	var made: Dictionary = got_mr[0] if not got_mr.is_empty() else {}
+	_check(got_mr.size() == 1 and made.grade == "MR" and made.slot == "hat" and made.subs.size() == 4 and Economy.bag.size() == n0 - 2
+		and lrs.all(func(x): return Economy.item(x).is_empty()) and not Economy.item(int(made.id)).is_empty() and bag.selected.is_empty()
+		and _child(HudScript)._toast.text.begins_with("신화(MR)"),
+		"(D) [합성] turns three LR hats into one MR hat with 4 special stats and announces it", "made=%s bag %d -> %d" % [made, n0, Economy.bag.size()])
+	Economy.fused.disconnect(on_fused)
+	Economy.bag = Economy.bag.filter(func(x): return int(x.id) != 990014 and int(x.id) != int(made.get("id", -1)))
+	Economy.items_changed.emit()
 	await _tap(bag.slot_button.get_global_rect().get_center())
 	_check(bag.slot_filter == "weapon" and bag.slot_button.text == "부위: 무기" and bag.rows.keys().all(func(x): return Economy.item(x).slot == "weapon"),
 		"(D) [부위] filter cycles to 무기 and lists only weapons", "filter=%s rows=%s" % [bag.slot_filter, bag.rows.keys()])
@@ -2874,14 +2904,16 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	dlg = recruit.dialog.get_global_rect()
 	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.dia_label.text == "보유 600"
-		and recruit.pity_label.text == "SSR 확정까지 50회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
-		and recruit.rates_label.text == "SSR 5% · SR 30% · R 65%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
+		and recruit.pity_label.text == "SSR 확정까지 50회  ·  UR 확정까지 200회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
+		and recruit.rates_label.text == "UR 0.5% · SSR 5% · SR 30% · R 64.5%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
 		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 5/30/65, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
 		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
-	var ssr: bool = recruit.cards.size() == 1 and GameData.hero(recruit.cards[0].hero_id).grade == "SSR"
-	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회" % (50 if ssr else 49)
+	var top_g: String = GameData.hero(recruit.cards[0].hero_id).grade if recruit.cards.size() == 1 else ""
+	var ssr: bool = top_g in ["SSR", "UR"]  # UR도 SSR 천장을 되돌린다
+	var ur_left := 200 if top_g == "UR" else 199
+	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회  ·  UR 확정까지 %d회" % [50 if ssr else 49, ur_left]
 		and Economy.gold == gold0 and recruit.is_showing_results() and not recruit.auto_box.visible and recruit.again_button.text == "1회 더\n다이아 300" and recruit.again10_button.text == "10회 더\n다이아 부족",
 		"(r23) diamond [1회]: diamonds -300, the pity count goes down, gold untouched; no 자동 모집 box on diamond results",
 		"dia=%d pity=%d text=%s gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, recruit.pity_label.text, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])

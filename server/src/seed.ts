@@ -121,13 +121,13 @@ export const TABLES: TableSpec[] = [
 // 개정 23 모집 설정(checkGacha가 범위를 본다): 골드 레벨 비용·확률, 다이아 비용·확률·천장
 export const GACHA_KEYS = ['gacha_gold_cost_base', 'gacha_gold_cost_growth', 'gacha_gold_level_max', 'gacha_gold_level_pulls',
   'gacha_gold_ssr_base', 'gacha_gold_ssr_step', 'gacha_gold_sr_base', 'gacha_gold_sr_step',
-  'gacha_dia_cost_1', 'gacha_dia_cost_10', 'gacha_dia_ssr', 'gacha_dia_sr', 'gacha_dia_pity']
+  'gacha_dia_cost_1', 'gacha_dia_cost_10', 'gacha_dia_ssr', 'gacha_dia_sr', 'gacha_dia_pity', 'gacha_dia_ur', 'gacha_dia_ur_pity', 'ur_fuse_shards']
 // 서버·앱이 쓰는 설정 키(스펙 §2). 숫자 키는 숫자여야 하고, 목록 키는 `|` 구분 항목이 비지 않아야 한다.
 export const CONFIG_NUM = ['castle_hp', 'gate_hp_per_level', 'max_live_monsters', 'countdown_sec', 'result_sec', 'wave_gap_sec',
   'spawn_spacing_sec', 'accum_cap_min', 'badge_min', 'merchant_jackpot_p', 'merchant_jackpot_rate', 'merchant_rate_min',
   'merchant_rate_max', 'merchant_rate_step', 'merchant_low_high_ratio', 'kill_rate_cap', 'kill_burst_sec', 'promote_mult',
   'gacha_10_min_sr', ...GACHA_KEYS,
-  'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'hero_level_stat_melee', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR',
+  'hero_max_level_base', 'hero_max_level_per_promotion', 'hero_level_stat', 'hero_level_stat_melee', 'levelup_gold_R', 'levelup_gold_SR', 'levelup_gold_SSR', 'levelup_gold_UR',
   'fever_kills', 'fever_sec', 'fever_spawn_mult', 'skill2_unlock_star', 'skill3_unlock_star', 'spawn_group',
   'rounds_per_stage', 'stage_speed_step', 'stage_speed_cap', 'boss_round_mult',
   'offline_gold_mult', 'tutorial_train_sec', 'lot_build_sec', 'quest_repeat_min_sec', 'tutorial_new_players'] // 개정 22 라운드(앱 표시·스폰만 — 서버 stage는 전체 라운드 g 그대로)
@@ -163,9 +163,9 @@ export const SLOT_STEP = 4 // 성이 넓어질 때마다 영웅 슬롯 +4(사용
 export const MAX_HERO_SLOTS = 12 // 앱 GameData.MAX_HERO_SLOTS
 // 시작 영웅 스펙 기본값(§3.1). 마이그레이션 005와 로그인이 설정 행이 없을 때(시드 전 DB) 쓴다.
 export const DEFAULT_STARTERS = 'hans|ella|dorik|nina'
-export const GRADES = ['R', 'SR', 'SSR']
+export const GRADES = ['R', 'SR', 'SSR', 'UR'] // UR = 태생 UR(2026-10-29)
 // 개정 17: 등급별 스킬 수(skill1부터 빈틈없이)와 스킬 종류 — 앱 GameData.GRADE_SKILLS·Skills.KINDS와 같다
-export const GRADE_SKILLS: Record<string, number> = { R: 2, SR: 3, SSR: 3 }
+export const GRADE_SKILLS: Record<string, number> = { R: 2, SR: 3, SSR: 3, UR: 3 }
 export const SKILL_KINDS = ['heal_aura', 'atk_aura', 'dmg_reduce', 'dodge', 'thorns', 'lifesteal', 'haste', 'rage', 'crit', 'execute',
   'boss_slayer', 'cleave', 'multishot', 'chain', 'aoe_blast', 'slow', 'stun', 'poison', 'gate_repair',
   // 스킬 100종 확장(앱 Skills.KINDS와 같은 순서)
@@ -183,7 +183,10 @@ export const SKILL_KINDS = ['heal_aura', 'atk_aura', 'dmg_reduce', 'dodge', 'tho
   'ignite', 'piercing_shot', 'blood_rage', 'frost_chain', 'rend', 'bulwark', 'crushing_blow', 'sunder', 'shield_bash', 'snare',
   'blade_flurry', 'parry', 'fire_bolt', 'firespread', 'axe_volley', 'boomerang', 'spear_sweep', 'drain_slash', 'volley',
   'wide_swing', 'cheap_shot', 'crescent', 'lunar_veil', 'howl', 'deep_freeze', 'hex', 'scorch', 'gale', 'solar_spark',
-  'frost_spike', 'magma']
+  'frost_spike', 'magma',
+  // 2026-10-29 태生 UR 전용(앱 Skills.KINDS와 같은 순서)
+  'turtle_ward', 'black_shell', 'north_tide', 'tiger_claw', 'tiger_fury', 'tiger_avatar', 'fox_fire', 'fox_charm', 'nine_tails',
+  'dragon_arrow', 'azure_tide', 'azure_dragon', 'time_stop', 'time_haste', 'time_collapse', 'phoenix_wing', 'phoenix_blessing', 'rebirth_flame']
 const SKILL_COLS = ['skill1', 'skill2', 'skill3']
 
 const NUM_RE = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/
@@ -354,13 +357,18 @@ function checkGachaRates(num: (k: string) => number | null, raw: (k: string) => 
   const max = ok('gacha_gold_level_max', int1, 'an integer of at least 1')
   ok('gacha_gold_level_pulls', int1, 'an integer of at least 1')
   ok('gacha_dia_pity', int1, 'an integer of at least 1')
+  ok('gacha_dia_ur_pity', int1, 'an integer of at least 1')
+  ok('ur_fuse_shards', int1, 'an integer of at least 1')
   ok('gacha_gold_cost_base', (v) => v >= 0, '0 or more')
   ok('gacha_gold_cost_growth', (v) => v >= 1, '1 or more')
   const [ssrBase, ssrStep, srBase, srStep] = ['gacha_gold_ssr_base', 'gacha_gold_ssr_step', 'gacha_gold_sr_base', 'gacha_gold_sr_step'].map((k) => ok(k, (v) => v >= 0, '0 or more'))
   const unit = (v: number) => v >= 0 && v <= 1
   const dSsr = ok('gacha_dia_ssr', unit, 'in 0..1')
   const dSr = ok('gacha_dia_sr', unit, 'in 0..1')
-  if (dSsr !== null && dSr !== null && dSsr + dSr > 1 + 1e-9) err('gacha_dia_sr', `plus gacha_dia_ssr must be at most 1: ${raw('gacha_dia_ssr')} + ${raw('gacha_dia_sr')}`)
+  const dUr = ok('gacha_dia_ur', unit, 'in 0..1') ?? 0
+  if (dSsr !== null && dSr !== null && dUr + dSsr + dSr > 1 + 1e-9) {
+    err('gacha_dia_sr', `plus gacha_dia_ur and gacha_dia_ssr must be at most 1: ${raw('gacha_dia_ur')} + ${raw('gacha_dia_ssr')} + ${raw('gacha_dia_sr')}`)
+  }
   if (max === null || ssrBase === null || ssrStep === null || srBase === null || srStep === null) return
   const r6 = (v: number) => Math.round(v * 1e6) / 1e6
   const ssrMax = ssrBase + ssrStep * (max - 1)

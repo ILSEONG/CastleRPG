@@ -137,11 +137,14 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal(r.json.player.dungeons.gold.keys, keys + 2)
   // 모집권 보상
   const t = rows.findIndex((x) => x.id === 'kill_100_2')
-  assert.ok(rows[t].reward.split('|').includes('tickets:10')) // 가이드 2026-10-12: 다음 미션 골드도 함께
+  assert.equal(rows[t - 1].id, 'keep_2') // 2026-10-29: 성채 Lv 2 바로 뒤(전투 목표 간격)
+  assert.ok(rows[t - 1].reward.split('|').includes('tickets:10')) // 다음 미션(처치)이 아무것도 안 쓰면 모집권
+  assert.equal(rows[t].reward, 'stone:380|food:530') // 처치 미션은 다음 미션(벌목장 Lv 2) 자원을 준다
   await pump(token, 200)
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
-  const tk = (await player(token)).dia_tickets // 채석장·농장 보상(모집권 10)을 이미 받았다
-  assert.equal((await claim(token, { type: 'tutorial', step: t })).json.player.dia_tickets, tk + 10)
+  const res0 = (await player(token)).res
+  const kr = (await claim(token, { type: 'tutorial', step: t })).json.player.res
+  assert.deepEqual([kr.stone - res0.stone, kr.food - res0.food], [380, 530])
   // 마지막
   await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, rows.length - 3])
   assert.equal(rows[rows.length - 3].id, 'stage_1_15')
@@ -173,37 +176,39 @@ test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_
   const { token, id } = await S.login()
   assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'tutorial_running')
   await S.db.query("update player_state set tut_state = 'skipped' where player_id = $1", [id])
-  const gold0 = (await player(token)).gold
-  assert.deepEqual((await player(token)).quest.rep, { have: 0, need: 100, from: null }) // 앱 카드가 이 진행을 보인다
-  assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
-  await pump(token)
+  // 순서(메이플스토리 키우기식 2026-10-29): 스테이지 돌파 → 처치 → 모집 → 던전 → 영웅 → 성장 → 건물 → 수집 → 판매
+  assert.deepEqual((await player(token)).quest.rep, { have: 2, need: 2, from: null }) // 기준 라운드가 없으면(가이드를 건너뛴 성주) 이미 끝난 것으로
   let r = await claim(token, { type: 'repeat', n: 0 })
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.reward, { gold: 3000 })
-  assert.equal(r.json.player.gold, gold0 + 3000)
+  assert.deepEqual([r.json.reward, r.json.player.diamonds], [{ diamonds: 20 }, 20])
   assert.equal(r.json.player.quest.rep_n, 1)
   assert.equal((await claim(token, { type: 'repeat', n: 0 })).json.error, 'stale')
   assert.equal((await claim(token, { type: 'repeat', n: 1 })).json.error, 'too_soon')
   S.clock.t = T0 + 30
-  assert.equal((await claim(token, { type: 'repeat', n: 1 })).json.error, 'not_done') // 받은 뒤부터 다시 센다
+  const gold0 = (await player(token)).gold
+  assert.deepEqual((await player(token)).quest.rep, { have: 0, need: 100, from: null }) // 앱 카드가 이 진행을 보인다
+  assert.equal((await claim(token, { type: 'repeat', n: 1 })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
   await pump(token)
-  assert.deepEqual((await claim(token, { type: 'repeat', n: 1 })).json.reward, { gold: 2000 })
+  r = await claim(token, { type: 'repeat', n: 1 })
+  assert.equal(r.status, 200)
+  assert.deepEqual(r.json.reward, { gold: 3000 })
+  assert.equal(r.json.player.gold, gold0 + 3000)
+  assert.equal(r.json.player.quest.rep_n, 2)
   S.clock.t = T0 + 60
+  assert.equal((await claim(token, { type: 'repeat', n: 2 })).json.error, 'not_done') // 받은 뒤부터 다시 센다(모집 10회)
+  await pump(token)
+  assert.deepEqual((await claim(token, { type: 'repeat', n: 2 })).json.reward, { tickets: 1 })
+  // 두 번째 바퀴: 스테이지는 받을 때 라운드 + 2, reward × 2, fixed 그대로
+  await S.db.query('update player_state set rep_n = 6 where player_id = $1', [id])
+  S.clock.t = T0 + 90
   assert.deepEqual((await player(token)).quest.rep, { have: 0, need: 2, from: 1 }) // 앱: 「스테이지 1-2 클리어」(받을 때 라운드 1 → 1-2까지 깨면 3)
-  assert.equal((await claim(token, { type: 'repeat', n: 2 })).json.error, 'not_done') // 받을 때 라운드 + 2
+  assert.equal((await claim(token, { type: 'repeat', n: 6 })).json.error, 'not_done')
   await setStage(token, 3)
   assert.deepEqual((await player(token)).quest.rep, { have: 2, need: 2, from: 1 })
-  r = await claim(token, { type: 'repeat', n: 2 })
-  assert.deepEqual([r.json.reward, r.json.player.diamonds], [{ diamonds: 20 }, 20])
-  // 두 번째 바퀴: reward × 2, fixed 그대로
-  await S.db.query('update player_state set rep_n = 9 where player_id = $1', [id])
-  S.clock.t = T0 + 90
-  await pump(token)
-  assert.deepEqual((await claim(token, { type: 'repeat', n: 9 })).json.reward, { gold: 6000 })
-  await S.db.query('update player_state set rep_n = 15 where player_id = $1', [id])
+  assert.deepEqual((await claim(token, { type: 'repeat', n: 6 })).json.reward, { diamonds: 20 })
   S.clock.t = T0 + 120
   await pump(token)
-  assert.deepEqual((await claim(token, { type: 'repeat', n: 15 })).json.reward, { tickets: 1 })
+  assert.deepEqual((await claim(token, { type: 'repeat', n: 7 })).json.reward, { gold: 6000 })
   assert.equal((await claim(token, { type: 'nope', n: 0 })).status, 400)
 })
 

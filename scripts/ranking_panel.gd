@@ -1,7 +1,8 @@
 extends "res://scripts/ui_window.gd"
 ## [랭킹] 시트(온라인 전용, 서버 GET /v1/ranking/:board — server/src/ranking.ts). 오른쪽 아래 메뉴(side_menu.gd) [랭킹]이 연다.
 ## 하위 탭 [스테이지][전투력][길드]. 오른쪽 위 [X]나 바깥(배경) 탭으로 닫는다.
-## 목록 = 상위 50(1~3위 메달), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
+## 목록 = 상위 50(1~3위 메달, 길드는 보상 순위까지 100), 맨 아래 고정 줄 = 내 순위(길드 보드는 내 길드). 받은 목록은 보드마다 CACHE_SEC 동안 다시 쓴다.
+## 길드 보드(2026-10-29) = 이번 주 드래곤 보스 길드 총 피해량 순 + 주간 보상 카드(서버 season: 남은 시간·순위 구간·상자 확률).
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -157,6 +158,8 @@ func _rebuild() -> void:
 	var b := board()
 	body.add_child(_label(HEAD[b], 20, SUB))
 	var d: Dictionary = data.get(b, {})
+	if b == "guild" and d.get("season") is Dictionary:
+		body.add_child(_season_card(d.season))
 	if d.is_empty():
 		var msg := Lang.t("ranking_panel.rebuild.msg")
 		if not Net.is_online():
@@ -177,7 +180,7 @@ func _rebuild() -> void:
 	if me is Dictionary:
 		me_box.add_child(_row(me, b))
 	else:
-		var why := Lang.t("ranking_panel.rebuild.why") if b == "guild" else (Lang.t("ranking_panel.rebuild_6") if b == "power" else Lang.t("ranking_panel.rebuild_7"))
+		var why := (Lang.t("ranking_panel.rebuild.why") if not (d.get("season") is Dictionary and d.season.get("in_guild", false)) else Lang.t("ranking_panel.rebuild_8")) if b == "guild" else (Lang.t("ranking_panel.rebuild_6") if b == "power" else Lang.t("ranking_panel.rebuild_7"))
 		var card := _card(ROW_BG)
 		card.get_child(0).add_child(_label(why, 22, SUB))
 		me_box.add_child(card)
@@ -216,7 +219,7 @@ func _row(e: Dictionary, b: String) -> Control:
 	v.add_child(name_row)
 	var sub := ""
 	if b == "guild":
-		sub = Lang.t("ranking_panel.row_3") % [int(e.get("members", 0)), UiKit.commas(int(e.get("boss", 0)))]
+		sub = Lang.t("ranking_panel.row_5") % [int(e.get("level", 1)), int(e.get("members", 0))]
 	elif e.has("guild"):
 		sub = Lang.t("ranking_panel.row_4") + str(e.guild)
 	if sub != "":
@@ -232,10 +235,35 @@ static func value_text(b: String, v: int) -> String:
 	match b:
 		"stage":
 			return GameData.round_label(v)
-		"power":
-			return UiKit.commas(v)
 		_:
-			return "Lv %d" % v
+			return UiKit.commas(v)  # 전투력, 길드 = 이번 주 드래곤 피해
+
+
+## 길드 랭킹 주간 보상 카드: 남은 시간 + 순위 구간별 상자(등급 확률).
+func _season_card(season: Dictionary) -> Control:
+	var card := _card(ROW_BG)
+	var v: VBoxContainer = card.get_child(0)
+	v.add_theme_constant_override("separation", 2)
+	var left := maxi(0, int(float(season.get("ends_at", 0)) - (Time.get_unix_time_from_system() + Economy.clock_offset)))
+	v.add_child(_label(Lang.t("ranking_panel.season_card"), 22, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	v.add_child(_label(Lang.t("ranking_panel.season_card_2") % [left / 86400, left % 86400 / 3600, left % 3600 / 60], 18, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	var boxes: Dictionary = season.get("boxes", {}) if season.get("boxes") is Dictionary else {}
+	for band in season.get("rewards", []):
+		var from := int(band.get("from", 1))
+		var to := int(band.get("to", 1))
+		var where := (Lang.t("ranking_panel.season_card_3") % from) if from == to else (Lang.t("ranking_panel.season_card_4") % [from, to])
+		for k in band.get("reward", {}):
+			var id := str(k).trim_prefix(LiveOps.BOX_PREFIX)
+			var odds: Array = []
+			var w: Dictionary = boxes.get(id, {}) if boxes.get(id) is Dictionary else {}
+			for g in w:
+				var pct := float(w[g])
+				odds.append("%s %s%%" % [g, str(int(pct)) if pct == floorf(pct) else String.num(pct, 2)])
+			var line := _label(Lang.t("ranking_panel.season_card_5") % [where, LiveOps.BOX_NAMES.get(id, id), int(band.reward[k])], 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+			v.add_child(line)
+			if not odds.is_empty():
+				v.add_child(_label("    " + " · ".join(odds), 16, SUB, HORIZONTAL_ALIGNMENT_LEFT))
+	return card
 
 
 ## 순위: 1~3위는 메달(각진 원 + 리본), 그 밖은 숫자.

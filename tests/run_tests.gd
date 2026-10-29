@@ -149,6 +149,7 @@ func _init() -> void:
 	test_shop()
 	test_iap()
 	test_gacha_odds()
+	test_hero_ur()
 	test_sfx()
 	test_follow_cam()
 	test_portrait_focus()
@@ -235,7 +236,7 @@ func test_game_tables() -> void:
 	check(GameData.errors == 0, "default tables incl. heroes/resources/config load without errors")
 	# Balance에서 옮긴 값 — 이전 상수와 같다(하드코딩 기대값)
 	var heroes := GameData.heroes()
-	check(heroes.size() == 36 and heroes[0].id == "arteon" and heroes[21].id == "jack" and heroes[35].id == "tia", "heroes keep file order")
+	check(heroes.size() == 42 and heroes[0].id == "arteon" and heroes[21].id == "jack" and heroes[35].id == "tia" and heroes[41].id == "jujak", "heroes keep file order")
 	var w := GameData.hero("hans")
 	check(w.name == "한스" and w.title == "민병대 검사" and w.grade == "R" and w.role == "melee" and w.model == "Knight" and w.gear == "1H_Sword" \
 		and w.color == "#95A5A6" and w.hp == 396.0 and w.atk == 23.0 and w.range == 1.8 and w.atk_interval == 0.8 and w.speed == 6.0 and w.aggro == 8.0 \
@@ -325,7 +326,7 @@ func _remote_checks() -> int:
 	p.heroes[17].skill3 = null  # 한스(R): 셋째 칸 없음
 	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
-	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 36 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
+	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 42 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
 	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
 		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
@@ -397,7 +398,7 @@ func _corrupt(q: Dictionary, what: String) -> void:
 		"repeated skill": q.heroes[0].skill2 = "heal_aura"
 		"skill number missing": q.heroes[0].s1c = ""  # heal_aura는 숫자 셋
 		"skill number not a number": q.heroes[2].s1a = "three"
-		"grade unknown": q.heroes[0].grade = "UR"
+		"grade unknown": q.heroes[0].grade = "LR"
 		"role unknown": q.heroes[0].role = "flying"
 		"color not #RRGGBB": q.heroes[0].color = "gold"
 		"gacha cost not an integer": q.config.gacha_dia_cost_1 = "300.5"  # 서버 BigInt(-cost)가 throw
@@ -456,7 +457,7 @@ func test_apply_remote() -> void:
 	check(_errors.count - logged == expected, "rejected payloads report each error through push_error")
 	_errors.count = logged
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 36, "default tables restored after apply_remote tests")
+	check(GameData.errors == 0 and GameData.hero("arteon").hp == 936.0 and GameData.config_num("castle_hp") == 1000.0 and GameData.heroes().size() == 42, "default tables restored after apply_remote tests")
 
 
 ## 2026-10-12: 라운드마다 졸개 72마리 뒤 남쪽 성문 보스 하나, 라운드 25(스테이지 마지막)는 네 성문에 하나씩 — HP × boss_round_mult.
@@ -1646,8 +1647,8 @@ func test_heroes_table() -> void:
 	const Skills := preload("res://scripts/skills.gd")
 	GameData.load_tables()
 	var hs := GameData.heroes()
-	check(hs.size() == 36, "36 heroes, got %d" % hs.size())
-	var grades := {"SSR": 0, "SR": 0, "R": 0}
+	check(hs.size() == 42, "42 heroes, got %d" % hs.size())
+	var grades := {"UR": 0, "SSR": 0, "SR": 0, "R": 0}
 	var used := {}
 	for h in hs:
 		grades[h.grade] += 1
@@ -1658,10 +1659,11 @@ func test_heroes_table() -> void:
 			used[k] = true
 		for g in h.gear.split("|"):
 			check(g in Art.HERO_MODELS[h.model].gear, "hero %s gear %s on %s" % [h.id, g, h.model])
-	check(grades == {"SSR": 16, "SR": 12, "R": 8}, "grades 16/12/8: %s" % grades)
+	check(grades == {"UR": 6, "SSR": 16, "SR": 12, "R": 8}, "grades 6/16/12/8: %s" % grades)
 	# crit 스킬은 영웅 표에서 뺐다(성장 치명타와 헷갈리지 않게) — 종류는 남아 있어 표에 다시 쓸 수 있다
 	# 2026-10-06 재구성: 영웅 36명 × 고유 스킬 100종(예전 패시브 종류 일부는 표에서 빠졌지만 종류는 남아 있다)
-	check(used.size() == 100 and not used.has("crit"), "100 distinct skill kinds on heroes: %d" % used.size())
+	# 2026-10-29 태생 UR 6명 × 전용 스킬 3 = 118
+	check(used.size() == 118 and not used.has("crit"), "118 distinct skill kinds on heroes: %d" % used.size())
 	for h in hs:  # SSR·SR = 액티브·패시브·액티브, R = 액티브·패시브
 		var ks: Array = h.skills.keys()
 		var want: Array = [true, false] if h.grade == "R" else [true, false, true]
@@ -1670,8 +1672,12 @@ func test_heroes_table() -> void:
 	for k in HeroSkillsScript.ACTIVE + HeroSkillsScript.HERO_ACTIVE:
 		check(SkillIconsScript.KIND.has(k) and not SkillIconsScript.shapes(SkillIconsScript.glyph_of(k)).is_empty(), "skill %s has a thumbnail" % k)
 	# 그린 스킬 아이콘(2026-10-25): 그림이 있는 종류(발동형·패시브 86종)는 모두 assets/ui/skills 그림이 있다(안 쓰는 발동형은 짝 패시브 그림)
+	# 태생 UR 전용 18종은 그린 아이콘이 오기 전까지 도형으로 그린다(디자인 스레드가 그림을 넣으면 이 목록을 지운다)
+	var ur_pending := ["turtle_ward", "black_shell", "north_tide", "tiger_claw", "tiger_fury", "tiger_avatar", "fox_fire", "fox_charm",
+		"nine_tails", "dragon_arrow", "azure_tide", "azure_dragon", "time_stop", "time_haste", "time_collapse", "phoenix_wing",
+		"phoenix_blessing", "rebirth_flame"]
 	for k in SkillIconsScript.KIND:
-		check(SkillIconsScript.texture_of(k) != null, "skill %s has a painted icon" % k)
+		check(SkillIconsScript.texture_of(k) != null or k in ur_pending, "skill %s has a painted icon" % k)
 	check(Skills.RULES.size() == Skills.KINDS.size() and Skills.KINDS.keys().all(func(k): return Skills.RULES.has(k) and Skills.RULES[k].size() == Skills.KINDS[k]),
 		"every skill kind has one range rule per number")
 	check(Skills.bad_num("multishot", [0.0, 0.0, 0.0]) == 0 and Skills.bad_num("chain", [3.0, 120.0, 4.0]) == 1 and Skills.bad_num("crit", [25.0, 200.0, 0.0]) == -1,
@@ -2953,11 +2959,11 @@ func test_skill_unlock() -> void:
 	check(GameData.active_skills(hans, 0).keys() == ["drain_slash"] and GameData.active_skills(hans, 3).keys() == ["drain_slash", "dmg_reduce"]
 		and GameData.active_skills(hans, 5).size() == 2, "R hans: skill2 at 3, nothing more at 5")
 	check(GameData.active_skills(se, 5) == se.skills and GameData.active_skills({}, 5).is_empty(), "everything unlocked at 5 equals the table; no skills -> empty")
-	var counts := {"SSR": 0, "SR": 0, "R": 0}
+	var counts := {"UR": 0, "SSR": 0, "SR": 0, "R": 0}
 	for h in GameData.heroes():
 		counts[h.grade] += 1
 		check(h.skills.size() == GameData.GRADE_SKILLS[h.grade], "hero %s (%s) has %d skills" % [h.id, h.grade, h.skills.size()])
-	check(GameData.heroes().size() == 36 and counts == {"SSR": 16, "SR": 12, "R": 8}, "36 rows: 16 SSR, 12 SR, 8 R")
+	check(GameData.heroes().size() == 42 and counts == {"UR": 6, "SSR": 16, "SR": 12, "R": 8}, "42 rows: 6 UR, 16 SSR, 12 SR, 8 R")
 	# 잠긴 스킬은 전투 수식에 안 들어간다(능력치는 승급 배율만)
 	var kyle := GameData.hero("kyle")
 	check(is_equal_approx(Skills.damage(GameData.active_skills(kyle, 0), 61.0, 0.0, 0.2, false), 61.0)
@@ -3489,14 +3495,14 @@ func test_item_icons() -> void:
 		seen[sig] = kind
 	check(IconsScript.ITEM_KINDS.size() == 13 and IconsScript.ITEM_KINDS.has("ring") and IconsScript.ITEM_KINDS.has("necklace") and not IconsScript.KINDS.has("sword"),
 		"13 equipment kinds (2026-10-15 + ring·necklace); resource chip kinds stay resources")
-	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR"], "six item grades in order")
+	check(Art.ITEM_GRADE_COLORS.keys() == ["N", "R", "SR", "SSR", "UR", "LR", "MR"], "seven item grades in order (MR 2026-10-29)")
 	check(IconsScript.item_tile().all(func(p): return absf(p.x) <= 0.5 and absf(p.y) <= 0.5), "item tile inside the unit box")
 	var n := 33
 	var sr := IconsScript.border_colors("SR", n, 0.0)
 	check(sr.size() == n and sr == IconsScript.border_colors("SR", n, 5.0) and sr[0] == Art.ITEM_GRADE_COLORS.SR, "SR border = grade colour, still")
 	var lr0 := IconsScript.border_colors("LR", n, 0.0)
 	check(lr0 != IconsScript.border_colors("LR", n, 0.5) and lr0[0].is_equal_approx(lr0[n - 1]), "LR border flows over time and wraps seamlessly")
-	# 그린 그림(2026-10-07): 부위 11종 × 등급 6단계가 모두 있고, 128 px 정사각, 네 귀퉁이는 투명(배경을 지웠다), 등급마다 다른 그림
+	# 그린 그림(2026-10-07): 부위 × 등급(MR은 LR을 검붉게 다시 칠함, dev/meshy/item_icons_mr.py)이 모두 있고, 128 px 정사각, 네 귀퉁이는 투명(배경을 지웠다), 등급마다 다른 그림
 	check(IconsScript.ITEM_GRADE_RANK.keys() == Art.ITEM_GRADE_COLORS.keys(), "tile decoration rank covers every grade in order")
 	for kind in IconsScript.ITEM_KINDS:
 		var sigs := {}
@@ -3761,9 +3767,11 @@ func test_dungeon_tables() -> void:
 	check(is_equal_approx(g3[0].hp, 120.0 * 1.12 * 1.12) and is_equal_approx(g3[2].atk, 40.0 * 1.12 * 1.12) and dk.size() == 1 and dk[0].kind == "death_knight"
 		and is_equal_approx(dk[0].hp, 6900.0) and is_equal_approx(dk[0].atk, 67.2) and dk[0].scale == 2.2, "enemy stats x growth^(n-1): goblins 1.12, death knight HP 1.15 / atk 1.12")
 	check([1, 2, 3, 10].map(func(n): return GameData.gold_reward(n)) == [4000, 4400, 4840, 9432], "gold reward = round(4000 x 1.1^(n-1))")
-	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
+	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0, "MR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
 		and GameData.drop_weights(5).UR == 1.0 and GameData.drop_weights(19).LR == 0.5 and GameData.drop_weights(20).SR == 34.0 and GameData.drop_weights(34).LR == 2.0
-		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0, "grade table bands 1-4, 5-9, 10-19, 20-34, 35+")
+		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0 and GameData.drop_weights(14).MR == 0.0 and GameData.drop_weights(15).MR == 0.05
+		and GameData.drop_weights(15).LR == 0.5 and GameData.drop_weights(20).MR == 0.1 and GameData.drop_weights(35).MR == 0.3,
+		"grade table bands 1-4, 5-9, 10-14, 15-19, 20-34, 35+ (MR from 15)")
 	# 호출 순서: 부위(무기?) → 무기 종류 또는 방어구 부위 → 등급 → 기본 굴림 → 특수(종류 → 굴림). 서버 테스트와 같은 난수열 → 같은 결과
 	var fixed := GameData.roll_drops(1, 2, _seq([0.1, 0.5, 0.95, 0.9, 0.0, 0.995, 0.9, 0.0, 0.995, 0.5, 0.4, 0.2]))
 	check(fixed == [{"slot": "weapon", "weapon_kind": "staff", "grade": "SR", "rolls": {"atk": 112}, "subs": [{"id": "lifesteal", "r": 115}]},
@@ -3773,7 +3781,7 @@ func test_dungeon_tables() -> void:
 	rng.seed = 18
 	var many := GameData.roll_drops(12, 60000, rng.randf)
 	var share := func(f: Callable) -> float: return many.filter(f).size() / 60000.0
-	var w := [20.0, 35.0, 28.0, 13.0, 3.5, 0.5]
+	var w := [20.0, 35.0, 28.0, 13.0, 3.5, 0.5, 0.0]
 	var grades_ok := true
 	for i in GameData.EQUIP_GRADES.size():
 		var gname: String = GameData.EQUIP_GRADES[i]
@@ -3792,7 +3800,11 @@ func test_dungeon_tables() -> void:
 	check(st.call("weapon", "N").atk == 20 and st.call("weapon", "SR", {"atk": 115}).atk == 51 and st.call("gloves", "R", {"atk": 85}).atk == 10
 		and st.call("shoes", "LR", {"hp": 100, "speed_pct": 85}).hp == 423 and is_equal_approx(st.call("shoes", "LR", {"speed_pct": 85}).speed_pct, 2.55)
 		and st.call("shoes", "N").speed_pct == 3.0 and st.call("top", "UR").hp == 598 and st.call("bottom", "N").hp == 130 and st.call("hat", "SSR").hp == 256
-		and st.call("pauldron", "R").hp == 120, "item stats = round(base x grade mult x roll / 100), shoes speed 3% x roll")
+		and st.call("pauldron", "R").hp == 120 and st.call("hat", "MR").hp == 736 and st.call("weapon", "MR", {"atk": 110}).atk == 202,
+		"item stats = round(base x grade mult x roll / 100), shoes speed 3% x roll, MR x9.2")
+	var mr := GameData.roll_item("hat", null, "MR", rng.randf)
+	check(mr.grade == "MR" and mr.subs.size() == 4 and _unique_count(mr.subs.map(func(y): return y.id)) == 4
+		and is_equal_approx(GameData.item_stats(mr, true).crit_dmg, 24.0 if mr.subs.any(func(y): return y.id == "crit_dmg") else 0.0), "MR rolls 4 different special stats (crit dmg base 24)")
 	var lr := {"slot": "hat", "grade": "LR", "rolls": {"hp": 90}, "subs": [{"id": "lifesteal", "r": 110}, {"id": "crit_dmg", "r": 85}, {"id": "dmg_reduce", "r": 100}]}
 	var ls := GameData.item_stats(lr)
 	var lb := GameData.item_stats(lr, true)
@@ -4179,7 +4191,7 @@ func test_recruit_r23() -> void:
 	e.gacha_done.connect(func(r): got.append(r))
 	e.gold = 400000
 	check(e.gacha(10) and e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 30 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: three 10-pulls are 30/40 at Lv 1")
-	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160, "dia_pity": 0, "pity_left": 50}
+	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160, "dia_pity": 0, "pity_left": 50, "ur_pity": 0, "ur_pity_left": 200}
 		and ups == [2] and notes == ["골드 모집 Lv 2! SR 5.5% · SSR은 Lv 3부터"] and e.gacha_cost("gold", 1) == 12500,
 		"rev 23: the 40th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
 	# 오프라인 다이아
@@ -4311,7 +4323,7 @@ func test_equip_upgrade_dot() -> void:
 func test_hero_looks_unique() -> void:
 	Art.meshy_bodies = false
 	var heroes: Array = GameData.heroes()
-	check(heroes.size() == 36 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
+	check(heroes.size() == 42 and heroes.all(func(h): return Art.HERO_LOOKS.has(h.id)), "every hero has a look (%d heroes)" % heroes.size())
 	var seen := {}
 	var looks := {}
 	for h in heroes:
@@ -4381,7 +4393,10 @@ func test_hero_look_builder() -> void:
 			for c in ba.get_children():
 				if HeroKit.has_part(String(c.name)):
 					found.append([String(ba.bone_name), String(c.name)])
-					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.style_material(Art.lowpoly_vc_material()),
+					var vc: Material = Art.style_material(Art.lowpoly_vc_material())
+					if spec.get("finish", false):
+						vc = Art.ur_material(vc)  # UR 마감(Art.ur_finish)도 공유
+					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == vc,
 						"%s part %s is a shared vertex-color mesh (its unit-style material, shared)" % [h.id, c.name])
 					used[String(c.name)] = true
 		var want: Array = spec.parts.duplicate()
@@ -4521,7 +4536,8 @@ func test_meshy_bodies() -> void:
 			model.free()
 			continue
 		var tris: int = body.mesh.get_faces().size() / 3
-		check(tris > 1000 and tris <= 5000, "%s Meshy body within 5,000 triangles (%d)" % [h.id, tris])
+		var cap := 6500 if h.grade == "UR" else 5000  # UR 몸은 6천 삼각형으로 리메시(dev/meshy_heroes.py UR_IDS)
+		check(tris > 1000 and tris <= cap, "%s Meshy body within %d triangles (%d)" % [h.id, cap, tris])
 		var m := body.get_active_material(0) as ShaderMaterial
 		check(m != null and m.get_shader_parameter("use_texture") and m.get_shader_parameter("use_remap") != true,
 			"%s Meshy body draws its own texture (no color table)" % h.id)
@@ -4536,7 +4552,9 @@ func test_meshy_bodies() -> void:
 		check(same, "%s body file binds match the %s skin" % [h.id, h.model])
 		src.free()
 		model.free()
-	check(n == GameData.heroes().size(), "every hero has a Meshy body (%d of %d)" % [n, GameData.heroes().size()])
+	# 태생 UR(2026-10-29)은 새 컨셉 몸을 디자인 스레드가 만드는 중 — 그동안 KayKit 생김새(HERO_LOOKS)로 보인다
+	var want := GameData.heroes().filter(func(h): return h.grade != "UR" or ResourceLoader.exists(Art.MESHY_HERO_DIR + h.id + ".glb")).size()
+	check(n == want, "every non-UR hero has a Meshy body (%d of %d)" % [n, want])
 	Art.meshy_bodies = false
 	check(not Art.hero_spec(GameData.hero("arteon")).has("body"), "meshy_bodies off: back to the KayKit look")
 	Art.meshy_bodies = true
@@ -5125,7 +5143,7 @@ func test_guild() -> void:
 	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
 		"guild: diamond donation once a day")
 	# 인원·레벨: 1~5레벨 15명, 6레벨부터 20명(나 포함, 최대 20명), 레벨 끝 없음·버프 레벨당 1%
-	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(5) == 15 and GuildScript.capacity(6) == 20 and GuildScript.capacity(40) == 20 and GuildScript.buff_of(99) == 99.0,
+	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(2) == 18 and GuildScript.capacity(5) == 27 and GuildScript.capacity(6) == 30 and GuildScript.capacity(40) == 30 and GuildScript.buff_of(99) == 99.0,
 		"guild: 15 members, 20 from level 6 on, levels and buff have no cap")
 	check(g.members_now(now).size() + 1 <= GuildScript.capacity(int(g.guild.level)), "guild: members + me fit the capacity")
 	g.guild.level = 1
@@ -5368,7 +5386,7 @@ func test_tutorial() -> void:
 		t.step = mi
 		locks.append(before and not t.dungeon_locked(ty) and TutorialScript.MISSIONS[mi].arg == ty)
 	t.step = step_was
-	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 39번째 미션 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
+	check(locks == [true, true, true] and t.dungeon_lock_text("ticket") == "가이드 퀘스트 43 「모집권 던전」에서 열립니다" and t.reward(t.mission_index("dungeon_equip")).get("keys_ticket") == 2,
 		"tutorial: each dungeon unlocks at its own mission; the ticket dungeon mission is paid 2 ticket keys: %s" % [locks])
 	# 공터 첫 건축: 그 건설 미션에 닿기 전엔 잠김(이미 지은 건물은 아님), 탭 잠금 문구
 	var lots_was: Dictionary = e.unbuilt.duplicate()
@@ -5388,8 +5406,8 @@ func test_tutorial() -> void:
 			blocks.append(before and not at and not t.build_locked(bid))
 	e.unbuilt = lots_was
 	t.step = step_was
-	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 20번째 미션 「주점 건설」에서 건설할 수 있습니다"
-		and t.tab_lock_text("hero") == "가이드 2번째 미션 「영웅 레벨업」에서 열립니다",
+	check(blocks.size() == 9 and not blocks.has(false) and t.build_lock_text("tavern") == "가이드 퀘스트 22 「주점 건설」에서 건설할 수 있습니다"
+		and t.tab_lock_text("hero") == "가이드 퀘스트 2 「영웅 레벨업」에서 열립니다",
 		"tutorial: an empty lot can't be built before its build mission; lock toasts name the mission number: %s" % [blocks])
 	# 가이드: 새 기능을 여는 미션 사이에 성장 미션이 2개 이상, 성장 미션 판정(영웅 레벨·능력치 레벨·PVP)
 	var intro := ["hero_level", "growth", "build_lumber", "sell", "build_tavern", "build_barracks", "dungeon_gold", "dungeon_equip", "dungeon_ticket",
@@ -5397,7 +5415,16 @@ func test_tutorial() -> void:
 	var gaps := []
 	for k in range(2, intro.size()):
 		gaps.append(t.mission_index(intro[k]) - t.mission_index(intro[k - 1]) - 1)
-	check(TutorialScript.MISSIONS.size() == 78 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	check(TutorialScript.MISSIONS.size() == 82 and TutorialScript.MISSIONS[-1].id == "party_clear" and gaps.min() >= 1 and gaps.filter(func(x): return x >= 2).size() >= 10, "guide: new features are spaced out by growth missions: %s" % [gaps])
+	# 메이플스토리 키우기식 리듬(2026-10-29): 1-1 뒤로 전투 목표(스테이지·처치·던전·PVP·길드 보스·공성전 체험·파티) 없이 6칸 이상 이어지지 않는다
+	var calm := 0
+	var calm_max := 0
+	for m in TutorialScript.MISSIONS:
+		calm = 0 if m.kind in ["stage", "kill", "dungeon", "pvp", "guild_boss", "siege_try", "party"] else calm + 1
+		calm_max = maxi(calm_max, calm)
+	var kills := TutorialScript.MISSIONS.filter(func(m): return m.kind == "kill").map(func(m): return int(m.arg))
+	check(calm_max <= 5 and kills == [30, 40, 50, 60, 100, 100] and t.reward(t.mission_index("kill_30")) == {"diamonds": 30},
+		"guide: a battle goal comes at least every 6th mission; kill goals grow 30 → 60 and pay 30 diamonds: %d %s" % [calm_max, kills])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5409,11 +5436,13 @@ func test_tutorial() -> void:
 	e.upgrades["atk"] = 2
 	check(not t.complete() and t.progress_text() == "Lv 2/3", "guide: stat level mission shows Lv 2/3")
 	e.upgrades["atk"] = 3
-	check(t.complete() and t.reward(t.step) == {"gold": TutorialScript._margin(int(t.need_of(t.step + 1).gold))} and int(t.need_of(t.step + 1).gold) == 3153,
-		"guide: stat Lv 3 completes; it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
+	var hp3: int = int(t.need_of(t.mission_index("hp_3")).gold)
+	check(t.complete() and t.reward(t.step) == {"gold": 2000} and hp3 == 3153 and t.mission_index("kill_40") == t.step + 1
+		and t.reward(t.step + 1) == {"gold": TutorialScript._margin(hp3), "diamonds": 30},
+		"guide: stat Lv 3 completes with its own gold; the kill mission after it pays the next mission's gold (HP Lv 0 -> 3) x1.2")
 	e.upgrades["atk"] = 0
 	t.step = t.mission_index("pvp") - 1
-	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 72번째 미션 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
+	check(t.pvp_locked() and t.pvp_lock_text() == "가이드 퀘스트 76 「PVP 결투」에서 열립니다", "guide: PVP locked before its mission: %s" % t.pvp_lock_text())
 	t.step += 1
 	t.count = 0
 	check(not t.pvp_locked() and not t.complete(), "guide: PVP opens at its mission")
@@ -5454,6 +5483,12 @@ func test_tutorial() -> void:
 		and TutorialScript.map_v5(27) == t.mission_index("atk_5") and TutorialScript.map_v5(80) == t.mission_index("party_clear")
 		and TutorialScript.map_v5(81) == TutorialScript.MISSIONS.size() and TutorialScript.map_step(TutorialScript.V4_IDS, 7) == t.mission_index("stage_1_1"),
 		"guide: old v5 steps continue at the first mission not done yet")
+	# v6(78개) → v7(82개, 메이플식 처치 미션 2026-10-29): 하던 미션 그대로(그 앞에 낀 처치 미션은 건너뛴다), 당겨 온 두 번째 100마리는 안 했으면 거기부터
+	check(TutorialScript.map_v6(0) == 0 and TutorialScript.map_v6(13) == t.mission_index("attend") and TutorialScript.map_v6(30) == t.mission_index("stage_1_4")
+		and TutorialScript.map_v6(56) == t.mission_index("kill_100_2") and TutorialScript.map_v6(59) == t.mission_index("kill_100_2")
+		and TutorialScript.map_v6(60) == t.mission_index("hero_lv4_18") and TutorialScript.map_v6(77) == t.mission_index("party_clear")
+		and TutorialScript.map_v6(78) == TutorialScript.MISSIONS.size() and TutorialScript.V6_IDS.size() == 78,
+		"guide: v6 steps continue at the same mission; new kill missions before it are skipped")
 	# 길드·거래소·공성전 체험: 공성전은 체험 끝, 길드 보스는 도전, 거래소는 창을 열면 끝난다. 거래소는 그 미션에서 열린다
 	t.step = t.mission_index("siege_try")
 	t.count = 0
@@ -5564,26 +5599,33 @@ func test_tutorial() -> void:
 	t.state = "done"
 	t.repeats_on = true
 	t.check()
-	# 반복 퀘스트: 처치 → 수집 → 스테이지 → 성장 … 바퀴마다 목표·보상이 커진다
-	var q: Dictionary = t.mission()
-	check(t.repeating() and q.kind == "kill" and int(q.arg) == 100 and int(t.repeat_reward(q).gold) == 3000, "repeat: first quest is kill 100 for 3,000 gold")
-	for i in 100:
-		e.add_kill("grunt", 1)
-	var g0: int = e.gold
-	check(t.complete() and t.claim() and e.gold == g0 + 3000 and t.mission().kind == "collect", "repeat: claim pays and moves on")
-	t.count = 3
-	t.claim()
+	# 반복 퀘스트(메이플스토리 키우기식 순서 2026-10-29): 스테이지 → 처치 → 모집 → 던전 → 영웅 → 성장(건물·수집·판매는 뺐다). 번호는 가이드 뒤로 이어지고
+	# 바퀴마다 목표·보상이 커진다
+	check(TutorialScript.REPEATS.map(func(d): return d.kind) == ["stage", "kill", "gacha", "dungeon_win", "hero_up", "growth_up"],
+		"repeat: Maple-style order (stage, kill, recruit, dungeon, hero levels, growth) without building/collect/sell")
 	gs.stage = 7
 	t.best_stage = 7
 	t.rep_quest = {}
-	q = t.mission()
-	check(q.kind == "stage" and not t.complete() and int(q.arg) == 8 and q.title == "스테이지 %s 클리어" % GameData.round_label(8), "repeat: stage target = reached + 1 (two more rounds)")
+	var q: Dictionary = t.mission()
+	check(t.repeating() and q.kind == "stage" and not t.complete() and int(q.arg) == 8 and q.title == "스테이지 %s 클리어" % GameData.round_label(8)
+		and t.guide_number() == TutorialScript.MISSIONS.size() + 1, "repeat: first quest is the stage breakthrough (reached + 1), numbered right after the guide")
 	gs.stage = 9
-	check(t.complete() and t.claim() and t.mission().kind == "growth_up" and t.progress_text() == "0/3", "repeat: stage cleared; growth counts from now")
-	t.rep_n = TutorialScript.REPEATS.size()
+	var d0: int = e.diamonds
+	check(t.complete() and t.claim() and e.diamonds == d0 + 20 and t.mission().kind == "kill" and t.guide_number() == TutorialScript.MISSIONS.size() + 2,
+		"repeat: stage cleared pays 20 diamonds; next is the kill quest, number goes on")
+	q = t.mission()
+	check(int(q.arg) == 100 and int(t.repeat_reward(q).gold) == 3000, "repeat: kill 100 for 3,000 gold")
+	for i in 100:
+		e.add_kill("grunt", 1)
+	var g0: int = e.gold
+	check(t.complete() and t.claim() and e.gold == g0 + 3000 and t.mission().kind == "gacha", "repeat: claim pays and moves on to recruiting")
+	t.rep_n = TutorialScript.REPEATS.map(func(d): return d.kind).find("growth_up")
+	t.rep_quest = {"kind": "collect", "arg": 3, "cycle": 0, "base_value": 0}  # 예전 순서로 저장해 둔 퀘스트
+	check(t.mission().kind == "growth_up" and t.progress_text() == "0/3", "repeat: a quest saved under the old order is rebuilt; growth counts from now")
+	t.rep_n = TutorialScript.REPEATS.size() + 1
 	t.rep_quest = {}
 	q = t.mission()
-	check(int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
+	check(q.kind == "kill" and int(q.arg) == 150 and int(t.repeat_reward(q).gold) == 6000, "repeat: second cycle grows target and reward")
 	check(t.save_path == "" and t.mission() == q, "repeat: quest is kept until claimed")
 	check(not e.tutorial_training and e.train_max("barracks") == 1 and e.train_time("barracks", 1) == 180 * 60.0, "tutorial done: normal training time, still one per order")
 	check(not t.tab_locked("hero") and not t.dungeon_locked("ticket") and t.repeating(), "tutorial done: nothing locked, repeat quests")
@@ -5659,16 +5701,16 @@ func test_tutorial_online() -> void:
 	e.notice.connect(func(x): notes.append(x))
 	e.apply_server(reply)
 	check(t.step == 4 and t.count == 0 and e.unbuilt.is_empty(), "a new server step starts counting again")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 2}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 0}
 	e.apply_server(reply)
-	check(not t.active() and t.repeating() and t.rep_n == 2 and t.mission().kind == TutorialScript.REPEATS[2].kind and notes.has(TutorialScript.DONE_TEXT)
+	check(not t.active() and t.repeating() and t.rep_n == 0 and t.mission().kind == TutorialScript.REPEATS[0].kind and notes.has(TutorialScript.DONE_TEXT)
 		and not e.tutorial_training, "online: tutorial done → repeat quest from the server's number")
-	check(not e.quest_claim_online({"type": "repeat", "n": 2}), "no network, no claim")
+	check(not e.quest_claim_online({"type": "repeat", "n": 0}), "no network, no claim")
 	# 온라인 반복 퀘스트는 서버가 센 진행으로(2026-10-14 동기화 전에 만들어 저장된 「1-2 클리어」가 ✓인데 서버가 받아 주지 않던 버그)
 	t.rep_quest = {"kind": "stage", "goto": "stage", "desc": "", "cycle": 0, "base_value": 0, "arg": 2, "title": "스테이지 1-2 클리어"}
 	gs.stage = 12
 	check(t.complete(), "(before) a stale local stage target looks done")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 2, "rep": {"have": 1, "need": 2, "from": 11}}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 0, "rep": {"have": 1, "need": 2, "from": 11}}
 	e.apply_server(reply)
 	var sq: Dictionary = t.mission()
 	check(sq.kind == "stage" and int(sq.arg) == 12 and sq.title == "스테이지 %s 클리어" % GameData.round_label(12) and not t.complete() and t.progress_text() == "",
@@ -5676,7 +5718,7 @@ func test_tutorial_online() -> void:
 	reply.player.quest.rep = {"have": 2, "need": 2, "from": 11}
 	e.apply_server(reply)
 	check(t.complete(), "online stage repeat: done when the server counts two more rounds")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 9, "rep": {"have": 40, "need": 150, "from": null}}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 7, "rep": {"have": 40, "need": 150, "from": null}}
 	e.kills_pending = {12: {"goblin": 5}}
 	e.apply_server(reply)
 	check(t.mission().kind == "kill" and t.progress_text() == "45/150" and not t.complete(), "online kill repeat: server count + unsent kills (%s)" % t.progress_text())
@@ -5686,7 +5728,7 @@ func test_tutorial_online() -> void:
 	e.kills_pending = {}
 	e.apply_server(reply)
 	check(t.complete() and t.progress_text() == "150/150", "online kill repeat: done at the server's count")
-	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 3, "rep": {"have": 1, "need": 3, "from": null}}
+	reply.player.quest = {"tut_state": "done", "tut_step": TutorialScript.MISSIONS.size(), "rep_n": 5, "rep": {"have": 1, "need": 3, "from": null}}
 	e.apply_server(reply)
 	check(t.mission().kind == "growth_up" and t.progress_text() == "1/3" and not t.complete(), "online growth repeat: server count, not the local level sum")
 	# 온라인 판매 응답도 sold를 낸다(튜토리얼 7 "상인과 거래" — 응답에서 세지 않아 깨지지 않던 버그)
@@ -5945,12 +5987,50 @@ func test_gacha_odds() -> void:
 			var rates := GameData.gacha_rates(cur, 3)
 			var odds: Array = Odds.hero_odds(rates)
 			var sum := 0.0
-			var ok := odds.size() == GameData.heroes().size()
+			var ur: float = rates.ur
+			var ok := odds.size() == GameData.heroes().filter(func(h): return ur > 0.0 or h.grade != "UR").size()  # UR은 다이아만
 			for o in odds:
 				sum += float(o.p)
 				var n := GameData.heroes().filter(func(h): return h.grade == o.grade).size()
-				var gp: float = rates.ssr if o.grade == "SSR" else (rates.sr if o.grade == "SR" else 1.0 - rates.ssr - rates.sr)
+				var gp: float = ur if o.grade == "UR" else (rates.ssr if o.grade == "SSR" else (rates.sr if o.grade == "SR" else 1.0 - ur - rates.ssr - rates.sr))
 				ok = ok and is_equal_approx(float(o.p), gp / n)
 			check(ok and is_equal_approx(sum, 1.0), "gacha odds: every hero listed, each = grade rate / grade size, sum 1 (%s, tavern %d)" % [cur, tav])
 	var dia: Array = Odds.hero_odds(GameData.gacha_rates(GameData.GACHA_DIA, 1))
-	check(Odds.pct(float(dia[0].p)) == "0.3125%" and dia[0].grade == "SSR", "gacha odds: a diamond SSR hero shows 0.3125%% (5%% / 16)")
+	var dia_ssr: Array = dia.filter(func(o): return o.grade == "SSR")
+	check(Odds.pct(float(dia_ssr[0].p)) == "0.3125%" and dia[0].grade == "UR" and Odds.pct(float(dia[0].p)) == "0.0833%",
+		"gacha odds: a diamond SSR hero shows 0.3125%% (5%% / 16), a UR hero 0.0833%% (0.5%% / 6) and UR comes first")
+
+
+## 태생 UR(2026-10-29 사용자): 다이아만 UR(골드 0), UR 천장(u ≥ umax면 UR, n·u 모두 0), SSR 조각 10개 합성 → UR 1명(오프라인), 전투력 등급 배율 2.8.
+func test_hero_ur() -> void:
+	check(is_equal_approx(GameData.gacha_rates(GameData.GACHA_DIA, 1).ur, 0.005) and GameData.gacha_rates(GameData.GACHA_GOLD, 10).ur == 0.0,
+		"UR: diamond 0.5%, gold 0")
+	var pity := {"n": 20, "max": 50, "u": 199, "umax": 200}
+	var out: Array = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), pity)
+	check(out[0].grade == "UR" and pity.n == 0 and pity.u == 0, "UR pity at 199: an R roll becomes UR and both counters reset: %s %s" % [out, pity])
+	pity = {"n": 49, "max": 50, "u": 10, "umax": 200}
+	out = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), pity)
+	check(out[0].grade == "SSR" and pity.n == 0 and pity.u == 11, "SSR pity does not reset the UR counter: %s" % [pity])
+	var gold: Array = EconomyScript.roll_gacha(200, func(): return 0.0, GameData.gacha_rates(GameData.GACHA_GOLD, 10))
+	check(gold.all(func(x): return x.grade != "UR"), "gold never rolls UR")
+	var e = _econ(1000.0)
+	e.heroes["arteon"] = 3
+	e.hero_shards["arteon"] = 6
+	e.heroes["ignis"] = 2
+	e.hero_shards["ignis"] = 5
+	e.heroes["bron"] = 2
+	e.hero_shards["bron"] = 20
+	check(not e.fuse_ok({"arteon": 6, "ignis": 3}) and not e.fuse_ok({"arteon": 6, "bron": 4}) and not e.fuse_ok({"arteon": 7, "ignis": 3}) and e.fuse_ok({"arteon": 6, "ignis": 4}),
+		"fuse needs exactly 10 shards of owned SSR heroes")
+	var fill: Dictionary = e.fuse_autofill()
+	check(fill == {"arteon": 6, "ignis": 4}, "autofill takes the most shards first: %s" % fill)
+	var got := []
+	e.gacha_done.connect(func(r): got.append(r))
+	check(e.fuse_ur({"arteon": 6, "ignis": 4}) and got.size() == 1 and got[0].size() == 1 and got[0][0].grade == "UR" and got[0][0].new
+		and e.shards_of("arteon") == 0 and e.shards_of("ignis") == 1 and int(e.heroes.get(got[0][0].hero_id, 0)) == 1, "offline fuse: 10 SSR shards -> one new UR hero")
+	var ur := GameData.heroes().filter(func(h): return h.grade == "UR")
+	var ssr := GameData.hero("arteon")
+	var sol := GameData.hero("hyeonmu")
+	check(ur.size() == 6 and GameData.hero_power(sol, 1, 0, {}) > GameData.hero_power(ssr, 1, 0, {}) and GameData.levelup_cost("UR", 1, 1).gold > GameData.levelup_cost("SSR", 1, 1).gold,
+		"6 UR heroes; a UR tank outpowers the SSR tank at the same level; UR level-up costs more")
+	e.free()

@@ -118,6 +118,7 @@ static var DUNGEON_FAIL_TEXT := Lang.t("economy.dungeon_fail_text")
 static var EQUIP_TEXT := {
 	"not_owned": Lang.t("economy.equip_text.not_owned"), "bad_slot": Lang.t("economy.equip_text.bad_slot"), "unknown_item": Lang.t("economy.equip_text.unknown_item"), "wrong_slot": Lang.t("economy.equip_text.wrong_slot"),
 	"wrong_weapon": Lang.t("economy.equip_text.wrong_weapon"), "equipped": Lang.t("economy.equip_text.equipped"), "bad_request": Lang.t("economy.equip_text.bad_request"), "waiting": "",
+	"not_fusable": Lang.t("economy.equip_text.not_fusable"), "mixed_slot": Lang.t("economy.equip_text.mixed_slot"),
 }
 static var EQUIP_FAIL_TEXT := Lang.t("economy.equip_fail_text")
 ## 연구 못 하는 이유 코드 → 문구(research_block, 서버 404/409 코드와 같다. waiting은 앱만, 개정 24).
@@ -146,6 +147,7 @@ signal soldiers_changed  # 병사 보유·배치·합성 대기가 바뀌었다(
 signal upgrades_changed  # 성장(공용 업그레이드) 레벨이 바뀌었다(개정 20)
 signal training_changed  # 훈련 대기열·응답 대기가 바뀌었다(개정 16). 완료(끝나는 시각 지남)는 시그널 없이 training().ready로 본다
 signal dungeons_changed  # 개정 18: 열쇠·최고 단계·추가 도전 횟수·응답 대기가 바뀌었다(일일 리셋은 시그널 없이 dungeon_state가 센다)
+signal fused(item: Dictionary)  # 장비 합성 결과 MR 장비(온라인은 서버 응답이 왔을 때 — 서버가 굴린 능력치)
 signal items_changed  # 보관함·장착이 바뀌었다(장착이 바뀌면 roster_changed도 — 영웅 능력치)
 signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, level, party, enemies, started_at, time_limit, paid_with}. 실패면 {}
 signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
@@ -222,6 +224,7 @@ var diamonds := 0  # 개정 23: 다이아(현금 재화, 온라인은 서버 값
 var gacha_gold_level := 1  # 골드 모집 레벨(1..gacha_gold_level_max)
 var gacha_gold_pulls := 0  # 그 레벨 안 누적 모집 수
 var gacha_dia_pity := 0  # 다이아 천장: SSR 없이 뽑은 다이아 모집 수
+var gacha_dia_ur_pity := 0  # 다이아 UR 천장: UR 없이 뽑은 다이아 모집 수(2026-10-29)
 var research_levels := {}  # 개정 24: 연구 노드 id → 레벨(> 0). 없으면 0
 var research_current := {}  # 진행 중 연구 {id, finish(유닉스 초, 보정 시각)}, 없으면 {}
 var current_run := {}  # 진행 중 도전(dungeon_started의 값). 결과가 오면 비운다
@@ -345,29 +348,40 @@ func gacha_cost(currency: String, count: int) -> int:
 	return GameData.gacha_cost(currency, count, gacha_gold_level)
 
 
-## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
+## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(UR rates.ur, SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
 ## rand = [0, 1) 난수 Callable(테스트는 주입). rates = GameData.gacha_rates(비면 골드 Lv 1).
-## pity(다이아 모집만, 개정 23) {n, max}가 있으면 장마다 n += 1, n ≥ max면 SSR 확정, SSR이면 n = 0 — pity를 바꿔 둔다. 다이아 10연차는 또
-## SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
+## pity(다이아 모집만, 개정 23) {n, max, u, umax}가 있으면 장마다 n·u += 1, u ≥ umax면 UR 확정, 아니고 n ≥ max면 SSR 확정.
+## UR이면 n = u = 0, SSR이면 n = 0(SSR 천장은 SSR 이상으로 풀린다) — pity를 바꿔 둔다. u·umax가 없으면 UR 천장은 없다.
+## 다이아 10연차는 또 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 ## 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
 static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> Array:
-	var pools := {"SSR": [], "SR": [], "R": []}
+	var pools := {"UR": [], "SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
 		if pools.has(h.grade):
 			pools[h.grade].append(h.id)
 	if rates.is_empty():
 		rates = GameData.gacha_rates(GameData.GACHA_GOLD, 1)
+	var ur: float = rates.get("ur", 0.0)
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
+	var ur_pity := pity.has("u") and pity.has("umax")
 	var out := []
 	for i in count:
 		var r: float = rand.call()
-		var grade := "SSR" if r < ssr else ("SR" if r < ssr + sr else "R")
+		var grade := "UR" if r < ur else ("SSR" if r < ur + ssr else ("SR" if r < ur + ssr + sr else "R"))
 		if not pity.is_empty():
 			pity.n += 1
-			if pity.n >= pity.max:
+			if ur_pity:
+				pity.u += 1
+				if pity.u >= pity.umax:
+					grade = "UR"
+			if pity.n >= pity.max and grade != "UR":
 				grade = "SSR"
-			if grade == "SSR":
+			if grade == "UR":
+				pity.n = 0
+				if ur_pity:
+					pity.u = 0
+			elif grade == "SSR":
 				pity.n = 0
 		out.append(_pick(pools, grade, rand))
 	if count == 10 and not pity.is_empty():
@@ -450,6 +464,7 @@ func reset(now: float) -> void:
 	gacha_gold_level = 1
 	gacha_gold_pulls = 0
 	gacha_dia_pity = 0
+	gacha_dia_ur_pity = 0
 	research_levels = {}
 	research_current = {}
 	_research_poll_at = 0.0
@@ -685,14 +700,16 @@ func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
 	if net != null:
 		return _gacha_online(count, currency)
 	var rates := gacha_rates(GameData.GACHA_DIA if dia else currency)
-	var pity := {"n": gacha_dia_pity, "max": int(GameData.config_num("gacha_dia_pity"))} if dia else {}
+	var pity := {"n": gacha_dia_pity, "max": int(GameData.config_num("gacha_dia_pity")),
+		"u": gacha_dia_ur_pity, "umax": int(GameData.config_num("gacha_dia_ur_pity"))} if dia else {}
 	var cards := roll_gacha(count, rng.randf, rates, pity)
+	if dia:
+		gacha_dia_pity = pity.n
+		gacha_dia_ur_pity = pity.u
 	if ticket:
 		dia_tickets -= cost
-		gacha_dia_pity = pity.n
 	elif dia:
 		diamonds -= cost
-		gacha_dia_pity = pity.n
 	else:
 		gold_tenths -= cost * 10
 		var up := GameData.gacha_level_up(gacha_gold_level, gacha_gold_pulls, count)
@@ -1861,10 +1878,12 @@ func gacha_rates(currency := GameData.GACHA_GOLD) -> Dictionary:
 	return GameData.gacha_rates(currency, gacha_gold_level)
 
 
-## 모집 상태(개정 23): {gold_level, gold_pulls, gold_next(다음 레벨까지 필요한 누적, 최대면 0), dia_pity, pity_left(SSR 확정까지 남은 수)}.
+## 모집 상태(개정 23): {gold_level, gold_pulls, gold_next(다음 레벨까지 필요한 누적, 최대면 0), dia_pity, pity_left(SSR 확정까지 남은 수),
+## ur_pity, ur_pity_left(UR 확정까지 남은 수)}.
 func gacha_state() -> Dictionary:
 	return {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "gold_next": GameData.gacha_gold_next(gacha_gold_level),
-		"dia_pity": gacha_dia_pity, "pity_left": maxi(1, int(GameData.config_num("gacha_dia_pity")) - gacha_dia_pity)}
+		"dia_pity": gacha_dia_pity, "pity_left": maxi(1, int(GameData.config_num("gacha_dia_pity")) - gacha_dia_pity),
+		"ur_pity": gacha_dia_ur_pity, "ur_pity_left": maxi(1, int(GameData.config_num("gacha_dia_ur_pity")) - gacha_dia_ur_pity)}
 
 
 ## 모집 재화 보유(골드는 정수 골드).
@@ -3376,6 +3395,61 @@ func sell_items(ids: Array) -> int:
 	return g
 
 
+## 합성 못 하는 이유(문구 EQUIP_TEXT, 서버 /v1/items/fuse와 같은 순서): bad_request(개수·겹침) → unknown_item → equipped → not_fusable(LR 아님)
+## → mixed_slot(부위·무기 종류가 다름) → waiting. 되면 "".
+func fuse_block(ids: Array) -> String:
+	if ids.size() != GameData.FUSE_COUNT or ids.size() != _unique(ids).size():
+		return "bad_request"
+	for id in ids:
+		if not (id is int or id is float) or item(int(id)).is_empty():
+			return "unknown_item"
+		if item_owner(int(id)) != "":
+			return "equipped"
+		if item(int(id)).grade != GameData.FUSE_FROM:
+			return "not_fusable"
+	var first := item(int(ids[0]))
+	for id in ids:
+		var it := item(int(id))
+		if it.slot != first.slot or it.get("weapon_kind") != first.get("weapon_kind"):
+			return "mixed_slot"
+	return "waiting" if _waiting.has("fuse") else ""
+
+
+## 장비 합성(2026-10-29 MR 신화): 같은 부위 LR 3개 → 그 부위 MR 하나(새 굴림). 안 되면 알림만 하고 {}. 오프라인은 곧바로 저장하고 새 장비를,
+## 온라인은 곧바로 보이게 바꾸고(3개 빼고 MR 하나) /v1/items/fuse로 확인 — 서버가 굴린 결과가 오면 보관함을 서버 값으로 맞추고 fused를 알린다
+## (거절·유실이면 되돌리고 알림). 온라인은 예측한 장비를 돌려준다.
+func fuse_items(ids: Array, announce := true) -> Dictionary:
+	var why := fuse_block(ids)
+	if why != "":
+		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
+		return {}
+	var int_ids: Array = ids.map(func(x): return int(x))
+	if net != null:
+		var got := [{}]
+		_instant(func():
+			got[0] = fuse_items(int_ids, false)
+			return not got[0].is_empty(), "/v1/items/fuse", {"item_ids": int_ids}, func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT),
+			true, "fuse", func(data: Dictionary):
+				var it = data.get("item")
+				if it is Dictionary and _num(it.get("id")) and not item(int(it.id)).is_empty():
+					fused.emit(item(int(it.id))))
+		return got[0]
+	var src := item(int_ids[0])
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var made := GameData.roll_item(src.slot, src.get("weapon_kind"), GameData.FUSE_TO, func(): return rng.randf())
+	bag = bag.filter(func(it): return not int(it.id) in int_ids)
+	made.id = next_item_id
+	next_item_id += 1
+	bag.append(made)
+	_reindex_items()
+	save()
+	items_changed.emit()
+	if announce:
+		fused.emit(made.duplicate(true))
+	return made.duplicate(true)
+
+
 static func _unique(a: Array) -> Array:
 	var out := []
 	for x in a:
@@ -3650,6 +3724,8 @@ func _apply_gacha(p: Dictionary) -> void:
 		return
 	if _num(g.get("dia_pity")):
 		gacha_dia_pity = maxi(0, int(g.dia_pity))
+	if _num(g.get("dia_ur_pity")):
+		gacha_dia_ur_pity = maxi(0, int(g.dia_ur_pity))
 	if _num(g.get("gold_level")) and _num(g.get("gold_pulls")):
 		if _synced:
 			_set_gold_level(int(g.gold_level), int(g.gold_pulls))
@@ -3798,7 +3874,8 @@ func _predict(key: String, apply: Callable, gold := 0) -> void:
 ## 지금 하고 서버에 보낸다. 응답이 올 때까지 다른 응답은 상태를 덮지 않고(골드만), 응답이 오면 서버 상태로 맞춘다. 거절되면 마지막 서버 상태로
 ## 되돌리고 fail_text()를 알린다(""이면 알리지 않는다). local이 false면(막힘) 보내지 않는다. 보냈으면 true.
 ## wait = 응답이 올 때까지 _waiting에 둘 키(""이면 두지 않는다) — 같은 버튼을 빠르게 두 번 눌러 한 번 하려던 동작이 두 번 가지 않게(가속 아이템 등).
-func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true, wait := "") -> bool:
+## after = 응답을 반영한 뒤 그 응답으로 할 일(없어도 된다).
+func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callable, once := true, wait := "", after := Callable()) -> bool:
 	if not net.up:
 		notice.emit(WAIT_TEXT)
 		return false
@@ -3818,16 +3895,18 @@ func _instant(local: Callable, path: String, body: Dictionary, fail_text: Callab
 	_recalc_gold()
 	changed.emit()
 	net.flush_kills()  # 골드 비용은 서버 골드로 판정한다 — 쌓인 처치를 먼저
-	net.send("POST", path, body, _on_instant.bind(dg, wait), _on_instant_failed.bind(dg, fail_text, wait), true, once)
+	net.send("POST", path, body, _on_instant.bind(dg, wait, after), _on_instant_failed.bind(dg, fail_text, wait), true, once)
 	return true
 
 
-func _on_instant(data: Dictionary, dg: int, wait := "") -> void:
+func _on_instant(data: Dictionary, dg: int, wait := "", after := Callable()) -> void:
 	_hold = maxi(0, _hold - 1)
 	_hold_gold -= dg
 	if wait != "":
 		_waiting.erase(wait)
 	apply_server(data)
+	if after.is_valid():
+		after.call(data)
 
 
 func _on_instant_failed(dg: int, fail_text: Callable, wait := "") -> void:
@@ -3960,6 +4039,101 @@ func _on_sold(data: Dictionary, key: String) -> void:
 
 ## 온라인 모집: 쌓인 처치를 먼저 보내(서버 골드를 표시 골드에 맞춤) 뒤 /v1/gacha. once — 실패해도 다시 보내지 않는다
 ## (서버가 반영했는데 답만 잃었으면 두 번 뽑힌다). 실패하면 알림, Net이 /v1/player로 상태를 새로 받는다(뽑힌 영웅은 거기 보인다).
+## SSR 조각 합성(2026-10-29 사용자 "SSR을 10개 합성하면 UR 하나 나오게 해"): 가진 SSR 영웅들의 조각을 합쳐 ur_fuse_shards개 넣으면
+## 태생 UR 영웅 1명(균등)이 나온다 — 모집처럼 새 영웅이면 NEW, 가진 영웅이면 조각 +1. picks = 영웅 id → 넣을 조각 수(> 0).
+## 결과는 gacha_done([{hero_id, grade, new, copies, shards}]) — 모집 창이 같은 뒤집기 연출로 보인다. 서버 /v1/hero/fuse와 같은 규칙.
+func fuse_cost() -> int:
+	return int(GameData.config_num("ur_fuse_shards"))
+
+
+## 넣을 수 있는 묶음인가: 합 = fuse_cost, 영웅마다 가진 SSR 영웅이고 0 < 수 ≤ 조각.
+func fuse_ok(picks: Dictionary) -> bool:
+	var total := 0
+	for id in picks:
+		var n := int(picks[id])
+		if not (id is String and GameData.hero(id).get("grade", "") == "SSR" and int(heroes.get(id, 0)) >= 1 and n > 0 and n <= shards_of(id)):
+			return false
+		total += n
+	return total == fuse_cost()
+
+
+## 자동 채우기: 승급(★5)까지 쓰고 남는 조각부터, 그다음 조각이 많은 영웅부터 fuse_cost개. 모자라면 가진 만큼.
+func fuse_autofill() -> Dictionary:
+	var need := fuse_cost()
+	var picks := {}
+	var ids: Array = GameData.heroes().filter(func(h): return h.grade == "SSR" and int(heroes.get(h.id, 0)) >= 1 and shards_of(h.id) > 0).map(func(h): return h.id)
+	ids.sort_custom(func(a, b): return [-spare_shards(a), -shards_of(a), a] < [-spare_shards(b), -shards_of(b), b])
+	for pass_spare in [true, false]:
+		for id in ids:
+			if need <= 0:
+				break
+			var room: int = (spare_shards(id) if pass_spare else shards_of(id)) - int(picks.get(id, 0))
+			var n := mini(room, need)
+			if n > 0:
+				picks[id] = int(picks.get(id, 0)) + n
+				need -= n
+	return picks
+
+
+## ★5까지 승급하고도 남는 조각(0 이상).
+func spare_shards(hero_id: String) -> int:
+	var left := 0
+	for p in range(promotion_of(hero_id), GameData.MAX_PROMOTION):
+		left += GameData.promote_cost(p)
+	return maxi(0, shards_of(hero_id) - left)
+
+
+func fuse_ur(picks: Dictionary) -> bool:
+	if not fuse_ok(picks):
+		notice.emit(Lang.t("economy.fuse_ur") % fuse_cost())
+		return false
+	if net != null:
+		if _waiting.has("hero_fuse"):
+			return false
+		if not net.up:
+			notice.emit(WAIT_TEXT)
+			return false
+		_waiting["hero_fuse"] = true
+		_predict("hero_fuse", func():
+			for id in picks:
+				hero_shards[id] = shards_of(id) - int(picks[id]))
+		net.send("POST", "/v1/hero/fuse", {"picks": picks}, _on_fuse, _on_fuse_failed, true, true)
+		return true
+	var pool: Array = GameData.heroes().filter(func(h): return h.grade == "UR").map(func(h): return h.id)
+	var id: String = pool[mini(floori(rng.randf() * pool.size()), pool.size() - 1)]
+	for k in picks:
+		hero_shards[k] = shards_of(k) - int(picks[k])
+	var c := int(heroes.get(id, 0)) + 1
+	if c > 1:
+		hero_shards[id] = shards_of(id) + 1
+	heroes[id] = c
+	changed.emit()
+	roster_changed.emit()
+	save()
+	gacha_done.emit([{"hero_id": id, "grade": "UR", "new": c == 1, "copies": c, "shards": shards_of(id)}])
+	return true
+
+
+func _on_fuse(data: Dictionary) -> void:
+	_waiting.erase("hero_fuse")
+	_predicts.erase("hero_fuse")
+	apply_server(data)
+	var results := []
+	if data.get("results") is Array:
+		for r in data.results:
+			if r is Dictionary and r.get("hero_id") is String and not GameData.hero(r.hero_id).is_empty():
+				results.append({"hero_id": r.hero_id, "grade": GameData.hero(r.hero_id).grade, "new": r.get("new") == true,
+					"copies": int(r.copies) if _num(r.get("copies")) else 1, "shards": int(r.shards) if _num(r.get("shards")) else 0})
+	gacha_done.emit(results)
+
+
+func _on_fuse_failed() -> void:
+	_waiting.erase("hero_fuse")
+	_unpredict("hero_fuse")
+	notice.emit(GACHA_FAIL_TEXT)
+	gacha_done.emit([])
+
+
 func _gacha_online(count: int, currency: String) -> bool:
 	if _waiting.has("gacha"):
 		return false
@@ -4477,7 +4651,7 @@ func save() -> void:
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
 		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches,
-		"build2": null if build2.is_empty() else build2, "builder2_until": builder2_until, "speedups": speedups, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "layout": _layout_save(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity},
+		"build2": null if build2.is_empty() else build2, "builder2_until": builder2_until, "speedups": speedups, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "layout": _layout_save(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity, "dia_ur_pity": gacha_dia_ur_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
 		"last_active": time_now()}))
 	f.close()
@@ -4645,6 +4819,8 @@ func _apply(data) -> bool:
 	gacha_gold_level = v11.gold_level
 	gacha_gold_pulls = v11.gold_pulls
 	gacha_dia_pity = v11.dia_pity
+	var gs = data.get("gacha")  # UR 천장(2026-10-29, 없으면 0)
+	gacha_dia_ur_pity = maxi(0, int(gs.dia_ur_pity)) if gs is Dictionary and _num(gs.get("dia_ur_pity")) else 0
 	research_levels = v12[0]
 	research_current = v12[1]
 	dia_tickets = maxi(0, int(data.get("dia_tickets", 0))) if _num(data.get("dia_tickets", 0)) else 0  # 튜토리얼(없으면 0)

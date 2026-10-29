@@ -55,6 +55,13 @@ const KIND := {
 	"shock_hit": ["bolt", STORM], "heavy_blow": ["hammer", EARTH], "echo_strike": ["wave", STEEL], "frost_shatter": ["ice_spike", ICE],
 	"counter": ["sword", GUARD], "second_wind": ["heart", HEAL], "invincible": ["shield", HOLY], "revive": ["heart", HOLY],
 	"scorch": ["flame", FIRE], "gale": ["swirl", WIND], "solar_spark": ["sun", HOLY], "frost_spike": ["ice_spike", ICE], "magma": ["fireball", LAVA],
+	# 2026-10-29 태생 UR(그린 아이콘이 오기 전 도형)
+	"turtle_ward": ["shield", ICE], "black_shell": ["shield", GUARD], "north_tide": ["wave", ICE],
+	"tiger_claw": ["claw", STORM], "tiger_fury": ["bolt", STORM], "tiger_avatar": ["paw", STORM],
+	"fox_fire": ["flame", SHADOW], "fox_charm": ["heart", SHADOW], "nine_tails": ["swirl", SHADOW],
+	"dragon_arrow": ["arrow", WIND], "azure_tide": ["wave", WIND], "azure_dragon": ["swirl", WIND],
+	"time_stop": ["star", STORM], "time_haste": ["wave", STORM], "time_collapse": ["swirl", STORM],
+	"phoenix_wing": ["bird", FIRE], "phoenix_blessing": ["note", FIRE], "rebirth_flame": ["heart", FIRE],
 }
 
 

@@ -225,7 +225,7 @@ const HERO_LOOKS := {
 	# 구미호: 단검 대신 철선 두 자루(진홍·흰 살 + 끝에 푸른 여우불)
 	"yeonhwa": {"palette": {"blade": Color("E8EEF4")}, "swap": {"Knife": "yeonhwa_fan", "Knife_Offhand": "yeonhwa_fan"}, "finish": true, "gear_scale": 0.7},
 	# 청룡: 쇠뇌 대신 비취 장궁(사용자 "청룡 석궁 버리고 장궁으로 무기 만들어")
-	"cheongryong": {"palette": {}, "swap": {"2H_Crossbow": "cheongryong_bow"}, "finish": true},
+	"cheongryong": {"palette": {"wood": Color("1E5E52"), "fit": Color("C8E8E0"), "blade": Color("7FFFD8")}, "swap": {"2H_Crossbow": "cheongryong_bow"}, "finish": true},
 	# 크로노스: 지팡이 머리에 모래시계 + 시계 고리
 	"chronos": {"palette": {"gem": Color("4FD8FF")}, "parts": [["handslot.r", "chronos_hourglass"]], "finish": true, "gear_scale": 0.85},
 	# 주작: 흰 마법서 + 주홍 보석
@@ -445,10 +445,11 @@ const MONSTER_MODELS := {
 	},
 }
 
-## 장비 등급 색(개정 18 §5). LR은 무지개 금 — 정적인 곳(드랍 상자)은 이 금색, 아이콘 테두리는 Icons.draw_item이 흐르게 그린다.
+## 장비 등급 색(개정 18 §5). MR은 검붉은 빛(테두리가 검붉게 일렁인다). LR은 무지개 금 — 정적인 곳(드랍 상자)은 이 금색, 아이콘 테두리는 Icons.draw_item이 흐르게 그린다.
 const ITEM_GRADE_COLORS := {
 	"N": Color(0.62, 0.64, 0.67), "R": Color(0.36, 0.73, 0.39), "SR": Color(0.29, 0.56, 0.89),
 	"SSR": Color(0.63, 0.36, 0.88), "UR": Color(0.94, 0.54, 0.14), "LR": Color(0.98, 0.80, 0.28),
+	"MR": Color(0.66, 0.07, 0.15),  # 신화(2026-10-29): 검붉은 오라 — LR 무지개 금과 구분, 금색 장식 없음
 }
 const WEAPON_BONE := "handslot.r"
 
@@ -806,17 +807,21 @@ static func toonify(root: Node) -> void:
 ## UR 영웅 마감(2026-10-29, 사용자 "왜 컨셉 그림의 퀄리티를 게임에서 담지를 못해?"): 카툰 재질의 가장 밝은 색을 눌러 흰 부분이 빛에 하얗게
 ## 날아가지 않게 하고, 보석·여우불·불꽃 같은 밝은 원색은 스스로 빛나게 한다(toon.gdshaderinc white_cap·glow). 카툰 재질마다 하나를 공유하고, 카툰이 아니면 그대로.
 static func ur_finish(root: Node) -> void:
-	_swap_materials(root, func(src: Material) -> Material:
-		var sm := src as ShaderMaterial
-		if sm == null or not (sm.shader == TOON_SHADER or sm.shader == TOON_DOUBLE_SHADER):
-			return src
-		var key := sm.get_instance_id()
-		if not _ur_cache.has(key):
-			var m: ShaderMaterial = sm.duplicate()
-			for p in UR_LOOK:
-				m.set_shader_parameter(p, UR_LOOK[p])
-			_ur_cache[key] = m
-		return _ur_cache[key])
+	_swap_materials(root, ur_material)
+
+
+## 카툰 재질 → UR 마감 재질(UR_LOOK 값). 카툰이 아니면 그대로.
+static func ur_material(src: Material) -> Material:
+	var sm := src as ShaderMaterial
+	if sm == null or not (sm.shader == TOON_SHADER or sm.shader == TOON_DOUBLE_SHADER):
+		return src
+	var key := sm.get_instance_id()
+	if not _ur_cache.has(key):
+		var m: ShaderMaterial = sm.duplicate()
+		for p in UR_LOOK:
+			m.set_shader_parameter(p, UR_LOOK[p])
+		_ur_cache[key] = m
+	return _ur_cache[key]
 
 
 ## 로우폴리 재질 → 카툰 재질(로우폴리 셰이더가 아니면 그대로).

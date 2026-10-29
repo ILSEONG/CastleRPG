@@ -158,7 +158,7 @@ func _recruit() -> void:
 		await _settle()
 		var pity := int(before.gacha[2])
 		for r in _gacha_results:
-			pity = 0 if r.grade == "SSR" else pity + 1
+			pity = 0 if r.grade in ["SSR", "UR"] else pity + 1
 		_check(Economy.gacha_dia_pity == pity, "ticket %dx: shares the diamond pity" % n, str([Economy.gacha_dia_pity, pity]))
 		await _same_as_server("ticket %dx" % n, ["gold", "diamonds", "tickets", "heroes", "gacha"], pred, ["tickets", "diamonds"])
 		rp._on_confirm()
@@ -182,7 +182,7 @@ func _recruit() -> void:
 		await _same_as_server("diamond %dx" % n, ["gold", "diamonds", "heroes", "gacha"], pred, ["diamonds"])
 		rp._on_confirm()
 		await _frames(3)
-	_check(rp.pity_label.text == "SSR 확정까지 %d회" % maxi(1, int(GameData.config_num("gacha_dia_pity")) - Economy.gacha_dia_pity), "pity label", rp.pity_label.text)
+	_check(rp.pity_label.text.begins_with("SSR 확정까지 %d회" % maxi(1, int(GameData.config_num("gacha_dia_pity")) - Economy.gacha_dia_pity)), "pity label", rp.pity_label.text)
 	_check_shards_invariant("all pulls")
 	var dups := 0
 	for id in Economy.heroes:

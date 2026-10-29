@@ -17,12 +17,12 @@ func set_item(p_kind: String, p_grade: String) -> void:
 	kind = p_kind
 	grade = p_grade
 	modulate.a = 1.0 if grade != "" else 0.35
-	set_process(grade == "LR")
+	set_process(grade == "LR" or grade == "MR")
 	queue_redraw()
 
 
 func _ready() -> void:
-	set_process(grade == "LR")
+	set_process(grade == "LR" or grade == "MR")
 
 
 func _process(_delta: float) -> void:

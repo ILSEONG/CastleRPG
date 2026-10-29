@@ -93,6 +93,10 @@ const SKILL := {
 	"arrow_rain": "sk_arrows", "volley": "sk_arrows", "axe_volley": "sk_arrows",
 	"piercing_shot": "sk_shot", "spear_throw": "sk_shot", "snare": "sk_shot", "boomerang": "sk_shot",
 	"gate_repair": "sk_repair",
+	# 2026-10-29 태생 UR
+	"turtle_ward": "sk_shield", "north_tide": "sk_earth", "tiger_claw": "sk_slash", "tiger_fury": "sk_thunder", "tiger_avatar": "sk_roar",
+	"fox_fire": "sk_fire", "fox_charm": "sk_dark", "nine_tails": "sk_slash", "dragon_arrow": "sk_shot", "azure_dragon": "sk_wind",
+	"time_stop": "sk_ice", "time_collapse": "sk_boom", "phoenix_wing": "sk_fire", "rebirth_flame": "sk_heal",
 }
 const SKILL_DEFAULT := "sk_slash"
 ## 떨어지는 스킬: 소리를 이만큼(게임 초) 늦춰 땅에 닿을 때 낸다(Fx.meteor 낙하 0.55초)

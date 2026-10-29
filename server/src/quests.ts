@@ -57,16 +57,14 @@ export function tutorialDone(id: string, f: QuestFacts): boolean {
 }
 
 // 반복 퀘스트(가이드 카드, 앱 Tutorial.REPEATS 순서 = quests.csv 반복 행 순서): 사건, 첫 목표, 바퀴마다 늘어나는 목표.
+// 2026-10-29 메이플스토리 키우기식: 스테이지 → 처치 → 모집 → 던전 → 영웅 → 성장(건물 레벨업·수집·판매는 사용자 요청으로 뺐다).
 export const REPEATS: Record<string, { ev: string; base: number; step: number }> = {
   rep_kill: { ev: 'kill', base: 100, step: 50 },
-  rep_collect: { ev: 'collect', base: 3, step: 1 },
   rep_stage: { ev: 'stage', base: 2, step: 0 }, // 받을 때의 라운드에서 두 라운드 더(앱: 다음 라운드 + 1을 클리어)
   rep_growth_up: { ev: 'growth', base: 3, step: 1 },
-  rep_sell: { ev: 'sell', base: 1, step: 0 },
   rep_hero_up: { ev: 'hero_level', base: 5, step: 2 },
   rep_gacha: { ev: 'gacha', base: 10, step: 0 },
   rep_dungeon_win: { ev: 'dungeon_win', base: 1, step: 0 },
-  rep_build_up: { ev: 'build_up', base: 1, step: 0 },
 }
 
 // 반복 퀘스트 진행(앱 카드가 그대로 보여 준다 — 2026-10-14 앱이 따로 세던 기준이 어긋나 「1-2 클리어」가 떠도 받을 수 없었다):

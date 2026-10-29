@@ -1017,7 +1017,7 @@ func _blast(center: Vector3) -> void:
 	for m in get_tree().get_nodes_in_group(foes):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1] and sees(center, m.global_position):
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
-	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade == "SSR" and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
+	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade in ["SSR", "UR"] and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
 	_announce("aoe_blast")
 
 
@@ -1049,7 +1049,7 @@ func _announce(kind: String) -> void:
 	var now := Time.get_ticks_msec() / 1000.0
 	var named := HeroSkillsScript.is_active(kind) or kind in NAMED_PASSIVES
 	var enemy: bool = get("team") == 1
-	var ssr: bool = not enemy and def.get("grade", "") == "SSR"
+	var ssr: bool = not enemy and def.get("grade", "") in ["SSR", "UR"]  # UR도 컷인
 	var ult: bool = named and ssr and kind == _ult_kind()
 	if named:
 		if now - _banner_at < BANNER_GAP and (not ult or kind == _banner_kind):
