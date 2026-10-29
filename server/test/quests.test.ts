@@ -121,43 +121,59 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal((await claim(token, { type: 'tutorial', step: lb })).json.error, 'not_done')
   await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'lumber') where player_id = $1", [id])
   assert.equal((await claim(token, { type: 'tutorial', step: lb })).status, 200)
-  // 여러 건물(2026-10-23 채석장·농장): 둘 다 지어야
-  assert.equal(rows[lb + 1].needs, 'build:quarry+farm')
+  // 여러 건물(2026-10-23 채석장·농장): 둘 다 지어야. 2026-10-29부터 벌목장과 채석장·농장 사이에 사이 퀘스트가 낀다
+  const qf = rows.findIndex((x) => x.id === 'build_quarry_farm')
+  assert.ok(qf > lb + 1)
+  assert.equal(rows[qf].needs, 'build:quarry+farm')
+  await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, qf])
   await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'quarry') where player_id = $1", [id])
-  assert.equal((await claim(token, { type: 'tutorial', step: lb + 1 })).json.error, 'not_done')
+  assert.equal((await claim(token, { type: 'tutorial', step: qf })).json.error, 'not_done')
   await S.db.query("update player_state set unbuilt = array_remove(unbuilt, 'farm') where player_id = $1", [id])
-  assert.equal((await claim(token, { type: 'tutorial', step: lb + 1 })).status, 200)
-  // 열쇠 보상(kill_100 → 골드 던전 열쇠 2)
-  const k = rows.findIndex((x) => x.reward === 'keys_gold:2')
+  assert.equal((await claim(token, { type: 'tutorial', step: qf })).status, 200)
+  // 열쇠 보상: 던전 단계 사이 퀘스트(골드 던전 2단계) 앞 처치 퀘스트가 골드 던전 열쇠 1개
+  const k = rows.findIndex((x) => x.id === 'dungeon_gold_2') - 1
+  assert.equal(rows[k].id, 'kill_60')
+  assert.ok(rows[k].reward.split('|').includes('keys_gold:1'))
   await S.db.query('update player_state set tut_step = $2, unbuilt = $3 where player_id = $1', [id, k, []])
   const keys = (await player(token)).dungeons.gold.keys
-  assert.equal((await claim(token, { type: 'tutorial', step: k })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
+  assert.equal((await claim(token, { type: 'tutorial', step: k })).json.error, 'not_done') // 처치 60마리를 서버가 아직 못 셌다
   await pump(token, 100)
   r = await claim(token, { type: 'tutorial', step: k })
-  assert.equal(r.json.player.dungeons.gold.keys, keys + 2)
-  // 모집권 보상
-  const t = rows.findIndex((x) => x.id === 'kill_100_2')
-  assert.equal(rows[t - 1].id, 'keep_2') // 2026-10-29: 성채 Lv 2 바로 뒤(전투 목표 간격)
-  assert.ok(rows[t - 1].reward.split('|').includes('tickets:10')) // 다음 미션(처치)이 아무것도 안 쓰면 모집권
-  assert.equal(rows[t].reward, 'stone:380|food:530') // 처치 미션은 다음 미션(벌목장 Lv 2) 자원을 준다
-  await pump(token, 200)
+  assert.equal(r.json.player.dungeons.gold.keys, keys + 1)
+  // 던전 단계 퀘스트: 최고 단계가 그 단계 이상이어야(dungeon_<종류>_<단계>)
+  assert.equal((await claim(token, { type: 'tutorial', step: k + 1 })).json.error, 'not_done')
+  await S.db.query("update player_dungeons set best_level = 2 where player_id = $1 and type = 'gold'", [id])
+  assert.equal((await claim(token, { type: 'tutorial', step: k + 1 })).status, 200)
+  // 능력치 사이 퀘스트(치명타 확률 등 6종)는 그 능력치 레벨을 본다
+  const cr = rows.findIndex((x) => x.id === 'crit_rate_1')
+  await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, cr])
+  assert.equal((await claim(token, { type: 'tutorial', step: cr })).json.error, 'not_done')
+  // 자원 보상: 처치 퀘스트가 다음 미션(농장 Lv 2) 자원을 준다
+  const t = rows.findIndex((x) => x.id === 'farm_2') - 1
+  assert.ok(rows[t].id.startsWith('kill_'))
+  const rr = R.parseReward(rows[t].reward as string)!
+  assert.ok((rr.wood ?? 0) > 0 || (rr.stone ?? 0) > 0 || (rr.food ?? 0) > 0)
+  assert.ok(rows[rows.findIndex((x) => x.id === 'kill_100')].reward.split('|').includes('tickets:10')) // 규칙 미션 뒤로 아무것도 안 쓰면 모집권
   await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, t])
   const res0 = (await player(token)).res
   const kr = (await claim(token, { type: 'tutorial', step: t })).json.player.res
-  assert.deepEqual([kr.stone - res0.stone, kr.food - res0.food], [380, 530])
-  // 마지막
-  await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, rows.length - 3])
-  assert.equal(rows[rows.length - 3].id, 'stage_1_15')
-  assert.equal(rows[rows.length - 2].id, 'exchange_look') // 가이드 2026-10-13: 1-15 뒤 거래소 둘러보기(앱이 센다)
+  assert.deepEqual(R.BUILD_RES.map((x) => kr[x] - res0[x]), R.BUILD_RES.map((x) => rr[x] ?? 0))
+  // 1-15 · 거래소 · 마지막(파티)
+  const s15 = rows.findIndex((x) => x.id === 'stage_1_15')
+  const ex = rows.findIndex((x) => x.id === 'exchange_look')
   assert.equal(rows[rows.length - 1].id, 'party_clear') // 가이드 2026-10-15: 마지막 = 파티 던전 첫 클리어
-  assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 3 })).json.error, 'not_done') // 1-15를 아직 안 깼다
+  assert.ok(s15 < ex && ex < rows.length - 1)
+  await S.db.query('update player_state set tut_step = $2, keep_level = 9, gate_level = 9 where player_id = $1', [id, s15])
+  assert.equal((await claim(token, { type: 'tutorial', step: s15 })).json.error, 'not_done') // 1-15를 아직 안 깼다
   await setStage(token, 16)
-  r = await claim(token, { type: 'tutorial', step: rows.length - 3 })
+  r = await claim(token, { type: 'tutorial', step: s15 })
   assert.equal(r.status, 200)
   assert.equal(r.json.player.quest.tut_state, 'active')
-  r = await claim(token, { type: 'tutorial', step: rows.length - 2 })
+  await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, ex])
+  r = await claim(token, { type: 'tutorial', step: ex }) // 거래소 둘러보기(앱이 센다)
   assert.equal(r.status, 200)
   assert.equal(r.json.player.quest.tut_state, 'active')
+  await S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, rows.length - 1])
   assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 1 })).json.error, 'not_done') // 파티 던전을 아직 못 이겼다
   await S.db.query("insert into party_stats (player_id, quest, best, day, clears) values ($1, 'spider', 0, 0, 0)", [id]) // 지기만 했다
   assert.equal((await claim(token, { type: 'tutorial', step: rows.length - 1 })).json.error, 'not_done')
@@ -168,7 +184,7 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal(r.json.player.quest.tut_state, 'done')
   assert.equal((await claim(token, { type: 'tutorial', step: rows.length })).json.error, 'no_tutorial')
   const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'quest' order by id", [id])
-  assert.equal(logs.length, 8) // 1-1·벌목장·채석장+농장·열쇠·모집권·1-15·거래소·파티
+  assert.equal(logs.length, 9) // 1-1·벌목장·채석장+농장·열쇠·골드 던전 2단계·자원·1-15·거래소·파티
 })
 
 test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_sec 간격, 보상 = reward × (1 + 바퀴) + fixed', async () => {

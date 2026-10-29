@@ -1,5 +1,5 @@
 extends Node
-## 통합 테스트(2026-10-14) — 가이드 여정(온라인): 새 게스트로 로컬 서버(ALLOW_TEST_HOOKS=1, tutorial_new_players=1)에 접속해 가이드 82개 미션을 처음부터
+## 통합 테스트(2026-10-14) — 가이드 여정(온라인): 새 게스트로 로컬 서버(ALLOW_TEST_HOOKS=1, tutorial_new_players=1)에 접속해 가이드 265개 퀘스트를 처음부터
 ## 하나씩 깬다. 미션마다 카드(제목·설명·보상·[바로가기])가 말이 되는지 보고 [바로가기]를 눌러 무엇이 열리는지 본 뒤, 버튼과 같은 함수로 목표를 채운다
 ## (실제 플레이로 오래 걸리는 처치·스테이지·FEVER 게이지는 테스트 훅/사건 수로 대신 — SIM 줄로 적는다). 카드 [보상 받기]로 받으면
 ## 보상이 곧바로 보이고(예측), 서버가 받아들이고(되돌림 없음), 앱 단계·보상 반영 상태 == 서버 GET /v1/player인지 본다.
@@ -52,7 +52,7 @@ func _ready() -> void:
 	Guild.boss_started.connect(func(r): _boss_run = r)
 	_check(await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0) and Tutorial.active() and Tutorial.step == 0, "guide starts at mission 1", str(Economy.server_quest))
 	var total: int = Tutorial.MISSIONS.size()
-	_check(total == 82, "the guide has 82 missions", str(total))
+	_check(total == 265, "the guide has 265 quests (MapleStory Idle-like spacing, 2026-10-29)", str(total))
 	var guard := 0
 	var upto := int(Net.arg_value("upto")) if Net.arg_value("upto") != "" else total  # 디버그: 이 미션까지만
 	while Tutorial.active() and guard < total + 2 and Tutorial.step < upto:
@@ -318,6 +318,14 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 			Economy.set_soldier_deploy(Economy.auto_deploy())
 		"dungeon":
 			await _dungeon(str(m.arg), tag)
+		"dungeon_lv":  # 사이 퀘스트(2026-10-29): 최고 단계 + 1부터 목표 단계까지(앞 퀘스트 보상 열쇠 1개 + 오늘 열쇠)
+			var dt := str(m.arg[0])
+			while int(Economy.dungeon_state(dt).best_level) < int(m.arg[1]):
+				var before := int(Economy.dungeon_state(dt).best_level)
+				await _dungeon(dt, tag, before + 1)
+				if int(Economy.dungeon_state(dt).best_level) <= before:
+					_check(false, tag + " %s dungeon %d cleared" % [dt, before + 1], "")
+					break
 		"equip":
 			var done := false
 			for it in Economy.items():
@@ -408,7 +416,7 @@ func _satisfy(m: Dictionary, tag: String) -> void:
 	await _settle()
 
 
-func _dungeon(type: String, tag: String) -> void:
+func _dungeon(type: String, tag: String, level := 1) -> void:
 	await _settle()
 	var party: Array = Economy.default_party(type)
 	var helper := ""
@@ -422,12 +430,12 @@ func _dungeon(type: String, tag: String) -> void:
 	var started := []
 	var cb := func(r): started.append(r)
 	Economy.dungeon_started.connect(cb)
-	_check(Economy.start_dungeon(type, 1, party, helper), tag + " start %s dungeon 1" % type, Economy.dungeon_block(type, 1, party, helper if type == "ticket" else null))
+	_check(Economy.start_dungeon(type, level, party, helper), tag + " start %s dungeon %d" % [type, level], Economy.dungeon_block(type, level, party, helper if type == "ticket" else null))
 	await _wait_until(func(): return not started.is_empty(), 10.0)
 	Economy.dungeon_started.disconnect(cb)
 	await _frames(20)
 	Economy.debug_win()
-	await _wait_until(func(): return int(Economy.dungeon_state(type).best_level) >= 1, 15.0)
+	await _wait_until(func(): return int(Economy.dungeon_state(type).best_level) >= level, 15.0)
 	await _frames(20)
 	await _leave_scene()
 

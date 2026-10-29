@@ -284,8 +284,9 @@ func _try(m: Dictionary) -> String:
 				return "훈련 대기"
 			Economy.set_soldier_deploy(Economy.auto_deploy())
 			return ""
-		"dungeon":
-			var type := str(m.arg)
+		"dungeon", "dungeon_lv":  # 던전 단계 사이 퀘스트(2026-10-29)는 최고 단계 + 1
+			var type := str(m.arg) if str(m.kind) == "dungeon" else str(m.arg[0])
+			var lv := 1 if str(m.kind) == "dungeon" else int(Economy.dungeon_state(type).best_level) + 1
 			var party: Array = Economy.default_party(type)
 			var helper = null
 			if type == "ticket":  # 던전 창 편성처럼 첫 도우미 후보를 고른다(창을 열면 GET /v1/dungeon으로 후보를 받는다)
@@ -299,12 +300,12 @@ func _try(m: Dictionary) -> String:
 				helper = str(hs[0].get("key", hs[0].get("hero_id", "")))
 				party = Economy.default_party("gold").filter(func(x): return x != helper).slice(0, GameData.party_size(type))
 				await _close_all()
-			if Economy.dungeon_block(type, 1, party, helper) != "":
-				return "던전 불가(%s)" % Economy.dungeon_block(type, 1, party, helper)
-			Economy.start_dungeon(type, 1, party, "" if helper == null else helper)
+			if Economy.dungeon_block(type, lv, party, helper) != "":
+				return "던전 불가(%s)" % Economy.dungeon_block(type, lv, party, helper)
+			Economy.start_dungeon(type, lv, party, "" if helper == null else helper)
 			await _wait_until(func(): return _main._dungeon != null, 15.0)
 			var t := _now_s()
-			await _wait_until(func(): return int(Economy.dungeon_state(type).best_level) >= 1 or _main._dungeon == null, 240.0)
+			await _wait_until(func(): return int(Economy.dungeon_state(type).best_level) >= lv or _main._dungeon == null, 240.0)
 			await _real_wait(3.0)
 			if _main._dungeon != null:
 				_main.leave_dungeon()
