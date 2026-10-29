@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c0ygidgegw077"
-path="res://.godot/imported/nox.glb-7470c5c5e5a8323500e5fc39e8a7ac50.scn"
+uid="uid://c6r11xsvgeugb"
+path="res://.godot/imported/baekho.glb-07c770d9c4c2df93bc474951888024e7.scn"
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/nox.glb"
-dest_files=["res://.godot/imported/nox.glb-7470c5c5e5a8323500e5fc39e8a7ac50.scn"]
+source_file="res://assets/models/meshy/heroes/baekho.glb"
+dest_files=["res://.godot/imported/baekho.glb-07c770d9c4c2df93bc474951888024e7.scn"]
 
 [params]
 

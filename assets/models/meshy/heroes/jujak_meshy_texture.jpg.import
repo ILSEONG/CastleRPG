@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://de0okb7fti0bl"
-path="res://.godot/imported/kaien_meshy_texture.jpg-2d966c75faea879136a3c9a12d3e00aa.ctex"
+uid="uid://bxtq2c2lplhxw"
+path="res://.godot/imported/jujak_meshy_texture.jpg-30a7e6dc7bf4e6fd673b03b24c1178d0.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "9b4e19e7ef84656fa8db49fe9efc182b"
+"md5": "b40003e8a86d0697373823246ef3137f"
 }
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/kaien_meshy_texture.jpg"
-dest_files=["res://.godot/imported/kaien_meshy_texture.jpg-2d966c75faea879136a3c9a12d3e00aa.ctex"]
+source_file="res://assets/models/meshy/heroes/jujak_meshy_texture.jpg"
+dest_files=["res://.godot/imported/jujak_meshy_texture.jpg-30a7e6dc7bf4e6fd673b03b24c1178d0.ctex"]
 
 [params]
 

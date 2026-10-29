@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cgq8ie4mdq1cf"
-path="res://.godot/imported/solaris_meshy_texture.jpg-a2e8502ae5fde0d79c0fdf982616015d.ctex"
+uid="uid://cgw36fpvwqn7n"
+path="res://.godot/imported/baekho_meshy_texture.jpg-9431f0810f0f70f15ce51cb90f9787f2.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "313600317801826e541f7770b6ae896a"
+"md5": "c96bcc9c8b68c0c7fda93ede25d308ea"
 }
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/solaris_meshy_texture.jpg"
-dest_files=["res://.godot/imported/solaris_meshy_texture.jpg-a2e8502ae5fde0d79c0fdf982616015d.ctex"]
+source_file="res://assets/models/meshy/heroes/baekho_meshy_texture.jpg"
+dest_files=["res://.godot/imported/baekho_meshy_texture.jpg-9431f0810f0f70f15ce51cb90f9787f2.ctex"]
 
 [params]
 

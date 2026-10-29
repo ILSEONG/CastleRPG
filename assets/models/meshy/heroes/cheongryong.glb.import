@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://d4mpekrcm684g"
-path="res://.godot/imported/aurora.glb-c6f1d4e9700352719232087cabbc1689.scn"
+uid="uid://cjkm2g44ityl1"
+path="res://.godot/imported/cheongryong.glb-e69ee8ecc98dd63fe3ad1d62ebddbebb.scn"
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/aurora.glb"
-dest_files=["res://.godot/imported/aurora.glb-c6f1d4e9700352719232087cabbc1689.scn"]
+source_file="res://assets/models/meshy/heroes/cheongryong.glb"
+dest_files=["res://.godot/imported/cheongryong.glb-e69ee8ecc98dd63fe3ad1d62ebddbebb.scn"]
 
 [params]
 

@@ -214,20 +214,20 @@ const HERO_LOOKS := {
 	"raven": {"palette": {"hood": Color("3B3F58"), "tunic": Color("1E2030"), "arms": Color("2E3148"), "strap": Color("6A5ACD"),
 		"belt": Color("1A1A24"), "boots": Color("1A1A24"), "wood": Color("22222C"), "fit": Color("8E7CC3")},
 		"parts": [["head", "raven_crest"], ["chest", "raven_mantle"]], "scale": 1.04},
-	# UR(2026-10-29 "UR은 개멋지게 뽑아줘"): 몸은 모두 Meshy(dev/meshy_heroes.py UR_IDS — 겹친 갑옷·등 장식·빛나는 수정, 금색 없이),
-	# 여기는 무기 색·손 부품만(몸이 있으면 팔레트는 무기 칸에만 먹는다).
-	# 태양의 용기사: 흰 강철 칼·방패 + 주황 방패 테, 칼날을 감싸는 주황 불꽃
-	"solaris": {"palette": {"steel": Color("F4F1EC"), "grip": Color("3A2A2A"), "rim": Color("FF6A1F")}, "parts": [["handslot.r", "solaris_flame"]]},
-	# 폭풍의 전쟁군주: 검은 강철 큰 도끼 + 하늘색 날, 도끼머리에서 갈라지는 번개
-	"ragna": {"palette": {"steel": Color("3A4250"), "edge": Color("8FD8FF"), "wood": Color("2A2A34")}, "parts": [["handslot.r", "ragna_bolts"]]},
-	# 월광 검성: 단검 대신 연보라 달빛 장검 두 자루
-	"kaien": {"palette": {"blade": Color("D8CCFF")}, "swap": {"Knife": "kaien_blade", "Knife_Offhand": "kaien_blade"}},
-	# 별의 사수: 남색 쇠뇌 + 은 쇠붙이
-	"orion": {"palette": {"wood": Color("2A2E5A"), "fit": Color("C8D0E8"), "blade": Color("8FB0FF")}},
-	# 공허의 대마도사: 지팡이 머리에 보라 수정 + 뜬 조각
-	"nox": {"palette": {"gem": Color("B070FF")}, "parts": [["handslot.r", "nox_crystal"]]},
-	# 새벽의 여신: 흰 마법서 + 분홍 보석
-	"aurora": {"palette": {"book": Color("F6EEF2"), "gem": Color("FF8FA3")}},
+	# UR(2026-10-29, 두 번째 안 — 사용자 "UR이 독창적이지 않자나 ... SSR을 그대로 가져오면 어떡하냐"): 기존 영웅에 없는 주제(사방신·구미호·시간).
+	# 몸은 모두 Meshy(dev/meshy_heroes.py UR_IDS — 겹친 갑옷·등 장식·빛나는 수정, 금색 없이), 여기는 무기 색·손 부품만(몸이 있으면 팔레트는 무기 칸에만).
+	# 현무: 은빛 칼·방패 + 청록 방패 테
+	"hyeonmu": {"palette": {"steel": Color("D6E4E8"), "grip": Color("1A2A30"), "rim": Color("3FE0C8")}},
+	# 백호: 큰 도끼 대신 월도(흰 강철 날 + 붉은 술)
+	"baekho": {"palette": {"steel": Color("E8EEF4")}, "swap": {"2H_Axe": "baekho_glaive"}},
+	# 구미호: 단검 대신 철선 두 자루(진홍·흰 살 + 끝에 푸른 여우불)
+	"yeonhwa": {"palette": {"blade": Color("E8EEF4")}, "swap": {"Knife": "yeonhwa_fan", "Knife_Offhand": "yeonhwa_fan"}},
+	# 청룡: 비취 쇠뇌 + 은 쇠붙이 + 옥빛 시위
+	"cheongryong": {"palette": {"wood": Color("1E5E52"), "fit": Color("C8E8E0"), "blade": Color("7FFFD8")}},
+	# 크로노스: 지팡이 머리에 모래시계 + 시계 고리
+	"chronos": {"palette": {"gem": Color("4FD8FF")}, "parts": [["handslot.r", "chronos_hourglass"]]},
+	# 주작: 흰 마법서 + 주홍 보석
+	"jujak": {"palette": {"book": Color("F6EEE6"), "gem": Color("FF5533")}},
 }
 
 ## Meshy 몸(docs/meshy-assets.md): 영웅 id 파일이 있으면 KayKit 몸(스킨 부위 + 모자·망토)을 숨기고 그 자리에 Meshy 메시를 단다.

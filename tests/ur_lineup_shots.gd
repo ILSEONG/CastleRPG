@@ -7,12 +7,12 @@ const GameData := preload("res://scripts/game_data.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const GAP := 2.0
 const UR := [
-	{"id": "solaris", "model": "Knight", "gear": "1H_Sword|Badge_Shield", "role": "melee"},
-	{"id": "ragna", "model": "Barbarian", "gear": "2H_Axe", "role": "melee"},
-	{"id": "kaien", "model": "Rogue", "gear": "Knife|Knife_Offhand", "role": "melee"},
-	{"id": "orion", "model": "Rogue_Hooded", "gear": "2H_Crossbow", "role": "ranged"},
-	{"id": "nox", "model": "Mage", "gear": "2H_Staff", "role": "ranged"},
-	{"id": "aurora", "model": "Mage", "gear": "Spellbook_open", "role": "ranged"},
+	{"id": "hyeonmu", "model": "Knight", "gear": "1H_Sword|Badge_Shield", "role": "melee"},
+	{"id": "baekho", "model": "Barbarian", "gear": "2H_Axe", "role": "melee"},
+	{"id": "yeonhwa", "model": "Rogue", "gear": "Knife|Knife_Offhand", "role": "melee"},
+	{"id": "cheongryong", "model": "Rogue_Hooded", "gear": "2H_Crossbow", "role": "ranged"},
+	{"id": "chronos", "model": "Mage", "gear": "2H_Staff", "role": "ranged"},
+	{"id": "jujak", "model": "Mage", "gear": "Spellbook_open", "role": "ranged"},
 ]
 const SSR := ["arteon", "dante", "kyle", "raven", "valen", "lumina"]
 
