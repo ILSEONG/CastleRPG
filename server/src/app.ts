@@ -164,6 +164,8 @@ interface Player {
   equipment: Equipped[]
   diamonds: number // 개정 23: 다이아(현금 재화)
   dia_tickets: number // 다이아 모집권(모집권 던전 보상·튜토리얼 보상)
+  stones: number // 강화석(2026-10-29: 장비 분해·강화석 던전 → 부위 강화)
+  slot_levels: R.SlotLevels // 부위 강화: 영웅 → {부위: 레벨}
   gacha: { gold_level: number; gold_pulls: number; dia_pity: number; dia_ur_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터(SSR·UR)
   research: Record<string, number> // 개정 24: 연구 노드 id → 레벨(0 초과만)
   research_cur: { id: string; finish: number } | null // 진행 중인 연구(끝나는 시각 = 유닉스 초), 쉬면 null
@@ -224,6 +226,8 @@ interface Change {
   runClose?: { run_id: string; result: { win: boolean; rewards: Record<string, unknown> } } // run 닫기 — 아직 열려 있을 때만 전체가 적용된다
   items?: R.EquipItem[] // 보관함에 넣을 장비(run 결과에 id와 함께 남는다)
   sellItems?: number[] // 지울 장비 id
+  stones?: number // 강화석 증감
+  slotLevels?: R.SlotLevels // 새 부위 강화 값 전체
   fuse?: boolean // 장비 합성 — 결과 행에 새 장비 id(new_item_id)를 같이 받는다
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   equips?: { hero_id: string; slot: string; item_id: number }[] // 한 번에 여러 부위 장착(자동착용) — 부위·장비는 서로 다르다
@@ -276,7 +280,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.unbuilt, s.layout,
+const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.stones, s.slot_levels, s.unbuilt, s.layout,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.gacha_dia_ur_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.build2_id, s.speedups, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -594,7 +598,7 @@ export function createApp(opts: AppOptions) {
     const defs = g.heroes.map((h) => ({ id: String(h.id), role: String(h.role), atk: Number(h.atk), hp: Number(h.hp), atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
     const up = (uid: string) => upPct(p, g, uid)
     const research = R.researchBonus(g.research, p.research).hero_atk_pct
-    const equip = R.heroEquip(p.items, p.equipment)
+    const equip = R.heroEquip(p.items, p.equipment, p.slot_levels)
     let out = G.teamDps(party.filter((id) => Object.hasOwn(p.heroes, id)), p.heroes, defs, cfg, up('atk'), up('aspd'), 0, equip, research)
     if (helper) out += G.teamDps([helper.hero_id], { [helper.hero_id]: { level: helper.level, promotion: helper.promotion } }, defs, cfg, up('atk'), up('aspd'), 0, {}, research)
     return out
@@ -689,6 +693,8 @@ export function createApp(opts: AppOptions) {
         equipment: (json(r.equipment) as any[]).map((x) => ({ hero_id: String(x.hero_id), slot: String(x.slot), item_id: Number(x.item_id) })),
         diamonds: Number(r.diamonds),
         dia_tickets: Number(r.dia_tickets ?? 0),
+        stones: Number(r.stones ?? 0),
+        slot_levels: R.cleanSlotLevels(json(r.slot_levels)),
         gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity), dia_ur_pity: Number(r.gacha_dia_ur_pity ?? 0) },
         research: counts(json(r.research)),
         research_cur: typeof r.research_id === 'string' ? { id: r.research_id, finish: Number(r.research_finish) } : null,
@@ -777,7 +783,9 @@ export function createApp(opts: AppOptions) {
         research: { levels, current: p.research_cur },
         quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n, rep: repeatView(p, game, now) }, // 튜토리얼·반복 퀘스트 진행
         layout: p.layout, // 자유 건설: 건물 → [x, y](고른 것만)
-        dia_tickets: p.dia_tickets, unbuilt: p.unbuilt.filter((b) => keysOf(game).includes(b)),
+        dia_tickets: p.dia_tickets,
+        stones: p.stones, slot_levels: Object.fromEntries(Object.entries(p.slot_levels).filter(([h]) => Object.hasOwn(p.heroes, h))), // 강화석·부위 강화
+        unbuilt: p.unbuilt.filter((b) => keysOf(game).includes(b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
         missions: missionView(p, game, now), // 미션: 오늘·이번 주 받은 기록, 반복 미션 받은 횟수
         pouches: p.pouches, // 방치 주머니 id → 개수
@@ -816,7 +824,7 @@ export function createApp(opts: AppOptions) {
 
   function systemHelpers(p: Player, g: Game, st: R.DungeonState, now: number): R.Helper[] {
     const defs = new Map(g.heroes.map((h) => [String(h.id), h]))
-    const equip = R.heroEquip(p.items, p.equipment)
+    const equip = R.heroEquip(p.items, p.equipment, p.slot_levels)
     const owned = Object.entries(p.heroes).filter(([id, h]) => defs.has(id) && h.copies >= 1).map(([id, h]) => {
       return { def: defs.get(id)!, level: h.level, promotion: h.promotion, equip: equip[id] ?? { hp: 0, atk: 0 } }
     })
@@ -831,7 +839,7 @@ export function createApp(opts: AppOptions) {
       const st = dungeonState(p, g, t, now)
       out[t] = {
         keys: st.keys, key_cap: R.cfgNum(g.config, `${t}_key_cap`), key_daily: R.cfgNum(g.config, `${t}_key_daily`), best_level: st.best_level,
-        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, st.extra_today) : null, last_reset: st.last_reset,
+        extra_today: st.extra_today, extra_cost: t === 'equip' ? R.extraCost(g.config, Math.min(st.best_level + 1, R.MAX_DUNGEON_LEVEL)) : null, last_reset: st.last_reset,
         next_reset: R.nextReset(now, g.config),
         ...(t === 'ticket' ? { helpers: helpersOf(p, g, st, now), helpers_used: st.helpers_used ?? [] } : {}),
       }
@@ -863,6 +871,8 @@ export function createApp(opts: AppOptions) {
     if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
     if (ch.diamonds) sets.push(`diamonds = diamonds + ${p(bigint(ch.diamonds))}::bigint`)
     if (ch.diaTickets) sets.push(`dia_tickets = dia_tickets + ${p(ch.diaTickets)}::int`)
+    if (ch.stones) sets.push(`stones = stones + ${p(ch.stones)}::int`)
+    if (ch.slotLevels) sets.push(`slot_levels = ${p(JSON.stringify(ch.slotLevels))}::jsonb`)
     if (ch.gacha?.gold_level !== undefined) sets.push(`gacha_gold_level = ${p(ch.gacha.gold_level)}::int`)
     if (ch.gacha?.gold_pulls !== undefined) sets.push(`gacha_gold_pulls = ${p(ch.gacha.gold_pulls)}::int`)
     if (ch.gacha?.dia_pity !== undefined) sets.push(`gacha_dia_pity = ${p(ch.gacha.dia_pity)}::int`)
@@ -1182,6 +1192,8 @@ export function createApp(opts: AppOptions) {
       pl.quest = { ...pl.quest, ...rest, ...(last_claim !== undefined ? { last_claim } : {}) }
     }
     pl.dia_tickets += ch.diaTickets ?? 0
+    pl.stones += ch.stones ?? 0
+    if (ch.slotLevels) pl.slot_levels = ch.slotLevels
     if (ch.attend) pl.attend = ch.attend
     if (ch.missions) pl.missions = ch.missions
     if (ch.layout) pl.layout = ch.layout
@@ -3134,7 +3146,7 @@ export function createApp(opts: AppOptions) {
       }
       if (st.keys < 1) {
         if (type !== 'equip') throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
-        const cost = R.extraCost(g.config, st.extra_today)
+        const cost = R.extraCost(g.config, lvl)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
       }
       const run = { run_id: randomUUID(), type, level: lvl, party: party as string[], seed: Math.floor(random() * 2 ** 31), ...(helper ? { helper } : {}) }
@@ -3193,7 +3205,7 @@ export function createApp(opts: AppOptions) {
       let cost = 0
       if (st.keys >= 1) next.keys = st.keys - 1
       else if (type === 'equip') {
-        cost = R.extraCost(g.config, st.extra_today)
+        cost = R.extraCost(g.config, run.level)
         if (Math.floor(p.gold_tenths / 10) < cost) throw new ApiError(409, 'not_enough_gold', `an extra run costs ${cost} gold`)
         next.extra_today = st.extra_today + 1
       } else throw new ApiError(409, 'no_key', `no ${type} dungeon key left`)
@@ -3346,6 +3358,59 @@ export function createApp(opts: AppOptions) {
         change: { sellItems: ids, items: [made], fuse: true, log: { kind: 'item_fuse', detail: { from: src, to: made } } },
         reload: true,
         after: (r) => ({ item: { ...made, id: Number(r.new_item_id) } }),
+      }
+    })
+  })
+
+  // 장비 분해(2026-10-29): {item_ids: [...]}(1..1000개, 겹치면 400) → 강화석(등급마다 R.DISMANTLE_STONES). 남의·없는 장비 404, 장착 중 409 equipped
+  // (하나라도 그러면 아무것도 안 한다). 응답 stones_gained.
+  app.post('/v1/items/dismantle', auth, async (c) => {
+    const ids = (await body(c)).item_ids
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_SELL_ITEMS || ids.some((x) => !isInt(x, 1, Number.MAX_SAFE_INTEGER)) || new Set(ids).size !== ids.length) {
+      throw new ApiError(400, 'bad_request', `'item_ids' must be 1..${MAX_SELL_ITEMS} distinct item ids`)
+    }
+    return mutate(c, (p) => {
+      const byId = new Map(p.items.map((x) => [x.id, x]))
+      let stones = 0
+      for (const id of ids as number[]) {
+        const it = byId.get(id)
+        if (!it) throw new ApiError(404, 'unknown_item', `item ${id} is not in the bag`)
+        if (p.equipment.some((e) => e.item_id === id)) throw new ApiError(409, 'equipped', `item ${id} is equipped`)
+        stones += R.DISMANTLE_STONES[it.grade] ?? 0
+      }
+      return {
+        change: { stones, sellItems: ids, log: { kind: 'item_dismantle', detail: { items: ids.map((id) => byId.get(id)), stones } } },
+        extra: { stones_gained: stones },
+        reload: true,
+      }
+    })
+  })
+
+  // 부위 강화(2026-10-29): {hero_id, slot, times?(1..10, 기본 1)} — 그 영웅 그 부위 레벨 +times(최대 SLOT_ENH_MAX). 비용 = 레벨마다 R.slotEnhCost 합.
+  // 거부: 404 not_owned, 400 bad_slot·bad_request, 409 max_level·not_enough_stones·not_enough_gold(아무것도 안 바꾼다).
+  app.post('/v1/slot/enhance', auth, async (c) => {
+    const b = await body(c)
+    const heroId = strField(b, 'hero_id')
+    const slot = strField(b, 'slot')
+    const times = b.times === undefined ? 1 : b.times
+    if (!R.EQUIP_SLOTS.includes(slot)) throw new ApiError(400, 'bad_slot', `'slot' must be one of ${R.EQUIP_SLOTS.join(', ')}`)
+    if (!isInt(times, 1, 10)) throw new ApiError(400, 'bad_request', "'times' must be 1..10")
+    return mutate(c, (p, g) => {
+      if (!g.heroes.some((h) => h.id === heroId) || !Object.hasOwn(p.heroes, heroId)) throw new ApiError(404, 'not_owned', `hero '${heroId}' is not owned`)
+      const lv = p.slot_levels[heroId]?.[slot] ?? 0
+      if (lv + (times as number) > R.SLOT_ENH_MAX) throw new ApiError(409, 'max_level', `slot level ${lv} + ${times} is over ${R.SLOT_ENH_MAX}`)
+      let stones = 0
+      let gold = 0
+      for (let l = lv; l < lv + (times as number); l++) {
+        stones += R.slotEnhCost(l).stones
+        gold += R.slotEnhCost(l).gold
+      }
+      if (p.stones < stones) throw new ApiError(409, 'not_enough_stones', `need ${stones} stones`)
+      if (Math.floor(p.gold_tenths / 10) < gold) throw new ApiError(409, 'not_enough_gold', `need ${gold} gold`)
+      const next = { ...p.slot_levels, [heroId]: { ...(p.slot_levels[heroId] ?? {}), [slot]: lv + (times as number) } }
+      return {
+        change: { stones: -stones, goldTenths: -gold * 10, slotLevels: next,
+          log: { kind: 'slot_enhance', detail: { hero_id: heroId, slot, from: lv, to: lv + (times as number), stones, gold } } },
       }
     })
   })
@@ -3533,7 +3598,7 @@ export function createApp(opts: AppOptions) {
       return d ? Math.min(pl.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
     }
     const buff = st ? G.buffPct(st.lv.level) : 0
-    const equip = R.heroEquip(pl.items, pl.equipment)
+    const equip = R.heroEquip(pl.items, pl.equipment, pl.slot_levels)
     return {
       id, pl, game, now, hour, mine: G.mineToday(pg.mine, now, hour), pg, g, st, members,
       dps: G.teamDps(deploy, pl.heroes, defs, cfg, up('atk'), up('aspd'), buff, equip, R.researchBonus(game.research, pl.research).hero_atk_pct),
@@ -4053,6 +4118,7 @@ export function createApp(opts: AppOptions) {
       }
       const res = (b.res && typeof b.res === 'object' ? b.res : {}) as Record<string, unknown>
       for (const [r, n] of Object.entries(res)) if (Number.isInteger(n) && (n as number) >= 0) await query('update player_resources set amount = $3 where player_id = $1 and res = $2', [id, r, n])
+      if (Number.isInteger(b.gold) && b.gold >= 0) await query('update player_state set gold_tenths = $2 where player_id = $1', [id, b.gold * 10]) // 골드(2026-10-29 부위 강화 온라인 검사)
       await query('update player_state set version = version + 1 where player_id = $1', [id])
       const now = clock()
       const game = await loadGame()

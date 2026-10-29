@@ -1,9 +1,11 @@
 extends "res://scripts/ui_window.gd"
 ## 장비 목록 창(개정 18 §8). 두 쓰임:
 ## - 보관함(던전 탭 [보관함] → open_bag): 제목 "보관함 n / 상한", [부위]·[등급]·[정렬] 순환 버튼, 장비 줄 목록 — 줄 오른쪽 체크로 여러 개 고름
-##   (장착 중은 못 고름, "장착: 이름"), 아래 "n개 선택 · +골드"와 [합성](같은 부위 LR 3개 → MR, Economy.fuse_items)·[판매](Economy.sell_items).
+##   (장착 중은 못 고름, "장착: 이름"), 아래 "n개 선택 · +골드"와 [합성](같은 부위 LR 3개 → MR, Economy.fuse_items)·[분해](강화석, Economy.dismantle_items)
+##   ·[판매](Economy.sell_items). 그 위 줄: "강화석 n"과 [일괄 분해] — 누르면 등급 줄([N 이하]…[UR 이하], 장착 안 한 것만)이 펼쳐지고 고르면 곧바로 분해.
 ## - 장비 고르기(영웅 상세 장비 칸 → open_pick(영웅, 부위)): 그 부위(무기는 그 영웅 무기 종류만) 장비 줄마다 [장착], 위에 지금 낀 장비와
-##   [해제]. 장착·해제하면 닫는다.
+##   [해제]. 장착·해제하면 닫는다. 그 아래 영웅 부위 강화 줄(2026-10-29): "부위 강화 +N · 체력·공격 +x%"와 다음 단계 비용, [강화](Economy.slot_enhance)
+##   — 장비가 아니라 영웅의 그 부위가 오른다(장비를 바꿔도 남는다). 강화해도 창은 열려 있다.
 ## 줄 = 장비 칸(item_tile, 등급 테두리) + "SR 모자 Lv 3" + 능력치 + 장착 표시. 층 4(탭 바 위) — 닫을 때까지 뒤 창은 그대로 있다.
 
 const Lang := preload("res://scripts/lang.gd")
@@ -41,11 +43,21 @@ var sort_button: Button
 var sum_label: Label
 var sell_button: Button
 var fuse_button: Button  # bag: [합성] — 같은 부위 LR 3개를 골랐을 때만(Economy.fuse_items → MR 신화)
+var dismantle_button: Button  # bag: [분해] — 고른 장비 → 강화석(Economy.dismantle_items)
+var stones_label: Label  # bag: 강화석 보유
+var bulk_button: Button  # bag: [일괄 분해] — 등급 줄을 펼치고 접는다
+var bulk_buttons := {}  # 등급 → [그 등급 이하] 버튼(BULK_GRADES)
+const BULK_GRADES := ["N", "R", "SR", "SSR", "UR"]  # 일괄 분해는 UR 이하까지(LR·MR은 합성 재료라 하나씩 골라 분해)
 var empty_label: Label
 
 var _pick_row: HBoxContainer
+var _enh_row: HBoxContainer  # pick: 영웅 부위 강화
+var enh_label: Label
+var enh_button: Button
 var _filter_row: HBoxContainer
 var _sell_row: HBoxContainer
+var _stone_row: HBoxContainer
+var _bulk_row: HBoxContainer
 var _list: VBoxContainer
 
 
@@ -71,6 +83,17 @@ func _ready() -> void:
 	unequip_button.custom_minimum_size = Vector2(140, 56)
 	unequip_button.pressed.connect(unequip)
 	_pick_row.add_child(unequip_button)
+	_enh_row = HBoxContainer.new()
+	_enh_row.add_theme_constant_override("separation", 10)
+	content.add_child(_enh_row)
+	enh_label = _label("", 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	enh_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enh_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_enh_row.add_child(enh_label)
+	enh_button = _button(Lang.t("bag_panel.ready_6"), HudScript.ACCENT, 26)
+	enh_button.custom_minimum_size = Vector2(140, 64)
+	enh_button.pressed.connect(enhance_slot)
+	_enh_row.add_child(enh_button)
 	_filter_row = HBoxContainer.new()
 	_filter_row.add_theme_constant_override("separation", 8)
 	content.add_child(_filter_row)
@@ -93,10 +116,31 @@ func _ready() -> void:
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(_list)
+	_stone_row = HBoxContainer.new()
+	_stone_row.add_theme_constant_override("separation", 10)
+	content.add_child(_stone_row)
+	stones_label = _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	stones_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stone_row.add_child(stones_label)
+	bulk_button = _button(Lang.t("bag_panel.ready_7"), UiKit.STEEL, 24)
+	bulk_button.custom_minimum_size = Vector2(170, 56)
+	bulk_button.pressed.connect(toggle_bulk)
+	_stone_row.add_child(bulk_button)
+	_bulk_row = HBoxContainer.new()
+	_bulk_row.add_theme_constant_override("separation", 6)
+	_bulk_row.visible = false
+	content.add_child(_bulk_row)
+	for g in BULK_GRADES:
+		var b := _button("", Art.ITEM_GRADE_COLORS.get(g, UiKit.STEEL), 20)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 64)
+		b.pressed.connect(bulk_dismantle.bind(g))
+		_bulk_row.add_child(b)
+		bulk_buttons[g] = b
 	_sell_row = HBoxContainer.new()
 	_sell_row.add_theme_constant_override("separation", 10)
 	content.add_child(_sell_row)
-	sum_label = _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	sum_label = _label("", 20, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	sum_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sell_row.add_child(sum_label)
 	sum_label.clip_text = true
@@ -104,8 +148,12 @@ func _ready() -> void:
 	fuse_button.custom_minimum_size = Vector2(130, 56)
 	fuse_button.pressed.connect(fuse)
 	_sell_row.add_child(fuse_button)
+	dismantle_button = _button(Lang.t("bag_panel.ready_8"), UiKit.STEEL, 24)
+	dismantle_button.custom_minimum_size = Vector2(110, 56)
+	dismantle_button.pressed.connect(dismantle)
+	_sell_row.add_child(dismantle_button)
 	sell_button = _button(Lang.t("bag_panel.ready_2"))
-	sell_button.custom_minimum_size = Vector2(160, 56)
+	sell_button.custom_minimum_size = Vector2(130, 56)
 	sell_button.pressed.connect(sell)
 	_sell_row.add_child(sell_button)
 	var close_button := _button(Lang.t("bag_panel.ready_3"), UiKit.STEEL)
@@ -113,6 +161,11 @@ func _ready() -> void:
 	content.add_child(close_button)
 	_fit_sheet()
 	Economy.items_changed.connect(_refresh)
+	Economy.changed.connect(func():
+		if visible and mode == "bag":
+			_refresh_stones()
+		elif visible and mode == "pick":
+			_refresh_enhance())
 	Economy.fused.connect(func(it): Economy.notice.emit(Lang.t("bag_panel.ready_5") % item_name(it)))
 
 
@@ -120,6 +173,7 @@ func _ready() -> void:
 func open_bag() -> void:
 	mode = "bag"
 	selected = {}
+	_bulk_row.visible = false
 	open()
 
 
@@ -180,6 +234,65 @@ func fuse() -> void:
 	_refresh()
 
 
+## [분해]: 고른 장비 → 등급별 강화석(N 1 … MR 300).
+func dismantle() -> void:
+	var ids := selected.keys()
+	var n := Economy.dismantle_items(ids)
+	if n > 0:
+		Economy.notice.emit(Lang.t("bag_panel.dismantle") % [ids.size(), UiKit.commas(n)])
+	selected = {}
+	_refresh()
+
+
+func toggle_bulk() -> void:
+	_bulk_row.visible = not _bulk_row.visible
+	_refresh()
+
+
+## [그 등급 이하]: 그 등급 이하이고 아무도 안 낀 장비를 모두 분해한다(Economy.dismantle_candidates).
+func bulk_dismantle(grade: String) -> void:
+	var ids := Economy.dismantle_candidates(grade)
+	if ids.is_empty():
+		Economy.notice.emit(Lang.t("bag_panel.bulk_dismantle"))
+		return
+	var n := Economy.dismantle_items(ids)
+	if n > 0:
+		Economy.notice.emit(Lang.t("bag_panel.bulk_dismantle_2") % [ids.size(), UiKit.commas(n)])
+	selected = {}
+	_bulk_row.visible = false
+	_refresh()
+
+
+static func stones_of(ids: Array) -> int:
+	var n := 0
+	for id in ids:
+		n += int(GameData.DISMANTLE_STONES.get(str(Economy.item(int(id)).get("grade", "")), 0))
+	return n
+
+
+func _refresh_stones() -> void:
+	stones_label.text = Lang.t("bag_panel.refresh_stones") % UiKit.commas(Economy.stones)
+
+
+## [강화](장비 고르기): 이 영웅의 이 부위 +1. 성공하면 알림(온라인은 곧바로 — 서버가 거절하면 되돌리고 알림).
+func enhance_slot() -> void:
+	if Economy.slot_enhance(hero_id, slot):
+		Economy.notice.emit(Lang.t("bag_panel.enhance_slot") % [ITEM_NAMES.get(slot, slot), Economy.slot_level(hero_id, slot)])
+	_refresh()
+
+
+func _refresh_enhance() -> void:
+	var lv := Economy.slot_level(hero_id, slot)
+	var head := Lang.t("bag_panel.refresh_enhance.head") % [lv, lv * GameData.SLOT_ENH_PCT]
+	if lv >= GameData.SLOT_ENH_MAX:
+		enh_label.text = head + Lang.t("bag_panel.refresh_enhance")
+	else:
+		var c := GameData.slot_enh_cost(lv)
+		enh_label.text = head + Lang.t("bag_panel.refresh_enhance_2") % [(lv + 1) * GameData.SLOT_ENH_PCT, UiKit.commas(c.stones),
+			UiKit.commas(Economy.stones), UiKit.commas(c.gold)]
+	enh_button.disabled = Economy.slot_enhance_block(hero_id, slot) != ""
+
+
 func equip(id: int) -> void:
 	if Economy.equip(hero_id, slot, id):
 		_close_to_detail()
@@ -223,8 +336,11 @@ func _refresh() -> void:
 		if Economy.item(id).is_empty() or Economy.item_owner(id) != "":
 			selected.erase(id)
 	_pick_row.visible = pick
+	_enh_row.visible = pick
 	_filter_row.visible = not pick
 	_sell_row.visible = not pick
+	_stone_row.visible = not pick
+	_bulk_row.visible = _bulk_row.visible and not pick
 	if pick:
 		var cur: Dictionary = Economy.hero_equipment(hero_id).get(slot, {})
 		title_label.text = "%s · %s" % [GameData.hero(hero_id).get("name", ""), ITEM_NAMES.get(slot, slot)]
@@ -235,6 +351,7 @@ func _refresh() -> void:
 		if not cur.is_empty():
 			_cur_stats.add_child(stat_box(cur, 20))
 		unequip_button.disabled = cur.is_empty() or Economy.equip_block(hero_id, slot, int(cur.get("id", 0))) == "waiting"
+		_refresh_enhance()
 	else:
 		title_label.text = Lang.t("bag_panel.refresh_3") % [Economy.bag.size(), int(GameData.config_num("equip_bag_cap"))]
 		slot_button.text = Lang.t("bag_panel.refresh_4") + (ITEM_NAMES[slot_filter] if slot_filter != "" else Lang.t("bag_panel.refresh_5"))
@@ -243,9 +360,16 @@ func _refresh() -> void:
 		var g := 0
 		for id in selected:
 			g += GameData.item_sell_value(Economy.item(id))
-		sum_label.text = Lang.t("bag_panel.refresh_8") % [selected.size(), UiKit.commas(g)]
+		sum_label.text = Lang.t("bag_panel.refresh_9") % [selected.size(), UiKit.commas(g), UiKit.commas(stones_of(selected.keys()))]
 		sell_button.disabled = Economy.sell_block(selected.keys()) != ""
 		fuse_button.disabled = Economy.fuse_block(selected.keys()) != ""
+		dismantle_button.disabled = Economy.dismantle_block(selected.keys()) != ""
+		_refresh_stones()
+		bulk_button.text = Lang.t("bag_panel.refresh_10") if _bulk_row.visible else Lang.t("bag_panel.refresh_11")
+		for gr in bulk_buttons:
+			var ids := Economy.dismantle_candidates(gr)
+			bulk_buttons[gr].text = Lang.t("bag_panel.refresh_12") % [gr, ids.size(), UiKit.commas(stones_of(ids))]
+			bulk_buttons[gr].disabled = ids.is_empty()
 	_rebuild(shown_items())
 
 

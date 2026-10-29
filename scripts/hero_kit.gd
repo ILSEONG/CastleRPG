@@ -21,8 +21,7 @@ const FIRE := Color("FF6A10")
 const FIRE_CORE := Color("FFD23A")
 const ICE := Color("C8F2FF")
 const ICE_DEEP := Color("62B8EE")
-const UR_FIRE := Color("FF6A1F")  # UR 불꽃(주황 — 노란 금빛 없이)
-const UR_FIRE_CORE := Color("FFE2D0")
+const BOW_CANT := 30.0  # 청룡 장궁 기울기(도): 대기 땐 앞아래로 내려 든 활, 쏠 땐 거의 곧게 선 활
 
 ## 부품 id 전체(Art.HERO_LOOKS가 쓰는 것). has_part로 ArenaKit 부품과 가른다.
 const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pauldrons", "bron_crest", "torvin_mitre", "torvin_mace",
@@ -33,7 +32,7 @@ const PARTS := ["arteon_wings", "arteon_pauldrons", "baldur_spikes", "baldur_pau
 	"valen_crown", "valen_flames", "valen_orb", "frieda_crown", "frieda_collar", "frieda_flake", "morgana_horns", "morgana_skulls",
 	"gaia_crown", "gaia_staff", "selene_stars", "pip_hat", "pip_spirit", "tia_hat", "thorgar_crown", "thorgar_boulders", "thorgar_maul",
 	"orin_wolf", "grit_helmet", "grit_hammer", "dante_horns", "dante_wings", "kaz_goggles", "kaz_pack", "luna_tiara", "luna_blade",
-	"raven_crest", "raven_mantle", "solaris_flame", "ragna_bolts", "kaien_blade", "nox_crystal"]
+	"raven_crest", "raven_mantle", "baekho_glaive", "yeonhwa_fan", "chronos_hourglass", "cheongryong_bow"]
 
 static var _meshes := {}
 
@@ -121,10 +120,10 @@ static func _build(id: String, k) -> void:
 		"luna_blade": _luna_blade(k)
 		"raven_crest": _raven_crest(k)
 		"raven_mantle": _raven_mantle(k)
-		"solaris_flame": _flame(k, Vector3(0, 0.6, 0), 0.95, 0.7, UR_FIRE, UR_FIRE_CORE)
-		"ragna_bolts": _ragna_bolts(k)
-		"kaien_blade": _kaien_blade(k)
-		"nox_crystal": _nox_crystal(k)
+		"baekho_glaive": _baekho_glaive(k)
+		"yeonhwa_fan": _yeonhwa_fan(k)
+		"chronos_hourglass": _chronos_hourglass(k)
+		"cheongryong_bow": _cheongryong_bow(k)
 		_: push_error("unknown hero part %s" % id)
 
 
@@ -195,15 +194,15 @@ static func _cap(k, y0: float, r: float, h: float, color: Color, z := 0.0) -> vo
 
 
 ## 불꽃 한 덩이(밑 c, 높이 h, 굵기 s): 바깥 주황 혀 다섯 + 안쪽 노란 혀 셋, 위로(+Y).
-static func _flame(k, c: Vector3, h: float, s: float, outer := FIRE, core := FIRE_CORE) -> void:
+static func _flame(k, c: Vector3, h: float, s: float) -> void:
 	for i in 5:
 		var a := TAU * i / 5.0
 		var d := Vector3(cos(a), 0, sin(a)) * 0.09 * s
-		_leaf(k, c + d, c + d * 1.6 + Vector3(0, h * (0.75 + 0.25 * (i % 2)), 0), 0.2 * s, 0.08 * s, d, outer, 0.35)
+		_leaf(k, c + d, c + d * 1.6 + Vector3(0, h * (0.75 + 0.25 * (i % 2)), 0), 0.2 * s, 0.08 * s, d, FIRE, 0.35)
 	for i in 3:
 		var a := TAU * i / 3.0 + 0.5
 		var d := Vector3(cos(a), 0, sin(a)) * 0.04 * s
-		_leaf(k, c + d, c + Vector3(0, h * 1.05, 0), 0.14 * s, 0.07 * s, d, core, 0.35)
+		_leaf(k, c + d, c + Vector3(0, h * 1.05, 0), 0.14 * s, 0.07 * s, d, FIRE_CORE, 0.35)
 
 
 ## 꽃(가운데 c, 꽃잎이 n에 수직인 면에 퍼짐): 꽃잎 다섯 + 가운데.
@@ -926,32 +925,79 @@ static func _raven_mantle(k) -> void:
 
 # --- UR(2026-10-29): 몸은 Meshy, 무기 손 부품만 ---
 
-## 폭풍의 전쟁군주: 큰 도끼 머리(y ≈ 1.3) 양옆에서 위로 갈라지는 하늘색 번개 둘.
-static func _ragna_bolts(k) -> void:
-	var blue := Color("8FD8FF")
-	for s in [-1.0, 1.0]:
-		var pts := [Vector3(s * 0.22, 1.12, 0.0), Vector3(s * 0.44, 1.4, 0.04), Vector3(s * 0.32, 1.48, 0.04), Vector3(s * 0.6, 1.86, 0.08)]
-		for i in 3:
-			_leaf(k, pts[i], pts[i + 1], 0.16, 0.06, Vector3(0, 0, 1), blue if i != 1 else Color("E6F7FF"), 0.5)
+## 백호 월도(도끼 자리): 검은 긴 자루 + 쇠 물미·코등이, 끝이 휘어 넓어지는 흰 강철 날(+x 쪽이 날), 코등이 아래 붉은 술. 길이 ≈ 2.8.
+static func _baekho_glaive(k) -> void:
+	k.prism_n(Vector3(0, -0.78, 0), 6, 0.07, 0.065, 0.1, STEEL)
+	k.prism_n(Vector3(0, -0.7, 0), 6, 0.055, 0.05, 1.75, Color("2A2A34"))
+	k.box(Vector3(0, 1.04, 0), Vector3(0.22, 0.08, 0.13), STEEL)
+	_slab(k, [Vector3(-0.06, 1.1, 0), Vector3(0.1, 1.1, 0), Vector3(0.2, 1.5, 0), Vector3(0.16, 1.85, 0), Vector3(-0.02, 2.0, 0),
+		Vector3(-0.06, 1.6, 0)], Vector3.BACK, 0.05, Color("E8EEF4"))
+	_slab(k, [Vector3(-0.02, 1.16, 0), Vector3(0.02, 1.16, 0), Vector3(0.02, 1.8, 0), Vector3(-0.02, 1.8, 0)], Vector3.BACK, 0.06, Color("8EC5FF"))
+	_leaf(k, Vector3(0, 1.0, 0), Vector3(-0.12, 0.68, 0.04), 0.16, 0.06, Vector3.BACK, Color("D83A3A"), 0.3)
 
 
-## 월광 검성 장검(단검 자리, 양손 같은 메시): 남보라 손잡이, 은 코등이, 곧고 긴 연보라 칼날 + 가운데 보라 빛줄. 길이 ≈ 1.6.
-static func _kaien_blade(k) -> void:
-	k.prism_n(Vector3(0, -0.26, 0), 6, 0.04, 0.04, 0.32, Color("2A2440"))
-	k.box(Vector3(0, 0.05, 0), Vector3(0.22, 0.05, 0.1), Color("D0D4DA"))
-	var w := 0.06
-	_slab(k, [Vector3(-w, 0.1, 0), Vector3(w, 0.1, 0), Vector3(w * 0.9, 1.3, 0), Vector3(0.0, 1.52, 0), Vector3(-w * 0.9, 1.3, 0)], Vector3.BACK, 0.04, Color("E4DEFF"))
-	_slab(k, [Vector3(-0.015, 0.16, 0), Vector3(0.015, 0.16, 0), Vector3(0.015, 1.26, 0), Vector3(-0.015, 1.26, 0)], Vector3.BACK, 0.05, Color("9C7BFF"))
+## 구미호 철선(단검 자리, 양손 같은 메시): 손잡이에서 위로 110° 펼친 부채 — 진홍·흰 살 여섯 + 검은 살대 + 끝에 푸른 여우불 셋.
+static func _yeonhwa_fan(k) -> void:
+	var n := 6
+	for i in n:
+		var a0 := deg_to_rad(-55.0 + 110.0 * i / n)
+		var a1 := deg_to_rad(-55.0 + 110.0 * (i + 1) / n)
+		var d0 := Vector3(sin(a0), cos(a0), 0)
+		var d1 := Vector3(sin(a1), cos(a1), 0)
+		_slab(k, [d0 * 0.22, d0 * 0.78, d1 * 0.78, d1 * 0.22], Vector3.BACK, 0.025, Color("C8283C") if i % 2 == 0 else Color("F4F0EC"))
+	for i in n + 1:
+		var a := deg_to_rad(-55.0 + 110.0 * i / n)
+		_tube(k, Vector3.ZERO, Vector3(sin(a), cos(a), 0) * 0.82, 0.02, 0.012, 4, Color("2A2230"))
+	for deg in [-36.0, 0.0, 36.0]:
+		var d := Vector3(sin(deg_to_rad(deg)), cos(deg_to_rad(deg)), 0)
+		_leaf(k, d * 0.8, d * 1.05, 0.12, 0.06, Vector3.BACK, Color("5FC8FF"), 0.4)
 
 
-## 공허의 대마도사: 지팡이 머리(y ≈ 1.25) 위 보라 수정 + 둘레에 뜬 작은 수정 조각 셋.
-static func _nox_crystal(k) -> void:
-	var violet := Color("B070FF")
-	var deep := Color("5A2BB0")
-	k.cone(Vector3(0, 1.32, 0), 4, 0.12, 0.46, violet, PI / 4.0)
-	k.xform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(0, 1.34, 0))
-	k.cone(Vector3.ZERO, 4, 0.12, 0.12, deep, PI / 4.0)
+## 청룡 장궁(쇠뇌 자리, 2026-10-29 사용자 "청룡 석궁 버리고 장궁으로 무기 만들어"): 손잡이(원점)에서 위아래(±Y)로 뻗은 비취 활채가
+## 시위 쪽(-X)으로 휘었다가 끝(고자)이 다시 앞으로 감기는 동양 각궁 꼴 + 은 고자 + 옥빛 시위, 손잡이 앞에 여의주와 용 지느러미 둘.
+## 겨누는 쪽 = +X(쇠뇌 개머리가 향하던 쪽).
+static func _cheongryong_bow(k) -> void:
+	var jade := Color("1E7A66")
+	var stripe := Color("2FB894")
+	var silver := Color("B8CCD4")
+	var b := Basis(Vector3.BACK, -deg_to_rad(BOW_CANT)).scaled(Vector3.ONE * 0.8)
+	var line := [Vector2(0.0, 0.12), Vector2(0.035, 0.36), Vector2(0.01, 0.6), Vector2(-0.07, 0.82), Vector2(-0.15, 0.98),
+		Vector2(-0.13, 1.1), Vector2(-0.04, 1.18)]
+	var n := line.size() - 1
+	for s in [1.0, -1.0]:
+		for i in n:
+			var p0: Vector2 = line[i]
+			var p1: Vector2 = line[i + 1]
+			var r0 := lerpf(0.055, 0.022, float(i) / n)
+			var r1 := lerpf(0.055, 0.022, float(i + 1) / n)
+			_tube(k, b * Vector3(p0.x, p0.y * s, 0), b * Vector3(p1.x, p1.y * s, 0), r0, r1, 6, jade if i < 4 else silver)
+			if i < 4:
+				_tube(k, b * Vector3(p0.x + r0 * 0.7, p0.y * s, 0), b * Vector3(p1.x + r1 * 0.7, p1.y * s, 0), r0 * 0.45, r1 * 0.45, 4, stripe)
+		_tube(k, b * Vector3(-0.04, 1.18 * s, 0), b * Vector3(0.03, 1.24 * s, 0), 0.024, 0.0, 5, silver)
+		_tube(k, b * Vector3(0, 0.1 * s, 0), b * Vector3(0, 0.14 * s, 0), 0.07, 0.07, 6, silver)
+		_leaf(k, b * Vector3(0.05, 0.08 * s, 0), b * Vector3(0.2, 0.34 * s, 0), 0.09, 0.03, Vector3.BACK, stripe, 0.3)
+	_tube(k, b * Vector3(0, -0.12, 0), b * Vector3(0, 0.12, 0), 0.06, 0.06, 6, Color("12302A"))
+	_tube(k, b * Vector3(-0.15, 0.98, 0), b * Vector3(-0.15, -0.98, 0), 0.009, 0.009, 4, Color("7FFFD8"))
+	k.xform = Transform3D(b, b * Vector3(0.1, 0, 0))
+	k.cone(Vector3.ZERO, 8, 0.055, 0.06, Color("C8FFF0"))
+	k.xform = Transform3D(b * Basis(Vector3.RIGHT, PI), b * Vector3(0.1, 0, 0))
+	k.cone(Vector3.ZERO, 8, 0.055, 0.06, Color("9FF5E0"))
+	k.xform = Transform3D.IDENTITY
+
+
+## 시간의 지배자: 지팡이 머리(y ≈ 1.25) 위 모래시계(은 받침 둘 + 기둥 셋 + 옥빛 유리) + 허리에 두른 하늘색 시계 고리.
+static func _chronos_hourglass(k) -> void:
+	var glass := Color("8FEFFF")
+	var silver := Color("D0D8E4")
+	k.prism_n(Vector3(0, 1.2, 0), 8, 0.18, 0.18, 0.05, silver)
+	k.prism_n(Vector3(0, 1.66, 0), 8, 0.18, 0.18, 0.05, silver)
+	k.cone(Vector3(0, 1.25, 0), 8, 0.14, 0.2, glass)
+	k.xform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(0, 1.66, 0))
+	k.cone(Vector3.ZERO, 8, 0.14, 0.21, glass.lightened(0.25))
 	k.xform = Transform3D.IDENTITY
 	for i in 3:
-		var d := Vector3(cos(TAU * i / 3.0), 0, sin(TAU * i / 3.0))
-		k.cone(Vector3(0, 1.36 + 0.06 * i, 0) + d * 0.3, 4, 0.05, 0.18, violet.lightened(0.25), PI / 4.0)
+		var d := Vector3(cos(TAU * i / 3.0), 0, sin(TAU * i / 3.0)) * 0.16
+		_tube(k, Vector3(0, 1.22, 0) + d, Vector3(0, 1.68, 0) + d, 0.02, 0.02, 4, silver)
+	k.xform = Transform3D(Basis(Vector3.RIGHT, PI / 2.0), Vector3(0, 1.45, 0))
+	_ring(k, Vector3.ZERO, 0.28, 0.33, 0.03, 12, Color("4FD8FF"))
+	k.xform = Transform3D.IDENTITY

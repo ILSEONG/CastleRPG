@@ -52,11 +52,11 @@ test('도우미 후보: 3명, 기준(상위 4명 평균) ±10% 안, 승급 = 평
   assert.deepEqual([1, 5, 6, 10, 11].map((n) => R.ticketReward(rw, n)), [10, 10, 12, 12, 14])
 })
 
-test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면 거부, 편성과 겹치면 거부, 승리 = 열쇠 1 → 모집권, 도우미는 그날 다시 못 쓴다', async () => {
+test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면 거부, 편성과 겹치면 거부, 승리 = 열쇠 1 → 모집권 5장, 도우미는 그날 다시 못 쓴다', async () => {
   const { token } = await fresh()
   const p = await player(token)
   const t = p.dungeons.ticket
-  assert.equal(t.keys, 1)
+  assert.equal(t.keys, 3)
   assert.equal(t.key_cap, 3)
   assert.equal(t.helpers.length, 3)
   assert.deepEqual(t.helpers_used, [])
@@ -76,18 +76,18 @@ test('모집권 던전: 상태에 후보 3명, helper 없거나 후보 밖이면
   await age(token, s.json.run_id, 25)
   const f = await finish(token, { run_id: s.json.run_id, win: true, elapsed: 21 })
   assert.equal(f.status, 200, JSON.stringify(f.json))
-  assert.deepEqual(f.json.rewards, { tickets: 10 })
+  assert.deepEqual(f.json.rewards, { tickets: 5 })
   const q = await player(token)
-  assert.equal(q.dia_tickets, 10)
-  assert.equal(q.dungeons.ticket.keys, 0)
+  assert.equal(q.dia_tickets, 5)
+  assert.equal(q.dungeons.ticket.keys, 2)
   assert.equal(q.dungeons.ticket.best_level, 1)
   assert.deepEqual(q.dungeons.ticket.helpers_used, [helper])
   assert.ok(!q.dungeons.ticket.helpers.some((h: any) => h.hero_id === helper))
   assert.equal((await start(token, { type: 'ticket', level: 2, party, helper })).json.error, 'helper_used')
-  // 다음 날: 열쇠 1, 쓴 도우미 목록 비움
+  // 다음 날: 열쇠 +3(상한 3), 쓴 도우미 목록 비움
   S.clock.t = T0 + 86400
   const n = await player(token)
-  assert.equal(n.dungeons.ticket.keys, 1)
+  assert.equal(n.dungeons.ticket.keys, 3)
   assert.deepEqual(n.dungeons.ticket.helpers_used, [])
 })
 
@@ -101,7 +101,7 @@ test('모집권 던전 패배: 열쇠·도우미 그대로', async () => {
   const f = await finish(token, { run_id: s.json.run_id, win: false, elapsed: 30 })
   assert.equal(f.json.win, false)
   const q = await player(token)
-  assert.equal(q.dungeons.ticket.keys, 1)
+  assert.equal(q.dungeons.ticket.keys, 3)
   assert.deepEqual(q.dungeons.ticket.helpers_used, [])
   assert.equal(q.dia_tickets, 0)
 })

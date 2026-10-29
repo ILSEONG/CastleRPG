@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://djru72wqb1wuc"
-path="res://.godot/imported/kaien.glb-751420487c92fca69cd0f1b1b475f2f8.scn"
+uid="uid://co80bdph850s"
+path="res://.godot/imported/jujak.glb-2226881547e00ed0c9fd9eedec9b8c6d.scn"
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/kaien.glb"
-dest_files=["res://.godot/imported/kaien.glb-751420487c92fca69cd0f1b1b475f2f8.scn"]
+source_file="res://assets/models/meshy/heroes/jujak.glb"
+dest_files=["res://.godot/imported/jujak.glb-2226881547e00ed0c9fd9eedec9b8c6d.scn"]
 
 [params]
 

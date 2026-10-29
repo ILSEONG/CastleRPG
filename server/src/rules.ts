@@ -759,13 +759,18 @@ export function applyReset(type: string, d: DungeonState, now: number, config: C
   return { ...d, keys, extra_today: 0, last_reset: resetAt(resetDay(now, h), h), ...(d.helpers_used ? { helpers_used: [] } : {}) }
 }
 
-// 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…).
-export const extraCost = (config: Config, extraToday: number) => cfgNum(config, 'equip_extra_gold_base') * (1 + 2 * Math.max(extraToday, 0))
+// 장비 던전 골드 도전 비용(열쇠가 없을 때) = 단계별 고정: equip_extra_gold_base × equip_extra_gold_mult^(단계 − 1)을 천 단위로 올림
+// (사용자 2026-10-29 "장비 던전 단계별로 고정 골드 값" — 그날 횟수로 오르지 않는다. 1단계 10만, 10단계 28만, 30단계 267만, 50단계 2,560만. 예전 10만 × (1 + 2 × 그날 횟수)).
+export const extraCost = (config: Config, level: number) => {
+  const mult = config.equip_extra_gold_mult == null ? 1.12 : cfgNum(config, 'equip_extra_gold_mult')
+  return Math.ceil(roundHalfAway(grown(cfgNum(config, 'equip_extra_gold_base'), mult, Math.max(1, level) - 1)) / 1000) * 1000
+}
 export const partySize = (config: Config, type: string) => cfgNum(config, `${type}_dg_party`)
 export const minClearSecOf = (config: Config, type: string) => cfgNum(config, `${type}_dg_min_sec`)
 
-// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)).
-export const goldReward = (config: Config, level: number) => roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1))
+// 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1))를 천 단위로 올림(사용자 2026-10-29 "100의 자리에서 올림" — 1단계 20,000, 3단계 25,000).
+export const goldReward = (config: Config, level: number) =>
+  Math.ceil(roundHalfAway(grown(cfgNum(config, 'gold_dg_base'), cfgNum(config, 'gold_dg_mult'), level - 1)) / 1000) * 1000
 
 // 적 능력치 성장: 골드 던전은 HP·공격 모두 gold_dg_growth, 장비·모집권 던전은 <종류>_dg_hp_growth·<종류>_dg_atk_growth.
 export function dungeonGrowth(config: Config, type: string) {
@@ -774,7 +779,7 @@ export function dungeonGrowth(config: Config, type: string) {
 }
 
 // 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
-// (사용자 2026-10-06: 10장, 5단계마다 2장씩 — 1~5단계 10, 6~10단계 12 …). ticket_reward_add가 없으면(시드 전) 1.
+// (사용자 2026-10-29 절반으로: 5장, 5단계마다 1장씩 — 1~5단계 5, 6~10단계 6 …. 예전 10장·2장씩). ticket_reward_add가 없으면(시드 전) 1.
 export const ticketReward = (config: Config, level: number) =>
   cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step'))) * (config.ticket_reward_add == null ? 1 : cfgNum(config, 'ticket_reward_add'))
 
@@ -965,16 +970,18 @@ export function cleanRolls(slot: string, grade: string, rolls: unknown, subs: un
 }
 
 // 영웅 id → 장착 장비 합계 {hp, atk}(전투력용 — 앱 Economy.equipment_bonus와 같다). equipment = [{hero_id, item_id}].
-export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item_id: number }[]): Record<string, { hp: number; atk: number }> {
+// slotLevels(부위 강화)가 있으면 그 영웅 그 부위 장비의 HP·공격 × slotMult(레벨)(반올림) — 앱 Economy.equipment_bonus와 같다.
+export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item_id: number }[], slotLevels: SlotLevels = {}): Record<string, { hp: number; atk: number }> {
   const byId = new Map(items.map((it) => [Number(it.id), it]))
   const out: Record<string, { hp: number; atk: number }> = {}
   for (const e of equipment) {
     const it = byId.get(Number(e.item_id))
     if (!it) continue
     const s = itemStats(it)
+    const m = slotMult(slotLevels[e.hero_id]?.[it.slot] ?? 0)
     const o = (out[e.hero_id] ??= { hp: 0, atk: 0 })
-    o.hp += s.hp
-    o.atk += s.atk
+    o.hp += Math.round(s.hp * m)
+    o.atk += Math.round(s.atk * m)
   }
   return out
 }
@@ -982,7 +989,7 @@ export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item
 // 앱이 보낸 영웅 능력치(PVP 방어팀·길드전 수비)를 믿을 상한의 근거(2026-10-07): 영웅별 장비 {hp, atk} + 내 성장·연구·길드 배율.
 // 앱 GuildWar.hero_entry = (기본 × 레벨 × 승급 + 장비) × (1 + 성장 %) × (1 + 연구 %) × (1 + 길드 %)와 같은 식.
 export interface StatLimit { equip: Record<string, { hp: number; atk: number }>; hp: number; atk: number }
-export function statLimit(pl: { upgrades: Record<string, number>; research: Record<string, number>; items: EquipItem[]; equipment: { hero_id: string; item_id: number }[] },
+export function statLimit(pl: { upgrades: Record<string, number>; research: Record<string, number>; items: EquipItem[]; equipment: { hero_id: string; item_id: number }[]; slot_levels?: SlotLevels },
   game: { upgrades: UpgradeDef[]; research: ResearchDef[] }, guildBuffPct: number): StatLimit {
   const up = (id: string) => {
     const d = game.upgrades.find((u) => u.id === id)
@@ -990,13 +997,37 @@ export function statLimit(pl: { upgrades: Record<string, number>; research: Reco
   }
   const rb = researchBonus(game.research, pl.research ?? {})
   const g = 1 + Math.max(0, guildBuffPct) / 100
-  return { equip: heroEquip(pl.items ?? [], pl.equipment ?? []), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }
+  return { equip: heroEquip(pl.items ?? [], pl.equipment ?? [], pl.slot_levels ?? {}), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }
 }
 
 // 장비 합성(2026-10-29 MR 신화 등급): 같은 부위(무기는 같은 종류) LR FUSE_COUNT개 → 그 부위 MR 하나(굴림·특수 능력치는 새로).
 export const FUSE_FROM = 'LR'
 export const FUSE_TO = 'MR'
 export const FUSE_COUNT = 3
+
+// 장비 분해(2026-10-29): 등급마다 강화석. 장착 중은 못 한다.
+export const DISMANTLE_STONES: Record<string, number> = { N: 1, R: 2, SR: 5, SSR: 15, UR: 40, LR: 100, MR: 300 }
+// 부위 강화(2026-10-29): 영웅마다 장착 부위(무기·모자…) 레벨 0..SLOT_ENH_MAX. 그 부위에 낀 장비의 기본 능력치(HP·공격)를 레벨마다 +SLOT_ENH_PCT%.
+// 장비가 아니라 영웅의 부위라 장비를 바꿔 껴도 남는다. 레벨 L → L+1 비용 = 강화석 SLOT_ENH_STONES × (L+1) + 골드 SLOT_ENH_GOLD × (L+1).
+export const SLOT_ENH_MAX = 20
+export const SLOT_ENH_PCT = 5
+export const SLOT_ENH_STONES = 10
+export const SLOT_ENH_GOLD = 5000
+export const slotEnhCost = (level: number) => ({ stones: SLOT_ENH_STONES * (level + 1), gold: SLOT_ENH_GOLD * (level + 1) })
+export const slotMult = (level: number) => 1 + (SLOT_ENH_PCT * Math.min(Math.max(Math.floor(level) || 0, 0), SLOT_ENH_MAX)) / 100
+export type SlotLevels = Record<string, Record<string, number>>
+// 저장된 부위 강화 값 검사: 영웅 → {알려진 부위: 1..MAX 정수}(틀린 값은 버린다).
+export function cleanSlotLevels(v: unknown): SlotLevels {
+  const out: SlotLevels = {}
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out
+  for (const [h, m] of Object.entries(v as Record<string, unknown>)) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) continue
+    for (const [s, l] of Object.entries(m as Record<string, unknown>)) {
+      if (EQUIP_SLOTS.includes(s) && Number.isInteger(l) && (l as number) >= 1 && (l as number) <= SLOT_ENH_MAX) (out[h] ??= {})[s] = l as number
+    }
+  }
+  return out
+}
 
 // 판매 값 = round(equip_sell_base × 등급 배율)(2026-10-07 장비 레벨 없앰).
 export const itemSellValue = (config: Config, item: EquipItem) => roundHalfAway(cfgNum(config, 'equip_sell_base') * (EQUIP_GRADE_MULT[item.grade] ?? 0))

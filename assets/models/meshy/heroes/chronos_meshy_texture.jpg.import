@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bfpf2ieyw15b"
-path="res://.godot/imported/aurora_meshy_texture.jpg-8b5a2d6fe330ea69826b2af4d129d8d4.ctex"
+uid="uid://dmtusqhknp50x"
+path="res://.godot/imported/chronos_meshy_texture.jpg-9e02653de6dd8dfdaa52e2dec60e0575.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "737329d67204c9357f5d15df739cc592"
+"md5": "40c5c1850af2a13d5e5763e3871053a8"
 }
 
 [deps]
 
-source_file="res://assets/models/meshy/heroes/aurora_meshy_texture.jpg"
-dest_files=["res://.godot/imported/aurora_meshy_texture.jpg-8b5a2d6fe330ea69826b2af4d129d8d4.ctex"]
+source_file="res://assets/models/meshy/heroes/chronos_meshy_texture.jpg"
+dest_files=["res://.godot/imported/chronos_meshy_texture.jpg-9e02653de6dd8dfdaa52e2dec60e0575.ctex"]
 
 [params]
 

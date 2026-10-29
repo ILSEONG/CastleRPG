@@ -434,8 +434,17 @@ func _build_equip_slots() -> void:
 		dot.draw.connect(func(): dot.draw_circle(Vector2(DOT_R, DOT_R), DOT_R, Color.WHITE); dot.draw_circle(Vector2(DOT_R, DOT_R), DOT_R - 2.0, DOT_RED))
 		dot.visible = false
 		b.add_child(dot)
+		var lv := Label.new()  # 영웅 부위 강화 레벨 "+N"(2026-10-29) — 왼쪽 아래, 장비를 바꿔도 남는다
+		lv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lv.add_theme_font_size_override("font_size", 18)
+		lv.add_theme_color_override("font_color", Color.WHITE)
+		lv.add_theme_color_override("font_outline_color", HudScript.INK)
+		lv.add_theme_constant_override("outline_size", 5)
+		lv.position = Vector2(4, EQUIP_PX - 26)
+		lv.visible = false
+		b.add_child(lv)
 		cols[0 if i < EQUIP_LEFT else 1].add_child(b)
-		equip_slots[s] = {"button": b, "tile": tile, "dot": dot}
+		equip_slots[s] = {"button": b, "tile": tile, "dot": dot, "level": lv}
 	# [장비 자동착용]: 큰 카드 오른쪽 아래(오른쪽 장비 줄 밑 — 별 줄과 안 겹친다, 상세 높이를 더 쓰지 않는다)
 	auto_equip_button = _button(AUTO_EQUIP_TEXT, EQUIP_COLOR, 19)
 	auto_equip_button.custom_minimum_size = AUTO_EQUIP_PX
@@ -461,7 +470,7 @@ func _build_equip_slots() -> void:
 	unequip_all_button.offset_right -= AUTO_EQUIP_PX.x + 8.0
 
 
-## 장비 칸 탭: 그 부위 장비 고르기(장착·해제).
+## 장비 칸 탭: 그 부위 장비 고르기(장착·해제)와 영웅 부위 강화.
 func press_equip(s: String) -> void:
 	if bag != null and detail_id != "":
 		bag.open_pick(detail_id, s)
@@ -898,6 +907,9 @@ func _refresh_equip(id: String, h: Dictionary) -> void:
 		var kind: String = GameData.weapon_of(h.model) if s == "weapon" else s
 		equip_slots[s].tile.set_item(BagPanel.item_kind(it) if not it.is_empty() else kind, str(it.get("grade", "")))
 		equip_slots[s].dot.visible = Economy.equip_upgrade_available(id, s)
+		var lv := Economy.slot_level(id, s)
+		equip_slots[s].level.text = "+%d" % lv
+		equip_slots[s].level.visible = lv > 0
 	var b := Economy.equipment_bonus(id)
 	var parts := []
 	if b.hp > 0:

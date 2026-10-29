@@ -1446,20 +1446,20 @@ func _dungeons_online(state_path: String) -> void:
 	Economy.dungeon_finished.connect(on_finish)
 	var es: Dictionary = Economy.dungeon_state("equip")
 	var gs: Dictionary = Economy.dungeon_state("gold")
-	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 1 and es.key_cap == 3 and es.best_level == 0 and es.extra_cost == 100000
+	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 2 and es.key_cap == 3 and es.best_level == 0 and es.extra_cost == 100000
 		and absf(es.next_reset - GameData.next_reset(Economy.time_now())) < 1.0 and Economy.items().is_empty(),
-		"(z) server dungeon state: gold 3 / 10, equip 1 / 3, next reset at 00:00 KST, empty bag", "gold=%s equip=%s" % [gs, es])
+		"(z) server dungeon state: gold 3 / 10, equip 2 / 3, next reset at 00:00 KST, empty bag", "gold=%s equip=%s" % [gs, es])
 	var party: Array = Economy.default_party("equip")
 	var s0: int = Net.requested.get("/v1/dungeon/start", 0)
 	var sent := Economy.start_dungeon("equip", 1, party)
 	var again := Economy.start_dungeon("equip", 1, party)  # 응답 전 재탭
 	await _wait_until(func(): return started.size() == 1, 15.0)
 	_check(sent and not again and started.size() == 1 and started[0].get("run_id", "") != "" and started[0].enemies.size() == 1 and started[0].enemies[0].kind == "death_knight"
-		and Net.requested.get("/v1/dungeon/start", 0) == s0 + 1 and Economy.dungeon_state("equip").keys == 1 and Economy.current_run.run_id == started[0].run_id,
+		and Net.requested.get("/v1/dungeon/start", 0) == s0 + 1 and Economy.dungeon_state("equip").keys == 2 and Economy.current_run.run_id == started[0].run_id,
 		"(z) one start request (a second tap waits); the run carries the server's death knight and nothing is spent", "started=%s" % [started])
 	Economy.finish_dungeon(started[0].run_id, false, 8.0)
 	await _wait_until(func(): return finished.size() == 1, 15.0)
-	_check(finished.size() == 1 and not finished[0].win and finished[0].rewards.is_empty() and Economy.dungeon_state("equip").keys == 1 and Economy.current_run.is_empty(),
+	_check(finished.size() == 1 and not finished[0].win and finished[0].rewards.is_empty() and Economy.dungeon_state("equip").keys == 2 and Economy.current_run.is_empty(),
 		"(z) a lost run spends no key", "finished=%s" % [finished])
 	Economy.start_dungeon("equip", 1, party)
 	await _wait_until(func(): return started.size() == 2, 15.0)
@@ -1468,18 +1468,18 @@ func _dungeons_online(state_path: String) -> void:
 	Economy.finish_dungeon(run_id, true, 20.0)  # 시작하자마자 20초 승리
 	await _wait_until(func(): return finished.size() == 2, 20.0)
 	await _wait_until(func(): return not Net._refreshing, 10.0)
-	_check(finished.size() == 2 and finished[1].get("error") == "implausible" and Economy.dungeon_state("equip").keys == 1 and Economy.items().is_empty()
+	_check(finished.size() == 2 and finished[1].get("error") == "implausible" and Economy.dungeon_state("equip").keys == 2 and Economy.items().is_empty()
 		and Economy.current_run.get("run_id", "") == run_id and _warned("server rejected") > r0,
 		"(z) a win faster than real time is refused (409 implausible); the run stays open, nothing changes", "finished=%s" % [finished.slice(1)])
 	Economy.debug_win()  # POST /v1/test/dungeon_age → finish(win, 20)
 	await _wait_until(func(): return finished.size() == 3, 20.0)
 	var got: Array = finished[2].rewards.get("items", []) if finished.size() == 3 else []
-	_check(finished.size() == 3 and finished[2].win and got.size() == 5 and Economy.items() == got and Economy.dungeon_state("equip").keys == 0
+	_check(finished.size() == 3 and finished[2].win and got.size() == 5 and Economy.items() == got and Economy.dungeon_state("equip").keys == 1
 		and Economy.dungeon_state("equip").best_level == 1 and got.all(func(x): return x.id is int and not x.has("level") and x.rolls.size() >= 1),
 		"(z) debug_win on the server: key -1, best level 1, exactly 5 items with server ids land in the bag", "rewards=%s bag=%d" % [got, Economy.items().size()])
 	Economy.finish_dungeon(run_id, true, 20.0)  # 같은 run 재전송
 	await _wait_until(func(): return finished.size() == 4, 15.0)
-	_check(finished.size() == 4 and finished[3].repeated and finished[3].rewards.get("items", []) == got and Economy.items().size() == 5 and Economy.dungeon_state("equip").keys == 0,
+	_check(finished.size() == 4 and finished[3].repeated and finished[3].rewards.get("items", []) == got and Economy.items().size() == 5 and Economy.dungeon_state("equip").keys == 1,
 		"(z) resending the finished run returns the same 5 items and changes nothing", "finished=%s" % [finished.slice(3)])
 	# 장착: 방어구는 니나(배치된 Mage)에게, 방어구가 없으면 무기 종류가 맞는 영웅에게
 	var pick := _equip_pick(got)
@@ -1565,8 +1565,32 @@ func _dungeons_online(state_path: String) -> void:
 		and Economy.items().filter(func(x): return x.grade == "MR").size() == 1 and Net.requested.get("/v1/items/fuse", 0) == fuse0 + 1,
 		"(z) one /v1/items/fuse: the bag holds the server's MR top with 4 special stats", "mr=%s" % [mr])
 	Economy.fused.disconnect(on_fused)
-	Economy.sell_items([int(mr.get("id", 0))])
-	await _wait_until(func(): return not Economy._waiting.has("sell_items") and Economy._hold == 0, 15.0)
+	# 분해(2026-10-29): MR 하나 → 강화석 300, 곧바로 빠지고 /v1/items/dismantle 하나로 서버 값과 같다
+	var st0: int = Economy.stones
+	var dis0: int = Net.requested.get("/v1/items/dismantle", 0)
+	var got_st := Economy.dismantle_items([int(mr.get("id", 0))])
+	_check(got_st == 300 and Economy.stones == st0 + 300 and Economy.item(int(mr.get("id", 0))).is_empty(),
+		"(z) dismantling the MR top shows +300 stones before the server answers", "got=%d stones=%d" % [got_st, Economy.stones])
+	await _wait_until(func(): return not Economy._waiting.has("dismantle") and Economy._hold == 0, 15.0)
+	_check(Economy.stones == st0 + 300 and Net.requested.get("/v1/items/dismantle", 0) == dis0 + 1 and Economy.item(int(mr.get("id", 0))).is_empty(),
+		"(z) one /v1/items/dismantle: the server keeps 300 stones", "stones=%d" % Economy.stones)
+	# 영웅 부위 강화: 곧바로 +1, /v1/slot/enhance 하나, 서버도 같은 레벨·강화석·골드. 장비 보너스 HP는 그 부위 장비 × 1.05
+	await _request("POST", "/v1/test/levels", {"gold": 100000})
+	Economy.apply_server(_resp if _resp is Dictionary else {})
+	var enh_hero: String = auto_hero if auto_hero != "" else str(Economy.heroes.keys()[0])
+	var enh_slot: String = str(Economy.hero_equipment(enh_hero).keys()[0]) if not Economy.hero_equipment(enh_hero).is_empty() else "hat"
+	var enh0: int = Net.requested.get("/v1/slot/enhance", 0)
+	var g0: int = Economy.gold
+	var enh_ok := Economy.slot_enhance(enh_hero, enh_slot)
+	_check(enh_ok and Economy.slot_level(enh_hero, enh_slot) == 1 and Economy.stones == st0 + 290 and Economy.gold == g0 - 5000,
+		"(z) slot enhance is +1 at once (10 stones, 5,000 gold)", "lv=%d stones=%d gold %d -> %d" % [Economy.slot_level(enh_hero, enh_slot), Economy.stones, g0, Economy.gold])
+	await _wait_until(func(): return not Economy._waiting.has("slot_enhance") and Economy._hold == 0, 15.0)
+	await _request("GET", "/v1/player")
+	var sp: Dictionary = _resp.get("player", {}) if _resp is Dictionary else {}
+	var cur: Dictionary = Economy.hero_equipment(enh_hero).get(enh_slot, {})
+	_check(Net.requested.get("/v1/slot/enhance", 0) == enh0 + 1 and Economy.slot_level(enh_hero, enh_slot) == 1 and int(sp.get("stones", -1)) == Economy.stones
+		and sp.get("slot_levels", {}).get(enh_hero, {}).get(enh_slot) == 1.0 and (cur.is_empty() or Economy.equipment_bonus(enh_hero).hp >= roundi(GameData.item_stats(cur).hp * 1.05)),
+		"(z) one /v1/slot/enhance: the server has the same slot level and stones", "server=%s/%s" % [sp.get("slot_levels"), sp.get("stones")])
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
 	var f := FileAccess.open(state_path + ".dungeons", FileAccess.WRITE)
@@ -1642,12 +1666,12 @@ func _dungeons_restored(state_path: String) -> void:
 	var gold0: int = Economy.server_gold_tenths
 	Economy.debug_win()
 	await _wait_until(func(): return finished.size() == 1, 20.0)
-	_check(sent and party.size() == 6 and finished.size() == 1 and finished[0].win and finished[0].rewards == {"gold_tenths": 40000} and Economy.server_gold_tenths == gold0 + 40000
+	_check(sent and party.size() == 6 and finished.size() == 1 and finished[0].win and finished[0].rewards == {"gold_tenths": 200000} and Economy.server_gold_tenths == gold0 + 200000
 		and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.dungeon_state("gold").best_level == 1,
-		"(p2) gold dungeon with 6 heroes: debug_win pays 4000 gold on the server and spends one key", "finished=%s gold %d -> %d" % [finished, gold0, Economy.server_gold_tenths])
+		"(p2) gold dungeon with 6 heroes: debug_win pays 20000 gold on the server and spends one key", "finished=%s gold %d -> %d" % [finished, gold0, Economy.server_gold_tenths])
 	Economy.finish_dungeon(started[0].get("run_id", ""), true, 15.0)
 	await _wait_until(func(): return finished.size() == 2, 15.0)
-	_check(finished.size() == 2 and finished[1].repeated and finished[1].rewards == {"gold_tenths": 40000} and Economy.server_gold_tenths == gold0 + 40000
+	_check(finished.size() == 2 and finished[1].repeated and finished[1].rewards == {"gold_tenths": 200000} and Economy.server_gold_tenths == gold0 + 200000
 		and Economy.dungeon_state("gold").keys == keys0 - 1, "(p2) resending the gold run returns the same reward once", "finished=%s" % [finished.slice(1)])
 	Economy.dungeon_started.disconnect(on_start)
 	Economy.dungeon_finished.disconnect(on_finish)
@@ -1655,7 +1679,7 @@ func _dungeons_restored(state_path: String) -> void:
 
 
 ## 개정 18 앱 흐름(온라인): 던전 시트 편성 [출전] → 서버 start → 던전 장면(성 월드는 트리 밖) → 즉시 승리 훅(test/dungeon_age → finish) → 결과 화면
-## (2단계 4,400 골드, 열쇠 −1, 최고 2단계) → [나가기] → 성 월드가 돌아온다.
+## (2단계 22,000 골드, 열쇠 −1, 최고 2단계) → [나가기] → 성 월드가 돌아온다.
 func _dungeon_scene_online() -> void:
 	Economy.dungeon_started.connect(_main._on_dungeon_started)
 	var dwin = _tabs.windows.dungeon
@@ -1668,9 +1692,9 @@ func _dungeon_scene_online() -> void:
 	dwin.deploy()
 	var done := await _wait_until(func(): return _main._dungeon != null and _main._dungeon.phase == _main._dungeon.Phase.RESULT, 30.0)
 	var d = _main._dungeon
-	_check(done and not _main.is_inside_tree() and lv == 2 and d.result.win and d.result.rewards == {"gold_tenths": 44000} and Economy.server_gold_tenths == gold0 + 44000
-		and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.dungeon_state("gold").best_level == 2 and d.hud.gold_label.text == "+4,400 골드",
-		"(p2) app flow online: formation [출전] -> server start -> dungeon scene -> instant win -> result 4,400 gold (level 2), key spent",
+	_check(done and not _main.is_inside_tree() and lv == 2 and d.result.win and d.result.rewards == {"gold_tenths": 220000} and Economy.server_gold_tenths == gold0 + 220000
+		and Economy.dungeon_state("gold").keys == keys0 - 1 and Economy.dungeon_state("gold").best_level == 2 and d.hud.gold_label.text == "+22,000 골드",
+		"(p2) app flow online: formation [출전] -> server start -> dungeon scene -> instant win -> result 22,000 gold (level 2), key spent",
 		"done=%s lv=%d result=%s gold %d -> %d" % [done, lv, d.result if d != null else {}, gold0, Economy.server_gold_tenths])
 	Economy.debug_win_on = false
 	if d != null:

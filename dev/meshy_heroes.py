@@ -2,6 +2,7 @@
 
   python3 dev/meshy_heroes.py concept <id>...   컨셉(image-to-image, 참조 = dev/meshy/arteon_concept.png) 시작
   python3 dev/meshy_heroes.py model <id>...     끝난 컨셉으로 3D(image-to-3d) 시작 — 컨셉을 눈으로 본 뒤에
+  python3 dev/meshy_heroes.py retex <id>...     끝난 3D에 컨셉 그림을 정면 시점으로 텍스처를 다시 입힌다(retexture 10, 4K, UV 그대로)
   python3 dev/meshy_heroes.py poll              상태 갱신, 끝난 것 내려받기(dev/meshy/out/<id>/)
 
 키: 환경 변수 MESHY_API_KEY(없으면 프록시가 넣는다고 가정). 상태는 dev/meshy/out/state.json.
@@ -16,7 +17,7 @@ OUT = os.path.join(HERE, "meshy", "out")
 STATE = os.path.join(OUT, "state.json")
 REF = os.path.join(HERE, "meshy", "arteon_concept.png")
 GRADE = {r["id"]: r["grade"] for r in csv.DictReader(open(os.path.join(HERE, "..", "data", "heroes.csv")))}
-UR_IDS = ("solaris", "ragna", "kaien", "orion", "nox", "aurora")
+UR_IDS = ("hyeonmu", "baekho", "yeonhwa", "cheongryong", "chronos", "jujak")
 
 STYLE = ("Same art style, chibi proportions, T-pose, front camera and plain light gray background as the reference image: "
          "stylized low-poly faceted 3D game hero, flat-shaded crisp facets, big head, sturdy short body. New character: ")
@@ -61,25 +62,26 @@ DESC = {
     "pip": "apprentice spirit mage boy, the smallest hero, orange hair with a small tilted pointed hat, sky-blue robe, a tiny water spirit on the shoulder.",
     "grit": "mine blacksmith man, small and stout, yellow miner helmet with a headlamp, soot-gray shirt, brown leather apron, black beard.",
     "tia": "swamp witch woman, droopy mossy hat with mushrooms, olive robe, mud-brown cape, purple sash, dark hair.",
-    # UR(태생): 원신 5성·블루 아카이브·세븐나이츠 키우기 최상위 등급 외형 참고 — 겹친 갑옷, 등 뒤 장식, 빛나는 수정.
-    "solaris": "radiant sun dragon knight man, white and bright orange layered plate armor, helmet shaped like a dragon head with a fan of "
-               "orange crystal sun-ray spikes behind the head, glowing orange sun crystal set in the chest plate, dragon-scale pauldrons, "
-               "two small white dragon wings on the back, long flowing orange-to-red cape, heroic face.",
-    "ragna": "storm warlord man, huge muscular barbarian, dark steel horned helmet crowned with jagged glowing sky-blue lightning crystals, "
-             "long white hair and braided white beard, storm-gray fur mantle over massive steel pauldrons engraved with lightning bolts, "
-             "glowing sky-blue rune tattoos on the bare arms, tattered navy war cape, belt with a blue crystal buckle.",
-    "kaien": "moonlight sword saint young man, long silver hair in a high ponytail, violet and white layered samurai-style outfit, "
-             "large silver crescent-moon ornament floating behind the head like a halo, long white scarf with violet ends, "
-             "light lacquered violet armor plates, glowing violet moon crystal on the chest, calm cool eyes.",
-    "orion": "star archer man, deep indigo hood with a silver star crest and glowing blue star points, long night-sky cape covered in "
-             "tiny white stars and constellation lines, white and indigo light armor, silver comet-shaped shoulder guard, "
-             "glowing blue star crystal on the chest, focused eyes.",
-    "nox": "void archmage man, tall dark violet wizard hat with a glowing violet crystal at the tip, black robe with glowing violet rune "
-           "lines, large purple cape with a starry void pattern, silver shoulder plates with violet crystal shards rising from them, "
-           "long white hair, pale skin, glowing violet eyes.",
-    "aurora": "dawn goddess woman, long pink-to-peach gradient hair with a white flower crown, pale pink glowing halo ring behind the "
-              "head, white flowing robe with soft pink and sky-blue layers, large white feathered angel wings with pink tips, "
-              "silver ornaments, gentle smile."
+    # UR(태생, 2026-10-29 두 번째 안 — 사용자 "UR이 독창적이지 않자나 ... SSR을 그대로 가져오면 어떡하냐"): 기존 36명에 없는 주제만.
+    # 사방신(현무·백호·청룡·주작) + 구미호 + 시간의 지배자. 원신 리월 선인·서머너즈워 구미호처럼 동양 신화 모티프(생김새 기준).
+    "hyeonmu": "black tortoise guardian knight man, dark navy-teal and black layered armor, a huge hexagonal tortoise-shell plate on the "
+               "back like a shell carapace, tortoise-shell pauldrons, a black serpent with glowing teal eyes coiled around the shoulders "
+               "and the helmet, helmet crested with a serpent head, glowing teal water-ripple patterns, calm stern face.",
+    "baekho": "white tiger general man, huge muscular warrior, helmet shaped like a snarling white tiger head with fangs framing his "
+              "face, white tiger fur mantle with black stripes, white and steel-blue lamellar armor, tiger-claw gauntlets, "
+              "a white war banner on the back, wild white hair, fierce eyes.",
+    "yeonhwa": "nine-tailed fox woman, long white hair with white fox ears, crimson and white korean hanbok-inspired battle dress with "
+               "layered sleeves, nine big fluffy white fox tails fanned out behind her with glowing blue foxfire at each tip, "
+               "a small white fox mask tilted on the side of the head, red eye makeup, sly smile.",
+    "cheongryong": "azure dragon archer man, jade and azure armor with swirling cloud patterns, hood shaped like an eastern dragon head "
+                   "with antlers and long whiskers, a long serpentine azure eastern dragon coiling around his body and shoulders, "
+                   "glowing pearl on the chest, flowing jade cape with cloud swirls, sharp eyes.",
+    "chronos": "time master archmage man, ageless face with long silver-white hair and short beard, deep midnight-blue robe patterned "
+               "with glowing cyan clock dials, a huge clock ring with roman numerals floating behind his back like a halo, small "
+               "floating silver gears around the shoulders, hourglass-shaped shoulder ornaments, glowing cyan eyes, no hat.",
+    "jujak": "vermilion bird shrine maiden woman, long black hair with a tall vermilion phoenix-feather headdress, white and vermilion "
+             "korean shrine-maiden robes with long wide sleeves, long flowing flame-feather tail plumes trailing behind her like a "
+             "phoenix tail, small flame feathers on the shoulders, gentle confident smile."
 }
 
 
@@ -126,10 +128,24 @@ def model(ids):
         print(i, "model", body["ai_model"], t["result"])
 
 
+## UR 재텍스처(2026-10-29 사용자 "그냥 퀄리티가 낮은거같은데?" — 3D 변환에서 얼굴이 하얗고 밋밋해지고 무늬가 뭉개졌다):
+## 컨셉 그림을 정면 시점(multiview, meshy-7)으로 같은 메시·UV에 4K 텍스처를 다시 입힌다. 몸 맞추기는 <id>_retex.glb로 meshy_fit.
+def retex(ids):
+    for i in ids:
+        s = load()
+        img = "data:image/png;base64," + base64.b64encode(open(os.path.join(OUT, i, "concept.png"), "rb").read()).decode()
+        body = {"input_task_id": s[i]["model"]["id"], "multiview_image_urls": [img], "ai_model": "meshy-7",
+                "enable_original_uv": True, "texture_resolution": "4k", "target_formats": ["glb"]}
+        t = req("POST", "/retexture", body)
+        s[i]["retex"] = {"id": t["result"], "status": "PENDING"}
+        save(s)
+        print(i, "retex", t["result"])
+
+
 def poll():
     s = load()
     for i, e in s.items():
-        for kind, path in (("concept", "/image-to-image/"), ("model", "/image-to-3d/")):
+        for kind, path in (("concept", "/image-to-image/"), ("model", "/image-to-3d/"), ("retex", "/retexture/")):
             t = e.get(kind)
             if not t or t.get("saved") or t["status"] in ("FAILED", "CANCELED"):
                 continue
@@ -138,11 +154,13 @@ def poll():
             if r["status"] == "SUCCEEDED":
                 os.makedirs(os.path.join(OUT, i), exist_ok=True)
                 url = r["image_urls"][0] if kind == "concept" else r["model_urls"]["glb"]
-                urllib.request.urlretrieve(url, os.path.join(OUT, i, "concept.png" if kind == "concept" else i + "_meshy.glb"))
+                name = {"concept": "concept.png", "model": i + "_meshy.glb", "retex": i + "_retex.glb"}[kind]
+                urllib.request.urlretrieve(url, os.path.join(OUT, i, name))
                 t["saved"] = True
             print(i, kind, t["status"], r.get("progress"))
     save(s)
 
 
 if __name__ == "__main__":
-    {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "poll": poll}[sys.argv[1]]()
+    {"concept": lambda: concept(sys.argv[2:]), "model": lambda: model(sys.argv[2:]), "retex": lambda: retex(sys.argv[2:]),
+     "poll": poll}[sys.argv[1]]()

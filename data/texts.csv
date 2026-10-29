@@ -46,7 +46,6 @@ bag_panel.refresh_4,부위: ,,,,scripts/bag_panel.gd
 bag_panel.refresh_5,전체,,,,scripts/bag_panel.gd
 bag_panel.refresh_6,등급: ,,,,scripts/bag_panel.gd
 bag_panel.refresh_7,정렬: ,,,,scripts/bag_panel.gd
-bag_panel.refresh_8,%d개 선택 · +%s 골드,,,,scripts/bag_panel.gd
 bag_panel.rebuild,장착: ,,,,scripts/bag_panel.gd
 bag_panel.rebuild_2,장착 중,,,,scripts/bag_panel.gd
 bag_panel.rebuild_3,장착,,,,scripts/bag_panel.gd
@@ -2800,6 +2799,24 @@ bag_panel.ready_4,합성,,,,scripts/bag_panel.gd
 bag_panel.ready_5,신화(MR) %s 완성!,,,,scripts/bag_panel.gd
 economy.equip_text.not_fusable,LR 장비만 합성할 수 있습니다,,,,scripts/economy.gd
 economy.equip_text.mixed_slot,같은 부위(무기는 같은 종류) 장비만 합성할 수 있습니다,,,,scripts/economy.gd
+economy.equip_text.max_level,최대 강화 단계입니다,,,,scripts/economy.gd
+economy.equip_text.not_enough_stones,강화석이 부족합니다,,,,scripts/economy.gd
+economy.equip_text.not_enough_gold,골드가 부족합니다,,,,scripts/economy.gd
+bag_panel.ready_6,강화,,,,scripts/bag_panel.gd
+bag_panel.ready_7,일괄 분해,,,,scripts/bag_panel.gd
+bag_panel.ready_8,분해,,,,scripts/bag_panel.gd
+bag_panel.dismantle,장비 %d개 분해 · 강화석 +%s,,,,scripts/bag_panel.gd
+bag_panel.bulk_dismantle,분해할 장비가 없습니다,,,,scripts/bag_panel.gd
+bag_panel.bulk_dismantle_2,장비 %d개 분해 · 강화석 +%s,,,,scripts/bag_panel.gd
+bag_panel.refresh_stones,강화석 %s,,,,scripts/bag_panel.gd
+bag_panel.enhance_slot,%s 부위 강화 +%d,,,,scripts/bag_panel.gd
+bag_panel.refresh_enhance.head,부위 강화 +%d · 체력·공격 +%d%%,,,,scripts/bag_panel.gd
+bag_panel.refresh_enhance,\n최대 강화 단계입니다,,,,scripts/bag_panel.gd
+bag_panel.refresh_enhance_2,\n다음 +%d%% · 강화석 %s/%s · 골드 %s,,,,scripts/bag_panel.gd
+bag_panel.refresh_9,%d개 선택\n골드 +%s · 강화석 +%s,,,,scripts/bag_panel.gd
+bag_panel.refresh_10,접기,,,,scripts/bag_panel.gd
+bag_panel.refresh_11,일괄 분해,,,,scripts/bag_panel.gd
+bag_panel.refresh_12,%s 이하\n%d개 · +%s,,,,scripts/bag_panel.gd
 server.ranking.guild_mail.title,[길드 랭킹] 주간 보상,,,,server/src/ranking.ts
 server.ranking.guild_mail.body,지난주 길드 랭킹에서 {guild} 길드가 {rank}위를 했습니다. 길드원 모두에게 드리는 보상입니다.,,,,server/src/ranking.ts
 ranking_panel.rebuild_8,이번 주 드래곤에 피해를 주면 순위에 오릅니다,,,,scripts/ranking_panel.gd

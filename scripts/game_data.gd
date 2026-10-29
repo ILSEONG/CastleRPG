@@ -104,6 +104,14 @@ const EQUIP_GRADE_MULT := {"N": 1.0, "R": 1.5, "SR": 2.2, "SSR": 3.2, "UR": 4.6,
 const FUSE_FROM := "LR"
 const FUSE_TO := "MR"
 const FUSE_COUNT := 3
+## 분해(2026-10-29): 장비 하나 → 등급별 강화석(서버 rules.ts DISMANTLE_STONES).
+const DISMANTLE_STONES := {"N": 1, "R": 2, "SR": 5, "SSR": 15, "UR": 40, "LR": 100, "MR": 300}
+## 영웅 부위 강화(2026-10-29): 영웅마다 부위 레벨 0..SLOT_ENH_MAX — 그 부위에 낀 장비의 체력·공격 +SLOT_ENH_PCT%/레벨. 장비를 바꿔도 레벨은 부위에 남는다.
+## 레벨 L → L+1 비용 = 강화석 SLOT_ENH_STONES×(L+1), 골드 SLOT_ENH_GOLD×(L+1)(서버 rules.ts slotEnhCost).
+const SLOT_ENH_MAX := 20
+const SLOT_ENH_PCT := 5
+const SLOT_ENH_STONES := 10
+const SLOT_ENH_GOLD := 5000
 const ARMOR_SLOTS := ["hat", "top", "bottom", "shoes", "pauldron", "gloves"]  # 모든 영웅이 쓴다
 const ACCESSORY_SLOTS := ["ring", "necklace"]  # 장신구(2026-10-15 파티 퀘스트 보상만: 리치 = 반지, 거미 여왕 = 목걸이). 모든 영웅이 쓴다
 const EQUIP_SLOTS := ["weapon", "hat", "top", "bottom", "shoes", "pauldron", "gloves", "ring", "necklace"]
@@ -128,7 +136,7 @@ const RUN_TTL_SEC := 1800.0  # run 만료(30분)
 const RUN_SLACK_SEC := 5.0  # 결과 타당성: 실제 경과 ≥ elapsed ÷ MAX_GAME_SPEED − 5
 const MAX_GAME_SPEED := 2.0  # 배속 버튼 최고 배율(speed_button.gd LEVELS 끝, 서버 rules.MAX_GAME_SPEED)
 const MAX_DUNGEON_LEVEL := 300  # 서버 rules.MAX_DUNGEON_LEVEL
-const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base",
+const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "equip_extra_gold_mult",
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
 	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base",
 	"ticket_key_daily", "ticket_key_cap", "ticket_dg_party", "ticket_dg_min_sec", "ticket_dg_hp_growth", "ticket_dg_atk_growth", "ticket_reward_base",
@@ -1074,9 +1082,10 @@ static func dungeon_enemies(type: String, level: int) -> Array:
 	return out
 
 
-## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1)). 1단계 4000, 2단계 4400.
+## 골드 던전 보상(정수 골드) = round(gold_dg_base × gold_dg_mult^(n−1))를 천 단위로 올림(사용자 2026-10-29 "100의 자리에서 올림"). 1단계 20,000, 2단계 22,000, 3단계 25,000.
 static func gold_reward(level: int) -> int:
-	return roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+	var g := roundi(_grown(config_num("gold_dg_base"), config_num("gold_dg_mult"), level - 1))
+	return ceili(g / 1000.0) * 1000
 
 
 ## 단계 n의 등급 가중치 {N: w, …}(equip_drop.csv의 min_level ≤ n인 마지막 행).
@@ -1158,6 +1167,15 @@ static func item_stats(item: Dictionary, base := false) -> Dictionary:
 
 
 ## 장비들의 합계 {hp, atk, speed_pct, 특수 능력치 %…}(hp·atk는 영웅 최종 능력치에 더한다 — hero_stats, 나머지는 전투 — hero.refresh_stats).
+static func slot_enh_cost(level: int) -> Dictionary:
+	return {"stones": SLOT_ENH_STONES * (level + 1), "gold": SLOT_ENH_GOLD * (level + 1)}
+
+
+## 부위 레벨의 체력·공격 배율(1 + 5% × 레벨, 0..SLOT_ENH_MAX로 자른다). 서버 rules.ts slotMult.
+static func slot_mult(level: int) -> float:
+	return 1.0 + SLOT_ENH_PCT * clampi(level, 0, SLOT_ENH_MAX) / 100.0
+
+
 static func equip_total(items: Array) -> Dictionary:
 	var out := item_stats({})
 	for it in items:
@@ -1211,9 +1229,12 @@ static func apply_reset(type: String, st: Dictionary, now: float) -> Dictionary:
 	return out
 
 
-## 장비 던전 골드 추가 도전 비용 = equip_extra_gold_base × (1 + 2 × 그날 추가 도전 횟수)(2026-10-07: 10만·30만·50만·70만…, 예전엔 10만·20만·30만…).
-static func extra_cost(extra_today: int) -> int:
-	return int(config_num("equip_extra_gold_base")) * (1 + 2 * maxi(extra_today, 0))
+## 장비 던전 골드 도전 비용(열쇠가 없을 때) = 단계별 고정: equip_extra_gold_base × equip_extra_gold_mult^(단계 − 1)을 천 단위로 올림
+## (사용자 2026-10-29 — 그날 횟수로 오르지 않는다. 서버 rules.extraCost와 같다. 1단계 10만, 10단계 28만, 30단계 267만).
+static func extra_cost(level: int) -> int:
+	var mult := config_num("equip_extra_gold_mult") if _config.has("equip_extra_gold_mult") else 1.12
+	var g := roundi(_grown(config_num("equip_extra_gold_base"), mult, maxi(level, 1) - 1))
+	return ceili(g / 1000.0) * 1000
 
 
 ## 출전 인원(골드 6, 장비 4).

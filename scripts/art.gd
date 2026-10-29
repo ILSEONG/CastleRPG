@@ -214,20 +214,22 @@ const HERO_LOOKS := {
 	"raven": {"palette": {"hood": Color("3B3F58"), "tunic": Color("1E2030"), "arms": Color("2E3148"), "strap": Color("6A5ACD"),
 		"belt": Color("1A1A24"), "boots": Color("1A1A24"), "wood": Color("22222C"), "fit": Color("8E7CC3")},
 		"parts": [["head", "raven_crest"], ["chest", "raven_mantle"]], "scale": 1.04},
-	# UR(2026-10-29 "UR은 개멋지게 뽑아줘"): 몸은 모두 Meshy(dev/meshy_heroes.py UR_IDS — 겹친 갑옷·등 장식·빛나는 수정, 금색 없이),
-	# 여기는 무기 색·손 부품만(몸이 있으면 팔레트는 무기 칸에만 먹는다).
-	# 태양의 용기사: 흰 강철 칼·방패 + 주황 방패 테, 칼날을 감싸는 주황 불꽃
-	"hyeonmu": {"palette": {"steel": Color("F4F1EC"), "grip": Color("3A2A2A"), "rim": Color("FF6A1F")}, "parts": [["handslot.r", "solaris_flame"]]},
-	# 폭풍의 전쟁군주: 검은 강철 큰 도끼 + 하늘색 날, 도끼머리에서 갈라지는 번개
-	"baekho": {"palette": {"steel": Color("3A4250"), "edge": Color("8FD8FF"), "wood": Color("2A2A34")}, "parts": [["handslot.r", "ragna_bolts"]]},
-	# 월광 검성: 단검 대신 연보라 달빛 장검 두 자루
-	"yeonhwa": {"palette": {"blade": Color("D8CCFF")}, "swap": {"Knife": "kaien_blade", "Knife_Offhand": "kaien_blade"}},
-	# 별의 사수: 남색 쇠뇌 + 은 쇠붙이
-	"cheongryong": {"palette": {"wood": Color("2A2E5A"), "fit": Color("C8D0E8"), "blade": Color("8FB0FF")}},
-	# 공허의 대마도사: 지팡이 머리에 보라 수정 + 뜬 조각
-	"chronos": {"palette": {"gem": Color("B070FF")}, "parts": [["handslot.r", "nox_crystal"]]},
-	# 새벽의 여신: 흰 마법서 + 분홍 보석
-	"jujak": {"palette": {"book": Color("F6EEF2"), "gem": Color("FF8FA3")}},
+	# UR(2026-10-29, 두 번째 안 — 사용자 "UR이 독창적이지 않자나 ... SSR을 그대로 가져오면 어떡하냐"): 기존 영웅에 없는 주제(사방신·구미호·시간).
+	# 몸은 모두 Meshy(dev/meshy_heroes.py UR_IDS — 겹친 갑옷·등 장식·빛나는 수정, 금색 없이), 여기는 무기 색·손 부품만(몸이 있으면 팔레트는 무기 칸에만).
+	# "finish" = UR 마감(Art.ur_finish: 흰 부분 결을 살리고 보석·불빛이 빛난다). "gear_scale" = 손에 든 무기 크기(KayKit 무기는 뭉툭한 몸에 맞춘 크기라
+	# 정교한 Meshy 몸을 가린다 — 2026-10-29 사용자 "왜 컨셉 그림의 퀄리티를 게임에서 담지를 못해?").
+	# 현무: 은빛 칼·방패 + 청록 방패 테
+	"hyeonmu": {"palette": {"steel": Color("A8BCC6"), "grip": Color("1A2A30"), "rim": Color("3FE0C8")}, "finish": true, "gear_scale": 0.8},
+	# 백호: 큰 도끼 대신 월도(흰 강철 날 + 붉은 술)
+	"baekho": {"palette": {"steel": Color("E8EEF4")}, "swap": {"2H_Axe": "baekho_glaive"}, "finish": true},
+	# 구미호: 단검 대신 철선 두 자루(진홍·흰 살 + 끝에 푸른 여우불)
+	"yeonhwa": {"palette": {"blade": Color("E8EEF4")}, "swap": {"Knife": "yeonhwa_fan", "Knife_Offhand": "yeonhwa_fan"}, "finish": true, "gear_scale": 0.7},
+	# 청룡: 쇠뇌 대신 비취 장궁(사용자 "청룡 석궁 버리고 장궁으로 무기 만들어")
+	"cheongryong": {"palette": {"wood": Color("1E5E52"), "fit": Color("C8E8E0"), "blade": Color("7FFFD8")}, "swap": {"2H_Crossbow": "cheongryong_bow"}, "finish": true},
+	# 크로노스: 지팡이 머리에 모래시계 + 시계 고리
+	"chronos": {"palette": {"gem": Color("4FD8FF")}, "parts": [["handslot.r", "chronos_hourglass"]], "finish": true, "gear_scale": 0.85},
+	# 주작: 흰 마법서 + 주홍 보석
+	"jujak": {"palette": {"book": Color("F6EEE6"), "gem": Color("FF5533")}, "finish": true, "gear_scale": 0.75},
 }
 
 ## Meshy 몸(docs/meshy-assets.md): 영웅 id 파일이 있으면 KayKit 몸(스킨 부위 + 모자·망토)을 숨기고 그 자리에 Meshy 메시를 단다.
@@ -538,6 +540,10 @@ static func hero_spec(h: Dictionary) -> Dictionary:
 		spec.parts = look.get("parts", [])
 		spec.swap = look.get("swap", {})
 		spec.body_scale = look.get("scale", 1.0)
+		if look.get("finish", false):
+			spec.finish = true
+		if look.has("gear_scale"):
+			spec.gear_scale = look.gear_scale
 		var body := meshy_body(h.id)
 		if body != "":
 			spec.body = body
@@ -732,6 +738,10 @@ static var unit_style := "toon"  # 영웅·몬스터 그림 방식: lowpoly(원�
 static var _toon_cache := {}  # 로우폴리 재질 id -> 카툰 재질
 static var _team_cache := {}  # [재질 id, 성주 색] -> 천 색을 바꾼 재질(team_tint)
 static var _real_cache := {}  # 로우폴리 재질 id -> 실사풍 재질
+static var _ur_cache := {}  # 카툰 재질 id -> UR 마감 재질(ur_finish)
+## UR 마감 재질 값(toon.gdshaderinc 유니폼): 흰 부분 눌러 결 살리기·보석 발광 + 두 단계 카툰 음영 대신 부드러운 입체 음영
+## (2026-10-29 사용자 "아직도 컨셉 디자인 느낌이 안살아" — Meshy 원본을 보통 조명으로 찍으면 컨셉과 가깝고, 두 단계 음영이 얼굴·옷 입체를 지웠다).
+static var UR_LOOK := {"white_cap": 0.85, "glow": 0.9, "band_soft": 1.0, "lit_level": 0.8, "shade": 0.15, "ambient": 0.5, "saturation": 1.05, "rim": 0.15}
 
 
 ## 영웅·몬스터 모델의 재질을 unit_style대로 바꾼다(UnitModel.dress가 합치기 전에 부른다).
@@ -792,6 +802,26 @@ static var toon_outlines := false
 ## 부드러운 법선 + 두 단계 음영 + 테두리 빛, toon_outlines면 next_pass로 외곽선. 원본 로우폴리 재질마다 하나를 공유한다. 발광·투명 재질은 그대로.
 static func toonify(root: Node) -> void:
 	_swap_materials(root, toon_material)
+
+
+## UR 영웅 마감(2026-10-29, 사용자 "왜 컨셉 그림의 퀄리티를 게임에서 담지를 못해?"): 카툰 재질의 가장 밝은 색을 눌러 흰 부분이 빛에 하얗게
+## 날아가지 않게 하고, 보석·여우불·불꽃 같은 밝은 원색은 스스로 빛나게 한다(toon.gdshaderinc white_cap·glow). 카툰 재질마다 하나를 공유하고, 카툰이 아니면 그대로.
+static func ur_finish(root: Node) -> void:
+	_swap_materials(root, ur_material)
+
+
+## 카툰 재질 → UR 마감 재질(UR_LOOK 값). 카툰이 아니면 그대로.
+static func ur_material(src: Material) -> Material:
+	var sm := src as ShaderMaterial
+	if sm == null or not (sm.shader == TOON_SHADER or sm.shader == TOON_DOUBLE_SHADER):
+		return src
+	var key := sm.get_instance_id()
+	if not _ur_cache.has(key):
+		var m: ShaderMaterial = sm.duplicate()
+		for p in UR_LOOK:
+			m.set_shader_parameter(p, UR_LOOK[p])
+		_ur_cache[key] = m
+	return _ur_cache[key]
 
 
 ## 로우폴리 재질 → 카툰 재질(로우폴리 셰이더가 아니면 그대로).

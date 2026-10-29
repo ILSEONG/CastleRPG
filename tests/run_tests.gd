@@ -3771,7 +3771,7 @@ func test_dungeon_tables() -> void:
 	var dk := GameData.dungeon_enemies("equip", 2)
 	check(is_equal_approx(g3[0].hp, 120.0 * 1.12 * 1.12) and is_equal_approx(g3[2].atk, 40.0 * 1.12 * 1.12) and dk.size() == 1 and dk[0].kind == "death_knight"
 		and is_equal_approx(dk[0].hp, 6900.0) and is_equal_approx(dk[0].atk, 67.2) and dk[0].scale == 2.2, "enemy stats x growth^(n-1): goblins 1.12, death knight HP 1.15 / atk 1.12")
-	check([1, 2, 3, 10].map(func(n): return GameData.gold_reward(n)) == [4000, 4400, 4840, 9432], "gold reward = round(4000 x 1.1^(n-1))")
+	check([1, 2, 3, 10].map(func(n): return GameData.gold_reward(n)) == [20000, 22000, 25000, 48000], "gold reward = round(20000 x 1.1^(n-1)) ceiled to the thousand")
 	check(GameData.drop_weights(1) == {"N": 60.0, "R": 30.0, "SR": 9.0, "SSR": 1.0, "UR": 0.0, "LR": 0.0, "MR": 0.0} and GameData.drop_weights(4) == GameData.drop_weights(1)
 		and GameData.drop_weights(5).UR == 1.0 and GameData.drop_weights(19).LR == 0.5 and GameData.drop_weights(20).SR == 34.0 and GameData.drop_weights(34).LR == 2.0
 		and GameData.drop_weights(35).LR == 7.0 and GameData.drop_weights(300).N == 2.0 and GameData.drop_weights(14).MR == 0.0 and GameData.drop_weights(15).MR == 0.05
@@ -3838,9 +3838,9 @@ func test_dungeon_tables() -> void:
 		and GameData.apply_reset("gold", {"best_level": 0, "keys": 12, "extra_today": 0, "last_reset": DG_LAST}, DG_MID + 9 * 86400.0).keys == 12
 		and GameData.apply_reset("equip", d, DG_MID + 9 * 86400.0).keys == 3 and GameData.apply_reset("gold", d, DG_LAST - 864000.0) == d,
 		"daily reset: +3 at 00:00 KST, missed days x 3 up to the cap 10 (equip 1 / 3), extra runs back to 0, a clock set back changes nothing")
-	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(0) == 100000
-		and GameData.extra_cost(2) == 500000 and GameData.extra_cost(3) == 700000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
-		"fresh dungeon = today's keys; extra run cost 100000 x (1 + 2 x runs today); party 6 / 4")
+	check(GameData.fresh_dungeon("gold", DG_MID + 100.0) == {"best_level": 0, "keys": 3, "extra_today": 0, "last_reset": DG_MID} and GameData.extra_cost(1) == 100000
+		and GameData.extra_cost(10) == 278000 and GameData.extra_cost(50) == 25804000 and GameData.party_size("gold") == 6 and GameData.party_size("equip") == 4 and GameData.min_clear_sec("equip") == 20.0,
+		"fresh dungeon = today's keys; extra run cost fixed per level: 100000 x 1.12^(n-1) ceiled to the thousand; party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
 	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
@@ -3862,8 +3862,8 @@ func test_ticket_dungeon_offline() -> void:
 		e.heroes[id] = 1
 	var st: Dictionary = e.dungeon_state("ticket")
 	var hs: Array = st.helpers
-	check(st.keys == 1 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 10}
-		and e.dungeon_reward("ticket", 5) == {"tickets": 10} and e.dungeon_reward("ticket", 6) == {"tickets": 12} and e.dungeon_reward("ticket", 11) == {"tickets": 14} and GameData.party_size("ticket") == 4, "ticket dungeon: 1 / 3 keys, 3 helpers, 10 tickets (+2 per 5 levels): %s" % [hs])
+	check(st.keys == 3 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 5}
+		and e.dungeon_reward("ticket", 5) == {"tickets": 5} and e.dungeon_reward("ticket", 6) == {"tickets": 6} and e.dungeon_reward("ticket", 11) == {"tickets": 7} and GameData.party_size("ticket") == 4, "ticket dungeon: 3 / 3 keys, 3 helpers, 5 tickets (+1 per 5 levels): %s" % [hs])
 	var top := []
 	for id in e.heroes:
 		top.append(GameData.hero_power(GameData.hero(id), e.level_of(id), e.promotion_of(id)))
@@ -3881,15 +3881,15 @@ func test_ticket_dungeon_offline() -> void:
 	check(e.start_dungeon("ticket", 1, party, helper) and started[-1].helper.hero_id == helper and started[-1].helper.level == hs[0].level and started[-1].enemies.size() == 2,
 		"start: the run carries the helper's level and promotion")
 	e.finish_dungeon(e.current_run.run_id, false, 10.0)
-	check(not finished[-1].win and e.dungeon_state("ticket").keys == 1 and e.dungeon_state("ticket").helpers_used == [], "a loss keeps the key and the helper")
+	check(not finished[-1].win and e.dungeon_state("ticket").keys == 3 and e.dungeon_state("ticket").helpers_used == [], "a loss keeps the key and the helper")
 	e.start_dungeon("ticket", 1, party, helper)
 	e.debug_win()
 	var st2: Dictionary = e.dungeon_state("ticket")
-	check(finished[-1].win and finished[-1].rewards == {"tickets": 10} and e.dia_tickets == 10 and st2.keys == 0 and st2.best_level == 1 and st2.helpers_used == [helper]
+	check(finished[-1].win and finished[-1].rewards == {"tickets": 5} and e.dia_tickets == 5 and st2.keys == 2 and st2.best_level == 1 and st2.helpers_used == [helper]
 		and not st2.helpers.any(func(h): return h.hero_id == helper) and e.dungeon_block("ticket", 2, party, helper) == "helper_used",
-		"win: key -1, +1 ticket, that helper is used for today: %s" % [st2])
+		"win: key -1, +5 tickets, that helper is used for today: %s" % [st2])
 	e.clock_offset = 86400.0
-	check(e.dungeon_state("ticket").keys == 1 and e.dungeon_state("ticket").helpers_used == [], "next day: a key and every helper again")
+	check(e.dungeon_state("ticket").keys == 3 and e.dungeon_state("ticket").helpers_used == [], "next day: keys back to 3 (cap) and every helper again")
 	e.clock_offset = 0.0
 	# 전투 장면(도우미 영웅·골렘 조각)은 tests/ticket_check.tscn(오토로드가 필요하다)
 
@@ -3907,9 +3907,9 @@ func test_dungeons_offline() -> void:
 		e.heroes[id] = 1
 	var gs: Dictionary = e.dungeon_state("gold")
 	var es: Dictionary = e.dungeon_state("equip")
-	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 1 and es.key_cap == 3 and es.extra_cost == 100000
-		and absf(gs.next_reset - GameData.next_reset(t0)) < 1.0 and gs.reset_in > 0.0 and gs.reset_in <= 86400.0, "new game: gold 3 / 10, equip 1 / 3, next reset at 00:00 KST")
-	check(e.dungeon_reward("gold", 2) == {"gold": 4400} and e.dungeon_reward("equip", 10).count == 5 and e.dungeon_reward("equip", 10).weights.LR == 0.5
+	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 2 and es.key_cap == 3 and es.extra_cost == 100000
+		and absf(gs.next_reset - GameData.next_reset(t0)) < 1.0 and gs.reset_in > 0.0 and gs.reset_in <= 86400.0, "new game: gold 3 / 10, equip 2 / 3, next reset at 00:00 KST")
+	check(e.dungeon_reward("gold", 2) == {"gold": 22000} and e.dungeon_reward("equip", 10).count == 5 and e.dungeon_reward("equip", 10).weights.LR == 0.5
 		and e.dungeon_enemies("gold", 1).size() == 3, "reward preview and enemy list")
 	var party: Array = e.default_party("gold")
 	check(party.size() == 6 and GOLD6.all(func(h): return party.has(h)) and e.default_party("equip").size() == 4, "default party = the strongest owned heroes, 6 / 4: %s" % [party])
@@ -3925,28 +3925,29 @@ func test_dungeons_offline() -> void:
 		and notes[-1] == EconomyScript.DUNGEON_TEXT.implausible, "a win faster than real time is implausible; the run stays open and nothing changes")
 	e.current_run.started_at -= 26.0
 	e.finish_dungeon(run_id, true, 30.0)
-	check(finished[-1].win and finished[-1].rewards == {"gold_tenths": 40000} and e.gold_tenths == 40000 and e.dungeon_state("gold").keys == 2 and e.dungeon_state("gold").best_level == 1
-		and e.current_run.is_empty(), "gold win: key -1, gold +4000, best level 1")
+	check(finished[-1].win and finished[-1].rewards == {"gold_tenths": 200000} and e.gold_tenths == 200000 and e.dungeon_state("gold").keys == 2 and e.dungeon_state("gold").best_level == 1
+		and e.current_run.is_empty(), "gold win: key -1, gold +20000, best level 1")
 	e.finish_dungeon(run_id, true, 30.0)
-	check(finished[-1].repeated and finished[-1].rewards == {"gold_tenths": 40000} and e.gold_tenths == 40000 and e.dungeon_state("gold").keys == 2, "the same run again returns the same result (idempotent)")
+	check(finished[-1].repeated and finished[-1].rewards == {"gold_tenths": 200000} and e.gold_tenths == 200000 and e.dungeon_state("gold").keys == 2, "the same run again returns the same result (idempotent)")
 	e.start_dungeon("gold", 2, GOLD6)
 	e.finish_dungeon(e.current_run.run_id, false, 5.0)
-	check(not finished[-1].win and finished[-1].rewards.is_empty() and e.dungeon_state("gold").keys == 2 and e.dungeon_state("gold").best_level == 1 and e.gold_tenths == 40000,
+	check(not finished[-1].win and finished[-1].rewards.is_empty() and e.dungeon_state("gold").keys == 2 and e.dungeon_state("gold").best_level == 1 and e.gold_tenths == 200000,
 		"a loss spends no key and changes nothing but the run")
-	# 장비 던전: 즉시 승리 훅 → 장비 5개
+	# 장비 던전: 즉시 승리 훅 → 장비 5개(하루 열쇠 2개 중 1개만 남겨 다 쓴 뒤 골드 추가 도전을 본다)
+	e.dungeons.equip.keys = 1
 	check(e.start_dungeon("equip", 1, EQ4) and e.debug_win() and finished[-1].win and finished[-1].rewards.items.size() == 5 and e.bag.size() == 5
 		and e.bag.map(func(x): return x.id) == [1, 2, 3, 4, 5] and e.next_item_id == 6 and e.dungeon_state("equip").keys == 0 and e.dungeon_state("equip").best_level == 1
 		and e.bag.all(func(x): return not x.has("level") and x.rolls.size() >= 1 and x.grade in GameData.EQUIP_GRADES and (x.slot == "weapon") == (x.weapon_kind != null)),
 		"equip win (debug_win hook): exactly 5 items with ids 1..5, key -1: %s" % [e.bag])
-	check(e.dungeon_block("equip", 1, EQ4) == "not_enough_gold", "no key and 4000 gold < 100000: no extra run")
+	check(e.dungeon_block("equip", 1, EQ4) == "not_enough_gold", "no key and 20000 gold < 100000: no extra run")
 	e.gold = 416000
 	check(e.dungeon_block("equip", 2, EQ4) == "" and e.start_dungeon("equip", 2, EQ4) and started[-1].paid_with == "gold" and e.gold == 416000, "an extra run with gold starts without paying yet")
 	e.debug_win()
 	var es2: Dictionary = e.dungeon_state("equip")
-	check(e.gold == 316000 and es2.extra_today == 1 and es2.extra_cost == 300000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays 100000 gold; the next one costs 300000")
+	check(e.gold == 304000 and es2.extra_today == 1 and es2.extra_cost == 126000 and es2.best_level == 2 and e.bag.size() == 10, "the extra run's win pays the level-2 fixed cost 112000; the next one shows level 3 (126000)")
 	e.start_dungeon("equip", 1, EQ4)
 	e.finish_dungeon(e.current_run.run_id, false, 25.0)
-	check(e.gold == 316000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
+	check(e.gold == 304000 and e.dungeon_state("equip").extra_today == 1, "a lost extra run pays nothing")
 	for i in 286:  # 10 + 286 = 296, + 5 > 300
 		e.bag.append({"id": e.next_item_id + i, "slot": "hat", "weapon_kind": null, "grade": "N", "level": 1})
 	e.next_item_id += 286
@@ -3955,7 +3956,7 @@ func test_dungeons_offline() -> void:
 	# 일일 리셋(오프라인, 앱 시계)
 	e.dungeons.gold = {"best_level": 1, "keys": 0, "extra_today": 0, "last_reset": GameData.reset_at(GameData.reset_day(t0) - 4)}
 	e.dungeons.equip.last_reset = GameData.reset_at(GameData.reset_day(t0) - 1)
-	check(e.dungeon_state("gold").keys == 10 and e.dungeon_state("equip").keys == 1 and e.dungeon_state("equip").extra_today == 0, "offline daily reset: 4 missed days -> 10 (cap), equip +1 and extra runs back to 0")
+	check(e.dungeon_state("gold").keys == 10 and e.dungeon_state("equip").keys == 2 and e.dungeon_state("equip").extra_today == 0, "offline daily reset: 4 missed days -> 10 (cap), equip +2 and extra runs back to 0")
 	check(not e.finish_dungeon("nope", true, 30.0) or finished[-1].get("error") == "unknown_run", "an unknown run is refused")
 	e.free()
 
@@ -3993,6 +3994,34 @@ func test_equipment_offline() -> void:
 	check(e.sell_block([1]) == "equipped" and e.sell_block([]) == "bad_request" and e.sell_block([3, 3]) == "bad_request" and e.sell_block([3, 99]) == "unknown_item"
 		and e.sell_items([1, 3]) == 0 and notes[-1] == EconomyScript.EQUIP_TEXT.equipped and e.bag.size() == 5, "sell_block: equipped / empty / duplicate / unknown; a refused sale sells nothing")
 	check(e.sell_items([3, 4]) == 250 and e.gold_tenths == 2500 and e.bag.map(func(x): return x.id) == [1, 2, 5], "sell: round(100 x 1.5) + 100 = 250 gold, the items leave the bag")
+	# 분해(2026-10-29): 등급별 강화석, 장착 중은 못 한다
+	e.bag.append({"id": 6, "slot": "hat", "weapon_kind": null, "grade": "SSR", "rolls": {}, "subs": []})
+	check(e.dismantle_block([1]) == "equipped" and e.dismantle_items([1]) == 0 and e.stones == 0 and e.dismantle_candidates("SSR") == [2, 6] and e.dismantle_candidates("N") == [2],
+		"dismantle_block: equipped refused; candidates are unequipped items up to the grade")
+	check(e.dismantle_items([2, 6]) == 16 and e.stones == 16 and e.bag.map(func(x): return x.id) == [1, 5], "dismantle: N 1 + SSR 15 = 16 stones, the items leave the bag")
+	# 영웅 부위 강화: 레벨 L 비용 강화석 10×(L+1)·골드 5,000×(L+1), 그 부위 장비 hp·atk × (1 + 5% × L), 장비를 빼도 남는다
+	check(GameData.slot_enh_cost(0) == {"stones": 10, "gold": 5000} and GameData.slot_enh_cost(19) == {"stones": 200, "gold": 100000}
+		and GameData.slot_mult(0) == 1.0 and is_equal_approx(GameData.slot_mult(20), 2.0) and is_equal_approx(GameData.slot_mult(99), 2.0), "slot cost and multiplier (+5%%/level, max 20)")
+	e.stones = 100
+	e.gold = 100000
+	check(e.slot_enhance_block("hans", "cape") == "bad_slot" and e.slot_enhance_block("kyle", "shoes") == "not_owned" and e.slot_enhance_block("hans", "shoes", 21) == "max_level"
+		and e.slot_enhance_block("hans", "shoes", 5) == "not_enough_stones" and e.slot_enhance_block("hans", "shoes") == "", "slot_enhance_block: bad_slot / not_owned / max_level / not_enough_stones")
+	var r1: int = roster[0]
+	check(e.slot_enhance("hans", "shoes") and e.slot_levels == {"hans": {"shoes": 1}} and e.stones == 90 and e.gold == 95000 and roster[0] == r1 + 1
+		and _pick3(e.equipment_bonus("hans")) == [444, 44, 3.0], "slot enhance +1: 10 stones, 5,000 gold, shoes HP 423 -> 444 (x1.05): %s" % [e.equipment_bonus("hans")])
+	check(e.slot_enhance("hans", "shoes", 3) and e.slot_level("hans", "shoes") == 4 and e.stones == 0 and e.gold == 50000 and _pick3(e.equipment_bonus("hans")) == [508, 44, 3.0]
+		and not e.slot_enhance("hans", "shoes") and notes[-1] == EconomyScript.EQUIP_TEXT.not_enough_stones, "+3 more costs 20+30+40 stones; level 4 = x1.2; no stones left")
+	e.unequip("hans", "shoes")
+	check(e.slot_level("hans", "shoes") == 4 and e.equipment_bonus("hans").hp == 0 and e.slot_level("ella", "shoes") == 0, "the slot keeps its level with nothing on it; other heroes start at 0")
+	e.equip("hans", "shoes", 5)
+	e.save_path = ECON_TMP
+	e.save()
+	var e2 = _econ(0.0)
+	e2.save_path = ECON_TMP
+	e2.load_save(Time.get_unix_time_from_system())
+	check(e2.stones == 0 and e2.slot_levels == {"hans": {"shoes": 4}} and e2.equipment_bonus("hans").hp == 508, "stones and slot levels survive save and load")
+	e2.free()
+	DirAccess.remove_absolute(ECON_TMP)
 	e.free()
 
 
@@ -4022,7 +4051,7 @@ func test_dungeon_save_and_server() -> void:
 		v9.erase(k)
 	_write(tmp, JSON.stringify(v9))
 	e8.load_save(t0)
-	check(e8.gold_tenths == e.gold_tenths and e8.dungeon_state("gold").keys == 3 and e8.dungeon_state("equip").keys == 1 and e8.bag.is_empty() and e8.equipment.is_empty() and e8.next_item_id == 1,
+	check(e8.gold_tenths == e.gold_tenths and e8.dungeon_state("gold").keys == 3 and e8.dungeon_state("equip").keys == 2 and e8.bag.is_empty() and e8.equipment.is_empty() and e8.next_item_id == 1,
 		"save v9 -> v10: today's keys and an empty bag")
 	for junk in [{"items": {}}, {"dungeons": []}, {"equipment": {"hans": 4}}, {"items": [{"slot": "hat"}]}, {"dungeons": {"gold": {"keys": "x"}}}, {"next_item_id": "3"}]:
 		var bad: Dictionary = raw.duplicate(true)
@@ -4398,7 +4427,10 @@ func test_hero_look_builder() -> void:
 			for c in ba.get_children():
 				if HeroKit.has_part(String(c.name)):
 					found.append([String(ba.bone_name), String(c.name)])
-					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == Art.style_material(Art.lowpoly_vc_material()),
+					var vc: Material = Art.style_material(Art.lowpoly_vc_material())
+					if spec.get("finish", false):
+						vc = Art.ur_material(vc)  # UR 마감(Art.ur_finish)도 공유
+					check(c is MeshInstance3D and c.mesh != null and c.mesh.get_surface_count() == 1 and c.material_override == vc,
 						"%s part %s is a shared vertex-color mesh (its unit-style material, shared)" % [h.id, c.name])
 					used[String(c.name)] = true
 		var want: Array = spec.parts.duplicate()
@@ -4538,7 +4570,8 @@ func test_meshy_bodies() -> void:
 			model.free()
 			continue
 		var tris: int = body.mesh.get_faces().size() / 3
-		check(tris > 1000 and tris <= 5000, "%s Meshy body within 5,000 triangles (%d)" % [h.id, tris])
+		var cap := 6500 if h.grade == "UR" else 5000  # UR 몸은 6천 삼각형으로 리메시(dev/meshy_heroes.py UR_IDS)
+		check(tris > 1000 and tris <= cap, "%s Meshy body within %d triangles (%d)" % [h.id, cap, tris])
 		var m := body.get_active_material(0) as ShaderMaterial
 		check(m != null and m.get_shader_parameter("use_texture") and m.get_shader_parameter("use_remap") != true,
 			"%s Meshy body draws its own texture (no color table)" % h.id)

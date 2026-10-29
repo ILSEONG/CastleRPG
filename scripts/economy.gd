@@ -119,6 +119,8 @@ static var EQUIP_TEXT := {
 	"not_owned": Lang.t("economy.equip_text.not_owned"), "bad_slot": Lang.t("economy.equip_text.bad_slot"), "unknown_item": Lang.t("economy.equip_text.unknown_item"), "wrong_slot": Lang.t("economy.equip_text.wrong_slot"),
 	"wrong_weapon": Lang.t("economy.equip_text.wrong_weapon"), "equipped": Lang.t("economy.equip_text.equipped"), "bad_request": Lang.t("economy.equip_text.bad_request"), "waiting": "",
 	"not_fusable": Lang.t("economy.equip_text.not_fusable"), "mixed_slot": Lang.t("economy.equip_text.mixed_slot"),
+	"max_level": Lang.t("economy.equip_text.max_level"), "not_enough_stones": Lang.t("economy.equip_text.not_enough_stones"),
+	"not_enough_gold": Lang.t("economy.equip_text.not_enough_gold"),
 }
 static var EQUIP_FAIL_TEXT := Lang.t("economy.equip_fail_text")
 ## 연구 못 하는 이유 코드 → 문구(research_block, 서버 404/409 코드와 같다. waiting은 앱만, 개정 24).
@@ -148,6 +150,8 @@ signal upgrades_changed  # 성장(공용 업그레이드) 레벨이 바뀌었다
 signal training_changed  # 훈련 대기열·응답 대기가 바뀌었다(개정 16). 완료(끝나는 시각 지남)는 시그널 없이 training().ready로 본다
 signal dungeons_changed  # 개정 18: 열쇠·최고 단계·추가 도전 횟수·응답 대기가 바뀌었다(일일 리셋은 시그널 없이 dungeon_state가 센다)
 signal fused(item: Dictionary)  # 장비 합성 결과 MR 장비(온라인은 서버 응답이 왔을 때 — 서버가 굴린 능력치)
+signal dismantled(stones: int)  # 분해로 얻은 강화석(온라인은 응답이 왔을 때)
+signal slot_enhanced(hero_id: String, slot: String, level: int)  # 부위 강화 성공(곧바로 — 온라인은 서버가 거절하면 되돌린다)
 signal items_changed  # 보관함·장착이 바뀌었다(장착이 바뀌면 roster_changed도 — 영웅 능력치)
 signal dungeon_started(run: Dictionary)  # 도전 시작 {run_id, seed, type, level, party, enemies, started_at, time_limit, paid_with}. 실패면 {}
 signal dungeon_finished(result: Dictionary)  # 결과 {run_id, win, rewards: {gold_tenths?, items?}, repeated}. 실패면 {run_id, win: false, rewards: {}, error: 코드}
@@ -220,6 +224,8 @@ var dungeons := {}  # 개정 18: 종류 → {best_level, keys, extra_today, last
 var bag: Array = []  # 보관함 [{id(int), slot, weapon_kind(무기만, 아니면 null), grade, rolls {능력치: %}, subs [{id, r}]}](id 순)
 var equipment := {}  # 영웅 id → {부위: 장비 id}
 var next_item_id := 1  # 오프라인 장비 id
+var stones := 0  # 강화석(2026-10-29: 장비 분해로 얻고 영웅 부위 강화에 쓴다)
+var slot_levels := {}  # 영웅 id → {부위: 강화 레벨(> 0)} — 장비를 바꿔도 남는다
 var diamonds := 0  # 개정 23: 다이아(현금 재화, 온라인은 서버 값)
 var gacha_gold_level := 1  # 골드 모집 레벨(1..gacha_gold_level_max)
 var gacha_gold_pulls := 0  # 그 레벨 안 누적 모집 수
@@ -486,6 +492,8 @@ func reset(now: float) -> void:
 	bag = []
 	equipment = {}
 	next_item_id = 1
+	stones = 0
+	slot_levels = {}
 	current_run = {}
 	_last_finish = {}
 	_dirty = false
@@ -2853,7 +2861,7 @@ func dungeon_state(type: String) -> Dictionary:
 	var nr := GameData.next_reset(now)
 	var out := {"keys": int(st.keys), "key_cap": int(GameData.config_num(type + "_key_cap")), "key_daily": int(GameData.config_num(type + "_key_daily")),
 		"best_level": int(st.best_level), "max_level": mini(int(st.best_level) + 1, GameData.MAX_DUNGEON_LEVEL), "extra_today": int(st.extra_today),
-		"extra_cost": GameData.extra_cost(int(st.extra_today)) if type == "equip" else 0, "next_reset": nr, "reset_in": maxf(0.0, nr - now)}
+		"extra_cost": GameData.extra_cost(mini(int(st.best_level) + 1, GameData.MAX_DUNGEON_LEVEL)) if type == "equip" else 0, "next_reset": nr, "reset_in": maxf(0.0, nr - now)}
 	if type == "ticket":
 		out["helpers_used"] = st.get("helpers_used", []).duplicate()
 		out["helpers"] = helper_candidates()
@@ -2985,7 +2993,7 @@ func dungeon_block(type: String, level: int, party: Array, helper = null) -> Str
 	if int(st.keys) < 1:
 		if type != "equip":
 			return "no_key"
-		if gold < GameData.extra_cost(int(st.extra_today)):
+		if gold < GameData.extra_cost(level):
 			return "not_enough_gold"
 	return "waiting" if _waiting.has("dungeon") else ""
 
@@ -3074,8 +3082,8 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 		var cost := 0
 		if int(st.keys) >= 1:
 			nxt.keys = int(st.keys) - 1
-		elif type == "equip" and gold >= GameData.extra_cost(int(st.extra_today)):
-			cost = GameData.extra_cost(int(st.extra_today))
+		elif type == "equip" and gold >= GameData.extra_cost(int(run.level)):
+			cost = GameData.extra_cost(int(run.level))
 			nxt.extra_today = int(st.extra_today) + 1
 		else:
 			fail.error = "no_key" if type != "equip" else "not_enough_gold"
@@ -3183,8 +3191,25 @@ func hero_equipment(hero_id: String) -> Dictionary:
 
 ## 영웅 장비 합계 {hp, atk, speed_pct, 특수 능력치 %…} — hp·atk는 영웅 최종 능력치에 더한다(GameData.hero_stats가 equip_source로 부른다).
 ## 이동속도·특수 능력치 %는 전투가 쓴다(hero.refresh_stats).
+## 부위 강화 레벨이 있으면 그 부위 장비의 hp·atk에 GameData.slot_mult(반올림, 서버 rules.ts heroEquip과 같다).
 func equipment_bonus(hero_id: String) -> Dictionary:
-	return GameData.equip_total(hero_equipment(hero_id).values())
+	var eq := hero_equipment(hero_id)
+	var out := GameData.equip_total(eq.values())
+	var lv: Dictionary = slot_levels.get(hero_id, {})
+	if lv.is_empty():
+		return out
+	out.hp = 0
+	out.atk = 0
+	for s in eq:
+		var st := GameData.item_stats(eq[s])
+		var m := GameData.slot_mult(int(lv.get(s, 0)))
+		out.hp += roundi(st.hp * m)
+		out.atk += roundi(st.atk * m)
+	return out
+
+
+func slot_level(hero_id: String, slot: String) -> int:
+	return int(slot_levels.get(hero_id, {}).get(slot, 0))
 
 
 ## 장비 점수(같은 부위끼리 비교용): HP + 공격 × 25 — 전투력 식(HP/10 + 공격×2/간격)에서 공격 1 ≈ HP 25 — + 특수 능력치 % × SUB_SCORE(HP 환산).
@@ -3448,6 +3473,103 @@ func fuse_items(ids: Array, announce := true) -> Dictionary:
 	if announce:
 		fused.emit(made.duplicate(true))
 	return made.duplicate(true)
+
+
+## 분해 못 하는 이유(문구 EQUIP_TEXT, 서버 /v1/items/dismantle과 같은 순서): bad_request → unknown_item → equipped → waiting. 되면 "".
+func dismantle_block(ids: Array) -> String:
+	var why := sell_block(ids)
+	if why != "" and why != "waiting":
+		return why
+	return "waiting" if _waiting.has("dismantle") else ""
+
+
+## 장비 분해(2026-10-29): 장비마다 등급별 강화석(GameData.DISMANTLE_STONES). 안 되면 알림만 하고 0. 오프라인은 곧바로 저장,
+## 온라인은 곧바로 빼고 강화석을 더한 뒤 /v1/items/dismantle로 확인(거절·유실이면 되돌리고 알림). 얻은 강화석을 돌려준다.
+func dismantle_items(ids: Array) -> int:
+	var why := dismantle_block(ids)
+	if why != "":
+		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
+		return 0
+	var int_ids: Array = ids.map(func(x): return int(x))
+	if net != null:
+		var got := [0]
+		_instant(func():
+			got[0] = dismantle_items(int_ids)
+			return true, "/v1/items/dismantle", {"item_ids": int_ids}, func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT), true, "dismantle")
+		return got[0]
+	var n := 0
+	for id in int_ids:
+		n += int(GameData.DISMANTLE_STONES.get(item(id).grade, 0))
+	bag = bag.filter(func(it): return not int(it.id) in int_ids)
+	_reindex_items()
+	stones += n
+	save()
+	changed.emit()
+	items_changed.emit()
+	dismantled.emit(n)
+	return n
+
+
+## 그 등급 이하(grade 포함), 아무도 안 낀 보관함 장비 id(일괄 분해).
+func dismantle_candidates(max_grade: String) -> Array:
+	var top := GameData.EQUIP_GRADES.find(max_grade)
+	var out := []
+	for it in bag:
+		if GameData.EQUIP_GRADES.find(str(it.grade)) <= top and item_owner(int(it.id)) == "":
+			out.append(int(it.id))
+	return out
+
+
+## 부위 강화 times번 비용 {stones, gold}(지금 레벨부터, 최대 레벨을 넘는 몫은 세지 않는다).
+func slot_enhance_cost(hero_id: String, slot: String, times := 1) -> Dictionary:
+	var lv := slot_level(hero_id, slot)
+	var out := {"stones": 0, "gold": 0}
+	for l in range(lv, mini(lv + times, GameData.SLOT_ENH_MAX)):
+		var c := GameData.slot_enh_cost(l)
+		out.stones += c.stones
+		out.gold += c.gold
+	return out
+
+
+## 부위 강화 못 하는 이유(EQUIP_TEXT 코드, 서버 /v1/slot/enhance와 같은 순서): bad_slot → not_owned → max_level → not_enough_stones
+## → not_enough_gold → waiting. 되면 "".
+func slot_enhance_block(hero_id: String, slot: String, times := 1) -> String:
+	if not slot in GameData.EQUIP_SLOTS:
+		return "bad_slot"
+	if GameData.hero(hero_id).is_empty() or int(heroes.get(hero_id, 0)) < 1:
+		return "not_owned"
+	if times < 1 or slot_level(hero_id, slot) + times > GameData.SLOT_ENH_MAX:
+		return "max_level"
+	var c := slot_enhance_cost(hero_id, slot, times)
+	if stones < int(c.stones):
+		return "not_enough_stones"
+	if gold < int(c.gold):
+		return "not_enough_gold"
+	return "waiting" if _waiting.has("slot_enhance") else ""
+
+
+## 영웅 부위 강화 times번(2026-10-29, 세븐나이츠 키우기·메이플스토리 키우기식 — 장비가 아니라 영웅의 부위가 오른다). 안 되면 알림만 하고 false.
+## 오프라인은 곧바로 저장, 온라인은 곧바로 올리고 /v1/slot/enhance로 확인(거절·유실이면 되돌리고 알림).
+func slot_enhance(hero_id: String, slot: String, times := 1) -> bool:
+	var why := slot_enhance_block(hero_id, slot, times)
+	if why != "":
+		notice.emit(EQUIP_TEXT.get(why, EQUIP_FAIL_TEXT))
+		return false
+	if net != null:
+		return _instant(slot_enhance.bind(hero_id, slot, times), "/v1/slot/enhance", {"hero_id": hero_id, "slot": slot, "times": times},
+			func(): return EQUIP_TEXT.get(net.last_error, EQUIP_FAIL_TEXT), true, "slot_enhance")
+	var c := slot_enhance_cost(hero_id, slot, times)
+	stones -= int(c.stones)
+	gold_tenths -= int(c.gold) * 10
+	var lv: Dictionary = slot_levels.get(hero_id, {}).duplicate()
+	lv[slot] = slot_level(hero_id, slot) + times
+	slot_levels[hero_id] = lv
+	save()
+	changed.emit()
+	items_changed.emit()
+	roster_changed.emit()  # 영웅 능력치가 바뀐다
+	slot_enhanced.emit(hero_id, slot, lv[slot])
+	return true
 
 
 static func _unique(a: Array) -> Array:
@@ -4613,7 +4735,11 @@ func _shape18_ok(p: Dictionary) -> bool:
 
 
 func _apply_server18(p: Dictionary) -> void:
-	var before := [dungeons.duplicate(true), bag.duplicate(true), equipment.duplicate(true)]
+	var before := [dungeons.duplicate(true), bag.duplicate(true), equipment.duplicate(true), slot_levels.duplicate(true)]
+	if _num(p.get("stones")):
+		stones = maxi(0, int(p.stones))
+	if p.get("slot_levels") is Dictionary:
+		slot_levels = _slot_level_dict(p.slot_levels)
 	if p.get("dungeons") is Dictionary:
 		dungeons = _dungeon_dict(p.dungeons, dungeons)
 		for k in _key_predicts:  # 응답 전인 상점 입장권 구매
@@ -4627,8 +4753,27 @@ func _apply_server18(p: Dictionary) -> void:
 		dungeons_changed.emit()
 	if bag != before[1] or equipment != before[2]:
 		items_changed.emit()
-	if equipment != before[2]:
-		roster_changed.emit()  # 장비가 바뀌면 영웅 능력치가 바뀐다
+	if equipment != before[2] or slot_levels != before[3]:
+		roster_changed.emit()  # 장비·부위 강화가 바뀌면 영웅 능력치가 바뀐다
+	if slot_levels != before[3]:
+		items_changed.emit()
+
+
+## 부위 강화 레벨 {영웅: {부위: 1..SLOT_ENH_MAX}} — 모르는 부위·0 이하·숫자 아님은 버린다(서버 rules.ts cleanSlotLevels).
+static func _slot_level_dict(v) -> Dictionary:
+	var out := {}
+	if not v is Dictionary:
+		return out
+	for h in v:
+		if not (h is String and v[h] is Dictionary):
+			continue
+		var lv := {}
+		for s in v[h]:
+			if s in GameData.EQUIP_SLOTS and _num(v[h][s]) and int(v[h][s]) > 0:
+				lv[s] = mini(int(v[h][s]), GameData.SLOT_ENH_MAX)
+		if not lv.is_empty():
+			out[h] = lv
+	return out
 
 
 # --- 저장 ---
@@ -4650,6 +4795,7 @@ func save() -> void:
 	f.store_string(JSON.stringify({"version": SAVE_VERSION, "gold_tenths": gold_tenths, "res": res, "last_collect": last_collect, "levels": levels,
 		"build": null if build.is_empty() else build, "heroes": hs, "deploy": deploy, "soldiers": soldiers, "soldier_deploy": soldier_deployed,
 		"training": train_queues, "upgrades": upgrades, "dungeons": dungeons, "items": bag, "equipment": equipment, "next_item_id": next_item_id,
+		"stones": stones, "slot_levels": slot_levels,
 		"diamonds": diamonds, "dia_tickets": dia_tickets, "pouches": pouches,
 		"build2": null if build2.is_empty() else build2, "builder2_until": builder2_until, "speedups": speedups, "shop": shop, "iap": iap, "unbuilt": unbuilt.keys(), "layout": _layout_save(), "gacha": {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "dia_pity": gacha_dia_pity, "dia_ur_pity": gacha_dia_ur_pity},
 		"research": {"levels": research_levels, "current": null if research_current.is_empty() else research_current},
@@ -4815,6 +4961,8 @@ func _apply(data) -> bool:
 	bag = v10.items
 	equipment = v10.equipment
 	next_item_id = v10.next_item_id
+	stones = maxi(0, int(data.get("stones", 0))) if _num(data.get("stones", 0)) else 0  # 강화석(없으면 0)
+	slot_levels = _slot_level_dict(data.get("slot_levels"))  # 부위 강화(없으면 {})
 	diamonds = v11.diamonds
 	gacha_gold_level = v11.gold_level
 	gacha_gold_pulls = v11.gold_pulls
