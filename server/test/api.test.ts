@@ -124,6 +124,7 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
         equip: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: 100000, last_reset: 1789916400, next_reset: 1790002800 },
         ticket: { keys: 3, key_cap: 3, key_daily: 3, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800,
           helpers, helpers_used: [] }, // 모집권 던전
+        stone: { keys: 2, key_cap: 3, key_daily: 2, best_level: 0, extra_today: 0, extra_cost: null, last_reset: 1789916400, next_reset: 1790002800 }, // 강화석 던전(2026-10-29)
       },
       items: [], equipment: {},
       diamonds: 0, dia_tickets: 0, gacha: { gold_level: 1, gold_pulls: 0, gold_next: 40, dia_pity: 0, dia_ur_pity: 0 }, // 개정 23
@@ -467,10 +468,11 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.equal(g.config.keep_slot_tiers, '1:4|9:8|22:12')
   assert.equal(g.config.hero_slots, undefined) // 개정 12: 성채 단계 표로 바뀌었다
   assert.equal(g.config.kill_rate_cap, '5')
-  assert.equal(Object.keys(g.config).length, 132) // 2026-10-29 장비 추가 도전 단계 배율 +1(equip_extra_gold_mult). 2026-10-29 태생 UR +4(gacha_dia_ur·gacha_dia_ur_pity·ur_fuse_shards·levelup_gold_UR). 2026-10-18 병사 공격 단계 배율 +1(soldier_atk_tier_mult). 2026-10-13 새 건물 +13(res_copy_tiers·창고·금광·대장간·길드 회관·망루). 영웅 최대 레벨 목록 +1(hero_max_levels, 2026-10-13). 라오킹식 연구소 게이트 +2(research_lab_per_level·research_lab_cap). 무료 즉시 완료 +1(free_finish_sec). 공터 첫 건설 +1(lot_build_sec). 모집권 던전 +9(ticket_*). 퀘스트 +3(tutorial_train_sec·quest_repeat_min_sec·tutorial_new_players). 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
+  assert.equal(Object.keys(g.config).length, 140) // 2026-10-29 강화석 던전 +8(stone_*). 2026-10-29 장비 추가 도전 단계 배율 +1(equip_extra_gold_mult). 2026-10-29 태생 UR +4(gacha_dia_ur·gacha_dia_ur_pity·ur_fuse_shards·levelup_gold_UR). 2026-10-18 병사 공격 단계 배율 +1(soldier_atk_tier_mult). 2026-10-13 새 건물 +13(res_copy_tiers·창고·금광·대장간·길드 회관·망루). 영웅 최대 레벨 목록 +1(hero_max_levels, 2026-10-13). 라오킹식 연구소 게이트 +2(research_lab_per_level·research_lab_cap). 무료 즉시 완료 +1(free_finish_sec). 공터 첫 건설 +1(lot_build_sec). 모집권 던전 +9(ticket_*). 퀘스트 +3(tutorial_train_sec·quest_repeat_min_sec·tutorial_new_players). 근접 레벨 계수 +1(hero_level_stat_melee). 오프라인 처치 골드 +1(offline_gold_mult). 개정 24: 연구 +5, lab_atk_per_level −1. 개정 12: 레벨업 설정 6개(식량 삭제), hero_slots −1, 건물 설정 +9. 개정 13: 병사 +5, 막사 HP −1. 개정 14: FEVER +3. 개정 15: 승급 +3, 별 −3. 개정 16: 훈련 +5. 개정 19: 훈련 시간·티어 +3, 생산 −2. 무리 스폰 +1(spawn_group). 개정 18: 던전 +20. 개정 22: 라운드 +4. 개정 23: 모집 +13 −4
   assert.deepEqual(g.dungeons.map((d: any) => [d.id, d.type, d.kind, d.count, d.delay]), [['gold_goblin_a', 'gold', 'goblin', 10, 0], ['gold_goblin_b', 'gold', 'goblin', 5, 5],
     ['gold_king', 'gold', 'goblin_king', 1, 5], ['equip_death_knight', 'equip', 'death_knight', 1, 0],
-    ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0]]) // 개정 18: 파일 순서
+    ['ticket_golem', 'ticket', 'rock_golem', 1, 0], ['ticket_golemite', 'ticket', 'golemite', 2, 0],
+      ['stone_ratman_a', 'stone', 'ratman', 6, 0], ['stone_ratman_b', 'stone', 'ratman', 4, 6], ['stone_ogre', 'stone', 'ogre_warlord', 1, 6]]) // 개정 18: 파일 순서
   assert.deepEqual(g.equip_drop[2], { min_level: 10, N: 20, R: 35, SR: 28, SSR: 13, UR: 3.5, LR: 0.5, MR: 0 })
   assert.equal(g.config.train_cost_cavalry, 'food:2000|stone:1000')
   assert.deepEqual(g.buildings.map((b: any) => b.id), ['keep', 'gate', 'barracks', 'tavern', 'lab', 'houses', 'lumber', 'quarry', 'farm', 'archery', 'stable',

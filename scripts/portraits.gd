@@ -8,6 +8,8 @@ extends Node
 ## portrait_ready(key)(Node에 이미 ready 시그널이 있어 이 이름이다). 큐는 한 프레임에 하나: 모델을 띄우고 대기 자세를 곧바로 적용
 ## (AnimationPlayer.advance(0) — 안 하면 이 프레임은 T자 기본 자세) + UPDATE_ONCE → 그 프레임 RenderingServer.frame_post_draw에서
 ## get_texture().get_image()로 읽는다.
+## "big:<영웅 id>" = "hero:"와 같은 전신을 BIG_SIZE로 찍은 큰 스냅샷 — UR 소환 연출이 피규어를 화면 절반 높이로 그린다.
+## 모든 렌더는 MSAA 4x(가장자리 계단 없이).
 ## 살아 있는 미리보기(상세 큰 카드): set_live(key) 동안 같은 SubViewport를 LIVE_SIZE로 키워 매 프레임 그리고(UPDATE_ALWAYS, 대기 애니메이션 ×
 ## LIVE_ANIM_SPEED) 큐는 쉰다.
 ## turn(px)로 모델을 돌린다. 카드는 live_texture()(ViewportTexture)를 직접 그린다 — SubViewportContainer도 안에서 같은 일을 하므로
@@ -25,7 +27,8 @@ const FACE_ART_ZOOM := 1.9  # 얼굴 칸 일러스트: 그림 폭의 약 절반�
 const FACE_ART_AT := 0.42
 
 const SIZE := 256
-const LIVE_SIZE := 512  # 실시간 미리보기 해상도 — 상세 큰 카드가 피규어를 400px 안팎으로 그린다(개정 15). 스냅샷은 SIZE
+const LIVE_SIZE := 1024  # 실시간 미리보기 해상도 — 상세 큰 카드가 피규어 칸을 ~580px(폰 화면에선 870~1160화소)로 그린다. 512는 두 배로 늘어 흐렸다(2026-10-29). 스냅샷은 SIZE
+const BIG_SIZE := 1024  # "big:" 스냅샷 — 소환 연출 창(~750px)에 256을 늘려 그리면 흐리다
 const VIEW_SIZE := 3.5  # 직교 카메라 세로 폭(m): 키 2.2(도적)~3.0m(마법사 모자) 모델과 앞으로 뻗은 무기가 여유 있게 들어간다
 const LOOK_AT := Vector3(0, 1.3, 0)
 const CAM_ROT := Vector3(-18, -30, 0)  # 살짝 위·왼쪽에서 본 3/4 시점(모델 정면 +Z). 직교 — 로우폴리 셰이더 법선 규약과 같다
@@ -61,6 +64,7 @@ func _init() -> void:
 	_vp = SubViewport.new()
 	_vp.size = Vector2i(SIZE, SIZE)
 	_vp.transparent_bg = true
+	_vp.msaa_3d = Viewport.MSAA_4X  # 상세·소환 연출처럼 크게 그릴 때 가장자리 계단이 보인다
 	_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	var env := Environment.new()  # main._build_environment와 같은 주변광
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -190,7 +194,7 @@ static func feet_y() -> float:
 
 
 static func _hero_of(key: String) -> Dictionary:
-	for p in ["hero:", "bust:"]:
+	for p in ["hero:", "bust:", "big:"]:
 		if key.begins_with(p):
 			return GameData.hero(key.trim_prefix(p))
 	return {}
@@ -235,7 +239,7 @@ func set_live(key: String) -> void:
 	live_key = key
 	yaw = 0.0
 	_pivot.rotation_degrees.y = 0.0
-	_vp.size = Vector2i(LIVE_SIZE, LIVE_SIZE) if key != "" else Vector2i(SIZE, SIZE)  # 큐 스냅샷은 미리보기가 쉴 때만 — 늘 SIZE
+	_vp.size = Vector2i(LIVE_SIZE, LIVE_SIZE) if key != "" else Vector2i(SIZE, SIZE)  # 큐 스냅샷은 미리보기가 쉴 때만 — 키마다 크기를 다시 정한다(_process)
 	if not can_render:
 		return
 	if _pending != "":
@@ -260,6 +264,7 @@ func _process(_delta: float) -> void:
 	if live_key != "" or _pending != "" or queue.is_empty():
 		return
 	_pending = queue.pop_front()
+	_vp.size = Vector2i(BIG_SIZE, BIG_SIZE) if _pending.begins_with("big:") else Vector2i(SIZE, SIZE)
 	_show(_pending)
 	_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 

@@ -599,7 +599,15 @@ func _offline_confirm() -> void:
 			var all: Array = GameData.heroes()
 			var def: Dictionary = all[_rng.randi() % all.size()]
 			var mine: Dictionary = seats[0].hero
-			s.hero = {"hero": def.id, "level": int(mine.level), "promotion": int(mine.promotion), "hp": float(mine.hp), "atk": float(mine.atk)}
+			# AI 성주는 자기 영웅 직업의 체력·공격(내 영웅과 같은 레벨·승급, 내 강화 배율) — 예전엔 내 영웅 값을 그대로 따라 해서
+			# 마법사를 고르면 4명 모두 체력이 낮았다(사용자 2026-10-29 B 선택). 서버 makeBot(fitHero)과 같은 생각.
+			var lv := int(mine.level)
+			var pr := int(mine.promotion)
+			var base_me := GameData.hero_stats(GameData.hero(str(mine.hero)), lv, pr)
+			var base_bot := GameData.hero_stats(def, lv, pr)
+			var hp_k: float = float(mine.hp) / maxf(1.0, float(base_me.get("hp", 1.0))) if not base_me.is_empty() else 1.0
+			var atk_k: float = float(mine.atk) / maxf(0.1, float(base_me.get("atk", 1.0))) if not base_me.is_empty() else 1.0
+			s.hero = {"hero": def.id, "level": lv, "promotion": pr, "hp": roundf(float(base_bot.hp) * hp_k), "atk": snappedf(float(base_bot.atk) * atk_k, 0.1)}
 		else:
 			s.soldiers = seats[0].soldiers.duplicate(true)
 		seats.append(s)

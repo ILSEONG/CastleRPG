@@ -2901,6 +2901,8 @@ func dungeon_reward(type: String, level: int) -> Dictionary:
 		return {"gold": GameData.gold_reward(level)}
 	if type == "ticket":
 		return {"tickets": GameData.ticket_reward(level)}
+	if type == "stone":
+		return {"stones": GameData.stone_reward(level)}
 	return {"count": int(GameData.config_num("equip_drop_count")), "weights": GameData.drop_weights(level)}
 
 
@@ -3097,6 +3099,10 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 			var gain := GameData.gold_reward(int(run.level))
 			gold_tenths += gain * 10
 			res.rewards = {"gold_tenths": gain * 10}
+		elif type == "stone":
+			var ns := GameData.stone_reward(int(run.level))
+			stones += ns
+			res.rewards = {"stones": ns}
 		elif type == "ticket":
 			var n := GameData.ticket_reward(int(run.level))
 			dia_tickets += n

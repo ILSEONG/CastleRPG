@@ -477,7 +477,7 @@ static func reward_text(r: Dictionary) -> String:
 		for k in [["wood", Lang.t("missions.reward_text_4")], ["stone", Lang.t("missions.reward_text_5")], ["food", Lang.t("missions.reward_text_6")]]:
 			if r.has(k[0]):
 				parts.append("%s %s" % [k[1], _commas(int(r[k[0]]))])
-	for k in [["keys_gold", Lang.t("missions.reward_text_7")], ["keys_equip", Lang.t("missions.reward_text_8")], ["keys_ticket", Lang.t("missions.reward_text_9")]]:
+	for k in [["keys_gold", Lang.t("missions.reward_text_7")], ["keys_equip", Lang.t("missions.reward_text_8")], ["keys_ticket", Lang.t("missions.reward_text_9")], ["keys_stone", Lang.t("missions.reward_text_12")]]:
 		if r.has(k[0]):
 			parts.append("%s %d" % [k[1], int(r[k[0]])])
 	if r.has("tickets"):

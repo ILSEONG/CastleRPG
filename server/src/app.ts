@@ -313,6 +313,12 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.att
     where l.accepted and (l.a = s.player_id or l.b = s.player_id)), '[]'::json) as friends
   from player_state s where s.player_id = $1`
 
+// 마이그레이션·시드 전에 라이브 DB에 아직 없을 수 있는 새 설정 값(063 강화석 던전) — DB 값이 있으면 그것이 이긴다
+const CONFIG_FALLBACK: Record<string, string> = {
+  stone_key_daily: '2', stone_key_cap: '3', stone_dg_party: '5', stone_dg_min_sec: '20',
+  stone_dg_hp_growth: '1.15', stone_dg_atk_growth: '1.12', stone_reward_base: '30', stone_reward_add: '3',
+}
+
 // 개정 18: 빠진 던전 행을 그날 지급분으로 채운다($2 = 오늘 리셋 시각, $3 = [{type, keys}]).
 const ENSURE_DUNGEONS_SQL = `insert into player_dungeons (player_id, type, best_level, keys, extra_today, last_reset)
   select $1, x.type, 0, x.keys, 0, to_timestamp($2::float8) from jsonb_to_recordset($3::jsonb) as x(type text, keys integer)
@@ -581,7 +587,8 @@ export function createApp(opts: AppOptions) {
     const [r] = await query(GAME_SQL)
     return {
       monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
-      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades), config: json(r.config),
+      resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades),
+      config: { ...CONFIG_FALLBACK, ...(json(r.config) as Record<string, string>) },
       dungeons: json(r.dungeons), equip_drop: json(r.equip_drop), research: json(r.research), quests: json(r.quests),
     }
   }
@@ -641,6 +648,7 @@ export function createApp(opts: AppOptions) {
   async function readPlayer(id: string, game: Game, now: number): Promise<Player> {
     let ensured = false
     let ensuredDungeons = false
+    const unsaved: Player['dungeons'] = {} // 새 던전 종류의 마이그레이션(제약)이 아직 DB에 없을 때 — 이번 응답에만 새 상태로 보여 준다
     for (let i = 0; i < MAX_ATTEMPTS + 3; i++) { // 행 채우기(자원·건물, 던전)·건설 완료·연구 완료가 한 번씩 다시 읽게 한다
       const [r] = await query(PLAYER_SQL, [id, now])
       if (!r) throw new ApiError(401, 'unknown_player', 'player not found; log in again')
@@ -666,12 +674,26 @@ export function createApp(opts: AppOptions) {
         dungeons[k] = { best_level: Number(v.best_level), keys: Number(v.keys), extra_today: Number(v.extra_today), last_reset: Number(v.last_reset) }
         if (k === 'ticket') dungeons[k].helpers_used = Array.isArray(json(v.helpers_used)) ? (json(v.helpers_used) as unknown[]).map(String) : []
       }
+      for (const [t, st] of Object.entries(unsaved)) if (!Object.hasOwn(dungeons, t)) dungeons[t] = { ...st }
       const lacking = R.DUNGEON_TYPES.filter((t) => !Object.hasOwn(dungeons, t))
       if (lacking.length) {
         if (ensuredDungeons) throw new ApiError(500, 'internal', 'dungeon rows missing')
         ensuredDungeons = true
         const fresh = lacking.map((t) => R.freshDungeon(t, now, game.config))
-        await query(ENSURE_DUNGEONS_SQL, [id, fresh[0].last_reset, JSON.stringify(lacking.map((t, j) => ({ type: t, keys: fresh[j].keys })))])
+        const rows = (ts: string[]) => JSON.stringify(ts.map((t) => ({ type: t, keys: fresh[lacking.indexOf(t)].keys })))
+        try {
+          await query(ENSURE_DUNGEONS_SQL, [id, fresh[0].last_reset, rows(lacking)])
+        } catch (e) {
+          if ((e as { code?: string }).code !== '23514') throw e // check 위반만(마이그레이션 전 새 종류) — 종류마다 따로 넣어 본다
+          for (const t of lacking) {
+            try {
+              await query(ENSURE_DUNGEONS_SQL, [id, fresh[0].last_reset, rows([t])])
+            } catch (e2) {
+              if ((e2 as { code?: string }).code !== '23514') throw e2
+              unsaved[t] = fresh[lacking.indexOf(t)]
+            }
+          }
+        }
         continue
       }
       const heroes: Player['heroes'] = {}
@@ -3213,9 +3235,13 @@ export function createApp(opts: AppOptions) {
       let items: R.EquipItem[] = []
       let gain = 0
       let tickets = 0
+      let stones = 0
       if (type === 'gold') {
         gain = R.goldReward(g.config, run.level)
         rewards.gold_tenths = gain * 10
+      } else if (type === 'stone') {
+        stones = R.stoneReward(g.config, run.level)
+        rewards.stones = stones
       } else if (type === 'ticket') {
         tickets = R.ticketReward(g.config, run.level)
         rewards.tickets = tickets
@@ -3227,11 +3253,11 @@ export function createApp(opts: AppOptions) {
       }
       return {
         change: {
-          goldTenths: (gain - cost) * 10, diaTickets: tickets, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
+          goldTenths: (gain - cost) * 10, diaTickets: tickets, stones, dungeon: { type, state: next }, items, runClose: { run_id: runId, result: { win: true, rewards } },
           log: {
             kind: 'dungeon_clear', detail: {
               run_id: runId, type, level: run.level, elapsed, real, party: run.party, paid: cost ? { gold: cost } : { key: 1 }, keys_after: next.keys,
-              best_level: next.best_level, gold_tenths: gain * 10, items, ...(type === 'ticket' ? { tickets, helper: run.helper } : {}),
+              best_level: next.best_level, gold_tenths: gain * 10, items, ...(type === 'ticket' ? { tickets, helper: run.helper } : {}), ...(type === 'stone' ? { stones } : {}),
             },
           },
         },
@@ -3612,11 +3638,15 @@ export function createApp(opts: AppOptions) {
     let rows = (await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
       order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)]))
     const system = rows.filter((r) => r.owner == null).length
+    // 이름(무작위)이 이미 있는 길드와 겹치면 다른 seed로 다시 — 겹친 채 건너뛰면 추천이 RECOMMEND_N보다 적게 나왔다
     for (let k = system; k < G.RECOMMEND_N; k++) {
-      const seed = Math.floor(random() * 2 ** 31)
-      const sg = G.systemGuild(seed, x.now)
-      await query(`insert into guilds (name, emblem, notice, owner, seed, created_at, virtual_n) values ($1, $2, $3, null, $4, to_timestamp($5::float8), $6)
-        on conflict (name) do nothing`, [sg.name, sg.emblem, sg.notice, seed, sg.created_at, sg.virtual_n])
+      for (let tries = 0; tries < 20; tries++) {
+        const seed = Math.floor(random() * 2 ** 31)
+        const sg = G.systemGuild(seed, x.now)
+        const ins = await query(`insert into guilds (name, emblem, notice, owner, seed, created_at, virtual_n) values ($1, $2, $3, null, $4, to_timestamp($5::float8), $6)
+          on conflict (name) do nothing returning 1`, [sg.name, sg.emblem, sg.notice, seed, sg.created_at, sg.virtual_n])
+        if (ins.length) break
+      }
     }
     if (system < G.RECOMMEND_N) rows = await query(`${open} where (select count(*) from player_guild m where m.guild_id = g.id) < ${G.MEMBERS_MAX}
       order by (owner is null), md5(g.id::text || $1) limit ${G.RECOMMEND_N * 2}`, [String(x.mine.day)])

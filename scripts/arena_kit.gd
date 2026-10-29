@@ -126,6 +126,8 @@ const TIMBER := Color(0.46, 0.31, 0.18)
 const SLEEPER := Color(0.36, 0.25, 0.16)
 const RAIL := Color(0.44, 0.44, 0.47)
 const MINE_DARK := Color(0.05, 0.04, 0.03)
+const CRYSTAL_FLOOR := Color(0.30, 0.33, 0.39)  # 수정 광산 바닥(강화석 던전)
+const CRYSTAL_GLINT := Color(0.62, 0.92, 1.0)
 
 static var _meshes := {}  # 부품·불꽃·연기·상자·빛기둥 메시(id마다 하나)
 static var _mats := {}
@@ -306,6 +308,55 @@ static func gold_mine() -> Dictionary:
 		"omni": [[hw * Vector3(MINE_TRACKS[0], 3.0, -MINE_BACK + 2.5), Color(1.0, 0.72, 0.30), 1.4, 11.0],
 			[hw * Vector3(-MINE_WALL + 1.5, 2.6, 4.0), Color(1.0, 0.72, 0.30), 0.9, 9.0],
 			[hw * Vector3(MINE_WALL - 1.5, 2.6, -6.0), Color(1.0, 0.72, 0.30), 0.9, 9.0]]}}
+
+
+## 강화석 던전 무대(2026-10-29): 골드 광산과 같은 협곡·선로·광차를 수정 광산으로 다시 칠한다 — 금빛(금 결정·더미·금화)은 푸른 수정,
+## 흙·나무 갈색은 푸른 잿빛 돌, 갱도 등불 빛과 반짝이는 차가운 하늘색. 자리(영웅·적·보스)는 골드 광산과 같다.
+static func crystal_mine() -> Dictionary:
+	var st := gold_mine()
+	var root: Node3D = st.root
+	root.name = "CrystalMine"
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh is ArrayMesh:
+			mi.mesh = _crystal_recolor(mi.mesh)
+		elif mi.material_override is ShaderMaterial and mi.mesh is PlaneMesh:  # 바닥
+			mi.material_override.set_shader_parameter("grass_a", CRYSTAL_FLOOR)
+			mi.material_override.set_shader_parameter("grass_b", CRYSTAL_FLOOR.darkened(0.05))
+	for p in root.find_children("*", "CPUParticles3D", true, false):
+		p.color = CRYSTAL_GLINT
+	var light: Dictionary = st.light
+	light.background = Color(0.42, 0.50, 0.60)
+	light.ambient = Color(0.70, 0.76, 0.86)
+	light.sun_color = Color(0.86, 0.92, 1.0)
+	for o in light.omni:
+		o[1] = Color(0.45, 0.82, 1.0)
+	return st
+
+
+## 수정 광산 색 바꾸기: 금·주황 계열(채도 높음) → 푸른 수정(밝기 그대로), 갈색·흙(채도 낮음) → 푸른 잿빛 돌. 회색·검정은 그대로.
+static func _crystal_recolor(mesh: ArrayMesh) -> ArrayMesh:
+	var out := ArrayMesh.new()
+	for i in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(i)
+		var cols = arrays[Mesh.ARRAY_COLOR]
+		if cols is PackedColorArray:
+			for j in cols.size():
+				cols[j] = crystal_color(cols[j])
+			arrays[Mesh.ARRAY_COLOR] = cols
+		out.add_surface_from_arrays(mesh.surface_get_primitive_type(i), arrays)
+		out.surface_set_material(i, mesh.surface_get_material(i))
+	return out
+
+
+static func crystal_color(c: Color) -> Color:
+	if c.s < 0.12:
+		return c
+	var h := c.h
+	if c.s > 0.5 and h > 0.05 and h < 0.18:  # 금빛 → 수정
+		return Color.from_hsv(0.53 + (h - 0.11) * 0.6, minf(1.0, c.s * 0.85), minf(1.0, c.v * 1.05), c.a)
+	if h < 0.14 or h > 0.95:  # 흙·나무 갈색 → 푸른 잿빛
+		return Color.from_hsv(0.60, c.s * 0.4, c.v * 0.78, c.a)
+	return c
 
 
 ## 바닥: 짙은 흙·금가루 얼룩(납작), 자갈, 금 알갱이(벽 쪽과 선로 둘레에 많이), 흩어진 널빤지. 싸움 자리 안은 0.5 m 아래.

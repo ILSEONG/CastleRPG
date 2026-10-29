@@ -31,8 +31,8 @@ const TabBarScript := preload("res://scripts/tab_bar.gd")
 const PvpViewScript := preload("res://scripts/pvp_view.gd")
 const PartyViewScript := preload("res://scripts/party_view.gd")
 
-const TYPES := ["gold", "equip", "ticket"]
-static var NAMES := {"gold": Lang.t("dungeon_panel.names.gold"), "equip": Lang.t("dungeon_panel.names.equip"), "ticket": Lang.t("dungeon_panel.names.ticket")}
+const TYPES := ["gold", "equip", "ticket", "stone"]
+static var NAMES := {"gold": Lang.t("dungeon_panel.names.gold"), "equip": Lang.t("dungeon_panel.names.equip"), "ticket": Lang.t("dungeon_panel.names.ticket"), "stone": Lang.t("dungeon_panel.names.stone")}
 const HELPER_SIZE := Vector2(136, 184)
 const BAND_H := 180.0  # 720 화면 띠 628×180 = DungeonSnaps.SIZE의 반(다른 비율이면 스냅샷을 잘라 채운다)
 const BAND_CHAMFER := 12.0
@@ -400,6 +400,8 @@ func _refresh() -> void:
 			c.reward.text = Lang.t("dungeon_panel.refresh_2") % UiKit.commas(rw.gold)
 		elif t == "ticket":
 			c.reward.text = Lang.t("dungeon_panel.refresh_3") % rw.tickets
+		elif t == "stone":
+			c.reward.text = Lang.t("dungeon_panel.refresh_7") % rw.stones
 		else:
 			c.reward.text = Lang.t("dungeon_panel.refresh_4") % [rw.count, odds_text(rw.weights)]
 			c.gold.text = UiKit.commas(Economy.gold)

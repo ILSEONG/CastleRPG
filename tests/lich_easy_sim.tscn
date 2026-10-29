@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/lich_easy_sim.gd" id="1"]
+
+[node name="ArenaRoom" type="Node"]
+script = ExtResource("1")

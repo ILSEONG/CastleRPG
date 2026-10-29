@@ -649,7 +649,7 @@ export function upgradeCost(d: UpgradeDef, level: number, count: number): number
 
 // --- 던전·장비 (개정 18 §2~§5) — 앱 GameData(던전·장비 블록)와 같은 식 ---
 
-export const DUNGEON_TYPES = ['gold', 'equip', 'ticket'] // ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 영웅 1, 보상 다이아 모집권
+export const DUNGEON_TYPES = ['gold', 'equip', 'ticket', 'stone'] // ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 영웅 1, 보상 다이아 모집권. stone = 강화석 던전(2026-10-29): 영웅 5, 보상 강화석
 export const EQUIP_GRADES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'] // 낮은 등급부터(MR = 신화, 2026-10-29). equip_drop.csv 가중치 열 = 이 이름
 // 장비 상자(2026-10-29 길드 랭킹 보상, 기본값 Claude): 상자 하나 = 장비 1개(부위 무작위, rollDrops와 같은 굴림). 등급 확률(%) = 아래 가중치.
 // 보상 키 equip_box_<id>(우편·쿠폰 숫자 보상 — live_ops.ts NUMERIC). 앱 live_ops.gd BOX_NAMES와 같은 id.
@@ -780,6 +780,9 @@ export function dungeonGrowth(config: Config, type: string) {
 
 // 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
 // (사용자 2026-10-29 절반으로: 5장, 5단계마다 1장씩 — 1~5단계 5, 6~10단계 6 …. 예전 10장·2장씩). ticket_reward_add가 없으면(시드 전) 1.
+// 강화석 던전 보상(강화석 개수) = stone_reward_base + (n − 1) × stone_reward_add(2026-10-29 사용자 "강화석 던전도 만들어줘", 기본값 Claude: 30 + 3씩)
+export const stoneReward = (config: Config, level: number) =>
+  cfgNum(config, 'stone_reward_base') + (Math.max(1, level) - 1) * cfgNum(config, 'stone_reward_add')
 export const ticketReward = (config: Config, level: number) =>
   cfgNum(config, 'ticket_reward_base') + Math.floor((level - 1) / Math.max(1, cfgNum(config, 'ticket_reward_step'))) * (config.ticket_reward_add == null ? 1 : cfgNum(config, 'ticket_reward_add'))
 

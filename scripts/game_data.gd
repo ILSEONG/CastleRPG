@@ -20,7 +20,7 @@ const INT_COLS := ["waves", "wave_size"]  # 스테이지 연장 시 반올림하
 const EXTEND_ROWS := 12  # 표 너머 연장 기울기를 잴 마지막 행 수 — 3의 배수라 3스테이지마다 오르는 waves도 기울기 1/3 그대로
 const MIN_IDLE_INTERVAL := 0.5  # 연장해도 방치 스폰 간격이 0 이하로 가지 않게
 const MONSTER_COLS := ["hp", "atk", "speed", "range", "atk_interval", "aggro", "scale", "gold"]
-const BOSS_KINDS := ["epic_boss", "goblin_king", "death_knight", "rock_golem"]  # 보스 종류(성 + 던전) — monster.is_boss(거인 사냥 boss_slayer, 던전 보스 자리)
+const BOSS_KINDS := ["epic_boss", "goblin_king", "death_knight", "rock_golem", "ogre_warlord"]  # 보스 종류(성 + 던전) — monster.is_boss(거인 사냥 boss_slayer, 던전 보스 자리)
 const STAGE_COLS := ["hp_mult", "atk_mult", "gold_mult", "waves", "wave_size", "idle_interval"]
 const HERO_COLS := ["hp", "atk", "range", "atk_interval", "speed", "aggro"]
 const HERO_STR_COLS := ["id", "name", "title", "grade", "role", "archetype", "model", "gear", "color", "desc"]
@@ -94,7 +94,7 @@ const LEVELUP_GOLD_TAU := 45.0
 # --- 던전·장비(개정 18). 서버 rules.ts·seed.ts(던전·장비 블록)와 같은 규칙 ---
 const DUNGEONS_PATH := "res://data/dungeons.csv"
 const EQUIP_DROP_PATH := "res://data/equip_drop.csv"
-const DUNGEON_TYPES := ["gold", "equip", "ticket"]  # ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 1, 보상 다이아 모집권
+const DUNGEON_TYPES := ["gold", "equip", "ticket", "stone"]  # ticket = 모집권 던전(2026-10-06): 내 영웅 4 + 도우미 1, 보상 다이아 모집권
 const DUNGEON_STR_COLS := ["id", "type", "kind"]
 const DUNGEON_NUM_COLS := ["count", "delay", "hp", "atk", "speed", "range", "atk_interval", "aggro", "scale"]
 const DUNGEON_POSITIVE_COLS := ["hp", "speed", "range", "atk_interval", "scale"]  # 0보다 크다(delay·atk·aggro는 0 이상, count는 1 이상 정수)
@@ -140,10 +140,11 @@ const DUNGEON_NUM_KEYS := ["daily_reset_utc_hour", "gold_key_daily", "gold_key_c
 	"gold_dg_base", "gold_dg_mult", "gold_dg_growth", "equip_dg_hp_growth", "equip_dg_atk_growth", "gold_dg_party", "equip_dg_party",
 	"gold_dg_min_sec", "equip_dg_min_sec", "dungeon_time_limit", "equip_drop_count", "equip_weapon_p", "equip_bag_cap", "equip_sell_base",
 	"ticket_key_daily", "ticket_key_cap", "ticket_dg_party", "ticket_dg_min_sec", "ticket_dg_hp_growth", "ticket_dg_atk_growth", "ticket_reward_base",
-	"ticket_reward_step", "ticket_reward_add"]
+	"ticket_reward_step", "ticket_reward_add",
+	"stone_key_daily", "stone_key_cap", "stone_dg_party", "stone_dg_min_sec", "stone_dg_hp_growth", "stone_dg_atk_growth", "stone_reward_base", "stone_reward_add"]  # stone = 강화석 던전(2026-10-29)
 const DUNGEON_INT_KEYS := ["gold_key_daily", "gold_key_cap", "equip_key_daily", "equip_key_cap", "equip_extra_gold_base", "gold_dg_base", "equip_sell_base",
-	"gold_dg_min_sec", "equip_dg_min_sec", "ticket_key_daily", "ticket_key_cap", "ticket_dg_min_sec"]  # 0 이상 정수
-const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap", "ticket_dg_party", "ticket_reward_base", "ticket_reward_step", "ticket_reward_add"]  # 1 이상 정수
+	"gold_dg_min_sec", "equip_dg_min_sec", "ticket_key_daily", "ticket_key_cap", "ticket_dg_min_sec", "stone_key_daily", "stone_key_cap", "stone_dg_min_sec", "stone_reward_add"]  # 0 이상 정수
+const DUNGEON_INT1_KEYS := ["gold_dg_party", "equip_dg_party", "equip_drop_count", "equip_bag_cap", "ticket_dg_party", "ticket_reward_base", "ticket_reward_step", "ticket_reward_add", "stone_dg_party", "stone_reward_base"]  # 1 이상 정수
 const HELPER_COUNT := 3  # 모집권 던전 도우미 후보 수(서버 rules.HELPER_COUNT)
 const HELPER_FIT := 0.1  # 도우미 전투력이 기준 ±10% 안이면 "적당한 스펙"(서버 rules.HELPER_FIT)
 # --- 연구(개정 24). 서버 rules.ts·seed.ts(연구 블록)와 같은 규칙 ---
@@ -1011,9 +1012,14 @@ static func dungeon_growth(type: String) -> Dictionary:
 
 
 ## 모집권 던전 보상(다이아 모집권 장수) = ticket_reward_base + floor((n − 1) / ticket_reward_step) × ticket_reward_add
-## (10장, 5단계마다 2장씩). 서버 rules.ticketReward.
+## (5장, 5단계마다 1장씩 — 2026-10-29). 서버 rules.ticketReward.
 static func ticket_reward(level: int) -> int:
 	return int(config_num("ticket_reward_base")) + floori((level - 1) / maxf(1.0, config_num("ticket_reward_step"))) * int(config_num("ticket_reward_add"))
+
+
+## 강화석 던전 보상(강화석 개수) = stone_reward_base + (n − 1) × stone_reward_add(2026-10-29, 30 + 3씩). 서버 rules.stoneReward.
+static func stone_reward(level: int) -> int:
+	return int(config_num("stone_reward_base")) + (maxi(level, 1) - 1) * int(config_num("stone_reward_add"))
 
 
 ## FNV-1a 32비트(서버 rules.fnv32와 같다 — 도우미 순서 섞기).
