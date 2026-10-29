@@ -261,7 +261,7 @@ interface Change {
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
 interface GuildChange {
   row: { guild_id: string | null; joined_at: number | null; coins: number; mine: G.Mine; boss_seen: number; power: number } // player_guild 행 전체
-  add?: { guild_id: string; exp: number; dmg: number; week?: number } // 길드 누적에 더한다(week가 있으면 dmg를 그 주 길드 랭킹 점수에도)
+  add?: { guild_id: string; exp: number; dmg: number } // 길드 누적에 더한다
   log?: { guild_id: string; text: string }
   create?: { id: string; name: string; emblem: number; seed: number; virtual_n: number; notice: string }
   leave?: { guild_id: string; owner: boolean } // 길드장이 나가면 남은 실제 길드원 중 먼저 들어온 사람이 길드장, 아무도 없으면 직접 만든 길드는 지운다
@@ -1059,10 +1059,6 @@ export function createApp(opts: AppOptions) {
     if (gc.add && (gc.add.exp || gc.add.dmg)) {
       ctes.push(`ga as (update guilds set exp = exp + ${p(gc.add.exp)}::bigint, boss_damage = boss_damage + ${p(Math.round(gc.add.dmg))}::bigint
         where id = ${p(gc.add.guild_id)}::uuid and exists (select 1 from s) returning 1)`)
-      if (gc.add.week !== undefined && gc.add.dmg > 0) {
-        ctes.push(`gw as (insert into guild_week_damage (guild_id, week, dmg) select ${p(gc.add.guild_id)}::uuid, ${p(gc.add.week)}::int, ${p(Math.round(gc.add.dmg))}::bigint
-          from s on conflict (guild_id, week) do update set dmg = guild_week_damage.dmg + excluded.dmg returning 1)`)
-      }
     }
     if (gc.log) {
       ctes.push(`gl as (insert into guild_log (guild_id, at, text) select ${p(gc.log.guild_id)}::uuid, to_timestamp(${p(now)}::float8), ${p(gc.log.text)}
@@ -3752,7 +3748,8 @@ export function createApp(opts: AppOptions) {
     const b = await body(c)
     const runId = strField(b, 'run_id')
     const sent = intField(b, 'dmg', 0, 1e12)
-    return guildMutate(c, (x) => {
+    let week: { guild_id: string; week: number; dmg: number } | null = null
+    const res = await guildMutate(c, (x) => {
       const { g } = needGuild(x)
       const run = x.mine.boss_run
       if (!run || run.id !== runId) throw blocked('no_run', 'no such boss fight')
@@ -3765,11 +3762,20 @@ export function createApp(opts: AppOptions) {
       const coins = { n: x.pg.coins }
       grant(x, { coins: grade[2], gold: grade[3] }, ch, coins)
       const mine = { ...x.mine, boss_run: null, boss_best: Math.max(x.mine.boss_best, dmg), boss_total: x.mine.boss_total + dmg, contrib: x.mine.contrib + 10 }
-      ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg, week: Rk.weekOf(R.resetDay(x.now, x.hour)) },
+      week = { guild_id: g.id, week: Rk.weekOf(R.resetDay(x.now, x.hour)), dmg: Math.round(dmg) }
+      ch.guild = { row: rowOf(x, { coins: coins.n, mine }), add: { guild_id: g.id, exp: 0, dmg },
         log: { guild_id: g.id, text: txt('server.app.guild_boss_finish.text', { playerName: G.playerName(x.id), reached, dmg: dmg.toLocaleString('en-US') }) } }
       ch.events = { guild_boss: 1 }
       return { change: ch, result: { dmg, sent, grade: grade[0], coins: grade[2], gold: grade[3], level: reached, killed: reached - 1, total: mine.boss_total } }
     })
+    // 이 판 피해를 이번 주 길드 랭킹 점수에(판이 저장된 뒤 — run은 한 번만 끝나므로 두 번 더하지 않는다). 실패해도 전투 결과는 그대로 준다.
+    const w = week as { guild_id: string; week: number; dmg: number } | null
+    if (res.status === 200 && w && w.dmg > 0) {
+      await query(`insert into guild_week_damage (guild_id, week, dmg) values ($1, $2, $3)
+        on conflict (guild_id, week) do update set dmg = guild_week_damage.dmg + excluded.dmg`, [w.guild_id, w.week, w.dmg])
+        .catch((e) => console.error('guild week damage failed', e))
+    }
+    return res
   })
 
 

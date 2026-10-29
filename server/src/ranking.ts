@@ -133,7 +133,9 @@ export function rankingStore(query: Query, clock: () => number, loadGame: () => 
     if (board === 'guild') {
       const hour = R.cfgNum(game.config, 'daily_reset_utc_hour')
       const week = weekOf(R.resetDay(now, hour))
-      const v = { at: now, list: guildEntries(await query(GUILDS_SQL, [week]), now, hour, week) }
+      // 주간 표(059)가 아직 없는 DB(배포와 마이그레이션 사이)면 빈 목록 — 길드 랭킹만 비고 다른 보드·부팅은 그대로
+      const rows = await query(GUILDS_SQL, [week]).catch((e) => (console.error('guild ranking failed', e), [] as Row[]))
+      const v = { at: now, list: guildEntries(rows, now, hour, week) }
       cache.set(board, v)
       return v
     }
