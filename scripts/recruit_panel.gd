@@ -39,6 +39,7 @@ const REVEAL_ONE := 0.15  # 1회: 소환진이 걷힌 뒤 뒤집기까지(SR·SS
 const REVEAL_FIRST := 0.12  # 10회: 소환진이 걷힌 뒤 첫 카드
 const REVEAL_STEP := 0.07  # 10회: 카드 사이(R·SR 먼저 왼쪽 위부터, SSR은 맨 끝에 무지개빛을 모았다가 하나씩)
 const SSR_GAP := 0.6  # 10회: SSR 카드끼리 사이
+const TOP_GRADES := ["SSR", "UR"]  # 맨 끝에 하나씩 뒤집고 일러스트 화면을 띄우는 등급(이 순서로 — UR이 마지막)
 const ONE_SCALE := 1.5  # 1회 결과 카드는 이만큼 크게
 var gold_tab: Button
 var dia_tab: Button
@@ -394,7 +395,7 @@ func _on_gacha_done(results: Array) -> void:
 
 
 ## 결과 카드 1장(ONE_SCALE배 크게) 또는 10장(5 × 2) + [확인]. 보호 시간을 다시 건다. 먼저 화면 전체에 소환진(summon_stage — 최고 등급 빛 예고)이
-## 돌고, 걷히면 뒷면 카드가 차례로 뒤집힌다(_start_flips). SSR 카드가 펴지면 SSR 일러스트 화면. 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고,
+## 돌고, 걷히면 뒷면 카드가 차례로 뒤집힌다(_start_flips). SSR·UR 카드가 펴지면 일러스트 화면(UR은 더 크게 — summon_stage). 아무 카드나 누르면 남은 카드가 한꺼번에 뒤집히고,
 ## [건너뛰기]는 SSR 화면까지 건너뛴다. 자동 모집 중엔 소환진 없이 바로 뒤집는다.
 func _show_results(results: Array) -> void:
 	for h in _reveals:
@@ -427,17 +428,21 @@ func _show_results(results: Array) -> void:
 		_grid.add_child(holder)
 		_reveals.append(holder)
 		cards.append(card)
-	var stop := auto_running() and results.any(func(r): return r.grade == "SSR")
+	var stop := auto_running() and results.any(func(r): return r.grade in TOP_GRADES)
 	if stop:  # 안전: 자동 중 SSR이 나오면 멈추고 그 카드를 강조(반짝임은 카드가 이미 낸다)
 		_halted = true
 		Economy.notice.emit(SSR_TEXT)
 	for i in results.size():
-		cards[i].highlight = stop and results[i].grade == "SSR"
+		cards[i].highlight = stop and results[i].grade in TOP_GRADES
 	_auto_left = auto_delay
 	if fast:
 		stage.stop()
 	else:
-		var best := "SSR" if results.any(func(x): return x.grade == "SSR") else ("SR" if results.any(func(x): return x.grade == "SR") else "R")
+		var best := "R"
+		for g in ["UR", "SSR", "SR"]:
+			if results.any(func(x): return x.grade == g):
+				best = g
+				break
 		stage.play(best, results.size())
 	auto_box.visible = _cur == GOLD  # 자동 모집은 골드만
 	_pick_view.visible = false
@@ -453,18 +458,19 @@ func reveal_all() -> void:
 		h.reveal_now()
 
 
-## 소환진이 걷혔다: R·SR 카드는 왼쪽 위부터 REVEAL_STEP 간격, SSR 카드는 그 뒤에 무지개빛을 모았다가 하나씩(SSR_GAP).
+## 소환진이 걷혔다: R·SR 카드는 왼쪽 위부터 REVEAL_STEP 간격, SSR 카드는 그 뒤에 무지개빛을 모았다가 하나씩(SSR_GAP), UR은 맨 끝에.
 func _start_flips() -> void:
 	_arm_guard()  # 소환진이 걷힌 직후 연타가 밑의 [확인]·[재모집]을 누르지 않게
 	var at := REVEAL_ONE if _reveals.size() == 1 else REVEAL_FIRST
 	for h in _reveals:
-		if h.grade != "SSR":
+		if not h.grade in TOP_GRADES:
 			h.begin(at)
 			at += REVEAL_STEP
-	for h in _reveals:
-		if h.grade == "SSR":
-			h.begin(at + h.tease_sec())
-			at += h.tease_sec() + SSR_GAP
+	for g in TOP_GRADES:
+		for h in _reveals:
+			if h.grade == g:
+				h.begin(at + h.tease_sec())
+				at += h.tease_sec() + SSR_GAP
 
 
 ## [건너뛰기]: 카드를 모두 바로 열고 SSR 화면도 띄우지 않는다.
@@ -473,10 +479,10 @@ func _skip_all() -> void:
 	reveal_all()
 
 
-## 카드가 펴졌다: SSR이면 일러스트 화면(건너뛰기를 누르지 않았으면).
+## 카드가 펴졌다: SSR·UR이면 일러스트 화면(건너뛰기를 누르지 않았으면).
 func _on_card_revealed(_holder, r: Dictionary) -> void:
-	if r.grade == "SSR" and not _no_splash and visible:
-		stage.splash(String(r.hero_id), bool(r.get("new", false)))
+	if r.grade in TOP_GRADES and not _no_splash and visible:
+		stage.splash(String(r.hero_id), bool(r.get("new", false)), String(r.grade))
 
 
 func _show_pick() -> void:
