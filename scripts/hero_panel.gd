@@ -31,6 +31,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
+const FuseDialog := preload("res://scripts/fuse_dialog.gd")
 const EQUIP_PX := 64.0  # 장비 칸 한 변(2026-10-15 장신구 두 칸이 늘어 72 → 64)
 const DOT_R := 9.0  # 장비 칸 빨간 점 반지름(논리 px)
 const DOT_RED := Color(0.9, 0.18, 0.15)
@@ -75,6 +76,9 @@ var apply_button: Button
 var _auto_used := false  # [자동 배치]를 누른 뒤 아직 [적용] 전(가이드 미션)
 var auto_button: Button  # [자동 배치](Economy.auto_hero_deploy — 편집만, 적용은 [적용]). 편집이 이미 자동 배치와 같으면 비활성
 var sort_button: Button
+var fuse_button: Button  # [UR 합성](2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서 해야지"): SSR 조각 합성 창을 연다
+var fuse: Control  # SSR 조각 합성 창(fuse_dialog.gd)
+var recruit  # 모집 창(main이 넣는다): 합성 결과를 뒤집기 연출로 보여 준다
 var promote_all_button: Button  # [일괄 승급]
 var promote_all_confirm: Control  # 일괄 승급 확인 창(어두운 막 + 크림 창)
 var promote_all_list: VBoxContainer  # 확인 창의 영웅별 줄
@@ -165,7 +169,9 @@ func _build_list() -> void:
 	apply_button.pressed.connect(apply)
 	Tutorial.register_ui("hero:auto_deploy", auto_button, func(): return not auto_button.disabled)  # 가이드 화살표
 	Tutorial.register_ui("hero:apply", apply_button, func(): return not apply_button.disabled)
-	for b in [sort_button, promote_all_button, auto_button, apply_button]:
+	fuse_button = _button(Lang.t("hero_panel.fuse"), UiKit.GRADE_COLORS.UR.darkened(0.1), 26)
+	fuse_button.pressed.connect(open_fuse)
+	for b in [sort_button, fuse_button, promote_all_button, auto_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	var scroll := ScrollContainer.new()
@@ -181,6 +187,22 @@ func _build_list() -> void:
 	_hero_grid.add_theme_constant_override("v_separation", 12)
 	grid_center.add_child(_hero_grid)
 	_build_promote_all_confirm()
+	fuse = FuseDialog.new()
+	fuse.fused.connect(_on_fused)
+	add_child(fuse)
+
+
+## [UR 합성]: SSR 조각 합성 창(조각 10개 → 태생 UR 1명 무작위 — AFK 아레나·서머너즈 워처럼 영웅 화면에서 바로).
+func open_fuse() -> void:
+	fuse.open()
+
+
+## 합성 창 [합성]: 결과는 모집 창이 뒤집기 연출로 보여 주고, [확인]을 누르면 이 창으로 돌아온다.
+func _on_fused(picks: Dictionary) -> void:
+	if recruit != null:
+		recruit.fuse_from(picks, self)
+	else:
+		Economy.fuse_ur(picks)
 
 
 ## 일괄 승급 확인 창: 화면을 덮는 어두운 막(뒤 입력 차단) + 가운데 크림 창 — 제목, 영웅별 줄(스크롤), [승급]·[취소].

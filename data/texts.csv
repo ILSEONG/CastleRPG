@@ -1024,6 +1024,7 @@ hero_panel.build_list,영웅,,,,scripts/hero_panel.gd
 hero_panel.build_list_2,일괄 승급,,,,scripts/hero_panel.gd
 hero_panel.build_list_3,자동 배치,,,,scripts/hero_panel.gd
 hero_panel.build_list_4,적용,,,,scripts/hero_panel.gd
+hero_panel.fuse,UR 합성,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm,일괄 승급,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm_2,아래 영웅을 승급하시겠습니까?,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm_3,승급,,,,scripts/hero_panel.gd
@@ -2841,7 +2842,6 @@ fuse_dialog.ready_5,합성,,,,scripts/fuse_dialog.gd
 fuse_dialog.ready_6,닫기,,,,scripts/fuse_dialog.gd
 fuse_dialog.rebuild,%s  (조각 %d),,,,scripts/fuse_dialog.gd
 fuse_dialog.rebuild_2,넣은 조각 %d / %d,,,,scripts/fuse_dialog.gd
-recruit_panel.refresh_15,SSR 조각 합성 (%d개 → UR 1명),,,,scripts/recruit_panel.gd
 economy.fuse_ur,SSR 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd
 dungeon_hud.show_result.rec,클리어 시간 %s,,,,scripts/dungeon_hud.gd
 dungeon_hud.show_result_7, · 최고 단계 갱신!,,,,scripts/dungeon_hud.gd

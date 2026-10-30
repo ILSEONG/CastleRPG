@@ -24,7 +24,6 @@ const RecruitBanner := preload("res://scripts/recruit_banner.gd")
 const CardReveal := preload("res://scripts/card_reveal.gd")
 const SummonStage := preload("res://scripts/summon_stage.gd")
 const GachaOdds := preload("res://scripts/gacha_odds.gd")
-const FuseDialog := preload("res://scripts/fuse_dialog.gd")
 
 const DIALOG_W := 680
 const CARD_SIZE := Vector2(118, 180)
@@ -62,8 +61,7 @@ var dia_label: Label  # 다이아 보유
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
 var odds: Control  # 확률 안내 창
-var fuse_button: Button  # [SSR 조각 합성] — 다이아 탭(2026-10-29)
-var fuse: Control  # SSR 조각 합성 창(fuse_dialog.gd)
+var _back: Control  # 영웅 창 [UR 합성]에서 왔으면 그 창(결과 [확인] 뒤 다시 연다 — 2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서")
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
@@ -127,10 +125,6 @@ func _ready() -> void:
 	have.add_child(dia_label)
 	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·10연차 보장은 다이아 모집과 같다)
 	_dia_box.add_child(ticket_label)
-	fuse_button = _button("", UiKit.GRADE_COLORS.UR.darkened(0.1), 24)
-	fuse_button.focus_mode = Control.FOCUS_NONE
-	fuse_button.pressed.connect(func(): if not _waiting: fuse.open())
-	_dia_box.add_child(fuse_button)
 
 	var rates_row := HBoxContainer.new()
 	rates_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -196,9 +190,6 @@ func _ready() -> void:
 	_build_shop_ask()
 	odds = GachaOdds.new()
 	add_child(odds)
-	fuse = FuseDialog.new()
-	fuse.fused.connect(_on_fused)
-	add_child(fuse)
 	stage = SummonStage.new()  # 맨 위(확률 창·상점 확인 창 위)
 	stage.intro_done.connect(_start_flips)
 	stage.skip_all.connect(_skip_all)
@@ -390,7 +381,30 @@ func _recruit(count: int, cur := "") -> void:
 		_refresh()
 
 
-## SSR 조각 합성 창 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
+## 영웅 창의 SSR 조각 합성 창 [합성](back = 영웅 창): 영웅 창을 닫고 이 창에서 결과를 모집처럼 뒤집기 연출로 보여 준다.
+## 결과 [확인]을 누르면 이 창을 닫고 영웅 창으로 돌아간다(영웅 창이 이 창보다 위 층이라 겹쳐 보여 줄 수 없다).
+func fuse_from(picks: Dictionary, back: Control = null) -> void:
+	if _waiting or not Economy.fuse_ok(picks):
+		return
+	_back = back
+	if back != null and back.visible:
+		back.close()
+	if not visible:
+		open()
+	_on_fused(picks)
+	if not _waiting:  # 보내지 못했다(조각 부족 등) — 영웅 창으로 되돌아간다
+		_go_back()
+
+
+func _go_back() -> void:
+	var b := _back
+	_back = null
+	if b != null and is_instance_valid(b):
+		close()
+		b.open()
+
+
+## SSR 조각 합성 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
 func _on_fused(picks: Dictionary) -> void:
 	if _waiting:
 		return
@@ -408,6 +422,8 @@ func _on_gacha_done(results: Array) -> void:
 	if results.is_empty():
 		_halted = true  # 온라인 실패(알림은 Economy가 띄운다) — 자동을 멈춘다
 		_refresh()
+		if _back != null:
+			_go_back()
 		return
 	if not visible:
 		if _another_window_open():  # 그 창 위로 겹쳐 열지 않는다(어둠이 겹치고 층 순서에 따라 결과가 가려진다)
@@ -537,7 +553,9 @@ func _on_confirm() -> void:
 		auto_box.button_pressed = false
 	_halted = true
 	_show_pick()
-	_arm_guard()  # 결과 화면 [확인] 자리에 뜨는 [10회 모집]을 더블 탭의 두 번째 누름이 누르지 않게
+	_arm_guard()
+	if _back != null:
+		_go_back()  # 결과 화면 [확인] 자리에 뜨는 [10회 모집]을 더블 탭의 두 번째 누름이 누르지 않게
 
 
 func _on_auto_toggled(on: bool) -> void:
@@ -550,6 +568,7 @@ func _on_auto_toggled(on: bool) -> void:
 
 func close() -> void:
 	_halted = true
+	_back = null
 	if shop_ask != null:
 		shop_ask.visible = false
 	if stage != null:
@@ -590,7 +609,6 @@ func _refresh() -> void:
 		preview_label.text = Lang.t("recruit_panel.refresh_4") % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
 	dia_label.text = Lang.t("recruit_panel.refresh_5") % UiKit.commas(Economy.diamonds)
-	fuse_button.text = Lang.t("recruit_panel.refresh_15") % Economy.fuse_cost()
 	var tk := Economy.dia_tickets
 	var tk_shown := tk > 0 and currency == DIA
 	if ticket_label.visible != tk_shown:
