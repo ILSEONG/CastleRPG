@@ -592,6 +592,13 @@ func _recruit_and_heroes(rig) -> void:
 	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
 	_check(not locked.is_empty() and locked == want_locked and grid_ids == heroes_win.hero_cards.keys() + locked and heroes_win.unowned_sorted() == want_locked,
 		"(u) unowned heroes follow every owned hero in the grid, SSR -> SR -> R then file order", "grid=%s locked=%s" % [grid_ids, locked])
+	# [UR 합성](2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서"): 영웅 목록 버튼 줄에 있고 누르면 SSR 조각 합성 창이 열린다
+	await _tap(heroes_win.fuse_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(heroes_win.fuse.visible and heroes_win.apply_button.get_global_rect().end.x <= 720.0 and heroes_win.sort_button.get_global_rect().position.x >= 0.0 and heroes_win.fuse_button.text == "UR 합성",
+		"(u) [UR 합성] on the hero list opens the SSR shard fusion window", "fuse=%s sort=%s apply=%s" % [heroes_win.fuse.visible, heroes_win.sort_button.get_global_rect(), heroes_win.apply_button.get_global_rect()])
+	await _tap(heroes_win.fuse.close_button.get_global_rect().get_center())
+	await _frames(2)
 	var dim: bool = not heroes_win.hero_cards.values().any(func(c): return c.modulate != Color.WHITE)
 	for id in locked:
 		var c = heroes_win.locked_cards[id]

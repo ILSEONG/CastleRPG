@@ -175,6 +175,7 @@ func _build_world() -> void:
 	picker.recruit = recruit
 	var hero_panel = HeroPanelScript.new()
 	add_child(hero_panel)
+	hero_panel.recruit = recruit  # [UR 합성] 결과는 모집 창의 뒤집기 연출로
 	var building_panel = BuildingPanelScript.new()  # 건물 창(개정 12 §2.5): 건물 탭·길게 누르기
 	add_child(building_panel)
 	picker.building_panel = building_panel
