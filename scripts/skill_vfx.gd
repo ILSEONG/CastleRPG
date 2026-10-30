@@ -25,6 +25,7 @@ const HITS_PER_FRAME := 4
 const LIGHTS := 2  # 순간 광원 풀(Compatibility 렌더러는 광원마다 맞는 물체를 한 번 더 그린다 — 둘, 짧게)
 const LIGHT_RANGE := 7.0
 const ULT_STOP := 0.08  # 궁극기 첫 타격 히트스톱(실제 초, camera_rig가 STOP_GAP으로 간격을 둔다)
+const ROCK := Color(0.55, 0.45, 0.35)  # 대지 준비: 떠오르는 돌조각 색
 const ULT_KICK := 0.3  # 궁극기 첫 타격 흔들림(m) — 화면이 읽히게 작게
 
 ## 속성 팔레트: c = 몸 색(에너지 셰이더가 가장자리·심을 여기서 만든다), c2 = 불똥·입자 색, smoke = 잔상 연기 색(a = 진하기),
@@ -63,7 +64,7 @@ const ELEMENT := {
 	"whirlwind": "blade", "rend": "blade", "blade_flurry": "blade", "crescent": "blade", "wide_swing": "blade", "cheap_shot": "blade",
 	"sunder": "blade", "spear_sweep": "blade", "shockwave": "blade", "tiger_claw": "blade", "parry": "blade",
 	# 암흑
-	"shadow_strike": "dark", "void_rift": "dark", "abyss_hand": "dark", "drain_slash": "dark", "summon_skeleton": "dark", "hex": "dark",
+	"shadow_strike": "dark", "void_rift": "dark", "abyss_hand": "dark", "drain_slash": "dark", "summon_skeleton": "dark",
 	# 신성
 	"holy_smite": "holy", "solar_flare": "holy", "starfall": "holy", "solar_spark": "holy", "battle_hymn": "holy", "summon_spirit": "holy",
 	# 회복
@@ -71,7 +72,7 @@ const ELEMENT := {
 	# 대지
 	"earthquake": "earth", "ground_slam": "earth", "crushing_blow": "earth", "summon_golem": "earth", "shield_bash": "earth",
 	# 독·자연
-	"poison_cloud": "poison", "snare": "poison", "summon_treant": "poison",
+	"poison_cloud": "poison", "snare": "poison", "summon_treant": "poison", "hex": "poison",  # 역병의 저주(초록 독구름)
 	# 바람
 	"tornado": "wind", "gale": "wind", "boomerang": "wind", "summon_hawk": "wind",
 	# 물(현무·청룡)
@@ -87,7 +88,7 @@ const ELEMENT := {
 ## 같은 속성이지만 색이 다른 스킬(영웅 고유 빛): 몸 색만 바꾼다.
 const TINT := {"fox_fire": Color(1.0, 0.4, 0.62), "nine_tails": Color(1.0, 0.4, 0.62), "comet": Color(0.55, 0.8, 1.0),
 	"tiger_avatar": Color(0.75, 0.88, 1.0), "tiger_claw": Color(0.75, 0.9, 1.0), "drain_slash": Color(0.75, 0.12, 0.3),
-	"hex": Color(0.42, 0.62, 0.22), "gate_repair": Color(0.95, 0.75, 0.25)}
+	"gate_repair": Color(0.95, 0.75, 0.25)}
 ## 시전 준비 겹(속성 고유 "모이는" 모양)이 따로 있는 속성. 나머지는 마법진 + 빨려 드는 입자만.
 const SELF_STYLES := ["heal", "guard", "rage", "beast"]  # 발동이 자기 몸에서 퍼지는 속성(앞으로 내딛지 않는다)
 
@@ -200,9 +201,9 @@ static func _gather(hero: Node3D, at: Vector3, e: String, col: Color, c2: Color,
 				tw.tween_method(_fader(bolt), 1.0, 0.0, 0.08)
 				tw.tween_callback(_give.bind(bolt))
 		"dark", "arcane", "moon":
-			var orb := _take(hero, _mesh("orb"), _energy_mat(), chest, col, "charge_orb")
-			if orb != null:  # 크게 일렁이던 검은 기운이 가슴 앞 작은 구슬로 응축된다
-				orb.scale = Vector3.ONE * 1.4 * sc
+			var orb := _take(hero, _mesh("orb"), _energy_mat(), chest, col.darkened(0.3) if e == "dark" else col, "charge_orb")
+			if orb != null:  # 일렁이던 검은 기운이 가슴 앞 작은 구슬로 응축된다
+				orb.scale = Vector3.ONE * 0.85 * sc
 				var tw := _tw(orb)
 				tw.tween_property(orb, "scale", Vector3.ONE * 0.35 * sc, sec).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
 				tw.parallel().tween_property(orb, "rotation", Vector3(1.5, 3.0, 0.7), sec)
@@ -226,7 +227,25 @@ static func _gather(hero: Node3D, at: Vector3, e: String, col: Color, c2: Color,
 				tw.tween_property(rg, "scale", Vector3(0.7, 1.0, 0.7) * sc, sec).set_ease(Tween.EASE_IN)
 				tw.parallel().tween_property(rg, "rotation:y", TAU * 0.5, sec)
 				tw.tween_callback(_give.bind(rg))
-		"blade", "earth", "shot", "guard", "beast":
+		"earth":
+			var rk := Fx._burst(hero, at + Vector3(0, 0.1, 0), ROCK, "chunk", int(6 * sc), sec + 0.2, "charge_rocks")
+			if rk != null:  # 발밑 돌조각이 땅에서 떠오른다(대지의 힘을 끌어올린다)
+				rk.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+				rk.emission_ring_radius = 1.0 * sc
+				rk.emission_ring_inner_radius = 0.5 * sc
+				rk.emission_ring_height = 0.1
+				rk.emission_ring_axis = Vector3.UP
+				rk.gravity = Vector3(0, 1.2, 0)
+				rk.initial_velocity_min = 0.4
+				rk.initial_velocity_max = 1.0
+				rk.explosiveness = 0.7
+			var rg2 := _take(hero, _mesh("ring"), _energy_mat(), at + Vector3(0, 0.06, 0), col, "charge_ring")
+			if rg2 != null:
+				rg2.scale = Vector3(1.6, 1.0, 1.6) * sc
+				var tw := _tw(rg2)
+				tw.tween_property(rg2, "scale", Vector3(0.6, 1.0, 0.6) * sc, sec).set_ease(Tween.EASE_IN)
+				tw.tween_callback(_give.bind(rg2))
+		"blade", "shot", "guard", "beast":
 			var sl := _take(hero, _mesh("crescent"), _arc_mat(), chest, col, "charge_edge")
 			if sl != null:  # 몸 앞에 검기가 겹겹이 모여 날이 선다
 				sl.scale = Vector3.ONE * 1.3 * sc
