@@ -54,6 +54,14 @@ static var _smoke: ShaderMaterial
 static var _halo: ShaderMaterial
 static var _quad: QuadMesh
 static var _energy_mats := {}
+static var _svfx: GDScript
+
+
+## SkillVfx(툰 폭발 boom) — fx.gd ↔ skill_vfx.gd 서로 preload하면 순환이라 처음 쓸 때 불러 온다.
+static func _skill_vfx() -> GDScript:
+	if _svfx == null:
+		_svfx = load("res://scripts/skill_vfx.gd")
+	return _svfx
 
 
 ## 등급의 연출 단계(모르는 등급은 0).
@@ -198,37 +206,18 @@ static func dress_projectile(proj: Node3D, kind: String, color: Color, tail := f
 	return look
 
 
-## aoe_blast(개정 25): 고유 색 불덩이(가산)가 반경 쪽으로 부풀며 옅어지고, 하얀 심이 번쩍, 뒤에 빛무리가 번진다. 바닥 충격파 고리가 퍼지며 옅어지고,
-## 각진 파편 SHARDS_MIN~MAX개가 포물선으로 튀고, 빛 불똥(입자)이 사방으로 흩어지고 연기 덩이가 피어오른다. 바닥엔 방사 섬광(burst).
+## aoe_blast(개정 25, 2026-10-30 툰 폭발): 만화풍 셀 셰이딩 폭발(SkillVfx.boom — 불덩이 무리·끊긴 빛 충격파 고리·흙먼지 고리·돌 파편, tier 1+ 불기둥,
+## tier 2 고리 둘) + 뒤 빛무리. 각진 파편 SHARDS_MIN~MAX개가 포물선으로 튀고, 빛 불똥(입자)이 사방으로 흩어지고 연기 덩이가 피어오른다.
 ## shake = 카메라를 약하게 흔든다(SSR, 설정 fx_shake — 호출자가 정한다). power = impact 세기(−1이면 SSR 1, 아니면 0 — 메테오는 더 세게 준다).
-## tier 1+: 두 번째 충격파(wave)가 반경 1.35배까지. tier 2: 가운데 빛기둥(pillar)과 떠오르는 불티(motes). 단계마다 불똥이 늘어난다.
+## tier 2: 떠오르는 불티(motes). 단계마다 불똥이 늘어난다.
 static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake := false, tier := 0, power := -1) -> void:
 	impact(parent, pos, color, radius * 0.55, (1 if tier >= 2 else 0) if power < 0 else power)  # 타격 섬광·흔들림(개정 26)
 	var hot := color.lightened(0.35)
-	var mi := _spawn(parent, _mesh("blast", color), pos + Vector3(0, 0.6, 0), "blast", energy_material("flame"))  # 불덩이(2026-10-30 에너지 재질: 진한 가장자리 → 하얀 심, 일렁이다 갉아먹히며 흩어진다)
-	if mi != null:
-		mi.scale = Vector3.ONE * 0.3
-		var tw := mi.create_tween()  # 순간 팽창(0.1초) → 일렁이며 부푼다 → 노이즈를 따라 갉아먹히며 흩어진다
-		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.6, 0.1).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_EXPO)
-		tw.parallel().tween_property(mi, "rotation", Vector3(0.6, 1.2, 0.3), 0.55)
-		tw.tween_property(mi, "scale", Vector3(radius * 0.75, radius * 0.85, radius * 0.75), 0.45).set_ease(Tween.EASE_OUT)
-		tw.tween_callback(mi.queue_free)
-		_fade(mi, 0.42, 0.12)
-	var ring := _spawn(parent, _mesh("shock", color.lightened(0.3)), pos + Vector3(0, 0.05, 0), "shock", glow_material())
-	if ring != null:
-		ring.scale = Vector3(0.3, 1.0, 0.3)
-		var tr := ring.create_tween()
-		tr.tween_property(ring, "scale", Vector3(radius * 1.15, 1.0, radius * 1.15), 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-		tr.tween_callback(ring.queue_free)
-		_fade(ring, 0.25, 0.15)
-	var flash := _spawn(parent, _mesh("flash", color.lightened(0.55)), pos + Vector3(0, 0.6, 0), "flash", glow_material())  # 밝은 심: 0.12초 번쩍(고유 색을 띤다)
-	if flash != null:
-		flash.scale = Vector3.ONE * radius * 0.25
-		var tf := flash.create_tween()
-		tf.tween_property(flash, "scale", Vector3.ONE * radius * 0.6, 0.12)
-		tf.tween_callback(flash.queue_free)
-		_fade(flash, 0.1, 0.02)
-	halo(parent, pos + Vector3(0, 0.8, 0), hot, radius * 1.8, 0.4, 1.25, "blast_glow")  # 2026-10-30: 3.3 → 1.8(화면을 하얗게 덮어 불덩이 모양이 안 보였다)
+	# 2026-10-30 타격 임팩트(사용자 참고 그림): 불덩이·섬광·불기둥·노란 6각 고리·바닥 방사 섬광 → SkillVfx.boom 만화풍 셀 셰이딩 폭발(진한 테두리 불덩이 무리 + 솟구치는 불기둥 +
+	# 끊긴 빛 충격파 고리 + 흙먼지 고리 + 돌 파편). 색은 color(몸)와 노랗게 밝힌 띠.
+	var bs := clampf(radius * 0.55, 0.6, 2.4)
+	_skill_vfx().boom(parent, pos, color, color.lerp(Color(1.0, 0.95, 0.6), 0.55), color.lerp(Color(0.3, 0.26, 0.24), 0.7), bs, 4 + 2 * mini(tier, 2), tier >= 1, 1 + int(tier >= 2), true)
+	halo(parent, pos + Vector3(0, 0.8, 0), hot, radius * 1.1, 0.3, 1.25, "blast_glow")  # 2026-10-30: 3.3 → 1.8 → 1.1(툰 폭발 모양이 하얗게 덮이지 않게)
 	var n := randi_range(SHARDS_MIN, SHARDS_MAX)
 	for i in n:
 		var s := _spawn(parent, _mesh("shard", color), pos + Vector3(0, 0.5, 0), "shard")
@@ -252,11 +241,7 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 		sm.emission_sphere_radius = radius * 0.4
 		sm.scale_amount_min = radius * 0.4
 		sm.scale_amount_max = radius * 0.7
-	_flare(parent, _mesh("burst", color), pos + Vector3(0, 0.08, 0), "burst", radius * 1.15, 0.4)
-	if tier >= 1:
-		_wave(parent, pos, color, radius * 1.35, 0.45, 0.12)
-	if tier >= 2:  # 불기둥(2026-10-30: 반투명 분홍 기둥 → 에너지 불꽃 재질 — 진한 가장자리, 위로 일렁인다)
-		_surge(parent, _mesh("pillar", color), pos, "pillar", radius * 0.4, radius * 2.2, 0.6, energy_material("flame"))
+	if tier >= 2:  # 불기둥은 툰 폭발(boom)이 맡는다
 		_motes(parent, pos, color.lightened(0.2), radius * 0.8, 2.4, 0.8)
 	if shake:
 		shake_camera(parent)
@@ -382,17 +367,8 @@ static func spark(parent: Node, pos: Vector3, color: Color, size: float) -> void
 ## tier 2면 바닥 붉은 방사 섬광.
 static func slash(parent: Node, pos: Vector3, tier := 0) -> void:
 	var sc: float = TIER_SCALE[tier]
-	var mi := _spawn(parent, _mesh("slash"), pos, "slash", energy_material("arc"))  # 2026-10-30 에너지 검기
-	if mi == null:
-		return
-	_face_camera(mi)
-	mi.scale = Vector3.ONE * 0.5 * sc
-	var tw := mi.create_tween()
-	tw.tween_property(mi, "scale", Vector3.ONE * 1.1 * sc, 0.08)
-	tw.tween_interval(0.17)
-	tw.tween_property(mi, "scale", Vector3(1.1, 0.05, 1.1) * sc, 0.05)
-	tw.tween_callback(mi.queue_free)
-	halo(parent, pos, SLASH_RED, 1.6 * sc, 0.3, 1.2, "slash_glow")
+	_skill_vfx().blade_face(parent, pos, 1.0 * sc, SLASH_RED, 0.1)  # 2026-10-30: 화면 쪽 대각 검기 띠(하얀 날 + 검은 테두리)
+	halo(parent, pos, SLASH_RED, 1.2 * sc, 0.25, 1.2, "slash_glow")
 	impact(parent, pos - Vector3(0, 0.75, 0), SLASH_RED, 0.6 * sc, 0, 0.75)
 	if tier >= 1:
 		spark(parent, pos, SLASH_RED.lightened(0.3), 0.8 * sc)
@@ -404,20 +380,18 @@ static func slash(parent: Node, pos: Vector3, tier := 0) -> void:
 static func cleave(parent: Node, pos: Vector3, color: Color, radius: float, tier := 0) -> void:
 	var sc: float = TIER_SCALE[tier]
 	var spin := randf() * TAU
-	for layer in 2:  # 2026-10-13: 반투명 고유 색 궤적(밝은 바닥에서도 보인다) + 위에 가산 빛 궤적, 허리 높이
-		var mi := _spawn(parent, _mesh("crescent", color if layer == 0 else color.lightened(0.3)), pos + Vector3(0, 0.45 + 0.15 * layer, 0), "cleave",
-			energy_material("arc") if layer == 0 else glow_material())  # 2026-10-30 아래 겹 = 에너지 검기(진한 가장자리 → 하얀 날)
-		if mi == null:
-			break
-		mi.rotation.y = spin
-		mi.scale = Vector3.ONE * 0.4
-		var r := radius * sc * (0.95 if layer == 0 else 0.85)
-		var tw := mi.create_tween().set_parallel()
-		tw.tween_property(mi, "scale", Vector3(r, 1.0, r), 0.18).set_ease(Tween.EASE_OUT)
-		tw.tween_property(mi, "rotation:y", spin + 2.4, 0.28).set_ease(Tween.EASE_OUT)
-		tw.chain().tween_property(mi, "scale", Vector3(r * 1.05, 0.05, r * 1.05), 0.1)
-		tw.chain().tween_callback(mi.queue_free)
-		_fade(mi, 0.18, 0.18)
+	# 2026-10-30 사용자 참고 그림: 넓게 휘어 도는 검기 띠(하얀 날 + 검은 테두리 + 잔상 꼬리, SkillVfx.blade_arc). 상한이면 예전 초승달.
+	if _skill_vfx().blade_arc(parent, pos + Vector3(0, 0.55, 0), spin, radius * sc * 0.95, color, 0.15, randf_range(-0.3, 0.3)) == null:
+		var mi := _spawn(parent, _mesh("crescent", color), pos + Vector3(0, 0.45, 0), "cleave", energy_material("arc"))
+		if mi != null:
+			mi.rotation.y = spin
+			mi.scale = Vector3.ONE * 0.4
+			var r := radius * sc * 0.95
+			var tw := mi.create_tween().set_parallel()
+			tw.tween_property(mi, "scale", Vector3(r, 1.0, r), 0.18).set_ease(Tween.EASE_OUT)
+			tw.tween_property(mi, "rotation:y", spin + 2.4, 0.28).set_ease(Tween.EASE_OUT)
+			tw.chain().tween_callback(mi.queue_free)
+			_fade(mi, 0.18, 0.18)
 	var sp := _burst(parent, pos + Vector3(0, 0.6, 0), color.lightened(0.4), "spark", 12 + 4 * tier, 0.35, "cleave_sparks")
 	if sp != null:  # 칼끝에서 바깥으로 튀는 불똥
 		sp.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
@@ -867,14 +841,15 @@ static func quake(parent: Node, pos: Vector3, radius: float, tier := 0) -> void:
 
 ## 회오리 베기: 영웅을 따라 도는 초승달 한 바퀴(가산, 0.3초 끝에 옅어진다) + 발 둘레 흙먼지.
 static func whirl(hero: Node3D, radius: float, color: Color) -> void:
-	var mi := _spawn(hero, _mesh("crescent", color.lightened(0.15)), hero.global_position + Vector3(0, 0.6, 0), "whirl", energy_material("arc"))  # 2026-10-30 에너지 검기
-	if mi == null:
-		return
-	mi.scale = Vector3(radius, 1.0, radius)
-	var tw := mi.create_tween()
-	tw.tween_property(mi, "rotation:y", mi.rotation.y - TAU, 0.3)
-	tw.tween_callback(mi.queue_free)
-	_fade(mi, 0.12, 0.18)
+	# 2026-10-30: 거의 한 바퀴 도는 검기 띠(SkillVfx.blade_arc ring) — 상한이면 예전 초승달
+	if _skill_vfx().blade_arc(hero.get_parent(), hero.global_position + Vector3(0, 0.6, 0), randf() * TAU, radius, color, 0.22, randf_range(-0.15, 0.15), true) == null:
+		var mi := _spawn(hero, _mesh("crescent", color.lightened(0.15)), hero.global_position + Vector3(0, 0.6, 0), "whirl", energy_material("arc"))
+		if mi != null:
+			mi.scale = Vector3(radius, 1.0, radius)
+			var tw := mi.create_tween()
+			tw.tween_property(mi, "rotation:y", mi.rotation.y - TAU, 0.3)
+			tw.tween_callback(mi.queue_free)
+			_fade(mi, 0.12, 0.18)
 	var sp := _burst(hero.get_parent(), hero.global_position + Vector3(0, 0.6, 0), color.lightened(0.4), "spark", 14, 0.35, "whirl_sparks")
 	if sp != null:  # 칼끝에서 바깥으로 튀는 불똥(개정 26)
 		sp.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING

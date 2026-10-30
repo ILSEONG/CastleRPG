@@ -17,15 +17,19 @@ const Fx := preload("res://scripts/fx.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
 const Graphics := preload("res://scripts/graphics.gd")
 const SigilShader := preload("res://shaders/fx_sigil.gdshader")
+const ToonShader := preload("res://shaders/fx_toon.gdshader")
+const ToonTopShader := preload("res://shaders/fx_toon_top.gdshader")
+const SlashShader := preload("res://shaders/fx_slash.gdshader")
 
-const POOL_MAX := 48
+const POOL_MAX := 64
 const BUSY := 0.6  # Fx.live()가 MAX_LIVE의 이만큼을 넘으면 곁가지(준비 겹·타격 파편·잔상)를 줄인다
 const RESERVE := 0.85  # 이 위로는 SkillVfx가 노드를 띄우지 않는다 — 남은 몫은 스킬 몸통(운석·번개 등 판정이 보이는 그림)에 남긴다
 const HITS_PER_FRAME := 4
 const LIGHTS := 2  # 순간 광원 풀(Compatibility 렌더러는 광원마다 맞는 물체를 한 번 더 그린다 — 둘, 짧게)
 const LIGHT_RANGE := 7.0
 const ULT_STOP := 0.08  # 궁극기 첫 타격 히트스톱(실제 초, camera_rig가 STOP_GAP으로 간격을 둔다)
-const ROCK := Color(0.55, 0.45, 0.35)  # 대지 준비: 떠오르는 돌조각 색
+const ROCK := Color(0.55, 0.45, 0.35)
+const BLADE_GLOW := Color(0.18, 0.85, 1.0)  # 검기 기본 색(푸른 검광)  # 대지 준비: 떠오르는 돌조각 색
 const ULT_KICK := 0.3  # 궁극기 첫 타격 흔들림(m) — 화면이 읽히게 작게
 
 ## 속성 팔레트: c = 몸 색(에너지 셰이더가 가장자리·심을 여기서 만든다), c2 = 불똥·입자 색, smoke = 잔상 연기 색(a = 진하기),
@@ -96,6 +100,10 @@ static var _pool: Array[MeshInstance3D] = []
 static var _holder: Node3D  # 쉬는 풀 노드를 숨겨 두는 곳(루트 아래, 숨김) — 트리 안에 있어야 게임이 끝날 때 함께 지워진다
 static var _meshes := {}
 static var _sigil_mat: ShaderMaterial
+static var _toon_mats := {}
+static var _slash_mat: ShaderMaterial
+static var _boom_ms := -1000
+static var _boom_at := Vector3.ZERO
 static var _plane: PlaneMesh
 static var _lights: Array[OmniLight3D] = []
 static var _light_i := 0
@@ -153,8 +161,11 @@ static func windup(hero: Node3D, kind: String, sec: float) -> void:
 		model.charge_glow(col.lerp(Color.WHITE, 0.25), maxf(sec, 0.08))  # 몸·무기가 달아오른다 → 발동 순간 번쩍
 	if sec <= 0.05:
 		return
-	var r := (1.0 if not ult else 1.5) * sc
+	var r := (1.5 if not ult else 2.2) * sc  # 2026-10-30 참고 그림: 몸보다 넉넉히 큰 마법진
 	sigil(hero, at + Vector3(0, 0.04, 0), col, r, sec, int(p.sides), float(p.spin), "charge_sigil")
+	if ult and not _low():  # 궁극기: 몸 둘레를 기울어 감아 도는 빛줄기 둘(참고 그림의 감기는 빛 띠)
+		for i in 2:
+			blade_arc(hero.get_parent(), at + Vector3(0, 0.9 + 0.3 * i, 0), randf() * TAU, (0.9 + 0.2 * i) * sc, Color(p.c2).lerp(col, 0.4), maxf(sec, 0.15), 0.45 * (1 - 2 * i), true, false)
 	if not _busy() or ult:  # 붐비면 마법진·몸 발광만(궁극기는 늘 다)
 		_gather(hero, at, e, col, Color(p.c2), sc, sec, ult)
 
@@ -348,6 +359,7 @@ static func _lunge(hero: Node3D, col: Color, sc: float) -> void:
 		tw.tween_interval(0.08)
 		tw.tween_property(model, "position", base, 0.2).set_ease(Tween.EASE_IN_OUT)
 		tw.tween_callback(func(): model.remove_meta("lunging"))
+	blade_arc(hero.get_parent(), hero.global_position + Vector3(0, 0.8, 0), atan2(fwd.x, fwd.z) + PI * 0.6, 1.7 * sc, col, 0.14, randf_range(-0.35, 0.35))  # 휘두르는 검기
 	var trail := _take(hero.get_parent(), _mesh("streak"), _arc_mat(), hero.global_position + Vector3(0, 0.9, 0), col, "afterimage")
 	if trail != null:  # 잔상: 지나온 자리에 늘어진 빛 띠
 		trail.look_at(trail.global_position + fwd, Vector3.UP)
@@ -397,7 +409,7 @@ static func hit(target: Node3D, kind: String, power: int, first: bool) -> void:
 	var col := color_of(kind)
 	var model = target.get("_model")
 	if model != null and model.has_method("tint_flash"):
-		model.tint_flash(col.lerp(Color.WHITE, 0.35))
+		model.tint_flash(Color.from_hsv(col.h, maxf(col.s, 0.65), 1.0))  # 속성 색으로 번쩍(하얗게 뭉개지지 않게)
 	var parent := target.get_parent()
 	var ground := Vector3(target.global_position.x, 0.0, target.global_position.z)
 	if first:
@@ -441,7 +453,9 @@ static func _shard(parent: Node, pos: Vector3, e: String, col: Color, c2: Color,
 				tw.tween_interval(0.05)
 				tw.tween_method(_fader(b), 1.0, 0.0, 0.08)
 				tw.tween_callback(_give.bind(b))
-		"blade", "shot", "beast", "guard", "earth":
+		"blade", "beast", "guard":  # 맞은 자리를 화면 쪽으로 긋는 작은 검기
+			blade_face(parent, pos, 0.75 * k, col)
+		"shot", "earth":
 			Fx.slash_mark(parent, pos, col.lightened(0.3), 0.55 * k)
 		"dark":
 			var o := _take(parent, _mesh("crack"), _energy_mat(), pos, col, "hit_crack")
@@ -462,6 +476,7 @@ static func _shard(parent: Node, pos: Vector3, e: String, col: Color, c2: Color,
 
 ## 첫 타격: 속성 충격 고리 + 궁극기면 히트스톱·짧은 흔들림·광원. 잔상은 조금 뒤 그 자리에서.
 static func _first_hit(parent: Node, ground: Vector3, e: String, col: Color, c2: Color, power: int) -> void:
+	explosion(parent, ground, e, col, c2, power)
 	if power >= 1:
 		_ring_wave(parent, ground, col, 1.6 + 0.8 * power, 0.32)
 	if power >= 2:
@@ -477,6 +492,114 @@ static func _first_hit(parent: Node, ground: Vector3, e: String, col: Color, c2:
 		var pp = wp.get_ref()
 		if pp != null and pp.is_inside_tree():
 			linger(pp, ground, e, col, c2, 0.8 + 0.4 * power))
+
+
+## 타격 폭발(2026-10-30 사용자 참고 그림 "스킬은 못해도 이정도 임팩트는"): 만화풍 셀 셰이딩 폭발을 맞은 자리에 터뜨린다.
+## 겹: ① 불덩이 무리(진한 테두리 → 몸 → 밝은 띠 → 하얀 심, 0.07초에 팡 부풀었다 위로 피며 연기 색으로 식어 구멍 나듯 사라진다)
+## ② 솟구치는 불기둥(액티브·궁극기) ③ 끊긴 빛 조각으로 된 충격파 고리(빠르게 퍼진다) ④ 흙먼지 줄기 고리(느리게 퍼진다) ⑤ 튀는 돌 파편.
+## 속성 색은 팔레트(c 몸, c2 밝은 띠) — 화염은 참고 그림 그대로 주황·노랑, 얼음은 파랑·하양 등. power: 0 확률 발동(작게) · 1 액티브 · 2 궁극기.
+static func explosion(parent: Node, ground: Vector3, e: String, col: Color, c2: Color, power: int) -> void:
+	var thin := e in ["blade", "shot", "wind", "guard"]  # 베기·사격: 불덩이를 줄이고 고리를 살린다
+	# 식는 색: 불·흙·어둠·독은 짙은 연기(참고 그림처럼 갈색으로 식는다), 나머지는 밝은 색으로 흩어진다(얼음·빛·검기가 지저분한 갈색이 되지 않게)
+	var smoke := Color(PAL[e].smoke as Color, 1.0).lerp(col, 0.25) if e in ["fire", "rage", "earth", "dark", "poison", "beast"] else c2.lerp(Color.WHITE, 0.3)
+	var n := 0 if thin else (3 if power <= 0 else (5 if power == 1 else 7))
+	if thin:  # 베기·사격: 불덩이 대신 맞은 자리를 엇갈려 긋는 큰 검기 둘(참고 그림의 검기) + 충격파 고리
+		for i in 2:
+			blade_face(parent, ground + Vector3(0, 0.8, 0), (1.1 + 0.3 * power) * (1.0 - 0.2 * i), col, 0.1 + 0.04 * i)
+	var s: float = [0.6, 1.0, 1.4][clampi(power, 0, 2)] * (0.75 if thin else 1.0)
+	boom(parent, ground, col, c2, smoke, s, n, power >= 1 and not thin, 2 if power >= 2 else 1, power >= 1, 1.5 if thin else 1.0)
+
+
+## 툰 폭발 본체(Fx.blast도 이것을 쓴다): s = 크기(1 ≈ 불덩이 0.75 m·고리 2.2 m), n = 불덩이 수, jet = 불기둥, rings = 충격파 고리 수,
+## dust = 흙먼지 고리·돌 파편, ring_k = 고리 크기 배수. 같은 자리(2 m 안)에 같은 순간(0.1초 안) 두 번 터지면 뒤엣것은 건너뛴다.
+static func boom(parent: Node, ground: Vector3, col: Color, c2: Color, smoke: Color, s: float, n: int, jet: bool, rings: int, dust: bool, ring_k := 1.0) -> void:
+	if parent == null or not parent.is_inside_tree():
+		return
+	var now := Time.get_ticks_msec()
+	if now - _boom_ms < 100 and _boom_at.distance_to(ground) < maxf(2.0, s * 1.5):
+		return
+	_boom_ms = now
+	_boom_at = ground
+	if _busy():
+		n = mini(n, 3)
+	for i in n:  # ① 불덩이 무리
+		var a := TAU * (i + randf() * 0.5) / maxf(n - 1, 1)
+		var off := Vector3(cos(a), 0, sin(a)) * s * (0.0 if i == 0 else randf_range(0.5, 0.85))
+		var b := _take(parent, _mesh("blob"), _toon_mat(1.0), ground + off + Vector3(0, s * (0.75 if i == 0 else randf_range(0.4, 1.2)), 0), Color.WHITE, "boom_blob")
+		if b == null:
+			break
+		var r := s * (0.85 if i == 0 else randf_range(0.5, 0.72))
+		b.set_instance_shader_parameter("tint", col)
+		b.set_instance_shader_parameter("hot", c2)
+		b.scale = Vector3.ONE * r * 0.2
+		b.rotation = Vector3(randf() * TAU, randf() * TAU, 0)
+		var tw := _tw(b)
+		tw.tween_interval(0.012 * i)
+		tw.tween_property(b, "scale", Vector3.ONE * r * 1.15, 0.07).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_EXPO)
+		tw.tween_property(b, "scale", Vector3.ONE * r * 1.35, 0.4).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(b, "position", b.position + off * 0.35 + Vector3(0, s * 0.6, 0), 0.4).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_method(func(v: float):  # 식는다: 몸 → 연기 색, 밝은 띠 → 몸 색
+			if is_instance_valid(b):
+				b.set_instance_shader_parameter("tint", col.lerp(smoke, v))
+				b.set_instance_shader_parameter("hot", c2.lerp(col, v)), 0.0, 1.0, 0.3).set_delay(0.08)
+		tw.parallel().tween_method(_fader(b), 1.0, 0.0, 0.3).set_delay(0.12).set_ease(Tween.EASE_IN)
+		tw.tween_callback(_give.bind(b))
+	if jet:  # ② 불기둥: 바닥에서 위로 솟구쳤다 가늘어지며 사라진다
+		var j := _take(parent, _mesh("blob"), _toon_mat(1.0), ground + Vector3(0, s * 0.3, 0), Color.WHITE, "boom_jet")
+		if j != null:
+			j.set_instance_shader_parameter("tint", col.lerp(Color(0.85, 0.08, 0.05), 0.35) if col.r > 0.8 and col.b < 0.3 else col)  # 불꽃은 더 붉게
+			j.set_instance_shader_parameter("hot", c2)
+			j.scale = Vector3(0.3, 0.4, 0.3) * s
+			var tw := _tw(j)
+			tw.tween_property(j, "scale", Vector3(0.55 * s, 1.9 * s, 0.55 * s), 0.1).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_EXPO)
+			tw.parallel().tween_property(j, "position", j.position + Vector3(0, 1.5 * s, 0), 0.1).set_ease(Tween.EASE_OUT)
+			tw.tween_property(j, "scale", Vector3(0.15 * s, 2.3 * s, 0.15 * s), 0.25).set_ease(Tween.EASE_IN)
+			tw.parallel().tween_property(j, "position", j.position + Vector3(0, 2.2 * s, 0), 0.25)
+			tw.parallel().tween_method(_fader(j), 1.0, 0.0, 0.25).set_ease(Tween.EASE_IN)
+			tw.tween_callback(_give.bind(j))
+	for k in rings:  # ③ 충격파 고리(끊긴 빛 조각, 안쪽이 하얗게 탄다)
+		var rg := _take(parent, _mesh("segring"), _toon_mat(0.0), ground + Vector3(0, 0.12 + 0.05 * k, 0), Color.WHITE, "boom_ring")
+		if rg == null:
+			break
+		rg.set_instance_shader_parameter("tint", col)
+		rg.set_instance_shader_parameter("hot", c2)
+		rg.rotation.y = randf() * TAU
+		rg.scale = Vector3(0.3, 1.0, 0.3) * s
+		var rr := s * (2.2 + 0.9 * k) * ring_k
+		var tw := _tw(rg)
+		tw.tween_interval(0.07 * k)
+		tw.tween_property(rg, "scale", Vector3(rr, 1.0, rr), 0.26).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_EXPO)
+		tw.parallel().tween_property(rg, "rotation:y", rg.rotation.y + 0.5, 0.36)
+		tw.parallel().tween_method(_fader(rg), 1.0, 0.0, 0.26).set_delay(0.1).set_ease(Tween.EASE_IN)
+		tw.tween_callback(_give.bind(rg))
+	if not dust or _low():
+		return
+	var d := _take(parent, _mesh("dustring"), _toon_mat(0.0), ground + Vector3(0, 0.06, 0), Color.WHITE, "boom_dust")
+	if d != null:  # ④ 흙먼지 줄기 고리(갈색, 느리게)
+		d.set_instance_shader_parameter("tint", Color(0.45, 0.3, 0.18, 0.95))
+		d.set_instance_shader_parameter("hot", Color(0.72, 0.55, 0.36, 0.95))
+		d.rotation.y = randf() * TAU
+		d.scale = Vector3(0.5, 1.0, 0.5) * s
+		var tw := _tw(d)
+		tw.tween_property(d, "scale", Vector3(2.0, 1.0, 2.0) * s, 0.45).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		tw.parallel().tween_method(_fader(d), 1.0, 0.0, 0.35).set_delay(0.15).set_ease(Tween.EASE_IN)
+		tw.tween_callback(_give.bind(d))
+	if _busy():
+		return
+	var rk := Fx._burst(parent, ground + Vector3(0, 0.3, 0), Color(0.36, 0.26, 0.18), "spark", int(6 + 5 * s), 0.7, "boom_rock")
+	if rk != null:  # ⑤ 돌 파편(작은 각진 조각이 튀어 올랐다 떨어진다)
+		rk.mesh = _mesh("shardlet")
+		rk.particle_flag_align_y = false
+		rk.particle_flag_rotate_y = true
+		rk.angular_velocity_min = -600.0
+		rk.angular_velocity_max = 600.0
+		rk.direction = Vector3.UP
+		rk.spread = 55.0
+		rk.gravity = Vector3(0, -16.0, 0)
+		rk.initial_velocity_min = 4.0 * s
+		rk.initial_velocity_max = 7.5 * s
+		rk.scale_amount_min = 1.2
+		rk.scale_amount_max = 2.2
 
 
 # --- 4) 잔상 ---
@@ -578,6 +701,66 @@ static func storm_cloud(parent: Node, pos: Vector3, r: float, sec: float) -> voi
 		cl.scale_amount_min = r * 0.45
 		cl.scale_amount_max = r * 0.75
 		cl.preprocess = 0.6
+
+
+# --- 검기 ---
+
+## 검기 궤적(2026-10-30 사용자 참고 그림): center 둘레를 반지름 r로 휘어 도는 넓은 빛 띠 — 바깥 날은 하얀 심 + 가는 검은 테두리,
+## 안쪽으로 갈수록 투명, 꼬리는 가늘어지며 머리를 따라 사라진다. yaw = 궤적이 시작하는 방향(라디안, +Y 축), tilt = 기울기(대각 베기),
+## sec = 머리가 끝까지 도는 시간. ring = 거의 한 바퀴(회오리). 뒤따르는 가는 궤적 하나가 조금 바깥에서 한 박자 늦게 돈다.
+static func blade_arc(parent: Node, center: Vector3, yaw: float, r: float, col: Color, sec := 0.16, tilt := 0.0, ring := false, thin := true) -> MeshInstance3D:
+	var main: MeshInstance3D = null
+	# 색: 진하고 밝은 색은 그대로(화염 베기 등), 흙빛·옅은 영웅 색은 푸른 검광(참고 그림) — 밝은 풀밭에서 흐린 색은 갈색 띠로 보인다
+	var tc := col if col.s >= 0.75 and col.v >= 0.8 else BLADE_GLOW
+	for k in (2 if thin and not _busy() else 1):
+		var mi := _take(parent, _mesh("blade_ring" if ring else "blade") if k == 0 else _mesh("blade_thin"), _slash_material(), center, Color.WHITE, "blade_arc")
+		if mi == null:
+			break
+		mi.rotation = Vector3(tilt, yaw, 0)
+		var rr := r * (1.0 if k == 0 else 1.12)
+		mi.scale = Vector3(rr, 1.0, rr)
+		mi.set_instance_shader_parameter("tint", tc)
+		mi.set_instance_shader_parameter("head", 0.0)
+		var tw := _tw(mi)
+		tw.tween_interval(0.035 * k)
+		tw.tween_method(_header(mi), 0.0, 1.0, sec).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(mi, "rotation:y", yaw - 0.35, sec + 0.12).set_ease(Tween.EASE_OUT)
+		tw.tween_method(_header(mi), 1.0, 1.8, 0.16)  # 꼬리가 머리를 따라 빠진다
+		tw.parallel().tween_method(_fader(mi), 1.0, 0.0, 0.16).set_ease(Tween.EASE_IN)
+		tw.tween_callback(_give.bind(mi))
+		if k == 0:
+			main = mi
+	return main
+
+
+## 화면 쪽을 보는 검기(맞은 자리·기본 베기): pos 둘레 반지름 r, 방향 아무렇게나(대각선 베기처럼).
+static func blade_face(parent: Node, pos: Vector3, r: float, col: Color, sec := 0.1) -> void:
+	if parent == null or not parent.is_inside_tree():
+		return
+	var cam := parent.get_viewport().get_camera_3d()
+	var mi := blade_arc(parent, pos, 0.0, r, col, sec, 0.0, false, false)
+	if mi == null or cam == null:
+		return
+	var b := cam.global_basis.orthonormalized() * Basis(Vector3.RIGHT, PI / 2.0) * Basis(Vector3.UP, randf() * TAU)
+	mi.global_basis = b.scaled(Vector3(r, 1.0, r))
+	var tw := _tw(mi)  # 화면 쪽 궤적은 돌리지 않는다(기울기를 지킨다)
+	tw.tween_method(_header(mi), 0.0, 1.0, sec).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_method(_header(mi), 1.0, 1.8, 0.14)
+	tw.parallel().tween_method(_fader(mi), 1.0, 0.0, 0.14).set_ease(Tween.EASE_IN)
+	tw.tween_callback(_give.bind(mi))
+
+
+static func _header(mi: GeometryInstance3D) -> Callable:
+	return func(v: float):
+		if is_instance_valid(mi):
+			mi.set_instance_shader_parameter("head", v)
+
+
+static func _slash_material() -> ShaderMaterial:
+	if _slash_mat == null:
+		_slash_mat = ShaderMaterial.new()
+		_slash_mat.shader = SlashShader
+	return _slash_mat
 
 
 # --- 공용 조각 ---
@@ -688,6 +871,16 @@ static func _arc_mat() -> ShaderMaterial:
 
 static func _smooth_mat() -> ShaderMaterial:
 	return Fx.energy_material("smooth")
+
+
+## 툰 폭발 재질: shade 1 = 덩어리(깊이 검사 없이 유닛 위에), 0 = 판(바닥 고리, 유닛 뒤로 숨는다).
+static func _toon_mat(shade: float) -> ShaderMaterial:
+	if not _toon_mats.has(shade):
+		var m := ShaderMaterial.new()
+		m.shader = ToonTopShader if shade > 0.5 else ToonShader
+		m.set_shader_parameter("shade", shade)
+		_toon_mats[shade] = m
+	return _toon_mats[shade]
 
 
 static func _sigil_material() -> ShaderMaterial:
@@ -808,6 +1001,69 @@ static func _build(kind: String) -> Mesh:
 			s.radial_segments = 10
 			s.rings = 6
 			return _flat(s)
+		"blob":  # 툰 폭발 덩어리: 매끈한 구(셀 셰이딩 띠가 둥글게 끊긴다)
+			var sp := SphereMesh.new()
+			sp.radius = 1.0
+			sp.height = 2.0
+			sp.radial_segments = 16
+			sp.rings = 8
+			var st := SurfaceTool.new()
+			st.create_from(sp, 0)
+			var arr := st.commit_to_arrays()
+			var cols := PackedColorArray()
+			cols.resize(arr[Mesh.ARRAY_VERTEX].size())
+			cols.fill(Color.WHITE)
+			arr[Mesh.ARRAY_COLOR] = cols
+			var out := ArrayMesh.new()
+			out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			return out
+		"segring", "dustring":  # 충격파 고리(굵은 빛 조각 10개, 사이가 조금씩 끊긴다) / 흙먼지 고리(바깥으로 뻗는 짧은 줄기 22개)
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var ring := kind == "segring"
+			var n := 10 if ring else 22
+			for i in n:
+				var c := TAU * (i + randf_range(-0.2, 0.2)) / n
+				var half := (TAU / n) * (randf_range(0.36, 0.46) if ring else randf_range(0.07, 0.13))
+				var r_in := randf_range(0.62, 0.7) if ring else randf_range(0.5, 0.7)
+				var r_out := randf_range(0.96, 1.04) if ring else randf_range(0.92, 1.08)
+				var steps := 4 if ring else 1
+				for q in steps:  # 안쪽 가장자리 r=1(하얗게), 바깥 r=0(속성 색) · 조각 양끝은 가늘다
+					var t0 := float(q) / steps
+					var t1 := float(q + 1) / steps
+					var a0 := c - half + 2.0 * half * t0
+					var a1 := c - half + 2.0 * half * t1
+					var w0 := sin(PI * t0) if ring else 1.0
+					var w1 := sin(PI * t1) if ring else 1.0
+					var m0 := lerpf(r_out, r_in, 0.15 + 0.85 * w0)
+					var m1 := lerpf(r_out, r_in, 0.15 + 0.85 * w1)
+					var d0 := Vector3(cos(a0), 0, sin(a0))
+					var d1 := Vector3(cos(a1), 0, sin(a1))
+					var g_in := 1.0 if ring else 0.0
+					var g_out := 0.0 if ring else 0.9
+					for v in [[d0 * m0, g_in], [d1 * m1, g_in], [d1 * r_out, g_out], [d0 * m0, g_in], [d1 * r_out, g_out], [d0 * r_out, g_out]]:
+						st.set_normal(Vector3.UP)
+						st.set_color(Color(v[1], v[1], v[1], 1.0))
+						st.add_vertex(v[0])
+			return st.commit()
+		"blade", "blade_ring", "blade_thin":  # 검기 띠(xz 평면, 반지름 1): 꼬리(각 0) → 머리(각 arc). 정점 색 r = 폭(0 안 ~ 1 바깥 날), g = 길이(0 꼬리 ~ 1 머리)
+			var arc := deg_to_rad(340.0 if kind == "blade_ring" else 210.0)
+			var steps := 40 if kind == "blade_ring" else 28
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for i in steps:
+				var quad := []
+				for t: float in [float(i) / steps, float(i + 1) / steps]:
+					var w: float = 0.05 if kind == "blade_thin" else 0.05 + 0.4 * smoothstep(0.0, 0.75, t) * (1.0 - 0.5 * smoothstep(0.93, 1.0, t))
+					var ro: float = 0.88 + 0.12 * t  # 꼬리 쪽이 안으로 감긴다
+					var d := Vector3(sin(arc * t), 0, cos(arc * t))
+					quad.append([d * ro, d * (ro - w), t])
+				for v in [[quad[0][0], 1.0, quad[0][2]], [quad[1][0], 1.0, quad[1][2]], [quad[1][1], 0.0, quad[1][2]],
+						[quad[0][0], 1.0, quad[0][2]], [quad[1][1], 0.0, quad[1][2]], [quad[0][1], 0.0, quad[0][2]]]:
+					st.set_normal(Vector3.UP)
+					st.set_color(Color(v[1], v[2], 0.0, 1.0))
+					st.add_vertex(v[0])
+			return st.commit()
 		"swirl":  # 감아 오르는 띠 셋(반지름 1, 높이 2, 1.25바퀴) — 위로 갈수록 좁고 옅다
 			var st := SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)

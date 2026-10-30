@@ -1549,12 +1549,12 @@ func _skill_unlock_cases() -> void:
 		var t: String = n.get_meta("fx", "")
 		tags[t] = tags.get(t, 0) + 1
 	var banners: Array = dn._tags.filter(func(e): return e.text != "")
-	_check(tags.get("blast", 0) == 1 and tags.get("shock", 0) == 1 and tags.get("flash", 0) == 1 and tags.get("shard", 0) >= Fx.SHARDS_MIN
-		and tags.get("shard", 0) <= Fx.SHARDS_MAX and Fx.live() <= Fx.MAX_LIVE, "(U3) aoe_blast makes an icosahedron, a shockwave ring, a flash and 8-12 shards", str(tags))
+	_check(tags.get("boom_blob", 0) >= 3 and tags.get("boom_ring", 0) >= 1 and tags.get("boom_dust", 0) == 1 and tags.get("shard", 0) >= Fx.SHARDS_MIN
+		and tags.get("shard", 0) <= Fx.SHARDS_MAX and Fx.live() <= Fx.MAX_LIVE, "(U3) aoe_blast makes a toon explosion (fireball cluster, shockwave ring, dust ring) and 8-12 shards", str(tags))
 	_check(banners.size() == 1 and banners[0].text == "화염구" and banners[0].bg == Color(ig.def.color) and tags.get("pulse", 0) == 1,
 		"(U3) the blast shows ignis's name banner in her color and pulses her foot ring", "banners=%s tags=%s" % [banners.map(func(e): return e.text), tags])
-	_check(tags.get("burst", 0) == 1 and tags.get("wave", 0) >= 1 and tags.get("pillar", 0) >= 1 and tags.get("rays", 0) == 1 and tags.get("motes", 0) >= 1,
-		"(U3) SSR tier: the blast adds a ground flare, a second shockwave, a light pillar and embers; the activation raises light rays", str(tags))
+	_check(tags.get("boom_jet", 0) == 1 and tags.get("boom_ring", 0) >= 2 and tags.get("rays", 0) == 1 and tags.get("motes", 0) >= 1,
+		"(U3) SSR tier: the blast adds a flame jet, a second shockwave ring and embers; the activation raises light rays", str(tags))
 	var rig = get_viewport().get_camera_3d().get_parent()
 	_check(rig.has_method("is_shaking") and not rig.is_shaking() and not GameData.fx_shake(), "(U3) with fx_shake off (tests) the SSR blast does not shake the camera", "")
 	ig._blast(mb.global_position)
