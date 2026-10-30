@@ -2,7 +2,7 @@ extends "res://scripts/ui_window.gd"
 ## 영웅 모집 창(스펙 §5, 개정 23: 골드·다이아 모집, 주점 탭으로 연다): 위 가운데 키 아트(이그니스가 화염구를 쏘는 순간 — 움직이지 않는
 ## 정지 그림 + 가장자리 비네트 + 외곽선 제목 "영웅 모집"), 그 아래 탭 [골드 모집] [다이아 모집].
 ## 골드 탭: 레벨 배지 "골드 모집 Lv n", 진행 막대 + "다음 레벨까지 a/b", 다음 레벨 확률·비용 미리보기, 확률 한 줄, [1회 3,000] [10회 30,000](10회 = 1회 × 10, 보장 없음).
-## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, 천장 "SSR 확정까지 n회", [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장].
+## 다이아 탭: 보유(보석 아이콘 + 수), 확률 한 줄, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장].
 ## 다이아 모집권이 그 장수만큼 있으면 그 버튼은 모집권 버튼([1회 모집권 1장] [10회 모집권 10장 · SR 이상 1장])으로 바뀌고 모집권을 쓴다(버튼마다 따로).
 ## 다이아 버튼은 다이아가 모자라도 눌린다: 누르면 "다이아가 부족합니다 — 상점으로 이동할까요?" 창, [이동]이면 다이아 상점을 연다(사용자 요청 2026-10-06).
 ## 골드가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
@@ -59,7 +59,6 @@ var progress_label: Label
 var preview_label: Label
 var rates_label: Label
 var dia_label: Label  # 다이아 보유
-var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
 var odds: Control  # 확률 안내 창
@@ -126,9 +125,7 @@ func _ready() -> void:
 	have.add_child(_gem(36))
 	dia_label = _label("", 32)
 	have.add_child(dia_label)
-	pity_label = _label("", 24, UiKit.GRADE_COLORS.SSR.darkened(0.25))
-	_dia_box.add_child(pity_label)
-	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·천장은 다이아 모집과 같다)
+	ticket_label = _label("", 26, UiKit.GRADE_COLORS.SR.darkened(0.2))  # 다이아 모집권: 다이아 대신 장당 1회(확률·10연차 보장은 다이아 모집과 같다)
 	_dia_box.add_child(ticket_label)
 	fuse_button = _button("", UiKit.GRADE_COLORS.UR.darkened(0.1), 24)
 	fuse_button.focus_mode = Control.FOCUS_NONE
@@ -593,7 +590,6 @@ func _refresh() -> void:
 		preview_label.text = Lang.t("recruit_panel.refresh_4") % [lv + 1, Skills.num_text(nr.ssr * 100.0), Skills.num_text(nr.sr * 100.0),
 			UiKit.commas(GameData.gacha_cost(GOLD, 1, lv + 1))]
 	dia_label.text = Lang.t("recruit_panel.refresh_5") % UiKit.commas(Economy.diamonds)
-	pity_label.text = Lang.t("recruit_panel.refresh_6") % st.pity_left + "  ·  " + (Lang.t("recruit_panel.refresh_14") % st.ur_pity_left)
 	fuse_button.text = Lang.t("recruit_panel.refresh_15") % Economy.fuse_cost()
 	var tk := Economy.dia_tickets
 	var tk_shown := tk > 0 and currency == DIA

@@ -2,7 +2,7 @@ extends Control
 ## 모집 확률 안내(출시 필수, 확률형 아이템 표시 — 2026-10-12): 모집 창 [확률 정보]가 연다. 어두운 막 + 크림 창(뒤 탭을 막는다).
 ## 지금 고른 모집(골드 = 지금 골드 모집 레벨, 다이아 = 다이아·모집권 공통)의 등급 확률, 보장 규칙, 영웅 한 명 한 명의 확률, 골드는 레벨별 표.
 ## 확률은 서버 뽑기(rules.ts rollGacha·gachaRates)와 같은 식: 등급(주점 보너스 포함)을 정한 뒤 그 등급 영웅 중 균등 → 영웅 확률 = 등급 확률 / 그 등급 영웅 수.
-## 보장(다이아 천장·10회 SR 이상)으로 바뀌는 장도 그 등급 안에서 균등이다. 확률 값은 바꾸지 않는다 — 보여 주기만.
+## 보장(10회 SR 이상)으로 바뀌는 장도 그 등급 안에서 균등이다. 확률 값은 바꾸지 않는다 — 보여 주기만.
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -92,8 +92,6 @@ func show_for(currency: String, gold_level: int) -> void:
 	else:
 		_line("SSR %s · SR %s · R %s" % [pct(rates.ssr), pct(rates.sr), pct(1.0 - rates.ssr - rates.sr)], 24, UiKit.INK)
 	if dia:
-		_line(Lang.t("gacha_odds.show_for_4") % int(GameData.config_num("gacha_dia_ur_pity")), 20, SUB)
-		_line(Lang.t("gacha_odds.show_for_5") % int(GameData.config_num("gacha_dia_pity")), 20, SUB)
 		_line(Lang.t("gacha_odds.show_for_6") % int(GameData.config_num("gacha_10_min_sr")), 20, SUB)
 	else:
 		_line(Lang.t("gacha_odds.show_for_7") % GameData.GOLD_SSR_FROM, 20, SUB)

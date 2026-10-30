@@ -1790,11 +1790,11 @@ func test_gacha_offline() -> void:
 	var dia := GameData.gacha_rates("diamond", 1)
 	var all_ten := true
 	for i in 2000:
-		var ten: Array = EconomyScript.roll_gacha(10, rng.randf, dia, {"n": 0, "max": 50})
+		var ten: Array = EconomyScript.roll_gacha(10, rng.randf, dia, true)
 		all_ten = all_ten and ten.size() == 10 and ten.any(func(x): return x.grade != "R")
 	check(all_ten, "every diamond 10-pull has an SR or better (2000 samples)")
 	var all_r := func(): return 0.99  # 전부 R, 풀 마지막(tia)
-	var rigged: Array = EconomyScript.roll_gacha(10, all_r, dia, {"n": 0, "max": 50})
+	var rigged: Array = EconomyScript.roll_gacha(10, all_r, dia, true)
 	check(rigged.slice(0, 9).all(func(x): return x.id == "tia") and rigged[9] == {"id": "selene", "grade": "SR"}, "a diamond 10-pull with no SR+ turns the last card into an SR: %s" % [rigged])
 	var gold_ten: Array = EconomyScript.roll_gacha(10, all_r)
 	check(gold_ten.size() == 10 and gold_ten.all(func(x): return x == {"id": "tia", "grade": "R"}), "a gold 10-pull has no SR guarantee (all R stays all R): %s" % [gold_ten])
@@ -4210,15 +4210,10 @@ func test_recruit_r23() -> void:
 		and GameData.gacha_level_up(1, 35, 10) == {"level": 2, "pulls": 5} and GameData.gacha_level_up(1, 0, 5000) == {"level": 7, "pulls": 1360}
 		and GameData.gacha_level_up(9, 3235, 10) == {"level": 10, "pulls": 0} and GameData.gacha_level_up(10, 0, 10) == {"level": 10, "pulls": 0},
 		"rev 23: level-up accumulates, carries over, climbs several levels at once and stops at 10")
-	# 천장
+	# 천장 없음(2026-10-30 사용자 "SSR, UR 천장 없애주고")
 	var all_r := func(): return 0.99
-	var pity := {"n": 0, "max": 50}
-	var first: Array = EconomyScript.roll_gacha(49, all_r, dia, pity)
-	var fiftieth: Array = EconomyScript.roll_gacha(1, all_r, dia, pity)
-	check(first.all(func(x): return x.grade == "R") and fiftieth[0].grade == "SSR" and pity.n == 0, "rev 23: the 50th diamond pull without an SSR is an SSR; the counter resets")
-	pity.n = 45
-	var ten: Array = EconomyScript.roll_gacha(10, all_r, dia, pity)
-	check(ten.map(func(x): return x.grade) == ["R", "R", "R", "R", "SSR", "R", "R", "R", "R", "R"] and pity.n == 5, "rev 23: pity inside a 10-pull (5th card)")
+	var many: Array = EconomyScript.roll_gacha(300, all_r, dia, true)
+	check(many.all(func(x): return x.grade == "R"), "no pity: 300 all-R diamond rolls stay R")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 23
 	var sample: Array = EconomyScript.roll_gacha(100000, rng.randf, l10)
@@ -4235,7 +4230,7 @@ func test_recruit_r23() -> void:
 	e.gacha_done.connect(func(r): got.append(r))
 	e.gold = 400000
 	check(e.gacha(10) and e.gacha(10) and e.gacha(10) and e.gacha_state().gold_pulls == 30 and e.gacha_state().gold_level == 1 and ups.is_empty(), "rev 23: three 10-pulls are 30/40 at Lv 1")
-	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160, "dia_pity": 0, "pity_left": 50, "ur_pity": 0, "ur_pity_left": 200}
+	check(e.gacha(10) and e.gold == 0 and e.gacha_state() == {"gold_level": 2, "gold_pulls": 0, "gold_next": 160}
 		and ups == [2] and notes == ["골드 모집 Lv 2! SR 5.5% · SSR은 Lv 3부터"] and e.gacha_cost("gold", 1) == 12500,
 		"rev 23: the 40th pull levels up: notice, signal, new cost: %s %s" % [e.gacha_state(), notes])
 	# 오프라인 다이아
@@ -4244,8 +4239,7 @@ func test_recruit_r23() -> void:
 	e.diamonds = 3000
 	check(e.gacha(10, "diamond") and e.diamonds == 300 and e.gacha_state().gold_pulls == 0 and e.gacha_state().gold_level == 2 and e.gold == 0,
 		"rev 23: a diamond 10-pull takes 2700 diamonds and leaves gold and the gold level alone")
-	e.gacha_dia_pity = 49
-	check(e.gacha(1, "diamond") and got[-1][0].grade == "SSR" and e.gacha_dia_pity == 0 and e.diamonds == 0, "rev 23: offline pity — pull 50 is an SSR")
+	check(e.gacha(1, "diamond") and e.diamonds == 0 and e.gacha_dia_pity == 0, "offline diamond 1-pull: 300 diamonds, no pity counter (2026-10-30)")
 	check(not e.gacha(1, "ruby") and not e.gacha(3, "diamond"), "rev 23: unknown currency or count does nothing")
 	# 저장 v11 왕복, v10은 기본값, 모집 상태가 빠진 v11은 깨진 저장
 	var tmp := "user://test_r23_save.json"
@@ -4281,7 +4275,7 @@ func test_recruit_r23() -> void:
 	o.gacha_leveled.connect(func(l): o_ups.append(l))
 	var reply := {"player": {"gold_tenths": 0, "stage": 1, "res": {}, "buildings": {}, "diamonds": 2700,
 		"gacha": {"gold_level": 4, "gold_pulls": 12, "gold_next": 120, "dia_pity": 37}}, "merchant": {"rates": {"wood": 1.0, "stone": 1.0, "food": 1.0}, "next_change": 3600.0}}
-	check(o.apply_server(reply) and o.diamonds == 2700 and o.gacha_state().gold_level == 4 and o.gacha_gold_pulls == 12 and o.gacha_state().pity_left == 13 and o_ups.is_empty(),
+	check(o.apply_server(reply) and o.diamonds == 2700 and o.gacha_state().gold_level == 4 and o.gacha_gold_pulls == 12 and o_ups.is_empty(),
 		"rev 23: apply_server takes diamonds and the recruit state (first sync is not a level-up)")
 	reply.player.gacha.gold_level = 5
 	check(o.apply_server(reply) and o_ups == [5], "rev 23: a later server level-up fires gacha_leveled")
@@ -6153,16 +6147,14 @@ func test_gacha_odds() -> void:
 		"gacha odds: a diamond SSR hero shows 0.3125%% (5%% / 16), a UR hero 0.0833%% (0.5%% / 6) and UR comes first")
 
 
-## 태생 UR(2026-10-29 사용자): 다이아만 UR(골드 0), UR 천장(u ≥ umax면 UR, n·u 모두 0), SSR 조각 10개 합성 → UR 1명(오프라인), 전투력 등급 배율 2.8.
+## 태생 UR(2026-10-29 사용자): 다이아만 UR(골드 0), 천장 없음(2026-10-30), SSR 조각 10개 합성 → UR 1명(오프라인), 전투력 등급 배율 2.8.
 func test_hero_ur() -> void:
 	check(is_equal_approx(GameData.gacha_rates(GameData.GACHA_DIA, 1).ur, 0.005) and GameData.gacha_rates(GameData.GACHA_GOLD, 10).ur == 0.0,
 		"UR: diamond 0.5%, gold 0")
-	var pity := {"n": 20, "max": 50, "u": 199, "umax": 200}
-	var out: Array = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), pity)
-	check(out[0].grade == "UR" and pity.n == 0 and pity.u == 0, "UR pity at 199: an R roll becomes UR and both counters reset: %s %s" % [out, pity])
-	pity = {"n": 49, "max": 50, "u": 10, "umax": 200}
-	out = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), pity)
-	check(out[0].grade == "SSR" and pity.n == 0 and pity.u == 11, "SSR pity does not reset the UR counter: %s" % [pity])
+	var out: Array = EconomyScript.roll_gacha(1, func(): return 0.004, GameData.gacha_rates(GameData.GACHA_DIA, 1), true)
+	check(out[0].grade == "UR", "UR: a diamond roll under 0.5%% is UR: %s" % [out])
+	out = EconomyScript.roll_gacha(1, func(): return 0.99, GameData.gacha_rates(GameData.GACHA_DIA, 1), true)
+	check(out[0].grade == "R", "no UR pity (2026-10-30): an R roll stays R: %s" % [out])
 	var gold: Array = EconomyScript.roll_gacha(200, func(): return 0.0, GameData.gacha_rates(GameData.GACHA_GOLD, 10))
 	check(gold.all(func(x): return x.grade != "UR"), "gold never rolls UR")
 	var e = _econ(1000.0)

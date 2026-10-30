@@ -106,7 +106,7 @@ test('확률(10만 회 표본, 암호학적 난수, 골드 Lv 1): SSR 0(Lv 3부�
   }
   const dia = R.gachaRates(cfg, 'diamond', 1)
   for (let i = 0; i < 2000; i++) { // 다이아 10연차만 SR 이상 1장 보장
-    const ten = R.rollGacha(10, heroes as { id: string; grade: string }[], cfg, R.cryptoRandom, dia, { n: 0, max: 50 })
+    const ten = R.rollGacha(10, heroes as { id: string; grade: string }[], cfg, R.cryptoRandom, dia, true)
     assert.ok(ten.length === 10 && ten.some((x) => x.grade !== 'R'), JSON.stringify(ten))
   }
   assert.ok(R.rollGacha(10, heroes as { id: string; grade: string }[], cfg, () => 0.99).every((x) => x.grade === 'R')) // 골드는 보장 없음

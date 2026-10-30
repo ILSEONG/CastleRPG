@@ -606,7 +606,6 @@ gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
-gacha_odds.show_for_5,%d회째 모집은 SSR 확정(SSR 이상이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_6,10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_7,"골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다",,,,scripts/gacha_odds.gd
 gacha_odds.show_for_8,등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림,,,,scripts/gacha_odds.gd
@@ -1530,7 +1529,6 @@ recruit_panel.refresh_2,최대 레벨,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_3,다음 레벨까지 %d/%d,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_4,Lv %d: SSR %s%% · SR %s%% · 1회 %s,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_5,보유 %s,,,,scripts/recruit_panel.gd
-recruit_panel.refresh_6,SSR 확정까지 %d회,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_7,다이아 모집권 %d장,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_8,다이아 ,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_9,모집권 ,,,,scripts/recruit_panel.gd
@@ -2843,9 +2841,7 @@ fuse_dialog.ready_5,합성,,,,scripts/fuse_dialog.gd
 fuse_dialog.ready_6,닫기,,,,scripts/fuse_dialog.gd
 fuse_dialog.rebuild,%s  (조각 %d),,,,scripts/fuse_dialog.gd
 fuse_dialog.rebuild_2,넣은 조각 %d / %d,,,,scripts/fuse_dialog.gd
-recruit_panel.refresh_14,UR 확정까지 %d회,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_15,SSR 조각 합성 (%d개 → UR 1명),,,,scripts/recruit_panel.gd
-gacha_odds.show_for_4,%d회째 모집은 UR 확정(UR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
 economy.fuse_ur,SSR 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd
 dungeon_hud.show_result.rec,클리어 시간 %s,,,,scripts/dungeon_hud.gd
 dungeon_hud.show_result_7, · 최고 단계 갱신!,,,,scripts/dungeon_hud.gd

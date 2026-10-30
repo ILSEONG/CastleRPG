@@ -356,11 +356,10 @@ func gacha_cost(currency: String, count: int) -> int:
 
 ## 모집(스펙 §3.6) count장 → [{id, grade}]. 장마다 등급(UR rates.ur, SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게.
 ## rand = [0, 1) 난수 Callable(테스트는 주입). rates = GameData.gacha_rates(비면 골드 Lv 1).
-## pity(다이아 모집만, 개정 23) {n, max, u, umax}가 있으면 장마다 n·u += 1, u ≥ umax면 UR 확정, 아니고 n ≥ max면 SSR 확정.
-## UR이면 n = u = 0, SSR이면 n = 0(SSR 천장은 SSR 이상으로 풀린다) — pity를 바꿔 둔다. u·umax가 없으면 UR 천장은 없다.
-## 다이아 10연차는 또 SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
+## 천장은 없다(2026-10-30 사용자 "SSR, UR 천장 없애주고"). guarantee(다이아·모집권 모집)면 10연차에 SR 이상이
+## gacha_10_min_sr장보다 적을 때 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 ## 서버 rules.rollGacha와 같은 규칙(같은 난수열이면 같은 결과).
-static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> Array:
+static func roll_gacha(count: int, rand: Callable, rates := {}, guarantee := false) -> Array:
 	var pools := {"UR": [], "SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
 		if pools.has(h.grade):
@@ -370,27 +369,12 @@ static func roll_gacha(count: int, rand: Callable, rates := {}, pity := {}) -> A
 	var ur: float = rates.get("ur", 0.0)
 	var ssr: float = rates.ssr
 	var sr: float = rates.sr
-	var ur_pity := pity.has("u") and pity.has("umax")
 	var out := []
 	for i in count:
 		var r: float = rand.call()
 		var grade := "UR" if r < ur else ("SSR" if r < ur + ssr else ("SR" if r < ur + ssr + sr else "R"))
-		if not pity.is_empty():
-			pity.n += 1
-			if ur_pity:
-				pity.u += 1
-				if pity.u >= pity.umax:
-					grade = "UR"
-			if pity.n >= pity.max and grade != "UR":
-				grade = "SSR"
-			if grade == "UR":
-				pity.n = 0
-				if ur_pity:
-					pity.u = 0
-			elif grade == "SSR":
-				pity.n = 0
 		out.append(_pick(pools, grade, rand))
-	if count == 10 and not pity.is_empty():
+	if count == 10 and guarantee:
 		var need := int(GameData.config_num("gacha_10_min_sr")) - out.filter(func(x): return x.grade != "R").size()
 		for i in range(out.size() - 1, -1, -1):
 			if need <= 0:
@@ -694,12 +678,12 @@ func deploy_slots(slots: int) -> Array:
 
 
 ## 모집 count장(1 또는 10), currency = 골드 | 다이아(개정 23). 재화가 모자라면 알림만. 오프라인은 바로 뽑아 저장하고 gacha_done,
-## 온라인은 요청(응답에 gacha_done). 골드는 모집 레벨 비용·확률로 뽑고 장수만큼 누적해 레벨업, 다이아는 천장을 센다.
+## 온라인은 요청(응답에 gacha_done). 골드는 모집 레벨 비용·확률로 뽑고 장수만큼 누적해 레벨업, 다이아는 천장 없이 10연차 SR 이상 보장만(2026-10-30).
 ## 뽑았거나 요청을 보냈으면 true.
 func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
 	if not count in [1, 10] or not currency in [GameData.GACHA_GOLD, GameData.GACHA_DIA, GameData.GACHA_TICKET]:
 		return false
-	var ticket := currency == GameData.GACHA_TICKET  # 다이아 모집권(튜토리얼 보상): 다이아 모집과 같은 확률·천장, 다이아 대신 모집권
+	var ticket := currency == GameData.GACHA_TICKET  # 다이아 모집권(튜토리얼 보상): 다이아 모집과 같은 확률·10연차 보장, 다이아 대신 모집권
 	var dia := currency == GameData.GACHA_DIA or ticket
 	var cost := gacha_cost(currency, count)
 	if wallet(currency) < cost:
@@ -708,12 +692,7 @@ func gacha(count: int, currency := GameData.GACHA_GOLD) -> bool:
 	if net != null:
 		return _gacha_online(count, currency)
 	var rates := gacha_rates(GameData.GACHA_DIA if dia else currency)
-	var pity := {"n": gacha_dia_pity, "max": int(GameData.config_num("gacha_dia_pity")),
-		"u": gacha_dia_ur_pity, "umax": int(GameData.config_num("gacha_dia_ur_pity"))} if dia else {}
-	var cards := roll_gacha(count, rng.randf, rates, pity)
-	if dia:
-		gacha_dia_pity = pity.n
-		gacha_dia_ur_pity = pity.u
+	var cards := roll_gacha(count, rng.randf, rates, dia)
 	if ticket:
 		dia_tickets -= cost
 	elif dia:
@@ -1886,12 +1865,9 @@ func gacha_rates(currency := GameData.GACHA_GOLD) -> Dictionary:
 	return GameData.gacha_rates(currency, gacha_gold_level)
 
 
-## 모집 상태(개정 23): {gold_level, gold_pulls, gold_next(다음 레벨까지 필요한 누적, 최대면 0), dia_pity, pity_left(SSR 확정까지 남은 수),
-## ur_pity, ur_pity_left(UR 확정까지 남은 수)}.
+## 모집 상태(개정 23): {gold_level, gold_pulls, gold_next(다음 레벨까지 필요한 누적, 최대면 0)}. 천장은 없다(2026-10-30).
 func gacha_state() -> Dictionary:
-	return {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "gold_next": GameData.gacha_gold_next(gacha_gold_level),
-		"dia_pity": gacha_dia_pity, "pity_left": maxi(1, int(GameData.config_num("gacha_dia_pity")) - gacha_dia_pity),
-		"ur_pity": gacha_dia_ur_pity, "ur_pity_left": maxi(1, int(GameData.config_num("gacha_dia_ur_pity")) - gacha_dia_ur_pity)}
+	return {"gold_level": gacha_gold_level, "gold_pulls": gacha_gold_pulls, "gold_next": GameData.gacha_gold_next(gacha_gold_level)}
 
 
 ## 모집 재화 보유(골드는 정수 골드).
