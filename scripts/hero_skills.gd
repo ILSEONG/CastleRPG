@@ -96,6 +96,7 @@ const FOX := Color(1.0, 0.42, 0.62)  # 연화 여우불
 const AZURE := Color(0.2, 0.85, 0.7)  # 청룡 청록
 const TIME := Color(0.45, 0.85, 1.0)  # 크로노스 시간
 const PHOENIX := Color(1.0, 0.38, 0.15)  # 주작 불꽃
+const REBIRTH_LOW := 0.4  # 환생의 불꽃: 쓰러진 아군이 없을 때 이 HP 비율 이하 아군이 있어야 쓴다
 const UR_FX_COLORS := [TORTOISE, Color(0.45, 0.7, 1.0), FOX, AZURE, TIME, PHOENIX]  # UR_ACTIVE 두 개씩(영웅 순서) → 발동 마법진 색(백호는 흰 번개가 화면을 하얗게 덮지 않게 푸른 빛)
 const SHELL_FX_GAP := 0.4  # 흑귀갑 되돌림 물보라 최소 간격(초)
 
@@ -1636,10 +1637,13 @@ func _cast_ur(k: String, p: Array, dry: bool) -> bool:
 				UrFx.phoenix(w, here + Vector3(-3, 2.5, 0), here + Vector3(3, 2.5, 0), PHOENIX, 0.6)
 		"rebirth_flame":  # 환생의 불꽃: 쓰러진 아군을 모두 최대 HP b%로 되살리고, 살아 있는 아군은 c% 회복
 			var dead := []
+			var low := false  # 자동 발동은 쓰러졌거나 위급한(HP REBIRTH_LOW 이하) 아군이 있을 때만 — 긁힌 상처에 써 버려 정작 쓰러질 때 쿨이던 것(2026-10-30). 직접 누르면 다친 아군만 있어도 쓴다
 			for o in h.get_tree().get_nodes_in_group(h.allies):
 				if not o.is_alive() and o.has_method("revive") and o.is_inside_tree():
 					dead.append(o)
-			if dead.is_empty() and _hurt_allies(here, INF).is_empty():
+				elif o.is_alive() and o.hp <= o.hp_max * REBIRTH_LOW:
+					low = true
+			if dead.is_empty() and (_hurt_allies(here, INF).is_empty() or not (low or h._skill_req.has(k))):
 				return false
 			if dry:
 				return true
