@@ -1,8 +1,8 @@
 shader_type spatial;
-render_mode blend_add, unshaded, cull_disabled, depth_draw_never, depth_test_disabled, shadows_disabled, fog_disabled;
+render_mode blend_premul_alpha, unshaded, cull_disabled, depth_draw_never, depth_test_disabled, shadows_disabled, fog_disabled;
 
 // 빛무리(Fx.halo): 카메라를 보는 사각형 하나에 가운데가 밝고 가장자리로 부드럽게 사라지는 원 — 텍스처 없이 UV로 계산한다.
-// 각진 이펙트 뒤에 깔아 "빛나는" 느낌만 더한다(블룸 후처리 없이). 색·세기는 인스턴스마다(tint·fade).
+// 각진 이펙트 뒤에 깔아 "빛나는" 느낌만 더한다(블룸 후처리 없이). 색·세기는 인스턴스마다(tint·fade). 미리 곱한 알파(2026-10-30).
 // depth_test_disabled: 땅·몸에 잘리지 않는다(작고 옅어 앞뒤가 바뀌어도 티 나지 않는다).
 instance uniform vec4 tint : source_color = vec4(1.0);
 instance uniform float fade : hint_range(0.0, 1.0) = 1.0;
@@ -18,6 +18,6 @@ void fragment() {
 	float d = clamp(length(UV - 0.5) * 2.0, 0.0, 1.0);
 	float a = (1.0 - d) * (1.0 - d);
 	a += 0.6 * pow(max(1.0 - d * 2.2, 0.0), 2.0);  // 작은 밝은 심
-	ALBEDO = tint.rgb * a * fade * 0.9;
-	ALPHA = 1.0;
+	ALBEDO = tint.rgb * a * fade * 0.8;
+	ALPHA = a * fade * 0.22;  // 2026-10-30: 바닥을 살짝 덮어 빛무리가 고유 색을 띤다(더하기만 하면 밝은 풀밭에서 하얗게 번졌다)
 }

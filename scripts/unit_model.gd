@@ -24,6 +24,7 @@ const SHADOW_ON_AT := 30  # 이만큼으로 줄면 다시 켬(경계에서 깜�
 const HIT_FLASH_SEC := 0.14  # 피격 번쩍임(개정 26)
 const HIT_SQUASH := Vector3(1.12, 0.86, 1.12)  # 피격 순간 찌그러짐(세게 맞으면 이만큼, 약하면 절반)
 const HIT_SQUASH_SEC := 0.16
+const FLASH_TINT := Color(1.0, 0.96, 0.88)  # 피격 번쩍임 기본 색(hit_flash.gdshader 기본값과 같다)
 const HIT_FLASH_GAP_MS := 260  # 피격 번쩍임 최소 간격(약한 타격, 강한 타격은 절반)
 
 static var _crowd_frame := -1
@@ -209,6 +210,51 @@ func hit_react(strong := false) -> bool:
 	return true
 
 
+## 스킬 시전 준비(SkillVfx.windup, 2026-10-30): 몸·무기가 tint 색으로 sec초에 걸쳐 달아오른다(피격 번쩍임과 같은 덧그림 재질).
+## 발동 순간 release_glow가 한 번 세게 번쩍이고 꺼진다. 그 사이 맞으면 hit_react가 이어받는다.
+func charge_glow(tint: Color, sec: float) -> void:
+	if not is_inside_tree():
+		return
+	_overlay_on(tint)
+	if _hit_tw != null:
+		_hit_tw.kill()
+	_hit_tw = create_tween()
+	_hit_tw.tween_method(_set_flash, 0.0, 0.35, sec).set_ease(Tween.EASE_IN)
+
+
+func release_glow() -> void:
+	if not is_inside_tree() or _flash_meshes.is_empty():
+		return
+	if _hit_tw != null:
+		_hit_tw.kill()
+	_hit_tw = create_tween()
+	_hit_tw.tween_method(_set_flash, 0.7, 0.0, 0.22).set_ease(Tween.EASE_OUT)
+	_hit_tw.tween_callback(_end_flash)
+
+
+## 스킬 피격(SkillVfx.hit): 막 번쩍인 몸을 속성 색으로(불 = 주황, 얼음 = 하늘색 …). 번쩍이는 중이 아니면 아무 일도 없다.
+func tint_flash(tint: Color) -> void:
+	if _hit_tw == null or not _hit_tw.is_valid():
+		return
+	for mi in _flash_meshes:
+		if is_instance_valid(mi) and mi.material_overlay != null:
+			mi.set_instance_shader_parameter("flash_tint", tint)
+
+
+func _overlay_on(tint: Color) -> void:
+	if _flash_mat == null:
+		_flash_mat = ShaderMaterial.new()
+		_flash_mat.shader = HitFlashShader
+	if _flash_meshes.is_empty():
+		for mi in find_children("*", "MeshInstance3D", true, false):
+			if mi.is_visible_in_tree():
+				_flash_meshes.append(mi)
+	for mi in _flash_meshes:
+		if is_instance_valid(mi):
+			mi.material_overlay = _flash_mat
+			mi.set_instance_shader_parameter("flash_tint", tint)
+
+
 func _set_flash(v: float) -> void:
 	for mi in _flash_meshes:
 		if is_instance_valid(mi):
@@ -219,6 +265,7 @@ func _end_flash() -> void:
 	for mi in _flash_meshes:
 		if is_instance_valid(mi):
 			mi.material_overlay = null
+			mi.set_instance_shader_parameter("flash_tint", FLASH_TINT)
 	scale = _base_scale
 
 

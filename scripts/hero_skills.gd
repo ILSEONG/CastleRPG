@@ -14,6 +14,7 @@ const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const UrFx := preload("res://scripts/ur_fx.gd")
+const SkillVfx := preload("res://scripts/skill_vfx.gd")
 
 ## 발동형(쿨 a초). 처음엔 쿨의 FIRST_CD배만 기다린다(교전이 시작되면 곧 쓴다).
 const BULWARK_TAUNT_R := 4.0  # 방벽 도발 반경(m)
@@ -84,7 +85,7 @@ const POISON := Color(0.5, 0.85, 0.25)
 const HOLY := Color(1.0, 0.9, 0.45)
 const VOID := Color(0.55, 0.3, 0.85)
 const EARTH := Color(0.62, 0.48, 0.32)
-const STORM := Color(0.7, 0.85, 1.0)
+const STORM := Color(0.5, 0.68, 1.0)  # 2026-10-30: 더 진한 전기색(옅은 하늘색은 밝은 바닥에서 하얗게 보였다)
 const BLOOD := Color(0.85, 0.12, 0.15)
 const STEEL := Color(0.75, 0.82, 0.95)
 const MOON := Color(0.75, 0.8, 1.0)
@@ -128,6 +129,11 @@ var _parry_t := 0.0  # 받아치기 남은 초
 var _wall_fx: Node3D
 var _tiger_t := 0.0  # 백호 현신 남은 초
 var _shell_fx := 0.0  # 흑귀갑 물보라 다음까지
+var _vfx_kind := ""  # 마지막으로 쓴 스킬(타격 연출의 속성 — SkillVfx.hit)
+var _vfx_power := 1  # 0 확률 발동 · 1 액티브 · 2 궁극기
+var _vfx_first := false  # 이 시전의 첫 타격이 아직이다
+var _vfx_at := -100.0  # 마지막 시전 시각(초) — VFX_WINDOW가 지난 타격(평타 패시브 등)엔 스킬 연출을 붙이지 않는다
+const VFX_WINDOW := 4.5
 
 
 func _init(hero) -> void:
@@ -440,6 +446,7 @@ func on_hit(m, d: float, primary: bool, attack_no: int, was: int) -> void:
 ## 확률 발동 패시브(평타 주 대상 m): 불바다 = 화염 지대, 돌개바람 = 회오리, 서리 가시 = 얼음 가시, 햇빛 파편·끓는 늪 = 그 자리 폭발.
 func _proc(k: String, m) -> void:
 	var p: Array = sk[k]
+	_vfx_mark(k, 0)
 	match k:
 		"scorch":
 			_zone("inferno", p, _flat(m.global_position))
@@ -600,6 +607,8 @@ func _cast(k: String, dry := false) -> bool:
 	var here: Vector3 = h.global_position
 	var w := _world()
 	var tier: int = h._tier
+	if not dry:
+		_vfx_mark(k, 2 if SkillVfx.is_ult(h, k) else 1)
 	if k in UR_ACTIVE:
 		var ok := _cast_ur(k, p, dry)
 		if ok and not dry:
@@ -742,6 +751,8 @@ func _cast(k: String, dry := false) -> bool:
 			var r := float(p[1])
 			var dmg: float = a * float(p[2]) / 100.0 * h._skill_mult
 			var n := 5 if k == "thunder_storm" else 3
+			if k == "thunder_storm":
+				SkillVfx.storm_cloud(w, at, r, 0.5 * n + 0.2)  # 낙뢰 동안 머리 위에 소용돌이치는 먹구름 + 번쩍임
 			for i in n:
 				_later((0.5 if k == "thunder_storm" else 0.3) * i, func():
 					if k == "thunder_storm":
@@ -1291,8 +1302,19 @@ func _hit(m, dmg: float, was := -1) -> void:
 		return
 	var w := snap(m) if was < 0 else was
 	m.take_damage(dmg, DamageNumbers.Kind.SKILL)
+	if _vfx_kind != "" and Time.get_ticks_msec() / 1000.0 - _vfx_at < VFX_WINDOW:
+		SkillVfx.hit(m, _vfx_kind, _vfx_power, _vfx_first)  # 스킬 연출 ③타격(2026-10-30): 속성 번쩍임·파편, 첫 타격은 충격 고리·잔상
+		_vfx_first = false
 	if not m.is_alive():
 		on_kill(m, w)
+
+
+## 타격 연출의 속성을 이 스킬로(이후 _hit이 SkillVfx.hit에 넘긴다). 지대·연속 낙뢰처럼 나중에 맞는 타격도 같은 스킬로 본다.
+func _vfx_mark(k: String, power: int) -> void:
+	_vfx_kind = k
+	_vfx_power = power
+	_vfx_first = true
+	_vfx_at = Time.get_ticks_msec() / 1000.0
 
 
 ## 오라·강화를 넣은 지금 공격력.

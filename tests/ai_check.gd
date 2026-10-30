@@ -1617,7 +1617,7 @@ func _skill_unlock_cases() -> void:
 	var casting: bool = va.is_casting()
 	var anim: String = va._model._current
 	var early: int = tag_n.call("meteor")
-	var charged: int = tag_n.call("charge")
+	var charged: int = tag_n.call("charge_sigil")  # 2026-10-30: 기 모으기 = SkillVfx 준비 마법진
 	var waited := 0.0
 	while va.is_casting() and waited < 2.0:
 		va._process(0.05)
@@ -1631,7 +1631,7 @@ func _skill_unlock_cases() -> void:
 	va._skx.tick(0.016)
 	var cast2: bool = va.is_casting()
 	va.apply_stun(0.2)
-	var cut: bool = not va.is_casting() and tag_n.call("charge") == 0
+	var cut: bool = not va.is_casting() and tag_n.call("charge_sigil") == 0
 	va._stun_t = 0.0
 	for i in 20:
 		va._process(0.05)

@@ -14,6 +14,7 @@ const MeshKit := preload("res://scripts/mesh_kit.gd")
 const AddShader := preload("res://shaders/fx_add.gdshader")
 const SoftShader := preload("res://shaders/fx_soft.gdshader")
 const HaloShader := preload("res://shaders/fx_halo.gdshader")
+const EnergyShader := preload("res://shaders/fx_energy.gdshader")
 
 const MAX_LIVE := 80  # 동시에 살아 있는 이펙트·투사체 모양 상한(넘으면 그 이펙트는 건너뛴다)
 const GROUP := "fx"
@@ -52,6 +53,7 @@ static var _fire: ShaderMaterial
 static var _smoke: ShaderMaterial
 static var _halo: ShaderMaterial
 static var _quad: QuadMesh
+static var _energy_mats := {}
 
 
 ## 등급의 연출 단계(모르는 등급은 0).
@@ -96,6 +98,28 @@ static func smoke_material() -> ShaderMaterial:
 	if _smoke == null:
 		_smoke = _fx_mat(SoftShader, 1.0)
 	return _smoke
+
+
+## 에너지 재질(fx_energy.gdshader, 2026-10-30 스킬 연출 고도화): 정점 색 하나에서 가장자리(진한 색)·몸·하얀 심 그라데이션 +
+## 흐르는 노이즈 + 갉아먹히며 사라짐(fade). 미리 곱한 알파라 밝은 풀밭 위에서도 제 색이 진하다(가산처럼 하얗게 날아가지 않는다).
+## style: "energy"(기본: 구슬·충격파) · "flame"(위로 빨리 일렁이는 불꽃) · "arc"(검기·전류: 날카로운 심) · "smooth"(결정·빛기둥·오라: 매끈, 옅게).
+## 스타일마다 하나를 모든 이펙트가 함께 쓴다(색은 정점 색, 사라짐은 인스턴스 값 fade).
+const ENERGY_STYLES := {
+	"energy": {},
+	"flame": {"scroll": Vector3(0, -2.6, 0), "noise_amt": 0.85, "noise_scale": 3.2, "core": 0.95, "glow": 0.45, "edge_dark": 0.32,
+		"hot_color": Color(1.0, 0.92, 0.5)},
+	"arc": {"scroll": Vector3(3.0, 0, 0), "noise_amt": 0.3, "noise_scale": 3.5, "core": 0.75, "glow": 0.6, "edge_dark": 0.5, "body": 0.95},
+	"smooth": {"scroll": Vector3(0, 0.6, 0), "noise_amt": 0.25, "noise_scale": 1.5, "core": 0.7, "glow": 0.3, "body": 0.7, "edge_dark": 0.6},
+}
+static func energy_material(style := "energy") -> ShaderMaterial:
+	if not _energy_mats.has(style):
+		var m := ShaderMaterial.new()
+		m.shader = EnergyShader
+		var ps: Dictionary = ENERGY_STYLES[style]
+		for k in ps:
+			m.set_shader_parameter(k, ps[k])
+		_energy_mats[style] = m
+	return _energy_mats[style]
 
 
 static func _fx_mat(shader: Shader, boost: float) -> ShaderMaterial:
@@ -181,15 +205,15 @@ static func dress_projectile(proj: Node3D, kind: String, color: Color, tail := f
 static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake := false, tier := 0, power := -1) -> void:
 	impact(parent, pos, color, radius * 0.55, (1 if tier >= 2 else 0) if power < 0 else power)  # 타격 섬광·흔들림(개정 26)
 	var hot := color.lightened(0.35)
-	var mi := _spawn(parent, _mesh("blast", hot), pos + Vector3(0, 0.6, 0), "blast", soft_material())  # 불덩이(반투명 — 밝은 바닥에서도 제 색): 커지며 옅어진다
+	var mi := _spawn(parent, _mesh("blast", color), pos + Vector3(0, 0.6, 0), "blast", energy_material("flame"))  # 불덩이(2026-10-30 에너지 재질: 진한 가장자리 → 하얀 심, 일렁이다 갉아먹히며 흩어진다)
 	if mi != null:
 		mi.scale = Vector3.ONE * 0.3
-		var tw := mi.create_tween()
-		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.78, 0.2).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-		tw.parallel().tween_property(mi, "rotation", Vector3(0.6, 1.2, 0.3), 0.4)
-		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.9, 0.18)
+		var tw := mi.create_tween()  # 순간 팽창(0.1초) → 일렁이며 부푼다 → 노이즈를 따라 갉아먹히며 흩어진다
+		tw.tween_property(mi, "scale", Vector3.ONE * radius * 0.6, 0.1).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_EXPO)
+		tw.parallel().tween_property(mi, "rotation", Vector3(0.6, 1.2, 0.3), 0.55)
+		tw.tween_property(mi, "scale", Vector3(radius * 0.75, radius * 0.85, radius * 0.75), 0.45).set_ease(Tween.EASE_OUT)
 		tw.tween_callback(mi.queue_free)
-		_fade(mi, 0.3, 0.1)
+		_fade(mi, 0.42, 0.12)
 	var ring := _spawn(parent, _mesh("shock", color.lightened(0.3)), pos + Vector3(0, 0.05, 0), "shock", glow_material())
 	if ring != null:
 		ring.scale = Vector3(0.3, 1.0, 0.3)
@@ -204,7 +228,7 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 		tf.tween_property(flash, "scale", Vector3.ONE * radius * 0.6, 0.12)
 		tf.tween_callback(flash.queue_free)
 		_fade(flash, 0.1, 0.02)
-	halo(parent, pos + Vector3(0, 0.8, 0), hot, radius * 3.3, 0.5, 1.25, "blast_glow")
+	halo(parent, pos + Vector3(0, 0.8, 0), hot, radius * 1.8, 0.4, 1.25, "blast_glow")  # 2026-10-30: 3.3 → 1.8(화면을 하얗게 덮어 불덩이 모양이 안 보였다)
 	var n := randi_range(SHARDS_MIN, SHARDS_MAX)
 	for i in n:
 		var s := _spawn(parent, _mesh("shard", color), pos + Vector3(0, 0.5, 0), "shard")
@@ -231,8 +255,8 @@ static func blast(parent: Node, pos: Vector3, color: Color, radius: float, shake
 	_flare(parent, _mesh("burst", color), pos + Vector3(0, 0.08, 0), "burst", radius * 1.15, 0.4)
 	if tier >= 1:
 		_wave(parent, pos, color, radius * 1.35, 0.45, 0.12)
-	if tier >= 2:
-		_surge(parent, _mesh("pillar", color), pos, "pillar", radius * 0.4, radius * 2.2, 0.55, soft_material())
+	if tier >= 2:  # 불기둥(2026-10-30: 반투명 분홍 기둥 → 에너지 불꽃 재질 — 진한 가장자리, 위로 일렁인다)
+		_surge(parent, _mesh("pillar", color), pos, "pillar", radius * 0.4, radius * 2.2, 0.6, energy_material("flame"))
 		_motes(parent, pos, color.lightened(0.2), radius * 0.8, 2.4, 0.8)
 	if shake:
 		shake_camera(parent)
@@ -299,20 +323,20 @@ static func lightning(parent: Node, points: Array, color: Color, tier := 0) -> v
 			if j <= bends:
 				var jitter := 0.55 * (1.0 - f * 0.6)
 				p += Vector3(randf_range(-jitter, jitter), 0, randf_range(-jitter, jitter))
-			_ribbon(glow, prev, p, 0.2 * sc, Color(color, 0.55))
+			_ribbon(glow, prev, p, 0.3 * sc, Color(color, 0.9))
 			_ribbon(core, prev, p, 0.05 * sc, Color(1.0, 1.0, 1.0).lerp(color, 0.25))
 			path.append(p)
 			prev = p
-		for k in 1 + mini(tier, 1):  # 곁가지: 위쪽 마디에서 비스듬히 아래로 3마디
+		for k in 1 + tier:  # 곁가지: 위쪽 마디에서 비스듬히 아래로 3마디(2026-10-30: 단계마다 하나씩 — 더 불규칙하게 갈라진다)
 			var bp: Vector3 = path[randi_range(2, 4)]
 			var dir := Vector3(randf_range(-1, 1), -1.4, randf_range(-1, 1)).normalized()
 			for _m in 3:
 				var q := bp + dir * randf_range(0.5, 0.8) + Vector3(randf_range(-0.2, 0.2), 0, randf_range(-0.2, 0.2))
-				_ribbon(glow, bp, q, 0.1 * sc, Color(color, 0.45))
+				_ribbon(glow, bp, q, 0.15 * sc, Color(color, 0.8))
 				_ribbon(core, bp, q, 0.03 * sc, Color(1.0, 1.0, 1.0).lerp(color, 0.3))
 				bp = q
-	for mk in [glow, core]:
-		var mi := _spawn(parent, mk.commit(), Vector3.ZERO, "lightning", glow_material())
+	for mk in [glow, core]:  # 바깥 = 에너지 재질(진한 전기색 가장자리 → 하얀 심, 밝은 바닥에서도 파랗다), 심 = 가산 흰빛(2026-10-30)
+		var mi := _spawn(parent, mk.commit(), Vector3.ZERO, "lightning", energy_material("arc") if mk == glow else glow_material())
 		if mi != null:
 			var tw := mi.create_tween()
 			tw.tween_interval(0.07)
@@ -329,7 +353,7 @@ static func lightning(parent: Node, points: Array, color: Color, tier := 0) -> v
 		if first:  # 첫 낙뢰만 타격 섬광·흔들림(사슬 번개가 화면을 계속 흔들지 않게)
 			impact(parent, ground, color, 0.7 * sc, 1 if tier >= 1 else 0, BOLT_HIT_Y)
 			first = false
-		halo(parent, hit, color.lightened(0.3), 2.2 * sc, 0.3, 1.3, "bolt_glow")
+		halo(parent, hit, color.lightened(0.3), 1.4 * sc, 0.25, 1.3, "bolt_glow")  # 2026-10-30: 2.2 → 1.4(하얀 덩이로 번져 줄기가 안 보였다)
 		_flare(parent, _mesh("burst", color), ground + Vector3(0, 0.06, 0), "bolt_flare", 1.0 * sc, 0.3)
 		if tier >= 1:
 			_wave(parent, ground, color.lightened(0.3), 1.2 * sc, 0.3, 0.0, "zap")
@@ -358,7 +382,7 @@ static func spark(parent: Node, pos: Vector3, color: Color, size: float) -> void
 ## tier 2면 바닥 붉은 방사 섬광.
 static func slash(parent: Node, pos: Vector3, tier := 0) -> void:
 	var sc: float = TIER_SCALE[tier]
-	var mi := _spawn(parent, _mesh("slash"), pos, "slash", glow_material())
+	var mi := _spawn(parent, _mesh("slash"), pos, "slash", energy_material("arc"))  # 2026-10-30 에너지 검기
 	if mi == null:
 		return
 	_face_camera(mi)
@@ -382,7 +406,7 @@ static func cleave(parent: Node, pos: Vector3, color: Color, radius: float, tier
 	var spin := randf() * TAU
 	for layer in 2:  # 2026-10-13: 반투명 고유 색 궤적(밝은 바닥에서도 보인다) + 위에 가산 빛 궤적, 허리 높이
 		var mi := _spawn(parent, _mesh("crescent", color if layer == 0 else color.lightened(0.3)), pos + Vector3(0, 0.45 + 0.15 * layer, 0), "cleave",
-			soft_material() if layer == 0 else glow_material())
+			energy_material("arc") if layer == 0 else glow_material())  # 2026-10-30 아래 겹 = 에너지 검기(진한 가장자리 → 하얀 날)
 		if mi == null:
 			break
 		mi.rotation.y = spin
@@ -511,7 +535,7 @@ static func shake_camera(node: Node) -> void:
 static func impact(parent: Node, ground: Vector3, color: Color, size: float, power := 1, h := 0.7) -> void:
 	size *= 1.4  # 2026-10-07: 전체 강화
 	var pos := ground + Vector3(0, h, 0)
-	var hot := Color(1, 1, 1).lerp(color, 0.35)
+	var hot := Color(1, 1, 1).lerp(color, 0.5)  # 2026-10-30: 0.35 → 0.5(흰 섬광에 고유 색이 더 묻어난다)
 	for layer in 2:  # 바깥 = 고유 색 큰 가시, 안 = 하얀 작은 가시(겹쳐 심이 타오른다)
 		var mi := _spawn(parent, _mesh("impact", color.lightened(0.15) if layer == 0 else hot), pos, "impact", glow_material())
 		if mi == null:
@@ -526,7 +550,7 @@ static func impact(parent: Node, ground: Vector3, color: Color, size: float, pow
 		tw.tween_property(mi, "scale", Vector3(size * 1.7 * k, size * 0.12, size * 1.7 * k), 0.12).set_ease(Tween.EASE_IN)
 		tw.tween_callback(mi.queue_free)
 		_fade(mi, 0.12, 0.08)
-	halo(parent, pos, hot, size * 2.8, 0.24, 1.6, "impact_glow")
+	halo(parent, pos, hot, size * 2.0, 0.24, 1.6, "impact_glow")
 	var ln := _spawn(parent, _mesh("speed", color), ground + Vector3(0, 0.08, 0), "impact_lines", glow_material())
 	if ln != null:
 		ln.rotation.y = randf() * TAU
@@ -674,13 +698,13 @@ static func nova(parent: Node, pos: Vector3, color: Color, radius: float, tier :
 ## 메테오·혜성: 하늘(왼쪽 위)에서 빛무리를 두르고 불티 꼬리(입자)를 끌며 도는 바위가 sec초에 떨어져 폭발(blast)한다.
 static func meteor(parent: Node, pos: Vector3, color: Color, radius: float, tier: int, sec: float) -> void:
 	var from := pos + Vector3(-3.0, 11.0, 2.5)
-	var mi := _spawn(parent, _mesh("blast", color), from, "meteor")
+	var mi := _spawn(parent, _mesh("blast", color), from, "meteor", energy_material("flame"))  # 2026-10-30 타오르는 바위(불꽃 재질)
 	if mi == null:
 		blast(parent, pos, color, radius, false, tier)
 		return
 	mi.scale = Vector3.ONE * 0.55 * TIER_SCALE[tier]
 	var tail := _static(_mesh("tail", color.lightened(0.3)))
-	tail.material_override = glow_material()
+	tail.material_override = energy_material("flame")  # 2026-10-30 불꽃 꼬리(일렁인다)
 	tail.scale = Vector3(3.0, 3.0, 4.0)
 	mi.add_child(tail)
 	halo(mi, from, color.lightened(0.3), 2.4 * TIER_SCALE[tier], 0.0)  # 바위와 함께 지워진다
@@ -703,7 +727,7 @@ static func meteor(parent: Node, pos: Vector3, color: Color, radius: float, tier
 ## 0.5초마다 _zone_puff, 그리고 지대마다 쉬지 않고 뿜는 입자 하나: 화염 지대 = 출렁이는 불꽃 혀(fire_material) + 불티,
 ## 눈보라 = 비스듬히 내리는 눈송이, 독구름 = 피어오르는 초록 연기 + 거품, 회오리 = 도는 깔때기 + 감겨 오르는 돌 조각, 성역 = 떠오르는 빛 조각.
 static func zone(parent: Node, pos: Vector3, color: Color, radius: float, sec: float, style: String, tier := 0) -> void:
-	var mi := _spawn(parent, _mesh("zone", color), pos + Vector3(0, 0.06, 0), "zone", soft_material())
+	var mi := _spawn(parent, _mesh("zone", color), pos + Vector3(0, 0.06, 0), "zone", energy_material("smooth"))  # 2026-10-30 바닥에 번지는 서리·독·불길(노이즈)
 	if mi == null:
 		return
 	mi.scale = Vector3(0.2, 1.0, 0.2)
@@ -843,7 +867,7 @@ static func quake(parent: Node, pos: Vector3, radius: float, tier := 0) -> void:
 
 ## 회오리 베기: 영웅을 따라 도는 초승달 한 바퀴(가산, 0.3초 끝에 옅어진다) + 발 둘레 흙먼지.
 static func whirl(hero: Node3D, radius: float, color: Color) -> void:
-	var mi := _spawn(hero, _mesh("crescent", color.lightened(0.15)), hero.global_position + Vector3(0, 0.6, 0), "whirl", glow_material())
+	var mi := _spawn(hero, _mesh("crescent", color.lightened(0.15)), hero.global_position + Vector3(0, 0.6, 0), "whirl", energy_material("arc"))  # 2026-10-30 에너지 검기
 	if mi == null:
 		return
 	mi.scale = Vector3(radius, 1.0, radius)
@@ -991,7 +1015,7 @@ static func arrows(parent: Node, pos: Vector3, radius: float, color: Color) -> v
 ## 심판의 빛: 하늘에서 내리꽂는 넓은 빛기둥 + 하얀 심 기둥(가산) + 빛무리 + 바닥 섬광 + 파동 + 떠오르는 빛 조각.
 static func beam(parent: Node, pos: Vector3, color: Color, tier := 0) -> void:
 	var sc: float = TIER_SCALE[tier]
-	_surge(parent, _mesh("pillar", color), pos, "beam", 1.0 * sc, 9.0, 0.55, soft_material())
+	_surge(parent, _mesh("pillar", color), pos, "beam", 0.7 * sc, 9.0, 0.55, soft_material())  # 2026-10-30: 1.0 → 0.7(에너지 재질이라 굵으면 화면을 덮는다)
 	_surge(parent, _mesh("pillar", Color(1.0, 1.0, 0.9)), pos, "beam_core", 0.4 * sc, 9.0, 0.45, glow_material())
 	halo(parent, pos + Vector3(0, 0.6, 0), color.lightened(0.3), 3.0 * sc, 0.5, 1.3, "beam_glow")
 	impact(parent, pos, color, 1.1 * sc, 2 if tier >= 2 else 1, 0.6)
@@ -1002,7 +1026,7 @@ static func beam(parent: Node, pos: Vector3, color: Color, tier := 0) -> void:
 
 ## 공허 균열: 소용돌이치며 오그라드는 어두운 바닥 + 둘레에서 가운데로 빨려 드는 빛줄기 + 오그라드는 빛무리 + 보랏빛 입자.
 static func rift(parent: Node, pos: Vector3, color: Color, radius: float, tier := 0) -> void:
-	var mi := _spawn(parent, _mesh("zone", color.darkened(0.3)), pos + Vector3(0, 0.06, 0), "rift", soft_material())
+	var mi := _spawn(parent, _mesh("zone", color.darkened(0.3)), pos + Vector3(0, 0.06, 0), "rift", energy_material("energy"))  # 2026-10-30 일렁이는 검은 기운
 	if mi != null:
 		mi.scale = Vector3(radius * 1.2, 1.0, radius * 1.2)
 		var tw := mi.create_tween().set_parallel()
@@ -1031,7 +1055,7 @@ static func rift(parent: Node, pos: Vector3, color: Color, radius: float, tier :
 
 ## 태양 섬광: 공중에서 커다란 빛덩이가 번쩍(+ 큰 빛무리·사방으로 튀는 빛줄기) + 바닥 방사 섬광 + 광선.
 static func flare_burst(parent: Node, pos: Vector3, color: Color, radius: float, tier := 0) -> void:
-	var mi := _spawn(parent, _mesh("flash", color), pos + Vector3(0, 1.4, 0), "sun", soft_material())
+	var mi := _spawn(parent, _mesh("flash", color), pos + Vector3(0, 1.4, 0), "sun", energy_material("smooth"))
 	if mi != null:
 		mi.scale = Vector3.ONE * radius * 0.2
 		var tw := mi.create_tween()
@@ -1064,7 +1088,7 @@ static func hands(parent: Node, pos: Vector3, radius: float, color: Color) -> vo
 
 ## 보호막: 대상을 감싸는 반투명 6각 돔(대상 자식, 지우는 건 부르는 쪽). 상한이면 null.
 static func barrier(target: Node3D, color: Color) -> Node3D:
-	var mi := _spawn(target, _mesh("dome", color), target.global_position, "barrier", soft_material())
+	var mi := _spawn(target, _mesh("dome", color), target.global_position, "barrier", energy_material("smooth"))
 	if mi != null:
 		mi.scale = Vector3.ONE * 0.3
 		mi.create_tween().tween_property(mi, "scale", Vector3.ONE * 1.1, 0.15).set_trans(Tween.TRANS_BACK)
@@ -1112,7 +1136,7 @@ static func soul(parent: Node, from: Vector3, hero: Node3D) -> void:
 static func slash_mark(parent: Node, pos: Vector3, color: Color, size := 1.0) -> void:
 	var roll := randf_range(-0.6, 0.6)
 	for layer in 2:
-		var mi := _spawn(parent, _mesh("slice", color.darkened(0.35) if layer == 0 else color), pos, "slice", soft_material() if layer == 0 else glow_material())
+		var mi := _spawn(parent, _mesh("slice", color.darkened(0.35) if layer == 0 else color), pos, "slice", energy_material("arc") if layer == 0 else glow_material())
 		if mi == null:
 			return
 		_face_camera(mi)
@@ -1257,7 +1281,7 @@ static func crescent_wave(parent: Node, from: Vector3, dir: Vector3, length: flo
 	var sc: float = TIER_SCALE[tier]
 	for layer in 2:  # 2026-10-13: 반투명 달빛 겹 + 가산 빛 겹, 더 크게(밝은 바닥에서도 초승달이 보인다)
 		var mi := _spawn(parent, _mesh("crescent", color.darkened(0.1) if layer == 0 else color.lightened(0.3)), from + Vector3(0, 0.6 + 0.1 * layer, 0), "crescent_wave",
-			soft_material() if layer == 0 else glow_material())
+			energy_material("arc") if layer == 0 else glow_material())  # 2026-10-30 아래 겹 = 에너지 검기
 		if mi == null:
 			break
 		mi.rotation.y = atan2(-dir.z, dir.x)
@@ -1514,7 +1538,7 @@ static func shock_run(parent: Node, from: Vector3, to: Vector3, color: Color, ti
 		tw.tween_property(mi, "global_position", to + Vector3(0, 0.12, 0), sec)
 		tw.tween_callback(mi.queue_free)
 		_fade(mi, 0.1, sec - 0.1)
-	var cr := _spawn(parent, _mesh("dart", color.darkened(0.2)), from + Vector3(0, 0.06, 0), "shock_trail", soft_material())
+	var cr := _spawn(parent, _mesh("dart", color.darkened(0.2)), from + Vector3(0, 0.06, 0), "shock_trail", energy_material("arc"))
 	if cr != null:  # 지나간 자리 길게 남는 띠(반투명)
 		cr.look_at(cr.global_position + dir, Vector3.UP)
 		cr.scale = Vector3(1.4 * sc, 1.0, 0.1)
@@ -1672,7 +1696,7 @@ static func wind(parent: Node, from: Vector3, to: Vector3, color: Color) -> void
 			var p := from.lerp(to, t) + off * (1.0 - t * 0.5) + side * sin(t * PI) * 0.6
 			_ribbon(k, prev, p, 0.12 * (1.0 - t * 0.5), Color(color, 0.7 - 0.4 * t))
 			prev = p
-	var mi := _spawn(parent, k.commit(), Vector3.ZERO, "wind", soft_material())
+	var mi := _spawn(parent, k.commit(), Vector3.ZERO, "wind", energy_material("smooth"))
 	if mi != null:
 		var tw := mi.create_tween()
 		tw.tween_interval(0.35)
@@ -1690,6 +1714,8 @@ static func wind(parent: Node, from: Vector3, to: Vector3, color: Color) -> void
 
 ## 발밑에서 솟는 겹(광선·빛기둥 — 재질 mat, 없으면 가산 빛): 가로 w·세로 h까지 튀어 오른 뒤 가늘어지며 더 높이 흩어지고 옅어진다(sec초).
 static func _surge(parent: Node, m: Mesh, pos: Vector3, tag: String, w: float, h: float, sec: float, mat: Material = null) -> void:
+	if mat == soft_material():
+		mat = energy_material("smooth")  # 2026-10-30: 빛기둥·오라 기둥은 에너지 재질(가장자리 진한 색 → 하얀 심, 위로 흐른다) — 반투명 단색 기둥이 밋밋했다
 	var mi := _spawn(parent, m, pos + Vector3(0, 0.05, 0), tag, mat if mat != null else glow_material())
 	if mi == null:
 		return
