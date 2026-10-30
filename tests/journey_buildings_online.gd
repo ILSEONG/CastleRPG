@@ -64,7 +64,7 @@ func _phase_lots() -> void:
 	var placement = _child(PlacementScript)
 	tray.open()
 	await _frames(5)
-	_check(str(tray.rows.lumber.why) == Tutorial.build_lock_text("lumber") and "10번째" in str(tray.rows.lumber.why),
+	_check(str(tray.rows.lumber.why) == Tutorial.build_lock_text("lumber") and ("가이드 퀘스트 %d " % (Tutorial.mission_index("build_lumber") + 1)) in str(tray.rows.lumber.why),
 		"(lots) before its mission the lumber card says which guide mission opens it", str(tray.rows.lumber.why))
 	_notes.clear()
 	tray._on_pressed("lumber")
