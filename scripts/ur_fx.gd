@@ -293,7 +293,8 @@ static func tide(parent: Node, pos: Vector3, color: Color, r: float) -> void:
 			if delay <= 0.0:
 				cb.call()
 			else:
-				parent.get_tree().create_timer(delay, false).timeout.connect(func(): if is_instance_valid(parent): cb.call())
+				var pref: WeakRef = weakref(parent)  # 붙잡은 노드가 먼저 풀리면 람다 캡처 오류 — 약한 참조로 본다
+				parent.get_tree().create_timer(delay, false).timeout.connect(func(): if pref.get_ref() != null: cb.call())
 		Fx._wave(parent, pos, color.lightened(0.15 * ring), rr * 1.3, 0.4, 0.12 * ring)
 	var sp := Fx._burst(parent, pos + Vector3(0, 0.4, 0), color.lightened(0.45), "spark", 30, 0.8, "ur_tide_spray")
 	if sp != null:
@@ -350,26 +351,30 @@ static func tiger_avatar(hero: Node3D, color: Color, sec: float) -> void:
 	var w := hero.get_parent()
 	var at := hero.global_position
 	Fx.golden_tint(hero, Color(0.45, 0.7, 1.0), sec)
+	var href: WeakRef = weakref(hero)  # 타이머가 영웅보다 오래 살 수 있다 — 약한 참조로 본다(풀린 노드 캡처 오류)
 	for i in int(sec / 0.6):  # 현신 동안 흰 번개가 몸을 타고 오른다
 		hero.get_tree().create_timer(0.6 * (i + 1), false).timeout.connect(func():
-			if is_instance_valid(hero) and hero.is_inside_tree() and hero.is_alive():
-				var p: Vector3 = hero.global_position
+			var hh = href.get_ref()
+			if hh != null and hh.is_inside_tree() and hh.is_alive():
+				var p: Vector3 = hh.global_position
 				var a := randf() * TAU
-				Fx.lightning(hero.get_parent(), [p + Vector3(cos(a) * 0.5, 1.7, sin(a) * 0.5), p + Vector3(cos(a + 1.5) * 0.4, 0.4, sin(a + 1.5) * 0.4)], color, 0)
-				Fx.halo(hero, p + Vector3(0, 1.0, 0), Color(0.5, 0.75, 1.0), 1.6, 0.3, 1.2, "ur_tiger_pulse"))
+				Fx.lightning(hh.get_parent(), [p + Vector3(cos(a) * 0.5, 1.7, sin(a) * 0.5), p + Vector3(cos(a + 1.5) * 0.4, 0.4, sin(a + 1.5) * 0.4)], color, 0)
+				Fx.halo(hh, p + Vector3(0, 1.0, 0), Color(0.5, 0.75, 1.0), 1.6, 0.3, 1.2, "ur_tiger_pulse"))
 	Fx._wave(w, at, Color(0.45, 0.7, 1.0), 3.5, 0.35)
 	Fx._wave(w, at, color, 4.5, 0.45, 0.1)
 	Fx.halo(w, at + Vector3(0, 1.0, 0), Color(0.5, 0.75, 1.0), 3.5, 0.5, 1.3, "ur_tiger_roar")
 	for i in 4:
 		var a := TAU * i / 4.0
 		Fx.lightning(w, [at + Vector3(cos(a), 1.6, sin(a)) * 0.9, at + Vector3(cos(a + 0.6) * 0.4, 0.5, sin(a + 0.6) * 0.4)], color, 1)
+	var wref: WeakRef = weakref(w)
 	for i in 5:  # 둘레에 하늘 번개가 차례로 내리꽂힌다
 		var a := TAU * i / 5.0 + randf() * 0.4
 		var p := at + Vector3(cos(a), 0, sin(a)) * 3.0
 		hero.get_tree().create_timer(0.07 * i, false).timeout.connect(func():
-			if is_instance_valid(w):
-				Fx.lightning(w, [p + Vector3(0, Fx.SKY_H, 0), p + Vector3(0.5, 4.0, 0.3), p], Color(0.6, 0.8, 1.0), 2)
-				Fx.impact(w, p, Color(0.5, 0.75, 1.0), 0.6, -1, 0.3))
+			var ww = wref.get_ref()
+			if ww != null:
+				Fx.lightning(ww, [p + Vector3(0, Fx.SKY_H, 0), p + Vector3(0.5, 4.0, 0.3), p], Color(0.6, 0.8, 1.0), 2)
+				Fx.impact(ww, p, Color(0.5, 0.75, 1.0), 0.6, -1, 0.3))
 	Fx._surge(w, Fx._mesh("pillar", Color(0.6, 0.8, 1.0)), at, "ur_tiger_pillar", 1.6, 6.0, 0.7)
 
 
@@ -429,6 +434,7 @@ static func fox_bloom(parent: Node, pos: Vector3, color: Color, r: float) -> voi
 ## 여우불 구슬: 시전자 둘레에 구슬 n개가 sec초 돌다가 사라진다(날아가는 구슬은 투사체가 맡는다).
 static func fox_orbs(hero: Node3D, color: Color, n: int, sec: float) -> void:
 	var w := hero.get_parent()
+	var href: WeakRef = weakref(hero)  # 구슬 트윈이 영웅보다 오래 살 수 있다(풀린 노드 캡처 오류)
 	for i in n:
 		var g := Fx.halo(w, hero.global_position + Vector3(0, 1.4, 0), color.lightened(0.3), 0.9, 0.0, 1.0, "ur_fox_orb")
 		if g == null:
@@ -436,9 +442,10 @@ static func fox_orbs(hero: Node3D, color: Color, n: int, sec: float) -> void:
 		var a0 := TAU * i / n
 		var tw := g.create_tween()
 		tw.tween_method(func(t: float):
-			if is_instance_valid(hero):
+			var hh = href.get_ref()
+			if hh != null:
 				var a := a0 + t * TAU * 1.5
-				g.global_position = hero.global_position + Vector3(cos(a) * 1.3, 1.4 + 0.3 * sin(a * 2.0), sin(a) * 1.3), 0.0, 1.0, sec)
+				g.global_position = hh.global_position + Vector3(cos(a) * 1.3, 1.4 + 0.3 * sin(a * 2.0), sin(a) * 1.3), 0.0, 1.0, sec)
 		tw.tween_callback(g.queue_free)
 
 
