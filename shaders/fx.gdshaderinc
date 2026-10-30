@@ -7,6 +7,7 @@ instance uniform float fade : hint_range(0.0, 1.0) = 1.0;
 uniform float boost = 1.0;
 uniform float flicker = 0.0;
 uniform float rim = 0.0;
+uniform float cover = 0.45;  // PREMUL(fx_add): 바닥을 덮는 몫(0 = 순수 더하기)
 
 void vertex() {
 	if (flicker > 0.0) {
@@ -23,6 +24,12 @@ void fragment() {
 	if (rim > 0.0) {
 		r = 1.0 + rim * (1.0 - abs(dot(normalize(NORMAL), normalize(VIEW))));
 	}
+#ifdef PREMUL
+	float a = clamp(COLOR.a * fade, 0.0, 1.0);
+	ALBEDO = COLOR.rgb * boost * r * a;
+	ALPHA = a * cover;
+#else
 	ALBEDO = COLOR.rgb * boost * r;
 	ALPHA = clamp(COLOR.a * fade, 0.0, 1.0);
+#endif
 }

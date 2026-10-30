@@ -20,6 +20,7 @@ const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const Skills := preload("res://scripts/skills.gd")
 const Fx := preload("res://scripts/fx.gd")
+const SkillVfx := preload("res://scripts/skill_vfx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Crowd := preload("res://scripts/crowd.gd")
@@ -112,6 +113,7 @@ var _stun_fx: Node3D
 var _cast_fn := Callable()  # 발동 모션 중인 스킬(개정 25): 모션의 발동 순간에 부른다. 비었으면 시전 중 아님
 var _cast_left := 0.0  # 발동 순간까지 남은 초
 var _cast_style := "attack"  # 발동 순간 연출 종류(hero_skills.cast_style, 2026-10-13)
+var _cast_kind := ""  # 시전 중인 스킬(SkillVfx 속성 연출)
 var _skill_req := {}  # 스킬 수동(2026-10-23): 칸을 눌러 기다리는 액티브 → 남은 초(SKILL_REQ_SEC). 쓰면 지운다
 var _focus  # 공격 명령 표적(2026-10-14, unit_picker): 쓰러지거나 새 명령이 올 때까지 이것만 쫓아가 친다
 var _focus_cd := 0.0  # 걷는 중 표적을 다시 볼 때까지 남은 초
@@ -977,9 +979,10 @@ func begin_cast(anim: String, fn: Callable, kind := "") -> bool:
 	var wind: float = _model.play_cast(anim)
 	_cast_fn = fn
 	_cast_style = HeroSkillsScript.cast_style(kind)
+	_cast_kind = kind
 	_cast_left = wind
 	_cast_t = wind + CAST_RECOVER
-	Fx.charge(self, _color, _tier, wind)
+	SkillVfx.windup(self, kind, wind)  # 2026-10-30 스킬 연출 4단계 ①준비: 속성 마법진·몸 발광·모이는 겹
 	return true
 
 
@@ -995,7 +998,7 @@ func _tick_cast(delta: float) -> void:
 	if _cast_left <= 0.0:
 		var fn := _cast_fn
 		_cast_fn = Callable()
-		Fx.release(self, _color, _tier, _cast_style)  # 발동 순간 빛 터짐(2026-10-07, 2026-10-13 스킬 종류별)
+		SkillVfx.release(self, _cast_kind, _cast_style)  # ②발동: 마법진이 닫히며 속성 섬광·순간 광원·내딛기(2026-10-30)
 		fn.call()
 
 
@@ -1014,10 +1017,13 @@ func _cancel_cast() -> void:
 func _blast(center: Vector3) -> void:
 	_blast_cd = _sk.aoe_blast[0]
 	var dmg: float = atk * _aura_mult() * _skx.atk_mult() * _sk.aoe_blast[2] / 100.0 * _skill_mult
+	var first := true
 	for m in get_tree().get_nodes_in_group(foes):
 		if m.is_alive() and Formation.flat_distance(center, m.global_position) <= _sk.aoe_blast[1] and sees(center, m.global_position):
 			m.take_damage(dmg, DamageNumbers.Kind.SKILL)
-	Fx.blast(get_parent(), center, _color, _sk.aoe_blast[1], def.grade in ["SSR", "UR"] and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
+			SkillVfx.hit(m, "aoe_blast", 2 if SkillVfx.is_ult(self, "aoe_blast") else 1, first)  # ③타격: 속성 번쩍임·파편, 첫 타격은 충격 고리·잔상
+			first = false
+	Fx.blast(get_parent(), center, SkillVfx.color_of("aoe_blast"), _sk.aoe_blast[1], def.grade in ["SSR", "UR"] and GameData.fx_shake(), _tier)  # SSR이면 카메라를 약하게 흔든다
 	_announce("aoe_blast")
 
 
