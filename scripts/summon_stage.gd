@@ -12,7 +12,8 @@ extends Control
 ##    가운데에 하얗게 타는 불꽃 해(흰 → 살구 → 주황 → 진홍 겹 + 길게 일렁이는 불꽃 혀 + 도는 불꽃 고리)가 솟는다.
 ##    빛이 진홍·주황 불꽃빛으로 바뀌며 충격파 고리 + 화면을 꿰는 큰 불기둥 + 바깥 셋째 불꽃 고리 + 화면 가득 오르는 불씨, 소환진도 UR_HOLD만큼 길다.
 ##    참고: 페이트 그랜드 오더·승리의 여신 니케(무지개에서 한 번 더 바뀌는 '확정 승급' 연출), 원신(마지막 순간 별똥별 색 승급).
-##    UR 화면은 SSR보다 크다: 대각선 섬광이 창을 가르며 열리고, 불꽃 테두리 위로 불길이 일렁이며 "UR"은 크게(진홍 두께).
+##    UR 화면은 SSR보다 크다: 대각선 섬광이 창을 가르며 열리고, 불꽃빛 테두리에 "UR"은 크게(진홍 두께). 일러스트 위에는 아무것도
+##    그리지 않는다(2026-10-30 사용자 "일러스트 위에 불꽃효과 너무 좆밥같아") — 불씨는 창 뒤로, 섬광은 창이 열리면 사라진다.
 ##    참고: 원신(최고 등급 별똥별 색), 세븐나이츠 키우기(최고 등급 소환 섬광·불꽃) — 화면 모습 기준.
 ## 금색은 쓰지 않는다(SSR = 무지개빛, UR = 주황 불꽃빛 — 사용자 2026-10-14 "금색되는거 촌스러워"). 그리는 것은 다각형 몇백 개뿐, 보일 때만 돈다(발열).
 
@@ -50,7 +51,6 @@ const ORANGE := Color("FF6A1F")  # UR 빛(= UR 등급 색)
 ## UR 불꽃빛: 진홍 → 주황 → 살구 → 흰빛을 돈다(노란 금빛은 피한다).
 const FLAME := [Color("E8344A"), Color("FF6A1F"), Color("FF9A5C"), Color("FFE2D0")]
 const EMBERS := 34
-const TONGUES := 14  # UR 화면 창 위 불길 수
 const RAYS := 16
 const MOTES := 26
 const RUNES := 16
@@ -433,7 +433,7 @@ func _draw_splash() -> void:
 
 
 ## UR 화면: SSR보다 크고 거칠다 — 진홍·주황 빛살이 빠르게 돌고, 대각선 섬광이 화면을 가른 뒤 그 선에서 창이 열린다.
-## 창 테두리는 불꽃빛으로 일렁이고 위 변에서 불길이 오르며, 불씨가 화면 가득 오른다. "UR"은 크게, 뒤에 진홍 두께.
+## 창 테두리는 불꽃빛으로 일렁이고, 불씨는 창 뒤에서 오른다(일러스트를 가리지 않게). "UR"은 크게, 뒤에 진홍 두께.
 func _draw_splash_ur() -> void:
 	var vs := size
 	var t := _t
@@ -463,6 +463,7 @@ func _draw_splash_ur() -> void:
 	var win_full := PackedVector2Array([full[0] + Vector2(inset * 0.6, inset), full[1] + Vector2(-inset, inset), full[2] + Vector2(-inset * 0.6, -inset), full[3] + Vector2(inset, -inset)])
 	var win := _opening(win_full, open)
 	var wr := Rect2(win_full[3].x, win_full[0].y, win_full[1].x - win_full[3].x, win_full[2].y - win_full[0].y)
+	_draw_embers(vs, a * open)  # 창 뒤 — 창 밖 빛살 위로만 보인다
 	if open > 0.0:
 		draw_colored_polygon(frame, Color(NIGHT.lightened(0.1), a))
 		var zoom := lerpf(1.12, 1.0, clampf(t / (UR_IN + UR_SPLASH_SEC), 0.0, 1.0))
@@ -473,15 +474,6 @@ func _draw_splash_ur() -> void:
 				Color(1, 1, 1, a * clampf((open - 0.6) * 2.5, 0.0, 1.0)))
 		if a < 1.0:
 			draw_colored_polygon(win, Color(NIGHT, 1.0 - a))
-		# 위 변 불길(창이 다 열린 뒤 일렁인다)
-		var top_a := a * clampf((t - UR_IN) * 4.0, 0.0, 1.0)
-		var along := (frame[1] - frame[0]).normalized()
-		for j in TONGUES:
-			var p := frame[0].lerp(frame[1], (j + 0.5) / TONGUES)
-			var fl := 0.6 + 0.4 * sin(t * 11.0 + j * 2.3) + 0.3 * LowpolyBox.hash01(j, 41)
-			var bw := (frame[1] - frame[0]).length() / TONGUES * 0.62
-			draw_colored_polygon(PackedVector2Array([p - along * bw, p + along * bw, p + Vector2(sin(t * 5.0 + j) * 6.0, -(16.0 + 26.0 * fl))]),
-				flame(0.15 + 0.5 * LowpolyBox.hash01(j, 43) + t * 0.2, 0.9 * top_a))
 		# 불꽃 테두리: 넓고 옅은 바깥 + 꼭짓점마다 다른 불꽃빛 + 흰 속선
 		var edge := frame.duplicate()
 		edge.append(frame[0])
@@ -491,16 +483,15 @@ func _draw_splash_ur() -> void:
 			cols.append(flame(float(i % 4) / 4.0 + t * 0.5, a))
 		draw_polyline_colors(edge, cols, 8.0, true)
 		draw_polyline(edge, Color(1, 0.95, 0.9, 0.7 * a), 2.0, true)
-	# 섬광: 창의 대각선을 따라 화면을 가르고(UR_SLASH), 창이 열리며 옅어진다
+	# 섬광: 창의 대각선을 따라 화면을 가르고(UR_SLASH), 창이 다 열리면 사라진다(그림 위에 선이 남지 않게)
 	var d := (full[1] - full[3]).normalized()
 	var s0 := full[3] - d * reach * 0.3
 	var s1 := s0 + d * reach * 1.1 * slash
-	var sa := (1.0 - open * 0.85) * a
+	var sa := (1.0 - open) * a
 	draw_line(s0, s1, Color(ORANGE, 0.5 * sa), 34.0 * (1.0 - open) + 4.0, true)
 	draw_line(s0, s1, Color(1, 0.96, 0.92, sa), 10.0 * (1.0 - open) + 2.0, true)
 	if t < UR_IN + 0.15:  # 열리는 순간 번쩍
 		draw_rect(Rect2(Vector2.ZERO, vs), Color(1, 0.62, 0.4, 0.3 * sin(PI * clampf((t - UR_SLASH) / (UR_IN + 0.15 - UR_SLASH), 0.0, 1.0)) * a))
-	_draw_embers(vs, a * open)
 	if open < 0.5:
 		return
 	var ta := a * clampf((open - 0.5) * 2.0, 0.0, 1.0)
