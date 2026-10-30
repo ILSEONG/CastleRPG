@@ -111,6 +111,15 @@ func _phase_lots() -> void:
 	await _diff("(lots) lumber built")
 	Tutorial.claim()
 	await _wait_until(func(): return Tutorial.step == lb + 1 and not Economy.quest_waiting(), 10.0)
+	_check(Tutorial.mission().id == Tutorial.MISSIONS[lb + 1].id, "(lots) claiming the lumber mission moves the guide to the next quest", str(Tutorial.mission().get("id", "")))
+	# 채석장·농장 미션으로 건너뛴다(2026-10-29부터 벌목장 뒤에 사이 퀘스트가 낀다) — 두 건물 비용만큼 자원
+	var cq := GameData.build_cost("quarry", 1)
+	var cf := GameData.build_cost("farm", 1)
+	var qf_res := {}
+	for r in ["wood", "stone", "food"]:
+		qf_res[r] = int(cq.get(r, 0)) + int(cf.get(r, 0))
+	await _request("/v1/test/levels", {"res": qf_res})
+	await _request("/v1/test/tut_step", {"step": Tutorial.mission_index("build_quarry_farm")})
 	_check(Tutorial.mission().id == "build_quarry_farm", "(lots) next: quarry + farm in one mission", str(Tutorial.mission().get("id", "")))
 	# 채석장: 공터 건물 창 [건설](기본 자리, cell 없이)
 	panel.open_building("quarry")
