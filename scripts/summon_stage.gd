@@ -7,9 +7,11 @@ extends Control
 ##    차례로 뒤집히기 시작한다. 화면을 누르면 바로 터지며 걷힌다(그 모집의 최고 등급 빛으로). [건너뛰기]는 skip_all(카드를 모두 바로 열고 SSR 화면도 건너뛴다).
 ## 2) SSR 화면(splash): SSR 카드가 펴지면 도는 무지개 빛살 위 큰 기울어진 창에 영웅 일러스트 + "SSR" + 이름·칭호(새 영웅이면 NEW).
 ##    누르면 닫힌다(SPLASH_SEC 뒤 저절로). 여러 장이면 차례로.
-## 3) UR(2026-10-29, 사용자 "UR은 개멋지게 뽑아줘", "SSR을 그대로 가져오면 어떡하냐"): SSR 무지개를 거치지 않고 SSR_AT에 보라가 곧바로
-##    일식이 된다 — 가운데 검은 해 둘레로 불꽃 혀가
-##    일렁이고, 빛이 진홍·주황 불꽃빛으로 바뀌며 충격파 고리 + 굵은 불기둥 + 화면 가득 오르는 불씨, 소환진도 UR_HOLD만큼 길다.
+## 3) UR(2026-10-29, 사용자 "UR은 개멋지게 뽑아줘", "SSR을 그대로 가져오면 어떡하냐"; 2026-10-30 "SSR은 왜 스킵하고 바로 블랙홀…
+##    블랙홀 멋없어"): 파랑 → 보라 → 무지개(SSR)까지 똑같이 오른 뒤 UR_AT에 한 단계 더 — 무지개 핵이 깨져 조각이 튀고(UR_CRACK),
+##    가운데에 하얗게 타는 불꽃 해(흰 → 살구 → 주황 → 진홍 겹 + 길게 일렁이는 불꽃 혀 + 도는 불꽃 고리)가 솟는다.
+##    빛이 진홍·주황 불꽃빛으로 바뀌며 충격파 고리 + 화면을 꿰는 큰 불기둥 + 바깥 셋째 불꽃 고리 + 화면 가득 오르는 불씨, 소환진도 UR_HOLD만큼 길다.
+##    참고: 페이트 그랜드 오더·승리의 여신 니케(무지개에서 한 번 더 바뀌는 '확정 승급' 연출), 원신(마지막 순간 별똥별 색 승급).
 ##    UR 화면은 SSR보다 크다: 대각선 섬광이 창을 가르며 열리고, 불꽃 테두리 위로 불길이 일렁이며 "UR"은 크게(진홍 두께).
 ##    참고: 원신(최고 등급 별똥별 색), 세븐나이츠 키우기(최고 등급 소환 섬광·불꽃) — 화면 모습 기준.
 ## 금색은 쓰지 않는다(SSR = 무지개빛, UR = 주황 불꽃빛 — 사용자 2026-10-14 "금색되는거 촌스러워"). 그리는 것은 다각형 몇백 개뿐, 보일 때만 돈다(발열).
@@ -28,7 +30,9 @@ const INTRO_ONE := 1.3  # 1회 소환진 길이(초)
 const INTRO_TEN := 1.6  # 10회
 const SR_AT := 0.5  # 소환진 시간 비율: 빛이 보라로
 const SSR_AT := 0.74  # 무지개로
-const UR_HOLD := 0.8  # UR: 소환진이 이만큼 더 돈다(일식이 보일 시간)
+const UR_AT := 1.05  # UR: 무지개가 이만큼(소환진 시간 비율) 보인 뒤 불꽃 해로
+const UR_HOLD := 1.0  # UR: 소환진이 이만큼 더 돈다(불꽃 해가 보일 시간)
+const UR_CRACK := 0.3  # UR: 무지개 핵이 깨져 조각이 튀는 시간
 const BURST := 0.24  # 끝: 터지며 걷힘
 const FADE_IN := 0.15
 const SPLASH_IN := 0.3
@@ -38,7 +42,7 @@ const SPLASH_MIN := 0.45  # SSR 화면이 뜬 뒤 이보다 이른 누름은 무
 const UR_SLASH := 0.16  # UR 화면: 섬광이 화면을 가르는 시간
 const UR_IN := 0.5  # UR 화면: 섬광 + 창이 열리는 시간
 const UR_SPLASH_SEC := 3.0
-const UR_WAVE := 0.6  # 일식 충격파 고리
+const UR_WAVE := 0.6  # UR 충격파 고리
 const NIGHT := Color("120F26")
 const BLUE := Color("7DB4FF")  # R 빛(R 등급 회청색을 밝게)
 const PURPLE := Color("B48CFF")  # SR 빛
@@ -64,9 +68,9 @@ var splash_hero := ""  # 지금 SSR 화면 영웅(테스트)
 
 var _t := 0.0
 var _len := INTRO_TEN
-var _base := INTRO_TEN  # UR 일식 전 소환진 길이(빛이 바뀌는 비율의 기준)
+var _base := INTRO_TEN  # UR 연장 전 소환진 길이(빛이 바뀌는 비율의 기준)
 var _rank := 0  # 지금 빛 0 R · 1 SR · 2 SSR · 3 UR
-var _ur_at := 0.0  # UR 일식이 시작된 시각(_t)
+var _ur_at := 0.0  # UR 불꽃 해가 솟은 시각(_t)
 var _flash := 0.0
 var _shake := 0.0
 var _queue: Array = []  # 기다리는 SSR·UR 화면 [{hero, new, grade}]
@@ -179,7 +183,9 @@ func _process(delta: float) -> void:
 		if _rank < 1 and _goal() >= 1 and k >= SR_AT:
 			_upgrade(1)
 		if _rank < 2 and _goal() >= 2 and k >= SSR_AT:
-			_upgrade(_goal())  # UR은 SSR 무지개를 거치지 않고 보라에서 바로 일식이 된다
+			_upgrade(2)  # UR도 무지개까지는 SSR과 같이 오른다
+		if _rank < 3 and _goal() >= 3 and k >= UR_AT:
+			_upgrade(3)  # 한 단계 더: 무지개가 깨지고 불꽃 해
 		if _t >= _len + BURST:
 			mode = Mode.IDLE
 			intro_done.emit()  # 카드가 뒤집히기 시작한다(SSR이 펴지면 splash로 다시 뜬다)
@@ -196,7 +202,7 @@ func _upgrade(r: int) -> void:
 	_rank = r
 	_flash = 0.55 if r == 1 else 1.0
 	_shake = [0.0, 0.6, 1.0, 1.8][r]
-	if r == 3:  # 일식: 쿵 + 불길
+	if r == 3:  # 불꽃 해: 쿵 + 불길
 		_ur_at = _t
 		Sfx.play("sk_boom")
 		Sfx.play("sk_fire")
@@ -266,7 +272,7 @@ func _draw_intro() -> void:
 	var fade := 1.0 - out
 	draw_rect(Rect2(Vector2.ZERO, vs), Color(NIGHT, 0.93 * a * fade))
 	var ur := _rank == 3
-	var since := _t - _ur_at  # UR 일식 뒤 초
+	var since := _t - _ur_at  # UR 불꽃 해 뒤 초
 	if ur:  # 불빛에 밤이 붉게 물든다
 		draw_rect(Rect2(Vector2.ZERO, vs), Color(0.5, 0.1, 0.02, 0.22 * clampf(since * 4.0, 0.0, 1.0) * fade))
 	var shake := Vector2(sin(_t * 71.0), cos(_t * 53.0)) * 9.0 * _shake
@@ -286,7 +292,13 @@ func _draw_intro() -> void:
 	for i in 4:
 		var rr := r * (1.5 - i * 0.28) * (0.9 + 0.1 * sin(_t * 6.0 + i))
 		draw_colored_polygon(_ngon(c, rr, 16, _t * 0.2), Color(_light(i, 4), (0.05 + 0.04 * i) * a * fade * (0.6 + 0.6 * k)))
-	# 빛기둥(SSR): 마법진에서 위로 솟는 가는 빛 6줄. UR은 굵은 불기둥 8줄
+	# 빛기둥(SSR): 마법진에서 위로 솟는 가는 빛 6줄. UR은 굵은 불기둥 8줄 + 화면을 꿰는 큰 불기둥
+	if ur:
+		var pw := r * 0.55 * ease(clampf(since * 4.0, 0.0, 1.0), 0.3) * (0.92 + 0.08 * sin(_t * 13.0))
+		for j in 3:
+			var ww := pw * (1.0 - j * 0.3)
+			draw_colored_polygon(PackedVector2Array([Vector2(c.x - ww, vs.y), Vector2(c.x + ww, vs.y), Vector2(c.x + ww * 0.55, 0.0), Vector2(c.x - ww * 0.55, 0.0)]),
+				Color(FLAME[j + 1], (0.16 + 0.12 * j) * fade))
 	if _rank >= 2:
 		var n := 8 if ur else 6
 		for i in n:
@@ -323,7 +335,8 @@ func _draw_intro() -> void:
 		draw_polyline_colors(pts, cols, 3.0, true)
 	var core := r * (0.18 + 0.22 * k + 0.25 * out)
 	if ur:
-		_draw_eclipse(c, core * 1.1 * (1.0 + 0.25 * ease(clampf(since * 3.0, 0.0, 1.0), 0.4)), a * fade)
+		_ring(c, r * 1.18, 24, 4.0, -_t * 1.1, a * fade * clampf(since * 3.0, 0.0, 1.0))  # 바깥 셋째 불꽃 고리
+		_draw_sun(c, core * 1.15 * (1.0 + 0.3 * ease(clampf(since * 3.0, 0.0, 1.0), 0.4)), a * fade, since)
 	else:
 		draw_colored_polygon(_ngon(c, core * 1.6, 12, -_t), Color(_light(1, 3), 0.25 * a * fade))
 		draw_colored_polygon(_ngon(c, core, 12, _t), Color(_light(0, 3).lightened(0.4), 0.85 * a * fade))
@@ -336,7 +349,7 @@ func _draw_intro() -> void:
 		var s := 4.0 + 4.0 * LowpolyBox.hash01(i, 6)
 		draw_colored_polygon(PackedVector2Array([Vector2(px, py - s), Vector2(px + s * 0.6, py), Vector2(px, py + s), Vector2(px - s * 0.6, py)]),
 			Color(_light(i, MOTES).lightened(0.3), (1.0 - u) * 0.9 * a * fade))
-	if ur:  # 불씨가 화면 아래에서 가득 오른다 + 일식 충격파
+	if ur:  # 불씨가 화면 아래에서 가득 오른다 + 불꽃 해 충격파
 		_draw_embers(vs, a * fade * clampf(since * 3.0, 0.0, 1.0))
 		var sw := since / UR_WAVE
 		if sw < 1.0:
@@ -528,18 +541,35 @@ static func _opening(q: PackedVector2Array, open: float) -> PackedVector2Array:
 	return out
 
 
-## UR 일식: 검은 해 둘레로 불꽃 혀가 일렁인다(흰 테 + 옅은 주황 번짐).
-func _draw_eclipse(c: Vector2, rr: float, a: float) -> void:
-	draw_colored_polygon(_ngon(c, rr * 2.4, 20, _t * 0.3), Color(ORANGE, 0.2 * a))
-	var n := 22
-	for i in n:
-		var ang := TAU * i / n + _t * 0.6
-		var fl := 0.7 + 0.3 * sin(_t * 9.0 + i * 1.7) + 0.4 * LowpolyBox.hash01(i, 21)
-		var hw := TAU / n * 0.55
-		draw_colored_polygon(PackedVector2Array([c + Vector2.from_angle(ang - hw) * rr * 0.95, c + Vector2.from_angle(ang) * rr * (1.3 + 0.6 * fl),
-			c + Vector2.from_angle(ang + hw) * rr * 0.95]), flame(float(i) / n + _t * 0.4, 0.9 * a))
-	draw_colored_polygon(_ngon(c, rr * 1.08, 20, 0.0), Color(1.0, 0.93, 0.86, a))
-	draw_colored_polygon(_ngon(c, rr, 20, 0.0), Color(NIGHT.darkened(0.6), a))
+## UR 불꽃 해: 처음 UR_CRACK 동안 무지개 핵 조각이 사방으로 튀고, 하얗게 타는 핵 둘레로 두 겹 불꽃 혀가 엇갈려 돈다.
+func _draw_sun(c: Vector2, rr: float, a: float, since: float) -> void:
+	var ck := since / UR_CRACK
+	if ck < 1.0:  # 깨지는 무지개 핵
+		for i in 10:
+			var ang := TAU * i / 10.0 + LowpolyBox.hash01(i, 51) * 0.5
+			var d := Vector2.from_angle(ang)
+			var p := c + d * rr * (0.3 + 3.2 * ease(ck, 0.4))
+			var s := rr * (0.35 + 0.25 * LowpolyBox.hash01(i, 52)) * (1.0 - ck * 0.6)
+			draw_colored_polygon(PackedVector2Array([p + d * s, p + d.orthogonal() * s * 0.4, p - d * s * 0.5]), prism(i / 10.0 + _t, (1.0 - ck) * a))
+	var grow := ease(clampf(since / UR_CRACK, 0.0, 1.0), 0.3)
+	rr *= 0.4 + 0.6 * grow
+	draw_colored_polygon(_ngon(c, rr * 3.0, 20, _t * 0.3), Color(ORANGE, 0.16 * a))
+	draw_colored_polygon(_ngon(c, rr * 2.1, 20, -_t * 0.4), Color(FLAME[0], 0.22 * a))
+	for layer in 2:  # 바깥 긴 진홍 혀 · 안쪽 짧은 살구 혀(서로 반대로 돈다)
+		var n := 18 if layer == 0 else 14
+		var dir := 1.0 if layer == 0 else -1.3
+		for i in n:
+			var ang := TAU * i / n + _t * 0.7 * dir
+			var fl := 0.7 + 0.3 * sin(_t * 10.0 + i * 1.9 + layer) + 0.4 * LowpolyBox.hash01(i, 21 + layer)
+			var hw := TAU / n * 0.5
+			var reach := rr * ((1.5 + 0.9 * fl) if layer == 0 else (1.2 + 0.4 * fl))
+			var tip := c + Vector2.from_angle(ang + 0.25 * dir) * reach  # 끝이 휘어 불길처럼
+			draw_colored_polygon(PackedVector2Array([c + Vector2.from_angle(ang - hw) * rr * 0.9, tip, c + Vector2.from_angle(ang + hw) * rr * 0.9]),
+				flame((0.05 if layer == 0 else 0.45) + 0.25 * float(i) / n + _t * 0.3, (0.85 if layer == 0 else 0.95) * a))
+	draw_colored_polygon(_ngon(c, rr * 1.05, 20, _t), Color(FLAME[1], a))
+	draw_colored_polygon(_ngon(c, rr * 0.82, 16, -_t), Color(FLAME[2], a))
+	draw_colored_polygon(_ngon(c, rr * 0.58, 12, _t * 2.0), Color(FLAME[3], a))
+	draw_colored_polygon(_ngon(c, rr * 0.34, 8, 0.0), Color(1, 1, 1, a * (0.85 + 0.15 * sin(_t * 17.0))))
 
 
 ## 불씨: 화면 아래에서 위로 오르며 흔들리고 흐려지는 불꽃빛 마름모(UR).
