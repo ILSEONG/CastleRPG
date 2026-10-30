@@ -800,7 +800,7 @@ func _phase6_quests() -> void:
 	_check(Tutorial.complete() and Tutorial.claim(), "(q) mission 1 done; claim sent to the server", "complete=%s" % Tutorial.complete())
 	_check(Tutorial.step == 1, "(q) the card moves to mission 2 at once (the server confirms behind — 2026-10-16)", "step=%d" % Tutorial.step)
 	var got := await _wait_until(func(): return Tutorial.step == 1 and not Economy.quest_waiting() and int(Economy.server_quest.tut_step) == 1, 10.0)
-	_check(got and Economy.gold >= gold0 + int(Tutorial.reward(0).gold) and Tutorial.count == 0 and Tutorial.mission().id == "hero_level",
+	_check(got and Economy.gold >= gold0 + int(Tutorial.reward(0).gold) and Tutorial.count == 0 and Tutorial.mission().id == Tutorial.MISSIONS[1].id,
 		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d gold=%d->%d" % [Tutorial.step, gold0, Economy.gold])
 	# 벌목장 공터 미션으로(테스트 훅) — 그 앞 미션의 보상(석재·식량)으로 짓는다
 	var lb: int = Tutorial.mission_index("build_lumber")
@@ -816,9 +816,11 @@ func _phase6_quests() -> void:
 		"unbuilt=%s" % [Economy.unbuilt.keys()])
 	Tutorial.claim()
 	got = await _wait_until(func(): return Tutorial.step == lb + 1 and not Economy.quest_waiting(), 10.0)  # 카드는 곧바로 넘어간다 — 서버 응답까지 기다린다
-	_check(got and int(Economy.server_quest.tut_step) == lb + 1 and Tutorial.mission().id == "build_quarry_farm", "(q) claiming the lumber mission moves the server to quarry + farm",
+	_check(got and int(Economy.server_quest.tut_step) == lb + 1 and Tutorial.mission().id == Tutorial.MISSIONS[lb + 1].id,  # 2026-10-29부터 벌목장 뒤는 사이 퀘스트
+		"(q) claiming the lumber mission moves the server to the next guide quest",
 		"quest=%s" % [Economy.server_quest])
-	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그)
+	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그). 팔 목재를 먼저 둔다(벌목장 보상이 이제 다음 사이 퀘스트의 골드라 자원이 없을 수 있다)
+	await _request("POST", "/v1/test/levels", {"res": {"wood": 500}})
 	var sales := []
 	Economy.sold.connect(func(g): sales.append(g))
 	Economy.sell_all(Economy.time_now())
