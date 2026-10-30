@@ -11,7 +11,7 @@ if (cmd !== 'migrate' && cmd !== 'seed') {
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? ''
 const pgliteDir = process.env.PGLITE_DIR?.trim() || join(import.meta.dirname, '..', '.data', 'dev')
 console.log(`[${cmd}] target: ${databaseUrl ? 'DATABASE_URL (neon)' : `pglite ${pgliteDir}`}`)
-const db = await openDb({ databaseUrl, pgliteDir })
+const db = await openDb({ databaseUrl, pgliteDir, driver: process.env.DB_DRIVER?.trim(), log: (m) => console.warn(`[${cmd}] ${m}`) })
 try {
   if (cmd === 'migrate') {
     const applied = await migrate(db)

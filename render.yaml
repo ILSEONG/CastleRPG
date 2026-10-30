@@ -34,6 +34,8 @@ services:
         sync: false
       - key: OAUTH_NAVER_SECRET
         sync: false
+      - key: SENTRY_DSN            # 오류 모음(sentry.io 프로젝트의 DSN, https://<key>@<host>/<project>). 비우면 오류를 보내지 않는다(server/src/sentry.ts)
+        sync: false
       - key: LEGAL_OPERATOR        # 약관·개인정보처리방침의 운영자 상호(비우면 코드 기본값 일성게임즈, 사업자등록번호는 LEGAL_BIZ_NO 또는 기본값) — /legal/terms·/legal/privacy
         sync: false
       - key: LEGAL_EMAIL           # 문의·개인정보 보호책임자 이메일(공개됨)
@@ -44,6 +46,7 @@ services:
         sync: false
       - key: TOSS_MTLS_KEY
         sync: false
+      # DB_DRIVER: 비우면 DB 연결 풀(pg, 시작할 때 안 되면 Neon HTTP로), http면 Neon HTTP만(server/src/db.ts)
       # GOOGLE_PLAY_PACKAGE(기본 com.ilesong.castlerpg), TOSS_SKUS({"상품 id":"토스 sku"}, 콘솔 sku가 상품 id와 다를 때만)
       # CORS_ORIGINS: 웹 빌드를 올리면 그 출처로 정한다(비우면 *). 앱인토스: https://<appName>.web.tossmini.com, https://<appName>.private-web.tossmini.com.
       # ALLOW_TEST_HOOKS 는 두지 않는다 — 운영에서 1이면 서버가 시작을 거부한다.

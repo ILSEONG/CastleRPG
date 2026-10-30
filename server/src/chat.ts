@@ -1,4 +1,4 @@
-// 채팅(마이그레이션 032). createApp 안에서 registerChat으로 붙인다. 전달은 폴링(창이 열려 있으면 자주, 닫혀 있으면 가끔).
+// 채팅(마이그레이션 032). createApp 안에서 registerChat으로 붙인다. 전달은 실시간 연결(chat_live.ts, 새 메시지를 바로 밀어 준다) + 폴링(연결이 없을 때, 있으면 가끔 빈 곳 채우기).
 //  GET  /v1/chat?all=<id>&guild=<id>   각 채널에서 그 id 뒤 메시지(없으면 최근 PAGE개) → {server_now, all: [...], guild: [...] | null, guild_name}
 //  POST /v1/chat {channel: 'all'|'guild', text}  보낸다 → {msg}. 거절은 400(too_fast · no_guild · empty). 욕설은 profanity.ts가 가린다(원문은 raw에 남긴다)
 //  POST /v1/chat/report {id}   남의 메시지 신고 → {ok, already}. 신고한 사람·신고당한 사람·그 메시지·그때 채널 앞뒤 메시지(CONTEXT개씩, 원문 포함)를 남긴다.
@@ -33,9 +33,23 @@ type Any = any
 
 export function registerChat(app: Hono<Any>, d: Any) {
   const { query, auth, clock, body, ApiError } = d
+  const live = d.live as import('./chat_live.ts').ChatLive | undefined
+  if (live) live.verify = d.verifyToken
   const bad = (code: string, msg: string) => new ApiError(400, code, msg)
   // GAP_SEC 안 두 번째 메시지는 메모리에서 먼저 막는다(2026-10-27 보안 점검: DB 검사는 insert 안 not exists라 동시에 보낸 여러 통이 모두 지났다). DB 검사도 그대로 둔다
   const sendLimit = new Limiter(1, GAP_SEC)
+
+  // 실시간 연결로 밀어 준다(실패해도 보내기는 성공 — 받는 쪽은 폴링으로 채운다)
+  async function push(channel: string, r: Any) {
+    if (!live || live.clients.size === 0) return
+    try {
+      const to = channel === 'all' ? null
+        : (await query('select player_id::text as p from player_guild where guild_id = $1', [channel.slice(2)])).map((x: Any) => String(x.p))
+      live.publish(channel === 'all' ? 'all' : 'guild', r, to)
+    } catch (e) {
+      console.warn(`[chat] live push failed: ${(e as Error).message}`)
+    }
+  }
 
   async function myGuild(id: string): Promise<{ id: string; name: string } | null> {
     const [r] = await query('select g.id::text as id, g.name from player_guild pg join guilds g on g.id = pg.guild_id where pg.player_id = $1', [id])
@@ -93,6 +107,7 @@ export function registerChat(app: Hono<Any>, d: Any) {
       where not exists (select 1 from chat_messages where player_id = $2 and at > to_timestamp($5::float8 - ${GAP_SEC}))
       returning id, player_id::text, name, text, extract(epoch from at)::float8 as at`, [channel, id, G.playerName(id), text, now, raw === text ? null : raw])
     if (!r) throw bad('too_fast', `wait ${GAP_SEC} s between messages`)
+    await push(channel, r)
     await query(`delete from chat_messages where channel = $1 and id <= (select id from chat_messages where channel = $1 order by id desc offset ${KEEP} limit 1)`, [channel])
     return c.json({ server_now: now, msg: out(r, id) })
   })

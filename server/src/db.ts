@@ -1,4 +1,6 @@
-// DB 접근은 query(text, params) -> rows 하나. DATABASE_URL이 있으면 Neon HTTP, 없으면 PGlite(디렉터리 또는 메모리).
+// DB 접근은 query(text, params) -> rows 하나. DATABASE_URL이 있으면 연결 풀(pg, TCP) — 안 되면 Neon HTTP, 없으면 PGlite(디렉터리 또는 메모리).
+// 연결 풀(2026-10-30 사용자 "1~4번 다 해줘"의 2번): Neon HTTP는 쿼리마다 HTTPS 요청을 새로 보내 서버 CPU를 약 2배 쓴다(부하 측정 15% 대 8%).
+// 열어 둔 연결을 다시 쓰고, 쉬는 연결은 POOL_IDLE_MS 뒤 닫는다 — 접속자가 없으면 Neon이 잠들 수 있게(무료 사용 시간).
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -17,7 +19,18 @@ export interface Db {
 export const MIGRATIONS_DIR = join(import.meta.dirname, '..', 'migrations')
 
 // pgliteDir가 비었거나 "memory"면 메모리 DB.
-export async function openDb(opts: { databaseUrl?: string; pgliteDir?: string } = {}): Promise<Db> {
+export const POOL_MAX = 10
+export const POOL_IDLE_MS = 60_000
+
+// driver: 'pool'(기본, 시작할 때 select 1이 안 되면 'http'로) · 'http'(DB_DRIVER=http로 강제).
+export async function openDb(opts: { databaseUrl?: string; pgliteDir?: string; driver?: string; log?: (m: string) => void } = {}): Promise<Db & { driver: string }> {
+  if (opts.databaseUrl && opts.driver !== 'http') {
+    try {
+      return { ...(await openPool(opts.databaseUrl)), driver: 'pool' }
+    } catch (e) {
+      opts.log?.(`connection pool failed (${(e as Error).message}) - using Neon HTTP`)
+    }
+  }
   if (opts.databaseUrl) {
     const { neon } = await import('@neondatabase/serverless')
     const sql = neon(opts.databaseUrl)
@@ -26,6 +39,7 @@ export async function openDb(opts: { databaseUrl?: string; pgliteDir?: string } 
       query: async (text, params = []) => (await sql.query(text, params)) as Row[],
       batch: async (stmts) => (await sql.transaction(stmts.map((s) => sql.query(s.text, s.params ?? [])))) as Row[][],
       close: async () => {},
+      driver: 'http',
     }
   }
   const { PGlite } = await import('@electric-sql/pglite')
@@ -41,6 +55,37 @@ export async function openDb(opts: { databaseUrl?: string; pgliteDir?: string } 
       return out
     }),
     close: () => pg.close(),
+    driver: 'pglite',
+  }
+}
+
+// pg 연결 풀. 값 해석(int8·numeric = 문자열, json = 값, timestamptz = Date)은 Neon HTTP 드라이버와 같다.
+export async function openPool(url: string, max = POOL_MAX): Promise<Db> {
+  const { default: pg } = await import('pg')
+  const u = new URL(url)
+  const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1'
+  // 연결 문자열의 sslmode는 pg가 verify-full처럼 다루는데, Neon은 공인 인증서라 그대로 검증한다. 로컬 시험 DB만 TLS 없이.
+  const pool = new pg.Pool({ connectionString: url, max, idleTimeoutMillis: POOL_IDLE_MS, connectionTimeoutMillis: 10_000, ssl: local ? false : { rejectUnauthorized: true } })
+  pool.on('error', () => {}) // 쉬는 연결이 끊긴 것(Neon이 잠듦 등) — 다음 쿼리가 새 연결을 연다
+  await pool.query('select 1')
+  return {
+    query: async (text, params = []) => (await pool.query(text, params as unknown[])).rows,
+    batch: async (stmts) => {
+      const c = await pool.connect()
+      try {
+        await c.query('begin')
+        const out: Row[][] = []
+        for (const s of stmts) out.push((await c.query(s.text, (s.params ?? []) as unknown[])).rows)
+        await c.query('commit')
+        return out
+      } catch (e) {
+        await c.query('rollback').catch(() => {})
+        throw e
+      } finally {
+        c.release()
+      }
+    },
+    close: () => pool.end(),
   }
 }
 

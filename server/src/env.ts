@@ -45,8 +45,13 @@ export function readEnv(env: Record<string, string | undefined>) {
   // 기획 표 재사용 초(app.ts loadGame). 운영 기본 30 — 시드 뒤 길어야 그만큼 늦게 반영된다. 개발 모드는 0(테스트 훅이 표를 바꾼다)
   const gameCacheSec = Number(env.GAME_CACHE_SEC?.trim() || (databaseUrl ? 30 : 0))
   if (!Number.isFinite(gameCacheSec) || gameCacheSec < 0) throw new Error('GAME_CACHE_SEC must be a non-negative number of seconds')
+  // DB 연결 방식(db.ts openDb): 비우면 연결 풀(pool, 안 되면 Neon HTTP로), 'http'면 Neon HTTP만
+  const dbDriver = env.DB_DRIVER?.trim() ?? ''
+  if (dbDriver && dbDriver !== 'pool' && dbDriver !== 'http') throw new Error("DB_DRIVER must be 'pool' or 'http'")
   return {
     databaseUrl,
+    dbDriver,
+    sentryDsn: env.SENTRY_DSN?.trim() ?? '',
     gameCacheSec,
     secret,
     allowTestHooks,

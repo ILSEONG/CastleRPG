@@ -28,6 +28,9 @@ import { registerGuildWar } from './war_routes.ts'
 import { registerPvp } from './pvp_routes.ts'
 import { registerMarket } from './market.ts'
 import { registerChat } from './chat.ts'
+import type { ChatLive } from './chat_live.ts'
+import type { Sentry } from './sentry.ts'
+import { SLOW_MS } from './sentry.ts'
 import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
 import { dayRecorder, registerRetention } from './retention.ts'
@@ -49,6 +52,8 @@ export interface AppOptions {
   fetch?: typeof fetch // 제공자 호출(테스트는 가짜)
   warLive?: WarLive // 공성전 실시간 방(main.ts가 만들어 http 서버에 붙인다). 없으면 방 없이(REST finish만)
   partyLive?: PartyLive // 파티 퀘스트 실시간 방(main.ts가 만들어 붙인다). 없으면 방 없이(REST finish만)
+  chatLive?: ChatLive // 채팅 실시간 전달(main.ts가 만들어 붙인다). 없으면 폴링만
+  sentry?: Sentry // 오류 모음(sentry.ts, SENTRY_DSN). 없으면 로그만
   payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
   legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
   adWaitMs?: number // 광고 서버 확인(AdMob SSV) 콜백을 상점 구매가 기다리는 최대 시간(기본 10초, 테스트 0)
@@ -82,6 +87,8 @@ const ACCOUNT_REQS = 600
 const ACCOUNT_WINDOW_SEC = 30
 // 한 IP의 로그인 없는 DB 요청 1분에 240개. 소셜 로그인 결과 기다리기가 2초마다(분당 30) — 통신사 공유 IP에서 8명이 동시에 로그인해도 된다
 const PUBLIC_PER_IP = 240
+const CLIENT_ERROR_POSTS = 6 // 앱 오류 보고(POST /v1/client/errors) IP마다 분당
+const CLIENT_ERRORS_MAX = 10 // 한 번에 받는 오류 수
 const PUBLIC_DB_PATHS = /^\/v1\/(status|notices|auth\/(guest|toss|oauth\/poll|session|logout|[a-z]+\/callback))$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TOSS_HASH_RE = /^[A-Za-z0-9+/=_.:-]{8,512}$/ // 앱인토스 getUserKeyForGame hash
@@ -477,9 +484,24 @@ export function createApp(opts: AppOptions) {
     onError: (c) => c.json({ error: 'payload_too_large', message: `request body must be at most ${MAX_BODY} bytes` }, 413),
   }))
 
+  // 느린 요청(SLOW_MS 넘음)은 오류 모음에 경고로 — 경로는 숫자·uuid를 지워 같은 종류끼리 묶는다(실시간 연결 Upgrade는 여기를 지나지 않는다)
+  const sentry = opts.sentry
+  if (sentry?.on) {
+    app.use('*', async (c, next) => {
+      const t = performance.now()
+      await next()
+      const ms = performance.now() - t
+      if (ms > SLOW_MS) {
+        const route = c.req.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, ':id').replace(/\/\d+(?=\/|$)/g, '/:n')
+        sentry.capture({ type: 'SlowRequest', message: `${c.req.method} ${route} ${Math.round(ms)} ms`, level: 'warning', tags: { route: `${c.req.method} ${route}` } })
+      }
+    })
+  }
+
   app.onError((err, c) => {
     if (err instanceof ApiError) return c.json({ error: err.code, message: err.message }, err.status as any)
     console.error('[server] unhandled error:', err.stack ?? err.message) // 오류 객체 전체는 남기지 않는다 — PG 오류의 where·detail에 요청 값이 들어 있다
+    sentry?.capture({ type: err.name || 'Error', message: err.message, stack: err.stack, tags: { route: `${c.req.method} ${c.req.routePath ?? c.req.path}` } })
     return c.json({ error: 'internal', message: 'internal server error' }, 500)
   })
   app.notFound((c) => c.json({ error: 'not_found', message: `no such endpoint: ${c.req.method} ${c.req.path}` }, 404))
@@ -1321,6 +1343,24 @@ export function createApp(opts: AppOptions) {
   // --- 엔드포인트 ---
 
   app.get('/v1/health', (c) => c.json({ ok: true, server_now: clock() }))
+
+  // 앱 오류 보고(client_errors.gd): GDScript 오류를 오류 모음(Sentry)으로 넘긴다. 로그인 전 오류도 받는다(토큰이 있으면 플레이어 id를 붙인다).
+  // 한 번에 CLIENT_ERRORS_MAX개까지, IP마다 분당 CLIENT_ERROR_POSTS번. DB를 읽지 않는다. 오류 모음이 꺼져 있으면 받기만 한다
+  const clientErrorPosts = new RL.Limiter(CLIENT_ERROR_POSTS, 60)
+  app.post('/v1/client/errors', async (c) => {
+    ipLimit(c, clientErrorPosts)
+    const b = await body(c)
+    const errors: any[] = Array.isArray(b.errors) ? b.errors.slice(0, CLIENT_ERRORS_MAX) : []
+    const pid = sentry?.on ? await tokenPlayer(c) : null
+    const str = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : '')
+    const tags = { app_version: str(b.version, 40), os: str(b.os, 40), store: str(b.store, 20) }
+    let taken = 0
+    for (const e of errors) {
+      if (!e || typeof e !== 'object' || !str(e.message, 1000)) continue
+      if (sentry?.capture({ type: str(e.type, 100) || 'ScriptError', message: str(e.message, 1000), stack: str(e.stack, 4000), platform: 'other', tags, user: pid ?? undefined })) taken++
+    }
+    return c.json({ ok: true, taken })
+  })
 
   // 이용약관·개인정보처리방침·계정 삭제 안내(Google Play·앱인토스에 등록하는 공개 주소, legal.ts)
   const legal: L.LegalInfo = opts.legal ?? { operator: '', email: '' }
@@ -4205,7 +4245,7 @@ export function createApp(opts: AppOptions) {
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
-  registerChat(app, { query, auth, clock, body, ApiError })
+  registerChat(app, { query, auth, clock, body, ApiError, verifyToken, live: opts.chatLive })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus, cacheMs: opsCacheMs })
   registerRetention(app, { query, auth, clock, ApiError, isAdmin })
   registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
