@@ -530,12 +530,11 @@ export function upgradeBlock(id: string, defs: BuildingDef[], levels: Record<str
 
 // 모집(스펙 §3.6): 장마다 등급(UR rates.ur, SSR rates.ssr, SR rates.sr, 나머지 R)을 정하고 그 등급 안에서 균등하게 뽑는다.
 // rand는 [0, 1) 난수(서버는 암호학적 난수). rates = gachaRates(기본: 골드 Lv 1).
-// pity(다이아 모집만, 개정 23)가 있으면 장마다 n·u += 1, u ≥ umax면 UR 확정, 아니고 n ≥ max면 SSR 확정. UR이면 n = u = 0,
-// SSR이면 n = 0 — 바꿔 둔다(u·umax가 없으면 UR 천장 없음, 2026-10-29). 다이아 10연차는 또
-// SR 이상이 gacha_10_min_sr장보다 적으면 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
+// 천장은 없다(2026-10-30 사용자 "SSR, UR 천장 없애주고"). guarantee(다이아·모집권 모집)면 10연차에
+// SR 이상이 gacha_10_min_sr장보다 적을 때 뒤에서부터 R을 SR(균등)로 바꾼다. 골드 10연차에는 보장이 없다.
 // 앱 Economy.roll_gacha와 같은 규칙.
 export function rollGacha(count: number, heroes: { id: string; grade: string }[], config: Config, rand: () => number,
-  rates: { ur?: number; ssr: number; sr: number } = gachaRates(config, GACHA_GOLD, 1), pity?: { n: number; max: number; u?: number; umax?: number }) {
+  rates: { ur?: number; ssr: number; sr: number } = gachaRates(config, GACHA_GOLD, 1), guarantee = false) {
   const pools: Record<string, string[]> = { UR: [], SSR: [], SR: [], R: [] }
   for (const h of heroes) pools[h.grade]?.push(h.id)
   const pick = (grade: string) => {
@@ -545,26 +544,13 @@ export function rollGacha(count: number, heroes: { id: string; grade: string }[]
   }
   const { ssr, sr } = rates
   const ur = rates.ur ?? 0
-  const urPity = pity !== undefined && pity.u !== undefined && pity.umax !== undefined
   const out: { id: string; grade: string }[] = []
   for (let i = 0; i < count; i++) {
     const r = rand()
-    let grade = r < ur ? 'UR' : r < ur + ssr ? 'SSR' : r < ur + ssr + sr ? 'SR' : 'R'
-    if (pity) {
-      pity.n += 1
-      if (urPity) {
-        pity.u! += 1
-        if (pity.u! >= pity.umax!) grade = 'UR'
-      }
-      if (pity.n >= pity.max && grade !== 'UR') grade = 'SSR'
-      if (grade === 'UR') {
-        pity.n = 0
-        if (urPity) pity.u = 0
-      } else if (grade === 'SSR') pity.n = 0
-    }
+    const grade = r < ur ? 'UR' : r < ur + ssr ? 'SSR' : r < ur + ssr + sr ? 'SR' : 'R'
     out.push(pick(grade))
   }
-  if (count === 10 && pity) {
+  if (count === 10 && guarantee) {
     let need = cfgNum(config, 'gacha_10_min_sr') - out.filter((x) => x.grade !== 'R').length
     for (let i = out.length - 1; i >= 0 && need > 0; i--) {
       if (out[i].grade === 'R') {

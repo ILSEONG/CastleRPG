@@ -45,6 +45,12 @@ const FOCUS := {
 	"pip": Vector2(0.50, 0.24),
 	"grit": Vector2(0.54, 0.24),
 	"tia": Vector2(0.60, 0.22),
+	"hyeonmu": Vector2(0.49, 0.39),
+	"baekho": Vector2(0.55, 0.43),
+	"yeonhwa": Vector2(0.47, 0.35),
+	"cheongryong": Vector2(0.52, 0.37),
+	"chronos": Vector2(0.51, 0.32),
+	"jujak": Vector2(0.42, 0.33),
 }
 
 static var enabled := true  # false면 그림이 있어도 예전 흉상(테스트·비교용)

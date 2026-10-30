@@ -58,7 +58,7 @@ func _ready() -> void:
 	_save("dungeon_form")
 	dw.close()
 	await _frames(10)
-	var by := {"SSR": [], "SR": [], "R": []}
+	var by := {"UR": [], "SSR": [], "SR": [], "R": []}
 	for h in GameData.heroes():
 		by[h.grade].append(h.id)
 	var picks := [by.R[0], by.SR[0], by.R[1], by.R[2], by.R[3], by.R[4], by.SSR[0], by.R[5], by.SR[1], by.R[6]]

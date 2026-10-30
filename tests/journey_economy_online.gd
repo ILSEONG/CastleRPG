@@ -156,14 +156,11 @@ func _recruit() -> void:
 		_check(pred.tickets == before.tickets - n and pred.diamonds == before.diamonds, "ticket %dx: -%d tickets, diamonds kept" % [n, n], str([before.tickets, pred.tickets]))
 		_check(await _wait_until(func(): return _gacha_got, 15.0) and _gacha_results.size() == n, "ticket %dx: %d results" % [n, n], str(_gacha_results.size()))
 		await _settle()
-		var pity := int(before.gacha[2])
-		for r in _gacha_results:
-			pity = 0 if r.grade in ["SSR", "UR"] else pity + 1
-		_check(Economy.gacha_dia_pity == pity, "ticket %dx: shares the diamond pity" % n, str([Economy.gacha_dia_pity, pity]))
+		_check(Economy.gacha_dia_pity == int(before.gacha[2]), "ticket %dx: no pity counter (2026-10-30)" % n, str([Economy.gacha_dia_pity, before.gacha[2]]))
 		await _same_as_server("ticket %dx" % n, ["gold", "diamonds", "tickets", "heroes", "gacha"], pred, ["tickets", "diamonds"])
 		rp._on_confirm()
 		await _frames(3)
-	# 다이아 1회·10회 — 천장(모집권을 다 쓴 뒤라 다이아 버튼)
+	# 다이아 1회·10회(모집권을 다 쓴 뒤라 다이아 버튼)
 	_check(Economy.dia_tickets == 0 and rp.pull_currency(1) == "diamond", "tickets used up: buttons back to diamonds", str(Economy.dia_tickets))
 	for n in [1, 10]:
 		var cd := Economy.gacha_cost("diamond", n)
@@ -175,14 +172,10 @@ func _recruit() -> void:
 		_check(await _wait_until(func(): return _gacha_got, 15.0) and _gacha_results.size() == n, "diamond %dx: %d results" % [n, n], str(_gacha_results.size()))
 		await _settle()
 		_check(_gacha_results.filter(func(r): return r.grade != "R").size() >= (1 if n == 10 else 0), "diamond %dx: SR+ guarantee" % n, str(_gacha_results.map(func(r): return r.grade)))
-		var pity := int(before.gacha[2])
-		for r in _gacha_results:
-			pity = 0 if r.grade == "SSR" else pity + 1
-		_check(Economy.gacha_dia_pity == pity, "diamond %dx: pity counter follows the results" % n, str([before.gacha[2], Economy.gacha_dia_pity, pity]))
+		_check(Economy.gacha_dia_pity == int(before.gacha[2]), "diamond %dx: no pity counter (2026-10-30)" % n, str([before.gacha[2], Economy.gacha_dia_pity]))
 		await _same_as_server("diamond %dx" % n, ["gold", "diamonds", "heroes", "gacha"], pred, ["diamonds"])
 		rp._on_confirm()
 		await _frames(3)
-	_check(rp.pity_label.text.begins_with("SSR 확정까지 %d회" % maxi(1, int(GameData.config_num("gacha_dia_pity")) - Economy.gacha_dia_pity)), "pity label", rp.pity_label.text)
 	_check_shards_invariant("all pulls")
 	var dups := 0
 	for id in Economy.heroes:

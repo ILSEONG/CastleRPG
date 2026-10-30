@@ -2018,9 +2018,8 @@ export function createApp(opts: AppOptions) {
       const owned: Record<string, { copies: number; shards: number }> = {}
       for (const [id, h] of Object.entries(p.heroes)) owned[id] = { copies: h.copies, shards: h.shards }
       const add: Record<string, number> = {}
-      const pity = dia ? { n: p.gacha.dia_pity, max: R.cfgNum(g.config, 'gacha_dia_pity'), u: p.gacha.dia_ur_pity, umax: R.cfgNum(g.config, 'gacha_dia_ur_pity') } : undefined
       const rates = R.gachaRates(g.config, dia ? R.GACHA_DIA : currency, lv)
-      const results = R.rollGacha(count, g.heroes, g.config, random, rates, pity).map(({ id, grade }) => {
+      const results = R.rollGacha(count, g.heroes, g.config, random, rates, dia).map(({ id, grade }) => {
         const o = owned[id]
         const isNew = !(o?.copies > 0)
         owned[id] = isNew ? { copies: 1, shards: 0 } : { copies: o.copies + 1, shards: o.shards + 1 }
@@ -2028,9 +2027,9 @@ export function createApp(opts: AppOptions) {
         return { hero_id: id, grade, new: isNew, copies: owned[id].copies, shards: owned[id].shards }
       })
       const up = R.goldLevelUp(g.config, lv, p.gacha.gold_pulls, count)
-      const gacha = pity ? { dia_pity: pity.n, dia_ur_pity: pity.u } : { gold_level: up.level, gold_pulls: up.pulls }
+      const gacha = dia ? {} : { gold_level: up.level, gold_pulls: up.pulls } // 천장 없음(2026-10-30): 다이아 모집은 모집 상태를 바꾸지 않는다
       const paid = ticket ? { dia_tickets: -cost } : dia ? { diamonds: -cost } : { gold_tenths: -cost * 10 }
-      const detail = { currency, count, cost, ...paid, level: lv, pity: p.gacha.dia_pity, ur_pity: p.gacha.dia_ur_pity, after: gacha, results }
+      const detail = { currency, count, cost, ...paid, level: lv, after: gacha, results }
       return {
         change: { ...(ticket ? { diaTickets: -cost } : dia ? { diamonds: -cost } : { goldTenths: -cost * 10 }), heroes: add, gacha, log: { kind: 'gacha', detail } },
         extra: { results },

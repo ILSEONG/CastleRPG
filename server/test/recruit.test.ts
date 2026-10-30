@@ -69,19 +69,11 @@ test('확률 표본(10만 장, 암호학적 난수): 골드 Lv 10은 SSR 1% · S
   assert.ok(share(l1, 'SSR') === 0 && Math.abs(share(l1, 'SR') - 0.05) <= 0.0045, `gold L1 ${share(l1, 'SSR')} ${share(l1, 'SR')}`)
 })
 
-test('천장(결정적 난수): SSR 없이 49장이면 50번째가 SSR, 카운터는 SSR에서 0. 10연차 중간에도, 자연 SSR도 카운터를 0으로', () => {
+test('천장 없음(2026-10-30 사용자 "SSR, UR 천장 없애주고"): 다이아로 R만 200장 뽑아도 1회 모집은 전부 R, 10연차는 SR 이상 1장 보장만', () => {
   const allR = () => 0.99
-  const pity = { n: 0, max: 50 }
-  const first = R.rollGacha(49, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1), pity)
-  assert.deepEqual([first.every((x) => x.grade === 'R'), pity.n], [true, 49])
-  assert.deepEqual([R.rollGacha(1, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1), pity)[0].grade, pity.n], ['SSR', 0])
-  pity.n = 45
-  const ten = R.rollGacha(10, HEROES, CFG, allR, R.gachaRates(CFG, 'diamond', 1), pity)
-  assert.deepEqual([ten.map((x) => x.grade), pity.n], [['R', 'R', 'R', 'R', 'SSR', 'R', 'R', 'R', 'R', 'R'], 5]) // 5번째(누적 50)가 SSR
-  pity.n = 30
-  const seq = [0.5, 0, 0.01, 0, 0.5, 0] // R, 자연 SSR, R
-  R.rollGacha(3, HEROES, CFG, () => seq.shift() ?? 0.5, R.gachaRates(CFG, 'diamond', 1), pity)
-  assert.equal(pity.n, 1)
+  const dia = R.gachaRates(CFG, 'diamond', 1)
+  assert.ok(R.rollGacha(200, HEROES, CFG, allR, dia, true).every((x) => x.grade === 'R'))
+  for (let i = 0; i < 20; i++) assert.equal(R.rollGacha(10, HEROES, CFG, allR, dia, true).map((x) => x.grade).join(''), 'RRRRRRRRRSR')
 })
 
 test('API 골드: 누적 35에서 10연차(100,000 = 1회 × 10, SR 보장 없음 — 전부 R이면 R 10장) → Lv 2·누적 5, 다음 1회는 12,500. 응답 gacha {gold_level, gold_pulls, gold_next, dia_pity}, 로그 currency·level·pity', async () => {
@@ -105,55 +97,51 @@ test('API 골드: 누적 35에서 10연차(100,000 = 1회 × 10, SR 보장 없�
   rand.next = []
 })
 
-test('API 다이아: 훅으로 3,000 → 1회 300(천장 +1), 천장 49에서 R만 나와도 SSR 확정 → 0, 10연차 2,700. 부족하면 409 not_enough_diamonds, 이상한 currency는 400', async () => {
+test('API 다이아: 훅으로 3,000 → 1회 300, 저장된 옛 천장 카운터가 49여도 R은 R(천장 없음, 2026-10-30), 10연차 2,700. 부족하면 409 not_enough_diamonds, 이상한 currency는 400', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   let r = await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 3000 } })
   assert.deepEqual([r.status, r.json.player.diamonds], [200, 3000])
   rand.next = [0.99, 0]
   r = await gacha(token, { count: 1, currency: 'diamond' })
-  assert.deepEqual([r.json.player.diamonds, r.json.player.gacha.dia_pity, r.json.player.gacha.gold_pulls, r.json.player.gold_tenths], [2700, 1, 0, 0])
+  assert.deepEqual([r.json.player.diamonds, r.json.player.gacha.dia_pity, r.json.player.gacha.gold_pulls, r.json.player.gold_tenths], [2700, 0, 0, 0])
   await setState(id, 'gacha_dia_pity', 49)
+  await setState(id, 'gacha_dia_ur_pity', 199)
   rand.next = [0.99, 0]
   r = await gacha(token, { count: 1, currency: 'diamond' })
-  assert.deepEqual([r.json.results[0].grade, r.json.player.gacha.dia_pity, r.json.player.diamonds], ['SSR', 0, 2400])
+  assert.deepEqual([r.json.results[0].grade, r.json.player.diamonds], ['R', 2400])
   // 2,400 < 2,700: 409, 아무것도 안 바뀐다(골드는 많아도 다이아로 판정)
   await setState(id, 'gold_tenths', 1_000_000)
   r = await gacha(token, { count: 10, currency: 'diamond' })
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_diamonds'])
   let p = (await S.req('GET', '/v1/player', { token })).json.player
-  assert.deepEqual([p.diamonds, p.gacha.dia_pity, p.gold_tenths], [2400, 0, 1_000_000])
+  assert.deepEqual([p.diamonds, p.gold_tenths], [2400, 1_000_000])
   await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 300 } })
-  rand.next = Array(30).fill(0.99) // 전부 R → 10연차 보장 SR 1장(SR은 천장을 되돌리지 않는다)
+  rand.next = Array(30).fill(0.99) // 전부 R → 10연차 보장 SR 1장
   r = await gacha(token, { count: 10, currency: 'diamond' })
-  assert.deepEqual([r.json.player.diamonds, r.json.player.gacha.dia_pity, r.json.results.map((x: any) => x.grade).join('')], [0, 10, 'RRRRRRRRRSR'])
+  assert.deepEqual([r.json.player.diamonds, r.json.results.map((x: any) => x.grade).join('')], [0, 'RRRRRRRRRSR'])
   for (const currency of ['ruby', 1, '', 'Gold']) assert.equal((await gacha(token, { count: 1, currency })).status, 400, String(currency))
   p = (await S.req('GET', '/v1/player', { token })).json.player
   const l = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'gacha' order by id", [id])
-  assert.deepEqual(l.map((x) => [x.detail.currency, x.detail.cost, x.detail.diamonds, x.detail.pity, x.detail.after]),
-    [['diamond', 300, -300, 0, { dia_pity: 1, dia_ur_pity: 1 }], ['diamond', 300, -300, 49, { dia_pity: 0, dia_ur_pity: 2 }], ['diamond', 2700, -2700, 0, { dia_pity: 10, dia_ur_pity: 12 }]])
+  assert.deepEqual(l.map((x) => [x.detail.currency, x.detail.cost, x.detail.diamonds, x.detail.after]),
+    [['diamond', 300, -300, {}], ['diamond', 300, -300, {}], ['diamond', 2700, -2700, {}]])
   assert.deepEqual([p.gold_tenths, p.gacha.gold_level, p.gacha.gold_pulls], [1_000_000, 1, 0]) // 다이아 모집은 골드·골드 레벨과 무관
   rand.next = []
 })
 
-test('UR(2026-10-29): 다이아만 0.5%(골드 0), UR 천장 200 — 199에서 R이 나와도 UR 확정이고 SSR·UR 천장이 0으로, UR은 SSR 천장도 푼다', async () => {
+test('UR(2026-10-29): 다이아만 0.5%(골드 0), 0.004 < 0.005 → UR. 천장은 없다(2026-10-30)', async () => {
   assert.ok(near(R.gachaRates(CFG, 'diamond', 1).ur ?? 0, 0.005))
   for (const l of [1, 5, 10]) assert.equal(R.gachaRates(CFG, 'gold', l).ur, 0)
   const urs = HEROES.filter((h) => h.grade === 'UR').map((h) => h.id)
   assert.equal(urs.length, 6)
-  // 순수 규칙: 0.004 < 0.005 → UR, 천장 n·u 모두 0
-  const pity = { n: 30, max: 50, u: 10, umax: 200 }
-  const out = R.rollGacha(1, HEROES, CFG, () => 0.004, R.gachaRates(CFG, 'diamond', 1), pity)
-  assert.deepEqual([out[0].grade, pity.n, pity.u], ['UR', 0, 0])
+  const out = R.rollGacha(1, HEROES, CFG, () => 0.004, R.gachaRates(CFG, 'diamond', 1), true)
+  assert.equal(out[0].grade, 'UR')
   S.clock.t = T0
-  const { token, id } = await S.login()
+  const { token } = await S.login()
   await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 300 } })
-  await setState(id, 'gacha_dia_ur_pity', 199)
-  await setState(id, 'gacha_dia_pity', 20)
-  rand.next = [0.99, 0]
+  rand.next = [0.004, 0]
   const r = await gacha(token, { count: 1, currency: 'diamond' })
-  assert.deepEqual([r.status, r.json.results[0].grade, urs.includes(r.json.results[0].hero_id), r.json.player.gacha.dia_pity, r.json.player.gacha.dia_ur_pity],
-    [200, 'UR', true, 0, 0])
+  assert.deepEqual([r.status, r.json.results[0].grade, urs.includes(r.json.results[0].hero_id)], [200, 'UR', true])
   rand.next = []
 })
 
@@ -223,7 +211,7 @@ test('원자성: 다이아 1회분(300)으로 두 요청이 같은 version을 �
     const [h] = await T.db.query('select coalesce(sum(copies), 0)::int as n from player_heroes where player_id = $1', [id])
     const [n] = await T.db.query("select count(*)::int as n from economy_log where player_id = $1 and kind = 'gacha'", [id])
     const won = r1.status === 200 ? r1 : r2
-    assert.deepEqual([Number(s.diamonds), s.gacha_dia_pity, h.n, n.n], [0, ['SSR', 'UR'].includes(won.json.results[0].grade) ? 0 : 1, 5, 1])
+    assert.deepEqual([Number(s.diamonds), s.gacha_dia_pity, h.n, n.n, won.status], [0, 0, 5, 1, 200])
   } finally {
     await T.close()
   }

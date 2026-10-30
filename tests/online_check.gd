@@ -800,7 +800,7 @@ func _phase6_quests() -> void:
 	_check(Tutorial.complete() and Tutorial.claim(), "(q) mission 1 done; claim sent to the server", "complete=%s" % Tutorial.complete())
 	_check(Tutorial.step == 1, "(q) the card moves to mission 2 at once (the server confirms behind — 2026-10-16)", "step=%d" % Tutorial.step)
 	var got := await _wait_until(func(): return Tutorial.step == 1 and not Economy.quest_waiting() and int(Economy.server_quest.tut_step) == 1, 10.0)
-	_check(got and Economy.gold >= gold0 + int(Tutorial.reward(0).gold) and Tutorial.count == 0 and Tutorial.mission().id == "hero_level",
+	_check(got and Economy.gold >= gold0 + int(Tutorial.reward(0).gold) and Tutorial.count == 0 and Tutorial.mission().id == Tutorial.MISSIONS[1].id,
 		"(q) the server pays the reward and moves the tutorial to mission 2", "step=%d gold=%d->%d" % [Tutorial.step, gold0, Economy.gold])
 	# 벌목장 공터 미션으로(테스트 훅) — 그 앞 미션의 보상(석재·식량)으로 짓는다
 	var lb: int = Tutorial.mission_index("build_lumber")
@@ -816,9 +816,11 @@ func _phase6_quests() -> void:
 		"unbuilt=%s" % [Economy.unbuilt.keys()])
 	Tutorial.claim()
 	got = await _wait_until(func(): return Tutorial.step == lb + 1 and not Economy.quest_waiting(), 10.0)  # 카드는 곧바로 넘어간다 — 서버 응답까지 기다린다
-	_check(got and int(Economy.server_quest.tut_step) == lb + 1 and Tutorial.mission().id == "build_quarry_farm", "(q) claiming the lumber mission moves the server to quarry + farm",
+	_check(got and int(Economy.server_quest.tut_step) == lb + 1 and Tutorial.mission().id == Tutorial.MISSIONS[lb + 1].id,  # 2026-10-29부터 벌목장 뒤는 사이 퀘스트
+		"(q) claiming the lumber mission moves the server to the next guide quest",
 		"quest=%s" % [Economy.server_quest])
-	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그)
+	# 상인 판매 응답이 sold를 내야 "상인과 거래" 미션이 센다(튜토리얼 7 버그). 팔 목재를 먼저 둔다(벌목장 보상이 이제 다음 사이 퀘스트의 골드라 자원이 없을 수 있다)
+	await _request("POST", "/v1/test/levels", {"res": {"wood": 500}})
 	var sales := []
 	Economy.sold.connect(func(g): sales.append(g))
 	Economy.sell_all(Economy.time_now())
@@ -1721,7 +1723,7 @@ func _pulls(n: int, count: int, currency: String) -> Array:
 
 
 ## (r23) 서버 골드 모집 레벨업: grant_gold로 골드 → 10연차 3번(요청 3번) = 30회 → 서버 Lv 2(넘김은 서버 규칙 그대로), 골드 −10연차 비용 × 3, 알림·시그널.
-## 다이아: grant_diamonds 16,000 → 1회 + 10연차 5번 = 51회(−13,800). 결과 순서로 센 천장 = 서버 dia_pity, 50회 안에 SSR이 한 장 이상(천장).
+## 다이아: grant_diamonds 16,000 → 1회 + 10연차 5번 = 51회(−13,800). 천장 없음(2026-10-30): 서버 dia_pity는 그대로 0, 10연차마다 SR 이상 1장.
 ## 재접속: 앱의 다이아·모집 상태를 비우고 토큰을 틀리게 해 다시 로그인 → /v1/player가 서버 값을 그대로 돌려준다(상단 다이아 칩도).
 ## phase 2 맨 끝에 돈다 — 모집이 영웅·조각을 늘려 phase 1·2의 영웅 복원 검사(서버 모집 한 장)를 흔들지 않게.
 func _recruit23_online() -> void:
@@ -1752,17 +1754,15 @@ func _recruit23_online() -> void:
 	var dia0: int = Economy.diamonds
 	var cards := await _pulls(1, 1, "diamond")
 	cards.append_array(await _pulls(5, 10, "diamond"))
-	var pity := 0
-	var ssr_in_50 := false
-	for i in cards.size():
-		pity = 0 if cards[i].grade == "SSR" else pity + 1
-		ssr_in_50 = ssr_in_50 or (i < 50 and cards[i].grade == "SSR")
+	var sr_each_ten := true
+	for t in 5:
+		sr_each_ten = sr_each_ten and cards.slice(1 + t * 10, 11 + t * 10).any(func(c): return c.grade != "R")
 	r = await _request("GET", "/v1/player")
 	var p: Dictionary = r.get("player", {})
-	_check(dia0 >= 16000 and cards.size() == 51 and Economy.diamonds == dia0 - 13800 and int(p.get("diamonds", -1)) == Economy.diamonds and ssr_in_50
-		and int(p.get("gacha", {}).get("dia_pity", -1)) == pity and Economy.gacha_dia_pity == pity and Economy.gacha_state().gold_level == 2,
-		"(r23) server diamond recruit: 51 cards for 13,800 diamonds, an SSR within 50 (pity), the server pity count matches the results",
-		"cards=%d dia %d -> %d pity=%d server=%s ssr50=%s" % [cards.size(), dia0, Economy.diamonds, pity, p.get("gacha"), ssr_in_50])
+	_check(dia0 >= 16000 and cards.size() == 51 and Economy.diamonds == dia0 - 13800 and int(p.get("diamonds", -1)) == Economy.diamonds and sr_each_ten
+		and int(p.get("gacha", {}).get("dia_pity", -1)) == 0 and Economy.gacha_dia_pity == 0 and Economy.gacha_state().gold_level == 2,
+		"(r23) server diamond recruit: 51 cards for 13,800 diamonds, an SR+ in every 10-pull, no pity counter (2026-10-30)",
+		"cards=%d dia %d -> %d server=%s sr10=%s" % [cards.size(), dia0, Economy.diamonds, p.get("gacha"), sr_each_ten])
 	var saved := [Economy.diamonds, Economy.gacha_state()]
 	Economy.diamonds = 0
 	Economy.gacha_gold_level = 1

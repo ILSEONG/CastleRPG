@@ -3022,19 +3022,16 @@ func _recruit23_ui(recruit) -> void:
 	await _frames(2)
 	dlg = recruit.dialog.get_global_rect()
 	_check(recruit.currency == "diamond" and recruit._dia_box.visible and not recruit._gold_box.visible and recruit.dia_label.text == "보유 600"
-		and recruit.pity_label.text == "SSR 확정까지 50회  ·  UR 확정까지 200회" and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
+		and recruit.one_button.text.contains("다이아 300") and recruit.ten_button.text.ends_with("다이아 2,700 · SR 이상 1장") and not recruit.one_button.disabled and not recruit.ten_button.disabled
 		and recruit.rates_label.text == "UR 0.5% · SSR 5% · SR 30% · R 64.5%" and dlg.position.y >= 0.0 and dlg.end.y <= 1280.0,
-		"(r23) [다이아 모집] tab: 보유 600, SSR 확정까지 50회, 5/30/65, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
-		"cur=%s have=%s pity=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.pity_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
+		"(r23) [다이아 모집] tab: 보유 600, no pity line (2026-10-30), 5/30/65, [1회 다이아 300] [10회 다이아 2,700 · SR 이상 1장] both on (short → shop ask); fits 720x1280",
+		"cur=%s have=%s one=%s rates=%s dialog=%s" % [recruit.currency, recruit.dia_label.text, recruit.one_button.text, recruit.rates_label.text, dlg])
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
-	var top_g: String = GameData.hero(recruit.cards[0].hero_id).grade if recruit.cards.size() == 1 else ""
-	var ssr: bool = top_g in ["SSR", "UR"]  # UR도 SSR 천장을 되돌린다
-	var ur_left := 200 if top_g == "UR" else 199
-	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == (0 if ssr else 1) and recruit.pity_label.text == "SSR 확정까지 %d회  ·  UR 확정까지 %d회" % [50 if ssr else 49, ur_left]
+	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == 0
 		and Economy.gold == gold0 and recruit.is_showing_results() and not recruit.auto_box.visible and recruit.again_button.text == "1회 더\n다이아 300" and recruit.again10_button.text == "10회 더\n다이아 부족",
-		"(r23) diamond [1회]: diamonds -300, the pity count goes down, gold untouched; no 자동 모집 box on diamond results",
-		"dia=%d pity=%d text=%s gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, recruit.pity_label.text, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])
+		"(r23) diamond [1회]: diamonds -300, no pity counter, gold untouched; no 자동 모집 box on diamond results",
+		"dia=%d pity=%d gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])
 	recruit.confirm_button.pressed.emit()
 	await _unguarded(recruit)
 	await _frames(2)
