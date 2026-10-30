@@ -1,6 +1,8 @@
 extends Node
 ## 채팅(사용자 2026-10-07, 오토로드 Chat): 전체·길드 채널. 서버 GET/POST /v1/chat(server/src/chat.ts, 마이그레이션 032).
-## 전달은 폴링: 채팅 창이 열려 있으면 OPEN_POLL_SEC마다, 닫혀 있으면 성 화면 채팅 줄(chat_bar.gd)의 마지막 줄을 위해 IDLE_POLL_SEC마다.
+## 전달(2026-10-30): 실시간 연결(WebSocket /v1/chat/live, server/src/chat_live.ts)이 열려 있으면 서버가 새 메시지를 바로 밀어 주고,
+## 폴링은 LIVE_POLL_SEC마다 빈 곳만 채운다. 연결이 없거나 끊기면 예전처럼 폴링: 채팅 창이 열려 있으면 OPEN_POLL_SEC마다,
+## 닫혀 있으면 성 화면 채팅 줄(chat_bar.gd)의 마지막 줄을 위해 IDLE_POLL_SEC마다. 끊기면 LIVE_RETRY_MIN초부터 두 배씩(최대 LIVE_RETRY_MAX) 다시 잇는다.
 ## 보내면 내 줄이 바로 보이고(대기 표시 없음) 서버가 받으면 서버 줄로 바뀐다. 서버가 거절하면 그 줄을 지우고 짧은 알림(notice)을 낸다.
 ## 오프라인(서버 없음)이면 아무것도 보내지 않는다.
 
@@ -15,6 +17,10 @@ const GAP_SEC := 2.0  # 서버 GAP_SEC과 같다(도배 제한)
 const KEEP := 100  # 채널마다 들고 있는 메시지 수
 const OPEN_POLL_SEC := 3.0
 const IDLE_POLL_SEC := 20.0
+const LIVE_POLL_SEC := 60.0
+const LIVE_PATH := "/v1/chat/live"
+const LIVE_RETRY_MIN := 2.0
+const LIVE_RETRY_MAX := 60.0
 const CHANNELS := ["all", "guild"]
 static var REFUSALS := {
 	"too_fast": Lang.t("chat.refusals.too_fast"),
@@ -35,7 +41,12 @@ var reports: Array = []  # 관리자: 서버 신고 목록(GET /v1/chat/reports)
 var reports_state := ""  # "" 안 받음 · "ok" · "failed"
 var system: Array = []  # [시스템] 줄(이 기기에서만): 채팅 안내·거절·신고 알림 {id, name, text, at, sys}
 
+var live := false  # 실시간 연결이 열려 있다
 var _cd := 0.0  # 다음 받기까지
+var _ws: WebSocketPeer = null
+var _ws_token := ""
+var _retry := 0.0
+var _backoff := LIVE_RETRY_MIN
 var _polling := false
 var _last_send_ms := -100000
 var _local_seq := 0
@@ -91,14 +102,71 @@ func online() -> bool:
 func _process(delta: float) -> void:
 	if not online() or not Net.ready_once:
 		return
-	_cd -= delta / maxf(Engine.time_scale, 0.01)  # 실제 초(배속과 무관)
+	var dt := delta / maxf(Engine.time_scale, 0.01)  # 실제 초(배속과 무관)
+	_live_tick(dt)
+	_cd -= dt
 	if _cd <= 0.0:
 		poll()
 
 
+static func live_url(api_base: String, token: String) -> String:
+	var base := api_base
+	if base.begins_with("https://"):
+		base = "wss://" + base.substr(8)
+	elif base.begins_with("http://"):
+		base = "ws://" + base.substr(7)
+	return "%s%s?token=%s" % [base, LIVE_PATH, token.uri_encode()]
+
+
+## 실시간 연결: 없으면(서버와 연결돼 있을 때) 잇고, 있으면 받은 메시지를 넣는다. 토큰이 바뀌면(다시 로그인) 새로 잇는다.
+func _live_tick(dt: float) -> void:
+	if _ws == null:
+		_retry -= dt
+		if _retry <= 0.0 and Net.up and Net.token != "":
+			_ws = WebSocketPeer.new()
+			_ws_token = Net.token
+			if _ws.connect_to_url(live_url(Net.api_base, Net.token)) != OK:
+				_live_closed()
+		return
+	if _ws_token != Net.token:
+		_ws.close()
+	_ws.poll()
+	match _ws.get_ready_state():
+		WebSocketPeer.STATE_OPEN:
+			if not live:
+				live = true
+				_backoff = LIVE_RETRY_MIN
+				_cd = 0.0  # 이어진 사이 놓친 줄을 한 번 채운다
+			while _ws.get_available_packet_count() > 0:
+				_on_live(_ws.get_packet().get_string_from_utf8())
+		WebSocketPeer.STATE_CLOSED:
+			_live_closed()
+
+
+func _live_closed() -> void:
+	_ws = null
+	if live:
+		live = false
+		_cd = 0.0  # 폴링으로 돌아간다
+	_retry = _backoff
+	_backoff = minf(_backoff * 2.0, LIVE_RETRY_MAX)
+
+
+func _on_live(raw: String) -> void:
+	var d = JSON.parse_string(raw)
+	if not d is Dictionary or d.get("t") != "msg" or not d.get("msg") is Dictionary:
+		return
+	var ch := str(d.get("ch", ""))
+	if ch == "guild" and not has_guild:  # 길드에 막 들었다 — 이름·길드 줄을 폴링으로 받는다
+		_cd = 0.0
+		return
+	if ch in CHANNELS and _merge(ch, [d.msg]):
+		changed.emit()
+
+
 ## 지금 받는다(창을 열 때 바로).
 func poll() -> void:
-	_cd = OPEN_POLL_SEC if window_open else IDLE_POLL_SEC
+	_cd = LIVE_POLL_SEC if live else (OPEN_POLL_SEC if window_open else IDLE_POLL_SEC)
 	if _polling or not online() or not Net.up:
 		return
 	_polling = true

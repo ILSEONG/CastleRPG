@@ -1,0 +1,23 @@
+# 서버 생존 감시(2026-10-30 사용자 "1~4번 다 해줘"의 4번): 10분마다 운영 API /v1/health를 친다.
+# 세 번(30초 간격) 다 실패하면 이 작업이 실패하고, GitHub가 저장소 주인에게 "workflow run failed" 메일을 보낸다(알림 설정: GitHub → Settings → Notifications → Actions).
+# GitHub 예약 실행은 몇 분 늦을 수 있다. 수동 실행: Actions 탭 → uptime → Run workflow.
+name: uptime
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GET /v1/health
+        run: |
+          for i in 1 2 3; do
+            if body=$(curl -fsS --max-time 20 https://castlerpg-api.onrender.com/v1/health) && echo "$body" | grep -q '"ok":true'; then
+              echo "up: $body"; exit 0
+            fi
+            echo "try $i failed"; sleep 30
+          done
+          echo "::error::castlerpg-api is down (3 tries)"; exit 1

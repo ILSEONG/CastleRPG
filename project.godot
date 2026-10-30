@@ -21,6 +21,7 @@ run/max_fps=60
 GameState="*res://scripts/game_state.gd"
 Economy="*res://scripts/economy.gd"
 Net="*res://scripts/net.gd"
+ClientErrors="*res://scripts/client_errors.gd"
 Fever="*res://scripts/fever.gd"
 Guild="*res://scripts/guild.gd"
 GuildWar="*res://scripts/guild_war.gd"

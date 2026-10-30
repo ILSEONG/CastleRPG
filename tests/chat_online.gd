@@ -1,7 +1,7 @@
 extends Node
 ## 온라인 채팅 체크 + 화면(개발용): 로컬 서버(메모리 PGlite, ALLOW_TEST_HOOKS=1)에 게스트로 접속한다. 다른 게스트 하나(HTTP 직접)가
 ## 전체 채널에 말하면 성 화면 채팅 줄에 보이는지, 줄을 누르면 창이 열리는지, 보내면 내 줄이 바로 보이고 서버 줄로 바뀌는지,
-## 2초 안에 또 보내면 알림만 나오고 입력이 남는지, 길드에 들면 [길드] 탭이 생기고 길드 채널이 되는지, 채팅 줄이 배속 버튼·
+## 실시간 연결로 폴링 없이 받는지, 2초 안에 또 보내면 알림만 나오고 입력이 남는지, 길드에 들면 [길드] 탭이 생기고 길드 채널이 되는지, 채팅 줄이 배속 버튼·
 ## 오른쪽 아래 메뉴·탭 바·튜토리얼 카드와 겹치지 않는지 본다.
 ## 실행: cd server && PGLITE_DIR=memory ALLOW_TEST_HOOKS=1 PORT=8790 node src/main.ts &
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/chat_online.tscn -- --api=http://127.0.0.1:8790 --device=/tmp/x/device.json --out=/tmp/chat.png
@@ -53,13 +53,18 @@ func _ready() -> void:
 	_check(_bar.button.visible, "chat bar shows online", "")
 	_layout_checks()
 
+	# 실시간 연결(/v1/chat/live)이 열린다 — 이제 새 줄은 폴링 없이 서버가 밀어 준다
+	_check(await _wait_until(func(): return Chat.live and not Chat._polling, 15.0), "chat live connection opens", "")
+	await _frames(5)
+	var polls_before := Chat.polls
+
 	# 다른 플레이어가 전체 채널에 말한다
 	var other: Dictionary = await _raw("POST", "/v1/auth/guest", {"device_id": "chat-check-other-%d" % Time.get_ticks_msec()}, "")
 	_other_token = str(other.get("token", ""))
 	var said: Dictionary = await _raw("POST", "/v1/chat", {"channel": "all", "text": "안녕하세요! 같이 성 키워요"}, _other_token)
 	_check(said.has("msg"), "other player speaks in 전체", str(said))
-	Chat.poll()
 	_check(await _wait_until(func(): return Chat.latest().get("text", "") == "안녕하세요! 같이 성 키워요", 10.0), "bar's latest line = other player's message", str(Chat.latest()))
+	_check(Chat.polls == polls_before, "the line came by push, not by polling", "%d polls" % (Chat.polls - polls_before))
 	await _snap()  # 1. 성 화면 채팅 줄
 
 	_bar.button.pressed.emit()

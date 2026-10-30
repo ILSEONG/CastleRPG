@@ -8,6 +8,8 @@ import type { OAuthConfig } from './oauth.ts'
 import { planningEmpty, seed } from './seed.ts'
 import { LIVE_PATH, WarLive } from './war_live.ts'
 import { PARTY_LIVE_PATH, PartyLive } from './party_live.ts'
+import { CHAT_LIVE_PATH, ChatLive } from './chat_live.ts'
+import { Sentry } from './sentry.ts'
 import { readPayments } from './payments.ts'
 
 let cfg: ReturnType<typeof readEnv>
@@ -20,7 +22,17 @@ try {
 for (const w of cfg.warnings) console.warn(`[server] WARNING: ${w}`)
 const { databaseUrl, pgliteDir, hostname, port, gameCacheSec } = cfg
 
-const db = await openDb({ databaseUrl, pgliteDir })
+// 오류 모음(sentry.ts): SENTRY_DSN이 있을 때만. 배포 커밋(Render RENDER_GIT_COMMIT)을 release로
+let sentry: Sentry
+try {
+  sentry = new Sentry(cfg.sentryDsn, { release: process.env.RENDER_GIT_COMMIT?.slice(0, 12), environment: databaseUrl ? 'production' : 'development' })
+} catch (e) {
+  console.error(`[server] ${(e as Error).message} - refusing to start`)
+  process.exit(1)
+}
+console.log(`[server] error reporting: ${sentry.on ? 'sentry' : 'off (no SENTRY_DSN)'}`)
+
+const db = await openDb({ databaseUrl, pgliteDir, driver: cfg.dbDriver, log: (m) => console.warn(`[server] ${m}`) })
 if (!databaseUrl) {
   const applied = await migrate(db)
   if (applied.length) console.log(`[server] migrations applied: ${applied.join(', ')}`)
@@ -40,6 +52,7 @@ const oauth = cfg.allowTestHooks && enabledProviders(envOauth).length === 0 ? un
 console.log(`[server] social login: ${oauth ? enabledProviders(oauth).join(', ') || 'off' : 'test providers (ALLOW_TEST_HOOKS)'}${oauth?.redirectBase ? ` (callbacks under ${oauth.redirectBase})` : ''}`)
 const warLive = new WarLive() // 공성전 실시간 방(WebSocket /v1/guild/war/live)
 const partyLive = new PartyLive() // 파티 퀘스트 실시간 방(WebSocket /v1/party/live)
+const chatLive = new ChatLive() // 채팅 실시간 전달(WebSocket /v1/chat/live)
 // 실결제 확인(payments.ts): GOOGLE_PLAY_SERVICE_ACCOUNT(+GOOGLE_PLAY_PACKAGE)·TOSS_MTLS_CERT/KEY(+TOSS_SKUS). 설정된 것만 결제가 열린다
 let payments: ReturnType<typeof readPayments>
 try {
@@ -57,20 +70,24 @@ const legal = {
 }
 // 광고 서버 확인(AdMob SSV)을 받는 보상형 광고 단위: ADMOB_AD_UNITS(쉼표 구분 광고 단위 id). 없으면 ads.ts AD_UNITS(앱 ad_config.gd 값)
 const adUnits = (process.env.ADMOB_AD_UNITS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, partyLive, gameCacheSec, payments, legal, adUnits })
+const app = createApp({ query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, partyLive, chatLive, sentry, gameCacheSec, payments, legal, adUnits })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
-  const store = databaseUrl ? 'neon' : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
+  const store = databaseUrl ? `neon (${db.driver})` : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)
 })
 warLive.attach(server as import('node:http').Server)
 partyLive.attach(server as import('node:http').Server)
+chatLive.attach(server as import('node:http').Server)
 // 실시간 방이 아닌 경로의 Upgrade 요청은 아무도 닫지 않아 소켓이 영원히 열려 있다 — 곧바로 끊는다
 server.on('upgrade', (req: import('node:http').IncomingMessage, sock: import('node:stream').Duplex) => {
   const path = new URL(req.url ?? '/', 'http://x').pathname
-  if (path !== LIVE_PATH && path !== PARTY_LIVE_PATH) sock.destroy()
+  if (path !== LIVE_PATH && path !== PARTY_LIVE_PATH && path !== CHAT_LIVE_PATH) sock.destroy()
 })
 // 놓친 거부 하나로 하나뿐인 서버가 꺼지지 않게(Node 기본 = 프로세스 종료) — 남기고 계속 돈다
-process.on('unhandledRejection', (e) => console.error('[server] unhandled rejection:', (e as Error)?.stack ?? String(e)))
+process.on('unhandledRejection', (e) => {
+  console.error('[server] unhandled rejection:', (e as Error)?.stack ?? String(e))
+  sentry.capture({ type: (e as Error)?.name || 'UnhandledRejection', message: (e as Error)?.message ?? String(e), stack: (e as Error)?.stack })
+})
 
 // 자기 깨우기: 공개 주소로 들어오는 요청이어야 호스팅이 "활동"으로 센다(Render 무료 인스턴스 15분 규칙). 실패해도 경고만.
 if (cfg.keepAliveMin > 0) {
@@ -85,6 +102,7 @@ async function stop() {
   stopping = true
   warLive.close()
   partyLive.close()
+  chatLive.close()
   server.close()
   await db.close()
   process.exit(0)
