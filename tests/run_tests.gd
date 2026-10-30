@@ -6173,13 +6173,27 @@ func test_hero_ur() -> void:
 	e.heroes["bron"] = 2
 	e.hero_shards["bron"] = 20
 	check(not e.fuse_ok({"arteon": 6, "ignis": 3}) and not e.fuse_ok({"arteon": 6, "bron": 4}) and not e.fuse_ok({"arteon": 7, "ignis": 3}) and e.fuse_ok({"arteon": 6, "ignis": 4}),
-		"fuse needs exactly 10 shards of owned SSR heroes")
+		"fuse needs exactly 10 shards of owned heroes of one grade")
 	var fill: Dictionary = e.fuse_autofill()
 	check(fill == {"arteon": 6, "ignis": 4}, "autofill takes the most shards first: %s" % fill)
 	var got := []
 	e.gacha_done.connect(func(r): got.append(r))
-	check(e.fuse_ur({"arteon": 6, "ignis": 4}) and got.size() == 1 and got[0].size() == 1 and got[0][0].grade == "UR" and got[0][0].new
+	check(e.fuse_heroes({"arteon": 6, "ignis": 4}) and got.size() == 1 and got[0].size() == 1 and got[0][0].grade == "UR" and got[0][0].new
 		and e.shards_of("arteon") == 0 and e.shards_of("ignis") == 1 and int(e.heroes.get(got[0][0].hero_id, 0)) == 1, "offline fuse: 10 SSR shards -> one new UR hero")
+	# 등급별 합성(2026-10-30): R 10 → SR, SR 10 → SSR, UR은 합성 재료가 아니다
+	e.heroes["hans"] = 2
+	e.hero_shards["hans"] = 10
+	e.hero_shards["bron"] = 20
+	check(e.fuse_ok({"bron": 10}) and e.fuse_ok({"hans": 10}) and not e.fuse_ok({"hans": 5, "bron": 5}) and e.grade_shards("SR") == 20 and e.fuse_autofill("R") == {"hans": 10},
+		"fuse works per grade (R, SR) and refuses mixed grades")
+	got.clear()
+	check(e.fuse_heroes({"bron": 10}) and got[0][0].grade == "SSR" and GameData.hero(got[0][0].hero_id).grade == "SSR", "offline fuse: 10 SR shards -> one SSR hero")
+	got.clear()
+	check(e.fuse_heroes({"hans": 10}) and got[0][0].grade == "SR" and GameData.hero(got[0][0].hero_id).grade == "SR", "offline fuse: 10 R shards -> one SR hero")
+	var urid: String = GameData.heroes().filter(func(h): return h.grade == "UR")[0].id
+	e.heroes[urid] = 2
+	e.hero_shards[urid] = 10
+	check(not e.fuse_ok({urid: 10}), "UR shards cannot be fused")
 	var ur := GameData.heroes().filter(func(h): return h.grade == "UR")
 	var ssr := GameData.hero("arteon")
 	var sol := GameData.hero("hyeonmu")

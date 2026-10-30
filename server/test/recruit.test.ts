@@ -157,14 +157,14 @@ test('UR(2026-10-29): 다이아만 0.5%(골드 0), UR 천장 200 — 199에서 R
   rand.next = []
 })
 
-test('SSR 조각 합성(2026-10-29): SSR 조각 정확히 10개 → 태생 UR 1명(새 영웅 copies 1), 조각 차감·로그 fuse. 개수가 틀리거나 SSR이 아니거나 모자라면 409, 형식이 틀리면 400', async () => {
+test('SSR 조각 합성(2026-10-29): SSR 조각 정확히 10개 → 태생 UR 1명(새 영웅 copies 1), 조각 차감·로그 fuse. 개수가 틀리거나 등급이 섞였거나 모자라면 409, 형식이 틀리면 400', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   const fuse = (picks: unknown) => S.req('POST', '/v1/hero/fuse', { token, body: { picks } })
   await S.db.query("insert into player_heroes (player_id, hero_id, copies, shards) values ($1, 'arteon', 5, 6), ($1, 'ignis', 5, 7), ($1, 'bron', 3, 20)", [id])
   for (const bad of [null, [], {}, { arteon: 0 }, { arteon: 1.5 }, 'x']) assert.equal((await fuse(bad)).status, 400, JSON.stringify(bad))
   assert.equal((await fuse({ arteon: 6, ignis: 3 })).json.error, 'wrong_count')
-  assert.equal((await fuse({ arteon: 6, ignis: 3, bron: 1 })).json.error, 'not_ssr')
+  assert.equal((await fuse({ arteon: 6, ignis: 3, bron: 1 })).json.error, 'not_fusable')
   assert.equal((await fuse({ arteon: 7, ignis: 3 })).json.error, 'not_enough_shards')
   assert.equal((await fuse({ kyle: 10 })).json.error, 'not_enough_shards') // 없는 영웅
   rand.next = [0]
@@ -178,6 +178,24 @@ test('SSR 조각 합성(2026-10-29): SSR 조각 정확히 10개 → 태생 UR 1�
   assert.deepEqual([by.arteon, by.ignis, by[r.json.results[0].hero_id]], [[5, 0], [5, 3], [1, 0]])
   const [l] = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'fuse'", [id])
   assert.deepEqual(l.detail.picks, { arteon: 6, ignis: 4 })
+})
+
+test('등급별 합성(2026-10-30): R 조각 10개 → SR 1명, SR 조각 10개 → SSR 1명. UR 조각은 합성할 수 없다(409 not_fusable)', async () => {
+  S.clock.t = T0
+  const { token, id } = await S.login()
+  const fuse = (picks: unknown) => S.req('POST', '/v1/hero/fuse', { token, body: { picks } })
+  await S.db.query("insert into player_heroes (player_id, hero_id, copies, shards) values ($1, 'hans', 3, 6), ($1, 'ella', 3, 4), ($1, 'bron', 3, 20), ($1, 'hyeonmu', 2, 10) on conflict (player_id, hero_id) do update set copies = excluded.copies, shards = excluded.shards", [id])
+  assert.equal((await fuse({ hyeonmu: 10 })).json.error, 'not_fusable')
+  for (const [picks, to] of [[{ hans: 6, ella: 4 }, 'SR'], [{ bron: 10 }, 'SSR']] as const) {
+    rand.next = [0]
+    const r = await fuse(picks)
+    rand.next = []
+    assert.equal(r.status, 200, JSON.stringify(r.json))
+    const pool = HEROES.filter((h) => h.grade === to).map((h) => h.id)
+    assert.deepEqual([r.json.results[0].grade, pool.includes(r.json.results[0].hero_id)], [to, true])
+  }
+  const rows = await S.db.query("select hero_id, shards from player_heroes where player_id = $1 and hero_id in ('hans', 'ella', 'bron')", [id])
+  assert.deepEqual(Object.fromEntries(rows.map((x) => [x.hero_id, x.shards])), { hans: 0, ella: 0, bron: 11 }) // R 합성 결과가 첫 SR 영웅 bron(가진 영웅: 조각 +1)
 })
 
 test('하위 호환: currency가 없거나 null이면 골드 모집(Lv 1 비용 10,000, 누적 +1)', async () => {

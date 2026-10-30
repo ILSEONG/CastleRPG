@@ -2038,9 +2038,10 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // SSR 조각 합성(2026-10-29 사용자 "SSR을 10개 합성하면 UR 하나 나오게 해"): body = {picks: {영웅 id: 조각 수}} — 가진 SSR 영웅들의 조각을
-  // 합쳐 ur_fuse_shards개(정확히). 태생 UR 영웅 1명(균등, 서버 난수)이 나온다: 모집처럼 새 영웅이면 copies 1, 가진 영웅이면 copies·조각 +1.
-  // 조각 차감·영웅·economy_log fuse를 version 가드 한 문장으로. 앱 Economy.fuse_ur와 같은 규칙.
+  // 영웅 조각 합성(2026-10-29 SSR→UR, 10-30 사용자 "R은 10개로 SR 1개 … SR 10개로 SSR … SSR 10개로 UR"): body = {picks: {영웅 id: 조각 수}} —
+  // 같은 등급(R·SR·SSR) 가진 영웅들의 조각을 합쳐 ur_fuse_shards개(정확히). 한 단계 위 등급 영웅 1명(균등, 서버 난수)이 나온다: 모집처럼 새 영웅이면
+  // copies 1, 가진 영웅이면 copies·조각 +1. 조각 차감·영웅·economy_log fuse를 version 가드 한 문장으로. 앱 Economy.fuse_heroes와 같은 규칙.
+  const FUSE_NEXT: Record<string, string> = { R: 'SR', SR: 'SSR', SSR: 'UR' }
   app.post('/v1/hero/fuse', auth, async (c) => {
     const b = await body(c)
     const picks = b.picks
@@ -2052,21 +2053,24 @@ export function createApp(opts: AppOptions) {
       const need = R.cfgNum(g.config, 'ur_fuse_shards')
       let total = 0
       const shards: Record<string, number> = {}
+      let from = ''
       for (const [id, n] of Object.entries(picks as Record<string, number>)) {
         const def = g.heroes.find((h) => h.id === id)
         const own = p.heroes[id]
-        if (!def || def.grade !== 'SSR') throw new ApiError(409, 'not_ssr', `${id} is not an SSR hero`)
+        if (!def || !(def.grade in FUSE_NEXT) || (from !== '' && def.grade !== from)) throw new ApiError(409, 'not_fusable', `${id} cannot be fused with these heroes`)
+        from = def.grade
         if (!own || own.copies < 1 || own.shards < n) throw new ApiError(409, 'not_enough_shards', `${id} has ${own?.shards ?? 0} shards`)
         shards[id] = -n
         total += n
       }
-      if (total !== need) throw new ApiError(409, 'wrong_count', `fusing takes exactly ${need} SSR shards (got ${total})`)
-      const pool = g.heroes.filter((h) => h.grade === 'UR').map((h) => h.id)
-      if (pool.length === 0) throw new ApiError(409, 'no_ur', 'no UR heroes')
+      if (total !== need) throw new ApiError(409, 'wrong_count', `fusing takes exactly ${need} ${from} shards (got ${total})`)
+      const to = FUSE_NEXT[from]
+      const pool = g.heroes.filter((h) => h.grade === to).map((h) => h.id)
+      if (pool.length === 0) throw new ApiError(409, 'no_heroes', `no ${to} heroes`)
       const id = pool[Math.floor(random() * pool.length)]
       const o = p.heroes[id]
       const isNew = !(o?.copies > 0)
-      const results = [{ hero_id: id, grade: 'UR', new: isNew, copies: isNew ? 1 : o.copies + 1, shards: isNew ? 0 : o.shards + 1 }]
+      const results = [{ hero_id: id, grade: to, new: isNew, copies: isNew ? 1 : o.copies + 1, shards: isNew ? 0 : o.shards + 1 }]
       return {
         change: { heroes: { [id]: 1 }, shards, log: { kind: 'fuse', detail: { picks, results } } },
         extra: { results },

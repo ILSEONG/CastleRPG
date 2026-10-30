@@ -62,7 +62,7 @@ var pity_label: Label
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
 var odds: Control  # 확률 안내 창
-var _back: Control  # 영웅 창 [UR 합성]에서 왔으면 그 창(결과 [확인] 뒤 다시 연다 — 2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서")
+var _back: CanvasLayer  # 영웅 창 [합성] 탭에서 왔으면 그 창(결과 [확인] 뒤 다시 연다 — 2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서")
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
@@ -384,9 +384,9 @@ func _recruit(count: int, cur := "") -> void:
 		_refresh()
 
 
-## 영웅 창의 SSR 조각 합성 창 [합성](back = 영웅 창): 영웅 창을 닫고 이 창에서 결과를 모집처럼 뒤집기 연출로 보여 준다.
+## 영웅 창 [합성] 탭의 조각 합성 창 [합성](back = 영웅 창): 영웅 창을 닫고 이 창에서 결과를 모집처럼 뒤집기 연출로 보여 준다.
 ## 결과 [확인]을 누르면 이 창을 닫고 영웅 창으로 돌아간다(영웅 창이 이 창보다 위 층이라 겹쳐 보여 줄 수 없다).
-func fuse_from(picks: Dictionary, back: Control = null) -> void:
+func fuse_from(picks: Dictionary, back: CanvasLayer = null) -> void:
 	if _waiting or not Economy.fuse_ok(picks):
 		return
 	_back = back
@@ -394,8 +394,7 @@ func fuse_from(picks: Dictionary, back: Control = null) -> void:
 		back.close()
 	if not visible:
 		open()
-	_on_fused(picks)
-	if not _waiting:  # 보내지 못했다(조각 부족 등) — 영웅 창으로 되돌아간다
+	if not _on_fused(picks):  # 보내지 못했다(조각 부족 등) — 영웅 창으로 되돌아간다(오프라인은 결과가 이미 와서 _waiting이 풀려 있다)
 		_go_back()
 
 
@@ -407,17 +406,19 @@ func _go_back() -> void:
 		b.open()
 
 
-## SSR 조각 합성 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
-func _on_fused(picks: Dictionary) -> void:
+## 조각 합성 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
+func _on_fused(picks: Dictionary) -> bool:
 	if _waiting:
-		return
+		return false
 	_count = 1
 	_cur = DIA
 	_halted = true
-	_waiting = true  # 오프라인은 fuse_ur 안에서 바로 gacha_done이 온다 — 그 전에 둔다
-	if not Economy.fuse_ur(picks):
+	_waiting = true  # 오프라인은 fuse_heroes 안에서 바로 gacha_done이 온다 — 그 전에 둔다
+	var sent := Economy.fuse_heroes(picks)
+	if not sent:
 		_waiting = false
 	_refresh()
+	return sent
 
 
 func _on_gacha_done(results: Array) -> void:

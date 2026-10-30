@@ -592,13 +592,49 @@ func _recruit_and_heroes(rig) -> void:
 	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
 	_check(not locked.is_empty() and locked == want_locked and grid_ids == heroes_win.hero_cards.keys() + locked and heroes_win.unowned_sorted() == want_locked,
 		"(u) unowned heroes follow every owned hero in the grid, SSR -> SR -> R then file order", "grid=%s locked=%s" % [grid_ids, locked])
-	# [UR 합성](2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서"): 영웅 목록 버튼 줄에 있고 누르면 SSR 조각 합성 창이 열린다
-	await _tap(heroes_win.fuse_button.get_global_rect().get_center())
+	# [영웅]·[합성] 탭(2026-10-30 사용자 "영웅 창에 탭을 두개 둬서, 합성 탭을 하나 만들어줘"): [합성] 탭은 R→SR · SR→SSR · SSR→UR 세 줄,
+	# 줄 [합성]은 그 등급 조각 합성 창을 연다. [영웅] 탭으로 돌아오면 목록 그대로
+	await _tap(heroes_win.fuse_tab.get_global_rect().get_center())
 	await _frames(2)
-	_check(heroes_win.fuse.visible and heroes_win.apply_button.get_global_rect().end.x <= 720.0 and heroes_win.sort_button.get_global_rect().position.x >= 0.0 and heroes_win.fuse_button.text == "UR 합성",
-		"(u) [UR 합성] on the hero list opens the SSR shard fusion window", "fuse=%s sort=%s apply=%s" % [heroes_win.fuse.visible, heroes_win.sort_button.get_global_rect(), heroes_win.apply_button.get_global_rect()])
+	var fuse_ok: bool = heroes_win.tab == "fuse" and not heroes_win._heroes_box.visible and heroes_win._fuse_box.visible and heroes_win.fuse_rows.keys() == ["R", "SR", "SSR"]
+	for g in heroes_win.fuse_rows:
+		var fb: Button = heroes_win.fuse_rows[g].button
+		fuse_ok = fuse_ok and fb.is_visible_in_tree() and fb.get_global_rect().end.x <= 720.0 and fb.disabled == (Economy.grade_shards(g) < Economy.fuse_cost())
+	_check(fuse_ok and heroes_win.fuse_tab.get_global_rect().end.x <= 720.0, "(u) [합성] tab shows the R/SR/SSR fusion rows inside the screen", "tab=%s" % heroes_win.tab)
+	heroes_win.open_fuse("SR")
+	await _frames(2)
+	_check(heroes_win.fuse.visible and heroes_win.fuse.grade == "SR" and heroes_win.fuse.title_label.text == "SR 조각 합성"
+		and heroes_win.fuse.candidates().all(func(id): return GameData.hero(id).grade == "SR"), "(u) a fusion row opens that grade's shard window", "title=%s" % heroes_win.fuse.title_label.text)
 	await _tap(heroes_win.fuse.close_button.get_global_rect().get_center())
 	await _frames(2)
+	# 실제 합성: SR 조각 10개 → [자동 채우기] → [합성] → 모집 창 결과 → [확인]이면 영웅 창 [합성] 탭으로 돌아온다
+	var sr_ids: Array = GameData.heroes().filter(func(h): return h.grade == "SR").map(func(h): return h.id)
+	var keep_heroes: Dictionary = Economy.heroes.duplicate()
+	var keep_shards: Dictionary = Economy.hero_shards.duplicate()
+	Economy.heroes[sr_ids[0]] = maxi(1, int(Economy.heroes.get(sr_ids[0], 0)))
+	Economy.hero_shards[sr_ids[0]] = 10
+	heroes_win.open_fuse("SR")
+	await _frames(2)
+	await _tap(heroes_win.fuse.auto_button.get_global_rect().get_center())
+	await _frames(2)
+	var fusable: bool = not heroes_win.fuse.fuse_button.disabled
+	await _tap(heroes_win.fuse.fuse_button.get_global_rect().get_center())
+	await _frames(4)
+	var rwin = recruit
+	var fused_shown: bool = rwin != null and rwin.visible and not heroes_win.fuse.visible
+	if rwin != null and rwin.visible:
+		rwin._on_confirm()
+	await _frames(3)
+	_check(fusable and fused_shown and Economy.shards_of(sr_ids[0]) <= 1 and heroes_win.visible and heroes_win.tab == "fuse",
+		"(u) fusing 10 SR shards plays in the recruit window and [확인] returns to the [합성] tab", "fusable=%s shown=%s shards=%d hero_win=%s tab=%s" % [fusable, fused_shown, Economy.shards_of(sr_ids[0]), heroes_win.visible, heroes_win.tab])
+	Economy.heroes = keep_heroes
+	Economy.hero_shards = keep_shards
+	Economy.roster_changed.emit()
+	await _wait_until(func(): return not heroes_win.is_guarded(), 1.0)  # 다시 연 창의 누름 보호(OPEN_GUARD_MS)
+	await _tap(heroes_win.heroes_tab.get_global_rect().get_center())
+	await _frames(2)
+	_check(heroes_win.tab == "heroes" and heroes_win._heroes_box.visible and not heroes_win._fuse_box.visible and heroes_win.apply_button.get_global_rect().end.x <= 720.0,
+		"(u) [영웅] tab returns to the hero list", "tab=%s" % heroes_win.tab)
 	var dim: bool = not heroes_win.hero_cards.values().any(func(c): return c.modulate != Color.WHITE)
 	for id in locked:
 		var c = heroes_win.locked_cards[id]

@@ -4167,29 +4167,55 @@ func _on_sold(data: Dictionary, key: String) -> void:
 
 ## 온라인 모집: 쌓인 처치를 먼저 보내(서버 골드를 표시 골드에 맞춤) 뒤 /v1/gacha. once — 실패해도 다시 보내지 않는다
 ## (서버가 반영했는데 답만 잃었으면 두 번 뽑힌다). 실패하면 알림, Net이 /v1/player로 상태를 새로 받는다(뽑힌 영웅은 거기 보인다).
-## SSR 조각 합성(2026-10-29 사용자 "SSR을 10개 합성하면 UR 하나 나오게 해"): 가진 SSR 영웅들의 조각을 합쳐 ur_fuse_shards개 넣으면
-## 태생 UR 영웅 1명(균등)이 나온다 — 모집처럼 새 영웅이면 NEW, 가진 영웅이면 조각 +1. picks = 영웅 id → 넣을 조각 수(> 0).
+## 영웅 조각 합성(2026-10-29 SSR → UR, 2026-10-30 사용자 "R은 10개로 SR 1개 … SR은 10개 있어야 SSR 1개 … SSR은 10개 있어야 UR 1개"):
+## 같은 등급 영웅들의 조각을 섞어 ur_fuse_shards개(모든 등급 같은 수) 넣으면 한 등급 위 영웅 1명(균등)이 나온다 — 모집처럼 새 영웅이면 NEW,
+## 가진 영웅이면 조각 +1. picks = 영웅 id → 넣을 조각 수(> 0). UR 결과는 태생 UR(다이아 모집 전용 영웅)이다.
 ## 결과는 gacha_done([{hero_id, grade, new, copies, shards}]) — 모집 창이 같은 뒤집기 연출로 보인다. 서버 /v1/hero/fuse와 같은 규칙.
+const FUSE_NEXT := {"R": "SR", "SR": "SSR", "SSR": "UR"}
+
+
 func fuse_cost() -> int:
 	return int(GameData.config_num("ur_fuse_shards"))
 
 
-## 넣을 수 있는 묶음인가: 합 = fuse_cost, 영웅마다 가진 SSR 영웅이고 0 < 수 ≤ 조각.
+## 묶음의 등급(모두 같은 합성 가능 등급이면 그 등급, 아니면 "").
+static func fuse_grade(picks: Dictionary) -> String:
+	var g := ""
+	for id in picks:
+		var hg: String = GameData.hero(str(id)).get("grade", "")
+		if not FUSE_NEXT.has(hg) or (g != "" and hg != g):
+			return ""
+		g = hg
+	return g
+
+
+## 넣을 수 있는 묶음인가: 합 = fuse_cost, 모두 같은 등급(R·SR·SSR)의 가진 영웅이고 0 < 수 ≤ 조각.
 func fuse_ok(picks: Dictionary) -> bool:
+	if picks.is_empty() or fuse_grade(picks) == "":
+		return false
 	var total := 0
 	for id in picks:
 		var n := int(picks[id])
-		if not (id is String and GameData.hero(id).get("grade", "") == "SSR" and int(heroes.get(id, 0)) >= 1 and n > 0 and n <= shards_of(id)):
+		if not (id is String and int(heroes.get(id, 0)) >= 1 and n > 0 and n <= shards_of(id)):
 			return false
 		total += n
 	return total == fuse_cost()
 
 
-## 자동 채우기: 승급(★5)까지 쓰고 남는 조각부터, 그다음 조각이 많은 영웅부터 fuse_cost개. 모자라면 가진 만큼.
-func fuse_autofill() -> Dictionary:
+## grade 등급 가진 영웅들의 조각 합(합성 탭이 보여 준다). spare = ★5까지 쓰고 남는 조각만.
+func grade_shards(grade: String, spare := false) -> int:
+	var t := 0
+	for h in GameData.heroes():
+		if h.grade == grade and int(heroes.get(h.id, 0)) >= 1:
+			t += spare_shards(h.id) if spare else shards_of(h.id)
+	return t
+
+
+## 자동 채우기(grade 등급): 승급(★5)까지 쓰고 남는 조각부터, 그다음 조각이 많은 영웅부터 fuse_cost개. 모자라면 가진 만큼.
+func fuse_autofill(grade := "SSR") -> Dictionary:
 	var need := fuse_cost()
 	var picks := {}
-	var ids: Array = GameData.heroes().filter(func(h): return h.grade == "SSR" and int(heroes.get(h.id, 0)) >= 1 and shards_of(h.id) > 0).map(func(h): return h.id)
+	var ids: Array = GameData.heroes().filter(func(h): return h.grade == grade and int(heroes.get(h.id, 0)) >= 1 and shards_of(h.id) > 0).map(func(h): return h.id)
 	ids.sort_custom(func(a, b): return [-spare_shards(a), -shards_of(a), a] < [-spare_shards(b), -shards_of(b), b])
 	for pass_spare in [true, false]:
 		for id in ids:
@@ -4211,7 +4237,7 @@ func spare_shards(hero_id: String) -> int:
 	return maxi(0, shards_of(hero_id) - left)
 
 
-func fuse_ur(picks: Dictionary) -> bool:
+func fuse_heroes(picks: Dictionary) -> bool:
 	if not fuse_ok(picks):
 		notice.emit(Lang.t("economy.fuse_ur") % fuse_cost())
 		return false
@@ -4227,7 +4253,8 @@ func fuse_ur(picks: Dictionary) -> bool:
 				hero_shards[id] = shards_of(id) - int(picks[id]))
 		net.send("POST", "/v1/hero/fuse", {"picks": picks}, _on_fuse, _on_fuse_failed, true, true)
 		return true
-	var pool: Array = GameData.heroes().filter(func(h): return h.grade == "UR").map(func(h): return h.id)
+	var to: String = FUSE_NEXT[fuse_grade(picks)]
+	var pool: Array = GameData.heroes().filter(func(h): return h.grade == to).map(func(h): return h.id)
 	var id: String = pool[mini(floori(rng.randf() * pool.size()), pool.size() - 1)]
 	for k in picks:
 		hero_shards[k] = shards_of(k) - int(picks[k])
@@ -4238,7 +4265,7 @@ func fuse_ur(picks: Dictionary) -> bool:
 	changed.emit()
 	roster_changed.emit()
 	save()
-	gacha_done.emit([{"hero_id": id, "grade": "UR", "new": c == 1, "copies": c, "shards": shards_of(id)}])
+	gacha_done.emit([{"hero_id": id, "grade": to, "new": c == 1, "copies": c, "shards": shards_of(id)}])
 	return true
 
 

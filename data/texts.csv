@@ -1025,7 +1025,13 @@ hero_panel.build_list,영웅,,,,scripts/hero_panel.gd
 hero_panel.build_list_2,일괄 승급,,,,scripts/hero_panel.gd
 hero_panel.build_list_3,자동 배치,,,,scripts/hero_panel.gd
 hero_panel.build_list_4,적용,,,,scripts/hero_panel.gd
-hero_panel.fuse,UR 합성,,,,scripts/hero_panel.gd
+hero_panel.tab_heroes,영웅,,,,scripts/hero_panel.gd
+hero_panel.tab_fuse,합성,,,,scripts/hero_panel.gd
+hero_panel.fuse_title,영웅 합성,,,,scripts/hero_panel.gd
+hero_panel.fuse_desc,같은 등급 조각 %d개로 한 단계 위 등급 영웅 1명을 뽑습니다,,,,scripts/hero_panel.gd
+hero_panel.fuse_row,%s 조각 %d개 → %s 영웅,,,,scripts/hero_panel.gd
+hero_panel.fuse_count,보유 조각 %d개 · 남는 조각 %d개,,,,scripts/hero_panel.gd
+hero_panel.fuse_go,합성,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm,일괄 승급,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm_2,아래 영웅을 승급하시겠습니까?,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm_3,승급,,,,scripts/hero_panel.gd
@@ -2836,9 +2842,9 @@ ranking_panel.season_card_5,%s  %s %d개,,,,scripts/ranking_panel.gd
 live_ops.box_names.top,최고급 장비 상자,,,,scripts/live_ops.gd
 live_ops.box_names.high,고급 장비 상자,,,,scripts/live_ops.gd
 live_ops.box_names.normal,일반 장비 상자,,,,scripts/live_ops.gd
-fuse_dialog.ready,SSR 조각 합성,,,,scripts/fuse_dialog.gd
-fuse_dialog.ready_2,SSR 조각 %d개를 넣으면 태생 UR 영웅 1명이 무작위로 나옵니다,,,,scripts/fuse_dialog.gd
-fuse_dialog.ready_3,조각이 있는 SSR 영웅이 없습니다,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready,%s 조각 합성,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_2,%s 조각 %d개를 넣으면 %s 영웅 1명이 무작위로 나옵니다,,,,scripts/fuse_dialog.gd
+fuse_dialog.ready_3,조각이 있는 %s 영웅이 없습니다,,,,scripts/fuse_dialog.gd
 fuse_dialog.ready_4,자동 채우기,,,,scripts/fuse_dialog.gd
 fuse_dialog.ready_5,합성,,,,scripts/fuse_dialog.gd
 fuse_dialog.ready_6,닫기,,,,scripts/fuse_dialog.gd
@@ -2846,7 +2852,7 @@ fuse_dialog.rebuild,%s  (조각 %d),,,,scripts/fuse_dialog.gd
 fuse_dialog.rebuild_2,넣은 조각 %d / %d,,,,scripts/fuse_dialog.gd
 recruit_panel.refresh_14,UR 확정까지 %d회,,,,scripts/recruit_panel.gd
 gacha_odds.show_for_4,%d회째 모집은 UR 확정(UR이 나오면 다시 1부터 셉니다),,,,scripts/gacha_odds.gd
-economy.fuse_ur,SSR 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd
+economy.fuse_ur,같은 등급 조각 %d개를 넣어야 합성할 수 있습니다,,,,scripts/economy.gd
 dungeon_hud.show_result.rec,클리어 시간 %s,,,,scripts/dungeon_hud.gd
 dungeon_hud.show_result_7, · 최고 단계 갱신!,,,,scripts/dungeon_hud.gd
 dungeon_hud.build_intro,%d단계,,,,scripts/dungeon_hud.gd

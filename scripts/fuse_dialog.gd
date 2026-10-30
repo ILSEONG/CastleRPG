@@ -1,7 +1,7 @@
 extends Control
-## SSR 조각 합성 창(2026-10-29 사용자 "SSR을 10개 합성하면 UR 하나 나오게 해"): 모집 창 다이아 탭 [SSR 조각 합성]이 연다. 어두운 막 + 크림 창.
-## 가진 SSR 영웅(조각이 있는 영웅만) 줄마다 이름·보유 조각·[−] 넣을 수 [+]. 위에 "넣은 조각 n / 10", 아래 [자동 채우기] [합성] [닫기].
-## [자동 채우기] = Economy.fuse_autofill(★5까지 쓰고 남는 조각부터). [합성]은 합이 Economy.fuse_cost()일 때만 — Economy.fuse_ur가 결과를
+## 조각 합성 창(2026-10-29 SSR→UR, 10-30 사용자 "R은 10개로 SR 1개 … SR 10개로 SSR … SSR 10개로 UR"): 영웅 창 [합성] 탭의
+## 등급 줄 [합성]이 open(grade)로 연다. 어두운 막 + 크림 창. 가진 그 등급 영웅(조각이 있는 영웅만) 줄마다 이름·보유 조각·[−] 넣을 수 [+]. 위에 "넣은 조각 n / 10", 아래 [자동 채우기] [합성] [닫기].
+## [자동 채우기] = Economy.fuse_autofill(grade)(★5까지 쓰고 남는 조각부터). [합성]은 합이 Economy.fuse_cost()일 때만 — Economy.fuse_heroes가 결과를
 ## gacha_done으로 보내면 모집 창이 뒤집기 연출로 보여 준다(fused(picks)를 받은 모집 창이 부른다).
 
 const Lang := preload("res://scripts/lang.gd")
@@ -9,7 +9,7 @@ const Lang := preload("res://scripts/lang.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 
-signal fused(picks: Dictionary)  # [합성]: 이 묶음으로 합성(모집 창이 Economy.fuse_ur를 부르고 결과를 기다린다)
+signal fused(picks: Dictionary)  # [합성]: 이 묶음으로 합성(모집 창이 Economy.fuse_heroes를 부르고 결과를 기다린다)
 
 const SUB := Color(0.25, 0.22, 0.2, 0.8)
 
@@ -21,6 +21,8 @@ var auto_button: Button
 var fuse_button: Button
 var close_button: Button
 var picks := {}  # 영웅 id → 넣을 조각 수
+var grade := "SSR"  # 넣는 조각 등급(R·SR·SSR) — 결과는 Economy.FUSE_NEXT[grade]
+var desc_label: Label
 
 
 func _ready() -> void:
@@ -43,9 +45,10 @@ func _ready() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	box.add_child(col)
-	title_label = _label(Lang.t("fuse_dialog.ready"), 32)
+	title_label = _label("", 32)
 	col.add_child(title_label)
-	col.add_child(_label(Lang.t("fuse_dialog.ready_2") % Economy.fuse_cost(), 20, SUB))
+	desc_label = _label("", 20, SUB)
+	col.add_child(desc_label)
 	count_label = _label("", 28, UiKit.GRADE_COLORS.UR.darkened(0.2))
 	col.add_child(count_label)
 	var scroll := ScrollContainer.new()
@@ -56,7 +59,7 @@ func _ready() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 6)
 	scroll.add_child(list)
-	empty_label = _label(Lang.t("fuse_dialog.ready_3"), 22, SUB)
+	empty_label = _label("", 22, SUB)
 	col.add_child(empty_label)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -93,16 +96,21 @@ func _button(text: String, color: Color, font_size := 24) -> Button:
 	return b
 
 
-## 연다: 넣은 조각은 비우고 목록을 다시 만든다.
-func open() -> void:
+## g 등급 조각으로 연다: 넣은 조각은 비우고 목록을 다시 만든다.
+func open(g := "SSR") -> void:
+	grade = g
 	picks = {}
+	title_label.text = Lang.t("fuse_dialog.ready") % grade
+	desc_label.text = Lang.t("fuse_dialog.ready_2") % [grade, Economy.fuse_cost(), Economy.FUSE_NEXT.get(grade, "")]
+	empty_label.text = Lang.t("fuse_dialog.ready_3") % grade
+	UiKit.apply_button(fuse_button, UiKit.GRADE_COLORS.get(Economy.FUSE_NEXT.get(grade, "UR"), UiKit.GRADE_COLORS.UR), 14.0)  # 결과 등급 색
 	_rebuild()
 	visible = true
 
 
-## 조각이 있는 가진 SSR 영웅(영웅 표 순서).
+## 조각이 있는 가진 grade 등급 영웅(영웅 표 순서).
 func candidates() -> Array:
-	return GameData.heroes().filter(func(h): return h.grade == "SSR" and int(Economy.heroes.get(h.id, 0)) >= 1 and Economy.shards_of(h.id) > 0).map(func(h): return h.id)
+	return GameData.heroes().filter(func(h): return h.grade == grade and int(Economy.heroes.get(h.id, 0)) >= 1 and Economy.shards_of(h.id) > 0).map(func(h): return h.id)
 
 
 func total() -> int:
@@ -124,7 +132,7 @@ func bump(id: String, d: int) -> void:
 
 
 func _on_auto() -> void:
-	picks = Economy.fuse_autofill()
+	picks = Economy.fuse_autofill(grade)
 	_rebuild()
 
 

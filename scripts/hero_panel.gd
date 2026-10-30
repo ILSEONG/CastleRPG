@@ -76,8 +76,12 @@ var apply_button: Button
 var _auto_used := false  # [자동 배치]를 누른 뒤 아직 [적용] 전(가이드 미션)
 var auto_button: Button  # [자동 배치](Economy.auto_hero_deploy — 편집만, 적용은 [적용]). 편집이 이미 자동 배치와 같으면 비활성
 var sort_button: Button
-var fuse_button: Button  # [UR 합성](2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서 해야지"): SSR 조각 합성 창을 연다
-var fuse: Control  # SSR 조각 합성 창(fuse_dialog.gd)
+var heroes_tab: Button  # 목록 위 탭(2026-10-30 사용자 "영웅 창에 탭을 두개 둬서, 합성 탭을 하나 만들어줘"): [영웅]
+var fuse_tab: Button  # [합성]: 등급 줄 R→SR · SR→SSR · SSR→UR
+var tab := "heroes"  # "heroes" | "fuse"
+var _from_fuse := false  # 합성 결과를 모집 창에 넘겼다(다시 열릴 때 탭을 지킨다)
+var fuse_rows := {}  # 넣는 등급 → {label, count, button}
+var fuse: Control  # 조각 합성 창(fuse_dialog.gd, open(grade))
 var recruit  # 모집 창(main이 넣는다): 합성 결과를 뒤집기 연출로 보여 준다
 var promote_all_button: Button  # [일괄 승급]
 var promote_all_confirm: Control  # 일괄 승급 확인 창(어두운 막 + 크림 창)
@@ -112,6 +116,8 @@ var promotions_shown := 0  # 승급 성공 연출 횟수(테스트용)
 var unlocks_shown := 0  # 스킬 해금 반짝임 횟수(테스트용)
 
 var _list_view: VBoxContainer
+var _heroes_box: VBoxContainer  # [영웅] 탭: 배치 슬롯 + 버튼 줄 + 보유 격자
+var _fuse_box: VBoxContainer  # [합성] 탭
 var _detail_view: VBoxContainer
 var _slot_grid: GridContainer
 var _hero_grid: GridContainer
@@ -148,17 +154,26 @@ func _build_list() -> void:
 	_list_view.add_theme_constant_override("separation", 10)
 	_list_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content.add_child(_list_view)
-	_list_view.add_child(_title(Lang.t("hero_panel.build_list")))
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 12)
+	_list_view.add_child(tabs)
+	heroes_tab = _tab_button(Lang.t("hero_panel.tab_heroes"), "heroes", tabs)
+	fuse_tab = _tab_button(Lang.t("hero_panel.tab_fuse"), "fuse", tabs)
+	_heroes_box = VBoxContainer.new()
+	_heroes_box.add_theme_constant_override("separation", 10)
+	_heroes_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_list_view.add_child(_heroes_box)
+	_heroes_box.add_child(_title(Lang.t("hero_panel.build_list")))
 	var slots_center := CenterContainer.new()
-	_list_view.add_child(slots_center)
+	_heroes_box.add_child(slots_center)
 	_slot_grid = GridContainer.new()
 	_slot_grid.columns = 4
 	_slot_grid.add_theme_constant_override("h_separation", 12)
 	slots_center.add_child(_slot_grid)
-	_list_view.add_child(_label(HINT, 22, HudScript.INK.lightened(0.3)))
+	_heroes_box.add_child(_label(HINT, 22, HudScript.INK.lightened(0.3)))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
-	_list_view.add_child(row)
+	_heroes_box.add_child(row)
 	sort_button = _button("", UiKit.STEEL, 26)
 	sort_button.pressed.connect(cycle_sort)
 	promote_all_button = _button(Lang.t("hero_panel.build_list_2"), PROMOTE_COLOR, 26)
@@ -169,15 +184,13 @@ func _build_list() -> void:
 	apply_button.pressed.connect(apply)
 	Tutorial.register_ui("hero:auto_deploy", auto_button, func(): return not auto_button.disabled)  # 가이드 화살표
 	Tutorial.register_ui("hero:apply", apply_button, func(): return not apply_button.disabled)
-	fuse_button = _button(Lang.t("hero_panel.fuse"), UiKit.GRADE_COLORS.UR.darkened(0.1), 26)
-	fuse_button.pressed.connect(open_fuse)
-	for b in [sort_button, fuse_button, promote_all_button, auto_button, apply_button]:
+	for b in [sort_button, promote_all_button, auto_button, apply_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_list_view.add_child(scroll)
+	_heroes_box.add_child(scroll)
 	var grid_center := CenterContainer.new()
 	grid_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(grid_center)
@@ -186,23 +199,91 @@ func _build_list() -> void:
 	_hero_grid.add_theme_constant_override("h_separation", 12)
 	_hero_grid.add_theme_constant_override("v_separation", 12)
 	grid_center.add_child(_hero_grid)
+	_build_fuse_tab()
 	_build_promote_all_confirm()
 	fuse = FuseDialog.new()
 	fuse.fused.connect(_on_fused)
 	add_child(fuse)
+	set_tab("heroes")
 
 
-## [UR 합성]: SSR 조각 합성 창(조각 10개 → 태생 UR 1명 무작위 — AFK 아레나·서머너즈 워처럼 영웅 화면에서 바로).
-func open_fuse() -> void:
-	fuse.open()
+func _tab_button(text: String, id: String, row: HBoxContainer) -> Button:
+	var b := _button(text, UiKit.STEEL, 26)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(0, 60)
+	b.pressed.connect(set_tab.bind(id))
+	row.add_child(b)
+	return b
+
+
+## 탭 고르기: 고른 탭은 호박색, 다른 탭은 강철색(모집 창 골드·다이아 탭과 같다).
+func set_tab(id: String) -> void:
+	tab = id
+	UiKit.apply_button(heroes_tab, UiKit.AMBER if id == "heroes" else UiKit.STEEL, 14.0)
+	UiKit.apply_button(fuse_tab, UiKit.AMBER if id == "fuse" else UiKit.STEEL, 14.0)
+	_heroes_box.visible = id == "heroes"
+	_fuse_box.visible = id == "fuse"
+	if id != "heroes":
+		selected_slot = -1
+	_refresh()
+
+
+## [합성] 탭: 등급마다 한 줄 — "R 조각 10개 → SR 영웅 1명", 보유 조각(★5까지 쓰고 남는 조각), [합성](조각이 모자라면 꺼진다).
+## AFK 아레나·세븐나이츠 키우기의 영웅 합성처럼 같은 등급 조각을 모아 한 단계 위 등급을 무작위로 받는다.
+func _build_fuse_tab() -> void:
+	_fuse_box = VBoxContainer.new()
+	_fuse_box.add_theme_constant_override("separation", 16)
+	_fuse_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_list_view.add_child(_fuse_box)
+	_fuse_box.add_child(_title(Lang.t("hero_panel.fuse_title")))
+	var desc := _label(Lang.t("hero_panel.fuse_desc") % Economy.fuse_cost(), 22, HudScript.INK.lightened(0.3))
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_fuse_box.add_child(desc)
+	for g in ["R", "SR", "SSR"]:
+		var to: String = Economy.FUSE_NEXT[g]
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", UiKit.panel(Color(UiKit.GRADE_COLORS[to], 0.16), 12.0, 14))
+		_fuse_box.add_child(panel)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		panel.add_child(row)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(col)
+		var name_l := _label(Lang.t("hero_panel.fuse_row") % [g, Economy.fuse_cost(), to], 28, UiKit.GRADE_COLORS[to].darkened(0.35))
+		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		col.add_child(name_l)
+		var count_l := _label("", 22, HudScript.INK.lightened(0.2))
+		count_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		col.add_child(count_l)
+		var b := _button(Lang.t("hero_panel.fuse_go"), UiKit.GRADE_COLORS[to].darkened(0.1), 26)
+		b.custom_minimum_size = Vector2(150, 72)
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		b.pressed.connect(open_fuse.bind(g))
+		row.add_child(b)
+		fuse_rows[g] = {"label": name_l, "count": count_l, "button": b}
+
+
+func _refresh_fuse() -> void:
+	for g in fuse_rows:
+		var r: Dictionary = fuse_rows[g]
+		var have := Economy.grade_shards(g)
+		r.count.text = Lang.t("hero_panel.fuse_count") % [have, Economy.grade_shards(g, true)]
+		r.button.disabled = have < Economy.fuse_cost()
+
+
+## 등급 줄 [합성]: 그 등급 조각 합성 창(조각 10개 → 한 단계 위 등급 1명 무작위).
+func open_fuse(grade := "SSR") -> void:
+	fuse.open(grade)
 
 
 ## 합성 창 [합성]: 결과는 모집 창이 뒤집기 연출로 보여 주고, [확인]을 누르면 이 창으로 돌아온다.
 func _on_fused(picks: Dictionary) -> void:
 	if recruit != null:
+		_from_fuse = true
 		recruit.fuse_from(picks, self)
 	else:
-		Economy.fuse_ur(picks)
+		Economy.fuse_heroes(picks)
 
 
 ## 일괄 승급 확인 창: 화면을 덮는 어두운 막(뒤 입력 차단) + 가운데 크림 창 — 제목, 영웅별 줄(스크롤), [승급]·[취소].
@@ -585,6 +666,8 @@ func _on_open() -> void:
 	promote_all_confirm.visible = false
 	work = GameState.deploy()
 	selected_slot = -1
+	set_tab(tab if _from_fuse else "heroes")  # 합성 결과 [확인]으로 돌아오면 [합성] 탭 그대로
+	_from_fuse = false
 	_show_list(false)
 
 
@@ -691,6 +774,7 @@ func _refresh() -> void:
 
 ## 슬롯·보유 카드를 work·보유·정렬에 맞춘다(순서가 바뀌었을 때만 카드를 다시 만든다).
 func _rebuild() -> void:
+	_refresh_fuse()
 	if work.size() != GameState.hero_count():
 		work = GameState.deploy()
 	if slot_cards.size() != work.size():
