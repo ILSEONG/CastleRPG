@@ -118,6 +118,42 @@ static func _build(kind: String, color: Color) -> ArrayMesh:
 				var ang := (t - 1) * 0.25
 				var tip := Vector3(sin(ang) * 0.9, -0.05, 0.9 + 0.2 * (1 - absi(t - 1)))
 				k.face([Vector3(-0.05, 0, 0.1), tip, Vector3(0.05, 0, 0.1)], Vector3.UP, Color(color.darkened(0.1), 0.75))
+		"sigil":  # UR 마법진 바깥 겹(XZ, 반지름 1): 굵은 테 + 안쪽 가는 테 + 룬 눈금 24개(길고 짧게) + 테 위 마름모 8개
+			for i in 48:
+				var a0 := TAU * i / 48.0
+				var a1 := TAU * (i + 1) / 48.0
+				var o0 := Vector3(cos(a0), 0, sin(a0))
+				var o1 := Vector3(cos(a1), 0, sin(a1))
+				k.face([o0 * 0.93, o0, o1, o1 * 0.93], Vector3.UP, Color(color, 0.95))
+				k.face([o0 * 0.72, o0 * 0.75, o1 * 0.75, o1 * 0.72], Vector3.UP, Color(color, 0.8))
+				k.face([o0 * 0.75, o0 * 0.93, o1 * 0.93, o1 * 0.75], Vector3.UP, Color(color.darkened(0.2), 0.16))
+			for i in 24:
+				var a := TAU * (i + 0.5) / 24.0
+				var d := Vector3(cos(a), 0, sin(a))
+				var sd := Vector3(-d.z, 0, d.x) * 0.018
+				var r0 := 0.78 if i % 2 == 0 else 0.83
+				k.face([d * r0 - sd, d * r0 + sd, d * 0.9 + sd, d * 0.9 - sd], Vector3.UP, color.lightened(0.35))
+			for i in 8:
+				var a := TAU * i / 8.0
+				var d := Vector3(cos(a), 0, sin(a))
+				var sd := Vector3(-d.z, 0, d.x)
+				k.face([d * 0.86, d * 0.965 + sd * 0.06, d * 1.07, d * 0.965 - sd * 0.06], Vector3.UP, color.lightened(0.5))
+		"sigil_star":  # UR 마법진 안쪽 겹(XZ, 반지름 0.7): 겹친 두 사각형 = 8각 별 + 가운데 작은 테
+			for sq in 2:
+				for i in 4:
+					var a0 := TAU * i / 4.0 + PI / 4.0 * sq
+					var a1 := TAU * (i + 1) / 4.0 + PI / 4.0 * sq
+					var p0 := Vector3(cos(a0), 0, sin(a0)) * 0.7
+					var p1 := Vector3(cos(a1), 0, sin(a1)) * 0.7
+					var n := (p1 - p0).normalized().cross(Vector3.UP) * 0.022
+					k.face([p0 - n, p0 + n, p1 + n, p1 - n], Vector3.UP, Color(color.lightened(0.2), 0.95))
+			for i in 24:
+				var a0 := TAU * i / 24.0
+				var a1 := TAU * (i + 1) / 24.0
+				var o0 := Vector3(cos(a0), 0, sin(a0))
+				var o1 := Vector3(cos(a1), 0, sin(a1))
+				k.face([o0 * 0.22, o0 * 0.26, o1 * 0.26, o1 * 0.22], Vector3.UP, color.lightened(0.4))
+				k.face([Vector3.ZERO, o0 * 0.22, o1 * 0.22], Vector3.UP, Color(color.lightened(0.3), 0.35))
 		"heart":  # 매혹 하트(XY 평면, 카메라를 보게): 두 마름모 + 아래 삼각
 			k.face([Vector3(0, -0.5, 0), Vector3(0.5, 0.1, 0), Vector3(0.25, 0.4, 0), Vector3(0, 0.2, 0)], Vector3.BACK, color)
 			k.face([Vector3(0, -0.5, 0), Vector3(0, 0.2, 0), Vector3(-0.25, 0.4, 0), Vector3(-0.5, 0.1, 0)], Vector3.BACK, color)
@@ -149,6 +185,63 @@ static func _fade(mi: MeshInstance3D, sec: float, delay := 0.0) -> void:
 			Fx._fade(c, sec, delay)
 
 
+# --- UR 공통 연출(2026-10-30 사용자 "스킬이 이펙트가 더 화려해야해": 원신 원소폭발·니케 버스트·세븐나이츠 키우기 궁극기처럼 마법진 + 빛기둥 + 섬광) ---
+
+## 바닥 UR 마법진: 바깥 겹과 별 겹이 반대로 돌며 r까지 펼쳐지고 sec초 머문 뒤 옅어진다.
+static func sigil(parent: Node, pos: Vector3, color: Color, r: float, sec: float) -> void:
+	for layer in 2:
+		var mi := _put(parent, "sigil" if layer == 0 else "sigil_star", color, pos + Vector3(0, 0.05 + 0.01 * layer, 0), "ur_sigil")
+		if mi == null:
+			return
+		var spin := (1.0 if layer == 0 else -1.6) * sec * 0.9
+		mi.scale = Vector3(r * 0.2, 1.0, r * 0.2)
+		var tw := mi.create_tween()
+		tw.tween_property(mi, "scale", Vector3(r, 1.0, r), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(mi, "rotation:y", spin, sec + 0.3)
+		tw.tween_interval(maxf(0.0, sec - 0.22))
+		tw.tween_property(mi, "scale", Vector3(r * 1.15, 1.0, r * 1.15), 0.3)
+		tw.tween_callback(mi.queue_free)
+		_fade(mi, 0.3, sec)
+
+
+## UR 스킬 발동 순간(시전자): 발밑 마법진 + 하늘로 솟는 고유색 빛기둥 + 사방으로 튀는 빛줄기·떠오르는 빛 조각.
+## ult(궁극기)면 마법진이 더 크고 오래 가며, 하늘에서 빛줄기가 내리꽂히고 화면이 번쩍·흔들린다.
+static func cast(hero: Node3D, color: Color, ult: bool) -> void:
+	if hero == null or not hero.is_inside_tree():
+		return
+	var w := hero.get_parent()
+	var at := Vector3(hero.global_position.x, 0, hero.global_position.z)
+	var r := 3.2 if ult else 2.2
+	sigil(w, at, color, r, 1.4 if ult else 0.8)
+	Fx._surge(w, Fx._mesh("pillar", color.lightened(0.2)), at, "ur_cast_pillar", 1.1 if ult else 0.8, 7.0 if ult else 4.5, 0.7 if ult else 0.5)
+	Fx._surge(w, Fx._mesh("rays", color.lightened(0.3)), at, "ur_cast_rays", r * 0.7, 2.2, 0.55)
+	Fx.halo(w, at + Vector3(0, 1.3, 0), color.lightened(0.25), r * 1.6, 0.6, 1.4, "ur_cast_glow")
+	var sp := Fx._burst(w, at + Vector3(0, 1.0, 0), color.lightened(0.45), "spark", 26 if ult else 16, 0.55, "ur_cast_sparks")
+	if sp != null:
+		sp.direction = Vector3.UP
+		sp.spread = 75.0
+		sp.initial_velocity_min = 6.0
+		sp.initial_velocity_max = 12.0
+		sp.scale_amount_min = 1.4
+		sp.scale_amount_max = 2.4
+	Fx._motes(w, at, color.lightened(0.35), r * 0.8, 3.0, 1.0)
+	if ult:
+		Fx._wave(w, at, color.lightened(0.3), r * 1.8, 0.45)
+		Fx._wave(w, at, color, r * 2.4, 0.55, 0.12)
+		Fx.lightning(w, [at + Vector3(0, Fx.SKY_H, 0), at + Vector3(0.6, 4.0, -0.4), at + Vector3(0, 0.3, 0)], color.lightened(0.4), 2)
+		Fx.screen_flash(w, at, color, 0.16)
+		Fx.kick(w, at, Fx.KICK_AMP[1], 0.0)
+
+
+## UR 큰 타격 자리: 마법진 + 별 섬광 + 빛기둥 + 파편처럼 튀는 빛줄기 + 고리 두 겹.
+static func burst(parent: Node, pos: Vector3, color: Color, r: float) -> void:
+	sigil(parent, pos, color, r, 0.5)
+	Fx.flare_burst(parent, pos, color, r * 0.8, 2)
+	Fx._surge(parent, Fx._mesh("pillar", color.lightened(0.2)), pos, "ur_burst_pillar", r * 0.4, 5.0, 0.55)
+	Fx._wave(parent, pos, color.lightened(0.3), r * 1.6, 0.4)
+	Fx._wave(parent, pos, color, r * 2.1, 0.5, 0.1)
+
+
 # --- 현무 ---
 
 ## 현무 결계: 시전자 둘레에 6각 판 거북 등껍질 돔이 솟아(반지름 r) sec초 머문다 + 바닥 물결 + 오르는 물방울.
@@ -168,6 +261,21 @@ static func shell_dome(parent: Node, pos: Vector3, color: Color, r: float, sec: 
 	Fx._wave(parent, pos, color.lightened(0.3), r * 1.5, 0.6, 0.15)
 	Fx.halo(parent, pos + Vector3(0, 1.0, 0), color.lightened(0.2), r * 2.0, 0.6, 1.2, "ur_shell_halo")
 	Fx._motes(parent, pos, color.lightened(0.35), r * 0.8, 2.4, 1.0)
+	sigil(parent, pos, color.lightened(0.15), r, sec)
+	for i in 6:  # 돔 둘레로 물기둥 여섯이 솟는다
+		var a := TAU * i / 6.0
+		Fx._surge(parent, Fx._mesh("pillar", color.lightened(0.2)), pos + Vector3(cos(a), 0, sin(a)) * (dr + 0.6), "ur_shell_pillar", 0.45, 3.0, 0.6, Fx.soft_material())
+	var sp := Fx._burst(parent, pos + Vector3(0, 0.3, 0), color.lightened(0.5), "spark", 20, 0.7, "ur_shell_spray")
+	if sp != null:
+		sp.direction = Vector3.UP
+		sp.spread = 50.0
+		sp.initial_velocity_min = 4.0
+		sp.initial_velocity_max = 8.0
+		sp.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+		sp.emission_ring_axis = Vector3.UP
+		sp.emission_ring_radius = dr
+		sp.emission_ring_inner_radius = dr * 0.8
+		sp.emission_ring_height = 0.1
 
 
 ## 북해 해일: 가운데서 바깥으로 물기둥이 세 겹 고리로 차례로 치솟고(반지름 r), 물보라·파동·흔들림.
@@ -196,7 +304,16 @@ static func tide(parent: Node, pos: Vector3, color: Color, r: float) -> void:
 		sp.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 		sp.emission_sphere_radius = r * 0.6
 	Fx.halo(parent, pos + Vector3(0, 1.2, 0), color, r * 2.4, 0.6, 1.3, "ur_tide_glow")
-	Fx.screen_flash(parent, pos, color, 0.12)
+	sigil(parent, pos, color.lightened(0.15), r * 1.1, 0.9)
+	Fx._surge(parent, Fx._mesh("pillar", color.lightened(0.3)), pos, "ur_tide_core", 1.6, 7.0, 0.8, Fx.soft_material())
+	var sp2 := Fx._burst(parent, pos + Vector3(0, 2.5, 0), color.lightened(0.35), "spark", 30, 1.0, "ur_tide_rain")
+	if sp2 != null:  # 치솟은 물이 사방으로 쏟아진다
+		sp2.direction = Vector3.UP
+		sp2.spread = 80.0
+		sp2.gravity = Vector3(0, -14.0, 0)
+		sp2.initial_velocity_min = r * 1.5
+		sp2.initial_velocity_max = r * 2.6
+	Fx.screen_flash(parent, pos, color.lerp(Color(1, 1, 1), 0.3), 0.18)
 
 
 # --- 백호 ---
@@ -211,13 +328,19 @@ static func claws(parent: Node, from: Vector3, dir: Vector3, length: float, colo
 		if mi == null:
 			break
 		mi.rotation = Vector3(0, yaw, (0.5 if flip else -0.5))
-		mi.scale = Vector3(1.6, 1.0, 0.2)
+		mi.scale = Vector3(2.2, 1.0, 0.2)
 		var tw := mi.create_tween()
 		tw.tween_interval(0.03 * i)
-		tw.tween_property(mi, "scale", Vector3(1.6, 1.0, length), 0.1).set_ease(Tween.EASE_OUT)
-		tw.tween_interval(0.12)
+		tw.tween_property(mi, "scale", Vector3(2.2, 1.0, length * 1.1), 0.1).set_ease(Tween.EASE_OUT)
+		tw.tween_interval(0.2)
 		tw.tween_callback(mi.queue_free)
-		_fade(mi, 0.15, 0.12)
+		_fade(mi, 0.18, 0.2)
+	var sp := Fx._burst(parent, from + dir * length * 0.6 + Vector3(0, 0.8, 0), color.lightened(0.5), "spark", 14, 0.35, "ur_claw_sparks")
+	if sp != null:
+		sp.direction = dir
+		sp.spread = 40.0
+		sp.initial_velocity_min = 7.0
+		sp.initial_velocity_max = 13.0
 	Fx.spark(parent, from + dir * length * 0.8 + Vector3(0, 0.8, 0), color.lightened(0.4), 1.0)
 	Fx.halo(parent, from + dir * length * 0.5 + Vector3(0, 0.8, 0), color, length * 0.9, 0.3, 1.2, "ur_claw_glow")
 
@@ -240,6 +363,14 @@ static func tiger_avatar(hero: Node3D, color: Color, sec: float) -> void:
 	for i in 4:
 		var a := TAU * i / 4.0
 		Fx.lightning(w, [at + Vector3(cos(a), 1.6, sin(a)) * 0.9, at + Vector3(cos(a + 0.6) * 0.4, 0.5, sin(a + 0.6) * 0.4)], color, 1)
+	for i in 5:  # 둘레에 하늘 번개가 차례로 내리꽂힌다
+		var a := TAU * i / 5.0 + randf() * 0.4
+		var p := at + Vector3(cos(a), 0, sin(a)) * 3.0
+		hero.get_tree().create_timer(0.07 * i, false).timeout.connect(func():
+			if is_instance_valid(w):
+				Fx.lightning(w, [p + Vector3(0, Fx.SKY_H, 0), p + Vector3(0.5, 4.0, 0.3), p], Color(0.6, 0.8, 1.0), 2)
+				Fx.impact(w, p, Color(0.5, 0.75, 1.0), 0.6, -1, 0.3))
+	Fx._surge(w, Fx._mesh("pillar", Color(0.6, 0.8, 1.0)), at, "ur_tiger_pillar", 1.6, 6.0, 0.7)
 
 
 # --- 연화 ---
@@ -264,12 +395,18 @@ static func tail_sweep(parent: Node, pos: Vector3, color: Color, r: float, angle
 	if mi == null:
 		return
 	mi.rotation = Vector3(randf_range(-0.25, 0.25), angle, randf_range(-0.25, 0.25))
-	mi.scale = Vector3(r * 0.6, 1.0, r * 0.6)
+	mi.scale = Vector3(r * 0.6, 1.6, r * 0.6)
 	var tw := mi.create_tween().set_parallel()
-	tw.tween_property(mi, "scale", Vector3(r * 1.1, 1.0, r * 1.1), 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mi, "scale", Vector3(r * 1.25, 1.6, r * 1.25), 0.18).set_ease(Tween.EASE_OUT)
 	tw.tween_property(mi, "rotation:y", angle + 2.4, 0.3)
 	tw.chain().tween_callback(mi.queue_free)
 	_fade(mi, 0.14, 0.16)
+	var fl := Fx._burst(parent, pos + Vector3(cos(-angle) * r * 0.8, 0.8, sin(-angle) * r * 0.8), color.lightened(0.3), "ember", 8, 0.6, "ur_tail_fire", Fx.glow_material())
+	if fl != null:  # 꼬리 끝에서 여우불이 흩날린다
+		fl.direction = Vector3.UP
+		fl.spread = 90.0
+		fl.initial_velocity_min = 1.5
+		fl.initial_velocity_max = 3.5
 
 
 ## 구미호 해방 마무리: 분홍 여우불이 사방으로 터지고 바닥에 꽃잎 같은 섬광.
@@ -282,7 +419,27 @@ static func fox_bloom(parent: Node, pos: Vector3, color: Color, r: float) -> voi
 		sp.gravity = Vector3(0, 1.0, 0)
 		sp.initial_velocity_min = 2.0
 		sp.initial_velocity_max = 5.0
-	Fx.screen_flash(parent, pos, color, 0.1)
+	burst(parent, pos, color, r)
+	for i in 9:  # 아홉 갈래 여우불 기둥
+		var a := TAU * i / 9.0
+		Fx._surge(parent, Fx._mesh("pillar", color.lightened(0.15)), pos + Vector3(cos(a), 0, sin(a)) * r * 0.75, "ur_fox_pillar", 0.4, 3.5, 0.6, Fx.fire_material())
+	Fx.screen_flash(parent, pos, color.lerp(Color(1, 1, 1), 0.3), 0.2)
+
+
+## 여우불 구슬: 시전자 둘레에 구슬 n개가 sec초 돌다가 사라진다(날아가는 구슬은 투사체가 맡는다).
+static func fox_orbs(hero: Node3D, color: Color, n: int, sec: float) -> void:
+	var w := hero.get_parent()
+	for i in n:
+		var g := Fx.halo(w, hero.global_position + Vector3(0, 1.4, 0), color.lightened(0.3), 0.9, 0.0, 1.0, "ur_fox_orb")
+		if g == null:
+			return
+		var a0 := TAU * i / n
+		var tw := g.create_tween()
+		tw.tween_method(func(t: float):
+			if is_instance_valid(hero):
+				var a := a0 + t * TAU * 1.5
+				g.global_position = hero.global_position + Vector3(cos(a) * 1.3, 1.4 + 0.3 * sin(a * 2.0), sin(a) * 1.3), 0.0, 1.0, sec)
+		tw.tween_callback(g.queue_free)
 
 
 # --- 청룡 ---
@@ -296,31 +453,63 @@ static func dragon_arrow(parent: Node, from: Vector3, to: Vector3, color: Color)
 	var mi := _put(parent, "helix", color, from, "ur_dragon_arrow")
 	if mi != null:
 		mi.look_at(to, Vector3.UP)
-		mi.scale = Vector3(2.4, 2.4, 0.05)
+		mi.scale = Vector3(3.2, 3.2, 0.05)
 		var tw := mi.create_tween()
-		tw.tween_property(mi, "scale", Vector3(2.4, 2.4, length), 0.18).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(mi, "rotation:z", mi.rotation.z + 3.0, 0.5)
+		tw.tween_property(mi, "scale", Vector3(3.2, 3.2, length), 0.18).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(mi, "rotation:z", mi.rotation.z + 3.0, 0.6)
 		tw.tween_callback(mi.queue_free)
-		_fade(mi, 0.25, 0.25)
+		_fade(mi, 0.3, 0.3)
+	var m2 := _put(parent, "helix", color.lightened(0.3), from, "ur_dragon_arrow")
+	if m2 != null:  # 반대로 감기는 두 번째 몸통(두 마리 용이 얽혀 나간다)
+		m2.look_at(to, Vector3.UP)
+		m2.rotation.z += PI
+		m2.scale = Vector3(2.0, 2.0, 0.05)
+		var t2 := m2.create_tween()
+		t2.tween_property(m2, "scale", Vector3(2.0, 2.0, length), 0.22).set_ease(Tween.EASE_OUT)
+		t2.parallel().tween_property(m2, "rotation:z", m2.rotation.z - 3.0, 0.6)
+		t2.tween_callback(m2.queue_free)
+		_fade(m2, 0.3, 0.3)
+	Fx.breath(parent, from, (to - from).normalized(), length, color.lightened(0.1), 1)
 	Fx.pierce(parent, from, to, color.lightened(0.3), 2)
 	for i in 4:
 		var at := from.lerp(to, (i + 1) / 5.0)
 		Fx.splash(parent, Vector3(at.x, 0, at.z), color, 1.2)
 	Fx._surge(parent, Fx._mesh("pillar", color), Vector3(to.x, 0, to.z), "ur_dragon_end", 1.0, 3.5, 0.5, Fx.soft_material())
 	Fx.halo(parent, to, color.lightened(0.3), 3.0, 0.4, 1.3, "ur_dragon_glow")
+	burst(parent, Vector3(to.x, 0, to.z), color, 1.8)
 
 
 ## 청룡 강림: 대상 자리 둘레를 푸른 용이 sec초 동안 휘감아 돌고(반지름 r), 바닥 물빛 지대가 깔린다.
 static func dragon_coil(parent: Node, pos: Vector3, color: Color, r: float, sec: float) -> void:
 	Fx.zone(parent, pos, color, r, sec, "blizzard", 2)
-	for layer in 2:
-		var mi := _put(parent, "coil", color.lightened(0.15 * layer), pos + Vector3(0, 0.2 + 0.6 * layer, 0), "ur_coil")
+	sigil(parent, pos, color.lightened(0.1), r * 1.15, sec)
+	var dive := _put(parent, "helix", color.lightened(0.2), pos + Vector3(0, 12.0, 0), "ur_coil_dive")
+	if dive != null:  # 하늘에서 용이 내리꽂힌다
+		dive.look_at(pos, Vector3.FORWARD)
+		dive.scale = Vector3(3.0, 3.0, 0.05)
+		var td := dive.create_tween()
+		td.tween_property(dive, "scale", Vector3(3.0, 3.0, 12.0), 0.25).set_ease(Tween.EASE_IN)
+		td.parallel().tween_property(dive, "rotation:z", 4.0, 0.5)
+		td.tween_callback(dive.queue_free)
+		_fade(dive, 0.25, 0.25)
+	Fx.impact(parent, pos, color, r * 0.4, 2, 0.6)
+	var rain := Fx._stream(parent, pos + Vector3(0, 6.0, 0), color.lightened(0.4), "spark", 40.0, 0.5, sec, "ur_coil_rain")
+	if rain != null:  # 용이 부르는 비
+		rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		rain.emission_box_extents = Vector3(r, 0.2, r)
+		rain.direction = Vector3.DOWN
+		rain.spread = 5.0
+		rain.gravity = Vector3(0, -20.0, 0)
+		rain.initial_velocity_min = 8.0
+		rain.initial_velocity_max = 12.0
+	for layer in 3:
+		var mi := _put(parent, "coil", color.lightened(0.15 * layer), pos + Vector3(0, 0.2 + 0.7 * layer, 0), "ur_coil")
 		if mi == null:
 			break
 		mi.scale = Vector3(r * 0.3, 1.5, r * 0.3)
 		var tw := mi.create_tween()
 		tw.tween_property(mi, "scale", Vector3(r, 1.8 + 0.4 * layer, r) * (1.0 - 0.15 * layer), 0.3).set_ease(Tween.EASE_OUT)
-		tw.parallel().tween_property(mi, "rotation:y", (TAU if layer == 0 else -TAU) * sec / 1.2, sec)
+		tw.parallel().tween_property(mi, "rotation:y", (TAU if layer != 1 else -TAU) * sec / 1.2, sec)
 		tw.tween_property(mi, "scale", Vector3(r * 0.2, 4.0, r * 0.2), 0.25).set_ease(Tween.EASE_IN)
 		tw.tween_callback(mi.queue_free)
 	Fx.halo(parent, pos + Vector3(0, 1.0, 0), color, r * 2.2, sec, 1.1, "ur_coil_glow")
@@ -351,6 +540,30 @@ static func clock(parent: Node, pos: Vector3, color: Color, r: float, sec: float
 		th.tween_callback(hand.queue_free)
 		_fade(hand, 0.3, maxf(0.0, sec - 0.3))
 	Fx.halo(parent, pos + Vector3(0, 0.4, 0), color, r * 2.2, 0.5, 1.2, "ur_clock_glow")
+	sigil(parent, pos, color.lightened(0.1), r * 1.2, sec)
+	var sky := _put(parent, "clock", color.lightened(0.15), pos + Vector3(0, 3.6, 0), "ur_clock_sky")
+	if sky != null:  # 공중에 선 커다란 시계(카메라를 본다), 거꾸로 돌며 sec초 머문다
+		var cam := sky.get_viewport().get_camera_3d()
+		if cam != null:
+			sky.look_at(cam.global_position, Vector3.UP)
+			sky.rotate_object_local(Vector3.RIGHT, -PI / 2.0)
+		sky.scale = Vector3.ONE * 0.1
+		var ts := sky.create_tween()
+		ts.tween_property(sky, "scale", Vector3(r * 0.75, 1.0, r * 0.75), 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		ts.tween_interval(maxf(0.1, sec - 0.5))
+		ts.tween_property(sky, "scale", Vector3(r * 1.1, 1.0, r * 1.1), 0.25)
+		ts.tween_callback(sky.queue_free)
+		_fade(sky, 0.25, maxf(0.0, sec - 0.25))
+	var shards := Fx._burst(parent, pos + Vector3(0, 1.2, 0), color.lightened(0.45), "mote", 26, sec, "ur_clock_frozen")
+	if shards != null:  # 멈춘 시간 속에 떠 있는 빛 조각
+		shards.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		shards.emission_sphere_radius = r * 0.8
+		shards.gravity = Vector3.ZERO
+		shards.initial_velocity_min = 0.0
+		shards.initial_velocity_max = 0.3
+		shards.explosiveness = 1.0
+		shards.scale_amount_min = 1.5
+		shards.scale_amount_max = 3.0
 
 
 ## 시간 역행: 대상 둘레에서 빛 조각이 위에서 아래로 감겨 내려앉는다(되감기).
@@ -386,7 +599,7 @@ static func collapse(parent: Node, pos: Vector3, color: Color, r: float, sec: fl
 # --- 주작 ---
 
 ## 불새: from → to로 날개 편 불새가 날아가며(sec초) 불티를 흘리고, 도착하면 불꽃이 터진다.
-static func phoenix(parent: Node, from: Vector3, to: Vector3, color: Color, sec: float, size := 3.4) -> void:
+static func phoenix(parent: Node, from: Vector3, to: Vector3, color: Color, sec: float, size := 4.4) -> void:
 	var bird := _put(parent, "wings", color, from, "ur_phoenix")
 	if bird == null:
 		Fx.blast(parent, Vector3(to.x, 0, to.z), color, 2.0, false, 2)
@@ -396,7 +609,7 @@ static func phoenix(parent: Node, from: Vector3, to: Vector3, color: Color, sec:
 		bird.look_at(from + flat, Vector3.UP)
 	bird.scale = Vector3.ONE * size
 	Fx.halo(bird, from, color.lightened(0.3), size * 1.4, 0.0)
-	var trail := Fx._stream(bird, from, color.lightened(0.2), "ember", 50.0, 0.6, sec, "ur_phoenix_trail")
+	var trail := Fx._stream(bird, from, color.lightened(0.2), "ember", 90.0, 0.8, sec, "ur_phoenix_trail")
 	if trail != null:
 		trail.spread = 40.0
 		trail.gravity = Vector3(0, 0.5, 0)
@@ -407,7 +620,10 @@ static func phoenix(parent: Node, from: Vector3, to: Vector3, color: Color, sec:
 		bird.global_position = from.lerp(to, t) + Vector3(0, sin(t * PI) * 1.5, 0)
 		bird.scale = Vector3(size, size, size) * (1.0 + 0.12 * sin(t * TAU * 3.0)), 0.0, 1.0, sec)
 	tw.tween_callback(func():
-		Fx.blast(parent, Vector3(to.x, 0, to.z), color, 2.2, false, 2, 1)
+		var g := Vector3(to.x, 0, to.z)
+		Fx.blast(parent, g, color, 2.6, false, 2, 2)
+		Fx._surge(parent, Fx._mesh("pillar", color), g, "ur_phoenix_pillar", 1.4, 5.5, 0.7, Fx.fire_material())
+		Fx._wave(parent, g, color.lightened(0.3), 4.5, 0.45)
 		bird.queue_free())
 
 

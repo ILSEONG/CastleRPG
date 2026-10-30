@@ -96,6 +96,7 @@ const FOX := Color(1.0, 0.42, 0.62)  # 연화 여우불
 const AZURE := Color(0.2, 0.85, 0.7)  # 청룡 청록
 const TIME := Color(0.45, 0.85, 1.0)  # 크로노스 시간
 const PHOENIX := Color(1.0, 0.38, 0.15)  # 주작 불꽃
+const UR_FX_COLORS := [TORTOISE, Color(0.45, 0.7, 1.0), FOX, AZURE, TIME, PHOENIX]  # UR_ACTIVE 두 개씩(영웅 순서) → 발동 마법진 색(백호는 흰 번개가 화면을 하얗게 덮지 않게 푸른 빛)
 const SHELL_FX_GAP := 0.4  # 흑귀갑 되돌림 물보라 최소 간격(초)
 
 var h  # 영웅(hero.gd) — 이 객체를 가진 노드
@@ -601,6 +602,8 @@ func _cast(k: String, dry := false) -> bool:
 	if k in UR_ACTIVE:
 		var ok := _cast_ur(k, p, dry)
 		if ok and not dry:
+			var i := UR_ACTIVE.find(k)
+			UrFx.cast(h, UR_FX_COLORS[i / 2], i % 2 == 1)  # 둘째 = 궁극기
 			_announce(k)
 		return ok
 	match k:
@@ -1521,9 +1524,10 @@ func _cast_ur(k: String, p: Array, dry: bool) -> bool:
 			pool.shuffle()
 			var dmg: float = a * float(p[2]) / 100.0 * m
 			var pop := func(o):
-				Fx.spark(_world(), o.global_position + HIT, FOX.lightened(0.4), 0.6)
+				Fx.impact(_world(), _flat(o.global_position), FOX, 0.5, -1, 0.9)
 				Fx.halo(_world(), o.global_position + HIT, FOX, 1.2, 0.25, 1.3, "ur_fox_hit")
 			Fx.halo(w, here + MUZZLE, FOX, 2.4, 0.5, 1.3, "ur_fox_cast")
+			UrFx.fox_orbs(h, FOX, int(p[1]), 0.5)
 			for i in int(p[1]):
 				_shoot(pool[i % pool.size()], "bolt", 12.0 + 1.5 * (i % 3), dmg, 0.06 * i, pop, FOX, true, true)
 		"nine_tails":  # 구미호 해방: 아홉 꼬리가 차례로 주변(반경 b)을 휩쓸어 번마다 c%, 마지막에 남은 적 기절 1초
@@ -1603,6 +1607,8 @@ func _cast_ur(k: String, p: Array, dry: bool) -> bool:
 			UrFx.collapse(w, at, TIME, r, 1.2)
 			_later(1.2, func():
 				Fx.blast(_world(), at, TIME, r, true, 2, 2)
+				UrFx.burst(_world(), at, TIME, r)
+				Fx.screen_flash(_world(), at, Color(1, 1, 1), 0.22)
 				for o in _near_monsters(at, r):
 					_hit(o, dmg)
 					if o.is_alive():
