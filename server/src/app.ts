@@ -1364,6 +1364,8 @@ export function createApp(opts: AppOptions) {
 
   // 이용약관·개인정보처리방침·계정 삭제 안내(Google Play·앱인토스에 등록하는 공개 주소, legal.ts)
   const legal: L.LegalInfo = opts.legal ?? { operator: '', email: '' }
+  // Google Search Console 소유권 확인(2026-11-02, Play Console 조직 가입의 웹사이트 확인). 확인된 뒤에도 지우지 않는다
+  app.get('/google35726a948d70fd0f.html', (c) => c.html('google-site-verification: google35726a948d70fd0f.html'))
   app.get('/legal/terms', (c) => c.html(L.termsPage(legal)))
   app.get('/legal/privacy', (c) => c.html(L.privacyPage(legal)))
   app.get('/legal/account-deletion', (c) => c.html(L.deletionPage(legal)))
