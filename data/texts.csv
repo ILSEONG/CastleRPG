@@ -2861,3 +2861,8 @@ dungeon_panel.refresh_7,보상 강화석 %d개 · 영웅 부위 강화 재료,,,
 event_panel.key_names.stone,강화석 던전 열쇠,,,,scripts/event_panel.gd
 live_ops.key_names.stone,강화석 던전 열쇠,,,,scripts/live_ops.gd
 missions.reward_text_12,강화석 던전 열쇠,,,,scripts/missions.gd
+settings_panel.skill_banner,스킬 이름 표시,,,,scripts/settings_panel.gd
+settings_panel.skill_banner_size,스킬 이름 크기,,,,scripts/settings_panel.gd
+settings_panel.banner_size_s,작게,,,,scripts/settings_panel.gd
+settings_panel.banner_size_m,보통,,,,scripts/settings_panel.gd
+settings_panel.banner_size_l,크게,,,,scripts/settings_panel.gd
