@@ -343,6 +343,8 @@ func _draw_price(c: Control, cur: String, price: int, sold: bool) -> void:
 
 
 func _buy(id: String) -> void:
+	if not UiKit.tap_once("shop:" + id):
+		return  # 빠른 두 번 누름(한 번만 산다)
 	var block := Economy.shop_block(id)
 	if block in SHORT_TEXT:
 		Economy.notice.emit(SHORT_TEXT[block])
@@ -403,6 +405,8 @@ func _pvp_card(x: Dictionary) -> Control:
 		face.draw_string(font, base, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.62, 0.58) if not sold and Pvp.coins() < price else Color.WHITE))
 	b.add_child(face)
 	b.pressed.connect(func():
+		if not UiKit.tap_once("pvp_shop:" + id):
+			return  # 빠른 두 번 누름(한 번만 산다)
 		if Pvp.buy(id) == "":
 			Economy.notice.emit(Lang.t("shop_panel.pvp_card_3") + str(PvpRules.SHOP_NAMES.get(id, id))))
 	v.add_child(b)

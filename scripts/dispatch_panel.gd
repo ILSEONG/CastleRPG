@@ -448,7 +448,9 @@ func _rebuild() -> void:
 	var free := bool(data.get("free_refresh", false))
 	var ref := _button(Lang.t("dispatch_panel.rebuild_2") if free else Lang.t("dispatch_panel.rebuild_3") % int(data.get("refresh_dia", 50)), UiKit.STEEL if free else DIA, 22)
 	ref.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ref.pressed.connect(refresh)
+	ref.pressed.connect(func():
+		if UiKit.tap_once("dispatch_refresh"):  # 빠른 두 번 누름이 다이아를 두 번 쓰지 않게
+			refresh())
 	tools.add_child(ref)
 	buttons["refresh"] = ref
 	var all := _button(Lang.t("dispatch_panel.rebuild_4"), HudScript.ACCENT, 22)

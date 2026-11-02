@@ -34,6 +34,7 @@ import { SLOW_MS } from './sentry.ts'
 import * as LO from './live_ops.ts'
 import { registerLiveOps } from './live_ops.ts'
 import { dayRecorder, registerRetention } from './retention.ts'
+import * as Idem from './idempotency.ts'
 import { registerInquiry } from './inquiry.ts'
 import type { WarLive } from './war_live.ts'
 import { registerParty } from './party_routes.ts'
@@ -473,7 +474,7 @@ export function createApp(opts: AppOptions) {
   app.use('*', cors({
     origin: opts.corsOrigins?.length ? opts.corsOrigins : '*',
     allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Authorization', 'Content-Type', 'If-None-Match', 'X-App-Version'],
+    allowHeaders: ['Authorization', 'Content-Type', 'If-None-Match', 'X-App-Version', 'X-Request-Id'],
     exposeHeaders: ['ETag'],
     maxAge: 600,
   }))
@@ -1337,8 +1338,30 @@ export function createApp(opts: AppOptions) {
     if (seenAt.size >= 50_000) seenAt.clear() // 메모리 지키기(접속 표시만 잠시 비게 된다)
     seenAt.set(payload.sub, clock())
     await recordDay(payload.sub, clock())
-    await next()
+    // 중복 요청 방지(idempotency.ts): 같은 계정·같은 X-Request-Id의 POST는 한 번만 처리하고 다시 오면 처음 답을 돌려준다
+    const rid = c.req.method === 'POST' ? c.req.header('x-request-id') : undefined
+    if (!rid || !Idem.ID_RE.test(rid)) return next()
+    const key = `${payload.sub}:${rid}`
+    const prev = replays.get(key, clock())
+    if (prev) {
+      const saved = await prev
+      if (saved) return c.body(saved.body, saved.status as any, { 'content-type': saved.type, 'x-replayed': '1' })
+      throw new ApiError(409, 'duplicate_request', 'the same request failed; send a new one')
+    }
+    const finish = replays.begin(key, clock())
+    try {
+      await next()
+    } finally {
+      const res = c.res
+      if (res && res.status >= 200 && res.status < 300) {
+        const body = await res.clone().text()
+        finish({ status: res.status, body, type: res.headers.get('content-type') ?? 'application/json' })
+      } else {
+        finish(null)
+      }
+    }
   }
+  const replays = new Idem.Replays()
 
   // --- 엔드포인트 ---
 
