@@ -459,7 +459,7 @@ test('gamedata: CSV 열 이름 키, 파일 순서, config 문자열, version = �
   assert.deepEqual(g.heroes[1], {
     id: 'ignis', name: '이그니스', title: '화염 대마법사', grade: 'SSR', role: 'ranged', archetype: 'caster', model: 'Mage', gear: '2H_Staff',
     color: '#E8553A', hp: 396, atk: 44, range: 13, atk_interval: 1.2, speed: 6, aggro: 12,
-    skill1: 'aoe_blast', s1a: 5, s1b: 3.5, s1c: 220, skill2: 'haste', s2a: 25, s2b: null, s2c: null,
+    skill1: 'aoe_blast', s1a: 5, s1b: 4.5, s1c: 220, skill2: 'haste', s2a: 25, s2b: null, s2c: null,
     skill3: 'ignite', s3a: 8, s3b: 3, s3c: 40, // 개정 17: 스킬 3열
     desc: '몰려오는 무리 한가운데 거대한 화염구를 떨어뜨린다',
   })

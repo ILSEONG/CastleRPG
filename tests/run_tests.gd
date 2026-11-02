@@ -332,7 +332,7 @@ func _remote_checks() -> int:
 	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
 	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 42 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
-	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
+	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 4.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
 		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(2) == 4 and GameData.hero_slots(3) == 8 and GameData.interior_tiles(6) == 28, "remote config replaces the table")
