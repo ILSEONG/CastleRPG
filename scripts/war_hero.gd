@@ -48,6 +48,7 @@ var _slow_t := 0.0
 var _poison_dps := 0.0
 var _poison_t := 0.0
 var _dot_dps := PackedFloat64Array([0.0, 0.0, 0.0])
+var _dot_by := [null, null, null, null]  # 지속 피해 칸(0..2)·독(3)을 건 영웅(BattleStats.capture)
 var _dot_t := PackedFloat64Array([0.0, 0.0, 0.0])
 var _root_t := 0.0
 var _vuln_pct := 0.0
@@ -109,7 +110,7 @@ func refresh_stats() -> void:
 	_base_speed = _speed
 
 
-func _process(delta: float) -> void:
+func _tick(delta: float) -> void:
 	if state == State.DEAD:
 		_tick_corpse(delta)
 	if puppet:
@@ -135,7 +136,7 @@ func _process(delta: float) -> void:
 		think_cd = 0.25
 		battle.brain.think(self)
 	var before := global_position
-	super._process(delta)
+	super._tick(delta)
 	if _root_t > 0.0:
 		global_position = Vector3(before.x, global_position.y, before.z)
 	if war_half > 0.0:
@@ -499,19 +500,27 @@ func take_damage(amount: float, source = null) -> void:
 	if r.x <= 0.0:
 		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
 		return
+	var before := hp
 	hp = maxf(0.0, hp - r.x)
+	BattleStats.taken(self, before - hp)  # 전투 통계: 받은 피해
+	BattleStats.dealt(self, before - hp)  # 상대 영웅(BattleStats.src)이 가한 피해(PVP·길드전)
 	DamageNumbers.pop(self, r.x, shown)
 	if shown != DamageNumbers.Kind.POISON and hp > 0.0:
 		_model.hit_react(shown == DamageNumbers.Kind.SKILL or shown == DamageNumbers.Kind.CRIT)
 	var back := maxf(r.y, atk * _sk.thorns[0] / 100.0) if _sk.has("thorns") else r.y
+	var prev = BattleStats.src
+	BattleStats.src = self  # 가시·반격은 이 영웅이 가한 피해
 	if back > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
 		source.take_damage(back * _skill_mult, DamageNumbers.Kind.SKILL)
 	if hp == 0.0 and _skx.try_revive():
+		BattleStats.src = prev
 		return
 	if hp == 0.0:
+		BattleStats.src = prev
 		die()
 		return
 	_skx.after_hurt(source)
+	BattleStats.src = prev
 
 
 func die() -> void:
@@ -563,12 +572,12 @@ func _tick_status(delta: float) -> void:
 	if _poison_t > 0.0:
 		var dt := minf(delta, _poison_t)
 		_poison_t -= delta
-		take_damage(_poison_dps * dt, DamageNumbers.Kind.POISON)
+		BattleStats.run(_dot_by[3], take_damage.bind(_poison_dps * dt, DamageNumbers.Kind.POISON))
 	for i in 3:
 		if _dot_t[i] > 0.0 and state != State.DEAD:
 			var dt := minf(delta, _dot_t[i])
 			_dot_t[i] -= delta
-			take_damage(_dot_dps[i] * dt, DamageNumbers.Kind.POISON)
+			BattleStats.run(_dot_by[i], take_damage.bind(_dot_dps[i] * dt, DamageNumbers.Kind.POISON))
 	if not _status.is_empty():
 		for k in _status.keys():
 			if _left(k) <= 0.0:
@@ -631,6 +640,7 @@ func apply_poison(dps: float, sec: float) -> void:
 		return
 	_poison_dps = dps
 	_poison_t = sec
+	_dot_by[3] = BattleStats.capture()
 	_show("poison")
 
 
@@ -638,6 +648,9 @@ func apply_dot(tag: String, dps: float, sec: float) -> void:
 	var i := DOT_TAGS.find(tag)
 	if i < 0 or state == State.DEAD:
 		return
+	var by = BattleStats.capture()
+	if by != null or _dot_t[i] <= 0.0:
+		_dot_by[i] = by
 	if _dot_t[i] > 0.0:
 		_dot_dps[i] = maxf(_dot_dps[i], dps)
 		_dot_t[i] = maxf(_dot_t[i], sec)

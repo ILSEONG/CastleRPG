@@ -11,6 +11,7 @@ const Art := preload("res://scripts/art.gd")
 const Formation := preload("res://scripts/formation.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
+const BattleStats := preload("res://scripts/battle_stats.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const UrFx := preload("res://scripts/ur_fx.gd")
@@ -431,14 +432,15 @@ func on_hit(m, d: float, primary: bool, attack_no: int, was: int) -> void:
 		_announce("echo_strike")
 	if sk.has("double_strike") and m.is_alive() and randf() < float(sk.double_strike[0]) / 100.0:
 		var mref: WeakRef = weakref(m)  # 몬스터 노드를 직접 담지 않는다 — 그새 지워지면 람다가 지워진 노드를 넘기며 오류를 낸다
-		h.get_tree().create_timer(0.12).timeout.connect(func():
+		var by = BattleStats.capture()  # 전투 통계: 늦게 들어가는 두 번째 타격도 이 영웅의 피해
+		h.get_tree().create_timer(0.12).timeout.connect(func(): BattleStats.run(by, func():
 			var mm = mref.get_ref()
 			if mm != null and mm.is_alive() and is_instance_valid(h) and h.is_alive():
 				var w := snap(mm)
 				mm.take_damage(d, DamageNumbers.Kind.HIT)
 				Fx.slash_mark(_world(), mm.global_position + HIT, h._color)
 				if not mm.is_alive():
-					on_kill(mm, w))
+					on_kill(mm, w)))
 	if sk.has("barrage") and h.role == "ranged" and randf() < float(sk.barrage[0]) / 100.0:
 		_barrage(m, int(sk.barrage[1]))
 
@@ -1432,9 +1434,10 @@ func _later(sec: float, f: Callable) -> void:
 	if sec <= 0.0:
 		f.call()
 		return
+	var by = BattleStats.capture()  # 전투 통계: 늦게 터지는 스킬도 이 영웅의 피해·치유
 	h.get_tree().create_timer(sec, false).timeout.connect(func():
 		if is_instance_valid(h) and h.is_inside_tree():
-			f.call())
+			BattleStats.run(by, f))
 
 
 static func _flat(v: Vector3) -> Vector3:

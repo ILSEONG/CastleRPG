@@ -20,6 +20,7 @@ extends Node3D
 ## 메시는 (종류, 색)마다 한 번 만들어 캐시한다. 걷기 흔들림·날갯짓·공격 돌진(나는 것은 급강하)은 매 프레임 부품 변환만 바꾼다(할당 없음).
 ## 성벽 위 주인이 부르면(첫 프레임에 위치가 성벽 높이) 움직이는 소환수는 그 면 성벽 바깥 땅으로 내려선다 — 포탑만 성벽 위에 남는다.
 
+const BattleStats := preload("res://scripts/battle_stats.gd")
 const Art := preload("res://scripts/art.gd")
 const Balance := preload("res://scripts/balance.gd")
 const Formation := preload("res://scripts/formation.gd")
@@ -319,6 +320,8 @@ func _muzzle() -> Vector3:
 func _hit(m) -> void:
 	if not (is_instance_valid(m) and m.is_alive()):
 		return
+	var prev = BattleStats.src
+	BattleStats.src = owner_hero if is_instance_valid(owner_hero) else null  # 전투 통계: 소환수 피해는 주인 영웅의 가한 피해
 	m.take_damage(dmg, DamageNumbers.Kind.SKILL)
 	match kind:
 		"golem":
@@ -330,6 +333,7 @@ func _hit(m) -> void:
 		"phoenix":
 			if m.has_method("apply_dot"):
 				m.apply_dot("burn", dmg * BURN_RATIO, BURN_SEC)
+	BattleStats.src = prev
 	if is_inside_tree() and is_instance_valid(m):
 		Fx.spark(get_parent(), m.global_position + Vector3(0, 0.8, 0), FIRE if kind == "phoenix" else color.lightened(0.3), 0.5)
 

@@ -2861,3 +2861,13 @@ dungeon_panel.refresh_7,보상 강화석 %d개 · 영웅 부위 강화 재료,,,
 event_panel.key_names.stone,강화석 던전 열쇠,,,,scripts/event_panel.gd
 live_ops.key_names.stone,강화석 던전 열쇠,,,,scripts/live_ops.gd
 missions.reward_text_12,강화석 던전 열쇠,,,,scripts/missions.gd
+stats_button.draw_face,통계,,,,scripts/stats_button.gd
+stats_button.build_popup,전투 통계,,,,scripts/stats_button.gd
+stats_button.build_popup_2,우리 팀,,,,scripts/stats_button.gd
+stats_button.build_popup_3,상대 팀,,,,scripts/stats_button.gd
+stats_button.build_popup.dealt,가한 피해,,,,scripts/stats_button.gd
+stats_button.build_popup.taken,받은 피해,,,,scripts/stats_button.gd
+stats_button.build_popup.healed,치유량,,,,scripts/stats_button.gd
+stats_button.build_popup_4,닫기,,,,scripts/stats_button.gd
+stats_button.refresh,아직 기록이 없습니다,,,,scripts/stats_button.gd
+stats_button.refresh_2,합계 %s,,,,scripts/stats_button.gd

@@ -268,6 +268,11 @@ func _build_world() -> void:
 	var hot = preload("res://scripts/hot_deal.gd").new()  # 핫딜: 보스 격파·다이아 부족·패배 때 1시간 특가 창 + 왼쪽 [핫딜] 버튼(배속 버튼 위)
 	hot.speed = speed
 	add_child(hot)
+	var stats = preload("res://scripts/stats_button.gd").new()  # [통계](2026-11-02): 배속 버튼([핫딜]) 위 — 스테이지 동안 영웅별 가한·받은 피해·치유량, 방치 중 숨김
+	stats.castle = true
+	stats.speed = speed
+	stats.hot = hot
+	add_child(stats)
 	recruit.hot = hot
 	_hud = hud
 	_strip = preload("res://scripts/hero_strip.gd").new()
@@ -446,6 +451,7 @@ func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scrip
 	Music.override = music
 	if not scene_script.resource_path in ["res://scripts/war_battle.gd", "res://scripts/party_battle.gd"]:  # 길드전은 늘 1배(사용자 2026-10-07 "길드전은 아니야"), 파티 퀘스트도 여럿이 함께라 1배
 		d.add_child(preload("res://scripts/speed_button.gd").new())  # 던전·PVP·길드 보스에도 같은 배속 버튼(x1 → x1.5 → x2, 성 화면과 같은 설정)
+	d.add_child(preload("res://scripts/stats_button.gd").new())  # 모든 전투 장면에 [통계](2026-11-02, 배속 버튼 위 — 없으면 그 자리)
 	_host.add_child(d)
 
 

@@ -16,6 +16,7 @@ const Formation := preload("res://scripts/formation.gd")
 const UnitModelScript := preload("res://scripts/unit_model.gd")
 const Fx := preload("res://scripts/fx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
+const BattleStats := preload("res://scripts/battle_stats.gd")
 const Crowd := preload("res://scripts/crowd.gd")
 const FxStatus := preload("res://scripts/fx_status.gd")
 const Sfx := preload("res://scripts/sfx.gd")
@@ -54,7 +55,8 @@ var _slow_t := 0.0
 var _stun_t := 0.0
 var _poison_dps := 0.0
 var _poison_t := 0.0
-var _dot_dps := PackedFloat64Array([0.0, 0.0, 0.0])  # DOT_TAGS 칸마다 초당 피해
+var _dot_dps := PackedFloat64Array([0.0, 0.0, 0.0])
+var _dot_by := [null, null, null, null]  # 지속 피해 칸(0..2)·독(3)을 건 영웅(BattleStats.capture) — 틱 피해를 그 영웅의 가한 피해로  # DOT_TAGS 칸마다 초당 피해
 var _dot_t := PackedFloat64Array([0.0, 0.0, 0.0])  # DOT_TAGS 칸마다 남은 초
 var _freeze_t := 0.0
 var _p_pos := Vector3.INF  # 꼭두각시: 방장이 보낸 자리(INF = 아직)
@@ -129,7 +131,9 @@ func take_damage(amount: float, kind := 0) -> void:  # kind = DamageNumbers.Kind
 		return
 	if _vuln_t > 0.0:
 		amount *= 1.0 + _vuln_pct / 100.0
+	var before := hp
 	hp = maxf(0.0, hp - amount)
+	BattleStats.dealt(self, before - hp)  # 전투 통계: 때린 영웅(BattleStats.src)의 가한 피해
 	DamageNumbers.pop(self, amount, kind)
 	if kind != DamageNumbers.Kind.POISON and hp > 0.0:  # 피격 번쩍임·찌그러짐(개정 26, 지속 피해 틱은 빼고)
 		var strong := kind == DamageNumbers.Kind.SKILL or kind == DamageNumbers.Kind.CRIT
@@ -172,14 +176,14 @@ func _process(delta: float) -> void:
 	if _poison_t > 0.0:
 		var dt := minf(delta, _poison_t)  # 마지막 틱은 남은 시간만큼만 — 합계가 dps × 초를 넘지 않는다
 		_poison_t -= delta
-		take_damage(_poison_dps * dt, DamageNumbers.Kind.POISON)
+		BattleStats.run(_dot_by[3], take_damage.bind(_poison_dps * dt, DamageNumbers.Kind.POISON))
 		if _dead:
 			return
 	for i in 3:  # 지속 피해 태그마다(독과 같은 규칙)
 		if _dot_t[i] > 0.0:
 			var dt := minf(delta, _dot_t[i])
 			_dot_t[i] -= delta
-			take_damage(_dot_dps[i] * dt, DamageNumbers.Kind.POISON)
+			BattleStats.run(_dot_by[i], take_damage.bind(_dot_dps[i] * dt, DamageNumbers.Kind.POISON))
 			if _dead:
 				return
 	if not _status.is_empty():
@@ -349,6 +353,7 @@ func apply_poison(dps: float, sec: float) -> void:
 		_status.poison = Fx.poison(self)
 	_poison_dps = dps
 	_poison_t = sec
+	_dot_by[3] = BattleStats.capture()
 
 
 ## 지속 피해: tag("burn"·"bleed"·"curse")마다 따로, sec초 동안 초당 dps(다시 걸면 dps·남은 시간 모두 큰 쪽). 모르는 태그는 무시.
@@ -357,6 +362,9 @@ func apply_dot(tag: String, dps: float, sec: float) -> void:
 	var i := DOT_TAGS.find(tag)
 	if i < 0 or _dead:
 		return
+	var by = BattleStats.capture()
+	if by != null or _dot_t[i] <= 0.0:
+		_dot_by[i] = by
 	if _dot_t[i] > 0.0:
 		_dot_dps[i] = maxf(_dot_dps[i], dps)
 		_dot_t[i] = maxf(_dot_t[i], sec)

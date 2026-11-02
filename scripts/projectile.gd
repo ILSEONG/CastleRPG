@@ -4,6 +4,7 @@ extends Node3D
 ## 상한이면 모양 없이 날지만 피해는 그대로 들어간다. 쏜 쪽이 사라지면(on_hit 무효) 피해도 없다.
 
 const Fx := preload("res://scripts/fx.gd")
+const BattleStats := preload("res://scripts/battle_stats.gd")
 
 const AIM := Vector3(0, 0.8, 0)  # 대상 몸통 높이(hero.HIT_HEIGHT)
 const AXE_SPIN := TAU * 6.0      # 도끼 초당 회전
@@ -17,6 +18,7 @@ var on_hit: Callable
 var big := false  # 스킬 투사체: 크게 + 빛 꼬리(Fx.dress_projectile, 2026-10-13)
 
 var _look: Node3D
+var _by = BattleStats.capture()  # 쏜 영웅(전투 통계 — 도착할 때 그 영웅의 가한 피해로)
 
 
 func _ready() -> void:
@@ -33,7 +35,7 @@ func _process(delta: float) -> void:
 		global_position = dest
 		queue_free()
 		if on_hit.is_valid():
-			on_hit.call(target)
+			BattleStats.run(_by, on_hit.bind(target))
 		return
 	global_position += to.normalized() * speed * delta
 	var left := dest - global_position
