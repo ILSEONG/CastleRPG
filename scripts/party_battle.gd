@@ -77,7 +77,8 @@ var net
 
 var _uid := 100  # 보스 = 100, 졸개 = 101부터(영웅·병사는 1부터)
 var _events: Array = []
-var _zones: Array = []  # [중심, 반경, 끝나는 clock]
+var _zones: Array = []  # [중심, 반경, 끝나는 clock, id]
+var _zone_seq := 0
 var _snap_cd := 0.0
 var _mine_down := false  # 내 영웅이 쓰러져 있다(일어나면 다시 고른다)
 var _revive: Array = []  # [영웅, 남은 초]
@@ -316,14 +317,24 @@ func unit_by_uid(uid: int):
 
 ## 보스 범위 예고(방장): AI 영웅·병사가 비킨다.
 func danger(pos: Vector3, r: float, sec: float) -> void:
-	_zones.append([Vector3(pos.x, 0, pos.z), r, clock + sec])
+	_zone_seq += 1
+	_zones.append([Vector3(pos.x, 0, pos.z), r, clock + sec, _zone_seq])
 
 
-## p(반지름 rad)가 예고 범위 안이면 가장 가까운 바깥 지점, 아니면 Vector3.INF.
-func escape_from(p: Vector3, rad: float) -> Vector3:
+## p(반지름 rad)를 덮고 있는 예고 범위들의 id(AI 영웅이 범위마다 반응 시간·놓침을 정한다 — party_hero.gd).
+func zones_at(p: Vector3, rad: float) -> Array:
+	var out := []
+	for z in _zones:
+		if float(z[2]) >= clock and Formation.flat_distance(Vector3(p.x, 0, p.z), z[0]) < float(z[1]) + rad + 0.5:
+			out.append(int(z[3]))
+	return out
+
+
+## p(반지름 rad)가 예고 범위 안이면 가장 가까운 바깥 지점, 아니면 Vector3.INF. only가 있으면 그 id의 범위만 피한다(알아챈 것만).
+func escape_from(p: Vector3, rad: float, only: Array = []) -> Vector3:
 	var flat := Vector3(p.x, 0, p.z)
 	for z in _zones:
-		if float(z[2]) < clock:
+		if float(z[2]) < clock or (not only.is_empty() and not only.has(int(z[3]))):
 			continue
 		var c: Vector3 = z[0]
 		var r: float = float(z[1]) + rad + 0.5
