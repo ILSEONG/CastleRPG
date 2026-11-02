@@ -1,5 +1,5 @@
 extends RefCounted
-## 몬스터 상태 이펙트(스킬 100종): burn(주황 불꽃 조각)·bleed(떨어지는 붉은 방울)·curse(머리 둘레 검보라 연기),
+## 몬스터 상태 이펙트(스킬 100종): burn(툰 불꽃 입자)·bleed(떨어지는 핏방울 입자)·curse(머리 둘레 검보라 툰 연기 입자),
 ## freeze(몸을 감싼 반투명 얼음 덩어리)·root(발밑 덩굴)·vulnerable(머리 위 보라 내림 화살 + 고리)·weaken(허리 회색 고리 + 내림 꺾쇠).
 ## 상태마다 MeshInstance3D 하나(조각 여럿을 메시 하나에 담는다). 메시는 종류마다 한 번 만들어 캐시하고 재질은 Fx 공유 재질
 ## (정점 색 / 반투명)을 쓴다. 생성은 Fx._spawn이라 이펙트 상한(Fx.MAX_LIVE)·track을 같이 쓴다 — 상한이면 null(상태는 그대로 걸린다).
@@ -8,6 +8,7 @@ extends RefCounted
 
 const Fx := preload("res://scripts/fx.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
+const SkillVfx := preload("res://scripts/skill_vfx.gd")
 
 const KINDS := ["burn", "bleed", "curse", "freeze", "root", "vulnerable", "weaken"]
 const BURN := Color(1.0, 0.5, 0.1)
@@ -26,7 +27,9 @@ static var _meshes := {}
 ## kind 이펙트를 target 자식으로 붙인다(월드 축 그대로 — 몬스터 노드는 돌지 않고 모델만 돈다).
 ## height = 발에서 머리(HP 막대)까지 m, size = 몸 배율(몬스터 표 scale), width = 몸 반지름 m(겹침 해소 radius — 몸을 감싸는 것들의
 ## 가로 배율 = max(size, width / BODY_R): 뚱뚱한 보스도 감싼다. 얼음 덩어리는 세로도 같이). 상한이거나 모르는 종류면 null.
-static func attach(target: Node3D, kind: String, height: float, size: float, width := 0.0) -> MeshInstance3D:
+static func attach(target: Node3D, kind: String, height: float, size: float, width := 0.0) -> Node3D:
+	if kind in ["burn", "curse", "bleed"]:
+		return _toon(target, kind, height, size, width)
 	var y := 0.0
 	var mat: Material = null
 	match kind:
@@ -38,7 +41,7 @@ static func attach(target: Node3D, kind: String, height: float, size: float, wid
 			y = height * 0.62
 			mat = Fx.soft_material()
 		"freeze":
-			mat = Fx.soft_material()
+			mat = Fx.energy_material("smooth")  # 2026-11-02: 반투명 단색 → 가장자리 진하고 정면이 하얗게 빛나는 얼음
 		"root":
 			y = 0.02
 		"vulnerable":
@@ -78,6 +81,50 @@ static func attach(target: Node3D, kind: String, height: float, size: float, wid
 		"weaken":
 			mi.create_tween().set_loops().tween_property(mi, "rotation:y", -TAU, 3.0).from(0.0)
 	return mi
+
+
+## 지속 피해 상태(2026-11-02 사용자 "불꽃 도트뎀 이펙트 구져" — 딱딱한 주황 뿔 조각 → 툰 입자): 원신·쿠키런 킹덤의 화상처럼
+## 몸 둘레에서 셀 셰이딩 불꽃 덩어리가 계속 피어올라 붉게 식으며 구멍 나듯 사라지고 불티가 튄다(burn). curse = 머리 둘레 검보라 연기 덩이가 천천히
+## 오른다, bleed = 붉은 핏방울이 떨어진다. 대상 자식 CPUParticles3D 하나(불티는 그 자식) — 상한·track은 Fx 규칙 그대로.
+static func _toon(target: Node3D, kind: String, height: float, size: float, width: float) -> Node3D:
+	if Fx.full(target):
+		return null
+	var wide := maxf(size, width / BODY_R)
+	var p: CPUParticles3D
+	var y := 0.0
+	match kind:
+		"burn":
+			p = SkillVfx.toon_particles("fire", BODY_R * wide * 0.6, 26.0, maxf(wide, 0.8) * 1.5)
+			y = height * 0.25
+		"curse":
+			p = SkillVfx.toon_particles("curse", BODY_R * wide * 0.7, 9.0, maxf(size, 0.8))
+			y = height * 0.7
+		_:
+			p = SkillVfx.toon_particles("bleed", BODY_R * wide * 0.7, 10.0, maxf(size, 0.8))
+			y = height * 0.6
+	p.set_meta("fx", kind)
+	target.add_child(p)
+	Fx.track(p)
+	p.global_position = target.global_position + Vector3(0, y, 0)
+	if kind == "burn":
+		var sp := CPUParticles3D.new()  # 불티: 작고 빠르게 튀어 오른다
+		sp.mesh = Fx._mesh("p_spark")
+		sp.material_override = Fx.glow_material()
+		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		sp.local_coords = false
+		sp.amount = 6
+		sp.lifetime = 0.5
+		sp.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		sp.emission_sphere_radius = BODY_R * wide * 0.8
+		sp.direction = Vector3.UP
+		sp.spread = 35.0
+		sp.initial_velocity_min = 2.0
+		sp.initial_velocity_max = 3.5
+		sp.gravity = Vector3(0, 1.0, 0)
+		sp.particle_flag_align_y = true
+		sp.color = BURN_CORE
+		p.add_child(sp)
+	return p
 
 
 ## 종류별 메시(캐시). 크기 1 = 키 ~2.2 m 몸(몬스터 표 scale 1).
