@@ -143,7 +143,7 @@ export function registerParty(app: Hono<Any>, d: Any, live?: PartyLive) {
       const lim = R.statLimit(x.pl, x.game, gx.st ? G.buffPct(gx.st.lv.level) : 0)
       const s = capStats(def, Number(own.level), Number(own.promotion), h.hp, h.atk, cfgOf(x.game), lim)
       const hero = { hero: id, level: Number(own.level), promotion: Number(own.promotion), hp: Math.round(s.hp), atk: Math.round(s.atk * 10) / 10 }
-      return { pid: x.id, name, hero, dps: hero.atk / Math.max(0.1, def.atk_interval), power: R.powerOf(def, hero.hp, hero.atk), accepted: false }
+      return { pid: x.id, name, hero, dps: hero.atk / Math.max(0.1, def.atk_interval), power: R.powerOfStats(def, hero.level, hero.promotion, hero.hp, hero.atk, cfgOf(x.game)), accepted: false }
     }
     const list = b.soldiers
     if (!Array.isArray(list) || list.length !== PQ.SOLDIERS_PER) throw new ApiError(400, 'bad_party', `'soldiers' must be ${PQ.SOLDIERS_PER} {type, tier}`)

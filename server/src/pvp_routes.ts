@@ -51,7 +51,7 @@ export function registerPvp(app: Hono<Any>, d: Any) {
     if (row.defense.length) {
       return row.defense.flatMap((h) => {
         const d = defs.find((g) => g.id === h.hero)
-        return d ? [{ grade: d.grade, role: d.role, power: R.powerOf(d, h.hp, h.atk) }] : []
+        return d ? [{ grade: d.grade, role: d.role, power: R.powerOfStats(d, h.level, h.promotion, h.hp, h.atk, cfgOf(x.game)) }] : []
       })
     }
     const eq = R.heroEquip(x.pl.items, x.pl.equipment, x.pl.slot_levels ?? {})
@@ -140,7 +140,7 @@ export function registerPvp(app: Hono<Any>, d: Any) {
     await rows(x)
     const soldiers = mode === 'total' ? mySoldiers(x) : {}
     await query('update pvp_stats set defense = $3::jsonb, soldiers = $4::jsonb, power = $5 where player_id = $1 and mode = $2',
-      [x.id, mode, JSON.stringify(team), JSON.stringify(soldiers), P.teamPower(team, defsOf(x.game))])
+      [x.id, mode, JSON.stringify(team), JSON.stringify(soldiers), P.teamPower(team, defsOf(x.game), cfgOf(x.game))])
     return c.json({ server_now: x.now, pvp: await pvpView(x) })
   })
 
@@ -169,8 +169,8 @@ export function registerPvp(app: Hono<Any>, d: Any) {
           select player_id, $2, $17::jsonb, to_timestamp($15::float8), $5, $16 from u returning id::text),
         w as (update pvp_wallet set coins = coins + ${P.COINS_LOSS} where player_id = $1 and exists (select 1 from u) returning 1)
         select (select id from b) as id`,
-      [x.id, mode, x.today, used + 1, loss, JSON.stringify(nextOpp), setDefense, JSON.stringify(team), JSON.stringify(soldiers), P.teamPower(team, defs),
-        r.day, r.plays, r.points, JSON.stringify(opp), x.now, gain, JSON.stringify({ ...opp, my_power: P.teamPower(team, defs) })])
+      [x.id, mode, x.today, used + 1, loss, JSON.stringify(nextOpp), setDefense, JSON.stringify(team), JSON.stringify(soldiers), P.teamPower(team, defs, cfgOf(x.game)),
+        r.day, r.plays, r.points, JSON.stringify(opp), x.now, gain, JSON.stringify({ ...opp, my_power: P.teamPower(team, defs, cfgOf(x.game)) })])
       if (!res?.id) continue
       const battle = { id: String(res.id), mode, opponent: oppView(opp), me: team, my_soldiers: soldiers, loss, gain, time: P.BATTLE_SEC[mode] }
       return c.json({ server_now: x.now, pvp: await pvpView(x), battle })

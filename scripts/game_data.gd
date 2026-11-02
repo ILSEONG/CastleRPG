@@ -896,9 +896,58 @@ static func hero_stats(def: Dictionary, level: int, promotion: int, equip = null
 ## 같은 레벨·승급·장비면 SSR > SR > R(레벨 1~70, 승급 0~5, 장비 N~LR 1~60레벨 전부 확인). 서버 rules.ts·guild.ts·guild_war.ts heroPower와 같다.
 const POWER_GRADE := {"UR": 2.8, "SSR": 2.0, "SR": 1.4, "R": 1.0}
 const POWER_RANGED := 2.0
+## 같은 등급 맞춤(2026-11-02 사용자 "같은 등급의 영웅들의 레벨이나 성급이 동일하다고 하면 전투력의 차이는 최대 10이야"):
+## 전투력 = round((그 등급 영웅들의 위 식 평균(레벨·승급) + 장비 HP / 10 + 장비 공격 × 2 × 그 등급 평균(원거리 배율 / 공격 간격)) × 등급 배율)
+##   + 영웅 몫 0~10(그 등급 안 1레벨 점수 순 — 가장 낮은 영웅 0, 가장 높은 영웅 10). 같은 등급·레벨·승급·장비면 차이는 영웅 몫(≤ 10)뿐.
+## 실제 전투 능력치(hero_stats)는 그대로. 서버 rules.powerAt과 같다. 영웅 표에 없는 정의(테스트가 만든 영웅)는 예전 식(power_of).
 static func hero_power(def: Dictionary, level: int, promotion: int, equip = null) -> int:
-	var s := hero_stats(def, level, promotion, equip)
-	return power_of(def, s.hp, s.atk)
+	var eq = equip if equip is Dictionary else (equip_source.equipment_bonus(str(def.get("id", ""))) if equip_source != null else {})
+	var info := _power_info(def)
+	if info.is_empty():
+		var s := hero_stats(def, level, promotion, eq)
+		return power_of(def, s.hp, s.atk)
+	var pm := promote_mult(promotion)
+	var v: float = (level_mult(level, "melee") * pm * info.melee + level_mult(level, "ranged") * pm * info.ranged) / info.n \
+		+ float(eq.get("hp", 0.0)) / 10.0 + float(eq.get("atk", 0.0)) * 2.0 * info.rf / info.n
+	return roundi(v * float(POWER_GRADE.get(str(def.get("grade", "")), 1.0))) + int(info.off)
+
+
+## 최종 능력치(성장·연구·장비 포함 hp·atk, PVP 상대 등)로: 레벨·승급 기본 능력치를 뺀 나머지를 장비처럼 더한다(서버 rules.powerOfStats).
+static func hero_power_of_stats(def: Dictionary, level: int, promotion: int, hp: float, atk: float) -> int:
+	var base := hero_stats(def, level, promotion, {})
+	return hero_power(def, level, promotion, {"hp": hp - base.hp, "atk": atk - base.atk})
+
+
+static var _power_cache := {}  # 영웅 id → {grade, n, melee, ranged, rf, off}(영웅 표를 읽으면 비운다)
+
+
+static func _power_score(d: Dictionary) -> float:
+	return float(d.hp) / 10.0 + float(d.atk) * 2.0 / float(d.atk_interval) * (POWER_RANGED if str(d.get("role", "")) == "ranged" else 1.0)
+
+
+static func _power_info(def: Dictionary) -> Dictionary:
+	if _power_cache.is_empty():
+		var grades := {}
+		for d in heroes():
+			var g := str(d.get("grade", ""))
+			if not grades.has(g):
+				grades[g] = []
+			grades[g].append(d)
+		for g in grades:
+			var list: Array = grades[g]
+			var sc: Array = list.map(func(d): return _power_score(d))
+			var lo: float = sc.min()
+			var hi: float = sc.max()
+			var base := {"grade": g, "n": list.size(), "melee": 0.0, "ranged": 0.0, "rf": 0.0}
+			for i in list.size():
+				base["melee" if str(list[i].get("role", "")) == "melee" else "ranged"] += sc[i]
+				base.rf += (POWER_RANGED if str(list[i].get("role", "")) == "ranged" else 1.0) / float(list[i].atk_interval)
+			for i in list.size():
+				var info := base.duplicate()
+				info.off = roundi(10.0 * (sc[i] - lo) / (hi - lo)) if hi > lo else 0
+				_power_cache[str(list[i].id)] = info
+	var info: Dictionary = _power_cache.get(str(def.get("id", "")), {})
+	return info if not info.is_empty() and info.grade == str(def.get("grade", "")) else {}
 
 
 ## 최종 HP·공격 → 전투력(hero_power의 식).
@@ -1262,6 +1311,7 @@ static func _install(t: Dictionary) -> void:
 	_monsters = t.monsters
 	_stages = t.stages
 	_heroes = t.heroes
+	_power_cache = {}
 	_resources = t.resources
 	_buildings = t.buildings
 	_soldiers = t.soldiers

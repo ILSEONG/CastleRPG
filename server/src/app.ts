@@ -607,8 +607,10 @@ export function createApp(opts: AppOptions) {
 
   async function readGame(): Promise<Game> {
     const [r] = await query(GAME_SQL)
+    const heroes = json(r.heroes) as Record<string, any>[]
+    R.indexPower(heroes) // 같은 등급 전투력 맞춤(rules.powerAt)
     return {
-      monsters: json(r.monsters), stages: json(r.stages), heroes: json(r.heroes),
+      monsters: json(r.monsters), stages: json(r.stages), heroes,
       resources: json(r.resources), buildings: json(r.buildings), soldiers: json(r.soldiers), upgrades: json(r.upgrades),
       config: { ...CONFIG_FALLBACK, ...(json(r.config) as Record<string, string>) },
       dungeons: json(r.dungeons), equip_drop: json(r.equip_drop), research: json(r.research), quests: json(r.quests),

@@ -1,7 +1,7 @@
 // 길드 규칙(순수 함수, 시간 인자). 앱 scripts/guild.gd와 같은 수치·규칙.
 // 길드 경험치·보스 누적 피해 = 실제 길드원이 쌓은 값(guilds.exp·boss_damage) + 가상 길드원 몫(virtualTotals — 길드 seed·생성 시각·지금으로
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
-import { mulberry32, powerOf, resetAt, resetDay } from './rules.ts'
+import { mulberry32, powerAt, resetAt, resetDay } from './rules.ts'
 import { txt } from './texts.ts'
 
 // 길드 레벨은 끝이 없다(2026-10-06 사용자: "길드 레벨은 무제한"). 레벨마다 영웅 공격력·체력 +BUFF_PER_LEVEL %.
@@ -333,11 +333,7 @@ export function teamPower(deploy: string[], heroes: Record<string, { level: numb
     const def = defs.find((h) => h.id === id)
     const h = heroes[id]
     if (!def || !h) continue
-    const lv = 1 + cfg(def.role === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (h.level - 1)
-    let pm = 1
-    for (let i = 0; i < Math.min(h.promotion, 5); i++) pm *= cfg('promote_mult')
-    const eq = equip[id] ?? { hp: 0, atk: 0 }
-    out += powerOf(def, def.hp * lv * pm + eq.hp, def.atk * lv * pm + eq.atk)
+    out += powerAt(def, h.level, h.promotion, equip[id] ?? { hp: 0, atk: 0 }, cfg)
   }
   return out
 }

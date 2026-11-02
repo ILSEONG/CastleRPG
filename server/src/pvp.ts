@@ -3,7 +3,7 @@
 // 상대 = 그 플레이어가 미리 정한 방어팀(pvp_stats.defense). 모드마다 하루 PLAYS번, 포인트·등급(브론즈~챌린저)이 따로다.
 // 시작에 판 하나를 쓰고 패배로 먼저 적어 둔다(도중에 나가도 패배) — 승리로 끝나면 바로잡는다. 전투는 앱이 돌리고 서버는 결과가 그럴듯한지만 본다.
 // 코인(PVP 코인) 하나를 두 모드가 함께 벌고 PVP 상점에서 쓴다.
-import { MAX_GAME_SPEED, mulberry32, powerOf, type StatLimit } from './rules.ts'
+import { MAX_GAME_SPEED, mulberry32, powerOfStats, type StatLimit } from './rules.ts'
 import { mix, nickname } from './guild.ts'
 import { capStats, fitHero, heroStats } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
@@ -60,10 +60,10 @@ export interface TeamHero { hero: string; level: number; promotion: number; hp: 
 export interface Soldiers { [key: string]: number } // "병종:티어" → 수
 export interface Opponent { kind: 'player' | 'bot'; id?: string; name: string; points: number; power: number; heroes: TeamHero[]; soldiers: Soldiers }
 
-export const teamPower = (team: TeamHero[], defs: HeroDef[]) =>
+export const teamPower = (team: TeamHero[], defs: HeroDef[], cfg: (k: string) => number) =>
   Math.round(team.reduce((a, h) => {
     const d = defs.find((x) => x.id === h.hero)
-    return a + (d ? powerOf(d, h.hp, h.atk) : 0)
+    return a + (d ? powerOfStats(d, h.level, h.promotion, h.hp, h.atk, cfg) : 0)
   }, 0))
 
 // 보유 병사 → 총력전 병사(높은 티어부터, 같으면 병종 이름 순, 합 SOLDIER_CAP).
@@ -124,7 +124,7 @@ export function botTeam(seed: number, mode: Mode, base: BaseHero[], points: numb
       soldiers[key] = (soldiers[key] ?? 0) + n
     }
   }
-  return { kind: 'bot', name: nickname(mix(seed, 11)), points: Math.max(0, Math.round(points + (r() - 0.5) * 60)), power: teamPower(team, heroes),
+  return { kind: 'bot', name: nickname(mix(seed, 11)), points: Math.max(0, Math.round(points + (r() - 0.5) * 60)), power: teamPower(team, heroes, cfg),
     heroes: team, soldiers }
 }
 
