@@ -9,6 +9,7 @@ extends Node
 
 const EconomyScript := preload("res://scripts/economy.gd")
 const ShopItems := preload("res://scripts/shop_items.gd")
+const UiKit := preload("res://scripts/ui_kit.gd")
 const IapItems := preload("res://scripts/iap_items.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
@@ -219,7 +220,7 @@ func _shop() -> void:
 	await _frames(3)
 	# 일일 한도 3: 골드 주머니 ×3 → 매진 → 4번째 거절
 	for i in 3:
-		await _shop_buy(sp, "d_pouch_gold")
+		await _shop_buy(sp, "d_pouch_gold", i == 0)  # 첫 번은 빠른 두 번 누름: 하나만 산다(남은 3 → 2)
 	_check(Economy.shop_left("d_pouch_gold") == 0 and Economy.shop_block("d_pouch_gold") == "sold_out" and sp.buttons["buy:d_pouch_gold"].disabled,
 		"daily limit 3: sold out after three", str(Economy.shop_left("d_pouch_gold")))
 	var dia := Economy.diamonds
@@ -245,6 +246,7 @@ func _shop() -> void:
 	r = await _post_raw("/v1/shop/buy", {"id": "a_dia", "n": 0})
 	_check(not r[0] and r[1] == "ad_required", "server: 409 ad_required without the ad", str(r))
 	dia = Economy.diamonds
+	UiKit._tap_at.clear()
 	sp.buttons["buy:a_dia"].pressed.emit()
 	await _frames(3)
 	_check(sp.ad_player.visible, "the ad screen opens", "")
@@ -253,6 +255,7 @@ func _shop() -> void:
 	await _wait_sec(AdPlayer.SECONDS + 0.5)
 	_check(Economy.diamonds == dia and Economy.shop_left("a_dia") == 5, "closing the ad early gives nothing", str([dia, Economy.diamonds]))
 	var before := _cli()
+	UiKit._tap_at.clear()
 	sp.buttons["buy:a_dia"].pressed.emit()
 	_check(await _wait_until(func(): return Economy.shop_left("a_dia") == 4, AdPlayer.SECONDS + 3.0), "watching the ad to the end buys it", "")
 	var pred := _cli()
@@ -267,7 +270,9 @@ func _shop() -> void:
 
 
 ## 창 버튼으로 하나 사고 예측 = 서버 = 앱인지 본다.
-func _shop_buy(sp, id: String) -> void:
+## double = 빠른 두 번 누름(같은 프레임에 두 번) — 한 번만 사야 한다(UiKit.tap_once, 2026-11-02).
+func _shop_buy(sp, id: String, double := false) -> void:
+	UiKit._tap_at.clear()  # 앞 누름과 떨어진 새 누름
 	var x := ShopItems.find(id)
 	var before := _cli()
 	var left := Economy.shop_left(id)
@@ -276,6 +281,8 @@ func _shop_buy(sp, id: String) -> void:
 	if not sp.buttons.has(key):
 		return
 	sp.buttons[key].pressed.emit()
+	if double:
+		sp.buttons[key].pressed.emit()
 	var pred := _cli()
 	var dia_cost := int(x.price) if x.currency == "diamonds" else 0
 	_check(Economy.shop_left(id) == left - 1 and pred.diamonds == before.diamonds - dia_cost + int(x.give.get("diamonds", 0))

@@ -427,6 +427,8 @@ func _build_home() -> void:
 		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		b.disabled = why != ""
 		b.pressed.connect(func():
+			if not UiKit.tap_once("guild_donate:" + kind):
+				return  # 빠른 두 번 누름(한 번만 기부한다)
 			if Guild.donate(kind):
 				Economy.notice.emit(Lang.t("guild_panel.build_home_14") % [d.name, d.coins]))
 		r.add_child(b)
@@ -575,6 +577,8 @@ func _build_shop() -> void:
 		b.disabled = Guild.buy_block(it.id) != ""
 		var id: String = it.id
 		b.pressed.connect(func():
+			if not UiKit.tap_once("guild_shop:" + id):
+				return  # 빠른 두 번 누름(한 번만 산다)
 			var got := Guild.buy(id)
 			if got != "":
 				Economy.notice.emit(got))
