@@ -79,6 +79,7 @@ var _uid := 100  # 보스 = 100, 졸개 = 101부터(영웅·병사는 1부터)
 var _events: Array = []
 var _zones: Array = []  # [중심, 반경, 끝나는 clock]
 var _snap_cd := 0.0
+var _mine_down := false  # 내 영웅이 쓰러져 있다(일어나면 다시 고른다)
 var _revive: Array = []  # [영웅, 남은 초]
 var _wave_cd := 2.0
 var _ko_left := -1.0
@@ -127,6 +128,7 @@ func _ready() -> void:
 		picker.camera = camera
 		picker.arena_r = FIELD_R - 1.0
 		add_child(picker)
+		_pick_mine()  # 처음부터 내 영웅이 골라진 채(사용자 2026-11-02 "파티던전에서 기본적으로 내 영웅이 클릭되어있는 상태로")
 	_freeze(true)
 	rig.follow(self, FOLLOW_MIN, CAMERA_SIZE)
 	hud = HudScript.new()
@@ -385,6 +387,7 @@ func _freeze(on: bool) -> void:
 
 
 func _process(delta: float) -> void:
+	_keep_mine_picked()
 	if role == "puppet":
 		if phase != Phase.RESULT:
 			_relay_my_commands()
@@ -433,6 +436,29 @@ func _process(delta: float) -> void:
 				hud.flash(Lang.t("party_battle.process"), 2.0, BAD)
 			elif clock >= duration:
 				_end(false, "time")
+
+
+## 내 영웅을 고른다(리치 — 영웅을 조종하는 파티만).
+func _pick_mine() -> void:
+	if picker == null:
+		return
+	for u in heroes:
+		if u.mine and is_instance_valid(u) and u.is_alive():
+			picker._select(u)
+			return
+
+
+## 내 영웅이 쓰러졌다 일어나면 다시 골라 둔다(쓰러지면 선택이 풀린다). 살아 있는 동안 내가 푼 선택은 그대로.
+func _keep_mine_picked() -> void:
+	if picker == null:
+		return
+	var down := false
+	for u in heroes:
+		if u.mine and is_instance_valid(u):
+			down = not u.is_alive()
+	if _mine_down and not down:
+		_pick_mine()
+	_mine_down = down
 
 
 func _begin_fight() -> void:
