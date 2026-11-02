@@ -139,6 +139,9 @@ func _run() -> void:
 	#     성 안 몬스터는 영역이 같아도 성벽 위 궁수를 치지 못한다
 	_clear_monsters()
 	await _frames(1)
+	var def0: Dictionary = archer.def
+	archer.def = def0.duplicate()
+	archer.def.range = 12.0  # 사거리 15 m(2026-11-02)면 성채 앞에 선 보스(약 14.9 m)가 끝까지 사거리 안이다 — 이 점검만 예전 12 m로
 	var reach: float = archer.def.range + 1.0
 	_g = _spawn("epic_boss", 1, Vector3(apos.x - 2.0, 0, apos.z))
 	await _wait_until(func(): return not _alive(_g) or Formation.flat_distance(_g.global_position, apos) > reach, 8.0)
@@ -146,6 +149,7 @@ func _run() -> void:
 	moved = archer.global_position.distance_to(apos)
 	_check(bd2 > reach and moved < 0.05 and archer.hp == ahp, "(d) wall-top archer does not follow a target walking out of range, and the inside boss cannot hit it",
 		"boss %.2f m away, archer moved %.2f to %s, hp %.0f -> %.0f" % [bd2, moved, archer.global_position, ahp, archer.hp])
+	archer.def = def0
 
 	# (e) 북쪽 면 소속이지만 동쪽 바깥에 놓인 grunt는 표적이 없으면 동쪽(1) 성문으로 재조준한다
 	_clear_monsters()
@@ -2357,10 +2361,11 @@ func _dk_cases() -> void:
 		"(DG3) death knight charge: after a lane warning it runs to the farthest hero; heroes on the lane are hit and stunned, others not",
 		"charges=%d stunned=%s lost=%.1f dist=%.2f" % [dk.charges, d.heroes.map(func(h): return h.is_stunned()), far.hp_max - far.hp, Formation.flat_distance(dk.global_position, far.global_position)])
 	var stun0: float = far._stun_t
+	var atk0: int = far._attacks
 	far.set_process(true)
 	await _frames(3)
 	far.set_process(false)
-	_check(far._stun_t < stun0 and far._attacks == 0, "(DG3) a stunned hero does not act while the stun runs down", "stun %.2f -> %.2f" % [stun0, far._stun_t])
+	_check(far._stun_t < stun0 and far._attacks == atk0, "(DG3) a stunned hero does not act while the stun runs down", "stun %.2f -> %.2f" % [stun0, far._stun_t])
 	Economy.unequip("hans", "top")
 	Economy.unequip("hans", "weapon")
 	Economy.unequip("hans", "shoes")
