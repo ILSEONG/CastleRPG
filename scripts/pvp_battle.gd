@@ -39,7 +39,7 @@ const FIELD_R := {"duel": ArenaKit.TEMPLE_FIGHT_R + DUEL_GROW_Z - 0.5, "total": 
 const FIELD_SIDE := {"duel": 14.0, "total": ArenaKit.ARENA_SIDE}  # 화면 가로(spot v)로 이만큼 안(결투 = 기둥 줄 안, 총력전 = 결투장 양옆 벽)
 const CAMERA_SIZE := {"duel": 30.0, "total": 28.0}  # 가장 먼 줌(결투는 넓어진 무대만큼 24 → 30)
 const FOLLOW_MIN := {"duel": 18.0, "total": 20.0}  # 가장 가까운 줌(싸움 따라가기, camera_rig.follow)
-const FRONT_D := {"duel": 9.0, "total": 16.0}  # 가운데에서 영웅 앞줄까지(m). 두 팀 사이를 넉넉히(예전 4.5/8의 2배)
+const FRONT_D := {"duel": 12.0, "total": 17.5}  # 가운데에서 영웅 앞줄까지(m). 사용자 2026-11-02 "처음 시작할 때 상대랑 좀 더 멀게": 9/16 → 12/17.5(뒷줄 14.6 m·20.1 m, 경기장 20·22 m 안)
 const ROW_GAP := 2.6  # 앞줄 ↔ 뒷줄
 const SIDE_GAP := 2.2  # 줄 안 간격
 const SOLDIER_ROW := 7  # 병사 한 줄
@@ -50,10 +50,8 @@ const SOLDIER_GAP := 1.4
 const TARGET_SEC := {"duel": 40.0, "total": 55.0}
 const TTK_CALIB := {"duel": 1.2, "total": 1.35}
 const HP_MULT_MAX := 30.0
-## 처치 알림·결정타(2026-10-07 전투 재미): 처치 멘트는 kill_line(아래)(연속 처치 알림은 없음 — 사용자 2026-10-07 "더블~펜타 킬은 하지마")(초록 = 우리가, 빨강 = 우리 영웅이 쓰러짐). 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과.
+## 결정타(2026-10-07): 마지막 영웅이 쓰러지면 슬로모션으로 KO_SEC게임 초 보여 준 뒤 결과. 처치·쓰러짐 멘트와 결정타 띠는 없앴다(사용자 2026-11-02).
 const KO_SEC := 0.45
-const GOOD := Color(0.55, 1.0, 0.55)
-const BAD := Color(1.0, 0.5, 0.45)
 const SOLDIER_FRONT := 3.3  # 영웅 앞줄 → 병사 첫 줄
 const SOLDIER_ROW_GAP := 2.25  # 병사 줄 사이(가운데 쪽으로)
 
@@ -77,7 +75,6 @@ var hp_mult := 1.0  # 이 판의 체력 배율(_pick_hp_mult)
 var ttk_est := 0.0  # 배율 전 어림 전투 시간(초, 시뮬 보정용)
 var force_hp_mult := 0.0
 var rig
-var _kills := 0
 var _ko_left := -1.0  # 마지막 영웅이 쓰러진 뒤 결과까지 남은 게임 초(음수 = 아직)
 var _ko := []  # [win, reason]  # 테스트·시뮬: 0보다 크면 이 배율을 그대로 쓴다
 
@@ -280,8 +277,7 @@ func _process(delta: float) -> void:
 				_ko_left = KO_SEC
 				if rig != null:
 					rig.slowmo()
-				if hud != null:
-					hud.flash(Lang.t("pvp_battle.process") if _ko[0] else Lang.t("pvp_battle.process_2"), 1.6, GOOD if _ko[0] else BAD)
+				# 결정타 띠("결정타! 승리!"·"전멸… 패배")도 없앴다 — 바로 뒤 결과 창과 승패가 두 번 나왔다(사용자 2026-11-02)
 			elif clock >= duration:
 				_end(team_hp(0) > team_hp(1), "time")
 
@@ -312,41 +308,10 @@ func set_auto() -> void:
 		u.commanded = false
 
 
-func _on_fell(u) -> void:
+func _on_fell(_u) -> void:
 	if hud != null:
 		hud.refresh()
-	if phase != Phase.FIGHT or _ko_left >= 0.0 or alive(u.team) == 0:
-		return  # 마지막 처치는 결정타 띠가 맡는다
-	var killer: int = 1 - int(u.team)
-	_kills += 1
-	var text := kill_line(str(u.def.get("name", "")), killer == 0, _kills == 1, alive(u.team))
-	if hud != null:
-		hud.flash(text, 1.4, GOOD if killer == 0 else BAD)
-
-
-## 처치 멘트(2026-10-14 사용자 "처치 멘트 좀 더 멋있게"): 같은 줄이 연달아 나오지 않게 무작위. 첫 처치는 선제 멘트,
-## 상대가 한 명 남으면 끝을 알리는 줄을 덧붙인다(연속 처치 집계는 여전히 없음).
-static var KILL_LINES := [Lang.t("pvp_battle.kill_lines"), Lang.t("pvp_battle.kill_lines_2"), Lang.t("pvp_battle.kill_lines_3"), Lang.t("pvp_battle.kill_lines_4"), Lang.t("pvp_battle.kill_lines_5")]
-static var FALL_LINES := [Lang.t("pvp_battle.fall_lines"), Lang.t("pvp_battle.fall_lines_2"), Lang.t("pvp_battle.fall_lines_3"), Lang.t("pvp_battle.fall_lines_4")]
-static var FIRST_KILL := Lang.t("pvp_battle.first_kill")
-static var FIRST_FALL := Lang.t("pvp_battle.first_fall")
-var _last_line := -1
-
-
-func kill_line(name: String, ours: bool, first: bool, left: int) -> String:
-	var text: String
-	if first:
-		text = (FIRST_KILL if ours else FIRST_FALL) % name
-	else:
-		var pool: Array = KILL_LINES if ours else FALL_LINES
-		var i := randi() % pool.size()
-		if i == _last_line:
-			i = (i + 1) % pool.size()
-		_last_line = i
-		text = pool[i] % name
-	if left == 1:
-		text += Lang.t("pvp_battle.kill_line") if ours else Lang.t("pvp_battle.kill_line_2")
-	return text
+	# 처치·쓰러짐 멘트 없음(사용자 2026-11-02 "적을 쓰러뜨리거나 우리 영웅이 쓰러질 때 멘트 그냥 없애줘")
 
 
 func _end(win: bool, reason: String) -> void:

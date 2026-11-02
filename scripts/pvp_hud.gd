@@ -216,9 +216,14 @@ func _build_result(root: Control) -> void:
 	box.add_child(ok)
 
 
+var _shown_win := false
+
+
 func show_result(r: Dictionary) -> void:
 	var win: bool = r.get("win", false)
-	result_title.play(Lang.t("pvp_hud.show_result") if win else Lang.t("pvp_hud.show_result_2"), "win" if win else "lose")
+	if not result_layer.visible or win != _shown_win:  # 서버 결과로 다시 채울 때(같은 승패)는 리본 연출을 다시 틀지 않는다 — 결과 창이 두 번 뜨는 것처럼 보였다(사용자 2026-11-02)
+		_shown_win = win
+		result_title.play(Lang.t("pvp_hud.show_result") if win else Lang.t("pvp_hud.show_result_2"), "win" if win else "lose")
 	var why := ""
 	match str(r.get("reason", "")):
 		"time":
