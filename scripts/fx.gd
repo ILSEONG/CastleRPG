@@ -715,6 +715,16 @@ static func zone(parent: Node, pos: Vector3, color: Color, radius: float, sec: f
 	tw.tween_callback(mi.queue_free)
 	_fade(mi, 0.25, 0.25 + n * 0.5)
 	_wave(parent, pos, color.lightened(0.2), radius * 1.05, 0.3, 0.0, "zone_wave")
+	# 2026-11-02: 범위 바닥에 속성 색 룬 마법진(어두운 바탕 + 룬 글자 고리)이 지대 동안 돈다 — 밋밋한 6각 판만으로는 범위·속성이 안 읽혔다
+	var sv := _skill_vfx()
+	var sg: MeshInstance3D = sv.sigil(parent, pos + Vector3(0, 0.08, 0), color, radius * 1.02, 0.25,
+		{"tornado": 3, "poison_cloud": 5, "sanctuary": 8}.get(style, 6), {"tornado": 2.5, "sanctuary": 0.6}.get(style, 1.0), "zone_sigil")
+	if sg != null:
+		var ts: Tween = sv._tw(sg)
+		ts.tween_method(func(v: float): sg.set_instance_shader_parameter("grow", v), 0.0, 1.0, 0.25).set_ease(Tween.EASE_OUT)
+		ts.tween_interval(maxf(sec - 0.25, 0.1))
+		ts.tween_method(sv._sigil_fader(sg), 1.0, 0.0, 0.35)
+		ts.tween_callback(sv._give.bind(sg))
 	match style:
 		"tornado":
 			var f := _spawn(parent, _mesh("funnel", color), pos, "funnel", soft_material())
@@ -749,15 +759,8 @@ static func zone(parent: Node, pos: Vector3, color: Color, radius: float, sec: f
 				gust.orbit_velocity_max = 1.8
 				gust.initial_velocity_min = 0.5
 				gust.initial_velocity_max = 1.0
-		"inferno":
-			var fl := _spawn(parent, _mesh("flames", color), pos, "flames", fire_material())
-			if fl != null:
-				fl.scale = Vector3(radius * 0.85, 0.05, radius * 0.85)
-				var tf := fl.create_tween()
-				tf.tween_property(fl, "scale", Vector3(radius * 0.85, 1.0 + 0.35 * tier, radius * 0.85), 0.25).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-				tf.tween_interval(maxf(sec - 0.5, 0.0))
-				tf.tween_property(fl, "scale", Vector3(radius * 0.9, 0.05, radius * 0.9), 0.25)
-				tf.tween_callback(fl.queue_free)
+		"inferno":  # 2026-11-02: 딱딱한 주황 뿔 → 툰 불꽃 입자가 지대 위로 계속 피어오른다
+			toon_fire(parent, pos + Vector3(0, 0.25, 0), radius * 0.75, sec, 14.0 * radius * (1.0 + 0.3 * tier), 1.0 + 0.4 * radius, "flames")
 			_zone_stream(parent, pos, color.lightened(0.25), radius, sec, "ember", 18.0)
 		"blizzard":
 			var sn := _zone_stream(parent, pos + Vector3(0, 3.0, 0), Color.WHITE, radius, sec, "flake", 30.0)
@@ -783,6 +786,24 @@ static func zone(parent: Node, pos: Vector3, color: Color, radius: float, sec: f
 			_zone_stream(parent, pos, color.lightened(0.3), radius, sec, "mote", 10.0)
 		"sanctuary":
 			_zone_stream(parent, pos, color.lightened(0.3), radius, sec, "mote", 14.0)
+
+
+## 툰 불꽃(2026-11-02, SkillVfx.toon_particles "fire"): pos 둘레 반지름 r 구에서 sec초 동안 초당 rate개 셀 셰이딩 불꽃 덩어리가 피어올라
+## 붉게 식으며 구멍 나듯 사라진다. k = 덩어리 크기 배율. 다 뿜으면 남은 덩어리가 사라진 뒤 지운다. 상한이면 null.
+static func toon_fire(parent: Node, pos: Vector3, r: float, sec: float, rate: float, k := 1.0, tag := "toon_fire") -> CPUParticles3D:
+	if full(parent):
+		return null
+	var p: CPUParticles3D = _skill_vfx().toon_particles("fire", r, rate, k)
+	p.set_meta("fx", tag)
+	parent.add_child(p)
+	track(p)
+	p.global_position = pos
+	var tw := p.create_tween()
+	tw.tween_interval(sec)
+	tw.tween_callback(func(): p.emitting = false)
+	tw.tween_interval(p.lifetime * 1.4)
+	tw.tween_callback(p.queue_free)
+	return p
 
 
 ## 지대 안에서 sec초 동안 뿜는 입자(반경 radius 원판에서): 초당 rate개.
@@ -1360,13 +1381,13 @@ static func breath(parent: Node, from: Vector3, dir: Vector3, length: float, col
 		fire.damping_min = length * 0.8
 		fire.damping_max = length * 1.2
 		fire.explosiveness = 0.35
-		fire.scale_amount_min = 0.9
-		fire.scale_amount_max = 1.8
-		var ramp := Gradient.new()
-		ramp.set_color(0, Color(1.3, 1.1, 0.6, 1.0))
-		ramp.add_point(0.35, Color(1.1, 0.5, 0.12, 0.9))
-		ramp.set_color(ramp.get_point_count() - 1, Color(0.6, 0.1, 0.05, 0.0))
-		fire.color_ramp = ramp
+		var tf: CPUParticles3D = _skill_vfx().toon_particles("fire", 0.1, 1.0)  # 2026-11-02: 납작한 가산 판 → 툰 불꽃 덩어리(테두리·하얀 심, 식으며 구멍 나듯 사라진다)
+		fire.mesh = tf.mesh
+		fire.material_override = tf.material_override
+		fire.color_ramp = tf.color_ramp
+		tf.free()
+		fire.scale_amount_min = 0.22 + 0.04 * tier
+		fire.scale_amount_max = 0.42 + 0.06 * tier
 		fire.color = Color.WHITE
 		var curve := Curve.new()
 		curve.add_point(Vector2(0, 0.4))
@@ -1378,17 +1399,9 @@ static func breath(parent: Node, from: Vector3, dir: Vector3, length: float, col
 		flat = Vector3.FORWARD
 	for i in 3:  # 길을 따라 솟는 불꽃 혀(가까운 쪽부터)
 		var at := ground_from + flat * length * (0.35 + 0.25 * i)
-		var fl := _spawn(parent, _mesh("flames", color), at, "breath_flames", fire_material())
-		if fl == null:
-			break
 		var w := 0.6 + 0.45 * i
-		fl.scale = Vector3(w, 0.05, w)
-		var tf := fl.create_tween()
-		tf.tween_interval(0.05 * i)
-		tf.tween_property(fl, "scale", Vector3(w, 1.0 + 0.3 * tier, w), 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		tf.tween_interval(0.3)
-		tf.tween_property(fl, "scale", Vector3(w * 1.1, 0.05, w * 1.1), 0.18)
-		tf.tween_callback(fl.queue_free)
+		if toon_fire(parent, at + Vector3(0, 0.2, 0), w * 0.6, 0.45, 30.0 * w, 1.4 + 0.5 * w, "breath_flames") == null:  # 2026-11-02 툰 불꽃
+			break
 	var end := ground_from + flat * length * 0.85
 	halo(parent, end + Vector3(0, 0.6, 0), color, 2.6 + 0.6 * tier, 0.45, 1.2, "breath_heat")
 	var sm := _burst(parent, end + Vector3(0, 0.5, 0), Color(0.3, 0.27, 0.25), "smoke", 6, 0.9, "breath_smoke")
@@ -1549,14 +1562,7 @@ static func proc_burst(parent: Node, pos: Vector3, color: Color, radius: float, 
 			_surge(parent, _mesh("rays", color), pos, "rays", radius * 0.7, 1.2, 0.4, glow_material())
 			_flare(parent, _mesh("burst", color), pos + Vector3(0, 0.08, 0), "burst", radius * 0.9, 0.3)
 		"magma":
-			var fl := _spawn(parent, _mesh("flames", Color(0.95, 0.3, 0.05)), pos, "magma", fire_material())
-			if fl != null:
-				fl.scale = Vector3(radius * 0.7, 0.05, radius * 0.7)
-				var tf := fl.create_tween()
-				tf.tween_property(fl, "scale", Vector3(radius * 0.7, 1.2, radius * 0.7), 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-				tf.tween_interval(0.25)
-				tf.tween_property(fl, "scale", Vector3(radius * 0.75, 0.05, radius * 0.75), 0.18)
-				tf.tween_callback(fl.queue_free)
+			toon_fire(parent, pos + Vector3(0, 0.2, 0), radius * 0.5, 0.35, 40.0 * radius, 1.2 + 0.5 * radius, "magma")  # 2026-11-02 툰 용암 불꽃
 			var lava := _spawn(parent, _mesh("zone", Color(1.0, 0.4, 0.08)), pos + Vector3(0, 0.05, 0), "magma_pool", soft_material())
 			if lava != null:
 				lava.scale = Vector3(radius * 0.3, 1.0, radius * 0.3)
@@ -1725,9 +1731,14 @@ static func _motes(parent: Node, pos: Vector3, color: Color, r: float, rise: flo
 
 ## 바닥 6각 파동(가산 빛 충격파): delay초 뒤 radius까지 sec초에 퍼지며 뒤쪽 절반에서 옅어진다.
 static func _wave(parent: Node, pos: Vector3, color: Color, radius: float, sec: float, delay := 0.0, tag := "wave") -> void:
-	var mi := _spawn(parent, _mesh("shock", color), pos + Vector3(0, 0.07, 0), tag, glow_material())
+	# 2026-11-02: 노란 가산 6각 고리(밝은 풀밭에서 뿌옇게 번졌다) → 툰 충격파 고리(끊긴 빛 조각, 안쪽이 하얗게 탄다 — SkillVfx.boom과 같은 모양)
+	var sv := _skill_vfx()
+	var mi := _spawn(parent, sv._mesh("segring"), pos + Vector3(0, 0.07, 0), tag, sv._toon_mat(0.0))
 	if mi == null:
 		return
+	mi.set_instance_shader_parameter("tint", color if color.s < 0.15 else Color.from_hsv(color.h, maxf(color.s, 0.6), minf(color.v, 0.95)))
+	mi.set_instance_shader_parameter("hot", color.lightened(0.45))
+	mi.rotation.y = randf() * TAU
 	mi.scale = Vector3(0.2, 1.0, 0.2)
 	var tw := mi.create_tween()
 	if delay > 0.0:
