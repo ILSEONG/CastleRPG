@@ -28,6 +28,20 @@ const GRADE_COLORS := Art.GRADE_COLORS  # 스펙 §3.1. 값은 Art 한 곳에만
 const PRESS_SHIFT := 2.0  # 눌린 버튼 내용이 아래로 내려가는 px
 const BUTTON_PAD_V := 2.0  # 버튼 내용 위·아래 여백. 눌림은 위 + PRESS_SHIFT, 아래 − PRESS_SHIFT(음수는 "기본값"이라 쓰지 않는다)
 const CARD_OUTLINE_W := 2.0
+
+## 빠른 두 번 누름 막기(2026-11-02 사용자 "버튼을 빠르게 두번 누르면 두번 재화가 소모되는 것들이 있는지 조사해"): 누를 때마다 사는 버튼
+## (상점·PVP 상점·길드 상점·길드 기부·파견 다이아 새로고침)은 같은 key가 DOUBLE_TAP_SEC 안에 다시 오면 false — 두 번째 누름은 버린다.
+## 레벨업·강화처럼 누를 때마다 한 번씩 오르는 것이 보이는 버튼은 막지 않는다(연타로 올린다).
+const DOUBLE_TAP_SEC := 0.5
+static var _tap_at := {}
+
+
+static func tap_once(key: String) -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	if _tap_at.has(key) and now - float(_tap_at[key]) < DOUBLE_TAP_SEC:
+		return false
+	_tap_at[key] = now
+	return true
 const CARD_GEM_R := 12.0  # 카드 위쪽 가운데 등급 보석
 
 static var _cache := {}

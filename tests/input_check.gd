@@ -77,6 +77,12 @@ func _run() -> void:
 	_picker._select(null)
 	await _tap(_hero_px(archer))
 	_check(_picker.selected == archer, "(a) mouse tap on a hero selects it", "selected=%s" % [_name(_picker.selected)])
+	# (a2) 넉넉한 영웅 탭(사용자 2026-11-02 "영웅을 선택할때 너무 엄격해"): 머리 위·발 옆 40 px를 눌러도 그 영웅
+	for off in [Vector2(0, -40), Vector2(40, 0)]:
+		_picker._select(null)
+		var head := _camera.unproject_position(archer.global_position + Vector3(0, 1.8, 0)) if off.y < 0 else _camera.unproject_position(archer.global_position)
+		await _tap(head + off)
+		_check(_picker.selected == archer, "(a2) tapping %s px off the hero's %s still selects it" % [off, "head" if off.y < 0 else "feet"], "selected=%s" % [_name(_picker.selected)])
 
 	# (b) 누른 채 12px 넘게 갔다가 제자리로 돌아와 떼기 → 선택도 명령도 아님
 	_picker._select(null)
@@ -92,8 +98,8 @@ func _run() -> void:
 	#     HERO_TAP_PX 밖이라 전사 쪽을 누른다 — 성문 상자 윗면은 성문 위 성벽(2026-10-25, (d2))이라 옆면에서
 	_picker._select(null)
 	await _tap(_hero_px(archer))
-	var gate := _gate_face_px(0, _hero_px(warrior), PickerScript.HERO_TAP_PRECISE_PX + 2.0)  # 성문 옆면(윗면은 성문 위 성벽 — 2026-10-25) 중 전사에 가까운 곳(전사를 바로 누른 건 아닌)
-	var warrior_d := _hero_px(warrior).distance_to(gate)
+	var gate := _gate_face_px(0, warrior, PickerScript.HERO_TAP_PRECISE_PX + 2.0)  # 성문 옆면(윗면은 성문 위 성벽 — 2026-10-25) 중 전사에 가까운 곳(전사를 바로 누른 건 아닌)
+	var warrior_d: float = _picker.hero_tap_dist(warrior, gate)
 	_check(warrior_d <= PickerScript.HERO_TAP_PX, "(c) precondition: warrior within HERO_TAP_PX of the gate's outer face", "d=%.1f" % warrior_d)
 	await _tap(gate)
 	_check(_picker.selected == archer and archer.side == 0 and archer.post == Formation.POST_GATE,
@@ -342,6 +348,10 @@ func _run() -> void:
 	# (q) 창이 열린 동안 드래그는 카메라를 못 움직이고, 배경(바닥 위) 탭은 영웅을 못 움직이고 창만 닫는다
 	var cam_pos: Vector3 = rig.position
 	var bg := Vector2(30, 700)
+	for y in range(700, 1100, 20):  # 영웅 탭 범위(48 px, 2026-11-02) 밖 왼쪽 바닥
+		if _open_ground(Vector2(30, y)) and not panel.dialog.get_global_rect().has_point(Vector2(30, y)):
+			bg = Vector2(30, y)
+			break
 	_check(_open_ground(bg) and panel.dialog.get_global_rect().has_point(bg) == false, "(q) precondition: backdrop point is open ground outside the dialog", "px=%s" % bg)
 	var dp: Vector2 = panel.dialog.get_global_rect().position + Vector2(300, 20)  # 창 안에서 시작한 드래그(배경 누름은 닫기)
 	_mouse_button(dp, true)
@@ -974,17 +984,19 @@ func _gate_px(side: int, outer := false) -> Vector2:
 	return _camera.unproject_position(Formation.gate_position(half, side) + face + Vector3(0, Balance.WALL_H / 2.0, 0))
 
 
-## 성문 탭 상자의 옆면(윗면 아래 — 성문 앞 명령)이 걸리는 화면 점 중 near에서 min_d 밖으로 가장 가까운 것(2 px 격자).
-func _gate_face_px(side: int, near: Vector2, min_d := 0.0) -> Vector2:
+## 성문 탭 상자의 옆면(윗면 아래 — 성문 앞 명령)이 걸리는 화면 점 중 영웅 몸에서 min_d 밖으로 가장 가까운 것(2 px 격자).
+func _gate_face_px(side: int, hero, min_d := 0.0) -> Vector2:
 	var best := Vector2.INF
+	var best_hd := INF
 	var c := _gate_px(side)
 	for dx in range(-80, 81, 2):
 		for dy in range(-80, 81, 2):
 			var px := c + Vector2(dx, dy)
 			var hit: Dictionary = _picker._pick(px, PickerScript.LAYER_GATE)
 			if not hit.is_empty() and int(hit.collider.get_meta("side")) == side and hit.position.y < Balance.WALL_H \
-					and px.distance_to(near) >= min_d and px.distance_to(near) < best.distance_to(near):
+					and _picker.hero_tap_dist(hero, px) >= min_d and _picker.hero_tap_dist(hero, px) < best_hd:
 				best = px
+				best_hd = _picker.hero_tap_dist(hero, px)
 	return best
 
 

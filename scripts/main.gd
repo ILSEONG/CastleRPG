@@ -258,6 +258,7 @@ func _build_world() -> void:
 	build_btn.panel = build_list
 	add_child(build_btn)
 	build_list.anchor = build_btn  # 버튼 오른쪽에서 펼쳐진다
+	build_list.side_menu = side_menu  # [메뉴]와 서로 겹치지 않게
 	card.build_button = build_btn  # 가이드 건설 미션 화살표: 자리를 안 잡은 공터면 [건설] 버튼을 가리킨다
 	var speed = preload("res://scripts/speed_button.gd").new()
 	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게, 방치 중엔 숨김)  # 왼쪽 아래([메뉴]와 같은 높이) 배속 x1 → x1.5 → x2(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)

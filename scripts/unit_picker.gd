@@ -28,8 +28,10 @@ const LAYER_WALL := 8
 const LAYER_TAP := 16  # 건물 탭 판정체(buildings.gd)
 const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — 건물보다 먼저 본다(앞쪽 벌목장·채석장 상자에 가리지 않게)
 const TAP_MAX_PX := 12.0
-const HERO_TAP_PX := 32.0  # 화면(논리 720px 폭 기준)에서 영웅 중심까지 이 거리 안이면 그 영웅. 줌과 무관
-const HERO_TAP_PRECISE_PX := 12.0  # 영웅 선택 중에는 이만큼 가까워야 성문·성벽보다 영웅이 먼저
+const HERO_TAP_PX := 48.0  # 화면(논리 720px 폭 기준)에서 영웅 몸(발~머리 세로줄)까지 이 거리 안이면 그 영웅. 줌과 무관(사용자 2026-11-02 "너무 엄격해" — 예전 32 px, 몸 가운데 한 점)
+const HERO_TAP_PRECISE_PX := 24.0  # 영웅 선택 중에는 이만큼 가까워야 성문·성벽·적보다 영웅이 먼저(예전 12 px)
+const SELF_TAP_PX := 12.0  # 고른 영웅 자신은 몸 이만큼 안을 눌러야 해제 — 그 밖은 바닥 이동(바로 옆으로 조금 옮기기)
+const HERO_BODY_H := Vector2(0.1, 1.8)  # 영웅 몸 세로줄(발·머리 높이, m) — 탭은 이 줄까지 화면 거리로 잰다
 const FOE_TAP_PX := 24.0  # 영웅 선택 중 적 중심에서 이 안(+ 큰 적은 몸 반지름)을 누르면 공격 명령(바닥 이동 아님)
 const GROUND_MARGIN := 4.0   # 바닥 명령 지점을 맵 가장자리에서 이만큼 안으로 자른다
 const LONG_PRESS_MS := 500
@@ -122,6 +124,8 @@ func _physics_process(_delta: float) -> void:
 		_select(tapped)
 		return
 	var hero = _hero_at(screen_pos, HERO_TAP_PRECISE_PX)
+	if hero == selected and hero_tap_dist(hero, screen_pos) > SELF_TAP_PX:
+		hero = null  # 고른 영웅 바로 옆 바닥: 해제가 아니라 짧은 이동(다른 영웅이 더 가까우면 그 영웅은 위 _hero_at이 이미 골랐다)
 	if hero != null:
 		_select(null if hero == selected else hero)  # 선택된 영웅을 다시 누르면 해제
 		return
@@ -309,13 +313,20 @@ func _show_marker(hero, dest: Vector3, foe) -> void:
 
 
 ## 탭 위치에서 화면상 가장 가까운 살아 있는 영웅 (radius_px 이내). 없으면 null.
+## 탭 지점에서 영웅 몸(발 ~ 머리 세로줄)까지 화면 거리(px). 머리나 발을 눌러도 가깝게 잡힌다.
+func hero_tap_dist(h, screen_pos: Vector2) -> float:
+	var a := camera.unproject_position(h.global_position + Vector3(0, HERO_BODY_H.x, 0))
+	var b := camera.unproject_position(h.global_position + Vector3(0, HERO_BODY_H.y, 0))
+	return Geometry2D.get_closest_point_to_segment(screen_pos, a, b).distance_to(screen_pos)
+
+
 func _hero_at(screen_pos: Vector2, radius_px: float):
 	var best = null
 	var best_d := radius_px
 	for h in get_tree().get_nodes_in_group("heroes"):
 		if not h.is_alive() or h.get("mine") == false:  # 공성전: 다른 길드원 영웅은 고를 수 없다
 			continue
-		var d := camera.unproject_position(h.global_position + Vector3(0, 0.8, 0)).distance_to(screen_pos)
+		var d := hero_tap_dist(h, screen_pos)
 		if d <= best_d:
 			best_d = d
 			best = h

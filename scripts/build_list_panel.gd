@@ -36,6 +36,7 @@ var placement  # placement.gd — main이 넣는다
 var building_panel  # building_panel.gd — 짓는 중인 공터 [보기]
 var anchor  # build_button.gd — 띠가 그 오른쪽에서 펼쳐진다
 var hide_while_open: Array = []  # 펼친 동안 숨기는 것(미니 채팅)
+var side_menu  # side_menu.gd — 펼치면 접고, 그쪽이 펼쳐지면 이 띠가 접힌다(겹침 방지)
 var rows := {}  # 건물 id → {card, status, costs, action, reason, button(= card), why}
 var tray: PanelContainer
 
@@ -48,6 +49,7 @@ var _hidden := []  # 펼치며 숨긴 것(접을 때 되돌린다)
 var _opened_ms := -100000  # 편 시각 — OPEN_GUARD_MS 동안 누름을 버린다(더블 탭의 두 번째가 곧바로 접거나 카드를 누르지 않게)
 var _closing := false  # 접히는 중(사라지기 전 카드 탭은 무시)
 const OPEN_GUARD_MS := 400
+const UI_WINDOWS := "ui_windows"  # ui_window.gd GROUP
 
 
 func _ready() -> void:
@@ -191,10 +193,28 @@ func is_open() -> bool:
 	return visible
 
 
+## 다른 창(하단 탭 시트·건물 창·팝업 — ui_window 무리)이 열리거나 [메뉴]가 펼쳐지면 접는다(사용자 2026-11-02 "건설 누르고 영웅 누르니까 겹치잖아").
+func _close_if_covered() -> void:
+	if not visible or _closing:
+		return
+	if side_menu != null and side_menu.is_open:
+		close()
+		return
+	for w in get_tree().get_nodes_in_group(UI_WINDOWS):
+		if w.visible:
+			close()
+			return
+
+
 ## 펼친다: 띠가 [건설] 버튼 오른쪽에서 오른쪽으로 자라고, 카드가 차례로 튀어나온다.
 func open() -> void:
 	if placement != null and placement.is_active():
 		placement.cancel()
+	if side_menu != null and side_menu.is_open:
+		side_menu.set_open(false)
+	for w in get_tree().get_nodes_in_group(UI_WINDOWS):  # 열린 창 위로 펼치지 않는다
+		if w.visible and w.has_method("close"):
+			w.close()
 	_refresh()
 	_layout()
 	visible = true
@@ -280,6 +300,7 @@ func _layout() -> void:
 
 
 func _process(_delta: float) -> void:
+	_close_if_covered()
 	if visible and (_tween == null or not _tween.is_running()):
 		_layout()
 

@@ -2871,3 +2871,8 @@ stats_button.build_popup.healed,치유량,,,,scripts/stats_button.gd
 stats_button.build_popup_4,닫기,,,,scripts/stats_button.gd
 stats_button.refresh,아직 기록이 없습니다,,,,scripts/stats_button.gd
 stats_button.refresh_2,합계 %s,,,,scripts/stats_button.gd
+settings_panel.skill_banner,스킬 이름 표시,,,,scripts/settings_panel.gd
+settings_panel.skill_banner_size,스킬 이름 크기,,,,scripts/settings_panel.gd
+settings_panel.banner_size_s,작게,,,,scripts/settings_panel.gd
+settings_panel.banner_size_m,보통,,,,scripts/settings_panel.gd
+settings_panel.banner_size_l,크게,,,,scripts/settings_panel.gd
