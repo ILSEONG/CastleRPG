@@ -202,7 +202,33 @@ func _run() -> void:
 	pl.cancel()
 	_check(not pl.is_active() and scenery.lots.houses.mi.visible and Economy.layout.houses == dest, "cancel keeps the building where it was", "")
 	await _copies(list, pl, btn)
+	await _overlaps(list, btn)
 	await _stage_taps(pl)
+
+
+## 띠와 다른 창이 겹치지 않는다(사용자 2026-11-02 "건설 누르고 영웅 누르니까 겹치잖아"): 펼친 채 하단 [영웅] 탭 → 띠가 접힌다,
+## 창이 열린 채 [건설] → 창이 닫히고 띠가 펼쳐진다, 펼친 채 [메뉴] → 띠가 접힌다.
+func _overlaps(list, btn) -> void:
+	var tabs = _find("res://scripts/tab_bar.gd")
+	var menu = _find("res://scripts/side_menu.gd")
+	var hero_win = tabs.windows.get("hero")
+	_check(hero_win != null, "precondition: the bottom bar has a hero tab", str(tabs.windows.keys()))
+	if hero_win == null:
+		return
+	btn.button.pressed.emit()
+	await get_tree().create_timer(0.6).timeout
+	tabs.press("hero")
+	await get_tree().create_timer(0.4).timeout
+	_check(hero_win.is_open() and not list.visible, "tray open + [영웅] tab: the hero window opens and the tray folds away", "%s %s" % [hero_win.is_open(), list.visible])
+	await _shot("_tray_hero")
+	btn.button.pressed.emit()
+	await get_tree().create_timer(0.6).timeout
+	_check(list.visible and not hero_win.is_open(), "hero window open + [건설]: the window closes and the tray unfolds", "%s %s" % [list.visible, hero_win.is_open()])
+	menu.set_open(true)
+	await get_tree().create_timer(0.4).timeout
+	_check(not list.visible, "tray open + [메뉴]: the tray folds away", "")
+	menu.set_open(false)
+	await get_tree().create_timer(0.3).timeout
 
 
 ## 스테이지를 미는 동안 건물 탭·길게 누르기는 아무것도 열지 않는다(사용자 2026-10-18 "스테이지 밀때는 건물 클릭 안되게"). 대기 중엔 그대로 열린다.

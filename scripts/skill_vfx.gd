@@ -763,6 +763,68 @@ static func _slash_material() -> ShaderMaterial:
 	return _slash_mat
 
 
+# --- 툰 입자(불꽃·연기·핏방울) ---
+
+## 툰 입자 스타일(2026-11-02 사용자 "불꽃 도트뎀 이펙트 구져"): 셀 셰이딩 덩어리가 피어오르며 색이 식고(색 경사) 구멍 나듯 사라진다.
+## ramp = [[위치, 색(알파 = 남은 정도)], ...], hot = 밝은 띠 색, up = 위로 미는 힘(음수 = 떨어진다), life = 수명, size = 덩어리 반지름 m.
+const TOON_PARTS := {
+	"fire": {"ramp": [[0.0, Color(1.0, 0.82, 0.3, 1.0)], [0.3, Color(1.0, 0.48, 0.08, 0.95)], [0.65, Color(0.85, 0.18, 0.05, 0.7)], [1.0, Color(0.28, 0.1, 0.08, 0.0)]],
+		"hot": Color(1.0, 0.9, 0.4), "up": 2.2, "life": 0.6, "size": 0.2},
+	"curse": {"ramp": [[0.0, Color(0.62, 0.3, 0.9, 1.0)], [0.4, Color(0.38, 0.14, 0.55, 0.85)], [1.0, Color(0.1, 0.04, 0.16, 0.0)]],
+		"hot": Color(0.9, 0.6, 1.0), "up": 0.9, "life": 1.0, "size": 0.16},
+	"bleed": {"ramp": [[0.0, Color(0.95, 0.12, 0.12, 1.0)], [0.6, Color(0.7, 0.04, 0.06, 0.9)], [1.0, Color(0.35, 0.0, 0.02, 0.0)]],
+		"hot": Color(1.0, 0.55, 0.5), "up": -6.0, "life": 0.5, "size": 0.07},
+}
+static var _part_mats := {}
+
+
+## 계속 뿜는 툰 입자(붙일 곳에 add_child 하고 위치를 정하는 건 호출자). r = 뿜는 구 반지름, rate = 초당 개수, k = 크기 배율.
+static func toon_particles(style: String, r: float, rate: float, k := 1.0) -> CPUParticles3D:
+	var d: Dictionary = TOON_PARTS[style]
+	var p := CPUParticles3D.new()
+	p.mesh = _mesh("blob")
+	if not _part_mats.has(style):
+		var m := ShaderMaterial.new()
+		m.shader = ToonShader
+		m.set_shader_parameter("shade", 1.0)
+		m.set_shader_parameter("use_vcol", 1.0)
+		m.set_shader_parameter("vhot", d.hot)
+		_part_mats[style] = m
+	p.material_override = _part_mats[style]
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.local_coords = false  # 대상이 움직이면 불꽃이 뒤로 남으며 오른다
+	p.lifetime = d.life
+	p.amount = maxi(4, int(rate * float(d.life)))
+	p.lifetime_randomness = 0.3
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = r
+	var up: float = d.up
+	p.direction = Vector3.UP if up >= 0.0 else Vector3.DOWN
+	p.spread = 25.0
+	p.initial_velocity_min = absf(up) * 0.25
+	p.initial_velocity_max = absf(up) * 0.5
+	p.gravity = Vector3(0, up, 0)
+	p.scale_amount_min = float(d.size) * k * 0.7
+	p.scale_amount_max = float(d.size) * k * 1.3
+	var curve := Curve.new()  # 팡 부풀었다가 줄며 사라진다
+	curve.add_point(Vector2(0.0, 0.45))
+	curve.add_point(Vector2(0.2, 1.0))
+	curve.add_point(Vector2(1.0, 0.55))
+	p.scale_amount_curve = curve
+	var g := Gradient.new()
+	var ramp: Array = d.ramp
+	g.set_offset(0, ramp[0][0])
+	g.set_color(0, ramp[0][1])
+	g.set_offset(1, ramp[-1][0])
+	g.set_color(1, ramp[-1][1])
+	for i in range(1, ramp.size() - 1):
+		g.add_point(ramp[i][0], ramp[i][1])
+	p.color_ramp = g
+	p.angle_min = 0.0
+	p.angle_max = 360.0
+	return p
+
+
 # --- 공용 조각 ---
 
 ## 바닥 마법진(셰이더 문양, 그리기 한 번): sec초에 걸쳐 안에서 바깥으로 그려진다. 반환 노드는 tag 메타를 단다(풀 노드).
