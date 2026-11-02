@@ -143,6 +143,13 @@ func _run() -> void:
 			return
 		_check(b.boss != null and b.boss.is_alive(), "%s: boss up" % quest)
 		_check(b.player_units().size() == (4 if quest == "lich" else 12), "%s: party units %d" % [quest, b.player_units().size()])
+		if quest == "lich":  # 사용자 2026-11-02: 처음부터 내 영웅이 골라진 채, 쓰러졌다 일어나면 다시 골라진다
+			var mine = b.heroes.filter(func(u): return u.mine)[0]
+			_check(b.picker.selected == mine and mine.selected, "lich: my hero starts selected")
+			b.picker._select(null)
+			b._mine_down = true
+			b._keep_mine_picked()
+			_check(b.picker.selected == mine, "lich: my hero is selected again after it gets back up")
 		if quest == "spider":  # 성주마다 병사 옷 색이 다르고, 한 성주의 4마리는 같다
 			var by_seat := {}
 			for s in b.soldiers:
