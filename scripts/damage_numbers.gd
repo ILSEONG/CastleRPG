@@ -38,6 +38,9 @@ const TAG_EDGE := 6.0  # 화면 가장자리 여백(px)
 const TAG_SLIDE := 900.0  # 밀린 띠가 새 자리로 옮겨 가는 속도(px/초)
 const MAX_TAGS := 24
 const BANNER_PAD := Vector2(10, 5)
+## 설정 [스킬 이름 띠 크기](2026-11-02 사용자): id → 배율. 기본 "m". 꺼짐은 Prefs skill_banner(기본 켬).
+const BANNER_SIZES := ["s", "m", "l"]
+const BANNER_SCALE := {"s": 0.75, "m": 1.0, "l": 1.35}
 ## [글자 크기, 그림 반지름] — 우리 편 / 상대 팀
 const TAG_MINE := [24, 14.0]
 const TAG_ENEMY := [18, 10.0]
@@ -114,12 +117,18 @@ static func pop(target, amount: float, kind: int) -> void:
 
 ## 스킬 표시 하나를 띄운다. text가 ""면 이름 없이 스킬 그림만(확률 패시브). color = 영웅 고유 색, enemy = 상대 팀(작게·붉은 테두리).
 static func banner(target, skill: String, text: String, color: Color, enemy := false) -> void:
-	if current == null or not is_instance_valid(target):
+	if current == null or not is_instance_valid(target) or not Prefs.get_bool("skill_banner"):  # 설정에서 끄면 머리 위 띠·그림을 띄우지 않는다(컷인은 그대로)
 		return
 	if current._tags.size() >= MAX_TAGS:
 		current._tags.pop_front()
 	current._tags.append({"pos": current._anchor(target), "text": text, "skill": skill, "kind": Kind.BANNER, "age": 0.0,
 		"life": BANNER_LIFE if text != "" else PROC_LIFE, "bg": color, "enemy": enemy, "lift": 0.0})
+
+
+## 설정된 스킬 이름 띠 크기 id(모르는 값이면 "m").
+static func banner_size_id() -> String:
+	var z := Prefs.get_str("skill_banner_size", "m")
+	return z if BANNER_SCALE.has(z) else "m"
 
 
 ## 우리 편 SSR 컷인. ult = 궁극기(늘 띄운다). 아니면 그 영웅이 CUTIN_HERO_GAP초 안에 컷인을 안 띄웠을 때만.
@@ -287,6 +296,8 @@ func _draw_tags() -> void:
 	var view := Rect2(Vector2.ZERO, vw).grow(SCREEN_MARGIN)
 	var font: Font = FONT
 	var placed: Array = []
+	var zk: float = BANNER_SCALE[banner_size_id()]
+	var pad := BANNER_PAD * zk
 	for e in _tags:
 		if camera.is_position_behind(e.pos):
 			continue
@@ -296,12 +307,12 @@ func _draw_tags() -> void:
 		var t: float = e.age / e.life
 		var pop := lerpf(TAG_POP_SCALE, 1.0, ease(minf(e.age / TAG_POP, 1.0), 0.4))
 		var st: Array = TAG_ENEMY if e.enemy else TAG_MINE
-		var size := roundi(int(st[0]) * pop)
-		var r: float = float(st[1]) * pop
+		var size := roundi(int(st[0]) * pop * zk)
+		var r: float = float(st[1]) * pop * zk
 		var named: bool = e.text != ""
 		var text_w := font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x if named else 0.0
-		var h := maxf(size + BANNER_PAD.y * 2.0, r * 2.0 + 6.0) if named else r * 2.0 + 4.0
-		var w := (BANNER_PAD.x + r * 2.0 + 6.0 + text_w + BANNER_PAD.x) if named else h
+		var h := maxf(size + pad.y * 2.0, r * 2.0 + 6.0) if named else r * 2.0 + 4.0
+		var w := (pad.x + r * 2.0 + 6.0 + text_w + pad.x) if named else h
 		var rect := Rect2(head.x - w / 2.0, head.y - TAG_UP - TAG_RISE * t - h, w, h)
 		rect.position.x = clampf(rect.position.x, TAG_EDGE, maxf(TAG_EDGE, vw.x - TAG_EDGE - w))
 		var want := 0.0  # 겹침을 피하려 더 올릴 높이
@@ -324,12 +335,12 @@ func _draw_tags() -> void:
 		if named:
 			var fill: Color = ENEMY_FILL if e.enemy else band_color(e.bg)
 			var edge: Color = ENEMY_EDGE if e.enemy else LowpolyBox.edge_color(fill)
-			var box := LowpolyBox.octagon(rect, 6.0 * pop)
+			var box := LowpolyBox.octagon(rect, 6.0 * pop * zk)
 			draw_colored_polygon(box, Color(fill, 0.94 * alpha))
 			box.append(box[0])
 			draw_polyline(box, Color(edge, alpha), 2.0, true)
-			_badge(Vector2(rect.position.x + BANNER_PAD.x + r, cy), r, e.skill, alpha)
-			var base := Vector2(rect.position.x + BANNER_PAD.x + r * 2.0 + 6.0, cy + (font.get_ascent(size) - font.get_descent(size)) / 2.0)
+			_badge(Vector2(rect.position.x + pad.x + r, cy), r, e.skill, alpha)
+			var base := Vector2(rect.position.x + pad.x + r * 2.0 + 6.0, cy + (font.get_ascent(size) - font.get_descent(size)) / 2.0)
 			draw_string_outline(font, base, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 5, Color(OUTLINE, alpha))
 			draw_string(font, base, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(1, 1, 1, alpha))
 			draws += 5

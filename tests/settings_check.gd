@@ -105,6 +105,34 @@ func _run() -> void:
 	w.shake_check.button_pressed = true
 	w.numbers_check.button_pressed = true
 
+	# 스킬 이름 띠(2026-11-02): 켬/끔 · 크기(작게·보통·크게) 저장, 끄면 띠가 안 뜬다, 크기는 띠 높이에 바로 반영
+	const DN := preload("res://scripts/damage_numbers.gd")
+	_check(w.banner_check.button_pressed and DN.banner_size_id() == "m" and w.banner_size_buttons.size() == 3, "skill banner starts on at normal size", "")
+	w.banner_check.button_pressed = false
+	_check(not Prefs.get_bool("skill_banner") and _file().get("skill_banner") == false, "skill banner off saves", str(_file()))
+	w.banner_size_buttons["l"].pressed.emit()
+	_check(DN.banner_size_id() == "l" and _file().get("skill_banner_size") == "l", "banner size large saves", str(_file()))
+	Music.prefs = {}
+	Music.load_settings()
+	_check(not Prefs.get_bool("skill_banner") and DN.banner_size_id() == "l", "banner settings survive a restart", "")
+	var dn = DN.new()
+	add_child(dn)
+	await _frames(1)
+	var dummy := Node3D.new()
+	var ds := GDScript.new()
+	ds.source_code = "extends Node3D\nfunc bar_height() -> float:\n\treturn 2.0\n"
+	ds.reload()
+	dummy.set_script(ds)
+	add_child(dummy)
+	DN.banner(dummy, "cleave", "test", Color.RED)
+	_check(dn._tags.is_empty(), "banner off: no head banner", "")
+	w.banner_check.button_pressed = true
+	DN.banner(dummy, "cleave", "test", Color.RED)
+	_check(dn._tags.size() == 1, "banner on: head banner shows", "")
+	w.banner_size_buttons["m"].pressed.emit()
+	dummy.queue_free()
+	dn.queue_free()
+
 	# 그래픽 품질·프레임·절전 모드(2026-10-12)
 	var g = GraphicsScript.current
 	_check(g != null, "graphics node exists", "")
