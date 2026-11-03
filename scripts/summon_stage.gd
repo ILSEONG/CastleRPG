@@ -30,8 +30,8 @@ const GameData := preload("res://scripts/game_data.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
-const INTRO_ONE := 1.9  # 1회 소환진 길이(초)
-const INTRO_TEN := 2.2  # 10회
+const INTRO_ONE := 1.3  # 1회 소환진 길이(초). 2026-11-03 사용자 "카드 뽑기 딜레이가 많이 심한거같아": 1.9 → 1.3
+const INTRO_TEN := 1.5  # 10회(2.2 → 1.5)
 const SR_AT := 0.6  # 소환진 시간 비율: 빛이 보라로
 const SSR_AT := 0.8  # 무지개로
 const UR_AT := 1.05  # UR: 무지개가 이만큼(소환진 시간 비율) 보인 뒤 불꽃 해로
@@ -40,7 +40,7 @@ const UR_CRACK := 0.3  # UR: 무지개 핵이 깨져 조각이 튀는 시간
 const BURST := 0.24  # 끝: 터지며 걷힘
 const FADE_IN := 0.15
 const SPLASH_IN := 0.3
-const SPLASH_SEC := 2.4
+const SPLASH_SEC := 1.8  # 2.4 → 1.8(2026-11-03, 누르면 더 일찍 걷힌다)
 const SPLASH_OUT := 0.22
 const SPLASH_MIN := 0.45  # SSR 화면이 뜬 뒤 이보다 이른 누름은 무시(연타가 바로 닫지 않게)
 const UR_SLASH := 0.16  # UR 화면: 섬광이 화면을 가르는 시간
@@ -82,6 +82,8 @@ var _queue: Array = []  # 기다리는 SSR·UR 화면 [{hero, new, grade}]
 var _splash := {}
 var fx  # 빛·입자·카메라(summon_fx.gd)
 var _flash_rect: ColorRect  # 흰 번쩍임(빛 위)
+var _pending := false  # play(pending): 결과 등급을 기다리는 중
+var _skip_wanted := false  # 기다리는 동안 [건너뛰기]를 눌렀다
 
 
 func _init() -> void:
@@ -113,8 +115,11 @@ func _init() -> void:
 
 
 ## 소환진을 처음부터. grade = 이번 모집 최고 등급, count = 장수(1 또는 10).
-func play(grade: String, count: int) -> void:
+## pending이면 등급을 아직 모른다(버튼을 누르자마자 서버 응답을 기다리며 돌린다 — 2026-11-03 딜레이 줄이기): resolve(grade)가 올 때까지
+## 등급 빛이 오르기 직전(SR_AT)에서 더 나아가지 않고, 누름·[건너뛰기]도 결과가 올 때까지 기다린다.
+func play(grade: String, count: int, pending := false) -> void:
 	best = grade
+	_pending = pending
 	_base = INTRO_ONE if count == 1 else INTRO_TEN
 	_len = _base + (UR_HOLD if grade == "UR" else 0.0)
 	_t = 0.0
@@ -133,6 +138,20 @@ func play(grade: String, count: int) -> void:
 	queue_redraw()
 
 
+## pending으로 시작한 소환진에 결과 최고 등급을 알려 준다(그 뒤로는 play(grade)와 같다).
+func resolve(grade: String) -> void:
+	best = grade
+	_len = _base + (UR_HOLD if grade == "UR" else 0.0)
+	_pending = false
+	if _skip_wanted:  # 기다리는 동안 누른 [건너뛰기]
+		_skip_wanted = false
+		_on_skip()
+
+
+func is_pending() -> bool:
+	return mode == Mode.INTRO and _pending
+
+
 ## SSR·UR 화면을 줄 세운다(소환진 중이면 걷힌 뒤에). grade가 ""이면 영웅 표의 등급.
 func splash(hero_id: String, is_new: bool, grade := "") -> void:
 	if grade == "":
@@ -146,6 +165,8 @@ func splash(hero_id: String, is_new: bool, grade := "") -> void:
 
 ## 다 멈추고 숨긴다(창을 닫을 때·새 결과).
 func stop() -> void:
+	_pending = false
+	_skip_wanted = false
 	fx.stop()
 	_flash_rect.color.a = 0.0
 	mode = Mode.IDLE
@@ -160,6 +181,9 @@ func is_busy() -> bool:
 
 
 func _on_skip() -> void:
+	if _pending:
+		_skip_wanted = true  # 결과가 오면 건너뛴다
+		return
 	stop()
 	skip_all.emit()
 
@@ -169,7 +193,9 @@ func _gui_input(event: InputEvent) -> void:
 	if not pressed:
 		return
 	accept_event()
-	if mode == Mode.INTRO and _t < _len:
+	if mode == Mode.INTRO and _pending:
+		pass  # 결과를 기다리는 중
+	elif mode == Mode.INTRO and _t < _len:
 		_upgrade(_goal())  # 바로 터진다 — 그 모집의 최고 등급 빛으로
 		_t = _len
 	elif mode == Mode.SPLASH and _t >= SPLASH_MIN and _t < _splash_in() + _splash_sec():
@@ -199,6 +225,8 @@ func _process(delta: float) -> void:
 	_flash = maxf(0.0, _flash - delta * 2.6)
 	_shake = maxf(0.0, _shake - delta * 2.2)
 	if mode == Mode.INTRO:
+		if _pending:
+			_t = minf(_t, _base * SR_AT - 0.01)  # 결과가 올 때까지 등급 빛 직전에서 돈다
 		var k := _t / _base
 		if _rank < 1 and _goal() >= 1 and k >= SR_AT:
 			_upgrade(1)
