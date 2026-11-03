@@ -311,6 +311,7 @@ func _build_form() -> void:
 
 
 func _on_open() -> void:
+	levels.clear()  # 열 때마다 지금 도전할 수 있는 가장 높은 단계(2026-11-03 사용자 "던전 들어가면 레벨이 도전할 수 있는 제일 높은 단계로")
 	_show_list(false)
 	# ponytail: 키가 종류뿐 — 띠의 영웅은 처음 연 때의 편성 앞 셋, 실행 중 편성이 바뀌어도 그대로. 따라가야 하면 키에 id를 넣는다.
 	for t in TYPES:  # 처음 열 때 띠 스냅샷 요청(이미 있거나 대기 중이면 아무 일 없음, 헤드리스는 자리표시만) — 그림(DungeonArt)이 있으면 안 찍는다
@@ -391,7 +392,6 @@ func _refresh() -> void:
 	for t in TYPES:
 		var st := Economy.dungeon_state(t)
 		var lv := level_of(t)
-		levels[t] = lv
 		var c: Dictionary = cards[t]
 		c.keys.text = "%d / %d" % [st.keys, st.key_cap]
 		c.info.text = Lang.t("dungeon_panel.refresh") % [UiKit.clock(st.reset_in), st.best_level]
