@@ -283,6 +283,8 @@ func refresh() -> void:
 			var lv: int = i + 1
 			var open := Party.unlocked(q, lv)
 			b.text = PartyRules.DIFF_NAMES[i] if open else Lang.t("party_view.refresh") % PartyRules.DIFF_NAMES[i]
+			# 잠긴 칸은 글자가 길다("매우 어려움 (잠김)") — 버튼 폭(160)을 넘지 않게 글자를 줄인다(2026-11-03 겹침 점검)
+			b.add_theme_font_size_override("font_size", 22 if open or b.get_theme_font("font").get_string_size(b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x <= b.size.x - 12.0 else 16)
 			UiKit.apply_button(b, PartyRules.DIFF_COLORS[i] if lv == d else (UiKit.STEEL if open else UiKit.STEEL.darkened(0.3)), 12.0)
 			b.disabled = _my_lobby(q) and not Party.lobby_leader()  # 파티원: 난이도는 방장이 정한다
 		var odds := PartyRules.drop_odds(d)
