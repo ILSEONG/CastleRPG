@@ -5343,7 +5343,7 @@ func test_tutorial() -> void:
 	check(e.is_built("lumber") and e.building_level("lumber") == 1 and t.complete(), "tutorial: finished lot becomes Lv 1 and completes the mission")
 	check(e.pending("lumber", float(e.last_collect.lumber) + 120.0) == 200, "tutorial: production counts from the build finish")
 	# 채석장·농장(하나로 합친 미션): 둘 다 지어야 끝, 화살표는 아직 안 지은 쪽
-	check(t.claim() and str(t.mission().kind) == "hero_lv", "guide: a hero level quest comes between the lumber mill and quarry + farm")
+	check(t.claim() and str(t.mission().kind) == "growth_lv", "guide: a stat quest comes right after the lumber mill (no two building quests in a row)")
 	t.step = t.mission_index("build_quarry_farm")
 	check(str(t.mission().id) == "build_quarry_farm" and t.ui_shown("chip:stone") and t.ui_shown("chip:food"), "guide: quarry + farm is one mission; their chips appear")
 	var qf: Dictionary = t.mission()
@@ -5504,17 +5504,17 @@ func test_tutorial() -> void:
 	var fd: Dictionary = TutorialScript.MISSIONS[t.mission_index("dungeon_gold_2")]
 	var fg: Dictionary = TutorialScript.MISSIONS[t.mission_index("gacha_10_1")]
 	var fw: Dictionary = TutorialScript.MISSIONS[t.mission_index("dwin_gold_1")]
-	var fh2: Dictionary = TutorialScript.MISSIONS[t.mission_index("hero_lv2_4")]
+	var fh2: Dictionary = TutorialScript.MISSIONS[t.mission_index("hero_lv4_4")]
 	var fb: Dictionary = TutorialScript.MISSIONS[t.mission_index("quarry_2")]
 	check(fg.title == "영웅 모집 10회" and fg.kind == "gacha" and int(fg.arg) == 10 and fg.goto == "recruit"
 		and int(t.reward(t.mission_index("gacha_10_1") - 1).get("tickets", 0)) >= 10
 		and fw.title == "골드 던전 클리어" and fw.kind == "dungeon_win" and fw.dungeon == "gold" and fw.goto == "tab:dungeon"
 		and int(t.reward(t.mission_index("dwin_gold_1") - 1).get("keys_gold", 0)) >= 1
-		and fh2.title == "영웅 2명 Lv 4 달성" and fh2.arg == [2, 4]
-		and t.need_of(t.mission_index("hero_lv2_4")).gold == 2 * int(GameData.levelup_cost("R", 3, 1).gold)
+		and fh2.title == "영웅 4명 Lv 4 달성" and fh2.arg == [4, 4]
+		and t.need_of(t.mission_index("hero_lv4_4")).gold == 4 * int(GameData.levelup_cost("R", 3, 1).gold)
 		and fb.title == "채석장 Lv 2" and fb.kind == "level" and fb.arg == ["quarry", 2] and fb.goto == "building:quarry"
 		and t.need_of(t.mission_index("quarry_2")).res == GameData.build_cost("quarry", 1),
-		"guide: recruit / dungeon clear / 2-hero / building quests are built from their ids; the quest before pays tickets or a key: %s %s %s %s"
+		"guide: recruit / dungeon clear / hero / building quests are built from their ids; the quest before pays tickets or a key: %s %s %s %s"
 		% [fg.title, fw.title, fh2.title, fb.title])
 	# 건물 레벨업 사이 퀘스트(사용자 2026-10-29 "중간중간 적절하게 건물 퀘스트도해"): 앞 퀘스트로 선행 조건이 차고, 모두 무료 즉시 완료 시간 안
 	var lvs := {"keep": 1, "gate": 1, "barracks": 0, "lumber": 0, "quarry": 0, "farm": 0, "houses": 0, "lab": 0, "archery": 0, "stable": 0}
@@ -5577,6 +5577,38 @@ func test_tutorial() -> void:
 	check(calm_max <= 9 and grows and kills[0] == 10 and kills[-1] <= 200 and t.reward(t.mission_index("kill_30")).get("diamonds") == 30
 		and kills.size() <= 30 and kill_gap >= 6,
 		"guide: a battle goal comes at least every 10th quest; %d kill quests at least 6 apart (%d), goals grow 10 → %d: %d" % [kills.size(), kill_gap, kills[-1], calm_max])
+	# 전체 재배치(사용자 2026-11-03 "가이드 퀘스트 메이플 키우기 보면서 전체 다시 만들어 / 퀘스트 하나 3개가 연달아"): 같은 종류가 두 번 연달아 오지 않고,
+	# 영웅 레벨 퀘스트는 늘 「영웅 4명 Lv N」(N이 1씩 오른다), 능력치는 같은 능력치가 바로 앞 능력치 퀘스트와 겹치지 않는다
+	var kind_group := func(m: Dictionary) -> String:
+		match str(m.kind):
+			"stage": return "stage"
+			"kill": return "kill"
+			"hero_lv", "hero_level", "deploy_new", "auto_deploy", "promote", "equip": return "hero"
+			"growth_lv", "growth": return "growth"
+			"build", "level": return "building"
+			"gacha": return "recruit"
+			"dungeon", "dungeon_lv", "dungeon_win": return "dungeon"
+			"train", "soldier_deploy": return "soldier"
+			"guild", "guild_attend", "guild_boss": return "guild"
+		return "other:" + str(m.id)
+	var twice := []
+	var hero_n := []
+	var last_stat := ""
+	var stat_twice := []
+	for i in TutorialScript.MISSIONS.size():
+		var m: Dictionary = TutorialScript.MISSIONS[i]
+		if i > 0 and kind_group.call(m) == kind_group.call(TutorialScript.MISSIONS[i - 1]):
+			twice.append("%d %s" % [i + 1, m.id])
+		if m.kind == "hero_lv":
+			hero_n.append(int(m.arg[1]))
+			if int(m.arg[0]) != 4:
+				twice.append("%d %s (not 4 heroes)" % [i + 1, m.id])
+		if m.kind == "growth_lv":
+			if str(m.arg[0]) == last_stat:
+				stat_twice.append("%d %s" % [i + 1, m.id])
+			last_stat = str(m.arg[0])
+	check(twice.is_empty() and stat_twice.is_empty() and hero_n == range(3, 21),
+		"guide: no quest kind twice in a row, hero quests are always 4 heroes Lv 3 -> 20: %s %s %s" % [twice, stat_twice, hero_n])
 	t.step = t.mission_index("hero_lv4_5")
 	var hero_lv_was: Dictionary = e.hero_levels.duplicate()
 	check(not t.complete() and t.progress_text() == "0/4", "guide: hero level mission waits: %s" % t.progress_text())
@@ -5831,6 +5863,20 @@ func test_tutorial_online() -> void:
 			var d: Dictionary = TutorialScript.REPEATS[i]
 			if rep[i][0] != "rep_" + d.kind or rep[i][3] != enc.call(d.get("reward", {})) or rep[i][4] != enc.call(d.get("fixed", {})):
 				bad = "%s: %s" % [d.kind, rep[i]]
+	if OS.get_environment("REGEN_QUESTS") == "1":  # 가이드 순서·비용이 바뀌면 이걸로 다시 만든다: REGEN_QUESTS=1 godot -s tests/run_tests.gd
+		var w := FileAccess.open("res://data/quests.csv", FileAccess.WRITE)
+		w.store_line("id,type,needs,reward,fixed")
+		for i in TutorialScript.MISSIONS.size():
+			var m: Dictionary = TutorialScript.MISSIONS[i]
+			var nd := ""
+			if m.kind == "build":
+				nd = "build:%s" % "+".join(TutorialScript.build_ids(m))
+			elif m.kind == "level":
+				nd = "level:%s:%d" % [m.arg[0], int(m.arg[1])]
+			w.store_line("%s,tutorial,%s,%s," % [m.id, nd, enc.call(tmp.reward(i))])
+		for r in rep:
+			w.store_line(",".join(r))
+		w.close()
 	tmp.free()
 	check(same and bad == "", "quests.csv matches the tutorial rewards and repeat quests (regenerate it when costs change) %s" % bad)
 	var now := 1.8e9

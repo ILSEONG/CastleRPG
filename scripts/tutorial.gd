@@ -19,7 +19,7 @@ const GuideTours := preload("res://scripts/guide_tours.gd")
 const GameLog := preload("res://scripts/game_log.gd")
 const Prefs := preload("res://scripts/prefs.gd")  # 배속 설정(speed_button.gd level()과 같은 키 — 그 스크립트는 HUD를 끌어와 여기서 preload하지 않는다)
 
-const SAVE_VERSION := 9  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
+const SAVE_VERSION := 10  # 2: 장비 던전 뒤에 모집권 던전 미션(dungeon_ticket)이 끼었다 — 1의 그 뒤 단계는 +1. 3: 가이드(2026-10-07) — 성장 미션이 사이사이 끼었다.
 ## 4: 기능 안내 미션(2026-10-13 — 연속 진행·배속·출석·주머니·미션·자동 배치·상점 선물·FEVER)이 끼었다
 ## 5: 길드 출석·기부, 길드 보스, 공성전 체험, 거래소 둘러보기 미션(2026-10-13 오후)이 끼었다
 ## 6: 초반 단순화(2026-10-23) — 첫 전투(1-1)가 1번이 되고 앞부분 순서가 바뀌었다. 성채 살펴보기·몬스터 30마리가 빠지고 채석장·농장은 한 미션
@@ -27,6 +27,8 @@ const SAVE_VERSION := 9  # 2: 장비 던전 뒤에 모집권 던전 미션(dunge
 ## 8: 메이플스토리 키우기식 간격(2026-10-29 오후) — 기능이 열리는 번호를 메이플 가이드 퀘스트 번호에 맞추고 사이를 순환 퀘스트로 채웠다(82 → 265)
 ## 9: 처치 퀘스트 줄이기(사용자 2026-10-29 "몬스터 처치 가이드 퀘스트가 왜이렇게 자주나와") — 기능 미션 자리는 그대로, 처치는 10칸에 한 번만 남기고
 ##    나머지 처치 칸을 영웅 레벨·능력치·영웅 모집·던전 클리어로 바꿨다. 번호가 같아 단계는 그대로 이어지고, 바뀐 칸의 진행 수만 새로 센다.
+## 10: 가이드 전체 재배치(사용자 2026-11-03 "가이드 퀘스트 메이플 키우기 보면서 전체 다시 만들어 … 퀘스트 하나 3개가 연달아") — 기능 미션 자리는 그대로,
+##    사이 퀘스트를 같은 종류가 두 번 연달아 오지 않게 다시 놓았다. 번호가 같아 단계는 그대로 이어지고, 진행 수만 새로 센다.
 ## 버전 2의 미션 순서(33개). 버전 2 이하 저장의 단계는 이 id로 새 표의 자리를 찾는다(서버는 migrations/034가 같은 일을 한다).
 const V2_IDS := ["look_keep", "build_lumber", "build_quarry", "build_farm", "kill_30", "collect", "sell", "stage_1_1", "hero_level", "growth",
 	"build_tavern", "gacha", "deploy_new", "stage_1_3", "build_barracks", "train", "build_houses", "kill_100", "dungeon_gold", "dungeon_equip",
@@ -282,43 +284,44 @@ static var KEY_MISSIONS := [
 	{"id": "party_clear", "title": Lang.t("tutorial.missions.party_clear.title"), "desc": Lang.t("tutorial.missions.party_clear.desc"),
 		"kind": "party", "goto": "party", "reward": {"diamonds": 50}},
 ]
-## 가이드 순서(사용자 2026-10-29 "지금은 너무 급박하게 컨텐츠를 너무 빨리 푸는거같아 메이플 키우기 좀 참고하라고"): 기능이 처음 열리는 미션을
-## 메이플스토리 키우기 가이드 퀘스트 번호 근처에 둔다 — 성장 8(메이플 스킬 8), 배속 13(무기 13), 건설 25(스킬 강화 25), 상인 34(성장 던전 34),
-## 가방 45(EXP 던전 45), 주점 58(월드 보스 58), 막사 67(장비 던전 67), 민가 75(빠른 사냥 75), 골드 던전 79(영웅의 힘 79), 장비 던전 89(부스터 89),
-## 모집권 던전 96(동료 96), 기병 마구간 131(강화 던전 131), 길드 140(길드 140), PVP 247(아레나 247). 그 사이는 메이플처럼 짧은 퀘스트가 돌며 채운다:
-## 스테이지 돌파 · 영웅 레벨(4명, 1·2명) · 능력치 레벨 · 영웅 모집 · 던전 클리어·단계. 처치는 10칸에 한 번만(사용자 2026-10-29 "몬스터 처치 가이드
-## 퀘스트가 왜이렇게 자주나와" — 메이플 순환 14가지 중 처치는 1가지). 보병 막사를 지은 뒤로는 7칸쯤마다 건물 레벨업(사용자 2026-10-29 "중간중간 적절하게
-## 건물 퀘스트도해" — 라이즈 오브 킹덤즈처럼 성채 Lv 2 → 자원 건물 → 성채 Lv 3 …, 모두 5분 이하).
+## 가이드 순서(사용자 2026-11-03 "가이드 퀘스트 메이플 키우기 보면서 전체 다시 만들어 / 무슨 퀘스트 하나 3개가 연달아 저따구로 짰어"): 메이플스토리 키우기
+## 가이드처럼 짧은 퀘스트가 종류를 바꿔 가며 돈다. 규칙(테스트 test_tutorial_guide_rhythm이 지킨다):
+## - 같은 종류(스테이지 · 처치 · 영웅 · 능력치 · 건물 · 영웅 모집 · 던전 · 병사 · 길드)는 두 번 연달아 오지 않는다. 능력치는 6종 모두 한 종류로 본다.
+## - 영웅 레벨 퀘스트는 늘 「영웅 4명 Lv N」 한 가지(시작 영웅 4명), N은 3 → 20으로 1씩. 영웅 레벨 상한(★0 Lv 20) 전까지.
+## - 기능이 처음 열리는 번호는 메이플 가이드 번호 그대로(사용자 2026-10-29 "너무 급박하게 컨텐츠를 너무 빨리 푸는거같아"): 성장 8, 배속 13, 건설 25,
+##   상인 34, 가방 45, 주점 58, 막사 67, 민가 75, 골드 던전 79, 장비 던전 89, 모집권 던전 96, 기병 마구간 131, 길드 140, PVP 247, 파티 265.
+## - 처치는 10칸에 한 번(사용자 2026-10-29 "몬스터 처치 가이드 퀘스트가 왜이렇게 자주나와"). 보병 막사 뒤로 건물 레벨업이 사이사이(5분 이하).
+## - 초반(1~57)은 메이플처럼 스테이지 → 영웅 레벨 → 능력치가 번갈아 오고, 주점·던전이 열리면 모집·던전 클리어가 순환에 들어온다.
 ## KEY_MISSIONS에 있는 id는 그 미션, 나머지는 이름에서 만든다(_filler): kill_<수>[_<순번>] · stage_<S>_<라운드> · hero_lv<명>_<Lv> · <능력치>_<Lv> · <건물>_<Lv>(레벨업) ·
 ## dungeon_<종류>_<단계> · dwin_<종류>_<순번>(그 던전 한 번 클리어) · gacha_<회>_<순번>(영웅 모집). 서버 quests.ts tutorialDone이 같은 이름으로 판정한다.
 const ORDER := [
-	"stage_1_1", "kill_10", "hero_level", "hero_lv4_3", "hero_lv2_4", "hero_lv4_5", "stage_1_2", "growth", "atk_2", "hero_lv4_6",  # 1~10
-	"kill_20", "hero_lv4_7", "speed_on", "aspd_1", "hero_lv4_8", "hp_2", "stage_1_3", "auto_on", "hero_lv2_9", "hero_lv4_9",  # 11~20
-	"atk_3", "kill_20_4", "hp_3", "crit_rate_1", "build_lumber", "hero_lv2_10", "atk_4", "build_quarry_farm", "kill_30", "hero_lv4_10",  # 21~30
-	"collect", "mspd_1", "hp_4", "sell", "hero_lv2_11", "crit_dmg_1", "atk_5", "kill_30_5", "hero_lv4_11", "attend",  # 31~40
-	"hero_lv2_12", "aspd_2", "hp_5", "hero_lv1_13", "pouch", "kill_40", "crit_rate_2", "atk_6", "mspd_2", "mission_claim",  # 41~50
-	"crit_dmg_2", "stage_1_4", "aspd_3", "shop_free", "kill_40_6", "hero_lv4_12", "hero_lv2_13", "build_tavern", "gacha", "hp_6",  # 51~60
-	"deploy_new", "crit_rate_3", "atk_7", "auto_deploy", "kill_50", "hero_lv4_13", "build_barracks", "train", "hero_lv2_14", "hp_7",  # 61~70
-	"keep_2", "atk_8", "gacha_10_1", "stage_1_5", "build_houses", "kill_50_5", "hero_lv4_14", "lumber_2", "dungeon_gold", "mspd_3",  # 71~80
-	"hp_8", "kill_60", "dungeon_gold_2", "farm_2", "atk_9", "dwin_gold_1", "hero_lv4_15", "crit_dmg_3", "dungeon_equip", "dwin_equip_1",  # 81~90
-	"hp_9", "stage_1_6", "kill_60_6", "atk_10", "quarry_2", "dungeon_ticket", "aspd_4", "equip", "houses_2", "dungeon_equip_2",  # 91~100
-	"gacha_10_2", "hp_10", "kill_70_2", "hero_lv4_16", "soldier_deploy", "crit_rate_4", "barracks_2", "atk_11", "stage_1_7", "hero_lv2_17",  # 101~110
-	"aspd_5", "dungeon_ticket_2", "kill_70_5", "hp_11", "build_lab", "hero_lv4_17", "research", "crit_dmg_4", "stage_1_8", "atk_12",  # 111~120
-	"gate_2", "mspd_4", "kill_80_2", "build_archery", "hp_12", "keep_3", "hero_lv4_18", "crit_rate_5", "crit_rate_6", "atk_13",  # 121~130
-	"build_stable", "stage_1_9", "lumber_3", "aspd_6", "gacha_10_3", "kill_80_5", "farm_3", "dwin_ticket_1", "stage_1_10", "guild",  # 131~140
-	"hp_13", "hero_lv4_19", "guild_attend", "atk_14", "kill_90", "mspd_5", "hp_14", "quarry_3", "dungeon_gold_3", "crit_dmg_5",  # 141~150
-	"crit_rate_7", "hero_lv4_20", "atk_15", "barracks_3", "aspd_7", "kill_100", "hp_15", "houses_3", "crit_dmg_6", "promote",  # 151~160
-	"gate_3", "atk_16", "mspd_6", "stage_1_11", "dwin_gold_2", "mspd_7", "kill_100_2", "hp_16", "lab_2", "crit_rate_8",  # 161~170
-	"gacha_10_4", "atk_17", "crit_dmg_7", "aspd_8", "guild_boss", "kill_110_2", "hp_17", "archery_2", "aspd_9", "crit_dmg_8",  # 171~180
-	"dwin_equip_2", "atk_18", "lab_3", "stage_1_12", "kill_110_7", "mspd_8", "crit_rate_9", "hp_18", "stable_2", "dwin_ticket_2",  # 181~190
-	"crit_rate_10", "mspd_9", "atk_19", "kill_120_2", "crit_dmg_9", "archery_3", "aspd_10", "dwin_gold_3", "hp_19", "siege_try",  # 191~200
-	"aspd_11", "crit_dmg_10", "kill_120_7", "atk_20", "stable_3", "dwin_equip_3", "stage_1_13", "crit_rate_11", "mspd_10", "gacha_10_5",  # 201~210
-	"hp_20", "kill_130_2", "dungeon_equip_3", "mspd_11", "atk_21", "dwin_ticket_3", "crit_rate_12", "crit_dmg_11", "aspd_12", "dwin_gold_4",  # 211~220
-	"hp_21", "kill_130_7", "aspd_13", "atk_22", "crit_rate_13", "crit_dmg_12", "dwin_equip_4", "mspd_12", "dwin_ticket_4", "mspd_13",  # 221~230
-	"kill_140_3", "hp_22", "crit_dmg_13", "stage_1_14", "aspd_14", "atk_23", "dwin_gold_5", "dungeon_gold_4", "crit_rate_14", "crit_rate_15",  # 231~240
-	"kill_140_8", "hp_23", "dwin_equip_5", "aspd_15", "mspd_14", "atk_24", "pvp", "crit_dmg_14", "crit_dmg_15", "kill_150_2",  # 241~250
-	"stage_1_15", "gacha_10_6", "fever", "dwin_ticket_5", "hp_24", "aspd_16", "mspd_15", "dwin_gold_6", "exchange_look", "kill_150_7",  # 251~260
-	"atk_25", "crit_rate_16", "hp_25", "mspd_16", "party_clear"  # 261~265
+	"stage_1_1", "kill_10", "hero_level", "stage_1_2", "hero_lv4_3", "stage_1_3", "hero_lv4_4", "growth", "hero_lv4_5", "atk_2",  # 1~10
+	"hero_lv4_6", "hp_2", "speed_on", "atk_3", "kill_20", "hp_3", "hero_lv4_7", "auto_on", "aspd_1", "hero_lv4_8",  # 11~20
+	"atk_4", "kill_20_4", "hp_4", "hero_lv4_9", "build_lumber", "crit_rate_1", "hero_lv4_10", "build_quarry_farm", "kill_30", "atk_5",  # 21~30
+	"collect", "hp_5", "hero_lv4_11", "sell", "aspd_2", "hero_lv4_12", "mspd_1", "kill_30_5", "atk_6", "attend",  # 31~40
+	"hp_6", "hero_lv4_13", "crit_dmg_1", "stage_1_4", "pouch", "kill_40", "crit_rate_2", "hero_lv4_14", "aspd_3", "mission_claim",  # 41~50
+	"atk_7", "hero_lv4_15", "hp_7", "shop_free", "kill_40_6", "hero_lv4_16", "crit_dmg_2", "build_tavern", "gacha", "aspd_4",  # 51~60
+	"deploy_new", "atk_8", "gacha_10_1", "auto_deploy", "kill_50", "hp_8", "build_barracks", "train", "mspd_2", "keep_2",  # 61~70
+	"crit_rate_3", "lumber_2", "crit_dmg_3", "stage_1_5", "build_houses", "kill_50_5", "atk_9", "farm_2", "dungeon_gold", "hp_9",  # 71~80
+	"dungeon_gold_2", "kill_60", "mspd_3", "hero_lv4_17", "crit_rate_4", "dwin_gold_1", "aspd_5", "quarry_2", "dungeon_equip", "crit_dmg_4",  # 81~90
+	"dwin_equip_1", "stage_1_6", "kill_60_6", "gacha_10_2", "atk_10", "dungeon_ticket", "hp_10", "equip", "mspd_4", "dungeon_equip_2",  # 91~100
+	"crit_rate_5", "houses_2", "kill_70_2", "aspd_6", "soldier_deploy", "crit_dmg_5", "dungeon_ticket_2", "atk_11", "stage_1_7", "hp_11",  # 101~110
+	"barracks_2", "mspd_5", "kill_70_5", "dwin_gold_2", "build_lab", "crit_rate_6", "research", "atk_12", "stage_1_8", "gate_2",  # 111~120
+	"hero_lv4_18", "hp_12", "kill_80_2", "build_archery", "dwin_equip_2", "aspd_7", "gacha_10_3", "crit_dmg_6", "keep_3", "mspd_6",  # 121~130
+	"build_stable", "stage_1_9", "crit_rate_7", "dwin_ticket_1", "atk_13", "kill_80_5", "hp_13", "lumber_3", "stage_1_10", "guild",  # 131~140
+	"dwin_ticket_2", "aspd_8", "guild_attend", "crit_dmg_7", "kill_90", "mspd_7", "dungeon_gold_3", "atk_14", "dwin_gold_3", "hp_14",  # 141~150
+	"farm_3", "hero_lv4_19", "crit_rate_8", "gacha_10_4", "quarry_3", "kill_100", "aspd_9", "dwin_equip_3", "crit_dmg_8", "promote",  # 151~160
+	"mspd_8", "dwin_gold_4", "atk_15", "stage_1_11", "barracks_3", "hp_15", "kill_100_2", "crit_rate_9", "dwin_ticket_3", "aspd_10",  # 161~170
+	"houses_3", "atk_16", "dwin_equip_4", "hp_16", "guild_boss", "kill_110_2", "mspd_9", "dwin_gold_5", "crit_dmg_9", "hero_lv4_20",  # 171~180
+	"crit_rate_10", "gacha_10_5", "atk_17", "stage_1_12", "kill_110_7", "gate_3", "hp_17", "dwin_ticket_4", "mspd_10", "dwin_equip_5",  # 181~190
+	"aspd_11", "lab_2", "crit_dmg_10", "kill_120_2", "crit_rate_11", "dwin_gold_6", "atk_18", "dwin_ticket_5", "hp_18", "siege_try",  # 191~200
+	"mspd_11", "archery_2", "kill_120_7", "aspd_12", "dwin_equip_6", "crit_dmg_11", "stage_1_13", "dwin_gold_7", "atk_19", "gacha_10_6",  # 201~210
+	"hp_19", "kill_130_2", "dungeon_equip_3", "lab_3", "crit_rate_12", "dwin_ticket_6", "mspd_12", "dwin_gold_8", "atk_20", "dwin_equip_7",  # 211~220
+	"hp_20", "kill_130_7", "aspd_13", "dwin_equip_8", "stable_2", "crit_dmg_12", "dwin_ticket_7", "crit_rate_13", "archery_3", "mspd_13",  # 221~230
+	"kill_140_3", "atk_21", "dwin_ticket_8", "stage_1_14", "hp_21", "dwin_gold_9", "aspd_14", "gacha_10_7", "dungeon_gold_4", "crit_dmg_13",  # 231~240
+	"kill_140_8", "crit_rate_14", "dwin_gold_10", "mspd_14", "stable_3", "atk_23", "pvp", "dwin_equip_9", "hp_23", "kill_150_2",  # 241~250
+	"stage_1_15", "aspd_16", "fever", "crit_dmg_15", "dwin_equip_10", "crit_rate_16", "dwin_ticket_9", "mspd_16", "exchange_look", "kill_150_7",  # 251~260
+	"atk_25", "gacha_10_8", "dwin_gold_11", "hp_25", "party_clear"  # 261~265
 ]
 static var MISSIONS := _missions()
 ## 사이 퀘스트 보상(제 기본값, 2026-10-29): 처치는 골드 = 처치 수 × 이 값, 스테이지·던전 단계는 다이아 FILL_DIA_BIG, 영웅·능력치 레벨은 다이아 FILL_DIA.
@@ -1589,7 +1592,7 @@ func load_save() -> bool:
 	elif ver < 8:
 		old_step = map_v7(old_step)
 	step = clampi(old_step, 0, MISSIONS.size())
-	count = maxi(0, int(d.get("count", 0))) if ver >= 9 else 0  # 9: 같은 번호의 처치 칸이 다른 퀘스트가 됐을 수 있다 — 진행 수는 새로
+	count = maxi(0, int(d.get("count", 0))) if ver >= 10 else 0  # 9·10: 같은 번호의 칸이 다른 퀘스트가 됐을 수 있다 — 진행 수는 새로
 	best_stage = maxi(1, int(d.get("best_stage", 1)))
 	rep_n = maxi(0, int(d.get("rep_n", 0)))
 	var rq = d.get("rep_quest", {})
