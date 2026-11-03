@@ -17,7 +17,7 @@ func _ready() -> void:
 	for g in ["R", "SR", "SSR", "UR"]:
 		var row := []
 		st.play(g, 10)
-		var times := [0.25, 0.55, 0.85, 1.25, st._len - 0.05]
+		var times := [0.18, 0.32, 0.46, 0.7, 0.97].map(func(x): return x * st._len)
 		var last := 0.0
 		for t in times:
 			while st._t < t:
