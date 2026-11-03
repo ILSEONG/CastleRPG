@@ -67,7 +67,7 @@ const legal = {
   operator: process.env.LEGAL_OPERATOR?.trim() || '일성게임즈',
   bizNo: process.env.LEGAL_BIZ_NO?.trim() || '227-15-93850',
   email: process.env.LEGAL_EMAIL?.trim() || 'castlerpg123@gmail.com', // 2026-11-03 사장님 선택(전자상거래법 제10조 표시 사항, Play 스토어 연락처와 같은 주소)
-  phone: process.env.LEGAL_PHONE?.trim() || '',
+  phone: process.env.LEGAL_PHONE?.trim() || '010-8230-7981', // 2026-11-03 사장님이 알려 줌
   ceo: '최일성', // 2026-11-03 통신판매업 신고증
   address: '서울특별시 노원구 한글비석로 396',
   mailOrderNo: '2026-서울노원-1515',
