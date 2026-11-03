@@ -38,6 +38,21 @@ var _core: Sprite2D
 var _ground: Sprite2D  # 바닥 빛(납작한 타원)
 var _history: Array = []  # 유성 머리 지나온 자리
 var _landed := false
+# 더 화려하게(2026-11-03 사용자 "방향성은 좋은데 좀 더 화려하게"):
+# 원신 5성 기원의 갈라지는 빛살·가로 렌즈 플레어, 스타레일 워프의 함께 떨어지는 작은 유성들,
+# 명일방주·니케의 2중 충격파와 흩어지는 파편, 빛기둥을 감고 오르는 나선 빛.
+const RAYS := 14
+var _rays_tex: Texture2D
+var _rays_a: Sprite2D  # 빛살(시계 방향)
+var _rays_b: Sprite2D  # 빛살(반대)
+var _flare: Sprite2D  # 가로 렌즈 플레어
+var _cross_h: Sprite2D  # 십자 반짝임
+var _cross_v: Sprite2D
+var _ring2: Sprite2D  # 늦게 따라오는 둘째 충격파
+var _shards: CPUParticles2D  # 길게 날아가는 파편
+var _spiral: CPUParticles2D  # 빛기둥을 감고 오르는 빛
+var _mini: Array = []  # 함께 떨어지는 작은 유성 [{line, head, hist, from, delay}]
+var _flare_t := 9.0
 
 
 func _init() -> void:
@@ -56,7 +71,19 @@ func _init() -> void:
 			img.set_pixel(x, y, Color(1, 1, 1, ha * va))
 	_beam_tex = ImageTexture.create_from_image(img)
 
-	_tunnel = _particles(140, 1.1, _dot_tex)
+	# 빛살: 각도마다 가늘게 밝고 바깥으로 흐려진다
+	var rimg := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	for y in 256:
+		for x in 256:
+			var d := Vector2(x - 127.5, y - 127.5) / 127.5
+			var r := d.length()
+			var ang := d.angle()
+			var w := pow(absf(cos(ang * RAYS * 0.5)), 18.0) + 0.6 * pow(absf(cos(ang * RAYS * 0.5 + 0.9)), 40.0)
+			var a := clampf(w * pow(maxf(1.0 - r, 0.0), 1.3) * smoothstep(0.0, 0.12, r), 0.0, 1.0)
+			rimg.set_pixel(x, y, Color(1, 1, 1, a))
+	_rays_tex = ImageTexture.create_from_image(rimg)
+
+	_tunnel = _particles(180, 1.1, _dot_tex)
 	_tunnel.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
 	_tunnel.emission_sphere_radius = 40.0
 	_tunnel.direction = Vector2.RIGHT
@@ -72,11 +99,30 @@ func _init() -> void:
 	_tunnel.color_ramp = _fade([0.0, 0.25, 0.85, 1.0], [0.0, 0.9, 0.7, 0.0])
 
 	_ground = _sprite(_glow_tex)
+	_rays_a = _sprite(_rays_tex)
+	_rays_b = _sprite(_rays_tex)
 	_pillar_glow = _sprite(_beam_tex)
 	_pillar = _sprite(_beam_tex)
 	_core_glow = _sprite(_glow_tex)
 	_core = _sprite(_glow_tex)
 	_ring = _sprite(_ring_tex)
+	_ring2 = _sprite(_ring_tex)
+	_flare = _sprite(_glow_tex)
+	_cross_h = _sprite(_glow_tex)
+	_cross_v = _sprite(_glow_tex)
+
+	for i in 4:
+		var ln := Line2D.new()
+		ln.material = _add
+		ln.width = 14.0
+		ln.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		ln.width_curve = _curve([0.0, 1.0], [1.0, 0.0])
+		add_child(ln)
+		var hd := _sprite(_glow_tex)
+		var side := -1.0 if i % 2 == 0 else 1.0
+		_mini.append({"line": ln, "head": hd, "hist": [],
+			"from": Vector2(0.5 + side * (0.35 + 0.18 * i), -(0.08 + 0.07 * i)),  # 화면 비율
+			"delay": 0.15 + 0.12 * i})
 
 	_trail = Line2D.new()
 	_trail.material = _add
@@ -123,7 +169,41 @@ func _init() -> void:
 	_burst.scale_amount_curve = _curve([0.0, 1.0], [1.0, 0.2])
 	_burst.color_ramp = _fade([0.0, 0.05, 0.6, 1.0], [0.0, 1.0, 0.7, 0.0])
 
-	_motes = _particles(60, 2.6, _dot_tex)
+	_shards = _particles(70, 1.4, _dot_tex)
+	_shards.one_shot = true
+	_shards.explosiveness = 0.95
+	_shards.emitting = false
+	_shards.spread = 180.0
+	_shards.initial_velocity_min = 500.0
+	_shards.initial_velocity_max = 1300.0
+	_shards.damping_min = 300.0
+	_shards.damping_max = 600.0
+	_shards.gravity = Vector2(0, 420)
+	_shards.scale_amount_min = 0.5
+	_shards.scale_amount_max = 1.3
+	_shards.particle_flag_align_y = true
+	_shards.angular_velocity_min = 0.0
+	_shards.scale_amount_curve = _curve([0.0, 1.0], [1.6, 0.3])
+	_shards.color_ramp = _fade([0.0, 0.04, 0.7, 1.0], [0.0, 1.0, 0.8, 0.0])
+
+	_spiral = _particles(90, 1.8, _dot_tex)
+	_spiral.local_coords = true
+	_spiral.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE_SURFACE
+	_spiral.emission_sphere_radius = 70.0
+	_spiral.direction = Vector2.UP
+	_spiral.spread = 10.0
+	_spiral.initial_velocity_min = 260.0
+	_spiral.initial_velocity_max = 420.0
+	_spiral.orbit_velocity_min = 0.35
+	_spiral.orbit_velocity_max = 0.6
+	_spiral.radial_accel_min = -40.0
+	_spiral.radial_accel_max = -10.0
+	_spiral.scale_amount_min = 0.3
+	_spiral.scale_amount_max = 0.7
+	_spiral.emitting = false
+	_spiral.color_ramp = _fade([0.0, 0.15, 0.7, 1.0], [0.0, 1.0, 0.7, 0.0])
+
+	_motes = _particles(90, 2.6, _dot_tex)
 	_motes.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	_motes.emission_rect_extents = Vector2(260, 60)
 	_motes.direction = Vector2.UP
@@ -152,28 +232,36 @@ func reset() -> void:
 	_history.clear()
 	_landed = false
 	_ring_t = 9.0
-	for p in [_sparks, _motes, _tunnel, _embers, _burst]:
+	for p in [_sparks, _motes, _tunnel, _embers, _burst, _shards, _spiral]:
 		p.restart()
 		p.emitting = false
 	_tunnel.emitting = true
 	_trail.clear_points()
 	_trail_core.clear_points()
+	_flare_t = 9.0
+	for m in _mini:
+		m.hist = []
+		m.line.clear_points()
 	visible = true
 
 
 func stop() -> void:
 	visible = false
-	for p in [_sparks, _motes, _tunnel, _embers, _burst]:
+	for p in [_sparks, _motes, _tunnel, _embers, _burst, _shards, _spiral]:
 		p.emitting = false
 
 
 ## 터진다(착지·등급이 오를 때): 입자 폭발 + 충격파. power 1 = 착지, 더 크면 더 크게.
 func burst(power: float) -> void:
 	_burst.restart()
-	_burst.amount = int(clampf(100.0 * power, 60.0, 260.0))
+	_burst.amount = int(clampf(160.0 * power, 100.0, 400.0))
 	_burst.initial_velocity_max = 600.0 + 260.0 * power
 	_burst.emitting = true
+	_shards.restart()
+	_shards.amount = int(clampf(40.0 * power, 30.0, 120.0))
+	_shards.emitting = true
 	_ring_t = 0.0
+	_flare_t = 0.0
 	_ring.set_meta("power", power)
 
 
@@ -227,6 +315,23 @@ func tick(delta: float, t: float, base: float, length: float, fall: float, out: 
 				_history.pop_back()
 			_trail.points = PackedVector2Array(_history)
 			_trail_core.points = PackedVector2Array(_history)
+	# 함께 떨어지는 작은 유성(워프 별똥별): 큰 유성보다 조금 늦게 출발해 같은 자리로 모인다
+	for m in _mini:
+		var mf: float = clampf((t - m.delay) / maxf(fall - m.delay * 0.5, 0.05), 0.0, 1.0)
+		var on: bool = t >= m.delay and mf < 1.0
+		m.head.visible = on
+		if on:
+			var mp: Vector2 = (m.from * vs).lerp(land, ease(mf, 2.0))
+			m.hist.push_front(mp)
+			if m.hist.size() > 16:
+				m.hist.pop_back()
+			_place(m.head, mp, 1.1, c1.lerp(Color.WHITE, 0.3), 0.9)
+		elif not m.hist.is_empty():
+			m.hist.pop_back()
+			if not m.hist.is_empty():
+				m.hist.pop_back()
+		m.line.points = PackedVector2Array(m.hist)
+		m.line.gradient = _line_grad(c1.lerp(Color.WHITE, 0.2), 0.8)
 	# 착지 뒤: 바닥 빛 · 큰 빛 · 빛기둥
 	var open := ease(clampf((t - fall) / maxf(length - fall, 0.01), 0.0, 1.0), 0.4) if not flying else 0.0
 	var pulse := 1.0 + 0.06 * sin(t * 9.0)
@@ -249,6 +354,38 @@ func tick(delta: float, t: float, base: float, length: float, fall: float, out: 
 		_pillar.position = _pillar_glow.position
 		_pillar.scale = Vector2(pw, _pillar_glow.scale.y)
 		_pillar.modulate = Color(Color.WHITE.lerp(c1, 0.3), 0.9 * fade)
+	# 빛살 · 렌즈 플레어 · 십자 반짝임 · 나선 빛
+	for r in [_rays_a, _rays_b]:
+		r.visible = not flying
+	_spiral.emitting = not flying and out < 0.6
+	_spiral.position = land + Vector2(0, 40)
+	_spiral.color = c1.lerp(Color.WHITE, 0.3)
+	if not flying:
+		var rs := (3.0 + 5.0 * open) * (1.0 + 1.5 * out) * pulse
+		_rays_a.position = land
+		_rays_a.rotation = t * 0.35
+		_rays_a.scale = Vector2(rs, rs)
+		_rays_a.modulate = Color(col.call(0.4), 0.6 * fade)
+		_rays_b.position = land
+		_rays_b.rotation = -t * 0.22 + 0.11
+		_rays_b.scale = Vector2(rs, rs) * 0.8
+		_rays_b.modulate = Color(col.call(0.85).lerp(Color.WHITE, 0.3), 0.45 * fade)
+	_flare_t += delta
+	var fl := 1.0 / (1.0 + _flare_t * 6.0)  # 터진 순간 크게, 곧 은은하게 남는다
+	var flw := 0.0 if flying else (0.25 + 0.75 * fl)
+	_flare.visible = flw > 0.0
+	_flare.position = land
+	_flare.scale = Vector2(9.0 + 10.0 * fl, 0.22 + 0.25 * fl)
+	_flare.modulate = Color(c0.lerp(Color.WHITE, 0.5), flw * fade)
+	var tw := 0.75 + 0.25 * sin(t * 13.0)
+	for cr in [_cross_h, _cross_v]:
+		cr.visible = not flying
+		cr.position = land
+		cr.rotation = 0.25 * sin(t * 1.7)
+	_cross_h.scale = Vector2(4.5 * tw * (1.0 + fl), 0.12)
+	_cross_v.scale = Vector2(0.12, 4.5 * tw * (1.0 + fl))
+	_cross_h.modulate = Color(1, 1, 1, 0.9 * fade)
+	_cross_v.modulate = Color(1, 1, 1, 0.9 * fade)
 	_motes.position = land + Vector2(0, 80)
 	_motes.color = c1.lerp(Color.WHITE, 0.3)
 	_burst.position = land
@@ -264,7 +401,9 @@ func tick(delta: float, t: float, base: float, length: float, fall: float, out: 
 			cs.append(col.call(i / 6.0))
 		ramp.offsets = os
 		ramp.colors = cs
-	for pp in [_burst, _motes, _sparks]:
+	_shards.position = land
+	_shards.color = c1.lerp(Color.WHITE, 0.25)
+	for pp in [_burst, _motes, _sparks, _shards, _spiral]:
 		pp.color_initial_ramp = ramp
 		if ramp != null:
 			pp.color = Color.WHITE
@@ -275,6 +414,11 @@ func tick(delta: float, t: float, base: float, length: float, fall: float, out: 
 	if rk < 1.0:
 		var pw2: float = _ring.get_meta("power", 1.0)
 		_place(_ring, land, (1.0 + 7.0 * ease(rk, 0.35)) * (0.8 + 0.3 * pw2), c1.lerp(Color.WHITE, 0.5), (1.0 - rk) * fade)
+	var rk2 := (_ring_t - 0.12) / 0.8
+	_ring2.visible = rk2 > 0.0 and rk2 < 1.0
+	if _ring2.visible:
+		var pw3: float = _ring.get_meta("power", 1.0)
+		_place(_ring2, land, (0.6 + 10.0 * ease(rk2, 0.4)) * (0.8 + 0.3 * pw3), col.call(0.7), 0.7 * (1.0 - rk2) * fade)
 	# UR 불씨
 	_embers.emitting = rank >= 3 and out < 1.0
 	_embers.position = Vector2(c.x, vs.y + 40.0)
