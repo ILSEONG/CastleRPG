@@ -11,6 +11,7 @@ export interface LegalInfo {
   ceo?: string // 대표자
   address?: string // 사업장 주소
   mailOrderNo?: string // 통신판매업 신고번호(전자상거래법 표시 사항)
+  phone?: string // 전화번호(전자상거래법 제10조 표시 사항, 2026-11-03)
 }
 
 export const EFFECTIVE = '2026년 10월 14일'
@@ -28,6 +29,8 @@ function who(info: LegalInfo) {
       info.bizNo ? `사업자등록번호: ${esc(info.bizNo)}` : '',
       info.mailOrderNo ? `통신판매업 신고번호: ${esc(info.mailOrderNo)}` : '',
       info.address ? `주소: ${esc(info.address)}` : '',
+      info.phone ? `전화: ${esc(info.phone)}` : '',
+      info.email ? `이메일: ${esc(info.email)}` : '',
     ].filter(Boolean).map((l) => `<br>${l}`).join(''),
     officer: esc(info.ceo || info.operator || `${GAME} 운영자`),
     email: info.email ? `<a href="mailto:${esc(info.email)}">${esc(info.email)}</a>` : '(연락처 등록 예정)',
