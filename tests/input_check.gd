@@ -2522,7 +2522,7 @@ func _recruit_repeat(recruit) -> void:
 	_check(Economy.gold == 1000 and recruit.again10_button.disabled and recruit.again_button.disabled and not recruit.auto_running() and recruit.auto_box.button_pressed,
 		"(rr) auto loops 10-pulls until gold is short (301,000 -> 1,000), then stops", "gold=%d running=%s" % [Economy.gold, recruit.auto_running()])
 	recruit.close()
-	# 자동: 1회 모집 두 번째에서 SSR → 멈추고 SSR 카드 강조, 골드는 남아도 더 안 뽑는다
+	# 자동: 1회 모집 두 번째에서 SSR이 나와도 멈추지 않고(2026-11-03 사용자 "SSR나와도 멈추지말고 그냥 계속 돌려") 골드가 모자랄 때까지 3번
 	_gold_lv1()
 	Economy.gacha_gold_level = 3  # 1회 15,650
 	Economy.rng.seed = seed_ssr2
@@ -2530,15 +2530,31 @@ func _recruit_repeat(recruit) -> void:
 	Economy.changed.emit()
 	recruit.open()
 	await _unguarded(recruit)
+	var pulled := []
+	var on_pull := func(res): pulled.append_array(res.map(func(x): return x.grade))
+	Economy.gacha_done.connect(on_pull)
 	recruit.auto_box.button_pressed = true
 	recruit._recruit(1)
-	for i in 120:
+	for i in 180:
 		await _frames(1)
-	_check(Economy.gold == 15700 and not recruit.auto_running() and recruit.cards.size() == 1 and recruit.cards[0].highlight and recruit.is_showing_results()
-		and recruit.again_button.text == "1회 더\n15,650" and not recruit.again_button.disabled,
-		"(rr) auto stops when an SSR is pulled (2nd pull): results stay up, the SSR card is highlighted, [1회 더] is manual again",
-		"gold=%d running=%s hl=%s" % [Economy.gold, recruit.auto_running(), recruit.cards[0].highlight if recruit.cards.size() == 1 else null])
+	Economy.gacha_done.disconnect(on_pull)
+	_check(Economy.gold == 50 and pulled.size() == 3 and pulled[1] == "SSR" and not recruit.auto_running() and recruit.is_showing_results(),
+		"(rr) auto keeps going after an SSR (2nd pull) and stops only when gold is short (3 pulls, 47,000 -> 50)",
+		"gold=%d pulled=%s running=%s" % [Economy.gold, pulled, recruit.auto_running()])
 	recruit.close()
+	# 딜레이 줄이기(2026-11-03): 버튼을 누르자마자 소환진이 돈다. 결과가 오기 전엔 등급 빛 직전에서 기다리고, 결과가 오면 이어서 걷힌다
+	var st = recruit.stage
+	st.play("R", 10, true)
+	st._process(3.0)
+	var held: bool = st.is_pending() and st.is_busy() and st._t < st._base * st.SR_AT and st._rank == 0
+	st.resolve("SSR")
+	st._process(st._len)
+	var ranked: bool = not st.is_pending() and st._rank == 2
+	st._process(st.BURST + 0.05)
+	_check(held and ranked and not st.is_busy() and st.INTRO_TEN <= 1.5,
+		"(rr) the summon intro starts before the server answers, holds before the grade light, then finishes with the result's grade",
+		"held=%s ranked=%s busy=%s" % [held, ranked, st.is_busy()])
+	st.stop()
 	# [확인]은 자동을 멈추고 체크를 푼다
 	_gold_lv1()
 	Economy.rng.seed = seed_no_ssr

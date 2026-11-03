@@ -2877,7 +2877,6 @@ settings_panel.skill_banner_size,스킬 이름 크기,,,,scripts/settings_panel.
 settings_panel.banner_size_s,작게,,,,scripts/settings_panel.gd
 settings_panel.banner_size_m,보통,,,,scripts/settings_panel.gd
 settings_panel.banner_size_l,크게,,,,scripts/settings_panel.gd
-recruit_panel.ssr_text_2,SSR 이상 등장 — 반복 모집을 멈췄습니다,,,,scripts/recruit_panel.gd
 recruit_panel.ready_5,반복 모집,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_6,반복 모집 중\n■ 멈춤,,,,scripts/recruit_panel.gd
 recruit_panel.ready_8,연출 건너뛰기,,,,scripts/recruit_panel.gd

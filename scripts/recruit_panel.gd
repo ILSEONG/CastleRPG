@@ -9,7 +9,7 @@ extends "res://scripts/ui_window.gd"
 ## 새 영웅은 "NEW", 중복은 "+1 조각"과 그 영웅의 조각 막대(개정 15), SSR은 반짝임) + [재모집]·[확인]·자동 모집(개정 17) — 마지막에 뽑은 재화로 되풀이한다.
 ## 반복 모집(2026-11-02 사용자 "다른 게임 참고해서 연출효과 스킵, 반복뽑기 넣어줘" — 세븐나이츠 키우기·메이플스토리 키우기의 반복 소환,
 ## 니케·원신의 연출 건너뛰기 참고): 창 아래 [반복 모집]·[연출 건너뛰기] 체크(뽑기 화면·결과 화면 모두). 반복은 골드·다이아·모집권 모두,
-## 방금 뽑은 재화·장수로 되풀이하고 SSR 이상이 나오거나 그 재화가 모자라거나(모집권이 떨어지면 다이아로 넘어가지 않는다) [■ 멈춤]·[확인]을 누르면 멈춘다.
+## 방금 뽑은 재화·장수로 되풀이하고(SSR·UR이 나와도 멈추지 않는다 — 2026-11-03) 그 재화가 모자라거나(모집권이 떨어지면 다이아로 넘어가지 않는다) [■ 멈춤]·[확인]을 누르면 멈춘다.
 ## 연출 건너뛰기: 소환진·SSR 일러스트 화면 없이 카드가 바로 펴진다. 카드가 아직 펴지는 중에 [1회 더]·[10회 더]를 누르면 뽑지 않고 남은 카드를
 ## 다 연다(연타가 결과를 못 본 채 다음 모집으로 넘어가지 않게 — 2026-11-02 사용자 "10회더를 빠르게 여러번 클릭하면 이상해지는데").
 ## 모집은 Economy.gacha(count, currency), 결과는 Economy.gacha_done — 온라인 응답이 창을 닫은 뒤에 와도 다시 열어 보여 준다(결과를 놓치지 않게).
@@ -37,12 +37,11 @@ const TICKET := GameData.GACHA_TICKET  # 다이아 모집권(튜토리얼 보상
 static var TITLE := Lang.t("recruit_panel.title")
 static var LATE_TEXT := Lang.t("recruit_panel.late_text")
 static var DUP_TEXT := Lang.t("recruit_panel.dup_text")  # 이미 가진 영웅(개정 15)
-const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
-static var SSR_TEXT := Lang.t("recruit_panel.ssr_text_2")
+const AUTO_DELAY := 0.6  # 결과를 보여 준 뒤 다음 자동 모집까지 초(1.2 → 0.6, 2026-11-03 딜레이 줄이기)
 const REVEAL_ONE := 0.15  # 1회: 소환진이 걷힌 뒤 뒤집기까지(SR·SSR은 등급 빛이 다 모일 때까지 — CardReveal.begin)
 const REVEAL_FIRST := 0.12  # 10회: 소환진이 걷힌 뒤 첫 카드
 const REVEAL_STEP := 0.07  # 10회: 카드 사이(R·SR 먼저 왼쪽 위부터, SSR은 맨 끝에 무지개빛을 모았다가 하나씩)
-const SSR_GAP := 0.6  # 10회: SSR 카드끼리 사이
+const SSR_GAP := 0.4  # (0.6 → 0.4, 2026-11-03) 10회: SSR 카드끼리 사이
 const TOP_GRADES := ["SSR", "UR"]  # 맨 끝에 하나씩 뒤집고 일러스트 화면을 띄우는 등급(이 순서로 — UR이 마지막)
 const ONE_SCALE := 1.5  # 1회 결과 카드는 이만큼 크게
 var gold_tab: Button
@@ -388,8 +387,11 @@ func _recruit(count: int, cur := "") -> void:
 	_halted = false
 	_auto_left = 0.0
 	_waiting = true  # 오프라인은 gacha 안에서 바로 gacha_done이 온다 — 그 전에 둔다
+	if not (auto_running() or Fever.recruit_skip):  # 응답을 기다리지 않고 소환진부터 돌린다(등급 빛은 결과가 오면 — 2026-11-03 딜레이 줄이기)
+		stage.play("R", count, true)
 	_refresh()
 	if not Economy.gacha(count, _cur):
+		stage.stop()
 		_halted = true
 		_waiting = false
 		_refresh()
@@ -399,6 +401,8 @@ func _on_gacha_done(results: Array) -> void:
 	_waiting = false
 	if results.is_empty():
 		_halted = true  # 온라인 실패(알림은 Economy가 띄운다) — 자동을 멈춘다
+		if stage.is_pending():
+			stage.stop()
 		_refresh()
 		return
 	if not visible:
@@ -444,21 +448,21 @@ func _show_results(results: Array) -> void:
 		_grid.add_child(holder)
 		_reveals.append(holder)
 		cards.append(card)
-	var stop := auto_running() and results.any(func(r): return r.grade in TOP_GRADES)
-	if stop:  # 안전: 자동 중 SSR이 나오면 멈추고 그 카드를 강조(반짝임은 카드가 이미 낸다)
-		_halted = true
-		Economy.notice.emit(SSR_TEXT)
+	# 반복 중 SSR·UR이 나와도 멈추지 않는다(2026-11-03 사용자 "SSR나와도 멈추지말고 그냥 계속 돌려") — 그 카드만 강조
+	var auto := auto_running()
 	for i in results.size():
-		cards[i].highlight = stop and results[i].grade in TOP_GRADES
+		cards[i].highlight = auto and results[i].grade in TOP_GRADES
 	_auto_left = auto_delay
-	if fast:
+	var best := "R"
+	for g in ["UR", "SSR", "SR"]:
+		if results.any(func(x): return x.grade == g):
+			best = g
+			break
+	if stage.is_pending():  # 버튼을 누를 때 이미 돌기 시작한 소환진
+		stage.resolve(best)
+	elif fast:
 		stage.stop()
 	else:
-		var best := "R"
-		for g in ["UR", "SSR", "SR"]:
-			if results.any(func(x): return x.grade == g):
-				best = g
-				break
 		stage.play(best, results.size())
 	_pick_view.visible = false
 	_result_view.visible = true

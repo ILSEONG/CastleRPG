@@ -82,6 +82,7 @@ func _run() -> void:
 	_check(auto_btn != null and auto_btn.button.visible, "[스킬 AUTO] button shows over the portrait row")
 	if auto_btn != null:
 		_check(auto_btn.button.get_global_rect().end.y <= _strip.row.global_position.y, "[스킬 AUTO] sits above the portraits")
+		await _tap_auto(auto_btn, "castle stage")
 	# (1) 수동: 적을 붙여 두고 쿨을 채워도 저절로 안 나간다
 	SkillAuto.set_auto(false)
 	var m = MonsterScript.new()
@@ -133,6 +134,69 @@ func _run() -> void:
 	await get_tree().create_timer(h.SKILL_REQ_SEC + 0.5).timeout
 	_check(not h._skill_req.has(k) and h._skx.cd_left(k) <= 0.0, "manual: a tap with no enemy near expires and keeps the skill ready")
 	SkillAuto.set_auto(true)
+	# 던전·PVP 결투의 [스킬 AUTO]도 실제로 눌리는가
+	_main._dev_dungeon("gold")
+	await _frames(30)
+	await _tap_auto(_deep_with(_main._dungeon, "res://scripts/skill_auto_button.gd"), "gold dungeon")
+	_main.leave_dungeon()
+	await _frames(5)
+	Pvp.save_path = ""
+	Pvp.load_save()
+	Pvp.fetch()
+	Pvp.start("duel", Pvp.default_team("duel"))
+	var pb = null
+	for i in 400:
+		if _main._dungeon != null and _main._dungeon.get_script().resource_path == "res://scripts/pvp_battle.gd" and _main._dungeon.phase == _main._dungeon.Phase.FIGHT:
+			pb = _main._dungeon
+			break
+		await _frames(1)
+	_check(pb != null, "PVP duel reached the fight")
+	if pb != null:
+		await _tap_auto(_deep_with(pb, "res://scripts/skill_auto_button.gd"), "PVP duel")
+		_main.leave_dungeon()
+		await _frames(3)
+	SkillAuto.set_auto(true)
+
+
+## 실제로 눌리는가(사용자 2026-11-03 "스킬 auto버튼 지금 눌리는거 맞아?"): 가운데와 안쪽 두 귀퉁이를 마우스로 눌러 본다.
+func _tap_auto(auto_btn, where: String) -> void:
+	_check(auto_btn != null and auto_btn.button.is_visible_in_tree(), "%s: [스킬 AUTO] shows" % where)
+	if auto_btn == null:
+		return
+	var r: Rect2 = auto_btn.button.get_global_rect()
+	for at in [r.get_center(), r.position + Vector2(10, 10), r.end - Vector2(10, 10)]:
+		var mm := InputEventMouseMotion.new()
+		mm.position = at
+		mm.global_position = at
+		get_viewport().push_input(mm, true)
+		await _frames(1)
+		var hov := get_viewport().gui_get_hovered_control()
+		var before := SkillAuto.is_auto()
+		await _click(at)
+		_check(SkillAuto.is_auto() != before, "%s: a tap on [스킬 AUTO] at %s toggles it (%s -> %s, under the finger: %s)" % [where, at, before, SkillAuto.is_auto(), hov.name if hov else "none"])
+	# 폰처럼 손가락 터치(ScreenTouch → 마우스 흉내)로도
+	var b2 := SkillAuto.is_auto()
+	for pressed in [true, false]:
+		var te := InputEventScreenTouch.new()
+		te.index = 0
+		te.pressed = pressed
+		te.position = get_viewport().get_screen_transform() * r.get_center()  # 창 좌표(늘림 전)
+		Input.parse_input_event(te)
+		await _frames(2)
+	_check(SkillAuto.is_auto() != b2, "%s: a finger touch on [스킬 AUTO] toggles it (%s -> %s)" % [where, b2, SkillAuto.is_auto()])
+
+
+func _deep_with(n: Node, path: String) -> Node:
+	if n == null:
+		return null
+	for c in n.get_children():
+		if c.get_script() != null and c.get_script().resource_path == path:
+			return c
+	for c in n.get_children():
+		var f := _deep_with(c, path)
+		if f != null:
+			return f
+	return null
 
 
 func _slot_button(h, i: int) -> Button:

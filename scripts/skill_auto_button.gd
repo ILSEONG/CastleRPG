@@ -21,6 +21,7 @@ const OFF_COLOR := Color(0.30, 0.34, 0.46)  # 수동: 배속 끔과 같은 강�
 var row: Control  # 초상화 줄(그 위에 둔다). 숨겨져 있으면 버튼도 숨김
 var button: Button
 var _face: Control
+var _toggled_frame := -10  # 손가락 한 번 = 터치 + 흉내 낸 마우스 두 번 눌림(2026-11-03 "스킬 auto버튼 지금 눌리는거 맞아?") — 같은 순간 두 번째는 버린다
 
 
 ## 스킬 자동인가(기본 켬).
@@ -52,6 +53,10 @@ func _ready() -> void:
 
 
 func toggle() -> void:
+	var f := Engine.get_process_frames()
+	if f - _toggled_frame <= 1:
+		return
+	_toggled_frame = f
 	set_auto(not is_auto())
 	_refresh()
 
