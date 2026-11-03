@@ -158,6 +158,10 @@ func _build_list() -> void:
 	_list_view.add_child(tabs)
 	heroes_tab = _tab_button(Lang.t("hero_panel.tab_heroes"), "heroes", tabs)
 	fuse_tab = _tab_button(Lang.t("hero_panel.tab_fuse"), "fuse", tabs)
+	var x_room := Control.new()  # 오른쪽 위 닫기 X 자리(2026-11-03 사용자 "합성위에 x버튼 겹치는거") — 탭이 X 밑으로 들어가지 않게
+	x_room.custom_minimum_size = Vector2(CLOSE_X_PX - 4.0, 0)
+	x_room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tabs.add_child(x_room)
 	_heroes_box = VBoxContainer.new()
 	_heroes_box.add_theme_constant_override("separation", 10)
 	_heroes_box.size_flags_vertical = Control.SIZE_EXPAND_FILL

@@ -618,6 +618,8 @@ func _recruit_and_heroes(rig) -> void:
 	var ft = heroes_win.fuse
 	var tab_ok: bool = heroes_win.tab == "fuse" and not heroes_win._heroes_box.visible and heroes_win._fuse_box.visible and ft.cards.has(sr_ids[0]) and ft.cards.has(r_ids[0]) \
 		and ft.candidates().all(func(id): return GameData.hero(id).grade != "UR") and ft.fuse_button.disabled and ft.main_card.hero_id == ""
+	_check(not heroes_win.fuse_tab.get_global_rect().intersects(heroes_win.close_x.get_global_rect()) and not heroes_win.heroes_tab.get_global_rect().intersects(heroes_win.close_x.get_global_rect()),
+		"(u) the [영웅]·[합성] tabs stay clear of the close X (2026-11-03)", "fuse_tab=%s x=%s" % [heroes_win.fuse_tab.get_global_rect(), heroes_win.close_x.get_global_rect()])
 	_check(tab_ok and ft.fuse_button.get_global_rect().end.x <= 720.0 and heroes_win.fuse_tab.get_global_rect().end.x <= 720.0,
 		"(u) [합성] tab: fusion stage, no grade yet, owned R/SR/SSR heroes with shards as cards inside the screen", "tab=%s cards=%s" % [heroes_win.tab, ft.cards.keys()])
 	ft.cards[sr_ids[0]].tapped.emit(ft.cards[sr_ids[0]])  # 카드 누름(격자 아래쪽이라 스크롤 밖일 수 있다)
