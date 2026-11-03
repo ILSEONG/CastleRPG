@@ -31,7 +31,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 const IconsScript := preload("res://scripts/icons.gd")
 const ItemTileScript := preload("res://scripts/item_tile.gd")
 const BagPanel := preload("res://scripts/bag_panel.gd")
-const FuseDialog := preload("res://scripts/fuse_dialog.gd")
+const FuseTabScript := preload("res://scripts/fuse_tab.gd")
 const EQUIP_PX := 64.0  # 장비 칸 한 변(2026-10-15 장신구 두 칸이 늘어 72 → 64)
 const DOT_R := 9.0  # 장비 칸 빨간 점 반지름(논리 px)
 const DOT_RED := Color(0.9, 0.18, 0.15)
@@ -77,11 +77,10 @@ var _auto_used := false  # [자동 배치]를 누른 뒤 아직 [적용] 전(가
 var auto_button: Button  # [자동 배치](Economy.auto_hero_deploy — 편집만, 적용은 [적용]). 편집이 이미 자동 배치와 같으면 비활성
 var sort_button: Button
 var heroes_tab: Button  # 목록 위 탭(2026-10-30 사용자 "영웅 창에 탭을 두개 둬서, 합성 탭을 하나 만들어줘"): [영웅]
-var fuse_tab: Button  # [합성]: 등급 줄 R→SR · SR→SSR · SSR→UR
+var fuse_tab: Button  # [합성]: 합성대 + 영웅 카드 격자(fuse_tab.gd — 첫 영웅 등급이 합성 등급)
 var tab := "heroes"  # "heroes" | "fuse"
 var _from_fuse := false  # 합성 결과를 모집 창에 넘겼다(다시 열릴 때 탭을 지킨다)
-var fuse_rows := {}  # 넣는 등급 → {label, count, button}
-var fuse: Control  # 조각 합성 창(fuse_dialog.gd, open(grade))
+var fuse  # [합성] 탭 내용(fuse_tab.gd)
 var recruit  # 모집 창(main이 넣는다): 합성 결과를 뒤집기 연출로 보여 준다
 var promote_all_button: Button  # [일괄 승급]
 var promote_all_confirm: Control  # 일괄 승급 확인 창(어두운 막 + 크림 창)
@@ -117,7 +116,7 @@ var unlocks_shown := 0  # 스킬 해금 반짝임 횟수(테스트용)
 
 var _list_view: VBoxContainer
 var _heroes_box: VBoxContainer  # [영웅] 탭: 배치 슬롯 + 버튼 줄 + 보유 격자
-var _fuse_box: VBoxContainer  # [합성] 탭
+var _fuse_box: VBoxContainer  # [합성] 탭(제목 + fuse)
 var _detail_view: VBoxContainer
 var _slot_grid: GridContainer
 var _hero_grid: GridContainer
@@ -201,9 +200,6 @@ func _build_list() -> void:
 	grid_center.add_child(_hero_grid)
 	_build_fuse_tab()
 	_build_promote_all_confirm()
-	fuse = FuseDialog.new()
-	fuse.fused.connect(_on_fused)
-	add_child(fuse)
 	set_tab("heroes")
 
 
@@ -228,53 +224,21 @@ func set_tab(id: String) -> void:
 	_refresh()
 
 
-## [합성] 탭: 등급마다 한 줄 — "R 조각 10개 → SR 영웅 1명", 보유 조각(★5까지 쓰고 남는 조각), [합성](조각이 모자라면 꺼진다).
-## AFK 아레나·세븐나이츠 키우기의 영웅 합성처럼 같은 등급 조각을 모아 한 단계 위 등급을 무작위로 받는다.
+## [합성] 탭: 제목 + fuse_tab(합성대 · 넣은 조각 막대 · [비우기][자동 채우기][합성] · 조각이 있는 영웅 카드 격자).
 func _build_fuse_tab() -> void:
 	_fuse_box = VBoxContainer.new()
-	_fuse_box.add_theme_constant_override("separation", 16)
+	_fuse_box.add_theme_constant_override("separation", 8)
 	_fuse_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_list_view.add_child(_fuse_box)
 	_fuse_box.add_child(_title(Lang.t("hero_panel.fuse_title")))
-	var desc := _label(Lang.t("hero_panel.fuse_desc") % Economy.fuse_cost(), 22, HudScript.INK.lightened(0.3))
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_fuse_box.add_child(desc)
-	for g in ["R", "SR", "SSR"]:
-		var to: String = Economy.FUSE_NEXT[g]
-		var panel := PanelContainer.new()
-		panel.add_theme_stylebox_override("panel", UiKit.panel(Color(UiKit.GRADE_COLORS[to], 0.16), 12.0, 14))
-		_fuse_box.add_child(panel)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		panel.add_child(row)
-		var col := VBoxContainer.new()
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(col)
-		var name_l := _label(Lang.t("hero_panel.fuse_row") % [g, Economy.fuse_cost(), to], 28, UiKit.GRADE_COLORS[to].darkened(0.35))
-		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		col.add_child(name_l)
-		var count_l := _label("", 22, HudScript.INK.lightened(0.2))
-		count_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		col.add_child(count_l)
-		var b := _button(Lang.t("hero_panel.fuse_go"), UiKit.GRADE_COLORS[to].darkened(0.1), 26)
-		b.custom_minimum_size = Vector2(150, 72)
-		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		b.pressed.connect(open_fuse.bind(g))
-		row.add_child(b)
-		fuse_rows[g] = {"label": name_l, "count": count_l, "button": b}
+	fuse = FuseTabScript.new()
+	fuse.fused.connect(_on_fused)
+	_fuse_box.add_child(fuse)
 
 
 func _refresh_fuse() -> void:
-	for g in fuse_rows:
-		var r: Dictionary = fuse_rows[g]
-		var have := Economy.grade_shards(g)
-		r.count.text = Lang.t("hero_panel.fuse_count") % [have, Economy.grade_shards(g, true)]
-		r.button.disabled = have < Economy.fuse_cost()
-
-
-## 등급 줄 [합성]: 그 등급 조각 합성 창(조각 10개 → 한 단계 위 등급 1명 무작위).
-func open_fuse(grade := "SSR") -> void:
-	fuse.open(grade)
+	if _fuse_box.visible:
+		fuse.refresh()
 
 
 ## 합성 창 [합성]: 결과는 모집 창이 뒤집기 연출로 보여 주고, [확인]을 누르면 이 창으로 돌아온다.

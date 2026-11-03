@@ -1,9 +1,10 @@
 extends Node
-## 영웅 합성 시연 영상(개발용, 오프라인, 2026-10-30): 영웅 창 [합성] 탭 → R→SR · SR→SSR · SSR→UR 줄마다 [합성] → [자동 채우기] → [합성]
+## 영웅 합성 시연 영상(개발용, 오프라인, 2026-11-02): 영웅 창 [합성] 탭 → 첫 영웅(R·SR·SSR)을 고르면 그 등급 합성 → [자동 채우기] → [합성]
 ## → 모집 연출로 결과 → [확인]으로 영웅 창에 돌아온다. 결과는 오프라인 규칙(무작위). 화면이 필요하다(--write-movie와 함께):
 ##   xvfb-run -a godot --path . --resolution 720x1280 --write-movie /tmp/fuse.avi --fixed-fps 30 res://tests/fuse_movie.tscn
 ## 저장 파일은 건드리지 않는다.
 
+const GameData := preload("res://scripts/game_data.gd")
 const FONT := preload("res://assets/fonts/Pretendard-SemiBold.otf")
 
 var _main
@@ -49,21 +50,23 @@ func _ready() -> void:
 	await _wait(2.0)
 	_tap(hp.fuse_tab.get_global_rect().get_center())
 	await _wait(0.4)
-	_say("[합성] 탭 — 같은 등급 조각 10개로 한 단계 위 영웅 1명")
+	_say("[합성] 탭 — 처음 고른 영웅의 등급으로 합성합니다")
 	await _wait(3.0)
-	for g in ["R", "SR", "SSR"]:
-		_say("%s 조각 10개 → %s 영웅" % [g, Economy.FUSE_NEXT[g]])
-		_tap(hp.fuse_rows[g].button.get_global_rect().get_center())
-		await _wait(1.4)
-		_tap(hp.fuse.auto_button.get_global_rect().get_center())
-		await _wait(1.4)
-		_tap(hp.fuse.fuse_button.get_global_rect().get_center())
+	for id in ["hans", "bron", "arteon"]:
+		var ft = hp.fuse
+		var g: String = GameData.hero(id).grade
+		_say("%s 영웅을 먼저 고르면 %s 합성 (다른 등급은 흐려짐)" % [g, g])
+		ft.cards[id].tapped.emit(ft.cards[id])
+		await _wait(2.2)
+		_say("[자동 채우기] → %s 조각 10개" % g)
+		_tap(ft.auto_button.get_global_rect().get_center())
+		await _wait(1.8)
+		_say("[합성] → %s 영웅 1명" % Economy.FUSE_NEXT[g])
+		_tap(ft.fuse_button.get_global_rect().get_center())
 		await _wait(6.5)
-		if rp.visible and rp.confirm_button != null and rp.confirm_button.is_visible_in_tree():
+		if rp.visible:
 			_tap(rp.confirm_button.get_global_rect().get_center())
-		elif rp.visible:
-			rp._on_confirm()
-		await _wait(1.5)
+		await _wait(1.6)
 	_say("[영웅] 탭으로 돌아가면 새 영웅이 목록에")
 	_tap(hp.heroes_tab.get_global_rect().get_center())
 	await _wait(3.0)

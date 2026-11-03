@@ -592,41 +592,44 @@ func _recruit_and_heroes(rig) -> void:
 	var grid_ids: Array = heroes_win._hero_grid.get_children().map(func(c): return c.hero_id)
 	_check(not locked.is_empty() and locked == want_locked and grid_ids == heroes_win.hero_cards.keys() + locked and heroes_win.unowned_sorted() == want_locked,
 		"(u) unowned heroes follow every owned hero in the grid, SSR -> SR -> R then file order", "grid=%s locked=%s" % [grid_ids, locked])
-	# [영웅]·[합성] 탭(2026-10-30 사용자 "영웅 창에 탭을 두개 둬서, 합성 탭을 하나 만들어줘"): [합성] 탭은 R→SR · SR→SSR · SSR→UR 세 줄,
-	# 줄 [합성]은 그 등급 조각 합성 창을 연다. [영웅] 탭으로 돌아오면 목록 그대로
-	await _tap(heroes_win.fuse_tab.get_global_rect().get_center())
-	await _frames(2)
-	var fuse_ok: bool = heroes_win.tab == "fuse" and not heroes_win._heroes_box.visible and heroes_win._fuse_box.visible and heroes_win.fuse_rows.keys() == ["R", "SR", "SSR"]
-	for g in heroes_win.fuse_rows:
-		var fb: Button = heroes_win.fuse_rows[g].button
-		fuse_ok = fuse_ok and fb.is_visible_in_tree() and fb.get_global_rect().end.x <= 720.0 and fb.disabled == (Economy.grade_shards(g) < Economy.fuse_cost())
-	_check(fuse_ok and heroes_win.fuse_tab.get_global_rect().end.x <= 720.0, "(u) [합성] tab shows the R/SR/SSR fusion rows inside the screen", "tab=%s" % heroes_win.tab)
-	heroes_win.open_fuse("SR")
-	await _frames(2)
-	_check(heroes_win.fuse.visible and heroes_win.fuse.grade == "SR" and heroes_win.fuse.title_label.text == "SR 조각 합성"
-		and heroes_win.fuse.candidates().all(func(id): return GameData.hero(id).grade == "SR"), "(u) a fusion row opens that grade's shard window", "title=%s" % heroes_win.fuse.title_label.text)
-	await _tap(heroes_win.fuse.close_button.get_global_rect().get_center())
-	await _frames(2)
-	# 실제 합성: SR 조각 10개 → [자동 채우기] → [합성] → 모집 창 결과 → [확인]이면 영웅 창 [합성] 탭으로 돌아온다
+	# [영웅]·[합성] 탭(2026-10-30). [합성] 탭(2026-11-02 사용자 "처음 선택한 영웅이 합성대상 영웅의 등급으로 정해지는거야"):
+	# 합성대(첫 영웅 → 결과 등급 "?") + 조각이 있는 영웅 카드 격자. 첫 카드의 등급이 합성 등급, 다른 등급 카드는 흐리고 넣을 수 없다
 	var sr_ids: Array = GameData.heroes().filter(func(h): return h.grade == "SR").map(func(h): return h.id)
+	var r_ids: Array = GameData.heroes().filter(func(h): return h.grade == "R").map(func(h): return h.id)
 	var keep_heroes: Dictionary = Economy.heroes.duplicate()
 	var keep_shards: Dictionary = Economy.hero_shards.duplicate()
-	Economy.heroes[sr_ids[0]] = maxi(1, int(Economy.heroes.get(sr_ids[0], 0)))
-	Economy.hero_shards[sr_ids[0]] = 10
-	heroes_win.open_fuse("SR")
+	for id in [sr_ids[0], sr_ids[1], r_ids[0]]:
+		Economy.heroes[id] = maxi(1, int(Economy.heroes.get(id, 0)))
+	Economy.hero_shards[sr_ids[0]] = 6
+	Economy.hero_shards[sr_ids[1]] = 6
+	Economy.hero_shards[r_ids[0]] = 5
+	await _tap(heroes_win.fuse_tab.get_global_rect().get_center())
 	await _frames(2)
-	await _tap(heroes_win.fuse.auto_button.get_global_rect().get_center())
+	var ft = heroes_win.fuse
+	var tab_ok: bool = heroes_win.tab == "fuse" and not heroes_win._heroes_box.visible and heroes_win._fuse_box.visible and ft.cards.has(sr_ids[0]) and ft.cards.has(r_ids[0]) \
+		and ft.candidates().all(func(id): return GameData.hero(id).grade != "UR") and ft.fuse_button.disabled and ft.main_card.hero_id == ""
+	_check(tab_ok and ft.fuse_button.get_global_rect().end.x <= 720.0 and heroes_win.fuse_tab.get_global_rect().end.x <= 720.0,
+		"(u) [합성] tab: fusion stage, no grade yet, owned R/SR/SSR heroes with shards as cards inside the screen", "tab=%s cards=%s" % [heroes_win.tab, ft.cards.keys()])
+	ft.cards[sr_ids[0]].tapped.emit(ft.cards[sr_ids[0]])  # 카드 누름(격자 아래쪽이라 스크롤 밖일 수 있다)
 	await _frames(2)
-	var fusable: bool = not heroes_win.fuse.fuse_button.disabled
-	await _tap(heroes_win.fuse.fuse_button.get_global_rect().get_center())
+	ft.cards[r_ids[0]].tapped.emit(ft.cards[r_ids[0]])
+	await _frames(2)
+	_check(ft.grade == "SR" and ft.main_card.hero_id == sr_ids[0] and ft.picks == {sr_ids[0]: 1} and ft.result_label.text == "SSR\n?"
+		and ft.cards[r_ids[0]].modulate.a < 0.5 and ft.cards[sr_ids[1]].modulate == Color.WHITE and ft.cards[sr_ids[0]].checked,
+		"(u) the first card picks the fusion grade (SR -> SSR); other grades dim and cannot be added", "grade=%s picks=%s" % [ft.grade, ft.picks])
+	await _tap(ft.auto_button.get_global_rect().get_center())
+	await _frames(2)
+	var fusable: bool = not ft.fuse_button.disabled and ft.total() == Economy.fuse_cost() and ft.main_card.hero_id == sr_ids[0] and ft.picks.keys().all(func(id): return GameData.hero(id).grade == "SR")
+	await _tap(ft.fuse_button.get_global_rect().get_center())
 	await _frames(4)
 	var rwin = recruit
-	var fused_shown: bool = rwin != null and rwin.visible and not heroes_win.fuse.visible
+	var fused_shown: bool = rwin != null and rwin.visible and ft.picks.is_empty()
 	if rwin != null and rwin.visible:
 		rwin._on_confirm()
 	await _frames(3)
-	_check(fusable and fused_shown and Economy.shards_of(sr_ids[0]) <= 1 and heroes_win.visible and heroes_win.tab == "fuse",
-		"(u) fusing 10 SR shards plays in the recruit window and [확인] returns to the [합성] tab", "fusable=%s shown=%s shards=%d hero_win=%s tab=%s" % [fusable, fused_shown, Economy.shards_of(sr_ids[0]), heroes_win.visible, heroes_win.tab])
+	_check(fusable and fused_shown and Economy.shards_of(sr_ids[0]) + Economy.shards_of(sr_ids[1]) <= 3 and heroes_win.visible and heroes_win.tab == "fuse" and ft.grade == "",
+		"(u) [자동 채우기] fills 10 SR shards, [합성] plays in the recruit window and [확인] returns to an empty [합성] tab",
+		"fusable=%s shown=%s shards=%d/%d hero_win=%s tab=%s" % [fusable, fused_shown, Economy.shards_of(sr_ids[0]), Economy.shards_of(sr_ids[1]), heroes_win.visible, heroes_win.tab])
 	Economy.heroes = keep_heroes
 	Economy.hero_shards = keep_shards
 	Economy.roster_changed.emit()
