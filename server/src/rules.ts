@@ -783,8 +783,51 @@ export const POWER_RANGED = 2.0
 export const powerOf = (def: { role?: unknown; grade?: unknown; atk_interval: unknown }, hp: number, atk: number) =>
   roundHalfAway((hp / 10 + ((atk * 2) / Number(def.atk_interval)) * (String(def.role ?? '') === 'ranged' ? POWER_RANGED : 1)) * (POWER_GRADE[String(def.grade ?? '')] ?? 1))
 export function heroPower(def: Record<string, any>, level: number, promotion: number, equip: { hp: number; atk: number }, config: Config): number {
-  const m = levelMult(config, level, String(def.role ?? '')) * promoteMult(config, promotion)
-  return powerOf(def, Number(def.hp) * m + equip.hp, Number(def.atk) * m + equip.atk)
+  return powerAt(def, level, promotion, equip, (k) => cfgNum(config, k))
+}
+
+// 같은 등급 전투력 맞춤(2026-11-02 사용자 "같은 등급의 영웅들의 레벨이나 성급이 동일하다고 하면 전투력의 차이는 최대 10이야"):
+// 전투력 = round((그 등급 영웅들의 위 식 평균(레벨·승급) + 장비 HP / 10 + 장비 공격 × 2 × 그 등급 평균(원거리 배율 / 공격 간격)) × 등급 배율)
+//   + 영웅 몫 0~10(그 등급 안에서 1레벨 점수 순 — 가장 낮은 영웅 0, 가장 높은 영웅 10).
+// 같은 등급·레벨·승급·장비면 앞부분이 똑같아 차이는 영웅 몫(최대 10)뿐이다. 실제 전투 능력치(hero_stats)는 그대로. 앱 GameData.hero_power와 같다.
+// 등급 표(indexPower — 게임 데이터를 읽을 때 영웅 id로)에 없는 영웅(테스트가 만든 영웅)은 예전 식(자기 HP·공격) 그대로.
+interface PowerInfo { grade: string; n: number; melee: number; ranged: number; rf: number; off: number }
+const POWER_INFO = new Map<string, PowerInfo>()
+const powerScore = (d: Record<string, any>) =>
+  Number(d.hp) / 10 + (Number(d.atk) * 2 / Number(d.atk_interval)) * (String(d.role ?? '') === 'ranged' ? POWER_RANGED : 1)
+export function indexPower(heroes: Record<string, any>[]): void {
+  POWER_INFO.clear()
+  const grades = new Map<string, Record<string, any>[]>()
+  for (const d of heroes) grades.set(String(d.grade ?? ''), [...(grades.get(String(d.grade ?? '')) ?? []), d])
+  for (const list of grades.values()) {
+    const sc = list.map(powerScore)
+    const lo = Math.min(...sc)
+    const hi = Math.max(...sc)
+    const base = { grade: String(list[0].grade ?? ''), n: list.length, melee: 0, ranged: 0, rf: 0 }
+    list.forEach((d, i) => {
+      if (String(d.role ?? '') === 'melee') base.melee += sc[i]
+      else base.ranged += sc[i]
+      base.rf += (String(d.role ?? '') === 'ranged' ? POWER_RANGED : 1) / Number(d.atk_interval)
+    })
+    list.forEach((d, i) => POWER_INFO.set(String(d.id), { ...base, off: hi > lo ? roundHalfAway(10 * (sc[i] - lo) / (hi - lo)) : 0 }))
+  }
+}
+// 최종 능력치(성장·연구·장비·버프 포함, PVP·파티가 받은 hp·atk)로: 레벨·승급 기본 능력치를 뺀 나머지를 장비처럼 더한다.
+export function powerOfStats(def: Record<string, any>, level: number, promotion: number, hp: number, atk: number, cfg: (k: string) => number): number {
+  const m = (1 + cfg(String(def.role ?? '') === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (level - 1)) *
+    grown(1, cfg('promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
+  return powerAt(def, level, promotion, { hp: hp - Number(def.hp) * m, atk: atk - Number(def.atk) * m }, cfg)
+}
+export function powerAt(def: Record<string, any>, level: number, promotion: number, equip: { hp: number; atk: number }, cfg: (k: string) => number): number {
+  const pm = grown(1, cfg('promote_mult'), Math.min(Math.max(promotion, 0), MAX_PROMOTION))
+  const lm = (role: string) => (1 + cfg(role === 'melee' ? 'hero_level_stat_melee' : 'hero_level_stat') * (level - 1)) * pm
+  const info = POWER_INFO.get(String(def.id))
+  if (!info || info.grade !== String(def.grade ?? '')) {
+    const m = lm(String(def.role ?? ''))
+    return powerOf(def, Number(def.hp) * m + equip.hp, Number(def.atk) * m + equip.atk)
+  }
+  const v = (lm('melee') * info.melee + lm('ranged') * info.ranged) / info.n + equip.hp / 10 + equip.atk * 2 * info.rf / info.n
+  return roundHalfAway(v * (POWER_GRADE[String(def.grade ?? '')] ?? 1)) + info.off
 }
 
 // FNV-1a 32비트(도우미 순서 섞기 — 앱 GameData.fnv32와 같다).

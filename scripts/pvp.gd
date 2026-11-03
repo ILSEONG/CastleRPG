@@ -405,7 +405,7 @@ func make_bot(mode: String, base: Array, pts: int) -> Dictionary:
 		var f := GuildWarScript.fit_hero(d, targets[i])
 		var s := GameData.hero_stats(d, int(f.level), int(f.promotion), {})
 		heroes.append({"hero": d.id, "level": f.level, "promotion": f.promotion, "hp": roundf(s.hp), "atk": snappedf(s.atk, 0.1)})
-		total += GameData.power_of(d, s.hp, s.atk)
+		total += GameData.hero_power(d, int(f.level), int(f.promotion), {})
 	var soldiers := {}
 	if mode == "total":
 		var ids: Array = GameData.soldiers().map(func(x): return str(x.id))
@@ -424,7 +424,7 @@ func _base_team(lm: Dictionary) -> Array:
 		for h in lm.defense:
 			var d := GameData.hero(str(h.hero))
 			if not d.is_empty():
-				out.append({"grade": d.grade, "role": d.role, "power": GameData.power_of(d, float(h.hp), float(h.atk))})
+				out.append({"grade": d.grade, "role": d.role, "power": GameData.hero_power_of_stats(d, int(h.get("level", 1)), int(h.get("promotion", 0)), float(h.hp), float(h.atk))})
 		return out
 	for id in owned_heroes().slice(0, PvpRules.TEAM):
 		var d := GameData.hero(str(id))

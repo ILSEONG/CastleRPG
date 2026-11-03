@@ -5,7 +5,7 @@
 // 성 상태(성문·성채 체력, 수비 영웅별 남은 체력 비율)는 전쟁 행(guild_wars.castle)에 저장되고 전투 결과로만 줄어든다(mergeCastle — 늘지 않는다).
 // 점수: 수비 영웅 처치 1 · 성문 10(2개까지) · 성채 최대 체력의 3%를 깎을 때마다 1(서버가 성 상태로 센다). 상대 점수 = 가상 상대가 우리 성을 한 번 친 결과(enemyPoints) —
 // 우리 공성 시간이 끝나면 보인다.
-import { heroMaxLevel, mulberry32, powerOf, type Config, type StatLimit } from './rules.ts'
+import { heroMaxLevel, mulberry32, powerAt, type Config, type StatLimit } from './rules.ts'
 import { guildName, mix, nickname } from './guild.ts'
 
 export const BATTLE_SEC = 600
@@ -52,11 +52,8 @@ export function heroStats(def: HeroDef, level: number, promotion: number, cfg: C
   return { hp: def.hp * m, atk: def.atk * m }
 }
 
-export const heroPower = (def: HeroDef, level: number, promotion: number, cfg: Cfg) => {
-  const s = heroStats(def, level, promotion, cfg)
-  return powerOf(def, s.hp, s.atk) // 앱 GameData.hero_power(장비 없이)와 같은 식
-
-}
+export const heroPower = (def: HeroDef, level: number, promotion: number, cfg: Cfg) =>
+  powerAt(def, level, promotion, { hp: 0, atk: 0 }, cfg) // 앱 GameData.hero_power(장비 없이)와 같은 식(같은 등급 맞춤, 2026-11-02)
 
 // 앱 GameData.max_level과 같다(2026-10-13 hero_max_levels 20·50·80·120·160·200 — 예전엔 기본 + 승급당 값이라 ★3에서 앱 120 · 서버 110으로 달랐다)
 export const maxLevel = (promotion: number, cfg: Cfg) =>

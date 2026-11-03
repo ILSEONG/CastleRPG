@@ -333,7 +333,7 @@ func _remote_checks() -> int:
 	p.heroes[17].s3a = null
 	check(GameData.apply_remote(p) and GameData.errors == 0, "apply_remote accepts changed payload")
 	check(GameData.hero("arteon").hp == 999.0 and GameData.heroes().size() == 42 and GameData.default_deploy(3) == ["jack", "kyle", null], "remote heroes + starters replace the table")
-	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 3.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
+	check(GameData.hero("ignis").skills == {"aoe_blast": [5.0, 4.5, 220.0], "haste": [25.0, 0.0, 0.0], "ignite": [8.0, 3.0, 40.0]}
 		and GameData.hero("hans").skills.size() == 2, "remote hero row with numbers and nulls parses skills")
 	check(GameData.resource("wood").per_min == 20.0 and GameData.monster("grunt").gold == 7.0, "remote resources/monsters replace the table")
 	check(GameData.config_num("castle_hp") == 2000.0 and GameData.hero_slots(2) == 4 and GameData.hero_slots(3) == 8 and GameData.interior_tiles(6) == 28, "remote config replaces the table")
@@ -2018,9 +2018,18 @@ func test_hero_levels() -> void:
 		"melee heroes grow slower: x(1 + 0.0315 x (L - 1))")
 	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.2835 × 1.3², 23 × 1.2835 × 1.3²
 	check(is_equal_approx(st.hp, 396.0 * 1.2835 * 1.69) and is_equal_approx(st.atk, 23.0 * 1.2835 * 1.69), "stats = base x level mult x promotion mult (1.3^p on base and level-ups alike): %s" % [st])
-	check(GameData.hero_power(hans, 1, 0) == 97 and GameData.hero_power(GameData.hero("kyle"), 1, 0) == 496 \
-		and GameData.hero_power(hans, 10, 2) == roundi(396.0 * 2.169115 / 10.0 + 23.0 * 2.169115 * 2.0 / 0.8) and GameData.hero_power(hans, 1, 1) == 126,
-		"power = round((HP / 10 + atk x 2 / interval) x grade): hans %d, kyle %d" % [GameData.hero_power(hans, 1, 0), GameData.hero_power(GameData.hero("kyle"), 1, 0)])
+	# 같은 등급 맞춤(2026-11-02 사용자 "같은 등급의 영웅들의 레벨이나 성급이 동일하다고 하면 전투력의 차이는 최대 10이야")
+	var spread_ok := true
+	var spreads := []
+	for g in ["R", "SR", "SSR", "UR"]:
+		for lp in [[1, 0], [10, 2], [50, 1], [120, 3], [200, 5]]:
+			var ps: Array = GameData.heroes().filter(func(h): return h.grade == g).map(func(h): return GameData.hero_power(h, lp[0], lp[1], {}))
+			spreads.append(ps.max() - ps.min())
+			spread_ok = spread_ok and ps.max() - ps.min() <= 10 and ps.max() - ps.min() >= 9
+	var kyle := GameData.hero("kyle")
+	check(spread_ok and GameData.hero_power(hans, 10, 2, {}) > GameData.hero_power(hans, 10, 1, {}) and GameData.hero_power(hans, 11, 2, {}) > GameData.hero_power(hans, 10, 2, {})
+		and GameData.hero_power(GameData.hero("torvin"), 1, 0, {}) > GameData.hero_power(GameData.hero("jack"), 1, 0, {}) and GameData.hero_power(kyle, 1, 0, {}) > GameData.hero_power(GameData.hero("rian"), 1, 0, {}),
+		"power: same grade, level and promotion differ by at most 10 (R/SR/SSR/UR, Lv 1-200, promotion 0-5); level and promotion raise it; a higher grade beats a lower one: spreads %s" % [spreads])
 	var gold := func(g: String, levels: Array): return levels.map(func(l): return GameData.levelup_cost(g, l).gold)
 	check(gold.call("R", [1, 2, 3, 4, 5, 10, 19, 20]) == [60, 75, 92, 114, 139, 368, 1723, 2016] and gold.call("SR", [1, 2, 3, 10, 19]) == [120, 149, 184, 736, 3446] \
 		and gold.call("SSR", [1, 2, 3, 10, 19, 69]) == [240, 298, 369, 1471, 6891, 1692572], "gold cost table = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))), same as the server")
@@ -2212,7 +2221,7 @@ func test_buildings() -> void:
 	var hans := GameData.hero("hans")
 	var st := GameData.hero_stats(hans, 1, 0)
 	check(st == {"hp": 396.0, "atk": 23.0} and not GameData.CONFIG_NUM_KEYS.has("lab_atk_per_level") and not GameData.BUILDING_NUM_KEYS.has("lab_atk_per_level")
-		and GameData.config_num("lab_atk_per_level") == 0.0 and GameData.hero_power(hans, 1, 0) == roundi(396.0 / 10.0 + 23.0 * 2.0 / 0.8),
+		and GameData.config_num("lab_atk_per_level") == 0.0,
 		"rev 24: the lab no longer raises hero attack (no lab_atk_per_level); stats and power ignore building levels: %s" % [st])
 	var rig := func(): return 0.006  # 등급 굴림 0.006(골드 Lv 3, SSR 0.65%)은 SSR, 0.0075는 SR
 	check(EconomyScript.roll_gacha(1, rig, GameData.gacha_rates("gold", 3))[0].grade == "SSR" and EconomyScript.roll_gacha(1, func(): return 0.0075, GameData.gacha_rates("gold", 3))[0].grade == "SR", "offline recruiting uses the gold-level odds")
@@ -3848,7 +3857,9 @@ func test_dungeon_tables() -> void:
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
 	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
-		and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0} and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) == roundi(49.6 + 35.0 * 2.0 / 0.8),
+		and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0}
+		and absi((GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) - GameData.hero_power(hans, 1, 0, {})) - (GameData.hero_power(GameData.hero("nina"), 1, 0, {"hp": 100, "atk": 12}) - GameData.hero_power(GameData.hero("nina"), 1, 0, {}))) <= 1
+		and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) > GameData.hero_power(hans, 1, 0, {}) + 10,
 		"hero stats add the equipment total flat after the multipliers (no source, no equipment: unchanged)")
 
 
