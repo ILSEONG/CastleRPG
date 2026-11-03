@@ -7,7 +7,11 @@ extends "res://scripts/ui_window.gd"
 ## 다이아 버튼은 다이아가 모자라도 눌린다: 누르면 "다이아가 부족합니다 — 상점으로 이동할까요?" 창, [이동]이면 다이아 상점을 연다(사용자 요청 2026-10-06).
 ## 골드가 모자라거나 응답을 기다리는 중이면 모집 버튼은 비활성. 결과 화면(카드 1장 또는 10장 5 × 2: 등급 테두리·보석·피규어(개정 14)·이름·칭호·
 ## 새 영웅은 "NEW", 중복은 "+1 조각"과 그 영웅의 조각 막대(개정 15), SSR은 반짝임) + [재모집]·[확인]·자동 모집(개정 17) — 마지막에 뽑은 재화로 되풀이한다.
-## 자동 모집은 골드만(현금 재화 자동 소모 방지): 다이아로 뽑은 결과 화면에는 자동 체크가 없다.
+## 반복 모집(2026-11-02 사용자 "다른 게임 참고해서 연출효과 스킵, 반복뽑기 넣어줘" — 세븐나이츠 키우기·메이플스토리 키우기의 반복 소환,
+## 니케·원신의 연출 건너뛰기 참고): 창 아래 [반복 모집]·[연출 건너뛰기] 체크(뽑기 화면·결과 화면 모두). 반복은 골드·다이아·모집권 모두,
+## 방금 뽑은 재화·장수로 되풀이하고 SSR 이상이 나오거나 그 재화가 모자라거나(모집권이 떨어지면 다이아로 넘어가지 않는다) [■ 멈춤]·[확인]을 누르면 멈춘다.
+## 연출 건너뛰기: 소환진·SSR 일러스트 화면 없이 카드가 바로 펴진다. 카드가 아직 펴지는 중에 [1회 더]·[10회 더]를 누르면 뽑지 않고 남은 카드를
+## 다 연다(연타가 결과를 못 본 채 다음 모집으로 넘어가지 않게 — 2026-11-02 사용자 "10회더를 빠르게 여러번 클릭하면 이상해지는데").
 ## 모집은 Economy.gacha(count, currency), 결과는 Economy.gacha_done — 온라인 응답이 창을 닫은 뒤에 와도 다시 열어 보여 준다(결과를 놓치지 않게).
 ## 다른 창(영웅·거래)이 열려 있으면 그 위로 열지 않고 알림만 띄우고, 결과는 다음에 주점 창을 열 때 보여 준다. 결과 화면이 뜨면 연 직후처럼
 ## 보호 시간을 다시 건다([확인] 연타 방지).
@@ -34,7 +38,7 @@ static var TITLE := Lang.t("recruit_panel.title")
 static var LATE_TEXT := Lang.t("recruit_panel.late_text")
 static var DUP_TEXT := Lang.t("recruit_panel.dup_text")  # 이미 가진 영웅(개정 15)
 const AUTO_DELAY := 1.2  # 결과를 보여 준 뒤 다음 자동 모집까지 초
-static var SSR_TEXT := Lang.t("recruit_panel.ssr_text")
+static var SSR_TEXT := Lang.t("recruit_panel.ssr_text_2")
 const REVEAL_ONE := 0.15  # 1회: 소환진이 걷힌 뒤 뒤집기까지(SR·SSR은 등급 빛이 다 모일 때까지 — CardReveal.begin)
 const REVEAL_FIRST := 0.12  # 10회: 소환진이 걷힌 뒤 첫 카드
 const REVEAL_STEP := 0.07  # 10회: 카드 사이(R·SR 먼저 왼쪽 위부터, SSR은 맨 끝에 무지개빛을 모았다가 하나씩)
@@ -48,7 +52,8 @@ var ten_button: Button
 var confirm_button: Button
 var again_button: Button  # [1회 더] — 결과 화면에서 바로 이어 뽑기(2026-10-15 사용자 "연속뽑기 기능이 왜 없어"). 자동 중엔 "자동 모집 중"
 var again10_button: Button  # [10회 더]
-var auto_box: Button  # 자동 모집 체크박스(Fever.auto_recruit에 저장). 골드 결과에서만 보인다
+var auto_box: Button  # 반복 모집 체크박스(Fever.auto_recruit에 저장)
+var skip_box: Button  # 연출 건너뛰기 체크박스(Fever.recruit_skip에 저장)
 var auto_delay := AUTO_DELAY  # 테스트가 줄인다
 var cards: Array = []  # 지금 보이는 결과 카드(hero_card — 저마다 뒤집기 연출 card_reveal 안에 있다)
 var currency := GOLD  # 고른 탭
@@ -183,10 +188,20 @@ func _ready() -> void:
 	confirm_button.custom_minimum_size = Vector2(132, 84)
 	confirm_button.pressed.connect(_on_confirm)
 	row.add_child(confirm_button)
-	auto_box = UiKit.checkbox(Lang.t("recruit_panel.ready_7"))
+	var opts := HBoxContainer.new()  # 뽑기 화면·결과 화면 모두 아래에
+	opts.alignment = BoxContainer.ALIGNMENT_CENTER
+	opts.add_theme_constant_override("separation", 24)
+	content.add_child(opts)
+	auto_box = UiKit.checkbox(Lang.t("recruit_panel.ready_5"))
 	auto_box.set_pressed_no_signal(Fever.auto_recruit)
 	auto_box.toggled.connect(_on_auto_toggled)
-	_result_view.add_child(auto_box)
+	opts.add_child(auto_box)
+	skip_box = UiKit.checkbox(Lang.t("recruit_panel.ready_8"))
+	skip_box.set_pressed_no_signal(Fever.recruit_skip)
+	skip_box.toggled.connect(func(on: bool):
+		Fever.recruit_skip = on
+		Fever.save())
+	opts.add_child(skip_box)
 	_build_shop_ask()
 	odds = GachaOdds.new()
 	add_child(odds)
@@ -445,9 +460,9 @@ func _show_results(results: Array) -> void:
 	_reveals.clear()
 	cards.clear()
 	_grid.columns = mini(5, results.size())
-	var fast := auto_running()
+	var fast := auto_running() or Fever.recruit_skip
 	var one := results.size() == 1
-	_no_splash = false
+	_no_splash = Fever.recruit_skip
 	for i in results.size():
 		var r: Dictionary = results[i]
 		var card = HeroCardScript.new()
@@ -485,7 +500,6 @@ func _show_results(results: Array) -> void:
 				best = g
 				break
 		stage.play(best, results.size())
-	auto_box.visible = _cur == GOLD  # 자동 모집은 골드만
 	_pick_view.visible = false
 	_result_view.visible = true
 	_fit()
@@ -537,15 +551,39 @@ func _show_pick() -> void:
 
 ## 자동 모집이 도는 중(골드 결과에서만).
 func auto_running() -> bool:
-	return auto_box.button_pressed and not _halted and _cur == GOLD
+	return auto_box.button_pressed and not _halted
 
 
 ## [1회 더]·[10회 더]: 방금 뽑은 재화(골드 / 다이아·모집권)로 n회 더. 모집권이 모자라면 다이아, 다이아가 모자라면 상점 이동 창.
 ## 참고: 원신·니케·에픽세븐의 결과 화면 [1회 더]·[10회 더](연속 뽑기).
 func _again(n: int) -> void:
 	var b: Button = again_button if n == 1 else again10_button
+	if not UiKit.tap_once("recruit_again"):
+		return  # 빠른 두 번 누름
+	if auto_running():  # [■ 멈춤]
+		_stop_auto()
+		return
+	if revealing():  # 아직 연출 중: 뽑지 않고 소환 연출을 걷고 카드를 다 연다
+		stage.stop()
+		_skip_all()
+		_arm_guard()  # 연타의 다음 누름이 곧바로 다음 모집이 되지 않게
+		return
 	if not _waiting and not b.disabled:
 		_pull(n, GOLD if _cur == GOLD else DIA)
+
+
+## 결과 연출이 아직 도는 중(소환진·SSR 화면이 떠 있거나 펴지지 않은 카드가 있다).
+func revealing() -> bool:
+	if _result_view == null or not _result_view.visible:
+		return false
+	return (stage != null and stage.is_busy()) or _reveals.any(func(h): return not h.is_revealed())
+
+
+## 반복 모집을 멈춘다(체크도 푼다).
+func _stop_auto() -> void:
+	auto_box.button_pressed = false
+	_halted = true
+	_refresh()
 
 
 ## [확인]: 자동이 돌고 있었다면 멈추고(체크도 푼다) 결과 화면을 닫는다.
@@ -591,6 +629,7 @@ func _process(delta: float) -> void:
 		return
 	if Economy.wallet(_cur) < Economy.gacha_cost(_cur, _count):
 		_halted = true
+		Economy.notice.emit(Lang.t("recruit_panel.process"))
 		_refresh()
 		return
 	_recruit(_count, _cur)
@@ -641,12 +680,12 @@ func _refresh() -> void:
 		var cost := Economy.gacha_cost(again_cur, n)
 		var short := Economy.wallet(again_cur) < cost
 		var head := Lang.t("recruit_panel.refresh.head") % n
-		if auto_running() and n == _count and not short:
-			b.text = Lang.t("recruit_panel.refresh_13")
+		if auto_running():
+			b.text = Lang.t("recruit_panel.refresh_6")
 		elif again_cur == TICKET:
 			b.text = head + "\n" + Lang.t("recruit_panel.refresh_18") % cost
 		elif short:
 			b.text = head + (Lang.t("recruit_panel.refresh_16") if again_cur == DIA else Lang.t("recruit_panel.refresh_17"))
 		else:
 			b.text = head + "\n" + (Lang.t("recruit_panel.refresh_8") if again_cur == DIA else "") + UiKit.commas(cost)
-		b.disabled = (short and again_cur == GOLD) or auto_running()
+		b.disabled = short and again_cur == GOLD and not auto_running()  # 반복 중엔 [■ 멈춤]

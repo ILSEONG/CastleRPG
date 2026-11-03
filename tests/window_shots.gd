@@ -44,6 +44,12 @@ func _ready() -> void:
 	w = _win("recruit_panel.gd")
 	w.open()
 	await _shot("recruit", w)
+	Economy.diamonds = maxi(Economy.diamonds, 30000)
+	w._recruit(10, "diamond")  # 결과 화면(연출은 걷고 카드를 다 연다) — [반복 모집]·[연출 건너뛰기] 체크
+	w.stage.stop()
+	w.reveal_all()
+	await _shot("recruit_result", w)
+	w.close()
 	for s in ["coupon_panel.gd", "hero_panel.gd", "growth_panel.gd", "shop_panel.gd", "mission_panel.gd", "notice_panel.gd", "mail_panel.gd"]:
 		w = _win(s)
 		if w == null:

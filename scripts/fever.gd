@@ -8,7 +8,8 @@ const SAVE_EVERY := 5.0
 var gauge := 0
 var left := 0.0  # 남은 FEVER 초(0이면 꺼짐)
 var auto_next := false  # 연속 진행 체크(HUD). 같은 파일에 저장. 새 성주는 꺼진 채 시작하고 가이드가 켜게 한다
-var auto_recruit := false  # 자동 모집 체크(모집 창). 같은 파일에 저장
+var auto_recruit := false  # 반복 모집 체크(모집 창). 같은 파일에 저장
+var recruit_skip := false  # 모집 연출 건너뛰기 체크(모집 창, 2026-11-02). 같은 파일에 저장
 var dungeon_auto := ""  # 개정 18 던전 결과 자동: "" · "next"(다음 단계 자동 도전) · "repeat"(현재 단계 자동 반복). 같은 파일에 저장
 var dungeon_party := {}  # 개정 18 던전별 출전 편성 종류 → [영웅 id]. 같은 파일에 저장
 var save_path := "user://local.json"  # ""이면 저장하지 않는다
@@ -99,7 +100,7 @@ func save() -> void:
 		var json := JSON.new()
 		if json.parse(FileAccess.get_file_as_string(save_path)) == OK and json.data is Dictionary:
 			data = json.data
-	data.merge({"gauge": gauge, "left": left, "auto_next": auto_next, "auto_recruit": auto_recruit, "dungeon_auto": dungeon_auto,
+	data.merge({"gauge": gauge, "left": left, "auto_next": auto_next, "auto_recruit": auto_recruit, "recruit_skip": recruit_skip, "dungeon_auto": dungeon_auto,
 		"dungeon_party": dungeon_party}, true)
 	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
@@ -114,6 +115,7 @@ func load_save() -> void:
 	reset()
 	auto_next = false  # 새 성주: 꺼짐(가이드 "연속 진행 켜기"). 예전 저장(키 없음)은 켜진 채 둔다
 	auto_recruit = false
+	recruit_skip = false
 	dungeon_auto = ""
 	dungeon_party = {}
 	if save_path == "" or not FileAccess.file_exists(save_path):
@@ -123,6 +125,7 @@ func load_save() -> void:
 		return
 	auto_next = json.data.get("auto_next", true) != false
 	auto_recruit = json.data.get("auto_recruit", false) == true
+	recruit_skip = json.data.get("recruit_skip", false) == true
 	var da = json.data.get("dungeon_auto", "")
 	dungeon_auto = da if da in ["next", "repeat"] else ""
 	var dp = json.data.get("dungeon_party", {})

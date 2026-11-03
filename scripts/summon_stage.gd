@@ -2,7 +2,9 @@ extends Control
 ## 영웅 모집 소환 연출(2026-10-15, 사용자 "영웅뽑기 좀 더 화려하게 연출해줘"): 모집 창 위 화면 전체를 덮는 막(recruit_panel이 맨 위 자식으로 둔다).
 ## 참고한 게임: 원신(기원 — 떨어지는 별빛 색이 최고 등급을 미리 알린다), 블루 아카이브(모집 쪽지 색이 마지막 순간 한 단계 바뀐다),
 ## 클래시 로얄(가장 높은 등급은 무지개빛), AFK 아레나(10회 결과를 한 화면에서 빠르게 차례로 뒤집고 언제든 건너뛴다).
-## 1) 소환진(play): 어두운 밤 막 위 로우폴리 마법진(두 고리 + 룬 + 육각별)이 돌며 빛을 모은다. 빛은 파랑(R)에서 시작해 이번 모집 최고 등급이
+## 1) 소환(play, 2026-11-03 사용자 "마법진이 너무 유치해 … 다른 게임 참고해서 마법진 아니어도 좋으니까 바꿔줘" — 마법진을 뺐다):
+##    어두운 밤에 별빛 터널(붕괴: 스타레일 워프)이 스치고, 유성(원신 기원)이 오른쪽 위에서 떨어져 가운데에 닿으면 가로 섬광과 함께
+##    세로 빛의 틈이 열린다(명일방주 헤드헌팅의 빛줄기). 유성 꼬리·틈의 빛이 등급을 미리 알린다. 빛은 파랑(R)에서 시작해 이번 모집 최고 등급이
 ##    SR이면 SR_AT에 보라로, SSR이면 SSR_AT에 무지개빛으로 바뀐다(번쩍 + 흔들림 + 빛기둥). 끝에 터지며 걷히고 intro_done — 창의 카드가
 ##    차례로 뒤집히기 시작한다. 화면을 누르면 바로 터지며 걷힌다(그 모집의 최고 등급 빛으로). [건너뛰기]는 skip_all(카드를 모두 바로 열고 SSR 화면도 건너뛴다).
 ## 2) SSR 화면(splash): SSR 카드가 펴지면 도는 무지개 빛살 위 큰 기울어진 창에 영웅 일러스트 + "SSR" + 이름·칭호(새 영웅이면 NEW).
@@ -53,7 +55,9 @@ const FLAME := [Color("E8344A"), Color("FF6A1F"), Color("FF9A5C"), Color("FFE2D0
 const EMBERS := 34
 const RAYS := 16
 const MOTES := 26
-const RUNES := 16
+const STREAKS := 54  # 별빛 터널 줄기
+const SHARDS := 10  # 빛의 틈 둘레를 도는 결정 조각
+const FALL_AT := 0.42  # 소환 시간 비율: 유성이 가운데에 닿는다(그 뒤 빛의 틈이 열린다)
 
 signal intro_done
 signal skip_all
@@ -270,7 +274,7 @@ func _draw_intro() -> void:
 	var a := clampf(_t / FADE_IN, 0.0, 1.0)
 	var out := clampf((_t - _len) / BURST, 0.0, 1.0)  # 터지며 걷힘
 	var fade := 1.0 - out
-	draw_rect(Rect2(Vector2.ZERO, vs), Color(NIGHT, 0.93 * a * fade))
+	draw_rect(Rect2(Vector2.ZERO, vs), Color(NIGHT, 0.94 * a * fade))
 	var ur := _rank == 3
 	var since := _t - _ur_at  # UR 불꽃 해 뒤 초
 	if ur:  # 불빛에 밤이 붉게 물든다
@@ -278,23 +282,63 @@ func _draw_intro() -> void:
 	var shake := Vector2(sin(_t * 71.0), cos(_t * 53.0)) * 9.0 * _shake
 	var c := Vector2(vs.x * 0.5, vs.y * 0.46) + shake
 	var big := minf(vs.x, vs.y) * 0.38
-	var grow := ease(clampf(_t / (_len * 0.35), 0.0, 1.0), 0.4)
-	var r := big * (0.5 + 0.5 * grow) * (1.0 + out * 0.7) * (1.0 + 0.1 * _flash)  # 빛이 바뀔 때 한 번 쿵
 	var k := clampf(_t / _base, 0.0, 1.0)
-	# 뒤에서 도는 빛살(갈수록 짙어지고, SSR이면 무지개빛으로 더 짙게)
-	var ray_a: float = (0.06 + 0.2 * k) * a * fade * [1.0, 1.0, 1.5, 1.6][_rank]
 	var reach := vs.length()
+	# 1) 별빛 터널(붕괴: 스타레일 워프): 가운데에서 바깥으로 빠르게 스치는 별줄기 — 갈수록 빠르고 길다
+	for i in STREAKS:
+		var dir := Vector2.from_angle(TAU * LowpolyBox.hash01(i, 21))
+		var u := fmod(_t * (0.5 + 0.9 * k) * (0.7 + 0.6 * LowpolyBox.hash01(i, 22)) + LowpolyBox.hash01(i, 23), 1.0)
+		var d0 := u * u * reach * 0.7 + 30.0
+		var ln := (10.0 + 160.0 * k) * u
+		var col := _light(i, STREAKS).lightened(0.35) if i % 3 == 0 else Color(0.85, 0.9, 1.0)
+		draw_line(c + dir * d0, c + dir * (d0 + ln), Color(col, u * (0.25 + 0.45 * k) * a * fade), 1.5 + 2.0 * u, true)
+	# 2) 은은한 빛살(등급 빛)
+	var ray_a: float = (0.03 + 0.1 * k) * a * fade * [1.0, 1.0, 1.5, 1.6][_rank]
 	for i in RAYS:
-		var ang := _t * 0.4 + TAU * i / RAYS
-		draw_colored_polygon(PackedVector2Array([c, c + Vector2.from_angle(ang) * reach, c + Vector2.from_angle(ang + TAU / RAYS * 0.4) * reach]),
+		var ang := _t * 0.25 + TAU * i / RAYS
+		draw_colored_polygon(PackedVector2Array([c, c + Vector2.from_angle(ang) * reach, c + Vector2.from_angle(ang + TAU / RAYS * 0.3) * reach]),
 			Color(_light(i, RAYS), ray_a * (0.6 + 0.4 * (i % 2))))
-	# 바닥 빛: 겹 다각형(바깥일수록 옅다)
-	for i in 4:
-		var rr := r * (1.5 - i * 0.28) * (0.9 + 0.1 * sin(_t * 6.0 + i))
-		draw_colored_polygon(_ngon(c, rr, 16, _t * 0.2), Color(_light(i, 4), (0.05 + 0.04 * i) * a * fade * (0.6 + 0.6 * k)))
-	# 빛기둥(SSR): 마법진에서 위로 솟는 가는 빛 6줄. UR은 굵은 불기둥 8줄 + 화면을 꿰는 큰 불기둥
+	# 3) 유성(원신 기원): 오른쪽 위에서 가운데로 떨어지며 꼬리 색이 등급 빛을 미리 알린다
+	var fall := _base * FALL_AT
+	var f := clampf(_t / fall, 0.0, 1.0)
+	var start := Vector2(vs.x * 0.92, -vs.y * 0.06)
+	if f < 1.0:
+		var prev := start.lerp(c, ease(f, 1.5))
+		for j in 12:
+			var fj := maxf(0.0, f - (j + 1) * 0.05)
+			var pj := start.lerp(c, ease(fj, 1.5))
+			var w := (26.0 - j * 2.0) * (0.7 + 0.5 * f)
+			draw_line(prev, pj, Color(_light(j, 12), 0.16 * a * (1.0 - j / 12.0)), w * 2.6, true)  # 번짐
+			draw_line(prev, pj, Color(_light(j, 12).lightened(0.45), (1.0 - j / 12.0) * 0.95 * a), w, true)
+			prev = pj
+		var head := start.lerp(c, ease(f, 1.5))
+		draw_colored_polygon(_ngon(head, 40.0, 10, _t * 3.0), Color(_light(0, 3), 0.3 * a))
+		draw_colored_polygon(_ngon(head, 24.0, 8, -_t * 4.0), Color(_light(1, 3).lightened(0.5), 0.8 * a))
+		draw_colored_polygon(_ngon(head, 13.0, 6, _t * 5.0), Color(1, 1, 1, a))
+	# 4) 빛의 틈(떨어진 자리가 세로로 갈라지며 열린다): 겹 렌즈 — 바깥일수록 옅고 넓다
+	var open := ease(clampf((_t - fall) / (_len - fall + 0.001), 0.0, 1.0), 0.35) if _t >= fall else 0.0
+	if open > 0.0:
+		var hgt := vs.y * (0.2 + 0.26 * open) * (1.0 + out * 0.4)
+		var wid := big * (0.03 + 0.1 * open) * (1.0 + 0.15 * _flash) * (1.0 + out * 3.0)
+		draw_colored_polygon(_lens(c, wid * 3.4, hgt * 1.08), Color(_light(0, 3), 0.1 * a * fade))
+		draw_colored_polygon(_lens(c, wid * 2.0, hgt), Color(_light(1, 3), 0.3 * a * fade))
+		draw_colored_polygon(_lens(c, wid * 1.1, hgt * 0.92), Color(_light(2, 3).lightened(0.55), 0.85 * a * fade))
+		draw_colored_polygon(_lens(c, wid * 0.45, hgt * 0.85), Color(1, 1, 1, a * fade))
+		# 틈 둘레를 도는 결정 조각(로우폴리 마름모)
+		for i in SHARDS:
+			var ang := TAU * i / SHARDS + _t * (0.6 + 0.2 * (i % 2))
+			var rad := Vector2(big * (0.45 + 0.15 * LowpolyBox.hash01(i, 31)), hgt * (0.45 + 0.2 * LowpolyBox.hash01(i, 32))) * (0.6 + 0.4 * open)
+			var p := c + Vector2(cos(ang) * rad.x, sin(ang) * rad.y * 0.35 + (LowpolyBox.hash01(i, 33) - 0.5) * hgt * 0.8)
+			var sz := (9.0 + 9.0 * LowpolyBox.hash01(i, 34)) * open
+			var front := sin(ang) > 0.0
+			draw_colored_polygon(PackedVector2Array([p + Vector2(0, -sz * 1.6), p + Vector2(sz * 0.7, 0), p + Vector2(0, sz * 1.6), p + Vector2(-sz * 0.7, 0)]),
+				Color(_light(i, SHARDS).lightened(0.3 if front else 0.0), (0.9 if front else 0.45) * a * fade))
+		if _t - fall < 0.25:  # 닿는 순간 가로 섬광
+			var hit := 1.0 - (_t - fall) / 0.25
+			draw_colored_polygon(_lens(c, vs.x * 0.6, 10.0 * hit + 2.0, true), Color(1, 1, 1, 0.8 * hit * a))
+	# 빛기둥(SSR): 틈에서 위로 솟는 가는 빛 6줄. UR은 굵은 불기둥 8줄 + 화면을 꿰는 큰 불기둥
 	if ur:
-		var pw := r * 0.55 * ease(clampf(since * 4.0, 0.0, 1.0), 0.3) * (0.92 + 0.08 * sin(_t * 13.0))
+		var pw := big * 0.55 * ease(clampf(since * 4.0, 0.0, 1.0), 0.3) * (0.92 + 0.08 * sin(_t * 13.0))
 		for j in 3:
 			var ww := pw * (1.0 - j * 0.3)
 			draw_colored_polygon(PackedVector2Array([Vector2(c.x - ww, vs.y), Vector2(c.x + ww, vs.y), Vector2(c.x + ww * 0.55, 0.0), Vector2(c.x - ww * 0.55, 0.0)]),
@@ -302,65 +346,42 @@ func _draw_intro() -> void:
 	if _rank >= 2:
 		var n := 8 if ur else 6
 		for i in n:
-			var x := c.x + (i - (n - 1) / 2.0) * r * (0.27 if ur else 0.32)
-			var w := (10.0 + 8.0 * LowpolyBox.hash01(i, 3)) * (1.8 if ur else 1.0)
+			var x := c.x + (i - (n - 1) / 2.0) * big * (0.27 if ur else 0.32)
+			var w := (8.0 + 6.0 * LowpolyBox.hash01(i, 3)) * (1.8 if ur else 1.0)
 			var top := -vs.y * (0.2 + 0.3 * LowpolyBox.hash01(i, 5))
-			var col := flame(float(i) / n + _t * 0.4, 0.45 * fade) if ur else prism(i / 6.0 + _t * 0.4, 0.35 * fade)
+			var col := flame(float(i) / n + _t * 0.4, 0.4 * fade) if ur else prism(i / 6.0 + _t * 0.4, 0.3 * fade)
 			draw_colored_polygon(PackedVector2Array([Vector2(x - w, c.y), Vector2(x + w, c.y), Vector2(x + w * 0.3, top), Vector2(x - w * 0.3, top)]), col)
-	# 모이는 빛줄기: 화면 가장자리에서 가운데로(뒤 절반)
-	if k > 0.45:
-		var s := (k - 0.45) / 0.55
-		for i in 12:
-			var dir := Vector2.from_angle(TAU * i / 12.0 + LowpolyBox.hash01(i, 11) * 0.3)
-			var far := vs.length() * 0.6 * (1.0 - fmod(_t * 1.6 + LowpolyBox.hash01(i, 13), 1.0))
-			var p0 := c + dir * maxf(far, r * 0.3)
-			var p1 := c + dir * maxf(far - 90.0, r * 0.2)
-			draw_line(p0, p1, Color(_light(i, 12), 0.7 * s * fade), 3.0, true)
-	# 마법진: 바깥 고리 두 줄 + 룬(마름모) + 안쪽 육각별 + 가운데 빛 덩어리
-	_ring(c, r, 32, 5.0, _t * 0.5, a * fade)
-	_ring(c, r * 0.86, 32, 2.5, -_t * 0.8, a * fade)
-	for i in RUNES:
-		var ang := TAU * i / RUNES + _t * 0.5
-		var p := c + Vector2.from_angle(ang) * r * 0.93
-		var s := 7.0 + 3.0 * (i % 2)
-		var d := Vector2.from_angle(ang)
-		draw_colored_polygon(PackedVector2Array([p + d * s, p + d.orthogonal() * s * 0.55, p - d * s, p - d.orthogonal() * s * 0.55]), Color(_light(i, RUNES), a * fade))
-	for tri in 2:
-		var pts := PackedVector2Array()
-		var cols := PackedColorArray()
-		for i in 4:
-			var ang := TAU * (i % 3) / 3.0 + PI * tri - _t * 0.9 * (1.0 if tri == 0 else -1.0)
-			pts.append(c + Vector2.from_angle(ang - PI / 2.0) * r * 0.74)
-			cols.append(Color(_light(i + tri * 3, 6), 0.85 * a * fade))
-		draw_polyline_colors(pts, cols, 3.0, true)
-	var core := r * (0.18 + 0.22 * k + 0.25 * out)
 	if ur:
-		_ring(c, r * 1.18, 24, 4.0, -_t * 1.1, a * fade * clampf(since * 3.0, 0.0, 1.0))  # 바깥 셋째 불꽃 고리
-		_draw_sun(c, core * 1.15 * (1.0 + 0.3 * ease(clampf(since * 3.0, 0.0, 1.0), 0.4)), a * fade, since)
-	else:
-		draw_colored_polygon(_ngon(c, core * 1.6, 12, -_t), Color(_light(1, 3), 0.25 * a * fade))
-		draw_colored_polygon(_ngon(c, core, 12, _t), Color(_light(0, 3).lightened(0.4), 0.85 * a * fade))
-		draw_colored_polygon(_ngon(c, core * 0.55, 8, _t * 2.0), Color(1, 1, 1, 0.9 * a * fade))
+		_draw_sun(c, big * (0.3 + 0.2 * k) * (1.0 + 0.3 * ease(clampf(since * 3.0, 0.0, 1.0), 0.4)), a * fade, since)
 	# 떠오르는 빛 조각
 	for i in MOTES:
 		var u := fmod(_t * (0.35 + 0.3 * LowpolyBox.hash01(i, 1)) + LowpolyBox.hash01(i, 2), 1.0)
-		var px := c.x + (LowpolyBox.hash01(i, 4) - 0.5) * r * 2.4
-		var py := c.y + r * 0.6 - u * vs.y * 0.55
-		var s := 4.0 + 4.0 * LowpolyBox.hash01(i, 6)
+		var px := c.x + (LowpolyBox.hash01(i, 4) - 0.5) * big * 2.4
+		var py := c.y + big * 0.6 - u * vs.y * 0.55
+		var s := 3.0 + 4.0 * LowpolyBox.hash01(i, 6)
 		draw_colored_polygon(PackedVector2Array([Vector2(px, py - s), Vector2(px + s * 0.6, py), Vector2(px, py + s), Vector2(px - s * 0.6, py)]),
-			Color(_light(i, MOTES).lightened(0.3), (1.0 - u) * 0.9 * a * fade))
+			Color(_light(i, MOTES).lightened(0.3), (1.0 - u) * 0.8 * a * fade * open))
 	if ur:  # 불씨가 화면 아래에서 가득 오른다 + 불꽃 해 충격파
 		_draw_embers(vs, a * fade * clampf(since * 3.0, 0.0, 1.0))
 		var sw := since / UR_WAVE
 		if sw < 1.0:
-			_ring(c, r * (1.0 + sw * 2.4), 32, 22.0 * (1.0 - sw), 0.0, (1.0 - sw) * fade)
-	# 터짐: 퍼지는 고리
-	if out > 0.0:
-		_ring(c, r * (1.0 + out * 1.2), 32, 14.0 * (1.0 - out), 0.0, 1.0 - out)
+			_ring(c, big * (1.0 + sw * 2.4), 32, 22.0 * (1.0 - sw), 0.0, (1.0 - sw) * fade)
 	if _flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, vs), Color(1, 1, 1, 0.6 * _flash))
 	if out > 0.0:  # 걷힐 때 한 번 번쩍
 		draw_rect(Rect2(Vector2.ZERO, vs), Color(1, 1, 1, 0.5 * sin(PI * out)))
+
+
+## 세로(또는 가로) 렌즈 모양(빛의 틈): 가운데 c, 반너비 w, 반높이 h.
+static func _lens(c: Vector2, w: float, h: float, horizontal := false) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in 16:
+		var ang := TAU * i / 16.0
+		var v := Vector2(cos(ang) * w, sin(ang) * h)
+		v.x *= absf(cos(ang)) ** 0.6 if not horizontal else 1.0  # 끝이 뾰족하게
+		v.y *= 1.0 if not horizontal else absf(sin(ang)) ** 0.6
+		pts.append(c + v)
+	return pts
 
 
 func _draw_splash() -> void:

@@ -2165,7 +2165,7 @@ func _alive_heroes() -> Array:
 ## 창의 연 직후 보호 시간이 확실히 지나게(타이머 0.45초 뒤에도 실제 시각으로 아직이면 프레임을 더 기다린다 — 부하에 따라 엇갈린다).
 func _unguarded(win) -> void:
 	await _guard_wait()
-	while win.is_guarded() or (win.get("stage") != null and win.stage.is_busy()):  # 모집 창: 소환 연출이 걷힐 때까지
+	while win.is_guarded() or (win.get("stage") != null and win.stage.is_busy()) or (win.has_method("revealing") and win.revealing()):  # 모집 창: 소환 연출이 걷히고 카드가 다 펴질 때까지
 		await _frames(1)
 
 
@@ -2540,7 +2540,7 @@ func _recruit_repeat(recruit) -> void:
 	recruit.auto_box.button_pressed = true
 	recruit._recruit(10)
 	await _frames(2)
-	_check(recruit.auto_running() and recruit.again10_button.text == "자동 모집 중" and recruit.again10_button.disabled and recruit.again_button.disabled, "(rr) while auto runs [10회 더] reads 자동 모집 중 (both off)", "text=%s" % recruit.again10_button.text)
+	_check(recruit.auto_running() and recruit.again10_button.text == "반복 모집 중\n■ 멈춤" and not recruit.again10_button.disabled and not recruit.again_button.disabled, "(rr) while repeat runs both buttons read 반복 모집 중 ■ 멈춤 (on)", "text=%s" % recruit.again10_button.text)
 	recruit.confirm_button.pressed.emit()
 	recruit.auto_delay = 0.05
 	var g0: int = Economy.gold
@@ -2549,6 +2549,91 @@ func _recruit_repeat(recruit) -> void:
 	_check(not recruit.auto_box.button_pressed and not recruit.auto_running() and Economy.gold == g0 and not recruit.is_showing_results(),
 		"(rr) [확인] stops auto (box unchecked) and no further pull happens", "gold=%d->%d" % [g0, Economy.gold])
 	recruit.close()
+	# [■ 멈춤]: 반복 중 [10회 더]를 누르면 멈추고 더 뽑지 않는다
+	_gold_lv1()
+	Economy.rng.seed = seed_no_ssr
+	Economy.gold_tenths = 2700000
+	Economy.changed.emit()
+	recruit.auto_delay = 5.0
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	recruit._recruit(10)
+	await _frames(2)
+	UiKit._tap_at.clear()
+	recruit.again10_button.pressed.emit()
+	recruit.auto_delay = 0.05
+	g0 = Economy.gold
+	for i in 40:
+		await _frames(1)
+	_check(not recruit.auto_box.button_pressed and not recruit.auto_running() and Economy.gold == g0 and recruit.is_showing_results(),
+		"(rr) [■ 멈춤] stops repeat (box unchecked), results stay, no further pull", "gold=%d->%d" % [g0, Economy.gold])
+	recruit.close()
+	# 반복 모집은 다이아도: 다이아 6,000 = 10회 2번 + 600 → 2번 뽑고 다이아 부족으로 멈춤(상점 창은 띄우지 않는다)
+	var dia_keep: int = Economy.diamonds
+	Economy.diamonds = 6000
+	Economy.dia_tickets = 0
+	Economy.changed.emit()
+	recruit.set_currency("diamond")
+	recruit.open()
+	await _unguarded(recruit)
+	recruit.auto_box.button_pressed = true
+	var ssr_seed := -1
+	for s in range(1, 5000):  # 다이아 10회 두 번 동안 SSR 이상이 없는 시드
+		var r := RandomNumberGenerator.new()
+		r.seed = s
+		var top := false
+		for i in 2:
+			top = top or Economy.roll_gacha(10, r.randf, Economy.gacha_rates("diamond"), true).any(func(x): return x.grade in ["SSR", "UR"])
+		if not top:
+			ssr_seed = s
+			break
+	Economy.rng.seed = ssr_seed
+	recruit._recruit(10, "diamond")
+	for i in 120:
+		await _frames(1)
+	_check(Economy.diamonds == 600 and not recruit.auto_running() and not recruit.shop_ask.visible and recruit.is_showing_results(),
+		"(rr) repeat works with diamonds too: 6,000 -> 600 (two 10-pulls), stops when short without the shop ask", "dia=%d running=%s" % [Economy.diamonds, recruit.auto_running()])
+	recruit.auto_box.button_pressed = false
+	recruit.close()
+	recruit.set_currency("gold")
+	# 연타: 카드가 펴지는 중 [10회 더]를 여러 번 눌러도 한 번도 뽑지 않고 카드만 다 연다, 다 열린 뒤 누르면 한 번
+	_gold_lv1()
+	Economy.gold_tenths = 3010000
+	Economy.changed.emit()
+	recruit.open()
+	await _unguarded(recruit)
+	recruit._recruit(10)
+	await _frames(2)
+	g0 = Economy.gold
+	var busy0: bool = recruit.revealing()
+	UiKit._tap_at.clear()
+	for i in 6:  # 한 프레임마다(0.5초 안) 연타
+		recruit.again10_button.pressed.emit()
+		await _frames(1)
+	_check(busy0 and Economy.gold == g0 and not recruit.revealing() and not recruit.stage.is_busy(),
+		"(rr) mashing [10회 더] while cards are still flipping pulls nothing and opens every card", "gold=%d->%d busy0=%s" % [g0, Economy.gold, busy0])
+	await _unguarded(recruit)
+	UiKit._tap_at.clear()
+	recruit.again10_button.pressed.emit()
+	recruit.again10_button.pressed.emit()
+	await _frames(2)
+	_check(Economy.gold == g0 - 100000, "(rr) once the cards are open, a fast double tap on [10회 더] pulls once (gold -100,000)", "gold=%d->%d" % [g0, Economy.gold])
+	recruit.close()
+	# 연출 건너뛰기: 소환진 없이 카드가 곧바로 펴진다(체크 저장)
+	recruit.skip_box.button_pressed = true
+	recruit.open()
+	await _unguarded(recruit)
+	recruit._recruit(1)
+	await _frames(2)
+	var no_stage: bool = not recruit.stage.is_busy()
+	for i in 30:
+		await _frames(1)
+	_check(Fever.recruit_skip and no_stage and not recruit.revealing() and recruit.cards.size() == 1,
+		"(rr) 연출 건너뛰기: no summon intro, the card is open at once", "stage=%s revealing=%s" % [recruit.stage.is_busy(), recruit.revealing()])
+	recruit.skip_box.button_pressed = false
+	recruit.close()
+	Economy.diamonds = dia_keep
 	# 체크 저장: 임시 파일, 다른 키는 그대로
 	var tmp := "user://test_local_recruit.json"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
@@ -3041,8 +3126,8 @@ func _recruit23_ui(recruit) -> void:
 	await _tap(recruit.one_button.get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.diamonds == 300 and Economy.gacha_dia_pity == 0
-		and Economy.gold == gold0 and recruit.is_showing_results() and not recruit.auto_box.visible and recruit.again_button.text == "1회 더\n다이아 300" and recruit.again10_button.text == "10회 더\n다이아 부족",
-		"(r23) diamond [1회]: diamonds -300, no pity counter, gold untouched; no 자동 모집 box on diamond results",
+		and Economy.gold == gold0 and recruit.is_showing_results() and recruit.auto_box.visible and recruit.again_button.text == "1회 더\n다이아 300" and recruit.again10_button.text == "10회 더\n다이아 부족",
+		"(r23) diamond [1회]: diamonds -300, no pity counter, gold untouched; diamond results keep the 반복 모집 box (2026-11-02)",
 		"dia=%d pity=%d gold=%d auto=%s again=%s" % [Economy.diamonds, Economy.gacha_dia_pity, Economy.gold, recruit.auto_box.visible, recruit.again_button.text])
 	recruit.confirm_button.pressed.emit()
 	await _unguarded(recruit)
