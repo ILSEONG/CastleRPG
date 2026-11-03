@@ -315,7 +315,14 @@ static func backoff(n: int) -> float:
 
 func _item(method: String, path: String, body, done: Callable, fail: Callable, auth: bool) -> Dictionary:
 	requested[path] = int(requested.get(path, 0)) + 1
-	return {"method": method, "path": path, "body": body, "auth": auth, "done": done, "fail": fail, "tries": 0, "conflicted": false}
+	return {"method": method, "path": path, "body": body, "auth": auth, "done": done, "fail": fail, "tries": 0, "conflicted": false,
+		"rid": request_id() if method == "POST" and auth else ""}
+
+
+## 요청 번호(2026-11-02 중복 요청 방지): 인증 POST마다 하나 — 같은 요청을 다시 보내면(401 뒤 다시 보내기·재시도) 같은 번호라
+## 서버가 이미 처리한 요청은 다시 처리하지 않고 처음 답을 돌려준다(server idempotency.ts).
+static func request_id() -> String:
+	return "%08x%08x%08x" % [randi(), randi(), Time.get_ticks_usec() & 0xffffffff]
 
 
 func _login_item() -> Dictionary:
@@ -382,7 +389,9 @@ func _send_head() -> void:
 		body = JSON.stringify(it.body)
 	if it.auth:
 		headers.append("Authorization: Bearer " + token)
-	headers.append("X-App-Version: " + LiveOps.app_version())  # 서버 최소 버전보다 낮으면 426 update_required(LiveOps)
+	headers.append("X-App-Version: " + LiveOps.app_version())
+	if str(it.get("rid", "")) != "":
+		headers.append("X-Request-Id: " + str(it.rid))  # 서버 최소 버전보다 낮으면 426 update_required(LiveOps)
 	var method := HTTPClient.METHOD_POST if it.method == "POST" else HTTPClient.METHOD_GET
 	if _http.request(api_base + it.path, headers, method, body) != OK:
 		_on_completed(HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())

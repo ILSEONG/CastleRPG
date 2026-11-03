@@ -60,6 +60,7 @@ func take_damage(amount: float, kind := 0) -> void:
 		amount *= 1.0 + _vuln_pct / 100.0
 	dealt += amount
 	hp -= amount
+	BattleStats.dealt(self, amount)  # 전투 통계(드래곤은 레벨마다 HP가 다시 차서 넘친 피해가 없다)
 	DamageNumbers.pop(self, amount, kind)
 	if kind != DamageNumbers.Kind.POISON:
 		_model.hit_react(kind == DamageNumbers.Kind.SKILL or kind == DamageNumbers.Kind.CRIT)

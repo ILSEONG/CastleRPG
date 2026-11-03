@@ -16,7 +16,7 @@ var _dodge_cd := 0.0
 var _noticed := {}  # 범위 id → 알아채는 clock(못 보면 INF)
 
 
-func _process(delta: float) -> void:
+func _tick(delta: float) -> void:
 	if not puppet and party != null and state != State.DEAD and not commanded:
 		_dodge_cd -= delta
 		if _dodge_cd <= 0.0:
@@ -33,7 +33,7 @@ func _process(delta: float) -> void:
 				_path.append(out)
 				_target = null
 				_swing = null
-	super._process(delta)
+	super._tick(delta)
 
 
 func _notice_at(id: int) -> float:

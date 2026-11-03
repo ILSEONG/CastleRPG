@@ -23,6 +23,7 @@ const Fx := preload("res://scripts/fx.gd")
 const SkillVfx := preload("res://scripts/skill_vfx.gd")
 const DamageNumbers := preload("res://scripts/damage_numbers.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
+const BattleStats := preload("res://scripts/battle_stats.gd")
 const Crowd := preload("res://scripts/crowd.gd")
 const HeroSkillsScript := preload("res://scripts/hero_skills.gd")
 const SkillAuto := preload("res://scripts/skill_auto_button.gd")
@@ -522,14 +523,20 @@ func take_damage(amount: float, source = null) -> void:
 	if r.x <= 0.0:
 		DamageNumbers.pop(self, 0.0, DamageNumbers.Kind.DODGE)
 		return
+	var before := hp
 	hp = maxf(0.0, hp - r.x)
+	BattleStats.taken(self, before - hp)  # 전투 통계: 받은 피해(실제로 잃은 HP)
 	DamageNumbers.pop(self, r.x, DamageNumbers.Kind.HURT)
 	var back := maxf(r.y, atk * _sk.thorns[0] / 100.0) if _sk.has("thorns") else r.y  # 가시: 받은 피해 %와 공격력 % 중 큰 것
+	var prev = BattleStats.src
+	BattleStats.src = self  # 가시·반격은 이 영웅이 가한 피해
 	if back > 0.0 and source != null and is_instance_valid(source) and source.is_alive():
 		source.take_damage(back * _skill_mult, DamageNumbers.Kind.SKILL)
 	if hp == 0.0 and _skx.try_revive():  # 불굴: 쓰러지는 대신 다시 일어난다
+		BattleStats.src = prev
 		return
 	if hp == 0.0:
+		BattleStats.src = prev
 		state = State.DEAD
 		_cancel_cast()
 		_model.play_death()
@@ -538,6 +545,7 @@ func take_damage(amount: float, source = null) -> void:
 		_aura_ring.visible = false
 		return
 	_skx.after_hurt(source)  # 반격·재기·금강불괴
+	BattleStats.src = prev
 
 
 ## 되살아남(부활의 기도): 쓰러진 영웅이 최대 HP의 pct%로 그 자리에서 일어난다.
@@ -563,6 +571,7 @@ func heal(amount: float) -> float:
 		return 0.0
 	var gain := minf(hp_max - hp, maxf(0.0, amount))
 	hp += gain
+	BattleStats.healed(self, gain)  # 전투 통계: 치유량(준 영웅 = 지금 행동 중인 영웅, 없으면 자신)
 	DamageNumbers.pop(self, gain, DamageNumbers.Kind.HEAL)
 	return gain
 
@@ -603,7 +612,15 @@ func retire() -> void:
 	queue_free()
 
 
+## 한 프레임 동안 이 영웅이 행동 중(BattleStats.src) — 가한 피해·치유량을 이 영웅에게 쌓는다. 몸통은 _tick(war_hero·party_hero가 덮어쓴다).
 func _process(delta: float) -> void:
+	var prev = BattleStats.src
+	BattleStats.src = self
+	_tick(delta)
+	BattleStats.src = prev
+
+
+func _tick(delta: float) -> void:
 	if state == State.DEAD:
 		return
 	if _stun_t > 0.0:  # 기절(개정 18)

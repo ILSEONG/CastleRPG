@@ -258,6 +258,7 @@ func _build_world() -> void:
 	build_btn.panel = build_list
 	add_child(build_btn)
 	build_list.anchor = build_btn  # 버튼 오른쪽에서 펼쳐진다
+	build_list.side_menu = side_menu  # [메뉴]와 서로 겹치지 않게
 	card.build_button = build_btn  # 가이드 건설 미션 화살표: 자리를 안 잡은 공터면 [건설] 버튼을 가리킨다
 	var speed = preload("res://scripts/speed_button.gd").new()
 	speed.castle = true  # 방치 중엔 1배(스테이지 전투만 빠르게, 방치 중엔 숨김)  # 왼쪽 아래([메뉴]와 같은 높이) 배속 x1 → x1.5 → x2(기기 저장, 던전·PVP·길드 보스에도 같은 버튼, 길드전 제외)
@@ -268,6 +269,11 @@ func _build_world() -> void:
 	var hot = preload("res://scripts/hot_deal.gd").new()  # 핫딜: 보스 격파·다이아 부족·패배 때 1시간 특가 창 + 왼쪽 [핫딜] 버튼(배속 버튼 위)
 	hot.speed = speed
 	add_child(hot)
+	var stats = preload("res://scripts/stats_button.gd").new()  # [통계](2026-11-02): 배속 버튼([핫딜]) 위 — 스테이지 동안 영웅별 가한·받은 피해·치유량, 방치 중 숨김
+	stats.castle = true
+	stats.speed = speed
+	stats.hot = hot
+	add_child(stats)
 	recruit.hot = hot
 	_hud = hud
 	_strip = preload("res://scripts/hero_strip.gd").new()
@@ -446,6 +452,7 @@ func _enter_dungeon(run: Dictionary, scene_script: Script = preload("res://scrip
 	Music.override = music
 	if not scene_script.resource_path in ["res://scripts/war_battle.gd", "res://scripts/party_battle.gd"]:  # 길드전은 늘 1배(사용자 2026-10-07 "길드전은 아니야"), 파티 퀘스트도 여럿이 함께라 1배
 		d.add_child(preload("res://scripts/speed_button.gd").new())  # 던전·PVP·길드 보스에도 같은 배속 버튼(x1 → x1.5 → x2, 성 화면과 같은 설정)
+	d.add_child(preload("res://scripts/stats_button.gd").new())  # 모든 전투 장면에 [통계](2026-11-02, 배속 버튼 위 — 없으면 그 자리)
 	_host.add_child(d)
 
 

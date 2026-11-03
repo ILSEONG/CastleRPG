@@ -1,7 +1,8 @@
 extends "res://scripts/ui_window.gd"
 ## 설정 창(2026-10-06, 오른쪽 아래 메뉴 [설정] — 예전 [음악] 켬/끔 버튼 자리). 바꾸면 바로 적용되고 기기에 저장된다(서버 요청 없음).
 ## 사운드: 배경음악 켬/끔 + 크기 슬라이더(Music.enabled·volume), 효과음 켬/끔 + 크기 슬라이더(SoundFx.enabled·volume, 2026-10-07).
-## 화면: 화면 흔들림(Prefs shake — 카메라 흔들림·히트스톱·SSR 줌), 피해 숫자 표시(Prefs damage_numbers).
+## 화면: 화면 흔들림(Prefs shake — 카메라 흔들림·히트스톱·SSR 줌), 피해 숫자 표시(Prefs damage_numbers),
+## 스킬 이름 띠 표시(Prefs skill_banner)·크기(Prefs skill_banner_size: s/m/l/xl).
 ## 알림(안드로이드만, 2026-10-12): 푸시 알림 전체·종류별·야간 켬/끔 — notify_settings.gd, 예약은 Notify(notify.gd).
 ## 계정: 닉네임·친구 코드([복사])·로그인 방식(온라인, 친구 목록 응답 Economy.friends에서). 오프라인이면 "오프라인 모드".
 ## 계정 삭제(온라인, Google Play 계정 삭제 정책): 두 번 눌러 확인 → POST /v1/account/delete → 저장한 로그인·기기 id를 지우고 처음부터(Net.forget_account).
@@ -23,6 +24,7 @@ const Links := preload("res://scripts/support_links.gd")
 const ReleasePlatform := preload("res://scripts/release_platform.gd")
 const NotifySettings := preload("res://scripts/notify_settings.gd")
 const AccountLinkScript := preload("res://scripts/account_link.gd")
+const DamageNumbersScript := preload("res://scripts/damage_numbers.gd")
 
 static var TITLE := Lang.t("settings_panel.title")
 const WIDTH := 600.0
@@ -40,6 +42,8 @@ var sfx_slider: HSlider
 var sfx_label: Label
 var shake_check: Button
 var numbers_check: Button
+var banner_check: Button  # 스킬 이름 띠(머리 위) 켬/끔
+var banner_size_buttons := {}  # 띠 크기 id → Button
 var name_label: Label
 var code_label: Label
 var login_label: Label
@@ -114,6 +118,12 @@ func _ready() -> void:
 	body.add_child(saver_hint)
 	shake_check = _toggle_row(Lang.t("settings_panel.ready_11"), func(on: bool): Prefs.set_value("shake", on))
 	numbers_check = _toggle_row(Lang.t("settings_panel.ready_12"), func(on: bool): Prefs.set_value("damage_numbers", on))
+	# 2026-11-02 사용자: 영웅 머리 위 스킬 이름 띠를 켜고 끄고 크기를 고른다(DamageNumbers가 그릴 때마다 읽는다 — 바로 적용)
+	banner_check = _toggle_row(Lang.t("settings_panel.skill_banner"), func(on: bool): Prefs.set_value("skill_banner", on))
+	banner_size_buttons = _choice_row(Lang.t("settings_panel.skill_banner_size"),
+		[["s", Lang.t("settings_panel.banner_size_s")], ["m", Lang.t("settings_panel.banner_size_m")], ["l", Lang.t("settings_panel.banner_size_l")]], func(z):
+			Prefs.set_value("skill_banner_size", z)
+			_style_choices(banner_size_buttons, DamageNumbersScript.banner_size_id()))
 	notify_rows = NotifySettings.add_to(self)  # 푸시 알림 켬/끔(안드로이드만)
 
 	body.add_child(_section(Lang.t("settings_panel.ready_13")))
@@ -207,16 +217,17 @@ func _on_open() -> void:
 
 ## 지금 값으로 다시 보인다(토글 신호는 막고).
 func _refresh() -> void:
-	for c in [music_check, shake_check, numbers_check, volume_slider, sfx_check, sfx_slider, saver_check]:
+	for c in [music_check, shake_check, numbers_check, banner_check, volume_slider, sfx_check, sfx_slider, saver_check]:
 		c.set_block_signals(true)
 	music_check.button_pressed = Music.enabled
 	sfx_check.button_pressed = SoundFx.enabled
 	sfx_slider.value = roundf(SoundFx.volume * 100.0)
 	shake_check.button_pressed = Prefs.get_bool("shake")
 	numbers_check.button_pressed = Prefs.get_bool("damage_numbers")
+	banner_check.button_pressed = Prefs.get_bool("skill_banner")
 	saver_check.button_pressed = GraphicsScript.saver_enabled()
 	volume_slider.value = roundf(Music.volume * 100.0)
-	for c in [music_check, shake_check, numbers_check, volume_slider, sfx_check, sfx_slider, saver_check]:
+	for c in [music_check, shake_check, numbers_check, banner_check, volume_slider, sfx_check, sfx_slider, saver_check]:
 		c.set_block_signals(false)
 		if c is Button:
 			for k in c.get_children():
@@ -240,6 +251,7 @@ func _refresh() -> void:
 	_style_links(online)
 	_style_choices(quality_buttons, GraphicsScript.quality())
 	_style_choices(fps_buttons, GraphicsScript.fps())
+	_style_choices(banner_size_buttons, DamageNumbersScript.banner_size_id())
 
 
 func _process(delta: float) -> void:

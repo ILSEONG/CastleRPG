@@ -155,6 +155,7 @@ func _init() -> void:
 	test_iap()
 	test_gacha_odds()
 	test_hero_ur()
+	test_tap_once()
 	test_sfx()
 	test_follow_cam()
 	test_portrait_focus()
@@ -6203,3 +6204,14 @@ func test_hero_ur() -> void:
 	check(ur.size() == 6 and GameData.hero_power(sol, 1, 0, {}) > GameData.hero_power(ssr, 1, 0, {}) and GameData.levelup_cost("UR", 1, 1).gold > GameData.levelup_cost("SSR", 1, 1).gold,
 		"6 UR heroes; a UR tank outpowers the SSR tank at the same level; UR level-up costs more")
 	e.free()
+
+
+## 빠른 두 번 누름 막기(2026-11-02): 같은 key는 DOUBLE_TAP_SEC 안에 한 번, 다른 key는 따로, 시간이 지나면 다시.
+func test_tap_once() -> void:
+	UiKit._tap_at.clear()
+	check(UiKit.tap_once("shop:d_ticket"), "tap_once: first tap goes through")
+	check(not UiKit.tap_once("shop:d_ticket"), "tap_once: same-frame second tap is dropped")
+	check(UiKit.tap_once("shop:d_res"), "tap_once: another item is its own tap")
+	UiKit._tap_at["shop:d_ticket"] = Time.get_ticks_msec() / 1000.0 - UiKit.DOUBLE_TAP_SEC - 0.01
+	check(UiKit.tap_once("shop:d_ticket"), "tap_once: a later tap goes through")
+	UiKit._tap_at.clear()
