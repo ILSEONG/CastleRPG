@@ -2117,7 +2117,7 @@ tutorial.missions.attend.desc,"오른쪽 아래 [메뉴] → [이벤트]에서 �
 tutorial.missions.pouch.title,주머니 열기,,,,scripts/tutorial.gd
 tutorial.missions.pouch.desc,출석 보상으로 받은 골드 주머니를 [메뉴] → [가방]에서 여세요. 주머니는 그 시간만큼의 방치 수입을 바로 줍니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_1.title,스테이지 1-1 클리어,,,,scripts/tutorial.gd
-tutorial.missions.stage_1_1.desc,"위의 [진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 몬스터를 잡을 때마다 골드가 쌓이고, 그 골드로 영웅을 키웁니다.",,,,scripts/tutorial.gd
+tutorial.missions.stage_1_1.desc,"위의 [▶ 진행]을 눌러 전투를 시작하고 1-1을 클리어하세요. 몬스터를 잡을 때마다 골드가 쌓이고, 그 골드로 영웅을 키웁니다.",,,,scripts/tutorial.gd
 tutorial.missions.auto_on.title,연속 진행 켜기,,,,scripts/tutorial.gd
 tutorial.missions.auto_on.desc,위쪽 [▶ 진행] 옆 [연속 진행]을 체크하세요. 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어서 도전합니다.,,,,scripts/tutorial.gd
 tutorial.missions.speed_on.title,전투 배속 켜기,,,,scripts/tutorial.gd
@@ -2127,7 +2127,7 @@ tutorial.missions.hero_level.desc,[영웅] 탭에서 영웅을 골라 골드로 
 tutorial.missions.hero_lv4_5.title,영웅 4명 Lv 5 달성,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_5.desc,[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
 tutorial.missions.mission_claim.title,일일 미션 보상 받기,,,,scripts/tutorial.gd
-tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 「영웅 레벨업 5회」는 이미 끝났습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
+tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 오늘 영웅을 5번 레벨업했다면 「영웅 레벨업 5회」가 끝나 있습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_2.title,스테이지 1-2 클리어,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_2.desc,전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.,,,,scripts/tutorial.gd
 tutorial.missions.growth.title,성장 강화,,,,scripts/tutorial.gd
@@ -2175,11 +2175,11 @@ tutorial.fill.hero_lv.desc,[영웅] 탭에서 영웅 %d명을 Lv %d 이상으로
 tutorial.fill.growth_lv.title,%s Lv %d 달성,,,,scripts/tutorial.gd
 tutorial.fill.growth_lv.desc,[성장] 탭에서 %s 레벨을 %d까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.fill.dungeon_lv.title,%s %d단계 클리어,,,,scripts/tutorial.gd
-tutorial.fill.dungeon_lv.desc,[던전] 탭에서 %s %d단계를 클리어하세요. 열쇠는 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
+tutorial.fill.dungeon_lv.desc,[던전] 탭에서 %s %d단계를 클리어하세요. 입장권은 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
 tutorial.fill.gacha.title,영웅 모집 %d회,,,,scripts/tutorial.gd
 tutorial.fill.gacha.desc,[모집] 탭에서 영웅을 %d회 모집하세요. 모집권은 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
 tutorial.fill.dungeon_win.title,%s 클리어,,,,scripts/tutorial.gd
-tutorial.fill.dungeon_win.desc,[던전] 탭에서 %s에 한 번 도전해 이기세요. 단계는 아무거나 괜찮습니다. 열쇠는 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
+tutorial.fill.dungeon_win.desc,[던전] 탭에서 %s에 한 번 도전해 이기세요. 단계는 아무거나 괜찮습니다. 입장권은 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
 tutorial.fill.level.title,%s Lv %d,,,,scripts/tutorial.gd
 tutorial.fill.level.desc,성 화면에서 %s 건물을 눌러 Lv %d로 올리세요. 남은 시간이 5분 이하면 [무료 즉시 완료]로 바로 끝납니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
@@ -2191,9 +2191,9 @@ tutorial.missions.kill_50.desc,새로 배치한 영웅들과 함께 몬스터 50
 tutorial.missions.kill_60.title,몬스터 60마리 처치,,,,scripts/tutorial.gd
 tutorial.missions.kill_60.desc,몬스터 60마리를 처치하세요. 대기 중에도 영웅들이 저절로 싸웁니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_100.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
-tutorial.missions.kill_100.desc,몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다. FEVER 게이지가 차면 버튼을 눌러 몰아치세요.,,,,scripts/tutorial.gd
+tutorial.missions.kill_100.desc,몬스터 100마리를 처치하세요. 대기 중에도 영웅들이 저절로 처치합니다.,,,,scripts/tutorial.gd
 tutorial.missions.dungeon_gold.title,골드 던전,,,,scripts/tutorial.gd
-tutorial.missions.dungeon_gold.desc,[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권(열쇠)은 매일 다시 채워집니다.,,,,scripts/tutorial.gd
+tutorial.missions.dungeon_gold.desc,[던전] 탭에서 골드 던전 1단계에 도전해 클리어하세요. 입장권은 매일 다시 채워집니다.,,,,scripts/tutorial.gd
 tutorial.missions.atk_8.title,공격력 Lv 8 달성,,,,scripts/tutorial.gd
 tutorial.missions.atk_8.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 8까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.hp_8.title,체력 Lv 8 달성,,,,scripts/tutorial.gd
@@ -2215,7 +2215,7 @@ tutorial.missions.hero_lv4_15.desc,[영웅] 탭에서 영웅 4명을 Lv 15 이�
 tutorial.missions.soldier_deploy.title,병사 배치,,,,scripts/tutorial.gd
 tutorial.missions.soldier_deploy.desc,"훈련이 끝난 막사를 눌러 병사를 받고, [병사] 탭에서 배치하세요. 같은 병사 5마리를 합성하면 상위 티어가 됩니다.",,,,scripts/tutorial.gd
 tutorial.missions.stage_1_5.title,스테이지 1-5 클리어,,,,scripts/tutorial.gd
-tutorial.missions.stage_1_5.desc,병사와 함께 1-5까지 클리어하세요. 병사는 전투가 시작되면 성채 앞에 나타납니다.,,,,scripts/tutorial.gd
+tutorial.missions.stage_1_5.desc,전투를 이어 가 1-5까지 클리어하세요. 막히면 영웅 레벨업과 성장으로 힘을 키우세요.,,,,scripts/tutorial.gd
 tutorial.missions.atk_12.title,공격력 Lv 12 달성,,,,scripts/tutorial.gd
 tutorial.missions.atk_12.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 12까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_6.title,스테이지 1-6 클리어,,,,scripts/tutorial.gd
@@ -2247,7 +2247,7 @@ tutorial.missions.farm_2.desc,농장을 눌러 Lv 2로 올리세요. 생산량�
 tutorial.missions.gate_2.title,성문 Lv 2,,,,scripts/tutorial.gd
 tutorial.missions.gate_2.desc,성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_100_2.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
-tutorial.missions.kill_100_2.desc,"몬스터 100마리를 처치하세요. 대기 중에도, 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.",,,,scripts/tutorial.gd
+tutorial.missions.kill_100_2.desc,몬스터 100마리를 처치하세요. 앱을 켜 둔 동안에는 대기 중에도 영웅들이 계속 싸웁니다. 앱을 끈 동안에는 골드만 쌓이고 처치 수는 늘지 않습니다.,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_18.title,영웅 4명 Lv 18 달성,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_18.desc,[영웅] 탭에서 영웅 4명을 Lv 18 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
 tutorial.missions.atk_16.title,공격력 Lv 16 달성,,,,scripts/tutorial.gd
@@ -2261,7 +2261,7 @@ tutorial.missions.guild_attend.desc,"[메뉴] → [길드]에서 [출석]을 누
 tutorial.missions.hp_16.title,체력 Lv 16 달성,,,,scripts/tutorial.gd
 tutorial.missions.hp_16.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_20.title,영웅 4명 Lv 20 달성,,,,scripts/tutorial.gd
-tutorial.missions.hero_lv4_20.desc,[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 다음 미션에서 승급으로 더 올리는 법을 배웁니다.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_20.desc,[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 곧 나오는 승급 퀘스트에서 더 올리는 법을 배웁니다.,,,,scripts/tutorial.gd
 tutorial.missions.promote.title,영웅 승급하기,,,,scripts/tutorial.gd
 tutorial.missions.promote.desc,"영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",,,,scripts/tutorial.gd
 tutorial.missions.guild_boss.title,길드 보스 도전,,,,scripts/tutorial.gd
@@ -2273,7 +2273,7 @@ tutorial.missions.siege_try.desc,"길드끼리 성을 공격하는 공성전을 
 tutorial.missions.pvp.title,PVP 결투,,,,scripts/tutorial.gd
 tutorial.missions.pvp.desc,"[던전] 탭 위쪽 [PVP]에서 결투나 총력전을 한 판 하세요. 다른 플레이어의 방어팀과 싸워 PVP 코인을 얻고, 코인은 상점에서 씁니다.",,,,scripts/tutorial.gd
 tutorial.missions.fever.title,FEVER 쓰기,,,,scripts/tutorial.gd
-tutorial.missions.fever.desc,몬스터를 처치하면 [진행] 왼쪽 FEVER 게이지가 찹니다. 가득 차면 FEVER 버튼을 눌러 잠시 몬스터를 몰아서 잡으세요(대기 중에만).,,,,scripts/tutorial.gd
+tutorial.missions.fever.desc,몬스터를 처치하면 [▶ 진행] 왼쪽 FEVER 게이지가 찹니다. 가득 차면 FEVER 버튼을 눌러 잠시 몬스터를 몰아서 잡으세요(대기 중에만).,,,,scripts/tutorial.gd
 tutorial.missions.atk_18.title,공격력 Lv 18 달성,,,,scripts/tutorial.gd
 tutorial.missions.atk_18.desc,[성장] 탭에서 모든 영웅의 공격력을 Lv 18까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.hp_18.title,체력 Lv 18 달성,,,,scripts/tutorial.gd
@@ -2286,8 +2286,8 @@ tutorial.repeats.title,몬스터 %d마리 처치,,,,scripts/tutorial.gd
 tutorial.repeats.title_3,스테이지 %s 클리어,,,,scripts/tutorial.gd
 tutorial.repeats.title_4,성장 강화 %d회,,,,scripts/tutorial.gd
 tutorial.repeats.title_6,영웅 레벨업 %d회,,,,scripts/tutorial.gd
-tutorial.repeats.title_7,영웅 %d회 모집,,,,scripts/tutorial.gd
-tutorial.repeats.title_8,던전 %d번 클리어,,,,scripts/tutorial.gd
+tutorial.repeats.title_7,영웅 모집 %d회,,,,scripts/tutorial.gd
+tutorial.repeats.title_8,던전 클리어 %d회,,,,scripts/tutorial.gd
 tutorial.repeat_desc.kill,몬스터를 처치하세요. 방치 중 처치도 셉니다.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.stage,전투를 이어 가 목표 라운드를 클리어하세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.growth_up,[성장] 탭에서 강화하세요.,,,,scripts/tutorial.gd
