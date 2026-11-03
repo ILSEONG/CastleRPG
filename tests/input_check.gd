@@ -705,6 +705,8 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _frames(2)
 	_check(heroes_win.is_showing_detail() and heroes_win.detail_id == "arteon" and heroes_win.is_guarded() and heroes_win.work == ["ella", "arteon", "dorik", "nina"],
 		"(x) a card tap (no slot picked) opens its detail and re-arms the open guard", "detail=%s" % heroes_win.detail_id)
+	_check(not heroes_win.big_card.get_global_rect().intersects(heroes_win.close_x.get_global_rect()),
+		"(x) the detail art card starts below the close X (2026-11-03)", "card=%s x=%s" % [heroes_win.big_card.get_global_rect(), heroes_win.close_x.get_global_rect()])
 	_check(heroes_win.stat_values[0].text == "1,217" and heroes_win.stat_nexts[0].text == "→ 1,255 (+38)" and heroes_win.stat_values[1].text == "42"
 		and heroes_win.stat_nexts[1].text == "→ 43 (+1)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
 		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 50",

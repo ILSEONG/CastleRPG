@@ -346,11 +346,8 @@ func _build_detail() -> void:
 	big_card.custom_minimum_size = Vector2(0, BIG_CARD_MIN_H)
 	big_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	big_card.size_flags_stretch_ratio = 3.0
-	big_card.chip_right_pad = CLOSE_X_PX + 4.0  # 창 오른쪽 위 닫기(X)와 안 겹치게
 	big_card.live = true  # 개정 14 §2: 실시간 피규어(대기 애니메이션), 끌어서 돌린다
-	_detail_view.add_child(big_card)
-	_build_equip_slots()
-	# 이름·등급 + [배치]
+	# 이름·등급 + [배치] — 맨 위 줄(2026-11-03 겹침 점검: 창 오른쪽 위 닫기 X는 이 줄 오른쪽 끝, 큰 카드는 그 아래)
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 12)
 	_detail_view.add_child(head)
@@ -370,6 +367,12 @@ func _build_detail() -> void:
 	deploy_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	deploy_button.pressed.connect(deploy_here)
 	head.add_child(deploy_button)
+	var x_room := Control.new()  # 닫기 X 자리
+	x_room.custom_minimum_size = Vector2(CLOSE_X_PX - 4.0, 0)
+	x_room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(x_room)
+	_detail_view.add_child(big_card)
+	_build_equip_slots()
 	# Lv N / 최대 + 막대
 	var lv_row := HBoxContainer.new()
 	lv_row.add_theme_constant_override("separation", 12)
