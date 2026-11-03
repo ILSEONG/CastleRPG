@@ -79,7 +79,6 @@ var sort_button: Button
 var heroes_tab: Button  # 목록 위 탭(2026-10-30 사용자 "영웅 창에 탭을 두개 둬서, 합성 탭을 하나 만들어줘"): [영웅]
 var fuse_tab: Button  # [합성]: 합성대 + 영웅 카드 격자(fuse_tab.gd — 첫 영웅 등급이 합성 등급)
 var tab := "heroes"  # "heroes" | "fuse"
-var _from_fuse := false  # 합성 결과를 모집 창에 넘겼다(다시 열릴 때 탭을 지킨다)
 var fuse  # [합성] 탭 내용(fuse_tab.gd)
 var recruit  # 모집 창(main이 넣는다): 합성 결과를 뒤집기 연출로 보여 준다
 var promote_all_button: Button  # [일괄 승급]
@@ -245,13 +244,11 @@ func _refresh_fuse() -> void:
 		fuse.refresh()
 
 
-## 합성 창 [합성]: 결과는 모집 창이 뒤집기 연출로 보여 주고, [확인]을 누르면 이 창으로 돌아온다.
+## [합성] 탭 [합성]: 결과는 그 탭 안에서 보여 준다(fuse_tab.show_result — 2026-11-03 모집 창으로 넘기지 않는다).
 func _on_fused(picks: Dictionary) -> void:
-	if recruit != null:
-		_from_fuse = true
-		recruit.fuse_from(picks, self)
-	else:
-		Economy.fuse_heroes(picks)
+	if not Economy.fuse_heroes(picks):  # 보내지 못했다(조각 부족·연결 끊김) — 다시 누를 수 있게
+		fuse.waiting = false
+		fuse.refresh()
 
 
 ## 일괄 승급 확인 창: 화면을 덮는 어두운 막(뒤 입력 차단) + 가운데 크림 창 — 제목, 영웅별 줄(스크롤), [승급]·[취소].
@@ -637,8 +634,7 @@ func _on_open() -> void:
 	promote_all_confirm.visible = false
 	work = GameState.deploy()
 	selected_slot = -1
-	set_tab(tab if _from_fuse else "heroes")  # 합성 결과 [확인]으로 돌아오면 [합성] 탭 그대로
-	_from_fuse = false
+	set_tab("fuse" if fuse.is_showing_result() or fuse.waiting else "heroes")  # 못 본 합성 결과가 있으면 [합성] 탭으로
 	_show_list(false)
 
 

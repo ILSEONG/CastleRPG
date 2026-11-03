@@ -569,7 +569,7 @@ export const LEVELUP_GOLD_GROWTH = 1.037
 export const LEVELUP_GOLD_BOOST = 8.2
 export const LEVELUP_GOLD_TAU = 45
 
-// 최대 레벨 = hero_max_levels의 승급번째(20|50|80|120|160|200, 2026-10-13). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
+// 최대 레벨 = hero_max_levels의 승급번째(50|100|150|200|250|300, 2026-11-03). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 export function heroMaxLevel(promotion: number, config: Config): number {
   const list = String(config.hero_max_levels ?? '').split('|').map(Number)
   if (list.length === MAX_PROMOTION + 1 && list.every((v) => Number.isInteger(v) && v >= 1)) return list[Math.max(0, Math.min(promotion, MAX_PROMOTION))]

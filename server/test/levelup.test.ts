@@ -55,20 +55,20 @@ test('레벨업 1회·3회: 골드(tenths × 10)만 정확히 빼고(식량은 �
   assert.deepEqual(l[1].detail, { hero_id: 'hans', from: 2, to: 5, count: 3, gold: 281, gold_tenths: -2810 })
 })
 
-test('최대 레벨: 승급 0은 20까지(넘으면 409 max_level), 승급이 오르면 상한도 오른다(승급 1 → 50)', async () => {
+test('최대 레벨: 승급 0은 50까지(넘으면 409 max_level), 승급이 오르면 상한도 오른다(승급 1 → 100)', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await setState(id, 10_000_000, 1_000_000)
-  await setHero(id, 'nina', 0, 19)
+  await setHero(id, 'nina', 0, 49)
   let r = await levelup(token, { hero_id: 'nina', count: 2 })
   assert.deepEqual([r.status, r.json.error], [409, 'max_level'])
   r = await levelup(token, { hero_id: 'nina', count: 1 })
-  assert.deepEqual([r.status, r.json.level], [200, 20])
-  assert.deepEqual([(await levelup(token, { hero_id: 'nina', count: 1 })).json.error], ['max_level'])
-  await setHero(id, 'nina', 1, 20) // 승급 1 → 상한 50(2026-10-13 hero_max_levels 20|50|80|120|160|200)
-  await setState(id, 1e12)
-  r = await levelup(token, { hero_id: 'nina', count: 30 })
   assert.deepEqual([r.status, r.json.level], [200, 50])
+  assert.deepEqual([(await levelup(token, { hero_id: 'nina', count: 1 })).json.error], ['max_level'])
+  await setHero(id, 'nina', 1, 50) // 승급 1 → 상한 100(2026-11-03 hero_max_levels 50|100|150|200|250|300)
+  await setState(id, 1e12)
+  r = await levelup(token, { hero_id: 'nina', count: 50 })
+  assert.deepEqual([r.status, r.json.level], [200, 100])
   assert.equal((await levelup(token, { hero_id: 'nina', count: 1 })).status, 409)
 })
 

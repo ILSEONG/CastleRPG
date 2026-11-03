@@ -1037,6 +1037,9 @@ fuse_tab.other_grade,%s 영웅의 조각만 넣을 수 있습니다,,,,scripts/f
 fuse_tab.hint_on,%s 조각 %d개 → %s 영웅 1명(무작위),,,,scripts/fuse_tab.gd
 fuse_tab.hint_off,처음 고른 영웅의 등급으로 합성합니다 · 같은 등급 조각 %d개 → 한 단계 위 영웅,,,,scripts/fuse_tab.gd
 fuse_tab.count,넣은 조각 %d / %d,,,,scripts/fuse_tab.gd
+fuse_tab.ok,확인,,,,scripts/fuse_tab.gd
+fuse_tab.result_title,합성 성공! %s 영웅 획득,,,,scripts/fuse_tab.gd
+fuse_tab.dup,+1 조각,,,,scripts/fuse_tab.gd
 hero_panel.build_promote_all_confirm,일괄 승급,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm_2,아래 영웅을 승급하시겠습니까?,,,,scripts/hero_panel.gd
 hero_panel.build_promote_all_confirm_3,승급,,,,scripts/hero_panel.gd
@@ -2261,7 +2264,7 @@ tutorial.missions.guild_attend.desc,"[메뉴] → [길드]에서 [출석]을 누
 tutorial.missions.hp_16.title,체력 Lv 16 달성,,,,scripts/tutorial.gd
 tutorial.missions.hp_16.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 16까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_20.title,영웅 4명 Lv 20 달성,,,,scripts/tutorial.gd
-tutorial.missions.hero_lv4_20.desc,[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 최대 레벨에 닿으면 곧 나오는 승급 퀘스트에서 더 올리는 법을 배웁니다.,,,,scripts/tutorial.gd
+tutorial.missions.hero_lv4_20.desc,"[영웅] 탭에서 영웅 4명을 Lv 20 이상으로 올리세요. 승급 전 최대 레벨은 Lv 50이고, 곧 나오는 승급 퀘스트에서 더 올리는 법을 배웁니다.",,,,scripts/tutorial.gd
 tutorial.missions.promote.title,영웅 승급하기,,,,scripts/tutorial.gd
 tutorial.missions.promote.desc,"영웅은 최대 레벨에 닿으면 더 오르지 않습니다. [영웅] 탭에서 영웅을 눌러 [승급]하면 최대 레벨이 오르고 HP·공격도 오릅니다. 승급에는 그 영웅의 조각이 필요하고, 조각은 모집에서 같은 영웅이 다시 나오면 쌓입니다.",,,,scripts/tutorial.gd
 tutorial.missions.guild_boss.title,길드 보스 도전,,,,scripts/tutorial.gd

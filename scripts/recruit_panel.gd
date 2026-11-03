@@ -66,7 +66,6 @@ var dia_label: Label  # 다이아 보유
 var ticket_label: Label  # "다이아 모집권 n장"(있을 때만)
 var odds_button: Button  # [확률 정보] — 영웅별 확률 안내(gacha_odds.gd)
 var odds: Control  # 확률 안내 창
-var _back: CanvasLayer  # 영웅 창 [합성] 탭에서 왔으면 그 창(결과 [확인] 뒤 다시 연다 — 2026-10-30 사용자 "UR 합성은 영웅 목록 페이지에서")
 var shop_ask: Control  # "다이아가 부족합니다" 확인 창(어두운 막 + 크림 창)
 var art: TextureRect  # 예전 3D 키 아트(처음 열 때 SceneSnap으로 렌더) — 일러스트 배너가 없을 때만 보인다
 var banner: Control  # SSR 일러스트 배너(recruit_banner.gd)
@@ -396,50 +395,11 @@ func _recruit(count: int, cur := "") -> void:
 		_refresh()
 
 
-## 영웅 창 [합성] 탭의 조각 합성 창 [합성](back = 영웅 창): 영웅 창을 닫고 이 창에서 결과를 모집처럼 뒤집기 연출로 보여 준다.
-## 결과 [확인]을 누르면 이 창을 닫고 영웅 창으로 돌아간다(영웅 창이 이 창보다 위 층이라 겹쳐 보여 줄 수 없다).
-func fuse_from(picks: Dictionary, back: CanvasLayer = null) -> void:
-	if _waiting or not Economy.fuse_ok(picks):
-		return
-	_back = back
-	if back != null and back.visible:
-		back.close()
-	if not visible:
-		open()
-	if not _on_fused(picks):  # 보내지 못했다(조각 부족 등) — 영웅 창으로 되돌아간다(오프라인은 결과가 이미 와서 _waiting이 풀려 있다)
-		_go_back()
-
-
-func _go_back() -> void:
-	var b := _back
-	_back = null
-	if b != null and is_instance_valid(b):
-		close()
-		b.open()
-
-
-## 조각 합성 [합성]: 결과(gacha_done)를 모집처럼 기다린다. 다시 뽑기 버튼은 다이아로.
-func _on_fused(picks: Dictionary) -> bool:
-	if _waiting:
-		return false
-	_count = 1
-	_cur = DIA
-	_halted = true
-	_waiting = true  # 오프라인은 fuse_heroes 안에서 바로 gacha_done이 온다 — 그 전에 둔다
-	var sent := Economy.fuse_heroes(picks)
-	if not sent:
-		_waiting = false
-	_refresh()
-	return sent
-
-
 func _on_gacha_done(results: Array) -> void:
 	_waiting = false
 	if results.is_empty():
 		_halted = true  # 온라인 실패(알림은 Economy가 띄운다) — 자동을 멈춘다
 		_refresh()
-		if _back != null:
-			_go_back()
 		return
 	if not visible:
 		if _another_window_open():  # 그 창 위로 겹쳐 열지 않는다(어둠이 겹치고 층 순서에 따라 결과가 가려진다)
@@ -593,8 +553,6 @@ func _on_confirm() -> void:
 	_halted = true
 	_show_pick()
 	_arm_guard()
-	if _back != null:
-		_go_back()  # 결과 화면 [확인] 자리에 뜨는 [10회 모집]을 더블 탭의 두 번째 누름이 누르지 않게
 
 
 func _on_auto_toggled(on: bool) -> void:
@@ -607,7 +565,6 @@ func _on_auto_toggled(on: bool) -> void:
 
 func close() -> void:
 	_halted = true
-	_back = null
 	if shop_ask != null:
 		shop_ask.visible = false
 	if stage != null:

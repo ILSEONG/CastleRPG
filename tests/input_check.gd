@@ -632,20 +632,23 @@ func _recruit_and_heroes(rig) -> void:
 	await _tap(ft.auto_button.get_global_rect().get_center())
 	await _frames(2)
 	var fusable: bool = not ft.fuse_button.disabled and ft.total() == Economy.fuse_cost() and ft.main_card.hero_id == sr_ids[0] and ft.picks.keys().all(func(id): return GameData.hero(id).grade == "SR")
+	var shown0: int = ft.results_shown
 	await _tap(ft.fuse_button.get_global_rect().get_center())
-	await _frames(4)
-	var rwin = recruit
-	var fused_shown: bool = rwin != null and rwin.visible and ft.picks.is_empty()
-	if rwin != null and rwin.visible:
-		rwin._on_confirm()
-	await _frames(3)
-	_check(fusable and fused_shown and Economy.shards_of(sr_ids[0]) + Economy.shards_of(sr_ids[1]) <= 3 and heroes_win.visible and heroes_win.tab == "fuse" and ft.grade == "",
-		"(u) [자동 채우기] fills 10 SR shards, [합성] plays in the recruit window and [확인] returns to an empty [합성] tab",
-		"fusable=%s shown=%s shards=%d/%d hero_win=%s tab=%s" % [fusable, fused_shown, Economy.shards_of(sr_ids[0]), Economy.shards_of(sr_ids[1]), heroes_win.visible, heroes_win.tab])
+	await _frames(20)
+	# 결과는 합성 탭 안에서(2026-11-03 사용자 "카드 합성 결과를 왜 카드 뽑기에서 보는거야?") — 모집 창은 열리지 않는다
+	var in_tab: bool = ft.is_showing_result() and ft.results_shown == shown0 + 1 and GameData.hero(ft.result_card.hero_id).get("grade", "") == "SSR" and ft.picks.is_empty() \
+		and heroes_win.visible and (recruit == null or not recruit.visible) and not ft._stage.visible and ft.ok_button.get_global_rect().end.y <= 1280.0 \
+		and not ft.ok_button.get_global_rect().intersects(heroes_win.close_x.get_global_rect())
+	_check(fusable and in_tab and Economy.shards_of(sr_ids[0]) + Economy.shards_of(sr_ids[1]) <= 3,
+		"(u) [자동 채우기] fills 10 SR shards; [합성] shows the SSR result inside the [합성] tab (no recruit window)",
+		"fusable=%s in_tab=%s result=%s recruit=%s shards=%d/%d" % [fusable, in_tab, ft.result_card.hero_id, recruit != null and recruit.visible, Economy.shards_of(sr_ids[0]), Economy.shards_of(sr_ids[1])])
+	await _tap(ft.ok_button.get_global_rect().get_center())
+	await _frames(2)
+	_check(not ft.is_showing_result() and ft._stage.visible and heroes_win.tab == "fuse" and ft.grade == "" and ft.main_card.hero_id == "",
+		"(u) [확인] closes the result and returns to an empty fusion stage", "result=%s tab=%s" % [ft.is_showing_result(), heroes_win.tab])
 	Economy.heroes = keep_heroes
 	Economy.hero_shards = keep_shards
 	Economy.roster_changed.emit()
-	await _wait_until(func(): return not heroes_win.is_guarded(), 1.0)  # 다시 연 창의 누름 보호(OPEN_GUARD_MS)
 	await _tap(heroes_win.heroes_tab.get_global_rect().get_center())
 	await _frames(2)
 	_check(heroes_win.tab == "heroes" and heroes_win._heroes_box.visible and not heroes_win._fuse_box.visible and heroes_win.apply_button.get_global_rect().end.x <= 720.0,
@@ -707,10 +710,10 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) a card tap (no slot picked) opens its detail and re-arms the open guard", "detail=%s" % heroes_win.detail_id)
 	_check(not heroes_win.big_card.get_global_rect().intersects(heroes_win.close_x.get_global_rect()),
 		"(x) the detail art card starts below the close X (2026-11-03)", "card=%s x=%s" % [heroes_win.big_card.get_global_rect(), heroes_win.close_x.get_global_rect()])
-	_check(heroes_win.stat_values[0].text == "1,217" and heroes_win.stat_nexts[0].text == "→ 1,255 (+38)" and heroes_win.stat_values[1].text == "42"
+	_check(heroes_win.stat_values[0].text == "1,217" and heroes_win.stat_nexts[0].text == "→ 1,251 (+34)" and heroes_win.stat_values[1].text == "42"
 		and heroes_win.stat_nexts[1].text == "→ 43 (+1)" and heroes_win.stat_values[2].text == "0.8초" and heroes_win.stat_nexts[2].text == ""
-		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 50",
-		"(x) stats with the promotion bonus x1.3 and the next level in green (HP 1,217 -> 1,255 (+38), melee growth 3.15%); Lv 1 / 50 at promotion 1",
+		and heroes_win.stat_values[4].text == UiKit.commas(GameData.hero_power(arteon, 1, 1)) and heroes_win.level_label.text == "Lv 1 / 100",
+		"(x) stats with the promotion bonus x1.3 and the next level in green (HP 1,217 -> 1,251 (+34), melee growth 2.8%); Lv 1 / 100 at promotion 1",
 		"hp=%s next=%s atk=%s level=%s" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text, heroes_win.stat_values[1].text, heroes_win.level_label.text])
 	var sk: Array = heroes_win.skill_ui.map(func(u): return u.label.text)  # 개정 17: ★1이면 스킬 1만 열림
 	_check(sk[0].contains("9초마다 3초 동안 반경 5m") and sk[1] == "수호의 오라 (패시브) — ★3에서 해금" and sk[2] == "심판의 빛 (액티브) — ★5에서 해금" and heroes_win.desc_label.text == arteon.desc
@@ -733,14 +736,14 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _frames(2)
 	var live := get_tree().get_nodes_in_group("heroes").filter(func(h): return h.is_alive())
 	live.sort_custom(func(a, b): return a.index < b.index)
-	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 50"
-		and heroes_win.stat_values[0].text == "1,255" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
+	_check(Economy.level_of("arteon") == 2 and Economy.gold_tenths == 5 and Economy.res["food"] == 0 and heroes_win.level_label.text == "Lv 2 / 100"
+		and heroes_win.stat_values[0].text == "1,251" and heroes_win.celebrations == 1 and heroes_win.big_card.is_bursting()
 		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win.stat_values[2].get_theme_color("font_color") == HudScript.INK,
 		"(x) [레벨업] takes 240 gold (2400 tenths) and no food, Lv 2, light burst, changed stats flash green",
 		"level=%d tenths=%d food=%d label=%s" % [Economy.level_of("arteon"), Economy.gold_tenths, Economy.res["food"], heroes_win.level_label.text])
-	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 936.0 * 1.0315 * 1.3)
-		and is_equal_approx(live[1].atk, 32.0 * 1.0315 * 1.3) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
-		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.0315, melee) x 1.3", "hp=%.1f" % live[1].hp_max)
+	_check(live.size() == 4 and live[1].def.id == "arteon" and live[1] != pre[1] and is_equal_approx(live[1].hp_max, 936.0 * 1.028 * 1.3)
+		and is_equal_approx(live[1].atk, 32.0 * 1.028 * 1.3) and live[0] == pre[0] and live[2] == pre[2] and live[3] == pre[3],
+		"(x) idle mode rebuilds only the leveled hero with HP/atk x(1 + 0.028, melee) x 1.3", "hp=%.1f" % live[1].hp_max)
 	var c3 := GameData.levelup_cost("SSR", 2, 3)
 	Economy.gold_tenths = int(c3.gold) * 10
 	Economy.res["food"] = 0
@@ -749,7 +752,7 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 		"(x) [×10] shows the affordable count (3) and its total cost", "title=%s gold=%s" % [heroes_win._ten.title.text, heroes_win._ten.gold.text])
 	await _tap(heroes_win.ten_button.get_global_rect().get_center())
 	await _frames(2)
-	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 0 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 50",
+	_check(Economy.level_of("arteon") == 5 and Economy.gold_tenths == 0 and Economy.res["food"] == 0 and heroes_win.celebrations == 2 and heroes_win.level_label.text == "Lv 5 / 100",
 		"(x) [×10] raises 3 levels for the summed cost", "level=%d tenths=%d" % [Economy.level_of("arteon"), Economy.gold_tenths])
 	# 이전·다음: [다음]은 목록 순서로 다음 영웅, 오른쪽으로 끌면 이전
 	var order: Array = heroes_win.order
@@ -2080,53 +2083,53 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	_check(nav.end.y <= sheet.end.y - 12.0 and sheet.end.y <= 1280.0 - 104.0 and heroes_win._detail_view.get_combined_minimum_size().y <= heroes_win.content.size.y + 0.5
 		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
 		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
-	_check(heroes_win._promo.line.text == "조각 2 / 25" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
-		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.3 · 최대 레벨 50 → 80\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
-		"(x3) [승급] shows 조각 2 / 25 inside, is off with the reason 조각 부족, and previews x1.3 and max level 50 -> 80",
+	_check(heroes_win._promo.line.text == "조각 2 / 10" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
+		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.3 · 최대 레벨 100 → 150\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
+		"(x3) [승급] shows 조각 2 / 10 inside, is off with the reason 조각 부족, and previews x1.3 and max level 100 -> 150",
 		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
 	var ac = heroes_win.hero_cards.arteon
-	_check(ac.shards == 2 and ac.shard_text() == "조각 2 / 25" and not ac.can_promote and ac.stars == 1 and ac.shard_bar_rect().size.x > 100.0
+	_check(ac.shards == 2 and ac.shard_text() == "조각 2 / 10" and not ac.can_promote and ac.stars == 1 and ac.shard_bar_rect().size.x > 100.0
 		and heroes_win.slot_cards[1].shard_bar_rect().size.x == 0.0,
-		"(x3) list card: one gold star and a shard bar 조각 2 / 25 (no ⬆ yet); slot cards have no bar", "text=%s" % ac.shard_text())
-	Economy.hero_shards["arteon"] = 30
+		"(x3) list card: one gold star and a shard bar 조각 2 / 10 (no ⬆ yet); slot cards have no bar", "text=%s" % ac.shard_text())
+	Economy.hero_shards["arteon"] = 12
 	Economy.changed.emit()
-	_check(ac.can_promote and ac.shard_text() == "조각 30 / 25" and not ac.can_level, "(x3) with 30 shards the card shows the gold ⬆ (not the green ▲)", "")
+	_check(ac.can_promote and ac.shard_text() == "조각 12 / 10" and not ac.can_level, "(x3) with 12 shards the card shows the gold ⬆ (not the green ▲)", "")
 	heroes_win.show_detail("arteon")
 	await _unguarded(heroes_win)
-	_check(not heroes_win.promote_button.disabled and heroes_win._promo.line.text == "조각 30 / 25" and heroes_win.promote_reason.text == "", "(x3) 30 shards: [승급] on", "")
+	_check(not heroes_win.promote_button.disabled and heroes_win._promo.line.text == "조각 12 / 10" and heroes_win.promote_reason.text == "", "(x3) 12 shards: [승급] on", "")
 	var lv := Economy.level_of("arteon")
 	var hp0: String = heroes_win.stat_values[0].text
 	var pre := _alive_heroes()
 	await _tap(heroes_win.promote_button.get_global_rect().get_center())
 	await _frames(2)
-	var mult := 1.0 + 0.0315 * (lv - 1)  # 아르테온은 근접(hero_level_stat_melee)
+	var mult := 1.0 + 0.028 * (lv - 1)  # 아르테온은 근접(hero_level_stat_melee)
 	var hero = _alive_heroes().filter(func(h): return h.def.id == "arteon")
-	_check(Economy.shards_of("arteon") == 5 and Economy.promotion_of("arteon") == 2 and heroes_win.big_card.stars == 2 and heroes_win.big_card.is_promoting()
-		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 80" % lv
+	_check(Economy.shards_of("arteon") == 2 and Economy.promotion_of("arteon") == 2 and heroes_win.big_card.stars == 2 and heroes_win.big_card.is_promoting()
+		and heroes_win.big_card._flying == 1 and heroes_win.promotions_shown == 1 and heroes_win.level_label.text == "Lv %d / 150" % lv
 		and heroes_win.stat_values[0].text == UiKit.commas(roundi(936.0 * mult * 1.69)) and heroes_win.stat_values[0].text != hp0
-		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win._promo.line.text == "조각 5 / 50",
-		"(x3) [승급] spends 25 shards: ★2 (a star flies in, gold shards burst), HP x1.3 flashes green, Lv %d / 80, next 조각 5 / 50" % lv,
+		and heroes_win.stat_values[0].get_theme_color("font_color") != HudScript.INK and heroes_win._promo.line.text == "조각 2 / 25",
+		"(x3) [승급] spends 10 shards: ★2 (a star flies in, gold shards burst), HP x1.3 flashes green, Lv %d / 150, next 조각 2 / 25" % lv,
 		"shards=%d promo=%d hp=%s->%s label=%s" % [Economy.shards_of("arteon"), Economy.promotion_of("arteon"), hp0, heroes_win.stat_values[0].text, heroes_win.level_label.text])
 	_check(hero.size() == 1 and not pre.has(hero[0]) and is_equal_approx(hero[0].hp_max, 936.0 * mult * 1.69) and is_equal_approx(hero[0].atk, 32.0 * mult * 1.69),
 		"(x3) idle mode rebuilds the promoted hero at once with HP/atk x1.3^2", "hp=%s" % [hero.map(func(h): return h.hp_max)])
 	await get_tree().create_timer(1.0).timeout
 	_check(not heroes_win.big_card.is_promoting() and heroes_win.big_card._flying == -1, "(x3) the effect ends and the new star stays in place", "")
 	await _tap(heroes_win.promote_button.get_global_rect().get_center())
-	_check(Economy.promotion_of("arteon") == 2 and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족", "(x3) 5 of 50 shards: [승급] is off again", "")
+	_check(Economy.promotion_of("arteon") == 2 and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족", "(x3) 2 of 25 shards: [승급] is off again", "")
 	Economy.hero_promotions["arteon"] = 5
-	Economy.hero_levels["arteon"] = 199  # 가장 큰 숫자(다음 레벨 미리보기 포함)로도 가로가 시트 안에 들어가는지
+	Economy.hero_levels["arteon"] = 299  # 가장 큰 숫자(다음 레벨 미리보기 포함)로도 가로가 시트 안에 들어가는지
 	Economy.roster_changed.emit()
 	await _frames(1)
 	var wide: Vector2 = heroes_win._detail_view.get_combined_minimum_size()
 	_check(wide.x <= heroes_win.content.size.x + 0.5 and heroes_win.stat_nexts[0].text.begins_with("→ ") and heroes_win.stat_values[0].text.length() >= 6,
-		"(x3) the widest stats (★5 Lv 199: HP %s %s) still fit the sheet width" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text],
+		"(x3) the widest stats (★5 Lv 299: HP %s %s) still fit the sheet width" % [heroes_win.stat_values[0].text, heroes_win.stat_nexts[0].text],
 		"min=%s content=%s" % [wide, heroes_win.content.size])
 	Economy.hero_levels["arteon"] = lv
 	Economy.roster_changed.emit()
-	_check(heroes_win._promo.line.text == "조각 5 · MAX" and heroes_win.promote_reason.text == "최대 승급" and heroes_win.promote_button.disabled
-		and heroes_win.promote_preview.text == "최대 승급 ★5 — HP·공격 ×3.71" and heroes_win.level_label.text == "Lv %d / 200" % lv,
-		"(x3) max promotion: MAX inside, reason 최대 승급, x3.71, max level 200", "line=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_preview.text])
+	_check(heroes_win._promo.line.text == "조각 2 · MAX" and heroes_win.promote_reason.text == "최대 승급" and heroes_win.promote_button.disabled
+		and heroes_win.promote_preview.text == "최대 승급 ★5 — HP·공격 ×3.71" and heroes_win.level_label.text == "Lv %d / 300" % lv,
+		"(x3) max promotion: MAX inside, reason 최대 승급, x3.71, max level 300", "line=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
 	_check(heroes_win.hero_cards.arteon.shard_text() == "MAX" and heroes_win.hero_cards.arteon.stars == 5, "(x3) the list card bar reads MAX with five stars", "")
 	Economy.hero_promotions["arteon"] = 2

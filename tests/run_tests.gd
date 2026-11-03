@@ -267,7 +267,7 @@ func test_game_tables() -> void:
 	check(GameData.config_list("merchant_rate_step") == [0.1], "config_list parses numbers")
 	check(GameData.config_list("starter_heroes") == ["hans", "ella", "dorik", "nina"], "config_list keeps strings")
 	check(GameData.config_list("nope").is_empty() and GameData.config_num("nope") == 0.0, "unknown config key is empty / 0")
-	check(GameData.config_num("promote_mult") == 1.3 and GameData.config_list("promote_shards") == [5.0, 25.0, 50.0, 100.0, 200.0] and GameData.config_num("gacha_dia_cost_10") == 2700.0, "hero/gacha/promotion config")
+	check(GameData.config_num("promote_mult") == 1.3 and GameData.config_list("promote_shards") == [3.0, 10.0, 25.0, 40.0, 70.0] and GameData.config_num("gacha_dia_cost_10") == 2700.0, "hero/gacha/promotion config")
 	# 깨진 config 파일: 필수 키 빠짐
 	var logged := _errors.count
 	var cp := "user://t_config.csv"
@@ -1733,9 +1733,9 @@ func test_deploy_and_promotion() -> void:
 	check(GameData.default_deploy(2) == ["hans", "ella"], "fewer slots: truncated")
 	check(GameData.promote_mult(0) == 1.0 and is_equal_approx(GameData.promote_mult(1), 1.3) and is_equal_approx(GameData.promote_mult(2), 1.69) and is_equal_approx(GameData.promote_mult(5), 3.71293) \
 		and GameData.promote_mult(9) == GameData.promote_mult(5), "promotion mult = 1.3^p (p 5 = x3.71), capped at 5")
-	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 5, 25, 50, 100, 200, 0, 0] and GameData.MAX_PROMOTION == 5,
-		"promotion cost p -> p+1 = 5|25|50|100|200 shards; none at the max (5)")
-	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [20, 50, 80, 120, 160, 200], "max level = hero_max_levels by promotion: 20 / 50 / 80 / 120 / 160 / 200 (2026-10-13)")
+	check(range(-1, 7).map(func(p): return GameData.promote_cost(p)) == [0, 3, 10, 25, 40, 70, 0, 0] and GameData.MAX_PROMOTION == 5,
+		"promotion cost p -> p+1 = 3|10|25|40|70 shards (2026-11-03); none at the max (5)")
+	check(range(0, 6).map(func(p): return GameData.max_level(p)) == [50, 100, 150, 200, 250, 300], "max level = hero_max_levels by promotion: 50 / 100 / 150 / 200 / 250 / 300 (2026-11-03)")
 	check(GameData.levelup_cost("SSR", 1).gold == 240 and GameData.levelup_cost("SSR", 20).gold == 8064 and GameData.levelup_cost("SSR", 50).gold == 328031
 		and GameData.levelup_cost("SSR", 199).gold == roundi(240.0 * pow(1.037, 198) * exp(8.2 * (1.0 - exp(-198.0 / 45.0)))) and absi(GameData.levelup_cost("SSR", 1, 199).gold - 26_400_000_000) < 200_000_000,
 		"level-up gold = round(base x 1.037^(L-1) x e^(8.2 x (1 - e^(-(L-1)/45)))): SSR Lv 20 8,064, Lv 50 32.8만, 1 -> 200 about 264억: %s" % [GameData.levelup_cost("SSR", 1, 199)])
@@ -2013,11 +2013,11 @@ func test_damage_numbers() -> void:
 func test_hero_levels() -> void:
 	GameData.load_tables()
 	var hans := GameData.hero("hans")
-	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.378) and is_equal_approx(GameData.level_mult(70), 3.898), "level x(1 + 0.042 x (L - 1))")
-	check(GameData.level_mult(1, "melee") == 1.0 and is_equal_approx(GameData.level_mult(10, "melee"), 1.2835) and is_equal_approx(GameData.level_mult(10, "ranged"), 1.378),
-		"melee heroes grow slower: x(1 + 0.0315 x (L - 1))")
-	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.2835 × 1.3², 23 × 1.2835 × 1.3²
-	check(is_equal_approx(st.hp, 396.0 * 1.2835 * 1.69) and is_equal_approx(st.atk, 23.0 * 1.2835 * 1.69), "stats = base x level mult x promotion mult (1.3^p on base and level-ups alike): %s" % [st])
+	check(GameData.level_mult(1) == 1.0 and is_equal_approx(GameData.level_mult(10), 1.342) and is_equal_approx(GameData.level_mult(70), 3.622), "level x(1 + 0.038 x (L - 1)) (2026-11-03, was 0.042)")
+	check(GameData.level_mult(1, "melee") == 1.0 and is_equal_approx(GameData.level_mult(10, "melee"), 1.252) and is_equal_approx(GameData.level_mult(10, "ranged"), 1.342),
+		"melee heroes grow slower: x(1 + 0.028 x (L - 1)) (2026-11-03, was 0.0315)")
+	var st := GameData.hero_stats(hans, 10, 2)  # 근접: 396 × 1.252 × 1.3², 23 × 1.252 × 1.3²
+	check(is_equal_approx(st.hp, 396.0 * 1.252 * 1.69) and is_equal_approx(st.atk, 23.0 * 1.252 * 1.69), "stats = base x level mult x promotion mult (1.3^p on base and level-ups alike): %s" % [st])
 	# 같은 등급 맞춤(2026-11-02 사용자 "같은 등급의 영웅들의 레벨이나 성급이 동일하다고 하면 전투력의 차이는 최대 10이야")
 	var spread_ok := true
 	var spreads := []
@@ -2057,33 +2057,33 @@ func test_hero_levels() -> void:
 	e.gold_tenths = int(c3.gold) * 10
 	e.res.food = 0
 	check(e.levelup_affordable("hans") == 3 and e.levelup_block("hans", 4) != "", "x10 counts the affordable levels (3)")
-	e.gold_tenths = 10000000
+	e.gold_tenths = 100_000_000_000
 	e.res.food = 10000000
-	e.hero_levels["hans"] = 15
-	check(e.levelup_affordable("hans") == 5 and e.levelup_block("hans", 6) == "최대 레벨", "x10 stops at the max level (15 -> 20)")
-	e.hero_levels["hans"] = 20
-	check(not e.level_up("hans") and e.level_of("hans") == 20 and e.levelup_affordable("hans") == 0, "max level blocks")
+	e.hero_levels["hans"] = 45
+	check(e.levelup_affordable("hans") == 5 and e.levelup_block("hans", 6) == "최대 레벨", "x10 stops at the max level (45 -> 50)")
+	e.hero_levels["hans"] = 50
+	check(not e.level_up("hans") and e.level_of("hans") == 50 and e.levelup_affordable("hans") == 0, "max level blocks")
 	e.heroes["hans"] = 9  # 옛 규칙의 별(중복)은 상한과 무관하다(개정 15)
-	check(not e.level_up("hans") and e.level_of("hans") == 20, "copies no longer raise the cap")
-	e.hero_promotions["hans"] = 1  # 승급 1 → 최대 30
-	check(e.level_up("hans", 10) and e.level_of("hans") == 30, "a promotion raises the cap")
+	check(not e.level_up("hans") and e.level_of("hans") == 50, "copies no longer raise the cap")
+	e.hero_promotions["hans"] = 1  # 승급 1 → 최대 100
+	check(e.level_up("hans", 10) and e.level_of("hans") == 60, "a promotion raises the cap")
 	e.heroes["hans"] = 2
 	# GameState 공급자: 레벨
 	var gs = GameStateScript.new()
 	check(gs.hero_level("hans") == 1, "no roster: level 1")
 	gs.roster = e
-	check(gs.hero_level("hans") == 30 and gs.hero_level("ella") == 1, "provider: level from the roster")
+	check(gs.hero_level("hans") == 60 and gs.hero_level("ella") == 1, "provider: level from the roster")
 	gs.free()
 	# 저장 v3 왕복, v2 → v3(level 1)
 	e.save_path = ECON_TMP
 	e.save()
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ECON_TMP))
-	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 30.0 and raw.heroes.ella.level == 1.0
+	check(int(raw.version) == EconomyScript.SAVE_VERSION and raw.heroes.hans.copies == 2.0 and raw.heroes.hans.level == 60.0 and raw.heroes.ella.level == 1.0
 		and raw.heroes.hans.promotion == 1.0 and raw.heroes.hans.shards == 0.0, "save v6 writes heroes {copies, level, shards, promotion}")
 	var e2 = _econ(0.0)
 	e2.save_path = ECON_TMP
 	e2.load_save(1000.0)
-	check(e2.heroes == e.heroes and e2.level_of("hans") == 30 and e2.hero_levels.hans is int and e2.level_of("nina") == 1 and e2.promotion_of("hans") == 1, "save round-trips levels and promotion")
+	check(e2.heroes == e.heroes and e2.level_of("hans") == 60 and e2.hero_levels.hans is int and e2.level_of("nina") == 1 and e2.promotion_of("hans") == 1, "save round-trips levels and promotion")
 	var v2 := {"version": 2, "gold_tenths": 5, "res": {"wood": 0, "stone": 0, "food": 0}, "last_collect": {"lumber": 0, "quarry": 0, "farm": 0},
 		"levels": {"lumber": 1, "quarry": 1, "farm": 1}, "heroes": {"hans": 2, "ignis": 1}, "deploy": ["ignis", "hans"]}
 	_write(ECON_TMP, JSON.stringify(v2))
@@ -2119,24 +2119,24 @@ func test_promotion() -> void:
 	e.promoted.connect(func(id, p): got.append([id, p]))
 	e.notice.connect(func(t): notes.append(t))
 	var arteon := GameData.hero("arteon")
-	check(e.promote_block("hans") == "not_enough_shards" and e.promote_cost("hans") == 5 and e.promote_block("arteon") == "not_owned",
-		"a starter has no shards (5 needed); an unowned hero cannot promote")
+	check(e.promote_block("hans") == "not_enough_shards" and e.promote_cost("hans") == 3 and e.promote_block("arteon") == "not_owned",
+		"a starter has no shards (3 needed); an unowned hero cannot promote")
 	check(not e.promote("hans") and notes == ["조각 부족"] and e.promotion_of("hans") == 0 and got.is_empty(), "not enough shards: a notice, nothing changes")
 	e.heroes["arteon"] = 13
 	e.hero_shards["arteon"] = 12
 	e.hero_levels["arteon"] = 20
 	var before := GameData.hero_stats(arteon, 20, 0)
-	check(e.promote("arteon") and e.shards_of("arteon") == 7 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
-		"[승급] spends 5 shards (12 -> 7), promotion 1, copies and level unchanged, promoted signal")
+	check(e.promote("arteon") and e.shards_of("arteon") == 9 and e.promotion_of("arteon") == 1 and e.heroes.arteon == 13 and e.level_of("arteon") == 20 and got == [["arteon", 1]],
+		"[승급] spends 3 shards (12 -> 9), promotion 1, copies and level unchanged, promoted signal")
 	var after := GameData.hero_stats(arteon, 20, e.promotion_of("arteon"))
-	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 50
-		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 20 -> 50 (Lv 20 can level again)")
-	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 25, "next step costs 25")
-	e.hero_shards["arteon"] = 25 + 50 + 100 + 200
+	check(is_equal_approx(after.hp, before.hp * 1.3) and is_equal_approx(after.atk, before.atk * 1.3) and GameData.max_level(e.promotion_of("arteon")) == 100
+		and e.levelup_block("arteon") == "골드 부족", "promotion: HP/atk x1.3 (base and level-ups), max level 50 -> 100 (Lv 20 can level again)")
+	check(e.promote_block("arteon") == "not_enough_shards" and e.promote_cost("arteon") == 10, "next step costs 10")
+	e.hero_shards["arteon"] = 10 + 25 + 40 + 70
 	for i in 4:
 		e.promote("arteon")
-	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 200,
-		"25 + 50 + 100 + 200 shards take promotion 1 -> 5 (x3.71, max level 200)")
+	check(e.promotion_of("arteon") == 5 and e.shards_of("arteon") == 0 and is_equal_approx(GameData.promote_mult(5), 3.71293) and GameData.max_level(5) == 300,
+		"10 + 25 + 40 + 70 shards take promotion 1 -> 5 (x3.71, max level 300)")
 	e.hero_shards["arteon"] = 999
 	notes.clear()
 	check(e.promote_block("arteon") == "max_promotion" and not e.promote("arteon") and notes == ["최대 승급"] and e.shards_of("arteon") == 999 and e.promotion_of("arteon") == 5,
@@ -2157,7 +2157,7 @@ func test_promotion() -> void:
 	check(e2.gold_tenths == 5 and e2.shards_of("hans") == 3 and e2.promotion_of("hans") == 0 and e2.shards_of("ignis") == 0 and e2.level_of("hans") == 9 and e2.heroes == {"hans": 4, "ignis": 1},
 		"save v5 -> v6: old stars become shards (copies - 1 = 3), promotion 0, levels kept")
 	var hp_v5: float = GameData.hero_stats(GameData.hero("hans"), 9, e2.promotion_of("hans")).hp
-	check(is_equal_approx(hp_v5, 396.0 * 1.252), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
+	check(is_equal_approx(hp_v5, 396.0 * 1.224), "the old +10%%/star bonus is gone: 3 stars of copies give no stat bonus (%.1f)" % hp_v5)
 	var v6 := v5.duplicate(true)
 	v6.version = 6
 	_write(ECON_TMP, JSON.stringify(v6))  # v6인데 shards·promotion이 없다
@@ -2171,18 +2171,18 @@ func test_promotion() -> void:
 	var all := []
 	b.promoted_all.connect(func(r): all.append(r))
 	check(b.promote_all_plan().is_empty(), "bulk promotion: starters without shards have nothing to promote")
-	b.hero_shards["hans"] = 31  # 0 -> 2 (5 + 25), 1 left
-	b.hero_shards["ella"] = 4  # not enough
+	b.hero_shards["hans"] = 14  # 0 -> 2 (3 + 10), 1 left
+	b.hero_shards["ella"] = 2  # not enough
 	b.heroes["arteon"] = 1
 	b.hero_shards["arteon"] = 999
-	b.hero_promotions["arteon"] = 4  # 4 -> 5 (200), stops at the max
+	b.hero_promotions["arteon"] = 4  # 4 -> 5 (70), stops at the max
 	var plan: Array = b.promote_all_plan()
 	var by := {}
 	for r in plan:
 		by[r.hero_id] = [r.from, r.to, r.shards]
-	check(by == {"hans": [0, 2, 30], "arteon": [4, 5, 200]}, "bulk plan: each hero as far as its shards go: %s" % [by])
-	check(b.promote_all() and b.promotion_of("hans") == 2 and b.shards_of("hans") == 1 and b.promotion_of("arteon") == 5 and b.shards_of("arteon") == 799
-		and b.promotion_of("ella") == 0 and b.shards_of("ella") == 4 and all.size() == 1 and all[0].size() == 2, "offline bulk promotion applies the plan and signals once")
+	check(by == {"hans": [0, 2, 13], "arteon": [4, 5, 70]}, "bulk plan: each hero as far as its shards go: %s" % [by])
+	check(b.promote_all() and b.promotion_of("hans") == 2 and b.shards_of("hans") == 1 and b.promotion_of("arteon") == 5 and b.shards_of("arteon") == 929
+		and b.promotion_of("ella") == 0 and b.shards_of("ella") == 2 and all.size() == 1 and all[0].size() == 2, "offline bulk promotion applies the plan and signals once")
 	check(b.promote_all_plan().is_empty() and not b.promote_all(), "after a bulk promotion nothing is left to promote")
 	b.free()
 
@@ -3856,7 +3856,7 @@ func test_dungeon_tables() -> void:
 		"fresh dungeon = today's keys; extra run cost fixed per level: 100000 x 1.12^(n-1) ceiled to the thousand; party 6 / 4")
 	# 영웅 최종 능력치 = (기본 × 레벨 × 승급) + 장비 합계(개정 24: 연구소 배율 없음)
 	var hans := GameData.hero("hans")
-	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.0315 + 12.0)
+	check(GameData.hero_stats(hans, 1, 0, {"hp": 100, "atk": 12}) == {"hp": 496.0, "atk": 35.0} and is_equal_approx(GameData.hero_stats(hans, 2, 0, {"atk": 12}).atk, 23.0 * 1.028 + 12.0)
 		and GameData.hero_stats(hans, 1, 0) == {"hp": 396.0, "atk": 23.0}
 		and absi((GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) - GameData.hero_power(hans, 1, 0, {})) - (GameData.hero_power(GameData.hero("nina"), 1, 0, {"hp": 100, "atk": 12}) - GameData.hero_power(GameData.hero("nina"), 1, 0, {}))) <= 1
 		and GameData.hero_power(hans, 1, 0, {"hp": 100, "atk": 12}) > GameData.hero_power(hans, 1, 0, {}) + 10,
@@ -6227,7 +6227,7 @@ func test_hero_ur() -> void:
 	var fill: Dictionary = e.fuse_autofill()
 	check(fill == {"arteon": 6, "ignis": 4}, "autofill takes the most shards first: %s" % fill)
 	var got := []
-	e.gacha_done.connect(func(r): got.append(r))
+	e.hero_fused.connect(func(r): got.append(r))
 	check(e.fuse_heroes({"arteon": 6, "ignis": 4}) and got.size() == 1 and got[0].size() == 1 and got[0][0].grade == "UR" and got[0][0].new
 		and e.shards_of("arteon") == 0 and e.shards_of("ignis") == 1 and int(e.heroes.get(got[0][0].hero_id, 0)) == 1, "offline fuse: 10 SSR shards -> one new UR hero")
 	# 등급별 합성(2026-10-30): R 10 → SR, SR 10 → SSR, UR은 합성 재료가 아니다

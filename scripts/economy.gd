@@ -137,6 +137,7 @@ signal changed
 signal collected(building_id: String, res_id: String, amount: int)  # 수집 성공(온라인은 응답이 왔을 때)
 signal notice(text: String)  # 짧은 알림(끊긴 동안 수집·판매 탭)
 signal roster_changed  # 보유 영웅(copies)이나 배치가 바뀌었다
+signal hero_fused(results: Array)  # 영웅 조각 합성 결과 [{hero_id, grade, new, copies, shards}](2026-11-03 합성 창 안에서 보여 준다). 실패(온라인)면 빈 배열
 signal gacha_done(results: Array)  # 모집 결과 [{hero_id, grade, new, copies, shards}]. 실패(온라인)면 빈 배열
 signal gacha_leveled(level: int)  # 골드 모집 레벨이 올랐다(개정 23, 온라인은 서버 응답에서 본 때)
 signal promoted(hero_id: String, promotion: int)  # 승급 성공(온라인은 응답이 왔을 때, 개정 15)
@@ -4241,7 +4242,7 @@ func fuse_heroes(picks: Dictionary) -> bool:
 	changed.emit()
 	roster_changed.emit()
 	save()
-	gacha_done.emit([{"hero_id": id, "grade": to, "new": c == 1, "copies": c, "shards": shards_of(id)}])
+	hero_fused.emit([{"hero_id": id, "grade": to, "new": c == 1, "copies": c, "shards": shards_of(id)}])
 	return true
 
 
@@ -4255,14 +4256,14 @@ func _on_fuse(data: Dictionary) -> void:
 			if r is Dictionary and r.get("hero_id") is String and not GameData.hero(r.hero_id).is_empty():
 				results.append({"hero_id": r.hero_id, "grade": GameData.hero(r.hero_id).grade, "new": r.get("new") == true,
 					"copies": int(r.copies) if _num(r.get("copies")) else 1, "shards": int(r.shards) if _num(r.get("shards")) else 0})
-	gacha_done.emit(results)
+	hero_fused.emit(results)
 
 
 func _on_fuse_failed() -> void:
 	_waiting.erase("hero_fuse")
 	_unpredict("hero_fuse")
 	notice.emit(GACHA_FAIL_TEXT)
-	gacha_done.emit([])
+	hero_fused.emit([])
 
 
 func _gacha_online(count: int, currency: String) -> bool:

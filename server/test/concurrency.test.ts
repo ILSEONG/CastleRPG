@@ -182,7 +182,7 @@ test('동시 승급 2건(조각은 1회분): 둘 다 같은 version을 읽어도
   try {
     S.clock.t = T0
     const { token, id } = await S.login()
-    await S.db.query("update player_heroes set shards = 5 where player_id = $1 and hero_id = 'hans'", [id])
+    await S.db.query("update player_heroes set shards = 3 where player_id = $1 and hero_id = 'hans'", [id])
     b.arm()
     const [r1, r2] = await Promise.all([
       S.req('POST', '/v1/hero/promote', { token, body: { hero_id: 'hans' } }),

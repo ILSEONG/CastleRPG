@@ -96,6 +96,8 @@ func _connect() -> void:
 		econ.sold.connect(func(_g): note("sell"))
 		econ.killed.connect(func(_k): note("kill"))
 		econ.gacha_done.connect(func(results): if results.size() > 0: note("gacha", results.size()))
+		if econ.has_signal("hero_fused"):  # 합성도 예전처럼 모집 1회로 센다(결과만 합성 창에서 보여 준다)
+			econ.hero_fused.connect(func(results): if results.size() > 0: note("gacha", results.size()))
 		econ.building_done.connect(func(_id, _lv): note("build_up"))
 		econ.dungeon_finished.connect(func(r): if r.get("win", false) and not r.get("repeated", false): note("dungeon_win"))
 		econ.acted.connect(func(kind, n): note(kind, n))

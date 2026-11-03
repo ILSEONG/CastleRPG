@@ -39,34 +39,34 @@ test('승급 성공: 조각 −비용, 승급 +1(다른 값은 그대로), 응�
   let r = await promote(token, { hero_id: 'hans' })
   assert.equal(r.status, 200)
   assert.equal(r.json.promotion, 1)
-  assert.deepEqual(r.json.player.heroes.hans, { copies: 13, level: 7, shards: 7, promotion: 1 })
+  assert.deepEqual(r.json.player.heroes.hans, { copies: 13, level: 7, shards: 9, promotion: 1 })
   assert.deepEqual(r.json.player.heroes.ella, { copies: 1, level: 1, shards: 0, promotion: 0 })
-  assert.deepEqual(await row(id, 'hans'), { copies: 13, level: 7, shards: 7, promotion: 1 })
-  await setHero(id, 'hans', { copies: 13, shards: 25, level: 7, promotion: 1 }) // 1 → 2는 정확히 25
+  assert.deepEqual(await row(id, 'hans'), { copies: 13, level: 7, shards: 9, promotion: 1 })
+  await setHero(id, 'hans', { copies: 13, shards: 10, level: 7, promotion: 1 }) // 1 → 2는 정확히 10
   r = await promote(token, { hero_id: 'hans' })
   assert.deepEqual([r.status, r.json.promotion, r.json.player.heroes.hans.shards], [200, 2, 0])
   const p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.deepEqual(p.heroes.hans, { copies: 13, level: 7, shards: 0, promotion: 2 })
   const l = await logs(id)
   assert.deepEqual(l.map((x) => x.detail), [
-    { hero_id: 'hans', from: 0, to: 1, shards: 5, shards_before: 12, shards_after: 7 },
-    { hero_id: 'hans', from: 1, to: 2, shards: 25, shards_before: 25, shards_after: 0 },
+    { hero_id: 'hans', from: 0, to: 1, shards: 3, shards_before: 12, shards_after: 9 },
+    { hero_id: 'hans', from: 1, to: 2, shards: 10, shards_before: 10, shards_after: 0 },
   ])
 })
 
 test('조각 부족은 409 not_enough_shards, 최대 승급은 409 max_promotion(조각이 많아도) — 아무것도 안 바뀐다. 404·400·401', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setHero(id, 'nina', { shards: 24, promotion: 1 }) // 1 → 2는 25
+  await setHero(id, 'nina', { shards: 9, promotion: 1 }) // 1 → 2는 10
   let r = await promote(token, { hero_id: 'nina' })
   assert.deepEqual([r.status, r.json.error], [409, 'not_enough_shards'])
-  await setHero(id, 'dorik', { shards: 4 })
+  await setHero(id, 'dorik', { shards: 2 })
   assert.deepEqual((await promote(token, { hero_id: 'dorik' })).json.error, 'not_enough_shards')
   await setHero(id, 'ella', { shards: 9999, promotion: 5 })
   r = await promote(token, { hero_id: 'ella' })
   assert.deepEqual([r.status, r.json.error], [409, 'max_promotion'])
   assert.deepEqual([await row(id, 'nina'), await row(id, 'dorik'), await row(id, 'ella')], [
-    { copies: 1, level: 1, shards: 24, promotion: 1 }, { copies: 1, level: 1, shards: 4, promotion: 0 }, { copies: 1, level: 1, shards: 9999, promotion: 5 }])
+    { copies: 1, level: 1, shards: 9, promotion: 1 }, { copies: 1, level: 1, shards: 2, promotion: 0 }, { copies: 1, level: 1, shards: 9999, promotion: 5 }])
   assert.equal((await logs(id)).length, 0)
   for (const hero of ['arteon', 'ghost', '__proto__', 'constructor']) {
     r = await promote(token, { hero_id: hero })
@@ -80,17 +80,17 @@ test('조각 부족은 409 not_enough_shards, 최대 승급은 409 max_promotion
   assert.equal((await S.req('POST', '/v1/hero/promote', { body: { hero_id: 'hans' } })).status, 401)
 })
 
-test('최대 레벨은 승급 기준: 승급 0은 20(넘으면 409 max_level), 승급하면 50까지. copies(중복)는 상한과 무관', async () => {
+test('최대 레벨은 승급 기준: 승급 0은 50(넘으면 409 max_level), 승급하면 100까지. copies(중복)는 상한과 무관', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
   await S.db.query('update player_state set gold_tenths = 1000000000000 where player_id = $1', [id])
-  await setHero(id, 'hans', { copies: 9, shards: 8, level: 20 }) // 옛 규칙이면 별 5 → 최대
+  await setHero(id, 'hans', { copies: 9, shards: 8, level: 50 }) // 옛 규칙이면 별 5 → 최대
   const lv = (count: number) => S.req('POST', '/v1/hero/levelup', { token, body: { hero_id: 'hans', count } })
   let r = await lv(1)
   assert.deepEqual([r.status, r.json.error], [409, 'max_level'])
   assert.equal((await promote(token, { hero_id: 'hans' })).status, 200)
-  r = await lv(30)
-  assert.deepEqual([r.status, r.json.level, r.json.player.heroes.hans], [200, 50, { copies: 9, level: 50, shards: 3, promotion: 1 }])
+  r = await lv(50)
+  assert.deepEqual([r.status, r.json.level, r.json.player.heroes.hans], [200, 100, { copies: 9, level: 100, shards: 5, promotion: 1 }])
   assert.equal((await lv(1)).json.error, 'max_level')
 })
 
@@ -114,19 +114,19 @@ test('모집 중복 → 조각 +1(결과 shards), 새 영웅은 조각 0. 골드
 test('일괄 승급: 목록의 영웅마다 목표까지 조각이 되는 만큼(단계별 비용 합), 못 오르는 영웅·목록 밖은 그대로, 로그 한 줄', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()
-  await setHero(id, 'hans', { shards: 31 }) // 0 → 1(5) → 2(25) = 30, 남는 1
-  await setHero(id, 'ella', { shards: 60, promotion: 4 }) // 4 → 5는 200: 못 오른다
+  await setHero(id, 'hans', { shards: 14 }) // 0 → 1(3) → 2(10) = 13, 남는 1
+  await setHero(id, 'ella', { shards: 60, promotion: 4 }) // 4 → 5는 70: 못 오른다
   await setHero(id, 'dorik', { shards: 100 }) // 목표 1이면 1까지만
   await setHero(id, 'nina', { shards: 5 }) // 목록 밖
   const all = (token: string, body: unknown) => S.req('POST', '/v1/hero/promote_all', { token, body })
   let r = await all(token, { heroes: { hans: 5, ella: 5, dorik: 1, arteon: 3 } })
   assert.equal(r.status, 200)
   const by = Object.fromEntries(r.json.promoted.map((x: any) => [x.hero_id, x]))
-  assert.deepEqual(by, { hans: { hero_id: 'hans', from: 0, to: 2, shards: 30 }, dorik: { hero_id: 'dorik', from: 0, to: 1, shards: 5 } })
+  assert.deepEqual(by, { hans: { hero_id: 'hans', from: 0, to: 2, shards: 13 }, dorik: { hero_id: 'dorik', from: 0, to: 1, shards: 3 } })
   assert.deepEqual(r.json.player.heroes.hans, { copies: 1, level: 1, shards: 1, promotion: 2 })
   assert.deepEqual([await row(id, 'hans'), await row(id, 'ella'), await row(id, 'dorik'), await row(id, 'nina')], [
     { copies: 1, level: 1, shards: 1, promotion: 2 }, { copies: 1, level: 1, shards: 60, promotion: 4 },
-    { copies: 1, level: 1, shards: 95, promotion: 1 }, { copies: 1, level: 1, shards: 5, promotion: 0 }])
+    { copies: 1, level: 1, shards: 97, promotion: 1 }, { copies: 1, level: 1, shards: 5, promotion: 0 }])
   const l = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'promote_all'", [id])
   assert.equal(l.length, 1)
   assert.equal(l[0].detail.heroes.length, 2)

@@ -666,7 +666,7 @@ static func promote_mult(promotion: int) -> float:
 	return _grown(1.0, config_num("promote_mult"), clampi(promotion, 0, MAX_PROMOTION))
 
 
-## 승급 p → p+1에 드는 조각 = promote_shards의 p번째(5|25|50|100|200). 최대 승급이면 0.
+## 승급 p → p+1에 드는 조각 = promote_shards의 p번째(3|10|25|40|70, 2026-11-03). 최대 승급이면 0.
 static func promote_cost(promotion: int) -> int:
 	var list := config_list("promote_shards")
 	return int(list[promotion]) if promotion >= 0 and promotion < mini(list.size(), MAX_PROMOTION) else 0
@@ -703,7 +703,7 @@ static func level_mult(level: int, role := "") -> float:
 	return 1.0 + config_num("hero_level_stat_melee" if role == "melee" else "hero_level_stat") * (level - 1)
 
 
-## 최대 레벨 = hero_max_levels의 승급번째(20|50|80|120|160|200, 2026-10-13). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
+## 최대 레벨 = hero_max_levels의 승급번째(50|100|150|200|250|300, 2026-11-03). 목록이 없으면 hero_max_level_base + hero_max_level_per_promotion × 승급(개정 15).
 static func max_level(promotion: int) -> int:
 	var list := config_list("hero_max_levels")
 	if list.size() == MAX_PROMOTION + 1:
