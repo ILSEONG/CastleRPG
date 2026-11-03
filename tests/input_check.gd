@@ -3243,11 +3243,12 @@ func _dungeon_gold_line(tabs) -> void:
 	print("INPUT INFO: equip card gold line %s, keys %s, band %s" % [ec.gold.get_parent().get_global_rect(), ec.keys.get_global_rect(), dwin.bands.equip.get_global_rect()])
 	_check(st0.keys == 0, "(D) precondition: no equip key left (the next run is paid with gold)", "keys=%d" % st0.keys)
 	Economy.dungeon_started.disconnect(_main._on_dungeon_started)  # 장면은 바꾸지 않고 오프라인 API만
-	var ok := Economy.start_dungeon("equip", 1, Economy.default_party("equip")) and Economy.debug_win()
+	var ok := Economy.start_dungeon("equip", dwin.level_of("equip"), Economy.default_party("equip")) and Economy.debug_win()  # 카드에 고른 단계(열 때 = 가장 높은 단계)
 	Economy.dungeon_started.connect(_main._on_dungeon_started)
 	var st := Economy.dungeon_state("equip")
-	_check(ok and st.extra_today == st0.extra_today + 1 and Economy.gold == 0 and ec.gold.text == "0"
-		and ec.cost.text == "/ " + UiKit.commas(cost) and ec.gold.get_theme_color("font_color") == dwin.RED,
-		"(D) an extra run paid with gold keeps the fixed level cost and the line follows at once (0 / cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
+	var cost2: int = GameData.extra_cost(dwin.level_of("equip"))  # 이기면 고른 단계가 새 최고 단계로 따라 오른다(2026-11-03) — 그 단계의 고정 비용
+	_check(ok and st.extra_today == st0.extra_today + 1 and Economy.gold == 0 and ec.gold.text == "0" and dwin.level_of("equip") == st.max_level
+		and ec.cost.text == "/ " + UiKit.commas(cost2) and ec.gold.get_theme_color("font_color") == dwin.RED,
+		"(D) an extra run paid with gold: the card moves to the new top level and shows its fixed cost at once (0 / cost, red)", "st=%s line=%s %s" % [st, ec.gold.text, ec.cost.text])
 	Economy.add_gold_tenths(g0 - Economy.gold_tenths)
 	dwin.close()

@@ -57,7 +57,7 @@ func _ready() -> void:
 	list.add_theme_constant_override("separation", 14)
 	scroll.add_child(list)
 	for q in PartyRules.QUESTS:
-		diff[q] = Party.last_diff(q)
+		diff[q] = top_diff(q)
 		list.add_child(_card(q))
 	var owned: Array = Party.owned_heroes()
 	hero_i = maxi(0, owned.find(Party.pick_hero()))
@@ -174,6 +174,19 @@ func _card(q: String) -> Control:
 	_cards[q] = {"diffs": diffs, "odds": odds, "left": left, "pick": pick, "row": pick_row, "reason": reason, "start": start,
 		"lobby": lobby_box, "code": code_label, "copy": copy, "invite": inv, "members": members, "party": party_b}
 	return panel
+
+
+## 지금 도전할 수 있는 가장 높은 난이도(2026-11-03 사용자 "던전 들어가면 레벨이 도전할 수 있는 제일 높은 단계로").
+func top_diff(q: String) -> int:
+	return mini(Party.best(q) + 1, PartyRules.DIFFS)
+
+
+## 탭을 열 때마다 가장 높은 난이도로 되돌린다(매칭·대기실 중이면 그 난이도 그대로).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and is_visible_in_tree() and Party.state() == "idle" and not Party.in_lobby() and not diff.is_empty():
+		for q in PartyRules.QUESTS:
+			diff[q] = top_diff(q)
+		refresh()
 
 
 func _pick_diff(q: String, d: int) -> void:
