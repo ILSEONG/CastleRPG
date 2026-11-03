@@ -67,6 +67,9 @@ const legal = {
   operator: process.env.LEGAL_OPERATOR?.trim() || '일성게임즈',
   bizNo: process.env.LEGAL_BIZ_NO?.trim() || '227-15-93850',
   email: process.env.LEGAL_EMAIL?.trim() ?? '',
+  ceo: '최일성', // 2026-11-03 통신판매업 신고증
+  address: '서울특별시 노원구 한글비석로 396',
+  mailOrderNo: '2026-서울노원-1515',
 }
 // 광고 서버 확인(AdMob SSV)을 받는 보상형 광고 단위: ADMOB_AD_UNITS(쉼표 구분 광고 단위 id). 없으면 ads.ts AD_UNITS(앱 ad_config.gd 값)
 const adUnits = (process.env.ADMOB_AD_UNITS ?? '').split(',').map((s) => s.trim()).filter(Boolean)

@@ -1,13 +1,16 @@
 // 이용약관·개인정보처리방침·계정 삭제 안내(2026-10-12, Google Play·앱인토스 등록용 공개 주소). 서버가 HTML로 준다:
 //   /legal/terms · /legal/privacy · /legal/account-deletion  (예: https://castlerpg-api.onrender.com/legal/privacy)
 // 앱은 scripts/support_links.gd의 같은 주소로 연다. 운영자(상호)·사업자등록번호는 main.ts 기본값(일성게임즈, 2026-10-14 사장님이 알려 줌),
-// 환경 변수 LEGAL_OPERATOR·LEGAL_BIZ_NO·LEGAL_EMAIL로 바꿀 수 있다(저장소에 개인 연락처를 두지 않는다). 메일이 비면 "등록 예정".
+// 대표자·주소·통신판매업 신고번호(2026-11-03, 2026-서울노원-1515)도 main.ts 기본값. 환경 변수 LEGAL_OPERATOR·LEGAL_BIZ_NO·LEGAL_EMAIL로 바꿀 수 있다(저장소에 개인 연락처를 두지 않는다). 메일이 비면 "등록 예정".
 // 문의는 이메일 없이 게임 안 [설정 → 문의하기](inquiry.ts, 2026-10-14)가 기본이고, LEGAL_EMAIL을 넣으면 함께 적는다.
 
 export interface LegalInfo {
   operator: string // 운영자(개인 이름 또는 상호)
   email: string // 문의·개인정보 보호책임자 연락처
   bizNo?: string // 사업자등록번호
+  ceo?: string // 대표자
+  address?: string // 사업장 주소
+  mailOrderNo?: string // 통신판매업 신고번호(전자상거래법 표시 사항)
 }
 
 export const EFFECTIVE = '2026년 10월 14일'
@@ -20,7 +23,13 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 function who(info: LegalInfo) {
   return {
     operator: esc(info.operator || `${GAME} 운영자`),
-    biz: info.bizNo ? `<br>사업자등록번호: ${esc(info.bizNo)}` : '',
+    biz: [
+      info.ceo ? `대표자: ${esc(info.ceo)}` : '',
+      info.bizNo ? `사업자등록번호: ${esc(info.bizNo)}` : '',
+      info.mailOrderNo ? `통신판매업 신고번호: ${esc(info.mailOrderNo)}` : '',
+      info.address ? `주소: ${esc(info.address)}` : '',
+    ].filter(Boolean).map((l) => `<br>${l}`).join(''),
+    officer: esc(info.ceo || info.operator || `${GAME} 운영자`),
     email: info.email ? `<a href="mailto:${esc(info.email)}">${esc(info.email)}</a>` : '(연락처 등록 예정)',
     // 문의 창구(2026-10-14): 게임 안 [설정 → 문의하기](inquiry.ts). LEGAL_EMAIL을 넣으면 이메일도 함께 적는다.
     contact: INQUIRY + (info.email ? ` 또는 이메일 <a href="mailto:${esc(info.email)}">${esc(info.email)}</a>` : ''),
@@ -136,7 +145,7 @@ export function privacyPage(info: LegalInfo): string {
 <h2>10. 만 14세 미만 아동</h2>
 <p>게임은 만 14세 미만 아동의 개인정보를 일부러 수집하지 않습니다. 만 14세 미만 아동이 가입한 사실을 알게 되면 법정대리인의 동의를 받거나 그 정보를 지웁니다.</p>
 <h2>11. 개인정보 보호책임자</h2>
-<p>개인정보처리자(상호): ${w.operator}${w.biz}<br>개인정보 보호책임자: ${w.operator}<br>문의: ${w.contact}</p>
+<p>개인정보처리자(상호): ${w.operator}${w.biz}<br>개인정보 보호책임자: ${w.officer}<br>문의: ${w.contact}</p>
 <p>개인정보 침해 신고·상담: 개인정보침해신고센터(privacy.kisa.or.kr, 국번 없이 118), 개인정보 분쟁조정위원회(www.kopico.go.kr, 1833-6972), 대검찰청 사이버수사과(www.spo.go.kr, 1301), 경찰청 사이버수사국(ecrm.police.go.kr, 182)</p>
 <h2>12. 방침의 변경</h2>
 <p>이 방침을 바꾸면 시행 7일 전부터 이 페이지와 게임 안에 알립니다.</p>`)
