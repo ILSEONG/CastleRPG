@@ -2106,7 +2106,7 @@ export function createApp(opts: AppOptions) {
 
   // 퀘스트 보상 받기(튜토리얼 미션·반복 퀘스트). body = {type: 'tutorial', step} | {type: 'repeat', n} — 지금 진행 번호와 같아야 한다
   // (아니면 409 stale: 이미 받았거나 앞섰다 — 재전송이 두 번 받지 않는다). 튜토리얼은 needs(서버가 볼 수 있는 조건: 지은 건물·레벨)를 보고,
-  // 나머지 완료 판정은 앱을 믿는다(사건 수 — 서버가 세지 않는다). 반복 퀘스트는 quest_repeat_min_sec 간격으로만(409 too_soon).
+  // 나머지는 quests.ts tutorialDone(사건 수는 그 퀘스트가 된 뒤 — c.gq, 2026-11-03). 반복 퀘스트는 quest_repeat_min_sec 간격으로만(409 too_soon).
   // 보상(자원·골드·다이아·모집권·던전 열쇠)·진행·economy_log quest를 version 가드 한 문장으로.
   app.post('/v1/quest/claim', auth, async (c) => {
     const b = await body(c)
@@ -2136,12 +2136,15 @@ export function createApp(opts: AppOptions) {
           dungeonBest: Object.fromEntries(Object.entries(p.dungeons).map(([k, d]) => [k, d.best_level])), equipped: p.equipment.length,
           soldierDeployed: Object.values(p.soldier_deploy).reduce((a, n) => a + (Number(n) || 0), 0),
           research: p.research_cur !== null || Object.keys(p.research).length > 0, guild: facts.guild, pvp: facts.pvp, party: facts.party, admin: p.admin, c: m.c,
+          step: num, attendN: p.attend.n, pouchesLeft: Object.values(p.pouches).reduce((a, n) => a + (Number(n) || 0), 0),
+          shopFreeToday: (SH.normalize(p.shop, today(g, now)).d['d_free'] ?? 0) > 0, promoted: Object.values(p.heroes).some((h) => h.copies > 0 && h.promotion > 0),
         })
         if (!done) throw new ApiError(409, 'not_done', `mission '${def.id}' is not done`)
         reward = R.parseReward(def.reward) ?? {}
         id = def.id
         quest = { tut_step: num + 1, ...(num + 1 >= rows.length ? { tut_state: 'done' } : {}) }
-        if (num + 1 >= rows.length) missions = { ...m, c: { ...m.c, qs: Q.snapshot(m.c, p.stage) } } // 첫 반복 퀘스트는 가이드를 끝낸 때부터 센다
+        // 다음 가이드 퀘스트는 지금부터 센다(처치·모집·던전 — 2026-11-03, 앱이 그 퀘스트가 된 뒤 세는 것과 같게)
+        missions = { ...m, c: { ...m.c, gq: Q.guideSnapshot(m.c, num + 1), ...(num + 1 >= rows.length ? { qs: Q.snapshot(m.c, p.stage) } : {}) } } // 첫 반복 퀘스트는 가이드를 끝낸 때부터 센다
       } else {
         if (q.tut_state === 'active') throw new ApiError(409, 'tutorial_running', 'finish the tutorial first')
         const rq = R.repeatQuest(g.quests, num)
@@ -2191,7 +2194,10 @@ export function createApp(opts: AppOptions) {
         add('gacha', Number(d.count) || 0)
         if (d.currency !== R.GACHA_GOLD) add('gacha_dia', Number(d.count) || 0)
         break
-      case 'dungeon_clear': add('dungeon_win', 1); break
+      case 'dungeon_clear': add('dungeon_win', 1); add(`dungeon_win_${String(d.type)}`, 1); break // 종류별 — 가이드 「골드 던전 클리어」(2026-11-03)
+      case 'pouch': add('pouch_open', 1); break
+      case 'mission': case 'mission_all': add('mission_claim', 1); break
+      case 'attendance': add('attend', 1); break
       case 'research': if (d.action === 'start') add('research', 1); break
       case 'train_start': add('train', 1); break
     }

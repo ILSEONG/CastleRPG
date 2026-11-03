@@ -2238,13 +2238,13 @@ tutorial.missions.hp_14.title,체력 Lv 14 달성,,,,scripts/tutorial.gd
 tutorial.missions.hp_14.desc,[성장] 탭에서 모든 영웅의 체력을 Lv 14까지 올리세요.,,,,scripts/tutorial.gd
 tutorial.missions.build_stable.title,기병 마구간 건설,,,,scripts/tutorial.gd
 tutorial.missions.build_stable.desc,[건설] 버튼을 눌러 기병 마구간을 골라 원하는 자리에 지으세요. 기병은 빠르게 돌격합니다.,,,,scripts/tutorial.gd
-tutorial.missions.keep_2.title,성채 레벨업,,,,scripts/tutorial.gd
+tutorial.missions.keep_2.title,성채 Lv 2,,,,scripts/tutorial.gd
 tutorial.missions.keep_2.desc,성채를 Lv 2로 올리세요. 다른 건물도 그만큼 더 올릴 수 있습니다.,,,,scripts/tutorial.gd
 tutorial.missions.lumber_2.title,벌목장 Lv 2,,,,scripts/tutorial.gd
 tutorial.missions.lumber_2.desc,벌목장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.,,,,scripts/tutorial.gd
 tutorial.missions.farm_2.title,농장 Lv 2,,,,scripts/tutorial.gd
 tutorial.missions.farm_2.desc,농장을 눌러 Lv 2로 올리세요. 생산량이 늘어납니다.,,,,scripts/tutorial.gd
-tutorial.missions.gate_2.title,성문 강화,,,,scripts/tutorial.gd
+tutorial.missions.gate_2.title,성문 Lv 2,,,,scripts/tutorial.gd
 tutorial.missions.gate_2.desc,성문(문루)을 눌러 Lv 2로 올리세요. 성문 HP가 늘어납니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_100_2.title,몬스터 100마리 처치,,,,scripts/tutorial.gd
 tutorial.missions.kill_100_2.desc,"몬스터 100마리를 처치하세요. 대기 중에도, 앱을 꺼 둬도 영웅들이 계속 싸워 골드가 쌓입니다.",,,,scripts/tutorial.gd
@@ -2293,7 +2293,7 @@ tutorial.repeat_desc.stage,전투를 이어 가 목표 라운드를 클리어하
 tutorial.repeat_desc.growth_up,[성장] 탭에서 강화하세요.,,,,scripts/tutorial.gd
 tutorial.repeat_desc.hero_up,[영웅] 탭에서 영웅을 레벨업하세요(여러 영웅 합산).,,,,scripts/tutorial.gd
 tutorial.repeat_desc.gacha,골드·다이아·모집권 어느 모집이든 셉니다.,,,,scripts/tutorial.gd
-tutorial.repeat_desc.dungeon_win,골드·장비 던전 아무 단계나 클리어하세요.,,,,scripts/tutorial.gd
+tutorial.repeat_desc.dungeon_win,어느 던전이든 아무 단계나 클리어하세요.,,,,scripts/tutorial.gd
 tutorial.mission_desc,지금 길드에 속해 있지 않습니다. 먼저 [메뉴] → [길드]에서 추천 길드에 가입하거나 길드를 만드세요. ,,,,scripts/tutorial.gd
 tutorial.pvp_lock_text,열립니다,,,,scripts/tutorial.gd
 tutorial.dungeon_lock_text,열립니다,,,,scripts/tutorial.gd

@@ -21,14 +21,25 @@ export interface QuestFacts {
   party: boolean // 파티 던전을 한 번이라도 이겼다(party_stats best ≥ 1)
   admin: boolean
   c: Counters
+  step?: number // 지금 가이드 번호(0부터) — c.gq가 이 번호의 것이면 처치·모집·던전은 그때부터 센다
+  attendN?: number // 출석 이벤트 받은 날 수
+  pouchesLeft?: number // 남은 방치 주머니 수
+  shopFreeToday?: boolean // 오늘 상점 일일 무료 선물을 받았다
+  promoted?: boolean // 승급한 영웅이 있다
 }
 
 const t = (f: QuestFacts, k: string) => f.c.t[k] ?? 0
+// 가이드 퀘스트가 된 뒤 센 사건(2026-11-03): 그 퀘스트가 시작된 때 기록(c.gq, 같은 번호)이 있으면 그 뒤만, 없으면(이 기능 전에 시작한 퀘스트) 누적
+const fresh = (f: QuestFacts) => f.c.gq != null && f.step !== undefined && (f.c.gq.step ?? -1) === f.step
+const since = (f: QuestFacts, k: string) => (fresh(f) ? Math.max(0, t(f, k) - (f.c.gq![k] ?? 0)) : t(f, k))
+
+// 다음 가이드 퀘스트(step = 그 번호)가 시작될 때의 기록
+export const guideSnapshot = (c: Counters, step: number) => ({ ...c.t, step })
 
 // 가이드 미션 id → 서버가 본 완료 여부. 모르는 id(건물 미션 등 needs로 보는 것)는 true.
 export function tutorialDone(id: string, f: QuestFacts): boolean {
   let m: RegExpExecArray | null
-  if ((m = /^kill_(\d+)(?:_\d+)?$/.exec(id))) return t(f, 'kill') >= Number(m[1]) // kill_<수>[_<순번>] — 같은 수가 두 번이면 kill_100_2(2026-10-13)
+  if ((m = /^kill_(\d+)(?:_\d+)?$/.exec(id))) return since(f, 'kill') >= Number(m[1]) // kill_<수>[_<순번>] — 같은 수가 두 번이면 kill_100_2(2026-10-13)
   if ((m = /^stage_(\d+)_(\d+)$/.exec(id))) {
     const round = (Number(m[1]) - 1) * 25 + Number(m[2])
     return f.stage > round || f.admin
@@ -36,15 +47,21 @@ export function tutorialDone(id: string, f: QuestFacts): boolean {
   if ((m = /^hero_lv(\d+)_(\d+)$/.exec(id))) return f.heroLevels.filter((lv) => lv >= Number(m![2])).length >= Number(m[1])
   if ((m = /^(atk|hp|aspd|mspd|crit_rate|crit_dmg)_(\d+)$/.exec(id))) return (f.upgrades[m[1]] ?? 0) >= Number(m[2]) // 2026-10-29 사이 퀘스트: 능력치 6종
   if ((m = /^dungeon_(gold|equip|ticket)_(\d+)$/.exec(id))) return (f.dungeonBest[m[1]] ?? 0) >= Number(m[2]) // 2026-10-29 사이 퀘스트: 던전 N단계
-  if (/^dwin_(gold|equip|ticket)_\d+$/.test(id)) return t(f, 'dungeon_win') >= 1 // 2026-10-29 사이 퀘스트: 던전 한 번 클리어(누적 — 처치처럼 느슨하다)
-  if ((m = /^gacha_(\d+)_\d+$/.exec(id))) return t(f, 'gacha') >= Number(m[1]) // 2026-10-29 사이 퀘스트: 영웅 모집 N회(누적)
+  if ((m = /^dwin_(gold|equip|ticket)_\d+$/.exec(id))) return fresh(f) ? since(f, `dungeon_win_${m[1]}`) >= 1 : t(f, 'dungeon_win') >= 1 // 사이 퀘스트: 그 던전 한 번 클리어(2026-11-03 종류·퀘스트가 된 뒤 — 그 전에 시작한 퀘스트는 예전대로)
+  if ((m = /^gacha_(\d+)_\d+$/.exec(id))) return since(f, 'gacha') >= Number(m[1]) // 2026-10-29 사이 퀘스트: 영웅 모집 N회(퀘스트가 된 뒤)
   if ((m = /^dungeon_(\w+)$/.exec(id))) return (f.dungeonBest[m[1]] ?? 0) >= 1
   switch (id) {
-    case 'collect': return t(f, 'collect') >= 1
-    case 'sell': return t(f, 'sell') >= 1
+    case 'collect': return since(f, 'collect') >= 1
+    case 'sell': return since(f, 'sell') >= 1
+    // 2026-11-03: 서버가 볼 수 있는 기능 퀘스트(앱 _done과 같은 조건). 배속·연속 진행·자동 배치·FEVER·공성전 체험·거래소는 앱만 안다
+    case 'attend': return f.attendN === undefined || f.attendN >= 1
+    case 'pouch': return f.pouchesLeft === undefined || f.pouchesLeft === 0 || !fresh(f) || since(f, 'pouch_open') >= 1
+    case 'mission_claim': return !fresh(f) || since(f, 'mission_claim') >= 1
+    case 'shop_free': return f.shopFreeToday === undefined || f.shopFreeToday
+    case 'promote': return f.promoted === undefined || f.promoted
     case 'hero_level': return f.heroLevels.some((lv) => lv >= 2)
     case 'growth': return Object.values(f.upgrades).some((v) => v > 0)
-    case 'gacha': return t(f, 'gacha') >= 10 || f.heroIds.some((h) => !f.starters.includes(h))
+    case 'gacha': return since(f, 'gacha') >= 10 || f.heroIds.some((h) => !f.starters.includes(h))
     case 'deploy_new': return f.deploy.some((h) => typeof h === 'string' && f.heroIds.includes(h) && !f.starters.includes(h))
     case 'train': return f.trainingOrSoldiers
     case 'equip': return f.equipped > 0

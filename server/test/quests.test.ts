@@ -200,6 +200,85 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal(logs.length, 9) // 1-1·벌목장·채석장+농장·열쇠·골드 던전 2단계·자원·1-15·거래소·파티
 })
 
+// 2026-11-03 가이드 퀘스트 서버 확인: 처치·모집·던전·수집 등은 그 퀘스트가 된 뒤(앞 퀘스트를 받은 때 c.gq) 센 것만, 던전은 종류까지.
+// 출석·주머니·미션 보상·상점 무료·승급은 서버 상태로 본다. c.gq가 없거나 번호가 다르면(이 기능 전에 시작한 퀘스트) 예전처럼 누적.
+test('가이드 퀘스트: 받은 뒤부터 센다(c.gq), 던전 종류, 서버가 아는 기능 퀘스트', async () => {
+  S.clock.t = T0
+  const rows = await tutorialRows()
+  const { token, id } = await S.login()
+  const ev = (events: Record<string, number>) => S.req('POST', '/v1/test/events', { token, body: { events } })
+  const at = (step: number) => S.db.query('update player_state set tut_step = $2 where player_id = $1', [id, step])
+  // 지금 누적을 그 번호의 시작 기록으로(앞 퀘스트를 방금 받은 것처럼)
+  const startAt = async (step: number) => {
+    await at(step)
+    const [r] = await S.db.query("select missions->'c'->'t' as t from player_state where player_id = $1", [id])
+    await S.db.query("update player_state set missions = missions || jsonb_build_object('c', coalesce(missions->'c', '{}'::jsonb) || jsonb_build_object('gq', $2::jsonb)) where player_id = $1",
+      [id, JSON.stringify({ ...(r.t ?? {}), step })])
+  }
+  const tryClaim = async (step: number) => (await claim(token, { type: 'tutorial', step }))
+  // 처치(실제 받기로): 1-1을 받기 전에 잡은 100마리는 다음 「몬스터 10마리」에 안 센다
+  assert.equal(rows[1].id, 'kill_10')
+  await ev({ kill: 100 })
+  await setStage(token, 2)
+  assert.equal((await tryClaim(0)).status, 200)
+  assert.equal((await tryClaim(1)).json.error, 'not_done')
+  await ev({ kill: 9 })
+  assert.equal((await tryClaim(1)).json.error, 'not_done')
+  await ev({ kill: 1 })
+  assert.equal((await tryClaim(1)).status, 200)
+  // 던전 클리어 사이 퀘스트: 그 종류만
+  const dw = rows.findIndex((x) => x.id === 'dwin_gold_1')
+  await startAt(dw)
+  await ev({ dungeon_win: 1, dungeon_win_equip: 1 })
+  assert.equal((await tryClaim(dw)).json.error, 'not_done')
+  await ev({ dungeon_win: 1, dungeon_win_gold: 1 })
+  assert.equal((await tryClaim(dw)).status, 200)
+  // 모집 N회: 받은 뒤 모집만
+  const g1 = rows.findIndex((x) => x.id === 'gacha_10_1')
+  await ev({ gacha: 50 })
+  await startAt(g1)
+  assert.equal((await tryClaim(g1)).json.error, 'not_done')
+  await ev({ gacha: 10 })
+  assert.equal((await tryClaim(g1)).status, 200)
+  // 미션 보상 받기: 받은 뒤 한 번
+  const mc = rows.findIndex((x) => x.id === 'mission_claim')
+  await startAt(mc)
+  assert.equal((await tryClaim(mc)).json.error, 'not_done')
+  await ev({ mission_claim: 1 })
+  assert.equal((await tryClaim(mc)).status, 200)
+  // 출석: 1일차 이상
+  const ad = rows.findIndex((x) => x.id === 'attend')
+  await startAt(ad)
+  await S.db.query('update player_state set attend_n = 0 where player_id = $1', [id])
+  assert.equal((await tryClaim(ad)).json.error, 'not_done')
+  await S.db.query('update player_state set attend_n = 1 where player_id = $1', [id])
+  assert.equal((await tryClaim(ad)).status, 200)
+  // 주머니: 남은 주머니가 있으면 하나 열어야(다 열어 없으면 통과)
+  const pc = rows.findIndex((x) => x.id === 'pouch')
+  await startAt(pc)
+  await S.db.query(`update player_state set pouches = '{"gold_60": 1}'::jsonb where player_id = $1`, [id])
+  assert.equal((await tryClaim(pc)).json.error, 'not_done')
+  await S.db.query(`update player_state set pouches = '{}'::jsonb where player_id = $1`, [id])
+  assert.equal((await tryClaim(pc)).status, 200)
+  // 상점 무료 선물: 오늘 받았어야
+  const sf = rows.findIndex((x) => x.id === 'shop_free')
+  await startAt(sf)
+  assert.equal((await tryClaim(sf)).json.error, 'not_done')
+  const buy = await S.req('POST', '/v1/shop/buy', { token, body: { id: 'd_free', n: 0 } })
+  assert.equal(buy.status, 200, JSON.stringify(buy.json))
+  assert.equal((await tryClaim(sf)).status, 200)
+  // 승급: 승급한 영웅이 있어야
+  const pr = rows.findIndex((x) => x.id === 'promote')
+  await startAt(pr)
+  assert.equal((await tryClaim(pr)).json.error, 'not_done')
+  await S.db.query('update player_heroes set promotion = 1 where player_id = $1 and copies > 0', [id])
+  assert.equal((await tryClaim(pr)).status, 200)
+  // 이 기능 전에 시작한 퀘스트(c.gq 번호가 다름): 예전처럼 누적 — 진행 중인 성주가 막히지 않는다
+  const k2 = rows.findIndex((x) => x.id === 'kill_20')
+  await at(k2)
+  assert.equal((await tryClaim(k2)).status, 200)
+})
+
 test('반복 퀘스트: 튜토리얼 중엔 409, 번호대로, quest_repeat_min_sec 간격, 보상 = reward × (1 + 바퀴) + fixed', async () => {
   S.clock.t = T0
   const { token, id } = await S.login()

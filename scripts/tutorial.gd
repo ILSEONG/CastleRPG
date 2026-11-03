@@ -534,7 +534,7 @@ func _connect() -> void:
 		econ.building_done.connect(func(_id, _lv):
 			note("build_up")
 			check())  # 나머지 상태 미션은 _process가 1초마다 본다
-		econ.dungeon_finished.connect(func(r): if r.get("win", false) and not r.get("repeated", false): note("dungeon_win"))
+		econ.dungeon_finished.connect(_on_dungeon_finished)
 	if gs != null:
 		gs.stage_cleared.connect(func(s): note_stage(int(s) + 1))
 	if guild != null:
@@ -1088,6 +1088,17 @@ func note(kind: String, n := 1, arg = null) -> void:
 	count += n
 	_dirty = true  # 처치는 자주 온다 — 저장은 _process가 몰아서
 	check()
+
+
+## 던전 승리: 「골드 던전 클리어」 같은 사이 퀘스트는 그 종류만 센다(서버 quests.ts dwin_<종류>와 같다, 2026-11-03). 반복 퀘스트는 아무 던전.
+func _on_dungeon_finished(r: Dictionary) -> void:
+	if not r.get("win", false) or r.get("repeated", false):
+		return
+	var m := mission()
+	var want := str(m.get("dungeon", "")) if active() else ""
+	if want != "" and str(r.get("type", "")) != "" and str(r.type) != want:
+		return
+	note("dungeon_win")
 
 
 func note_stage(s: int) -> void:

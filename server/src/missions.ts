@@ -75,11 +75,12 @@ export interface Counters {
   t: Record<string, number>
   rb: Record<string, number>
   qs: Record<string, number> | null
+  gq: Record<string, number> | null // 지금 가이드 퀘스트가 시작된 때(앞 퀘스트를 받은 때)의 t + step(그 가이드 번호). 없거나 번호가 다르면 null로 본다(누적)
 }
 
 // 서버가 세는 사건(앱 missions.gd·tutorial.gd가 세는 것과 같은 이름)
 export const EVENTS = ['kill', 'collect', 'sell', 'stage', 'hero_level', 'growth', 'gacha', 'gacha_dia', 'dungeon_win', 'guild_attend', 'guild_boss', 'build_up',
-  'research', 'train'] as const
+  'research', 'train', 'pouch_open', 'mission_claim', 'attend', 'dungeon_win_gold', 'dungeon_win_equip', 'dungeon_win_ticket'] as const
 
 // 주 번호: 월요일에 시작한다(리셋 날짜 0 = 1970-01-02 금요일 KST).
 export const weekOf = (day: number) => Math.floor((day + 4) / 7)
@@ -137,6 +138,7 @@ function counters(raw: unknown, day: number): Counters {
     t: nums(c.t),
     rb: nums(c.rb),
     qs: c.qs && typeof c.qs === 'object' && !Array.isArray(c.qs) ? nums(c.qs) : null,
+    gq: c.gq && typeof c.gq === 'object' && !Array.isArray(c.gq) ? nums(c.gq) : null,
   }
 }
 

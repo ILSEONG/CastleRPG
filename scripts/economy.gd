@@ -3049,7 +3049,7 @@ func _finish_offline(run_id: String, win: bool, elapsed: float) -> Dictionary:
 		fail.error = "run_expired"
 		return fail
 	var type: String = run.type
-	var res := {"run_id": run_id, "win": false, "rewards": {}, "repeated": false}
+	var res := {"run_id": run_id, "win": false, "rewards": {}, "repeated": false, "type": type}  # type: 가이드 「골드 던전 클리어」가 종류를 본다
 	if win:
 		if elapsed < GameData.min_clear_sec(type) or elapsed > GameData.config_num("dungeon_time_limit") or real < elapsed / GameData.MAX_GAME_SPEED - GameData.RUN_SLACK_SEC:
 			fail.error = "implausible"  # run은 열린 채
@@ -4575,6 +4575,7 @@ func _on_dungeon_start_failed() -> void:
 func _on_dungeon_finished(data: Dictionary, run_id: String) -> void:
 	_waiting.erase("finish:" + run_id)
 	apply_server(data)
+	var run_type := str(current_run.get("type", "")) if current_run.get("run_id", "") == run_id else ""
 	if current_run.get("run_id", "") == run_id:
 		current_run = {}
 	var rw = data.get("rewards")
@@ -4586,7 +4587,7 @@ func _on_dungeon_finished(data: Dictionary, run_id: String) -> void:
 			rewards.tickets = int(rw.tickets)
 		if rw.get("items") is Array:
 			rewards.items = _item_list(rw.items)
-	dungeon_finished.emit({"run_id": run_id, "win": data.get("win") == true, "rewards": rewards, "repeated": data.get("repeated") == true})
+	dungeon_finished.emit({"run_id": run_id, "win": data.get("win") == true, "rewards": rewards, "repeated": data.get("repeated") == true, "type": run_type})
 
 
 ## 거부(409 implausible·run_expired·run_closed·no_key·not_enough_gold·bag_full, 404)나 재시도 소진: 알림 + 상태 새로 받기.
