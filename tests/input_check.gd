@@ -3175,7 +3175,7 @@ func _recruit23_ui(recruit) -> void:
 	var shop = recruit.shop
 	var sr: Rect2 = shop.dialog.get_global_rect()
 	_check(shop.is_open() and not recruit.is_open() and shop.tab == "diamond" and shop.buy_buttons.size() == 6 and shop.buy_buttons.all(func(b): return not b.disabled and b.text.begins_with("₩"))
-		and shop.note.text == "결제 기능은 출시 전에 연결됩니다" and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
+		and shop.note.text.begins_with("쓰지 않은 상품만") and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
 		"(r23) [이동] closes the recruit window and opens the shop on its 다이아 tab: 6 packs with ₩ prices, the payment note; fits 720x1280", "open=%s rect=%s" % [shop.is_open(), sr])
 	await _unguarded(shop)
 	var d0: int = Economy.diamonds

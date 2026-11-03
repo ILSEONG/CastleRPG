@@ -106,7 +106,8 @@ export function privacyPage(info: LegalInfo): string {
 <tr><td>게임 이용</td><td>자동 생성 닉네임, 게임 진행·재화·아이템 기록, 친구·길드 관계, 랭킹 기록</td></tr>
 <tr><td>채팅</td><td>보낸 메시지와 시각, 신고 내용(신고된 메시지와 앞뒤 대화)</td></tr>
 <tr><td>결제</td><td>주문 번호, 상품, 결제 시각(카드번호 등 결제 수단 정보는 Google·토스가 처리하며 운영자는 받지 않음)</td></tr>
-<tr><td>자동 수집</td><td>접속 IP 주소, 접속 시각, 서버 오류 기록</td></tr>
+<tr><td>문의</td><td>문의 내용, 닉네임·친구 코드, 로그인 방식, 게임 버전, 기기 정보(기종·OS)</td></tr>
+<tr><td>자동 수집</td><td>접속 IP 주소, 접속 시각, 서버 오류 기록, 앱 오류 기록(오류 내용, 게임 버전, OS 종류)</td></tr>
 <tr><td>보상형 광고(Google Play 앱)</td><td>광고 식별자(Android 광고 ID), 기기 정보(기종, OS 버전), IP 주소 — 광고를 볼 때 Google AdMob이 수집</td></tr></table>
 <h2>2. 처리 목적</h2>
 <ul><li>계정 생성·로그인과 게임 진행 저장, 기기 변경 시 진행 이어가기</li>
@@ -128,6 +129,7 @@ export function privacyPage(info: LegalInfo): string {
 <tr><td>Neon, Inc.(Databricks)</td><td>게임 데이터베이스 보관</td><td>싱가포르(ap-southeast-1) 데이터센터, 네트워크로 전송</td><td>1번의 전체 항목, 위탁 계약 종료 또는 보유 기간 끝까지</td></tr>
 <tr><td>Google LLC</td><td>Google 로그인, Google Play 결제</td><td>미국 등, 로그인·결제 때 전송</td><td>계정 식별자·이메일·주문 정보, Google 정책에 따름</td></tr>
 <tr><td>Google LLC(Google AdMob)</td><td>보상형 광고 송출, 광고 성과 측정, 부정 클릭 방지</td><td>미국 등, 광고를 볼 때 전송</td><td>광고 식별자·기기 정보·IP 주소, <a href="https://policies.google.com/privacy">Google 개인정보처리방침</a>에 따름</td></tr>
+<tr><td>Functional Software, Inc.(Sentry)</td><td>서버·앱 오류 기록 모음과 분석</td><td>미국, 오류가 날 때 네트워크로 전송</td><td>오류 내용·게임 버전·OS 종류·플레이어 번호, Sentry 보관 정책에 따름(최대 90일)</td></tr>
 <tr><td>(주)카카오, 네이버(주)</td><td>소셜 로그인</td><td>대한민국</td><td>계정 식별자, 각 회사 정책에 따름</td></tr>
 <tr><td>(주)비바리퍼블리카(토스)</td><td>토스 로그인, 토스 인앱 결제</td><td>대한민국</td><td>사용자 식별키·주문 정보, 토스 정책에 따름</td></tr></table>
 <p>국외 이전을 원하지 않으면 계정을 삭제해 이전을 멈출 수 있습니다. 다만 게임 서버가 국외에 있어 게임을 이용할 수 없게 됩니다.</p>

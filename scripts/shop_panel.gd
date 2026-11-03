@@ -263,8 +263,7 @@ func _rebuild() -> void:
 		var packs := IapItems.of_kind("diamond")
 		for i in packs.size():
 			grid.add_child(_pack_card(packs[i], i))
-		note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
-		body.add_child(note)
+		_add_note()
 		return
 	if tab == "pvp":
 		for x in PvpRules.SHOP:
@@ -561,8 +560,7 @@ func _build_packages() -> void:
 		var side := [_krw_button(p.id, int(p.krw))] if ok else [_label(SOLD_TEXT, 22, SUB)]
 		body.add_child(_wide(str(ShopArt.PACK_ICONS.get(p.id, "ticket" if p.give.has("tickets") else "diamond")), p.name, [[Missions.reward_text(p.give), GIVE], [limit, SUB]], side,
 			CARD_BG if ok else SOLD_BG))
-	note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
-	body.add_child(note)
+	_add_note()
 
 
 ## 대략의 다이아 가치(모집권 1장 = 다이아 모집 1회 비용).
@@ -596,6 +594,14 @@ func _build_pass() -> void:
 		for track in ["free", "paid"]:
 			r.add_child(_growth_cell(i, track, t[track], owned))
 		body.add_child(card)
+	_add_note()
+
+
+## 유료 탭(다이아·패키지·패스) 맨 아래 청약 철회 안내(2026-11-03 출시 전 법률 점검): 전자상거래법 제17조 — 철회가 제한되는 상품은 구매 화면에 알린다(이용약관 제6조와 같은 내용).
+func _add_note() -> void:
+	note = _label(NOTE_TEXT, 20, Color(HudScript.INK, 0.75))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(note)
 
 
 ## 성장 패스 표 머리줄(사용자 2026-10-12): 단계 칸 · [무료] · [패스] — 칸마다 "무료 ·"/"패스 ·"를 붙이지 않는다. 열 너비는 아래 줄과 같다.
