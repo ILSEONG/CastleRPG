@@ -132,12 +132,12 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   assert.equal((await claim(token, { type: 'tutorial', step: qf })).status, 200)
   // 열쇠 보상: 던전 단계 사이 퀘스트(골드 던전 3단계) 앞 처치 퀘스트가 골드 던전 열쇠 1개(가이드 레벨 5 단위 2026-11-03)
   const k = rows.findIndex((x) => x.id === 'dungeon_gold_3') - 1
-  assert.equal(rows[k].id, 'kill_100')
+  assert.equal(rows[k].id, 'kill_30_10') // 처치는 모두 30마리(2026-11-04)
   assert.ok(rows[k].reward.split('|').includes('keys_gold:1'))
   await S.db.query('update player_state set tut_step = $2, unbuilt = $3 where player_id = $1', [id, k, []])
   await S.db.query("update player_dungeons set keys = 0 where player_id = $1 and type = 'gold'", [id]) // 가득 찬 열쇠는 더 안 쌓인다
   const keys = (await player(token)).dungeons.gold.keys
-  assert.equal((await claim(token, { type: 'tutorial', step: k })).json.error, 'not_done') // 처치 100마리를 서버가 아직 못 셌다
+  assert.equal((await claim(token, { type: 'tutorial', step: k })).json.error, 'not_done') // 처치 30마리를 서버가 아직 못 셌다
   await pump(token, 200)
   r = await claim(token, { type: 'tutorial', step: k })
   assert.equal(r.json.player.dungeons.gold.keys, keys + 1)
@@ -195,7 +195,7 @@ test('튜토리얼 보상: 지금 단계만(재전송·건너뛰기는 409 stale
   await S.db.query("insert into party_stats (player_id, quest, best, day, clears) values ($1, 'lich', 1, 0, 1)", [id])
   r = await claim(token, { type: 'tutorial', step: rows.length - 1 })
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.reward, { diamonds: 50 })
+  assert.deepEqual(r.json.reward, { diamonds: 500 }) // 가이드 다이아 10배(2026-11-04)
   assert.equal(r.json.player.quest.tut_state, 'done')
   assert.equal((await claim(token, { type: 'tutorial', step: rows.length })).json.error, 'no_tutorial')
   const logs = await S.db.query("select detail from economy_log where player_id = $1 and kind = 'quest' order by id", [id])
@@ -218,13 +218,13 @@ test('가이드 퀘스트: 받은 뒤부터 센다(c.gq), 던전 종류, 서버�
       [id, JSON.stringify({ ...(r.t ?? {}), step })])
   }
   const tryClaim = async (step: number) => (await claim(token, { type: 'tutorial', step }))
-  // 처치(실제 받기로): 1-1을 받기 전에 잡은 100마리는 다음 「몬스터 10마리」에 안 센다
-  assert.equal(rows[1].id, 'kill_10')
+  // 처치(실제 받기로): 1-1을 받기 전에 잡은 100마리는 다음 「몬스터 30마리」에 안 센다
+  assert.equal(rows[1].id, 'kill_30_2')
   await ev({ kill: 100 })
   await setStage(token, 2)
   assert.equal((await tryClaim(0)).status, 200)
   assert.equal((await tryClaim(1)).json.error, 'not_done')
-  await ev({ kill: 9 })
+  await ev({ kill: 29 })
   assert.equal((await tryClaim(1)).json.error, 'not_done')
   await ev({ kill: 1 })
   assert.equal((await tryClaim(1)).status, 200)
@@ -276,7 +276,7 @@ test('가이드 퀘스트: 받은 뒤부터 센다(c.gq), 던전 종류, 서버�
   await S.db.query('update player_heroes set promotion = 1 where player_id = $1 and copies > 0', [id])
   assert.equal((await tryClaim(pr)).status, 200)
   // 이 기능 전에 시작한 퀘스트(c.gq 번호가 다름): 예전처럼 누적 — 진행 중인 성주가 막히지 않는다
-  const k2 = rows.findIndex((x) => x.id === 'kill_20')
+  const k2 = rows.findIndex((x) => x.id === 'kill_30_3')
   await at(k2)
   assert.equal((await tryClaim(k2)).status, 200)
 })
