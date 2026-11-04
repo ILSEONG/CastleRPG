@@ -1,6 +1,6 @@
 extends CanvasLayer
-## 로그인 화면(온라인 모드, 저장한 로그인 방식이 없을 때 main이 띄운다). 방치형 게임 첫 화면처럼: 시작 그림(splash — 앱 아이콘 느낌의
-## 주황 하늘·성·게임 이름 로고가 그림에 들어 있다) 위, 아래쪽 따뜻한 갈색 그라데이션 위에 제공자 버튼 셋 — [Google로 시작하기](흰 바탕·G 로고) [카카오로 시작하기](#FEE500·말풍선)
+## 로그인 화면(온라인 모드, 저장한 로그인 방식이 없을 때 main이 띄운다). 방치형 게임 첫 화면처럼: 시작 그림(splash — 세라핀 일러스트와
+## 은빛 CASTLE RPG 로고가 그림에 들어 있다) 위, 아래쪽 짙은 남색 그라데이션 위에 제공자 버튼 셋 — [Google로 시작하기](흰 바탕·G 로고) [카카오로 시작하기](#FEE500·말풍선)
 ## [네이버로 시작하기](#03C75A·N) — 그 아래 [게스트로 시작하기] 글자 버튼, 맨 아래 약관 안내와 버전. 회원가입 없음: 처음 로그인하면 계정이 생긴다.
 ## 소셜 로그인: verifier(무작위 32바이트 hex)의 sha256을 challenge로 POST /v1/auth/oauth/start → 받은 주소를 시스템 브라우저로 열고
 ## (OS.shell_open), POLL_SEC마다 POST /v1/auth/oauth/poll {state, verifier}로 결과를 기다린다(앱으로 돌아오면 곧바로 받는다).
@@ -22,7 +22,7 @@ const SPLASH := preload("res://assets/ui/splash.png")
 const POLL_SEC := 2.0
 const BUTTON_W := 560.0
 const BUTTON_H := 88.0
-const SHADE := Color(0.36, 0.17, 0.04)  # 아래 그라데이션(주황 하늘의 어두운 쪽)
+const SHADE := Color(0.05, 0.07, 0.18)  # 아래 그라데이션(시작 그림의 짙은 남색)
 ## 제공자 → [버튼 글자, 바탕, 글자색, 테두리(없으면 투명)] — 각 사 로그인 버튼 지침의 색
 static var BRANDS := {
 	"google": [Lang.t("login_screen.brands"), Color("FFFFFF"), Color("1F1F1F"), Color("747775")],

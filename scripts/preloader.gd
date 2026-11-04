@@ -47,12 +47,13 @@ static var LOAD_TEXT := Lang.t("preloader.load_text")
 static var OFFLINE_TEXT := Lang.t("preloader.offline_text")
 static var RETRY_TEXT := Lang.t("preloader.retry_text")
 const CONNECT_SHARE := 0.3  # 온라인: 막대에서 서버 연결 몫(나머지가 불러오기)
-## 앱 아이콘 느낌(splash 그림과 같은 색): 글자는 흰색에 따뜻한 갈색 테두리, 막대는 크림 바탕·지붕 파랑 채움, 테두리는 각 색의 어두운 쪽
-const TEXT_EDGE := Color(0.55, 0.27, 0.07)
-const BAR_BACK := Color(1.0, 0.97, 0.9, 0.9)
-const BAR_BACK_EDGE := Color(0.72, 0.42, 0.16)
-const BAR_FILL := Color(0.25, 0.47, 0.8)
-const BAR_FILL_EDGE := Color(0.14, 0.29, 0.54)
+## 시작 그림(splash, 2026-11-04 B안: 세라핀 일러스트 + 은빛 CASTLE RPG 로고)과 같은 색: 글자는 흰색에 짙은 남색 테두리,
+## 막대는 흰 바탕·얼음 파랑 채움, 테두리는 각 색의 어두운 쪽
+const TEXT_EDGE := Color(0.08, 0.11, 0.26)
+const BAR_BACK := Color(1.0, 1.0, 1.0, 0.88)
+const BAR_BACK_EDGE := Color(0.3, 0.36, 0.52)
+const BAR_FILL := Color(0.45, 0.7, 0.98)
+const BAR_FILL_EDGE := Color(0.2, 0.36, 0.64)
 
 static var _keep: Array = []  # 불러 둔 리소스(쥐고 있어야 캐시에 남는다)
 static var done := false  # 이번 실행에서 한 번 끝냈다(월드를 다시 만들 때는 다시 하지 않는다)
