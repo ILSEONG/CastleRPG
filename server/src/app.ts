@@ -3738,13 +3738,22 @@ export function createApp(opts: AppOptions) {
     })
   }
 
+  // 길드가 열렸나: 1-10 클리어·슈퍼관리자, 또는 가이드가 「길드 가입」 미션(quests id 'guild')에 닿았다(통합 테스트 2026-11-04 — 그 미션이 1-10 앞이라
+  // 가이드가 잠긴 길드에서 멈췄다). 앱 Guild.is_unlocked·guide_reached와 같다.
+  const guildOpen = (pl: Player, game: Game): boolean => {
+    if (pl.stage >= G.UNLOCK_STAGE || pl.admin) return true
+    if (pl.quest?.tut_state !== 'active') return false
+    const at = game.quests.filter((d) => d.type === 'tutorial').findIndex((d) => d.id === 'guild')
+    return at >= 0 && Number(pl.quest.tut_step) >= at
+  }
+
   async function guildView(x: GuildCtx) {
     const out: Record<string, unknown> = {
-      unlocked: x.pl.stage >= G.UNLOCK_STAGE || x.pl.admin, coins: x.pg.coins, me: x.mine, dps: Math.round(x.dps), power: x.power,
+      unlocked: guildOpen(x.pl, x.game), coins: x.pg.coins, me: x.mine, dps: Math.round(x.dps), power: x.power,
       next_reset: R.nextReset(x.now, x.game.config), guild: null, boss_pending: 0,
     }
     if (!x.g || !x.st) {
-      if (x.pl.stage >= G.UNLOCK_STAGE || x.pl.admin) out.recommendations = await recommendations(x)
+      if (guildOpen(x.pl, x.game)) out.recommendations = await recommendations(x)
       return out
     }
     const g = x.g
@@ -3842,7 +3851,7 @@ export function createApp(opts: AppOptions) {
     const gid = strField(await body(c), 'guild_id')
     if (!UUID_RE.test(gid)) throw new ApiError(400, 'bad_request', "'guild_id' must be a uuid")
     return inTurn([`g:${gid.toLowerCase()}`], () => guildMutate(c, async (x) => {
-      if (x.pl.stage < G.UNLOCK_STAGE && !x.pl.admin) throw blocked('locked', 'clear round 1-10 first')
+      if (!guildOpen(x.pl, x.game)) throw blocked('locked', 'clear round 1-10 first')
       if (x.g) throw blocked('in_guild', 'already in a guild')
       const [gr] = await query(`select ${GUILD_COLS} from guilds where id = $1`, [gid])
       if (!gr) throw new ApiError(404, 'no_such_guild', 'guild not found')
@@ -3860,7 +3869,7 @@ export function createApp(opts: AppOptions) {
     const emblem = intField(b, 'emblem', 0, G.EMBLEMS - 1)
     if ([...name].length < 2 || [...name].length > 8) throw new ApiError(400, 'bad_name', 'name must be 2-8 characters')
     return guildMutate(c, async (x) => {
-      if (x.pl.stage < G.UNLOCK_STAGE && !x.pl.admin) throw blocked('locked', 'clear round 1-10 first')
+      if (!guildOpen(x.pl, x.game)) throw blocked('locked', 'clear round 1-10 first')
       if (x.g) throw blocked('in_guild', 'already in a guild')
       if (x.pl.gold_tenths < G.CREATE_GOLD * 10) throw blocked('not_enough_gold', `creating a guild costs ${G.CREATE_GOLD} gold`)
       const [taken] = await query('select 1 from guilds where name = $1', [name])

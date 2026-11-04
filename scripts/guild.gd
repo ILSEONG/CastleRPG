@@ -177,9 +177,21 @@ func online() -> bool:
 func is_unlocked() -> bool:
 	if econ != null and econ.get("admin") == true:  # 슈퍼관리자: 라운드 1-10 전에도 열린다(서버도 허락)
 		return true
+	if guide_reached():
+		return true
 	if online():
 		return remote.get("unlocked", false) == true or (gs != null and int(gs.stage) >= UNLOCK_ROUND)
 	return unlocked or (gs != null and int(gs.stage) >= UNLOCK_ROUND)
+
+
+## 가이드가 「길드 가입」 미션에 닿았다(통합 테스트 2026-11-04: 그 미션이 1-10 앞에 있어 길드가 잠긴 채 멈췄다) — 그때부터 열린다.
+## 서버 app.ts guildOpen과 같다. 가이드 밖(끝·건너뜀)은 원래대로 1-10 클리어.
+func guide_reached() -> bool:
+	var tut: Node = get_node_or_null("/root/Tutorial") if is_inside_tree() else null
+	if tut == null or tut.state != "active":
+		return false
+	var at: int = tut.mission_index("guild")
+	return at >= 0 and tut.step >= at
 
 
 func check_unlock() -> void:

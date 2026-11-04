@@ -167,8 +167,9 @@ func _guild() -> void:
 			_check(false, "boss fight opens", str(_notes))
 			return
 		var fight = _main._dungeon
+		await _wait_until(func(): return fight.phase != fight.Phase.INTRO, 15.0)  # 시작 띠 동안은 정배속(2026-10-18)
 		await _frames(5)
-		_check(is_equal_approx(Engine.time_scale, 2.0), "boss fight runs at x2", str(Engine.time_scale))
+		_check(is_equal_approx(Engine.time_scale, 2.0), "boss fight runs at x2 (after the start band)", str(Engine.time_scale))
 		_check(await _wait_until(func(): return fight.phase == fight.Phase.RESULT, 60.0) and _boss != null and not _boss.has("error"), "boss %d: server result" % (n + 1), str(_boss))
 		if _boss == null or _boss.has("error"):
 			return
@@ -282,10 +283,12 @@ func _war() -> void:
 	b._finish()
 	_check(int(b.result.points) == expect, "result screen points == %d" % expect, str(b.result.get("points")))
 	await _snap()
-	_check(await _wait_until(func(): return GuildWar.war.get("battle", {}).get("state", "") == "done" or _refetch_war(), 15.0), "server closes the battle", str(GuildWar.war.get("battle")))
+	# 보안 점검(2026-10-27): 시간이 남았고 성채가 서 있는 이른 끝은 전투를 닫지 않는다(다른 길드원을 내보내지 않게) — 점수만 저장된다
+	await _wait_until(func(): return _refetch_war() and false, 3.0)
+	_check(str(GuildWar.war.get("battle", {}).get("state", "")) == "live", "early end (time left, keep standing): the server keeps the battle open", str(GuildWar.war.get("battle")))
 	sv = await _http_get("/v1/guild/war")
 	_check(int(sv.war.points) == expect and int(GuildWar.war.points) == expect, "server points == app points (%d)" % expect, "server %s app %s" % [sv.war.points, GuildWar.war.points])
-	_check(GuildWar.enter_block(squad) == GuildWar.ERROR_TEXT.battle_done, "one siege a week", GuildWar.enter_block(squad))
+
 	b.leave()
 	await _wait_until(func(): return _main._dungeon == null, 10.0)
 	Prefs.set_value(SpeedButton.PREF_KEY, 1.0)

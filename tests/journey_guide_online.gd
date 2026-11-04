@@ -52,7 +52,7 @@ func _ready() -> void:
 	Guild.boss_started.connect(func(r): _boss_run = r)
 	_check(await _wait_until(func(): return not Tutorial.mission().is_empty(), 10.0) and Tutorial.active() and Tutorial.step == 0, "guide starts at mission 1", str(Economy.server_quest))
 	var total: int = Tutorial.MISSIONS.size()
-	_check(total == 265, "the guide has 265 quests (MapleStory Idle-like spacing, 2026-10-29)", str(total))
+	_check(total == Tutorial.ORDER.size() and total == 138, "the guide has 138 quests (2026-11-04: kill quests 30, 4 recruit quests added)", str(total))
 	var guard := 0
 	var upto := int(Net.arg_value("upto")) if Net.arg_value("upto") != "" else total  # 디버그: 이 미션까지만
 	while Tutorial.active() and guard < total + 2 and Tutorial.step < upto:
@@ -483,7 +483,7 @@ func _repeats(n: int) -> void:
 		await _close_all()
 		await _settle()
 		var wait := float(GameData.config_num("quest_repeat_min_sec")) + 1.0
-		await get_tree().create_timer(wait).timeout  # 서버 간격(지난 받기 이후)
+		await get_tree().create_timer(wait, true, false, true).timeout  # 서버 간격(지난 받기 이후) — 실제 초(방치 1.3배와 무관)
 		var s0 := _state()
 		var rn := Tutorial.rep_n
 		card = _child(CardScript)
@@ -575,7 +575,9 @@ func _added(s0: Dictionary, s1: Dictionary, r: Dictionary, keys: bool) -> Array:
 	for k in ["wood", "stone", "food"]:
 		if s1[k] != s0[k] + int(r.get(k, 0)):
 			bad.append("%s %d+%d≠%d" % [k, s0[k], int(r.get(k, 0)), s1[k]])
-	if s1.gold_tenths != s0.gold_tenths + int(r.get("gold", 0)) * 10:
+	var want_g: int = s0.gold_tenths + int(r.get("gold", 0)) * 10
+	# 서버 값과 견줄 때(keys)는 그사이 방치 처치로 번 골드(처치 보고)가 더해질 수 있다 — 모자라면 안 되고 더 많은 건 처치 몫(방치 1.3배, 2026-11-04)
+	if (s1.gold_tenths != want_g) if not keys else (s1.gold_tenths < want_g):
 		bad.append("gold_tenths %d+%d≠%d" % [s0.gold_tenths, int(r.get("gold", 0)) * 10, s1.gold_tenths])
 	if s1.diamonds != s0.diamonds + int(r.get("diamonds", 0)):
 		bad.append("diamonds %d+%d≠%d" % [s0.diamonds, int(r.get("diamonds", 0)), s1.diamonds])

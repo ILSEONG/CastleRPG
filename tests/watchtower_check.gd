@@ -153,7 +153,7 @@ func _run() -> void:
 
 	# 5) 성문을 치는 몬스터 우선: 성 안 가까운 것보다 성문 앞(성 밖, 성벽 띠) 것
 	m.global_position = tp + Vector3(2, 0, 0)
-	var g = _monster(Vector3(0, 0, half + 2.5))
+	var g = _monster(Vector3(0, 0, half + Balance.WALL_T + 1.0))  # 성벽 바깥 띠(성벽 두께 3 m, 2026-10-23)
 	if Vector2(g.global_position.x - tp.x, g.global_position.z - tp.z).length() <= r:
 		_check(_wt.pick_target(tp) == g, "prefers the enemy at the gate", "")
 	g.global_position = Vector3(0, 0, half + 30.0)  # 성문에서 먼 벌판 → 가까운 것

@@ -349,21 +349,25 @@ func _promote_online() -> void:
 	_check(Economy.shards_of(id) == 30 and Economy.promotion_of(id) == 0 and lv == 12, "(w) precondition: hans Lv 12, 30 shards from the server, promotion 0",
 		"shards=%d promotion=%d level=%d" % [Economy.shards_of(id), Economy.promotion_of(id), lv])
 	var p0: int = Net.requested.get("/v1/hero/promote", 0)
+	# 승급 카드·최대 레벨은 설정표에서(2026-11-03 3/10/25… · 50/100/150…)
+	var pc0 := GameData.promote_cost(0)
+	var pc1 := GameData.promote_cost(1)
+	var pc2 := GameData.promote_cost(2)
 	_hero_panel.open()
 	_hero_panel.show_detail(id)
-	_check(_hero_panel._promo.line.text == "조각 30 / 5" and not _hero_panel.promote_button.disabled, "(w) [승급] shows 조각 30 / 5 and is on", _hero_panel._promo.line.text)
+	_check(_hero_panel._promo.line.text == "조각 30 / %d" % pc0 and not _hero_panel.promote_button.disabled, "(w) [승급] shows 조각 30 / %d and is on" % pc0, _hero_panel._promo.line.text)
 	_hero_panel.promote_button.pressed.emit()
-	_check(Economy.promotion_of(id) == 1 and Economy.shards_of(id) == 25 and Net.requested.get("/v1/hero/promote", 0) == p0 + 1, "(w) [승급] applies at once (★1, shards 25) while the reply is on its way", "promotion=%d" % Economy.promotion_of(id))
+	_check(Economy.promotion_of(id) == 1 and Economy.shards_of(id) == 30 - pc0 and Net.requested.get("/v1/hero/promote", 0) == p0 + 1, "(w) [승급] applies at once (★1, shards %d) while" % (30 - pc0) + " the reply is on its way", "promotion=%d" % Economy.promotion_of(id))
 	var done := await _wait_until(func(): return Economy.promotion_of(id) == 1 and Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
-	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 1 and Economy.shards_of(id) == 25 and _hero_panel.promotions_shown == 1
-		and _hero_panel.big_card.stars == 1 and _hero_panel.level_label.text == "Lv 12 / 50" and _hero_panel._promo.line.text == "조각 25 / 25",
-		"(w) one /v1/hero/promote: shards 30 -> 25, ★1, max level 50, with the effect",
+	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 1 and Economy.shards_of(id) == 30 - pc0 and _hero_panel.promotions_shown == 1
+		and _hero_panel.big_card.stars == 1 and _hero_panel.level_label.text == "Lv 12 / %d" % GameData.max_level(1) and _hero_panel._promo.line.text == "조각 %d / %d" % [30 - pc0, pc1],
+		"(w) one /v1/hero/promote: shards 30 -> %d, ★1, max level %d, with the effect" % [30 - pc0, GameData.max_level(1)],
 		"requests=%d shards=%d promotion=%d label=%s" % [Net.requested.get("/v1/hero/promote", 0) - p0, Economy.shards_of(id), Economy.promotion_of(id), _hero_panel.level_label.text])
 	_hero_panel.promote_button.pressed.emit()
 	done = await _wait_until(func(): return Economy.promotion_of(id) == 2 and Economy._hold == 0 and not Economy.promote_waiting(), 15.0)
-	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 2 and Economy.shards_of(id) == 0 and _hero_panel.promote_button.disabled
-		and _hero_panel.promote_reason.text == "조각 부족" and _hero_panel.level_label.text == "Lv 12 / 80",
-		"(w) again: 25 shards -> ★2 (Lv 12 / 80); [승급] off with 조각 부족", "shards=%d reason=%s" % [Economy.shards_of(id), _hero_panel.promote_reason.text])
+	_check(done and Net.requested.get("/v1/hero/promote", 0) == p0 + 2 and Economy.shards_of(id) == 30 - pc0 - pc1 and _hero_panel.promote_button.disabled and 30 - pc0 - pc1 < pc2
+		and _hero_panel.promote_reason.text == "조각 부족" and _hero_panel.level_label.text == "Lv 12 / %d" % GameData.max_level(2),
+		"(w) again: -> ★2 (Lv 12 / %d); [승급] off with 조각 부족" % GameData.max_level(2), "shards=%d reason=%s" % [Economy.shards_of(id), _hero_panel.promote_reason.text])
 	var live := Net.api_base
 	var notices := []
 	var on_notice := func(t): notices.append(t)
@@ -415,7 +419,7 @@ func _levelup_online() -> void:
 	_check(Economy.level_of(id) == 2 and _hero_panel.celebrations == 1 and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1, "(n) [레벨업] levels up at once, before the reply (one request)", "")
 	var done := await _wait_until(func(): return Economy.level_of(id) == 2 and Economy._hold == 0, 15.0)
 	_check(done and Net.requested.get("/v1/hero/levelup", 0) == l0 + 1 and Economy.server_gold_tenths == gold0 - int(c1.gold) * 10 and Economy.res["food"] == food0
-		and _hero_panel.celebrations == 1 and _hero_panel.level_label.text == "Lv 2 / 20",
+		and _hero_panel.celebrations == 1 and _hero_panel.level_label.text == "Lv 2 / %d" % GameData.max_level(0),
 		"(n) one /v1/hero/levelup: server gold -30 (300 tenths), food unchanged, Lv 2 with the success effect",
 		"requests=%d gold=%d->%d food=%d->%d label=%s" % [Net.requested.get("/v1/hero/levelup", 0) - l0, gold0, Economy.server_gold_tenths, food0, Economy.res["food"], _hero_panel.level_label.text])
 	var n := Economy.levelup_affordable(id, 10)

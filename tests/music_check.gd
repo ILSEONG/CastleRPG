@@ -91,7 +91,10 @@ func _run() -> void:
 	for type in ["gold", "equip", "ticket"]:
 		var helper := ""
 		if type == "ticket":
-			helper = str(Economy.dungeon_state(type).helpers[0].key)
+			for hc in Economy.dungeon_state(type).helpers:  # 편성에 없는 영웅의 도우미(같은 영웅이면 bad_party)
+				if not PARTY.has(str(hc.hero_id)):
+					helper = str(hc.key)
+					break
 		var party: Array = GOLD_PARTY if type == "gold" else PARTY
 		var started: bool = Economy.start_dungeon(type, 1, party, helper)
 		if not started:

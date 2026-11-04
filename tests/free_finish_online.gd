@@ -57,7 +57,7 @@ func _ready() -> void:
 	panel.free_build_button.pressed.emit()
 	_check(Economy.build.is_empty() and Economy.building_level("keep") == keep + 1, "keep is done the moment the button is pressed", str([Economy.build, Economy.building_level("keep")]))
 	_check(await _wait_until(func(): return not Economy._waiting.has("build"), 10.0), "server answered the free build finish", "")
-	_check(Economy.build.is_empty() and Economy.building_level("keep") == keep + 1 and not _notes.has(EconomyScript.ROLLBACK_TEXT), "server agrees (no rollback)", str(_notes))
+	_check(Economy.build.is_empty() and Economy.building_level("keep") == keep + 1 and not _notes.has(EconomyScript.ROLLBACK_TEXT), "server agrees (no rollback)", str([Economy.build, Economy.building_level("keep"), keep + 1, _notes]))
 	await _snap()
 	panel.close()
 

@@ -48,7 +48,7 @@ func _ready() -> void:
 		shots.append(get_viewport().get_texture().get_image())
 		Tutorial.tour_node.next()
 	await _frames(6)
-	_check(not _tour_is("skill") and not get_tree().paused and Tutorial.tours_seen.has("skill"), "after the last step the battle runs again; shown once", "paused=%s" % get_tree().paused)
+	_check(not _tour_is("skill") and not get_tree().paused and Tutorial.tours_seen.has("skill"), "after the last step the battle runs again; shown once", "paused=%s tour=%s" % [get_tree().paused, _tour_id()])
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
 			var w: int = shots[0].get_width() / 2

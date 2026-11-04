@@ -122,7 +122,7 @@ func _ready() -> void:
 	_panel.buttons.collect.pressed.emit()
 	_check(Economy.gold == gold1 + 18000, "collect adds gold at once", "%d -> %d" % [gold1, Economy.gold])
 	_check(await _wait_until(func(): return Economy._hold == 0, 10.0), "collect confirmed", "")
-	_check(Economy.gold == gold1 + 18000 and Economy.market_sold == 0, "gold stays after server answer", "%d" % Economy.gold)
+	_check(Economy.gold == gold1 + 18000 and Economy.market_sold == 0, "gold stays after server answer", "%d want %d" % [Economy.gold, gold1 + 18000])
 
 	# 올렸다 내리기
 	var it2: Dictionary = _panel.sellable_items()[0]

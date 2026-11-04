@@ -61,6 +61,9 @@ func _ready() -> void:
 	Tutorial.check()
 	await _frames(5)
 	_check(Tutorial.complete() and Tutorial.claim(), "1-1 cleared: [보상 받기]", "step=%d" % Tutorial.step)
+	# 가이드 재구성(2026-11-03): 1-1 뒤에 처치 미션이 하나 끼고 그다음이 영웅 레벨업 — [영웅]·[상점]은 그 미션에서 나타난다
+	Tutorial.step = Tutorial.mission_index("hero_level")
+	Tutorial.changed.emit()
 	await _frames(20)
 	_check(_tabs._bar.visible and _tabs.buttons.hero.visible and _tabs.buttons.shop.visible and not _tabs.buttons.growth.visible, "after 1-1: [영웅]·[상점] tabs appear", _tabs_text())
 	_check(_banner.band.visible and _banner.label.text == "새 기능: 영웅 · 상점", "after 1-1: one \"새 기능\" band names both", "%s %s" % [_banner.band.visible, _banner.label.text])

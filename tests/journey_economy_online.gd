@@ -456,14 +456,17 @@ func _heroes() -> void:
 	r = await _post_raw("/v1/hero/promote", {"hero_id": id})
 	_check(not r[0] and r[1] == "not_enough_shards", "server: 409 not_enough_shards", str(r))
 	# 일괄 승급
-	await _post("/v1/test/shards", {"hero_id": "ella", "shards": 30})
-	await _post("/v1/test/shards", {"hero_id": "dorik", "shards": 7})
+	# 승급 카드 수는 설정표(promote_shards — 2026-11-03 3/10/25/40/70)에서: 엘라는 ★2까지 딱, 도릭은 ★1 + 2장 남김
+	var pc0 := GameData.promote_cost(0)
+	var pc1 := GameData.promote_cost(1)
+	await _post("/v1/test/shards", {"hero_id": "ella", "shards": pc0 + pc1})
+	await _post("/v1/test/shards", {"hero_id": "dorik", "shards": pc0 + 2})
 	await _frames(3)
 	hp._show_list()
 	await _frames(3)
 	var plan := Economy.promote_all_plan()
-	_check(plan.any(func(x): return x.hero_id == "ella" and x.to == 2 and x.shards == 30) and plan.any(func(x): return x.hero_id == "dorik" and x.to == 1 and x.shards == 5),
-		"promote-all plan: ella ★2 (30), dorik ★1 (5)", str(plan))
+	_check(plan.any(func(x): return x.hero_id == "ella" and x.to == 2 and x.shards == pc0 + pc1) and plan.any(func(x): return x.hero_id == "dorik" and x.to == 1 and x.shards == pc0),
+		"promote-all plan: ella ★2 (%d), dorik ★1 (%d)" % [pc0 + pc1, pc0], str(plan))
 	hp.ask_promote_all()
 	await _frames(3)
 	_check(hp.promote_all_confirm.visible, "promote-all confirm window", "")
