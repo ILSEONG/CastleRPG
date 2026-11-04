@@ -30,6 +30,9 @@ func _build_window(width: float, separation := 14) -> void:
 	layer = 2  # HUD(1) 위
 	visible = false
 	add_to_group(GROUP)
+	# 열려 있는 동안 방치 1.3배를 멈춘다(창 연출은 늘 같은 시간, speed_button.gd — 순환 preload를 피해 load)
+	visibility_changed.connect(func(): load("res://scripts/speed_button.gd").window_shown(self, visible))
+	tree_exiting.connect(func(): load("res://scripts/speed_button.gd").window_shown(self, false))
 	var back := ColorRect.new()
 	back.color = DIM
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

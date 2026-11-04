@@ -22,6 +22,7 @@ var _caption: Label
 
 
 func _ready() -> void:
+	load("res://scripts/speed_button.gd").idle_speed = 1.0  # 방치 중에도 게임 시간 = 실제 시간으로 잰다(방치 1.3배는 speed_check)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--out="):
 			_out = a.substr(6)

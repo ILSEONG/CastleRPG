@@ -54,7 +54,18 @@ func _run() -> void:
 		return
 	var b: Button = sp.button
 	var vh := get_viewport().get_visible_rect().size.y
-	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.0), "off by default, game at 1x", str(Engine.time_scale))
+	_check(not SpeedButton.is_on() and is_equal_approx(Engine.time_scale, 1.3), "off by default, idle runs at 1.3x", str(Engine.time_scale))
+	# 방치 1.3배(사용자 2026-11-04): 창이 열려 있는 동안은 1배, 닫으면 다시 1.3배
+	var win = _first_window()
+	if win != null:
+		win.open()
+		await _frames(2)
+		_check(is_equal_approx(Engine.time_scale, 1.0), "idle with a window open: 1x", "%s %s" % [Engine.time_scale, win.name])
+		win.close()
+		await _frames(2)
+		_check(is_equal_approx(Engine.time_scale, 1.3), "window closed: idle 1.3x again", str(Engine.time_scale))
+	else:
+		_check(false, "found a window to open", "")
 	_check(not b.visible, "idle (방치): button hidden", "")
 	Music.prefs = {"speed_x15": true}  # 2026-10-07판 켬 → x1.5로 읽는다
 	_check(is_equal_approx(SpeedButton.level(), 1.5), "old x1.5 setting reads as x1.5", str(SpeedButton.level()))
@@ -76,7 +87,7 @@ func _run() -> void:
 	var chat = _find("res://scripts/chat_bar.gd")
 	if chat != null:
 		var cr: Rect2 = chat.button.get_global_rect()
-		_check(absf(cr.end.y - tr.end.y) < 1.0 and cr.end.x <= tr.position.x, "chat line on the same line, left of [메뉴]", "%s vs %s" % [cr, tr])
+		_check(not cr.intersects(r) and not cr.intersects(tr), "chat line clear of the speed button and [메뉴]", "%s vs %s / %s" % [cr, r, tr])  # 채팅 줄 자리는 [건설] 버튼을 따른다(main.gd)
 	var hot = _find("res://scripts/hot_deal.gd")
 	if hot != null and hot.hud_button != null:
 		_check(not hot.hud_button.get_global_rect().intersects(r), "hot-deal button stays above, no overlap", str(hot.hud_button.get_global_rect()))
@@ -106,7 +117,7 @@ func _run() -> void:
 
 	GameState.start_stage()
 	await _frames(3)
-	_check(b.visible and is_equal_approx(Engine.time_scale, 1.0), "stage: button shows, still 1x until tapped", str(Engine.time_scale))
+	_check(b.visible == Tutorial.ui_shown("hud:speed") and is_equal_approx(Engine.time_scale, 1.0), "stage: button shows (once the guide opens it), still 1x until tapped", "%s visible %s" % [Engine.time_scale, b.visible])
 	b.pressed.emit()
 	_check(is_equal_approx(SpeedButton.level(), 1.5) and is_equal_approx(Engine.time_scale, 1.5), "tap: x1.5", str(Engine.time_scale))
 	_check(is_equal_approx(float(_file().get("speed_level", 0)), 1.5), "saved on the device (settings file)", str(_file()))
@@ -135,7 +146,7 @@ func _run() -> void:
 	_check(is_equal_approx(Engine.time_scale, 1.5), "combat starts: x1.5", str(Engine.time_scale))
 	GameState._set_mode(GameState.Mode.IDLE)
 	await _frames(2)
-	_check(not b.visible and is_equal_approx(Engine.time_scale, 1.0), "back to idle: hidden, 1x", str(Engine.time_scale))
+	_check(not b.visible and is_equal_approx(Engine.time_scale, 1.3), "back to idle: hidden, 1.3x", str(Engine.time_scale))
 
 	# 실제 시각은 배속과 무관: 0.5 실제 초 동안 Economy.time_now()도 약 0.5초
 	var t0 := Economy.time_now()
@@ -188,7 +199,7 @@ func _run() -> void:
 		_check(is_equal_approx(Engine.time_scale, 1.5), "then x1.5", str(Engine.time_scale))
 	_main.leave_dungeon()
 	await _frames(3)
-	_check(is_equal_approx(Engine.time_scale, _castle_want()), "back on the castle screen: x1.5 in a stage, 1x idle", "%s mode %d" % [Engine.time_scale, GameState.mode])
+	_check(is_equal_approx(Engine.time_scale, _castle_want()), "back on the castle screen: x1.5 in a stage, 1.3x idle", "%s mode %d" % [Engine.time_scale, GameState.mode])
 
 	# 길드전은 제외(사용자 2026-10-07 "길드전은 아니야"): 켜 둬도 버튼 없이 1배, 나오면 다시 1.5배
 	Guild.save_path = ""
@@ -246,7 +257,7 @@ func _run() -> void:
 	# 방치 ↔ 스테이지: 대기로 돌아오면 1배, 스테이지를 시작하면 다시 1.5배
 	GameState._set_mode(GameState.Mode.IDLE)
 	await _frames(2)
-	_check(is_equal_approx(Engine.time_scale, 1.0) and not b.visible, "back to idle: 1x and hidden with x1.5 still set", str(Engine.time_scale))
+	_check(is_equal_approx(Engine.time_scale, 1.3) and not b.visible, "back to idle: 1.3x and hidden with x1.5 still set", str(Engine.time_scale))
 	GameState.start_stage()
 	await _frames(3)
 	_check(GameState.mode != GameState.Mode.IDLE and is_equal_approx(Engine.time_scale, 1.5) and b.visible, "stage starts: x1.5, button back", "%s mode %d" % [Engine.time_scale, GameState.mode])
@@ -266,7 +277,16 @@ func _file() -> Dictionary:
 
 
 func _castle_want() -> float:
-	return 1.0 if GameState.mode in [GameState.Mode.IDLE, GameState.Mode.COUNTDOWN] else 1.5
+	if GameState.mode == GameState.Mode.IDLE:
+		return 1.3
+	return 1.0 if GameState.mode == GameState.Mode.COUNTDOWN else 1.5
+
+
+func _first_window():
+	for w in get_tree().get_nodes_in_group("ui_windows"):
+		if not w.visible and w.has_method("open"):
+			return w
+	return null
 
 
 func _deep_with(n: Node, path: String) -> Node:

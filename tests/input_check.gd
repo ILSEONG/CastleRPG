@@ -29,6 +29,7 @@ var _heroes: Array = []
 
 
 func _ready() -> void:
+	load("res://scripts/speed_button.gd").idle_speed = 1.0  # 방치 중에도 게임 시간 = 실제 시간으로 잰다(방치 1.3배는 speed_check)
 	OS.add_logger(_errors)
 	Economy.save_path = ""  # 실제 저장 파일을 건드리지 않는다
 	Fever.save_path = ""
