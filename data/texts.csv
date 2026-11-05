@@ -17,8 +17,8 @@ ad_player.ready_3,닫기,,,,scripts/ad_player.gd
 ad_player.play_real,광고를 불러오는 중입니다,,,,scripts/ad_player.gd
 ad_player.play_real_2,끝까지 보면 보상을 받습니다,,,,scripts/ad_player.gd
 ad_player.on_ad_loaded,광고를 불러오지 못했습니다,,,,scripts/ad_player.gd
-ad_player.on_ad_loaded_2,잠시 후 다시 시도하세요,,,,scripts/ad_player.gd
-ad_player.tick,%d초 뒤 보상을 받습니다 · 닫으면 보상이 없습니다,,,,scripts/ad_player.gd
+ad_player.on_ad_loaded_2,잠시 후 다시 시도해 주세요,,,,scripts/ad_player.gd
+ad_player.tick,%d초 뒤 보상을 받습니다 · 닫으면 보상을 받을 수 없습니다,,,,scripts/ad_player.gd
 bag_panel.item_names.weapon,무기,,,,scripts/bag_panel.gd
 bag_panel.item_names.hat,모자,,,,scripts/bag_panel.gd
 bag_panel.item_names.top,상의,,,,scripts/bag_panel.gd
@@ -105,10 +105,10 @@ building_panel.desc.quarry,석재를 생산합니다.,,,,scripts/building_panel.
 building_panel.desc.farm,식량을 생산합니다.,,,,scripts/building_panel.gd
 building_panel.desc.warehouse,자원과 금광이 쌓이는 최대 시간을 늘립니다.,,,,scripts/building_panel.gd
 building_panel.desc.goldmine,골드를 생산합니다. 눌러서 받으세요.,,,,scripts/building_panel.gd
-building_panel.desc.forge,장비 던전에서 장비가 하나 더 나올 확률을 줍니다.,,,,scripts/building_panel.gd
-building_panel.desc.guild_hall,길드에 가입하면 길드원 도움으로 건설·연구 시간이 줄어듭니다.,,,,scripts/building_panel.gd
+building_panel.desc.forge,장비 던전에서 장비가 하나 더 나올 확률이 생깁니다.,,,,scripts/building_panel.gd
+building_panel.desc.guild_hall,길드에 가입하면 길드원의 도움으로 건설·연구 시간이 줄어듭니다.,,,,scripts/building_panel.gd
 building_panel.desc.watchtower,전투 중 성 밖 몬스터에게 화살을 쏩니다.,,,,scripts/building_panel.gd
-building_panel.desc.dispatch,영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수와 높은 희귀도 확률이 오르고 파견 시간이 줄어듭니다.,,,,scripts/building_panel.gd
+building_panel.desc.dispatch,영웅을 의뢰에 보내 보상을 받습니다. 레벨이 오르면 하루 의뢰 수가 늘고 희귀도 높은 의뢰가 나올 확률이 오르며 파견 시간이 줄어듭니다.,,,,scripts/building_panel.gd
 building_panel.ready,선행 조건,,,,scripts/building_panel.gd
 building_panel.ready_2,닫기,,,,scripts/building_panel.gd
 building_panel.levelup_text,%s Lv %d · 레벨업 중 %s ›,,,,scripts/building_panel.gd
@@ -237,7 +237,7 @@ dispatch_panel.names_17,잊힌 왕의 보물,,,,scripts/dispatch_panel.gd
 dispatch_panel.names_18,마왕군 보급로 습격,,,,scripts/dispatch_panel.gd
 dispatch_panel.names_19,하늘섬 탐험,,,,scripts/dispatch_panel.gd
 dispatch_panel.fail_text.no_building,파견소를 먼저 지어야 합니다,,,,scripts/dispatch_panel.gd
-dispatch_panel.fail_text.busy,다른 의뢰에 간 영웅이 있습니다,,,,scripts/dispatch_panel.gd
+dispatch_panel.fail_text.busy,이미 다른 의뢰를 수행 중인 영웅이 있습니다,,,,scripts/dispatch_panel.gd
 dispatch_panel.fail_text.bad_heroes,조건에 맞지 않는 영웅이 있습니다,,,,scripts/dispatch_panel.gd
 dispatch_panel.fail_text.not_enough,다이아가 부족합니다,,,,scripts/dispatch_panel.gd
 dispatch_panel.fail_text.limit,오늘은 더 새로고침할 수 없습니다,,,,scripts/dispatch_panel.gd
@@ -619,7 +619,7 @@ gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.g
 gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_6,10회 모집은 SR 이상 %d장 보장(모자라면 마지막 R을 SR로 바꿉니다),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_7,"골드 모집은 보장이 없고, SSR은 골드 모집 Lv %d부터 나옵니다. 골드 모집 레벨이 오르면 SSR·SR 확률이 오릅니다",,,,scripts/gacha_odds.gd
-gacha_odds.show_for_8,등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 소수 다섯째 자리에서 반올림,,,,scripts/gacha_odds.gd
+gacha_odds.show_for_8,등급을 정한 뒤 그 등급 영웅 중 하나가 똑같은 확률로 나옵니다(보장된 장 포함). 확률은 소수점 다섯째 자리에서 반올림합니다,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_9,%s (%d명) — 한 명당 %s,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_10,골드 모집 레벨별 등급 확률,,,,scripts/gacha_odds.gd
 gacha_odds.show_for.up, · 레벨업 %s회,,,,scripts/gacha_odds.gd
@@ -646,7 +646,7 @@ growth_panel.refresh_2, (최대),,,,scripts/growth_panel.gd
 growth_panel.refresh_3,강화,,,,scripts/growth_panel.gd
 growth_panel.row,강화,,,,scripts/growth_panel.gd
 guide_tour.ready,건너뛰기,,,,scripts/guide_tour.gd
-guide_tour.next,%d / %d · 화면을 누르면 다음,,,,scripts/guide_tour.gd
+guide_tour.next,%d / %d · 화면을 누르면 다음으로,,,,scripts/guide_tour.gd
 guide_tour.next_2,%d / %d · 화면을 누르면 닫힙니다,,,,scripts/guide_tour.gd
 guide_tours.tours.title,성 화면 둘러보기,,,,scripts/guide_tours.gd
 guide_tours.tours.text_2,가지고 있는 골드·목재·석재·식량·다이아입니다. 건설·레벨업·모집에 씁니다.,,,,scripts/guide_tours.gd
@@ -655,7 +655,7 @@ guide_tours.tours.text_4,성의 체력입니다. 성문을 부수고 들어온 �
 guide_tours.tours.text_5,북·동·남·서 네 성문의 체력입니다. 누르면 그 성문으로 화면이 이동합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_6,[진행]을 누르면 스테이지 전투를 시작합니다. 누르지 않으면 대기하며 영웅들이 몬스터를 잡아 골드를 모읍니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_7,[연속 진행]을 켜 두면 스테이지를 깬 뒤 다음 스테이지를 저절로 이어 갑니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_8,"FEVER 게이지입니다. 몬스터를 잡으면 차고, 가득 차면 눌러 잠시 몬스터를 몰아서 잡습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_8,"FEVER 게이지입니다. 몬스터를 잡으면 차고, 가득 차면 눌러서 잠시 동안 몬스터를 몰아 잡습니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_9,"[건설]을 누르면 지을 수 있는 건물 목록이 펼쳐집니다. 원하는 자리에 짓고, 지은 건물은 옮길 수 있습니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_10,[메뉴]에는 이벤트·미션·가방·길드·우편 같은 기능이 모여 있습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_11,아래 탭에서 영웅·성장·상점 같은 창을 엽니다. 새 탭은 가이드를 진행하면 하나씩 생깁니다.,,,,scripts/guide_tours.gd
@@ -664,18 +664,18 @@ guide_tours.tours.text_13,건물 이름과 지금 레벨입니다.,,,,scripts/gu
 guide_tours.tours.text_14,지금 효과와 다음 레벨 효과(초록)입니다. 성채 레벨은 다른 건물이 오를 수 있는 최대 레벨을 정합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_15,레벨업에 필요한 조건입니다. 모두 ✓가 되어야 올릴 수 있습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_16,레벨업에 드는 자원입니다. 빨간 숫자는 모자란 자원입니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_17,"[레벨업]을 누르면 일꾼이 공사를 시작합니다. 시간이 지나면 끝나고, 가속 아이템으로 줄일 수 있습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_17,"[레벨업]을 누르면 일꾼이 공사를 시작합니다. 시간이 지나면 끝나며, 가속 아이템으로 시간을 줄일 수 있습니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_18,출전 자리입니다. 여기 선 영웅이 성문을 지킵니다. 자리를 누른 뒤 아래 영웅을 누르면 그 자리에 섭니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_19,"가지고 있는 영웅입니다. 카드를 누르면 자세히 보고 레벨업합니다. 초록 ▲는 레벨업, 금색 ⬆는 승급할 수 있다는 표시입니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_19,"가지고 있는 영웅입니다. 카드를 누르면 자세한 정보를 보고 레벨업할 수 있습니다. 초록 ▲는 레벨업, 금색 ⬆는 승급할 수 있다는 표시입니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_20,[정렬]을 누를 때마다 전투력·등급·레벨 순으로 바뀝니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_21,[자동 배치]는 전투력 높은 영웅으로 자리를 채웁니다. [적용]을 눌러야 확정됩니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_22,[일괄 승급]은 조각이 모인 영웅을 한 번에 승급합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_23,능력치입니다. 옆의 초록 숫자는 다음 레벨 값입니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_24,스킬입니다. 잠긴 스킬은 승급하면 열립니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_25,[레벨업]은 골드로 1레벨 올립니다. 옆 [×10]은 여러 번을 한 번에 합니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_25,[레벨업]은 골드로 1레벨 올립니다. 옆의 [×10]은 레벨업을 여러 번 한꺼번에 합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_26,[승급]은 그 영웅의 조각으로 별을 올립니다. 최대 레벨과 능력치가 함께 오릅니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_27,[배치]를 누르면 이 영웅을 출전 자리에 세웁니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_28,성장은 골드로 합니다. 지금 가진 골드입니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_28,성장에는 골드가 듭니다. 지금 가진 골드입니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_29,[강화]를 누르면 모든 영웅의 공격력이 오릅니다. 누르고 있으면 계속 강화합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_30,[×10]은 10번을 한 번에 강화합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_31,체력·공격 속도·치명타 같은 다른 능력치도 같은 방법으로 올립니다. 모든 영웅에게 함께 적용됩니다.,,,,scripts/guide_tours.gd
@@ -697,7 +697,7 @@ guide_tours.tours.text_46,"영웅을 누르면 자리에 넣고, 다시 누르�
 guide_tours.tours.text_47,전투력 높은 영웅으로 자리를 한 번에 채웁니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_48,준비가 되면 눌러 던전에 들어갑니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_49,연구 분야입니다. 분야마다 다른 능력을 올립니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_50,연구 카드입니다. 위 단 연구를 올리면 아래 단이 열립니다. 카드를 누르면 자세히 봅니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_50,연구 카드입니다. 위 단 연구를 올리면 아래 단이 열립니다. 카드를 누르면 자세한 내용을 볼 수 있습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_51,지금 진행 중인 연구와 남은 시간입니다. 연구는 한 번에 하나씩 합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_52,이 연구의 효과입니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_53,필요한 자원입니다(가진 양 / 필요한 양).,,,,scripts/guide_tours.gd
@@ -724,13 +724,13 @@ guide_tours.tours.text_72,지금은 배치 단계입니다. 내 영웅을 누르
 guide_tours.tours.text_73,자리를 다 잡았으면 [전투 시작]을 누르세요. 실제 공성전은 길드장이 누르거나 배치 시간이 끝나면 시작합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_74,전투가 시작되었습니다. 영웅들이 성문으로 가서 수비 영웅과 싸우고 성문을 공격합니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_75,"이번 전투 점수입니다. 수비 영웅 처치 1점, 성문 파괴 10점(성문 점수는 2개까지), 성채는 최대 체력의 3%를 깎을 때마다 1점입니다.",,,,scripts/guide_tours.gd
-guide_tours.tours.text_76,성문 체력이 0이 되면 그 면으로 성 안에 들어갈 수 있습니다. 한 성문에 힘을 모으면 빨리 부서집니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_76,성문 체력이 0이 되면 그쪽으로 성 안에 들어갈 수 있습니다. 한 성문에 힘을 모으면 빨리 부서집니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_77,[자동 진격]을 누르면 내 영웅도 AI가 알아서 움직입니다. 직접 움직이려면 내 영웅을 누르고 갈 곳을 누르세요.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_78,영웅이 쓰러졌습니다. 공격 영웅은 30초 뒤 진영에서 한 번 다시 일어납니다. 두 번째로 쓰러지면 그 전투에서는 더 싸우지 못합니다. 수비 영웅은 다시 일어나지 않습니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_79,성문이 부서졌습니다! 이제 그 면으로 들어가 성채를 칠 수 있습니다. 성채를 무너뜨리면 전투가 바로 끝납니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_79,성문이 부서졌습니다! 이제 그쪽으로 들어가 성채를 칠 수 있습니다. 성채를 무너뜨리면 전투가 바로 끝납니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_80,"체험이 끝났습니다. 실제 공성전은 일주일에 한 번 길드장이 정한 시각에 열리고, 점수가 더 높은 길드가 이깁니다. [나가기]를 누르면 성으로 돌아갑니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_81,[구매]에서는 다른 성주가 올린 장비를 봅니다. 통화·부위·등급으로 거르고 가격순으로 정렬합니다.,,,,scripts/guide_tours.gd
-guide_tours.tours.text_82,"[판매 등록]에서는 내 장비를 골라 값을 정해 올립니다. 48시간 동안 걸리고, 동시에 10개까지 올릴 수 있습니다.",,,,scripts/guide_tours.gd
+guide_tours.tours.text_82,"[판매 등록]에서는 내 장비를 골라 값을 정해 올립니다. 48시간 동안 판매되고, 동시에 10개까지 올릴 수 있습니다.",,,,scripts/guide_tours.gd
 guide_tours.tours.text_83,[내 판매]에서는 올린 장비를 봅니다. 팔리면 수수료 10%를 뺀 대금을 [대금 받기]로 받습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_84,가지고 있는 골드와 다이아입니다.,,,,scripts/guide_tours.gd
 guild.my_name,나,,,,scripts/guild.gd
@@ -1163,12 +1163,12 @@ inquiry_panel.status,답변 대기,,,,scripts/inquiry_panel.gd
 inquiry_panel.status_2,답변 완료,,,,scripts/inquiry_panel.gd
 inquiry_panel.status_3,종료,,,,scripts/inquiry_panel.gd
 inquiry_panel.ready,문의하기,,,,scripts/inquiry_panel.gd
-inquiry_panel.ready_2,무엇이 궁금하거나 불편하셨나요? 자세히 적어 주시면 빨리 도와드릴 수 있어요,,,,scripts/inquiry_panel.gd
-inquiry_panel.ready_3,닉네임·친구 코드·로그인 방식·게임 버전·기기 정보가 함께 전달됩니다. 답변은 우편으로 알려 드려요.,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready_2,무엇이 궁금하거나 불편하셨나요? 자세히 적어 주시면 빨리 도와드릴 수 있습니다,,,,scripts/inquiry_panel.gd
+inquiry_panel.ready_3,닉네임·친구 코드·로그인 방식·게임 버전·기기 정보가 함께 전달됩니다. 답변은 우편으로 알려 드립니다.,,,,scripts/inquiry_panel.gd
 inquiry_panel.ready_4,보내기,,,,scripts/inquiry_panel.gd
 inquiry_panel.ready_5,내 문의,,,,scripts/inquiry_panel.gd
-inquiry_panel.rebuild,보낸 문의가 없어요,,,,scripts/inquiry_panel.gd
-inquiry_panel.rebuild_2,문의는 온라인에서만 보낼 수 있어요,,,,scripts/inquiry_panel.gd
+inquiry_panel.rebuild,보낸 문의가 없습니다,,,,scripts/inquiry_panel.gd
+inquiry_panel.rebuild_2,문의는 온라인에서만 보낼 수 있습니다,,,,scripts/inquiry_panel.gd
 inquiry_panel.rebuild_3,문의,,,,scripts/inquiry_panel.gd
 inquiry_panel.rebuild_4,운영자 답변,,,,scripts/inquiry_panel.gd
 item_text.stat_parts,공격 +%s,,,,scripts/item_text.gd
@@ -1207,7 +1207,7 @@ live_ops.reward_text_12, %d개,,,,scripts/live_ops.gd
 live_ops.on_blocked.text,새 버전이 나왔습니다. 업데이트 후 이용해 주세요.,,,,scripts/live_ops.gd
 live_ops.send_inquiry,문의 내용을 적어 주세요,,,,scripts/live_ops.gd
 live_ops.send_inquiry_2,서버에 연결된 뒤 보낼 수 있습니다,,,,scripts/live_ops.gd
-live_ops.send_inquiry_3,문의를 보냈습니다. 답변은 우편으로 알려 드려요,,,,scripts/live_ops.gd
+live_ops.send_inquiry_3,문의를 보냈습니다. 답변은 우편으로 알려 드립니다,,,,scripts/live_ops.gd
 live_ops.send_inquiry_4,문의를 보내지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/live_ops.gd
 login_screen.brands,Google로 시작하기,,,,scripts/login_screen.gd
 login_screen.brands_2,카카오로 시작하기,,,,scripts/login_screen.gd
@@ -2085,24 +2085,24 @@ skills.texts.gale,공격이 {a}% 확률로 맞은 자리에 회오리를 일으�
 skills.texts.solar_spark,공격이 {a}% 확률로 맞은 자리에 섬광을 터뜨려 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 3초 동안 공격력을 30% 낮춥니다.,,,,scripts/skills.gd
 skills.texts.frost_spike,공격이 {a}% 확률로 대상 쪽으로 길이 {b}m 얼음 가시를 솟게 해 공격력의 {c}% 피해를 주고 0.8초 얼립니다.,,,,scripts/skills.gd
 skills.texts.magma,공격이 {a}% 확률로 맞은 자리에 용암을 뿜어 반경 {b}m 적에게 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
-skills.texts.turtle_ward,"{a}초마다 거북 등껍질 결계를 펼쳐 반경 {b}m 아군에게 자기 최대 HP {c}%의 보호막을 씌우고, 주변 적을 3초 동안 도발합니다.",,,,scripts/skills.gd
+skills.texts.turtle_ward,"{a}초마다 거북 등껍질 결계를 펼쳐 반경 {b}m 아군에게 자신의 최대 HP {c}%만큼 보호막을 씌우고, 주변 적을 3초 동안 도발합니다.",,,,scripts/skills.gd
 skills.texts.black_shell,"받는 피해가 {a}% 줄고, 받은 피해의 {b}%를 때린 적에게 물살로 되돌려 줍니다.",,,,scripts/skills.gd
 skills.texts.north_tide,"{a}초마다 북해의 물기둥을 일으켜 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 1.5초 기절시키며 밀쳐냅니다.",,,,scripts/skills.gd
-skills.texts.tiger_claw,{a}초마다 앞쪽 {b}m를 백호의 발톱으로 세 번 할퀴어 번마다 공격력의 {c}% 피해를 줍니다. 마지막 발톱은 적을 밀쳐냅니다.,,,,scripts/skills.gd
+skills.texts.tiger_claw,{a}초마다 앞쪽 {b}m를 백호의 발톱으로 세 번 할퀴어 매번 공격력의 {c}% 피해를 줍니다. 마지막 발톱은 적을 밀쳐냅니다.,,,,scripts/skills.gd
 skills.texts.tiger_fury,{a}번째 공격마다 흰 번개 발톱이 터져 맞은 적 주변 {b}m에 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
 skills.texts.tiger_avatar,"{a}초마다 백호로 현신해 {b}초 동안 공격력과 공격 속도가 {c}% 오르고, 포효로 주변 적을 1초 기절시킵니다.",,,,scripts/skills.gd
 skills.texts.fox_fire,{a}초마다 여우불 {b}개를 흩뿌려 하나마다 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
-skills.texts.fox_charm,"공격이 {a}% 확률로 적을 홀려 {b}초 동안 멈추게 하고, 그 뒤 2초까지 받는 피해를 {c}% 늘립니다.",,,,scripts/skills.gd
-skills.texts.nine_tails,"{a}초마다 아홉 꼬리로 주변 {b}m를 아홉 번 휩쓸어 번마다 공격력의 {c}% 피해를 주고, 마지막에 남은 적을 1초 홀립니다.",,,,scripts/skills.gd
+skills.texts.fox_charm,"공격이 {a}% 확률로 적을 홀려 {b}초 동안 멈추게 하고, 그 뒤 2초 동안 받는 피해를 {c}% 늘립니다.",,,,scripts/skills.gd
+skills.texts.nine_tails,"{a}초마다 아홉 꼬리로 주변 {b}m를 아홉 번 휩쓸어 매번 공격력의 {c}% 피해를 주고, 마지막에 남은 적을 1초 홀립니다.",,,,scripts/skills.gd
 skills.texts.dragon_arrow,"{a}초마다 청룡이 깃든 화살로 앞쪽 {b}m의 적을 모두 꿰뚫어 공격력의 {c}% 피해를 주고, 2초 동안 40% 느리게 합니다.",,,,scripts/skills.gd
 skills.texts.azure_tide,"공격이 적을 {c}초 동안 {b}% 느리게 하고, 느려진 적에게 주는 피해가 {a}% 늘어납니다.",,,,scripts/skills.gd
 skills.texts.azure_dragon,"{a}초마다 청룡을 불러 대상 자리 반경 {b}m를 3초 동안 휘감아 0.5초마다 공격력의 {c}% 피해를 주고, 마지막에 두 배 피해를 줍니다.",,,,scripts/skills.gd
 skills.texts.time_stop,{a}초마다 시간을 멈춰 대상 자리 반경 {b}m 적을 {c}초 동안 얼어붙게 합니다.,,,,scripts/skills.gd
-skills.texts.time_haste,스킬 재사용 대기 시간이 {a}% 빨리 돌아옵니다.,,,,scripts/skills.gd
+skills.texts.time_haste,스킬 재사용 대기 시간이 {a}% 더 빨리 흐릅니다.,,,,scripts/skills.gd
 skills.texts.time_collapse,"{a}초마다 대상 자리에 시간의 균열을 열어 1.2초 뒤 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 3초 동안 50% 느리게 합니다.",,,,scripts/skills.gd
-skills.texts.phoenix_wing,"{a}초마다 불새를 날려 아군 모두를 최대 HP의 {b}% 회복하고, 대상 자리 적에게 공격력의 {c}% 피해와 화상을 줍니다.",,,,scripts/skills.gd
+skills.texts.phoenix_wing,"{a}초마다 불새를 날려 아군 모두의 HP를 최대 HP의 {b}%만큼 회복하고, 대상 자리 적에게 공격력의 {c}% 피해와 화상을 줍니다.",,,,scripts/skills.gd
 skills.texts.phoenix_blessing,스킬로 회복하거나 되살린 아군은 {b}초 동안 공격력이 {a}% 오릅니다.,,,,scripts/skills.gd
-skills.texts.rebirth_flame,"{a}초마다 쓰러진 아군을 모두 최대 HP의 {b}%로 되살리고, 살아 있는 아군은 최대 HP의 {c}% 회복합니다.",,,,scripts/skills.gd
+skills.texts.rebirth_flame,"{a}초마다 쓰러진 아군을 모두 최대 HP의 {b}%로 되살리고, 살아 있는 아군은 최대 HP의 {c}%를 회복합니다.",,,,scripts/skills.gd
 soldier_panel.empty_text,보유한 병사가 없습니다,,,,scripts/soldier_panel.gd
 soldier_panel.ready,병사,,,,scripts/soldier_panel.gd
 soldier_panel.ready_2,자동 배치,,,,scripts/soldier_panel.gd
@@ -2152,7 +2152,7 @@ tutorial.missions.hero_level.desc,[영웅] 탭에서 영웅을 골라 골드로 
 tutorial.missions.hero_lv4_5.title,영웅 4명 Lv 5 달성,,,,scripts/tutorial.gd
 tutorial.missions.hero_lv4_5.desc,[영웅] 탭에서 영웅 4명을 Lv 5 이상으로 올리세요. 레벨업은 골드로 합니다. 몬스터를 처치하면 골드가 쌓입니다.,,,,scripts/tutorial.gd
 tutorial.missions.mission_claim.title,일일 미션 보상 받기,,,,scripts/tutorial.gd
-tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 다 한 미션의 [받기]를 누르세요. 오늘 영웅을 5번 레벨업했다면 「영웅 레벨업 5회」가 끝나 있습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
+tutorial.missions.mission_claim.desc,[메뉴] → [미션]에서 완료한 미션의 [받기]를 누르세요. 오늘 영웅을 5번 레벨업했다면 「영웅 레벨업 5회」가 끝나 있습니다. 미션은 매일 새로 열립니다.,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_2.title,스테이지 1-2 클리어,,,,scripts/tutorial.gd
 tutorial.missions.stage_1_2.desc,전투를 이어 가 1-2까지 클리어하세요. 막히면 [영웅] 탭에서 영웅을 레벨업해 힘을 키우세요.,,,,scripts/tutorial.gd
 tutorial.missions.growth.title,성장 강화,,,,scripts/tutorial.gd
@@ -2206,7 +2206,7 @@ tutorial.fill.gacha.desc,[모집] 탭에서 영웅을 %d회 모집하세요. 모
 tutorial.fill.dungeon_win.title,%s 클리어,,,,scripts/tutorial.gd
 tutorial.fill.dungeon_win.desc,[던전] 탭에서 %s에 한 번 도전해 이기세요. 단계는 아무거나 괜찮습니다. 입장권은 앞 퀘스트 보상으로 받았습니다.,,,,scripts/tutorial.gd
 tutorial.fill.level.title,%s Lv %d,,,,scripts/tutorial.gd
-tutorial.fill.level.desc,성 화면에서 %s 건물을 눌러 Lv %d로 올리세요. 남은 시간이 5분 이하면 [무료 즉시 완료]로 바로 끝납니다.,,,,scripts/tutorial.gd
+tutorial.fill.level.desc,성 화면에서 %s 건물을 눌러 Lv %d로 올리세요. 남은 시간이 5분 이하이면 [무료 즉시 완료]로 바로 끝납니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_30.title,몬스터 30마리 처치,,,,scripts/tutorial.gd
 tutorial.missions.kill_30.desc,성 밖에서 몰려오는 몬스터를 영웅들이 저절로 막아 냅니다. 잠시 기다리면 30마리를 처치합니다. 처치할 때마다 골드를 얻습니다.,,,,scripts/tutorial.gd
 tutorial.missions.kill_40.title,몬스터 40마리 처치,,,,scripts/tutorial.gd
@@ -2530,11 +2530,11 @@ server.inquiry.web_logins.kakao,카카오,,,,server/src/inquiry.ts
 server.inquiry.web_logins.naver,네이버,,,,server/src/inquiry.ts
 server.inquiry.web_logins.toss,토스,,,,server/src/inquiry.ts
 server.inquiry.web_logins.guest,게스트,,,,server/src/inquiry.ts
-server.inquiry.legal_account_deletion,친구 코드는 숫자와 A~F로 된 8자리예요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion,친구 코드는 숫자와 A~F로 된 8자리입니다.,,,,server/src/inquiry.ts
 server.inquiry.legal_account_deletion_2,이메일 주소를 다시 확인해 주세요.,,,,server/src/inquiry.ts
 server.inquiry.legal_account_deletion_3,친구 코드나 Google 이메일 중 하나는 적어 주세요.,,,,server/src/inquiry.ts
-server.inquiry.legal_account_deletion_4,요청이 많아 지금은 받을 수 없어요. 잠시 뒤에 다시 보내 주세요.,,,,server/src/inquiry.ts
-server.inquiry.legal_account_deletion_5,요청이 많아 지금은 받을 수 없어요. 내일 다시 보내 주세요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_4,요청이 많아 지금은 받을 수 없습니다. 잠시 뒤에 다시 보내 주세요.,,,,server/src/inquiry.ts
+server.inquiry.legal_account_deletion_5,요청이 많아 지금은 받을 수 없습니다. 내일 다시 보내 주세요.,,,,server/src/inquiry.ts
 server.inquiry.legal_account_deletion.null,본인 확인: 친구 코드와 Google 이메일 일치,,,,server/src/inquiry.ts
 server.inquiry.legal_account_deletion.null_2,본인 확인 안 됨: 친구 코드와 Google 이메일이 같은 계정이 아님 — 삭제 전 본인인지 확인 필요,,,,server/src/inquiry.ts
 server.inquiry.legal_account_deletion.platform,웹(앱 없이 삭제 요청),,,,server/src/inquiry.ts
@@ -2760,7 +2760,7 @@ guide_tours.tours.text_85,다른 성주와 한 팀이 되어 강한 보스를 �
 guide_tours.tours.text_86,리치의 무덤: 성주 4명이 영웅 1명씩 데리고 들어갑니다. 내 영웅을 눌러 고르고 바닥이나 적을 누르면 움직입니다. 이기면 반지(공격)를 받습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_87,◀ ▶로 데려갈 영웅을 고르세요. 레벨이 높고 튼튼한 영웅이 좋습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_88,"난이도는 쉬움부터 시작합니다. 한 난이도를 깨면 다음 난이도가 열리고, 어려울수록 좋은 등급 장신구가 나옵니다.",,,,scripts/guide_tours.gd
-guide_tours.tours.text_89,보상은 퀘스트마다 하루 3번까지 받습니다.,,,,scripts/guide_tours.gd
+guide_tours.tours.text_89,보상은 던전마다 하루 3번까지 받습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_90,거미 여왕의 둥지: 성주 3명이 병사 4마리씩 내보내 자동으로 싸웁니다. 이기면 목걸이(체력)를 받습니다. 병사 티어가 낮으면 버티기 어렵습니다.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_91,[자동 수락]을 켜 두면 매칭이 잡히자마자 입장합니다. 끄면 뜨는 창에서 [입장 수락]을 직접 누르세요.,,,,scripts/guide_tours.gd
 guide_tours.tours.text_92,[매칭 시작]을 누르면 함께할 성주를 찾습니다. 30초 안에 자리가 다 차지 않으면 AI 성주가 빈자리를 채웁니다. 리치의 무덤 쉬움을 한 번 이겨 보세요.,,,,scripts/guide_tours.gd
@@ -2769,8 +2769,8 @@ party.error_text.full,파티가 가득 찼습니다,,,,scripts/party.gd
 party.error_text.not_leader,방장만 매칭을 시작할 수 있습니다,,,,scripts/party.gd
 party.error_text.no_lobby,파티가 없어졌습니다,,,,scripts/party.gd
 party.error_text.busy,파티원이 입장 수락 중입니다,,,,scripts/party.gd
-party.error_text.member_locked,아직 이 난이도를 못 연 파티원이 있습니다,,,,scripts/party.gd
-party.error_text.rate_limited,코드를 너무 많이 틀렸습니다. 잠시 뒤 다시 시도하세요,,,,scripts/party.gd
+party.error_text.member_locked,아직 이 난이도가 열리지 않은 파티원이 있습니다,,,,scripts/party.gd
+party.error_text.rate_limited,코드를 너무 많이 틀렸습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/party.gd
 party.error_text.in_lobby,파티에 있는 동안은 방장이 매칭을 시작합니다,,,,scripts/party.gd
 party.join_lobby,파티 코드는 온라인에서만 쓸 수 있습니다,,,,scripts/party.gd
 party_view.ready_3,코드로 참가,,,,scripts/party_view.gd
@@ -2813,7 +2813,7 @@ party_invite_panel.on_open_3,친구나 길드원이 없습니다. 친구를 맺�
 party_invite_panel.row,친구,,,,scripts/party_invite_panel.gd
 party_invite_panel.row_2,길드원,,,,scripts/party_invite_panel.gd
 party_invite_panel.row_3,접속 중,,,,scripts/party_invite_panel.gd
-party_invite_panel.row_4,접속 안 함,,,,scripts/party_invite_panel.gd
+party_invite_panel.row_4,오프라인,,,,scripts/party_invite_panel.gd
 party_invite_panel.row_5,초대,,,,scripts/party_invite_panel.gd
 party_invite_panel.row_6,파티원,,,,scripts/party_invite_panel.gd
 party_invite_panel.invite,초대함,,,,scripts/party_invite_panel.gd
@@ -2824,15 +2824,15 @@ recruit_panel.refresh.head,%d회 더,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_18,모집권 %d장,,,,scripts/recruit_panel.gd
 mission_panel.ready_2,모두 받기,,,,scripts/mission_panel.gd
 missions.fail_text.nothing,받을 보상이 없습니다,,,,scripts/missions.gd
-party.error_text.guide_locked,가이드에서 파티 던전 미션에 닿으면 열립니다,,,,scripts/party.gd
-party.error_text.their_locked,그 성주는 아직 가이드에서 파티 던전에 닿지 않았습니다,,,,scripts/party.gd
+party.error_text.guide_locked,가이드의 파티 던전 미션까지 진행하면 열립니다,,,,scripts/party.gd
+party.error_text.their_locked,그 성주는 아직 가이드의 파티 던전 미션까지 진행하지 않았습니다,,,,scripts/party.gd
 party_invite_panel.row_7,가이드 중,,,,scripts/party_invite_panel.gd
 preloader.offline_text,서버에 연결할 수 없습니다\n인터넷 연결을 확인해 주세요,,,,scripts/preloader.gd
 preloader.retry_text,다시 연결,,,,scripts/preloader.gd
 skill_auto_button.draw_face,스킬,,,,scripts/skill_auto_button.gd
 hero.tick_skill_req.why,다친 아군이 없습니다,,,,scripts/hero.gd
 hero.tick_skill_req,고칠 성문이 없습니다,,,,scripts/hero.gd
-hero.tick_skill_req_2,가까이 적이 없습니다,,,,scripts/hero.gd
+hero.tick_skill_req_2,가까이에 적이 없습니다,,,,scripts/hero.gd
 tutorial.missions.build_quarry_farm.title,채석장·농장 건설,,,,scripts/tutorial.gd
 tutorial.missions.build_quarry_farm.desc,"[건설] 버튼을 눌러 채석장과 농장을 지으세요. 채석장은 석재, 농장은 식량을 생산합니다.",,,,scripts/tutorial.gd
 reveal_banner.flush,새 기능: %s,,,,scripts/reveal_banner.gd
@@ -2863,7 +2863,7 @@ bag_panel.refresh_10,접기,,,,scripts/bag_panel.gd
 bag_panel.refresh_11,일괄 분해,,,,scripts/bag_panel.gd
 bag_panel.refresh_12,%s 이하\n%d개 · +%s,,,,scripts/bag_panel.gd
 server.ranking.guild_mail.title,[길드 랭킹] 주간 보상,,,,server/src/ranking.ts
-server.ranking.guild_mail.body,지난주 길드 랭킹에서 {guild} 길드가 {rank}위를 했습니다. 길드원 모두에게 드리는 보상입니다.,,,,server/src/ranking.ts
+server.ranking.guild_mail.body,지난주 길드 랭킹에서 {guild} 길드가 {rank}위를 차지했습니다. 길드원 모두에게 드리는 보상입니다.,,,,server/src/ranking.ts
 ranking_panel.rebuild_8,이번 주 드래곤에 피해를 주면 순위에 오릅니다,,,,scripts/ranking_panel.gd
 ranking_panel.row_5,Lv %d · 길드원 %d명,,,,scripts/ranking_panel.gd
 ranking_panel.season_card,주간 보상 · 길드원 모두 우편으로 받습니다,,,,scripts/ranking_panel.gd
