@@ -1602,12 +1602,13 @@ func _growth_ui(tabs) -> void:
 	await _unguarded(gw)
 	var atk = gw.rows.atk
 	print("INPUT INFO: growth sheet %s, atk [강화] %s, [×10] %s (720x1280 logical)" % [gw.dialog.get_global_rect(), atk.up.button.get_global_rect(), atk.ten.button.get_global_rect()])
-	var ids: Array = gw.rows.keys()
+	var ids: Array = gw.rows.keys().filter(func(id): return gw.rows[id].row.visible)  # 고급·최고급·초월은 아래 단계가 다 만렙이 될 때까지 숨는다
+	var hidden_ok: bool = gw.rows.size() == 24 and gw.rows.keys().all(func(id): return gw.rows[id].row.visible == (GameData.upgrade_tier(id) == 0))
 	var note: bool = gw.content.find_children("*", "Label", true, false).any(func(l): return l.text == gw.NOTE)
 	_check(gw.is_open() and tabs.selected == "growth" and ids == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"]
 		and ids.all(func(id): return not icons.shapes(gw.ICONS[id]).is_empty()) and atk.lv.text == "Lv 0 / 200" and atk.effect.text == "+0.0% → +0.5%"
-		and gw.rows.crit_rate.effect.text == "+0.0%p → +0.1%p" and gw.gold_label.text == "보유 골드 100,000" and atk.up.gold.text == "1,000" and not atk.up.button.disabled and note,
-		"(G) [성장] tab: 6 rows with icons, 'Lv 0 / 200', '+0.0% → +0.5%' (%p for crit), gold line, [강화 1,000], the note",
+		and gw.rows.crit_rate.effect.text == "+0.0%p → +0.1%p" and gw.gold_label.text == "보유 골드 100,000" and atk.up.gold.text == "1,000" and not atk.up.button.disabled and note and hidden_ok,
+		"(G) [성장] tab: 6 rows with icons (고급·최고급·초월 18 rows hidden), 'Lv 0 / 200', '+0.0% → +0.5%' (%p for crit), gold line, [강화 1,000], the note",
 		"open=%s ids=%s lv=%s effect=%s gold=%s cost=%s note=%s" % [gw.is_open(), ids, atk.lv.text, atk.effect.text, gw.gold_label.text, atk.up.gold.text, note])
 	await _tap(_center(atk.up.button))
 	_check(Economy.upgrade_level("atk") == 1 and Economy.gold == 99000 and atk.lv.text == "Lv 1 / 200" and atk.effect.text == "+0.5% → +1.0%" and atk.up.gold.text == "1,050"
