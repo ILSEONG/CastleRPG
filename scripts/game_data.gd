@@ -750,18 +750,30 @@ static func upgrade_bonus(levels: Dictionary) -> Dictionary:
 	for key in UPGRADE_KEYS.values():
 		out[key] = 0.0
 	for u in upgrades():
-		var base: String = str(u.id).trim_prefix(ADV_PREFIX)  # 고급 성장은 같은 이름의 성장에 더한다
+		var base := upgrade_base_id(str(u.id))  # 고급·최고급·초월 성장은 같은 이름의 성장에 더한다
 		if UPGRADE_KEYS.has(base):
 			out[UPGRADE_KEYS[base]] += clampi(int(levels.get(u.id, 0)), 0, int(u.max_level)) * float(u.per_level) / 100.0
 	return out
 
 
-## 고급 성장(2026-11-05 사용자: 성장이 다 만렙이면 "고급 ○○"으로 똑같이 렙업, 같은 레벨 성장보다 훨씬 비싸게. 서버 rules.upgradeLocked):
-## id가 ADV_PREFIX로 시작하는 행은 고급이 아닌 성장이 전부 최대 레벨이어야 열린다.
-const ADV_PREFIX := "adv_"
+## 성장 단계(2026-11-05 사용자: 성장이 다 만렙이면 "고급 ○○"으로 똑같이 렙업, 이어서 최고급·초월도 똑같이. 서버 rules.upgradeLocked):
+## 성장 → 고급(adv_) → 최고급(sup_) → 초월(tra_). 단계 t의 행은 바로 아래 단계의 행이 전부 최대 레벨이어야 열린다.
+const UPGRADE_TIER_PREFIXES := ["", "adv_", "sup_", "tra_"]
+static func upgrade_tier(id: String) -> int:
+	for t in range(UPGRADE_TIER_PREFIXES.size() - 1, 0, -1):
+		if id.begins_with(UPGRADE_TIER_PREFIXES[t]):
+			return t
+	return 0
+static func upgrade_base_id(id: String) -> String:
+	return id.substr(UPGRADE_TIER_PREFIXES[upgrade_tier(id)].length())
 static func upgrade_locked(id: String, levels: Dictionary) -> bool:
-	if not id.begins_with(ADV_PREFIX):
+	var t := upgrade_tier(id)
+	if t == 0:
 		return false
+	for u in upgrades():
+		if upgrade_tier(str(u.id)) == t - 1 and int(levels.get(u.id, 0)) < int(u.max_level):
+			return true
+	return false
 	for u in upgrades():
 		if not str(u.id).begins_with(ADV_PREFIX) and int(levels.get(u.id, 0)) < int(u.max_level):
 			return true

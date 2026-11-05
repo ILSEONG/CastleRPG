@@ -3352,7 +3352,8 @@ func test_training_tiers() -> void:
 	GameData.load_tables()  # 실제 설정(훈련 1마리씩)으로 되돌린다
 func test_upgrade_tables() -> void:
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg", "adv_atk", "adv_hp", "adv_aspd", "adv_mspd", "adv_crit_rate", "adv_crit_dmg"], "upgrades.csv loads in file order")
+	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg", "adv_atk", "adv_hp", "adv_aspd", "adv_mspd", "adv_crit_rate", "adv_crit_dmg",
+		"sup_atk", "sup_hp", "sup_aspd", "sup_mspd", "sup_crit_rate", "sup_crit_dmg", "tra_atk", "tra_hp", "tra_aspd", "tra_mspd", "tra_crit_rate", "tra_crit_dmg"], "upgrades.csv loads in file order")
 	var a := GameData.upgrade_def("aspd")
 	check(a.name == "공격속도" and a.unit == "pct" and a.per_level == 0.25 and a.max_level == 100.0 and a.cost_base == 5000.0 and is_equal_approx(a.cost_growth, 1.07), "aspd row")
 	check(GameData.upgrade_def("nope").is_empty() and GameData.upgrade_cost("nope", 3) == 0, "unknown upgrade is empty / cost 0")
@@ -3376,11 +3377,20 @@ func test_upgrade_tables() -> void:
 	check(is_equal_approx(adv.atk_pct, 1.05) and adv.size() == 6, "adv_atk adds onto atk_pct")
 	var maxed := {}
 	for u in GameData.upgrades():
-		if not str(u.id).begins_with(GameData.ADV_PREFIX):
+		if GameData.upgrade_tier(str(u.id)) == 0:
 			maxed[u.id] = int(u.max_level)
 	check(not GameData.upgrade_locked("atk", {}) and GameData.upgrade_locked("adv_atk", {}) and not GameData.upgrade_locked("adv_atk", maxed), "adv rows unlock when every growth row is maxed")
 	maxed["crit_dmg"] = int(maxed["crit_dmg"]) - 1
 	check(GameData.upgrade_locked("adv_hp", maxed), "one growth row short keeps adv locked")
+	# 최고급(×100)·초월(×1000): 바로 아래 단계가 전부 최대여야 열린다
+	check(GameData.upgrade_cost("sup_atk", 0) == 100000 and GameData.upgrade_cost("tra_atk", 0) == 1000000, "sup/tra atk cost 100x / 1000x atk")
+	var adv_max := {}
+	for u in GameData.upgrades():
+		if GameData.upgrade_tier(str(u.id)) == 1:
+			adv_max[u.id] = int(u.max_level)
+	check(GameData.upgrade_locked("sup_atk", {}) and not GameData.upgrade_locked("sup_atk", adv_max) and GameData.upgrade_locked("tra_atk", adv_max), "sup opens after every adv row, tra stays locked")
+	var all4 := GameData.upgrade_bonus({"atk": 200, "adv_atk": 200, "sup_atk": 200, "tra_atk": 2})
+	check(is_equal_approx(all4.atk_pct, 3.01), "every tier adds onto atk_pct")
 
 
 ## 치명타 결합(개정 20 §3): 굴림은 한 번, 확률·배율을 더한다.

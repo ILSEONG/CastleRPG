@@ -2971,7 +2971,7 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g) => {
       const def = g.upgrades.find((u) => u.id === id)
       if (!def) throw new ApiError(404, 'unknown_upgrade', `upgrade '${id}' does not exist`)
-      if (R.upgradeLocked(g.upgrades, p.upgrades, id)) throw new ApiError(409, 'locked', `'${id}' opens when every other growth is at its max level`)
+      if (R.upgradeLocked(g.upgrades, p.upgrades, id)) throw new ApiError(409, 'locked', `'${id}' opens when every growth of the tier below is at its max level`)
       const from = p.upgrades[id] ?? 0
       const to = from + count
       if (to > def.max_level) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${def.max_level}`)
