@@ -254,6 +254,8 @@ func _refresh() -> void:
 		return
 	var f: Dictionary = Economy.friends
 	code_label.text = Lang.t("friend_panel.refresh") % [f.get("name", "…"), f.get("code", "…")] if not f.is_empty() else Lang.t("friend_panel.refresh_2")
+	if f.is_empty():
+		preload("res://scripts/spinner.gd").mark(code_label)  # 받는 중: 로딩 고리
 	var h = f.get("hero")
 	hero_card.hero_id = h.hero_id if h is Dictionary else ""
 	hero_card.stars = int(h.promotion) if h is Dictionary else 0

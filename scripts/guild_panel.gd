@@ -165,6 +165,8 @@ func _center_note(head: String, sub: String) -> void:
 	var h := _label(head, 28)
 	h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(h)
+	if head == Lang.t("guild_panel.rebuild"):
+		preload("res://scripts/spinner.gd").mark(h)  # 길드 정보를 불러오는 중: 로딩 고리
 	var s := _label(sub, 22, SUB)
 	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(s)

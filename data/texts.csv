@@ -1070,9 +1070,8 @@ hero_panel.refresh_detail_8,조각 %d / %d,,,,scripts/hero_panel.gd
 hero_panel.refresh_detail_9,조각 %d · MAX,,,,scripts/hero_panel.gd
 hero_panel.refresh_detail_11,최대 레벨 — [승급]하면 Lv %d까지,,,,scripts/hero_panel.gd
 hero_panel.refresh_detail_12,조각 부족 — 모집에서 이 영웅이 다시 나오면 조각이 쌓입니다,,,,scripts/hero_panel.gd
-hero_panel.refresh_detail_13,승급하면 HP·공격 → ×%s · 최대 레벨 %d → %d,,,,scripts/hero_panel.gd
-hero_panel.refresh_detail_14,\n★%d 달성 시 스킬 해금: %s,,,,scripts/hero_panel.gd
-hero_panel.refresh_detail_15,최대 승급 ★%d — HP·공격 ×%s,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_13,승급하면 최대 레벨 %d → %d,,,,scripts/hero_panel.gd
+hero_panel.refresh_detail_15,최대 승급 ★%d,,,,scripts/hero_panel.gd
 hero_panel.refresh_detail_16,배치 중,,,,scripts/hero_panel.gd
 hero_panel.refresh_detail_17,빈 슬롯 없음,,,,scripts/hero_panel.gd
 hero_panel.refresh_detail_18,배치,,,,scripts/hero_panel.gd

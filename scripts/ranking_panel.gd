@@ -167,7 +167,10 @@ func _rebuild() -> void:
 		elif _failed.get(b, false):
 			msg = Lang.t("ranking_panel.rebuild_2")
 		body.add_child(_spacer(40))
-		body.add_child(_label(msg, 26, SUB))
+		var ml := _label(msg, 26, SUB)
+		body.add_child(ml)
+		if msg == Lang.t("ranking_panel.rebuild.msg"):
+			preload("res://scripts/spinner.gd").mark(ml)  # 로딩 고리
 		return
 	var top: Array = d.get("top", [])
 	if top.is_empty():
