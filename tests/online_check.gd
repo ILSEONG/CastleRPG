@@ -727,7 +727,7 @@ func _phase7_toss() -> void:
 	ReleasePlatform.override = ""
 
 
-const DONE_PAY := "결제가 완료되어 지급했습니다"
+const DONE_PAY := "결제가 완료되어 상품이 지급되었습니다"
 
 
 ## phase 8: 계정 연결(2026-10-12). 새 기기 게스트 → 설정 [Google]로 연결 → 같은 계정·진행 그대로, 이제 Google 자동 로그인.

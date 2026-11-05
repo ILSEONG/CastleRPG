@@ -116,7 +116,7 @@ func _guild() -> void:
 		await _wait_until(func(): return Guild._pending == 0, 10.0)
 		_check(Guild.coins == c0 + int(d.coins) and Guild.donations_left(kind) == int(d.daily) - 1 and not _notes.has(Guild.ERROR_TEXT.get("donated", "-")), "%s: server agrees" % kind, str(Guild.me.donations))
 		await _compare_guild("after %s donation" % kind)
-	_check(Guild.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and not Guild.donate("dia"), "dia donation: daily limit", Guild.donate_block("dia"))
+	_check(Guild.donate_block("dia") == "오늘 기부 횟수를 모두 사용했습니다" and not Guild.donate("dia"), "dia donation: daily limit", Guild.donate_block("dia"))
 	_check(Guild.donate_block("gold") == "골드가 부족합니다" or Economy.gold >= 10000, "gold donation needs 10,000 gold", Guild.donate_block("gold"))
 	_panel.tab = "home"
 	_panel._rebuild()
@@ -180,7 +180,7 @@ func _guild() -> void:
 		fight.leave()
 		await _wait_until(func(): return _main._dungeon == null, 10.0)
 		await _frames(10)
-	_check(Guild.boss_block() == "오늘 도전 횟수를 다 썼습니다" and not Guild.start_boss(), "third boss try: no tries left", Guild.boss_block())
+	_check(Guild.boss_block() == "오늘 도전 횟수를 모두 사용했습니다" and not Guild.start_boss(), "third boss try: no tries left", Guild.boss_block())
 	Prefs.set_value(SpeedButton.PREF_KEY, 1.0)
 	# 길드 회관 도움: 길드에 들어 있으면 건설 시간이 줄어든다 — 앱이 곧바로 보인 끝 시각 == 서버 끝 시각
 	await _request("/v1/test/levels", {"levels": {"keep": 11, "guild_hall": 3, "lumber": 10}, "res": {"wood": 50000000, "stone": 50000000, "food": 50000000}})

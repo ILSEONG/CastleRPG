@@ -5244,7 +5244,7 @@ func test_guild() -> void:
 	e.gold = 15000
 	e.diamonds = 60
 	check(g.donate("gold", now) and e.gold == 5000 and g.donate_block("gold") == "골드가 부족합니다", "guild: gold donation costs 10,000")
-	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
+	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 모두 사용했습니다" and g.donate_block("royal") == "다이아가 부족합니다",
 		"guild: diamond donation once a day")
 	# 인원·레벨: 1~5레벨 15명, 6레벨부터 20명(나 포함, 최대 20명), 레벨 끝 없음·버프 레벨당 1%
 	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(2) == 18 and GuildScript.capacity(5) == 27 and GuildScript.capacity(6) == 30 and GuildScript.capacity(40) == 30 and GuildScript.buff_of(99) == 99.0,
@@ -5277,7 +5277,7 @@ func test_guild() -> void:
 	g.start_boss(now)
 	g.finish_boss(str(g._boss_run.run_id), 1e12, now)
 	check(results.back().dmg == float(run.cap), "guild: damage is capped at dps × sec × cap: %s" % [results.back()])
-	check(g.boss_block() == "오늘 도전 횟수를 다 썼습니다" and not g.start_boss(now), "guild: 2 boss tries a day")
+	check(g.boss_block() == "오늘 도전 횟수를 모두 사용했습니다" and not g.start_boss(now), "guild: 2 boss tries a day")
 	var reach := func(lv: int) -> float:
 		var n := 0.0
 		for i in range(1, lv):

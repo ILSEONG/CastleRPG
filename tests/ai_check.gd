@@ -799,7 +799,7 @@ func _levelup_case() -> void:
 ## (B) 개정 12 건물(오프라인, 실제 완료 경로: 끝난 일꾼을 Economy._process가 완료 → building_done → main).
 ## 막사 Lv 5 → 영웅은 그대로(개정 13: 막사는 영웅 HP를 올리지 않는다), 연구소 Lv 3 → 영웅도 그대로(개정 24: 연구소 레벨 공격 보너스 없음)
 ## — 영웅이 그 공격으로 친다.
-## 성문 Lv 2 → 성문 최대 HP 800. 성채가 단계(5)를 넘으면 "성이 넓어졌습니다!"와 함께 월드를 다시 만든다 — 새 main(성 내부 24타일, 슬롯 8,
+## 성문 Lv 2 → 성문 최대 HP 800. 성채가 단계(5)를 넘으면 "성이 확장되었습니다!"와 함께 월드를 다시 만든다 — 새 main(성 내부 24타일, 슬롯 8,
 ## 성 HP 1800)이고 오토로드 상태(Economy 골드·자원·건물·영웅, GameState 스테이지)는 그대로. 월드가 바뀌므로 마지막 사례.
 func _building_cases() -> void:
 	_clear_monsters()
@@ -870,7 +870,7 @@ func _building_cases() -> void:
 	var keep_after := [Economy.gold_tenths, Economy.res, Economy.heroes, Economy.hero_levels, Economy.hero_promotions, GameState.stage, GameState.deploy().slice(0, 4)]
 	_check(keep_after == keep_before and Economy.building_level("keep") == 9 and Economy.building_level("lab") == 3 and GameState.roster == Economy and not Net.is_online(),
 		"(B) autoload state carries over the rebuild (gold, resources, heroes, levels, stage, deploy)", "before=%s after=%s" % [keep_before, keep_after])
-	_check(hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!", "(B) the new HUD shows '성이 넓어졌습니다!'", "toast=%s '%s'" % [hud._toast.visible, hud._toast.text])
+	_check(hud._toast.visible and hud._toast.text == "성이 확장되었습니다!", "(B) the new HUD shows '성이 확장되었습니다!'", "toast=%s '%s'" % [hud._toast.visible, hud._toast.text])
 	# 스테이지 중에 단계가 바뀌면(성채 21 → 22): 지금 알리고, 월드는 방치로 돌아올 때 다시 만든다
 	hud._toast.visible = false
 	GameState.start_stage()
@@ -878,7 +878,7 @@ func _building_cases() -> void:
 	Economy.levels["keep"] = 21
 	Economy.build = {"id": "keep", "finish": Economy.time_now() - 1.0}
 	await _frames(3)
-	_check(is_instance_valid(fresh) and fresh.is_inside_tree() and hud._toast.visible and hud._toast.text == "성이 넓어졌습니다!" and fresh.castle.half == 28.0,
+	_check(is_instance_valid(fresh) and fresh.is_inside_tree() and hud._toast.visible and hud._toast.text == "성이 확장되었습니다!" and fresh.castle.half == 28.0,
 		"(B) a tier change during a stage shows the notice now and keeps the world until idle", "valid=%s toast=%s" % [is_instance_valid(fresh), hud._toast.visible])
 	var stage_id: int = fresh.get_instance_id()
 	GameState.on_all_monsters_dead()

@@ -1963,7 +1963,7 @@ func _fever_ui(hud) -> void:
 		GameState.mode = m
 		await _frames(1)
 		await _tap(fr.get_center())
-		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중엔 FEVER를 쓸 수 없습니다" and fb.modulate.a < 1.0,
+		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중에는 FEVER를 사용할 수 없습니다" and fb.modulate.a < 1.0,
 			"(fever) while pushing a stage (mode %d) FEVER can't start: dimmed, tap only toasts, gauge kept" % m,
 			"active=%s gauge=%d toast=%s a=%.2f" % [Fever.active(), Fever.gauge, hud._toast.text, fb.modulate.a])
 	GameState.mode = mode0
@@ -2803,7 +2803,7 @@ func _dungeon_ui(tabs) -> void:
 	var first_on := [Fever.dungeon_auto, hud.auto_next_box.button_pressed, hud.auto_repeat_box.button_pressed]
 	await _tap(hud.auto_repeat_box.get_global_rect().get_center())
 	_check(first_on == ["next", true, false] and Fever.dungeon_auto == "repeat" and not hud.auto_next_box.button_pressed and hud.auto_repeat_box.button_pressed
-		and d.auto_left > 1.5 and hud.auto_label.text == "2초 뒤 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
+		and d.auto_left > 1.5 and hud.auto_label.text == "2초 후 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
 		"first=%s now=%s left=%.2f label=%s" % [first_on, Fever.dungeon_auto, d.auto_left, hud.auto_label.text])
 	await _wait_until(func(): return Economy.dungeon_state("gold").keys == 0 and _main._dungeon != null and _main._dungeon.auto_halted, 15.0)
 	d = _main._dungeon
