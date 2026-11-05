@@ -435,6 +435,7 @@ economy.growth_block,알 수 없는 항목,,,,scripts/economy.gd
 economy.growth_block_2,응답 대기 중,,,,scripts/economy.gd
 economy.growth_block_3,최대 레벨,,,,scripts/economy.gd
 economy.growth_block_4,골드 부족,,,,scripts/economy.gd
+economy.growth_block_5,모든 성장을 최대 레벨로 올리면 열려요,,,,scripts/economy.gd
 economy.growth_up.max_level,최대 레벨입니다,,,,scripts/economy.gd
 economy.minutes_text,%d일,,,,scripts/economy.gd
 economy.minutes_text_2,%d시간,,,,scripts/economy.gd

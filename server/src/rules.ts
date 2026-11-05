@@ -626,6 +626,19 @@ export interface UpgradeDef {
 }
 export const UPGRADE_UNITS = ['pct', 'pp']
 export const upgradeStepCost = (d: UpgradeDef, level: number) => roundHalfAway(Number(d.cost_base) * Number(d.cost_growth) ** level)
+// 고급 성장(2026-11-05 사용자 "성장에서 모든 게 다 만렙을 찍으면 앞에 고급이 붙은걸로 똑같이 렙업, 같은 레벨의 성장보다 훨씬 비싸게"):
+// id가 ADV_PREFIX로 시작하는 행은 고급이 아닌 성장이 전부 최대 레벨일 때만 올릴 수 있고, 효과는 같은 이름의 성장에 더한다.
+export const ADV_PREFIX = 'adv_'
+export const upgradeLocked = (upgrades: UpgradeDef[], levels: Record<string, number>, id: string) =>
+  id.startsWith(ADV_PREFIX) && upgrades.some((u) => !u.id.startsWith(ADV_PREFIX) && (levels[u.id] ?? 0) < Number(u.max_level))
+// 성장 효과(분수, 0.05 = +5%) = 그 성장 + 고급 성장. 레벨은 0..max_level로 자른다.
+export function upgradePct(upgrades: UpgradeDef[], levels: Record<string, number>, id: string): number {
+  let out = 0
+  for (const d of upgrades) {
+    if (d.id === id || d.id === ADV_PREFIX + id) out += (Math.min(Math.max(levels[d.id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100
+  }
+  return out
+}
 // level에서 count번 올리는 비용 합계
 export function upgradeCost(d: UpgradeDef, level: number, count: number): number {
   let gold = 0
@@ -1023,10 +1036,7 @@ export function heroEquip(items: EquipItem[], equipment: { hero_id: string; item
 export interface StatLimit { equip: Record<string, { hp: number; atk: number }>; hp: number; atk: number }
 export function statLimit(pl: { upgrades: Record<string, number>; research: Record<string, number>; items: EquipItem[]; equipment: { hero_id: string; item_id: number }[]; slot_levels?: SlotLevels },
   game: { upgrades: UpgradeDef[]; research: ResearchDef[] }, guildBuffPct: number): StatLimit {
-  const up = (id: string) => {
-    const d = game.upgrades.find((u) => u.id === id)
-    return d ? (Math.min(Math.max(pl.upgrades[id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100 : 0
-  }
+  const up = (id: string) => upgradePct(game.upgrades, pl.upgrades, id)
   const rb = researchBonus(game.research, pl.research ?? {})
   const g = 1 + Math.max(0, guildBuffPct) / 100
   return { equip: heroEquip(pl.items ?? [], pl.equipment ?? [], pl.slot_levels ?? {}), hp: (1 + up('hp')) * (1 + rb.hero_hp_pct / 100) * g, atk: (1 + up('atk')) * (1 + rb.hero_atk_pct / 100) * g }

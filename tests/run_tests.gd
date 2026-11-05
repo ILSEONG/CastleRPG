@@ -3351,7 +3351,7 @@ func test_training_tiers() -> void:
 	GameData.load_tables()  # 실제 설정(훈련 1마리씩)으로 되돌린다
 func test_upgrade_tables() -> void:
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"], "upgrades.csv loads in file order")
+	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg", "adv_atk", "adv_hp", "adv_aspd", "adv_mspd", "adv_crit_rate", "adv_crit_dmg"], "upgrades.csv loads in file order")
 	var a := GameData.upgrade_def("aspd")
 	check(a.name == "공격속도" and a.unit == "pct" and a.per_level == 0.25 and a.max_level == 100.0 and a.cost_base == 5000.0 and is_equal_approx(a.cost_growth, 1.07), "aspd row")
 	check(GameData.upgrade_def("nope").is_empty() and GameData.upgrade_cost("nope", 3) == 0, "unknown upgrade is empty / cost 0")
@@ -3369,6 +3369,17 @@ func test_upgrade_tables() -> void:
 		and is_equal_approx(b.crit_rate, 0.1) and is_equal_approx(b.crit_dmg, 0.5), "max levels give +100% / +100% / +25% / +20% / +10%p / +50%p, atk 23 = +11.5%")
 	var over := GameData.upgrade_bonus({"atk": 9999, "crit_dmg": -5, "ghost": 7})
 	check(is_equal_approx(over.atk_pct, 1.0) and over.crit_dmg == 0.0 and over.size() == 6, "levels clamp to 0..max, unknown ids are ignored")
+	# 고급 성장: 같은 레벨 성장의 10배 값, 효과는 같은 키에 더한다, 성장이 모두 최대여야 열린다
+	check(GameData.upgrade_cost("adv_atk", 0) == 10000 and GameData.upgrade_cost("adv_atk", 1) == 10500, "adv_atk costs 10x atk")
+	var adv := GameData.upgrade_bonus({"atk": 200, "adv_atk": 10})
+	check(is_equal_approx(adv.atk_pct, 1.05) and adv.size() == 6, "adv_atk adds onto atk_pct")
+	var maxed := {}
+	for u in GameData.upgrades():
+		if not str(u.id).begins_with(GameData.ADV_PREFIX):
+			maxed[u.id] = int(u.max_level)
+	check(not GameData.upgrade_locked("atk", {}) and GameData.upgrade_locked("adv_atk", {}) and not GameData.upgrade_locked("adv_atk", maxed), "adv rows unlock when every growth row is maxed")
+	maxed["crit_dmg"] = int(maxed["crit_dmg"]) - 1
+	check(GameData.upgrade_locked("adv_hp", maxed), "one growth row short keeps adv locked")
 
 
 ## 치명타 결합(개정 20 §3): 굴림은 한 번, 확률·배율을 더한다.

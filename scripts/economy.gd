@@ -828,6 +828,8 @@ func growth_block(id: String, count := 1) -> String:
 		return Lang.t("economy.growth_block")
 	if _waiting.has("growth"):
 		return Lang.t("economy.growth_block_2")
+	if GameData.upgrade_locked(id, upgrades):
+		return Lang.t("economy.growth_block_5")
 	if upgrade_level(id) + count > int(u.max_level):
 		return Lang.t("economy.growth_block_3")
 	return Lang.t("economy.growth_block_4") if gold < upgrade_total_cost(id, count) else ""

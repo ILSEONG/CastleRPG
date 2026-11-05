@@ -619,10 +619,7 @@ export function createApp(opts: AppOptions) {
   }
 
   // 성장(업그레이드) 효과 = 분수(0.05 = +5%)
-  const upPct = (p: Player, g: Game, uid: string) => {
-    const d = g.upgrades.find((u) => u.id === uid)
-    return d ? Math.min(p.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
-  }
+  const upPct = (p: Player, g: Game, uid: string) => R.upgradePct(g.upgrades, p.upgrades, uid)
 
   // 편성 영웅(+도우미)의 서버 계산 초당 피해(길드 공성전·보스와 같은 식 G.teamDps — 장비·성장·연구 반영, 길드 버프·치명타·스킬 제외)
   function partyDps(p: Player, g: Game, party: string[], helper: R.Helper | null): number {
@@ -2914,7 +2911,7 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // 공용 업그레이드(개정 20 §4): count 1..100. 모르는 id는 404 unknown_upgrade, 최대 레벨을 넘으면 409 max_level, 골드가 모자라면 409 not_enough_gold.
+  // 공용 업그레이드(개정 20 §4): count 1..100. 모르는 id는 404 unknown_upgrade, 고급 성장이 아직 잠겼으면 409 locked, 최대 레벨을 넘으면 409 max_level, 골드가 모자라면 409 not_enough_gold.
   // 골드(정수, × 10 tenths) 차감·레벨·economy_log upgrade는 version 가드 한 문장 — 같이 들어가거나 같이 안 들어간다.
   app.post('/v1/upgrade', auth, async (c) => {
     const b = await body(c)
@@ -2923,6 +2920,7 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g) => {
       const def = g.upgrades.find((u) => u.id === id)
       if (!def) throw new ApiError(404, 'unknown_upgrade', `upgrade '${id}' does not exist`)
+      if (R.upgradeLocked(g.upgrades, p.upgrades, id)) throw new ApiError(409, 'locked', `'${id}' opens when every other growth is at its max level`)
       const from = p.upgrades[id] ?? 0
       const to = from + count
       if (to > def.max_level) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${def.max_level}`)
@@ -3695,10 +3693,7 @@ export function createApp(opts: AppOptions) {
     const slots = R.heroSlots(game.config, level(pl, R.KEEP))
     const deploy = Array.from({ length: slots }, (_, i) => pl.deploy[i]).filter((x): x is string => typeof x === 'string' && Object.hasOwn(pl.heroes, x))
     const defs = game.heroes.map((h) => ({ id: String(h.id), role: String(h.role), atk: Number(h.atk), hp: Number(h.hp), atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
-    const up = (uid: string) => {
-      const d = game.upgrades.find((u) => u.id === uid)
-      return d ? Math.min(pl.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
-    }
+    const up = (uid: string) => R.upgradePct(game.upgrades, pl.upgrades, uid)
     const buff = st ? G.buffPct(st.lv.level) : 0
     const equip = R.heroEquip(pl.items, pl.equipment, pl.slot_levels)
     return {
