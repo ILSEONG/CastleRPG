@@ -14,7 +14,8 @@ extends "res://scripts/ui_window.gd"
 ##   주소는 support_links.gd 상수(출시 작업이 채운다). 비어 있으면 "준비 중" 알림.
 ## 줄이 많아 가운데는 세로 스크롤(body), 제목과 [닫기]는 고정.
 ## 정보: 게임 버전(프로젝트 설정 application/config/version).
-## 로그인 줄 [쿠폰 입력](온라인) → 쿠폰 창(coupon_panel.gd), 버전 줄 [운영 관리](슈퍼관리자만) → 관리자 창(admin_panel.gd: 공지·점검·업데이트·우편·쿠폰).
+## 닉네임 줄 [변경](온라인, 2026-11-05) → 닉네임 변경 창(nickname_panel.gd). 줄은 이름 칸 + 같은 너비 세 칸 격자(_grid_row).
+## [쿠폰 입력](온라인) → 쿠폰 창(coupon_panel.gd), 버전 줄 [운영 관리](슈퍼관리자만) → 관리자 창(admin_panel.gd: 공지·점검·업데이트·우편·쿠폰).
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -32,6 +33,8 @@ const SUB := Color(0.16, 0.18, 0.24, 0.62)
 static var LOGIN_NAMES := {"guest": Lang.t("settings_panel.login_names.guest"), "google": "Google", "kakao": Lang.t("settings_panel.login_names.kakao"), "naver": Lang.t("settings_panel.login_names.naver"), "toss": Lang.t("settings_panel.login_names.toss")}
 const SCROLL_H := 820.0  # 가운데 스크롤 높이(제목·[닫기] 제외)
 const DELETE_ARM_SEC := 4.0  # [계정 삭제]를 한 번 누른 뒤 확인을 기다리는 시간
+const LABEL_W := 180.0  # 줄 이름 칸 너비(그 오른쪽은 같은 너비 세 칸)
+const SLOT_GAP := 8.0  # 칸 사이
 const CONFIRM_GAP_SEC := 0.4  # 확인 누름은 첫 누름 뒤 이만큼 지나야 받는다 — 빠른 두 번 누름(실수)이 곧바로 삭제·로그아웃하지 않게
 
 var music_check: Button
@@ -54,6 +57,9 @@ var coupon_button: Button
 var admin_button: Button
 var coupon  # 쿠폰 입력 창(coupon_panel.gd) — main이 넣는다
 var inquiry  # 문의 창(inquiry_panel.gd) — main이 넣는다
+var nickname_panel  # 닉네임 변경 창(nickname_panel.gd) — main이 넣는다
+var rename_button: Button
+var _slider_value: Label
 var admin_panel  # 운영 관리 창(admin_panel.gd, 슈퍼관리자만) — main이 넣는다
 var _delete_armed := 0.0
 var _deleting := false
@@ -93,14 +99,14 @@ func _ready() -> void:
 	body.add_child(_section(Lang.t("settings_panel.ready")))
 	music_check = _toggle_row(Lang.t("settings_panel.ready_2"), func(on: bool): Music.set_enabled(on))
 	volume_slider = _slider_row(Lang.t("settings_panel.ready_3"))
-	volume_label = volume_slider.get_parent().get_child(2)
+	volume_label = _slider_value
 	volume_slider.value_changed.connect(func(v: float):
 		Music.set_volume(v / 100.0, false)  # 끄는 동안 바로 들린다
 		volume_label.text = "%d%%" % int(v))
 	volume_slider.drag_ended.connect(func(_changed): Music.save_settings())
 	sfx_check = _toggle_row(Lang.t("settings_panel.ready_4"), func(on: bool): SoundFx.set_enabled(on))
 	sfx_slider = _slider_row(Lang.t("settings_panel.ready_5"))
-	sfx_label = sfx_slider.get_parent().get_child(2)
+	sfx_label = _slider_value
 	sfx_slider.value_changed.connect(func(v: float):
 		SoundFx.set_volume(v / 100.0, false)
 		sfx_label.text = "%d%%" % int(v))
@@ -113,9 +119,7 @@ func _ready() -> void:
 		func(q): _set_gfx("gfx_quality", q))
 	fps_buttons = _choice_row(Lang.t("settings_panel.ready_8"), GraphicsScript.FPS_CHOICES.map(func(f): return [f, "%d" % f]), func(f): _set_gfx("gfx_fps", f))
 	saver_check = _toggle_row(Lang.t("settings_panel.ready_9"), func(on: bool): _set_gfx("power_saver", on))
-	var saver_hint := _label(Lang.t("settings_panel.ready_10"), 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
-	saver_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_child(saver_hint)
+	_note(Lang.t("settings_panel.ready_10"))
 	shake_check = _toggle_row(Lang.t("settings_panel.ready_11"), func(on: bool): Prefs.set_value("shake", on))
 	numbers_check = _toggle_row(Lang.t("settings_panel.ready_12"), func(on: bool): Prefs.set_value("damage_numbers", on))
 	# 2026-11-02 사용자: 영웅 머리 위 스킬 이름 띠를 켜고 끄고 크기를 고른다(DamageNumbers가 그릴 때마다 읽는다 — 바로 적용)
@@ -127,76 +131,48 @@ func _ready() -> void:
 	notify_rows = NotifySettings.add_to(self)  # 푸시 알림 켬/끔(안드로이드만)
 
 	body.add_child(_section(Lang.t("settings_panel.ready_13")))
-	name_label = _info_row(Lang.t("settings_panel.ready_14"))
-	var code_row := HBoxContainer.new()
-	code_row.add_theme_constant_override("separation", 12)
-	code_row.add_child(_row_label(Lang.t("settings_panel.ready_15")))
-	code_label = _label("", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
-	code_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	code_row.add_child(code_label)
-	copy_button = _button(Lang.t("settings_panel.ready_16"), UiKit.STEEL, 22)
-	copy_button.custom_minimum_size = Vector2(88, 48)
+	rename_button = _slot_button(Lang.t("settings_panel.ready_29"))  # 닉네임 변경(2026-11-05): 첫 번은 무료, 그 뒤는 다이아(nickname_panel.gd)
+	rename_button.pressed.connect(open_rename)
+	name_label = _info_row(Lang.t("settings_panel.ready_14"), rename_button)
+	copy_button = _slot_button(Lang.t("settings_panel.ready_16"))
 	copy_button.pressed.connect(copy_code)
-	code_row.add_child(copy_button)
-	body.add_child(code_row)
+	code_label = _info_row(Lang.t("settings_panel.ready_15"), copy_button)
 	login_label = _info_row(Lang.t("settings_panel.ready_17"))
 	account_link = AccountLinkScript.new()
 	add_child(account_link)
 	account_link.changed.connect(_refresh)
-	link_row = HBoxContainer.new()
-	link_row.add_theme_constant_override("separation", 8)
-	link_row.add_child(_row_label(Lang.t("settings_panel.ready_18")))
+	link_row = _grid_row(Lang.t("settings_panel.ready_18"))
 	for provider in AccountLinkScript.PROVIDERS:
-		var b := _button(AccountLinkScript.NAMES[provider], UiKit.STEEL, 22)
-		b.custom_minimum_size = Vector2(0, 52)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var b := _slot_button(AccountLinkScript.NAMES[provider])
 		b.pressed.connect(func(): account_link.start(provider))
 		link_buttons[provider] = b
-		link_row.add_child(b)
-	body.add_child(link_row)
-	link_label = _label("", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
-	link_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_child(link_label)
-	logout_button = _button(Lang.t("settings_panel.ready_19"), UiKit.STEEL, 22)
-	logout_button.custom_minimum_size = Vector2(0, 56)
+		_slot(link_row, 1, b)
+	link_label = _note("")
+	logout_button = _action_button(Lang.t("settings_panel.ready_19"))
 	logout_button.pressed.connect(press_logout)
-	body.add_child(logout_button)
-	coupon_button = _button(Lang.t("settings_panel.ready_20"), UiKit.STEEL, 22)  # 쿠폰(2026-10-12, LiveOps): 로그인 줄 오른쪽(창 높이를 늘리지 않게)
-	coupon_button.custom_minimum_size = Vector2(150, 48)
-	coupon_button.pressed.connect(func():
-		if coupon != null:
-			close()
-			coupon.open())
-	login_label.get_parent().add_child(coupon_button)
-	delete_button = _button(Lang.t("settings_panel.ready_21"), UiKit.STEEL, 22)
-	delete_button.custom_minimum_size = Vector2(0, 56)
+	delete_button = _action_button(Lang.t("settings_panel.ready_21"))
 	delete_button.pressed.connect(press_delete)
-	body.add_child(delete_button)
+	body.add_child(_action_grid([logout_button, delete_button]))
 
 	body.add_child(_section(Lang.t("settings_panel.ready_22")))
-	version_label = _info_row(Lang.t("settings_panel.ready_23"))
-	var docs := HBoxContainer.new()
-	docs.add_theme_constant_override("separation", 10)
-	terms_button = _button(Lang.t("settings_panel.ready_24"), UiKit.STEEL, 22)
-	privacy_button = _button(Lang.t("settings_panel.ready_25"), UiKit.STEEL, 22)
-	for b in [terms_button, privacy_button]:
-		b.custom_minimum_size = Vector2(0, 56)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		docs.add_child(b)
-	terms_button.pressed.connect(func(): open_link(Links.TERMS_URL))
-	privacy_button.pressed.connect(func(): open_link(Links.PRIVACY_URL))
-	body.add_child(docs)
-	inquiry_button = _button(Lang.t("settings_panel.ready_26"), UiKit.STEEL, 22)
-	inquiry_button.custom_minimum_size = Vector2(0, 56)
-	inquiry_button.pressed.connect(open_inquiry)
-	body.add_child(inquiry_button)
-	admin_button = _button(Lang.t("settings_panel.ready_27"), UiKit.AMBER, 22)  # 공지·점검·우편·쿠폰 만들기(슈퍼관리자만 보인다) — 버전 줄 오른쪽
-	admin_button.custom_minimum_size = Vector2(150, 48)
+	admin_button = _slot_button(Lang.t("settings_panel.ready_27"), UiKit.AMBER)  # 공지·점검·우편·쿠폰 만들기(슈퍼관리자만 보인다) — 버전 줄 오른쪽
 	admin_button.pressed.connect(func():
 		if admin_panel != null:
 			close()
 			admin_panel.open())
-	version_label.get_parent().add_child(admin_button)
+	version_label = _info_row(Lang.t("settings_panel.ready_23"), admin_button)
+	terms_button = _action_button(Lang.t("settings_panel.ready_24"))
+	terms_button.pressed.connect(func(): open_link(Links.TERMS_URL))
+	privacy_button = _action_button(Lang.t("settings_panel.ready_25"))
+	privacy_button.pressed.connect(func(): open_link(Links.PRIVACY_URL))
+	inquiry_button = _action_button(Lang.t("settings_panel.ready_26"))
+	inquiry_button.pressed.connect(open_inquiry)
+	coupon_button = _action_button(Lang.t("settings_panel.ready_20"))  # 쿠폰(2026-10-12, LiveOps)
+	coupon_button.pressed.connect(func():
+		if coupon != null:
+			close()
+			coupon.open())
+	body.add_child(_action_grid([terms_button, privacy_button, inquiry_button, coupon_button]))
 
 	var close_button := _button(Lang.t("settings_panel.ready_28"), UiKit.STEEL)
 	close_button.pressed.connect(close)
@@ -230,14 +206,13 @@ func _refresh() -> void:
 	for c in [music_check, shake_check, numbers_check, banner_check, volume_slider, sfx_check, sfx_slider, saver_check]:
 		c.set_block_signals(false)
 		if c is Button:
-			for k in c.get_children():
-				if k is Control:
-					k.queue_redraw()
+			_style_toggle(c)
 	volume_label.text = "%d%%" % int(volume_slider.value)
 	sfx_label.text = "%d%%" % int(sfx_slider.value)
 	var online := Net.is_online()
 	var code := str(Economy.friends.get("code", ""))
-	name_label.text = str(Economy.friends.get("name", "…")) if online else Lang.t("settings_panel.refresh")
+	name_label.text = str(Economy.nickname.get("name", Economy.friends.get("name", "…"))) if online else Lang.t("settings_panel.refresh")
+	rename_button.visible = online and not Economy.nickname.is_empty()
 	code_label.text = code if code != "" else ("…" if online else "-")
 	copy_button.visible = code != ""
 	login_label.text = LOGIN_NAMES.get(Net.auth_mode, "-") if online else "-"
@@ -360,6 +335,14 @@ func _style_delete() -> void:
 	UiKit.apply_button(delete_button, Color(0.85, 0.27, 0.22) if armed else UiKit.STEEL, 12.0)
 
 
+## [변경](닉네임 줄): 닉네임 변경 창을 연다(첫 번은 무료, 그 뒤 다이아).
+func open_rename() -> void:
+	if nickname_panel == null or Economy.nickname.is_empty():
+		return
+	close()
+	nickname_panel.open()
+
+
 func copy_code() -> void:
 	var code := str(Economy.friends.get("code", ""))
 	if code != "":
@@ -367,24 +350,82 @@ func copy_code() -> void:
 		Economy.notice.emit(Lang.t("settings_panel.copy_code"))
 
 
-## [이름 | 슬라이더 0..100 | "n%"] 한 줄. 반환 = 슬라이더(줄의 1번 자식, 글자 = 2번 자식).
-func _slider_row(text: String) -> HSlider:
+## 줄 모양(2026-11-05 "오와열"): 모든 줄 = [이름 LABEL_W | 칸 | 칸 | 칸]. 세 칸은 같은 너비라 선택 버튼·켬/끔·값·[변경]·[복사]가
+## 줄마다 같은 세로줄에 선다. 켬/끔은 언제나 셋째 칸, 선택지는 오른쪽 끝부터, 값은 첫째 칸 왼쪽부터.
+## 아래 [로그아웃]·[계정 삭제]·[이용약관]… 같은 동작 버튼은 창 너비 2열(_action_grid).
+func _grid_row(text: String, free_label := false) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	row.add_child(_row_label(text))
+	row.add_theme_constant_override("separation", 0)
+	row.add_child(_row_label(text, free_label))
+	body.add_child(row)
+	return row
+
+
+## row에 칸 span개 너비의 자리를 붙이고 c(없으면 빈 자리)를 넣는다. 칸마다 왼쪽 SLOT_GAP 여백 — span 2의 끝은 둘째 칸 끝과 같다.
+func _slot(row: HBoxContainer, span: int, c: Control = null) -> MarginContainer:
+	var m := MarginContainer.new()
+	m.add_theme_constant_override("margin_left", int(SLOT_GAP))
+	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	m.size_flags_stretch_ratio = float(span)
+	m.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if c != null:
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		m.add_child(c)
+	row.add_child(m)
+	return m
+
+
+## 칸 하나를 채우는 버튼(글자가 길어도 칸 너비를 바꾸지 않게 자른다).
+func _slot_button(text: String, color := UiKit.STEEL) -> Button:
+	var b := _button(text, color, 22)
+	b.custom_minimum_size = Vector2(0, 52)
+	b.clip_text = true
+	b.focus_mode = Control.FOCUS_NONE
+	return b
+
+
+## 창 너비 2열 동작 버튼.
+func _action_button(text: String) -> Button:
+	var b := _button(text, UiKit.STEEL, 22)
+	b.custom_minimum_size = Vector2(0, 56)
+	b.clip_text = true
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return b
+
+
+func _action_grid(buttons: Array) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = 2
+	g.add_theme_constant_override("h_separation", 10)
+	g.add_theme_constant_override("v_separation", 10)
+	for b in buttons:
+		g.add_child(b)
+	return g
+
+
+## 이름 칸 아래 줄(첫째 칸 왼쪽에 맞춘 작은 안내 글).
+func _note(text: String) -> Label:
+	var l := _label(text, 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var sb := StyleBoxEmpty.new()
+	sb.content_margin_left = LABEL_W + SLOT_GAP
+	l.add_theme_stylebox_override("normal", sb)
+	body.add_child(l)
+	return l
+
+
+## [이름 | 슬라이더(칸 둘) | "n%"] 한 줄. 반환 = 슬라이더(글자 = _slider_value).
+func _slider_row(text: String) -> HSlider:
+	var row := _grid_row(text)
 	var s := HSlider.new()
 	s.min_value = 0
 	s.max_value = 100
 	s.step = 1
 	s.custom_minimum_size = Vector2(0, 48)
-	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	s.focus_mode = Control.FOCUS_NONE
-	row.add_child(s)
-	var l := _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
-	l.custom_minimum_size = Vector2(76, 0)
-	row.add_child(l)
-	body.add_child(row)
+	_slot(row, 2, s)
+	_slider_value = _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_CENTER)
+	_slot(row, 1, _slider_value)
 	return s
 
 
@@ -395,56 +436,67 @@ func _section(text: String) -> Label:
 	return l
 
 
-func _row_label(text: String) -> Label:
-	var l := _label(text, 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
-	l.custom_minimum_size = Vector2(170, 52)
+## 줄 이름. free = 글자가 길면 빈 칸 위로 넘어가도 된다(켬/끔 줄 — 첫째·둘째 칸이 비어 있다): 이름 칸 너비는 그대로.
+func _row_label(text: String, free := false) -> Control:
+	var l := _label(text, 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	return l
+	if not free:
+		l.custom_minimum_size = Vector2(LABEL_W, 52)
+		l.clip_text = true
+		return l
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(LABEL_W, 52)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.position = Vector2.ZERO
+	l.size = Vector2(LABEL_W * 3.0, 52)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(l)
+	return holder
 
 
-## 이름 + 오른쪽 체크박스(켬/끔). 누르면 on_change(켬?)를 바로 부른다.
+## 이름 + 셋째 칸 켬/끔 버튼(켬 = 주황, 끔 = 회색). 누르면 on_change(켬?)를 바로 부른다.
 func _toggle_row(text: String, on_change: Callable) -> Button:
-	var row := HBoxContainer.new()
-	var l := _row_label(text)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(l)
-	var b := UiKit.checkbox(Lang.t("settings_panel.toggle_row"))
-	b.custom_minimum_size = Vector2(110, 64)
-	b.toggled.connect(on_change)
-	row.add_child(b)
-	body.add_child(row)
+	var row := _grid_row(text, true)
+	_slot(row, 2)
+	var b := _slot_button("")
+	b.toggle_mode = true
+	b.toggled.connect(func(on: bool):
+		_style_toggle(b)
+		on_change.call(on))
+	_slot(row, 1, b)
+	_style_toggle(b)
 	return b
 
 
-## 이름 + 오른쪽 값 글자. 값 Label을 돌려준다.
-func _info_row(text: String) -> Label:
-	var row := HBoxContainer.new()
-	row.add_child(_row_label(text))
-	var v := _label("", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_RIGHT)
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+func _style_toggle(b: Button) -> void:
+	b.text = Lang.t("settings_panel.toggle_row") if b.button_pressed else Lang.t("settings_panel.style_toggle")
+	UiKit.apply_button(b, UiKit.AMBER if b.button_pressed else UiKit.STEEL, 12.0)
+
+
+## 이름 + 값 글자(첫째·둘째 칸) + 셋째 칸 action(없으면 빈 칸). 값 Label을 돌려준다.
+func _info_row(text: String, action: Button = null) -> Label:
+	var row := _grid_row(text)
+	var v := _label("", 24, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
 	v.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(v)
-	body.add_child(row)
+	v.custom_minimum_size = Vector2(0, 52)
+	v.clip_text = true
+	_slot(row, 2, v)
+	_slot(row, 1, action)
 	return v
 
 
-## [이름 | 선택지 버튼들] 한 줄. 고른 버튼은 금색. on_pick(id)를 바로 부른다. 반환 = id → Button.
+## [이름 | 선택지 버튼들(오른쪽 칸부터)] 한 줄. 고른 버튼은 주황. on_pick(id)를 바로 부른다. 반환 = id → Button.
 func _choice_row(text: String, options: Array, on_pick: Callable) -> Dictionary:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var l := _row_label(text)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(l)
+	var row := _grid_row(text)
+	if options.size() < 3:
+		_slot(row, 3 - options.size())
 	var out := {}
 	for o in options:
-		var b := _button(o[1], UiKit.STEEL, 22)
-		b.custom_minimum_size = Vector2(96, 52)
-		b.focus_mode = Control.FOCUS_NONE
+		var b := _slot_button(o[1])
 		var id = o[0]
 		b.pressed.connect(func(): on_pick.call(id))
-		row.add_child(b)
+		_slot(row, 1, b)
 		out[id] = b
-	body.add_child(row)
 	return out
 
 
