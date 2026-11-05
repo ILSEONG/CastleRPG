@@ -15,7 +15,7 @@ const HeroCardScript := preload("res://scripts/hero_card.gd")
 signal fused(picks: Dictionary)
 
 const SUB := Color(0.25, 0.22, 0.2, 0.8)
-const CARD := Vector2(150, 180)
+const CARD := Vector2(146, 175)  # 4칸 + 간격 + 스크롤 막대가 시트 안에 들어가게(150이면 [합성] 탭에서 창이 10px 넓어진다, 2026-11-05)
 const BIG := Vector2(170, 204)
 const DIM := Color(1, 1, 1, 0.35)
 const RESULT := Vector2(260, 312)
