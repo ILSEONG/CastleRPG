@@ -5095,7 +5095,7 @@ static var FRIEND_TEXT := {
 	"already_requested": Lang.t("economy.friend_text.already_requested"), "friend_full": Lang.t("economy.friend_text.friend_full"), "their_full": Lang.t("economy.friend_text.their_full"),
 	"no_request": Lang.t("economy.friend_text.no_request"), "not_friend": Lang.t("economy.friend_text.not_friend"), "not_owned": Lang.t("economy.friend_text.not_owned"),
 	"bad_request": Lang.t("economy.friend_text.bad_request"),
-	"gift_sent": Lang.t("economy.friend_text.gift_sent"), "gift_cap": Lang.t("economy.friend_text.gift_cap"), "gift_none": Lang.t("economy.friend_text.gift_none"),
+	"gift_sent": Lang.t("economy.friend_text.gift_sent"), "gift_cap": Lang.t("economy.friend_text.gift_cap"), "gift_none": Lang.t("economy.friend_text.gift_none"), "their_gift_full": Lang.t("economy.friend_text.their_gift_full"),
 	"not_enough_diamonds": Lang.t("economy.friend_text.not_enough_diamonds"),
 }
 static var FRIEND_DONE_TEXT := {"request": Lang.t("economy.friend_done_text.request"), "accept": Lang.t("economy.friend_done_text.accept"), "remove": Lang.t("economy.friend_done_text.remove"), "hero": Lang.t("economy.friend_done_text.hero"), "gift": Lang.t("economy.friend_done_text.gift")}
@@ -5134,7 +5134,7 @@ func _on_friend_op(data, op: String) -> void:
 	if op != "hero":
 		net.refresh()  # 도우미 목록(dungeons.ticket.helpers)은 플레이어 응답에 온다
 	if op == "gift":
-		notice.emit(FRIEND_DONE_TEXT.gift % [int(data.get("gift_sent", 0)) if data is Dictionary else 0, int(friends.get("gift", {}).get("per", 100))])
+		notice.emit(FRIEND_DONE_TEXT.gift % [int(data.get("gift_sent", 0)) if data is Dictionary else 0, int(friends.get("gift", {}).get("per", 50))])
 		return
 	# 서로 신청하면 바로 친구가 된다
 	notice.emit(FRIEND_DONE_TEXT.accept if op == "request" and friends.get("friends", []).size() > before else FRIEND_DONE_TEXT[op])

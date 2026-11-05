@@ -918,7 +918,8 @@ export function createApp(opts: AppOptions) {
   // --- 쓰기: version 낙관적 잠금 + 한 문장(CTE) ---
 
   // 성공하면 결과 행({n, run_result?}), version이 달랐으면(또는 닫을 run이 이미 닫혔으면) null.
-  // 친구 선물 가드(commit의 version 가드와 같은 문장): 받는 사람 모두 지금 친구, 오늘 아직 안 보냄, 오늘 합계 + 이번 것 ≤ 하루 상한.
+  // 친구 선물 가드(commit의 version 가드와 같은 문장): 받는 사람 모두 지금 친구, 오늘 아직 안 보냄, 오늘 보낸 합계 + 이번 것 ≤ 하루 상한,
+  // 받는 사람마다 오늘 받은 합계 + 이번 것 ≤ 하루 상한.
   // 같은 사람의 선물은 player_state 행(version)에서 줄을 서니 동시에 보내도 합계를 넘지 못한다(기본 키도 같은 날 두 번을 막는다).
   function friendGiftGuard(ch: Change, p: (v: unknown) => string): string {
     const fg = ch.friendGift
@@ -928,6 +929,8 @@ export function createApp(opts: AppOptions) {
     return ` and (select count(*) from friend_links where accepted and ((a = $1 and b = any(${to})) or (b = $1 and a = any(${to})))) = ${p(fg.to.length)}::int`
       + ` and not exists (select 1 from friend_gifts where sender = $1 and day = ${day} and receiver = any(${to}))`
       + ` and (select coalesce(sum(amount), 0) from friend_gifts where sender = $1 and day = ${day}) + ${p(fg.per * fg.to.length)}::int <= ${p(R.FRIEND_GIFT_DAILY)}::int`
+      // 받는 쪽도 하루 R.FRIEND_GIFT_DAILY까지(2026-11-05 사용자: 받는 쪽도 하루 상한)
+      + ` and not exists (select 1 from unnest(${to}) as r where (select coalesce(sum(amount), 0) from friend_gifts where receiver = r and day = ${day}) + ${p(fg.per)}::int > ${p(R.FRIEND_GIFT_DAILY)}::int)`
   }
 
   async function commit(playerId: string, version: number, ch: Change, now: number): Promise<Row | null> {
@@ -3651,8 +3654,17 @@ export function createApp(opts: AppOptions) {
       hero: R.lentHero(g.heroes, mine?.friend_hero ?? null, myHeroes, g.config), hero_chosen: mine?.friend_hero ?? null,
       friends: links.filter((r) => r.accepted).map(person), incoming: links.filter((r) => !r.accepted && !r.mine).map(person),
       outgoing: links.filter((r) => !r.accepted && r.mine).map(person), recommend: recommend.map(person), used_today: used,
-      gift: { per: R.FRIEND_GIFT_DIA, cap: R.FRIEND_GIFT_DAILY, sent: gift.sent, sent_to: gift.sentTo, received_from: gift.receivedFrom, next_reset: R.nextReset(now, g.config) },
+      gift: { per: R.FRIEND_GIFT_DIA, cap: R.FRIEND_GIFT_DAILY, sent: gift.sent, sent_to: gift.sentTo, received: gift.received, received_from: gift.receivedFrom,
+        full: [...await giftFull(links.filter((r) => r.accepted).map((r) => String(r.id)), gift.day)], next_reset: R.nextReset(now, g.config) },
     }
+  }
+
+  // 오늘 받을 한도(R.FRIEND_GIFT_DAILY)를 다 받아 하나도 더 못 받는 사람들
+  async function giftFull(ids: string[], day: number): Promise<Set<string>> {
+    if (!ids.length) return new Set()
+    const rows = await query(`select receiver::text as id from friend_gifts where day = $1 and receiver = any($2::uuid[])
+      group by receiver having sum(amount) + $3::int > $4::int`, [day, ids, R.FRIEND_GIFT_DIA, R.FRIEND_GIFT_DAILY])
+    return new Set(rows.map((r) => String(r.id)))
   }
 
   // 오늘(리셋 날짜) 선물: 보낸 합계·보낸 친구 id·나에게 보낸 친구 id
@@ -3664,6 +3676,7 @@ export function createApp(opts: AppOptions) {
     return {
       day, sent: out.reduce((n, r) => n + Number(r.amount), 0), sentTo: out.map((r) => String(r.receiver)),
       receivedFrom: rows.filter((r) => r.receiver === me).map((r) => String(r.sender)),
+      received: rows.filter((r) => r.receiver === me).reduce((n, r) => n + Number(r.amount), 0),
     }
   }
 
@@ -3786,7 +3799,9 @@ export function createApp(opts: AppOptions) {
 
   // 친구 다이아 선물(2026-11-05, 마이그레이션 066): {id}(그 친구 한 명) 또는 {all: true}(오늘 아직 안 보낸 친구 모두 — 남은 하루 한도·가진 다이아만큼 목록 순서대로).
   // 친구 한 명에게 하루 한 번 R.FRIEND_GIFT_DIA개, 보내는 사람 하루 합계 R.FRIEND_GIFT_DAILY개(00:00 KST 초기화). 받는 친구는 우편으로 받는다.
-  // 막힘: 404 not_friend, 409 gift_sent(오늘 이미 보냄)·gift_cap(오늘 한도 다 씀)·not_enough_diamonds·gift_none(모두 보내기: 보낼 친구 없음).
+  // 받는 사람도 하루 R.FRIEND_GIFT_DAILY개까지 — 다 받은 친구는 모두 보내기에서 빠진다.
+  // 막힘: 404 not_friend, 409 gift_sent(오늘 이미 보냄)·gift_cap(오늘 보낼 한도 다 씀)·their_gift_full(그 친구가 오늘 받을 한도를 다 받음)·
+  // not_enough_diamonds·gift_none(모두 보내기: 보낼 수 있는 친구 없음).
   // 응답 = 새 friendsView + gift_sent(이번에 보낸 친구 수). 다이아는 플레이어 상태에서 빠진다(앱은 플레이어를 다시 받는다).
   app.post('/v1/friends/gift', auth, async (c) => {
     const me = c.get('playerId') as string
@@ -3795,8 +3810,10 @@ export function createApp(opts: AppOptions) {
     if (!all && (typeof b.id !== 'string' || !UUID_RE.test(b.id))) throw new ApiError(400, 'bad_request', "send 'id' (a friend's player id) or 'all': true")
     const one = all ? '' : String(b.id).toLowerCase()
     const per = R.FRIEND_GIFT_DIA
-    // 같은 사람의 선물은 이 서버 안에서 줄을 세운다(연타·모두 보내기가 겹쳐도 version 충돌로 실패하지 않게). 상한은 commit 가드가 지킨다.
-    const sent = await inTurn([`gift:${me}`], async () => {
+    // 같은 사람이 보내는 선물·같은 사람이 받는 선물은 이 서버 안에서 줄을 세운다(연타·모두 보내기·여러 친구가 한 사람에게 동시에 보내도
+    // version 충돌로 실패하지 않고 받는 쪽 합계도 겹쳐 읽지 않게). 상한은 commit 가드가 지킨다.
+    const mine = (await query(`select (case when a = $1 then b else a end)::text as id from friend_links where accepted and (a = $1 or b = $1)`, [me])).map((r) => String(r.id))
+    const sent = await inTurn([`gift:${me}`, ...(all ? mine : [one]).map((id) => `giftr:${id}`)], async () => {
       for (let i = 0; i < MAX_ATTEMPTS; i++) {
         const now = clock()
         const g = await loadGame()
@@ -3813,6 +3830,9 @@ export function createApp(opts: AppOptions) {
         }
         const room = Math.floor((R.FRIEND_GIFT_DAILY - gift.sent) / per)
         if (room <= 0) throw new ApiError(409, 'gift_cap', `daily gift limit ${R.FRIEND_GIFT_DAILY} reached`)
+        const full = await giftFull(to, gift.day)
+        if (!all && full.has(one)) throw new ApiError(409, 'their_gift_full', `that friend already received ${R.FRIEND_GIFT_DAILY} today`)
+        to = to.filter((f) => !full.has(f))
         if (!to.length) throw new ApiError(409, 'gift_none', 'no friend left to send a gift to today')
         const afford = Math.floor(pl.diamonds / per)
         if (afford <= 0) throw new ApiError(409, 'not_enough_diamonds', 'not enough diamonds')

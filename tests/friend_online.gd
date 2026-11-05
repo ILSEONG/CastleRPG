@@ -87,23 +87,24 @@ func _ready() -> void:
 	await _frames(10)
 	await _shot("f3_friends")
 
-	# 3b. 다이아 선물(2026-11-05): B가 나에게 100 → 내 친구 줄에 '선물 받음', 우편에 다이아. 내가 B에게 [💎100] → '보냄', 다이아 −100, B 우편 +100.
+	# 3b. 다이아 선물(2026-11-05): B가 나에게 50 → 내 친구 줄에 '선물 받음', 우편에 다이아. 내가 B에게 [💎50] → '보냄', 다이아 −50, B 우편 +50.
 	await _http("POST", "/v1/test/grant_diamonds", {"amount": 1000}, _bots.B.token)
 	var gb = await _http("POST", "/v1/friends/gift", {"id": me}, _bots.B.token)
-	_check(int(gb.get("gift_sent", 0)) == 1, "B gifts me 100", str(gb))
+	_check(int(gb.get("gift_sent", 0)) == 1, "B gifts me 50", str(gb))
 	await _http("POST", "/v1/test/grant_diamonds", {"amount": 500}, Net.token)
 	Net.refresh()
 	Economy.friends_load()
 	_check(await _wait_until(func(): return Economy.friends.get("gift", {}).get("received_from", []).has(_bots.B.id) and Economy.diamonds >= 500, 10.0),
 		"received_from has B", str(Economy.friends.get("gift")))
 	await _frames(10)
+	_check(fp.gift_label.text.contains("받은 선물 💎50 / 1,500"), "received total shown (receiver cap 1,500)", fp.gift_label.text)
 	var dia0: int = Economy.diamonds
 	fp.gift_one(_bots.B.id)
 	_check(Economy.friends.gift.sent_to.has(_bots.B.id), "gift shows sent right away", "")
-	_check(await _wait_until(func(): return not Economy.friends_waiting and Economy.diamonds == dia0 - 100, 10.0), "my diamonds -100 after gift", "%d -> %d" % [dia0, Economy.diamonds])
-	_check(Economy.friends.gift.sent == 100 and Economy.friends.gift.sent_to == [_bots.B.id], "server: sent 100 to B", str(Economy.friends.gift))
+	_check(await _wait_until(func(): return not Economy.friends_waiting and Economy.diamonds == dia0 - 50, 10.0), "my diamonds -50 after gift", "%d -> %d" % [dia0, Economy.diamonds])
+	_check(Economy.friends.gift.sent == 50 and Economy.friends.gift.sent_to == [_bots.B.id], "server: sent 50 to B", str(Economy.friends.gift))
 	var bm = await _http("GET", "/v1/mail", null, _bots.B.token)
-	_check(bm.get("mails", []).size() == 1 and bm.mails[0].reward.get("diamonds", 0) == 100, "B gets a 100-diamond mail", str(bm))
+	_check(bm.get("mails", []).size() == 1 and bm.mails[0].reward.get("diamonds", 0) == 50, "B gets a 50-diamond mail", str(bm))
 	await _frames(10)
 	await _shot("f3b_gift")
 	fp.gift_all()  # 첫 탭 = 확인(C 한 명)
@@ -111,7 +112,7 @@ func _ready() -> void:
 	_check(fp.gift_all_btn.text.contains("1명"), "gift-all asks to confirm with the count", fp.gift_all_btn.text)
 	await _shot("f3c_gift_all_confirm")
 	fp.gift_all()
-	_check(await _wait_until(func(): return not Economy.friends_waiting and Economy.friends.gift.sent == 200, 10.0), "gift all -> C too (200 today)", str(Economy.friends.gift))
+	_check(await _wait_until(func(): return not Economy.friends_waiting and Economy.friends.gift.sent == 100, 10.0), "gift all -> C too (100 today)", str(Economy.friends.gift))
 	await _frames(10)
 	_check(fp.gift_all_btn.disabled, "gift-all disabled when everyone got one", "")
 	await _shot("f3d_gift_done")

@@ -4,8 +4,8 @@ extends "res://scripts/ui_window.gd"
 ## 친구 목록: 빌려주는 영웅(친구가 모집권 던전에서 데려가는 내 영웅 — 기본은 가장 강한 영웅) [바꾸기] → 내 영웅 줄에서 탭,
 ##   목록(스크롤): 받은 신청 [수락][거절], 친구 n / 상한(영웅·레벨·전투력, 오늘 함께했으면 표시) [삭제], 보낸 신청 [취소].
 ## 친구 추가: 친구 코드 입력 + [신청], 추천 성주(최근 접속, 서버가 무작위로 고른다) [새로고침] → 새로 받기, [신청].
-## 다이아 선물(2026-11-05, 쿠키런·서머너즈 워의 친구 하트 보내기처럼): 친구 목록 위 줄 "오늘 보낸 선물 n / 3,000" + [모두 보내기](한 번 더 눌러 확인),
-##   친구 줄마다 [💎100](오늘 보냈으면 '보냄'), 오늘 나에게 보낸 친구는 '선물 받음 — 우편 확인'. 친구 한 명 하루 100개, 하루 합계 3,000개(서버가 지킨다).
+## 다이아 선물(2026-11-05, 쿠키런·서머너즈 워의 친구 하트 보내기처럼): 친구 목록 위 줄 "보낸 선물 n / 1,500 · 받은 선물 n / 1,500" + [모두 보내기](한 번 더 눌러 확인),
+##   친구 줄마다 [💎50](오늘 보냈으면 '보냄', 그 친구가 오늘 1,500개를 다 받았으면 '받기 마감'), 오늘 나에게 보낸 친구 표시. 친구 한 명 하루 50개, 보내기·받기 각각 하루 1,500개(서버가 지킨다).
 ## 친구 요청은 Economy.friend_op, 목록은 Economy.friends(응답이 오면 friends_changed로 다시 그린다).
 ## 오프라인이면 안내 한 줄만.
 
@@ -230,10 +230,11 @@ func _hero_op(id) -> void:
 	_op("hero", {"hero_id": id}, local)
 
 
-## 오늘 아직 선물을 안 보낸 친구 id들(목록 순서)
+## 오늘 아직 선물을 안 보냈고 받을 한도가 남은 친구 id들(목록 순서)
 func _gift_targets(f: Dictionary) -> Array:
 	var sent: Array = f.get("gift", {}).get("sent_to", [])
-	return f.get("friends", []).map(func(p): return str(p.get("id", ""))).filter(func(id): return id != "" and not sent.has(id))
+	var full: Array = f.get("gift", {}).get("full", [])  # 오늘 받을 한도(1,500개)를 다 받은 친구
+	return f.get("friends", []).map(func(p): return str(p.get("id", ""))).filter(func(id): return id != "" and not sent.has(id) and not full.has(id))
 
 
 ## 한 친구에게 선물: 곧바로 '보냄'으로 바꿔 보이고 보낸다(거절되면 되돌린다).
@@ -265,7 +266,7 @@ func gift_all() -> void:
 func _gift_all_count(f: Dictionary) -> int:
 	var g: Dictionary = f.get("gift", {})
 	var per: int = max(1, int(g.get("per", 100)))
-	var room: int = (int(g.get("cap", 3000)) - int(g.get("sent", 0))) / per
+	var room: int = (int(g.get("cap", 1500)) - int(g.get("sent", 0))) / per
 	return max(0, mini(_gift_targets(f).size(), mini(room, int(Economy.diamonds) / per)))
 
 
@@ -334,11 +335,12 @@ func _refresh() -> void:
 		_fit()
 		return
 	var gift: Dictionary = f.get("gift", {})
-	var per := int(gift.get("per", 100))
+	var per := int(gift.get("per", 50))
 	var gift_sent: Array = gift.get("sent_to", [])
 	var gift_got: Array = gift.get("received_from", [])
-	var gift_full: bool = int(gift.get("sent", 0)) + per > int(gift.get("cap", 3000))
-	gift_label.text = Lang.t("friend_panel.gift_today") % [UiKit.commas(int(gift.get("sent", 0))), UiKit.commas(int(gift.get("cap", 3000)))]
+	var gift_full: bool = int(gift.get("sent", 0)) + per > int(gift.get("cap", 1500))
+	var cap_s := UiKit.commas(int(gift.get("cap", 1500)))
+	gift_label.text = Lang.t("friend_panel.gift_today") % [UiKit.commas(int(gift.get("sent", 0))), cap_s, UiKit.commas(int(gift.get("received", 0))), cap_s]
 	var n_all := _gift_all_count(f)
 	if n_all == 0:
 		_gift_all_armed = false
@@ -349,7 +351,7 @@ func _refresh() -> void:
 	_section(list, Lang.t("friend_panel.refresh_8"), f.get("incoming", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_9"), HudScript.ACCENT, "accept", p.id); _add_btn(row, Lang.t("friend_panel.refresh_10"), UiKit.STEEL, "remove", p.id))
 	var fr: Array = f.get("friends", [])
 	_section(list, Lang.t("friend_panel.refresh_11") % [fr.size(), int(f.get("cap", 30))], fr, func(p, row):
-		_gift_btn(row, p.id, per, gift_sent.has(p.id), gift_full)
+		_gift_btn(row, p.id, per, gift_sent.has(p.id), gift_full, gift.get("full", []).has(p.id))
 		_add_btn(row, Lang.t("friend_panel.refresh_12"), UiKit.STEEL, "remove", p.id),
 		Lang.t("friend_panel.refresh_13"), used, gift_got)
 	_section(list, Lang.t("friend_panel.refresh_14"), f.get("outgoing", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_15"), UiKit.STEEL, "remove", p.id))
@@ -427,12 +429,13 @@ func _add_btn(row: HBoxContainer, text: String, color: Color, op: String, id: St
 	row.add_child(b)
 
 
-## 친구 줄 [💎100] — 오늘 보냈으면 '보냄'(꺼짐), 하루 한도를 다 썼으면 꺼짐.
-func _gift_btn(row: HBoxContainer, id: String, per: int, sent: bool, full: bool) -> void:
-	var b := _button(Lang.t("friend_panel.gift_done") if sent else Lang.t("friend_panel.gift_one") % per, UiKit.STEEL if sent else HudScript.ACCENT, 21)
+## 친구 줄 [💎50] — 오늘 보냈으면 '보냄', 그 친구가 오늘 1,500개를 다 받았으면 '받기 마감', 내 보낼 한도를 다 썼으면 꺼짐.
+func _gift_btn(row: HBoxContainer, id: String, per: int, sent: bool, full: bool, their_full := false) -> void:
+	var text := Lang.t("friend_panel.gift_done") if sent else (Lang.t("friend_panel.gift_their_full") if their_full else Lang.t("friend_panel.gift_one") % per)
+	var b := _button(text, UiKit.STEEL if sent or their_full else HudScript.ACCENT, 21)
 	b.custom_minimum_size = Vector2(96, 52)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.disabled = sent or full or Economy.friends_waiting
+	b.disabled = sent or full or their_full or Economy.friends_waiting
 	b.pressed.connect(func(): gift_one(id))
 	row.add_child(b)
 

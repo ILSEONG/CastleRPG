@@ -455,8 +455,9 @@ economy.friend_text.not_friend,이미 친구가 아닙니다,,,,scripts/economy.
 economy.friend_text.not_owned,보유하지 않은 영웅입니다,,,,scripts/economy.gd
 economy.friend_text.bad_request,친구 코드는 8자리입니다,,,,scripts/economy.gd
 economy.friend_text.gift_sent,오늘 이미 선물을 보낸 친구입니다,,,,scripts/economy.gd
-economy.friend_text.gift_cap,오늘 보낼 수 있는 다이아 선물을 모두 보냈습니다(하루 3000개),,,,scripts/economy.gd
-economy.friend_text.gift_none,오늘 선물을 보낼 친구가 없습니다,,,,scripts/economy.gd
+economy.friend_text.gift_cap,오늘 보낼 수 있는 다이아 선물을 모두 보냈습니다(하루 1500개),,,,scripts/economy.gd
+economy.friend_text.gift_none,오늘 선물을 보낼 수 있는 친구가 없습니다,,,,scripts/economy.gd
+economy.friend_text.their_gift_full,그 친구는 오늘 받을 수 있는 다이아 선물(하루 1500개)을 모두 받았습니다,,,,scripts/economy.gd
 economy.friend_text.not_enough_diamonds,다이아가 부족합니다,,,,scripts/economy.gd
 economy.friend_done_text.request,친구 신청을 보냈습니다,,,,scripts/economy.gd
 economy.friend_done_text.accept,친구가 되었습니다,,,,scripts/economy.gd
@@ -602,11 +603,12 @@ friend_panel.fill_picks,자동,,,,scripts/friend_panel.gd
 friend_panel.section.sub,%s Lv %d · 전투력 %d,,,,scripts/friend_panel.gd
 friend_panel.section.sub_2,영웅 없음,,,,scripts/friend_panel.gd
 friend_panel.section,오늘 이미 함께했습니다 · 내일 다시 가능,,,,scripts/friend_panel.gd
-friend_panel.gift_today,오늘 보낸 선물 💎%s / %s,,,,scripts/friend_panel.gd
+friend_panel.gift_today,보낸 선물 💎%s / %s · 받은 선물 💎%s / %s,,,,scripts/friend_panel.gd
 friend_panel.gift_all,모두 보내기,,,,scripts/friend_panel.gd
 friend_panel.gift_all_ok,%d명 💎%s 보내기,,,,scripts/friend_panel.gd
 friend_panel.gift_one,💎%d,,,,scripts/friend_panel.gd
 friend_panel.gift_done,보냄,,,,scripts/friend_panel.gd
+friend_panel.gift_their_full,받기 마감,,,,scripts/friend_panel.gd
 friend_panel.gift_got,나에게 다이아를 선물했습니다 · 우편함에서 받기,,,,scripts/friend_panel.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
