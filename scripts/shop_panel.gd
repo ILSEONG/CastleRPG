@@ -51,7 +51,7 @@ const SOLD_BG := Color(0.86, 0.87, 0.89, 0.7)
 const GIVE := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
 const CLOSE_PX := 56.0
-const CARD_W := 316.0
+const CARD_W := 300.0  # 두 칸 + 간격 10 + 세로 스크롤 막대가 시트 안(628)에 들어가게 — 넘치면 탭마다 창 너비가 바뀐다(2026-11-05 "양피지 너비")
 
 var tab := "package"
 var body: VBoxContainer
@@ -650,7 +650,9 @@ func _pass_cell(i: int, track: String, reward: Dictionary, owned: bool, claimed:
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_theme_constant_override("separation", 2)
-	v.add_child(_label(Missions.reward_text(reward), 17, GIVE if track == "free" else PASS_COL))
+	var rw := _label(Missions.reward_text(reward), 17, GIVE if track == "free" else PASS_COL)
+	rw.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # 긴 보상은 줄을 바꾼다(한 줄로 두면 표가 시트보다 넓어진다)
+	v.add_child(rw)
 	if claimed.call(i, track):
 		v.add_child(_label(Lang.t("shop_panel.growth_cell"), 20, SUB))
 	elif can.call(i, track):
