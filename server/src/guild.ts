@@ -1,6 +1,7 @@
 // 길드 규칙(순수 함수, 시간 인자). 앱 scripts/guild.gd와 같은 수치·규칙.
 // 길드 경험치·보스 누적 피해 = 실제 길드원이 쌓은 값(guilds.exp·boss_damage) + 가상 길드원 몫(virtualTotals — 길드 seed·생성 시각·지금으로
 // 매번 같은 값을 계산한다. 저장하지 않으므로 여러 요청이 겨뤄도 두 번 세지 않는다). 레벨·보스 단계는 누적값에서 나온다.
+import * as N from './names.ts'
 import { mulberry32, powerAt, resetAt, resetDay } from './rules.ts'
 import { txt } from './texts.ts'
 
@@ -103,6 +104,8 @@ export function nickname(seed: number): string {
 
 // 플레이어 id(uuid) → 길드원 이름(같은 id면 늘 같다).
 export function playerName(id: string): string {
+  const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
+  if (own) return own
   const hex = id.replace(/-/g, '')
   return nickname(mix(parseInt(hex.slice(0, 8), 16), parseInt(hex.slice(8, 16), 16)))
 }
