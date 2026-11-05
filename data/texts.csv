@@ -1246,11 +1246,9 @@ merchant_panel.refresh_2,→ %s골드,,,,scripts/merchant_panel.gd
 merchant_panel.main_row,판매,,,,scripts/merchant_panel.gd
 merchant_panel.qty_labels,→ %s골드,,,,scripts/merchant_panel.gd
 merchant_panel.qty_labels_2,선택 판매 · %s골드,,,,scripts/merchant_panel.gd
-mission_panel.head.daily,매일 00:00에 초기화,,,,scripts/mission_panel.gd
-mission_panel.head.weekly,매주 월요일 00:00에 초기화,,,,scripts/mission_panel.gd
-mission_panel.head.repeat,받을 때마다 목표가 올라가며 반복해서 받을 수 있습니다,,,,scripts/mission_panel.gd
+mission_panel.head.daily,매일 자정에 초기화,,,,scripts/mission_panel.gd
+mission_panel.head.weekly,매주 월요일 자정에 초기화,,,,scripts/mission_panel.gd
 mission_panel.ready,미션,,,,scripts/mission_panel.gd
-mission_panel.head,%s · 남은 시간 %s,,,,scripts/mission_panel.gd
 mission_panel.row,%d회 수령,,,,scripts/mission_panel.gd
 mission_panel.row_2,보상: ,,,,scripts/mission_panel.gd
 mission_panel.row_3,완료,,,,scripts/mission_panel.gd
