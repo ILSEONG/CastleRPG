@@ -5060,8 +5060,10 @@ static var FRIEND_TEXT := {
 	"already_requested": Lang.t("economy.friend_text.already_requested"), "friend_full": Lang.t("economy.friend_text.friend_full"), "their_full": Lang.t("economy.friend_text.their_full"),
 	"no_request": Lang.t("economy.friend_text.no_request"), "not_friend": Lang.t("economy.friend_text.not_friend"), "not_owned": Lang.t("economy.friend_text.not_owned"),
 	"bad_request": Lang.t("economy.friend_text.bad_request"),
+	"gift_sent": Lang.t("economy.friend_text.gift_sent"), "gift_cap": Lang.t("economy.friend_text.gift_cap"), "gift_none": Lang.t("economy.friend_text.gift_none"),
+	"not_enough_diamonds": Lang.t("economy.friend_text.not_enough_diamonds"),
 }
-static var FRIEND_DONE_TEXT := {"request": Lang.t("economy.friend_done_text.request"), "accept": Lang.t("economy.friend_done_text.accept"), "remove": Lang.t("economy.friend_done_text.remove"), "hero": Lang.t("economy.friend_done_text.hero")}
+static var FRIEND_DONE_TEXT := {"request": Lang.t("economy.friend_done_text.request"), "accept": Lang.t("economy.friend_done_text.accept"), "remove": Lang.t("economy.friend_done_text.remove"), "hero": Lang.t("economy.friend_done_text.hero"), "gift": Lang.t("economy.friend_done_text.gift")}
 static var FRIEND_OFFLINE_TEXT := Lang.t("economy.friend_offline_text")
 
 
@@ -5074,6 +5076,7 @@ func friends_load() -> void:
 
 
 ## 친구 요청: op = "request"({code} 또는 {id}) · "accept"({id}) · "remove"({id} — 삭제·거절·취소) · "hero"({hero_id}, null = 가장 강한 영웅).
+## · "gift"({id} 또는 {all: true} — 친구 다이아 선물, 서버가 한도·다이아를 확인하고 다이아를 뺀다. 응답 뒤 플레이어를 다시 받아 다이아가 맞춰진다).
 ## 응답이 오면 friends를 바꾸고, 친구가 바뀌었으면 플레이어 상태(모집권 던전 도우미 목록)를 다시 받는다. 오프라인·대기 중·끊김이면 false.
 func friend_op(op: String, body: Dictionary) -> bool:
 	if net == null:
@@ -5095,6 +5098,9 @@ func _on_friend_op(data, op: String) -> void:
 	_on_friends(data)
 	if op != "hero":
 		net.refresh()  # 도우미 목록(dungeons.ticket.helpers)은 플레이어 응답에 온다
+	if op == "gift":
+		notice.emit(FRIEND_DONE_TEXT.gift % [int(data.get("gift_sent", 0)) if data is Dictionary else 0, int(friends.get("gift", {}).get("per", 100))])
+		return
 	# 서로 신청하면 바로 친구가 된다
 	notice.emit(FRIEND_DONE_TEXT.accept if op == "request" and friends.get("friends", []).size() > before else FRIEND_DONE_TEXT[op])
 
