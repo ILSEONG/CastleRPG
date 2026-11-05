@@ -1,4 +1,4 @@
-// 플레이어가 고른 닉네임(2026-11-05, 마이그레이션 066). 이름을 보이는 곳(guild.ts playerName·rules.ts friendName)이 먼저 여기를 본다 —
+// 플레이어가 고른 닉네임(2026-11-05, 마이그레이션 067). 이름을 보이는 곳(guild.ts playerName·rules.ts friendName)이 먼저 여기를 본다 —
 // 없으면 id에서 정해지는 별명. 동기 함수에서 쓰므로 메모리에 둔다: 서버가 뜰 때 모두 읽고(load), 바꿀 때 바로 넣고(set),
 // 서버는 하나(Render Starter)라 주기적으로 다시 읽지 않는다(Neon이 쉬도록).
 import { findBad } from './profanity.ts'
