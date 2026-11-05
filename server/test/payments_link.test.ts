@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createHash, generateKeyPairSync, randomBytes, createVerify } from 'node:crypto'
 import { test } from 'node:test'
 import * as Pay from '../src/payments.ts'
-import { setup } from './helpers.ts'
+import { setup, takeMail } from './helpers.ts'
 
 // 가짜 확인기: token "ok:<상품>"이면 그 상품의 완료 결제, "pending"이면 진행 중, "boom"이면 확인 서버 오류, 그 밖은 무효.
 function fakeVerifier(orderPrefix: string) {
@@ -26,8 +26,11 @@ function fakeVerifier(orderPrefix: string) {
   return { v, finished }
 }
 
-const buy = (S: any, token: string, product: string, provider: string, t: string) =>
-  S.req('POST', '/v1/iap/purchase', { token, body: { product, provider, token: t } })
+// 사고 우편함을 다 받는다(2026-11-05부터 받는 것은 우편으로 온다)
+const buy = async (S: any, token: string, product: string, provider: string, t: string) => {
+  const r = await S.req('POST', '/v1/iap/purchase', { token, body: { product, provider, token: t } })
+  return r.status === 200 && r.json.bought?.mail ? takeMail(S, token, r) : r
+}
 
 test('Google 결제: 확인되면 지급 + consume, 다시 보내면 already(+ consume 다시), 진행 중 202, 무효·상품 불일치 402, 확인 오류 502', async () => {
   const g = fakeVerifier('GPA')

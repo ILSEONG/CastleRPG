@@ -727,7 +727,7 @@ func _phase7_toss() -> void:
 	ReleasePlatform.override = ""
 
 
-const DONE_PAY := "결제가 완료되어 지급했습니다"
+const DONE_PAY := "결제가 완료되어 우편함으로 보냈습니다"
 
 
 ## phase 8: 계정 연결(2026-10-12). 새 기기 게스트 → 설정 [Google]로 연결 → 같은 계정·진행 그대로, 이제 Google 자동 로그인.
@@ -772,14 +772,22 @@ func _phase8_link() -> void:
 	StorePay.fake_store = func(_id): return "order-online-check-1"
 	var dia0 := Economy.diamonds
 	var opened_pay := Economy.iap_buy("dia_1")
-	var paid := await _wait_until(func(): return Economy.diamonds >= dia0 + 300, 10.0)
+	# 결제한 다이아는 우편으로 온다(2026-11-05) — 결제 뒤 앱이 우편함을 새로 받아 오고, 받으면 오른다
+	var mailed := await _wait_until(func(): return LiveOps.mail_count() > 0, 10.0)
+	if mailed:
+		LiveOps.claim()
+	var paid := mailed and await _wait_until(func(): return Economy.diamonds >= dia0 + 300 and LiveOps.claiming.is_empty(), 10.0)
 	_check(opened_pay and paid and DONE_PAY in notes and Economy.iap_view().first.has("dia_1"),
 		"(p1) buying 다이아 300 sends the receipt; the server grants it and the shop marks the first-purchase bonus used", "dia=%d->%d notes=%s" % [dia0, Economy.diamonds, notes])
 	var dia1 := Economy.diamonds
 	StorePay._send("dia_1", "test", "order-online-check-1", true)
 	await _wait_until(func(): return StorePay._sent.is_empty(), 10.0)
 	await _frames(10)
-	_check(Economy.diamonds == dia1 and notes.count(DONE_PAY) == 1, "(p1) the same order sent again (restore) grants nothing more and stays quiet", "dia=%d->%d" % [dia1, Economy.diamonds])
+	LiveOps.mail_loaded = false
+	LiveOps.fetch_mail()
+	await _wait_until(func(): return LiveOps.mail_loaded, 10.0)
+	_check(Economy.diamonds == dia1 and LiveOps.mail_count() == 0 and notes.count(DONE_PAY) == 1, "(p1) the same order sent again (restore) grants nothing more and stays quiet",
+		"dia=%d->%d mails=%d" % [dia1, Economy.diamonds, LiveOps.mail_count()])
 	StorePay.fake_store = Callable()
 	_check(not Economy.iap_buy("dia_2") and notes.back() == preload("res://scripts/release_platform.gd").iap_off_text(),
 		"(p2) with no payment keys on the server the buttons only say payments open after release", str(notes.back()))

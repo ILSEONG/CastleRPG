@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as G from '../src/guild.ts'
 import * as M from '../src/missions.ts'
-import { barrier, setup, T0 } from './helpers.ts'
+import { barrier, setup, T0, takeMail } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 type Res = Awaited<ReturnType<Setup['req']>>
@@ -102,6 +102,8 @@ test('결제 영수증 두 번(같은 주문 번호가 동시에): 지급은 한
     assert.equal(ok.status, 200, JSON.stringify(ok.json))
     assert.ok(other.json.already === true || other.json.error === 'order_pending', JSON.stringify(other.json))
     if (other.status === 200 && !other.json.already) assert.fail('both requests granted the order')
+    assert.equal((await S.req('GET', '/v1/mail', { token })).json.mails.length, 1) // 우편 한 통(2026-11-05)
+    await takeMail(S, token)
     assert.equal((await player(S, token)).diamonds, d0 + 16000)
     assert.equal(await logCount(S, id, 'iap'), 1)
     // 지급이 끝난 뒤 다시 보내면 already

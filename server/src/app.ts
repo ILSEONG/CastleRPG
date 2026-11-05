@@ -266,8 +266,16 @@ interface Change {
   marketBuy?: { id: number; currency: string; price: number } // 사기: 판매를 먼저 잡고(한 사람만), 값(goldTenths·diamonds 음수)이 모자라면 전체를 되돌린다
   // 운영 도구(live_ops.ts, 마이그레이션 039)
   mailClaim?: number[] // 받은 우편 id들(하나라도 이미 받았으면 전체가 안 바뀐다)
+  mailOut?: MailOut[] // 이 플레이어에게 보낼 우편(상점·결제 상품 — 2026-11-05 우편 지급). version 가드와 한 문장
   coupon?: { code: string; max_uses: number | null } // 쓴 쿠폰(이 계정이 이미 썼으면 전체가 안 바뀐다, 전체 상한에 걸리면 되돌린다)
   idle?: boolean // 플레이어 활동이 아닌 쓰기(게으른 연구 완료·파견 하루 정리) — last_active를 옮기지 않는다(건설 완료 completeSql과 같다, 오프라인 골드 기준)
+}
+
+// 이 플레이어에게 보내는 우편 한 통(기한 MAIL_DEFAULT_DAYS일).
+interface MailOut {
+  title: string
+  body: string
+  reward: Record<string, number>
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -1012,6 +1020,11 @@ export function createApp(opts: AppOptions) {
       ctes.push(`mcl as (insert into mail_claims (mail_id, player_id, at) select x, s.player_id, to_timestamp(${p(now)}::float8)
         from s, unnest(${p(ch.mailClaim)}::bigint[]) as x returning 1)`)
     }
+    ch.mailOut?.forEach((m, i) => {
+      ctes.push(`mo${i} as (insert into mails (player_id, title, body, reward, created_at, expires_at)
+        select player_id, ${p(m.title)}::text, ${p(m.body)}::text, ${p(JSON.stringify(m.reward))}::jsonb, to_timestamp(${p(now)}::float8),
+          to_timestamp(${p(now + LO.MAIL_DEFAULT_DAYS * 86400)}::float8) from s returning 1)`)
+    })
     if (ch.coupon) {
       const code = `${p(ch.coupon.code)}::text`
       ctes.push(`cu as (update coupons set uses = uses + 1 where code = ${code} and (max_uses is null or uses < max_uses) and exists (select 1 from s) returning 1)`)
@@ -2690,28 +2703,17 @@ export function createApp(opts: AppOptions) {
         const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
         if (ad && !free && ad.required && !ad.verified) throw new ApiError(409, 'ad_unverified', `'${x.id}' needs an ad confirmed by AdMob`)
         if (ad && !free && !ad.required && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
-        const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(ad ? { ad: !free, ssv: ad.verified } : {}) } } }
-        const give = x.give as Record<string, number>
-        let gold = (give.gold ?? 0) * 10
-        let dia = give.diamonds ?? 0
+        const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, mail: true, ...(ad ? { ad: !free, ssv: ad.verified } : {}) } } }
+        // 값만 바로 빼고, 받는 것은 우편으로(2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내")
         if (x.currency === 'diamonds') {
           if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
-          dia -= x.price
+          change.diamonds = -x.price
         } else if (x.currency === 'gold') {
           if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
-          gold -= x.price * 10
+          change.goldTenths = -x.price * 10
         }
-        if (gold) change.goldTenths = gold
-        if (dia) change.diamonds = dia
-        const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
-        if (Object.keys(res).length) change.res = res
-        if (give.tickets) change.diaTickets = give.tickets
-        const keys = addKeys(p, g, now, give, change)
-        const pz = P.fromReward(give)
-        if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
-        const sz = S.fromReward(give)
-        if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
-        return { change, extra: { bought: { id: x.id, give: x.give } }, reload: keys }
+        change.mailOut = [shopMail(x.name, x.give)]
+        return { change, extra: { bought: { id: x.id, give: x.give, mail: true } } }
       })
     } catch (e) {
       // 이 요청이 새로 잡은 표만, 구매 판단이 거절했을 때(sold_out·stale 등 409 — 쓰기 전) 돌려놓는다: 한도 등으로 못 산 광고는 다음 구매에 다시 쓴다.
@@ -2722,6 +2724,11 @@ export function createApp(opts: AppOptions) {
   })
 
   // --- 결제 상품(iap.ts): 다이아 충전·월정액·패키지·성장 패스 ---
+
+  // 상점·결제 상품 우편(2026-11-05): 제목 "[상점] 상품 이름", 받는 것 = 그 상품의 give.
+  function shopMail(name: string, give: Record<string, number>): MailOut {
+    return { title: txt('server.mail.shop.title', { name }), body: txt('server.mail.shop.body', { name }), reward: { ...give } }
+  }
 
   // 보상(보상 키 — 출석·미션과 같은 규칙)을 change에 더한다. 던전 열쇠는 종류마다(addKeys). 열쇠를 넣었으면 true(다시 읽기).
   function addReward(p: Player, g: Game, now: number, reward: Record<string, number>, change: Change) {
@@ -2803,9 +2810,9 @@ export function createApp(opts: AppOptions) {
         const st = IAP.normalize(p.iap, today(g, now))
         if (!IAP.canBuy(st, pr, now)) throw new ApiError(409, 'limit', `'${pr.id}' can't be bought now`)
         const { give, state } = IAP.purchase(st, pr)
-        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderKey, give } } }
-        const reload = addReward(p, g, now, give, change)
-        return { change, extra: { bought: { product: pr.id, give } }, reload }
+        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderKey, give, mail: true } } }
+        if (Object.keys(give).length) change.mailOut = [shopMail(pr.name, give)] // 우편으로(2026-11-05)
+        return { change, extra: { bought: { product: pr.id, give, mail: true } } }
       })
     } catch (e) {
       // 지급이 안 들어갔을 때만 주문 행을 지운다(지급은 economy_log iap와 한 문장). 쓴 뒤 다시 읽기·응답에서 난 오류면 남긴다 — 지우면
@@ -2844,11 +2851,38 @@ export function createApp(opts: AppOptions) {
       const st = IAP.normalize(p.iap, today(g, now))
       if (IAP.monthlyLeft(st, pr.id) <= 0) throw new ApiError(409, 'inactive', 'this monthly card is not active')
       if (!IAP.canClaimMonthly(st, pr.id)) throw new ApiError(409, 'claimed', 'already claimed today')
-      const state = { ...st, monthly: { ...st.monthly, [pr.id]: { ...st.monthly[pr.id], claimed: st.day } } }
-      const change: Change = { iap: state, log: { kind: 'monthly', detail: { product: pr.id, day: st.day, reward: pr.daily } } }
-      const reload = addReward(p, g, now, pr.daily ?? {}, change)
-      return { change, extra: { reward: pr.daily }, reload }
+      return { change: monthlyMailChange(st, [pr.id]), extra: { reward: pr.daily, mail: true } }
     })
+  })
+
+  // 월정액 오늘 몫을 우편으로(2026-11-05 사용자 "매일 받을 수 있는 월정액도 일단 우편으로 보내"): 받은 날로 적고 상품마다 우편 한 통.
+  function monthlyMailChange(st: IAP.IapState, ids: string[]): Change {
+    const monthly = { ...st.monthly }
+    const mailOut: MailOut[] = []
+    for (const id of ids) {
+      const pr = IAP.product(id)!
+      monthly[id] = { ...monthly[id], claimed: st.day }
+      const left = IAP.monthlyLeft(st, id)
+      mailOut.push({ title: txt('server.mail.monthly.title', { name: pr.name }), body: txt('server.mail.monthly.body', { name: pr.name, left: left - 1 }), reward: { ...(pr.daily ?? {}) } })
+    }
+    return { iap: { ...st, monthly }, mailOut, log: { kind: 'monthly', detail: { products: ids, day: st.day, mail: true } } }
+  }
+
+  // 그날 처음 우편함을 볼 때(GET /v1/mail — 로딩 일괄 조회·5분마다 다시 보기에도) 오늘 몫을 보낸다. 실패해도 우편함은 연다.
+  async function issueMonthly(c: Context) {
+    const id = c.get('playerId') as string
+    const [row] = await query('select iap from player_state where player_id = $1', [id])
+    const g = await loadGame()
+    if (!row || IAP.monthlyDue(IAP.normalize(row.iap, today(g, clock()))).length === 0) return
+    await mutate(c, (p, game, now) => {
+      const st = IAP.normalize(p.iap, today(game, now))
+      const due = IAP.monthlyDue(st)
+      return due.length ? { change: monthlyMailChange(st, due), extra: {} } : { extra: {} }
+    })
+  }
+  app.get('/v1/mail', auth, async (c, next) => {
+    await issueMonthly(c).catch((e) => console.error('monthly mail failed', e))
+    return next()
   })
 
   // 성장 패스 보상. body = {tier, track: 'free'|'paid'}. 그 라운드를 아직 못 깼거나(유료는 패스 없음) 받았으면 409 not_ready.
@@ -2863,6 +2897,23 @@ export function createApp(opts: AppOptions) {
       const reward = IAP.GROWTH[tier][track]
       const state = { ...st, gp: { ...st.gp, [track]: [...st.gp[track], tier].sort((a, z) => a - z) } }
       const change: Change = { iap: state, log: { kind: 'growth_pass', detail: { tier, track, reward } } }
+      const reload = addReward(p, g, now, reward, change)
+      return { change, extra: { reward }, reload }
+    })
+  })
+
+  // 성채 레벨 패스 보상(2026-11-05). body = {tier, track: 'free'|'paid'}. 성채가 그 레벨이 아니거나(유료는 패스 없음) 받았으면 409 not_ready.
+  app.post('/v1/iap/keep/claim', auth, async (c) => {
+    const b = await body(c)
+    const tier = intField(b, 'tier', 0, IAP.KEEP.length - 1)
+    const track = strField(b, 'track')
+    if (track !== 'free' && track !== 'paid') throw new ApiError(400, 'bad_request', "'track' must be free or paid")
+    return mutate(c, (p, g, now) => {
+      const st = IAP.normalize(p.iap, today(g, now))
+      if (!IAP.canClaimKeep(st, tier, track, level(p, R.KEEP))) throw new ApiError(409, 'not_ready', 'this castle level pass reward is not ready')
+      const reward = IAP.KEEP[tier][track]
+      const state = { ...st, kp: { ...st.kp, [track]: [...st.kp[track], tier].sort((a, z) => a - z) } }
+      const change: Change = { iap: state, log: { kind: 'keep_pass', detail: { tier, track, reward } } }
       const reload = addReward(p, g, now, reward, change)
       return { change, extra: { reward }, reload }
     })

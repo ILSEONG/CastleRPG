@@ -12,6 +12,7 @@ import * as G from './guild.ts'
 import * as R from './rules.ts'
 import { weekOf } from './guild_war.ts'
 import type { HeroDef } from './guild_war.ts'
+import { txt } from './texts.ts'
 
 const json = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)
 
@@ -217,10 +218,11 @@ export function registerPvp(app: Hono<Any>, d: Any) {
       if (it.give.equip && x.pl.items.length + it.give.equip > R.cfgNum(x.game.config, 'equip_bag_cap')) throw blocked('bag_full', 'equipment bag is full')
       const ch: Any = {}
       const give = { ...it.give }
-      if (give.tickets) {
-        ch.diaTickets = give.tickets
-        delete give.tickets
-      }
+      // 재화(골드·다이아·모집권)는 우편으로(2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내").
+      // 장비·영웅 조각은 우편에 담을 수 없어(무작위로 정해진다) 바로 받는다
+      const mail: Record<string, number> = {}
+      for (const k of ['gold', 'diamonds', 'tickets']) if (give[k]) { mail[k] = give[k]; delete give[k] }
+      if (Object.keys(mail).length) ch.mailOut = [{ title: txt('server.mail.pvp.title'), body: txt('server.mail.pvp.body'), reward: mail }]
       grant({ pl: x.pl, game: x.game }, give, ch, { n: 0 })
       if ((it.give.shards || it.give.ssr_shards) && !ch.shards) throw blocked('no_heroes', 'no hero to receive shards')
       ch.pvpBuy = { price: it.price, shop: { ...shop, bought: { ...shop.bought, [it.id]: (shop.bought[it.id] ?? 0) + 1 } } }
@@ -228,7 +230,7 @@ export function registerPvp(app: Hono<Any>, d: Any) {
       if (!(await commit(id, x.pl.version, ch, x.now))) continue
       const pl2 = await loadPlayer(id, x.game, x.now)
       return c.json({ ...view(pl2, x.game, x.now), pvp: await pvpView({ ...x, pl: pl2 }),
-        result: { id: it.id, give: it.give, shards: ch.shards ?? {}, items: ch.items ?? [] } })
+        result: { id: it.id, give: it.give, mail: Object.keys(mail).length > 0, shards: ch.shards ?? {}, items: ch.items ?? [] } })
     }
     throw new ApiError(409, 'conflict', 'concurrent update; try again')
   })

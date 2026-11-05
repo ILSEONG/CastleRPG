@@ -1570,24 +1570,20 @@ func buy_shop(id: String, ad := false, ad_token := "") -> bool:
 		return false
 	var give: Dictionary = x.give
 	var r := give.duplicate()  # 받는 것 − 값(다이아·골드)
+	var cost := {}  # 값만(온라인: 받는 것은 우편으로 — 2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내")
 	if x.currency == "diamonds":
 		r.diamonds = int(r.get("diamonds", 0)) - int(x.price)
+		cost.diamonds = -int(x.price)
 	elif x.currency == "gold":
 		r.gold = int(r.get("gold", 0)) - int(x.price)
+		cost.gold = -int(x.price)
 	if net != null:
 		if not net.up:
 			notice.emit(WAIT_TEXT)
 			return false
 		var n := shop_bought(id)
 		var key := "shop:%s:%d" % [id, n]
-		predict_reward(key, r, _shop_mark.bind(x))
-		var keys := {}
-		for type in GameData.DUNGEON_TYPES:
-			if int(give.get("keys_" + type, 0)) > 0:
-				keys[type] = int(give["keys_" + type])
-		if not keys.is_empty():  # 던전 입장권도 곧바로(서버 응답의 열쇠 위에 응답이 올 때까지 다시 얹는다 — _apply_server18)
-			_key_predicts[key] = keys
-			_add_keys(keys)
+		predict_reward(key, cost, _shop_mark.bind(x))
 		shop_changed.emit()
 		dungeons_changed.emit()
 		net.flush_kills()
@@ -1625,9 +1621,13 @@ func iap_view() -> Dictionary:
 			s[k] = []
 	if not s.get("gp") is Dictionary:
 		s.gp = {}
+	if not s.get("kp") is Dictionary:
+		s.kp = {}
 	for k in ["free", "paid"]:
 		if not s.gp.get(k) is Array:
 			s.gp[k] = []
+		if not s.kp.get(k) is Array:
+			s.kp[k] = []
 	if not s.get("hot") is Dictionary:
 		s.hot = {}
 	if not s.get("hcool") is Dictionary:
@@ -1700,14 +1700,24 @@ func can_claim_growth(tier: int, track: String, cleared: int) -> bool:
 	return track == "free" or s.passes.has("pass_growth")
 
 
-## 받을 것이 있다(상점 탭·하단 [상점] 빨간 점): 월정액 오늘 보상 또는 성장 패스.
+## 성채 레벨 패스 단계 받을 수 있는가(지금 성채 레벨).
+func can_claim_keep(tier: int, track: String) -> bool:
+	if tier < 0 or tier >= IapItems.KEEP.size():
+		return false
+	var s := iap_view()
+	if building_level(GameData.KEEP) < int(IapItems.KEEP[tier].level) or s.kp[track].has(tier) or s.kp[track].has(float(tier)):
+		return false
+	return track == "free" or s.passes.has("pass_keep")
+
+
+## 받을 것이 있다(상점 탭·하단 [상점] 빨간 점): 성장 패스·성채 레벨 패스. 월정액 매일 보상은 우편으로 온다(2026-11-05).
 func iap_claim_left(cleared: int) -> Dictionary:
 	var out := {}
-	for p in IapItems.of_kind("monthly"):
-		if can_claim_monthly(p.id):
-			out.package = true
 	for i in IapItems.GROWTH.size():
 		if can_claim_growth(i, "free", cleared) or can_claim_growth(i, "paid", cleared):
+			out.pass = true
+	for i in IapItems.KEEP.size():
+		if can_claim_keep(i, "free") or can_claim_keep(i, "paid"):
 			out.pass = true
 	return out
 
@@ -1797,6 +1807,16 @@ func claim_growth(tier: int, track: String, cleared: int) -> bool:
 	return _iap_claim("growth:%d:%s" % [tier, track], IapItems.GROWTH[tier][track], mark, "/v1/iap/growth/claim", {"tier": tier, "track": track})
 
 
+func claim_keep(tier: int, track: String) -> bool:
+	if not can_claim_keep(tier, track):
+		return false
+	var mark := func():
+		var s := iap_view()
+		s.kp[track] = s.kp[track] + [tier]
+		iap = s
+	return _iap_claim("keep:%d:%s" % [tier, track], IapItems.KEEP[tier][track], mark, "/v1/iap/keep/claim", {"tier": tier, "track": track})
+
+
 ## 보상 받기 공통: 온라인은 곧바로 반영(predict_reward + 기록 표시) 후 서버에 보낸다, 오프라인은 곧바로 받고 저장.
 func _iap_claim(key: String, reward: Dictionary, mark: Callable, path: String, body: Dictionary) -> bool:
 	if net != null:
@@ -1843,6 +1863,16 @@ func _on_shop_bought(data: Dictionary, key: String) -> void:
 	apply_server(data)
 	shop_changed.emit()
 	dungeons_changed.emit()
+	var b = data.get("bought")
+	if (b is Dictionary and b.get("mail") == true) or data.get("mail") == true:
+		fetch_mail()
+
+
+## 우편함을 다시 받는다(상점·결제 상품이 우편으로 왔다 — 하단 메뉴 [우편] 빨간 점). 단위 테스트(트리 밖)는 아무것도 안 한다.
+func fetch_mail() -> void:
+	var lo := get_node_or_null("/root/LiveOps") if is_inside_tree() else null
+	if lo != null:
+		lo.fetch_mail()
 
 
 func _on_shop_failed(key: String) -> void:

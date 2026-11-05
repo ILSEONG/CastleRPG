@@ -1710,13 +1710,12 @@ shop_panel.tabs_4,일일,,,,scripts/shop_panel.gd
 shop_panel.tabs_5,주간,,,,scripts/shop_panel.gd
 shop_panel.tabs_6,다이아,,,,scripts/shop_panel.gd
 shop_panel.head.package,월정액·특가 패키지,,,,scripts/shop_panel.gd
-shop_panel.head.pass,라운드를 깰 때마다 보상 · 패스를 사면 유료 보상도,,,,scripts/shop_panel.gd
-shop_panel.head.daily,매일 00:00에 초기화,,,,scripts/shop_panel.gd
-shop_panel.head.ad,광고를 보면 무료 · 매일 00:00에 초기화,,,,scripts/shop_panel.gd
-shop_panel.head.weekly,매주 월요일 00:00에 초기화,,,,scripts/shop_panel.gd
+shop_panel.head.daily,매일 자정에 초기화,,,,scripts/shop_panel.gd
+shop_panel.head.ad,매일 자정에 초기화,,,,scripts/shop_panel.gd
+shop_panel.head.weekly,매주 월요일 자정에 초기화,,,,scripts/shop_panel.gd
 shop_panel.head.diamond,단계마다 첫 구매는 다이아 2배,,,,scripts/shop_panel.gd
-shop_panel.head.pvp,"PVP 코인 상점 · 일일 상품은 매일, 주간 상품은 월요일 00:00에 초기화",,,,scripts/shop_panel.gd
-shop_panel.note_text,쓰지 않은 상품만 7일 안에 청약 철회(환불)할 수 있습니다,,,,scripts/shop_panel.gd
+shop_panel.head.pvp,"일일 상품은 매일 자정, 주간 상품은 월요일 자정에 초기화",,,,scripts/shop_panel.gd
+shop_panel.note_text,사용하지 않은 상품만 7일 안에 청약 철회(환불)할 수 있습니다,,,,scripts/shop_panel.gd
 shop_panel.sold_text,매진,,,,scripts/shop_panel.gd
 shop_panel.free_text,무료,,,,scripts/shop_panel.gd
 shop_panel.ad_text,광고 보기,,,,scripts/shop_panel.gd
@@ -1725,7 +1724,6 @@ shop_panel.short_text.diamonds,다이아가 부족합니다,,,,scripts/shop_pane
 shop_panel.short_text.gold,골드가 부족합니다,,,,scripts/shop_panel.gd
 shop_panel.ready,상점,,,,scripts/shop_panel.gd
 shop_panel.hot_time,남은 시간 ,,,,scripts/shop_panel.gd
-shop_panel.head,%s · 남은 시간 %s,,,,scripts/shop_panel.gd
 shop_panel.wallet,보유  PVP 코인 %s,,,,scripts/shop_panel.gd
 shop_panel.wallet_2,보유  다이아 %s  ·  골드 %s,,,,scripts/shop_panel.gd
 shop_panel.card,이번 주,,,,scripts/shop_panel.gd
@@ -1734,7 +1732,6 @@ shop_panel.buy,받음: ,,,,scripts/shop_panel.gd
 shop_panel.buy_2,구매: ,,,,scripts/shop_panel.gd
 shop_panel.pvp_card,오늘,,,,scripts/shop_panel.gd
 shop_panel.pvp_card_2,이번 주,,,,scripts/shop_panel.gd
-shop_panel.pvp_card_3,구매: ,,,,scripts/shop_panel.gd
 shop_panel.pack_card,첫 구매 2배,,,,scripts/shop_panel.gd
 shop_panel.pack_card_2,다이아 %s,,,,scripts/shop_panel.gd
 shop_panel.pack_card_3,+%s 보너스,,,,scripts/shop_panel.gd
@@ -1744,8 +1741,6 @@ shop_panel.build_packages_3,구매 즉시 ,,,,scripts/shop_panel.gd
 shop_panel.build_packages_4,%d일간 매일 %s,,,,scripts/shop_panel.gd
 shop_panel.build_packages_5,남은 기간 %d일,,,,scripts/shop_panel.gd
 shop_panel.build_packages_6,총 %s 이상의 가치,,,,scripts/shop_panel.gd
-shop_panel.build_packages_7,오늘 받기,,,,scripts/shop_panel.gd
-shop_panel.build_packages_8,오늘 받음,,,,scripts/shop_panel.gd
 shop_panel.build_packages_9,연장 ₩,,,,scripts/shop_panel.gd
 shop_panel.build_packages_10,구매함,,,,scripts/shop_panel.gd
 shop_panel.build_packages_11, (영구),,,,scripts/shop_panel.gd
@@ -1756,8 +1751,6 @@ shop_panel.build_packages.daily,매일 1회,,,,scripts/shop_panel.gd
 shop_panel.build_packages.weekly,매주 1회,,,,scripts/shop_panel.gd
 shop_panel.value_text,다이아 %s,,,,scripts/shop_panel.gd
 shop_panel.build_pass,구매함,,,,scripts/shop_panel.gd
-shop_panel.build_pass_2,성장 패스,,,,scripts/shop_panel.gd
-shop_panel.build_pass_3,"라운드를 깰 때마다 무료 보상, 패스가 있으면 유료 보상도 받습니다",,,,scripts/shop_panel.gd
 shop_panel.build_pass_4,산 뒤에는 지난 단계 유료 보상도 받을 수 있습니다,,,,scripts/shop_panel.gd
 shop_panel.pass_head,단계,,,,scripts/shop_panel.gd
 shop_panel.pass_head_2,무료,,,,scripts/shop_panel.gd
@@ -2095,7 +2088,7 @@ soldier_panel.rebuild_rows,합성 %d→1,,,,scripts/soldier_panel.gd
 speedup_list.empty_text,가속 아이템이 없습니다. 미션·출석·상점에서 받을 수 있습니다.,,,,scripts/speedup_list.gd
 speedup_list.refresh,1개,,,,scripts/speedup_list.gd
 speedup_list.refresh_2,%d개,,,,scripts/speedup_list.gd
-store_pay.done_text,결제가 완료되어 지급했습니다,,,,scripts/store_pay.gd
+store_pay.done_text,결제가 완료되어 우편함으로 보냈습니다,,,,scripts/store_pay.gd
 store_pay.pending_text,결제를 확인하고 있습니다. 확인되면 다음 접속 때 지급됩니다,,,,scripts/store_pay.gd
 store_pay.fail_text,결제를 확인하지 못했습니다. 지급되지 않은 결제는 자동으로 환불됩니다,,,,scripts/store_pay.gd
 store_pay.open_fail_text,결제 창을 열지 못했습니다. 잠시 뒤 다시 시도해 주세요,,,,scripts/store_pay.gd
@@ -2881,3 +2874,25 @@ recruit_panel.ready_5,반복 모집,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_6,반복 모집 중\n■ 멈춤,,,,scripts/recruit_panel.gd
 recruit_panel.ready_8,연출 건너뛰기,,,,scripts/recruit_panel.gd
 recruit_panel.process,재화가 부족해 반복 모집을 멈췄습니다,,,,scripts/recruit_panel.gd
+server.mail.shop.title,[상점] {name},,,,server/src/app.ts
+server.mail.shop.body,상점에서 구매한 {name}입니다. [받기]를 누르면 받습니다.,,,,server/src/app.ts
+server.mail.monthly.title,[월정액] {name} 오늘 보상,,,,server/src/app.ts
+server.mail.monthly.body,{name} 오늘 보상입니다. 남은 기간 {left}일,,,,server/src/app.ts
+server.mail.pvp.title,[PVP 상점] 구매한 상품,,,,server/src/pvp_routes.ts
+server.mail.pvp.body,PVP 상점에서 구매한 상품입니다. [받기]를 누르면 받습니다.,,,,server/src/pvp_routes.ts
+server.iap.products.pass_keep.name,성채 레벨 패스,,,,server/src/iap.ts
+iap_items.products.pass_keep.name,성채 레벨 패스,,,,scripts/iap_items.gd
+shop_panel.mail_text,우편함으로 보냈습니다: ,,,,scripts/shop_panel.gd
+shop_panel.build_packages_14,매일 우편으로,,,,scripts/shop_panel.gd
+shop_panel.pass_head_4,성채,,,,scripts/shop_panel.gd
+pvp.buy_3, · 우편함으로 보냈습니다,,,,scripts/pvp.gd
+tests.journey_economy_online.recruit_insufficient,gold [1회] is disabled with no gold,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.recruit_insufficient_2,diamond [1회] with no diamonds opens the go-to-shop ask,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.recruit,골드 모집 Lv 2,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.recruit_2,모집권,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.shop,다이아가 부족합니다,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.iap,no [오늘 받기] button for the monthly card,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.iap_2,pass tab: [받기] for tier 0 %s,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.heroes,최대 레벨,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.equipment,start: notice 보관함이 가득 찼습니다,,,,tests/journey_economy_online.gd
+tests.journey_economy_online.pouches_offline_merchant, 골드,,,,tests/journey_economy_online.gd
