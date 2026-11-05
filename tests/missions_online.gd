@@ -48,13 +48,13 @@ func _ready() -> void:
 	await _frames(10)
 	await _snap()  # 2. 일일
 	_check(_panel.buttons.has("claim:d_kill"), "daily kill shows 받기", str(_panel.buttons.keys()))
-	var gold := Economy.gold
+	var gold := Economy.pouch_count("gold_10")
 	_panel.buttons["claim:d_kill"].pressed.emit()
-	_check(Missions.waiting == "d_kill" and Missions.is_claimed(Missions.find("d_kill")) and Economy.gold >= gold + 3000,
-		"claim shows at once, before the reply (claimed, gold +3000)", "waiting=%s gold %d -> %d" % [Missions.waiting, gold, Economy.gold])
+	_check(Missions.waiting == "d_kill" and Missions.is_claimed(Missions.find("d_kill")) and Economy.pouch_count("gold_10") == gold + 2,
+		"claim shows at once, before the reply (claimed, 10-min gold pouch +2)", "waiting=%s pouch %d -> %d" % [Missions.waiting, gold, Economy.pouch_count("gold_10")])
 	_check(await _wait_until(func(): return Missions.waiting == "", 10.0), "claim answered", "")
-	_check("d_kill" in Economy.server_missions.get("d", []) and Economy.gold >= gold + 3000, "server recorded the claim, gold +3000",
-		"%s %d -> %d" % [str(Economy.server_missions), gold, Economy.gold])
+	_check("d_kill" in Economy.server_missions.get("d", []) and Economy.pouch_count("gold_10") == gold + 2, "server recorded the claim, pouch +2",
+		"%s %d -> %d" % [str(Economy.server_missions), gold, Economy.pouch_count("gold_10")])
 	_check(not Missions.claim("d_kill"), "cannot claim twice", "")
 	await _frames(20)
 	await _snap()  # 3. 받은 뒤
@@ -72,9 +72,9 @@ func _ready() -> void:
 	# 연달아 받기: 응답을 기다리지 않고 두 번(1500 → 2000), 서버는 보낸 순서대로 확인한다
 	await _events({"kill": 3500})
 	var d0 := Economy.diamonds
-	var g1 := Economy.gold
-	_check(Missions.claim("r_kill") and Missions.claim("r_kill") and Missions.times("r_kill") == 3 and Economy.gold >= g1 + 10000,
-		"two repeat claims in a row show at once", "times=%d gold %d -> %d" % [Missions.times("r_kill"), g1, Economy.gold])
+	var g1 := Economy.pouch_count("gold_30")
+	_check(Missions.claim("r_kill") and Missions.claim("r_kill") and Missions.times("r_kill") == 3 and Economy.pouch_count("gold_30") == g1 + 2,
+		"two repeat claims in a row show at once", "times=%d pouch %d -> %d" % [Missions.times("r_kill"), g1, Economy.pouch_count("gold_30")])
 	_check(await _wait_until(func(): return Missions.waiting == "", 10.0) and Missions.times("r_kill") == 3 and int(Economy.server_missions.get("r", {}).get("r_kill", 0)) == 3,
 		"server confirms both chained claims", str(Economy.server_missions))
 	_check(Economy.diamonds == d0, "no stray reward", "")
