@@ -142,7 +142,7 @@ func _build_status() -> void:
 	f.mt_text = line_edit("안내 문구(비우면 기본 문구)", 300)
 	f.mt_text.text = str(m.get("text", ""))
 	v.add_child(f.mt_text)
-	f.mt_min = line_edit("끝나는 예정: 지금부터 몇 분 뒤(비우면 없음)", 6)
+	f.mt_min = line_edit("종료 예정: 지금부터 몇 분 뒤(비우면 없음)", 6)
 	v.add_child(f.mt_min)
 	if m.get("until") != null and float(m.until) > 0.0:
 		v.add_child(_label("지금 예정: " + preload("res://scripts/ops_overlay.gd").clock_text(float(m.until)), 22, SUB, HORIZONTAL_ALIGNMENT_LEFT))
@@ -483,7 +483,7 @@ func _build_retention() -> void:
 	var d7: Dictionary = ret.get("d7", {})
 	v.add_child(_wrap("하루 뒤 복귀(D1) %s · 일주일 뒤 복귀(D7) %s" % [back_text(d1.get("back"), int(d1.get("n", 0))),
 		back_text(d7.get("back"), int(d7.get("n", 0)))], 23, HudScript.INK))
-	v.add_child(_wrap("최근 30일 가입자 중 가입 다음 날(D1)·7일 뒤 그날(D7)에 한 번이라도 들어온 사람입니다. 숫자 앞은 그날이 지난 가입자 수 중 돌아온 수입니다.", 19, SUB))
+	v.add_child(_wrap("최근 30일 가입자 중 가입 다음 날(D1)이나 가입 7일 뒤(D7)에 다시 들어온 사람의 비율입니다. 앞 숫자는 해당 날짜가 지난 가입자 중 다시 들어온 사람 수입니다.", 19, SUB))
 	var dv := _card()
 	dv.add_child(_label("날마다 접속", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	var daily: Array = ret.get("daily", [])
@@ -507,7 +507,7 @@ func _build_retention() -> void:
 			away_days, int(r.get("away", 0))], 21))
 	var g: Dictionary = ret.get("guide", {})
 	var gv := _card()
-	gv.add_child(_label("가이드 어디서 멈추나", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
+	gv.add_child(_label("가이드 이탈 지점", 26, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT))
 	gv.add_child(_wrap("가이드를 받은 %d명 · 끝까지 %d명 · 진행 중 %d명" % [int(g.get("total", 0)), int(g.get("done", 0)), int(g.get("active", 0))], 23))
 	var worst := 0
 	for s in g.get("steps", []):
@@ -542,7 +542,7 @@ func answer(id: int) -> void:
 		Economy.notice.emit("답변을 적어 주세요")
 		return
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 다시 해 주세요")
+		Economy.notice.emit("서버에 연결된 뒤 다시 시도해 주세요")
 		return
 	var back := q.duplicate()
 	var d := {"id": id, "answer": text, "reward": _reward_of("q_")}
@@ -654,7 +654,7 @@ func _reward_of(p: String) -> Dictionary:
 
 func _post(path: String, d: Dictionary, ok_text: String, after := Callable()) -> void:
 	if not Net.up:
-		Economy.notice.emit("서버에 연결된 뒤 다시 해 주세요")
+		Economy.notice.emit("서버에 연결된 뒤 다시 시도해 주세요")
 		return
 	if _posting.has(path):
 		return  # 같은 요청이 응답 전 — 두 번 누름이 우편·공지·쿠폰을 두 번 만들지 않게
