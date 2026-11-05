@@ -15,7 +15,7 @@ const SHEET_TOP := 76  # 시트 위 끝: 상단 칩 줄(16..64) 아래
 const SHEET_SIDE := 8
 const UNROLL_SEC := 0.22  # 열 때 두루마리가 펼쳐지는 시간(누름 보호 OPEN_GUARD_MS 안에 끝난다)
 const UNROLL_FROM := 0.08  # 펼치기 시작할 때 세로 크기 비율
-const CLOSE_X_PX := 56.0  # 오른쪽 위 닫기(X) 버튼 한 변
+const CLOSE_X_PX := UiKit.CLOSE_X_PX  # 오른쪽 위 닫기(X) 버튼 한 변
 
 var dialog: PanelContainer
 var content: VBoxContainer
@@ -53,37 +53,19 @@ func _build_window(width: float, separation := 14) -> void:
 	dialog.add_child(content)
 
 
-## 닫기(X) 버튼 하나: 강철색 네모 + 흰 X(RoK·로드 모바일처럼 창 오른쪽 위에 둔다, 금색 없음). 누르면 on_press.
+## 닫기(X) 버튼 하나(UiKit.close_x — 창이 아닌 팝업도 같은 모양을 쓰게 UiKit에 둔다).
 static func make_close_x(on_press: Callable) -> Button:
-	var x := Button.new()
-	x.focus_mode = Control.FOCUS_NONE
-	x.custom_minimum_size = Vector2(CLOSE_X_PX, CLOSE_X_PX)
-	x.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	UiKit.apply_button(x, UiKit.STEEL, 10.0)
-	x.pressed.connect(on_press)
-	var face := Control.new()
-	face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	face.draw.connect(func():
-		var c := face.size / 2.0
-		var r := CLOSE_X_PX * 0.2
-		for d in [Vector2(r, r), Vector2(r, -r)]:
-			face.draw_line(c - d, c + d, Color.WHITE, 5.0, true))
-	x.add_child(face)
-	return x
+	return UiKit.close_x(on_press)
 
 
 ## 닫는 버튼이 따로 없는 창(사용자 2026-10-18 "팝업창 닫는 버튼이 없어"): 패널 내용 영역 오른쪽 위 구석에 닫기(X)를 겹쳐 둔다.
 ## 내용 배치는 그대로라 하위 창이 그 구석을 비워 둔다(제목 줄 오른쪽 등).
 func _add_close_x() -> void:
-	var corner := Control.new()  # PanelContainer가 내용 영역 크기로 맞춘다 — 누름은 통과
-	corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dialog.add_child(corner)
-	close_x = make_close_x(close)
-	close_x.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	close_x.offset_left = -CLOSE_X_PX
-	close_x.offset_bottom = CLOSE_X_PX
-	corner.add_child(close_x)
+	close_x = corner_x(dialog, close)
+
+
+static func corner_x(panel: Container, on_press: Callable) -> Button:
+	return UiKit.corner_x(panel, on_press)
 
 
 ## 내용(보이는 부분)이 바뀐 뒤 패널을 내용 크기로 줄여 화면 가운데에 다시 둔다(크기 0에서 양쪽으로 자란다).

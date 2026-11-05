@@ -13,7 +13,6 @@ account_link.on_poll,%s 계정을 연결했습니다. 다른 기기에서도 %s�
 account_link.finish,연결하지 못했습니다. 다시 시도해 주세요,,,,scripts/account_link.gd
 ad_player.ready,광고,,,,scripts/ad_player.gd
 ad_player.ready_2,광고 연동 전 테스트 화면입니다,,,,scripts/ad_player.gd
-ad_player.ready_3,닫기,,,,scripts/ad_player.gd
 ad_player.play_real,광고를 불러오는 중입니다,,,,scripts/ad_player.gd
 ad_player.play_real_2,끝까지 시청하면 보상을 받습니다,,,,scripts/ad_player.gd
 ad_player.on_ad_loaded,광고를 불러오지 못했습니다,,,,scripts/ad_player.gd
@@ -37,7 +36,6 @@ bag_panel.sort_names.new,최신,,,,scripts/bag_panel.gd
 bag_panel.empty_text,장비가 없습니다,,,,scripts/bag_panel.gd
 bag_panel.ready,해제,,,,scripts/bag_panel.gd
 bag_panel.ready_2,판매,,,,scripts/bag_panel.gd
-bag_panel.ready_3,닫기,,,,scripts/bag_panel.gd
 bag_panel.sell,장비 %d개 판매 +%s 골드,,,,scripts/bag_panel.gd
 bag_panel.refresh,현재: ,,,,scripts/bag_panel.gd
 bag_panel.refresh_2,없음,,,,scripts/bag_panel.gd
@@ -110,7 +108,6 @@ building_panel.desc.guild_hall,길드에 가입하면 길드원의 도움으로 
 building_panel.desc.watchtower,전투 중 성 밖 몬스터에게 화살을 쏩니다.,,,,scripts/building_panel.gd
 building_panel.desc.dispatch,영웅을 의뢰에 파견해 보상을 얻습니다. 레벨이 오르면 일일 의뢰 수와 희귀 의뢰 확률이 늘고 파견 시간이 줄어듭니다.,,,,scripts/building_panel.gd
 building_panel.ready,선행 조건,,,,scripts/building_panel.gd
-building_panel.ready_2,닫기,,,,scripts/building_panel.gd
 building_panel.levelup_text,%s Lv %d · 레벨업 중 %s ›,,,,scripts/building_panel.gd
 building_panel.levelup_text_2,%s Lv %d (최대 레벨) ›,,,,scripts/building_panel.gd
 building_panel.levelup_text_3,%s Lv %d · 레벨업 ›,,,,scripts/building_panel.gd
@@ -207,7 +204,6 @@ chat_panel.rebuild_reports_5,신고된 메시지: ,,,,scripts/chat_panel.gd
 coupon_panel.ready,쿠폰 입력,,,,scripts/coupon_panel.gd
 coupon_panel.ready_2,받은 쿠폰 번호를 입력해 주세요,,,,scripts/coupon_panel.gd
 coupon_panel.ready_3,쿠폰 번호,,,,scripts/coupon_panel.gd
-coupon_panel.ready_4,닫기,,,,scripts/coupon_panel.gd
 coupon_panel.ready_5,사용,,,,scripts/coupon_panel.gd
 damage_numbers.push.text,회피,,,,scripts/damage_numbers.gd
 dispatch_panel.title,파견소,,,,scripts/dispatch_panel.gd
@@ -435,7 +431,7 @@ economy.growth_block,알 수 없는 항목,,,,scripts/economy.gd
 economy.growth_block_2,응답 대기 중,,,,scripts/economy.gd
 economy.growth_block_3,최대 레벨,,,,scripts/economy.gd
 economy.growth_block_4,골드 부족,,,,scripts/economy.gd
-economy.growth_block_5,모든 성장을 최대 레벨로 올리면 열려요,,,,scripts/economy.gd
+economy.growth_block_5,앞 단계 성장을 모두 최대 레벨로 올리면 열려요,,,,scripts/economy.gd
 economy.growth_up.max_level,최대 레벨입니다,,,,scripts/economy.gd
 economy.minutes_text,%d일,,,,scripts/economy.gd
 economy.minutes_text_2,%d시간,,,,scripts/economy.gd
@@ -476,7 +472,6 @@ event_panel.key_names.ticket,모집권 던전 열쇠,,,,scripts/event_panel.gd
 event_panel.fail_text.claimed,오늘 보상은 이미 받았습니다,,,,scripts/event_panel.gd
 event_panel.fail_text.finished,모든 출석 보상을 받았습니다,,,,scripts/event_panel.gd
 event_panel.fail_text.stale,출석 정보가 바뀌었습니다. 다시 열어 주세요,,,,scripts/event_panel.gd
-event_panel.ready,닫기,,,,scripts/event_panel.gd
 event_panel.ready_2,오늘의 보상 받기,,,,scripts/event_panel.gd
 event_panel.claim,%d일차 출석 보상을 받았습니다!,,,,scripts/event_panel.gd
 event_panel.on_claim_failed,보상을 받지 못했습니다. 잠시 후 다시 시도해 주세요,,,,scripts/event_panel.gd
@@ -547,7 +542,7 @@ exchange_panel.buy_2,장비,,,,scripts/exchange_panel.gd
 exchange_panel.left_text,남은 시간 %d시간 %d분,,,,scripts/exchange_panel.gd
 exchange_panel.left_text_2,남은 시간 %d분,,,,scripts/exchange_panel.gd
 exchange_panel.rebuild,보유  골드 %s · 다이아 %s,,,,scripts/exchange_panel.gd
-exchange_panel.build_buy,다른 성주가 등록한 장비 · 구매 즉시 보관함으로 들어갑니다,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy,다른 성주가 등록한 장비를 구매하면 즉시 보관함으로 들어갑니다,,,,scripts/exchange_panel.gd
 exchange_panel.build_buy_2,통화: ,,,,scripts/exchange_panel.gd
 exchange_panel.build_buy_3,부위: ,,,,scripts/exchange_panel.gd
 exchange_panel.build_buy_4,전체,,,,scripts/exchange_panel.gd
@@ -585,7 +580,6 @@ friend_panel.ready_6,친구 코드 8자리,,,,scripts/friend_panel.gd
 friend_panel.ready_7,신청,,,,scripts/friend_panel.gd
 friend_panel.ready_8,추천 성주,,,,scripts/friend_panel.gd
 friend_panel.ready_9,새로고침,,,,scripts/friend_panel.gd
-friend_panel.ready_10,닫기,,,,scripts/friend_panel.gd
 friend_panel.copy_code,친구 코드를 복사했습니다,,,,scripts/friend_panel.gd
 friend_panel.refresh,%s · 친구 코드 %s,,,,scripts/friend_panel.gd
 friend_panel.refresh_2,친구 목록을 불러오는 중…,,,,scripts/friend_panel.gd
@@ -614,7 +608,6 @@ friend_panel.gift_all_ok,%d명 💎%s 보내기,,,,scripts/friend_panel.gd
 friend_panel.gift_one,💎%d,,,,scripts/friend_panel.gd
 friend_panel.gift_done,보냄,,,,scripts/friend_panel.gd
 friend_panel.gift_got,나에게 다이아를 선물했습니다 · 우편함에서 받기,,,,scripts/friend_panel.gd
-gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
 gacha_odds.show_for_3,골드 모집 Lv %d,,,,scripts/gacha_odds.gd
@@ -1074,7 +1067,6 @@ hero_panel.on_promoted_all,영웅 %d명 승급 완료,,,,scripts/hero_panel.gd
 hero_panel.build_detail,배치,,,,scripts/hero_panel.gd
 hero_panel.build_detail_2,레벨업,,,,scripts/hero_panel.gd
 hero_panel.build_detail_3,< 이전,,,,scripts/hero_panel.gd
-hero_panel.build_detail_4,닫기,,,,scripts/hero_panel.gd
 hero_panel.build_detail_5,다음 >,,,,scripts/hero_panel.gd
 hero_panel.auto_equip,장비 %d개를 착용했습니다,,,,scripts/hero_panel.gd
 hero_panel.auto_equip_2,더 좋은 장비가 없습니다,,,,scripts/hero_panel.gd
@@ -1249,17 +1241,14 @@ main.expanded_text,성이 확장되었습니다!,,,,scripts/main.gd
 merchant_panel.ready,상인,,,,scripts/merchant_panel.gd
 merchant_panel.ready_2,선택 판매 · 0골드,,,,scripts/merchant_panel.gd
 merchant_panel.ready_3,모두 판매,,,,scripts/merchant_panel.gd
-merchant_panel.ready_4,닫기,,,,scripts/merchant_panel.gd
 merchant_panel.refresh,시세 갱신까지 %02d:%02d,,,,scripts/merchant_panel.gd
 merchant_panel.refresh_2,→ %s골드,,,,scripts/merchant_panel.gd
 merchant_panel.main_row,판매,,,,scripts/merchant_panel.gd
 merchant_panel.qty_labels,→ %s골드,,,,scripts/merchant_panel.gd
 merchant_panel.qty_labels_2,선택 판매 · %s골드,,,,scripts/merchant_panel.gd
-mission_panel.head.daily,매일 00:00에 초기화,,,,scripts/mission_panel.gd
-mission_panel.head.weekly,매주 월요일 00:00에 초기화,,,,scripts/mission_panel.gd
-mission_panel.head.repeat,받을 때마다 목표가 올라가며 반복해서 받을 수 있습니다,,,,scripts/mission_panel.gd
+mission_panel.head.daily,매일 자정에 초기화,,,,scripts/mission_panel.gd
+mission_panel.head.weekly,매주 월요일 자정에 초기화,,,,scripts/mission_panel.gd
 mission_panel.ready,미션,,,,scripts/mission_panel.gd
-mission_panel.head,%s · 남은 시간 %s,,,,scripts/mission_panel.gd
 mission_panel.row,%d회 수령,,,,scripts/mission_panel.gd
 mission_panel.row_2,보상: ,,,,scripts/mission_panel.gd
 mission_panel.row_3,완료,,,,scripts/mission_panel.gd
@@ -1555,7 +1544,6 @@ recruit_panel.ssr_text,SSR 등장! 자동 모집을 중지했습니다,,,,script
 recruit_panel.ready,골드 모집,,,,scripts/recruit_panel.gd
 recruit_panel.ready_2,다이아 모집,,,,scripts/recruit_panel.gd
 recruit_panel.ready_3,확률 정보,,,,scripts/recruit_panel.gd
-recruit_panel.ready_4,닫기,,,,scripts/recruit_panel.gd
 recruit_panel.ready_6,확인,,,,scripts/recruit_panel.gd
 recruit_panel.ready_7,자동 모집,,,,scripts/recruit_panel.gd
 recruit_panel.build_shop_ask,다이아가 부족합니다,,,,scripts/recruit_panel.gd
@@ -1624,12 +1612,10 @@ research_panel.effect_desc.hero_hp_pct,모든 영웅의 체력이 오릅니다.,
 research_panel.effect_desc.skill_pct,영웅 스킬의 추가 피해가 늘어납니다.,,,,scripts/research_panel.gd
 research_panel.idle_text,진행 중인 연구 없음 — 연구할 기술을 선택하세요,,,,scripts/research_panel.gd
 research_panel.available_text,연구 가능,,,,scripts/research_panel.gd
-research_panel.ready,닫기,,,,scripts/research_panel.gd
 research_panel.build_current,취소,,,,scripts/research_panel.gd
 research_panel.build_current_2,가속 ▼,,,,scripts/research_panel.gd
 research_panel.build_detail,연구,,,,scripts/research_panel.gd
 research_panel.build_detail_2,취소,,,,scripts/research_panel.gd
-research_panel.build_detail_3,닫기,,,,scripts/research_panel.gd
 research_panel.set_dia,무료 즉시 완료,,,,scripts/research_panel.gd
 research_panel.set_dia_2,      %d 즉시 완료,,,,scripts/research_panel.gd
 research_panel.rebuild_tree,%d단,,,,scripts/research_panel.gd
@@ -1685,7 +1671,6 @@ settings_panel.ready_24,이용약관,,,,scripts/settings_panel.gd
 settings_panel.ready_25,개인정보처리방침,,,,scripts/settings_panel.gd
 settings_panel.ready_26,문의하기,,,,scripts/settings_panel.gd
 settings_panel.ready_27,운영 관리,,,,scripts/settings_panel.gd
-settings_panel.ready_28,닫기,,,,scripts/settings_panel.gd
 settings_panel.refresh,오프라인 모드,,,,scripts/settings_panel.gd
 settings_panel.press_logout,로그아웃되었습니다. 게임을 다시 실행하면 로그인 화면이 나타납니다,,,,scripts/settings_panel.gd
 settings_panel.style_logout,한 번 더 누르면 로그아웃,,,,scripts/settings_panel.gd
@@ -2785,7 +2770,6 @@ party_view.refresh_20,방장이 매칭을 시작하면 입장 수락 창이 뜹�
 party_code_panel.ready,코드로 참가,,,,scripts/party_code_panel.gd
 party_code_panel.ready_2,친구에게 받은 파티 코드를 입력하세요,,,,scripts/party_code_panel.gd
 party_code_panel.ready_3,파티 코드 6자리,,,,scripts/party_code_panel.gd
-party_code_panel.ready_4,닫기,,,,scripts/party_code_panel.gd
 party_code_panel.ready_5,참가,,,,scripts/party_code_panel.gd
 party.error_text.not_friend,친구나 길드원만 초대할 수 있습니다,,,,scripts/party.gd
 party.error_text.offline,현재 접속하지 않은 성주입니다,,,,scripts/party.gd
@@ -2800,7 +2784,6 @@ party_overlay.refresh_invite,%s님이 %s · %s 파티에 초대했습니다,,,,s
 party_overlay.process_5,%d초 뒤 사라집니다,,,,scripts/party_overlay.gd
 party_invite_panel.ready,파티 초대,,,,scripts/party_invite_panel.gd
 party_invite_panel.ready_2,접속 중인 친구와 길드원을 부를 수 있습니다,,,,scripts/party_invite_panel.gd
-party_invite_panel.ready_3,닫기,,,,scripts/party_invite_panel.gd
 party_invite_panel.on_open,불러오는 중,,,,scripts/party_invite_panel.gd
 party_invite_panel.on_open_2,목록을 불러오지 못했습니다,,,,scripts/party_invite_panel.gd
 party_invite_panel.on_open_3,친구나 길드원이 없습니다. 친구를 추가하거나 길드에 가입하면 초대할 수 있습니다,,,,scripts/party_invite_panel.gd
@@ -2888,7 +2871,6 @@ stats_button.build_popup_3,상대 팀,,,,scripts/stats_button.gd
 stats_button.build_popup.dealt,가한 피해,,,,scripts/stats_button.gd
 stats_button.build_popup.taken,받은 피해,,,,scripts/stats_button.gd
 stats_button.build_popup.healed,치유량,,,,scripts/stats_button.gd
-stats_button.build_popup_4,닫기,,,,scripts/stats_button.gd
 stats_button.refresh,아직 기록이 없습니다,,,,scripts/stats_button.gd
 stats_button.refresh_2,합계 %s,,,,scripts/stats_button.gd
 settings_panel.skill_banner,스킬 이름 표시,,,,scripts/settings_panel.gd
@@ -2917,7 +2899,6 @@ settings_panel.style_toggle,끔,,,,scripts/settings_panel.gd
 nickname_panel.ready,닉네임 변경,,,,scripts/nickname_panel.gd
 nickname_panel.ready_2,새 닉네임,,,,scripts/nickname_panel.gd
 nickname_panel.ready_3,"2~8자 · 한글, 영문, 숫자",,,,scripts/nickname_panel.gd
-nickname_panel.ready_4,취소,,,,scripts/nickname_panel.gd
 nickname_panel.ready_5,변경,,,,scripts/nickname_panel.gd
 nickname_panel.on_open,지금 닉네임: %s,,,,scripts/nickname_panel.gd
 nickname_panel.on_open_2,첫 변경은 무료입니다,,,,scripts/nickname_panel.gd

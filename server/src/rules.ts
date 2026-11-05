@@ -627,16 +627,24 @@ export interface UpgradeDef {
 }
 export const UPGRADE_UNITS = ['pct', 'pp']
 export const upgradeStepCost = (d: UpgradeDef, level: number) => roundHalfAway(Number(d.cost_base) * Number(d.cost_growth) ** level)
-// 고급 성장(2026-11-05 사용자 "성장에서 모든 게 다 만렙을 찍으면 앞에 고급이 붙은걸로 똑같이 렙업, 같은 레벨의 성장보다 훨씬 비싸게"):
-// id가 ADV_PREFIX로 시작하는 행은 고급이 아닌 성장이 전부 최대 레벨일 때만 올릴 수 있고, 효과는 같은 이름의 성장에 더한다.
-export const ADV_PREFIX = 'adv_'
-export const upgradeLocked = (upgrades: UpgradeDef[], levels: Record<string, number>, id: string) =>
-  id.startsWith(ADV_PREFIX) && upgrades.some((u) => !u.id.startsWith(ADV_PREFIX) && (levels[u.id] ?? 0) < Number(u.max_level))
-// 성장 효과(분수, 0.05 = +5%) = 그 성장 + 고급 성장. 레벨은 0..max_level로 자른다.
+// 성장 단계(2026-11-05 사용자): 성장 → 고급(adv_) → 최고급(sup_) → 초월(tra_). "성장에서 모든 게 다 만렙을 찍으면 앞에 고급이 붙은걸로
+// 똑같이 렙업, 같은 레벨의 성장보다 훨씬 비싸게", 이어서 "최고급 성장과 초월 성장도 똑같이".
+// 단계 t의 행은 바로 아래 단계의 행이 전부 최대 레벨일 때만 올릴 수 있고, 효과는 접두사를 뗀 같은 이름의 성장에 더한다.
+export const UPGRADE_TIER_PREFIXES = ['', 'adv_', 'sup_', 'tra_']
+export const upgradeTier = (id: string) => {
+  for (let t = UPGRADE_TIER_PREFIXES.length - 1; t > 0; t--) if (id.startsWith(UPGRADE_TIER_PREFIXES[t])) return t
+  return 0
+}
+export const upgradeBaseId = (id: string) => id.slice(UPGRADE_TIER_PREFIXES[upgradeTier(id)].length)
+export const upgradeLocked = (upgrades: UpgradeDef[], levels: Record<string, number>, id: string) => {
+  const t = upgradeTier(id)
+  return t > 0 && upgrades.some((u) => upgradeTier(u.id) === t - 1 && (levels[u.id] ?? 0) < Number(u.max_level))
+}
+// 성장 효과(분수, 0.05 = +5%) = 그 성장 + 모든 단계의 같은 이름 성장. 레벨은 0..max_level로 자른다.
 export function upgradePct(upgrades: UpgradeDef[], levels: Record<string, number>, id: string): number {
   let out = 0
   for (const d of upgrades) {
-    if (d.id === id || d.id === ADV_PREFIX + id) out += (Math.min(Math.max(levels[d.id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100
+    if (upgradeBaseId(d.id) === id) out += (Math.min(Math.max(levels[d.id] ?? 0, 0), Number(d.max_level)) * Number(d.per_level)) / 100
   }
   return out
 }

@@ -1,7 +1,7 @@
 extends "res://scripts/ui_window.gd"
 ## [미션] 시트(오른쪽 아래 메뉴 side_menu.gd [미션]이 연다). 하위 탭 [일일][주간][반복] — 받을 보상이 있는 탭에 빨간 점.
 ## 줄 = 미션 제목 + 진행 막대(n / 목표) + 보상, 오른쪽에 [받기](완료)·[이동](바로가기 — 창을 닫고 Tutorial.goto_requested)·"완료"(받음).
-## 받을 수 있는 줄이 위, 받은 줄이 아래. 일일·주간은 위에 초기화까지 남은 시간. 진행·보상은 Missions(오토로드).
+## 받을 수 있는 줄이 위, 받은 줄이 아래. 일일·주간은 위에 초기화 시각. 진행·보상은 Missions(오토로드).
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -14,8 +14,7 @@ const DONE_BG := Color(0.86, 0.87, 0.89, 0.7)
 const REWARD := Color(0.13, 0.50, 0.24)
 const RED := Color(0.88, 0.22, 0.2)
 const CLOSE_PX := 56.0
-static var HEAD := {"daily": Lang.t("mission_panel.head.daily"), "weekly": Lang.t("mission_panel.head.weekly"),
-	"repeat": Lang.t("mission_panel.head.repeat")}
+static var HEAD := {"daily": Lang.t("mission_panel.head.daily"), "weekly": Lang.t("mission_panel.head.weekly")}
 
 var tab := "daily"
 var body: VBoxContainer
@@ -79,7 +78,7 @@ func _ready() -> void:
 		tabs.add_child(b)
 		buttons["tab:" + t[0]] = b
 	content.add_child(tabs)
-	var head_row := HBoxContainer.new()  # 초기화까지 남은 시간 + 오른쪽 [모두 받기]
+	var head_row := HBoxContainer.new()  # 초기화 시각 + 오른쪽 [모두 받기]
 	head_row.add_theme_constant_override("separation", 8)
 	head_label = _label("", 20, SUB, HORIZONTAL_ALIGNMENT_LEFT)
 	head_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -136,13 +135,8 @@ func _process(delta: float) -> void:
 			_rebuild()
 
 
-func _head() -> void:
-	var left := 0.0
-	if tab == "daily":
-		left = Missions.next_day_at() - Missions.now_t()
-	elif tab == "weekly":
-		left = Missions.next_week_at() - Missions.now_t()
-	head_label.text = HEAD[tab] if tab == "repeat" else Lang.t("mission_panel.head") % [HEAD[tab], UiKit.duration(maxf(0.0, left))]
+func _head() -> void:  # 남은 시간·반복 안내는 표시하지 않는다(2026-11-05 요청)
+	head_label.text = HEAD.get(tab, "")
 
 
 ## 보이는 줄의 순서와 상태(받기·이동·완료·응답 대기·반복 횟수).

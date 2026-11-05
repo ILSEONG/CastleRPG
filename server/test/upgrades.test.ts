@@ -26,8 +26,10 @@ test('CSV 표가 서버에 시드되고 gamedata에 upgrades 행(파일 순서)�
   const S = await setup()
   try {
     const g = (await S.req('GET', '/v1/gamedata')).json
-    assert.deepEqual(g.upgrades.map((u: any) => u.id), ['atk', 'hp', 'aspd', 'mspd', 'crit_rate', 'crit_dmg', 'adv_atk', 'adv_hp', 'adv_aspd', 'adv_mspd', 'adv_crit_rate', 'adv_crit_dmg'])
+    assert.deepEqual(g.upgrades.map((u: any) => u.id), [...['', 'adv_', 'sup_', 'tra_'].flatMap((p) => ['atk', 'hp', 'aspd', 'mspd', 'crit_rate', 'crit_dmg'].map((b) => p + b))])
     assert.deepEqual(g.upgrades[6], { id: 'adv_atk', name: '고급 공격력', per_level: 0.5, unit: 'pct', max_level: 200, cost_base: 10000, cost_growth: 1.05 })
+    assert.deepEqual(g.upgrades[12], { id: 'sup_atk', name: '최고급 공격력', per_level: 0.5, unit: 'pct', max_level: 200, cost_base: 100000, cost_growth: 1.05 })
+    assert.deepEqual(g.upgrades[18], { id: 'tra_atk', name: '초월 공격력', per_level: 0.5, unit: 'pct', max_level: 200, cost_base: 1000000, cost_growth: 1.05 })
     assert.deepEqual(g.upgrades[2], { id: 'aspd', name: '공격속도', per_level: 0.25, unit: 'pct', max_level: 100, cost_base: 5000, cost_growth: 1.07 })
     const t = await S.db.query("select count(*)::int as n from information_schema.tables where table_name in ('upgrade_defs', 'player_upgrades')")
     assert.equal(t[0].n, 2)
@@ -144,6 +146,14 @@ test('고급 성장: 고급이 아닌 성장이 전부 최대 레벨이어야 �
   assert.equal(R.upgradeLocked(ups, {}, 'atk'), false)
   assert.equal(R.upgradePct(ups, { atk: 200, adv_atk: 10 }, 'atk'), 1.05) // 100% + 5%
   assert.equal(R.upgradePct(ups, { atk: 300, adv_atk: 999 }, 'atk'), 2) // 각자 최대 레벨로 자른다
+  // 최고급·초월: 바로 아래 단계가 전부 최대여야 열리고, 효과는 같은 성장에 계속 더한다
+  const tiers = [...ups, DEF({ id: 'sup_atk', cost_base: 100000 }), DEF({ id: 'tra_atk', cost_base: 1000000 })]
+  assert.deepEqual([R.upgradeTier('atk'), R.upgradeTier('adv_atk'), R.upgradeTier('sup_atk'), R.upgradeTier('tra_atk'), R.upgradeBaseId('tra_crit_rate')], [0, 1, 2, 3, 'crit_rate'])
+  assert.equal(R.upgradeLocked(tiers, { atk: 200, hp: 200 }, 'sup_atk'), true)
+  assert.equal(R.upgradeLocked(tiers, { adv_atk: 200 }, 'sup_atk'), false) // 바로 아래 단계(고급)만 본다
+  assert.equal(R.upgradeLocked(tiers, { adv_atk: 200, sup_atk: 199 }, 'tra_atk'), true)
+  assert.equal(R.upgradeLocked(tiers, { sup_atk: 200 }, 'tra_atk'), false)
+  assert.equal(R.upgradePct(tiers, { atk: 200, adv_atk: 200, sup_atk: 200, tra_atk: 2 }, 'atk'), 3.01)
   assert.equal(R.upgradeStepCost(ups[2], 7), Math.round(10000 * 1.05 ** 7)) // 같은 레벨 성장(1,407)의 10배 = 14,071
   const S = await setup()
   try {
@@ -152,7 +162,7 @@ test('고급 성장: 고급이 아닌 성장이 전부 최대 레벨이어야 �
     await gold(id, 1e15, S)
     let r = await S.req('POST', '/v1/upgrade', { token, body: { id: 'adv_atk', count: 1 } })
     assert.deepEqual([r.status, r.json.error], [409, 'locked'])
-    const defs = (await S.req('GET', '/v1/gamedata')).json.upgrades.filter((u: any) => !u.id.startsWith('adv_'))
+    const defs = (await S.req('GET', '/v1/gamedata')).json.upgrades.filter((u: any) => R.upgradeTier(u.id) === 0)
     for (const d of defs.slice(0, -1)) await S.db.query('insert into player_upgrades (player_id, id, level) values ($1, $2, $3)', [id, d.id, d.max_level])
     const last = defs[defs.length - 1]
     await S.db.query('insert into player_upgrades (player_id, id, level) values ($1, $2, $3)', [id, last.id, last.max_level - 1])

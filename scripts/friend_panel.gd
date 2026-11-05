@@ -145,9 +145,7 @@ func _ready() -> void:
 	gift_row.add_child(gift_all_btn)
 	list = _scroll_list(_list_page, LIST_H - 56)
 	rec_list = _scroll_list(_add_page, LIST_H - 8)  # 두 탭 창 높이를 맞춘다
-	var close_b := _button(Lang.t("friend_panel.ready_10"), UiKit.STEEL)
-	close_b.pressed.connect(close)
-	content.add_child(close_b)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	Economy.friends_changed.connect(_on_friends_changed)
 
 
