@@ -259,9 +259,10 @@ func _shop() -> void:
 	sp.buttons["buy:a_dia"].pressed.emit()
 	_check(await _wait_until(func(): return Economy.shop_left("a_dia") == 4, AdPlayer.SECONDS + 3.0), "watching the ad to the end buys it", "")
 	var pred := _cli()
-	_check(pred.diamonds == before.diamonds + 100, "ad diamonds +100 at once", str([before.diamonds, pred.diamonds]))
 	await _settle()
 	await _same_as_server("ad a_dia", ["diamonds", "shop"], pred, ["diamonds", "shop"])
+	await _take_mail()
+	_check(_cli().diamonds == before.diamonds + 100, "ad diamonds +100 from the mailbox", str([before.diamonds, _cli().diamonds]))
 	AdPlayer.instant = true
 	await _shop_buy(sp, "a_sp_any")
 	AdPlayer.instant = false
@@ -285,12 +286,28 @@ func _shop_buy(sp, id: String, double := false) -> void:
 		sp.buttons[key].pressed.emit()
 	var pred := _cli()
 	var dia_cost := int(x.price) if x.currency == "diamonds" else 0
-	_check(Economy.shop_left(id) == left - 1 and pred.diamonds == before.diamonds - dia_cost + int(x.give.get("diamonds", 0))
-		and pred.tickets == before.tickets + int(x.give.get("tickets", 0)), "shop %s: shown at once (left %d → %d)" % [id, left, left - 1], str([before.diamonds, pred.diamonds, Economy.shop_left(id)]))
+	# 산 것은 우편으로 온다(2026-11-05) — 누른 즉시는 값만 빠진다
+	_check(Economy.shop_left(id) == left - 1 and pred.diamonds == before.diamonds - dia_cost and pred.tickets == before.tickets,
+		"shop %s: shown at once (left %d → %d)" % [id, left, left - 1], str([before.diamonds, pred.diamonds, Economy.shop_left(id)]))
 	await _settle()
 	await _same_as_server("shop " + id, ["gold", "diamonds", "tickets", "res", "pouches", "speedups", "shop", "keys"], pred,
 		["diamonds", "tickets", "res", "pouches", "speedups", "shop", "keys"])
+	var mid := _cli()
+	await _take_mail()
+	_check(_cli().diamonds == mid.diamonds + int(x.give.get("diamonds", 0)) and _cli().tickets == mid.tickets + int(x.give.get("tickets", 0)),
+		"shop %s: reward from the mailbox" % id, str([mid.diamonds, _cli().diamonds]))
+	await _same_as_server("shop mail " + id, ["gold", "diamonds", "tickets", "res", "pouches", "speedups", "keys"])
 	await _frames(2)
+
+
+## 우편함을 새로 받아 와 전부 받는다(상점·결제·월정액 보상은 우편으로 온다).
+func _take_mail() -> void:
+	LiveOps.mail_loaded = false
+	LiveOps.fetch_mail()
+	_check(await _wait_until(func(): return LiveOps.mail_loaded, 15.0), "mailbox loaded", "")
+	if LiveOps.mail_count() > 0:
+		LiveOps.claim()
+		await _settle()
 
 
 # --- 결제 상품 ---
@@ -327,10 +344,13 @@ func _iap() -> void:
 		_check(Economy.iap_buy(id), "test purchase %s: payment opened" % id, "")
 		_check(await _wait_until(func(): return StorePay._sent.is_empty(), 15.0), "test purchase %s: answered" % id, "")
 		await _settle()
+		await _take_mail()
 		var p := IapItems.find(id)
 		var want := int(p.give.get("diamonds", 0))
 		if p.kind == "diamond":
 			want = want * 2 if first else want + int(p.bonus)
+		if p.kind == "monthly":
+			want += int(p.daily.get("diamonds", 0))  # 산 날 몫도 우편으로 함께 온다
 		_check(_cli().diamonds == before.diamonds + want, "purchase %s: +%d diamonds" % [id, want], str([before.diamonds, _cli().diamonds]))
 		await _same_as_server("purchase " + id, ["diamonds", "tickets", "speedups", "iap"])
 	_check(Economy.has_pass("pass_growth") and Economy.ad_free() and Economy.monthly_left("monthly") == 30, "owns the growth pass, ad removal and 30 days of monthly",
@@ -341,25 +361,24 @@ func _iap() -> void:
 	StorePay._send("dia_2", "test", tok)
 	await _wait_until(func(): return StorePay._sent.is_empty(), 15.0)
 	await _settle()
+	await _take_mail()
 	var mid := _cli()
 	StorePay._send("dia_2", "test", tok)
 	await _wait_until(func(): return StorePay._sent.is_empty(), 15.0)
 	await _wait_sec(1.0)
 	await _settle()
+	await _take_mail()
 	_check(mid.diamonds == before.diamonds + 16000 and _cli().diamonds == mid.diamonds, "same receipt twice → granted once", str([before.diamonds, mid.diamonds, _cli().diamonds]))
 	StorePay.fake_store = Callable()
-	# 월정액 오늘 보상
+	# 월정액: 오늘 보상은 우편으로 저절로 온다(2026-11-05 — [오늘 받기] 없음, 산 날 몫은 결제 때 받았다)
 	sp.open_tab("package")
 	await _frames(5)
-	_check(sp.buttons.has("monthly:monthly"), "[오늘 받기] shows for the owned monthly card", str(sp.buttons.keys()))
+	_check(not sp.buttons.has("monthly:monthly"), "no [오늘 받기] button for the monthly card", str(sp.buttons.keys()))
+	_check(not Economy.can_claim_monthly("monthly"), "today's monthly reward already mailed", "")
 	before = _cli()
-	sp.buttons["monthly:monthly"].pressed.emit()
-	var pred := _cli()
-	_check(pred.diamonds == before.diamonds + 500 and int(pred.speedups.get("build_60", 0)) == int(before.speedups.get("build_60", 0)) + 1,
-		"monthly claim: reward shown at once", str([before.diamonds, pred.diamonds]))
-	await _settle()
-	await _same_as_server("claim monthly", ["diamonds", "speedups", "iap"], pred, ["diamonds", "speedups", "iap"])
-	_check(not Economy.claim_monthly("monthly") and not Economy.can_claim_monthly("monthly"), "second monthly claim today is refused", "")
+	await _take_mail()
+	_check(_cli().diamonds == before.diamonds, "monthly is mailed once a day", str([before.diamonds, _cli().diamonds]))
+	var pred := {}
 	var r := await _post_raw("/v1/iap/monthly/claim", {"product": "monthly"})
 	_check(not r[0] and r[1] == "claimed", "server: 409 claimed", str(r))
 	r = await _post_raw("/v1/iap/monthly/claim", {"product": "monthly_plus"})
@@ -394,8 +413,10 @@ func _iap() -> void:
 	before = _cli()
 	sp.buttons["buy:a_ticket"].pressed.emit()
 	await _frames(2)
-	_check(not sp.ad_player.visible and _cli().tickets == before.tickets + 1, "ad-free: the ad item is given without the ad", str([before.tickets, _cli().tickets]))
+	_check(not sp.ad_player.visible, "ad-free: no ad screen", "")
 	await _settle()
+	await _take_mail()
+	_check(_cli().tickets == before.tickets + 1, "ad-free: the ad item is given without the ad (mailbox)", str([before.tickets, _cli().tickets]))
 	await _same_as_server("ad-free a_ticket", ["tickets", "shop"])
 	sp.close()
 	_no_rollback("iap")
@@ -705,6 +726,7 @@ func _pouches_offline_merchant() -> void:
 		for sid in ["d_free", "d_pouch_gold", "d_pouch_gold", "d_pouch_gold"]:
 			Economy.buy_shop(sid)
 			await _settle()
+			await _take_mail()
 		pp._rebuild()
 		await _frames(3)
 	var have := Economy.pouch_count(id)
@@ -728,6 +750,7 @@ func _pouches_offline_merchant() -> void:
 	if Economy.pouch_count(rid) == 0:
 		Economy.buy_shop("d_pouch_res")
 		await _settle()
+		await _take_mail()
 	before = _cli()
 	var rv := Economy.pouch_value(rid, GameState.stage)
 	Economy.open_pouch(rid, 1, GameState.stage)

@@ -308,7 +308,10 @@ func buy(id: String) -> String:
 		econ.net.send("POST", "/v1/pvp/buy", {"id": id}, func(d):
 			econ.apply_server(d)
 			_take(d)
-			_notice(Lang.t("pvp.buy") % PvpRules.SHOP_NAMES.get(id, id)), func():
+			var mailed: bool = d.get("result") is Dictionary and d.result.get("mail") == true  # 재화는 우편으로(2026-11-05)
+			if mailed:
+				econ.fetch_mail()
+			_notice((Lang.t("pvp.buy") % PvpRules.SHOP_NAMES.get(id, id)) + (Lang.t("pvp.buy_3") if mailed else "")), func():
 			view = before
 			changed.emit()
 			_notice(ERROR_TEXT.get(econ.net.last_error, Lang.t("pvp.buy_2"))), true, true)

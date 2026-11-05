@@ -439,7 +439,10 @@ func _rebuild() -> void:
 	_update_info(Economy.time_now())
 	if failed != "" or data.is_empty():
 		var t := Lang.t("dispatch_panel.rebuild.t") if loading else (OFFLINE_TEXT if failed == "offline" else NO_OFFICE_TEXT if failed == "no_building" else Lang.t("dispatch_panel.rebuild"))
-		body.add_child(_label(t, 24, SUB))
+		var tl := _label(t, 24, SUB)
+		body.add_child(tl)
+		if loading:
+			preload("res://scripts/spinner.gd").mark(tl)  # 로딩 고리
 		return
 	if picking >= 0:
 		_build_pick()

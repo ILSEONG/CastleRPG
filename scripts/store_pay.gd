@@ -117,6 +117,7 @@ func _on_sent(d: Dictionary, token: String, answer: Callable, product := "") -> 
 		Economy.apply_server(d)
 		Economy.shop_changed.emit()
 		Economy.dungeons_changed.emit()
+		Economy.fetch_mail()  # 받는 것은 우편으로(2026-11-05)
 		Economy.notice.emit(DONE_TEXT)
 	if answer.is_valid():
 		answer.call(true)

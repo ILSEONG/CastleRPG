@@ -750,9 +750,22 @@ static func upgrade_bonus(levels: Dictionary) -> Dictionary:
 	for key in UPGRADE_KEYS.values():
 		out[key] = 0.0
 	for u in upgrades():
-		if UPGRADE_KEYS.has(u.id):
-			out[UPGRADE_KEYS[u.id]] = clampi(int(levels.get(u.id, 0)), 0, int(u.max_level)) * float(u.per_level) / 100.0
+		var base: String = str(u.id).trim_prefix(ADV_PREFIX)  # 고급 성장은 같은 이름의 성장에 더한다
+		if UPGRADE_KEYS.has(base):
+			out[UPGRADE_KEYS[base]] += clampi(int(levels.get(u.id, 0)), 0, int(u.max_level)) * float(u.per_level) / 100.0
 	return out
+
+
+## 고급 성장(2026-11-05 사용자: 성장이 다 만렙이면 "고급 ○○"으로 똑같이 렙업, 같은 레벨 성장보다 훨씬 비싸게. 서버 rules.upgradeLocked):
+## id가 ADV_PREFIX로 시작하는 행은 고급이 아닌 성장이 전부 최대 레벨이어야 열린다.
+const ADV_PREFIX := "adv_"
+static func upgrade_locked(id: String, levels: Dictionary) -> bool:
+	if not id.begins_with(ADV_PREFIX):
+		return false
+	for u in upgrades():
+		if not str(u.id).begins_with(ADV_PREFIX) and int(levels.get(u.id, 0)) < int(u.max_level):
+			return true
+	return false
 
 
 ## 치명타 굴림 한 번의 확률·배율(개정 20 §3). skill_rate = 치명타 스킬 확률(분수, 0.25), skill_mult = 스킬 배율(2.0 = 200%, 스킬 없음 = 0 이하),

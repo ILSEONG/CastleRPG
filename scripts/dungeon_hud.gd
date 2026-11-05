@@ -391,6 +391,7 @@ func _update() -> void:
 		banner.text = Lang.t("dungeon_hud.update_4")
 	elif d.phase == d.Phase.REPORT:
 		banner.text = Lang.t("dungeon_hud.update_5")
+		preload("res://scripts/spinner.gd").mark(banner)  # 결과 확인 중: 로딩 고리
 	else:
 		banner.text = ""
 	for s in strip:

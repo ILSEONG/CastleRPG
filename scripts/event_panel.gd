@@ -63,16 +63,13 @@ func _ready() -> void:
 	content.add_child(info)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var close_button := _button(Lang.t("event_panel.ready"), UiKit.STEEL)
-	close_button.custom_minimum_size.x = 160
-	close_button.pressed.connect(close)
-	row.add_child(close_button)
 	claim_button = _button(Lang.t("event_panel.ready_2"))
 	claim_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	claim_button.pressed.connect(claim)
 	Tutorial.register_ui("event:claim", claim_button, can_claim)  # 가이드 「출석 보상 받기」 화살표
 	row.add_child(claim_button)
 	content.add_child(row)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	if PortraitsScript.current != null:
 		PortraitsScript.current.portrait_ready.connect(func(_k): _redraw_cells())
 	_rebuild()
@@ -167,6 +164,8 @@ func _rebuild() -> void:
 	if rewards.is_empty():
 		progress.text = ""
 		info.text = Lang.t("event_panel.rebuild") if not Net.is_online() else (Lang.t("event_panel.rebuild_2") if loading or not failed else Lang.t("event_panel.rebuild_3"))
+		if info.text == Lang.t("event_panel.rebuild_2"):
+			preload("res://scripts/spinner.gd").mark(info)  # 불러오는 중: 로딩 고리(글이 바뀌면 숨는다)
 		claim_button.disabled = true
 		claim_button.text = Lang.t("event_panel.rebuild_4")
 		_fit()

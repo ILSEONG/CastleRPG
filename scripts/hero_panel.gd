@@ -104,7 +104,7 @@ var level_button: Button
 var ten_button: Button
 var deploy_button: Button
 var promote_button: Button
-var promote_preview: Label  # 승급 미리보기 "승급하면 HP·공격 → ×1.3 · 최대 레벨 30 → 40"(최대면 "최대 승급 ★5 — HP·공격 ×3.71")
+var promote_preview: Label  # 승급 미리보기 "승급하면 최대 레벨 50 → 100"(최대면 "최대 승급 ★5")
 var reason_label: Label  # [레벨업] 못 하는 이유
 var promote_reason: Label  # [승급] 못 하는 이유("조각 부족"·"최대 승급")
 var prev_button: Button
@@ -464,11 +464,9 @@ func _build_detail() -> void:
 	_detail_view.add_child(nav)
 	prev_button = _button(Lang.t("hero_panel.build_detail_3"), UiKit.STEEL)
 	prev_button.pressed.connect(step.bind(-1))
-	var close_button := _button(Lang.t("hero_panel.build_detail_4"), UiKit.STEEL)
-	close_button.pressed.connect(_show_list)
 	next_button = _button(Lang.t("hero_panel.build_detail_5"), UiKit.STEEL)
 	next_button.pressed.connect(step.bind(1))
-	for b in [prev_button, close_button, next_button]:
+	for b in [prev_button, next_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nav.add_child(b)
 
@@ -959,12 +957,9 @@ func _refresh_detail() -> void:
 		if pwhy == "not_enough_shards":
 			promote_reason.text = Lang.t("hero_panel.refresh_detail_12")
 	if need > 0:
-		promote_preview.text = Lang.t("hero_panel.refresh_detail_13") % [Skills.num_text(GameData.config_num("promote_mult")), mx, GameData.max_level(pr + 1)]
-		var next := sk_rows.filter(func(r): return r.locked)
-		if not next.is_empty():  # 개정 17: 다음 해금
-			promote_preview.text += Lang.t("hero_panel.refresh_detail_14") % [next[0].star, next[0].name]
+		promote_preview.text = Lang.t("hero_panel.refresh_detail_13") % [mx, GameData.max_level(pr + 1)]  # 최대 레벨 상승만(2026-11-05 사용자: ×1.3·스킬 해금 줄 없앰)
 	else:
-		promote_preview.text = Lang.t("hero_panel.refresh_detail_15") % [pr, Skills.num_text(GameData.promote_mult(pr))]
+		promote_preview.text = Lang.t("hero_panel.refresh_detail_15") % pr
 	var d := GameState.deploy()
 	deploy_button.text = Lang.t("hero_panel.refresh_detail_16") if d.has(id) else (Lang.t("hero_panel.refresh_detail_17") if not d.has(null) else Lang.t("hero_panel.refresh_detail_18"))
 	deploy_button.disabled = d.has(id) or not d.has(null)

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as G from '../src/guild.ts'
 import * as M from '../src/missions.ts'
-import { barrier, setup, T0 } from './helpers.ts'
+import { barrier, setup, T0, takeMail } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 type Res = Awaited<ReturnType<Setup['req']>>
@@ -27,11 +27,11 @@ test('미션 받기 두 번 탭: 보상은 한 번(진 쪽 409 claimed), 로그 
     S.clock.t = T0
     const { token, id } = await S.login()
     await S.req('POST', '/v1/test/events', { token, body: { events: Object.fromEntries(M.EVENTS.map((k) => [k, 1_000_000])) } })
-    const g0 = (await player(S, token)).gold
+    const g0 = (await player(S, token)).pouches?.gold_10 ?? 0
     const [ok, lost] = await race(S, b, () => S.req('POST', '/v1/mission/claim', { token, body: { id: 'd_kill' } }))
     assert.equal(ok.status, 200, JSON.stringify(ok.json))
     assert.deepEqual([lost.status, lost.json.error], [409, 'claimed'])
-    assert.equal((await player(S, token)).gold, g0 + 3000)
+    assert.equal((await player(S, token)).pouches.gold_10, g0 + 2)
     assert.equal(await logCount(S, id, 'mission'), 1)
   } finally {
     await S.close()
@@ -102,6 +102,8 @@ test('결제 영수증 두 번(같은 주문 번호가 동시에): 지급은 한
     assert.equal(ok.status, 200, JSON.stringify(ok.json))
     assert.ok(other.json.already === true || other.json.error === 'order_pending', JSON.stringify(other.json))
     if (other.status === 200 && !other.json.already) assert.fail('both requests granted the order')
+    assert.equal((await S.req('GET', '/v1/mail', { token })).json.mails.length, 1) // 우편 한 통(2026-11-05)
+    await takeMail(S, token)
     assert.equal((await player(S, token)).diamonds, d0 + 16000)
     assert.equal(await logCount(S, id, 'iap'), 1)
     // 지급이 끝난 뒤 다시 보내면 already

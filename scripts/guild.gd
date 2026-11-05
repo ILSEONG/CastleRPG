@@ -81,7 +81,8 @@ static var NICK_A := [Lang.t("guild.nick_a"), Lang.t("guild.nick_a_2"), Lang.t("
 static var NICK_B := [Lang.t("guild.nick_b"), Lang.t("guild.nick_b_2"), Lang.t("guild.nick_b_3"), Lang.t("guild.nick_b_4"), Lang.t("guild.nick_b_5"), Lang.t("guild.nick_b_6"), Lang.t("guild.nick_b_7"), Lang.t("guild.nick_b_8"), Lang.t("guild.nick_b_9"), Lang.t("guild.nick_b_10"), Lang.t("guild.nick_b_11"), Lang.t("guild.nick_b_12"), Lang.t("guild.nick_b_13"), Lang.t("guild.nick_b_14")]
 static var NOTICES := [Lang.t("guild.notices"), Lang.t("guild.notices_2"), Lang.t("guild.notices_3"), Lang.t("guild.notices_4"),
 	Lang.t("guild.notices_5"), Lang.t("guild.notices_6")]
-const EMBLEMS := 8  # 문장 모양·색 수(guild_panel이 그린다)
+const EmblemScript := preload("res://scripts/guild_emblem.gd")
+static var EMBLEMS: int = EmblemScript.count()  # 문양 값 수(배경 모양·문양·배경 색·문양 색 조합, guild_emblem.gd)
 
 signal changed  # 길드 상태(가입·출석·기부·보스·상점·가상 길드원 활동)가 바뀌었다
 signal buff_changed  # 길드 버프(공격력·체력 %)가 바뀌었다 — 영웅 능력치를 다시 읽는다
@@ -698,7 +699,7 @@ func recommendations(now := -1.0) -> Array:
 		r.seed = hash([GameData.reset_day(now), recommend_n, i])
 		var s := r.randi()
 		var lv := r.randi_range(2, 14)
-		out.append({"seed": s, "name": _guild_name(r), "emblem": r.randi_range(0, EMBLEMS - 1), "level": lv,
+		out.append({"seed": s, "name": _guild_name(r), "emblem": EmblemScript.from_seed(r.randi()), "level": lv,
 			"count": mini(r.randi_range(14, 28), capacity(lv) - 1), "notice": NOTICES[r.randi_range(0, NOTICES.size() - 1)], "power": 300 + lv * 120 + r.randi_range(0, 400)})
 	return out
 
@@ -783,6 +784,27 @@ func create(name_text: String, emblem: int, now := -1.0) -> bool:
 	save()
 	changed.emit()
 	_emit_buff()
+	return true
+
+
+## 길드 문양 바꾸기(길드장만, 2026-11-05): 배경 모양·문양·배경 색·문양 색 조합 값(guild_emblem.gd). 서버가 길드장인지 다시 본다.
+func can_edit_emblem() -> bool:
+	return joined() and bool(guild.get("mine", false)) and not _locked
+
+
+func set_emblem(v: int) -> bool:
+	if not can_edit_emblem() or v < 0 or v >= EMBLEMS:
+		return false
+	if int(guild.get("emblem", 0)) == v:
+		return true
+	if online():
+		_post("emblem", {"emblem": v}, func(_d): notice.emit(Lang.t("guild.set_emblem_2")))
+		return true
+	guild.emblem = v
+	_log(Lang.t("guild.set_emblem") % MY_NAME, now_t())
+	save()
+	changed.emit()
+	notice.emit(Lang.t("guild.set_emblem_2"))
 	return true
 
 

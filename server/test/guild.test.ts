@@ -281,3 +281,31 @@ test('guild: parallel joins cannot pass the member cap — the lost race is the 
     await T.close()
   }
 })
+
+test('guild emblem: leader picks shape + symbol + colours (one value), only the leader can change it, range is checked', async () => {
+  const custom = G.EMBLEM_LEGACY + 3 + G.EMBLEM_SHAPES * (17 + G.EMBLEM_SYMBOLS * (5 + G.EMBLEM_BG * 9))
+  assert.equal(G.EMBLEMS, 8 + 8 * 20 * 12 * 10)
+  for (const n of [0, 1, 12345, 2 ** 31 - 1]) {
+    const e = G.randomEmblem(n)
+    assert.ok(e >= G.EMBLEM_LEGACY && e < G.EMBLEMS)
+  }
+  const a = await ready()
+  await setGold(a.id, G.CREATE_GOLD)
+  assert.equal((await post(a.token, 'create', { name: '문양길드', emblem: G.EMBLEMS })).status, 400, 'out of range')
+  let r = await post(a.token, 'create', { name: '문양길드', emblem: custom })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.guild.guild.emblem, custom)
+  const gid = r.json.guild.guild.id
+  const b = await ready()
+  await post(b.token, 'join', { guild_id: gid })
+  r = await post(b.token, 'emblem', { emblem: 9 })
+  assert.equal(r.json.error, 'not_owner', 'members cannot change it')
+  assert.equal((await post(a.token, 'emblem', { emblem: -1 })).status, 400)
+  r = await post(a.token, 'emblem', { emblem: G.EMBLEMS - 1 })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.guild.guild.emblem, G.EMBLEMS - 1)
+  assert.equal((await guild(b.token)).guild.emblem, G.EMBLEMS - 1, 'members see the new emblem')
+  assert.equal((await post(a.token, 'emblem', { emblem: G.EMBLEMS - 1 })).status, 200, 'same value is a no-op')
+  const c = await ready()
+  assert.equal((await post(c.token, 'emblem', { emblem: 9 })).json.error, 'no_guild')
+})

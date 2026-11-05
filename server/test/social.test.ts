@@ -176,7 +176,7 @@ test('안드로이드 브라우저: 콜백이 끝나면 게임 앱 링크(castle
     const page = await S.req('GET', '/v1/auth/result?r=ok', { headers: UA })
     assert.ok(page.text.includes('로그인되었습니다') && page.text.includes('게임으로 돌아가기') && page.text.includes('intent://oauth#Intent;scheme=castlerpg;'))
     const fail = await S.req('GET', '/v1/auth/result?r=already_linked')
-    assert.ok(fail.text.includes('로그인하지 못했습니다') && !fail.text.includes('게임으로 돌아가기'))
+    assert.ok(fail.text.includes('로그인에 실패했습니다') && !fail.text.includes('게임으로 돌아가기'))
     const c = await begin(S, 'google')
     const pc = await callback(S, 'google', { code: 'uid:PC-1', state: c.state })
     assert.deepEqual([pc.status, pc.headers.get('location')], [200, null])

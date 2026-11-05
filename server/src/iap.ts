@@ -4,10 +4,13 @@
 // - 패키지: 신규 스타터(평생 1회), 일일(하루 1회)·주간(주 1회) 한정 패키지.
 // - 핫딜: 보스 격파(25라운드마다)·다이아 부족·패배 때 1시간 한정 특가가 뜬다(한 번에 하나, 계기마다 쉬는 시간). 뜬 핫딜만 그 시간 안에 한 번 살 수 있다.
 // - 성장 패스: 라운드 달성 단계마다 무료 보상(누구나) + 유료 보상(패스 구매자). 산 뒤에는 지난 단계 유료 보상도 받는다.
+// - 성채 레벨 패스(2026-11-05 사용자 "패스를 하나 더 만들어줘, 성채 레벨 패스야"): 성장 패스와 같은 방식, 단계 = 성채 레벨.
+// - 우편 지급(2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내", "월정액도 일단 우편으로"): 사면 받는 것(give)과
+//   월정액 매일 보상은 바로 넣지 않고 우편으로 보낸다(app.ts mailOut). 월정액은 그날 처음 우편함을 볼 때 그날 몫을 보낸다(monthlyDue).
 // 결제 확인(provider): 'google' = Google Play 영수증(앱 등록·상품 등록 전이라 지금은 iap_enabled 설정이 0이면 503 payments_unavailable),
 // 'test' = 통합 테스트(allowTestHooks)만. 같은 주문 번호는 한 번만(iap_orders 기본 키).
 // 기록: player_state.iap {first: [첫 구매 보너스를 쓴 충전 id], n: {상품 id: 평생 산 수}, day, week, d: {id: 오늘}, w: {id: 이번 주},
-// monthly: {종류: {until: 마지막 날(리셋 날짜), claimed: 마지막으로 받은 날}}, passes: [산 패스], gp: {free: [단계], paid: [단계]},
+// monthly: {종류: {until: 마지막 날(리셋 날짜), claimed: 마지막으로 받은 날}}, passes: [산 패스], gp: {free: [단계], paid: [단계]}, kp: 성채 레벨 패스(gp와 같은 모양),
 // hot: {id, until: 끝나는 시각(유닉스 초), bought} | null, hcool: {계기: 마지막으로 뜬 시각}, hs: 핫딜을 띄운 마지막 보스 단계(깬 라운드 / 25)}.
 // 앱 scripts/iap_items.gd가 같은 표를 쓴다(단위 테스트가 비교한다).
 import { weekOf } from './missions.ts'
@@ -42,17 +45,20 @@ export const PRODUCTS: Product[] = [
   // 월정액
   { id: 'monthly', kind: 'monthly', name: txt('server.iap.products.monthly.name'), krw: 4900, give: { diamonds: 1500 }, days: 30, daily: { diamonds: 500, speedup_build_60: 1, speedup_research_60: 1 } },
   { id: 'monthly_plus', kind: 'monthly', name: txt('server.iap.products.monthly_plus.name'), krw: 14900, give: { diamonds: 5000, speedup_builder_43200: 1 }, days: 30, daily: { diamonds: 800, tickets: 3, pouch_gold_240: 1, speedup_any_180: 1 } },
-  // 패키지
-  { id: 'pkg_starter', kind: 'package', name: txt('server.iap.products.pkg_starter.name'), krw: 1200, period: 'once', limit: 1, give: { diamonds: 1500, tickets: 30, pouch_gold_120: 5, pouch_res_120: 5, speedup_builder_10080: 1, speedup_build_60: 5 } },
-  { id: 'pkg_daily', kind: 'package', name: txt('server.iap.products.pkg_daily.name'), krw: 1200, period: 'daily', limit: 1, give: { diamonds: 600, tickets: 8, keys_gold: 3, speedup_any_60: 3 } },
-  { id: 'pkg_weekly', kind: 'package', name: txt('server.iap.products.pkg_weekly.name'), krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 4000, tickets: 50, keys_equip: 5, speedup_any_480: 3, speedup_builder_10080: 1 } },
-  { id: 'pkg_growth', kind: 'package', name: txt('server.iap.products.pkg_growth.name'), krw: 33000, period: 'once', limit: 1, give: { diamonds: 30000, tickets: 150, pouch_gold_360: 10, pouch_res_360: 10, speedup_builder_43200: 1, speedup_build_1440: 5, speedup_research_1440: 5 } },
+  // 패키지(2026-11-05 사용자 "패키지의 효율이 다이아 첫 구매보다 약 1.5배 좋아야 해"): 같은 가격대 다이아 첫 구매(2배)의 약 1.5배 가치.
+  // 가치 = 다이아 + 모집권 300 + 상점 다이아 가격(주머니 1시간 40·2시간 80·6시간 200, 열쇠 골드 60·장비 100, 가속 1시간 40·8시간 250·1일 700,
+  // 일꾼 7일 1,000·30일 4,000). 초보자 4,920(첫 구매 3,300의 1.49배)·일일 4,950(1.50배)·주간 24,000(16,000의 1.50배)·성장 140,000(93,000의 1.51배)
+  { id: 'pkg_starter', kind: 'package', name: txt('server.iap.products.pkg_starter.name'), krw: 1200, period: 'once', limit: 1, give: { diamonds: 1000, tickets: 8, pouch_gold_120: 2, pouch_res_120: 2, speedup_builder_10080: 1, speedup_build_60: 5 } },
+  { id: 'pkg_daily', kind: 'package', name: txt('server.iap.products.pkg_daily.name'), krw: 1200, period: 'daily', limit: 1, give: { diamonds: 1650, tickets: 10, keys_gold: 3, speedup_any_60: 3 } },
+  { id: 'pkg_weekly', kind: 'package', name: txt('server.iap.products.pkg_weekly.name'), krw: 5900, period: 'weekly', limit: 1, give: { diamonds: 6750, tickets: 50, keys_equip: 5, speedup_any_480: 3, speedup_builder_10080: 1 } },
+  { id: 'pkg_growth', kind: 'package', name: txt('server.iap.products.pkg_growth.name'), krw: 33000, period: 'once', limit: 1, give: { diamonds: 50000, tickets: 250, pouch_gold_360: 10, pouch_res_360: 10, speedup_builder_43200: 1, speedup_build_1440: 5, speedup_research_1440: 5 } },
   // 핫딜(1시간 한정, 뜬 것만)
   { id: 'hot_boss', kind: 'hot', name: txt('server.iap.products.hot_boss.name'), krw: 3300, value: 5, give: { diamonds: 18000, tickets: 20, pouch_gold_360: 3, speedup_build_480: 3 } },
   { id: 'hot_dia', kind: 'hot', name: txt('server.iap.products.hot_dia.name'), krw: 5900, value: 5, give: { diamonds: 40000, tickets: 15 } },
   { id: 'hot_defeat', kind: 'hot', name: txt('server.iap.products.hot_defeat.name'), krw: 4900, value: 5, give: { diamonds: 30000, tickets: 20, pouch_gold_360: 5, pouch_res_360: 5, speedup_any_480: 3 } },
   // 패스
   { id: 'pass_growth', kind: 'pass', name: txt('server.iap.products.pass_growth.name'), krw: 9900, give: {} },
+  { id: 'pass_keep', kind: 'pass', name: txt('server.iap.products.pass_keep.name'), krw: 9900, give: {} },
   // 광고 제거: 상점 [광고] 상품을 광고 없이 바로 받는다(view.ad_free). 구매 보너스는 없다(사용자 2026-10-12 "광고제거 사면 이득보는걸 지우고").
   { id: 'no_ads', kind: 'pass', name: txt('server.iap.products.no_ads.name'), krw: 5500, give: {} },
 ]
@@ -71,6 +77,22 @@ export const GROWTH: { round: number; free: Reward; paid: Reward }[] = [
   { round: 375, free: { tickets: 4 }, paid: { diamonds: 4800, tickets: 30, speedup_any_180: 2 } },
   { round: 450, free: { diamonds: 200 }, paid: { diamonds: 6000, speedup_any_180: 2 } },
   { round: 550, free: { tickets: 6 }, paid: { diamonds: 6000, tickets: 60, speedup_any_180: 2 } },
+]
+
+// 성채 레벨 패스 단계: 성채가 그 레벨이 되면 받는다. free = 누구나, paid = 패스 구매자. 건설 가속 위주(성채를 올리는 패스).
+export const KEEP: { level: number; free: Reward; paid: Reward }[] = [
+  { level: 3, free: { speedup_build_60: 1 }, paid: { diamonds: 1500, speedup_build_480: 2 } },
+  { level: 5, free: { diamonds: 60 }, paid: { diamonds: 1500, tickets: 10, speedup_build_480: 2 } },
+  { level: 7, free: { speedup_build_60: 2 }, paid: { diamonds: 2000, speedup_build_480: 3 } },
+  { level: 9, free: { tickets: 2 }, paid: { diamonds: 2000, tickets: 15, speedup_build_480: 3 } },
+  { level: 11, free: { diamonds: 100 }, paid: { diamonds: 2500, speedup_build_1440: 1, speedup_builder_10080: 1 } },
+  { level: 13, free: { speedup_build_60: 3 }, paid: { diamonds: 2500, tickets: 15, speedup_build_1440: 1 } },
+  { level: 15, free: { tickets: 2 }, paid: { diamonds: 3000, speedup_build_1440: 2 } },
+  { level: 18, free: { diamonds: 160 }, paid: { diamonds: 3000, tickets: 20, speedup_build_1440: 2 } },
+  { level: 21, free: { speedup_build_480: 1 }, paid: { diamonds: 4000, speedup_build_1440: 3, speedup_builder_10080: 1 } },
+  { level: 24, free: { tickets: 4 }, paid: { diamonds: 4000, tickets: 30, speedup_build_1440: 3 } },
+  { level: 27, free: { diamonds: 200 }, paid: { diamonds: 5000, speedup_build_1440: 4 } },
+  { level: 30, free: { tickets: 6 }, paid: { diamonds: 6000, tickets: 50, speedup_build_1440: 5 } },
 ]
 
 export const MONTHLY_MAX_DAYS = 180
@@ -96,6 +118,7 @@ export interface IapState {
   monthly: Record<string, { until: number; claimed: number | null }>
   passes: string[]
   gp: { free: number[]; paid: number[] }
+  kp: { free: number[]; paid: number[] }
   hot: { id: string; until: number; bought: boolean } | null
   hcool: Record<string, number>
   hs: number
@@ -119,6 +142,7 @@ export function normalize(raw: unknown, day: number): IapState {
     if (product(k)?.kind === 'monthly' && Number.isInteger(m.until)) monthly[k] = { until: m.until as number, claimed: Number.isInteger(m.claimed) ? (m.claimed as number) : null }
   }
   const gp = obj(s.gp)
+  const kp = obj(s.kp)
   return {
     first: Array.isArray(s.first) ? s.first.filter((x): x is string => typeof x === 'string' && product(x)?.kind === 'diamond') : [],
     n: ints(s.n),
@@ -129,6 +153,7 @@ export function normalize(raw: unknown, day: number): IapState {
     monthly,
     passes: Array.isArray(s.passes) ? s.passes.filter((x): x is string => typeof x === 'string' && product(x)?.kind === 'pass') : [],
     gp: { free: idxs(gp.free, GROWTH.length), paid: idxs(gp.paid, GROWTH.length) },
+    kp: { free: idxs(kp.free, KEEP.length), paid: idxs(kp.paid, KEEP.length) },
     hot: hotOf(s.hot),
     hcool: Object.fromEntries(Object.entries(obj(s.hcool)).filter(([k, v]) => Object.hasOwn(HOT, k) && typeof v === 'number' && Number.isFinite(v))) as Record<string, number>,
     hs: Number.isInteger(s.hs) && (s.hs as number) >= 0 ? (s.hs as number) : 0,
@@ -202,6 +227,9 @@ export function purchase(s: IapState, p: Product): { give: Reward; state: IapSta
 // 월정액 오늘 받을 수 있는가.
 export const canClaimMonthly = (s: IapState, id: string) => monthlyLeft(s, id) > 0 && s.monthly[id].claimed !== s.day
 
+// 오늘 몫을 아직 우편으로 보내지 않은 월정액 id들.
+export const monthlyDue = (s: IapState) => PRODUCTS.filter((p) => p.kind === 'monthly' && canClaimMonthly(s, p.id)).map((p) => p.id)
+
 // 성장 패스 단계 받을 수 있는가: 그 라운드를 깼고(cleared = 깬 마지막 라운드), 아직 안 받았고, 유료는 패스가 있다.
 // 광고 제거를 샀다(보상형 광고를 보지 않고 바로 받는다).
 export const adFree = (s: IapState) => s.passes.includes('no_ads')
@@ -210,4 +238,11 @@ export function canClaimGrowth(s: IapState, tier: number, track: 'free' | 'paid'
   const t = GROWTH[tier]
   if (!t || cleared < t.round || s.gp[track].includes(tier)) return false
   return track === 'free' || s.passes.includes('pass_growth')
+}
+
+// 성채 레벨 패스 단계 받을 수 있는가(keep = 지금 성채 레벨).
+export function canClaimKeep(s: IapState, tier: number, track: 'free' | 'paid', keep: number): boolean {
+  const t = KEEP[tier]
+  if (!t || keep < t.level || s.kp[track].includes(tier)) return false
+  return track === 'free' || s.passes.includes('pass_keep')
 }

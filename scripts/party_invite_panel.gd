@@ -34,9 +34,7 @@ func _ready() -> void:
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.custom_minimum_size = Vector2(540, 0)
 	content.add_child(status_label)
-	var close_button := _button(Lang.t("party_invite_panel.ready_3"), UiKit.STEEL)
-	close_button.pressed.connect(close)
-	content.add_child(close_button)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 
 
 func _on_open() -> void:
@@ -44,6 +42,7 @@ func _on_open() -> void:
 	status_label.text = ""
 	_show([])
 	status_label.text = Lang.t("party_invite_panel.on_open")
+	preload("res://scripts/spinner.gd").mark(status_label)  # 불러오는 중인 동안 로딩 고리
 	status_label.add_theme_color_override("font_color", SOFT_INK)
 	_ask += 1
 	var ask := _ask

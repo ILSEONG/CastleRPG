@@ -133,10 +133,11 @@ test('플레이어 응답 형식: server_now, player{gold_tenths,gold,res,stage,
       attendance: { n: 0, days: 28, can_claim: true }, // 출석 이벤트
       missions: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: [], w: [], wd: 0, r: {}, c: M.progressView(M.normalize({}, R.resetDay(T0, 15))), // 미션
         next_day: R.resetAt(R.resetDay(T0, 15) + 1, 15), next_week: R.resetAt(M.weekStart(M.weekOf(R.resetDay(T0, 15)) + 1), 15) },
+      nickname: { name: r.json.player.nickname.name, changes: 0, price: 0, cost: 3000 }, // 닉네임 변경(첫 변경 무료)
       pouches: {}, // 방치 주머니
       dispatch: [], // 파견소: 진행 중 의뢰의 끝나는 시각
       shop: { day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {} }, // 상점
-      iap: { first: [], n: {}, day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {}, monthly: {}, passes: [], gp: { free: [], paid: [] }, hot: null, hcool: {}, hs: 0 },
+      iap: { first: [], n: {}, day: R.resetDay(T0, 15), week: M.weekOf(R.resetDay(T0, 15)), d: {}, w: {}, monthly: {}, passes: [], gp: { free: [], paid: [] }, kp: { free: [], paid: [] }, hot: null, hcool: {}, hs: 0 },
       iap_enabled: false, // 결제 상품
       ad_free: false,
       iap_providers: [], iap_skus: { toss: {} }, account_tag: Pay.accountTag(id), // 실결제(결제 키 없음 → 닫힘)
