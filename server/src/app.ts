@@ -268,6 +268,8 @@ interface Change {
   marketBuy?: { id: number; currency: string; price: number } // 사기: 판매를 먼저 잡고(한 사람만), 값(goldTenths·diamonds 음수)이 모자라면 전체를 되돌린다
   // 운영 도구(live_ops.ts, 마이그레이션 039)
   mailClaim?: number[] // 받은 우편 id들(하나라도 이미 받았으면 전체가 안 바뀐다)
+  friendGift?: { day: number; to: string[]; per: number; title: string; body: string } // 친구 다이아 선물: 받는 친구마다 선물 행 + 우편(다이아 per개).
+  // 오늘 이미 보낸 친구가 있거나·친구가 아니거나·오늘 합계가 R.FRIEND_GIFT_DAILY를 넘으면 전체가 안 바뀐다(다이아 차감은 diamonds 음수로)
   nickname?: { name: string; changes: number } // 새 닉네임(바꾼 횟수가 그대로일 때만 — 동시에 두 번 바꿔도 한 번만 무료)
   coupon?: { code: string; max_uses: number | null } // 쓴 쿠폰(이 계정이 이미 썼으면 전체가 안 바뀐다, 전체 상한에 걸리면 되돌린다)
   idle?: boolean // 플레이어 활동이 아닌 쓰기(게으른 연구 완료·파견 하루 정리) — last_active를 옮기지 않는다(건설 완료 completeSql과 같다, 오프라인 골드 기준)
@@ -911,6 +913,18 @@ export function createApp(opts: AppOptions) {
   // --- 쓰기: version 낙관적 잠금 + 한 문장(CTE) ---
 
   // 성공하면 결과 행({n, run_result?}), version이 달랐으면(또는 닫을 run이 이미 닫혔으면) null.
+  // 친구 선물 가드(commit의 version 가드와 같은 문장): 받는 사람 모두 지금 친구, 오늘 아직 안 보냄, 오늘 합계 + 이번 것 ≤ 하루 상한.
+  // 같은 사람의 선물은 player_state 행(version)에서 줄을 서니 동시에 보내도 합계를 넘지 못한다(기본 키도 같은 날 두 번을 막는다).
+  function friendGiftGuard(ch: Change, p: (v: unknown) => string): string {
+    const fg = ch.friendGift
+    if (!fg) return ''
+    const to = `${p(fg.to)}::uuid[]`
+    const day = `${p(fg.day)}::int`
+    return ` and (select count(*) from friend_links where accepted and ((a = $1 and b = any(${to})) or (b = $1 and a = any(${to})))) = ${p(fg.to.length)}::int`
+      + ` and not exists (select 1 from friend_gifts where sender = $1 and day = ${day} and receiver = any(${to}))`
+      + ` and (select coalesce(sum(amount), 0) from friend_gifts where sender = $1 and day = ${day}) + ${p(fg.per * fg.to.length)}::int <= ${p(R.FRIEND_GIFT_DAILY)}::int`
+  }
+
   async function commit(playerId: string, version: number, ch: Change, now: number): Promise<Row | null> {
     const params: unknown[] = [playerId, version]
     const p = (v: unknown) => {
@@ -957,6 +971,7 @@ export function createApp(opts: AppOptions) {
       + marketGuard(ch, now, p)
       + (ch.mailClaim?.length ? ` and not exists (select 1 from mail_claims where player_id = $1 and mail_id = any(${p(ch.mailClaim)}::bigint[]))` : '')
       + (ch.coupon ? ` and not exists (select 1 from coupon_uses where player_id = $1 and code = ${p(ch.coupon.code)}::text)` : '')
+      + friendGiftGuard(ch, p)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
     if (ch.marketBuy) ctes.unshift(marketBuyCte(ch.marketBuy, now, p)) // 판매를 먼저 잡는다(s가 mb를 기다린다)
     if (ch.soldiers && Object.keys(ch.soldiers).length) {
@@ -1025,6 +1040,15 @@ export function createApp(opts: AppOptions) {
     if (ch.mailClaim?.length) {
       ctes.push(`mcl as (insert into mail_claims (mail_id, player_id, at) select x, s.player_id, to_timestamp(${p(now)}::float8)
         from s, unnest(${p(ch.mailClaim)}::bigint[]) as x returning 1)`)
+    }
+    if (ch.friendGift) {
+      const fg = ch.friendGift
+      const to = `${p(fg.to)}::uuid[]`
+      ctes.push(`fg as (insert into friend_gifts (sender, receiver, day, amount, created_at)
+        select s.player_id, x, ${p(fg.day)}::int, ${p(fg.per)}::int, to_timestamp(${p(now)}::float8) from s, unnest(${to}) as x returning receiver)`)
+      ctes.push(`fgm as (insert into mails (player_id, title, body, reward, created_at, expires_at)
+        select receiver, ${p(fg.title)}, ${p(fg.body)}, ${p(JSON.stringify({ diamonds: fg.per }))}::jsonb, to_timestamp(${p(now)}::float8),
+          to_timestamp(${p(now + LO.MAIL_DEFAULT_DAYS * 86400)}::float8) from fg returning 1)`)
     }
     if (ch.nickname) {
       ctes.push(`nk as (update players set nickname = ${p(ch.nickname.name)}::text, nickname_changes = nickname_changes + 1
@@ -3572,11 +3596,25 @@ export function createApp(opts: AppOptions) {
     const myHeroes: Record<string, { level: number; promotion: number }> = {}
     for (const [id, h] of Object.entries(p.heroes)) if (h.copies >= 1) myHeroes[id] = { level: h.level, promotion: h.promotion }
     const used = (dungeonState(p, g, 'ticket', now).helpers_used ?? []).filter((k) => k.startsWith('f:')).map((k) => k.slice(2))
+    const gift = await giftToday(me, g, now)
     return {
       server_now: now, code: R.friendCode(me), name: R.friendName(me), cap: R.FRIEND_CAP,
       hero: R.lentHero(g.heroes, mine?.friend_hero ?? null, myHeroes, g.config), hero_chosen: mine?.friend_hero ?? null,
       friends: links.filter((r) => r.accepted).map(person), incoming: links.filter((r) => !r.accepted && !r.mine).map(person),
       outgoing: links.filter((r) => !r.accepted && r.mine).map(person), recommend: recommend.map(person), used_today: used,
+      gift: { per: R.FRIEND_GIFT_DIA, cap: R.FRIEND_GIFT_DAILY, sent: gift.sent, sent_to: gift.sentTo, received_from: gift.receivedFrom, next_reset: R.nextReset(now, g.config) },
+    }
+  }
+
+  // 오늘(리셋 날짜) 선물: 보낸 합계·보낸 친구 id·나에게 보낸 친구 id
+  async function giftToday(me: string, g: Game, now: number) {
+    const day = R.resetDay(now, R.cfgNum(g.config, 'daily_reset_utc_hour'))
+    const rows = await query(`select sender::text as sender, receiver::text as receiver, amount from friend_gifts
+      where day = $2 and (sender = $1 or receiver = $1) order by created_at`, [me, day])
+    const out = rows.filter((r) => r.sender === me)
+    return {
+      day, sent: out.reduce((n, r) => n + Number(r.amount), 0), sentTo: out.map((r) => String(r.receiver)),
+      receivedFrom: rows.filter((r) => r.receiver === me).map((r) => String(r.sender)),
     }
   }
 
@@ -3695,6 +3733,53 @@ export function createApp(opts: AppOptions) {
     }
     await query('update players set friend_hero = $2 where id = $1', [me, heroId])
     return c.json(await friendsView(me))
+  })
+
+  // 친구 다이아 선물(2026-11-05, 마이그레이션 066): {id}(그 친구 한 명) 또는 {all: true}(오늘 아직 안 보낸 친구 모두 — 남은 하루 한도·가진 다이아만큼 목록 순서대로).
+  // 친구 한 명에게 하루 한 번 R.FRIEND_GIFT_DIA개, 보내는 사람 하루 합계 R.FRIEND_GIFT_DAILY개(00:00 KST 초기화). 받는 친구는 우편으로 받는다.
+  // 막힘: 404 not_friend, 409 gift_sent(오늘 이미 보냄)·gift_cap(오늘 한도 다 씀)·not_enough_diamonds·gift_none(모두 보내기: 보낼 친구 없음).
+  // 응답 = 새 friendsView + gift_sent(이번에 보낸 친구 수). 다이아는 플레이어 상태에서 빠진다(앱은 플레이어를 다시 받는다).
+  app.post('/v1/friends/gift', auth, async (c) => {
+    const me = c.get('playerId') as string
+    const b = await body(c)
+    const all = b.all === true
+    if (!all && (typeof b.id !== 'string' || !UUID_RE.test(b.id))) throw new ApiError(400, 'bad_request', "send 'id' (a friend's player id) or 'all': true")
+    const one = all ? '' : String(b.id).toLowerCase()
+    const per = R.FRIEND_GIFT_DIA
+    // 같은 사람의 선물은 이 서버 안에서 줄을 세운다(연타·모두 보내기가 겹쳐도 version 충돌로 실패하지 않게). 상한은 commit 가드가 지킨다.
+    const sent = await inTurn([`gift:${me}`], async () => {
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const now = clock()
+        const g = await loadGame()
+        const [pl, gift, links] = await Promise.all([loadPlayer(me, g, now), giftToday(me, g, now),
+          query(`select (case when a = $1 then b else a end)::text as id from friend_links where accepted and (a = $1 or b = $1) order by created_at, id`, [me])])
+        const friends = links.map((r) => String(r.id))
+        let to: string[]
+        if (all) {
+          to = friends.filter((f) => !gift.sentTo.includes(f))
+        } else {
+          if (!friends.includes(one)) throw new ApiError(404, 'not_friend', 'that player is not your friend')
+          if (gift.sentTo.includes(one)) throw new ApiError(409, 'gift_sent', 'already sent a gift to that friend today')
+          to = [one]
+        }
+        const room = Math.floor((R.FRIEND_GIFT_DAILY - gift.sent) / per)
+        if (room <= 0) throw new ApiError(409, 'gift_cap', `daily gift limit ${R.FRIEND_GIFT_DAILY} reached`)
+        if (!to.length) throw new ApiError(409, 'gift_none', 'no friend left to send a gift to today')
+        const afford = Math.floor(pl.diamonds / per)
+        if (afford <= 0) throw new ApiError(409, 'not_enough_diamonds', 'not enough diamonds')
+        to = to.slice(0, Math.min(room, afford))
+        const title = txt('server.friend.gift_title')
+        const mailBody = txt('server.friend.gift_body', { name: R.friendName(me), n: per })
+        const r = await commit(me, pl.version, {
+          diamonds: -per * to.length, friendGift: { day: gift.day, to, per, title, body: mailBody },
+          log: { kind: 'friend_gift', detail: { to, per, day: gift.day } },
+        }, now)
+        if (!r) continue
+        return to.length
+      }
+      throw new ApiError(409, 'conflict', 'concurrent update; try again')
+    })
+    return c.json({ ...(await friendsView(me)), gift_sent: sent })
   })
 
   // --- 길드(server/src/guild.ts, 마이그레이션 020) ---
