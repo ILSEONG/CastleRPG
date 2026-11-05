@@ -148,6 +148,7 @@ func _init() -> void:
 	test_offline_gold()
 	test_mesh_merge()
 	test_guild()
+	test_guild_emblem()
 	test_tutorial()
 	test_tutorial_online()
 	test_missions()
@@ -3351,7 +3352,8 @@ func test_training_tiers() -> void:
 	GameData.load_tables()  # 실제 설정(훈련 1마리씩)으로 되돌린다
 func test_upgrade_tables() -> void:
 	GameData.load_tables()
-	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg"], "upgrades.csv loads in file order")
+	check(GameData.errors == 0 and GameData.upgrades().map(func(u): return u.id) == ["atk", "hp", "aspd", "mspd", "crit_rate", "crit_dmg", "adv_atk", "adv_hp", "adv_aspd", "adv_mspd", "adv_crit_rate", "adv_crit_dmg",
+		"sup_atk", "sup_hp", "sup_aspd", "sup_mspd", "sup_crit_rate", "sup_crit_dmg", "tra_atk", "tra_hp", "tra_aspd", "tra_mspd", "tra_crit_rate", "tra_crit_dmg"], "upgrades.csv loads in file order")
 	var a := GameData.upgrade_def("aspd")
 	check(a.name == "공격속도" and a.unit == "pct" and a.per_level == 0.25 and a.max_level == 100.0 and a.cost_base == 5000.0 and is_equal_approx(a.cost_growth, 1.07), "aspd row")
 	check(GameData.upgrade_def("nope").is_empty() and GameData.upgrade_cost("nope", 3) == 0, "unknown upgrade is empty / cost 0")
@@ -3369,6 +3371,26 @@ func test_upgrade_tables() -> void:
 		and is_equal_approx(b.crit_rate, 0.1) and is_equal_approx(b.crit_dmg, 0.5), "max levels give +100% / +100% / +25% / +20% / +10%p / +50%p, atk 23 = +11.5%")
 	var over := GameData.upgrade_bonus({"atk": 9999, "crit_dmg": -5, "ghost": 7})
 	check(is_equal_approx(over.atk_pct, 1.0) and over.crit_dmg == 0.0 and over.size() == 6, "levels clamp to 0..max, unknown ids are ignored")
+	# 고급 성장: 같은 레벨 성장의 10배 값, 효과는 같은 키에 더한다, 성장이 모두 최대여야 열린다
+	check(GameData.upgrade_cost("adv_atk", 0) == 10000 and GameData.upgrade_cost("adv_atk", 1) == 10500, "adv_atk costs 10x atk")
+	var adv := GameData.upgrade_bonus({"atk": 200, "adv_atk": 10})
+	check(is_equal_approx(adv.atk_pct, 1.05) and adv.size() == 6, "adv_atk adds onto atk_pct")
+	var maxed := {}
+	for u in GameData.upgrades():
+		if GameData.upgrade_tier(str(u.id)) == 0:
+			maxed[u.id] = int(u.max_level)
+	check(not GameData.upgrade_locked("atk", {}) and GameData.upgrade_locked("adv_atk", {}) and not GameData.upgrade_locked("adv_atk", maxed), "adv rows unlock when every growth row is maxed")
+	maxed["crit_dmg"] = int(maxed["crit_dmg"]) - 1
+	check(GameData.upgrade_locked("adv_hp", maxed), "one growth row short keeps adv locked")
+	# 최고급(×100)·초월(×1000): 바로 아래 단계가 전부 최대여야 열린다
+	check(GameData.upgrade_cost("sup_atk", 0) == 100000 and GameData.upgrade_cost("tra_atk", 0) == 1000000, "sup/tra atk cost 100x / 1000x atk")
+	var adv_max := {}
+	for u in GameData.upgrades():
+		if GameData.upgrade_tier(str(u.id)) == 1:
+			adv_max[u.id] = int(u.max_level)
+	check(GameData.upgrade_locked("sup_atk", {}) and not GameData.upgrade_locked("sup_atk", adv_max) and GameData.upgrade_locked("tra_atk", adv_max), "sup opens after every adv row, tra stays locked")
+	var all4 := GameData.upgrade_bonus({"atk": 200, "adv_atk": 200, "sup_atk": 200, "tra_atk": 2})
+	check(is_equal_approx(all4.atk_pct, 3.01), "every tier adds onto atk_pct")
 
 
 ## 치명타 결합(개정 20 §3): 굴림은 한 번, 확률·배율을 더한다.
@@ -5158,6 +5180,48 @@ const GuildScript := preload("res://scripts/guild.gd")
 
 
 ## 길드(오프라인 로컬): 잠금, 가입, 출석·상자, 기부(비용·한도), 레벨업·버프, 보스(피해·등급·횟수·처치 넘김), 상점(한도·코인), 가상 길드원, 탈퇴, 저장.
+## 길드 문양(2026-11-05): 배경 모양·문양·배경 색·문양 색 조합 값, 예전 0..7, 서버와 같은 무작위 식, 길드장만 바꾼다(오프라인).
+func test_guild_emblem() -> void:
+	var E := preload("res://scripts/guild_emblem.gd")
+	check(E.count() == 8 + 8 * 20 * 12 * 10, "emblem: value count matches the server (19208)")
+	var v: int = E.encode(3, 17, 5, 9)
+	var d: Dictionary = E.decode(v)
+	check(int(d.shape) == 3 and int(d.symbol) == 17 and int(d.bg) == 5 and int(d.fg) == 9 and v == 8 + 3 + 8 * (17 + 20 * (5 + 12 * 9)), "emblem: encode/decode round trip")
+	check(E.decode(2).symbol == 2 and E.decode(2).shape == 0 and E.decode(-5) == E.decode(0) and E.decode(E.count()) == E.decode(0), "emblem: legacy 0..7 and out-of-range fall back")
+	# 서버 randomEmblem(12345) = 8 + 1 + 8*(2 + 20*(5 + 12*0)) 와 같은 식(12345: shape 1, symbol 1543%20=3 …) — 식 자체를 다시 계산해 맞춘다
+	for n in [0, 1, 12345, 2147483647]:
+		var bg: int = (n / 160) % 12
+		var fg: int = (n / 1920) % 4
+		if fg == 3 and bg in [5, 9, 11]:
+			fg = 0
+		check(E.from_seed(n) == E.encode(n % 8, (n / 8) % 20, bg, fg), "emblem: from_seed(%d) follows the server formula" % n)
+	var bad := 0
+	for i in E.SYMBOLS:
+		for p in E.symbol_parts(i):
+			if Geometry2D.triangulate_polygon(p.poly).is_empty():
+				bad += 1
+	for i in E.SHAPES:
+		if Geometry2D.triangulate_polygon(E.shape_poly(i)).is_empty():
+			bad += 1
+	check(bad == 0, "emblem: every shape and symbol polygon triangulates (%d bad)" % bad)
+	GameData.load_tables()
+	var now := GameData.reset_at(20000) + 3600.0
+	var e = _econ(now)
+	e.gold = GuildScript.CREATE_GOLD * 2
+	var g = GuildScript.new()
+	g.save_path = ""
+	g.econ = e
+	g.fixed_now = now
+	g.unlocked = true
+	var rec: Dictionary = g.recommendations(now)[0]
+	check(int(rec.emblem) >= 8 and int(rec.emblem) < E.count(), "emblem: recommended guilds get a full random emblem")
+	g.join(rec, now)
+	check(not g.can_edit_emblem() and not g.set_emblem(v), "emblem: a member of someone else's guild cannot change it")
+	g.leave()
+	check(g.create("문양길드", v, now) and int(g.guild.emblem) == v, "emblem: create keeps the picked emblem")
+	check(g.can_edit_emblem() and g.set_emblem(9) and int(g.guild.emblem) == 9 and not g.set_emblem(E.count()), "emblem: the leader changes it, out of range refused")
+
+
 func test_guild() -> void:
 	GameData.load_tables()
 	var now := GameData.reset_at(20000) + 3600.0  # 그날 01:00 KST
@@ -5190,7 +5254,7 @@ func test_guild() -> void:
 	e.gold = 15000
 	e.diamonds = 60
 	check(g.donate("gold", now) and e.gold == 5000 and g.donate_block("gold") == "골드가 부족합니다", "guild: gold donation costs 10,000")
-	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 다 썼습니다" and g.donate_block("royal") == "다이아가 부족합니다",
+	check(g.donate("dia", now) and e.diamonds == 10 and g.donate_block("dia") == "오늘 기부 횟수를 모두 사용했습니다" and g.donate_block("royal") == "다이아가 부족합니다",
 		"guild: diamond donation once a day")
 	# 인원·레벨: 1~5레벨 15명, 6레벨부터 20명(나 포함, 최대 20명), 레벨 끝 없음·버프 레벨당 1%
 	check(GuildScript.capacity(1) == 15 and GuildScript.capacity(2) == 18 and GuildScript.capacity(5) == 27 and GuildScript.capacity(6) == 30 and GuildScript.capacity(40) == 30 and GuildScript.buff_of(99) == 99.0,
@@ -5223,7 +5287,7 @@ func test_guild() -> void:
 	g.start_boss(now)
 	g.finish_boss(str(g._boss_run.run_id), 1e12, now)
 	check(results.back().dmg == float(run.cap), "guild: damage is capped at dps × sec × cap: %s" % [results.back()])
-	check(g.boss_block() == "오늘 도전 횟수를 다 썼습니다" and not g.start_boss(now), "guild: 2 boss tries a day")
+	check(g.boss_block() == "오늘 도전 횟수를 모두 사용했습니다" and not g.start_boss(now), "guild: 2 boss tries a day")
 	var reach := func(lv: int) -> float:
 		var n := 0.0
 		for i in range(1, lv):
@@ -5715,7 +5779,7 @@ func test_tutorial() -> void:
 	for id in ["guild_attend", "guild_boss"]:
 		t.step = t.mission_index(id)
 		t.count = 0
-		check(not t.complete() and t.point_keys(t.mission()) == TutorialScript.NO_GUILD_POINT and t.mission_desc(t.mission()).begins_with("지금 길드에 속해 있지 않습니다"),
+		check(not t.complete() and t.point_keys(t.mission()) == TutorialScript.NO_GUILD_POINT and t.mission_desc(t.mission()).begins_with("현재 가입한 길드가 없습니다"),
 			"guide: %s without a guild points to join/create first" % id)
 		ng_guild.guild = {"id": "g1", "name": "테스트", "level": 1}
 		check(t.point_keys(t.mission()) == t.mission().point and t.mission_desc(t.mission()) == str(t.mission().desc), "guide: %s with a guild points to its own buttons" % id)

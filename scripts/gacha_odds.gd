@@ -69,15 +69,7 @@ func _ready() -> void:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 4)
 	scroll.add_child(list)
-	close_button = Button.new()
-	close_button.text = Lang.t("gacha_odds.ready")
-	close_button.focus_mode = Control.FOCUS_NONE
-	close_button.custom_minimum_size = Vector2(220, 68)
-	close_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close_button.add_theme_font_size_override("font_size", 26)
-	UiKit.apply_button(close_button, UiKit.STEEL, 14.0)
-	close_button.pressed.connect(func(): visible = false)
-	col.add_child(close_button)
+	close_button = UiKit.corner_x(box, func(): visible = false)  # 오른쪽 위 닫기 X(2026-11-05, [닫기] 대신)
 
 
 ## currency = 골드 또는 다이아(모집권은 다이아와 같다). gold_level = 지금 골드 모집 레벨.

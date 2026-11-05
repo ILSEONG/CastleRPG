@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as SH from '../src/shop.ts'
-import { setup, T0 } from './helpers.ts'
+import { setup, takeMail, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 let S: Setup
@@ -14,7 +14,26 @@ after(async () => {
 })
 
 const DAY = 86400
-const buy = (token: string, id: string, n = 0) => S.req('POST', '/v1/shop/buy', { token, body: { id, n } })
+// 사고 우편함을 다 받는다(2026-11-05부터 받는 것은 우편으로 온다)
+const post = async (token: string, body: Record<string, unknown>) => {
+  const r = await S.req('POST', '/v1/shop/buy', { token, body })
+  return r.status === 200 ? takeMail(S, token, r) : r
+}
+const buy = (token: string, id: string, n = 0) => post(token, { id, n })
+
+test('우편 지급(2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내"): 값만 바로 빠지고 받는 것은 우편 한 통', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  await S.req('POST', '/v1/test/grant_diamonds', { token, body: { amount: 1000 } })
+  const p0 = (await S.req('GET', '/v1/player', { token })).json.player
+  const r = await S.req('POST', '/v1/shop/buy', { token, body: { id: 'd_key_gold', n: 0 } })
+  assert.deepEqual([r.status, r.json.player.diamonds, r.json.player.dungeons.gold.keys, r.json.bought.mail], [200, p0.diamonds - 60, p0.dungeons.gold.keys, true])
+  const m = (await S.req('GET', '/v1/mail', { token })).json.mails
+  assert.equal(m.length, 1)
+  assert.deepEqual(m[0].reward, { keys_gold: 1 })
+  const got = await takeMail(S, token)
+  assert.equal(got.json.player.dungeons.gold.keys, p0.dungeons.gold.keys + 1)
+})
 
 test('shop.ts: 상품 id는 겹치지 않고 한도·가격이 맞다', () => {
   assert.equal(new Set(SH.ITEMS.map((x) => x.id)).size, SH.ITEMS.length)
@@ -88,13 +107,13 @@ test('광고 상품: 광고를 봐야(ad: true, 아니면 409 ad_required) 받�
   const { token, id } = await S.login()
   const p0 = (await S.req('GET', '/v1/player', { token })).json.player
   assert.equal((await buy(token, 'a_dia')).json.error, 'ad_required')
-  const ad = (n: number) => S.req('POST', '/v1/shop/buy', { token, body: { id: 'a_dia', n, ad: true } })
+  const ad = (n: number) => post(token, { id: 'a_dia', n, ad: true })
   for (let n = 0; n < 5; n++) assert.equal((await ad(n)).status, 200)
   assert.equal((await ad(5)).json.error, 'sold_out')
   let p = (await S.req('GET', '/v1/player', { token })).json.player
   assert.equal(p.diamonds, p0.diamonds + 500)
   assert.deepEqual(p.shop.d, { a_dia: 5 })
-  const k = await S.req('POST', '/v1/shop/buy', { token, body: { id: 'a_key_gold', n: 0, ad: true } })
+  const k = await post(token, { id: 'a_key_gold', n: 0, ad: true })
   assert.equal(k.status, 200)
   assert.equal((await S.req('POST', '/v1/iap/purchase', { token, body: { product: 'no_ads', provider: 'test', order_id: 'ad1' } })).status, 200)
   const r = await buy(token, 'a_ticket') // 광고 없이

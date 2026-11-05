@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import * as IAP from '../src/iap.ts'
-import { setup, T0 } from './helpers.ts'
+import { setup, takeMail, T0 } from './helpers.ts'
 import type { Setup } from './helpers.ts'
 
 let S: Setup
@@ -15,8 +15,11 @@ after(async () => {
 
 const DAY = 86400
 let order = 0
-const buy = (token: string, product: string, provider = 'test', order_id = `o${++order}`) =>
-  S.req('POST', '/v1/iap/purchase', { token, body: { product, provider, order_id } })
+// 사고 우편함을 다 받는다(2026-11-05부터 받는 것은 우편으로 온다)
+const buy = async (token: string, product: string, provider = 'test', order_id = `o${++order}`) => {
+  const r = await S.req('POST', '/v1/iap/purchase', { token, body: { product, provider, order_id } })
+  return r.status === 200 && r.json.bought?.mail ? takeMail(S, token, r) : r
+}
 
 test('iap.ts: 상품 id가 겹치지 않고, 충전은 클수록 원당 다이아가 많다', () => {
   assert.equal(new Set(IAP.PRODUCTS.map((p) => p.id)).size, IAP.PRODUCTS.length)
@@ -60,7 +63,7 @@ test('패키지: 스타터 평생 1번, 일일 패키지는 다음 날 다시', 
   const { token } = await S.login()
   let r = await buy(token, 'pkg_starter')
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.pouches.gold_120, 5)
+  assert.equal(r.json.player.pouches.gold_120, 2)
   assert.equal((await buy(token, 'pkg_starter')).json.error, 'limit')
   const keys = r.json.player.dungeons.gold.keys
   r = await buy(token, 'pkg_daily')
@@ -70,24 +73,56 @@ test('패키지: 스타터 평생 1번, 일일 패키지는 다음 날 다시', 
   assert.equal((await buy(token, 'pkg_daily')).status, 200)
 })
 
-test('월정액: 즉시 300 + 하루 한 번 100, 30일 뒤 끝, 남은 기간에 사면 이어 붙는다', async () => {
+test('월정액(2026-11-05 우편): 사면 즉시분이 우편, 그날 처음 우편함을 보면 오늘 몫이 우편으로(하루 한 통), 30일 뒤 끝, 남은 기간에 사면 이어 붙는다', async () => {
   S.clock.t = T0
   const { token } = await S.login()
   const claim = () => S.req('POST', '/v1/iap/monthly/claim', { token, body: { product: 'monthly' } })
+  const mails = async () => (await S.req('GET', '/v1/mail', { token })).json.mails
   assert.equal((await claim()).json.error, 'inactive')
-  let r = await buy(token, 'monthly')
-  const d = r.json.player.diamonds
-  r = await claim()
-  assert.equal(r.json.player.diamonds, d + 500)
+  const d0 = (await S.req('GET', '/v1/player', { token })).json.player.diamonds
+  let r = await S.req('POST', '/v1/iap/purchase', { token, body: { product: 'monthly', provider: 'test', order_id: `o${++order}` } })
+  assert.equal(r.json.player.diamonds, d0) // 바로 넣지 않는다
+  let m = await mails()
+  assert.equal(m.length, 2) // 즉시분 + 오늘 몫
+  assert.deepEqual(m.map((x: { reward: Record<string, number> }) => x.reward.diamonds).sort((a: number, b: number) => a - b), [500, 1500])
+  assert.equal((await mails()).length, 2) // 다시 봐도 오늘 몫은 한 통
   assert.equal((await claim()).json.error, 'claimed')
+  r = await takeMail(S, token, r)
+  assert.equal(r.json.player.diamonds, d0 + 2000)
+  S.clock.t = T0 + DAY
+  m = await mails()
+  assert.equal(m.length, 1)
+  assert.equal(m[0].reward.diamonds, 500)
   S.clock.t = T0 + 29 * DAY
-  assert.equal((await claim()).status, 200)
+  assert.equal((await claim()).status, 200) // 예전 앱의 [받기]도 우편으로
+  assert.equal((await mails()).length, 2)
   r = await buy(token, 'monthly')
-  const m = r.json.player.iap.monthly.monthly
-  assert.equal(m.until - r.json.player.iap.day + 1, 31) // 남은 1일 + 30일
+  const mm = r.json.player.iap.monthly.monthly
+  assert.equal(mm.until - r.json.player.iap.day + 1, 31) // 남은 1일 + 30일
   assert.equal((await claim()).json.error, 'claimed') // 오늘 받은 것은 그대로
   const later = IAP.normalize(r.json.player.iap, r.json.player.iap.day + 31) // 이어 붙인 31일이 지나면 끝(토큰 만료 전이라 규칙으로 본다)
   assert.equal(IAP.monthlyLeft(later, 'monthly'), 0)
+})
+
+test('성채 레벨 패스(2026-11-05): 성채가 그 레벨이어야 무료, 유료는 패스를 산 뒤(지난 단계도)', async () => {
+  S.clock.t = T0
+  const { token } = await S.login()
+  const claim = (tier: number, track: string) => S.req('POST', '/v1/iap/keep/claim', { token, body: { tier, track } })
+  assert.equal(IAP.KEEP.length, 12)
+  assert.equal((await claim(0, 'free')).json.error, 'not_ready')
+  await S.req('POST', '/v1/test/levels', { token, body: { levels: { keep: 5 } } })
+  let r = await claim(0, 'free')
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.deepEqual(r.json.player.iap.kp.free, [0])
+  assert.equal((await claim(0, 'free')).json.error, 'not_ready')
+  assert.equal((await claim(0, 'paid')).json.error, 'not_ready')
+  assert.equal((await claim(2, 'free')).json.error, 'not_ready') // 성채 7 전
+  await buy(token, 'pass_keep')
+  assert.equal((await buy(token, 'pass_keep')).json.error, 'limit')
+  const d = (await S.req('GET', '/v1/player', { token })).json.player.diamonds
+  r = await claim(0, 'paid')
+  assert.equal(r.json.player.diamonds, d + 1500)
+  assert.equal((await claim(1, 'paid')).status, 200)
 })
 
 test('성장 패스: 라운드를 깨야 무료, 유료는 패스를 산 뒤(지난 단계도)', async () => {
@@ -158,19 +193,20 @@ test('지급이 들어간 뒤 다시 읽기에서 오류가 나도 주문 행은
   let paid = false
   const S2 = await setup({
     wrapQuery: (q) => async (text, params) => {
-      if (armed && text.includes('insert into economy_log')) paid = true
-      else if (armed && paid && text.includes('from player_state s where')) {
+      const out = await q(text, params)
+      if (armed && text.includes('insert into economy_log')) { // 지급 문장은 들어갔고, 그 뒤에 연결이 끊겼다
+        paid = true
         armed = false
         throw new Error('db gone')
       }
-      return q(text, params)
+      return out
     },
   })
   try {
     const { token, id } = await S2.login()
     const send = () => S2.req('POST', '/v1/iap/purchase', { token, body: { product: 'pkg_daily', provider: 'test', order_id: 'after-commit' } })
     armed = true
-    assert.equal((await send()).status, 500) // 일일 패키지(던전 열쇠) = 쓴 뒤 다시 읽는다
+    assert.equal((await send()).status, 500)
     assert.equal(paid, true)
     assert.equal((await S2.db.query("select 1 from iap_orders where order_id = 'test:after-commit'")).length, 1)
     const again = await send()

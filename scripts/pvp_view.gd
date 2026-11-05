@@ -11,6 +11,7 @@ const Lang := preload("res://scripts/lang.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const TierEmblem := preload("res://scripts/tier_emblem.gd")
 const PvpRules := preload("res://scripts/pvp_rules.gd")
 const HeroCardScript := preload("res://scripts/hero_card.gd")
 
@@ -137,6 +138,7 @@ func _mode_card(m: String) -> Control:
 	panel.add_child(row)
 	var badge := Control.new()
 	badge.custom_minimum_size = Vector2(120, 140)
+	badge.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	badge.draw.connect(func(): draw_badge(badge, str(_tier_id(m))))
 	row.add_child(badge)
 	var col := VBoxContainer.new()
@@ -213,6 +215,7 @@ func _build_page() -> void:
 	me.add_child(mrow)
 	var badge := Control.new()
 	badge.custom_minimum_size = Vector2(120, 140)
+	badge.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	badge.draw.connect(func(): draw_badge(badge, _tier_id(page) if page != "" else "bronze"))
 	mrow.add_child(badge)
 	_p.badge = badge
@@ -540,33 +543,16 @@ static func _tier_progress(pts: int) -> float:
 
 ## 등급 배지: 등급 색 방패(로우폴리 면) + 위 보석(등급이 높을수록 면이 많다) + 아래 이름.
 static func draw_badge(c: Control, tier_id: String) -> void:
-	var col := PvpRules.tier_color(tier_id)
-	var idx := 0
 	var name := ""
 	for i in PvpRules.TIERS.size():
 		if PvpRules.TIERS[i][0] == tier_id:
-			idx = i
 			name = PvpRules.TIERS[i][1]
-	var w := c.size.x
-	var h := c.size.y - 30.0
-	var cx := w / 2.0
-	var top := 6.0
-	var pts := PackedVector2Array([Vector2(cx - w * 0.38, top + h * 0.12), Vector2(cx, top), Vector2(cx + w * 0.38, top + h * 0.12),
-		Vector2(cx + w * 0.34, top + h * 0.62), Vector2(cx, top + h * 0.95), Vector2(cx - w * 0.34, top + h * 0.62)])
-	c.draw_colored_polygon(pts, col.darkened(0.25))
-	var inner := PackedVector2Array()
-	for p in pts:
-		inner.append(Vector2(cx, top + h * 0.48) + (p - Vector2(cx, top + h * 0.48)) * 0.82)
-	c.draw_colored_polygon(inner, col)
-	c.draw_colored_polygon(PackedVector2Array([inner[0], inner[1], Vector2(cx, top + h * 0.48), inner[5]]), col.lightened(0.18))  # 밝은 면
-	var ring := pts.duplicate()
-	ring.append(pts[0])
-	c.draw_polyline(ring, col.darkened(0.5), 2.5, true)
-	UiKit.draw_gem(c, Vector2(cx, top + h * 0.46), w * 0.13, Color.WHITE.lerp(col, 0.35), 4 + idx)
+	var s := minf(c.size.x * 0.72, c.size.y - 40.0)
+	TierEmblem.draw(c, tier_id, Vector2(c.size.x / 2.0, 8.0 + s * 0.6), s)  # 티어 문양(tier_emblem.gd — 2026-11-05 새 문양)
 	var font := ThemeDB.fallback_font
 	var fs := 20
 	var tw := font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	c.draw_string(font, Vector2(cx - tw / 2.0, c.size.y - 6.0), name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudScript.INK)
+	c.draw_string(font, Vector2(c.size.x / 2.0 - tw / 2.0, c.size.y - 6.0), name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudScript.INK)
 
 
 ## PVP 코인: 은청색 동전 + 엇갈린 칼 둘.

@@ -59,9 +59,7 @@ func _ready() -> void:
 	sell_all_button = _button(Lang.t("merchant_panel.ready_3"))
 	sell_all_button.pressed.connect(func(): Economy.sell_all(_now()))
 	col.add_child(sell_all_button)
-	var close_button := _button(Lang.t("merchant_panel.ready_4"), Color(0.55, 0.6, 0.7))
-	close_button.pressed.connect(close)
-	col.add_child(close_button)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	Economy.changed.connect(func(): if visible: _refresh(_now()))
 
 

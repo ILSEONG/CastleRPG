@@ -4,6 +4,8 @@ extends "res://scripts/ui_window.gd"
 ## 친구 목록: 빌려주는 영웅(친구가 모집권 던전에서 데려가는 내 영웅 — 기본은 가장 강한 영웅) [바꾸기] → 내 영웅 줄에서 탭,
 ##   목록(스크롤): 받은 신청 [수락][거절], 친구 n / 상한(영웅·레벨·전투력, 오늘 함께했으면 표시) [삭제], 보낸 신청 [취소].
 ## 친구 추가: 친구 코드 입력 + [신청], 추천 성주(최근 접속, 서버가 무작위로 고른다) [새로고침] → 새로 받기, [신청].
+## 다이아 선물(2026-11-05, 쿠키런·서머너즈 워의 친구 하트 보내기처럼): 친구 목록 위 줄 "오늘 보낸 선물 n / 3,000" + [모두 보내기](한 번 더 눌러 확인),
+##   친구 줄마다 [💎100](오늘 보냈으면 '보냄'), 오늘 나에게 보낸 친구는 '선물 받음 — 우편 확인'. 친구 한 명 하루 100개, 하루 합계 3,000개(서버가 지킨다).
 ## 친구 요청은 Economy.friend_op, 목록은 Economy.friends(응답이 오면 friends_changed로 다시 그린다).
 ## 오프라인이면 안내 한 줄만.
 
@@ -34,6 +36,9 @@ var tab_btns := {}
 var _top: VBoxContainer
 var _list_page: VBoxContainer
 var _add_page: VBoxContainer
+var gift_label: Label
+var gift_all_btn: Button
+var _gift_all_armed := false  # [모두 보내기]를 한 번 눌렀다(한 번 더 누르면 보낸다)
 var _optimistic = null  # 곧바로 바꿔 보인 친구 목록(응답 전). 서버 응답은 새 사전으로 바꾸니, 응답 뒤에도 이 사전 그대로면 거절된 것
 var _snapshot := {}  # 그 직전 목록(거절되면 되돌린다)
 
@@ -125,11 +130,22 @@ func _ready() -> void:
 	refresh_btn.custom_minimum_size = Vector2(130, 48)
 	refresh_btn.pressed.connect(refresh_recommend)
 	rec_head.add_child(refresh_btn)
-	list = _scroll_list(_list_page, LIST_H)
+	var gift_row := HBoxContainer.new()
+	gift_row.add_theme_constant_override("separation", 8)
+	_list_page.add_child(gift_row)
+	gift_label = _label("", 21, HudScript.INK, HORIZONTAL_ALIGNMENT_LEFT)
+	gift_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gift_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	gift_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	gift_row.add_child(gift_label)
+	gift_all_btn = _button("", HudScript.ACCENT, 21)
+	gift_all_btn.custom_minimum_size = Vector2(170, 48)
+	gift_all_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	gift_all_btn.pressed.connect(gift_all)
+	gift_row.add_child(gift_all_btn)
+	list = _scroll_list(_list_page, LIST_H - 56)
 	rec_list = _scroll_list(_add_page, LIST_H - 8)  # 두 탭 창 높이를 맞춘다
-	var close_b := _button(Lang.t("friend_panel.ready_10"), UiKit.STEEL)
-	close_b.pressed.connect(close)
-	content.add_child(close_b)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	Economy.friends_changed.connect(_on_friends_changed)
 
 
@@ -147,6 +163,7 @@ func _scroll_list(parent: Control, h: float) -> VBoxContainer:
 
 func _on_open() -> void:
 	pick_scroll.visible = false
+	_gift_all_armed = false
 	tab = "list"
 	Economy.friends_load()
 	_refresh()
@@ -213,6 +230,45 @@ func _hero_op(id) -> void:
 	_op("hero", {"hero_id": id}, local)
 
 
+## 오늘 아직 선물을 안 보낸 친구 id들(목록 순서)
+func _gift_targets(f: Dictionary) -> Array:
+	var sent: Array = f.get("gift", {}).get("sent_to", [])
+	return f.get("friends", []).map(func(p): return str(p.get("id", ""))).filter(func(id): return id != "" and not sent.has(id))
+
+
+## 한 친구에게 선물: 곧바로 '보냄'으로 바꿔 보이고 보낸다(거절되면 되돌린다).
+func gift_one(id: String) -> void:
+	_op("gift", {"id": id}, func(f: Dictionary):
+		var g: Dictionary = f.get("gift", {})
+		g["sent_to"] = g.get("sent_to", []) + [id]
+		g["sent"] = int(g.get("sent", 0)) + int(g.get("per", 100))
+		f["gift"] = g)
+
+
+## [모두 보내기]: 첫 탭은 확인(보낼 명수·다이아를 버튼에 보인다), 두 번째 탭에 보낸다.
+func gift_all() -> void:
+	if not _gift_all_armed:
+		_gift_all_armed = true
+		_refresh()
+		return
+	_gift_all_armed = false
+	var n := _gift_all_count(Economy.friends)
+	_op("gift", {"all": true}, func(f: Dictionary):
+		var g: Dictionary = f.get("gift", {})
+		var ids := _gift_targets(f).slice(0, n)
+		g["sent_to"] = g.get("sent_to", []) + ids
+		g["sent"] = int(g.get("sent", 0)) + ids.size() * int(g.get("per", 100))
+		f["gift"] = g)
+
+
+## 모두 보내기로 보낼 명수: 안 보낸 친구 중 남은 하루 한도·가진 다이아만큼(서버와 같은 셈)
+func _gift_all_count(f: Dictionary) -> int:
+	var g: Dictionary = f.get("gift", {})
+	var per: int = max(1, int(g.get("per", 100)))
+	var room: int = (int(g.get("cap", 3000)) - int(g.get("sent", 0))) / per
+	return max(0, mini(_gift_targets(f).size(), mini(room, int(Economy.diamonds) / per)))
+
+
 func pick_tab(t: String) -> void:
 	tab = t
 	pick_scroll.visible = false
@@ -277,11 +333,25 @@ func _refresh() -> void:
 	if f.is_empty():
 		_fit()
 		return
+	var gift: Dictionary = f.get("gift", {})
+	var per := int(gift.get("per", 100))
+	var gift_sent: Array = gift.get("sent_to", [])
+	var gift_got: Array = gift.get("received_from", [])
+	var gift_full: bool = int(gift.get("sent", 0)) + per > int(gift.get("cap", 3000))
+	gift_label.text = Lang.t("friend_panel.gift_today") % [UiKit.commas(int(gift.get("sent", 0))), UiKit.commas(int(gift.get("cap", 3000)))]
+	var n_all := _gift_all_count(f)
+	if n_all == 0:
+		_gift_all_armed = false
+	gift_all_btn.text = Lang.t("friend_panel.gift_all_ok") % [n_all, UiKit.commas(n_all * per)] if _gift_all_armed else Lang.t("friend_panel.gift_all")
+	UiKit.apply_button(gift_all_btn, UiKit.AMBER if _gift_all_armed else HudScript.ACCENT, 14.0)
+	gift_all_btn.disabled = Economy.friends_waiting or n_all == 0
 	var used: Array = f.get("used_today", [])
 	_section(list, Lang.t("friend_panel.refresh_8"), f.get("incoming", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_9"), HudScript.ACCENT, "accept", p.id); _add_btn(row, Lang.t("friend_panel.refresh_10"), UiKit.STEEL, "remove", p.id))
 	var fr: Array = f.get("friends", [])
-	_section(list, Lang.t("friend_panel.refresh_11") % [fr.size(), int(f.get("cap", 30))], fr, func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_12"), UiKit.STEEL, "remove", p.id),
-		Lang.t("friend_panel.refresh_13"), used)
+	_section(list, Lang.t("friend_panel.refresh_11") % [fr.size(), int(f.get("cap", 30))], fr, func(p, row):
+		_gift_btn(row, p.id, per, gift_sent.has(p.id), gift_full)
+		_add_btn(row, Lang.t("friend_panel.refresh_12"), UiKit.STEEL, "remove", p.id),
+		Lang.t("friend_panel.refresh_13"), used, gift_got)
 	_section(list, Lang.t("friend_panel.refresh_14"), f.get("outgoing", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_15"), UiKit.STEEL, "remove", p.id))
 	_section(rec_list, "", f.get("recommend", []), func(p, row): _add_btn(row, Lang.t("friend_panel.refresh_16"), HudScript.ACCENT, "request", p.id),
 		Lang.t("friend_panel.refresh_17"))
@@ -314,7 +384,7 @@ func _fill_picks(f: Dictionary) -> void:
 
 
 ## 한 묶음(into 목록에): 머리 줄(title이 비면 생략) + 사람 줄(영웅 얼굴·이름·영웅 정보 + buttons(p, row)이 붙이는 버튼). 비었으면 empty 안내(없으면 묶음째 숨김).
-func _section(into: VBoxContainer, title: String, people: Array, buttons: Callable, empty := "", used: Array = []) -> void:
+func _section(into: VBoxContainer, title: String, people: Array, buttons: Callable, empty := "", used: Array = [], gifted: Array = []) -> void:
 	if people.is_empty() and empty == "":
 		return
 	if title != "":
@@ -343,6 +413,8 @@ func _section(into: VBoxContainer, title: String, people: Array, buttons: Callab
 		info.add_child(_label(sub, 19, SUB, HORIZONTAL_ALIGNMENT_LEFT))
 		if used.has(p.id):
 			info.add_child(_label(Lang.t("friend_panel.section"), 18, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
+		if gifted.has(p.id):
+			info.add_child(_label(Lang.t("friend_panel.gift_got"), 18, GREEN, HORIZONTAL_ALIGNMENT_LEFT))
 		buttons.call(p, row)
 
 
@@ -353,3 +425,14 @@ func _add_btn(row: HBoxContainer, text: String, color: Color, op: String, id: St
 	b.disabled = Economy.friends_waiting
 	b.pressed.connect(func(): _person_op(op, id))
 	row.add_child(b)
+
+
+## 친구 줄 [💎100] — 오늘 보냈으면 '보냄'(꺼짐), 하루 한도를 다 썼으면 꺼짐.
+func _gift_btn(row: HBoxContainer, id: String, per: int, sent: bool, full: bool) -> void:
+	var b := _button(Lang.t("friend_panel.gift_done") if sent else Lang.t("friend_panel.gift_one") % per, UiKit.STEEL if sent else HudScript.ACCENT, 21)
+	b.custom_minimum_size = Vector2(96, 52)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.disabled = sent or full or Economy.friends_waiting
+	b.pressed.connect(func(): gift_one(id))
+	row.add_child(b)
+

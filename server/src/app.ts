@@ -11,6 +11,7 @@ import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 import * as O from './oauth.ts'
 import * as G from './guild.ts'
+import * as N from './names.ts'
 import * as Rk from './ranking.ts'
 import * as A from './attendance.ts'
 import * as M from './missions.ts'
@@ -147,6 +148,7 @@ interface Run {
 
 interface Player {
   id: string // players.id
+  nickname_changes: number // 닉네임을 바꾼 횟수(0이면 다음 변경 무료, 2026-11-05)
   gold_tenths: number
   stage: number
   keep_level: number
@@ -266,8 +268,19 @@ interface Change {
   marketBuy?: { id: number; currency: string; price: number } // 사기: 판매를 먼저 잡고(한 사람만), 값(goldTenths·diamonds 음수)이 모자라면 전체를 되돌린다
   // 운영 도구(live_ops.ts, 마이그레이션 039)
   mailClaim?: number[] // 받은 우편 id들(하나라도 이미 받았으면 전체가 안 바뀐다)
+  mailOut?: MailOut[] // 이 플레이어에게 보낼 우편(상점·결제 상품 — 2026-11-05 우편 지급). version 가드와 한 문장
+  friendGift?: { day: number; to: string[]; per: number; title: string; body: string } // 친구 다이아 선물: 받는 친구마다 선물 행 + 우편(다이아 per개).
+  // 오늘 이미 보낸 친구가 있거나·친구가 아니거나·오늘 합계가 R.FRIEND_GIFT_DAILY를 넘으면 전체가 안 바뀐다(다이아 차감은 diamonds 음수로)
+  nickname?: { name: string; changes: number } // 새 닉네임(바꾼 횟수가 그대로일 때만 — 동시에 두 번 바꿔도 한 번만 무료)
   coupon?: { code: string; max_uses: number | null } // 쓴 쿠폰(이 계정이 이미 썼으면 전체가 안 바뀐다, 전체 상한에 걸리면 되돌린다)
   idle?: boolean // 플레이어 활동이 아닌 쓰기(게으른 연구 완료·파견 하루 정리) — last_active를 옮기지 않는다(건설 완료 completeSql과 같다, 오프라인 골드 기준)
+}
+
+// 이 플레이어에게 보내는 우편 한 통(기한 MAIL_DEFAULT_DAYS일).
+interface MailOut {
+  title: string
+  body: string
+  reward: Record<string, number>
 }
 
 // 길드 변경(전부 from s — version 가드가 실패하면 아무것도 안 바뀐다).
@@ -276,6 +289,7 @@ interface GuildChange {
   add?: { guild_id: string; exp: number; dmg: number } // 길드 누적에 더한다
   log?: { guild_id: string; text: string }
   create?: { id: string; name: string; emblem: number; seed: number; virtual_n: number; notice: string }
+  emblem?: { guild_id: string; emblem: number } // 길드장이 문양을 바꾼다(owner가 그대로일 때만)
   leave?: { guild_id: string; owner: boolean } // 길드장이 나가면 남은 실제 길드원 중 먼저 들어온 사람이 길드장, 아무도 없으면 직접 만든 길드는 지운다
 }
 
@@ -313,6 +327,7 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.att
       and m.status = 'active' and m.expires_at > to_timestamp($2::float8))), '[]'::json) as items,
   (select count(*) from market_listings where seller_id = s.player_id and status = 'sold')::int as market_sold,
   exists (select 1 from player_identities i join admin_emails a on a.email = i.email where i.player_id = s.player_id and i.provider = 'google') as admin,
+  (select nickname from players where id = s.player_id) as nickname, (select nickname_changes from players where id = s.player_id) as nickname_changes,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
     from player_equipment where player_id = s.player_id), '[]'::json) as equipment,
   coalesce((select json_agg(json_build_object('id', f.id, 'hero', f.friend_hero, 'heroes', coalesce((select json_object_agg(hero_id,
@@ -467,6 +482,13 @@ export function createApp(opts: AppOptions) {
   const clock = opts.now ?? (() => Date.now() / 1000)
   const secret = opts.jwtSecret
   const random = opts.random ?? R.cryptoRandom
+  // 고른 닉네임을 메모리로(names.ts): 첫 인증 요청 때 한 번만 읽는다(health 핑이 DB를 깨우지 않게 — 주기적으로 다시 읽지도 않는다)
+  let namesLoaded: Promise<void> | null = null
+  const loadNames = () => (namesLoaded ??= N.load(query).catch((e) => { namesLoaded = null; console.warn(`[server] nicknames: ${(e as Error).message}`) }))
+  const nicknameCost = (g: Game) => {
+    const v = Number(g.config.nickname_change_dia)
+    return Number.isFinite(v) && v >= 0 ? Math.round(v) : N.DEFAULT_COST
+  }
   const app = new Hono()
   const pay: Pay.Payments = opts.payments ?? {}
   const payProviders = (['google', 'toss'] as const).filter((k) => pay[k])
@@ -619,10 +641,7 @@ export function createApp(opts: AppOptions) {
   }
 
   // 성장(업그레이드) 효과 = 분수(0.05 = +5%)
-  const upPct = (p: Player, g: Game, uid: string) => {
-    const d = g.upgrades.find((u) => u.id === uid)
-    return d ? Math.min(p.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
-  }
+  const upPct = (p: Player, g: Game, uid: string) => R.upgradePct(g.upgrades, p.upgrades, uid)
 
   // 편성 영웅(+도우미)의 서버 계산 초당 피해(길드 공성전·보스와 같은 식 G.teamDps — 장비·성장·연구 반영, 길드 버프·치명타·스킬 제외)
   function partyDps(p: Player, g: Game, party: string[], helper: R.Helper | null): number {
@@ -759,6 +778,7 @@ export function createApp(opts: AppOptions) {
         iap: r.iap == null ? {} : json(r.iap),
         market_sold: Number(r.market_sold ?? 0),
         admin: r.admin === true,
+        nickname_changes: Number(r.nickname_changes ?? 0),
       }
       const done = p.build && p.build.finish <= now ? { b: p.build, slot: 1 as const } : p.build2 && p.build2.finish <= now ? { b: p.build2, slot: 2 as const } : null
       if (done) {
@@ -825,6 +845,7 @@ export function createApp(opts: AppOptions) {
         population: population(p, game), heroes, deploy,
         soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
         dungeons: dungeonsView(p, game, now), items: p.items, equipment,
+        nickname: { name: R.friendName(p.id), changes: p.nickname_changes, price: N.priceOf(p.nickname_changes, nicknameCost(game)), cost: nicknameCost(game) }, // 닉네임 변경(설정 창)
         diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
@@ -897,6 +918,18 @@ export function createApp(opts: AppOptions) {
   // --- 쓰기: version 낙관적 잠금 + 한 문장(CTE) ---
 
   // 성공하면 결과 행({n, run_result?}), version이 달랐으면(또는 닫을 run이 이미 닫혔으면) null.
+  // 친구 선물 가드(commit의 version 가드와 같은 문장): 받는 사람 모두 지금 친구, 오늘 아직 안 보냄, 오늘 합계 + 이번 것 ≤ 하루 상한.
+  // 같은 사람의 선물은 player_state 행(version)에서 줄을 서니 동시에 보내도 합계를 넘지 못한다(기본 키도 같은 날 두 번을 막는다).
+  function friendGiftGuard(ch: Change, p: (v: unknown) => string): string {
+    const fg = ch.friendGift
+    if (!fg) return ''
+    const to = `${p(fg.to)}::uuid[]`
+    const day = `${p(fg.day)}::int`
+    return ` and (select count(*) from friend_links where accepted and ((a = $1 and b = any(${to})) or (b = $1 and a = any(${to})))) = ${p(fg.to.length)}::int`
+      + ` and not exists (select 1 from friend_gifts where sender = $1 and day = ${day} and receiver = any(${to}))`
+      + ` and (select coalesce(sum(amount), 0) from friend_gifts where sender = $1 and day = ${day}) + ${p(fg.per * fg.to.length)}::int <= ${p(R.FRIEND_GIFT_DAILY)}::int`
+  }
+
   async function commit(playerId: string, version: number, ch: Change, now: number): Promise<Row | null> {
     const params: unknown[] = [playerId, version]
     const p = (v: unknown) => {
@@ -943,6 +976,7 @@ export function createApp(opts: AppOptions) {
       + marketGuard(ch, now, p)
       + (ch.mailClaim?.length ? ` and not exists (select 1 from mail_claims where player_id = $1 and mail_id = any(${p(ch.mailClaim)}::bigint[]))` : '')
       + (ch.coupon ? ` and not exists (select 1 from coupon_uses where player_id = $1 and code = ${p(ch.coupon.code)}::text)` : '')
+      + friendGiftGuard(ch, p)
     const ctes = [`s as (update player_state set ${sets.join(', ')} where player_id = $1 and version = $2${guard} returning player_id)`]
     if (ch.marketBuy) ctes.unshift(marketBuyCte(ch.marketBuy, now, p)) // 판매를 먼저 잡는다(s가 mb를 기다린다)
     if (ch.soldiers && Object.keys(ch.soldiers).length) {
@@ -1012,6 +1046,24 @@ export function createApp(opts: AppOptions) {
       ctes.push(`mcl as (insert into mail_claims (mail_id, player_id, at) select x, s.player_id, to_timestamp(${p(now)}::float8)
         from s, unnest(${p(ch.mailClaim)}::bigint[]) as x returning 1)`)
     }
+    ch.mailOut?.forEach((m, i) => {
+      ctes.push(`mo${i} as (insert into mails (player_id, title, body, reward, created_at, expires_at)
+        select player_id, ${p(m.title)}::text, ${p(m.body)}::text, ${p(JSON.stringify(m.reward))}::jsonb, to_timestamp(${p(now)}::float8),
+          to_timestamp(${p(now + LO.MAIL_DEFAULT_DAYS * 86400)}::float8) from s returning 1)`)
+    })
+    if (ch.friendGift) {
+      const fg = ch.friendGift
+      const to = `${p(fg.to)}::uuid[]`
+      ctes.push(`fg as (insert into friend_gifts (sender, receiver, day, amount, created_at)
+        select s.player_id, x, ${p(fg.day)}::int, ${p(fg.per)}::int, to_timestamp(${p(now)}::float8) from s, unnest(${to}) as x returning receiver)`)
+      ctes.push(`fgm as (insert into mails (player_id, title, body, reward, created_at, expires_at)
+        select receiver, ${p(fg.title)}, ${p(fg.body)}, ${p(JSON.stringify({ diamonds: fg.per }))}::jsonb, to_timestamp(${p(now)}::float8),
+          to_timestamp(${p(now + LO.MAIL_DEFAULT_DAYS * 86400)}::float8) from fg returning 1)`)
+    }
+    if (ch.nickname) {
+      ctes.push(`nk as (update players set nickname = ${p(ch.nickname.name)}::text, nickname_changes = nickname_changes + 1
+        where id = (select player_id from s) and nickname_changes = ${p(ch.nickname.changes)}::int returning 1)`)
+    }
     if (ch.coupon) {
       const code = `${p(ch.coupon.code)}::text`
       ctes.push(`cu as (update coupons set uses = uses + 1 where code = ${code} and (max_uses is null or uses < max_uses) and exists (select 1 from s) returning 1)`)
@@ -1027,11 +1079,14 @@ export function createApp(opts: AppOptions) {
     const buyCheck = (ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) and (select count(*) from mbi) = (select count(*) from s) then 1 else 0 end) as mb_ok' : '')
       // 쿠폰 전체 상한: 다른 사람이 마지막 한 장을 먼저 썼으면(cu가 비었는데 내 쪽은 바뀜) 문장 전체를 되돌린다 — null(다시 계산하면 coupon_used_up)
       + (ch.coupon ? ', 1 / (case when (select count(*) from cu) = (select count(*) from s) then 1 else 0 end) as cu_ok' : '')
+      // 닉네임: 다른 요청이 먼저 바꿨으면(횟수가 달라 nk가 비었는데 내 쪽은 바뀜) 문장 전체를 되돌린다 — null(다시 계산하면 그때 값)
+      + (ch.nickname ? ', 1 / (case when (select count(*) from nk) = (select count(*) from s) then 1 else 0 end) as nk_ok' : '')
     let r: Row
     try {
       ;[r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult}${buyCheck} from s`, params)
     } catch (e) {
-      if ((ch.marketBuy || ch.coupon) && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
+      if ((ch.marketBuy || ch.coupon || ch.nickname) && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
+      if (ch.nickname && /players_nickname_lower|duplicate key/i.test(String((e as Error)?.message ?? e))) throw new ApiError(409, 'name_taken', 'that nickname is taken')
       throw e
     }
     return Number(r.n) === 1 ? r : null
@@ -1121,6 +1176,10 @@ export function createApp(opts: AppOptions) {
     if (gc.log) {
       ctes.push(`gl as (insert into guild_log (guild_id, at, text) select ${p(gc.log.guild_id)}::uuid, to_timestamp(${p(now)}::float8), ${p(gc.log.text)}
         from s returning 1)`)
+    }
+    if (gc.emblem) {
+      ctes.push(`gem as (update guilds set emblem = ${p(gc.emblem.emblem)}::int where id = ${p(gc.emblem.guild_id)}::uuid and owner = ${sid}
+        and exists (select 1 from s) returning 1)`)
     }
     if (gc.leave?.owner) {
       const gid = `${p(gc.leave.guild_id)}::uuid`
@@ -1334,6 +1393,7 @@ export function createApp(opts: AppOptions) {
     if (typeof payload.exp !== 'number' || payload.exp <= clock()) throw new ApiError(401, 'token_expired', 'token expired')
     if (typeof payload.sub !== 'string' || !UUID_RE.test(payload.sub)) throw new ApiError(401, 'bad_token', 'invalid token subject')
     c.set('playerId', payload.sub)
+    await loadNames()
     if (limits && !c.req.path.startsWith('/v1/test/') && !accountReqs.take(payload.sub, clock())) {
       throw new ApiError(429, 'too_many_requests', 'too many requests from this account; slow down')
     }
@@ -1671,6 +1731,7 @@ export function createApp(opts: AppOptions) {
 
   // 계정 지우기(앱 [계정 삭제]·관리자 웹 삭제 요청 처리 공통).
   async function deletePlayer(id: string) {
+    N.forget(id)
     const [g] = await query('select g.id from guilds g join player_guild pg on pg.guild_id = g.id where pg.player_id = $1 and g.owner = $1', [id])
     if (g) {
       const [next] = await query('select player_id from player_guild where guild_id = $1 and player_id <> $2 order by joined_at, player_id limit 1', [g.id, id])
@@ -2690,28 +2751,17 @@ export function createApp(opts: AppOptions) {
         const free = x.currency === 'ad' && IAP.adFree(IAP.normalize(p.iap, today(g, now)))
         if (ad && !free && ad.required && !ad.verified) throw new ApiError(409, 'ad_unverified', `'${x.id}' needs an ad confirmed by AdMob`)
         if (ad && !free && !ad.required && b.ad !== true) throw new ApiError(409, 'ad_required', `'${x.id}' needs a watched ad`)
-        const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, ...(ad ? { ad: !free, ssv: ad.verified } : {}) } } }
-        const give = x.give as Record<string, number>
-        let gold = (give.gold ?? 0) * 10
-        let dia = give.diamonds ?? 0
+        const change: Change = { shop: SH.add(st, x), log: { kind: 'shop', detail: { id: x.id, n, currency: x.currency, price: x.price, give: x.give, mail: true, ...(ad ? { ad: !free, ssv: ad.verified } : {}) } } }
+        // 값만 바로 빼고, 받는 것은 우편으로(2026-11-05 사용자 "상점에서 파는 재화는 무료든 유료든 먼저 우편으로 보내")
         if (x.currency === 'diamonds') {
           if (p.diamonds < x.price) throw new ApiError(409, 'not_enough', `need ${x.price} diamonds`)
-          dia -= x.price
+          change.diamonds = -x.price
         } else if (x.currency === 'gold') {
           if (p.gold_tenths < x.price * 10) throw new ApiError(409, 'not_enough', `need ${x.price} gold`)
-          gold -= x.price * 10
+          change.goldTenths = -x.price * 10
         }
-        if (gold) change.goldTenths = gold
-        if (dia) change.diamonds = dia
-        const res = Object.fromEntries(R.BUILD_RES.filter((r) => (give[r] ?? 0) > 0).map((r) => [r, give[r]]))
-        if (Object.keys(res).length) change.res = res
-        if (give.tickets) change.diaTickets = give.tickets
-        const keys = addKeys(p, g, now, give, change)
-        const pz = P.fromReward(give)
-        if (Object.keys(pz).length) change.pouches = P.add(p.pouches, pz)
-        const sz = S.fromReward(give)
-        if (Object.keys(sz).length) change.speedups = S.add(p.speedups, sz)
-        return { change, extra: { bought: { id: x.id, give: x.give } }, reload: keys }
+        change.mailOut = [shopMail(x.name, x.give)]
+        return { change, extra: { bought: { id: x.id, give: x.give, mail: true } } }
       })
     } catch (e) {
       // 이 요청이 새로 잡은 표만, 구매 판단이 거절했을 때(sold_out·stale 등 409 — 쓰기 전) 돌려놓는다: 한도 등으로 못 산 광고는 다음 구매에 다시 쓴다.
@@ -2722,6 +2772,11 @@ export function createApp(opts: AppOptions) {
   })
 
   // --- 결제 상품(iap.ts): 다이아 충전·월정액·패키지·성장 패스 ---
+
+  // 상점·결제 상품 우편(2026-11-05): 제목 "[상점] 상품 이름", 받는 것 = 그 상품의 give.
+  function shopMail(name: string, give: Record<string, number>): MailOut {
+    return { title: txt('server.mail.shop.title', { name }), body: txt('server.mail.shop.body', { name }), reward: { ...give } }
+  }
 
   // 보상(보상 키 — 출석·미션과 같은 규칙)을 change에 더한다. 던전 열쇠는 종류마다(addKeys). 열쇠를 넣었으면 true(다시 읽기).
   function addReward(p: Player, g: Game, now: number, reward: Record<string, number>, change: Change) {
@@ -2803,9 +2858,9 @@ export function createApp(opts: AppOptions) {
         const st = IAP.normalize(p.iap, today(g, now))
         if (!IAP.canBuy(st, pr, now)) throw new ApiError(409, 'limit', `'${pr.id}' can't be bought now`)
         const { give, state } = IAP.purchase(st, pr)
-        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderKey, give } } }
-        const reload = addReward(p, g, now, give, change)
-        return { change, extra: { bought: { product: pr.id, give } }, reload }
+        const change: Change = { iap: state, log: { kind: 'iap', detail: { product: pr.id, krw: pr.krw, order_id: orderKey, give, mail: true } } }
+        if (Object.keys(give).length) change.mailOut = [shopMail(pr.name, give)] // 우편으로(2026-11-05)
+        return { change, extra: { bought: { product: pr.id, give, mail: true } } }
       })
     } catch (e) {
       // 지급이 안 들어갔을 때만 주문 행을 지운다(지급은 economy_log iap와 한 문장). 쓴 뒤 다시 읽기·응답에서 난 오류면 남긴다 — 지우면
@@ -2844,11 +2899,38 @@ export function createApp(opts: AppOptions) {
       const st = IAP.normalize(p.iap, today(g, now))
       if (IAP.monthlyLeft(st, pr.id) <= 0) throw new ApiError(409, 'inactive', 'this monthly card is not active')
       if (!IAP.canClaimMonthly(st, pr.id)) throw new ApiError(409, 'claimed', 'already claimed today')
-      const state = { ...st, monthly: { ...st.monthly, [pr.id]: { ...st.monthly[pr.id], claimed: st.day } } }
-      const change: Change = { iap: state, log: { kind: 'monthly', detail: { product: pr.id, day: st.day, reward: pr.daily } } }
-      const reload = addReward(p, g, now, pr.daily ?? {}, change)
-      return { change, extra: { reward: pr.daily }, reload }
+      return { change: monthlyMailChange(st, [pr.id]), extra: { reward: pr.daily, mail: true } }
     })
+  })
+
+  // 월정액 오늘 몫을 우편으로(2026-11-05 사용자 "매일 받을 수 있는 월정액도 일단 우편으로 보내"): 받은 날로 적고 상품마다 우편 한 통.
+  function monthlyMailChange(st: IAP.IapState, ids: string[]): Change {
+    const monthly = { ...st.monthly }
+    const mailOut: MailOut[] = []
+    for (const id of ids) {
+      const pr = IAP.product(id)!
+      monthly[id] = { ...monthly[id], claimed: st.day }
+      const left = IAP.monthlyLeft(st, id)
+      mailOut.push({ title: txt('server.mail.monthly.title', { name: pr.name }), body: txt('server.mail.monthly.body', { name: pr.name, left: left - 1 }), reward: { ...(pr.daily ?? {}) } })
+    }
+    return { iap: { ...st, monthly }, mailOut, log: { kind: 'monthly', detail: { products: ids, day: st.day, mail: true } } }
+  }
+
+  // 그날 처음 우편함을 볼 때(GET /v1/mail — 로딩 일괄 조회·5분마다 다시 보기에도) 오늘 몫을 보낸다. 실패해도 우편함은 연다.
+  async function issueMonthly(c: Context) {
+    const id = c.get('playerId') as string
+    const [row] = await query('select iap from player_state where player_id = $1', [id])
+    const g = await loadGame()
+    if (!row || IAP.monthlyDue(IAP.normalize(row.iap, today(g, clock()))).length === 0) return
+    await mutate(c, (p, game, now) => {
+      const st = IAP.normalize(p.iap, today(game, now))
+      const due = IAP.monthlyDue(st)
+      return due.length ? { change: monthlyMailChange(st, due), extra: {} } : { extra: {} }
+    })
+  }
+  app.get('/v1/mail', auth, async (c, next) => {
+    await issueMonthly(c).catch((e) => console.error('monthly mail failed', e))
+    return next()
   })
 
   // 성장 패스 보상. body = {tier, track: 'free'|'paid'}. 그 라운드를 아직 못 깼거나(유료는 패스 없음) 받았으면 409 not_ready.
@@ -2863,6 +2945,23 @@ export function createApp(opts: AppOptions) {
       const reward = IAP.GROWTH[tier][track]
       const state = { ...st, gp: { ...st.gp, [track]: [...st.gp[track], tier].sort((a, z) => a - z) } }
       const change: Change = { iap: state, log: { kind: 'growth_pass', detail: { tier, track, reward } } }
+      const reload = addReward(p, g, now, reward, change)
+      return { change, extra: { reward }, reload }
+    })
+  })
+
+  // 성채 레벨 패스 보상(2026-11-05). body = {tier, track: 'free'|'paid'}. 성채가 그 레벨이 아니거나(유료는 패스 없음) 받았으면 409 not_ready.
+  app.post('/v1/iap/keep/claim', auth, async (c) => {
+    const b = await body(c)
+    const tier = intField(b, 'tier', 0, IAP.KEEP.length - 1)
+    const track = strField(b, 'track')
+    if (track !== 'free' && track !== 'paid') throw new ApiError(400, 'bad_request', "'track' must be free or paid")
+    return mutate(c, (p, g, now) => {
+      const st = IAP.normalize(p.iap, today(g, now))
+      if (!IAP.canClaimKeep(st, tier, track, level(p, R.KEEP))) throw new ApiError(409, 'not_ready', 'this castle level pass reward is not ready')
+      const reward = IAP.KEEP[tier][track]
+      const state = { ...st, kp: { ...st.kp, [track]: [...st.kp[track], tier].sort((a, z) => a - z) } }
+      const change: Change = { iap: state, log: { kind: 'keep_pass', detail: { tier, track, reward } } }
       const reload = addReward(p, g, now, reward, change)
       return { change, extra: { reward }, reload }
     })
@@ -2914,7 +3013,7 @@ export function createApp(opts: AppOptions) {
     })
   })
 
-  // 공용 업그레이드(개정 20 §4): count 1..100. 모르는 id는 404 unknown_upgrade, 최대 레벨을 넘으면 409 max_level, 골드가 모자라면 409 not_enough_gold.
+  // 공용 업그레이드(개정 20 §4): count 1..100. 모르는 id는 404 unknown_upgrade, 고급 성장이 아직 잠겼으면 409 locked, 최대 레벨을 넘으면 409 max_level, 골드가 모자라면 409 not_enough_gold.
   // 골드(정수, × 10 tenths) 차감·레벨·economy_log upgrade는 version 가드 한 문장 — 같이 들어가거나 같이 안 들어간다.
   app.post('/v1/upgrade', auth, async (c) => {
     const b = await body(c)
@@ -2923,6 +3022,7 @@ export function createApp(opts: AppOptions) {
     return mutate(c, (p, g) => {
       const def = g.upgrades.find((u) => u.id === id)
       if (!def) throw new ApiError(404, 'unknown_upgrade', `upgrade '${id}' does not exist`)
+      if (R.upgradeLocked(g.upgrades, p.upgrades, id)) throw new ApiError(409, 'locked', `'${id}' opens when every growth of the tier below is at its max level`)
       const from = p.upgrades[id] ?? 0
       const to = from + count
       if (to > def.max_level) throw new ApiError(409, 'max_level', `level ${to} is above the max level ${def.max_level}`)
@@ -3545,11 +3645,25 @@ export function createApp(opts: AppOptions) {
     const myHeroes: Record<string, { level: number; promotion: number }> = {}
     for (const [id, h] of Object.entries(p.heroes)) if (h.copies >= 1) myHeroes[id] = { level: h.level, promotion: h.promotion }
     const used = (dungeonState(p, g, 'ticket', now).helpers_used ?? []).filter((k) => k.startsWith('f:')).map((k) => k.slice(2))
+    const gift = await giftToday(me, g, now)
     return {
       server_now: now, code: R.friendCode(me), name: R.friendName(me), cap: R.FRIEND_CAP,
       hero: R.lentHero(g.heroes, mine?.friend_hero ?? null, myHeroes, g.config), hero_chosen: mine?.friend_hero ?? null,
       friends: links.filter((r) => r.accepted).map(person), incoming: links.filter((r) => !r.accepted && !r.mine).map(person),
       outgoing: links.filter((r) => !r.accepted && r.mine).map(person), recommend: recommend.map(person), used_today: used,
+      gift: { per: R.FRIEND_GIFT_DIA, cap: R.FRIEND_GIFT_DAILY, sent: gift.sent, sent_to: gift.sentTo, received_from: gift.receivedFrom, next_reset: R.nextReset(now, g.config) },
+    }
+  }
+
+  // 오늘(리셋 날짜) 선물: 보낸 합계·보낸 친구 id·나에게 보낸 친구 id
+  async function giftToday(me: string, g: Game, now: number) {
+    const day = R.resetDay(now, R.cfgNum(g.config, 'daily_reset_utc_hour'))
+    const rows = await query(`select sender::text as sender, receiver::text as receiver, amount from friend_gifts
+      where day = $2 and (sender = $1 or receiver = $1) order by created_at`, [me, day])
+    const out = rows.filter((r) => r.sender === me)
+    return {
+      day, sent: out.reduce((n, r) => n + Number(r.amount), 0), sentTo: out.map((r) => String(r.receiver)),
+      receivedFrom: rows.filter((r) => r.receiver === me).map((r) => String(r.sender)),
     }
   }
 
@@ -3589,6 +3703,27 @@ export function createApp(opts: AppOptions) {
     if (typeof b.code === 'string' && /^[0-9A-Fa-f]{8}$/.test(b.code.trim())) return { sql: 'select id from players where friend_code = $1', arg: b.code.trim().toUpperCase() }
     throw new ApiError(400, 'bad_request', "send 'code' (8-character friend code) or 'id'")
   }
+
+  // 닉네임 변경(2026-11-05) {name}: 처음은 무료, 그 뒤는 다이아(game_config nickname_change_dia, 없으면 names.ts DEFAULT_COST).
+  // 2~8자 한글·영문·숫자, 금칙어·운영자 사칭 불가, 같은 닉네임(대소문자 무시)은 한 명만 — 400 bad_name {reason}, 409 same_name·name_taken·not_enough.
+  // 응답 = 플레이어 상태(nickname {name, changes, price}) + name. 그 뒤 모든 화면(랭킹·길드·채팅·친구)이 새 이름을 쓴다.
+  app.post('/v1/nickname', auth, async (c) => {
+    const name = String((await body(c)).name ?? '').normalize('NFC').trim()
+    const bad = N.check(name)
+    if (bad) throw new ApiError(400, 'bad_name', bad)
+    const id = c.get('playerId') as string
+    if (R.friendName(id).toLowerCase() === name.toLowerCase()) throw new ApiError(409, 'same_name', 'that is already your nickname')
+    const [taken] = await query('select 1 from players where lower(nickname) = lower($1) and id <> $2', [name, id])
+    if (taken) throw new ApiError(409, 'name_taken', 'that nickname is taken')
+    return mutate(c, (p, g) => {
+      const price = N.priceOf(p.nickname_changes, nicknameCost(g))
+      if (p.diamonds < price) throw new ApiError(409, 'not_enough', 'not enough diamonds')
+      const change: Change = { nickname: { name, changes: p.nickname_changes }, log: { kind: 'nickname', detail: { name, from: R.friendName(id), diamonds: price } } }
+      if (price > 0) change.diamonds = -price
+      p.nickname_changes += 1 // 응답 view가 새 횟수·다음 값을 보이게(applyLocal은 이 칸을 모른다)
+      return { change, extra: { name }, after: () => { N.set(id, name); return {} } }
+    })
+  })
 
   app.get('/v1/friends', auth, async (c) => c.json(await friendsView(c.get('playerId') as string)))
 
@@ -3649,6 +3784,53 @@ export function createApp(opts: AppOptions) {
     return c.json(await friendsView(me))
   })
 
+  // 친구 다이아 선물(2026-11-05, 마이그레이션 066): {id}(그 친구 한 명) 또는 {all: true}(오늘 아직 안 보낸 친구 모두 — 남은 하루 한도·가진 다이아만큼 목록 순서대로).
+  // 친구 한 명에게 하루 한 번 R.FRIEND_GIFT_DIA개, 보내는 사람 하루 합계 R.FRIEND_GIFT_DAILY개(00:00 KST 초기화). 받는 친구는 우편으로 받는다.
+  // 막힘: 404 not_friend, 409 gift_sent(오늘 이미 보냄)·gift_cap(오늘 한도 다 씀)·not_enough_diamonds·gift_none(모두 보내기: 보낼 친구 없음).
+  // 응답 = 새 friendsView + gift_sent(이번에 보낸 친구 수). 다이아는 플레이어 상태에서 빠진다(앱은 플레이어를 다시 받는다).
+  app.post('/v1/friends/gift', auth, async (c) => {
+    const me = c.get('playerId') as string
+    const b = await body(c)
+    const all = b.all === true
+    if (!all && (typeof b.id !== 'string' || !UUID_RE.test(b.id))) throw new ApiError(400, 'bad_request', "send 'id' (a friend's player id) or 'all': true")
+    const one = all ? '' : String(b.id).toLowerCase()
+    const per = R.FRIEND_GIFT_DIA
+    // 같은 사람의 선물은 이 서버 안에서 줄을 세운다(연타·모두 보내기가 겹쳐도 version 충돌로 실패하지 않게). 상한은 commit 가드가 지킨다.
+    const sent = await inTurn([`gift:${me}`], async () => {
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const now = clock()
+        const g = await loadGame()
+        const [pl, gift, links] = await Promise.all([loadPlayer(me, g, now), giftToday(me, g, now),
+          query(`select (case when a = $1 then b else a end)::text as id from friend_links where accepted and (a = $1 or b = $1) order by created_at, id`, [me])])
+        const friends = links.map((r) => String(r.id))
+        let to: string[]
+        if (all) {
+          to = friends.filter((f) => !gift.sentTo.includes(f))
+        } else {
+          if (!friends.includes(one)) throw new ApiError(404, 'not_friend', 'that player is not your friend')
+          if (gift.sentTo.includes(one)) throw new ApiError(409, 'gift_sent', 'already sent a gift to that friend today')
+          to = [one]
+        }
+        const room = Math.floor((R.FRIEND_GIFT_DAILY - gift.sent) / per)
+        if (room <= 0) throw new ApiError(409, 'gift_cap', `daily gift limit ${R.FRIEND_GIFT_DAILY} reached`)
+        if (!to.length) throw new ApiError(409, 'gift_none', 'no friend left to send a gift to today')
+        const afford = Math.floor(pl.diamonds / per)
+        if (afford <= 0) throw new ApiError(409, 'not_enough_diamonds', 'not enough diamonds')
+        to = to.slice(0, Math.min(room, afford))
+        const title = txt('server.friend.gift_title')
+        const mailBody = txt('server.friend.gift_body', { name: R.friendName(me), n: per })
+        const r = await commit(me, pl.version, {
+          diamonds: -per * to.length, friendGift: { day: gift.day, to, per, title, body: mailBody },
+          log: { kind: 'friend_gift', detail: { to, per, day: gift.day } },
+        }, now)
+        if (!r) continue
+        return to.length
+      }
+      throw new ApiError(409, 'conflict', 'concurrent update; try again')
+    })
+    return c.json({ ...(await friendsView(me)), gift_sent: sent })
+  })
+
   // --- 길드(server/src/guild.ts, 마이그레이션 020) ---
   // 모든 응답 = 플레이어 응답 + guild(guildView). 쓰기는 version 가드 한 문장(commit의 guild CTE). 막힘은 409(코드 = 앱 문구 키).
 
@@ -3695,10 +3877,7 @@ export function createApp(opts: AppOptions) {
     const slots = R.heroSlots(game.config, level(pl, R.KEEP))
     const deploy = Array.from({ length: slots }, (_, i) => pl.deploy[i]).filter((x): x is string => typeof x === 'string' && Object.hasOwn(pl.heroes, x))
     const defs = game.heroes.map((h) => ({ id: String(h.id), role: String(h.role), atk: Number(h.atk), hp: Number(h.hp), atk_interval: Number(h.atk_interval), grade: String(h.grade) }))
-    const up = (uid: string) => {
-      const d = game.upgrades.find((u) => u.id === uid)
-      return d ? Math.min(pl.upgrades[uid] ?? 0, Number(d.max_level)) * Number(d.per_level) / 100 : 0
-    }
+    const up = (uid: string) => R.upgradePct(game.upgrades, pl.upgrades, uid)
     const buff = st ? G.buffPct(st.lv.level) : 0
     const equip = R.heroEquip(pl.items, pl.equipment, pl.slot_levels)
     return {
@@ -3883,6 +4062,25 @@ export function createApp(opts: AppOptions) {
             row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: 1 }), log: { guild_id: gid, text: txt('server.app.guild_create.text', { playerName: G.playerName(x.id) }) },
           },
           log: { kind: 'guild', detail: { action: 'create', name, gold: G.CREATE_GOLD } },
+        },
+      }
+    })
+  })
+
+  // 길드 문양 바꾸기(2026-11-05): 길드장만. 배경 모양·문양·배경 색·문양 색 조합 값 하나(G.EMBLEMS 범위). 값은 무료로 언제든 바꾼다.
+  app.post('/v1/guild/emblem', auth, async (c) => {
+    const b = await body(c)
+    const emblem = intField(b, 'emblem', 0, G.EMBLEMS - 1)
+    return guildMutate(c, (x) => {
+      const { g } = needGuild(x)
+      if (g.owner !== x.id) throw blocked('not_owner', 'only the guild leader can change the emblem')
+      if (g.emblem === emblem) return {} // 그대로면 아무것도 안 바꾼다
+      return {
+        change: {
+          guild: {
+            row: rowOf(x), emblem: { guild_id: g.id, emblem },
+            log: { guild_id: g.id, text: txt('server.app.guild_emblem.text', { playerName: G.playerName(x.id) }) },
+          },
         },
       }
     })

@@ -28,15 +28,12 @@ func _ready() -> void:
 	content.add_child(result_label)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var close_button := _button(Lang.t("coupon_panel.ready_4"), UiKit.STEEL)
-	close_button.custom_minimum_size.x = 160
-	close_button.pressed.connect(close)
-	row.add_child(close_button)
 	use_button = _button(Lang.t("coupon_panel.ready_5"))
 	use_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	use_button.pressed.connect(use)
 	row.add_child(use_button)
 	content.add_child(row)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 
 
 func _on_open() -> void:

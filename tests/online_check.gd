@@ -727,7 +727,7 @@ func _phase7_toss() -> void:
 	ReleasePlatform.override = ""
 
 
-const DONE_PAY := "결제가 완료되어 지급했습니다"
+const DONE_PAY := "결제가 완료되어 우편함으로 보냈습니다"
 
 
 ## phase 8: 계정 연결(2026-10-12). 새 기기 게스트 → 설정 [Google]로 연결 → 같은 계정·진행 그대로, 이제 Google 자동 로그인.
@@ -772,17 +772,64 @@ func _phase8_link() -> void:
 	StorePay.fake_store = func(_id): return "order-online-check-1"
 	var dia0 := Economy.diamonds
 	var opened_pay := Economy.iap_buy("dia_1")
-	var paid := await _wait_until(func(): return Economy.diamonds >= dia0 + 300, 10.0)
+	# 결제한 다이아는 우편으로 온다(2026-11-05) — 결제 뒤 앱이 우편함을 새로 받아 오고, 받으면 오른다
+	var mailed := await _wait_until(func(): return LiveOps.mail_count() > 0, 10.0)
+	if mailed:
+		LiveOps.claim()
+	var paid := mailed and await _wait_until(func(): return Economy.diamonds >= dia0 + 300 and LiveOps.claiming.is_empty(), 10.0)
 	_check(opened_pay and paid and DONE_PAY in notes and Economy.iap_view().first.has("dia_1"),
 		"(p1) buying 다이아 300 sends the receipt; the server grants it and the shop marks the first-purchase bonus used", "dia=%d->%d notes=%s" % [dia0, Economy.diamonds, notes])
 	var dia1 := Economy.diamonds
 	StorePay._send("dia_1", "test", "order-online-check-1", true)
 	await _wait_until(func(): return StorePay._sent.is_empty(), 10.0)
 	await _frames(10)
-	_check(Economy.diamonds == dia1 and notes.count(DONE_PAY) == 1, "(p1) the same order sent again (restore) grants nothing more and stays quiet", "dia=%d->%d" % [dia1, Economy.diamonds])
+	LiveOps.mail_loaded = false
+	LiveOps.fetch_mail()
+	await _wait_until(func(): return LiveOps.mail_loaded, 10.0)
+	_check(Economy.diamonds == dia1 and LiveOps.mail_count() == 0 and notes.count(DONE_PAY) == 1, "(p1) the same order sent again (restore) grants nothing more and stays quiet",
+		"dia=%d->%d mails=%d" % [dia1, Economy.diamonds, LiveOps.mail_count()])
 	StorePay.fake_store = Callable()
 	_check(not Economy.iap_buy("dia_2") and notes.back() == preload("res://scripts/release_platform.gd").iap_off_text(),
 		"(p2) with no payment keys on the server the buttons only say payments open after release", str(notes.back()))
+	# 닉네임 변경(2026-11-05): 첫 번은 무료, 그 뒤 다이아. 바로 바꿔 보이고, 서버가 거절하면 되돌린다
+	sp._refresh()
+	var nick0 := str(Economy.nickname.get("name", ""))
+	_check(nick0 != "" and int(Economy.nickname.get("price", -1)) == 0 and sp.rename_button.visible and sp.name_label.text == nick0,
+		"(n1) settings show the nickname with [변경]; the first change is free", "nick=%s" % [Economy.nickname])
+	var sent0: int = Net.requested.get("/v1/nickname", 0)
+	_check(Economy.change_nickname("운영자님") and Economy.nickname.name == "운영자님", "(n2) a change shows at once (before the server answers)", str(Economy.nickname))
+	await _wait_until(func(): return not Economy._waiting.has("nickname"), 10.0)
+	await _frames(5)
+	_check(Economy.nickname.get("name") == nick0 and int(Economy.nickname.get("changes", -1)) == 0 and notes.back() == "쓸 수 없는 닉네임입니다",
+		"(n2) a name the server refuses (staff impersonation) is rolled back and the reason shown", "nick=%s note=%s" % [Economy.nickname, notes.back()])
+	var np = preload("res://scripts/nickname_panel.gd").new()
+	add_child(np)
+	np.open()
+	np.input.text = "가"
+	np.submit()
+	_check(np.visible and np.error_label.text != "" and Net.requested.get("/v1/nickname", 0) == sent0 + 1, "(n3) a 1-letter name is refused in the window without asking the server", np.error_label.text)
+	var nick1 := "성주%d" % (randi() % 100000)
+	var dia2 := Economy.diamonds
+	np.input.text = nick1
+	np.submit()
+	sp._refresh()
+	_check(not np.visible and Economy.nickname.name == nick1 and sp.name_label.text == nick1 and Economy.diamonds == dia2,
+		"(n3) [변경] closes the window and shows the new name at once, free the first time", "nick=%s label=%s" % [Economy.nickname, sp.name_label.text])
+	await _wait_until(func(): return not Economy._waiting.has("nickname"), 10.0)
+	await _frames(5)
+	_check(Economy.nickname.get("name") == nick1 and int(Economy.nickname.get("changes", 0)) == 1 and int(Economy.nickname.get("price", 0)) == 3000 and Economy.diamonds == dia2,
+		"(n3) the server keeps the new name; the next change costs 3,000 diamonds", str(Economy.nickname))
+	var nick2 := "둘째%d" % (randi() % 10000)
+	var dia3 := Economy.diamonds
+	if dia3 >= 3000:  # 두 번째 변경: 다이아 3,000을 바로 빼고 서버가 같은 값을 돌려준다
+		_check(Economy.change_nickname(nick2) and Economy.diamonds == dia3 - 3000, "(n4) the second change takes 3,000 diamonds at once", "dia=%d->%d" % [dia3, Economy.diamonds])
+		await _wait_until(func(): return not Economy._waiting.has("nickname"), 10.0)
+		await _frames(5)
+		_check(Economy.nickname.get("name") == nick2 and Economy.diamonds == dia3 - 3000 and int(Economy.nickname.get("changes", 0)) == 2,
+			"(n4) the server charged 3,000 diamonds and kept the name", "nick=%s dia=%d" % [Economy.nickname, Economy.diamonds])
+	var sent1: int = Net.requested.get("/v1/nickname", 0)
+	_check(Economy.diamonds < 3000 and not Economy.change_nickname("셋째이름") and notes.back() == "다이아가 부족합니다" and Net.requested.get("/v1/nickname", 0) == sent1,
+		"(n5) without 3,000 diamonds the next change is refused on the device", "dia=%d note=%s" % [Economy.diamonds, notes.back()])
 
 
 ## phase 6: 튜토리얼(서버 퀘스트). 새 플레이어 튜토리얼을 켜고 새 기기로 접속 → 서버가 정한 공터·1단계 미션 카드 → 보상 받기(서버가 자원을 준다) →
