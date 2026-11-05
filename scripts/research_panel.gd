@@ -82,10 +82,10 @@ var speedup_button: Button  # [가속] → 가속 아이템 목록(2026-10-13)
 var speedups: VBoxContainer  # speedup_list.gd(펼쳤을 때만)
 var idle_label: Label
 var tree: VBoxContainer  # 단 줄들(연결선은 여기 뒤에 그린다)
-var close_button: Button
 var level_button: Button  # [연구소 레벨업 ›] → 건물 창(비용·시간·선행 조건·[가속]) — 사용자 2026-10-14
 var building_panel  # 건물 창(building_panel.gd). main이 넣는다
 # 노드 상세(아래에서 뜨는 창)
+var detail_close_x: Button  # 연구 상세 오른쪽 위 닫기(2026-11-05)
 var detail: Control
 var detail_id := ""
 var detail_name: Label
@@ -143,9 +143,7 @@ func _ready() -> void:
 	tree.add_theme_constant_override("separation", 22)
 	tree.draw.connect(_draw_links)
 	_scroll.add_child(tree)
-	close_button = _button(Lang.t("research_panel.ready"), UiKit.STEEL)
-	close_button.pressed.connect(close)
-	content.add_child(close_button)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	_fit_sheet()
 	_build_detail()
 	Economy.changed.connect(func(): if visible: _refresh())
@@ -298,9 +296,7 @@ func _build_detail() -> void:
 	detail_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_cancel.pressed.connect(func(): _acted(Economy.cancel_research()))
 	run_btns.add_child(detail_cancel)
-	var close_detail_button := _button(Lang.t("research_panel.build_detail_3"), UiKit.STEEL)
-	close_detail_button.pressed.connect(close_detail)
-	box.add_child(close_detail_button)
+	detail_close_x = corner_x(panel, close_detail)  # 오른쪽 위 닫기 X(2026-11-05, [닫기] 대신)
 
 
 ## 연구 시작·즉시 완료·취소가 됐으면 누름 보호를 다시 건다: [연구] 자리에 [즉시 완료]·[취소]가(끝나면 반대로) 떠서

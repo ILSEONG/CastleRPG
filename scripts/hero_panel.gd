@@ -464,11 +464,9 @@ func _build_detail() -> void:
 	_detail_view.add_child(nav)
 	prev_button = _button(Lang.t("hero_panel.build_detail_3"), UiKit.STEEL)
 	prev_button.pressed.connect(step.bind(-1))
-	var close_button := _button(Lang.t("hero_panel.build_detail_4"), UiKit.STEEL)
-	close_button.pressed.connect(_show_list)
 	next_button = _button(Lang.t("hero_panel.build_detail_5"), UiKit.STEEL)
 	next_button.pressed.connect(step.bind(1))
-	for b in [prev_button, close_button, next_button]:
+	for b in [prev_button, next_button]:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nav.add_child(b)
 
