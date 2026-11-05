@@ -167,6 +167,8 @@ func _rebuild() -> void:
 	if rewards.is_empty():
 		progress.text = ""
 		info.text = Lang.t("event_panel.rebuild") if not Net.is_online() else (Lang.t("event_panel.rebuild_2") if loading or not failed else Lang.t("event_panel.rebuild_3"))
+		if info.text == Lang.t("event_panel.rebuild_2"):
+			preload("res://scripts/spinner.gd").mark(info)  # 불러오는 중: 로딩 고리(글이 바뀌면 숨는다)
 		claim_button.disabled = true
 		claim_button.text = Lang.t("event_panel.rebuild_4")
 		_fit()

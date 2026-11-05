@@ -63,6 +63,7 @@ func _run() -> void:
 	_check(w.shake_check.button_pressed and w.numbers_check.button_pressed, "shake and damage numbers start on", "")
 	_check(w.version_label.text == str(ProjectSettings.get_setting("application/config/version")), "shows game version", w.version_label.text)
 	_check(w.name_label.text == "오프라인 모드", "offline: account shows offline mode", w.name_label.text)
+	_check(not w.rename_button.visible, "offline: no nickname [변경]", "")
 
 	# 음량: 슬라이더를 끌면 바로 버스 크기가 바뀌고, 손을 떼면 저장
 	w.volume_slider.value = 40

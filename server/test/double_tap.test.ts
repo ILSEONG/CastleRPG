@@ -27,11 +27,11 @@ test('미션 받기 두 번 탭: 보상은 한 번(진 쪽 409 claimed), 로그 
     S.clock.t = T0
     const { token, id } = await S.login()
     await S.req('POST', '/v1/test/events', { token, body: { events: Object.fromEntries(M.EVENTS.map((k) => [k, 1_000_000])) } })
-    const g0 = (await player(S, token)).gold
+    const g0 = (await player(S, token)).pouches?.gold_10 ?? 0
     const [ok, lost] = await race(S, b, () => S.req('POST', '/v1/mission/claim', { token, body: { id: 'd_kill' } }))
     assert.equal(ok.status, 200, JSON.stringify(ok.json))
     assert.deepEqual([lost.status, lost.json.error], [409, 'claimed'])
-    assert.equal((await player(S, token)).gold, g0 + 3000)
+    assert.equal((await player(S, token)).pouches.gold_10, g0 + 2)
     assert.equal(await logCount(S, id, 'mission'), 1)
   } finally {
     await S.close()

@@ -333,7 +333,7 @@ func _run() -> void:
 	await _frames(2)
 	var rate: float = Economy.current_rate("wood", Time.get_unix_time_from_system())
 	var expect := Economy.sell_value("wood", 2000, rate)
-	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("다음 시세까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
+	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("시세 갱신까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
 	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [선택 판매]로 전량
 	await _tap(panel.qty_max["wood"].get_global_rect().get_center())
@@ -1315,7 +1315,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child_count() == 2,
 		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 00:02", "reqs=%s time=%s" % [rows, bwin.time_label.text])
 	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
-	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면마다 성문", "1개", "2개"]]
+	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면당 성문", "1개", "2개"]]
 		and names.call(9) == ["건물 최대", "성 HP", "성 모습"] and bwin.effect_lines("keep", 4)[2] == ["성 모습", "1단계", "2단계"] and names.call(21).size() == 6 and names.call(30) == ["건물 최대", "성 HP"],
 		"(B) keep slot/area/gate/look lines only when the next level changes them: Lv 1 none, Lv 4 → 5 성 모습 1 → 2단계, Lv 8 → 9 영웅 슬롯 4 → 8, 성 넓이 20칸 → 28칸, 성문 1 → 2, Lv 9 → 10 성 모습 only, Lv 21 → 22 all, max level none",
 		"Lv1=%s Lv8=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 8), names.call(30)])
@@ -1533,7 +1533,7 @@ func _soldiers_ui(tabs, hud) -> void:
 	await _frames(1)
 	var tq := Economy.training("barracks")
 	_check(Economy.res == {"wood": 42000, "stone": 10000, "food": 38000} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
-		and (bwin.run_label.text == "T1 보병 ×8 · 남은 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
+		and (bwin.run_label.text == "T1 보병 ×8 · 남은 시간 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 시간 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
 		and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUILD_LIFT_PX,
 		"(S) [훈련]: resources go down at once (food 12,000 / wood 8,000), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
 		"res=%s q=%s run=%s" % [Economy.res, tq, bwin.run_label.text])
@@ -1953,7 +1953,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더" % (fmax - int(fmax * 0.36)),
+	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더 처치 필요" % (fmax - int(fmax * 0.36)),
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)
@@ -1963,7 +1963,7 @@ func _fever_ui(hud) -> void:
 		GameState.mode = m
 		await _frames(1)
 		await _tap(fr.get_center())
-		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중엔 FEVER를 쓸 수 없습니다" and fb.modulate.a < 1.0,
+		_check(not Fever.active() and Fever.full() and hud._toast.text == "스테이지 진행 중에는 FEVER를 사용할 수 없습니다" and fb.modulate.a < 1.0,
 			"(fever) while pushing a stage (mode %d) FEVER can't start: dimmed, tap only toasts, gauge kept" % m,
 			"active=%s gauge=%d toast=%s a=%.2f" % [Fever.active(), Fever.gauge, hud._toast.text, fb.modulate.a])
 	GameState.mode = mode0
@@ -2085,7 +2085,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
 		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
 	_check(heroes_win._promo.line.text == "조각 2 / 10" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
-		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.3 · 최대 레벨 100 → 150\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
+		and heroes_win.promote_preview.text == "승급하면 최대 레벨 100 → 150" and heroes_win.big_card.stars == 1,
 		"(x3) [승급] shows 조각 2 / 10 inside, is off with the reason 조각 부족, and previews x1.3 and max level 100 -> 150",
 		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
@@ -2129,7 +2129,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.hero_levels["arteon"] = lv
 	Economy.roster_changed.emit()
 	_check(heroes_win._promo.line.text == "조각 2 · MAX" and heroes_win.promote_reason.text == "최대 승급" and heroes_win.promote_button.disabled
-		and heroes_win.promote_preview.text == "최대 승급 ★5 — HP·공격 ×3.71" and heroes_win.level_label.text == "Lv %d / 300" % lv,
+		and heroes_win.promote_preview.text == "최대 승급 ★5" and heroes_win.level_label.text == "Lv %d / 300" % lv,
 		"(x3) max promotion: MAX inside, reason 최대 승급, x3.71, max level 300", "line=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
 	_check(heroes_win.hero_cards.arteon.shard_text() == "MAX" and heroes_win.hero_cards.arteon.stars == 5, "(x3) the list card bar reads MAX with five stars", "")
@@ -2433,7 +2433,7 @@ func _skill_unlock_ui(heroes_win) -> void:
 	Economy.hero_promotions["ignis"] = 0
 	heroes_win.show_detail("ignis")
 	_check(ui.all(func(u): return u.box.visible) and ui[1].label.text == "신속 (패시브) — ★3에서 해금" and ui[2].label.text == "점화 (액티브) — ★5에서 해금"
-		and heroes_win.promote_preview.text.ends_with("\n★3 달성 시 스킬 해금: 신속"),
+		and not heroes_win.promote_preview.text.contains("스킬 해금"),
 		"(U) SSR ignis at ★0: three rows (신속 at ★3, 점화 at ★5) and the preview names the next unlock", "rows=%s preview=%s" % [ui.map(func(u): return u.label.text), heroes_win.promote_preview.text])
 	var notices := []
 	var grab := func(t: String): notices.append(t)
@@ -2449,7 +2449,7 @@ func _skill_unlock_ui(heroes_win) -> void:
 	var col: Color = ui[1].label.get_theme_color("font_color")
 	_check(locked_before and Economy.promotion_of("arteon") == 3 and notices.has("스킬 해금! 수호의 오라") and heroes_win.unlocks_shown == shown0 + 1 and not ui[1].lock.visible
 		and ui[1].label.text.contains("받는 피해가 30% 줄어듭니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
-		and heroes_win.promote_preview.text.ends_with("\n★5 달성 시 스킬 해금: 심판의 빛"),
+		and not heroes_win.promote_preview.text.contains("스킬 해금"),
 		"(U) [승급] to ★3 unlocks 수호의 오라: notice 스킬 해금! 수호의 오라, the row opens and flashes gold, the preview moves on to ★5",
 		"promo=%d notices=%s shown=%d row=%s color=%s preview=%s" % [Economy.promotion_of("arteon"), notices, heroes_win.unlocks_shown, ui[1].label.text, col, heroes_win.promote_preview.text])
 	Economy.notice.disconnect(grab)
@@ -2803,7 +2803,7 @@ func _dungeon_ui(tabs) -> void:
 	var first_on := [Fever.dungeon_auto, hud.auto_next_box.button_pressed, hud.auto_repeat_box.button_pressed]
 	await _tap(hud.auto_repeat_box.get_global_rect().get_center())
 	_check(first_on == ["next", true, false] and Fever.dungeon_auto == "repeat" and not hud.auto_next_box.button_pressed and hud.auto_repeat_box.button_pressed
-		and d.auto_left > 1.5 and hud.auto_label.text == "2초 뒤 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
+		and d.auto_left > 1.5 and hud.auto_label.text == "2초 후 자동 도전", "(D) the two auto checkboxes are exclusive; 현재 단계 자동 반복 counts down 2 s",
 		"first=%s now=%s left=%.2f label=%s" % [first_on, Fever.dungeon_auto, d.auto_left, hud.auto_label.text])
 	await _wait_until(func(): return Economy.dungeon_state("gold").keys == 0 and _main._dungeon != null and _main._dungeon.auto_halted, 15.0)
 	d = _main._dungeon

@@ -7,8 +7,6 @@ extends Node
 ##   xvfb-run -a godot --path . --resolution 720x1280 res://tests/journey_economy_online.tscn -- --api=http://127.0.0.1:8801 --device=/tmp/x/device.json --out=/tmp/econ.png
 ## 마지막 줄이 ECONOMY ONLINE PASSED(실패면 종료 코드 1).
 
-const Lang := preload("res://scripts/lang.gd")
-
 const EconomyScript := preload("res://scripts/economy.gd")
 const ShopItems := preload("res://scripts/shop_items.gd")
 const UiKit := preload("res://scripts/ui_kit.gd")
@@ -79,7 +77,7 @@ func _recruit_insufficient() -> void:
 	var rp = _panel("recruit_panel.gd")
 	rp.open()
 	await _frames(5)
-	_check(Economy.gold < Economy.gacha_cost("gold", 1) and rp.one_button.disabled, Lang.t("tests.journey_economy_online.recruit_insufficient"), str([Economy.gold, rp.one_button.disabled]))
+	_check(Economy.gold < Economy.gacha_cost("gold", 1) and rp.one_button.disabled, "gold [1회] is disabled with no gold", str([Economy.gold, rp.one_button.disabled]))
 	var n0 := _notes.size()
 	_check(not Economy.gacha(1, "gold") and _notes.slice(n0).has(EconomyScript.NO_GOLD_TEXT), "gold recruit with no gold: notice, nothing sent", str(_notes.slice(n0)))
 	_check(not Economy.gacha(1, "diamond") and _notes.slice(n0).has(EconomyScript.NO_DIA_TEXT), "diamond recruit with no diamonds: notice", str(_notes.slice(n0)))
@@ -88,7 +86,7 @@ func _recruit_insufficient() -> void:
 	await _frames(3)
 	rp.one_button.pressed.emit()
 	await _frames(3)
-	_check(rp.shop_ask.visible and not Economy._waiting.has("gacha"), Lang.t("tests.journey_economy_online.recruit_insufficient_2"), "")
+	_check(rp.shop_ask.visible and not Economy._waiting.has("gacha"), "diamond [1회] with no diamonds opens the go-to-shop ask", "")
 	await _snap()
 	rp.shop_ask.visible = false
 	rp.close()
@@ -139,7 +137,7 @@ func _recruit() -> void:
 	await _snap()
 	_check(Economy.gacha_gold_level == 2 and Economy.gacha_gold_pulls == 1 and _leveled_to == 2, "41 gold pulls → gold recruit Lv 2 (1 into it)",
 		str([Economy.gacha_gold_level, Economy.gacha_gold_pulls, _leveled_to]))
-	_check(_notes.any(func(s): return str(s).begins_with(Lang.t("tests.journey_economy_online.recruit"))), "level-up notice shown", str(_notes.slice(-6)))
+	_check(_notes.any(func(s): return str(s).begins_with("골드 모집 Lv 2")), "level-up notice shown", str(_notes.slice(-6)))
 	_check(Economy.gacha_cost("gold", 1) > cost1, "Lv 2 gold cost is higher", str([cost1, Economy.gacha_cost("gold", 1)]))
 	_check_shards_invariant("gold pulls")
 	# 모집권(상점 주간 모집권 10장 묶음 + 일일 할인 1장으로 받았다)
@@ -147,7 +145,7 @@ func _recruit() -> void:
 	await _frames(3)
 	rp.set_currency("diamond")
 	await _frames(3)
-	_check(rp.pull_currency(1) == "ticket" and rp.one_button.text.contains(Lang.t("tests.journey_economy_online.recruit_2")), "with tickets the diamond buttons become ticket buttons", rp.one_button.text)
+	_check(rp.pull_currency(1) == "ticket" and rp.one_button.text.contains("모집권"), "with tickets the diamond buttons become ticket buttons", rp.one_button.text)
 	var ticket_pulls := [10]
 	for i in Economy.dia_tickets - 10:
 		ticket_pulls.append(1)
@@ -216,7 +214,7 @@ func _shop() -> void:
 	var n0 := _notes.size()
 	_check(Economy.shop_block("d_ticket") == "diamonds", "240-diamond ticket is blocked with 50 diamonds", Economy.shop_block("d_ticket"))
 	sp.buttons["buy:d_ticket"].pressed.emit()
-	_check(_notes.slice(n0).has(Lang.t("tests.journey_economy_online.shop")) and Economy.shop_left("d_ticket") == 1, "short of diamonds: notice, nothing bought", str(_notes.slice(n0)))
+	_check(_notes.slice(n0).has("다이아가 부족합니다") and Economy.shop_left("d_ticket") == 1, "short of diamonds: notice, nothing bought", str(_notes.slice(n0)))
 	await _same_as_server("shop refusal", ["diamonds", "shop", "tickets"])
 	await _post("/v1/test/grant_diamonds", {"amount": 10000})
 	await _frames(3)
@@ -375,7 +373,7 @@ func _iap() -> void:
 	# 월정액: 오늘 보상은 우편으로 저절로 온다(2026-11-05 — [오늘 받기] 없음, 산 날 몫은 결제 때 받았다)
 	sp.open_tab("package")
 	await _frames(5)
-	_check(not sp.buttons.has("monthly:monthly"), Lang.t("tests.journey_economy_online.iap"), str(sp.buttons.keys()))
+	_check(not sp.buttons.has("monthly:monthly"), "no [오늘 받기] button for the monthly card", str(sp.buttons.keys()))
 	_check(not Economy.can_claim_monthly("monthly"), "today's monthly reward already mailed", "")
 	before = _cli()
 	await _take_mail()
@@ -396,7 +394,7 @@ func _iap() -> void:
 	await _snap()
 	for track in ["free", "paid"]:
 		var k: String = "growth:0:" + track
-		_check(sp.buttons.has(k), Lang.t("tests.journey_economy_online.iap_2") % track, str(sp.buttons.keys()))
+		_check(sp.buttons.has(k), "pass tab: [받기] for tier 0 %s" % track, str(sp.buttons.keys()))
 		if not sp.buttons.has(k):
 			continue
 		before = _cli()
@@ -459,7 +457,7 @@ func _heroes() -> void:
 		await _settle()
 	_check(Economy.level_of(id) == cap, "levelled to the cap %d" % cap, str(Economy.level_of(id)))
 	var n0 := _notes.size()
-	_check(not Economy.level_up(id, 1) and _notes.slice(n0).has(Lang.t("tests.journey_economy_online.heroes")), "above the cap: refused with notice", str(_notes.slice(n0)))
+	_check(not Economy.level_up(id, 1) and _notes.slice(n0).has("최대 레벨"), "above the cap: refused with notice", str(_notes.slice(n0)))
 	var r := await _post_raw("/v1/hero/levelup", {"hero_id": id, "count": 1})
 	_check(not r[0] and r[1] == "max_level", "server: 409 max_level", str(r))
 	await _same_as_server("level cap", ["gold", "heroes"])
@@ -619,7 +617,7 @@ func _equipment() -> void:
 	var party := Economy.default_party("equip")
 	_check(Economy.dungeon_block("equip", 1, party) == "bag_full", "equipment dungeon blocked: bag_full", Economy.dungeon_block("equip", 1, party))
 	n0 = _notes.size()
-	_check(not Economy.start_dungeon("equip", 1, party) and _notes.slice(n0).has(EconomyScript.DUNGEON_TEXT.bag_full), Lang.t("tests.journey_economy_online.equipment"), str(_notes.slice(n0)))
+	_check(not Economy.start_dungeon("equip", 1, party) and _notes.slice(n0).has(EconomyScript.DUNGEON_TEXT.bag_full), "start: notice 보관함이 가득 찼습니다", str(_notes.slice(n0)))
 	r = await _post_raw("/v1/dungeon/start", {"type": "equip", "level": 1, "party": party})
 	_check(not r[0] and r[1] == "bag_full", "server: 409 bag_full", str(r))
 	# 한 번에 많이 팔아 비운다
@@ -770,7 +768,7 @@ func _pouches_offline_merchant() -> void:
 	_check(await _wait_until(func(): return off.visible, 10.0), "offline reward window opens", "")
 	await _settle()
 	var after := _cli()
-	var shown := int(off.gold_label.text.replace("+", "").replace(Lang.t("tests.journey_economy_online.pouches_offline_merchant"), "").replace(",", ""))
+	var shown := int(off.gold_label.text.replace("+", "").replace(" 골드", "").replace(",", ""))
 	_check(float(_offline.get("away_sec", 0.0)) >= 7200.0 and float(_offline.get("away_sec", 0.0)) < 7300.0, "offline away ≈ 2 h", str(_offline))
 	var expect: Dictionary = EconomyScript.offline_reward(float(_offline.get("away_sec", 0.0)), Economy.server_stage, Economy.kill_tenths(EconomyScript.OFFLINE_KIND, Economy.server_stage))
 	_check(after.gold - before.gold == int(expect.tenths) and shown == int(expect.tenths) / 10, "offline gold = app formula (%d tenths)" % int(expect.tenths),

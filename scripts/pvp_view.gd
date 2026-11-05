@@ -496,6 +496,7 @@ func refresh() -> void:
 	var o := Pvp.opponent(page)
 	if o.is_empty():
 		_p.opp_name.text = Lang.t("pvp_view.refresh_6")
+		preload("res://scripts/spinner.gd").mark(_p.opp_name)  # 상대를 찾는 중: 로딩 고리
 		_p.opp_info.text = ""
 		_fill_row(_p.opp_row, [])
 	else:

@@ -15,6 +15,7 @@ static var ROWS := [
 
 var toggles := {}  # Prefs 키 → 체크 버튼
 var section: Label
+var panel: Node  # 설정 창(켬/끔 버튼 모양 _style_toggle)
 
 
 ## 창(settings_panel.gd)의 content에 칸을 붙인다. 지원 안 하는 빌드면 null.
@@ -23,6 +24,7 @@ static func add_to(panel: Node) -> RefCounted:
 	if notify == null or not notify.supported():
 		return null
 	var s := new()
+	s.panel = panel
 	s.section = panel._section(Lang.t("notify_settings.add_to"))
 	panel.body.add_child(s.section)
 	for r in ROWS:
@@ -48,9 +50,6 @@ func refresh() -> void:
 		b.set_block_signals(false)
 		b.disabled = key != "notify" and not master_on
 		b.modulate.a = 0.45 if b.disabled else 1.0
-		b.queue_redraw()
-		for k in b.get_children():
-			if k is Control:
-				k.queue_redraw()
+		panel._style_toggle(b)
 	var blocked: bool = notify.plugin != null and not notify.plugin.has_permission()
 	section.text = Lang.t("notify_settings.refresh") if master_on and blocked else Lang.t("notify_settings.refresh_2")

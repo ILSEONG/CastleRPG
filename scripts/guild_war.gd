@@ -441,7 +441,7 @@ static func enemy_guild(seed_n: int, n: int, avg: float) -> Dictionary:
 			h.merge({"uid": 1 + m * WarRules.SQUAD + i, "owner": "d:%d" % m, "name": name_s, "squad": m, "lane": WarRules.lane_of(m)})
 			defs.append(h)
 	var gr := _rng([seed_n, 3])
-	return {"seed": seed_n, "name": GuildScriptNames.guild(gr), "emblem": _rng([seed_n, 4]).randi_range(0, 7), "power": total, "members": members, "defenders": defs}
+	return {"seed": seed_n, "name": GuildScriptNames.guild(gr), "emblem": preload("res://scripts/guild_emblem.gd").from_seed(_rng([seed_n, 4]).randi()), "power": total, "members": members, "defenders": defs}
 
 
 ## level = 성 주인 길드 레벨(가상 상대는 우리 길드 레벨). 0이면 예전 식(그 주를 레벨 없이 연 저장). 서버 castleMax와 같다.

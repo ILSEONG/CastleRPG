@@ -54,14 +54,15 @@ test('일일 미션: 보상 반영, 하루 한 번(409 claimed), 다음 날 다�
   const before = (await S.req('GET', '/v1/player', { token })).json.player
   const r = await claim(token, { id: 'd_kill' })
   assert.equal(r.status, 200)
-  assert.deepEqual(r.json.reward, { gold: 3000, pouch_gold_10: 1, speedup_build_15: 1 })
-  assert.deepEqual(r.json.player.pouches, { gold_10: 1 })
+  assert.deepEqual(r.json.reward, { pouch_gold_10: 2, speedup_build_15: 1 })
+  assert.deepEqual(r.json.player.pouches, { gold_10: 2 })
   assert.deepEqual(r.json.player.speedups, { build_15: 1 })
-  assert.equal(r.json.player.gold, before.gold + 3000)
+  assert.equal(r.json.player.gold, before.gold) // 골드는 주머니로(2026-11-05)
   assert.deepEqual(r.json.player.missions.d, ['d_kill'])
   assert.equal((await claim(token, { id: 'd_kill' })).json.error, 'claimed')
   const res = await claim(token, { id: 'd_collect' })
-  assert.equal(res.json.player.res.wood, before.res.wood + 3000)
+  assert.deepEqual(res.json.player.pouches, { gold_10: 2, res_10: 2 })
+  assert.equal(res.json.player.res.wood, before.res.wood)
   S.clock.t = monday + 86400
   const next = await claim(token, { id: 'd_kill' })
   assert.equal(next.status, 200)
@@ -77,7 +78,7 @@ test('일일 보너스: 다른 일일 미션 6개를 받아야(409 not_done), �
   const p0 = (await claim(token, { id: 'd_gacha' })).json.player
   const r = await claim(token, { id: 'd_all' })
   assert.equal(r.status, 200)
-  assert.equal(r.json.player.diamonds, p0.diamonds + 100)
+  assert.equal(r.json.player.diamonds, p0.diamonds + 1000)
   assert.equal(r.json.player.dia_tickets, p0.dia_tickets + 1)
   assert.equal(r.json.player.missions.wd, 1)
 })
@@ -182,7 +183,7 @@ test('모두 받기(일일): 받을 수 있는 것을 다 받고 보너스는 �
   for (const id of r.json.claimed.ids) for (const [k, v] of Object.entries(M.def(id)!.reward)) sum[k] = (sum[k] ?? 0) + v
   assert.deepEqual(r.json.claimed.reward, sum)
   assert.equal(r.json.player.diamonds, before.diamonds + (sum.diamonds ?? 0))
-  assert.equal(r.json.player.gold, before.gold + 3000 + (sum.gold ?? 0))
+  assert.equal(r.json.player.gold, before.gold)
   assert.deepEqual([r.json.player.missions.d.length, r.json.player.missions.wd], [7, 1])
   assert.equal((await claimAll(token, 'daily')).json.error, 'nothing')
   const [log] = await S.db.query("select detail from economy_log where kind = 'mission_all' order by at desc limit 1")
