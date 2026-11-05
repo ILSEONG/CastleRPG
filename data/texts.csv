@@ -547,7 +547,7 @@ exchange_panel.buy_2,장비,,,,scripts/exchange_panel.gd
 exchange_panel.left_text,남은 시간 %d시간 %d분,,,,scripts/exchange_panel.gd
 exchange_panel.left_text_2,남은 시간 %d분,,,,scripts/exchange_panel.gd
 exchange_panel.rebuild,보유  골드 %s · 다이아 %s,,,,scripts/exchange_panel.gd
-exchange_panel.build_buy,다른 성주가 등록한 장비 · 구매 즉시 보관함으로 들어갑니다,,,,scripts/exchange_panel.gd
+exchange_panel.build_buy,다른 성주가 등록한 장비를 구매하면 즉시 보관함으로 들어갑니다,,,,scripts/exchange_panel.gd
 exchange_panel.build_buy_2,통화: ,,,,scripts/exchange_panel.gd
 exchange_panel.build_buy_3,부위: ,,,,scripts/exchange_panel.gd
 exchange_panel.build_buy_4,전체,,,,scripts/exchange_panel.gd
