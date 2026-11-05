@@ -4,7 +4,7 @@ import { defineConfig } from '@apps-in-toss/web-framework/config'
 export default defineConfig({
   appName: 'castle-rpg',
   brand: {
-    primaryColor: '#F08A24',
+    primaryColor: '#3F6FCF',
   },
   navigationBar: {
     withBackButton: false,
