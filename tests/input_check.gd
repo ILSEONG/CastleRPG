@@ -333,7 +333,7 @@ func _run() -> void:
 	await _frames(2)
 	var rate: float = Economy.current_rate("wood", Time.get_unix_time_from_system())
 	var expect := Economy.sell_value("wood", 2000, rate)
-	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("다음 시세까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
+	_check(panel.rate_labels["wood"].text == "×%.1f" % rate and panel._timer_label.text.begins_with("시세 갱신까지 "), "(p) trade window row shows that resource's rate and the countdown", "wood=%s timer=%s" % [panel.rate_labels["wood"].text, panel._timer_label.text])
 	var bp: Vector2 = panel.sell_buttons["wood"].get_global_rect().get_center()
 	await _tap(bp)  # [판매] → 수량 칸이 펼쳐진다. [최대] → [선택 판매]로 전량
 	await _tap(panel.qty_max["wood"].get_global_rect().get_center())
@@ -1315,7 +1315,7 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		and bwin.effects.get_child(1).get_child(0).text == "성 HP 1,000" and bwin.effects.get_child(1).get_child(1).text == "→ 1,200" and bwin.effects.get_child_count() == 2,
 		"(B) keep window: green ✓ prerequisites, 성 HP 1,000 → 1,200, no slot/area lines at Lv 1 (they do not change), [업그레이드] on, 00:02", "reqs=%s time=%s" % [rows, bwin.time_label.text])
 	var names := func(lv: int) -> Array: return bwin.effect_lines("keep", lv).map(func(r): return r[0])
-	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면마다 성문", "1개", "2개"]]
+	_check(names.call(1) == ["건물 최대", "성 HP"] and bwin.effect_lines("keep", 8).slice(2) == [["영웅 슬롯", "4", "8"], ["성 넓이", "20칸", "28칸"], ["면당 성문", "1개", "2개"]]
 		and names.call(9) == ["건물 최대", "성 HP", "성 모습"] and bwin.effect_lines("keep", 4)[2] == ["성 모습", "1단계", "2단계"] and names.call(21).size() == 6 and names.call(30) == ["건물 최대", "성 HP"],
 		"(B) keep slot/area/gate/look lines only when the next level changes them: Lv 1 none, Lv 4 → 5 성 모습 1 → 2단계, Lv 8 → 9 영웅 슬롯 4 → 8, 성 넓이 20칸 → 28칸, 성문 1 → 2, Lv 9 → 10 성 모습 only, Lv 21 → 22 all, max level none",
 		"Lv1=%s Lv8=%s Lv30=%s" % [names.call(1), bwin.effect_lines("keep", 8), names.call(30)])
@@ -1533,7 +1533,7 @@ func _soldiers_ui(tabs, hud) -> void:
 	await _frames(1)
 	var tq := Economy.training("barracks")
 	_check(Economy.res == {"wood": 42000, "stone": 10000, "food": 38000} and tq.count == 8 and not tq.ready and bwin.run_box.visible and not bwin.empty_box.visible
-		and (bwin.run_label.text == "T1 보병 ×8 · 남은 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
+		and (bwin.run_label.text == "T1 보병 ×8 · 남은 시간 24:00:00" or bwin.run_label.text.begins_with("T1 보병 ×8 · 남은 시간 23:59:")) and bwin.train_bar.value < 0.01 and badges.training_ids().bars == ["barracks"]
 		and badges.stack_size("barracks", Economy.time_now()).y >= badges.BUILD_LIFT_PX,
 		"(S) [훈련]: resources go down at once (food 12,000 / wood 8,000), the window shows a progress bar and '보병 ×8 · 남은 24:00:00', a bar joins the barracks tag",
 		"res=%s q=%s run=%s" % [Economy.res, tq, bwin.run_label.text])
@@ -1953,7 +1953,7 @@ func _fever_ui(hud) -> void:
 	_check(fr.end.x <= br.position.x and absf(fr.get_center().y - br.get_center().y) < 12.0 and fb.label_text() == "36%",
 		"(fever) the button sits left of [진행] on the same row and reads 36%", "fever=%s stage=%s text=%s" % [fr, br, fb.label_text()])
 	await _tap(fr.get_center())
-	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더" % (fmax - int(fmax * 0.36)),
+	_check(not Fever.active() and Fever.gauge == int(fmax * 0.36) and hud._toast.visible and hud._toast.text == "몬스터 %d마리 더 처치 필요" % (fmax - int(fmax * 0.36)),
 		"(fever) tapping an uncharged button only toasts how many more kills", "gauge=%d toast=%s" % [Fever.gauge, hud._toast.text])
 	Fever.gauge = Fever.kills_needed()
 	await _frames(2)

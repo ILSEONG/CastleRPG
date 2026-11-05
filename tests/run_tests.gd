@@ -5769,7 +5769,7 @@ func test_tutorial() -> void:
 	for id in ["guild_attend", "guild_boss"]:
 		t.step = t.mission_index(id)
 		t.count = 0
-		check(not t.complete() and t.point_keys(t.mission()) == TutorialScript.NO_GUILD_POINT and t.mission_desc(t.mission()).begins_with("지금 길드에 속해 있지 않습니다"),
+		check(not t.complete() and t.point_keys(t.mission()) == TutorialScript.NO_GUILD_POINT and t.mission_desc(t.mission()).begins_with("현재 가입한 길드가 없습니다"),
 			"guide: %s without a guild points to join/create first" % id)
 		ng_guild.guild = {"id": "g1", "name": "테스트", "level": 1}
 		check(t.point_keys(t.mission()) == t.mission().point and t.mission_desc(t.mission()) == str(t.mission().desc), "guide: %s with a guild points to its own buttons" % id)
