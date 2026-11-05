@@ -157,14 +157,12 @@ func _ready() -> void:
 		icon.offset_bottom = 15
 		b.add_child(icon)
 		_btn_gems.append(icon)
-	var close_button := _button(Lang.t("recruit_panel.ready_4"), UiKit.STEEL)
-	close_button.pressed.connect(close)
-	_pick_view.add_child(close_button)
 
 	_result_view = VBoxContainer.new()
 	_result_view.add_theme_constant_override("separation", 16)
 	_result_view.visible = false
 	content.add_child(_result_view)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x") — 모집 고르기 화면에서만 보인다
 	var center := CenterContainer.new()
 	_result_view.add_child(center)
 	_grid = GridContainer.new()
@@ -466,6 +464,7 @@ func _show_results(results: Array) -> void:
 		stage.play(best, results.size())
 	_pick_view.visible = false
 	_result_view.visible = true
+	close_x.visible = false  # 결과 화면은 [확인]·[다시 모집]으로 돌아간다(닫기는 모집 고르기 화면에만)
 	_fit()
 	_arm_guard()
 	_refresh()
@@ -509,6 +508,7 @@ func _show_pick() -> void:
 		stage.stop()
 	_result_view.visible = false
 	_pick_view.visible = true
+	close_x.visible = true
 	_fit()
 	_refresh()
 

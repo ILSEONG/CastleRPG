@@ -775,9 +775,9 @@ func _heroes_detail(heroes_win, tabs, hud, recruit) -> void:
 	await _promotion_ui(heroes_win, recruit)
 	await _skill_unlock_ui(heroes_win)
 	await _guard_wait()  # _figures가 창을 다시 열어 0.4초 보호가 다시 걸린다
-	await _tap(heroes_win.prev_button.get_parent().get_child(1).get_global_rect().get_center())  # [닫기]
+	heroes_win._show_list()  # 2026-11-05: 상세의 [닫기]는 없어졌다(오른쪽 위 X가 시트를 닫는다 — 아래 (x))
 	_check(heroes_win.is_open() and not heroes_win.is_showing_detail() and heroes_win.is_guarded() and heroes_win.hero_cards.arteon.level == 5,
-		"(x) [닫기] returns to the list (guarded); the card shows Lv 5", "")
+		"(x) back on the list (guarded) the card shows Lv 5", "")
 	await _guard_wait()
 	await _tap(Vector2(30, 40))  # 위 칩 줄 높이 — 시트 바깥 배경
 	_check(not heroes_win.is_open() and tabs.selected == "", "(x) a backdrop tap above the sheet closes it and no tab is selected", "")
@@ -1229,14 +1229,14 @@ func _buildings_ui(tabs, hud, recruit) -> void:
 		"held=%s open=%s wood=%d" % [held, bwin.is_open(), Economy.res.wood])
 	await _guard_wait()
 	var cam0: Vector3 = rig.position
-	await _tap(bwin.content.get_child(bwin.content.get_child_count() - 1).get_global_rect().get_center())  # [닫기]
+	await _tap(bwin.close_x.get_global_rect().get_center())  # 오른쪽 위 X
 	var hover := InputEventMouseMotion.new()
 	hover.position = lp + Vector2(60, 40)
 	hover.global_position = hover.position
 	hover.relative = Vector2(60, 40)
 	get_viewport().push_input(hover, true)
 	await _frames(2)
-	_check(not bwin.is_open() and rig.position == cam0, "(B) [닫기] closes it; afterwards a mouse move without a press does not pan the camera",
+	_check(not bwin.is_open() and rig.position == cam0, "(B) the top-right X closes it; afterwards a mouse move without a press does not pan the camera",
 		"open=%s cam %s -> %s" % [bwin.is_open(), cam0, rig.position])
 	await _tap(lp)
 	_check(Economy.res.wood == 1000 and not bwin.is_open() and badges.last_pop.get("amount", 0) == 1000, "(B) a short tap on the same mill still collects (+1000)", "wood=%d" % Economy.res.wood)
@@ -3195,7 +3195,7 @@ func _recruit23_ui(recruit) -> void:
 	var shop = recruit.shop
 	var sr: Rect2 = shop.dialog.get_global_rect()
 	_check(shop.is_open() and not recruit.is_open() and shop.tab == "diamond" and shop.buy_buttons.size() == 6 and shop.buy_buttons.all(func(b): return not b.disabled and b.text.begins_with("₩"))
-		and shop.note.text.begins_with("쓰지 않은 상품만") and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
+		and shop.note.text.begins_with("사용하지 않은 상품만") and sr.position.x >= 0.0 and sr.end.x <= 720.0 and sr.position.y >= 0.0 and sr.end.y <= 1280.0,
 		"(r23) [이동] closes the recruit window and opens the shop on its 다이아 tab: 6 packs with ₩ prices, the payment note; fits 720x1280", "open=%s recruit=%s tab=%s buys=%s note=%s rect=%s" % [shop.is_open(), recruit.is_open(), shop.tab, shop.buy_buttons.map(func(b): return "%s%s" % [b.text, "x" if b.disabled else ""]), shop.note.text.left(20), sr])
 	await _unguarded(shop)
 	var d0: int = Economy.diamonds

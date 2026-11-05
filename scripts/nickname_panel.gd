@@ -38,15 +38,12 @@ func _ready() -> void:
 	content.add_child(error_label)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	var cancel := _button(Lang.t("nickname_panel.ready_4"), UiKit.STEEL)
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel.pressed.connect(close)
-	row.add_child(cancel)
 	change_button = _button(Lang.t("nickname_panel.ready_5"))
 	change_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	change_button.pressed.connect(submit)
 	row.add_child(change_button)
 	content.add_child(row)
+	_add_close_x()  # 오른쪽 위 닫기(2026-11-05 — [취소] 대신, 다른 창과 같게)
 
 
 func _on_open() -> void:

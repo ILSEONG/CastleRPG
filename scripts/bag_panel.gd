@@ -156,9 +156,7 @@ func _ready() -> void:
 	sell_button.custom_minimum_size = Vector2(130, 56)
 	sell_button.pressed.connect(sell)
 	_sell_row.add_child(sell_button)
-	var close_button := _button(Lang.t("bag_panel.ready_3"), UiKit.STEEL)
-	close_button.pressed.connect(close)
-	content.add_child(close_button)
+	_add_close_x()  # 오른쪽 위 닫기(사용자 2026-11-05 "닫기 버튼 대신 일괄적으로 우측 상단에 x")
 	_fit_sheet()
 	Economy.items_changed.connect(_refresh)
 	Economy.changed.connect(func():
