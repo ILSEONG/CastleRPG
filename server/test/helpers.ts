@@ -83,3 +83,15 @@ export async function setup(o: { wrapQuery?: (q: Query) => Query; allowTestHooks
   }
   return { db, clock, req, login, makeApp, close: () => db.close() }
 }
+
+// 우편함을 다 받는다(2026-11-05 상점·결제 상품 우편 지급). r을 주면 그 응답의 player를 받은 뒤 값으로 바꿔 돌려준다.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function takeMail(S: Setup, token: string, r?: any) {
+  const m = await S.req('GET', '/v1/mail', { token })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ids = (m.json.mails ?? []).map((x: any) => x.id)
+  if (!ids.length) return r
+  const c = await S.req('POST', '/v1/mail/claim', { token, body: { ids } })
+  if (r?.json?.player) r.json.player = c.json.player
+  return r ?? c
+}

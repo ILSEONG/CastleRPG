@@ -1,7 +1,7 @@
 extends RefCounted
 ## 결제 상품 표(서버 server/src/iap.ts PRODUCTS·GROWTH와 같은 값 — 한쪽을 바꾸면 다른 쪽도, 단위 테스트 test_iap가 비교한다).
 ## kind: diamond(충전: 첫 구매는 기본 다이아 2배, 이후 기본 + bonus)·monthly(월정액 days일, 사면 give + 매일 daily)·package(period 기간 한도 limit)·
-## pass(성장 패스: GROWTH 유료 보상)·hot(핫딜: 계기에 1시간 뜬 것만 한 번, value = 가치 배수 표시). krw = 원화 가격. 실결제는 Economy.iap_buy → StorePay(Google Play·토스, 서버 키가 없으면 알림만).
+## pass(성장 패스: GROWTH 유료 보상, 성채 레벨 패스: KEEP 유료 보상)·hot(핫딜: 계기에 1시간 뜬 것만 한 번, value = 가치 배수 표시). krw = 원화 가격. 실결제는 Economy.iap_buy → StorePay(Google Play·토스, 서버 키가 없으면 알림만).
 
 const Lang := preload("res://scripts/lang.gd")
 
@@ -14,14 +14,15 @@ static var PRODUCTS := [
 	{ "id": "dia_6", "kind": "diamond", "name": Lang.t("iap_items.products.dia_6.name"), "krw": 99000, "give": { "diamonds": 156000 }, "bonus": 66000 },
 	{ "id": "monthly", "kind": "monthly", "name": Lang.t("iap_items.products.monthly.name"), "krw": 4900, "give": { "diamonds": 1500 }, "days": 30, "daily": { "diamonds": 500, "speedup_build_60": 1, "speedup_research_60": 1 } },
 	{ "id": "monthly_plus", "kind": "monthly", "name": Lang.t("iap_items.products.monthly_plus.name"), "krw": 14900, "give": { "diamonds": 5000, "speedup_builder_43200": 1 }, "days": 30, "daily": { "diamonds": 800, "tickets": 3, "pouch_gold_240": 1, "speedup_any_180": 1 } },
-	{ "id": "pkg_starter", "kind": "package", "name": Lang.t("iap_items.products.pkg_starter.name"), "krw": 1200, "period": "once", "limit": 1, "give": { "diamonds": 1500, "tickets": 30, "pouch_gold_120": 5, "pouch_res_120": 5, "speedup_builder_10080": 1, "speedup_build_60": 5 } },
-	{ "id": "pkg_daily", "kind": "package", "name": Lang.t("iap_items.products.pkg_daily.name"), "krw": 1200, "period": "daily", "limit": 1, "give": { "diamonds": 600, "tickets": 8, "keys_gold": 3, "speedup_any_60": 3 } },
-	{ "id": "pkg_weekly", "kind": "package", "name": Lang.t("iap_items.products.pkg_weekly.name"), "krw": 5900, "period": "weekly", "limit": 1, "give": { "diamonds": 4000, "tickets": 50, "keys_equip": 5, "speedup_any_480": 3, "speedup_builder_10080": 1 } },
-	{ "id": "pkg_growth", "kind": "package", "name": Lang.t("iap_items.products.pkg_growth.name"), "krw": 33000, "period": "once", "limit": 1, "give": { "diamonds": 30000, "tickets": 150, "pouch_gold_360": 10, "pouch_res_360": 10, "speedup_builder_43200": 1, "speedup_build_1440": 5, "speedup_research_1440": 5 } },
+	{ "id": "pkg_starter", "kind": "package", "name": Lang.t("iap_items.products.pkg_starter.name"), "krw": 1200, "period": "once", "limit": 1, "give": { "diamonds": 1000, "tickets": 8, "pouch_gold_120": 2, "pouch_res_120": 2, "speedup_builder_10080": 1, "speedup_build_60": 5 } },
+	{ "id": "pkg_daily", "kind": "package", "name": Lang.t("iap_items.products.pkg_daily.name"), "krw": 1200, "period": "daily", "limit": 1, "give": { "diamonds": 1650, "tickets": 10, "keys_gold": 3, "speedup_any_60": 3 } },
+	{ "id": "pkg_weekly", "kind": "package", "name": Lang.t("iap_items.products.pkg_weekly.name"), "krw": 5900, "period": "weekly", "limit": 1, "give": { "diamonds": 6750, "tickets": 50, "keys_equip": 5, "speedup_any_480": 3, "speedup_builder_10080": 1 } },
+	{ "id": "pkg_growth", "kind": "package", "name": Lang.t("iap_items.products.pkg_growth.name"), "krw": 33000, "period": "once", "limit": 1, "give": { "diamonds": 50000, "tickets": 250, "pouch_gold_360": 10, "pouch_res_360": 10, "speedup_builder_43200": 1, "speedup_build_1440": 5, "speedup_research_1440": 5 } },
 	{ "id": "hot_boss", "kind": "hot", "name": Lang.t("iap_items.products.hot_boss.name"), "krw": 3300, "value": 5, "give": { "diamonds": 18000, "tickets": 20, "pouch_gold_360": 3, "speedup_build_480": 3 } },
 	{ "id": "hot_dia", "kind": "hot", "name": Lang.t("iap_items.products.hot_dia.name"), "krw": 5900, "value": 5, "give": { "diamonds": 40000, "tickets": 15 } },
 	{ "id": "hot_defeat", "kind": "hot", "name": Lang.t("iap_items.products.hot_defeat.name"), "krw": 4900, "value": 5, "give": { "diamonds": 30000, "tickets": 20, "pouch_gold_360": 5, "pouch_res_360": 5, "speedup_any_480": 3 } },
 	{ "id": "pass_growth", "kind": "pass", "name": Lang.t("iap_items.products.pass_growth.name"), "krw": 9900, "give": {} },
+	{ "id": "pass_keep", "kind": "pass", "name": Lang.t("iap_items.products.pass_keep.name"), "krw": 9900, "give": {} },
 	{ "id": "no_ads", "kind": "pass", "name": Lang.t("iap_items.products.no_ads.name"), "krw": 5500, "give": {} },
 ]
 
@@ -39,6 +40,22 @@ const GROWTH := [
 	{ "round": 375, "free": { "tickets": 4 }, "paid": { "diamonds": 4800, "tickets": 30, "speedup_any_180": 2 } },
 	{ "round": 450, "free": { "diamonds": 200 }, "paid": { "diamonds": 6000, "speedup_any_180": 2 } },
 	{ "round": 550, "free": { "tickets": 6 }, "paid": { "diamonds": 6000, "tickets": 60, "speedup_any_180": 2 } },
+]
+
+## 성채 레벨 패스 단계(2026-11-05): 성채가 level이 되면 free(누구나)·paid(pass_keep 구매자).
+const KEEP := [
+	{ "level": 3, "free": { "speedup_build_60": 1 }, "paid": { "diamonds": 1500, "speedup_build_480": 2 } },
+	{ "level": 5, "free": { "diamonds": 60 }, "paid": { "diamonds": 1500, "tickets": 10, "speedup_build_480": 2 } },
+	{ "level": 7, "free": { "speedup_build_60": 2 }, "paid": { "diamonds": 2000, "speedup_build_480": 3 } },
+	{ "level": 9, "free": { "tickets": 2 }, "paid": { "diamonds": 2000, "tickets": 15, "speedup_build_480": 3 } },
+	{ "level": 11, "free": { "diamonds": 100 }, "paid": { "diamonds": 2500, "speedup_build_1440": 1, "speedup_builder_10080": 1 } },
+	{ "level": 13, "free": { "speedup_build_60": 3 }, "paid": { "diamonds": 2500, "tickets": 15, "speedup_build_1440": 1 } },
+	{ "level": 15, "free": { "tickets": 2 }, "paid": { "diamonds": 3000, "speedup_build_1440": 2 } },
+	{ "level": 18, "free": { "diamonds": 160 }, "paid": { "diamonds": 3000, "tickets": 20, "speedup_build_1440": 2 } },
+	{ "level": 21, "free": { "speedup_build_480": 1 }, "paid": { "diamonds": 4000, "speedup_build_1440": 3, "speedup_builder_10080": 1 } },
+	{ "level": 24, "free": { "tickets": 4 }, "paid": { "diamonds": 4000, "tickets": 30, "speedup_build_1440": 3 } },
+	{ "level": 27, "free": { "diamonds": 200 }, "paid": { "diamonds": 5000, "speedup_build_1440": 4 } },
+	{ "level": 30, "free": { "tickets": 6 }, "paid": { "diamonds": 6000, "tickets": 50, "speedup_build_1440": 5 } },
 ]
 
 const MONTHLY_MAX_DAYS := 180
