@@ -6078,7 +6078,8 @@ func test_missions() -> void:
 		e.killed.emit("goblin")
 	check(m.can_claim(dk) and m.ready_count("daily") == 1 and m.ready_count("weekly") == 0, "missions: 300 kills finish the daily kill mission")
 	var gold0: int = e.gold
-	check(m.claim("d_kill") and e.gold == gold0 + 3000 and m.is_claimed(dk) and not m.claim("d_kill"), "missions: daily reward once")
+	var pz0: int = e.pouch_count("gold_10")
+	check(m.claim("d_kill") and e.gold == gold0 and e.pouch_count("gold_10") == pz0 + 2 and m.is_claimed(dk) and not m.claim("d_kill"), "missions: daily reward once (gold as pouches)")
 	check(m.progress(m.find("w_kill")) == 300 and m.progress(m.find("r_kill")) == 300, "missions: kills also count for weekly and repeat")
 	# 반복: 1000 → 받으면 목표 1500, 남은 진행부터
 	for i in 800:
@@ -6102,7 +6103,7 @@ func test_missions() -> void:
 	var dia0: int = e.diamonds
 	m.claim("d_gacha")
 	var t0: int = e.dia_tickets
-	check(m.can_claim(dall) and m.claim("d_all") and e.diamonds == dia0 + 130 and e.dia_tickets == t0 + 1 and int(m.claimed.wd) == 1,
+	check(m.can_claim(dall) and m.claim("d_all") and e.diamonds == dia0 + 1300 and e.dia_tickets == t0 + 1 and int(m.claimed.wd) == 1,
 		"missions: daily bonus gives diamonds + a ticket and counts a bonus day")
 	# 다음 날: 일일 기록·진행이 지워지고 주간·반복은 남는다(같은 주)
 	var d0: int = m.day
