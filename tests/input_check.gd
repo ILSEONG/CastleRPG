@@ -3202,6 +3202,24 @@ func _recruit23_ui(recruit) -> void:
 	await _tap(shop.buy_buttons[0].get_global_rect().get_center())
 	await _frames(2)
 	_check(Economy.diamonds == d0 and shop.is_open(), "(r23) tapping a ₩ pack before payments are connected changes nothing (notice only)", "")
+	# 탭을 바꿔도 양피지(시트) 너비가 그대로(2026-11-05 사용자 "양피지가 움찔움찔 — 너비가 안 맞는다": 칸이 시트보다 넓으면 탭마다 창이 커졌다)
+	var widths := {}
+	for t in shop.TABS:
+		shop.open_tab(t[0])
+		await _frames(2)
+		widths[t[0]] = shop.dialog.size.x
+	_check(widths.values().all(func(w): return absf(w - sr.size.x) < 0.5), "(r23) every shop tab keeps the same sheet width (no twitch when switching tabs)", "want=%s %s" % [sr.size.x, widths])
+	var hp = tabs_hero_panel()
+	if hp != null:
+		hp.open()
+		await _frames(2)
+		var hw: float = hp.dialog.size.x
+		hp.set_tab("fuse")
+		await _frames(2)
+		_check(absf(hw - sr.size.x) < 0.5 and absf(hp.dialog.size.x - sr.size.x) < 0.5, "(r23) the hero sheet is as wide as the other sheets on both tabs", "hero=%s fuse=%s want=%s" % [hw, hp.dialog.size.x, sr.size.x])
+		hp.set_tab("heroes")
+		hp.close()
+		await _frames(2)
 	shop.close()
 	Economy.diamonds = 9999999
 	Economy.gold = 9999999
@@ -3224,6 +3242,13 @@ func _recruit23_ui(recruit) -> void:
 	Fever.auto_recruit = keep[5]
 	recruit.set_currency("gold")
 	Economy.changed.emit()
+
+
+func tabs_hero_panel():
+	for c in _main.find_children("*", "CanvasLayer", true, false):
+		if c.get_script() == preload("res://scripts/hero_panel.gd"):
+			return c
+	return null
 
 
 ## 장비 던전 카드 열쇠 밑 골드 줄 "현재 골드 / 추가 도전 비용": 모자라면 현재 골드가 빨강, 골드가 오르면 원래 색(Economy.changed로 바로).
