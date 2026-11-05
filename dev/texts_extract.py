@@ -463,7 +463,7 @@ def main(argv):
 
 # --- 서버 TypeScript(server/src/*.ts) ---
 # '…'·"…"·`…${식}…` 안의 한글 → txt('키') / txt('키', { 이름: 식 }). 값의 ${식} 자리는 {이름}.
-TS_SKIP_FILES = {'server/src/legal.ts', 'server/src/profanity.ts', 'server/src/seed.ts', 'server/src/main.ts',
+TS_SKIP_FILES = {'server/src/legal.ts', 'server/src/profanity.ts', 'server/src/names.ts', 'server/src/seed.ts', 'server/src/main.ts',
                  'server/src/texts.ts', 'server/src/cli.ts', 'server/src/env.ts'}
 TS_SKIP_CALLS = {'log', 'warn', 'error', 'info', 'debug', 'Error', 'TypeError', 'RangeError'}
 TS_IMPORT = "import { txt } from './texts.ts'"

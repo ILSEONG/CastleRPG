@@ -1,4 +1,5 @@
 // 경제 규칙(순수 함수, 시간은 인자 — 유닉스 초). 앱 economy.gd(개정 7)·game_data.gd(개정 8)와 같은 규칙.
+import * as N from './names.ts'
 import { randomBytes } from 'node:crypto'
 import { txt } from './texts.ts'
 
@@ -885,6 +886,10 @@ export function helperCandidates(heroDefs: Record<string, any>[], owned: { def: 
 export const FRIEND_CAP = 30 // 친구 + 보낸 신청 상한
 export const FRIEND_RECOMMEND = 5 // 추천 친구 수(최근 3일 안에 접속한 다른 플레이어)
 export const FRIEND_RECENT_SEC = 3 * 86400
+// 친구 다이아 선물(2026-11-05 사용자 "하루에 다이아 선물은 최대 3000개야 (인당 100개) … 하루 3000개를 넘길 수 없어"):
+// 보내는 사람 기준 — 친구 한 명에게 하루 한 번 100개, 하루 합계 3,000개(친구 30명 × 100). 하루 = 리셋 날짜(00:00 KST).
+export const FRIEND_GIFT_DIA = 100
+export const FRIEND_GIFT_DAILY = 3000
 
 // 플레이어 이름: id(uuid)에서 정해지는 별명(같은 id면 늘 같다 — 길드 guild.ts playerName과 같은 규칙·같은 낱말).
 const NICK_A = [txt('server.rules.nick_a'), txt('server.rules.nick_a_2'), txt('server.rules.nick_a_3'), txt('server.rules.nick_a_4'), txt('server.rules.nick_a_5'), txt('server.rules.nick_a_6'), txt('server.rules.nick_a_7'), txt('server.rules.nick_a_8'), txt('server.rules.nick_a_9'), txt('server.rules.nick_a_10'), txt('server.rules.nick_a_11'), txt('server.rules.nick_a_12'), txt('server.rules.nick_a_13'), txt('server.rules.nick_a_14')]
@@ -900,6 +905,8 @@ function mixName(...xs: number[]): number {
 }
 
 export function friendName(id: string): string {
+  const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
+  if (own) return own
   const hex = id.replace(/-/g, '')
   const r = mulberry32(mixName(parseInt(hex.slice(0, 8), 16), parseInt(hex.slice(8, 16), 16)))
   const pick = (a: string[]) => a[Math.floor(r() * a.length)]

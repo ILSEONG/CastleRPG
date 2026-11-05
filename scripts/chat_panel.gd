@@ -438,7 +438,10 @@ func _rebuild_reports() -> void:
 		c.queue_free()
 	if Chat.reports.is_empty():
 		var msg := Lang.t("chat_panel.rebuild_reports.msg") if Chat.reports_state == "failed" else (Lang.t("chat_panel.rebuild_reports") if Chat.reports_state == "ok" else Lang.t("chat_panel.rebuild_reports_2"))
-		list.add_child(_label(msg, 22, SUB))
+		var ml := _label(msg, 22, SUB)
+		list.add_child(ml)
+		if Chat.reports_state != "failed" and Chat.reports_state != "ok":
+			preload("res://scripts/spinner.gd").mark(ml)  # 불러오는 중: 로딩 고리
 		return
 	for r in Chat.reports:
 		var p := PanelContainer.new()

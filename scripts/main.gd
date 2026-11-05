@@ -237,6 +237,9 @@ func _build_world() -> void:
 	add_child(inquiry_panel)
 	settings_panel.inquiry = inquiry_panel
 	settings_panel.admin_panel = admin_panel
+	var nickname_panel = preload("res://scripts/nickname_panel.gd").new()  # 닉네임 변경(2026-11-05): 설정 창 닉네임 줄 [변경]이 연다
+	add_child(nickname_panel)
+	settings_panel.nickname_panel = nickname_panel
 	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][공지][우편][가방][미션][랭킹][친구][이벤트][거래소][길드]
 	side_menu.windows = {"settings": settings_panel, "notice": notice_panel, "mail": mail_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}
@@ -293,6 +296,7 @@ func _build_world() -> void:
 	add_child(chat_bar)
 	build_list.hide_while_open = [chat_bar]  # 펼친 동안 채팅 줄은 숨긴다
 	move_child(chat_bar, card.get_index())  # 같은 층(1)에서 가이드 카드·화살표보다 아래에 그린다(화살표가 채팅에 가리지 않게)
+	add_child(preload("res://scripts/busy_spinner.gd").new())  # 서버 답을 기다리는 동안 화면 가운데 로딩 고리(2026-11-05)
 	add_child(preload("res://scripts/reveal_banner.gd").new())  # 가이드 중 숨긴 버튼이 처음 나타날 때 「새 기능」 띠(초반 단순화 2026-10-23)
 	_battle_hide = [tabs, side_menu, tags, badges, build_btn]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit, "placement": placement}

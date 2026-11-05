@@ -9,6 +9,7 @@ extends "res://scripts/ui_window.gd"
 ## - 내 판매: 판매 중(남은 시간, [내리기] — 즉시 보관함으로) · 판매 완료(받을 금액). 위에 [대금 받기](즉시 반영). 받을 대금이 있으면 탭·메뉴에 빨간 점.
 ## 온라인 전용(오프라인이면 안내 글). 버튼은 기다리는 글자로 바뀌지 않는다.
 
+const Spinner := preload("res://scripts/spinner.gd")
 const Lang := preload("res://scripts/lang.gd")
 
 const GameData := preload("res://scripts/game_data.gd")
@@ -182,12 +183,17 @@ func fetch_listings() -> void:
 	_fetch_n += 1
 	var n := _fetch_n
 	var q := "/v1/market?currency=%s&sort=%s&slot=%s&grade=%s" % [currency, sort_mode, slot_filter, grade_filter]
+	Spinner.hold("market", true)  # 목록을 받는 동안 로딩 고리(2026-11-05)
 	Economy.net.send("GET", q, null, func(d: Dictionary):
+		if n == _fetch_n:
+			Spinner.hold("market", false)
 		if n == _fetch_n and d.get("listings") is Array:
 			listings = (d.listings as Array).filter(func(l): return not (l is Dictionary and _buying.has(int(l.get("id", 0)))))
 			if d.get("rules") is Dictionary:
 				Economy.market["rules"] = d.rules
-			_rebuild())
+			_rebuild(), func():
+		if n == _fetch_n:
+			Spinner.hold("market", false))
 
 
 func fetch_mine() -> void:

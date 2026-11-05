@@ -458,10 +458,15 @@ economy.friend_text.no_request,친구 신청이 없어졌습니다,,,,scripts/ec
 economy.friend_text.not_friend,이미 친구가 아닙니다,,,,scripts/economy.gd
 economy.friend_text.not_owned,가지고 있지 않은 영웅입니다,,,,scripts/economy.gd
 economy.friend_text.bad_request,친구 코드는 8자리입니다,,,,scripts/economy.gd
+economy.friend_text.gift_sent,오늘 이미 선물을 보낸 친구입니다,,,,scripts/economy.gd
+economy.friend_text.gift_cap,오늘 보낼 수 있는 다이아 선물을 모두 보냈습니다(하루 3000개),,,,scripts/economy.gd
+economy.friend_text.gift_none,오늘 선물을 보낼 친구가 없습니다,,,,scripts/economy.gd
+economy.friend_text.not_enough_diamonds,다이아가 부족합니다,,,,scripts/economy.gd
 economy.friend_done_text.request,친구 신청을 보냈습니다,,,,scripts/economy.gd
 economy.friend_done_text.accept,친구가 되었습니다,,,,scripts/economy.gd
 economy.friend_done_text.remove,정리했습니다,,,,scripts/economy.gd
 economy.friend_done_text.hero,빌려줄 영웅을 바꿨습니다,,,,scripts/economy.gd
+economy.friend_done_text.gift,친구 %d명에게 다이아 %d개씩 선물했습니다,,,,scripts/economy.gd
 economy.friend_offline_text,친구는 온라인에서만 쓸 수 있습니다,,,,scripts/economy.gd
 economy.on_friends_failed,친구 요청이 처리되지 않았습니다,,,,scripts/economy.gd
 event_panel.title,28일 출석 이벤트,,,,scripts/event_panel.gd
@@ -603,6 +608,12 @@ friend_panel.fill_picks,자동,,,,scripts/friend_panel.gd
 friend_panel.section.sub,%s Lv %d · 전투력 %d,,,,scripts/friend_panel.gd
 friend_panel.section.sub_2,영웅 없음,,,,scripts/friend_panel.gd
 friend_panel.section,오늘 함께했습니다 · 내일 다시,,,,scripts/friend_panel.gd
+friend_panel.gift_today,오늘 보낸 선물 💎%s / %s,,,,scripts/friend_panel.gd
+friend_panel.gift_all,모두 보내기,,,,scripts/friend_panel.gd
+friend_panel.gift_all_ok,%d명 💎%s 보내기,,,,scripts/friend_panel.gd
+friend_panel.gift_one,💎%d,,,,scripts/friend_panel.gd
+friend_panel.gift_done,보냄,,,,scripts/friend_panel.gd
+friend_panel.gift_got,나에게 다이아를 선물했습니다 · 우편함에서 받기,,,,scripts/friend_panel.gd
 gacha_odds.ready,닫기,,,,scripts/gacha_odds.gd
 gacha_odds.show_for,모집 확률 · ,,,,scripts/gacha_odds.gd
 gacha_odds.show_for_2,다이아 모집(모집권 포함),,,,scripts/gacha_odds.gd
@@ -863,6 +874,8 @@ guild.create_block,길드 이름은 2~8글자입니다,,,,scripts/guild.gd
 guild.create_block_2,골드가 부족합니다,,,,scripts/guild.gd
 guild.create,함께 성장할 길드원을 모집합니다!,,,,scripts/guild.gd
 guild.create_2,%s님이 길드를 창설했습니다,,,,scripts/guild.gd
+guild.set_emblem,%s님이 길드 문양을 바꿨습니다,,,,scripts/guild.gd
+guild.set_emblem_2,길드 문양을 바꿨습니다,,,,scripts/guild.gd
 guild.tick,%s님이 %s를 했습니다,,,,scripts/guild.gd
 guild.tick_2,%s님이 출석했습니다,,,,scripts/guild.gd
 guild.post,연결 대기 중,,,,scripts/guild.gd
@@ -884,6 +897,14 @@ guild_boss.show_result_5,(한 판에 인정되는 점수 한도까지만 반영)
 guild_boss.show_result_6,길드 코인 +%d · 골드 +%s,,,,scripts/guild_boss.gd
 guild_boss.show_result_7,오늘 내 점수 %s · 길드 점수에 더해집니다,,,,scripts/guild_boss.gd
 guild_boss.show_result_8,확인,,,,scripts/guild_boss.gd
+guild_emblem_editor.title,길드 문양,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_shape,배경 모양,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_symbol,가운데 문양,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_bg,배경 색,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_fg,문양 색,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.random,무작위,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.cancel,취소,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.save,저장,,,,scripts/guild_emblem_editor.gd
 guild_panel.subtabs,홈,,,,scripts/guild_panel.gd
 guild_panel.subtabs_2,보스,,,,scripts/guild_panel.gd
 guild_panel.subtabs_3,길드전,,,,scripts/guild_panel.gd
@@ -902,6 +923,8 @@ guild_panel.rec_row_2,가입,,,,scripts/guild_panel.gd
 guild_panel.rec_row_3,%s에 가입했습니다!,,,,scripts/guild_panel.gd
 guild_panel.create_card,길드 창설,,,,scripts/guild_panel.gd
 guild_panel.create_card_2,직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어옵니다.,,,,scripts/guild_panel.gd
+guild_panel.make_emblem,문양 만들기,,,,scripts/guild_panel.gd
+guild_panel.change_emblem,문양 변경,,,,scripts/guild_panel.gd
 guild_panel.create_card_3,길드 이름(2~8글자),,,,scripts/guild_panel.gd
 guild_panel.create_card_4,창설  골드 %s,,,,scripts/guild_panel.gd
 guild_panel.create_card_5,「%s」 길드를 창설했습니다!,,,,scripts/guild_panel.gd
@@ -1665,13 +1688,13 @@ settings_panel.ready_27,운영 관리,,,,scripts/settings_panel.gd
 settings_panel.ready_28,닫기,,,,scripts/settings_panel.gd
 settings_panel.refresh,오프라인 모드,,,,scripts/settings_panel.gd
 settings_panel.press_logout,로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다,,,,scripts/settings_panel.gd
-settings_panel.style_logout,한 번 더 누르면 로그아웃합니다,,,,scripts/settings_panel.gd
+settings_panel.style_logout,한 번 더 누르면 로그아웃,,,,scripts/settings_panel.gd
 settings_panel.style_logout_2,로그아웃 · 계정 전환,,,,scripts/settings_panel.gd
 settings_panel.style_links,게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없습니다. 연결해 두면 진행이 그대로 남습니다,,,,scripts/settings_panel.gd
 settings_panel.style_links_2,다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있습니다,,,,scripts/settings_panel.gd
 settings_panel.open_inquiry,문의는 온라인에서만 보낼 수 있습니다,,,,scripts/settings_panel.gd
 settings_panel.press_delete,계정을 삭제하지 못했습니다. 다시 시도해 주세요,,,,scripts/settings_panel.gd
-settings_panel.style_delete,한 번 더 누르면 계정이 삭제됩니다,,,,scripts/settings_panel.gd
+settings_panel.style_delete,한 번 더 누르면 계정 삭제,,,,scripts/settings_panel.gd
 settings_panel.style_delete_2,계정 삭제,,,,scripts/settings_panel.gd
 settings_panel.copy_code,친구 코드를 복사했습니다,,,,scripts/settings_panel.gd
 settings_panel.toggle_row,켬,,,,scripts/settings_panel.gd
@@ -2405,10 +2428,13 @@ server.app.link_errors.already_linked,이미 다른 게임 계정에 연결된 �
 server.app.link_errors.provider_taken,이 게임 계정에는 이미 같은 종류의 계정이 연결되어 있습니다,,,,server/src/app.ts
 server.app.guild_join.text,{playerName}님이 길드에 가입했습니다,,,,server/src/app.ts
 server.app.guild_create.text,{playerName}님이 길드를 창설했습니다,,,,server/src/app.ts
+server.app.guild_emblem.text,{playerName}님이 길드 문양을 바꿨습니다,,,,server/src/app.ts
 server.app.guild_leave.text,{playerName}님이 길드를 떠났습니다,,,,server/src/app.ts
 server.app.guild_attend.text,{playerName}님이 출석했습니다,,,,server/src/app.ts
 server.app.guild_donate.text,{playerName}님이 {name}를 했습니다,,,,server/src/app.ts
 server.app.guild_boss_finish.text,{playerName}님이 드래곤 Lv {reached} 도달 · {dmg}점,,,,server/src/app.ts
+server.friend.gift_title,[친구 선물] 다이아,,,,server/src/app.ts
+server.friend.gift_body,{name}님이 다이아 {n}개를 선물했습니다.,,,,server/src/app.ts
 server.guild.donations.name,골드 기부,,,,server/src/guild.ts
 server.guild.donations.name_2,다이아 기부,,,,server/src/guild.ts
 server.guild.donations.name_3,왕실 기부,,,,server/src/guild.ts
@@ -2881,3 +2907,23 @@ recruit_panel.ready_5,반복 모집,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_6,반복 모집 중\n■ 멈춤,,,,scripts/recruit_panel.gd
 recruit_panel.ready_8,연출 건너뛰기,,,,scripts/recruit_panel.gd
 recruit_panel.process,재화가 부족해 반복 모집을 멈췄습니다,,,,scripts/recruit_panel.gd
+settings_panel.ready_29,변경,,,,scripts/settings_panel.gd
+settings_panel.style_toggle,끔,,,,scripts/settings_panel.gd
+nickname_panel.ready,닉네임 변경,,,,scripts/nickname_panel.gd
+nickname_panel.ready_2,새 닉네임,,,,scripts/nickname_panel.gd
+nickname_panel.ready_3,"2~8자 · 한글, 영문, 숫자",,,,scripts/nickname_panel.gd
+nickname_panel.ready_4,취소,,,,scripts/nickname_panel.gd
+nickname_panel.ready_5,변경,,,,scripts/nickname_panel.gd
+nickname_panel.on_open,지금 닉네임: %s,,,,scripts/nickname_panel.gd
+nickname_panel.on_open_2,첫 변경은 무료입니다,,,,scripts/nickname_panel.gd
+nickname_panel.on_open_3,다이아 %s개 (보유 %s),,,,scripts/nickname_panel.gd
+nickname_panel.check,닉네임은 2~8자로 지어 주세요,,,,scripts/nickname_panel.gd
+nickname_panel.check_3,"한글, 영문, 숫자만 쓸 수 있습니다",,,,scripts/nickname_panel.gd
+nickname_panel.submit,지금 닉네임과 같습니다,,,,scripts/nickname_panel.gd
+nickname_panel.submit_2,닉네임을 %s(으)로 바꿨습니다,,,,scripts/nickname_panel.gd
+economy.change_nickname,온라인에서만 닉네임을 바꿀 수 있습니다,,,,scripts/economy.gd
+economy.change_nickname_2,다이아가 부족합니다,,,,scripts/economy.gd
+economy.change_nickname_3,이미 다른 성주가 쓰는 닉네임입니다,,,,scripts/economy.gd
+economy.change_nickname_4,지금 닉네임과 같습니다,,,,scripts/economy.gd
+economy.change_nickname_5,쓸 수 없는 닉네임입니다,,,,scripts/economy.gd
+economy.change_nickname_6,닉네임을 바꾸지 못했습니다. 잠시 뒤 다시 해 주세요,,,,scripts/economy.gd

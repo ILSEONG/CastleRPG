@@ -90,6 +90,7 @@ func _play_real() -> void:
 	_waiting = true
 	_token = ""
 	sub_label.text = Lang.t("ad_player.play_real")
+	preload("res://scripts/spinner.gd").mark(sub_label)  # 광고를 불러오는 중: 로딩 고리
 	time_label.text = Lang.t("ad_player.play_real_2")
 	bar.visible = false
 	visible = true

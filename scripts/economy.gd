@@ -199,6 +199,7 @@ var iap_enabled := false  # 실결제 연결됨(서버 player.iap_enabled). 아�
 var iap_providers: Array = []  # 서버가 켠 결제 제공자 'google'·'toss'(player.iap_providers) — 이 빌드 것이 있어야 결제 창(StorePay)
 var iap_skus := {}  # 상품 id → 제공자 sku {toss: {...}}(다를 때만)
 var account_tag := ""  # Google 결제에 실어 보내는 내 계정 표시(player.account_tag)
+var nickname := {}  # 서버 player.nickname {name, changes, price(이번 변경 다이아 — 첫 변경 0), cost(두 번째부터)}. 비면 오프라인·아직 안 받음(2026-11-05)
 var admin := false  # 슈퍼관리자(서버 player.admin — 이은 Google 계정의 확인된 이메일로 서버가 정한다). 기능 잠금(가이드 메뉴·던전·PVP·공터·길드)이 모두 열린다
 var market := {}  # 거래소(서버 market.ts): {rules: {fee_pct, max_active, duration_sec, price_limits}, mine: [판매]} — 마지막 서버 값(+ 곧바로 반영한 것)
 var market_sold := 0  # 거래소: 팔렸고 대금을 아직 안 받은 판매 수(서버 player.market_sold — 메뉴 빨간 점)
@@ -448,6 +449,7 @@ func reset(now: float) -> void:
 	shop = {}
 	iap = {}
 	admin = false
+	nickname = {}
 	unbuilt = {}
 	for k in GameData.lot_keys():  # 2026-10-13: 새 건물·n번째 채는 공터로 시작(성채 레벨로 연다)
 		unbuilt[k] = true
@@ -3630,6 +3632,7 @@ func apply_server(data: Dictionary) -> bool:
 		var sp := _store_pay()
 		if sp != null:
 			sp.restore_once()  # 지급 못 받은 결제 되찾기(한 번)
+	nickname = p.nickname.duplicate() if p.get("nickname") is Dictionary and p.nickname.get("name") is String else {}
 	if admin != (p.get("admin") == true):
 		admin = p.get("admin") == true
 		var tut := get_node_or_null("/root/Tutorial")
@@ -5062,8 +5065,10 @@ static var FRIEND_TEXT := {
 	"already_requested": Lang.t("economy.friend_text.already_requested"), "friend_full": Lang.t("economy.friend_text.friend_full"), "their_full": Lang.t("economy.friend_text.their_full"),
 	"no_request": Lang.t("economy.friend_text.no_request"), "not_friend": Lang.t("economy.friend_text.not_friend"), "not_owned": Lang.t("economy.friend_text.not_owned"),
 	"bad_request": Lang.t("economy.friend_text.bad_request"),
+	"gift_sent": Lang.t("economy.friend_text.gift_sent"), "gift_cap": Lang.t("economy.friend_text.gift_cap"), "gift_none": Lang.t("economy.friend_text.gift_none"),
+	"not_enough_diamonds": Lang.t("economy.friend_text.not_enough_diamonds"),
 }
-static var FRIEND_DONE_TEXT := {"request": Lang.t("economy.friend_done_text.request"), "accept": Lang.t("economy.friend_done_text.accept"), "remove": Lang.t("economy.friend_done_text.remove"), "hero": Lang.t("economy.friend_done_text.hero")}
+static var FRIEND_DONE_TEXT := {"request": Lang.t("economy.friend_done_text.request"), "accept": Lang.t("economy.friend_done_text.accept"), "remove": Lang.t("economy.friend_done_text.remove"), "hero": Lang.t("economy.friend_done_text.hero"), "gift": Lang.t("economy.friend_done_text.gift")}
 static var FRIEND_OFFLINE_TEXT := Lang.t("economy.friend_offline_text")
 
 
@@ -5076,6 +5081,7 @@ func friends_load() -> void:
 
 
 ## 친구 요청: op = "request"({code} 또는 {id}) · "accept"({id}) · "remove"({id} — 삭제·거절·취소) · "hero"({hero_id}, null = 가장 강한 영웅).
+## · "gift"({id} 또는 {all: true} — 친구 다이아 선물, 서버가 한도·다이아를 확인하고 다이아를 뺀다. 응답 뒤 플레이어를 다시 받아 다이아가 맞춰진다).
 ## 응답이 오면 friends를 바꾸고, 친구가 바뀌었으면 플레이어 상태(모집권 던전 도우미 목록)를 다시 받는다. 오프라인·대기 중·끊김이면 false.
 func friend_op(op: String, body: Dictionary) -> bool:
 	if net == null:
@@ -5097,6 +5103,9 @@ func _on_friend_op(data, op: String) -> void:
 	_on_friends(data)
 	if op != "hero":
 		net.refresh()  # 도우미 목록(dungeons.ticket.helpers)은 플레이어 응답에 온다
+	if op == "gift":
+		notice.emit(FRIEND_DONE_TEXT.gift % [int(data.get("gift_sent", 0)) if data is Dictionary else 0, int(friends.get("gift", {}).get("per", 100))])
+		return
 	# 서로 신청하면 바로 친구가 된다
 	notice.emit(FRIEND_DONE_TEXT.accept if op == "request" and friends.get("friends", []).size() > before else FRIEND_DONE_TEXT[op])
 
@@ -5114,3 +5123,36 @@ func _on_friends_failed(_data = null) -> void:
 	if code != "":
 		notice.emit(FRIEND_TEXT.get(code, Lang.t("economy.on_friends_failed")))
 	friends_changed.emit()
+
+
+## 닉네임 변경(2026-11-05, 설정 창 → nickname_panel.gd). 응답을 기다리지 않고 바로 바꿔 보인다(다이아도 바로 뺀다) →
+## POST /v1/nickname(once — 다시 보내지 않는다). 서버가 거절하면(이미 쓰는 이름 409 name_taken 등) 마지막 서버 상태로 되돌리고 이유를 알린다.
+## 첫 변경은 무료(price 0), 그 뒤는 cost 다이아. 보냈으면 true.
+func change_nickname(new_name: String) -> bool:
+	if net == null or nickname.is_empty():
+		notice.emit(Lang.t("economy.change_nickname"))
+		return false
+	if _waiting.has("nickname"):
+		return false
+	var price := int(nickname.get("price", 0))
+	if diamonds < price:
+		notice.emit(Lang.t("economy.change_nickname_2"))
+		return false
+	var cost := int(nickname.get("cost", price))
+	var old_name := str(nickname.get("name", ""))
+	return _instant(func():
+		diamonds -= price
+		nickname = {"name": new_name, "changes": int(nickname.get("changes", 0)) + 1, "price": cost, "cost": cost}
+		if not friends.is_empty():
+			friends["name"] = new_name
+		friends_changed.emit()
+		return true, "/v1/nickname", {"name": new_name}, func():
+			if not friends.is_empty():
+				friends["name"] = old_name  # 되돌리기(nickname·다이아는 마지막 서버 상태로 돌아간다)
+			friends_changed.emit.call_deferred()
+			match net.last_error:
+				"name_taken": return Lang.t("economy.change_nickname_3")
+				"same_name": return Lang.t("economy.change_nickname_4")
+				"bad_name": return Lang.t("economy.change_nickname_5")
+				"not_enough": return Lang.t("economy.change_nickname_2")
+			return Lang.t("economy.change_nickname_6"), true, "nickname")
