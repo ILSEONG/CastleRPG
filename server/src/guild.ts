@@ -62,7 +62,25 @@ export const SHOP: { id: string; give: Record<string, number>; price: number; li
   { id: 'shards', give: { shards: 3 }, price: 200, limit: 5, period: 'week' },
   { id: 'ssr', give: { ssr_shards: 1 }, price: 600, limit: 2, period: 'week' },
 ]
-export const EMBLEMS = 8
+// 길드 문양(2026-11-05, 길드장이 배경 모양 + 가운데 문양 + 배경 색 + 문양 색을 고른다 — 앱 scripts/guild_emblem.gd와 같은 식):
+// 0..7 = 예전 문장, 8 이상 = 8 + 모양 + 8 × (문양 + 20 × (배경색 + 12 × 문양색)).
+export const EMBLEM_LEGACY = 8
+export const EMBLEM_SHAPES = 8
+export const EMBLEM_SYMBOLS = 20
+export const EMBLEM_BG = 12
+export const EMBLEM_FG = 10
+export const EMBLEMS = EMBLEM_LEGACY + EMBLEM_SHAPES * EMBLEM_SYMBOLS * EMBLEM_BG * EMBLEM_FG
+const EMBLEM_DARK_BG = [5, 9, 11] // 남색·갈색·검정 바탕엔 검정 문양 대신 흰색
+// 수 하나(0 이상)로 정해지는 무작위 문양(추천·상대 길드): 문양색은 흰색·상아·은색·검정 중에서.
+export function randomEmblem(n: number): number {
+  n = Math.abs(Math.floor(n))
+  const shape = n % EMBLEM_SHAPES
+  const symbol = Math.floor(n / EMBLEM_SHAPES) % EMBLEM_SYMBOLS
+  const bg = Math.floor(n / (EMBLEM_SHAPES * EMBLEM_SYMBOLS)) % EMBLEM_BG
+  let fg = Math.floor(n / (EMBLEM_SHAPES * EMBLEM_SYMBOLS * EMBLEM_BG)) % 4
+  if (fg === 3 && EMBLEM_DARK_BG.includes(bg)) fg = 0
+  return EMBLEM_LEGACY + shape + EMBLEM_SHAPES * (symbol + EMBLEM_SYMBOLS * (bg + EMBLEM_BG * fg))
+}
 export const RECOMMEND_N = 5
 export const SYSTEM_VIRTUAL = [12, 18] // 시스템 길드 가상 길드원 수 범위
 export const CREATED_VIRTUAL = 10 // 직접 만든 길드: 가상 길드원이 몇 시간마다 한 명씩 이만큼까지 들어온다
@@ -248,7 +266,7 @@ export function systemGuild(seed: number, now: number) {
   return {
     seed,
     name: guildName(seed),
-    emblem: Math.floor(r() * EMBLEMS),
+    emblem: randomEmblem(Math.floor(r() * 2 ** 30)),
     notice: pick(r, NOTICES),
     created_at: now - range(r, 3, 45) * 86400,
     virtual_n: SYSTEM_VIRTUAL[0] + Math.floor(r() * (SYSTEM_VIRTUAL[1] - SYSTEM_VIRTUAL[0] + 1)),

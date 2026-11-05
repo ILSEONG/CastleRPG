@@ -148,6 +148,7 @@ func _init() -> void:
 	test_offline_gold()
 	test_mesh_merge()
 	test_guild()
+	test_guild_emblem()
 	test_tutorial()
 	test_tutorial_online()
 	test_missions()
@@ -5158,6 +5159,48 @@ const GuildScript := preload("res://scripts/guild.gd")
 
 
 ## 길드(오프라인 로컬): 잠금, 가입, 출석·상자, 기부(비용·한도), 레벨업·버프, 보스(피해·등급·횟수·처치 넘김), 상점(한도·코인), 가상 길드원, 탈퇴, 저장.
+## 길드 문양(2026-11-05): 배경 모양·문양·배경 색·문양 색 조합 값, 예전 0..7, 서버와 같은 무작위 식, 길드장만 바꾼다(오프라인).
+func test_guild_emblem() -> void:
+	var E := preload("res://scripts/guild_emblem.gd")
+	check(E.count() == 8 + 8 * 20 * 12 * 10, "emblem: value count matches the server (19208)")
+	var v: int = E.encode(3, 17, 5, 9)
+	var d: Dictionary = E.decode(v)
+	check(int(d.shape) == 3 and int(d.symbol) == 17 and int(d.bg) == 5 and int(d.fg) == 9 and v == 8 + 3 + 8 * (17 + 20 * (5 + 12 * 9)), "emblem: encode/decode round trip")
+	check(E.decode(2).symbol == 2 and E.decode(2).shape == 0 and E.decode(-5) == E.decode(0) and E.decode(E.count()) == E.decode(0), "emblem: legacy 0..7 and out-of-range fall back")
+	# 서버 randomEmblem(12345) = 8 + 1 + 8*(2 + 20*(5 + 12*0)) 와 같은 식(12345: shape 1, symbol 1543%20=3 …) — 식 자체를 다시 계산해 맞춘다
+	for n in [0, 1, 12345, 2147483647]:
+		var bg: int = (n / 160) % 12
+		var fg: int = (n / 1920) % 4
+		if fg == 3 and bg in [5, 9, 11]:
+			fg = 0
+		check(E.from_seed(n) == E.encode(n % 8, (n / 8) % 20, bg, fg), "emblem: from_seed(%d) follows the server formula" % n)
+	var bad := 0
+	for i in E.SYMBOLS:
+		for p in E.symbol_parts(i):
+			if Geometry2D.triangulate_polygon(p.poly).is_empty():
+				bad += 1
+	for i in E.SHAPES:
+		if Geometry2D.triangulate_polygon(E.shape_poly(i)).is_empty():
+			bad += 1
+	check(bad == 0, "emblem: every shape and symbol polygon triangulates (%d bad)" % bad)
+	GameData.load_tables()
+	var now := GameData.reset_at(20000) + 3600.0
+	var e = _econ(now)
+	e.gold = GuildScript.CREATE_GOLD * 2
+	var g = GuildScript.new()
+	g.save_path = ""
+	g.econ = e
+	g.fixed_now = now
+	g.unlocked = true
+	var rec: Dictionary = g.recommendations(now)[0]
+	check(int(rec.emblem) >= 8 and int(rec.emblem) < E.count(), "emblem: recommended guilds get a full random emblem")
+	g.join(rec, now)
+	check(not g.can_edit_emblem() and not g.set_emblem(v), "emblem: a member of someone else's guild cannot change it")
+	g.leave()
+	check(g.create("문양길드", v, now) and int(g.guild.emblem) == v, "emblem: create keeps the picked emblem")
+	check(g.can_edit_emblem() and g.set_emblem(9) and int(g.guild.emblem) == 9 and not g.set_emblem(E.count()), "emblem: the leader changes it, out of range refused")
+
+
 func test_guild() -> void:
 	GameData.load_tables()
 	var now := GameData.reset_at(20000) + 3600.0  # 그날 01:00 KST

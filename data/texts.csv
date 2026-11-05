@@ -862,6 +862,8 @@ guild.create_block,길드 이름은 2~8글자입니다,,,,scripts/guild.gd
 guild.create_block_2,골드가 부족합니다,,,,scripts/guild.gd
 guild.create,함께 성장할 길드원을 모집합니다!,,,,scripts/guild.gd
 guild.create_2,%s님이 길드를 창설했습니다,,,,scripts/guild.gd
+guild.set_emblem,%s님이 길드 문양을 바꿨습니다,,,,scripts/guild.gd
+guild.set_emblem_2,길드 문양을 바꿨습니다,,,,scripts/guild.gd
 guild.tick,%s님이 %s를 했습니다,,,,scripts/guild.gd
 guild.tick_2,%s님이 출석했습니다,,,,scripts/guild.gd
 guild.post,연결 대기 중,,,,scripts/guild.gd
@@ -883,6 +885,14 @@ guild_boss.show_result_5,(한 판에 인정되는 점수 한도까지만 반영)
 guild_boss.show_result_6,길드 코인 +%d · 골드 +%s,,,,scripts/guild_boss.gd
 guild_boss.show_result_7,오늘 내 점수 %s · 길드 점수에 더해집니다,,,,scripts/guild_boss.gd
 guild_boss.show_result_8,확인,,,,scripts/guild_boss.gd
+guild_emblem_editor.title,길드 문양,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_shape,배경 모양,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_symbol,가운데 문양,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_bg,배경 색,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.tab_fg,문양 색,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.random,무작위,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.cancel,취소,,,,scripts/guild_emblem_editor.gd
+guild_emblem_editor.save,저장,,,,scripts/guild_emblem_editor.gd
 guild_panel.subtabs,홈,,,,scripts/guild_panel.gd
 guild_panel.subtabs_2,보스,,,,scripts/guild_panel.gd
 guild_panel.subtabs_3,길드전,,,,scripts/guild_panel.gd
@@ -901,6 +911,8 @@ guild_panel.rec_row_2,가입,,,,scripts/guild_panel.gd
 guild_panel.rec_row_3,%s에 가입했습니다!,,,,scripts/guild_panel.gd
 guild_panel.create_card,길드 창설,,,,scripts/guild_panel.gd
 guild_panel.create_card_2,직접 길드를 만들면 길드장이 됩니다. 시간이 지나면 가입 신청한 길드원이 들어옵니다.,,,,scripts/guild_panel.gd
+guild_panel.make_emblem,문양 만들기,,,,scripts/guild_panel.gd
+guild_panel.change_emblem,문양 변경,,,,scripts/guild_panel.gd
 guild_panel.create_card_3,길드 이름(2~8글자),,,,scripts/guild_panel.gd
 guild_panel.create_card_4,창설  골드 %s,,,,scripts/guild_panel.gd
 guild_panel.create_card_5,「%s」 길드를 창설했습니다!,,,,scripts/guild_panel.gd
@@ -2404,6 +2416,7 @@ server.app.link_errors.already_linked,이미 다른 게임 계정에 연결된 �
 server.app.link_errors.provider_taken,이 게임 계정에는 이미 같은 종류의 계정이 연결되어 있습니다,,,,server/src/app.ts
 server.app.guild_join.text,{playerName}님이 길드에 가입했습니다,,,,server/src/app.ts
 server.app.guild_create.text,{playerName}님이 길드를 창설했습니다,,,,server/src/app.ts
+server.app.guild_emblem.text,{playerName}님이 길드 문양을 바꿨습니다,,,,server/src/app.ts
 server.app.guild_leave.text,{playerName}님이 길드를 떠났습니다,,,,server/src/app.ts
 server.app.guild_attend.text,{playerName}님이 출석했습니다,,,,server/src/app.ts
 server.app.guild_donate.text,{playerName}님이 {name}를 했습니다,,,,server/src/app.ts

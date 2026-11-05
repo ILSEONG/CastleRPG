@@ -19,8 +19,7 @@ const DragonModelScript := preload("res://scripts/dragon_model.gd")
 const WarPanel := preload("res://scripts/war_panel.gd")
 
 static var SUBTABS := [["home", Lang.t("guild_panel.subtabs")], ["boss", Lang.t("guild_panel.subtabs_2")], ["war", Lang.t("guild_panel.subtabs_3")], ["shop", Lang.t("guild_panel.subtabs_4")], ["members", Lang.t("guild_panel.subtabs_5")]]
-const EMBLEM_COLORS := [Color(0.80, 0.22, 0.20), Color(0.22, 0.42, 0.78), Color(0.24, 0.60, 0.32), Color(0.56, 0.30, 0.70),
-	Color(0.92, 0.62, 0.16), Color(0.18, 0.55, 0.60), Color(0.35, 0.36, 0.42), Color(0.86, 0.40, 0.58)]
+const EmblemScript := preload("res://scripts/guild_emblem.gd")
 const GREEN := Color(0.13, 0.50, 0.22)
 const RED := Color(0.80, 0.26, 0.22)
 const COIN_COLOR := Color(0.52, 0.40, 0.78)
@@ -37,7 +36,8 @@ var tab := "home"
 var body: VBoxContainer  # 다시 만드는 내용
 var scroll: ScrollContainer
 var name_edit: LineEdit
-var emblem_pick := 0
+var emblem_pick: int = EmblemScript.from_seed(randi())  # 창설 카드에서 고른 문양(처음엔 무작위 조합)
+var emblem_editor  # guild_emblem_editor.gd(처음 열 때 만든다)
 var buttons := {}  # 테스트·연출용: "attend", "donate:gold", "boss", "buy:dia", "join:0", "create", "leave", "tab:boss", "box:0" …
 
 var _dirty := false
@@ -238,23 +238,18 @@ func _create_card() -> Control:
 	name_edit.add_theme_font_size_override("font_size", 26)
 	name_edit.text_changed.connect(func(_t): _refresh_create())
 	v.add_child(name_edit)
-	var picks := HBoxContainer.new()
+	var picks := HBoxContainer.new()  # 고른 문양 + [문양 만들기]
 	picks.alignment = BoxContainer.ALIGNMENT_CENTER
-	picks.add_theme_constant_override("separation", 6)
-	for i in GuildScript.EMBLEMS:
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(70, 70)
-		b.focus_mode = Control.FOCUS_NONE
-		UiKit.apply_button(b, UiKit.AMBER if i == emblem_pick else Color(1, 1, 1, 0.6), 10.0)
-		var face := Control.new()
-		face.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		face.draw.connect(func(): draw_emblem(face, face.size / 2.0, 52.0, i))
-		b.add_child(face)
-		b.pressed.connect(func():
-			emblem_pick = i
-			_dirty = true)
-		picks.add_child(b)
+	picks.add_theme_constant_override("separation", 16)
+	picks.add_child(_emblem_box(emblem_pick, 110))
+	var eb := _button(Lang.t("guild_panel.make_emblem"), UiKit.STEEL, 24)
+	eb.custom_minimum_size = Vector2(220, 56)
+	eb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	eb.pressed.connect(func(): open_emblem_editor(emblem_pick, func(v: int):
+		emblem_pick = v
+		_dirty = true))
+	picks.add_child(eb)
+	buttons["emblem_make"] = eb
 	v.add_child(picks)
 	var c := _button(Lang.t("guild_panel.create_card_4") % UiKit.commas(GuildScript.CREATE_GOLD), UiKit.AMBER, 26)
 	c.pressed.connect(func():
@@ -286,7 +281,16 @@ func _build_joined() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	hv.add_child(row)
-	row.add_child(_emblem_box(int(g.emblem), 96))
+	var ecol := VBoxContainer.new()
+	ecol.add_theme_constant_override("separation", 4)
+	ecol.add_child(_emblem_box(int(g.emblem), 96))
+	if Guild.can_edit_emblem():  # 길드장만: [문양 변경]
+		var eb := _button(Lang.t("guild_panel.change_emblem"), UiKit.STEEL, 18)
+		eb.custom_minimum_size = Vector2(96, 38)
+		eb.pressed.connect(func(): open_emblem_editor(int(Guild.guild.get("emblem", 0)), func(v: int): Guild.set_emblem(v)))
+		ecol.add_child(eb)
+		buttons["emblem_change"] = eb
+	row.add_child(ecol)
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.add_theme_constant_override("separation", 2)
@@ -672,56 +676,17 @@ static func dragon_view(px: Vector2) -> SubViewportContainer:
 
 # --- 그림(각진 로우폴리 평면) ---
 
-## 길드 문장: 각진 방패(왼쪽 면 밝게) + 가운데 상징(i에 따라 별·검·왕관·나무·달·불꽃·탑·하트).
+## 길드 문양(guild_emblem.gd): 배경 모양 + 가운데 문양 + 배경 색 + 문양 색 조합 값 i(예전 0..7도 그대로).
 static func draw_emblem(ci: CanvasItem, c: Vector2, size: float, i: int) -> void:
-	var s := size / 2.0
-	var col: Color = EMBLEM_COLORS[posmod(i, EMBLEM_COLORS.size())]
-	var shield := PackedVector2Array([c + Vector2(-0.8, -0.85) * s, c + Vector2(0.8, -0.85) * s, c + Vector2(0.8, 0.05) * s, c + Vector2(0.0, 0.92) * s,
-		c + Vector2(-0.8, 0.05) * s])
-	ci.draw_colored_polygon(shield, col)
-	ci.draw_colored_polygon(PackedVector2Array([shield[0], c + Vector2(0, -0.85) * s, c + Vector2(0, 0.92) * s, shield[4]]), col.lightened(0.22))
-	var rim := shield.duplicate()
-	rim.append(rim[0])
-	ci.draw_polyline(rim, IconsScript.OUTLINE, maxf(1.5, size / 30.0), true)
-	var gold := Color(0.98, 0.84, 0.36)
-	var sym := PackedVector2Array()
-	match posmod(i, 8):
-		0:  # 별
-			for k in 10:
-				var r := (0.42 if k % 2 == 0 else 0.18) * s
-				var a := -PI / 2.0 + k * PI / 5.0
-				sym.append(c + Vector2(cos(a), sin(a)) * r + Vector2(0, -0.02 * s))
-		1:  # 검
-			sym = PackedVector2Array([c + Vector2(0, -0.6) * s, c + Vector2(0.09, -0.45) * s, c + Vector2(0.09, 0.2) * s, c + Vector2(0.3, 0.2) * s,
-				c + Vector2(0.3, 0.3) * s, c + Vector2(0.07, 0.3) * s, c + Vector2(0.07, 0.55) * s, c + Vector2(-0.07, 0.55) * s, c + Vector2(-0.07, 0.3) * s,
-				c + Vector2(-0.3, 0.3) * s, c + Vector2(-0.3, 0.2) * s, c + Vector2(-0.09, 0.2) * s, c + Vector2(-0.09, -0.45) * s])
-		2:  # 왕관
-			sym = PackedVector2Array([c + Vector2(-0.45, 0.3) * s, c + Vector2(-0.45, -0.3) * s, c + Vector2(-0.22, 0.0) * s, c + Vector2(0, -0.42) * s,
-				c + Vector2(0.22, 0.0) * s, c + Vector2(0.45, -0.3) * s, c + Vector2(0.45, 0.3) * s])
-		3:  # 나무
-			sym = PackedVector2Array([c + Vector2(0, -0.55) * s, c + Vector2(0.42, 0.1) * s, c + Vector2(0.1, 0.1) * s, c + Vector2(0.1, 0.5) * s,
-				c + Vector2(-0.1, 0.5) * s, c + Vector2(-0.1, 0.1) * s, c + Vector2(-0.42, 0.1) * s])
-		4:  # 초승달
-			for k in 9:
-				var a := PI * 0.3 + k * PI * 1.4 / 8.0
-				sym.append(c + Vector2(cos(a), sin(a)) * 0.45 * s)
-			for k in 9:
-				var a := PI * 1.7 - k * PI * 1.4 / 8.0
-				sym.append(c + Vector2(0.18, 0) * s + Vector2(cos(a), sin(a)) * 0.34 * s)
-		5:  # 불꽃
-			sym = PackedVector2Array([c + Vector2(0, -0.6) * s, c + Vector2(0.18, -0.25) * s, c + Vector2(0.38, -0.1) * s, c + Vector2(0.32, 0.3) * s,
-				c + Vector2(0, 0.5) * s, c + Vector2(-0.32, 0.3) * s, c + Vector2(-0.38, -0.05) * s, c + Vector2(-0.15, 0.0) * s])
-		6:  # 성탑
-			sym = PackedVector2Array([c + Vector2(-0.4, 0.5) * s, c + Vector2(-0.4, -0.45) * s, c + Vector2(-0.22, -0.45) * s, c + Vector2(-0.22, -0.3) * s,
-				c + Vector2(-0.08, -0.3) * s, c + Vector2(-0.08, -0.45) * s, c + Vector2(0.08, -0.45) * s, c + Vector2(0.08, -0.3) * s,
-				c + Vector2(0.22, -0.3) * s, c + Vector2(0.22, -0.45) * s, c + Vector2(0.4, -0.45) * s, c + Vector2(0.4, 0.5) * s])
-		7:  # 하트
-			sym = PackedVector2Array([c + Vector2(0, 0.5) * s, c + Vector2(-0.45, 0.0) * s, c + Vector2(-0.45, -0.25) * s, c + Vector2(-0.25, -0.42) * s,
-				c + Vector2(0, -0.22) * s, c + Vector2(0.25, -0.42) * s, c + Vector2(0.45, -0.25) * s, c + Vector2(0.45, 0.0) * s])
-	if sym.size() >= 3:
-		ci.draw_colored_polygon(sym, gold)
-		sym.append(sym[0])
-		ci.draw_polyline(sym, Color(IconsScript.OUTLINE, 0.7), maxf(1.0, size / 45.0), true)
+	EmblemScript.draw(ci, c, size, i)
+
+
+## 문양 만들기 창을 값 v로 연다. 저장하면 done(새 값).
+func open_emblem_editor(v: int, done: Callable) -> void:
+	if emblem_editor == null:
+		emblem_editor = preload("res://scripts/guild_emblem_editor.gd").new()
+		get_tree().root.add_child(emblem_editor)
+	emblem_editor.edit(v, done)
 
 
 ## 길드 코인: 보라 8각 + 안쪽 작은 방패.

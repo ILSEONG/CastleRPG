@@ -276,6 +276,7 @@ interface GuildChange {
   add?: { guild_id: string; exp: number; dmg: number } // 길드 누적에 더한다
   log?: { guild_id: string; text: string }
   create?: { id: string; name: string; emblem: number; seed: number; virtual_n: number; notice: string }
+  emblem?: { guild_id: string; emblem: number } // 길드장이 문양을 바꾼다(owner가 그대로일 때만)
   leave?: { guild_id: string; owner: boolean } // 길드장이 나가면 남은 실제 길드원 중 먼저 들어온 사람이 길드장, 아무도 없으면 직접 만든 길드는 지운다
 }
 
@@ -1121,6 +1122,10 @@ export function createApp(opts: AppOptions) {
     if (gc.log) {
       ctes.push(`gl as (insert into guild_log (guild_id, at, text) select ${p(gc.log.guild_id)}::uuid, to_timestamp(${p(now)}::float8), ${p(gc.log.text)}
         from s returning 1)`)
+    }
+    if (gc.emblem) {
+      ctes.push(`gem as (update guilds set emblem = ${p(gc.emblem.emblem)}::int where id = ${p(gc.emblem.guild_id)}::uuid and owner = ${sid}
+        and exists (select 1 from s) returning 1)`)
     }
     if (gc.leave?.owner) {
       const gid = `${p(gc.leave.guild_id)}::uuid`
@@ -3883,6 +3888,25 @@ export function createApp(opts: AppOptions) {
             row: rowOf(x, { guild_id: gid, joined_at: x.now, boss_seen: 1 }), log: { guild_id: gid, text: txt('server.app.guild_create.text', { playerName: G.playerName(x.id) }) },
           },
           log: { kind: 'guild', detail: { action: 'create', name, gold: G.CREATE_GOLD } },
+        },
+      }
+    })
+  })
+
+  // 길드 문양 바꾸기(2026-11-05): 길드장만. 배경 모양·문양·배경 색·문양 색 조합 값 하나(G.EMBLEMS 범위). 값은 무료로 언제든 바꾼다.
+  app.post('/v1/guild/emblem', auth, async (c) => {
+    const b = await body(c)
+    const emblem = intField(b, 'emblem', 0, G.EMBLEMS - 1)
+    return guildMutate(c, (x) => {
+      const { g } = needGuild(x)
+      if (g.owner !== x.id) throw blocked('not_owner', 'only the guild leader can change the emblem')
+      if (g.emblem === emblem) return {} // 그대로면 아무것도 안 바꾼다
+      return {
+        change: {
+          guild: {
+            row: rowOf(x), emblem: { guild_id: g.id, emblem },
+            log: { guild_id: g.id, text: txt('server.app.guild_emblem.text', { playerName: G.playerName(x.id) }) },
+          },
         },
       }
     })
