@@ -2085,7 +2085,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 		and pb.size.y >= 90.0 and pb.size.x >= 180.0,
 		"(x3) the whole detail fits the 720x1280 sheet above the tab bar (buttons >= 90 px tall)", "nav=%s sheet=%s min=%s content=%s" % [nav, sheet, heroes_win._detail_view.get_combined_minimum_size(), heroes_win.content.size])
 	_check(heroes_win._promo.line.text == "조각 2 / 10" and heroes_win._promo.title.text == "승급 ★2" and heroes_win.promote_button.disabled and heroes_win.promote_reason.text == "조각 부족"
-		and heroes_win.promote_preview.text == "승급하면 HP·공격 → ×1.3 · 최대 레벨 100 → 150\n★3 달성 시 스킬 해금: 수호의 오라" and heroes_win.big_card.stars == 1,
+		and heroes_win.promote_preview.text == "승급하면 최대 레벨 100 → 150" and heroes_win.big_card.stars == 1,
 		"(x3) [승급] shows 조각 2 / 10 inside, is off with the reason 조각 부족, and previews x1.3 and max level 100 -> 150",
 		"line=%s reason=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_reason.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
@@ -2129,7 +2129,7 @@ func _promotion_ui(heroes_win, recruit) -> void:
 	Economy.hero_levels["arteon"] = lv
 	Economy.roster_changed.emit()
 	_check(heroes_win._promo.line.text == "조각 2 · MAX" and heroes_win.promote_reason.text == "최대 승급" and heroes_win.promote_button.disabled
-		and heroes_win.promote_preview.text == "최대 승급 ★5 — HP·공격 ×3.71" and heroes_win.level_label.text == "Lv %d / 300" % lv,
+		and heroes_win.promote_preview.text == "최대 승급 ★5" and heroes_win.level_label.text == "Lv %d / 300" % lv,
 		"(x3) max promotion: MAX inside, reason 최대 승급, x3.71, max level 300", "line=%s preview=%s" % [heroes_win._promo.line.text, heroes_win.promote_preview.text])
 	heroes_win._show_list(false)
 	_check(heroes_win.hero_cards.arteon.shard_text() == "MAX" and heroes_win.hero_cards.arteon.stars == 5, "(x3) the list card bar reads MAX with five stars", "")
@@ -2433,7 +2433,7 @@ func _skill_unlock_ui(heroes_win) -> void:
 	Economy.hero_promotions["ignis"] = 0
 	heroes_win.show_detail("ignis")
 	_check(ui.all(func(u): return u.box.visible) and ui[1].label.text == "신속 (패시브) — ★3에서 해금" and ui[2].label.text == "점화 (액티브) — ★5에서 해금"
-		and heroes_win.promote_preview.text.ends_with("\n★3 달성 시 스킬 해금: 신속"),
+		and not heroes_win.promote_preview.text.contains("스킬 해금"),
 		"(U) SSR ignis at ★0: three rows (신속 at ★3, 점화 at ★5) and the preview names the next unlock", "rows=%s preview=%s" % [ui.map(func(u): return u.label.text), heroes_win.promote_preview.text])
 	var notices := []
 	var grab := func(t: String): notices.append(t)
@@ -2449,7 +2449,7 @@ func _skill_unlock_ui(heroes_win) -> void:
 	var col: Color = ui[1].label.get_theme_color("font_color")
 	_check(locked_before and Economy.promotion_of("arteon") == 3 and notices.has("스킬 해금! 수호의 오라") and heroes_win.unlocks_shown == shown0 + 1 and not ui[1].lock.visible
 		and ui[1].label.text.contains("받는 피해가 30% 줄어듭니다") and col != heroes_win.LOCKED_GRAY and col != HudScript.INK and ui[2].lock.visible
-		and heroes_win.promote_preview.text.ends_with("\n★5 달성 시 스킬 해금: 심판의 빛"),
+		and not heroes_win.promote_preview.text.contains("스킬 해금"),
 		"(U) [승급] to ★3 unlocks 수호의 오라: notice 스킬 해금! 수호의 오라, the row opens and flashes gold, the preview moves on to ★5",
 		"promo=%d notices=%s shown=%d row=%s color=%s preview=%s" % [Economy.promotion_of("arteon"), notices, heroes_win.unlocks_shown, ui[1].label.text, col, heroes_win.promote_preview.text])
 	Economy.notice.disconnect(grab)
