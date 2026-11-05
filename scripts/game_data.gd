@@ -774,10 +774,6 @@ static func upgrade_locked(id: String, levels: Dictionary) -> bool:
 		if upgrade_tier(str(u.id)) == t - 1 and int(levels.get(u.id, 0)) < int(u.max_level):
 			return true
 	return false
-	for u in upgrades():
-		if not str(u.id).begins_with(ADV_PREFIX) and int(levels.get(u.id, 0)) < int(u.max_level):
-			return true
-	return false
 
 
 ## 치명타 굴림 한 번의 확률·배율(개정 20 §3). skill_rate = 치명타 스킬 확률(분수, 0.25), skill_mult = 스킬 배율(2.0 = 200%, 스킬 없음 = 0 이하),
