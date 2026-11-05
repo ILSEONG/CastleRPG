@@ -386,8 +386,7 @@ func _draw_splash() -> void:
 	var inset := 10.0
 	var win := PackedVector2Array([frame[0] + Vector2(inset * 0.6, inset), frame[1] + Vector2(-inset, inset), frame[2] + Vector2(-inset * 0.6, -inset), frame[3] + Vector2(inset, -inset)])
 	var wr := Rect2(win[3].x, win[0].y, win[1].x - win[3].x, win[2].y - win[0].y)
-	var zoom := lerpf(1.08, 1.0, clampf(t / (SPLASH_IN + SPLASH_SEC), 0.0, 1.0))
-	if not HeroArt.draw_in(self, _splash.hero, win, wr, 0.3, zoom):
+	if not HeroArt.draw_in(self, _splash.hero, win, wr, 0.3):  # 그림은 제자리(천천히 당겨지지 않는다 — 2026-11-05 사용자 "배너가 조금씩 움직이는거 하지마")
 		draw_colored_polygon(win, Color(UiKit.GRADE_COLORS.SSR.darkened(0.4), a))
 	if a < 1.0:
 		draw_colored_polygon(win, Color(NIGHT, 1.0 - a))
@@ -462,10 +461,9 @@ func _draw_splash_ur() -> void:
 	_draw_embers(vs, a * open)  # 창 뒤 — 창 밖 빛살 위로만 보인다
 	if open > 0.0:
 		draw_colored_polygon(frame, Color(NIGHT.lightened(0.1), a))
-		var zoom := lerpf(1.12, 1.0, clampf(t / (UR_IN + UR_SPLASH_SEC), 0.0, 1.0))
-		if not HeroArt.draw_in(self, _splash.hero, win, wr, 0.3, zoom):  # 일러스트 전: 주황 창에 3D 전신 피규어
+		if not HeroArt.draw_in(self, _splash.hero, win, wr, 0.3):  # 그림은 제자리. 일러스트 전: 주황 창에 3D 전신 피규어
 			draw_colored_polygon(win, Color(ORANGE.darkened(0.45), a))
-			var fs := wr.size.y * 1.05 * zoom
+			var fs := wr.size.y * 1.05
 			draw_texture_rect(Portraits.portrait("big:" + str(_splash.hero)), Rect2(wr.get_center() - Vector2(fs, fs) * 0.5, Vector2(fs, fs)), false,
 				Color(1, 1, 1, a * clampf((open - 0.6) * 2.5, 0.0, 1.0)))
 		if a < 1.0:
