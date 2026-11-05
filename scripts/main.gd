@@ -293,6 +293,7 @@ func _build_world() -> void:
 	add_child(chat_bar)
 	build_list.hide_while_open = [chat_bar]  # 펼친 동안 채팅 줄은 숨긴다
 	move_child(chat_bar, card.get_index())  # 같은 층(1)에서 가이드 카드·화살표보다 아래에 그린다(화살표가 채팅에 가리지 않게)
+	add_child(preload("res://scripts/busy_spinner.gd").new())  # 서버 답을 기다리는 동안 화면 가운데 로딩 고리(2026-11-05)
 	add_child(preload("res://scripts/reveal_banner.gd").new())  # 가이드 중 숨긴 버튼이 처음 나타날 때 「새 기능」 띠(초반 단순화 2026-10-23)
 	_battle_hide = [tabs, side_menu, tags, badges, build_btn]
 	_tutorial_ui = {"rig": rig, "building": building_panel, "tabs": tabs, "side_menu": side_menu, "merchant": panel, "recruit": recruit, "placement": placement}

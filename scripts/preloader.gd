@@ -96,6 +96,9 @@ func _ready() -> void:
 			_finish.call_deferred(true)
 		return
 	_build_ui()
+	var sp = preload("res://scripts/spinner.gd").mark(label, 0.0, [LOAD_TEXT])  # 연결·불러오는 동안 글 왼쪽에 로딩 고리(2026-11-05)
+	if sp != null:
+		sp.want = CONNECT_TEXT
 	if connecting:
 		label.text = CONNECT_TEXT
 		return

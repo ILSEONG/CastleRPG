@@ -26,7 +26,9 @@ static func build(p) -> void:
 	var w: Dictionary = GuildWar.war
 	if w.is_empty():
 		var c = p._card()
-		c.get_child(0).add_child(p._label(Lang.t("war_panel.build"), 24, SUB))
+		var wl = p._label(Lang.t("war_panel.build"), 24, SUB)
+		c.get_child(0).add_child(wl)
+		preload("res://scripts/spinner.gd").mark(wl)  # 불러오는 중: 로딩 고리
 		p.body.add_child(c)
 		return
 	var sel := _sel(p)

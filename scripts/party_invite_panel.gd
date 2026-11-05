@@ -44,6 +44,7 @@ func _on_open() -> void:
 	status_label.text = ""
 	_show([])
 	status_label.text = Lang.t("party_invite_panel.on_open")
+	preload("res://scripts/spinner.gd").mark(status_label)  # 불러오는 중인 동안 로딩 고리
 	status_label.add_theme_color_override("font_color", SOFT_INK)
 	_ask += 1
 	var ask := _ask

@@ -557,6 +557,7 @@ func _build_link_ui() -> void:
 	band.add_child(lines)
 	_link_label = _band_label(Lang.t("hud.build_link_ui"), 26)
 	lines.add_child(_link_label)
+	preload("res://scripts/spinner.gd").mark(_link_label)  # 서버 연결 중…: 로딩 고리
 	_storage_label = _band_label(Net.STORAGE_TEXT, 20)
 	_storage_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lines.add_child(_storage_label)
