@@ -1,4 +1,5 @@
 // 경제 규칙(순수 함수, 시간은 인자 — 유닉스 초). 앱 economy.gd(개정 7)·game_data.gd(개정 8)와 같은 규칙.
+import * as N from './names.ts'
 import { randomBytes } from 'node:crypto'
 import { txt } from './texts.ts'
 
@@ -891,6 +892,8 @@ function mixName(...xs: number[]): number {
 }
 
 export function friendName(id: string): string {
+  const own = N.customName(id) // 고른 닉네임이 있으면 그것(names.ts)
+  if (own) return own
   const hex = id.replace(/-/g, '')
   const r = mulberry32(mixName(parseInt(hex.slice(0, 8), 16), parseInt(hex.slice(8, 16), 16)))
   const pick = (a: string[]) => a[Math.floor(r() * a.length)]

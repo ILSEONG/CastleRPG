@@ -237,6 +237,9 @@ func _build_world() -> void:
 	add_child(inquiry_panel)
 	settings_panel.inquiry = inquiry_panel
 	settings_panel.admin_panel = admin_panel
+	var nickname_panel = preload("res://scripts/nickname_panel.gd").new()  # 닉네임 변경(2026-11-05): 설정 창 닉네임 줄 [변경]이 연다
+	add_child(nickname_panel)
+	settings_panel.nickname_panel = nickname_panel
 	var side_menu = preload("res://scripts/side_menu.gd").new()  # 오른쪽 아래 메뉴: 위로 [설정][공지][우편][가방][미션][랭킹][친구][이벤트][거래소][길드]
 	side_menu.windows = {"settings": settings_panel, "notice": notice_panel, "mail": mail_panel, "bag": pouch_panel, "mission": mission_panel, "ranking": ranking_panel, "friend": dungeon_panel.friend_panel,
 		"event": event_panel, "exchange": exchange_panel, "guild": guild_panel}

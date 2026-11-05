@@ -1675,13 +1675,13 @@ settings_panel.ready_27,운영 관리,,,,scripts/settings_panel.gd
 settings_panel.ready_28,닫기,,,,scripts/settings_panel.gd
 settings_panel.refresh,오프라인 모드,,,,scripts/settings_panel.gd
 settings_panel.press_logout,로그아웃했습니다. 게임을 다시 열면 로그인 화면이 나옵니다,,,,scripts/settings_panel.gd
-settings_panel.style_logout,한 번 더 누르면 로그아웃합니다,,,,scripts/settings_panel.gd
+settings_panel.style_logout,한 번 더 누르면 로그아웃,,,,scripts/settings_panel.gd
 settings_panel.style_logout_2,로그아웃 · 계정 전환,,,,scripts/settings_panel.gd
 settings_panel.style_links,게스트 계정은 기기를 바꾸거나 앱을 지우면 찾을 수 없습니다. 연결해 두면 진행이 그대로 남습니다,,,,scripts/settings_panel.gd
 settings_panel.style_links_2,다른 로그인도 연결해 두면 어느 쪽으로든 들어올 수 있습니다,,,,scripts/settings_panel.gd
 settings_panel.open_inquiry,문의는 온라인에서만 보낼 수 있습니다,,,,scripts/settings_panel.gd
 settings_panel.press_delete,계정을 삭제하지 못했습니다. 다시 시도해 주세요,,,,scripts/settings_panel.gd
-settings_panel.style_delete,한 번 더 누르면 계정이 삭제됩니다,,,,scripts/settings_panel.gd
+settings_panel.style_delete,한 번 더 누르면 계정 삭제,,,,scripts/settings_panel.gd
 settings_panel.style_delete_2,계정 삭제,,,,scripts/settings_panel.gd
 settings_panel.copy_code,친구 코드를 복사했습니다,,,,scripts/settings_panel.gd
 settings_panel.toggle_row,켬,,,,scripts/settings_panel.gd
@@ -2893,3 +2893,23 @@ recruit_panel.ready_5,반복 모집,,,,scripts/recruit_panel.gd
 recruit_panel.refresh_6,반복 모집 중\n■ 멈춤,,,,scripts/recruit_panel.gd
 recruit_panel.ready_8,연출 건너뛰기,,,,scripts/recruit_panel.gd
 recruit_panel.process,재화가 부족해 반복 모집을 멈췄습니다,,,,scripts/recruit_panel.gd
+settings_panel.ready_29,변경,,,,scripts/settings_panel.gd
+settings_panel.style_toggle,끔,,,,scripts/settings_panel.gd
+nickname_panel.ready,닉네임 변경,,,,scripts/nickname_panel.gd
+nickname_panel.ready_2,새 닉네임,,,,scripts/nickname_panel.gd
+nickname_panel.ready_3,"2~8자 · 한글, 영문, 숫자",,,,scripts/nickname_panel.gd
+nickname_panel.ready_4,취소,,,,scripts/nickname_panel.gd
+nickname_panel.ready_5,변경,,,,scripts/nickname_panel.gd
+nickname_panel.on_open,지금 닉네임: %s,,,,scripts/nickname_panel.gd
+nickname_panel.on_open_2,첫 변경은 무료입니다,,,,scripts/nickname_panel.gd
+nickname_panel.on_open_3,다이아 %s개 (보유 %s),,,,scripts/nickname_panel.gd
+nickname_panel.check,닉네임은 2~8자로 지어 주세요,,,,scripts/nickname_panel.gd
+nickname_panel.check_3,"한글, 영문, 숫자만 쓸 수 있습니다",,,,scripts/nickname_panel.gd
+nickname_panel.submit,지금 닉네임과 같습니다,,,,scripts/nickname_panel.gd
+nickname_panel.submit_2,닉네임을 %s(으)로 바꿨습니다,,,,scripts/nickname_panel.gd
+economy.change_nickname,온라인에서만 닉네임을 바꿀 수 있습니다,,,,scripts/economy.gd
+economy.change_nickname_2,다이아가 부족합니다,,,,scripts/economy.gd
+economy.change_nickname_3,이미 다른 성주가 쓰는 닉네임입니다,,,,scripts/economy.gd
+economy.change_nickname_4,지금 닉네임과 같습니다,,,,scripts/economy.gd
+economy.change_nickname_5,쓸 수 없는 닉네임입니다,,,,scripts/economy.gd
+economy.change_nickname_6,닉네임을 바꾸지 못했습니다. 잠시 뒤 다시 해 주세요,,,,scripts/economy.gd

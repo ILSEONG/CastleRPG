@@ -11,6 +11,7 @@ import { DEFAULT_STARTERS, ident, TABLES } from './seed.ts'
 import * as R from './rules.ts'
 import * as O from './oauth.ts'
 import * as G from './guild.ts'
+import * as N from './names.ts'
 import * as Rk from './ranking.ts'
 import * as A from './attendance.ts'
 import * as M from './missions.ts'
@@ -147,6 +148,7 @@ interface Run {
 
 interface Player {
   id: string // players.id
+  nickname_changes: number // 닉네임을 바꾼 횟수(0이면 다음 변경 무료, 2026-11-05)
   gold_tenths: number
   stage: number
   keep_level: number
@@ -268,6 +270,7 @@ interface Change {
   mailClaim?: number[] // 받은 우편 id들(하나라도 이미 받았으면 전체가 안 바뀐다)
   friendGift?: { day: number; to: string[]; per: number; title: string; body: string } // 친구 다이아 선물: 받는 친구마다 선물 행 + 우편(다이아 per개).
   // 오늘 이미 보낸 친구가 있거나·친구가 아니거나·오늘 합계가 R.FRIEND_GIFT_DAILY를 넘으면 전체가 안 바뀐다(다이아 차감은 diamonds 음수로)
+  nickname?: { name: string; changes: number } // 새 닉네임(바꾼 횟수가 그대로일 때만 — 동시에 두 번 바꿔도 한 번만 무료)
   coupon?: { code: string; max_uses: number | null } // 쓴 쿠폰(이 계정이 이미 썼으면 전체가 안 바뀐다, 전체 상한에 걸리면 되돌린다)
   idle?: boolean // 플레이어 활동이 아닌 쓰기(게으른 연구 완료·파견 하루 정리) — last_active를 옮기지 않는다(건설 완료 completeSql과 같다, 오프라인 골드 기준)
 }
@@ -315,6 +318,7 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.att
       and m.status = 'active' and m.expires_at > to_timestamp($2::float8))), '[]'::json) as items,
   (select count(*) from market_listings where seller_id = s.player_id and status = 'sold')::int as market_sold,
   exists (select 1 from player_identities i join admin_emails a on a.email = i.email where i.player_id = s.player_id and i.provider = 'google') as admin,
+  (select nickname from players where id = s.player_id) as nickname, (select nickname_changes from players where id = s.player_id) as nickname_changes,
   coalesce((select json_agg(json_build_object('hero_id', hero_id, 'slot', slot, 'item_id', item_id) order by hero_id, slot)
     from player_equipment where player_id = s.player_id), '[]'::json) as equipment,
   coalesce((select json_agg(json_build_object('id', f.id, 'hero', f.friend_hero, 'heroes', coalesce((select json_object_agg(hero_id,
@@ -469,6 +473,13 @@ export function createApp(opts: AppOptions) {
   const clock = opts.now ?? (() => Date.now() / 1000)
   const secret = opts.jwtSecret
   const random = opts.random ?? R.cryptoRandom
+  // 고른 닉네임을 메모리로(names.ts): 첫 인증 요청 때 한 번만 읽는다(health 핑이 DB를 깨우지 않게 — 주기적으로 다시 읽지도 않는다)
+  let namesLoaded: Promise<void> | null = null
+  const loadNames = () => (namesLoaded ??= N.load(query).catch((e) => { namesLoaded = null; console.warn(`[server] nicknames: ${(e as Error).message}`) }))
+  const nicknameCost = (g: Game) => {
+    const v = Number(g.config.nickname_change_dia)
+    return Number.isFinite(v) && v >= 0 ? Math.round(v) : N.DEFAULT_COST
+  }
   const app = new Hono()
   const pay: Pay.Payments = opts.payments ?? {}
   const payProviders = (['google', 'toss'] as const).filter((k) => pay[k])
@@ -761,6 +772,7 @@ export function createApp(opts: AppOptions) {
         iap: r.iap == null ? {} : json(r.iap),
         market_sold: Number(r.market_sold ?? 0),
         admin: r.admin === true,
+        nickname_changes: Number(r.nickname_changes ?? 0),
       }
       const done = p.build && p.build.finish <= now ? { b: p.build, slot: 1 as const } : p.build2 && p.build2.finish <= now ? { b: p.build2, slot: 2 as const } : null
       if (done) {
@@ -827,6 +839,7 @@ export function createApp(opts: AppOptions) {
         population: population(p, game), heroes, deploy,
         soldiers, soldier_deploy: R.trimDeploy(p.soldier_deploy, soldiers), training, upgrades,
         dungeons: dungeonsView(p, game, now), items: p.items, equipment,
+        nickname: { name: R.friendName(p.id), changes: p.nickname_changes, price: N.priceOf(p.nickname_changes, nicknameCost(game)), cost: nicknameCost(game) }, // 닉네임 변경(설정 창)
         diamonds: p.diamonds, // 개정 23: 다이아, 모집 상태(gold_next = 다음 레벨까지 필요한 누적, 최대 레벨이면 null)
         gacha: { ...p.gacha, gold_next: R.goldNext(game.config, p.gacha.gold_level) },
         research: { levels, current: p.research_cur },
@@ -1036,6 +1049,10 @@ export function createApp(opts: AppOptions) {
         select receiver, ${p(fg.title)}, ${p(fg.body)}, ${p(JSON.stringify({ diamonds: fg.per }))}::jsonb, to_timestamp(${p(now)}::float8),
           to_timestamp(${p(now + LO.MAIL_DEFAULT_DAYS * 86400)}::float8) from fg returning 1)`)
     }
+    if (ch.nickname) {
+      ctes.push(`nk as (update players set nickname = ${p(ch.nickname.name)}::text, nickname_changes = nickname_changes + 1
+        where id = (select player_id from s) and nickname_changes = ${p(ch.nickname.changes)}::int returning 1)`)
+    }
     if (ch.coupon) {
       const code = `${p(ch.coupon.code)}::text`
       ctes.push(`cu as (update coupons set uses = uses + 1 where code = ${code} and (max_uses is null or uses < max_uses) and exists (select 1 from s) returning 1)`)
@@ -1051,11 +1068,14 @@ export function createApp(opts: AppOptions) {
     const buyCheck = (ch.marketBuy ? ', 1 / (case when (select count(*) from mb) = (select count(*) from s) and (select count(*) from mbi) = (select count(*) from s) then 1 else 0 end) as mb_ok' : '')
       // 쿠폰 전체 상한: 다른 사람이 마지막 한 장을 먼저 썼으면(cu가 비었는데 내 쪽은 바뀜) 문장 전체를 되돌린다 — null(다시 계산하면 coupon_used_up)
       + (ch.coupon ? ', 1 / (case when (select count(*) from cu) = (select count(*) from s) then 1 else 0 end) as cu_ok' : '')
+      // 닉네임: 다른 요청이 먼저 바꿨으면(횟수가 달라 nk가 비었는데 내 쪽은 바뀜) 문장 전체를 되돌린다 — null(다시 계산하면 그때 값)
+      + (ch.nickname ? ', 1 / (case when (select count(*) from nk) = (select count(*) from s) then 1 else 0 end) as nk_ok' : '')
     let r: Row
     try {
       ;[r] = await query(`with ${ctes.join(',\n')} select count(*)::int as n${runResult}${buyCheck} from s`, params)
     } catch (e) {
-      if ((ch.marketBuy || ch.coupon) && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
+      if ((ch.marketBuy || ch.coupon || ch.nickname) && /division by zero/i.test(String((e as Error)?.message ?? e))) return null
+      if (ch.nickname && /players_nickname_lower|duplicate key/i.test(String((e as Error)?.message ?? e))) throw new ApiError(409, 'name_taken', 'that nickname is taken')
       throw e
     }
     return Number(r.n) === 1 ? r : null
@@ -1358,6 +1378,7 @@ export function createApp(opts: AppOptions) {
     if (typeof payload.exp !== 'number' || payload.exp <= clock()) throw new ApiError(401, 'token_expired', 'token expired')
     if (typeof payload.sub !== 'string' || !UUID_RE.test(payload.sub)) throw new ApiError(401, 'bad_token', 'invalid token subject')
     c.set('playerId', payload.sub)
+    await loadNames()
     if (limits && !c.req.path.startsWith('/v1/test/') && !accountReqs.take(payload.sub, clock())) {
       throw new ApiError(429, 'too_many_requests', 'too many requests from this account; slow down')
     }
@@ -1695,6 +1716,7 @@ export function createApp(opts: AppOptions) {
 
   // 계정 지우기(앱 [계정 삭제]·관리자 웹 삭제 요청 처리 공통).
   async function deletePlayer(id: string) {
+    N.forget(id)
     const [g] = await query('select g.id from guilds g join player_guild pg on pg.guild_id = g.id where pg.player_id = $1 and g.owner = $1', [id])
     if (g) {
       const [next] = await query('select player_id from player_guild where guild_id = $1 and player_id <> $2 order by joined_at, player_id limit 1', [g.id, id])
@@ -3627,6 +3649,27 @@ export function createApp(opts: AppOptions) {
     if (typeof b.code === 'string' && /^[0-9A-Fa-f]{8}$/.test(b.code.trim())) return { sql: 'select id from players where friend_code = $1', arg: b.code.trim().toUpperCase() }
     throw new ApiError(400, 'bad_request', "send 'code' (8-character friend code) or 'id'")
   }
+
+  // 닉네임 변경(2026-11-05) {name}: 처음은 무료, 그 뒤는 다이아(game_config nickname_change_dia, 없으면 names.ts DEFAULT_COST).
+  // 2~8자 한글·영문·숫자, 금칙어·운영자 사칭 불가, 같은 닉네임(대소문자 무시)은 한 명만 — 400 bad_name {reason}, 409 same_name·name_taken·not_enough.
+  // 응답 = 플레이어 상태(nickname {name, changes, price}) + name. 그 뒤 모든 화면(랭킹·길드·채팅·친구)이 새 이름을 쓴다.
+  app.post('/v1/nickname', auth, async (c) => {
+    const name = String((await body(c)).name ?? '').normalize('NFC').trim()
+    const bad = N.check(name)
+    if (bad) throw new ApiError(400, 'bad_name', bad)
+    const id = c.get('playerId') as string
+    if (R.friendName(id).toLowerCase() === name.toLowerCase()) throw new ApiError(409, 'same_name', 'that is already your nickname')
+    const [taken] = await query('select 1 from players where lower(nickname) = lower($1) and id <> $2', [name, id])
+    if (taken) throw new ApiError(409, 'name_taken', 'that nickname is taken')
+    return mutate(c, (p, g) => {
+      const price = N.priceOf(p.nickname_changes, nicknameCost(g))
+      if (p.diamonds < price) throw new ApiError(409, 'not_enough', 'not enough diamonds')
+      const change: Change = { nickname: { name, changes: p.nickname_changes }, log: { kind: 'nickname', detail: { name, from: R.friendName(id), diamonds: price } } }
+      if (price > 0) change.diamonds = -price
+      p.nickname_changes += 1 // 응답 view가 새 횟수·다음 값을 보이게(applyLocal은 이 칸을 모른다)
+      return { change, extra: { name }, after: () => { N.set(id, name); return {} } }
+    })
+  })
 
   app.get('/v1/friends', auth, async (c) => c.json(await friendsView(c.get('playerId') as string)))
 
