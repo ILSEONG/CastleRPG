@@ -74,7 +74,7 @@ const legal = {
 }
 // 광고 서버 확인(AdMob SSV)을 받는 보상형 광고 단위: ADMOB_AD_UNITS(쉼표 구분 광고 단위 id). 없으면 ads.ts AD_UNITS(앱 ad_config.gd 값)
 const adUnits = (process.env.ADMOB_AD_UNITS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-const app = createApp({ tokenTtlSec: TOKEN_TTL_PROD, query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, partyLive, chatLive, sentry, gameCacheSec, payments, legal, adUnits })
+const app = createApp({ tokenTtlSec: TOKEN_TTL_PROD, refundPollMin: 60, query: db.query, jwtSecret: cfg.secret, allowTestHooks: cfg.allowTestHooks, corsOrigins: cfg.corsOrigins, oauth, warLive, partyLive, chatLive, sentry, gameCacheSec, payments, legal, adUnits })
 const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
   const store = databaseUrl ? `neon (${db.driver})` : `pglite ${pgliteDir === 'memory' ? '(memory)' : pgliteDir}`
   console.log(`[server] listening on http://${hostname}:${info.port} (${store})`)

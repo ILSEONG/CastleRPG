@@ -24,6 +24,7 @@ export interface Verified {
 export interface Verifier {
   verify(input: { product: string; token: string; account: string }): Promise<Verified>
   finish?(input: { product: string; token: string }): Promise<void> // 지급 뒤 처리(Google consume). 실패해도 지급은 그대로
+  voided?(sinceMs: number): Promise<{ orderId: string; token: string; at: number }[]> // 환불·취소된 결제(Google 무효 구매 목록, 2026-11-06)
 }
 
 export interface Payments {
@@ -100,6 +101,24 @@ export function googleVerifier(cfg: { email: string; privateKey: string; pkg: st
     async finish({ product, token }) {
       const r = await fetchFn(url(product, token, ':consume'), { method: 'POST', headers: { Authorization: `Bearer ${await accessToken()}` } })
       if (!r.ok) throw new Error(`google consume failed: ${r.status}`)
+    },
+    // 무효 구매(환불·차지백·취소) 목록 purchases.voidedpurchases.list — 서비스 계정에 "주문 및 정기 결제 관리" 권한이 있어야 한다. 쪽마다 1,000개.
+    async voided(sinceMs) {
+      const out: { orderId: string; token: string; at: number }[] = []
+      let page = ''
+      for (let i = 0; i < 20; i++) {
+        const q = new URLSearchParams({ startTime: String(Math.max(0, Math.floor(sinceMs))), maxResults: '1000', type: '0' })
+        if (page) q.set('token', page)
+        const r = await fetchFn(`${ANDROID_PUBLISHER}/${encodeURIComponent(cfg.pkg)}/purchases/voidedpurchases?${q}`, { headers: { Authorization: `Bearer ${await accessToken()}` } })
+        const j: any = await r.json().catch(() => null)
+        if (!r.ok || !j) throw new Error(`google voided purchases failed: ${r.status}`)
+        for (const v of Array.isArray(j.voidedPurchases) ? j.voidedPurchases : []) {
+          if (typeof v?.purchaseToken === 'string') out.push({ orderId: String(v.orderId ?? ''), token: v.purchaseToken, at: Number(v.voidedTimeMillis ?? 0) })
+        }
+        page = j.tokenPagination?.nextPageToken ?? ''
+        if (!page) break
+      }
+      return out
     },
   }
 }

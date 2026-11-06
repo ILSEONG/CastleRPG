@@ -162,6 +162,7 @@ chat.refusals.empty,메시지를 입력해 주세요,,,,scripts/chat.gd
 chat.refusals.too_many,오늘은 더 이상 신고할 수 없습니다,,,,scripts/chat.gd
 chat.refusals.no_message,이 메시지는 신고할 수 없습니다,,,,scripts/chat.gd
 chat.refusals.own_message,내 메시지는 신고할 수 없습니다,,,,scripts/chat.gd
+chat.refusals.muted,채팅이 금지된 상태입니다. 운영 정책 위반으로 일정 기간 채팅을 쓸 수 없습니다.,,,,scripts/chat.gd
 chat.welcome,"채팅 예절을 지켜 주세요. 욕설은 자동으로 가려지며, 다른 성주의 메시지를 누르면 신고할 수 있습니다.",,,,scripts/chat.gd
 chat.send,온라인 상태에서만 채팅할 수 있습니다,,,,scripts/chat.gd
 chat.send_2,나,,,,scripts/chat.gd
@@ -2886,6 +2887,9 @@ recruit_panel.ready_8,연출 건너뛰기,,,,scripts/recruit_panel.gd
 recruit_panel.process,재화가 부족해 반복 모집을 멈췄습니다,,,,scripts/recruit_panel.gd
 server.mail.shop.title,[상점] {name},,,,server/src/app.ts
 server.mail.shop.body,상점에서 구매한 {name}입니다. [받기]를 누르면 받습니다.,,,,server/src/app.ts
+server.mail.refund.title,[결제 취소] {name},,,,server/src/app.ts
+server.mail.refund.body,{name} 결제가 환불되어 그 상품으로 받은 재화를 회수했습니다.,,,,server/src/app.ts
+server.mail.refund.body_debt,{name} 결제가 환불되어 그 상품으로 받은 재화를 회수했습니다. 모자란 다이아 {debt}개는 앞으로 얻는 다이아에서 먼저 차감됩니다.,,,,server/src/app.ts
 server.mail.monthly.title,[월정액] {name} 오늘 보상,,,,server/src/app.ts
 server.mail.monthly.body,{name} 오늘 보상입니다. 남은 기간 {left}일,,,,server/src/app.ts
 server.mail.pvp.title,[PVP 상점] 구매한 상품,,,,server/src/pvp_routes.ts

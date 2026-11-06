@@ -58,6 +58,7 @@ export interface AppOptions {
   chatLive?: ChatLive // 채팅 실시간 전달(main.ts가 만들어 붙인다). 없으면 폴링만
   sentry?: Sentry // 오류 모음(sentry.ts, SENTRY_DSN). 없으면 로그만
   payments?: Pay.Payments // 실결제 확인(payments.ts). 없으면 실결제 꺼짐 — 테스트는 가짜 확인기를 넣는다
+  refundPollMin?: number // 구글 환불(무효 구매) 확인 주기(분). 없으면 안 본다(테스트는 /v1/admin/refunds/sync) — 운영은 main.ts
   legal?: L.LegalInfo // 약관·개인정보처리방침의 운영자·연락처(LEGAL_OPERATOR·LEGAL_EMAIL)
   adWaitMs?: number // 광고 서버 확인(AdMob SSV) 콜백을 상점 구매가 기다리는 최대 시간(기본 10초, 테스트 0)
   adUnits?: string[] // 광고 서버 확인을 받는 우리 보상형 광고 단위(비면 ads.ts AD_UNITS, 운영은 main.ts ADMOB_AD_UNITS)
@@ -176,6 +177,7 @@ interface Player {
   equipment: Equipped[]
   diamonds: number // 개정 23: 다이아(현금 재화)
   dia_tickets: number // 다이아 모집권(모집권 던전 보상·튜토리얼 보상)
+  dia_debt: number // 환불로 아직 회수하지 못한 다이아(앞으로 얻는 다이아에서 먼저 갚는다, 마이그레이션 069)
   stones: number // 강화석(2026-10-29: 장비 분해·강화석 던전 → 부위 강화)
   slot_levels: R.SlotLevels // 부위 강화: 영웅 → {부위: 레벨}
   gacha: { gold_level: number; gold_pulls: number; dia_pity: number; dia_ur_pity: number } // 골드 모집 레벨·그 레벨 안 누적, 다이아 천장 카운터(SSR·UR)
@@ -244,7 +246,8 @@ interface Change {
   equip?: { hero_id: string; slot: string; item_id: number | null } // 장착(다른 영웅이 끼고 있으면 옮긴다)·해제(null)
   equips?: { hero_id: string; slot: string; item_id: number }[] // 한 번에 여러 부위 장착(자동착용) — 부위·장비는 서로 다르다
   unequipAll?: string // 그 영웅의 장비를 모든 부위에서 뺀다(전체 해제)
-  diamonds?: number // 다이아 증감(개정 23)
+  diamonds?: number // 다이아 증감(개정 23). 늘어날 때는 환불 빚(dia_debt)을 먼저 갚는다
+  diaDebt?: number // 환불 빚 증가(환불 회수 — refundOrder)
   diaTickets?: number // 다이아 모집권 증감(모집권 던전)
   gacha?: Partial<Player['gacha']> // 새 모집 상태(개정 23)
   research?: { id: string; finish: number } | null // 새 진행 중 연구(개정 24)
@@ -304,7 +307,7 @@ const GAME_SQL = 'select ' + TABLES.map((t) => {
   return `(select coalesce(json_agg(${obj} order by ${order}), '[]'::json) from ${t.table}) as ${t.name}`
 }).join(',\n  ')
 
-const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.stones, s.slot_levels, s.unbuilt, s.layout,
+const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.attend_n, s.attend_day, s.missions, s.tut_state, s.tut_step, s.rep_n, extract(epoch from s.last_quest_claim)::float8 as last_quest_claim, s.dia_tickets, s.dia_debt, s.stones, s.slot_levels, s.unbuilt, s.layout,
   s.gold_tenths, s.diamonds, s.gacha_gold_level, s.gacha_gold_pulls, s.gacha_dia_pity, s.gacha_dia_ur_pity, s.stage, s.keep_level, s.gate_level, s.version, s.kill_seq, s.deploy, s.build_id, s.build2_id, s.speedups, s.soldier_deploy,
   coalesce((select json_object_agg(type || ':' || tier, count) from player_soldiers where player_id = s.player_id and count > 0), '{}'::json) as soldiers,
   coalesce((select json_object_agg(id, level) from player_upgrades where player_id = s.player_id and level > 0), '{}'::json) as upgrades,
@@ -762,6 +765,7 @@ export function createApp(opts: AppOptions) {
         equipment: (json(r.equipment) as any[]).map((x) => ({ hero_id: String(x.hero_id), slot: String(x.slot), item_id: Number(x.item_id) })),
         diamonds: Number(r.diamonds),
         dia_tickets: Number(r.dia_tickets ?? 0),
+        dia_debt: Number(r.dia_debt ?? 0),
         stones: Number(r.stones ?? 0),
         slot_levels: R.cleanSlotLevels(json(r.slot_levels)),
         gacha: { gold_level: Number(r.gacha_gold_level), gold_pulls: Number(r.gacha_gold_pulls), dia_pity: Number(r.gacha_dia_pity), dia_ur_pity: Number(r.gacha_dia_ur_pity ?? 0) },
@@ -855,6 +859,7 @@ export function createApp(opts: AppOptions) {
         quest: { tut_state: p.quest.tut_state, tut_step: p.quest.tut_step, rep_n: p.quest.rep_n, rep: repeatView(p, game, now) }, // 튜토리얼·반복 퀘스트 진행
         layout: p.layout, // 자유 건설: 건물 → [x, y](고른 것만)
         dia_tickets: p.dia_tickets,
+        ...(p.dia_debt > 0 ? { dia_debt: p.dia_debt } : {}), // 환불로 갚을 다이아(있을 때만)
         stones: p.stones, slot_levels: Object.fromEntries(Object.entries(p.slot_levels).filter(([h]) => Object.hasOwn(p.heroes, h))), // 강화석·부위 강화
         unbuilt: p.unbuilt.filter((b) => keysOf(game).includes(b)),
         attendance: { n: p.attend.n, days: A.DAYS, can_claim: A.canClaim(p.attend.n, p.attend.day, today(game, now)) }, // 출석 이벤트
@@ -955,7 +960,12 @@ export function createApp(opts: AppOptions) {
     if (ch.builder2Until !== undefined) sets.push(`builder2_until = to_timestamp(${p(ch.builder2Until)}::float8)`)
     if (ch.speedups) sets.push(`speedups = ${p(JSON.stringify(ch.speedups))}::jsonb`)
     if (ch.soldierDeploy !== undefined) sets.push(`soldier_deploy = ${p(JSON.stringify(ch.soldierDeploy))}::jsonb`)
-    if (ch.diamonds) sets.push(`diamonds = diamonds + ${p(bigint(ch.diamonds))}::bigint`)
+    // 다이아가 늘어날 때는 환불 빚부터 갚는다(2026-11-06 환불 회수). 오른쪽 값은 모두 바꾸기 전 행이다
+    if (ch.diamonds && ch.diamonds > 0) {
+      const d = p(bigint(ch.diamonds))
+      sets.push(`diamonds = diamonds + greatest(0, ${d}::bigint - dia_debt), dia_debt = greatest(0, dia_debt - ${d}::bigint)`)
+    } else if (ch.diamonds) sets.push(`diamonds = diamonds + ${p(bigint(ch.diamonds))}::bigint`)
+    if (ch.diaDebt) sets.push(`dia_debt = dia_debt + ${p(bigint(ch.diaDebt))}::bigint`)
     if (ch.diaTickets) sets.push(`dia_tickets = dia_tickets + ${p(ch.diaTickets)}::int`)
     if (ch.stones) sets.push(`stones = stones + ${p(ch.stones)}::int`)
     if (ch.slotLevels) sets.push(`slot_levels = ${p(JSON.stringify(ch.slotLevels))}::jsonb`)
@@ -1295,7 +1305,12 @@ export function createApp(opts: AppOptions) {
     for (const [k, d] of Object.entries(ch.soldiers ?? {})) pl.soldiers[k] = (pl.soldiers[k] ?? 0) + d
     if (ch.soldierDeploy !== undefined) pl.soldier_deploy = ch.soldierDeploy
     for (const [k, d] of Object.entries(ch.upgrades ?? {})) pl.upgrades[k] = (pl.upgrades[k] ?? 0) + d
-    pl.diamonds += ch.diamonds ?? 0
+    if ((ch.diamonds ?? 0) > 0) {
+      const repay = Math.min(pl.dia_debt, ch.diamonds as number)
+      pl.dia_debt -= repay
+      pl.diamonds += (ch.diamonds as number) - repay
+    } else pl.diamonds += ch.diamonds ?? 0
+    pl.dia_debt += ch.diaDebt ?? 0
     pl.gacha = { ...pl.gacha, ...ch.gacha }
     if (ch.research !== undefined) pl.research_cur = ch.research
     if (ch.researchUp) pl.research[ch.researchUp] = (pl.research[ch.researchUp] ?? 0) + 1
@@ -2875,6 +2890,164 @@ export function createApp(opts: AppOptions) {
     }
     await finish()
     return res
+  })
+
+  // --- 환불 회수(2026-11-06 사용자 "구글 결제를 환불받아도 지급한 다이아가 회수해야지") ---
+  // 환불된 주문(구글 무효 구매 목록을 주기적으로 확인 · 관리자 [운영 관리 → 환불]에서 주문 번호로 직접)마다 한 번:
+  //  1) 그 결제 우편을 아직 안 받았으면 우편을 지운다(받은 것이 없으니 회수할 것도 없다).
+  //  2) 받았으면 준 만큼 빼앗는다: 다이아(모자라면 모자란 만큼 dia_debt — 앞으로 얻는 다이아에서 먼저 갚는다), 모집권·주머니·가속 아이템(있는 만큼).
+  //  3) 패스는 없애고 월정액은 그 기간만큼 줄인다. 그 플레이어에게 회수 안내 우편(보상 없음)을 보낸다.
+  // 주문 행에 refunded_at·clawback(무엇을 회수했는지)을 남겨 같은 환불을 두 번 회수하지 않는다.
+  type RefundResult = { order_id: string; status: 'refunded' | 'already' | 'unknown'; clawback?: Record<string, unknown> }
+
+  async function mutateId(id: string, plan: (p: Player, g: Game, now: number) => Change | null): Promise<Change | null> {
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      const now = clock()
+      const game = await loadGame()
+      const pl = await loadPlayer(id, game, now)
+      const change = plan(pl, game, now)
+      if (!change) return null
+      if (await commit(id, pl.version, change, now)) return change
+    }
+    throw new ApiError(409, 'conflict', 'concurrent update; try again')
+  }
+
+  async function refundOrder(orderKey: string, source: string): Promise<RefundResult> {
+    const now = clock()
+    const [o] = await query('select order_id, player_id::text as pid, product, refunded_at from iap_orders where order_id = $1', [orderKey])
+    if (!o) return { order_id: orderKey, status: 'unknown' }
+    if (o.refunded_at) return { order_id: orderKey, status: 'already' }
+    // 먼저 표시를 걸어 동시에 두 번(주기 확인 + 관리자) 회수하지 않게 한다
+    const [mark] = await query('update iap_orders set refunded_at = to_timestamp($2::float8) where order_id = $1 and refunded_at is null returning 1', [orderKey, now])
+    if (!mark) return { order_id: orderKey, status: 'already' }
+    const pr = IAP.product(String(o.product))
+    const claw: Record<string, unknown> = { source }
+    const save = async () => {
+      await query('update iap_orders set clawback = $2::jsonb where order_id = $1', [orderKey, JSON.stringify(claw)])
+      return { order_id: orderKey, status: 'refunded' as const, clawback: claw }
+    }
+    if (!o.pid || !pr) {
+      claw.note = o.pid ? 'unknown product' : 'account deleted'
+      return save()
+    }
+    const pid = String(o.pid)
+    const [log] = await query("select detail from economy_log where player_id = $1 and kind = 'iap' and detail->>'order_id' = $2 limit 1", [pid, orderKey])
+    const detail = log ? (typeof log.detail === 'string' ? JSON.parse(log.detail) : log.detail) : null
+    const give: Record<string, number> = detail?.give && typeof detail.give === 'object' ? detail.give : {}
+    try {
+      let unclaimed = false
+      if (detail && Object.keys(give).length) {
+        const [m] = await query(`update mails set deleted = true where id = (select m.id from mails m where m.player_id = $1 and not m.deleted
+            and m.title = $2 and m.reward = $3::jsonb and not exists (select 1 from mail_claims c where c.mail_id = m.id) order by m.id limit 1) returning id`,
+        [pid, shopMail(pr.name, give).title, JSON.stringify(give)])
+        unclaimed = !!m
+        if (unclaimed) claw.mail_removed = Number(m.id)
+      }
+      if (!detail) claw.note = 'not granted'
+      await mutateId(pid, (p, g) => {
+        const ch: Change = {}
+        if (detail && !unclaimed) {
+          const dia = Math.max(0, Number(give.diamonds ?? 0))
+          const take = Math.min(p.diamonds, dia)
+          if (take) ch.diamonds = -take
+          if (dia - take) ch.diaDebt = dia - take
+          const tickets = Math.min(p.dia_tickets, Math.max(0, Number(give.tickets ?? 0)))
+          if (tickets) ch.diaTickets = -tickets
+          const less = (held: Record<string, number>, got: Record<string, number>) =>
+            Object.fromEntries(Object.entries(got).map(([k, v]) => [k, -Math.min(held[k] ?? 0, v)]).filter(([, v]) => v !== 0))
+          const pz = less(p.pouches, P.fromReward(give))
+          if (Object.keys(pz).length) ch.pouches = P.add(p.pouches, pz)
+          const sz = less(p.speedups, S.fromReward(give))
+          if (Object.keys(sz).length) ch.speedups = S.add(p.speedups, sz)
+          Object.assign(claw, { diamonds: take, debt: dia - take, tickets, pouches: pz, speedups: sz })
+        }
+        // 패스·월정액(우편과 상관없이 산 순간 열린다)
+        const st = IAP.normalize(p.iap, today(g, clock()))
+        if (pr.kind === 'pass' && st.passes.includes(pr.id)) {
+          ch.iap = { ...st, passes: st.passes.filter((x) => x !== pr.id) }
+          claw.pass = pr.id
+        }
+        if (pr.kind === 'monthly' && st.monthly[pr.id]) {
+          const m = st.monthly[pr.id]
+          ch.iap = { ...st, monthly: { ...st.monthly, [pr.id]: { ...m, until: Math.max(st.day - 1, m.until - (pr.days ?? 30)) } } }
+          claw.monthly_days = pr.days ?? 30
+        }
+        const debt = Number(claw.debt ?? 0)
+        ch.mailOut = [{ title: txt('server.mail.refund.title', { name: pr.name }),
+          body: txt(debt > 0 ? 'server.mail.refund.body_debt' : 'server.mail.refund.body', { name: pr.name, debt }), reward: {} }]
+        ch.log = { kind: 'iap_refund', detail: { order_id: orderKey, product: pr.id, ...claw } }
+        return ch
+      })
+    } catch (e) {
+      // 회수가 안 들어갔으면 표시를 되돌려 다음 확인 때 다시 한다
+      await query('update iap_orders set refunded_at = null where order_id = $1', [orderKey]).catch(() => {})
+      throw e
+    }
+    console.log(`[server] iap refund: ${orderKey} ${JSON.stringify(claw)}`)
+    return save()
+  }
+
+  // 구글 무효 구매(환불·차지백·취소) 목록을 보고 회수한다. 최근 30일을 매번 다시 본다(이미 회수한 주문은 already로 건너뛴다).
+  async function syncRefunds(): Promise<{ checked: number; refunded: RefundResult[] }> {
+    const google = pay.google
+    if (!google?.voided) return { checked: 0, refunded: [] }
+    const list = await google.voided(Math.floor(clock() * 1000) - 30 * 86400_000)
+    const refunded: RefundResult[] = []
+    for (const v of list) {
+      const keys = [v.orderId ? `google:${v.orderId}` : '', `google:token-${createHash('sha256').update(v.token).digest('hex').slice(0, 32)}`].filter(Boolean)
+      for (const k of keys) {
+        const r = await refundOrder(k, 'google_voided')
+        if (r.status === 'refunded') refunded.push(r)
+        if (r.status !== 'unknown') break
+      }
+    }
+    return { checked: list.length, refunded }
+  }
+  if (opts.refundPollMin && pay.google?.voided) {
+    const tick = () => syncRefunds().catch((e) => console.warn(`[server] refund sync: ${(e as Error).message}`))
+    setTimeout(tick, 60_000).unref()
+    setInterval(tick, opts.refundPollMin * 60_000).unref()
+  }
+
+  // 관리자 [운영 관리 → 환불]: 최근 환불·최근 결제 목록, 지금 확인, 주문 번호로 직접 회수(토스 환불 등).
+  const ORDER_COLS = `o.order_id, o.product, o.provider, o.krw, extract(epoch from o.at)::float8 as at, extract(epoch from o.refunded_at)::float8 as refunded_at, o.clawback,
+    upper(substr(replace(o.player_id::text, '-', ''), 1, 8)) as code, s.dia_debt`
+  const orderRow = (r: any) => ({ order_id: String(r.order_id), product: String(r.product), name: IAP.product(String(r.product))?.name ?? String(r.product),
+    provider: String(r.provider), krw: r.krw == null ? null : Number(r.krw), at: Number(r.at), refunded_at: r.refunded_at == null ? null : Number(r.refunded_at),
+    clawback: typeof r.clawback === 'string' ? JSON.parse(r.clawback) : r.clawback ?? null, code: r.code ?? '', debt: Number(r.dia_debt ?? 0) })
+  async function adminOnly(c: Context) {
+    if (!(await isAdmin(c.get('playerId') as string))) throw new ApiError(403, 'not_admin', 'admins only')
+  }
+  app.get('/v1/admin/refunds', auth, async (c) => {
+    await adminOnly(c)
+    const refunds = await query(`select ${ORDER_COLS} from iap_orders o left join player_state s on s.player_id = o.player_id
+      where o.refunded_at is not null order by o.refunded_at desc limit 50`)
+    const orders = await query(`select ${ORDER_COLS} from iap_orders o left join player_state s on s.player_id = o.player_id
+      where o.refunded_at is null and o.provider <> 'test' order by o.at desc limit 50`)
+    return c.json({ server_now: clock(), google_sync: !!pay.google?.voided, refunds: refunds.map(orderRow), orders: orders.map(orderRow) })
+  })
+  app.post('/v1/admin/refunds/sync', auth, async (c) => {
+    await adminOnly(c)
+    try {
+      const r = await syncRefunds()
+      return c.json({ server_now: clock(), checked: r.checked, refunded: r.refunded.length })
+    } catch (e) {
+      console.warn(`[server] refund sync: ${(e as Error).message}`)
+      throw new ApiError(502, 'refund_check_failed', 'could not read refunds from google now')
+    }
+  })
+  // order_id = 목록의 주문 키(google:… · toss:…) 또는 결제 제공자의 주문 번호(GPA.… · 토스 주문 번호)
+  app.post('/v1/admin/refund', auth, async (c) => {
+    await adminOnly(c)
+    const raw = strField(await body(c), 'order_id').trim()
+    if (raw.length > 200) throw new ApiError(400, 'bad_request', "'order_id' is too long")
+    const keys = raw.includes(':') ? [raw] : [`google:${raw}`, `toss:${raw.toLowerCase()}`]
+    for (const k of keys) {
+      const r = await refundOrder(k, 'admin')
+      if (r.status === 'already') throw new ApiError(409, 'already_refunded', 'this order was already refunded')
+      if (r.status === 'refunded') return c.json({ server_now: clock(), ...r })
+    }
+    throw new ApiError(404, 'unknown_order', 'no such order')
   })
 
   // 핫딜 띄우기. body = {trigger: 'boss'|'dia'|'defeat'}. 보스는 서버가 깬 라운드로 확인, 나머지는 쉬는 시간만.
@@ -4514,7 +4687,7 @@ export function createApp(opts: AppOptions) {
     verifyToken, testHooks: !!opts.allowTestHooks }, opts.warLive)
   registerPvp(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, strField, blocked, grant, random, ApiError, testHooks: !!opts.allowTestHooks })
   registerMarket(app, { query, auth, clock, loadGame, loadPlayer, commit, view, body, ApiError, random, testHooks: !!opts.allowTestHooks })
-  registerChat(app, { query, auth, clock, body, ApiError, verifyToken, live: opts.chatLive })
+  registerChat(app, { query, auth, clock, body, ApiError, verifyToken, isAdmin, live: opts.chatLive })
   registerLiveOps(app, { query, auth, clock, body, ApiError, mutate, loadGame, rewardChange, isAdmin, status: opsStatus, setStatus: setOpsStatus, cacheMs: opsCacheMs })
   registerRetention(app, { query, auth, clock, ApiError, isAdmin })
   registerParty(app, { query, auth, clock, loadGame, loadPlayer, guildCtx, commit, view, body, blocked, random, ApiError, verifyToken, seenAt, testHooks: !!opts.allowTestHooks },
