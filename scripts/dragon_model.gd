@@ -40,6 +40,7 @@ func _ready() -> void:
 	_base_scale = scale
 	var src := Art.instance(SCENE)
 	Art.stylize(src)
+	Art.ur_finish(src)  # 흑요석 몸(2026-11-06): 용암 금은 스스로 빛나고, 검은 비늘 가장자리에 흰 테두리 빛이 덜 끼게(UR 영웅 마감과 같다)
 	add_child(src)
 	for n in PARTS:
 		var p := src.get_node_or_null(n) as Node3D
