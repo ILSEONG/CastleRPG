@@ -562,6 +562,12 @@ func revive(pct: float) -> void:
 
 ## 회복(최대 HP 상한). 실제로 오른 양.
 ## 준 피해에 비례한 회복(흡혈·흡수)의 배율 — PVP는 체력 배율만큼(체력만 늘고 피해는 그대로라 흡혈이 약해지지 않게).
+## 힐러 회복량(사용자 2026-11-06 "힐러의 힐 계수를 공격력으로"): 이 영웅의 지금 공격력(오라·강화 포함) × pct%.
+## PVP는 체력 배율만큼 곱한다(dmg_heal_mult — 흡혈과 같다. 최대 HP가 배율만큼 커지니 회복도 같은 비율로).
+func heal_power(pct: float) -> float:
+	return _skx._atk() * pct / 100.0 * dmg_heal_mult()
+
+
 func dmg_heal_mult() -> float:
 	return 1.0
 
@@ -827,7 +833,7 @@ func _heal_aura() -> void:
 	var healed := false
 	for h in get_tree().get_nodes_in_group(allies):
 		if h.is_alive() and Formation.flat_distance(global_position, h.global_position) <= radius \
-				and h.heal(h.hp_max * _sk.heal_aura[2] / 100.0) > 0.0:
+				and h.heal(heal_power(_sk.heal_aura[2])) > 0.0:
 			healed = true
 			Fx.heal_cross(h)
 	if healed:
