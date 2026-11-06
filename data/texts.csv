@@ -2920,3 +2920,7 @@ economy.change_nickname_4,지금 닉네임과 같습니다,,,,scripts/economy.gd
 economy.change_nickname_5,쓸 수 없는 닉네임입니다,,,,scripts/economy.gd
 economy.change_nickname_6,닉네임을 바꾸지 못했습니다. 잠시 뒤 다시 해 주세요,,,,scripts/economy.gd
 ad_player.play,이 앱에서는 아직 광고 보상을 받을 수 없습니다,,,,scripts/ad_player.gd
+party_battle.boss_line_4,죽음의 장막! 푸른 원 안으로 피하세요,,,,scripts/party_battle.gd
+party_battle.boss_line_5,영혼 폭풍! 리치 곁으로 파고드세요,,,,scripts/party_battle.gd
+party_battle.boss_line_6,산성 홍수! 푸른 원 안으로 피하세요,,,,scripts/party_battle.gd
+party_battle.boss_line_7,독 줄기! 줄 사이 틈으로 비키세요,,,,scripts/party_battle.gd

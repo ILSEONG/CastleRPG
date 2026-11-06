@@ -586,6 +586,8 @@ static func kick(node: Node, at: Vector3, amp: float, stop := 0.0) -> void:
 const TELE_BASE := Color(0.55, 0.04, 0.03, 0.30)
 const TELE_EDGE := Color(1.0, 0.18, 0.12, 0.95)
 const TELE_FILL := Color(0.95, 0.08, 0.05, 0.42)
+const SAFE_BASE := Color(0.10, 0.55, 1.0, 0.55)
+const SAFE_EDGE := Color(0.55, 0.95, 1.0, 1.0)
 
 ## 원 범위: pos 둘레 radius m. 어두운 붉은 바닥 + 붉은 테두리, 가운데서 붉은 원이 sec초에 걸쳐 테두리까지 차오른다(다 차는 순간 = 공격).
 ## 다 차면 잠깐 밝게 번쩍이고 사라진다. 반환 노드를 지우면 예고가 바로 사라진다(시전자가 쓰러질 때).
@@ -613,6 +615,19 @@ static func telegraph_lane(parent: Node, from: Vector3, to: Vector3, width: floa
 	var tw := fill.create_tween()
 	tw.tween_property(fill, "scale", Vector3(width, 1, length), sec)
 	_tele_end(root, [base, edge, fill], sec)
+	return root
+
+
+## 안전지대(2026-11-06 맵 전체 공격): pos 둘레 radius m를 푸른 원으로 sec초 동안 밝힌다(붉은 예고 위에 덮여 "여기로" 보인다).
+## 테두리가 숨 쉬듯 커졌다 작아지고, 다 차는 순간 함께 사라진다.
+static func safe_circle(parent: Node, pos: Vector3, radius: float, sec: float) -> Node3D:
+	var root := _tele_root(parent, pos)
+	var base := _tele_part(root, _mesh("tele_disc", SAFE_BASE), 0.09, Vector3(radius, 1, radius))
+	var edge := _tele_part(root, _mesh("tele_ring", SAFE_EDGE), 0.11, Vector3(radius, 1, radius))
+	var tw := edge.create_tween().set_loops(int(ceil(sec / 0.6)))
+	tw.tween_property(edge, "scale", Vector3(radius * 1.06, 1, radius * 1.06), 0.3)
+	tw.tween_property(edge, "scale", Vector3(radius, 1, radius), 0.3)
+	_tele_end(root, [base, edge], sec)
 	return root
 
 

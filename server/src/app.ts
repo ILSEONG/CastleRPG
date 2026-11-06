@@ -343,7 +343,7 @@ const PLAYER_SQL = `select s.iap, s.shop, s.pouches, s.goblin, s.dispatch, s.att
 
 // 마이그레이션·시드 전에 라이브 DB에 아직 없을 수 있는 새 설정 값(063 강화석 던전) — DB 값이 있으면 그것이 이긴다
 const CONFIG_FALLBACK: Record<string, string> = {
-  stone_key_daily: '2', stone_key_cap: '3', stone_dg_party: '5', stone_dg_min_sec: '20',
+  stone_key_daily: '2', stone_key_cap: '10', stone_dg_party: '5', stone_dg_min_sec: '20',
   stone_dg_hp_growth: '1.15', stone_dg_atk_growth: '1.12', stone_reward_base: '30', stone_reward_add: '3',
 }
 

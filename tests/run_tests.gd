@@ -3914,7 +3914,7 @@ func test_ticket_dungeon_offline() -> void:
 		e.heroes[id] = 1
 	var st: Dictionary = e.dungeon_state("ticket")
 	var hs: Array = st.helpers
-	check(st.keys == 3 and st.key_cap == 3 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 5}
+	check(st.keys == 3 and st.key_cap == 10 and st.helpers_used == [] and hs.size() == 3 and e.dungeon_reward("ticket", 1) == {"tickets": 5}
 		and e.dungeon_reward("ticket", 5) == {"tickets": 5} and e.dungeon_reward("ticket", 6) == {"tickets": 6} and e.dungeon_reward("ticket", 11) == {"tickets": 7} and GameData.party_size("ticket") == 4, "ticket dungeon: 3 / 3 keys, 3 helpers, 5 tickets (+1 per 5 levels): %s" % [hs])
 	var top := []
 	for id in e.heroes:
@@ -3959,7 +3959,7 @@ func test_dungeons_offline() -> void:
 		e.heroes[id] = 1
 	var gs: Dictionary = e.dungeon_state("gold")
 	var es: Dictionary = e.dungeon_state("equip")
-	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 2 and es.key_cap == 3 and es.extra_cost == 100000
+	check(gs.keys == 3 and gs.key_cap == 10 and gs.best_level == 0 and gs.max_level == 1 and gs.extra_cost == 0 and es.keys == 2 and es.key_cap == 10 and es.extra_cost == 100000
 		and absf(gs.next_reset - GameData.next_reset(t0)) < 1.0 and gs.reset_in > 0.0 and gs.reset_in <= 86400.0, "new game: gold 3 / 10, equip 2 / 3, next reset at 00:00 KST")
 	check(e.dungeon_reward("gold", 2) == {"gold": 22000} and e.dungeon_reward("equip", 10).count == 5 and e.dungeon_reward("equip", 10).weights.LR == 0.5
 		and e.dungeon_enemies("gold", 1).size() == 3, "reward preview and enemy list")
@@ -4012,7 +4012,7 @@ func test_dungeons_offline() -> void:
 	check(not e.finish_dungeon("nope", true, 30.0) or finished[-1].get("error") == "unknown_run", "an unknown run is refused")
 	# 강화석 던전(2026-10-29): 영웅 5, 열쇠 2 / 3, 이기면 강화석 30 + 3씩
 	var ss: Dictionary = e.dungeon_state("stone")
-	check(ss.keys == 2 and ss.key_cap == 3 and GameData.party_size("stone") == 5 and e.dungeon_reward("stone", 1) == {"stones": 30} and e.dungeon_reward("stone", 10) == {"stones": 57}
+	check(ss.keys == 2 and ss.key_cap == 10 and GameData.party_size("stone") == 5 and e.dungeon_reward("stone", 1) == {"stones": 30} and e.dungeon_reward("stone", 10) == {"stones": 57}
 		and e.dungeon_enemies("stone", 1).map(func(x): return x.kind) == ["ratman", "ratman", "ogre_warlord"], "stone dungeon: 2 / 3 keys, 5 heroes, 30 stones (+3 per level), rat men + mine ogre")
 	var st0: int = e.stones
 	check(e.start_dungeon("stone", 1, GOLD6.slice(0, 5)) and e.debug_win() and finished[-1].win and finished[-1].rewards == {"stones": 30} and e.stones == st0 + 30

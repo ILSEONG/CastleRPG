@@ -1499,7 +1499,7 @@ func _dungeons_online(state_path: String) -> void:
 	Economy.dungeon_finished.connect(on_finish)
 	var es: Dictionary = Economy.dungeon_state("equip")
 	var gs: Dictionary = Economy.dungeon_state("gold")
-	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 2 and es.key_cap == 3 and es.best_level == 0 and es.extra_cost == 100000
+	_check(gs.keys == 3 and gs.key_cap == 10 and es.keys == 2 and es.key_cap == 10 and es.best_level == 0 and es.extra_cost == 100000
 		and absf(es.next_reset - GameData.next_reset(Economy.time_now())) < 1.0 and Economy.items().is_empty(),
 		"(z) server dungeon state: gold 3 / 10, equip 2 / 3, next reset at 00:00 KST, empty bag", "gold=%s equip=%s" % [gs, es])
 	var party: Array = Economy.default_party("equip")
