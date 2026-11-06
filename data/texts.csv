@@ -1935,7 +1935,7 @@ skills.names.phoenix_blessing,주작의 가호,,,,scripts/skills.gd
 skills.names.rebirth_flame,환생의 불꽃,,,,scripts/skills.gd
 skills.hero_names.poison,화상,,,,scripts/skills.gd
 skills.hero_names.aoe_blast,화염구,,,,scripts/skills.gd
-skills.texts.heal_aura,{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 각자 최대 HP의 {c}%만큼 회복합니다.,,,,scripts/skills.gd
+skills.texts.heal_aura,{a}초마다 반경 {b}m 안 아군 영웅(자신 포함)의 HP를 공격력의 {c}%만큼 회복합니다.,,,,scripts/skills.gd
 skills.texts.atk_aura,반경 {a}m 안 다른 영웅의 공격력을 {b}% 올립니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
 skills.texts.dmg_reduce,받는 피해를 {a}% 줄입니다.,,,,scripts/skills.gd
 skills.texts.dodge,{a}% 확률로 피해를 피합니다.,,,,scripts/skills.gd
@@ -1980,7 +1980,7 @@ skills.texts.solar_flare,{a}초마다 대상 위치 반경 {b}m에 섬광을 터
 skills.texts.abyss_hand,{a}초마다 대상 위치 반경 {b}m 안 적을 {c}초 동안 붙잡고 공격력의 50% 피해를 줍니다.,,,,scripts/skills.gd
 skills.texts.lava_burst,{a}초마다 대상 위치 반경 {b}m에 용암을 뿜어 공격력의 {c}% 피해를 주고 밀쳐냅니다.,,,,scripts/skills.gd
 skills.texts.sanctuary,{a}초마다 3초 동안 반경 {b}m 성역을 펼쳐 안의 아군 영웅을 매초 최대 HP의 {c}% 회복합니다.,,,,scripts/skills.gd
-skills.texts.mass_heal,{a}초마다 모든 아군 영웅의 HP를 각자 최대 HP의 {b}% 회복합니다.,,,,scripts/skills.gd
+skills.texts.mass_heal,{a}초마다 모든 아군 영웅의 HP를 공격력의 {b}%만큼 회복합니다.,,,,scripts/skills.gd
 skills.texts.resurrection,{a}초마다 쓰러진 아군 영웅 하나를 최대 HP의 {b}%로 되살립니다.,,,,scripts/skills.gd
 skills.texts.battle_hymn,{a}초마다 모든 아군 영웅의 공격력을 {c}초 동안 {b}% 올립니다.,,,,scripts/skills.gd
 skills.texts.shield_ally,{a}초마다 가장 다친 아군 영웅에게 최대 HP의 {b}% 보호막을 씌웁니다.,,,,scripts/skills.gd
@@ -2035,7 +2035,7 @@ skills.texts.stoneskin,받는 피해가 {a}% 줄어듭니다.,,,,scripts/skills.
 skills.texts.counter,맞으면 {a}% 확률로 공격한 적에게 공격력의 {b}% 피해로 반격합니다.,,,,scripts/skills.gd
 skills.texts.haste_aura,반경 {a}m 안 아군 영웅(자신 포함)의 공격 속도가 {b}% 빨라집니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
 skills.texts.guard_aura,반경 {a}m 안 아군 영웅(자신 포함)이 받는 피해가 {b}% 줄어듭니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
-skills.texts.regen_aura,반경 {a}m 안 아군 영웅(자신 포함)이 매초 최대 HP의 {b}%를 회복합니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
+skills.texts.regen_aura,반경 {a}m 안 아군 영웅(자신 포함)이 매초 공격력의 {b}%만큼 회복합니다(겹치면 가장 큰 효과 하나만 적용).,,,,scripts/skills.gd
 skills.texts.ignite,{a}초마다 사거리 안 적 최대 {b}마리에게 불을 붙여 3초 동안 매초 공격력의 {c}% 화상 피해를 줍니다.,,,,scripts/skills.gd
 skills.texts.piercing_shot,{a}초마다 대상 쪽으로 길이 {b}m를 꿰뚫는 화살을 쏘아 닿는 적 모두에게 공격력의 {c}% 피해를 줍니다.,,,,scripts/skills.gd
 skills.texts.blood_rage,{a}초마다 포효하며 {b}초 동안 공격 속도가 {c}% 빨라집니다.,,,,scripts/skills.gd
@@ -2082,9 +2082,9 @@ skills.texts.azure_dragon,"{a}초마다 청룡을 불러 대상 자리 반경 {b
 skills.texts.time_stop,{a}초마다 시간을 멈춰 대상 자리 반경 {b}m 적을 {c}초 동안 얼어붙게 합니다.,,,,scripts/skills.gd
 skills.texts.time_haste,스킬 재사용 대기 시간이 {a}% 더 빨리 흐릅니다.,,,,scripts/skills.gd
 skills.texts.time_collapse,"{a}초마다 대상 자리에 시간의 균열을 열어 1.2초 뒤 반경 {b}m 적에게 공격력의 {c}% 피해를 주고, 3초 동안 50% 느리게 합니다.",,,,scripts/skills.gd
-skills.texts.phoenix_wing,"{a}초마다 불새를 날려 아군 모두의 HP를 최대 HP의 {b}%만큼 회복하고, 대상 자리 적에게 공격력의 {c}% 피해와 화상을 줍니다.",,,,scripts/skills.gd
+skills.texts.phoenix_wing,"{a}초마다 불새를 날려 아군 모두의 HP를 공격력의 {b}%만큼 회복하고, 대상 자리 적에게 공격력의 {c}% 피해와 화상을 줍니다.",,,,scripts/skills.gd
 skills.texts.phoenix_blessing,스킬로 회복하거나 되살린 아군은 {b}초 동안 공격력이 {a}% 오릅니다.,,,,scripts/skills.gd
-skills.texts.rebirth_flame,"{a}초마다 쓰러진 아군을 모두 최대 HP의 {b}%로 되살리고, 살아 있는 아군은 최대 HP의 {c}%를 회복합니다.",,,,scripts/skills.gd
+skills.texts.rebirth_flame,"{a}초마다 쓰러진 아군을 모두 최대 HP의 {b}%로 되살리고, 살아 있는 아군은 공격력의 {c}%만큼 회복합니다.",,,,scripts/skills.gd
 soldier_panel.empty_text,보유한 병사가 없습니다,,,,scripts/soldier_panel.gd
 soldier_panel.ready,병사,,,,scripts/soldier_panel.gd
 soldier_panel.ready_2,자동 배치,,,,scripts/soldier_panel.gd

@@ -16,6 +16,7 @@ const UnitModelScript := preload("res://scripts/unit_model.gd")
 const GameData := preload("res://scripts/game_data.gd")
 const MeshKit := preload("res://scripts/mesh_kit.gd")
 const Fx := preload("res://scripts/fx.gd")
+const Graphics := preload("res://scripts/graphics.gd")
 
 const LAYER_TAP := 16  # 건물 탭 판정체 (성문 2, 성벽 8과 별도)
 const LAYER_MERCHANT := 32  # 상인·수레 탭 판정체 — picker가 건물보다 먼저 본다(앞쪽 건물 상자에 가리지 않게)
@@ -43,6 +44,7 @@ var _keep_look := 0  # 성채 메시의 성 모습 단계(GameData.castle_look) 
 ## 자연물·산 MultiMesh마다 {mm, recipe(TownKit 레시피), idx(레시피 안 변형 번호), state(만들기 전 rng 상태), base(기본 메시)}.
 ## seasons.gd(개정 22)가 같은 rng 상태 + 계절 팔레트로 다시 만든 메시를 갈아 끼운다.
 var season_slots: Array = []
+const DETAIL_CLUMPS := 440  # 성 밖 풀포기 무리 수(무리마다 2~6포기)
 
 
 func _ready() -> void:
@@ -52,6 +54,7 @@ func _ready() -> void:
 	_add_gate_sites()
 	_place_merchant()
 	_scatter_nature()
+	_scatter_ground_detail()
 	_ring_mountains()
 	Economy.changed.connect(_sync_build)
 	Economy.changed.connect(_sync_lots)
@@ -240,6 +243,58 @@ func _scatter_nature() -> void:
 				by_variant[v].append(Transform3D(basis, Vector3(q.x, 0, q.y)))
 	for v in by_variant:
 		_add_season_slot(_add_multimesh(variants[v], by_variant[v]), info[v])
+
+
+## 맵 퀄리티(2026-11-06): 성 밖 풀밭에 풀포기·들꽃·자갈을 무리 지어 흩는다(RoK·Lords Mobile 성 밖 풀밭처럼 맨 격자 대신 결이 보이게).
+## 흙길(성문 축, ground_grid outer_road) 위는 비운다. 높이 0.65 m 이하라 유닛은 그대로 지나간다. 그림자 없음, 변형마다 MultiMesh 하나.
+## 그래픽 품질 낮음이면 만들지 않고, 중간이면 절반만.
+func _scatter_ground_detail() -> void:
+	if Graphics.quality() == "low":
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = Art.NATURE_SEED + 101
+	var variants: Array[Mesh] = []
+	var info := []
+	for pair in [[TownKit.grass_tuft, 4], [TownKit.flower_tuft, 3], [TownKit.pebbles, 2]]:
+		for i in pair[1]:
+			info.append([pair[0], i, rng.state])
+			variants.append(pair[0].call(rng))
+	var keep_out := half + Balance.WALL_T + 1.0
+	var lim := Balance.MAP_HALF - 2.0
+	var road := Balance.TILE * 1.6 + 1.2
+	var lanes: Array = Formation.gate_offsets(half).map(func(x): return absf(float(x)))
+	var by_variant := {}
+	var clumps := 0
+	var want := DETAIL_CLUMPS if Graphics.quality() == "high" else int(DETAIL_CLUMPS * 0.5)  # 중간 품질은 절반
+	for i in want * 4:
+		if clumps >= want:
+			break
+		var c := Vector2(rng.randf_range(-lim, lim), rng.randf_range(-lim, lim))
+		if maxf(absf(c.x), absf(c.y)) < keep_out:
+			continue
+		clumps += 1
+		var v := rng.randi_range(0, variants.size() - 1)
+		for g in rng.randi_range(2, 6):
+			var q := c + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.0, 2.2)
+			if maxf(absf(q.x), absf(q.y)) < keep_out or _on_lane(q, lanes, road):
+				continue
+			var vv := v if rng.randf() < 0.7 else rng.randi_range(0, 3)  # 무리 안에 풀포기를 섞는다
+			if not by_variant.has(vv):
+				by_variant[vv] = []
+			var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3.ONE * rng.randf_range(1.1, 1.6))
+			by_variant[vv].append(Transform3D(basis, Vector3(q.x, 0, q.y)))
+	for v in by_variant:
+		var mm := _add_multimesh(variants[v], by_variant[v])
+		_add_season_slot(mm, info[v])
+		get_child(get_child_count() - 1).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _on_lane(p: Vector2, lanes: Array, w: float) -> bool:
+	var along := minf(absf(p.x), absf(p.y))
+	for a in lanes:
+		if absf(along - a) < w:
+			return true
+	return false
 
 
 ## 플레이 영역 바깥 띠에 로우폴리 산을 한 바퀴 두른다(유닛은 들어가지 않는다). 시드 고정, 변형별 MultiMesh.

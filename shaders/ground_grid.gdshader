@@ -19,8 +19,32 @@ uniform float facet_variation = 0.045;  // 타일을 대각선으로 나눈 두 
 // 계절(개정 22): grass_a·grass_b를 seasons.gd가 바꾼다. edge_snow > 0 이면 성 안 포장 가장자리 삼각형 일부가 눈 얼룩(겨울).
 uniform float edge_snow = 0.0;
 uniform vec4 snow_color : source_color = vec4(0.70, 0.73, 0.78, 1.0);
+// 맵 퀄리티(2026-11-06): 넓은 얼룩(마른 땅·짙은 풀) — 삼각형 중심에서 잰 값 잡음이라 면마다 한 색(로우폴리 그대로).
+// patch_strength 0 이면 예전 바닥. patch_hue: 밝은 얼룩 쪽으로 더하는 색 기울기(어두운 쪽은 반대로).
+uniform float patch_strength = 0.12;
+uniform float patch_scale = 13.0;
+uniform vec3 patch_hue = vec3(0.05, 0.03, -0.07);
+// 성 밖(interior_half 바깥) 격자선 세기 배율 — 풀밭에 게임판 같은 선을 줄인다. 성 안 포장 타일 선은 그대로.
+uniform float outside_line = 0.35;
+// 성 밖 흙길: 성문 축을 따라 바깥으로 이어지는 밟힌 길(괴물 진입로). outer_road_half 0 = 없음. center_lane 1 = 가운데 성문 축도.
+uniform float outer_road_half = 0.0;
+uniform float center_lane = 1.0;
+uniform vec4 path_color : source_color = vec4(0.53, 0.46, 0.35, 1.0);
 
 varying vec3 world_pos;
+
+float hash12(vec2 c) {
+	vec3 q = fract(vec3(c.xyx) * 0.1031);
+	q += dot(q, q.yzx + 33.33);
+	return fract((q.x + q.y) * q.z);
+}
+
+float vnoise(vec2 x) {
+	vec2 i = floor(x);
+	vec2 f = fract(x);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -39,6 +63,17 @@ void fragment() {
 		base = (along < road_half || side_road) ? road.rgb : mix(paved_a.rgb, paved_b.rgb, checker);
 	} else {
 		base = mix(grass_a.rgb, grass_b.rgb, checker);
+		if (outer_road_half > 0.0) {
+			float along_o = min(a.x, a.y);
+			float lane = 1e5;
+			if (center_lane > 0.5) lane = along_o;
+			if (gate_off > 0.0) lane = min(lane, abs(along_o - gate_off));
+			// 삼각형마다 가장자리를 들쭉날쭉하게(로우폴리 면 단위), 성에서 멀수록 조금 좁게
+			vec2 fc = floor(world_pos.xz / tile_size);
+			float jag = hash12(fc * 1.7 + step(fract(world_pos.x / tile_size), fract(world_pos.z / tile_size)) * 7.0) - 0.5;
+			float w = outer_road_half * (1.0 - 0.25 * smoothstep(interior_half, interior_half + 80.0, max(a.x, a.y))) + jag * tile_size * 0.9;
+			if (lane < w) base = mix(path_color.rgb, base, 0.15 * step(0.0, jag));
+		}
 	}
 	// 로우폴리: 타일마다 대각선으로 나눈 두 삼각형에 서로 다른 명암
 	vec2 cell = floor(p);
@@ -51,10 +86,16 @@ void fragment() {
 	float edge = edge_snow * (1.0 - smoothstep(0.0, 2.5 * tile_size, interior_half - max(a.x, a.y)));
 	base = mix(base, snow_color.rgb, step(1.0 - edge, h) * step(max(a.x, a.y), interior_half));
 	base *= 1.0 + facet_variation * (h * 2.0 - 1.0);
+	if (patch_strength > 0.0) {
+		vec2 c = (cell + mix(vec2(2.0, 1.0), vec2(1.0, 2.0), upper) / 3.0) * tile_size / patch_scale;
+		float t = (vnoise(c) * 0.65 + vnoise(c * 2.7 + 17.0) * 0.35) * 2.0 - 1.0;
+		t = clamp(t * 1.6, -1.0, 1.0) * patch_strength * (max(a.x, a.y) < interior_half ? 0.5 : 1.0);
+		base = max(base * (1.0 + t) + patch_hue * t, vec3(0.0));
+	}
 	vec2 to_line = 0.5 - abs(fract(p) - 0.5);  // 격자선에서 0
 	vec2 aa = fwidth(p);
 	vec2 on_line = 1.0 - smoothstep(vec2(line_width), vec2(line_width) + aa, to_line);
-	float line = max(on_line.x, on_line.y);
+	float line = max(on_line.x, on_line.y) * (max(a.x, a.y) < interior_half ? 1.0 : outside_line);
 	ALBEDO = mix(base, line_color.rgb, line * line_color.a);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;

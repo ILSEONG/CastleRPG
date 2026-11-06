@@ -92,7 +92,7 @@ const RULES := {
 	"time_collapse": ["pos", "pos", "nonneg"],
 	"phoenix_wing": ["pos", "nonneg", "nonneg"],
 	"phoenix_blessing": ["nonneg", "pos"],
-	"rebirth_flame": ["pos", "pct", "pct"],
+	"rebirth_flame": ["pos", "pct", "nonneg"],
 }
 const RULE_TEXT := {"pos": "greater than 0", "nonneg": "0 or more", "pct": "in 0..100", "int1": "an integer of 1 or more", "mult": "100 or more"}
 

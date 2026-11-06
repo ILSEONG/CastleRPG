@@ -25,6 +25,9 @@ const LEAF := Color(0.36, 0.60, 0.34)
 const LEAF_DARK := Color(0.25, 0.46, 0.30)
 const ROCK := Color(0.50, 0.50, 0.53)
 const SNOW := Color(0.70, 0.72, 0.76)
+const TUFT := Color(0.44, 0.58, 0.30)  # 풀포기(여름): 바닥보다 조금 밝고 노란 잎
+const TUFT_DARK := Color(0.32, 0.47, 0.27)
+const WILDFLOWERS := [Color(0.95, 0.92, 0.85), Color(0.95, 0.80, 0.35), Color(0.80, 0.55, 0.85), Color(0.95, 0.55, 0.55)]
 const CROP := Color(0.69, 0.60, 0.28)
 const SOIL := Color(0.45, 0.34, 0.24)
 const FLAG := Color(0.72, 0.24, 0.22)
@@ -1148,6 +1151,48 @@ static func bush(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
 	for i in rng.randi_range(2, 3):
 		var r := rng.randf_range(0.55, 0.9)
 		k.rock(Vector3(rng.randf_range(-0.7, 0.7), r * 0.4, rng.randf_range(-0.7, 0.7)), r, pal.get("bush", LEAF_DARK), rng, 0.8, 0.0)
+	return k.commit()
+
+
+## 풀포기(맵 퀄리티 2026-11-06): 가는 3각뿔 잎 5~7개를 반지름 0.45 m 안에 모은 낮은 풀(높이 0.25~0.55 m), 두 톤. 그림자 없이 바닥에 흩는다.
+## pal: tuft·tuft_dark(없으면 여름 풀색), flowers = 꽃 색 배열(있으면 꽃대 2~3개 위 작은 꽃), snow = 잎 끝에 눈.
+static func grass_tuft(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
+	var k = MeshKit.new()
+	var light: Color = pal.get("tuft", TUFT)
+	var dark: Color = pal.get("tuft_dark", TUFT_DARK)
+	for i in rng.randi_range(5, 7):
+		var a := rng.randf_range(0.0, TAU)
+		var d := rng.randf_range(0.0, 0.45)
+		var h := rng.randf_range(0.25, 0.55)
+		var c := light if i % 2 == 0 else dark
+		k.cone(Vector3(cos(a) * d, 0, sin(a) * d), 3, rng.randf_range(0.07, 0.11), h, c.darkened(rng.randf_range(0.0, 0.08)), rng.randf_range(0.0, TAU))  # 잎 = 3각뿔(삼각형 3개)
+		if pal.get("snow", false) and i % 3 == 0:
+			k.cone(Vector3(cos(a) * d, h * 0.55, sin(a) * d), 3, 0.06, h * 0.5, SNOW)
+	var fl: Array = pal.get("flowers", [])
+	for i in (rng.randi_range(2, 3) if not fl.is_empty() else 0):
+		var a := rng.randf_range(0.0, TAU)
+		var p := Vector3(cos(a), 0, sin(a)) * rng.randf_range(0.1, 0.4)
+		var h := rng.randf_range(0.45, 0.65)
+		k.cone(p, 3, 0.03, h, dark)
+		k.prism_n(p + Vector3(0, h - 0.06, 0), 3, 0.11, 0.09, 0.07, fl[rng.randi_range(0, fl.size() - 1)], rng.randf_range(0.0, TAU))  # 꽃송이: 납작한 3각 판
+	return k.commit()
+
+
+## 들꽃 포기: 풀포기 + 꽃대. pal의 flowers가 없으면 기본 들꽃 색(겨울은 flowers = [] 로 꽃 없이).
+static func flower_tuft(rng: RandomNumberGenerator, pal := {}) -> ArrayMesh:
+	var p2: Dictionary = pal.duplicate()
+	if not p2.has("flowers"):
+		p2["flowers"] = WILDFLOWERS
+	return grass_tuft(rng, p2)
+
+
+## 자갈: 납작한 작은 돌 2~3개(반지름 0.12~0.3 m). pal 무시(돌색 그대로).
+static func pebbles(rng: RandomNumberGenerator, _pal := {}) -> ArrayMesh:
+	var k = MeshKit.new()
+	for i in rng.randi_range(2, 3):
+		var a := rng.randf_range(0.0, TAU)
+		var r := rng.randf_range(0.15, 0.32)
+		k.rock(Vector3(cos(a), 0, sin(a)) * rng.randf_range(0.0, 0.6) + Vector3(0, r * 0.15, 0), r, ROCK.lightened(rng.randf_range(0.0, 0.1)), rng, 0.45, 0.0)
 	return k.commit()
 
 

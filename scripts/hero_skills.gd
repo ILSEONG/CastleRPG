@@ -282,17 +282,17 @@ static func cast_anim(k: String, hero_def: Dictionary) -> String:
 	return CAST_ANIM.get(k, Art.hero_spec(hero_def).anims.attack)
 
 
-## 재생(자기 regen + 받는 생명의 오라): 1초마다 한 번에 회복한다(숫자가 매 프레임 뜨지 않게).
+## 재생(자기 regen 최대 HP % + 받는 생명의 오라 — 오라 주인 공격력 %의 양): 1초마다 한 번에 회복한다(숫자가 매 프레임 뜨지 않게).
 func _tick_regen(delta: float) -> void:
-	var pct: float = (float(sk.regen[0]) if sk.has("regen") else 0.0) + _regen_aura
-	if pct <= 0.0 or not h.is_alive():
+	var pct: float = float(sk.regen[0]) if sk.has("regen") else 0.0
+	if (pct <= 0.0 and _regen_aura <= 0.0) or not h.is_alive():
 		_regen_acc = 0.0
 		return
 	_regen_acc += delta
 	if _regen_acc >= 1.0:
 		_regen_acc -= 1.0
 		if h.hp < h.hp_max:
-			h.heal(h.hp_max * pct / 100.0)
+			h.heal(h.hp_max * pct / 100.0 + _regen_aura)
 
 
 ## 받는 오라(질풍·수호·생명): 반경 안 영웅(자신 포함)들 것 중 가장 큰 것 하나씩.
@@ -310,7 +310,7 @@ func _scan_auras() -> void:
 		if os.has("guard_aura") and d <= float(os.guard_aura[0]):
 			_guard_aura = maxf(_guard_aura, float(os.guard_aura[1]))
 		if os.has("regen_aura") and d <= float(os.regen_aura[0]):
-			_regen_aura = maxf(_regen_aura, float(os.regen_aura[1]))
+			_regen_aura = maxf(_regen_aura, o.heal_power(float(os.regen_aura[1])))  # 초당 회복량 = 오라 주인 공격력 b%(2026-11-06)
 
 
 # --- 공격 ---
@@ -829,7 +829,7 @@ func _cast(k: String, dry := false) -> bool:
 				return true
 			for o in h.get_tree().get_nodes_in_group(h.allies):
 				if o.is_alive():
-					o.heal(o.hp_max * float(p[1]) / 100.0)
+					o.heal(h.heal_power(float(p[1])))
 					Fx.heal_ring(_world(), o.global_position, 1.2, 0)
 					Fx.heal_cross(o)
 		"resurrection":
@@ -1639,14 +1639,14 @@ func _cast_ur(k: String, p: Array, dry: bool) -> bool:
 					_hit(o, dmg)
 					if o.is_alive():
 						o.apply_slow(50.0, 3.0))
-		"phoenix_wing":  # 불새의 날개: 아군 모두 최대 HP b% 회복, 불새가 대상 자리(반경 3.5m)를 덮쳐 c% + 화상
+		"phoenix_wing":  # 불새의 날개: 아군 모두 주작 공격력 b% 회복, 불새가 대상 자리(반경 3.5m)를 덮쳐 c% + 화상
 			if t == null and _hurt_allies(here, INF).is_empty():
 				return false
 			if dry:
 				return true
 			for o in h.get_tree().get_nodes_in_group(h.allies):
 				if o.is_alive():
-					o.heal(o.hp_max * float(p[1]) / 100.0)
+					o.heal(h.heal_power(float(p[1])))
 					Fx.heal_cross(o)
 					_bless(o)
 			if t != null:
@@ -1660,7 +1660,7 @@ func _cast_ur(k: String, p: Array, dry: bool) -> bool:
 							o.apply_dot("burn", a * BURN_PCT / 100.0 * m, 3.0))
 			else:
 				UrFx.phoenix(w, here + Vector3(-3, 2.5, 0), here + Vector3(3, 2.5, 0), PHOENIX, 0.6)
-		"rebirth_flame":  # 환생의 불꽃: 쓰러진 아군을 모두 최대 HP b%로 되살리고, 살아 있는 아군은 c% 회복
+		"rebirth_flame":  # 환생의 불꽃: 쓰러진 아군을 모두 최대 HP b%로 되살리고, 살아 있는 아군은 주작 공격력 c% 회복
 			var dead := []
 			var low := false  # 자동 발동은 쓰러졌거나 위급한(HP REBIRTH_LOW 이하) 아군이 있을 때만 — 긁힌 상처에 써 버려 정작 쓰러질 때 쿨이던 것(2026-10-30). 직접 누르면 다친 아군만 있어도 쓴다
 			for o in h.get_tree().get_nodes_in_group(h.allies):
@@ -1678,7 +1678,7 @@ func _cast_ur(k: String, p: Array, dry: bool) -> bool:
 					o.revive(float(p[1]))
 					UrFx.rebirth(o, PHOENIX)
 				elif o.is_alive():
-					o.heal(o.hp_max * float(p[2]) / 100.0)
+					o.heal(h.heal_power(float(p[2])))
 					Fx.heal_ring(w, o.global_position, 1.2, 1)
 				_bless(o)
 		_:
