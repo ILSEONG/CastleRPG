@@ -35,6 +35,11 @@ func _ready() -> void:
 	await _snap()
 	shop.buttons["growth:0:free"].pressed.emit()
 	await _frames(4)
+	shop.buttons["pass:keep"].pressed.emit()  # 하위 탭 [성채 레벨 패스]
+	await _frames(4)
+	await _snap()
+	shop.buttons["pass:growth"].pressed.emit()
+	await _frames(2)
 	shop._pick("ad")
 	await _snap()
 	shop.buttons["buy:a_dia"].pressed.emit()  # 광고 화면(시험)

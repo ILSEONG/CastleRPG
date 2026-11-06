@@ -3210,6 +3210,22 @@ func _recruit23_ui(recruit) -> void:
 		await _frames(2)
 		widths[t[0]] = shop.dialog.size.x
 	_check(widths.values().all(func(w): return absf(w - sr.size.x) < 0.5), "(r23) every shop tab keeps the same sheet width (no twitch when switching tabs)", "want=%s %s" % [sr.size.x, widths])
+	# [패스] 탭: 하위 탭 [성장 패스][성채 레벨 패스] — 고른 패스 표 하나만(2026-11-06 사용자 "하위 탭으로 구분지어 밑으로 늘어뜨리지 말고")
+	shop.open_tab("pass")
+	await _frames(2)
+	var texts := func(): return shop.body.find_children("*", "Label", true, false).map(func(l): return l.text) + shop.body.find_children("*", "Button", true, false).map(func(b): return b.text)
+	var g_text: Array = texts.call()
+	var g_rows: int = shop.body.get_child_count()
+	shop.buttons["pass:keep"].pressed.emit()
+	await _frames(2)
+	var k_text: Array = texts.call()
+	_check(shop.buttons.has("pass:growth") and shop.pass_tab == "keep" and g_text.has("Lv 3") == false and k_text.has("Lv 3") and k_text.has("Lv 30")
+		and absf(shop.dialog.size.x - sr.size.x) < 0.5 and g_rows == preload("res://scripts/iap_items.gd").GROWTH.size() + 4
+		and shop.body.get_child_count() == preload("res://scripts/iap_items.gd").KEEP.size() + 4,
+		"(r23) the pass tab has sub-tabs [성장 패스][성채 레벨 패스]; each shows only its own table (sub-tab row, pass card, header, rows, note)",
+		"growth_rows=%d keep_rows=%d keep_has_lv3=%s" % [g_rows, shop.body.get_child_count(), k_text.has("Lv 3")])
+	shop.buttons["pass:growth"].pressed.emit()
+	await _frames(2)
 	var hp = tabs_hero_panel()
 	if hp != null:
 		hp.open()

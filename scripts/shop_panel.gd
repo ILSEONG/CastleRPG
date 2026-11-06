@@ -54,10 +54,11 @@ const CLOSE_PX := 56.0
 const CARD_W := 300.0  # 두 칸 + 간격 10 + 세로 스크롤 막대가 시트 안(628)에 들어가게 — 넘치면 탭마다 창 너비가 바뀐다(2026-11-05 "양피지 너비")
 
 var tab := "package"
+var pass_tab := "growth"  # [패스] 탭 안의 하위 탭: "growth"(성장 패스)·"keep"(성채 레벨 패스)
 var body: VBoxContainer
 var head_label: Label
 var wallet_label: Label
-var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "growth:<단계>:<free|paid>", "keep:<단계>:<free|paid>", "close"
+var buttons := {}  # 테스트용: "tab:daily" …, "buy:<id>", "iap:<상품 id>", "growth:<단계>:<free|paid>", "keep:<단계>:<free|paid>", "pass:growth"·"pass:keep"(패스 하위 탭), "close"
 var buy_buttons: Array = []  # 다이아 탭 충전 버튼들
 var note: Label
 var ad_player: Control  # 보상형 광고 화면(ad_player.gd)
@@ -216,7 +217,7 @@ func _wallet() -> void:
 
 ## 보이는 카드의 상태(남은 횟수·살 수 있는지) — 같으면 카드를 다시 만들지 않는다(누르는 도중 버튼이 바뀌지 않게).
 func _signature() -> String:
-	var parts := [tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0, str(Economy.active_hot().get("id", ""))]
+	var parts := [tab, pass_tab, str(Economy.iap_view()), cleared(), Economy.diamonds >= 0, str(Economy.active_hot().get("id", ""))]
 	if tab == "pvp":
 		parts.append(str(Pvp.coins()))
 		for x in PvpRules.SHOP:
@@ -567,18 +568,65 @@ func _value_text(p: Dictionary) -> String:
 	return Lang.t("shop_panel.value_text") % UiKit.commas(dia)
 
 
-## [패스] 탭: 성장 패스(깬 라운드) + 성채 레벨 패스(2026-11-05 사용자 "패스를 하나 더 만들어줘, 성채 레벨 패스야").
-## 표마다 [무료] 칸과 [패스] 칸 사이에 세로 경계선, 패스 칸은 보라 바탕(사용자 "무료와 패스 경계을 좀 만들어줘").
+## [패스] 탭: 하위 탭 [성장 패스][성채 레벨 패스] 중 고른 패스 하나만(2026-11-06 사용자 "패스 하위 탭으로 구분지어 밑으로 늘어뜨리지 말고").
+## 성장 패스 = 깬 라운드, 성채 레벨 패스 = 성채 레벨. 표마다 [무료] 칸과 [패스] 칸 사이에 세로 경계선, 패스 칸은 보라 바탕.
 func _build_pass() -> void:
-	var c := cleared()
-	_pass_table("pass_growth", IapItems.GROWTH, func(t): return GameData.round_label(int(t.round)), func(t): return c >= int(t.round),
-		func(i, track): return Economy.iap_view().gp[track].has(i) or Economy.iap_view().gp[track].has(float(i)),
-		func(i, track): return Economy.can_claim_growth(i, track, cleared()), func(i, track): Economy.claim_growth(i, track, cleared()), "growth")
-	var kl := Economy.building_level(GameData.KEEP)
-	_pass_table("pass_keep", IapItems.KEEP, func(t): return "Lv %d" % int(t.level), func(t): return kl >= int(t.level),
-		func(i, track): return Economy.iap_view().kp[track].has(i) or Economy.iap_view().kp[track].has(float(i)),
-		func(i, track): return Economy.can_claim_keep(i, track), func(i, track): Economy.claim_keep(i, track), "keep")
+	var subs := HBoxContainer.new()
+	subs.add_theme_constant_override("separation", 8)
+	body.add_child(subs)
+	for sub in [["growth", "pass_growth"], ["keep", "pass_keep"]]:
+		var id: String = sub[0]
+		var b := _button(str(IapItems.find(sub[1]).name), UiKit.AMBER if id == pass_tab else UiKit.STEEL, 22)
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 50)
+		b.pressed.connect(func(): _pick_pass(id))
+		var dot := Control.new()  # 받을 보상이 남은 패스는 빨간 점
+		dot.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if pass_dot(id):
+			dot.draw.connect(func():
+				var p := Vector2(dot.size.x - 12, 12)
+				dot.draw_circle(p, 9.0, RED)
+				dot.draw_arc(p, 9.0, 0, TAU, 16, RED.darkened(0.3), 1.5, true))
+		b.add_child(dot)
+		subs.add_child(b)
+		buttons["pass:" + id] = b
+	if pass_tab == "keep":
+		var kl := Economy.building_level(GameData.KEEP)
+		_pass_table("pass_keep", IapItems.KEEP, func(t): return "Lv %d" % int(t.level), func(t): return kl >= int(t.level),
+			func(i, track): return Economy.iap_view().kp[track].has(i) or Economy.iap_view().kp[track].has(float(i)),
+			func(i, track): return Economy.can_claim_keep(i, track), func(i, track): Economy.claim_keep(i, track), "keep")
+	else:
+		var c := cleared()
+		_pass_table("pass_growth", IapItems.GROWTH, func(t): return GameData.round_label(int(t.round)), func(t): return c >= int(t.round),
+			func(i, track): return Economy.iap_view().gp[track].has(i) or Economy.iap_view().gp[track].has(float(i)),
+			func(i, track): return Economy.can_claim_growth(i, track, cleared()), func(i, track): Economy.claim_growth(i, track, cleared()), "growth")
 	_add_note()
+
+
+func _pick_pass(id: String) -> void:
+	if id == pass_tab:
+		return
+	pass_tab = id
+	_rebuild()
+	var sc := body.get_parent() as ScrollContainer
+	if sc != null:
+		sc.scroll_vertical = 0
+
+
+## 그 패스에 지금 받을 보상이 있다(하위 탭 빨간 점).
+static func pass_dot(id: String) -> bool:
+	if id == "keep":
+		for i in IapItems.KEEP.size():
+			if Economy.can_claim_keep(i, "free") or Economy.can_claim_keep(i, "paid"):
+				return true
+		return false
+	var c := cleared()
+	for i in IapItems.GROWTH.size():
+		if Economy.can_claim_growth(i, "free", c) or Economy.can_claim_growth(i, "paid", c):
+			return true
+	return false
 
 
 ## 패스 하나: 이름 카드([₩] 또는 "구매함") + 머리줄 + 단계 줄들. key = 테스트 버튼 이름 앞머리("growth"·"keep").
