@@ -5134,7 +5134,7 @@ func _on_friend_op(data, op: String) -> void:
 	if op != "hero":
 		net.refresh()  # 도우미 목록(dungeons.ticket.helpers)은 플레이어 응답에 온다
 	if op == "gift":
-		notice.emit(FRIEND_DONE_TEXT.gift % [int(data.get("gift_sent", 0)) if data is Dictionary else 0, int(friends.get("gift", {}).get("per", 50))])
+		notice.emit(FRIEND_DONE_TEXT.gift % [int(data.get("gift_sent", 0)) if data is Dictionary else 0, int(friends.get("gift", {}).get("per", 100))])
 		return
 	# 서로 신청하면 바로 친구가 된다
 	notice.emit(FRIEND_DONE_TEXT.accept if op == "request" and friends.get("friends", []).size() > before else FRIEND_DONE_TEXT[op])

@@ -455,9 +455,9 @@ economy.friend_text.not_friend,이미 친구가 아닙니다,,,,scripts/economy.
 economy.friend_text.not_owned,보유하지 않은 영웅입니다,,,,scripts/economy.gd
 economy.friend_text.bad_request,친구 코드는 8자리입니다,,,,scripts/economy.gd
 economy.friend_text.gift_sent,오늘 이미 선물을 보낸 친구입니다,,,,scripts/economy.gd
-economy.friend_text.gift_cap,오늘 보낼 수 있는 다이아 선물을 모두 보냈습니다(하루 1500개),,,,scripts/economy.gd
+economy.friend_text.gift_cap,오늘 보낼 수 있는 다이아 선물을 모두 보냈습니다(하루 3000개),,,,scripts/economy.gd
 economy.friend_text.gift_none,오늘 선물을 보낼 수 있는 친구가 없습니다,,,,scripts/economy.gd
-economy.friend_text.their_gift_full,그 친구는 오늘 받을 수 있는 다이아 선물(하루 1500개)을 모두 받았습니다,,,,scripts/economy.gd
+economy.friend_text.their_gift_full,그 친구는 오늘 받을 수 있는 다이아 선물(하루 3000개)을 모두 받았습니다,,,,scripts/economy.gd
 economy.friend_text.not_enough_diamonds,다이아가 부족합니다,,,,scripts/economy.gd
 economy.friend_done_text.request,친구 신청을 보냈습니다,,,,scripts/economy.gd
 economy.friend_done_text.accept,친구가 되었습니다,,,,scripts/economy.gd

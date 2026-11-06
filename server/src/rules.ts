@@ -896,9 +896,11 @@ export const FRIEND_RECOMMEND = 5 // 추천 친구 수(최근 3일 안에 접속
 export const FRIEND_RECENT_SEC = 3 * 86400
 // 친구 다이아 선물(2026-11-05 사용자 "하루에 다이아 선물은 최대 3000개야 (인당 100개) … 하루 3000개를 넘길 수 없어"):
 // → 바꿈(2026-11-05 16:25Z 사용자 "보내는거 50씩 해서 1500/받는거 50씩해서 1500 이렇게 해"): 친구 한 명에게 하루 한 번 50개,
-// 보내는 사람 하루 합계 1,500개, 받는 사람 하루 합계 1,500개. 하루 = 리셋 날짜(00:00 KST).
-export const FRIEND_GIFT_DIA = 50
-export const FRIEND_GIFT_DAILY = 1500
+// 보내는 사람 하루 합계 1,500개, 받는 사람 하루 합계 1,500개.
+// → 다시 바꿈(2026-11-06 사용자 "보내는것도 3000개 받는것도 3000개 / 한명에게 보내는거 100개"): 친구 한 명에게 하루 100개, 보내기·받기 각각 하루 3,000개.
+// 하루 = 리셋 날짜(00:00 KST).
+export const FRIEND_GIFT_DIA = 100
+export const FRIEND_GIFT_DAILY = 3000
 
 // 플레이어 이름: id(uuid)에서 정해지는 별명(같은 id면 늘 같다 — 길드 guild.ts playerName과 같은 규칙·같은 낱말).
 const NICK_A = [txt('server.rules.nick_a'), txt('server.rules.nick_a_2'), txt('server.rules.nick_a_3'), txt('server.rules.nick_a_4'), txt('server.rules.nick_a_5'), txt('server.rules.nick_a_6'), txt('server.rules.nick_a_7'), txt('server.rules.nick_a_8'), txt('server.rules.nick_a_9'), txt('server.rules.nick_a_10'), txt('server.rules.nick_a_11'), txt('server.rules.nick_a_12'), txt('server.rules.nick_a_13'), txt('server.rules.nick_a_14')]
